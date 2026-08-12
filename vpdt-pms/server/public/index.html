@@ -881,31 +881,20 @@
           </div>
 
           <div class="bg-white p-3 rounded border space-y-3">
-            <h4 class="font-bold text-indigo-900 border-b pb-1 text-sm">2. Phân Hệ Nghiệp Vụ</h4>
+            <h4 class="font-bold text-indigo-900 border-b pb-1 text-sm">2. Năng Lực Xử Lý (không phụ thuộc phòng ban)</h4>
+            <p class="text-[11px] text-gray-500 italic">Phạm vi phòng ban của từng module (Xem/Tạo mới) nay cấu hình riêng ở các khối 7-11 bên dưới.</p>
             <div class="space-y-1.5">
-              <label class="flex items-center gap-2 text-amber-800 font-semibold cursor-pointer">
-                <input type="checkbox" id="pSubmissionModule" checked> 📜 Xử lý Văn Bản Trình
-              </label>
-              <label class="flex items-center gap-2 text-cyan-800 font-semibold cursor-pointer">
-                <input type="checkbox" id="pContractModule" checked> 📄 Hợp Đồng & Giấy Phép
-              </label>
-              <div class="border-t pt-1.5 space-y-1">
-                <span class="font-bold text-emerald-800 block text-[11px]">📅 Phân Quyền Phòng Họp:</span>
+              <div class="space-y-1">
+                <span class="font-bold text-emerald-800 block text-[11px]">📅 Phòng Họp:</span>
                 <label class="flex items-center gap-1.5 text-gray-700 cursor-pointer">
-                  <input type="checkbox" id="pMeetingBook" checked> ✍️ Đăng ký phòng họp
+                  <input type="checkbox" id="pMeetingApprove"> ✅ Phê duyệt phòng họp (toàn công ty)
                 </label>
                 <label class="flex items-center gap-1.5 text-gray-700 cursor-pointer">
-                  <input type="checkbox" id="pMeetingApprove"> ✅ Phê duyệt phòng họp
-                </label>
-                <label class="flex items-center gap-1.5 text-gray-700 cursor-pointer">
-                  <input type="checkbox" id="pMeetingCancel" checked> ❌ Hủy phòng họp
+                  <input type="checkbox" id="pMeetingCancel"> ❌ Hủy phòng họp (toàn công ty)
                 </label>
               </div>
-              <label class="flex items-center gap-2 text-indigo-700 font-semibold cursor-pointer border-t pt-1.5">
-                <input type="checkbox" id="pCarModule" checked> 🚗 Đăng Ký Xe
-              </label>
               <div class="border-t pt-1.5 space-y-1">
-                <span class="font-bold text-teal-800 block text-[11px]">🏢 Phê Duyệt VP:</span>
+                <span class="font-bold text-teal-800 block text-[11px]">🏢 Phân Hệ Văn Phòng Được Dùng:</span>
                 <label class="flex items-center gap-1.5 text-gray-700 cursor-pointer">
                   <input type="checkbox" id="pOfficeBuy" checked> 🛒 Mua Bán
                 </label>
@@ -913,7 +902,7 @@
                   <input type="checkbox" id="pOfficeFix" checked> 🔧 Sửa Chữa
                 </label>
                 <label class="flex items-center gap-1.5 text-gray-700 cursor-pointer">
-                  <input type="checkbox" id="pOfficeInvest" checked> 📈 Đầu Tư
+                  <input type="checkbox" id="pOfficeInvest"> 📈 Đầu Tư
                 </label>
               </div>
             </div>
@@ -962,6 +951,127 @@
             </div>
             <p class="text-[11px] text-gray-500 italic">Áp dụng chung cho nút "Tải" ở mọi module có tệp đính kèm: Tài liệu, Hợp đồng, Tờ trình.</p>
             <div id="pDownloadDeptContainer" class="space-y-1.5 pl-1 max-h-48 overflow-y-auto"></div>
+          </div>
+
+          <div class="bg-white p-3 rounded border space-y-2 lg:col-span-2">
+            <h4 class="font-bold text-amber-800 text-sm border-b pb-1">7. 📜 Tờ Trình — Phạm Vi Theo Phòng Ban</h4>
+            <div class="grid grid-cols-2 gap-3">
+              <div>
+                <div class="flex justify-between items-center mb-1">
+                  <span class="font-semibold text-gray-600 text-[11px]">Xem</span>
+                  <label class="flex items-center gap-1 font-bold text-amber-700 cursor-pointer text-[11px]">
+                    <input type="checkbox" id="pSubViewAll" onchange="toggleScopeGroup('pSubViewAll', 'pSubViewDept')"><span>ALL</span>
+                  </label>
+                </div>
+                <div id="pSubViewDeptContainer" class="space-y-1 pl-1 max-h-32 overflow-y-auto"></div>
+              </div>
+              <div>
+                <div class="flex justify-between items-center mb-1">
+                  <span class="font-semibold text-gray-600 text-[11px]">Tạo mới</span>
+                  <label class="flex items-center gap-1 font-bold text-amber-700 cursor-pointer text-[11px]">
+                    <input type="checkbox" id="pSubCreateAll" onchange="toggleScopeGroup('pSubCreateAll', 'pSubCreateDept')"><span>ALL</span>
+                  </label>
+                </div>
+                <div id="pSubCreateDeptContainer" class="space-y-1 pl-1 max-h-32 overflow-y-auto"></div>
+              </div>
+            </div>
+          </div>
+
+          <div class="bg-white p-3 rounded border space-y-2 lg:col-span-2">
+            <h4 class="font-bold text-cyan-800 text-sm border-b pb-1">8. 📄 Hợp Đồng & Giấy Phép — Phạm Vi Theo Phòng Ban</h4>
+            <div class="grid grid-cols-2 gap-3">
+              <div>
+                <div class="flex justify-between items-center mb-1">
+                  <span class="font-semibold text-gray-600 text-[11px]">Xem</span>
+                  <label class="flex items-center gap-1 font-bold text-cyan-700 cursor-pointer text-[11px]">
+                    <input type="checkbox" id="pContractViewAll" onchange="toggleScopeGroup('pContractViewAll', 'pContractViewDept')"><span>ALL</span>
+                  </label>
+                </div>
+                <div id="pContractViewDeptContainer" class="space-y-1 pl-1 max-h-32 overflow-y-auto"></div>
+              </div>
+              <div>
+                <div class="flex justify-between items-center mb-1">
+                  <span class="font-semibold text-gray-600 text-[11px]">Tạo mới</span>
+                  <label class="flex items-center gap-1 font-bold text-cyan-700 cursor-pointer text-[11px]">
+                    <input type="checkbox" id="pContractCreateAll" onchange="toggleScopeGroup('pContractCreateAll', 'pContractCreateDept')"><span>ALL</span>
+                  </label>
+                </div>
+                <div id="pContractCreateDeptContainer" class="space-y-1 pl-1 max-h-32 overflow-y-auto"></div>
+              </div>
+            </div>
+          </div>
+
+          <div class="bg-white p-3 rounded border space-y-2 lg:col-span-2">
+            <h4 class="font-bold text-emerald-800 text-sm border-b pb-1">9. 📅 Phòng Họp — Phạm Vi Theo Phòng Ban</h4>
+            <div class="grid grid-cols-2 gap-3">
+              <div>
+                <div class="flex justify-between items-center mb-1">
+                  <span class="font-semibold text-gray-600 text-[11px]">Xem</span>
+                  <label class="flex items-center gap-1 font-bold text-emerald-700 cursor-pointer text-[11px]">
+                    <input type="checkbox" id="pMeetingViewAll" onchange="toggleScopeGroup('pMeetingViewAll', 'pMeetingViewDept')"><span>ALL</span>
+                  </label>
+                </div>
+                <div id="pMeetingViewDeptContainer" class="space-y-1 pl-1 max-h-32 overflow-y-auto"></div>
+              </div>
+              <div>
+                <div class="flex justify-between items-center mb-1">
+                  <span class="font-semibold text-gray-600 text-[11px]">Đăng ký (book)</span>
+                  <label class="flex items-center gap-1 font-bold text-emerald-700 cursor-pointer text-[11px]">
+                    <input type="checkbox" id="pMeetingBookAll" onchange="toggleScopeGroup('pMeetingBookAll', 'pMeetingBookDept')"><span>ALL</span>
+                  </label>
+                </div>
+                <div id="pMeetingBookDeptContainer" class="space-y-1 pl-1 max-h-32 overflow-y-auto"></div>
+              </div>
+            </div>
+          </div>
+
+          <div class="bg-white p-3 rounded border space-y-2 lg:col-span-2">
+            <h4 class="font-bold text-indigo-800 text-sm border-b pb-1">10. 🚗 Đăng Ký Xe — Phạm Vi Theo Phòng Ban</h4>
+            <div class="grid grid-cols-2 gap-3">
+              <div>
+                <div class="flex justify-between items-center mb-1">
+                  <span class="font-semibold text-gray-600 text-[11px]">Xem</span>
+                  <label class="flex items-center gap-1 font-bold text-indigo-700 cursor-pointer text-[11px]">
+                    <input type="checkbox" id="pCarViewAll" onchange="toggleScopeGroup('pCarViewAll', 'pCarViewDept')"><span>ALL</span>
+                  </label>
+                </div>
+                <div id="pCarViewDeptContainer" class="space-y-1 pl-1 max-h-32 overflow-y-auto"></div>
+              </div>
+              <div>
+                <div class="flex justify-between items-center mb-1">
+                  <span class="font-semibold text-gray-600 text-[11px]">Tạo mới</span>
+                  <label class="flex items-center gap-1 font-bold text-indigo-700 cursor-pointer text-[11px]">
+                    <input type="checkbox" id="pCarCreateAll" onchange="toggleScopeGroup('pCarCreateAll', 'pCarCreateDept')"><span>ALL</span>
+                  </label>
+                </div>
+                <div id="pCarCreateDeptContainer" class="space-y-1 pl-1 max-h-32 overflow-y-auto"></div>
+              </div>
+            </div>
+          </div>
+
+          <div class="bg-white p-3 rounded border space-y-2 lg:col-span-2">
+            <h4 class="font-bold text-teal-800 text-sm border-b pb-1">11. 🏢 Văn Phòng (Mua/Sửa/Đầu Tư) — Phạm Vi Theo Phòng Ban</h4>
+            <p class="text-[11px] text-gray-500 italic">Dùng chung cho cả 3 phân hệ VP; bật/tắt từng phân hệ cụ thể ở khối 2.</p>
+            <div class="grid grid-cols-2 gap-3">
+              <div>
+                <div class="flex justify-between items-center mb-1">
+                  <span class="font-semibold text-gray-600 text-[11px]">Xem</span>
+                  <label class="flex items-center gap-1 font-bold text-teal-700 cursor-pointer text-[11px]">
+                    <input type="checkbox" id="pOfficeViewAll" onchange="toggleScopeGroup('pOfficeViewAll', 'pOfficeViewDept')"><span>ALL</span>
+                  </label>
+                </div>
+                <div id="pOfficeViewDeptContainer" class="space-y-1 pl-1 max-h-32 overflow-y-auto"></div>
+              </div>
+              <div>
+                <div class="flex justify-between items-center mb-1">
+                  <span class="font-semibold text-gray-600 text-[11px]">Tạo mới</span>
+                  <label class="flex items-center gap-1 font-bold text-teal-700 cursor-pointer text-[11px]">
+                    <input type="checkbox" id="pOfficeCreateAll" onchange="toggleScopeGroup('pOfficeCreateAll', 'pOfficeCreateDept')"><span>ALL</span>
+                  </label>
+                </div>
+                <div id="pOfficeCreateDeptContainer" class="space-y-1 pl-1 max-h-32 overflow-y-auto"></div>
+              </div>
+            </div>
           </div>
         </div>
 
@@ -1213,23 +1323,78 @@ function logSystemAction(module, actionType, description, status = 'SUCCESS', ta
   syncStorage('systemLogs');
 }
 
-// --- HÀM KIỂM TRA PHÂN QUYỀN ---
+// ==========================================
+// PHÂN QUYỀN THEO PHÂN HỆ MODULE (Submission/Contract/Meeting/Car/Office)
+// ==========================================
+// Mỗi module nghiệp vụ (Tờ trình, Hợp đồng, Phòng họp, Đăng ký xe, Văn phòng) có phạm vi dữ liệu
+// riêng dạng { all: boolean, depts: string[] } cho hành động XEM và TẠO MỚI — giống hệt mô hình
+// đã áp dụng cho module Tài liệu (uploadDepts/viewApprovedDepts...), thay vì 1 công tắc bật/tắt
+// toàn công ty như trước (khiến ai cũng thấy dữ liệu của mọi phòng ban). Phòng ban của chính người
+// dùng luôn được phép mặc định, kể cả khi admin chưa cấp thêm quyền nào khác.
+
+// Kiểm tra 1 phạm vi {all, depts} có cho phép thao tác trên 1 phòng ban cụ thể hay không.
+function scopeAllows(user, scope, dept) {
+  if (!user) return false;
+  if (user.perms?.admin) return true;
+  if (scope?.all) return true;
+  if (dept && user.dept === dept) return true;
+  return !!(dept && Array.isArray(scope?.depts) && scope.depts.includes(dept));
+}
+
+// Có ít nhất 1 phòng ban được phép hay không — dùng để bật/tắt quyền vào cả 1 tab/module.
+function scopeHasAny(user, scope) {
+  if (!user) return false;
+  if (user.perms?.admin) return true;
+  if (scope?.all) return true;
+  if (user.dept) return true; // luôn có ít nhất phòng ban của chính mình
+  return !!(Array.isArray(scope?.depts) && scope.depts.length > 0);
+}
+
+// Danh sách phòng ban được phép — dùng đổ vào <select> phòng ban khi tạo mới 1 hồ sơ.
+function getScopedDepts(user, scope) {
+  if (!user) return [];
+  if (user.perms?.admin || scope?.all) return [...DB.depts];
+  const allowed = new Set();
+  if (user.dept) allowed.add(user.dept);
+  if (Array.isArray(scope?.depts)) scope.depts.forEach(d => allowed.add(d));
+  return Array.from(allowed);
+}
+
+// Người dùng có được liệt kê làm người duyệt ở BẤT KỲ bước nào trong 1 cấu hình quy trình
+// (dept workflow config) hay không — dùng để 1 approver luôn xem/duyệt được hồ sơ được giao,
+// kể cả khi phạm vi Xem theo phòng ban của họ không bao gồm phòng ban đó.
+function isApproverForDeptWorkflow(wfConfig, username) {
+  if (!wfConfig || !wfConfig.approvers) return false;
+  return Object.values(wfConfig.approvers).some(list =>
+    Array.isArray(list) ? list.includes(username) : list === username
+  );
+}
+
+// Quét toàn bộ map cấu hình quy trình theo phòng ban (vd DB.submissionDeptWorkflows) xem người
+// dùng có phải approver ở phòng ban nào không — dùng để cấp quyền vào tab cho approver dù họ
+// chưa được cấp quyền Xem tường minh cho phòng ban đó.
+function isApproverInWorkflowMap(wfDeptMap, username) {
+  if (!wfDeptMap) return false;
+  return Object.values(wfDeptMap).some(cfg => isApproverForDeptWorkflow(cfg, username));
+}
+
+// --- HÀM KIỂM TRA PHÂN QUYỀN THEO MODULE ---
 function canAccessSubmissionModule(user) {
   if (!user) return false;
   if (user.perms?.admin) return true;
-  return !!user.perms?.submissionModule;
+  return scopeHasAny(user, user.perms?.submissionView) || isApproverInWorkflowMap(DB.submissionDeptWorkflows, user.username);
 }
 
 function canAccessContractModule(user) {
   if (!user) return false;
   if (user.perms?.admin) return true;
-  return !!user.perms?.contractModule;
+  return scopeHasAny(user, user.perms?.contractView);
 }
 
 function canBookMeeting(user) {
   if (!user) return false;
   if (user.perms?.admin) return true;
-  return !!user.perms?.meetingBook;
+  return scopeHasAny(user, user.perms?.meetingBookScope);
 }
 
 function canApproveMeeting(user) {
@@ -1247,22 +1412,28 @@ function canCancelMeeting(user) {
 function canAccessMeetingModule(user) {
   if (!user) return false;
   if (user.perms?.admin) return true;
-  return !!(user.perms?.meetingBook || user.perms?.meetingApprove || user.perms?.meetingCancel);
+  return scopeHasAny(user, user.perms?.meetingView) || canBookMeeting(user) || canApproveMeeting(user) || canCancelMeeting(user);
 }
 
 function canAccessCarModule(user) {
   if (!user) return false;
   if (user.perms?.admin) return true;
-  return !!user.perms?.carModule;
+  return scopeHasAny(user, user.perms?.carView) || isApproverInWorkflowMap(DB.carDeptWorkflows, user.username);
+}
+
+function getOfficeWorkflowMap(subType) {
+  if (subType === 'SUA_CHUA') return DB.officeFixDeptWorkflows;
+  if (subType === 'DAU_TU') return DB.officeInvestDeptWorkflows;
+  return DB.officeBuyDeptWorkflows;
 }
 
 function canAccessOfficeSubTab(user, subType) {
   if (!user) return false;
   if (user.perms?.admin) return true;
-  if (subType === 'MUA_BAN') return !!user.perms?.officeBuy;
-  if (subType === 'SUA_CHUA') return !!user.perms?.officeFix;
-  if (subType === 'DAU_TU') return !!user.perms?.officeInvest;
-  return false;
+  if (subType === 'MUA_BAN' && !user.perms?.officeBuy) return false;
+  if (subType === 'SUA_CHUA' && !user.perms?.officeFix) return false;
+  if (subType === 'DAU_TU' && !user.perms?.officeInvest) return false;
+  return scopeHasAny(user, user.perms?.officeView) || isApproverInWorkflowMap(getOfficeWorkflowMap(subType), user.username);
 }
 
 function canAccessOfficeModule(user) {
@@ -1295,6 +1466,73 @@ function canDownloadFile(user, dept, ownerUsername) {
   return false;
 }
 
+// Bộ quyền mặc định AN TOÀN cho user mới (tạo tay hoặc import CSV): mặc định KHÔNG cấp quyền
+// xem/tạo liên phòng ban nào — mỗi người chỉ thao tác trong phạm vi phòng ban của chính mình
+// (do scopeAllows/scopeHasAny/getScopedDepts luôn ngầm định cho phép phòng ban của bản thân).
+// Trước đây user mới được bật sẵn hầu hết các module nghiệp vụ trên toàn công ty — không an toàn.
+function defaultNewUserPerms() {
+  const emptyScope = () => ({ all: false, depts: [] });
+  return {
+    admin: false,
+    uploadAll: false, uploadDepts: [],
+    viewDraftAll: false, viewDraftDepts: [],
+    viewApprovedAll: false, viewApprovedDepts: [],
+    downloadAll: false, downloadDepts: [],
+    submissionView: emptyScope(), submissionCreate: emptyScope(),
+    contractView: emptyScope(), contractCreate: emptyScope(),
+    meetingView: emptyScope(), meetingBookScope: emptyScope(),
+    meetingApprove: false, meetingCancel: false,
+    carView: emptyScope(), carCreate: emptyScope(),
+    officeView: emptyScope(), officeCreate: emptyScope(),
+    officeBuy: true, officeFix: true, officeInvest: false
+  };
+}
+
+// Chuyển đổi perms kiểu CŨ (cờ bật/tắt toàn công ty: submissionModule, contractModule, carModule,
+// meetingBook dạng boolean) sang mô hình MỚI theo phòng ban ({all, depts}) — không âm thầm bớt
+// quyền của user đang có: nếu cờ cũ = true thì phạm vi mới quy đổi thành "Tất cả phòng ban" (all:
+// true) để giữ nguyên đúng quyền hiện có; nếu = false/chưa có thì quy đổi thành rỗng (chỉ còn quyền
+// mặc định trong phòng ban của chính họ). Hàm idempotent — gọi lại nhiều lần không đổi kết quả.
+function migrateLegacyPerms(perms) {
+  if (!perms || typeof perms !== 'object') return { perms, changed: false };
+  const p = { ...perms };
+  let changed = false;
+  const scopeFromFlag = (flag) => ({ all: !!flag, depts: [] });
+
+  if (p.submissionView === undefined) {
+    p.submissionView = scopeFromFlag(p.submissionModule);
+    p.submissionCreate = scopeFromFlag(p.submissionModule);
+    delete p.submissionModule;
+    changed = true;
+  }
+  if (p.contractView === undefined) {
+    p.contractView = scopeFromFlag(p.contractModule);
+    p.contractCreate = scopeFromFlag(p.contractModule);
+    delete p.contractModule;
+    changed = true;
+  }
+  if (p.carView === undefined) {
+    p.carView = scopeFromFlag(p.carModule);
+    p.carCreate = scopeFromFlag(p.carModule);
+    delete p.carModule;
+    changed = true;
+  }
+  if (p.meetingView === undefined) {
+    p.meetingView = scopeFromFlag(p.meetingBook || p.meetingApprove || p.meetingCancel);
+    p.meetingBookScope = scopeFromFlag(p.meetingBook);
+    delete p.meetingBook;
+    changed = true;
+  }
+  if (p.officeView === undefined) {
+    const anyOffice = !!(p.officeBuy || p.officeFix || p.officeInvest);
+    p.officeView = scopeFromFlag(anyOffice);
+    p.officeCreate = scopeFromFlag(anyOffice);
+    changed = true;
+  }
+
+  return { perms: p, changed };
+}
+
 // ==========================================
 // KẾT NỐI DỮ LIỆU: đã chuyển từ localStorage sang API backend (Node.js + MSSQL)
 // Toàn bộ dữ liệu mặc định (depts, cats, workflows, users...) giờ được khởi tạo (seed)
@@ -1308,7 +1546,20 @@ async function initDatabase() {
 
     DB.depts = data.depts || [];
     DB.cats = data.cats || [];
-    DB.users = data.users || [];
+
+    // Di trú phân quyền cũ (cờ bật/tắt toàn công ty theo module) sang mô hình mới theo phòng ban.
+    // Nếu có user nào được chuyển đổi, lưu lại ngay lên server để không phải di trú lại mỗi lần tải trang.
+    let permsMigrated = false;
+    DB.users = (data.users || []).map(u => {
+      const { perms, changed } = migrateLegacyPerms(u.perms);
+      if (changed) permsMigrated = true;
+      return changed ? { ...u, perms } : u;
+    });
+    if (permsMigrated) {
+      console.log('ℹ️ Đã tự động chuyển đổi phân quyền người dùng sang mô hình theo phòng ban (module-level).');
+      syncStorage('users');
+    }
+
     DB.docs = data.docs || [];
     DB.submissions = data.submissions || [];
     DB.contracts = data.contracts || [];
@@ -1599,29 +1850,32 @@ function populateDropdowns() {
       DB.cats.map(c => `<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`).join('');
   }
 
+  // CẬP NHẬT: mỗi module giờ chỉ cho chọn phòng ban trong phạm vi quyền "Tạo mới" của người dùng
+  // (trước đây các dropdown này liệt kê TẤT CẢ phòng ban, ai cũng tạo được hồ sơ "thay mặt" phòng
+  // ban khác) — dùng getScopedDepts() dựa trên perms.<module>Create tương ứng.
   const subDept = document.getElementById('subDept');
   if (subDept) {
-    subDept.innerHTML = DB.depts.map(d => `<option value="${escapeHtml(d)}">${escapeHtml(d)}</option>`).join('');
+    subDept.innerHTML = getScopedDepts(currentUser, currentUser.perms?.submissionCreate).map(d => `<option value="${escapeHtml(d)}">${escapeHtml(d)}</option>`).join('');
   }
 
   const contractDept = document.getElementById('contractDept');
   if (contractDept) {
-    contractDept.innerHTML = DB.depts.map(d => `<option value="${escapeHtml(d)}">${escapeHtml(d)}</option>`).join('');
+    contractDept.innerHTML = getScopedDepts(currentUser, currentUser.perms?.contractCreate).map(d => `<option value="${escapeHtml(d)}">${escapeHtml(d)}</option>`).join('');
   }
 
   const meetingDept = document.getElementById('meetingDept');
   if (meetingDept) {
-    meetingDept.innerHTML = DB.depts.map(d => `<option value="${escapeHtml(d)}">${escapeHtml(d)}</option>`).join('');
+    meetingDept.innerHTML = getScopedDepts(currentUser, currentUser.perms?.meetingBookScope).map(d => `<option value="${escapeHtml(d)}">${escapeHtml(d)}</option>`).join('');
   }
 
   const carDept = document.getElementById('carDept');
   if (carDept) {
-    carDept.innerHTML = DB.depts.map(d => `<option value="${escapeHtml(d)}">${escapeHtml(d)}</option>`).join('');
+    carDept.innerHTML = getScopedDepts(currentUser, currentUser.perms?.carCreate).map(d => `<option value="${escapeHtml(d)}">${escapeHtml(d)}</option>`).join('');
   }
 
   const offDept = document.getElementById('offDept');
   if (offDept) {
-    offDept.innerHTML = DB.depts.map(d => `<option value="${escapeHtml(d)}">${escapeHtml(d)}</option>`).join('');
+    offDept.innerHTML = getScopedDepts(currentUser, currentUser.perms?.officeCreate).map(d => `<option value="${escapeHtml(d)}">${escapeHtml(d)}</option>`).join('');
   }
 
   const uDept = document.getElementById('uDept');
@@ -1688,10 +1942,15 @@ function renderDocs() {
 
   // Lọc tài liệu theo quyền truy cập phòng ban & bộ lọc
   let filtered = DB.docs.filter(doc => {
-    // Kiểm tra quyền xem
-    const canView = currentUser.perms.admin || 
-      currentUser.perms.viewApprovedAll || 
-      (currentUser.perms.viewApprovedDepts && currentUser.perms.viewApprovedDepts.includes(doc.dept)) ||
+    // Kiểm tra quyền xem — CẬP NHẬT: quyền "Xem Bản Nháp" (viewDraftAll/viewDraftDepts) trước đây
+    // được cấu hình ở Module Quản trị nhưng KHÔNG được dùng ở đâu cả (mọi trạng thái tài liệu đều
+    // chỉ xét quyền "Xem Đã Duyệt"). Nay tách riêng: tài liệu đã APPROVED xét quyền Xem Đã Duyệt,
+    // còn tài liệu đang xử lý / bị từ chối (PENDING/REJECTED = "bản nháp") xét quyền Xem Bản Nháp.
+    const canView = currentUser.perms.admin ||
+      (doc.status === 'APPROVED'
+        ? (currentUser.perms.viewApprovedAll || (currentUser.perms.viewApprovedDepts || []).includes(doc.dept))
+        : (currentUser.perms.viewDraftAll || (currentUser.perms.viewDraftDepts || []).includes(doc.dept))
+      ) ||
       (doc.uploader === currentUser.username);
 
     if (!canView) return false;
@@ -2114,7 +2373,16 @@ function renderSubmissionReqs() {
   const tbody = document.getElementById('submissionTableBody');
   if (!tbody) return;
 
-  tbody.innerHTML = DB.submissions.map(sub => {
+  // CẬP NHẬT: trước đây hiển thị TẤT CẢ tờ trình của mọi phòng ban cho bất kỳ ai có quyền
+  // "submissionModule". Nay lọc theo phạm vi Xem (submissionView) — người tạo và approver được
+  // giao ở quy trình duyệt của phòng ban đó luôn xem được hồ sơ liên quan dù ngoài phạm vi.
+  const visibleSubs = DB.submissions.filter(sub => {
+    if (scopeAllows(currentUser, currentUser.perms?.submissionView, sub.dept)) return true;
+    if (sub.creator === currentUser.username) return true;
+    return isApproverForDeptWorkflow(DB.submissionDeptWorkflows[sub.dept], currentUser.username);
+  });
+
+  tbody.innerHTML = visibleSubs.map(sub => {
     const wfConfig = DB.submissionDeptWorkflows[sub.dept] || { workflowId: 'WF_1STEP', approvers: { 1: ['admin'] } };
     const wf = DB.workflows.find(w => w.id === wfConfig.workflowId) || { steps: [{ name: 'Sếp duyệt' }] };
 
@@ -2403,7 +2671,12 @@ function renderContracts() {
 
   const now = new Date();
 
-  tbody.innerHTML = DB.contracts.map(c => {
+  // CẬP NHẬT: lọc theo phạm vi Xem (contractView) thay vì hiển thị hợp đồng của mọi phòng ban.
+  const visibleContracts = DB.contracts.filter(c =>
+    scopeAllows(currentUser, currentUser.perms?.contractView, c.dept) || c.creator === currentUser.username
+  );
+
+  tbody.innerHTML = visibleContracts.map(c => {
     const endD = new Date(c.endDate);
     const diffDays = Math.ceil((endD - now) / (1000 * 60 * 60 * 24));
 
@@ -2520,7 +2793,16 @@ function renderMeetings() {
   const tbody = document.getElementById('meetingTableBody');
   if (!tbody) return;
 
-  tbody.innerHTML = DB.meetings.map(m => {
+  // CẬP NHẬT: lọc theo phạm vi Xem (meetingView) thay vì hiển thị lịch họp của mọi phòng ban.
+  // Người có quyền Phê duyệt/Hủy lịch họp (vai trò quản lý phòng họp dùng chung toàn công ty)
+  // vẫn cần thấy mọi lịch để xử lý, nên được xem toàn bộ bất kể phạm vi phòng ban.
+  const visibleMeetings = DB.meetings.filter(m =>
+    scopeAllows(currentUser, currentUser.perms?.meetingView, m.dept) ||
+    m.creator === currentUser.username ||
+    canApproveMeeting(currentUser) || canCancelMeeting(currentUser)
+  );
+
+  tbody.innerHTML = visibleMeetings.map(m => {
     let statusBadge = '';
     if (m.status === 'APPROVED') statusBadge = `<span class="px-2 py-0.5 bg-green-100 text-green-800 rounded font-bold text-xs">✅ Đã duyệt lịch</span>`;
     else if (m.status === 'CANCELLED') statusBadge = `<span class="px-2 py-0.5 bg-red-100 text-red-800 rounded font-bold text-xs">❌ Đã hủy lịch</span>`;
@@ -2618,7 +2900,14 @@ function renderCarRegs() {
   const tbody = document.getElementById('carTableBody');
   if (!tbody) return;
 
-  tbody.innerHTML = DB.carRegs.map(c => {
+  // CẬP NHẬT: lọc theo phạm vi Xem (carView) thay vì hiển thị đăng ký xe của mọi phòng ban.
+  const visibleCarRegs = DB.carRegs.filter(c =>
+    scopeAllows(currentUser, currentUser.perms?.carView, c.dept) ||
+    c.creator === currentUser.username ||
+    isApproverForDeptWorkflow(DB.carDeptWorkflows[c.dept], currentUser.username)
+  );
+
+  tbody.innerHTML = visibleCarRegs.map(c => {
     const wfConfig = DB.carDeptWorkflows[c.dept] || { workflowId: 'WF_1STEP', approvers: { 1: ['admin'] } };
     const wf = DB.workflows.find(w => w.id === wfConfig.workflowId) || { steps: [{ name: 'Sếp duyệt' }] };
 
@@ -2731,7 +3020,15 @@ function renderOfficeReqs() {
   const tbody = document.getElementById('officeTableBody');
   if (!tbody) return;
 
-  const list = DB.officeReqs.filter(o => o.subType === activeOfficeSubTab);
+  // CẬP NHẬT: lọc theo phạm vi Xem (officeView) thay vì hiển thị đề xuất của mọi phòng ban.
+  const wfMapForFilter = getOfficeWorkflowMap(activeOfficeSubTab);
+  const list = DB.officeReqs.filter(o =>
+    o.subType === activeOfficeSubTab && (
+      scopeAllows(currentUser, currentUser.perms?.officeView, o.dept) ||
+      o.creator === currentUser.username ||
+      isApproverForDeptWorkflow(wfMapForFilter[o.dept], currentUser.username)
+    )
+  );
 
   if (list.length === 0) {
     tbody.innerHTML = `<tr><td colspan="7" class="text-center p-6 text-gray-500 italic">Không có đề xuất nào thuộc phân hệ này.</td></tr>`;
@@ -3247,7 +3544,17 @@ function renderDeptCheckboxes() {
     { container: 'pUploadDeptContainer', prefix: 'pUploadDept' },
     { container: 'pViewDraftDeptContainer', prefix: 'pViewDraftDept' },
     { container: 'pViewApprovedDeptContainer', prefix: 'pViewApprovedDept' },
-    { container: 'pDownloadDeptContainer', prefix: 'pDownloadDept' }
+    { container: 'pDownloadDeptContainer', prefix: 'pDownloadDept' },
+    { container: 'pSubViewDeptContainer', prefix: 'pSubViewDept' },
+    { container: 'pSubCreateDeptContainer', prefix: 'pSubCreateDept' },
+    { container: 'pContractViewDeptContainer', prefix: 'pContractViewDept' },
+    { container: 'pContractCreateDeptContainer', prefix: 'pContractCreateDept' },
+    { container: 'pMeetingViewDeptContainer', prefix: 'pMeetingViewDept' },
+    { container: 'pMeetingBookDeptContainer', prefix: 'pMeetingBookDept' },
+    { container: 'pCarViewDeptContainer', prefix: 'pCarViewDept' },
+    { container: 'pCarCreateDeptContainer', prefix: 'pCarCreateDept' },
+    { container: 'pOfficeViewDeptContainer', prefix: 'pOfficeViewDept' },
+    { container: 'pOfficeCreateDeptContainer', prefix: 'pOfficeCreateDept' }
   ];
 
   groups.forEach(g => {
@@ -3270,6 +3577,14 @@ function toggleScopeGroup(allCheckId, deptCheckPrefix) {
   });
 }
 
+// Đọc 1 nhóm quyền theo phòng ban ({all, depts}) từ cặp checkbox ALL + danh sách phòng ban trên form.
+function scopeFromForm(allId, deptPrefix) {
+  return {
+    all: document.getElementById(allId).checked,
+    depts: Array.from(document.querySelectorAll(`[id^="${deptPrefix}_"]:checked`)).map(cb => cb.value)
+  };
+}
+
 function saveUser(e) {
   e.preventDefault();
   const editId = document.getElementById('editUserId').value;
@@ -3282,12 +3597,8 @@ function saveUser(e) {
 
   const perms = {
     admin: document.getElementById('pAdmin').checked,
-    submissionModule: document.getElementById('pSubmissionModule').checked,
-    contractModule: document.getElementById('pContractModule').checked,
-    meetingBook: document.getElementById('pMeetingBook').checked,
     meetingApprove: document.getElementById('pMeetingApprove').checked,
     meetingCancel: document.getElementById('pMeetingCancel').checked,
-    carModule: document.getElementById('pCarModule').checked,
     officeBuy: document.getElementById('pOfficeBuy').checked,
     officeFix: document.getElementById('pOfficeFix').checked,
     officeInvest: document.getElementById('pOfficeInvest').checked,
@@ -3298,7 +3609,18 @@ function saveUser(e) {
     viewApprovedAll: document.getElementById('pViewApprovedAll').checked,
     viewApprovedDepts: Array.from(document.querySelectorAll('[id^="pViewApprovedDept_"]:checked')).map(cb => cb.value),
     downloadAll: document.getElementById('pDownloadAll').checked,
-    downloadDepts: Array.from(document.querySelectorAll('[id^="pDownloadDept_"]:checked')).map(cb => cb.value)
+    downloadDepts: Array.from(document.querySelectorAll('[id^="pDownloadDept_"]:checked')).map(cb => cb.value),
+
+    submissionView: scopeFromForm('pSubViewAll', 'pSubViewDept'),
+    submissionCreate: scopeFromForm('pSubCreateAll', 'pSubCreateDept'),
+    contractView: scopeFromForm('pContractViewAll', 'pContractViewDept'),
+    contractCreate: scopeFromForm('pContractCreateAll', 'pContractCreateDept'),
+    meetingView: scopeFromForm('pMeetingViewAll', 'pMeetingViewDept'),
+    meetingBookScope: scopeFromForm('pMeetingBookAll', 'pMeetingBookDept'),
+    carView: scopeFromForm('pCarViewAll', 'pCarViewDept'),
+    carCreate: scopeFromForm('pCarCreateAll', 'pCarCreateDept'),
+    officeView: scopeFromForm('pOfficeViewAll', 'pOfficeViewDept'),
+    officeCreate: scopeFromForm('pOfficeCreateAll', 'pOfficeCreateDept')
   };
 
   if (editId) {
@@ -3334,18 +3656,23 @@ function resetUserForm() {
   document.getElementById('uFullName').value = '';
   document.getElementById('uEmail').value = '';
   document.getElementById('uPhone').value = '';
-  document.getElementById('pAdmin').checked = false;
-  document.getElementById('pSubmissionModule').checked = true;
-  document.getElementById('pContractModule').checked = true;
-  document.getElementById('pMeetingBook').checked = true;
-  document.getElementById('pMeetingApprove').checked = false;
-  document.getElementById('pMeetingCancel').checked = true;
-  document.getElementById('pCarModule').checked = true;
-  document.getElementById('pOfficeBuy').checked = true;
-  document.getElementById('pOfficeFix').checked = true;
-  document.getElementById('pOfficeInvest').checked = true;
+  // CẬP NHẬT: mặc định AN TOÀN cho user mới — không bật sẵn quyền xem/tạo liên phòng ban nào ở
+  // module nào cả (trước đây hầu hết module nghiệp vụ được bật sẵn = toàn công ty, xem phân tích ở
+  // defaultNewUserPerms()). Mỗi người vẫn luôn thao tác được trong phòng ban của chính mình.
+  const defaults = defaultNewUserPerms();
+  document.getElementById('pAdmin').checked = defaults.admin;
+  document.getElementById('pMeetingApprove').checked = defaults.meetingApprove;
+  document.getElementById('pMeetingCancel').checked = defaults.meetingCancel;
+  document.getElementById('pOfficeBuy').checked = defaults.officeBuy;
+  document.getElementById('pOfficeFix').checked = defaults.officeFix;
+  document.getElementById('pOfficeInvest').checked = defaults.officeInvest;
 
-  ['pUploadAll', 'pViewDraftAll', 'pViewApprovedAll', 'pDownloadAll'].forEach(id => {
+  [
+    'pUploadAll', 'pViewDraftAll', 'pViewApprovedAll', 'pDownloadAll',
+    'pSubViewAll', 'pSubCreateAll', 'pContractViewAll', 'pContractCreateAll',
+    'pMeetingViewAll', 'pMeetingBookAll', 'pCarViewAll', 'pCarCreateAll',
+    'pOfficeViewAll', 'pOfficeCreateAll'
+  ].forEach(id => {
     const cb = document.getElementById(id);
     if (cb) { cb.checked = false; }
   });
@@ -3365,21 +3692,33 @@ function editUser(id) {
   document.getElementById('uPhone').value = user.phone || '';
   document.getElementById('uDept').value = user.dept;
 
-  document.getElementById('pAdmin').checked = !!user.perms.admin;
-  document.getElementById('pSubmissionModule').checked = !!user.perms.submissionModule;
-  document.getElementById('pContractModule').checked = !!user.perms.contractModule;
-  document.getElementById('pMeetingBook').checked = !!user.perms.meetingBook;
-  document.getElementById('pMeetingApprove').checked = !!user.perms.meetingApprove;
-  document.getElementById('pMeetingCancel').checked = !!user.perms.meetingCancel;
-  document.getElementById('pCarModule').checked = !!user.perms.carModule;
-  document.getElementById('pOfficeBuy').checked = !!user.perms.officeBuy;
-  document.getElementById('pOfficeFix').checked = !!user.perms.officeFix;
-  document.getElementById('pOfficeInvest').checked = !!user.perms.officeInvest;
+  // Perms của user cũ (nếu chưa từng được di trú vì lý do nào đó) sẽ được quy đổi tạm thời ở đây để
+  // form luôn đọc đúng cấu trúc mới — initDatabase() đã tự động lưu lại bản di trú nên trường hợp
+  // này thực tế chỉ là lớp phòng vệ bổ sung.
+  const perms = migrateLegacyPerms(user.perms).perms;
 
-  document.getElementById('pUploadAll').checked = !!user.perms.uploadAll;
-  document.getElementById('pViewDraftAll').checked = !!user.perms.viewDraftAll;
-  document.getElementById('pViewApprovedAll').checked = !!user.perms.viewApprovedAll;
-  document.getElementById('pDownloadAll').checked = !!user.perms.downloadAll;
+  document.getElementById('pAdmin').checked = !!perms.admin;
+  document.getElementById('pMeetingApprove').checked = !!perms.meetingApprove;
+  document.getElementById('pMeetingCancel').checked = !!perms.meetingCancel;
+  document.getElementById('pOfficeBuy').checked = !!perms.officeBuy;
+  document.getElementById('pOfficeFix').checked = !!perms.officeFix;
+  document.getElementById('pOfficeInvest').checked = !!perms.officeInvest;
+
+  document.getElementById('pUploadAll').checked = !!perms.uploadAll;
+  document.getElementById('pViewDraftAll').checked = !!perms.viewDraftAll;
+  document.getElementById('pViewApprovedAll').checked = !!perms.viewApprovedAll;
+  document.getElementById('pDownloadAll').checked = !!perms.downloadAll;
+
+  document.getElementById('pSubViewAll').checked = !!perms.submissionView?.all;
+  document.getElementById('pSubCreateAll').checked = !!perms.submissionCreate?.all;
+  document.getElementById('pContractViewAll').checked = !!perms.contractView?.all;
+  document.getElementById('pContractCreateAll').checked = !!perms.contractCreate?.all;
+  document.getElementById('pMeetingViewAll').checked = !!perms.meetingView?.all;
+  document.getElementById('pMeetingBookAll').checked = !!perms.meetingBookScope?.all;
+  document.getElementById('pCarViewAll').checked = !!perms.carView?.all;
+  document.getElementById('pCarCreateAll').checked = !!perms.carCreate?.all;
+  document.getElementById('pOfficeViewAll').checked = !!perms.officeView?.all;
+  document.getElementById('pOfficeCreateAll').checked = !!perms.officeCreate?.all;
 
   renderDeptCheckboxes();
 
@@ -3395,10 +3734,32 @@ function editUser(id) {
     }
   };
 
-  setGroupCheckboxes(user.perms.uploadDepts, 'pUploadDept');
-  setGroupCheckboxes(user.perms.viewDraftDepts, 'pViewDraftDept');
-  setGroupCheckboxes(user.perms.viewApprovedDepts, 'pViewApprovedDept');
-  setGroupCheckboxes(user.perms.downloadDepts, 'pDownloadDept');
+  setGroupCheckboxes(perms.uploadDepts, 'pUploadDept');
+  setGroupCheckboxes(perms.viewDraftDepts, 'pViewDraftDept');
+  setGroupCheckboxes(perms.viewApprovedDepts, 'pViewApprovedDept');
+  setGroupCheckboxes(perms.downloadDepts, 'pDownloadDept');
+  setGroupCheckboxes(perms.submissionView?.depts, 'pSubViewDept');
+  setGroupCheckboxes(perms.submissionCreate?.depts, 'pSubCreateDept');
+  setGroupCheckboxes(perms.contractView?.depts, 'pContractViewDept');
+  setGroupCheckboxes(perms.contractCreate?.depts, 'pContractCreateDept');
+  setGroupCheckboxes(perms.meetingView?.depts, 'pMeetingViewDept');
+  setGroupCheckboxes(perms.meetingBookScope?.depts, 'pMeetingBookDept');
+  setGroupCheckboxes(perms.carView?.depts, 'pCarViewDept');
+  setGroupCheckboxes(perms.carCreate?.depts, 'pCarCreateDept');
+  setGroupCheckboxes(perms.officeView?.depts, 'pOfficeViewDept');
+  setGroupCheckboxes(perms.officeCreate?.depts, 'pOfficeCreateDept');
+
+  // Đồng bộ trạng thái "disabled" của các checkbox phòng ban khi ALL đang bật (sửa luôn 1 lỗi nhỏ
+  // có sẵn: trước đây khi sửa 1 user có *All=true, checkbox phòng ban không tự vô hiệu hoá lại).
+  [
+    ['pUploadAll', 'pUploadDept'], ['pViewDraftAll', 'pViewDraftDept'],
+    ['pViewApprovedAll', 'pViewApprovedDept'], ['pDownloadAll', 'pDownloadDept'],
+    ['pSubViewAll', 'pSubViewDept'], ['pSubCreateAll', 'pSubCreateDept'],
+    ['pContractViewAll', 'pContractViewDept'], ['pContractCreateAll', 'pContractCreateDept'],
+    ['pMeetingViewAll', 'pMeetingViewDept'], ['pMeetingBookAll', 'pMeetingBookDept'],
+    ['pCarViewAll', 'pCarViewDept'], ['pCarCreateAll', 'pCarCreateDept'],
+    ['pOfficeViewAll', 'pOfficeViewDept'], ['pOfficeCreateAll', 'pOfficeCreateDept']
+  ].forEach(([allId, prefix]) => toggleScopeGroup(allId, prefix));
 }
 
 function deleteUser(id) {
@@ -3408,6 +3769,22 @@ function deleteUser(id) {
   syncStorage('users');
   logSystemAction('USER_MGM', 'DELETE_USER', `Xóa người dùng [${u?.username}]`, 'SUCCESS', u?.username);
   renderUsers();
+}
+
+// Tóm tắt nhanh các module người dùng có thể Xem/Tạo — dùng cho danh sách người dùng ở Module
+// Quản trị. Trước đây đếm số field "truthy" trong perms, dễ gây hiểu nhầm vì mảng/đối tượng rỗng
+// vẫn được coi là truthy dù không thực sự cấp quyền gì.
+function summarizeUserPerms(perms) {
+  if (perms.admin) return '<span class="text-purple-700 font-bold">[ADMIN — Toàn quyền hệ thống]</span>';
+  const hasScope = (scope) => !!(scope?.all || (scope?.depts || []).length > 0);
+  const parts = [];
+  if (perms.uploadAll || (perms.uploadDepts || []).length) parts.push('📄 Tài liệu');
+  if (hasScope(perms.submissionView) || hasScope(perms.submissionCreate)) parts.push('📜 Tờ trình');
+  if (hasScope(perms.contractView) || hasScope(perms.contractCreate)) parts.push('📄 Hợp đồng');
+  if (hasScope(perms.meetingView) || hasScope(perms.meetingBookScope) || perms.meetingApprove || perms.meetingCancel) parts.push('📅 Phòng họp');
+  if (hasScope(perms.carView) || hasScope(perms.carCreate)) parts.push('🚗 Xe');
+  if ((hasScope(perms.officeView) || hasScope(perms.officeCreate)) && (perms.officeBuy || perms.officeFix || perms.officeInvest)) parts.push('🏢 VP');
+  return parts.length ? parts.join(', ') : '<span class="text-gray-400 italic">Chưa cấp quyền module nào</span>';
 }
 
 function renderUsers() {
@@ -3420,7 +3797,7 @@ function renderUsers() {
       <td class="border p-2 font-semibold">${escapeHtml(u.name)}</td>
       <td class="border p-2 text-xs">✉️ ${escapeHtml(u.email || 'N/A')}<br>📞 ${escapeHtml(u.phone || 'N/A')}</td>
       <td class="border p-2">${escapeHtml(u.dept)}</td>
-      <td class="border p-2 text-xs">${u.perms.admin ? '<span class="text-purple-700 font-bold">[ADMIN]</span> ' : ''}Quyền: ${Object.keys(u.perms).filter(k => u.perms[k]).length} mục</td>
+      <td class="border p-2 text-xs">${summarizeUserPerms(u.perms)}</td>
       <td class="border p-2 text-center space-x-1">
         <button onclick="editUser(${u.id})" class="text-blue-600 font-bold hover:underline">Sửa</button>
         <button onclick="deleteUser(${u.id})" class="text-red-600 font-bold hover:underline">Xóa</button>
@@ -3470,7 +3847,7 @@ function importUsersCSV(evt) {
           DB.users.push({
             id: Date.now() + Math.random(),
             username, pass, name, email, phone, dept,
-            perms: { admin: false, submissionModule: true, contractModule: true, meetingBook: true, meetingApprove: false, meetingCancel: true, carModule: true, officeBuy: true, officeFix: true, officeInvest: false }
+            perms: defaultNewUserPerms()
           });
           count++;
         }
