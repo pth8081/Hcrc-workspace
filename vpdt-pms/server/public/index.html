@@ -1791,7 +1791,7 @@ function goToPage(p) {
   renderDocs();
 }
 
-function uploadDoc(e) {
+async function uploadDoc(e) {
   e.preventDefault();
   const code = document.getElementById('docCode').value.trim();
   const title = document.getElementById('docTitle').value.trim();
@@ -1808,45 +1808,57 @@ function uploadDoc(e) {
   const file = fileInput.files[0];
   if (!file) return alert('Vui lòng chọn tệp tài liệu!');
 
-  const reader = new FileReader();
-  reader.onload = function(evt) {
-    const fileData = evt.target.result;
-    const newDoc = {
-      id: Date.now(),
-      code: code,
-      title: title,
-      ver: ver,
-      dept: dept,
-      cat: cat,
-      summary: summary,
-      fileName: file.name,
-      fileType: file.type,
-      fileData: fileData,
-      uploader: currentUser.username,
-      uploaderName: currentUser.name,
-      createdAt: new Date().toLocaleString('vi-VN'),
-      status: 'PENDING',
-      currentStep: 1,
-      history: [
-        {
-          step: 0,
-          stepName: 'Tải lên & Trình ký',
-          approver: currentUser.name,
-          username: currentUser.username,
-          action: 'UPLOADED',
-          time: new Date().toLocaleString('vi-VN')
-        }
-      ]
-    };
+  let uploaded;
+  try {
+    uploaded = await uploadFileToServer(file);
+  } catch (err) {
+    return alert(`⛔ Tải tệp lên thất bại: ${err.message}`);
+  }
 
-    DB.docs.unshift(newDoc);
-    syncStorage('docs');
-    logSystemAction('DOC', 'UPLOAD_DOC', `Tải lên tài liệu mới [${code} - ${title}]`, 'SUCCESS', code);
-    alert('✅ Tải lên và trình ký tài liệu thành công!');
-    document.getElementById('docForm').reset();
-    renderDocs();
+  const newDoc = {
+    id: Date.now(),
+    code: code,
+    title: title,
+    ver: ver,
+    dept: dept,
+    cat: cat,
+    summary: summary,
+    fileName: uploaded.fileName,
+    fileType: uploaded.fileType,
+    fileUrl: uploaded.fileUrl,
+    uploader: currentUser.username,
+    uploaderName: currentUser.name,
+    createdAt: new Date().toLocaleString('vi-VN'),
+    status: 'PENDING',
+    currentStep: 1,
+    history: [
+      {
+        step: 0,
+        stepName: 'Tải lên & Trình ký',
+        approver: currentUser.name,
+        username: currentUser.username,
+        action: 'UPLOADED',
+        time: new Date().toLocaleString('vi-VN')
+      }
+    ]
   };
-  reader.readAsDataURL(file);
+
+  DB.docs.unshift(newDoc);
+  syncStorage('docs');
+  logSystemAction('DOC', 'UPLOAD_DOC', `Tải lên tài liệu mới [${code} - ${title}]`, 'SUCCESS', code);
+  alert('✅ Tải lên và trình ký tài liệu thành công!');
+  document.getElementById('docForm').reset();
+  renderDocs();
+}
+
+// Tải 1 file lên server (POST /api/upload) — trả về { fileUrl, fileName, fileType, size }
+async function uploadFileToServer(file) {
+  const formData = new FormData();
+  formData.append('file', file);
+  const res = await fetch('/api/upload', { method: 'POST', body: formData });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || 'Lỗi không xác định');
+  return data;
 }
 
 // CẬP NHẬT: Phê duyệt cấp đơn đơn giản hóa (Sequential Step Approval)
@@ -1932,15 +1944,17 @@ function viewDoc(docId) {
   const container = document.getElementById('viewModalContent');
   container.innerHTML = '';
 
-  if (doc.fileData) {
+  // fileUrl: file lưu trên server (mới). fileData: fallback cho bản ghi cũ còn base64 nhúng sẵn trong DB.
+  const fileSrc = doc.fileUrl || doc.fileData;
+  if (fileSrc) {
     if (doc.fileType && doc.fileType.startsWith('image/')) {
       container.innerHTML = `
         <div class="flex flex-col items-center justify-center p-4 w-full protected-view-container" oncontextmenu="return false;">
-          <img src="${doc.fileData}" alt="${escapeHtml(doc.title)}" class="max-h-[65vh] max-w-full rounded border shadow-md object-contain pointer-events-none select-none" oncontextmenu="return false;" />
+          <img src="${fileSrc}" alt="${escapeHtml(doc.title)}" class="max-h-[65vh] max-w-full rounded border shadow-md object-contain pointer-events-none select-none" oncontextmenu="return false;" />
         </div>
       `;
     } else {
-      const frameUrl = `${doc.fileData}#toolbar=0&navpanes=0&scrollbar=0`;
+      const frameUrl = `${fileSrc}#toolbar=0&navpanes=0&scrollbar=0`;
       container.innerHTML = `
         <div class="w-full h-[65vh] relative protected-view-container" oncontextmenu="return false;">
           <iframe src="${frameUrl}" class="w-full h-full border-0 rounded bg-white shadow-inner" style="user-select: none; pointer-events: auto;" oncontextmenu="return false;"></iframe>
@@ -1978,7 +1992,7 @@ function closeViewDocModal() {
 // ==========================================
 // 2. MODULE VĂN BẢN TRÌNH / TỜ TRÌNH (SUBMISSION)
 // ==========================================
-function submitSubmissionReq(e) {
+async function submitSubmissionReq(e) {
   e.preventDefault();
   const code = document.getElementById('subCode').value.trim();
   const dept = document.getElementById('subDept').value;
@@ -1994,52 +2008,53 @@ function submitSubmissionReq(e) {
 
   const customData = collectDynamicFieldsData('SUBMISSION');
 
-  const saveSubmission = (fileData = '', fileName = '') => {
-    const newSub = {
-      id: Date.now(),
-      code: code,
-      dept: dept,
-      type: type,
-      title: title,
-      priority: priority,
-      content: content,
-      fileName: fileName,
-      fileData: fileData,
-      customData: customData,
-      creator: currentUser.username,
-      creatorName: currentUser.name,
-      createdAt: new Date().toLocaleString('vi-VN'),
-      status: 'PENDING',
-      currentStep: 1,
-      history: [
-        {
-          step: 0,
-          approver: currentUser.name,
-          username: currentUser.username,
-          action: 'CREATED',
-          comment: 'Khởi tạo và trình duyệt tờ trình mới',
-          time: new Date().toLocaleString('vi-VN')
-        }
-      ]
-    };
+  let fileUrl = '', fileName = '', fileType = '';
+  if (fileInput.files && fileInput.files[0]) {
+    try {
+      const uploaded = await uploadFileToServer(fileInput.files[0]);
+      fileUrl = uploaded.fileUrl;
+      fileName = uploaded.fileName;
+      fileType = uploaded.fileType;
+    } catch (err) {
+      return alert(`⛔ Tải tệp lên thất bại: ${err.message}`);
+    }
+  }
 
-    DB.submissions.unshift(newSub);
-    syncStorage('submissions');
-    logSystemAction('SUBMISSION', 'CREATE_SUBMISSION', `Tạo tờ trình mới [${code} - ${title}]`, 'SUCCESS', code);
-    alert('✅ Trình văn bản / tờ trình thành công!');
-    e.target.reset();
-    renderSubmissionReqs();
+  const newSub = {
+    id: Date.now(),
+    code: code,
+    dept: dept,
+    type: type,
+    title: title,
+    priority: priority,
+    content: content,
+    fileName: fileName,
+    fileUrl: fileUrl,
+    fileType: fileType,
+    customData: customData,
+    creator: currentUser.username,
+    creatorName: currentUser.name,
+    createdAt: new Date().toLocaleString('vi-VN'),
+    status: 'PENDING',
+    currentStep: 1,
+    history: [
+      {
+        step: 0,
+        approver: currentUser.name,
+        username: currentUser.username,
+        action: 'CREATED',
+        comment: 'Khởi tạo và trình duyệt tờ trình mới',
+        time: new Date().toLocaleString('vi-VN')
+      }
+    ]
   };
 
-  if (fileInput.files && fileInput.files[0]) {
-    const reader = new FileReader();
-    reader.onload = function(evt) {
-      saveSubmission(evt.target.result, fileInput.files[0].name);
-    };
-    reader.readAsDataURL(fileInput.files[0]);
-  } else {
-    saveSubmission();
-  }
+  DB.submissions.unshift(newSub);
+  syncStorage('submissions');
+  logSystemAction('SUBMISSION', 'CREATE_SUBMISSION', `Tạo tờ trình mới [${code} - ${title}]`, 'SUCCESS', code);
+  alert('✅ Trình văn bản / tờ trình thành công!');
+  e.target.reset();
+  renderSubmissionReqs();
 }
 
 function renderSubmissionReqs() {
