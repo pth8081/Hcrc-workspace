@@ -1,0 +1,3424 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Hệ Thống DMS v6.0 - Quản Lý Tài Liệu & Xử Lý Văn Bản Trình Tích Hợp</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+.dash-card.active-card {
+  ring-width: 2px;
+  --tw-ring-color: #2563eb;
+  background-color: #f0f9ff;
+}
+.protected-view-container {
+  user-select: none;
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+}
+</style>
+</head>
+<body class="bg-gray-100 min-h-screen p-6 font-sans">
+<div class="max-w-7xl mx-auto bg-white p-6 rounded-lg shadow-md space-y-6">
+
+  <!-- Header -->
+  <div class="flex justify-between items-center border-b pb-4">
+    <div>
+      <h1 class="text-2xl font-bold text-gray-800">Hệ Thống Quản Lý & Phê Duyệt Tích Hợp (DMS v6.0)</h1>
+      <p class="text-xs text-gray-500">Tài liệu | Xử lý văn bản trình | Phê duyệt đồng cấp | Hợp đồng & Giấy phép | Phòng họp | Công việc | Xe | Văn phòng</p>
+    </div>
+    <div id="userHeader" class="text-right hidden">
+      <div class="cursor-pointer group inline-block" onclick="openProfileModal()" title="Bấm để cập nhật thông tin cá nhân & đổi mật khẩu">
+        <span id="userInfo" class="font-bold text-blue-600 block text-sm group-hover:underline"></span>
+        <span id="userPhoneInfo" class="text-xs text-gray-500 block"></span>
+      </div>
+      <div class="flex gap-2 justify-end mt-1 flex-wrap">
+        <button id="btnDocTab" onclick="switchTab('doc')" class="hidden text-xs bg-blue-600 text-white px-2 py-1 rounded hover:bg-blue-700 font-semibold">📂 Tài liệu</button>
+        <button id="btnSubmissionTab" onclick="switchTab('submission')" class="hidden text-xs bg-amber-600 text-white px-2 py-1 rounded hover:bg-amber-700 font-semibold">📜 Văn bản trình</button>
+        <button id="btnTaskTab" onclick="switchTab('task')" class="hidden text-xs bg-violet-600 text-white px-2 py-1 rounded hover:bg-violet-700 font-semibold">📋 Công việc</button>
+        <button id="btnContractTab" onclick="switchTab('contract')" class="hidden text-xs bg-cyan-600 text-white px-2 py-1 rounded hover:bg-cyan-700 font-semibold">📄 Hợp đồng</button>
+        <button id="btnMeetingTab" onclick="switchTab('meeting')" class="hidden text-xs bg-emerald-600 text-white px-2 py-1 rounded hover:bg-emerald-700 font-semibold">📅 Phòng họp</button>
+        <button id="btnCarTab" onclick="switchTab('car')" class="hidden text-xs bg-indigo-600 text-white px-2 py-1 rounded hover:bg-indigo-700 font-semibold">🚗 Đăng ký xe</button>
+        <button id="btnOfficeTab" onclick="switchTab('office')" class="hidden text-xs bg-teal-600 text-white px-2 py-1 rounded hover:bg-teal-700 font-semibold">🏢 Phê duyệt VP</button>
+        <button id="btnFormTab" onclick="switchTab('form')" class="hidden text-xs bg-rose-600 text-white px-2 py-1 rounded hover:bg-rose-700 font-semibold">📋 Biểu mẫu</button>
+        <button id="btnWorkflowTab" onclick="switchTab('workflow')" class="hidden text-xs bg-emerald-600 text-white px-2 py-1 rounded hover:bg-emerald-700 font-semibold">🔄 Quy trình & Đồng cấp</button>
+        <button id="btnAdminTab" onclick="switchTab('admin')" class="hidden text-xs bg-purple-600 text-white px-2 py-1 rounded hover:bg-purple-700 font-semibold">⚙️ Quản trị</button>
+        <button id="btnLogTab" onclick="switchTab('log')" class="hidden text-xs bg-stone-600 text-white px-2 py-1 rounded hover:bg-stone-700 font-semibold">📊 Log</button>
+        <button onclick="logout()" class="text-xs text-red-500 underline py-1 hover:text-red-700">Đăng xuất</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Màn hình 1: Đăng nhập -->
+  <div id="loginSection" class="max-w-md mx-auto my-10 p-6 border rounded-lg bg-gray-50 space-y-4 shadow-sm">
+    <h2 class="text-xl font-bold text-center text-gray-800">Đăng Nhập Hệ Thống v6.0</h2>
+    
+    <div class="bg-blue-50 p-3 rounded text-xs text-blue-800 space-y-1.5 border border-blue-200">
+      <p class="font-bold">Tài khoản thử nghiệm (Mật khẩu: 123456):</p>
+      <p>• <b>admin</b>: Quản trị viên (Toàn quyền)</p>
+      <p>• <b>nv_nhansu</b>: Nhân sự (Tài liệu, Tờ trình, Hợp đồng, Xe)</p>
+      <p>• <b>ks_kiemsoat</b>: Kiểm soát viên (Duyệt đồng cấp)</p>
+      <p>• <b>sep_duyet</b>: Ban Giám Đốc (Lãnh đạo duyệt cấp cao)</p>
+    </div>
+
+    <div>
+      <label class="block text-xs font-semibold text-gray-600 mb-1">Tên đăng nhập</label>
+      <input id="txtUser" type="text" value="admin" autocomplete="username" class="w-full border p-2 rounded text-sm focus:outline-none focus:border-blue-500">
+    </div>
+    <div>
+      <label class="block text-xs font-semibold text-gray-600 mb-1">Mật khẩu</label>
+      <input id="txtPass" type="password" value="123456" autocomplete="current-password" class="w-full border p-2 rounded text-sm focus:outline-none focus:border-blue-500">
+    </div>
+    <button onclick="login()" class="w-full bg-blue-600 text-white p-2 rounded font-bold hover:bg-blue-700 transition">Đăng Nhập</button>
+  </div>
+
+  <!-- Màn hình 2: Tab Quản Lý Tài Liệu -->
+  <div id="docSection" class="hidden space-y-6">
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div id="card-ALL" onclick="filterByCard('')" class="dash-card bg-white border rounded-lg p-4 shadow-sm border-l-4 border-l-blue-500 flex justify-between items-center cursor-pointer transition-all hover:scale-[1.02]">
+        <div>
+          <p class="text-xs text-gray-500 uppercase font-bold">Tổng Tài Liệu</p>
+          <h3 id="dashTotal" class="text-2xl font-bold text-gray-800">0</h3>
+        </div>
+        <div class="bg-blue-100 p-3 rounded-full text-blue-600">📊</div>
+      </div>
+      <div id="card-APPROVED" onclick="filterByCard('APPROVED')" class="dash-card bg-white border rounded-lg p-4 shadow-sm border-l-4 border-l-green-500 flex justify-between items-center cursor-pointer transition-all hover:scale-[1.02]">
+        <div>
+          <p class="text-xs text-gray-500 uppercase font-bold">Đã Phê Duyệt</p>
+          <h3 id="dashApproved" class="text-2xl font-bold text-green-600">0</h3>
+        </div>
+        <div class="bg-green-100 p-3 rounded-full text-green-600">✅</div>
+      </div>
+      <div id="card-PENDING" onclick="filterByCard('PENDING')" class="dash-card bg-white border rounded-lg p-4 shadow-sm border-l-4 border-l-yellow-500 flex justify-between items-center cursor-pointer transition-all hover:scale-[1.02]">
+        <div>
+          <p class="text-xs text-gray-500 uppercase font-bold">Đang Chờ Duyệt</p>
+          <h3 id="dashPending" class="text-2xl font-bold text-yellow-600">0</h3>
+        </div>
+        <div class="bg-yellow-100 p-3 rounded-full text-yellow-600">⏳</div>
+      </div>
+      <div id="card-REJECTED" onclick="filterByCard('REJECTED')" class="dash-card bg-white border rounded-lg p-4 shadow-sm border-l-4 border-l-red-500 flex justify-between items-center cursor-pointer transition-all hover:scale-[1.02]">
+        <div>
+          <p class="text-xs text-gray-500 uppercase font-bold">Từ Chối / Trả Về</p>
+          <h3 id="dashRejected" class="text-2xl font-bold text-red-600">0</h3>
+        </div>
+        <div class="bg-red-100 p-3 rounded-full text-red-600">❌</div>
+      </div>
+    </div>
+
+    <div id="uploadBox" class="bg-blue-50 p-4 rounded border border-blue-200 hidden">
+      <h3 class="font-bold mb-1 text-blue-900 flex items-center gap-2">
+        📄 Tải Lên Tài Liệu Mới (PDF, Word, Excel, PowerPoint, Hình ảnh)
+      </h3>
+      <p class="text-xs text-amber-700 mb-3 font-semibold">⚠️ Bạn chỉ có thể tải lên tài liệu cho các phòng ban được phân quyền.</p>
+      
+      <form id="docForm" onsubmit="uploadDoc(event)" class="grid grid-cols-1 md:grid-cols-3 gap-3">
+        <input id="docCode" placeholder="Mã tài liệu (VD: HD-2026-01)" class="border p-2 rounded text-sm" required>
+        <input id="docTitle" placeholder="Tên / Tiêu đề tài liệu" class="border p-2 rounded text-sm" required>
+        <input id="docVer" placeholder="Phiên bản (VD: v1.0)" value="v1.0" class="border p-2 rounded text-sm" required>
+        
+        <select id="selDept" class="border p-2 rounded text-sm" required><option value="">-- Chọn Phòng Ban Trình --</option></select>
+        <select id="selCat" class="border p-2 rounded text-sm" required><option value="">-- Chọn Phân Loại --</option></select>
+        <input id="docFile" type="file" accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,image/*" class="border p-1 bg-white rounded text-sm" required>
+        
+        <textarea id="docSummary" placeholder="Trích lục / Tóm tắt nội dung tài liệu..." class="md:col-span-3 border p-2 rounded text-sm h-16" required></textarea>
+        
+        <button type="submit" class="md:col-span-3 bg-green-600 text-white p-2 rounded font-bold hover:bg-green-700 transition">Tải Lên & Trình Ký Phê Duyệt</button>
+      </form>
+    </div>
+
+    <div class="bg-gray-50 p-4 rounded-lg border space-y-3">
+      <h4 class="font-bold text-gray-700 text-sm">🔍 Tìm Kiếm & Lọc Tài Liệu</h4>
+      <div class="grid grid-cols-1 md:grid-cols-5 gap-3">
+        <div>
+          <label class="block text-xs font-semibold text-gray-600 mb-1">Lọc Theo Phòng Ban</label>
+          <select id="filterDept" onchange="onFilterChange()" class="w-full border p-2 rounded text-sm bg-white">
+            <option value="">-- Tất cả phòng ban --</option>
+          </select>
+        </div>
+        <div>
+          <label class="block text-xs font-semibold text-gray-600 mb-1">Lọc Theo Trạng Thái</label>
+          <select id="filterStatus" onchange="onFilterChange()" class="w-full border p-2 rounded text-sm bg-white">
+            <option value="">-- Tất cả trạng thái --</option>
+            <option value="APPROVED">Đã Phê Duyệt</option>
+            <option value="PENDING">Đang Chờ Duyệt</option>
+            <option value="REJECTED">Bị Từ Chối / Trả Về</option>
+          </select>
+        </div>
+        <div>
+          <label class="block text-xs font-semibold text-gray-600 mb-1">Từ Ngày</label>
+          <input id="filterFromDate" type="date" onchange="onFilterChange()" class="w-full border p-2 rounded text-sm bg-white">
+        </div>
+        <div>
+          <label class="block text-xs font-semibold text-gray-600 mb-1">Đến Ngày</label>
+          <input id="filterToDate" type="date" onchange="onFilterChange()" class="w-full border p-2 rounded text-sm bg-white">
+        </div>
+        <div>
+          <label class="block text-xs font-semibold text-gray-600 mb-1">Từ Khóa</label>
+          <input id="filterKeyword" oninput="onFilterChange()" placeholder="Tiêu đề, Mã, Nội dung..." class="w-full border p-2 rounded text-sm">
+        </div>
+      </div>
+    </div>
+
+    <div>
+      <div class="flex justify-between items-center mb-3">
+        <h3 class="font-bold text-gray-800">Danh Sách Tài Liệu Trong Hệ Thống</h3>
+      </div>
+      <div class="overflow-x-auto">
+        <table class="w-full border-collapse border text-sm">
+          <thead>
+            <tr class="bg-gray-200 text-left text-gray-700">
+              <th class="border p-2">Mã Doc</th>
+              <th class="border p-2">Tên & Trích Lục Nội Dung</th>
+              <th class="border p-2">Phòng Ban</th>
+              <th class="border p-2">Phân Loại</th>
+              <th class="border p-2 text-center">Phiên Bản</th>
+              <th class="border p-2">Tiến Trình Phê Duyệt (Tuần Tự)</th>
+              <th class="border p-2 text-center min-w-[140px]">Thao Tác</th>
+            </tr>
+          </thead>
+          <tbody id="docTableBody"></tbody>
+        </table>
+      </div>
+      <div id="paginationBox" class="mt-4 flex flex-col sm:flex-row justify-between items-center gap-3 bg-gray-50 p-3 rounded border text-xs text-gray-700">
+        <div class="flex items-center gap-2">
+          <span>Hiển thị</span>
+          <select id="pageSizeSelect" onchange="changePageSize(this.value)" class="border p-1 rounded bg-white font-semibold">
+            <option value="5" selected>5</option>
+            <option value="10">10</option>
+            <option value="20">20</option>
+          </select>
+          <span>dòng / trang.</span>
+          <span id="pageInfoText" class="font-semibold text-gray-600 border-l pl-2 ml-1"></span>
+        </div>
+        <div id="paginationButtons" class="flex items-center gap-1"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Màn hình MODULE XỦ LÝ VĂN BẢN TRÌNH / TỜ TRÌNH -->
+  <div id="submissionSection" class="hidden space-y-6">
+    <div class="bg-amber-50 p-4 rounded border border-amber-200 space-y-3">
+      <h3 class="font-bold text-amber-900 text-base flex items-center gap-2">📜 Trình Văn Bản / Tờ Trình Đề Xuất Phê Duyệt</h3>
+      <p class="text-xs text-amber-800">Soạn thảo tờ trình đề xuất chủ trương, kinh phí hoặc quy chế. Luồng chuyển duyệt tích hợp phê duyệt đồng cấp đa cấp.</p>
+      
+      <form onsubmit="submitSubmissionReq(event)" class="bg-white p-3 rounded border text-xs space-y-3">
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+          <div>
+            <label class="block font-semibold text-gray-600 mb-1">Mã Văn Bản Trình / Tờ Trình</label>
+            <input id="subCode" placeholder="VD: TT-2026-001" class="w-full border p-1.5 rounded" required>
+          </div>
+          <div>
+            <label class="block font-semibold text-gray-600 mb-1">Phòng Ban Trình</label>
+            <select id="subDept" class="w-full border p-1.5 rounded bg-white font-semibold" required></select>
+          </div>
+          <div>
+            <label class="block font-semibold text-gray-600 mb-1">Loại Tờ Trình</label>
+            <select id="subType" class="w-full border p-1.5 rounded bg-white" required>
+              <option value="Tờ trình xin chủ trương">Tờ trình xin chủ trương</option>
+              <option value="Tờ trình duyệt kinh phí">Tờ trình duyệt kinh phí</option>
+              <option value="Tờ trình nhân sự / bổ nhiệm">Tờ trình nhân sự / bổ nhiệm</option>
+              <option value="Tờ trình ban hành Quy chế / Quy định">Tờ trình ban hành Quy chế / Quy định</option>
+              <option value="Tờ trình khác">Tờ trình khác</option>
+            </select>
+          </div>
+          <div class="md:col-span-2">
+            <label class="block font-semibold text-gray-600 mb-1">Tên / Trích Yếu Tờ Trình</label>
+            <input id="subTitle" placeholder="V/v Đề xuất phê duyệt chủ trương..." class="w-full border p-1.5 rounded" required>
+          </div>
+          <div>
+            <label class="block font-semibold text-gray-600 mb-1">Độ Khẩn</label>
+            <select id="subPriority" class="w-full border p-1.5 rounded bg-white font-bold text-rose-600">
+              <option value="Bình thường">Bình thường</option>
+              <option value="Gấp">🔥 Gấp</option>
+              <option value="Thượng khẩn">⚡ Thượng khẩn</option>
+            </select>
+          </div>
+          <div class="md:col-span-3">
+            <label class="block font-semibold text-gray-600 mb-1">Tệp Đính Kèm Tờ Trình</label>
+            <input id="subFile" type="file" accept=".pdf,.doc,.docx,.xls,.xlsx,image/*" class="w-full border p-1 bg-white rounded">
+          </div>
+        </div>
+
+        <div id="dynamicFieldsContainer_SUBMISSION" class="grid grid-cols-1 md:grid-cols-3 gap-3 border-t pt-3"></div>
+
+        <div>
+          <label class="block font-semibold text-gray-600 mb-1">Nội Dung Trình Chi Tiết & Đề Xuất Cụ Thể</label>
+          <textarea id="subContent" placeholder="Kính trình Lãnh đạo xem xét và phê duyệt nội dung..." class="w-full border p-1.5 rounded h-20" required></textarea>
+        </div>
+        <div class="flex justify-end">
+          <button type="submit" class="bg-amber-600 text-white px-5 py-2 rounded font-bold hover:bg-amber-700">Trình Văn Bản / Tờ Trình</button>
+        </div>
+      </form>
+    </div>
+
+    <div class="space-y-3">
+      <h3 class="font-bold text-gray-800">📋 Danh Sách Văn Bản Trình / Tờ Trình</h3>
+      <div class="overflow-x-auto">
+        <table class="w-full border-collapse border text-xs bg-white">
+          <thead>
+            <tr class="bg-gray-100 text-left text-gray-700">
+              <th class="border p-2">Mã Tờ Trình</th>
+              <th class="border p-2">Trích Yếu & Nội Dung</th>
+              <th class="border p-2">Phòng Ban & Người Trình</th>
+              <th class="border p-2">Loại & Độ Khẩn</th>
+              <th class="border p-2">Tiến Trình & Phê Duyệt Đồng Cấp</th>
+              <th class="border p-2 text-center min-w-[120px]">Thao Tác</th>
+            </tr>
+          </thead>
+          <tbody id="submissionTableBody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- Màn hình MODULE QUẢN LÝ CÔNG VIỆC -->
+  <div id="taskSection" class="hidden space-y-6">
+    <div class="bg-violet-50 p-4 rounded border border-violet-200 space-y-3">
+      <h3 class="font-bold text-violet-900 text-base flex items-center gap-2">📋 Quản Lý Công Việc & Tiến Trình Văn Bản Trình</h3>
+      <p class="text-xs text-violet-800">Hiển thị các công việc đang trong tiến trình xử lý hoặc đã hoàn tất từ module Xử lý văn bản trình.</p>
+      
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-3 bg-white p-3 rounded border text-xs">
+        <div>
+          <label class="block font-semibold text-gray-600 mb-1">Lọc Theo Trạng Thái</label>
+          <select id="filterTaskStatus" onchange="renderTasks()" class="w-full border p-1.5 rounded bg-white">
+            <option value="">-- Tất cả trạng thái --</option>
+            <option value="PENDING">Đang trong tiến trình xử lý (PENDING)</option>
+            <option value="APPROVED">Đã xử lý / Hoàn thành (APPROVED)</option>
+            <option value="REJECTED">Bị từ chối / Trả về (REJECTED)</option>
+          </select>
+        </div>
+        <div>
+          <label class="block font-semibold text-gray-600 mb-1">Từ Khóa Tìm Kiếm</label>
+          <input id="filterTaskKeyword" oninput="renderTasks()" placeholder="Mã tờ trình, trích yếu, người trình..." class="w-full border p-1.5 rounded">
+        </div>
+        <div class="flex items-end">
+          <button onclick="resetTaskFilters()" class="w-full bg-gray-200 text-gray-700 p-1.5 rounded font-bold hover:bg-gray-300">Đặt Lại Bộ Lọc</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="space-y-3">
+      <h3 class="font-bold text-gray-800">📋 Danh Sách Công Việc Văn Bản Trình</h3>
+      <div class="overflow-x-auto">
+        <table class="w-full border-collapse border text-xs bg-white">
+          <thead>
+            <tr class="bg-gray-100 text-left text-gray-700">
+              <th class="border p-2">Mã Công Việc / Tờ Trình</th>
+              <th class="border p-2">Trích Yếu & Nội Dung</th>
+              <th class="border p-2">Phòng Ban & Người Trình</th>
+              <th class="border p-2">Độ Khẩn</th>
+              <th class="border p-2">Tiến Trình Xử Lý</th>
+              <th class="border p-2 text-center min-w-[120px]">Thao Tác Nhanh</th>
+            </tr>
+          </thead>
+          <tbody id="taskTableBody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- Màn hình MODULE HỢP ĐỒNG & GIẤY PHÉP -->
+  <div id="contractSection" class="hidden space-y-6">
+    <div class="bg-cyan-50 p-4 rounded border border-cyan-200 space-y-3">
+      <h3 class="font-bold text-cyan-900 text-base flex items-center gap-2">📄 Quản Lý Hợp Đồng & Giấy Phép</h3>
+      <p class="text-xs text-cyan-800">Quản lý và theo dõi thời hạn hợp đồng, giấy phép để tự động thông báo hết hạn.</p> 
+      
+      <form onsubmit="submitContractReq(event)" class="bg-white p-3 rounded border text-xs space-y-3">
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+          <div>
+            <label class="block font-semibold text-gray-600 mb-1">Mã Hợp Đồng / Giấy Phép</label>
+            <input id="contractCode" placeholder="VD: HDKT-2026-001" class="w-full border p-1.5 rounded" required>
+          </div>
+          <div>
+            <label class="block font-semibold text-gray-600 mb-1">Phòng Ban Quản Lý</label>
+            <select id="contractDept" class="w-full border p-1.5 rounded bg-white font-semibold" required></select>
+          </div>
+          <div>
+            <label class="block font-semibold text-gray-600 mb-1">Loại Pháp Lý</label>
+            <select id="contractType" class="w-full border p-1.5 rounded bg-white" required>
+              <option value="Hợp đồng kinh tế">Hợp đồng kinh tế</option>
+              <option value="Hợp đồng lao động">Hợp đồng lao động</option>
+              <option value="Giấy phép kinh doanh / Pháp lý">Giấy phép kinh doanh / Pháp lý</option>
+              <option value="Thỏa thuận bảo mật (NDA)">Thỏa thuận bảo mật (NDA)</option>
+              <option value="Phụ lục hợp đồng">Phụ lục hợp đồng</option>
+            </select>
+          </div>
+          <div class="md:col-span-2">
+            <label class="block font-semibold text-gray-600 mb-1">Tên Hợp Đồng / Tên Giấy Phép</label>
+            <input id="contractTitle" placeholder="Hợp đồng cung cấp dịch vụ công nghệ..." class="w-full border p-1.5 rounded" required>
+          </div>
+          <div>
+            <label class="block font-semibold text-gray-600 mb-1">Đối Tác / Bên Ký Kết</label>
+            <input id="contractPartner" placeholder="Công ty TNHH ABC..." class="w-full border p-1.5 rounded" required>
+          </div>
+          <div>
+            <label class="block font-semibold text-gray-600 mb-1">Giá Trị Hợp Đồng (VNĐ)</label>
+            <input id="contractAmount" type="number" placeholder="100000000" class="w-full border p-1.5 rounded" required>
+          </div>
+          <div>
+            <label class="block font-semibold text-gray-600 mb-1">Ngày Hiệu Lực</label>
+            <input id="contractStartDate" type="date" class="w-full border p-1.5 rounded" required>
+          </div>
+          <div>
+            <label class="block font-semibold text-gray-600 mb-1">Ngày Hết Hạn</label>
+            <input id="contractEndDate" type="date" class="w-full border p-1.5 rounded" required>
+          </div>
+          <div class="md:col-span-3">
+            <label class="block font-semibold text-gray-600 mb-1">Tệp Đính Kèm Hợp Đồng / Giấy Phép</label>
+            <input id="contractFile" type="file" accept=".pdf,.doc,.docx" class="w-full border p-1 bg-white rounded" required>
+          </div>
+        </div>
+        <div>
+          <label class="block font-semibold text-gray-600 mb-1">Nội Dung Tóm Tắt & Điều Khoản Chính</label>
+          <textarea id="contractContent" placeholder="Ghi chú các điều khoản thanh toán, nghĩa vụ..." class="w-full border p-1.5 rounded h-16" required></textarea>
+        </div>
+        <div class="flex justify-end">
+          <button type="submit" class="bg-cyan-600 text-white px-5 py-2 rounded font-bold hover:bg-cyan-700">Lưu & Theo Dõi Hết Hạn</button>
+        </div>
+      </form>
+    </div>
+
+    <div class="space-y-3">
+      <h3 class="font-bold text-gray-800">📋 Danh Sách Hợp Đồng & Giấy Phép & Trạng Thái Cảnh Báo</h3>
+      <div class="overflow-x-auto">
+        <table class="w-full border-collapse border text-xs bg-white">
+          <thead>
+            <tr class="bg-gray-100 text-left text-gray-700">
+              <th class="border p-2">Mã & Loại</th>
+              <th class="border p-2">Tên & Đối Tác</th>
+              <th class="border p-2">Giá Trị & Thời Hạn</th>
+              <th class="border p-2">Phòng Ban & Người Tạo</th>
+              <th class="border p-2">Trạng Thái & Cảnh Báo Hết Hạn</th>
+              <th class="border p-2 text-center min-w-[100px]">Thao Tác</th>
+            </tr>
+          </thead>
+          <tbody id="contractTableBody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- Màn hình MODULE QUẢN LÝ PHÒNG HỌP -->
+  <div id="meetingSection" class="hidden space-y-6">
+    <div class="bg-emerald-50 p-4 rounded border border-emerald-200 space-y-3">
+      <h3 class="font-bold text-emerald-900 text-base flex items-center gap-2">📅 Quản Lý & Đặt Lịch Phòng Họp</h3>
+      <p class="text-xs text-emerald-800">Đăng ký lịch sử dụng phòng họp. Phiếu đặt chỉ được xác nhận sau khi được phê duyệt.</p> 
+      
+      <form onsubmit="submitMeetingReq(event)" class="bg-white p-3 rounded border text-xs space-y-3">
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+          <div>
+            <label class="block font-semibold text-gray-600 mb-1">Mã Phiếu Đặt Phòng</label>
+            <input id="meetingCode" placeholder="VD: HOP-2026-001" class="w-full border p-1.5 rounded" required>
+          </div>
+          <div>
+            <label class="block font-semibold text-gray-600 mb-1">Phòng Ban Đặt Lịch</label>
+            <select id="meetingDept" class="w-full border p-1.5 rounded bg-white font-semibold" required></select>
+          </div>
+          <div>
+            <label class="block font-semibold text-gray-600 mb-1">Chọn Phòng Họp</label>
+            <select id="meetingRoom" class="w-full border p-1.5 rounded bg-white" required>
+              <option value="Phòng Họp Lớn A (Tầng 3 - Sức chứa 50 người)">Phòng Họp Lớn A (Tầng 3 - 50 người)</option>
+              <option value="Phòng Họp Nhỏ B (Tầng 2 - Sức chứa 15 người)">Phòng Họp Nhỏ B (Tầng 2 - 15 người)</option>
+              <option value="Phòng Hội Thảo Trực Tuyến C (Tầng 5)">Phòng Hội Thảo Trực Tuyến C (Tầng 5)</option>
+            </select>
+          </div>
+          <div class="md:col-span-2">
+            <label class="block font-semibold text-gray-600 mb-1">Chủ Đề Cuộc Họp</label>
+            <input id="meetingTitle" placeholder="Họp giao ban tuần / Họp triển khai dự án..." class="w-full border p-1.5 rounded" required>
+          </div>
+          <div>
+            <label class="block font-semibold text-gray-600 mb-1">Số Lượng Người Tham Dự</label>
+            <input id="meetingAttendees" type="number" placeholder="10" class="w-full border p-1.5 rounded" required>
+          </div>
+          <div>
+            <label class="block font-semibold text-gray-600 mb-1">Thời Gian Bắt Đầu</label>
+            <input id="meetingStartTime" type="datetime-local" class="w-full border p-1.5 rounded" required>
+          </div>
+          <div>
+            <label class="block font-semibold text-gray-600 mb-1">Thời Gian Kết Thúc</label>
+            <input id="meetingEndTime" type="datetime-local" class="w-full border p-1.5 rounded" required>
+          </div>
+          <div>
+            <label class="block font-semibold text-gray-600 mb-1">Thiết Bị Hỗ Trợ Yêu Cầu</label>
+            <input id="meetingEquipment" placeholder="Máy chiếu, Micro không dây, Zoom online..." class="w-full border p-1.5 rounded">
+          </div>
+        </div>
+        <div>
+          <label class="block font-semibold text-gray-600 mb-1">Nội Dung / Chương Trình Họp Chi Tiết (Agenda)</label>
+          <textarea id="meetingAgenda" placeholder="1. Đánh giá tuần qua... 2. Kế hoạch tuần tới..." class="w-full border p-1.5 rounded h-16" required></textarea>
+        </div>
+        <div class="flex justify-end">
+          <button type="submit" class="bg-emerald-600 text-white px-5 py-2 rounded font-bold hover:bg-emerald-700">Gửi Đăng Ký Phòng Họp</button>
+        </div>
+      </form>
+    </div>
+
+    <div class="space-y-3">
+      <h3 class="font-bold text-gray-800">📋 Danh Sách Đặt Lịch Phòng Họp & Trạng Thái Phê Duyệt</h3>
+      <div class="overflow-x-auto">
+        <table class="w-full border-collapse border text-xs bg-white">
+          <thead>
+            <tr class="bg-gray-100 text-left text-gray-700">
+              <th class="border p-2">Mã & Phòng Họp</th>
+              <th class="border p-2">Chủ Đề & Số Người</th>
+              <th class="border p-2">Thời Gian Sử Dụng</th>
+              <th class="border p-2">Phòng Ban & Người Đặt</th>
+              <th class="border p-2">Trạng Thái & Phê Duyệt</th>
+              <th class="border p-2 text-center min-w-[140px]">Thao Tác</th>
+            </tr>
+          </thead>
+          <tbody id="meetingTableBody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- Màn hình MODULE ĐĂNG KÝ XE -->
+  <div id="carSection" class="hidden space-y-6">
+    <div class="bg-indigo-50 p-4 rounded border border-indigo-200 space-y-3">
+      <h3 class="font-bold text-indigo-900 text-base flex items-center gap-2">🚗 Mẫu Biểu Đăng Ký Xe Ô Tô / Phương Tiện</h3>
+      <p class="text-xs text-indigo-700">Tạo phiếu đăng ký lịch trình xe. Luồng duyệt tích hợp phê duyệt đồng cấp.</p>
+      
+      <form onsubmit="submitCarReq(event)" class="bg-white p-3 rounded border text-xs space-y-3">
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+          <div>
+            <label class="block font-semibold text-gray-600 mb-1">Mã Phiếu Đăng Ký</label>
+            <input id="carCode" placeholder="Mã tự động hoặc nhập (VD: XE-2026-001)" class="w-full border p-1.5 rounded" required>
+          </div>
+          <div>
+            <label class="block font-semibold text-gray-600 mb-1">Phòng Ban Đăng Ký</label>
+            <select id="carDept" class="w-full border p-1.5 rounded bg-white font-semibold" required></select>
+          </div>
+          <div>
+            <label class="block font-semibold text-gray-600 mb-1">Loại Xe / Bằng Lái Cần Thiết</label>
+            <select id="carType" class="w-full border p-1.5 rounded bg-white" required>
+              <option value="Xe 4 chỗ">Xe 4 chỗ</option>
+              <option value="Xe 7 chỗ">Xe 7 chỗ</option>
+              <option value="Xe 16 chỗ">Xe 16 chỗ</option>
+              <option value="Xe Bán tải">Xe Bán tải</option>
+            </select>
+          </div>
+          <div>
+            <label class="block font-semibold text-gray-600 mb-1">Biển Số Xe</label>
+            <input id="carPlate" placeholder="VD: 30F-123.45" class="w-full border p-1.5 rounded">
+          </div>
+          <div>
+            <label class="block font-semibold text-gray-600 mb-1">Lái Xe / Tự Lái</label>
+            <input id="carDriver" placeholder="Tên tài xế hoặc Ghi 'Tự lái'" class="w-full border p-1.5 rounded" required>
+          </div>
+          <div>
+            <label class="block font-semibold text-gray-600 mb-1">Số KM Dự Kiến</label>
+            <input id="carKm" type="number" placeholder="150" class="w-full border p-1.5 rounded" required>
+          </div>
+          <div>
+            <label class="block font-semibold text-gray-600 mb-1">Thời Gian Bắt Đầu Đi</label>
+            <input id="carStartTime" type="datetime-local" class="w-full border p-1.5 rounded" required>
+          </div>
+          <div>
+            <label class="block font-semibold text-gray-600 mb-1">Thời Gian Dự Kiến Về</label>
+            <input id="carEndTime" type="datetime-local" class="w-full border p-1.5 rounded" required>
+          </div>
+          <div>
+            <label class="block font-semibold text-gray-600 mb-1">Lộ Trình / Địa Điểm Đến</label>
+            <input id="carDestination" placeholder="HN -> Hải Phòng -> HN" class="w-full border p-1.5 rounded" required>
+          </div>
+        </div>
+
+        <div id="dynamicFieldsContainer_CAR" class="grid grid-cols-1 md:grid-cols-3 gap-3 border-t pt-3"></div>
+
+        <div>
+          <label class="block font-semibold text-gray-600 mb-1">Mục Đích Sử Dụng / Lý Do Công Tác</label>
+          <textarea id="carReason" placeholder="Diễn giải chi tiết công tác..." class="w-full border p-1.5 rounded h-16" required></textarea>
+        </div>
+        <div class="flex justify-end">
+          <button type="submit" class="bg-indigo-600 text-white px-5 py-2 rounded font-bold hover:bg-indigo-700">Gửi Đăng Ký Xe & Trình Duyệt</button>
+        </div>
+      </form>
+    </div>
+
+    <div class="space-y-3">
+      <h3 class="font-bold text-gray-800">📋 Danh Sách Phiếu Đăng Ký Xe</h3>
+      <div class="overflow-x-auto">
+        <table class="w-full border-collapse border text-xs bg-white">
+          <thead>
+            <tr class="bg-gray-100 text-left text-gray-700">
+              <th class="border p-2">Mã Đăng Ký</th>
+              <th class="border p-2">Phòng Ban / Người Đăng Ký</th>
+              <th class="border p-2">Thông Tin Xe & Lái Xe</th>
+              <th class="border p-2">Thời Gian & Lộ Trình</th>
+              <th class="border p-2">Mục Đích & Trường Tùy Biến</th>
+              <th class="border p-2">Trạng Thái & Lịch Sử Duyệt Đồng Cấp</th>
+              <th class="border p-2 text-center">Thao Tác</th>
+            </tr>
+          </thead>
+          <tbody id="carTableBody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- Màn hình MODULE PHÊ DUYỆT VĂN PHÒNG -->
+  <div id="officeSection" class="hidden space-y-6">
+    <div class="bg-teal-50 p-4 rounded border border-teal-200 space-y-3">
+      <div class="flex justify-between items-center">
+        <h3 class="font-bold text-teal-900 text-base flex items-center gap-2">🏢 Phê Duyệt Văn Phòng (Mua Bán - Sửa Chữa - Đầu Tư)</h3>
+        <div class="flex gap-2">
+          <button onclick="setOfficeSubTab('MUA_BAN')" id="btnSubBuy" class="px-3 py-1 rounded text-xs font-bold bg-teal-700 text-white">🛒 Mua Bán</button>
+          <button onclick="setOfficeSubTab('SUA_CHUA')" id="btnSubFix" class="px-3 py-1 rounded text-xs font-bold bg-gray-200 text-gray-700">🔧 Sửa Chữa</button>
+          <button onclick="setOfficeSubTab('DAU_TU')" id="btnSubInvest" class="px-3 py-1 rounded text-xs font-bold bg-gray-200 text-gray-700">📈 Đầu Tư</button>
+        </div>
+      </div>
+      <p class="text-xs text-teal-800" id="officeSubTitle">Phân hệ Mua Sắm Trang Thiết Bị / Vật Tư Văn Phòng.</p>
+      
+      <form onsubmit="submitOfficeReq(event)" class="bg-white p-3 rounded border text-xs space-y-3">
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+          <div>
+            <label class="block font-semibold text-gray-600 mb-1">Mã Yêu Cầu</label>
+            <input id="offCode" placeholder="VD: MB-2026-001" class="w-full border p-1.5 rounded" required>
+          </div>
+          <div>
+            <label class="block font-semibold text-gray-600 mb-1">Phòng Ban Trình</label>
+            <select id="offDept" class="w-full border p-1.5 rounded bg-white font-semibold" required></select>
+          </div>
+          <div>
+            <label class="block font-semibold text-gray-600 mb-1">Tên Hạng Mục / Nội Dung Trình</label>
+            <input id="offTitle" placeholder="Tên mua sắm / hạng mục sửa chữa / gói đầu tư" class="w-full border p-1.5 rounded" required>
+          </div>
+          <div>
+            <label class="block font-semibold text-gray-600 mb-1">Số Lượng / Quy Mô</label>
+            <input id="offQty" placeholder="VD: 5 cái / 10 bộ" class="w-full border p-1.5 rounded" required>
+          </div>
+          <div>
+            <label class="block font-semibold text-gray-600 mb-1">Dự Toán / Tổng Chi Phí (VNĐ)</label>
+            <input id="offAmount" type="number" placeholder="50000000" class="w-full border p-1.5 rounded" required>
+          </div>
+          <div>
+            <label class="block font-semibold text-gray-600 mb-1">Đối Tác / Nhà Cung Cấp</label>
+            <input id="offSupplier" placeholder="Công ty cung cấp dịch vụ..." class="w-full border p-1.5 rounded">
+          </div>
+        </div>
+
+        <div id="dynamicFieldsContainer_OFFICE" class="grid grid-cols-1 md:grid-cols-3 gap-3 border-t pt-3"></div>
+
+        <div>
+          <label class="block font-semibold text-gray-600 mb-1">Lý Do Trình & Diễn Giải Chi Tiết</label>
+          <textarea id="offReason" placeholder="Cần thiết mua mới / lý do hỏng hóc / hiệu quả đầu tư..." class="w-full border p-1.5 rounded h-16" required></textarea>
+        </div>
+        <div class="flex justify-end">
+          <button type="submit" class="bg-teal-600 text-white px-5 py-2 rounded font-bold hover:bg-teal-700">Trình Duyệt Văn Phòng</button>
+        </div>
+      </form>
+    </div>
+
+    <div class="space-y-3">
+      <h3 class="font-bold text-gray-800">📋 Danh Sách Đề Xuất Phê Duyệt Văn Phòng</h3>
+      <div class="overflow-x-auto">
+        <table class="w-full border-collapse border text-xs bg-white">
+          <thead>
+            <tr class="bg-gray-100 text-left text-gray-700">
+              <th class="border p-2">Mã Phiếu</th>
+              <th class="border p-2">Phân Hệ</th>
+              <th class="border p-2">Phòng Ban & Người Đề Xuất</th>
+              <th class="border p-2">Tên Hạng Mục & Số Lượng</th>
+              <th class="border p-2">Dự Toán & Trường Tùy Biến</th>
+              <th class="border p-2">Trạng Thái & Lịch Sử Duyệt Đồng Cấp</th>
+              <th class="border p-2 text-center">Thao Tác</th>
+            </tr>
+          </thead>
+          <tbody id="officeTableBody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- Màn hình MODULE QUẢN LÝ BIỂU MẪU (FORM BUILDER) -->
+  <div id="formSection" class="hidden space-y-6">
+    <div class="bg-rose-50 p-4 rounded border border-rose-200 space-y-4">
+      <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 border-b border-rose-200 pb-3">
+        <div>
+          <h3 class="font-bold text-rose-900 text-base flex items-center gap-2">📋 Quản Lý & Tùy Biến Trường Cho Các Biểu Mẫu</h3>
+          <p class="text-xs text-rose-700">Thêm, bớt, cập nhật trường dữ liệu động cho từng loại biểu mẫu.</p>
+        </div>
+        <div class="flex gap-2 flex-wrap">
+          <button onclick="switchFormTab('SUBMISSION')" id="btnFormTabSubmission" class="px-3 py-1.5 rounded text-xs font-bold bg-rose-700 text-white">📜 Tờ Trình</button>
+          <button onclick="switchFormTab('CAR')" id="btnFormTabCar" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">🚗 Đăng Ký Xe</button>
+          <button onclick="switchFormTab('MUA_BAN')" id="btnFormTabBuy" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">🛒 Mua Bán</button>
+          <button onclick="switchFormTab('SUA_CHUA')" id="btnFormTabFix" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">🔧 Sửa Chữa</button>
+          <button onclick="switchFormTab('DAU_TU')" id="btnFormTabInvest" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">📈 Đầu Tư</button>
+        </div>
+      </div>
+
+      <form onsubmit="addCustomField(event)" class="bg-white p-4 rounded border space-y-3 text-xs">
+        <h4 class="font-bold text-gray-800 text-sm flex items-center gap-1">➕ Thêm Trường Dữ Liệu Tùy Biến Cho: <span id="lblActiveFormName" class="text-rose-600 font-extrabold">Văn Bản Trình / Tờ Trình</span></h4>
+        
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-3">
+          <div>
+            <label class="block font-semibold text-gray-600 mb-1">Tên Trường (Label)</label>
+            <input id="fldLabel" placeholder="VD: Phạm vi áp dụng..." class="w-full border p-1.5 rounded" required>
+          </div>
+          <div>
+            <label class="block font-semibold text-gray-600 mb-1">Kiểu Dữ Liệu</label>
+            <select id="fldType" onchange="toggleOptionsInput()" class="w-full border p-1.5 rounded bg-white font-semibold">
+              <option value="text">Văn bản ngắn (Text)</option>
+              <option value="number">Số (Number)</option>
+              <option value="date">Ngày (Date)</option>
+              <option value="datetime-local">Ngày & Giờ (DateTime)</option>
+              <option value="select">Danh sách chọn (Dropdown Select)</option>
+              <option value="textarea">Văn bản dài (Textarea)</option>
+            </select>
+          </div>
+          <div id="optionsGroup" class="hidden">
+            <label class="block font-semibold text-gray-600 mb-1">CÁC TÙY CHỌN (Phân cách dấu phẩy)</label>
+            <input id="fldOptions" placeholder="Toàn tập đoàn, Nội bộ phòng..." class="w-full border p-1.5 rounded">
+          </div>
+          <div class="flex items-center pt-5 gap-2">
+            <label class="flex items-center gap-1.5 font-bold text-gray-700 cursor-pointer">
+              <input id="fldRequired" type="checkbox" class="w-4 h-4 text-rose-600 rounded">
+              <span>Bắt buộc nhập</span>
+            </label>
+          </div>
+        </div>
+
+        <div class="flex justify-end">
+          <button type="submit" class="bg-rose-600 text-white px-4 py-1.5 rounded font-bold hover:bg-rose-700 transition">Thêm Trường Vào Biểu Mẫu</button>
+        </div>
+      </form>
+
+      <div class="bg-white rounded border overflow-hidden">
+        <div class="p-3 bg-gray-50 border-b flex justify-between items-center">
+          <h4 class="font-bold text-gray-800 text-xs">Cấu Trúc Tất Cả Các Trường Đang Áp Dụng</h4>
+          <span class="text-xs text-gray-500 italic">Các trường mặc định không thể xóa.</span>
+        </div>
+        <div class="overflow-x-auto">
+          <table class="w-full border-collapse text-xs text-left">
+            <thead>
+              <tr class="bg-gray-100 text-gray-700 font-bold border-b">
+                <th class="p-2 border">Mã Trường</th>
+                <th class="p-2 border">Tên Hiển Thị</th>
+                <th class="p-2 border">Loại Dữ Liệu</th>
+                <th class="p-2 border">Options</th>
+                <th class="p-2 border text-center">Bắt Buộc</th>
+                <th class="p-2 border text-center">Phân Loại</th>
+                <th class="p-2 border text-center">Thao Tác</th>
+              </tr>
+            </thead>
+            <tbody id="formFieldsTableBody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Màn hình 3: Tab Quản Lý Quy Trình & Phê Duyệt Đồng Cấp -->
+  <div id="workflowSection" class="hidden space-y-6">
+    <div class="flex gap-2 border-b pb-2 flex-wrap">
+      <button onclick="switchWfModule('DOC')" id="btnWfModDoc" class="px-3 py-1.5 rounded text-xs font-bold bg-blue-600 text-white">📂 QT Tài Liệu</button>
+      <button onclick="switchWfModule('SUBMISSION')" id="btnWfModSubmission" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">📜 QT Văn Bản Trình</button>
+      <button onclick="switchWfModule('CAR')" id="btnWfModCar" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">🚗 QT Đăng Ký Xe</button>
+      <button onclick="switchWfModule('OFFICE_BUY')" id="btnWfModOfficeBuy" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">🛒 QT Mua Bán</button>
+      <button onclick="switchWfModule('OFFICE_FIX')" id="btnWfModOfficeFix" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">🔧 QT Sửa Chữa</button>
+      <button onclick="switchWfModule('OFFICE_INVEST')" id="btnWfModOfficeInvest" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">📈 QT Đầu Tư</button>
+    </div>
+
+    <div class="bg-emerald-50 p-4 rounded border border-emerald-200 space-y-3">
+      <h3 class="font-bold text-emerald-900 text-base flex items-center gap-2" id="wfConfigTitle">
+        🏢 Cấu Hình Quy Trình Theo Phòng Ban
+      </h3>
+      <p class="text-xs text-emerald-800">💡 Cấu hình luồng duyệt chuyển tiếp theo các cấp thẩm quyền phòng ban.</p>
+      
+      <div id="deptWorkflowConfigContainer" class="space-y-4"></div>
+    </div>
+
+    <!-- ĐỊNH NGHĨA CÁC MẪU QUY TRÌNH (WORKFLOW TEMPLATES) -->
+    <div class="bg-slate-50 p-4 rounded border space-y-4">
+      <h3 class="font-bold text-slate-800 text-base">🛠️ Định Nghĩa Các Mẫu Bước Phê Duyệt</h3>
+      
+      <form onsubmit="saveWorkflowTemplate(event)" class="bg-white p-3 rounded border space-y-3">
+        <input id="editingWfCode" type="hidden">
+        
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+          <div>
+            <label class="block text-xs font-semibold text-gray-600 mb-1">Mã Quy Trình (VD: WF_5STEP)</label>
+            <input id="wfCode" placeholder="WF_..." class="w-full border p-1.5 rounded text-xs disabled:bg-gray-100 font-mono font-bold" required>
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-gray-600 mb-1">Tên Quy Trình</label>
+            <input id="wfName" placeholder="Ví dụ: Quy trình chuẩn 3 bước" class="w-full border p-1.5 rounded text-xs" required>
+          </div>
+        </div>
+
+        <div>
+          <label class="block text-xs font-bold text-gray-700 mb-2">Thêm / Sửa / Xóa Các Bước Theo Thứ Tự:</label>
+          <div id="stepBuilderContainer" class="space-y-2"></div>
+          <button type="button" onclick="addStepRow()" class="mt-2 text-xs bg-gray-200 text-gray-800 px-2 py-1 rounded font-semibold hover:bg-gray-300">+ Thêm Bước Duyệt</button>
+        </div>
+
+        <div class="flex justify-end gap-2">
+          <button id="btnCancelWf" type="button" onclick="resetWorkflowForm()" class="hidden bg-gray-400 text-white text-xs px-3 py-1.5 rounded font-bold">Hủy</button>
+          <button id="btnSaveWf" type="submit" class="bg-emerald-600 text-white text-xs px-4 py-1.5 rounded font-bold hover:bg-emerald-700">Lưu Mẫu Quy Trình</button>
+        </div>
+      </form>
+
+      <div class="overflow-x-auto bg-white rounded border">
+        <table class="w-full text-xs text-left">
+          <thead class="bg-gray-100 text-gray-700 font-bold">
+            <tr>
+              <th class="p-2 border">Mã WF</th>
+              <th class="p-2 border">Tên Quy Trình</th>
+              <th class="p-2 border">Tổng Số Bước</th>
+              <th class="p-2 border">Cấu Trúc Duyệt</th>
+              <th class="p-2 border text-center">Thao Tác</th>
+            </tr>
+          </thead>
+          <tbody id="workflowTableBody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- Màn hình 4: Tab Quản Trị Hệ Thống & Phân Quyền -->
+  <div id="adminSection" class="hidden space-y-6">
+    <!-- CẤU HÌNH HỆ THỐNG EMAIL -->
+    <div class="bg-amber-50 p-4 rounded border border-amber-300 space-y-3">
+      <h3 class="font-bold text-amber-900 text-sm flex items-center gap-1">✉️ Cấu Hình Máy Chủ Gửi Email Thông Báo</h3>
+      
+      <form onsubmit="saveEmailConfig(event)" class="grid grid-cols-1 md:grid-cols-4 gap-3 bg-white p-3 rounded border text-xs">
+        <div>
+          <label class="block font-semibold text-gray-600 mb-1">Trạng thái gửi mail</label>
+          <select id="cfgEmailEnabled" class="w-full border p-1.5 rounded bg-white font-bold text-green-700">
+            <option value="true">Bật (Active)</option>
+            <option value="false">Tắt (Disabled)</option>
+          </select>
+        </div>
+        <div>
+          <label class="block font-semibold text-gray-600 mb-1">SMTP Server</label>
+          <input id="cfgSmtpHost" placeholder="smtp.gmail.com" class="w-full border p-1.5 rounded" required>
+        </div>
+        <div>
+          <label class="block font-semibold text-gray-600 mb-1">SMTP Port</label>
+          <input id="cfgSmtpPort" type="number" placeholder="587" class="w-full border p-1.5 rounded" required>
+        </div>
+        <div>
+          <label class="block font-semibold text-gray-600 mb-1">Email Hệ Thống (Sender)</label>
+          <input id="cfgSenderEmail" type="email" placeholder="dms-noreply@company.com" class="w-full border p-1.5 rounded" required>
+        </div>
+        <div class="md:col-span-4 flex justify-between items-center pt-1">
+          <span class="text-gray-500 italic text-[11px]">Hệ thống ghi nhận log thông báo email tại cửa sổ console.</span>
+          <button type="submit" class="bg-amber-600 text-white px-4 py-1.5 rounded font-bold hover:bg-amber-700">Lưu Cấu Hình Email</button>
+        </div>
+      </form>
+    </div>
+
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+      <div class="bg-indigo-50 p-4 rounded border border-indigo-200 space-y-3">
+        <h3 class="font-bold text-indigo-900 text-sm flex items-center gap-1">🏢 Quản Lý Danh Mục Phòng Ban</h3>
+        <form onsubmit="saveDept(event)" class="flex gap-2">
+          <input id="txtDeptName" placeholder="Tên phòng ban mới..." class="border p-1.5 rounded text-xs flex-1" required>
+          <button type="submit" class="bg-indigo-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-indigo-700">Thêm</button>
+        </form>
+        <div class="max-h-32 overflow-y-auto bg-white rounded border">
+          <ul id="deptList" class="divide-y text-xs"></ul>
+        </div>
+      </div>
+
+      <div class="bg-emerald-50 p-4 rounded border border-emerald-200 space-y-3">
+        <h3 class="font-bold text-emerald-900 text-sm flex items-center gap-1">🏷️ Quản Lý Phân Loại Tài Liệu</h3>
+        <form onsubmit="saveCat(event)" class="flex gap-2">
+          <input id="txtCatName" placeholder="Tên loại tài liệu mới..." class="border p-1.5 rounded text-xs flex-1" required>
+          <button type="submit" class="bg-emerald-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-emerald-700">Thêm</button>
+        </form>
+        <div class="max-h-32 overflow-y-auto bg-white rounded border">
+          <ul id="catList" class="divide-y text-xs"></ul>
+        </div>
+      </div>
+    </div>
+
+    <!-- CẤU HÌNH USER & PHÂN QUYỀN -->
+    <div class="bg-slate-50 p-4 rounded border border-slate-300 space-y-4">
+      <div>
+        <h3 class="font-bold text-base text-gray-800">Cấu hình Quyền Hạn, Email, Số Điện Thoại & Phạm Vi Truy Cập Theo Phòng Ban</h3>
+      </div>
+      
+      <form onsubmit="saveUser(event)" class="space-y-4">
+        <input id="editUserId" type="hidden">
+        
+        <div class="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-3 bg-white p-3 rounded border">
+          <div>
+            <label class="block text-xs font-semibold text-gray-600 mb-1">Tên đăng nhập</label>
+            <input id="uUsername" placeholder="username" class="w-full border p-1.5 rounded text-xs" required>
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-gray-600 mb-1">Mật khẩu</label>
+            <input id="uPassword" type="password" placeholder="******" class="w-full border p-1.5 rounded text-xs" required>
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-gray-600 mb-1">Họ và Tên</label>
+            <input id="uFullName" placeholder="Nguyễn Văn A" class="w-full border p-1.5 rounded text-xs" required>
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-gray-600 mb-1">Email</label>
+            <input id="uEmail" type="email" placeholder="name@company.com" class="w-full border p-1.5 rounded text-xs" required>
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-gray-600 mb-1">Số điện thoại</label>
+            <input id="uPhone" type="tel" placeholder="0912345678" class="w-full border p-1.5 rounded text-xs" required>
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-gray-600 mb-1">Phòng Ban</label>
+            <select id="uDept" class="w-full border p-1.5 rounded text-xs" required></select>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-3 text-xs">
+          <div class="bg-white p-3 rounded border space-y-3">
+            <h4 class="font-bold text-gray-800 border-b pb-1 text-sm">1. Quyền Hệ Thống</h4>
+            <div class="space-y-2">
+              <label class="flex items-center gap-2 text-purple-700 font-semibold cursor-pointer">
+                <input type="checkbox" id="pAdmin"> Quyền Admin (Trang quản trị)
+              </label>
+            </div>
+          </div>
+
+          <div class="bg-white p-3 rounded border space-y-3">
+            <h4 class="font-bold text-indigo-900 border-b pb-1 text-sm">2. Phân Hệ Nghiệp Vụ</h4>
+            <div class="space-y-1.5">
+              <label class="flex items-center gap-2 text-amber-800 font-semibold cursor-pointer">
+                <input type="checkbox" id="pSubmissionModule" checked> 📜 Xử lý Văn Bản Trình
+              </label>
+              <label class="flex items-center gap-2 text-cyan-800 font-semibold cursor-pointer">
+                <input type="checkbox" id="pContractModule" checked> 📄 Hợp Đồng & Giấy Phép
+              </label>
+              <div class="border-t pt-1.5 space-y-1">
+                <span class="font-bold text-emerald-800 block text-[11px]">📅 Phân Quyền Phòng Họp:</span>
+                <label class="flex items-center gap-1.5 text-gray-700 cursor-pointer">
+                  <input type="checkbox" id="pMeetingBook" checked> ✍️ Đăng ký phòng họp
+                </label>
+                <label class="flex items-center gap-1.5 text-gray-700 cursor-pointer">
+                  <input type="checkbox" id="pMeetingApprove"> ✅ Phê duyệt phòng họp
+                </label>
+                <label class="flex items-center gap-1.5 text-gray-700 cursor-pointer">
+                  <input type="checkbox" id="pMeetingCancel" checked> ❌ Hủy phòng họp
+                </label>
+              </div>
+              <label class="flex items-center gap-2 text-indigo-700 font-semibold cursor-pointer border-t pt-1.5">
+                <input type="checkbox" id="pCarModule" checked> 🚗 Đăng Ký Xe
+              </label>
+              <div class="border-t pt-1.5 space-y-1">
+                <span class="font-bold text-teal-800 block text-[11px]">🏢 Phê Duyệt VP:</span>
+                <label class="flex items-center gap-1.5 text-gray-700 cursor-pointer">
+                  <input type="checkbox" id="pOfficeBuy" checked> 🛒 Mua Bán
+                </label>
+                <label class="flex items-center gap-1.5 text-gray-700 cursor-pointer">
+                  <input type="checkbox" id="pOfficeFix" checked> 🔧 Sửa Chữa
+                </label>
+                <label class="flex items-center gap-1.5 text-gray-700 cursor-pointer">
+                  <input type="checkbox" id="pOfficeInvest" checked> 📈 Đầu Tư
+                </label>
+              </div>
+            </div>
+          </div>
+
+          <div class="bg-white p-3 rounded border space-y-3">
+            <div class="flex justify-between items-center border-b pb-1">
+              <h4 class="font-bold text-blue-800 text-sm">3. Upload / Trình Ký</h4>
+              <label class="flex items-center gap-1 font-bold text-blue-700 cursor-pointer text-[11px]">
+                <input type="checkbox" id="pUploadAll" onchange="toggleScopeGroup('pUploadAll', 'pUploadDept')">
+                <span>ALL</span>
+              </label>
+            </div>
+            <div id="pUploadDeptContainer" class="space-y-1.5 pl-1 max-h-48 overflow-y-auto"></div>
+          </div>
+
+          <div class="bg-white p-3 rounded border space-y-3">
+            <div class="flex justify-between items-center border-b pb-1">
+              <h4 class="font-bold text-amber-800 text-sm">4. Xem Bản Nháp</h4>
+              <label class="flex items-center gap-1 font-bold text-amber-700 cursor-pointer text-[11px]">
+                <input type="checkbox" id="pViewDraftAll" onchange="toggleScopeGroup('pViewDraftAll', 'pViewDraftDept')">
+                <span>ALL</span>
+              </label>
+            </div>
+            <div id="pViewDraftDeptContainer" class="space-y-1.5 pl-1 max-h-48 overflow-y-auto"></div>
+          </div>
+
+          <div class="bg-white p-3 rounded border space-y-3">
+            <div class="flex justify-between items-center border-b pb-1">
+              <h4 class="font-bold text-emerald-800 text-sm">5. Xem Đã Duyệt</h4>
+              <label class="flex items-center gap-1 font-bold text-emerald-700 cursor-pointer text-[11px]">
+                <input type="checkbox" id="pViewApprovedAll" onchange="toggleScopeGroup('pViewApprovedAll', 'pViewApprovedDept')">
+                <span>ALL</span>
+              </label>
+            </div>
+            <div id="pViewApprovedDeptContainer" class="space-y-1.5 pl-1 max-h-48 overflow-y-auto"></div>
+          </div>
+
+          <div class="bg-white p-3 rounded border space-y-3">
+            <div class="flex justify-between items-center border-b pb-1">
+              <h4 class="font-bold text-rose-800 text-sm">6. Tải Tài Liệu</h4>
+              <label class="flex items-center gap-1 font-bold text-rose-700 cursor-pointer text-[11px]">
+                <input type="checkbox" id="pDownloadAll" onchange="toggleScopeGroup('pDownloadAll', 'pDownloadDept')">
+                <span>ALL</span>
+              </label>
+            </div>
+            <div id="pDownloadDeptContainer" class="space-y-1.5 pl-1 max-h-48 overflow-y-auto"></div>
+          </div>
+        </div>
+
+        <div class="flex justify-end gap-2 pt-2">
+          <button type="button" onclick="resetUserForm()" class="bg-gray-400 text-white px-4 py-1.5 rounded text-xs font-bold">Hủy</button>
+          <button type="submit" class="bg-purple-600 text-white px-6 py-1.5 rounded text-xs font-bold hover:bg-purple-700">Lưu Người Dùng & Phân Quyền</button>
+        </div>
+      </form>
+
+      <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 my-3 border-t pt-3">
+        <h4 class="font-bold text-sm text-gray-800">Danh Sách Người Dùng & Quyền Hạn</h4>
+        <div class="flex flex-wrap gap-2 text-xs">
+          <button type="button" onclick="downloadUserTemplate()" class="bg-gray-600 text-white px-2.5 py-1.5 rounded font-semibold hover:bg-gray-700 transition">📄 Tải File Mẫu (.csv)</button>
+          <button type="button" onclick="exportUsersCSV()" class="bg-emerald-600 text-white px-2.5 py-1.5 rounded font-semibold hover:bg-emerald-700 transition">📤 Export CSV</button>
+          <label class="bg-blue-600 text-white px-2.5 py-1.5 rounded font-semibold hover:bg-blue-700 cursor-pointer transition">
+            📥 Import CSV <input type="file" accept=".csv" onchange="importUsersCSV(event)" class="hidden">
+          </label>
+        </div>
+      </div>
+
+      <div class="overflow-x-auto">
+        <table class="w-full border-collapse border bg-white text-xs">
+          <thead>
+            <tr class="bg-gray-100 text-left">
+              <th class="border p-2">Username</th>
+              <th class="border p-2">Họ Tên</th>
+              <th class="border p-2">Liên Hệ</th>
+              <th class="border p-2">Phòng Ban</th>
+              <th class="border p-2">Quyền Hạn Chi Tiết</th>
+              <th class="border p-2 text-center">Thao Tác</th>
+            </tr>
+          </thead>
+          <tbody id="userTableBody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- Màn hình 5: Tab Quản Trị Log Hệ Thống -->
+  <div id="logSection" class="hidden space-y-6">
+    <div class="bg-stone-50 p-4 rounded border border-stone-300 space-y-3">
+      <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
+        <div>
+          <h3 class="font-bold text-stone-900 text-base flex items-center gap-1">📊 Quản Trị Log Hệ Thống & Giám Sát Hành Vi</h3>
+          <p class="text-xs text-stone-800">Theo dõi toàn bộ nhật ký hệ thống: Email, cấu hình, thay đổi phân quyền và hành vi.</p>
+        </div>
+        <div class="flex gap-2">
+          <button onclick="clearSystemLogs()" class="text-xs bg-red-600 text-white px-3 py-1.5 rounded font-bold hover:bg-red-700">🗑️ Xóa Log</button>
+          <button onclick="exportSystemLogsCSV()" class="text-xs bg-emerald-600 text-white px-3 py-1.5 rounded font-bold hover:bg-emerald-700">📥 Xuất Log CSV</button>
+        </div>
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-4 gap-3 bg-white p-3 rounded border text-xs">
+        <div>
+          <label class="block font-semibold text-gray-600 mb-1">Lọc Theo Phân Hệ</label>
+          <select id="filterLogModule" onchange="renderSystemLogs()" class="w-full border p-1.5 rounded bg-white font-semibold">
+            <option value="">-- Tất cả --</option>
+            <option value="EMAIL">Log Gửi Email (EMAIL)</option>
+            <option value="CONFIG">Log Cấu Hình (CONFIG)</option>
+            <option value="USER_MGM">Log User (USER_MGM)</option>
+            <option value="PERMISSION">Log Phân Quyền (PERMISSION)</option>
+            <option value="INTERACTION">Log Tương Tác (INTERACTION)</option>
+          </select>
+        </div>
+        <div>
+          <label class="block font-semibold text-gray-600 mb-1">Lọc Theo Trạng Thái</label>
+          <select id="filterLogStatus" onchange="renderSystemLogs()" class="w-full border p-1.5 rounded bg-white font-semibold">
+            <option value="">-- Tất cả --</option>
+            <option value="SUCCESS">Thành công (SUCCESS)</option>
+            <option value="FAILED">Thất bại (FAILED)</option>
+          </select>
+        </div>
+        <div>
+          <label class="block font-semibold text-gray-600 mb-1">Tìm Kiếm</label>
+          <input id="filterLogKeyword" oninput="renderSystemLogs()" placeholder="Username, IP, hành động..." class="w-full border p-1.5 rounded">
+        </div>
+        <div class="flex items-end">
+          <button onclick="resetLogFilters()" class="w-full bg-gray-200 text-gray-700 p-1.5 rounded font-bold hover:bg-gray-300">Đặt Lại</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="overflow-x-auto bg-white rounded border">
+      <table class="w-full border-collapse text-xs">
+        <thead>
+          <tr class="bg-gray-100 text-left text-gray-700">
+            <th class="border p-2">Thời Gian</th>
+            <th class="border p-2">Người Thực Hiện</th>
+            <th class="border p-2">IP Thiết Bị</th>
+            <th class="border p-2">Phân Hệ</th>
+            <th class="border p-2">Hành Động</th>
+            <th class="border p-2">Mô Tả Chi Tiết</th>
+            <th class="border p-2 text-center">Trạng Thái</th>
+          </tr>
+        </thead>
+        <tbody id="systemLogTableBody"></tbody>
+      </table>
+    </div>
+  </div>
+
+</div>
+
+<!-- MODAL XEM TÀI LIỆU PROTECTED VIEW -->
+<div id="viewDocModal" class="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center hidden z-50 p-4">
+  <div class="bg-white rounded-lg shadow-2xl max-w-4xl w-full flex flex-col max-h-[90vh] overflow-hidden">
+    <div class="flex justify-between items-center bg-gray-800 text-white p-4">
+      <div>
+        <h3 id="viewModalTitle" class="font-bold text-base flex items-center gap-2">📄 Xem Tài Liệu Nội Bộ</h3>
+        <p id="viewModalSub" class="text-xs text-gray-300"></p>
+      </div>
+      <button onclick="closeViewDocModal()" class="text-gray-300 hover:text-white font-bold text-xl px-2">✕</button>
+    </div>
+    <div class="bg-amber-100 text-amber-900 px-4 py-2 text-xs font-semibold flex items-center justify-between border-b border-amber-200 select-none">
+      <span>🔒 Chế độ xem an toàn (Bảo vệ tài liệu - Tắt menu chuột phải & không cho tải tài liệu)</span>
+      <span class="text-[10px] bg-amber-200 text-amber-900 font-bold px-2 py-0.5 rounded">Frame Protected Viewer</span>
+    </div>
+    <div class="p-4 overflow-y-auto flex-1 bg-gray-100 flex flex-col items-center justify-center protected-view-container" id="viewModalContent" oncontextmenu="return false;"></div>
+    <div class="p-3 bg-gray-50 border-t flex justify-between items-center text-xs">
+      <span id="viewModalFooterInfo" class="text-gray-500 italic"></span>
+      <button onclick="closeViewDocModal()" class="bg-gray-600 text-white px-5 py-1.5 rounded font-bold hover:bg-gray-700">Đóng</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL BÚT PHÊ & XỬ LÝ VĂN BẢN TRÌNH / TỜ TRÌNH -->
+<div id="submissionProcessModal" class="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center hidden z-50 p-4">
+  <div class="bg-white rounded-lg shadow-2xl max-w-3xl w-full flex flex-col max-h-[90vh] overflow-hidden">
+    <div class="flex justify-between items-center bg-amber-800 text-white p-4">
+      <div>
+        <h3 id="subModalTitle" class="font-bold text-base flex items-center gap-2">📜 Bút Phê & Xử Lý Tờ Trình (Đồng Cấp)</h3>
+        <p id="subModalSub" class="text-xs text-amber-200"></p>
+      </div>
+      <button onclick="closeProcessSubmissionModal()" class="text-amber-200 hover:text-white font-bold text-xl px-2">✕</button>
+    </div>
+    <div class="p-4 overflow-y-auto flex-1 space-y-4 text-xs">
+      <div id="subModalDetails" class="bg-gray-50 p-3 rounded border space-y-2 text-gray-700"></div>
+      
+      <div>
+        <h4 class="font-bold text-gray-800 mb-2">✍️ Ý Kiến Chỉ Đạo & Bút Phê Phê Duyệt Đồng Cấp</h4>
+        <textarea id="txtSubmissionComment" placeholder="Nhập bút phê chỉ đạo, ý kiến phê duyệt hoặc lý do từ chối..." class="w-full border p-2 rounded h-20 text-xs focus:ring-1 focus:ring-amber-500 focus:outline-none"></textarea>
+      </div>
+      
+      <div>
+        <h4 class="font-bold text-gray-800 mb-2">📜 Lịch Sử Ý Kiến & Bút Phê Chỉ Đạo Các Cấp</h4>
+        <div id="subModalHistory" class="space-y-2 bg-slate-50 p-3 rounded border max-h-48 overflow-y-auto"></div>
+      </div>
+    </div>
+    <div class="p-3 bg-gray-100 border-t flex justify-between items-center text-xs">
+      <button onclick="closeProcessSubmissionModal()" class="bg-gray-500 text-white px-4 py-1.5 rounded font-bold hover:bg-gray-600">Đóng</button>
+      <div id="subModalActionBtns" class="flex gap-2"></div>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL CÁ NHÂN HÓA -->
+<div id="profileModal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center hidden z-50 p-4">
+  <div class="bg-white p-6 rounded-lg shadow-xl max-w-md w-full space-y-4">
+    <div class="flex justify-between items-center border-b pb-3">
+      <h3 class="font-bold text-gray-800 text-base">⚙️ Cá Nhân Hóa & Cập Nhật Thông Tin</h3>
+      <button onclick="closeProfileModal()" class="text-gray-500 font-bold hover:text-gray-700 text-lg">✕</button>
+    </div>
+    
+    <form onsubmit="savePersonalProfile(event)" class="space-y-3 text-xs">
+      <div>
+        <label class="block font-semibold text-gray-600 mb-1">Tên đăng nhập</label>
+        <input id="pfUsername" type="text" disabled class="w-full border p-2 rounded bg-gray-100 font-bold">
+      </div>
+      <div>
+        <label class="block font-semibold text-gray-600 mb-1">Họ và Tên</label>
+        <input id="pfFullName" type="text" class="w-full border p-2 rounded font-semibold" required>
+      </div>
+      <div>
+        <label class="block font-semibold text-gray-600 mb-1">Email Nhận Thông Báo</label>
+        <input id="pfEmail" type="email" class="w-full border p-2 rounded" required>
+      </div>
+      <div>
+        <label class="block font-semibold text-gray-600 mb-1">Số Điện Thoại</label>
+        <input id="pfPhone" type="tel" class="w-full border p-2 rounded" placeholder="0912345678" required>
+      </div>
+      
+      <div class="border-t pt-3 space-y-3">
+        <h4 class="font-bold text-gray-700">🔒 Đổi Mật Khẩu (Để trống nếu giữ nguyên)</h4>
+        <div>
+          <label class="block font-semibold text-gray-600 mb-1">Mật khẩu mới</label>
+          <input id="pfNewPass" type="password" class="w-full border p-2 rounded">
+        </div>
+        <div>
+          <label class="block font-semibold text-gray-600 mb-1">Xác nhận mật khẩu mới</label>
+          <input id="pfConfirmPass" type="password" class="w-full border p-2 rounded">
+        </div>
+      </div>
+      
+      <div class="flex justify-end gap-2 pt-2">
+        <button type="button" onclick="closeProfileModal()" class="bg-gray-400 text-white px-4 py-2 rounded font-bold">Hủy</button>
+        <button type="submit" class="bg-blue-600 text-white px-5 py-2 rounded font-bold hover:bg-blue-700">Lưu Thay Đổi</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script>
+// --- KHỞI TẠO DỮ LIỆU DB v6.0 ---
+const DB = {
+  depts: [], cats: [], users: [], docs: [],
+  workflows: [], deptWorkflows: {},
+  submissions: [], submissionDeptWorkflows: {},
+  contracts: [],
+  meetings: [],
+  carRegs: [], carDeptWorkflows: {},
+  officeReqs: [],
+  officeBuyDeptWorkflows: {},
+  officeFixDeptWorkflows: {},
+  officeInvestDeptWorkflows: {},
+  formTemplates: {},
+  emailConfig: {}, systemLogs: []
+};
+
+let currentUser = null;
+let currentPage = 1;
+let pageSize = 5;
+let activeWfMod = 'DOC';
+let activeOfficeSubTab = 'MUA_BAN';
+let activeFormTab = 'SUBMISSION';
+let currentFilterCard = '';
+let currentProcessingSubId = null;
+
+function escapeHtml(str) {
+  if (!str) return '';
+  return String(str).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
+}
+
+function logSystemAction(module, actionType, description, status = 'SUCCESS', target = '') {
+  const logEntry = {
+    id: Date.now() + Math.random(),
+    timestamp: new Date().toLocaleString('vi-VN'),
+    username: currentUser ? currentUser.username : 'system_guest',
+    fullName: currentUser ? currentUser.name : 'Khách',
+    ipAddress: '127.0.0.1 (Localhost)',
+    module: module,
+    actionType: actionType,
+    targetObject: target,
+    description: description,
+    status: status
+  };
+
+  DB.systemLogs.unshift(logEntry);
+  if (DB.systemLogs.length > 200) DB.systemLogs.pop();
+  syncStorage('systemLogs');
+}
+
+// --- HÀM KIỂM TRA PHÂN QUYỀN ---
+function canAccessSubmissionModule(user) {
+  if (!user) return false;
+  if (user.perms?.admin) return true;
+  return !!user.perms?.submissionModule;
+}
+
+function canAccessContractModule(user) {
+  if (!user) return false;
+  if (user.perms?.admin) return true;
+  return !!user.perms?.contractModule;
+}
+
+function canBookMeeting(user) {
+  if (!user) return false;
+  if (user.perms?.admin) return true;
+  return !!user.perms?.meetingBook;
+}
+
+function canApproveMeeting(user) {
+  if (!user) return false;
+  if (user.perms?.admin) return true;
+  return !!user.perms?.meetingApprove;
+}
+
+function canCancelMeeting(user) {
+  if (!user) return false;
+  if (user.perms?.admin) return true;
+  return !!user.perms?.meetingCancel;
+}
+
+function canAccessMeetingModule(user) {
+  if (!user) return false;
+  if (user.perms?.admin) return true;
+  return !!(user.perms?.meetingBook || user.perms?.meetingApprove || user.perms?.meetingCancel);
+}
+
+function canAccessCarModule(user) {
+  if (!user) return false;
+  if (user.perms?.admin) return true;
+  return !!user.perms?.carModule;
+}
+
+function canAccessOfficeSubTab(user, subType) {
+  if (!user) return false;
+  if (user.perms?.admin) return true;
+  if (subType === 'MUA_BAN') return !!user.perms?.officeBuy;
+  if (subType === 'SUA_CHUA') return !!user.perms?.officeFix;
+  if (subType === 'DAU_TU') return !!user.perms?.officeInvest;
+  return false;
+}
+
+function canAccessOfficeModule(user) {
+  if (!user) return false;
+  if (user.perms?.admin) return true;
+  return !!(user.perms?.officeBuy || user.perms?.officeFix || user.perms?.officeInvest);
+}
+
+function getUserAllowedDepts(user) {
+  if (!user) return [];
+  if (user.perms?.admin) return [...DB.depts];
+  let allowed = new Set();
+  if (user.dept) allowed.add(user.dept);
+  if (user.perms?.uploadDepts) user.perms.uploadDepts.forEach(d => allowed.add(d));
+  if (user.perms?.viewDraftDepts) user.perms.viewDraftDepts.forEach(d => allowed.add(d));
+  if (user.perms?.viewApprovedDepts) user.perms.viewApprovedDepts.forEach(d => allowed.add(d));
+  if (allowed.size === 0) return [...DB.depts];
+  return Array.from(allowed);
+}
+
+// ==========================================
+// KẾT NỐI DỮ LIỆU: đã chuyển từ localStorage sang API backend (Node.js + MSSQL)
+// Toàn bộ dữ liệu mặc định (depts, cats, workflows, users...) giờ được khởi tạo (seed)
+// một lần duy nhất ở phía Server (xem file server/seedDefaults.js), không còn seed ở Client.
+// ==========================================
+async function initDatabase() {
+  try {
+    const res = await fetch('/api/data');
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const data = await res.json();
+
+    DB.depts = data.depts || [];
+    DB.cats = data.cats || [];
+    DB.users = data.users || [];
+    DB.docs = data.docs || [];
+    DB.submissions = data.submissions || [];
+    DB.contracts = data.contracts || [];
+    DB.meetings = data.meetings || [];
+    DB.carRegs = data.carRegs || [];
+    DB.officeReqs = data.officeReqs || [];
+    DB.workflows = data.workflows || [];
+    DB.formTemplates = data.formTemplates || {};
+    DB.emailConfig = data.emailConfig || {};
+    DB.systemLogs = data.systemLogs || [];
+
+    DB.deptWorkflows = data.deptWorkflows || {};
+    DB.submissionDeptWorkflows = data.submissionDeptWorkflows || {};
+    DB.carDeptWorkflows = data.carDeptWorkflows || {};
+
+    DB.officeBuyDeptWorkflows = data.officeBuyDeptWorkflows || {};
+    DB.officeFixDeptWorkflows = data.officeFixDeptWorkflows || {};
+    DB.officeInvestDeptWorkflows = data.officeInvestDeptWorkflows || {};
+  } catch (e) {
+    console.error('Lỗi khi tải dữ liệu từ máy chủ (API /api/data):', e);
+    alert('⛔ Không thể kết nối tới máy chủ dữ liệu (MSSQL API). Vui lòng kiểm tra lại kết nối / liên hệ Quản trị viên.\n\nChi tiết lỗi: ' + e.message);
+  }
+}
+
+function syncStorage(key) {
+  try {
+    fetch(`/api/data/${key}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(DB[key])
+    }).then(res => {
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+    }).catch(e => {
+      console.error(`Lỗi khi lưu "${key}" lên máy chủ:`, e);
+      alert(`⛔ Lỗi lưu dữ liệu "${key}" lên máy chủ: ` + e.message);
+    });
+    return true;
+  } catch (e) {
+    alert('Lỗi lưu dữ liệu: ' + e.message);
+    return false;
+  }
+}
+
+let dataReady = false;
+initDatabase().then(() => { dataReady = true; });
+
+// --- EMAIL SIMULATOR ---
+function sendNotificationEmail(recipientEmail, recipientName, subject, messageBody) {
+  if (!DB.emailConfig.enabled) return;
+  if (!recipientEmail) return;
+  console.log(`[DMS EMAIL SIMULATOR] To: ${recipientName} <${recipientEmail}> | Subject: ${subject}`);
+  logSystemAction('EMAIL', 'SEND_EMAIL_SUCCESS', `Đã gửi email tự động tới [${recipientName} - ${recipientEmail}] với chủ đề: "${subject}"`, 'SUCCESS', recipientEmail);
+}
+
+function saveEmailConfig(e) {
+  e.preventDefault();
+  DB.emailConfig = {
+    enabled: document.getElementById('cfgEmailEnabled').value === 'true',
+    smtpHost: document.getElementById('cfgSmtpHost').value.trim(),
+    smtpPort: parseInt(document.getElementById('cfgSmtpPort').value, 10) || 587,
+    senderEmail: document.getElementById('cfgSenderEmail').value.trim()
+  };
+  syncStorage('emailConfig');
+  logSystemAction('CONFIG', 'UPDATE_SMTP_CONFIG', 'Cập nhật SMTP server thành công.', 'SUCCESS', 'SMTP_CONFIG');
+  alert('✅ Đã lưu cấu hình Email thành công!');
+}
+
+function loadEmailConfigToForm() {
+  if (!DB.emailConfig) return;
+  document.getElementById('cfgEmailEnabled').value = DB.emailConfig.enabled !== false ? 'true' : 'false';
+  document.getElementById('cfgSmtpHost').value = DB.emailConfig.smtpHost || 'smtp.gmail.com';
+  document.getElementById('cfgSmtpPort').value = DB.emailConfig.smtpPort || 587;
+  document.getElementById('cfgSenderEmail').value = DB.emailConfig.senderEmail || 'dms-noreply@company.com';
+}
+
+// --- CÁ NHÂN HÓA USER ---
+function openProfileModal() {
+  if (!currentUser) return;
+  document.getElementById('pfUsername').value = currentUser.username;
+  document.getElementById('pfFullName').value = currentUser.name || '';
+  document.getElementById('pfEmail').value = currentUser.email || '';
+  document.getElementById('pfPhone').value = currentUser.phone || '';
+  document.getElementById('pfNewPass').value = '';
+  document.getElementById('pfConfirmPass').value = '';
+  document.getElementById('profileModal').classList.remove('hidden');
+}
+
+function closeProfileModal() {
+  document.getElementById('profileModal').classList.add('hidden');
+}
+
+function savePersonalProfile(e) {
+  e.preventDefault();
+  const newName = document.getElementById('pfFullName').value.trim();
+  const newEmail = document.getElementById('pfEmail').value.trim();
+  const newPhone = document.getElementById('pfPhone').value.trim();
+  const newPass = document.getElementById('pfNewPass').value.trim();
+  const confirmPass = document.getElementById('pfConfirmPass').value.trim();
+
+  if (newPass || confirmPass) {
+    if (newPass !== confirmPass) return alert('❌ Mật khẩu xác nhận không khớp!');
+    if (newPass.length < 6) return alert('❌ Mật khẩu phải có ít nhất 6 ký tự!');
+    currentUser.pass = newPass;
+  }
+
+  currentUser.name = newName;
+  currentUser.email = newEmail;
+  currentUser.phone = newPhone;
+
+  const userIdx = DB.users.findIndex(u => u.username === currentUser.username);
+  if (userIdx !== -1) {
+    DB.users[userIdx] = JSON.parse(JSON.stringify(currentUser));
+    syncStorage('users');
+  }
+
+  document.getElementById('userInfo').innerText = `${currentUser.name} (${currentUser.dept})`;
+  document.getElementById('userPhoneInfo').innerText = `📞 ${currentUser.phone || 'Chưa có SĐT'} | ✉️ ${currentUser.email || 'Chưa có Email'}`;
+
+  closeProfileModal();
+  alert('✅ Cập nhật thông tin cá nhân thành công!');
+}
+
+// --- ĐĂNG NHẬP & TABS ---
+function login() {
+  if (!dataReady) return alert('⏳ Hệ thống đang tải dữ liệu từ máy chủ, vui lòng thử lại sau giây lát!');
+  const u = document.getElementById('txtUser').value.trim();
+  const p = document.getElementById('txtPass').value.trim();
+
+  const user = DB.users.find(item => item.username === u && (item.pass === p || item.password === p));
+  if (!user) return alert('Tài khoản hoặc mật khẩu không chính xác!');
+
+  currentUser = user;
+  logSystemAction('USER_MGM', 'LOGIN_SUCCESS', 'Đăng nhập thành công.', 'SUCCESS', user.username);
+
+  document.getElementById('loginSection').classList.add('hidden');
+  document.getElementById('userHeader').classList.remove('hidden');
+  document.getElementById('userInfo').innerText = `${user.name} (${user.dept})`;
+  document.getElementById('userPhoneInfo').innerText = `📞 ${user.phone || 'Chưa có SĐT'} | ✉️ ${user.email || 'Chưa có Email'}`;
+
+  document.getElementById('btnAdminTab').classList.toggle('hidden', !user.perms.admin);
+  document.getElementById('btnWorkflowTab').classList.toggle('hidden', !user.perms.admin);
+  document.getElementById('btnFormTab').classList.toggle('hidden', !user.perms.admin);
+  document.getElementById('btnLogTab').classList.toggle('hidden', !user.perms.admin);
+  document.getElementById('btnDocTab').classList.remove('hidden');
+
+  document.getElementById('btnSubmissionTab').classList.toggle('hidden', !canAccessSubmissionModule(user));
+  document.getElementById('btnContractTab').classList.toggle('hidden', !canAccessContractModule(user));
+  document.getElementById('btnMeetingTab').classList.toggle('hidden', !canAccessMeetingModule(user));
+  document.getElementById('btnTaskTab').classList.remove('hidden');
+  document.getElementById('btnCarTab').classList.toggle('hidden', !canAccessCarModule(user));
+  document.getElementById('btnOfficeTab').classList.toggle('hidden', !canAccessOfficeModule(user));
+
+  populateDropdowns();
+  switchTab('doc');
+}
+
+function logout() {
+  currentUser = null;
+  document.getElementById('loginSection').classList.remove('hidden');
+  document.getElementById('docSection').classList.add('hidden');
+  document.getElementById('submissionSection').classList.add('hidden');
+  document.getElementById('taskSection').classList.add('hidden');
+  document.getElementById('contractSection').classList.add('hidden');
+  document.getElementById('meetingSection').classList.add('hidden');
+  document.getElementById('carSection').classList.add('hidden');
+  document.getElementById('officeSection').classList.add('hidden');
+  document.getElementById('formSection').classList.add('hidden');
+  document.getElementById('adminSection').classList.add('hidden');
+  document.getElementById('workflowSection').classList.add('hidden');
+  document.getElementById('logSection').classList.add('hidden');
+  document.getElementById('userHeader').classList.add('hidden');
+}
+
+function switchTab(tabName) {
+  if (!currentUser) return logout();
+
+  if (tabName === 'submission' && !canAccessSubmissionModule(currentUser)) {
+    alert('⛔ Bạn không có quyền truy cập Module Xử lý Văn bản trình!');
+    return;
+  }
+  if (tabName === 'contract' && !canAccessContractModule(currentUser)) {
+    alert('⛔ Bạn không có quyền truy cập Module Hợp đồng & giấy phép!');
+    return;
+  }
+  if (tabName === 'meeting' && !canAccessMeetingModule(currentUser)) {
+    alert('⛔ Bạn không có quyền truy cập Module Quản lý phòng họp!');
+    return;
+  }
+  if (tabName === 'car' && !canAccessCarModule(currentUser)) {
+    alert('⛔ Bạn không có quyền truy cập Module Đăng ký xe!');
+    return;
+  }
+  if (tabName === 'office' && !canAccessOfficeModule(currentUser)) {
+    alert('⛔ Bạn không có quyền truy cập Module Phê duyệt Văn phòng!');
+    return;
+  }
+
+  document.getElementById('docSection').classList.toggle('hidden', tabName !== 'doc');
+  document.getElementById('submissionSection').classList.toggle('hidden', tabName !== 'submission');
+  document.getElementById('taskSection').classList.toggle('hidden', tabName !== 'task');
+  document.getElementById('contractSection').classList.toggle('hidden', tabName !== 'contract');
+  document.getElementById('meetingSection').classList.toggle('hidden', tabName !== 'meeting');
+  document.getElementById('carSection').classList.toggle('hidden', tabName !== 'car');
+  document.getElementById('officeSection').classList.toggle('hidden', tabName !== 'office');
+  document.getElementById('formSection').classList.toggle('hidden', tabName !== 'form');
+  document.getElementById('adminSection').classList.toggle('hidden', tabName !== 'admin');
+  document.getElementById('workflowSection').classList.toggle('hidden', tabName !== 'workflow');
+  document.getElementById('logSection').classList.toggle('hidden', tabName !== 'log');
+
+  populateDropdowns();
+
+  if (tabName === 'doc') { renderDocs(); updateUploadDeptDropdown(); }
+  if (tabName === 'submission') { renderDynamicInputsForModule('SUBMISSION', 'dynamicFieldsContainer_SUBMISSION'); renderSubmissionReqs(); }
+  if (tabName === 'task') { renderTasks(); }
+  if (tabName === 'contract') { renderContracts(); }
+  if (tabName === 'meeting') { renderMeetings(); }
+  if (tabName === 'car') { renderDynamicInputsForModule('CAR', 'dynamicFieldsContainer_CAR'); renderCarRegs(); }
+  if (tabName === 'office') {
+    let targetSub = activeOfficeSubTab;
+    if (!canAccessOfficeSubTab(currentUser, targetSub)) {
+      if (canAccessOfficeSubTab(currentUser, 'MUA_BAN')) targetSub = 'MUA_BAN';
+      else if (canAccessOfficeSubTab(currentUser, 'SUA_CHUA')) targetSub = 'SUA_CHUA';
+      else if (canAccessOfficeSubTab(currentUser, 'DAU_TU')) targetSub = 'DAU_TU';
+    }
+    setOfficeSubTab(targetSub);
+  }
+  if (tabName === 'form' && currentUser.perms.admin) { switchFormTab(activeFormTab); }
+  if (tabName === 'workflow' && currentUser.perms.admin) { renderWorkflowTab(); }
+  if (tabName === 'admin' && currentUser.perms.admin) {
+    renderDeptList(); renderCatList(); renderDeptCheckboxes(); renderUsers(); loadEmailConfigToForm();
+  }
+  if (tabName === 'log' && currentUser.perms.admin) { renderSystemLogs(); }
+}
+
+function setOfficeSubTab(subTab) {
+  if (!canAccessOfficeSubTab(currentUser, subTab)) {
+    alert('⛔ Bạn không có quyền truy cập phân hệ văn phòng này!');
+    return;
+  }
+  activeOfficeSubTab = subTab;
+
+  const btnBuy = document.getElementById('btnSubBuy');
+  const btnFix = document.getElementById('btnSubFix');
+  const btnInvest = document.getElementById('btnSubInvest');
+
+  if (btnBuy) {
+    btnBuy.classList.toggle('hidden', !canAccessOfficeSubTab(currentUser, 'MUA_BAN'));
+    btnBuy.className = subTab === 'MUA_BAN' ? 'px-3 py-1 rounded text-xs font-bold bg-teal-700 text-white' : 'px-3 py-1 rounded text-xs font-bold bg-gray-200 text-gray-700';
+  }
+  if (btnFix) {
+    btnFix.classList.toggle('hidden', !canAccessOfficeSubTab(currentUser, 'SUA_CHUA'));
+    btnFix.className = subTab === 'SUA_CHUA' ? 'px-3 py-1 rounded text-xs font-bold bg-teal-700 text-white' : 'px-3 py-1 rounded text-xs font-bold bg-gray-200 text-gray-700';
+  }
+  if (btnInvest) {
+    btnInvest.classList.toggle('hidden', !canAccessOfficeSubTab(currentUser, 'DAU_TU'));
+    btnInvest.className = subTab === 'DAU_TU' ? 'px-3 py-1 rounded text-xs font-bold bg-teal-700 text-white' : 'px-3 py-1 rounded text-xs font-bold bg-gray-200 text-gray-700';
+  }
+
+  const lblSub = document.getElementById('officeSubTitle');
+  if (lblSub) {
+    if (subTab === 'MUA_BAN') lblSub.innerText = 'Phân hệ Đề Xuất Mua Sắm Trang Thiết Bị / Vật Tư Văn Phòng.';
+    if (subTab === 'SUA_CHUA') lblSub.innerText = 'Phân hệ Đề Xuất Sửa Chữa / Bảo Trì Cơ Sở Vật Chất.';
+    if (subTab === 'DAU_TU') lblSub.innerText = 'Phân hệ Đề Xuất Dự Án Đầu Tư & Cải Tạo Văn Phòng.';
+  }
+
+  renderDynamicInputsForModule(subTab, 'dynamicFieldsContainer_OFFICE');
+  renderOfficeReqs();
+}
+
+function populateDropdowns() {
+  const allowedDepts = getUserAllowedDepts(currentUser);
+  
+  const selDept = document.getElementById('selDept');
+  if (selDept) {
+    selDept.innerHTML = '<option value="">-- Chọn Phòng Ban Trình --</option>' + 
+      allowedDepts.map(d => `<option value="${escapeHtml(d)}">${escapeHtml(d)}</option>`).join('');
+  }
+
+  const filterDept = document.getElementById('filterDept');
+  if (filterDept) {
+    filterDept.innerHTML = '<option value="">-- Tất cả phòng ban --</option>' + 
+      DB.depts.map(d => `<option value="${escapeHtml(d)}">${escapeHtml(d)}</option>`).join('');
+  }
+
+  const selCat = document.getElementById('selCat');
+  if (selCat) {
+    selCat.innerHTML = '<option value="">-- Chọn Phân Loại --</option>' + 
+      DB.cats.map(c => `<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`).join('');
+  }
+
+  const subDept = document.getElementById('subDept');
+  if (subDept) {
+    subDept.innerHTML = DB.depts.map(d => `<option value="${escapeHtml(d)}">${escapeHtml(d)}</option>`).join('');
+  }
+
+  const contractDept = document.getElementById('contractDept');
+  if (contractDept) {
+    contractDept.innerHTML = DB.depts.map(d => `<option value="${escapeHtml(d)}">${escapeHtml(d)}</option>`).join('');
+  }
+
+  const meetingDept = document.getElementById('meetingDept');
+  if (meetingDept) {
+    meetingDept.innerHTML = DB.depts.map(d => `<option value="${escapeHtml(d)}">${escapeHtml(d)}</option>`).join('');
+  }
+
+  const carDept = document.getElementById('carDept');
+  if (carDept) {
+    carDept.innerHTML = DB.depts.map(d => `<option value="${escapeHtml(d)}">${escapeHtml(d)}</option>`).join('');
+  }
+
+  const offDept = document.getElementById('offDept');
+  if (offDept) {
+    offDept.innerHTML = DB.depts.map(d => `<option value="${escapeHtml(d)}">${escapeHtml(d)}</option>`).join('');
+  }
+
+  const uDept = document.getElementById('uDept');
+  if (uDept) {
+    uDept.innerHTML = DB.depts.map(d => `<option value="${escapeHtml(d)}">${escapeHtml(d)}</option>`).join('');
+  }
+}
+
+function updateUploadDeptDropdown() {
+  const allowedDepts = getUserAllowedDepts(currentUser);
+  const uploadBox = document.getElementById('uploadBox');
+  
+  const canUpload = currentUser.perms.admin || currentUser.perms.uploadAll || (currentUser.perms.uploadDepts && currentUser.perms.uploadDepts.length > 0);
+  if (uploadBox) {
+    uploadBox.classList.toggle('hidden', !canUpload);
+  }
+}
+
+// ==========================================
+// 1. MODULE TÀI LIỆU (DOCUMENT MODULE)
+// ==========================================
+function filterByCard(status) {
+  currentFilterCard = status;
+  document.querySelectorAll('.dash-card').forEach(el => el.classList.remove('active-card'));
+  const targetId = status === '' ? 'card-ALL' : `card-${status}`;
+  const card = document.getElementById(targetId);
+  if (card) card.classList.add('active-card');
+  document.getElementById('filterStatus').value = status;
+  currentPage = 1;
+  renderDocs();
+}
+
+function onFilterChange() {
+  currentPage = 1;
+  renderDocs();
+}
+
+function changePageSize(val) {
+  pageSize = parseInt(val, 10) || 5;
+  currentPage = 1;
+  renderDocs();
+}
+
+function renderDocs() {
+  const tbody = document.getElementById('docTableBody');
+  if (!tbody) return;
+
+  const keyword = (document.getElementById('filterKeyword')?.value || '').toLowerCase().trim();
+  const deptFilter = document.getElementById('filterDept')?.value || '';
+  const statusFilter = document.getElementById('filterStatus')?.value || '';
+  const fromDate = document.getElementById('filterFromDate')?.value || '';
+  const toDate = document.getElementById('filterToDate')?.value || '';
+
+  // Thống kê đếm tổng quan
+  let totalDocs = DB.docs.length;
+  let approvedDocs = DB.docs.filter(d => d.status === 'APPROVED').length;
+  let pendingDocs = DB.docs.filter(d => d.status === 'PENDING').length;
+  let rejectedDocs = DB.docs.filter(d => d.status === 'REJECTED').length;
+
+  document.getElementById('dashTotal').innerText = totalDocs;
+  document.getElementById('dashApproved').innerText = approvedDocs;
+  document.getElementById('dashPending').innerText = pendingDocs;
+  document.getElementById('dashRejected').innerText = rejectedDocs;
+
+  // Lọc tài liệu theo quyền truy cập phòng ban & bộ lọc
+  let filtered = DB.docs.filter(doc => {
+    // Kiểm tra quyền xem
+    const canView = currentUser.perms.admin || 
+      currentUser.perms.viewApprovedAll || 
+      (currentUser.perms.viewApprovedDepts && currentUser.perms.viewApprovedDepts.includes(doc.dept)) ||
+      (doc.uploader === currentUser.username);
+
+    if (!canView) return false;
+
+    if (deptFilter && doc.dept !== deptFilter) return false;
+    if (statusFilter && doc.status !== statusFilter) return false;
+    if (currentFilterCard && doc.status !== currentFilterCard) return false;
+
+    if (keyword) {
+      const matchCode = (doc.code || '').toLowerCase().includes(keyword);
+      const matchTitle = (doc.title || '').toLowerCase().includes(keyword);
+      const matchSummary = (doc.summary || '').toLowerCase().includes(keyword);
+      if (!matchCode && !matchTitle && !matchSummary) return false;
+    }
+
+    if (fromDate) {
+      const docDate = new Date(doc.createdAt);
+      const fDate = new Date(fromDate);
+      if (docDate < fDate) return false;
+    }
+
+    if (toDate) {
+      const docDate = new Date(doc.createdAt);
+      const tDate = new Date(toDate + 'T23:59:59');
+      if (docDate > tDate) return false;
+    }
+
+    return true;
+  });
+
+  // Phân trang
+  const totalItems = filtered.length;
+  const totalPages = Math.ceil(totalItems / pageSize) || 1;
+  if (currentPage > totalPages) currentPage = totalPages;
+  if (currentPage < 1) currentPage = 1;
+
+  const startIdx = (currentPage - 1) * pageSize;
+  const pageDocs = filtered.slice(startIdx, startIdx + pageSize);
+
+  document.getElementById('pageInfoText').innerText = `Trang ${currentPage}/${totalPages} (Tổng ${totalItems} tài liệu)`;
+
+  let paginationButtonsHTML = `
+    <button onclick="goToPage(1)" ${currentPage === 1 ? 'disabled' : ''} class="px-2 py-1 border rounded bg-white hover:bg-gray-100 disabled:opacity-50">«</button>
+    <button onclick="goToPage(${currentPage - 1})" ${currentPage === 1 ? 'disabled' : ''} class="px-2 py-1 border rounded bg-white hover:bg-gray-100 disabled:opacity-50">‹</button>
+  `;
+  for (let i = 1; i <= totalPages; i++) {
+    if (i === 1 || i === totalPages || (i >= currentPage - 1 && i <= currentPage + 1)) {
+      paginationButtonsHTML += `<button onclick="goToPage(${i})" class="px-2 py-1 border rounded ${i === currentPage ? 'bg-blue-600 text-white font-bold' : 'bg-white hover:bg-gray-100'}">${i}</button>`;
+    } else if (i === currentPage - 2 || i === currentPage + 2) {
+      paginationButtonsHTML += `<span class="px-1 text-gray-400">...</span>`;
+    }
+  }
+  paginationButtonsHTML += `
+    <button onclick="goToPage(${currentPage + 1})" ${currentPage === totalPages ? 'disabled' : ''} class="px-2 py-1 border rounded bg-white hover:bg-gray-100 disabled:opacity-50">›</button>
+    <button onclick="goToPage(${totalPages})" ${currentPage === totalPages ? 'disabled' : ''} class="px-2 py-1 border rounded bg-white hover:bg-gray-100 disabled:opacity-50">»</button>
+  `;
+  document.getElementById('paginationButtons').innerHTML = paginationButtonsHTML;
+
+  if (pageDocs.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="7" class="text-center p-6 text-gray-500 italic">Không tìm thấy tài liệu phù hợp.</td></tr>`;
+    return;
+  }
+
+  tbody.innerHTML = pageDocs.map(doc => {
+    const wfConfig = DB.deptWorkflows[doc.dept] || { workflowId: 'WF_1STEP', approvers: { 1: ['admin'] } };
+    const wf = DB.workflows.find(w => w.id === wfConfig.workflowId) || { steps: [{ name: 'Sếp duyệt' }] };
+
+    // Kiểm tra quyền phê duyệt bước hiện tại
+    const currentStepApprovers = wfConfig.approvers ? (wfConfig.approvers[doc.currentStep] || []) : [];
+    const canApprove = (doc.status === 'PENDING') && (
+      currentUser.perms.admin || 
+      (Array.isArray(currentStepApprovers) ? currentStepApprovers.includes(currentUser.username) : currentStepApprovers === currentUser.username)
+    );
+
+    // Tiến trình hiển thị
+    let progressBadge = '';
+    if (doc.status === 'APPROVED') {
+      progressBadge = `<span class="px-2 py-1 bg-green-100 text-green-800 rounded font-bold text-xs">✅ Đã phê duyệt hoàn tất</span>`;
+    } else if (doc.status === 'REJECTED') {
+      progressBadge = `<span class="px-2 py-1 bg-red-100 text-red-800 rounded font-bold text-xs">❌ Bị từ chối / Trả về</span>`;
+    } else {
+      const stepName = wf.steps[doc.currentStep - 1]?.name || `Bước ${doc.currentStep}`;
+      progressBadge = `<span class="px-2 py-1 bg-yellow-100 text-yellow-800 rounded font-semibold text-xs">⏳ Đang ở Bước ${doc.currentStep}/${wf.steps.length}: ${escapeHtml(stepName)}</span>`;
+    }
+
+    return `
+      <tr class="hover:bg-gray-50 transition border-b">
+        <td class="border p-2 font-mono font-bold text-blue-700">${escapeHtml(doc.code)}</td>
+        <td class="border p-2">
+          <div class="font-bold text-gray-800">${escapeHtml(doc.title)}</div>
+          <div class="text-xs text-gray-500 line-clamp-2 mt-0.5">${escapeHtml(doc.summary)}</div>
+        </td>
+        <td class="border p-2 font-semibold text-gray-700">${escapeHtml(doc.dept)}</td>
+        <td class="border p-2 text-gray-600">${escapeHtml(doc.cat)}</td>
+        <td class="border p-2 text-center font-bold text-purple-700">${escapeHtml(doc.ver)}</td>
+        <td class="border p-2">${progressBadge}</td>
+        <td class="border p-2 text-center space-x-1">
+          <button onclick="viewDoc(${doc.id})" class="px-2 py-1 bg-blue-600 text-white rounded text-xs hover:bg-blue-700 font-semibold" title="Xem trực tiếp trong Protected View">👁️ Xem</button>
+          ${canApprove ? `
+            <button onclick="approveDoc(${doc.id})" class="px-2 py-1 bg-green-600 text-white rounded text-xs hover:bg-green-700 font-semibold" title="Phê duyệt bước này">✅ Duyệt</button>
+            <button onclick="rejectDoc(${doc.id})" class="px-2 py-1 bg-red-600 text-white rounded text-xs hover:bg-red-700 font-semibold" title="Từ chối tài liệu">❌ Từ chối</button>
+          ` : ''}
+        </td>
+      </tr>
+    `;
+  }).join('');
+}
+
+function goToPage(p) {
+  currentPage = p;
+  renderDocs();
+}
+
+function uploadDoc(e) {
+  e.preventDefault();
+  const code = document.getElementById('docCode').value.trim();
+  const title = document.getElementById('docTitle').value.trim();
+  const ver = document.getElementById('docVer').value.trim();
+  const dept = document.getElementById('selDept').value;
+  const cat = document.getElementById('selCat').value;
+  const summary = document.getElementById('docSummary').value.trim();
+  const fileInput = document.getElementById('docFile');
+
+  if (DB.docs.some(d => d.code === code)) {
+    return alert('Mã tài liệu đã tồn tại trong hệ thống!');
+  }
+
+  const file = fileInput.files[0];
+  if (!file) return alert('Vui lòng chọn tệp tài liệu!');
+
+  const reader = new FileReader();
+  reader.onload = function(evt) {
+    const fileData = evt.target.result;
+    const newDoc = {
+      id: Date.now(),
+      code: code,
+      title: title,
+      ver: ver,
+      dept: dept,
+      cat: cat,
+      summary: summary,
+      fileName: file.name,
+      fileType: file.type,
+      fileData: fileData,
+      uploader: currentUser.username,
+      uploaderName: currentUser.name,
+      createdAt: new Date().toLocaleString('vi-VN'),
+      status: 'PENDING',
+      currentStep: 1,
+      history: [
+        {
+          step: 0,
+          stepName: 'Tải lên & Trình ký',
+          approver: currentUser.name,
+          username: currentUser.username,
+          action: 'UPLOADED',
+          time: new Date().toLocaleString('vi-VN')
+        }
+      ]
+    };
+
+    DB.docs.unshift(newDoc);
+    syncStorage('docs');
+    logSystemAction('DOC', 'UPLOAD_DOC', `Tải lên tài liệu mới [${code} - ${title}]`, 'SUCCESS', code);
+    alert('✅ Tải lên và trình ký tài liệu thành công!');
+    document.getElementById('docForm').reset();
+    renderDocs();
+  };
+  reader.readAsDataURL(file);
+}
+
+// CẬP NHẬT: Phê duyệt cấp đơn đơn giản hóa (Sequential Step Approval)
+function approveDoc(docId) {
+  const doc = DB.docs.find(d => d.id === docId);
+  if (!doc) return;
+
+  const wfConfig = DB.deptWorkflows[doc.dept];
+  if (!wfConfig) return alert('Chưa cấu hình quy trình cho phòng ban này!');
+
+  const wf = DB.workflows.find(w => w.id === wfConfig.workflowId);
+  if (!wf) return alert('Quy trình không tồn tại!');
+
+  const currentStepApprovers = wfConfig.approvers ? (wfConfig.approvers[doc.currentStep] || []) : [];
+  const isApprover = currentUser.perms.admin || 
+    (Array.isArray(currentStepApprovers) ? currentStepApprovers.includes(currentUser.username) : currentStepApprovers === currentUser.username);
+
+  if (!isApprover) {
+    return alert('⛔ Bạn không có quyền phê duyệt ở bước hiện tại!');
+  }
+
+  if (!doc.history) doc.history = [];
+  doc.history.push({
+    step: doc.currentStep,
+    stepName: wf.steps[doc.currentStep - 1]?.name || `Bước ${doc.currentStep}`,
+    approver: currentUser.name,
+    username: currentUser.username,
+    action: 'APPROVED',
+    time: new Date().toLocaleString('vi-VN')
+  });
+
+  // Khi bấm Phê duyệt, tài liệu lập tức chuyển sang bước tiếp theo (hoặc hoàn tất APPROVED nếu là bước cuối)
+  if (doc.currentStep >= wf.steps.length) {
+    doc.status = 'APPROVED';
+  } else {
+    doc.currentStep += 1;
+    doc.status = 'PENDING';
+  }
+
+  syncStorage('docs');
+  logSystemAction('DOC', 'APPROVE_DOC', `Phê duyệt tài liệu [${doc.code}] thành công.`, 'SUCCESS', doc.code);
+  alert('✅ Phê duyệt tài liệu thành công!');
+  renderDocs();
+}
+
+function rejectDoc(docId) {
+  const doc = DB.docs.find(d => d.id === docId);
+  if (!doc) return;
+
+  const reason = prompt('Nhập lý do từ chối / trả về tài liệu:');
+  if (reason === null) return;
+
+  const wfConfig = DB.deptWorkflows[doc.dept];
+  const wf = wfConfig ? DB.workflows.find(w => w.id === wfConfig.workflowId) : null;
+
+  doc.status = 'REJECTED';
+  if (!doc.history) doc.history = [];
+  doc.history.push({
+    step: doc.currentStep,
+    stepName: wf?.steps[doc.currentStep - 1]?.name || `Bước ${doc.currentStep}`,
+    approver: currentUser.name,
+    username: currentUser.username,
+    action: 'REJECTED',
+    comment: reason,
+    time: new Date().toLocaleString('vi-VN')
+  });
+
+  syncStorage('docs');
+  logSystemAction('DOC', 'REJECT_DOC', `Từ chối tài liệu [${doc.code}]. Lý do: ${reason}`, 'SUCCESS', doc.code);
+  alert('❌ Đã chuyển tài liệu sang trạng thái Từ chối / Trả về!');
+  renderDocs();
+}
+
+// CẬP NHẬT: Frame Protected View đọc Base64/Data URL & Bảo mật chuột phải/Text selection/Toolbar
+function viewDoc(docId) {
+  const doc = DB.docs.find(d => d.id === docId);
+  if (!doc) return;
+
+  document.getElementById('viewModalTitle').innerText = `📄 ${doc.title} (${doc.code})`;
+  document.getElementById('viewModalSub').innerText = `Phòng ban: ${doc.dept} | Phân loại: ${doc.cat} | Phiên bản: ${doc.ver} | Người trình: ${doc.uploaderName || doc.uploader}`;
+  document.getElementById('viewModalFooterInfo').innerText = `Trích lục: ${doc.summary || 'Không có mô tả'}`;
+
+  const container = document.getElementById('viewModalContent');
+  container.innerHTML = '';
+
+  if (doc.fileData) {
+    if (doc.fileType && doc.fileType.startsWith('image/')) {
+      container.innerHTML = `
+        <div class="flex flex-col items-center justify-center p-4 w-full protected-view-container" oncontextmenu="return false;">
+          <img src="${doc.fileData}" alt="${escapeHtml(doc.title)}" class="max-h-[65vh] max-w-full rounded border shadow-md object-contain pointer-events-none select-none" oncontextmenu="return false;" />
+        </div>
+      `;
+    } else {
+      const frameUrl = `${doc.fileData}#toolbar=0&navpanes=0&scrollbar=0`;
+      container.innerHTML = `
+        <div class="w-full h-[65vh] relative protected-view-container" oncontextmenu="return false;">
+          <iframe src="${frameUrl}" class="w-full h-full border-0 rounded bg-white shadow-inner" style="user-select: none; pointer-events: auto;" oncontextmenu="return false;"></iframe>
+        </div>
+      `;
+    }
+  } else {
+    container.innerHTML = `
+      <div class="w-full h-[60vh] bg-white p-6 rounded shadow border overflow-y-auto relative protected-view-container" oncontextmenu="return false;">
+        <div class="absolute inset-0 flex items-center justify-center pointer-events-none opacity-10 font-bold text-4xl text-gray-500 transform -rotate-45 select-none">
+          PROTECTED VIEW - ${escapeHtml(currentUser.name)}
+        </div>
+        <h4 class="font-bold text-lg text-gray-800 border-b pb-2 mb-4">${escapeHtml(doc.title)} (${escapeHtml(doc.code)})</h4>
+        <div class="text-sm text-gray-700 space-y-3">
+          <p><b>Phòng ban:</b> ${escapeHtml(doc.dept)}</p>
+          <p><b>Loại tài liệu:</b> ${escapeHtml(doc.cat)}</p>
+          <p><b>Phiên bản:</b> ${escapeHtml(doc.ver)}</p>
+          <p><b>Trích yếu nội dung:</b></p>
+          <div class="bg-gray-50 p-4 rounded border text-gray-800 italic">
+            ${escapeHtml(doc.summary || 'Không có mô tả chi tiết.')}
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
+  document.getElementById('viewDocModal').classList.remove('hidden');
+}
+
+function closeViewDocModal() {
+  document.getElementById('viewDocModal').classList.add('hidden');
+  document.getElementById('viewModalContent').innerHTML = '';
+}
+
+// ==========================================
+// 2. MODULE VĂN BẢN TRÌNH / TỜ TRÌNH (SUBMISSION)
+// ==========================================
+function submitSubmissionReq(e) {
+  e.preventDefault();
+  const code = document.getElementById('subCode').value.trim();
+  const dept = document.getElementById('subDept').value;
+  const type = document.getElementById('subType').value;
+  const title = document.getElementById('subTitle').value.trim();
+  const priority = document.getElementById('subPriority').value;
+  const content = document.getElementById('subContent').value.trim();
+  const fileInput = document.getElementById('subFile');
+
+  if (DB.submissions.some(s => s.code === code)) {
+    return alert('Mã văn bản trình / tờ trình đã tồn tại!');
+  }
+
+  const customData = collectDynamicFieldsData('SUBMISSION');
+
+  const saveSubmission = (fileData = '', fileName = '') => {
+    const newSub = {
+      id: Date.now(),
+      code: code,
+      dept: dept,
+      type: type,
+      title: title,
+      priority: priority,
+      content: content,
+      fileName: fileName,
+      fileData: fileData,
+      customData: customData,
+      creator: currentUser.username,
+      creatorName: currentUser.name,
+      createdAt: new Date().toLocaleString('vi-VN'),
+      status: 'PENDING',
+      currentStep: 1,
+      history: [
+        {
+          step: 0,
+          approver: currentUser.name,
+          username: currentUser.username,
+          action: 'CREATED',
+          comment: 'Khởi tạo và trình duyệt tờ trình mới',
+          time: new Date().toLocaleString('vi-VN')
+        }
+      ]
+    };
+
+    DB.submissions.unshift(newSub);
+    syncStorage('submissions');
+    logSystemAction('SUBMISSION', 'CREATE_SUBMISSION', `Tạo tờ trình mới [${code} - ${title}]`, 'SUCCESS', code);
+    alert('✅ Trình văn bản / tờ trình thành công!');
+    e.target.reset();
+    renderSubmissionReqs();
+  };
+
+  if (fileInput.files && fileInput.files[0]) {
+    const reader = new FileReader();
+    reader.onload = function(evt) {
+      saveSubmission(evt.target.result, fileInput.files[0].name);
+    };
+    reader.readAsDataURL(fileInput.files[0]);
+  } else {
+    saveSubmission();
+  }
+}
+
+function renderSubmissionReqs() {
+  const tbody = document.getElementById('submissionTableBody');
+  if (!tbody) return;
+
+  tbody.innerHTML = DB.submissions.map(sub => {
+    const wfConfig = DB.submissionDeptWorkflows[sub.dept] || { workflowId: 'WF_1STEP', approvers: { 1: ['admin'] } };
+    const wf = DB.workflows.find(w => w.id === wfConfig.workflowId) || { steps: [{ name: 'Sếp duyệt' }] };
+
+    const currentStepApprovers = wfConfig.approvers ? (wfConfig.approvers[sub.currentStep] || []) : [];
+    const canApprove = (sub.status === 'PENDING') && (
+      currentUser.perms.admin || 
+      (Array.isArray(currentStepApprovers) ? currentStepApprovers.includes(currentUser.username) : currentStepApprovers === currentUser.username)
+    );
+
+    let progressBadge = '';
+    if (sub.status === 'APPROVED') {
+      progressBadge = `<span class="px-2 py-1 bg-green-100 text-green-800 rounded font-bold text-xs">✅ Đã phê duyệt hoàn tất</span>`;
+    } else if (sub.status === 'REJECTED') {
+      progressBadge = `<span class="px-2 py-1 bg-red-100 text-red-800 rounded font-bold text-xs">❌ Bị từ chối / Trả về</span>`;
+    } else {
+      const stepName = wf.steps[sub.currentStep - 1]?.name || `Bước ${sub.currentStep}`;
+      progressBadge = `<span class="px-2 py-1 bg-amber-100 text-amber-800 rounded font-semibold text-xs">⏳ Bước ${sub.currentStep}/${wf.steps.length}: ${escapeHtml(stepName)}</span>`;
+    }
+
+    return `
+      <tr class="hover:bg-gray-50 border-b">
+        <td class="border p-2 font-mono font-bold text-amber-800">${escapeHtml(sub.code)}</td>
+        <td class="border p-2">
+          <div class="font-bold text-gray-800">${escapeHtml(sub.title)}</div>
+          <div class="text-xs text-gray-500 line-clamp-2">${escapeHtml(sub.content)}</div>
+        </td>
+        <td class="border p-2">
+          <div class="font-semibold">${escapeHtml(sub.dept)}</div>
+          <div class="text-gray-500 text-[11px]">${escapeHtml(sub.creatorName)}</div>
+        </td>
+        <td class="border p-2">
+          <div>${escapeHtml(sub.type)}</div>
+          <div class="text-rose-600 font-bold">${escapeHtml(sub.priority)}</div>
+        </td>
+        <td class="border p-2">${progressBadge}</td>
+        <td class="border p-2 text-center space-x-1">
+          <button onclick="openProcessSubmissionModal(${sub.id})" class="px-2.5 py-1 ${canApprove ? 'bg-amber-600 text-white' : 'bg-gray-600 text-white'} rounded text-xs hover:opacity-90 font-bold">
+            ${canApprove ? '✍️ Bút phê / Duyệt' : '👁️ Xem chi tiết'}
+          </button>
+        </td>
+      </tr>
+    `;
+  }).join('');
+}
+
+function openProcessSubmissionModal(subId) {
+  currentProcessingSubId = subId;
+  const sub = DB.submissions.find(s => s.id === subId);
+  if (!sub) return;
+
+  const wfConfig = DB.submissionDeptWorkflows[sub.dept] || { workflowId: 'WF_1STEP', approvers: { 1: ['admin'] } };
+  const wf = DB.workflows.find(w => w.id === wfConfig.workflowId) || { steps: [{ name: 'Sếp duyệt' }] };
+
+  document.getElementById('subModalTitle').innerText = `📜 Bút Phê & Xử Lý: ${sub.title} (${sub.code})`;
+  document.getElementById('subModalSub').innerText = `Phòng ban: ${sub.dept} | Người trình: ${sub.creatorName} | Độ khẩn: ${sub.priority}`;
+
+  let detailsHTML = `
+    <div class="grid grid-cols-2 gap-2 text-xs">
+      <div><b>Loại tờ trình:</b> ${escapeHtml(sub.type)}</div>
+      <div><b>Ngày trình:</b> ${escapeHtml(sub.createdAt)}</div>
+      <div class="col-span-2"><b>Nội dung chi tiết:</b> <p class="bg-white p-2 rounded border mt-1">${escapeHtml(sub.content)}</p></div>
+    </div>
+  `;
+
+  if (sub.customData && Object.keys(sub.customData).length > 0) {
+    detailsHTML += `<div class="border-t pt-2 mt-2 font-semibold">Trường dữ liệu mở rộng:</div><div class="grid grid-cols-2 gap-2 text-xs">`;
+    for (let key in sub.customData) {
+      detailsHTML += `<div><b>${escapeHtml(key)}:</b> ${escapeHtml(sub.customData[key])}</div>`;
+    }
+    detailsHTML += `</div>`;
+  }
+
+  document.getElementById('subModalDetails').innerHTML = detailsHTML;
+  document.getElementById('txtSubmissionComment').value = '';
+
+  // Render history
+  const historyHTML = (sub.history || []).map(h => `
+    <div class="bg-white p-2 rounded border text-xs space-y-1">
+      <div class="flex justify-between font-bold text-gray-700">
+        <span>${escapeHtml(h.approver)} (${escapeHtml(h.username)})</span>
+        <span class="text-gray-400 font-normal">${escapeHtml(h.time)}</span>
+      </div>
+      <div class="text-gray-600">Hành động: <span class="font-bold text-blue-600">${escapeHtml(h.action)}</span></div>
+      ${h.comment ? `<div class="text-gray-800 bg-amber-50 p-1.5 rounded border italic">"${escapeHtml(h.comment)}"</div>` : ''}
+    </div>
+  `).join('');
+  document.getElementById('subModalHistory').innerHTML = historyHTML || '<div class="text-gray-400 italic">Chưa có lịch sử xử lý.</div>';
+
+  const currentStepApprovers = wfConfig.approvers ? (wfConfig.approvers[sub.currentStep] || []) : [];
+  const canApprove = (sub.status === 'PENDING') && (
+    currentUser.perms.admin || 
+    (Array.isArray(currentStepApprovers) ? currentStepApprovers.includes(currentUser.username) : currentStepApprovers === currentUser.username)
+  );
+
+  const actionBtns = document.getElementById('subModalActionBtns');
+  if (canApprove) {
+    actionBtns.innerHTML = `
+      <button onclick="processSubmission('REJECT')" class="bg-red-600 text-white px-4 py-1.5 rounded font-bold hover:bg-red-700 text-xs">❌ Từ Chối / Trả Về</button>
+      <button onclick="processSubmission('APPROVE')" class="bg-green-600 text-white px-5 py-1.5 rounded font-bold hover:bg-green-700 text-xs">✅ Phê Duyệt & Chuyển Bước</button>
+    `;
+  } else {
+    actionBtns.innerHTML = `<span class="text-gray-500 italic text-xs">Bạn chỉ có quyền xem thông tin tờ trình này.</span>`;
+  }
+
+  document.getElementById('submissionProcessModal').classList.remove('hidden');
+}
+
+function closeProcessSubmissionModal() {
+  document.getElementById('submissionProcessModal').classList.add('hidden');
+  currentProcessingSubId = null;
+}
+
+function processSubmission(actionType) {
+  if (!currentProcessingSubId) return;
+  const sub = DB.submissions.find(s => s.id === currentProcessingSubId);
+  if (!sub) return;
+
+  const comment = document.getElementById('txtSubmissionComment').value.trim();
+  if (actionType === 'REJECT' && !comment) {
+    return alert('Vui lòng nhập lý do từ chối vào ô Ý kiến chỉ đạo!');
+  }
+
+  const wfConfig = DB.submissionDeptWorkflows[sub.dept];
+  const wf = wfConfig ? DB.workflows.find(w => w.id === wfConfig.workflowId) : null;
+
+  if (!sub.history) sub.history = [];
+
+  if (actionType === 'REJECT') {
+    sub.status = 'REJECTED';
+    sub.history.push({
+      step: sub.currentStep,
+      approver: currentUser.name,
+      username: currentUser.username,
+      action: 'REJECTED',
+      comment: comment,
+      time: new Date().toLocaleString('vi-VN')
+    });
+  } else if (actionType === 'APPROVE') {
+    sub.history.push({
+      step: sub.currentStep,
+      approver: currentUser.name,
+      username: currentUser.username,
+      action: 'APPROVED',
+      comment: comment,
+      time: new Date().toLocaleString('vi-VN')
+    });
+
+    if (wf && sub.currentStep < wf.steps.length) {
+      sub.currentStep += 1;
+      sub.status = 'PENDING';
+    } else {
+      sub.status = 'APPROVED';
+    }
+  }
+
+  syncStorage('submissions');
+  logSystemAction('SUBMISSION', `PROCESS_${actionType}`, `Xử lý tờ trình [${sub.code}]: ${actionType}`, 'SUCCESS', sub.code);
+  alert('✅ Đã cập nhật trạng thái tờ trình!');
+  closeProcessSubmissionModal();
+  renderSubmissionReqs();
+}
+
+// ==========================================
+// 3. MODULE CÔNG VIỆC (TASK MODULE)
+// ==========================================
+function renderTasks() {
+  const tbody = document.getElementById('taskTableBody');
+  if (!tbody) return;
+
+  const statusFilter = document.getElementById('filterTaskStatus')?.value || '';
+  const keyword = (document.getElementById('filterTaskKeyword')?.value || '').toLowerCase().trim();
+
+  let tasks = DB.submissions.filter(sub => {
+    if (statusFilter && sub.status !== statusFilter) return false;
+    if (keyword) {
+      const matchCode = (sub.code || '').toLowerCase().includes(keyword);
+      const matchTitle = (sub.title || '').toLowerCase().includes(keyword);
+      const matchCreator = (sub.creatorName || '').toLowerCase().includes(keyword);
+      if (!matchCode && !matchTitle && !matchCreator) return false;
+    }
+    return true;
+  });
+
+  if (tasks.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="6" class="text-center p-6 text-gray-500 italic">Không có công việc nào trong danh sách.</td></tr>`;
+    return;
+  }
+
+  tbody.innerHTML = tasks.map(t => `
+    <tr class="hover:bg-gray-50 border-b">
+      <td class="border p-2 font-mono font-bold text-violet-800">${escapeHtml(t.code)}</td>
+      <td class="border p-2">
+        <div class="font-bold text-gray-800">${escapeHtml(t.title)}</div>
+        <div class="text-xs text-gray-500 line-clamp-1">${escapeHtml(t.content)}</div>
+      </td>
+      <td class="border p-2">${escapeHtml(t.dept)} (${escapeHtml(t.creatorName)})</td>
+      <td class="border p-2 font-bold text-rose-600">${escapeHtml(t.priority)}</td>
+      <td class="border p-2 font-bold ${t.status === 'APPROVED' ? 'text-green-600' : t.status === 'REJECTED' ? 'text-red-600' : 'text-yellow-600'}">
+        ${t.status}
+      </td>
+      <td class="border p-2 text-center">
+        <button onclick="switchTab('submission'); openProcessSubmissionModal(${t.id})" class="bg-violet-600 text-white px-2 py-1 rounded text-xs hover:bg-violet-700 font-bold">👁️ Chi tiết</button>
+      </td>
+    </tr>
+  `).join('');
+}
+
+function resetTaskFilters() {
+  document.getElementById('filterTaskStatus').value = '';
+  document.getElementById('filterTaskKeyword').value = '';
+  renderTasks();
+}
+
+// ==========================================
+// 4. MODULE HỢP ĐỒNG & GIẤY PHÉP (CONTRACT MODULE)
+// ==========================================
+function submitContractReq(e) {
+  e.preventDefault();
+  const code = document.getElementById('contractCode').value.trim();
+  const dept = document.getElementById('contractDept').value;
+  const type = document.getElementById('contractType').value;
+  const title = document.getElementById('contractTitle').value.trim();
+  const partner = document.getElementById('contractPartner').value.trim();
+  const amount = parseFloat(document.getElementById('contractAmount').value) || 0;
+  const startDate = document.getElementById('contractStartDate').value;
+  const endDate = document.getElementById('contractEndDate').value;
+  const content = document.getElementById('contractContent').value.trim();
+
+  if (DB.contracts.some(c => c.code === code)) {
+    return alert('Mã hợp đồng đã tồn tại!');
+  }
+
+  const newContract = {
+    id: Date.now(),
+    code: code,
+    dept: dept,
+    type: type,
+    title: title,
+    partner: partner,
+    amount: amount,
+    startDate: startDate,
+    endDate: endDate,
+    content: content,
+    creator: currentUser.username,
+    createdAt: new Date().toLocaleString('vi-VN')
+  };
+
+  DB.contracts.unshift(newContract);
+  syncStorage('contracts');
+  logSystemAction('CONTRACT', 'CREATE_CONTRACT', `Tạo hồ sơ hợp đồng [${code} - ${title}]`, 'SUCCESS', code);
+  alert('✅ Đã lưu thông tin Hợp đồng / Giấy phép thành công!');
+  e.target.reset();
+  renderContracts();
+}
+
+function renderContracts() {
+  const tbody = document.getElementById('contractTableBody');
+  if (!tbody) return;
+
+  const now = new Date();
+
+  tbody.innerHTML = DB.contracts.map(c => {
+    const endD = new Date(c.endDate);
+    const diffDays = Math.ceil((endD - now) / (1000 * 60 * 60 * 24));
+
+    let warningBadge = '';
+    if (diffDays < 0) {
+      warningBadge = `<span class="px-2 py-0.5 bg-red-100 text-red-800 rounded font-bold text-xs">⚠️ Đã hết hạn (${Math.abs(diffDays)} ngày)</span>`;
+    } else if (diffDays <= 30) {
+      warningBadge = `<span class="px-2 py-0.5 bg-yellow-100 text-yellow-800 rounded font-bold text-xs">⏰ Sắp hết hạn (Còn ${diffDays} ngày)</span>`;
+    } else {
+      warningBadge = `<span class="px-2 py-0.5 bg-green-100 text-green-800 rounded font-semibold text-xs">✅ Còn hiệu lực</span>`;
+    }
+
+    return `
+      <tr class="hover:bg-gray-50 border-b">
+        <td class="border p-2 font-mono font-bold text-cyan-800">${escapeHtml(c.code)}<br><span class="text-xs text-gray-500 font-normal">${escapeHtml(c.type)}</span></td>
+        <td class="border p-2">
+          <div class="font-bold text-gray-800">${escapeHtml(c.title)}</div>
+          <div class="text-xs text-gray-500">Bên ký kết: ${escapeHtml(c.partner)}</div>
+        </td>
+        <td class="border p-2">
+          <div class="font-bold text-purple-700">${c.amount.toLocaleString('vi-VN')} VNĐ</div>
+          <div class="text-xs text-gray-500">${escapeHtml(c.startDate)} ➔ ${escapeHtml(c.endDate)}</div>
+        </td>
+        <td class="border p-2">${escapeHtml(c.dept)}</td>
+        <td class="border p-2">${warningBadge}</td>
+        <td class="border p-2 text-center">
+          <button onclick="alert('Trích lược hợp đồng:\\n${escapeHtml(c.content)}')" class="bg-cyan-600 text-white px-2 py-1 rounded text-xs hover:bg-cyan-700 font-bold">👁️ Xem</button>
+        </td>
+      </tr>
+    `;
+  }).join('');
+}
+
+// ==========================================
+// 5. MODULE PHÒNG HỌP (MEETING MODULE)
+// ==========================================
+function submitMeetingReq(e) {
+  e.preventDefault();
+  const code = document.getElementById('meetingCode').value.trim();
+  const dept = document.getElementById('meetingDept').value;
+  const room = document.getElementById('meetingRoom').value;
+  const title = document.getElementById('meetingTitle').value.trim();
+  const attendees = parseInt(document.getElementById('meetingAttendees').value, 10) || 1;
+  const startTime = document.getElementById('meetingStartTime').value;
+  const endTime = document.getElementById('meetingEndTime').value;
+  const equipment = document.getElementById('meetingEquipment').value.trim();
+  const agenda = document.getElementById('meetingAgenda').value.trim();
+
+  if (DB.meetings.some(m => m.code === code)) {
+    return alert('Mã phiếu đặt phòng họp đã tồn tại!');
+  }
+
+  const newMeeting = {
+    id: Date.now(),
+    code: code,
+    dept: dept,
+    room: room,
+    title: title,
+    attendees: attendees,
+    startTime: startTime,
+    endTime: endTime,
+    equipment: equipment,
+    agenda: agenda,
+    creator: currentUser.username,
+    creatorName: currentUser.name,
+    createdAt: new Date().toLocaleString('vi-VN'),
+    status: 'PENDING'
+  };
+
+  DB.meetings.unshift(newMeeting);
+  syncStorage('meetings');
+  logSystemAction('MEETING', 'CREATE_MEETING', `Đặt lịch phòng họp [${code} - ${room}]`, 'SUCCESS', code);
+  alert('✅ Đã gửi đăng ký lịch phòng họp thành công!');
+  e.target.reset();
+  renderMeetings();
+}
+
+function renderMeetings() {
+  const tbody = document.getElementById('meetingTableBody');
+  if (!tbody) return;
+
+  tbody.innerHTML = DB.meetings.map(m => {
+    let statusBadge = '';
+    if (m.status === 'APPROVED') statusBadge = `<span class="px-2 py-0.5 bg-green-100 text-green-800 rounded font-bold text-xs">✅ Đã duyệt lịch</span>`;
+    else if (m.status === 'CANCELLED') statusBadge = `<span class="px-2 py-0.5 bg-red-100 text-red-800 rounded font-bold text-xs">❌ Đã hủy lịch</span>`;
+    else statusBadge = `<span class="px-2 py-0.5 bg-yellow-100 text-yellow-800 rounded font-bold text-xs">⏳ Đang chờ duyệt</span>`;
+
+    return `
+      <tr class="hover:bg-gray-50 border-b">
+        <td class="border p-2 font-mono font-bold text-emerald-800">${escapeHtml(m.code)}<br><span class="text-xs font-normal text-gray-600">${escapeHtml(m.room)}</span></td>
+        <td class="border p-2">
+          <div class="font-bold text-gray-800">${escapeHtml(m.title)}</div>
+          <div class="text-xs text-gray-500">Số người: ${m.attendees} | Thiết bị: ${escapeHtml(m.equipment || 'Không')}</div>
+        </td>
+        <td class="border p-2 text-xs">${escapeHtml(m.startTime)}<br>➔ ${escapeHtml(m.endTime)}</td>
+        <td class="border p-2">${escapeHtml(m.dept)} (${escapeHtml(m.creatorName)})</td>
+        <td class="border p-2">${statusBadge}</td>
+        <td class="border p-2 text-center space-x-1">
+          ${(canApproveMeeting(currentUser) && m.status === 'PENDING') ? `<button onclick="approveMeeting(${m.id})" class="bg-green-600 text-white px-2 py-1 rounded text-xs hover:bg-green-700 font-bold">Duyệt</button>` : ''}
+          ${(canCancelMeeting(currentUser) && m.status !== 'CANCELLED') ? `<button onclick="cancelMeeting(${m.id})" class="bg-red-600 text-white px-2 py-1 rounded text-xs hover:bg-red-700 font-bold">Hủy</button>` : ''}
+        </td>
+      </tr>
+    `;
+  }).join('');
+}
+
+function approveMeeting(id) {
+  const m = DB.meetings.find(item => item.id === id);
+  if (!m) return;
+  m.status = 'APPROVED';
+  syncStorage('meetings');
+  logSystemAction('MEETING', 'APPROVE_MEETING', `Phê duyệt đặt phòng họp [${m.code}]`, 'SUCCESS', m.code);
+  renderMeetings();
+}
+
+function cancelMeeting(id) {
+  const m = DB.meetings.find(item => item.id === id);
+  if (!m) return;
+  m.status = 'CANCELLED';
+  syncStorage('meetings');
+  logSystemAction('MEETING', 'CANCEL_MEETING', `Hủy lịch phòng họp [${m.code}]`, 'SUCCESS', m.code);
+  renderMeetings();
+}
+
+// ==========================================
+// 6. MODULE ĐĂNG KÝ XE (CAR REGISTRATION MODULE)
+// ==========================================
+function submitCarReq(e) {
+  e.preventDefault();
+  const code = document.getElementById('carCode').value.trim();
+  const dept = document.getElementById('carDept').value;
+  const type = document.getElementById('carType').value;
+  const plate = document.getElementById('carPlate').value.trim();
+  const driver = document.getElementById('carDriver').value.trim();
+  const km = parseFloat(document.getElementById('carKm').value) || 0;
+  const startTime = document.getElementById('carStartTime').value;
+  const endTime = document.getElementById('carEndTime').value;
+  const destination = document.getElementById('carDestination').value.trim();
+  const reason = document.getElementById('carReason').value.trim();
+
+  if (DB.carRegs.some(c => c.code === code)) {
+    return alert('Mã phiếu đăng ký xe đã tồn tại!');
+  }
+
+  const customData = collectDynamicFieldsData('CAR');
+
+  const newCar = {
+    id: Date.now(),
+    code: code,
+    dept: dept,
+    type: type,
+    plate: plate,
+    driver: driver,
+    km: km,
+    startTime: startTime,
+    endTime: endTime,
+    destination: destination,
+    reason: reason,
+    customData: customData,
+    creator: currentUser.username,
+    creatorName: currentUser.name,
+    createdAt: new Date().toLocaleString('vi-VN'),
+    status: 'PENDING',
+    currentStep: 1,
+    history: []
+  };
+
+  DB.carRegs.unshift(newCar);
+  syncStorage('carRegs');
+  logSystemAction('CAR', 'CREATE_CAR_REG', `Tạo phiếu đăng ký xe [${code} - ${destination}]`, 'SUCCESS', code);
+  alert('✅ Đã gửi phiếu đăng ký xe thành công!');
+  e.target.reset();
+  renderCarRegs();
+}
+
+function renderCarRegs() {
+  const tbody = document.getElementById('carTableBody');
+  if (!tbody) return;
+
+  tbody.innerHTML = DB.carRegs.map(c => {
+    const wfConfig = DB.carDeptWorkflows[c.dept] || { workflowId: 'WF_1STEP', approvers: { 1: ['admin'] } };
+    const wf = DB.workflows.find(w => w.id === wfConfig.workflowId) || { steps: [{ name: 'Sếp duyệt' }] };
+
+    const currentStepApprovers = wfConfig.approvers ? (wfConfig.approvers[c.currentStep] || []) : [];
+    const canApprove = (c.status === 'PENDING') && (
+      currentUser.perms.admin || 
+      (Array.isArray(currentStepApprovers) ? currentStepApprovers.includes(currentUser.username) : currentStepApprovers === currentUser.username)
+    );
+
+    let statusBadge = '';
+    if (c.status === 'APPROVED') statusBadge = `<span class="px-2 py-0.5 bg-green-100 text-green-800 rounded font-bold text-xs">✅ Đã phê duyệt</span>`;
+    else if (c.status === 'REJECTED') statusBadge = `<span class="px-2 py-0.5 bg-red-100 text-red-800 rounded font-bold text-xs">❌ Từ chối</span>`;
+    else statusBadge = `<span class="px-2 py-0.5 bg-indigo-100 text-indigo-800 rounded font-bold text-xs">⏳ Bước ${c.currentStep}/${wf.steps.length}</span>`;
+
+    return `
+      <tr class="hover:bg-gray-50 border-b">
+        <td class="border p-2 font-mono font-bold text-indigo-800">${escapeHtml(c.code)}</td>
+        <td class="border p-2">${escapeHtml(c.dept)}<br><span class="text-xs text-gray-500">${escapeHtml(c.creatorName)}</span></td>
+        <td class="border p-2">
+          <div class="font-bold">${escapeHtml(c.type)} (${escapeHtml(c.plate || 'Chưa xếp')})</div>
+          <div class="text-xs text-gray-500">Lái xe: ${escapeHtml(c.driver)} | ${c.km} KM</div>
+        </td>
+        <td class="border p-2 text-xs">${escapeHtml(c.destination)}<br><span class="text-gray-400">${escapeHtml(c.startTime)} ➔ ${escapeHtml(c.endTime)}</span></td>
+        <td class="border p-2 text-xs">${escapeHtml(c.reason)}</td>
+        <td class="border p-2">${statusBadge}</td>
+        <td class="border p-2 text-center space-x-1">
+          ${canApprove ? `
+            <button onclick="approveCarReg(${c.id})" class="bg-green-600 text-white px-2 py-1 rounded text-xs font-bold hover:bg-green-700">Duyệt</button>
+            <button onclick="rejectCarReg(${c.id})" class="bg-red-600 text-white px-2 py-1 rounded text-xs font-bold hover:bg-red-700">Từ chối</button>
+          ` : ''}
+        </td>
+      </tr>
+    `;
+  }).join('');
+}
+
+function approveCarReg(id) {
+  const c = DB.carRegs.find(item => item.id === id);
+  if (!c) return;
+  const wfConfig = DB.carDeptWorkflows[c.dept];
+  const wf = wfConfig ? DB.workflows.find(w => w.id === wfConfig.workflowId) : null;
+
+  if (wf && c.currentStep < wf.steps.length) {
+    c.currentStep += 1;
+    c.status = 'PENDING';
+  } else {
+    c.status = 'APPROVED';
+  }
+  syncStorage('carRegs');
+  logSystemAction('CAR', 'APPROVE_CAR_REG', `Phê duyệt đăng ký xe [${c.code}]`, 'SUCCESS', c.code);
+  renderCarRegs();
+}
+
+function rejectCarReg(id) {
+  const c = DB.carRegs.find(item => item.id === id);
+  if (!c) return;
+  c.status = 'REJECTED';
+  syncStorage('carRegs');
+  logSystemAction('CAR', 'REJECT_CAR_REG', `Từ chối đăng ký xe [${c.code}]`, 'SUCCESS', c.code);
+  renderCarRegs();
+}
+
+// ==========================================
+// 7. MODULE PHÊ DUYỆT VĂN PHÒNG (OFFICE MODULE)
+// ==========================================
+function submitOfficeReq(e) {
+  e.preventDefault();
+  const code = document.getElementById('offCode').value.trim();
+  const dept = document.getElementById('offDept').value;
+  const title = document.getElementById('offTitle').value.trim();
+  const qty = document.getElementById('offQty').value.trim();
+  const amount = parseFloat(document.getElementById('offAmount').value) || 0;
+  const supplier = document.getElementById('offSupplier').value.trim();
+  const reason = document.getElementById('offReason').value.trim();
+
+  if (DB.officeReqs.some(o => o.code === code)) {
+    return alert('Mã phiếu đề xuất văn phòng đã tồn tại!');
+  }
+
+  const customData = collectDynamicFieldsData(activeOfficeSubTab);
+
+  const newOff = {
+    id: Date.now(),
+    code: code,
+    subType: activeOfficeSubTab,
+    dept: dept,
+    title: title,
+    qty: qty,
+    amount: amount,
+    supplier: supplier,
+    reason: reason,
+    customData: customData,
+    creator: currentUser.username,
+    creatorName: currentUser.name,
+    createdAt: new Date().toLocaleString('vi-VN'),
+    status: 'PENDING',
+    currentStep: 1,
+    history: []
+  };
+
+  DB.officeReqs.unshift(newOff);
+  syncStorage('officeReqs');
+  logSystemAction('OFFICE', 'CREATE_OFFICE_REQ', `Tạo đề xuất văn phòng [${code} - ${title}]`, 'SUCCESS', code);
+  alert('✅ Đã gửi đề xuất văn phòng thành công!');
+  e.target.reset();
+  renderOfficeReqs();
+}
+
+function renderOfficeReqs() {
+  const tbody = document.getElementById('officeTableBody');
+  if (!tbody) return;
+
+  const list = DB.officeReqs.filter(o => o.subType === activeOfficeSubTab);
+
+  if (list.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="7" class="text-center p-6 text-gray-500 italic">Không có đề xuất nào thuộc phân hệ này.</td></tr>`;
+    return;
+  }
+
+  tbody.innerHTML = list.map(o => {
+    let wfMap = DB.officeBuyDeptWorkflows;
+    if (o.subType === 'SUA_CHUA') wfMap = DB.officeFixDeptWorkflows;
+    if (o.subType === 'DAU_TU') wfMap = DB.officeInvestDeptWorkflows;
+
+    const wfConfig = wfMap[o.dept] || { workflowId: 'WF_1STEP', approvers: { 1: ['admin'] } };
+    const wf = DB.workflows.find(w => w.id === wfConfig.workflowId) || { steps: [{ name: 'Sếp duyệt' }] };
+
+    const currentStepApprovers = wfConfig.approvers ? (wfConfig.approvers[o.currentStep] || []) : [];
+    const canApprove = (o.status === 'PENDING') && (
+      currentUser.perms.admin || 
+      (Array.isArray(currentStepApprovers) ? currentStepApprovers.includes(currentUser.username) : currentStepApprovers === currentUser.username)
+    );
+
+    let statusBadge = '';
+    if (o.status === 'APPROVED') statusBadge = `<span class="px-2 py-0.5 bg-green-100 text-green-800 rounded font-bold text-xs">✅ Đã phê duyệt</span>`;
+    else if (o.status === 'REJECTED') statusBadge = `<span class="px-2 py-0.5 bg-red-100 text-red-800 rounded font-bold text-xs">❌ Từ chối</span>`;
+    else statusBadge = `<span class="px-2 py-0.5 bg-teal-100 text-teal-800 rounded font-bold text-xs">⏳ Bước ${o.currentStep}/${wf.steps.length}</span>`;
+
+    return `
+      <tr class="hover:bg-gray-50 border-b">
+        <td class="border p-2 font-mono font-bold text-teal-800">${escapeHtml(o.code)}</td>
+        <td class="border p-2 font-bold">${escapeHtml(o.subType)}</td>
+        <td class="border p-2">${escapeHtml(o.dept)}<br><span class="text-xs text-gray-500">${escapeHtml(o.creatorName)}</span></td>
+        <td class="border p-2">
+          <div class="font-bold text-gray-800">${escapeHtml(o.title)}</div>
+          <div class="text-xs text-gray-500">Số lượng: ${escapeHtml(o.qty)}</div>
+        </td>
+        <td class="border p-2">
+          <div class="font-bold text-rose-600">${o.amount.toLocaleString('vi-VN')} VNĐ</div>
+          <div class="text-xs text-gray-500">NCC: ${escapeHtml(o.supplier || 'N/A')}</div>
+        </td>
+        <td class="border p-2">${statusBadge}</td>
+        <td class="border p-2 text-center space-x-1">
+          ${canApprove ? `
+            <button onclick="approveOfficeReq(${o.id})" class="bg-green-600 text-white px-2 py-1 rounded text-xs font-bold hover:bg-green-700">Duyệt</button>
+            <button onclick="rejectOfficeReq(${o.id})" class="bg-red-600 text-white px-2 py-1 rounded text-xs font-bold hover:bg-red-700">Từ chối</button>
+          ` : ''}
+        </td>
+      </tr>
+    `;
+  }).join('');
+}
+
+function approveOfficeReq(id) {
+  const o = DB.officeReqs.find(item => item.id === id);
+  if (!o) return;
+
+  let wfMap = DB.officeBuyDeptWorkflows;
+  if (o.subType === 'SUA_CHUA') wfMap = DB.officeFixDeptWorkflows;
+  if (o.subType === 'DAU_TU') wfMap = DB.officeInvestDeptWorkflows;
+
+  const wfConfig = wfMap[o.dept];
+  const wf = wfConfig ? DB.workflows.find(w => w.id === wfConfig.workflowId) : null;
+
+  if (wf && o.currentStep < wf.steps.length) {
+    o.currentStep += 1;
+    o.status = 'PENDING';
+  } else {
+    o.status = 'APPROVED';
+  }
+  syncStorage('officeReqs');
+  logSystemAction('OFFICE', 'APPROVE_OFFICE_REQ', `Phê duyệt đề xuất văn phòng [${o.code}]`, 'SUCCESS', o.code);
+  renderOfficeReqs();
+}
+
+function rejectOfficeReq(id) {
+  const o = DB.officeReqs.find(item => item.id === id);
+  if (!o) return;
+  o.status = 'REJECTED';
+  syncStorage('officeReqs');
+  logSystemAction('OFFICE', 'REJECT_OFFICE_REQ', `Từ chối đề xuất văn phòng [${o.code}]`, 'SUCCESS', o.code);
+  renderOfficeReqs();
+}
+
+// ==========================================
+// 8. FORM BUILDER (DYNAMIC FIELDS)
+// ==========================================
+function switchFormTab(tabName) {
+  activeFormTab = tabName;
+  const tabs = ['SUBMISSION', 'CAR', 'MUA_BAN', 'SUA_CHUA', 'DAU_TU'];
+  tabs.forEach(t => {
+    const btn = document.getElementById(`btnFormTab${t === 'SUBMISSION' ? 'Submission' : t === 'CAR' ? 'Car' : t === 'MUA_BAN' ? 'Buy' : t === 'SUA_CHUA' ? 'Fix' : 'Invest'}`);
+    if (btn) btn.className = t === tabName ? 'px-3 py-1.5 rounded text-xs font-bold bg-rose-700 text-white' : 'px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700';
+  });
+
+  const lbl = document.getElementById('lblActiveFormName');
+  if (lbl) {
+    if (tabName === 'SUBMISSION') lbl.innerText = 'Văn Bản Trình / Tờ Trình';
+    if (tabName === 'CAR') lbl.innerText = 'Đăng Ký Xe';
+    if (tabName === 'MUA_BAN') lbl.innerText = 'Văn Phòng - Mua Bán';
+    if (tabName === 'SUA_CHUA') lbl.innerText = 'Văn Phòng - Sửa Chữa';
+    if (tabName === 'DAU_TU') lbl.innerText = 'Văn Phòng - Đầu Tư';
+  }
+
+  renderFormFieldsTable();
+}
+
+function toggleOptionsInput() {
+  const type = document.getElementById('fldType').value;
+  document.getElementById('optionsGroup').classList.toggle('hidden', type !== 'select');
+}
+
+function addCustomField(e) {
+  e.preventDefault();
+  const label = document.getElementById('fldLabel').value.trim();
+  const type = document.getElementById('fldType').value;
+  const optionsRaw = document.getElementById('fldOptions').value.trim();
+  const required = document.getElementById('fldRequired').checked;
+
+  if (!DB.formTemplates[activeFormTab]) DB.formTemplates[activeFormTab] = [];
+
+  const fieldId = 'f_cust_' + Date.now();
+  const optionsArr = type === 'select' ? optionsRaw.split(',').map(s => s.trim()).filter(Boolean) : [];
+
+  DB.formTemplates[activeFormTab].push({
+    id: fieldId,
+    label: label,
+    type: type,
+    options: optionsArr,
+    required: required,
+    isDefault: false
+  });
+
+  syncStorage('formTemplates');
+  logSystemAction('CONFIG', 'ADD_CUSTOM_FIELD', `Thêm trường [${label}] cho biểu mẫu ${activeFormTab}`, 'SUCCESS', fieldId);
+  alert('✅ Đã thêm trường dữ liệu tùy biến thành công!');
+  e.target.reset();
+  toggleOptionsInput();
+  renderFormFieldsTable();
+}
+
+function deleteCustomField(fieldId) {
+  if (!confirm('Bạn có chắc chắn muốn xóa trường này khỏi biểu mẫu?')) return;
+  if (!DB.formTemplates[activeFormTab]) return;
+
+  DB.formTemplates[activeFormTab] = DB.formTemplates[activeFormTab].filter(f => f.id !== fieldId);
+  syncStorage('formTemplates');
+  logSystemAction('CONFIG', 'DELETE_CUSTOM_FIELD', `Xóa trường [${fieldId}] khỏi biểu mẫu ${activeFormTab}`, 'SUCCESS', fieldId);
+  renderFormFieldsTable();
+}
+
+function renderFormFieldsTable() {
+  const tbody = document.getElementById('formFieldsTableBody');
+  if (!tbody) return;
+
+  const fields = DB.formTemplates[activeFormTab] || [];
+  if (fields.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="7" class="text-center p-4 text-gray-500 italic">Chưa có trường tùy biến nào.</td></tr>`;
+    return;
+  }
+
+  tbody.innerHTML = fields.map(f => `
+    <tr class="border-b hover:bg-gray-50">
+      <td class="p-2 border font-mono font-bold text-gray-700">${escapeHtml(f.id)}</td>
+      <td class="p-2 border font-bold text-gray-800">${escapeHtml(f.label)}</td>
+      <td class="p-2 border">${escapeHtml(f.type)}</td>
+      <td class="p-2 border">${f.options ? escapeHtml(f.options.join(', ')) : '-'}</td>
+      <td class="p-2 border text-center font-bold">${f.required ? '✅ Có' : 'Không'}</td>
+      <td class="p-2 border text-center">${f.isDefault ? '<span class="text-gray-400">Mặc định</span>' : '<span class="text-rose-600 font-bold">Tùy biến</span>'}</td>
+      <td class="p-2 border text-center">
+        ${!f.isDefault ? `<button onclick="deleteCustomField('${f.id}')" class="text-red-600 font-bold hover:underline">Xóa</button>` : '-'}
+      </td>
+    </tr>
+  `).join('');
+}
+
+function renderDynamicInputsForModule(modKey, containerId) {
+  const container = document.getElementById(containerId);
+  if (!container) return;
+
+  const fields = DB.formTemplates[modKey] || [];
+  if (fields.length === 0) {
+    container.innerHTML = '';
+    return;
+  }
+
+  container.innerHTML = fields.map(f => {
+    let inputHTML = '';
+    const reqAttr = f.required ? 'required' : '';
+
+    if (f.type === 'select') {
+      const opts = (f.options || []).map(o => `<option value="${escapeHtml(o)}">${escapeHtml(o)}</option>`).join('');
+      inputHTML = `<select data-dyn-id="${f.id}" data-dyn-label="${escapeHtml(f.label)}" class="w-full border p-1.5 rounded bg-white" ${reqAttr}><option value="">-- Chọn --</option>${opts}</select>`;
+    } else if (f.type === 'textarea') {
+      inputHTML = `<textarea data-dyn-id="${f.id}" data-dyn-label="${escapeHtml(f.label)}" class="w-full border p-1.5 rounded h-16" ${reqAttr}></textarea>`;
+    } else {
+      inputHTML = `<input type="${f.type}" data-dyn-id="${f.id}" data-dyn-label="${escapeHtml(f.label)}" class="w-full border p-1.5 rounded" ${reqAttr}>`;
+    }
+
+    return `
+      <div>
+        <label class="block font-semibold text-gray-600 mb-1">${escapeHtml(f.label)} ${f.required ? '<span class="text-red-500">*</span>' : ''}</label>
+        ${inputHTML}
+      </div>
+    `;
+  }).join('');
+}
+
+function collectDynamicFieldsData(containerId) {
+  let targetContainerId = 'dynamicFieldsContainer_SUBMISSION';
+  if (containerId === 'CAR') targetContainerId = 'dynamicFieldsContainer_CAR';
+  if (['MUA_BAN', 'SUA_CHUA', 'DAU_TU'].includes(containerId)) targetContainerId = 'dynamicFieldsContainer_OFFICE';
+
+  const container = document.getElementById(targetContainerId);
+  if (!container) return {};
+
+  const result = {};
+  const inputs = container.querySelectorAll('[data-dyn-id]');
+  inputs.forEach(input => {
+    const label = input.getAttribute('data-dyn-label');
+    result[label] = input.value;
+  });
+  return result;
+}
+
+// ==========================================
+// 9. MODULE QUY TRÌNH PHÊ DUYỆT (WORKFLOW)
+// ==========================================
+function switchWfModule(mod) {
+  activeWfMod = mod;
+  const mods = ['DOC', 'SUBMISSION', 'CAR', 'OFFICE_BUY', 'OFFICE_FIX', 'OFFICE_INVEST'];
+  mods.forEach(m => {
+    const btn = document.getElementById(`btnWfMod${m.replace('_', '')}`);
+    if (btn) btn.className = m === mod ? 'px-3 py-1.5 rounded text-xs font-bold bg-blue-600 text-white' : 'px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700';
+  });
+
+  const lbl = document.getElementById('wfConfigTitle');
+  if (lbl) {
+    if (mod === 'DOC') lbl.innerText = '📂 Cấu Hình Quy Trình Phê Duyệt Tài Liệu Theo Phòng Ban';
+    if (mod === 'SUBMISSION') lbl.innerText = '📜 Cấu Hình Quy Trình Văn Bản Trình / Tờ Trình Theo Phòng Ban';
+    if (mod === 'CAR') lbl.innerText = '🚗 Cấu Hình Quy Trình Đăng Ký Xe Theo Phòng Ban';
+    if (mod === 'OFFICE_BUY') lbl.innerText = '🛒 Cấu Hình Quy Trình Phê Duyệt Mua Bán VP Theo Phòng Ban';
+    if (mod === 'OFFICE_FIX') lbl.innerText = '🔧 Cấu Hình Quy Trình Phê Duyệt Sửa Chữa VP Theo Phòng Ban';
+    if (mod === 'OFFICE_INVEST') lbl.innerText = '📈 Cấu Hình Quy Trình Phê Duyệt Đầu Tư VP Theo Phòng Ban';
+  }
+
+  renderWorkflowTab();
+}
+
+function renderWorkflowTab() {
+  const container = document.getElementById('deptWorkflowConfigContainer');
+  if (!container) return;
+
+  let deptWfMap = DB.deptWorkflows;
+  if (activeWfMod === 'SUBMISSION') deptWfMap = DB.submissionDeptWorkflows;
+  if (activeWfMod === 'CAR') deptWfMap = DB.carDeptWorkflows;
+  if (activeWfMod === 'OFFICE_BUY') deptWfMap = DB.officeBuyDeptWorkflows;
+  if (activeWfMod === 'OFFICE_FIX') deptWfMap = DB.officeFixDeptWorkflows;
+  if (activeWfMod === 'OFFICE_INVEST') deptWfMap = DB.officeInvestDeptWorkflows;
+
+  container.innerHTML = DB.depts.map(dept => {
+    const config = deptWfMap[dept] || { workflowId: 'WF_1STEP', approvers: { 1: ['admin'] } };
+    const selectedWf = DB.workflows.find(w => w.id === config.workflowId) || DB.workflows[0];
+
+    const stepsConfigHTML = selectedWf.steps.map(step => {
+      const currentApprovers = config.approvers ? (config.approvers[step.order] || []) : [];
+      const userCheckboxes = DB.users.map(u => {
+        const isChecked = Array.isArray(currentApprovers) ? currentApprovers.includes(u.username) : currentApprovers === u.username;
+        return `
+          <label class="inline-flex items-center gap-1 bg-white px-2 py-0.5 rounded border text-[11px] cursor-pointer">
+            <input type="checkbox" value="${escapeHtml(u.username)}" data-dept="${escapeHtml(dept)}" data-step="${step.order}" ${isChecked ? 'checked' : ''}>
+            <span>${escapeHtml(u.name)} (${escapeHtml(u.username)})</span>
+          </label>
+        `;
+      }).join('');
+
+      return `
+        <div class="bg-gray-100 p-2 rounded text-xs space-y-1 border">
+          <div class="font-bold text-gray-700">Bước ${step.order}: ${escapeHtml(step.name)}</div>
+          <div class="flex flex-wrap gap-1.5 pt-1">${userCheckboxes}</div>
+        </div>
+      `;
+    }).join('');
+
+    const wfOptions = DB.workflows.map(w => `<option value="${w.id}" ${w.id === config.workflowId ? 'selected' : ''}>${escapeHtml(w.name)} (${w.steps.length} bước)</option>`).join('');
+
+    return `
+      <div class="bg-white p-3 rounded border space-y-2">
+        <div class="flex justify-between items-center border-b pb-2">
+          <h4 class="font-bold text-sm text-gray-800">🏢 ${escapeHtml(dept)}</h4>
+          <div class="flex items-center gap-2">
+            <span class="text-xs font-semibold text-gray-600">Chọn mẫu quy trình:</span>
+            <select id="wfSelect_${dept.replace(/\s+/g, '_')}" onchange="saveDeptWorkflowConfig('${escapeHtml(dept)}')" class="border p-1 rounded text-xs bg-white font-bold text-emerald-700">
+              ${wfOptions}
+            </select>
+          </div>
+        </div>
+        <div class="space-y-2">${stepsConfigHTML}</div>
+        <div class="flex justify-end pt-1">
+          <button onclick="saveDeptWorkflowConfig('${escapeHtml(dept)}')" class="bg-emerald-600 text-white px-3 py-1 rounded text-xs font-bold hover:bg-emerald-700">Lưu Cấu Hình [${escapeHtml(dept)}]</button>
+        </div>
+      </div>
+    `;
+  }).join('');
+
+  renderWorkflowTemplatesTable();
+}
+
+function saveDeptWorkflowConfig(dept) {
+  const deptKey = dept.replace(/\s+/g, '_');
+  const wfSelect = document.getElementById(`wfSelect_${deptKey}`);
+  if (!wfSelect) return;
+
+  const selectedWfId = wfSelect.value;
+  const approversObj = {};
+
+  const checkboxes = document.querySelectorAll(`input[data-dept="${dept}"]`);
+  checkboxes.forEach(cb => {
+    const stepOrder = parseInt(cb.getAttribute('data-step'), 10);
+    if (!approversObj[stepOrder]) approversObj[stepOrder] = [];
+    if (cb.checked) {
+      approversObj[stepOrder].push(cb.value);
+    }
+  });
+
+  const newConfig = { workflowId: selectedWfId, approvers: approversObj };
+
+  if (activeWfMod === 'DOC') { DB.deptWorkflows[dept] = newConfig; syncStorage('deptWorkflows'); }
+  if (activeWfMod === 'SUBMISSION') { DB.submissionDeptWorkflows[dept] = newConfig; syncStorage('submissionDeptWorkflows'); }
+  if (activeWfMod === 'CAR') { DB.carDeptWorkflows[dept] = newConfig; syncStorage('carDeptWorkflows'); }
+  if (activeWfMod === 'OFFICE_BUY') { DB.officeBuyDeptWorkflows[dept] = newConfig; syncStorage('officeBuyDeptWorkflows'); }
+  if (activeWfMod === 'OFFICE_FIX') { DB.officeFixDeptWorkflows[dept] = newConfig; syncStorage('officeFixDeptWorkflows'); }
+  if (activeWfMod === 'OFFICE_INVEST') { DB.officeInvestDeptWorkflows[dept] = newConfig; syncStorage('officeInvestDeptWorkflows'); }
+
+  logSystemAction('CONFIG', 'UPDATE_DEPT_WORKFLOW', `Cập nhật cấu hình quy trình phòng ban [${dept}]`, 'SUCCESS', dept);
+  alert(`✅ Đã lưu cấu hình quy trình cho phòng ban [${dept}] thành công!`);
+}
+
+function renderWorkflowTemplatesTable() {
+  const tbody = document.getElementById('workflowTableBody');
+  if (!tbody) return;
+
+  tbody.innerHTML = DB.workflows.map(wf => `
+    <tr class="border-b hover:bg-gray-50">
+      <td class="p-2 border font-mono font-bold text-gray-800">${escapeHtml(wf.id)}</td>
+      <td class="p-2 border font-bold text-emerald-800">${escapeHtml(wf.name)}</td>
+      <td class="p-2 border text-center font-bold">${wf.steps.length} bước</td>
+      <td class="p-2 border text-xs">${wf.steps.map(s => `${s.order}. ${escapeHtml(s.name)}`).join(' ➔ ')}</td>
+      <td class="p-2 border text-center space-x-1">
+        <button onclick="editWorkflowTemplate('${wf.id}')" class="text-blue-600 font-bold hover:underline">Sửa</button>
+        <button onclick="deleteWorkflowTemplate('${wf.id}')" class="text-red-600 font-bold hover:underline">Xóa</button>
+      </td>
+    </tr>
+  `).join('');
+}
+
+function addStepRow(nameVal = '') {
+  const container = document.getElementById('stepBuilderContainer');
+  if (!container) return;
+  const count = container.children.length + 1;
+
+  const div = document.createElement('div');
+  div.className = 'flex items-center gap-2 step-row';
+  div.innerHTML = `
+    <span class="font-bold text-xs w-16">Bước ${count}:</span>
+    <input placeholder="Tên bước (VD: Trưởng phòng)" value="${escapeHtml(nameVal)}" class="border p-1 rounded text-xs flex-1 step-name-input" required>
+    <button type="button" onclick="this.parentElement.remove(); reindexStepRows();" class="text-red-500 font-bold px-2 text-xs">✕ Xóa</button>
+  `;
+  container.appendChild(div);
+}
+
+function reindexStepRows() {
+  const container = document.getElementById('stepBuilderContainer');
+  if (!container) return;
+  Array.from(container.children).forEach((row, idx) => {
+    const lbl = row.querySelector('span');
+    if (lbl) lbl.innerText = `Bước ${idx + 1}:`;
+  });
+}
+
+function resetWorkflowForm() {
+  document.getElementById('editingWfCode').value = '';
+  document.getElementById('wfCode').value = '';
+  document.getElementById('wfCode').disabled = false;
+  document.getElementById('wfName').value = '';
+  document.getElementById('stepBuilderContainer').innerHTML = '';
+  document.getElementById('btnCancelWf').classList.add('hidden');
+  addStepRow('Phê duyệt cấp 1');
+}
+
+function saveWorkflowTemplate(e) {
+  e.preventDefault();
+  const editingCode = document.getElementById('editingWfCode').value;
+  const code = document.getElementById('wfCode').value.trim();
+  const name = document.getElementById('wfName').value.trim();
+
+  const stepInputs = document.querySelectorAll('.step-name-input');
+  if (stepInputs.length === 0) return alert('Vui lòng thêm ít nhất 1 bước cho quy trình!');
+
+  const steps = Array.from(stepInputs).map((input, idx) => ({
+    order: idx + 1,
+    name: input.value.trim()
+  }));
+
+  if (editingCode) {
+    const wf = DB.workflows.find(w => w.id === editingCode);
+    if (wf) {
+      wf.name = name;
+      wf.steps = steps;
+    }
+  } else {
+    if (DB.workflows.some(w => w.id === code)) return alert('Mã quy trình đã tồn tại!');
+    DB.workflows.push({ id: code, name: name, steps: steps });
+  }
+
+  syncStorage('workflows');
+  logSystemAction('CONFIG', 'SAVE_WORKFLOW_TEMPLATE', `Lưu mẫu quy trình [${code} - ${name}]`, 'SUCCESS', code);
+  alert('✅ Đã lưu mẫu quy trình thành công!');
+  resetWorkflowForm();
+  renderWorkflowTab();
+}
+
+function editWorkflowTemplate(code) {
+  const wf = DB.workflows.find(w => w.id === code);
+  if (!wf) return;
+
+  document.getElementById('editingWfCode').value = wf.id;
+  document.getElementById('wfCode').value = wf.id;
+  document.getElementById('wfCode').disabled = true;
+  document.getElementById('wfName').value = wf.name;
+
+  const container = document.getElementById('stepBuilderContainer');
+  container.innerHTML = '';
+  wf.steps.forEach(s => addStepRow(s.name));
+
+  document.getElementById('btnCancelWf').classList.remove('hidden');
+}
+
+function deleteWorkflowTemplate(code) {
+  if (!confirm('Bạn có chắc chắn muốn xóa mẫu quy trình này?')) return;
+  DB.workflows = DB.workflows.filter(w => w.id !== code);
+  syncStorage('workflows');
+  logSystemAction('CONFIG', 'DELETE_WORKFLOW_TEMPLATE', `Xóa mẫu quy trình [${code}]`, 'SUCCESS', code);
+  renderWorkflowTab();
+}
+
+// ==========================================
+// 10. ADMIN MANAGEMENT (USER, DEPT, CAT)
+// ==========================================
+function saveDept(e) {
+  e.preventDefault();
+  const name = document.getElementById('txtDeptName').value.trim();
+  if (DB.depts.includes(name)) return alert('Phòng ban đã tồn tại!');
+  DB.depts.push(name);
+  syncStorage('depts');
+  logSystemAction('USER_MGM', 'ADD_DEPT', `Thêm phòng ban mới [${name}]`, 'SUCCESS', name);
+  document.getElementById('txtDeptName').value = '';
+  renderDeptList();
+  populateDropdowns();
+}
+
+function deleteDept(name) {
+  if (!confirm(`Xóa phòng ban ${name}?`)) return;
+  DB.depts = DB.depts.filter(d => d !== name);
+  syncStorage('depts');
+  logSystemAction('USER_MGM', 'DELETE_DEPT', `Xóa phòng ban [${name}]`, 'SUCCESS', name);
+  renderDeptList();
+  populateDropdowns();
+}
+
+function renderDeptList() {
+  const ul = document.getElementById('deptList');
+  if (!ul) return;
+  ul.innerHTML = DB.depts.map(d => `
+    <li class="p-2 flex justify-between items-center hover:bg-gray-50">
+      <span>${escapeHtml(d)}</span>
+      <button onclick="deleteDept('${escapeHtml(d)}')" class="text-red-500 font-bold hover:underline">Xóa</button>
+    </li>
+  `).join('');
+}
+
+function saveCat(e) {
+  e.preventDefault();
+  const name = document.getElementById('txtCatName').value.trim();
+  if (DB.cats.includes(name)) return alert('Loại tài liệu đã tồn tại!');
+  DB.cats.push(name);
+  syncStorage('cats');
+  logSystemAction('USER_MGM', 'ADD_CAT', `Thêm loại tài liệu mới [${name}]`, 'SUCCESS', name);
+  document.getElementById('txtCatName').value = '';
+  renderCatList();
+  populateDropdowns();
+}
+
+function deleteCat(name) {
+  if (!confirm(`Xóa loại tài liệu ${name}?`)) return;
+  DB.cats = DB.cats.filter(c => c !== name);
+  syncStorage('cats');
+  logSystemAction('USER_MGM', 'DELETE_CAT', `Xóa loại tài liệu [${name}]`, 'SUCCESS', name);
+  renderCatList();
+  populateDropdowns();
+}
+
+function renderCatList() {
+  const ul = document.getElementById('catList');
+  if (!ul) return;
+  ul.innerHTML = DB.cats.map(c => `
+    <li class="p-2 flex justify-between items-center hover:bg-gray-50">
+      <span>${escapeHtml(c)}</span>
+      <button onclick="deleteCat('${escapeHtml(c)}')" class="text-red-500 font-bold hover:underline">Xóa</button>
+    </li>
+  `).join('');
+}
+
+function renderDeptCheckboxes() {
+  const groups = [
+    { container: 'pUploadDeptContainer', prefix: 'pUploadDept' },
+    { container: 'pViewDraftDeptContainer', prefix: 'pViewDraftDept' },
+    { container: 'pViewApprovedDeptContainer', prefix: 'pViewApprovedDept' },
+    { container: 'pDownloadDeptContainer', prefix: 'pDownloadDept' }
+  ];
+
+  groups.forEach(g => {
+    const el = document.getElementById(g.container);
+    if (!el) return;
+    el.innerHTML = DB.depts.map((d, idx) => `
+      <label class="flex items-center gap-1 text-gray-700 cursor-pointer">
+        <input type="checkbox" id="${g.prefix}_${idx}" value="${escapeHtml(d)}">
+        <span class="truncate">${escapeHtml(d)}</span>
+      </label>
+    `).join('');
+  });
+}
+
+function toggleScopeGroup(allCheckId, deptCheckPrefix) {
+  const isAll = document.getElementById(allCheckId).checked;
+  DB.depts.forEach((_, idx) => {
+    const cb = document.getElementById(`${deptCheckPrefix}_${idx}`);
+    if (cb) cb.disabled = isAll;
+  });
+}
+
+function saveUser(e) {
+  e.preventDefault();
+  const editId = document.getElementById('editUserId').value;
+  const username = document.getElementById('uUsername').value.trim();
+  const pass = document.getElementById('uPassword').value.trim();
+  const name = document.getElementById('uFullName').value.trim();
+  const email = document.getElementById('uEmail').value.trim();
+  const phone = document.getElementById('uPhone').value.trim();
+  const dept = document.getElementById('uDept').value;
+
+  const perms = {
+    admin: document.getElementById('pAdmin').checked,
+    submissionModule: document.getElementById('pSubmissionModule').checked,
+    contractModule: document.getElementById('pContractModule').checked,
+    meetingBook: document.getElementById('pMeetingBook').checked,
+    meetingApprove: document.getElementById('pMeetingApprove').checked,
+    meetingCancel: document.getElementById('pMeetingCancel').checked,
+    carModule: document.getElementById('pCarModule').checked,
+    officeBuy: document.getElementById('pOfficeBuy').checked,
+    officeFix: document.getElementById('pOfficeFix').checked,
+    officeInvest: document.getElementById('pOfficeInvest').checked,
+    uploadAll: document.getElementById('pUploadAll').checked,
+    uploadDepts: Array.from(document.querySelectorAll('[id^="pUploadDept_"]:checked')).map(cb => cb.value),
+    viewDraftAll: document.getElementById('pViewDraftAll').checked,
+    viewDraftDepts: Array.from(document.querySelectorAll('[id^="pViewDraftDept_"]:checked')).map(cb => cb.value),
+    viewApprovedAll: document.getElementById('pViewApprovedAll').checked,
+    viewApprovedDepts: Array.from(document.querySelectorAll('[id^="pViewApprovedDept_"]:checked')).map(cb => cb.value),
+    downloadAll: document.getElementById('pDownloadAll').checked,
+    downloadDepts: Array.from(document.querySelectorAll('[id^="pDownloadDept_"]:checked')).map(cb => cb.value)
+  };
+
+  if (editId) {
+    const user = DB.users.find(u => u.id === parseInt(editId, 10));
+    if (user) {
+      user.username = username;
+      user.pass = pass;
+      user.name = name;
+      user.email = email;
+      user.phone = phone;
+      user.dept = dept;
+      user.perms = perms;
+    }
+  } else {
+    if (DB.users.some(u => u.username === username)) return alert('Tên đăng nhập đã tồn tại!');
+    DB.users.push({
+      id: Date.now(),
+      username, pass, name, email, phone, dept, perms
+    });
+  }
+
+  syncStorage('users');
+  logSystemAction('USER_MGM', 'SAVE_USER', `Lưu thông tin người dùng [${username}]`, 'SUCCESS', username);
+  alert('✅ Đã lưu thông tin người dùng và phân quyền!');
+  resetUserForm();
+  renderUsers();
+}
+
+function resetUserForm() {
+  document.getElementById('editUserId').value = '';
+  document.getElementById('uUsername').value = '';
+  document.getElementById('uPassword').value = '';
+  document.getElementById('uFullName').value = '';
+  document.getElementById('uEmail').value = '';
+  document.getElementById('uPhone').value = '';
+  document.getElementById('pAdmin').checked = false;
+  document.getElementById('pSubmissionModule').checked = true;
+  document.getElementById('pContractModule').checked = true;
+  document.getElementById('pMeetingBook').checked = true;
+  document.getElementById('pMeetingApprove').checked = false;
+  document.getElementById('pMeetingCancel').checked = true;
+  document.getElementById('pCarModule').checked = true;
+  document.getElementById('pOfficeBuy').checked = true;
+  document.getElementById('pOfficeFix').checked = true;
+  document.getElementById('pOfficeInvest').checked = true;
+
+  ['pUploadAll', 'pViewDraftAll', 'pViewApprovedAll', 'pDownloadAll'].forEach(id => {
+    const cb = document.getElementById(id);
+    if (cb) { cb.checked = false; }
+  });
+
+  renderDeptCheckboxes();
+}
+
+function editUser(id) {
+  const user = DB.users.find(u => u.id === id);
+  if (!user) return;
+
+  document.getElementById('editUserId').value = user.id;
+  document.getElementById('uUsername').value = user.username;
+  document.getElementById('uPassword').value = user.pass || user.password || '';
+  document.getElementById('uFullName').value = user.name;
+  document.getElementById('uEmail').value = user.email || '';
+  document.getElementById('uPhone').value = user.phone || '';
+  document.getElementById('uDept').value = user.dept;
+
+  document.getElementById('pAdmin').checked = !!user.perms.admin;
+  document.getElementById('pSubmissionModule').checked = !!user.perms.submissionModule;
+  document.getElementById('pContractModule').checked = !!user.perms.contractModule;
+  document.getElementById('pMeetingBook').checked = !!user.perms.meetingBook;
+  document.getElementById('pMeetingApprove').checked = !!user.perms.meetingApprove;
+  document.getElementById('pMeetingCancel').checked = !!user.perms.meetingCancel;
+  document.getElementById('pCarModule').checked = !!user.perms.carModule;
+  document.getElementById('pOfficeBuy').checked = !!user.perms.officeBuy;
+  document.getElementById('pOfficeFix').checked = !!user.perms.officeFix;
+  document.getElementById('pOfficeInvest').checked = !!user.perms.officeInvest;
+
+  document.getElementById('pUploadAll').checked = !!user.perms.uploadAll;
+  document.getElementById('pViewDraftAll').checked = !!user.perms.viewDraftAll;
+  document.getElementById('pViewApprovedAll').checked = !!user.perms.viewApprovedAll;
+  document.getElementById('pDownloadAll').checked = !!user.perms.downloadAll;
+
+  renderDeptCheckboxes();
+
+  const setGroupCheckboxes = (deptList, prefix) => {
+    if (Array.isArray(deptList)) {
+      deptList.forEach(d => {
+        const idx = DB.depts.indexOf(d);
+        if (idx !== -1) {
+          const cb = document.getElementById(`${prefix}_${idx}`);
+          if (cb) cb.checked = true;
+        }
+      });
+    }
+  };
+
+  setGroupCheckboxes(user.perms.uploadDepts, 'pUploadDept');
+  setGroupCheckboxes(user.perms.viewDraftDepts, 'pViewDraftDept');
+  setGroupCheckboxes(user.perms.viewApprovedDepts, 'pViewApprovedDept');
+  setGroupCheckboxes(user.perms.downloadDepts, 'pDownloadDept');
+}
+
+function deleteUser(id) {
+  if (!confirm('Bạn có chắc chắn muốn xóa người dùng này?')) return;
+  const u = DB.users.find(item => item.id === id);
+  DB.users = DB.users.filter(item => item.id !== id);
+  syncStorage('users');
+  logSystemAction('USER_MGM', 'DELETE_USER', `Xóa người dùng [${u?.username}]`, 'SUCCESS', u?.username);
+  renderUsers();
+}
+
+function renderUsers() {
+  const tbody = document.getElementById('userTableBody');
+  if (!tbody) return;
+
+  tbody.innerHTML = DB.users.map(u => `
+    <tr class="hover:bg-gray-50 border-b">
+      <td class="border p-2 font-bold font-mono text-purple-700">${escapeHtml(u.username)}</td>
+      <td class="border p-2 font-semibold">${escapeHtml(u.name)}</td>
+      <td class="border p-2 text-xs">✉️ ${escapeHtml(u.email || 'N/A')}<br>📞 ${escapeHtml(u.phone || 'N/A')}</td>
+      <td class="border p-2">${escapeHtml(u.dept)}</td>
+      <td class="border p-2 text-xs">${u.perms.admin ? '<span class="text-purple-700 font-bold">[ADMIN]</span> ' : ''}Quyền: ${Object.keys(u.perms).filter(k => u.perms[k]).length} mục</td>
+      <td class="border p-2 text-center space-x-1">
+        <button onclick="editUser(${u.id})" class="text-blue-600 font-bold hover:underline">Sửa</button>
+        <button onclick="deleteUser(${u.id})" class="text-red-600 font-bold hover:underline">Xóa</button>
+      </td>
+    </tr>
+  `).join('');
+}
+
+function downloadUserTemplate() {
+  const csvContent = "data:text/csv;charset=utf-8,username,pass,name,email,phone,dept\nuser1,123456,Nguyen Van One,user1@company.com,0901234567,Phong Nhan Su";
+  const encodedUri = encodeURI(csvContent);
+  const link = document.createElement("a");
+  link.setAttribute("href", encodedUri);
+  link.setAttribute("download", "user_template.csv");
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+}
+
+function exportUsersCSV() {
+  let csv = "username,pass,name,email,phone,dept\n";
+  DB.users.forEach(u => {
+    csv += `"${u.username}","${u.pass || u.password}","${u.name}","${u.email || ''}","${u.phone || ''}","${u.dept}"\n`;
+  });
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = "dms_users_export.csv";
+  link.click();
+}
+
+function importUsersCSV(evt) {
+  const file = evt.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    const lines = e.target.result.split('\n');
+    let count = 0;
+    for (let i = 1; i < lines.length; i++) {
+      const line = lines[i].trim();
+      if (!line) continue;
+      const parts = line.split(',').map(p => p.replace(/"/g, '').trim());
+      if (parts.length >= 6) {
+        const [username, pass, name, email, phone, dept] = parts;
+        if (!DB.users.some(u => u.username === username)) {
+          DB.users.push({
+            id: Date.now() + Math.random(),
+            username, pass, name, email, phone, dept,
+            perms: { admin: false, submissionModule: true, contractModule: true, meetingBook: true, meetingApprove: false, meetingCancel: true, carModule: true, officeBuy: true, officeFix: true, officeInvest: false }
+          });
+          count++;
+        }
+      }
+    }
+    syncStorage('users');
+    alert(`✅ Đã import thành công ${count} người dùng mới!`);
+    renderUsers();
+  };
+  reader.readAsText(file);
+}
+
+// ==========================================
+// 11. LOG SYSTEM MODULE
+// ==========================================
+function renderSystemLogs() {
+  const tbody = document.getElementById('systemLogTableBody');
+  if (!tbody) return;
+
+  const moduleFilter = document.getElementById('filterLogModule')?.value || '';
+  const statusFilter = document.getElementById('filterLogStatus')?.value || '';
+  const keyword = (document.getElementById('filterLogKeyword')?.value || '').toLowerCase().trim();
+
+  let logs = DB.systemLogs.filter(l => {
+    if (moduleFilter && l.module !== moduleFilter) return false;
+    if (statusFilter && l.status !== statusFilter) return false;
+    if (keyword) {
+      const matchUser = (l.username || '').toLowerCase().includes(keyword);
+      const matchDesc = (l.description || '').toLowerCase().includes(keyword);
+      if (!matchUser && !matchDesc) return false;
+    }
+    return true;
+  });
+
+  if (logs.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="7" class="text-center p-6 text-gray-500 italic">Chưa có log nhật ký nào.</td></tr>`;
+    return;
+  }
+
+  tbody.innerHTML = logs.map(l => `
+    <tr class="hover:bg-gray-50 border-b">
+      <td class="border p-2 text-xs font-mono text-gray-600">${escapeHtml(l.timestamp)}</td>
+      <td class="border p-2 font-bold">${escapeHtml(l.fullName)} (${escapeHtml(l.username)})</td>
+      <td class="border p-2 font-mono text-xs">${escapeHtml(l.ipAddress)}</td>
+      <td class="border p-2 font-bold text-stone-700">${escapeHtml(l.module)}</td>
+      <td class="border p-2">${escapeHtml(l.actionType)}</td>
+      <td class="border p-2 text-xs">${escapeHtml(l.description)}</td>
+      <td class="border p-2 text-center font-bold ${l.status === 'SUCCESS' ? 'text-green-600' : 'text-red-600'}">${escapeHtml(l.status)}</td>
+    </tr>
+  `).join('');
+}
+
+function clearSystemLogs() {
+  if (!confirm('Bạn có chắc muốn xóa toàn bộ lịch sử log hệ thống?')) return;
+  DB.systemLogs = [];
+  syncStorage('systemLogs');
+  renderSystemLogs();
+}
+
+function exportSystemLogsCSV() {
+  let csv = "timestamp,username,fullName,ipAddress,module,actionType,description,status\n";
+  DB.systemLogs.forEach(l => {
+    csv += `"${l.timestamp}","${l.username}","${l.fullName}","${l.ipAddress}","${l.module}","${l.actionType}","${l.description}","${l.status}"\n`;
+  });
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = "dms_system_logs_export.csv";
+  link.click();
+}
+
+function resetLogFilters() {
+  document.getElementById('filterLogModule').value = '';
+  document.getElementById('filterLogStatus').value = '';
+  document.getElementById('filterLogKeyword').value = '';
+  renderSystemLogs();
+}
+</script>
+</body>
+</html>
