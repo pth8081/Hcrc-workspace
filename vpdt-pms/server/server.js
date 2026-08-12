@@ -5,17 +5,22 @@ const path = require('path');
 const { getPool } = require('./db');
 const { seedDefaults } = require('./seedDefaults');
 const dataRoutes = require('./routes/data');
+const uploadRoutes = require('./routes/upload');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// Tăng giới hạn body vì tài liệu/hợp đồng được lưu dạng base64 (Data URL) ngay trong JSON,
-// giữ đúng hành vi gốc của ứng dụng (fileData nhúng trực tiếp trong object, không tách file riêng).
-app.use(express.json({ limit: '60mb' }));
-app.use(express.urlencoded({ extended: true, limit: '60mb' }));
+// Tài liệu/hồ sơ không còn nhúng base64 trong JSON — file đính kèm được tải lên qua
+// POST /api/upload và lưu ra ổ đĩa (thư mục uploads/), collection JSON chỉ giữ fileUrl.
+app.use(express.json({ limit: '5mb' }));
+app.use(express.urlencoded({ extended: true, limit: '5mb' }));
 
 // API
 app.use('/api/data', dataRoutes);
+app.use('/api/upload', uploadRoutes);
+
+// Phục vụ file đính kèm đã tải lên
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
 // Health check (dùng cho giám sát / load balancer / kiểm tra nhanh sau khi deploy)
 app.get('/api/health', async (req, res) => {

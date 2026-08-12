@@ -960,6 +960,7 @@
                 <span>ALL</span>
               </label>
             </div>
+            <p class="text-[11px] text-gray-500 italic">Áp dụng chung cho nút "Tải" ở mọi module có tệp đính kèm: Tài liệu, Hợp đồng, Tờ trình.</p>
             <div id="pDownloadDeptContainer" class="space-y-1.5 pl-1 max-h-48 overflow-y-auto"></div>
           </div>
         </div>
@@ -1013,16 +1014,17 @@
         </div>
       </div>
 
-      <div class="grid grid-cols-1 md:grid-cols-4 gap-3 bg-white p-3 rounded border text-xs">
+      <div class="grid grid-cols-1 md:grid-cols-5 gap-3 bg-white p-3 rounded border text-xs">
         <div>
           <label class="block font-semibold text-gray-600 mb-1">Lọc Theo Phân Hệ</label>
           <select id="filterLogModule" onchange="renderSystemLogs()" class="w-full border p-1.5 rounded bg-white font-semibold">
             <option value="">-- Tất cả --</option>
-            <option value="EMAIL">Log Gửi Email (EMAIL)</option>
-            <option value="CONFIG">Log Cấu Hình (CONFIG)</option>
-            <option value="USER_MGM">Log User (USER_MGM)</option>
-            <option value="PERMISSION">Log Phân Quyền (PERMISSION)</option>
-            <option value="INTERACTION">Log Tương Tác (INTERACTION)</option>
+          </select>
+        </div>
+        <div>
+          <label class="block font-semibold text-gray-600 mb-1">Lọc Theo Sự Kiện</label>
+          <select id="filterLogAction" onchange="renderSystemLogs()" class="w-full border p-1.5 rounded bg-white font-semibold">
+            <option value="">-- Tất cả --</option>
           </select>
         </div>
         <div>
@@ -1074,7 +1076,7 @@
       <button onclick="closeViewDocModal()" class="text-gray-300 hover:text-white font-bold text-xl px-2">✕</button>
     </div>
     <div class="bg-amber-100 text-amber-900 px-4 py-2 text-xs font-semibold flex items-center justify-between border-b border-amber-200 select-none">
-      <span>🔒 Chế độ xem an toàn (Bảo vệ tài liệu - Tắt menu chuột phải & không cho tải tài liệu)</span>
+      <span>🔒 Chế độ xem an toàn (Tắt menu chuột phải trong khung xem — tải tệp chỉ dành cho người có quyền)</span>
       <span class="text-[10px] bg-amber-200 text-amber-900 font-bold px-2 py-0.5 rounded">Frame Protected Viewer</span>
     </div>
     <div class="p-4 overflow-y-auto flex-1 bg-gray-100 flex flex-col items-center justify-center protected-view-container" id="viewModalContent" oncontextmenu="return false;"></div>
@@ -1279,6 +1281,18 @@ function getUserAllowedDepts(user) {
   if (user.perms?.viewApprovedDepts) user.perms.viewApprovedDepts.forEach(d => allowed.add(d));
   if (allowed.size === 0) return [...DB.depts];
   return Array.from(allowed);
+}
+
+// Kiểm tra quyền TẢI TỆP ĐÍNH KÈM — dùng chung cho mọi module có tài liệu tải lên
+// (Tài liệu, Hợp đồng, Tờ trình...) dựa trên perms.downloadAll / perms.downloadDepts
+// được cấu hình ở Module Quản trị người dùng. Người tạo/tải lên luôn được tải lại bản của chính mình.
+function canDownloadFile(user, dept, ownerUsername) {
+  if (!user) return false;
+  if (user.perms?.admin) return true;
+  if (user.perms?.downloadAll) return true;
+  if (dept && Array.isArray(user.perms?.downloadDepts) && user.perms.downloadDepts.includes(dept)) return true;
+  if (ownerUsername && ownerUsername === user.username) return true;
+  return false;
 }
 
 // ==========================================
@@ -1776,6 +1790,9 @@ function renderDocs() {
         <td class="border p-2">${progressBadge}</td>
         <td class="border p-2 text-center space-x-1">
           <button onclick="viewDoc(${doc.id})" class="px-2 py-1 bg-blue-600 text-white rounded text-xs hover:bg-blue-700 font-semibold" title="Xem trực tiếp trong Protected View">👁️ Xem</button>
+          ${(doc.fileUrl || doc.fileData) && canDownloadFile(currentUser, doc.dept, doc.uploader) ? `
+            <a href="${doc.fileUrl || doc.fileData}" download="${escapeHtml(doc.fileName || doc.code)}" class="inline-block px-2 py-1 bg-slate-600 text-white rounded text-xs hover:bg-slate-700 font-semibold" title="Tải tệp đính kèm về máy">⬇️ Tải</a>
+          ` : ''}
           ${canApprove ? `
             <button onclick="approveDoc(${doc.id})" class="px-2 py-1 bg-green-600 text-white rounded text-xs hover:bg-green-700 font-semibold" title="Phê duyệt bước này">✅ Duyệt</button>
             <button onclick="rejectDoc(${doc.id})" class="px-2 py-1 bg-red-600 text-white rounded text-xs hover:bg-red-700 font-semibold" title="Từ chối tài liệu">❌ Từ chối</button>
@@ -1791,7 +1808,7 @@ function goToPage(p) {
   renderDocs();
 }
 
-function uploadDoc(e) {
+async function uploadDoc(e) {
   e.preventDefault();
   const code = document.getElementById('docCode').value.trim();
   const title = document.getElementById('docTitle').value.trim();
@@ -1808,45 +1825,57 @@ function uploadDoc(e) {
   const file = fileInput.files[0];
   if (!file) return alert('Vui lòng chọn tệp tài liệu!');
 
-  const reader = new FileReader();
-  reader.onload = function(evt) {
-    const fileData = evt.target.result;
-    const newDoc = {
-      id: Date.now(),
-      code: code,
-      title: title,
-      ver: ver,
-      dept: dept,
-      cat: cat,
-      summary: summary,
-      fileName: file.name,
-      fileType: file.type,
-      fileData: fileData,
-      uploader: currentUser.username,
-      uploaderName: currentUser.name,
-      createdAt: new Date().toLocaleString('vi-VN'),
-      status: 'PENDING',
-      currentStep: 1,
-      history: [
-        {
-          step: 0,
-          stepName: 'Tải lên & Trình ký',
-          approver: currentUser.name,
-          username: currentUser.username,
-          action: 'UPLOADED',
-          time: new Date().toLocaleString('vi-VN')
-        }
-      ]
-    };
+  let uploaded;
+  try {
+    uploaded = await uploadFileToServer(file);
+  } catch (err) {
+    return alert(`⛔ Tải tệp lên thất bại: ${err.message}`);
+  }
 
-    DB.docs.unshift(newDoc);
-    syncStorage('docs');
-    logSystemAction('DOC', 'UPLOAD_DOC', `Tải lên tài liệu mới [${code} - ${title}]`, 'SUCCESS', code);
-    alert('✅ Tải lên và trình ký tài liệu thành công!');
-    document.getElementById('docForm').reset();
-    renderDocs();
+  const newDoc = {
+    id: Date.now(),
+    code: code,
+    title: title,
+    ver: ver,
+    dept: dept,
+    cat: cat,
+    summary: summary,
+    fileName: uploaded.fileName,
+    fileType: uploaded.fileType,
+    fileUrl: uploaded.fileUrl,
+    uploader: currentUser.username,
+    uploaderName: currentUser.name,
+    createdAt: new Date().toLocaleString('vi-VN'),
+    status: 'PENDING',
+    currentStep: 1,
+    history: [
+      {
+        step: 0,
+        stepName: 'Tải lên & Trình ký',
+        approver: currentUser.name,
+        username: currentUser.username,
+        action: 'UPLOADED',
+        time: new Date().toLocaleString('vi-VN')
+      }
+    ]
   };
-  reader.readAsDataURL(file);
+
+  DB.docs.unshift(newDoc);
+  syncStorage('docs');
+  logSystemAction('DOC', 'UPLOAD_DOC', `Tải lên tài liệu mới [${code} - ${title}]`, 'SUCCESS', code);
+  alert('✅ Tải lên và trình ký tài liệu thành công!');
+  document.getElementById('docForm').reset();
+  renderDocs();
+}
+
+// Tải 1 file lên server (POST /api/upload) — trả về { fileUrl, fileName, fileType, size }
+async function uploadFileToServer(file) {
+  const formData = new FormData();
+  formData.append('file', file);
+  const res = await fetch('/api/upload', { method: 'POST', body: formData });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || 'Lỗi không xác định');
+  return data;
 }
 
 // CẬP NHẬT: Phê duyệt cấp đơn đơn giản hóa (Sequential Step Approval)
@@ -1920,7 +1949,60 @@ function rejectDoc(docId) {
   renderDocs();
 }
 
-// CẬP NHẬT: Frame Protected View đọc Base64/Data URL & Bảo mật chuột phải/Text selection/Toolbar
+// Xác định loại tệp (ảnh / pdf / văn phòng / khác) dựa trên fileType (MIME) và phần mở rộng tên tệp
+function getFileKind(fileType, fileName) {
+  const t = (fileType || '').toLowerCase();
+  const ext = (fileName || '').toLowerCase().split('.').pop();
+  if (t.startsWith('image/') || ['png', 'jpg', 'jpeg', 'gif', 'webp'].includes(ext)) return 'image';
+  if (t === 'application/pdf' || ext === 'pdf') return 'pdf';
+  if (['doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx'].includes(ext)) return 'office';
+  return 'other';
+}
+
+// Dựng HTML khung xem Protected View cho 1 tệp — dùng chung cho Tài liệu & Hợp đồng.
+// Trả về null nếu không có tệp (để nơi gọi tự hiển thị nội dung tóm tắt thay thế).
+// CẬP NHẬT: sửa lỗi hiển thị trên các trình duyệt không hỗ trợ xem PDF/ảnh trực tiếp trong iframe:
+// - PDF dùng cặp <object>/<iframe> lồng nhau kèm link dự phòng ("bulletproof PDF embed") thay vì chỉ
+//   1 iframe với tham số #toolbar=0 (tham số này chỉ có tác dụng trên trình duyệt lõi Chromium).
+// - Định dạng văn phòng (doc/docx/xls/xlsx/ppt/pptx) trình duyệt KHÔNG có khả năng hiển thị trực tuyến
+//   (trước đây bị nhét chung vào iframe PDF nên hiển thị trống/lỗi) — nay hiển thị rõ thông báo + hướng
+//   dẫn dùng nút Tải xuống thay vì một khung xem trống gây hiểu lầm là lỗi.
+function buildProtectedViewerHTML(fileSrc, fileType, fileName, altLabel) {
+  if (!fileSrc) return null;
+  const kind = getFileKind(fileType, fileName);
+
+  if (kind === 'image') {
+    return `
+      <div class="flex flex-col items-center justify-center p-4 w-full protected-view-container" oncontextmenu="return false;">
+        <img src="${fileSrc}" alt="${escapeHtml(altLabel || '')}" class="max-h-[65vh] max-w-full rounded border shadow-md object-contain pointer-events-none select-none" oncontextmenu="return false;" />
+      </div>
+    `;
+  }
+
+  if (kind === 'pdf') {
+    return `
+      <div class="w-full h-[65vh] relative protected-view-container" oncontextmenu="return false;">
+        <object data="${fileSrc}" type="application/pdf" class="w-full h-full border-0 rounded bg-white shadow-inner" style="user-select: none;">
+          <iframe src="${fileSrc}" class="w-full h-full border-0 rounded bg-white shadow-inner" style="user-select: none;" oncontextmenu="return false;">
+            <p class="p-4 text-center text-gray-600 text-sm">Trình duyệt của bạn không hỗ trợ xem PDF trực tuyến.
+              <a href="${fileSrc}" target="_blank" rel="noopener" class="text-blue-600 underline font-semibold">Mở tệp trong tab mới</a>
+            </p>
+          </iframe>
+        </object>
+      </div>
+    `;
+  }
+
+  const kindLabel = kind === 'office' ? 'Định dạng văn phòng (Word/Excel/PowerPoint)' : 'Định dạng tệp này';
+  return `
+    <div class="w-full h-[65vh] bg-white rounded border shadow-inner flex flex-col items-center justify-center gap-2 p-6 text-center protected-view-container" oncontextmenu="return false;">
+      <div class="text-5xl">📎</div>
+      <div class="font-bold text-gray-700">${escapeHtml(fileName || 'Tệp đính kèm')}</div>
+      <div class="text-xs text-gray-500 max-w-sm">${kindLabel} chưa hỗ trợ xem trực tuyến ngay trong trình duyệt. Vui lòng dùng nút "⬇️ Tải" để tải về và mở bằng phần mềm tương ứng.</div>
+    </div>
+  `;
+}
+
 function viewDoc(docId) {
   const doc = DB.docs.find(d => d.id === docId);
   if (!doc) return;
@@ -1930,42 +2012,27 @@ function viewDoc(docId) {
   document.getElementById('viewModalFooterInfo').innerText = `Trích lục: ${doc.summary || 'Không có mô tả'}`;
 
   const container = document.getElementById('viewModalContent');
-  container.innerHTML = '';
+  // fileUrl: file lưu trên server (mới). fileData: fallback cho bản ghi cũ còn base64 nhúng sẵn trong DB.
+  const fileSrc = doc.fileUrl || doc.fileData;
+  const viewerHTML = buildProtectedViewerHTML(fileSrc, doc.fileType, doc.fileName, doc.title);
 
-  if (doc.fileData) {
-    if (doc.fileType && doc.fileType.startsWith('image/')) {
-      container.innerHTML = `
-        <div class="flex flex-col items-center justify-center p-4 w-full protected-view-container" oncontextmenu="return false;">
-          <img src="${doc.fileData}" alt="${escapeHtml(doc.title)}" class="max-h-[65vh] max-w-full rounded border shadow-md object-contain pointer-events-none select-none" oncontextmenu="return false;" />
-        </div>
-      `;
-    } else {
-      const frameUrl = `${doc.fileData}#toolbar=0&navpanes=0&scrollbar=0`;
-      container.innerHTML = `
-        <div class="w-full h-[65vh] relative protected-view-container" oncontextmenu="return false;">
-          <iframe src="${frameUrl}" class="w-full h-full border-0 rounded bg-white shadow-inner" style="user-select: none; pointer-events: auto;" oncontextmenu="return false;"></iframe>
-        </div>
-      `;
-    }
-  } else {
-    container.innerHTML = `
-      <div class="w-full h-[60vh] bg-white p-6 rounded shadow border overflow-y-auto relative protected-view-container" oncontextmenu="return false;">
-        <div class="absolute inset-0 flex items-center justify-center pointer-events-none opacity-10 font-bold text-4xl text-gray-500 transform -rotate-45 select-none">
-          PROTECTED VIEW - ${escapeHtml(currentUser.name)}
-        </div>
-        <h4 class="font-bold text-lg text-gray-800 border-b pb-2 mb-4">${escapeHtml(doc.title)} (${escapeHtml(doc.code)})</h4>
-        <div class="text-sm text-gray-700 space-y-3">
-          <p><b>Phòng ban:</b> ${escapeHtml(doc.dept)}</p>
-          <p><b>Loại tài liệu:</b> ${escapeHtml(doc.cat)}</p>
-          <p><b>Phiên bản:</b> ${escapeHtml(doc.ver)}</p>
-          <p><b>Trích yếu nội dung:</b></p>
-          <div class="bg-gray-50 p-4 rounded border text-gray-800 italic">
-            ${escapeHtml(doc.summary || 'Không có mô tả chi tiết.')}
-          </div>
+  container.innerHTML = viewerHTML || `
+    <div class="w-full h-[60vh] bg-white p-6 rounded shadow border overflow-y-auto relative protected-view-container" oncontextmenu="return false;">
+      <div class="absolute inset-0 flex items-center justify-center pointer-events-none opacity-10 font-bold text-4xl text-gray-500 transform -rotate-45 select-none">
+        PROTECTED VIEW - ${escapeHtml(currentUser.name)}
+      </div>
+      <h4 class="font-bold text-lg text-gray-800 border-b pb-2 mb-4">${escapeHtml(doc.title)} (${escapeHtml(doc.code)})</h4>
+      <div class="text-sm text-gray-700 space-y-3">
+        <p><b>Phòng ban:</b> ${escapeHtml(doc.dept)}</p>
+        <p><b>Loại tài liệu:</b> ${escapeHtml(doc.cat)}</p>
+        <p><b>Phiên bản:</b> ${escapeHtml(doc.ver)}</p>
+        <p><b>Trích yếu nội dung:</b></p>
+        <div class="bg-gray-50 p-4 rounded border text-gray-800 italic">
+          ${escapeHtml(doc.summary || 'Không có mô tả chi tiết.')}
         </div>
       </div>
-    `;
-  }
+    </div>
+  `;
 
   document.getElementById('viewDocModal').classList.remove('hidden');
 }
@@ -1978,7 +2045,7 @@ function closeViewDocModal() {
 // ==========================================
 // 2. MODULE VĂN BẢN TRÌNH / TỜ TRÌNH (SUBMISSION)
 // ==========================================
-function submitSubmissionReq(e) {
+async function submitSubmissionReq(e) {
   e.preventDefault();
   const code = document.getElementById('subCode').value.trim();
   const dept = document.getElementById('subDept').value;
@@ -1994,52 +2061,53 @@ function submitSubmissionReq(e) {
 
   const customData = collectDynamicFieldsData('SUBMISSION');
 
-  const saveSubmission = (fileData = '', fileName = '') => {
-    const newSub = {
-      id: Date.now(),
-      code: code,
-      dept: dept,
-      type: type,
-      title: title,
-      priority: priority,
-      content: content,
-      fileName: fileName,
-      fileData: fileData,
-      customData: customData,
-      creator: currentUser.username,
-      creatorName: currentUser.name,
-      createdAt: new Date().toLocaleString('vi-VN'),
-      status: 'PENDING',
-      currentStep: 1,
-      history: [
-        {
-          step: 0,
-          approver: currentUser.name,
-          username: currentUser.username,
-          action: 'CREATED',
-          comment: 'Khởi tạo và trình duyệt tờ trình mới',
-          time: new Date().toLocaleString('vi-VN')
-        }
-      ]
-    };
+  let fileUrl = '', fileName = '', fileType = '';
+  if (fileInput.files && fileInput.files[0]) {
+    try {
+      const uploaded = await uploadFileToServer(fileInput.files[0]);
+      fileUrl = uploaded.fileUrl;
+      fileName = uploaded.fileName;
+      fileType = uploaded.fileType;
+    } catch (err) {
+      return alert(`⛔ Tải tệp lên thất bại: ${err.message}`);
+    }
+  }
 
-    DB.submissions.unshift(newSub);
-    syncStorage('submissions');
-    logSystemAction('SUBMISSION', 'CREATE_SUBMISSION', `Tạo tờ trình mới [${code} - ${title}]`, 'SUCCESS', code);
-    alert('✅ Trình văn bản / tờ trình thành công!');
-    e.target.reset();
-    renderSubmissionReqs();
+  const newSub = {
+    id: Date.now(),
+    code: code,
+    dept: dept,
+    type: type,
+    title: title,
+    priority: priority,
+    content: content,
+    fileName: fileName,
+    fileUrl: fileUrl,
+    fileType: fileType,
+    customData: customData,
+    creator: currentUser.username,
+    creatorName: currentUser.name,
+    createdAt: new Date().toLocaleString('vi-VN'),
+    status: 'PENDING',
+    currentStep: 1,
+    history: [
+      {
+        step: 0,
+        approver: currentUser.name,
+        username: currentUser.username,
+        action: 'CREATED',
+        comment: 'Khởi tạo và trình duyệt tờ trình mới',
+        time: new Date().toLocaleString('vi-VN')
+      }
+    ]
   };
 
-  if (fileInput.files && fileInput.files[0]) {
-    const reader = new FileReader();
-    reader.onload = function(evt) {
-      saveSubmission(evt.target.result, fileInput.files[0].name);
-    };
-    reader.readAsDataURL(fileInput.files[0]);
-  } else {
-    saveSubmission();
-  }
+  DB.submissions.unshift(newSub);
+  syncStorage('submissions');
+  logSystemAction('SUBMISSION', 'CREATE_SUBMISSION', `Tạo tờ trình mới [${code} - ${title}]`, 'SUCCESS', code);
+  alert('✅ Trình văn bản / tờ trình thành công!');
+  e.target.reset();
+  renderSubmissionReqs();
 }
 
 function renderSubmissionReqs() {
@@ -2117,6 +2185,19 @@ function openProcessSubmissionModal(subId) {
       detailsHTML += `<div><b>${escapeHtml(key)}:</b> ${escapeHtml(sub.customData[key])}</div>`;
     }
     detailsHTML += `</div>`;
+  }
+
+  const subFileSrc = sub.fileUrl || sub.fileData;
+  if (subFileSrc) {
+    const canDL = canDownloadFile(currentUser, sub.dept, sub.creator);
+    detailsHTML += `
+      <div class="border-t pt-2 mt-2 flex items-center justify-between gap-2">
+        <span><b>📎 Tệp đính kèm:</b> ${escapeHtml(sub.fileName || '')}</span>
+        ${canDL
+          ? `<a href="${subFileSrc}" download="${escapeHtml(sub.fileName || sub.code)}" class="px-2 py-1 bg-slate-600 text-white rounded text-[11px] font-bold hover:bg-slate-700">⬇️ Tải</a>`
+          : `<span class="text-[11px] text-gray-400 italic">Không có quyền tải tệp</span>`}
+      </div>
+    `;
   }
 
   document.getElementById('subModalDetails').innerHTML = detailsHTML;
@@ -2263,7 +2344,7 @@ function resetTaskFilters() {
 // ==========================================
 // 4. MODULE HỢP ĐỒNG & GIẤY PHÉP (CONTRACT MODULE)
 // ==========================================
-function submitContractReq(e) {
+async function submitContractReq(e) {
   e.preventDefault();
   const code = document.getElementById('contractCode').value.trim();
   const dept = document.getElementById('contractDept').value;
@@ -2274,9 +2355,20 @@ function submitContractReq(e) {
   const startDate = document.getElementById('contractStartDate').value;
   const endDate = document.getElementById('contractEndDate').value;
   const content = document.getElementById('contractContent').value.trim();
+  const fileInput = document.getElementById('contractFile');
 
   if (DB.contracts.some(c => c.code === code)) {
     return alert('Mã hợp đồng đã tồn tại!');
+  }
+
+  const file = fileInput.files[0];
+  if (!file) return alert('Vui lòng chọn tệp hợp đồng / giấy phép đính kèm!');
+
+  let uploaded;
+  try {
+    uploaded = await uploadFileToServer(file);
+  } catch (err) {
+    return alert(`⛔ Tải tệp lên thất bại: ${err.message}`);
   }
 
   const newContract = {
@@ -2290,6 +2382,9 @@ function submitContractReq(e) {
     startDate: startDate,
     endDate: endDate,
     content: content,
+    fileName: uploaded.fileName,
+    fileType: uploaded.fileType,
+    fileUrl: uploaded.fileUrl,
     creator: currentUser.username,
     createdAt: new Date().toLocaleString('vi-VN')
   };
@@ -2334,12 +2429,47 @@ function renderContracts() {
         </td>
         <td class="border p-2">${escapeHtml(c.dept)}</td>
         <td class="border p-2">${warningBadge}</td>
-        <td class="border p-2 text-center">
-          <button onclick="alert('Trích lược hợp đồng:\\n${escapeHtml(c.content)}')" class="bg-cyan-600 text-white px-2 py-1 rounded text-xs hover:bg-cyan-700 font-bold">👁️ Xem</button>
+        <td class="border p-2 text-center space-x-1">
+          <button onclick="viewContract(${c.id})" class="bg-cyan-600 text-white px-2 py-1 rounded text-xs hover:bg-cyan-700 font-bold">👁️ Xem</button>
+          ${(c.fileUrl || c.fileData) && canDownloadFile(currentUser, c.dept, c.creator) ? `
+            <a href="${c.fileUrl || c.fileData}" download="${escapeHtml(c.fileName || c.code)}" class="inline-block bg-slate-600 text-white px-2 py-1 rounded text-xs hover:bg-slate-700 font-bold" title="Tải tệp đính kèm về máy">⬇️ Tải</a>
+          ` : ''}
         </td>
       </tr>
     `;
   }).join('');
+}
+
+function viewContract(contractId) {
+  const c = DB.contracts.find(x => x.id === contractId);
+  if (!c) return;
+
+  document.getElementById('viewModalTitle').innerText = `📄 ${c.title} (${c.code})`;
+  document.getElementById('viewModalSub').innerText = `Phòng ban: ${c.dept} | Đối tác: ${c.partner} | Loại: ${c.type}`;
+  document.getElementById('viewModalFooterInfo').innerText = `Trích lược: ${c.content || 'Không có mô tả'}`;
+
+  const container = document.getElementById('viewModalContent');
+  const fileSrc = c.fileUrl || c.fileData;
+  const viewerHTML = buildProtectedViewerHTML(fileSrc, c.fileType, c.fileName, c.title);
+
+  container.innerHTML = viewerHTML || `
+    <div class="w-full h-[60vh] bg-white p-6 rounded shadow border overflow-y-auto relative protected-view-container" oncontextmenu="return false;">
+      <div class="absolute inset-0 flex items-center justify-center pointer-events-none opacity-10 font-bold text-4xl text-gray-500 transform -rotate-45 select-none">
+        PROTECTED VIEW - ${escapeHtml(currentUser.name)}
+      </div>
+      <h4 class="font-bold text-lg text-gray-800 border-b pb-2 mb-4">${escapeHtml(c.title)} (${escapeHtml(c.code)})</h4>
+      <div class="text-sm text-gray-700 space-y-3">
+        <p><b>Đối tác:</b> ${escapeHtml(c.partner)}</p>
+        <p><b>Phòng ban:</b> ${escapeHtml(c.dept)}</p>
+        <p><b>Nội dung / Điều khoản chính:</b></p>
+        <div class="bg-gray-50 p-4 rounded border text-gray-800 italic">
+          ${escapeHtml(c.content || 'Không có mô tả chi tiết.')}
+        </div>
+      </div>
+    </div>
+  `;
+
+  document.getElementById('viewDocModal').classList.remove('hidden');
 }
 
 // ==========================================
@@ -3356,16 +3486,38 @@ function importUsersCSV(evt) {
 // ==========================================
 // 11. LOG SYSTEM MODULE
 // ==========================================
+// Dựng lại danh sách option cho 1 <select> lọc log dựa trên các giá trị THỰC SỰ đang tồn tại
+// trong DB.systemLogs (thay vì danh sách cứng dễ thiếu/sai khi hệ thống phát sinh module hay
+// loại sự kiện mới), đồng thời giữ lại lựa chọn hiện tại của người dùng nếu vẫn còn hợp lệ.
+function populateLogFilterSelect(selectId, values) {
+  const sel = document.getElementById(selectId);
+  if (!sel) return;
+  const current = sel.value;
+  const sorted = [...new Set(values.filter(Boolean))].sort();
+  sel.innerHTML = `<option value="">-- Tất cả --</option>` +
+    sorted.map(v => `<option value="${escapeHtml(v)}">${escapeHtml(v)}</option>`).join('');
+  if (sorted.includes(current)) sel.value = current;
+}
+
 function renderSystemLogs() {
   const tbody = document.getElementById('systemLogTableBody');
   if (!tbody) return;
 
+  // CẬP NHẬT: danh sách "Phân Hệ" trước đây bị hard-code và thiếu (DOC, SUBMISSION, CONTRACT,
+  // MEETING, CAR, OFFICE chưa từng xuất hiện trong bộ lọc dù log các module này vẫn được ghi
+  // nhận). Nay danh sách Phân Hệ & Sự Kiện được dựng động theo đúng dữ liệu log đã có, đồng thời
+  // bổ sung bộ lọc riêng theo Sự Kiện (actionType) để tra cứu chi tiết hơn theo module.
+  populateLogFilterSelect('filterLogModule', DB.systemLogs.map(l => l.module));
+  populateLogFilterSelect('filterLogAction', DB.systemLogs.map(l => l.actionType));
+
   const moduleFilter = document.getElementById('filterLogModule')?.value || '';
+  const actionFilter = document.getElementById('filterLogAction')?.value || '';
   const statusFilter = document.getElementById('filterLogStatus')?.value || '';
   const keyword = (document.getElementById('filterLogKeyword')?.value || '').toLowerCase().trim();
 
   let logs = DB.systemLogs.filter(l => {
     if (moduleFilter && l.module !== moduleFilter) return false;
+    if (actionFilter && l.actionType !== actionFilter) return false;
     if (statusFilter && l.status !== statusFilter) return false;
     if (keyword) {
       const matchUser = (l.username || '').toLowerCase().includes(keyword);
@@ -3415,6 +3567,7 @@ function exportSystemLogsCSV() {
 
 function resetLogFilters() {
   document.getElementById('filterLogModule').value = '';
+  document.getElementById('filterLogAction').value = '';
   document.getElementById('filterLogStatus').value = '';
   document.getElementById('filterLogKeyword').value = '';
   renderSystemLogs();

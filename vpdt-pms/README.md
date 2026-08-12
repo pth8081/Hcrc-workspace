@@ -11,7 +11,9 @@ server/
 ├── defaults.js            # Dữ liệu mặc định (seed) - thuần data, không phụ thuộc mssql
 ├── seedDefaults.js        # Logic ghi dữ liệu mặc định vào SQL Server khi khởi động lần đầu
 ├── routes/
-│   └── data.js            # API: GET /api/data, GET/POST /api/data/:key
+│   ├── data.js            # API: GET /api/data, GET/POST /api/data/:key
+│   └── upload.js          # API: POST /api/upload — nhận file, lưu ra thư mục uploads/
+├── uploads/                # File đính kèm (tài liệu, tờ trình...) lưu vật lý tại đây, KHÔNG lưu trong DB
 ├── sql/
 │   └── schema.sql          # Script tạo database + bảng AppData
 ├── public/
@@ -44,5 +46,17 @@ Tài khoản mặc định: `admin / 123456` (đổi mật khẩu ngay sau khi t
 - **Đã sửa 1 lỗi có sẵn**: một số lời gọi lưu cấu hình quy trình dùng sai tên
   khóa (snake_case) không khớp field thực tế (camelCase), khiến thay đổi cấu
   hình bị mất khi tải lại trang. Đã chuẩn hoá lại toàn bộ tên khóa.
+- **File đính kèm (tài liệu, tờ trình) không còn nhúng base64 trong JSON**:
+  khi upload, file được gửi qua `POST /api/upload` (multipart) và lưu vật lý
+  trong thư mục `server/uploads/`; các collection JSON (`docs`,
+  `submissions`) chỉ lưu `fileUrl` (đường dẫn `/uploads/<tên-file>`),
+  `fileName`, `fileType`. Nhờ đó dung lượng bảng `AppData` không phình to
+  theo số lượng/độ lớn file, và giới hạn body JSON đã giảm từ 60MB xuống
+  5MB (không còn cần chứa base64). Giới hạn dung lượng mỗi file upload mặc
+  định 20MB, chỉnh qua biến môi trường `UPLOAD_MAX_MB`. Các bản ghi cũ còn
+  `fileData` (base64) trong DB vẫn xem được nhờ cơ chế fallback ở
+  `viewDoc()`.
+  ⚠️ Khi deploy: nhớ backup định kỳ thư mục `uploads/` cùng với DB, vì file
+  giờ nằm ngoài SQL Server.
 
 Xem đầy đủ hướng dẫn triển khai tại `HUONG_DAN_DEPLOY_UBUNTU.md`.
