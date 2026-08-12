@@ -49,33 +49,66 @@ const DEFAULTS = {
   officeFixDeptWorkflows: {},
   officeInvestDeptWorkflows: {},
 
+  // Phân quyền theo module (submissionView/Create, contractView/Create, meetingView/BookScope,
+  // carView/Create, officeView/Create) dùng dạng { all, depts } — xem/tạo mới theo TOÀN CÔNG TY
+  // (all:true) hoặc chỉ trong DANH SÁCH PHÒNG BAN chỉ định (depts:[...]); phòng ban của chính
+  // người dùng luôn được phép mặc định dù không liệt kê ở đây.
   users: [
     {
       id: 1, username: 'admin', pass: '123456', name: 'Quản Trị Viên', email: 'admin@company.com', phone: '0901112223', dept: 'Phòng IT',
-      perms: {
-        admin: true, uploadAll: true, uploadDepts: [], viewDraftAll: true, viewDraftDepts: [], viewApprovedAll: true, viewApprovedDepts: [], downloadAll: true, downloadDepts: [],
-        submissionModule: true, contractModule: true, meetingBook: true, meetingApprove: true, meetingCancel: true, carModule: true, officeBuy: true, officeFix: true, officeInvest: true
-      }
+      perms: { admin: true } // admin:true bỏ qua mọi kiểm tra phạm vi khác, toàn quyền hệ thống
     },
     {
       id: 2, username: 'nv_nhansu', pass: '123456', name: 'Nguyễn Văn A', email: 'nhansu@company.com', phone: '0902223334', dept: 'Phòng Nhân Sự',
       perms: {
-        admin: false, uploadAll: false, uploadDepts: ['Phòng Nhân Sự'], viewDraftAll: false, viewDraftDepts: ['Phòng Nhân Sự'], viewApprovedAll: false, viewApprovedDepts: ['Phòng Nhân Sự'], downloadAll: false, downloadDepts: ['Phòng Nhân Sự'],
-        submissionModule: true, contractModule: true, meetingBook: true, meetingApprove: false, meetingCancel: true, carModule: true, officeBuy: true, officeFix: true, officeInvest: false
+        admin: false,
+        uploadAll: false, uploadDepts: ['Phòng Nhân Sự'],
+        viewDraftAll: false, viewDraftDepts: ['Phòng Nhân Sự'],
+        viewApprovedAll: false, viewApprovedDepts: ['Phòng Nhân Sự'],
+        downloadAll: false, downloadDepts: ['Phòng Nhân Sự'],
+        submissionView: { all: false, depts: ['Phòng Nhân Sự'] }, submissionCreate: { all: false, depts: ['Phòng Nhân Sự'] },
+        contractView: { all: false, depts: ['Phòng Nhân Sự'] }, contractCreate: { all: false, depts: ['Phòng Nhân Sự'] },
+        meetingView: { all: false, depts: ['Phòng Nhân Sự'] }, meetingBookScope: { all: false, depts: ['Phòng Nhân Sự'] },
+        meetingApprove: false, meetingCancel: true,
+        carView: { all: false, depts: ['Phòng Nhân Sự'] }, carCreate: { all: false, depts: ['Phòng Nhân Sự'] },
+        officeView: { all: false, depts: ['Phòng Nhân Sự'] }, officeCreate: { all: false, depts: ['Phòng Nhân Sự'] },
+        officeBuy: true, officeFix: true, officeInvest: false
       }
     },
     {
       id: 3, username: 'ks_kiemsoat', pass: '123456', name: 'Lê Văn KS', email: 'kiemsoat@company.com', phone: '0903334445', dept: 'Phòng IT',
       perms: {
-        admin: false, uploadAll: false, uploadDepts: [], viewDraftAll: true, viewDraftDepts: [], viewApprovedAll: true, viewApprovedDepts: [], downloadAll: false, downloadDepts: [],
-        submissionModule: true, contractModule: true, meetingBook: true, meetingApprove: true, meetingCancel: true, carModule: true, officeBuy: true, officeFix: true, officeInvest: true
+        admin: false,
+        uploadAll: false, uploadDepts: [],
+        viewDraftAll: true, viewDraftDepts: [],
+        viewApprovedAll: true, viewApprovedDepts: [],
+        downloadAll: false, downloadDepts: [],
+        // Kiểm soát viên cần xem xuyên phòng ban để kiểm toán, nhưng chỉ tạo hồ sơ trong phòng mình.
+        submissionView: { all: true, depts: [] }, submissionCreate: { all: false, depts: ['Phòng IT'] },
+        contractView: { all: true, depts: [] }, contractCreate: { all: false, depts: ['Phòng IT'] },
+        meetingView: { all: true, depts: [] }, meetingBookScope: { all: false, depts: ['Phòng IT'] },
+        meetingApprove: true, meetingCancel: true,
+        carView: { all: true, depts: [] }, carCreate: { all: false, depts: ['Phòng IT'] },
+        officeView: { all: true, depts: [] }, officeCreate: { all: false, depts: ['Phòng IT'] },
+        officeBuy: true, officeFix: true, officeInvest: true
       }
     },
     {
       id: 4, username: 'sep_duyet', pass: '123456', name: 'Phạm Văn BGD', email: 'giamdoc@company.com', phone: '0904445556', dept: 'Ban Giám Đốc',
       perms: {
-        admin: false, uploadAll: true, uploadDepts: [], viewDraftAll: true, viewDraftDepts: [], viewApprovedAll: true, viewApprovedDepts: [], downloadAll: true, downloadDepts: [],
-        submissionModule: true, contractModule: true, meetingBook: true, meetingApprove: true, meetingCancel: true, carModule: true, officeBuy: true, officeFix: true, officeInvest: true
+        admin: false,
+        uploadAll: true, uploadDepts: [],
+        viewDraftAll: true, viewDraftDepts: [],
+        viewApprovedAll: true, viewApprovedDepts: [],
+        downloadAll: true, downloadDepts: [],
+        // Ban Giám Đốc cần toàn quyền xem & tạo trên mọi module để phê duyệt/giám sát toàn công ty.
+        submissionView: { all: true, depts: [] }, submissionCreate: { all: true, depts: [] },
+        contractView: { all: true, depts: [] }, contractCreate: { all: true, depts: [] },
+        meetingView: { all: true, depts: [] }, meetingBookScope: { all: true, depts: [] },
+        meetingApprove: true, meetingCancel: true,
+        carView: { all: true, depts: [] }, carCreate: { all: true, depts: [] },
+        officeView: { all: true, depts: [] }, officeCreate: { all: true, depts: [] },
+        officeBuy: true, officeFix: true, officeInvest: true
       }
     }
   ],

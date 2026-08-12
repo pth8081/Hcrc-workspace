@@ -58,5 +58,21 @@ Tài khoản mặc định: `admin / 123456` (đổi mật khẩu ngay sau khi t
   `viewDoc()`.
   ⚠️ Khi deploy: nhớ backup định kỳ thư mục `uploads/` cùng với DB, vì file
   giờ nằm ngoài SQL Server.
+- **Phân quyền theo phòng ban cho từng module nghiệp vụ**: trước đây Tờ
+  trình / Hợp đồng / Phòng họp / Đăng ký xe / Văn phòng chỉ có 1 công tắc
+  bật-tắt truy cập toàn công ty (ai được bật là thấy dữ liệu của MỌI phòng
+  ban). Nay mỗi module có phạm vi Xem & Tạo mới riêng dạng "Tất cả" hoặc
+  "chỉ các phòng ban được chỉ định" — giống hệt mô hình đã có sẵn ở module
+  Tài liệu. Quyền "Xem Bản Nháp" (trước đây được cấu hình nhưng không có
+  tác dụng gì) nay thực sự kiểm soát việc xem tài liệu đang xử lý/bị từ
+  chối, tách riêng khỏi quyền "Xem Đã Duyệt".
+  - **Tự động di trú dữ liệu cũ**: lần đầu tải trang sau khi cập nhật,
+    `initDatabase()` tự chuyển đổi phân quyền kiểu cũ (cờ boolean) sang mô
+    hình mới và lưu lại ngay, giữ nguyên đúng quyền hiện có của từng user
+    (không âm thầm khoá bớt quyền ai). Không cần thao tác thủ công.
+  - Người dùng mới tạo mặc định **không** có quyền xem/tạo liên phòng ban ở
+    module nào (trước đây mặc định bật hầu hết) — admin cấp thêm quyền nếu
+    cần. Mỗi người luôn thao tác được trong phạm vi phòng ban của chính
+    mình dù chưa được cấp thêm gì.
 
 Xem đầy đủ hướng dẫn triển khai tại `HUONG_DAN_DEPLOY_UBUNTU.md`.
