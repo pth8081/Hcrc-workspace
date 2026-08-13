@@ -1759,6 +1759,37 @@ function sendNotificationEmail(recipientEmail, recipientName, subject, messageBo
   logSystemAction('EMAIL', 'SEND_EMAIL_SUCCESS', `Đã gửi email tự động tới [${recipientName} - ${recipientEmail}] với chủ đề: "${subject}"`, 'SUCCESS', recipientEmail);
 }
 
+// Gửi + ghi log thông báo email cho 1 nhóm người nhận (theo username), gộp thành 1 dòng Nhật ký hệ
+// thống duy nhất theo đúng phân hệ nghiệp vụ gọi tới (DOC/SUBMISSION/CAR/OFFICE/MEETING) — để lọc
+// được theo "Lọc Theo Phân Hệ" ở module Log, nhất quán với cách jobs/contractExpiryReminder.js đã
+// làm ở phía server cho nhắc hạn hợp đồng. Không dùng sendNotificationEmail() vì hàm đó hard-code
+// module 'EMAIL' và ghi 1 log riêng cho mỗi người nhận — ở đây gộp thành 1 dòng dễ đọc hơn khi có
+// nhiều đồng phê duyệt cùng nhận 1 thông báo.
+function notifyUsersByEmail(module, actionType, targetCode, usernames, subject, bodyText) {
+  const recipients = [];
+  for (const uname of new Set((usernames || []).filter(Boolean))) {
+    const u = DB.users.find(x => x.username === uname);
+    if (u && u.email) recipients.push(u);
+  }
+  recipients.forEach(u => {
+    console.log(`[DMS EMAIL SIMULATOR] To: ${u.name} <${u.email}> | Subject: ${subject}\n  ${bodyText}`);
+  });
+  logSystemAction(
+    module, actionType,
+    recipients.length
+      ? `${bodyText} (Đã gửi tới: ${recipients.map(u => `${u.name} <${u.email}>`).join(', ')})`
+      : `${bodyText} (Không có người nhận hợp lệ — thiếu email hoặc chưa cấu hình người duyệt)`,
+    recipients.length ? 'SUCCESS' : 'WARNING',
+    targetCode
+  );
+}
+
+// Toàn bộ user có quyền phê duyệt/hủy lịch phòng họp (cờ toàn cục meetingApprove/meetingCancel,
+// không gắn theo bước quy trình như 4 module kia) — dùng để xác định người nhận thông báo email.
+function getMeetingApproverUsernames() {
+  return DB.users.filter(u => u.perms?.admin || u.perms?.meetingApprove).map(u => u.username);
+}
+
 // Parse "30, 15, 7" -> [30, 15, 7] (số nguyên không âm, loại trùng, sắp giảm dần)
 function parseDaysListInput(str) {
   const days = (str || '').split(',')
@@ -2288,6 +2319,15 @@ async function uploadDoc(e) {
   DB.docs.unshift(newDoc);
   syncStorage('docs');
   logSystemAction('DOC', 'UPLOAD_DOC', `Tải lên tài liệu mới [${code} - ${title}]`, 'SUCCESS', code);
+
+  const newDocWfConfig = DB.deptWorkflows[dept];
+  const newDocApprovers = newDocWfConfig?.approvers?.[1] || [];
+  if (newDocApprovers.length) {
+    notifyUsersByEmail('DOC', 'NOTIFY_APPROVAL_NEEDED', code, newDocApprovers,
+      `[VPDT] Tài liệu ${code} cần bạn phê duyệt`,
+      `Tài liệu "${title}" (${code}) do ${currentUser.name} tải lên đang chờ bạn phê duyệt.`);
+  }
+
   alert('✅ Tải lên và trình ký tài liệu thành công!');
   document.getElementById('docForm').reset();
   renderDocs();
@@ -2338,10 +2378,19 @@ function approveDoc(docId) {
     if (doc.currentStep >= wf.steps.length) {
       doc.status = 'APPROVED';
       msg = '✅ Phê duyệt tài liệu thành công!';
+      notifyUsersByEmail('DOC', 'NOTIFY_APPROVED', doc.code, [doc.uploader],
+        `[VPDT] Tài liệu ${doc.code} đã được phê duyệt`,
+        `Tài liệu "${doc.title}" (${doc.code}) của bạn đã được phê duyệt hoàn tất.`);
     } else {
       doc.currentStep += 1;
       doc.status = 'PENDING';
       msg = getStepAdvanceMessage(currentStepApprovers);
+      const nextApprovers = wfConfig.approvers?.[doc.currentStep] || [];
+      if (nextApprovers.length) {
+        notifyUsersByEmail('DOC', 'NOTIFY_APPROVAL_NEEDED', doc.code, nextApprovers,
+          `[VPDT] Tài liệu ${doc.code} cần bạn phê duyệt`,
+          `Tài liệu "${doc.title}" (${doc.code}) đang chờ bạn phê duyệt ở bước "${wf.steps[doc.currentStep - 1]?.name || ''}".`);
+      }
     }
   } else {
     msg = `✅ Đã ghi nhận phê duyệt của bạn — đang chờ các đồng phê duyệt còn lại ở bước này.`;
@@ -2377,6 +2426,9 @@ function rejectDoc(docId) {
 
   syncStorage('docs');
   logSystemAction('DOC', 'REJECT_DOC', `Từ chối tài liệu [${doc.code}]. Lý do: ${reason}`, 'SUCCESS', doc.code);
+  notifyUsersByEmail('DOC', 'NOTIFY_REJECTED', doc.code, [doc.uploader],
+    `[VPDT] Tài liệu ${doc.code} bị từ chối`,
+    `Tài liệu "${doc.title}" (${doc.code}) của bạn đã bị từ chối/trả về. Lý do: ${reason}`);
   alert('❌ Đã chuyển tài liệu sang trạng thái Từ chối / Trả về!');
   renderDocs();
 }
@@ -2565,6 +2617,15 @@ async function submitSubmissionReq(e) {
   DB.submissions.unshift(newSub);
   syncStorage('submissions');
   logSystemAction('SUBMISSION', 'CREATE_SUBMISSION', `Tạo tờ trình mới [${code} - ${title}]`, 'SUCCESS', code);
+
+  const newSubWfConfig = DB.submissionDeptWorkflows[dept];
+  const newSubApprovers = newSubWfConfig?.approvers?.[1] || [];
+  if (newSubApprovers.length) {
+    notifyUsersByEmail('SUBMISSION', 'NOTIFY_APPROVAL_NEEDED', code, newSubApprovers,
+      `[VPDT] Tờ trình ${code} cần bạn phê duyệt`,
+      `Tờ trình "${title}" (${code}) do ${currentUser.name} trình đang chờ bạn phê duyệt.`);
+  }
+
   alert('✅ Trình văn bản / tờ trình thành công!');
   e.target.reset();
   renderSubmissionReqs();
@@ -2740,6 +2801,9 @@ function processSubmission(actionType) {
       comment: comment,
       time: new Date().toLocaleString('vi-VN')
     });
+    notifyUsersByEmail('SUBMISSION', 'NOTIFY_REJECTED', sub.code, [sub.creator],
+      `[VPDT] Tờ trình ${sub.code} bị từ chối`,
+      `Tờ trình "${sub.title}" (${sub.code}) của bạn đã bị từ chối/trả về. Lý do: ${comment}`);
   } else if (actionType === 'APPROVE') {
     sub.history.push({
       step: sub.currentStep,
@@ -2756,9 +2820,18 @@ function processSubmission(actionType) {
         sub.currentStep += 1;
         sub.status = 'PENDING';
         msg = getStepAdvanceMessage(currentStepApprovers);
+        const nextApprovers = wfConfig.approvers?.[sub.currentStep] || [];
+        if (nextApprovers.length) {
+          notifyUsersByEmail('SUBMISSION', 'NOTIFY_APPROVAL_NEEDED', sub.code, nextApprovers,
+            `[VPDT] Tờ trình ${sub.code} cần bạn phê duyệt`,
+            `Tờ trình "${sub.title}" (${sub.code}) đang chờ bạn phê duyệt ở bước "${wf.steps[sub.currentStep - 1]?.name || ''}".`);
+        }
       } else {
         sub.status = 'APPROVED';
         msg = '✅ Phê duyệt tờ trình thành công!';
+        notifyUsersByEmail('SUBMISSION', 'NOTIFY_APPROVED', sub.code, [sub.creator],
+          `[VPDT] Tờ trình ${sub.code} đã được phê duyệt`,
+          `Tờ trình "${sub.title}" (${sub.code}) của bạn đã được phê duyệt hoàn tất.`);
       }
     } else {
       msg = '✅ Đã ghi nhận phê duyệt của bạn — đang chờ các đồng phê duyệt còn lại ở bước này.';
@@ -3200,6 +3273,14 @@ function submitMeetingReq(e) {
   DB.meetings.unshift(newMeeting);
   syncStorage('meetings');
   logSystemAction('MEETING', 'CREATE_MEETING', `Đặt lịch phòng họp [${code} - ${room}]`, 'SUCCESS', code);
+
+  const meetingApprovers = getMeetingApproverUsernames();
+  if (meetingApprovers.length) {
+    notifyUsersByEmail('MEETING', 'NOTIFY_APPROVAL_NEEDED', code, meetingApprovers,
+      `[VPDT] Lịch phòng họp ${code} cần bạn phê duyệt`,
+      `Lịch đặt phòng "${room}" (${code}) do ${currentUser.name} đăng ký đang chờ bạn phê duyệt.`);
+  }
+
   alert('✅ Đã gửi đăng ký lịch phòng họp thành công!');
   e.target.reset();
   renderMeetings();
@@ -3249,6 +3330,9 @@ function approveMeeting(id) {
   m.status = 'APPROVED';
   syncStorage('meetings');
   logSystemAction('MEETING', 'APPROVE_MEETING', `Phê duyệt đặt phòng họp [${m.code}]`, 'SUCCESS', m.code);
+  notifyUsersByEmail('MEETING', 'NOTIFY_APPROVED', m.code, [m.creator],
+    `[VPDT] Lịch phòng họp ${m.code} đã được phê duyệt`,
+    `Lịch đặt phòng "${m.room}" (${m.code}) của bạn đã được phê duyệt.`);
   renderMeetings();
 }
 
@@ -3258,6 +3342,9 @@ function cancelMeeting(id) {
   m.status = 'CANCELLED';
   syncStorage('meetings');
   logSystemAction('MEETING', 'CANCEL_MEETING', `Hủy lịch phòng họp [${m.code}]`, 'SUCCESS', m.code);
+  notifyUsersByEmail('MEETING', 'NOTIFY_REJECTED', m.code, [m.creator],
+    `[VPDT] Lịch phòng họp ${m.code} đã bị hủy`,
+    `Lịch đặt phòng "${m.room}" (${m.code}) của bạn đã bị hủy.`);
   renderMeetings();
 }
 
@@ -3318,6 +3405,15 @@ function submitCarReq(e) {
   DB.carRegs.unshift(newCar);
   syncStorage('carRegs');
   logSystemAction('CAR', 'CREATE_CAR_REG', `Tạo phiếu đăng ký xe [${code} - ${destination}]`, 'SUCCESS', code);
+
+  const newCarWfConfig = DB.carDeptWorkflows[dept];
+  const newCarApprovers = newCarWfConfig?.approvers?.[1] || [];
+  if (newCarApprovers.length) {
+    notifyUsersByEmail('CAR', 'NOTIFY_APPROVAL_NEEDED', code, newCarApprovers,
+      `[VPDT] Đăng ký xe ${code} cần bạn phê duyệt`,
+      `Phiếu đăng ký xe "${destination}" (${code}) do ${currentUser.name} đăng ký đang chờ bạn phê duyệt.`);
+  }
+
   alert('✅ Đã gửi phiếu đăng ký xe thành công!');
   e.target.reset();
   renderCarRegs();
@@ -3486,6 +3582,9 @@ function processCarReg(actionType) {
       assignedPlate: assignedPlate,
       time: new Date().toLocaleString('vi-VN')
     });
+    notifyUsersByEmail('CAR', 'NOTIFY_REJECTED', c.code, [c.creator],
+      `[VPDT] Đăng ký xe ${c.code} bị từ chối`,
+      `Phiếu đăng ký xe "${c.destination}" (${c.code}) của bạn đã bị từ chối. Lý do: ${comment}`);
   } else if (actionType === 'APPROVE') {
     c.history.push({
       step: c.currentStep,
@@ -3505,9 +3604,18 @@ function processCarReg(actionType) {
         c.currentStep += 1;
         c.status = 'PENDING';
         msg = getStepAdvanceMessage(currentStepApprovers);
+        const nextApprovers = wfConfig.approvers?.[c.currentStep] || [];
+        if (nextApprovers.length) {
+          notifyUsersByEmail('CAR', 'NOTIFY_APPROVAL_NEEDED', c.code, nextApprovers,
+            `[VPDT] Đăng ký xe ${c.code} cần bạn phê duyệt`,
+            `Phiếu đăng ký xe "${c.destination}" (${c.code}) đang chờ bạn phê duyệt ở bước "${wf.steps[c.currentStep - 1]?.name || ''}".`);
+        }
       } else {
         c.status = 'APPROVED';
         msg = '✅ Phê duyệt đăng ký xe thành công!';
+        notifyUsersByEmail('CAR', 'NOTIFY_APPROVED', c.code, [c.creator],
+          `[VPDT] Đăng ký xe ${c.code} đã được phê duyệt`,
+          `Phiếu đăng ký xe "${c.destination}" (${c.code}) của bạn đã được phê duyệt hoàn tất.`);
       }
     } else {
       msg = '✅ Đã ghi nhận phê duyệt của bạn — đang chờ các đồng phê duyệt còn lại ở bước này.';
@@ -3727,6 +3835,15 @@ function submitOfficeReq(e) {
   DB.officeReqs.unshift(newOff);
   syncStorage('officeReqs');
   logSystemAction('OFFICE', 'CREATE_OFFICE_REQ', `Tạo đề xuất văn phòng [${code} - ${title}]`, 'SUCCESS', code);
+
+  const newOffWfMap = getOfficeWorkflowMap(activeOfficeSubTab);
+  const newOffApprovers = newOffWfMap[dept]?.approvers?.[1] || [];
+  if (newOffApprovers.length) {
+    notifyUsersByEmail('OFFICE', 'NOTIFY_APPROVAL_NEEDED', code, newOffApprovers,
+      `[VPDT] Đề xuất văn phòng ${code} cần bạn phê duyệt`,
+      `Đề xuất "${title}" (${code}) do ${currentUser.name} tạo đang chờ bạn phê duyệt.`);
+  }
+
   alert('✅ Đã gửi đề xuất văn phòng thành công!');
   e.target.reset();
   renderOfficeReqs();
@@ -3821,9 +3938,18 @@ function approveOfficeReq(id) {
       o.currentStep += 1;
       o.status = 'PENDING';
       msg = getStepAdvanceMessage(currentStepApprovers);
+      const nextApprovers = wfConfig.approvers?.[o.currentStep] || [];
+      if (nextApprovers.length) {
+        notifyUsersByEmail('OFFICE', 'NOTIFY_APPROVAL_NEEDED', o.code, nextApprovers,
+          `[VPDT] Đề xuất văn phòng ${o.code} cần bạn phê duyệt`,
+          `Đề xuất "${o.title}" (${o.code}) đang chờ bạn phê duyệt ở bước "${wf.steps[o.currentStep - 1]?.name || ''}".`);
+      }
     } else {
       o.status = 'APPROVED';
       msg = '✅ Phê duyệt đề xuất văn phòng thành công!';
+      notifyUsersByEmail('OFFICE', 'NOTIFY_APPROVED', o.code, [o.creator],
+        `[VPDT] Đề xuất văn phòng ${o.code} đã được phê duyệt`,
+        `Đề xuất "${o.title}" (${o.code}) của bạn đã được phê duyệt hoàn tất.`);
     }
   } else {
     msg = '✅ Đã ghi nhận phê duyệt của bạn — đang chờ các đồng phê duyệt còn lại ở bước này.';
@@ -3866,6 +3992,9 @@ function rejectOfficeReq(id) {
 
   syncStorage('officeReqs');
   logSystemAction('OFFICE', 'REJECT_OFFICE_REQ', `Từ chối đề xuất văn phòng [${o.code}]`, 'SUCCESS', o.code);
+  notifyUsersByEmail('OFFICE', 'NOTIFY_REJECTED', o.code, [o.creator],
+    `[VPDT] Đề xuất văn phòng ${o.code} bị từ chối`,
+    `Đề xuất "${o.title}" (${o.code}) của bạn đã bị từ chối. Lý do: ${reason}`);
   renderOfficeReqs();
 }
 
