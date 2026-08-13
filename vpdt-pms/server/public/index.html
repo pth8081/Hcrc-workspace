@@ -324,7 +324,7 @@
       <h3 class="font-bold text-cyan-900 text-base flex items-center gap-2">📄 Quản Lý Hợp Đồng & Giấy Phép</h3>
       <p class="text-xs text-cyan-800">Quản lý và theo dõi thời hạn hợp đồng, giấy phép để tự động thông báo hết hạn.</p> 
       
-      <form onsubmit="submitContractReq(event)" class="bg-white p-3 rounded border text-xs space-y-3">
+      <form id="contractForm" onsubmit="submitContractReq(event)" class="bg-white p-3 rounded border text-xs space-y-3">
         <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
           <div>
             <label class="block font-semibold text-gray-600 mb-1">Mã Hợp Đồng / Giấy Phép</label>
@@ -367,14 +367,16 @@
           <div class="md:col-span-3">
             <label class="block font-semibold text-gray-600 mb-1">Tệp Đính Kèm Hợp Đồng / Giấy Phép</label>
             <input id="contractFile" type="file" accept=".pdf,.doc,.docx" class="w-full border p-1 bg-white rounded" required>
+            <p id="contractFileEditHint" class="hidden text-[11px] text-gray-500 italic mt-1">Để trống nếu không muốn thay tệp đính kèm hiện tại.</p>
           </div>
         </div>
         <div>
           <label class="block font-semibold text-gray-600 mb-1">Nội Dung Tóm Tắt & Điều Khoản Chính</label>
           <textarea id="contractContent" placeholder="Ghi chú các điều khoản thanh toán, nghĩa vụ..." class="w-full border p-1.5 rounded h-16" required></textarea>
         </div>
-        <div class="flex justify-end">
-          <button type="submit" class="bg-cyan-600 text-white px-5 py-2 rounded font-bold hover:bg-cyan-700">Lưu & Theo Dõi Hết Hạn</button>
+        <div class="flex justify-end gap-2">
+          <button type="button" id="contractCancelEditBtn" onclick="cancelEditContract()" class="hidden bg-gray-200 text-gray-700 px-5 py-2 rounded font-bold hover:bg-gray-300">Huỷ Sửa</button>
+          <button type="submit" id="contractSubmitBtn" class="bg-cyan-600 text-white px-5 py-2 rounded font-bold hover:bg-cyan-700">Lưu & Theo Dõi Hết Hạn</button>
         </div>
       </form>
     </div>
@@ -814,6 +816,14 @@
         <div>
           <label class="block font-semibold text-gray-600 mb-1">Email Hệ Thống (Sender)</label>
           <input id="cfgSenderEmail" type="email" placeholder="dms-noreply@company.com" class="w-full border p-1.5 rounded" required>
+        </div>
+        <div class="md:col-span-2">
+          <label class="block font-semibold text-gray-600 mb-1">Nhắc Hết Hạn Hợp Đồng — Trước (số ngày, cách nhau dấu phẩy)</label>
+          <input id="cfgContractReminderDays" placeholder="30, 15, 7" class="w-full border p-1.5 rounded" required>
+        </div>
+        <div class="md:col-span-2">
+          <label class="block font-semibold text-gray-600 mb-1">Email CC Cố Định Nhận Cảnh Báo Hết Hạn (tuỳ chọn, cách nhau dấu phẩy)</label>
+          <input id="cfgContractReminderCc" placeholder="bgd@company.com, phaply@company.com" class="w-full border p-1.5 rounded">
         </div>
         <div class="md:col-span-4 flex justify-between items-center pt-1">
           <span class="text-gray-500 italic text-[11px]">Hệ thống ghi nhận log thông báo email tại cửa sổ console.</span>
@@ -1749,13 +1759,32 @@ function sendNotificationEmail(recipientEmail, recipientName, subject, messageBo
   logSystemAction('EMAIL', 'SEND_EMAIL_SUCCESS', `Đã gửi email tự động tới [${recipientName} - ${recipientEmail}] với chủ đề: "${subject}"`, 'SUCCESS', recipientEmail);
 }
 
+// Parse "30, 15, 7" -> [30, 15, 7] (số nguyên không âm, loại trùng, sắp giảm dần)
+function parseDaysListInput(str) {
+  const days = (str || '').split(',')
+    .map(s => parseInt(s.trim(), 10))
+    .filter(n => Number.isFinite(n) && n >= 0);
+  return Array.from(new Set(days)).sort((a, b) => b - a);
+}
+
+// Parse "a@x.com, b@y.com" -> ['a@x.com', 'b@y.com']
+function parseEmailListInput(str) {
+  return (str || '').split(',').map(s => s.trim()).filter(Boolean);
+}
+
 function saveEmailConfig(e) {
   e.preventDefault();
+  const reminderDays = parseDaysListInput(document.getElementById('cfgContractReminderDays').value);
+  if (reminderDays.length === 0) {
+    return alert('⛔ Vui lòng nhập ít nhất 1 mốc số ngày nhắc hết hạn hợp lệ (vd: 30, 15, 7)!');
+  }
   DB.emailConfig = {
     enabled: document.getElementById('cfgEmailEnabled').value === 'true',
     smtpHost: document.getElementById('cfgSmtpHost').value.trim(),
     smtpPort: parseInt(document.getElementById('cfgSmtpPort').value, 10) || 587,
-    senderEmail: document.getElementById('cfgSenderEmail').value.trim()
+    senderEmail: document.getElementById('cfgSenderEmail').value.trim(),
+    contractExpiryReminderDays: reminderDays,
+    contractExpiryCcEmails: parseEmailListInput(document.getElementById('cfgContractReminderCc').value)
   };
   syncStorage('emailConfig');
   logSystemAction('CONFIG', 'UPDATE_SMTP_CONFIG', 'Cập nhật SMTP server thành công.', 'SUCCESS', 'SMTP_CONFIG');
@@ -1768,6 +1797,9 @@ function loadEmailConfigToForm() {
   document.getElementById('cfgSmtpHost').value = DB.emailConfig.smtpHost || 'smtp.gmail.com';
   document.getElementById('cfgSmtpPort').value = DB.emailConfig.smtpPort || 587;
   document.getElementById('cfgSenderEmail').value = DB.emailConfig.senderEmail || 'dms-noreply@company.com';
+  document.getElementById('cfgContractReminderDays').value = (DB.emailConfig.contractExpiryReminderDays && DB.emailConfig.contractExpiryReminderDays.length
+    ? DB.emailConfig.contractExpiryReminderDays : [30, 15, 7]).join(', ');
+  document.getElementById('cfgContractReminderCc').value = (DB.emailConfig.contractExpiryCcEmails || []).join(', ');
 }
 
 // --- CÁ NHÂN HÓA USER ---
@@ -2879,8 +2911,13 @@ function resetTaskFilters() {
 // ==========================================
 // 4. MODULE HỢP ĐỒNG & GIẤY PHÉP (CONTRACT MODULE)
 // ==========================================
+// Khi khác null: form đang ở chế độ SỬA hồ sơ hợp đồng có id này (thay vì tạo mới).
+let editingContractId = null;
+
 async function submitContractReq(e) {
   e.preventDefault();
+  if (editingContractId !== null) return updateContractReq(e);
+
   const code = document.getElementById('contractCode').value.trim();
   const dept = document.getElementById('contractDept').value;
   const type = document.getElementById('contractType').value;
@@ -2921,7 +2958,8 @@ async function submitContractReq(e) {
     fileType: uploaded.fileType,
     fileUrl: uploaded.fileUrl,
     creator: currentUser.username,
-    createdAt: new Date().toLocaleString('vi-VN')
+    createdAt: new Date().toLocaleString('vi-VN'),
+    notifiedThresholds: []
   };
 
   DB.contracts.unshift(newContract);
@@ -2929,6 +2967,114 @@ async function submitContractReq(e) {
   logSystemAction('CONTRACT', 'CREATE_CONTRACT', `Tạo hồ sơ hợp đồng [${code} - ${title}]`, 'SUCCESS', code);
   alert('✅ Đã lưu thông tin Hợp đồng / Giấy phép thành công!');
   e.target.reset();
+  renderContracts();
+}
+
+// Mở form hiện có ở chế độ SỬA, chỉ cho phép người đã tạo hồ sơ đó thực hiện.
+function openEditContract(contractId) {
+  const c = DB.contracts.find(x => x.id === contractId);
+  if (!c) return;
+  if (c.creator !== currentUser.username) {
+    return alert('⛔ Bạn chỉ có thể sửa hồ sơ hợp đồng do chính mình tạo!');
+  }
+
+  editingContractId = contractId;
+
+  document.getElementById('contractCode').value = c.code;
+  document.getElementById('contractCode').readOnly = true;
+  document.getElementById('contractCode').classList.add('bg-gray-100', 'cursor-not-allowed');
+  document.getElementById('contractDept').value = c.dept;
+  document.getElementById('contractType').value = c.type;
+  document.getElementById('contractTitle').value = c.title;
+  document.getElementById('contractPartner').value = c.partner;
+  document.getElementById('contractAmount').value = c.amount;
+  document.getElementById('contractStartDate').value = c.startDate;
+  document.getElementById('contractEndDate').value = c.endDate;
+  document.getElementById('contractContent').value = c.content;
+
+  const fileInput = document.getElementById('contractFile');
+  fileInput.value = '';
+  fileInput.required = false;
+  document.getElementById('contractFileEditHint').classList.remove('hidden');
+
+  document.getElementById('contractSubmitBtn').innerText = '💾 Cập Nhật Hợp Đồng';
+  document.getElementById('contractCancelEditBtn').classList.remove('hidden');
+
+  document.getElementById('contractForm').scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+function cancelEditContract() {
+  editingContractId = null;
+  document.getElementById('contractForm').reset();
+  document.getElementById('contractCode').readOnly = false;
+  document.getElementById('contractCode').classList.remove('bg-gray-100', 'cursor-not-allowed');
+  document.getElementById('contractFile').required = true;
+  document.getElementById('contractFileEditHint').classList.add('hidden');
+  document.getElementById('contractSubmitBtn').innerText = 'Lưu & Theo Dõi Hết Hạn';
+  document.getElementById('contractCancelEditBtn').classList.add('hidden');
+}
+
+async function updateContractReq(e) {
+  const c = DB.contracts.find(x => x.id === editingContractId);
+  if (!c) { cancelEditContract(); return; }
+  if (c.creator !== currentUser.username) {
+    cancelEditContract();
+    return alert('⛔ Bạn chỉ có thể sửa hồ sơ hợp đồng do chính mình tạo!');
+  }
+
+  const dept = document.getElementById('contractDept').value;
+  const type = document.getElementById('contractType').value;
+  const title = document.getElementById('contractTitle').value.trim();
+  const partner = document.getElementById('contractPartner').value.trim();
+  const amount = parseFloat(document.getElementById('contractAmount').value) || 0;
+  const startDate = document.getElementById('contractStartDate').value;
+  const endDate = document.getElementById('contractEndDate').value;
+  const content = document.getElementById('contractContent').value.trim();
+  const fileInput = document.getElementById('contractFile');
+  const newFile = fileInput.files[0];
+
+  // Ghi nhận các trường thực sự thay đổi để đưa vào Nhật ký hệ thống (audit trail).
+  const fieldLabels = {
+    dept: 'Phòng Ban', type: 'Loại Pháp Lý', title: 'Tên Hợp Đồng', partner: 'Đối Tác',
+    amount: 'Giá Trị', startDate: 'Ngày Hiệu Lực', endDate: 'Ngày Hết Hạn', content: 'Nội Dung'
+  };
+  const newValues = { dept, type, title, partner, amount, startDate, endDate, content };
+  const changes = [];
+  for (const key in fieldLabels) {
+    if (String(c[key]) !== String(newValues[key])) {
+      changes.push(`${fieldLabels[key]}: "${c[key]}" → "${newValues[key]}"`);
+    }
+  }
+
+  if (newFile) {
+    let uploaded;
+    try {
+      uploaded = await uploadFileToServer(newFile);
+    } catch (err) {
+      return alert(`⛔ Tải tệp lên thất bại: ${err.message}`);
+    }
+    changes.push(`Tệp Đính Kèm: "${c.fileName}" → "${uploaded.fileName}"`);
+    c.fileName = uploaded.fileName;
+    c.fileType = uploaded.fileType;
+    c.fileUrl = uploaded.fileUrl;
+  }
+
+  const endDateChanged = c.endDate !== endDate;
+
+  Object.assign(c, newValues);
+  c.lastEditedBy = currentUser.username;
+  c.lastEditedAt = new Date().toLocaleString('vi-VN');
+  // Đổi ngày hết hạn thì tính lại từ đầu các mốc đã nhắc, tránh bỏ sót/lặp mốc mới.
+  if (endDateChanged) c.notifiedThresholds = [];
+
+  syncStorage('contracts');
+  logSystemAction(
+    'CONTRACT', 'EDIT_CONTRACT',
+    changes.length ? `Cập nhật hồ sơ hợp đồng [${c.code}]: ${changes.join('; ')}` : `Cập nhật hồ sơ hợp đồng [${c.code}] (không có trường nào thay đổi)`,
+    'SUCCESS', c.code
+  );
+  alert('✅ Đã cập nhật hồ sơ hợp đồng thành công!');
+  cancelEditContract();
   renderContracts();
 }
 
@@ -2973,6 +3119,9 @@ function renderContracts() {
           <button onclick="viewContract(${c.id})" class="bg-cyan-600 text-white px-2 py-1 rounded text-xs hover:bg-cyan-700 font-bold">👁️ Xem</button>
           ${(c.fileUrl || c.fileData) && canDownloadFile(currentUser, c.dept, c.creator) ? `
             <a href="${c.fileUrl || c.fileData}" download="${escapeHtml(c.fileName || c.code)}" class="inline-block bg-slate-600 text-white px-2 py-1 rounded text-xs hover:bg-slate-700 font-bold" title="Tải tệp đính kèm về máy">⬇️ Tải</a>
+          ` : ''}
+          ${c.creator === currentUser.username ? `
+            <button onclick="openEditContract(${c.id})" class="bg-amber-600 text-white px-2 py-1 rounded text-xs hover:bg-amber-700 font-bold" title="Chỉ người tạo hồ sơ mới sửa được">✏️ Sửa</button>
           ` : ''}
         </td>
       </tr>
