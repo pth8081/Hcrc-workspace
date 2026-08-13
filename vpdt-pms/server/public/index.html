@@ -1073,6 +1073,14 @@
               </div>
             </div>
           </div>
+
+          <div class="bg-white p-3 rounded border space-y-2">
+            <h4 class="font-bold text-gray-800 border-b pb-1 text-sm">12. Người Duyệt</h4>
+            <label class="flex items-center gap-2 text-emerald-700 font-semibold cursor-pointer">
+              <input type="checkbox" id="pCanBeApprover"> ✅ Có thể được chọn làm người duyệt
+            </label>
+            <p class="text-[11px] text-gray-500 italic">Chỉ để LỌC danh sách ứng viên ở màn "Quy trình & Đồng cấp" cho gọn — không tự cấp quyền duyệt. Quyền duyệt thật vẫn do admin tick chọn đích danh ở từng bước.</p>
+          </div>
         </div>
 
         <div class="flex justify-end gap-2 pt-2">
@@ -1294,6 +1302,8 @@ let currentUser = null;
 let currentPage = 1;
 let pageSize = 5;
 let activeWfMod = 'DOC';
+// Lựa chọn mẫu quy trình CHƯA lưu (preview) theo phòng ban khi đang cấu hình — xem onWorkflowTemplateChange().
+let pendingWfTemplate = {};
 let activeOfficeSubTab = 'MUA_BAN';
 let activeFormTab = 'SUBMISSION';
 let currentFilterCard = '';
@@ -1474,6 +1484,7 @@ function defaultNewUserPerms() {
   const emptyScope = () => ({ all: false, depts: [] });
   return {
     admin: false,
+    canBeApprover: false,
     uploadAll: false, uploadDepts: [],
     viewDraftAll: false, viewDraftDepts: [],
     viewApprovedAll: false, viewApprovedDepts: [],
@@ -3254,24 +3265,51 @@ function collectDynamicFieldsData(containerId) {
 // ==========================================
 // 9. MODULE QUY TRÌNH PHÊ DUYỆT (WORKFLOW)
 // ==========================================
+// Bảng tra cứu module ↔ collection dữ liệu quy trình — thay cho chuỗi if lặp lại giống hệt nhau ở
+// switchWfModule/renderWorkflowTab/saveDeptWorkflowConfig/deleteWorkflowTemplate trước đây (thêm
+// module mới chỉ cần sửa 1 chỗ, tránh nguy cơ quên đồng bộ 1 trong nhiều hàm).
+const WF_MODULE_CONFIG = {
+  DOC: { dbKey: 'deptWorkflows', label: 'Tài liệu', title: '📂 Cấu Hình Quy Trình Phê Duyệt Tài Liệu Theo Phòng Ban' },
+  SUBMISSION: { dbKey: 'submissionDeptWorkflows', label: 'Văn bản trình', title: '📜 Cấu Hình Quy Trình Văn Bản Trình / Tờ Trình Theo Phòng Ban' },
+  CAR: { dbKey: 'carDeptWorkflows', label: 'Đăng ký xe', title: '🚗 Cấu Hình Quy Trình Đăng Ký Xe Theo Phòng Ban' },
+  OFFICE_BUY: { dbKey: 'officeBuyDeptWorkflows', label: 'Mua bán VP', title: '🛒 Cấu Hình Quy Trình Phê Duyệt Mua Bán VP Theo Phòng Ban' },
+  OFFICE_FIX: { dbKey: 'officeFixDeptWorkflows', label: 'Sửa chữa VP', title: '🔧 Cấu Hình Quy Trình Phê Duyệt Sửa Chữa VP Theo Phòng Ban' },
+  OFFICE_INVEST: { dbKey: 'officeInvestDeptWorkflows', label: 'Đầu tư VP', title: '📈 Cấu Hình Quy Trình Phê Duyệt Đầu Tư VP Theo Phòng Ban' }
+};
+
 function switchWfModule(mod) {
   activeWfMod = mod;
-  const mods = ['DOC', 'SUBMISSION', 'CAR', 'OFFICE_BUY', 'OFFICE_FIX', 'OFFICE_INVEST'];
-  mods.forEach(m => {
+  pendingWfTemplate = {}; // Đổi module = huỷ mọi lựa chọn mẫu quy trình đang preview dở của module trước
+
+  Object.keys(WF_MODULE_CONFIG).forEach(m => {
     const btn = document.getElementById(`btnWfMod${m.replace('_', '')}`);
     if (btn) btn.className = m === mod ? 'px-3 py-1.5 rounded text-xs font-bold bg-blue-600 text-white' : 'px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700';
   });
 
   const lbl = document.getElementById('wfConfigTitle');
-  if (lbl) {
-    if (mod === 'DOC') lbl.innerText = '📂 Cấu Hình Quy Trình Phê Duyệt Tài Liệu Theo Phòng Ban';
-    if (mod === 'SUBMISSION') lbl.innerText = '📜 Cấu Hình Quy Trình Văn Bản Trình / Tờ Trình Theo Phòng Ban';
-    if (mod === 'CAR') lbl.innerText = '🚗 Cấu Hình Quy Trình Đăng Ký Xe Theo Phòng Ban';
-    if (mod === 'OFFICE_BUY') lbl.innerText = '🛒 Cấu Hình Quy Trình Phê Duyệt Mua Bán VP Theo Phòng Ban';
-    if (mod === 'OFFICE_FIX') lbl.innerText = '🔧 Cấu Hình Quy Trình Phê Duyệt Sửa Chữa VP Theo Phòng Ban';
-    if (mod === 'OFFICE_INVEST') lbl.innerText = '📈 Cấu Hình Quy Trình Phê Duyệt Đầu Tư VP Theo Phòng Ban';
-  }
+  if (lbl) lbl.innerText = WF_MODULE_CONFIG[mod].title;
 
+  renderWorkflowTab();
+}
+
+// Lấy danh sách ứng viên người duyệt cho 1 bước: những người có cờ "Người duyệt" (perms.canBeApprover)
+// HOẶC admin, HỢP với những người ĐÃ được tick sẵn cho đúng bước này trước đó — để không bao giờ làm
+// "biến mất" một approver đã cấu hình từ trước chỉ vì họ chưa được cấp cờ mới.
+function getApproverCandidateUsers(currentApproversForStep) {
+  const list = Array.isArray(currentApproversForStep) ? currentApproversForStep : (currentApproversForStep ? [currentApproversForStep] : []);
+  const eligible = DB.users.filter(u => u.perms?.canBeApprover || u.perms?.admin);
+  const eligibleUsernames = new Set(eligible.map(u => u.username));
+  const alreadyAssignedExtra = DB.users.filter(u => !eligibleUsernames.has(u.username) && list.includes(u.username));
+  return [...eligible, ...alreadyAssignedExtra];
+}
+
+function onWorkflowTemplateChange(dept) {
+  // CẬP NHẬT: đổi mẫu quy trình giờ CHỈ preview lại danh sách bước/người duyệt theo mẫu mới, KHÔNG
+  // lưu ngay — sửa lỗi trước đây: đổi mẫu lưu tức thì bằng các checkbox của mẫu CŨ còn sót lại trên
+  // màn hình (chưa kịp render lại), khiến approvers bị thiếu/sai bước dù vẫn báo "lưu thành công".
+  const sel = document.getElementById(`wfSelect_${dept.replace(/\s+/g, '_')}`);
+  if (!sel) return;
+  pendingWfTemplate[dept] = sel.value;
   renderWorkflowTab();
 }
 
@@ -3279,38 +3317,50 @@ function renderWorkflowTab() {
   const container = document.getElementById('deptWorkflowConfigContainer');
   if (!container) return;
 
-  let deptWfMap = DB.deptWorkflows;
-  if (activeWfMod === 'SUBMISSION') deptWfMap = DB.submissionDeptWorkflows;
-  if (activeWfMod === 'CAR') deptWfMap = DB.carDeptWorkflows;
-  if (activeWfMod === 'OFFICE_BUY') deptWfMap = DB.officeBuyDeptWorkflows;
-  if (activeWfMod === 'OFFICE_FIX') deptWfMap = DB.officeFixDeptWorkflows;
-  if (activeWfMod === 'OFFICE_INVEST') deptWfMap = DB.officeInvestDeptWorkflows;
+  const deptWfMap = DB[WF_MODULE_CONFIG[activeWfMod].dbKey];
 
   container.innerHTML = DB.depts.map(dept => {
-    const config = deptWfMap[dept] || { workflowId: 'WF_1STEP', approvers: { 1: ['admin'] } };
-    const selectedWf = DB.workflows.find(w => w.id === config.workflowId) || DB.workflows[0];
+    const savedConfig = deptWfMap[dept] || { workflowId: 'WF_1STEP', approvers: { 1: ['admin'] } };
+    const isPending = pendingWfTemplate[dept] !== undefined && pendingWfTemplate[dept] !== savedConfig.workflowId;
+    const effectiveWfId = isPending ? pendingWfTemplate[dept] : savedConfig.workflowId;
+    const selectedWf = DB.workflows.find(w => w.id === effectiveWfId) || DB.workflows[0];
+    // Vừa đổi mẫu (chưa lưu) → bắt đầu từ approvers RỖNG để buộc gán lại đúng cấu trúc bước mới,
+    // tránh trường hợp giữ nhầm approvers của mẫu cũ (số bước/ý nghĩa từng bước có thể khác hẳn).
+    const effectiveApprovers = isPending ? {} : (savedConfig.approvers || {});
 
     const stepsConfigHTML = selectedWf.steps.map(step => {
-      const currentApprovers = config.approvers ? (config.approvers[step.order] || []) : [];
-      const userCheckboxes = DB.users.map(u => {
+      const currentApprovers = effectiveApprovers[step.order] || [];
+      const candidates = getApproverCandidateUsers(currentApprovers).slice().sort((a, b) => {
+        const aSame = a.dept === dept ? 0 : 1;
+        const bSame = b.dept === dept ? 0 : 1;
+        if (aSame !== bSame) return aSame - bSame;
+        return (a.name || '').localeCompare(b.name || '', 'vi');
+      });
+
+      const userCheckboxes = candidates.map(u => {
         const isChecked = Array.isArray(currentApprovers) ? currentApprovers.includes(u.username) : currentApprovers === u.username;
         return `
           <label class="inline-flex items-center gap-1 bg-white px-2 py-0.5 rounded border text-[11px] cursor-pointer">
             <input type="checkbox" value="${escapeHtml(u.username)}" data-dept="${escapeHtml(dept)}" data-step="${step.order}" ${isChecked ? 'checked' : ''}>
-            <span>${escapeHtml(u.name)} (${escapeHtml(u.username)})</span>
+            <span>${escapeHtml(u.name)} (${escapeHtml(u.username)})${u.dept !== dept ? ` · <span class="text-gray-400">${escapeHtml(u.dept)}</span>` : ''}</span>
           </label>
         `;
       }).join('');
+
+      const emptyHint = candidates.length === 0
+        ? `<div class="text-[11px] text-gray-400 italic">Chưa có ai được cấp quyền "Người duyệt" — vào Module Quản trị (khối 12) để cấp trước.</div>`
+        : '';
 
       return `
         <div class="bg-gray-100 p-2 rounded text-xs space-y-1 border">
           <div class="font-bold text-gray-700">Bước ${step.order}: ${escapeHtml(step.name)}</div>
           <div class="flex flex-wrap gap-1.5 pt-1">${userCheckboxes}</div>
+          ${emptyHint}
         </div>
       `;
     }).join('');
 
-    const wfOptions = DB.workflows.map(w => `<option value="${w.id}" ${w.id === config.workflowId ? 'selected' : ''}>${escapeHtml(w.name)} (${w.steps.length} bước)</option>`).join('');
+    const wfOptions = DB.workflows.map(w => `<option value="${w.id}" ${w.id === effectiveWfId ? 'selected' : ''}>${escapeHtml(w.name)} (${w.steps.length} bước)</option>`).join('');
 
     return `
       <div class="bg-white p-3 rounded border space-y-2">
@@ -3318,11 +3368,12 @@ function renderWorkflowTab() {
           <h4 class="font-bold text-sm text-gray-800">🏢 ${escapeHtml(dept)}</h4>
           <div class="flex items-center gap-2">
             <span class="text-xs font-semibold text-gray-600">Chọn mẫu quy trình:</span>
-            <select id="wfSelect_${dept.replace(/\s+/g, '_')}" onchange="saveDeptWorkflowConfig('${escapeHtml(dept)}')" class="border p-1 rounded text-xs bg-white font-bold text-emerald-700">
+            <select id="wfSelect_${dept.replace(/\s+/g, '_')}" onchange="onWorkflowTemplateChange('${escapeHtml(dept)}')" class="border p-1 rounded text-xs bg-white font-bold text-emerald-700">
               ${wfOptions}
             </select>
           </div>
         </div>
+        ${isPending ? `<div class="text-[11px] text-amber-800 bg-amber-50 border border-amber-200 rounded px-2 py-1">⚠️ Mẫu quy trình vừa đổi — <b>chưa lưu</b>. Gán người duyệt cho từng bước rồi bấm "Lưu Cấu Hình" để áp dụng.</div>` : ''}
         <div class="space-y-2">${stepsConfigHTML}</div>
         <div class="flex justify-end pt-1">
           <button onclick="saveDeptWorkflowConfig('${escapeHtml(dept)}')" class="bg-emerald-600 text-white px-3 py-1 rounded text-xs font-bold hover:bg-emerald-700">Lưu Cấu Hình [${escapeHtml(dept)}]</button>
@@ -3351,17 +3402,27 @@ function saveDeptWorkflowConfig(dept) {
     }
   });
 
+  // Cảnh báo (không chặn cứng) nếu có bước hoàn toàn chưa có người duyệt — hồ sơ tới bước đó sẽ
+  // không ai (ngoài Admin) duyệt được, admin cần biết rõ trước khi lưu thay vì phát hiện sau này.
+  const selectedWf = DB.workflows.find(w => w.id === selectedWfId);
+  if (selectedWf) {
+    const emptySteps = selectedWf.steps.filter(s => !(approversObj[s.order] && approversObj[s.order].length > 0));
+    if (emptySteps.length > 0) {
+      const stepNames = emptySteps.map(s => `Bước ${s.order} (${s.name})`).join(', ');
+      const proceed = confirm(`⚠️ Các bước sau CHƯA có người duyệt nào được chọn:\n${stepNames}\n\nHồ sơ tới các bước này sẽ không ai (ngoài Admin) duyệt được. Vẫn lưu?`);
+      if (!proceed) return;
+    }
+  }
+
   const newConfig = { workflowId: selectedWfId, approvers: approversObj };
+  const dbKey = WF_MODULE_CONFIG[activeWfMod].dbKey;
+  DB[dbKey][dept] = newConfig;
+  syncStorage(dbKey);
 
-  if (activeWfMod === 'DOC') { DB.deptWorkflows[dept] = newConfig; syncStorage('deptWorkflows'); }
-  if (activeWfMod === 'SUBMISSION') { DB.submissionDeptWorkflows[dept] = newConfig; syncStorage('submissionDeptWorkflows'); }
-  if (activeWfMod === 'CAR') { DB.carDeptWorkflows[dept] = newConfig; syncStorage('carDeptWorkflows'); }
-  if (activeWfMod === 'OFFICE_BUY') { DB.officeBuyDeptWorkflows[dept] = newConfig; syncStorage('officeBuyDeptWorkflows'); }
-  if (activeWfMod === 'OFFICE_FIX') { DB.officeFixDeptWorkflows[dept] = newConfig; syncStorage('officeFixDeptWorkflows'); }
-  if (activeWfMod === 'OFFICE_INVEST') { DB.officeInvestDeptWorkflows[dept] = newConfig; syncStorage('officeInvestDeptWorkflows'); }
-
+  delete pendingWfTemplate[dept];
   logSystemAction('CONFIG', 'UPDATE_DEPT_WORKFLOW', `Cập nhật cấu hình quy trình phòng ban [${dept}]`, 'SUCCESS', dept);
   alert(`✅ Đã lưu cấu hình quy trình cho phòng ban [${dept}] thành công!`);
+  renderWorkflowTab();
 }
 
 function renderWorkflowTemplatesTable() {
@@ -3465,6 +3526,22 @@ function editWorkflowTemplate(code) {
 }
 
 function deleteWorkflowTemplate(code) {
+  // CẬP NHẬT: chặn xoá nếu mẫu quy trình đang được gán cho phòng ban nào đó ở BẤT KỲ module nào —
+  // trước đây xoá vô điều kiện, để lại workflowId trỏ tới mẫu không còn tồn tại (tham chiếu treo).
+  // Khi đó hệ thống âm thầm rơi về 1 quy trình giả 1 bước không có người duyệt thật lúc xử lý hồ sơ.
+  const usages = [];
+  Object.values(WF_MODULE_CONFIG).forEach(cfg => {
+    const map = DB[cfg.dbKey] || {};
+    Object.keys(map).forEach(dept => {
+      if (map[dept]?.workflowId === code) usages.push(`${cfg.label} — ${dept}`);
+    });
+  });
+
+  if (usages.length > 0) {
+    alert(`⛔ Không thể xoá — mẫu quy trình này đang được sử dụng ở:\n- ${usages.join('\n- ')}\n\nHãy đổi các phòng ban trên sang mẫu quy trình khác trước khi xoá.`);
+    return;
+  }
+
   if (!confirm('Bạn có chắc chắn muốn xóa mẫu quy trình này?')) return;
   DB.workflows = DB.workflows.filter(w => w.id !== code);
   syncStorage('workflows');
@@ -3597,6 +3674,7 @@ function saveUser(e) {
 
   const perms = {
     admin: document.getElementById('pAdmin').checked,
+    canBeApprover: document.getElementById('pCanBeApprover').checked,
     meetingApprove: document.getElementById('pMeetingApprove').checked,
     meetingCancel: document.getElementById('pMeetingCancel').checked,
     officeBuy: document.getElementById('pOfficeBuy').checked,
@@ -3661,6 +3739,7 @@ function resetUserForm() {
   // defaultNewUserPerms()). Mỗi người vẫn luôn thao tác được trong phòng ban của chính mình.
   const defaults = defaultNewUserPerms();
   document.getElementById('pAdmin').checked = defaults.admin;
+  document.getElementById('pCanBeApprover').checked = !!defaults.canBeApprover;
   document.getElementById('pMeetingApprove').checked = defaults.meetingApprove;
   document.getElementById('pMeetingCancel').checked = defaults.meetingCancel;
   document.getElementById('pOfficeBuy').checked = defaults.officeBuy;
@@ -3698,6 +3777,7 @@ function editUser(id) {
   const perms = migrateLegacyPerms(user.perms).perms;
 
   document.getElementById('pAdmin').checked = !!perms.admin;
+  document.getElementById('pCanBeApprover').checked = !!perms.canBeApprover;
   document.getElementById('pMeetingApprove').checked = !!perms.meetingApprove;
   document.getElementById('pMeetingCancel').checked = !!perms.meetingCancel;
   document.getElementById('pOfficeBuy').checked = !!perms.officeBuy;
