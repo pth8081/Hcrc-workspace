@@ -1309,6 +1309,36 @@
   </div>
 </div>
 
+<!-- MODAL XỬ LÝ ĐỀ XUẤT VĂN PHÒNG (MUA SẮM / SỬA CHỮA / ĐẦU TƯ) -->
+<div id="officeProcessModal" class="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center hidden z-50 p-4">
+  <div class="bg-white rounded-lg shadow-2xl max-w-3xl w-full flex flex-col max-h-[90vh] overflow-hidden">
+    <div class="flex justify-between items-center bg-teal-800 text-white p-4">
+      <div>
+        <h3 id="officeModalTitle" class="font-bold text-base flex items-center gap-2">🏢 Xử Lý Đề Xuất Văn Phòng</h3>
+        <p id="officeModalSub" class="text-xs text-teal-200"></p>
+      </div>
+      <button onclick="closeOfficeProcessModal()" class="text-teal-200 hover:text-white font-bold text-xl px-2">✕</button>
+    </div>
+    <div class="p-4 overflow-y-auto flex-1 space-y-4 text-xs">
+      <div id="officeModalDetails" class="bg-gray-50 p-3 rounded border space-y-2 text-gray-700"></div>
+
+      <div>
+        <h4 class="font-bold text-gray-800 mb-2">✍️ Ý Kiến Chỉ Đạo & Ghi Chú Phê Duyệt</h4>
+        <textarea id="txtOfficeComment" placeholder="Nhập ý kiến chỉ đạo, ghi chú phê duyệt hoặc lý do từ chối..." class="w-full border p-2 rounded h-20 text-xs focus:ring-1 focus:ring-teal-500 focus:outline-none"></textarea>
+      </div>
+
+      <div>
+        <h4 class="font-bold text-gray-800 mb-2">📜 Lịch Sử Xử Lý Các Cấp</h4>
+        <div id="officeModalHistory" class="space-y-2 bg-slate-50 p-3 rounded border max-h-48 overflow-y-auto"></div>
+      </div>
+    </div>
+    <div class="p-3 bg-gray-100 border-t flex justify-between items-center text-xs">
+      <button onclick="closeOfficeProcessModal()" class="bg-gray-500 text-white px-4 py-1.5 rounded font-bold hover:bg-gray-600">Đóng</button>
+      <div id="officeModalActionBtns" class="flex gap-2"></div>
+    </div>
+  </div>
+</div>
+
 <!-- MODAL CÁ NHÂN HÓA -->
 <div id="profileModal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center hidden z-50 p-4">
   <div class="bg-white p-6 rounded-lg shadow-xl max-w-md w-full space-y-4">
@@ -1383,6 +1413,7 @@ let activeFormTab = 'SUBMISSION';
 let currentFilterCard = '';
 let currentProcessingSubId = null;
 let currentProcessingCarId = null;
+let currentProcessingOfficeId = null;
 
 function escapeHtml(str) {
   if (!str) return '';
@@ -3189,6 +3220,7 @@ function renderContracts() {
         <td class="border p-2">${escapeHtml(c.dept)}</td>
         <td class="border p-2">${warningBadge}</td>
         <td class="border p-2 text-center space-x-1">
+          <button onclick="viewContractDetails(${c.id})" class="bg-teal-600 text-white px-2 py-1 rounded text-xs hover:bg-teal-700 font-bold" title="Xem đầy đủ thông tin đã nhập">🔍 Xem chi tiết</button>
           <button onclick="viewContract(${c.id})" class="bg-cyan-600 text-white px-2 py-1 rounded text-xs hover:bg-cyan-700 font-bold">👁️ Xem</button>
           ${(c.fileUrl || c.fileData) && canDownloadFile(currentUser, c.dept, c.creator) ? `
             <a href="${c.fileUrl || c.fileData}" download="${escapeHtml(c.fileName || c.code)}" class="inline-block bg-slate-600 text-white px-2 py-1 rounded text-xs hover:bg-slate-700 font-bold" title="Tải tệp đính kèm về máy">⬇️ Tải</a>
@@ -3200,6 +3232,58 @@ function renderContracts() {
       </tr>
     `;
   }).join('');
+}
+
+// Xem đầy đủ TOÀN BỘ thông tin đã nhập của hồ sơ hợp đồng (khác với viewContract() ở dưới, vốn chỉ
+// hiển thị FILE đính kèm) — các trường như giá trị, ngày hiệu lực/hết hạn, nội dung tóm tắt trước
+// đây không có chỗ nào xem đầy đủ ngoài bảng danh sách rút gọn.
+function viewContractDetails(contractId) {
+  const c = DB.contracts.find(x => x.id === contractId);
+  if (!c) return;
+
+  const now = new Date();
+  const endD = new Date(c.endDate);
+  const diffDays = Math.ceil((endD - now) / (1000 * 60 * 60 * 24));
+  let warningBadge = '';
+  if (diffDays < 0) {
+    warningBadge = `<span class="px-2 py-0.5 bg-red-100 text-red-800 rounded font-bold">⚠️ Đã hết hạn (${Math.abs(diffDays)} ngày)</span>`;
+  } else if (diffDays <= 30) {
+    warningBadge = `<span class="px-2 py-0.5 bg-yellow-100 text-yellow-800 rounded font-bold">⏰ Sắp hết hạn (Còn ${diffDays} ngày)</span>`;
+  } else {
+    warningBadge = `<span class="px-2 py-0.5 bg-green-100 text-green-800 rounded font-semibold">✅ Còn hiệu lực</span>`;
+  }
+
+  document.getElementById('viewModalTitle').innerText = `🔍 Chi Tiết Hợp Đồng: ${c.title} (${c.code})`;
+  document.getElementById('viewModalSub').innerText = `Phòng ban: ${c.dept} | Đối tác: ${c.partner} | Loại: ${c.type}`;
+  document.getElementById('viewModalFooterInfo').innerText = `Người tạo: ${c.creator}${c.lastEditedBy ? ` | Sửa lần cuối bởi: ${c.lastEditedBy} lúc ${c.lastEditedAt}` : ''}`;
+
+  document.getElementById('viewModalContent').innerHTML = `
+    <div class="w-full bg-white p-6 rounded shadow border overflow-y-auto text-sm">
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+        <div><b>Mã Hợp Đồng / Giấy Phép:</b> ${escapeHtml(c.code)}</div>
+        <div><b>Loại Pháp Lý:</b> ${escapeHtml(c.type)}</div>
+        <div><b>Phòng Ban Quản Lý:</b> ${escapeHtml(c.dept)}</div>
+        <div><b>Đối Tác / Bên Ký Kết:</b> ${escapeHtml(c.partner)}</div>
+        <div class="md:col-span-2"><b>Tên Hợp Đồng / Giấy Phép:</b> ${escapeHtml(c.title)}</div>
+        <div><b>Giá Trị Hợp Đồng:</b> ${(c.amount || 0).toLocaleString('vi-VN')} VNĐ</div>
+        <div><b>Trạng Thái:</b> ${warningBadge}</div>
+        <div><b>Ngày Hiệu Lực:</b> ${escapeHtml(c.startDate)}</div>
+        <div><b>Ngày Hết Hạn:</b> ${escapeHtml(c.endDate)}</div>
+        <div><b>Người Tạo:</b> ${escapeHtml(c.creator)}</div>
+        <div><b>Ngày Tạo:</b> ${escapeHtml(c.createdAt)}</div>
+        ${c.lastEditedBy ? `
+          <div><b>Sửa Lần Cuối Bởi:</b> ${escapeHtml(c.lastEditedBy)}</div>
+          <div><b>Thời Gian Sửa:</b> ${escapeHtml(c.lastEditedAt || '')}</div>
+        ` : ''}
+        ${c.fileName ? `<div class="md:col-span-2"><b>Tệp Đính Kèm:</b> ${escapeHtml(c.fileName)}</div>` : ''}
+      </div>
+      <div class="border-t mt-4 pt-3">
+        <b>Nội Dung Tóm Tắt & Điều Khoản Chính:</b>
+        <div class="bg-gray-50 p-3 rounded border mt-1 text-gray-800">${escapeHtml(c.content || 'Không có mô tả.')}</div>
+      </div>
+    </div>
+  `;
+  document.getElementById('viewDocModal').classList.remove('hidden');
 }
 
 function viewContract(contractId) {
@@ -3881,6 +3965,8 @@ function renderOfficeReqs() {
     else if (o.status === 'REJECTED') statusBadge = `<span class="px-2 py-0.5 bg-red-100 text-red-800 rounded font-bold text-xs">❌ Từ chối</span>`;
     else statusBadge = `<span class="px-2 py-0.5 bg-teal-100 text-teal-800 rounded font-bold text-xs">⏳ Bước ${o.currentStep}/${wf.steps.length}${escapeHtml(getStepApprovalProgressText(currentStepApprovers, o.history, o.currentStep))}</span>`;
 
+    const canDL = o.status === 'APPROVED' && canDownloadFile(currentUser, o.dept, o.creator);
+
     return `
       <tr class="hover:bg-gray-50 border-b">
         <td class="border p-2 font-mono font-bold text-teal-800">${escapeHtml(o.code)}</td>
@@ -3896,9 +3982,12 @@ function renderOfficeReqs() {
         </td>
         <td class="border p-2">${statusBadge}</td>
         <td class="border p-2 text-center space-x-1">
-          ${canApprove ? `
-            <button onclick="approveOfficeReq(${o.id})" class="bg-green-600 text-white px-2 py-1 rounded text-xs font-bold hover:bg-green-700">Duyệt</button>
-            <button onclick="rejectOfficeReq(${o.id})" class="bg-red-600 text-white px-2 py-1 rounded text-xs font-bold hover:bg-red-700">Từ chối</button>
+          <button onclick="openOfficeProcessModal(${o.id})" class="px-2.5 py-1 ${canApprove ? 'bg-teal-600 text-white' : 'bg-gray-600 text-white'} rounded text-xs hover:opacity-90 font-bold">
+            ${canApprove ? '✍️ Xử lý / Duyệt' : '👁️ Xem chi tiết'}
+          </button>
+          ${o.status === 'APPROVED' ? `
+            <button onclick="viewOfficeApprovalSlip(${o.id})" class="px-2 py-1 bg-blue-600 text-white rounded text-xs hover:bg-blue-700 font-bold" title="Xem Phiếu Phê Duyệt">👁️ Xem Phiếu</button>
+            ${canDL ? `<button onclick="downloadOfficeApprovalSlip(${o.id})" class="px-2 py-1 bg-slate-600 text-white rounded text-xs hover:bg-slate-700 font-bold" title="Tải Phiếu Phê Duyệt">⬇️ Tải</button>` : ''}
           ` : ''}
         </td>
       </tr>
@@ -3906,9 +3995,81 @@ function renderOfficeReqs() {
   }).join('');
 }
 
-function approveOfficeReq(id) {
-  const o = DB.officeReqs.find(item => item.id === id);
+function openOfficeProcessModal(officeId) {
+  currentProcessingOfficeId = officeId;
+  const o = DB.officeReqs.find(item => item.id === officeId);
   if (!o) return;
+
+  const wfMap = getOfficeWorkflowMap(o.subType);
+  const wfConfig = wfMap[o.dept] || { workflowId: 'WF_1STEP', approvers: { 1: ['admin'] } };
+  const wf = DB.workflows.find(w => w.id === wfConfig.workflowId) || { steps: [{ name: 'Sếp duyệt' }] };
+
+  document.getElementById('officeModalTitle').innerText = `🏢 Xử Lý Đề Xuất Văn Phòng: ${o.title} (${o.code})`;
+  document.getElementById('officeModalSub').innerText = `Phân hệ: ${o.subType} | Phòng ban: ${o.dept} | Người tạo: ${o.creatorName}`;
+
+  let detailsHTML = `
+    <div class="grid grid-cols-2 gap-2 text-xs">
+      <div><b>Ngày tạo:</b> ${escapeHtml(o.createdAt)}</div>
+      <div><b>Số lượng:</b> ${escapeHtml(o.qty)}</div>
+      <div><b>Giá trị dự kiến:</b> ${o.amount.toLocaleString('vi-VN')} VNĐ</div>
+      <div><b>Nhà cung cấp:</b> ${escapeHtml(o.supplier || 'N/A')}</div>
+      <div class="col-span-2"><b>Lý do / Diễn giải:</b> <p class="bg-white p-2 rounded border mt-1">${escapeHtml(o.reason)}</p></div>
+    </div>
+  `;
+
+  if (o.customData && Object.keys(o.customData).length > 0) {
+    detailsHTML += `<div class="border-t pt-2 mt-2 font-semibold">Trường dữ liệu mở rộng:</div><div class="grid grid-cols-2 gap-2 text-xs">`;
+    for (let key in o.customData) {
+      detailsHTML += `<div><b>${escapeHtml(key)}:</b> ${escapeHtml(o.customData[key])}</div>`;
+    }
+    detailsHTML += `</div>`;
+  }
+
+  document.getElementById('officeModalDetails').innerHTML = detailsHTML;
+  document.getElementById('txtOfficeComment').value = '';
+
+  const historyHTML = (o.history || []).map(h => `
+    <div class="bg-white p-2 rounded border text-xs space-y-1">
+      <div class="flex justify-between font-bold text-gray-700">
+        <span>${escapeHtml(h.approver)} (${escapeHtml(h.username)})</span>
+        <span class="text-gray-400 font-normal">${escapeHtml(h.time)}</span>
+      </div>
+      <div class="text-gray-600">Hành động: <span class="font-bold text-blue-600">${escapeHtml(h.action)}</span> — Bước ${h.step}${h.stepName ? ` (${escapeHtml(h.stepName)})` : ''}</div>
+      ${h.comment ? `<div class="text-gray-800 bg-amber-50 p-1.5 rounded border italic">"${escapeHtml(h.comment)}"</div>` : ''}
+    </div>
+  `).join('');
+  document.getElementById('officeModalHistory').innerHTML = historyHTML || '<div class="text-gray-400 italic">Chưa có lịch sử xử lý.</div>';
+
+  const currentStepApprovers = wfConfig.approvers ? (wfConfig.approvers[o.currentStep] || []) : [];
+  const canApprove = (o.status === 'PENDING') && canApproveStep(currentUser, currentStepApprovers, o.history, o.currentStep);
+
+  const actionBtns = document.getElementById('officeModalActionBtns');
+  if (canApprove) {
+    actionBtns.innerHTML = `
+      <button onclick="processOfficeReq('REJECT')" class="bg-red-600 text-white px-4 py-1.5 rounded font-bold hover:bg-red-700 text-xs">❌ Từ Chối</button>
+      <button onclick="processOfficeReq('APPROVE')" class="bg-green-600 text-white px-5 py-1.5 rounded font-bold hover:bg-green-700 text-xs">✅ Phê Duyệt & Chuyển Bước</button>
+    `;
+  } else {
+    actionBtns.innerHTML = `<span class="text-gray-500 italic text-xs">Bạn chỉ có quyền xem thông tin đề xuất này.</span>`;
+  }
+
+  document.getElementById('officeProcessModal').classList.remove('hidden');
+}
+
+function closeOfficeProcessModal() {
+  document.getElementById('officeProcessModal').classList.add('hidden');
+  currentProcessingOfficeId = null;
+}
+
+function processOfficeReq(actionType) {
+  if (!currentProcessingOfficeId) return;
+  const o = DB.officeReqs.find(item => item.id === currentProcessingOfficeId);
+  if (!o) return;
+
+  const comment = document.getElementById('txtOfficeComment').value.trim();
+  if (actionType === 'REJECT' && !comment) {
+    return alert('Vui lòng nhập lý do từ chối vào ô Ý kiến chỉ đạo!');
+  }
 
   const wfMap = getOfficeWorkflowMap(o.subType);
   const wfConfig = wfMap[o.dept];
@@ -3918,84 +4079,150 @@ function approveOfficeReq(id) {
   if (!o.history) o.history = [];
 
   if (!canApproveStep(currentUser, currentStepApprovers, o.history, o.currentStep)) {
-    return alert('⛔ Bạn không có quyền phê duyệt ở bước hiện tại, hoặc đã duyệt bước này rồi!');
+    return alert('⛔ Bạn không có quyền xử lý ở bước hiện tại, hoặc đã duyệt bước này rồi!');
   }
 
-  o.history.push({
-    step: o.currentStep,
-    stepName: wf?.steps[o.currentStep - 1]?.name || `Bước ${o.currentStep}`,
-    approver: currentUser.name,
-    username: currentUser.username,
-    action: 'APPROVED',
-    time: new Date().toLocaleString('vi-VN')
-  });
+  let msg = '✅ Đã cập nhật trạng thái đề xuất văn phòng!';
 
-  // CẬP NHẬT: bước có từ 2 người đồng duyệt trở lên phải đủ TẤT CẢ mới chuyển bước tiếp theo —
-  // trước đây 1 người duyệt là chuyển bước ngay, bỏ qua ý kiến người còn lại.
-  let msg = '✅ Đã ghi nhận phê duyệt của bạn!';
-  if (isStepApprovalComplete(currentUser, currentStepApprovers, o.history, o.currentStep)) {
-    if (wf && o.currentStep < wf.steps.length) {
-      o.currentStep += 1;
-      o.status = 'PENDING';
-      msg = getStepAdvanceMessage(currentStepApprovers);
-      const nextApprovers = wfConfig.approvers?.[o.currentStep] || [];
-      if (nextApprovers.length) {
-        notifyUsersByEmail('OFFICE', 'NOTIFY_APPROVAL_NEEDED', o.code, nextApprovers,
-          `[VPDT] Đề xuất văn phòng ${o.code} cần bạn phê duyệt`,
-          `Đề xuất "${o.title}" (${o.code}) đang chờ bạn phê duyệt ở bước "${wf.steps[o.currentStep - 1]?.name || ''}".`);
+  if (actionType === 'REJECT') {
+    o.status = 'REJECTED';
+    o.history.push({
+      step: o.currentStep,
+      stepName: wf?.steps[o.currentStep - 1]?.name || `Bước ${o.currentStep}`,
+      approver: currentUser.name,
+      username: currentUser.username,
+      action: 'REJECTED',
+      comment: comment,
+      time: new Date().toLocaleString('vi-VN')
+    });
+    notifyUsersByEmail('OFFICE', 'NOTIFY_REJECTED', o.code, [o.creator],
+      `[VPDT] Đề xuất văn phòng ${o.code} bị từ chối`,
+      `Đề xuất "${o.title}" (${o.code}) của bạn đã bị từ chối. Lý do: ${comment}`);
+  } else if (actionType === 'APPROVE') {
+    o.history.push({
+      step: o.currentStep,
+      stepName: wf?.steps[o.currentStep - 1]?.name || `Bước ${o.currentStep}`,
+      approver: currentUser.name,
+      username: currentUser.username,
+      action: 'APPROVED',
+      comment: comment,
+      time: new Date().toLocaleString('vi-VN')
+    });
+
+    // CẬP NHẬT: bước có từ 2 người đồng duyệt trở lên phải đủ TẤT CẢ mới chuyển bước tiếp theo —
+    // trước đây 1 người duyệt là chuyển bước ngay, bỏ qua ý kiến người còn lại.
+    if (isStepApprovalComplete(currentUser, currentStepApprovers, o.history, o.currentStep)) {
+      if (wf && o.currentStep < wf.steps.length) {
+        o.currentStep += 1;
+        o.status = 'PENDING';
+        msg = getStepAdvanceMessage(currentStepApprovers);
+        const nextApprovers = wfConfig.approvers?.[o.currentStep] || [];
+        if (nextApprovers.length) {
+          notifyUsersByEmail('OFFICE', 'NOTIFY_APPROVAL_NEEDED', o.code, nextApprovers,
+            `[VPDT] Đề xuất văn phòng ${o.code} cần bạn phê duyệt`,
+            `Đề xuất "${o.title}" (${o.code}) đang chờ bạn phê duyệt ở bước "${wf.steps[o.currentStep - 1]?.name || ''}".`);
+        }
+      } else {
+        o.status = 'APPROVED';
+        msg = '✅ Phê duyệt đề xuất văn phòng thành công!';
+        notifyUsersByEmail('OFFICE', 'NOTIFY_APPROVED', o.code, [o.creator],
+          `[VPDT] Đề xuất văn phòng ${o.code} đã được phê duyệt`,
+          `Đề xuất "${o.title}" (${o.code}) của bạn đã được phê duyệt hoàn tất.`);
       }
     } else {
-      o.status = 'APPROVED';
-      msg = '✅ Phê duyệt đề xuất văn phòng thành công!';
-      notifyUsersByEmail('OFFICE', 'NOTIFY_APPROVED', o.code, [o.creator],
-        `[VPDT] Đề xuất văn phòng ${o.code} đã được phê duyệt`,
-        `Đề xuất "${o.title}" (${o.code}) của bạn đã được phê duyệt hoàn tất.`);
+      msg = '✅ Đã ghi nhận phê duyệt của bạn — đang chờ các đồng phê duyệt còn lại ở bước này.';
     }
-  } else {
-    msg = '✅ Đã ghi nhận phê duyệt của bạn — đang chờ các đồng phê duyệt còn lại ở bước này.';
   }
 
   syncStorage('officeReqs');
-  logSystemAction('OFFICE', 'APPROVE_OFFICE_REQ', `Phê duyệt đề xuất văn phòng [${o.code}]`, 'SUCCESS', o.code);
+  logSystemAction('OFFICE', `PROCESS_${actionType}`, `Xử lý đề xuất văn phòng [${o.code}]: ${actionType}`, 'SUCCESS', o.code);
   alert(msg);
+  closeOfficeProcessModal();
   renderOfficeReqs();
 }
 
-function rejectOfficeReq(id) {
-  const o = DB.officeReqs.find(item => item.id === id);
-  if (!o) return;
-
+// Dựng HTML "Phiếu Phê Duyệt Đề Xuất Văn Phòng" — dùng lại khung chung buildApprovalSlipShellHTML()
+// giống hệt pattern đã áp dụng cho Đăng Ký Xe và Văn Bản Trình.
+function buildOfficeApprovalSlipHTML(o) {
   const wfMap = getOfficeWorkflowMap(o.subType);
-  const wfConfig = wfMap[o.dept];
-  const wf = wfConfig ? DB.workflows.find(w => w.id === wfConfig.workflowId) : null;
-  const currentStepApprovers = wfConfig?.approvers ? (wfConfig.approvers[o.currentStep] || []) : [];
+  const wfConfig = wfMap[o.dept] || { workflowId: 'WF_1STEP' };
+  const wf = DB.workflows.find(w => w.id === wfConfig.workflowId) || { steps: [{ order: 1, name: 'Duyệt' }] };
+  const signatureColumnsHTML = wf.steps.map(step => buildApprovalSignatureColumnHTML(step, o.history)).join('');
 
-  if (!o.history) o.history = [];
-
-  if (!canApproveStep(currentUser, currentStepApprovers, o.history, o.currentStep)) {
-    return alert('⛔ Bạn không có quyền từ chối ở bước hiện tại!');
+  let extraFieldsHTML = '';
+  if (o.customData && Object.keys(o.customData).length > 0) {
+    const rows = Object.keys(o.customData).map(k => `<tr><td class="as-label">${escapeHtml(k)}:</td><td>${escapeHtml(o.customData[k])}</td></tr>`).join('');
+    extraFieldsHTML = `<div class="as-section-title">Thông Tin Bổ Sung</div><table class="as-field-table">${rows}</table>`;
   }
 
-  const reason = prompt('Nhập lý do từ chối đề xuất văn phòng:');
-  if (reason === null) return;
+  // Ý kiến chỉ đạo của người phê duyệt cuối cùng — bản ghi APPROVED gần nhất trong lịch sử xử lý.
+  const finalApprovalEntry = [...(o.history || [])].reverse().find(h => h.action === 'APPROVED');
+  let finalCommentHTML = '';
+  if (finalApprovalEntry && finalApprovalEntry.comment) {
+    finalCommentHTML = `
+      <div class="as-section-title">Ý Kiến Chỉ Đạo Của Người Phê Duyệt Cuối Cùng</div>
+      <div class="as-comment-box">
+        <p>"${escapeHtml(finalApprovalEntry.comment)}"</p>
+        <div class="as-comment-meta">— ${escapeHtml(finalApprovalEntry.approver)}, ${escapeHtml(finalApprovalEntry.time)}</div>
+      </div>
+    `;
+  }
 
-  o.status = 'REJECTED';
-  o.history.push({
-    step: o.currentStep,
-    stepName: wf?.steps[o.currentStep - 1]?.name || `Bước ${o.currentStep}`,
-    approver: currentUser.name,
-    username: currentUser.username,
-    action: 'REJECTED',
-    comment: reason,
-    time: new Date().toLocaleString('vi-VN')
+  const bodyHTML = `
+    <table class="as-field-table">
+      <tr><td class="as-label">Ngày tạo:</td><td>${escapeHtml(o.createdAt || '')}</td></tr>
+      <tr><td class="as-label">Người tạo:</td><td>${escapeHtml(o.creatorName || '')}</td></tr>
+      <tr><td class="as-label">Phòng ban:</td><td>${escapeHtml(o.dept || '')}</td></tr>
+      <tr><td class="as-label">Phân hệ:</td><td>${escapeHtml(o.subType || '')}</td></tr>
+      <tr><td class="as-label">Tên đề xuất:</td><td>${escapeHtml(o.title || '')}</td></tr>
+      <tr><td class="as-label">Số lượng:</td><td>${escapeHtml(o.qty || '')}</td></tr>
+      <tr><td class="as-label">Giá trị dự kiến:</td><td>${(o.amount || 0).toLocaleString('vi-VN')} VNĐ</td></tr>
+      <tr><td class="as-label">Nhà cung cấp:</td><td>${escapeHtml(o.supplier || 'N/A')}</td></tr>
+      <tr><td class="as-label">Lý do / Diễn giải:</td><td>${escapeHtml(o.reason || '')}</td></tr>
+    </table>
+    ${extraFieldsHTML}
+    ${finalCommentHTML}
+  `;
+
+  return buildApprovalSlipShellHTML({
+    formCode: 'Đề Xuất Văn Phòng',
+    title: 'Phiếu Phê Duyệt Đề Xuất Văn Phòng',
+    approvedNote: `✅ Đã phê duyệt hoàn tất trên Hệ thống Văn phòng điện tử — Mã: ${escapeHtml(o.code)}`,
+    bodyHTML,
+    requesterRoleLabel: 'Người tạo đề xuất',
+    requesterName: o.creatorName,
+    requesterTime: `Tạo lúc: ${escapeHtml(o.createdAt || '')}`,
+    signatureColumnsHTML,
+    footerNote: 'Phiếu được lập và phê duyệt điện tử trên Hệ thống Văn phòng điện tử (VPĐT) — không cần chữ ký tay/con dấu bản cứng. Thông tin phê duyệt có thể tra cứu lại trên hệ thống.'
   });
+}
 
-  syncStorage('officeReqs');
-  logSystemAction('OFFICE', 'REJECT_OFFICE_REQ', `Từ chối đề xuất văn phòng [${o.code}]`, 'SUCCESS', o.code);
-  notifyUsersByEmail('OFFICE', 'NOTIFY_REJECTED', o.code, [o.creator],
-    `[VPDT] Đề xuất văn phòng ${o.code} bị từ chối`,
-    `Đề xuất "${o.title}" (${o.code}) của bạn đã bị từ chối. Lý do: ${reason}`);
-  renderOfficeReqs();
+function viewOfficeApprovalSlip(officeId) {
+  const o = DB.officeReqs.find(x => x.id === officeId);
+  if (!o) return;
+  if (o.status !== 'APPROVED') return alert('Chỉ xem được Phiếu Phê Duyệt sau khi đề xuất đã được phê duyệt hoàn tất.');
+
+  document.getElementById('viewModalTitle').innerText = `🏢 Phiếu Phê Duyệt Đề Xuất Văn Phòng (${o.code})`;
+  document.getElementById('viewModalSub').innerText = `Phân hệ: ${o.subType} | Phòng ban: ${o.dept} | Người tạo: ${o.creatorName}`;
+  document.getElementById('viewModalFooterInfo').innerText = 'Trạng thái: Đã phê duyệt hoàn tất';
+
+  document.getElementById('viewModalContent').innerHTML = buildOfficeApprovalSlipHTML(o);
+  document.getElementById('viewDocModal').classList.remove('hidden');
+}
+
+function downloadOfficeApprovalSlip(officeId) {
+  const o = DB.officeReqs.find(x => x.id === officeId);
+  if (!o) return;
+  if (o.status !== 'APPROVED') return alert('Chỉ tải được Phiếu Phê Duyệt sau khi đề xuất đã được phê duyệt hoàn tất.');
+
+  const fullHtml = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Phiếu Phê Duyệt Đề Xuất Văn Phòng - ${escapeHtml(o.code)}</title></head><body>${buildOfficeApprovalSlipHTML(o)}</body></html>`;
+  const blob = new Blob([fullHtml], { type: 'text/html;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = `PhieuPheDuyet_${o.code}.html`;
+  link.click();
+  URL.revokeObjectURL(url);
 }
 
 // ==========================================
