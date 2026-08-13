@@ -298,22 +298,35 @@
   <!-- Màn hình MODULE QUẢN LÝ CÔNG VIỆC -->
   <div id="taskSection" class="hidden space-y-6">
     <div class="bg-violet-50 p-4 rounded border border-violet-200 space-y-3">
-      <h3 class="font-bold text-violet-900 text-base flex items-center gap-2">📋 Quản Lý Công Việc & Tiến Trình Văn Bản Trình</h3>
-      <p class="text-xs text-violet-800">Hiển thị các công việc đang trong tiến trình xử lý hoặc đã hoàn tất từ module Xử lý văn bản trình.</p>
-      
-      <div class="grid grid-cols-1 md:grid-cols-3 gap-3 bg-white p-3 rounded border text-xs">
+      <div class="flex justify-between items-center flex-wrap gap-2">
+        <h3 class="font-bold text-violet-900 text-base flex items-center gap-2">📋 Quản Lý Công Việc</h3>
+        <button onclick="openCreateTaskModal({})" class="bg-violet-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-violet-700">➕ Giao Việc Thủ Công</button>
+      </div>
+      <p class="text-xs text-violet-800">Theo dõi công việc được giao trực tiếp hoặc từ ý kiến chỉ đạo trong Văn bản trình & Biên bản họp.</p>
+
+      <div class="grid grid-cols-1 md:grid-cols-4 gap-3 bg-white p-3 rounded border text-xs">
         <div>
           <label class="block font-semibold text-gray-600 mb-1">Lọc Theo Trạng Thái</label>
-          <select id="filterTaskStatus" onchange="renderTasks()" class="w-full border p-1.5 rounded bg-white">
+          <select id="filterTaskStatus" onchange="onTaskFilterChange()" class="w-full border p-1.5 rounded bg-white">
             <option value="">-- Tất cả trạng thái --</option>
-            <option value="PENDING">Đang trong tiến trình xử lý (PENDING)</option>
-            <option value="APPROVED">Đã xử lý / Hoàn thành (APPROVED)</option>
-            <option value="REJECTED">Bị từ chối / Trả về (REJECTED)</option>
+            <option value="TODO">Chưa bắt đầu</option>
+            <option value="DOING">Đang thực hiện</option>
+            <option value="DONE">Đã hoàn thành</option>
+            <option value="CANCELLED">Đã huỷ</option>
+          </select>
+        </div>
+        <div>
+          <label class="block font-semibold text-gray-600 mb-1">Lọc Theo Nguồn Gốc</label>
+          <select id="filterTaskSource" onchange="onTaskFilterChange()" class="w-full border p-1.5 rounded bg-white">
+            <option value="">-- Tất cả --</option>
+            <option value="SUBMISSION">Từ Văn bản trình</option>
+            <option value="MEETING_MINUTES">Từ Biên bản họp</option>
+            <option value="MANUAL">Giao trực tiếp</option>
           </select>
         </div>
         <div>
           <label class="block font-semibold text-gray-600 mb-1">Từ Khóa Tìm Kiếm</label>
-          <input id="filterTaskKeyword" oninput="renderTasks()" placeholder="Mã tờ trình, trích yếu, người trình..." class="w-full border p-1.5 rounded">
+          <input id="filterTaskKeyword" oninput="onTaskFilterChange()" placeholder="Tiêu đề, người nhận, nguồn..." class="w-full border p-1.5 rounded">
         </div>
         <div class="flex items-end">
           <button onclick="resetTaskFilters()" class="w-full bg-gray-200 text-gray-700 p-1.5 rounded font-bold hover:bg-gray-300">Đặt Lại Bộ Lọc</button>
@@ -322,22 +335,23 @@
     </div>
 
     <div class="space-y-3">
-      <h3 class="font-bold text-gray-800">📋 Danh Sách Công Việc Văn Bản Trình</h3>
+      <h3 class="font-bold text-gray-800">📋 Danh Sách Công Việc</h3>
       <div class="overflow-x-auto">
         <table class="w-full border-collapse border text-xs bg-white">
           <thead>
             <tr class="bg-gray-100 text-left text-gray-700">
-              <th class="border p-2">Mã Công Việc / Tờ Trình</th>
-              <th class="border p-2">Trích Yếu & Nội Dung</th>
-              <th class="border p-2">Phòng Ban & Người Trình</th>
-              <th class="border p-2">Độ Khẩn</th>
-              <th class="border p-2">Tiến Trình Xử Lý</th>
-              <th class="border p-2 text-center min-w-[120px]">Thao Tác Nhanh</th>
+              <th class="border p-2">Tiêu Đề & Mô Tả</th>
+              <th class="border p-2">Người Nhận / Người Giao</th>
+              <th class="border p-2">Nguồn Gốc</th>
+              <th class="border p-2">Hạn Hoàn Thành</th>
+              <th class="border p-2">Trạng Thái</th>
+              <th class="border p-2 text-center min-w-[160px]">Thao Tác</th>
             </tr>
           </thead>
           <tbody id="taskTableBody"></tbody>
         </table>
       </div>
+      <div id="paginationContainer_task"></div>
     </div>
   </div>
 
@@ -1680,6 +1694,41 @@
   </div>
 </div>
 
+<!-- MODAL GIAO VIỆC (tạo mới thủ công hoặc từ ý kiến chỉ đạo Văn bản trình / Biên bản họp) -->
+<div id="createTaskModal" class="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center hidden z-50 p-4">
+  <div class="bg-white rounded-lg shadow-2xl max-w-lg w-full flex flex-col max-h-[90vh] overflow-hidden">
+    <div class="flex justify-between items-center bg-violet-800 text-white p-4">
+      <h3 class="font-bold text-base flex items-center gap-2">📌 Giao Việc</h3>
+      <button onclick="closeCreateTaskModal()" class="text-violet-200 hover:text-white font-bold text-xl px-2">✕</button>
+    </div>
+    <div class="p-4 overflow-y-auto flex-1 space-y-3 text-xs">
+      <div id="createTaskSourceLabel" class="text-gray-500 italic"></div>
+      <div>
+        <label class="block font-semibold text-gray-600 mb-1">Tiêu Đề Công Việc</label>
+        <input id="taskTitleInput" class="w-full border p-2 rounded text-sm" required>
+      </div>
+      <div>
+        <label class="block font-semibold text-gray-600 mb-1">Mô Tả / Nội Dung</label>
+        <textarea id="taskDescInput" class="w-full border p-2 rounded text-sm h-20"></textarea>
+      </div>
+      <div class="grid grid-cols-2 gap-3">
+        <div>
+          <label class="block font-semibold text-gray-600 mb-1">Người Nhận</label>
+          <select id="taskAssigneeInput" class="w-full border p-2 rounded bg-white text-sm"></select>
+        </div>
+        <div>
+          <label class="block font-semibold text-gray-600 mb-1">Hạn Hoàn Thành</label>
+          <input id="taskDeadlineInput" type="date" class="w-full border p-2 rounded text-sm">
+        </div>
+      </div>
+    </div>
+    <div class="p-3 bg-gray-100 border-t flex justify-end gap-2 text-xs">
+      <button onclick="closeCreateTaskModal()" class="bg-gray-500 text-white px-4 py-1.5 rounded font-bold hover:bg-gray-600">Huỷ</button>
+      <button onclick="confirmCreateTask()" class="bg-violet-600 text-white px-5 py-1.5 rounded font-bold hover:bg-violet-700">✅ Xác Nhận Giao Việc</button>
+    </div>
+  </div>
+</div>
+
 <!-- MODAL CÁ NHÂN HÓA -->
 <div id="profileModal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center hidden z-50 p-4">
   <div class="bg-white p-6 rounded-lg shadow-xl max-w-md w-full space-y-4">
@@ -1740,6 +1789,7 @@ const DB = {
   officeFixDeptWorkflows: {},
   officeInvestDeptWorkflows: {},
   meetingMinutes: [],
+  tasks: [],
   formTemplates: {},
   emailConfig: {}, systemLogs: []
 };
@@ -2213,6 +2263,7 @@ async function initDatabase() {
     DB.carRegs = data.carRegs || [];
     DB.officeReqs = data.officeReqs || [];
     DB.meetingMinutes = data.meetingMinutes || [];
+    DB.tasks = data.tasks || [];
     DB.workflows = data.workflows || [];
     DB.formTemplates = data.formTemplates || {};
     DB.emailConfig = data.emailConfig || {};
@@ -3211,6 +3262,7 @@ function renderSubmissionReqs() {
           ${sub.status === 'APPROVED' ? `
             <button onclick="viewSubmissionApprovalSlip(${sub.id})" class="px-2 py-1 bg-blue-600 text-white rounded text-xs hover:bg-blue-700 font-bold" title="Xem Phiếu Phê Duyệt">👁️ Xem Phiếu</button>
             ${canDownloadFile(currentUser, sub.dept, sub.creator) ? `<button onclick="downloadSubmissionApprovalSlip(${sub.id})" class="px-2 py-1 bg-slate-600 text-white rounded text-xs hover:bg-slate-700 font-bold" title="Tải Phiếu Phê Duyệt">⬇️ Tải</button>` : ''}
+            <button onclick="createTaskFromSubmission(${sub.id})" class="px-2 py-1 bg-violet-600 text-white rounded text-xs hover:bg-violet-700 font-bold" title="Giao việc từ ý kiến chỉ đạo">📌 Giao việc</button>
           ` : ''}
         </td>
       </tr>
@@ -3459,51 +3511,179 @@ function downloadSubmissionApprovalSlip(subId) {
 // ==========================================
 // 3. MODULE CÔNG VIỆC (TASK MODULE)
 // ==========================================
+// Đang chờ xác nhận (opts: {sourceType, sourceCode}) trong lúc modal Giao Việc đang mở — set bởi
+// openCreateTaskModal(), đọc lại khi bấm Xác Nhận, KHÔNG tự động tạo — người dùng luôn phải xem
+// trước, có thể sửa tiêu đề/mô tả/người nhận/hạn trước khi xác nhận (tránh tạo nhầm công việc từ
+// những ý kiến/chỉ đạo không thực sự cần giao việc).
+let pendingTaskSource = null;
+
+function openCreateTaskModal(opts) {
+  pendingTaskSource = { sourceType: opts.sourceType || 'MANUAL', sourceCode: opts.sourceCode || '' };
+
+  document.getElementById('taskTitleInput').value = opts.title || '';
+  document.getElementById('taskDescInput').value = opts.description || '';
+  document.getElementById('taskDeadlineInput').value = opts.deadline || '';
+
+  const assigneeSel = document.getElementById('taskAssigneeInput');
+  assigneeSel.innerHTML = '<option value="">-- Chọn người nhận --</option>' +
+    DB.users.map(u => `<option value="${escapeHtml(u.username)}" ${opts.assignedTo === u.username ? 'selected' : ''}>${escapeHtml(u.name)} (${escapeHtml(u.username)})</option>`).join('');
+
+  const labels = { SUBMISSION: 'Từ Văn bản trình', MEETING_MINUTES: 'Từ Biên bản họp', MANUAL: 'Giao việc trực tiếp' };
+  document.getElementById('createTaskSourceLabel').innerText = opts.sourceCode ? `${labels[pendingTaskSource.sourceType]}: ${opts.sourceCode}` : labels[pendingTaskSource.sourceType];
+
+  document.getElementById('createTaskModal').classList.remove('hidden');
+}
+
+function closeCreateTaskModal() {
+  document.getElementById('createTaskModal').classList.add('hidden');
+  pendingTaskSource = null;
+}
+
+function confirmCreateTask() {
+  const title = document.getElementById('taskTitleInput').value.trim();
+  const description = document.getElementById('taskDescInput').value.trim();
+  const assignedTo = document.getElementById('taskAssigneeInput').value;
+  const deadline = document.getElementById('taskDeadlineInput').value;
+
+  if (!title) return alert('Vui lòng nhập tiêu đề công việc!');
+  if (!assignedTo) return alert('Vui lòng chọn người nhận!');
+
+  const assignee = DB.users.find(u => u.username === assignedTo);
+  const newTask = {
+    id: Date.now(),
+    title, description, deadline,
+    assignedTo, assignedToName: assignee ? assignee.name : assignedTo,
+    assignedBy: currentUser.username, assignedByName: currentUser.name,
+    sourceType: pendingTaskSource?.sourceType || 'MANUAL',
+    sourceCode: pendingTaskSource?.sourceCode || '',
+    status: 'TODO',
+    createdAt: new Date().toLocaleString('vi-VN'),
+    history: [{ action: 'CREATED', by: currentUser.username, byName: currentUser.name, time: new Date().toLocaleString('vi-VN') }]
+  };
+
+  DB.tasks.unshift(newTask);
+  syncStorage('tasks');
+  logSystemAction('TASK', 'CREATE_TASK', `Giao việc [${title}] cho ${newTask.assignedToName}${newTask.sourceCode ? ` (từ ${newTask.sourceCode})` : ''}`, 'SUCCESS', newTask.sourceCode || title);
+
+  if (assignee && assignee.email) {
+    notifyUsersByEmail('TASK', 'NOTIFY_TASK_ASSIGNED', newTask.sourceCode || title, [assignedTo],
+      `[VPDT] Bạn được giao công việc mới: ${title}`,
+      `${currentUser.name} đã giao cho bạn công việc "${title}"${description ? `: ${description}` : ''}.${deadline ? ` Hạn hoàn thành: ${deadline}.` : ''}`);
+  }
+
+  alert('✅ Đã giao việc thành công!');
+  closeCreateTaskModal();
+  renderTasks();
+}
+
+// Mở modal Giao Việc đổ sẵn từ ý kiến chỉ đạo cuối cùng của 1 Văn bản trình đã duyệt xong.
+function createTaskFromSubmission(subId) {
+  const sub = DB.submissions.find(s => s.id === subId);
+  if (!sub) return;
+  const finalApproval = [...(sub.history || [])].reverse().find(h => h.action === 'APPROVED');
+  openCreateTaskModal({
+    title: `Thực hiện theo chỉ đạo: ${sub.title}`,
+    description: finalApproval?.comment || '',
+    sourceType: 'SUBMISSION',
+    sourceCode: sub.code
+  });
+}
+
+// Mở modal Giao Việc đổ sẵn từ 1 dòng "Ý kiến chỉ đạo" cụ thể trong Biên bản họp.
+function createTaskFromMinutesDirective(minutesId, directiveIdx) {
+  const m = DB.meetingMinutes.find(x => x.id === minutesId);
+  if (!m || !m.directives[directiveIdx]) return;
+  const d = m.directives[directiveIdx];
+  openCreateTaskModal({
+    title: `Chỉ đạo từ biên bản họp: ${m.title}`,
+    description: d.content,
+    assignedTo: d.assignedTo,
+    deadline: d.deadline,
+    sourceType: 'MEETING_MINUTES',
+    sourceCode: m.code
+  });
+}
+
+function updateTaskStatus(id, newStatus) {
+  const t = DB.tasks.find(x => x.id === id);
+  if (!t) return;
+  if (t.assignedTo !== currentUser.username && t.assignedBy !== currentUser.username && !currentUser.perms?.admin) {
+    return alert('⛔ Bạn không có quyền cập nhật công việc này!');
+  }
+  t.status = newStatus;
+  t.history.push({ action: `STATUS_${newStatus}`, by: currentUser.username, byName: currentUser.name, time: new Date().toLocaleString('vi-VN') });
+  syncStorage('tasks');
+  logSystemAction('TASK', 'UPDATE_TASK_STATUS', `Cập nhật công việc [${t.title}] sang trạng thái ${newStatus}`, 'SUCCESS', t.sourceCode || t.title);
+  renderTasks();
+}
+
+function onTaskFilterChange() {
+  resetListPage('task');
+  renderTasks();
+}
+
 function renderTasks() {
   const tbody = document.getElementById('taskTableBody');
   if (!tbody) return;
 
   const statusFilter = document.getElementById('filterTaskStatus')?.value || '';
-  const keyword = (document.getElementById('filterTaskKeyword')?.value || '').toLowerCase().trim();
+  const sourceFilter = document.getElementById('filterTaskSource')?.value || '';
+  const keyword = (document.getElementById('filterTaskKeyword')?.value || '').trim();
 
-  let tasks = DB.submissions.filter(sub => {
-    if (statusFilter && sub.status !== statusFilter) return false;
-    if (keyword) {
-      const matchCode = (sub.code || '').toLowerCase().includes(keyword);
-      const matchTitle = (sub.title || '').toLowerCase().includes(keyword);
-      const matchCreator = (sub.creatorName || '').toLowerCase().includes(keyword);
-      if (!matchCode && !matchTitle && !matchCreator) return false;
-    }
+  const visible = DB.tasks.filter(t => {
+    const canView = currentUser.perms?.admin || t.assignedTo === currentUser.username || t.assignedBy === currentUser.username;
+    if (!canView) return false;
+    if (statusFilter && t.status !== statusFilter) return false;
+    if (sourceFilter && t.sourceType !== sourceFilter) return false;
+    if (!matchesKeywordFields([t.title, t.assignedToName, t.assignedByName, t.sourceCode], keyword)) return false;
     return true;
   });
 
-  if (tasks.length === 0) {
-    tbody.innerHTML = `<tr><td colspan="6" class="text-center p-6 text-gray-500 italic">Không có công việc nào trong danh sách.</td></tr>`;
+  document.getElementById('paginationContainer_task').innerHTML = buildPaginationBoxHTML('task', 'renderTasks');
+  const pageItems = paginateList('task', visible, 'renderTasks', 'công việc');
+
+  if (pageItems.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="6" class="text-center p-6 text-gray-500 italic">Không có công việc nào phù hợp.</td></tr>`;
     return;
   }
 
-  tbody.innerHTML = tasks.map(t => `
-    <tr class="hover:bg-gray-50 border-b">
-      <td class="border p-2 font-mono font-bold text-violet-800">${escapeHtml(t.code)}</td>
-      <td class="border p-2">
-        <div class="font-bold text-gray-800">${escapeHtml(t.title)}</div>
-        <div class="text-xs text-gray-500 line-clamp-1">${escapeHtml(t.content)}</div>
-      </td>
-      <td class="border p-2">${escapeHtml(t.dept)} (${escapeHtml(t.creatorName)})</td>
-      <td class="border p-2 font-bold text-rose-600">${escapeHtml(t.priority)}</td>
-      <td class="border p-2 font-bold ${t.status === 'APPROVED' ? 'text-green-600' : t.status === 'REJECTED' ? 'text-red-600' : 'text-yellow-600'}">
-        ${t.status}
-      </td>
-      <td class="border p-2 text-center">
-        <button onclick="switchTab('submission'); openProcessSubmissionModal(${t.id})" class="bg-violet-600 text-white px-2 py-1 rounded text-xs hover:bg-violet-700 font-bold">👁️ Chi tiết</button>
-      </td>
-    </tr>
-  `).join('');
+  const sourceLabels = { SUBMISSION: '📜 Văn bản trình', MEETING_MINUTES: '📝 Biên bản họp', MANUAL: '✋ Giao trực tiếp' };
+  const statusBadges = {
+    TODO: '<span class="px-2 py-0.5 bg-gray-100 text-gray-800 rounded font-bold text-xs">⏳ Chưa bắt đầu</span>',
+    DOING: '<span class="px-2 py-0.5 bg-blue-100 text-blue-800 rounded font-bold text-xs">🔵 Đang thực hiện</span>',
+    DONE: '<span class="px-2 py-0.5 bg-green-100 text-green-800 rounded font-bold text-xs">✅ Hoàn thành</span>',
+    CANCELLED: '<span class="px-2 py-0.5 bg-red-100 text-red-800 rounded font-bold text-xs">❌ Đã huỷ</span>'
+  };
+
+  tbody.innerHTML = pageItems.map(t => {
+    const canUpdate = currentUser.perms?.admin || t.assignedTo === currentUser.username || t.assignedBy === currentUser.username;
+    let actionBtns = '';
+    if (canUpdate && t.status !== 'DONE' && t.status !== 'CANCELLED') {
+      if (t.status === 'TODO') actionBtns += `<button onclick="updateTaskStatus(${t.id}, 'DOING')" class="bg-blue-600 text-white px-2 py-1 rounded text-xs font-bold hover:bg-blue-700">▶️ Bắt đầu</button> `;
+      if (t.status === 'DOING') actionBtns += `<button onclick="updateTaskStatus(${t.id}, 'DONE')" class="bg-green-600 text-white px-2 py-1 rounded text-xs font-bold hover:bg-green-700">✅ Hoàn thành</button> `;
+      actionBtns += `<button onclick="updateTaskStatus(${t.id}, 'CANCELLED')" class="bg-red-600 text-white px-2 py-1 rounded text-xs font-bold hover:bg-red-700">✕ Huỷ</button>`;
+    }
+    return `
+      <tr class="hover:bg-gray-50 border-b">
+        <td class="border p-2">
+          <div class="font-bold text-gray-800">${escapeHtml(t.title)}</div>
+          <div class="text-xs text-gray-500 line-clamp-1">${escapeHtml(t.description || '')}</div>
+        </td>
+        <td class="border p-2 text-xs">Nhận: <b>${escapeHtml(t.assignedToName)}</b><br>Giao: ${escapeHtml(t.assignedByName)}</td>
+        <td class="border p-2 text-xs">${sourceLabels[t.sourceType] || t.sourceType}${t.sourceCode ? `<br><span class="text-gray-400">${escapeHtml(t.sourceCode)}</span>` : ''}</td>
+        <td class="border p-2 text-xs">${escapeHtml(t.deadline || 'Chưa đặt')}</td>
+        <td class="border p-2">${statusBadges[t.status] || t.status}</td>
+        <td class="border p-2 text-center space-x-1">${actionBtns}</td>
+      </tr>
+    `;
+  }).join('');
 }
 
 function resetTaskFilters() {
   document.getElementById('filterTaskStatus').value = '';
+  document.getElementById('filterTaskSource').value = '';
   document.getElementById('filterTaskKeyword').value = '';
+  resetListPage('task');
   renderTasks();
 }
 
@@ -4218,11 +4398,11 @@ function viewMeetingMinutesDetails(id) {
 
   const directivesHTML = (m.directives || []).length ? `
     <table class="w-full border-collapse border text-xs mt-2">
-      <thead><tr class="bg-gray-100"><th class="border p-1">STT</th><th class="border p-1">Nội dung chỉ đạo</th><th class="border p-1">Người thực hiện</th><th class="border p-1">Hạn hoàn thành</th></tr></thead>
+      <thead><tr class="bg-gray-100"><th class="border p-1">STT</th><th class="border p-1">Nội dung chỉ đạo</th><th class="border p-1">Người thực hiện</th><th class="border p-1">Hạn hoàn thành</th><th class="border p-1">Thao tác</th></tr></thead>
       <tbody>
         ${m.directives.map((d, idx) => {
           const u = DB.users.find(x => x.username === d.assignedTo);
-          return `<tr><td class="border p-1 text-center">${idx + 1}</td><td class="border p-1">${escapeHtml(d.content)}</td><td class="border p-1">${escapeHtml(u ? u.name : (d.assignedTo || 'Chưa gán'))}</td><td class="border p-1">${escapeHtml(d.deadline || '')}</td></tr>`;
+          return `<tr><td class="border p-1 text-center">${idx + 1}</td><td class="border p-1">${escapeHtml(d.content)}</td><td class="border p-1">${escapeHtml(u ? u.name : (d.assignedTo || 'Chưa gán'))}</td><td class="border p-1">${escapeHtml(d.deadline || '')}</td><td class="border p-1 text-center"><button onclick="createTaskFromMinutesDirective(${m.id}, ${idx})" class="bg-violet-600 text-white px-2 py-0.5 rounded text-[11px] font-bold hover:bg-violet-700">📌 Giao việc</button></td></tr>`;
         }).join('')}
       </tbody>
     </table>

@@ -121,6 +121,7 @@ const DEFAULTS = {
   carRegs: [],
   officeReqs: [],
   meetingMinutes: [],
+  tasks: [],
   systemLogs: []
 };
 
