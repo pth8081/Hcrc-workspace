@@ -487,28 +487,39 @@
             <input id="carCode" placeholder="Mã tự động hoặc nhập (VD: XE-2026-001)" class="w-full border p-1.5 rounded" required>
           </div>
           <div>
-            <label class="block font-semibold text-gray-600 mb-1">Phòng Ban Đăng Ký</label>
+            <label class="block font-semibold text-gray-600 mb-1">Đơn Vị (Phòng/Ban/Bộ phận)</label>
             <select id="carDept" class="w-full border p-1.5 rounded bg-white font-semibold" required></select>
           </div>
           <div>
-            <label class="block font-semibold text-gray-600 mb-1">Loại Xe / Bằng Lái Cần Thiết</label>
+            <label class="block font-semibold text-gray-600 mb-1">Đăng Ký Sử Dụng Loại Xe</label>
             <select id="carType" class="w-full border p-1.5 rounded bg-white" required>
-              <option value="Xe 4 chỗ">Xe 4 chỗ</option>
-              <option value="Xe 7 chỗ">Xe 7 chỗ</option>
-              <option value="Xe 16 chỗ">Xe 16 chỗ</option>
-              <option value="Xe Bán tải">Xe Bán tải</option>
+              <option value="5 chỗ">5 chỗ</option>
+              <option value="7 chỗ">7 chỗ</option>
             </select>
           </div>
           <div>
-            <label class="block font-semibold text-gray-600 mb-1">Biển Số Xe</label>
-            <input id="carPlate" placeholder="VD: 30F-123.45" class="w-full border p-1.5 rounded">
+            <label class="block font-semibold text-gray-600 mb-1">Số Người Sử Dụng</label>
+            <input id="carPassengers" placeholder="VD: 02 - Nguyễn Văn A, Trần Thị B" class="w-full border p-1.5 rounded" required>
           </div>
           <div>
-            <label class="block font-semibold text-gray-600 mb-1">Lái Xe / Tự Lái</label>
-            <input id="carDriver" placeholder="Tên tài xế hoặc Ghi 'Tự lái'" class="w-full border p-1.5 rounded" required>
+            <label class="block font-semibold text-gray-600 mb-1">Người Sử Dụng Trực Tiếp</label>
+            <input id="carDirectUser" placeholder="Để trống nếu là chính người đăng ký" class="w-full border p-1.5 rounded">
           </div>
           <div>
-            <label class="block font-semibold text-gray-600 mb-1">Số KM Dự Kiến</label>
+            <label class="block font-semibold text-gray-600 mb-1">SĐT Người Sử Dụng Trực Tiếp</label>
+            <input id="carDirectUserPhone" placeholder="09xxxxxxxx" class="w-full border p-1.5 rounded">
+          </div>
+          <div>
+            <label class="block font-semibold text-gray-600 mb-1">Mục Đích Sử Dụng</label>
+            <select id="carPurpose" class="w-full border p-1.5 rounded bg-white" required>
+              <option value="Công tác">Công tác (đính kèm QĐ, KH)</option>
+              <option value="Vận chuyển tài sản/hàng hóa">Vận chuyển tài sản/hàng hóa (đính kèm DS, KH)</option>
+              <option value="Ngoại giao, đưa đón khách">Ngoại giao, đưa đón khách (đính kèm KH)</option>
+              <option value="Khác">Khác (đính kèm KH)</option>
+            </select>
+          </div>
+          <div>
+            <label class="block font-semibold text-gray-600 mb-1">Số KM Dự Kiến (2 chiều)</label>
             <input id="carKm" type="number" placeholder="150" class="w-full border p-1.5 rounded" required>
           </div>
           <div>
@@ -519,8 +530,8 @@
             <label class="block font-semibold text-gray-600 mb-1">Thời Gian Dự Kiến Về</label>
             <input id="carEndTime" type="datetime-local" class="w-full border p-1.5 rounded" required>
           </div>
-          <div>
-            <label class="block font-semibold text-gray-600 mb-1">Lộ Trình / Địa Điểm Đến</label>
+          <div class="md:col-span-2">
+            <label class="block font-semibold text-gray-600 mb-1">Lộ Trình Di Chuyển</label>
             <input id="carDestination" placeholder="HN -> Hải Phòng -> HN" class="w-full border p-1.5 rounded" required>
           </div>
         </div>
@@ -528,9 +539,10 @@
         <div id="dynamicFieldsContainer_CAR" class="grid grid-cols-1 md:grid-cols-3 gap-3 border-t pt-3"></div>
 
         <div>
-          <label class="block font-semibold text-gray-600 mb-1">Mục Đích Sử Dụng / Lý Do Công Tác</label>
-          <textarea id="carReason" placeholder="Diễn giải chi tiết công tác..." class="w-full border p-1.5 rounded h-16" required></textarea>
+          <label class="block font-semibold text-gray-600 mb-1">Nội Dung Chi Tiết</label>
+          <textarea id="carReason" placeholder="Diễn giải chi tiết mục đích, công việc cần dùng xe..." class="w-full border p-1.5 rounded h-16" required></textarea>
         </div>
+        <p class="text-[11px] text-gray-500 italic">💡 Loại xe cụ thể, biển kiểm soát và lái xe được phân công sẽ do Phòng Hành Chính điền khi xử lý duyệt — không cần nhập ở bước đăng ký.</p>
         <div class="flex justify-end">
           <button type="submit" class="bg-indigo-600 text-white px-5 py-2 rounded font-bold hover:bg-indigo-700">Gửi Đăng Ký Xe & Trình Duyệt</button>
         </div>
@@ -1200,7 +1212,59 @@
     <div class="p-4 overflow-y-auto flex-1 bg-gray-100 flex flex-col items-center justify-center protected-view-container" id="viewModalContent" oncontextmenu="return false;"></div>
     <div class="p-3 bg-gray-50 border-t flex justify-between items-center text-xs">
       <span id="viewModalFooterInfo" class="text-gray-500 italic"></span>
-      <button onclick="closeViewDocModal()" class="bg-gray-600 text-white px-5 py-1.5 rounded font-bold hover:bg-gray-700">Đóng</button>
+      <div class="flex gap-2">
+        <button onclick="printViewModalContent()" class="bg-blue-600 text-white px-4 py-1.5 rounded font-bold hover:bg-blue-700">🖨️ In</button>
+        <button onclick="closeViewDocModal()" class="bg-gray-600 text-white px-5 py-1.5 rounded font-bold hover:bg-gray-700">Đóng</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL XỬ LÝ & PHÊ DUYỆT ĐĂNG KÝ XE -->
+<div id="carProcessModal" class="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center hidden z-50 p-4">
+  <div class="bg-white rounded-lg shadow-2xl max-w-3xl w-full flex flex-col max-h-[90vh] overflow-hidden">
+    <div class="flex justify-between items-center bg-indigo-800 text-white p-4">
+      <div>
+        <h3 id="carModalTitle" class="font-bold text-base flex items-center gap-2">🚗 Xử Lý Đăng Ký Xe</h3>
+        <p id="carModalSub" class="text-xs text-indigo-200"></p>
+      </div>
+      <button onclick="closeCarProcessModal()" class="text-indigo-200 hover:text-white font-bold text-xl px-2">✕</button>
+    </div>
+    <div class="p-4 overflow-y-auto flex-1 space-y-4 text-xs">
+      <div id="carModalDetails" class="bg-gray-50 p-3 rounded border space-y-2 text-gray-700"></div>
+
+      <div class="bg-indigo-50 p-3 rounded border border-indigo-200 space-y-2">
+        <h4 class="font-bold text-indigo-900 mb-1">🏢 Phần Dành Cho Phòng Hành Chính (phân công xe)</h4>
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-2">
+          <div>
+            <label class="block font-semibold text-gray-600 mb-1">Lái xe được phân công</label>
+            <input id="carAssignedDriver" placeholder="Tên tài xế hoặc 'Tự lái'" class="w-full border p-1.5 rounded">
+          </div>
+          <div>
+            <label class="block font-semibold text-gray-600 mb-1">Loại xe cụ thể</label>
+            <input id="carAssignedVehicleType" placeholder="VD: Toyota Innova 7 chỗ" class="w-full border p-1.5 rounded">
+          </div>
+          <div>
+            <label class="block font-semibold text-gray-600 mb-1">Biển kiểm soát (BKS)</label>
+            <input id="carAssignedPlate" placeholder="VD: 30F-123.45" class="w-full border p-1.5 rounded">
+          </div>
+        </div>
+        <p class="text-[11px] text-indigo-700 italic">Có thể để trống nếu bước này chưa xác định — điền ở bước phê duyệt phù hợp (thường là bước cuối).</p>
+      </div>
+
+      <div>
+        <h4 class="font-bold text-gray-800 mb-2">✍️ Ý Kiến / Ghi Chú Duyệt</h4>
+        <textarea id="txtCarComment" placeholder="Nhập ý kiến chỉ đạo, ghi chú phê duyệt hoặc lý do từ chối..." class="w-full border p-2 rounded h-16 text-xs focus:ring-1 focus:ring-indigo-500 focus:outline-none"></textarea>
+      </div>
+
+      <div>
+        <h4 class="font-bold text-gray-800 mb-2">📜 Lịch Sử Xử Lý Các Cấp</h4>
+        <div id="carModalHistory" class="space-y-2 bg-slate-50 p-3 rounded border max-h-48 overflow-y-auto"></div>
+      </div>
+    </div>
+    <div class="p-3 bg-gray-100 border-t flex justify-between items-center text-xs">
+      <button onclick="closeCarProcessModal()" class="bg-gray-500 text-white px-4 py-1.5 rounded font-bold hover:bg-gray-600">Đóng</button>
+      <div id="carModalActionBtns" class="flex gap-2"></div>
     </div>
   </div>
 </div>
@@ -1308,6 +1372,7 @@ let activeOfficeSubTab = 'MUA_BAN';
 let activeFormTab = 'SUBMISSION';
 let currentFilterCard = '';
 let currentProcessingSubId = null;
+let currentProcessingCarId = null;
 
 function escapeHtml(str) {
   if (!str) return '';
@@ -2312,6 +2377,34 @@ function closeViewDocModal() {
   document.getElementById('viewModalContent').innerHTML = '';
 }
 
+// In trực tiếp nội dung đang hiển thị trong Protected Viewer (tệp đính kèm hoặc phiếu/chứng từ
+// dựng động như Phiếu Phê Duyệt Đăng Ký Xe) — dùng 1 iframe ẩn để chỉ in đúng phần nội dung, không
+// in kèm khung modal/nút bấm xung quanh.
+function printViewModalContent() {
+  const container = document.getElementById('viewModalContent');
+  if (!container || !container.innerHTML.trim()) return alert('Không có nội dung để in.');
+
+  const printFrame = document.createElement('iframe');
+  printFrame.style.position = 'fixed';
+  printFrame.style.right = '0';
+  printFrame.style.bottom = '0';
+  printFrame.style.width = '0';
+  printFrame.style.height = '0';
+  printFrame.style.border = '0';
+  document.body.appendChild(printFrame);
+
+  const doc = printFrame.contentWindow.document;
+  doc.open();
+  doc.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>In</title></head><body>${container.innerHTML}</body></html>`);
+  doc.close();
+
+  printFrame.onload = () => {
+    printFrame.contentWindow.focus();
+    printFrame.contentWindow.print();
+    setTimeout(() => document.body.removeChild(printFrame), 1000);
+  };
+}
+
 // ==========================================
 // 2. MODULE VĂN BẢN TRÌNH / TỜ TRÌNH (SUBMISSION)
 // ==========================================
@@ -2864,8 +2957,10 @@ function submitCarReq(e) {
   const code = document.getElementById('carCode').value.trim();
   const dept = document.getElementById('carDept').value;
   const type = document.getElementById('carType').value;
-  const plate = document.getElementById('carPlate').value.trim();
-  const driver = document.getElementById('carDriver').value.trim();
+  const passengers = document.getElementById('carPassengers').value.trim();
+  const directUser = document.getElementById('carDirectUser').value.trim();
+  const directUserPhone = document.getElementById('carDirectUserPhone').value.trim();
+  const purpose = document.getElementById('carPurpose').value;
   const km = parseFloat(document.getElementById('carKm').value) || 0;
   const startTime = document.getElementById('carStartTime').value;
   const endTime = document.getElementById('carEndTime').value;
@@ -2883,8 +2978,11 @@ function submitCarReq(e) {
     code: code,
     dept: dept,
     type: type,
-    plate: plate,
-    driver: driver,
+    passengers: passengers,
+    // Người sử dụng trực tiếp có thể khác người đăng ký; để trống = chính người đăng ký.
+    directUser: directUser || currentUser.name,
+    directUserPhone: directUserPhone || currentUser.phone || '',
+    purpose: purpose,
     km: km,
     startTime: startTime,
     endTime: endTime,
@@ -2893,10 +2991,16 @@ function submitCarReq(e) {
     customData: customData,
     creator: currentUser.username,
     creatorName: currentUser.name,
+    registrantPhone: currentUser.phone || '',
     createdAt: new Date().toLocaleString('vi-VN'),
     status: 'PENDING',
     currentStep: 1,
-    history: []
+    history: [],
+    // Do Phòng Hành Chính điền khi xử lý duyệt (xem openCarProcessModal/processCarReg) — KHÔNG
+    // thu thập ở bước đăng ký vì người đăng ký thường chưa biết xe/lái xe cụ thể sẽ được xếp.
+    assignedDriver: '',
+    assignedVehicleType: '',
+    assignedPlate: ''
   };
 
   DB.carRegs.unshift(newCar);
@@ -2924,7 +3028,7 @@ function renderCarRegs() {
 
     const currentStepApprovers = wfConfig.approvers ? (wfConfig.approvers[c.currentStep] || []) : [];
     const canApprove = (c.status === 'PENDING') && (
-      currentUser.perms.admin || 
+      currentUser.perms.admin ||
       (Array.isArray(currentStepApprovers) ? currentStepApprovers.includes(currentUser.username) : currentStepApprovers === currentUser.username)
     );
 
@@ -2933,21 +3037,30 @@ function renderCarRegs() {
     else if (c.status === 'REJECTED') statusBadge = `<span class="px-2 py-0.5 bg-red-100 text-red-800 rounded font-bold text-xs">❌ Từ chối</span>`;
     else statusBadge = `<span class="px-2 py-0.5 bg-indigo-100 text-indigo-800 rounded font-bold text-xs">⏳ Bước ${c.currentStep}/${wf.steps.length}</span>`;
 
+    // assignedPlate/assignedDriver: do Phòng Hành Chính điền lúc xử lý duyệt (xem processCarReg()).
+    // Fallback plate/driver: giữ tương thích bản ghi cũ trước khi tách 2 trường này ra khỏi form đăng ký.
+    const displayPlate = c.assignedPlate || c.plate || '';
+    const displayDriver = c.assignedDriver || c.driver || '';
+    const canDL = c.status === 'APPROVED' && canDownloadFile(currentUser, c.dept, c.creator);
+
     return `
       <tr class="hover:bg-gray-50 border-b">
         <td class="border p-2 font-mono font-bold text-indigo-800">${escapeHtml(c.code)}</td>
         <td class="border p-2">${escapeHtml(c.dept)}<br><span class="text-xs text-gray-500">${escapeHtml(c.creatorName)}</span></td>
         <td class="border p-2">
-          <div class="font-bold">${escapeHtml(c.type)} (${escapeHtml(c.plate || 'Chưa xếp')})</div>
-          <div class="text-xs text-gray-500">Lái xe: ${escapeHtml(c.driver)} | ${c.km} KM</div>
+          <div class="font-bold">${escapeHtml(c.type)} ${displayPlate ? `(${escapeHtml(displayPlate)})` : '<span class="text-gray-400 font-normal">(Chưa xếp)</span>'}</div>
+          <div class="text-xs text-gray-500">Lái xe: ${displayDriver ? escapeHtml(displayDriver) : 'Chưa phân công'} | ${c.km} KM</div>
         </td>
         <td class="border p-2 text-xs">${escapeHtml(c.destination)}<br><span class="text-gray-400">${escapeHtml(c.startTime)} ➔ ${escapeHtml(c.endTime)}</span></td>
-        <td class="border p-2 text-xs">${escapeHtml(c.reason)}</td>
+        <td class="border p-2 text-xs">${escapeHtml(c.purpose || c.reason)}</td>
         <td class="border p-2">${statusBadge}</td>
         <td class="border p-2 text-center space-x-1">
-          ${canApprove ? `
-            <button onclick="approveCarReg(${c.id})" class="bg-green-600 text-white px-2 py-1 rounded text-xs font-bold hover:bg-green-700">Duyệt</button>
-            <button onclick="rejectCarReg(${c.id})" class="bg-red-600 text-white px-2 py-1 rounded text-xs font-bold hover:bg-red-700">Từ chối</button>
+          <button onclick="openCarProcessModal(${c.id})" class="px-2.5 py-1 ${canApprove ? 'bg-indigo-600 text-white' : 'bg-gray-600 text-white'} rounded text-xs hover:opacity-90 font-bold">
+            ${canApprove ? '✍️ Xử lý / Duyệt' : '👁️ Xem chi tiết'}
+          </button>
+          ${c.status === 'APPROVED' ? `
+            <button onclick="viewCarApprovalSlip(${c.id})" class="px-2 py-1 bg-blue-600 text-white rounded text-xs hover:bg-blue-700 font-bold" title="Xem Phiếu Phê Duyệt">👁️ Xem Phiếu</button>
+            ${canDL ? `<button onclick="downloadCarApprovalSlip(${c.id})" class="px-2 py-1 bg-slate-600 text-white rounded text-xs hover:bg-slate-700 font-bold" title="Tải Phiếu Phê Duyệt">⬇️ Tải</button>` : ''}
           ` : ''}
         </td>
       </tr>
@@ -2955,30 +3068,260 @@ function renderCarRegs() {
   }).join('');
 }
 
-function approveCarReg(id) {
-  const c = DB.carRegs.find(item => item.id === id);
+function openCarProcessModal(carId) {
+  currentProcessingCarId = carId;
+  const c = DB.carRegs.find(item => item.id === carId);
   if (!c) return;
+
+  const wfConfig = DB.carDeptWorkflows[c.dept] || { workflowId: 'WF_1STEP', approvers: { 1: ['admin'] } };
+  const wf = DB.workflows.find(w => w.id === wfConfig.workflowId) || { steps: [{ name: 'Sếp duyệt' }] };
+
+  document.getElementById('carModalTitle').innerText = `🚗 Xử Lý Đăng Ký Xe: ${c.code}`;
+  document.getElementById('carModalSub').innerText = `Đơn vị: ${c.dept} | Người đăng ký: ${c.creatorName} | Lộ trình: ${c.destination}`;
+
+  const detailsHTML = `
+    <div class="grid grid-cols-2 gap-2 text-xs">
+      <div><b>Loại xe đăng ký:</b> ${escapeHtml(c.type)}</div>
+      <div><b>Số KM dự kiến (2 chiều):</b> ${c.km} km</div>
+      <div><b>Số người sử dụng:</b> ${escapeHtml(c.passengers || '')}</div>
+      <div><b>Người sử dụng trực tiếp:</b> ${escapeHtml(c.directUser || c.creatorName)} ${c.directUserPhone ? `(SĐT: ${escapeHtml(c.directUserPhone)})` : ''}</div>
+      <div><b>Mục đích sử dụng:</b> ${escapeHtml(c.purpose || '')}</div>
+      <div><b>Thời gian sử dụng:</b> ${escapeHtml(c.startTime)} ➔ ${escapeHtml(c.endTime)}</div>
+      <div class="col-span-2"><b>Nội dung chi tiết:</b> <p class="bg-white p-2 rounded border mt-1">${escapeHtml(c.reason)}</p></div>
+    </div>
+  `;
+  document.getElementById('carModalDetails').innerHTML = detailsHTML;
+
+  document.getElementById('carAssignedDriver').value = c.assignedDriver || c.driver || '';
+  document.getElementById('carAssignedVehicleType').value = c.assignedVehicleType || '';
+  document.getElementById('carAssignedPlate').value = c.assignedPlate || c.plate || '';
+  document.getElementById('txtCarComment').value = '';
+
+  const historyHTML = (c.history || []).map(h => `
+    <div class="bg-white p-2 rounded border text-xs space-y-1">
+      <div class="flex justify-between font-bold text-gray-700">
+        <span>${escapeHtml(h.approver)} (${escapeHtml(h.username)})</span>
+        <span class="text-gray-400 font-normal">${escapeHtml(h.time)}</span>
+      </div>
+      <div class="text-gray-600">Hành động: <span class="font-bold text-blue-600">${escapeHtml(h.action)}</span> — Bước ${h.step}${h.stepName ? ` (${escapeHtml(h.stepName)})` : ''}</div>
+      ${h.assignedDriver || h.assignedPlate ? `<div class="text-gray-700">🚘 Phân công: ${escapeHtml(h.assignedDriver || '')} ${h.assignedPlate ? `- BKS ${escapeHtml(h.assignedPlate)}` : ''}</div>` : ''}
+      ${h.comment ? `<div class="text-gray-800 bg-amber-50 p-1.5 rounded border italic">"${escapeHtml(h.comment)}"</div>` : ''}
+    </div>
+  `).join('');
+  document.getElementById('carModalHistory').innerHTML = historyHTML || '<div class="text-gray-400 italic">Chưa có lịch sử xử lý.</div>';
+
+  const currentStepApprovers = wfConfig.approvers ? (wfConfig.approvers[c.currentStep] || []) : [];
+  const canApprove = (c.status === 'PENDING') && (
+    currentUser.perms.admin ||
+    (Array.isArray(currentStepApprovers) ? currentStepApprovers.includes(currentUser.username) : currentStepApprovers === currentUser.username)
+  );
+
+  const actionBtns = document.getElementById('carModalActionBtns');
+  if (canApprove) {
+    actionBtns.innerHTML = `
+      <button onclick="processCarReg('REJECT')" class="bg-red-600 text-white px-4 py-1.5 rounded font-bold hover:bg-red-700 text-xs">❌ Từ Chối</button>
+      <button onclick="processCarReg('APPROVE')" class="bg-green-600 text-white px-5 py-1.5 rounded font-bold hover:bg-green-700 text-xs">✅ Phê Duyệt & Chuyển Bước</button>
+    `;
+  } else {
+    actionBtns.innerHTML = `<span class="text-gray-500 italic text-xs">Bạn chỉ có quyền xem thông tin đăng ký này.</span>`;
+  }
+
+  document.getElementById('carProcessModal').classList.remove('hidden');
+}
+
+function closeCarProcessModal() {
+  document.getElementById('carProcessModal').classList.add('hidden');
+  currentProcessingCarId = null;
+}
+
+function processCarReg(actionType) {
+  if (!currentProcessingCarId) return;
+  const c = DB.carRegs.find(item => item.id === currentProcessingCarId);
+  if (!c) return;
+
+  const comment = document.getElementById('txtCarComment').value.trim();
+  if (actionType === 'REJECT' && !comment) {
+    return alert('Vui lòng nhập lý do từ chối!');
+  }
+
+  const assignedDriver = document.getElementById('carAssignedDriver').value.trim();
+  const assignedVehicleType = document.getElementById('carAssignedVehicleType').value.trim();
+  const assignedPlate = document.getElementById('carAssignedPlate').value.trim();
+
   const wfConfig = DB.carDeptWorkflows[c.dept];
   const wf = wfConfig ? DB.workflows.find(w => w.id === wfConfig.workflowId) : null;
+  const stepName = wf?.steps[c.currentStep - 1]?.name || `Bước ${c.currentStep}`;
 
-  if (wf && c.currentStep < wf.steps.length) {
-    c.currentStep += 1;
-    c.status = 'PENDING';
-  } else {
-    c.status = 'APPROVED';
+  if (!c.history) c.history = [];
+
+  // Bất kỳ bước nào cũng có thể điền/điều chỉnh thông tin phân công xe (thường do Phòng Hành Chính
+  // thực hiện ở bước cuối) — ghi nhận ngay khi có nhập, không chờ tới bước cuối cùng mới lưu.
+  if (assignedDriver) c.assignedDriver = assignedDriver;
+  if (assignedVehicleType) c.assignedVehicleType = assignedVehicleType;
+  if (assignedPlate) c.assignedPlate = assignedPlate;
+
+  if (actionType === 'REJECT') {
+    c.status = 'REJECTED';
+    c.history.push({
+      step: c.currentStep,
+      stepName: stepName,
+      approver: currentUser.name,
+      username: currentUser.username,
+      action: 'REJECTED',
+      comment: comment,
+      assignedDriver: assignedDriver,
+      assignedPlate: assignedPlate,
+      time: new Date().toLocaleString('vi-VN')
+    });
+  } else if (actionType === 'APPROVE') {
+    c.history.push({
+      step: c.currentStep,
+      stepName: stepName,
+      approver: currentUser.name,
+      username: currentUser.username,
+      action: 'APPROVED',
+      comment: comment,
+      assignedDriver: assignedDriver,
+      assignedPlate: assignedPlate,
+      time: new Date().toLocaleString('vi-VN')
+    });
+
+    if (wf && c.currentStep < wf.steps.length) {
+      c.currentStep += 1;
+      c.status = 'PENDING';
+    } else {
+      c.status = 'APPROVED';
+    }
   }
+
   syncStorage('carRegs');
-  logSystemAction('CAR', 'APPROVE_CAR_REG', `Phê duyệt đăng ký xe [${c.code}]`, 'SUCCESS', c.code);
+  logSystemAction('CAR', `PROCESS_${actionType}`, `Xử lý đăng ký xe [${c.code}]: ${actionType}`, 'SUCCESS', c.code);
+  alert('✅ Đã cập nhật trạng thái đăng ký xe!');
+  closeCarProcessModal();
   renderCarRegs();
 }
 
-function rejectCarReg(id) {
-  const c = DB.carRegs.find(item => item.id === id);
+// Dựng HTML "Phiếu Phê Duyệt Đăng Ký Xe" — theo đúng bố cục Mẫu Oto01 (đăng ký + phần Phòng Hành
+// Chính + khối chữ ký) do người dùng cung cấp, dùng chung cho cả "Xem" (chèn vào Protected Viewer,
+// in trực tiếp được) và "Tải" (xuất file .html độc lập). CSS được nhúng trực tiếp (không phụ thuộc
+// Tailwind của trang chính) vì file tải về / cửa sổ in không có Tailwind.
+function buildCarApprovalSlipHTML(car) {
+  const wfConfig = DB.carDeptWorkflows[car.dept] || { workflowId: 'WF_1STEP' };
+  const wf = DB.workflows.find(w => w.id === wfConfig.workflowId) || { steps: [{ order: 1, name: 'Duyệt' }] };
+
+  // Mỗi bước quy trình (đã cấu hình ở module Quy Trình & Đồng Cấp) tương ứng 1 cột chữ ký — không
+  // hard-code cứng "Phụ trách đơn vị / Phòng Hành Chính" để khớp mọi quy trình admin tự cấu hình.
+  const signatureColumnsHTML = wf.steps.map(step => {
+    const entry = (car.history || []).find(h => h.step === step.order && h.action === 'APPROVED');
+    return `
+      <td>
+        <span class="cs-sign-role">${escapeHtml(step.name)}</span>
+        ${entry ? `
+          <div class="cs-sign-stamp">✅ ĐÃ PHÊ DUYỆT</div>
+          <div class="cs-sign-name">${escapeHtml(entry.approver)}</div>
+          <div class="cs-sign-time">Lúc: ${escapeHtml(entry.time)}</div>
+        ` : `<div class="cs-sign-time" style="margin-top:44px;">Chưa duyệt</div>`}
+      </td>
+    `;
+  }).join('');
+
+  return `
+    <div class="car-slip">
+      <style>
+        .car-slip { font-family: 'Times New Roman', Georgia, serif; color: #111; background: #fff; padding: 24px; max-width: 800px; margin: 0 auto; position: relative; font-size: 13px; line-height: 1.55; }
+        .car-slip .cs-watermark { position: absolute; top: 42%; left: 50%; transform: translate(-50%,-50%) rotate(-28deg); font-size: 26px; font-weight: bold; color: rgba(200,0,0,0.13); white-space: nowrap; pointer-events: none; z-index: 0; text-transform: uppercase; text-align: center; }
+        .car-slip .cs-content { position: relative; z-index: 1; }
+        .car-slip .cs-header { text-align: center; margin-bottom: 6px; }
+        .car-slip .cs-form-code { font-size: 11px; color: #555; }
+        .car-slip .cs-title { font-size: 19px; font-weight: bold; text-transform: uppercase; margin: 6px 0; }
+        .car-slip .cs-approved-note { font-size: 11px; font-style: italic; color: #16a34a; font-weight: bold; }
+        .car-slip table.cs-field-table { width: 100%; border-collapse: collapse; margin: 8px 0; }
+        .car-slip table.cs-field-table td { padding: 3px 4px; vertical-align: top; }
+        .car-slip .cs-label { font-weight: bold; width: 230px; white-space: nowrap; }
+        .car-slip .cs-section-title { font-weight: bold; margin-top: 14px; margin-bottom: 2px; background: #f0f0f0; padding: 4px 6px; }
+        .car-slip .cs-sign-table { width: 100%; border-collapse: collapse; margin-top: 22px; table-layout: fixed; }
+        .car-slip .cs-sign-table td { text-align: center; vertical-align: top; padding: 8px 6px; border: 1px solid #ccc; }
+        .car-slip .cs-sign-role { font-weight: bold; text-transform: uppercase; display: block; margin-bottom: 6px; }
+        .car-slip .cs-sign-stamp { border: 2px solid #16a34a; color: #16a34a; display: inline-block; padding: 3px 8px; border-radius: 4px; font-weight: bold; font-size: 10px; transform: rotate(-6deg); margin: 6px 0 4px; }
+        .car-slip .cs-sign-name { font-weight: bold; margin-top: 2px; }
+        .car-slip .cs-sign-time { font-size: 10.5px; color: #555; }
+        .car-slip .cs-footer-note { margin-top: 16px; font-size: 11px; color: #444; border-top: 1px solid #ccc; padding-top: 6px; }
+        @media print { .car-slip { padding: 0; } }
+      </style>
+      <div class="cs-watermark">PHÊ DUYỆT TRÊN HỆ THỐNG<br>VĂN PHÒNG ĐIỆN TỬ</div>
+      <div class="cs-content">
+        <div class="cs-header">
+          <div class="cs-form-code">Mẫu: Oto01</div>
+          <div class="cs-title">Phiếu Đăng Ký Sử Dụng Xe Ô Tô</div>
+          <div class="cs-approved-note">✅ Đã phê duyệt hoàn tất trên Hệ thống Văn phòng điện tử — Mã phiếu: ${escapeHtml(car.code)}</div>
+        </div>
+
+        <table class="cs-field-table">
+          <tr><td class="cs-label">Thời gian đăng ký:</td><td>${escapeHtml(car.createdAt || '')}</td></tr>
+          <tr><td class="cs-label">Người đăng ký:</td><td>${escapeHtml(car.creatorName || '')}${car.registrantPhone ? ` — SĐT: ${escapeHtml(car.registrantPhone)}` : ''}</td></tr>
+          <tr><td class="cs-label">Đơn vị (Phòng/Ban/Bộ phận):</td><td>${escapeHtml(car.dept || '')}</td></tr>
+          <tr><td class="cs-label">Đăng ký sử dụng loại xe:</td><td>${escapeHtml(car.type || '')}</td></tr>
+          <tr><td class="cs-label">Số người sử dụng:</td><td>${escapeHtml(car.passengers || '')}</td></tr>
+          <tr><td class="cs-label">Người sử dụng trực tiếp:</td><td>${escapeHtml(car.directUser || car.creatorName || '')}${car.directUserPhone ? ` — SĐT: ${escapeHtml(car.directUserPhone)}` : ''}</td></tr>
+          <tr><td class="cs-label">Mục đích sử dụng:</td><td>${escapeHtml(car.purpose || '')}</td></tr>
+          <tr><td class="cs-label">Nội dung chi tiết:</td><td>${escapeHtml(car.reason || '')}</td></tr>
+          <tr><td class="cs-label">Lộ trình di chuyển:</td><td>${escapeHtml(car.destination || '')}</td></tr>
+          <tr><td class="cs-label">Thời gian sử dụng (dự kiến):</td><td>${escapeHtml(car.startTime || '')} ➔ ${escapeHtml(car.endTime || '')}</td></tr>
+          <tr><td class="cs-label">Số km dự kiến (2 chiều):</td><td>${car.km || 0} km</td></tr>
+        </table>
+
+        <div class="cs-section-title">Phần dành cho Phòng Hành Chính</div>
+        <table class="cs-field-table">
+          <tr><td class="cs-label">Lái xe được phân công:</td><td>${escapeHtml(car.assignedDriver || car.driver || 'Chưa phân công')}</td></tr>
+          <tr><td class="cs-label">Loại xe cụ thể:</td><td>${escapeHtml(car.assignedVehicleType || '')}</td></tr>
+          <tr><td class="cs-label">Biển kiểm soát (BKS):</td><td>${escapeHtml(car.assignedPlate || car.plate || '')}</td></tr>
+        </table>
+
+        <table class="cs-sign-table">
+          <tr>
+            <td>
+              <span class="cs-sign-role">Người đề nghị</span>
+              <div class="cs-sign-name">${escapeHtml(car.creatorName || '')}</div>
+              <div class="cs-sign-time">Đăng ký lúc: ${escapeHtml(car.createdAt || '')}</div>
+            </td>
+            ${signatureColumnsHTML}
+          </tr>
+        </table>
+
+        <div class="cs-footer-note">
+          Phiếu được lập và phê duyệt điện tử trên Hệ thống Văn phòng điện tử (VPĐT) — không cần chữ ký tay/con dấu bản cứng. Thông tin phê duyệt có thể tra cứu lại trên hệ thống.
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function viewCarApprovalSlip(carId) {
+  const c = DB.carRegs.find(item => item.id === carId);
   if (!c) return;
-  c.status = 'REJECTED';
-  syncStorage('carRegs');
-  logSystemAction('CAR', 'REJECT_CAR_REG', `Từ chối đăng ký xe [${c.code}]`, 'SUCCESS', c.code);
-  renderCarRegs();
+  if (c.status !== 'APPROVED') return alert('Chỉ xem được Phiếu Phê Duyệt sau khi đăng ký đã được phê duyệt hoàn tất.');
+
+  document.getElementById('viewModalTitle').innerText = `🚗 Phiếu Phê Duyệt Đăng Ký Xe (${c.code})`;
+  document.getElementById('viewModalSub').innerText = `Đơn vị: ${c.dept} | Người đăng ký: ${c.creatorName}`;
+  document.getElementById('viewModalFooterInfo').innerText = 'Trạng thái: Đã phê duyệt hoàn tất';
+
+  document.getElementById('viewModalContent').innerHTML = buildCarApprovalSlipHTML(c);
+  document.getElementById('viewDocModal').classList.remove('hidden');
+}
+
+function downloadCarApprovalSlip(carId) {
+  const c = DB.carRegs.find(item => item.id === carId);
+  if (!c) return;
+  if (c.status !== 'APPROVED') return alert('Chỉ tải được Phiếu Phê Duyệt sau khi đăng ký đã được phê duyệt hoàn tất.');
+
+  const fullHtml = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Phiếu Phê Duyệt Đăng Ký Xe - ${escapeHtml(c.code)}</title></head><body>${buildCarApprovalSlipHTML(c)}</body></html>`;
+  const blob = new Blob([fullHtml], { type: 'text/html;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = `PhieuPheDuyet_${c.code}.html`;
+  link.click();
+  URL.revokeObjectURL(url);
 }
 
 // ==========================================

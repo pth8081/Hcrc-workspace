@@ -94,5 +94,30 @@ Tài khoản mặc định: `admin / 123456` (đổi mật khẩu ngay sau khi t
     cứng theo phòng ban để vẫn gán được người duyệt chéo phòng, ví dụ Ban
     Giám Đốc). Người đã được gán làm approver từ trước vẫn luôn hiển thị dù
     chưa có quyền này, để không bị "biến mất" khỏi màn hình cấu hình.
+- **Module Đăng Ký Xe — có form xử lý ở cả 2 phía, sinh Phiếu Phê Duyệt điện tử**:
+  - Form đăng ký được tái cấu trúc theo đúng Mẫu Oto01 (Thời gian đăng ký,
+    Người đăng ký, Đơn vị, Loại xe đăng ký, Số người sử dụng, Người sử dụng
+    trực tiếp, Mục đích sử dụng, Nội dung chi tiết, Lộ trình, Thời gian sử
+    dụng, Số km dự kiến). Bỏ 2 trường Biển số/Lái xe khỏi bước đăng ký vì
+    thực tế do Phòng Hành Chính xếp SAU khi duyệt, không phải người đăng ký
+    tự chọn trước.
+  - Phía phê duyệt trước đây chỉ có 2 nút Duyệt/Từ chối không nhập được gì.
+    Nay có modal "Xử Lý Đăng Ký Xe" giống module Tờ trình, kèm 3 ô nhập cho
+    Phòng Hành Chính: Lái xe được phân công / Loại xe cụ thể / Biển kiểm
+    soát — điền ở bước nào cũng được (thường là bước cuối), lưu vào lịch sử
+    xử lý của từng bước.
+  - Sau khi phê duyệt hoàn tất (mọi bước quy trình), người đăng ký (và ai có
+    quyền xem/tải phù hợp) thấy nút **"👁️ Xem Phiếu"** — mở "Phiếu Phê Duyệt
+    Đăng Ký Xe" dựng động: đầy đủ thông tin đăng ký + phần Phòng Hành Chính +
+    khối chữ ký nhiều cột (1 cột/bước quy trình đã cấu hình, tự lấy đúng tên
+    bước + người duyệt + thời gian từ lịch sử xử lý), kèm watermark chéo
+    "PHÊ DUYỆT TRÊN HỆ THỐNG VĂN PHÒNG ĐIỆN TỬ". Nút **"⬇️ Tải"** bên cạnh
+    xuất file `.html` tự chứa (không phụ thuộc CSS ngoài) để lưu/in sau.
+  - Modal xem tài liệu (Protected Viewer) có thêm nút **"🖨️ In"** dùng chung
+    cho mọi loại nội dung (tài liệu, hợp đồng, phiếu xe...) — in trực tiếp
+    đúng phần nội dung đang xem qua 1 iframe ẩn, không kèm khung modal.
+  - ⚠️ Lưu ý thiết kế: phần tiêu đề công ty trên phiếu hiện để chung chung
+    (không có tên/logo công ty cụ thể) vì hệ thống chưa có cấu hình tên công
+    ty — báo lại nếu muốn bổ sung trường này ở Module Quản trị.
 
 Xem đầy đủ hướng dẫn triển khai tại `HUONG_DAN_DEPLOY_UBUNTU.md`.
