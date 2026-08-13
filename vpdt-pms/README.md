@@ -74,5 +74,25 @@ Tài khoản mặc định: `admin / 123456` (đổi mật khẩu ngay sau khi t
     module nào (trước đây mặc định bật hầu hết) — admin cấp thêm quyền nếu
     cần. Mỗi người luôn thao tác được trong phạm vi phòng ban của chính
     mình dù chưa được cấp thêm gì.
+- **Module Quy Trình & Đồng Cấp — sửa 2 lỗi có sẵn + thêm quyền "Người duyệt"**:
+  - Trước đây đổi mẫu quy trình (dropdown) cho 1 phòng ban sẽ **lưu ngay
+    lập tức** bằng danh sách người duyệt của mẫu CŨ còn sót lại trên màn
+    hình (chưa kịp render lại theo mẫu mới), khiến các bước mới bị thiếu/mất
+    người duyệt mà vẫn báo "lưu thành công". Nay đổi mẫu chỉ preview (có
+    banner cảnh báo "chưa lưu"), phải gán lại người duyệt rồi bấm "Lưu Cấu
+    Hình" mới thực sự áp dụng.
+  - Trước đây xoá 1 mẫu quy trình đang được phòng ban nào đó sử dụng sẽ xoá
+    vô điều kiện, để lại tham chiếu treo khiến hệ thống âm thầm rơi về quy
+    trình giả không có người duyệt thật. Nay bị **chặn xoá** kèm danh sách
+    module/phòng ban đang dùng, phải đổi sang mẫu khác trước.
+  - Lưu cấu hình quy trình mà có bước không có ai duyệt sẽ được **cảnh báo
+    rõ tên bước** trước khi lưu (vẫn cho lưu nếu admin xác nhận là cố ý).
+  - Thêm quyền **"Người duyệt"** (`perms.canBeApprover`, khối 12 trong form
+    user) — danh sách chọn người duyệt ở từng bước quy trình giờ chỉ hiện
+    người có quyền này (+ admin), thay vì toàn bộ user trong hệ thống; ưu
+    tiên hiển thị người cùng phòng ban đang cấu hình lên trước (không lọc
+    cứng theo phòng ban để vẫn gán được người duyệt chéo phòng, ví dụ Ban
+    Giám Đốc). Người đã được gán làm approver từ trước vẫn luôn hiển thị dù
+    chưa có quyền này, để không bị "biến mất" khỏi màn hình cấu hình.
 
 Xem đầy đủ hướng dẫn triển khai tại `HUONG_DAN_DEPLOY_UBUNTU.md`.
