@@ -66,13 +66,13 @@ const DEFAULTS = {
         uploadAll: false, uploadDepts: ['Phòng Nhân Sự'],
         viewDraftAll: false, viewDraftDepts: ['Phòng Nhân Sự'],
         viewApprovedAll: false, viewApprovedDepts: ['Phòng Nhân Sự'],
-        downloadAll: false, downloadDepts: ['Phòng Nhân Sự'],
-        submissionView: { all: false, depts: ['Phòng Nhân Sự'] }, submissionCreate: { all: false, depts: ['Phòng Nhân Sự'] },
-        contractView: { all: false, depts: ['Phòng Nhân Sự'] }, contractCreate: { all: false, depts: ['Phòng Nhân Sự'] },
+        docDownload: { all: false, depts: ['Phòng Nhân Sự'] },
+        submissionView: { all: false, depts: ['Phòng Nhân Sự'] }, submissionCreate: { all: false, depts: ['Phòng Nhân Sự'] }, submissionDownload: { all: false, depts: ['Phòng Nhân Sự'] },
+        contractView: { all: false, depts: ['Phòng Nhân Sự'] }, contractCreate: { all: false, depts: ['Phòng Nhân Sự'] }, contractDownload: { all: false, depts: ['Phòng Nhân Sự'] },
         meetingView: { all: false, depts: ['Phòng Nhân Sự'] }, meetingBookScope: { all: false, depts: ['Phòng Nhân Sự'] },
         meetingApprove: false, meetingCancel: true,
-        carView: { all: false, depts: ['Phòng Nhân Sự'] }, carCreate: { all: false, depts: ['Phòng Nhân Sự'] },
-        officeView: { all: false, depts: ['Phòng Nhân Sự'] }, officeCreate: { all: false, depts: ['Phòng Nhân Sự'] },
+        carView: { all: false, depts: ['Phòng Nhân Sự'] }, carCreate: { all: false, depts: ['Phòng Nhân Sự'] }, carDownload: { all: false, depts: ['Phòng Nhân Sự'] },
+        officeView: { all: false, depts: ['Phòng Nhân Sự'] }, officeCreate: { all: false, depts: ['Phòng Nhân Sự'] }, officeDownload: { all: false, depts: ['Phòng Nhân Sự'] },
         officeBuy: true, officeFix: true, officeInvest: false
       }
     },
@@ -83,14 +83,14 @@ const DEFAULTS = {
         uploadAll: false, uploadDepts: [],
         viewDraftAll: true, viewDraftDepts: [],
         viewApprovedAll: true, viewApprovedDepts: [],
-        downloadAll: false, downloadDepts: [],
+        docDownload: { all: false, depts: [] },
         // Kiểm soát viên cần xem xuyên phòng ban để kiểm toán, nhưng chỉ tạo hồ sơ trong phòng mình.
-        submissionView: { all: true, depts: [] }, submissionCreate: { all: false, depts: ['Phòng IT'] },
-        contractView: { all: true, depts: [] }, contractCreate: { all: false, depts: ['Phòng IT'] },
+        submissionView: { all: true, depts: [] }, submissionCreate: { all: false, depts: ['Phòng IT'] }, submissionDownload: { all: false, depts: [] },
+        contractView: { all: true, depts: [] }, contractCreate: { all: false, depts: ['Phòng IT'] }, contractDownload: { all: false, depts: [] },
         meetingView: { all: true, depts: [] }, meetingBookScope: { all: false, depts: ['Phòng IT'] },
         meetingApprove: true, meetingCancel: true,
-        carView: { all: true, depts: [] }, carCreate: { all: false, depts: ['Phòng IT'] },
-        officeView: { all: true, depts: [] }, officeCreate: { all: false, depts: ['Phòng IT'] },
+        carView: { all: true, depts: [] }, carCreate: { all: false, depts: ['Phòng IT'] }, carDownload: { all: false, depts: [] },
+        officeView: { all: true, depts: [] }, officeCreate: { all: false, depts: ['Phòng IT'] }, officeDownload: { all: false, depts: [] },
         officeBuy: true, officeFix: true, officeInvest: true
       }
     },
@@ -101,14 +101,14 @@ const DEFAULTS = {
         uploadAll: true, uploadDepts: [],
         viewDraftAll: true, viewDraftDepts: [],
         viewApprovedAll: true, viewApprovedDepts: [],
-        downloadAll: true, downloadDepts: [],
+        docDownload: { all: true, depts: [] },
         // Ban Giám Đốc cần toàn quyền xem & tạo trên mọi module để phê duyệt/giám sát toàn công ty.
-        submissionView: { all: true, depts: [] }, submissionCreate: { all: true, depts: [] },
-        contractView: { all: true, depts: [] }, contractCreate: { all: true, depts: [] },
+        submissionView: { all: true, depts: [] }, submissionCreate: { all: true, depts: [] }, submissionDownload: { all: true, depts: [] },
+        contractView: { all: true, depts: [] }, contractCreate: { all: true, depts: [] }, contractDownload: { all: true, depts: [] },
         meetingView: { all: true, depts: [] }, meetingBookScope: { all: true, depts: [] },
         meetingApprove: true, meetingCancel: true,
-        carView: { all: true, depts: [] }, carCreate: { all: true, depts: [] },
-        officeView: { all: true, depts: [] }, officeCreate: { all: true, depts: [] },
+        carView: { all: true, depts: [] }, carCreate: { all: true, depts: [] }, carDownload: { all: true, depts: [] },
+        officeView: { all: true, depts: [] }, officeCreate: { all: true, depts: [] }, officeDownload: { all: true, depts: [] },
         officeBuy: true, officeFix: true, officeInvest: true
       }
     }
