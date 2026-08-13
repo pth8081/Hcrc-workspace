@@ -119,5 +119,46 @@ Tài khoản mặc định: `admin / 123456` (đổi mật khẩu ngay sau khi t
   - ⚠️ Lưu ý thiết kế: phần tiêu đề công ty trên phiếu hiện để chung chung
     (không có tên/logo công ty cụ thể) vì hệ thống chưa có cấu hình tên công
     ty — báo lại nếu muốn bổ sung trường này ở Module Quản trị.
+- **Module Văn Bản Trình — sinh Phiếu Phê Duyệt điện tử (như module Xe)**:
+  - Sau khi phê duyệt hoàn tất mọi bước, người trình (và ai có quyền xem/tải
+    phù hợp) thấy nút **"👁️ Xem Phiếu"** — mở "Phiếu Phê Duyệt Văn Bản
+    Trình" dựng động: thông tin tờ trình (ngày trình, người trình, phòng
+    ban, loại, độ khẩn, tiêu đề, nội dung, tệp đính kèm nếu có, trường mở
+    rộng nếu có) + khối chữ ký nhiều cột theo đúng quy trình đã cấu hình,
+    kèm watermark chéo "PHÊ DUYỆT TRÊN HỆ THỐNG VĂN PHÒNG ĐIỆN TỬ". Nút
+    **"⬇️ Tải"** bên cạnh xuất file `.html` tự chứa để lưu/in sau; nút
+    **"🖨️ In"** có sẵn trong Protected Viewer.
+  - Về mặt code: khung "Phiếu Phê Duyệt" (watermark, tiêu đề, khối chữ ký,
+    ghi chú cuối, CSS) đã được tách thành hàm dùng chung
+    `buildApprovalSlipShellHTML()` — dùng lại cho cả Xe và Văn bản trình,
+    mỗi module chỉ cần cung cấp phần bảng thông tin riêng của mình. Module
+    nào sau này cần tính năng tương tự (Hợp đồng, Đề xuất VP...) chỉ cần
+    viết 1 hàm build tương tự, không phải lặp lại toàn bộ khung + CSS.
+  - Phiếu Phê Duyệt Văn Bản Trình có thêm khối **"Ý Kiến Chỉ Đạo Của Người
+    Phê Duyệt Cuối Cùng"** — lấy đúng ý kiến của bước duyệt hoàn tất quy
+    trình (không lẫn ý kiến các bước trung gian), chỉ hiện khi thực sự có
+    nội dung.
+- **Đồng phê duyệt (nhiều người duyệt cùng 1 bước) — áp dụng cho TẤT CẢ
+  module có luồng duyệt nhiều bước (Tài liệu, Văn bản trình, Đăng ký xe,
+  Văn phòng)**: trước đây nếu 1 bước được gán từ 2 người duyệt trở lên, chỉ
+  cần 1 trong số họ bấm Duyệt là chuyển bước ngay, bỏ qua ý kiến những
+  người còn lại. Nay bước chỉ thực sự hoàn tất (chuyển bước tiếp/kết thúc
+  quy trình) khi **tất cả** người được gán đã bấm Duyệt.
+  - Mỗi người chỉ được duyệt 1 lần cho 1 bước (chặn duyệt trùng); trong lúc
+    chờ, badge trạng thái hiện tiến độ dạng "⏳ Bước 1/2 (Đã 1/2 người
+    duyệt)". Trường hợp phổ biến nhất (1 người duyệt/bước) không đổi hành
+    vi — vẫn chuyển bước ngay như trước.
+  - Admin bấm Duyệt luôn coi là đủ điều kiện chuyển bước (ghi đè yêu cầu
+    đồng thuận), nhất quán với việc admin luôn có toàn quyền vượt qua cấu
+    hình approver ở mọi nơi khác trong hệ thống.
+  - Nếu 1 người trong số đồng duyệt bấm **Từ chối**, hồ sơ bị từ chối ngay
+    lập tức (không cần chờ những người còn lại) — giữ nguyên logic "1 người
+    phản đối là đủ để chặn" vốn có.
+  - Khối chữ ký trên Phiếu Phê Duyệt (Xe, Văn bản trình) hiển thị đủ **tất
+    cả** người đồng duyệt của 1 bước, không chỉ người đầu tiên như trước.
+  - Module Văn Phòng trước đây hoàn toàn không lưu lịch sử xử lý khi
+    duyệt/từ chối — nay đã bổ sung (hạ tầng bắt buộc để biết ai đã duyệt),
+    đồng thời nút Từ chối giờ có hỏi lý do (trước đây từ chối ngay không lý
+    do), nhất quán với 3 module còn lại.
 
 Xem đầy đủ hướng dẫn triển khai tại `HUONG_DAN_DEPLOY_UBUNTU.md`.
