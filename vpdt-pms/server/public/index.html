@@ -37,6 +37,7 @@
         <button id="btnDocTab" onclick="switchTab('doc')" class="hidden text-xs bg-blue-600 text-white px-2 py-1 rounded hover:bg-blue-700 font-semibold">📂 Tài liệu</button>
         <button id="btnSubmissionTab" onclick="switchTab('submission')" class="hidden text-xs bg-amber-600 text-white px-2 py-1 rounded hover:bg-amber-700 font-semibold">📜 Văn bản trình</button>
         <button id="btnTaskTab" onclick="switchTab('task')" class="hidden text-xs bg-violet-600 text-white px-2 py-1 rounded hover:bg-violet-700 font-semibold">📋 Công việc</button>
+        <button id="btnInternalTab" onclick="switchTab('internal')" class="hidden text-xs bg-fuchsia-600 text-white px-2 py-1 rounded hover:bg-fuchsia-700 font-semibold">📣 Truyền thông</button>
         <button id="btnContractTab" onclick="switchTab('contract')" class="hidden text-xs bg-cyan-600 text-white px-2 py-1 rounded hover:bg-cyan-700 font-semibold">📄 Hợp đồng</button>
         <button id="btnMeetingTab" onclick="switchTab('meeting')" class="hidden text-xs bg-emerald-600 text-white px-2 py-1 rounded hover:bg-emerald-700 font-semibold">📅 Phòng họp</button>
         <button id="btnMinutesTab" onclick="switchTab('minutes')" class="hidden text-xs bg-rose-600 text-white px-2 py-1 rounded hover:bg-rose-700 font-semibold">📝 Biên bản họp</button>
@@ -703,6 +704,100 @@
         </table>
       </div>
       <div id="paginationContainer_minutes"></div>
+    </div>
+  </div>
+
+  <!-- Màn hình MODULE TRUYỀN THÔNG NỘI BỘ -->
+  <div id="internalSection" class="hidden space-y-6">
+    <div class="bg-fuchsia-50 p-4 rounded border border-fuchsia-200 space-y-3">
+      <h3 class="font-bold text-fuchsia-900 text-base flex items-center gap-2">📣 Truyền Thông Nội Bộ</h3>
+      <p class="text-xs text-fuchsia-800">Tin nội bộ, đào tạo, khen thưởng và góc chia sẻ — tương tác bằng bình luận & thả tim, hệ thống ghi nhận ai đã xem.</p>
+      <div class="flex gap-2 flex-wrap">
+        <button type="button" onclick="setInternalSubTab('NEWS')" id="btnInternalSubNews" class="px-3 py-1 rounded text-xs font-bold bg-fuchsia-700 text-white">📰 Tin Nội Bộ</button>
+        <button type="button" onclick="setInternalSubTab('TRAINING')" id="btnInternalSubTraining" class="px-3 py-1 rounded text-xs font-bold bg-gray-200 text-gray-700">🎓 Đào Tạo</button>
+        <button type="button" onclick="setInternalSubTab('REWARD')" id="btnInternalSubReward" class="px-3 py-1 rounded text-xs font-bold bg-gray-200 text-gray-700">🏆 Khen Thưởng</button>
+        <button type="button" onclick="setInternalSubTab('SHARE')" id="btnInternalSubShare" class="px-3 py-1 rounded text-xs font-bold bg-gray-200 text-gray-700">💬 Góc Chia Sẻ</button>
+      </div>
+    </div>
+
+    <form id="internalPostForm" onsubmit="submitInternalPost(event)" class="bg-white p-3 rounded border text-xs space-y-3">
+      <h4 id="internalFormTitle" class="font-bold text-gray-700">📝 Đăng Tin Nội Bộ Mới</h4>
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+        <div class="md:col-span-2">
+          <label class="block font-semibold text-gray-600 mb-1">Tiêu Đề</label>
+          <input id="internalTitle" placeholder="Tiêu đề..." class="w-full border p-1.5 rounded" required>
+        </div>
+        <div id="internalTrainingTimeField" class="hidden">
+          <label class="block font-semibold text-gray-600 mb-1">Thời Gian Bắt Đầu</label>
+          <input id="internalTrainingStart" type="datetime-local" class="w-full border p-1.5 rounded">
+        </div>
+        <div id="internalTrainingEndField" class="hidden">
+          <label class="block font-semibold text-gray-600 mb-1">Thời Gian Kết Thúc</label>
+          <input id="internalTrainingEnd" type="datetime-local" class="w-full border p-1.5 rounded">
+        </div>
+        <div id="internalTrainingLocationField" class="hidden">
+          <label class="block font-semibold text-gray-600 mb-1">Địa Điểm / Hình Thức</label>
+          <input id="internalTrainingLocation" placeholder="Phòng đào tạo A / Trực tuyến..." class="w-full border p-1.5 rounded">
+        </div>
+        <div id="internalTrainingDeadlineField" class="hidden">
+          <label class="block font-semibold text-gray-600 mb-1">Hạn Đăng Ký</label>
+          <input id="internalTrainingDeadline" type="date" class="w-full border p-1.5 rounded">
+        </div>
+        <div id="internalTrainingCapacityField" class="hidden">
+          <label class="block font-semibold text-gray-600 mb-1">Số Lượng Học Viên Tối Đa (để trống = không giới hạn)</label>
+          <input id="internalTrainingCapacity" type="number" min="0" class="w-full border p-1.5 rounded">
+        </div>
+        <div id="internalRewardPeriodField" class="hidden">
+          <label class="block font-semibold text-gray-600 mb-1">Đợt / Kỳ Khen Thưởng</label>
+          <input id="internalRewardPeriod" placeholder="VD: Quý 3/2026" class="w-full border p-1.5 rounded">
+        </div>
+        <div id="internalRewardRecipientsField" class="hidden md:col-span-2">
+          <label class="block font-semibold text-gray-600 mb-1">Cá Nhân / Tập Thể Được Khen Thưởng</label>
+          <input id="internalRewardRecipients" placeholder="Họ tên, đơn vị... cách nhau dấu phẩy" class="w-full border p-1.5 rounded">
+        </div>
+      </div>
+      <div>
+        <label class="block font-semibold text-gray-600 mb-1">Nội Dung</label>
+        <textarea id="internalContent" placeholder="Nội dung chi tiết..." class="w-full border p-1.5 rounded h-24" required></textarea>
+      </div>
+      <div>
+        <label class="block font-semibold text-gray-600 mb-1">Tệp Đính Kèm (tuỳ chọn)</label>
+        <input id="internalFile" type="file" class="w-full border p-1.5 rounded bg-white">
+      </div>
+      <div class="flex justify-end">
+        <button type="submit" id="internalSubmitBtn" class="bg-fuchsia-600 text-white px-5 py-2 rounded font-bold hover:bg-fuchsia-700">Đăng Tin</button>
+      </div>
+    </form>
+    <p id="internalNoPermNote" class="hidden text-xs text-gray-500 italic bg-gray-50 border rounded p-3">⛔ Bạn không có quyền đăng bài ở phân hệ này — chỉ có thể xem và tương tác (bình luận, thả tim).</p>
+
+    <div class="bg-gray-50 p-4 rounded-lg border space-y-3">
+      <h4 class="font-bold text-gray-700 text-sm">🔍 Tìm Kiếm & Lọc</h4>
+      <div class="grid grid-cols-1 md:grid-cols-4 gap-3">
+        <div>
+          <label class="block text-xs font-semibold text-gray-600 mb-1">Lọc Theo Phòng Ban</label>
+          <select id="filterDeptInternal" onchange="onInternalFilterChange()" class="w-full border p-2 rounded text-sm bg-white">
+            <option value="">-- Tất cả phòng ban --</option>
+          </select>
+        </div>
+        <div>
+          <label class="block text-xs font-semibold text-gray-600 mb-1">Từ Ngày</label>
+          <input id="filterFromDateInternal" type="date" onchange="onInternalFilterChange()" class="w-full border p-2 rounded text-sm bg-white">
+        </div>
+        <div>
+          <label class="block text-xs font-semibold text-gray-600 mb-1">Đến Ngày</label>
+          <input id="filterToDateInternal" type="date" onchange="onInternalFilterChange()" class="w-full border p-2 rounded text-sm bg-white">
+        </div>
+        <div>
+          <label class="block text-xs font-semibold text-gray-600 mb-1">Từ Khóa</label>
+          <input id="filterKeywordInternal" oninput="onInternalFilterChange()" placeholder="Tiêu đề, nội dung, người đăng..." class="w-full border p-2 rounded text-sm">
+        </div>
+      </div>
+    </div>
+
+    <div class="space-y-3">
+      <h3 id="internalListTitle" class="font-bold text-gray-800">📰 Danh Sách Tin Nội Bộ</h3>
+      <div id="internalPostsContainer" class="space-y-3"></div>
+      <div id="paginationContainer_internal"></div>
     </div>
   </div>
 
@@ -1466,6 +1561,22 @@
             </label>
             <p class="text-[11px] text-gray-500 italic">Xem số liệu tổng hợp toàn hệ thống (không phân biệt phòng ban tạo hồ sơ) — Admin luôn xem được mặc định dù không tick.</p>
           </div>
+
+          <div class="bg-white p-3 rounded border space-y-2 lg:col-span-2">
+            <h4 class="font-bold text-fuchsia-800 text-sm border-b pb-1">15. 📣 Truyền Thông Nội Bộ — Quyền Đăng Bài</h4>
+            <p class="text-[11px] text-gray-500 italic">Mọi người dùng đều XEM và tương tác được (bình luận, thả tim) trên cả 4 phân hệ; riêng "Góc chia sẻ" ai cũng đăng được tự do. 3 quyền dưới đây chỉ kiểm soát ai được ĐĂNG BÀI ở Tin nội bộ / Đào tạo / Khen thưởng.</p>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-2">
+              <label class="flex items-center gap-2 text-fuchsia-700 font-semibold cursor-pointer">
+                <input type="checkbox" id="pInternalNewsCreate"> 📰 Đăng Tin nội bộ
+              </label>
+              <label class="flex items-center gap-2 text-fuchsia-700 font-semibold cursor-pointer">
+                <input type="checkbox" id="pInternalTrainingCreate"> 🎓 Đăng Đào tạo
+              </label>
+              <label class="flex items-center gap-2 text-fuchsia-700 font-semibold cursor-pointer">
+                <input type="checkbox" id="pInternalRewardCreate"> 🏆 Đăng Khen thưởng
+              </label>
+            </div>
+          </div>
         </div>
 
         <div class="flex justify-end gap-2 pt-2">
@@ -1834,6 +1945,7 @@ const DB = {
   officeInvestDeptWorkflows: {},
   meetingMinutes: [],
   tasks: [],
+  internalPosts: [],
   formTemplates: {},
   emailConfig: {}, systemLogs: []
 };
@@ -1856,6 +1968,8 @@ let officeItems = [];
 let minutesDirectives = [];
 // Khác null khi đang SỬA 1 biên bản đã tạo (thay vì tạo mới) — chỉ người tạo mới sửa được.
 let editingMinutesId = null;
+// Phân hệ đang chọn trong module Truyền thông nội bộ: NEWS/TRAINING/REWARD/SHARE.
+let activeInternalSubTab = 'NEWS';
 
 function escapeHtml(str) {
   if (!str) return '';
@@ -2159,6 +2273,23 @@ function canAccessReportsModule(user) {
   return !!(user.perms?.admin || user.perms?.canViewReports);
 }
 
+// Truyền thông nội bộ: XEM và tương tác (bình luận/thả tim) mở cho MỌI người dùng đã đăng nhập —
+// đây là kênh thông tin toàn công ty, không giới hạn theo phòng ban như các module nghiệp vụ khác.
+// "Góc chia sẻ" ai cũng đăng được tự do (không cần quyền riêng); Tin nội bộ/Đào tạo/Khen thưởng chỉ
+// người được admin cấp quyền (hoặc admin) mới đăng bài được, để tránh loạn nội dung công khai.
+function canCreateInternalPost(user, type) {
+  if (!user) return false;
+  if (user.perms?.admin) return true;
+  if (type === 'SHARE') return true;
+  if (type === 'NEWS') return !!user.perms?.internalNewsCreate;
+  if (type === 'TRAINING') return !!user.perms?.internalTrainingCreate;
+  if (type === 'REWARD') return !!user.perms?.internalRewardCreate;
+  return false;
+}
+
+const INTERNAL_TYPE_LABELS = { NEWS: 'Tin Nội Bộ', TRAINING: 'Đào Tạo', REWARD: 'Khen Thưởng', SHARE: 'Góc Chia Sẻ' };
+const INTERNAL_TYPE_PREFIX = { NEWS: 'TN', TRAINING: 'DT', REWARD: 'KT', SHARE: 'CS' };
+
 function getOfficeWorkflowMap(subType) {
   if (subType === 'SUA_CHUA') return DB.officeFixDeptWorkflows;
   if (subType === 'DAU_TU') return DB.officeInvestDeptWorkflows;
@@ -2214,6 +2345,7 @@ function defaultNewUserPerms() {
     admin: false,
     canBeApprover: false,
     canViewReports: false,
+    internalNewsCreate: false, internalTrainingCreate: false, internalRewardCreate: false,
     uploadAll: false, uploadDepts: [],
     viewDraftAll: false, viewDraftDepts: [],
     viewApprovedAll: false, viewApprovedDepts: [],
@@ -2314,6 +2446,7 @@ async function initDatabase() {
     DB.officeReqs = data.officeReqs || [];
     DB.meetingMinutes = data.meetingMinutes || [];
     DB.tasks = data.tasks || [];
+    DB.internalPosts = data.internalPosts || [];
     DB.workflows = data.workflows || [];
     DB.formTemplates = data.formTemplates || {};
     DB.emailConfig = data.emailConfig || {};
@@ -2512,6 +2645,7 @@ function login() {
   document.getElementById('btnMeetingTab').classList.toggle('hidden', !canAccessMeetingModule(user));
   document.getElementById('btnMinutesTab').classList.toggle('hidden', !canAccessMeetingMinutesModule(user));
   document.getElementById('btnTaskTab').classList.remove('hidden');
+  document.getElementById('btnInternalTab').classList.remove('hidden');
   document.getElementById('btnCarTab').classList.toggle('hidden', !canAccessCarModule(user));
   document.getElementById('btnOfficeTab').classList.toggle('hidden', !canAccessOfficeModule(user));
 
@@ -2528,6 +2662,7 @@ function logout() {
   document.getElementById('contractSection').classList.add('hidden');
   document.getElementById('meetingSection').classList.add('hidden');
   document.getElementById('minutesSection').classList.add('hidden');
+  document.getElementById('internalSection').classList.add('hidden');
   document.getElementById('carSection').classList.add('hidden');
   document.getElementById('officeSection').classList.add('hidden');
   document.getElementById('formSection').classList.add('hidden');
@@ -2572,6 +2707,7 @@ function switchTab(tabName) {
   document.getElementById('contractSection').classList.toggle('hidden', tabName !== 'contract');
   document.getElementById('meetingSection').classList.toggle('hidden', tabName !== 'meeting');
   document.getElementById('minutesSection').classList.toggle('hidden', tabName !== 'minutes');
+  document.getElementById('internalSection').classList.toggle('hidden', tabName !== 'internal');
   document.getElementById('carSection').classList.toggle('hidden', tabName !== 'car');
   document.getElementById('officeSection').classList.toggle('hidden', tabName !== 'office');
   document.getElementById('formSection').classList.toggle('hidden', tabName !== 'form');
@@ -2588,6 +2724,7 @@ function switchTab(tabName) {
   if (tabName === 'contract') { renderContracts(); }
   if (tabName === 'meeting') { renderMeetings(); }
   if (tabName === 'minutes') { renderMeetingMinutes(); populateMinutesLinkSelect(); }
+  if (tabName === 'internal') { setInternalSubTab(activeInternalSubTab); }
   if (tabName === 'car') { renderDynamicInputsForModule('CAR', 'dynamicFieldsContainer_CAR'); renderCarRegs(); }
   if (tabName === 'office') {
     let targetSub = activeOfficeSubTab;
@@ -2672,7 +2809,7 @@ function populateDropdowns() {
 
   // Dropdown "Lọc Theo Phòng Ban" của các module khác — cùng danh sách toàn bộ phòng ban (không
   // giới hạn theo quyền tạo mới, vì kết quả hiển thị đã được lọc theo quyền xem ở nơi khác).
-  ['filterDeptSub', 'filterDeptContract', 'filterDeptCar', 'filterDeptOffice', 'filterDeptMeeting', 'filterDeptMinutes', 'reportsDeptFilter'].forEach(id => {
+  ['filterDeptSub', 'filterDeptContract', 'filterDeptCar', 'filterDeptOffice', 'filterDeptMeeting', 'filterDeptMinutes', 'reportsDeptFilter', 'filterDeptInternal'].forEach(id => {
     const el = document.getElementById(id);
     if (el) el.innerHTML = '<option value="">-- Tất cả phòng ban --</option>' + DB.depts.map(d => `<option value="${escapeHtml(d)}">${escapeHtml(d)}</option>`).join('');
   });
@@ -6122,6 +6259,9 @@ function saveUser(e) {
     admin: document.getElementById('pAdmin').checked,
     canBeApprover: document.getElementById('pCanBeApprover').checked,
     canViewReports: document.getElementById('pCanViewReports').checked,
+    internalNewsCreate: document.getElementById('pInternalNewsCreate').checked,
+    internalTrainingCreate: document.getElementById('pInternalTrainingCreate').checked,
+    internalRewardCreate: document.getElementById('pInternalRewardCreate').checked,
     meetingApprove: document.getElementById('pMeetingApprove').checked,
     meetingCancel: document.getElementById('pMeetingCancel').checked,
     officeBuy: document.getElementById('pOfficeBuy').checked,
@@ -6190,6 +6330,9 @@ function resetUserForm() {
   document.getElementById('pAdmin').checked = defaults.admin;
   document.getElementById('pCanBeApprover').checked = !!defaults.canBeApprover;
   document.getElementById('pCanViewReports').checked = !!defaults.canViewReports;
+  document.getElementById('pInternalNewsCreate').checked = !!defaults.internalNewsCreate;
+  document.getElementById('pInternalTrainingCreate').checked = !!defaults.internalTrainingCreate;
+  document.getElementById('pInternalRewardCreate').checked = !!defaults.internalRewardCreate;
   document.getElementById('pMeetingApprove').checked = defaults.meetingApprove;
   document.getElementById('pMeetingCancel').checked = defaults.meetingCancel;
   document.getElementById('pOfficeBuy').checked = defaults.officeBuy;
@@ -6229,6 +6372,9 @@ function editUser(id) {
   document.getElementById('pAdmin').checked = !!perms.admin;
   document.getElementById('pCanBeApprover').checked = !!perms.canBeApprover;
   document.getElementById('pCanViewReports').checked = !!perms.canViewReports;
+  document.getElementById('pInternalNewsCreate').checked = !!perms.internalNewsCreate;
+  document.getElementById('pInternalTrainingCreate').checked = !!perms.internalTrainingCreate;
+  document.getElementById('pInternalRewardCreate').checked = !!perms.internalRewardCreate;
   document.getElementById('pMeetingApprove').checked = !!perms.meetingApprove;
   document.getElementById('pMeetingCancel').checked = !!perms.meetingCancel;
   document.getElementById('pOfficeBuy').checked = !!perms.officeBuy;
@@ -6322,6 +6468,7 @@ function summarizeUserPerms(perms) {
   if ((hasScope(perms.officeView) || hasScope(perms.officeCreate)) && (perms.officeBuy || perms.officeFix || perms.officeInvest)) parts.push('🏢 VP');
   if (hasScope(perms.minutesView) || hasScope(perms.minutesCreate)) parts.push('📝 Biên bản họp');
   if (perms.canViewReports) parts.push('📊 Báo cáo');
+  if (perms.internalNewsCreate || perms.internalTrainingCreate || perms.internalRewardCreate) parts.push('📣 Truyền thông (đăng bài)');
   return parts.length ? parts.join(', ') : '<span class="text-gray-400 italic">Chưa cấp quyền module nào</span>';
 }
 
@@ -6803,6 +6950,307 @@ function exportReportsCSV() {
   link.download = `BaoCaoQuanTri_${new Date().toISOString().slice(0, 10)}.csv`;
   link.click();
   URL.revokeObjectURL(url);
+}
+
+// ==========================================
+// TRUYỀN THÔNG NỘI BỘ (Tin nội bộ / Đào tạo / Khen thưởng / Góc chia sẻ)
+// ==========================================
+// Kênh thông tin nội bộ tương tác đầy đủ: bình luận, thả tim (like) và ghi nhận người đã xem cho
+// từng bài đăng — dùng chung 1 collection DB.internalPosts, phân biệt bằng field `type`. XEM và
+// tương tác mở cho mọi người dùng (không lọc theo phạm vi phòng ban) vì đây là kênh truyền thông
+// toàn công ty; chỉ việc ĐĂNG BÀI ở Tin nội bộ/Đào tạo/Khen thưởng mới cần quyền riêng.
+
+function setInternalSubTab(subTab) {
+  resetListPage('internal');
+  activeInternalSubTab = subTab;
+
+  const btnMap = { NEWS: 'btnInternalSubNews', TRAINING: 'btnInternalSubTraining', REWARD: 'btnInternalSubReward', SHARE: 'btnInternalSubShare' };
+  Object.entries(btnMap).forEach(([type, btnId]) => {
+    const btn = document.getElementById(btnId);
+    if (btn) btn.className = type === subTab ? 'px-3 py-1 rounded text-xs font-bold bg-fuchsia-700 text-white' : 'px-3 py-1 rounded text-xs font-bold bg-gray-200 text-gray-700';
+  });
+
+  document.getElementById('internalTrainingTimeField').classList.toggle('hidden', subTab !== 'TRAINING');
+  document.getElementById('internalTrainingEndField').classList.toggle('hidden', subTab !== 'TRAINING');
+  document.getElementById('internalTrainingLocationField').classList.toggle('hidden', subTab !== 'TRAINING');
+  document.getElementById('internalTrainingDeadlineField').classList.toggle('hidden', subTab !== 'TRAINING');
+  document.getElementById('internalTrainingCapacityField').classList.toggle('hidden', subTab !== 'TRAINING');
+  document.getElementById('internalRewardPeriodField').classList.toggle('hidden', subTab !== 'REWARD');
+  document.getElementById('internalRewardRecipientsField').classList.toggle('hidden', subTab !== 'REWARD');
+
+  const icons = { NEWS: '📰', TRAINING: '🎓', REWARD: '🏆', SHARE: '💬' };
+  document.getElementById('internalFormTitle').innerText = `📝 Đăng ${INTERNAL_TYPE_LABELS[subTab]} Mới`;
+  document.getElementById('internalListTitle').innerText = `${icons[subTab]} Danh Sách ${INTERNAL_TYPE_LABELS[subTab]}`;
+  document.getElementById('internalSubmitBtn').innerText = `Đăng ${INTERNAL_TYPE_LABELS[subTab]}`;
+
+  const canCreate = canCreateInternalPost(currentUser, subTab);
+  document.getElementById('internalPostForm').classList.toggle('hidden', !canCreate);
+  document.getElementById('internalNoPermNote').classList.toggle('hidden', canCreate);
+
+  renderInternalPosts();
+}
+
+function onInternalFilterChange() {
+  resetListPage('internal');
+  renderInternalPosts();
+}
+
+async function submitInternalPost(e) {
+  e.preventDefault();
+  const type = activeInternalSubTab;
+  if (!canCreateInternalPost(currentUser, type)) {
+    return alert('⛔ Bạn không có quyền đăng bài ở phân hệ này!');
+  }
+
+  const title = document.getElementById('internalTitle').value.trim();
+  const content = document.getElementById('internalContent').value.trim();
+
+  let training = null, reward = null;
+  if (type === 'TRAINING') {
+    const startTime = document.getElementById('internalTrainingStart').value;
+    if (!startTime) return alert('Vui lòng nhập Thời Gian Bắt Đầu cho khóa đào tạo!');
+    training = {
+      startTime,
+      endTime: document.getElementById('internalTrainingEnd').value,
+      location: document.getElementById('internalTrainingLocation').value.trim(),
+      registerDeadline: document.getElementById('internalTrainingDeadline').value,
+      capacity: parseInt(document.getElementById('internalTrainingCapacity').value, 10) || 0,
+      registeredUsers: []
+    };
+  }
+  if (type === 'REWARD') {
+    const recipients = document.getElementById('internalRewardRecipients').value.trim();
+    if (!recipients) return alert('Vui lòng nhập Cá nhân/Tập thể được khen thưởng!');
+    reward = { period: document.getElementById('internalRewardPeriod').value.trim(), recipients };
+  }
+
+  const fileInput = document.getElementById('internalFile');
+  let attachment = null;
+  const file = fileInput.files[0];
+  if (file) {
+    try {
+      const uploaded = await uploadFileToServer(file);
+      attachment = { fileName: uploaded.fileName, fileType: uploaded.fileType, fileUrl: uploaded.fileUrl };
+    } catch (err) {
+      return alert(`⛔ Tải tệp đính kèm thất bại: ${err.message}`);
+    }
+  }
+
+  const newPost = {
+    id: Date.now(),
+    type,
+    code: `${INTERNAL_TYPE_PREFIX[type]}-${Date.now()}`,
+    title, content,
+    dept: currentUser.dept,
+    attachment,
+    training, reward,
+    author: currentUser.username,
+    authorName: currentUser.name,
+    createdAt: new Date().toLocaleString('vi-VN'),
+    comments: [],
+    likes: [],
+    readBy: [currentUser.username]
+  };
+
+  DB.internalPosts.unshift(newPost);
+  syncStorage('internalPosts');
+  logSystemAction('INTERNAL', 'CREATE_INTERNAL_POST', `Đăng ${INTERNAL_TYPE_LABELS[type]} [${newPost.code} - ${title}]`, 'SUCCESS', newPost.code);
+  alert('✅ Đã đăng bài thành công!');
+  e.target.reset();
+  renderInternalPosts();
+}
+
+function renderInternalPosts() {
+  const container = document.getElementById('internalPostsContainer');
+  if (!container) return;
+
+  const deptFilter = document.getElementById('filterDeptInternal')?.value || '';
+  const fromDate = document.getElementById('filterFromDateInternal')?.value || '';
+  const toDate = document.getElementById('filterToDateInternal')?.value || '';
+  const keyword = (document.getElementById('filterKeywordInternal')?.value || '').trim();
+
+  const visible = DB.internalPosts.filter(p => {
+    if (p.type !== activeInternalSubTab) return false;
+    if (deptFilter && p.dept !== deptFilter) return false;
+    if (!isInDateRange(p.createdAt, fromDate, toDate)) return false;
+    if (!matchesKeywordFields([p.title, p.content, p.authorName, p.dept], keyword)) return false;
+    return true;
+  });
+
+  document.getElementById('paginationContainer_internal').innerHTML = buildPaginationBoxHTML('internal', 'renderInternalPosts');
+  const pageItems = paginateList('internal', visible, 'renderInternalPosts', 'bài đăng');
+
+  if (pageItems.length === 0) {
+    container.innerHTML = `<div class="text-center p-6 text-gray-500 italic bg-white rounded border">Chưa có bài đăng nào phù hợp.</div>`;
+    return;
+  }
+
+  container.innerHTML = pageItems.map(p => {
+    const readCount = (p.readBy || []).length;
+    const likeCount = (p.likes || []).length;
+    const commentCount = (p.comments || []).length;
+    let extraInfo = '';
+    if (p.type === 'TRAINING' && p.training) {
+      const regCount = (p.training.registeredUsers || []).length;
+      extraInfo = `<div class="text-xs text-emerald-700 mt-1">🗓️ ${escapeHtml(p.training.startTime || '')} tại ${escapeHtml(p.training.location || 'N/A')} | Đã đăng ký: ${regCount}${p.training.capacity ? '/' + p.training.capacity : ''}</div>`;
+    }
+    if (p.type === 'REWARD' && p.reward) {
+      extraInfo = `<div class="text-xs text-amber-700 mt-1">🏆 ${escapeHtml(p.reward.period || '')} — ${escapeHtml(p.reward.recipients || '')}</div>`;
+    }
+    const snippet = (p.content || '').slice(0, 200);
+    return `
+      <div class="bg-white p-4 rounded border hover:shadow cursor-pointer" onclick="viewInternalPostDetail(${p.id})">
+        <div class="flex justify-between items-start gap-2">
+          <div>
+            <div class="font-bold text-fuchsia-800">${escapeHtml(p.title)}</div>
+            <div class="text-xs text-gray-500 mt-0.5">${escapeHtml(p.authorName)} (${escapeHtml(p.dept)}) — ${escapeHtml(p.createdAt)}</div>
+          </div>
+          ${p.attachment ? '<span class="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded whitespace-nowrap">📎 Đính kèm</span>' : ''}
+        </div>
+        <p class="text-sm text-gray-700 mt-2">${escapeHtml(snippet)}${(p.content || '').length > 200 ? '…' : ''}</p>
+        ${extraInfo}
+        <div class="flex gap-4 mt-2 text-xs text-gray-500">
+          <span>❤️ ${likeCount}</span>
+          <span>💬 ${commentCount}</span>
+          <span>👁️ ${readCount} đã xem</span>
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+function viewInternalPostDetail(id) {
+  const p = DB.internalPosts.find(x => x.id === id);
+  if (!p) return;
+
+  markInternalRead(id);
+
+  const icons = { NEWS: '📰', TRAINING: '🎓', REWARD: '🏆', SHARE: '💬' };
+  document.getElementById('viewModalTitle').innerText = `${icons[p.type] || '📣'} ${p.title}`;
+  document.getElementById('viewModalSub').innerText = `${p.authorName} (${p.dept}) — ${p.createdAt}`;
+  document.getElementById('viewModalFooterInfo').innerText = `Mã: ${p.code} | ${(p.readBy || []).length} người đã xem`;
+
+  let typeInfoHTML = '';
+  if (p.type === 'TRAINING' && p.training) {
+    const t = p.training;
+    const regCount = (t.registeredUsers || []).length;
+    const isFull = t.capacity > 0 && regCount >= t.capacity;
+    const isRegistered = (t.registeredUsers || []).includes(currentUser.username);
+    typeInfoHTML = `
+      <div class="bg-emerald-50 border border-emerald-200 rounded p-3 mb-3 text-sm space-y-1">
+        <div><b>Thời gian:</b> ${escapeHtml(t.startTime || '')}${t.endTime ? ` ➔ ${escapeHtml(t.endTime)}` : ''}</div>
+        <div><b>Địa điểm:</b> ${escapeHtml(t.location || 'N/A')}</div>
+        ${t.registerDeadline ? `<div><b>Hạn đăng ký:</b> ${escapeHtml(t.registerDeadline)}</div>` : ''}
+        <div><b>Số lượng đăng ký:</b> ${regCount}${t.capacity ? '/' + t.capacity : ' (không giới hạn)'}</div>
+        <div class="pt-1">
+          ${isRegistered
+            ? `<button onclick="unregisterFromTraining(${p.id})" class="bg-gray-500 text-white px-3 py-1 rounded text-xs font-bold hover:bg-gray-600">Hủy Đăng Ký</button>`
+            : `<button onclick="registerForTraining(${p.id})" ${isFull ? 'disabled' : ''} class="${isFull ? 'bg-gray-300 text-gray-500 cursor-not-allowed' : 'bg-emerald-600 text-white hover:bg-emerald-700'} px-3 py-1 rounded text-xs font-bold">${isFull ? 'Đã Đủ Số Lượng' : '✅ Đăng Ký Tham Gia'}</button>`}
+        </div>
+      </div>
+    `;
+  }
+  if (p.type === 'REWARD' && p.reward) {
+    typeInfoHTML = `
+      <div class="bg-amber-50 border border-amber-200 rounded p-3 mb-3 text-sm space-y-1">
+        <div><b>Đợt/Kỳ:</b> ${escapeHtml(p.reward.period || 'N/A')}</div>
+        <div><b>Được khen thưởng:</b> ${escapeHtml(p.reward.recipients || '')}</div>
+      </div>
+    `;
+  }
+
+  const isLiked = (p.likes || []).includes(currentUser.username);
+  const commentsHTML = (p.comments || []).length
+    ? p.comments.map(c => `
+        <div class="bg-gray-50 border rounded p-2 text-xs">
+          <div class="font-bold text-gray-700">${escapeHtml(c.name)} <span class="text-gray-400 font-normal">${escapeHtml(c.time)}</span></div>
+          <div class="text-gray-800 mt-0.5">${escapeHtml(c.content)}</div>
+        </div>
+      `).join('')
+    : '<div class="text-gray-400 italic text-xs">Chưa có bình luận nào.</div>';
+
+  document.getElementById('viewModalContent').innerHTML = `
+    <div class="w-full bg-white p-6 rounded shadow border overflow-y-auto text-sm">
+      ${typeInfoHTML}
+      <div class="whitespace-pre-wrap text-gray-800">${escapeHtml(p.content)}</div>
+      ${p.attachment ? `<div class="mt-3"><a href="${escapeHtml(p.attachment.fileUrl)}" target="_blank" class="text-blue-600 underline text-xs">📎 ${escapeHtml(p.attachment.fileName)}</a></div>` : ''}
+
+      <div class="border-t mt-4 pt-3 flex items-center gap-3">
+        <button onclick="toggleInternalLike(${p.id})" class="px-3 py-1 rounded text-xs font-bold ${isLiked ? 'bg-rose-600 text-white' : 'bg-gray-200 text-gray-700'}">❤️ ${isLiked ? 'Đã thích' : 'Thích'} (${(p.likes || []).length})</button>
+        <span class="text-xs text-gray-500">👁️ ${(p.readBy || []).length} người đã xem</span>
+      </div>
+
+      <div class="border-t mt-3 pt-3 space-y-2">
+        <b class="text-xs">💬 Bình luận (${(p.comments || []).length})</b>
+        <div class="space-y-1.5 max-h-48 overflow-y-auto">${commentsHTML}</div>
+        <div class="flex gap-2 pt-1">
+          <input id="internalCommentInput" placeholder="Viết bình luận..." class="flex-1 border p-1.5 rounded text-xs" onkeydown="if(event.key==='Enter'){event.preventDefault(); addInternalComment(${p.id});}">
+          <button onclick="addInternalComment(${p.id})" class="bg-fuchsia-600 text-white px-3 py-1 rounded text-xs font-bold hover:bg-fuchsia-700">Gửi</button>
+        </div>
+      </div>
+    </div>
+  `;
+  document.getElementById('viewDocModal').classList.remove('hidden');
+}
+
+function markInternalRead(id) {
+  const p = DB.internalPosts.find(x => x.id === id);
+  if (!p) return;
+  if (!p.readBy) p.readBy = [];
+  if (!p.readBy.includes(currentUser.username)) {
+    p.readBy.push(currentUser.username);
+    syncStorage('internalPosts');
+  }
+}
+
+function toggleInternalLike(id) {
+  const p = DB.internalPosts.find(x => x.id === id);
+  if (!p) return;
+  if (!p.likes) p.likes = [];
+  const idx = p.likes.indexOf(currentUser.username);
+  if (idx === -1) p.likes.push(currentUser.username);
+  else p.likes.splice(idx, 1);
+  syncStorage('internalPosts');
+  viewInternalPostDetail(id);
+  renderInternalPosts();
+}
+
+function addInternalComment(id) {
+  const p = DB.internalPosts.find(x => x.id === id);
+  if (!p) return;
+  const input = document.getElementById('internalCommentInput');
+  const content = input.value.trim();
+  if (!content) return;
+  if (!p.comments) p.comments = [];
+  p.comments.push({ id: Date.now(), username: currentUser.username, name: currentUser.name, content, time: new Date().toLocaleString('vi-VN') });
+  syncStorage('internalPosts');
+  viewInternalPostDetail(id);
+  renderInternalPosts();
+}
+
+function registerForTraining(id) {
+  const p = DB.internalPosts.find(x => x.id === id);
+  if (!p || !p.training) return;
+  if (!p.training.registeredUsers) p.training.registeredUsers = [];
+  if (p.training.registeredUsers.includes(currentUser.username)) return;
+  if (p.training.capacity > 0 && p.training.registeredUsers.length >= p.training.capacity) {
+    return alert('⛔ Khóa đào tạo đã đủ số lượng đăng ký!');
+  }
+  p.training.registeredUsers.push(currentUser.username);
+  syncStorage('internalPosts');
+  logSystemAction('INTERNAL', 'REGISTER_TRAINING', `Đăng ký tham gia đào tạo [${p.code} - ${p.title}]`, 'SUCCESS', p.code);
+  alert('✅ Đã đăng ký tham gia thành công!');
+  viewInternalPostDetail(id);
+  renderInternalPosts();
+}
+
+function unregisterFromTraining(id) {
+  const p = DB.internalPosts.find(x => x.id === id);
+  if (!p || !p.training) return;
+  p.training.registeredUsers = (p.training.registeredUsers || []).filter(u => u !== currentUser.username);
+  syncStorage('internalPosts');
+  viewInternalPostDetail(id);
+  renderInternalPosts();
 }
 </script>
 </body>
