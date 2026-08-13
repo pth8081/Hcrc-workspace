@@ -119,5 +119,20 @@ Tài khoản mặc định: `admin / 123456` (đổi mật khẩu ngay sau khi t
   - ⚠️ Lưu ý thiết kế: phần tiêu đề công ty trên phiếu hiện để chung chung
     (không có tên/logo công ty cụ thể) vì hệ thống chưa có cấu hình tên công
     ty — báo lại nếu muốn bổ sung trường này ở Module Quản trị.
+- **Module Văn Bản Trình — sinh Phiếu Phê Duyệt điện tử (như module Xe)**:
+  - Sau khi phê duyệt hoàn tất mọi bước, người trình (và ai có quyền xem/tải
+    phù hợp) thấy nút **"👁️ Xem Phiếu"** — mở "Phiếu Phê Duyệt Văn Bản
+    Trình" dựng động: thông tin tờ trình (ngày trình, người trình, phòng
+    ban, loại, độ khẩn, tiêu đề, nội dung, tệp đính kèm nếu có, trường mở
+    rộng nếu có) + khối chữ ký nhiều cột theo đúng quy trình đã cấu hình,
+    kèm watermark chéo "PHÊ DUYỆT TRÊN HỆ THỐNG VĂN PHÒNG ĐIỆN TỬ". Nút
+    **"⬇️ Tải"** bên cạnh xuất file `.html` tự chứa để lưu/in sau; nút
+    **"🖨️ In"** có sẵn trong Protected Viewer.
+  - Về mặt code: khung "Phiếu Phê Duyệt" (watermark, tiêu đề, khối chữ ký,
+    ghi chú cuối, CSS) đã được tách thành hàm dùng chung
+    `buildApprovalSlipShellHTML()` — dùng lại cho cả Xe và Văn bản trình,
+    mỗi module chỉ cần cung cấp phần bảng thông tin riêng của mình. Module
+    nào sau này cần tính năng tương tự (Hợp đồng, Đề xuất VP...) chỉ cần
+    viết 1 hàm build tương tự, không phải lặp lại toàn bộ khung + CSS.
 
 Xem đầy đủ hướng dẫn triển khai tại `HUONG_DAN_DEPLOY_UBUNTU.md`.

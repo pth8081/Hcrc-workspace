@@ -2526,6 +2526,10 @@ function renderSubmissionReqs() {
           <button onclick="openProcessSubmissionModal(${sub.id})" class="px-2.5 py-1 ${canApprove ? 'bg-amber-600 text-white' : 'bg-gray-600 text-white'} rounded text-xs hover:opacity-90 font-bold">
             ${canApprove ? '✍️ Bút phê / Duyệt' : '👁️ Xem chi tiết'}
           </button>
+          ${sub.status === 'APPROVED' ? `
+            <button onclick="viewSubmissionApprovalSlip(${sub.id})" class="px-2 py-1 bg-blue-600 text-white rounded text-xs hover:bg-blue-700 font-bold" title="Xem Phiếu Phê Duyệt">👁️ Xem Phiếu</button>
+            ${canDownloadFile(currentUser, sub.dept, sub.creator) ? `<button onclick="downloadSubmissionApprovalSlip(${sub.id})" class="px-2 py-1 bg-slate-600 text-white rounded text-xs hover:bg-slate-700 font-bold" title="Tải Phiếu Phê Duyệt">⬇️ Tải</button>` : ''}
+          ` : ''}
         </td>
       </tr>
     `;
@@ -2660,6 +2664,76 @@ function processSubmission(actionType) {
   alert('✅ Đã cập nhật trạng thái tờ trình!');
   closeProcessSubmissionModal();
   renderSubmissionReqs();
+}
+
+// Dựng HTML "Phiếu Phê Duyệt Văn Bản Trình" — ghép vào khung dùng chung buildApprovalSlipShellHTML()
+// (định nghĩa ở module Đăng Ký Xe, các hàm function được hoisted nên gọi trước vị trí định nghĩa
+// trong file vẫn hợp lệ). Bố cục tự thiết kế hợp lý cho văn bản trình nội bộ: thông tin trình +
+// nội dung + trường mở rộng (nếu có) + khối chữ ký nhiều cấp theo đúng quy trình đã cấu hình.
+function buildSubmissionApprovalSlipHTML(sub) {
+  const wfConfig = DB.submissionDeptWorkflows[sub.dept] || { workflowId: 'WF_1STEP' };
+  const wf = DB.workflows.find(w => w.id === wfConfig.workflowId) || { steps: [{ order: 1, name: 'Duyệt' }] };
+  const signatureColumnsHTML = wf.steps.map(step => buildApprovalSignatureColumnHTML(step, sub.history)).join('');
+
+  let extraFieldsHTML = '';
+  if (sub.customData && Object.keys(sub.customData).length > 0) {
+    const rows = Object.keys(sub.customData).map(k => `<tr><td class="as-label">${escapeHtml(k)}:</td><td>${escapeHtml(sub.customData[k])}</td></tr>`).join('');
+    extraFieldsHTML = `<div class="as-section-title">Thông Tin Bổ Sung</div><table class="as-field-table">${rows}</table>`;
+  }
+
+  const bodyHTML = `
+    <table class="as-field-table">
+      <tr><td class="as-label">Ngày trình:</td><td>${escapeHtml(sub.createdAt || '')}</td></tr>
+      <tr><td class="as-label">Người trình:</td><td>${escapeHtml(sub.creatorName || '')}</td></tr>
+      <tr><td class="as-label">Phòng ban:</td><td>${escapeHtml(sub.dept || '')}</td></tr>
+      <tr><td class="as-label">Loại văn bản trình:</td><td>${escapeHtml(sub.type || '')}</td></tr>
+      <tr><td class="as-label">Độ khẩn:</td><td>${escapeHtml(sub.priority || '')}</td></tr>
+      <tr><td class="as-label">Tiêu đề:</td><td>${escapeHtml(sub.title || '')}</td></tr>
+      <tr><td class="as-label">Nội dung chi tiết:</td><td>${escapeHtml(sub.content || '')}</td></tr>
+      ${sub.fileName ? `<tr><td class="as-label">Tệp đính kèm:</td><td>${escapeHtml(sub.fileName)}</td></tr>` : ''}
+    </table>
+    ${extraFieldsHTML}
+  `;
+
+  return buildApprovalSlipShellHTML({
+    formCode: 'Văn Bản Trình',
+    title: 'Phiếu Phê Duyệt Văn Bản Trình',
+    approvedNote: `✅ Đã phê duyệt hoàn tất trên Hệ thống Văn phòng điện tử — Mã: ${escapeHtml(sub.code)}`,
+    bodyHTML,
+    requesterRoleLabel: 'Người trình',
+    requesterName: sub.creatorName,
+    requesterTime: `Trình lúc: ${escapeHtml(sub.createdAt || '')}`,
+    signatureColumnsHTML,
+    footerNote: 'Phiếu được lập và phê duyệt điện tử trên Hệ thống Văn phòng điện tử (VPĐT) — không cần chữ ký tay/con dấu bản cứng. Thông tin phê duyệt có thể tra cứu lại trên hệ thống.'
+  });
+}
+
+function viewSubmissionApprovalSlip(subId) {
+  const sub = DB.submissions.find(s => s.id === subId);
+  if (!sub) return;
+  if (sub.status !== 'APPROVED') return alert('Chỉ xem được Phiếu Phê Duyệt sau khi văn bản trình đã được phê duyệt hoàn tất.');
+
+  document.getElementById('viewModalTitle').innerText = `📜 Phiếu Phê Duyệt Văn Bản Trình (${sub.code})`;
+  document.getElementById('viewModalSub').innerText = `Phòng ban: ${sub.dept} | Người trình: ${sub.creatorName}`;
+  document.getElementById('viewModalFooterInfo').innerText = 'Trạng thái: Đã phê duyệt hoàn tất';
+
+  document.getElementById('viewModalContent').innerHTML = buildSubmissionApprovalSlipHTML(sub);
+  document.getElementById('viewDocModal').classList.remove('hidden');
+}
+
+function downloadSubmissionApprovalSlip(subId) {
+  const sub = DB.submissions.find(s => s.id === subId);
+  if (!sub) return;
+  if (sub.status !== 'APPROVED') return alert('Chỉ tải được Phiếu Phê Duyệt sau khi văn bản trình đã được phê duyệt hoàn tất.');
+
+  const fullHtml = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Phiếu Phê Duyệt Văn Bản Trình - ${escapeHtml(sub.code)}</title></head><body>${buildSubmissionApprovalSlipHTML(sub)}</body></html>`;
+  const blob = new Blob([fullHtml], { type: 'text/html;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = `PhieuPheDuyet_${sub.code}.html`;
+  link.click();
+  URL.revokeObjectURL(url);
 }
 
 // ==========================================
@@ -3201,99 +3275,127 @@ function processCarReg(actionType) {
   renderCarRegs();
 }
 
-// Dựng HTML "Phiếu Phê Duyệt Đăng Ký Xe" — theo đúng bố cục Mẫu Oto01 (đăng ký + phần Phòng Hành
-// Chính + khối chữ ký) do người dùng cung cấp, dùng chung cho cả "Xem" (chèn vào Protected Viewer,
-// in trực tiếp được) và "Tải" (xuất file .html độc lập). CSS được nhúng trực tiếp (không phụ thuộc
-// Tailwind của trang chính) vì file tải về / cửa sổ in không có Tailwind.
-function buildCarApprovalSlipHTML(car) {
-  const wfConfig = DB.carDeptWorkflows[car.dept] || { workflowId: 'WF_1STEP' };
-  const wf = DB.workflows.find(w => w.id === wfConfig.workflowId) || { steps: [{ order: 1, name: 'Duyệt' }] };
+// ==========================================
+// "PHIẾU PHÊ DUYỆT" DỰNG ĐỘNG — khung dùng chung cho mọi module có luồng duyệt nhiều bước
+// (Đăng ký Xe, Văn bản trình...). Mỗi module chỉ cần cung cấp phần bảng trường thông tin riêng
+// (bodyHTML) + dữ liệu người trình; khung (watermark, tiêu đề, khối chữ ký, ghi chú cuối) và CSS
+// dùng chung để tránh lặp lại. CSS nhúng trực tiếp trong nội dung (không phụ thuộc Tailwind của
+// trang chính) vì file tải về / cửa sổ in không load Tailwind.
+// ==========================================
 
-  // Mỗi bước quy trình (đã cấu hình ở module Quy Trình & Đồng Cấp) tương ứng 1 cột chữ ký — không
-  // hard-code cứng "Phụ trách đơn vị / Phòng Hành Chính" để khớp mọi quy trình admin tự cấu hình.
-  const signatureColumnsHTML = wf.steps.map(step => {
-    const entry = (car.history || []).find(h => h.step === step.order && h.action === 'APPROVED');
-    return `
-      <td>
-        <span class="cs-sign-role">${escapeHtml(step.name)}</span>
-        ${entry ? `
-          <div class="cs-sign-stamp">✅ ĐÃ PHÊ DUYỆT</div>
-          <div class="cs-sign-name">${escapeHtml(entry.approver)}</div>
-          <div class="cs-sign-time">Lúc: ${escapeHtml(entry.time)}</div>
-        ` : `<div class="cs-sign-time" style="margin-top:44px;">Chưa duyệt</div>`}
-      </td>
-    `;
-  }).join('');
+// Dựng 1 cột chữ ký cho 1 bước quy trình, dựa trên lịch sử xử lý (history) của hồ sơ — không
+// hard-code cứng tên vai trò để khớp bất kỳ quy trình nào admin tự cấu hình ở module Quy Trình.
+function buildApprovalSignatureColumnHTML(step, history) {
+  const entry = (history || []).find(h => h.step === step.order && h.action === 'APPROVED');
+  return `
+    <td>
+      <span class="as-sign-role">${escapeHtml(step.name)}</span>
+      ${entry ? `
+        <div class="as-sign-stamp">✅ ĐÃ PHÊ DUYỆT</div>
+        <div class="as-sign-name">${escapeHtml(entry.approver)}</div>
+        <div class="as-sign-time">Lúc: ${escapeHtml(entry.time)}</div>
+      ` : `<div class="as-sign-time" style="margin-top:44px;">Chưa duyệt</div>`}
+    </td>
+  `;
+}
+
+function buildApprovalSlipShellHTML(opts) {
+  const {
+    formCode = '', title, approvedNote, bodyHTML,
+    requesterRoleLabel = 'Người đề nghị', requesterName, requesterTime,
+    signatureColumnsHTML, footerNote
+  } = opts;
 
   return `
-    <div class="car-slip">
+    <div class="approval-slip">
       <style>
-        .car-slip { font-family: 'Times New Roman', Georgia, serif; color: #111; background: #fff; padding: 24px; max-width: 800px; margin: 0 auto; position: relative; font-size: 13px; line-height: 1.55; }
-        .car-slip .cs-watermark { position: absolute; top: 42%; left: 50%; transform: translate(-50%,-50%) rotate(-28deg); font-size: 26px; font-weight: bold; color: rgba(200,0,0,0.13); white-space: nowrap; pointer-events: none; z-index: 0; text-transform: uppercase; text-align: center; }
-        .car-slip .cs-content { position: relative; z-index: 1; }
-        .car-slip .cs-header { text-align: center; margin-bottom: 6px; }
-        .car-slip .cs-form-code { font-size: 11px; color: #555; }
-        .car-slip .cs-title { font-size: 19px; font-weight: bold; text-transform: uppercase; margin: 6px 0; }
-        .car-slip .cs-approved-note { font-size: 11px; font-style: italic; color: #16a34a; font-weight: bold; }
-        .car-slip table.cs-field-table { width: 100%; border-collapse: collapse; margin: 8px 0; }
-        .car-slip table.cs-field-table td { padding: 3px 4px; vertical-align: top; }
-        .car-slip .cs-label { font-weight: bold; width: 230px; white-space: nowrap; }
-        .car-slip .cs-section-title { font-weight: bold; margin-top: 14px; margin-bottom: 2px; background: #f0f0f0; padding: 4px 6px; }
-        .car-slip .cs-sign-table { width: 100%; border-collapse: collapse; margin-top: 22px; table-layout: fixed; }
-        .car-slip .cs-sign-table td { text-align: center; vertical-align: top; padding: 8px 6px; border: 1px solid #ccc; }
-        .car-slip .cs-sign-role { font-weight: bold; text-transform: uppercase; display: block; margin-bottom: 6px; }
-        .car-slip .cs-sign-stamp { border: 2px solid #16a34a; color: #16a34a; display: inline-block; padding: 3px 8px; border-radius: 4px; font-weight: bold; font-size: 10px; transform: rotate(-6deg); margin: 6px 0 4px; }
-        .car-slip .cs-sign-name { font-weight: bold; margin-top: 2px; }
-        .car-slip .cs-sign-time { font-size: 10.5px; color: #555; }
-        .car-slip .cs-footer-note { margin-top: 16px; font-size: 11px; color: #444; border-top: 1px solid #ccc; padding-top: 6px; }
-        @media print { .car-slip { padding: 0; } }
+        .approval-slip { font-family: 'Times New Roman', Georgia, serif; color: #111; background: #fff; padding: 24px; max-width: 800px; margin: 0 auto; position: relative; font-size: 13px; line-height: 1.55; }
+        .approval-slip .as-watermark { position: absolute; top: 42%; left: 50%; transform: translate(-50%,-50%) rotate(-28deg); font-size: 26px; font-weight: bold; color: rgba(200,0,0,0.13); white-space: nowrap; pointer-events: none; z-index: 0; text-transform: uppercase; text-align: center; }
+        .approval-slip .as-content { position: relative; z-index: 1; }
+        .approval-slip .as-header { text-align: center; margin-bottom: 6px; }
+        .approval-slip .as-form-code { font-size: 11px; color: #555; }
+        .approval-slip .as-title { font-size: 19px; font-weight: bold; text-transform: uppercase; margin: 6px 0; }
+        .approval-slip .as-approved-note { font-size: 11px; font-style: italic; color: #16a34a; font-weight: bold; }
+        .approval-slip table.as-field-table { width: 100%; border-collapse: collapse; margin: 8px 0; }
+        .approval-slip table.as-field-table td { padding: 3px 4px; vertical-align: top; }
+        .approval-slip .as-label { font-weight: bold; width: 230px; white-space: nowrap; }
+        .approval-slip .as-section-title { font-weight: bold; margin-top: 14px; margin-bottom: 2px; background: #f0f0f0; padding: 4px 6px; }
+        .approval-slip .as-sign-table { width: 100%; border-collapse: collapse; margin-top: 22px; table-layout: fixed; }
+        .approval-slip .as-sign-table td { text-align: center; vertical-align: top; padding: 8px 6px; border: 1px solid #ccc; }
+        .approval-slip .as-sign-role { font-weight: bold; text-transform: uppercase; display: block; margin-bottom: 6px; }
+        .approval-slip .as-sign-stamp { border: 2px solid #16a34a; color: #16a34a; display: inline-block; padding: 3px 8px; border-radius: 4px; font-weight: bold; font-size: 10px; transform: rotate(-6deg); margin: 6px 0 4px; }
+        .approval-slip .as-sign-name { font-weight: bold; margin-top: 2px; }
+        .approval-slip .as-sign-time { font-size: 10.5px; color: #555; }
+        .approval-slip .as-footer-note { margin-top: 16px; font-size: 11px; color: #444; border-top: 1px solid #ccc; padding-top: 6px; }
+        @media print { .approval-slip { padding: 0; } }
       </style>
-      <div class="cs-watermark">PHÊ DUYỆT TRÊN HỆ THỐNG<br>VĂN PHÒNG ĐIỆN TỬ</div>
-      <div class="cs-content">
-        <div class="cs-header">
-          <div class="cs-form-code">Mẫu: Oto01</div>
-          <div class="cs-title">Phiếu Đăng Ký Sử Dụng Xe Ô Tô</div>
-          <div class="cs-approved-note">✅ Đã phê duyệt hoàn tất trên Hệ thống Văn phòng điện tử — Mã phiếu: ${escapeHtml(car.code)}</div>
+      <div class="as-watermark">PHÊ DUYỆT TRÊN HỆ THỐNG<br>VĂN PHÒNG ĐIỆN TỬ</div>
+      <div class="as-content">
+        <div class="as-header">
+          ${formCode ? `<div class="as-form-code">${escapeHtml(formCode)}</div>` : ''}
+          <div class="as-title">${escapeHtml(title)}</div>
+          <div class="as-approved-note">${approvedNote}</div>
         </div>
 
-        <table class="cs-field-table">
-          <tr><td class="cs-label">Thời gian đăng ký:</td><td>${escapeHtml(car.createdAt || '')}</td></tr>
-          <tr><td class="cs-label">Người đăng ký:</td><td>${escapeHtml(car.creatorName || '')}${car.registrantPhone ? ` — SĐT: ${escapeHtml(car.registrantPhone)}` : ''}</td></tr>
-          <tr><td class="cs-label">Đơn vị (Phòng/Ban/Bộ phận):</td><td>${escapeHtml(car.dept || '')}</td></tr>
-          <tr><td class="cs-label">Đăng ký sử dụng loại xe:</td><td>${escapeHtml(car.type || '')}</td></tr>
-          <tr><td class="cs-label">Số người sử dụng:</td><td>${escapeHtml(car.passengers || '')}</td></tr>
-          <tr><td class="cs-label">Người sử dụng trực tiếp:</td><td>${escapeHtml(car.directUser || car.creatorName || '')}${car.directUserPhone ? ` — SĐT: ${escapeHtml(car.directUserPhone)}` : ''}</td></tr>
-          <tr><td class="cs-label">Mục đích sử dụng:</td><td>${escapeHtml(car.purpose || '')}</td></tr>
-          <tr><td class="cs-label">Nội dung chi tiết:</td><td>${escapeHtml(car.reason || '')}</td></tr>
-          <tr><td class="cs-label">Lộ trình di chuyển:</td><td>${escapeHtml(car.destination || '')}</td></tr>
-          <tr><td class="cs-label">Thời gian sử dụng (dự kiến):</td><td>${escapeHtml(car.startTime || '')} ➔ ${escapeHtml(car.endTime || '')}</td></tr>
-          <tr><td class="cs-label">Số km dự kiến (2 chiều):</td><td>${car.km || 0} km</td></tr>
-        </table>
+        ${bodyHTML}
 
-        <div class="cs-section-title">Phần dành cho Phòng Hành Chính</div>
-        <table class="cs-field-table">
-          <tr><td class="cs-label">Lái xe được phân công:</td><td>${escapeHtml(car.assignedDriver || car.driver || 'Chưa phân công')}</td></tr>
-          <tr><td class="cs-label">Loại xe cụ thể:</td><td>${escapeHtml(car.assignedVehicleType || '')}</td></tr>
-          <tr><td class="cs-label">Biển kiểm soát (BKS):</td><td>${escapeHtml(car.assignedPlate || car.plate || '')}</td></tr>
-        </table>
-
-        <table class="cs-sign-table">
+        <table class="as-sign-table">
           <tr>
             <td>
-              <span class="cs-sign-role">Người đề nghị</span>
-              <div class="cs-sign-name">${escapeHtml(car.creatorName || '')}</div>
-              <div class="cs-sign-time">Đăng ký lúc: ${escapeHtml(car.createdAt || '')}</div>
+              <span class="as-sign-role">${escapeHtml(requesterRoleLabel)}</span>
+              <div class="as-sign-name">${escapeHtml(requesterName || '')}</div>
+              <div class="as-sign-time">${requesterTime || ''}</div>
             </td>
             ${signatureColumnsHTML}
           </tr>
         </table>
 
-        <div class="cs-footer-note">
-          Phiếu được lập và phê duyệt điện tử trên Hệ thống Văn phòng điện tử (VPĐT) — không cần chữ ký tay/con dấu bản cứng. Thông tin phê duyệt có thể tra cứu lại trên hệ thống.
-        </div>
+        <div class="as-footer-note">${footerNote}</div>
       </div>
     </div>
   `;
+}
+
+// Dựng HTML "Phiếu Phê Duyệt Đăng Ký Xe" — theo đúng bố cục Mẫu Oto01 (đăng ký + phần Phòng Hành
+// Chính) do người dùng cung cấp, ghép vào khung dùng chung buildApprovalSlipShellHTML().
+function buildCarApprovalSlipHTML(car) {
+  const wfConfig = DB.carDeptWorkflows[car.dept] || { workflowId: 'WF_1STEP' };
+  const wf = DB.workflows.find(w => w.id === wfConfig.workflowId) || { steps: [{ order: 1, name: 'Duyệt' }] };
+  const signatureColumnsHTML = wf.steps.map(step => buildApprovalSignatureColumnHTML(step, car.history)).join('');
+
+  const bodyHTML = `
+    <table class="as-field-table">
+      <tr><td class="as-label">Thời gian đăng ký:</td><td>${escapeHtml(car.createdAt || '')}</td></tr>
+      <tr><td class="as-label">Người đăng ký:</td><td>${escapeHtml(car.creatorName || '')}${car.registrantPhone ? ` — SĐT: ${escapeHtml(car.registrantPhone)}` : ''}</td></tr>
+      <tr><td class="as-label">Đơn vị (Phòng/Ban/Bộ phận):</td><td>${escapeHtml(car.dept || '')}</td></tr>
+      <tr><td class="as-label">Đăng ký sử dụng loại xe:</td><td>${escapeHtml(car.type || '')}</td></tr>
+      <tr><td class="as-label">Số người sử dụng:</td><td>${escapeHtml(car.passengers || '')}</td></tr>
+      <tr><td class="as-label">Người sử dụng trực tiếp:</td><td>${escapeHtml(car.directUser || car.creatorName || '')}${car.directUserPhone ? ` — SĐT: ${escapeHtml(car.directUserPhone)}` : ''}</td></tr>
+      <tr><td class="as-label">Mục đích sử dụng:</td><td>${escapeHtml(car.purpose || '')}</td></tr>
+      <tr><td class="as-label">Nội dung chi tiết:</td><td>${escapeHtml(car.reason || '')}</td></tr>
+      <tr><td class="as-label">Lộ trình di chuyển:</td><td>${escapeHtml(car.destination || '')}</td></tr>
+      <tr><td class="as-label">Thời gian sử dụng (dự kiến):</td><td>${escapeHtml(car.startTime || '')} ➔ ${escapeHtml(car.endTime || '')}</td></tr>
+      <tr><td class="as-label">Số km dự kiến (2 chiều):</td><td>${car.km || 0} km</td></tr>
+    </table>
+
+    <div class="as-section-title">Phần dành cho Phòng Hành Chính</div>
+    <table class="as-field-table">
+      <tr><td class="as-label">Lái xe được phân công:</td><td>${escapeHtml(car.assignedDriver || car.driver || 'Chưa phân công')}</td></tr>
+      <tr><td class="as-label">Loại xe cụ thể:</td><td>${escapeHtml(car.assignedVehicleType || '')}</td></tr>
+      <tr><td class="as-label">Biển kiểm soát (BKS):</td><td>${escapeHtml(car.assignedPlate || car.plate || '')}</td></tr>
+    </table>
+  `;
+
+  return buildApprovalSlipShellHTML({
+    formCode: 'Mẫu: Oto01',
+    title: 'Phiếu Đăng Ký Sử Dụng Xe Ô Tô',
+    approvedNote: `✅ Đã phê duyệt hoàn tất trên Hệ thống Văn phòng điện tử — Mã phiếu: ${escapeHtml(car.code)}`,
+    bodyHTML,
+    requesterName: car.creatorName,
+    requesterTime: `Đăng ký lúc: ${escapeHtml(car.createdAt || '')}`,
+    signatureColumnsHTML,
+    footerNote: 'Phiếu được lập và phê duyệt điện tử trên Hệ thống Văn phòng điện tử (VPĐT) — không cần chữ ký tay/con dấu bản cứng. Thông tin phê duyệt có thể tra cứu lại trên hệ thống.'
+  });
 }
 
 function viewCarApprovalSlip(carId) {
