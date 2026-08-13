@@ -587,7 +587,7 @@
   <div id="minutesSection" class="hidden space-y-6">
     <div class="bg-rose-50 p-4 rounded border border-rose-200 space-y-3">
       <h3 class="font-bold text-rose-900 text-base flex items-center gap-2">📝 Lập Biên Bản Họp & Ý Kiến Chỉ Đạo</h3>
-      <p class="text-xs text-rose-800">Nhập biên bản trực tiếp trong cuộc họp — ghi lại nội dung và các ý kiến chỉ đạo gán ngay cho từng người.</p>
+      <p class="text-xs text-rose-800">Nhập biên bản trực tiếp trong cuộc họp — ghi lại nội dung và các ý kiến chỉ đạo gán ngay cho từng người. Biên bản là kênh chung, không giới hạn theo phòng ban.</p>
 
       <form id="minutesForm" onsubmit="submitMeetingMinutes(event)" class="bg-white p-3 rounded border text-xs space-y-3">
         <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
@@ -595,11 +595,7 @@
             <label class="block font-semibold text-gray-600 mb-1">Mã Biên Bản</label>
             <input id="minutesCode" placeholder="VD: BB-2026-001" class="w-full border p-1.5 rounded" required>
           </div>
-          <div>
-            <label class="block font-semibold text-gray-600 mb-1">Phòng Ban</label>
-            <select id="minutesDept" class="w-full border p-1.5 rounded bg-white font-semibold" required></select>
-          </div>
-          <div>
+          <div class="md:col-span-2">
             <label class="block font-semibold text-gray-600 mb-1">Liên Kết Lịch Đặt Phòng Họp (tuỳ chọn)</label>
             <select id="minutesLinkedMeeting" onchange="onMinutesLinkedMeetingChange()" class="w-full border p-1.5 rounded bg-white">
               <option value="">-- Không liên kết --</option>
@@ -625,10 +621,26 @@
             <label class="block font-semibold text-gray-600 mb-1">Thư Ký</label>
             <input id="minutesSecretary" placeholder="Họ tên người ghi biên bản" class="w-full border p-1.5 rounded" required>
           </div>
-          <div class="md:col-span-3">
-            <label class="block font-semibold text-gray-600 mb-1">Thành Phần Tham Dự</label>
-            <input id="minutesAttendees" placeholder="Họ tên, chức danh các thành viên tham dự, cách nhau dấu phẩy" class="w-full border p-1.5 rounded">
+        </div>
+
+        <div class="border-t pt-3 space-y-2">
+          <label class="block font-semibold text-gray-600">Thành Phần Tham Dự</label>
+          <div class="overflow-x-auto">
+            <table class="w-full border-collapse border text-xs bg-white">
+              <thead>
+                <tr class="bg-gray-100 text-left text-gray-700">
+                  <th class="border p-1.5 w-8">STT</th>
+                  <th class="border p-1.5">Họ Và Tên</th>
+                  <th class="border p-1.5">Chức Danh</th>
+                  <th class="border p-1.5">Phòng</th>
+                  <th class="border p-1.5 w-32">Số Điện Thoại</th>
+                  <th class="border p-1.5 w-8"></th>
+                </tr>
+              </thead>
+              <tbody id="minutesAttendeesTableBody"></tbody>
+            </table>
           </div>
+          <button type="button" onclick="addAttendeeRow()" class="bg-rose-600 text-white px-3 py-1 rounded text-xs font-bold hover:bg-rose-700">➕ Thêm Người Tham Dự</button>
         </div>
 
         <div>
@@ -638,6 +650,7 @@
 
         <div class="border-t pt-3 space-y-2">
           <label class="block font-semibold text-gray-600">Ý Kiến Chỉ Đạo (gán trực tiếp cho người thực hiện)</label>
+          <p class="text-[11px] text-gray-500 italic">Dòng nào có gán sẵn Người thực hiện sẽ TỰ ĐỘNG được tạo thành Công việc ngay khi lưu biên bản.</p>
           <div class="overflow-x-auto">
             <table class="w-full border-collapse border text-xs bg-white">
               <thead>
@@ -660,16 +673,15 @@
           <button type="submit" id="minutesSubmitBtn" class="bg-rose-600 text-white px-5 py-2 rounded font-bold hover:bg-rose-700">Lưu Biên Bản Họp</button>
         </div>
       </form>
+      <p id="minutesNoPermNote" class="hidden text-xs text-gray-500 italic bg-gray-50 border rounded p-3">⛔ Bạn không có quyền lập biên bản họp — chỉ có thể xem danh sách.</p>
     </div>
 
     <div class="bg-gray-50 p-4 rounded-lg border space-y-3">
       <h4 class="font-bold text-gray-700 text-sm">🔍 Tìm Kiếm & Lọc Biên Bản Họp</h4>
       <div class="grid grid-cols-1 md:grid-cols-4 gap-3">
         <div>
-          <label class="block text-xs font-semibold text-gray-600 mb-1">Lọc Theo Phòng Ban</label>
-          <select id="filterDeptMinutes" onchange="onMinutesFilterChange()" class="w-full border p-2 rounded text-sm bg-white">
-            <option value="">-- Tất cả phòng ban --</option>
-          </select>
+          <label class="block text-xs font-semibold text-gray-600 mb-1">Chủ Đề Họp</label>
+          <input id="filterTopicMinutes" oninput="onMinutesFilterChange()" placeholder="Lọc theo tiêu đề cuộc họp..." class="w-full border p-2 rounded text-sm">
         </div>
         <div>
           <label class="block text-xs font-semibold text-gray-600 mb-1">Từ Ngày</label>
@@ -692,8 +704,8 @@
         <table class="w-full border-collapse border text-xs bg-white">
           <thead>
             <tr class="bg-gray-100 text-left text-gray-700">
+              <th class="border p-2 w-10">STT</th>
               <th class="border p-2">Mã & Chủ Đề</th>
-              <th class="border p-2">Phòng Ban</th>
               <th class="border p-2">Thời Gian Họp</th>
               <th class="border p-2">Chủ Trì / Thư Ký</th>
               <th class="border p-2">Ý Kiến Chỉ Đạo</th>
@@ -1549,28 +1561,12 @@
             </div>
           </div>
 
-          <div class="bg-white p-3 rounded border space-y-2 lg:col-span-2">
-            <h4 class="font-bold text-rose-800 text-sm border-b pb-1">9. 📝 Biên Bản Họp — Phạm Vi Theo Phòng Ban</h4>
-            <div class="grid grid-cols-2 gap-3">
-              <div>
-                <div class="flex justify-between items-center mb-1">
-                  <span class="font-semibold text-gray-600 text-[11px]">Xem</span>
-                  <label class="flex items-center gap-1 font-bold text-rose-700 cursor-pointer text-[11px]">
-                    <input type="checkbox" id="pMinutesViewAll" onchange="toggleScopeGroup('pMinutesViewAll', 'pMinutesViewDept')"><span>ALL</span>
-                  </label>
-                </div>
-                <div id="pMinutesViewDeptContainer" class="space-y-1 pl-1 max-h-32 overflow-y-auto"></div>
-              </div>
-              <div>
-                <div class="flex justify-between items-center mb-1">
-                  <span class="font-semibold text-gray-600 text-[11px]">Tạo mới</span>
-                  <label class="flex items-center gap-1 font-bold text-rose-700 cursor-pointer text-[11px]">
-                    <input type="checkbox" id="pMinutesCreateAll" onchange="toggleScopeGroup('pMinutesCreateAll', 'pMinutesCreateDept')"><span>ALL</span>
-                  </label>
-                </div>
-                <div id="pMinutesCreateDeptContainer" class="space-y-1 pl-1 max-h-32 overflow-y-auto"></div>
-              </div>
-            </div>
+          <div class="bg-white p-3 rounded border space-y-2">
+            <h4 class="font-bold text-rose-800 text-sm border-b pb-1">9. 📝 Biên Bản Họp</h4>
+            <label class="flex items-center gap-2 text-rose-700 font-semibold cursor-pointer">
+              <input type="checkbox" id="pMinutesCreate"> ✅ Được lập biên bản họp
+            </label>
+            <p class="text-[11px] text-gray-500 italic">Biên bản họp là kênh chung, không giới hạn theo phòng ban — mọi người dùng đều XEM được toàn bộ. Quyền này chỉ kiểm soát ai được LẬP biên bản mới.</p>
           </div>
 
           <div class="bg-white p-3 rounded border space-y-2">
@@ -1921,7 +1917,7 @@
     </div>
     <div class="p-3 bg-gray-100 border-t flex justify-end gap-2 text-xs">
       <button onclick="closeCreateTaskModal()" class="bg-gray-500 text-white px-4 py-1.5 rounded font-bold hover:bg-gray-600">Huỷ</button>
-      <button onclick="confirmCreateTask()" class="bg-violet-600 text-white px-5 py-1.5 rounded font-bold hover:bg-violet-700">✅ Xác Nhận Giao Việc</button>
+      <button id="createTaskConfirmBtn" onclick="confirmCreateTask()" class="bg-violet-600 text-white px-5 py-1.5 rounded font-bold hover:bg-violet-700">✅ Xác Nhận Giao Việc</button>
     </div>
   </div>
 </div>
@@ -2008,6 +2004,8 @@ let officeItems = [];
 // Danh sách dòng "Ý kiến chỉ đạo" của Biên bản họp đang nhập/sửa — mỗi dòng có thể gán ngay cho 1
 // người cụ thể (nguồn dữ liệu để Phase 3 tạo Công việc từ chỉ đạo).
 let minutesDirectives = [];
+// Danh sách dòng "Thành phần tham dự" đang nhập/sửa — mỗi dòng gồm Họ tên/Chức danh/Phòng/SĐT.
+let minutesAttendeesRows = [];
 // Khác null khi đang SỬA 1 biên bản đã tạo (thay vì tạo mới) — chỉ người tạo mới sửa được.
 let editingMinutesId = null;
 // Phân hệ đang chọn trong module Truyền thông nội bộ: NEWS/TRAINING/REWARD/SHARE.
@@ -2304,10 +2302,16 @@ function canAccessCarModule(user) {
   return scopeHasAny(user, user.perms?.carView) || isApproverInWorkflowMap(DB.carDeptWorkflows, user.username);
 }
 
+// Biên bản họp là kênh chung, không giới hạn theo phòng ban -> XEM mở cho mọi người dùng đã đăng
+// nhập, giống Tài liệu/Công việc/Truyền thông nội bộ. Chỉ việc LẬP biên bản mới cần quyền riêng
+// (xem canCreateMeetingMinutes()).
 function canAccessMeetingMinutesModule(user) {
+  return !!user;
+}
+
+function canCreateMeetingMinutes(user) {
   if (!user) return false;
-  if (user.perms?.admin) return true;
-  return scopeHasAny(user, user.perms?.minutesView) || scopeHasAny(user, user.perms?.minutesCreate);
+  return !!(user.perms?.admin || user.perms?.minutesCreate);
 }
 
 function canAccessReportsModule(user) {
@@ -2398,7 +2402,7 @@ function defaultNewUserPerms() {
     carView: emptyScope(), carCreate: emptyScope(), carDownload: emptyScope(),
     officeView: emptyScope(), officeCreate: emptyScope(), officeDownload: emptyScope(),
     officeBuy: true, officeFix: true, officeInvest: false,
-    minutesView: emptyScope(), minutesCreate: emptyScope()
+    minutesCreate: false
   };
 }
 
@@ -2443,9 +2447,14 @@ function migrateLegacyPerms(perms) {
     p.officeCreate = scopeFromFlag(anyOffice);
     changed = true;
   }
-  if (p.minutesView === undefined) {
-    p.minutesView = { all: false, depts: [] };
-    p.minutesCreate = { all: false, depts: [] };
+  // Biên bản họp trước đây phân quyền Xem/Tạo theo phòng ban ({all, depts}), nay chuyển thành 1
+  // quyền "Được lập biên bản họp" dạng boolean đơn giản (XEM giờ mở cho mọi người, không còn theo
+  // phòng ban — bản thân biên bản họp cũng không còn trường phòng ban). Quy đổi: có quyền cũ (ALL
+  // hoặc có ít nhất 1 phòng ban) -> giữ nguyên true để không ai bị mất quyền đang có.
+  if (typeof p.minutesCreate !== 'boolean') {
+    const oldCreate = p.minutesCreate;
+    p.minutesCreate = !!(oldCreate?.all || (Array.isArray(oldCreate?.depts) && oldCreate.depts.length > 0));
+    delete p.minutesView;
     changed = true;
   }
   // Quyền "Tải xuống" trước đây DÙNG CHUNG cho mọi module (downloadAll/downloadDepts) — quy đổi
@@ -2744,10 +2753,6 @@ function switchTab(tabName) {
     alert('⛔ Bạn không có quyền truy cập Module Quản lý phòng họp!');
     return;
   }
-  if (tabName === 'minutes' && !canAccessMeetingMinutesModule(currentUser)) {
-    alert('⛔ Bạn không có quyền truy cập Module Biên bản họp!');
-    return;
-  }
   if (tabName === 'car' && !canAccessCarModule(currentUser)) {
     alert('⛔ Bạn không có quyền truy cập Module Đăng ký xe!');
     return;
@@ -2779,7 +2784,13 @@ function switchTab(tabName) {
   if (tabName === 'task') { renderTasks(); }
   if (tabName === 'contract') { renderContracts(); }
   if (tabName === 'meeting') { renderMeetings(); }
-  if (tabName === 'minutes') { renderMeetingMinutes(); populateMinutesLinkSelect(); }
+  if (tabName === 'minutes') {
+    renderMeetingMinutes();
+    populateMinutesLinkSelect();
+    const canCreate = canCreateMeetingMinutes(currentUser);
+    document.getElementById('minutesForm').classList.toggle('hidden', !canCreate);
+    document.getElementById('minutesNoPermNote').classList.toggle('hidden', canCreate);
+  }
   if (tabName === 'internal') { setInternalSubTab(activeInternalSubTab); }
   if (tabName === 'car') { renderDynamicInputsForModule('CAR', 'dynamicFieldsContainer_CAR'); renderCarRegs(); }
   if (tabName === 'office') {
@@ -2865,7 +2876,7 @@ function populateDropdowns() {
 
   // Dropdown "Lọc Theo Phòng Ban" của các module khác — cùng danh sách toàn bộ phòng ban (không
   // giới hạn theo quyền tạo mới, vì kết quả hiển thị đã được lọc theo quyền xem ở nơi khác).
-  ['filterDeptSub', 'filterDeptContract', 'filterDeptCar', 'filterDeptOffice', 'filterDeptMeeting', 'filterDeptMinutes', 'reportsDeptFilter'].forEach(id => {
+  ['filterDeptSub', 'filterDeptContract', 'filterDeptCar', 'filterDeptOffice', 'filterDeptMeeting', 'reportsDeptFilter'].forEach(id => {
     const el = document.getElementById(id);
     if (el) el.innerHTML = '<option value="">-- Tất cả phòng ban --</option>' + DB.depts.map(d => `<option value="${escapeHtml(d)}">${escapeHtml(d)}</option>`).join('');
   });
@@ -2902,11 +2913,6 @@ function populateDropdowns() {
   const offDept = document.getElementById('offDept');
   if (offDept) {
     offDept.innerHTML = getScopedDepts(currentUser, currentUser.perms?.officeCreate).map(d => `<option value="${escapeHtml(d)}">${escapeHtml(d)}</option>`).join('');
-  }
-
-  const minutesDept = document.getElementById('minutesDept');
-  if (minutesDept) {
-    minutesDept.innerHTML = getScopedDepts(currentUser, currentUser.perms?.minutesCreate).map(d => `<option value="${escapeHtml(d)}">${escapeHtml(d)}</option>`).join('');
   }
 
   const uDept = document.getElementById('uDept');
@@ -3510,7 +3516,9 @@ function renderSubmissionReqs() {
           ${sub.status === 'APPROVED' ? `
             <button onclick="viewSubmissionApprovalSlip(${sub.id})" class="px-2 py-1 bg-blue-600 text-white rounded text-xs hover:bg-blue-700 font-bold" title="Xem Phiếu Phê Duyệt">👁️ Xem Phiếu</button>
             ${canDownloadFile(currentUser, 'submission', sub.dept, sub.creator) ? `<button onclick="downloadSubmissionApprovalSlip(${sub.id})" class="px-2 py-1 bg-slate-600 text-white rounded text-xs hover:bg-slate-700 font-bold" title="Tải Phiếu Phê Duyệt">⬇️ Tải</button>` : ''}
-            <button onclick="createTaskFromSubmission(${sub.id})" class="px-2 py-1 bg-violet-600 text-white rounded text-xs hover:bg-violet-700 font-bold" title="Giao việc từ ý kiến chỉ đạo">📌 Giao việc</button>
+            ${DB.tasks.some(t => t.sourceType === 'SUBMISSION' && t.sourceCode === sub.code)
+              ? `<span class="px-2 py-1 bg-emerald-100 text-emerald-800 rounded text-xs font-bold" title="Đã tự động tạo Công việc theo dõi khi phê duyệt">✅ Đã có công việc</span>`
+              : `<button onclick="createTaskFromSubmission(${sub.id})" class="px-2 py-1 bg-violet-600 text-white rounded text-xs hover:bg-violet-700 font-bold" title="Giao việc từ ý kiến chỉ đạo">📌 Giao việc</button>`}
           ` : ''}
         </td>
       </tr>
@@ -3658,6 +3666,27 @@ function processSubmission(actionType) {
         notifyUsersByEmail('SUBMISSION', 'NOTIFY_APPROVED', sub.code, [sub.creator],
           `[VPDT] Tờ trình ${sub.code} đã được phê duyệt`,
           `Tờ trình "${sub.title}" (${sub.code}) của bạn đã được phê duyệt hoàn tất.`);
+
+        // TỰ ĐỘNG tạo Công việc theo dõi ngay khi có ý kiến chỉ đạo ở bước phê duyệt cuối cùng —
+        // không cần bấm "📌 Giao việc" thủ công nữa. Chưa gán người nhận (theo yêu cầu), người
+        // duyệt cuối (đang thực hiện) hoặc Admin sẽ gán người nhận sau trong module Công việc.
+        if (comment) {
+          const newTask = {
+            id: Date.now(),
+            title: `Thực hiện theo chỉ đạo: ${sub.title}`,
+            description: comment,
+            deadline: '',
+            assignedTo: '', assignedToName: '',
+            assignedBy: currentUser.username, assignedByName: currentUser.name,
+            sourceType: 'SUBMISSION', sourceCode: sub.code,
+            status: 'TODO',
+            createdAt: new Date().toLocaleString('vi-VN'),
+            history: [{ action: 'CREATED', by: currentUser.username, byName: currentUser.name, time: new Date().toLocaleString('vi-VN') }]
+          };
+          DB.tasks.unshift(newTask);
+          syncStorage('tasks');
+          logSystemAction('TASK', 'CREATE_TASK', `Tự động tạo công việc theo dõi chỉ đạo từ Văn bản trình [${sub.code}] (chưa gán người nhận)`, 'SUCCESS', sub.code);
+        }
       }
     } else {
       msg = '✅ Đã ghi nhận phê duyệt của bạn — đang chờ các đồng phê duyệt còn lại ở bước này.';
@@ -3764,8 +3793,12 @@ function downloadSubmissionApprovalSlip(subId) {
 // trước, có thể sửa tiêu đề/mô tả/người nhận/hạn trước khi xác nhận (tránh tạo nhầm công việc từ
 // những ý kiến/chỉ đạo không thực sự cần giao việc).
 let pendingTaskSource = null;
+// Khác null khi modal Giao Việc đang ở chế độ GÁN NGƯỜI NHẬN cho 1 công việc đã tồn tại (vd công
+// việc tự động tạo từ chỉ đạo của Văn bản trình nhưng chưa có người nhận) thay vì tạo công việc mới.
+let editingTaskId = null;
 
 function openCreateTaskModal(opts) {
+  editingTaskId = null;
   pendingTaskSource = { sourceType: opts.sourceType || 'MANUAL', sourceCode: opts.sourceCode || '' };
 
   document.getElementById('taskTitleInput').value = opts.title || '';
@@ -3778,6 +3811,31 @@ function openCreateTaskModal(opts) {
 
   const labels = { SUBMISSION: 'Từ Văn bản trình', MEETING_MINUTES: 'Từ Biên bản họp', MANUAL: 'Giao việc trực tiếp' };
   document.getElementById('createTaskSourceLabel').innerText = opts.sourceCode ? `${labels[pendingTaskSource.sourceType]}: ${opts.sourceCode}` : labels[pendingTaskSource.sourceType];
+  document.getElementById('createTaskConfirmBtn').innerText = '✅ Xác Nhận Giao Việc';
+
+  document.getElementById('createTaskModal').classList.remove('hidden');
+}
+
+// Mở modal Giao Việc ở chế độ GÁN NGƯỜI NHẬN cho 1 công việc đã tồn tại nhưng chưa có người nhận
+// (vd công việc tự động tạo từ ý kiến chỉ đạo cuối cùng của Văn bản trình).
+function openAssignTaskModal(taskId) {
+  const t = DB.tasks.find(x => x.id === taskId);
+  if (!t) return;
+
+  editingTaskId = taskId;
+  pendingTaskSource = null;
+
+  document.getElementById('taskTitleInput').value = t.title;
+  document.getElementById('taskDescInput').value = t.description || '';
+  document.getElementById('taskDeadlineInput').value = t.deadline || '';
+
+  const assigneeSel = document.getElementById('taskAssigneeInput');
+  assigneeSel.innerHTML = '<option value="">-- Chọn người nhận --</option>' +
+    DB.users.map(u => `<option value="${escapeHtml(u.username)}">${escapeHtml(u.name)} (${escapeHtml(u.username)})</option>`).join('');
+
+  const labels = { SUBMISSION: 'Từ Văn bản trình', MEETING_MINUTES: 'Từ Biên bản họp', MANUAL: 'Giao việc trực tiếp' };
+  document.getElementById('createTaskSourceLabel').innerText = `Gán người nhận cho công việc ${t.sourceCode ? `${labels[t.sourceType] || t.sourceType}: ${t.sourceCode}` : labels[t.sourceType] || ''}`;
+  document.getElementById('createTaskConfirmBtn').innerText = '✅ Gán Người Nhận';
 
   document.getElementById('createTaskModal').classList.remove('hidden');
 }
@@ -3785,6 +3843,7 @@ function openCreateTaskModal(opts) {
 function closeCreateTaskModal() {
   document.getElementById('createTaskModal').classList.add('hidden');
   pendingTaskSource = null;
+  editingTaskId = null;
 }
 
 function confirmCreateTask() {
@@ -3797,6 +3856,29 @@ function confirmCreateTask() {
   if (!assignedTo) return alert('Vui lòng chọn người nhận!');
 
   const assignee = DB.users.find(u => u.username === assignedTo);
+
+  if (editingTaskId !== null) {
+    const t = DB.tasks.find(x => x.id === editingTaskId);
+    if (!t) { closeCreateTaskModal(); return; }
+    t.assignedTo = assignedTo;
+    t.assignedToName = assignee ? assignee.name : assignedTo;
+    t.deadline = deadline;
+    t.history.push({ action: 'ASSIGNED', by: currentUser.username, byName: currentUser.name, time: new Date().toLocaleString('vi-VN') });
+    syncStorage('tasks');
+    logSystemAction('TASK', 'ASSIGN_TASK', `Gán người nhận [${t.assignedToName}] cho công việc [${t.title}]`, 'SUCCESS', t.sourceCode || t.title);
+
+    if (assignee && assignee.email) {
+      notifyUsersByEmail('TASK', 'NOTIFY_TASK_ASSIGNED', t.sourceCode || t.title, [assignedTo],
+        `[VPDT] Bạn được giao công việc: ${t.title}`,
+        `${currentUser.name} đã gán cho bạn công việc "${t.title}"${description ? `: ${description}` : ''}.${deadline ? ` Hạn hoàn thành: ${deadline}.` : ''}`);
+    }
+
+    alert('✅ Đã gán người nhận thành công!');
+    closeCreateTaskModal();
+    renderTasks();
+    return;
+  }
+
   const newTask = {
     id: Date.now(),
     title, description, deadline,
@@ -3905,8 +3987,12 @@ function renderTasks() {
 
   tbody.innerHTML = pageItems.map(t => {
     const canUpdate = currentUser.perms?.admin || t.assignedTo === currentUser.username || t.assignedBy === currentUser.username;
+    const canAssign = !t.assignedTo && (currentUser.perms?.admin || t.assignedBy === currentUser.username);
     let actionBtns = '';
-    if (canUpdate && t.status !== 'DONE' && t.status !== 'CANCELLED') {
+    if (canAssign) {
+      actionBtns += `<button onclick="openAssignTaskModal(${t.id})" class="bg-violet-600 text-white px-2 py-1 rounded text-xs font-bold hover:bg-violet-700">👤 Gán người nhận</button> `;
+    }
+    if (canUpdate && t.assignedTo && t.status !== 'DONE' && t.status !== 'CANCELLED') {
       if (t.status === 'TODO') actionBtns += `<button onclick="updateTaskStatus(${t.id}, 'DOING')" class="bg-blue-600 text-white px-2 py-1 rounded text-xs font-bold hover:bg-blue-700">▶️ Bắt đầu</button> `;
       if (t.status === 'DOING') actionBtns += `<button onclick="updateTaskStatus(${t.id}, 'DONE')" class="bg-green-600 text-white px-2 py-1 rounded text-xs font-bold hover:bg-green-700">✅ Hoàn thành</button> `;
       actionBtns += `<button onclick="updateTaskStatus(${t.id}, 'CANCELLED')" class="bg-red-600 text-white px-2 py-1 rounded text-xs font-bold hover:bg-red-700">✕ Huỷ</button>`;
@@ -3917,7 +4003,7 @@ function renderTasks() {
           <div class="font-bold text-gray-800">${escapeHtml(t.title)}</div>
           <div class="text-xs text-gray-500 line-clamp-1">${escapeHtml(t.description || '')}</div>
         </td>
-        <td class="border p-2 text-xs">Nhận: <b>${escapeHtml(t.assignedToName)}</b><br>Giao: ${escapeHtml(t.assignedByName)}</td>
+        <td class="border p-2 text-xs">Nhận: ${t.assignedToName ? `<b>${escapeHtml(t.assignedToName)}</b>` : '<span class="text-amber-600 font-bold">Chưa gán</span>'}<br>Giao: ${escapeHtml(t.assignedByName)}</td>
         <td class="border p-2 text-xs">${sourceLabels[t.sourceType] || t.sourceType}${t.sourceCode ? `<br><span class="text-gray-400">${escapeHtml(t.sourceCode)}</span>` : ''}</td>
         <td class="border p-2 text-xs">${escapeHtml(t.deadline || 'Chưa đặt')}</td>
         <td class="border p-2">${statusBadges[t.status] || t.status}</td>
@@ -4438,14 +4524,45 @@ function onMinutesLinkedMeetingChange() {
   if (!id) return;
   const m = DB.meetings.find(x => x.id === parseInt(id, 10));
   if (!m) return;
-  document.getElementById('minutesDept').value = m.dept;
   document.getElementById('minutesTitle').value = m.title;
   document.getElementById('minutesTime').value = m.startTime;
   document.getElementById('minutesLocation').value = m.room || '';
 }
 
-// --- Bảng "Ý kiến chỉ đạo" nhập trực tiếp trong biên bản — mỗi dòng gán ngay cho 1 người cụ thể,
-// là nguồn dữ liệu để tạo Công việc sau này (xem module Công việc). ---
+// --- Bảng "Thành phần tham dự" nhập theo hàng ngang: Họ tên / Chức danh / Phòng / SĐT. ---
+function addAttendeeRow() {
+  minutesAttendeesRows.push({ name: '', title: '', dept: '', phone: '' });
+  renderAttendeesTable();
+}
+
+function removeAttendeeRow(idx) {
+  minutesAttendeesRows.splice(idx, 1);
+  renderAttendeesTable();
+}
+
+function updateAttendeeField(idx, field, value) {
+  if (!minutesAttendeesRows[idx]) return;
+  minutesAttendeesRows[idx][field] = value;
+}
+
+function renderAttendeesTable() {
+  const tbody = document.getElementById('minutesAttendeesTableBody');
+  if (!tbody) return;
+  tbody.innerHTML = minutesAttendeesRows.map((a, idx) => `
+    <tr>
+      <td class="border p-1 text-center">${idx + 1}</td>
+      <td class="border p-1"><input value="${escapeHtml(a.name)}" oninput="updateAttendeeField(${idx}, 'name', this.value)" class="w-full border-0 p-0.5 text-xs focus:outline-none" placeholder="Họ và tên"></td>
+      <td class="border p-1"><input value="${escapeHtml(a.title)}" oninput="updateAttendeeField(${idx}, 'title', this.value)" class="w-full border-0 p-0.5 text-xs focus:outline-none" placeholder="Chức danh"></td>
+      <td class="border p-1"><input value="${escapeHtml(a.dept)}" oninput="updateAttendeeField(${idx}, 'dept', this.value)" class="w-full border-0 p-0.5 text-xs focus:outline-none" placeholder="Phòng"></td>
+      <td class="border p-1"><input value="${escapeHtml(a.phone)}" oninput="updateAttendeeField(${idx}, 'phone', this.value)" class="w-full border-0 p-0.5 text-xs focus:outline-none" placeholder="SĐT"></td>
+      <td class="border p-1 text-center"><button type="button" onclick="removeAttendeeRow(${idx})" class="text-red-600 font-bold hover:text-red-800" title="Xoá dòng">✕</button></td>
+    </tr>
+  `).join('');
+}
+
+// --- Bảng "Ý kiến chỉ đạo" nhập trực tiếp trong biên bản — mỗi dòng gán ngay cho 1 người cụ thể;
+// dòng nào có gán người thực hiện sẽ TỰ ĐỘNG được tạo thành Công việc ngay khi lưu biên bản (xem
+// autoCreateTasksFromDirectives()) — không cần bấm "Giao việc" thủ công từng dòng như trước nữa. ---
 function addMinutesDirectiveRow() {
   minutesDirectives.push({ content: '', assignedTo: '', deadline: '' });
   renderMinutesDirectivesTable();
@@ -4480,32 +4597,71 @@ function renderMinutesDirectivesTable() {
   `).join('');
 }
 
+// Tự động tạo Công việc cho các dòng chỉ đạo CÓ gán người thực hiện và CHƯA từng tạo việc
+// (d.taskCreated) — gọi ngay sau khi Lưu/Cập nhật biên bản, không cần bấm "Giao việc" thủ công.
+// An toàn khi Sửa biên bản nhiều lần: chỉ tạo bổ sung cho dòng mới/chưa có việc, không tạo trùng.
+function autoCreateTasksFromDirectives(m) {
+  let anyCreated = false;
+  (m.directives || []).forEach(d => {
+    if (!d.assignedTo || d.taskCreated) return;
+    const assignee = DB.users.find(u => u.username === d.assignedTo);
+    const newTask = {
+      id: Date.now() + Math.floor(Math.random() * 1000),
+      title: `Chỉ đạo từ biên bản họp: ${m.title}`,
+      description: d.content,
+      deadline: d.deadline || '',
+      assignedTo: d.assignedTo, assignedToName: assignee ? assignee.name : d.assignedTo,
+      assignedBy: currentUser.username, assignedByName: currentUser.name,
+      sourceType: 'MEETING_MINUTES', sourceCode: m.code,
+      status: 'TODO',
+      createdAt: new Date().toLocaleString('vi-VN'),
+      history: [{ action: 'CREATED', by: currentUser.username, byName: currentUser.name, time: new Date().toLocaleString('vi-VN') }]
+    };
+    DB.tasks.unshift(newTask);
+    logSystemAction('TASK', 'CREATE_TASK', `Tự động giao việc [${newTask.title}] cho ${newTask.assignedToName} (từ ${m.code})`, 'SUCCESS', m.code);
+    if (assignee && assignee.email) {
+      notifyUsersByEmail('TASK', 'NOTIFY_TASK_ASSIGNED', m.code, [d.assignedTo],
+        `[VPDT] Bạn được giao công việc mới từ Biên bản họp: ${m.title}`,
+        `${currentUser.name} đã giao cho bạn công việc theo chỉ đạo trong biên bản họp "${m.title}" (${m.code}): ${d.content}`);
+    }
+    d.taskCreated = true;
+    anyCreated = true;
+  });
+  if (anyCreated) syncStorage('tasks');
+  return anyCreated;
+}
+
 function submitMeetingMinutes(e) {
   e.preventDefault();
   if (editingMinutesId !== null) return updateMeetingMinutes(e);
 
+  if (!canCreateMeetingMinutes(currentUser)) {
+    return alert('⛔ Bạn không có quyền lập biên bản họp!');
+  }
+
   const code = document.getElementById('minutesCode').value.trim();
-  const dept = document.getElementById('minutesDept').value;
   const linkedMeetingRaw = document.getElementById('minutesLinkedMeeting').value;
   const title = document.getElementById('minutesTitle').value.trim();
   const time = document.getElementById('minutesTime').value;
   const location = document.getElementById('minutesLocation').value.trim();
   const chair = document.getElementById('minutesChair').value.trim();
   const secretary = document.getElementById('minutesSecretary').value.trim();
-  const attendees = document.getElementById('minutesAttendees').value.trim();
   const content = document.getElementById('minutesContent').value.trim();
 
   if (DB.meetingMinutes.some(m => m.code === code)) {
     return alert('Mã biên bản đã tồn tại!');
   }
 
+  const validAttendees = minutesAttendeesRows.filter(a => a.name.trim()).map(a => ({ ...a }));
   const validDirectives = minutesDirectives.filter(d => d.content.trim()).map(d => ({ ...d }));
 
   const newMinutes = {
     id: Date.now(),
-    code, dept,
+    code,
     linkedMeetingId: linkedMeetingRaw ? parseInt(linkedMeetingRaw, 10) : null,
-    title, time, location, chair, secretary, attendees, content,
+    title, time, location, chair, secretary,
+    attendees: validAttendees,
+    content,
     directives: validDirectives,
     creator: currentUser.username,
     creatorName: currentUser.name,
@@ -4513,12 +4669,15 @@ function submitMeetingMinutes(e) {
   };
 
   DB.meetingMinutes.unshift(newMinutes);
+  const anyTaskCreated = autoCreateTasksFromDirectives(newMinutes);
   syncStorage('meetingMinutes');
   logSystemAction('MINUTES', 'CREATE_MINUTES', `Lập biên bản họp [${code} - ${title}]`, 'SUCCESS', code);
-  alert('✅ Đã lưu biên bản họp thành công!');
+  alert('✅ Đã lưu biên bản họp thành công!' + (anyTaskCreated ? ' Các chỉ đạo đã gán người thực hiện đã được tự động chuyển thành Công việc.' : ''));
   e.target.reset();
   minutesDirectives = [];
+  minutesAttendeesRows = [];
   renderMinutesDirectivesTable();
+  renderAttendeesTable();
   renderMeetingMinutes();
 }
 
@@ -4534,15 +4693,16 @@ function openEditMeetingMinutes(id) {
   document.getElementById('minutesCode').readOnly = true;
   document.getElementById('minutesCode').classList.add('bg-gray-100', 'cursor-not-allowed');
   populateMinutesLinkSelect();
-  document.getElementById('minutesDept').value = m.dept;
   document.getElementById('minutesLinkedMeeting').value = m.linkedMeetingId || '';
   document.getElementById('minutesTitle').value = m.title;
   document.getElementById('minutesTime').value = m.time;
   document.getElementById('minutesLocation').value = m.location || '';
   document.getElementById('minutesChair').value = m.chair;
   document.getElementById('minutesSecretary').value = m.secretary;
-  document.getElementById('minutesAttendees').value = m.attendees || '';
   document.getElementById('minutesContent').value = m.content;
+
+  minutesAttendeesRows = Array.isArray(m.attendees) ? m.attendees.map(a => ({ ...a })) : [];
+  renderAttendeesTable();
 
   minutesDirectives = (m.directives || []).map(d => ({ ...d }));
   renderMinutesDirectivesTable();
@@ -4558,7 +4718,9 @@ function cancelEditMeetingMinutes() {
   document.getElementById('minutesCode').readOnly = false;
   document.getElementById('minutesCode').classList.remove('bg-gray-100', 'cursor-not-allowed');
   minutesDirectives = [];
+  minutesAttendeesRows = [];
   renderMinutesDirectivesTable();
+  renderAttendeesTable();
   document.getElementById('minutesSubmitBtn').innerText = 'Lưu Biên Bản Họp';
   document.getElementById('minutesCancelEditBtn').classList.add('hidden');
 }
@@ -4572,22 +4734,30 @@ function updateMeetingMinutes(e) {
   }
 
   const linkedMeetingRaw = document.getElementById('minutesLinkedMeeting').value;
-  m.dept = document.getElementById('minutesDept').value;
   m.linkedMeetingId = linkedMeetingRaw ? parseInt(linkedMeetingRaw, 10) : null;
   m.title = document.getElementById('minutesTitle').value.trim();
   m.time = document.getElementById('minutesTime').value;
   m.location = document.getElementById('minutesLocation').value.trim();
   m.chair = document.getElementById('minutesChair').value.trim();
   m.secretary = document.getElementById('minutesSecretary').value.trim();
-  m.attendees = document.getElementById('minutesAttendees').value.trim();
+  m.attendees = minutesAttendeesRows.filter(a => a.name.trim()).map(a => ({ ...a }));
   m.content = document.getElementById('minutesContent').value.trim();
-  m.directives = minutesDirectives.filter(d => d.content.trim()).map(d => ({ ...d }));
+
+  // Giữ lại cờ taskCreated của các dòng chỉ đạo CŨ khớp nội dung+người thực hiện, để không tạo lại
+  // Công việc đã có; dòng thực sự mới sẽ được autoCreateTasksFromDirectives() xử lý bên dưới.
+  const oldDirectivesByKey = new Map((m.directives || []).map(d => [`${d.content}::${d.assignedTo}`, d]));
+  m.directives = minutesDirectives.filter(d => d.content.trim()).map(d => {
+    const old = oldDirectivesByKey.get(`${d.content}::${d.assignedTo}`);
+    return { ...d, taskCreated: old ? !!old.taskCreated : false };
+  });
+
   m.lastEditedBy = currentUser.username;
   m.lastEditedAt = new Date().toLocaleString('vi-VN');
 
+  const anyTaskCreated = autoCreateTasksFromDirectives(m);
   syncStorage('meetingMinutes');
   logSystemAction('MINUTES', 'EDIT_MINUTES', `Cập nhật biên bản họp [${m.code}]`, 'SUCCESS', m.code);
-  alert('✅ Đã cập nhật biên bản họp thành công!');
+  alert('✅ Đã cập nhật biên bản họp thành công!' + (anyTaskCreated ? ' Các chỉ đạo mới đã gán người thực hiện đã được tự động chuyển thành Công việc.' : ''));
   cancelEditMeetingMinutes();
   renderMeetingMinutes();
 }
@@ -4596,16 +4766,14 @@ function renderMeetingMinutes() {
   const tbody = document.getElementById('minutesTableBody');
   if (!tbody) return;
 
-  const deptFilter = document.getElementById('filterDeptMinutes')?.value || '';
+  const topicFilter = (document.getElementById('filterTopicMinutes')?.value || '').trim().toLowerCase();
   const fromDate = document.getElementById('filterFromDateMinutes')?.value || '';
   const toDate = document.getElementById('filterToDateMinutes')?.value || '';
   const keyword = (document.getElementById('filterKeywordMinutes')?.value || '').trim();
 
+  // Biên bản họp là kênh chung, không giới hạn theo phòng ban -> mọi người dùng đều XEM được toàn bộ.
   const visible = DB.meetingMinutes.filter(m => {
-    const canView = scopeAllows(currentUser, currentUser.perms?.minutesView, m.dept) || m.creator === currentUser.username;
-    if (!canView) return false;
-
-    if (deptFilter && m.dept !== deptFilter) return false;
+    if (topicFilter && !(m.title || '').toLowerCase().includes(topicFilter)) return false;
     if (!isInDateRange(m.createdAt, fromDate, toDate)) return false;
     if (!matchesKeywordFields([m.code, m.title, m.chair, m.creatorName], keyword)) return false;
 
@@ -4620,10 +4788,13 @@ function renderMeetingMinutes() {
     return;
   }
 
-  tbody.innerHTML = pageItems.map(m => `
+  const st = getListPageState('minutes');
+  const startIdx = (st.page - 1) * st.pageSize;
+
+  tbody.innerHTML = pageItems.map((m, idx) => `
     <tr class="hover:bg-gray-50 border-b">
+      <td class="border p-2 text-center text-gray-500">${startIdx + idx + 1}</td>
       <td class="border p-2 font-mono font-bold text-rose-800">${escapeHtml(m.code)}<br><span class="text-xs text-gray-500 font-normal">${escapeHtml(m.title)}</span></td>
-      <td class="border p-2">${escapeHtml(m.dept)}</td>
       <td class="border p-2 text-xs">${escapeHtml(m.time)}${m.location ? `<br><span class="text-gray-400">${escapeHtml(m.location)}</span>` : ''}</td>
       <td class="border p-2 text-xs">CT: ${escapeHtml(m.chair)}<br>TK: ${escapeHtml(m.secretary)}</td>
       <td class="border p-2 text-center">${(m.directives || []).length}</td>
@@ -4641,8 +4812,18 @@ function viewMeetingMinutesDetails(id) {
   if (!m) return;
 
   document.getElementById('viewModalTitle').innerText = `📝 ${m.title} (${m.code})`;
-  document.getElementById('viewModalSub').innerText = `Phòng ban: ${m.dept} | Chủ trì: ${m.chair} | Thư ký: ${m.secretary}`;
+  document.getElementById('viewModalSub').innerText = `Chủ trì: ${m.chair} | Thư ký: ${m.secretary}`;
   document.getElementById('viewModalFooterInfo').innerText = `Người lập: ${m.creator}${m.lastEditedBy ? ` | Sửa lần cuối bởi: ${m.lastEditedBy} lúc ${m.lastEditedAt}` : ''}`;
+
+  const attendeesRows = Array.isArray(m.attendees) ? m.attendees : [];
+  const attendeesHTML = attendeesRows.length ? `
+    <table class="w-full border-collapse border text-xs mt-2">
+      <thead><tr class="bg-gray-100"><th class="border p-1">STT</th><th class="border p-1">Họ và tên</th><th class="border p-1">Chức danh</th><th class="border p-1">Phòng</th><th class="border p-1">SĐT</th></tr></thead>
+      <tbody>
+        ${attendeesRows.map((a, idx) => `<tr><td class="border p-1 text-center">${idx + 1}</td><td class="border p-1">${escapeHtml(a.name)}</td><td class="border p-1">${escapeHtml(a.title || '')}</td><td class="border p-1">${escapeHtml(a.dept || '')}</td><td class="border p-1">${escapeHtml(a.phone || '')}</td></tr>`).join('')}
+      </tbody>
+    </table>
+  ` : '<p class="text-gray-400 italic">Không có thành phần tham dự nào được ghi nhận.</p>';
 
   const directivesHTML = (m.directives || []).length ? `
     <table class="w-full border-collapse border text-xs mt-2">
@@ -4650,7 +4831,10 @@ function viewMeetingMinutesDetails(id) {
       <tbody>
         ${m.directives.map((d, idx) => {
           const u = DB.users.find(x => x.username === d.assignedTo);
-          return `<tr><td class="border p-1 text-center">${idx + 1}</td><td class="border p-1">${escapeHtml(d.content)}</td><td class="border p-1">${escapeHtml(u ? u.name : (d.assignedTo || 'Chưa gán'))}</td><td class="border p-1">${escapeHtml(d.deadline || '')}</td><td class="border p-1 text-center"><button onclick="createTaskFromMinutesDirective(${m.id}, ${idx})" class="bg-violet-600 text-white px-2 py-0.5 rounded text-[11px] font-bold hover:bg-violet-700">📌 Giao việc</button></td></tr>`;
+          const actionCell = d.taskCreated
+            ? `<span class="text-emerald-700 font-bold text-[11px]">✅ Đã giao việc</span>`
+            : `<button onclick="createTaskFromMinutesDirective(${m.id}, ${idx})" class="bg-violet-600 text-white px-2 py-0.5 rounded text-[11px] font-bold hover:bg-violet-700">📌 Giao việc</button>`;
+          return `<tr><td class="border p-1 text-center">${idx + 1}</td><td class="border p-1">${escapeHtml(d.content)}</td><td class="border p-1">${escapeHtml(u ? u.name : (d.assignedTo || 'Chưa gán'))}</td><td class="border p-1">${escapeHtml(d.deadline || '')}</td><td class="border p-1 text-center">${actionCell}</td></tr>`;
         }).join('')}
       </tbody>
     </table>
@@ -4663,7 +4847,10 @@ function viewMeetingMinutesDetails(id) {
         <div><b>Địa điểm:</b> ${escapeHtml(m.location || 'N/A')}</div>
         <div><b>Chủ trì:</b> ${escapeHtml(m.chair)}</div>
         <div><b>Thư ký:</b> ${escapeHtml(m.secretary)}</div>
-        <div class="md:col-span-2"><b>Thành phần tham dự:</b> ${escapeHtml(m.attendees || 'N/A')}</div>
+      </div>
+      <div class="border-t mt-3 pt-3">
+        <b>Thành phần tham dự:</b>
+        ${attendeesHTML}
       </div>
       <div class="border-t mt-3 pt-3">
         <b>Nội dung biên bản:</b>
@@ -4685,6 +4872,11 @@ function buildMeetingMinutesDocumentHTML(m) {
     const u = DB.users.find(x => x.username === username);
     return u ? u.name : (username || 'Chưa gán');
   };
+  const attendeesRows = Array.isArray(m.attendees) ? m.attendees : [];
+  const attendeeRowsHTML = attendeesRows.map((a, idx) => `
+    <tr><td>${idx + 1}</td><td>${escapeHtml(a.name)}</td><td>${escapeHtml(a.title || '')}</td><td>${escapeHtml(a.dept || '')}</td><td>${escapeHtml(a.phone || '')}</td></tr>
+  `).join('') || `<tr><td colspan="5" style="text-align:center;color:#888;">Không có thành phần tham dự</td></tr>`;
+
   const directiveRows = (m.directives || []).map((d, idx) => `
     <tr><td>${idx + 1}</td><td>${escapeHtml(d.content)}</td><td>${escapeHtml(u2name(d.assignedTo))}</td><td>${escapeHtml(d.deadline || '')}</td></tr>
   `).join('') || `<tr><td colspan="4" style="text-align:center;color:#888;">Không có ý kiến chỉ đạo</td></tr>`;
@@ -4723,10 +4915,14 @@ function buildMeetingMinutesDocumentHTML(m) {
         <table class="md-field-table">
           <tr><td class="md-label">Thời gian họp:</td><td>${escapeHtml(m.time)}</td></tr>
           <tr><td class="md-label">Địa điểm:</td><td>${escapeHtml(m.location || '')}</td></tr>
-          <tr><td class="md-label">Phòng ban:</td><td>${escapeHtml(m.dept)}</td></tr>
           <tr><td class="md-label">Chủ trì:</td><td>${escapeHtml(m.chair)}</td></tr>
           <tr><td class="md-label">Thư ký:</td><td>${escapeHtml(m.secretary)}</td></tr>
-          <tr><td class="md-label">Thành phần tham dự:</td><td>${escapeHtml(m.attendees || '')}</td></tr>
+        </table>
+
+        <div class="md-section-title">Thành Phần Tham Dự</div>
+        <table class="md-items-table">
+          <thead><tr><th>STT</th><th>Họ và tên</th><th>Chức danh</th><th>Phòng</th><th>SĐT</th></tr></thead>
+          <tbody>${attendeeRowsHTML}</tbody>
         </table>
 
         <div class="md-section-title">Nội Dung Biên Bản</div>
@@ -6272,9 +6468,7 @@ function renderDeptCheckboxes() {
     { container: 'pCarDownloadDeptContainer', prefix: 'pCarDownloadDept' },
     { container: 'pOfficeViewDeptContainer', prefix: 'pOfficeViewDept' },
     { container: 'pOfficeCreateDeptContainer', prefix: 'pOfficeCreateDept' },
-    { container: 'pOfficeDownloadDeptContainer', prefix: 'pOfficeDownloadDept' },
-    { container: 'pMinutesViewDeptContainer', prefix: 'pMinutesViewDept' },
-    { container: 'pMinutesCreateDeptContainer', prefix: 'pMinutesCreateDept' }
+    { container: 'pOfficeDownloadDeptContainer', prefix: 'pOfficeDownloadDept' }
   ];
 
   groups.forEach(g => {
@@ -6349,8 +6543,7 @@ function saveUser(e) {
     officeView: scopeFromForm('pOfficeViewAll', 'pOfficeViewDept'),
     officeCreate: scopeFromForm('pOfficeCreateAll', 'pOfficeCreateDept'),
     officeDownload: scopeFromForm('pOfficeDownloadAll', 'pOfficeDownloadDept'),
-    minutesView: scopeFromForm('pMinutesViewAll', 'pMinutesViewDept'),
-    minutesCreate: scopeFromForm('pMinutesCreateAll', 'pMinutesCreateDept')
+    minutesCreate: document.getElementById('pMinutesCreate').checked
   };
 
   if (editId) {
@@ -6401,6 +6594,7 @@ function resetUserForm() {
   document.getElementById('pOfficeBuy').checked = defaults.officeBuy;
   document.getElementById('pOfficeFix').checked = defaults.officeFix;
   document.getElementById('pOfficeInvest').checked = defaults.officeInvest;
+  document.getElementById('pMinutesCreate').checked = !!defaults.minutesCreate;
 
   [
     'pUploadAll', 'pViewDraftAll', 'pViewApprovedAll', 'pDocDownloadAll',
@@ -6408,8 +6602,7 @@ function resetUserForm() {
     'pContractViewAll', 'pContractCreateAll', 'pContractDownloadAll',
     'pMeetingViewAll', 'pMeetingBookAll',
     'pCarViewAll', 'pCarCreateAll', 'pCarDownloadAll',
-    'pOfficeViewAll', 'pOfficeCreateAll', 'pOfficeDownloadAll',
-    'pMinutesViewAll', 'pMinutesCreateAll'
+    'pOfficeViewAll', 'pOfficeCreateAll', 'pOfficeDownloadAll'
   ].forEach(id => {
     const cb = document.getElementById(id);
     if (cb) { cb.checked = false; }
@@ -6446,6 +6639,7 @@ function editUser(id) {
   document.getElementById('pOfficeBuy').checked = !!perms.officeBuy;
   document.getElementById('pOfficeFix').checked = !!perms.officeFix;
   document.getElementById('pOfficeInvest').checked = !!perms.officeInvest;
+  document.getElementById('pMinutesCreate').checked = !!perms.minutesCreate;
 
   document.getElementById('pUploadAll').checked = !!perms.uploadAll;
   document.getElementById('pViewDraftAll').checked = !!perms.viewDraftAll;
@@ -6466,8 +6660,6 @@ function editUser(id) {
   document.getElementById('pOfficeViewAll').checked = !!perms.officeView?.all;
   document.getElementById('pOfficeCreateAll').checked = !!perms.officeCreate?.all;
   document.getElementById('pOfficeDownloadAll').checked = !!perms.officeDownload?.all;
-  document.getElementById('pMinutesViewAll').checked = !!perms.minutesView?.all;
-  document.getElementById('pMinutesCreateAll').checked = !!perms.minutesCreate?.all;
 
   renderDeptCheckboxes();
 
@@ -6501,8 +6693,6 @@ function editUser(id) {
   setGroupCheckboxes(perms.officeView?.depts, 'pOfficeViewDept');
   setGroupCheckboxes(perms.officeCreate?.depts, 'pOfficeCreateDept');
   setGroupCheckboxes(perms.officeDownload?.depts, 'pOfficeDownloadDept');
-  setGroupCheckboxes(perms.minutesView?.depts, 'pMinutesViewDept');
-  setGroupCheckboxes(perms.minutesCreate?.depts, 'pMinutesCreateDept');
 
   // Đồng bộ trạng thái "disabled" của các checkbox phòng ban khi ALL đang bật (sửa luôn 1 lỗi nhỏ
   // có sẵn: trước đây khi sửa 1 user có *All=true, checkbox phòng ban không tự vô hiệu hoá lại).
@@ -6513,8 +6703,7 @@ function editUser(id) {
     ['pContractViewAll', 'pContractViewDept'], ['pContractCreateAll', 'pContractCreateDept'], ['pContractDownloadAll', 'pContractDownloadDept'],
     ['pMeetingViewAll', 'pMeetingViewDept'], ['pMeetingBookAll', 'pMeetingBookDept'],
     ['pCarViewAll', 'pCarViewDept'], ['pCarCreateAll', 'pCarCreateDept'], ['pCarDownloadAll', 'pCarDownloadDept'],
-    ['pOfficeViewAll', 'pOfficeViewDept'], ['pOfficeCreateAll', 'pOfficeCreateDept'], ['pOfficeDownloadAll', 'pOfficeDownloadDept'],
-    ['pMinutesViewAll', 'pMinutesViewDept'], ['pMinutesCreateAll', 'pMinutesCreateDept']
+    ['pOfficeViewAll', 'pOfficeViewDept'], ['pOfficeCreateAll', 'pOfficeCreateDept'], ['pOfficeDownloadAll', 'pOfficeDownloadDept']
   ].forEach(([allId, prefix]) => toggleScopeGroup(allId, prefix));
 }
 
@@ -6540,7 +6729,7 @@ function summarizeUserPerms(perms) {
   if (hasScope(perms.meetingView) || hasScope(perms.meetingBookScope) || perms.meetingApprove || perms.meetingCancel) parts.push('📅 Phòng họp');
   if (hasScope(perms.carView) || hasScope(perms.carCreate)) parts.push('🚗 Xe');
   if ((hasScope(perms.officeView) || hasScope(perms.officeCreate)) && (perms.officeBuy || perms.officeFix || perms.officeInvest)) parts.push('🏢 VP');
-  if (hasScope(perms.minutesView) || hasScope(perms.minutesCreate)) parts.push('📝 Biên bản họp');
+  if (perms.minutesCreate) parts.push('📝 Biên bản họp');
   if (perms.canViewReports) parts.push('📊 Báo cáo');
   if (perms.internalNewsCreate || perms.internalTrainingCreate || perms.internalRewardCreate) parts.push('📣 Truyền thông (đăng bài)');
   return parts.length ? parts.join(', ') : '<span class="text-gray-400 italic">Chưa cấp quyền module nào</span>';
