@@ -772,19 +772,13 @@
 
     <div class="bg-gray-50 p-4 rounded-lg border space-y-3">
       <h4 class="font-bold text-gray-700 text-sm">🔍 Tìm Kiếm & Lọc</h4>
-      <div class="grid grid-cols-1 md:grid-cols-4 gap-3">
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
         <div>
-          <label class="block text-xs font-semibold text-gray-600 mb-1">Lọc Theo Phòng Ban</label>
-          <select id="filterDeptInternal" onchange="onInternalFilterChange()" class="w-full border p-2 rounded text-sm bg-white">
-            <option value="">-- Tất cả phòng ban --</option>
-          </select>
-        </div>
-        <div>
-          <label class="block text-xs font-semibold text-gray-600 mb-1">Từ Ngày</label>
+          <label class="block text-xs font-semibold text-gray-600 mb-1">Từ Ngày Đăng</label>
           <input id="filterFromDateInternal" type="date" onchange="onInternalFilterChange()" class="w-full border p-2 rounded text-sm bg-white">
         </div>
         <div>
-          <label class="block text-xs font-semibold text-gray-600 mb-1">Đến Ngày</label>
+          <label class="block text-xs font-semibold text-gray-600 mb-1">Đến Ngày Đăng</label>
           <input id="filterToDateInternal" type="date" onchange="onInternalFilterChange()" class="w-full border p-2 rounded text-sm bg-white">
         </div>
         <div>
@@ -1330,7 +1324,7 @@
 
           <div class="bg-white p-3 rounded border space-y-3">
             <h4 class="font-bold text-indigo-900 border-b pb-1 text-sm">2. Năng Lực Xử Lý (không phụ thuộc phòng ban)</h4>
-            <p class="text-[11px] text-gray-500 italic">Phạm vi phòng ban của từng module (Xem/Tạo mới) nay cấu hình riêng ở các khối 7-11 bên dưới.</p>
+            <p class="text-[11px] text-gray-500 italic">Phạm vi phòng ban của từng module (Xem/Tạo mới/Tải xuống) nay cấu hình riêng ở các khối 4-9 bên dưới.</p>
             <div class="space-y-1.5">
               <div class="space-y-1">
                 <span class="font-bold text-emerald-800 block text-[11px]">📅 Phòng Họp:</span>
@@ -1356,54 +1350,51 @@
             </div>
           </div>
 
-          <div class="bg-white p-3 rounded border space-y-3">
-            <div class="flex justify-between items-center border-b pb-1">
-              <h4 class="font-bold text-blue-800 text-sm">3. Upload / Trình Ký</h4>
-              <label class="flex items-center gap-1 font-bold text-blue-700 cursor-pointer text-[11px]">
-                <input type="checkbox" id="pUploadAll" onchange="toggleScopeGroup('pUploadAll', 'pUploadDept')">
-                <span>ALL</span>
-              </label>
+          <div class="bg-white p-3 rounded border space-y-2 lg:col-span-3">
+            <h4 class="font-bold text-blue-800 text-sm border-b pb-1">3. 📂 Quyền Module Tài Liệu</h4>
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
+              <div>
+                <div class="flex justify-between items-center mb-1">
+                  <span class="font-semibold text-gray-600 text-[11px]">Tải lên</span>
+                  <label class="flex items-center gap-1 font-bold text-blue-700 cursor-pointer text-[11px]">
+                    <input type="checkbox" id="pUploadAll" onchange="toggleScopeGroup('pUploadAll', 'pUploadDept')"><span>ALL</span>
+                  </label>
+                </div>
+                <div id="pUploadDeptContainer" class="space-y-1 pl-1 max-h-32 overflow-y-auto"></div>
+              </div>
+              <div>
+                <div class="flex justify-between items-center mb-1">
+                  <span class="font-semibold text-gray-600 text-[11px]">Xem Bản Nháp</span>
+                  <label class="flex items-center gap-1 font-bold text-amber-700 cursor-pointer text-[11px]">
+                    <input type="checkbox" id="pViewDraftAll" onchange="toggleScopeGroup('pViewDraftAll', 'pViewDraftDept')"><span>ALL</span>
+                  </label>
+                </div>
+                <div id="pViewDraftDeptContainer" class="space-y-1 pl-1 max-h-32 overflow-y-auto"></div>
+              </div>
+              <div>
+                <div class="flex justify-between items-center mb-1">
+                  <span class="font-semibold text-gray-600 text-[11px]">Xem Đã Duyệt</span>
+                  <label class="flex items-center gap-1 font-bold text-emerald-700 cursor-pointer text-[11px]">
+                    <input type="checkbox" id="pViewApprovedAll" onchange="toggleScopeGroup('pViewApprovedAll', 'pViewApprovedDept')"><span>ALL</span>
+                  </label>
+                </div>
+                <div id="pViewApprovedDeptContainer" class="space-y-1 pl-1 max-h-32 overflow-y-auto"></div>
+              </div>
+              <div>
+                <div class="flex justify-between items-center mb-1">
+                  <span class="font-semibold text-gray-600 text-[11px]">Tải Xuống</span>
+                  <label class="flex items-center gap-1 font-bold text-rose-700 cursor-pointer text-[11px]">
+                    <input type="checkbox" id="pDocDownloadAll" onchange="toggleScopeGroup('pDocDownloadAll', 'pDocDownloadDept')"><span>ALL</span>
+                  </label>
+                </div>
+                <div id="pDocDownloadDeptContainer" class="space-y-1 pl-1 max-h-32 overflow-y-auto"></div>
+              </div>
             </div>
-            <div id="pUploadDeptContainer" class="space-y-1.5 pl-1 max-h-48 overflow-y-auto"></div>
           </div>
 
-          <div class="bg-white p-3 rounded border space-y-3">
-            <div class="flex justify-between items-center border-b pb-1">
-              <h4 class="font-bold text-amber-800 text-sm">4. Xem Bản Nháp</h4>
-              <label class="flex items-center gap-1 font-bold text-amber-700 cursor-pointer text-[11px]">
-                <input type="checkbox" id="pViewDraftAll" onchange="toggleScopeGroup('pViewDraftAll', 'pViewDraftDept')">
-                <span>ALL</span>
-              </label>
-            </div>
-            <div id="pViewDraftDeptContainer" class="space-y-1.5 pl-1 max-h-48 overflow-y-auto"></div>
-          </div>
-
-          <div class="bg-white p-3 rounded border space-y-3">
-            <div class="flex justify-between items-center border-b pb-1">
-              <h4 class="font-bold text-emerald-800 text-sm">5. Xem Đã Duyệt</h4>
-              <label class="flex items-center gap-1 font-bold text-emerald-700 cursor-pointer text-[11px]">
-                <input type="checkbox" id="pViewApprovedAll" onchange="toggleScopeGroup('pViewApprovedAll', 'pViewApprovedDept')">
-                <span>ALL</span>
-              </label>
-            </div>
-            <div id="pViewApprovedDeptContainer" class="space-y-1.5 pl-1 max-h-48 overflow-y-auto"></div>
-          </div>
-
-          <div class="bg-white p-3 rounded border space-y-3">
-            <div class="flex justify-between items-center border-b pb-1">
-              <h4 class="font-bold text-rose-800 text-sm">6. Tải Tài Liệu</h4>
-              <label class="flex items-center gap-1 font-bold text-rose-700 cursor-pointer text-[11px]">
-                <input type="checkbox" id="pDownloadAll" onchange="toggleScopeGroup('pDownloadAll', 'pDownloadDept')">
-                <span>ALL</span>
-              </label>
-            </div>
-            <p class="text-[11px] text-gray-500 italic">Áp dụng chung cho nút "Tải" ở mọi module có tệp đính kèm: Tài liệu, Hợp đồng, Tờ trình.</p>
-            <div id="pDownloadDeptContainer" class="space-y-1.5 pl-1 max-h-48 overflow-y-auto"></div>
-          </div>
-
-          <div class="bg-white p-3 rounded border space-y-2 lg:col-span-2">
-            <h4 class="font-bold text-amber-800 text-sm border-b pb-1">7. 📜 Tờ Trình — Phạm Vi Theo Phòng Ban</h4>
-            <div class="grid grid-cols-2 gap-3">
+          <div class="bg-white p-3 rounded border space-y-2 lg:col-span-3">
+            <h4 class="font-bold text-amber-800 text-sm border-b pb-1">4. 📜 Tờ Trình — Phạm Vi Theo Phòng Ban</h4>
+            <div class="grid grid-cols-3 gap-3">
               <div>
                 <div class="flex justify-between items-center mb-1">
                   <span class="font-semibold text-gray-600 text-[11px]">Xem</span>
@@ -1422,12 +1413,21 @@
                 </div>
                 <div id="pSubCreateDeptContainer" class="space-y-1 pl-1 max-h-32 overflow-y-auto"></div>
               </div>
+              <div>
+                <div class="flex justify-between items-center mb-1">
+                  <span class="font-semibold text-gray-600 text-[11px]">Tải xuống</span>
+                  <label class="flex items-center gap-1 font-bold text-amber-700 cursor-pointer text-[11px]">
+                    <input type="checkbox" id="pSubDownloadAll" onchange="toggleScopeGroup('pSubDownloadAll', 'pSubDownloadDept')"><span>ALL</span>
+                  </label>
+                </div>
+                <div id="pSubDownloadDeptContainer" class="space-y-1 pl-1 max-h-32 overflow-y-auto"></div>
+              </div>
             </div>
           </div>
 
-          <div class="bg-white p-3 rounded border space-y-2 lg:col-span-2">
-            <h4 class="font-bold text-cyan-800 text-sm border-b pb-1">8. 📄 Hợp Đồng & Giấy Phép — Phạm Vi Theo Phòng Ban</h4>
-            <div class="grid grid-cols-2 gap-3">
+          <div class="bg-white p-3 rounded border space-y-2 lg:col-span-3">
+            <h4 class="font-bold text-cyan-800 text-sm border-b pb-1">5. 📄 Hợp Đồng & Giấy Phép — Phạm Vi Theo Phòng Ban</h4>
+            <div class="grid grid-cols-3 gap-3">
               <div>
                 <div class="flex justify-between items-center mb-1">
                   <span class="font-semibold text-gray-600 text-[11px]">Xem</span>
@@ -1446,11 +1446,20 @@
                 </div>
                 <div id="pContractCreateDeptContainer" class="space-y-1 pl-1 max-h-32 overflow-y-auto"></div>
               </div>
+              <div>
+                <div class="flex justify-between items-center mb-1">
+                  <span class="font-semibold text-gray-600 text-[11px]">Tải xuống</span>
+                  <label class="flex items-center gap-1 font-bold text-cyan-700 cursor-pointer text-[11px]">
+                    <input type="checkbox" id="pContractDownloadAll" onchange="toggleScopeGroup('pContractDownloadAll', 'pContractDownloadDept')"><span>ALL</span>
+                  </label>
+                </div>
+                <div id="pContractDownloadDeptContainer" class="space-y-1 pl-1 max-h-32 overflow-y-auto"></div>
+              </div>
             </div>
           </div>
 
           <div class="bg-white p-3 rounded border space-y-2 lg:col-span-2">
-            <h4 class="font-bold text-emerald-800 text-sm border-b pb-1">9. 📅 Phòng Họp — Phạm Vi Theo Phòng Ban</h4>
+            <h4 class="font-bold text-emerald-800 text-sm border-b pb-1">6. 📅 Phòng Họp — Phạm Vi Theo Phòng Ban</h4>
             <div class="grid grid-cols-2 gap-3">
               <div>
                 <div class="flex justify-between items-center mb-1">
@@ -1473,9 +1482,9 @@
             </div>
           </div>
 
-          <div class="bg-white p-3 rounded border space-y-2 lg:col-span-2">
-            <h4 class="font-bold text-indigo-800 text-sm border-b pb-1">10. 🚗 Đăng Ký Xe — Phạm Vi Theo Phòng Ban</h4>
-            <div class="grid grid-cols-2 gap-3">
+          <div class="bg-white p-3 rounded border space-y-2 lg:col-span-3">
+            <h4 class="font-bold text-indigo-800 text-sm border-b pb-1">7. 🚗 Đăng Ký Xe — Phạm Vi Theo Phòng Ban</h4>
+            <div class="grid grid-cols-3 gap-3">
               <div>
                 <div class="flex justify-between items-center mb-1">
                   <span class="font-semibold text-gray-600 text-[11px]">Xem</span>
@@ -1494,13 +1503,22 @@
                 </div>
                 <div id="pCarCreateDeptContainer" class="space-y-1 pl-1 max-h-32 overflow-y-auto"></div>
               </div>
+              <div>
+                <div class="flex justify-between items-center mb-1">
+                  <span class="font-semibold text-gray-600 text-[11px]">Tải xuống</span>
+                  <label class="flex items-center gap-1 font-bold text-indigo-700 cursor-pointer text-[11px]">
+                    <input type="checkbox" id="pCarDownloadAll" onchange="toggleScopeGroup('pCarDownloadAll', 'pCarDownloadDept')"><span>ALL</span>
+                  </label>
+                </div>
+                <div id="pCarDownloadDeptContainer" class="space-y-1 pl-1 max-h-32 overflow-y-auto"></div>
+              </div>
             </div>
           </div>
 
-          <div class="bg-white p-3 rounded border space-y-2 lg:col-span-2">
-            <h4 class="font-bold text-teal-800 text-sm border-b pb-1">11. 🏢 Văn Phòng (Mua/Sửa/Đầu Tư) — Phạm Vi Theo Phòng Ban</h4>
+          <div class="bg-white p-3 rounded border space-y-2 lg:col-span-3">
+            <h4 class="font-bold text-teal-800 text-sm border-b pb-1">8. 🏢 Văn Phòng (Mua/Sửa/Đầu Tư) — Phạm Vi Theo Phòng Ban</h4>
             <p class="text-[11px] text-gray-500 italic">Dùng chung cho cả 3 phân hệ VP; bật/tắt từng phân hệ cụ thể ở khối 2.</p>
-            <div class="grid grid-cols-2 gap-3">
+            <div class="grid grid-cols-3 gap-3">
               <div>
                 <div class="flex justify-between items-center mb-1">
                   <span class="font-semibold text-gray-600 text-[11px]">Xem</span>
@@ -1519,11 +1537,20 @@
                 </div>
                 <div id="pOfficeCreateDeptContainer" class="space-y-1 pl-1 max-h-32 overflow-y-auto"></div>
               </div>
+              <div>
+                <div class="flex justify-between items-center mb-1">
+                  <span class="font-semibold text-gray-600 text-[11px]">Tải xuống</span>
+                  <label class="flex items-center gap-1 font-bold text-teal-700 cursor-pointer text-[11px]">
+                    <input type="checkbox" id="pOfficeDownloadAll" onchange="toggleScopeGroup('pOfficeDownloadAll', 'pOfficeDownloadDept')"><span>ALL</span>
+                  </label>
+                </div>
+                <div id="pOfficeDownloadDeptContainer" class="space-y-1 pl-1 max-h-32 overflow-y-auto"></div>
+              </div>
             </div>
           </div>
 
           <div class="bg-white p-3 rounded border space-y-2 lg:col-span-2">
-            <h4 class="font-bold text-rose-800 text-sm border-b pb-1">12. 📝 Biên Bản Họp — Phạm Vi Theo Phòng Ban</h4>
+            <h4 class="font-bold text-rose-800 text-sm border-b pb-1">9. 📝 Biên Bản Họp — Phạm Vi Theo Phòng Ban</h4>
             <div class="grid grid-cols-2 gap-3">
               <div>
                 <div class="flex justify-between items-center mb-1">
@@ -1547,7 +1574,7 @@
           </div>
 
           <div class="bg-white p-3 rounded border space-y-2">
-            <h4 class="font-bold text-gray-800 border-b pb-1 text-sm">13. Người Duyệt</h4>
+            <h4 class="font-bold text-gray-800 border-b pb-1 text-sm">10. Người Duyệt</h4>
             <label class="flex items-center gap-2 text-emerald-700 font-semibold cursor-pointer">
               <input type="checkbox" id="pCanBeApprover"> ✅ Có thể được chọn làm người duyệt
             </label>
@@ -1555,7 +1582,7 @@
           </div>
 
           <div class="bg-white p-3 rounded border space-y-2">
-            <h4 class="font-bold text-gray-800 border-b pb-1 text-sm">14. Báo Cáo Quản Trị</h4>
+            <h4 class="font-bold text-gray-800 border-b pb-1 text-sm">11. Báo Cáo Quản Trị</h4>
             <label class="flex items-center gap-2 text-sky-700 font-semibold cursor-pointer">
               <input type="checkbox" id="pCanViewReports"> 📊 Được xem Báo cáo quản trị
             </label>
@@ -1563,7 +1590,7 @@
           </div>
 
           <div class="bg-white p-3 rounded border space-y-2 lg:col-span-2">
-            <h4 class="font-bold text-fuchsia-800 text-sm border-b pb-1">15. 📣 Truyền Thông Nội Bộ — Quyền Đăng Bài</h4>
+            <h4 class="font-bold text-fuchsia-800 text-sm border-b pb-1">12. 📣 Truyền Thông Nội Bộ — Quyền Đăng Bài</h4>
             <p class="text-[11px] text-gray-500 italic">Mọi người dùng đều XEM và tương tác được (bình luận, thả tim) trên cả 4 phân hệ; riêng "Góc chia sẻ" ai cũng đăng được tự do. 3 quyền dưới đây chỉ kiểm soát ai được ĐĂNG BÀI ở Tin nội bộ / Đào tạo / Khen thưởng.</p>
             <div class="grid grid-cols-1 md:grid-cols-3 gap-2">
               <label class="flex items-center gap-2 text-fuchsia-700 font-semibold cursor-pointer">
@@ -1737,6 +1764,21 @@
         <button onclick="closeViewDocModal()" class="bg-gray-600 text-white px-5 py-1.5 rounded font-bold hover:bg-gray-700">Đóng</button>
       </div>
     </div>
+  </div>
+</div>
+
+<!-- MODAL XEM BÀI VIẾT TRUYỀN THÔNG NỘI BỘ — kiểu "trang báo" thông thường (không phải khung xem
+     bảo mật): ảnh đại diện hiện trực tiếp, không chặn chuột phải, vì nội dung không phải hồ sơ mật. -->
+<div id="internalArticleModal" class="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center hidden z-50 p-4">
+  <div class="bg-white rounded-lg shadow-2xl max-w-3xl w-full flex flex-col max-h-[90vh] overflow-hidden">
+    <div class="flex justify-between items-center bg-fuchsia-800 text-white p-4">
+      <div>
+        <h3 id="internalArticleTitle" class="font-bold text-base"></h3>
+        <p id="internalArticleSub" class="text-xs text-fuchsia-100 mt-0.5"></p>
+      </div>
+      <button onclick="closeInternalArticleModal()" class="text-fuchsia-100 hover:text-white font-bold text-xl px-2">✕</button>
+    </div>
+    <div class="overflow-y-auto flex-1 bg-white" id="internalArticleContent"></div>
   </div>
 </div>
 
@@ -2323,16 +2365,15 @@ function getUserAllowedDepts(user) {
   return Array.from(allowed);
 }
 
-// Kiểm tra quyền TẢI TỆP ĐÍNH KÈM — dùng chung cho mọi module có tài liệu tải lên
-// (Tài liệu, Hợp đồng, Tờ trình...) dựa trên perms.downloadAll / perms.downloadDepts
-// được cấu hình ở Module Quản trị người dùng. Người tạo/tải lên luôn được tải lại bản của chính mình.
-function canDownloadFile(user, dept, ownerUsername) {
+// Kiểm tra quyền TẢI TỆP ĐÍNH KÈM. Người tạo/tải lên luôn được tải lại bản của chính mình.
+// CẬP NHẬT: quyền Tải xuống trước đây là 1 cờ DÙNG CHUNG cho mọi module (downloadAll/downloadDepts)
+// — cấp cho ai đó ở module Tài liệu vô tình cũng cho họ tải luôn ở Hợp đồng/Xe/Văn phòng. Nay tách
+// riêng theo từng module (docDownload/submissionDownload/contractDownload/carDownload/
+// officeDownload), moduleKey ứng với 1 trong 5 giá trị: 'doc'|'submission'|'contract'|'car'|'office'.
+function canDownloadFile(user, moduleKey, dept, ownerUsername) {
   if (!user) return false;
-  if (user.perms?.admin) return true;
-  if (user.perms?.downloadAll) return true;
-  if (dept && Array.isArray(user.perms?.downloadDepts) && user.perms.downloadDepts.includes(dept)) return true;
   if (ownerUsername && ownerUsername === user.username) return true;
-  return false;
+  return scopeAllows(user, user.perms?.[`${moduleKey}Download`], dept);
 }
 
 // Bộ quyền mặc định AN TOÀN cho user mới (tạo tay hoặc import CSV): mặc định KHÔNG cấp quyền
@@ -2349,13 +2390,13 @@ function defaultNewUserPerms() {
     uploadAll: false, uploadDepts: [],
     viewDraftAll: false, viewDraftDepts: [],
     viewApprovedAll: false, viewApprovedDepts: [],
-    downloadAll: false, downloadDepts: [],
-    submissionView: emptyScope(), submissionCreate: emptyScope(),
-    contractView: emptyScope(), contractCreate: emptyScope(),
+    docDownload: emptyScope(),
+    submissionView: emptyScope(), submissionCreate: emptyScope(), submissionDownload: emptyScope(),
+    contractView: emptyScope(), contractCreate: emptyScope(), contractDownload: emptyScope(),
     meetingView: emptyScope(), meetingBookScope: emptyScope(),
     meetingApprove: false, meetingCancel: false,
-    carView: emptyScope(), carCreate: emptyScope(),
-    officeView: emptyScope(), officeCreate: emptyScope(),
+    carView: emptyScope(), carCreate: emptyScope(), carDownload: emptyScope(),
+    officeView: emptyScope(), officeCreate: emptyScope(), officeDownload: emptyScope(),
     officeBuy: true, officeFix: true, officeInvest: false,
     minutesView: emptyScope(), minutesCreate: emptyScope()
   };
@@ -2405,6 +2446,21 @@ function migrateLegacyPerms(perms) {
   if (p.minutesView === undefined) {
     p.minutesView = { all: false, depts: [] };
     p.minutesCreate = { all: false, depts: [] };
+    changed = true;
+  }
+  // Quyền "Tải xuống" trước đây DÙNG CHUNG cho mọi module (downloadAll/downloadDepts) — quy đổi
+  // giữ nguyên phạm vi cũ sang CẢ 5 quyền tải mới theo từng module, để không ai bị mất quyền tải
+  // đang có; sau đó admin có thể tinh chỉnh lại riêng cho từng module nếu muốn thu hẹp.
+  if (p.docDownload === undefined) {
+    const dlScope = scopeFromFlag(p.downloadAll);
+    dlScope.depts = Array.isArray(p.downloadDepts) ? [...p.downloadDepts] : [];
+    p.docDownload = { ...dlScope, depts: [...dlScope.depts] };
+    p.submissionDownload = { ...dlScope, depts: [...dlScope.depts] };
+    p.contractDownload = { ...dlScope, depts: [...dlScope.depts] };
+    p.carDownload = { ...dlScope, depts: [...dlScope.depts] };
+    p.officeDownload = { ...dlScope, depts: [...dlScope.depts] };
+    delete p.downloadAll;
+    delete p.downloadDepts;
     changed = true;
   }
 
@@ -2809,7 +2865,7 @@ function populateDropdowns() {
 
   // Dropdown "Lọc Theo Phòng Ban" của các module khác — cùng danh sách toàn bộ phòng ban (không
   // giới hạn theo quyền tạo mới, vì kết quả hiển thị đã được lọc theo quyền xem ở nơi khác).
-  ['filterDeptSub', 'filterDeptContract', 'filterDeptCar', 'filterDeptOffice', 'filterDeptMeeting', 'filterDeptMinutes', 'reportsDeptFilter', 'filterDeptInternal'].forEach(id => {
+  ['filterDeptSub', 'filterDeptContract', 'filterDeptCar', 'filterDeptOffice', 'filterDeptMeeting', 'filterDeptMinutes', 'reportsDeptFilter'].forEach(id => {
     const el = document.getElementById(id);
     if (el) el.innerHTML = '<option value="">-- Tất cả phòng ban --</option>' + DB.depts.map(d => `<option value="${escapeHtml(d)}">${escapeHtml(d)}</option>`).join('');
   });
@@ -2993,7 +3049,7 @@ function renderDocs() {
         <td class="border p-2">${progressBadge}</td>
         <td class="border p-2 text-center space-x-1">
           <button onclick="viewDoc(${doc.id})" class="px-2 py-1 bg-blue-600 text-white rounded text-xs hover:bg-blue-700 font-semibold" title="Xem trực tiếp trong Protected View">👁️ Xem</button>
-          ${(doc.fileUrl || doc.fileData) && canDownloadFile(currentUser, doc.dept, doc.uploader) ? `
+          ${(doc.fileUrl || doc.fileData) && canDownloadFile(currentUser, 'doc', doc.dept, doc.uploader) ? `
             <a href="${doc.fileUrl || doc.fileData}" download="${escapeHtml(doc.fileName || doc.code)}" class="inline-block px-2 py-1 bg-slate-600 text-white rounded text-xs hover:bg-slate-700 font-semibold" title="Tải tệp đính kèm về máy">⬇️ Tải</a>
           ` : ''}
           ${canApprove ? `
@@ -3453,7 +3509,7 @@ function renderSubmissionReqs() {
           </button>
           ${sub.status === 'APPROVED' ? `
             <button onclick="viewSubmissionApprovalSlip(${sub.id})" class="px-2 py-1 bg-blue-600 text-white rounded text-xs hover:bg-blue-700 font-bold" title="Xem Phiếu Phê Duyệt">👁️ Xem Phiếu</button>
-            ${canDownloadFile(currentUser, sub.dept, sub.creator) ? `<button onclick="downloadSubmissionApprovalSlip(${sub.id})" class="px-2 py-1 bg-slate-600 text-white rounded text-xs hover:bg-slate-700 font-bold" title="Tải Phiếu Phê Duyệt">⬇️ Tải</button>` : ''}
+            ${canDownloadFile(currentUser, 'submission', sub.dept, sub.creator) ? `<button onclick="downloadSubmissionApprovalSlip(${sub.id})" class="px-2 py-1 bg-slate-600 text-white rounded text-xs hover:bg-slate-700 font-bold" title="Tải Phiếu Phê Duyệt">⬇️ Tải</button>` : ''}
             <button onclick="createTaskFromSubmission(${sub.id})" class="px-2 py-1 bg-violet-600 text-white rounded text-xs hover:bg-violet-700 font-bold" title="Giao việc từ ý kiến chỉ đạo">📌 Giao việc</button>
           ` : ''}
         </td>
@@ -3491,7 +3547,7 @@ function openProcessSubmissionModal(subId) {
 
   const subFileSrc = sub.fileUrl || sub.fileData;
   if (subFileSrc) {
-    const canDL = canDownloadFile(currentUser, sub.dept, sub.creator);
+    const canDL = canDownloadFile(currentUser, 'submission', sub.dept, sub.creator);
     detailsHTML += `
       <div class="border-t pt-2 mt-2 flex items-center justify-between gap-2">
         <span><b>📎 Tệp đính kèm:</b> ${escapeHtml(sub.fileName || '')}</span>
@@ -4121,7 +4177,7 @@ function renderContracts() {
         <td class="border p-2 text-center space-x-1">
           <button onclick="viewContractDetails(${c.id})" class="bg-teal-600 text-white px-2 py-1 rounded text-xs hover:bg-teal-700 font-bold" title="Xem đầy đủ thông tin đã nhập">🔍 Xem chi tiết</button>
           <button onclick="viewContract(${c.id})" class="bg-cyan-600 text-white px-2 py-1 rounded text-xs hover:bg-cyan-700 font-bold">👁️ Xem</button>
-          ${(c.fileUrl || c.fileData) && canDownloadFile(currentUser, c.dept, c.creator) ? `
+          ${(c.fileUrl || c.fileData) && canDownloadFile(currentUser, 'contract', c.dept, c.creator) ? `
             <a href="${c.fileUrl || c.fileData}" download="${escapeHtml(c.fileName || c.code)}" class="inline-block bg-slate-600 text-white px-2 py-1 rounded text-xs hover:bg-slate-700 font-bold" title="Tải tệp đính kèm về máy">⬇️ Tải</a>
           ` : ''}
           ${c.creator === currentUser.username ? `
@@ -4833,7 +4889,7 @@ function renderCarRegs() {
     // Fallback plate/driver: giữ tương thích bản ghi cũ trước khi tách 2 trường này ra khỏi form đăng ký.
     const displayPlate = c.assignedPlate || c.plate || '';
     const displayDriver = c.assignedDriver || c.driver || '';
-    const canDL = c.status === 'APPROVED' && canDownloadFile(currentUser, c.dept, c.creator);
+    const canDL = c.status === 'APPROVED' && canDownloadFile(currentUser, 'car', c.dept, c.creator);
 
     return `
       <tr class="hover:bg-gray-50 border-b">
@@ -5362,7 +5418,7 @@ function renderOfficeReqs() {
     else if (o.status === 'REJECTED') statusBadge = `<span class="px-2 py-0.5 bg-red-100 text-red-800 rounded font-bold text-xs">❌ Từ chối</span>`;
     else statusBadge = `<span class="px-2 py-0.5 bg-teal-100 text-teal-800 rounded font-bold text-xs">⏳ Bước ${o.currentStep}/${wf.steps.length}${escapeHtml(getStepApprovalProgressText(currentStepApprovers, o.history, o.currentStep))}</span>`;
 
-    const canDL = o.status === 'APPROVED' && canDownloadFile(currentUser, o.dept, o.creator);
+    const canDL = o.status === 'APPROVED' && canDownloadFile(currentUser, 'office', o.dept, o.creator);
 
     return `
       <tr class="hover:bg-gray-50 border-b">
@@ -6202,17 +6258,21 @@ function renderDeptCheckboxes() {
     { container: 'pUploadDeptContainer', prefix: 'pUploadDept' },
     { container: 'pViewDraftDeptContainer', prefix: 'pViewDraftDept' },
     { container: 'pViewApprovedDeptContainer', prefix: 'pViewApprovedDept' },
-    { container: 'pDownloadDeptContainer', prefix: 'pDownloadDept' },
+    { container: 'pDocDownloadDeptContainer', prefix: 'pDocDownloadDept' },
     { container: 'pSubViewDeptContainer', prefix: 'pSubViewDept' },
     { container: 'pSubCreateDeptContainer', prefix: 'pSubCreateDept' },
+    { container: 'pSubDownloadDeptContainer', prefix: 'pSubDownloadDept' },
     { container: 'pContractViewDeptContainer', prefix: 'pContractViewDept' },
     { container: 'pContractCreateDeptContainer', prefix: 'pContractCreateDept' },
+    { container: 'pContractDownloadDeptContainer', prefix: 'pContractDownloadDept' },
     { container: 'pMeetingViewDeptContainer', prefix: 'pMeetingViewDept' },
     { container: 'pMeetingBookDeptContainer', prefix: 'pMeetingBookDept' },
     { container: 'pCarViewDeptContainer', prefix: 'pCarViewDept' },
     { container: 'pCarCreateDeptContainer', prefix: 'pCarCreateDept' },
+    { container: 'pCarDownloadDeptContainer', prefix: 'pCarDownloadDept' },
     { container: 'pOfficeViewDeptContainer', prefix: 'pOfficeViewDept' },
     { container: 'pOfficeCreateDeptContainer', prefix: 'pOfficeCreateDept' },
+    { container: 'pOfficeDownloadDeptContainer', prefix: 'pOfficeDownloadDept' },
     { container: 'pMinutesViewDeptContainer', prefix: 'pMinutesViewDept' },
     { container: 'pMinutesCreateDeptContainer', prefix: 'pMinutesCreateDept' }
   ];
@@ -6273,19 +6333,22 @@ function saveUser(e) {
     viewDraftDepts: Array.from(document.querySelectorAll('[id^="pViewDraftDept_"]:checked')).map(cb => cb.value),
     viewApprovedAll: document.getElementById('pViewApprovedAll').checked,
     viewApprovedDepts: Array.from(document.querySelectorAll('[id^="pViewApprovedDept_"]:checked')).map(cb => cb.value),
-    downloadAll: document.getElementById('pDownloadAll').checked,
-    downloadDepts: Array.from(document.querySelectorAll('[id^="pDownloadDept_"]:checked')).map(cb => cb.value),
+    docDownload: scopeFromForm('pDocDownloadAll', 'pDocDownloadDept'),
 
     submissionView: scopeFromForm('pSubViewAll', 'pSubViewDept'),
     submissionCreate: scopeFromForm('pSubCreateAll', 'pSubCreateDept'),
+    submissionDownload: scopeFromForm('pSubDownloadAll', 'pSubDownloadDept'),
     contractView: scopeFromForm('pContractViewAll', 'pContractViewDept'),
     contractCreate: scopeFromForm('pContractCreateAll', 'pContractCreateDept'),
+    contractDownload: scopeFromForm('pContractDownloadAll', 'pContractDownloadDept'),
     meetingView: scopeFromForm('pMeetingViewAll', 'pMeetingViewDept'),
     meetingBookScope: scopeFromForm('pMeetingBookAll', 'pMeetingBookDept'),
     carView: scopeFromForm('pCarViewAll', 'pCarViewDept'),
     carCreate: scopeFromForm('pCarCreateAll', 'pCarCreateDept'),
+    carDownload: scopeFromForm('pCarDownloadAll', 'pCarDownloadDept'),
     officeView: scopeFromForm('pOfficeViewAll', 'pOfficeViewDept'),
     officeCreate: scopeFromForm('pOfficeCreateAll', 'pOfficeCreateDept'),
+    officeDownload: scopeFromForm('pOfficeDownloadAll', 'pOfficeDownloadDept'),
     minutesView: scopeFromForm('pMinutesViewAll', 'pMinutesViewDept'),
     minutesCreate: scopeFromForm('pMinutesCreateAll', 'pMinutesCreateDept')
   };
@@ -6340,10 +6403,13 @@ function resetUserForm() {
   document.getElementById('pOfficeInvest').checked = defaults.officeInvest;
 
   [
-    'pUploadAll', 'pViewDraftAll', 'pViewApprovedAll', 'pDownloadAll',
-    'pSubViewAll', 'pSubCreateAll', 'pContractViewAll', 'pContractCreateAll',
-    'pMeetingViewAll', 'pMeetingBookAll', 'pCarViewAll', 'pCarCreateAll',
-    'pOfficeViewAll', 'pOfficeCreateAll', 'pMinutesViewAll', 'pMinutesCreateAll'
+    'pUploadAll', 'pViewDraftAll', 'pViewApprovedAll', 'pDocDownloadAll',
+    'pSubViewAll', 'pSubCreateAll', 'pSubDownloadAll',
+    'pContractViewAll', 'pContractCreateAll', 'pContractDownloadAll',
+    'pMeetingViewAll', 'pMeetingBookAll',
+    'pCarViewAll', 'pCarCreateAll', 'pCarDownloadAll',
+    'pOfficeViewAll', 'pOfficeCreateAll', 'pOfficeDownloadAll',
+    'pMinutesViewAll', 'pMinutesCreateAll'
   ].forEach(id => {
     const cb = document.getElementById(id);
     if (cb) { cb.checked = false; }
@@ -6384,18 +6450,22 @@ function editUser(id) {
   document.getElementById('pUploadAll').checked = !!perms.uploadAll;
   document.getElementById('pViewDraftAll').checked = !!perms.viewDraftAll;
   document.getElementById('pViewApprovedAll').checked = !!perms.viewApprovedAll;
-  document.getElementById('pDownloadAll').checked = !!perms.downloadAll;
+  document.getElementById('pDocDownloadAll').checked = !!perms.docDownload?.all;
 
   document.getElementById('pSubViewAll').checked = !!perms.submissionView?.all;
   document.getElementById('pSubCreateAll').checked = !!perms.submissionCreate?.all;
+  document.getElementById('pSubDownloadAll').checked = !!perms.submissionDownload?.all;
   document.getElementById('pContractViewAll').checked = !!perms.contractView?.all;
   document.getElementById('pContractCreateAll').checked = !!perms.contractCreate?.all;
+  document.getElementById('pContractDownloadAll').checked = !!perms.contractDownload?.all;
   document.getElementById('pMeetingViewAll').checked = !!perms.meetingView?.all;
   document.getElementById('pMeetingBookAll').checked = !!perms.meetingBookScope?.all;
   document.getElementById('pCarViewAll').checked = !!perms.carView?.all;
   document.getElementById('pCarCreateAll').checked = !!perms.carCreate?.all;
+  document.getElementById('pCarDownloadAll').checked = !!perms.carDownload?.all;
   document.getElementById('pOfficeViewAll').checked = !!perms.officeView?.all;
   document.getElementById('pOfficeCreateAll').checked = !!perms.officeCreate?.all;
+  document.getElementById('pOfficeDownloadAll').checked = !!perms.officeDownload?.all;
   document.getElementById('pMinutesViewAll').checked = !!perms.minutesView?.all;
   document.getElementById('pMinutesCreateAll').checked = !!perms.minutesCreate?.all;
 
@@ -6416,17 +6486,21 @@ function editUser(id) {
   setGroupCheckboxes(perms.uploadDepts, 'pUploadDept');
   setGroupCheckboxes(perms.viewDraftDepts, 'pViewDraftDept');
   setGroupCheckboxes(perms.viewApprovedDepts, 'pViewApprovedDept');
-  setGroupCheckboxes(perms.downloadDepts, 'pDownloadDept');
+  setGroupCheckboxes(perms.docDownload?.depts, 'pDocDownloadDept');
   setGroupCheckboxes(perms.submissionView?.depts, 'pSubViewDept');
   setGroupCheckboxes(perms.submissionCreate?.depts, 'pSubCreateDept');
+  setGroupCheckboxes(perms.submissionDownload?.depts, 'pSubDownloadDept');
   setGroupCheckboxes(perms.contractView?.depts, 'pContractViewDept');
   setGroupCheckboxes(perms.contractCreate?.depts, 'pContractCreateDept');
+  setGroupCheckboxes(perms.contractDownload?.depts, 'pContractDownloadDept');
   setGroupCheckboxes(perms.meetingView?.depts, 'pMeetingViewDept');
   setGroupCheckboxes(perms.meetingBookScope?.depts, 'pMeetingBookDept');
   setGroupCheckboxes(perms.carView?.depts, 'pCarViewDept');
   setGroupCheckboxes(perms.carCreate?.depts, 'pCarCreateDept');
+  setGroupCheckboxes(perms.carDownload?.depts, 'pCarDownloadDept');
   setGroupCheckboxes(perms.officeView?.depts, 'pOfficeViewDept');
   setGroupCheckboxes(perms.officeCreate?.depts, 'pOfficeCreateDept');
+  setGroupCheckboxes(perms.officeDownload?.depts, 'pOfficeDownloadDept');
   setGroupCheckboxes(perms.minutesView?.depts, 'pMinutesViewDept');
   setGroupCheckboxes(perms.minutesCreate?.depts, 'pMinutesCreateDept');
 
@@ -6434,12 +6508,12 @@ function editUser(id) {
   // có sẵn: trước đây khi sửa 1 user có *All=true, checkbox phòng ban không tự vô hiệu hoá lại).
   [
     ['pUploadAll', 'pUploadDept'], ['pViewDraftAll', 'pViewDraftDept'],
-    ['pViewApprovedAll', 'pViewApprovedDept'], ['pDownloadAll', 'pDownloadDept'],
-    ['pSubViewAll', 'pSubViewDept'], ['pSubCreateAll', 'pSubCreateDept'],
-    ['pContractViewAll', 'pContractViewDept'], ['pContractCreateAll', 'pContractCreateDept'],
+    ['pViewApprovedAll', 'pViewApprovedDept'], ['pDocDownloadAll', 'pDocDownloadDept'],
+    ['pSubViewAll', 'pSubViewDept'], ['pSubCreateAll', 'pSubCreateDept'], ['pSubDownloadAll', 'pSubDownloadDept'],
+    ['pContractViewAll', 'pContractViewDept'], ['pContractCreateAll', 'pContractCreateDept'], ['pContractDownloadAll', 'pContractDownloadDept'],
     ['pMeetingViewAll', 'pMeetingViewDept'], ['pMeetingBookAll', 'pMeetingBookDept'],
-    ['pCarViewAll', 'pCarViewDept'], ['pCarCreateAll', 'pCarCreateDept'],
-    ['pOfficeViewAll', 'pOfficeViewDept'], ['pOfficeCreateAll', 'pOfficeCreateDept'],
+    ['pCarViewAll', 'pCarViewDept'], ['pCarCreateAll', 'pCarCreateDept'], ['pCarDownloadAll', 'pCarDownloadDept'],
+    ['pOfficeViewAll', 'pOfficeViewDept'], ['pOfficeCreateAll', 'pOfficeCreateDept'], ['pOfficeDownloadAll', 'pOfficeDownloadDept'],
     ['pMinutesViewAll', 'pMinutesViewDept'], ['pMinutesCreateAll', 'pMinutesCreateDept']
   ].forEach(([allId, prefix]) => toggleScopeGroup(allId, prefix));
 }
@@ -7060,18 +7134,23 @@ async function submitInternalPost(e) {
   renderInternalPosts();
 }
 
+// Ảnh đính kèm (theo mimetype trả về từ /api/upload) được hiển thị trực tiếp kiểu trang báo —
+// không cần mở qua Frame Protected Viewer như tài liệu/hợp đồng, vì nội dung Truyền thông không
+// phải hồ sơ mật. Tệp đính kèm không phải ảnh (PDF...) vẫn hiện link tải bình thường.
+function isInternalImageAttachment(att) {
+  return !!(att && typeof att.fileType === 'string' && att.fileType.startsWith('image/'));
+}
+
 function renderInternalPosts() {
   const container = document.getElementById('internalPostsContainer');
   if (!container) return;
 
-  const deptFilter = document.getElementById('filterDeptInternal')?.value || '';
   const fromDate = document.getElementById('filterFromDateInternal')?.value || '';
   const toDate = document.getElementById('filterToDateInternal')?.value || '';
   const keyword = (document.getElementById('filterKeywordInternal')?.value || '').trim();
 
   const visible = DB.internalPosts.filter(p => {
     if (p.type !== activeInternalSubTab) return false;
-    if (deptFilter && p.dept !== deptFilter) return false;
     if (!isInDateRange(p.createdAt, fromDate, toDate)) return false;
     if (!matchesKeywordFields([p.title, p.content, p.authorName, p.dept], keyword)) return false;
     return true;
@@ -7098,25 +7177,33 @@ function renderInternalPosts() {
       extraInfo = `<div class="text-xs text-amber-700 mt-1">🏆 ${escapeHtml(p.reward.period || '')} — ${escapeHtml(p.reward.recipients || '')}</div>`;
     }
     const snippet = (p.content || '').slice(0, 200);
+    const coverThumbHTML = isInternalImageAttachment(p.attachment)
+      ? `<img src="${escapeHtml(p.attachment.fileUrl)}" alt="" class="w-full sm:w-48 h-40 sm:h-auto object-cover cursor-pointer flex-shrink-0" onclick="viewInternalPostDetail(${p.id})">`
+      : '';
     return `
-      <div class="bg-white p-4 rounded border hover:shadow cursor-pointer" onclick="viewInternalPostDetail(${p.id})">
-        <div class="flex justify-between items-start gap-2">
-          <div>
-            <div class="font-bold text-fuchsia-800">${escapeHtml(p.title)}</div>
-            <div class="text-xs text-gray-500 mt-0.5">${escapeHtml(p.authorName)} (${escapeHtml(p.dept)}) — ${escapeHtml(p.createdAt)}</div>
+      <div class="bg-white rounded border hover:shadow overflow-hidden flex flex-col sm:flex-row">
+        ${coverThumbHTML}
+        <div class="p-4 flex-1 flex flex-col">
+          <div class="font-bold text-fuchsia-800 text-base cursor-pointer hover:underline" onclick="viewInternalPostDetail(${p.id})">${escapeHtml(p.title)}</div>
+          <div class="text-xs text-gray-500 mt-0.5">${escapeHtml(p.authorName)} (${escapeHtml(p.dept)}) — ${escapeHtml(p.createdAt)}</div>
+          <p class="text-sm text-gray-700 mt-2 flex-1">${escapeHtml(snippet)}${(p.content || '').length > 200 ? '…' : ''}</p>
+          ${extraInfo}
+          <div class="flex flex-wrap justify-between items-center gap-2 mt-3">
+            <div class="flex gap-4 text-xs text-gray-500">
+              <span>❤️ ${likeCount}</span>
+              <span>💬 ${commentCount}</span>
+              <span>👁️ ${readCount} đã xem</span>
+            </div>
+            <button onclick="viewInternalPostDetail(${p.id})" class="bg-fuchsia-600 text-white px-3 py-1 rounded text-xs font-bold hover:bg-fuchsia-700">📄 Chi tiết</button>
           </div>
-          ${p.attachment ? '<span class="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded whitespace-nowrap">📎 Đính kèm</span>' : ''}
-        </div>
-        <p class="text-sm text-gray-700 mt-2">${escapeHtml(snippet)}${(p.content || '').length > 200 ? '…' : ''}</p>
-        ${extraInfo}
-        <div class="flex gap-4 mt-2 text-xs text-gray-500">
-          <span>❤️ ${likeCount}</span>
-          <span>💬 ${commentCount}</span>
-          <span>👁️ ${readCount} đã xem</span>
         </div>
       </div>
     `;
   }).join('');
+}
+
+function closeInternalArticleModal() {
+  document.getElementById('internalArticleModal').classList.add('hidden');
 }
 
 function viewInternalPostDetail(id) {
@@ -7126,9 +7213,8 @@ function viewInternalPostDetail(id) {
   markInternalRead(id);
 
   const icons = { NEWS: '📰', TRAINING: '🎓', REWARD: '🏆', SHARE: '💬' };
-  document.getElementById('viewModalTitle').innerText = `${icons[p.type] || '📣'} ${p.title}`;
-  document.getElementById('viewModalSub').innerText = `${p.authorName} (${p.dept}) — ${p.createdAt}`;
-  document.getElementById('viewModalFooterInfo').innerText = `Mã: ${p.code} | ${(p.readBy || []).length} người đã xem`;
+  document.getElementById('internalArticleTitle').innerText = `${icons[p.type] || '📣'} ${p.title}`;
+  document.getElementById('internalArticleSub').innerText = `${p.authorName} (${p.dept}) — ${p.createdAt} | Mã: ${p.code}`;
 
   let typeInfoHTML = '';
   if (p.type === 'TRAINING' && p.training) {
@@ -7169,11 +7255,18 @@ function viewInternalPostDetail(id) {
       `).join('')
     : '<div class="text-gray-400 italic text-xs">Chưa có bình luận nào.</div>';
 
-  document.getElementById('viewModalContent').innerHTML = `
-    <div class="w-full bg-white p-6 rounded shadow border overflow-y-auto text-sm">
+  const isImg = isInternalImageAttachment(p.attachment);
+  const coverHTML = isImg ? `<img src="${escapeHtml(p.attachment.fileUrl)}" alt="" class="w-full max-h-96 object-cover">` : '';
+  const attachmentLinkHTML = (p.attachment && !isImg)
+    ? `<div class="mt-3"><a href="${escapeHtml(p.attachment.fileUrl)}" target="_blank" class="text-blue-600 underline text-xs">📎 ${escapeHtml(p.attachment.fileName)}</a></div>`
+    : '';
+
+  document.getElementById('internalArticleContent').innerHTML = `
+    ${coverHTML}
+    <div class="w-full p-6 text-sm">
       ${typeInfoHTML}
       <div class="whitespace-pre-wrap text-gray-800">${escapeHtml(p.content)}</div>
-      ${p.attachment ? `<div class="mt-3"><a href="${escapeHtml(p.attachment.fileUrl)}" target="_blank" class="text-blue-600 underline text-xs">📎 ${escapeHtml(p.attachment.fileName)}</a></div>` : ''}
+      ${attachmentLinkHTML}
 
       <div class="border-t mt-4 pt-3 flex items-center gap-3">
         <button onclick="toggleInternalLike(${p.id})" class="px-3 py-1 rounded text-xs font-bold ${isLiked ? 'bg-rose-600 text-white' : 'bg-gray-200 text-gray-700'}">❤️ ${isLiked ? 'Đã thích' : 'Thích'} (${(p.likes || []).length})</button>
@@ -7190,7 +7283,7 @@ function viewInternalPostDetail(id) {
       </div>
     </div>
   `;
-  document.getElementById('viewDocModal').classList.remove('hidden');
+  document.getElementById('internalArticleModal').classList.remove('hidden');
 }
 
 function markInternalRead(id) {
