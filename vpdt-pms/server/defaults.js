@@ -120,6 +120,7 @@ const DEFAULTS = {
   meetings: [],
   carRegs: [],
   officeReqs: [],
+  meetingMinutes: [],
   systemLogs: []
 };
 
