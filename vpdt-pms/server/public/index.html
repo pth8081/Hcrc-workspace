@@ -39,6 +39,7 @@
         <button id="btnTaskTab" onclick="switchTab('task')" class="hidden text-xs bg-violet-600 text-white px-2 py-1 rounded hover:bg-violet-700 font-semibold">📋 Công việc</button>
         <button id="btnContractTab" onclick="switchTab('contract')" class="hidden text-xs bg-cyan-600 text-white px-2 py-1 rounded hover:bg-cyan-700 font-semibold">📄 Hợp đồng</button>
         <button id="btnMeetingTab" onclick="switchTab('meeting')" class="hidden text-xs bg-emerald-600 text-white px-2 py-1 rounded hover:bg-emerald-700 font-semibold">📅 Phòng họp</button>
+        <button id="btnMinutesTab" onclick="switchTab('minutes')" class="hidden text-xs bg-rose-600 text-white px-2 py-1 rounded hover:bg-rose-700 font-semibold">📝 Biên bản họp</button>
         <button id="btnCarTab" onclick="switchTab('car')" class="hidden text-xs bg-indigo-600 text-white px-2 py-1 rounded hover:bg-indigo-700 font-semibold">🚗 Đăng ký xe</button>
         <button id="btnOfficeTab" onclick="switchTab('office')" class="hidden text-xs bg-teal-600 text-white px-2 py-1 rounded hover:bg-teal-700 font-semibold">🏢 Phê duyệt VP</button>
         <button id="btnFormTab" onclick="switchTab('form')" class="hidden text-xs bg-rose-600 text-white px-2 py-1 rounded hover:bg-rose-700 font-semibold">📋 Biểu mẫu</button>
@@ -563,6 +564,130 @@
         </table>
       </div>
       <div id="paginationContainer_meeting"></div>
+    </div>
+  </div>
+
+  <!-- Màn hình MODULE BIÊN BẢN HỌP -->
+  <div id="minutesSection" class="hidden space-y-6">
+    <div class="bg-rose-50 p-4 rounded border border-rose-200 space-y-3">
+      <h3 class="font-bold text-rose-900 text-base flex items-center gap-2">📝 Lập Biên Bản Họp & Ý Kiến Chỉ Đạo</h3>
+      <p class="text-xs text-rose-800">Nhập biên bản trực tiếp trong cuộc họp — ghi lại nội dung và các ý kiến chỉ đạo gán ngay cho từng người.</p>
+
+      <form id="minutesForm" onsubmit="submitMeetingMinutes(event)" class="bg-white p-3 rounded border text-xs space-y-3">
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+          <div>
+            <label class="block font-semibold text-gray-600 mb-1">Mã Biên Bản</label>
+            <input id="minutesCode" placeholder="VD: BB-2026-001" class="w-full border p-1.5 rounded" required>
+          </div>
+          <div>
+            <label class="block font-semibold text-gray-600 mb-1">Phòng Ban</label>
+            <select id="minutesDept" class="w-full border p-1.5 rounded bg-white font-semibold" required></select>
+          </div>
+          <div>
+            <label class="block font-semibold text-gray-600 mb-1">Liên Kết Lịch Đặt Phòng Họp (tuỳ chọn)</label>
+            <select id="minutesLinkedMeeting" onchange="onMinutesLinkedMeetingChange()" class="w-full border p-1.5 rounded bg-white">
+              <option value="">-- Không liên kết --</option>
+            </select>
+          </div>
+          <div class="md:col-span-2">
+            <label class="block font-semibold text-gray-600 mb-1">Chủ Đề / Tiêu Đề Cuộc Họp</label>
+            <input id="minutesTitle" placeholder="Họp giao ban tuần / Họp triển khai dự án..." class="w-full border p-1.5 rounded" required>
+          </div>
+          <div>
+            <label class="block font-semibold text-gray-600 mb-1">Thời Gian Họp</label>
+            <input id="minutesTime" type="datetime-local" class="w-full border p-1.5 rounded" required>
+          </div>
+          <div>
+            <label class="block font-semibold text-gray-600 mb-1">Địa Điểm</label>
+            <input id="minutesLocation" placeholder="Phòng họp A / Trực tuyến..." class="w-full border p-1.5 rounded">
+          </div>
+          <div>
+            <label class="block font-semibold text-gray-600 mb-1">Chủ Trì</label>
+            <input id="minutesChair" placeholder="Họ tên người chủ trì" class="w-full border p-1.5 rounded" required>
+          </div>
+          <div>
+            <label class="block font-semibold text-gray-600 mb-1">Thư Ký</label>
+            <input id="minutesSecretary" placeholder="Họ tên người ghi biên bản" class="w-full border p-1.5 rounded" required>
+          </div>
+          <div class="md:col-span-3">
+            <label class="block font-semibold text-gray-600 mb-1">Thành Phần Tham Dự</label>
+            <input id="minutesAttendees" placeholder="Họ tên, chức danh các thành viên tham dự, cách nhau dấu phẩy" class="w-full border p-1.5 rounded">
+          </div>
+        </div>
+
+        <div>
+          <label class="block font-semibold text-gray-600 mb-1">Nội Dung Biên Bản</label>
+          <textarea id="minutesContent" placeholder="Ghi nội dung trao đổi, kết luận từng phần trong cuộc họp..." class="w-full border p-1.5 rounded h-28" required></textarea>
+        </div>
+
+        <div class="border-t pt-3 space-y-2">
+          <label class="block font-semibold text-gray-600">Ý Kiến Chỉ Đạo (gán trực tiếp cho người thực hiện)</label>
+          <div class="overflow-x-auto">
+            <table class="w-full border-collapse border text-xs bg-white">
+              <thead>
+                <tr class="bg-gray-100 text-left text-gray-700">
+                  <th class="border p-1.5 w-8">STT</th>
+                  <th class="border p-1.5">Nội Dung Chỉ Đạo</th>
+                  <th class="border p-1.5 w-48">Người Thực Hiện</th>
+                  <th class="border p-1.5 w-36">Hạn Hoàn Thành</th>
+                  <th class="border p-1.5 w-8"></th>
+                </tr>
+              </thead>
+              <tbody id="minutesDirectivesTableBody"></tbody>
+            </table>
+          </div>
+          <button type="button" onclick="addMinutesDirectiveRow()" class="bg-rose-600 text-white px-3 py-1 rounded text-xs font-bold hover:bg-rose-700">➕ Thêm Ý Kiến Chỉ Đạo</button>
+        </div>
+
+        <div class="flex justify-end gap-2">
+          <button type="button" id="minutesCancelEditBtn" onclick="cancelEditMeetingMinutes()" class="hidden bg-gray-200 text-gray-700 px-5 py-2 rounded font-bold hover:bg-gray-300">Huỷ Sửa</button>
+          <button type="submit" id="minutesSubmitBtn" class="bg-rose-600 text-white px-5 py-2 rounded font-bold hover:bg-rose-700">Lưu Biên Bản Họp</button>
+        </div>
+      </form>
+    </div>
+
+    <div class="bg-gray-50 p-4 rounded-lg border space-y-3">
+      <h4 class="font-bold text-gray-700 text-sm">🔍 Tìm Kiếm & Lọc Biên Bản Họp</h4>
+      <div class="grid grid-cols-1 md:grid-cols-4 gap-3">
+        <div>
+          <label class="block text-xs font-semibold text-gray-600 mb-1">Lọc Theo Phòng Ban</label>
+          <select id="filterDeptMinutes" onchange="onMinutesFilterChange()" class="w-full border p-2 rounded text-sm bg-white">
+            <option value="">-- Tất cả phòng ban --</option>
+          </select>
+        </div>
+        <div>
+          <label class="block text-xs font-semibold text-gray-600 mb-1">Từ Ngày</label>
+          <input id="filterFromDateMinutes" type="date" onchange="onMinutesFilterChange()" class="w-full border p-2 rounded text-sm bg-white">
+        </div>
+        <div>
+          <label class="block text-xs font-semibold text-gray-600 mb-1">Đến Ngày</label>
+          <input id="filterToDateMinutes" type="date" onchange="onMinutesFilterChange()" class="w-full border p-2 rounded text-sm bg-white">
+        </div>
+        <div>
+          <label class="block text-xs font-semibold text-gray-600 mb-1">Từ Khóa</label>
+          <input id="filterKeywordMinutes" oninput="onMinutesFilterChange()" placeholder="Mã, chủ đề, chủ trì..." class="w-full border p-2 rounded text-sm">
+        </div>
+      </div>
+    </div>
+
+    <div class="space-y-3">
+      <h3 class="font-bold text-gray-800">📋 Danh Sách Biên Bản Họp</h3>
+      <div class="overflow-x-auto">
+        <table class="w-full border-collapse border text-xs bg-white">
+          <thead>
+            <tr class="bg-gray-100 text-left text-gray-700">
+              <th class="border p-2">Mã & Chủ Đề</th>
+              <th class="border p-2">Phòng Ban</th>
+              <th class="border p-2">Thời Gian Họp</th>
+              <th class="border p-2">Chủ Trì / Thư Ký</th>
+              <th class="border p-2">Ý Kiến Chỉ Đạo</th>
+              <th class="border p-2 text-center min-w-[140px]">Thao Tác</th>
+            </tr>
+          </thead>
+          <tbody id="minutesTableBody"></tbody>
+        </table>
+      </div>
+      <div id="paginationContainer_minutes"></div>
     </div>
   </div>
 
@@ -1287,8 +1412,32 @@
             </div>
           </div>
 
+          <div class="bg-white p-3 rounded border space-y-2 lg:col-span-2">
+            <h4 class="font-bold text-rose-800 text-sm border-b pb-1">12. 📝 Biên Bản Họp — Phạm Vi Theo Phòng Ban</h4>
+            <div class="grid grid-cols-2 gap-3">
+              <div>
+                <div class="flex justify-between items-center mb-1">
+                  <span class="font-semibold text-gray-600 text-[11px]">Xem</span>
+                  <label class="flex items-center gap-1 font-bold text-rose-700 cursor-pointer text-[11px]">
+                    <input type="checkbox" id="pMinutesViewAll" onchange="toggleScopeGroup('pMinutesViewAll', 'pMinutesViewDept')"><span>ALL</span>
+                  </label>
+                </div>
+                <div id="pMinutesViewDeptContainer" class="space-y-1 pl-1 max-h-32 overflow-y-auto"></div>
+              </div>
+              <div>
+                <div class="flex justify-between items-center mb-1">
+                  <span class="font-semibold text-gray-600 text-[11px]">Tạo mới</span>
+                  <label class="flex items-center gap-1 font-bold text-rose-700 cursor-pointer text-[11px]">
+                    <input type="checkbox" id="pMinutesCreateAll" onchange="toggleScopeGroup('pMinutesCreateAll', 'pMinutesCreateDept')"><span>ALL</span>
+                  </label>
+                </div>
+                <div id="pMinutesCreateDeptContainer" class="space-y-1 pl-1 max-h-32 overflow-y-auto"></div>
+              </div>
+            </div>
+          </div>
+
           <div class="bg-white p-3 rounded border space-y-2">
-            <h4 class="font-bold text-gray-800 border-b pb-1 text-sm">12. Người Duyệt</h4>
+            <h4 class="font-bold text-gray-800 border-b pb-1 text-sm">13. Người Duyệt</h4>
             <label class="flex items-center gap-2 text-emerald-700 font-semibold cursor-pointer">
               <input type="checkbox" id="pCanBeApprover"> ✅ Có thể được chọn làm người duyệt
             </label>
@@ -1590,6 +1739,7 @@ const DB = {
   officeBuyDeptWorkflows: {},
   officeFixDeptWorkflows: {},
   officeInvestDeptWorkflows: {},
+  meetingMinutes: [],
   formTemplates: {},
   emailConfig: {}, systemLogs: []
 };
@@ -1607,6 +1757,11 @@ let currentProcessingOfficeId = null;
 // Danh sách hạng mục của phiếu Đề Nghị Mua Sắm đang nhập (theo Mẫu BM-TS01) — reset mỗi khi
 // submit thành công hoặc chuyển sang phân hệ Mua Sắm.
 let officeItems = [];
+// Danh sách dòng "Ý kiến chỉ đạo" của Biên bản họp đang nhập/sửa — mỗi dòng có thể gán ngay cho 1
+// người cụ thể (nguồn dữ liệu để Phase 3 tạo Công việc từ chỉ đạo).
+let minutesDirectives = [];
+// Khác null khi đang SỬA 1 biên bản đã tạo (thay vì tạo mới) — chỉ người tạo mới sửa được.
+let editingMinutesId = null;
 
 function escapeHtml(str) {
   if (!str) return '';
@@ -1899,6 +2054,12 @@ function canAccessCarModule(user) {
   return scopeHasAny(user, user.perms?.carView) || isApproverInWorkflowMap(DB.carDeptWorkflows, user.username);
 }
 
+function canAccessMeetingMinutesModule(user) {
+  if (!user) return false;
+  if (user.perms?.admin) return true;
+  return scopeHasAny(user, user.perms?.minutesView) || scopeHasAny(user, user.perms?.minutesCreate);
+}
+
 function getOfficeWorkflowMap(subType) {
   if (subType === 'SUA_CHUA') return DB.officeFixDeptWorkflows;
   if (subType === 'DAU_TU') return DB.officeInvestDeptWorkflows;
@@ -1963,7 +2124,8 @@ function defaultNewUserPerms() {
     meetingApprove: false, meetingCancel: false,
     carView: emptyScope(), carCreate: emptyScope(),
     officeView: emptyScope(), officeCreate: emptyScope(),
-    officeBuy: true, officeFix: true, officeInvest: false
+    officeBuy: true, officeFix: true, officeInvest: false,
+    minutesView: emptyScope(), minutesCreate: emptyScope()
   };
 }
 
@@ -2008,6 +2170,11 @@ function migrateLegacyPerms(perms) {
     p.officeCreate = scopeFromFlag(anyOffice);
     changed = true;
   }
+  if (p.minutesView === undefined) {
+    p.minutesView = { all: false, depts: [] };
+    p.minutesCreate = { all: false, depts: [] };
+    changed = true;
+  }
 
   return { perms: p, changed };
 }
@@ -2045,6 +2212,7 @@ async function initDatabase() {
     DB.meetings = data.meetings || [];
     DB.carRegs = data.carRegs || [];
     DB.officeReqs = data.officeReqs || [];
+    DB.meetingMinutes = data.meetingMinutes || [];
     DB.workflows = data.workflows || [];
     DB.formTemplates = data.formTemplates || {};
     DB.emailConfig = data.emailConfig || {};
@@ -2240,6 +2408,7 @@ function login() {
   document.getElementById('btnSubmissionTab').classList.toggle('hidden', !canAccessSubmissionModule(user));
   document.getElementById('btnContractTab').classList.toggle('hidden', !canAccessContractModule(user));
   document.getElementById('btnMeetingTab').classList.toggle('hidden', !canAccessMeetingModule(user));
+  document.getElementById('btnMinutesTab').classList.toggle('hidden', !canAccessMeetingMinutesModule(user));
   document.getElementById('btnTaskTab').classList.remove('hidden');
   document.getElementById('btnCarTab').classList.toggle('hidden', !canAccessCarModule(user));
   document.getElementById('btnOfficeTab').classList.toggle('hidden', !canAccessOfficeModule(user));
@@ -2280,6 +2449,10 @@ function switchTab(tabName) {
     alert('⛔ Bạn không có quyền truy cập Module Quản lý phòng họp!');
     return;
   }
+  if (tabName === 'minutes' && !canAccessMeetingMinutesModule(currentUser)) {
+    alert('⛔ Bạn không có quyền truy cập Module Biên bản họp!');
+    return;
+  }
   if (tabName === 'car' && !canAccessCarModule(currentUser)) {
     alert('⛔ Bạn không có quyền truy cập Module Đăng ký xe!');
     return;
@@ -2294,6 +2467,7 @@ function switchTab(tabName) {
   document.getElementById('taskSection').classList.toggle('hidden', tabName !== 'task');
   document.getElementById('contractSection').classList.toggle('hidden', tabName !== 'contract');
   document.getElementById('meetingSection').classList.toggle('hidden', tabName !== 'meeting');
+  document.getElementById('minutesSection').classList.toggle('hidden', tabName !== 'minutes');
   document.getElementById('carSection').classList.toggle('hidden', tabName !== 'car');
   document.getElementById('officeSection').classList.toggle('hidden', tabName !== 'office');
   document.getElementById('formSection').classList.toggle('hidden', tabName !== 'form');
@@ -2308,6 +2482,7 @@ function switchTab(tabName) {
   if (tabName === 'task') { renderTasks(); }
   if (tabName === 'contract') { renderContracts(); }
   if (tabName === 'meeting') { renderMeetings(); }
+  if (tabName === 'minutes') { renderMeetingMinutes(); populateMinutesLinkSelect(); }
   if (tabName === 'car') { renderDynamicInputsForModule('CAR', 'dynamicFieldsContainer_CAR'); renderCarRegs(); }
   if (tabName === 'office') {
     let targetSub = activeOfficeSubTab;
@@ -2391,7 +2566,7 @@ function populateDropdowns() {
 
   // Dropdown "Lọc Theo Phòng Ban" của các module khác — cùng danh sách toàn bộ phòng ban (không
   // giới hạn theo quyền tạo mới, vì kết quả hiển thị đã được lọc theo quyền xem ở nơi khác).
-  ['filterDeptSub', 'filterDeptContract', 'filterDeptCar', 'filterDeptOffice', 'filterDeptMeeting'].forEach(id => {
+  ['filterDeptSub', 'filterDeptContract', 'filterDeptCar', 'filterDeptOffice', 'filterDeptMeeting', 'filterDeptMinutes'].forEach(id => {
     const el = document.getElementById(id);
     if (el) el.innerHTML = '<option value="">-- Tất cả phòng ban --</option>' + DB.depts.map(d => `<option value="${escapeHtml(d)}">${escapeHtml(d)}</option>`).join('');
   });
@@ -2428,6 +2603,11 @@ function populateDropdowns() {
   const offDept = document.getElementById('offDept');
   if (offDept) {
     offDept.innerHTML = getScopedDepts(currentUser, currentUser.perms?.officeCreate).map(d => `<option value="${escapeHtml(d)}">${escapeHtml(d)}</option>`).join('');
+  }
+
+  const minutesDept = document.getElementById('minutesDept');
+  if (minutesDept) {
+    minutesDept.innerHTML = getScopedDepts(currentUser, currentUser.perms?.minutesCreate).map(d => `<option value="${escapeHtml(d)}">${escapeHtml(d)}</option>`).join('');
   }
 
   const uDept = document.getElementById('uDept');
@@ -3804,6 +3984,356 @@ function cancelMeeting(id) {
     `[VPDT] Lịch phòng họp ${m.code} đã bị hủy`,
     `Lịch đặt phòng "${m.room}" (${m.code}) của bạn đã bị hủy.`);
   renderMeetings();
+}
+
+// ==========================================
+// MODULE BIÊN BẢN HỌP (MEETING MINUTES MODULE)
+// ==========================================
+function onMinutesFilterChange() {
+  resetListPage('minutes');
+  renderMeetingMinutes();
+}
+
+function populateMinutesLinkSelect() {
+  const sel = document.getElementById('minutesLinkedMeeting');
+  if (!sel) return;
+  const current = sel.value;
+  const visible = DB.meetings.filter(m => m.status !== 'CANCELLED');
+  sel.innerHTML = '<option value="">-- Không liên kết --</option>' +
+    visible.map(m => `<option value="${m.id}">${escapeHtml(m.code)} - ${escapeHtml(m.title)}</option>`).join('');
+  sel.value = current;
+}
+
+// Chọn 1 lịch đặt phòng họp đã có -> tự điền sẵn thông tin cơ bản, đỡ phải nhập lại (vẫn sửa được).
+function onMinutesLinkedMeetingChange() {
+  const id = document.getElementById('minutesLinkedMeeting').value;
+  if (!id) return;
+  const m = DB.meetings.find(x => x.id === parseInt(id, 10));
+  if (!m) return;
+  document.getElementById('minutesDept').value = m.dept;
+  document.getElementById('minutesTitle').value = m.title;
+  document.getElementById('minutesTime').value = m.startTime;
+  document.getElementById('minutesLocation').value = m.room || '';
+}
+
+// --- Bảng "Ý kiến chỉ đạo" nhập trực tiếp trong biên bản — mỗi dòng gán ngay cho 1 người cụ thể,
+// là nguồn dữ liệu để tạo Công việc sau này (xem module Công việc). ---
+function addMinutesDirectiveRow() {
+  minutesDirectives.push({ content: '', assignedTo: '', deadline: '' });
+  renderMinutesDirectivesTable();
+}
+
+function removeMinutesDirectiveRow(idx) {
+  minutesDirectives.splice(idx, 1);
+  renderMinutesDirectivesTable();
+}
+
+function updateMinutesDirectiveField(idx, field, value) {
+  if (!minutesDirectives[idx]) return;
+  minutesDirectives[idx][field] = value;
+}
+
+function renderMinutesDirectivesTable() {
+  const tbody = document.getElementById('minutesDirectivesTableBody');
+  if (!tbody) return;
+  tbody.innerHTML = minutesDirectives.map((d, idx) => `
+    <tr>
+      <td class="border p-1 text-center">${idx + 1}</td>
+      <td class="border p-1"><input value="${escapeHtml(d.content)}" oninput="updateMinutesDirectiveField(${idx}, 'content', this.value)" class="w-full border-0 p-0.5 text-xs focus:outline-none" placeholder="Nội dung chỉ đạo cụ thể..."></td>
+      <td class="border p-1">
+        <select onchange="updateMinutesDirectiveField(${idx}, 'assignedTo', this.value)" class="w-full border-0 p-0.5 text-xs bg-white focus:outline-none">
+          <option value="">-- Chọn người --</option>
+          ${DB.users.map(u => `<option value="${escapeHtml(u.username)}" ${d.assignedTo === u.username ? 'selected' : ''}>${escapeHtml(u.name)} (${escapeHtml(u.username)})</option>`).join('')}
+        </select>
+      </td>
+      <td class="border p-1"><input type="date" value="${escapeHtml(d.deadline)}" onchange="updateMinutesDirectiveField(${idx}, 'deadline', this.value)" class="w-full border-0 p-0.5 text-xs focus:outline-none"></td>
+      <td class="border p-1 text-center"><button type="button" onclick="removeMinutesDirectiveRow(${idx})" class="text-red-600 font-bold hover:text-red-800" title="Xoá dòng">✕</button></td>
+    </tr>
+  `).join('');
+}
+
+function submitMeetingMinutes(e) {
+  e.preventDefault();
+  if (editingMinutesId !== null) return updateMeetingMinutes(e);
+
+  const code = document.getElementById('minutesCode').value.trim();
+  const dept = document.getElementById('minutesDept').value;
+  const linkedMeetingRaw = document.getElementById('minutesLinkedMeeting').value;
+  const title = document.getElementById('minutesTitle').value.trim();
+  const time = document.getElementById('minutesTime').value;
+  const location = document.getElementById('minutesLocation').value.trim();
+  const chair = document.getElementById('minutesChair').value.trim();
+  const secretary = document.getElementById('minutesSecretary').value.trim();
+  const attendees = document.getElementById('minutesAttendees').value.trim();
+  const content = document.getElementById('minutesContent').value.trim();
+
+  if (DB.meetingMinutes.some(m => m.code === code)) {
+    return alert('Mã biên bản đã tồn tại!');
+  }
+
+  const validDirectives = minutesDirectives.filter(d => d.content.trim()).map(d => ({ ...d }));
+
+  const newMinutes = {
+    id: Date.now(),
+    code, dept,
+    linkedMeetingId: linkedMeetingRaw ? parseInt(linkedMeetingRaw, 10) : null,
+    title, time, location, chair, secretary, attendees, content,
+    directives: validDirectives,
+    creator: currentUser.username,
+    creatorName: currentUser.name,
+    createdAt: new Date().toLocaleString('vi-VN')
+  };
+
+  DB.meetingMinutes.unshift(newMinutes);
+  syncStorage('meetingMinutes');
+  logSystemAction('MINUTES', 'CREATE_MINUTES', `Lập biên bản họp [${code} - ${title}]`, 'SUCCESS', code);
+  alert('✅ Đã lưu biên bản họp thành công!');
+  e.target.reset();
+  minutesDirectives = [];
+  renderMinutesDirectivesTable();
+  renderMeetingMinutes();
+}
+
+function openEditMeetingMinutes(id) {
+  const m = DB.meetingMinutes.find(x => x.id === id);
+  if (!m) return;
+  if (m.creator !== currentUser.username) {
+    return alert('⛔ Bạn chỉ có thể sửa biên bản do chính mình lập!');
+  }
+
+  editingMinutesId = id;
+  document.getElementById('minutesCode').value = m.code;
+  document.getElementById('minutesCode').readOnly = true;
+  document.getElementById('minutesCode').classList.add('bg-gray-100', 'cursor-not-allowed');
+  populateMinutesLinkSelect();
+  document.getElementById('minutesDept').value = m.dept;
+  document.getElementById('minutesLinkedMeeting').value = m.linkedMeetingId || '';
+  document.getElementById('minutesTitle').value = m.title;
+  document.getElementById('minutesTime').value = m.time;
+  document.getElementById('minutesLocation').value = m.location || '';
+  document.getElementById('minutesChair').value = m.chair;
+  document.getElementById('minutesSecretary').value = m.secretary;
+  document.getElementById('minutesAttendees').value = m.attendees || '';
+  document.getElementById('minutesContent').value = m.content;
+
+  minutesDirectives = (m.directives || []).map(d => ({ ...d }));
+  renderMinutesDirectivesTable();
+
+  document.getElementById('minutesSubmitBtn').innerText = '💾 Cập Nhật Biên Bản';
+  document.getElementById('minutesCancelEditBtn').classList.remove('hidden');
+  document.getElementById('minutesForm').scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+function cancelEditMeetingMinutes() {
+  editingMinutesId = null;
+  document.getElementById('minutesForm').reset();
+  document.getElementById('minutesCode').readOnly = false;
+  document.getElementById('minutesCode').classList.remove('bg-gray-100', 'cursor-not-allowed');
+  minutesDirectives = [];
+  renderMinutesDirectivesTable();
+  document.getElementById('minutesSubmitBtn').innerText = 'Lưu Biên Bản Họp';
+  document.getElementById('minutesCancelEditBtn').classList.add('hidden');
+}
+
+function updateMeetingMinutes(e) {
+  const m = DB.meetingMinutes.find(x => x.id === editingMinutesId);
+  if (!m) { cancelEditMeetingMinutes(); return; }
+  if (m.creator !== currentUser.username) {
+    cancelEditMeetingMinutes();
+    return alert('⛔ Bạn chỉ có thể sửa biên bản do chính mình lập!');
+  }
+
+  const linkedMeetingRaw = document.getElementById('minutesLinkedMeeting').value;
+  m.dept = document.getElementById('minutesDept').value;
+  m.linkedMeetingId = linkedMeetingRaw ? parseInt(linkedMeetingRaw, 10) : null;
+  m.title = document.getElementById('minutesTitle').value.trim();
+  m.time = document.getElementById('minutesTime').value;
+  m.location = document.getElementById('minutesLocation').value.trim();
+  m.chair = document.getElementById('minutesChair').value.trim();
+  m.secretary = document.getElementById('minutesSecretary').value.trim();
+  m.attendees = document.getElementById('minutesAttendees').value.trim();
+  m.content = document.getElementById('minutesContent').value.trim();
+  m.directives = minutesDirectives.filter(d => d.content.trim()).map(d => ({ ...d }));
+  m.lastEditedBy = currentUser.username;
+  m.lastEditedAt = new Date().toLocaleString('vi-VN');
+
+  syncStorage('meetingMinutes');
+  logSystemAction('MINUTES', 'EDIT_MINUTES', `Cập nhật biên bản họp [${m.code}]`, 'SUCCESS', m.code);
+  alert('✅ Đã cập nhật biên bản họp thành công!');
+  cancelEditMeetingMinutes();
+  renderMeetingMinutes();
+}
+
+function renderMeetingMinutes() {
+  const tbody = document.getElementById('minutesTableBody');
+  if (!tbody) return;
+
+  const deptFilter = document.getElementById('filterDeptMinutes')?.value || '';
+  const fromDate = document.getElementById('filterFromDateMinutes')?.value || '';
+  const toDate = document.getElementById('filterToDateMinutes')?.value || '';
+  const keyword = (document.getElementById('filterKeywordMinutes')?.value || '').trim();
+
+  const visible = DB.meetingMinutes.filter(m => {
+    const canView = scopeAllows(currentUser, currentUser.perms?.minutesView, m.dept) || m.creator === currentUser.username;
+    if (!canView) return false;
+
+    if (deptFilter && m.dept !== deptFilter) return false;
+    if (!isInDateRange(m.createdAt, fromDate, toDate)) return false;
+    if (!matchesKeywordFields([m.code, m.title, m.chair, m.creatorName], keyword)) return false;
+
+    return true;
+  });
+
+  document.getElementById('paginationContainer_minutes').innerHTML = buildPaginationBoxHTML('minutes', 'renderMeetingMinutes');
+  const pageItems = paginateList('minutes', visible, 'renderMeetingMinutes', 'biên bản');
+
+  if (pageItems.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="6" class="text-center p-6 text-gray-500 italic">Không tìm thấy biên bản họp phù hợp.</td></tr>`;
+    return;
+  }
+
+  tbody.innerHTML = pageItems.map(m => `
+    <tr class="hover:bg-gray-50 border-b">
+      <td class="border p-2 font-mono font-bold text-rose-800">${escapeHtml(m.code)}<br><span class="text-xs text-gray-500 font-normal">${escapeHtml(m.title)}</span></td>
+      <td class="border p-2">${escapeHtml(m.dept)}</td>
+      <td class="border p-2 text-xs">${escapeHtml(m.time)}${m.location ? `<br><span class="text-gray-400">${escapeHtml(m.location)}</span>` : ''}</td>
+      <td class="border p-2 text-xs">CT: ${escapeHtml(m.chair)}<br>TK: ${escapeHtml(m.secretary)}</td>
+      <td class="border p-2 text-center">${(m.directives || []).length}</td>
+      <td class="border p-2 text-center space-x-1">
+        <button onclick="viewMeetingMinutesDetails(${m.id})" class="bg-rose-600 text-white px-2 py-1 rounded text-xs hover:bg-rose-700 font-bold">🔍 Xem chi tiết</button>
+        <button onclick="downloadMeetingMinutes(${m.id})" class="bg-slate-600 text-white px-2 py-1 rounded text-xs hover:bg-slate-700 font-bold">⬇️ Tải</button>
+        ${m.creator === currentUser.username ? `<button onclick="openEditMeetingMinutes(${m.id})" class="bg-amber-600 text-white px-2 py-1 rounded text-xs hover:bg-amber-700 font-bold">✏️ Sửa</button>` : ''}
+      </td>
+    </tr>
+  `).join('');
+}
+
+function viewMeetingMinutesDetails(id) {
+  const m = DB.meetingMinutes.find(x => x.id === id);
+  if (!m) return;
+
+  document.getElementById('viewModalTitle').innerText = `📝 ${m.title} (${m.code})`;
+  document.getElementById('viewModalSub').innerText = `Phòng ban: ${m.dept} | Chủ trì: ${m.chair} | Thư ký: ${m.secretary}`;
+  document.getElementById('viewModalFooterInfo').innerText = `Người lập: ${m.creator}${m.lastEditedBy ? ` | Sửa lần cuối bởi: ${m.lastEditedBy} lúc ${m.lastEditedAt}` : ''}`;
+
+  const directivesHTML = (m.directives || []).length ? `
+    <table class="w-full border-collapse border text-xs mt-2">
+      <thead><tr class="bg-gray-100"><th class="border p-1">STT</th><th class="border p-1">Nội dung chỉ đạo</th><th class="border p-1">Người thực hiện</th><th class="border p-1">Hạn hoàn thành</th></tr></thead>
+      <tbody>
+        ${m.directives.map((d, idx) => {
+          const u = DB.users.find(x => x.username === d.assignedTo);
+          return `<tr><td class="border p-1 text-center">${idx + 1}</td><td class="border p-1">${escapeHtml(d.content)}</td><td class="border p-1">${escapeHtml(u ? u.name : (d.assignedTo || 'Chưa gán'))}</td><td class="border p-1">${escapeHtml(d.deadline || '')}</td></tr>`;
+        }).join('')}
+      </tbody>
+    </table>
+  ` : '<p class="text-gray-400 italic">Không có ý kiến chỉ đạo nào.</p>';
+
+  document.getElementById('viewModalContent').innerHTML = `
+    <div class="w-full bg-white p-6 rounded shadow border overflow-y-auto text-sm">
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+        <div><b>Thời gian họp:</b> ${escapeHtml(m.time)}</div>
+        <div><b>Địa điểm:</b> ${escapeHtml(m.location || 'N/A')}</div>
+        <div><b>Chủ trì:</b> ${escapeHtml(m.chair)}</div>
+        <div><b>Thư ký:</b> ${escapeHtml(m.secretary)}</div>
+        <div class="md:col-span-2"><b>Thành phần tham dự:</b> ${escapeHtml(m.attendees || 'N/A')}</div>
+      </div>
+      <div class="border-t mt-3 pt-3">
+        <b>Nội dung biên bản:</b>
+        <div class="bg-gray-50 p-3 rounded border mt-1 whitespace-pre-wrap text-gray-800">${escapeHtml(m.content)}</div>
+      </div>
+      <div class="border-t mt-3 pt-3">
+        <b>Ý kiến chỉ đạo:</b>
+        ${directivesHTML}
+      </div>
+    </div>
+  `;
+  document.getElementById('viewDocModal').classList.remove('hidden');
+}
+
+// Dựng văn bản Biên Bản Họp hoàn chỉnh để in/tải — tự thân (không phụ thuộc Tailwind của trang
+// chính) vì file tải về / khung in không load Tailwind, theo đúng cách đã làm cho Phiếu Phê Duyệt.
+function buildMeetingMinutesDocumentHTML(m) {
+  const u2name = (username) => {
+    const u = DB.users.find(x => x.username === username);
+    return u ? u.name : (username || 'Chưa gán');
+  };
+  const directiveRows = (m.directives || []).map((d, idx) => `
+    <tr><td>${idx + 1}</td><td>${escapeHtml(d.content)}</td><td>${escapeHtml(u2name(d.assignedTo))}</td><td>${escapeHtml(d.deadline || '')}</td></tr>
+  `).join('') || `<tr><td colspan="4" style="text-align:center;color:#888;">Không có ý kiến chỉ đạo</td></tr>`;
+
+  return `
+    <div class="minutes-doc">
+      <style>
+        .minutes-doc { font-family: 'Times New Roman', Georgia, serif; color: #111; background: #fff; padding: 24px; max-width: 800px; margin: 0 auto; position: relative; font-size: 13px; line-height: 1.6; }
+        .minutes-doc .md-watermark { position: absolute; top: 45%; left: 50%; transform: translate(-50%,-50%) rotate(-28deg); font-size: 28px; font-weight: bold; color: rgba(0,0,0,0.06); white-space: nowrap; pointer-events: none; z-index: 0; text-transform: uppercase; text-align: center; }
+        .minutes-doc .md-content { position: relative; z-index: 1; }
+        .minutes-doc .md-header { text-align: center; margin-bottom: 10px; }
+        .minutes-doc .md-code { font-size: 11px; color: #555; }
+        .minutes-doc .md-title { font-size: 19px; font-weight: bold; text-transform: uppercase; margin: 6px 0; }
+        .minutes-doc table.md-field-table { width: 100%; border-collapse: collapse; margin: 8px 0; }
+        .minutes-doc table.md-field-table td { padding: 3px 4px; vertical-align: top; }
+        .minutes-doc .md-label { font-weight: bold; width: 160px; white-space: nowrap; }
+        .minutes-doc .md-section-title { font-weight: bold; margin-top: 14px; margin-bottom: 4px; background: #f0f0f0; padding: 4px 6px; }
+        .minutes-doc .md-body-text { white-space: pre-wrap; }
+        .minutes-doc table.md-items-table { width: 100%; border-collapse: collapse; margin: 6px 0; font-size: 12px; }
+        .minutes-doc table.md-items-table th, .minutes-doc table.md-items-table td { border: 1px solid #999; padding: 4px 6px; }
+        .minutes-doc table.md-items-table th { background: #f0f0f0; font-weight: bold; text-align: center; }
+        .minutes-doc .md-sign-table { width: 100%; border-collapse: collapse; margin-top: 24px; }
+        .minutes-doc .md-sign-table td { text-align: center; vertical-align: top; padding: 8px 6px; width: 50%; }
+        .minutes-doc .md-sign-role { font-weight: bold; text-transform: uppercase; display: block; margin-bottom: 44px; }
+        .minutes-doc .md-footer-note { margin-top: 16px; font-size: 11px; color: #444; border-top: 1px solid #ccc; padding-top: 6px; }
+        @media print { .minutes-doc { padding: 0; } }
+      </style>
+      <div class="md-watermark">VĂN PHÒNG ĐIỆN TỬ</div>
+      <div class="md-content">
+        <div class="md-header">
+          <div class="md-code">Mã biên bản: ${escapeHtml(m.code)}</div>
+          <div class="md-title">Biên Bản Họp</div>
+          <div>${escapeHtml(m.title)}</div>
+        </div>
+
+        <table class="md-field-table">
+          <tr><td class="md-label">Thời gian họp:</td><td>${escapeHtml(m.time)}</td></tr>
+          <tr><td class="md-label">Địa điểm:</td><td>${escapeHtml(m.location || '')}</td></tr>
+          <tr><td class="md-label">Phòng ban:</td><td>${escapeHtml(m.dept)}</td></tr>
+          <tr><td class="md-label">Chủ trì:</td><td>${escapeHtml(m.chair)}</td></tr>
+          <tr><td class="md-label">Thư ký:</td><td>${escapeHtml(m.secretary)}</td></tr>
+          <tr><td class="md-label">Thành phần tham dự:</td><td>${escapeHtml(m.attendees || '')}</td></tr>
+        </table>
+
+        <div class="md-section-title">Nội Dung Biên Bản</div>
+        <div class="md-body-text">${escapeHtml(m.content)}</div>
+
+        <div class="md-section-title">Ý Kiến Chỉ Đạo</div>
+        <table class="md-items-table">
+          <thead><tr><th>STT</th><th>Nội dung chỉ đạo</th><th>Người thực hiện</th><th>Hạn hoàn thành</th></tr></thead>
+          <tbody>${directiveRows}</tbody>
+        </table>
+
+        <table class="md-sign-table">
+          <tr>
+            <td><span class="md-sign-role">Thư Ký</span>${escapeHtml(m.secretary)}</td>
+            <td><span class="md-sign-role">Chủ Trì</span>${escapeHtml(m.chair)}</td>
+          </tr>
+        </table>
+
+        <div class="md-footer-note">Biên bản được lập trên Hệ thống Văn phòng điện tử (VPĐT) lúc ${escapeHtml(m.createdAt)}.</div>
+      </div>
+    </div>
+  `;
+}
+
+function downloadMeetingMinutes(id) {
+  const m = DB.meetingMinutes.find(x => x.id === id);
+  if (!m) return;
+  const fullHtml = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Bien Ban Hop - ${escapeHtml(m.code)}</title></head><body>${buildMeetingMinutesDocumentHTML(m)}</body></html>`;
+  const blob = new Blob([fullHtml], { type: 'text/html;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = `BienBanHop_${m.code}.html`;
+  link.click();
+  URL.revokeObjectURL(url);
 }
 
 // ==========================================
@@ -5310,7 +5840,9 @@ function renderDeptCheckboxes() {
     { container: 'pCarViewDeptContainer', prefix: 'pCarViewDept' },
     { container: 'pCarCreateDeptContainer', prefix: 'pCarCreateDept' },
     { container: 'pOfficeViewDeptContainer', prefix: 'pOfficeViewDept' },
-    { container: 'pOfficeCreateDeptContainer', prefix: 'pOfficeCreateDept' }
+    { container: 'pOfficeCreateDeptContainer', prefix: 'pOfficeCreateDept' },
+    { container: 'pMinutesViewDeptContainer', prefix: 'pMinutesViewDept' },
+    { container: 'pMinutesCreateDeptContainer', prefix: 'pMinutesCreateDept' }
   ];
 
   groups.forEach(g => {
@@ -5377,7 +5909,9 @@ function saveUser(e) {
     carView: scopeFromForm('pCarViewAll', 'pCarViewDept'),
     carCreate: scopeFromForm('pCarCreateAll', 'pCarCreateDept'),
     officeView: scopeFromForm('pOfficeViewAll', 'pOfficeViewDept'),
-    officeCreate: scopeFromForm('pOfficeCreateAll', 'pOfficeCreateDept')
+    officeCreate: scopeFromForm('pOfficeCreateAll', 'pOfficeCreateDept'),
+    minutesView: scopeFromForm('pMinutesViewAll', 'pMinutesViewDept'),
+    minutesCreate: scopeFromForm('pMinutesCreateAll', 'pMinutesCreateDept')
   };
 
   if (editId) {
@@ -5429,7 +5963,7 @@ function resetUserForm() {
     'pUploadAll', 'pViewDraftAll', 'pViewApprovedAll', 'pDownloadAll',
     'pSubViewAll', 'pSubCreateAll', 'pContractViewAll', 'pContractCreateAll',
     'pMeetingViewAll', 'pMeetingBookAll', 'pCarViewAll', 'pCarCreateAll',
-    'pOfficeViewAll', 'pOfficeCreateAll'
+    'pOfficeViewAll', 'pOfficeCreateAll', 'pMinutesViewAll', 'pMinutesCreateAll'
   ].forEach(id => {
     const cb = document.getElementById(id);
     if (cb) { cb.checked = false; }
@@ -5478,6 +6012,8 @@ function editUser(id) {
   document.getElementById('pCarCreateAll').checked = !!perms.carCreate?.all;
   document.getElementById('pOfficeViewAll').checked = !!perms.officeView?.all;
   document.getElementById('pOfficeCreateAll').checked = !!perms.officeCreate?.all;
+  document.getElementById('pMinutesViewAll').checked = !!perms.minutesView?.all;
+  document.getElementById('pMinutesCreateAll').checked = !!perms.minutesCreate?.all;
 
   renderDeptCheckboxes();
 
@@ -5507,6 +6043,8 @@ function editUser(id) {
   setGroupCheckboxes(perms.carCreate?.depts, 'pCarCreateDept');
   setGroupCheckboxes(perms.officeView?.depts, 'pOfficeViewDept');
   setGroupCheckboxes(perms.officeCreate?.depts, 'pOfficeCreateDept');
+  setGroupCheckboxes(perms.minutesView?.depts, 'pMinutesViewDept');
+  setGroupCheckboxes(perms.minutesCreate?.depts, 'pMinutesCreateDept');
 
   // Đồng bộ trạng thái "disabled" của các checkbox phòng ban khi ALL đang bật (sửa luôn 1 lỗi nhỏ
   // có sẵn: trước đây khi sửa 1 user có *All=true, checkbox phòng ban không tự vô hiệu hoá lại).
@@ -5517,7 +6055,8 @@ function editUser(id) {
     ['pContractViewAll', 'pContractViewDept'], ['pContractCreateAll', 'pContractCreateDept'],
     ['pMeetingViewAll', 'pMeetingViewDept'], ['pMeetingBookAll', 'pMeetingBookDept'],
     ['pCarViewAll', 'pCarViewDept'], ['pCarCreateAll', 'pCarCreateDept'],
-    ['pOfficeViewAll', 'pOfficeViewDept'], ['pOfficeCreateAll', 'pOfficeCreateDept']
+    ['pOfficeViewAll', 'pOfficeViewDept'], ['pOfficeCreateAll', 'pOfficeCreateDept'],
+    ['pMinutesViewAll', 'pMinutesViewDept'], ['pMinutesCreateAll', 'pMinutesCreateDept']
   ].forEach(([allId, prefix]) => toggleScopeGroup(allId, prefix));
 }
 
@@ -5543,6 +6082,7 @@ function summarizeUserPerms(perms) {
   if (hasScope(perms.meetingView) || hasScope(perms.meetingBookScope) || perms.meetingApprove || perms.meetingCancel) parts.push('📅 Phòng họp');
   if (hasScope(perms.carView) || hasScope(perms.carCreate)) parts.push('🚗 Xe');
   if ((hasScope(perms.officeView) || hasScope(perms.officeCreate)) && (perms.officeBuy || perms.officeFix || perms.officeInvest)) parts.push('🏢 VP');
+  if (hasScope(perms.minutesView) || hasScope(perms.minutesCreate)) parts.push('📝 Biên bản họp');
   return parts.length ? parts.join(', ') : '<span class="text-gray-400 italic">Chưa cấp quyền module nào</span>';
 }
 
