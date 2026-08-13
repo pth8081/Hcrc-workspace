@@ -13,7 +13,8 @@ const DEFAULTS = {
   cats: ['Quy trình / Quy định', 'Báo cáo tài chính', 'Hợp đồng / Hồ sơ'],
 
   emailConfig: {
-    enabled: true, smtpHost: 'smtp.gmail.com', smtpPort: 587, senderEmail: 'dms-noreply@company.com'
+    enabled: true, smtpHost: 'smtp.gmail.com', smtpPort: 587, senderEmail: 'dms-noreply@company.com',
+    contractExpiryReminderDays: [30, 15, 7], contractExpiryCcEmails: []
   },
 
   formTemplates: {

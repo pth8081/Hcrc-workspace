@@ -6,6 +6,7 @@ const { getPool } = require('./db');
 const { seedDefaults } = require('./seedDefaults');
 const dataRoutes = require('./routes/data');
 const uploadRoutes = require('./routes/upload');
+const { checkContractExpiryReminders } = require('./jobs/contractExpiryReminder');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -47,6 +48,11 @@ async function start() {
     app.listen(PORT, () => {
       console.log(`✅ VPDT server đang chạy tại http://localhost:${PORT}`);
     });
+
+    // Nhắc hết hạn hợp đồng: kiểm tra ngay lúc khởi động, sau đó lặp lại mỗi 24h.
+    // Không phụ thuộc việc có ai mở trình duyệt hay không.
+    checkContractExpiryReminders();
+    setInterval(checkContractExpiryReminders, 24 * 60 * 60 * 1000);
   } catch (err) {
     console.error('⛔ Không thể khởi động server:', err.message);
     process.exit(1);
