@@ -122,6 +122,7 @@ const DEFAULTS = {
   officeReqs: [],
   meetingMinutes: [],
   tasks: [],
+  internalPosts: [],
   systemLogs: []
 };
 
