@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Hệ Thống DMS v6.0 - Quản Lý Tài Liệu & Xử Lý Văn Bản Trình Tích Hợp</title>
+<title>Văn Phòng Điện Tử</title>
 <script src="https://cdn.tailwindcss.com"></script>
 <style>
 .dash-card.active-card {
@@ -25,7 +25,7 @@
   <!-- Header -->
   <div class="flex justify-between items-center border-b pb-4">
     <div>
-      <h1 class="text-2xl font-bold text-gray-800">Hệ Thống Quản Lý & Phê Duyệt Tích Hợp (DMS v6.0)</h1>
+      <h1 class="text-2xl font-bold text-gray-800">Văn Phòng Điện Tử</h1>
       <p class="text-xs text-gray-500">Tài liệu | Xử lý văn bản trình | Phê duyệt đồng cấp | Hợp đồng & Giấy phép | Phòng họp | Công việc | Xe | Văn phòng</p>
     </div>
     <div id="userHeader" class="text-right hidden">
@@ -52,7 +52,7 @@
 
   <!-- Màn hình 1: Đăng nhập -->
   <div id="loginSection" class="max-w-md mx-auto my-10 p-6 border rounded-lg bg-gray-50 space-y-4 shadow-sm">
-    <h2 class="text-xl font-bold text-center text-gray-800">Đăng Nhập Hệ Thống v6.0</h2>
+    <h2 class="text-xl font-bold text-center text-gray-800">Đăng Nhập Văn Phòng Điện Tử</h2>
     
     <div class="bg-blue-50 p-3 rounded text-xs text-blue-800 space-y-1.5 border border-blue-200">
       <p class="font-bold">Tài khoản thử nghiệm (Mật khẩu: 123456):</p>
@@ -180,19 +180,7 @@
           <tbody id="docTableBody"></tbody>
         </table>
       </div>
-      <div id="paginationBox" class="mt-4 flex flex-col sm:flex-row justify-between items-center gap-3 bg-gray-50 p-3 rounded border text-xs text-gray-700">
-        <div class="flex items-center gap-2">
-          <span>Hiển thị</span>
-          <select id="pageSizeSelect" onchange="changePageSize(this.value)" class="border p-1 rounded bg-white font-semibold">
-            <option value="5" selected>5</option>
-            <option value="10">10</option>
-            <option value="20">20</option>
-          </select>
-          <span>dòng / trang.</span>
-          <span id="pageInfoText" class="font-semibold text-gray-600 border-l pl-2 ml-1"></span>
-        </div>
-        <div id="paginationButtons" class="flex items-center gap-1"></div>
-      </div>
+      <div id="paginationContainer_doc"></div>
     </div>
   </div>
 
@@ -252,6 +240,39 @@
       </form>
     </div>
 
+    <div class="bg-gray-50 p-4 rounded-lg border space-y-3">
+      <h4 class="font-bold text-gray-700 text-sm">🔍 Tìm Kiếm & Lọc Văn Bản Trình</h4>
+      <div class="grid grid-cols-1 md:grid-cols-5 gap-3">
+        <div>
+          <label class="block text-xs font-semibold text-gray-600 mb-1">Lọc Theo Phòng Ban</label>
+          <select id="filterDeptSub" onchange="onSubFilterChange()" class="w-full border p-2 rounded text-sm bg-white">
+            <option value="">-- Tất cả phòng ban --</option>
+          </select>
+        </div>
+        <div>
+          <label class="block text-xs font-semibold text-gray-600 mb-1">Lọc Theo Trạng Thái</label>
+          <select id="filterStatusSub" onchange="onSubFilterChange()" class="w-full border p-2 rounded text-sm bg-white">
+            <option value="">-- Tất cả trạng thái --</option>
+            <option value="APPROVED">Đã Phê Duyệt</option>
+            <option value="PENDING">Đang Chờ Duyệt</option>
+            <option value="REJECTED">Bị Từ Chối / Trả Về</option>
+          </select>
+        </div>
+        <div>
+          <label class="block text-xs font-semibold text-gray-600 mb-1">Từ Ngày</label>
+          <input id="filterFromDateSub" type="date" onchange="onSubFilterChange()" class="w-full border p-2 rounded text-sm bg-white">
+        </div>
+        <div>
+          <label class="block text-xs font-semibold text-gray-600 mb-1">Đến Ngày</label>
+          <input id="filterToDateSub" type="date" onchange="onSubFilterChange()" class="w-full border p-2 rounded text-sm bg-white">
+        </div>
+        <div>
+          <label class="block text-xs font-semibold text-gray-600 mb-1">Từ Khóa</label>
+          <input id="filterKeywordSub" oninput="onSubFilterChange()" placeholder="Mã, tiêu đề, nội dung..." class="w-full border p-2 rounded text-sm">
+        </div>
+      </div>
+    </div>
+
     <div class="space-y-3">
       <h3 class="font-bold text-gray-800">📋 Danh Sách Văn Bản Trình / Tờ Trình</h3>
       <div class="overflow-x-auto">
@@ -269,6 +290,7 @@
           <tbody id="submissionTableBody"></tbody>
         </table>
       </div>
+      <div id="paginationContainer_sub"></div>
     </div>
   </div>
 
@@ -381,6 +403,39 @@
       </form>
     </div>
 
+    <div class="bg-gray-50 p-4 rounded-lg border space-y-3">
+      <h4 class="font-bold text-gray-700 text-sm">🔍 Tìm Kiếm & Lọc Hợp Đồng</h4>
+      <div class="grid grid-cols-1 md:grid-cols-5 gap-3">
+        <div>
+          <label class="block text-xs font-semibold text-gray-600 mb-1">Lọc Theo Phòng Ban</label>
+          <select id="filterDeptContract" onchange="onContractFilterChange()" class="w-full border p-2 rounded text-sm bg-white">
+            <option value="">-- Tất cả phòng ban --</option>
+          </select>
+        </div>
+        <div>
+          <label class="block text-xs font-semibold text-gray-600 mb-1">Lọc Theo Hiệu Lực</label>
+          <select id="filterExpiryContract" onchange="onContractFilterChange()" class="w-full border p-2 rounded text-sm bg-white">
+            <option value="">-- Tất cả --</option>
+            <option value="ACTIVE">✅ Còn hiệu lực</option>
+            <option value="SOON">⏰ Sắp hết hạn (≤ 30 ngày)</option>
+            <option value="EXPIRED">⚠️ Đã hết hạn</option>
+          </select>
+        </div>
+        <div>
+          <label class="block text-xs font-semibold text-gray-600 mb-1">Tạo Từ Ngày</label>
+          <input id="filterFromDateContract" type="date" onchange="onContractFilterChange()" class="w-full border p-2 rounded text-sm bg-white">
+        </div>
+        <div>
+          <label class="block text-xs font-semibold text-gray-600 mb-1">Đến Ngày</label>
+          <input id="filterToDateContract" type="date" onchange="onContractFilterChange()" class="w-full border p-2 rounded text-sm bg-white">
+        </div>
+        <div>
+          <label class="block text-xs font-semibold text-gray-600 mb-1">Từ Khóa</label>
+          <input id="filterKeywordContract" oninput="onContractFilterChange()" placeholder="Mã, tên, đối tác..." class="w-full border p-2 rounded text-sm">
+        </div>
+      </div>
+    </div>
+
     <div class="space-y-3">
       <h3 class="font-bold text-gray-800">📋 Danh Sách Hợp Đồng & Giấy Phép & Trạng Thái Cảnh Báo</h3>
       <div class="overflow-x-auto">
@@ -398,6 +453,7 @@
           <tbody id="contractTableBody"></tbody>
         </table>
       </div>
+      <div id="paginationContainer_contract"></div>
     </div>
   </div>
 
@@ -456,6 +512,39 @@
       </form>
     </div>
 
+    <div class="bg-gray-50 p-4 rounded-lg border space-y-3">
+      <h4 class="font-bold text-gray-700 text-sm">🔍 Tìm Kiếm & Lọc Lịch Phòng Họp</h4>
+      <div class="grid grid-cols-1 md:grid-cols-5 gap-3">
+        <div>
+          <label class="block text-xs font-semibold text-gray-600 mb-1">Lọc Theo Phòng Ban</label>
+          <select id="filterDeptMeeting" onchange="onMeetingFilterChange()" class="w-full border p-2 rounded text-sm bg-white">
+            <option value="">-- Tất cả phòng ban --</option>
+          </select>
+        </div>
+        <div>
+          <label class="block text-xs font-semibold text-gray-600 mb-1">Lọc Theo Trạng Thái</label>
+          <select id="filterStatusMeeting" onchange="onMeetingFilterChange()" class="w-full border p-2 rounded text-sm bg-white">
+            <option value="">-- Tất cả trạng thái --</option>
+            <option value="APPROVED">Đã Duyệt Lịch</option>
+            <option value="PENDING">Đang Chờ Duyệt</option>
+            <option value="CANCELLED">Đã Hủy Lịch</option>
+          </select>
+        </div>
+        <div>
+          <label class="block text-xs font-semibold text-gray-600 mb-1">Từ Ngày</label>
+          <input id="filterFromDateMeeting" type="date" onchange="onMeetingFilterChange()" class="w-full border p-2 rounded text-sm bg-white">
+        </div>
+        <div>
+          <label class="block text-xs font-semibold text-gray-600 mb-1">Đến Ngày</label>
+          <input id="filterToDateMeeting" type="date" onchange="onMeetingFilterChange()" class="w-full border p-2 rounded text-sm bg-white">
+        </div>
+        <div>
+          <label class="block text-xs font-semibold text-gray-600 mb-1">Từ Khóa</label>
+          <input id="filterKeywordMeeting" oninput="onMeetingFilterChange()" placeholder="Mã, chủ đề, người đặt..." class="w-full border p-2 rounded text-sm">
+        </div>
+      </div>
+    </div>
+
     <div class="space-y-3">
       <h3 class="font-bold text-gray-800">📋 Danh Sách Đặt Lịch Phòng Họp & Trạng Thái Phê Duyệt</h3>
       <div class="overflow-x-auto">
@@ -473,6 +562,7 @@
           <tbody id="meetingTableBody"></tbody>
         </table>
       </div>
+      <div id="paginationContainer_meeting"></div>
     </div>
   </div>
 
@@ -551,6 +641,39 @@
       </form>
     </div>
 
+    <div class="bg-gray-50 p-4 rounded-lg border space-y-3">
+      <h4 class="font-bold text-gray-700 text-sm">🔍 Tìm Kiếm & Lọc Đăng Ký Xe</h4>
+      <div class="grid grid-cols-1 md:grid-cols-5 gap-3">
+        <div>
+          <label class="block text-xs font-semibold text-gray-600 mb-1">Lọc Theo Phòng Ban</label>
+          <select id="filterDeptCar" onchange="onCarFilterChange()" class="w-full border p-2 rounded text-sm bg-white">
+            <option value="">-- Tất cả phòng ban --</option>
+          </select>
+        </div>
+        <div>
+          <label class="block text-xs font-semibold text-gray-600 mb-1">Lọc Theo Trạng Thái</label>
+          <select id="filterStatusCar" onchange="onCarFilterChange()" class="w-full border p-2 rounded text-sm bg-white">
+            <option value="">-- Tất cả trạng thái --</option>
+            <option value="APPROVED">Đã Phê Duyệt</option>
+            <option value="PENDING">Đang Chờ Duyệt</option>
+            <option value="REJECTED">Bị Từ Chối</option>
+          </select>
+        </div>
+        <div>
+          <label class="block text-xs font-semibold text-gray-600 mb-1">Từ Ngày</label>
+          <input id="filterFromDateCar" type="date" onchange="onCarFilterChange()" class="w-full border p-2 rounded text-sm bg-white">
+        </div>
+        <div>
+          <label class="block text-xs font-semibold text-gray-600 mb-1">Đến Ngày</label>
+          <input id="filterToDateCar" type="date" onchange="onCarFilterChange()" class="w-full border p-2 rounded text-sm bg-white">
+        </div>
+        <div>
+          <label class="block text-xs font-semibold text-gray-600 mb-1">Từ Khóa</label>
+          <input id="filterKeywordCar" oninput="onCarFilterChange()" placeholder="Mã, điểm đến, người đăng ký..." class="w-full border p-2 rounded text-sm">
+        </div>
+      </div>
+    </div>
+
     <div class="space-y-3">
       <h3 class="font-bold text-gray-800">📋 Danh Sách Phiếu Đăng Ký Xe</h3>
       <div class="overflow-x-auto">
@@ -569,6 +692,7 @@
           <tbody id="carTableBody"></tbody>
         </table>
       </div>
+      <div id="paginationContainer_car"></div>
     </div>
   </div>
 
@@ -658,6 +782,39 @@
       </form>
     </div>
 
+    <div class="bg-gray-50 p-4 rounded-lg border space-y-3">
+      <h4 class="font-bold text-gray-700 text-sm">🔍 Tìm Kiếm & Lọc Đề Xuất Văn Phòng</h4>
+      <div class="grid grid-cols-1 md:grid-cols-5 gap-3">
+        <div>
+          <label class="block text-xs font-semibold text-gray-600 mb-1">Lọc Theo Phòng Ban</label>
+          <select id="filterDeptOffice" onchange="onOfficeFilterChange()" class="w-full border p-2 rounded text-sm bg-white">
+            <option value="">-- Tất cả phòng ban --</option>
+          </select>
+        </div>
+        <div>
+          <label class="block text-xs font-semibold text-gray-600 mb-1">Lọc Theo Trạng Thái</label>
+          <select id="filterStatusOffice" onchange="onOfficeFilterChange()" class="w-full border p-2 rounded text-sm bg-white">
+            <option value="">-- Tất cả trạng thái --</option>
+            <option value="APPROVED">Đã Phê Duyệt</option>
+            <option value="PENDING">Đang Chờ Duyệt</option>
+            <option value="REJECTED">Bị Từ Chối</option>
+          </select>
+        </div>
+        <div>
+          <label class="block text-xs font-semibold text-gray-600 mb-1">Từ Ngày</label>
+          <input id="filterFromDateOffice" type="date" onchange="onOfficeFilterChange()" class="w-full border p-2 rounded text-sm bg-white">
+        </div>
+        <div>
+          <label class="block text-xs font-semibold text-gray-600 mb-1">Đến Ngày</label>
+          <input id="filterToDateOffice" type="date" onchange="onOfficeFilterChange()" class="w-full border p-2 rounded text-sm bg-white">
+        </div>
+        <div>
+          <label class="block text-xs font-semibold text-gray-600 mb-1">Từ Khóa</label>
+          <input id="filterKeywordOffice" oninput="onOfficeFilterChange()" placeholder="Mã, tên đề xuất, người tạo..." class="w-full border p-2 rounded text-sm">
+        </div>
+      </div>
+    </div>
+
     <div class="space-y-3">
       <h3 class="font-bold text-gray-800">📋 Danh Sách Đề Xuất Phê Duyệt Văn Phòng</h3>
       <div class="overflow-x-auto">
@@ -676,6 +833,7 @@
           <tbody id="officeTableBody"></tbody>
         </table>
       </div>
+      <div id="paginationContainer_office"></div>
     </div>
   </div>
 
@@ -1190,19 +1348,19 @@
       <div class="grid grid-cols-1 md:grid-cols-5 gap-3 bg-white p-3 rounded border text-xs">
         <div>
           <label class="block font-semibold text-gray-600 mb-1">Lọc Theo Phân Hệ</label>
-          <select id="filterLogModule" onchange="renderSystemLogs()" class="w-full border p-1.5 rounded bg-white font-semibold">
+          <select id="filterLogModule" onchange="onLogFilterChange()" class="w-full border p-1.5 rounded bg-white font-semibold">
             <option value="">-- Tất cả --</option>
           </select>
         </div>
         <div>
           <label class="block font-semibold text-gray-600 mb-1">Lọc Theo Sự Kiện</label>
-          <select id="filterLogAction" onchange="renderSystemLogs()" class="w-full border p-1.5 rounded bg-white font-semibold">
+          <select id="filterLogAction" onchange="onLogFilterChange()" class="w-full border p-1.5 rounded bg-white font-semibold">
             <option value="">-- Tất cả --</option>
           </select>
         </div>
         <div>
           <label class="block font-semibold text-gray-600 mb-1">Lọc Theo Trạng Thái</label>
-          <select id="filterLogStatus" onchange="renderSystemLogs()" class="w-full border p-1.5 rounded bg-white font-semibold">
+          <select id="filterLogStatus" onchange="onLogFilterChange()" class="w-full border p-1.5 rounded bg-white font-semibold">
             <option value="">-- Tất cả --</option>
             <option value="SUCCESS">Thành công (SUCCESS)</option>
             <option value="FAILED">Thất bại (FAILED)</option>
@@ -1210,7 +1368,7 @@
         </div>
         <div>
           <label class="block font-semibold text-gray-600 mb-1">Tìm Kiếm</label>
-          <input id="filterLogKeyword" oninput="renderSystemLogs()" placeholder="Username, IP, hành động..." class="w-full border p-1.5 rounded">
+          <input id="filterLogKeyword" oninput="onLogFilterChange()" placeholder="Username, IP, hành động..." class="w-full border p-1.5 rounded">
         </div>
         <div class="flex items-end">
           <button onclick="resetLogFilters()" class="w-full bg-gray-200 text-gray-700 p-1.5 rounded font-bold hover:bg-gray-300">Đặt Lại</button>
@@ -1234,6 +1392,7 @@
         <tbody id="systemLogTableBody"></tbody>
       </table>
     </div>
+    <div id="paginationContainer_log"></div>
   </div>
 
 </div>
@@ -1436,8 +1595,6 @@ const DB = {
 };
 
 let currentUser = null;
-let currentPage = 1;
-let pageSize = 5;
 let activeWfMod = 'DOC';
 // Lựa chọn mẫu quy trình CHƯA lưu (preview) theo phòng ban khi đang cấu hình — xem onWorkflowTemplateChange().
 let pendingWfTemplate = {};
@@ -1454,6 +1611,116 @@ let officeItems = [];
 function escapeHtml(str) {
   if (!str) return '';
   return String(str).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
+}
+
+// ==========================================
+// BỘ TÌM KIẾM / LỌC / PHÂN TRANG DÙNG CHUNG CHO MỌI MODULE DẠNG DANH SÁCH
+// ==========================================
+// Trước đây mỗi module tự viết lại toàn bộ logic lọc + phân trang (module Tài liệu là bản đầu
+// tiên, ~150 dòng). Tách ra đây để mọi module (Tài liệu, Tờ trình, Hợp đồng, Xe, Văn phòng, Phòng
+// họp, Log...) dùng chung 1 bộ — sửa 1 chỗ áp dụng toàn hệ thống, tránh lặp code.
+
+// Trạng thái trang hiện tại + số dòng/trang, theo từng module (key tự đặt, không trùng nhau).
+const listPageState = {};
+
+function getListPageState(moduleKey) {
+  if (!listPageState[moduleKey]) listPageState[moduleKey] = { page: 1, pageSize: 10 };
+  return listPageState[moduleKey];
+}
+
+function resetListPage(moduleKey) {
+  getListPageState(moduleKey).page = 1;
+}
+
+function goToListPage(moduleKey, page, renderFnName) {
+  getListPageState(moduleKey).page = page;
+  window[renderFnName]();
+}
+
+function changeListPageSize(moduleKey, val, renderFnName) {
+  const st = getListPageState(moduleKey);
+  st.pageSize = parseInt(val, 10) || 10;
+  st.page = 1;
+  window[renderFnName]();
+}
+
+// true nếu bất kỳ field nào trong danh sách chứa keyword (không phân biệt hoa/thường); keyword rỗng
+// luôn khớp (không lọc gì).
+function matchesKeywordFields(fields, keyword) {
+  if (!keyword) return true;
+  const kw = keyword.toLowerCase();
+  return fields.some(f => (f || '').toString().toLowerCase().includes(kw));
+}
+
+// true nếu dateStr nằm trong khoảng [fromDate, toDate] (dạng yyyy-mm-dd từ input type=date); bỏ
+// trống 1 hoặc cả 2 đầu = không giới hạn phía đó.
+function isInDateRange(dateStr, fromDate, toDate) {
+  if (!fromDate && !toDate) return true;
+  const d = new Date(dateStr);
+  if (isNaN(d.getTime())) return true; // dữ liệu thiếu ngày thì không loại bỏ khỏi kết quả
+  if (fromDate && d < new Date(fromDate)) return false;
+  if (toDate && d > new Date(toDate + 'T23:59:59')) return false;
+  return true;
+}
+
+// Cắt đúng trang hiện tại từ mảng đã lọc + tự vẽ khối phân trang (đếm trang, các nút điều hướng)
+// vào 2 phần tử #pageInfoText_<moduleKey> và #paginationButtons_<moduleKey>. Trả về mảng của riêng
+// trang hiện tại để nơi gọi render ra bảng.
+function paginateList(moduleKey, filteredItems, renderFnName, unitLabel) {
+  const st = getListPageState(moduleKey);
+  const totalItems = filteredItems.length;
+  const totalPages = Math.ceil(totalItems / st.pageSize) || 1;
+  if (st.page > totalPages) st.page = totalPages;
+  if (st.page < 1) st.page = 1;
+
+  const startIdx = (st.page - 1) * st.pageSize;
+  const pageItems = filteredItems.slice(startIdx, startIdx + st.pageSize);
+
+  const infoEl = document.getElementById(`pageInfoText_${moduleKey}`);
+  if (infoEl) infoEl.innerText = `Trang ${st.page}/${totalPages} (Tổng ${totalItems} ${unitLabel || 'mục'})`;
+
+  const btnsEl = document.getElementById(`paginationButtons_${moduleKey}`);
+  if (btnsEl) {
+    let html = `
+      <button onclick="goToListPage('${moduleKey}', 1, '${renderFnName}')" ${st.page === 1 ? 'disabled' : ''} class="px-2 py-1 border rounded bg-white hover:bg-gray-100 disabled:opacity-50">«</button>
+      <button onclick="goToListPage('${moduleKey}', ${st.page - 1}, '${renderFnName}')" ${st.page === 1 ? 'disabled' : ''} class="px-2 py-1 border rounded bg-white hover:bg-gray-100 disabled:opacity-50">‹</button>
+    `;
+    for (let i = 1; i <= totalPages; i++) {
+      if (i === 1 || i === totalPages || (i >= st.page - 1 && i <= st.page + 1)) {
+        html += `<button onclick="goToListPage('${moduleKey}', ${i}, '${renderFnName}')" class="px-2 py-1 border rounded ${i === st.page ? 'bg-blue-600 text-white font-bold' : 'bg-white hover:bg-gray-100'}">${i}</button>`;
+      } else if (i === st.page - 2 || i === st.page + 2) {
+        html += `<span class="px-1 text-gray-400">...</span>`;
+      }
+    }
+    html += `
+      <button onclick="goToListPage('${moduleKey}', ${st.page + 1}, '${renderFnName}')" ${st.page === totalPages ? 'disabled' : ''} class="px-2 py-1 border rounded bg-white hover:bg-gray-100 disabled:opacity-50">›</button>
+      <button onclick="goToListPage('${moduleKey}', ${totalPages}, '${renderFnName}')" ${st.page === totalPages ? 'disabled' : ''} class="px-2 py-1 border rounded bg-white hover:bg-gray-100 disabled:opacity-50">»</button>
+    `;
+    btnsEl.innerHTML = html;
+  }
+
+  return pageItems;
+}
+
+// Khối HTML "thanh phân trang" dùng chung, chèn dưới mỗi bảng danh sách — id gắn theo moduleKey để
+// không đụng nhau giữa các module trên cùng 1 trang.
+function buildPaginationBoxHTML(moduleKey, renderFnName) {
+  return `
+    <div id="paginationBox_${moduleKey}" class="mt-3 flex flex-col sm:flex-row justify-between items-center gap-3 bg-gray-50 p-3 rounded border text-xs text-gray-700">
+      <div class="flex items-center gap-2">
+        <span>Hiển thị</span>
+        <select onchange="changeListPageSize('${moduleKey}', this.value, '${renderFnName}')" class="border p-1 rounded bg-white font-semibold">
+          <option value="5">5</option>
+          <option value="10" selected>10</option>
+          <option value="20">20</option>
+          <option value="50">50</option>
+        </select>
+        <span>dòng / trang.</span>
+        <span id="pageInfoText_${moduleKey}" class="font-semibold text-gray-600 border-l pl-2 ml-1"></span>
+      </div>
+      <div id="paginationButtons_${moduleKey}" class="flex items-center gap-1"></div>
+    </div>
+  `;
 }
 
 function logSystemAction(module, actionType, description, status = 'SUCCESS', target = '') {
@@ -2060,6 +2327,7 @@ function switchTab(tabName) {
 }
 
 function setOfficeSubTab(subTab) {
+  resetListPage('office');
   if (!canAccessOfficeSubTab(currentUser, subTab)) {
     alert('⛔ Bạn không có quyền truy cập phân hệ văn phòng này!');
     return;
@@ -2117,9 +2385,16 @@ function populateDropdowns() {
 
   const filterDept = document.getElementById('filterDept');
   if (filterDept) {
-    filterDept.innerHTML = '<option value="">-- Tất cả phòng ban --</option>' + 
+    filterDept.innerHTML = '<option value="">-- Tất cả phòng ban --</option>' +
       DB.depts.map(d => `<option value="${escapeHtml(d)}">${escapeHtml(d)}</option>`).join('');
   }
+
+  // Dropdown "Lọc Theo Phòng Ban" của các module khác — cùng danh sách toàn bộ phòng ban (không
+  // giới hạn theo quyền tạo mới, vì kết quả hiển thị đã được lọc theo quyền xem ở nơi khác).
+  ['filterDeptSub', 'filterDeptContract', 'filterDeptCar', 'filterDeptOffice', 'filterDeptMeeting'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.innerHTML = '<option value="">-- Tất cả phòng ban --</option>' + DB.depts.map(d => `<option value="${escapeHtml(d)}">${escapeHtml(d)}</option>`).join('');
+  });
 
   const selCat = document.getElementById('selCat');
   if (selCat) {
@@ -2181,18 +2456,12 @@ function filterByCard(status) {
   const card = document.getElementById(targetId);
   if (card) card.classList.add('active-card');
   document.getElementById('filterStatus').value = status;
-  currentPage = 1;
+  resetListPage('doc');
   renderDocs();
 }
 
 function onFilterChange() {
-  currentPage = 1;
-  renderDocs();
-}
-
-function changePageSize(val) {
-  pageSize = parseInt(val, 10) || 5;
-  currentPage = 1;
+  resetListPage('doc');
   renderDocs();
 }
 
@@ -2258,33 +2527,9 @@ function renderDocs() {
     return true;
   });
 
-  // Phân trang
-  const totalItems = filtered.length;
-  const totalPages = Math.ceil(totalItems / pageSize) || 1;
-  if (currentPage > totalPages) currentPage = totalPages;
-  if (currentPage < 1) currentPage = 1;
-
-  const startIdx = (currentPage - 1) * pageSize;
-  const pageDocs = filtered.slice(startIdx, startIdx + pageSize);
-
-  document.getElementById('pageInfoText').innerText = `Trang ${currentPage}/${totalPages} (Tổng ${totalItems} tài liệu)`;
-
-  let paginationButtonsHTML = `
-    <button onclick="goToPage(1)" ${currentPage === 1 ? 'disabled' : ''} class="px-2 py-1 border rounded bg-white hover:bg-gray-100 disabled:opacity-50">«</button>
-    <button onclick="goToPage(${currentPage - 1})" ${currentPage === 1 ? 'disabled' : ''} class="px-2 py-1 border rounded bg-white hover:bg-gray-100 disabled:opacity-50">‹</button>
-  `;
-  for (let i = 1; i <= totalPages; i++) {
-    if (i === 1 || i === totalPages || (i >= currentPage - 1 && i <= currentPage + 1)) {
-      paginationButtonsHTML += `<button onclick="goToPage(${i})" class="px-2 py-1 border rounded ${i === currentPage ? 'bg-blue-600 text-white font-bold' : 'bg-white hover:bg-gray-100'}">${i}</button>`;
-    } else if (i === currentPage - 2 || i === currentPage + 2) {
-      paginationButtonsHTML += `<span class="px-1 text-gray-400">...</span>`;
-    }
-  }
-  paginationButtonsHTML += `
-    <button onclick="goToPage(${currentPage + 1})" ${currentPage === totalPages ? 'disabled' : ''} class="px-2 py-1 border rounded bg-white hover:bg-gray-100 disabled:opacity-50">›</button>
-    <button onclick="goToPage(${totalPages})" ${currentPage === totalPages ? 'disabled' : ''} class="px-2 py-1 border rounded bg-white hover:bg-gray-100 disabled:opacity-50">»</button>
-  `;
-  document.getElementById('paginationButtons').innerHTML = paginationButtonsHTML;
+  // Phân trang — dùng bộ dùng chung (xem "BỘ TÌM KIẾM / LỌC / PHÂN TRANG DÙNG CHUNG" phía trên).
+  document.getElementById('paginationContainer_doc').innerHTML = buildPaginationBoxHTML('doc', 'renderDocs');
+  const pageDocs = paginateList('doc', filtered, 'renderDocs', 'tài liệu');
 
   if (pageDocs.length === 0) {
     tbody.innerHTML = `<tr><td colspan="7" class="text-center p-6 text-gray-500 italic">Không tìm thấy tài liệu phù hợp.</td></tr>`;
@@ -2336,11 +2581,6 @@ function renderDocs() {
       </tr>
     `;
   }).join('');
-}
-
-function goToPage(p) {
-  currentPage = p;
-  renderDocs();
 }
 
 async function uploadDoc(e) {
@@ -2710,6 +2950,11 @@ async function submitSubmissionReq(e) {
   renderSubmissionReqs();
 }
 
+function onSubFilterChange() {
+  resetListPage('sub');
+  renderSubmissionReqs();
+}
+
 function renderSubmissionReqs() {
   const tbody = document.getElementById('submissionTableBody');
   if (!tbody) return;
@@ -2717,13 +2962,35 @@ function renderSubmissionReqs() {
   // CẬP NHẬT: trước đây hiển thị TẤT CẢ tờ trình của mọi phòng ban cho bất kỳ ai có quyền
   // "submissionModule". Nay lọc theo phạm vi Xem (submissionView) — người tạo và approver được
   // giao ở quy trình duyệt của phòng ban đó luôn xem được hồ sơ liên quan dù ngoài phạm vi.
+  const deptFilter = document.getElementById('filterDeptSub')?.value || '';
+  const statusFilter = document.getElementById('filterStatusSub')?.value || '';
+  const fromDate = document.getElementById('filterFromDateSub')?.value || '';
+  const toDate = document.getElementById('filterToDateSub')?.value || '';
+  const keyword = (document.getElementById('filterKeywordSub')?.value || '').trim();
+
   const visibleSubs = DB.submissions.filter(sub => {
-    if (scopeAllows(currentUser, currentUser.perms?.submissionView, sub.dept)) return true;
-    if (sub.creator === currentUser.username) return true;
-    return isApproverForDeptWorkflow(DB.submissionDeptWorkflows[sub.dept], currentUser.username);
+    const canView = scopeAllows(currentUser, currentUser.perms?.submissionView, sub.dept) ||
+      sub.creator === currentUser.username ||
+      isApproverForDeptWorkflow(DB.submissionDeptWorkflows[sub.dept], currentUser.username);
+    if (!canView) return false;
+
+    if (deptFilter && sub.dept !== deptFilter) return false;
+    if (statusFilter && sub.status !== statusFilter) return false;
+    if (!isInDateRange(sub.createdAt, fromDate, toDate)) return false;
+    if (!matchesKeywordFields([sub.code, sub.title, sub.content, sub.creatorName], keyword)) return false;
+
+    return true;
   });
 
-  tbody.innerHTML = visibleSubs.map(sub => {
+  document.getElementById('paginationContainer_sub').innerHTML = buildPaginationBoxHTML('sub', 'renderSubmissionReqs');
+  const pageSubs = paginateList('sub', visibleSubs, 'renderSubmissionReqs', 'tờ trình');
+
+  if (pageSubs.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="6" class="text-center p-6 text-gray-500 italic">Không tìm thấy tờ trình phù hợp.</td></tr>`;
+    return;
+  }
+
+  tbody.innerHTML = pageSubs.map(sub => {
     const wfConfig = DB.submissionDeptWorkflows[sub.dept] || { workflowId: 'WF_1STEP', approvers: { 1: ['admin'] } };
     const wf = DB.workflows.find(w => w.id === wfConfig.workflowId) || { steps: [{ name: 'Sếp duyệt' }] };
 
@@ -3230,18 +3497,50 @@ async function updateContractReq(e) {
   renderContracts();
 }
 
+function onContractFilterChange() {
+  resetListPage('contract');
+  renderContracts();
+}
+
 function renderContracts() {
   const tbody = document.getElementById('contractTableBody');
   if (!tbody) return;
 
   const now = new Date();
+  const deptFilter = document.getElementById('filterDeptContract')?.value || '';
+  const expiryFilter = document.getElementById('filterExpiryContract')?.value || '';
+  const fromDate = document.getElementById('filterFromDateContract')?.value || '';
+  const toDate = document.getElementById('filterToDateContract')?.value || '';
+  const keyword = (document.getElementById('filterKeywordContract')?.value || '').trim();
 
   // CẬP NHẬT: lọc theo phạm vi Xem (contractView) thay vì hiển thị hợp đồng của mọi phòng ban.
-  const visibleContracts = DB.contracts.filter(c =>
-    scopeAllows(currentUser, currentUser.perms?.contractView, c.dept) || c.creator === currentUser.username
-  );
+  const visibleContracts = DB.contracts.filter(c => {
+    const canView = scopeAllows(currentUser, currentUser.perms?.contractView, c.dept) || c.creator === currentUser.username;
+    if (!canView) return false;
 
-  tbody.innerHTML = visibleContracts.map(c => {
+    if (deptFilter && c.dept !== deptFilter) return false;
+    if (!isInDateRange(c.createdAt, fromDate, toDate)) return false;
+    if (!matchesKeywordFields([c.code, c.title, c.partner], keyword)) return false;
+
+    if (expiryFilter) {
+      const diffDays = Math.ceil((new Date(c.endDate) - now) / (1000 * 60 * 60 * 24));
+      if (expiryFilter === 'EXPIRED' && diffDays >= 0) return false;
+      if (expiryFilter === 'SOON' && !(diffDays >= 0 && diffDays <= 30)) return false;
+      if (expiryFilter === 'ACTIVE' && diffDays <= 30) return false;
+    }
+
+    return true;
+  });
+
+  document.getElementById('paginationContainer_contract').innerHTML = buildPaginationBoxHTML('contract', 'renderContracts');
+  const pageContracts = paginateList('contract', visibleContracts, 'renderContracts', 'hợp đồng');
+
+  if (pageContracts.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="6" class="text-center p-6 text-gray-500 italic">Không tìm thấy hợp đồng phù hợp.</td></tr>`;
+    return;
+  }
+
+  tbody.innerHTML = pageContracts.map(c => {
     const endD = new Date(c.endDate);
     const diffDays = Math.ceil((endD - now) / (1000 * 60 * 60 * 24));
 
@@ -3418,20 +3717,47 @@ function submitMeetingReq(e) {
   renderMeetings();
 }
 
+function onMeetingFilterChange() {
+  resetListPage('meeting');
+  renderMeetings();
+}
+
 function renderMeetings() {
   const tbody = document.getElementById('meetingTableBody');
   if (!tbody) return;
 
+  const deptFilter = document.getElementById('filterDeptMeeting')?.value || '';
+  const statusFilter = document.getElementById('filterStatusMeeting')?.value || '';
+  const fromDate = document.getElementById('filterFromDateMeeting')?.value || '';
+  const toDate = document.getElementById('filterToDateMeeting')?.value || '';
+  const keyword = (document.getElementById('filterKeywordMeeting')?.value || '').trim();
+
   // CẬP NHẬT: lọc theo phạm vi Xem (meetingView) thay vì hiển thị lịch họp của mọi phòng ban.
   // Người có quyền Phê duyệt/Hủy lịch họp (vai trò quản lý phòng họp dùng chung toàn công ty)
   // vẫn cần thấy mọi lịch để xử lý, nên được xem toàn bộ bất kể phạm vi phòng ban.
-  const visibleMeetings = DB.meetings.filter(m =>
-    scopeAllows(currentUser, currentUser.perms?.meetingView, m.dept) ||
-    m.creator === currentUser.username ||
-    canApproveMeeting(currentUser) || canCancelMeeting(currentUser)
-  );
+  const visibleMeetings = DB.meetings.filter(m => {
+    const canView = scopeAllows(currentUser, currentUser.perms?.meetingView, m.dept) ||
+      m.creator === currentUser.username ||
+      canApproveMeeting(currentUser) || canCancelMeeting(currentUser);
+    if (!canView) return false;
 
-  tbody.innerHTML = visibleMeetings.map(m => {
+    if (deptFilter && m.dept !== deptFilter) return false;
+    if (statusFilter && m.status !== statusFilter) return false;
+    if (!isInDateRange(m.createdAt, fromDate, toDate)) return false;
+    if (!matchesKeywordFields([m.code, m.title, m.creatorName], keyword)) return false;
+
+    return true;
+  });
+
+  document.getElementById('paginationContainer_meeting').innerHTML = buildPaginationBoxHTML('meeting', 'renderMeetings');
+  const pageMeetings = paginateList('meeting', visibleMeetings, 'renderMeetings', 'lịch họp');
+
+  if (pageMeetings.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="6" class="text-center p-6 text-gray-500 italic">Không tìm thấy lịch họp phù hợp.</td></tr>`;
+    return;
+  }
+
+  tbody.innerHTML = pageMeetings.map(m => {
     let statusBadge = '';
     if (m.status === 'APPROVED') statusBadge = `<span class="px-2 py-0.5 bg-green-100 text-green-800 rounded font-bold text-xs">✅ Đã duyệt lịch</span>`;
     else if (m.status === 'CANCELLED') statusBadge = `<span class="px-2 py-0.5 bg-red-100 text-red-800 rounded font-bold text-xs">❌ Đã hủy lịch</span>`;
@@ -3551,18 +3877,45 @@ function submitCarReq(e) {
   renderCarRegs();
 }
 
+function onCarFilterChange() {
+  resetListPage('car');
+  renderCarRegs();
+}
+
 function renderCarRegs() {
   const tbody = document.getElementById('carTableBody');
   if (!tbody) return;
 
-  // CẬP NHẬT: lọc theo phạm vi Xem (carView) thay vì hiển thị đăng ký xe của mọi phòng ban.
-  const visibleCarRegs = DB.carRegs.filter(c =>
-    scopeAllows(currentUser, currentUser.perms?.carView, c.dept) ||
-    c.creator === currentUser.username ||
-    isApproverForDeptWorkflow(DB.carDeptWorkflows[c.dept], currentUser.username)
-  );
+  const deptFilter = document.getElementById('filterDeptCar')?.value || '';
+  const statusFilter = document.getElementById('filterStatusCar')?.value || '';
+  const fromDate = document.getElementById('filterFromDateCar')?.value || '';
+  const toDate = document.getElementById('filterToDateCar')?.value || '';
+  const keyword = (document.getElementById('filterKeywordCar')?.value || '').trim();
 
-  tbody.innerHTML = visibleCarRegs.map(c => {
+  // CẬP NHẬT: lọc theo phạm vi Xem (carView) thay vì hiển thị đăng ký xe của mọi phòng ban.
+  const visibleCarRegs = DB.carRegs.filter(c => {
+    const canView = scopeAllows(currentUser, currentUser.perms?.carView, c.dept) ||
+      c.creator === currentUser.username ||
+      isApproverForDeptWorkflow(DB.carDeptWorkflows[c.dept], currentUser.username);
+    if (!canView) return false;
+
+    if (deptFilter && c.dept !== deptFilter) return false;
+    if (statusFilter && c.status !== statusFilter) return false;
+    if (!isInDateRange(c.createdAt, fromDate, toDate)) return false;
+    if (!matchesKeywordFields([c.code, c.destination, c.creatorName], keyword)) return false;
+
+    return true;
+  });
+
+  document.getElementById('paginationContainer_car').innerHTML = buildPaginationBoxHTML('car', 'renderCarRegs');
+  const pageCarRegs = paginateList('car', visibleCarRegs, 'renderCarRegs', 'phiếu đăng ký');
+
+  if (pageCarRegs.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="7" class="text-center p-6 text-gray-500 italic">Không tìm thấy phiếu đăng ký phù hợp.</td></tr>`;
+    return;
+  }
+
+  tbody.innerHTML = pageCarRegs.map(c => {
     const wfConfig = DB.carDeptWorkflows[c.dept] || { workflowId: 'WF_1STEP', approvers: { 1: ['admin'] } };
     const wf = DB.workflows.find(w => w.id === wfConfig.workflowId) || { steps: [{ name: 'Sếp duyệt' }] };
 
@@ -4054,26 +4407,47 @@ function submitOfficeReq(e) {
   renderOfficeReqs();
 }
 
+function onOfficeFilterChange() {
+  resetListPage('office');
+  renderOfficeReqs();
+}
+
 function renderOfficeReqs() {
   const tbody = document.getElementById('officeTableBody');
   if (!tbody) return;
 
+  const deptFilter = document.getElementById('filterDeptOffice')?.value || '';
+  const statusFilter = document.getElementById('filterStatusOffice')?.value || '';
+  const fromDate = document.getElementById('filterFromDateOffice')?.value || '';
+  const toDate = document.getElementById('filterToDateOffice')?.value || '';
+  const keyword = (document.getElementById('filterKeywordOffice')?.value || '').trim();
+
   // CẬP NHẬT: lọc theo phạm vi Xem (officeView) thay vì hiển thị đề xuất của mọi phòng ban.
   const wfMapForFilter = getOfficeWorkflowMap(activeOfficeSubTab);
-  const list = DB.officeReqs.filter(o =>
-    o.subType === activeOfficeSubTab && (
-      scopeAllows(currentUser, currentUser.perms?.officeView, o.dept) ||
+  const list = DB.officeReqs.filter(o => {
+    if (o.subType !== activeOfficeSubTab) return false;
+    const canView = scopeAllows(currentUser, currentUser.perms?.officeView, o.dept) ||
       o.creator === currentUser.username ||
-      isApproverForDeptWorkflow(wfMapForFilter[o.dept], currentUser.username)
-    )
-  );
+      isApproverForDeptWorkflow(wfMapForFilter[o.dept], currentUser.username);
+    if (!canView) return false;
 
-  if (list.length === 0) {
-    tbody.innerHTML = `<tr><td colspan="7" class="text-center p-6 text-gray-500 italic">Không có đề xuất nào thuộc phân hệ này.</td></tr>`;
+    if (deptFilter && o.dept !== deptFilter) return false;
+    if (statusFilter && o.status !== statusFilter) return false;
+    if (!isInDateRange(o.createdAt, fromDate, toDate)) return false;
+    if (!matchesKeywordFields([o.code, o.title, o.creatorName], keyword)) return false;
+
+    return true;
+  });
+
+  document.getElementById('paginationContainer_office').innerHTML = buildPaginationBoxHTML('office', 'renderOfficeReqs');
+  const pageList = paginateList('office', list, 'renderOfficeReqs', 'đề xuất');
+
+  if (pageList.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="7" class="text-center p-6 text-gray-500 italic">Không có đề xuất nào phù hợp.</td></tr>`;
     return;
   }
 
-  tbody.innerHTML = list.map(o => {
+  tbody.innerHTML = pageList.map(o => {
     const wfMap = getOfficeWorkflowMap(o.subType);
     const wfConfig = wfMap[o.dept] || { workflowId: 'WF_1STEP', approvers: { 1: ['admin'] } };
     const wf = DB.workflows.find(w => w.id === wfConfig.workflowId) || { steps: [{ name: 'Sếp duyệt' }] };
@@ -5261,6 +5635,11 @@ function populateLogFilterSelect(selectId, values) {
   if (sorted.includes(current)) sel.value = current;
 }
 
+function onLogFilterChange() {
+  resetListPage('log');
+  renderSystemLogs();
+}
+
 function renderSystemLogs() {
   const tbody = document.getElementById('systemLogTableBody');
   if (!tbody) return;
@@ -5289,12 +5668,15 @@ function renderSystemLogs() {
     return true;
   });
 
-  if (logs.length === 0) {
+  document.getElementById('paginationContainer_log').innerHTML = buildPaginationBoxHTML('log', 'renderSystemLogs');
+  const pageLogs = paginateList('log', logs, 'renderSystemLogs', 'dòng log');
+
+  if (pageLogs.length === 0) {
     tbody.innerHTML = `<tr><td colspan="7" class="text-center p-6 text-gray-500 italic">Chưa có log nhật ký nào.</td></tr>`;
     return;
   }
 
-  tbody.innerHTML = logs.map(l => `
+  tbody.innerHTML = pageLogs.map(l => `
     <tr class="hover:bg-gray-50 border-b">
       <td class="border p-2 text-xs font-mono text-gray-600">${escapeHtml(l.timestamp)}</td>
       <td class="border p-2 font-bold">${escapeHtml(l.fullName)} (${escapeHtml(l.username)})</td>
