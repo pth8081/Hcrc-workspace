@@ -585,7 +585,7 @@
       </div>
       <p class="text-xs text-teal-800" id="officeSubTitle">Phân hệ Mua Sắm Trang Thiết Bị / Vật Tư Văn Phòng.</p>
       
-      <form onsubmit="submitOfficeReq(event)" class="bg-white p-3 rounded border text-xs space-y-3">
+      <form id="officeForm" onsubmit="submitOfficeReq(event)" class="bg-white p-3 rounded border text-xs space-y-3">
         <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
           <div>
             <label class="block font-semibold text-gray-600 mb-1">Mã Yêu Cầu</label>
@@ -599,24 +599,57 @@
             <label class="block font-semibold text-gray-600 mb-1">Tên Hạng Mục / Nội Dung Trình</label>
             <input id="offTitle" placeholder="Tên mua sắm / hạng mục sửa chữa / gói đầu tư" class="w-full border p-1.5 rounded" required>
           </div>
-          <div>
+          <div id="officeQtyField">
             <label class="block font-semibold text-gray-600 mb-1">Số Lượng / Quy Mô</label>
             <input id="offQty" placeholder="VD: 5 cái / 10 bộ" class="w-full border p-1.5 rounded" required>
           </div>
-          <div>
+          <div id="officeAmountField">
             <label class="block font-semibold text-gray-600 mb-1">Dự Toán / Tổng Chi Phí (VNĐ)</label>
             <input id="offAmount" type="number" placeholder="50000000" class="w-full border p-1.5 rounded" required>
           </div>
-          <div>
+          <div id="officeSupplierField">
             <label class="block font-semibold text-gray-600 mb-1">Đối Tác / Nhà Cung Cấp</label>
             <input id="offSupplier" placeholder="Công ty cung cấp dịch vụ..." class="w-full border p-1.5 rounded">
+          </div>
+          <div id="officeUsageTimeField" class="hidden">
+            <label class="block font-semibold text-gray-600 mb-1">Thời Gian Cần Sử Dụng</label>
+            <input id="offUsageTime" placeholder="VD: Cần luôn / Trong tháng 9..." class="w-full border p-1.5 rounded">
+          </div>
+        </div>
+
+        <!-- Bảng nhiều hạng mục — chỉ dùng cho phân hệ Mua Sắm, theo đúng Mẫu BM-TS01 (Phiếu Đề Nghị
+             Mua Sắm Tài Sản/Cung Cấp Trang Thiết Bị): mỗi phiếu có thể gồm nhiều tài sản/vật tư, mỗi
+             dòng tự tính Thành tiền = Số lượng × Đơn giá, Dự toán tổng (offAmount) = tổng các dòng. -->
+        <div id="officeItemsSection" class="hidden border-t pt-3 space-y-2">
+          <label class="block font-semibold text-gray-600">Danh Sách Hạng Mục Đề Nghị Mua Sắm</label>
+          <div class="overflow-x-auto">
+            <table class="w-full border-collapse border text-xs bg-white">
+              <thead>
+                <tr class="bg-gray-100 text-left text-gray-700">
+                  <th class="border p-1.5 w-8">STT</th>
+                  <th class="border p-1.5">Tên Tài Sản</th>
+                  <th class="border p-1.5">Model</th>
+                  <th class="border p-1.5 w-20">ĐVT</th>
+                  <th class="border p-1.5 w-20">Số Lượng</th>
+                  <th class="border p-1.5 w-32">Đơn Giá (VNĐ)</th>
+                  <th class="border p-1.5 w-32">Thành Tiền (VNĐ)</th>
+                  <th class="border p-1.5">Ghi Chú</th>
+                  <th class="border p-1.5 w-8"></th>
+                </tr>
+              </thead>
+              <tbody id="officeItemsTableBody"></tbody>
+            </table>
+          </div>
+          <div class="flex justify-between items-center">
+            <button type="button" onclick="addOfficeItemRow()" class="bg-teal-600 text-white px-3 py-1 rounded text-xs font-bold hover:bg-teal-700">➕ Thêm Hạng Mục</button>
+            <div class="font-bold text-rose-600">Tổng Dự Toán (chưa VAT): <span id="officeItemsTotalDisplay">0</span> VNĐ</div>
           </div>
         </div>
 
         <div id="dynamicFieldsContainer_OFFICE" class="grid grid-cols-1 md:grid-cols-3 gap-3 border-t pt-3"></div>
 
         <div>
-          <label class="block font-semibold text-gray-600 mb-1">Lý Do Trình & Diễn Giải Chi Tiết</label>
+          <label class="block font-semibold text-gray-600 mb-1">Lý Do Trình & Diễn Giải Chi Tiết / Mục Đích Mua Sắm</label>
           <textarea id="offReason" placeholder="Cần thiết mua mới / lý do hỏng hóc / hiệu quả đầu tư..." class="w-full border p-1.5 rounded h-16" required></textarea>
         </div>
         <div class="flex justify-end">
@@ -1414,6 +1447,9 @@ let currentFilterCard = '';
 let currentProcessingSubId = null;
 let currentProcessingCarId = null;
 let currentProcessingOfficeId = null;
+// Danh sách hạng mục của phiếu Đề Nghị Mua Sắm đang nhập (theo Mẫu BM-TS01) — reset mỗi khi
+// submit thành công hoặc chuyển sang phân hệ Mua Sắm.
+let officeItems = [];
 
 function escapeHtml(str) {
   if (!str) return '';
@@ -2053,6 +2089,18 @@ function setOfficeSubTab(subTab) {
     if (subTab === 'SUA_CHUA') lblSub.innerText = 'Phân hệ Đề Xuất Sửa Chữa / Bảo Trì Cơ Sở Vật Chất.';
     if (subTab === 'DAU_TU') lblSub.innerText = 'Phân hệ Đề Xuất Dự Án Đầu Tư & Cải Tạo Văn Phòng.';
   }
+
+  // Phân hệ Mua Sắm dùng bảng nhiều hạng mục theo Mẫu BM-TS01 (Phiếu Đề Nghị Mua Sắm Tài Sản) thay
+  // vì 1 dòng Số Lượng/Dự Toán/Nhà Cung Cấp như Sửa Chữa & Đầu Tư — không có mẫu giấy nên giữ nguyên.
+  const isMuaSam = subTab === 'MUA_BAN';
+  document.getElementById('officeItemsSection').classList.toggle('hidden', !isMuaSam);
+  document.getElementById('officeUsageTimeField').classList.toggle('hidden', !isMuaSam);
+  document.getElementById('officeQtyField').classList.toggle('hidden', isMuaSam);
+  document.getElementById('officeAmountField').classList.toggle('hidden', isMuaSam);
+  document.getElementById('officeSupplierField').classList.toggle('hidden', isMuaSam);
+  document.getElementById('offQty').required = !isMuaSam;
+  document.getElementById('offAmount').required = !isMuaSam;
+  if (isMuaSam && officeItems.length === 0) addOfficeItemRow();
 
   renderDynamicInputsForModule(subTab, 'dynamicFieldsContainer_OFFICE');
   renderOfficeReqs();
@@ -3769,6 +3817,11 @@ function buildApprovalSlipShellHTML(opts) {
         .approval-slip table.as-field-table td { padding: 3px 4px; vertical-align: top; }
         .approval-slip .as-label { font-weight: bold; width: 230px; white-space: nowrap; }
         .approval-slip .as-section-title { font-weight: bold; margin-top: 14px; margin-bottom: 2px; background: #f0f0f0; padding: 4px 6px; }
+        .approval-slip table.as-items-table { width: 100%; border-collapse: collapse; margin: 6px 0 10px; font-size: 12px; }
+        .approval-slip table.as-items-table th, .approval-slip table.as-items-table td { border: 1px solid #999; padding: 4px 6px; }
+        .approval-slip table.as-items-table th { background: #f0f0f0; font-weight: bold; text-align: center; }
+        .approval-slip .as-items-center { text-align: center; }
+        .approval-slip .as-items-right { text-align: right; }
         .approval-slip .as-sign-table { width: 100%; border-collapse: collapse; margin-top: 22px; table-layout: fixed; }
         .approval-slip .as-sign-table td { text-align: center; vertical-align: top; padding: 8px 6px; border: 1px solid #ccc; }
         .approval-slip .as-sign-role { font-weight: bold; text-transform: uppercase; display: block; margin-bottom: 6px; }
@@ -3881,18 +3934,80 @@ function downloadCarApprovalSlip(carId) {
 // ==========================================
 // 7. MODULE PHÊ DUYỆT VĂN PHÒNG (OFFICE MODULE)
 // ==========================================
+
+// --- Bảng nhiều hạng mục cho phiếu Đề Nghị Mua Sắm (Mẫu BM-TS01) ---
+function addOfficeItemRow() {
+  officeItems.push({ name: '', model: '', unit: '', qty: 0, unitPrice: 0, note: '' });
+  renderOfficeItemsTable();
+}
+
+function removeOfficeItemRow(idx) {
+  officeItems.splice(idx, 1);
+  renderOfficeItemsTable();
+}
+
+function updateOfficeItemField(idx, field, value) {
+  if (!officeItems[idx]) return;
+  officeItems[idx][field] = (field === 'qty' || field === 'unitPrice') ? (parseFloat(value) || 0) : value;
+  // Chỉ cập nhật ô Thành Tiền của đúng dòng đang sửa + tổng cộng, không render lại toàn bảng để
+  // tránh mất focus/con trỏ đang gõ dở ở các dòng khác.
+  const amountCell = document.getElementById(`officeItemAmount_${idx}`);
+  if (amountCell) amountCell.innerText = ((officeItems[idx].qty || 0) * (officeItems[idx].unitPrice || 0)).toLocaleString('vi-VN');
+  recalcOfficeItemsTotal();
+}
+
+function recalcOfficeItemsTotal() {
+  const total = officeItems.reduce((sum, it) => sum + (it.qty || 0) * (it.unitPrice || 0), 0);
+  const el = document.getElementById('officeItemsTotalDisplay');
+  if (el) el.innerText = total.toLocaleString('vi-VN');
+  return total;
+}
+
+function renderOfficeItemsTable() {
+  const tbody = document.getElementById('officeItemsTableBody');
+  if (!tbody) return;
+  tbody.innerHTML = officeItems.map((it, idx) => `
+    <tr>
+      <td class="border p-1 text-center">${idx + 1}</td>
+      <td class="border p-1"><input value="${escapeHtml(it.name)}" oninput="updateOfficeItemField(${idx}, 'name', this.value)" class="w-full border-0 p-0.5 text-xs focus:outline-none" placeholder="Tên tài sản"></td>
+      <td class="border p-1"><input value="${escapeHtml(it.model)}" oninput="updateOfficeItemField(${idx}, 'model', this.value)" class="w-full border-0 p-0.5 text-xs focus:outline-none" placeholder="Model"></td>
+      <td class="border p-1"><input value="${escapeHtml(it.unit)}" oninput="updateOfficeItemField(${idx}, 'unit', this.value)" class="w-full border-0 p-0.5 text-xs focus:outline-none" placeholder="Cái/Bộ..."></td>
+      <td class="border p-1"><input type="number" value="${it.qty || ''}" oninput="updateOfficeItemField(${idx}, 'qty', this.value)" class="w-full border-0 p-0.5 text-xs focus:outline-none"></td>
+      <td class="border p-1"><input type="number" value="${it.unitPrice || ''}" oninput="updateOfficeItemField(${idx}, 'unitPrice', this.value)" class="w-full border-0 p-0.5 text-xs focus:outline-none"></td>
+      <td class="border p-1 text-right font-semibold" id="officeItemAmount_${idx}">${((it.qty || 0) * (it.unitPrice || 0)).toLocaleString('vi-VN')}</td>
+      <td class="border p-1"><input value="${escapeHtml(it.note)}" oninput="updateOfficeItemField(${idx}, 'note', this.value)" class="w-full border-0 p-0.5 text-xs focus:outline-none" placeholder="Ghi chú"></td>
+      <td class="border p-1 text-center"><button type="button" onclick="removeOfficeItemRow(${idx})" class="text-red-600 font-bold hover:text-red-800" title="Xoá dòng">✕</button></td>
+    </tr>
+  `).join('');
+  recalcOfficeItemsTotal();
+}
+
 function submitOfficeReq(e) {
   e.preventDefault();
   const code = document.getElementById('offCode').value.trim();
   const dept = document.getElementById('offDept').value;
   const title = document.getElementById('offTitle').value.trim();
-  const qty = document.getElementById('offQty').value.trim();
-  const amount = parseFloat(document.getElementById('offAmount').value) || 0;
-  const supplier = document.getElementById('offSupplier').value.trim();
   const reason = document.getElementById('offReason').value.trim();
+  const isMuaSam = activeOfficeSubTab === 'MUA_BAN';
 
   if (DB.officeReqs.some(o => o.code === code)) {
     return alert('Mã phiếu đề xuất văn phòng đã tồn tại!');
+  }
+
+  let qty = '', amount = 0, supplier = '', usageTime = '', items = null;
+
+  if (isMuaSam) {
+    const validItems = officeItems.filter(it => it.name.trim() && it.qty > 0);
+    if (validItems.length === 0) {
+      return alert('Vui lòng nhập ít nhất 1 hạng mục hợp lệ (có Tên tài sản và Số lượng > 0)!');
+    }
+    items = validItems.map(it => ({ ...it, amount: it.qty * it.unitPrice }));
+    amount = recalcOfficeItemsTotal();
+    usageTime = document.getElementById('offUsageTime').value.trim();
+  } else {
+    qty = document.getElementById('offQty').value.trim();
+    amount = parseFloat(document.getElementById('offAmount').value) || 0;
+    supplier = document.getElementById('offSupplier').value.trim();
   }
 
   const customData = collectDynamicFieldsData(activeOfficeSubTab);
@@ -3906,6 +4021,8 @@ function submitOfficeReq(e) {
     qty: qty,
     amount: amount,
     supplier: supplier,
+    usageTime: usageTime,
+    items: items,
     reason: reason,
     customData: customData,
     creator: currentUser.username,
@@ -3930,6 +4047,10 @@ function submitOfficeReq(e) {
 
   alert('✅ Đã gửi đề xuất văn phòng thành công!');
   e.target.reset();
+  if (isMuaSam) {
+    officeItems = [];
+    addOfficeItemRow();
+  }
   renderOfficeReqs();
 }
 
@@ -3974,11 +4095,11 @@ function renderOfficeReqs() {
         <td class="border p-2">${escapeHtml(o.dept)}<br><span class="text-xs text-gray-500">${escapeHtml(o.creatorName)}</span></td>
         <td class="border p-2">
           <div class="font-bold text-gray-800">${escapeHtml(o.title)}</div>
-          <div class="text-xs text-gray-500">Số lượng: ${escapeHtml(o.qty)}</div>
+          <div class="text-xs text-gray-500">${Array.isArray(o.items) ? `${o.items.length} hạng mục` : `Số lượng: ${escapeHtml(o.qty)}`}</div>
         </td>
         <td class="border p-2">
           <div class="font-bold text-rose-600">${o.amount.toLocaleString('vi-VN')} VNĐ</div>
-          <div class="text-xs text-gray-500">NCC: ${escapeHtml(o.supplier || 'N/A')}</div>
+          <div class="text-xs text-gray-500">${Array.isArray(o.items) ? '' : `NCC: ${escapeHtml(o.supplier || 'N/A')}`}</div>
         </td>
         <td class="border p-2">${statusBadge}</td>
         <td class="border p-2 text-center space-x-1">
@@ -4010,12 +4131,45 @@ function openOfficeProcessModal(officeId) {
   let detailsHTML = `
     <div class="grid grid-cols-2 gap-2 text-xs">
       <div><b>Ngày tạo:</b> ${escapeHtml(o.createdAt)}</div>
-      <div><b>Số lượng:</b> ${escapeHtml(o.qty)}</div>
+      ${Array.isArray(o.items)
+        ? `<div><b>Thời gian cần sử dụng:</b> ${escapeHtml(o.usageTime || 'N/A')}</div>`
+        : `<div><b>Số lượng:</b> ${escapeHtml(o.qty)}</div>`}
       <div><b>Giá trị dự kiến:</b> ${o.amount.toLocaleString('vi-VN')} VNĐ</div>
-      <div><b>Nhà cung cấp:</b> ${escapeHtml(o.supplier || 'N/A')}</div>
+      ${Array.isArray(o.items) ? '' : `<div><b>Nhà cung cấp:</b> ${escapeHtml(o.supplier || 'N/A')}</div>`}
       <div class="col-span-2"><b>Lý do / Diễn giải:</b> <p class="bg-white p-2 rounded border mt-1">${escapeHtml(o.reason)}</p></div>
     </div>
   `;
+
+  if (Array.isArray(o.items)) {
+    detailsHTML += `
+      <div class="border-t pt-2 mt-2">
+        <div class="font-semibold mb-1">Danh sách hạng mục (theo Mẫu BM-TS01):</div>
+        <div class="overflow-x-auto">
+          <table class="w-full border-collapse border text-xs bg-white">
+            <thead><tr class="bg-gray-100 text-left">
+              <th class="border p-1">STT</th><th class="border p-1">Tên tài sản</th><th class="border p-1">Model</th>
+              <th class="border p-1">ĐVT</th><th class="border p-1">SL</th><th class="border p-1">Đơn giá</th>
+              <th class="border p-1">Thành tiền</th><th class="border p-1">Ghi chú</th>
+            </tr></thead>
+            <tbody>
+              ${o.items.map((it, idx) => `
+                <tr>
+                  <td class="border p-1 text-center">${idx + 1}</td>
+                  <td class="border p-1">${escapeHtml(it.name)}</td>
+                  <td class="border p-1">${escapeHtml(it.model || '')}</td>
+                  <td class="border p-1">${escapeHtml(it.unit || '')}</td>
+                  <td class="border p-1 text-right">${it.qty}</td>
+                  <td class="border p-1 text-right">${(it.unitPrice || 0).toLocaleString('vi-VN')}</td>
+                  <td class="border p-1 text-right font-semibold">${(it.amount || 0).toLocaleString('vi-VN')}</td>
+                  <td class="border p-1">${escapeHtml(it.note || '')}</td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    `;
+  }
 
   if (o.customData && Object.keys(o.customData).length > 0) {
     detailsHTML += `<div class="border-t pt-2 mt-2 font-semibold">Trường dữ liệu mở rộng:</div><div class="grid grid-cols-2 gap-2 text-xs">`;
@@ -4168,7 +4322,54 @@ function buildOfficeApprovalSlipHTML(o) {
     `;
   }
 
-  const bodyHTML = `
+  // Phân hệ Mua Sắm dùng bảng nhiều hạng mục theo đúng bố cục Mẫu BM-TS01 (Phiếu Đề Nghị Mua Sắm
+  // Tài Sản/Cung Cấp Trang Thiết Bị) do người dùng cung cấp — Sửa Chữa/Đầu Tư giữ nguyên 1 dòng vì
+  // chưa có mẫu giấy riêng.
+  const isMuaSam = Array.isArray(o.items);
+
+  const itemsTableHTML = isMuaSam ? `
+    <table class="as-items-table">
+      <thead>
+        <tr>
+          <th>STT</th><th>Tên Tài Sản</th><th>Model</th><th>ĐVT</th><th>Số Lượng</th>
+          <th>Đơn Giá</th><th>Thành Tiền</th><th>Ghi Chú</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${o.items.map((it, idx) => `
+          <tr>
+            <td class="as-items-center">${idx + 1}</td>
+            <td>${escapeHtml(it.name)}</td>
+            <td>${escapeHtml(it.model || '')}</td>
+            <td class="as-items-center">${escapeHtml(it.unit || '')}</td>
+            <td class="as-items-right">${it.qty}</td>
+            <td class="as-items-right">${(it.unitPrice || 0).toLocaleString('vi-VN')}</td>
+            <td class="as-items-right">${(it.amount || 0).toLocaleString('vi-VN')}</td>
+            <td>${escapeHtml(it.note || '')}</td>
+          </tr>
+        `).join('')}
+        <tr>
+          <td colspan="6" class="as-items-right" style="font-weight:bold;">Tổng Cộng (chưa VAT):</td>
+          <td class="as-items-right" style="font-weight:bold;">${(o.amount || 0).toLocaleString('vi-VN')}</td>
+          <td></td>
+        </tr>
+      </tbody>
+    </table>
+  ` : '';
+
+  const bodyHTML = isMuaSam ? `
+    <table class="as-field-table">
+      <tr><td class="as-label">Ngày đề nghị:</td><td>${escapeHtml(o.createdAt || '')}</td></tr>
+      <tr><td class="as-label">Họ tên người đề nghị:</td><td>${escapeHtml(o.creatorName || '')}</td></tr>
+      <tr><td class="as-label">Phòng ban / đơn vị:</td><td>${escapeHtml(o.dept || '')}</td></tr>
+      <tr><td class="as-label">Mục đích mua sắm / cung cấp tài sản:</td><td>${escapeHtml(o.reason || '')}</td></tr>
+      <tr><td class="as-label">Thời gian cần sử dụng:</td><td>${escapeHtml(o.usageTime || '')}</td></tr>
+    </table>
+    <div class="as-section-title">Danh Sách Hạng Mục Đề Nghị Mua Sắm</div>
+    ${itemsTableHTML}
+    ${extraFieldsHTML}
+    ${finalCommentHTML}
+  ` : `
     <table class="as-field-table">
       <tr><td class="as-label">Ngày tạo:</td><td>${escapeHtml(o.createdAt || '')}</td></tr>
       <tr><td class="as-label">Người tạo:</td><td>${escapeHtml(o.creatorName || '')}</td></tr>
@@ -4185,15 +4386,15 @@ function buildOfficeApprovalSlipHTML(o) {
   `;
 
   return buildApprovalSlipShellHTML({
-    formCode: 'Đề Xuất Văn Phòng',
-    title: 'Phiếu Phê Duyệt Đề Xuất Văn Phòng',
+    formCode: isMuaSam ? 'Mẫu: BM-TS01' : 'Đề Xuất Văn Phòng',
+    title: isMuaSam ? 'Phiếu Đề Nghị Mua Sắm Tài Sản / Cung Cấp Trang Thiết Bị' : 'Phiếu Phê Duyệt Đề Xuất Văn Phòng',
     approvedNote: `✅ Đã phê duyệt hoàn tất trên Hệ thống Văn phòng điện tử — Mã: ${escapeHtml(o.code)}`,
     bodyHTML,
-    requesterRoleLabel: 'Người tạo đề xuất',
+    requesterRoleLabel: 'Người đề nghị',
     requesterName: o.creatorName,
-    requesterTime: `Tạo lúc: ${escapeHtml(o.createdAt || '')}`,
+    requesterTime: `Đề nghị lúc: ${escapeHtml(o.createdAt || '')}`,
     signatureColumnsHTML,
-    footerNote: 'Phiếu được lập và phê duyệt điện tử trên Hệ thống Văn phòng điện tử (VPĐT) — không cần chữ ký tay/con dấu bản cứng. Thông tin phê duyệt có thể tra cứu lại trên hệ thống.'
+    footerNote: 'Phiếu được lập và phê duyệt điện tử trên Hệ thống Văn phòng điện tử (VPĐT) — không cần chữ ký tay/con dấu bản cứng. Chữ ký các cấp theo đúng quy trình phê duyệt đã cấu hình cho phòng ban. Thông tin phê duyệt có thể tra cứu lại trên hệ thống.'
   });
 }
 
