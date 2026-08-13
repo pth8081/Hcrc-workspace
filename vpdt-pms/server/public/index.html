@@ -45,6 +45,7 @@
         <button id="btnFormTab" onclick="switchTab('form')" class="hidden text-xs bg-rose-600 text-white px-2 py-1 rounded hover:bg-rose-700 font-semibold">📋 Biểu mẫu</button>
         <button id="btnWorkflowTab" onclick="switchTab('workflow')" class="hidden text-xs bg-emerald-600 text-white px-2 py-1 rounded hover:bg-emerald-700 font-semibold">🔄 Quy trình & Đồng cấp</button>
         <button id="btnAdminTab" onclick="switchTab('admin')" class="hidden text-xs bg-purple-600 text-white px-2 py-1 rounded hover:bg-purple-700 font-semibold">⚙️ Quản trị</button>
+        <button id="btnReportsTab" onclick="switchTab('reports')" class="hidden text-xs bg-sky-600 text-white px-2 py-1 rounded hover:bg-sky-700 font-semibold">📊 Báo cáo</button>
         <button id="btnLogTab" onclick="switchTab('log')" class="hidden text-xs bg-stone-600 text-white px-2 py-1 rounded hover:bg-stone-700 font-semibold">📊 Log</button>
         <button onclick="logout()" class="text-xs text-red-500 underline py-1 hover:text-red-700">Đăng xuất</button>
       </div>
@@ -1457,6 +1458,14 @@
             </label>
             <p class="text-[11px] text-gray-500 italic">Chỉ để LỌC danh sách ứng viên ở màn "Quy trình & Đồng cấp" cho gọn — không tự cấp quyền duyệt. Quyền duyệt thật vẫn do admin tick chọn đích danh ở từng bước.</p>
           </div>
+
+          <div class="bg-white p-3 rounded border space-y-2">
+            <h4 class="font-bold text-gray-800 border-b pb-1 text-sm">14. Báo Cáo Quản Trị</h4>
+            <label class="flex items-center gap-2 text-sky-700 font-semibold cursor-pointer">
+              <input type="checkbox" id="pCanViewReports"> 📊 Được xem Báo cáo quản trị
+            </label>
+            <p class="text-[11px] text-gray-500 italic">Xem số liệu tổng hợp toàn hệ thống (không phân biệt phòng ban tạo hồ sơ) — Admin luôn xem được mặc định dù không tick.</p>
+          </div>
         </div>
 
         <div class="flex justify-end gap-2 pt-2">
@@ -1556,6 +1565,41 @@
       </table>
     </div>
     <div id="paginationContainer_log"></div>
+  </div>
+
+  <!-- Màn hình MODULE BÁO CÁO QUẢN TRỊ -->
+  <div id="reportsSection" class="hidden space-y-6">
+    <div class="bg-sky-50 p-4 rounded border border-sky-200 space-y-3">
+      <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
+        <div>
+          <h3 class="font-bold text-sky-900 text-base flex items-center gap-1">📊 Báo Cáo Quản Trị Tổng Hợp</h3>
+          <p class="text-xs text-sky-800">Số liệu tổng hợp toàn hệ thống theo khoảng thời gian & phòng ban đã chọn.</p>
+        </div>
+        <button onclick="exportReportsCSV()" class="text-xs bg-emerald-600 text-white px-3 py-1.5 rounded font-bold hover:bg-emerald-700">📥 Xuất Báo Cáo CSV</button>
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-4 gap-3 bg-white p-3 rounded border text-xs">
+        <div>
+          <label class="block font-semibold text-gray-600 mb-1">Từ Ngày (theo ngày tạo hồ sơ)</label>
+          <input id="reportsFromDate" type="date" onchange="renderReports()" class="w-full border p-1.5 rounded bg-white">
+        </div>
+        <div>
+          <label class="block font-semibold text-gray-600 mb-1">Đến Ngày</label>
+          <input id="reportsToDate" type="date" onchange="renderReports()" class="w-full border p-1.5 rounded bg-white">
+        </div>
+        <div>
+          <label class="block font-semibold text-gray-600 mb-1">Phòng Ban</label>
+          <select id="reportsDeptFilter" onchange="renderReports()" class="w-full border p-1.5 rounded bg-white font-semibold">
+            <option value="">-- Tất cả phòng ban --</option>
+          </select>
+        </div>
+        <div class="flex items-end">
+          <button onclick="resetReportsFilters()" class="w-full bg-gray-200 text-gray-700 p-1.5 rounded font-bold hover:bg-gray-300">Đặt Lại Bộ Lọc</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="reportsContent" class="space-y-6"></div>
   </div>
 
 </div>
@@ -2110,6 +2154,11 @@ function canAccessMeetingMinutesModule(user) {
   return scopeHasAny(user, user.perms?.minutesView) || scopeHasAny(user, user.perms?.minutesCreate);
 }
 
+function canAccessReportsModule(user) {
+  if (!user) return false;
+  return !!(user.perms?.admin || user.perms?.canViewReports);
+}
+
 function getOfficeWorkflowMap(subType) {
   if (subType === 'SUA_CHUA') return DB.officeFixDeptWorkflows;
   if (subType === 'DAU_TU') return DB.officeInvestDeptWorkflows;
@@ -2164,6 +2213,7 @@ function defaultNewUserPerms() {
   return {
     admin: false,
     canBeApprover: false,
+    canViewReports: false,
     uploadAll: false, uploadDepts: [],
     viewDraftAll: false, viewDraftDepts: [],
     viewApprovedAll: false, viewApprovedDepts: [],
@@ -2454,6 +2504,7 @@ function login() {
   document.getElementById('btnWorkflowTab').classList.toggle('hidden', !user.perms.admin);
   document.getElementById('btnFormTab').classList.toggle('hidden', !user.perms.admin);
   document.getElementById('btnLogTab').classList.toggle('hidden', !user.perms.admin);
+  document.getElementById('btnReportsTab').classList.toggle('hidden', !canAccessReportsModule(user));
   document.getElementById('btnDocTab').classList.remove('hidden');
 
   document.getElementById('btnSubmissionTab').classList.toggle('hidden', !canAccessSubmissionModule(user));
@@ -2476,12 +2527,14 @@ function logout() {
   document.getElementById('taskSection').classList.add('hidden');
   document.getElementById('contractSection').classList.add('hidden');
   document.getElementById('meetingSection').classList.add('hidden');
+  document.getElementById('minutesSection').classList.add('hidden');
   document.getElementById('carSection').classList.add('hidden');
   document.getElementById('officeSection').classList.add('hidden');
   document.getElementById('formSection').classList.add('hidden');
   document.getElementById('adminSection').classList.add('hidden');
   document.getElementById('workflowSection').classList.add('hidden');
   document.getElementById('logSection').classList.add('hidden');
+  document.getElementById('reportsSection').classList.add('hidden');
   document.getElementById('userHeader').classList.add('hidden');
 }
 
@@ -2525,6 +2578,7 @@ function switchTab(tabName) {
   document.getElementById('adminSection').classList.toggle('hidden', tabName !== 'admin');
   document.getElementById('workflowSection').classList.toggle('hidden', tabName !== 'workflow');
   document.getElementById('logSection').classList.toggle('hidden', tabName !== 'log');
+  document.getElementById('reportsSection').classList.toggle('hidden', tabName !== 'reports');
 
   populateDropdowns();
 
@@ -2550,6 +2604,7 @@ function switchTab(tabName) {
     renderDeptList(); renderCatList(); renderDeptCheckboxes(); renderUsers(); loadEmailConfigToForm();
   }
   if (tabName === 'log' && currentUser.perms.admin) { renderSystemLogs(); }
+  if (tabName === 'reports' && canAccessReportsModule(currentUser)) { renderReports(); }
 }
 
 function setOfficeSubTab(subTab) {
@@ -2617,7 +2672,7 @@ function populateDropdowns() {
 
   // Dropdown "Lọc Theo Phòng Ban" của các module khác — cùng danh sách toàn bộ phòng ban (không
   // giới hạn theo quyền tạo mới, vì kết quả hiển thị đã được lọc theo quyền xem ở nơi khác).
-  ['filterDeptSub', 'filterDeptContract', 'filterDeptCar', 'filterDeptOffice', 'filterDeptMeeting', 'filterDeptMinutes'].forEach(id => {
+  ['filterDeptSub', 'filterDeptContract', 'filterDeptCar', 'filterDeptOffice', 'filterDeptMeeting', 'filterDeptMinutes', 'reportsDeptFilter'].forEach(id => {
     const el = document.getElementById(id);
     if (el) el.innerHTML = '<option value="">-- Tất cả phòng ban --</option>' + DB.depts.map(d => `<option value="${escapeHtml(d)}">${escapeHtml(d)}</option>`).join('');
   });
@@ -6066,6 +6121,7 @@ function saveUser(e) {
   const perms = {
     admin: document.getElementById('pAdmin').checked,
     canBeApprover: document.getElementById('pCanBeApprover').checked,
+    canViewReports: document.getElementById('pCanViewReports').checked,
     meetingApprove: document.getElementById('pMeetingApprove').checked,
     meetingCancel: document.getElementById('pMeetingCancel').checked,
     officeBuy: document.getElementById('pOfficeBuy').checked,
@@ -6133,6 +6189,7 @@ function resetUserForm() {
   const defaults = defaultNewUserPerms();
   document.getElementById('pAdmin').checked = defaults.admin;
   document.getElementById('pCanBeApprover').checked = !!defaults.canBeApprover;
+  document.getElementById('pCanViewReports').checked = !!defaults.canViewReports;
   document.getElementById('pMeetingApprove').checked = defaults.meetingApprove;
   document.getElementById('pMeetingCancel').checked = defaults.meetingCancel;
   document.getElementById('pOfficeBuy').checked = defaults.officeBuy;
@@ -6171,6 +6228,7 @@ function editUser(id) {
 
   document.getElementById('pAdmin').checked = !!perms.admin;
   document.getElementById('pCanBeApprover').checked = !!perms.canBeApprover;
+  document.getElementById('pCanViewReports').checked = !!perms.canViewReports;
   document.getElementById('pMeetingApprove').checked = !!perms.meetingApprove;
   document.getElementById('pMeetingCancel').checked = !!perms.meetingCancel;
   document.getElementById('pOfficeBuy').checked = !!perms.officeBuy;
@@ -6263,6 +6321,7 @@ function summarizeUserPerms(perms) {
   if (hasScope(perms.carView) || hasScope(perms.carCreate)) parts.push('🚗 Xe');
   if ((hasScope(perms.officeView) || hasScope(perms.officeCreate)) && (perms.officeBuy || perms.officeFix || perms.officeInvest)) parts.push('🏢 VP');
   if (hasScope(perms.minutesView) || hasScope(perms.minutesCreate)) parts.push('📝 Biên bản họp');
+  if (perms.canViewReports) parts.push('📊 Báo cáo');
   return parts.length ? parts.join(', ') : '<span class="text-gray-400 italic">Chưa cấp quyền module nào</span>';
 }
 
@@ -6435,6 +6494,315 @@ function resetLogFilters() {
   document.getElementById('filterLogStatus').value = '';
   document.getElementById('filterLogKeyword').value = '';
   renderSystemLogs();
+}
+
+// ==========================================
+// MODULE BÁO CÁO QUẢN TRỊ (REPORTS MODULE)
+// ==========================================
+
+// Parse ngược chuỗi "HH:MM:SS D/M/YYYY" do new Date().toLocaleString('vi-VN') sinh ra (định dạng cố
+// định của locale này) — cần thiết vì Date() không tự parse lại được chuỗi theo locale vi-VN.
+function parseVNDateTime(str) {
+  if (!str || typeof str !== 'string') return null;
+  const parts = str.trim().split(' ');
+  if (parts.length !== 2) return null;
+  const [timePart, datePart] = parts;
+  const timeBits = timePart.split(':').map(Number);
+  const dateBits = datePart.split('/').map(Number);
+  if (dateBits.length !== 3 || dateBits.some(isNaN)) return null;
+  const [h, mi, s] = timeBits;
+  const [d, mo, y] = dateBits;
+  const dt = new Date(y, mo - 1, d, h || 0, mi || 0, s || 0);
+  return isNaN(dt.getTime()) ? null : dt;
+}
+
+function formatHoursLabel(h) {
+  if (h === null || h === undefined) return 'Chưa có dữ liệu';
+  if (h < 24) return `${h.toFixed(1)} giờ`;
+  return `${(h / 24).toFixed(1)} ngày`;
+}
+
+// Thanh tỷ lệ ngang dùng chung cho mọi báo cáo — không cần thêm thư viện biểu đồ ngoài, giữ trang nhẹ.
+function buildStatBarHTML(label, value, max, colorClass) {
+  const pct = max > 0 ? Math.min(100, Math.round((value / max) * 100)) : 0;
+  return `
+    <div>
+      <div class="flex justify-between mb-0.5 text-xs"><span class="font-semibold text-gray-700">${escapeHtml(label)}</span><span class="font-bold text-gray-800">${(value || 0).toLocaleString('vi-VN')}</span></div>
+      <div class="w-full bg-gray-100 rounded h-2.5 overflow-hidden"><div class="${colorClass} h-2.5 rounded" style="width:${pct}%"></div></div>
+    </div>
+  `;
+}
+
+// Thống kê dùng chung cho 4 module có luồng phê duyệt nhiều bước (Tài liệu/Văn bản trình/Xe/Văn
+// phòng) — đều có chung cấu trúc {status, dept, createdAt, history[]}. Trả về số lượng theo trạng
+// thái/phòng ban + thời gian xử lý trung bình mỗi bước và mỗi hồ sơ hoàn tất (tính từ history[]).
+function computeApprovalStats(records, deptFilter, fromDate, toDate) {
+  const filtered = records.filter(r =>
+    (!deptFilter || r.dept === deptFilter) && isInDateRange(r.createdAt, fromDate, toDate)
+  );
+
+  const stats = { total: filtered.length, pending: 0, approved: 0, rejected: 0, byDept: {} };
+  const stepDurationsHours = [];
+  const completionDurationsHours = [];
+
+  filtered.forEach(r => {
+    if (r.status === 'PENDING') stats.pending++;
+    else if (r.status === 'APPROVED') stats.approved++;
+    else if (r.status === 'REJECTED') stats.rejected++;
+
+    stats.byDept[r.dept] = (stats.byDept[r.dept] || 0) + 1;
+
+    const created = parseVNDateTime(r.createdAt);
+    let prevTime = created;
+    (r.history || []).forEach(h => {
+      if (h.action !== 'APPROVED' && h.action !== 'REJECTED') return;
+      const t = parseVNDateTime(h.time);
+      if (prevTime && t && t >= prevTime) stepDurationsHours.push((t - prevTime) / 3600000);
+      prevTime = t || prevTime;
+    });
+
+    if ((r.status === 'APPROVED' || r.status === 'REJECTED') && created) {
+      const finalEntry = [...(r.history || [])].reverse().find(h => h.action === 'APPROVED' || h.action === 'REJECTED');
+      const finalTime = finalEntry ? parseVNDateTime(finalEntry.time) : null;
+      if (finalTime && finalTime >= created) completionDurationsHours.push((finalTime - created) / 3600000);
+    }
+  });
+
+  const avg = (arr) => arr.length ? arr.reduce((a, b) => a + b, 0) / arr.length : null;
+  stats.avgStepHours = avg(stepDurationsHours);
+  stats.avgCompletionHours = avg(completionDurationsHours);
+  return stats;
+}
+
+function resetReportsFilters() {
+  document.getElementById('reportsFromDate').value = '';
+  document.getElementById('reportsToDate').value = '';
+  document.getElementById('reportsDeptFilter').value = '';
+  renderReports();
+}
+
+function renderReports() {
+  const container = document.getElementById('reportsContent');
+  if (!container) return;
+
+  const fromDate = document.getElementById('reportsFromDate')?.value || '';
+  const toDate = document.getElementById('reportsToDate')?.value || '';
+  const deptFilter = document.getElementById('reportsDeptFilter')?.value || '';
+
+  const docStats = computeApprovalStats(DB.docs, deptFilter, fromDate, toDate);
+  const subStats = computeApprovalStats(DB.submissions, deptFilter, fromDate, toDate);
+  const carStats = computeApprovalStats(DB.carRegs, deptFilter, fromDate, toDate);
+  const offStats = computeApprovalStats(DB.officeReqs, deptFilter, fromDate, toDate);
+  const approvalModules = [['Tài liệu', docStats], ['Văn bản trình', subStats], ['Đăng ký xe', carStats], ['Văn phòng', offStats]];
+
+  const inScope = (r) => (!deptFilter || r.dept === deptFilter) && isInDateRange(r.createdAt, fromDate, toDate);
+  const visibleContracts = DB.contracts.filter(inScope);
+  const visibleMeetings = DB.meetings.filter(inScope);
+  const visibleMinutes = DB.meetingMinutes.filter(inScope);
+  const visibleCars = DB.carRegs.filter(inScope);
+  const visibleOffice = DB.officeReqs.filter(inScope);
+  const visibleTasks = DB.tasks.filter(t => isInDateRange(t.createdAt, fromDate, toDate));
+
+  // --- Tổng quan ---
+  const overviewItems = [
+    ['📂 Tài liệu', docStats.total], ['📜 Văn bản trình', subStats.total],
+    ['🚗 Đăng ký xe', carStats.total], ['🏢 Văn phòng', offStats.total],
+    ['📄 Hợp đồng', visibleContracts.length], ['📅 Phòng họp', visibleMeetings.length],
+    ['📝 Biên bản họp', visibleMinutes.length], ['✅ Công việc', visibleTasks.length]
+  ];
+  const overviewHTML = `
+    <div class="bg-white p-4 rounded border">
+      <h4 class="font-bold text-gray-800 mb-3">📈 Tổng Quan Số Lượng Hồ Sơ</h4>
+      <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
+        ${overviewItems.map(([label, val]) => `
+          <div class="bg-gray-50 border rounded p-3 text-center">
+            <div class="text-2xl font-bold text-sky-700">${val.toLocaleString('vi-VN')}</div>
+            <div class="text-xs text-gray-600 mt-1">${label}</div>
+          </div>
+        `).join('')}
+      </div>
+    </div>
+  `;
+
+  // --- Tình trạng phê duyệt ---
+  const approvalHTML = `
+    <div class="bg-white p-4 rounded border">
+      <h4 class="font-bold text-gray-800 mb-3">⏳ Tình Trạng Phê Duyệt Theo Module</h4>
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        ${approvalModules.map(([name, s]) => `
+          <div class="border rounded p-3 space-y-2">
+            <div class="font-semibold text-gray-700 text-sm mb-1">${escapeHtml(name)} (${s.total})</div>
+            ${buildStatBarHTML('Đang chờ duyệt', s.pending, s.total, 'bg-yellow-500')}
+            ${buildStatBarHTML('Đã phê duyệt', s.approved, s.total, 'bg-green-500')}
+            ${buildStatBarHTML('Bị từ chối', s.rejected, s.total, 'bg-red-500')}
+          </div>
+        `).join('')}
+      </div>
+    </div>
+  `;
+
+  // --- Khối lượng theo phòng ban ---
+  const deptTotals = {};
+  [docStats, subStats, carStats, offStats].forEach(s => {
+    Object.entries(s.byDept).forEach(([d, c]) => { deptTotals[d] = (deptTotals[d] || 0) + c; });
+  });
+  const deptEntries = Object.entries(deptTotals).sort((a, b) => b[1] - a[1]);
+  const maxDeptTotal = Math.max(1, ...deptEntries.map(e => e[1]));
+  const deptHTML = deptEntries.length ? `
+    <div class="bg-white p-4 rounded border">
+      <h4 class="font-bold text-gray-800 mb-3">🏢 Khối Lượng Hồ Sơ Theo Phòng Ban</h4>
+      <div class="space-y-2">
+        ${deptEntries.map(([d, c]) => buildStatBarHTML(d, c, maxDeptTotal, 'bg-sky-500')).join('')}
+      </div>
+    </div>
+  ` : '';
+
+  // --- Tài chính ---
+  const now = new Date();
+  const activeContractValue = visibleContracts.filter(c => new Date(c.endDate) >= now).reduce((sum, c) => sum + (c.amount || 0), 0);
+  const expiredContractValue = visibleContracts.filter(c => new Date(c.endDate) < now).reduce((sum, c) => sum + (c.amount || 0), 0);
+
+  const officeBySubType = { MUA_BAN: 0, SUA_CHUA: 0, DAU_TU: 0 };
+  visibleOffice.forEach(o => { officeBySubType[o.subType] = (officeBySubType[o.subType] || 0) + (o.amount || 0); });
+  const maxOfficeAmount = Math.max(1, ...Object.values(officeBySubType));
+
+  const financeHTML = `
+    <div class="bg-white p-4 rounded border">
+      <h4 class="font-bold text-gray-800 mb-3">💰 Tài Chính</h4>
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div>
+          <div class="text-xs font-semibold text-gray-600 mb-2">Giá trị Hợp đồng (${visibleContracts.length} hợp đồng)</div>
+          <div class="grid grid-cols-2 gap-2 text-center">
+            <div class="bg-green-50 border border-green-200 rounded p-2">
+              <div class="font-bold text-green-700">${activeContractValue.toLocaleString('vi-VN')} VNĐ</div>
+              <div class="text-[11px] text-gray-500">Còn hiệu lực</div>
+            </div>
+            <div class="bg-red-50 border border-red-200 rounded p-2">
+              <div class="font-bold text-red-700">${expiredContractValue.toLocaleString('vi-VN')} VNĐ</div>
+              <div class="text-[11px] text-gray-500">Đã hết hạn</div>
+            </div>
+          </div>
+        </div>
+        <div>
+          <div class="text-xs font-semibold text-gray-600 mb-2">Dự toán Văn phòng theo phân hệ (VNĐ)</div>
+          <div class="space-y-2">
+            ${buildStatBarHTML('Mua sắm', officeBySubType.MUA_BAN, maxOfficeAmount, 'bg-teal-500')}
+            ${buildStatBarHTML('Sửa chữa', officeBySubType.SUA_CHUA, maxOfficeAmount, 'bg-amber-500')}
+            ${buildStatBarHTML('Đầu tư', officeBySubType.DAU_TU, maxOfficeAmount, 'bg-purple-500')}
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+
+  // --- Vận hành ---
+  const totalKm = visibleCars.reduce((sum, c) => sum + (c.km || 0), 0);
+  const meetingApproved = visibleMeetings.filter(m => m.status === 'APPROVED').length;
+  const meetingPending = visibleMeetings.filter(m => m.status === 'PENDING').length;
+  const meetingCancelled = visibleMeetings.filter(m => m.status === 'CANCELLED').length;
+
+  const operationsHTML = `
+    <div class="bg-white p-4 rounded border">
+      <h4 class="font-bold text-gray-800 mb-3">🚗 Vận Hành</h4>
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div class="bg-gray-50 border rounded p-3 text-center">
+          <div class="text-2xl font-bold text-indigo-700">${totalKm.toLocaleString('vi-VN')} km</div>
+          <div class="text-xs text-gray-600 mt-1">Tổng số km đăng ký xe (${visibleCars.length} chuyến)</div>
+        </div>
+        <div class="space-y-2">
+          <div class="text-xs font-semibold text-gray-600 mb-1">Lịch phòng họp (${visibleMeetings.length})</div>
+          ${buildStatBarHTML('Đã duyệt', meetingApproved, visibleMeetings.length, 'bg-green-500')}
+          ${buildStatBarHTML('Đang chờ', meetingPending, visibleMeetings.length, 'bg-yellow-500')}
+          ${buildStatBarHTML('Đã huỷ', meetingCancelled, visibleMeetings.length, 'bg-red-500')}
+        </div>
+      </div>
+    </div>
+  `;
+
+  // --- Hiệu suất xử lý ---
+  const perfHTML = `
+    <div class="bg-white p-4 rounded border">
+      <h4 class="font-bold text-gray-800 mb-3">⚡ Hiệu Suất Xử Lý (trung bình)</h4>
+      <div class="overflow-x-auto">
+        <table class="w-full border-collapse border text-xs">
+          <thead><tr class="bg-gray-100"><th class="border p-2 text-left">Module</th><th class="border p-2">Thời gian / bước duyệt</th><th class="border p-2">Thời gian hoàn tất hồ sơ</th></tr></thead>
+          <tbody>
+            ${approvalModules.map(([name, s]) => `
+              <tr><td class="border p-2 font-semibold">${escapeHtml(name)}</td><td class="border p-2 text-center">${formatHoursLabel(s.avgStepHours)}</td><td class="border p-2 text-center">${formatHoursLabel(s.avgCompletionHours)}</td></tr>
+            `).join('')}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  `;
+
+  // --- Công việc & chỉ đạo ---
+  const taskByStatus = { TODO: 0, DOING: 0, DONE: 0, CANCELLED: 0 };
+  const taskBySource = { SUBMISSION: 0, MEETING_MINUTES: 0, MANUAL: 0 };
+  let overdueTasks = 0;
+  const todayStr = new Date().toISOString().slice(0, 10);
+  visibleTasks.forEach(t => {
+    taskByStatus[t.status] = (taskByStatus[t.status] || 0) + 1;
+    taskBySource[t.sourceType] = (taskBySource[t.sourceType] || 0) + 1;
+    if (t.deadline && t.deadline < todayStr && t.status !== 'DONE' && t.status !== 'CANCELLED') overdueTasks++;
+  });
+
+  const tasksHTML = `
+    <div class="bg-white p-4 rounded border">
+      <h4 class="font-bold text-gray-800 mb-3">✅ Công Việc & Chỉ Đạo</h4>
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div class="space-y-2">
+          <div class="text-xs font-semibold text-gray-600 mb-1">Theo trạng thái (${visibleTasks.length} công việc, <span class="text-red-600 font-bold">${overdueTasks} quá hạn</span>)</div>
+          ${buildStatBarHTML('Chưa bắt đầu', taskByStatus.TODO, visibleTasks.length, 'bg-gray-500')}
+          ${buildStatBarHTML('Đang thực hiện', taskByStatus.DOING, visibleTasks.length, 'bg-blue-500')}
+          ${buildStatBarHTML('Hoàn thành', taskByStatus.DONE, visibleTasks.length, 'bg-green-500')}
+          ${buildStatBarHTML('Đã huỷ', taskByStatus.CANCELLED, visibleTasks.length, 'bg-red-500')}
+        </div>
+        <div class="space-y-2">
+          <div class="text-xs font-semibold text-gray-600 mb-1">Theo nguồn gốc</div>
+          ${buildStatBarHTML('Văn bản trình', taskBySource.SUBMISSION, visibleTasks.length, 'bg-violet-500')}
+          ${buildStatBarHTML('Biên bản họp', taskBySource.MEETING_MINUTES, visibleTasks.length, 'bg-rose-500')}
+          ${buildStatBarHTML('Giao trực tiếp', taskBySource.MANUAL, visibleTasks.length, 'bg-slate-500')}
+        </div>
+      </div>
+    </div>
+  `;
+
+  container.innerHTML = overviewHTML + approvalHTML + deptHTML + financeHTML + operationsHTML + perfHTML + tasksHTML;
+}
+
+function exportReportsCSV() {
+  const fromDate = document.getElementById('reportsFromDate')?.value || '';
+  const toDate = document.getElementById('reportsToDate')?.value || '';
+  const deptFilter = document.getElementById('reportsDeptFilter')?.value || '';
+
+  const docStats = computeApprovalStats(DB.docs, deptFilter, fromDate, toDate);
+  const subStats = computeApprovalStats(DB.submissions, deptFilter, fromDate, toDate);
+  const carStats = computeApprovalStats(DB.carRegs, deptFilter, fromDate, toDate);
+  const offStats = computeApprovalStats(DB.officeReqs, deptFilter, fromDate, toDate);
+
+  const inScope = (r) => (!deptFilter || r.dept === deptFilter) && isInDateRange(r.createdAt, fromDate, toDate);
+  const visibleContracts = DB.contracts.filter(inScope);
+  const now = new Date();
+  const activeContractValue = visibleContracts.filter(c => new Date(c.endDate) >= now).reduce((sum, c) => sum + (c.amount || 0), 0);
+
+  const rows = [
+    ['Chỉ số', 'Giá trị'],
+    ['Tổng Tài liệu', docStats.total], ['Tài liệu - Đang chờ', docStats.pending], ['Tài liệu - Đã duyệt', docStats.approved], ['Tài liệu - Từ chối', docStats.rejected],
+    ['Tổng Văn bản trình', subStats.total], ['Văn bản trình - Đang chờ', subStats.pending], ['Văn bản trình - Đã duyệt', subStats.approved], ['Văn bản trình - Từ chối', subStats.rejected],
+    ['Tổng Đăng ký xe', carStats.total], ['Đăng ký xe - Đang chờ', carStats.pending], ['Đăng ký xe - Đã duyệt', carStats.approved], ['Đăng ký xe - Từ chối', carStats.rejected],
+    ['Tổng Văn phòng', offStats.total], ['Văn phòng - Đang chờ', offStats.pending], ['Văn phòng - Đã duyệt', offStats.approved], ['Văn phòng - Từ chối', offStats.rejected],
+    ['Tổng Hợp đồng', visibleContracts.length], ['Giá trị Hợp đồng còn hiệu lực (VNĐ)', activeContractValue]
+  ];
+
+  const csv = rows.map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(',')).join('\n');
+  const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = `BaoCaoQuanTri_${new Date().toISOString().slice(0, 10)}.csv`;
+  link.click();
+  URL.revokeObjectURL(url);
 }
 </script>
 </body>
