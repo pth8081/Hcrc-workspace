@@ -1,14 +1,15 @@
 // routes/email.js — POST /api/send-email: gửi email THẬT (qua lib/mailer.js), được gọi từ frontend
 // (notifyUsersByEmail/notifyMinutesDirectiveRecipients/sendApprovalOtp) song song với việc ghi log
-// mô phỏng như trước — không đổi hành vi các hàm gọi, chỉ thêm bước gửi thật nếu server đã cấu hình
-// SMTP thật (biến môi trường, xem lib/mailer.js).
+// mô phỏng như trước — không đổi hành vi các hàm gọi, chỉ thêm bước gửi thật nếu đã cấu hình đủ
+// Host SMTP (xem lib/mailer.js).
 const express = require('express');
 const router = express.Router();
 const { getPool, sql } = require('../db');
-const { sendMail } = require('../lib/mailer');
+const { sendMail, hasAuthConfigured } = require('../lib/mailer');
 
-// Host/Port/Email người gửi không nhạy cảm nên vẫn lấy từ DB.emailConfig (admin chỉnh trong màn
-// Quản trị) — chỉ tài khoản/mật khẩu SMTP thật là bắt buộc lấy từ biến môi trường (xem lib/mailer.js).
+// Host/Port/Secure/Email người gửi/Bật-tắt: nguồn DUY NHẤT là DB.emailConfig (admin chỉnh trong màn
+// Quản trị) — không nhạy cảm nên không cần đặt trong biến môi trường. Xem lib/mailer.js để biết vì
+// sao tài khoản/mật khẩu SMTP tách riêng, chỉ đọc từ .env.
 async function getEmailConfig() {
   try {
     const pool = await getPool();
@@ -22,6 +23,13 @@ async function getEmailConfig() {
     return {};
   }
 }
+
+// Trạng thái cấu hình xác thực SMTP phía server (không nhạy cảm — chỉ trả có/không, không lộ giá trị
+// SMTP_USER/SMTP_PASS thật) để màn Cấu Hình Email hiển thị cho admin biết server đang chạy chế độ có
+// xác thực hay ẩn danh, tránh phải đoán mò vì admin không xem được nội dung .env từ trình duyệt.
+router.get('/status', (req, res) => {
+  res.json({ hasAuth: hasAuthConfigured() });
+});
 
 router.post('/', async (req, res) => {
   const { to, subject, text, html } = req.body || {};
@@ -37,6 +45,7 @@ router.post('/', async (req, res) => {
       to, subject, text, html,
       host: emailConfig.smtpHost,
       port: emailConfig.smtpPort,
+      secure: emailConfig.smtpSecure,
       from: emailConfig.senderEmail
     });
     res.json(result);

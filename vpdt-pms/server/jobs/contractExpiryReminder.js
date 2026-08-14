@@ -109,7 +109,8 @@ async function checkContractExpiryReminders() {
             sendResult = await sendMail({
               to: recipients.map(r => r.email),
               subject, text: body,
-              host: emailConfig.smtpHost, port: emailConfig.smtpPort, from: emailConfig.senderEmail
+              host: emailConfig.smtpHost, port: emailConfig.smtpPort, secure: emailConfig.smtpSecure,
+              from: emailConfig.senderEmail
             });
           } catch (err) {
             console.error('⛔ [Nhắc hạn hợp đồng] Gửi email thật thất bại:', err.message);

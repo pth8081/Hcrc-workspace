@@ -1258,7 +1258,8 @@
     <!-- CẤU HÌNH HỆ THỐNG EMAIL -->
     <div class="bg-amber-50 p-4 rounded border border-amber-300 space-y-3">
       <h3 class="font-bold text-amber-900 text-sm flex items-center gap-1">✉️ Cấu Hình Máy Chủ Gửi Email Thông Báo</h3>
-      <p class="text-[11px] text-gray-500 italic">Host/Port/Email người gửi chỉnh trực tiếp ở đây. Máy chủ SMTP thật (bắt buộc SMTP_HOST, tài khoản/mật khẩu chỉ cần nếu máy chủ yêu cầu xác thực) được cấu hình riêng ở file .env trên server (theo hướng dẫn triển khai) vì lý do bảo mật — chưa khai báo SMTP_HOST thì hệ thống tự chuyển sang chế độ mô phỏng (ghi Nhật ký hệ thống, không gửi hộp thư thật).</p>
+      <p class="text-[11px] text-gray-500 italic">Host/Port/Mã hoá TLS/Email người gửi/Bật-tắt cấu hình đầy đủ ngay tại đây, không cần đụng tới server. Riêng tài khoản/mật khẩu đăng nhập SMTP (chỉ cần nếu máy chủ SMTP yêu cầu xác thực) bắt buộc đặt trong file <code>.env</code> trên server vì lý do bảo mật (không lưu trong dữ liệu ứng dụng) — để trống cả 2 biến đó nếu máy chủ SMTP không yêu cầu đăng nhập (ví dụ mail relay nội bộ). Chưa nhập SMTP Server bên dưới thì hệ thống tự chuyển sang chế độ mô phỏng (ghi Nhật ký hệ thống, không gửi hộp thư thật).</p>
+      <p id="cfgSmtpAuthStatus" class="text-[11px] font-semibold rounded px-2 py-1 bg-white border"></p>
 
       <form onsubmit="saveEmailConfig(event)" class="grid grid-cols-1 md:grid-cols-4 gap-3 bg-white p-3 rounded border text-xs">
         <div>
@@ -1275,6 +1276,14 @@
         <div>
           <label class="block font-semibold text-gray-600 mb-1">SMTP Port</label>
           <input id="cfgSmtpPort" type="number" placeholder="587" class="w-full border p-1.5 rounded" required>
+        </div>
+        <div>
+          <label class="block font-semibold text-gray-600 mb-1">Mã Hoá Kết Nối (TLS)</label>
+          <select id="cfgSmtpSecure" class="w-full border p-1.5 rounded bg-white">
+            <option value="">Tự động theo Port (khuyến nghị)</option>
+            <option value="true">Bật ngay từ đầu (SSL, thường port 465)</option>
+            <option value="false">Tắt / STARTTLS (thường port 587)</option>
+          </select>
         </div>
         <div>
           <label class="block font-semibold text-gray-600 mb-1">Email Hệ Thống (Sender)</label>
@@ -3128,8 +3137,8 @@ function syncStorage(key) {
 let dataReady = false;
 initDatabase().then(() => { dataReady = true; });
 
-// Gửi email THẬT qua backend (POST /api/send-email) nếu server đã cấu hình SMTP thật (biến môi
-// trường phía server) — chạy song song (fire-and-forget đối với luồng đang gọi: KHÔNG chặn hay đổi
+// Gửi email THẬT qua backend (POST /api/send-email) nếu đã nhập SMTP Server ở màn Quản trị > Cấu
+// Hình Email — chạy song song (fire-and-forget đối với luồng đang gọi: KHÔNG chặn hay đổi
 // hành vi của thao tác đang thực hiện, vốn đã ghi log "đã thử gửi" + cập nhật UI ngay). Nhưng khác
 // với trước đây, hàm này giờ CHỜ phản hồi thật từ backend rồi ghi THÊM 1 dòng Nhật ký hệ thống riêng
 // xác nhận máy chủ SMTP đã cấu hình có thực sự nhận email hay không (xem logEmailDeliveryResult) —
@@ -3163,7 +3172,7 @@ function logEmailDeliveryResult(module, targetCode, addresses, result, networkEr
   if (!result) return;
   if (result.simulated) {
     logSystemAction(module, 'EMAIL_SIMULATED',
-      `Server chưa cấu hình SMTP_HOST thật (.env) — email chỉ mô phỏng, KHÔNG gửi thật tới: ${addresses.join(', ')}`,
+      `Chưa nhập SMTP Server ở màn Quản trị > Cấu Hình Email (hoặc đang Tắt gửi mail) — email chỉ mô phỏng, KHÔNG gửi thật tới: ${addresses.join(', ')}`,
       'WARNING', targetCode);
     return;
   }
@@ -3316,10 +3325,12 @@ function saveEmailConfig(e) {
   if (reminderDays.length === 0) {
     return alert('⛔ Vui lòng nhập ít nhất 1 mốc số ngày nhắc hết hạn hợp lệ (vd: 30, 15, 7)!');
   }
+  const secureRaw = document.getElementById('cfgSmtpSecure').value;
   DB.emailConfig = {
     enabled: document.getElementById('cfgEmailEnabled').value === 'true',
     smtpHost: document.getElementById('cfgSmtpHost').value.trim(),
     smtpPort: parseInt(document.getElementById('cfgSmtpPort').value, 10) || 587,
+    smtpSecure: secureRaw === '' ? null : secureRaw === 'true',
     senderEmail: document.getElementById('cfgSenderEmail').value.trim(),
     contractExpiryReminderDays: reminderDays,
     contractExpiryCcEmails: parseEmailListInput(document.getElementById('cfgContractReminderCc').value)
@@ -3334,10 +3345,38 @@ function loadEmailConfigToForm() {
   document.getElementById('cfgEmailEnabled').value = DB.emailConfig.enabled !== false ? 'true' : 'false';
   document.getElementById('cfgSmtpHost').value = DB.emailConfig.smtpHost || 'smtp.gmail.com';
   document.getElementById('cfgSmtpPort').value = DB.emailConfig.smtpPort || 587;
+  document.getElementById('cfgSmtpSecure').value = DB.emailConfig.smtpSecure === true ? 'true'
+    : DB.emailConfig.smtpSecure === false ? 'false' : '';
   document.getElementById('cfgSenderEmail').value = DB.emailConfig.senderEmail || 'dms-noreply@company.com';
   document.getElementById('cfgContractReminderDays').value = (DB.emailConfig.contractExpiryReminderDays && DB.emailConfig.contractExpiryReminderDays.length
     ? DB.emailConfig.contractExpiryReminderDays : [30, 15, 7]).join(', ');
   document.getElementById('cfgContractReminderCc').value = (DB.emailConfig.contractExpiryCcEmails || []).join(', ');
+  loadSmtpAuthStatus();
+}
+
+// Hỏi backend server đang cấu hình tài khoản/mật khẩu đăng nhập SMTP (.env) hay không, để hiển thị
+// (không nhạy cảm — chỉ có/không, không lộ giá trị thật) cho admin biết chắc server đang chạy đúng
+// chế độ mình định dùng (có xác thực / relay ẩn danh), vì không xem được nội dung .env từ trình duyệt.
+function loadSmtpAuthStatus() {
+  const el = document.getElementById('cfgSmtpAuthStatus');
+  if (!el) return;
+  el.className = 'text-[11px] font-semibold rounded px-2 py-1 bg-gray-100 border text-gray-500';
+  el.textContent = '⏳ Đang kiểm tra trạng thái xác thực SMTP trên server...';
+  fetch('/api/send-email/status')
+    .then(res => res.json())
+    .then(data => {
+      if (data.hasAuth) {
+        el.className = 'text-[11px] font-semibold rounded px-2 py-1 bg-blue-50 border border-blue-200 text-blue-700';
+        el.textContent = '🔒 Server đang cấu hình CÓ xác thực (SMTP_USER/SMTP_PASS đã đặt trong .env).';
+      } else {
+        el.className = 'text-[11px] font-semibold rounded px-2 py-1 bg-slate-50 border border-slate-200 text-slate-600';
+        el.textContent = '🔓 Server đang cấu hình KHÔNG xác thực (chưa đặt SMTP_USER/SMTP_PASS trong .env — kết nối ẩn danh tới máy chủ SMTP).';
+      }
+    })
+    .catch(() => {
+      el.className = 'text-[11px] font-semibold rounded px-2 py-1 bg-red-50 border border-red-200 text-red-700';
+      el.textContent = '⚠️ Không kiểm tra được trạng thái xác thực SMTP (không liên hệ được backend).';
+    });
 }
 
 // --- CÁ NHÂN HÓA USER ---

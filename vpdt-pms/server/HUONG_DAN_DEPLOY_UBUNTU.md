@@ -153,37 +153,41 @@ DB_TRUST_CERT=true
 
 ## 5b. Cấu hình gửi email thật (SMTP)
 
-Mặc định hệ thống chỉ **mô phỏng** gửi email (ghi vào Nhật ký hệ thống, không gửi thật) cho tới khi
-khai báo `SMTP_HOST` trong `.env`. `SMTP_USER`/`SMTP_PASS` là **tùy chọn** — chỉ cần nếu máy chủ
-SMTP yêu cầu đăng nhập.
+Cấu hình gửi email chia làm 2 nơi, **mỗi phần chỉ có đúng 1 nguồn**, không trùng lặp/không chồng
+chéo ưu tiên:
+
+- **Host / Port / Mã hoá TLS / Email người gửi / Bật-tắt gửi mail** — cấu hình trực tiếp trên web,
+  tại màn **Quản trị > Cấu Hình Email**. Đổi ở đây có hiệu lực ngay, không cần đụng server hay
+  khởi động lại. Mặc định hệ thống chỉ **mô phỏng** gửi email (ghi vào Nhật ký hệ thống, không gửi
+  thật) cho tới khi nhập SMTP Server ở màn này.
+- **Tài khoản/mật khẩu đăng nhập SMTP** (`SMTP_USER`/`SMTP_PASS`, chỉ cần nếu máy chủ SMTP yêu cầu
+  xác thực) — bắt buộc đặt trong `.env` trên server vì lý do bảo mật (không lưu trong dữ liệu ứng
+  dụng, vì `GET /api/data` trả nguyên dữ liệu cho mọi client gọi được). Để trống **cả 2** biến này
+  nếu máy chủ SMTP không yêu cầu đăng nhập — hệ thống hỗ trợ song song cả 2 kiểu.
 
 **Trường hợp 1 — Gmail (cần xác thực):**
 ```
-SMTP_HOST=smtp.gmail.com
-SMTP_PORT=587
-SMTP_SECURE=false
 SMTP_USER=your-email@gmail.com
 SMTP_PASS=your-app-password
-SMTP_FROM=your-email@gmail.com
 ```
 Bật xác thực 2 bước cho tài khoản Gmail, tạo "Mật khẩu ứng dụng" (App Password) tại
 `https://myaccount.google.com/apppasswords`, dùng mật khẩu đó cho `SMTP_PASS` (Google đã chặn đăng
-nhập SMTP bằng mật khẩu thường).
+nhập SMTP bằng mật khẩu thường). Sau đó vào **Quản trị > Cấu Hình Email** trên web, điền
+`SMTP Server = smtp.gmail.com`, `Port = 587`, `Mã hoá TLS = Tắt / STARTTLS`.
 
 **Trường hợp 2 — mail relay nội bộ công ty (KHÔNG cần xác thực):** nếu relay chỉ cho phép kết nối
-từ IP nội bộ tin cậy (không hỏi tài khoản/mật khẩu), để trống `SMTP_USER`/`SMTP_PASS`:
+từ IP nội bộ tin cậy (không hỏi tài khoản/mật khẩu), để trống cả `SMTP_USER` lẫn `SMTP_PASS` trong
+`.env`. Nếu relay dùng chứng chỉ TLS tự ký (self-signed), thêm:
 ```
-SMTP_HOST=mail.noibobo.local
-SMTP_PORT=25
-SMTP_FROM=vpdt-noreply@congty.vn
+SMTP_TLS_REJECT_UNAUTHORIZED=false
 ```
-Nếu relay dùng chứng chỉ TLS tự ký (self-signed), thêm `SMTP_TLS_REJECT_UNAUTHORIZED=false`.
+Sau đó vào **Quản trị > Cấu Hình Email** trên web điền Host/Port/Email người gửi thật của relay nội
+bộ. Màn này cũng hiển thị sẵn dòng trạng thái "Server đang cấu hình CÓ/KHÔNG xác thực" để xác nhận
+lại đúng chế độ đang chạy, không cần mở file `.env` để kiểm tra.
 
-Host/Port/Email người gửi hiển thị trong màn Quản trị > Cấu Hình Email vẫn chỉnh được trực tiếp
-trên web như trước — chỉ riêng tài khoản/mật khẩu đăng nhập SMTP (khi máy chủ yêu cầu) là bắt buộc
-đặt trong `.env` vì lý do bảo mật (không lưu trong dữ liệu ứng dụng).
-
-> ⚠️ Sau khi sửa `.env`, cần khởi động lại server (`pm2 restart vpdt` hoặc tương đương) để áp dụng.
+> ⚠️ Sau khi sửa `.env` (chỉ áp dụng cho tài khoản/mật khẩu SMTP), cần khởi động lại server
+> (`pm2 restart vpdt` hoặc tương đương) để áp dụng. Đổi Host/Port/TLS/Email người gửi/Bật-tắt trên
+> màn Cấu Hình Email thì KHÔNG cần khởi động lại.
 
 ---
 
