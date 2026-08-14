@@ -1254,7 +1254,7 @@
     <!-- CẤU HÌNH HỆ THỐNG EMAIL -->
     <div class="bg-amber-50 p-4 rounded border border-amber-300 space-y-3">
       <h3 class="font-bold text-amber-900 text-sm flex items-center gap-1">✉️ Cấu Hình Máy Chủ Gửi Email Thông Báo</h3>
-      <p class="text-[11px] text-gray-500 italic">Host/Port/Email người gửi chỉnh trực tiếp ở đây. Tài khoản/mật khẩu đăng nhập SMTP thật được cấu hình riêng ở file .env trên server (theo hướng dẫn triển khai) vì lý do bảo mật — chưa khai báo thì hệ thống tự chuyển sang chế độ mô phỏng (ghi Nhật ký hệ thống, không gửi hộp thư thật).</p>
+      <p class="text-[11px] text-gray-500 italic">Host/Port/Email người gửi chỉnh trực tiếp ở đây. Máy chủ SMTP thật (bắt buộc SMTP_HOST, tài khoản/mật khẩu chỉ cần nếu máy chủ yêu cầu xác thực) được cấu hình riêng ở file .env trên server (theo hướng dẫn triển khai) vì lý do bảo mật — chưa khai báo SMTP_HOST thì hệ thống tự chuyển sang chế độ mô phỏng (ghi Nhật ký hệ thống, không gửi hộp thư thật).</p>
 
       <form onsubmit="saveEmailConfig(event)" class="grid grid-cols-1 md:grid-cols-4 gap-3 bg-white p-3 rounded border text-xs">
         <div>

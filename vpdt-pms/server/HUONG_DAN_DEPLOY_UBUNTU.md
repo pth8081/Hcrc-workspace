@@ -154,8 +154,10 @@ DB_TRUST_CERT=true
 ## 5b. Cấu hình gửi email thật (SMTP)
 
 Mặc định hệ thống chỉ **mô phỏng** gửi email (ghi vào Nhật ký hệ thống, không gửi thật) cho tới khi
-khai báo đủ 2 biến `SMTP_USER` và `SMTP_PASS` trong `.env`:
+khai báo `SMTP_HOST` trong `.env`. `SMTP_USER`/`SMTP_PASS` là **tùy chọn** — chỉ cần nếu máy chủ
+SMTP yêu cầu đăng nhập.
 
+**Trường hợp 1 — Gmail (cần xác thực):**
 ```
 SMTP_HOST=smtp.gmail.com
 SMTP_PORT=587
@@ -164,14 +166,22 @@ SMTP_USER=your-email@gmail.com
 SMTP_PASS=your-app-password
 SMTP_FROM=your-email@gmail.com
 ```
-
-Nếu dùng Gmail: bật xác thực 2 bước cho tài khoản, tạo "Mật khẩu ứng dụng" (App Password) tại
+Bật xác thực 2 bước cho tài khoản Gmail, tạo "Mật khẩu ứng dụng" (App Password) tại
 `https://myaccount.google.com/apppasswords`, dùng mật khẩu đó cho `SMTP_PASS` (Google đã chặn đăng
-nhập SMTP bằng mật khẩu thường). Có thể dùng SMTP nội bộ công ty tương tự, chỉ cần đổi `SMTP_HOST`.
+nhập SMTP bằng mật khẩu thường).
+
+**Trường hợp 2 — mail relay nội bộ công ty (KHÔNG cần xác thực):** nếu relay chỉ cho phép kết nối
+từ IP nội bộ tin cậy (không hỏi tài khoản/mật khẩu), để trống `SMTP_USER`/`SMTP_PASS`:
+```
+SMTP_HOST=mail.noibobo.local
+SMTP_PORT=25
+SMTP_FROM=vpdt-noreply@congty.vn
+```
+Nếu relay dùng chứng chỉ TLS tự ký (self-signed), thêm `SMTP_TLS_REJECT_UNAUTHORIZED=false`.
 
 Host/Port/Email người gửi hiển thị trong màn Quản trị > Cấu Hình Email vẫn chỉnh được trực tiếp
-trên web như trước — chỉ riêng tài khoản/mật khẩu đăng nhập SMTP là bắt buộc đặt trong `.env` vì lý
-do bảo mật (không lưu trong dữ liệu ứng dụng).
+trên web như trước — chỉ riêng tài khoản/mật khẩu đăng nhập SMTP (khi máy chủ yêu cầu) là bắt buộc
+đặt trong `.env` vì lý do bảo mật (không lưu trong dữ liệu ứng dụng).
 
 > ⚠️ Sau khi sửa `.env`, cần khởi động lại server (`pm2 restart vpdt` hoặc tương đương) để áp dụng.
 
