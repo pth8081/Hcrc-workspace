@@ -118,7 +118,10 @@ async function checkContractExpiryReminders() {
 
         let statusSuffix = '';
         if (recipients.length && !sendResult.simulated) {
-          statusSuffix = sendResult.failed.length ? `; LỖI gửi thật tới: ${sendResult.failed.join(', ')}` : ' (đã gửi email thật)';
+          const hostLabel = sendResult.host ? ` (máy chủ SMTP ${sendResult.host}:${sendResult.port || ''})` : '';
+          statusSuffix = sendResult.failed.length
+            ? `; LỖI gửi thật tới: ${sendResult.failed.join(', ')}${hostLabel}`
+            : ` (đã xác nhận gửi email thật${hostLabel})`;
         }
 
         systemLogs.unshift({

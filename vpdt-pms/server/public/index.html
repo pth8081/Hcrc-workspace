@@ -2985,17 +2985,56 @@ let dataReady = false;
 initDatabase().then(() => { dataReady = true; });
 
 // Gửi email THẬT qua backend (POST /api/send-email) nếu server đã cấu hình SMTP thật (biến môi
-// trường phía server) — chạy song song (fire-and-forget), KHÔNG chặn hay đổi hành vi của luồng đang
-// gọi (vốn đã ghi log mô phỏng + cập nhật UI ngay, không chờ email). Nếu server chưa cấu hình SMTP,
-// backend trả về simulated:true và không có gì thay đổi so với trước (chỉ mô phỏng qua console.log).
-function dispatchRealEmail(recipients, subject, bodyText) {
+// trường phía server) — chạy song song (fire-and-forget đối với luồng đang gọi: KHÔNG chặn hay đổi
+// hành vi của thao tác đang thực hiện, vốn đã ghi log "đã thử gửi" + cập nhật UI ngay). Nhưng khác
+// với trước đây, hàm này giờ CHỜ phản hồi thật từ backend rồi ghi THÊM 1 dòng Nhật ký hệ thống riêng
+// xác nhận máy chủ SMTP đã cấu hình có thực sự nhận email hay không (xem logEmailDeliveryResult) —
+// vì dòng log "đã thử gửi" ghi ngay lúc thao tác không phản ánh được điều đó.
+function dispatchRealEmail(recipients, subject, bodyText, context) {
   const addresses = (recipients || []).map(r => (typeof r === 'string' ? r : r?.email)).filter(Boolean);
   if (addresses.length === 0) return;
+  const ctxModule = (context && context.module) || 'EMAIL';
+  const ctxTarget = (context && context.targetCode) || '';
   fetch('/api/send-email', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ to: addresses, subject, text: bodyText })
-  }).catch(err => console.error('Lỗi gửi email thật:', err.message));
+  })
+    .then(res => res.json())
+    .then(result => logEmailDeliveryResult(ctxModule, ctxTarget, addresses, result))
+    .catch(err => logEmailDeliveryResult(ctxModule, ctxTarget, addresses, null, err.message));
+}
+
+// Ghi dòng Nhật ký hệ thống XÁC NHẬN kết quả gửi email THẬT — dựa trên phản hồi thật của backend
+// (đã liên hệ máy chủ SMTP đã cấu hình), không phải giả định lúc thao tác. Bao gồm rõ máy chủ
+// host:port đã dùng và tách riêng người nhận thành công/thất bại, để kiểm tra/xác minh được trong
+// module Log thay vì chỉ biết hệ thống "đã thử gửi".
+function logEmailDeliveryResult(module, targetCode, addresses, result, networkError) {
+  if (networkError) {
+    logSystemAction(module, 'EMAIL_DELIVERY_FAILED',
+      `Không liên hệ được backend để gửi email thật (${networkError}). Người nhận dự kiến: ${addresses.join(', ')}`,
+      'WARNING', targetCode);
+    return;
+  }
+  if (!result) return;
+  if (result.simulated) {
+    logSystemAction(module, 'EMAIL_SIMULATED',
+      `Server chưa cấu hình SMTP_HOST thật (.env) — email chỉ mô phỏng, KHÔNG gửi thật tới: ${addresses.join(', ')}`,
+      'WARNING', targetCode);
+    return;
+  }
+  const host = result.host ? `${result.host}:${result.port || ''}` : '(không rõ máy chủ)';
+  const sent = result.sent || [];
+  const failed = result.failed || [];
+  if (failed.length) {
+    logSystemAction(module, 'EMAIL_DELIVERY_FAILED',
+      `Máy chủ SMTP ${host} từ chối/lỗi gửi tới: ${failed.join(', ')}` + (sent.length ? `; đã xác nhận gửi thành công tới: ${sent.join(', ')}` : ''),
+      'WARNING', targetCode);
+  } else if (sent.length) {
+    logSystemAction(module, 'EMAIL_DELIVERY_CONFIRMED',
+      `Máy chủ SMTP ${host} đã xác nhận nhận email thành công, gửi tới: ${sent.join(', ')}`,
+      'SUCCESS', targetCode);
+  }
 }
 
 // --- EMAIL SIMULATOR ---
@@ -3003,32 +3042,38 @@ function sendNotificationEmail(recipientEmail, recipientName, subject, messageBo
   if (!DB.emailConfig.enabled) return;
   if (!recipientEmail) return;
   console.log(`[DMS EMAIL SIMULATOR] To: ${recipientName} <${recipientEmail}> | Subject: ${subject}`);
-  dispatchRealEmail([recipientEmail], subject, messageBody || subject);
+  dispatchRealEmail([recipientEmail], subject, messageBody || subject, { module: 'EMAIL', targetCode: recipientEmail });
   logSystemAction('EMAIL', 'SEND_EMAIL_SUCCESS', `Đã gửi email tự động tới [${recipientName} - ${recipientEmail}] với chủ đề: "${subject}"`, 'SUCCESS', recipientEmail);
 }
 
-// Gửi + ghi log thông báo email cho 1 nhóm người nhận (theo username), gộp thành 1 dòng Nhật ký hệ
-// thống duy nhất theo đúng phân hệ nghiệp vụ gọi tới (DOC/SUBMISSION/CAR/OFFICE/MEETING) — để lọc
-// được theo "Lọc Theo Phân Hệ" ở module Log, nhất quán với cách jobs/contractExpiryReminder.js đã
-// làm ở phía server cho nhắc hạn hợp đồng. Không dùng sendNotificationEmail() vì hàm đó hard-code
-// module 'EMAIL' và ghi 1 log riêng cho mỗi người nhận — ở đây gộp thành 1 dòng dễ đọc hơn khi có
-// nhiều đồng phê duyệt cùng nhận 1 thông báo.
+// Gửi + ghi log thông báo email cho 1 nhóm người nhận (theo username hệ thống) — tra email từ
+// DB.users rồi giao cho notifyRecipientsByEmail() xử lý gửi + ghi log dùng chung.
 function notifyUsersByEmail(module, actionType, targetCode, usernames, subject, bodyText) {
   const recipients = [];
   for (const uname of new Set((usernames || []).filter(Boolean))) {
     const u = DB.users.find(x => x.username === uname);
     if (u && u.email) recipients.push(u);
   }
-  recipients.forEach(u => {
-    console.log(`[DMS EMAIL SIMULATOR] To: ${u.name} <${u.email}> | Subject: ${subject}\n  ${bodyText}`);
+  notifyRecipientsByEmail(module, actionType, targetCode, recipients, subject, bodyText);
+}
+
+// Gửi + ghi log thông báo email cho 1 nhóm người nhận đã có sẵn {name, email} (không cần tra theo
+// username hệ thống — dùng cho thành phần tham dự biên bản họp nhập tay, có thể không phải user hệ
+// thống). Gộp thành 1 dòng Nhật ký hệ thống duy nhất theo đúng phân hệ nghiệp vụ gọi tới
+// (DOC/SUBMISSION/CAR/OFFICE/MEETING/MINUTES/TASK) — để lọc được theo "Lọc Theo Phân Hệ" ở module
+// Log, nhất quán với cách jobs/contractExpiryReminder.js đã làm ở phía server cho nhắc hạn hợp đồng.
+function notifyRecipientsByEmail(module, actionType, targetCode, recipients, subject, bodyText) {
+  const valid = (recipients || []).filter(r => r && r.email);
+  valid.forEach(r => {
+    console.log(`[DMS EMAIL SIMULATOR] To: ${r.name || r.email} <${r.email}> | Subject: ${subject}\n  ${bodyText}`);
   });
-  dispatchRealEmail(recipients, subject, bodyText);
+  dispatchRealEmail(valid, subject, bodyText, { module, targetCode });
   logSystemAction(
     module, actionType,
-    recipients.length
-      ? `${bodyText} (Đã gửi tới: ${recipients.map(u => `${u.name} <${u.email}>`).join(', ')})`
+    valid.length
+      ? `${bodyText} (Đã gửi tới: ${valid.map(r => `${r.name || r.email} <${r.email}>`).join(', ')})`
       : `${bodyText} (Không có người nhận hợp lệ — thiếu email hoặc chưa cấu hình người duyệt)`,
-    recipients.length ? 'SUCCESS' : 'WARNING',
+    valid.length ? 'SUCCESS' : 'WARNING',
     targetCode
   );
 }
@@ -3053,25 +3098,13 @@ function notifyMinutesDirectiveRecipients(m, usernames, module, actionType, targ
     const r = getAttendeeEmail(m, uname);
     if (r) recipients.push(r);
   }
-  recipients.forEach(r => {
-    console.log(`[DMS EMAIL SIMULATOR] To: ${r.name} <${r.email}> | Subject: ${subject}\n  ${bodyText}`);
-  });
-  dispatchRealEmail(recipients, subject, bodyText);
-  logSystemAction(
-    module, actionType,
-    recipients.length
-      ? `${bodyText} (Đã gửi tới: ${recipients.map(r => `${r.name} <${r.email}>`).join(', ')})`
-      : `${bodyText} (Không có người nhận hợp lệ — thiếu email hoặc chưa cấu hình người duyệt)`,
-    recipients.length ? 'SUCCESS' : 'WARNING',
-    targetCode
-  );
+  notifyRecipientsByEmail(module, actionType, targetCode, recipients, subject, bodyText);
 }
 
 // ==========================================
 // XÁC THỰC BỔ SUNG KHI DUYỆT (nhập lại mật khẩu / OTP email) — perms.approverAuthLevel, cấu hình ở
 // khối "9. Người Duyệt" trong Quản trị. Chỉ áp dụng cho hành động DUYỆT (không phải Từ chối/Hủy) ở
 // 3 module Văn bản trình/Đăng ký xe/Văn phòng — xem lời gọi withApprovalAuth() ở mỗi module.
-// OTP hiện đang mô phỏng giống mọi email khác của hệ thống (console.log), chưa gửi email thật.
 // ==========================================
 let pendingApprovalAction = null;
 let pendingApprovalOtpCode = null;
@@ -3099,7 +3132,7 @@ function sendApprovalOtp(isResend) {
     const otpSubject = '[VPDT] Mã xác thực phê duyệt';
     const otpBody = `Mã OTP của bạn: ${pendingApprovalOtpCode} (chỉ dùng 1 lần cho lượt duyệt này)`;
     console.log(`[DMS EMAIL SIMULATOR] To: ${currentUser.name} <${currentUser.email}> | Subject: ${otpSubject}\n  ${otpBody}`);
-    dispatchRealEmail([currentUser.email], otpSubject, otpBody);
+    dispatchRealEmail([currentUser.email], otpSubject, otpBody, { module: 'AUTH', targetCode: currentUser.username });
   }
   logSystemAction(
     'AUTH', 'SEND_APPROVAL_OTP',
@@ -5606,6 +5639,12 @@ async function submitMeetingMinutes(e) {
   const anyTaskCreated = autoCreateTasksFromDirectives(newMinutes);
   syncStorage('meetingMinutes');
   logSystemAction('MINUTES', 'CREATE_MINUTES', `Lập biên bản họp [${code} - ${title}]`, 'SUCCESS', code);
+  const attendeeRecipients = validAttendees
+    .filter(a => a.email && a.email.trim())
+    .map(a => ({ name: a.name, email: a.email.trim() }));
+  notifyRecipientsByEmail('MINUTES', 'NOTIFY_MINUTES_CREATED', code, attendeeRecipients,
+    `[VPDT] Biên bản họp mới: ${title} (${code})`,
+    `Biên bản họp "${title}" (${code}) đã được lập. Vui lòng đăng nhập hệ thống Văn phòng điện tử để xem chi tiết.`);
   alert('✅ Đã lưu biên bản họp thành công!' + (anyTaskCreated ? ' Các chỉ đạo đã gán người thực hiện đã được tự động chuyển thành Công việc.' : ''));
   e.target.reset();
   minutesDirectives = [];
