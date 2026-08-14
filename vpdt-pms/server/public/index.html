@@ -478,8 +478,14 @@
   <div id="meetingSection" class="hidden space-y-6">
     <div class="bg-emerald-50 p-4 rounded border border-emerald-200 space-y-3">
       <h3 class="font-bold text-emerald-900 text-base flex items-center gap-2">📅 Quản Lý & Đặt Lịch Phòng Họp</h3>
-      <p class="text-xs text-emerald-800">Đăng ký lịch sử dụng phòng họp. Phiếu đặt chỉ được xác nhận sau khi được phê duyệt.</p> 
-      
+      <p class="text-xs text-emerald-800">Đăng ký lịch sử dụng phòng họp. Phiếu đặt chỉ được xác nhận sau khi được phê duyệt. Hệ thống tự động kiểm tra trùng giờ trong cùng 1 phòng.</p>
+      <div class="flex gap-2 flex-wrap">
+        <button type="button" onclick="setMeetingSubTab('REGISTER')" id="btnMeetingSubRegister" class="px-3 py-1 rounded text-xs font-bold bg-emerald-700 text-white">📝 Đăng Ký</button>
+        <button type="button" onclick="setMeetingSubTab('CALENDAR')" id="btnMeetingSubCalendar" class="px-3 py-1 rounded text-xs font-bold bg-gray-200 text-gray-700">🗓️ Lịch Họp</button>
+      </div>
+    </div>
+
+    <div id="meetingRegisterTabContent" class="space-y-6">
       <form onsubmit="submitMeetingReq(event)" class="bg-white p-3 rounded border text-xs space-y-3">
         <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
           <div>
@@ -492,11 +498,7 @@
           </div>
           <div>
             <label class="block font-semibold text-gray-600 mb-1">Chọn Phòng Họp</label>
-            <select id="meetingRoom" class="w-full border p-1.5 rounded bg-white" required>
-              <option value="Phòng Họp Lớn A (Tầng 3 - Sức chứa 50 người)">Phòng Họp Lớn A (Tầng 3 - 50 người)</option>
-              <option value="Phòng Họp Nhỏ B (Tầng 2 - Sức chứa 15 người)">Phòng Họp Nhỏ B (Tầng 2 - 15 người)</option>
-              <option value="Phòng Hội Thảo Trực Tuyến C (Tầng 5)">Phòng Hội Thảo Trực Tuyến C (Tầng 5)</option>
-            </select>
+            <select id="meetingRoom" class="w-full border p-1.5 rounded bg-white" required></select>
           </div>
           <div class="md:col-span-2">
             <label class="block font-semibold text-gray-600 mb-1">Chủ Đề Cuộc Họp</label>
@@ -527,59 +529,71 @@
           <button type="submit" class="bg-emerald-600 text-white px-5 py-2 rounded font-bold hover:bg-emerald-700">Gửi Đăng Ký Phòng Họp</button>
         </div>
       </form>
-    </div>
 
-    <div class="bg-gray-50 p-4 rounded-lg border space-y-3">
-      <h4 class="font-bold text-gray-700 text-sm">🔍 Tìm Kiếm & Lọc Lịch Phòng Họp</h4>
-      <div class="grid grid-cols-1 md:grid-cols-5 gap-3">
-        <div>
-          <label class="block text-xs font-semibold text-gray-600 mb-1">Lọc Theo Phòng Ban</label>
-          <select id="filterDeptMeeting" onchange="onMeetingFilterChange()" class="w-full border p-2 rounded text-sm bg-white">
-            <option value="">-- Tất cả phòng ban --</option>
-          </select>
+      <div class="bg-gray-50 p-4 rounded-lg border space-y-3">
+        <h4 class="font-bold text-gray-700 text-sm">🔍 Tìm Kiếm & Lọc Lịch Phòng Họp</h4>
+        <div class="grid grid-cols-1 md:grid-cols-5 gap-3">
+          <div>
+            <label class="block text-xs font-semibold text-gray-600 mb-1">Lọc Theo Phòng Ban</label>
+            <select id="filterDeptMeeting" onchange="onMeetingFilterChange()" class="w-full border p-2 rounded text-sm bg-white">
+              <option value="">-- Tất cả phòng ban --</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-gray-600 mb-1">Lọc Theo Trạng Thái</label>
+            <select id="filterStatusMeeting" onchange="onMeetingFilterChange()" class="w-full border p-2 rounded text-sm bg-white">
+              <option value="">-- Tất cả trạng thái --</option>
+              <option value="APPROVED">Đã Duyệt Lịch</option>
+              <option value="PENDING">Đang Chờ Duyệt</option>
+              <option value="CANCELLED">Đã Hủy Lịch</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-gray-600 mb-1">Từ Ngày</label>
+            <input id="filterFromDateMeeting" type="date" onchange="onMeetingFilterChange()" class="w-full border p-2 rounded text-sm bg-white">
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-gray-600 mb-1">Đến Ngày</label>
+            <input id="filterToDateMeeting" type="date" onchange="onMeetingFilterChange()" class="w-full border p-2 rounded text-sm bg-white">
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-gray-600 mb-1">Từ Khóa</label>
+            <input id="filterKeywordMeeting" oninput="onMeetingFilterChange()" placeholder="Mã, chủ đề, người đặt..." class="w-full border p-2 rounded text-sm">
+          </div>
         </div>
-        <div>
-          <label class="block text-xs font-semibold text-gray-600 mb-1">Lọc Theo Trạng Thái</label>
-          <select id="filterStatusMeeting" onchange="onMeetingFilterChange()" class="w-full border p-2 rounded text-sm bg-white">
-            <option value="">-- Tất cả trạng thái --</option>
-            <option value="APPROVED">Đã Duyệt Lịch</option>
-            <option value="PENDING">Đang Chờ Duyệt</option>
-            <option value="CANCELLED">Đã Hủy Lịch</option>
-          </select>
+      </div>
+
+      <div class="space-y-3">
+        <h3 class="font-bold text-gray-800">📋 Danh Sách Đặt Lịch Phòng Họp & Trạng Thái Phê Duyệt</h3>
+        <div class="overflow-x-auto">
+          <table class="w-full border-collapse border text-xs bg-white">
+            <thead>
+              <tr class="bg-gray-100 text-left text-gray-700">
+                <th class="border p-2">Mã & Phòng Họp</th>
+                <th class="border p-2">Chủ Đề & Số Người</th>
+                <th class="border p-2">Thời Gian Sử Dụng</th>
+                <th class="border p-2">Phòng Ban & Người Đặt</th>
+                <th class="border p-2">Trạng Thái & Phê Duyệt</th>
+                <th class="border p-2 text-center min-w-[140px]">Thao Tác</th>
+              </tr>
+            </thead>
+            <tbody id="meetingTableBody"></tbody>
+          </table>
         </div>
-        <div>
-          <label class="block text-xs font-semibold text-gray-600 mb-1">Từ Ngày</label>
-          <input id="filterFromDateMeeting" type="date" onchange="onMeetingFilterChange()" class="w-full border p-2 rounded text-sm bg-white">
-        </div>
-        <div>
-          <label class="block text-xs font-semibold text-gray-600 mb-1">Đến Ngày</label>
-          <input id="filterToDateMeeting" type="date" onchange="onMeetingFilterChange()" class="w-full border p-2 rounded text-sm bg-white">
-        </div>
-        <div>
-          <label class="block text-xs font-semibold text-gray-600 mb-1">Từ Khóa</label>
-          <input id="filterKeywordMeeting" oninput="onMeetingFilterChange()" placeholder="Mã, chủ đề, người đặt..." class="w-full border p-2 rounded text-sm">
-        </div>
+        <div id="paginationContainer_meeting"></div>
       </div>
     </div>
 
-    <div class="space-y-3">
-      <h3 class="font-bold text-gray-800">📋 Danh Sách Đặt Lịch Phòng Họp & Trạng Thái Phê Duyệt</h3>
-      <div class="overflow-x-auto">
-        <table class="w-full border-collapse border text-xs bg-white">
-          <thead>
-            <tr class="bg-gray-100 text-left text-gray-700">
-              <th class="border p-2">Mã & Phòng Họp</th>
-              <th class="border p-2">Chủ Đề & Số Người</th>
-              <th class="border p-2">Thời Gian Sử Dụng</th>
-              <th class="border p-2">Phòng Ban & Người Đặt</th>
-              <th class="border p-2">Trạng Thái & Phê Duyệt</th>
-              <th class="border p-2 text-center min-w-[140px]">Thao Tác</th>
-            </tr>
-          </thead>
-          <tbody id="meetingTableBody"></tbody>
-        </table>
+    <div id="meetingCalendarTabContent" class="hidden space-y-3">
+      <div class="bg-white p-3 rounded border text-xs flex flex-wrap items-center gap-3">
+        <label class="font-semibold text-gray-600">Xem lịch ngày:</label>
+        <input id="meetingCalDate" type="date" onchange="renderMeetingCalendar()" class="border p-1.5 rounded">
+        <div class="flex items-center gap-1.5 ml-auto">
+          <span class="inline-block w-4 h-4 bg-white border border-gray-300"></span><span class="text-gray-600">Còn trống (bấm để đặt)</span>
+          <span class="inline-block w-4 h-4 bg-red-500 border border-red-600 ml-3"></span><span class="text-gray-600">Đã có lịch (bấm để xem)</span>
+        </div>
       </div>
-      <div id="paginationContainer_meeting"></div>
+      <div id="meetingCalendarGrid"></div>
     </div>
   </div>
 
@@ -2006,6 +2020,15 @@ let officeItems = [];
 let minutesDirectives = [];
 // Danh sách dòng "Thành phần tham dự" đang nhập/sửa — mỗi dòng gồm Họ tên/Chức danh/Phòng/SĐT.
 let minutesAttendeesRows = [];
+
+// Danh sách phòng họp — nguồn dữ liệu DUY NHẤT dùng chung cho cả <select> đăng ký lẫn lưới Lịch Họp,
+// tránh lệch dữ liệu giữa 2 nơi. "short" dùng làm tiêu đề cột gọn trên lưới.
+const MEETING_ROOMS = [
+  { name: 'Phòng Họp Lớn A (Tầng 3 - Sức chứa 50 người)', short: 'Phòng A (50 người)' },
+  { name: 'Phòng Họp Nhỏ B (Tầng 2 - Sức chứa 15 người)', short: 'Phòng B (15 người)' },
+  { name: 'Phòng Hội Thảo Trực Tuyến C (Tầng 5)', short: 'Phòng C (Online)' }
+];
+let activeMeetingSubTab = 'REGISTER';
 // Khác null khi đang SỬA 1 biên bản đã tạo (thay vì tạo mới) — chỉ người tạo mới sửa được.
 let editingMinutesId = null;
 // Phân hệ đang chọn trong module Truyền thông nội bộ: NEWS/TRAINING/REWARD/SHARE.
@@ -2783,7 +2806,7 @@ function switchTab(tabName) {
   if (tabName === 'submission') { renderDynamicInputsForModule('SUBMISSION', 'dynamicFieldsContainer_SUBMISSION'); renderSubmissionReqs(); }
   if (tabName === 'task') { renderTasks(); }
   if (tabName === 'contract') { renderContracts(); }
-  if (tabName === 'meeting') { renderMeetings(); }
+  if (tabName === 'meeting') { renderMeetings(); setMeetingSubTab(activeMeetingSubTab); }
   if (tabName === 'minutes') {
     renderMeetingMinutes();
     populateMinutesLinkSelect();
@@ -2903,6 +2926,13 @@ function populateDropdowns() {
   const meetingDept = document.getElementById('meetingDept');
   if (meetingDept) {
     meetingDept.innerHTML = getScopedDepts(currentUser, currentUser.perms?.meetingBookScope).map(d => `<option value="${escapeHtml(d)}">${escapeHtml(d)}</option>`).join('');
+  }
+
+  const meetingRoomSel = document.getElementById('meetingRoom');
+  if (meetingRoomSel) {
+    const current = meetingRoomSel.value;
+    meetingRoomSel.innerHTML = MEETING_ROOMS.map(r => `<option value="${escapeHtml(r.name)}">${escapeHtml(r.name)}</option>`).join('');
+    if (MEETING_ROOMS.some(r => r.name === current)) meetingRoomSel.value = current;
   }
 
   const carDept = document.getElementById('carDept');
@@ -4362,6 +4392,110 @@ function viewContract(contractId) {
 // ==========================================
 // 5. MODULE PHÒNG HỌP (MEETING MODULE)
 // ==========================================
+
+// Tìm 1 lịch đã có (chưa Hủy) cùng phòng có khung giờ giao nhau với [startTime, endTime) — tính cả
+// lịch Đang chờ duyệt lẫn Đã duyệt là đang "chiếm chỗ", để chặn ngay từ lúc đăng ký thay vì để dồn
+// nhiều yêu cầu trùng giờ về cho người phê duyệt. excludeId dùng khi kiểm tra lại 1 lịch đang sửa.
+function findMeetingConflict(room, startTime, endTime, excludeId) {
+  const newStart = new Date(startTime).getTime();
+  const newEnd = new Date(endTime).getTime();
+  return DB.meetings.find(m => {
+    if (excludeId && m.id === excludeId) return false;
+    if (m.status === 'CANCELLED') return false;
+    if (m.room !== room) return false;
+    const mStart = new Date(m.startTime).getTime();
+    const mEnd = new Date(m.endTime).getTime();
+    return newStart < mEnd && mStart < newEnd;
+  });
+}
+
+function toDatetimeLocalValue(date) {
+  const pad = n => String(n).padStart(2, '0');
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
+
+// Khung giờ 07:00 - 19:00, mỗi ô 30 phút, dùng cho lưới Lịch Họp.
+function generateMeetingTimeSlots() {
+  const slots = [];
+  for (let h = 7; h < 19; h++) {
+    slots.push(`${String(h).padStart(2, '0')}:00`);
+    slots.push(`${String(h).padStart(2, '0')}:30`);
+  }
+  return slots;
+}
+
+function setMeetingSubTab(subTab) {
+  activeMeetingSubTab = subTab;
+  const btnRegister = document.getElementById('btnMeetingSubRegister');
+  const btnCalendar = document.getElementById('btnMeetingSubCalendar');
+  if (btnRegister) btnRegister.className = subTab === 'REGISTER' ? 'px-3 py-1 rounded text-xs font-bold bg-emerald-700 text-white' : 'px-3 py-1 rounded text-xs font-bold bg-gray-200 text-gray-700';
+  if (btnCalendar) btnCalendar.className = subTab === 'CALENDAR' ? 'px-3 py-1 rounded text-xs font-bold bg-emerald-700 text-white' : 'px-3 py-1 rounded text-xs font-bold bg-gray-200 text-gray-700';
+  document.getElementById('meetingRegisterTabContent').classList.toggle('hidden', subTab !== 'REGISTER');
+  document.getElementById('meetingCalendarTabContent').classList.toggle('hidden', subTab !== 'CALENDAR');
+  if (subTab === 'CALENDAR') renderMeetingCalendar();
+}
+
+// Lưới xem nhanh phòng trống/bận theo ngày — ô trắng bấm để đặt nhanh (đổ sẵn phòng/ngày/giờ sang
+// tab Đăng Ký), ô đỏ bấm để xem nhanh thông tin lịch đang chiếm chỗ đó.
+function renderMeetingCalendar() {
+  const dateInput = document.getElementById('meetingCalDate');
+  if (!dateInput) return;
+  if (!dateInput.value) dateInput.value = new Date().toISOString().slice(0, 10);
+  const dateStr = dateInput.value;
+  const grid = document.getElementById('meetingCalendarGrid');
+  if (!grid) return;
+
+  const slots = generateMeetingTimeSlots();
+
+  let html = '<div class="overflow-x-auto"><table class="w-full border-collapse border text-xs bg-white">';
+  html += '<thead><tr class="bg-gray-100"><th class="border p-2 w-16">Giờ</th>' +
+    MEETING_ROOMS.map(r => `<th class="border p-2">${escapeHtml(r.short)}</th>`).join('') + '</tr></thead><tbody>';
+
+  slots.forEach(slot => {
+    const slotStart = new Date(`${dateStr}T${slot}:00`);
+    const slotEnd = new Date(slotStart.getTime() + 30 * 60000);
+    html += `<tr><td class="border p-1 text-center text-gray-500 font-mono">${slot}</td>`;
+    MEETING_ROOMS.forEach((r, ridx) => {
+      const booking = DB.meetings.find(m => {
+        if (m.status === 'CANCELLED') return false;
+        if (m.room !== r.name) return false;
+        const mStart = new Date(m.startTime);
+        const mEnd = new Date(m.endTime);
+        return slotStart < mEnd && mStart < slotEnd;
+      });
+      if (booking) {
+        html += `<td class="border p-1 h-6 text-center bg-red-500 hover:bg-red-600 cursor-pointer" title="${escapeHtml(booking.title)} — bấm để xem" onclick="showMeetingSlotInfo(${booking.id})"></td>`;
+      } else {
+        html += `<td class="border p-1 h-6 text-center bg-white hover:bg-emerald-50 cursor-pointer" title="Còn trống — bấm để đặt" onclick="quickBookMeetingSlot(${ridx}, '${dateStr}', '${slot}')"></td>`;
+      }
+    });
+    html += '</tr>';
+  });
+  html += '</tbody></table></div>';
+  grid.innerHTML = html;
+}
+
+function showMeetingSlotInfo(id) {
+  const m = DB.meetings.find(x => x.id === id);
+  if (!m) return;
+  const statusLabel = { PENDING: 'Đang chờ duyệt', APPROVED: 'Đã duyệt', CANCELLED: 'Đã hủy' }[m.status] || m.status;
+  alert(`📅 ${m.title}\nMã: ${m.code}\nPhòng: ${m.room}\nNgười đặt: ${m.creatorName} (${m.dept})\nThời gian: ${m.startTime} ➔ ${m.endTime}\nTrạng thái: ${statusLabel}`);
+}
+
+// Bấm 1 ô trống trên lưới -> chuyển sang tab Đăng Ký, đổ sẵn phòng/ngày/giờ (mặc định 1 tiếng),
+// người dùng vẫn xem/sửa lại trước khi gửi — không tự động đặt lịch ngay.
+function quickBookMeetingSlot(roomIdx, dateStr, slot) {
+  const room = MEETING_ROOMS[roomIdx];
+  if (!room) return;
+  setMeetingSubTab('REGISTER');
+  document.getElementById('meetingRoom').value = room.name;
+  const startDate = new Date(`${dateStr}T${slot}:00`);
+  document.getElementById('meetingStartTime').value = toDatetimeLocalValue(startDate);
+  const endDate = new Date(startDate.getTime() + 60 * 60000);
+  document.getElementById('meetingEndTime').value = toDatetimeLocalValue(endDate);
+  document.querySelector('#meetingRegisterTabContent form').scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
 function submitMeetingReq(e) {
   e.preventDefault();
   const code = document.getElementById('meetingCode').value.trim();
@@ -4376,6 +4510,16 @@ function submitMeetingReq(e) {
 
   if (DB.meetings.some(m => m.code === code)) {
     return alert('Mã phiếu đặt phòng họp đã tồn tại!');
+  }
+
+  if (new Date(startTime) >= new Date(endTime)) {
+    return alert('⛔ Thời gian bắt đầu phải trước thời gian kết thúc!');
+  }
+
+  const conflict = findMeetingConflict(room, startTime, endTime, null);
+  if (conflict) {
+    const conflictStatusLabel = conflict.status === 'APPROVED' ? 'Đã duyệt' : 'Đang chờ duyệt';
+    return alert(`⛔ Phòng "${room}" đã có lịch trùng khung giờ này!\n\nLịch trùng: ${conflict.code} - ${conflict.title}\nThời gian: ${conflict.startTime} ➔ ${conflict.endTime}\nTrạng thái: ${conflictStatusLabel}\n\nVui lòng chọn phòng khác hoặc đổi khung giờ.`);
   }
 
   const newMeeting = {
