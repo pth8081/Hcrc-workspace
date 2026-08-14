@@ -4752,6 +4752,11 @@ function updateTaskStatus(id, newStatus, note) {
   if (t.assignedTo !== currentUser.username && t.assignedBy !== currentUser.username && !currentUser.perms?.admin) {
     return alert('⛔ Bạn không có quyền cập nhật công việc này!');
   }
+  // Không cho đóng công việc (Hoàn thành/Huỷ) khi đang có 1 yêu cầu gia hạn chờ duyệt — phải xử lý
+  // (Đồng ý/Từ chối) yêu cầu đó trước, tránh trường hợp vô lý "duyệt gia hạn" cho việc đã kết thúc.
+  if ((newStatus === 'DONE' || newStatus === 'CANCELLED') && t.pendingExtension) {
+    return alert('⛔ Công việc đang có 1 yêu cầu gia hạn chờ duyệt. Vui lòng Đồng ý hoặc Từ chối yêu cầu đó trước khi đóng công việc.');
+  }
   t.status = newStatus;
   t.history.push({
     action: `STATUS_${newStatus}`, by: currentUser.username, byName: currentUser.name,
@@ -4774,12 +4779,15 @@ function openTaskProgressModal(taskId) {
   if (!t) return;
   progressingTaskId = taskId;
 
-  document.getElementById('progressTaskInfo').innerText = `${t.title}${t.sourceCode ? ` (${t.sourceCode})` : ''} — Trạng thái hiện tại: ${TASK_STATUS_LABELS[t.status] || t.status}`;
+  document.getElementById('progressTaskInfo').innerText = `${t.title}${t.sourceCode ? ` (${t.sourceCode})` : ''} — Trạng thái hiện tại: ${TASK_STATUS_LABELS[t.status] || t.status}`
+    + (t.pendingExtension ? ' — ⚠️ Đang có yêu cầu gia hạn chờ duyệt, cần xử lý xong mới đóng được công việc.' : '');
 
-  const nextOptions = { TODO: ['DOING', 'CANCELLED'], DOING: ['DONE', 'CANCELLED'] }[t.status] || [];
+  let nextOptions = { TODO: ['DOING', 'CANCELLED'], DOING: ['DONE', 'CANCELLED'] }[t.status] || [];
+  // Không cho chọn Hoàn thành/Huỷ khi đang có yêu cầu gia hạn chờ duyệt — xem updateTaskStatus().
+  if (t.pendingExtension) nextOptions = nextOptions.filter(s => s !== 'DONE' && s !== 'CANCELLED');
   const sel = document.getElementById('progressNewStatus');
   sel.innerHTML = nextOptions.map(s => `<option value="${s}">${TASK_STATUS_LABELS[s]}</option>`).join('')
-    || `<option value="">-- Công việc đã kết thúc, không thể đổi trạng thái --</option>`;
+    || `<option value="">-- Không có lựa chọn hợp lệ --</option>`;
   document.getElementById('progressNote').value = '';
 
   document.getElementById('taskProgressModal').classList.remove('hidden');
