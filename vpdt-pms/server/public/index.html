@@ -1254,7 +1254,8 @@
     <!-- CẤU HÌNH HỆ THỐNG EMAIL -->
     <div class="bg-amber-50 p-4 rounded border border-amber-300 space-y-3">
       <h3 class="font-bold text-amber-900 text-sm flex items-center gap-1">✉️ Cấu Hình Máy Chủ Gửi Email Thông Báo</h3>
-      
+      <p class="text-[11px] text-gray-500 italic">Host/Port/Email người gửi chỉnh trực tiếp ở đây. Tài khoản/mật khẩu đăng nhập SMTP thật được cấu hình riêng ở file .env trên server (theo hướng dẫn triển khai) vì lý do bảo mật — chưa khai báo thì hệ thống tự chuyển sang chế độ mô phỏng (ghi Nhật ký hệ thống, không gửi hộp thư thật).</p>
+
       <form onsubmit="saveEmailConfig(event)" class="grid grid-cols-1 md:grid-cols-4 gap-3 bg-white p-3 rounded border text-xs">
         <div>
           <label class="block font-semibold text-gray-600 mb-1">Trạng thái gửi mail</label>
@@ -2983,11 +2984,26 @@ function syncStorage(key) {
 let dataReady = false;
 initDatabase().then(() => { dataReady = true; });
 
+// Gửi email THẬT qua backend (POST /api/send-email) nếu server đã cấu hình SMTP thật (biến môi
+// trường phía server) — chạy song song (fire-and-forget), KHÔNG chặn hay đổi hành vi của luồng đang
+// gọi (vốn đã ghi log mô phỏng + cập nhật UI ngay, không chờ email). Nếu server chưa cấu hình SMTP,
+// backend trả về simulated:true và không có gì thay đổi so với trước (chỉ mô phỏng qua console.log).
+function dispatchRealEmail(recipients, subject, bodyText) {
+  const addresses = (recipients || []).map(r => (typeof r === 'string' ? r : r?.email)).filter(Boolean);
+  if (addresses.length === 0) return;
+  fetch('/api/send-email', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ to: addresses, subject, text: bodyText })
+  }).catch(err => console.error('Lỗi gửi email thật:', err.message));
+}
+
 // --- EMAIL SIMULATOR ---
 function sendNotificationEmail(recipientEmail, recipientName, subject, messageBody) {
   if (!DB.emailConfig.enabled) return;
   if (!recipientEmail) return;
   console.log(`[DMS EMAIL SIMULATOR] To: ${recipientName} <${recipientEmail}> | Subject: ${subject}`);
+  dispatchRealEmail([recipientEmail], subject, messageBody || subject);
   logSystemAction('EMAIL', 'SEND_EMAIL_SUCCESS', `Đã gửi email tự động tới [${recipientName} - ${recipientEmail}] với chủ đề: "${subject}"`, 'SUCCESS', recipientEmail);
 }
 
@@ -3006,6 +3022,7 @@ function notifyUsersByEmail(module, actionType, targetCode, usernames, subject, 
   recipients.forEach(u => {
     console.log(`[DMS EMAIL SIMULATOR] To: ${u.name} <${u.email}> | Subject: ${subject}\n  ${bodyText}`);
   });
+  dispatchRealEmail(recipients, subject, bodyText);
   logSystemAction(
     module, actionType,
     recipients.length
@@ -3039,6 +3056,7 @@ function notifyMinutesDirectiveRecipients(m, usernames, module, actionType, targ
   recipients.forEach(r => {
     console.log(`[DMS EMAIL SIMULATOR] To: ${r.name} <${r.email}> | Subject: ${subject}\n  ${bodyText}`);
   });
+  dispatchRealEmail(recipients, subject, bodyText);
   logSystemAction(
     module, actionType,
     recipients.length
@@ -3078,7 +3096,10 @@ function withApprovalAuth(actionFn) {
 function sendApprovalOtp(isResend) {
   pendingApprovalOtpCode = String(Math.floor(100000 + Math.random() * 900000));
   if (currentUser.email) {
-    console.log(`[DMS EMAIL SIMULATOR] To: ${currentUser.name} <${currentUser.email}> | Subject: [VPDT] Mã xác thực phê duyệt\n  Mã OTP của bạn: ${pendingApprovalOtpCode} (chỉ dùng 1 lần cho lượt duyệt này)`);
+    const otpSubject = '[VPDT] Mã xác thực phê duyệt';
+    const otpBody = `Mã OTP của bạn: ${pendingApprovalOtpCode} (chỉ dùng 1 lần cho lượt duyệt này)`;
+    console.log(`[DMS EMAIL SIMULATOR] To: ${currentUser.name} <${currentUser.email}> | Subject: ${otpSubject}\n  ${otpBody}`);
+    dispatchRealEmail([currentUser.email], otpSubject, otpBody);
   }
   logSystemAction(
     'AUTH', 'SEND_APPROVAL_OTP',
