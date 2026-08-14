@@ -17,13 +17,14 @@ function isConfigured() {
 }
 
 function buildTransporter({ host, port, secure }) {
+  const resolvedHost = host || process.env.SMTP_HOST;
   const resolvedPort = parseInt(port || process.env.SMTP_PORT || '587', 10);
   const resolvedSecure = process.env.SMTP_SECURE === 'true' ? true
     : process.env.SMTP_SECURE === 'false' ? false
     : (secure !== undefined ? !!secure : resolvedPort === 465);
 
   const config = {
-    host: host || process.env.SMTP_HOST,
+    host: resolvedHost,
     port: resolvedPort,
     secure: resolvedSecure
   };
@@ -37,11 +38,13 @@ function buildTransporter({ host, port, secure }) {
   if (process.env.SMTP_TLS_REJECT_UNAUTHORIZED === 'false') {
     config.tls = { rejectUnauthorized: false };
   }
-  return nodemailer.createTransport(config);
+  return { transporter: nodemailer.createTransport(config), resolvedHost, resolvedPort };
 }
 
 // Gửi email tới 1 hoặc nhiều người nhận (gửi riêng từng người để biết chính xác ai thành công/thất
-// bại). Trả về { sent: string[], failed: string[], simulated: boolean }.
+// bại). Trả về { sent, failed, simulated, host, port } — có kèm host/port THỰC đã dùng để gửi (chỉ
+// khi simulated:false) để nơi gọi (Nhật ký hệ thống) ghi rõ đã xác nhận gửi tới máy chủ nào, phục vụ
+// việc kiểm tra/xác minh thay vì chỉ tin vào việc "đã thử gửi".
 async function sendMail({ to, subject, text, html, host, port, secure, from }) {
   const recipients = (Array.isArray(to) ? to : [to]).map(a => (a || '').trim()).filter(Boolean);
   if (recipients.length === 0) return { sent: [], failed: [], simulated: false };
@@ -50,7 +53,7 @@ async function sendMail({ to, subject, text, html, host, port, secure, from }) {
     return { sent: [], failed: recipients, simulated: true };
   }
 
-  const transporter = buildTransporter({ host, port, secure });
+  const { transporter, resolvedHost, resolvedPort } = buildTransporter({ host, port, secure });
   const fromAddr = from || process.env.SMTP_FROM || process.env.SMTP_USER || 'no-reply@localhost';
 
   const sent = [];
@@ -64,7 +67,7 @@ async function sendMail({ to, subject, text, html, host, port, secure, from }) {
       failed.push(addr);
     }
   }
-  return { sent, failed, simulated: false };
+  return { sent, failed, simulated: false, host: resolvedHost, port: resolvedPort };
 }
 
 module.exports = { sendMail, isConfigured };
