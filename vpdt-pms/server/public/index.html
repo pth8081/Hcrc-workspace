@@ -302,7 +302,7 @@
     <div class="bg-violet-50 p-4 rounded border border-violet-200 space-y-3">
       <div class="flex justify-between items-center flex-wrap gap-2">
         <h3 class="font-bold text-violet-900 text-base flex items-center gap-2">📋 Quản Lý Công Việc</h3>
-        <button onclick="openCreateTaskModal({})" class="bg-violet-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-violet-700">➕ Giao Việc Thủ Công</button>
+        <button id="btnManualTaskCreate" onclick="openCreateTaskModal({})" class="hidden bg-violet-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-violet-700">➕ Giao Việc Thủ Công</button>
       </div>
       <p class="text-xs text-violet-800">Theo dõi công việc được giao trực tiếp hoặc từ ý kiến chỉ đạo trong Văn bản trình & Biên bản họp.</p>
 
@@ -650,6 +650,7 @@
                   <th class="border p-1.5">Chức Danh</th>
                   <th class="border p-1.5">Phòng</th>
                   <th class="border p-1.5 w-32">Số Điện Thoại</th>
+                  <th class="border p-1.5 w-40">Email</th>
                   <th class="border p-1.5 w-8"></th>
                 </tr>
               </thead>
@@ -1619,7 +1620,7 @@
             <label class="flex items-center gap-2 text-rose-700 font-semibold cursor-pointer">
               <input type="checkbox" id="pMinutesCreate"> ✅ Được lập biên bản họp
             </label>
-            <p class="text-[11px] text-gray-500 italic">Biên bản họp là kênh chung, không giới hạn theo phòng ban — mọi người dùng đều XEM được toàn bộ. Quyền này chỉ kiểm soát ai được LẬP biên bản mới.</p>
+            <p class="text-[11px] text-gray-500 italic">Quyền này chỉ kiểm soát ai được LẬP biên bản mới. Xem/Sửa/Xóa/Tải từng biên bản xét ở khối 13 bên dưới — mặc định người tạo và người có tên trong Thành phần tham dự luôn xem được biên bản đó.</p>
           </div>
 
           <div class="bg-white p-3 rounded border space-y-2">
@@ -1651,6 +1652,43 @@
               <label class="flex items-center gap-2 text-fuchsia-700 font-semibold cursor-pointer">
                 <input type="checkbox" id="pInternalRewardCreate"> 🏆 Đăng Khen thưởng
               </label>
+            </div>
+          </div>
+
+          <div class="bg-white p-3 rounded border space-y-2 lg:col-span-3">
+            <h4 class="font-bold text-rose-800 text-sm border-b pb-1">13. 📝 Biên Bản Họp & 📋 Công Việc — Quyền Xem/Sửa/Xóa/Tải Toàn Bộ</h4>
+            <p class="text-[11px] text-gray-500 italic">Mặc định: người TẠO biên bản luôn Xem/Sửa/Xóa/Tải được bản của mình; người có tên trong Thành phần tham dự luôn XEM được (không Tải/Sửa/Xóa). Người NHẬN việc và người GIAO việc luôn xem được công việc liên quan. Các quyền dưới đây mở rộng thêm ra TOÀN BỘ biên bản/công việc của mọi người.</p>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <div class="space-y-1">
+                <span class="font-bold text-rose-800 block text-[11px]">📝 Biên Bản Họp:</span>
+                <label class="flex items-center gap-1.5 text-gray-700 cursor-pointer">
+                  <input type="checkbox" id="pMinutesView"> 👁️ Xem tất cả biên bản
+                </label>
+                <label class="flex items-center gap-1.5 text-gray-700 cursor-pointer">
+                  <input type="checkbox" id="pMinutesEdit"> ✏️ Sửa tất cả biên bản
+                </label>
+                <label class="flex items-center gap-1.5 text-gray-700 cursor-pointer">
+                  <input type="checkbox" id="pMinutesDelete"> 🗑️ Xóa tất cả biên bản
+                </label>
+                <label class="flex items-center gap-1.5 text-gray-700 cursor-pointer">
+                  <input type="checkbox" id="pMinutesDownload"> ⬇️ Tải tất cả biên bản
+                </label>
+              </div>
+              <div class="space-y-1">
+                <span class="font-bold text-violet-800 block text-[11px]">📋 Công Việc:</span>
+                <label class="flex items-center gap-1.5 text-gray-700 cursor-pointer">
+                  <input type="checkbox" id="pTaskView"> 👁️ Xem tất cả công việc
+                </label>
+                <label class="flex items-center gap-1.5 text-gray-700 cursor-pointer">
+                  <input type="checkbox" id="pTaskEdit"> ✏️ Tạo mới & Sửa tất cả công việc
+                </label>
+                <label class="flex items-center gap-1.5 text-gray-700 cursor-pointer">
+                  <input type="checkbox" id="pTaskDelete"> 🗑️ Xóa tất cả công việc
+                </label>
+                <label class="flex items-center gap-1.5 text-gray-700 cursor-pointer">
+                  <input type="checkbox" id="pTaskDownload"> ⬇️ Tải phiếu giao việc
+                </label>
+              </div>
             </div>
           </div>
         </div>
@@ -2523,6 +2561,32 @@ function canAccessTaskModule(user) {
   return hasModuleAccess(user, 'task');
 }
 
+// "Quản trị" Công việc: gộp quyền Tạo mới + Sửa (đổi tiêu đề/nội dung/hạn/người nhận) — người có
+// quyền này xử lý được TOÀN BỘ công việc, không chỉ việc của mình.
+function canManageTasks(user) {
+  if (!user) return false;
+  return !!(user.perms?.admin || user.perms?.taskEdit);
+}
+
+// XEM 1 công việc cụ thể: admin/người có quyền taskView (xem toàn bộ), người được giao, hoặc người
+// đã giao việc đó (giữ đúng hành vi tiện lợi hiện có — người giao vẫn theo dõi được việc mình giao).
+function canViewTaskRecord(user, t) {
+  if (!user) return false;
+  if (user.perms?.admin) return true;
+  if (user.perms?.taskView) return true;
+  return t.assignedTo === user.username || t.assignedBy === user.username;
+}
+
+function canDeleteTaskRecord(user) {
+  if (!user) return false;
+  return !!(user.perms?.admin || user.perms?.taskDelete);
+}
+
+function canDownloadTaskRecord(user) {
+  if (!user) return false;
+  return !!(user.perms?.admin || user.perms?.taskDownload);
+}
+
 function canAccessInternalModule(user) {
   if (!user) return false;
   return hasModuleAccess(user, 'internal');
@@ -2574,9 +2638,8 @@ function canAccessCarModule(user) {
   return scopeHasAny(user, user.perms?.carView) || isApproverInWorkflowMap(DB.carDeptWorkflows, user.username);
 }
 
-// Biên bản họp là kênh chung, không giới hạn theo phòng ban -> XEM mở cho mọi người dùng đã đăng
-// nhập, giống Tài liệu/Công việc/Truyền thông nội bộ. Chỉ việc LẬP biên bản mới cần quyền riêng
-// (xem canCreateMeetingMinutes()).
+// Vào được module Biên bản họp hay không (cổng chung, chưa xét từng biên bản cụ thể). XEM/Sửa/Xóa/
+// Tải từng biên bản cụ thể xét riêng ở canView/Edit/Delete/DownloadMeetingMinutesRecord() bên dưới.
 function canAccessMeetingMinutesModule(user) {
   if (!user) return false;
   return hasModuleAccess(user, 'minutes');
@@ -2585,6 +2648,45 @@ function canAccessMeetingMinutesModule(user) {
 function canCreateMeetingMinutes(user) {
   if (!user) return false;
   return !!(user.perms?.admin || user.perms?.minutesCreate);
+}
+
+// Có tên trong Thành phần tham dự của 1 biên bản cụ thể hay không (khớp theo Họ và Tên).
+function isMeetingMinutesAttendee(user, m) {
+  if (!user) return false;
+  const uname = (user.name || '').trim().toLowerCase();
+  if (!uname) return false;
+  return (m.attendees || []).some(a => (a.name || '').trim().toLowerCase() === uname);
+}
+
+// XEM: admin, người có quyền minutesView (xem toàn bộ), người tạo, hoặc người có tên trong thành
+// phần tham dự của chính biên bản đó (chỉ xem, không tự tải/sửa/xóa được nếu không có quyền khác).
+function canViewMeetingMinutesRecord(user, m) {
+  if (!user) return false;
+  if (user.perms?.admin) return true;
+  if (user.perms?.minutesView) return true;
+  if (m.creator === user.username) return true;
+  return isMeetingMinutesAttendee(user, m);
+}
+
+function canEditMeetingMinutesRecord(user, m) {
+  if (!user) return false;
+  if (user.perms?.admin) return true;
+  if (user.perms?.minutesEdit) return true;
+  return m.creator === user.username;
+}
+
+function canDeleteMeetingMinutesRecord(user, m) {
+  if (!user) return false;
+  if (user.perms?.admin) return true;
+  if (user.perms?.minutesDelete) return true;
+  return m.creator === user.username;
+}
+
+function canDownloadMeetingMinutesRecord(user, m) {
+  if (!user) return false;
+  if (user.perms?.admin) return true;
+  if (user.perms?.minutesDownload) return true;
+  return m.creator === user.username;
 }
 
 function canAccessReportsModule(user) {
@@ -2684,7 +2786,8 @@ function defaultNewUserPerms() {
     carView: emptyScope(), carCreate: emptyScope(), carDownload: emptyScope(),
     officeView: emptyScope(), officeCreate: emptyScope(), officeDownload: emptyScope(),
     officeBuy: true, officeFix: true, officeInvest: false,
-    minutesCreate: false
+    minutesCreate: false, minutesView: false, minutesEdit: false, minutesDelete: false, minutesDownload: false,
+    taskView: false, taskEdit: false, taskDelete: false, taskDownload: false
   };
 }
 
@@ -2870,6 +2973,39 @@ function notifyUsersByEmail(module, actionType, targetCode, usernames, subject, 
     module, actionType,
     recipients.length
       ? `${bodyText} (Đã gửi tới: ${recipients.map(u => `${u.name} <${u.email}>`).join(', ')})`
+      : `${bodyText} (Không có người nhận hợp lệ — thiếu email hoặc chưa cấu hình người duyệt)`,
+    recipients.length ? 'SUCCESS' : 'WARNING',
+    targetCode
+  );
+}
+
+// Email của 1 người dùng hệ thống trong ngữ cảnh 1 biên bản họp cụ thể — ưu tiên lấy đúng email đã
+// NHẬP ở Thành phần tham dự (khớp theo Họ và Tên, không phân biệt hoa/thường), nếu người đó không
+// nhập email trong bảng tham dự thì mới dùng tạm email tài khoản hệ thống.
+function getAttendeeEmail(m, username) {
+  const user = DB.users.find(u => u.username === username);
+  if (!user) return null;
+  const uname = (user.name || '').trim().toLowerCase();
+  const attendee = (m.attendees || []).find(a => (a.name || '').trim().toLowerCase() === uname);
+  const email = (attendee && attendee.email && attendee.email.trim()) || user.email;
+  return email ? { username: user.username, name: user.name, email } : null;
+}
+
+// Giống notifyUsersByEmail() nhưng ưu tiên email đã nhập ở Thành phần tham dự biên bản họp — dùng
+// cho việc thông báo Người thực hiện/Người phối hợp khi tự động tạo Công việc từ ý kiến chỉ đạo.
+function notifyMinutesDirectiveRecipients(m, usernames, module, actionType, targetCode, subject, bodyText) {
+  const recipients = [];
+  for (const uname of new Set((usernames || []).filter(Boolean))) {
+    const r = getAttendeeEmail(m, uname);
+    if (r) recipients.push(r);
+  }
+  recipients.forEach(r => {
+    console.log(`[DMS EMAIL SIMULATOR] To: ${r.name} <${r.email}> | Subject: ${subject}\n  ${bodyText}`);
+  });
+  logSystemAction(
+    module, actionType,
+    recipients.length
+      ? `${bodyText} (Đã gửi tới: ${recipients.map(r => `${r.name} <${r.email}>`).join(', ')})`
       : `${bodyText} (Không có người nhận hợp lệ — thiếu email hoặc chưa cấu hình người duyệt)`,
     recipients.length ? 'SUCCESS' : 'WARNING',
     targetCode
@@ -3092,7 +3228,10 @@ function switchTab(tabName) {
 
   if (tabName === 'doc') { renderDynamicInputsForModule('DOC', 'dynamicFieldsContainer_DOC'); renderDocs(); updateUploadDeptDropdown(); }
   if (tabName === 'submission') { renderDynamicInputsForModule('SUBMISSION', 'dynamicFieldsContainer_SUBMISSION'); renderSubmissionReqs(); }
-  if (tabName === 'task') { renderTasks(); }
+  if (tabName === 'task') {
+    document.getElementById('btnManualTaskCreate').classList.toggle('hidden', !canManageTasks(currentUser));
+    renderTasks();
+  }
   if (tabName === 'contract') { renderDynamicInputsForModule('CONTRACT', 'dynamicFieldsContainer_CONTRACT'); renderContracts(); }
   if (tabName === 'meeting') { renderDynamicInputsForModule('MEETING_ROOM', 'dynamicFieldsContainer_MEETING_ROOM'); renderMeetings(); setMeetingSubTab(activeMeetingSubTab); }
   if (tabName === 'minutes') {
@@ -3840,7 +3979,7 @@ function renderSubmissionReqs() {
             ${canDownloadFile(currentUser, 'submission', sub.dept, sub.creator) ? `<button onclick="downloadSubmissionApprovalSlip(${sub.id})" class="px-2 py-1 bg-slate-600 text-white rounded text-xs hover:bg-slate-700 font-bold" title="Tải Phiếu Phê Duyệt">⬇️ Tải</button>` : ''}
             ${DB.tasks.some(t => t.sourceType === 'SUBMISSION' && t.sourceCode === sub.code)
               ? `<span class="px-2 py-1 bg-emerald-100 text-emerald-800 rounded text-xs font-bold" title="Đã tự động tạo Công việc theo dõi khi phê duyệt">✅ Đã có công việc</span>`
-              : `<button onclick="createTaskFromSubmission(${sub.id})" class="px-2 py-1 bg-violet-600 text-white rounded text-xs hover:bg-violet-700 font-bold" title="Giao việc từ ý kiến chỉ đạo">📌 Giao việc</button>`}
+              : (canManageTasks(currentUser) ? `<button onclick="createTaskFromSubmission(${sub.id})" class="px-2 py-1 bg-violet-600 text-white rounded text-xs hover:bg-violet-700 font-bold" title="Giao việc từ ý kiến chỉ đạo">📌 Giao việc</button>` : '')}
           ` : ''}
         </td>
       </tr>
@@ -4115,11 +4254,15 @@ function downloadSubmissionApprovalSlip(subId) {
 // trước, có thể sửa tiêu đề/mô tả/người nhận/hạn trước khi xác nhận (tránh tạo nhầm công việc từ
 // những ý kiến/chỉ đạo không thực sự cần giao việc).
 let pendingTaskSource = null;
-// Khác null khi modal Giao Việc đang ở chế độ GÁN NGƯỜI NHẬN cho 1 công việc đã tồn tại (vd công
-// việc tự động tạo từ chỉ đạo của Văn bản trình nhưng chưa có người nhận) thay vì tạo công việc mới.
+// Khác null khi modal Giao Việc đang ở chế độ GÁN NGƯỜI NHẬN hoặc SỬA cho 1 công việc đã tồn tại
+// (vd công việc tự động tạo từ chỉ đạo của Văn bản trình nhưng chưa có người nhận) thay vì tạo mới.
 let editingTaskId = null;
+// 'CREATE' | 'ASSIGN' | 'EDIT' — modal Giao Việc dùng chung 1 form cho cả 3 luồng, xem confirmCreateTask().
+let taskModalMode = 'CREATE';
 
 function openCreateTaskModal(opts) {
+  if (!canManageTasks(currentUser)) return alert('⛔ Bạn không có quyền tạo công việc mới!');
+  taskModalMode = 'CREATE';
   editingTaskId = null;
   pendingTaskSource = { sourceType: opts.sourceType || 'MANUAL', sourceCode: opts.sourceCode || '' };
 
@@ -4143,7 +4286,11 @@ function openCreateTaskModal(opts) {
 function openAssignTaskModal(taskId) {
   const t = DB.tasks.find(x => x.id === taskId);
   if (!t) return;
+  if (!(currentUser.perms?.admin || t.assignedBy === currentUser.username)) {
+    return alert('⛔ Bạn không có quyền gán người nhận cho công việc này!');
+  }
 
+  taskModalMode = 'ASSIGN';
   editingTaskId = taskId;
   pendingTaskSource = null;
 
@@ -4162,10 +4309,37 @@ function openAssignTaskModal(taskId) {
   document.getElementById('createTaskModal').classList.remove('hidden');
 }
 
+// Mở modal Giao Việc ở chế độ SỬA — cho phép đổi cả tiêu đề/mô tả/hạn/người nhận của 1 công việc đã
+// tồn tại (khác openAssignTaskModal chỉ đổi được người nhận, dùng riêng cho việc gán việc chưa có người nhận).
+function openEditTaskModal(taskId) {
+  if (!canManageTasks(currentUser)) return alert('⛔ Bạn không có quyền sửa công việc!');
+  const t = DB.tasks.find(x => x.id === taskId);
+  if (!t) return;
+
+  taskModalMode = 'EDIT';
+  editingTaskId = taskId;
+  pendingTaskSource = null;
+
+  document.getElementById('taskTitleInput').value = t.title;
+  document.getElementById('taskDescInput').value = t.description || '';
+  document.getElementById('taskDeadlineInput').value = t.deadline || '';
+
+  const assigneeSel = document.getElementById('taskAssigneeInput');
+  assigneeSel.innerHTML = '<option value="">-- Chọn người nhận --</option>' +
+    DB.users.map(u => `<option value="${escapeHtml(u.username)}" ${t.assignedTo === u.username ? 'selected' : ''}>${escapeHtml(u.name)} (${escapeHtml(u.username)})</option>`).join('');
+
+  const labels = { SUBMISSION: 'Từ Văn bản trình', MEETING_MINUTES: 'Từ Biên bản họp', MANUAL: 'Giao việc trực tiếp' };
+  document.getElementById('createTaskSourceLabel').innerText = `Sửa công việc ${t.sourceCode ? `${labels[t.sourceType] || t.sourceType}: ${t.sourceCode}` : labels[t.sourceType] || ''}`;
+  document.getElementById('createTaskConfirmBtn').innerText = '💾 Lưu Thay Đổi';
+
+  document.getElementById('createTaskModal').classList.remove('hidden');
+}
+
 function closeCreateTaskModal() {
   document.getElementById('createTaskModal').classList.add('hidden');
   pendingTaskSource = null;
   editingTaskId = null;
+  taskModalMode = 'CREATE';
 }
 
 function confirmCreateTask() {
@@ -4179,9 +4353,13 @@ function confirmCreateTask() {
 
   const assignee = DB.users.find(u => u.username === assignedTo);
 
-  if (editingTaskId !== null) {
+  if (taskModalMode === 'ASSIGN' && editingTaskId !== null) {
     const t = DB.tasks.find(x => x.id === editingTaskId);
     if (!t) { closeCreateTaskModal(); return; }
+    if (!(currentUser.perms?.admin || t.assignedBy === currentUser.username)) {
+      closeCreateTaskModal();
+      return alert('⛔ Bạn không có quyền gán người nhận cho công việc này!');
+    }
     t.assignedTo = assignedTo;
     t.assignedToName = assignee ? assignee.name : assignedTo;
     t.deadline = deadline;
@@ -4199,6 +4377,40 @@ function confirmCreateTask() {
     closeCreateTaskModal();
     renderTasks();
     return;
+  }
+
+  if (taskModalMode === 'EDIT' && editingTaskId !== null) {
+    if (!canManageTasks(currentUser)) {
+      closeCreateTaskModal();
+      return alert('⛔ Bạn không có quyền sửa công việc!');
+    }
+    const t = DB.tasks.find(x => x.id === editingTaskId);
+    if (!t) { closeCreateTaskModal(); return; }
+    const oldAssignedTo = t.assignedTo;
+    t.title = title;
+    t.description = description;
+    t.deadline = deadline;
+    t.assignedTo = assignedTo;
+    t.assignedToName = assignee ? assignee.name : assignedTo;
+    t.history.push({ action: 'EDITED', by: currentUser.username, byName: currentUser.name, time: new Date().toLocaleString('vi-VN') });
+    syncStorage('tasks');
+    logSystemAction('TASK', 'EDIT_TASK', `Cập nhật công việc [${t.title}]`, 'SUCCESS', t.sourceCode || t.title);
+
+    if (assignedTo !== oldAssignedTo && assignee && assignee.email) {
+      notifyUsersByEmail('TASK', 'NOTIFY_TASK_ASSIGNED', t.sourceCode || t.title, [assignedTo],
+        `[VPDT] Bạn được giao công việc: ${t.title}`,
+        `${currentUser.name} đã cập nhật và gán cho bạn công việc "${t.title}"${description ? `: ${description}` : ''}.${deadline ? ` Hạn hoàn thành: ${deadline}.` : ''}`);
+    }
+
+    alert('✅ Đã cập nhật công việc thành công!');
+    closeCreateTaskModal();
+    renderTasks();
+    return;
+  }
+
+  if (!canManageTasks(currentUser)) {
+    closeCreateTaskModal();
+    return alert('⛔ Bạn không có quyền tạo công việc mới!');
   }
 
   const newTask = {
@@ -4283,8 +4495,7 @@ function renderTasks() {
   const keyword = (document.getElementById('filterTaskKeyword')?.value || '').trim();
 
   const visible = DB.tasks.filter(t => {
-    const canView = currentUser.perms?.admin || t.assignedTo === currentUser.username || t.assignedBy === currentUser.username;
-    if (!canView) return false;
+    if (!canViewTaskRecord(currentUser, t)) return false;
     if (statusFilter && t.status !== statusFilter) return false;
     if (sourceFilter && t.sourceType !== sourceFilter) return false;
     if (!matchesKeywordFields([t.title, t.assignedToName, t.assignedByName, t.sourceCode], keyword)) return false;
@@ -4310,6 +4521,7 @@ function renderTasks() {
   tbody.innerHTML = pageItems.map(t => {
     const canUpdate = currentUser.perms?.admin || t.assignedTo === currentUser.username || t.assignedBy === currentUser.username;
     const canAssign = !t.assignedTo && (currentUser.perms?.admin || t.assignedBy === currentUser.username);
+    const canManage = canManageTasks(currentUser);
     let actionBtns = '';
     if (canAssign) {
       actionBtns += `<button onclick="openAssignTaskModal(${t.id})" class="bg-violet-600 text-white px-2 py-1 rounded text-xs font-bold hover:bg-violet-700">👤 Gán người nhận</button> `;
@@ -4317,15 +4529,25 @@ function renderTasks() {
     if (canUpdate && t.assignedTo && t.status !== 'DONE' && t.status !== 'CANCELLED') {
       if (t.status === 'TODO') actionBtns += `<button onclick="updateTaskStatus(${t.id}, 'DOING')" class="bg-blue-600 text-white px-2 py-1 rounded text-xs font-bold hover:bg-blue-700">▶️ Bắt đầu</button> `;
       if (t.status === 'DOING') actionBtns += `<button onclick="updateTaskStatus(${t.id}, 'DONE')" class="bg-green-600 text-white px-2 py-1 rounded text-xs font-bold hover:bg-green-700">✅ Hoàn thành</button> `;
-      actionBtns += `<button onclick="updateTaskStatus(${t.id}, 'CANCELLED')" class="bg-red-600 text-white px-2 py-1 rounded text-xs font-bold hover:bg-red-700">✕ Huỷ</button>`;
+      actionBtns += `<button onclick="updateTaskStatus(${t.id}, 'CANCELLED')" class="bg-red-600 text-white px-2 py-1 rounded text-xs font-bold hover:bg-red-700">✕ Huỷ</button> `;
     }
+    if (canManage) {
+      actionBtns += `<button onclick="openEditTaskModal(${t.id})" class="bg-amber-600 text-white px-2 py-1 rounded text-xs font-bold hover:bg-amber-700">✏️ Sửa</button> `;
+    }
+    if (canDeleteTaskRecord(currentUser)) {
+      actionBtns += `<button onclick="deleteTask(${t.id})" class="bg-red-700 text-white px-2 py-1 rounded text-xs font-bold hover:bg-red-800">🗑️ Xóa</button> `;
+    }
+    if (canDownloadTaskRecord(currentUser)) {
+      actionBtns += `<button onclick="downloadTaskSlip(${t.id})" class="bg-slate-600 text-white px-2 py-1 rounded text-xs font-bold hover:bg-slate-700">⬇️ Tải</button>`;
+    }
+    const collabNames = (t.collaborators || []).map(u => DB.users.find(x => x.username === u)?.name || u);
     return `
       <tr class="hover:bg-gray-50 border-b">
         <td class="border p-2">
           <div class="font-bold text-gray-800">${escapeHtml(t.title)}</div>
           <div class="text-xs text-gray-500 line-clamp-1">${escapeHtml(t.description || '')}</div>
         </td>
-        <td class="border p-2 text-xs">Nhận: ${t.assignedToName ? `<b>${escapeHtml(t.assignedToName)}</b>` : '<span class="text-amber-600 font-bold">Chưa gán</span>'}<br>Giao: ${escapeHtml(t.assignedByName)}</td>
+        <td class="border p-2 text-xs">Nhận: ${t.assignedToName ? `<b>${escapeHtml(t.assignedToName)}</b>` : '<span class="text-amber-600 font-bold">Chưa gán</span>'}<br>Giao: ${escapeHtml(t.assignedByName)}${collabNames.length ? `<br>Phối hợp: ${escapeHtml(collabNames.join(', '))}` : ''}</td>
         <td class="border p-2 text-xs">${sourceLabels[t.sourceType] || t.sourceType}${t.sourceCode ? `<br><span class="text-gray-400">${escapeHtml(t.sourceCode)}</span>` : ''}</td>
         <td class="border p-2 text-xs">${escapeHtml(t.deadline || 'Chưa đặt')}</td>
         <td class="border p-2">${statusBadges[t.status] || t.status}</td>
@@ -4333,6 +4555,95 @@ function renderTasks() {
       </tr>
     `;
   }).join('');
+}
+
+function deleteTask(id) {
+  if (!canDeleteTaskRecord(currentUser)) return alert('⛔ Bạn không có quyền xóa công việc!');
+  const t = DB.tasks.find(x => x.id === id);
+  if (!t) return;
+  if (!confirm(`Bạn có chắc chắn muốn xóa công việc [${t.title}]? Hành động này không thể hoàn tác.`)) return;
+
+  DB.tasks = DB.tasks.filter(x => x.id !== id);
+  syncStorage('tasks');
+  logSystemAction('TASK', 'DELETE_TASK', `Xóa công việc [${t.title}]`, 'SUCCESS', t.sourceCode || t.title);
+  renderTasks();
+}
+
+// Dựng HTML "Phiếu Giao Việc" độc lập cho 1 công việc — không dùng khung buildApprovalSlipShellHTML()
+// vì Công việc không có quy trình phê duyệt nhiều bước, chỉ theo mẫu tự thân giống buildMeetingMinutesDocumentHTML().
+function buildTaskSlipHTML(t) {
+  const sourceLabels = { SUBMISSION: 'Văn bản trình', MEETING_MINUTES: 'Biên bản họp', MANUAL: 'Giao trực tiếp' };
+  const statusLabels = { TODO: 'Chưa bắt đầu', DOING: 'Đang thực hiện', DONE: 'Hoàn thành', CANCELLED: 'Đã huỷ' };
+  const collabNames = (t.collaborators || []).map(u => DB.users.find(x => x.username === u)?.name || u);
+  const historyRows = (t.history || []).map(h => `<tr><td>${escapeHtml(h.action)}</td><td>${escapeHtml(h.byName)}</td><td>${escapeHtml(h.time)}</td></tr>`).join('')
+    || `<tr><td colspan="3" style="text-align:center;color:#888;">Chưa có lịch sử xử lý</td></tr>`;
+
+  return `
+    <div class="task-doc">
+      <style>
+        .task-doc { font-family: 'Times New Roman', Georgia, serif; color: #111; background: #fff; padding: 24px; max-width: 800px; margin: 0 auto; position: relative; font-size: 13px; line-height: 1.6; }
+        .task-doc .td-watermark { position: absolute; top: 45%; left: 50%; transform: translate(-50%,-50%) rotate(-28deg); font-size: 28px; font-weight: bold; color: rgba(0,0,0,0.06); white-space: nowrap; pointer-events: none; z-index: 0; text-transform: uppercase; text-align: center; }
+        .task-doc .td-content { position: relative; z-index: 1; }
+        .task-doc .td-header { text-align: center; margin-bottom: 10px; }
+        .task-doc .td-code { font-size: 11px; color: #555; }
+        .task-doc .td-title { font-size: 19px; font-weight: bold; text-transform: uppercase; margin: 6px 0; }
+        .task-doc table.td-field-table { width: 100%; border-collapse: collapse; margin: 8px 0; }
+        .task-doc table.td-field-table td { padding: 3px 4px; vertical-align: top; }
+        .task-doc .td-label { font-weight: bold; width: 160px; white-space: nowrap; }
+        .task-doc .td-section-title { font-weight: bold; margin-top: 14px; margin-bottom: 4px; background: #f0f0f0; padding: 4px 6px; }
+        .task-doc .td-body-text { white-space: pre-wrap; }
+        .task-doc table.td-items-table { width: 100%; border-collapse: collapse; margin: 6px 0; font-size: 12px; }
+        .task-doc table.td-items-table th, .task-doc table.td-items-table td { border: 1px solid #999; padding: 4px 6px; }
+        .task-doc table.td-items-table th { background: #f0f0f0; font-weight: bold; text-align: center; }
+        .task-doc .td-footer-note { margin-top: 16px; font-size: 11px; color: #444; border-top: 1px solid #ccc; padding-top: 6px; }
+        @media print { .task-doc { padding: 0; } }
+      </style>
+      <div class="td-watermark">VĂN PHÒNG ĐIỆN TỬ</div>
+      <div class="td-content">
+        <div class="td-header">
+          <div class="td-code">${t.sourceCode ? `Nguồn: ${escapeHtml(t.sourceCode)}` : ''}</div>
+          <div class="td-title">Phiếu Giao Việc</div>
+          <div>${escapeHtml(t.title)}</div>
+        </div>
+
+        <table class="td-field-table">
+          <tr><td class="td-label">Nguồn gốc:</td><td>${escapeHtml(sourceLabels[t.sourceType] || t.sourceType)}${t.sourceCode ? ` (${escapeHtml(t.sourceCode)})` : ''}</td></tr>
+          <tr><td class="td-label">Người giao:</td><td>${escapeHtml(t.assignedByName)}</td></tr>
+          <tr><td class="td-label">Người nhận:</td><td>${escapeHtml(t.assignedToName || 'Chưa gán')}</td></tr>
+          <tr><td class="td-label">Người phối hợp:</td><td>${collabNames.length ? escapeHtml(collabNames.join(', ')) : 'Không có'}</td></tr>
+          <tr><td class="td-label">Hạn hoàn thành:</td><td>${escapeHtml(t.deadline || 'Chưa đặt')}</td></tr>
+          <tr><td class="td-label">Trạng thái:</td><td>${escapeHtml(statusLabels[t.status] || t.status)}</td></tr>
+        </table>
+
+        <div class="td-section-title">Nội Dung Công Việc</div>
+        <div class="td-body-text">${escapeHtml(t.description || '(Không có mô tả)')}</div>
+
+        <div class="td-section-title">Lịch Sử Xử Lý</div>
+        <table class="td-items-table">
+          <thead><tr><th>Hành động</th><th>Người thực hiện</th><th>Thời gian</th></tr></thead>
+          <tbody>${historyRows}</tbody>
+        </table>
+
+        <div class="td-footer-note">Phiếu được xuất từ Hệ thống Văn phòng điện tử (VPĐT) lúc ${escapeHtml(t.createdAt)}.</div>
+      </div>
+    </div>
+  `;
+}
+
+function downloadTaskSlip(id) {
+  if (!canDownloadTaskRecord(currentUser)) return alert('⛔ Bạn không có quyền tải phiếu giao việc!');
+  const t = DB.tasks.find(x => x.id === id);
+  if (!t) return;
+
+  const fullHtml = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Phieu Giao Viec - ${escapeHtml(t.title)}</title></head><body>${buildTaskSlipHTML(t)}</body></html>`;
+  const blob = new Blob([fullHtml], { type: 'text/html;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = `PhieuGiaoViec_${t.sourceCode || t.id}.html`;
+  link.click();
+  URL.revokeObjectURL(url);
+  logSystemAction('TASK', 'DOWNLOAD_TASK_SLIP', `Tải phiếu giao việc [${t.title}]`, 'SUCCESS', t.sourceCode || t.title);
 }
 
 function resetTaskFilters() {
@@ -4977,7 +5288,7 @@ function onMinutesLinkedMeetingChange() {
 
 // --- Bảng "Thành phần tham dự" nhập theo hàng ngang: Họ tên / Chức danh / Phòng / SĐT. ---
 function addAttendeeRow() {
-  minutesAttendeesRows.push({ name: '', title: '', dept: '', phone: '' });
+  minutesAttendeesRows.push({ name: '', title: '', dept: '', phone: '', email: '' });
   renderAttendeesTable();
   renderMinutesDirectivesTable();
 }
@@ -5006,6 +5317,7 @@ function renderAttendeesTable() {
       <td class="border p-1"><input value="${escapeHtml(a.title)}" oninput="updateAttendeeField(${idx}, 'title', this.value)" class="w-full border-0 p-0.5 text-xs focus:outline-none" placeholder="Chức danh"></td>
       <td class="border p-1"><input value="${escapeHtml(a.dept)}" oninput="updateAttendeeField(${idx}, 'dept', this.value)" class="w-full border-0 p-0.5 text-xs focus:outline-none" placeholder="Phòng"></td>
       <td class="border p-1"><input value="${escapeHtml(a.phone)}" oninput="updateAttendeeField(${idx}, 'phone', this.value)" class="w-full border-0 p-0.5 text-xs focus:outline-none" placeholder="SĐT"></td>
+      <td class="border p-1"><input type="email" value="${escapeHtml(a.email || '')}" oninput="updateAttendeeField(${idx}, 'email', this.value)" class="w-full border-0 p-0.5 text-xs focus:outline-none" placeholder="email@company.com"></td>
       <td class="border p-1 text-center"><button type="button" onclick="removeAttendeeRow(${idx})" class="text-red-600 font-bold hover:text-red-800" title="Xoá dòng">✕</button></td>
     </tr>
   `).join('');
@@ -5093,6 +5405,7 @@ function autoCreateTasksFromDirectives(m) {
       description: d.content,
       deadline: d.deadline || '',
       assignedTo: d.assignedTo, assignedToName: assignee ? assignee.name : d.assignedTo,
+      collaborators: Array.isArray(d.collaborators) ? [...d.collaborators] : [],
       assignedBy: currentUser.username, assignedByName: currentUser.name,
       sourceType: 'MEETING_MINUTES', sourceCode: m.code,
       status: 'TODO',
@@ -5101,11 +5414,17 @@ function autoCreateTasksFromDirectives(m) {
     };
     DB.tasks.unshift(newTask);
     logSystemAction('TASK', 'CREATE_TASK', `Tự động giao việc [${newTask.title}] cho ${newTask.assignedToName} (từ ${m.code})`, 'SUCCESS', m.code);
-    if (assignee && assignee.email) {
-      notifyUsersByEmail('TASK', 'NOTIFY_TASK_ASSIGNED', m.code, [d.assignedTo],
-        `[VPDT] Bạn được giao công việc mới từ Biên bản họp: ${m.title}`,
-        `${currentUser.name} đã giao cho bạn công việc theo chỉ đạo trong biên bản họp "${m.title}" (${m.code}): ${d.content}`);
+
+    notifyMinutesDirectiveRecipients(m, [d.assignedTo], 'TASK', 'NOTIFY_TASK_ASSIGNED', m.code,
+      `[VPDT] Bạn được giao công việc mới từ Biên bản họp: ${m.title}`,
+      `${currentUser.name} đã giao cho bạn công việc theo chỉ đạo trong biên bản họp "${m.title}" (${m.code}): ${d.content}`);
+
+    if (newTask.collaborators.length) {
+      notifyMinutesDirectiveRecipients(m, newTask.collaborators, 'TASK', 'NOTIFY_TASK_COLLABORATOR', m.code,
+        `[VPDT] Bạn được phân công phối hợp thực hiện: ${m.title}`,
+        `${currentUser.name} đã phân công bạn phối hợp thực hiện chỉ đạo trong biên bản họp "${m.title}" (${m.code}) cùng ${newTask.assignedToName}: ${d.content}`);
     }
+
     d.taskCreated = true;
     anyCreated = true;
   });
@@ -5174,8 +5493,8 @@ async function submitMeetingMinutes(e) {
 function openEditMeetingMinutes(id) {
   const m = DB.meetingMinutes.find(x => x.id === id);
   if (!m) return;
-  if (m.creator !== currentUser.username) {
-    return alert('⛔ Bạn chỉ có thể sửa biên bản do chính mình lập!');
+  if (!canEditMeetingMinutesRecord(currentUser, m)) {
+    return alert('⛔ Bạn không có quyền sửa biên bản họp này!');
   }
 
   editingMinutesId = id;
@@ -5218,9 +5537,9 @@ function cancelEditMeetingMinutes() {
 function updateMeetingMinutes(e) {
   const m = DB.meetingMinutes.find(x => x.id === editingMinutesId);
   if (!m) { cancelEditMeetingMinutes(); return; }
-  if (m.creator !== currentUser.username) {
+  if (!canEditMeetingMinutesRecord(currentUser, m)) {
     cancelEditMeetingMinutes();
-    return alert('⛔ Bạn chỉ có thể sửa biên bản do chính mình lập!');
+    return alert('⛔ Bạn không có quyền sửa biên bản họp này!');
   }
 
   const linkedMeetingRaw = document.getElementById('minutesLinkedMeeting').value;
@@ -5261,8 +5580,10 @@ function renderMeetingMinutes() {
   const toDate = document.getElementById('filterToDateMinutes')?.value || '';
   const keyword = (document.getElementById('filterKeywordMinutes')?.value || '').trim();
 
-  // Biên bản họp là kênh chung, không giới hạn theo phòng ban -> mọi người dùng đều XEM được toàn bộ.
+  // Chỉ hiện các biên bản người dùng có quyền XEM: admin/người có quyền minutesView, người tạo,
+  // hoặc có tên trong Thành phần tham dự của chính biên bản đó.
   const visible = DB.meetingMinutes.filter(m => {
+    if (!canViewMeetingMinutesRecord(currentUser, m)) return false;
     if (topicFilter && !(m.title || '').toLowerCase().includes(topicFilter)) return false;
     if (!isInDateRange(m.createdAt, fromDate, toDate)) return false;
     if (!matchesKeywordFields([m.code, m.title, m.chair, m.creatorName], keyword)) return false;
@@ -5286,16 +5607,34 @@ function renderMeetingMinutes() {
       <td class="border p-2 text-center">${(m.directives || []).length}</td>
       <td class="border p-2 text-center space-x-1">
         <button onclick="viewMeetingMinutesDetails(${m.id})" class="bg-rose-600 text-white px-2 py-1 rounded text-xs hover:bg-rose-700 font-bold">🔍 Xem chi tiết</button>
-        <button onclick="downloadMeetingMinutes(${m.id})" class="bg-slate-600 text-white px-2 py-1 rounded text-xs hover:bg-slate-700 font-bold">⬇️ Tải</button>
-        ${m.creator === currentUser.username ? `<button onclick="openEditMeetingMinutes(${m.id})" class="bg-amber-600 text-white px-2 py-1 rounded text-xs hover:bg-amber-700 font-bold">✏️ Sửa</button>` : ''}
+        ${canDownloadMeetingMinutesRecord(currentUser, m) ? `<button onclick="downloadMeetingMinutes(${m.id})" class="bg-slate-600 text-white px-2 py-1 rounded text-xs hover:bg-slate-700 font-bold">⬇️ Tải</button>` : ''}
+        ${canEditMeetingMinutesRecord(currentUser, m) ? `<button onclick="openEditMeetingMinutes(${m.id})" class="bg-amber-600 text-white px-2 py-1 rounded text-xs hover:bg-amber-700 font-bold">✏️ Sửa</button>` : ''}
+        ${canDeleteMeetingMinutesRecord(currentUser, m) ? `<button onclick="deleteMeetingMinutes(${m.id})" class="bg-red-600 text-white px-2 py-1 rounded text-xs hover:bg-red-700 font-bold">🗑️ Xóa</button>` : ''}
       </td>
     </tr>
   `).join('');
 }
 
+function deleteMeetingMinutes(id) {
+  const m = DB.meetingMinutes.find(x => x.id === id);
+  if (!m) return;
+  if (!canDeleteMeetingMinutesRecord(currentUser, m)) {
+    return alert('⛔ Bạn không có quyền xóa biên bản họp này!');
+  }
+  if (!confirm(`Bạn có chắc chắn muốn xóa biên bản họp [${m.code}]? Hành động này không thể hoàn tác.`)) return;
+
+  DB.meetingMinutes = DB.meetingMinutes.filter(x => x.id !== id);
+  syncStorage('meetingMinutes');
+  logSystemAction('MINUTES', 'DELETE_MINUTES', `Xóa biên bản họp [${m.code} - ${m.title}]`, 'SUCCESS', m.code);
+  renderMeetingMinutes();
+}
+
 function viewMeetingMinutesDetails(id) {
   const m = DB.meetingMinutes.find(x => x.id === id);
   if (!m) return;
+  if (!canViewMeetingMinutesRecord(currentUser, m)) {
+    return alert('⛔ Bạn không có quyền xem biên bản họp này!');
+  }
 
   document.getElementById('viewModalTitle').innerText = `📝 ${m.title} (${m.code})`;
   document.getElementById('viewModalSub').innerText = `Chủ trì: ${m.chair} | Thư ký: ${m.secretary}`;
@@ -5321,7 +5660,7 @@ function viewMeetingMinutesDetails(id) {
             .map(username => DB.users.find(x => x.username === username)?.name || username);
           const actionCell = d.taskCreated
             ? `<span class="text-emerald-700 font-bold text-[11px]">✅ Đã giao việc</span>`
-            : `<button onclick="createTaskFromMinutesDirective(${m.id}, ${idx})" class="bg-violet-600 text-white px-2 py-0.5 rounded text-[11px] font-bold hover:bg-violet-700">📌 Giao việc</button>`;
+            : (canManageTasks(currentUser) ? `<button onclick="createTaskFromMinutesDirective(${m.id}, ${idx})" class="bg-violet-600 text-white px-2 py-0.5 rounded text-[11px] font-bold hover:bg-violet-700">📌 Giao việc</button>` : '<span class="text-gray-400 italic text-[11px]">Chưa gán</span>');
           return `<tr><td class="border p-1 text-center">${idx + 1}</td><td class="border p-1">${escapeHtml(d.content)}</td><td class="border p-1">${escapeHtml(u ? u.name : (d.assignedTo || 'Chưa gán'))}</td><td class="border p-1">${collaboratorNames.length ? escapeHtml(collaboratorNames.join(', ')) : '<span class="text-gray-400 italic">Không có</span>'}</td><td class="border p-1">${escapeHtml(d.deadline || '')}</td><td class="border p-1 text-center">${actionCell}</td></tr>`;
         }).join('')}
       </tbody>
@@ -5439,6 +5778,9 @@ function buildMeetingMinutesDocumentHTML(m) {
 function downloadMeetingMinutes(id) {
   const m = DB.meetingMinutes.find(x => x.id === id);
   if (!m) return;
+  if (!canDownloadMeetingMinutesRecord(currentUser, m)) {
+    return alert('⛔ Bạn không có quyền tải biên bản họp này!');
+  }
   const fullHtml = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Bien Ban Hop - ${escapeHtml(m.code)}</title></head><body>${buildMeetingMinutesDocumentHTML(m)}</body></html>`;
   const blob = new Blob([fullHtml], { type: 'text/html;charset=utf-8;' });
   const url = URL.createObjectURL(blob);
@@ -7197,7 +7539,15 @@ function collectPermsFromForm() {
     officeView: scopeFromForm('pOfficeViewAll', 'pOfficeViewDept'),
     officeCreate: scopeFromForm('pOfficeCreateAll', 'pOfficeCreateDept'),
     officeDownload: scopeFromForm('pOfficeDownloadAll', 'pOfficeDownloadDept'),
-    minutesCreate: document.getElementById('pMinutesCreate').checked
+    minutesCreate: document.getElementById('pMinutesCreate').checked,
+    minutesView: document.getElementById('pMinutesView').checked,
+    minutesEdit: document.getElementById('pMinutesEdit').checked,
+    minutesDelete: document.getElementById('pMinutesDelete').checked,
+    minutesDownload: document.getElementById('pMinutesDownload').checked,
+    taskView: document.getElementById('pTaskView').checked,
+    taskEdit: document.getElementById('pTaskEdit').checked,
+    taskDelete: document.getElementById('pTaskDelete').checked,
+    taskDownload: document.getElementById('pTaskDownload').checked
   };
 }
 
@@ -7218,6 +7568,14 @@ function populatePermsForm(permsInput) {
   document.getElementById('pOfficeFix').checked = !!perms.officeFix;
   document.getElementById('pOfficeInvest').checked = !!perms.officeInvest;
   document.getElementById('pMinutesCreate').checked = !!perms.minutesCreate;
+  document.getElementById('pMinutesView').checked = !!perms.minutesView;
+  document.getElementById('pMinutesEdit').checked = !!perms.minutesEdit;
+  document.getElementById('pMinutesDelete').checked = !!perms.minutesDelete;
+  document.getElementById('pMinutesDownload').checked = !!perms.minutesDownload;
+  document.getElementById('pTaskView').checked = !!perms.taskView;
+  document.getElementById('pTaskEdit').checked = !!perms.taskEdit;
+  document.getElementById('pTaskDelete').checked = !!perms.taskDelete;
+  document.getElementById('pTaskDownload').checked = !!perms.taskDownload;
 
   document.getElementById('pUploadAll').checked = !!perms.uploadAll;
   document.getElementById('pViewDraftAll').checked = !!perms.viewDraftAll;
@@ -7507,6 +7865,14 @@ function resetUserForm() {
   document.getElementById('pOfficeFix').checked = defaults.officeFix;
   document.getElementById('pOfficeInvest').checked = defaults.officeInvest;
   document.getElementById('pMinutesCreate').checked = !!defaults.minutesCreate;
+  document.getElementById('pMinutesView').checked = !!defaults.minutesView;
+  document.getElementById('pMinutesEdit').checked = !!defaults.minutesEdit;
+  document.getElementById('pMinutesDelete').checked = !!defaults.minutesDelete;
+  document.getElementById('pMinutesDownload').checked = !!defaults.minutesDownload;
+  document.getElementById('pTaskView').checked = !!defaults.taskView;
+  document.getElementById('pTaskEdit').checked = !!defaults.taskEdit;
+  document.getElementById('pTaskDelete').checked = !!defaults.taskDelete;
+  document.getElementById('pTaskDownload').checked = !!defaults.taskDownload;
 
   [
     'pUploadAll', 'pViewDraftAll', 'pViewApprovedAll', 'pDocDownloadAll',
