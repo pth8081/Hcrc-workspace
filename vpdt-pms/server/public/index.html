@@ -43,10 +43,8 @@
         <button id="btnMinutesTab" onclick="switchTab('minutes')" class="hidden text-xs bg-rose-600 text-white px-2 py-1 rounded hover:bg-rose-700 font-semibold">📝 Biên bản họp</button>
         <button id="btnCarTab" onclick="switchTab('car')" class="hidden text-xs bg-indigo-600 text-white px-2 py-1 rounded hover:bg-indigo-700 font-semibold">🚗 Đăng ký xe</button>
         <button id="btnOfficeTab" onclick="switchTab('office')" class="hidden text-xs bg-teal-600 text-white px-2 py-1 rounded hover:bg-teal-700 font-semibold">🏢 Phê duyệt VP</button>
-        <button id="btnFormTab" onclick="switchTab('form')" class="hidden text-xs bg-rose-600 text-white px-2 py-1 rounded hover:bg-rose-700 font-semibold">📋 Biểu mẫu</button>
-        <button id="btnWorkflowTab" onclick="switchTab('workflow')" class="hidden text-xs bg-emerald-600 text-white px-2 py-1 rounded hover:bg-emerald-700 font-semibold">🔄 Quy trình & Đồng cấp</button>
-        <button id="btnAdminTab" onclick="switchTab('admin')" class="hidden text-xs bg-purple-600 text-white px-2 py-1 rounded hover:bg-purple-700 font-semibold">⚙️ Quản trị</button>
         <button id="btnReportsTab" onclick="switchTab('reports')" class="hidden text-xs bg-sky-600 text-white px-2 py-1 rounded hover:bg-sky-700 font-semibold">📊 Báo cáo</button>
+        <button id="btnSystemTab" onclick="switchTab('system')" class="hidden text-xs bg-purple-600 text-white px-2 py-1 rounded hover:bg-purple-700 font-semibold">🛠️ Hệ Thống</button>
         <button id="btnLogTab" onclick="switchTab('log')" class="hidden text-xs bg-stone-600 text-white px-2 py-1 rounded hover:bg-stone-700 font-semibold">📊 Log</button>
         <button onclick="logout()" class="text-xs text-red-500 underline py-1 hover:text-red-700">Đăng xuất</button>
       </div>
@@ -1242,6 +1240,15 @@
   </div>
 
   <!-- Màn hình 4: Tab Quản Trị Hệ Thống & Phân Quyền -->
+  <!-- Màn hình Hệ Thống — gộp Quản trị + Biểu mẫu + Quy trình & Phê duyệt đồng cấp, chỉ dành cho admin -->
+  <div id="systemSection" class="hidden space-y-4">
+    <div class="flex gap-2 flex-wrap border-b pb-2">
+      <button type="button" onclick="setSystemSubTab('ADMIN')" id="btnSystemSubAdmin" class="px-3 py-1.5 rounded text-xs font-bold bg-purple-700 text-white">⚙️ Quản Trị</button>
+      <button type="button" onclick="setSystemSubTab('FORM')" id="btnSystemSubForm" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">📋 Biểu Mẫu</button>
+      <button type="button" onclick="setSystemSubTab('WORKFLOW')" id="btnSystemSubWorkflow" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">🔄 Quy Trình & Phê Duyệt</button>
+    </div>
+  </div>
+
   <div id="adminSection" class="hidden space-y-6">
     <!-- CẤU HÌNH HỆ THỐNG EMAIL -->
     <div class="bg-amber-50 p-4 rounded border border-amber-300 space-y-3">
@@ -1314,8 +1321,8 @@
       
       <form onsubmit="saveUser(event)" class="space-y-4">
         <input id="editUserId" type="hidden">
-        
-        <div class="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-3 bg-white p-3 rounded border">
+
+        <div id="userIdentityFields" class="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-7 gap-3 bg-white p-3 rounded border">
           <div>
             <label class="block text-xs font-semibold text-gray-600 mb-1">Tên đăng nhập</label>
             <input id="uUsername" placeholder="username" class="w-full border p-1.5 rounded text-xs" required>
@@ -1340,6 +1347,34 @@
             <label class="block text-xs font-semibold text-gray-600 mb-1">Phòng Ban</label>
             <select id="uDept" class="w-full border p-1.5 rounded text-xs" required></select>
           </div>
+          <div>
+            <label class="block text-xs font-semibold text-gray-600 mb-1">Nhóm Phân Quyền</label>
+            <select id="uPermGroup" onchange="onUserPermGroupChange()" class="w-full border p-1.5 rounded text-xs bg-white">
+              <option value="">-- Không thuộc nhóm (quyền riêng) --</option>
+            </select>
+          </div>
+        </div>
+
+        <div id="groupIdentityFields" class="hidden grid grid-cols-1 md:grid-cols-2 gap-3 bg-white p-3 rounded border">
+          <div>
+            <label class="block text-xs font-semibold text-gray-600 mb-1">Tên Nhóm Phân Quyền</label>
+            <input id="gGroupName" placeholder="VD: Trưởng phòng, Kế toán viên..." class="w-full border p-1.5 rounded text-xs">
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-gray-600 mb-1">Mô Tả</label>
+            <input id="gGroupDesc" placeholder="Mô tả ngắn về nhóm quyền này..." class="w-full border p-1.5 rounded text-xs">
+          </div>
+        </div>
+
+        <div id="permGroupLockNote" class="hidden bg-amber-50 border border-amber-300 text-amber-800 text-[11px] rounded p-2">
+          🔒 Người dùng này thuộc 1 nhóm phân quyền nên các quyền bên dưới bị khoá theo đúng quyền của nhóm. Muốn tuỳ chỉnh riêng, chọn lại "Không thuộc nhóm" ở trên.
+        </div>
+
+        <div id="permFieldsContainer" class="space-y-4">
+        <div class="bg-white p-3 rounded border space-y-2 text-xs">
+          <h4 class="font-bold text-gray-800 border-b pb-1 text-sm">0. Quyền Truy Cập Module</h4>
+          <p class="text-[11px] text-gray-500 italic">Công tắc BẬT/TẮT quyền vào từng module, độc lập với quyền Admin. Tắt module nào thì người dùng không vào được module đó, dù có quyền chi tiết bên dưới. Quyền Admin luôn vào được mọi module.</p>
+          <div id="moduleAccessCheckboxes" class="grid grid-cols-2 md:grid-cols-5 gap-2"></div>
         </div>
 
         <div class="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-3 text-xs">
@@ -1619,12 +1654,36 @@
             </div>
           </div>
         </div>
+        </div>
 
         <div class="flex justify-end gap-2 pt-2">
-          <button type="button" onclick="resetUserForm()" class="bg-gray-400 text-white px-4 py-1.5 rounded text-xs font-bold">Hủy</button>
-          <button type="submit" class="bg-purple-600 text-white px-6 py-1.5 rounded text-xs font-bold hover:bg-purple-700">Lưu Người Dùng & Phân Quyền</button>
+          <button type="button" onclick="cancelPermFormEdit()" class="bg-gray-400 text-white px-4 py-1.5 rounded text-xs font-bold">Hủy</button>
+          <button type="submit" id="btnSavePermForm" class="bg-purple-600 text-white px-6 py-1.5 rounded text-xs font-bold hover:bg-purple-700">Lưu Người Dùng & Phân Quyền</button>
         </div>
       </form>
+
+      <div class="bg-white p-4 rounded border space-y-3">
+        <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
+          <div>
+            <h4 class="font-bold text-sm text-gray-800">🗂️ Nhóm Phân Quyền</h4>
+            <p class="text-[11px] text-gray-500 italic">Gán người dùng vào 1 nhóm để họ tự động dùng đúng quyền của nhóm. Sửa quyền của nhóm sẽ cập nhật ngay cho mọi thành viên.</p>
+          </div>
+          <button type="button" onclick="startCreateGroup()" class="bg-purple-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-purple-700">➕ Tạo Nhóm Mới</button>
+        </div>
+        <div class="overflow-x-auto">
+          <table class="w-full border-collapse border text-xs">
+            <thead>
+              <tr class="bg-gray-100 text-left">
+                <th class="border p-2">Tên Nhóm</th>
+                <th class="border p-2">Mô Tả</th>
+                <th class="border p-2 text-center">Số Thành Viên</th>
+                <th class="border p-2 text-center">Thao Tác</th>
+              </tr>
+            </thead>
+            <tbody id="permGroupsTableBody"></tbody>
+          </table>
+        </div>
+      </div>
 
       <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 my-3 border-t pt-3">
         <h4 class="font-bold text-sm text-gray-800">Danh Sách Người Dùng & Quyền Hạn</h4>
@@ -2003,14 +2062,18 @@ const DB = {
   tasks: [],
   internalPosts: [],
   formTemplates: {},
+  permGroups: [],
   emailConfig: {}, systemLogs: []
 };
 
 let currentUser = null;
+let editingGroupId = null;
+let permFormMode = 'USER'; // 'USER' | 'GROUP' — form Người dùng/Nhóm phân quyền dùng chung 1 bộ checkbox
 let activeWfMod = 'DOC';
 // Lựa chọn mẫu quy trình CHƯA lưu (preview) theo phòng ban khi đang cấu hình — xem onWorkflowTemplateChange().
 let pendingWfTemplate = {};
 let activeOfficeSubTab = 'MUA_BAN';
+let activeSystemSubTab = 'ADMIN';
 let activeFormTab = 'SUBMISSION';
 let editingCustomFieldId = null;
 
@@ -2337,6 +2400,31 @@ function scopeHasAny(user, scope) {
   return !!(Array.isArray(scope?.depts) && scope.depts.length > 0);
 }
 
+// Danh sách các module nghiệp vụ có công tắc "Quyền Truy Cập Module" độc lập (không cần quyền
+// admin) — admin bật/tắt riêng cho từng người dùng ở khối "0. Quyền Truy Cập Module".
+const BUSINESS_MODULES = [
+  { key: 'doc', label: 'Tài Liệu' },
+  { key: 'submission', label: 'Văn Bản Trình / Tờ Trình' },
+  { key: 'task', label: 'Công Việc' },
+  { key: 'internal', label: 'Truyền Thông Nội Bộ' },
+  { key: 'contract', label: 'Hợp Đồng' },
+  { key: 'meeting', label: 'Đặt Phòng Họp' },
+  { key: 'minutes', label: 'Biên Bản Họp' },
+  { key: 'car', label: 'Đăng Ký Xe' },
+  { key: 'office', label: 'Phê Duyệt Văn Phòng' },
+  { key: 'reports', label: 'Báo Cáo' }
+];
+
+// Cổng truy cập module độc lập với các quyền hành động chi tiết (Xem/Tạo/Tải...) — admin luôn qua
+// được; user thường mặc định được BẬT ở mọi module (giữ nguyên hành vi cũ) trừ khi admin tắt riêng.
+function hasModuleAccess(user, moduleKey) {
+  if (!user) return false;
+  if (user.perms?.admin) return true;
+  const ma = user.perms?.moduleAccess;
+  if (!ma) return true;
+  return ma[moduleKey] !== false;
+}
+
 // Danh sách phòng ban được phép — dùng đổ vào <select> phòng ban khi tạo mới 1 hồ sơ.
 function getScopedDepts(user, scope) {
   if (!user) return [];
@@ -2425,15 +2513,32 @@ function getStepAdvanceMessage(stepApprovers) {
 }
 
 // --- HÀM KIỂM TRA PHÂN QUYỀN THEO MODULE ---
+function canAccessDocModule(user) {
+  if (!user) return false;
+  return hasModuleAccess(user, 'doc');
+}
+
+function canAccessTaskModule(user) {
+  if (!user) return false;
+  return hasModuleAccess(user, 'task');
+}
+
+function canAccessInternalModule(user) {
+  if (!user) return false;
+  return hasModuleAccess(user, 'internal');
+}
+
 function canAccessSubmissionModule(user) {
   if (!user) return false;
   if (user.perms?.admin) return true;
+  if (!hasModuleAccess(user, 'submission')) return false;
   return scopeHasAny(user, user.perms?.submissionView) || isApproverInWorkflowMap(DB.submissionDeptWorkflows, user.username);
 }
 
 function canAccessContractModule(user) {
   if (!user) return false;
   if (user.perms?.admin) return true;
+  if (!hasModuleAccess(user, 'contract')) return false;
   return scopeHasAny(user, user.perms?.contractView);
 }
 
@@ -2458,12 +2563,14 @@ function canCancelMeeting(user) {
 function canAccessMeetingModule(user) {
   if (!user) return false;
   if (user.perms?.admin) return true;
+  if (!hasModuleAccess(user, 'meeting')) return false;
   return scopeHasAny(user, user.perms?.meetingView) || canBookMeeting(user) || canApproveMeeting(user) || canCancelMeeting(user);
 }
 
 function canAccessCarModule(user) {
   if (!user) return false;
   if (user.perms?.admin) return true;
+  if (!hasModuleAccess(user, 'car')) return false;
   return scopeHasAny(user, user.perms?.carView) || isApproverInWorkflowMap(DB.carDeptWorkflows, user.username);
 }
 
@@ -2471,7 +2578,8 @@ function canAccessCarModule(user) {
 // nhập, giống Tài liệu/Công việc/Truyền thông nội bộ. Chỉ việc LẬP biên bản mới cần quyền riêng
 // (xem canCreateMeetingMinutes()).
 function canAccessMeetingMinutesModule(user) {
-  return !!user;
+  if (!user) return false;
+  return hasModuleAccess(user, 'minutes');
 }
 
 function canCreateMeetingMinutes(user) {
@@ -2481,7 +2589,8 @@ function canCreateMeetingMinutes(user) {
 
 function canAccessReportsModule(user) {
   if (!user) return false;
-  return !!(user.perms?.admin || user.perms?.canViewReports);
+  if (user.perms?.admin) return true;
+  return hasModuleAccess(user, 'reports') && !!user.perms?.canViewReports;
 }
 
 // Truyền thông nội bộ: XEM và tương tác (bình luận/thả tim) mở cho MỌI người dùng đã đăng nhập —
@@ -2519,6 +2628,7 @@ function canAccessOfficeSubTab(user, subType) {
 function canAccessOfficeModule(user) {
   if (!user) return false;
   if (user.perms?.admin) return true;
+  if (!hasModuleAccess(user, 'office')) return false;
   return !!(user.perms?.officeBuy || user.perms?.officeFix || user.perms?.officeInvest);
 }
 
@@ -2549,10 +2659,17 @@ function canDownloadFile(user, moduleKey, dept, ownerUsername) {
 // xem/tạo liên phòng ban nào — mỗi người chỉ thao tác trong phạm vi phòng ban của chính mình
 // (do scopeAllows/scopeHasAny/getScopedDepts luôn ngầm định cho phép phòng ban của bản thân).
 // Trước đây user mới được bật sẵn hầu hết các module nghiệp vụ trên toàn công ty — không an toàn.
+function defaultModuleAccess() {
+  const ma = {};
+  BUSINESS_MODULES.forEach(m => { ma[m.key] = true; });
+  return ma;
+}
+
 function defaultNewUserPerms() {
   const emptyScope = () => ({ all: false, depts: [] });
   return {
     admin: false,
+    moduleAccess: defaultModuleAccess(),
     canBeApprover: false,
     canViewReports: false,
     internalNewsCreate: false, internalTrainingCreate: false, internalRewardCreate: false,
@@ -2637,6 +2754,12 @@ function migrateLegacyPerms(perms) {
     delete p.downloadDepts;
     changed = true;
   }
+  // Quyền truy cập module (bật/tắt độc lập, không cần admin) — user cũ chưa có trường này thì mặc
+  // định BẬT ở mọi module để giữ nguyên hành vi/quyền truy cập đang có, admin có thể tắt bớt sau.
+  if (p.moduleAccess === undefined) {
+    p.moduleAccess = defaultModuleAccess();
+    changed = true;
+  }
 
   return { perms: p, changed };
 }
@@ -2679,6 +2802,7 @@ async function initDatabase() {
     DB.internalPosts = data.internalPosts || [];
     DB.workflows = data.workflows || [];
     DB.formTemplates = data.formTemplates || {};
+    DB.permGroups = data.permGroups || [];
     DB.emailConfig = data.emailConfig || {};
     DB.systemLogs = data.systemLogs || [];
 
@@ -2865,19 +2989,17 @@ function login() {
   document.getElementById('userInfo').innerText = `${user.name} (${user.dept})`;
   document.getElementById('userPhoneInfo').innerText = `📞 ${user.phone || 'Chưa có SĐT'} | ✉️ ${user.email || 'Chưa có Email'}`;
 
-  document.getElementById('btnAdminTab').classList.toggle('hidden', !user.perms.admin);
-  document.getElementById('btnWorkflowTab').classList.toggle('hidden', !user.perms.admin);
-  document.getElementById('btnFormTab').classList.toggle('hidden', !user.perms.admin);
+  document.getElementById('btnSystemTab').classList.toggle('hidden', !user.perms.admin);
   document.getElementById('btnLogTab').classList.toggle('hidden', !user.perms.admin);
   document.getElementById('btnReportsTab').classList.toggle('hidden', !canAccessReportsModule(user));
-  document.getElementById('btnDocTab').classList.remove('hidden');
+  document.getElementById('btnDocTab').classList.toggle('hidden', !canAccessDocModule(user));
 
   document.getElementById('btnSubmissionTab').classList.toggle('hidden', !canAccessSubmissionModule(user));
   document.getElementById('btnContractTab').classList.toggle('hidden', !canAccessContractModule(user));
   document.getElementById('btnMeetingTab').classList.toggle('hidden', !canAccessMeetingModule(user));
   document.getElementById('btnMinutesTab').classList.toggle('hidden', !canAccessMeetingMinutesModule(user));
-  document.getElementById('btnTaskTab').classList.remove('hidden');
-  document.getElementById('btnInternalTab').classList.remove('hidden');
+  document.getElementById('btnTaskTab').classList.toggle('hidden', !canAccessTaskModule(user));
+  document.getElementById('btnInternalTab').classList.toggle('hidden', !canAccessInternalModule(user));
   document.getElementById('btnCarTab').classList.toggle('hidden', !canAccessCarModule(user));
   document.getElementById('btnOfficeTab').classList.toggle('hidden', !canAccessOfficeModule(user));
 
@@ -2897,6 +3019,7 @@ function logout() {
   document.getElementById('internalSection').classList.add('hidden');
   document.getElementById('carSection').classList.add('hidden');
   document.getElementById('officeSection').classList.add('hidden');
+  document.getElementById('systemSection').classList.add('hidden');
   document.getElementById('formSection').classList.add('hidden');
   document.getElementById('adminSection').classList.add('hidden');
   document.getElementById('workflowSection').classList.add('hidden');
@@ -2908,6 +3031,18 @@ function logout() {
 function switchTab(tabName) {
   if (!currentUser) return logout();
 
+  if (tabName === 'doc' && !canAccessDocModule(currentUser)) {
+    alert('⛔ Bạn không có quyền truy cập Module Tài liệu!');
+    return;
+  }
+  if (tabName === 'task' && !canAccessTaskModule(currentUser)) {
+    alert('⛔ Bạn không có quyền truy cập Module Công việc!');
+    return;
+  }
+  if (tabName === 'internal' && !canAccessInternalModule(currentUser)) {
+    alert('⛔ Bạn không có quyền truy cập Module Truyền thông nội bộ!');
+    return;
+  }
   if (tabName === 'submission' && !canAccessSubmissionModule(currentUser)) {
     alert('⛔ Bạn không có quyền truy cập Module Xử lý Văn bản trình!');
     return;
@@ -2920,12 +3055,20 @@ function switchTab(tabName) {
     alert('⛔ Bạn không có quyền truy cập Module Quản lý phòng họp!');
     return;
   }
+  if (tabName === 'minutes' && !canAccessMeetingMinutesModule(currentUser)) {
+    alert('⛔ Bạn không có quyền truy cập Module Biên bản họp!');
+    return;
+  }
   if (tabName === 'car' && !canAccessCarModule(currentUser)) {
     alert('⛔ Bạn không có quyền truy cập Module Đăng ký xe!');
     return;
   }
   if (tabName === 'office' && !canAccessOfficeModule(currentUser)) {
     alert('⛔ Bạn không có quyền truy cập Module Phê duyệt Văn phòng!');
+    return;
+  }
+  if (tabName === 'reports' && !canAccessReportsModule(currentUser)) {
+    alert('⛔ Bạn không có quyền truy cập Module Báo cáo!');
     return;
   }
 
@@ -2938,9 +3081,10 @@ function switchTab(tabName) {
   document.getElementById('internalSection').classList.toggle('hidden', tabName !== 'internal');
   document.getElementById('carSection').classList.toggle('hidden', tabName !== 'car');
   document.getElementById('officeSection').classList.toggle('hidden', tabName !== 'office');
-  document.getElementById('formSection').classList.toggle('hidden', tabName !== 'form');
-  document.getElementById('adminSection').classList.toggle('hidden', tabName !== 'admin');
-  document.getElementById('workflowSection').classList.toggle('hidden', tabName !== 'workflow');
+  document.getElementById('systemSection').classList.toggle('hidden', tabName !== 'system');
+  document.getElementById('formSection').classList.toggle('hidden', !(tabName === 'system' && activeSystemSubTab === 'FORM'));
+  document.getElementById('adminSection').classList.toggle('hidden', !(tabName === 'system' && activeSystemSubTab === 'ADMIN'));
+  document.getElementById('workflowSection').classList.toggle('hidden', !(tabName === 'system' && activeSystemSubTab === 'WORKFLOW'));
   document.getElementById('logSection').classList.toggle('hidden', tabName !== 'log');
   document.getElementById('reportsSection').classList.toggle('hidden', tabName !== 'reports');
 
@@ -2970,11 +3114,7 @@ function switchTab(tabName) {
     }
     setOfficeSubTab(targetSub);
   }
-  if (tabName === 'form' && currentUser.perms.admin) { switchFormTab(activeFormTab); }
-  if (tabName === 'workflow' && currentUser.perms.admin) { renderWorkflowTab(); }
-  if (tabName === 'admin' && currentUser.perms.admin) {
-    renderDeptList(); renderCatList(); renderDeptCheckboxes(); renderUsers(); loadEmailConfigToForm();
-  }
+  if (tabName === 'system' && currentUser.perms.admin) { setSystemSubTab(activeSystemSubTab); }
   if (tabName === 'log' && currentUser.perms.admin) { renderSystemLogs(); }
   if (tabName === 'reports' && canAccessReportsModule(currentUser)) { renderReports(); }
 }
@@ -6314,6 +6454,30 @@ function downloadOfficeApprovalSlip(officeId) {
 }
 
 // ==========================================
+// 7b. MÀN HÌNH HỆ THỐNG (gộp Quản trị + Biểu mẫu + Quy trình & Phê duyệt đồng cấp, chỉ admin)
+// ==========================================
+function setSystemSubTab(subTab) {
+  if (!currentUser?.perms?.admin) return;
+  activeSystemSubTab = subTab;
+
+  document.getElementById('formSection').classList.toggle('hidden', subTab !== 'FORM');
+  document.getElementById('adminSection').classList.toggle('hidden', subTab !== 'ADMIN');
+  document.getElementById('workflowSection').classList.toggle('hidden', subTab !== 'WORKFLOW');
+
+  const activeCls = 'px-3 py-1.5 rounded text-xs font-bold bg-purple-700 text-white';
+  const inactiveCls = 'px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700';
+  document.getElementById('btnSystemSubAdmin').className = subTab === 'ADMIN' ? activeCls : inactiveCls;
+  document.getElementById('btnSystemSubForm').className = subTab === 'FORM' ? activeCls : inactiveCls;
+  document.getElementById('btnSystemSubWorkflow').className = subTab === 'WORKFLOW' ? activeCls : inactiveCls;
+
+  if (subTab === 'ADMIN') {
+    renderDeptList(); renderCatList(); renderDeptCheckboxes(); renderModuleAccessCheckboxes(); renderUsers(); loadEmailConfigToForm(); renderPermGroupsList();
+  }
+  if (subTab === 'FORM') { switchFormTab(activeFormTab); }
+  if (subTab === 'WORKFLOW') { renderWorkflowTab(); }
+}
+
+// ==========================================
 // 8. FORM BUILDER (DYNAMIC FIELDS)
 // ==========================================
 function renderFormTabsBar() {
@@ -6915,6 +7079,36 @@ function renderCatList() {
   `).join('');
 }
 
+// Vẽ danh sách checkbox "Quyền Truy Cập Module" (khối 0.) theo BUSINESS_MODULES — dùng lại cho cả
+// form Người dùng (prefix 'p') lẫn form Nhóm phân quyền (prefix 'g') qua tham số containerId/prefix.
+function renderModuleAccessCheckboxes(containerId = 'moduleAccessCheckboxes', prefix = 'pModuleAccess') {
+  const el = document.getElementById(containerId);
+  if (!el) return;
+  el.innerHTML = BUSINESS_MODULES.map(m => `
+    <label class="flex items-center gap-1.5 text-gray-700 cursor-pointer bg-slate-50 px-2 py-1 rounded border">
+      <input type="checkbox" id="${prefix}_${m.key}" checked>
+      <span>${escapeHtml(m.label)}</span>
+    </label>
+  `).join('');
+}
+
+function readModuleAccessFromForm(prefix = 'pModuleAccess') {
+  const ma = {};
+  BUSINESS_MODULES.forEach(m => {
+    const cb = document.getElementById(`${prefix}_${m.key}`);
+    ma[m.key] = cb ? cb.checked : true;
+  });
+  return ma;
+}
+
+function populateModuleAccessForm(moduleAccess, prefix = 'pModuleAccess') {
+  const ma = moduleAccess || defaultModuleAccess();
+  BUSINESS_MODULES.forEach(m => {
+    const cb = document.getElementById(`${prefix}_${m.key}`);
+    if (cb) cb.checked = ma[m.key] !== false;
+  });
+}
+
 function renderDeptCheckboxes() {
   const groups = [
     { container: 'pUploadDeptContainer', prefix: 'pUploadDept' },
@@ -6965,18 +7159,12 @@ function scopeFromForm(allId, deptPrefix) {
   };
 }
 
-function saveUser(e) {
-  e.preventDefault();
-  const editId = document.getElementById('editUserId').value;
-  const username = document.getElementById('uUsername').value.trim();
-  const pass = document.getElementById('uPassword').value.trim();
-  const name = document.getElementById('uFullName').value.trim();
-  const email = document.getElementById('uEmail').value.trim();
-  const phone = document.getElementById('uPhone').value.trim();
-  const dept = document.getElementById('uDept').value;
-
-  const perms = {
+// Đọc toàn bộ khối quyền (0-9) từ form — dùng chung cho cả Lưu Người Dùng lẫn Lưu Nhóm Phân Quyền,
+// vì 2 luồng này tái sử dụng ĐÚNG 1 bộ checkbox vật lý trên form (xem toggleUserPermFormMode()).
+function collectPermsFromForm() {
+  return {
     admin: document.getElementById('pAdmin').checked,
+    moduleAccess: readModuleAccessFromForm(),
     canBeApprover: document.getElementById('pCanBeApprover').checked,
     canViewReports: document.getElementById('pCanViewReports').checked,
     internalNewsCreate: document.getElementById('pInternalNewsCreate').checked,
@@ -7011,88 +7199,12 @@ function saveUser(e) {
     officeDownload: scopeFromForm('pOfficeDownloadAll', 'pOfficeDownloadDept'),
     minutesCreate: document.getElementById('pMinutesCreate').checked
   };
-
-  if (editId) {
-    const user = DB.users.find(u => u.id === parseInt(editId, 10));
-    if (user) {
-      user.username = username;
-      user.pass = pass;
-      user.name = name;
-      user.email = email;
-      user.phone = phone;
-      user.dept = dept;
-      user.perms = perms;
-    }
-  } else {
-    if (DB.users.some(u => u.username === username)) return alert('Tên đăng nhập đã tồn tại!');
-    DB.users.push({
-      id: Date.now(),
-      username, pass, name, email, phone, dept, perms
-    });
-  }
-
-  syncStorage('users');
-  logSystemAction('USER_MGM', 'SAVE_USER', `Lưu thông tin người dùng [${username}]`, 'SUCCESS', username);
-  alert('✅ Đã lưu thông tin người dùng và phân quyền!');
-  resetUserForm();
-  renderUsers();
 }
 
-function resetUserForm() {
-  document.getElementById('editUserId').value = '';
-  document.getElementById('uUsername').value = '';
-  document.getElementById('uPassword').value = '';
-  document.getElementById('uFullName').value = '';
-  document.getElementById('uEmail').value = '';
-  document.getElementById('uPhone').value = '';
-  // CẬP NHẬT: mặc định AN TOÀN cho user mới — không bật sẵn quyền xem/tạo liên phòng ban nào ở
-  // module nào cả (trước đây hầu hết module nghiệp vụ được bật sẵn = toàn công ty, xem phân tích ở
-  // defaultNewUserPerms()). Mỗi người vẫn luôn thao tác được trong phòng ban của chính mình.
-  const defaults = defaultNewUserPerms();
-  document.getElementById('pAdmin').checked = defaults.admin;
-  document.getElementById('pCanBeApprover').checked = !!defaults.canBeApprover;
-  document.getElementById('pCanViewReports').checked = !!defaults.canViewReports;
-  document.getElementById('pInternalNewsCreate').checked = !!defaults.internalNewsCreate;
-  document.getElementById('pInternalTrainingCreate').checked = !!defaults.internalTrainingCreate;
-  document.getElementById('pInternalRewardCreate').checked = !!defaults.internalRewardCreate;
-  document.getElementById('pMeetingApprove').checked = defaults.meetingApprove;
-  document.getElementById('pMeetingCancel').checked = defaults.meetingCancel;
-  document.getElementById('pOfficeBuy').checked = defaults.officeBuy;
-  document.getElementById('pOfficeFix').checked = defaults.officeFix;
-  document.getElementById('pOfficeInvest').checked = defaults.officeInvest;
-  document.getElementById('pMinutesCreate').checked = !!defaults.minutesCreate;
-
-  [
-    'pUploadAll', 'pViewDraftAll', 'pViewApprovedAll', 'pDocDownloadAll',
-    'pSubViewAll', 'pSubCreateAll', 'pSubDownloadAll',
-    'pContractViewAll', 'pContractCreateAll', 'pContractDownloadAll',
-    'pMeetingViewAll', 'pMeetingBookAll',
-    'pCarViewAll', 'pCarCreateAll', 'pCarDownloadAll',
-    'pOfficeViewAll', 'pOfficeCreateAll', 'pOfficeDownloadAll'
-  ].forEach(id => {
-    const cb = document.getElementById(id);
-    if (cb) { cb.checked = false; }
-  });
-
-  renderDeptCheckboxes();
-}
-
-function editUser(id) {
-  const user = DB.users.find(u => u.id === id);
-  if (!user) return;
-
-  document.getElementById('editUserId').value = user.id;
-  document.getElementById('uUsername').value = user.username;
-  document.getElementById('uPassword').value = user.pass || user.password || '';
-  document.getElementById('uFullName').value = user.name;
-  document.getElementById('uEmail').value = user.email || '';
-  document.getElementById('uPhone').value = user.phone || '';
-  document.getElementById('uDept').value = user.dept;
-
-  // Perms của user cũ (nếu chưa từng được di trú vì lý do nào đó) sẽ được quy đổi tạm thời ở đây để
-  // form luôn đọc đúng cấu trúc mới — initDatabase() đã tự động lưu lại bản di trú nên trường hợp
-  // này thực tế chỉ là lớp phòng vệ bổ sung.
-  const perms = migrateLegacyPerms(user.perms).perms;
+// Đổ 1 object perms lên toàn bộ khối checkbox (0-9) trên form — dùng chung cho cả Sửa Người Dùng
+// lẫn Sửa Nhóm Phân Quyền.
+function populatePermsForm(permsInput) {
+  const perms = migrateLegacyPerms(permsInput).perms || defaultNewUserPerms();
 
   document.getElementById('pAdmin').checked = !!perms.admin;
   document.getElementById('pCanBeApprover').checked = !!perms.canBeApprover;
@@ -7128,6 +7240,8 @@ function editUser(id) {
   document.getElementById('pOfficeDownloadAll').checked = !!perms.officeDownload?.all;
 
   renderDeptCheckboxes();
+  renderModuleAccessCheckboxes();
+  populateModuleAccessForm(perms.moduleAccess);
 
   const setGroupCheckboxes = (deptList, prefix) => {
     if (Array.isArray(deptList)) {
@@ -7160,17 +7274,278 @@ function editUser(id) {
   setGroupCheckboxes(perms.officeCreate?.depts, 'pOfficeCreateDept');
   setGroupCheckboxes(perms.officeDownload?.depts, 'pOfficeDownloadDept');
 
-  // Đồng bộ trạng thái "disabled" của các checkbox phòng ban khi ALL đang bật (sửa luôn 1 lỗi nhỏ
-  // có sẵn: trước đây khi sửa 1 user có *All=true, checkbox phòng ban không tự vô hiệu hoá lại).
+  ['pUploadAll', 'pViewDraftAll', 'pViewApprovedAll', 'pDocDownloadAll',
+   'pSubViewAll', 'pSubCreateAll', 'pSubDownloadAll',
+   'pContractViewAll', 'pContractCreateAll', 'pContractDownloadAll',
+   'pMeetingViewAll', 'pMeetingBookAll',
+   'pCarViewAll', 'pCarCreateAll', 'pCarDownloadAll',
+   'pOfficeViewAll', 'pOfficeCreateAll', 'pOfficeDownloadAll'
+  ].forEach(allId => {
+    const deptPrefix = allId.replace(/All$/, 'Dept');
+    toggleScopeGroup(allId, deptPrefix);
+  });
+}
+
+// ==========================================
+// NHÓM PHÂN QUYỀN (PERMISSION GROUPS)
+// Tái sử dụng ĐÚNG 1 bộ form/checkbox vật lý (khối 0-9) cho cả Người dùng lẫn Nhóm phân quyền,
+// chuyển đổi qua lại bằng toggleUserPermFormMode() thay vì nhân đôi ~30 checkbox.
+// ==========================================
+function toggleUserPermFormMode(mode) {
+  permFormMode = mode;
+  document.getElementById('userIdentityFields').classList.toggle('hidden', mode !== 'USER');
+  document.getElementById('groupIdentityFields').classList.toggle('hidden', mode !== 'GROUP');
+  // Ẩn field nào thì bỏ luôn "required" của field đó — display:none không tự loại field khỏi việc
+  // kiểm tra hợp lệ của trình duyệt, nếu không submit ở chế độ còn lại sẽ bị chặn ngầm.
+  ['uUsername', 'uPassword', 'uFullName', 'uEmail', 'uPhone', 'uDept'].forEach(id => {
+    document.getElementById(id).required = (mode === 'USER');
+  });
+  document.getElementById('btnSavePermForm').innerText = mode === 'GROUP' ? 'Lưu Nhóm Phân Quyền' : 'Lưu Người Dùng & Phân Quyền';
+  if (mode === 'GROUP') setPermFormLockedByGroup(false);
+}
+
+function setPermFormLockedByGroup(locked) {
+  document.querySelectorAll('#permFieldsContainer input').forEach(el => { el.disabled = locked; });
+  document.getElementById('permGroupLockNote').classList.toggle('hidden', !locked);
+}
+
+function onUserPermGroupChange() {
+  const groupId = document.getElementById('uPermGroup').value;
+  if (groupId) {
+    const group = DB.permGroups.find(g => g.id === groupId);
+    if (group) populatePermsForm(group.perms);
+    setPermFormLockedByGroup(true);
+  } else {
+    setPermFormLockedByGroup(false);
+  }
+}
+
+function renderPermGroupDropdown() {
+  const sel = document.getElementById('uPermGroup');
+  if (!sel) return;
+  const current = sel.value;
+  sel.innerHTML = '<option value="">-- Không thuộc nhóm (quyền riêng) --</option>' +
+    DB.permGroups.map(g => `<option value="${escapeHtml(g.id)}">${escapeHtml(g.name)}</option>`).join('');
+  if (DB.permGroups.some(g => g.id === current)) sel.value = current;
+}
+
+function renderPermGroupsList() {
+  renderPermGroupDropdown();
+  const tbody = document.getElementById('permGroupsTableBody');
+  if (!tbody) return;
+  if (DB.permGroups.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="4" class="text-center p-3 text-gray-500 italic">Chưa có nhóm phân quyền nào.</td></tr>`;
+    return;
+  }
+  tbody.innerHTML = DB.permGroups.map(g => {
+    const memberCount = DB.users.filter(u => u.groupId === g.id).length;
+    return `
+    <tr class="border-b hover:bg-gray-50">
+      <td class="border p-2 font-bold text-gray-800">${escapeHtml(g.name)}</td>
+      <td class="border p-2 text-gray-600">${escapeHtml(g.description || '-')}</td>
+      <td class="border p-2 text-center">${memberCount}</td>
+      <td class="border p-2 text-center">
+        <button onclick="editPermGroup('${g.id}')" class="text-blue-600 font-bold hover:underline mr-2">Sửa</button>
+        <button onclick="deletePermGroup('${g.id}')" class="text-red-600 font-bold hover:underline">Xóa</button>
+      </td>
+    </tr>`;
+  }).join('');
+}
+
+function startCreateGroup() {
+  editingGroupId = null;
+  resetUserForm();
+  toggleUserPermFormMode('GROUP');
+  document.getElementById('gGroupName').value = '';
+  document.getElementById('gGroupDesc').value = '';
+  document.getElementById('gGroupName').scrollIntoView({ behavior: 'smooth', block: 'center' });
+}
+
+function editPermGroup(id) {
+  const group = DB.permGroups.find(g => g.id === id);
+  if (!group) return;
+  editingGroupId = id;
+  toggleUserPermFormMode('GROUP');
+  document.getElementById('gGroupName').value = group.name;
+  document.getElementById('gGroupDesc').value = group.description || '';
+  populatePermsForm(group.perms);
+  document.getElementById('gGroupName').scrollIntoView({ behavior: 'smooth', block: 'center' });
+}
+
+function savePermGroup(e) {
+  e.preventDefault();
+  const name = document.getElementById('gGroupName').value.trim();
+  if (!name) return alert('Vui lòng nhập Tên Nhóm Phân Quyền!');
+  const perms = collectPermsFromForm();
+
+  let group;
+  if (editingGroupId) {
+    group = DB.permGroups.find(g => g.id === editingGroupId);
+    if (!group) return;
+    group.name = name;
+    group.description = document.getElementById('gGroupDesc').value.trim();
+    group.perms = perms;
+  } else {
+    group = {
+      id: 'grp_' + Date.now(),
+      name,
+      description: document.getElementById('gGroupDesc').value.trim(),
+      perms
+    };
+    DB.permGroups.push(group);
+  }
+
+  // Nhóm là "vai trò" (role) — sửa quyền của nhóm phải cập nhật NGAY cho mọi thành viên đang gán.
+  let membersUpdated = 0;
+  DB.users.forEach(u => {
+    if (u.groupId === group.id) { u.perms = { ...perms }; membersUpdated++; }
+  });
+
+  syncStorage('permGroups');
+  if (membersUpdated > 0) syncStorage('users');
+  logSystemAction('USER_MGM', 'SAVE_PERM_GROUP', `Lưu nhóm phân quyền [${name}]${membersUpdated ? `, cập nhật quyền cho ${membersUpdated} thành viên` : ''}`, 'SUCCESS', name);
+  alert(`✅ Đã lưu nhóm phân quyền!${membersUpdated ? ` Đã tự động cập nhật quyền cho ${membersUpdated} thành viên.` : ''}`);
+
+  cancelPermFormEdit();
+  renderPermGroupsList();
+  renderUsers();
+}
+
+function deletePermGroup(id) {
+  const group = DB.permGroups.find(g => g.id === id);
+  if (!group) return;
+  const memberCount = DB.users.filter(u => u.groupId === id).length;
+  const msg = memberCount > 0
+    ? `Nhóm "${group.name}" đang có ${memberCount} thành viên. Xóa nhóm sẽ gỡ các thành viên này khỏi nhóm (họ giữ nguyên quyền hiện tại như quyền riêng, không còn tự động cập nhật theo nhóm nữa). Tiếp tục xóa?`
+    : `Bạn có chắc chắn muốn xóa nhóm phân quyền "${group.name}"?`;
+  if (!confirm(msg)) return;
+
+  DB.users.forEach(u => { if (u.groupId === id) u.groupId = null; });
+  DB.permGroups = DB.permGroups.filter(g => g.id !== id);
+
+  syncStorage('permGroups');
+  if (memberCount > 0) syncStorage('users');
+  logSystemAction('USER_MGM', 'DELETE_PERM_GROUP', `Xóa nhóm phân quyền [${group.name}]`, 'SUCCESS', group.name);
+  renderPermGroupsList();
+  renderUsers();
+}
+
+function cancelPermFormEdit() {
+  editingGroupId = null;
+  toggleUserPermFormMode('USER');
+  resetUserForm();
+}
+
+function saveUser(e) {
+  e.preventDefault();
+  if (permFormMode === 'GROUP') return savePermGroup(e); // form đang ở chế độ Nhóm — xem savePermGroup()
+
+  const editId = document.getElementById('editUserId').value;
+  const username = document.getElementById('uUsername').value.trim();
+  const pass = document.getElementById('uPassword').value.trim();
+  const name = document.getElementById('uFullName').value.trim();
+  const email = document.getElementById('uEmail').value.trim();
+  const phone = document.getElementById('uPhone').value.trim();
+  const dept = document.getElementById('uDept').value;
+  const groupId = document.getElementById('uPermGroup').value || null;
+
+  // Nếu gán vào nhóm phân quyền: quyền của user = quyền của nhóm (kế thừa hoàn toàn), khối checkbox
+  // trên form bị khoá (readonly) khi đang ở chế độ này nên không đọc từ form nữa mà lấy thẳng từ nhóm.
+  const group = groupId ? DB.permGroups.find(g => g.id === groupId) : null;
+  const perms = group ? { ...group.perms } : collectPermsFromForm();
+
+  if (editId) {
+    const user = DB.users.find(u => u.id === parseInt(editId, 10));
+    if (user) {
+      user.username = username;
+      user.pass = pass;
+      user.name = name;
+      user.email = email;
+      user.phone = phone;
+      user.dept = dept;
+      user.perms = perms;
+      user.groupId = groupId;
+    }
+  } else {
+    if (DB.users.some(u => u.username === username)) return alert('Tên đăng nhập đã tồn tại!');
+    DB.users.push({
+      id: Date.now(),
+      username, pass, name, email, phone, dept, perms, groupId
+    });
+  }
+
+  syncStorage('users');
+  logSystemAction('USER_MGM', 'SAVE_USER', `Lưu thông tin người dùng [${username}]`, 'SUCCESS', username);
+  alert('✅ Đã lưu thông tin người dùng và phân quyền!');
+  resetUserForm();
+  renderUsers();
+  renderPermGroupsList();
+}
+
+function resetUserForm() {
+  document.getElementById('editUserId').value = '';
+  document.getElementById('uUsername').value = '';
+  document.getElementById('uPassword').value = '';
+  document.getElementById('uFullName').value = '';
+  document.getElementById('uEmail').value = '';
+  document.getElementById('uPhone').value = '';
+  document.getElementById('uPermGroup').value = '';
+  setPermFormLockedByGroup(false);
+  // CẬP NHẬT: mặc định AN TOÀN cho user mới — không bật sẵn quyền xem/tạo liên phòng ban nào ở
+  // module nào cả (trước đây hầu hết module nghiệp vụ được bật sẵn = toàn công ty, xem phân tích ở
+  // defaultNewUserPerms()). Mỗi người vẫn luôn thao tác được trong phòng ban của chính mình.
+  const defaults = defaultNewUserPerms();
+  document.getElementById('pAdmin').checked = defaults.admin;
+  document.getElementById('pCanBeApprover').checked = !!defaults.canBeApprover;
+  document.getElementById('pCanViewReports').checked = !!defaults.canViewReports;
+  document.getElementById('pInternalNewsCreate').checked = !!defaults.internalNewsCreate;
+  document.getElementById('pInternalTrainingCreate').checked = !!defaults.internalTrainingCreate;
+  document.getElementById('pInternalRewardCreate').checked = !!defaults.internalRewardCreate;
+  document.getElementById('pMeetingApprove').checked = defaults.meetingApprove;
+  document.getElementById('pMeetingCancel').checked = defaults.meetingCancel;
+  document.getElementById('pOfficeBuy').checked = defaults.officeBuy;
+  document.getElementById('pOfficeFix').checked = defaults.officeFix;
+  document.getElementById('pOfficeInvest').checked = defaults.officeInvest;
+  document.getElementById('pMinutesCreate').checked = !!defaults.minutesCreate;
+
   [
-    ['pUploadAll', 'pUploadDept'], ['pViewDraftAll', 'pViewDraftDept'],
-    ['pViewApprovedAll', 'pViewApprovedDept'], ['pDocDownloadAll', 'pDocDownloadDept'],
-    ['pSubViewAll', 'pSubViewDept'], ['pSubCreateAll', 'pSubCreateDept'], ['pSubDownloadAll', 'pSubDownloadDept'],
-    ['pContractViewAll', 'pContractViewDept'], ['pContractCreateAll', 'pContractCreateDept'], ['pContractDownloadAll', 'pContractDownloadDept'],
-    ['pMeetingViewAll', 'pMeetingViewDept'], ['pMeetingBookAll', 'pMeetingBookDept'],
-    ['pCarViewAll', 'pCarViewDept'], ['pCarCreateAll', 'pCarCreateDept'], ['pCarDownloadAll', 'pCarDownloadDept'],
-    ['pOfficeViewAll', 'pOfficeViewDept'], ['pOfficeCreateAll', 'pOfficeCreateDept'], ['pOfficeDownloadAll', 'pOfficeDownloadDept']
-  ].forEach(([allId, prefix]) => toggleScopeGroup(allId, prefix));
+    'pUploadAll', 'pViewDraftAll', 'pViewApprovedAll', 'pDocDownloadAll',
+    'pSubViewAll', 'pSubCreateAll', 'pSubDownloadAll',
+    'pContractViewAll', 'pContractCreateAll', 'pContractDownloadAll',
+    'pMeetingViewAll', 'pMeetingBookAll',
+    'pCarViewAll', 'pCarCreateAll', 'pCarDownloadAll',
+    'pOfficeViewAll', 'pOfficeCreateAll', 'pOfficeDownloadAll'
+  ].forEach(id => {
+    const cb = document.getElementById(id);
+    if (cb) { cb.checked = false; }
+  });
+
+  renderDeptCheckboxes();
+  renderModuleAccessCheckboxes();
+  populateModuleAccessForm(defaults.moduleAccess);
+}
+
+function editUser(id) {
+  const user = DB.users.find(u => u.id === id);
+  if (!user) return;
+
+  editingGroupId = null;
+  toggleUserPermFormMode('USER');
+
+  document.getElementById('editUserId').value = user.id;
+  document.getElementById('uUsername').value = user.username;
+  document.getElementById('uPassword').value = user.pass || user.password || '';
+  document.getElementById('uFullName').value = user.name;
+  document.getElementById('uEmail').value = user.email || '';
+  document.getElementById('uPhone').value = user.phone || '';
+  document.getElementById('uDept').value = user.dept;
+  document.getElementById('uPermGroup').value = user.groupId || '';
+
+  // Perms của user cũ (nếu chưa từng được di trú vì lý do nào đó) sẽ được quy đổi tạm thời ở đây để
+  // form luôn đọc đúng cấu trúc mới — initDatabase() đã tự động lưu lại bản di trú nên trường hợp
+  // này thực tế chỉ là lớp phòng vệ bổ sung.
+  populatePermsForm(user.perms);
+  setPermFormLockedByGroup(!!user.groupId);
 }
 
 function deleteUser(id) {
@@ -7180,6 +7555,7 @@ function deleteUser(id) {
   syncStorage('users');
   logSystemAction('USER_MGM', 'DELETE_USER', `Xóa người dùng [${u?.username}]`, 'SUCCESS', u?.username);
   renderUsers();
+  renderPermGroupsList();
 }
 
 // Tóm tắt nhanh các module người dùng có thể Xem/Tạo — dùng cho danh sách người dùng ở Module
@@ -7205,19 +7581,25 @@ function renderUsers() {
   const tbody = document.getElementById('userTableBody');
   if (!tbody) return;
 
-  tbody.innerHTML = DB.users.map(u => `
+  tbody.innerHTML = DB.users.map(u => {
+    const group = u.groupId ? DB.permGroups.find(g => g.id === u.groupId) : null;
+    return `
     <tr class="hover:bg-gray-50 border-b">
       <td class="border p-2 font-bold font-mono text-purple-700">${escapeHtml(u.username)}</td>
       <td class="border p-2 font-semibold">${escapeHtml(u.name)}</td>
       <td class="border p-2 text-xs">✉️ ${escapeHtml(u.email || 'N/A')}<br>📞 ${escapeHtml(u.phone || 'N/A')}</td>
       <td class="border p-2">${escapeHtml(u.dept)}</td>
-      <td class="border p-2 text-xs">${summarizeUserPerms(u.perms)}</td>
+      <td class="border p-2 text-xs">
+        ${group ? `<span class="inline-block bg-purple-100 text-purple-700 font-bold px-1.5 py-0.5 rounded mb-1">🗂️ ${escapeHtml(group.name)}</span><br>` : ''}
+        ${summarizeUserPerms(u.perms)}
+      </td>
       <td class="border p-2 text-center space-x-1">
         <button onclick="editUser(${u.id})" class="text-blue-600 font-bold hover:underline">Sửa</button>
         <button onclick="deleteUser(${u.id})" class="text-red-600 font-bold hover:underline">Xóa</button>
       </td>
     </tr>
-  `).join('');
+  `;
+  }).join('');
 }
 
 function downloadUserTemplate() {
