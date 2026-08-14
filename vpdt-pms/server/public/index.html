@@ -347,6 +347,7 @@
               <th class="border p-2">Nguồn Gốc</th>
               <th class="border p-2">Hạn Hoàn Thành</th>
               <th class="border p-2">Trạng Thái</th>
+              <th class="border p-2">Gia Hạn / Trễ Hạn</th>
               <th class="border p-2 text-center min-w-[160px]">Thao Tác</th>
             </tr>
           </thead>
@@ -1877,7 +1878,7 @@
     <div class="p-3 bg-gray-50 border-t flex justify-between items-center text-xs">
       <span id="viewModalFooterInfo" class="text-gray-500 italic"></span>
       <div class="flex gap-2">
-        <button onclick="printViewModalContent()" class="bg-blue-600 text-white px-4 py-1.5 rounded font-bold hover:bg-blue-700">🖨️ In</button>
+        <button id="viewModalPrintBtn" onclick="printViewModalContent()" class="bg-blue-600 text-white px-4 py-1.5 rounded font-bold hover:bg-blue-700">🖨️ In</button>
         <button onclick="closeViewDocModal()" class="bg-gray-600 text-white px-5 py-1.5 rounded font-bold hover:bg-gray-700">Đóng</button>
       </div>
     </div>
@@ -2039,6 +2040,86 @@
     <div class="p-3 bg-gray-100 border-t flex justify-end gap-2 text-xs">
       <button onclick="closeCreateTaskModal()" class="bg-gray-500 text-white px-4 py-1.5 rounded font-bold hover:bg-gray-600">Huỷ</button>
       <button id="createTaskConfirmBtn" onclick="confirmCreateTask()" class="bg-violet-600 text-white px-5 py-1.5 rounded font-bold hover:bg-violet-700">✅ Xác Nhận Giao Việc</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL XIN GIA HẠN CÔNG VIỆC — người nhận việc điền hạn mới + lý do, gửi cho người giao việc duyệt -->
+<div id="taskExtensionRequestModal" class="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center hidden z-50 p-4">
+  <div class="bg-white rounded-lg shadow-2xl max-w-md w-full overflow-hidden">
+    <div class="flex justify-between items-center bg-orange-700 text-white p-4">
+      <h3 class="font-bold text-base flex items-center gap-2">📅 Xin Gia Hạn Công Việc</h3>
+      <button onclick="closeExtensionRequestModal()" class="text-orange-200 hover:text-white font-bold text-xl px-2">✕</button>
+    </div>
+    <div class="p-4 space-y-3 text-xs">
+      <div id="extReqCurrentInfo" class="text-gray-500 italic"></div>
+      <div>
+        <label class="block font-semibold text-gray-600 mb-1">Hạn hoàn thành mới</label>
+        <input id="extReqNewDeadline" type="date" class="w-full border p-2 rounded text-sm" required>
+      </div>
+      <div>
+        <label class="block font-semibold text-gray-600 mb-1">Lý do xin gia hạn</label>
+        <textarea id="extReqReason" class="w-full border p-2 rounded text-sm h-20" placeholder="Nhập lý do cần gia hạn..." required></textarea>
+      </div>
+      <p class="text-[11px] text-amber-700 italic">⚠️ Mỗi lần gia hạn được tính là 1 lần trễ hạn. Yêu cầu cần người giao việc phê duyệt mới có hiệu lực.</p>
+    </div>
+    <div class="p-3 bg-gray-100 border-t flex justify-end gap-2 text-xs">
+      <button onclick="closeExtensionRequestModal()" class="bg-gray-500 text-white px-4 py-1.5 rounded font-bold hover:bg-gray-600">Huỷ</button>
+      <button onclick="confirmRequestExtension()" class="bg-orange-600 text-white px-5 py-1.5 rounded font-bold hover:bg-orange-700">📤 Gửi Yêu Cầu</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL DUYỆT GIA HẠN — người giao việc xem yêu cầu và Đồng ý/Từ chối -->
+<div id="taskExtensionApproveModal" class="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center hidden z-50 p-4">
+  <div class="bg-white rounded-lg shadow-2xl max-w-md w-full overflow-hidden">
+    <div class="flex justify-between items-center bg-orange-700 text-white p-4">
+      <h3 class="font-bold text-base flex items-center gap-2">📅 Duyệt Yêu Cầu Gia Hạn</h3>
+      <button onclick="closeExtensionApproveModal()" class="text-orange-200 hover:text-white font-bold text-xl px-2">✕</button>
+    </div>
+    <div class="p-4 space-y-2 text-xs" id="extApproveInfo"></div>
+    <div class="p-3 bg-gray-100 border-t flex justify-end gap-2 text-xs">
+      <button onclick="rejectExtension()" class="bg-red-600 text-white px-4 py-1.5 rounded font-bold hover:bg-red-700">✕ Từ Chối</button>
+      <button onclick="approveExtension()" class="bg-green-600 text-white px-5 py-1.5 rounded font-bold hover:bg-green-700">✅ Đồng Ý Gia Hạn</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL CẬP NHẬT TIẾN ĐỘ — gộp các thao tác đổi trạng thái (Bắt đầu/Hoàn thành/Huỷ) + ghi chú tiến độ -->
+<div id="taskProgressModal" class="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center hidden z-50 p-4">
+  <div class="bg-white rounded-lg shadow-2xl max-w-md w-full overflow-hidden">
+    <div class="flex justify-between items-center bg-blue-700 text-white p-4">
+      <h3 class="font-bold text-base flex items-center gap-2">🔄 Cập Nhật Tiến Độ Công Việc</h3>
+      <button onclick="closeTaskProgressModal()" class="text-blue-200 hover:text-white font-bold text-xl px-2">✕</button>
+    </div>
+    <div class="p-4 space-y-3 text-xs">
+      <div id="progressTaskInfo" class="text-gray-500 italic"></div>
+      <div>
+        <label class="block font-semibold text-gray-600 mb-1">Trạng thái mới</label>
+        <select id="progressNewStatus" class="w-full border p-2 rounded bg-white text-sm"></select>
+      </div>
+      <div>
+        <label class="block font-semibold text-gray-600 mb-1">Ghi chú tiến độ (tuỳ chọn)</label>
+        <textarea id="progressNote" class="w-full border p-2 rounded text-sm h-16" placeholder="VD: đã hoàn thành 50%, đang chờ đối tác phản hồi..."></textarea>
+      </div>
+    </div>
+    <div class="p-3 bg-gray-100 border-t flex justify-end gap-2 text-xs">
+      <button onclick="closeTaskProgressModal()" class="bg-gray-500 text-white px-4 py-1.5 rounded font-bold hover:bg-gray-600">Huỷ</button>
+      <button onclick="confirmTaskProgress()" class="bg-blue-600 text-white px-5 py-1.5 rounded font-bold hover:bg-blue-700">💾 Cập Nhật</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL XEM CHI TIẾT CÔNG VIỆC — chỉ đọc -->
+<div id="taskDetailModal" class="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center hidden z-50 p-4">
+  <div class="bg-white rounded-lg shadow-2xl max-w-2xl w-full flex flex-col max-h-[90vh] overflow-hidden">
+    <div class="flex justify-between items-center bg-slate-800 text-white p-4">
+      <h3 id="taskDetailTitle" class="font-bold text-base flex items-center gap-2">👁️ Chi Tiết Công Việc</h3>
+      <button onclick="closeTaskDetailModal()" class="text-slate-300 hover:text-white font-bold text-xl px-2">✕</button>
+    </div>
+    <div id="taskDetailContent" class="p-4 overflow-y-auto flex-1 text-xs space-y-3"></div>
+    <div class="p-3 bg-gray-100 border-t flex justify-end text-xs">
+      <button onclick="closeTaskDetailModal()" class="bg-gray-600 text-white px-5 py-1.5 rounded font-bold hover:bg-gray-700">Đóng</button>
     </div>
   </div>
 </div>
@@ -3861,14 +3942,12 @@ function getFileKind(fileType, fileName) {
   return 'other';
 }
 
-// Dựng HTML khung xem Protected View cho 1 tệp — dùng chung cho Tài liệu & Hợp đồng.
+// Dựng HTML khung xem Protected View cho 1 tệp — dùng cho ảnh / định dạng văn phòng / khác. PDF
+// KHÔNG còn đi qua hàm này (xem openFileProtectedView + renderPdfProtected ở script type="module"
+// cuối trang) — PDF được vẽ ra <canvas> bằng PDF.js thay vì plugin PDF gốc của trình duyệt, vì plugin
+// gốc (qua <object>/<iframe>) bị Chrome/Edge chặn khi nằm trong modal có lớp nền mờ ("PDF bị che bởi
+// phần tử khác"), và không thể ẩn thanh công cụ In/Tải có sẵn của plugin bằng JavaScript của trang.
 // Trả về null nếu không có tệp (để nơi gọi tự hiển thị nội dung tóm tắt thay thế).
-// CẬP NHẬT: sửa lỗi hiển thị trên các trình duyệt không hỗ trợ xem PDF/ảnh trực tiếp trong iframe:
-// - PDF dùng cặp <object>/<iframe> lồng nhau kèm link dự phòng ("bulletproof PDF embed") thay vì chỉ
-//   1 iframe với tham số #toolbar=0 (tham số này chỉ có tác dụng trên trình duyệt lõi Chromium).
-// - Định dạng văn phòng (doc/docx/xls/xlsx/ppt/pptx) trình duyệt KHÔNG có khả năng hiển thị trực tuyến
-//   (trước đây bị nhét chung vào iframe PDF nên hiển thị trống/lỗi) — nay hiển thị rõ thông báo + hướng
-//   dẫn dùng nút Tải xuống thay vì một khung xem trống gây hiểu lầm là lỗi.
 function buildProtectedViewerHTML(fileSrc, fileType, fileName, altLabel) {
   if (!fileSrc) return null;
   const kind = getFileKind(fileType, fileName);
@@ -3877,20 +3956,6 @@ function buildProtectedViewerHTML(fileSrc, fileType, fileName, altLabel) {
     return `
       <div class="flex flex-col items-center justify-center p-4 w-full protected-view-container" oncontextmenu="return false;">
         <img src="${fileSrc}" alt="${escapeHtml(altLabel || '')}" class="max-h-[65vh] max-w-full rounded border shadow-md object-contain pointer-events-none select-none" oncontextmenu="return false;" />
-      </div>
-    `;
-  }
-
-  if (kind === 'pdf') {
-    return `
-      <div class="w-full h-[65vh] relative protected-view-container" oncontextmenu="return false;">
-        <object data="${fileSrc}" type="application/pdf" class="w-full h-full border-0 rounded bg-white shadow-inner" style="user-select: none;">
-          <iframe src="${fileSrc}" class="w-full h-full border-0 rounded bg-white shadow-inner" style="user-select: none;" oncontextmenu="return false;">
-            <p class="p-4 text-center text-gray-600 text-sm">Trình duyệt của bạn không hỗ trợ xem PDF trực tuyến.
-              <a href="${fileSrc}" target="_blank" rel="noopener" class="text-blue-600 underline font-semibold">Mở tệp trong tab mới</a>
-            </p>
-          </iframe>
-        </object>
       </div>
     `;
   }
@@ -3905,43 +3970,77 @@ function buildProtectedViewerHTML(fileSrc, fileType, fileName, altLabel) {
   `;
 }
 
+// Mở #viewDocModal để xem 1 tệp đính kèm THẬT (khác với Phiếu/chứng từ do hệ thống tự dựng — những
+// Phiếu đó gọi thẳng viewModalContent.innerHTML nên KHÔNG qua hàm này và vẫn giữ nút In). Dùng chung
+// cho mọi module có tệp đính kèm (Tài liệu, Hợp đồng, Văn bản trình, Đăng ký xe, Văn phòng...). Theo
+// đúng chính sách mới: PDF luôn ẩn nút In (vẽ bằng PDF.js ra canvas, không có thao tác in/tải nào từ
+// khung xem); các loại tệp khác (ảnh, văn phòng...) cũng ẩn nút In vì đây là khung xem tệp đính kèm
+// thô, không phải chứng từ được thiết kế để in — nút In chỉ dành cho Phiếu hệ thống tự tạo.
+function openFileProtectedView({ title, sub, footerInfo, fileSrc, fileType, fileName, noFileFallbackHTML }) {
+  document.getElementById('viewModalTitle').innerText = title;
+  document.getElementById('viewModalSub').innerText = sub || '';
+  document.getElementById('viewModalFooterInfo').innerText = footerInfo || '';
+  document.getElementById('viewModalPrintBtn').classList.add('hidden');
+
+  const container = document.getElementById('viewModalContent');
+  const kind = fileSrc ? getFileKind(fileType, fileName) : null;
+
+  if (kind === 'pdf') {
+    container.innerHTML = `<div class="w-full h-[65vh] overflow-y-auto bg-gray-200 rounded protected-view-container" oncontextmenu="return false;"></div>`;
+    const pdfContainer = container.firstElementChild;
+    document.getElementById('viewDocModal').classList.remove('hidden');
+    if (window.renderPdfProtected) {
+      window.renderPdfProtected(pdfContainer, fileSrc, `PROTECTED VIEW - ${currentUser.name}`);
+    } else {
+      pdfContainer.innerHTML = '<div class="p-6 text-center text-gray-500 text-sm">⏳ Đang tải bộ xem PDF...</div>';
+    }
+    return;
+  }
+
+  const viewerHTML = fileSrc ? buildProtectedViewerHTML(fileSrc, fileType, fileName, title) : null;
+  container.innerHTML = viewerHTML || noFileFallbackHTML || `
+    <div class="w-full h-[60vh] bg-white p-6 rounded shadow border flex items-center justify-center text-gray-400 italic protected-view-container" oncontextmenu="return false;">
+      Không có tệp đính kèm để xem trước.
+    </div>
+  `;
+  document.getElementById('viewDocModal').classList.remove('hidden');
+}
+
 function viewDoc(docId) {
   const doc = DB.docs.find(d => d.id === docId);
   if (!doc) return;
-
-  document.getElementById('viewModalTitle').innerText = `📄 ${doc.title} (${doc.code})`;
-  document.getElementById('viewModalSub').innerText = `Phòng ban: ${doc.dept} | Phân loại: ${doc.cat} | Phiên bản: ${doc.ver} | Người trình: ${doc.uploaderName || doc.uploader}`;
-  document.getElementById('viewModalFooterInfo').innerText = `Trích lục: ${doc.summary || 'Không có mô tả'}`;
-
-  const container = document.getElementById('viewModalContent');
   // fileUrl: file lưu trên server (mới). fileData: fallback cho bản ghi cũ còn base64 nhúng sẵn trong DB.
   const fileSrc = doc.fileUrl || doc.fileData;
-  const viewerHTML = buildProtectedViewerHTML(fileSrc, doc.fileType, doc.fileName, doc.title);
 
-  container.innerHTML = viewerHTML || `
-    <div class="w-full h-[60vh] bg-white p-6 rounded shadow border overflow-y-auto relative protected-view-container" oncontextmenu="return false;">
-      <div class="absolute inset-0 flex items-center justify-center pointer-events-none opacity-10 font-bold text-4xl text-gray-500 transform -rotate-45 select-none">
-        PROTECTED VIEW - ${escapeHtml(currentUser.name)}
-      </div>
-      <h4 class="font-bold text-lg text-gray-800 border-b pb-2 mb-4">${escapeHtml(doc.title)} (${escapeHtml(doc.code)})</h4>
-      <div class="text-sm text-gray-700 space-y-3">
-        <p><b>Phòng ban:</b> ${escapeHtml(doc.dept)}</p>
-        <p><b>Loại tài liệu:</b> ${escapeHtml(doc.cat)}</p>
-        <p><b>Phiên bản:</b> ${escapeHtml(doc.ver)}</p>
-        <p><b>Trích yếu nội dung:</b></p>
-        <div class="bg-gray-50 p-4 rounded border text-gray-800 italic">
-          ${escapeHtml(doc.summary || 'Không có mô tả chi tiết.')}
+  openFileProtectedView({
+    title: `📄 ${doc.title} (${doc.code})`,
+    sub: `Phòng ban: ${doc.dept} | Phân loại: ${doc.cat} | Phiên bản: ${doc.ver} | Người trình: ${doc.uploaderName || doc.uploader}`,
+    footerInfo: `Trích lục: ${doc.summary || 'Không có mô tả'}`,
+    fileSrc, fileType: doc.fileType, fileName: doc.fileName,
+    noFileFallbackHTML: `
+      <div class="w-full h-[60vh] bg-white p-6 rounded shadow border overflow-y-auto relative protected-view-container" oncontextmenu="return false;">
+        <div class="absolute inset-0 flex items-center justify-center pointer-events-none opacity-10 font-bold text-4xl text-gray-500 transform -rotate-45 select-none">
+          PROTECTED VIEW - ${escapeHtml(currentUser.name)}
+        </div>
+        <h4 class="font-bold text-lg text-gray-800 border-b pb-2 mb-4">${escapeHtml(doc.title)} (${escapeHtml(doc.code)})</h4>
+        <div class="text-sm text-gray-700 space-y-3">
+          <p><b>Phòng ban:</b> ${escapeHtml(doc.dept)}</p>
+          <p><b>Loại tài liệu:</b> ${escapeHtml(doc.cat)}</p>
+          <p><b>Phiên bản:</b> ${escapeHtml(doc.ver)}</p>
+          <p><b>Trích yếu nội dung:</b></p>
+          <div class="bg-gray-50 p-4 rounded border text-gray-800 italic">
+            ${escapeHtml(doc.summary || 'Không có mô tả chi tiết.')}
+          </div>
         </div>
       </div>
-    </div>
-  `;
-
-  document.getElementById('viewDocModal').classList.remove('hidden');
+    `
+  });
 }
 
 function closeViewDocModal() {
   document.getElementById('viewDocModal').classList.add('hidden');
   document.getElementById('viewModalContent').innerHTML = '';
+  document.getElementById('viewModalPrintBtn').classList.remove('hidden');
 }
 
 // In trực tiếp nội dung đang hiển thị trong Protected Viewer (tệp đính kèm hoặc phiếu/chứng từ
@@ -4178,9 +4277,12 @@ function openProcessSubmissionModal(subId) {
     detailsHTML += `
       <div class="border-t pt-2 mt-2 flex items-center justify-between gap-2">
         <span><b>📎 Tệp đính kèm:</b> ${escapeHtml(sub.fileName || '')}</span>
-        ${canDL
-          ? `<a href="${subFileSrc}" download="${escapeHtml(sub.fileName || sub.code)}" class="px-2 py-1 bg-slate-600 text-white rounded text-[11px] font-bold hover:bg-slate-700">⬇️ Tải</a>`
-          : `<span class="text-[11px] text-gray-400 italic">Không có quyền tải tệp</span>`}
+        <div class="flex gap-1">
+          <button type="button" onclick="viewSubmissionAttachment(${sub.id})" class="px-2 py-1 bg-blue-600 text-white rounded text-[11px] font-bold hover:bg-blue-700">👁️ Xem</button>
+          ${canDL
+            ? `<a href="${subFileSrc}" download="${escapeHtml(sub.fileName || sub.code)}" class="px-2 py-1 bg-slate-600 text-white rounded text-[11px] font-bold hover:bg-slate-700">⬇️ Tải</a>`
+            : `<span class="text-[11px] text-gray-400 italic">Không có quyền tải tệp</span>`}
+        </div>
       </div>
     `;
   }
@@ -4299,6 +4401,7 @@ function processSubmission(actionType) {
             assignedBy: currentUser.username, assignedByName: currentUser.name,
             sourceType: 'SUBMISSION', sourceCode: sub.code,
             status: 'TODO',
+            extensionCount: 0, lateCount: 0, pendingExtension: null,
             createdAt: new Date().toLocaleString('vi-VN'),
             history: [{ action: 'CREATED', by: currentUser.username, byName: currentUser.name, time: new Date().toLocaleString('vi-VN') }]
           };
@@ -4373,6 +4476,22 @@ function buildSubmissionApprovalSlipHTML(sub) {
     requesterTime: `Trình lúc: ${escapeHtml(sub.createdAt || '')}`,
     signatureColumnsHTML,
     footerNote: 'Phiếu được lập và phê duyệt điện tử trên Hệ thống Văn phòng điện tử (VPĐT) — không cần chữ ký tay/con dấu bản cứng. Thông tin phê duyệt có thể tra cứu lại trên hệ thống.'
+  });
+}
+
+// Xem trước tệp đính kèm gốc của 1 văn bản trình/tờ trình (khác với Phiếu Phê Duyệt do hệ thống tự
+// tạo — xem viewSubmissionApprovalSlip) — dùng chung Khung Xem Bảo Vệ với Tài liệu/Hợp đồng.
+function viewSubmissionAttachment(subId) {
+  const sub = DB.submissions.find(s => s.id === subId);
+  if (!sub) return;
+  const fileSrc = sub.fileUrl || sub.fileData;
+  if (!fileSrc) return;
+
+  openFileProtectedView({
+    title: `📎 ${sub.fileName || sub.title} (${sub.code})`,
+    sub: `Phòng ban: ${sub.dept} | Người trình: ${sub.creatorName}`,
+    footerInfo: `Văn bản trình: ${sub.title}`,
+    fileSrc, fileType: sub.fileType, fileName: sub.fileName
   });
 }
 
@@ -4579,6 +4698,7 @@ function confirmCreateTask() {
     sourceType: pendingTaskSource?.sourceType || 'MANUAL',
     sourceCode: pendingTaskSource?.sourceCode || '',
     status: 'TODO',
+    extensionCount: 0, lateCount: 0, pendingExtension: null,
     createdAt: new Date().toLocaleString('vi-VN'),
     history: [{ action: 'CREATED', by: currentUser.username, byName: currentUser.name, time: new Date().toLocaleString('vi-VN') }]
   };
@@ -4626,17 +4746,252 @@ function createTaskFromMinutesDirective(minutesId, directiveIdx) {
   });
 }
 
-function updateTaskStatus(id, newStatus) {
+function updateTaskStatus(id, newStatus, note) {
   const t = DB.tasks.find(x => x.id === id);
   if (!t) return;
   if (t.assignedTo !== currentUser.username && t.assignedBy !== currentUser.username && !currentUser.perms?.admin) {
     return alert('⛔ Bạn không có quyền cập nhật công việc này!');
   }
   t.status = newStatus;
-  t.history.push({ action: `STATUS_${newStatus}`, by: currentUser.username, byName: currentUser.name, time: new Date().toLocaleString('vi-VN') });
+  t.history.push({
+    action: `STATUS_${newStatus}`, by: currentUser.username, byName: currentUser.name,
+    time: new Date().toLocaleString('vi-VN'), note: note || ''
+  });
   syncStorage('tasks');
-  logSystemAction('TASK', 'UPDATE_TASK_STATUS', `Cập nhật công việc [${t.title}] sang trạng thái ${newStatus}`, 'SUCCESS', t.sourceCode || t.title);
+  logSystemAction('TASK', 'UPDATE_TASK_STATUS', `Cập nhật công việc [${t.title}] sang trạng thái ${newStatus}${note ? ` — Ghi chú: ${note}` : ''}`, 'SUCCESS', t.sourceCode || t.title);
   renderTasks();
+}
+
+// ==========================================
+// CẬP NHẬT TIẾN ĐỘ — gộp 3 nút trạng thái rời rạc (Bắt đầu/Hoàn thành/Huỷ) thành 1 modal chọn trạng
+// thái mới + ghi chú tiến độ tuỳ chọn, gọn phần thao tác trong bảng.
+// ==========================================
+let progressingTaskId = null;
+const TASK_STATUS_LABELS = { TODO: '⏳ Chưa bắt đầu', DOING: '🔵 Đang thực hiện', DONE: '✅ Hoàn thành', CANCELLED: '❌ Đã huỷ' };
+
+function openTaskProgressModal(taskId) {
+  const t = DB.tasks.find(x => x.id === taskId);
+  if (!t) return;
+  progressingTaskId = taskId;
+
+  document.getElementById('progressTaskInfo').innerText = `${t.title}${t.sourceCode ? ` (${t.sourceCode})` : ''} — Trạng thái hiện tại: ${TASK_STATUS_LABELS[t.status] || t.status}`;
+
+  const nextOptions = { TODO: ['DOING', 'CANCELLED'], DOING: ['DONE', 'CANCELLED'] }[t.status] || [];
+  const sel = document.getElementById('progressNewStatus');
+  sel.innerHTML = nextOptions.map(s => `<option value="${s}">${TASK_STATUS_LABELS[s]}</option>`).join('')
+    || `<option value="">-- Công việc đã kết thúc, không thể đổi trạng thái --</option>`;
+  document.getElementById('progressNote').value = '';
+
+  document.getElementById('taskProgressModal').classList.remove('hidden');
+}
+
+function closeTaskProgressModal() {
+  document.getElementById('taskProgressModal').classList.add('hidden');
+  progressingTaskId = null;
+}
+
+function confirmTaskProgress() {
+  if (progressingTaskId === null) return;
+  const newStatus = document.getElementById('progressNewStatus').value;
+  const note = document.getElementById('progressNote').value.trim();
+  if (!newStatus) return alert('Không có trạng thái hợp lệ để cập nhật.');
+  updateTaskStatus(progressingTaskId, newStatus, note);
+  closeTaskProgressModal();
+}
+
+// ==========================================
+// GIA HẠN CÔNG VIỆC — người nhận việc xin gia hạn (bắt buộc nhập lý do), người giao việc duyệt.
+// Mỗi lần gia hạn ĐƯỢC DUYỆT tính là 1 lần trễ hạn — extensionCount và lateCount luôn tăng cùng nhau.
+// ==========================================
+let requestingExtensionTaskId = null;
+
+function openExtensionRequestModal(taskId) {
+  const t = DB.tasks.find(x => x.id === taskId);
+  if (!t) return;
+  if (t.assignedTo !== currentUser.username && !currentUser.perms?.admin) {
+    return alert('⛔ Chỉ người nhận việc mới có thể xin gia hạn!');
+  }
+  if (t.pendingExtension) return alert('⛔ Công việc này đang có 1 yêu cầu gia hạn chờ duyệt, vui lòng đợi xử lý xong.');
+  requestingExtensionTaskId = taskId;
+
+  document.getElementById('extReqCurrentInfo').innerText = `${t.title} — Hạn hiện tại: ${t.deadline || 'Chưa đặt'}`;
+  document.getElementById('extReqNewDeadline').value = t.deadline || '';
+  document.getElementById('extReqReason').value = '';
+
+  document.getElementById('taskExtensionRequestModal').classList.remove('hidden');
+}
+
+function closeExtensionRequestModal() {
+  document.getElementById('taskExtensionRequestModal').classList.add('hidden');
+  requestingExtensionTaskId = null;
+}
+
+function confirmRequestExtension() {
+  if (requestingExtensionTaskId === null) return;
+  const t = DB.tasks.find(x => x.id === requestingExtensionTaskId);
+  if (!t) return closeExtensionRequestModal();
+
+  const newDeadline = document.getElementById('extReqNewDeadline').value;
+  const reason = document.getElementById('extReqReason').value.trim();
+  if (!newDeadline) return alert('Vui lòng chọn hạn hoàn thành mới!');
+  if (!reason) return alert('Vui lòng nhập lý do xin gia hạn!');
+
+  t.pendingExtension = {
+    newDeadline, reason,
+    requestedBy: currentUser.username, requestedByName: currentUser.name,
+    requestedAt: new Date().toLocaleString('vi-VN')
+  };
+  t.history.push({ action: 'EXTENSION_REQUESTED', by: currentUser.username, byName: currentUser.name, time: new Date().toLocaleString('vi-VN'), note: `Xin gia hạn tới ${newDeadline}. Lý do: ${reason}` });
+  syncStorage('tasks');
+  logSystemAction('TASK', 'EXTENSION_REQUESTED', `${currentUser.name} xin gia hạn công việc [${t.title}] tới ${newDeadline}. Lý do: ${reason}`, 'SUCCESS', t.sourceCode || t.title);
+
+  if (t.assignedBy) {
+    notifyUsersByEmail('TASK', 'NOTIFY_EXTENSION_REQUESTED', t.sourceCode || t.title, [t.assignedBy],
+      `[VPDT] Yêu cầu gia hạn công việc: ${t.title}`,
+      `${currentUser.name} xin gia hạn công việc "${t.title}" tới ${newDeadline}. Lý do: ${reason}`);
+  }
+
+  alert('✅ Đã gửi yêu cầu gia hạn, chờ người giao việc phê duyệt.');
+  closeExtensionRequestModal();
+  renderTasks();
+}
+
+function openExtensionApproveModal(taskId) {
+  const t = DB.tasks.find(x => x.id === taskId);
+  if (!t || !t.pendingExtension) return;
+  if (t.assignedBy !== currentUser.username && !currentUser.perms?.admin) {
+    return alert('⛔ Chỉ người giao việc mới có thể duyệt yêu cầu gia hạn!');
+  }
+  requestingExtensionTaskId = taskId;
+  const p = t.pendingExtension;
+  document.getElementById('extApproveInfo').innerHTML = `
+    <p><b>Công việc:</b> ${escapeHtml(t.title)}</p>
+    <p><b>Người xin gia hạn:</b> ${escapeHtml(p.requestedByName)} (lúc ${escapeHtml(p.requestedAt)})</p>
+    <p><b>Hạn hiện tại:</b> ${escapeHtml(t.deadline || 'Chưa đặt')}</p>
+    <p><b>Hạn mới đề nghị:</b> <span class="font-bold text-orange-700">${escapeHtml(p.newDeadline)}</span></p>
+    <p><b>Lý do:</b></p>
+    <div class="bg-gray-50 p-2 rounded border italic">${escapeHtml(p.reason)}</div>
+    <p class="text-[11px] text-amber-700">⚠️ Nếu đồng ý, số lần gia hạn và số lần trễ hạn của công việc này sẽ tăng thêm 1.</p>
+  `;
+  document.getElementById('taskExtensionApproveModal').classList.remove('hidden');
+}
+
+function closeExtensionApproveModal() {
+  document.getElementById('taskExtensionApproveModal').classList.add('hidden');
+  requestingExtensionTaskId = null;
+}
+
+function approveExtension() {
+  if (requestingExtensionTaskId === null) return;
+  const t = DB.tasks.find(x => x.id === requestingExtensionTaskId);
+  if (!t || !t.pendingExtension) return closeExtensionApproveModal();
+  if (t.assignedBy !== currentUser.username && !currentUser.perms?.admin) {
+    closeExtensionApproveModal();
+    return alert('⛔ Chỉ người giao việc mới có thể duyệt yêu cầu gia hạn!');
+  }
+
+  const p = t.pendingExtension;
+  const oldDeadline = t.deadline;
+  t.deadline = p.newDeadline;
+  t.extensionCount = (t.extensionCount || 0) + 1;
+  t.lateCount = (t.lateCount || 0) + 1;
+  t.pendingExtension = null;
+  t.history.push({ action: 'EXTENSION_APPROVED', by: currentUser.username, byName: currentUser.name, time: new Date().toLocaleString('vi-VN'), note: `Đồng ý gia hạn từ ${oldDeadline || 'chưa đặt'} sang ${p.newDeadline}. Lý do: ${p.reason}` });
+  syncStorage('tasks');
+  logSystemAction('TASK', 'EXTENSION_APPROVED', `${currentUser.name} đồng ý gia hạn công việc [${t.title}] sang ${p.newDeadline} (lần gia hạn thứ ${t.extensionCount})`, 'SUCCESS', t.sourceCode || t.title);
+
+  if (t.assignedTo) {
+    notifyUsersByEmail('TASK', 'NOTIFY_EXTENSION_APPROVED', t.sourceCode || t.title, [t.assignedTo],
+      `[VPDT] Yêu cầu gia hạn công việc đã được duyệt: ${t.title}`,
+      `${currentUser.name} đã đồng ý gia hạn công việc "${t.title}" tới hạn mới ${p.newDeadline}.`);
+  }
+
+  alert('✅ Đã duyệt gia hạn thành công!');
+  closeExtensionApproveModal();
+  renderTasks();
+}
+
+function rejectExtension() {
+  if (requestingExtensionTaskId === null) return;
+  const t = DB.tasks.find(x => x.id === requestingExtensionTaskId);
+  if (!t || !t.pendingExtension) return closeExtensionApproveModal();
+  if (t.assignedBy !== currentUser.username && !currentUser.perms?.admin) {
+    closeExtensionApproveModal();
+    return alert('⛔ Chỉ người giao việc mới có thể duyệt yêu cầu gia hạn!');
+  }
+
+  const p = t.pendingExtension;
+  t.pendingExtension = null;
+  t.history.push({ action: 'EXTENSION_REJECTED', by: currentUser.username, byName: currentUser.name, time: new Date().toLocaleString('vi-VN'), note: `Từ chối yêu cầu gia hạn tới ${p.newDeadline}` });
+  syncStorage('tasks');
+  logSystemAction('TASK', 'EXTENSION_REJECTED', `${currentUser.name} từ chối yêu cầu gia hạn công việc [${t.title}]`, 'SUCCESS', t.sourceCode || t.title);
+
+  if (t.assignedTo) {
+    notifyUsersByEmail('TASK', 'NOTIFY_EXTENSION_REJECTED', t.sourceCode || t.title, [t.assignedTo],
+      `[VPDT] Yêu cầu gia hạn công việc đã bị từ chối: ${t.title}`,
+      `${currentUser.name} đã từ chối yêu cầu gia hạn công việc "${t.title}". Hạn hoàn thành giữ nguyên: ${t.deadline || 'Chưa đặt'}.`);
+  }
+
+  alert('Đã từ chối yêu cầu gia hạn.');
+  closeExtensionApproveModal();
+  renderTasks();
+}
+
+// ==========================================
+// XEM CHI TIẾT CÔNG VIỆC — modal chỉ đọc, tổng hợp đầy đủ thông tin bao gồm số lần gia hạn/trễ hạn.
+// ==========================================
+function openTaskDetailModal(taskId) {
+  const t = DB.tasks.find(x => x.id === taskId);
+  if (!t) return;
+
+  const sourceLabels = { SUBMISSION: '📜 Văn bản trình', MEETING_MINUTES: '📝 Biên bản họp', MANUAL: '✋ Giao trực tiếp' };
+  const collabNames = (t.collaborators || []).map(u => DB.users.find(x => x.username === u)?.name || u);
+
+  document.getElementById('taskDetailTitle').innerText = `👁️ ${t.title}`;
+
+  const historyRows = (t.history || []).map(h => `
+    <tr>
+      <td class="border p-1.5">${escapeHtml(h.action)}</td>
+      <td class="border p-1.5">${escapeHtml(h.byName)}</td>
+      <td class="border p-1.5">${escapeHtml(h.time)}</td>
+      <td class="border p-1.5">${escapeHtml(h.note || '')}</td>
+    </tr>
+  `).join('') || `<tr><td colspan="4" class="border p-2 text-center text-gray-400 italic">Chưa có lịch sử xử lý</td></tr>`;
+
+  document.getElementById('taskDetailContent').innerHTML = `
+    <div class="grid grid-cols-2 gap-3 bg-gray-50 p-3 rounded border">
+      <div><b>Ngày giao:</b> ${escapeHtml(t.createdAt || '')}</div>
+      <div><b>Loại giao việc:</b> ${sourceLabels[t.sourceType] || t.sourceType}${t.sourceCode ? ` (${escapeHtml(t.sourceCode)})` : ''}</div>
+      <div><b>Người giao:</b> ${escapeHtml(t.assignedByName || '')}</div>
+      <div><b>Người nhận:</b> ${t.assignedToName ? escapeHtml(t.assignedToName) : '<span class="text-amber-600 font-bold">Chưa gán</span>'}</div>
+      ${collabNames.length ? `<div class="col-span-2"><b>Người phối hợp:</b> ${escapeHtml(collabNames.join(', '))}</div>` : ''}
+      <div><b>Trạng thái:</b> ${TASK_STATUS_LABELS[t.status] || t.status}</div>
+      <div><b>Hạn hoàn thành hiện tại:</b> ${escapeHtml(t.deadline || 'Chưa đặt')}</div>
+      <div><b>Số lần gia hạn:</b> <span class="font-bold text-orange-700">${t.extensionCount || 0}</span></div>
+      <div><b>Số lần trễ hạn:</b> <span class="font-bold text-red-700">${t.lateCount || 0}</span></div>
+    </div>
+    ${t.description ? `<div><b>Mô tả / Nội dung:</b><div class="bg-gray-50 p-2 rounded border mt-1">${escapeHtml(t.description)}</div></div>` : ''}
+    ${t.pendingExtension ? `
+      <div class="bg-orange-50 border border-orange-200 p-2 rounded">
+        <b class="text-orange-800">⏳ Đang chờ duyệt gia hạn</b> tới <b>${escapeHtml(t.pendingExtension.newDeadline)}</b>
+        — Lý do: ${escapeHtml(t.pendingExtension.reason)}
+        (xin lúc ${escapeHtml(t.pendingExtension.requestedAt)} bởi ${escapeHtml(t.pendingExtension.requestedByName)})
+      </div>
+    ` : ''}
+    <div>
+      <b>Lịch sử xử lý:</b>
+      <table class="w-full border-collapse border text-[11px] mt-1">
+        <thead><tr class="bg-gray-100"><th class="border p-1.5">Hành động</th><th class="border p-1.5">Người thực hiện</th><th class="border p-1.5">Thời gian</th><th class="border p-1.5">Ghi chú</th></tr></thead>
+        <tbody>${historyRows}</tbody>
+      </table>
+    </div>
+  `;
+
+  document.getElementById('taskDetailModal').classList.remove('hidden');
+}
+
+function closeTaskDetailModal() {
+  document.getElementById('taskDetailModal').classList.add('hidden');
 }
 
 function onTaskFilterChange() {
@@ -4664,7 +5019,7 @@ function renderTasks() {
   const pageItems = paginateList('task', visible, 'renderTasks', 'công việc');
 
   if (pageItems.length === 0) {
-    tbody.innerHTML = `<tr><td colspan="6" class="text-center p-6 text-gray-500 italic">Không có công việc nào phù hợp.</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="7" class="text-center p-6 text-gray-500 italic">Không có công việc nào phù hợp.</td></tr>`;
     return;
   }
 
@@ -4680,14 +5035,21 @@ function renderTasks() {
     const canUpdate = currentUser.perms?.admin || t.assignedTo === currentUser.username || t.assignedBy === currentUser.username;
     const canAssign = !t.assignedTo && (currentUser.perms?.admin || t.assignedBy === currentUser.username);
     const canManage = canManageTasks(currentUser);
+    const isAssignee = t.assignedTo === currentUser.username;
+    const isAssigner = t.assignedBy === currentUser.username || currentUser.perms?.admin;
+    const isOpenTask = t.status !== 'DONE' && t.status !== 'CANCELLED';
     let actionBtns = '';
+    actionBtns += `<button onclick="openTaskDetailModal(${t.id})" class="bg-slate-500 text-white px-2 py-1 rounded text-xs font-bold hover:bg-slate-600">👁️ Chi tiết</button> `;
     if (canAssign) {
       actionBtns += `<button onclick="openAssignTaskModal(${t.id})" class="bg-violet-600 text-white px-2 py-1 rounded text-xs font-bold hover:bg-violet-700">👤 Gán người nhận</button> `;
     }
-    if (canUpdate && t.assignedTo && t.status !== 'DONE' && t.status !== 'CANCELLED') {
-      if (t.status === 'TODO') actionBtns += `<button onclick="updateTaskStatus(${t.id}, 'DOING')" class="bg-blue-600 text-white px-2 py-1 rounded text-xs font-bold hover:bg-blue-700">▶️ Bắt đầu</button> `;
-      if (t.status === 'DOING') actionBtns += `<button onclick="updateTaskStatus(${t.id}, 'DONE')" class="bg-green-600 text-white px-2 py-1 rounded text-xs font-bold hover:bg-green-700">✅ Hoàn thành</button> `;
-      actionBtns += `<button onclick="updateTaskStatus(${t.id}, 'CANCELLED')" class="bg-red-600 text-white px-2 py-1 rounded text-xs font-bold hover:bg-red-700">✕ Huỷ</button> `;
+    if (canUpdate && t.assignedTo && isOpenTask) {
+      actionBtns += `<button onclick="openTaskProgressModal(${t.id})" class="bg-blue-600 text-white px-2 py-1 rounded text-xs font-bold hover:bg-blue-700">🔄 Cập nhật tiến độ</button> `;
+    }
+    if (t.pendingExtension && isAssigner) {
+      actionBtns += `<button onclick="openExtensionApproveModal(${t.id})" class="bg-orange-600 text-white px-2 py-1 rounded text-xs font-bold hover:bg-orange-700 animate-pulse">📅 Duyệt gia hạn</button> `;
+    } else if (isAssignee && t.assignedTo && isOpenTask) {
+      actionBtns += `<button onclick="openExtensionRequestModal(${t.id})" class="bg-orange-500 text-white px-2 py-1 rounded text-xs font-bold hover:bg-orange-600">📅 Xin gia hạn</button> `;
     }
     if (canManage) {
       actionBtns += `<button onclick="openEditTaskModal(${t.id})" class="bg-amber-600 text-white px-2 py-1 rounded text-xs font-bold hover:bg-amber-700">✏️ Sửa</button> `;
@@ -4707,8 +5069,12 @@ function renderTasks() {
         </td>
         <td class="border p-2 text-xs">Nhận: ${t.assignedToName ? `<b>${escapeHtml(t.assignedToName)}</b>` : '<span class="text-amber-600 font-bold">Chưa gán</span>'}<br>Giao: ${escapeHtml(t.assignedByName)}${collabNames.length ? `<br>Phối hợp: ${escapeHtml(collabNames.join(', '))}` : ''}</td>
         <td class="border p-2 text-xs">${sourceLabels[t.sourceType] || t.sourceType}${t.sourceCode ? `<br><span class="text-gray-400">${escapeHtml(t.sourceCode)}</span>` : ''}</td>
-        <td class="border p-2 text-xs">${escapeHtml(t.deadline || 'Chưa đặt')}</td>
+        <td class="border p-2 text-xs">${escapeHtml(t.deadline || 'Chưa đặt')}${t.pendingExtension ? `<br><span class="text-orange-600 font-bold">⏳ Chờ duyệt gia hạn</span>` : ''}</td>
         <td class="border p-2">${statusBadges[t.status] || t.status}</td>
+        <td class="border p-2 text-center text-xs">
+          <span class="font-bold text-orange-700">${t.extensionCount || 0}</span> gia hạn<br>
+          <span class="font-bold text-red-700">${t.lateCount || 0}</span> trễ hạn
+        </td>
         <td class="border p-2 text-center space-x-1">${actionBtns}</td>
       </tr>
     `;
@@ -4733,8 +5099,8 @@ function buildTaskSlipHTML(t) {
   const sourceLabels = { SUBMISSION: 'Văn bản trình', MEETING_MINUTES: 'Biên bản họp', MANUAL: 'Giao trực tiếp' };
   const statusLabels = { TODO: 'Chưa bắt đầu', DOING: 'Đang thực hiện', DONE: 'Hoàn thành', CANCELLED: 'Đã huỷ' };
   const collabNames = (t.collaborators || []).map(u => DB.users.find(x => x.username === u)?.name || u);
-  const historyRows = (t.history || []).map(h => `<tr><td>${escapeHtml(h.action)}</td><td>${escapeHtml(h.byName)}</td><td>${escapeHtml(h.time)}</td></tr>`).join('')
-    || `<tr><td colspan="3" style="text-align:center;color:#888;">Chưa có lịch sử xử lý</td></tr>`;
+  const historyRows = (t.history || []).map(h => `<tr><td>${escapeHtml(h.action)}</td><td>${escapeHtml(h.byName)}</td><td>${escapeHtml(h.time)}</td><td>${escapeHtml(h.note || '')}</td></tr>`).join('')
+    || `<tr><td colspan="4" style="text-align:center;color:#888;">Chưa có lịch sử xử lý</td></tr>`;
 
   return `
     <div class="task-doc">
@@ -4771,6 +5137,8 @@ function buildTaskSlipHTML(t) {
           <tr><td class="td-label">Người phối hợp:</td><td>${collabNames.length ? escapeHtml(collabNames.join(', ')) : 'Không có'}</td></tr>
           <tr><td class="td-label">Hạn hoàn thành:</td><td>${escapeHtml(t.deadline || 'Chưa đặt')}</td></tr>
           <tr><td class="td-label">Trạng thái:</td><td>${escapeHtml(statusLabels[t.status] || t.status)}</td></tr>
+          <tr><td class="td-label">Số lần gia hạn:</td><td>${t.extensionCount || 0}</td></tr>
+          <tr><td class="td-label">Số lần trễ hạn:</td><td>${t.lateCount || 0}</td></tr>
         </table>
 
         <div class="td-section-title">Nội Dung Công Việc</div>
@@ -4778,7 +5146,7 @@ function buildTaskSlipHTML(t) {
 
         <div class="td-section-title">Lịch Sử Xử Lý</div>
         <table class="td-items-table">
-          <thead><tr><th>Hành động</th><th>Người thực hiện</th><th>Thời gian</th></tr></thead>
+          <thead><tr><th>Hành động</th><th>Người thực hiện</th><th>Thời gian</th><th>Ghi chú</th></tr></thead>
           <tbody>${historyRows}</tbody>
         </table>
 
@@ -5123,33 +5491,30 @@ function viewContractDetails(contractId) {
 function viewContract(contractId) {
   const c = DB.contracts.find(x => x.id === contractId);
   if (!c) return;
-
-  document.getElementById('viewModalTitle').innerText = `📄 ${c.title} (${c.code})`;
-  document.getElementById('viewModalSub').innerText = `Phòng ban: ${c.dept} | Đối tác: ${c.partner} | Loại: ${c.type}`;
-  document.getElementById('viewModalFooterInfo').innerText = `Trích lược: ${c.content || 'Không có mô tả'}`;
-
-  const container = document.getElementById('viewModalContent');
   const fileSrc = c.fileUrl || c.fileData;
-  const viewerHTML = buildProtectedViewerHTML(fileSrc, c.fileType, c.fileName, c.title);
 
-  container.innerHTML = viewerHTML || `
-    <div class="w-full h-[60vh] bg-white p-6 rounded shadow border overflow-y-auto relative protected-view-container" oncontextmenu="return false;">
-      <div class="absolute inset-0 flex items-center justify-center pointer-events-none opacity-10 font-bold text-4xl text-gray-500 transform -rotate-45 select-none">
-        PROTECTED VIEW - ${escapeHtml(currentUser.name)}
-      </div>
-      <h4 class="font-bold text-lg text-gray-800 border-b pb-2 mb-4">${escapeHtml(c.title)} (${escapeHtml(c.code)})</h4>
-      <div class="text-sm text-gray-700 space-y-3">
-        <p><b>Đối tác:</b> ${escapeHtml(c.partner)}</p>
-        <p><b>Phòng ban:</b> ${escapeHtml(c.dept)}</p>
-        <p><b>Nội dung / Điều khoản chính:</b></p>
-        <div class="bg-gray-50 p-4 rounded border text-gray-800 italic">
-          ${escapeHtml(c.content || 'Không có mô tả chi tiết.')}
+  openFileProtectedView({
+    title: `📄 ${c.title} (${c.code})`,
+    sub: `Phòng ban: ${c.dept} | Đối tác: ${c.partner} | Loại: ${c.type}`,
+    footerInfo: `Trích lược: ${c.content || 'Không có mô tả'}`,
+    fileSrc, fileType: c.fileType, fileName: c.fileName,
+    noFileFallbackHTML: `
+      <div class="w-full h-[60vh] bg-white p-6 rounded shadow border overflow-y-auto relative protected-view-container" oncontextmenu="return false;">
+        <div class="absolute inset-0 flex items-center justify-center pointer-events-none opacity-10 font-bold text-4xl text-gray-500 transform -rotate-45 select-none">
+          PROTECTED VIEW - ${escapeHtml(currentUser.name)}
+        </div>
+        <h4 class="font-bold text-lg text-gray-800 border-b pb-2 mb-4">${escapeHtml(c.title)} (${escapeHtml(c.code)})</h4>
+        <div class="text-sm text-gray-700 space-y-3">
+          <p><b>Đối tác:</b> ${escapeHtml(c.partner)}</p>
+          <p><b>Phòng ban:</b> ${escapeHtml(c.dept)}</p>
+          <p><b>Nội dung / Điều khoản chính:</b></p>
+          <div class="bg-gray-50 p-4 rounded border text-gray-800 italic">
+            ${escapeHtml(c.content || 'Không có mô tả chi tiết.')}
+          </div>
         </div>
       </div>
-    </div>
-  `;
-
-  document.getElementById('viewDocModal').classList.remove('hidden');
+    `
+  });
 }
 
 // ==========================================
@@ -5567,6 +5932,7 @@ function autoCreateTasksFromDirectives(m) {
       assignedBy: currentUser.username, assignedByName: currentUser.name,
       sourceType: 'MEETING_MINUTES', sourceCode: m.code,
       status: 'TODO',
+      extensionCount: 0, lateCount: 0, pendingExtension: null,
       createdAt: new Date().toLocaleString('vi-VN'),
       history: [{ action: 'CREATED', by: currentUser.username, byName: currentUser.name, time: new Date().toLocaleString('vi-VN') }]
     };
@@ -8915,6 +9281,71 @@ function unregisterFromTraining(id) {
   viewInternalPostDetail(id);
   renderInternalPosts();
 }
+</script>
+
+<!-- Vẽ PDF ra <canvas> bằng PDF.js (tự lưu trên server qua /vendor/pdfjs, không qua CDN) thay cho
+     plugin PDF gốc của trình duyệt — sửa tận gốc lỗi Chrome/Edge chặn PDF nhúng trong modal có lớp nền
+     mờ (cảnh báo "PDF bị che bởi phần tử khác"), đồng thời loại bỏ thanh công cụ In/Tải có sẵn của
+     plugin trình duyệt (JS trang không thể ẩn được) và hiển thị nhất quán trên mọi trình duyệt kể cả
+     trình duyệt không hỗ trợ xem PDF sẵn. Dùng type="module" vì PDF.js chỉ phát hành bản ESM (.mjs).
+     LƯU Ý GIỚI HẠN: đây là chống sao chép thông thường (ẩn nút in/tải, chặn chuột phải) chứ không phải
+     bảo mật tuyệt đối — người dùng rành kỹ thuật vẫn có thể lấy tệp qua công cụ nhà phát triển. -->
+<script type="module">
+  import * as pdfjsLib from '/vendor/pdfjs/pdf.mjs';
+  pdfjsLib.GlobalWorkerOptions.workerSrc = '/vendor/pdfjs/pdf.worker.mjs';
+
+  window.renderPdfProtected = async function(container, fileSrc, watermarkText) {
+    container.innerHTML = '<div class="p-6 text-center text-gray-500 text-sm">⏳ Đang tải PDF để xem...</div>';
+    try {
+      const pdf = await pdfjsLib.getDocument(fileSrc).promise;
+      container.innerHTML = '';
+      const wrap = document.createElement('div');
+      wrap.className = 'flex flex-col items-center gap-3 py-2 w-full';
+      container.appendChild(wrap);
+
+      for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
+        const page = await pdf.getPage(pageNum);
+        const containerWidth = container.clientWidth || 800;
+        const baseViewport = page.getViewport({ scale: 1 });
+        const scale = Math.max(0.5, Math.min(2.5, (containerWidth - 32) / baseViewport.width));
+        const viewport = page.getViewport({ scale });
+
+        const pageWrap = document.createElement('div');
+        pageWrap.className = 'relative bg-white shadow-md flex-shrink-0';
+        pageWrap.style.width = viewport.width + 'px';
+        pageWrap.style.height = viewport.height + 'px';
+        pageWrap.oncontextmenu = () => false;
+
+        const canvas = document.createElement('canvas');
+        canvas.width = viewport.width;
+        canvas.height = viewport.height;
+        canvas.style.display = 'block';
+        canvas.oncontextmenu = () => false;
+        const ctx = canvas.getContext('2d');
+        await page.render({ canvasContext: ctx, viewport }).promise;
+        pageWrap.appendChild(canvas);
+
+        if (watermarkText) {
+          const wm = document.createElement('div');
+          wm.className = 'absolute inset-0 flex items-center justify-center pointer-events-none select-none overflow-hidden';
+          const span = document.createElement('span');
+          span.style.cssText = 'transform: rotate(-30deg); font-size: 2rem; font-weight: 700; color: rgba(120,120,120,0.18); white-space: nowrap;';
+          span.textContent = watermarkText;
+          wm.appendChild(span);
+          pageWrap.appendChild(wm);
+        }
+
+        const pageLabel = document.createElement('div');
+        pageLabel.className = 'text-[11px] text-gray-400 select-none';
+        pageLabel.textContent = `Trang ${pageNum}/${pdf.numPages}`;
+
+        wrap.appendChild(pageWrap);
+        wrap.appendChild(pageLabel);
+      }
+    } catch (err) {
+      container.innerHTML = `<div class="p-6 text-center text-red-600 text-sm">⛔ Không tải được PDF để xem: ${err.message}</div>`;
+    }
+  };
 </script>
 </body>
 </html>

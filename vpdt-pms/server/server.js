@@ -25,6 +25,12 @@ app.use('/api/send-email', emailRoutes);
 // Phục vụ file đính kèm đã tải lên
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
+// Phục vụ PDF.js (tự lưu trên server, không qua CDN) — dùng để vẽ PDF ra <canvas> ở Khung Xem Bảo Vệ
+// thay vì plugin PDF gốc của trình duyệt (bị Chrome/Edge chặn khi nằm trong modal có lớp nền mờ, và
+// không thể ẩn thanh công cụ In/Tải có sẵn của plugin). Lấy trực tiếp từ node_modules nên luôn khớp
+// phiên bản đã cài qua npm, không cần bước copy thủ công.
+app.use('/vendor/pdfjs', express.static(path.join(__dirname, 'node_modules', 'pdfjs-dist', 'legacy', 'build')));
+
 // Health check (dùng cho giám sát / load balancer / kiểm tra nhanh sau khi deploy)
 app.get('/api/health', async (req, res) => {
   try {
