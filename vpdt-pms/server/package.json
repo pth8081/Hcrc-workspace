@@ -12,7 +12,8 @@
     "express": "^4.19.2",
     "mssql": "^11.0.1",
     "multer": "^2.0.0",
-    "nodemailer": "^9.0.5"
+    "nodemailer": "^9.0.5",
+    "pdfjs-dist": "^4.10.38"
   },
   "engines": {
     "node": ">=18.0.0"
