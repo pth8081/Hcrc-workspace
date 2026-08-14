@@ -2036,6 +2036,11 @@
           <input id="taskDeadlineInput" type="date" class="w-full border p-2 rounded text-sm">
         </div>
       </div>
+      <div>
+        <label class="block font-semibold text-gray-600 mb-1">Người Phối Hợp (tuỳ chọn)</label>
+        <select id="taskCollaboratorsInput" multiple size="4" class="w-full border p-2 rounded bg-white text-sm"></select>
+        <div class="text-[11px] text-gray-400 mt-0.5">Giữ Ctrl/Cmd để chọn nhiều — lấy từ tài khoản hệ thống, sẽ nhận được email thông báo cùng người nhận.</div>
+      </div>
     </div>
     <div class="p-3 bg-gray-100 border-t flex justify-end gap-2 text-xs">
       <button onclick="closeCreateTaskModal()" class="bg-gray-500 text-white px-4 py-1.5 rounded font-bold hover:bg-gray-600">Huỷ</button>
@@ -2081,6 +2086,45 @@
     <div class="p-3 bg-gray-100 border-t flex justify-end gap-2 text-xs">
       <button onclick="rejectExtension()" class="bg-red-600 text-white px-4 py-1.5 rounded font-bold hover:bg-red-700">✕ Từ Chối</button>
       <button onclick="approveExtension()" class="bg-green-600 text-white px-5 py-1.5 rounded font-bold hover:bg-green-700">✅ Đồng Ý Gia Hạn</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL HUỶ CÔNG VIỆC — dùng chung cho cả 2 luồng: người giao việc/admin huỷ ngay (chỉ cần nhập lý
+     do), hoặc người nhận/phối hợp xin huỷ (nhập lý do -> chờ người giao việc duyệt) — xem
+     openCancelTaskModal() quyết định luồng theo người đang thao tác. -->
+<div id="taskCancelModal" class="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center hidden z-50 p-4">
+  <div class="bg-white rounded-lg shadow-2xl max-w-md w-full overflow-hidden">
+    <div class="flex justify-between items-center bg-red-700 text-white p-4">
+      <h3 id="cancelModalTitle" class="font-bold text-base flex items-center gap-2">✕ Huỷ Công Việc</h3>
+      <button onclick="closeCancelTaskModal()" class="text-red-200 hover:text-white font-bold text-xl px-2">✕</button>
+    </div>
+    <div class="p-4 space-y-3 text-xs">
+      <div id="cancelModalInfo" class="text-gray-500 italic"></div>
+      <div>
+        <label class="block font-semibold text-gray-600 mb-1">Lý do huỷ (bắt buộc)</label>
+        <textarea id="cancelReasonInput" class="w-full border p-2 rounded text-sm h-20" placeholder="Nhập lý do huỷ công việc..." required></textarea>
+      </div>
+      <p id="cancelModalNote" class="text-[11px] text-amber-700 italic"></p>
+    </div>
+    <div class="p-3 bg-gray-100 border-t flex justify-end gap-2 text-xs">
+      <button onclick="closeCancelTaskModal()" class="bg-gray-500 text-white px-4 py-1.5 rounded font-bold hover:bg-gray-600">Đóng</button>
+      <button id="cancelModalConfirmBtn" onclick="confirmCancelTask()" class="bg-red-600 text-white px-5 py-1.5 rounded font-bold hover:bg-red-700">✕ Huỷ Công Việc</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL DUYỆT HUỶ — người giao việc xem yêu cầu huỷ và Đồng ý/Từ chối -->
+<div id="taskCancelApproveModal" class="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center hidden z-50 p-4">
+  <div class="bg-white rounded-lg shadow-2xl max-w-md w-full overflow-hidden">
+    <div class="flex justify-between items-center bg-red-700 text-white p-4">
+      <h3 class="font-bold text-base flex items-center gap-2">✕ Duyệt Yêu Cầu Huỷ</h3>
+      <button onclick="closeCancelApproveModal()" class="text-red-200 hover:text-white font-bold text-xl px-2">✕</button>
+    </div>
+    <div class="p-4 space-y-2 text-xs" id="cancelApproveInfo"></div>
+    <div class="p-3 bg-gray-100 border-t flex justify-end gap-2 text-xs">
+      <button onclick="rejectCancellation()" class="bg-gray-500 text-white px-4 py-1.5 rounded font-bold hover:bg-gray-600">Từ Chối (Giữ việc)</button>
+      <button onclick="approveCancellation()" class="bg-red-600 text-white px-5 py-1.5 rounded font-bold hover:bg-red-700">✅ Đồng Ý Huỷ</button>
     </div>
   </div>
 </div>
@@ -2373,8 +2417,26 @@ let officeItems = [];
 // Danh sách dòng "Ý kiến chỉ đạo" của Biên bản họp đang nhập/sửa — mỗi dòng có thể gán ngay cho 1
 // người cụ thể (nguồn dữ liệu để Phase 3 tạo Công việc từ chỉ đạo).
 let minutesDirectives = [];
-// Danh sách dòng "Thành phần tham dự" đang nhập/sửa — mỗi dòng gồm Họ tên/Chức danh/Phòng/SĐT.
+// Danh sách dòng "Thành phần tham dự" đang nhập/sửa — mỗi dòng gồm Họ tên/Chức danh/Phòng/SĐT/Email,
+// có id ổn định riêng (genAttendeeId) để Ý kiến chỉ đạo tham chiếu tới đúng người, không phụ thuộc
+// việc khớp tên với tài khoản hệ thống — Người thực hiện/phối hợp lấy trực tiếp từ danh sách này.
 let minutesAttendeesRows = [];
+function genAttendeeId() { return `${Date.now()}-${Math.floor(Math.random() * 100000)}`; }
+
+// Tra cứu 1 người trong Thành phần tham dự theo id ổn định — dùng cho cả lúc đang nhập biên bản (đọc
+// từ minutesAttendeesRows, phản ứng ngay khi sửa/thêm/xoá người tham dự) lẫn sau khi đã lưu (đọc từ
+// m.attendees đã chốt). Nếu người đó cũng có 1 tài khoản hệ thống trùng tên thì trả kèm username để
+// liên kết quyền quản lý Công việc (Nhận việc, xem "việc của tôi"...); nếu không có tài khoản, username
+// là null — Công việc vẫn tạo được bình thường ("người thực hiện ngoài hệ thống"), chỉ khác là người
+// giao việc/admin sẽ thao tác (Nhận việc thay/Cập nhật tiến độ) thay cho họ vì họ không đăng nhập được.
+// Email thông báo LUÔN lấy đúng email đã nhập ở Thành phần tham dự, không fallback về email hệ thống.
+function resolveDirectiveAttendee(attendeesList, attendeeId) {
+  if (!attendeeId) return null;
+  const a = (attendeesList || []).find(x => String(x.id) === String(attendeeId));
+  if (!a || !(a.name || '').trim()) return null;
+  const matchedUser = DB.users.find(u => (u.name || '').trim().toLowerCase() === (a.name || '').trim().toLowerCase());
+  return { name: a.name.trim(), email: (a.email || '').trim(), username: matchedUser ? matchedUser.username : null };
+}
 
 // Danh sách phòng họp — nguồn dữ liệu DUY NHẤT dùng chung cho cả <select> đăng ký lẫn lưới Lịch Họp,
 // tránh lệch dữ liệu giữa 2 nơi. "short" dùng làm tiêu đề cột gọn trên lưới.
@@ -2686,7 +2748,7 @@ function canViewTaskRecord(user, t) {
   if (!user) return false;
   if (user.perms?.admin) return true;
   if (user.perms?.taskView) return true;
-  return t.assignedTo === user.username || t.assignedBy === user.username;
+  return t.assignedTo === user.username || t.assignedBy === user.username || (t.collaborators || []).includes(user.username);
 }
 
 function canDeleteTaskRecord(user) {
@@ -3157,29 +3219,6 @@ function notifyRecipientsByEmail(module, actionType, targetCode, recipients, sub
     valid.length ? 'SUCCESS' : 'WARNING',
     targetCode
   );
-}
-
-// Email của 1 người dùng hệ thống trong ngữ cảnh 1 biên bản họp cụ thể — ưu tiên lấy đúng email đã
-// NHẬP ở Thành phần tham dự (khớp theo Họ và Tên, không phân biệt hoa/thường), nếu người đó không
-// nhập email trong bảng tham dự thì mới dùng tạm email tài khoản hệ thống.
-function getAttendeeEmail(m, username) {
-  const user = DB.users.find(u => u.username === username);
-  if (!user) return null;
-  const uname = (user.name || '').trim().toLowerCase();
-  const attendee = (m.attendees || []).find(a => (a.name || '').trim().toLowerCase() === uname);
-  const email = (attendee && attendee.email && attendee.email.trim()) || user.email;
-  return email ? { username: user.username, name: user.name, email } : null;
-}
-
-// Giống notifyUsersByEmail() nhưng ưu tiên email đã nhập ở Thành phần tham dự biên bản họp — dùng
-// cho việc thông báo Người thực hiện/Người phối hợp khi tự động tạo Công việc từ ý kiến chỉ đạo.
-function notifyMinutesDirectiveRecipients(m, usernames, module, actionType, targetCode, subject, bodyText) {
-  const recipients = [];
-  for (const uname of new Set((usernames || []).filter(Boolean))) {
-    const r = getAttendeeEmail(m, uname);
-    if (r) recipients.push(r);
-  }
-  notifyRecipientsByEmail(module, actionType, targetCode, recipients, subject, bodyText);
 }
 
 // ==========================================
@@ -4401,7 +4440,7 @@ function processSubmission(actionType) {
             assignedBy: currentUser.username, assignedByName: currentUser.name,
             sourceType: 'SUBMISSION', sourceCode: sub.code,
             status: 'TODO',
-            extensionCount: 0, lateCount: 0, pendingExtension: null,
+            extensionCount: 0, lateCount: 0, pendingExtension: null, pendingCancellation: null,
             createdAt: new Date().toLocaleString('vi-VN'),
             history: [{ action: 'CREATED', by: currentUser.username, byName: currentUser.name, time: new Date().toLocaleString('vi-VN') }]
           };
@@ -4537,6 +4576,14 @@ let editingTaskId = null;
 // 'CREATE' | 'ASSIGN' | 'EDIT' — modal Giao Việc dùng chung 1 form cho cả 3 luồng, xem confirmCreateTask().
 let taskModalMode = 'CREATE';
 
+// Đổ lại các lựa chọn "Người Phối Hợp" (từ DB.users) cho modal Giao Việc, giữ nguyên những người đã
+// chọn sẵn (preselected) — dùng chung cho cả 3 chế độ CREATE/ASSIGN/EDIT.
+function populateTaskCollaboratorsSelect(preselected) {
+  const sel = document.getElementById('taskCollaboratorsInput');
+  const selectedSet = new Set(preselected || []);
+  sel.innerHTML = DB.users.map(u => `<option value="${escapeHtml(u.username)}" ${selectedSet.has(u.username) ? 'selected' : ''}>${escapeHtml(u.name)} (${escapeHtml(u.username)})</option>`).join('');
+}
+
 function openCreateTaskModal(opts) {
   if (!canManageTasks(currentUser)) return alert('⛔ Bạn không có quyền tạo công việc mới!');
   taskModalMode = 'CREATE';
@@ -4550,6 +4597,7 @@ function openCreateTaskModal(opts) {
   const assigneeSel = document.getElementById('taskAssigneeInput');
   assigneeSel.innerHTML = '<option value="">-- Chọn người nhận --</option>' +
     DB.users.map(u => `<option value="${escapeHtml(u.username)}" ${opts.assignedTo === u.username ? 'selected' : ''}>${escapeHtml(u.name)} (${escapeHtml(u.username)})</option>`).join('');
+  populateTaskCollaboratorsSelect(opts.collaborators);
 
   const labels = { SUBMISSION: 'Từ Văn bản trình', MEETING_MINUTES: 'Từ Biên bản họp', MANUAL: 'Giao việc trực tiếp' };
   document.getElementById('createTaskSourceLabel').innerText = opts.sourceCode ? `${labels[pendingTaskSource.sourceType]}: ${opts.sourceCode}` : labels[pendingTaskSource.sourceType];
@@ -4578,6 +4626,7 @@ function openAssignTaskModal(taskId) {
   const assigneeSel = document.getElementById('taskAssigneeInput');
   assigneeSel.innerHTML = '<option value="">-- Chọn người nhận --</option>' +
     DB.users.map(u => `<option value="${escapeHtml(u.username)}">${escapeHtml(u.name)} (${escapeHtml(u.username)})</option>`).join('');
+  populateTaskCollaboratorsSelect(t.collaborators);
 
   const labels = { SUBMISSION: 'Từ Văn bản trình', MEETING_MINUTES: 'Từ Biên bản họp', MANUAL: 'Giao việc trực tiếp' };
   document.getElementById('createTaskSourceLabel').innerText = `Gán người nhận cho công việc ${t.sourceCode ? `${labels[t.sourceType] || t.sourceType}: ${t.sourceCode}` : labels[t.sourceType] || ''}`;
@@ -4604,6 +4653,7 @@ function openEditTaskModal(taskId) {
   const assigneeSel = document.getElementById('taskAssigneeInput');
   assigneeSel.innerHTML = '<option value="">-- Chọn người nhận --</option>' +
     DB.users.map(u => `<option value="${escapeHtml(u.username)}" ${t.assignedTo === u.username ? 'selected' : ''}>${escapeHtml(u.name)} (${escapeHtml(u.username)})</option>`).join('');
+  populateTaskCollaboratorsSelect(t.collaborators);
 
   const labels = { SUBMISSION: 'Từ Văn bản trình', MEETING_MINUTES: 'Từ Biên bản họp', MANUAL: 'Giao việc trực tiếp' };
   document.getElementById('createTaskSourceLabel').innerText = `Sửa công việc ${t.sourceCode ? `${labels[t.sourceType] || t.sourceType}: ${t.sourceCode}` : labels[t.sourceType] || ''}`;
@@ -4619,11 +4669,21 @@ function closeCreateTaskModal() {
   taskModalMode = 'CREATE';
 }
 
+// Gửi thông báo email cho danh sách người phối hợp (username hệ thống) khi được thêm vào 1 công việc
+// — dùng chung cho cả 3 chế độ CREATE/ASSIGN/EDIT của modal Giao Việc.
+function notifyTaskCollaborators(t, collaboratorUsernames, title, description, deadline) {
+  if (!collaboratorUsernames.length) return;
+  notifyUsersByEmail('TASK', 'NOTIFY_TASK_COLLABORATOR', t.sourceCode || title, collaboratorUsernames,
+    `[VPDT] Bạn được mời phối hợp công việc: ${title}`,
+    `${currentUser.name} đã mời bạn phối hợp thực hiện công việc "${title}"${description ? `: ${description}` : ''}.${deadline ? ` Hạn hoàn thành: ${deadline}.` : ''}`);
+}
+
 function confirmCreateTask() {
   const title = document.getElementById('taskTitleInput').value.trim();
   const description = document.getElementById('taskDescInput').value.trim();
   const assignedTo = document.getElementById('taskAssigneeInput').value;
   const deadline = document.getElementById('taskDeadlineInput').value;
+  const collaborators = Array.from(document.getElementById('taskCollaboratorsInput').selectedOptions).map(o => o.value);
 
   if (!title) return alert('Vui lòng nhập tiêu đề công việc!');
   if (!assignedTo) return alert('Vui lòng chọn người nhận!');
@@ -4637,9 +4697,11 @@ function confirmCreateTask() {
       closeCreateTaskModal();
       return alert('⛔ Bạn không có quyền gán người nhận cho công việc này!');
     }
+    const oldCollaborators = new Set(t.collaborators || []);
     t.assignedTo = assignedTo;
     t.assignedToName = assignee ? assignee.name : assignedTo;
     t.deadline = deadline;
+    t.collaborators = collaborators;
     t.history.push({ action: 'ASSIGNED', by: currentUser.username, byName: currentUser.name, time: new Date().toLocaleString('vi-VN') });
     syncStorage('tasks');
     logSystemAction('TASK', 'ASSIGN_TASK', `Gán người nhận [${t.assignedToName}] cho công việc [${t.title}]`, 'SUCCESS', t.sourceCode || t.title);
@@ -4649,6 +4711,7 @@ function confirmCreateTask() {
         `[VPDT] Bạn được giao công việc: ${t.title}`,
         `${currentUser.name} đã gán cho bạn công việc "${t.title}"${description ? `: ${description}` : ''}.${deadline ? ` Hạn hoàn thành: ${deadline}.` : ''}`);
     }
+    notifyTaskCollaborators(t, collaborators.filter(u => !oldCollaborators.has(u)), t.title, description, deadline);
 
     alert('✅ Đã gán người nhận thành công!');
     closeCreateTaskModal();
@@ -4664,11 +4727,13 @@ function confirmCreateTask() {
     const t = DB.tasks.find(x => x.id === editingTaskId);
     if (!t) { closeCreateTaskModal(); return; }
     const oldAssignedTo = t.assignedTo;
+    const oldCollaborators = new Set(t.collaborators || []);
     t.title = title;
     t.description = description;
     t.deadline = deadline;
     t.assignedTo = assignedTo;
     t.assignedToName = assignee ? assignee.name : assignedTo;
+    t.collaborators = collaborators;
     t.history.push({ action: 'EDITED', by: currentUser.username, byName: currentUser.name, time: new Date().toLocaleString('vi-VN') });
     syncStorage('tasks');
     logSystemAction('TASK', 'EDIT_TASK', `Cập nhật công việc [${t.title}]`, 'SUCCESS', t.sourceCode || t.title);
@@ -4678,6 +4743,7 @@ function confirmCreateTask() {
         `[VPDT] Bạn được giao công việc: ${t.title}`,
         `${currentUser.name} đã cập nhật và gán cho bạn công việc "${t.title}"${description ? `: ${description}` : ''}.${deadline ? ` Hạn hoàn thành: ${deadline}.` : ''}`);
     }
+    notifyTaskCollaborators(t, collaborators.filter(u => !oldCollaborators.has(u)), t.title, description, deadline);
 
     alert('✅ Đã cập nhật công việc thành công!');
     closeCreateTaskModal();
@@ -4694,11 +4760,12 @@ function confirmCreateTask() {
     id: Date.now(),
     title, description, deadline,
     assignedTo, assignedToName: assignee ? assignee.name : assignedTo,
+    collaborators,
     assignedBy: currentUser.username, assignedByName: currentUser.name,
     sourceType: pendingTaskSource?.sourceType || 'MANUAL',
     sourceCode: pendingTaskSource?.sourceCode || '',
     status: 'TODO',
-    extensionCount: 0, lateCount: 0, pendingExtension: null,
+    extensionCount: 0, lateCount: 0, pendingExtension: null, pendingCancellation: null,
     createdAt: new Date().toLocaleString('vi-VN'),
     history: [{ action: 'CREATED', by: currentUser.username, byName: currentUser.name, time: new Date().toLocaleString('vi-VN') }]
   };
@@ -4712,6 +4779,7 @@ function confirmCreateTask() {
       `[VPDT] Bạn được giao công việc mới: ${title}`,
       `${currentUser.name} đã giao cho bạn công việc "${title}"${description ? `: ${description}` : ''}.${deadline ? ` Hạn hoàn thành: ${deadline}.` : ''}`);
   }
+  notifyTaskCollaborators(newTask, collaborators, title, description, deadline);
 
   alert('✅ Đã giao việc thành công!');
   closeCreateTaskModal();
@@ -4736,10 +4804,11 @@ function createTaskFromMinutesDirective(minutesId, directiveIdx) {
   const m = DB.meetingMinutes.find(x => x.id === minutesId);
   if (!m || !m.directives[directiveIdx]) return;
   const d = m.directives[directiveIdx];
+  const resolved = resolveDirectiveAttendee(m.attendees, d.assignedToAttendeeId);
   openCreateTaskModal({
     title: `Chỉ đạo từ biên bản họp: ${m.title}`,
     description: d.content,
-    assignedTo: d.assignedTo,
+    assignedTo: resolved?.username || '',
     deadline: d.deadline,
     sourceType: 'MEETING_MINUTES',
     sourceCode: m.code
@@ -4752,6 +4821,14 @@ function updateTaskStatus(id, newStatus, note) {
   if (t.assignedTo !== currentUser.username && t.assignedBy !== currentUser.username && !currentUser.perms?.admin) {
     return alert('⛔ Bạn không có quyền cập nhật công việc này!');
   }
+  // Không cho đóng công việc (Hoàn thành) khi đang có 1 yêu cầu gia hạn hoặc yêu cầu huỷ chờ duyệt —
+  // phải xử lý (Đồng ý/Từ chối) yêu cầu đó trước, tránh vô lý "duyệt gia hạn/huỷ" cho việc đã kết thúc.
+  if (newStatus === 'DONE' && t.pendingExtension) {
+    return alert('⛔ Công việc đang có 1 yêu cầu gia hạn chờ duyệt. Vui lòng Đồng ý hoặc Từ chối yêu cầu đó trước khi đóng công việc.');
+  }
+  if (newStatus === 'DONE' && t.pendingCancellation) {
+    return alert('⛔ Công việc đang có 1 yêu cầu huỷ chờ duyệt. Vui lòng Đồng ý hoặc Từ chối yêu cầu đó trước khi đóng công việc.');
+  }
   t.status = newStatus;
   t.history.push({
     action: `STATUS_${newStatus}`, by: currentUser.username, byName: currentUser.name,
@@ -4760,6 +4837,109 @@ function updateTaskStatus(id, newStatus, note) {
   syncStorage('tasks');
   logSystemAction('TASK', 'UPDATE_TASK_STATUS', `Cập nhật công việc [${t.title}] sang trạng thái ${newStatus}${note ? ` — Ghi chú: ${note}` : ''}`, 'SUCCESS', t.sourceCode || t.title);
   renderTasks();
+}
+
+// ==========================================
+// NHẬN VIỆC / XÁC NHẬN THAM GIA — người thực hiện chính bấm "Nhận việc" = đồng thời bắt đầu làm
+// (chuyển sang Đang thực hiện, ghi nhận thời điểm bắt đầu), báo người giao việc. Mỗi người phối hợp
+// bấm "Xác nhận tham gia" riêng, không đổi trạng thái chung của việc (có thể nhiều người phối hợp).
+// Người thực hiện/phối hợp KHÔNG có tài khoản hệ thống (gán từ Thành phần tham dự biên bản họp không
+// khớp tài khoản nào) không tự đăng nhập bấm được — người giao việc/admin xác nhận thay, thao tác từ
+// modal Xem chi tiết (xem acceptTaskOnBehalf() / confirmCollaboratorParticipationOnBehalf()).
+// ==========================================
+function acceptTask(id) {
+  const t = DB.tasks.find(x => x.id === id);
+  if (!t) return;
+  if (t.assignedTo !== currentUser.username) return alert('⛔ Chỉ người được giao việc mới có thể Nhận việc!');
+  if (t.status !== 'TODO') return alert('⛔ Công việc này đã được nhận/xử lý rồi.');
+
+  t.status = 'DOING';
+  t.startedAt = new Date().toLocaleString('vi-VN');
+  t.history.push({ action: 'ACCEPTED', by: currentUser.username, byName: currentUser.name, time: t.startedAt, note: 'Đã nhận việc và bắt đầu thực hiện' });
+  syncStorage('tasks');
+  logSystemAction('TASK', 'ACCEPT_TASK', `${currentUser.name} đã nhận việc [${t.title}] và bắt đầu thực hiện`, 'SUCCESS', t.sourceCode || t.title);
+
+  if (t.assignedBy) {
+    notifyUsersByEmail('TASK', 'NOTIFY_TASK_ACCEPTED', t.sourceCode || t.title, [t.assignedBy],
+      `[VPDT] ${currentUser.name} đã nhận việc: ${t.title}`,
+      `${currentUser.name} đã nhận và bắt đầu thực hiện công việc "${t.title}" lúc ${t.startedAt}.`);
+  }
+
+  alert('✅ Đã xác nhận nhận việc, chúc bạn hoàn thành tốt công việc!');
+  renderTasks();
+}
+
+// Người giao việc/admin xác nhận NHẬN VIỆC thay cho Người thực hiện ngoài hệ thống (không có tài
+// khoản để tự đăng nhập bấm) — dùng khi đã xác nhận qua kênh khác (điện thoại, trực tiếp...).
+function acceptTaskOnBehalf(id) {
+  const t = DB.tasks.find(x => x.id === id);
+  if (!t) return;
+  if (!t.externalAssignee) return alert('⛔ Công việc này có người thực hiện là tài khoản hệ thống, họ cần tự bấm Nhận việc.');
+  if (!(currentUser.perms?.admin || t.assignedBy === currentUser.username)) {
+    return alert('⛔ Chỉ người giao việc mới có thể xác nhận thay!');
+  }
+  if (t.status !== 'TODO') return alert('⛔ Công việc này đã được nhận/xử lý rồi.');
+
+  t.status = 'DOING';
+  t.startedAt = new Date().toLocaleString('vi-VN');
+  t.history.push({ action: 'ACCEPTED', by: currentUser.username, byName: currentUser.name, time: t.startedAt, note: `Xác nhận thay cho ${t.externalAssignee.name} (ngoài hệ thống)` });
+  syncStorage('tasks');
+  logSystemAction('TASK', 'ACCEPT_TASK', `${currentUser.name} xác nhận nhận việc thay cho ${t.externalAssignee.name} (ngoài hệ thống) [${t.title}]`, 'SUCCESS', t.sourceCode || t.title);
+
+  alert(`✅ Đã xác nhận nhận việc thay cho ${t.externalAssignee.name}.`);
+  renderTasks();
+  const detailModal = document.getElementById('taskDetailModal');
+  if (detailModal && !detailModal.classList.contains('hidden')) openTaskDetailModal(id);
+}
+
+function confirmCollaboratorParticipation(id) {
+  const t = DB.tasks.find(x => x.id === id);
+  if (!t) return;
+  if (!(t.collaborators || []).includes(currentUser.username)) {
+    return alert('⛔ Bạn không phải người phối hợp của công việc này!');
+  }
+  if ((t.collaboratorAccepts || []).some(c => c.username === currentUser.username)) {
+    return alert('Bạn đã xác nhận tham gia công việc này rồi.');
+  }
+
+  t.collaboratorAccepts = t.collaboratorAccepts || [];
+  t.collaboratorAccepts.push({ username: currentUser.username, name: currentUser.name, acceptedAt: new Date().toLocaleString('vi-VN') });
+  t.history.push({ action: 'COLLABORATOR_CONFIRMED', by: currentUser.username, byName: currentUser.name, time: new Date().toLocaleString('vi-VN'), note: 'Xác nhận tham gia phối hợp' });
+  syncStorage('tasks');
+  logSystemAction('TASK', 'CONFIRM_COLLABORATION', `${currentUser.name} xác nhận tham gia phối hợp công việc [${t.title}]`, 'SUCCESS', t.sourceCode || t.title);
+
+  if (t.assignedBy) {
+    notifyUsersByEmail('TASK', 'NOTIFY_COLLABORATOR_CONFIRMED', t.sourceCode || t.title, [t.assignedBy],
+      `[VPDT] ${currentUser.name} đã xác nhận tham gia phối hợp: ${t.title}`,
+      `${currentUser.name} đã xác nhận tham gia phối hợp thực hiện công việc "${t.title}".`);
+  }
+
+  alert('✅ Đã xác nhận tham gia phối hợp!');
+  renderTasks();
+}
+
+// Người giao việc/admin xác nhận tham gia THAY cho 1 người phối hợp ngoài hệ thống (theo tên, vì họ
+// không có username) — mở từ modal Xem chi tiết.
+function confirmCollaboratorParticipationOnBehalf(id, externalName) {
+  const t = DB.tasks.find(x => x.id === id);
+  if (!t) return;
+  if (!(currentUser.perms?.admin || t.assignedBy === currentUser.username)) {
+    return alert('⛔ Chỉ người giao việc mới có thể xác nhận thay!');
+  }
+  if ((t.collaboratorAccepts || []).some(c => !c.username && c.name === externalName)) {
+    return alert('Người này đã được xác nhận tham gia rồi.');
+  }
+
+  t.collaboratorAccepts = t.collaboratorAccepts || [];
+  t.collaboratorAccepts.push({ username: null, name: externalName, acceptedAt: new Date().toLocaleString('vi-VN') });
+  t.history.push({ action: 'COLLABORATOR_CONFIRMED', by: currentUser.username, byName: currentUser.name, time: new Date().toLocaleString('vi-VN'), note: `Xác nhận tham gia thay cho ${externalName} (ngoài hệ thống)` });
+  syncStorage('tasks');
+  logSystemAction('TASK', 'CONFIRM_COLLABORATION', `${currentUser.name} xác nhận tham gia phối hợp thay cho ${externalName} (ngoài hệ thống) [${t.title}]`, 'SUCCESS', t.sourceCode || t.title);
+
+  alert(`✅ Đã xác nhận tham gia thay cho ${externalName}.`);
+  renderTasks();
+  const detailModal = document.getElementById('taskDetailModal');
+  if (detailModal && !detailModal.classList.contains('hidden')) openTaskDetailModal(id);
 }
 
 // ==========================================
@@ -4774,12 +4954,17 @@ function openTaskProgressModal(taskId) {
   if (!t) return;
   progressingTaskId = taskId;
 
-  document.getElementById('progressTaskInfo').innerText = `${t.title}${t.sourceCode ? ` (${t.sourceCode})` : ''} — Trạng thái hiện tại: ${TASK_STATUS_LABELS[t.status] || t.status}`;
+  document.getElementById('progressTaskInfo').innerText = `${t.title}${t.sourceCode ? ` (${t.sourceCode})` : ''} — Trạng thái hiện tại: ${TASK_STATUS_LABELS[t.status] || t.status}`
+    + (t.pendingExtension ? ' — ⚠️ Đang có yêu cầu gia hạn chờ duyệt, cần xử lý xong mới đóng được công việc.' : '');
 
-  const nextOptions = { TODO: ['DOING', 'CANCELLED'], DOING: ['DONE', 'CANCELLED'] }[t.status] || [];
+  // Huỷ công việc KHÔNG còn là lựa chọn ở đây nữa — đi qua luồng riêng bắt buộc nhập lý do +
+  // cần người giao việc xác nhận (xem openCancelTaskModal()).
+  let nextOptions = { TODO: ['DOING'], DOING: ['DONE'] }[t.status] || [];
+  // Không cho chọn Hoàn thành khi đang có yêu cầu gia hạn chờ duyệt — xem updateTaskStatus().
+  if (t.pendingExtension) nextOptions = nextOptions.filter(s => s !== 'DONE');
   const sel = document.getElementById('progressNewStatus');
   sel.innerHTML = nextOptions.map(s => `<option value="${s}">${TASK_STATUS_LABELS[s]}</option>`).join('')
-    || `<option value="">-- Công việc đã kết thúc, không thể đổi trạng thái --</option>`;
+    || `<option value="">-- Không có lựa chọn hợp lệ --</option>`;
   document.getElementById('progressNote').value = '';
 
   document.getElementById('taskProgressModal').classList.remove('hidden');
@@ -4812,6 +4997,7 @@ function openExtensionRequestModal(taskId) {
     return alert('⛔ Chỉ người nhận việc mới có thể xin gia hạn!');
   }
   if (t.pendingExtension) return alert('⛔ Công việc này đang có 1 yêu cầu gia hạn chờ duyệt, vui lòng đợi xử lý xong.');
+  if (t.pendingCancellation) return alert('⛔ Công việc đang có 1 yêu cầu huỷ chờ duyệt, vui lòng xử lý xong yêu cầu đó trước.');
   requestingExtensionTaskId = taskId;
 
   document.getElementById('extReqCurrentInfo').innerText = `${t.title} — Hạn hiện tại: ${t.deadline || 'Chưa đặt'}`;
@@ -4938,6 +5124,161 @@ function rejectExtension() {
 }
 
 // ==========================================
+// HUỶ CÔNG VIỆC — bắt buộc nhập lý do. Người giao việc/admin huỷ trực tiếp có hiệu lực ngay (họ đã là
+// người có quyền xác nhận). Người nhận việc/phối hợp muốn huỷ phải gửi yêu cầu (pendingCancellation)
+// chờ người giao việc Đồng ý/Từ chối — cùng mô hình với Xin/Duyệt gia hạn ở trên.
+// ==========================================
+let cancellingTaskId = null;
+
+function openCancelTaskModal(taskId) {
+  const t = DB.tasks.find(x => x.id === taskId);
+  if (!t) return;
+  const isAssignerOrAdmin = t.assignedBy === currentUser.username || currentUser.perms?.admin;
+  const isRequester = t.assignedTo === currentUser.username || (t.collaborators || []).includes(currentUser.username);
+  if (!isAssignerOrAdmin && !isRequester) return alert('⛔ Bạn không có quyền huỷ công việc này!');
+  if (t.pendingCancellation) return alert('⛔ Công việc này đang có 1 yêu cầu huỷ chờ duyệt rồi.');
+  if (t.pendingExtension) return alert('⛔ Công việc đang có 1 yêu cầu gia hạn chờ duyệt, vui lòng xử lý xong yêu cầu đó trước.');
+
+  cancellingTaskId = taskId;
+  document.getElementById('cancelReasonInput').value = '';
+  document.getElementById('cancelModalInfo').innerText = `${t.title}${t.sourceCode ? ` (${t.sourceCode})` : ''}`;
+
+  if (isAssignerOrAdmin) {
+    document.getElementById('cancelModalTitle').innerText = '✕ Huỷ Công Việc';
+    document.getElementById('cancelModalNote').innerText = 'Bạn là người giao việc nên huỷ có hiệu lực ngay sau khi xác nhận.';
+    document.getElementById('cancelModalConfirmBtn').innerText = '✕ Huỷ Công Việc';
+  } else {
+    document.getElementById('cancelModalTitle').innerText = '✕ Xin Huỷ Công Việc';
+    document.getElementById('cancelModalNote').innerText = 'Yêu cầu huỷ cần người giao việc Đồng ý mới có hiệu lực.';
+    document.getElementById('cancelModalConfirmBtn').innerText = '📤 Gửi Yêu Cầu Huỷ';
+  }
+
+  document.getElementById('taskCancelModal').classList.remove('hidden');
+}
+
+function closeCancelTaskModal() {
+  document.getElementById('taskCancelModal').classList.add('hidden');
+  cancellingTaskId = null;
+}
+
+function confirmCancelTask() {
+  if (cancellingTaskId === null) return;
+  const t = DB.tasks.find(x => x.id === cancellingTaskId);
+  if (!t) return closeCancelTaskModal();
+
+  const reason = document.getElementById('cancelReasonInput').value.trim();
+  if (!reason) return alert('Vui lòng nhập lý do huỷ!');
+
+  const isAssignerOrAdmin = t.assignedBy === currentUser.username || currentUser.perms?.admin;
+
+  if (isAssignerOrAdmin) {
+    t.status = 'CANCELLED';
+    t.history.push({ action: 'CANCELLED', by: currentUser.username, byName: currentUser.name, time: new Date().toLocaleString('vi-VN'), note: reason });
+    syncStorage('tasks');
+    logSystemAction('TASK', 'CANCEL_TASK', `${currentUser.name} đã huỷ công việc [${t.title}]. Lý do: ${reason}`, 'SUCCESS', t.sourceCode || t.title);
+
+    const notifyTargets = [t.assignedTo, ...(t.collaborators || [])].filter(Boolean);
+    if (notifyTargets.length) {
+      notifyUsersByEmail('TASK', 'NOTIFY_TASK_CANCELLED', t.sourceCode || t.title, notifyTargets,
+        `[VPDT] Công việc đã bị huỷ: ${t.title}`,
+        `${currentUser.name} đã huỷ công việc "${t.title}". Lý do: ${reason}`);
+    }
+    alert('✅ Đã huỷ công việc.');
+  } else {
+    t.pendingCancellation = { reason, requestedBy: currentUser.username, requestedByName: currentUser.name, requestedAt: new Date().toLocaleString('vi-VN') };
+    t.history.push({ action: 'CANCEL_REQUESTED', by: currentUser.username, byName: currentUser.name, time: new Date().toLocaleString('vi-VN'), note: reason });
+    syncStorage('tasks');
+    logSystemAction('TASK', 'CANCEL_REQUESTED', `${currentUser.name} xin huỷ công việc [${t.title}]. Lý do: ${reason}`, 'SUCCESS', t.sourceCode || t.title);
+
+    if (t.assignedBy) {
+      notifyUsersByEmail('TASK', 'NOTIFY_CANCEL_REQUESTED', t.sourceCode || t.title, [t.assignedBy],
+        `[VPDT] Yêu cầu huỷ công việc: ${t.title}`,
+        `${currentUser.name} xin huỷ công việc "${t.title}". Lý do: ${reason}`);
+    }
+    alert('✅ Đã gửi yêu cầu huỷ, chờ người giao việc phê duyệt.');
+  }
+
+  closeCancelTaskModal();
+  renderTasks();
+}
+
+function openCancelApproveModal(taskId) {
+  const t = DB.tasks.find(x => x.id === taskId);
+  if (!t || !t.pendingCancellation) return;
+  if (t.assignedBy !== currentUser.username && !currentUser.perms?.admin) {
+    return alert('⛔ Chỉ người giao việc mới có thể duyệt yêu cầu huỷ!');
+  }
+  cancellingTaskId = taskId;
+  const p = t.pendingCancellation;
+  document.getElementById('cancelApproveInfo').innerHTML = `
+    <p><b>Công việc:</b> ${escapeHtml(t.title)}</p>
+    <p><b>Người xin huỷ:</b> ${escapeHtml(p.requestedByName)} (lúc ${escapeHtml(p.requestedAt)})</p>
+    <p><b>Lý do:</b></p>
+    <div class="bg-gray-50 p-2 rounded border italic">${escapeHtml(p.reason)}</div>
+  `;
+  document.getElementById('taskCancelApproveModal').classList.remove('hidden');
+}
+
+function closeCancelApproveModal() {
+  document.getElementById('taskCancelApproveModal').classList.add('hidden');
+  cancellingTaskId = null;
+}
+
+function approveCancellation() {
+  if (cancellingTaskId === null) return;
+  const t = DB.tasks.find(x => x.id === cancellingTaskId);
+  if (!t || !t.pendingCancellation) return closeCancelApproveModal();
+  if (t.assignedBy !== currentUser.username && !currentUser.perms?.admin) {
+    closeCancelApproveModal();
+    return alert('⛔ Chỉ người giao việc mới có thể duyệt yêu cầu huỷ!');
+  }
+
+  const p = t.pendingCancellation;
+  t.status = 'CANCELLED';
+  t.pendingCancellation = null;
+  t.history.push({ action: 'CANCELLED', by: currentUser.username, byName: currentUser.name, time: new Date().toLocaleString('vi-VN'), note: `Đồng ý huỷ theo yêu cầu của ${p.requestedByName}. Lý do: ${p.reason}` });
+  syncStorage('tasks');
+  logSystemAction('TASK', 'CANCEL_TASK', `${currentUser.name} đồng ý huỷ công việc [${t.title}] theo yêu cầu của ${p.requestedByName}`, 'SUCCESS', t.sourceCode || t.title);
+
+  const notifyTargets = [t.assignedTo, ...(t.collaborators || [])].filter(Boolean);
+  if (notifyTargets.length) {
+    notifyUsersByEmail('TASK', 'NOTIFY_TASK_CANCELLED', t.sourceCode || t.title, notifyTargets,
+      `[VPDT] Công việc đã bị huỷ: ${t.title}`,
+      `${currentUser.name} đã đồng ý huỷ công việc "${t.title}" theo yêu cầu của ${p.requestedByName}. Lý do: ${p.reason}`);
+  }
+
+  alert('✅ Đã huỷ công việc.');
+  closeCancelApproveModal();
+  renderTasks();
+}
+
+function rejectCancellation() {
+  if (cancellingTaskId === null) return;
+  const t = DB.tasks.find(x => x.id === cancellingTaskId);
+  if (!t || !t.pendingCancellation) return closeCancelApproveModal();
+  if (t.assignedBy !== currentUser.username && !currentUser.perms?.admin) {
+    closeCancelApproveModal();
+    return alert('⛔ Chỉ người giao việc mới có thể duyệt yêu cầu huỷ!');
+  }
+
+  const p = t.pendingCancellation;
+  t.pendingCancellation = null;
+  t.history.push({ action: 'CANCEL_REJECTED', by: currentUser.username, byName: currentUser.name, time: new Date().toLocaleString('vi-VN'), note: `Từ chối yêu cầu huỷ. Lý do xin huỷ: ${p.reason}` });
+  syncStorage('tasks');
+  logSystemAction('TASK', 'CANCEL_REJECTED', `${currentUser.name} từ chối yêu cầu huỷ công việc [${t.title}]`, 'SUCCESS', t.sourceCode || t.title);
+
+  if (p.requestedBy) {
+    notifyUsersByEmail('TASK', 'NOTIFY_CANCEL_REJECTED', t.sourceCode || t.title, [p.requestedBy],
+      `[VPDT] Yêu cầu huỷ công việc đã bị từ chối: ${t.title}`,
+      `${currentUser.name} đã từ chối yêu cầu huỷ công việc "${t.title}". Công việc vẫn tiếp tục.`);
+  }
+
+  alert('Đã từ chối yêu cầu huỷ, công việc vẫn tiếp tục.');
+  closeCancelApproveModal();
+  renderTasks();
+}
+
+// ==========================================
 // XEM CHI TIẾT CÔNG VIỆC — modal chỉ đọc, tổng hợp đầy đủ thông tin bao gồm số lần gia hạn/trễ hạn.
 // ==========================================
 function openTaskDetailModal(taskId) {
@@ -4945,7 +5286,26 @@ function openTaskDetailModal(taskId) {
   if (!t) return;
 
   const sourceLabels = { SUBMISSION: '📜 Văn bản trình', MEETING_MINUTES: '📝 Biên bản họp', MANUAL: '✋ Giao trực tiếp' };
-  const collabNames = (t.collaborators || []).map(u => DB.users.find(x => x.username === u)?.name || u);
+  const isAssigner = t.assignedBy === currentUser.username || currentUser.perms?.admin;
+  const acceptedUsernames = new Set((t.collaboratorAccepts || []).map(c => c.username).filter(Boolean));
+  const acceptedExternalNames = new Set((t.collaboratorAccepts || []).filter(c => !c.username).map(c => c.name));
+
+  // Danh sách người phối hợp kèm trạng thái xác nhận tham gia — cả tài khoản hệ thống lẫn ngoài hệ
+  // thống (người giao việc/admin có thể xác nhận thay người ngoài hệ thống ngay tại đây).
+  const collabRows = [
+    ...(t.collaborators || []).map(u => {
+      const user = DB.users.find(x => x.username === u);
+      const accepted = acceptedUsernames.has(u);
+      return `<li>${escapeHtml(user ? user.name : u)} — ${accepted ? '<span class="text-emerald-700 font-bold">✅ Đã xác nhận tham gia</span>' : '<span class="text-gray-400 italic">Chưa xác nhận</span>'}</li>`;
+    }),
+    ...(t.externalCollaborators || []).map(e => {
+      const accepted = acceptedExternalNames.has(e.name);
+      const onBehalfBtn = (!accepted && isAssigner)
+        ? ` <button onclick="confirmCollaboratorParticipationOnBehalf(${t.id}, '${escapeHtml(e.name).replace(/'/g, "\\'")}')" class="ml-1 bg-teal-600 text-white px-1.5 py-0.5 rounded text-[10px] font-bold hover:bg-teal-700">Xác nhận thay</button>`
+        : '';
+      return `<li>${escapeHtml(e.name)} (ngoài hệ thống) — ${accepted ? '<span class="text-emerald-700 font-bold">✅ Đã xác nhận tham gia</span>' : '<span class="text-gray-400 italic">Chưa xác nhận</span>'}${onBehalfBtn}</li>`;
+    })
+  ];
 
   document.getElementById('taskDetailTitle').innerText = `👁️ ${t.title}`;
 
@@ -4963,19 +5323,28 @@ function openTaskDetailModal(taskId) {
       <div><b>Ngày giao:</b> ${escapeHtml(t.createdAt || '')}</div>
       <div><b>Loại giao việc:</b> ${sourceLabels[t.sourceType] || t.sourceType}${t.sourceCode ? ` (${escapeHtml(t.sourceCode)})` : ''}</div>
       <div><b>Người giao:</b> ${escapeHtml(t.assignedByName || '')}</div>
-      <div><b>Người nhận:</b> ${t.assignedToName ? escapeHtml(t.assignedToName) : '<span class="text-amber-600 font-bold">Chưa gán</span>'}</div>
-      ${collabNames.length ? `<div class="col-span-2"><b>Người phối hợp:</b> ${escapeHtml(collabNames.join(', '))}</div>` : ''}
+      <div><b>Người nhận:</b> ${t.assignedToName ? escapeHtml(t.assignedToName) : '<span class="text-amber-600 font-bold">Chưa gán</span>'}${t.externalAssignee ? ' <span class="text-gray-400">(ngoài hệ thống — không có tài khoản đăng nhập)</span>' : ''}
+        ${t.externalAssignee && t.status === 'TODO' && isAssigner ? ` <button onclick="acceptTaskOnBehalf(${t.id})" class="ml-1 bg-emerald-600 text-white px-1.5 py-0.5 rounded text-[10px] font-bold hover:bg-emerald-700">Nhận việc thay</button>` : ''}
+      </div>
+      <div><b>Thời điểm bắt đầu (Nhận việc):</b> ${escapeHtml(t.startedAt || 'Chưa nhận việc')}</div>
       <div><b>Trạng thái:</b> ${TASK_STATUS_LABELS[t.status] || t.status}</div>
       <div><b>Hạn hoàn thành hiện tại:</b> ${escapeHtml(t.deadline || 'Chưa đặt')}</div>
       <div><b>Số lần gia hạn:</b> <span class="font-bold text-orange-700">${t.extensionCount || 0}</span></div>
       <div><b>Số lần trễ hạn:</b> <span class="font-bold text-red-700">${t.lateCount || 0}</span></div>
     </div>
+    ${collabRows.length ? `<div><b>Người phối hợp:</b><ul class="list-disc list-inside mt-1 space-y-0.5">${collabRows.join('')}</ul></div>` : ''}
     ${t.description ? `<div><b>Mô tả / Nội dung:</b><div class="bg-gray-50 p-2 rounded border mt-1">${escapeHtml(t.description)}</div></div>` : ''}
     ${t.pendingExtension ? `
       <div class="bg-orange-50 border border-orange-200 p-2 rounded">
         <b class="text-orange-800">⏳ Đang chờ duyệt gia hạn</b> tới <b>${escapeHtml(t.pendingExtension.newDeadline)}</b>
         — Lý do: ${escapeHtml(t.pendingExtension.reason)}
         (xin lúc ${escapeHtml(t.pendingExtension.requestedAt)} bởi ${escapeHtml(t.pendingExtension.requestedByName)})
+      </div>
+    ` : ''}
+    ${t.pendingCancellation ? `
+      <div class="bg-red-50 border border-red-200 p-2 rounded">
+        <b class="text-red-800">⏳ Đang chờ duyệt huỷ</b> — Lý do: ${escapeHtml(t.pendingCancellation.reason)}
+        (xin lúc ${escapeHtml(t.pendingCancellation.requestedAt)} bởi ${escapeHtml(t.pendingCancellation.requestedByName)})
       </div>
     ` : ''}
     <div>
@@ -5033,15 +5402,25 @@ function renderTasks() {
 
   tbody.innerHTML = pageItems.map(t => {
     const canUpdate = currentUser.perms?.admin || t.assignedTo === currentUser.username || t.assignedBy === currentUser.username;
-    const canAssign = !t.assignedTo && (currentUser.perms?.admin || t.assignedBy === currentUser.username);
+    const canAssign = !t.assignedTo && !t.externalAssignee && (currentUser.perms?.admin || t.assignedBy === currentUser.username);
     const canManage = canManageTasks(currentUser);
     const isAssignee = t.assignedTo === currentUser.username;
+    const isCollaborator = (t.collaborators || []).includes(currentUser.username);
     const isAssigner = t.assignedBy === currentUser.username || currentUser.perms?.admin;
     const isOpenTask = t.status !== 'DONE' && t.status !== 'CANCELLED';
+    const hasAccepted = (t.collaboratorAccepts || []).some(c => c.username === currentUser.username);
     let actionBtns = '';
     actionBtns += `<button onclick="openTaskDetailModal(${t.id})" class="bg-slate-500 text-white px-2 py-1 rounded text-xs font-bold hover:bg-slate-600">👁️ Chi tiết</button> `;
     if (canAssign) {
       actionBtns += `<button onclick="openAssignTaskModal(${t.id})" class="bg-violet-600 text-white px-2 py-1 rounded text-xs font-bold hover:bg-violet-700">👤 Gán người nhận</button> `;
+    }
+    if (isAssignee && t.status === 'TODO') {
+      actionBtns += `<button onclick="acceptTask(${t.id})" class="bg-emerald-600 text-white px-2 py-1 rounded text-xs font-bold hover:bg-emerald-700 animate-pulse">✅ Nhận Việc</button> `;
+    } else if (isAssigner && t.externalAssignee && t.status === 'TODO') {
+      actionBtns += `<button onclick="acceptTaskOnBehalf(${t.id})" class="bg-emerald-600 text-white px-2 py-1 rounded text-xs font-bold hover:bg-emerald-700" title="Xác nhận thay cho người thực hiện ngoài hệ thống">✅ Nhận Việc Thay</button> `;
+    }
+    if (isCollaborator && !hasAccepted && isOpenTask) {
+      actionBtns += `<button onclick="confirmCollaboratorParticipation(${t.id})" class="bg-teal-600 text-white px-2 py-1 rounded text-xs font-bold hover:bg-teal-700 animate-pulse">✅ Xác Nhận Tham Gia</button> `;
     }
     if (canUpdate && t.assignedTo && isOpenTask) {
       actionBtns += `<button onclick="openTaskProgressModal(${t.id})" class="bg-blue-600 text-white px-2 py-1 rounded text-xs font-bold hover:bg-blue-700">🔄 Cập nhật tiến độ</button> `;
@@ -5050,6 +5429,11 @@ function renderTasks() {
       actionBtns += `<button onclick="openExtensionApproveModal(${t.id})" class="bg-orange-600 text-white px-2 py-1 rounded text-xs font-bold hover:bg-orange-700 animate-pulse">📅 Duyệt gia hạn</button> `;
     } else if (isAssignee && t.assignedTo && isOpenTask) {
       actionBtns += `<button onclick="openExtensionRequestModal(${t.id})" class="bg-orange-500 text-white px-2 py-1 rounded text-xs font-bold hover:bg-orange-600">📅 Xin gia hạn</button> `;
+    }
+    if (t.pendingCancellation && isAssigner) {
+      actionBtns += `<button onclick="openCancelApproveModal(${t.id})" class="bg-red-700 text-white px-2 py-1 rounded text-xs font-bold hover:bg-red-800 animate-pulse">✕ Duyệt huỷ</button> `;
+    } else if (isOpenTask && (isAssigner || isAssignee || isCollaborator) && !t.pendingCancellation) {
+      actionBtns += `<button onclick="openCancelTaskModal(${t.id})" class="bg-red-600 text-white px-2 py-1 rounded text-xs font-bold hover:bg-red-700">✕ ${isAssigner ? 'Huỷ' : 'Xin huỷ'}</button> `;
     }
     if (canManage) {
       actionBtns += `<button onclick="openEditTaskModal(${t.id})" class="bg-amber-600 text-white px-2 py-1 rounded text-xs font-bold hover:bg-amber-700">✏️ Sửa</button> `;
@@ -5060,16 +5444,19 @@ function renderTasks() {
     if (canDownloadTaskRecord(currentUser)) {
       actionBtns += `<button onclick="downloadTaskSlip(${t.id})" class="bg-slate-600 text-white px-2 py-1 rounded text-xs font-bold hover:bg-slate-700">⬇️ Tải</button>`;
     }
-    const collabNames = (t.collaborators || []).map(u => DB.users.find(x => x.username === u)?.name || u);
+    const collabNames = [
+      ...(t.collaborators || []).map(u => DB.users.find(x => x.username === u)?.name || u),
+      ...(t.externalCollaborators || []).map(e => `${e.name} (ngoài hệ thống)`)
+    ];
     return `
       <tr class="hover:bg-gray-50 border-b">
         <td class="border p-2">
           <div class="font-bold text-gray-800">${escapeHtml(t.title)}</div>
           <div class="text-xs text-gray-500 line-clamp-1">${escapeHtml(t.description || '')}</div>
         </td>
-        <td class="border p-2 text-xs">Nhận: ${t.assignedToName ? `<b>${escapeHtml(t.assignedToName)}</b>` : '<span class="text-amber-600 font-bold">Chưa gán</span>'}<br>Giao: ${escapeHtml(t.assignedByName)}${collabNames.length ? `<br>Phối hợp: ${escapeHtml(collabNames.join(', '))}` : ''}</td>
+        <td class="border p-2 text-xs">Nhận: ${t.assignedToName ? `<b>${escapeHtml(t.assignedToName)}</b>${t.externalAssignee ? ' <span class="text-gray-400">(ngoài hệ thống)</span>' : ''}` : '<span class="text-amber-600 font-bold">Chưa gán</span>'}<br>Giao: ${escapeHtml(t.assignedByName)}${collabNames.length ? `<br>Phối hợp: ${escapeHtml(collabNames.join(', '))}` : ''}</td>
         <td class="border p-2 text-xs">${sourceLabels[t.sourceType] || t.sourceType}${t.sourceCode ? `<br><span class="text-gray-400">${escapeHtml(t.sourceCode)}</span>` : ''}</td>
-        <td class="border p-2 text-xs">${escapeHtml(t.deadline || 'Chưa đặt')}${t.pendingExtension ? `<br><span class="text-orange-600 font-bold">⏳ Chờ duyệt gia hạn</span>` : ''}</td>
+        <td class="border p-2 text-xs">${escapeHtml(t.deadline || 'Chưa đặt')}${t.pendingExtension ? `<br><span class="text-orange-600 font-bold">⏳ Chờ duyệt gia hạn</span>` : ''}${t.pendingCancellation ? `<br><span class="text-red-600 font-bold">⏳ Chờ duyệt huỷ</span>` : ''}</td>
         <td class="border p-2">${statusBadges[t.status] || t.status}</td>
         <td class="border p-2 text-center text-xs">
           <span class="font-bold text-orange-700">${t.extensionCount || 0}</span> gia hạn<br>
@@ -5098,7 +5485,10 @@ function deleteTask(id) {
 function buildTaskSlipHTML(t) {
   const sourceLabels = { SUBMISSION: 'Văn bản trình', MEETING_MINUTES: 'Biên bản họp', MANUAL: 'Giao trực tiếp' };
   const statusLabels = { TODO: 'Chưa bắt đầu', DOING: 'Đang thực hiện', DONE: 'Hoàn thành', CANCELLED: 'Đã huỷ' };
-  const collabNames = (t.collaborators || []).map(u => DB.users.find(x => x.username === u)?.name || u);
+  const collabNames = [
+    ...(t.collaborators || []).map(u => DB.users.find(x => x.username === u)?.name || u),
+    ...(t.externalCollaborators || []).map(e => `${e.name} (ngoài hệ thống)`)
+  ];
   const historyRows = (t.history || []).map(h => `<tr><td>${escapeHtml(h.action)}</td><td>${escapeHtml(h.byName)}</td><td>${escapeHtml(h.time)}</td><td>${escapeHtml(h.note || '')}</td></tr>`).join('')
     || `<tr><td colspan="4" style="text-align:center;color:#888;">Chưa có lịch sử xử lý</td></tr>`;
 
@@ -5133,8 +5523,9 @@ function buildTaskSlipHTML(t) {
         <table class="td-field-table">
           <tr><td class="td-label">Nguồn gốc:</td><td>${escapeHtml(sourceLabels[t.sourceType] || t.sourceType)}${t.sourceCode ? ` (${escapeHtml(t.sourceCode)})` : ''}</td></tr>
           <tr><td class="td-label">Người giao:</td><td>${escapeHtml(t.assignedByName)}</td></tr>
-          <tr><td class="td-label">Người nhận:</td><td>${escapeHtml(t.assignedToName || 'Chưa gán')}</td></tr>
+          <tr><td class="td-label">Người nhận:</td><td>${escapeHtml(t.assignedToName || 'Chưa gán')}${t.externalAssignee ? ' (ngoài hệ thống)' : ''}</td></tr>
           <tr><td class="td-label">Người phối hợp:</td><td>${collabNames.length ? escapeHtml(collabNames.join(', ')) : 'Không có'}</td></tr>
+          <tr><td class="td-label">Thời điểm bắt đầu:</td><td>${escapeHtml(t.startedAt || 'Chưa nhận việc')}</td></tr>
           <tr><td class="td-label">Hạn hoàn thành:</td><td>${escapeHtml(t.deadline || 'Chưa đặt')}</td></tr>
           <tr><td class="td-label">Trạng thái:</td><td>${escapeHtml(statusLabels[t.status] || t.status)}</td></tr>
           <tr><td class="td-label">Số lần gia hạn:</td><td>${t.extensionCount || 0}</td></tr>
@@ -5811,7 +6202,7 @@ function onMinutesLinkedMeetingChange() {
 
 // --- Bảng "Thành phần tham dự" nhập theo hàng ngang: Họ tên / Chức danh / Phòng / SĐT. ---
 function addAttendeeRow() {
-  minutesAttendeesRows.push({ name: '', title: '', dept: '', phone: '', email: '' });
+  minutesAttendeesRows.push({ id: genAttendeeId(), name: '', title: '', dept: '', phone: '', email: '' });
   renderAttendeesTable();
   renderMinutesDirectivesTable();
 }
@@ -5850,7 +6241,7 @@ function renderAttendeesTable() {
 // dòng nào có gán người thực hiện sẽ TỰ ĐỘNG được tạo thành Công việc ngay khi lưu biên bản (xem
 // autoCreateTasksFromDirectives()) — không cần bấm "Giao việc" thủ công từng dòng như trước nữa. ---
 function addMinutesDirectiveRow() {
-  minutesDirectives.push({ content: '', assignedTo: '', collaborators: [], deadline: '' });
+  minutesDirectives.push({ content: '', assignedToAttendeeId: '', collaboratorAttendeeIds: [], deadline: '' });
   renderMinutesDirectivesTable();
 }
 
@@ -5868,42 +6259,28 @@ function renderMinutesDirectivesTable() {
   const tbody = document.getElementById('minutesDirectivesTableBody');
   if (!tbody) return;
 
-  // Người thực hiện chỉ được chọn trong Thành phần tham dự (khớp theo Họ và tên) — đảm bảo chỉ đạo
-  // luôn giao cho người thực sự có mặt tại cuộc họp, không phải bất kỳ ai trong hệ thống.
-  const attendeeNames = new Set(minutesAttendeesRows.map(a => (a.name || '').trim().toLowerCase()).filter(Boolean));
-  const eligibleUsers = DB.users.filter(u => attendeeNames.has((u.name || '').trim().toLowerCase()));
+  // Người thực hiện/phối hợp lấy TRỰC TIẾP từ Thành phần tham dự (không lọc theo tài khoản hệ thống
+  // nữa) — mọi người tham dự có nhập tên đều chọn được, kể cả khi không có tài khoản hệ thống. Việc
+  // gán liên kết username (nếu trùng tên 1 tài khoản) diễn ra ở autoCreateTasksFromDirectives() khi
+  // lưu biên bản, không phải ở đây — dropdown chỉ cần phản ánh đúng Thành phần tham dự hiện tại.
+  const namedAttendees = minutesAttendeesRows.filter(a => (a.name || '').trim());
 
   tbody.innerHTML = minutesDirectives.map((d, idx) => {
-    const collaborators = Array.isArray(d.collaborators) ? d.collaborators : [];
-
-    // Luôn giữ lại người đang được gán (nếu có) trong danh sách lựa chọn của DÒNG ĐÓ, kể cả khi họ
-    // vừa bị xoá khỏi Thành phần tham dự, để không âm thầm bỏ gán khi render lại.
-    const options = [...eligibleUsers];
-    if (d.assignedTo && !options.some(u => u.username === d.assignedTo)) {
-      const stale = DB.users.find(u => u.username === d.assignedTo);
-      if (stale) options.push(stale);
-    }
-    const collabOptions = [...eligibleUsers];
-    collaborators.forEach(username => {
-      if (!collabOptions.some(u => u.username === username)) {
-        const stale = DB.users.find(u => u.username === username);
-        if (stale) collabOptions.push(stale);
-      }
-    });
+    const collaboratorIds = (Array.isArray(d.collaboratorAttendeeIds) ? d.collaboratorAttendeeIds : []).map(String);
     return `
     <tr>
       <td class="border p-1 text-center">${idx + 1}</td>
       <td class="border p-1"><input value="${escapeHtml(d.content)}" oninput="updateMinutesDirectiveField(${idx}, 'content', this.value)" class="w-full border-0 p-0.5 text-xs focus:outline-none" placeholder="Nội dung chỉ đạo cụ thể..."></td>
       <td class="border p-1">
-        <select onchange="updateMinutesDirectiveField(${idx}, 'assignedTo', this.value)" class="w-full border-0 p-0.5 text-xs bg-white focus:outline-none">
+        <select onchange="updateMinutesDirectiveField(${idx}, 'assignedToAttendeeId', this.value)" class="w-full border-0 p-0.5 text-xs bg-white focus:outline-none">
           <option value="">-- Chọn người --</option>
-          ${options.map(u => `<option value="${escapeHtml(u.username)}" ${d.assignedTo === u.username ? 'selected' : ''}>${escapeHtml(u.name)} (${escapeHtml(u.username)})</option>`).join('')}
+          ${namedAttendees.map(a => `<option value="${escapeHtml(a.id)}" ${String(d.assignedToAttendeeId) === String(a.id) ? 'selected' : ''}>${escapeHtml(a.name)}${a.dept ? ` (${escapeHtml(a.dept)})` : ''}</option>`).join('')}
         </select>
-        ${eligibleUsers.length === 0 ? '<div class="text-[10px] text-amber-600 mt-0.5">Chưa có người tham dự khớp tài khoản hệ thống</div>' : ''}
+        ${namedAttendees.length === 0 ? '<div class="text-[10px] text-amber-600 mt-0.5">Chưa nhập Thành phần tham dự</div>' : ''}
       </td>
       <td class="border p-1">
-        <select multiple size="3" onchange="updateMinutesDirectiveField(${idx}, 'collaborators', Array.from(this.selectedOptions).map(o => o.value))" class="w-full border-0 p-0.5 text-xs bg-white focus:outline-none">
-          ${collabOptions.map(u => `<option value="${escapeHtml(u.username)}" ${collaborators.includes(u.username) ? 'selected' : ''}>${escapeHtml(u.name)}</option>`).join('')}
+        <select multiple size="3" onchange="updateMinutesDirectiveField(${idx}, 'collaboratorAttendeeIds', Array.from(this.selectedOptions).map(o => o.value))" class="w-full border-0 p-0.5 text-xs bg-white focus:outline-none">
+          ${namedAttendees.map(a => `<option value="${escapeHtml(a.id)}" ${collaboratorIds.includes(String(a.id)) ? 'selected' : ''}>${escapeHtml(a.name)}</option>`).join('')}
         </select>
         <div class="text-[10px] text-gray-400 mt-0.5">Giữ Ctrl/Cmd để chọn nhiều</div>
       </td>
@@ -5920,31 +6297,46 @@ function renderMinutesDirectivesTable() {
 function autoCreateTasksFromDirectives(m) {
   let anyCreated = false;
   (m.directives || []).forEach(d => {
-    if (!d.assignedTo || d.taskCreated) return;
-    const assignee = DB.users.find(u => u.username === d.assignedTo);
+    if (!d.assignedToAttendeeId || d.taskCreated) return;
+    const resolved = resolveDirectiveAttendee(m.attendees, d.assignedToAttendeeId);
+    if (!resolved) return;
+
+    const collaboratorsResolved = (Array.isArray(d.collaboratorAttendeeIds) ? d.collaboratorAttendeeIds : [])
+      .map(id => resolveDirectiveAttendee(m.attendees, id))
+      .filter(Boolean);
+
     const newTask = {
       id: Date.now() + Math.floor(Math.random() * 1000),
       title: `Chỉ đạo từ biên bản họp: ${m.title}`,
       description: d.content,
       deadline: d.deadline || '',
-      assignedTo: d.assignedTo, assignedToName: assignee ? assignee.name : d.assignedTo,
-      collaborators: Array.isArray(d.collaborators) ? [...d.collaborators] : [],
+      // Có tài khoản hệ thống trùng tên -> assignedTo = username (đầy đủ tính năng: đăng nhập, Nhận
+      // việc, "việc của tôi"...). Không có tài khoản -> externalAssignee lưu tên+email để hiển thị và
+      // gửi thông báo; người giao việc/admin sẽ thao tác thay (xem acceptTaskOnBehalf()).
+      assignedTo: resolved.username || '', assignedToName: resolved.name,
+      externalAssignee: resolved.username ? null : { name: resolved.name, email: resolved.email },
+      collaborators: collaboratorsResolved.filter(r => r.username).map(r => r.username),
+      externalCollaborators: collaboratorsResolved.filter(r => !r.username).map(r => ({ name: r.name, email: r.email })),
       assignedBy: currentUser.username, assignedByName: currentUser.name,
       sourceType: 'MEETING_MINUTES', sourceCode: m.code,
       status: 'TODO',
-      extensionCount: 0, lateCount: 0, pendingExtension: null,
+      extensionCount: 0, lateCount: 0, pendingExtension: null, pendingCancellation: null,
       createdAt: new Date().toLocaleString('vi-VN'),
       history: [{ action: 'CREATED', by: currentUser.username, byName: currentUser.name, time: new Date().toLocaleString('vi-VN') }]
     };
     DB.tasks.unshift(newTask);
-    logSystemAction('TASK', 'CREATE_TASK', `Tự động giao việc [${newTask.title}] cho ${newTask.assignedToName} (từ ${m.code})`, 'SUCCESS', m.code);
+    logSystemAction('TASK', 'CREATE_TASK', `Tự động giao việc [${newTask.title}] cho ${newTask.assignedToName}${newTask.externalAssignee ? ' (ngoài hệ thống)' : ''} (từ ${m.code})`, 'SUCCESS', m.code);
 
-    notifyMinutesDirectiveRecipients(m, [d.assignedTo], 'TASK', 'NOTIFY_TASK_ASSIGNED', m.code,
-      `[VPDT] Bạn được giao công việc mới từ Biên bản họp: ${m.title}`,
-      `${currentUser.name} đã giao cho bạn công việc theo chỉ đạo trong biên bản họp "${m.title}" (${m.code}): ${d.content}`);
-
-    if (newTask.collaborators.length) {
-      notifyMinutesDirectiveRecipients(m, newTask.collaborators, 'TASK', 'NOTIFY_TASK_COLLABORATOR', m.code,
+    // Email LUÔN lấy đúng email đã nhập ở Thành phần tham dự (không fallback email hệ thống) — áp
+    // dụng đồng nhất cho cả người có và không có tài khoản hệ thống, đúng yêu cầu nghiệp vụ.
+    if (resolved.email) {
+      notifyRecipientsByEmail('TASK', 'NOTIFY_TASK_ASSIGNED', m.code, [{ name: resolved.name, email: resolved.email }],
+        `[VPDT] Bạn được giao công việc mới từ Biên bản họp: ${m.title}`,
+        `${currentUser.name} đã giao cho bạn công việc theo chỉ đạo trong biên bản họp "${m.title}" (${m.code}): ${d.content}`);
+    }
+    const collabRecipients = collaboratorsResolved.filter(r => r.email).map(r => ({ name: r.name, email: r.email }));
+    if (collabRecipients.length) {
+      notifyRecipientsByEmail('TASK', 'NOTIFY_TASK_COLLABORATOR', m.code, collabRecipients,
         `[VPDT] Bạn được phân công phối hợp thực hiện: ${m.title}`,
         `${currentUser.name} đã phân công bạn phối hợp thực hiện chỉ đạo trong biên bản họp "${m.title}" (${m.code}) cùng ${newTask.assignedToName}: ${d.content}`);
     }
@@ -6040,10 +6432,11 @@ function openEditMeetingMinutes(id) {
   document.getElementById('minutesSecretary').value = m.secretary;
   document.getElementById('minutesContent').value = m.content;
 
-  minutesAttendeesRows = Array.isArray(m.attendees) ? m.attendees.map(a => ({ ...a })) : [];
+  // Bù id ổn định cho biên bản cũ lưu trước khi có genAttendeeId() (dữ liệu cũ không có trường id).
+  minutesAttendeesRows = Array.isArray(m.attendees) ? m.attendees.map(a => ({ id: a.id || genAttendeeId(), ...a })) : [];
   renderAttendeesTable();
 
-  minutesDirectives = (m.directives || []).map(d => ({ ...d, collaborators: Array.isArray(d.collaborators) ? [...d.collaborators] : [] }));
+  minutesDirectives = (m.directives || []).map(d => ({ ...d, collaboratorAttendeeIds: Array.isArray(d.collaboratorAttendeeIds) ? [...d.collaboratorAttendeeIds] : [] }));
   renderMinutesDirectivesTable();
 
   document.getElementById('minutesSubmitBtn').innerText = '💾 Cập Nhật Biên Bản';
@@ -6084,9 +6477,9 @@ function updateMeetingMinutes(e) {
 
   // Giữ lại cờ taskCreated của các dòng chỉ đạo CŨ khớp nội dung+người thực hiện, để không tạo lại
   // Công việc đã có; dòng thực sự mới sẽ được autoCreateTasksFromDirectives() xử lý bên dưới.
-  const oldDirectivesByKey = new Map((m.directives || []).map(d => [`${d.content}::${d.assignedTo}`, d]));
+  const oldDirectivesByKey = new Map((m.directives || []).map(d => [`${d.content}::${d.assignedToAttendeeId}`, d]));
   m.directives = minutesDirectives.filter(d => d.content.trim()).map(d => {
-    const old = oldDirectivesByKey.get(`${d.content}::${d.assignedTo}`);
+    const old = oldDirectivesByKey.get(`${d.content}::${d.assignedToAttendeeId}`);
     return { ...d, taskCreated: old ? !!old.taskCreated : false };
   });
 
@@ -6185,13 +6578,13 @@ function viewMeetingMinutesDetails(id) {
       <thead><tr class="bg-gray-100"><th class="border p-1">STT</th><th class="border p-1">Nội dung chỉ đạo</th><th class="border p-1">Người thực hiện</th><th class="border p-1">Người phối hợp</th><th class="border p-1">Hạn hoàn thành</th><th class="border p-1">Thao tác</th></tr></thead>
       <tbody>
         ${m.directives.map((d, idx) => {
-          const u = DB.users.find(x => x.username === d.assignedTo);
-          const collaboratorNames = (Array.isArray(d.collaborators) ? d.collaborators : [])
-            .map(username => DB.users.find(x => x.username === username)?.name || username);
+          const resolved = resolveDirectiveAttendee(m.attendees, d.assignedToAttendeeId);
+          const collaboratorNames = (Array.isArray(d.collaboratorAttendeeIds) ? d.collaboratorAttendeeIds : [])
+            .map(id => resolveDirectiveAttendee(m.attendees, id)?.name).filter(Boolean);
           const actionCell = d.taskCreated
             ? `<span class="text-emerald-700 font-bold text-[11px]">✅ Đã giao việc</span>`
             : (canManageTasks(currentUser) ? `<button onclick="createTaskFromMinutesDirective(${m.id}, ${idx})" class="bg-violet-600 text-white px-2 py-0.5 rounded text-[11px] font-bold hover:bg-violet-700">📌 Giao việc</button>` : '<span class="text-gray-400 italic text-[11px]">Chưa gán</span>');
-          return `<tr><td class="border p-1 text-center">${idx + 1}</td><td class="border p-1">${escapeHtml(d.content)}</td><td class="border p-1">${escapeHtml(u ? u.name : (d.assignedTo || 'Chưa gán'))}</td><td class="border p-1">${collaboratorNames.length ? escapeHtml(collaboratorNames.join(', ')) : '<span class="text-gray-400 italic">Không có</span>'}</td><td class="border p-1">${escapeHtml(d.deadline || '')}</td><td class="border p-1 text-center">${actionCell}</td></tr>`;
+          return `<tr><td class="border p-1 text-center">${idx + 1}</td><td class="border p-1">${escapeHtml(d.content)}</td><td class="border p-1">${escapeHtml(resolved ? resolved.name : 'Chưa gán')}</td><td class="border p-1">${collaboratorNames.length ? escapeHtml(collaboratorNames.join(', ')) : '<span class="text-gray-400 italic">Không có</span>'}</td><td class="border p-1">${escapeHtml(d.deadline || '')}</td><td class="border p-1 text-center">${actionCell}</td></tr>`;
         }).join('')}
       </tbody>
     </table>
@@ -6225,18 +6618,16 @@ function viewMeetingMinutesDetails(id) {
 // Dựng văn bản Biên Bản Họp hoàn chỉnh để in/tải — tự thân (không phụ thuộc Tailwind của trang
 // chính) vì file tải về / khung in không load Tailwind, theo đúng cách đã làm cho Phiếu Phê Duyệt.
 function buildMeetingMinutesDocumentHTML(m) {
-  const u2name = (username) => {
-    const u = DB.users.find(x => x.username === username);
-    return u ? u.name : (username || 'Chưa gán');
-  };
   const attendeesRows = Array.isArray(m.attendees) ? m.attendees : [];
   const attendeeRowsHTML = attendeesRows.map((a, idx) => `
     <tr><td>${idx + 1}</td><td>${escapeHtml(a.name)}</td><td>${escapeHtml(a.title || '')}</td><td>${escapeHtml(a.dept || '')}</td><td>${escapeHtml(a.phone || '')}</td></tr>
   `).join('') || `<tr><td colspan="5" style="text-align:center;color:#888;">Không có thành phần tham dự</td></tr>`;
 
   const directiveRows = (m.directives || []).map((d, idx) => {
-    const collaboratorNames = (Array.isArray(d.collaborators) ? d.collaborators : []).map(u2name).join(', ');
-    return `<tr><td>${idx + 1}</td><td>${escapeHtml(d.content)}</td><td>${escapeHtml(u2name(d.assignedTo))}</td><td>${escapeHtml(collaboratorNames)}</td><td>${escapeHtml(d.deadline || '')}</td></tr>`;
+    const resolved = resolveDirectiveAttendee(m.attendees, d.assignedToAttendeeId);
+    const collaboratorNames = (Array.isArray(d.collaboratorAttendeeIds) ? d.collaboratorAttendeeIds : [])
+      .map(id => resolveDirectiveAttendee(m.attendees, id)?.name).filter(Boolean).join(', ');
+    return `<tr><td>${idx + 1}</td><td>${escapeHtml(d.content)}</td><td>${escapeHtml(resolved ? resolved.name : 'Chưa gán')}</td><td>${escapeHtml(collaboratorNames)}</td><td>${escapeHtml(d.deadline || '')}</td></tr>`;
   }).join('') || `<tr><td colspan="5" style="text-align:center;color:#888;">Không có ý kiến chỉ đạo</td></tr>`;
 
   return `
