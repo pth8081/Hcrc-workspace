@@ -1616,15 +1616,7 @@
           </div>
 
           <div class="bg-white p-3 rounded border space-y-2">
-            <h4 class="font-bold text-rose-800 text-sm border-b pb-1">9. 📝 Biên Bản Họp</h4>
-            <label class="flex items-center gap-2 text-rose-700 font-semibold cursor-pointer">
-              <input type="checkbox" id="pMinutesCreate"> ✅ Được lập biên bản họp
-            </label>
-            <p class="text-[11px] text-gray-500 italic">Quyền này chỉ kiểm soát ai được LẬP biên bản mới. Xem/Sửa/Xóa/Tải từng biên bản xét ở khối 13 bên dưới — mặc định người tạo và người có tên trong Thành phần tham dự luôn xem được biên bản đó.</p>
-          </div>
-
-          <div class="bg-white p-3 rounded border space-y-2">
-            <h4 class="font-bold text-gray-800 border-b pb-1 text-sm">10. Người Duyệt</h4>
+            <h4 class="font-bold text-gray-800 border-b pb-1 text-sm">9. Người Duyệt</h4>
             <label class="flex items-center gap-2 text-emerald-700 font-semibold cursor-pointer">
               <input type="checkbox" id="pCanBeApprover"> ✅ Có thể được chọn làm người duyệt
             </label>
@@ -1632,7 +1624,7 @@
           </div>
 
           <div class="bg-white p-3 rounded border space-y-2">
-            <h4 class="font-bold text-gray-800 border-b pb-1 text-sm">11. Báo Cáo Quản Trị</h4>
+            <h4 class="font-bold text-gray-800 border-b pb-1 text-sm">10. Báo Cáo Quản Trị</h4>
             <label class="flex items-center gap-2 text-sky-700 font-semibold cursor-pointer">
               <input type="checkbox" id="pCanViewReports"> 📊 Được xem Báo cáo quản trị
             </label>
@@ -1640,7 +1632,7 @@
           </div>
 
           <div class="bg-white p-3 rounded border space-y-2 lg:col-span-2">
-            <h4 class="font-bold text-fuchsia-800 text-sm border-b pb-1">12. 📣 Truyền Thông Nội Bộ — Quyền Đăng Bài</h4>
+            <h4 class="font-bold text-fuchsia-800 text-sm border-b pb-1">11. 📣 Truyền Thông Nội Bộ — Quyền Đăng Bài</h4>
             <p class="text-[11px] text-gray-500 italic">Mọi người dùng đều XEM và tương tác được (bình luận, thả tim) trên cả 4 phân hệ; riêng "Góc chia sẻ" ai cũng đăng được tự do. 3 quyền dưới đây chỉ kiểm soát ai được ĐĂNG BÀI ở Tin nội bộ / Đào tạo / Khen thưởng.</p>
             <div class="grid grid-cols-1 md:grid-cols-3 gap-2">
               <label class="flex items-center gap-2 text-fuchsia-700 font-semibold cursor-pointer">
@@ -1656,11 +1648,14 @@
           </div>
 
           <div class="bg-white p-3 rounded border space-y-2 lg:col-span-3">
-            <h4 class="font-bold text-rose-800 text-sm border-b pb-1">13. 📝 Biên Bản Họp & 📋 Công Việc — Quyền Xem/Sửa/Xóa/Tải Toàn Bộ</h4>
+            <h4 class="font-bold text-rose-800 text-sm border-b pb-1">12. 📝 Biên Bản Họp & 📋 Công Việc — Quyền Tạo/Xem/Sửa/Xóa/Tải</h4>
             <p class="text-[11px] text-gray-500 italic">Mặc định: người TẠO biên bản luôn Xem/Sửa/Xóa/Tải được bản của mình; người có tên trong Thành phần tham dự luôn XEM được (không Tải/Sửa/Xóa). Người NHẬN việc và người GIAO việc luôn xem được công việc liên quan. Các quyền dưới đây mở rộng thêm ra TOÀN BỘ biên bản/công việc của mọi người.</p>
             <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
               <div class="space-y-1">
                 <span class="font-bold text-rose-800 block text-[11px]">📝 Biên Bản Họp:</span>
+                <label class="flex items-center gap-1.5 text-gray-700 cursor-pointer">
+                  <input type="checkbox" id="pMinutesCreate"> ✅ Tạo mới (lập) biên bản
+                </label>
                 <label class="flex items-center gap-1.5 text-gray-700 cursor-pointer">
                   <input type="checkbox" id="pMinutesView"> 👁️ Xem tất cả biên bản
                 </label>
