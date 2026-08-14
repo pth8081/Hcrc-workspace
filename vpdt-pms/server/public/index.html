@@ -647,6 +647,7 @@
               <thead>
                 <tr class="bg-gray-100 text-left text-gray-700">
                   <th class="border p-1.5 w-8">STT</th>
+                  <th class="border p-1.5 w-20">Tài Khoản</th>
                   <th class="border p-1.5">Họ Và Tên</th>
                   <th class="border p-1.5">Chức Danh</th>
                   <th class="border p-1.5">Phòng</th>
@@ -659,6 +660,8 @@
             </table>
           </div>
           <button type="button" onclick="addAttendeeRow()" class="bg-rose-600 text-white px-3 py-1 rounded text-xs font-bold hover:bg-rose-700">➕ Thêm Người Tham Dự</button>
+          <p class="text-[11px] text-gray-500 italic">Cột "Tài khoản" = Có: gõ Họ và tên sẽ gợi ý đúng tài khoản hệ thống (kèm phòng ban để phân biệt người trùng tên) — chọn xong tự điền Chức danh/Phòng/SĐT/Email từ hệ thống (vẫn sửa tay được). Chọn Không: nhập tự do, không tìm theo tài khoản hệ thống.</p>
+          <datalist id="systemUsersDatalist"></datalist>
         </div>
 
         <div>
@@ -2425,17 +2428,17 @@ function genAttendeeId() { return `${Date.now()}-${Math.floor(Math.random() * 10
 
 // Tra cứu 1 người trong Thành phần tham dự theo id ổn định — dùng cho cả lúc đang nhập biên bản (đọc
 // từ minutesAttendeesRows, phản ứng ngay khi sửa/thêm/xoá người tham dự) lẫn sau khi đã lưu (đọc từ
-// m.attendees đã chốt). Nếu người đó cũng có 1 tài khoản hệ thống trùng tên thì trả kèm username để
-// liên kết quyền quản lý Công việc (Nhận việc, xem "việc của tôi"...); nếu không có tài khoản, username
-// là null — Công việc vẫn tạo được bình thường ("người thực hiện ngoài hệ thống"), chỉ khác là người
-// giao việc/admin sẽ thao tác (Nhận việc thay/Cập nhật tiến độ) thay cho họ vì họ không đăng nhập được.
-// Email thông báo LUÔN lấy đúng email đã nhập ở Thành phần tham dự, không fallback về email hệ thống.
+// m.attendees đã chốt). Liên kết tài khoản hệ thống (username) đọc THẲNG từ cột "Tài khoản" đã xác
+// nhận lúc nhập (a.hasAccount/a.username — xem applyAttendeeSystemUser()/resolveAttendeeAccountInput()),
+// KHÔNG dò tên mơ hồ ở đây nữa — tránh khớp nhầm khi nhiều người trùng tên. Không có tài khoản (hoặc
+// Tài khoản = Không) -> username null — Công việc vẫn tạo được bình thường ("người thực hiện ngoài hệ
+// thống"), người giao việc/admin thao tác thay (Nhận việc thay/Cập nhật tiến độ) vì họ không đăng nhập
+// được. Email thông báo LUÔN lấy đúng email đã nhập ở Thành phần tham dự, không fallback về email hệ thống.
 function resolveDirectiveAttendee(attendeesList, attendeeId) {
   if (!attendeeId) return null;
   const a = (attendeesList || []).find(x => String(x.id) === String(attendeeId));
   if (!a || !(a.name || '').trim()) return null;
-  const matchedUser = DB.users.find(u => (u.name || '').trim().toLowerCase() === (a.name || '').trim().toLowerCase());
-  return { name: a.name.trim(), email: (a.email || '').trim(), username: matchedUser ? matchedUser.username : null };
+  return { name: a.name.trim(), email: (a.email || '').trim(), username: a.hasAccount === 'YES' ? (a.username || null) : null };
 }
 
 // Danh sách phòng họp — nguồn dữ liệu DUY NHẤT dùng chung cho cả <select> đăng ký lẫn lưới Lịch Họp,
@@ -6200,9 +6203,13 @@ function onMinutesLinkedMeetingChange() {
   document.getElementById('minutesLocation').value = m.room || '';
 }
 
-// --- Bảng "Thành phần tham dự" nhập theo hàng ngang: Họ tên / Chức danh / Phòng / SĐT. ---
+// --- Bảng "Thành phần tham dự" nhập theo hàng ngang: Tài khoản / Họ tên / Chức danh / Phòng / SĐT /
+// Email. Cột "Tài khoản" = Có: gõ tên gợi ý đúng tài khoản hệ thống (kèm phòng ban để phân biệt người
+// trùng tên) — chọn xong tự điền Chức danh/Phòng/SĐT/Email từ hệ thống (vẫn sửa tay lại được), đồng
+// thời lưu liên kết `username` chính xác (không dò tên mơ hồ nữa ở chỗ dùng — xem resolveDirectiveAttendee()).
+// = Không: nhập tự do hoàn toàn, không tìm/khớp tài khoản hệ thống nào. ---
 function addAttendeeRow() {
-  minutesAttendeesRows.push({ id: genAttendeeId(), name: '', title: '', dept: '', phone: '', email: '' });
+  minutesAttendeesRows.push({ id: genAttendeeId(), hasAccount: 'NO', username: null, name: '', title: '', dept: '', phone: '', email: '' });
   renderAttendeesTable();
   renderMinutesDirectivesTable();
 }
@@ -6221,20 +6228,90 @@ function updateAttendeeField(idx, field, value) {
   if (field === 'name') renderMinutesDirectivesTable();
 }
 
+// Áp thông tin 1 tài khoản hệ thống vào dòng người tham dự thứ idx — chỉ điền vào Phòng/SĐT/Email khi
+// Ô ĐANG TRỐNG (ưu tiên dữ liệu đã nhập tay/dành riêng cho cuộc họp, ví dụ email liên hệ khác lúc họp
+// — đúng theo yêu cầu "email luôn lấy đúng email đã nhập ở Thành phần tham dự"), lưu liên kết username
+// chính xác. Vẫn sửa tay lại được sau đó bình thường dù đã tự điền hay không.
+function applyAttendeeSystemUser(idx, user) {
+  const a = minutesAttendeesRows[idx];
+  if (!a) return;
+  a.username = user.username;
+  a.name = user.name;
+  a.dept = a.dept || user.dept || '';
+  a.phone = a.phone || user.phone || '';
+  a.email = a.email || user.email || '';
+}
+
+// Bật/tắt liên kết tài khoản hệ thống cho 1 người tham dự. Chuyển sang "Không": chỉ gỡ liên kết username,
+// GIỮ NGUYÊN toàn bộ dữ liệu đã nhập/tự điền trước đó. Chuyển sang "Có": thử tìm lại theo tên hiện có —
+// nếu khớp đúng DUY NHẤT 1 tài khoản thì tự liên kết + điền lại thông tin ngay, không cần gõ lại tên.
+function toggleAttendeeHasAccount(idx, value) {
+  const a = minutesAttendeesRows[idx];
+  if (!a) return;
+  a.hasAccount = value;
+  if (value === 'NO') {
+    a.username = null;
+  } else {
+    const matches = DB.users.filter(u => (u.name || '').trim().toLowerCase() === (a.name || '').trim().toLowerCase());
+    if (matches.length === 1) applyAttendeeSystemUser(idx, matches[0]);
+  }
+  renderAttendeesTable();
+  renderMinutesDirectivesTable();
+}
+
+// Xử lý khi rời khỏi (blur/chọn gợi ý) ô Họ và tên lúc Tài khoản = Có: nếu giá trị đang gõ đúng định
+// dạng gợi ý lấy từ danh sách hệ thống ("Tên — Phòng (username)") thì liên kết CHÍNH XÁC theo username
+// nhúng sẵn trong đó (tránh khớp nhầm khi trùng tên), rồi rút gọn ô lại chỉ còn Họ và tên cho gọn gàng.
+// Gõ tự do không khớp gợi ý nào (chưa chọn, hoặc gõ sai) thì chỉ gỡ liên kết cũ (nếu có) — KHÔNG chặn
+// nhập, người dùng có thể gõ tiếp/chọn lại sau.
+function resolveAttendeeAccountInput(idx, rawValue) {
+  const a = minutesAttendeesRows[idx];
+  if (!a) return;
+  const m = rawValue.match(/^(.*) — .*\(([^()]+)\)$/);
+  const user = m ? DB.users.find(u => u.username === m[2].trim()) : null;
+  if (user) {
+    applyAttendeeSystemUser(idx, user);
+  } else {
+    a.name = rawValue;
+    a.username = null;
+  }
+  renderAttendeesTable();
+  renderMinutesDirectivesTable();
+}
+
 function renderAttendeesTable() {
   const tbody = document.getElementById('minutesAttendeesTableBody');
   if (!tbody) return;
-  tbody.innerHTML = minutesAttendeesRows.map((a, idx) => `
+
+  const datalist = document.getElementById('systemUsersDatalist');
+  if (datalist) {
+    datalist.innerHTML = DB.users.map(u => `<option value="${escapeHtml(u.name)} — ${escapeHtml(u.dept || 'Chưa rõ phòng')} (${escapeHtml(u.username)})"></option>`).join('');
+  }
+
+  tbody.innerHTML = minutesAttendeesRows.map((a, idx) => {
+    const hasAccount = a.hasAccount === 'YES';
+    const nameCell = hasAccount
+      ? `<input value="${escapeHtml(a.name)}" list="systemUsersDatalist" oninput="updateAttendeeField(${idx}, 'name', this.value)" onchange="resolveAttendeeAccountInput(${idx}, this.value)" class="w-full border-0 p-0.5 text-xs focus:outline-none" placeholder="Gõ để tìm tài khoản hệ thống...">
+         ${a.username ? `<div class="text-[10px] text-emerald-700 mt-0.5">✓ Đã liên kết tài khoản: ${escapeHtml(a.username)}</div>` : '<div class="text-[10px] text-amber-600 mt-0.5">Chưa liên kết — chọn từ gợi ý</div>'}`
+      : `<input value="${escapeHtml(a.name)}" oninput="updateAttendeeField(${idx}, 'name', this.value)" class="w-full border-0 p-0.5 text-xs focus:outline-none" placeholder="Họ và tên">`;
+    return `
     <tr>
       <td class="border p-1 text-center">${idx + 1}</td>
-      <td class="border p-1"><input value="${escapeHtml(a.name)}" oninput="updateAttendeeField(${idx}, 'name', this.value)" class="w-full border-0 p-0.5 text-xs focus:outline-none" placeholder="Họ và tên"></td>
+      <td class="border p-1">
+        <select onchange="toggleAttendeeHasAccount(${idx}, this.value)" class="w-full border-0 p-0.5 text-xs bg-white focus:outline-none">
+          <option value="NO" ${!hasAccount ? 'selected' : ''}>Không</option>
+          <option value="YES" ${hasAccount ? 'selected' : ''}>Có</option>
+        </select>
+      </td>
+      <td class="border p-1">${nameCell}</td>
       <td class="border p-1"><input value="${escapeHtml(a.title)}" oninput="updateAttendeeField(${idx}, 'title', this.value)" class="w-full border-0 p-0.5 text-xs focus:outline-none" placeholder="Chức danh"></td>
       <td class="border p-1"><input value="${escapeHtml(a.dept)}" oninput="updateAttendeeField(${idx}, 'dept', this.value)" class="w-full border-0 p-0.5 text-xs focus:outline-none" placeholder="Phòng"></td>
       <td class="border p-1"><input value="${escapeHtml(a.phone)}" oninput="updateAttendeeField(${idx}, 'phone', this.value)" class="w-full border-0 p-0.5 text-xs focus:outline-none" placeholder="SĐT"></td>
       <td class="border p-1"><input type="email" value="${escapeHtml(a.email || '')}" oninput="updateAttendeeField(${idx}, 'email', this.value)" class="w-full border-0 p-0.5 text-xs focus:outline-none" placeholder="email@company.com"></td>
       <td class="border p-1 text-center"><button type="button" onclick="removeAttendeeRow(${idx})" class="text-red-600 font-bold hover:text-red-800" title="Xoá dòng">✕</button></td>
     </tr>
-  `).join('');
+  `;
+  }).join('');
 }
 
 // --- Bảng "Ý kiến chỉ đạo" nhập trực tiếp trong biên bản — mỗi dòng gán ngay cho 1 người cụ thể;
@@ -6432,8 +6509,14 @@ function openEditMeetingMinutes(id) {
   document.getElementById('minutesSecretary').value = m.secretary;
   document.getElementById('minutesContent').value = m.content;
 
-  // Bù id ổn định cho biên bản cũ lưu trước khi có genAttendeeId() (dữ liệu cũ không có trường id).
-  minutesAttendeesRows = Array.isArray(m.attendees) ? m.attendees.map(a => ({ id: a.id || genAttendeeId(), ...a })) : [];
+  // Bù id ổn định + cột Tài khoản cho biên bản cũ lưu trước khi có 2 trường này: thử khớp tên với 1
+  // tài khoản hệ thống DUY NHẤT (giống cách hệ thống từng làm ngầm trước đây) làm mặc định ban đầu —
+  // Tài khoản = Có nếu khớp được, còn lại mặc định Không; người dùng vẫn sửa lại bình thường sau đó.
+  minutesAttendeesRows = Array.isArray(m.attendees) ? m.attendees.map(a => {
+    if (a.hasAccount) return { id: a.id || genAttendeeId(), ...a };
+    const matches = DB.users.filter(u => (u.name || '').trim().toLowerCase() === (a.name || '').trim().toLowerCase());
+    return { id: a.id || genAttendeeId(), hasAccount: matches.length === 1 ? 'YES' : 'NO', username: matches.length === 1 ? matches[0].username : null, ...a };
+  }) : [];
   renderAttendeesTable();
 
   minutesDirectives = (m.directives || []).map(d => ({ ...d, collaboratorAttendeeIds: Array.isArray(d.collaboratorAttendeeIds) ? [...d.collaboratorAttendeeIds] : [] }));
