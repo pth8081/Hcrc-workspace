@@ -6,6 +6,7 @@ const { getPool } = require('./db');
 const { seedDefaults } = require('./seedDefaults');
 const dataRoutes = require('./routes/data');
 const uploadRoutes = require('./routes/upload');
+const emailRoutes = require('./routes/email');
 const { checkContractExpiryReminders } = require('./jobs/contractExpiryReminder');
 
 const app = express();
@@ -19,6 +20,7 @@ app.use(express.urlencoded({ extended: true, limit: '5mb' }));
 // API
 app.use('/api/data', dataRoutes);
 app.use('/api/upload', uploadRoutes);
+app.use('/api/send-email', emailRoutes);
 
 // Phục vụ file đính kèm đã tải lên
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));

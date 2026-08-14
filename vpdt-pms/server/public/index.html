@@ -1254,7 +1254,8 @@
     <!-- CẤU HÌNH HỆ THỐNG EMAIL -->
     <div class="bg-amber-50 p-4 rounded border border-amber-300 space-y-3">
       <h3 class="font-bold text-amber-900 text-sm flex items-center gap-1">✉️ Cấu Hình Máy Chủ Gửi Email Thông Báo</h3>
-      
+      <p class="text-[11px] text-gray-500 italic">Host/Port/Email người gửi chỉnh trực tiếp ở đây. Máy chủ SMTP thật (bắt buộc SMTP_HOST, tài khoản/mật khẩu chỉ cần nếu máy chủ yêu cầu xác thực) được cấu hình riêng ở file .env trên server (theo hướng dẫn triển khai) vì lý do bảo mật — chưa khai báo SMTP_HOST thì hệ thống tự chuyển sang chế độ mô phỏng (ghi Nhật ký hệ thống, không gửi hộp thư thật).</p>
+
       <form onsubmit="saveEmailConfig(event)" class="grid grid-cols-1 md:grid-cols-4 gap-3 bg-white p-3 rounded border text-xs">
         <div>
           <label class="block font-semibold text-gray-600 mb-1">Trạng thái gửi mail</label>
@@ -1621,6 +1622,16 @@
               <input type="checkbox" id="pCanBeApprover"> ✅ Có thể được chọn làm người duyệt
             </label>
             <p class="text-[11px] text-gray-500 italic">Chỉ để LỌC danh sách ứng viên ở màn "Quy trình & Đồng cấp" cho gọn — không tự cấp quyền duyệt. Quyền duyệt thật vẫn do admin tick chọn đích danh ở từng bước.</p>
+
+            <div class="border-t pt-2 mt-1">
+              <label class="block font-semibold text-gray-700 mb-1">🔐 Xác thực bổ sung khi bấm Duyệt</label>
+              <select id="pApproverAuthLevel" class="w-full border p-1.5 rounded bg-white text-xs">
+                <option value="NONE">Không yêu cầu thêm (mặc định)</option>
+                <option value="PASSWORD">Yêu cầu nhập lại mật khẩu</option>
+                <option value="OTP_EMAIL">Yêu cầu mã OTP gửi qua email</option>
+              </select>
+              <p class="text-[11px] text-gray-500 italic mt-1">Chỉ áp dụng cho hành động DUYỆT ở Văn bản trình / Đăng ký xe / Văn phòng (không áp dụng Từ chối/Hủy, Tài liệu, Đặt phòng họp). Mã OTP hiện đang ở chế độ mô phỏng giống các email khác của hệ thống (hiện trong log, chưa gửi hộp thư thật) cho tới khi kết nối SMTP thật.</p>
+            </div>
           </div>
 
           <div class="bg-white p-3 rounded border space-y-2">
@@ -2028,6 +2039,31 @@
     <div class="p-3 bg-gray-100 border-t flex justify-end gap-2 text-xs">
       <button onclick="closeCreateTaskModal()" class="bg-gray-500 text-white px-4 py-1.5 rounded font-bold hover:bg-gray-600">Huỷ</button>
       <button id="createTaskConfirmBtn" onclick="confirmCreateTask()" class="bg-violet-600 text-white px-5 py-1.5 rounded font-bold hover:bg-violet-700">✅ Xác Nhận Giao Việc</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL XÁC THỰC BỔ SUNG KHI DUYỆT (mật khẩu / OTP email) — xem withApprovalAuth() -->
+<div id="approvalAuthModal" class="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center hidden z-50 p-4">
+  <div class="bg-white rounded-lg shadow-2xl max-w-sm w-full overflow-hidden">
+    <div class="flex justify-between items-center bg-emerald-800 text-white p-4">
+      <h3 class="font-bold text-base flex items-center gap-2">🔐 Xác Thực Trước Khi Duyệt</h3>
+      <button onclick="closeApprovalAuthModal()" class="text-emerald-200 hover:text-white font-bold text-xl px-2">✕</button>
+    </div>
+    <div class="p-4 space-y-3 text-xs">
+      <div id="approvalAuthPasswordGroup" class="hidden">
+        <label class="block font-semibold text-gray-600 mb-1">Nhập lại mật khẩu đăng nhập</label>
+        <input id="approvalAuthPasswordInput" type="password" class="w-full border p-2 rounded text-sm" placeholder="••••••••">
+      </div>
+      <div id="approvalAuthOtpGroup" class="hidden">
+        <label class="block font-semibold text-gray-600 mb-1">Nhập mã OTP đã gửi tới email của bạn</label>
+        <input id="approvalAuthOtpInput" type="text" inputmode="numeric" maxlength="6" class="w-full border p-2 rounded text-sm tracking-widest" placeholder="000000">
+        <button type="button" onclick="sendApprovalOtp(true)" class="text-emerald-700 font-semibold hover:underline mt-1">↻ Gửi lại mã</button>
+      </div>
+    </div>
+    <div class="p-3 bg-gray-100 border-t flex justify-end gap-2 text-xs">
+      <button onclick="closeApprovalAuthModal()" class="bg-gray-500 text-white px-4 py-1.5 rounded font-bold hover:bg-gray-600">Huỷ</button>
+      <button onclick="confirmApprovalAuth()" class="bg-emerald-600 text-white px-5 py-1.5 rounded font-bold hover:bg-emerald-700">✅ Xác Nhận & Duyệt</button>
     </div>
   </div>
 </div>
@@ -2782,7 +2818,8 @@ function defaultNewUserPerms() {
     officeView: emptyScope(), officeCreate: emptyScope(), officeDownload: emptyScope(),
     officeBuy: true, officeFix: true, officeInvest: false,
     minutesCreate: false, minutesView: false, minutesEdit: false, minutesDelete: false, minutesDownload: false,
-    taskView: false, taskEdit: false, taskDelete: false, taskDownload: false
+    taskView: false, taskEdit: false, taskDelete: false, taskDownload: false,
+    approverAuthLevel: 'NONE'
   };
 }
 
@@ -2856,6 +2893,12 @@ function migrateLegacyPerms(perms) {
   // định BẬT ở mọi module để giữ nguyên hành vi/quyền truy cập đang có, admin có thể tắt bớt sau.
   if (p.moduleAccess === undefined) {
     p.moduleAccess = defaultModuleAccess();
+    changed = true;
+  }
+  // Mức xác thực bổ sung khi bấm Duyệt (nhập lại mật khẩu / OTP email) — user cũ chưa có trường này
+  // thì mặc định KHÔNG yêu cầu thêm gì (giữ nguyên trải nghiệm hiện tại), admin bật riêng sau.
+  if (p.approverAuthLevel === undefined) {
+    p.approverAuthLevel = 'NONE';
     changed = true;
   }
 
@@ -2941,11 +2984,26 @@ function syncStorage(key) {
 let dataReady = false;
 initDatabase().then(() => { dataReady = true; });
 
+// Gửi email THẬT qua backend (POST /api/send-email) nếu server đã cấu hình SMTP thật (biến môi
+// trường phía server) — chạy song song (fire-and-forget), KHÔNG chặn hay đổi hành vi của luồng đang
+// gọi (vốn đã ghi log mô phỏng + cập nhật UI ngay, không chờ email). Nếu server chưa cấu hình SMTP,
+// backend trả về simulated:true và không có gì thay đổi so với trước (chỉ mô phỏng qua console.log).
+function dispatchRealEmail(recipients, subject, bodyText) {
+  const addresses = (recipients || []).map(r => (typeof r === 'string' ? r : r?.email)).filter(Boolean);
+  if (addresses.length === 0) return;
+  fetch('/api/send-email', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ to: addresses, subject, text: bodyText })
+  }).catch(err => console.error('Lỗi gửi email thật:', err.message));
+}
+
 // --- EMAIL SIMULATOR ---
 function sendNotificationEmail(recipientEmail, recipientName, subject, messageBody) {
   if (!DB.emailConfig.enabled) return;
   if (!recipientEmail) return;
   console.log(`[DMS EMAIL SIMULATOR] To: ${recipientName} <${recipientEmail}> | Subject: ${subject}`);
+  dispatchRealEmail([recipientEmail], subject, messageBody || subject);
   logSystemAction('EMAIL', 'SEND_EMAIL_SUCCESS', `Đã gửi email tự động tới [${recipientName} - ${recipientEmail}] với chủ đề: "${subject}"`, 'SUCCESS', recipientEmail);
 }
 
@@ -2964,6 +3022,7 @@ function notifyUsersByEmail(module, actionType, targetCode, usernames, subject, 
   recipients.forEach(u => {
     console.log(`[DMS EMAIL SIMULATOR] To: ${u.name} <${u.email}> | Subject: ${subject}\n  ${bodyText}`);
   });
+  dispatchRealEmail(recipients, subject, bodyText);
   logSystemAction(
     module, actionType,
     recipients.length
@@ -2997,6 +3056,7 @@ function notifyMinutesDirectiveRecipients(m, usernames, module, actionType, targ
   recipients.forEach(r => {
     console.log(`[DMS EMAIL SIMULATOR] To: ${r.name} <${r.email}> | Subject: ${subject}\n  ${bodyText}`);
   });
+  dispatchRealEmail(recipients, subject, bodyText);
   logSystemAction(
     module, actionType,
     recipients.length
@@ -3005,6 +3065,76 @@ function notifyMinutesDirectiveRecipients(m, usernames, module, actionType, targ
     recipients.length ? 'SUCCESS' : 'WARNING',
     targetCode
   );
+}
+
+// ==========================================
+// XÁC THỰC BỔ SUNG KHI DUYỆT (nhập lại mật khẩu / OTP email) — perms.approverAuthLevel, cấu hình ở
+// khối "9. Người Duyệt" trong Quản trị. Chỉ áp dụng cho hành động DUYỆT (không phải Từ chối/Hủy) ở
+// 3 module Văn bản trình/Đăng ký xe/Văn phòng — xem lời gọi withApprovalAuth() ở mỗi module.
+// OTP hiện đang mô phỏng giống mọi email khác của hệ thống (console.log), chưa gửi email thật.
+// ==========================================
+let pendingApprovalAction = null;
+let pendingApprovalOtpCode = null;
+
+// Gọi hàm actionFn() ngay nếu người dùng không cấu hình xác thực bổ sung (mặc định), ngược lại mở
+// modal yêu cầu nhập mật khẩu/OTP trước, chỉ gọi actionFn() sau khi xác thực đúng.
+function withApprovalAuth(actionFn) {
+  const level = currentUser.perms?.approverAuthLevel || 'NONE';
+  if (level === 'NONE') { actionFn(); return; }
+
+  pendingApprovalAction = actionFn;
+  document.getElementById('approvalAuthPasswordGroup').classList.toggle('hidden', level !== 'PASSWORD');
+  document.getElementById('approvalAuthOtpGroup').classList.toggle('hidden', level !== 'OTP_EMAIL');
+  document.getElementById('approvalAuthPasswordInput').value = '';
+  document.getElementById('approvalAuthOtpInput').value = '';
+  document.getElementById('approvalAuthModal').classList.remove('hidden');
+
+  if (level === 'OTP_EMAIL') sendApprovalOtp(false);
+}
+
+// Sinh mã OTP 6 số mới và "gửi" (mô phỏng) tới email của chính người đang cần xác thực.
+function sendApprovalOtp(isResend) {
+  pendingApprovalOtpCode = String(Math.floor(100000 + Math.random() * 900000));
+  if (currentUser.email) {
+    const otpSubject = '[VPDT] Mã xác thực phê duyệt';
+    const otpBody = `Mã OTP của bạn: ${pendingApprovalOtpCode} (chỉ dùng 1 lần cho lượt duyệt này)`;
+    console.log(`[DMS EMAIL SIMULATOR] To: ${currentUser.name} <${currentUser.email}> | Subject: ${otpSubject}\n  ${otpBody}`);
+    dispatchRealEmail([currentUser.email], otpSubject, otpBody);
+  }
+  logSystemAction(
+    'AUTH', 'SEND_APPROVAL_OTP',
+    `${isResend ? 'Gửi lại' : 'Gửi'} mã OTP xác thực phê duyệt cho ${currentUser.name}` + (currentUser.email ? ` <${currentUser.email}>` : ' (không có email)'),
+    currentUser.email ? 'SUCCESS' : 'WARNING',
+    currentUser.username
+  );
+}
+
+function closeApprovalAuthModal() {
+  document.getElementById('approvalAuthModal').classList.add('hidden');
+  pendingApprovalAction = null;
+  pendingApprovalOtpCode = null;
+}
+
+function confirmApprovalAuth() {
+  const level = currentUser.perms?.approverAuthLevel || 'NONE';
+
+  if (level === 'PASSWORD') {
+    const entered = document.getElementById('approvalAuthPasswordInput').value;
+    if (!entered || entered !== (currentUser.pass || currentUser.password)) {
+      return alert('⛔ Mật khẩu không đúng, vui lòng thử lại!');
+    }
+  } else if (level === 'OTP_EMAIL') {
+    const entered = document.getElementById('approvalAuthOtpInput').value.trim();
+    if (!entered || entered !== pendingApprovalOtpCode) {
+      return alert('⛔ Mã OTP không đúng hoặc đã hết hạn, vui lòng thử lại!');
+    }
+  }
+
+  logSystemAction('AUTH', 'APPROVAL_AUTH_SUCCESS', `Xác thực ${level === 'PASSWORD' ? 'mật khẩu' : 'OTP email'} thành công trước khi phê duyệt`, 'SUCCESS', currentUser.username);
+
+  const action = pendingApprovalAction;
+  closeApprovalAuthModal();
+  if (action) action();
 }
 
 // Toàn bộ user có quyền phê duyệt/hủy lịch phòng họp (cờ toàn cục meetingApprove/meetingCancel,
@@ -4045,7 +4175,7 @@ function openProcessSubmissionModal(subId) {
   if (canApprove) {
     actionBtns.innerHTML = `
       <button onclick="processSubmission('REJECT')" class="bg-red-600 text-white px-4 py-1.5 rounded font-bold hover:bg-red-700 text-xs">❌ Từ Chối / Trả Về</button>
-      <button onclick="processSubmission('APPROVE')" class="bg-green-600 text-white px-5 py-1.5 rounded font-bold hover:bg-green-700 text-xs">✅ Phê Duyệt & Chuyển Bước</button>
+      <button onclick="withApprovalAuth(() => processSubmission('APPROVE'))" class="bg-green-600 text-white px-5 py-1.5 rounded font-bold hover:bg-green-700 text-xs">✅ Phê Duyệt & Chuyển Bước</button>
     `;
   } else {
     actionBtns.innerHTML = `<span class="text-gray-500 italic text-xs">Bạn chỉ có quyền xem thông tin tờ trình này.</span>`;
@@ -5992,7 +6122,7 @@ function openCarProcessModal(carId) {
   if (canApprove) {
     actionBtns.innerHTML = `
       <button onclick="processCarReg('REJECT')" class="bg-red-600 text-white px-4 py-1.5 rounded font-bold hover:bg-red-700 text-xs">❌ Từ Chối</button>
-      <button onclick="processCarReg('APPROVE')" class="bg-green-600 text-white px-5 py-1.5 rounded font-bold hover:bg-green-700 text-xs">✅ Phê Duyệt & Chuyển Bước</button>
+      <button onclick="withApprovalAuth(() => processCarReg('APPROVE'))" class="bg-green-600 text-white px-5 py-1.5 rounded font-bold hover:bg-green-700 text-xs">✅ Phê Duyệt & Chuyển Bước</button>
     `;
   } else {
     actionBtns.innerHTML = `<span class="text-gray-500 italic text-xs">Bạn chỉ có quyền xem thông tin đăng ký này.</span>`;
@@ -6565,7 +6695,7 @@ function openOfficeProcessModal(officeId) {
   if (canApprove) {
     actionBtns.innerHTML = `
       <button onclick="processOfficeReq('REJECT')" class="bg-red-600 text-white px-4 py-1.5 rounded font-bold hover:bg-red-700 text-xs">❌ Từ Chối</button>
-      <button onclick="processOfficeReq('APPROVE')" class="bg-green-600 text-white px-5 py-1.5 rounded font-bold hover:bg-green-700 text-xs">✅ Phê Duyệt & Chuyển Bước</button>
+      <button onclick="withApprovalAuth(() => processOfficeReq('APPROVE'))" class="bg-green-600 text-white px-5 py-1.5 rounded font-bold hover:bg-green-700 text-xs">✅ Phê Duyệt & Chuyển Bước</button>
     `;
   } else {
     actionBtns.innerHTML = `<span class="text-gray-500 italic text-xs">Bạn chỉ có quyền xem thông tin đề xuất này.</span>`;
@@ -7503,6 +7633,7 @@ function collectPermsFromForm() {
     admin: document.getElementById('pAdmin').checked,
     moduleAccess: readModuleAccessFromForm(),
     canBeApprover: document.getElementById('pCanBeApprover').checked,
+    approverAuthLevel: document.getElementById('pApproverAuthLevel').value,
     canViewReports: document.getElementById('pCanViewReports').checked,
     internalNewsCreate: document.getElementById('pInternalNewsCreate').checked,
     internalTrainingCreate: document.getElementById('pInternalTrainingCreate').checked,
@@ -7553,6 +7684,7 @@ function populatePermsForm(permsInput) {
 
   document.getElementById('pAdmin').checked = !!perms.admin;
   document.getElementById('pCanBeApprover').checked = !!perms.canBeApprover;
+  document.getElementById('pApproverAuthLevel').value = perms.approverAuthLevel || 'NONE';
   document.getElementById('pCanViewReports').checked = !!perms.canViewReports;
   document.getElementById('pInternalNewsCreate').checked = !!perms.internalNewsCreate;
   document.getElementById('pInternalTrainingCreate').checked = !!perms.internalTrainingCreate;
@@ -7850,6 +7982,7 @@ function resetUserForm() {
   const defaults = defaultNewUserPerms();
   document.getElementById('pAdmin').checked = defaults.admin;
   document.getElementById('pCanBeApprover').checked = !!defaults.canBeApprover;
+  document.getElementById('pApproverAuthLevel').value = defaults.approverAuthLevel || 'NONE';
   document.getElementById('pCanViewReports').checked = !!defaults.canViewReports;
   document.getElementById('pInternalNewsCreate').checked = !!defaults.internalNewsCreate;
   document.getElementById('pInternalTrainingCreate').checked = !!defaults.internalTrainingCreate;

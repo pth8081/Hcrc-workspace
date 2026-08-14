@@ -1,7 +1,9 @@
-// jobs/contractExpiryReminder.js — Job định kỳ quét hợp đồng sắp/đã hết hạn và gửi
-// thông báo nhắc nhở (dùng chung cơ chế "email simulator" — ghi console + Nhật ký hệ
-// thống — như sendNotificationEmail() phía frontend, chưa cần tích hợp SMTP thật).
+// jobs/contractExpiryReminder.js — Job định kỳ quét hợp đồng sắp/đã hết hạn và gửi thông báo nhắc
+// nhở — ghi console + Nhật ký hệ thống như trước, đồng thời gửi email THẬT qua lib/mailer.js nếu
+// server đã cấu hình SMTP thật (biến môi trường); nếu chưa cấu hình thì mailer tự trả về
+// simulated:true và job vẫn chạy bình thường như cơ chế mô phỏng cũ.
 const { getPool, sql } = require('../db');
+const { sendMail } = require('../lib/mailer');
 
 const DEFAULT_REMINDER_DAYS = [30, 15, 7];
 const MAX_LOG_ENTRIES = 200;
@@ -101,6 +103,24 @@ async function checkContractExpiryReminders() {
           console.log(`[DMS EMAIL SIMULATOR] To: ${r.name} <${r.email}> | Subject: ${subject}\n  ${body}`);
         }
 
+        let sendResult = { sent: [], failed: [], simulated: true };
+        if (recipients.length) {
+          try {
+            sendResult = await sendMail({
+              to: recipients.map(r => r.email),
+              subject, text: body,
+              host: emailConfig.smtpHost, port: emailConfig.smtpPort, from: emailConfig.senderEmail
+            });
+          } catch (err) {
+            console.error('⛔ [Nhắc hạn hợp đồng] Gửi email thật thất bại:', err.message);
+          }
+        }
+
+        let statusSuffix = '';
+        if (recipients.length && !sendResult.simulated) {
+          statusSuffix = sendResult.failed.length ? `; LỖI gửi thật tới: ${sendResult.failed.join(', ')}` : ' (đã gửi email thật)';
+        }
+
         systemLogs.unshift({
           id: Date.now() + Math.random(),
           timestamp: nowStr,
@@ -111,9 +131,9 @@ async function checkContractExpiryReminders() {
           actionType: 'EXPIRY_REMINDER',
           targetObject: c.code,
           description: recipients.length
-            ? `Đã gửi nhắc hạn hợp đồng [${c.code} - ${c.title}] (${label}) tới ${recipients.map(r => r.email).join(', ')}`
+            ? `Đã gửi nhắc hạn hợp đồng [${c.code} - ${c.title}] (${label}) tới ${recipients.map(r => r.email).join(', ')}${statusSuffix}`
             : `Hợp đồng [${c.code} - ${c.title}] (${label}) chưa có người nhận hợp lệ (người tạo chưa có email, không có CC)`,
-          status: recipients.length ? 'SUCCESS' : 'WARNING'
+          status: recipients.length ? (sendResult.failed.length && !sendResult.simulated ? 'WARNING' : 'SUCCESS') : 'WARNING'
         });
 
         c.notifiedThresholds.push(threshold);
