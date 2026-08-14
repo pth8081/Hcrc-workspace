@@ -1379,7 +1379,7 @@
         <div id="permFieldsContainer" class="space-y-4">
         <div class="bg-white p-3 rounded border space-y-2 text-xs">
           <h4 class="font-bold text-gray-800 border-b pb-1 text-sm">0. Quyền Truy Cập Module</h4>
-          <p class="text-[11px] text-gray-500 italic">Công tắc BẬT/TẮT quyền vào từng module, độc lập với quyền Admin. Tắt module nào thì người dùng không vào được module đó, dù có quyền chi tiết bên dưới. Quyền Admin luôn vào được mọi module.</p>
+          <p class="text-[11px] text-gray-500 italic">Công tắc BẬT/TẮT quyền vào từng module, độc lập với quyền Admin. Tắt module nào thì người dùng không vào được module đó, dù có quyền chi tiết bên dưới. Quyền Admin luôn vào được mọi module. Module nào có nhiều phân hệ con (vd Văn phòng) sẽ tự hiện thêm checkbox con bên dưới để cấp quyền từng phần.</p>
           <div id="moduleAccessCheckboxes" class="grid grid-cols-2 md:grid-cols-5 gap-2"></div>
         </div>
 
@@ -1395,7 +1395,7 @@
 
           <div class="bg-white p-3 rounded border space-y-3">
             <h4 class="font-bold text-indigo-900 border-b pb-1 text-sm">2. Năng Lực Xử Lý (không phụ thuộc phòng ban)</h4>
-            <p class="text-[11px] text-gray-500 italic">Phạm vi phòng ban của từng module (Xem/Tạo mới/Tải xuống) nay cấu hình riêng ở các khối 4-9 bên dưới.</p>
+            <p class="text-[11px] text-gray-500 italic">Phạm vi phòng ban của từng module (Xem/Tạo mới/Tải xuống) nay cấu hình riêng ở các khối 4-9 bên dưới. Phân hệ con của Văn phòng (Mua Bán/Sửa Chữa/Đầu Tư) nay cấp quyền ở mục 0 (lồng dưới module "Phê Duyệt Văn Phòng").</p>
             <div class="space-y-1.5">
               <div class="space-y-1">
                 <span class="font-bold text-emerald-800 block text-[11px]">📅 Phòng Họp:</span>
@@ -1404,18 +1404,6 @@
                 </label>
                 <label class="flex items-center gap-1.5 text-gray-700 cursor-pointer">
                   <input type="checkbox" id="pMeetingCancel"> ❌ Hủy phòng họp (toàn công ty)
-                </label>
-              </div>
-              <div class="border-t pt-1.5 space-y-1">
-                <span class="font-bold text-teal-800 block text-[11px]">🏢 Phân Hệ Văn Phòng Được Dùng:</span>
-                <label class="flex items-center gap-1.5 text-gray-700 cursor-pointer">
-                  <input type="checkbox" id="pOfficeBuy" checked> 🛒 Mua Bán
-                </label>
-                <label class="flex items-center gap-1.5 text-gray-700 cursor-pointer">
-                  <input type="checkbox" id="pOfficeFix" checked> 🔧 Sửa Chữa
-                </label>
-                <label class="flex items-center gap-1.5 text-gray-700 cursor-pointer">
-                  <input type="checkbox" id="pOfficeInvest"> 📈 Đầu Tư
                 </label>
               </div>
             </div>
@@ -1588,7 +1576,7 @@
 
           <div class="bg-white p-3 rounded border space-y-2 lg:col-span-3">
             <h4 class="font-bold text-teal-800 text-sm border-b pb-1">8. 🏢 Văn Phòng (Mua/Sửa/Đầu Tư) — Phạm Vi Theo Phòng Ban</h4>
-            <p class="text-[11px] text-gray-500 italic">Dùng chung cho cả 3 phân hệ VP; bật/tắt từng phân hệ cụ thể ở khối 2.</p>
+            <p class="text-[11px] text-gray-500 italic">Dùng chung cho cả 3 phân hệ VP; bật/tắt từng phân hệ cụ thể ở khối 0.</p>
             <div class="grid grid-cols-3 gap-3">
               <div>
                 <div class="flex justify-between items-center mb-1">
@@ -2617,6 +2605,12 @@ function scopeHasAny(user, scope) {
 
 // Danh sách các module nghiệp vụ có công tắc "Quyền Truy Cập Module" độc lập (không cần quyền
 // admin) — admin bật/tắt riêng cho từng người dùng ở khối "0. Quyền Truy Cập Module".
+// `subModules` (tuỳ chọn): module nào có nhiều phân hệ con cần cấp quyền riêng lẻ (vd Văn phòng có
+// Mua Bán/Sửa Chữa/Đầu Tư) thì khai báo ở đây — mục "0. Quyền Truy Cập Module" sẽ TỰ ĐỘNG lồng các
+// checkbox con này ngay dưới module cha (xem renderModuleAccessCheckboxes()), không cần đặt rải rác
+// ở chỗ khác trong form nữa. `id`/`checkedByDefault` khớp đúng với key trong đối tượng perms của user
+// (vd perms.officeBuy) — collectPermsFromForm()/populatePermsForm() đọc/ghi theo id này, không phụ
+// thuộc vị trí trong DOM.
 const BUSINESS_MODULES = [
   { key: 'doc', label: 'Tài Liệu' },
   { key: 'submission', label: 'Văn Bản Trình / Tờ Trình' },
@@ -2626,7 +2620,11 @@ const BUSINESS_MODULES = [
   { key: 'meeting', label: 'Đặt Phòng Họp' },
   { key: 'minutes', label: 'Biên Bản Họp' },
   { key: 'car', label: 'Đăng Ký Xe' },
-  { key: 'office', label: 'Phê Duyệt Văn Phòng' },
+  { key: 'office', label: 'Phê Duyệt Văn Phòng', subModules: [
+    { id: 'pOfficeBuy', label: '🛒 Mua Bán', checkedByDefault: true },
+    { id: 'pOfficeFix', label: '🔧 Sửa Chữa', checkedByDefault: true },
+    { id: 'pOfficeInvest', label: '📈 Đầu Tư', checkedByDefault: false }
+  ] },
   { key: 'reports', label: 'Báo Cáo' }
 ];
 
@@ -8431,10 +8429,22 @@ function renderModuleAccessCheckboxes(containerId = 'moduleAccessCheckboxes', pr
   const el = document.getElementById(containerId);
   if (!el) return;
   el.innerHTML = BUSINESS_MODULES.map(m => `
-    <label class="flex items-center gap-1.5 text-gray-700 cursor-pointer bg-slate-50 px-2 py-1 rounded border">
-      <input type="checkbox" id="${prefix}_${m.key}" checked>
-      <span>${escapeHtml(m.label)}</span>
-    </label>
+    <div class="bg-slate-50 px-2 py-1 rounded border">
+      <label class="flex items-center gap-1.5 text-gray-700 cursor-pointer">
+        <input type="checkbox" id="${prefix}_${m.key}" checked>
+        <span>${escapeHtml(m.label)}</span>
+      </label>
+      ${(m.subModules && m.subModules.length) ? `
+        <div class="pl-4 mt-1 space-y-0.5 border-l-2 border-slate-200">
+          ${m.subModules.map(sm => `
+            <label class="flex items-center gap-1.5 text-gray-600 text-[11px] cursor-pointer">
+              <input type="checkbox" id="${escapeHtml(sm.id)}" ${sm.checkedByDefault ? 'checked' : ''}>
+              <span>${escapeHtml(sm.label)}</span>
+            </label>
+          `).join('')}
+        </div>
+      ` : ''}
+    </div>
   `).join('');
 }
 
@@ -8561,6 +8571,11 @@ function collectPermsFromForm() {
 function populatePermsForm(permsInput) {
   const perms = migrateLegacyPerms(permsInput).perms || defaultNewUserPerms();
 
+  // Render trước 2 khối checkbox tạo động (module con lồng trong mục 0, checkbox phòng ban) rồi mới
+  // đổ giá trị đã lưu lên — nếu render sau sẽ ghi đè lại checkedByDefault, mất giá trị vừa gán.
+  renderDeptCheckboxes();
+  renderModuleAccessCheckboxes();
+
   document.getElementById('pAdmin').checked = !!perms.admin;
   document.getElementById('pCanBeApprover').checked = !!perms.canBeApprover;
   document.getElementById('pApproverAuthLevel').value = perms.approverAuthLevel || 'NONE';
@@ -8603,8 +8618,6 @@ function populatePermsForm(permsInput) {
   document.getElementById('pOfficeCreateAll').checked = !!perms.officeCreate?.all;
   document.getElementById('pOfficeDownloadAll').checked = !!perms.officeDownload?.all;
 
-  renderDeptCheckboxes();
-  renderModuleAccessCheckboxes();
   populateModuleAccessForm(perms.moduleAccess);
 
   const setGroupCheckboxes = (deptList, prefix) => {
@@ -8859,6 +8872,10 @@ function resetUserForm() {
   // module nào cả (trước đây hầu hết module nghiệp vụ được bật sẵn = toàn công ty, xem phân tích ở
   // defaultNewUserPerms()). Mỗi người vẫn luôn thao tác được trong phòng ban của chính mình.
   const defaults = defaultNewUserPerms();
+  // Render trước 2 khối checkbox tạo động (module con lồng trong mục 0, checkbox phòng ban) rồi mới
+  // đổ giá trị mặc định lên — nếu render sau sẽ ghi đè lại checkedByDefault, mất giá trị vừa gán.
+  renderDeptCheckboxes();
+  renderModuleAccessCheckboxes();
   document.getElementById('pAdmin').checked = defaults.admin;
   document.getElementById('pCanBeApprover').checked = !!defaults.canBeApprover;
   document.getElementById('pApproverAuthLevel').value = defaults.approverAuthLevel || 'NONE';
@@ -8893,8 +8910,6 @@ function resetUserForm() {
     if (cb) { cb.checked = false; }
   });
 
-  renderDeptCheckboxes();
-  renderModuleAccessCheckboxes();
   populateModuleAccessForm(defaults.moduleAccess);
 }
 
