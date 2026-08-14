@@ -657,7 +657,8 @@
                 <tr class="bg-gray-100 text-left text-gray-700">
                   <th class="border p-1.5 w-8">STT</th>
                   <th class="border p-1.5">Nội Dung Chỉ Đạo</th>
-                  <th class="border p-1.5 w-48">Người Thực Hiện</th>
+                  <th class="border p-1.5 w-40">Người Thực Hiện</th>
+                  <th class="border p-1.5 w-40">Người Phối Hợp</th>
                   <th class="border p-1.5 w-36">Hạn Hoàn Thành</th>
                   <th class="border p-1.5 w-8"></th>
                 </tr>
@@ -704,7 +705,6 @@
         <table class="w-full border-collapse border text-xs bg-white">
           <thead>
             <tr class="bg-gray-100 text-left text-gray-700">
-              <th class="border p-2 w-10">STT</th>
               <th class="border p-2">Mã & Chủ Đề</th>
               <th class="border p-2">Thời Gian Họp</th>
               <th class="border p-2">Chủ Trì / Thư Ký</th>
@@ -4533,16 +4533,21 @@ function onMinutesLinkedMeetingChange() {
 function addAttendeeRow() {
   minutesAttendeesRows.push({ name: '', title: '', dept: '', phone: '' });
   renderAttendeesTable();
+  renderMinutesDirectivesTable();
 }
 
 function removeAttendeeRow(idx) {
   minutesAttendeesRows.splice(idx, 1);
   renderAttendeesTable();
+  renderMinutesDirectivesTable();
 }
 
 function updateAttendeeField(idx, field, value) {
   if (!minutesAttendeesRows[idx]) return;
   minutesAttendeesRows[idx][field] = value;
+  // Danh sách "Người thực hiện" ở bảng Ý kiến chỉ đạo lấy trực tiếp từ Họ và tên ở đây -> đổi tên là
+  // phải làm mới lại dropdown ngay để luôn khớp với Thành phần tham dự hiện tại.
+  if (field === 'name') renderMinutesDirectivesTable();
 }
 
 function renderAttendeesTable() {
@@ -4564,7 +4569,7 @@ function renderAttendeesTable() {
 // dòng nào có gán người thực hiện sẽ TỰ ĐỘNG được tạo thành Công việc ngay khi lưu biên bản (xem
 // autoCreateTasksFromDirectives()) — không cần bấm "Giao việc" thủ công từng dòng như trước nữa. ---
 function addMinutesDirectiveRow() {
-  minutesDirectives.push({ content: '', assignedTo: '', deadline: '' });
+  minutesDirectives.push({ content: '', assignedTo: '', collaborators: [], deadline: '' });
   renderMinutesDirectivesTable();
 }
 
@@ -4581,20 +4586,51 @@ function updateMinutesDirectiveField(idx, field, value) {
 function renderMinutesDirectivesTable() {
   const tbody = document.getElementById('minutesDirectivesTableBody');
   if (!tbody) return;
-  tbody.innerHTML = minutesDirectives.map((d, idx) => `
+
+  // Người thực hiện chỉ được chọn trong Thành phần tham dự (khớp theo Họ và tên) — đảm bảo chỉ đạo
+  // luôn giao cho người thực sự có mặt tại cuộc họp, không phải bất kỳ ai trong hệ thống.
+  const attendeeNames = new Set(minutesAttendeesRows.map(a => (a.name || '').trim().toLowerCase()).filter(Boolean));
+  const eligibleUsers = DB.users.filter(u => attendeeNames.has((u.name || '').trim().toLowerCase()));
+
+  tbody.innerHTML = minutesDirectives.map((d, idx) => {
+    const collaborators = Array.isArray(d.collaborators) ? d.collaborators : [];
+
+    // Luôn giữ lại người đang được gán (nếu có) trong danh sách lựa chọn của DÒNG ĐÓ, kể cả khi họ
+    // vừa bị xoá khỏi Thành phần tham dự, để không âm thầm bỏ gán khi render lại.
+    const options = [...eligibleUsers];
+    if (d.assignedTo && !options.some(u => u.username === d.assignedTo)) {
+      const stale = DB.users.find(u => u.username === d.assignedTo);
+      if (stale) options.push(stale);
+    }
+    const collabOptions = [...eligibleUsers];
+    collaborators.forEach(username => {
+      if (!collabOptions.some(u => u.username === username)) {
+        const stale = DB.users.find(u => u.username === username);
+        if (stale) collabOptions.push(stale);
+      }
+    });
+    return `
     <tr>
       <td class="border p-1 text-center">${idx + 1}</td>
       <td class="border p-1"><input value="${escapeHtml(d.content)}" oninput="updateMinutesDirectiveField(${idx}, 'content', this.value)" class="w-full border-0 p-0.5 text-xs focus:outline-none" placeholder="Nội dung chỉ đạo cụ thể..."></td>
       <td class="border p-1">
         <select onchange="updateMinutesDirectiveField(${idx}, 'assignedTo', this.value)" class="w-full border-0 p-0.5 text-xs bg-white focus:outline-none">
           <option value="">-- Chọn người --</option>
-          ${DB.users.map(u => `<option value="${escapeHtml(u.username)}" ${d.assignedTo === u.username ? 'selected' : ''}>${escapeHtml(u.name)} (${escapeHtml(u.username)})</option>`).join('')}
+          ${options.map(u => `<option value="${escapeHtml(u.username)}" ${d.assignedTo === u.username ? 'selected' : ''}>${escapeHtml(u.name)} (${escapeHtml(u.username)})</option>`).join('')}
         </select>
+        ${eligibleUsers.length === 0 ? '<div class="text-[10px] text-amber-600 mt-0.5">Chưa có người tham dự khớp tài khoản hệ thống</div>' : ''}
+      </td>
+      <td class="border p-1">
+        <select multiple size="3" onchange="updateMinutesDirectiveField(${idx}, 'collaborators', Array.from(this.selectedOptions).map(o => o.value))" class="w-full border-0 p-0.5 text-xs bg-white focus:outline-none">
+          ${collabOptions.map(u => `<option value="${escapeHtml(u.username)}" ${collaborators.includes(u.username) ? 'selected' : ''}>${escapeHtml(u.name)}</option>`).join('')}
+        </select>
+        <div class="text-[10px] text-gray-400 mt-0.5">Giữ Ctrl/Cmd để chọn nhiều</div>
       </td>
       <td class="border p-1"><input type="date" value="${escapeHtml(d.deadline)}" onchange="updateMinutesDirectiveField(${idx}, 'deadline', this.value)" class="w-full border-0 p-0.5 text-xs focus:outline-none"></td>
       <td class="border p-1 text-center"><button type="button" onclick="removeMinutesDirectiveRow(${idx})" class="text-red-600 font-bold hover:text-red-800" title="Xoá dòng">✕</button></td>
     </tr>
-  `).join('');
+  `;
+  }).join('');
 }
 
 // Tự động tạo Công việc cho các dòng chỉ đạo CÓ gán người thực hiện và CHƯA từng tạo việc
@@ -4704,7 +4740,7 @@ function openEditMeetingMinutes(id) {
   minutesAttendeesRows = Array.isArray(m.attendees) ? m.attendees.map(a => ({ ...a })) : [];
   renderAttendeesTable();
 
-  minutesDirectives = (m.directives || []).map(d => ({ ...d }));
+  minutesDirectives = (m.directives || []).map(d => ({ ...d, collaborators: Array.isArray(d.collaborators) ? [...d.collaborators] : [] }));
   renderMinutesDirectivesTable();
 
   document.getElementById('minutesSubmitBtn').innerText = '💾 Cập Nhật Biên Bản';
@@ -4784,16 +4820,12 @@ function renderMeetingMinutes() {
   const pageItems = paginateList('minutes', visible, 'renderMeetingMinutes', 'biên bản');
 
   if (pageItems.length === 0) {
-    tbody.innerHTML = `<tr><td colspan="6" class="text-center p-6 text-gray-500 italic">Không tìm thấy biên bản họp phù hợp.</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="5" class="text-center p-6 text-gray-500 italic">Không tìm thấy biên bản họp phù hợp.</td></tr>`;
     return;
   }
 
-  const st = getListPageState('minutes');
-  const startIdx = (st.page - 1) * st.pageSize;
-
-  tbody.innerHTML = pageItems.map((m, idx) => `
+  tbody.innerHTML = pageItems.map(m => `
     <tr class="hover:bg-gray-50 border-b">
-      <td class="border p-2 text-center text-gray-500">${startIdx + idx + 1}</td>
       <td class="border p-2 font-mono font-bold text-rose-800">${escapeHtml(m.code)}<br><span class="text-xs text-gray-500 font-normal">${escapeHtml(m.title)}</span></td>
       <td class="border p-2 text-xs">${escapeHtml(m.time)}${m.location ? `<br><span class="text-gray-400">${escapeHtml(m.location)}</span>` : ''}</td>
       <td class="border p-2 text-xs">CT: ${escapeHtml(m.chair)}<br>TK: ${escapeHtml(m.secretary)}</td>
@@ -4827,14 +4859,16 @@ function viewMeetingMinutesDetails(id) {
 
   const directivesHTML = (m.directives || []).length ? `
     <table class="w-full border-collapse border text-xs mt-2">
-      <thead><tr class="bg-gray-100"><th class="border p-1">STT</th><th class="border p-1">Nội dung chỉ đạo</th><th class="border p-1">Người thực hiện</th><th class="border p-1">Hạn hoàn thành</th><th class="border p-1">Thao tác</th></tr></thead>
+      <thead><tr class="bg-gray-100"><th class="border p-1">STT</th><th class="border p-1">Nội dung chỉ đạo</th><th class="border p-1">Người thực hiện</th><th class="border p-1">Người phối hợp</th><th class="border p-1">Hạn hoàn thành</th><th class="border p-1">Thao tác</th></tr></thead>
       <tbody>
         ${m.directives.map((d, idx) => {
           const u = DB.users.find(x => x.username === d.assignedTo);
+          const collaboratorNames = (Array.isArray(d.collaborators) ? d.collaborators : [])
+            .map(username => DB.users.find(x => x.username === username)?.name || username);
           const actionCell = d.taskCreated
             ? `<span class="text-emerald-700 font-bold text-[11px]">✅ Đã giao việc</span>`
             : `<button onclick="createTaskFromMinutesDirective(${m.id}, ${idx})" class="bg-violet-600 text-white px-2 py-0.5 rounded text-[11px] font-bold hover:bg-violet-700">📌 Giao việc</button>`;
-          return `<tr><td class="border p-1 text-center">${idx + 1}</td><td class="border p-1">${escapeHtml(d.content)}</td><td class="border p-1">${escapeHtml(u ? u.name : (d.assignedTo || 'Chưa gán'))}</td><td class="border p-1">${escapeHtml(d.deadline || '')}</td><td class="border p-1 text-center">${actionCell}</td></tr>`;
+          return `<tr><td class="border p-1 text-center">${idx + 1}</td><td class="border p-1">${escapeHtml(d.content)}</td><td class="border p-1">${escapeHtml(u ? u.name : (d.assignedTo || 'Chưa gán'))}</td><td class="border p-1">${collaboratorNames.length ? escapeHtml(collaboratorNames.join(', ')) : '<span class="text-gray-400 italic">Không có</span>'}</td><td class="border p-1">${escapeHtml(d.deadline || '')}</td><td class="border p-1 text-center">${actionCell}</td></tr>`;
         }).join('')}
       </tbody>
     </table>
@@ -4877,9 +4911,10 @@ function buildMeetingMinutesDocumentHTML(m) {
     <tr><td>${idx + 1}</td><td>${escapeHtml(a.name)}</td><td>${escapeHtml(a.title || '')}</td><td>${escapeHtml(a.dept || '')}</td><td>${escapeHtml(a.phone || '')}</td></tr>
   `).join('') || `<tr><td colspan="5" style="text-align:center;color:#888;">Không có thành phần tham dự</td></tr>`;
 
-  const directiveRows = (m.directives || []).map((d, idx) => `
-    <tr><td>${idx + 1}</td><td>${escapeHtml(d.content)}</td><td>${escapeHtml(u2name(d.assignedTo))}</td><td>${escapeHtml(d.deadline || '')}</td></tr>
-  `).join('') || `<tr><td colspan="4" style="text-align:center;color:#888;">Không có ý kiến chỉ đạo</td></tr>`;
+  const directiveRows = (m.directives || []).map((d, idx) => {
+    const collaboratorNames = (Array.isArray(d.collaborators) ? d.collaborators : []).map(u2name).join(', ');
+    return `<tr><td>${idx + 1}</td><td>${escapeHtml(d.content)}</td><td>${escapeHtml(u2name(d.assignedTo))}</td><td>${escapeHtml(collaboratorNames)}</td><td>${escapeHtml(d.deadline || '')}</td></tr>`;
+  }).join('') || `<tr><td colspan="5" style="text-align:center;color:#888;">Không có ý kiến chỉ đạo</td></tr>`;
 
   return `
     <div class="minutes-doc">
@@ -4930,7 +4965,7 @@ function buildMeetingMinutesDocumentHTML(m) {
 
         <div class="md-section-title">Ý Kiến Chỉ Đạo</div>
         <table class="md-items-table">
-          <thead><tr><th>STT</th><th>Nội dung chỉ đạo</th><th>Người thực hiện</th><th>Hạn hoàn thành</th></tr></thead>
+          <thead><tr><th>STT</th><th>Nội dung chỉ đạo</th><th>Người thực hiện</th><th>Người phối hợp</th><th>Hạn hoàn thành</th></tr></thead>
           <tbody>${directiveRows}</tbody>
         </table>
 
