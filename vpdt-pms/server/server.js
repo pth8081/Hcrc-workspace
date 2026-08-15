@@ -8,6 +8,7 @@ const { seedDefaults } = require('./seedDefaults');
 const { requireAuth } = require('./lib/auth');
 const authRoutes = require('./routes/auth');
 const dataRoutes = require('./routes/data');
+const workflowRoutes = require('./routes/workflow');
 const uploadRoutes = require('./routes/upload');
 const emailRoutes = require('./routes/email');
 const { checkContractExpiryReminders } = require('./jobs/contractExpiryReminder');
@@ -25,6 +26,7 @@ app.use(cookieParser());
 // mọi API còn lại bắt buộc có phiên hợp lệ (requireAuth) — trước đây hoàn toàn không có bước này.
 app.use('/api/auth', authRoutes);
 app.use('/api/data', dataRoutes);
+app.use('/api/workflow', workflowRoutes);
 app.use('/api/upload', requireAuth, uploadRoutes);
 app.use('/api/send-email', requireAuth, emailRoutes);
 

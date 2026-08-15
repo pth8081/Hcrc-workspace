@@ -2283,7 +2283,11 @@ const DB = {
   internalPosts: [],
   formTemplates: {},
   permGroups: [],
-  emailConfig: {}, systemLogs: []
+  emailConfig: {}, systemLogs: [],
+  // Version (UpdatedAt) từng collection tại lần đọc gần nhất — gửi kèm header If-Match khi ghi
+  // (syncStorage()) để server phát hiện xung đột nếu người khác đã ghi đè kể từ lúc đọc (Bước 1:
+  // optimistic concurrency, xem routes/data.js). KHÔNG phải 1 collection thật, không sync lên server.
+  _versions: {}
 };
 
 let currentUser = null;
@@ -3257,6 +3261,8 @@ async function initDatabase(loggingInUser) {
     DB.officeFixDeptWorkflows = data.officeFixDeptWorkflows || {};
     DB.officeInvestDeptWorkflows = data.officeInvestDeptWorkflows || {};
 
+    DB._versions = data._versions || {};
+
     applyAllCoreFieldCustomizations();
   } catch (e) {
     console.error('Lỗi khi tải dữ liệu từ máy chủ (API /api/data):', e);
@@ -3272,15 +3278,49 @@ function handleSessionExpired() {
   alert('⛔ Phiên đăng nhập đã hết hạn, vui lòng đăng nhập lại.');
 }
 
+// Gọi API xử lý quy trình duyệt THẬT ở server (Bước 1 — xem routes/workflow.js/lib/workflowEngine.js)
+// — trước đây "duyệt hồ sơ" chỉ là client tự tính toán đúng/sai bước rồi POST đè nguyên collection,
+// server không xác minh lại gì cả. Giờ server tự kiểm tra người gọi có đúng là approver ở đúng bước
+// hiện tại hay không, tự tính chuyển bước/hoàn tất, rồi trả về hồ sơ mới nhất + mô tả kết quả
+// (transition) để client build đúng thông báo/side-effect (email, tự tạo Công việc...) như trước.
+async function callWorkflowAction(moduleKey, id, action, payload) {
+  const res = await fetch(`/api/workflow/${moduleKey}/${id}/${action}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload || {})
+  });
+  if (res.status === 401) {
+    handleSessionExpired();
+    throw new Error('Phiên đăng nhập đã hết hạn');
+  }
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(body.error || `Lỗi máy chủ (HTTP ${res.status})`);
+  return body; // { ok, item, transition }
+}
+
 function syncStorage(key) {
   try {
+    // If-Match: version đọc gần nhất (nếu có) — cho server biết "tôi đang ghi dựa trên bản đã đọc
+    // này", để phát hiện nếu người khác ghi đè "${key}" ở nơi khác sau đó (xem routes/data.js).
+    // Lần đầu (chưa từng có version, vd. vừa tạo collection mới) thì bỏ qua, ghi vô điều kiện như cũ.
+    const headers = { 'Content-Type': 'application/json' };
+    const knownVersion = DB._versions?.[key];
+    if (knownVersion) headers['If-Match'] = knownVersion;
+
     fetch(`/api/data/${key}`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers,
       body: JSON.stringify(DB[key])
-    }).then(res => {
+    }).then(async res => {
       if (res.status === 401) return handleSessionExpired();
+      if (res.status === 409) {
+        const body = await res.json().catch(() => ({}));
+        alert(`⚠️ ${body.error || `Dữ liệu "${key}" vừa bị người khác thay đổi — vui lòng tải lại trang.`}`);
+        return;
+      }
       if (!res.ok) throw new Error('HTTP ' + res.status);
+      const body = await res.json().catch(() => ({}));
+      if (body.version) DB._versions[key] = body.version;
     }).catch(e => {
       console.error(`Lỗi khi lưu "${key}" lên máy chủ:`, e);
       alert(`⛔ Lỗi lưu dữ liệu "${key}" lên máy chủ: ` + e.message);
@@ -4173,91 +4213,66 @@ async function uploadFileToServer(file) {
 }
 
 // CẬP NHẬT: Phê duyệt cấp đơn đơn giản hóa (Sequential Step Approval)
-function approveDoc(docId) {
+async function approveDoc(docId) {
   const doc = DB.docs.find(d => d.id === docId);
   if (!doc) return;
 
-  const wfConfig = DB.deptWorkflows[doc.dept];
-  if (!wfConfig) return alert('Chưa cấu hình quy trình cho phòng ban này!');
-
-  const wf = DB.workflows.find(w => w.id === wfConfig.workflowId);
-  if (!wf) return alert('Quy trình không tồn tại!');
-
-  const currentStepApprovers = wfConfig.approvers ? (wfConfig.approvers[doc.currentStep] || []) : [];
-  if (!doc.history) doc.history = [];
-
-  if (!canApproveStep(currentUser, currentStepApprovers, doc.history, doc.currentStep)) {
-    return alert('⛔ Bạn không có quyền phê duyệt ở bước hiện tại, hoặc đã duyệt bước này rồi!');
+  let result;
+  try {
+    result = await callWorkflowAction('docs', docId, 'approve', {});
+  } catch (e) {
+    return alert('⛔ ' + e.message);
   }
 
-  doc.history.push({
-    step: doc.currentStep,
-    stepName: wf.steps[doc.currentStep - 1]?.name || `Bước ${doc.currentStep}`,
-    approver: currentUser.name,
-    username: currentUser.username,
-    action: 'APPROVED',
-    time: new Date().toLocaleString('vi-VN')
-  });
+  const updatedDoc = result.item;
+  const transition = result.transition;
+  const idx = DB.docs.findIndex(d => d.id === docId);
+  if (idx !== -1) DB.docs[idx] = updatedDoc;
 
-  // CẬP NHẬT: nếu bước hiện tại được gán từ 2 người đồng duyệt trở lên, chỉ chuyển bước tiếp theo
-  // (hoặc hoàn tất) khi TẤT CẢ đã duyệt — trước đây 1 người duyệt là chuyển bước ngay, bỏ qua ý
-  // kiến người còn lại.
   let msg = '✅ Đã ghi nhận phê duyệt của bạn!';
-  if (isStepApprovalComplete(currentUser, currentStepApprovers, doc.history, doc.currentStep)) {
-    if (doc.currentStep >= wf.steps.length) {
-      doc.status = 'APPROVED';
-      msg = '✅ Phê duyệt tài liệu thành công!';
-      notifyUsersByEmail('DOC', 'NOTIFY_APPROVED', doc.code, [doc.uploader],
-        `[VPDT] Tài liệu ${doc.code} đã được phê duyệt`,
-        `Tài liệu "${doc.title}" (${doc.code}) của bạn đã được phê duyệt hoàn tất.`);
-    } else {
-      doc.currentStep += 1;
-      doc.status = 'PENDING';
-      msg = getStepAdvanceMessage(currentStepApprovers);
-      const nextApprovers = wfConfig.approvers?.[doc.currentStep] || [];
-      if (nextApprovers.length) {
-        notifyUsersByEmail('DOC', 'NOTIFY_APPROVAL_NEEDED', doc.code, nextApprovers,
-          `[VPDT] Tài liệu ${doc.code} cần bạn phê duyệt`,
-          `Tài liệu "${doc.title}" (${doc.code}) đang chờ bạn phê duyệt ở bước "${wf.steps[doc.currentStep - 1]?.name || ''}".`);
-      }
+  if (transition.type === 'COMPLETED') {
+    msg = '✅ Phê duyệt tài liệu thành công!';
+    notifyUsersByEmail('DOC', 'NOTIFY_APPROVED', updatedDoc.code, [updatedDoc.uploader],
+      `[VPDT] Tài liệu ${updatedDoc.code} đã được phê duyệt`,
+      `Tài liệu "${updatedDoc.title}" (${updatedDoc.code}) của bạn đã được phê duyệt hoàn tất.`);
+  } else if (transition.type === 'ADVANCED') {
+    msg = getStepAdvanceMessage(transition.stepApprovers);
+    if (transition.nextApprovers.length) {
+      notifyUsersByEmail('DOC', 'NOTIFY_APPROVAL_NEEDED', updatedDoc.code, transition.nextApprovers,
+        `[VPDT] Tài liệu ${updatedDoc.code} cần bạn phê duyệt`,
+        `Tài liệu "${updatedDoc.title}" (${updatedDoc.code}) đang chờ bạn phê duyệt ở bước "${transition.nextStepName}".`);
     }
-  } else {
-    msg = `✅ Đã ghi nhận phê duyệt của bạn — đang chờ các đồng phê duyệt còn lại ở bước này.`;
+  } else if (transition.type === 'PARTIAL_APPROVE') {
+    msg = '✅ Đã ghi nhận phê duyệt của bạn — đang chờ các đồng phê duyệt còn lại ở bước này.';
   }
 
-  syncStorage('docs');
-  logSystemAction('DOC', 'APPROVE_DOC', `Phê duyệt tài liệu [${doc.code}] thành công.`, 'SUCCESS', doc.code);
+  logSystemAction('DOC', 'APPROVE_DOC', `Phê duyệt tài liệu [${updatedDoc.code}] thành công.`, 'SUCCESS', updatedDoc.code);
   alert(msg);
   renderDocs();
 }
 
-function rejectDoc(docId) {
+async function rejectDoc(docId) {
   const doc = DB.docs.find(d => d.id === docId);
   if (!doc) return;
 
   const reason = prompt('Nhập lý do từ chối / trả về tài liệu:');
   if (reason === null) return;
 
-  const wfConfig = DB.deptWorkflows[doc.dept];
-  const wf = wfConfig ? DB.workflows.find(w => w.id === wfConfig.workflowId) : null;
+  let result;
+  try {
+    result = await callWorkflowAction('docs', docId, 'reject', { comment: reason });
+  } catch (e) {
+    return alert('⛔ ' + e.message);
+  }
 
-  doc.status = 'REJECTED';
-  if (!doc.history) doc.history = [];
-  doc.history.push({
-    step: doc.currentStep,
-    stepName: wf?.steps[doc.currentStep - 1]?.name || `Bước ${doc.currentStep}`,
-    approver: currentUser.name,
-    username: currentUser.username,
-    action: 'REJECTED',
-    comment: reason,
-    time: new Date().toLocaleString('vi-VN')
-  });
+  const updatedDoc = result.item;
+  const idx = DB.docs.findIndex(d => d.id === docId);
+  if (idx !== -1) DB.docs[idx] = updatedDoc;
 
-  syncStorage('docs');
-  logSystemAction('DOC', 'REJECT_DOC', `Từ chối tài liệu [${doc.code}]. Lý do: ${reason}`, 'SUCCESS', doc.code);
-  notifyUsersByEmail('DOC', 'NOTIFY_REJECTED', doc.code, [doc.uploader],
-    `[VPDT] Tài liệu ${doc.code} bị từ chối`,
-    `Tài liệu "${doc.title}" (${doc.code}) của bạn đã bị từ chối/trả về. Lý do: ${reason}`);
+  logSystemAction('DOC', 'REJECT_DOC', `Từ chối tài liệu [${updatedDoc.code}]. Lý do: ${reason}`, 'SUCCESS', updatedDoc.code);
+  notifyUsersByEmail('DOC', 'NOTIFY_REJECTED', updatedDoc.code, [updatedDoc.uploader],
+    `[VPDT] Tài liệu ${updatedDoc.code} bị từ chối`,
+    `Tài liệu "${updatedDoc.title}" (${updatedDoc.code}) của bạn đã bị từ chối/trả về. Lý do: ${reason}`);
   alert('❌ Đã chuyển tài liệu sang trạng thái Từ chối / Trả về!');
   renderDocs();
 }
@@ -4690,7 +4705,7 @@ function closeProcessSubmissionModal() {
   currentProcessingSubId = null;
 }
 
-function processSubmission(actionType) {
+async function processSubmission(actionType) {
   if (!currentProcessingSubId) return;
   const sub = DB.submissions.find(s => s.id === currentProcessingSubId);
   if (!sub) return;
@@ -4700,89 +4715,63 @@ function processSubmission(actionType) {
     return alert('Vui lòng nhập lý do từ chối vào ô Ý kiến chỉ đạo!');
   }
 
-  const wfConfig = resolveSubmissionWorkflow(sub);
-  const wf = { steps: wfConfig.steps };
-  const currentStepApprovers = wfConfig?.approvers ? (wfConfig.approvers[sub.currentStep] || []) : [];
-
-  if (!sub.history) sub.history = [];
-
-  if (!canApproveStep(currentUser, currentStepApprovers, sub.history, sub.currentStep)) {
-    return alert('⛔ Bạn không có quyền xử lý ở bước hiện tại, hoặc đã duyệt bước này rồi!');
+  let result;
+  try {
+    result = await callWorkflowAction('submissions', sub.id, actionType === 'REJECT' ? 'reject' : 'approve', { comment });
+  } catch (e) {
+    return alert('⛔ ' + e.message);
   }
+
+  const updatedSub = result.item;
+  const transition = result.transition;
+  const idx = DB.submissions.findIndex(s => s.id === sub.id);
+  if (idx !== -1) DB.submissions[idx] = updatedSub;
 
   let msg = '✅ Đã cập nhật trạng thái tờ trình!';
 
-  if (actionType === 'REJECT') {
-    sub.status = 'REJECTED';
-    sub.history.push({
-      step: sub.currentStep,
-      approver: currentUser.name,
-      username: currentUser.username,
-      action: 'REJECTED',
-      comment: comment,
-      time: new Date().toLocaleString('vi-VN')
-    });
-    notifyUsersByEmail('SUBMISSION', 'NOTIFY_REJECTED', sub.code, [sub.creator],
-      `[VPDT] Tờ trình ${sub.code} bị từ chối`,
-      `Tờ trình "${sub.title}" (${sub.code}) của bạn đã bị từ chối/trả về. Lý do: ${comment}`);
-  } else if (actionType === 'APPROVE') {
-    sub.history.push({
-      step: sub.currentStep,
-      approver: currentUser.name,
-      username: currentUser.username,
-      action: 'APPROVED',
-      comment: comment,
-      time: new Date().toLocaleString('vi-VN')
-    });
-
-    // CẬP NHẬT: bước có từ 2 người đồng duyệt trở lên phải đủ TẤT CẢ mới chuyển bước tiếp theo.
-    if (isStepApprovalComplete(currentUser, currentStepApprovers, sub.history, sub.currentStep)) {
-      if (wf && sub.currentStep < wf.steps.length) {
-        sub.currentStep += 1;
-        sub.status = 'PENDING';
-        msg = getStepAdvanceMessage(currentStepApprovers);
-        const nextApprovers = wfConfig.approvers?.[sub.currentStep] || [];
-        if (nextApprovers.length) {
-          notifyUsersByEmail('SUBMISSION', 'NOTIFY_APPROVAL_NEEDED', sub.code, nextApprovers,
-            `[VPDT] Tờ trình ${sub.code} cần bạn phê duyệt`,
-            `Tờ trình "${sub.title}" (${sub.code}) đang chờ bạn phê duyệt ở bước "${wf.steps[sub.currentStep - 1]?.name || ''}".`);
-        }
-      } else {
-        sub.status = 'APPROVED';
-        msg = '✅ Phê duyệt tờ trình thành công!';
-        notifyUsersByEmail('SUBMISSION', 'NOTIFY_APPROVED', sub.code, [sub.creator],
-          `[VPDT] Tờ trình ${sub.code} đã được phê duyệt`,
-          `Tờ trình "${sub.title}" (${sub.code}) của bạn đã được phê duyệt hoàn tất.`);
-
-        // TỰ ĐỘNG tạo Công việc theo dõi ngay khi có ý kiến chỉ đạo ở bước phê duyệt cuối cùng —
-        // không cần bấm "📌 Giao việc" thủ công nữa. Chưa gán người nhận (theo yêu cầu), người
-        // duyệt cuối (đang thực hiện) hoặc Admin sẽ gán người nhận sau trong module Công việc.
-        if (comment) {
-          const newTask = {
-            id: Date.now(),
-            title: `Thực hiện theo chỉ đạo: ${sub.title}`,
-            description: comment,
-            deadline: '',
-            assignedTo: '', assignedToName: '',
-            assignedBy: currentUser.username, assignedByName: currentUser.name,
-            sourceType: 'SUBMISSION', sourceCode: sub.code,
-            status: 'TODO',
-            extensionCount: 0, lateCount: 0, pendingExtension: null, pendingCancellation: null,
-            createdAt: new Date().toLocaleString('vi-VN'),
-            history: [{ action: 'CREATED', by: currentUser.username, byName: currentUser.name, time: new Date().toLocaleString('vi-VN') }]
-          };
-          DB.tasks.unshift(newTask);
-          syncStorage('tasks');
-          logSystemAction('TASK', 'CREATE_TASK', `Tự động tạo công việc theo dõi chỉ đạo từ Văn bản trình [${sub.code}] (chưa gán người nhận)`, 'SUCCESS', sub.code);
-        }
-      }
-    } else {
-      msg = '✅ Đã ghi nhận phê duyệt của bạn — đang chờ các đồng phê duyệt còn lại ở bước này.';
+  if (transition.type === 'REJECTED') {
+    notifyUsersByEmail('SUBMISSION', 'NOTIFY_REJECTED', updatedSub.code, [updatedSub.creator],
+      `[VPDT] Tờ trình ${updatedSub.code} bị từ chối`,
+      `Tờ trình "${updatedSub.title}" (${updatedSub.code}) của bạn đã bị từ chối/trả về. Lý do: ${comment}`);
+  } else if (transition.type === 'ADVANCED') {
+    msg = getStepAdvanceMessage(transition.stepApprovers);
+    if (transition.nextApprovers.length) {
+      notifyUsersByEmail('SUBMISSION', 'NOTIFY_APPROVAL_NEEDED', updatedSub.code, transition.nextApprovers,
+        `[VPDT] Tờ trình ${updatedSub.code} cần bạn phê duyệt`,
+        `Tờ trình "${updatedSub.title}" (${updatedSub.code}) đang chờ bạn phê duyệt ở bước "${transition.nextStepName}".`);
     }
+  } else if (transition.type === 'COMPLETED') {
+    msg = '✅ Phê duyệt tờ trình thành công!';
+    notifyUsersByEmail('SUBMISSION', 'NOTIFY_APPROVED', updatedSub.code, [updatedSub.creator],
+      `[VPDT] Tờ trình ${updatedSub.code} đã được phê duyệt`,
+      `Tờ trình "${updatedSub.title}" (${updatedSub.code}) của bạn đã được phê duyệt hoàn tất.`);
+
+    // TỰ ĐỘNG tạo Công việc theo dõi ngay khi có ý kiến chỉ đạo ở bước phê duyệt cuối cùng —
+    // không cần bấm "📌 Giao việc" thủ công nữa. Chưa gán người nhận (theo yêu cầu), người
+    // duyệt cuối (đang thực hiện) hoặc Admin sẽ gán người nhận sau trong module Công việc.
+    if (comment) {
+      const newTask = {
+        id: Date.now(),
+        title: `Thực hiện theo chỉ đạo: ${updatedSub.title}`,
+        description: comment,
+        deadline: '',
+        assignedTo: '', assignedToName: '',
+        assignedBy: currentUser.username, assignedByName: currentUser.name,
+        sourceType: 'SUBMISSION', sourceCode: updatedSub.code,
+        status: 'TODO',
+        extensionCount: 0, lateCount: 0, pendingExtension: null, pendingCancellation: null,
+        createdAt: new Date().toLocaleString('vi-VN'),
+        history: [{ action: 'CREATED', by: currentUser.username, byName: currentUser.name, time: new Date().toLocaleString('vi-VN') }]
+      };
+      DB.tasks.unshift(newTask);
+      syncStorage('tasks');
+      logSystemAction('TASK', 'CREATE_TASK', `Tự động tạo công việc theo dõi chỉ đạo từ Văn bản trình [${updatedSub.code}] (chưa gán người nhận)`, 'SUCCESS', updatedSub.code);
+    }
+  } else if (transition.type === 'PARTIAL_APPROVE') {
+    msg = '✅ Đã ghi nhận phê duyệt của bạn — đang chờ các đồng phê duyệt còn lại ở bước này.';
   }
 
-  syncStorage('submissions');
-  logSystemAction('SUBMISSION', `PROCESS_${actionType}`, `Xử lý tờ trình [${sub.code}]: ${actionType}`, 'SUCCESS', sub.code);
+  logSystemAction('SUBMISSION', `PROCESS_${actionType}`, `Xử lý tờ trình [${updatedSub.code}]: ${actionType}`, 'SUCCESS', updatedSub.code);
   alert(msg);
   closeProcessSubmissionModal();
   renderSubmissionReqs();
@@ -4792,7 +4781,7 @@ function processSubmission(actionType) {
 // xử lý bước hiện tại) — KHÔNG đổi trạng thái tờ trình, KHÔNG khoá bước, KHÔNG reset các đồng phê
 // duyệt khác đã duyệt rồi. Cơ chế "ALL required" của isStepApprovalComplete() đã tự nhiên giữ bước
 // chưa hoàn tất cho đến khi chính người yêu cầu này bấm Phê Duyệt — không cần thêm logic khoá riêng.
-function requestSubmissionInfo() {
+async function requestSubmissionInfo() {
   if (!currentProcessingSubId) return;
   const sub = DB.submissions.find(s => s.id === currentProcessingSubId);
   if (!sub) return;
@@ -4802,40 +4791,21 @@ function requestSubmissionInfo() {
     return alert('Vui lòng nhập nội dung cần bổ sung vào ô Ý kiến chỉ đạo!');
   }
 
-  const wfConfig = resolveSubmissionWorkflow(sub);
-  const currentStepApprovers = wfConfig.approvers ? (wfConfig.approvers[sub.currentStep] || []) : [];
-  if (!canApproveStep(currentUser, currentStepApprovers, sub.history, sub.currentStep)) {
-    return alert('⛔ Bạn không có quyền yêu cầu bổ sung ở bước hiện tại, hoặc đã xử lý bước này rồi!');
+  let result;
+  try {
+    result = await callWorkflowAction('submissions', sub.id, 'request-info', { comment });
+  } catch (e) {
+    return alert('⛔ ' + e.message);
   }
 
-  if (!sub.infoRequests) sub.infoRequests = [];
-  const reqEntry = {
-    id: Date.now(),
-    step: sub.currentStep,
-    requestedBy: currentUser.username,
-    requestedByName: currentUser.name,
-    reason: comment,
-    requestedAt: new Date().toLocaleString('vi-VN'),
-    response: null,
-    respondedAt: null
-  };
-  sub.infoRequests.push(reqEntry);
+  const updatedSub = result.item;
+  const idx = DB.submissions.findIndex(s => s.id === sub.id);
+  if (idx !== -1) DB.submissions[idx] = updatedSub;
 
-  if (!sub.history) sub.history = [];
-  sub.history.push({
-    step: sub.currentStep,
-    approver: currentUser.name,
-    username: currentUser.username,
-    action: 'REQUEST_INFO',
-    comment: comment,
-    time: reqEntry.requestedAt
-  });
-
-  syncStorage('submissions');
-  logSystemAction('SUBMISSION', 'REQUEST_INFO', `Yêu cầu bổ sung cho tờ trình [${sub.code}]: ${comment}`, 'SUCCESS', sub.code);
-  notifyUsersByEmail('SUBMISSION', 'NOTIFY_REQUEST_INFO', sub.code, [sub.creator],
-    `[VPDT] Tờ trình ${sub.code} cần bổ sung thông tin`,
-    `Tờ trình "${sub.title}" (${sub.code}) của bạn cần bổ sung: ${comment}`);
+  logSystemAction('SUBMISSION', 'REQUEST_INFO', `Yêu cầu bổ sung cho tờ trình [${updatedSub.code}]: ${comment}`, 'SUCCESS', updatedSub.code);
+  notifyUsersByEmail('SUBMISSION', 'NOTIFY_REQUEST_INFO', updatedSub.code, [updatedSub.creator],
+    `[VPDT] Tờ trình ${updatedSub.code} cần bổ sung thông tin`,
+    `Tờ trình "${updatedSub.title}" (${updatedSub.code}) của bạn cần bổ sung: ${comment}`);
 
   alert('✅ Đã gửi yêu cầu bổ sung tới người trình!');
   closeProcessSubmissionModal();
@@ -4876,7 +4846,7 @@ function renderSubModalInfoRequests(sub) {
   `;
 }
 
-function respondSubmissionInfo(reqId) {
+async function respondSubmissionInfo(reqId) {
   if (!currentProcessingSubId) return;
   const sub = DB.submissions.find(s => s.id === currentProcessingSubId);
   if (!sub) return;
@@ -4887,27 +4857,33 @@ function respondSubmissionInfo(reqId) {
   const response = (input?.value || '').trim();
   if (!response) return alert('Vui lòng nhập nội dung bổ sung!');
 
-  reqEntry.response = response;
-  reqEntry.respondedAt = new Date().toLocaleString('vi-VN');
+  let result;
+  try {
+    const res = await fetch(`/api/workflow/submissions/${sub.id}/respond-info`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ requestId: reqId, response })
+    });
+    if (res.status === 401) return handleSessionExpired();
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(body.error || `Lỗi máy chủ (HTTP ${res.status})`);
+    result = body;
+  } catch (e) {
+    return alert('⛔ ' + e.message);
+  }
 
-  if (!sub.history) sub.history = [];
-  sub.history.push({
-    step: reqEntry.step,
-    approver: currentUser.name,
-    username: currentUser.username,
-    action: 'RESPOND_INFO',
-    comment: response,
-    time: reqEntry.respondedAt
-  });
+  const updatedSub = result.item;
+  const idx = DB.submissions.findIndex(s => s.id === sub.id);
+  if (idx !== -1) DB.submissions[idx] = updatedSub;
+  const updatedReqEntry = (updatedSub.infoRequests || []).find(r => r.id === reqId);
 
-  syncStorage('submissions');
-  logSystemAction('SUBMISSION', 'RESPOND_INFO', `Phản hồi yêu cầu bổ sung cho tờ trình [${sub.code}]: ${response}`, 'SUCCESS', sub.code);
-  notifyUsersByEmail('SUBMISSION', 'NOTIFY_RESPOND_INFO', sub.code, [reqEntry.requestedBy],
-    `[VPDT] Tờ trình ${sub.code} đã được bổ sung thông tin`,
-    `Người trình đã bổ sung thông tin bạn yêu cầu cho tờ trình "${sub.title}" (${sub.code}): ${response}`);
+  logSystemAction('SUBMISSION', 'RESPOND_INFO', `Phản hồi yêu cầu bổ sung cho tờ trình [${updatedSub.code}]: ${response}`, 'SUCCESS', updatedSub.code);
+  notifyUsersByEmail('SUBMISSION', 'NOTIFY_RESPOND_INFO', updatedSub.code, [updatedReqEntry?.requestedBy],
+    `[VPDT] Tờ trình ${updatedSub.code} đã được bổ sung thông tin`,
+    `Người trình đã bổ sung thông tin bạn yêu cầu cho tờ trình "${updatedSub.title}" (${updatedSub.code}): ${response}`);
 
   alert('✅ Đã gửi bổ sung!');
-  openProcessSubmissionModal(sub.id);
+  openProcessSubmissionModal(updatedSub.id);
 }
 
 // Dựng HTML "Phiếu Phê Duyệt Văn Bản Trình" — ghép vào khung dùng chung buildApprovalSlipShellHTML()
@@ -7624,7 +7600,7 @@ function closeCarProcessModal() {
   currentProcessingCarId = null;
 }
 
-function processCarReg(actionType) {
+async function processCarReg(actionType) {
   if (!currentProcessingCarId) return;
   const c = DB.carRegs.find(item => item.id === currentProcessingCarId);
   if (!c) return;
@@ -7634,84 +7610,49 @@ function processCarReg(actionType) {
     return alert('Vui lòng nhập lý do từ chối!');
   }
 
-  const assignedDriver = document.getElementById('carAssignedDriver').value.trim();
-  const assignedVehicleType = document.getElementById('carAssignedVehicleType').value.trim();
-  const assignedPlate = document.getElementById('carAssignedPlate').value.trim();
+  // Bất kỳ bước nào cũng có thể điền/điều chỉnh thông tin phân công xe (thường do Phòng Hành Chính
+  // thực hiện ở bước cuối) — gửi kèm cùng request duyệt/từ chối, ghi nhận ngay khi có nhập.
+  const extraFields = {
+    assignedDriver: document.getElementById('carAssignedDriver').value.trim(),
+    assignedVehicleType: document.getElementById('carAssignedVehicleType').value.trim(),
+    assignedPlate: document.getElementById('carAssignedPlate').value.trim()
+  };
 
-  const wfConfig = DB.carDeptWorkflows[c.dept];
-  const wf = wfConfig ? DB.workflows.find(w => w.id === wfConfig.workflowId) : null;
-  const stepName = wf?.steps[c.currentStep - 1]?.name || `Bước ${c.currentStep}`;
-  const currentStepApprovers = wfConfig?.approvers ? (wfConfig.approvers[c.currentStep] || []) : [];
-
-  if (!c.history) c.history = [];
-
-  if (!canApproveStep(currentUser, currentStepApprovers, c.history, c.currentStep)) {
-    return alert('⛔ Bạn không có quyền xử lý ở bước hiện tại, hoặc đã duyệt bước này rồi!');
+  let result;
+  try {
+    result = await callWorkflowAction('carRegs', c.id, actionType === 'REJECT' ? 'reject' : 'approve', { comment, extraFields });
+  } catch (e) {
+    return alert('⛔ ' + e.message);
   }
 
-  // Bất kỳ bước nào cũng có thể điền/điều chỉnh thông tin phân công xe (thường do Phòng Hành Chính
-  // thực hiện ở bước cuối) — ghi nhận ngay khi có nhập, không chờ tới bước cuối cùng mới lưu.
-  if (assignedDriver) c.assignedDriver = assignedDriver;
-  if (assignedVehicleType) c.assignedVehicleType = assignedVehicleType;
-  if (assignedPlate) c.assignedPlate = assignedPlate;
+  const updatedCar = result.item;
+  const transition = result.transition;
+  const idx = DB.carRegs.findIndex(item => item.id === c.id);
+  if (idx !== -1) DB.carRegs[idx] = updatedCar;
 
   let msg = '✅ Đã cập nhật trạng thái đăng ký xe!';
 
-  if (actionType === 'REJECT') {
-    c.status = 'REJECTED';
-    c.history.push({
-      step: c.currentStep,
-      stepName: stepName,
-      approver: currentUser.name,
-      username: currentUser.username,
-      action: 'REJECTED',
-      comment: comment,
-      assignedDriver: assignedDriver,
-      assignedPlate: assignedPlate,
-      time: new Date().toLocaleString('vi-VN')
-    });
-    notifyUsersByEmail('CAR', 'NOTIFY_REJECTED', c.code, [c.creator],
-      `[VPDT] Đăng ký xe ${c.code} bị từ chối`,
-      `Phiếu đăng ký xe "${c.destination}" (${c.code}) của bạn đã bị từ chối. Lý do: ${comment}`);
-  } else if (actionType === 'APPROVE') {
-    c.history.push({
-      step: c.currentStep,
-      stepName: stepName,
-      approver: currentUser.name,
-      username: currentUser.username,
-      action: 'APPROVED',
-      comment: comment,
-      assignedDriver: assignedDriver,
-      assignedPlate: assignedPlate,
-      time: new Date().toLocaleString('vi-VN')
-    });
-
-    // CẬP NHẬT: bước có từ 2 người đồng duyệt trở lên phải đủ TẤT CẢ mới chuyển bước tiếp theo.
-    if (isStepApprovalComplete(currentUser, currentStepApprovers, c.history, c.currentStep)) {
-      if (wf && c.currentStep < wf.steps.length) {
-        c.currentStep += 1;
-        c.status = 'PENDING';
-        msg = getStepAdvanceMessage(currentStepApprovers);
-        const nextApprovers = wfConfig.approvers?.[c.currentStep] || [];
-        if (nextApprovers.length) {
-          notifyUsersByEmail('CAR', 'NOTIFY_APPROVAL_NEEDED', c.code, nextApprovers,
-            `[VPDT] Đăng ký xe ${c.code} cần bạn phê duyệt`,
-            `Phiếu đăng ký xe "${c.destination}" (${c.code}) đang chờ bạn phê duyệt ở bước "${wf.steps[c.currentStep - 1]?.name || ''}".`);
-        }
-      } else {
-        c.status = 'APPROVED';
-        msg = '✅ Phê duyệt đăng ký xe thành công!';
-        notifyUsersByEmail('CAR', 'NOTIFY_APPROVED', c.code, [c.creator],
-          `[VPDT] Đăng ký xe ${c.code} đã được phê duyệt`,
-          `Phiếu đăng ký xe "${c.destination}" (${c.code}) của bạn đã được phê duyệt hoàn tất.`);
-      }
-    } else {
-      msg = '✅ Đã ghi nhận phê duyệt của bạn — đang chờ các đồng phê duyệt còn lại ở bước này.';
+  if (transition.type === 'REJECTED') {
+    notifyUsersByEmail('CAR', 'NOTIFY_REJECTED', updatedCar.code, [updatedCar.creator],
+      `[VPDT] Đăng ký xe ${updatedCar.code} bị từ chối`,
+      `Phiếu đăng ký xe "${updatedCar.destination}" (${updatedCar.code}) của bạn đã bị từ chối. Lý do: ${comment}`);
+  } else if (transition.type === 'ADVANCED') {
+    msg = getStepAdvanceMessage(transition.stepApprovers);
+    if (transition.nextApprovers.length) {
+      notifyUsersByEmail('CAR', 'NOTIFY_APPROVAL_NEEDED', updatedCar.code, transition.nextApprovers,
+        `[VPDT] Đăng ký xe ${updatedCar.code} cần bạn phê duyệt`,
+        `Phiếu đăng ký xe "${updatedCar.destination}" (${updatedCar.code}) đang chờ bạn phê duyệt ở bước "${transition.nextStepName}".`);
     }
+  } else if (transition.type === 'COMPLETED') {
+    msg = '✅ Phê duyệt đăng ký xe thành công!';
+    notifyUsersByEmail('CAR', 'NOTIFY_APPROVED', updatedCar.code, [updatedCar.creator],
+      `[VPDT] Đăng ký xe ${updatedCar.code} đã được phê duyệt`,
+      `Phiếu đăng ký xe "${updatedCar.destination}" (${updatedCar.code}) của bạn đã được phê duyệt hoàn tất.`);
+  } else if (transition.type === 'PARTIAL_APPROVE') {
+    msg = '✅ Đã ghi nhận phê duyệt của bạn — đang chờ các đồng phê duyệt còn lại ở bước này.';
   }
 
-  syncStorage('carRegs');
-  logSystemAction('CAR', `PROCESS_${actionType}`, `Xử lý đăng ký xe [${c.code}]: ${actionType}`, 'SUCCESS', c.code);
+  logSystemAction('CAR', `PROCESS_${actionType}`, `Xử lý đăng ký xe [${updatedCar.code}]: ${actionType}`, 'SUCCESS', updatedCar.code);
   alert(msg);
   closeCarProcessModal();
   renderCarRegs();
@@ -8208,7 +8149,7 @@ function closeOfficeProcessModal() {
   currentProcessingOfficeId = null;
 }
 
-function processOfficeReq(actionType) {
+async function processOfficeReq(actionType) {
   if (!currentProcessingOfficeId) return;
   const o = DB.officeReqs.find(item => item.id === currentProcessingOfficeId);
   if (!o) return;
@@ -8218,71 +8159,41 @@ function processOfficeReq(actionType) {
     return alert('Vui lòng nhập lý do từ chối vào ô Ý kiến chỉ đạo!');
   }
 
-  const wfMap = getOfficeWorkflowMap(o.subType);
-  const wfConfig = wfMap[o.dept];
-  const wf = wfConfig ? DB.workflows.find(w => w.id === wfConfig.workflowId) : null;
-  const currentStepApprovers = wfConfig?.approvers ? (wfConfig.approvers[o.currentStep] || []) : [];
-
-  if (!o.history) o.history = [];
-
-  if (!canApproveStep(currentUser, currentStepApprovers, o.history, o.currentStep)) {
-    return alert('⛔ Bạn không có quyền xử lý ở bước hiện tại, hoặc đã duyệt bước này rồi!');
+  let result;
+  try {
+    result = await callWorkflowAction('officeReqs', o.id, actionType === 'REJECT' ? 'reject' : 'approve', { comment });
+  } catch (e) {
+    return alert('⛔ ' + e.message);
   }
+
+  const updatedOffice = result.item;
+  const transition = result.transition;
+  const idx = DB.officeReqs.findIndex(item => item.id === o.id);
+  if (idx !== -1) DB.officeReqs[idx] = updatedOffice;
 
   let msg = '✅ Đã cập nhật trạng thái đề xuất văn phòng!';
 
-  if (actionType === 'REJECT') {
-    o.status = 'REJECTED';
-    o.history.push({
-      step: o.currentStep,
-      stepName: wf?.steps[o.currentStep - 1]?.name || `Bước ${o.currentStep}`,
-      approver: currentUser.name,
-      username: currentUser.username,
-      action: 'REJECTED',
-      comment: comment,
-      time: new Date().toLocaleString('vi-VN')
-    });
-    notifyUsersByEmail('OFFICE', 'NOTIFY_REJECTED', o.code, [o.creator],
-      `[VPDT] Đề xuất văn phòng ${o.code} bị từ chối`,
-      `Đề xuất "${o.title}" (${o.code}) của bạn đã bị từ chối. Lý do: ${comment}`);
-  } else if (actionType === 'APPROVE') {
-    o.history.push({
-      step: o.currentStep,
-      stepName: wf?.steps[o.currentStep - 1]?.name || `Bước ${o.currentStep}`,
-      approver: currentUser.name,
-      username: currentUser.username,
-      action: 'APPROVED',
-      comment: comment,
-      time: new Date().toLocaleString('vi-VN')
-    });
-
-    // CẬP NHẬT: bước có từ 2 người đồng duyệt trở lên phải đủ TẤT CẢ mới chuyển bước tiếp theo —
-    // trước đây 1 người duyệt là chuyển bước ngay, bỏ qua ý kiến người còn lại.
-    if (isStepApprovalComplete(currentUser, currentStepApprovers, o.history, o.currentStep)) {
-      if (wf && o.currentStep < wf.steps.length) {
-        o.currentStep += 1;
-        o.status = 'PENDING';
-        msg = getStepAdvanceMessage(currentStepApprovers);
-        const nextApprovers = wfConfig.approvers?.[o.currentStep] || [];
-        if (nextApprovers.length) {
-          notifyUsersByEmail('OFFICE', 'NOTIFY_APPROVAL_NEEDED', o.code, nextApprovers,
-            `[VPDT] Đề xuất văn phòng ${o.code} cần bạn phê duyệt`,
-            `Đề xuất "${o.title}" (${o.code}) đang chờ bạn phê duyệt ở bước "${wf.steps[o.currentStep - 1]?.name || ''}".`);
-        }
-      } else {
-        o.status = 'APPROVED';
-        msg = '✅ Phê duyệt đề xuất văn phòng thành công!';
-        notifyUsersByEmail('OFFICE', 'NOTIFY_APPROVED', o.code, [o.creator],
-          `[VPDT] Đề xuất văn phòng ${o.code} đã được phê duyệt`,
-          `Đề xuất "${o.title}" (${o.code}) của bạn đã được phê duyệt hoàn tất.`);
-      }
-    } else {
-      msg = '✅ Đã ghi nhận phê duyệt của bạn — đang chờ các đồng phê duyệt còn lại ở bước này.';
+  if (transition.type === 'REJECTED') {
+    notifyUsersByEmail('OFFICE', 'NOTIFY_REJECTED', updatedOffice.code, [updatedOffice.creator],
+      `[VPDT] Đề xuất văn phòng ${updatedOffice.code} bị từ chối`,
+      `Đề xuất "${updatedOffice.title}" (${updatedOffice.code}) của bạn đã bị từ chối. Lý do: ${comment}`);
+  } else if (transition.type === 'ADVANCED') {
+    msg = getStepAdvanceMessage(transition.stepApprovers);
+    if (transition.nextApprovers.length) {
+      notifyUsersByEmail('OFFICE', 'NOTIFY_APPROVAL_NEEDED', updatedOffice.code, transition.nextApprovers,
+        `[VPDT] Đề xuất văn phòng ${updatedOffice.code} cần bạn phê duyệt`,
+        `Đề xuất "${updatedOffice.title}" (${updatedOffice.code}) đang chờ bạn phê duyệt ở bước "${transition.nextStepName}".`);
     }
+  } else if (transition.type === 'COMPLETED') {
+    msg = '✅ Phê duyệt đề xuất văn phòng thành công!';
+    notifyUsersByEmail('OFFICE', 'NOTIFY_APPROVED', updatedOffice.code, [updatedOffice.creator],
+      `[VPDT] Đề xuất văn phòng ${updatedOffice.code} đã được phê duyệt`,
+      `Đề xuất "${updatedOffice.title}" (${updatedOffice.code}) của bạn đã được phê duyệt hoàn tất.`);
+  } else if (transition.type === 'PARTIAL_APPROVE') {
+    msg = '✅ Đã ghi nhận phê duyệt của bạn — đang chờ các đồng phê duyệt còn lại ở bước này.';
   }
 
-  syncStorage('officeReqs');
-  logSystemAction('OFFICE', `PROCESS_${actionType}`, `Xử lý đề xuất văn phòng [${o.code}]: ${actionType}`, 'SUCCESS', o.code);
+  logSystemAction('OFFICE', `PROCESS_${actionType}`, `Xử lý đề xuất văn phòng [${updatedOffice.code}]: ${actionType}`, 'SUCCESS', updatedOffice.code);
   alert(msg);
   closeOfficeProcessModal();
   renderOfficeReqs();

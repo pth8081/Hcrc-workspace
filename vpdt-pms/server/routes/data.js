@@ -6,7 +6,7 @@ const express = require('express');
 const router = express.Router();
 const { getPool } = require('../db');
 const { DEFAULTS } = require('../defaults');
-const { getAppDataValue, setAppDataValue } = require('../lib/appData');
+const { getAppDataValue, setAppDataValue, setAppDataValueIfVersionMatches } = require('../lib/appData');
 const { requireAuth, hashPassword, isBcryptHash } = require('../lib/auth');
 
 const VALID_KEYS = new Set(Object.keys(DEFAULTS));
@@ -47,22 +47,28 @@ async function prepareUsersForSave(incomingUsers) {
   }));
 }
 
-// GET /api/data  → trả về TOÀN BỘ dữ liệu app dưới dạng { depts, cats, users, docs, ... }
+// GET /api/data  → trả về TOÀN BỘ dữ liệu app dưới dạng { depts, cats, users, docs, ..., _versions }
+// _versions[key] = UpdatedAt (ISO string) tại thời điểm đọc — client lưu lại, gửi kèm header
+// If-Match khi ghi (syncStorage()) để server phát hiện xung đột ghi đồng thời (xem POST /:key bên
+// dưới + lib/appData.js setAppDataValueIfVersionMatches()).
 router.get('/', async (req, res) => {
   try {
     const pool = await getPool();
-    const result = await pool.request().query('SELECT DataKey, DataValue FROM dbo.AppData');
+    const result = await pool.request().query('SELECT DataKey, DataValue, UpdatedAt FROM dbo.AppData');
 
     const data = {};
+    const versions = {};
     for (const row of result.recordset) {
       try {
         data[row.DataKey] = JSON.parse(row.DataValue);
+        versions[row.DataKey] = row.UpdatedAt.toISOString();
       } catch (e) {
         console.error(`Lỗi parse JSON cho key "${row.DataKey}":`, e.message);
         data[row.DataKey] = null;
       }
     }
     if (data.users) data.users = stripPasswords(data.users);
+    data._versions = versions;
     res.json(data);
   } catch (err) {
     console.error('GET /api/data lỗi:', err.message);
@@ -85,7 +91,11 @@ router.get('/:key', async (req, res) => {
   }
 });
 
-// POST /api/data/:key  → ghi đè toàn bộ 1 collection (tương đương syncStorage(key) trước đây)
+// POST /api/data/:key  → ghi đè toàn bộ 1 collection (tương đương syncStorage(key) trước đây).
+// Header If-Match (tuỳ chọn, so version đọc gần nhất) -> nếu có, chỉ ghi khi chưa ai đổi key này kể
+// từ lúc client đọc; ai đó đã ghi trước thì trả 409 thay vì âm thầm ghi đè mất thay đổi của họ. Nếu
+// KHÔNG gửi If-Match thì ghi vô điều kiện như trước (đường lùi an toàn cho các nơi chưa cập nhật
+// theo dõi version — không phá hành vi hiện có).
 router.post('/:key', async (req, res) => {
   const { key } = req.params;
   if (!VALID_KEYS.has(key)) return res.status(400).json({ error: `Key không hợp lệ: ${key}` });
@@ -99,6 +109,20 @@ router.post('/:key', async (req, res) => {
 
   try {
     if (key === 'users') value = await prepareUsersForSave(value);
+
+    const ifMatch = req.get('If-Match');
+    if (ifMatch) {
+      const { conflict, version } = await setAppDataValueIfVersionMatches(key, value, ifMatch);
+      if (conflict) {
+        return res.status(409).json({
+          error: `Dữ liệu "${key}" vừa bị người khác thay đổi — vui lòng tải lại trang rồi thử lại.`,
+          conflict: true
+        });
+      }
+      res.set('ETag', version);
+      return res.json({ ok: true, version });
+    }
+
     await setAppDataValue(key, value);
     res.json({ ok: true });
   } catch (err) {
