@@ -45,6 +45,37 @@ router.post('/contracts/:id/edit', async (req, res) => {
   }
 });
 
+// Bước 4 — lập/sửa biên bản họp xong thì tự suy ra Công việc cần tạo TỪ CHÍNH bản ghi vừa lưu (xem
+// lib/recordActions.js buildTasksFromDirectives()) — dùng chung cho cả tạo mới lẫn sửa bên dưới.
+async function createTasksFromMinutes(minutesItem, freshUser) {
+  let createdTasks = [];
+  await withLockedAppDataValue('tasks', (collection) => {
+    const list = Array.isArray(collection) ? collection : [];
+    createdTasks = recordActions.buildTasksFromDirectives(minutesItem, freshUser);
+    for (const c of createdTasks) list.unshift(c.item);
+    return list;
+  });
+  return createdTasks;
+}
+
+// POST /api/records/minutes — lập biên bản họp mới (tự tạo kèm Công việc nếu có chỉ đạo đã gán người)
+router.post('/minutes', async (req, res) => {
+  try {
+    const { freshUser } = await getFreshUser(req);
+    let minutesItem = null;
+    await withLockedAppDataValue('meetingMinutes', (collection) => {
+      const list = Array.isArray(collection) ? collection : [];
+      minutesItem = recordActions.createMinutes(req.body, freshUser, list);
+      list.unshift(minutesItem);
+      return list;
+    });
+    const createdTasks = await createTasksFromMinutes(minutesItem, freshUser);
+    res.json({ ok: true, item: minutesItem, createdTasks });
+  } catch (err) {
+    handleError(res, 'minutes (tạo mới)', err);
+  }
+});
+
 // POST /api/records/minutes/:id/edit
 router.post('/minutes/:id/edit', async (req, res) => {
   const itemId = Number(req.params.id);
@@ -59,7 +90,8 @@ router.post('/minutes/:id/edit', async (req, res) => {
       result = recordActions.editMinutes(req.body, freshUser, list[idx]);
       return list;
     });
-    res.json({ ok: true, item: result });
+    const createdTasks = await createTasksFromMinutes(result, freshUser);
+    res.json({ ok: true, item: result, createdTasks });
   } catch (err) {
     handleError(res, `minutes/${req.params.id}/edit`, err);
   }
@@ -106,6 +138,24 @@ async function withTaskAction(req, res, action, mutator) {
     handleError(res, `tasks/${req.params.id}/${action}`, err);
   }
 }
+
+// POST /api/records/tasks — giao việc thủ công qua modal (khác việc tự động sinh từ chỉ đạo biên bản
+// ở trên, không dùng chung route vì gate quyền khác nhau — xem lib/recordActions.js createTask()).
+router.post('/tasks', async (req, res) => {
+  try {
+    const { freshUser, users } = await getFreshUser(req);
+    let result = null;
+    await withLockedAppDataValue('tasks', (collection) => {
+      const list = Array.isArray(collection) ? collection : [];
+      result = recordActions.createTask(req.body, freshUser, users);
+      list.unshift(result);
+      return list;
+    });
+    res.json({ ok: true, item: result });
+  } catch (err) {
+    handleError(res, 'tasks (tạo mới)', err);
+  }
+});
 
 // POST /api/records/tasks/:id/assign
 router.post('/tasks/:id/assign', (req, res) => withTaskAction(req, res, 'assign', recordActions.assignTask));

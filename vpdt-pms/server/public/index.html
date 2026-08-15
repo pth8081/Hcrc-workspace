@@ -3345,6 +3345,22 @@ async function callRecordAction(module, id, action, payload) {
   return body; // { ok, item? }
 }
 
+// Bước 4: tạo mới Biên bản họp/Công việc — khác callRecordAction() (không thao tác trên 1 id có sẵn).
+async function callRecordCreate(module, payload) {
+  const res = await fetch(`/api/records/${module}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload || {})
+  });
+  if (res.status === 401) {
+    handleSessionExpired();
+    throw new Error('Phiên đăng nhập đã hết hạn');
+  }
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(body.error || `Lỗi máy chủ (HTTP ${res.status})`);
+  return body; // { ok, item, createdTasks? }
+}
+
 function syncStorage(key) {
   try {
     // If-Match: version đọc gần nhất (nếu có) — cho server biết "tôi đang ghi dựa trên bản đã đọc
@@ -5233,28 +5249,27 @@ async function confirmCreateTask() {
     return;
   }
 
-  if (!canManageTasks(currentUser)) {
-    closeCreateTaskModal();
-    return alert('⛔ Bạn không có quyền tạo công việc mới!');
-  }
-
-  const newTask = {
-    id: Date.now(),
+  const taskPayload = {
     title, description, deadline,
-    assignedTo, assignedToName: assignee ? assignee.name : assignedTo,
-    collaborators,
-    assignedBy: currentUser.username, assignedByName: currentUser.name,
+    assignedTo, collaborators,
     sourceType: pendingTaskSource?.sourceType || 'MANUAL',
     sourceCode: pendingTaskSource?.sourceCode || '',
     status: 'TODO',
     extensionCount: 0, lateCount: 0, pendingExtension: null, pendingCancellation: null,
-    createdAt: new Date().toLocaleString('vi-VN'),
-    history: [{ action: 'CREATED', by: currentUser.username, byName: currentUser.name, time: new Date().toLocaleString('vi-VN') }]
+    createdAt: new Date().toLocaleString('vi-VN')
   };
 
+  let newTask;
+  try {
+    const result = await callRecordCreate('tasks', taskPayload);
+    newTask = result.item;
+  } catch (err) {
+    closeCreateTaskModal();
+    return alert(`⛔ ${err.message}`);
+  }
+
   DB.tasks.unshift(newTask);
-  syncStorage('tasks');
-  logSystemAction('TASK', 'CREATE_TASK', `Giao việc [${title}] cho ${newTask.assignedToName}${newTask.sourceCode ? ` (từ ${newTask.sourceCode})` : ''}`, 'SUCCESS', newTask.sourceCode || title);
+  logSystemAction('TASK', 'CREATE_TASK', `Giao việc [${newTask.title}] cho ${newTask.assignedToName}${newTask.sourceCode ? ` (từ ${newTask.sourceCode})` : ''}`, 'SUCCESS', newTask.sourceCode || newTask.title);
 
   if (assignee && assignee.email) {
     notifyUsersByEmail('TASK', 'NOTIFY_TASK_ASSIGNED', newTask.sourceCode || title, [assignedTo],
@@ -7047,58 +7062,28 @@ function renderMinutesDirectivesTable() {
 // Tự động tạo Công việc cho các dòng chỉ đạo CÓ gán người thực hiện và CHƯA từng tạo việc
 // (d.taskCreated) — gọi ngay sau khi Lưu/Cập nhật biên bản, không cần bấm "Giao việc" thủ công.
 // An toàn khi Sửa biên bản nhiều lần: chỉ tạo bổ sung cho dòng mới/chưa có việc, không tạo trùng.
-function autoCreateTasksFromDirectives(m) {
-  let anyCreated = false;
-  (m.directives || []).forEach(d => {
-    if (!d.assignedToAttendeeId || d.taskCreated) return;
-    const resolved = resolveDirectiveAttendee(m.attendees, d.assignedToAttendeeId);
-    if (!resolved) return;
-
-    const collaboratorsResolved = (Array.isArray(d.collaboratorAttendeeIds) ? d.collaboratorAttendeeIds : [])
-      .map(id => resolveDirectiveAttendee(m.attendees, id))
-      .filter(Boolean);
-
-    const newTask = {
-      id: Date.now() + Math.floor(Math.random() * 1000),
-      title: `Chỉ đạo từ biên bản họp: ${m.title}`,
-      description: d.content,
-      deadline: d.deadline || '',
-      // Có tài khoản hệ thống trùng tên -> assignedTo = username (đầy đủ tính năng: đăng nhập, Nhận
-      // việc, "việc của tôi"...). Không có tài khoản -> externalAssignee lưu tên+email để hiển thị và
-      // gửi thông báo; người giao việc/admin sẽ thao tác thay (xem acceptTaskOnBehalf()).
-      assignedTo: resolved.username || '', assignedToName: resolved.name,
-      externalAssignee: resolved.username ? null : { name: resolved.name, email: resolved.email },
-      collaborators: collaboratorsResolved.filter(r => r.username).map(r => r.username),
-      externalCollaborators: collaboratorsResolved.filter(r => !r.username).map(r => ({ name: r.name, email: r.email })),
-      assignedBy: currentUser.username, assignedByName: currentUser.name,
-      sourceType: 'MEETING_MINUTES', sourceCode: m.code,
-      status: 'TODO',
-      extensionCount: 0, lateCount: 0, pendingExtension: null, pendingCancellation: null,
-      createdAt: new Date().toLocaleString('vi-VN'),
-      history: [{ action: 'CREATED', by: currentUser.username, byName: currentUser.name, time: new Date().toLocaleString('vi-VN') }]
-    };
+// Bước 4: server tự suy ra + tạo Công việc từ chỉ đạo đã gán người thực hiện ngay khi lập/sửa Biên bản
+// họp (xem lib/recordActions.js buildTasksFromDirectives()) — hàm này chỉ còn áp kết quả trả về vào
+// DB.tasks cục bộ + gửi thông báo, KHÔNG tự tạo việc ở client nữa (tránh giả mạo assignedBy/id...).
+function applyAutoCreatedTasks(createdTasks, minutesCode, minutesTitle) {
+  (createdTasks || []).forEach(({ item: newTask, notify }) => {
     DB.tasks.unshift(newTask);
-    logSystemAction('TASK', 'CREATE_TASK', `Tự động giao việc [${newTask.title}] cho ${newTask.assignedToName}${newTask.externalAssignee ? ' (ngoài hệ thống)' : ''} (từ ${m.code})`, 'SUCCESS', m.code);
+    logSystemAction('TASK', 'CREATE_TASK', `Tự động giao việc [${newTask.title}] cho ${newTask.assignedToName}${newTask.externalAssignee ? ' (ngoài hệ thống)' : ''} (từ ${minutesCode})`, 'SUCCESS', minutesCode);
 
     // Email LUÔN lấy đúng email đã nhập ở Thành phần tham dự (không fallback email hệ thống) — áp
     // dụng đồng nhất cho cả người có và không có tài khoản hệ thống, đúng yêu cầu nghiệp vụ.
-    if (resolved.email) {
-      notifyRecipientsByEmail('TASK', 'NOTIFY_TASK_ASSIGNED', m.code, [{ name: resolved.name, email: resolved.email }],
-        `[VPDT] Bạn được giao công việc mới từ Biên bản họp: ${m.title}`,
-        `${currentUser.name} đã giao cho bạn công việc theo chỉ đạo trong biên bản họp "${m.title}" (${m.code}): ${d.content}`);
+    if (notify?.assigneeEmail) {
+      notifyRecipientsByEmail('TASK', 'NOTIFY_TASK_ASSIGNED', minutesCode, [{ name: newTask.assignedToName, email: notify.assigneeEmail }],
+        `[VPDT] Bạn được giao công việc mới từ Biên bản họp: ${minutesTitle}`,
+        `${currentUser.name} đã giao cho bạn công việc theo chỉ đạo trong biên bản họp "${minutesTitle}" (${minutesCode}): ${newTask.description}`);
     }
-    const collabRecipients = collaboratorsResolved.filter(r => r.email).map(r => ({ name: r.name, email: r.email }));
-    if (collabRecipients.length) {
-      notifyRecipientsByEmail('TASK', 'NOTIFY_TASK_COLLABORATOR', m.code, collabRecipients,
-        `[VPDT] Bạn được phân công phối hợp thực hiện: ${m.title}`,
-        `${currentUser.name} đã phân công bạn phối hợp thực hiện chỉ đạo trong biên bản họp "${m.title}" (${m.code}) cùng ${newTask.assignedToName}: ${d.content}`);
+    if (notify?.collaboratorEmails?.length) {
+      notifyRecipientsByEmail('TASK', 'NOTIFY_TASK_COLLABORATOR', minutesCode, notify.collaboratorEmails,
+        `[VPDT] Bạn được phân công phối hợp thực hiện: ${minutesTitle}`,
+        `${currentUser.name} đã phân công bạn phối hợp thực hiện chỉ đạo trong biên bản họp "${minutesTitle}" (${minutesCode}) cùng ${newTask.assignedToName}: ${newTask.description}`);
     }
-
-    d.taskCreated = true;
-    anyCreated = true;
   });
-  if (anyCreated) syncStorage('tasks');
-  return anyCreated;
+  return (createdTasks || []).length > 0;
 }
 
 async function submitMeetingMinutes(e) {
@@ -7132,8 +7117,7 @@ async function submitMeetingMinutes(e) {
   const validAttendees = minutesAttendeesRows.filter(a => a.name.trim()).map(a => ({ ...a }));
   const validDirectives = minutesDirectives.filter(d => d.content.trim()).map(d => ({ ...d }));
 
-  const newMinutes = {
-    id: Date.now(),
+  const minutesPayload = {
     code,
     linkedMeetingId: linkedMeetingRaw ? parseInt(linkedMeetingRaw, 10) : null,
     title, time, location, chair, secretary,
@@ -7141,14 +7125,20 @@ async function submitMeetingMinutes(e) {
     content,
     directives: validDirectives,
     customData,
-    creator: currentUser.username,
-    creatorName: currentUser.name,
     createdAt: new Date().toLocaleString('vi-VN')
   };
 
+  let newMinutes, createdTasks;
+  try {
+    const result = await callRecordCreate('minutes', minutesPayload);
+    newMinutes = result.item;
+    createdTasks = result.createdTasks;
+  } catch (err) {
+    return alert(`⛔ ${err.message}`);
+  }
+
   DB.meetingMinutes.unshift(newMinutes);
-  const anyTaskCreated = autoCreateTasksFromDirectives(newMinutes);
-  syncStorage('meetingMinutes');
+  const anyTaskCreated = applyAutoCreatedTasks(createdTasks, newMinutes.code, newMinutes.title);
   logSystemAction('MINUTES', 'CREATE_MINUTES', `Lập biên bản họp [${code} - ${title}]`, 'SUCCESS', code);
   const attendeeRecipients = validAttendees
     .filter(a => a.email && a.email.trim())
@@ -7246,10 +7236,11 @@ async function updateMeetingMinutes(e) {
     directives
   };
 
-  let updated;
+  let updated, createdTasks;
   try {
     const result = await callRecordAction('minutes', m.id, 'edit', editPayload);
     updated = result.item;
+    createdTasks = result.createdTasks;
   } catch (err) {
     return alert(`⛔ ${err.message}`);
   }
@@ -7257,7 +7248,7 @@ async function updateMeetingMinutes(e) {
   const idx = DB.meetingMinutes.findIndex(x => x.id === m.id);
   if (idx !== -1) DB.meetingMinutes[idx] = updated;
 
-  const anyTaskCreated = autoCreateTasksFromDirectives(updated);
+  const anyTaskCreated = applyAutoCreatedTasks(createdTasks, updated.code, updated.title);
   logSystemAction('MINUTES', 'EDIT_MINUTES', `Cập nhật biên bản họp [${updated.code}]`, 'SUCCESS', updated.code);
   alert('✅ Đã cập nhật biên bản họp thành công!' + (anyTaskCreated ? ' Các chỉ đạo mới đã gán người thực hiện đã được tự động chuyển thành Công việc.' : ''));
   cancelEditMeetingMinutes();

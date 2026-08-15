@@ -75,6 +75,86 @@ function assertCanDeleteMinutes(user, minutes) {
   }
 }
 
+// ===================== BIÊN BẢN HỌP (tạo mới — Bước 4) =====================
+// minutesCreate là cờ toàn công ty — khớp đúng canCreateMeetingMinutes() ở index.html.
+function canCreateMinutes(user) {
+  return !!(user.perms?.admin || user.perms?.minutesCreate);
+}
+
+function createMinutes(payload, user, existingCollection) {
+  if (!canCreateMinutes(user)) {
+    throw new HttpError(403, 'Bạn không có quyền lập biên bản họp');
+  }
+  if (!payload || typeof payload !== 'object') throw new HttpError(400, 'Thiếu dữ liệu biên bản họp');
+  if (payload.code) {
+    const dup = (existingCollection || []).some(m => m.code === payload.code);
+    if (dup) throw new HttpError(409, `Mã "${payload.code}" đã tồn tại`);
+  }
+
+  const record = { ...payload, id: Date.now() };
+  record.creator = user.username;
+  record.creatorName = user.name;
+  return record;
+}
+
+// Sao y resolveDirectiveAttendee() ở index.html — dò 1 người trong "Thành phần tham dự" của CHÍNH bản
+// ghi biên bản đã lưu theo attendeeId.
+function resolveDirectiveAttendeeServer(attendeesList, attendeeId) {
+  if (!attendeeId) return null;
+  const a = (attendeesList || []).find(x => String(x.id) === String(attendeeId));
+  if (!a || !(a.name || '').trim()) return null;
+  return { name: a.name.trim(), email: (a.email || '').trim(), username: a.hasAccount === 'YES' ? (a.username || null) : null };
+}
+
+// Tự động chuyển các dòng "chỉ đạo" đã gán người thực hiện thành Công việc mới — khớp đúng
+// autoCreateTasksFromDirectives() ở index.html, nhưng SERVER TỰ SUY LẠI từ chính bản ghi biên bản vừa
+// lưu (minutes.attendees/minutes.directives), không tin danh sách việc do client tự gửi kèm.
+//
+// LƯU Ý quyền hạn: bước này KHÔNG đòi canManageTasks (taskEdit) — quyền tạo việc ở đây tới từ việc
+// user đã được phép tạo/sửa CHÍNH biên bản này (đã xác minh ở createMinutes()/editMinutes() trước khi
+// gọi hàm này), khớp đúng hành vi cũ (client trước đây tạo việc kèm theo không đòi thêm quyền quản lý
+// việc riêng). Tạo việc THỦ CÔNG qua modal Giao Việc là luồng khác, vẫn đòi canManageTasks — xem
+// createTask() bên dưới.
+function buildTasksFromDirectives(minutes, user) {
+  const created = [];
+  (minutes.directives || []).forEach((d, i) => {
+    if (!d.assignedToAttendeeId || d.taskCreated) return;
+    const resolved = resolveDirectiveAttendeeServer(minutes.attendees, d.assignedToAttendeeId);
+    if (!resolved) return;
+
+    const collaboratorsResolved = (Array.isArray(d.collaboratorAttendeeIds) ? d.collaboratorAttendeeIds : [])
+      .map(id => resolveDirectiveAttendeeServer(minutes.attendees, id))
+      .filter(Boolean);
+
+    const item = {
+      id: Date.now() + i,
+      title: `Chỉ đạo từ biên bản họp: ${minutes.title}`,
+      description: d.content,
+      deadline: d.deadline || '',
+      assignedTo: resolved.username || '', assignedToName: resolved.name,
+      externalAssignee: resolved.username ? null : { name: resolved.name, email: resolved.email },
+      collaborators: collaboratorsResolved.filter(r => r.username).map(r => r.username),
+      externalCollaborators: collaboratorsResolved.filter(r => !r.username).map(r => ({ name: r.name, email: r.email })),
+      assignedBy: user.username, assignedByName: user.name,
+      sourceType: 'MEETING_MINUTES', sourceCode: minutes.code,
+      status: 'TODO',
+      extensionCount: 0, lateCount: 0, pendingExtension: null, pendingCancellation: null,
+      createdAt: nowVN(),
+      history: [{ action: 'CREATED', by: user.username, byName: user.name, time: nowVN() }]
+    };
+    d.taskCreated = true;
+    // notify: thông tin CHỈ để trả về cho client gửi email — không thuộc bản ghi Công việc được lưu.
+    created.push({
+      item,
+      notify: {
+        assigneeEmail: resolved.email || '',
+        collaboratorEmails: collaboratorsResolved.filter(r => r.email).map(r => ({ name: r.name, email: r.email }))
+      }
+    });
+  });
+  return created;
+}
+
 // ===================== CÔNG VIỆC (sửa/giao/xóa) =====================
 // canManageTasks (sửa) là cờ toàn công ty (admin||taskEdit) — quyền sửa BẤT KỲ công việc nào.
 // Gán người nhận thì hẹp hơn: chỉ admin hoặc CHÍNH người đã giao việc đó (assignedBy) — khớp đúng
@@ -134,6 +214,26 @@ function assertCanDeleteTask(user) {
   if (!canDeleteTaskPerm(user)) {
     throw new HttpError(403, 'Bạn không có quyền xóa công việc');
   }
+}
+
+// Giao việc THỦ CÔNG qua modal (khác việc tự động sinh từ chỉ đạo biên bản — xem
+// buildTasksFromDirectives() ở trên, không đòi canManageTasks vì quyền hạn ở đó tới từ việc được phép
+// tạo/sửa biên bản, không phải quyền quản lý việc chung).
+function createTask(payload, user, usersList) {
+  if (!canManageTasks(user)) {
+    throw new HttpError(403, 'Bạn không có quyền tạo công việc mới');
+  }
+  if (!payload || typeof payload !== 'object' || !payload.title) {
+    throw new HttpError(400, 'Thiếu tiêu đề công việc');
+  }
+  if (!payload.assignedTo) throw new HttpError(400, 'Thiếu người nhận việc');
+
+  const record = { ...payload, id: Date.now() };
+  record.assignedToName = resolveAssigneeName(usersList, payload.assignedTo);
+  record.assignedBy = user.username;
+  record.assignedByName = user.name;
+  record.history = [{ action: 'CREATED', by: user.username, byName: user.name, time: nowVN() }];
+  return record;
 }
 
 // ===================== CÔNG VIỆC (Bước 3 — nhận việc/phối hợp/trạng thái/gia hạn/huỷ) =====================
@@ -314,7 +414,9 @@ function resolvePendingTaskAction(kind, verb, user, task) {
 module.exports = {
   editContract,
   canEditMinutes, canDeleteMinutes, editMinutes, assertCanDeleteMinutes,
+  canCreateMinutes, createMinutes, buildTasksFromDirectives,
   canManageTasks, canDeleteTaskPerm, canAssignSpecificTask, assignTask, editTask, assertCanDeleteTask,
+  createTask,
   acceptTask, confirmCollaboratorParticipation, updateTaskStatusAction, requestExtension,
   cancelOrRequestCancelTask, resolvePendingTaskAction
 };
