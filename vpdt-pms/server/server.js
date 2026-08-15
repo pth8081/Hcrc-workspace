@@ -3,6 +3,7 @@ require('dotenv').config();
 const express = require('express');
 const cookieParser = require('cookie-parser');
 const path = require('path');
+const { version: APP_VERSION } = require('./package.json');
 const { getPool } = require('./db');
 const { seedDefaults } = require('./seedDefaults');
 const { requireAuth } = require('./lib/auth');
@@ -45,13 +46,15 @@ app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 // phiên bản đã cài qua npm, không cần bước copy thủ công.
 app.use('/vendor/pdfjs', express.static(path.join(__dirname, 'node_modules', 'pdfjs-dist', 'legacy', 'build')));
 
-// Health check (dùng cho giám sát / load balancer / kiểm tra nhanh sau khi deploy)
+// Health check (dùng cho giám sát / load balancer / kiểm tra nhanh sau khi deploy). "version" luôn
+// trả về ngay cả khi DB lỗi — dùng để xác nhận server đang chạy ĐÚNG bản code vừa deploy (so khớp với
+// package.json trên máy), độc lập với tình trạng kết nối SQL Server.
 app.get('/api/health', async (req, res) => {
   try {
     await getPool();
-    res.json({ status: 'ok', db: 'connected' });
+    res.json({ status: 'ok', db: 'connected', version: APP_VERSION });
   } catch (err) {
-    res.status(500).json({ status: 'error', db: 'disconnected', detail: err.message });
+    res.status(500).json({ status: 'error', db: 'disconnected', detail: err.message, version: APP_VERSION });
   }
 });
 

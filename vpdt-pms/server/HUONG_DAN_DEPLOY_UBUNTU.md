@@ -313,8 +313,13 @@ internet mở:
 Endpoint kiểm tra nhanh:
 ```
 GET http://<ip-server>:3000/api/health
-→ {"status":"ok","db":"connected"}
+→ {"status":"ok","db":"connected","version":"1.1.0"}
 ```
+
+`version` khớp đúng trường `version` trong `package.json` của bản code server
+đang chạy — dùng để xác nhận sau khi cập nhật code (mục 11) đã áp dụng đúng
+bản mới hay chưa, không cần đoán. Cùng số phiên bản này cũng hiện ở góc dưới
+bên phải màn hình web (không cần đăng nhập).
 
 Dùng cho giám sát (uptime monitor, script cron cảnh báo qua email/Zalo nếu server down).
 
@@ -324,9 +329,31 @@ Dùng cho giám sát (uptime monitor, script cron cảnh báo qua email/Zalo n�
 
 ```bash
 cd /opt/vpdt
-# copy file public/index.html hoặc code backend mới đè lên
+# copy toàn bộ code mới (backend + public/index.html) đè lên
+npm install     # BẮT BUỘC nếu package.json có thay đổi (thêm/đổi gói) — xem cảnh báo bên dưới
 pm2 restart vpdt
+pm2 status      # phải thấy "online", không phải liên tục "restart"/"errored"
 ```
 
 Vì toàn bộ dữ liệu đã nằm trong SQL Server (không còn trong trình duyệt), việc
 cập nhật giao diện/code **không làm mất dữ liệu người dùng đã nhập**.
+
+> ⚠️ **Lỗi thường gặp: web báo 502/503 sau khi cập nhật code, không truy cập
+> được.** Nguyên nhân hầu hết là bỏ sót bước `npm install` — nếu code mới
+> thêm gói mới trong `package.json` (`dependencies`) mà chưa cài, tiến trình
+> Node sẽ báo lỗi `Cannot find module '...'` và **thoát ngay khi khởi động**,
+> khiến PM2 cứ khởi động rồi crash liên tục, Nginx không có gì để chuyển tiếp
+> request tới nên trả về 502/503. Cách kiểm tra và khắc phục:
+> ```bash
+> pm2 logs vpdt --lines 50 --err   # tìm dòng "Cannot find module ..."
+> cd /opt/vpdt && npm install
+> pm2 restart vpdt
+> ```
+> Sau khi sửa, mở `GET /api/health` (mục 10) để xác nhận server đã lên và
+> đúng phiên bản mới trước khi báo cho người dùng thử lại.
+>
+> Ngoài `npm install`, nếu bản cập nhật có ghi chú đổi cấu trúc bảng
+> (`server/sql/schema.sql`), cũng cần chạy lại script đó trên SQL Server thật
+> (script viết để chạy lại nhiều lần an toàn, không mất dữ liệu cũ) và đảm
+> bảo file `.env` đã có đủ biến bắt buộc mới (ví dụ `JWT_SECRET`) — xem
+> `.env.example`.

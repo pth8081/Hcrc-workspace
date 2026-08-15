@@ -20,6 +20,10 @@
 </style>
 </head>
 <body class="bg-gray-100 min-h-screen p-6 font-sans">
+<!-- Số phiên bản đang chạy trên server — lấy từ GET /api/health (xem server.js), không phải giá trị
+     tĩnh ghi cứng ở đây, để luôn khớp đúng bản code server đang thực sự chạy. Dùng để xác nhận nhanh
+     sau khi deploy (đè code + npm install + pm2 restart) đã áp dụng đúng bản mới hay chưa. -->
+<div id="appVersionBadge" class="fixed bottom-1 right-2 text-[10px] text-gray-400 select-none z-10"></div>
 <div class="max-w-7xl mx-auto bg-white p-6 rounded-lg shadow-md space-y-6">
 
   <!-- Header -->
@@ -3412,6 +3416,18 @@ let dataReady = false;
   } catch (e) {
     console.warn('Không thể khôi phục phiên đăng nhập cũ:', e.message);
   }
+})();
+
+// Hiện số phiên bản server ở góc màn hình (không cần đăng nhập) — cách nhanh nhất để xác nhận sau khi
+// deploy code mới, server thật sự đang chạy đúng bản (so với package.json), tránh tình trạng tưởng đã
+// cập nhật nhưng PM2 vẫn đang chạy tiến trình cũ do lỗi khi khởi động lại.
+(async function loadAppVersion() {
+  try {
+    const res = await fetch('/api/health');
+    const body = await res.json().catch(() => ({}));
+    const badge = document.getElementById('appVersionBadge');
+    if (badge && body.version) badge.textContent = `v${body.version}`;
+  } catch (e) { /* im lặng — chỉ là thông tin phụ, không ảnh hưởng gì tới việc dùng app */ }
 })();
 
 // Gửi email THẬT qua backend (POST /api/send-email) nếu đã nhập SMTP Server ở màn Quản trị > Cấu
