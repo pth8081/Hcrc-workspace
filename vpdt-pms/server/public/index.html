@@ -3298,6 +3298,37 @@ async function callWorkflowAction(moduleKey, id, action, payload) {
   return body; // { ok, item, transition }
 }
 
+// Gọi API tạo hồ sơ mới THẬT ở server (Bước 2 — xem routes/create.js/lib/createValidation.js) — server
+// tự xác minh phạm vi phòng ban + tự gán người tạo từ phiên đăng nhập, không tin field dept/creator
+// client gửi lên nữa (trước đây chỉ lọc dropdown ở giao diện, 1 request tự soạn vẫn tạo được hồ sơ
+// cho phòng ban bất kỳ). Trả về đúng bản ghi server đã lưu (id/creator là giá trị THẬT, không phải
+// giá trị client tạm tính).
+async function callCreateAction(moduleKey, payload) {
+  const res = await fetch(`/api/create/${moduleKey}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload)
+  });
+  if (res.status === 401) {
+    handleSessionExpired();
+    throw new Error('Phiên đăng nhập đã hết hạn');
+  }
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(body.error || `Lỗi máy chủ (HTTP ${res.status})`);
+  return body; // { ok, item }
+}
+
+async function callMeetingAction(id, action) {
+  const res = await fetch(`/api/meetings/${id}/${action}`, { method: 'POST' });
+  if (res.status === 401) {
+    handleSessionExpired();
+    throw new Error('Phiên đăng nhập đã hết hạn');
+  }
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(body.error || `Lỗi máy chủ (HTTP ${res.status})`);
+  return body; // { ok, item }
+}
+
 function syncStorage(key) {
   try {
     // If-Match: version đọc gần nhất (nếu có) — cho server biết "tôi đang ghi dựa trên bản đã đọc
@@ -3889,12 +3920,16 @@ function setOfficeSubTab(subTab) {
 }
 
 function populateDropdowns() {
-  const allowedDepts = getUserAllowedDepts(currentUser);
-  
   const selDept = document.getElementById('selDept');
   if (selDept) {
-    selDept.innerHTML = '<option value="">-- Chọn Phòng Ban Trình --</option>' + 
-      allowedDepts.map(d => `<option value="${escapeHtml(d)}">${escapeHtml(d)}</option>`).join('');
+    // CẬP NHẬT: trước đây dùng getUserAllowedDepts() — hàm đó gộp cả viewDraftDepts/viewApprovedDepts
+    // (chỉ để XEM) vào danh sách, và mặc định trả về TOÀN BỘ phòng ban nếu rỗng — khiến dropdown tải
+    // lên tài liệu gần như không lọc gì. Nay dùng đúng phạm vi TẠO (uploadAll/uploadDepts), cùng cơ chế
+    // getScopedDepts()/scopeAllows() như 5 module Trình/Hợp đồng/Họp/Xe/Văn phòng — khớp với server
+    // (xem lib/createValidation.js CREATE_MODULE_CONFIGS.docs.getScope).
+    const docCreateScope = { all: !!currentUser.perms?.uploadAll, depts: currentUser.perms?.uploadDepts || [] };
+    selDept.innerHTML = '<option value="">-- Chọn Phòng Ban Trình --</option>' +
+      getScopedDepts(currentUser, docCreateScope).map(d => `<option value="${escapeHtml(d)}">${escapeHtml(d)}</option>`).join('');
   }
 
   const filterDept = document.getElementById('filterDept');
@@ -4156,8 +4191,7 @@ async function uploadDoc(e) {
     return alert(`⛔ Tải tệp lên thất bại: ${err.message}`);
   }
 
-  const newDoc = {
-    id: Date.now(),
+  const docPayload = {
     code: code,
     title: title,
     ver: ver,
@@ -4168,8 +4202,6 @@ async function uploadDoc(e) {
     fileName: uploaded.fileName,
     fileType: uploaded.fileType,
     fileUrl: uploaded.fileUrl,
-    uploader: currentUser.username,
-    uploaderName: currentUser.name,
     createdAt: new Date().toLocaleString('vi-VN'),
     status: 'PENDING',
     currentStep: 1,
@@ -4185,8 +4217,14 @@ async function uploadDoc(e) {
     ]
   };
 
+  let newDoc;
+  try {
+    newDoc = (await callCreateAction('docs', docPayload)).item;
+  } catch (err) {
+    return alert('⛔ ' + err.message);
+  }
+
   DB.docs.unshift(newDoc);
-  syncStorage('docs');
   logSystemAction('DOC', 'UPLOAD_DOC', `Tải lên tài liệu mới [${code} - ${title}]`, 'SUCCESS', code);
 
   const newDocWfConfig = DB.deptWorkflows[dept];
@@ -4455,8 +4493,7 @@ async function submitSubmissionReq(e) {
 
   const effectiveWf = buildEffectiveSubmissionWorkflow(type, dept, selectedLayerKeys);
 
-  const newSub = {
-    id: Date.now(),
+  const subPayload = {
     code: code,
     dept: dept,
     type: type,
@@ -4467,8 +4504,6 @@ async function submitSubmissionReq(e) {
     fileUrl: fileUrl,
     fileType: fileType,
     customData: customData,
-    creator: currentUser.username,
-    creatorName: currentUser.name,
     createdAt: new Date().toLocaleString('vi-VN'),
     status: 'PENDING',
     currentStep: 1,
@@ -4487,8 +4522,15 @@ async function submitSubmissionReq(e) {
     ]
   };
 
+  let newSub;
+  try {
+    const result = await callCreateAction('submissions', subPayload);
+    newSub = result.item;
+  } catch (err) {
+    return alert(`⛔ ${err.message}`);
+  }
+
   DB.submissions.unshift(newSub);
-  syncStorage('submissions');
   logSystemAction('SUBMISSION', 'CREATE_SUBMISSION', `Tạo tờ trình mới [${code} - ${title}]`, 'SUCCESS', code);
 
   const newSubApprovers = effectiveWf.approvers?.[1] || [];
@@ -6062,8 +6104,7 @@ async function submitContractReq(e) {
     return alert(`⛔ Tải tệp lên thất bại: ${err.message}`);
   }
 
-  const newContract = {
-    id: Date.now(),
+  const contractPayload = {
     code: code,
     dept: dept,
     type: type,
@@ -6077,13 +6118,19 @@ async function submitContractReq(e) {
     fileName: uploaded.fileName,
     fileType: uploaded.fileType,
     fileUrl: uploaded.fileUrl,
-    creator: currentUser.username,
     createdAt: new Date().toLocaleString('vi-VN'),
     notifiedThresholds: []
   };
 
+  let newContract;
+  try {
+    const result = await callCreateAction('contracts', contractPayload);
+    newContract = result.item;
+  } catch (err) {
+    return alert(`⛔ ${err.message}`);
+  }
+
   DB.contracts.unshift(newContract);
-  syncStorage('contracts');
   logSystemAction('CONTRACT', 'CREATE_CONTRACT', `Tạo hồ sơ hợp đồng [${code} - ${title}]`, 'SUCCESS', code);
   alert('✅ Đã lưu thông tin Hợp đồng / Giấy phép thành công!');
   e.target.reset();
@@ -6526,8 +6573,7 @@ async function submitMeetingReq(e) {
     return alert(`⛔ ${err.message}`);
   }
 
-  const newMeeting = {
-    id: Date.now(),
+  const meetingPayload = {
     code: code,
     dept: dept,
     room: room,
@@ -6538,14 +6584,19 @@ async function submitMeetingReq(e) {
     equipment: equipment,
     agenda: agenda,
     customData: customData,
-    creator: currentUser.username,
-    creatorName: currentUser.name,
     createdAt: new Date().toLocaleString('vi-VN'),
     status: 'PENDING'
   };
 
+  let newMeeting;
+  try {
+    const result = await callCreateAction('meetings', meetingPayload);
+    newMeeting = result.item;
+  } catch (err) {
+    return alert(`⛔ ${err.message}`);
+  }
+
   DB.meetings.unshift(newMeeting);
-  syncStorage('meetings');
   logSystemAction('MEETING', 'CREATE_MEETING', `Đặt lịch phòng họp [${code} - ${room}]`, 'SUCCESS', code);
 
   const meetingApprovers = getMeetingApproverUsernames();
@@ -6643,27 +6694,45 @@ function runMeetingAction(id, action) {
   }
 }
 
-function approveMeeting(id) {
+async function approveMeeting(id) {
   const m = DB.meetings.find(item => item.id === id);
   if (!m) return;
-  m.status = 'APPROVED';
-  syncStorage('meetings');
-  logSystemAction('MEETING', 'APPROVE_MEETING', `Phê duyệt đặt phòng họp [${m.code}]`, 'SUCCESS', m.code);
-  notifyUsersByEmail('MEETING', 'NOTIFY_APPROVED', m.code, [m.creator],
-    `[VPDT] Lịch phòng họp ${m.code} đã được phê duyệt`,
-    `Lịch đặt phòng "${m.room}" (${m.code}) của bạn đã được phê duyệt.`);
+
+  let updated;
+  try {
+    const result = await callMeetingAction(id, 'approve');
+    updated = result.item;
+  } catch (err) {
+    return alert(`⛔ ${err.message}`);
+  }
+
+  const idx = DB.meetings.findIndex(item => item.id === id);
+  if (idx !== -1) DB.meetings[idx] = updated;
+  logSystemAction('MEETING', 'APPROVE_MEETING', `Phê duyệt đặt phòng họp [${updated.code}]`, 'SUCCESS', updated.code);
+  notifyUsersByEmail('MEETING', 'NOTIFY_APPROVED', updated.code, [updated.creator],
+    `[VPDT] Lịch phòng họp ${updated.code} đã được phê duyệt`,
+    `Lịch đặt phòng "${updated.room}" (${updated.code}) của bạn đã được phê duyệt.`);
   renderMeetings();
 }
 
-function cancelMeeting(id) {
+async function cancelMeeting(id) {
   const m = DB.meetings.find(item => item.id === id);
   if (!m) return;
-  m.status = 'CANCELLED';
-  syncStorage('meetings');
-  logSystemAction('MEETING', 'CANCEL_MEETING', `Hủy lịch phòng họp [${m.code}]`, 'SUCCESS', m.code);
-  notifyUsersByEmail('MEETING', 'NOTIFY_REJECTED', m.code, [m.creator],
-    `[VPDT] Lịch phòng họp ${m.code} đã bị hủy`,
-    `Lịch đặt phòng "${m.room}" (${m.code}) của bạn đã bị hủy.`);
+
+  let updated;
+  try {
+    const result = await callMeetingAction(id, 'cancel');
+    updated = result.item;
+  } catch (err) {
+    return alert(`⛔ ${err.message}`);
+  }
+
+  const idx = DB.meetings.findIndex(item => item.id === id);
+  if (idx !== -1) DB.meetings[idx] = updated;
+  logSystemAction('MEETING', 'CANCEL_MEETING', `Hủy lịch phòng họp [${updated.code}]`, 'SUCCESS', updated.code);
+  notifyUsersByEmail('MEETING', 'NOTIFY_REJECTED', updated.code, [updated.creator],
+    `[VPDT] Lịch phòng họp ${updated.code} đã bị hủy`,
+    `Lịch đặt phòng "${updated.room}" (${updated.code}) của bạn đã bị hủy.`);
   renderMeetings();
 }
 
@@ -7398,8 +7467,7 @@ async function submitCarReq(e) {
     return alert(`⛔ ${err.message}`);
   }
 
-  const newCar = {
-    id: Date.now(),
+  const carPayload = {
     code: code,
     dept: dept,
     type: type,
@@ -7414,8 +7482,6 @@ async function submitCarReq(e) {
     destination: destination,
     reason: reason,
     customData: customData,
-    creator: currentUser.username,
-    creatorName: currentUser.name,
     registrantPhone: currentUser.phone || '',
     createdAt: new Date().toLocaleString('vi-VN'),
     status: 'PENDING',
@@ -7428,8 +7494,15 @@ async function submitCarReq(e) {
     assignedPlate: ''
   };
 
+  let newCar;
+  try {
+    const result = await callCreateAction('carRegs', carPayload);
+    newCar = result.item;
+  } catch (err) {
+    return alert(`⛔ ${err.message}`);
+  }
+
   DB.carRegs.unshift(newCar);
-  syncStorage('carRegs');
   logSystemAction('CAR', 'CREATE_CAR_REG', `Tạo phiếu đăng ký xe [${code} - ${destination}]`, 'SUCCESS', code);
 
   const newCarWfConfig = DB.carDeptWorkflows[dept];
@@ -7914,8 +7987,7 @@ async function submitOfficeReq(e) {
     return alert(`⛔ ${err.message}`);
   }
 
-  const newOff = {
-    id: Date.now(),
+  const officePayload = {
     code: code,
     subType: activeOfficeSubTab,
     dept: dept,
@@ -7927,16 +7999,21 @@ async function submitOfficeReq(e) {
     items: items,
     reason: reason,
     customData: customData,
-    creator: currentUser.username,
-    creatorName: currentUser.name,
     createdAt: new Date().toLocaleString('vi-VN'),
     status: 'PENDING',
     currentStep: 1,
     history: []
   };
 
+  let newOff;
+  try {
+    const result = await callCreateAction('officeReqs', officePayload);
+    newOff = result.item;
+  } catch (err) {
+    return alert(`⛔ ${err.message}`);
+  }
+
   DB.officeReqs.unshift(newOff);
-  syncStorage('officeReqs');
   logSystemAction('OFFICE', 'CREATE_OFFICE_REQ', `Tạo đề xuất văn phòng [${code} - ${title}]`, 'SUCCESS', code);
 
   const newOffWfMap = getOfficeWorkflowMap(activeOfficeSubTab);

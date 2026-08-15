@@ -9,6 +9,8 @@ const { requireAuth } = require('./lib/auth');
 const authRoutes = require('./routes/auth');
 const dataRoutes = require('./routes/data');
 const workflowRoutes = require('./routes/workflow');
+const createRoutes = require('./routes/create');
+const meetingActionsRoutes = require('./routes/meetingActions');
 const uploadRoutes = require('./routes/upload');
 const emailRoutes = require('./routes/email');
 const { checkContractExpiryReminders } = require('./jobs/contractExpiryReminder');
@@ -27,6 +29,8 @@ app.use(cookieParser());
 app.use('/api/auth', authRoutes);
 app.use('/api/data', dataRoutes);
 app.use('/api/workflow', workflowRoutes);
+app.use('/api/create', createRoutes);
+app.use('/api/meetings', meetingActionsRoutes);
 app.use('/api/upload', requireAuth, uploadRoutes);
 app.use('/api/send-email', requireAuth, emailRoutes);
 
