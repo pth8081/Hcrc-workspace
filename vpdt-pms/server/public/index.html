@@ -3329,6 +3329,22 @@ async function callMeetingAction(id, action) {
   return body; // { ok, item }
 }
 
+// Bước 2b: sửa/xóa/giao hồ sơ đã tồn tại (Hợp đồng, Biên bản họp, Công việc) — xem routes/records.js.
+async function callRecordAction(module, id, action, payload) {
+  const res = await fetch(`/api/records/${module}/${id}/${action}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload || {})
+  });
+  if (res.status === 401) {
+    handleSessionExpired();
+    throw new Error('Phiên đăng nhập đã hết hạn');
+  }
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(body.error || `Lỗi máy chủ (HTTP ${res.status})`);
+  return body; // { ok, item? }
+}
+
 function syncStorage(key) {
   try {
     // If-Match: version đọc gần nhất (nếu có) — cho server biết "tôi đang ghi dựa trên bản đã đọc
@@ -5144,7 +5160,7 @@ function notifyTaskCollaborators(t, collaboratorUsernames, title, description, d
     `${currentUser.name} đã mời bạn phối hợp thực hiện công việc "${title}"${description ? `: ${description}` : ''}.${deadline ? ` Hạn hoàn thành: ${deadline}.` : ''}`);
 }
 
-function confirmCreateTask() {
+async function confirmCreateTask() {
   const title = document.getElementById('taskTitleInput').value.trim();
   const description = document.getElementById('taskDescInput').value.trim();
   const assignedTo = document.getElementById('taskAssigneeInput').value;
@@ -5159,25 +5175,26 @@ function confirmCreateTask() {
   if (taskModalMode === 'ASSIGN' && editingTaskId !== null) {
     const t = DB.tasks.find(x => x.id === editingTaskId);
     if (!t) { closeCreateTaskModal(); return; }
-    if (!(currentUser.perms?.admin || t.assignedBy === currentUser.username)) {
-      closeCreateTaskModal();
-      return alert('⛔ Bạn không có quyền gán người nhận cho công việc này!');
-    }
     const oldCollaborators = new Set(t.collaborators || []);
-    t.assignedTo = assignedTo;
-    t.assignedToName = assignee ? assignee.name : assignedTo;
-    t.deadline = deadline;
-    t.collaborators = collaborators;
-    t.history.push({ action: 'ASSIGNED', by: currentUser.username, byName: currentUser.name, time: new Date().toLocaleString('vi-VN') });
-    syncStorage('tasks');
-    logSystemAction('TASK', 'ASSIGN_TASK', `Gán người nhận [${t.assignedToName}] cho công việc [${t.title}]`, 'SUCCESS', t.sourceCode || t.title);
+
+    let updated;
+    try {
+      const result = await callRecordAction('tasks', t.id, 'assign', { assignedTo, assignedToName: assignee ? assignee.name : assignedTo, deadline, collaborators });
+      updated = result.item;
+    } catch (err) {
+      closeCreateTaskModal();
+      return alert(`⛔ ${err.message}`);
+    }
+    const idx = DB.tasks.findIndex(x => x.id === t.id);
+    if (idx !== -1) DB.tasks[idx] = updated;
+    logSystemAction('TASK', 'ASSIGN_TASK', `Gán người nhận [${updated.assignedToName}] cho công việc [${updated.title}]`, 'SUCCESS', updated.sourceCode || updated.title);
 
     if (assignee && assignee.email) {
-      notifyUsersByEmail('TASK', 'NOTIFY_TASK_ASSIGNED', t.sourceCode || t.title, [assignedTo],
-        `[VPDT] Bạn được giao công việc: ${t.title}`,
-        `${currentUser.name} đã gán cho bạn công việc "${t.title}"${description ? `: ${description}` : ''}.${deadline ? ` Hạn hoàn thành: ${deadline}.` : ''}`);
+      notifyUsersByEmail('TASK', 'NOTIFY_TASK_ASSIGNED', updated.sourceCode || updated.title, [assignedTo],
+        `[VPDT] Bạn được giao công việc: ${updated.title}`,
+        `${currentUser.name} đã gán cho bạn công việc "${updated.title}"${description ? `: ${description}` : ''}.${deadline ? ` Hạn hoàn thành: ${deadline}.` : ''}`);
     }
-    notifyTaskCollaborators(t, collaborators.filter(u => !oldCollaborators.has(u)), t.title, description, deadline);
+    notifyTaskCollaborators(updated, collaborators.filter(u => !oldCollaborators.has(u)), updated.title, description, deadline);
 
     alert('✅ Đã gán người nhận thành công!');
     closeCreateTaskModal();
@@ -5186,30 +5203,29 @@ function confirmCreateTask() {
   }
 
   if (taskModalMode === 'EDIT' && editingTaskId !== null) {
-    if (!canManageTasks(currentUser)) {
-      closeCreateTaskModal();
-      return alert('⛔ Bạn không có quyền sửa công việc!');
-    }
     const t = DB.tasks.find(x => x.id === editingTaskId);
     if (!t) { closeCreateTaskModal(); return; }
     const oldAssignedTo = t.assignedTo;
     const oldCollaborators = new Set(t.collaborators || []);
-    t.title = title;
-    t.description = description;
-    t.deadline = deadline;
-    t.assignedTo = assignedTo;
-    t.assignedToName = assignee ? assignee.name : assignedTo;
-    t.collaborators = collaborators;
-    t.history.push({ action: 'EDITED', by: currentUser.username, byName: currentUser.name, time: new Date().toLocaleString('vi-VN') });
-    syncStorage('tasks');
-    logSystemAction('TASK', 'EDIT_TASK', `Cập nhật công việc [${t.title}]`, 'SUCCESS', t.sourceCode || t.title);
+
+    let updated;
+    try {
+      const result = await callRecordAction('tasks', t.id, 'edit', { title, description, deadline, assignedTo, assignedToName: assignee ? assignee.name : assignedTo, collaborators });
+      updated = result.item;
+    } catch (err) {
+      closeCreateTaskModal();
+      return alert(`⛔ ${err.message}`);
+    }
+    const idx = DB.tasks.findIndex(x => x.id === t.id);
+    if (idx !== -1) DB.tasks[idx] = updated;
+    logSystemAction('TASK', 'EDIT_TASK', `Cập nhật công việc [${updated.title}]`, 'SUCCESS', updated.sourceCode || updated.title);
 
     if (assignedTo !== oldAssignedTo && assignee && assignee.email) {
-      notifyUsersByEmail('TASK', 'NOTIFY_TASK_ASSIGNED', t.sourceCode || t.title, [assignedTo],
-        `[VPDT] Bạn được giao công việc: ${t.title}`,
-        `${currentUser.name} đã cập nhật và gán cho bạn công việc "${t.title}"${description ? `: ${description}` : ''}.${deadline ? ` Hạn hoàn thành: ${deadline}.` : ''}`);
+      notifyUsersByEmail('TASK', 'NOTIFY_TASK_ASSIGNED', updated.sourceCode || updated.title, [assignedTo],
+        `[VPDT] Bạn được giao công việc: ${updated.title}`,
+        `${currentUser.name} đã cập nhật và gán cho bạn công việc "${updated.title}"${description ? `: ${description}` : ''}.${deadline ? ` Hạn hoàn thành: ${deadline}.` : ''}`);
     }
-    notifyTaskCollaborators(t, collaborators.filter(u => !oldCollaborators.has(u)), t.title, description, deadline);
+    notifyTaskCollaborators(updated, collaborators.filter(u => !oldCollaborators.has(u)), updated.title, description, deadline);
 
     alert('✅ Đã cập nhật công việc thành công!');
     closeCreateTaskModal();
@@ -5965,14 +5981,19 @@ function runTaskAction(id, action) {
   }
 }
 
-function deleteTask(id) {
+async function deleteTask(id) {
   if (!canDeleteTaskRecord(currentUser)) return alert('⛔ Bạn không có quyền xóa công việc!');
   const t = DB.tasks.find(x => x.id === id);
   if (!t) return;
   if (!confirm(`Bạn có chắc chắn muốn xóa công việc [${t.title}]? Hành động này không thể hoàn tác.`)) return;
 
+  try {
+    await callRecordAction('tasks', id, 'delete');
+  } catch (err) {
+    return alert(`⛔ ${err.message}`);
+  }
+
   DB.tasks = DB.tasks.filter(x => x.id !== id);
-  syncStorage('tasks');
   logSystemAction('TASK', 'DELETE_TASK', `Xóa công việc [${t.title}]`, 'SUCCESS', t.sourceCode || t.title);
   renderTasks();
 }
@@ -6213,6 +6234,7 @@ async function updateContractReq(e) {
     }
   }
 
+  const editPayload = { ...newValues };
   if (newFile) {
     let uploaded;
     try {
@@ -6221,20 +6243,21 @@ async function updateContractReq(e) {
       return alert(`⛔ Tải tệp lên thất bại: ${err.message}`);
     }
     changes.push(`Tệp Đính Kèm: "${c.fileName}" → "${uploaded.fileName}"`);
-    c.fileName = uploaded.fileName;
-    c.fileType = uploaded.fileType;
-    c.fileUrl = uploaded.fileUrl;
+    editPayload.fileName = uploaded.fileName;
+    editPayload.fileType = uploaded.fileType;
+    editPayload.fileUrl = uploaded.fileUrl;
   }
 
-  const endDateChanged = c.endDate !== endDate;
+  let updated;
+  try {
+    const result = await callRecordAction('contracts', c.id, 'edit', editPayload);
+    updated = result.item;
+  } catch (err) {
+    return alert(`⛔ ${err.message}`);
+  }
 
-  Object.assign(c, newValues);
-  c.lastEditedBy = currentUser.username;
-  c.lastEditedAt = new Date().toLocaleString('vi-VN');
-  // Đổi ngày hết hạn thì tính lại từ đầu các mốc đã nhắc, tránh bỏ sót/lặp mốc mới.
-  if (endDateChanged) c.notifiedThresholds = [];
-
-  syncStorage('contracts');
+  const idx = DB.contracts.findIndex(x => x.id === c.id);
+  if (idx !== -1) DB.contracts[idx] = updated;
   logSystemAction(
     'CONTRACT', 'EDIT_CONTRACT',
     changes.length ? `Cập nhật hồ sơ hợp đồng [${c.code}]: ${changes.join('; ')}` : `Cập nhật hồ sơ hợp đồng [${c.code}] (không có trường nào thay đổi)`,
@@ -7169,7 +7192,7 @@ function cancelEditMeetingMinutes() {
   document.getElementById('minutesCancelEditBtn').classList.add('hidden');
 }
 
-function updateMeetingMinutes(e) {
+async function updateMeetingMinutes(e) {
   const m = DB.meetingMinutes.find(x => x.id === editingMinutesId);
   if (!m) { cancelEditMeetingMinutes(); return; }
   if (!canEditMeetingMinutesRecord(currentUser, m)) {
@@ -7178,29 +7201,40 @@ function updateMeetingMinutes(e) {
   }
 
   const linkedMeetingRaw = document.getElementById('minutesLinkedMeeting').value;
-  m.linkedMeetingId = linkedMeetingRaw ? parseInt(linkedMeetingRaw, 10) : null;
-  m.title = document.getElementById('minutesTitle').value.trim();
-  m.time = document.getElementById('minutesTime').value;
-  m.location = document.getElementById('minutesLocation').value.trim();
-  m.chair = document.getElementById('minutesChair').value.trim();
-  m.secretary = document.getElementById('minutesSecretary').value.trim();
-  m.attendees = minutesAttendeesRows.filter(a => a.name.trim()).map(a => ({ ...a }));
-  m.content = document.getElementById('minutesContent').value.trim();
+  const attendees = minutesAttendeesRows.filter(a => a.name.trim()).map(a => ({ ...a }));
 
   // Giữ lại cờ taskCreated của các dòng chỉ đạo CŨ khớp nội dung+người thực hiện, để không tạo lại
   // Công việc đã có; dòng thực sự mới sẽ được autoCreateTasksFromDirectives() xử lý bên dưới.
   const oldDirectivesByKey = new Map((m.directives || []).map(d => [`${d.content}::${d.assignedToAttendeeId}`, d]));
-  m.directives = minutesDirectives.filter(d => d.content.trim()).map(d => {
+  const directives = minutesDirectives.filter(d => d.content.trim()).map(d => {
     const old = oldDirectivesByKey.get(`${d.content}::${d.assignedToAttendeeId}`);
     return { ...d, taskCreated: old ? !!old.taskCreated : false };
   });
 
-  m.lastEditedBy = currentUser.username;
-  m.lastEditedAt = new Date().toLocaleString('vi-VN');
+  const editPayload = {
+    linkedMeetingId: linkedMeetingRaw ? parseInt(linkedMeetingRaw, 10) : null,
+    title: document.getElementById('minutesTitle').value.trim(),
+    time: document.getElementById('minutesTime').value,
+    location: document.getElementById('minutesLocation').value.trim(),
+    chair: document.getElementById('minutesChair').value.trim(),
+    secretary: document.getElementById('minutesSecretary').value.trim(),
+    attendees, content: document.getElementById('minutesContent').value.trim(),
+    directives
+  };
 
-  const anyTaskCreated = autoCreateTasksFromDirectives(m);
-  syncStorage('meetingMinutes');
-  logSystemAction('MINUTES', 'EDIT_MINUTES', `Cập nhật biên bản họp [${m.code}]`, 'SUCCESS', m.code);
+  let updated;
+  try {
+    const result = await callRecordAction('minutes', m.id, 'edit', editPayload);
+    updated = result.item;
+  } catch (err) {
+    return alert(`⛔ ${err.message}`);
+  }
+
+  const idx = DB.meetingMinutes.findIndex(x => x.id === m.id);
+  if (idx !== -1) DB.meetingMinutes[idx] = updated;
+
+  const anyTaskCreated = autoCreateTasksFromDirectives(updated);
+  logSystemAction('MINUTES', 'EDIT_MINUTES', `Cập nhật biên bản họp [${updated.code}]`, 'SUCCESS', updated.code);
   alert('✅ Đã cập nhật biên bản họp thành công!' + (anyTaskCreated ? ' Các chỉ đạo mới đã gán người thực hiện đã được tự động chuyển thành Công việc.' : ''));
   cancelEditMeetingMinutes();
   renderMeetingMinutes();
@@ -7264,7 +7298,7 @@ function runMinutesAction(id, action) {
   }
 }
 
-function deleteMeetingMinutes(id) {
+async function deleteMeetingMinutes(id) {
   const m = DB.meetingMinutes.find(x => x.id === id);
   if (!m) return;
   if (!canDeleteMeetingMinutesRecord(currentUser, m)) {
@@ -7272,8 +7306,13 @@ function deleteMeetingMinutes(id) {
   }
   if (!confirm(`Bạn có chắc chắn muốn xóa biên bản họp [${m.code}]? Hành động này không thể hoàn tác.`)) return;
 
+  try {
+    await callRecordAction('minutes', id, 'delete');
+  } catch (err) {
+    return alert(`⛔ ${err.message}`);
+  }
+
   DB.meetingMinutes = DB.meetingMinutes.filter(x => x.id !== id);
-  syncStorage('meetingMinutes');
   logSystemAction('MINUTES', 'DELETE_MINUTES', `Xóa biên bản họp [${m.code} - ${m.title}]`, 'SUCCESS', m.code);
   renderMeetingMinutes();
 }
@@ -10280,24 +10319,27 @@ async function submitInternalPost(e) {
     }
   }
 
-  const newPost = {
-    id: Date.now(),
+  const postPayload = {
     type,
     code: `${INTERNAL_TYPE_PREFIX[type]}-${Date.now()}`,
     title, content,
-    dept: currentUser.dept,
     attachment,
     training, reward,
-    author: currentUser.username,
-    authorName: currentUser.name,
     createdAt: new Date().toLocaleString('vi-VN'),
     comments: [],
     likes: [],
     readBy: [currentUser.username]
   };
 
+  let newPost;
+  try {
+    const result = await callCreateAction('internalPosts', postPayload);
+    newPost = result.item;
+  } catch (err) {
+    return alert(`⛔ ${err.message}`);
+  }
+
   DB.internalPosts.unshift(newPost);
-  syncStorage('internalPosts');
   logSystemAction('INTERNAL', 'CREATE_INTERNAL_POST', `Đăng ${INTERNAL_TYPE_LABELS[type]} [${newPost.code} - ${title}]`, 'SUCCESS', newPost.code);
   alert('✅ Đã đăng bài thành công!');
   e.target.reset();
