@@ -45,7 +45,6 @@
         <button id="btnOfficeTab" onclick="switchTab('office')" class="hidden text-xs bg-teal-600 text-white px-2 py-1 rounded hover:bg-teal-700 font-semibold">🏢 Phê duyệt VP</button>
         <button id="btnReportsTab" onclick="switchTab('reports')" class="hidden text-xs bg-sky-600 text-white px-2 py-1 rounded hover:bg-sky-700 font-semibold">📊 Báo cáo</button>
         <button id="btnSystemTab" onclick="switchTab('system')" class="hidden text-xs bg-purple-600 text-white px-2 py-1 rounded hover:bg-purple-700 font-semibold">🛠️ Hệ Thống</button>
-        <button id="btnLogTab" onclick="switchTab('log')" class="hidden text-xs bg-stone-600 text-white px-2 py-1 rounded hover:bg-stone-700 font-semibold">📊 Log</button>
         <button onclick="logout()" class="text-xs text-red-500 underline py-1 hover:text-red-700">Đăng xuất</button>
       </div>
     </div>
@@ -1251,6 +1250,7 @@
       <button type="button" onclick="setSystemSubTab('ADMIN')" id="btnSystemSubAdmin" class="px-3 py-1.5 rounded text-xs font-bold bg-purple-700 text-white">⚙️ Quản Trị</button>
       <button type="button" onclick="setSystemSubTab('FORM')" id="btnSystemSubForm" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">📋 Biểu Mẫu</button>
       <button type="button" onclick="setSystemSubTab('WORKFLOW')" id="btnSystemSubWorkflow" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">🔄 Quy Trình & Phê Duyệt</button>
+      <button type="button" onclick="setSystemSubTab('LOG')" id="btnSystemSubLog" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">📊 Log</button>
     </div>
   </div>
 
@@ -1381,8 +1381,8 @@
           </div>
         </div>
 
-        <div id="permGroupLockNote" class="hidden bg-amber-50 border border-amber-300 text-amber-800 text-[11px] rounded p-2">
-          🔒 Người dùng này thuộc 1 nhóm phân quyền nên các quyền bên dưới bị khoá theo đúng quyền của nhóm. Muốn tuỳ chỉnh riêng, chọn lại "Không thuộc nhóm" ở trên.
+        <div id="permGroupInfoNote" class="hidden bg-blue-50 border border-blue-300 text-blue-800 text-[11px] rounded p-2">
+          ℹ️ Quyền bên dưới đã tự điền theo nhóm phân quyền đã chọn. Bạn vẫn tick thêm/bớt tuỳ ý để cấp riêng cho người này — sau này nhóm đổi quyền vẫn tự cập nhật cho người này, nhưng phần bạn đã tick thêm/bớt riêng sẽ được giữ nguyên.
         </div>
 
         <div id="permFieldsContainer" class="space-y-4">
@@ -1741,6 +1741,8 @@
         </div>
       </div>
 
+      <input id="filterUserKeyword" oninput="onUserFilterChange()" placeholder="🔍 Tìm theo Username, Họ tên, hoặc Phòng ban..." class="w-full border p-2 rounded text-xs mb-2">
+
       <div class="overflow-x-auto">
         <table class="w-full border-collapse border bg-white text-xs">
           <thead>
@@ -1756,6 +1758,7 @@
           <tbody id="userTableBody"></tbody>
         </table>
       </div>
+      <div id="paginationContainer_user"></div>
     </div>
   </div>
 
@@ -2976,6 +2979,27 @@ function defaultNewUserPerms() {
   };
 }
 
+// So sánh perms trên form với perms NỀN của 1 nhóm phân quyền -> trả về CHỈ những trường khác nhau
+// (giá trị đầy đủ tại trường đó, so sánh ở cấp 1, không so sánh sâu hơn bên trong từng trường) — dùng
+// làm "quyền tuỳ chỉnh riêng" (permOverrides) của người dùng, tách biệt khỏi phần thừa hưởng từ nhóm,
+// để khi nhóm đổi quyền sau này vẫn tự động cập nhật đúng cho người này mà không mất phần tuỳ chỉnh.
+function diffPerms(formPerms, basePerms) {
+  const overrides = {};
+  Object.keys(formPerms || {}).forEach(key => {
+    if (JSON.stringify(formPerms[key]) !== JSON.stringify(basePerms ? basePerms[key] : undefined)) {
+      overrides[key] = formPerms[key];
+    }
+  });
+  return overrides;
+}
+
+// Áp phần quyền tuỳ chỉnh riêng (overrides) lên trên nền quyền của nhóm -> ra quyền hiệu lực thực tế
+// (user.perms) — dùng cho MỌI hàm kiểm tra quyền trong ứng dụng, nên luôn phải tính lại giá trị này
+// mỗi khi lưu người dùng HOẶC lưu nhóm phân quyền (xem saveUser()/savePermGroup()).
+function mergePerms(basePerms, overrides) {
+  return { ...(basePerms || {}), ...(overrides || {}) };
+}
+
 // Chuyển đổi perms kiểu CŨ (cờ bật/tắt toàn công ty: submissionModule, contractModule, carModule,
 // meetingBook dạng boolean) sang mô hình MỚI theo phòng ban ({all, depts}) — không âm thầm bớt
 // quyền của user đang có: nếu cờ cũ = true thì phạm vi mới quy đổi thành "Tất cả phòng ban" (all:
@@ -3444,7 +3468,6 @@ function login() {
   document.getElementById('userPhoneInfo').innerText = `📞 ${user.phone || 'Chưa có SĐT'} | ✉️ ${user.email || 'Chưa có Email'}`;
 
   document.getElementById('btnSystemTab').classList.toggle('hidden', !user.perms.admin);
-  document.getElementById('btnLogTab').classList.toggle('hidden', !user.perms.admin);
   document.getElementById('btnReportsTab').classList.toggle('hidden', !canAccessReportsModule(user));
   document.getElementById('btnDocTab').classList.toggle('hidden', !canAccessDocModule(user));
 
@@ -3539,7 +3562,7 @@ function switchTab(tabName) {
   document.getElementById('formSection').classList.toggle('hidden', !(tabName === 'system' && activeSystemSubTab === 'FORM'));
   document.getElementById('adminSection').classList.toggle('hidden', !(tabName === 'system' && activeSystemSubTab === 'ADMIN'));
   document.getElementById('workflowSection').classList.toggle('hidden', !(tabName === 'system' && activeSystemSubTab === 'WORKFLOW'));
-  document.getElementById('logSection').classList.toggle('hidden', tabName !== 'log');
+  document.getElementById('logSection').classList.toggle('hidden', !(tabName === 'system' && activeSystemSubTab === 'LOG'));
   document.getElementById('reportsSection').classList.toggle('hidden', tabName !== 'reports');
 
   populateDropdowns();
@@ -3572,7 +3595,6 @@ function switchTab(tabName) {
     setOfficeSubTab(targetSub);
   }
   if (tabName === 'system' && currentUser.perms.admin) { setSystemSubTab(activeSystemSubTab); }
-  if (tabName === 'log' && currentUser.perms.admin) { renderSystemLogs(); }
   if (tabName === 'reports' && canAccessReportsModule(currentUser)) { renderReports(); }
 }
 
@@ -7846,18 +7868,21 @@ function setSystemSubTab(subTab) {
   document.getElementById('formSection').classList.toggle('hidden', subTab !== 'FORM');
   document.getElementById('adminSection').classList.toggle('hidden', subTab !== 'ADMIN');
   document.getElementById('workflowSection').classList.toggle('hidden', subTab !== 'WORKFLOW');
+  document.getElementById('logSection').classList.toggle('hidden', subTab !== 'LOG');
 
   const activeCls = 'px-3 py-1.5 rounded text-xs font-bold bg-purple-700 text-white';
   const inactiveCls = 'px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700';
   document.getElementById('btnSystemSubAdmin').className = subTab === 'ADMIN' ? activeCls : inactiveCls;
   document.getElementById('btnSystemSubForm').className = subTab === 'FORM' ? activeCls : inactiveCls;
   document.getElementById('btnSystemSubWorkflow').className = subTab === 'WORKFLOW' ? activeCls : inactiveCls;
+  document.getElementById('btnSystemSubLog').className = subTab === 'LOG' ? activeCls : inactiveCls;
 
   if (subTab === 'ADMIN') {
     renderDeptList(); renderCatList(); renderDeptCheckboxes(); renderModuleAccessCheckboxes(); renderUsers(); loadEmailConfigToForm(); renderPermGroupsList();
   }
   if (subTab === 'FORM') { switchFormTab(activeFormTab); }
   if (subTab === 'WORKFLOW') { renderWorkflowTab(); }
+  if (subTab === 'LOG') { renderSystemLogs(); }
 }
 
 // ==========================================
@@ -8717,12 +8742,13 @@ function toggleUserPermFormMode(mode) {
     document.getElementById(id).required = (mode === 'USER');
   });
   document.getElementById('btnSavePermForm').innerText = mode === 'GROUP' ? 'Lưu Nhóm Phân Quyền' : 'Lưu Người Dùng & Phân Quyền';
-  if (mode === 'GROUP') setPermFormLockedByGroup(false);
+  if (mode === 'GROUP') updatePermGroupNote(false);
 }
 
-function setPermFormLockedByGroup(locked) {
-  document.querySelectorAll('#permFieldsContainer input').forEach(el => { el.disabled = locked; });
-  document.getElementById('permGroupLockNote').classList.toggle('hidden', !locked);
+// Chỉ hiện/ẩn dòng ghi chú — khối checkbox KHÔNG còn bị khoá (disabled) khi chọn nhóm nữa, cho phép
+// tick thêm/bớt tuỳ chỉnh riêng trên nền quyền của nhóm (xem diffPerms()/mergePerms() + saveUser()).
+function updatePermGroupNote(hasGroup) {
+  document.getElementById('permGroupInfoNote').classList.toggle('hidden', !hasGroup);
 }
 
 function onUserPermGroupChange() {
@@ -8730,9 +8756,9 @@ function onUserPermGroupChange() {
   if (groupId) {
     const group = DB.permGroups.find(g => g.id === groupId);
     if (group) populatePermsForm(group.perms);
-    setPermFormLockedByGroup(true);
+    updatePermGroupNote(true);
   } else {
-    setPermFormLockedByGroup(false);
+    updatePermGroupNote(false);
   }
 }
 
@@ -8811,10 +8837,12 @@ function savePermGroup(e) {
     DB.permGroups.push(group);
   }
 
-  // Nhóm là "vai trò" (role) — sửa quyền của nhóm phải cập nhật NGAY cho mọi thành viên đang gán.
+  // Nhóm là "vai trò" (role) — sửa quyền của nhóm phải cập nhật NGAY cho mọi thành viên đang gán,
+  // NHƯNG vẫn giữ nguyên phần quyền tuỳ chỉnh riêng (permOverrides) từng người đã được cấp thêm/bớt
+  // trên nền quyền của nhóm (xem diffPerms()/mergePerms() + saveUser()).
   let membersUpdated = 0;
   DB.users.forEach(u => {
-    if (u.groupId === group.id) { u.perms = { ...perms }; membersUpdated++; }
+    if (u.groupId === group.id) { u.perms = mergePerms(perms, u.permOverrides); membersUpdated++; }
   });
 
   syncStorage('permGroups');
@@ -8865,10 +8893,14 @@ function saveUser(e) {
   const dept = document.getElementById('uDept').value;
   const groupId = document.getElementById('uPermGroup').value || null;
 
-  // Nếu gán vào nhóm phân quyền: quyền của user = quyền của nhóm (kế thừa hoàn toàn), khối checkbox
-  // trên form bị khoá (readonly) khi đang ở chế độ này nên không đọc từ form nữa mà lấy thẳng từ nhóm.
+  // Nếu gán vào nhóm phân quyền: khối checkbox trên form KHÔNG còn bị khoá, cho phép tick thêm/bớt
+  // tuỳ chỉnh riêng trên nền quyền của nhóm. Chỉ lưu lại PHẦN KHÁC BIỆT so với nhóm (permOverrides),
+  // không lưu y nguyên toàn bộ như trước — nhờ vậy khi nhóm đổi quyền sau này (savePermGroup()) vẫn
+  // tự động cập nhật đúng cho người này mà không mất phần tuỳ chỉnh riêng.
   const group = groupId ? DB.permGroups.find(g => g.id === groupId) : null;
-  const perms = group ? { ...group.perms } : collectPermsFromForm();
+  const formPerms = collectPermsFromForm();
+  const permOverrides = group ? diffPerms(formPerms, group.perms) : null;
+  const perms = group ? mergePerms(group.perms, permOverrides) : formPerms;
 
   if (editId) {
     const user = DB.users.find(u => u.id === parseInt(editId, 10));
@@ -8881,12 +8913,13 @@ function saveUser(e) {
       user.dept = dept;
       user.perms = perms;
       user.groupId = groupId;
+      user.permOverrides = permOverrides;
     }
   } else {
     if (DB.users.some(u => u.username === username)) return alert('Tên đăng nhập đã tồn tại!');
     DB.users.push({
       id: Date.now(),
-      username, pass, name, email, phone, dept, perms, groupId
+      username, pass, name, email, phone, dept, perms, groupId, permOverrides
     });
   }
 
@@ -8906,7 +8939,7 @@ function resetUserForm() {
   document.getElementById('uEmail').value = '';
   document.getElementById('uPhone').value = '';
   document.getElementById('uPermGroup').value = '';
-  setPermFormLockedByGroup(false);
+  updatePermGroupNote(false);
   // CẬP NHẬT: mặc định AN TOÀN cho user mới — không bật sẵn quyền xem/tạo liên phòng ban nào ở
   // module nào cả (trước đây hầu hết module nghiệp vụ được bật sẵn = toàn công ty, xem phân tích ở
   // defaultNewUserPerms()). Mỗi người vẫn luôn thao tác được trong phòng ban của chính mình.
@@ -8972,7 +9005,7 @@ function editUser(id) {
   // form luôn đọc đúng cấu trúc mới — initDatabase() đã tự động lưu lại bản di trú nên trường hợp
   // này thực tế chỉ là lớp phòng vệ bổ sung.
   populatePermsForm(user.perms);
-  setPermFormLockedByGroup(!!user.groupId);
+  updatePermGroupNote(!!user.groupId);
 }
 
 function deleteUser(id) {
@@ -9004,12 +9037,30 @@ function summarizeUserPerms(perms) {
   return parts.length ? parts.join(', ') : '<span class="text-gray-400 italic">Chưa cấp quyền module nào</span>';
 }
 
+function onUserFilterChange() {
+  resetListPage('user');
+  renderUsers();
+}
+
 function renderUsers() {
   const tbody = document.getElementById('userTableBody');
   if (!tbody) return;
 
-  tbody.innerHTML = DB.users.map(u => {
+  const keyword = (document.getElementById('filterUserKeyword')?.value || '').toLowerCase().trim();
+  const filtered = DB.users.filter(u => {
+    if (!keyword) return true;
+    return (u.username || '').toLowerCase().includes(keyword)
+      || (u.name || '').toLowerCase().includes(keyword)
+      || (u.dept || '').toLowerCase().includes(keyword);
+  });
+
+  const paginationEl = document.getElementById('paginationContainer_user');
+  if (paginationEl) paginationEl.innerHTML = buildPaginationBoxHTML('user', 'renderUsers');
+  const pageUsers = paginateList('user', filtered, 'renderUsers', 'người dùng');
+
+  tbody.innerHTML = pageUsers.map(u => {
     const group = u.groupId ? DB.permGroups.find(g => g.id === u.groupId) : null;
+    const hasOverrides = group && u.permOverrides && Object.keys(u.permOverrides).length > 0;
     return `
     <tr class="hover:bg-gray-50 border-b">
       <td class="border p-2 font-bold font-mono text-purple-700">${escapeHtml(u.username)}</td>
@@ -9017,7 +9068,9 @@ function renderUsers() {
       <td class="border p-2 text-xs">✉️ ${escapeHtml(u.email || 'N/A')}<br>📞 ${escapeHtml(u.phone || 'N/A')}</td>
       <td class="border p-2">${escapeHtml(u.dept)}</td>
       <td class="border p-2 text-xs">
-        ${group ? `<span class="inline-block bg-purple-100 text-purple-700 font-bold px-1.5 py-0.5 rounded mb-1">🗂️ ${escapeHtml(group.name)}</span><br>` : ''}
+        ${group ? `<span class="inline-block bg-purple-100 text-purple-700 font-bold px-1.5 py-0.5 rounded mb-1">🗂️ ${escapeHtml(group.name)}</span>` : ''}
+        ${hasOverrides ? `<span class="inline-block bg-blue-100 text-blue-700 font-bold px-1.5 py-0.5 rounded mb-1 ml-1">+ tuỳ chỉnh riêng</span>` : ''}
+        ${group ? '<br>' : ''}
         ${summarizeUserPerms(u.perms)}
       </td>
       <td class="border p-2 text-center space-x-1">
