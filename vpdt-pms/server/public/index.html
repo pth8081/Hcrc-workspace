@@ -5297,27 +5297,21 @@ function createTaskFromMinutesDirective(minutesId, directiveIdx) {
   });
 }
 
-function updateTaskStatus(id, newStatus, note) {
+async function updateTaskStatus(id, newStatus, note) {
   const t = DB.tasks.find(x => x.id === id);
   if (!t) return;
-  if (t.assignedTo !== currentUser.username && t.assignedBy !== currentUser.username && !currentUser.perms?.admin) {
-    return alert('⛔ Bạn không có quyền cập nhật công việc này!');
+
+  let updated;
+  try {
+    const result = await callRecordAction('tasks', id, 'status', { newStatus, note });
+    updated = result.item;
+  } catch (err) {
+    return alert(`⛔ ${err.message}`);
   }
-  // Không cho đóng công việc (Hoàn thành) khi đang có 1 yêu cầu gia hạn hoặc yêu cầu huỷ chờ duyệt —
-  // phải xử lý (Đồng ý/Từ chối) yêu cầu đó trước, tránh vô lý "duyệt gia hạn/huỷ" cho việc đã kết thúc.
-  if (newStatus === 'DONE' && t.pendingExtension) {
-    return alert('⛔ Công việc đang có 1 yêu cầu gia hạn chờ duyệt. Vui lòng Đồng ý hoặc Từ chối yêu cầu đó trước khi đóng công việc.');
-  }
-  if (newStatus === 'DONE' && t.pendingCancellation) {
-    return alert('⛔ Công việc đang có 1 yêu cầu huỷ chờ duyệt. Vui lòng Đồng ý hoặc Từ chối yêu cầu đó trước khi đóng công việc.');
-  }
-  t.status = newStatus;
-  t.history.push({
-    action: `STATUS_${newStatus}`, by: currentUser.username, byName: currentUser.name,
-    time: new Date().toLocaleString('vi-VN'), note: note || ''
-  });
-  syncStorage('tasks');
-  logSystemAction('TASK', 'UPDATE_TASK_STATUS', `Cập nhật công việc [${t.title}] sang trạng thái ${newStatus}${note ? ` — Ghi chú: ${note}` : ''}`, 'SUCCESS', t.sourceCode || t.title);
+
+  const idx = DB.tasks.findIndex(x => x.id === id);
+  if (idx !== -1) DB.tasks[idx] = updated;
+  logSystemAction('TASK', 'UPDATE_TASK_STATUS', `Cập nhật công việc [${updated.title}] sang trạng thái ${newStatus}${note ? ` — Ghi chú: ${note}` : ''}`, 'SUCCESS', updated.sourceCode || updated.title);
   renderTasks();
 }
 
@@ -5329,22 +5323,26 @@ function updateTaskStatus(id, newStatus, note) {
 // khớp tài khoản nào) không tự đăng nhập bấm được — người giao việc/admin xác nhận thay, thao tác từ
 // modal Xem chi tiết (xem acceptTaskOnBehalf() / confirmCollaboratorParticipationOnBehalf()).
 // ==========================================
-function acceptTask(id) {
+async function acceptTask(id) {
   const t = DB.tasks.find(x => x.id === id);
   if (!t) return;
-  if (t.assignedTo !== currentUser.username) return alert('⛔ Chỉ người được giao việc mới có thể Nhận việc!');
-  if (t.status !== 'TODO') return alert('⛔ Công việc này đã được nhận/xử lý rồi.');
 
-  t.status = 'DOING';
-  t.startedAt = new Date().toLocaleString('vi-VN');
-  t.history.push({ action: 'ACCEPTED', by: currentUser.username, byName: currentUser.name, time: t.startedAt, note: 'Đã nhận việc và bắt đầu thực hiện' });
-  syncStorage('tasks');
-  logSystemAction('TASK', 'ACCEPT_TASK', `${currentUser.name} đã nhận việc [${t.title}] và bắt đầu thực hiện`, 'SUCCESS', t.sourceCode || t.title);
+  let updated;
+  try {
+    const result = await callRecordAction('tasks', id, 'accept', {});
+    updated = result.item;
+  } catch (err) {
+    return alert(`⛔ ${err.message}`);
+  }
 
-  if (t.assignedBy) {
-    notifyUsersByEmail('TASK', 'NOTIFY_TASK_ACCEPTED', t.sourceCode || t.title, [t.assignedBy],
-      `[VPDT] ${currentUser.name} đã nhận việc: ${t.title}`,
-      `${currentUser.name} đã nhận và bắt đầu thực hiện công việc "${t.title}" lúc ${t.startedAt}.`);
+  const idx = DB.tasks.findIndex(x => x.id === id);
+  if (idx !== -1) DB.tasks[idx] = updated;
+  logSystemAction('TASK', 'ACCEPT_TASK', `${currentUser.name} đã nhận việc [${updated.title}] và bắt đầu thực hiện`, 'SUCCESS', updated.sourceCode || updated.title);
+
+  if (updated.assignedBy) {
+    notifyUsersByEmail('TASK', 'NOTIFY_TASK_ACCEPTED', updated.sourceCode || updated.title, [updated.assignedBy],
+      `[VPDT] ${currentUser.name} đã nhận việc: ${updated.title}`,
+      `${currentUser.name} đã nhận và bắt đầu thực hiện công việc "${updated.title}" lúc ${updated.startedAt}.`);
   }
 
   alert('✅ Đã xác nhận nhận việc, chúc bạn hoàn thành tốt công việc!');
@@ -5353,47 +5351,48 @@ function acceptTask(id) {
 
 // Người giao việc/admin xác nhận NHẬN VIỆC thay cho Người thực hiện ngoài hệ thống (không có tài
 // khoản để tự đăng nhập bấm) — dùng khi đã xác nhận qua kênh khác (điện thoại, trực tiếp...).
-function acceptTaskOnBehalf(id) {
+async function acceptTaskOnBehalf(id) {
   const t = DB.tasks.find(x => x.id === id);
   if (!t) return;
-  if (!t.externalAssignee) return alert('⛔ Công việc này có người thực hiện là tài khoản hệ thống, họ cần tự bấm Nhận việc.');
-  if (!(currentUser.perms?.admin || t.assignedBy === currentUser.username)) {
-    return alert('⛔ Chỉ người giao việc mới có thể xác nhận thay!');
+
+  let updated;
+  try {
+    const result = await callRecordAction('tasks', id, 'accept', { onBehalf: true });
+    updated = result.item;
+  } catch (err) {
+    return alert(`⛔ ${err.message}`);
   }
-  if (t.status !== 'TODO') return alert('⛔ Công việc này đã được nhận/xử lý rồi.');
 
-  t.status = 'DOING';
-  t.startedAt = new Date().toLocaleString('vi-VN');
-  t.history.push({ action: 'ACCEPTED', by: currentUser.username, byName: currentUser.name, time: t.startedAt, note: `Xác nhận thay cho ${t.externalAssignee.name} (ngoài hệ thống)` });
-  syncStorage('tasks');
-  logSystemAction('TASK', 'ACCEPT_TASK', `${currentUser.name} xác nhận nhận việc thay cho ${t.externalAssignee.name} (ngoài hệ thống) [${t.title}]`, 'SUCCESS', t.sourceCode || t.title);
+  const idx = DB.tasks.findIndex(x => x.id === id);
+  if (idx !== -1) DB.tasks[idx] = updated;
+  logSystemAction('TASK', 'ACCEPT_TASK', `${currentUser.name} xác nhận nhận việc thay cho ${updated.externalAssignee.name} (ngoài hệ thống) [${updated.title}]`, 'SUCCESS', updated.sourceCode || updated.title);
 
-  alert(`✅ Đã xác nhận nhận việc thay cho ${t.externalAssignee.name}.`);
+  alert(`✅ Đã xác nhận nhận việc thay cho ${updated.externalAssignee.name}.`);
   renderTasks();
   const detailModal = document.getElementById('taskDetailModal');
   if (detailModal && !detailModal.classList.contains('hidden')) openTaskDetailModal(id);
 }
 
-function confirmCollaboratorParticipation(id) {
+async function confirmCollaboratorParticipation(id) {
   const t = DB.tasks.find(x => x.id === id);
   if (!t) return;
-  if (!(t.collaborators || []).includes(currentUser.username)) {
-    return alert('⛔ Bạn không phải người phối hợp của công việc này!');
-  }
-  if ((t.collaboratorAccepts || []).some(c => c.username === currentUser.username)) {
-    return alert('Bạn đã xác nhận tham gia công việc này rồi.');
+
+  let updated;
+  try {
+    const result = await callRecordAction('tasks', id, 'confirm-collaborator', {});
+    updated = result.item;
+  } catch (err) {
+    return alert(`⛔ ${err.message}`);
   }
 
-  t.collaboratorAccepts = t.collaboratorAccepts || [];
-  t.collaboratorAccepts.push({ username: currentUser.username, name: currentUser.name, acceptedAt: new Date().toLocaleString('vi-VN') });
-  t.history.push({ action: 'COLLABORATOR_CONFIRMED', by: currentUser.username, byName: currentUser.name, time: new Date().toLocaleString('vi-VN'), note: 'Xác nhận tham gia phối hợp' });
-  syncStorage('tasks');
-  logSystemAction('TASK', 'CONFIRM_COLLABORATION', `${currentUser.name} xác nhận tham gia phối hợp công việc [${t.title}]`, 'SUCCESS', t.sourceCode || t.title);
+  const idx = DB.tasks.findIndex(x => x.id === id);
+  if (idx !== -1) DB.tasks[idx] = updated;
+  logSystemAction('TASK', 'CONFIRM_COLLABORATION', `${currentUser.name} xác nhận tham gia phối hợp công việc [${updated.title}]`, 'SUCCESS', updated.sourceCode || updated.title);
 
-  if (t.assignedBy) {
-    notifyUsersByEmail('TASK', 'NOTIFY_COLLABORATOR_CONFIRMED', t.sourceCode || t.title, [t.assignedBy],
-      `[VPDT] ${currentUser.name} đã xác nhận tham gia phối hợp: ${t.title}`,
-      `${currentUser.name} đã xác nhận tham gia phối hợp thực hiện công việc "${t.title}".`);
+  if (updated.assignedBy) {
+    notifyUsersByEmail('TASK', 'NOTIFY_COLLABORATOR_CONFIRMED', updated.sourceCode || updated.title, [updated.assignedBy],
+      `[VPDT] ${currentUser.name} đã xác nhận tham gia phối hợp: ${updated.title}`,
+      `${currentUser.name} đã xác nhận tham gia phối hợp thực hiện công việc "${updated.title}".`);
   }
 
   alert('✅ Đã xác nhận tham gia phối hợp!');
@@ -5402,21 +5401,21 @@ function confirmCollaboratorParticipation(id) {
 
 // Người giao việc/admin xác nhận tham gia THAY cho 1 người phối hợp ngoài hệ thống (theo tên, vì họ
 // không có username) — mở từ modal Xem chi tiết.
-function confirmCollaboratorParticipationOnBehalf(id, externalName) {
+async function confirmCollaboratorParticipationOnBehalf(id, externalName) {
   const t = DB.tasks.find(x => x.id === id);
   if (!t) return;
-  if (!(currentUser.perms?.admin || t.assignedBy === currentUser.username)) {
-    return alert('⛔ Chỉ người giao việc mới có thể xác nhận thay!');
-  }
-  if ((t.collaboratorAccepts || []).some(c => !c.username && c.name === externalName)) {
-    return alert('Người này đã được xác nhận tham gia rồi.');
+
+  let updated;
+  try {
+    const result = await callRecordAction('tasks', id, 'confirm-collaborator', { externalName });
+    updated = result.item;
+  } catch (err) {
+    return alert(`⛔ ${err.message}`);
   }
 
-  t.collaboratorAccepts = t.collaboratorAccepts || [];
-  t.collaboratorAccepts.push({ username: null, name: externalName, acceptedAt: new Date().toLocaleString('vi-VN') });
-  t.history.push({ action: 'COLLABORATOR_CONFIRMED', by: currentUser.username, byName: currentUser.name, time: new Date().toLocaleString('vi-VN'), note: `Xác nhận tham gia thay cho ${externalName} (ngoài hệ thống)` });
-  syncStorage('tasks');
-  logSystemAction('TASK', 'CONFIRM_COLLABORATION', `${currentUser.name} xác nhận tham gia phối hợp thay cho ${externalName} (ngoài hệ thống) [${t.title}]`, 'SUCCESS', t.sourceCode || t.title);
+  const idx = DB.tasks.findIndex(x => x.id === id);
+  if (idx !== -1) DB.tasks[idx] = updated;
+  logSystemAction('TASK', 'CONFIRM_COLLABORATION', `${currentUser.name} xác nhận tham gia phối hợp thay cho ${externalName} (ngoài hệ thống) [${updated.title}]`, 'SUCCESS', updated.sourceCode || updated.title);
 
   alert(`✅ Đã xác nhận tham gia thay cho ${externalName}.`);
   renderTasks();
@@ -5494,9 +5493,10 @@ function closeExtensionRequestModal() {
   requestingExtensionTaskId = null;
 }
 
-function confirmRequestExtension() {
+async function confirmRequestExtension() {
   if (requestingExtensionTaskId === null) return;
-  const t = DB.tasks.find(x => x.id === requestingExtensionTaskId);
+  const taskId = requestingExtensionTaskId;
+  const t = DB.tasks.find(x => x.id === taskId);
   if (!t) return closeExtensionRequestModal();
 
   const newDeadline = document.getElementById('extReqNewDeadline').value;
@@ -5504,19 +5504,22 @@ function confirmRequestExtension() {
   if (!newDeadline) return alert('Vui lòng chọn hạn hoàn thành mới!');
   if (!reason) return alert('Vui lòng nhập lý do xin gia hạn!');
 
-  t.pendingExtension = {
-    newDeadline, reason,
-    requestedBy: currentUser.username, requestedByName: currentUser.name,
-    requestedAt: new Date().toLocaleString('vi-VN')
-  };
-  t.history.push({ action: 'EXTENSION_REQUESTED', by: currentUser.username, byName: currentUser.name, time: new Date().toLocaleString('vi-VN'), note: `Xin gia hạn tới ${newDeadline}. Lý do: ${reason}` });
-  syncStorage('tasks');
-  logSystemAction('TASK', 'EXTENSION_REQUESTED', `${currentUser.name} xin gia hạn công việc [${t.title}] tới ${newDeadline}. Lý do: ${reason}`, 'SUCCESS', t.sourceCode || t.title);
+  let updated;
+  try {
+    const result = await callRecordAction('tasks', taskId, 'request-extension', { newDeadline, reason });
+    updated = result.item;
+  } catch (err) {
+    return alert(`⛔ ${err.message}`);
+  }
 
-  if (t.assignedBy) {
-    notifyUsersByEmail('TASK', 'NOTIFY_EXTENSION_REQUESTED', t.sourceCode || t.title, [t.assignedBy],
-      `[VPDT] Yêu cầu gia hạn công việc: ${t.title}`,
-      `${currentUser.name} xin gia hạn công việc "${t.title}" tới ${newDeadline}. Lý do: ${reason}`);
+  const idx = DB.tasks.findIndex(x => x.id === taskId);
+  if (idx !== -1) DB.tasks[idx] = updated;
+  logSystemAction('TASK', 'EXTENSION_REQUESTED', `${currentUser.name} xin gia hạn công việc [${updated.title}] tới ${newDeadline}. Lý do: ${reason}`, 'SUCCESS', updated.sourceCode || updated.title);
+
+  if (updated.assignedBy) {
+    notifyUsersByEmail('TASK', 'NOTIFY_EXTENSION_REQUESTED', updated.sourceCode || updated.title, [updated.assignedBy],
+      `[VPDT] Yêu cầu gia hạn công việc: ${updated.title}`,
+      `${currentUser.name} xin gia hạn công việc "${updated.title}" tới ${newDeadline}. Lý do: ${reason}`);
   }
 
   alert('✅ Đã gửi yêu cầu gia hạn, chờ người giao việc phê duyệt.');
@@ -5549,29 +5552,29 @@ function closeExtensionApproveModal() {
   requestingExtensionTaskId = null;
 }
 
-function approveExtension() {
+async function approveExtension() {
   if (requestingExtensionTaskId === null) return;
-  const t = DB.tasks.find(x => x.id === requestingExtensionTaskId);
+  const taskId = requestingExtensionTaskId;
+  const t = DB.tasks.find(x => x.id === taskId);
   if (!t || !t.pendingExtension) return closeExtensionApproveModal();
-  if (t.assignedBy !== currentUser.username && !currentUser.perms?.admin) {
+
+  let updated;
+  try {
+    const result = await callRecordAction('tasks', taskId, 'approve-extension', {});
+    updated = result.item;
+  } catch (err) {
     closeExtensionApproveModal();
-    return alert('⛔ Chỉ người giao việc mới có thể duyệt yêu cầu gia hạn!');
+    return alert(`⛔ ${err.message}`);
   }
 
-  const p = t.pendingExtension;
-  const oldDeadline = t.deadline;
-  t.deadline = p.newDeadline;
-  t.extensionCount = (t.extensionCount || 0) + 1;
-  t.lateCount = (t.lateCount || 0) + 1;
-  t.pendingExtension = null;
-  t.history.push({ action: 'EXTENSION_APPROVED', by: currentUser.username, byName: currentUser.name, time: new Date().toLocaleString('vi-VN'), note: `Đồng ý gia hạn từ ${oldDeadline || 'chưa đặt'} sang ${p.newDeadline}. Lý do: ${p.reason}` });
-  syncStorage('tasks');
-  logSystemAction('TASK', 'EXTENSION_APPROVED', `${currentUser.name} đồng ý gia hạn công việc [${t.title}] sang ${p.newDeadline} (lần gia hạn thứ ${t.extensionCount})`, 'SUCCESS', t.sourceCode || t.title);
+  const idx = DB.tasks.findIndex(x => x.id === taskId);
+  if (idx !== -1) DB.tasks[idx] = updated;
+  logSystemAction('TASK', 'EXTENSION_APPROVED', `${currentUser.name} đồng ý gia hạn công việc [${updated.title}] sang ${updated.deadline} (lần gia hạn thứ ${updated.extensionCount})`, 'SUCCESS', updated.sourceCode || updated.title);
 
-  if (t.assignedTo) {
-    notifyUsersByEmail('TASK', 'NOTIFY_EXTENSION_APPROVED', t.sourceCode || t.title, [t.assignedTo],
-      `[VPDT] Yêu cầu gia hạn công việc đã được duyệt: ${t.title}`,
-      `${currentUser.name} đã đồng ý gia hạn công việc "${t.title}" tới hạn mới ${p.newDeadline}.`);
+  if (updated.assignedTo) {
+    notifyUsersByEmail('TASK', 'NOTIFY_EXTENSION_APPROVED', updated.sourceCode || updated.title, [updated.assignedTo],
+      `[VPDT] Yêu cầu gia hạn công việc đã được duyệt: ${updated.title}`,
+      `${currentUser.name} đã đồng ý gia hạn công việc "${updated.title}" tới hạn mới ${updated.deadline}.`);
   }
 
   alert('✅ Đã duyệt gia hạn thành công!');
@@ -5579,25 +5582,30 @@ function approveExtension() {
   renderTasks();
 }
 
-function rejectExtension() {
+async function rejectExtension() {
   if (requestingExtensionTaskId === null) return;
-  const t = DB.tasks.find(x => x.id === requestingExtensionTaskId);
+  const taskId = requestingExtensionTaskId;
+  const t = DB.tasks.find(x => x.id === taskId);
   if (!t || !t.pendingExtension) return closeExtensionApproveModal();
-  if (t.assignedBy !== currentUser.username && !currentUser.perms?.admin) {
+  const oldDeadline = t.deadline;
+
+  let updated;
+  try {
+    const result = await callRecordAction('tasks', taskId, 'reject-extension', {});
+    updated = result.item;
+  } catch (err) {
     closeExtensionApproveModal();
-    return alert('⛔ Chỉ người giao việc mới có thể duyệt yêu cầu gia hạn!');
+    return alert(`⛔ ${err.message}`);
   }
 
-  const p = t.pendingExtension;
-  t.pendingExtension = null;
-  t.history.push({ action: 'EXTENSION_REJECTED', by: currentUser.username, byName: currentUser.name, time: new Date().toLocaleString('vi-VN'), note: `Từ chối yêu cầu gia hạn tới ${p.newDeadline}` });
-  syncStorage('tasks');
-  logSystemAction('TASK', 'EXTENSION_REJECTED', `${currentUser.name} từ chối yêu cầu gia hạn công việc [${t.title}]`, 'SUCCESS', t.sourceCode || t.title);
+  const idx = DB.tasks.findIndex(x => x.id === taskId);
+  if (idx !== -1) DB.tasks[idx] = updated;
+  logSystemAction('TASK', 'EXTENSION_REJECTED', `${currentUser.name} từ chối yêu cầu gia hạn công việc [${updated.title}]`, 'SUCCESS', updated.sourceCode || updated.title);
 
-  if (t.assignedTo) {
-    notifyUsersByEmail('TASK', 'NOTIFY_EXTENSION_REJECTED', t.sourceCode || t.title, [t.assignedTo],
-      `[VPDT] Yêu cầu gia hạn công việc đã bị từ chối: ${t.title}`,
-      `${currentUser.name} đã từ chối yêu cầu gia hạn công việc "${t.title}". Hạn hoàn thành giữ nguyên: ${t.deadline || 'Chưa đặt'}.`);
+  if (updated.assignedTo) {
+    notifyUsersByEmail('TASK', 'NOTIFY_EXTENSION_REJECTED', updated.sourceCode || updated.title, [updated.assignedTo],
+      `[VPDT] Yêu cầu gia hạn công việc đã bị từ chối: ${updated.title}`,
+      `${currentUser.name} đã từ chối yêu cầu gia hạn công việc "${updated.title}". Hạn hoàn thành giữ nguyên: ${oldDeadline || 'Chưa đặt'}.`);
   }
 
   alert('Đã từ chối yêu cầu gia hạn.');
@@ -5643,39 +5651,46 @@ function closeCancelTaskModal() {
   cancellingTaskId = null;
 }
 
-function confirmCancelTask() {
+async function confirmCancelTask() {
   if (cancellingTaskId === null) return;
-  const t = DB.tasks.find(x => x.id === cancellingTaskId);
+  const taskId = cancellingTaskId;
+  const t = DB.tasks.find(x => x.id === taskId);
   if (!t) return closeCancelTaskModal();
 
   const reason = document.getElementById('cancelReasonInput').value.trim();
   if (!reason) return alert('Vui lòng nhập lý do huỷ!');
 
-  const isAssignerOrAdmin = t.assignedBy === currentUser.username || currentUser.perms?.admin;
+  let updated;
+  try {
+    const result = await callRecordAction('tasks', taskId, 'cancel', { reason });
+    updated = result.item;
+  } catch (err) {
+    closeCancelTaskModal();
+    return alert(`⛔ ${err.message}`);
+  }
 
-  if (isAssignerOrAdmin) {
-    t.status = 'CANCELLED';
-    t.history.push({ action: 'CANCELLED', by: currentUser.username, byName: currentUser.name, time: new Date().toLocaleString('vi-VN'), note: reason });
-    syncStorage('tasks');
-    logSystemAction('TASK', 'CANCEL_TASK', `${currentUser.name} đã huỷ công việc [${t.title}]. Lý do: ${reason}`, 'SUCCESS', t.sourceCode || t.title);
+  const idx = DB.tasks.findIndex(x => x.id === taskId);
+  if (idx !== -1) DB.tasks[idx] = updated;
 
-    const notifyTargets = [t.assignedTo, ...(t.collaborators || [])].filter(Boolean);
+  // Server trả về bản ghi đã cập nhật — huỷ ngay lập tức (status='CANCELLED') hay chỉ gửi yêu cầu chờ
+  // duyệt (pendingCancellation) tuỳ vào việc người gọi có phải người giao việc/admin hay không.
+  if (updated.status === 'CANCELLED') {
+    logSystemAction('TASK', 'CANCEL_TASK', `${currentUser.name} đã huỷ công việc [${updated.title}]. Lý do: ${reason}`, 'SUCCESS', updated.sourceCode || updated.title);
+
+    const notifyTargets = [updated.assignedTo, ...(updated.collaborators || [])].filter(Boolean);
     if (notifyTargets.length) {
-      notifyUsersByEmail('TASK', 'NOTIFY_TASK_CANCELLED', t.sourceCode || t.title, notifyTargets,
-        `[VPDT] Công việc đã bị huỷ: ${t.title}`,
-        `${currentUser.name} đã huỷ công việc "${t.title}". Lý do: ${reason}`);
+      notifyUsersByEmail('TASK', 'NOTIFY_TASK_CANCELLED', updated.sourceCode || updated.title, notifyTargets,
+        `[VPDT] Công việc đã bị huỷ: ${updated.title}`,
+        `${currentUser.name} đã huỷ công việc "${updated.title}". Lý do: ${reason}`);
     }
     alert('✅ Đã huỷ công việc.');
   } else {
-    t.pendingCancellation = { reason, requestedBy: currentUser.username, requestedByName: currentUser.name, requestedAt: new Date().toLocaleString('vi-VN') };
-    t.history.push({ action: 'CANCEL_REQUESTED', by: currentUser.username, byName: currentUser.name, time: new Date().toLocaleString('vi-VN'), note: reason });
-    syncStorage('tasks');
-    logSystemAction('TASK', 'CANCEL_REQUESTED', `${currentUser.name} xin huỷ công việc [${t.title}]. Lý do: ${reason}`, 'SUCCESS', t.sourceCode || t.title);
+    logSystemAction('TASK', 'CANCEL_REQUESTED', `${currentUser.name} xin huỷ công việc [${updated.title}]. Lý do: ${reason}`, 'SUCCESS', updated.sourceCode || updated.title);
 
-    if (t.assignedBy) {
-      notifyUsersByEmail('TASK', 'NOTIFY_CANCEL_REQUESTED', t.sourceCode || t.title, [t.assignedBy],
-        `[VPDT] Yêu cầu huỷ công việc: ${t.title}`,
-        `${currentUser.name} xin huỷ công việc "${t.title}". Lý do: ${reason}`);
+    if (updated.assignedBy) {
+      notifyUsersByEmail('TASK', 'NOTIFY_CANCEL_REQUESTED', updated.sourceCode || updated.title, [updated.assignedBy],
+        `[VPDT] Yêu cầu huỷ công việc: ${updated.title}`,
+        `${currentUser.name} xin huỷ công việc "${updated.title}". Lý do: ${reason}`);
     }
     alert('✅ Đã gửi yêu cầu huỷ, chờ người giao việc phê duyệt.');
   }
@@ -5706,27 +5721,31 @@ function closeCancelApproveModal() {
   cancellingTaskId = null;
 }
 
-function approveCancellation() {
+async function approveCancellation() {
   if (cancellingTaskId === null) return;
-  const t = DB.tasks.find(x => x.id === cancellingTaskId);
+  const taskId = cancellingTaskId;
+  const t = DB.tasks.find(x => x.id === taskId);
   if (!t || !t.pendingCancellation) return closeCancelApproveModal();
-  if (t.assignedBy !== currentUser.username && !currentUser.perms?.admin) {
+  const p = t.pendingCancellation; // đọc trước khi gọi server, vì sau khi duyệt field này sẽ bị null
+
+  let updated;
+  try {
+    const result = await callRecordAction('tasks', taskId, 'approve-cancellation', {});
+    updated = result.item;
+  } catch (err) {
     closeCancelApproveModal();
-    return alert('⛔ Chỉ người giao việc mới có thể duyệt yêu cầu huỷ!');
+    return alert(`⛔ ${err.message}`);
   }
 
-  const p = t.pendingCancellation;
-  t.status = 'CANCELLED';
-  t.pendingCancellation = null;
-  t.history.push({ action: 'CANCELLED', by: currentUser.username, byName: currentUser.name, time: new Date().toLocaleString('vi-VN'), note: `Đồng ý huỷ theo yêu cầu của ${p.requestedByName}. Lý do: ${p.reason}` });
-  syncStorage('tasks');
-  logSystemAction('TASK', 'CANCEL_TASK', `${currentUser.name} đồng ý huỷ công việc [${t.title}] theo yêu cầu của ${p.requestedByName}`, 'SUCCESS', t.sourceCode || t.title);
+  const idx = DB.tasks.findIndex(x => x.id === taskId);
+  if (idx !== -1) DB.tasks[idx] = updated;
+  logSystemAction('TASK', 'CANCEL_TASK', `${currentUser.name} đồng ý huỷ công việc [${updated.title}] theo yêu cầu của ${p.requestedByName}`, 'SUCCESS', updated.sourceCode || updated.title);
 
-  const notifyTargets = [t.assignedTo, ...(t.collaborators || [])].filter(Boolean);
+  const notifyTargets = [updated.assignedTo, ...(updated.collaborators || [])].filter(Boolean);
   if (notifyTargets.length) {
-    notifyUsersByEmail('TASK', 'NOTIFY_TASK_CANCELLED', t.sourceCode || t.title, notifyTargets,
-      `[VPDT] Công việc đã bị huỷ: ${t.title}`,
-      `${currentUser.name} đã đồng ý huỷ công việc "${t.title}" theo yêu cầu của ${p.requestedByName}. Lý do: ${p.reason}`);
+    notifyUsersByEmail('TASK', 'NOTIFY_TASK_CANCELLED', updated.sourceCode || updated.title, notifyTargets,
+      `[VPDT] Công việc đã bị huỷ: ${updated.title}`,
+      `${currentUser.name} đã đồng ý huỷ công việc "${updated.title}" theo yêu cầu của ${p.requestedByName}. Lý do: ${p.reason}`);
   }
 
   alert('✅ Đã huỷ công việc.');
@@ -5734,25 +5753,30 @@ function approveCancellation() {
   renderTasks();
 }
 
-function rejectCancellation() {
+async function rejectCancellation() {
   if (cancellingTaskId === null) return;
-  const t = DB.tasks.find(x => x.id === cancellingTaskId);
+  const taskId = cancellingTaskId;
+  const t = DB.tasks.find(x => x.id === taskId);
   if (!t || !t.pendingCancellation) return closeCancelApproveModal();
-  if (t.assignedBy !== currentUser.username && !currentUser.perms?.admin) {
+  const p = t.pendingCancellation; // đọc trước khi gọi server, vì sau khi từ chối field này sẽ bị null
+
+  let updated;
+  try {
+    const result = await callRecordAction('tasks', taskId, 'reject-cancellation', {});
+    updated = result.item;
+  } catch (err) {
     closeCancelApproveModal();
-    return alert('⛔ Chỉ người giao việc mới có thể duyệt yêu cầu huỷ!');
+    return alert(`⛔ ${err.message}`);
   }
 
-  const p = t.pendingCancellation;
-  t.pendingCancellation = null;
-  t.history.push({ action: 'CANCEL_REJECTED', by: currentUser.username, byName: currentUser.name, time: new Date().toLocaleString('vi-VN'), note: `Từ chối yêu cầu huỷ. Lý do xin huỷ: ${p.reason}` });
-  syncStorage('tasks');
-  logSystemAction('TASK', 'CANCEL_REJECTED', `${currentUser.name} từ chối yêu cầu huỷ công việc [${t.title}]`, 'SUCCESS', t.sourceCode || t.title);
+  const idx = DB.tasks.findIndex(x => x.id === taskId);
+  if (idx !== -1) DB.tasks[idx] = updated;
+  logSystemAction('TASK', 'CANCEL_REJECTED', `${currentUser.name} từ chối yêu cầu huỷ công việc [${updated.title}]`, 'SUCCESS', updated.sourceCode || updated.title);
 
   if (p.requestedBy) {
-    notifyUsersByEmail('TASK', 'NOTIFY_CANCEL_REJECTED', t.sourceCode || t.title, [p.requestedBy],
-      `[VPDT] Yêu cầu huỷ công việc đã bị từ chối: ${t.title}`,
-      `${currentUser.name} đã từ chối yêu cầu huỷ công việc "${t.title}". Công việc vẫn tiếp tục.`);
+    notifyUsersByEmail('TASK', 'NOTIFY_CANCEL_REJECTED', updated.sourceCode || updated.title, [p.requestedBy],
+      `[VPDT] Yêu cầu huỷ công việc đã bị từ chối: ${updated.title}`,
+      `${currentUser.name} đã từ chối yêu cầu huỷ công việc "${updated.title}". Công việc vẫn tiếp tục.`);
   }
 
   alert('Đã từ chối yêu cầu huỷ, công việc vẫn tiếp tục.');

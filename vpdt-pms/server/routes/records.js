@@ -85,8 +85,10 @@ router.post('/minutes/:id/delete', async (req, res) => {
   }
 });
 
-// POST /api/records/tasks/:id/assign
-router.post('/tasks/:id/assign', async (req, res) => {
+// Bước 3 — Công việc có nhiều action cùng khuôn "tìm việc trong collection, khoá, gọi hàm xác minh +
+// mutate ở lib/recordActions.js, trả về bản ghi mới" — gom vào 1 helper dùng chung thay vì lặp lại
+// nguyên khối try/withLockedAppDataValue cho từng action (assign/edit/accept/status/gia hạn/huỷ việc...).
+async function withTaskAction(req, res, action, mutator) {
   const itemId = Number(req.params.id);
   if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
   try {
@@ -96,34 +98,47 @@ router.post('/tasks/:id/assign', async (req, res) => {
       const list = Array.isArray(collection) ? collection : [];
       const idx = list.findIndex(t => t.id === itemId);
       if (idx === -1) throw new HttpError(404, 'Không tìm thấy công việc');
-      result = recordActions.assignTask(req.body, freshUser, list[idx], users);
+      result = mutator(req.body, freshUser, list[idx], users);
       return list;
     });
     res.json({ ok: true, item: result });
   } catch (err) {
-    handleError(res, `tasks/${req.params.id}/assign`, err);
+    handleError(res, `tasks/${req.params.id}/${action}`, err);
   }
-});
+}
+
+// POST /api/records/tasks/:id/assign
+router.post('/tasks/:id/assign', (req, res) => withTaskAction(req, res, 'assign', recordActions.assignTask));
 
 // POST /api/records/tasks/:id/edit
-router.post('/tasks/:id/edit', async (req, res) => {
-  const itemId = Number(req.params.id);
-  if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
-  try {
-    const { freshUser, users } = await getFreshUser(req);
-    let result = null;
-    await withLockedAppDataValue('tasks', (collection) => {
-      const list = Array.isArray(collection) ? collection : [];
-      const idx = list.findIndex(t => t.id === itemId);
-      if (idx === -1) throw new HttpError(404, 'Không tìm thấy công việc');
-      result = recordActions.editTask(req.body, freshUser, list[idx], users);
-      return list;
-    });
-    res.json({ ok: true, item: result });
-  } catch (err) {
-    handleError(res, `tasks/${req.params.id}/edit`, err);
-  }
-});
+router.post('/tasks/:id/edit', (req, res) => withTaskAction(req, res, 'edit', recordActions.editTask));
+
+// POST /api/records/tasks/:id/accept — gộp acceptTask + acceptTaskOnBehalf (payload.onBehalf)
+router.post('/tasks/:id/accept', (req, res) => withTaskAction(req, res, 'accept', recordActions.acceptTask));
+
+// POST /api/records/tasks/:id/confirm-collaborator — gộp bản thân + xác nhận thay (payload.externalName)
+router.post('/tasks/:id/confirm-collaborator', (req, res) => withTaskAction(req, res, 'confirm-collaborator', recordActions.confirmCollaboratorParticipation));
+
+// POST /api/records/tasks/:id/status — "Cập nhật tiến độ" (payload: {newStatus, note})
+router.post('/tasks/:id/status', (req, res) => withTaskAction(req, res, 'status', recordActions.updateTaskStatusAction));
+
+// POST /api/records/tasks/:id/request-extension
+router.post('/tasks/:id/request-extension', (req, res) => withTaskAction(req, res, 'request-extension', recordActions.requestExtension));
+
+// POST /api/records/tasks/:id/approve-extension | reject-extension — dùng chung 1 engine duyệt/từ chối
+router.post('/tasks/:id/approve-extension', (req, res) =>
+  withTaskAction(req, res, 'approve-extension', (payload, user, task) => recordActions.resolvePendingTaskAction('extension', 'approve', user, task)));
+router.post('/tasks/:id/reject-extension', (req, res) =>
+  withTaskAction(req, res, 'reject-extension', (payload, user, task) => recordActions.resolvePendingTaskAction('extension', 'reject', user, task)));
+
+// POST /api/records/tasks/:id/cancel — huỷ ngay (người giao việc/admin) hoặc gửi yêu cầu (người nhận/phối hợp)
+router.post('/tasks/:id/cancel', (req, res) => withTaskAction(req, res, 'cancel', recordActions.cancelOrRequestCancelTask));
+
+// POST /api/records/tasks/:id/approve-cancellation | reject-cancellation — cùng engine duyệt/từ chối trên
+router.post('/tasks/:id/approve-cancellation', (req, res) =>
+  withTaskAction(req, res, 'approve-cancellation', (payload, user, task) => recordActions.resolvePendingTaskAction('cancellation', 'approve', user, task)));
+router.post('/tasks/:id/reject-cancellation', (req, res) =>
+  withTaskAction(req, res, 'reject-cancellation', (payload, user, task) => recordActions.resolvePendingTaskAction('cancellation', 'reject', user, task)));
 
 // POST /api/records/tasks/:id/delete
 router.post('/tasks/:id/delete', async (req, res) => {
