@@ -82,6 +82,28 @@ const CREATE_MODULE_CONFIGS = {
     dbKey: 'docs',
     getScope: (user) => ({ all: !!user.perms?.uploadAll, depts: user.perms?.uploadDepts || [] }),
     creatorField: 'uploader', creatorNameField: 'uploaderName'
+  },
+  // Tin nội bộ (Bước 2b): KHÔNG có khái niệm phòng ban để chọn — dept trong hồ sơ chỉ là thông tin
+  // hiển thị (phòng ban của người đăng), không phải phạm vi được cấp. forceOwnDept ép dept = phòng ban
+  // thật của người đăng (bỏ qua giá trị client gửi) nên scopeAllows() luôn đi qua nhánh "own dept" —
+  // quyền thật sự nằm ở extraValidate theo type (NEWS/TRAINING/REWARD cần cờ riêng, SHARE ai cũng được,
+  // khớp canCreateInternalPost() ở index.html). Trước Bước 2b, type/dept/author đều do client tự gửi.
+  internalPosts: {
+    dbKey: 'internalPosts',
+    forceOwnDept: true,
+    getScope: () => ({}),
+    creatorField: 'author', creatorNameField: 'authorName',
+    extraValidate: (payload, collection, user) => {
+      const type = payload.type;
+      const allowed = !!(
+        user.perms?.admin ||
+        type === 'SHARE' ||
+        (type === 'NEWS' && user.perms?.internalNewsCreate) ||
+        (type === 'TRAINING' && user.perms?.internalTrainingCreate) ||
+        (type === 'REWARD' && user.perms?.internalRewardCreate)
+      );
+      if (!allowed) throw new CreateError(403, 'Bạn không có quyền đăng bài ở phân hệ này');
+    }
   }
 };
 
@@ -93,7 +115,7 @@ function validateAndPrepareCreate(moduleKey, payload, user, existingCollection) 
   if (!config) throw new CreateError(400, `Module không hợp lệ: ${moduleKey}`);
   if (!payload || typeof payload !== 'object') throw new CreateError(400, 'Thiếu dữ liệu hồ sơ');
 
-  const dept = payload.dept;
+  const dept = config.forceOwnDept ? user.dept : payload.dept;
   if (!dept) throw new CreateError(400, 'Thiếu phòng ban');
   if (!scopeAllows(user, config.getScope(user), dept)) {
     throw new CreateError(403, 'Bạn không có quyền tạo hồ sơ cho phòng ban này');
@@ -106,7 +128,7 @@ function validateAndPrepareCreate(moduleKey, payload, user, existingCollection) 
 
   if (config.extraValidate) config.extraValidate(payload, existingCollection, user);
 
-  const record = { ...payload, id: Date.now() };
+  const record = { ...payload, id: Date.now(), dept };
   record[config.creatorField] = user.username;
   if (config.creatorNameField) record[config.creatorNameField] = user.name;
   return record;
