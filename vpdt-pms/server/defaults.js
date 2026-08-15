@@ -47,6 +47,8 @@ const DEFAULTS = {
 
   deptWorkflows: DEFAULT_MAP,
   submissionDeptWorkflows: DEFAULT_MAP,
+  submissionTypeDeptWorkflows: {},
+  submissionApprovalGroups: {},
   carDeptWorkflows: DEFAULT_MAP,
   officeBuyDeptWorkflows: {},
   officeFixDeptWorkflows: {},
@@ -123,6 +125,7 @@ const DEFAULTS = {
   carRegs: [],
   officeReqs: [],
   meetingMinutes: [],
+  meetingAttendeeTemplates: [],
   tasks: [],
   internalPosts: [],
   systemLogs: []

@@ -53,24 +53,16 @@
   <!-- Màn hình 1: Đăng nhập -->
   <div id="loginSection" class="max-w-md mx-auto my-10 p-6 border rounded-lg bg-gray-50 space-y-4 shadow-sm">
     <h2 class="text-xl font-bold text-center text-gray-800">Đăng Nhập Văn Phòng Điện Tử</h2>
-    
-    <div class="bg-blue-50 p-3 rounded text-xs text-blue-800 space-y-1.5 border border-blue-200">
-      <p class="font-bold">Tài khoản thử nghiệm (Mật khẩu: 123456):</p>
-      <p>• <b>admin</b>: Quản trị viên (Toàn quyền)</p>
-      <p>• <b>nv_nhansu</b>: Nhân sự (Tài liệu, Tờ trình, Hợp đồng, Xe)</p>
-      <p>• <b>ks_kiemsoat</b>: Kiểm soát viên (Duyệt đồng cấp)</p>
-      <p>• <b>sep_duyet</b>: Ban Giám Đốc (Lãnh đạo duyệt cấp cao)</p>
-    </div>
 
     <div>
       <label class="block text-xs font-semibold text-gray-600 mb-1">Tên đăng nhập</label>
-      <input id="txtUser" type="text" value="admin" autocomplete="username" class="w-full border p-2 rounded text-sm focus:outline-none focus:border-blue-500">
+      <input id="txtUser" type="text" autocomplete="username" class="w-full border p-2 rounded text-sm focus:outline-none focus:border-blue-500">
     </div>
     <div>
       <label class="block text-xs font-semibold text-gray-600 mb-1">Mật khẩu</label>
-      <input id="txtPass" type="password" value="123456" autocomplete="current-password" class="w-full border p-2 rounded text-sm focus:outline-none focus:border-blue-500">
+      <input id="txtPass" type="password" autocomplete="current-password" class="w-full border p-2 rounded text-sm focus:outline-none focus:border-blue-500">
     </div>
-    <button onclick="login()" class="w-full bg-blue-600 text-white p-2 rounded font-bold hover:bg-blue-700 transition">Đăng Nhập</button>
+    <button id="btnLogin" onclick="login()" class="w-full bg-blue-600 text-white p-2 rounded font-bold hover:bg-blue-700 transition">Đăng Nhập</button>
   </div>
 
   <!-- Màn hình 2: Tab Quản Lý Tài Liệu -->
@@ -1363,7 +1355,7 @@
           </div>
           <div>
             <label class="block text-xs font-semibold text-gray-600 mb-1">Mật khẩu</label>
-            <input id="uPassword" type="password" placeholder="******" class="w-full border p-1.5 rounded text-xs" required>
+            <input id="uPassword" type="password" placeholder="Để trống = giữ nguyên mật khẩu hiện tại" class="w-full border p-1.5 rounded text-xs">
           </div>
           <div>
             <label class="block text-xs font-semibold text-gray-600 mb-1">Họ và Tên</label>
@@ -3215,7 +3207,7 @@ function migrateLegacyPerms(perms) {
 // Toàn bộ dữ liệu mặc định (depts, cats, workflows, users...) giờ được khởi tạo (seed)
 // một lần duy nhất ở phía Server (xem file server/seedDefaults.js), không còn seed ở Client.
 // ==========================================
-async function initDatabase() {
+async function initDatabase(loggingInUser) {
   try {
     const res = await fetch('/api/data');
     if (!res.ok) throw new Error('HTTP ' + res.status);
@@ -3225,14 +3217,16 @@ async function initDatabase() {
     DB.cats = data.cats || [];
 
     // Di trú phân quyền cũ (cờ bật/tắt toàn công ty theo module) sang mô hình mới theo phòng ban.
-    // Nếu có user nào được chuyển đổi, lưu lại ngay lên server để không phải di trú lại mỗi lần tải trang.
+    // Nếu có user nào được chuyển đổi, lưu lại ngay lên server để không phải di trú lại mỗi lần tải
+    // trang — nhưng chỉ khi người vừa đăng nhập là Admin, vì ghi "users" giờ yêu cầu quyền Admin ở
+    // server (trước đây API không có xác thực nên ai load trang cũng lưu được).
     let permsMigrated = false;
     DB.users = (data.users || []).map(u => {
       const { perms, changed } = migrateLegacyPerms(u.perms);
       if (changed) permsMigrated = true;
       return changed ? { ...u, perms } : u;
     });
-    if (permsMigrated) {
+    if (permsMigrated && loggingInUser?.perms?.admin) {
       console.log('ℹ️ Đã tự động chuyển đổi phân quyền người dùng sang mô hình theo phòng ban (module-level).');
       syncStorage('users');
     }
@@ -3270,6 +3264,14 @@ async function initDatabase() {
   }
 }
 
+// Phiên đăng nhập hết hạn/không hợp lệ giữa lúc đang dùng (cookie hết hạn, hoặc bị admin đổi mật
+// khẩu ở nơi khác...) — đưa về màn hình đăng nhập thay vì cứ báo lỗi HTTP 401 chung chung khó hiểu.
+function handleSessionExpired() {
+  if (!currentUser) return; // đã ở màn đăng nhập rồi, tránh hiện alert lặp lại
+  logout();
+  alert('⛔ Phiên đăng nhập đã hết hạn, vui lòng đăng nhập lại.');
+}
+
 function syncStorage(key) {
   try {
     fetch(`/api/data/${key}`, {
@@ -3277,6 +3279,7 @@ function syncStorage(key) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(DB[key])
     }).then(res => {
+      if (res.status === 401) return handleSessionExpired();
       if (!res.ok) throw new Error('HTTP ' + res.status);
     }).catch(e => {
       console.error(`Lỗi khi lưu "${key}" lên máy chủ:`, e);
@@ -3290,7 +3293,23 @@ function syncStorage(key) {
 }
 
 let dataReady = false;
-initDatabase().then(() => { dataReady = true; });
+
+// KHÔNG còn tải dữ liệu ngay khi mở trang — /api/data giờ bắt buộc đăng nhập (trước đây gọi thẳng ở
+// đây vì GET /api/data không có xác thực gì, ai cũng gọi được). Chỉ còn thử khôi phục phiên đăng
+// nhập cũ (nếu trình duyệt vẫn còn cookie hợp lệ từ lần trước, vd. tải lại trang) qua /api/auth/me —
+// nếu không có/hết hạn thì cứ để im màn hình đăng nhập, không báo lỗi.
+(async function tryRestoreSession() {
+  try {
+    const res = await fetch('/api/auth/me');
+    if (!res.ok) return;
+    const user = await res.json();
+    await initDatabase(user);
+    dataReady = true;
+    finishLogin(user);
+  } catch (e) {
+    console.warn('Không thể khôi phục phiên đăng nhập cũ:', e.message);
+  }
+})();
 
 // Gửi email THẬT qua backend (POST /api/send-email) nếu đã nhập SMTP Server ở màn Quản trị > Cấu
 // Hình Email — chạy song song (fire-and-forget đối với luồng đang gọi: KHÔNG chặn hay đổi
@@ -3433,14 +3452,27 @@ function closeApprovalAuthModal() {
   pendingApprovalOtpCode = null;
 }
 
-function confirmApprovalAuth() {
+async function confirmApprovalAuth() {
   const level = currentUser.perms?.approverAuthLevel || 'NONE';
 
   if (level === 'PASSWORD') {
     const entered = document.getElementById('approvalAuthPasswordInput').value;
-    if (!entered || entered !== (currentUser.pass || currentUser.password)) {
-      return alert('⛔ Mật khẩu không đúng, vui lòng thử lại!');
+    if (!entered) return alert('⛔ Vui lòng nhập mật khẩu!');
+    // Xác thực LẠI mật khẩu qua server (POST /api/auth/verify-password) — trước đây so sánh thẳng
+    // với currentUser.pass ở JS trình duyệt, không có giá trị bảo mật thật (sửa được bằng DevTools).
+    let ok = false;
+    try {
+      const res = await fetch('/api/auth/verify-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password: entered })
+      });
+      const body = await res.json().catch(() => ({}));
+      ok = res.ok && body.ok;
+    } catch (e) {
+      return alert('⛔ Không thể kết nối tới máy chủ để xác thực mật khẩu: ' + e.message);
     }
+    if (!ok) return alert('⛔ Mật khẩu không đúng, vui lòng thử lại!');
   } else if (level === 'OTP_EMAIL') {
     const entered = document.getElementById('approvalAuthOtpInput').value.trim();
     if (!entered || entered !== pendingApprovalOtpCode) {
@@ -3550,7 +3582,7 @@ function closeProfileModal() {
   document.getElementById('profileModal').classList.add('hidden');
 }
 
-function savePersonalProfile(e) {
+async function savePersonalProfile(e) {
   e.preventDefault();
   const newName = document.getElementById('pfFullName').value.trim();
   const newEmail = document.getElementById('pfEmail').value.trim();
@@ -3561,17 +3593,26 @@ function savePersonalProfile(e) {
   if (newPass || confirmPass) {
     if (newPass !== confirmPass) return alert('❌ Mật khẩu xác nhận không khớp!');
     if (newPass.length < 6) return alert('❌ Mật khẩu phải có ít nhất 6 ký tự!');
-    currentUser.pass = newPass;
   }
 
-  currentUser.name = newName;
-  currentUser.email = newEmail;
-  currentUser.phone = newPhone;
-
-  const userIdx = DB.users.findIndex(u => u.username === currentUser.username);
-  if (userIdx !== -1) {
-    DB.users[userIdx] = JSON.parse(JSON.stringify(currentUser));
-    syncStorage('users');
+  // Tự sửa hồ sơ CỦA CHÍNH MÌNH đi qua API riêng (PATCH /api/auth/me) thay vì ghi đè nguyên cả
+  // collection "users" — vì "users" giờ chỉ Admin mới có quyền ghi ở server (xem routes/data.js).
+  try {
+    const res = await fetch('/api/auth/me', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: newName, email: newEmail, phone: newPhone, password: newPass || undefined })
+    });
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      return alert(body.error || '⛔ Lỗi cập nhật thông tin cá nhân');
+    }
+    const updated = await res.json();
+    currentUser = updated;
+    const userIdx = DB.users.findIndex(u => u.username === currentUser.username);
+    if (userIdx !== -1) DB.users[userIdx] = { ...DB.users[userIdx], ...updated };
+  } catch (err) {
+    return alert('⛔ Không thể kết nối tới máy chủ: ' + err.message);
   }
 
   document.getElementById('userInfo').innerText = `${currentUser.name} (${currentUser.dept})`;
@@ -3582,16 +3623,41 @@ function savePersonalProfile(e) {
 }
 
 // --- ĐĂNG NHẬP & TABS ---
-function login() {
-  if (!dataReady) return alert('⏳ Hệ thống đang tải dữ liệu từ máy chủ, vui lòng thử lại sau giây lát!');
+async function login() {
   const u = document.getElementById('txtUser').value.trim();
   const p = document.getElementById('txtPass').value.trim();
+  if (!u || !p) return alert('Vui lòng nhập tên đăng nhập và mật khẩu!');
 
-  const user = DB.users.find(item => item.username === u && (item.pass === p || item.password === p));
-  if (!user) return alert('Tài khoản hoặc mật khẩu không chính xác!');
+  const btn = document.getElementById('btnLogin');
+  if (btn) btn.disabled = true;
+  let user;
+  try {
+    const res = await fetch('/api/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username: u, password: p })
+    });
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      return alert(body.error || 'Tài khoản hoặc mật khẩu không chính xác!');
+    }
+    user = await res.json();
+    await initDatabase(user);
+    dataReady = true;
+  } catch (e) {
+    return alert('⛔ Không thể kết nối tới máy chủ: ' + e.message);
+  } finally {
+    if (btn) btn.disabled = false;
+  }
 
-  currentUser = user;
   logSystemAction('USER_MGM', 'LOGIN_SUCCESS', 'Đăng nhập thành công.', 'SUCCESS', user.username);
+  finishLogin(user);
+}
+
+// Phần UI sau khi đã có phiên đăng nhập hợp lệ — dùng chung cho đăng nhập thật (login()) và khôi
+// phục phiên cũ khi tải lại trang (tryRestoreSession()), vì cả 2 đều kết thúc bằng cùng 1 trạng thái.
+function finishLogin(user) {
+  currentUser = user;
 
   document.getElementById('loginSection').classList.add('hidden');
   document.getElementById('userHeader').classList.remove('hidden');
@@ -3615,8 +3681,12 @@ function login() {
   switchTab('doc');
 }
 
+// Đăng xuất phía server (xoá cookie phiên) — chạy song song (fire-and-forget), không chặn việc dọn
+// UI ngay lập tức, vì nhiều nơi gọi logout() đồng bộ (vd. switchTab() khi currentUser rỗng).
 function logout() {
+  fetch('/api/auth/logout', { method: 'POST' }).catch(() => {});
   currentUser = null;
+  dataReady = false;
   document.getElementById('loginSection').classList.remove('hidden');
   document.getElementById('docSection').classList.add('hidden');
   document.getElementById('submissionSection').classList.add('hidden');
@@ -9283,7 +9353,10 @@ function toggleUserPermFormMode(mode) {
   document.getElementById('groupIdentityFields').classList.toggle('hidden', mode !== 'GROUP');
   // Ẩn field nào thì bỏ luôn "required" của field đó — display:none không tự loại field khỏi việc
   // kiểm tra hợp lệ của trình duyệt, nếu không submit ở chế độ còn lại sẽ bị chặn ngầm.
-  ['uUsername', 'uPassword', 'uFullName', 'uEmail', 'uPhone', 'uDept'].forEach(id => {
+  // uPassword KHÔNG nằm trong danh sách này — để trống khi SỬA user nghĩa là giữ nguyên mật khẩu cũ
+  // (server không còn gửi mật khẩu hiện tại về để hiển thị lại), chỉ bắt buộc nhập khi TẠO MỚI, việc
+  // này được kiểm tra riêng trong saveUser() vì phụ thuộc editUserId chứ không phải mode USER/GROUP.
+  ['uUsername', 'uFullName', 'uEmail', 'uPhone', 'uDept'].forEach(id => {
     document.getElementById(id).required = (mode === 'USER');
   });
   document.getElementById('btnSavePermForm').innerText = mode === 'GROUP' ? 'Lưu Nhóm Phân Quyền' : 'Lưu Người Dùng & Phân Quyền';
@@ -9493,7 +9566,9 @@ function saveUser(e) {
     const user = DB.users.find(u => u.id === parseInt(editId, 10));
     if (user) {
       user.username = username;
-      user.pass = pass;
+      // Để trống ô mật khẩu khi sửa = giữ nguyên mật khẩu hiện tại (server không bao giờ gửi mật khẩu
+      // thật về trình duyệt để hiển thị lại nữa, nên chỉ gửi khi admin thực sự nhập giá trị mới).
+      if (pass) user.pass = pass;
       user.name = name;
       user.email = email;
       user.phone = phone;
@@ -9503,6 +9578,7 @@ function saveUser(e) {
       user.permOverrides = permOverrides;
     }
   } else {
+    if (!pass) return alert('Vui lòng nhập mật khẩu cho người dùng mới!');
     if (DB.users.some(u => u.username === username)) return alert('Tên đăng nhập đã tồn tại!');
     DB.users.push({
       id: Date.now(),
@@ -9581,7 +9657,7 @@ function editUser(id) {
 
   document.getElementById('editUserId').value = user.id;
   document.getElementById('uUsername').value = user.username;
-  document.getElementById('uPassword').value = user.pass || user.password || '';
+  document.getElementById('uPassword').value = ''; // server không gửi mật khẩu hiện tại về — để trống = giữ nguyên
   document.getElementById('uFullName').value = user.name;
   document.getElementById('uEmail').value = user.email || '';
   document.getElementById('uPhone').value = user.phone || '';
@@ -9680,10 +9756,12 @@ function downloadUserTemplate() {
   document.body.removeChild(link);
 }
 
+// KHÔNG export cột mật khẩu — server không còn gửi mật khẩu (dù đã hash) về trình duyệt cho bất kỳ
+// ai, kể cả admin, nên không có gì để xuất ra CSV ở đây nữa (và không nên có, dù là hash).
 function exportUsersCSV() {
-  let csv = "username,pass,name,email,phone,dept\n";
+  let csv = "username,name,email,phone,dept\n";
   DB.users.forEach(u => {
-    csv += `"${u.username}","${u.pass || u.password}","${u.name}","${u.email || ''}","${u.phone || ''}","${u.dept}"\n`;
+    csv += `"${u.username}","${u.name}","${u.email || ''}","${u.phone || ''}","${u.dept}"\n`;
   });
   const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
   const url = URL.createObjectURL(blob);

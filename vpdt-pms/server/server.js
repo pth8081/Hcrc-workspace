@@ -1,9 +1,12 @@
 // server.js — Điểm khởi chạy chính của ứng dụng VPDT (Văn Phòng Điện Tử)
 require('dotenv').config();
 const express = require('express');
+const cookieParser = require('cookie-parser');
 const path = require('path');
 const { getPool } = require('./db');
 const { seedDefaults } = require('./seedDefaults');
+const { requireAuth } = require('./lib/auth');
+const authRoutes = require('./routes/auth');
 const dataRoutes = require('./routes/data');
 const uploadRoutes = require('./routes/upload');
 const emailRoutes = require('./routes/email');
@@ -16,11 +19,14 @@ const PORT = process.env.PORT || 3000;
 // POST /api/upload và lưu ra ổ đĩa (thư mục uploads/), collection JSON chỉ giữ fileUrl.
 app.use(express.json({ limit: '5mb' }));
 app.use(express.urlencoded({ extended: true, limit: '5mb' }));
+app.use(cookieParser());
 
-// API
+// API — /api/auth (đăng nhập/đăng xuất) đứng ngoài yêu cầu đăng nhập vì đó CHÍNH LÀ chỗ đăng nhập;
+// mọi API còn lại bắt buộc có phiên hợp lệ (requireAuth) — trước đây hoàn toàn không có bước này.
+app.use('/api/auth', authRoutes);
 app.use('/api/data', dataRoutes);
-app.use('/api/upload', uploadRoutes);
-app.use('/api/send-email', emailRoutes);
+app.use('/api/upload', requireAuth, uploadRoutes);
+app.use('/api/send-email', requireAuth, emailRoutes);
 
 // Phục vụ file đính kèm đã tải lên
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
