@@ -4,7 +4,7 @@
 // request tới POST /api/data/submissions để tự duyệt hồ sơ của chính mình.
 const express = require('express');
 const router = express.Router();
-const { getAppDataValue, getAllAppData, withLockedAppDataValue } = require('../lib/appData');
+const { getAllAppData, withLockedAppDataValue } = require('../lib/appData');
 const { requireAuth } = require('../lib/auth');
 const { MODULE_CONFIGS, WorkflowError, applyWorkflowAction } = require('../lib/workflowEngine');
 
@@ -25,9 +25,8 @@ router.post('/submissions/:id/respond-info', async (req, res) => {
   if (!response) return res.status(400).json({ error: 'Vui lòng nhập nội dung bổ sung' });
 
   try {
-    const users = await getAppDataValue('users');
-    const freshUser = (users || []).find(u => u.username === req.user.username);
-    if (!freshUser) return res.status(401).json({ error: 'Tài khoản không còn tồn tại' });
+    // requireAuth đã tra cứu sẵn user hiện tại (kể cả active) và gắn vào req.freshUser.
+    const freshUser = req.freshUser;
 
     let resultItem = null;
     await withLockedAppDataValue('submissions', (collection) => {
@@ -84,11 +83,10 @@ router.post('/:module/:id/:action', async (req, res) => {
   const { comment, extraFields } = req.body || {};
 
   try {
-    // Ngữ cảnh tra cứu cấu hình quy trình + xác định lại CHÍNH XÁC người dùng hiện tại từ DB (không
-    // tin field "admin" trong JWT tuyệt đối — token có thể còn hiệu lực vài giờ dù quyền vừa bị đổi).
+    // Ngữ cảnh tra cứu cấu hình quy trình — requireAuth đã tự xác định lại CHÍNH XÁC người dùng hiện
+    // tại từ DB (kể cả trạng thái active) và gắn sẵn vào req.freshUser, không cần đọc lại lần nữa.
     const appData = await getAllAppData();
-    const freshUser = (appData.users || []).find(u => u.username === req.user.username);
-    if (!freshUser) return res.status(401).json({ error: 'Tài khoản không còn tồn tại' });
+    const freshUser = req.freshUser;
 
     let resultItem = null;
     let transition = null;

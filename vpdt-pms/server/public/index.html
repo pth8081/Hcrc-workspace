@@ -10042,6 +10042,30 @@ function deleteUser(id) {
   renderPermGroupsList();
 }
 
+// Vô hiệu hóa / Kích hoạt lại tài khoản — dùng khi nhân viên nghỉ việc: khác Xóa (mất hẳn dữ liệu +
+// username có thể bị người khác chiếm lại sau này), vô hiệu hóa GIỮ NGUYÊN toàn bộ lịch sử hồ sơ đã
+// tạo/duyệt của người đó, chỉ chặn truy cập hệ thống. Có hiệu lực NGAY LẬP TỨC kể cả phiên đang mở sẵn
+// (server tự kiểm tra lại trạng thái active ở MỌI request, xem lib/auth.js requireAuth) — không cần
+// đợi họ tự đăng xuất hay JWT hết hạn (tới 8 tiếng).
+function toggleUserActive(id) {
+  const u = DB.users.find(item => item.id === id);
+  if (!u) return;
+  const willActivate = u.active === false;
+
+  if (!willActivate && u.username === currentUser.username) {
+    return alert('⛔ Không thể tự vô hiệu hóa chính tài khoản đang đăng nhập!');
+  }
+
+  const verb = willActivate ? 'kích hoạt lại' : 'vô hiệu hóa';
+  if (!confirm(`Bạn có chắc chắn muốn ${verb} tài khoản "${u.username}" (${u.name})?${willActivate ? '' : '\n\nSau khi vô hiệu hóa, người này sẽ KHÔNG đăng nhập được nữa và mọi phiên đang mở sẵn (nếu có) sẽ bị chặn ngay ở lần thao tác tiếp theo.'}`)) return;
+
+  u.active = willActivate;
+  syncStorage('users');
+  logSystemAction('USER_MGM', willActivate ? 'ACTIVATE_USER' : 'DEACTIVATE_USER',
+    `${willActivate ? 'Kích hoạt lại' : 'Vô hiệu hóa'} người dùng [${u.username}]`, 'SUCCESS', u.username);
+  renderUsers();
+}
+
 // Tóm tắt nhanh các module người dùng có thể Xem/Tạo — dùng cho danh sách người dùng ở Module
 // Quản trị. Trước đây đếm số field "truthy" trong perms, dễ gây hiểu nhầm vì mảng/đối tượng rỗng
 // vẫn được coi là truthy dù không thực sự cấp quyền gì.
@@ -10085,9 +10109,13 @@ function renderUsers() {
   tbody.innerHTML = pageUsers.map(u => {
     const group = u.groupId ? DB.permGroups.find(g => g.id === u.groupId) : null;
     const hasOverrides = group && u.permOverrides && Object.keys(u.permOverrides).length > 0;
+    const isInactive = u.active === false;
     return `
-    <tr class="hover:bg-gray-50 border-b">
-      <td class="border p-2 font-bold font-mono text-purple-700">${escapeHtml(u.username)}</td>
+    <tr class="hover:bg-gray-50 border-b${isInactive ? ' bg-gray-50 opacity-60' : ''}">
+      <td class="border p-2 font-bold font-mono text-purple-700">
+        ${escapeHtml(u.username)}
+        ${isInactive ? '<span class="ml-1 inline-block bg-gray-400 text-white text-[10px] font-bold px-1.5 py-0.5 rounded align-middle">Đã vô hiệu hóa</span>' : ''}
+      </td>
       <td class="border p-2 font-semibold">${escapeHtml(u.name)}</td>
       <td class="border p-2 text-xs">✉️ ${escapeHtml(u.email || 'N/A')}<br>📞 ${escapeHtml(u.phone || 'N/A')}</td>
       <td class="border p-2">${escapeHtml(u.dept)}</td>
@@ -10100,6 +10128,7 @@ function renderUsers() {
       <td class="border p-2 text-center space-x-1">
         <button onclick="editUser(${u.id})" class="text-blue-600 font-bold hover:underline">Sửa</button>
         <button onclick="deleteUser(${u.id})" class="text-red-600 font-bold hover:underline">Xóa</button>
+        <button onclick="toggleUserActive(${u.id})" class="${isInactive ? 'text-emerald-600' : 'text-amber-600'} font-bold hover:underline">${isInactive ? 'Kích Hoạt' : 'Vô Hiệu Hóa'}</button>
       </td>
     </tr>
   `;

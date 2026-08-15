@@ -4,6 +4,7 @@
 // request từ client, khiến GET/POST /api/data không có xác thực gì. Module này là gốc để vá lỗ đó.
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
+const { getAppDataValue } = require('./appData');
 
 const COOKIE_NAME = 'vpdt_token';
 const TOKEN_TTL = '8h';
@@ -66,28 +67,41 @@ function clearAuthCookie(res) {
   });
 }
 
-// Chặn mọi request chưa có cookie phiên hợp lệ — gắn req.user = { username, admin } (đã ký bởi
-// server, KHÔNG lấy từ dữ liệu client gửi lên) để các route sau dùng làm căn cứ phân quyền thật.
-function requireAuth(req, res, next) {
+// Chặn mọi request chưa có cookie phiên hợp lệ. Xác minh xong chữ ký JWT rồi còn tra CƯ TRẠNG THÁI
+// HIỆN TẠI của tài khoản trong DB (không chỉ tin token) — vì token có hiệu lực tới 8h
+// (TOKEN_TTL), nếu chỉ dựa vào token thì 1 tài khoản admin vừa VÔ HIỆU HÓA (nhân viên nghỉ việc) vẫn
+// thao tác được bình thường suốt phiên đang mở cho tới khi token hết hạn — không đúng ý "vô hiệu hóa
+// là mất quyền NGAY LẬP TỨC". Gắn req.user = { username, admin } (giữ nguyên shape cũ, dùng khắp nơi),
+// req.freshUser = bản ghi user đầy đủ vừa đọc được, và req.allUsers = toàn bộ danh sách users cùng
+// lượt đọc — để các route phía sau (create.js/workflow.js/records.js/meetingActions.js) không phải tự
+// đọc lại DB thêm 1 lần nữa cho cùng mục đích (trước đây mỗi route tự viết lại y hệt đoạn này).
+async function requireAuth(req, res, next) {
   const token = req.cookies && req.cookies[COOKIE_NAME];
   if (!token) return res.status(401).json({ error: 'Chưa đăng nhập' });
+
+  let payload;
   try {
-    const payload = verifyToken(token);
-    req.user = { username: payload.sub, admin: !!payload.admin };
-    next();
+    payload = verifyToken(token);
   } catch (err) {
     return res.status(401).json({ error: 'Phiên đăng nhập hết hạn hoặc không hợp lệ' });
   }
-}
 
-// Dùng SAU requireAuth — chặn ghi vào các collection chỉ admin mới được sửa (users, permGroups,
-// cấu hình quy trình, emailConfig...). Dựa vào req.user.admin lấy từ JWT đã ký, không tin field
-// "admin" bất kỳ nào client có thể tự gửi kèm trong body.
-function requireAdmin(req, res, next) {
-  if (!req.user || !req.user.admin) {
-    return res.status(403).json({ error: 'Chỉ Quản Trị Viên mới có quyền thực hiện thao tác này' });
+  try {
+    const users = await getAppDataValue('users');
+    const freshUser = (users || []).find(u => u.username === payload.sub);
+    if (!freshUser) return res.status(401).json({ error: 'Tài khoản không còn tồn tại' });
+    if (freshUser.active === false) {
+      return res.status(401).json({ error: 'Tài khoản đã bị vô hiệu hóa — vui lòng liên hệ quản trị viên' });
+    }
+
+    req.user = { username: freshUser.username, admin: !!freshUser.perms?.admin };
+    req.freshUser = freshUser;
+    req.allUsers = users || [];
+    next();
+  } catch (err) {
+    console.error('requireAuth: lỗi khi xác minh trạng thái tài khoản:', err.message);
+    res.status(500).json({ error: 'Không thể xác minh phiên đăng nhập' });
   }
-  next();
 }
 
 module.exports = {
@@ -99,6 +113,5 @@ module.exports = {
   verifyToken,
   setAuthCookie,
   clearAuthCookie,
-  requireAuth,
-  requireAdmin
+  requireAuth
 };

@@ -3,7 +3,7 @@
 // dept/creator client tự gửi, chỉ dựa vào dropdown ĐÃ LỌC SẴN ở giao diện.
 const express = require('express');
 const router = express.Router();
-const { getAppDataValue, getAllAppData, withLockedAppDataValue } = require('../lib/appData');
+const { getAllAppData, withLockedAppDataValue } = require('../lib/appData');
 const { requireAuth } = require('../lib/auth');
 const { CREATE_MODULE_CONFIGS, CreateError, validateAndPrepareCreate } = require('../lib/createValidation');
 
@@ -17,11 +17,9 @@ router.post('/:module', async (req, res) => {
   }
 
   try {
-    // Xác định lại CHÍNH XÁC người dùng hiện tại từ DB (không tin field "admin"/dept trong JWT tuyệt
-    // đối — token có thể còn hiệu lực vài giờ dù quyền vừa bị đổi, xem lib/auth.js requireAuth).
-    const users = await getAppDataValue('users');
-    const freshUser = (users || []).find(u => u.username === req.user.username);
-    if (!freshUser) return res.status(401).json({ error: 'Tài khoản không còn tồn tại' });
+    // requireAuth đã tự tra cứu bản ghi user hiện tại từ DB (kể cả trạng thái active) và gắn sẵn vào
+    // req.freshUser — không cần tự đọc lại DB thêm 1 lần nữa cho cùng mục đích.
+    const freshUser = req.freshUser;
 
     // Đọc kèm toàn bộ AppData (quy trình phòng ban, nhóm phê duyệt trình...) — chỉ module submissions
     // dùng tới (dựng lại quy trình hiệu lực server-side, xem lib/createValidation.js), các module khác

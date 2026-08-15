@@ -24,6 +24,11 @@ router.post('/login', async (req, res) => {
     if (!ok) {
       return res.status(401).json({ error: 'Tài khoản hoặc mật khẩu không chính xác' });
     }
+    // Kiểm tra SAU khi đã xác minh đúng mật khẩu — tránh lộ thông tin "tài khoản này có tồn tại và bị
+    // vô hiệu hóa" cho người không biết mật khẩu (trả đúng lỗi sai tài khoản/mật khẩu như bình thường).
+    if (user.active === false) {
+      return res.status(403).json({ error: 'Tài khoản đã bị vô hiệu hóa — vui lòng liên hệ quản trị viên' });
+    }
 
     const token = signToken(user);
     setAuthCookie(res, token);
@@ -39,17 +44,10 @@ router.post('/logout', (req, res) => {
   res.json({ ok: true });
 });
 
-// GET /api/auth/me — khôi phục phiên khi tải lại trang (đã có cookie hợp lệ từ trước).
+// GET /api/auth/me — khôi phục phiên khi tải lại trang (đã có cookie hợp lệ từ trước). requireAuth
+// đã tự tra cứu + xác minh user hiện tại (kể cả active) và gắn sẵn vào req.freshUser.
 router.get('/me', requireAuth, async (req, res) => {
-  try {
-    const users = (await getAppDataValue('users')) || [];
-    const user = users.find(u => u.username === req.user.username);
-    if (!user) return res.status(401).json({ error: 'Tài khoản không còn tồn tại' });
-    res.json(toSafeUser(user));
-  } catch (err) {
-    console.error('GET /api/auth/me lỗi:', err.message);
-    res.status(500).json({ error: 'Không thể tải thông tin phiên đăng nhập' });
-  }
+  res.json(toSafeUser(req.freshUser));
 });
 
 // POST /api/auth/verify-password — xác thực LẠI mật khẩu của CHÍNH người đang đăng nhập, dùng cho
@@ -60,9 +58,8 @@ router.post('/verify-password', requireAuth, async (req, res) => {
   if (!password) return res.status(400).json({ error: 'Thiếu mật khẩu' });
 
   try {
-    const users = (await getAppDataValue('users')) || [];
-    const user = users.find(u => u.username === req.user.username);
-    const ok = user && await verifyPassword(password, user.pass || user.password);
+    const user = req.freshUser;
+    const ok = await verifyPassword(password, user.pass || user.password);
     res.json({ ok: !!ok });
   } catch (err) {
     console.error('POST /api/auth/verify-password lỗi:', err.message);
