@@ -232,6 +232,11 @@
 
         <div id="dynamicFieldsContainer_SUBMISSION" class="grid grid-cols-1 md:grid-cols-3 gap-3 border-t pt-3"></div>
 
+        <div class="border-t pt-3">
+          <label class="block font-semibold text-gray-600 mb-1">Cấp Phê Duyệt Bổ Sung (tuỳ chọn, cộng thêm vào cuối quy trình phòng ban)</label>
+          <div id="subApprovalLayersContainer" class="flex flex-wrap gap-4"></div>
+        </div>
+
         <div>
           <label class="block font-semibold text-gray-600 mb-1">Nội Dung Trình Chi Tiết & Đề Xuất Cụ Thể</label>
           <textarea id="subContent" placeholder="Kính trình Lãnh đạo xem xét và phê duyệt nội dung..." class="w-full border p-1.5 rounded h-20" required></textarea>
@@ -1199,6 +1204,8 @@
       <button onclick="switchWfModule('OFFICE_INVEST')" id="btnWfModOfficeInvest" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">📈 QT Đầu Tư</button>
     </div>
 
+    <div id="wfSubmissionTypeTabs" class="hidden gap-2 flex-wrap"></div>
+
     <div class="bg-emerald-50 p-4 rounded border border-emerald-200 space-y-3">
       <h3 class="font-bold text-emerald-900 text-base flex items-center gap-2" id="wfConfigTitle">
         🏢 Cấu Hình Quy Trình Theo Phòng Ban
@@ -1742,6 +1749,14 @@
         </div>
       </div>
 
+      <div class="bg-white p-4 rounded border space-y-3">
+        <div>
+          <h4 class="font-bold text-sm text-gray-800">🖋️ Quản Lý Nhóm Phê Duyệt Trình (Văn Bản Trình)</h4>
+          <p class="text-[11px] text-gray-500 italic">3 nhóm phê duyệt bổ sung tuỳ chọn — người trình tick chọn khi tạo tờ trình để cộng thêm vào cuối quy trình phòng ban (gốc). Gán thành viên cho từng nhóm ở đây.</p>
+        </div>
+        <div id="submissionApprovalGroupsContainer" class="grid grid-cols-1 md:grid-cols-3 gap-3"></div>
+      </div>
+
       <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 my-3 border-t pt-3">
         <h4 class="font-bold text-sm text-gray-800">Danh Sách Người Dùng & Quyền Hạn</h4>
         <div class="flex flex-wrap gap-2 text-xs">
@@ -1976,7 +1991,9 @@
     </div>
     <div class="p-4 overflow-y-auto flex-1 space-y-4 text-xs">
       <div id="subModalDetails" class="bg-gray-50 p-3 rounded border space-y-2 text-gray-700"></div>
-      
+
+      <div id="subModalInfoRequests"></div>
+
       <div>
         <h4 class="font-bold text-gray-800 mb-2">✍️ Ý Kiến Chỉ Đạo & Bút Phê Phê Duyệt Đồng Cấp</h4>
         <textarea id="txtSubmissionComment" placeholder="Nhập bút phê chỉ đạo, ý kiến phê duyệt hoặc lý do từ chối..." class="w-full border p-2 rounded h-20 text-xs focus:ring-1 focus:ring-amber-500 focus:outline-none"></textarea>
@@ -2260,6 +2277,7 @@ const DB = {
   depts: [], cats: [], users: [], docs: [],
   workflows: [], deptWorkflows: {},
   submissions: [], submissionDeptWorkflows: {},
+  submissionTypeDeptWorkflows: {}, submissionApprovalGroups: {},
   contracts: [],
   meetings: [],
   carRegs: [], carDeptWorkflows: {},
@@ -2280,6 +2298,9 @@ let currentUser = null;
 let editingGroupId = null;
 let permFormMode = 'USER'; // 'USER' | 'GROUP' — form Người dùng/Nhóm phân quyền dùng chung 1 bộ checkbox
 let activeWfMod = 'DOC';
+// Loại tờ trình đang chọn để cấu hình quy trình riêng — chỉ áp dụng khi activeWfMod === 'SUBMISSION'.
+// Gán giá trị thật ngay sau khi SUBMISSION_TYPES được khai báo (tránh lỗi tham chiếu trước khai báo).
+let activeWfSubmissionType = null;
 // Lựa chọn mẫu quy trình CHƯA lưu (preview) theo phòng ban khi đang cấu hình — xem onWorkflowTemplateChange().
 let pendingWfTemplate = {};
 let activeOfficeSubTab = 'MUA_BAN';
@@ -2670,6 +2691,29 @@ const BUSINESS_MODULES = [
   { key: 'reports', label: 'Báo Cáo' }
 ];
 
+// Các loại Văn bản trình / Tờ trình cố định (khớp đúng option value ở #subType) — dùng làm khoá để
+// cấu hình quy trình phê duyệt RIÊNG cho từng loại (xem DB.submissionTypeDeptWorkflows,
+// getSubmissionDeptWorkflowConfig()), vì các loại tờ trình khác nhau thường cần luồng duyệt khác nhau.
+const SUBMISSION_TYPES = [
+  { key: 'CHU_TRUONG', label: 'Tờ trình xin chủ trương' },
+  { key: 'KINH_PHI', label: 'Tờ trình duyệt kinh phí' },
+  { key: 'NHAN_SU', label: 'Tờ trình nhân sự / bổ nhiệm' },
+  { key: 'QUY_CHE', label: 'Tờ trình ban hành Quy chế / Quy định' },
+  { key: 'KHAC', label: 'Tờ trình khác' }
+];
+activeWfSubmissionType = SUBMISSION_TYPES[0].key;
+
+// 3 lớp phê duyệt BỔ SUNG tuỳ chọn cho Văn bản trình — cộng thêm vào SAU quy trình phòng ban (gốc),
+// theo đúng thứ tự cố định dưới đây (Đồng trình -> Phê duyệt đồng cấp -> BGD, vì BGD luôn là bước ký
+// cuối cùng mang tính chỉ đạo). Người trình tick chọn lớp nào khi tạo tờ trình thì lớp đó được thêm
+// vào cuối quy trình hiệu lực của đúng tờ trình đó (xem submitSubmissionReq()). Thành viên từng lớp
+// do admin gán ở màn "Quản Lý Nhóm Phê Duyệt Trình" (DB.submissionApprovalGroups).
+const SUBMISSION_APPROVAL_LAYERS = [
+  { key: 'DONG_TRINH', label: 'Đồng trình' },
+  { key: 'DONG_CAP', label: 'Phê duyệt đồng cấp' },
+  { key: 'BGD', label: 'Ban Giám Đốc (Phê duyệt chỉ đạo)' }
+];
+
 // Cổng truy cập module độc lập với các quyền hành động chi tiết (Xem/Tạo/Tải...) — admin luôn qua
 // được; user thường mặc định được BẬT ở mọi module (giữ nguyên hành vi cũ) trừ khi admin tắt riêng.
 function hasModuleAccess(user, moduleKey) {
@@ -2765,6 +2809,60 @@ function getStepAdvanceMessage(stepApprovers) {
   return normalizeApproversList(stepApprovers).length > 1
     ? '✅ Đã đủ đồng phê duyệt bước này — chuyển sang bước tiếp theo!'
     : '✅ Đã chuyển sang bước phê duyệt tiếp theo!';
+}
+
+// ==========================================
+// VĂN BẢN TRÌNH — QUY TRÌNH THEO LOẠI TỜ TRÌNH + LỚP PHÊ DUYỆT BỔ SUNG CỘNG THÊM
+// ==========================================
+
+// Cấu hình quy trình phòng ban CHO ĐÚNG LOẠI tờ trình — ưu tiên cấu hình riêng của loại đó nếu admin
+// đã thiết lập, không có thì rơi về cấu hình chung theo phòng ban (DB.submissionDeptWorkflows, hành
+// vi cũ trước khi có tính năng theo loại) — nên chưa cấu hình gì thêm thì hành vi giữ nguyên như cũ.
+function getSubmissionDeptWorkflowConfig(type, dept) {
+  const typeEntry = SUBMISSION_TYPES.find(t => t.label === type);
+  const typeKey = typeEntry ? typeEntry.key : 'KHAC';
+  const typeMap = DB.submissionTypeDeptWorkflows[typeKey];
+  const fromType = typeMap ? typeMap[dept] : null;
+  if (fromType) return fromType;
+  return DB.submissionDeptWorkflows[dept] || { workflowId: 'WF_1STEP', approvers: { 1: ['admin'] } };
+}
+
+// Dựng quy trình HIỆU LỰC cho 1 tờ trình MỚI (lúc tạo) = quy trình phòng ban (gốc, theo đúng loại) +
+// các lớp phê duyệt bổ sung tuỳ chọn người trình đã tick, nối vào SAU theo đúng thứ tự cố định ở
+// SUBMISSION_APPROVAL_LAYERS. Thành viên từng lớp bổ sung được CHỐT LẠI (snapshot) ngay lúc tạo —
+// sau này admin đổi thành viên nhóm không ảnh hưởng tới tờ trình đang xử lý dở.
+function buildEffectiveSubmissionWorkflow(type, dept, selectedLayerKeys) {
+  const baseConfig = getSubmissionDeptWorkflowConfig(type, dept);
+  const baseWf = DB.workflows.find(w => w.id === baseConfig.workflowId) || { steps: [{ order: 1, name: 'Sếp duyệt' }] };
+
+  const steps = baseWf.steps.map(s => ({ order: s.order, name: s.name }));
+  const approvers = {};
+  baseWf.steps.forEach(s => { approvers[s.order] = baseConfig.approvers?.[s.order] || []; });
+
+  (selectedLayerKeys || []).forEach(layerKey => {
+    const layer = SUBMISSION_APPROVAL_LAYERS.find(l => l.key === layerKey);
+    if (!layer) return;
+    const stepOrder = steps.length + 1;
+    steps.push({ order: stepOrder, name: layer.label });
+    approvers[stepOrder] = [...(DB.submissionApprovalGroups[layerKey] || [])];
+  });
+
+  return { steps, approvers };
+}
+
+// Lấy quy trình HIỆU LỰC của 1 tờ trình ĐÃ TẠO — dùng snapshot đã chốt lúc tạo (effectiveSteps/
+// effectiveApprovers) nếu có; tờ trình cũ tạo trước khi có tính năng này thì suy ra như cách cũ
+// (quy trình phòng ban theo loại, không có lớp bổ sung nào) để không phá vỡ dữ liệu đã có.
+function resolveSubmissionWorkflow(sub) {
+  if (sub.effectiveSteps && sub.effectiveApprovers) {
+    return { steps: sub.effectiveSteps, approvers: sub.effectiveApprovers };
+  }
+  const baseConfig = getSubmissionDeptWorkflowConfig(sub.type, sub.dept);
+  const baseWf = DB.workflows.find(w => w.id === baseConfig.workflowId) || { steps: [{ order: 1, name: 'Sếp duyệt' }] };
+  const steps = baseWf.steps.map(s => ({ order: s.order, name: s.name }));
+  const approvers = {};
+  baseWf.steps.forEach(s => { approvers[s.order] = baseConfig.approvers?.[s.order] || []; });
+  return { steps, approvers };
 }
 
 // --- HÀM KIỂM TRA PHÂN QUYỀN THEO MODULE ---
@@ -3157,6 +3255,8 @@ async function initDatabase() {
 
     DB.deptWorkflows = data.deptWorkflows || {};
     DB.submissionDeptWorkflows = data.submissionDeptWorkflows || {};
+    DB.submissionTypeDeptWorkflows = data.submissionTypeDeptWorkflows || {};
+    DB.submissionApprovalGroups = data.submissionApprovalGroups || {};
     DB.carDeptWorkflows = data.carDeptWorkflows || {};
 
     DB.officeBuyDeptWorkflows = data.officeBuyDeptWorkflows || {};
@@ -3599,7 +3699,7 @@ function switchTab(tabName) {
   populateDropdowns();
 
   if (tabName === 'doc') { renderDynamicInputsForModule('DOC', 'dynamicFieldsContainer_DOC'); renderDocs(); updateUploadDeptDropdown(); }
-  if (tabName === 'submission') { renderDynamicInputsForModule('SUBMISSION', 'dynamicFieldsContainer_SUBMISSION'); renderSubmissionReqs(); }
+  if (tabName === 'submission') { renderDynamicInputsForModule('SUBMISSION', 'dynamicFieldsContainer_SUBMISSION'); renderSubmissionApprovalLayerCheckboxes(); renderSubmissionReqs(); }
   if (tabName === 'task') {
     document.getElementById('btnManualTaskCreate').classList.toggle('hidden', !canManageTasks(currentUser));
     renderTasks();
@@ -4243,6 +4343,7 @@ async function submitSubmissionReq(e) {
   const priority = document.getElementById('subPriority').value;
   const content = document.getElementById('subContent').value.trim();
   const fileInput = document.getElementById('subFile');
+  const selectedLayerKeys = [...document.querySelectorAll('#subApprovalLayersContainer input[type="checkbox"]:checked')].map(cb => cb.value);
 
   if (DB.submissions.some(s => s.code === code)) {
     return alert('Mã văn bản trình / tờ trình đã tồn tại!');
@@ -4267,6 +4368,8 @@ async function submitSubmissionReq(e) {
     }
   }
 
+  const effectiveWf = buildEffectiveSubmissionWorkflow(type, dept, selectedLayerKeys);
+
   const newSub = {
     id: Date.now(),
     code: code,
@@ -4284,6 +4387,9 @@ async function submitSubmissionReq(e) {
     createdAt: new Date().toLocaleString('vi-VN'),
     status: 'PENDING',
     currentStep: 1,
+    selectedApprovalLayers: selectedLayerKeys,
+    effectiveSteps: effectiveWf.steps,
+    effectiveApprovers: effectiveWf.approvers,
     history: [
       {
         step: 0,
@@ -4300,8 +4406,7 @@ async function submitSubmissionReq(e) {
   syncStorage('submissions');
   logSystemAction('SUBMISSION', 'CREATE_SUBMISSION', `Tạo tờ trình mới [${code} - ${title}]`, 'SUCCESS', code);
 
-  const newSubWfConfig = DB.submissionDeptWorkflows[dept];
-  const newSubApprovers = newSubWfConfig?.approvers?.[1] || [];
+  const newSubApprovers = effectiveWf.approvers?.[1] || [];
   if (newSubApprovers.length) {
     notifyUsersByEmail('SUBMISSION', 'NOTIFY_APPROVAL_NEEDED', code, newSubApprovers,
       `[VPDT] Tờ trình ${code} cần bạn phê duyệt`,
@@ -4310,7 +4415,19 @@ async function submitSubmissionReq(e) {
 
   alert('✅ Trình văn bản / tờ trình thành công!');
   e.target.reset();
+  renderSubmissionApprovalLayerCheckboxes();
   renderSubmissionReqs();
+}
+
+function renderSubmissionApprovalLayerCheckboxes() {
+  const container = document.getElementById('subApprovalLayersContainer');
+  if (!container) return;
+  container.innerHTML = SUBMISSION_APPROVAL_LAYERS.map(layer => `
+    <label class="flex items-center gap-1.5 text-gray-700 cursor-pointer">
+      <input type="checkbox" value="${layer.key}">
+      <span>${escapeHtml(layer.label)}</span>
+    </label>
+  `).join('');
 }
 
 function onSubFilterChange() {
@@ -4334,7 +4451,7 @@ function renderSubmissionReqs() {
   const visibleSubs = DB.submissions.filter(sub => {
     const canView = scopeAllows(currentUser, currentUser.perms?.submissionView, sub.dept) ||
       sub.creator === currentUser.username ||
-      isApproverForDeptWorkflow(DB.submissionDeptWorkflows[sub.dept], currentUser.username);
+      isApproverForDeptWorkflow(resolveSubmissionWorkflow(sub), currentUser.username);
     if (!canView) return false;
 
     if (deptFilter && sub.dept !== deptFilter) return false;
@@ -4354,10 +4471,10 @@ function renderSubmissionReqs() {
   }
 
   tbody.innerHTML = pageSubs.map(sub => {
-    const wfConfig = DB.submissionDeptWorkflows[sub.dept] || { workflowId: 'WF_1STEP', approvers: { 1: ['admin'] } };
-    const wf = DB.workflows.find(w => w.id === wfConfig.workflowId) || { steps: [{ name: 'Sếp duyệt' }] };
+    const resolvedWf = resolveSubmissionWorkflow(sub);
+    const wf = { steps: resolvedWf.steps };
 
-    const currentStepApprovers = wfConfig.approvers ? (wfConfig.approvers[sub.currentStep] || []) : [];
+    const currentStepApprovers = resolvedWf.approvers ? (resolvedWf.approvers[sub.currentStep] || []) : [];
     const canApprove = (sub.status === 'PENDING') && canApproveStep(currentUser, currentStepApprovers, sub.history, sub.currentStep);
 
     let progressBadge = '';
@@ -4426,8 +4543,7 @@ function openProcessSubmissionModal(subId) {
   const sub = DB.submissions.find(s => s.id === subId);
   if (!sub) return;
 
-  const wfConfig = DB.submissionDeptWorkflows[sub.dept] || { workflowId: 'WF_1STEP', approvers: { 1: ['admin'] } };
-  const wf = DB.workflows.find(w => w.id === wfConfig.workflowId) || { steps: [{ name: 'Sếp duyệt' }] };
+  const wfConfig = resolveSubmissionWorkflow(sub);
 
   document.getElementById('subModalTitle').innerText = `📜 Bút Phê & Xử Lý: ${sub.title} (${sub.code})`;
   document.getElementById('subModalSub').innerText = `Phòng ban: ${sub.dept} | Người trình: ${sub.creatorName} | Độ khẩn: ${sub.priority}`;
@@ -4480,6 +4596,8 @@ function openProcessSubmissionModal(subId) {
   `).join('');
   document.getElementById('subModalHistory').innerHTML = historyHTML || '<div class="text-gray-400 italic">Chưa có lịch sử xử lý.</div>';
 
+  renderSubModalInfoRequests(sub);
+
   const currentStepApprovers = wfConfig.approvers ? (wfConfig.approvers[sub.currentStep] || []) : [];
   const canApprove = (sub.status === 'PENDING') && canApproveStep(currentUser, currentStepApprovers, sub.history, sub.currentStep);
 
@@ -4487,6 +4605,7 @@ function openProcessSubmissionModal(subId) {
   if (canApprove) {
     actionBtns.innerHTML = `
       <button onclick="processSubmission('REJECT')" class="bg-red-600 text-white px-4 py-1.5 rounded font-bold hover:bg-red-700 text-xs">❌ Từ Chối / Trả Về</button>
+      <button onclick="requestSubmissionInfo()" class="bg-blue-600 text-white px-4 py-1.5 rounded font-bold hover:bg-blue-700 text-xs">📋 Yêu Cầu Bổ Sung</button>
       <button onclick="withApprovalAuth(() => processSubmission('APPROVE'))" class="bg-green-600 text-white px-5 py-1.5 rounded font-bold hover:bg-green-700 text-xs">✅ Phê Duyệt & Chuyển Bước</button>
     `;
   } else {
@@ -4511,8 +4630,8 @@ function processSubmission(actionType) {
     return alert('Vui lòng nhập lý do từ chối vào ô Ý kiến chỉ đạo!');
   }
 
-  const wfConfig = DB.submissionDeptWorkflows[sub.dept];
-  const wf = wfConfig ? DB.workflows.find(w => w.id === wfConfig.workflowId) : null;
+  const wfConfig = resolveSubmissionWorkflow(sub);
+  const wf = { steps: wfConfig.steps };
   const currentStepApprovers = wfConfig?.approvers ? (wfConfig.approvers[sub.currentStep] || []) : [];
 
   if (!sub.history) sub.history = [];
@@ -4599,14 +4718,135 @@ function processSubmission(actionType) {
   renderSubmissionReqs();
 }
 
+// YÊU CẦU BỔ SUNG: theo đúng yêu cầu người dùng, chỉ nhắm tới ĐÚNG người yêu cầu (approver hiện đang
+// xử lý bước hiện tại) — KHÔNG đổi trạng thái tờ trình, KHÔNG khoá bước, KHÔNG reset các đồng phê
+// duyệt khác đã duyệt rồi. Cơ chế "ALL required" của isStepApprovalComplete() đã tự nhiên giữ bước
+// chưa hoàn tất cho đến khi chính người yêu cầu này bấm Phê Duyệt — không cần thêm logic khoá riêng.
+function requestSubmissionInfo() {
+  if (!currentProcessingSubId) return;
+  const sub = DB.submissions.find(s => s.id === currentProcessingSubId);
+  if (!sub) return;
+
+  const comment = document.getElementById('txtSubmissionComment').value.trim();
+  if (!comment) {
+    return alert('Vui lòng nhập nội dung cần bổ sung vào ô Ý kiến chỉ đạo!');
+  }
+
+  const wfConfig = resolveSubmissionWorkflow(sub);
+  const currentStepApprovers = wfConfig.approvers ? (wfConfig.approvers[sub.currentStep] || []) : [];
+  if (!canApproveStep(currentUser, currentStepApprovers, sub.history, sub.currentStep)) {
+    return alert('⛔ Bạn không có quyền yêu cầu bổ sung ở bước hiện tại, hoặc đã xử lý bước này rồi!');
+  }
+
+  if (!sub.infoRequests) sub.infoRequests = [];
+  const reqEntry = {
+    id: Date.now(),
+    step: sub.currentStep,
+    requestedBy: currentUser.username,
+    requestedByName: currentUser.name,
+    reason: comment,
+    requestedAt: new Date().toLocaleString('vi-VN'),
+    response: null,
+    respondedAt: null
+  };
+  sub.infoRequests.push(reqEntry);
+
+  if (!sub.history) sub.history = [];
+  sub.history.push({
+    step: sub.currentStep,
+    approver: currentUser.name,
+    username: currentUser.username,
+    action: 'REQUEST_INFO',
+    comment: comment,
+    time: reqEntry.requestedAt
+  });
+
+  syncStorage('submissions');
+  logSystemAction('SUBMISSION', 'REQUEST_INFO', `Yêu cầu bổ sung cho tờ trình [${sub.code}]: ${comment}`, 'SUCCESS', sub.code);
+  notifyUsersByEmail('SUBMISSION', 'NOTIFY_REQUEST_INFO', sub.code, [sub.creator],
+    `[VPDT] Tờ trình ${sub.code} cần bổ sung thông tin`,
+    `Tờ trình "${sub.title}" (${sub.code}) của bạn cần bổ sung: ${comment}`);
+
+  alert('✅ Đã gửi yêu cầu bổ sung tới người trình!');
+  closeProcessSubmissionModal();
+  renderSubmissionReqs();
+}
+
+function renderSubModalInfoRequests(sub) {
+  const container = document.getElementById('subModalInfoRequests');
+  if (!container) return;
+  const requests = sub.infoRequests || [];
+  if (requests.length === 0) { container.innerHTML = ''; return; }
+
+  const isCreator = currentUser.username === sub.creator;
+  container.innerHTML = `
+    <div>
+      <h4 class="font-bold text-blue-700 mb-2">📋 Yêu Cầu Bổ Sung</h4>
+      <div class="space-y-1.5">
+        ${requests.map(r => `
+          <div class="bg-blue-50 border border-blue-200 p-2 rounded text-xs space-y-1">
+            <div class="flex justify-between font-semibold text-gray-700">
+              <span>${escapeHtml(r.requestedByName)} yêu cầu (bước ${r.step})</span>
+              <span class="text-gray-400 font-normal">${escapeHtml(r.requestedAt)}</span>
+            </div>
+            <div class="text-gray-800 italic">"${escapeHtml(r.reason)}"</div>
+            ${r.response
+              ? `<div class="bg-white p-1.5 rounded border mt-1"><b>Đã bổ sung (${escapeHtml(r.respondedAt)}):</b> ${escapeHtml(r.response)}</div>`
+              : (isCreator
+                  ? `<div class="flex gap-1 mt-1">
+                      <input type="text" id="subInfoReplyInput_${r.id}" placeholder="Nhập nội dung bổ sung..." class="flex-1 border p-1 rounded text-xs">
+                      <button onclick="respondSubmissionInfo(${r.id})" class="bg-blue-600 text-white px-2 py-1 rounded text-[11px] font-bold hover:bg-blue-700">Gửi</button>
+                    </div>`
+                  : `<div class="text-amber-600 italic">⏳ Đang chờ người trình bổ sung...</div>`)
+            }
+          </div>
+        `).join('')}
+      </div>
+    </div>
+  `;
+}
+
+function respondSubmissionInfo(reqId) {
+  if (!currentProcessingSubId) return;
+  const sub = DB.submissions.find(s => s.id === currentProcessingSubId);
+  if (!sub) return;
+  const reqEntry = (sub.infoRequests || []).find(r => r.id === reqId);
+  if (!reqEntry) return;
+
+  const input = document.getElementById(`subInfoReplyInput_${reqId}`);
+  const response = (input?.value || '').trim();
+  if (!response) return alert('Vui lòng nhập nội dung bổ sung!');
+
+  reqEntry.response = response;
+  reqEntry.respondedAt = new Date().toLocaleString('vi-VN');
+
+  if (!sub.history) sub.history = [];
+  sub.history.push({
+    step: reqEntry.step,
+    approver: currentUser.name,
+    username: currentUser.username,
+    action: 'RESPOND_INFO',
+    comment: response,
+    time: reqEntry.respondedAt
+  });
+
+  syncStorage('submissions');
+  logSystemAction('SUBMISSION', 'RESPOND_INFO', `Phản hồi yêu cầu bổ sung cho tờ trình [${sub.code}]: ${response}`, 'SUCCESS', sub.code);
+  notifyUsersByEmail('SUBMISSION', 'NOTIFY_RESPOND_INFO', sub.code, [reqEntry.requestedBy],
+    `[VPDT] Tờ trình ${sub.code} đã được bổ sung thông tin`,
+    `Người trình đã bổ sung thông tin bạn yêu cầu cho tờ trình "${sub.title}" (${sub.code}): ${response}`);
+
+  alert('✅ Đã gửi bổ sung!');
+  openProcessSubmissionModal(sub.id);
+}
+
 // Dựng HTML "Phiếu Phê Duyệt Văn Bản Trình" — ghép vào khung dùng chung buildApprovalSlipShellHTML()
 // (định nghĩa ở module Đăng Ký Xe, các hàm function được hoisted nên gọi trước vị trí định nghĩa
 // trong file vẫn hợp lệ). Bố cục tự thiết kế hợp lý cho văn bản trình nội bộ: thông tin trình +
 // nội dung + trường mở rộng (nếu có) + khối chữ ký nhiều cấp theo đúng quy trình đã cấu hình.
 function buildSubmissionApprovalSlipHTML(sub) {
-  const wfConfig = DB.submissionDeptWorkflows[sub.dept] || { workflowId: 'WF_1STEP' };
-  const wf = DB.workflows.find(w => w.id === wfConfig.workflowId) || { steps: [{ order: 1, name: 'Duyệt' }] };
-  const signatureColumnsHTML = wf.steps.map(step => buildApprovalSignatureColumnHTML(step, sub.history)).join('');
+  const wfConfig = resolveSubmissionWorkflow(sub);
+  const signatureColumnsHTML = wfConfig.steps.map(step => buildApprovalSignatureColumnHTML(step, sub.history)).join('');
 
   let extraFieldsHTML = '';
   if (sub.customData && Object.keys(sub.customData).length > 0) {
@@ -8129,7 +8369,7 @@ function setSystemSubTab(subTab) {
   document.getElementById('btnSystemSubLog').className = subTab === 'LOG' ? activeCls : inactiveCls;
 
   if (subTab === 'ADMIN') {
-    renderDeptList(); renderCatList(); renderDeptCheckboxes(); renderModuleAccessCheckboxes(); renderUsers(); loadEmailConfigToForm(); renderPermGroupsList();
+    renderDeptList(); renderCatList(); renderDeptCheckboxes(); renderModuleAccessCheckboxes(); renderUsers(); loadEmailConfigToForm(); renderPermGroupsList(); renderSubmissionApprovalGroups();
   }
   if (subTab === 'FORM') { switchFormTab(activeFormTab); }
   if (subTab === 'WORKFLOW') { renderWorkflowTab(); }
@@ -8392,7 +8632,12 @@ async function collectDynamicFieldsData(modKey, containerId) {
 // module mới chỉ cần sửa 1 chỗ, tránh nguy cơ quên đồng bộ 1 trong nhiều hàm).
 const WF_MODULE_CONFIG = {
   DOC: { dbKey: 'deptWorkflows', label: 'Tài liệu', title: '📂 Cấu Hình Quy Trình Phê Duyệt Tài Liệu Theo Phòng Ban' },
-  SUBMISSION: { dbKey: 'submissionDeptWorkflows', label: 'Văn bản trình', title: '📜 Cấu Hình Quy Trình Văn Bản Trình / Tờ Trình Theo Phòng Ban' },
+  // types: cấu hình quy trình theo phòng ban RIÊNG cho từng loại tờ trình (xem SUBMISSION_TYPES) —
+  // dbKey trỏ tới cấu trúc LỒNG {loại: {phòng ban: config}}. legacyDbKey là cấu hình chung cũ (chỉ
+  // theo phòng ban, trước khi có tính năng theo loại) — dùng làm phương án dự phòng hiển thị/lưu khi
+  // loại đang chọn CHƯA được admin cấu hình riêng, để không đổi hành vi cho tới khi admin chủ động
+  // tuỳ chỉnh (xem getSubmissionDeptWorkflowConfig()).
+  SUBMISSION: { dbKey: 'submissionTypeDeptWorkflows', legacyDbKey: 'submissionDeptWorkflows', types: SUBMISSION_TYPES, label: 'Văn bản trình', title: '📜 Cấu Hình Quy Trình Văn Bản Trình / Tờ Trình Theo Phòng Ban' },
   CAR: { dbKey: 'carDeptWorkflows', label: 'Đăng ký xe', title: '🚗 Cấu Hình Quy Trình Đăng Ký Xe Theo Phòng Ban' },
   OFFICE_BUY: { dbKey: 'officeBuyDeptWorkflows', label: 'Mua bán VP', title: '🛒 Cấu Hình Quy Trình Phê Duyệt Mua Bán VP Theo Phòng Ban' },
   OFFICE_FIX: { dbKey: 'officeFixDeptWorkflows', label: 'Sửa chữa VP', title: '🔧 Cấu Hình Quy Trình Phê Duyệt Sửa Chữa VP Theo Phòng Ban' },
@@ -8411,6 +8656,37 @@ function switchWfModule(mod) {
   const lbl = document.getElementById('wfConfigTitle');
   if (lbl) lbl.innerText = WF_MODULE_CONFIG[mod].title;
 
+  // Văn bản trình có thêm 1 hàng tab chọn LOẠI tờ trình (mỗi loại cấu hình quy trình riêng) — chỉ
+  // hiện khi đang ở đúng module này, module khác vẫn cấu hình 1 quy trình duy nhất theo phòng ban.
+  const typeTabsEl = document.getElementById('wfSubmissionTypeTabs');
+  const hasTypes = !!WF_MODULE_CONFIG[mod].types;
+  if (typeTabsEl) {
+    typeTabsEl.classList.toggle('hidden', !hasTypes);
+    typeTabsEl.classList.toggle('flex', hasTypes);
+  }
+  if (hasTypes) {
+    activeWfSubmissionType = WF_MODULE_CONFIG[mod].types[0].key;
+    renderWfSubmissionTypeTabs();
+  }
+
+  renderWorkflowTab();
+}
+
+// Hàng tab chọn LOẠI tờ trình khi đang cấu hình quy trình Văn bản trình — chọn xong render lại đúng
+// cấu hình theo phòng ban của loại đó (xem renderWorkflowTab()).
+function renderWfSubmissionTypeTabs() {
+  const container = document.getElementById('wfSubmissionTypeTabs');
+  if (!container) return;
+  const types = WF_MODULE_CONFIG[activeWfMod].types || [];
+  container.innerHTML = types.map(t => `
+    <button onclick="switchWfSubmissionType('${t.key}')" class="px-3 py-1.5 rounded text-xs font-bold ${t.key === activeWfSubmissionType ? 'bg-emerald-600 text-white' : 'bg-gray-100 text-gray-700'}">${escapeHtml(t.label)}</button>
+  `).join('');
+}
+
+function switchWfSubmissionType(typeKey) {
+  activeWfSubmissionType = typeKey;
+  pendingWfTemplate = {}; // Đổi loại tờ trình = huỷ mọi lựa chọn mẫu quy trình đang preview dở của loại trước
+  renderWfSubmissionTypeTabs();
   renderWorkflowTab();
 }
 
@@ -8439,10 +8715,22 @@ function renderWorkflowTab() {
   const container = document.getElementById('deptWorkflowConfigContainer');
   if (!container) return;
 
-  const deptWfMap = DB[WF_MODULE_CONFIG[activeWfMod].dbKey];
+  // Module có "types" (hiện chỉ Văn bản trình): cấu hình LỒNG theo loại rồi mới tới phòng ban —
+  // chưa cấu hình riêng cho loại đang chọn thì rơi về cấu hình chung cũ (legacyDbKey) làm mặc định
+  // hiển thị, để không đổi hành vi cho tới khi admin chủ động tuỳ chỉnh riêng loại đó.
+  const modConfig = WF_MODULE_CONFIG[activeWfMod];
+  let deptWfMap, legacyMap;
+  if (modConfig.types) {
+    if (!DB[modConfig.dbKey][activeWfSubmissionType]) DB[modConfig.dbKey][activeWfSubmissionType] = {};
+    deptWfMap = DB[modConfig.dbKey][activeWfSubmissionType];
+    legacyMap = modConfig.legacyDbKey ? DB[modConfig.legacyDbKey] : {};
+  } else {
+    deptWfMap = DB[modConfig.dbKey];
+    legacyMap = {};
+  }
 
   container.innerHTML = DB.depts.map(dept => {
-    const savedConfig = deptWfMap[dept] || { workflowId: 'WF_1STEP', approvers: { 1: ['admin'] } };
+    const savedConfig = deptWfMap[dept] || legacyMap[dept] || { workflowId: 'WF_1STEP', approvers: { 1: ['admin'] } };
     const isPending = pendingWfTemplate[dept] !== undefined && pendingWfTemplate[dept] !== savedConfig.workflowId;
     const effectiveWfId = isPending ? pendingWfTemplate[dept] : savedConfig.workflowId;
     const selectedWf = DB.workflows.find(w => w.id === effectiveWfId) || DB.workflows[0];
@@ -8537,8 +8825,14 @@ function saveDeptWorkflowConfig(dept) {
   }
 
   const newConfig = { workflowId: selectedWfId, approvers: approversObj };
-  const dbKey = WF_MODULE_CONFIG[activeWfMod].dbKey;
-  DB[dbKey][dept] = newConfig;
+  const modConfig = WF_MODULE_CONFIG[activeWfMod];
+  const dbKey = modConfig.dbKey;
+  if (modConfig.types) {
+    if (!DB[dbKey][activeWfSubmissionType]) DB[dbKey][activeWfSubmissionType] = {};
+    DB[dbKey][activeWfSubmissionType][dept] = newConfig;
+  } else {
+    DB[dbKey][dept] = newConfig;
+  }
   syncStorage(dbKey);
 
   delete pendingWfTemplate[dept];
@@ -9123,6 +9417,48 @@ function deletePermGroup(id) {
   logSystemAction('USER_MGM', 'DELETE_PERM_GROUP', `Xóa nhóm phân quyền [${group.name}]`, 'SUCCESS', group.name);
   renderPermGroupsList();
   renderUsers();
+}
+
+// ==========================================
+// NHÓM PHÊ DUYỆT TRÌNH (Văn bản trình) — 3 nhóm CỐ ĐỊNH (SUBMISSION_APPROVAL_LAYERS), admin chỉ gán
+// thành viên, không tạo/xoá nhóm mới. Người trình tick chọn nhóm nào khi tạo tờ trình thì nhóm đó
+// được cộng thêm làm 1 bước phê duyệt bổ sung ở cuối quy trình phòng ban (xem
+// buildEffectiveSubmissionWorkflow()).
+// ==========================================
+function renderSubmissionApprovalGroups() {
+  const container = document.getElementById('submissionApprovalGroupsContainer');
+  if (!container) return;
+
+  container.innerHTML = SUBMISSION_APPROVAL_LAYERS.map(layer => {
+    const members = DB.submissionApprovalGroups[layer.key] || [];
+    const checkboxes = DB.users.map(u => `
+      <label class="flex items-center gap-1.5 text-gray-700 cursor-pointer text-[11px]">
+        <input type="checkbox" value="${escapeHtml(u.username)}" data-layer="${layer.key}" ${members.includes(u.username) ? 'checked' : ''}>
+        <span>${escapeHtml(u.name)} (${escapeHtml(u.username)}) <span class="text-gray-400">- ${escapeHtml(u.dept)}</span></span>
+      </label>
+    `).join('');
+
+    return `
+      <div class="bg-slate-50 p-3 rounded border space-y-2">
+        <div class="font-bold text-gray-800 text-xs">${escapeHtml(layer.label)}</div>
+        <div class="space-y-1 max-h-40 overflow-y-auto">${checkboxes || '<span class="text-gray-400 italic text-[11px]">Chưa có người dùng nào.</span>'}</div>
+        <button type="button" onclick="saveSubmissionApprovalGroup('${layer.key}')" class="w-full bg-rose-600 text-white px-2 py-1 rounded text-[11px] font-bold hover:bg-rose-700">Lưu Thành Viên</button>
+      </div>
+    `;
+  }).join('');
+}
+
+function saveSubmissionApprovalGroup(layerKey) {
+  const checkboxes = document.querySelectorAll(`input[data-layer="${layerKey}"]`);
+  const members = [];
+  checkboxes.forEach(cb => { if (cb.checked) members.push(cb.value); });
+
+  DB.submissionApprovalGroups[layerKey] = members;
+  syncStorage('submissionApprovalGroups');
+
+  const layer = SUBMISSION_APPROVAL_LAYERS.find(l => l.key === layerKey);
+  logSystemAction('SUBMISSION', 'SAVE_APPROVAL_GROUP', `Cập nhật nhóm phê duyệt trình [${layer?.label}]: ${members.length} thành viên`, 'SUCCESS', layerKey);
+  alert(`✅ Đã lưu thành viên nhóm "${layer?.label}"!`);
 }
 
 function cancelPermFormEdit() {
