@@ -29,6 +29,18 @@ function stripPasswords(users) {
   return users.map(({ pass, password, ...rest }) => rest);
 }
 
+// Xác nhận LẠI quyền admin từ CSDL tại thời điểm ghi, không tin cờ "admin" cache sẵn trong JWT lúc
+// đăng nhập (req.user.admin, hiệu lực tới 8h) — nếu không re-fetch, một admin vừa bị THU HỒI quyền sẽ
+// vẫn ghi được vào các collection nhạy cảm (users/permGroups/deptWorkflows...) cho tới khi JWT hết
+// hạn hoặc họ tự đăng xuất. Khớp đúng cách routes/workflow.js, routes/create.js, routes/records.js đã
+// làm (re-fetch freshUser từ DB thay vì tin token) — trước đây route này (viết từ trước, ở Bước 0) là
+// nơi DUY NHẤT còn sót lại kiểu tin token cũ.
+async function isCurrentlyAdmin(username) {
+  const users = await getAppDataValue('users');
+  const freshUser = (users || []).find(u => u.username === username);
+  return !!freshUser?.perms?.admin;
+}
+
 // Trước khi ghi collection "users": KHÔNG bao giờ lưu lại mật khẩu dạng plaintext.
 // - Nếu admin để trống ô mật khẩu khi sửa user (form không còn hiển thị mật khẩu cũ) -> giữ
 //   nguyên hash đang lưu của đúng user đó (khớp theo id), KHÔNG xoá/ghi đè thành rỗng.
@@ -100,14 +112,14 @@ router.post('/:key', async (req, res) => {
   const { key } = req.params;
   if (!VALID_KEYS.has(key)) return res.status(400).json({ error: `Key không hợp lệ: ${key}` });
 
-  if (ADMIN_ONLY_KEYS.has(key) && !req.user.admin) {
-    return res.status(403).json({ error: 'Chỉ Quản Trị Viên mới có quyền sửa dữ liệu này' });
-  }
-
   let value = req.body;
   if (value === undefined) return res.status(400).json({ error: 'Thiếu dữ liệu (body) cần lưu' });
 
   try {
+    if (ADMIN_ONLY_KEYS.has(key) && !(await isCurrentlyAdmin(req.user.username))) {
+      return res.status(403).json({ error: 'Chỉ Quản Trị Viên mới có quyền sửa dữ liệu này' });
+    }
+
     if (key === 'users') value = await prepareUsersForSave(value);
 
     const ifMatch = req.get('If-Match');
