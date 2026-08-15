@@ -5,7 +5,7 @@
 // dùng route đơn giản riêng thay vì lib/workflowEngine.js (vốn dành cho quy trình có currentStep).
 const express = require('express');
 const router = express.Router();
-const { getAppDataValue, withLockedAppDataValue } = require('../lib/appData');
+const { withLockedAppDataValue } = require('../lib/appData');
 const { requireAuth } = require('../lib/auth');
 const { HttpError } = require('../lib/httpErrors');
 
@@ -25,9 +25,8 @@ router.post('/:id/:action', async (req, res) => {
   if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
 
   try {
-    const users = await getAppDataValue('users');
-    const freshUser = (users || []).find(u => u.username === req.user.username);
-    if (!freshUser) return res.status(401).json({ error: 'Tài khoản không còn tồn tại' });
+    // requireAuth đã tự tra cứu user hiện tại (kể cả active) và gắn vào req.freshUser.
+    const freshUser = req.freshUser;
     if (!freshUser.perms?.admin && !freshUser.perms?.[config.perm]) {
       return res.status(403).json({ error: 'Bạn không có quyền thực hiện thao tác này' });
     }

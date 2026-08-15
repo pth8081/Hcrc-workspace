@@ -3,20 +3,17 @@
 // toàn bộ mảng qua POST /api/data/:key như trước đây.
 const express = require('express');
 const router = express.Router();
-const { getAppDataValue, withLockedAppDataValue } = require('../lib/appData');
+const { withLockedAppDataValue } = require('../lib/appData');
 const { requireAuth } = require('../lib/auth');
 const { HttpError } = require('../lib/httpErrors');
 const recordActions = require('../lib/recordActions');
 
 router.use(requireAuth);
 
-// Xác định lại CHÍNH XÁC người dùng hiện tại từ DB (không tin field quyền trong JWT tuyệt đối — token
-// có thể còn hiệu lực dù quyền vừa bị đổi, xem lib/auth.js requireAuth).
-async function getFreshUser(req) {
-  const users = await getAppDataValue('users');
-  const freshUser = (users || []).find(u => u.username === req.user.username);
-  if (!freshUser) throw new HttpError(401, 'Tài khoản không còn tồn tại');
-  return { freshUser, users };
+// requireAuth đã tự xác định lại CHÍNH XÁC người dùng hiện tại từ DB (kể cả trạng thái active) và gắn
+// sẵn vào req.freshUser/req.allUsers — không cần đọc lại DB thêm 1 lần nữa cho cùng mục đích.
+function getFreshUser(req) {
+  return { freshUser: req.freshUser, users: req.allUsers };
 }
 
 function handleError(res, action, err) {
