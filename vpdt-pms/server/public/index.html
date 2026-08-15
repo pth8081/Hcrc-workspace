@@ -2582,6 +2582,23 @@ function buildPaginationBoxHTML(moduleKey, renderFnName) {
   `;
 }
 
+// Khối "Thao Tác" dùng chung cho mọi bảng danh sách nghiệp vụ: giữ 1 nút chính (hành động cần chú ý
+// nhất hoặc hay dùng nhất) hiển thị ngoài như trước, các thao tác còn lại gộp vào 1 dropdown "Khác ▾"
+// bên cạnh — tránh mỗi dòng có quá nhiều nút bấm làm bảng thống kê rối mắt. Chọn 1 mục trong dropdown
+// thực thi ngay qua hàm điều phối của module rồi tự trả dropdown về mục "Khác ▾" (không giữ lại lựa
+// chọn cũ, vì đây là menu hành động chứ không phải bộ lọc).
+// - primaryBtnHTML: chuỗi HTML <button> đã dựng sẵn cho hành động chính.
+// - secondaryOptions: mảng [{ value, label }] — các hành động còn lại.
+// - dispatcherFnName: tên hàm điều phối của module, nhận (id, value) và tự gọi đúng hàm xử lý.
+function buildActionCell(id, primaryBtnHTML, secondaryOptions, dispatcherFnName) {
+  const opts = (secondaryOptions || []).filter(Boolean);
+  if (opts.length === 0) return primaryBtnHTML;
+  return `${primaryBtnHTML}<select onchange="if(this.value){ ${dispatcherFnName}(${id}, this.value); } this.selectedIndex=0;" class="border rounded px-1 py-1 text-[11px] bg-white align-middle ml-1">
+    <option value="">Khác ▾</option>
+    ${opts.map(o => `<option value="${escapeHtml(o.value)}">${escapeHtml(o.label)}</option>`).join('')}
+  </select>`;
+}
+
 function logSystemAction(module, actionType, description, status = 'SUCCESS', target = '') {
   const logEntry = {
     id: Date.now() + Math.random(),
@@ -3863,18 +3880,45 @@ function renderDocs() {
         <td class="border p-2 text-center font-bold text-purple-700">${escapeHtml(doc.ver)}</td>
         <td class="border p-2">${progressBadge}</td>
         <td class="border p-2 text-center space-x-1">
-          <button onclick="viewDoc(${doc.id})" class="px-2 py-1 bg-blue-600 text-white rounded text-xs hover:bg-blue-700 font-semibold" title="Xem trực tiếp trong Protected View">👁️ Xem</button>
-          ${(doc.fileUrl || doc.fileData) && canDownloadFile(currentUser, 'doc', doc.dept, doc.uploader) ? `
-            <a href="${doc.fileUrl || doc.fileData}" download="${escapeHtml(doc.fileName || doc.code)}" class="inline-block px-2 py-1 bg-slate-600 text-white rounded text-xs hover:bg-slate-700 font-semibold" title="Tải tệp đính kèm về máy">⬇️ Tải</a>
-          ` : ''}
-          ${canApprove ? `
-            <button onclick="approveDoc(${doc.id})" class="px-2 py-1 bg-green-600 text-white rounded text-xs hover:bg-green-700 font-semibold" title="Phê duyệt bước này">✅ Duyệt</button>
-            <button onclick="rejectDoc(${doc.id})" class="px-2 py-1 bg-red-600 text-white rounded text-xs hover:bg-red-700 font-semibold" title="Từ chối tài liệu">❌ Từ chối</button>
-          ` : ''}
+          ${(() => {
+            const canDownload = (doc.fileUrl || doc.fileData) && canDownloadFile(currentUser, 'doc', doc.dept, doc.uploader);
+            const secondaryOptions = [];
+            let primaryBtnHTML;
+            if (canApprove) {
+              primaryBtnHTML = `<button onclick="runDocAction(${doc.id}, 'approve')" class="px-2 py-1 bg-green-600 text-white rounded text-xs hover:bg-green-700 font-semibold animate-pulse" title="Phê duyệt bước này">✅ Duyệt</button>`;
+              secondaryOptions.push({ value: 'view', label: '👁️ Xem' });
+              secondaryOptions.push({ value: 'reject', label: '❌ Từ chối' });
+            } else {
+              primaryBtnHTML = `<button onclick="runDocAction(${doc.id}, 'view')" class="px-2 py-1 bg-blue-600 text-white rounded text-xs hover:bg-blue-700 font-semibold" title="Xem trực tiếp trong Protected View">👁️ Xem</button>`;
+            }
+            if (canDownload) secondaryOptions.push({ value: 'download', label: '⬇️ Tải' });
+            return buildActionCell(doc.id, primaryBtnHTML, secondaryOptions, 'runDocAction');
+          })()}
         </td>
       </tr>
     `;
   }).join('');
+}
+
+// Hàm điều phối cho khối "Thao Tác" của Tài liệu (xem buildActionCell()) — riêng 'download' tự tạo
+// và bấm 1 thẻ <a download> tạm thời, thay cho thẻ <a> tĩnh cũ (không đặt được onclick vào <option>).
+function runDocAction(id, action) {
+  const doc = DB.docs.find(d => d.id === id);
+  if (!doc) return;
+  switch (action) {
+    case 'view': viewDoc(id); break;
+    case 'approve': approveDoc(id); break;
+    case 'reject': rejectDoc(id); break;
+    case 'download': {
+      const a = document.createElement('a');
+      a.href = doc.fileUrl || doc.fileData;
+      a.download = doc.fileName || doc.code;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      break;
+    }
+  }
 }
 
 async function uploadDoc(e) {
@@ -4344,20 +4388,37 @@ function renderSubmissionReqs() {
         </td>
         <td class="border p-2">${progressBadge}</td>
         <td class="border p-2 text-center space-x-1">
-          <button onclick="openProcessSubmissionModal(${sub.id})" class="px-2.5 py-1 ${canApprove ? 'bg-amber-600 text-white' : 'bg-gray-600 text-white'} rounded text-xs hover:opacity-90 font-bold">
-            ${canApprove ? '✍️ Bút phê / Duyệt' : '👁️ Xem chi tiết'}
-          </button>
-          ${sub.status === 'APPROVED' ? `
-            <button onclick="viewSubmissionApprovalSlip(${sub.id})" class="px-2 py-1 bg-blue-600 text-white rounded text-xs hover:bg-blue-700 font-bold" title="Xem Phiếu Phê Duyệt">👁️ Xem Phiếu</button>
-            ${canDownloadFile(currentUser, 'submission', sub.dept, sub.creator) ? `<button onclick="downloadSubmissionApprovalSlip(${sub.id})" class="px-2 py-1 bg-slate-600 text-white rounded text-xs hover:bg-slate-700 font-bold" title="Tải Phiếu Phê Duyệt">⬇️ Tải</button>` : ''}
-            ${DB.tasks.some(t => t.sourceType === 'SUBMISSION' && t.sourceCode === sub.code)
-              ? `<span class="px-2 py-1 bg-emerald-100 text-emerald-800 rounded text-xs font-bold" title="Đã tự động tạo Công việc theo dõi khi phê duyệt">✅ Đã có công việc</span>`
-              : (canManageTasks(currentUser) ? `<button onclick="createTaskFromSubmission(${sub.id})" class="px-2 py-1 bg-violet-600 text-white rounded text-xs hover:bg-violet-700 font-bold" title="Giao việc từ ý kiến chỉ đạo">📌 Giao việc</button>` : '')}
-          ` : ''}
+          ${(() => {
+            const primaryBtnHTML = `<button onclick="runSubmissionAction(${sub.id}, 'process')" class="px-2.5 py-1 ${canApprove ? 'bg-amber-600 text-white' : 'bg-gray-600 text-white'} rounded text-xs hover:opacity-90 font-bold">${canApprove ? '✍️ Bút phê / Duyệt' : '👁️ Xem chi tiết'}</button>`;
+            const secondaryOptions = [];
+            let extraBadge = '';
+            if (sub.status === 'APPROVED') {
+              secondaryOptions.push({ value: 'viewSlip', label: '👁️ Xem Phiếu' });
+              if (canDownloadFile(currentUser, 'submission', sub.dept, sub.creator)) {
+                secondaryOptions.push({ value: 'downloadSlip', label: '⬇️ Tải' });
+              }
+              if (DB.tasks.some(t => t.sourceType === 'SUBMISSION' && t.sourceCode === sub.code)) {
+                extraBadge = `<span class="px-2 py-1 bg-emerald-100 text-emerald-800 rounded text-xs font-bold" title="Đã tự động tạo Công việc theo dõi khi phê duyệt">✅ Đã có công việc</span>`;
+              } else if (canManageTasks(currentUser)) {
+                secondaryOptions.push({ value: 'createTask', label: '📌 Giao việc' });
+              }
+            }
+            return buildActionCell(sub.id, primaryBtnHTML, secondaryOptions, 'runSubmissionAction') + extraBadge;
+          })()}
         </td>
       </tr>
     `;
   }).join('');
+}
+
+// Hàm điều phối cho khối "Thao Tác" của Văn bản trình (xem buildActionCell()).
+function runSubmissionAction(id, action) {
+  switch (action) {
+    case 'process': openProcessSubmissionModal(id); break;
+    case 'viewSlip': viewSubmissionApprovalSlip(id); break;
+    case 'downloadSlip': downloadSubmissionApprovalSlip(id); break;
+    case 'createTask': createTaskFromSubmission(id); break;
+  }
 }
 
 function openProcessSubmissionModal(subId) {
@@ -5486,41 +5547,52 @@ function renderTasks() {
     const isAssigner = t.assignedBy === currentUser.username || currentUser.perms?.admin;
     const isOpenTask = t.status !== 'DONE' && t.status !== 'CANCELLED';
     const hasAccepted = (t.collaboratorAccepts || []).some(c => c.username === currentUser.username);
-    let actionBtns = '';
-    actionBtns += `<button onclick="openTaskDetailModal(${t.id})" class="bg-slate-500 text-white px-2 py-1 rounded text-xs font-bold hover:bg-slate-600">👁️ Chi tiết</button> `;
+    // Dựng danh sách thao tác khả dụng cho dòng này -> hành động urgent:true đầu tiên (đang cần người
+    // dùng phản hồi/xử lý ngay, trước đây có animate-pulse) được chọn làm nút chính hiển thị ngoài;
+    // nếu không có gì urgent thì ưu tiên "Cập nhật tiến độ" (hành động hay dùng nhất khi đang làm),
+    // cuối cùng mới tới "Chi tiết". Các thao tác còn lại gộp vào dropdown "Khác ▾" (xem buildActionCell()).
+    const candidates = [];
+    candidates.push({ value: 'detail', label: '👁️ Chi tiết', cls: 'bg-slate-500 hover:bg-slate-600' });
     if (canAssign) {
-      actionBtns += `<button onclick="openAssignTaskModal(${t.id})" class="bg-violet-600 text-white px-2 py-1 rounded text-xs font-bold hover:bg-violet-700">👤 Gán người nhận</button> `;
+      candidates.push({ value: 'assign', label: '👤 Gán người nhận', cls: 'bg-violet-600 hover:bg-violet-700' });
     }
     if (isAssignee && t.status === 'TODO') {
-      actionBtns += `<button onclick="acceptTask(${t.id})" class="bg-emerald-600 text-white px-2 py-1 rounded text-xs font-bold hover:bg-emerald-700 animate-pulse">✅ Nhận Việc</button> `;
+      candidates.push({ value: 'accept', label: '✅ Nhận Việc', urgent: true, cls: 'bg-emerald-600 hover:bg-emerald-700' });
     } else if (isAssigner && t.externalAssignee && t.status === 'TODO') {
-      actionBtns += `<button onclick="acceptTaskOnBehalf(${t.id})" class="bg-emerald-600 text-white px-2 py-1 rounded text-xs font-bold hover:bg-emerald-700" title="Xác nhận thay cho người thực hiện ngoài hệ thống">✅ Nhận Việc Thay</button> `;
+      candidates.push({ value: 'acceptOnBehalf', label: '✅ Nhận Việc Thay', urgent: true, cls: 'bg-emerald-600 hover:bg-emerald-700' });
     }
     if (isCollaborator && !hasAccepted && isOpenTask) {
-      actionBtns += `<button onclick="confirmCollaboratorParticipation(${t.id})" class="bg-teal-600 text-white px-2 py-1 rounded text-xs font-bold hover:bg-teal-700 animate-pulse">✅ Xác Nhận Tham Gia</button> `;
+      candidates.push({ value: 'confirmCollab', label: '✅ Xác Nhận Tham Gia', urgent: true, cls: 'bg-teal-600 hover:bg-teal-700' });
     }
     if (canUpdate && t.assignedTo && isOpenTask) {
-      actionBtns += `<button onclick="openTaskProgressModal(${t.id})" class="bg-blue-600 text-white px-2 py-1 rounded text-xs font-bold hover:bg-blue-700">🔄 Cập nhật tiến độ</button> `;
+      candidates.push({ value: 'progress', label: '🔄 Cập nhật tiến độ', cls: 'bg-blue-600 hover:bg-blue-700' });
     }
     if (t.pendingExtension && isAssigner) {
-      actionBtns += `<button onclick="openExtensionApproveModal(${t.id})" class="bg-orange-600 text-white px-2 py-1 rounded text-xs font-bold hover:bg-orange-700 animate-pulse">📅 Duyệt gia hạn</button> `;
+      candidates.push({ value: 'extApprove', label: '📅 Duyệt gia hạn', urgent: true, cls: 'bg-orange-600 hover:bg-orange-700' });
     } else if (isAssignee && t.assignedTo && isOpenTask) {
-      actionBtns += `<button onclick="openExtensionRequestModal(${t.id})" class="bg-orange-500 text-white px-2 py-1 rounded text-xs font-bold hover:bg-orange-600">📅 Xin gia hạn</button> `;
+      candidates.push({ value: 'extRequest', label: '📅 Xin gia hạn', cls: 'bg-orange-500 hover:bg-orange-600' });
     }
     if (t.pendingCancellation && isAssigner) {
-      actionBtns += `<button onclick="openCancelApproveModal(${t.id})" class="bg-red-700 text-white px-2 py-1 rounded text-xs font-bold hover:bg-red-800 animate-pulse">✕ Duyệt huỷ</button> `;
+      candidates.push({ value: 'cancelApprove', label: '✕ Duyệt huỷ', urgent: true, cls: 'bg-red-700 hover:bg-red-800' });
     } else if (isOpenTask && (isAssigner || isAssignee || isCollaborator) && !t.pendingCancellation) {
-      actionBtns += `<button onclick="openCancelTaskModal(${t.id})" class="bg-red-600 text-white px-2 py-1 rounded text-xs font-bold hover:bg-red-700">✕ ${isAssigner ? 'Huỷ' : 'Xin huỷ'}</button> `;
+      candidates.push({ value: 'cancelRequest', label: `✕ ${isAssigner ? 'Huỷ' : 'Xin huỷ'}`, cls: 'bg-red-600 hover:bg-red-700' });
     }
     if (canManage) {
-      actionBtns += `<button onclick="openEditTaskModal(${t.id})" class="bg-amber-600 text-white px-2 py-1 rounded text-xs font-bold hover:bg-amber-700">✏️ Sửa</button> `;
+      candidates.push({ value: 'edit', label: '✏️ Sửa', cls: 'bg-amber-600 hover:bg-amber-700' });
     }
     if (canDeleteTaskRecord(currentUser)) {
-      actionBtns += `<button onclick="deleteTask(${t.id})" class="bg-red-700 text-white px-2 py-1 rounded text-xs font-bold hover:bg-red-800">🗑️ Xóa</button> `;
+      candidates.push({ value: 'delete', label: '🗑️ Xóa', cls: 'bg-red-700 hover:bg-red-800' });
     }
     if (canDownloadTaskRecord(currentUser)) {
-      actionBtns += `<button onclick="downloadTaskSlip(${t.id})" class="bg-slate-600 text-white px-2 py-1 rounded text-xs font-bold hover:bg-slate-700">⬇️ Tải</button>`;
+      candidates.push({ value: 'download', label: '⬇️ Tải', cls: 'bg-slate-600 hover:bg-slate-700' });
     }
+
+    const primary = candidates.find(c => c.urgent)
+      || candidates.find(c => c.value === 'progress')
+      || candidates.find(c => c.value === 'detail');
+    const primaryTitle = primary.value === 'acceptOnBehalf' ? ' title="Xác nhận thay cho người thực hiện ngoài hệ thống"' : '';
+    const primaryBtnHTML = `<button onclick="runTaskAction(${t.id}, '${primary.value}')" class="${primary.cls} text-white px-2 py-1 rounded text-xs font-bold${primary.urgent ? ' animate-pulse' : ''}"${primaryTitle}>${primary.label}</button>`;
+    const actionBtns = buildActionCell(t.id, primaryBtnHTML, candidates.filter(c => c.value !== primary.value), 'runTaskAction');
     const collabNames = [
       ...(t.collaborators || []).map(u => DB.users.find(x => x.username === u)?.name || u),
       ...(t.externalCollaborators || []).map(e => `${e.name} (ngoài hệ thống)`)
@@ -5543,6 +5615,26 @@ function renderTasks() {
       </tr>
     `;
   }).join('');
+}
+
+// Hàm điều phối cho khối "Thao Tác" của Công việc (xem buildActionCell()) — nhận id công việc + mã
+// hành động (khớp đúng `value` đã gán ở renderTasks()), gọi thẳng hàm xử lý sẵn có tương ứng.
+function runTaskAction(id, action) {
+  switch (action) {
+    case 'detail': openTaskDetailModal(id); break;
+    case 'assign': openAssignTaskModal(id); break;
+    case 'accept': acceptTask(id); break;
+    case 'acceptOnBehalf': acceptTaskOnBehalf(id); break;
+    case 'confirmCollab': confirmCollaboratorParticipation(id); break;
+    case 'progress': openTaskProgressModal(id); break;
+    case 'extApprove': openExtensionApproveModal(id); break;
+    case 'extRequest': openExtensionRequestModal(id); break;
+    case 'cancelApprove': openCancelApproveModal(id); break;
+    case 'cancelRequest': openCancelTaskModal(id); break;
+    case 'edit': openEditTaskModal(id); break;
+    case 'delete': deleteTask(id); break;
+    case 'download': downloadTaskSlip(id); break;
+  }
 }
 
 function deleteTask(id) {
@@ -5890,18 +5982,41 @@ function renderContracts() {
         <td class="border p-2">${escapeHtml(c.dept)}</td>
         <td class="border p-2">${warningBadge}</td>
         <td class="border p-2 text-center space-x-1">
-          <button onclick="viewContractDetails(${c.id})" class="bg-teal-600 text-white px-2 py-1 rounded text-xs hover:bg-teal-700 font-bold" title="Xem đầy đủ thông tin đã nhập">🔍 Xem chi tiết</button>
-          <button onclick="viewContract(${c.id})" class="bg-cyan-600 text-white px-2 py-1 rounded text-xs hover:bg-cyan-700 font-bold">👁️ Xem</button>
-          ${(c.fileUrl || c.fileData) && canDownloadFile(currentUser, 'contract', c.dept, c.creator) ? `
-            <a href="${c.fileUrl || c.fileData}" download="${escapeHtml(c.fileName || c.code)}" class="inline-block bg-slate-600 text-white px-2 py-1 rounded text-xs hover:bg-slate-700 font-bold" title="Tải tệp đính kèm về máy">⬇️ Tải</a>
-          ` : ''}
-          ${c.creator === currentUser.username ? `
-            <button onclick="openEditContract(${c.id})" class="bg-amber-600 text-white px-2 py-1 rounded text-xs hover:bg-amber-700 font-bold" title="Chỉ người tạo hồ sơ mới sửa được">✏️ Sửa</button>
-          ` : ''}
+          ${(() => {
+            const primaryBtnHTML = `<button onclick="runContractAction(${c.id}, 'detail')" class="bg-teal-600 text-white px-2 py-1 rounded text-xs hover:bg-teal-700 font-bold" title="Xem đầy đủ thông tin đã nhập">🔍 Xem chi tiết</button>`;
+            const secondaryOptions = [{ value: 'view', label: '👁️ Xem' }];
+            if ((c.fileUrl || c.fileData) && canDownloadFile(currentUser, 'contract', c.dept, c.creator)) {
+              secondaryOptions.push({ value: 'download', label: '⬇️ Tải' });
+            }
+            if (c.creator === currentUser.username) {
+              secondaryOptions.push({ value: 'edit', label: '✏️ Sửa' });
+            }
+            return buildActionCell(c.id, primaryBtnHTML, secondaryOptions, 'runContractAction');
+          })()}
         </td>
       </tr>
     `;
   }).join('');
+}
+
+// Hàm điều phối cho khối "Thao Tác" của Hợp đồng (xem buildActionCell()).
+function runContractAction(id, action) {
+  switch (action) {
+    case 'detail': viewContractDetails(id); break;
+    case 'view': viewContract(id); break;
+    case 'edit': openEditContract(id); break;
+    case 'download': {
+      const c = DB.contracts.find(x => x.id === id);
+      if (!c) return;
+      const a = document.createElement('a');
+      a.href = c.fileUrl || c.fileData;
+      a.download = c.fileName || c.code;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      break;
+    }
+  }
 }
 
 // Xem đầy đủ TOÀN BỘ thông tin đã nhập của hồ sơ hợp đồng (khác với viewContract() ở dưới, vốn chỉ
@@ -6216,12 +6331,30 @@ function renderMeetings() {
         <td class="border p-2">${escapeHtml(m.dept)} (${escapeHtml(m.creatorName)})</td>
         <td class="border p-2">${statusBadge}</td>
         <td class="border p-2 text-center space-x-1">
-          ${(canApproveMeeting(currentUser) && m.status === 'PENDING') ? `<button onclick="approveMeeting(${m.id})" class="bg-green-600 text-white px-2 py-1 rounded text-xs hover:bg-green-700 font-bold">Duyệt</button>` : ''}
-          ${(canCancelMeeting(currentUser) && m.status !== 'CANCELLED') ? `<button onclick="cancelMeeting(${m.id})" class="bg-red-600 text-white px-2 py-1 rounded text-xs hover:bg-red-700 font-bold">Hủy</button>` : ''}
+          ${(() => {
+            const canApprove = canApproveMeeting(currentUser) && m.status === 'PENDING';
+            const canCancel = canCancelMeeting(currentUser) && m.status !== 'CANCELLED';
+            if (canApprove) {
+              const primaryBtnHTML = `<button onclick="runMeetingAction(${m.id}, 'approve')" class="bg-green-600 text-white px-2 py-1 rounded text-xs hover:bg-green-700 font-bold">Duyệt</button>`;
+              return buildActionCell(m.id, primaryBtnHTML, canCancel ? [{ value: 'cancel', label: 'Hủy' }] : [], 'runMeetingAction');
+            }
+            if (canCancel) {
+              return `<button onclick="runMeetingAction(${m.id}, 'cancel')" class="bg-red-600 text-white px-2 py-1 rounded text-xs hover:bg-red-700 font-bold">Hủy</button>`;
+            }
+            return '';
+          })()}
         </td>
       </tr>
     `;
   }).join('');
+}
+
+// Hàm điều phối cho khối "Thao Tác" của Phòng họp (xem buildActionCell()).
+function runMeetingAction(id, action) {
+  switch (action) {
+    case 'approve': approveMeeting(id); break;
+    case 'cancel': cancelMeeting(id); break;
+  }
 }
 
 function approveMeeting(id) {
@@ -6753,13 +6886,27 @@ function renderMeetingMinutes() {
       <td class="border p-2 text-xs">CT: ${escapeHtml(m.chair)}<br>TK: ${escapeHtml(m.secretary)}</td>
       <td class="border p-2 text-center">${(m.directives || []).length}</td>
       <td class="border p-2 text-center space-x-1">
-        <button onclick="viewMeetingMinutesDetails(${m.id})" class="bg-rose-600 text-white px-2 py-1 rounded text-xs hover:bg-rose-700 font-bold">🔍 Xem chi tiết</button>
-        ${canDownloadMeetingMinutesRecord(currentUser, m) ? `<button onclick="downloadMeetingMinutes(${m.id})" class="bg-slate-600 text-white px-2 py-1 rounded text-xs hover:bg-slate-700 font-bold">⬇️ Tải</button>` : ''}
-        ${canEditMeetingMinutesRecord(currentUser, m) ? `<button onclick="openEditMeetingMinutes(${m.id})" class="bg-amber-600 text-white px-2 py-1 rounded text-xs hover:bg-amber-700 font-bold">✏️ Sửa</button>` : ''}
-        ${canDeleteMeetingMinutesRecord(currentUser, m) ? `<button onclick="deleteMeetingMinutes(${m.id})" class="bg-red-600 text-white px-2 py-1 rounded text-xs hover:bg-red-700 font-bold">🗑️ Xóa</button>` : ''}
+        ${(() => {
+          const primaryBtnHTML = `<button onclick="runMinutesAction(${m.id}, 'detail')" class="bg-rose-600 text-white px-2 py-1 rounded text-xs hover:bg-rose-700 font-bold">🔍 Xem chi tiết</button>`;
+          const secondaryOptions = [];
+          if (canDownloadMeetingMinutesRecord(currentUser, m)) secondaryOptions.push({ value: 'download', label: '⬇️ Tải' });
+          if (canEditMeetingMinutesRecord(currentUser, m)) secondaryOptions.push({ value: 'edit', label: '✏️ Sửa' });
+          if (canDeleteMeetingMinutesRecord(currentUser, m)) secondaryOptions.push({ value: 'delete', label: '🗑️ Xóa' });
+          return buildActionCell(m.id, primaryBtnHTML, secondaryOptions, 'runMinutesAction');
+        })()}
       </td>
     </tr>
   `).join('');
+}
+
+// Hàm điều phối cho khối "Thao Tác" của Biên bản họp (xem buildActionCell()).
+function runMinutesAction(id, action) {
+  switch (action) {
+    case 'detail': viewMeetingMinutesDetails(id); break;
+    case 'download': downloadMeetingMinutes(id); break;
+    case 'edit': openEditMeetingMinutes(id); break;
+    case 'delete': deleteMeetingMinutes(id); break;
+  }
 }
 
 function deleteMeetingMinutes(id) {
@@ -7080,17 +7227,28 @@ function renderCarRegs() {
         <td class="border p-2 text-xs">${escapeHtml(c.purpose || c.reason)}</td>
         <td class="border p-2">${statusBadge}</td>
         <td class="border p-2 text-center space-x-1">
-          <button onclick="openCarProcessModal(${c.id})" class="px-2.5 py-1 ${canApprove ? 'bg-indigo-600 text-white' : 'bg-gray-600 text-white'} rounded text-xs hover:opacity-90 font-bold">
-            ${canApprove ? '✍️ Xử lý / Duyệt' : '👁️ Xem chi tiết'}
-          </button>
-          ${c.status === 'APPROVED' ? `
-            <button onclick="viewCarApprovalSlip(${c.id})" class="px-2 py-1 bg-blue-600 text-white rounded text-xs hover:bg-blue-700 font-bold" title="Xem Phiếu Phê Duyệt">👁️ Xem Phiếu</button>
-            ${canDL ? `<button onclick="downloadCarApprovalSlip(${c.id})" class="px-2 py-1 bg-slate-600 text-white rounded text-xs hover:bg-slate-700 font-bold" title="Tải Phiếu Phê Duyệt">⬇️ Tải</button>` : ''}
-          ` : ''}
+          ${(() => {
+            const primaryBtnHTML = `<button onclick="runCarAction(${c.id}, 'process')" class="px-2.5 py-1 ${canApprove ? 'bg-indigo-600 text-white' : 'bg-gray-600 text-white'} rounded text-xs hover:opacity-90 font-bold">${canApprove ? '✍️ Xử lý / Duyệt' : '👁️ Xem chi tiết'}</button>`;
+            const secondaryOptions = [];
+            if (c.status === 'APPROVED') {
+              secondaryOptions.push({ value: 'viewSlip', label: '👁️ Xem Phiếu' });
+              if (canDL) secondaryOptions.push({ value: 'downloadSlip', label: '⬇️ Tải' });
+            }
+            return buildActionCell(c.id, primaryBtnHTML, secondaryOptions, 'runCarAction');
+          })()}
         </td>
       </tr>
     `;
   }).join('');
+}
+
+// Hàm điều phối cho khối "Thao Tác" của Đăng ký xe (xem buildActionCell()).
+function runCarAction(id, action) {
+  switch (action) {
+    case 'process': openCarProcessModal(id); break;
+    case 'viewSlip': viewCarApprovalSlip(id); break;
+    case 'downloadSlip': downloadCarApprovalSlip(id); break;
+  }
 }
 
 function openCarProcessModal(carId) {
@@ -7617,17 +7775,28 @@ function renderOfficeReqs() {
         </td>
         <td class="border p-2">${statusBadge}</td>
         <td class="border p-2 text-center space-x-1">
-          <button onclick="openOfficeProcessModal(${o.id})" class="px-2.5 py-1 ${canApprove ? 'bg-teal-600 text-white' : 'bg-gray-600 text-white'} rounded text-xs hover:opacity-90 font-bold">
-            ${canApprove ? '✍️ Xử lý / Duyệt' : '👁️ Xem chi tiết'}
-          </button>
-          ${o.status === 'APPROVED' ? `
-            <button onclick="viewOfficeApprovalSlip(${o.id})" class="px-2 py-1 bg-blue-600 text-white rounded text-xs hover:bg-blue-700 font-bold" title="Xem Phiếu Phê Duyệt">👁️ Xem Phiếu</button>
-            ${canDL ? `<button onclick="downloadOfficeApprovalSlip(${o.id})" class="px-2 py-1 bg-slate-600 text-white rounded text-xs hover:bg-slate-700 font-bold" title="Tải Phiếu Phê Duyệt">⬇️ Tải</button>` : ''}
-          ` : ''}
+          ${(() => {
+            const primaryBtnHTML = `<button onclick="runOfficeAction(${o.id}, 'process')" class="px-2.5 py-1 ${canApprove ? 'bg-teal-600 text-white' : 'bg-gray-600 text-white'} rounded text-xs hover:opacity-90 font-bold">${canApprove ? '✍️ Xử lý / Duyệt' : '👁️ Xem chi tiết'}</button>`;
+            const secondaryOptions = [];
+            if (o.status === 'APPROVED') {
+              secondaryOptions.push({ value: 'viewSlip', label: '👁️ Xem Phiếu' });
+              if (canDL) secondaryOptions.push({ value: 'downloadSlip', label: '⬇️ Tải' });
+            }
+            return buildActionCell(o.id, primaryBtnHTML, secondaryOptions, 'runOfficeAction');
+          })()}
         </td>
       </tr>
     `;
   }).join('');
+}
+
+// Hàm điều phối cho khối "Thao Tác" của Phê duyệt Văn phòng (xem buildActionCell()).
+function runOfficeAction(id, action) {
+  switch (action) {
+    case 'process': openOfficeProcessModal(id); break;
+    case 'viewSlip': viewOfficeApprovalSlip(id); break;
+    case 'downloadSlip': downloadOfficeApprovalSlip(id); break;
+  }
 }
 
 function openOfficeProcessModal(officeId) {
