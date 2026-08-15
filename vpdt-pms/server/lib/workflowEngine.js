@@ -105,12 +105,9 @@ const MODULE_CONFIGS = {
   }
 };
 
-class WorkflowError extends Error {
-  constructor(status, message) {
-    super(message);
-    this.status = status;
-  }
-}
+// Giữ tên "WorkflowError" (export riêng, dùng ở routes/workflow.js + stub test) nhưng dùng chung 1
+// class lỗi HTTP với lib/createValidation.js — xem lib/httpErrors.js.
+const { HttpError: WorkflowError } = require('./httpErrors');
 
 const nowVN = () => new Date().toLocaleString('vi-VN');
 
