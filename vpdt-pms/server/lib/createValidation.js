@@ -33,6 +33,67 @@ function findMeetingConflict(meetings, room, startTime, endTime) {
 
 const OFFICE_SUBTYPE_TO_PERM_FLAG = { MUA_BAN: 'officeBuy', SUA_CHUA: 'officeFix', DAU_TU: 'officeInvest' };
 
+// Khớp đúng SUBMISSION_TYPES và SUBMISSION_APPROVAL_LAYERS trong index.html — xem "LƯU Ý BẢO TRÌ" ở
+// đầu file, 2 cài đặt độc lập vì client (trình duyệt) không import chung được với server (Node).
+const SUBMISSION_TYPES = [
+  { key: 'CHU_TRUONG', label: 'Tờ trình xin chủ trương' },
+  { key: 'KINH_PHI', label: 'Tờ trình duyệt kinh phí' },
+  { key: 'NHAN_SU', label: 'Tờ trình nhân sự / bổ nhiệm' },
+  { key: 'QUY_CHE', label: 'Tờ trình ban hành Quy chế / Quy định' },
+  { key: 'KHAC', label: 'Tờ trình khác' }
+];
+
+const SUBMISSION_APPROVAL_LAYERS = [
+  { key: 'DONG_TRINH', label: 'Đồng trình' },
+  { key: 'DONG_CAP', label: 'Phê duyệt đồng cấp' },
+  { key: 'BGD', label: 'Ban Giám Đốc (Phê duyệt chỉ đạo)' }
+];
+
+// Tự dựng lại TOÀN BỘ quy trình hiệu lực (steps/approvers) của 1 tờ trình mới từ dữ liệu ĐÃ XÁC MINH
+// trong DB (quy trình phòng ban theo loại + thành viên nhóm phê duyệt do admin gán) — KHÔNG dùng
+// effectiveSteps/effectiveApprovers client tự gửi lên (trước đây tin nguyên client, ai đó tự soạn
+// request có thể nhét bất kỳ ai làm "người duyệt"). selectedLayerMembers[layerKey] là danh sách người
+// người trình chọn cho lớp đó — bắt buộc phải là TẬP CON của DB.submissionApprovalGroups[layerKey],
+// không thì từ chối tạo. Khớp đúng buildEffectiveSubmissionWorkflow() + getSubmissionDeptWorkflowConfig()
+// trong index.html.
+function buildEffectiveSubmissionWorkflowServer(type, dept, selectedLayerKeys, selectedLayerMembers, appData) {
+  const typeEntry = SUBMISSION_TYPES.find(t => t.label === type);
+  const typeKey = typeEntry ? typeEntry.key : 'KHAC';
+  const typeMap = appData.submissionTypeDeptWorkflows || {};
+  const deptMap = appData.submissionDeptWorkflows || {};
+  const baseConfig = typeMap[typeKey]?.[dept] || deptMap[dept] || { workflowId: 'WF_1STEP', approvers: { 1: ['admin'] } };
+  const workflows = appData.workflows || [];
+  const baseWf = workflows.find(w => w.id === baseConfig.workflowId) || { steps: [{ order: 1, name: 'Sếp duyệt' }] };
+
+  const steps = baseWf.steps.map(s => ({ order: s.order, name: s.name }));
+  const approvers = {};
+  baseWf.steps.forEach(s => { approvers[s.order] = baseConfig.approvers?.[s.order] || []; });
+
+  const groups = appData.submissionApprovalGroups || {};
+  const layerKeys = Array.isArray(selectedLayerKeys) ? selectedLayerKeys : [];
+
+  layerKeys.forEach(layerKey => {
+    const layer = SUBMISSION_APPROVAL_LAYERS.find(l => l.key === layerKey);
+    if (!layer) throw new CreateError(400, `Lớp phê duyệt không hợp lệ: ${layerKey}`);
+
+    const groupMembers = groups[layerKey] || [];
+    const chosen = Array.isArray(selectedLayerMembers?.[layerKey]) ? [...new Set(selectedLayerMembers[layerKey])] : [];
+    if (chosen.length === 0) {
+      throw new CreateError(400, `Chưa chọn người duyệt cho lớp "${layer.label}"`);
+    }
+    const invalid = chosen.filter(u => !groupMembers.includes(u));
+    if (invalid.length) {
+      throw new CreateError(403, `Người được chọn duyệt lớp "${layer.label}" không thuộc nhóm được admin gán: ${invalid.join(', ')}`);
+    }
+
+    const stepOrder = steps.length + 1;
+    steps.push({ order: stepOrder, name: layer.label });
+    approvers[stepOrder] = chosen;
+  });
+
+  return { steps, approvers, layerKeys };
+}
+
 // Mỗi module: khoá collection AppData, cách lấy phạm vi phòng ban được phép tạo ({all,depts}), tên
 // field ghi người tạo, và kiểm tra bổ sung riêng (nếu có) — phần logic chung (xác minh dept, chặn mã
 // trùng, gán người tạo) nằm ở validateAndPrepareCreate() bên dưới, dùng chung cho mọi module.
@@ -40,7 +101,22 @@ const CREATE_MODULE_CONFIGS = {
   submissions: {
     dbKey: 'submissions',
     getScope: (user) => user.perms?.submissionCreate,
-    creatorField: 'creator', creatorNameField: 'creatorName'
+    creatorField: 'creator', creatorNameField: 'creatorName',
+    // Ghi đè effectiveSteps/effectiveApprovers/selectedApprovalLayers/selectedLayerMembers bằng bản
+    // server tự dựng lại + xác minh (xem buildEffectiveSubmissionWorkflowServer) — payload là cùng 1
+    // object được validateAndPrepareCreate() dùng để tạo record ngay sau đó, nên sửa tại chỗ ở đây là đủ.
+    // appData (workflows/submissionDeptWorkflows/submissionTypeDeptWorkflows/submissionApprovalGroups)
+    // do CALLER đọc sẵn từ DB rồi truyền vào (xem validateAndPrepareCreate) — file này không tự đọc DB,
+    // để routes/create.js thật VÀ stub test (dùng data in-memory) đều gọi chung được hàm này.
+    extraValidate: (payload, collection, user, appData) => {
+      const effectiveWf = buildEffectiveSubmissionWorkflowServer(
+        payload.type, payload.dept, payload.selectedApprovalLayers, payload.selectedLayerMembers, appData || {}
+      );
+      payload.selectedApprovalLayers = effectiveWf.layerKeys;
+      payload.selectedLayerMembers = payload.selectedLayerMembers || {};
+      payload.effectiveSteps = effectiveWf.steps;
+      payload.effectiveApprovers = effectiveWf.approvers;
+    }
   },
   contracts: {
     dbKey: 'contracts',
@@ -109,8 +185,9 @@ const CREATE_MODULE_CONFIGS = {
 
 // payload: dữ liệu hồ sơ client gửi lên (mọi field nghiệp vụ giữ nguyên) — chỉ id/creator/creatorName
 // bị SERVER ghi đè bằng giá trị xác thực từ phiên đăng nhập, không tin bất kỳ giá trị nào client tự
-// gửi cho các field này.
-function validateAndPrepareCreate(moduleKey, payload, user, existingCollection) {
+// gửi cho các field này. appData (tuỳ chọn): snapshot toàn bộ AppData do CALLER đọc sẵn (getAllAppData())
+// — chỉ module submissions cần dùng (dựng lại quy trình hiệu lực), các module khác bỏ qua tham số này.
+function validateAndPrepareCreate(moduleKey, payload, user, existingCollection, appData) {
   const config = CREATE_MODULE_CONFIGS[moduleKey];
   if (!config) throw new CreateError(400, `Module không hợp lệ: ${moduleKey}`);
   if (!payload || typeof payload !== 'object') throw new CreateError(400, 'Thiếu dữ liệu hồ sơ');
@@ -126,7 +203,7 @@ function validateAndPrepareCreate(moduleKey, payload, user, existingCollection) 
     if (dup) throw new CreateError(409, `Mã "${payload.code}" đã tồn tại`);
   }
 
-  if (config.extraValidate) config.extraValidate(payload, existingCollection, user);
+  if (config.extraValidate) config.extraValidate(payload, existingCollection, user, appData);
 
   const record = { ...payload, id: Date.now(), dept };
   record[config.creatorField] = user.username;
