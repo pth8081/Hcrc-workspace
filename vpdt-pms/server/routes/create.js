@@ -3,7 +3,7 @@
 // dept/creator client tự gửi, chỉ dựa vào dropdown ĐÃ LỌC SẴN ở giao diện.
 const express = require('express');
 const router = express.Router();
-const { getAppDataValue, withLockedAppDataValue } = require('../lib/appData');
+const { getAppDataValue, getAllAppData, withLockedAppDataValue } = require('../lib/appData');
 const { requireAuth } = require('../lib/auth');
 const { CREATE_MODULE_CONFIGS, CreateError, validateAndPrepareCreate } = require('../lib/createValidation');
 
@@ -23,10 +23,16 @@ router.post('/:module', async (req, res) => {
     const freshUser = (users || []).find(u => u.username === req.user.username);
     if (!freshUser) return res.status(401).json({ error: 'Tài khoản không còn tồn tại' });
 
+    // Đọc kèm toàn bộ AppData (quy trình phòng ban, nhóm phê duyệt trình...) — chỉ module submissions
+    // dùng tới (dựng lại quy trình hiệu lực server-side, xem lib/createValidation.js), các module khác
+    // bỏ qua tham số này. Đọc TRƯỚC khi khoá dòng "submissions" bên dưới, tránh giữ transaction lâu hơn
+    // cần thiết cho 1 lượt đọc không cần khoá này.
+    const appData = await getAllAppData();
+
     let record = null;
     await withLockedAppDataValue(CREATE_MODULE_CONFIGS[moduleKey].dbKey, (collection) => {
       const list = Array.isArray(collection) ? collection : [];
-      record = validateAndPrepareCreate(moduleKey, req.body, freshUser, list);
+      record = validateAndPrepareCreate(moduleKey, req.body, freshUser, list, appData);
       list.unshift(record);
       return list;
     });

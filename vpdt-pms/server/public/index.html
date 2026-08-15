@@ -230,7 +230,8 @@
 
         <div class="border-t pt-3">
           <label class="block font-semibold text-gray-600 mb-1">Cấp Phê Duyệt Bổ Sung (tuỳ chọn, cộng thêm vào cuối quy trình phòng ban)</label>
-          <div id="subApprovalLayersContainer" class="flex flex-wrap gap-4"></div>
+          <p class="text-[11px] text-gray-500 italic mb-1.5">Tick chọn lớp cần dùng, rồi chọn CỤ THỂ những ai (trong số người admin đã gán vào nhóm đó) sẽ tham gia duyệt tờ trình này.</p>
+          <div id="subApprovalLayersContainer" class="flex flex-wrap gap-3"></div>
         </div>
 
         <div>
@@ -649,10 +650,11 @@
               <option value="">-- Chọn mẫu đã lưu --</option>
             </select>
             <button type="button" onclick="applyMeetingAttendeeTemplate(document.getElementById('minutesAttendeeTemplateSelect').value)" class="bg-rose-700 text-white px-2 py-1 rounded text-xs font-bold hover:bg-rose-800">▶️ Áp Dụng</button>
-            <button type="button" onclick="saveMeetingAttendeeTemplate()" class="bg-rose-600 text-white px-2 py-1 rounded text-xs font-bold hover:bg-rose-700">💾 Lưu Mẫu</button>
+            <button type="button" onclick="saveMeetingAttendeeTemplate()" class="bg-rose-600 text-white px-2 py-1 rounded text-xs font-bold hover:bg-rose-700">💾 Lưu Mẫu Từ Danh Sách Này</button>
             <button type="button" onclick="deleteMeetingAttendeeTemplate()" class="bg-gray-400 text-white px-2 py-1 rounded text-xs font-bold hover:bg-gray-500">🗑️ Xóa Mẫu</button>
+            <button type="button" onclick="openAttendeeTemplateManagerModal()" class="bg-slate-600 text-white px-2 py-1 rounded text-xs font-bold hover:bg-slate-700">🗂️ Quản Lý Mẫu</button>
           </div>
-          <p class="text-[11px] text-gray-500 italic">Mẫu dùng chung cho cả công ty — lưu 1 lần, mọi người lập biên bản đều chọn dùng lại được. Áp dụng mẫu xong vẫn sửa/thêm/bớt người tham dự bình thường. Chọn mẫu ở đây rồi bấm "Áp Dụng" hoặc "Xóa Mẫu" tùy ý, chọn xong KHÔNG tự áp dụng ngay.</p>
+          <p class="text-[11px] text-gray-500 italic">Mẫu dùng chung cho cả công ty — lưu 1 lần, mọi người lập biên bản đều chọn dùng lại được. Áp dụng mẫu xong vẫn sửa/thêm/bớt người tham dự bình thường. Chọn mẫu ở đây rồi bấm "Áp Dụng" hoặc "Xóa Mẫu" tùy ý, chọn xong KHÔNG tự áp dụng ngay. Muốn soạn mẫu mới từ đầu (không cần có sẵn biên bản) hoặc sửa mẫu đã lưu, bấm "Quản Lý Mẫu".</p>
 
           <div class="overflow-x-auto">
             <table class="w-full border-collapse border text-xs bg-white">
@@ -2196,6 +2198,58 @@
   </div>
 </div>
 
+<!-- MODAL QUẢN LÝ MẪU DANH SÁCH THAM DỰ — soạn/sửa mẫu ĐỘC LẬP, không cần có sẵn 1 Biên bản họp thật
+     đang mở (trước đây chỉ "Lưu Mẫu" được từ danh sách người tham dự ĐANG có trong form đang soạn dở).
+     2 chế độ trong cùng 1 modal: danh sách mẫu <-> soạn/sửa 1 mẫu (bảng nhập người tham dự riêng, dùng
+     state tplEditRows — KHÔNG đụng tới minutesAttendeesRows của form biên bản thật). -->
+<div id="attendeeTemplateManagerModal" class="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center hidden z-50 p-4">
+  <div class="bg-white rounded-lg shadow-2xl max-w-3xl w-full flex flex-col max-h-[90vh] overflow-hidden">
+    <div class="flex justify-between items-center bg-rose-800 text-white p-4">
+      <h3 class="font-bold text-base flex items-center gap-2">🗂️ Quản Lý Mẫu Danh Sách Tham Dự</h3>
+      <button onclick="closeAttendeeTemplateManagerModal()" class="text-rose-200 hover:text-white font-bold text-xl px-2">✕</button>
+    </div>
+
+    <div id="attendeeTplManagerListView" class="p-4 overflow-y-auto flex-1 text-xs space-y-2">
+      <div class="flex justify-between items-center">
+        <p class="text-gray-500 italic">Mẫu dùng chung cho cả công ty, ai lập biên bản cũng chọn dùng lại được.</p>
+        <button type="button" onclick="openAttendeeTemplateEditor(null)" class="bg-rose-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-rose-700 whitespace-nowrap">➕ Tạo Mẫu Mới</button>
+      </div>
+      <div id="attendeeTplManagerListBody" class="space-y-1.5"></div>
+    </div>
+
+    <div id="attendeeTplManagerEditView" class="hidden p-4 overflow-y-auto flex-1 text-xs space-y-3">
+      <div>
+        <label class="block font-semibold text-gray-600 mb-1">Tên Mẫu</label>
+        <input id="tplEditName" class="w-full border p-1.5 rounded" placeholder="VD: Họp giao ban tuần">
+      </div>
+      <div class="overflow-x-auto">
+        <table class="w-full border-collapse border text-xs bg-white">
+          <thead>
+            <tr class="bg-gray-100 text-left text-gray-700">
+              <th class="border p-1.5 w-8">STT</th>
+              <th class="border p-1.5 w-20">Tài Khoản</th>
+              <th class="border p-1.5">Họ Và Tên</th>
+              <th class="border p-1.5">Chức Danh</th>
+              <th class="border p-1.5">Phòng</th>
+              <th class="border p-1.5 w-32">Số Điện Thoại</th>
+              <th class="border p-1.5 w-40">Email</th>
+              <th class="border p-1.5 w-8"></th>
+            </tr>
+          </thead>
+          <tbody id="tplEditRowsTableBody"></tbody>
+        </table>
+      </div>
+      <button type="button" onclick="addTplEditRow()" class="bg-rose-600 text-white px-3 py-1 rounded text-xs font-bold hover:bg-rose-700">➕ Thêm Người Tham Dự</button>
+    </div>
+
+    <div class="p-3 bg-gray-100 border-t flex justify-end gap-2 text-xs">
+      <button id="attendeeTplManagerBackBtn" onclick="backToAttendeeTemplateList()" class="hidden bg-gray-500 text-white px-4 py-1.5 rounded font-bold hover:bg-gray-600">← Quay Lại Danh Sách</button>
+      <button id="attendeeTplManagerSaveBtn" onclick="saveAttendeeTemplateFromEditor()" class="hidden bg-rose-600 text-white px-5 py-1.5 rounded font-bold hover:bg-rose-700">💾 Lưu Mẫu</button>
+      <button id="attendeeTplManagerCloseBtn" onclick="closeAttendeeTemplateManagerModal()" class="bg-gray-600 text-white px-5 py-1.5 rounded font-bold hover:bg-gray-700">Đóng</button>
+    </div>
+  </div>
+</div>
+
 <!-- MODAL XÁC THỰC BỔ SUNG KHI DUYỆT (mật khẩu / OTP email) — xem withApprovalAuth() -->
 <div id="approvalAuthModal" class="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center hidden z-50 p-4">
   <div class="bg-white rounded-lg shadow-2xl max-w-sm w-full overflow-hidden">
@@ -2829,9 +2883,11 @@ function getSubmissionDeptWorkflowConfig(type, dept) {
 
 // Dựng quy trình HIỆU LỰC cho 1 tờ trình MỚI (lúc tạo) = quy trình phòng ban (gốc, theo đúng loại) +
 // các lớp phê duyệt bổ sung tuỳ chọn người trình đã tick, nối vào SAU theo đúng thứ tự cố định ở
-// SUBMISSION_APPROVAL_LAYERS. Thành viên từng lớp bổ sung được CHỐT LẠI (snapshot) ngay lúc tạo —
-// sau này admin đổi thành viên nhóm không ảnh hưởng tới tờ trình đang xử lý dở.
-function buildEffectiveSubmissionWorkflow(type, dept, selectedLayerKeys) {
+// SUBMISSION_APPROVAL_LAYERS. selectedLayerMembers: { layerKey: [username,...] } — CHỈ những người
+// người trình đã chọn cụ thể cho lớp đó (trong số thành viên admin gán), KHÔNG phải cả nhóm — snapshot
+// ngay lúc tạo nên sau này admin đổi thành viên nhóm không ảnh hưởng tới tờ trình đang xử lý dở. Server
+// (lib/createValidation.js) tự dựng lại y hệt và xác minh lại từ DB, không tin kết quả này của client.
+function buildEffectiveSubmissionWorkflow(type, dept, selectedLayerKeys, selectedLayerMembers) {
   const baseConfig = getSubmissionDeptWorkflowConfig(type, dept);
   const baseWf = DB.workflows.find(w => w.id === baseConfig.workflowId) || { steps: [{ order: 1, name: 'Sếp duyệt' }] };
 
@@ -2844,7 +2900,7 @@ function buildEffectiveSubmissionWorkflow(type, dept, selectedLayerKeys) {
     if (!layer) return;
     const stepOrder = steps.length + 1;
     steps.push({ order: stepOrder, name: layer.label });
-    approvers[stepOrder] = [...(DB.submissionApprovalGroups[layerKey] || [])];
+    approvers[stepOrder] = [...(selectedLayerMembers?.[layerKey] || [])];
   });
 
   return { steps, approvers };
@@ -4514,7 +4570,17 @@ async function submitSubmissionReq(e) {
   const priority = document.getElementById('subPriority').value;
   const content = document.getElementById('subContent').value.trim();
   const fileInput = document.getElementById('subFile');
-  const selectedLayerKeys = [...document.querySelectorAll('#subApprovalLayersContainer input[type="checkbox"]:checked')].map(cb => cb.value);
+  const selectedLayerKeys = [...document.querySelectorAll('#subApprovalLayersContainer input.sub-layer-toggle:checked')].map(cb => cb.value);
+
+  const selectedLayerMembers = {};
+  for (const layerKey of selectedLayerKeys) {
+    const members = [...document.querySelectorAll(`input.sub-layer-member[data-layer="${layerKey}"]:checked`)].map(cb => cb.value);
+    if (members.length === 0) {
+      const layer = SUBMISSION_APPROVAL_LAYERS.find(l => l.key === layerKey);
+      return alert(`⛔ Đã tick lớp "${layer?.label}" nhưng chưa chọn người nào duyệt — vui lòng chọn ít nhất 1 người!`);
+    }
+    selectedLayerMembers[layerKey] = members;
+  }
 
   if (DB.submissions.some(s => s.code === code)) {
     return alert('Mã văn bản trình / tờ trình đã tồn tại!');
@@ -4539,7 +4605,7 @@ async function submitSubmissionReq(e) {
     }
   }
 
-  const effectiveWf = buildEffectiveSubmissionWorkflow(type, dept, selectedLayerKeys);
+  const effectiveWf = buildEffectiveSubmissionWorkflow(type, dept, selectedLayerKeys, selectedLayerMembers);
 
   const subPayload = {
     code: code,
@@ -4556,6 +4622,7 @@ async function submitSubmissionReq(e) {
     status: 'PENDING',
     currentStep: 1,
     selectedApprovalLayers: selectedLayerKeys,
+    selectedLayerMembers: selectedLayerMembers,
     effectiveSteps: effectiveWf.steps,
     effectiveApprovers: effectiveWf.approvers,
     history: [
@@ -4594,15 +4661,49 @@ async function submitSubmissionReq(e) {
   renderSubmissionReqs();
 }
 
+// Với mỗi lớp phê duyệt bổ sung, chỉ liệt kê ĐÚNG những người admin đã gán vào nhóm đó (màn "Quản Lý
+// Nhóm Phê Duyệt Trình") — người trình tick chọn lớp rồi chọn CỤ THỂ ai trong nhóm tham gia duyệt tờ
+// trình này (không còn bắt buộc CẢ nhóm phải duyệt như trước). Nhóm chưa có ai -> khoá checkbox lớp.
 function renderSubmissionApprovalLayerCheckboxes() {
   const container = document.getElementById('subApprovalLayersContainer');
   if (!container) return;
-  container.innerHTML = SUBMISSION_APPROVAL_LAYERS.map(layer => `
-    <label class="flex items-center gap-1.5 text-gray-700 cursor-pointer">
-      <input type="checkbox" value="${layer.key}">
-      <span>${escapeHtml(layer.label)}</span>
-    </label>
-  `).join('');
+  container.innerHTML = SUBMISSION_APPROVAL_LAYERS.map(layer => {
+    const groupUsers = (DB.submissionApprovalGroups[layer.key] || [])
+      .map(un => DB.users.find(u => u.username === un))
+      .filter(Boolean);
+    const disabled = groupUsers.length === 0;
+
+    const memberCheckboxes = groupUsers.map(u => `
+      <label class="flex items-center gap-1.5 text-gray-700 cursor-pointer text-[11px]">
+        <input type="checkbox" class="sub-layer-member" value="${escapeHtml(u.username)}" data-layer="${layer.key}">
+        <span>${escapeHtml(u.name)} <span class="text-gray-400">(${escapeHtml(u.dept)})</span></span>
+      </label>
+    `).join('');
+
+    return `
+      <div class="border rounded p-2 bg-amber-50/60 min-w-[220px]">
+        <label class="flex items-center gap-1.5 font-semibold text-gray-700 ${disabled ? 'opacity-50' : 'cursor-pointer'}">
+          <input type="checkbox" class="sub-layer-toggle" value="${layer.key}" ${disabled ? 'disabled' : ''} onchange="onSubApprovalLayerToggle('${layer.key}')">
+          <span>${escapeHtml(layer.label)}</span>
+        </label>
+        ${disabled
+          ? `<p class="text-[11px] text-gray-400 italic mt-1">Admin chưa gán thành viên nào cho nhóm này.</p>`
+          : `<div id="subLayerMembers_${layer.key}" class="hidden mt-1.5 pl-1 space-y-1 max-h-32 overflow-y-auto border-t pt-1.5">${memberCheckboxes}</div>`
+        }
+      </div>
+    `;
+  }).join('');
+}
+
+// Hiện/ẩn khối chọn người của 1 lớp theo trạng thái checkbox lớp đó — bỏ tick thì reset (bỏ chọn
+// hết người) để không lỡ giữ lại lựa chọn cũ của lần trước khi người dùng bỏ rồi tick lại.
+function onSubApprovalLayerToggle(layerKey) {
+  const box = document.getElementById(`subLayerMembers_${layerKey}`);
+  if (!box) return;
+  const toggle = document.querySelector(`.sub-layer-toggle[value="${layerKey}"]`);
+  const checked = !!toggle?.checked;
+  box.classList.toggle('hidden', !checked);
+  if (!checked) box.querySelectorAll('input[type="checkbox"]').forEach(cb => { cb.checked = false; });
 }
 
 function onSubFilterChange() {
@@ -6921,6 +7022,203 @@ function deleteMeetingAttendeeTemplate() {
   logSystemAction('MEETING_MINUTES', 'DELETE_ATTENDEE_TEMPLATE', `Xóa mẫu danh sách tham gia [${tpl.name}]`, 'SUCCESS', tpl.name);
 }
 
+// ==========================================
+// MODAL QUẢN LÝ MẪU DANH SÁCH THAM DỰ — soạn/sửa mẫu ĐỘC LẬP với biên bản đang mở. Dùng state riêng
+// (tplEditRows/tplEditingId) — KHÔNG đụng tới minutesAttendeesRows của form Biên bản họp thật, nên mở
+// modal này giữa chừng lúc đang soạn dở 1 biên bản KHÔNG làm mất dữ liệu đang nhập dở ở form đó.
+// ==========================================
+let tplEditRows = [];
+let tplEditingId = null; // null = đang tạo mẫu mới, khác null = đang sửa mẫu có id này
+
+function openAttendeeTemplateManagerModal() {
+  populateSystemUsersDatalist();
+  showAttendeeTemplateListView();
+  document.getElementById('attendeeTemplateManagerModal').classList.remove('hidden');
+}
+
+function closeAttendeeTemplateManagerModal() {
+  document.getElementById('attendeeTemplateManagerModal').classList.add('hidden');
+}
+
+function showAttendeeTemplateListView() {
+  document.getElementById('attendeeTplManagerListView').classList.remove('hidden');
+  document.getElementById('attendeeTplManagerEditView').classList.add('hidden');
+  document.getElementById('attendeeTplManagerBackBtn').classList.add('hidden');
+  document.getElementById('attendeeTplManagerSaveBtn').classList.add('hidden');
+  renderAttendeeTemplateManagerList();
+}
+
+function renderAttendeeTemplateManagerList() {
+  const box = document.getElementById('attendeeTplManagerListBody');
+  if (!box) return;
+  if (DB.meetingAttendeeTemplates.length === 0) {
+    box.innerHTML = '<p class="text-gray-400 italic text-center py-4">Chưa có mẫu nào — bấm "➕ Tạo Mẫu Mới" để soạn mẫu đầu tiên.</p>';
+    return;
+  }
+  box.innerHTML = DB.meetingAttendeeTemplates.map(t => `
+    <div class="flex items-center justify-between border rounded p-2 bg-slate-50">
+      <div>
+        <div class="font-semibold text-gray-800">${escapeHtml(t.name)}</div>
+        <div class="text-[11px] text-gray-500">${t.attendees.length} người</div>
+      </div>
+      <div class="flex gap-1.5">
+        <button type="button" onclick="openAttendeeTemplateEditor('${escapeHtml(t.id)}')" class="bg-amber-500 text-white px-2 py-1 rounded text-[11px] font-bold hover:bg-amber-600">✏️ Sửa</button>
+        <button type="button" onclick="deleteAttendeeTemplateFromManager('${escapeHtml(t.id)}')" class="bg-red-500 text-white px-2 py-1 rounded text-[11px] font-bold hover:bg-red-600">🗑️ Xoá</button>
+      </div>
+    </div>
+  `).join('');
+}
+
+// templateId null -> soạn mẫu mới (bảng trống); có id -> đổ sẵn dữ liệu mẫu đó vào bảng để sửa.
+function openAttendeeTemplateEditor(templateId) {
+  if (templateId) {
+    const tpl = DB.meetingAttendeeTemplates.find(t => t.id === templateId);
+    if (!tpl) return;
+    tplEditingId = tpl.id;
+    tplEditRows = tpl.attendees.map(a => ({ ...a, id: genAttendeeId() }));
+    document.getElementById('tplEditName').value = tpl.name;
+  } else {
+    tplEditingId = null;
+    tplEditRows = [];
+    document.getElementById('tplEditName').value = '';
+  }
+
+  document.getElementById('attendeeTplManagerListView').classList.add('hidden');
+  document.getElementById('attendeeTplManagerEditView').classList.remove('hidden');
+  document.getElementById('attendeeTplManagerBackBtn').classList.remove('hidden');
+  document.getElementById('attendeeTplManagerSaveBtn').classList.remove('hidden');
+  renderTplEditRowsTable();
+}
+
+function backToAttendeeTemplateList() {
+  showAttendeeTemplateListView();
+}
+
+function addTplEditRow() {
+  tplEditRows.push({ id: genAttendeeId(), hasAccount: 'NO', username: null, name: '', title: '', dept: '', phone: '', email: '' });
+  renderTplEditRowsTable();
+}
+
+function removeTplEditRow(idx) {
+  tplEditRows.splice(idx, 1);
+  renderTplEditRowsTable();
+}
+
+function updateTplEditField(idx, field, value) {
+  if (!tplEditRows[idx]) return;
+  tplEditRows[idx][field] = value;
+}
+
+// Khớp đúng applyAttendeeSystemUser()/toggleAttendeeHasAccount()/resolveAttendeeAccountInput() ở bảng
+// Thành phần tham dự thật — chỉ khác thao tác trên tplEditRows/renderTplEditRowsTable() thay vì
+// minutesAttendeesRows/renderAttendeesTable(), và không có bảng Ý kiến chỉ đạo nào cần làm mới theo.
+function applyTplRowSystemUser(idx, user) {
+  const a = tplEditRows[idx];
+  if (!a) return;
+  a.username = user.username;
+  a.name = user.name;
+  a.dept = a.dept || user.dept || '';
+  a.phone = a.phone || user.phone || '';
+  a.email = a.email || user.email || '';
+}
+
+function toggleTplRowHasAccount(idx, value) {
+  const a = tplEditRows[idx];
+  if (!a) return;
+  a.hasAccount = value;
+  if (value === 'NO') {
+    a.username = null;
+  } else {
+    const matches = DB.users.filter(u => (u.name || '').trim().toLowerCase() === (a.name || '').trim().toLowerCase());
+    if (matches.length === 1) applyTplRowSystemUser(idx, matches[0]);
+  }
+  renderTplEditRowsTable();
+}
+
+function resolveTplRowAccountInput(idx, rawValue) {
+  const a = tplEditRows[idx];
+  if (!a) return;
+  const m = rawValue.match(/^(.*) — .*\(([^()]+)\)$/);
+  const user = m ? DB.users.find(u => u.username === m[2].trim()) : null;
+  if (user) {
+    applyTplRowSystemUser(idx, user);
+  } else {
+    a.name = rawValue;
+    a.username = null;
+  }
+  renderTplEditRowsTable();
+}
+
+function renderTplEditRowsTable() {
+  const tbody = document.getElementById('tplEditRowsTableBody');
+  if (!tbody) return;
+
+  tbody.innerHTML = tplEditRows.map((a, idx) => {
+    const hasAccount = a.hasAccount === 'YES';
+    const nameCell = hasAccount
+      ? `<input value="${escapeHtml(a.name)}" list="systemUsersDatalist" oninput="updateTplEditField(${idx}, 'name', this.value)" onchange="resolveTplRowAccountInput(${idx}, this.value)" class="w-full border-0 p-0.5 text-xs focus:outline-none" placeholder="Gõ để tìm tài khoản hệ thống...">
+         ${a.username ? `<div class="text-[10px] text-emerald-700 mt-0.5">✓ Đã liên kết tài khoản: ${escapeHtml(a.username)}</div>` : '<div class="text-[10px] text-amber-600 mt-0.5">Chưa liên kết — chọn từ gợi ý</div>'}`
+      : `<input value="${escapeHtml(a.name)}" oninput="updateTplEditField(${idx}, 'name', this.value)" class="w-full border-0 p-0.5 text-xs focus:outline-none" placeholder="Họ và tên">`;
+    return `
+    <tr>
+      <td class="border p-1 text-center">${idx + 1}</td>
+      <td class="border p-1">
+        <select onchange="toggleTplRowHasAccount(${idx}, this.value)" class="w-full border-0 p-0.5 text-xs bg-white focus:outline-none">
+          <option value="NO" ${!hasAccount ? 'selected' : ''}>Không</option>
+          <option value="YES" ${hasAccount ? 'selected' : ''}>Có</option>
+        </select>
+      </td>
+      <td class="border p-1">${nameCell}</td>
+      <td class="border p-1"><input value="${escapeHtml(a.title)}" oninput="updateTplEditField(${idx}, 'title', this.value)" class="w-full border-0 p-0.5 text-xs focus:outline-none" placeholder="Chức danh"></td>
+      <td class="border p-1"><input value="${escapeHtml(a.dept)}" oninput="updateTplEditField(${idx}, 'dept', this.value)" class="w-full border-0 p-0.5 text-xs focus:outline-none" placeholder="Phòng"></td>
+      <td class="border p-1"><input value="${escapeHtml(a.phone)}" oninput="updateTplEditField(${idx}, 'phone', this.value)" class="w-full border-0 p-0.5 text-xs focus:outline-none" placeholder="SĐT"></td>
+      <td class="border p-1"><input type="email" value="${escapeHtml(a.email || '')}" oninput="updateTplEditField(${idx}, 'email', this.value)" class="w-full border-0 p-0.5 text-xs focus:outline-none" placeholder="email@company.com"></td>
+      <td class="border p-1 text-center"><button type="button" onclick="removeTplEditRow(${idx})" class="text-red-600 font-bold hover:text-red-800" title="Xoá dòng">✕</button></td>
+    </tr>
+  `;
+  }).join('');
+}
+
+function saveAttendeeTemplateFromEditor() {
+  const name = document.getElementById('tplEditName').value.trim();
+  if (!name) return alert('⛔ Vui lòng nhập tên mẫu!');
+
+  const validAttendees = tplEditRows.filter(a => (a.name || '').trim());
+  if (validAttendees.length === 0) return alert('⛔ Chưa có người tham dự nào trong mẫu — vui lòng thêm ít nhất 1 người!');
+
+  const duplicate = DB.meetingAttendeeTemplates.find(t =>
+    t.name.toLowerCase() === name.toLowerCase() && t.id !== tplEditingId);
+  if (duplicate) return alert(`⛔ Đã có mẫu khác tên "${name}" — vui lòng đặt tên khác!`);
+
+  const attendeesSnapshot = validAttendees.map(({ id, ...rest }) => ({ ...rest }));
+
+  if (tplEditingId) {
+    const tpl = DB.meetingAttendeeTemplates.find(t => t.id === tplEditingId);
+    if (tpl) { tpl.name = name; tpl.attendees = attendeesSnapshot; }
+  } else {
+    DB.meetingAttendeeTemplates.push({ id: 'mtpl_' + Date.now(), name, attendees: attendeesSnapshot });
+  }
+
+  syncStorage('meetingAttendeeTemplates');
+  renderMeetingAttendeeTemplateSelect();
+  logSystemAction('MEETING_MINUTES', tplEditingId ? 'EDIT_ATTENDEE_TEMPLATE' : 'SAVE_ATTENDEE_TEMPLATE',
+    `${tplEditingId ? 'Sửa' : 'Tạo'} mẫu danh sách tham gia [${name}] (${attendeesSnapshot.length} người)`, 'SUCCESS', name);
+  alert(`✅ Đã lưu mẫu "${name}"!`);
+  showAttendeeTemplateListView();
+}
+
+function deleteAttendeeTemplateFromManager(templateId) {
+  const tpl = DB.meetingAttendeeTemplates.find(t => t.id === templateId);
+  if (!tpl) return;
+  if (!confirm(`Bạn có chắc chắn muốn xóa mẫu "${tpl.name}"?`)) return;
+
+  DB.meetingAttendeeTemplates = DB.meetingAttendeeTemplates.filter(t => t.id !== templateId);
+  syncStorage('meetingAttendeeTemplates');
+  renderMeetingAttendeeTemplateSelect();
+  logSystemAction('MEETING_MINUTES', 'DELETE_ATTENDEE_TEMPLATE', `Xóa mẫu danh sách tham gia [${tpl.name}]`, 'SUCCESS', tpl.name);
+  renderAttendeeTemplateManagerList();
+}
+
 function removeAttendeeRow(idx) {
   minutesAttendeesRows.splice(idx, 1);
   renderAttendeesTable();
@@ -6986,14 +7284,19 @@ function resolveAttendeeAccountInput(idx, rawValue) {
   renderMinutesDirectivesTable();
 }
 
+// Dùng chung bởi bảng Thành phần tham dự (form Biên bản họp thật) VÀ bảng soạn Mẫu độc lập trong
+// modal Quản Lý Mẫu (xem renderTplEditRowsTable()) — cả 2 trỏ vào cùng 1 <datalist id="systemUsersDatalist">.
+function populateSystemUsersDatalist() {
+  const datalist = document.getElementById('systemUsersDatalist');
+  if (!datalist) return;
+  datalist.innerHTML = DB.users.map(u => `<option value="${escapeHtml(u.name)} — ${escapeHtml(u.dept || 'Chưa rõ phòng')} (${escapeHtml(u.username)})"></option>`).join('');
+}
+
 function renderAttendeesTable() {
   const tbody = document.getElementById('minutesAttendeesTableBody');
   if (!tbody) return;
 
-  const datalist = document.getElementById('systemUsersDatalist');
-  if (datalist) {
-    datalist.innerHTML = DB.users.map(u => `<option value="${escapeHtml(u.name)} — ${escapeHtml(u.dept || 'Chưa rõ phòng')} (${escapeHtml(u.username)})"></option>`).join('');
-  }
+  populateSystemUsersDatalist();
 
   tbody.innerHTML = minutesAttendeesRows.map((a, idx) => {
     const hasAccount = a.hasAccount === 'YES';
