@@ -59,6 +59,51 @@ router.post('/submissions/:id/respond-info', async (req, res) => {
   }
 });
 
+// POST /api/workflow/submissions/:id/give-opinion — người được XIN Ý KIẾN (sub.opinionRequestees,
+// xem lib/createValidation.js) để lại ý kiến tham khảo. KHÔNG phải hành động Duyệt/Từ chối, KHÔNG đi
+// qua applyWorkflowAction/lib/workflowEngine.js — kênh song song, không chặn quy trình duyệt chính,
+// nên KHÔNG kiểm tra item.status/currentStep (được phép để ý kiến ở bất kỳ trạng thái/bước nào).
+// PHẢI đăng ký TRƯỚC route generic bên dưới (cùng lý do với /respond-info ở trên).
+router.post('/submissions/:id/give-opinion', async (req, res) => {
+  const itemId = Number(req.params.id);
+  const { comment } = req.body || {};
+  if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
+  if (!comment) return res.status(400).json({ error: 'Vui lòng nhập ý kiến' });
+
+  try {
+    const freshUser = req.freshUser;
+
+    const resultItem = await withLockedRecordForCollection('submissions', itemId, (sub) => {
+      const requestees = sub.opinionRequestees || [];
+      if (!requestees.includes(freshUser.username)) {
+        throw new WorkflowError(403, 'Bạn không thuộc danh sách được xin ý kiến ở tờ trình này');
+      }
+      if (!sub.opinionResponses) sub.opinionResponses = [];
+      const now = new Date().toLocaleString('vi-VN');
+      const existing = sub.opinionResponses.find(r => r.username === freshUser.username);
+      if (existing) {
+        existing.comment = comment;
+        existing.respondedAt = now;
+      } else {
+        sub.opinionResponses.push({ username: freshUser.username, name: freshUser.name, comment, respondedAt: now });
+      }
+      if (!sub.history) sub.history = [];
+      sub.history.push({
+        step: sub.currentStep, approver: freshUser.name, username: freshUser.username,
+        action: 'GIVE_OPINION', comment, time: now
+      });
+
+      return sub;
+    });
+
+    res.json({ ok: true, item: resultItem });
+  } catch (err) {
+    if (err instanceof WorkflowError) return res.status(err.status).json({ error: err.message });
+    console.error(`POST /api/workflow/submissions/${req.params.id}/give-opinion lỗi:`, err.message);
+    res.status(500).json({ error: 'Không thể xử lý yêu cầu' });
+  }
+});
+
 // POST /api/workflow/:module/:id/:action  (module: docs|submissions|carRegs|officeReqs)
 router.post('/:module/:id/:action', async (req, res) => {
   const { module: moduleKey, id, action: rawAction } = req.params;

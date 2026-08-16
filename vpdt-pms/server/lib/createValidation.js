@@ -43,10 +43,15 @@ const SUBMISSION_TYPES = [
   { key: 'KHAC', label: 'Tờ trình khác' }
 ];
 
+// blocking:true = lớp trở thành 1 BƯỚC DUYỆT thật trong effectiveSteps (chặn quy trình, phải xử lý
+// xong mới qua bước sau). blocking:false (XIN_Y_KIEN) = kênh tham khảo song song — người được chọn
+// để lại ý kiến vào opinionRequestees/opinionResponses của hồ sơ, KHÔNG tham gia effectiveSteps,
+// KHÔNG có hành động Duyệt/Từ chối (xem buildEffectiveSubmissionWorkflowServer bên dưới).
 const SUBMISSION_APPROVAL_LAYERS = [
-  { key: 'DONG_TRINH', label: 'Đồng trình' },
-  { key: 'DONG_CAP', label: 'Phê duyệt đồng cấp' },
-  { key: 'BGD', label: 'Ban Giám Đốc (Phê duyệt chỉ đạo)' }
+  { key: 'DONG_TRINH', label: 'Đồng trình', blocking: true },
+  { key: 'DONG_CAP', label: 'Phê duyệt đồng cấp', blocking: true },
+  { key: 'BGD', label: 'Ban Giám Đốc (Phê duyệt chỉ đạo)', blocking: true },
+  { key: 'XIN_Y_KIEN', label: 'Xin ý kiến', blocking: false }
 ];
 
 // Tự dựng lại TOÀN BỘ quy trình hiệu lực (steps/approvers) của 1 tờ trình mới từ dữ liệu ĐÃ XÁC MINH
@@ -71,27 +76,35 @@ function buildEffectiveSubmissionWorkflowServer(type, dept, selectedLayerKeys, s
 
   const groups = appData.submissionApprovalGroups || {};
   const layerKeys = Array.isArray(selectedLayerKeys) ? selectedLayerKeys : [];
+  const opinionRequestees = [];
 
   layerKeys.forEach(layerKey => {
     const layer = SUBMISSION_APPROVAL_LAYERS.find(l => l.key === layerKey);
-    if (!layer) throw new CreateError(400, `Lớp phê duyệt không hợp lệ: ${layerKey}`);
+    if (!layer) throw new CreateError(400, `Lớp không hợp lệ: ${layerKey}`);
 
     const groupMembers = groups[layerKey] || [];
     const chosen = Array.isArray(selectedLayerMembers?.[layerKey]) ? [...new Set(selectedLayerMembers[layerKey])] : [];
     if (chosen.length === 0) {
-      throw new CreateError(400, `Chưa chọn người duyệt cho lớp "${layer.label}"`);
+      throw new CreateError(400, `Chưa chọn người cho lớp "${layer.label}"`);
     }
     const invalid = chosen.filter(u => !groupMembers.includes(u));
     if (invalid.length) {
-      throw new CreateError(403, `Người được chọn duyệt lớp "${layer.label}" không thuộc nhóm được admin gán: ${invalid.join(', ')}`);
+      throw new CreateError(403, `Người được chọn cho lớp "${layer.label}" không thuộc nhóm được admin gán: ${invalid.join(', ')}`);
     }
 
-    const stepOrder = steps.length + 1;
-    steps.push({ order: stepOrder, name: layer.label });
-    approvers[stepOrder] = chosen;
+    if (layer.blocking) {
+      const stepOrder = steps.length + 1;
+      steps.push({ order: stepOrder, name: layer.label });
+      approvers[stepOrder] = chosen;
+    } else {
+      // XIN_Y_KIEN (hoặc lớp không chặn khác trong tương lai): KHÔNG trở thành bước duyệt — chỉ ghi
+      // nhận danh sách người được xin ý kiến, để lại comment tham khảo qua opinionResponses, không
+      // ảnh hưởng tới effectiveSteps/effectiveApprovers và không có hành động Duyệt/Từ chối.
+      opinionRequestees.push(...chosen);
+    }
   });
 
-  return { steps, approvers, layerKeys };
+  return { steps, approvers, layerKeys, opinionRequestees: [...new Set(opinionRequestees)] };
 }
 
 // Mỗi module: khoá collection AppData, cách lấy phạm vi phòng ban được phép tạo ({all,depts}), tên
@@ -116,6 +129,10 @@ const CREATE_MODULE_CONFIGS = {
       payload.selectedLayerMembers = payload.selectedLayerMembers || {};
       payload.effectiveSteps = effectiveWf.steps;
       payload.effectiveApprovers = effectiveWf.approvers;
+      // "Xin ý kiến" (blocking:false) — KHÔNG phải bước duyệt, ghi đè riêng để không tin danh sách
+      // client tự gửi (cùng lý do với effectiveSteps/effectiveApprovers ở trên).
+      payload.opinionRequestees = effectiveWf.opinionRequestees;
+      payload.opinionResponses = [];
     }
   },
   contracts: {

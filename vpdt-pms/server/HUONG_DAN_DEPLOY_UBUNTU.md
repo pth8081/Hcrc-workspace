@@ -7,23 +7,56 @@
 
 ```
 [Trình duyệt người dùng]
-        │  HTTP (http://<ip-server>:3000)
+        │  HTTP(S) (http://<ip-server>:3000, cookie phiên đăng nhập httpOnly)
         ▼
 [Ubuntu Server]
-   ├─ Node.js (Express) — port 3000 — phục vụ giao diện + API
-   └─ SQL Server (MSSQL) — port 1433 — lưu trữ dữ liệu (bảng AppData)
+   ├─ Node.js (Express) — port 3000 — phục vụ giao diện + API, xác thực bằng
+   │  JWT ký ở server (xem mục 5)
+   └─ SQL Server (MSSQL) — port 1433 — lưu trữ dữ liệu (dbo.AppData + các bảng
+      riêng theo loại hồ sơ: dbo.SystemLogs, dbo.Tasks, dbo.Records — xem ghi
+      chú cập nhật bên dưới)
 ```
 
-Toàn bộ giao diện, chức năng, các module (Tài liệu, Văn bản trình, Hợp đồng,
-Phòng họp, Đăng ký xe, Đề xuất văn phòng, Quản trị, Quy trình...) **giữ nguyên
-100%** — chỉ thay đổi nơi lưu trữ dữ liệu từ `localStorage` của trình duyệt
-sang SQL Server thông qua một API Node.js ở giữa.
+Bản mô tả gốc ở đây (lần đầu chuyển từ `localStorage` sang SQL Server) nói
+giao diện/chức năng **giữ nguyên 100%**, chỉ đổi nơi lưu trữ. Từ đó tới nay
+ứng dụng đã trải qua nhiều đợt nâng cấp bảo mật/kiến trúc lớn nên mô tả đó
+**không còn đúng nữa** — xem ghi chú cập nhật ngay dưới đây trước khi triển
+khai, đặc biệt là phần cấu hình `.env` ở mục 5.
 
-**Lưu ý về 1 lỗi đã sửa trong quá trình chuyển đổi:** một số hàm cấu hình quy
-trình (`dept_workflows`, `car_regs`, `office_reqs`...) trong code gốc gọi lưu
-dữ liệu với tên khóa không khớp với tên trường thực tế trong bộ nhớ, khiến các
-thay đổi này bị mất khi tải lại trang. Đã sửa lại cho khớp đúng — đây là sửa
-lỗi, không phải thay đổi chức năng hay giao diện.
+**Lưu ý về 1 lỗi đã sửa trong quá trình chuyển đổi (lịch sử, không còn liên
+quan tới bản hiện tại):** một số hàm cấu hình quy trình (`dept_workflows`,
+`car_regs`, `office_reqs`...) trong code gốc gọi lưu dữ liệu với tên khóa
+không khớp với tên trường thực tế trong bộ nhớ, khiến các thay đổi này bị mất
+khi tải lại trang. Đã sửa lại cho khớp đúng.
+
+**Cập nhật quan trọng sau lần chuyển đổi ban đầu — ĐỌC TRƯỚC KHI TRIỂN KHAI:**
+
+- **Xác thực đã chuyển hẳn sang phía SERVER.** Mật khẩu lưu dạng hash
+  (bcrypt, không đọc lại được nguyên văn dù có quyền truy cập CSDL trực
+  tiếp). Đăng nhập cấp 1 phiên qua cookie JWT httpOnly, ký bằng `JWT_SECRET`
+  — biến này **bắt buộc phải có trong `.env`, server sẽ không khởi động nếu
+  thiếu** (xem mục 5, đã bổ sung vào ví dụ `.env` bên dưới). Có giới hạn số
+  lần đăng nhập sai liên tiếp + khoá tạm tài khoản.
+- **Cookie phiên đăng nhập mặc định bắt buộc HTTPS** (`COOKIE_SECURE=true`
+  theo mặc định). Nếu triển khai theo đường tối giản ở mục 6-7 (chạy thẳng
+  qua `http://<ip>:3000`, **chưa** làm mục 8 Nginx+HTTPS), trình duyệt sẽ
+  **không gửi lại cookie này** — đăng nhập có vẻ thành công nhưng ngay sau đó
+  bị coi như chưa đăng nhập, không có thông báo lỗi rõ ràng. Phải đặt
+  `COOKIE_SECURE=false` trong `.env` nếu thật sự chạy qua HTTP thuần trong
+  mạng nội bộ tin cậy (xem cảnh báo lại ở mục 5 và mục 8).
+- **Toàn bộ thao tác tạo/sửa/xoá/duyệt hồ sơ nghiệp vụ** (Văn bản trình, Tài
+  liệu, Hợp đồng, Đăng ký xe, Đề xuất văn phòng, Phòng họp, Biên bản họp,
+  Công việc, Truyền thông nội bộ...) đều được SERVER tự xác minh lại quyền +
+  đúng bước quy trình trước khi ghi — không chỉ dựa vào ẩn/hiện nút trên giao
+  diện như bản gốc.
+- **Phần lớn dữ liệu nghiệp vụ đã tách khỏi `dbo.AppData`** (vốn chỉ lưu 1
+  dòng JSON cho cả collection, phải khoá/đọc/ghi lại NGUYÊN dòng mỗi lần sửa
+  1 bản ghi) sang các bảng riêng có khoá đúng từng dòng (`dbo.SystemLogs`,
+  `dbo.Tasks`, `dbo.Records`). `dbo.AppData` giờ chỉ còn giữ dữ liệu cấu hình
+  (người dùng, phân quyền, quy trình mẫu, cấu hình email...). `schema.sql`
+  (mục 3) đã tạo sẵn đầy đủ các bảng này.
+
+Mục 9 (Khuyến nghị bảo mật) đã cập nhật lại đúng hiện trạng này.
 
 ---
 
@@ -104,9 +137,12 @@ sqlcmd -S localhost -U sa -P 'Your_Strong_Password_Here' -i schema.sql
 
 Nếu dùng Docker, chạy từ trong container hoặc trỏ `-S localhost,1433` từ máy host.
 
-Script này sẽ:
+Script này sẽ (an toàn để chạy lại nhiều lần — chỉ tạo bảng nào chưa có, không đụng dữ liệu cũ):
 - Tạo database `VPDT_DMS`
-- Tạo bảng `dbo.AppData` (lưu trữ toàn bộ dữ liệu ứng dụng dạng JSON theo từng "collection")
+- Tạo bảng `dbo.AppData` (dữ liệu cấu hình: người dùng, phân quyền, quy trình
+  mẫu, cấu hình email... — mỗi collection 1 dòng JSON)
+- Tạo `dbo.SystemLogs`, `dbo.Tasks`, `dbo.Records` (dữ liệu hồ sơ nghiệp vụ —
+  mỗi bản ghi 1 dòng riêng, xem ghi chú kiến trúc ở mục 0)
 
 Dữ liệu mặc định (phòng ban, user admin, quy trình mẫu...) sẽ được **tự động
 seed khi server Node.js khởi động lần đầu** (không cần chạy tay).
@@ -127,7 +163,7 @@ npm install
 
 ---
 
-## 5. Cấu hình kết nối SQL Server
+## 5. Cấu hình kết nối SQL Server + xác thực đăng nhập
 
 ```bash
 cp .env.example .env
@@ -138,6 +174,12 @@ nano .env
 
 ```
 PORT=3000
+
+# --- Xác thực đăng nhập (BẮT BUỘC — server sẽ không khởi động nếu thiếu JWT_SECRET) ---
+JWT_SECRET=change-me-to-a-long-random-string
+COOKIE_SECURE=true
+
+# --- Kết nối SQL Server ---
 DB_SERVER=localhost          # hoặc IP máy chủ SQL Server nếu chạy riêng
 DB_PORT=1433
 DB_NAME=VPDT_DMS
@@ -147,7 +189,26 @@ DB_ENCRYPT=false
 DB_TRUST_CERT=true
 ```
 
-> ⚠️ Không commit file `.env` lên Git — chứa mật khẩu SQL Server.
+Tạo `JWT_SECRET` bằng lệnh:
+```bash
+node -e "console.log(require('crypto').randomBytes(48).toString('hex'))"
+```
+Đây là khoá ký phiên đăng nhập (JWT) — **PHẢI là chuỗi ngẫu nhiên dài, giữ
+kín, và khác nhau giữa các môi trường** (dev/staging/production). Đổi giá trị
+này sẽ khiến mọi phiên đăng nhập đang mở bị đăng xuất (không sao, chỉ cần
+đăng nhập lại) — hữu ích nếu nghi ngờ khoá đã lộ.
+
+> ⚠️ **`COOKIE_SECURE=true` (mặc định) yêu cầu truy cập qua HTTPS.** Nếu bạn
+> làm theo mục 8 (Nginx + HTTPS nội bộ) thì giữ nguyên giá trị này. Nếu bạn
+> **bỏ qua mục 8** và chạy thẳng qua `http://<ip>:3000` (chỉ nên làm trong
+> mạng nội bộ hoàn toàn tin cậy), phải đổi thành `COOKIE_SECURE=false` — nếu
+> không, trình duyệt sẽ không lưu lại cookie phiên đăng nhập và người dùng
+> **không đăng nhập được dù nhập đúng mật khẩu** (không có thông báo lỗi rõ
+> ràng, chỉ tự động bị coi như chưa đăng nhập ngay sau khi vào được màn
+> chính).
+
+> ⚠️ Không commit file `.env` lên Git — chứa mật khẩu SQL Server và khoá
+> `JWT_SECRET`.
 
 ---
 
@@ -212,9 +273,15 @@ Mở trình duyệt: `http://<ip-server>:3000` — đăng nhập thử với tà
 - `admin / 123456` (Quản trị viên - full quyền)
 - `nv_nhansu / 123456`, `ks_kiemsoat / 123456`, `sep_duyet / 123456`
 
+Nếu đang chạy thử qua `http://` thuần (chưa làm mục 8) mà đăng nhập không ăn
+(vào được màn chính rồi lại bị đá về màn đăng nhập), xem lại cảnh báo
+`COOKIE_SECURE` ở mục 5 — nguyên nhân hầu hết là do đó.
+
 **⚠️ Đổi ngay mật khẩu các tài khoản mặc định này trước khi đưa vào sử dụng
-thật** (qua module Quản trị → Người dùng), vì mật khẩu hiện đang lưu ở dạng
-plain-text — xem khuyến nghị bảo mật ở mục 9.
+thật** (qua module Quản trị → Người dùng). Mật khẩu đã lưu dạng hash (bcrypt,
+không đọc lại được nguyên văn dù có quyền truy cập CSDL trực tiếp), nhưng giá
+trị mặc định `123456` thì ai cũng biết trước — xem thêm khuyến nghị bảo mật ở
+mục 9.
 
 ---
 
@@ -290,21 +357,31 @@ tự cấp chứng chỉ nội bộ qua CA công ty.
 
 ## 9. Khuyến nghị bảo mật trước khi đưa vào sử dụng chính thức
 
-Đây là các điểm **quan trọng cần làm thêm**, vì hiện tại ứng dụng vẫn giữ
-nguyên cơ chế xác thực gốc (kiểm tra mật khẩu ở phía trình duyệt) để không
-thay đổi chức năng — nhưng cơ chế này vốn chưa an toàn cho môi trường
-internet mở:
+**Cập nhật:** mục "nâng cấp hash mật khẩu (bcrypt) + xác thực phía server"
+trong bản hướng dẫn gốc **đã hoàn tất từ lâu** — không còn là việc cần làm
+thêm. Xác thực hiện đã hoàn toàn ở phía server (mật khẩu hash bcrypt, phiên
+đăng nhập bằng JWT httpOnly, có giới hạn số lần đăng nhập sai + khoá tạm tài
+khoản), và toàn bộ thao tác tạo/sửa/xoá/duyệt hồ sơ nghiệp vụ đều được server
+tự xác minh lại quyền trước khi ghi (xem ghi chú cập nhật ở mục 0). Các điểm
+dưới đây vẫn là khuyến nghị **vận hành** thật sự cần làm khi triển khai —
+không phụ thuộc vào code, chỉ phụ thuộc vào cách bạn cấu hình/vận hành server:
 
-1. **Đổi toàn bộ mật khẩu mặc định** (`123456`) ngay sau khi triển khai.
-2. **Chỉ mở port 3000/1433 trong mạng nội bộ** (LAN/VPN công ty), không expose
+1. **Đổi toàn bộ mật khẩu mặc định** (`123456`) ngay sau khi triển khai —
+   mật khẩu đã hash nên không đọc lại được nguyên văn, nhưng giá trị mặc định
+   này ai cũng biết trước, vẫn là điểm yếu nếu không đổi.
+2. **Đặt `JWT_SECRET` đủ mạnh, ngẫu nhiên, và giữ bí mật** trong `.env` (mục
+   5). Đây là khoá ký phiên đăng nhập — lộ khoá này coi như lộ khả năng tự
+   tạo phiên đăng nhập giả mạo bất kỳ tài khoản nào mà không cần biết mật
+   khẩu. Không dùng chung 1 giá trị `JWT_SECRET` giữa các môi trường
+   (dev/staging/production).
+3. **Giữ `COOKIE_SECURE=true`** (mặc định) và triển khai HTTPS thật (mục 8)
+   khi có thể — cookie phiên đăng nhập chỉ thật sự an toàn khi truyền qua
+   HTTPS. Chỉ tắt (`false`) khi chạy hoàn toàn trong mạng nội bộ tin cậy và
+   chấp nhận đánh đổi (xem cảnh báo ở mục 5).
+4. **Chỉ mở port 3000/1433 trong mạng nội bộ** (LAN/VPN công ty), không expose
    trực tiếp ra Internet nếu không có SSL + xác thực bổ sung.
-3. **Backup định kỳ SQL Server** (`sqlcmd`/SQL Server Agent job hoặc script
+5. **Backup định kỳ SQL Server** (`sqlcmd`/SQL Server Agent job hoặc script
    `BACKUP DATABASE VPDT_DMS TO DISK = ...` chạy cron hàng ngày).
-4. Về lâu dài, nên nâng cấp cơ chế đăng nhập sang hash mật khẩu (bcrypt) và xác
-   thực phía server thay vì so sánh ở client — tôi có thể hỗ trợ việc này ở
-   một đợt cập nhật riêng nếu bạn cần (đây là thay đổi về bảo mật/kiến trúc
-   xác thực, ngoài phạm vi "giữ nguyên chức năng" của lần chuyển đổi này nên
-   tôi chưa tự ý thực hiện).
 
 ---
 
