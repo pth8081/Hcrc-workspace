@@ -118,21 +118,22 @@ const DEFAULTS = {
     }
   ],
 
-  contracts: [],
   meetings: [],
   meetingMinutes: [],
   meetingAttendeeTemplates: [],
   internalPosts: []
-  // systemLogs (Bước 6a), tasks (Bước 6b), submissions + docs + carRegs + officeReqs (Bước
-  // 6c/6d/6e/6f) KHÔNG còn ở đây — lưu ở bảng riêng (dbo.SystemLogs, dbo.Tasks, dbo.Records — xem
+  // systemLogs (Bước 6a), tasks (Bước 6b), submissions + docs + carRegs + officeReqs + contracts (Bước
+  // 6c/6d/6e/6f/6g) KHÔNG còn ở đây — lưu ở bảng riêng (dbo.SystemLogs, dbo.Tasks, dbo.Records — xem
   // lib/systemLogStore.js, lib/taskStore.js, lib/recordStore.js), không còn là 1 dòng JSON trong
   // AppData. routes/data.js không nhận các key này làm key hợp lệ nữa (loại khỏi VALID_KEYS tự nhiên
   // vì không còn trong DEFAULTS) — systemLogs dùng POST/DELETE /api/log (routes/systemLog.js), tasks
   // dùng route riêng theo hành động dưới /api/records/tasks/... (routes/records.js),
   // submissions/docs/carRegs/officeReqs dùng /api/create/<module> + /api/workflow/<module>/...
-  // (routes/create.js, routes/workflow.js) — mỗi collection tiếp theo được thêm vào
-  // lib/recordStore.js MIGRATED_COLLECTIONS sẽ tự động theo đúng mẫu này, không cần sửa gì thêm ở
-  // routes/data.js.
+  // (routes/create.js, routes/workflow.js), contracts TẠO qua /api/create/contracts, SỬA qua
+  // /api/records/contracts/:id/edit (routes/records.js) — mỗi collection tiếp theo được thêm vào
+  // lib/recordStore.js MIGRATED_COLLECTIONS sẽ tự động theo đúng mẫu này (miễn route đọc/ghi của nó đã
+  // đi qua getAllForCollection/createForCollection/withLockedRecordForCollection), không cần sửa gì
+  // thêm ở routes/data.js.
 };
 
 module.exports = { DEFAULTS };
