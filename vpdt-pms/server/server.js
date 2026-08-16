@@ -3,6 +3,7 @@ require('dotenv').config();
 const express = require('express');
 const cookieParser = require('cookie-parser');
 const path = require('path');
+const securityHeaders = require('./lib/securityHeaders');
 const { version: APP_VERSION } = require('./package.json');
 const { getPool } = require('./db');
 const { seedDefaults } = require('./seedDefaults');
@@ -20,6 +21,8 @@ const { checkContractExpiryReminders } = require('./jobs/contractExpiryReminder'
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+
+app.use(securityHeaders);
 
 // Tài liệu/hồ sơ không còn nhúng base64 trong JSON — file đính kèm được tải lên qua
 // POST /api/upload và lưu ra ổ đĩa (thư mục uploads/), collection JSON chỉ giữ fileUrl.
