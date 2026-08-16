@@ -2674,6 +2674,15 @@ function buildActionCell(id, primaryBtnHTML, secondaryOptions, dispatcherFnName)
   </select>`;
 }
 
+// Ghi qua API append an toàn (POST /api/log, xem routes/systemLog.js) thay vì đọc/sửa/ghi đè cả mảng
+// qua /api/data/systemLogs (syncStorage) — trước đây, khi 1 thao tác kích hoạt NHIỀU log liên tiếp
+// gần như đồng thời (VD lập biên bản họp tự động tạo N Công việc, mỗi việc tự ghi 1 dòng log), các
+// request đều dựa trên cùng 1 version cũ (If-Match) vì request đầu chưa kịp trả version mới cho các
+// request sau dùng -> request thứ 2 trở đi bị server từ chối 409 "vừa bị người khác thay đổi", dù
+// thực ra chỉ là chính client đó tự ghi log liên tiếp, không có ai ghi đè mất gì cả. Vẫn thêm ngay vào
+// DB.systemLogs ở client để màn Nhật ký hệ thống cập nhật tức thì, không chờ phản hồi server (fire-
+// and-forget, giống hành vi cũ) — nhưng không alert() khi request nền thất bại (khác thao tác nghiệp
+// vụ chính, ghi log lỗi không nên làm gián đoạn người dùng).
 function logSystemAction(module, actionType, description, status = 'SUCCESS', target = '') {
   const logEntry = {
     id: Date.now() + Math.random(),
@@ -2690,7 +2699,12 @@ function logSystemAction(module, actionType, description, status = 'SUCCESS', ta
 
   DB.systemLogs.unshift(logEntry);
   if (DB.systemLogs.length > 200) DB.systemLogs.pop();
-  syncStorage('systemLogs');
+
+  fetch('/api/log', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ module, actionType, description, status, target })
+  }).catch(e => console.error('Lỗi khi ghi nhật ký hệ thống lên máy chủ:', e));
 }
 
 // ==========================================
@@ -5432,6 +5446,10 @@ function createTaskFromMinutesDirective(minutesId, directiveIdx) {
 async function updateTaskStatus(id, newStatus, note) {
   const t = DB.tasks.find(x => x.id === id);
   if (!t) return;
+  // Việc đang dài hạn có thể cập nhật NHIỀU LẦN ghi chú tiến độ mà KHÔNG đổi trạng thái (VD vẫn đang
+  // "Đang thực hiện") — server vẫn ghi 1 dòng lịch sử mới mỗi lần (xem updateTaskStatusAction()), chỉ
+  // khác cách diễn đạt log cho đúng ý (không nói "chuyển sang" khi thực ra trạng thái không đổi).
+  const isProgressNoteOnly = t.status === newStatus;
 
   let updated;
   try {
@@ -5443,7 +5461,10 @@ async function updateTaskStatus(id, newStatus, note) {
 
   const idx = DB.tasks.findIndex(x => x.id === id);
   if (idx !== -1) DB.tasks[idx] = updated;
-  logSystemAction('TASK', 'UPDATE_TASK_STATUS', `Cập nhật công việc [${updated.title}] sang trạng thái ${newStatus}${note ? ` — Ghi chú: ${note}` : ''}`, 'SUCCESS', updated.sourceCode || updated.title);
+  const logMsg = isProgressNoteOnly
+    ? `Cập nhật tiến độ công việc [${updated.title}] — Ghi chú: ${note}`
+    : `Cập nhật công việc [${updated.title}] sang trạng thái ${TASK_STATUS_LABELS[newStatus] || newStatus}${note ? ` — Ghi chú: ${note}` : ''}`;
+  logSystemAction('TASK', isProgressNoteOnly ? 'UPDATE_TASK_PROGRESS' : 'UPDATE_TASK_STATUS', logMsg, 'SUCCESS', updated.sourceCode || updated.title);
   renderTasks();
 }
 
@@ -5572,11 +5593,27 @@ function openTaskProgressModal(taskId) {
 
   // Huỷ công việc KHÔNG còn là lựa chọn ở đây nữa — đi qua luồng riêng bắt buộc nhập lý do +
   // cần người giao việc xác nhận (xem openCancelTaskModal()).
-  let nextOptions = { TODO: ['DOING'], DOING: ['DONE'] }[t.status] || [];
+  // Mỗi lựa chọn: value = trạng thái sẽ lưu, label = nhãn RIÊNG cho đúng ngữ cảnh (không dùng chung
+  // TASK_STATUS_LABELS vì cùng giá trị "DOING" mang 2 ý nghĩa khác nhau tuỳ trạng thái hiện tại — từ
+  // TODO là "bắt đầu làm", còn từ chính DOING là "vẫn đang làm, chỉ cập nhật ghi chú tiến độ" — việc có
+  // thể kéo dài nên cần cập nhật được nhiều lần cho người giao việc theo dõi tới lúc hoàn thành, không
+  // bắt buộc phải đóng việc mới ghi được tiến độ), requireNote = bắt buộc nhập ghi chú hay không.
+  let nextOptions;
+  if (t.status === 'TODO') {
+    nextOptions = [{ value: 'DOING', label: '🔵 Bắt đầu thực hiện', requireNote: false }];
+  } else if (t.status === 'DOING') {
+    nextOptions = [
+      { value: 'DOING', label: '🔵 Tiếp tục công việc (cập nhật ghi chú tiến độ)', requireNote: true },
+      { value: 'DONE', label: '✅ Hoàn thành', requireNote: false }
+    ];
+  } else {
+    nextOptions = [];
+  }
   // Không cho chọn Hoàn thành khi đang có yêu cầu gia hạn chờ duyệt — xem updateTaskStatus().
-  if (t.pendingExtension) nextOptions = nextOptions.filter(s => s !== 'DONE');
+  if (t.pendingExtension) nextOptions = nextOptions.filter(o => o.value !== 'DONE');
+
   const sel = document.getElementById('progressNewStatus');
-  sel.innerHTML = nextOptions.map(s => `<option value="${s}">${TASK_STATUS_LABELS[s]}</option>`).join('')
+  sel.innerHTML = nextOptions.map(o => `<option value="${o.value}" data-require-note="${o.requireNote ? '1' : ''}">${o.label}</option>`).join('')
     || `<option value="">-- Không có lựa chọn hợp lệ --</option>`;
   document.getElementById('progressNote').value = '';
 
@@ -5590,9 +5627,16 @@ function closeTaskProgressModal() {
 
 function confirmTaskProgress() {
   if (progressingTaskId === null) return;
-  const newStatus = document.getElementById('progressNewStatus').value;
+  const sel = document.getElementById('progressNewStatus');
+  const newStatus = sel.value;
   const note = document.getElementById('progressNote').value.trim();
   if (!newStatus) return alert('Không có trạng thái hợp lệ để cập nhật.');
+
+  const requireNote = sel.selectedOptions[0]?.dataset.requireNote === '1';
+  if (requireNote && !note) {
+    return alert('⛔ Vui lòng nhập ghi chú tiến độ trước khi cập nhật!');
+  }
+
   updateTaskStatus(progressingTaskId, newStatus, note);
   closeTaskProgressModal();
 }
@@ -10264,6 +10308,11 @@ function renderSystemLogs() {
 function clearSystemLogs() {
   if (!confirm('Bạn có chắc muốn xóa toàn bộ lịch sử log hệ thống?')) return;
   DB.systemLogs = [];
+  // logSystemAction() giờ ghi qua /api/log (append riêng, xem routes/systemLog.js) nên không còn cập
+  // nhật DB._versions.systemLogs mỗi lần có log mới — version cache ở đây gần như LUÔN lệch so với
+  // thực tế trên server (vì hầu như thao tác nào cũng ghi log). Xóa nhật ký là hành động chủ đích, ghi
+  // đè toàn bộ mảng vô điều kiện là đúng ý muốn, nên bỏ qua version cache để không bị 409 giả.
+  delete DB._versions.systemLogs;
   syncStorage('systemLogs');
   renderSystemLogs();
 }
