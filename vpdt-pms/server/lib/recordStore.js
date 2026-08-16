@@ -16,8 +16,12 @@ const { getAppDataValue, withLockedAppDataValue } = require('./appData');
 const { HttpError } = require('./httpErrors');
 
 // Collection ĐÃ chuyển sang dbo.Records — thêm dần theo đúng lộ trình đã thống nhất, mỗi bước 1
-// collection (Bước 6c: submissions, Bước 6d: docs, Bước 6e: carRegs, Bước 6f: officeReqs).
-const MIGRATED_COLLECTIONS = new Set(['submissions', 'docs', 'carRegs', 'officeReqs']);
+// collection (Bước 6c: submissions, Bước 6d: docs, Bước 6e: carRegs, Bước 6f: officeReqs, Bước 6g:
+// contracts). Khác 4 collection trước (dùng chung 2 engine createValidation.js/workflowEngine.js qua
+// routes/create.js + routes/workflow.js), contracts SỬA qua route riêng (routes/records.js
+// POST /contracts/:id/edit, dùng lib/recordActions.js::editContract) — vẫn dùng được đúng dispatch
+// withLockedRecordForCollection() ở đây vì hàm sửa chỉ cần 1 bản ghi (không cần cả collection).
+const MIGRATED_COLLECTIONS = new Set(['submissions', 'docs', 'carRegs', 'officeReqs', 'contracts']);
 
 function toRecord(row) {
   return JSON.parse(row.Payload);

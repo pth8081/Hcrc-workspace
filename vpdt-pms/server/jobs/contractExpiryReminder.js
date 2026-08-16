@@ -2,11 +2,20 @@
 // nhở — ghi console + Nhật ký hệ thống như trước, đồng thời gửi email THẬT qua lib/mailer.js nếu
 // server đã cấu hình SMTP thật (biến môi trường); nếu chưa cấu hình thì mailer tự trả về
 // simulated:true và job vẫn chạy bình thường như cơ chế mô phỏng cũ.
+//
+// LƯU Ý: contracts đã chuyển sang bảng dbo.Records từ Bước 6g (xem lib/recordStore.js) — job này đọc
+// qua getAllForCollection('contracts') và ghi lại notifiedThresholds qua withLockedRecordById() cho
+// từng hợp đồng thay đổi, thay vì đọc/ghi nguyên mảng AppData.contracts như trước. Nhật ký hệ thống
+// cũng đã chuyển sang dbo.SystemLogs từ Bước 6a (lib/systemLogStore.js) — job này trước đây vẫn đọc/
+// ghi thẳng AppData.systemLogs (key đã không còn ai đọc từ Bước 6a, log của job này từng bị lạc mất
+// khỏi Nhật ký hệ thống thật mà không ai biết) — nay ghi qua insertSystemLog() để log thật sự xuất
+// hiện trong Nhật ký hệ thống.
 const { getPool, sql } = require('../db');
 const { sendMail } = require('../lib/mailer');
+const { getAllForCollection, withLockedRecordById } = require('../lib/recordStore');
+const { insertSystemLog } = require('../lib/systemLogStore');
 
 const DEFAULT_REMINDER_DAYS = [30, 15, 7];
-const MAX_LOG_ENTRIES = 200;
 
 async function getCollection(pool, key, fallback) {
   const result = await pool.request()
@@ -66,20 +75,18 @@ async function checkContractExpiryReminders() {
     const thresholds = Array.from(new Set([...configuredDays, 0])).sort((a, b) => b - a);
     const ccEmails = Array.isArray(emailConfig.contractExpiryCcEmails) ? emailConfig.contractExpiryCcEmails : [];
 
-    const contracts = await getCollection(pool, 'contracts', []);
+    const contracts = await getAllForCollection('contracts');
     if (!Array.isArray(contracts) || contracts.length === 0) return;
 
     const users = await getCollection(pool, 'users', []);
-    const systemLogs = await getCollection(pool, 'systemLogs', []);
-
-    let changed = false;
-    const nowStr = new Date().toLocaleString('vi-VN');
 
     for (const c of contracts) {
       if (!c || !c.endDate) continue;
       const diffDays = daysUntil(c.endDate);
       if (diffDays === null) continue;
       if (!Array.isArray(c.notifiedThresholds)) c.notifiedThresholds = [];
+
+      let contractChanged = false;
 
       for (const threshold of thresholds) {
         if (diffDays > threshold) continue; // chưa tới ngưỡng này
@@ -125,9 +132,7 @@ async function checkContractExpiryReminders() {
             : ` (đã xác nhận gửi email thật${hostLabel})`;
         }
 
-        systemLogs.unshift({
-          id: Date.now() + Math.random(),
-          timestamp: nowStr,
+        await insertSystemLog({
           username: 'system_scheduler',
           fullName: 'Hệ Thống (Tự Động)',
           ipAddress: 'SERVER (Scheduled Job)',
@@ -141,14 +146,15 @@ async function checkContractExpiryReminders() {
         });
 
         c.notifiedThresholds.push(threshold);
-        changed = true;
+        contractChanged = true;
       }
-    }
 
-    if (changed) {
-      while (systemLogs.length > MAX_LOG_ENTRIES) systemLogs.pop();
-      await saveCollection(pool, 'contracts', contracts);
-      await saveCollection(pool, 'systemLogs', systemLogs);
+      if (contractChanged) {
+        await withLockedRecordById('contracts', c.id, (item) => {
+          item.notifiedThresholds = c.notifiedThresholds;
+          return item;
+        });
+      }
     }
   } catch (err) {
     console.error('⛔ [Nhắc hạn hợp đồng] Lỗi khi kiểm tra:', err.message);

@@ -8,6 +8,7 @@ const { requireAuth, blockIfMustChangePassword } = require('../lib/auth');
 const { HttpError } = require('../lib/httpErrors');
 const recordActions = require('../lib/recordActions');
 const { insertTask, withLockedTaskById, deleteTaskById } = require('../lib/taskStore');
+const { withLockedRecordForCollection } = require('../lib/recordStore');
 
 router.use(requireAuth, blockIfMustChangePassword);
 
@@ -23,20 +24,16 @@ function handleError(res, action, err) {
   res.status(500).json({ error: 'Không thể xử lý yêu cầu' });
 }
 
-// POST /api/records/contracts/:id/edit
+// POST /api/records/contracts/:id/edit — contracts đã chuyển sang bảng dbo.Records (Bước 6g, xem
+// lib/recordStore.js), khoá đúng 1 dòng hợp đồng thay vì cả collection.
 router.post('/contracts/:id/edit', async (req, res) => {
   const itemId = Number(req.params.id);
   if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
   try {
     const { freshUser } = await getFreshUser(req);
-    let result = null;
-    await withLockedAppDataValue('contracts', (collection) => {
-      const list = Array.isArray(collection) ? collection : [];
-      const idx = list.findIndex(c => c.id === itemId);
-      if (idx === -1) throw new HttpError(404, 'Không tìm thấy hồ sơ hợp đồng');
-      result = recordActions.editContract(req.body, freshUser, list[idx]);
-      return list;
-    });
+    const result = await withLockedRecordForCollection('contracts', itemId, (item) =>
+      recordActions.editContract(req.body, freshUser, item)
+    );
     res.json({ ok: true, item: result });
   } catch (err) {
     handleError(res, `contracts/${req.params.id}/edit`, err);
