@@ -17,14 +17,20 @@ const { HttpError } = require('./httpErrors');
 
 // Collection ĐÃ chuyển sang dbo.Records — thêm dần theo đúng lộ trình đã thống nhất, mỗi bước 1
 // collection (Bước 6c: submissions, Bước 6d: docs, Bước 6e: carRegs, Bước 6f: officeReqs, Bước 6g:
-// contracts, Bước 6h: meetings, Bước 6i: meetingMinutes). Khác 4 collection Bước 6c-6f (dùng chung 2
-// engine createValidation.js/workflowEngine.js qua routes/create.js + routes/workflow.js),
-// contracts/meetings/meetingMinutes SỬA qua route riêng đơn giản (routes/records.js
-// POST /contracts/:id/edit, POST /minutes/:id/edit, routes/meetingActions.js POST /:id/approve|cancel)
-// — vẫn dùng được đúng dispatch withLockedRecordForCollection() ở đây vì các hàm sửa chỉ cần 1 bản ghi
-// (không cần cả collection). meetingMinutes còn có thêm route XOÁ (POST /minutes/:id/delete) — collection
-// ĐẦU TIÊN trong nhóm này cần xoá 1 dòng, xem deleteRecordForCollection() bên dưới.
-const MIGRATED_COLLECTIONS = new Set(['submissions', 'docs', 'carRegs', 'officeReqs', 'contracts', 'meetings', 'meetingMinutes']);
+// contracts, Bước 6h: meetings, Bước 6i: meetingMinutes, Bước 6j: internalPosts — bước CUỐI của lộ
+// trình Bước 6). Khác 4 collection Bước 6c-6f (dùng chung 2 engine
+// createValidation.js/workflowEngine.js qua routes/create.js + routes/workflow.js),
+// contracts/meetings/meetingMinutes/internalPosts SỬA qua route riêng đơn giản (routes/records.js
+// POST /contracts/:id/edit, POST /minutes/:id/edit, POST /internalPosts/:id/<action>,
+// routes/meetingActions.js POST /:id/approve|cancel) — vẫn dùng được đúng dispatch
+// withLockedRecordForCollection() ở đây vì các hàm sửa chỉ cần 1 bản ghi (không cần cả collection).
+// meetingMinutes còn có thêm route XOÁ (POST /minutes/:id/delete) — collection ĐẦU TIÊN trong nhóm này
+// cần xoá 1 dòng, xem deleteRecordForCollection() bên dưới. internalPosts trước Bước 6j chỉ có route
+// TẠO qua createValidation.js — 5 hành động tương tác (đánh dấu đã đọc/thích/bình luận/đăng ký đào tạo)
+// vẫn ghi thẳng qua đường /api/data/internalPosts chung, không xác thực gì — đã xây route riêng cho cả
+// 5 hành động này trong routes/records.js TRƯỚC KHI migrate storage ở bước này (xem
+// lib/recordActions.js phần "TRUYỀN THÔNG NỘI BỘ").
+const MIGRATED_COLLECTIONS = new Set(['submissions', 'docs', 'carRegs', 'officeReqs', 'contracts', 'meetings', 'meetingMinutes', 'internalPosts']);
 
 function toRecord(row) {
   return JSON.parse(row.Payload);

@@ -178,6 +178,57 @@ function buildTaskFromSubmissionComment(sub, user, comment) {
   };
 }
 
+// ===================== TRUYỀN THÔNG NỘI BỘ (tương tác — Bước 6j) =====================
+// Xem/tương tác (đánh dấu đã đọc, thích, bình luận, đăng ký đào tạo) mở cho MỌI người dùng đã đăng
+// nhập — khớp đúng canCreateInternalPost() ở index.html (chỉ ĐĂNG bài mới cần quyền riêng theo type,
+// tương tác với bài đã đăng thì ai cũng được, không cần kiểm tra quyền gì thêm ở đây ngoài đã đăng
+// nhập, đã có sẵn ở requireAuth gắn trên toàn bộ router). Trước đây 5 hành động này ghi thẳng TOÀN BỘ
+// mảng internalPosts qua POST /api/data/internalPosts (route generic, không xác minh gì) — 1 request tự
+// soạn bỏ qua UI vẫn có thể giả mạo bình luận/lượt thích/đăng ký của người khác vì server chưa từng
+// xác minh lại danh tính. Server giờ luôn dùng danh tính TỪ PHIÊN ĐĂNG NHẬP (user.username/name),
+// không tin bất kỳ giá trị nào client tự gửi.
+function markInternalPostRead(user, post) {
+  if (!Array.isArray(post.readBy)) post.readBy = [];
+  if (!post.readBy.includes(user.username)) post.readBy.push(user.username);
+  return post;
+}
+
+function toggleInternalPostLike(user, post) {
+  if (!Array.isArray(post.likes)) post.likes = [];
+  const idx = post.likes.indexOf(user.username);
+  if (idx === -1) post.likes.push(user.username);
+  else post.likes.splice(idx, 1);
+  return post;
+}
+
+function addInternalPostComment(payload, user, post) {
+  const content = (payload?.content || '').trim();
+  if (!content) throw new HttpError(400, 'Vui lòng nhập nội dung bình luận');
+  if (!Array.isArray(post.comments)) post.comments = [];
+  post.comments.push({ id: Date.now(), username: user.username, name: user.name, content, time: nowVN() });
+  return post;
+}
+
+// Khớp đúng registerForTraining() ở index.html: đã đăng ký rồi thì client tự bỏ qua từ trước khi gọi
+// tới đây (không coi là lỗi) — server vẫn tự kiểm tra lại phòng khi dữ liệu client cũ/lệch (idempotent,
+// không throw), chỉ chặn thật khi ĐÃ ĐỦ số lượng.
+function registerInternalPostTraining(user, post) {
+  if (post.type !== 'TRAINING' || !post.training) throw new HttpError(400, 'Bài đăng không phải khóa đào tạo');
+  if (!Array.isArray(post.training.registeredUsers)) post.training.registeredUsers = [];
+  if (post.training.registeredUsers.includes(user.username)) return post;
+  if (post.training.capacity > 0 && post.training.registeredUsers.length >= post.training.capacity) {
+    throw new HttpError(409, 'Khóa đào tạo đã đủ số lượng đăng ký!');
+  }
+  post.training.registeredUsers.push(user.username);
+  return post;
+}
+
+function unregisterInternalPostTraining(user, post) {
+  if (post.type !== 'TRAINING' || !post.training) throw new HttpError(400, 'Bài đăng không phải khóa đào tạo');
+  post.training.registeredUsers = (post.training.registeredUsers || []).filter(u => u !== user.username);
+  return post;
+}
+
 // ===================== CÔNG VIỆC (sửa/giao/xóa) =====================
 // canManageTasks (sửa) là cờ toàn công ty (admin||taskEdit) — quyền sửa BẤT KỲ công việc nào.
 // Gán người nhận thì hẹp hơn: chỉ admin hoặc CHÍNH người đã giao việc đó (assignedBy) — khớp đúng
@@ -438,6 +489,8 @@ module.exports = {
   editContract,
   canEditMinutes, canDeleteMinutes, editMinutes, assertCanDeleteMinutes,
   canCreateMinutes, createMinutes, buildTasksFromDirectives, buildTaskFromSubmissionComment,
+  markInternalPostRead, toggleInternalPostLike, addInternalPostComment,
+  registerInternalPostTraining, unregisterInternalPostTraining,
   canManageTasks, canDeleteTaskPerm, canAssignSpecificTask, assignTask, editTask, assertCanDeleteTask,
   createTask,
   acceptTask, confirmCollaboratorParticipation, updateTaskStatusAction, requestExtension,

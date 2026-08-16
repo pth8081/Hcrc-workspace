@@ -99,6 +99,42 @@ router.post('/minutes/:id/delete', async (req, res) => {
   }
 });
 
+// Bước 6j — Truyền thông nội bộ: tương tác (đánh dấu đã đọc/thích/bình luận/đăng ký đào tạo) mở cho
+// MỌI người dùng đã đăng nhập (khớp canCreateInternalPost() ở index.html — chỉ ĐĂNG bài mới cần quyền
+// riêng theo type, xem/tương tác với bài đã đăng thì không) — cùng khuôn "khoá đúng 1 bài, gọi hàm xác
+// minh + mutate ở lib/recordActions.js" như withTaskAction() bên dưới.
+async function withInternalPostAction(req, res, action, mutator) {
+  const itemId = Number(req.params.id);
+  if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
+  try {
+    const { freshUser } = await getFreshUser(req);
+    const result = await withLockedRecordForCollection('internalPosts', itemId, (item) => mutator(req.body, freshUser, item));
+    res.json({ ok: true, item: result });
+  } catch (err) {
+    handleError(res, `internalPosts/${req.params.id}/${action}`, err);
+  }
+}
+
+// POST /api/records/internalPosts/:id/mark-read
+router.post('/internalPosts/:id/mark-read', (req, res) =>
+  withInternalPostAction(req, res, 'mark-read', (payload, user, item) => recordActions.markInternalPostRead(user, item)));
+
+// POST /api/records/internalPosts/:id/like
+router.post('/internalPosts/:id/like', (req, res) =>
+  withInternalPostAction(req, res, 'like', (payload, user, item) => recordActions.toggleInternalPostLike(user, item)));
+
+// POST /api/records/internalPosts/:id/comment
+router.post('/internalPosts/:id/comment', (req, res) =>
+  withInternalPostAction(req, res, 'comment', recordActions.addInternalPostComment));
+
+// POST /api/records/internalPosts/:id/register-training
+router.post('/internalPosts/:id/register-training', (req, res) =>
+  withInternalPostAction(req, res, 'register-training', (payload, user, item) => recordActions.registerInternalPostTraining(user, item)));
+
+// POST /api/records/internalPosts/:id/unregister-training
+router.post('/internalPosts/:id/unregister-training', (req, res) =>
+  withInternalPostAction(req, res, 'unregister-training', (payload, user, item) => recordActions.unregisterInternalPostTraining(user, item)));
+
 // Bước 3 — Công việc có nhiều action cùng khuôn "tìm việc trong collection, khoá, gọi hàm xác minh +
 // mutate ở lib/recordActions.js, trả về bản ghi mới" — gom vào 1 helper dùng chung thay vì lặp lại
 // nguyên khối try/withLockedAppDataValue cho từng action (assign/edit/accept/status/gia hạn/huỷ việc...).
