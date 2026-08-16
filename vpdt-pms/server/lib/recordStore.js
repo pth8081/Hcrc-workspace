@@ -17,12 +17,14 @@ const { HttpError } = require('./httpErrors');
 
 // Collection ĐÃ chuyển sang dbo.Records — thêm dần theo đúng lộ trình đã thống nhất, mỗi bước 1
 // collection (Bước 6c: submissions, Bước 6d: docs, Bước 6e: carRegs, Bước 6f: officeReqs, Bước 6g:
-// contracts, Bước 6h: meetings). Khác 4 collection Bước 6c-6f (dùng chung 2 engine
-// createValidation.js/workflowEngine.js qua routes/create.js + routes/workflow.js), contracts/meetings
-// SỬA qua route riêng đơn giản (routes/records.js POST /contracts/:id/edit,
-// routes/meetingActions.js POST /:id/approve|cancel) — vẫn dùng được đúng dispatch
-// withLockedRecordForCollection() ở đây vì các hàm sửa chỉ cần 1 bản ghi (không cần cả collection).
-const MIGRATED_COLLECTIONS = new Set(['submissions', 'docs', 'carRegs', 'officeReqs', 'contracts', 'meetings']);
+// contracts, Bước 6h: meetings, Bước 6i: meetingMinutes). Khác 4 collection Bước 6c-6f (dùng chung 2
+// engine createValidation.js/workflowEngine.js qua routes/create.js + routes/workflow.js),
+// contracts/meetings/meetingMinutes SỬA qua route riêng đơn giản (routes/records.js
+// POST /contracts/:id/edit, POST /minutes/:id/edit, routes/meetingActions.js POST /:id/approve|cancel)
+// — vẫn dùng được đúng dispatch withLockedRecordForCollection() ở đây vì các hàm sửa chỉ cần 1 bản ghi
+// (không cần cả collection). meetingMinutes còn có thêm route XOÁ (POST /minutes/:id/delete) — collection
+// ĐẦU TIÊN trong nhóm này cần xoá 1 dòng, xem deleteRecordForCollection() bên dưới.
+const MIGRATED_COLLECTIONS = new Set(['submissions', 'docs', 'carRegs', 'officeReqs', 'contracts', 'meetings', 'meetingMinutes']);
 
 function toRecord(row) {
   return JSON.parse(row.Payload);
@@ -90,6 +92,39 @@ async function withLockedRecordById(collection, id, mutatorFn) {
 
     await tx.commit();
     return updated;
+  } catch (err) {
+    await tx.rollback().catch(() => {});
+    throw err;
+  }
+}
+
+// checkFn(item) (tuỳ chọn) -> throw HttpError (vd 403) để huỷ, không xoá gì — chạy SAU khi đã khoá đọc
+// được đúng bản ghi (UPDLOCK/HOLDLOCK), TRƯỚC khi xoá, khớp đúng thời điểm mutatorFn chạy ở
+// withLockedRecordById() bên trên.
+async function deleteRecordById(collection, id, checkFn) {
+  const pool = await getPool();
+  const tx = new sql.Transaction(pool);
+  await tx.begin();
+  try {
+    const readReq = new sql.Request(tx);
+    const readResult = await readReq
+      .input('collection', sql.NVarChar(50), collection)
+      .input('id', sql.BigInt, id)
+      .query('SELECT Payload FROM dbo.Records WITH (UPDLOCK, HOLDLOCK) WHERE Collection = @collection AND Id = @id');
+    if (readResult.recordset.length === 0) {
+      throw new HttpError(404, 'Không tìm thấy hồ sơ');
+    }
+    const item = toRecord(readResult.recordset[0]);
+
+    if (checkFn) await checkFn(item);
+
+    const delReq = new sql.Request(tx);
+    await delReq
+      .input('collection', sql.NVarChar(50), collection)
+      .input('id', sql.BigInt, id)
+      .query('DELETE FROM dbo.Records WHERE Collection = @collection AND Id = @id');
+
+    await tx.commit();
   } catch (err) {
     await tx.rollback().catch(() => {});
     throw err;
@@ -169,8 +204,21 @@ async function withLockedRecordForCollection(collection, id, mutatorFn) {
   return result;
 }
 
+// checkFn(item) (tuỳ chọn) -> throw HttpError (vd 403) để huỷ, không xoá gì.
+async function deleteRecordForCollection(collection, id, checkFn) {
+  if (MIGRATED_COLLECTIONS.has(collection)) return deleteRecordById(collection, id, checkFn);
+  await withLockedAppDataValue(collection, (list) => {
+    const arr = Array.isArray(list) ? list : [];
+    const idx = arr.findIndex(it => it.id === id);
+    if (idx === -1) throw new HttpError(404, 'Không tìm thấy hồ sơ');
+    if (checkFn) checkFn(arr[idx]);
+    arr.splice(idx, 1);
+    return arr;
+  });
+}
+
 module.exports = {
   MIGRATED_COLLECTIONS,
-  getAllRecords, insertRecord, withLockedRecordById, migrateLegacyCollection, migrateAllLegacyCollections,
-  getAllForCollection, createForCollection, withLockedRecordForCollection
+  getAllRecords, insertRecord, withLockedRecordById, deleteRecordById, migrateLegacyCollection, migrateAllLegacyCollections,
+  getAllForCollection, createForCollection, withLockedRecordForCollection, deleteRecordForCollection
 };
