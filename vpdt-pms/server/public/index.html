@@ -229,8 +229,8 @@
         <div id="dynamicFieldsContainer_SUBMISSION" class="grid grid-cols-1 md:grid-cols-3 gap-3 border-t pt-3"></div>
 
         <div class="border-t pt-3">
-          <label class="block font-semibold text-gray-600 mb-1">Cấp Phê Duyệt Bổ Sung (tuỳ chọn, cộng thêm vào cuối quy trình phòng ban)</label>
-          <p class="text-[11px] text-gray-500 italic mb-1.5">Tick chọn lớp cần dùng, rồi chọn CỤ THỂ những ai (trong số người admin đã gán vào nhóm đó) sẽ tham gia duyệt tờ trình này.</p>
+          <label class="block font-semibold text-gray-600 mb-1">Cấp Phê Duyệt Bổ Sung & Xin Ý Kiến (tuỳ chọn)</label>
+          <p class="text-[11px] text-gray-500 italic mb-1.5">Tick chọn lớp cần dùng, rồi chọn CỤ THỂ những ai (trong số người admin đã gán vào nhóm đó). "Đồng trình/Đồng cấp/BGD" cộng thêm 1 bước duyệt vào cuối quy trình; riêng "Xin ý kiến" chỉ để tham khảo, không chặn quy trình duyệt.</p>
           <div id="subApprovalLayersContainer" class="flex flex-wrap gap-3"></div>
         </div>
 
@@ -1750,9 +1750,9 @@
       <div class="bg-white p-4 rounded border space-y-3">
         <div>
           <h4 class="font-bold text-sm text-gray-800">🖋️ Quản Lý Nhóm Phê Duyệt Trình (Văn Bản Trình)</h4>
-          <p class="text-[11px] text-gray-500 italic">3 nhóm phê duyệt bổ sung tuỳ chọn — người trình tick chọn khi tạo tờ trình để cộng thêm vào cuối quy trình phòng ban (gốc). Gán thành viên cho từng nhóm ở đây.</p>
+          <p class="text-[11px] text-gray-500 italic">4 nhóm tuỳ chọn — người trình tick chọn khi tạo tờ trình. 3 nhóm đầu (Đồng trình/Đồng cấp/BGD) cộng thêm 1 bước duyệt vào cuối quy trình phòng ban (gốc); riêng "Xin ý kiến" chỉ là kênh tham khảo song song, không chặn quy trình. Gán thành viên cho từng nhóm ở đây.</p>
         </div>
-        <div id="submissionApprovalGroupsContainer" class="grid grid-cols-1 md:grid-cols-3 gap-3"></div>
+        <div id="submissionApprovalGroupsContainer" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3"></div>
       </div>
 
       <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 my-3 border-t pt-3">
@@ -1991,6 +1991,8 @@
       <div id="subModalDetails" class="bg-gray-50 p-3 rounded border space-y-2 text-gray-700"></div>
 
       <div id="subModalInfoRequests"></div>
+
+      <div id="subModalOpinions"></div>
 
       <div>
         <h4 class="font-bold text-gray-800 mb-2">✍️ Ý Kiến Chỉ Đạo & Bút Phê Phê Duyệt Đồng Cấp</h4>
@@ -2804,10 +2806,14 @@ activeWfSubmissionType = SUBMISSION_TYPES[0].key;
 // cuối cùng mang tính chỉ đạo). Người trình tick chọn lớp nào khi tạo tờ trình thì lớp đó được thêm
 // vào cuối quy trình hiệu lực của đúng tờ trình đó (xem submitSubmissionReq()). Thành viên từng lớp
 // do admin gán ở màn "Quản Lý Nhóm Phê Duyệt Trình" (DB.submissionApprovalGroups).
+// blocking:true = trở thành 1 BƯỚC DUYỆT thật trong effectiveSteps (chặn quy trình). blocking:false
+// (XIN_Y_KIEN) = kênh tham khảo song song, không chặn, không có nút Duyệt/Từ chối — xem
+// buildEffectiveSubmissionWorkflow() bên dưới + lib/createValidation.js (LƯU Ý BẢO TRÌNH, 2 bản độc lập).
 const SUBMISSION_APPROVAL_LAYERS = [
-  { key: 'DONG_TRINH', label: 'Đồng trình' },
-  { key: 'DONG_CAP', label: 'Phê duyệt đồng cấp' },
-  { key: 'BGD', label: 'Ban Giám Đốc (Phê duyệt chỉ đạo)' }
+  { key: 'DONG_TRINH', label: 'Đồng trình', blocking: true },
+  { key: 'DONG_CAP', label: 'Phê duyệt đồng cấp', blocking: true },
+  { key: 'BGD', label: 'Ban Giám Đốc (Phê duyệt chỉ đạo)', blocking: true },
+  { key: 'XIN_Y_KIEN', label: 'Xin ý kiến', blocking: false }
 ];
 
 // Cổng truy cập module độc lập với các quyền hành động chi tiết (Xem/Tạo/Tải...) — admin luôn qua
@@ -2937,15 +2943,23 @@ function buildEffectiveSubmissionWorkflow(type, dept, selectedLayerKeys, selecte
   const approvers = {};
   baseWf.steps.forEach(s => { approvers[s.order] = baseConfig.approvers?.[s.order] || []; });
 
+  const opinionRequestees = [];
   (selectedLayerKeys || []).forEach(layerKey => {
     const layer = SUBMISSION_APPROVAL_LAYERS.find(l => l.key === layerKey);
     if (!layer) return;
-    const stepOrder = steps.length + 1;
-    steps.push({ order: stepOrder, name: layer.label });
-    approvers[stepOrder] = [...(selectedLayerMembers?.[layerKey] || [])];
+    const chosen = [...(selectedLayerMembers?.[layerKey] || [])];
+    if (layer.blocking) {
+      const stepOrder = steps.length + 1;
+      steps.push({ order: stepOrder, name: layer.label });
+      approvers[stepOrder] = chosen;
+    } else {
+      // XIN_Y_KIEN: không phải bước duyệt — chỉ cosmetic ở client, giá trị THẬT do server tự dựng lại
+      // và ghi đè (xem buildEffectiveSubmissionWorkflowServer trong lib/createValidation.js).
+      opinionRequestees.push(...chosen);
+    }
   });
 
-  return { steps, approvers };
+  return { steps, approvers, opinionRequestees: [...new Set(opinionRequestees)] };
 }
 
 // Lấy quy trình HIỆU LỰC của 1 tờ trình ĐÃ TẠO — dùng snapshot đã chốt lúc tạo (effectiveSteps/
@@ -4741,6 +4755,13 @@ async function submitSubmissionReq(e) {
       `[VPDT] Tờ trình ${code} cần bạn phê duyệt`,
       `Tờ trình "${title}" (${code}) do ${currentUser.name} trình đang chờ bạn phê duyệt.`);
   }
+  // "Xin ý kiến" — dùng danh sách từ record đã được SERVER xác minh trả về (newSub.opinionRequestees),
+  // không dùng effectiveWf cục bộ, vì server mới là nơi quyết định danh sách cuối cùng.
+  if (newSub.opinionRequestees && newSub.opinionRequestees.length) {
+    notifyUsersByEmail('SUBMISSION', 'NOTIFY_OPINION_REQUESTED', code, newSub.opinionRequestees,
+      `[VPDT] Tờ trình ${code} cần bạn cho ý kiến tham khảo`,
+      `Tờ trình "${title}" (${code}) do ${currentUser.name} trình đang xin ý kiến tham khảo của bạn.`);
+  }
 
   alert('✅ Trình văn bản / tờ trình thành công!');
   e.target.reset();
@@ -4961,6 +4982,7 @@ function openProcessSubmissionModal(subId) {
   document.getElementById('subModalHistory').innerHTML = historyHTML || '<div class="text-gray-400 italic">Chưa có lịch sử xử lý.</div>';
 
   renderSubModalInfoRequests(sub);
+  renderSubModalOpinions(sub);
 
   const currentStepApprovers = wfConfig.approvers ? (wfConfig.approvers[sub.currentStep] || []) : [];
   const canApprove = (sub.status === 'PENDING') && canApproveStep(currentUser, currentStepApprovers, sub.history, sub.currentStep);
@@ -5113,6 +5135,86 @@ function renderSubModalInfoRequests(sub) {
       </div>
     </div>
   `;
+}
+
+// "XIN Ý KIẾN" — kênh tham khảo song song (blocking:false trong SUBMISSION_APPROVAL_LAYERS), KHÔNG
+// gắn với bước duyệt nào nên hiện bất kể tờ trình đang ở bước/trạng thái nào, KHÔNG có nút Duyệt/Từ
+// chối — chỉ 1 ô nhập ý kiến cho đúng người có tên trong opinionRequestees của hồ sơ này.
+function renderSubModalOpinions(sub) {
+  const container = document.getElementById('subModalOpinions');
+  if (!container) return;
+  const requestees = sub.opinionRequestees || [];
+  if (requestees.length === 0) { container.innerHTML = ''; return; }
+
+  const responses = sub.opinionResponses || [];
+  const isRequestee = requestees.includes(currentUser.username);
+  const myResponse = responses.find(r => r.username === currentUser.username);
+
+  const rows = requestees.map(username => {
+    const u = DB.users.find(x => x.username === username);
+    const label = u ? `${u.name} (${u.username})` : username;
+    const resp = responses.find(r => r.username === username);
+    return resp
+      ? `<div class="bg-purple-50 border border-purple-200 p-2 rounded text-xs space-y-1">
+          <div class="flex justify-between font-semibold text-gray-700">
+            <span>${escapeHtml(label)}</span>
+            <span class="text-gray-400 font-normal">${escapeHtml(resp.respondedAt)}</span>
+          </div>
+          <div class="text-gray-800 italic">"${escapeHtml(resp.comment)}"</div>
+        </div>`
+      : `<div class="bg-purple-50 border border-purple-200 p-2 rounded text-xs flex justify-between items-center">
+          <span class="font-semibold text-gray-700">${escapeHtml(label)}</span>
+          <span class="text-amber-600 italic">⏳ Chưa cho ý kiến</span>
+        </div>`;
+  }).join('');
+
+  const myInputBlock = isRequestee
+    ? `<div class="flex gap-1 mt-2">
+        <input type="text" id="subOpinionInput" placeholder="Nhập ý kiến tham khảo của bạn..." value="${escapeHtml(myResponse?.comment || '')}" class="flex-1 border p-1 rounded text-xs">
+        <button onclick="giveSubmissionOpinion()" class="bg-purple-600 text-white px-2 py-1 rounded text-[11px] font-bold hover:bg-purple-700">${myResponse ? 'Cập Nhật' : 'Gửi'}</button>
+      </div>`
+    : '';
+
+  container.innerHTML = `
+    <div>
+      <h4 class="font-bold text-purple-700 mb-2">💬 Ý Kiến Tham Khảo (Xin Ý Kiến)</h4>
+      <div class="space-y-1.5">${rows}</div>
+      ${myInputBlock}
+    </div>
+  `;
+}
+
+async function giveSubmissionOpinion() {
+  if (!currentProcessingSubId) return;
+  const sub = DB.submissions.find(s => s.id === currentProcessingSubId);
+  if (!sub) return;
+
+  const input = document.getElementById('subOpinionInput');
+  const comment = (input?.value || '').trim();
+  if (!comment) return alert('Vui lòng nhập ý kiến!');
+
+  let result;
+  try {
+    const res = await fetch(`/api/workflow/submissions/${sub.id}/give-opinion`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ comment })
+    });
+    if (res.status === 401) return handleSessionExpired();
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(body.error || `Lỗi máy chủ (HTTP ${res.status})`);
+    result = body;
+  } catch (e) {
+    return alert('⛔ ' + e.message);
+  }
+
+  const updatedSub = result.item;
+  const idx = DB.submissions.findIndex(s => s.id === sub.id);
+  if (idx !== -1) DB.submissions[idx] = updatedSub;
+
+  logSystemAction('SUBMISSION', 'GIVE_OPINION', `Cho ý kiến tham khảo tờ trình [${updatedSub.code}]: ${comment}`, 'SUCCESS', updatedSub.code);
+  alert('✅ Đã gửi ý kiến tham khảo!');
+  renderSubModalOpinions(updatedSub);
 }
 
 async function respondSubmissionInfo(reqId) {
@@ -10080,7 +10182,12 @@ function renderSubmissionApprovalGroups() {
 }
 
 function saveSubmissionApprovalGroup(layerKey) {
-  const checkboxes = document.querySelectorAll(`input[data-layer="${layerKey}"]`);
+  // PHẢI scope theo #submissionApprovalGroupsContainer — checkbox ẩn của widget chọn người ở form
+  // TẠO tờ trình (subLayerMemberPicker_*) cũng mang cùng data-layer="${layerKey}" (chỉ khác ở việc có
+  // class "sub-layer-member" hay không); cả 2 khối này luôn cùng tồn tại trong DOM (SPA 1 trang, tab
+  // ẩn bằng CSS chứ không gỡ khỏi DOM) nên querySelectorAll không scope sẽ vô tình gộp cả người đang
+  // được chọn dở trong form tạo tờ trình vào danh sách thành viên nhóm do admin lưu.
+  const checkboxes = document.querySelectorAll(`#submissionApprovalGroupsContainer input[data-layer="${layerKey}"]`);
   const members = [];
   checkboxes.forEach(cb => { if (cb.checked) members.push(cb.value); });
 
