@@ -13,6 +13,7 @@ const workflowRoutes = require('./routes/workflow');
 const createRoutes = require('./routes/create');
 const meetingActionsRoutes = require('./routes/meetingActions');
 const recordsRoutes = require('./routes/records');
+const systemLogRoutes = require('./routes/systemLog');
 const uploadRoutes = require('./routes/upload');
 const emailRoutes = require('./routes/email');
 const { checkContractExpiryReminders } = require('./jobs/contractExpiryReminder');
@@ -34,6 +35,7 @@ app.use('/api/workflow', workflowRoutes);
 app.use('/api/create', createRoutes);
 app.use('/api/meetings', meetingActionsRoutes);
 app.use('/api/records', recordsRoutes);
+app.use('/api/log', systemLogRoutes);
 app.use('/api/upload', requireAuth, uploadRoutes);
 app.use('/api/send-email', requireAuth, emailRoutes);
 
