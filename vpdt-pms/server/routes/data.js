@@ -12,6 +12,7 @@ const { validatePasswordStrength } = require('../lib/passwordPolicy');
 const { HttpError } = require('../lib/httpErrors');
 const { getRecentSystemLogs } = require('../lib/systemLogStore');
 const { getAllTasks } = require('../lib/taskStore');
+const { getAllForCollection, MIGRATED_COLLECTIONS } = require('../lib/recordStore');
 
 // Số dòng nhật ký hệ thống trả về cho lần tải dữ liệu đầu (GET /api/data) — khớp đúng giới hạn hiển
 // thị cũ ở client (DB.systemLogs tối đa 200 dòng, xem logSystemAction() trong index.html) để không
@@ -112,12 +113,17 @@ router.get('/', async (req, res) => {
       }
     }
     if (data.users) data.users = stripPasswords(data.users);
-    // systemLogs (Bước 6a) và tasks (Bước 6b) không còn trong dbo.AppData — nguồn riêng từ bảng của
-    // chúng. Không có _versions.systemLogs/_versions.tasks tương ứng (không còn khái niệm "version"
-    // AppData cho 2 key này) — an toàn vì client không còn ghi 2 collection này qua đường chung nữa
-    // (tasks đi qua routes/records.js, systemLogs đi qua routes/systemLog.js).
+    // systemLogs (Bước 6a), tasks (Bước 6b) và mọi collection trong MIGRATED_COLLECTIONS (Bước 6c trở
+    // đi — hiện tại: submissions) không còn trong dbo.AppData — nguồn riêng từ bảng của chúng. Không
+    // có _versions.<key> tương ứng cho các key này (không còn khái niệm "version" AppData) — an toàn
+    // vì client không còn ghi các collection này qua đường chung nữa (tasks đi qua routes/records.js,
+    // systemLogs đi qua routes/systemLog.js, các collection trong MIGRATED_COLLECTIONS đi qua
+    // routes/create.js + routes/workflow.js).
     data.systemLogs = await getRecentSystemLogs(SYSTEM_LOGS_BULK_LOAD_LIMIT);
     data.tasks = await getAllTasks();
+    for (const collection of MIGRATED_COLLECTIONS) {
+      data[collection] = await getAllForCollection(collection);
+    }
     data._versions = versions;
     res.json(data);
   } catch (err) {
