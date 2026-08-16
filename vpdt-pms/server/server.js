@@ -22,6 +22,15 @@ const { checkContractExpiryReminders } = require('./jobs/contractExpiryReminder'
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+// 'trust proxy' — CHỈ bật khi server chạy SAU một reverse proxy thật (ví dụ Nginx theo hướng dẫn
+// deploy, mục 8). Mặc định TẮT (không đặt biến môi trường) để tránh lỗ hổng giả mạo IP: rate-limit +
+// khoá tài khoản khi đăng nhập sai nhiều lần (routes/auth.js) dựa vào req.ip — nếu bật 'trust proxy' khi
+// server không thực sự đứng sau proxy, kẻ tấn công có thể tự đặt header X-Forwarded-For để giả IP khác
+// nhau mỗi lần, né được giới hạn. Đặt TRUST_PROXY=1 trong .env nếu deploy đúng 1 lớp Nginx phía trước.
+if (process.env.TRUST_PROXY) {
+  app.set('trust proxy', process.env.TRUST_PROXY === 'true' ? true : parseInt(process.env.TRUST_PROXY, 10));
+}
+
 app.use(securityHeaders);
 
 // Tài liệu/hồ sơ không còn nhúng base64 trong JSON — file đính kèm được tải lên qua
