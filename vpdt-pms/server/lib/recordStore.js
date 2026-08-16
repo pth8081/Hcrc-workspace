@@ -16,8 +16,8 @@ const { getAppDataValue, withLockedAppDataValue } = require('./appData');
 const { HttpError } = require('./httpErrors');
 
 // Collection ĐÃ chuyển sang dbo.Records — thêm dần theo đúng lộ trình đã thống nhất, mỗi bước 1
-// collection (Bước 6c: submissions, Bước 6d: docs).
-const MIGRATED_COLLECTIONS = new Set(['submissions', 'docs']);
+// collection (Bước 6c: submissions, Bước 6d: docs, Bước 6e: carRegs).
+const MIGRATED_COLLECTIONS = new Set(['submissions', 'docs', 'carRegs']);
 
 function toRecord(row) {
   return JSON.parse(row.Payload);
