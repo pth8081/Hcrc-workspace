@@ -3,9 +3,10 @@
 // dept/creator client tự gửi, chỉ dựa vào dropdown ĐÃ LỌC SẴN ở giao diện.
 const express = require('express');
 const router = express.Router();
-const { getAllAppData, withLockedAppDataValue } = require('../lib/appData');
+const { getAllAppData } = require('../lib/appData');
 const { requireAuth, blockIfMustChangePassword } = require('../lib/auth');
 const { CREATE_MODULE_CONFIGS, CreateError, validateAndPrepareCreate } = require('../lib/createValidation');
+const { createForCollection } = require('../lib/recordStore');
 
 router.use(requireAuth, blockIfMustChangePassword);
 
@@ -23,17 +24,12 @@ router.post('/:module', async (req, res) => {
 
     // Đọc kèm toàn bộ AppData (quy trình phòng ban, nhóm phê duyệt trình...) — chỉ module submissions
     // dùng tới (dựng lại quy trình hiệu lực server-side, xem lib/createValidation.js), các module khác
-    // bỏ qua tham số này. Đọc TRƯỚC khi khoá dòng "submissions" bên dưới, tránh giữ transaction lâu hơn
-    // cần thiết cho 1 lượt đọc không cần khoá này.
+    // bỏ qua tham số này.
     const appData = await getAllAppData();
 
-    let record = null;
-    await withLockedAppDataValue(CREATE_MODULE_CONFIGS[moduleKey].dbKey, (collection) => {
-      const list = Array.isArray(collection) ? collection : [];
-      record = validateAndPrepareCreate(moduleKey, req.body, freshUser, list, appData);
-      list.unshift(record);
-      return list;
-    });
+    const record = await createForCollection(CREATE_MODULE_CONFIGS[moduleKey].dbKey, (list) =>
+      validateAndPrepareCreate(moduleKey, req.body, freshUser, list, appData)
+    );
 
     res.json({ ok: true, item: record });
   } catch (err) {

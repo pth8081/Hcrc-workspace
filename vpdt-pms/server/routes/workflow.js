@@ -4,11 +4,12 @@
 // request tới POST /api/data/submissions để tự duyệt hồ sơ của chính mình.
 const express = require('express');
 const router = express.Router();
-const { getAllAppData, withLockedAppDataValue } = require('../lib/appData');
+const { getAllAppData } = require('../lib/appData');
 const { requireAuth, blockIfMustChangePassword } = require('../lib/auth');
 const { MODULE_CONFIGS, WorkflowError, applyWorkflowAction } = require('../lib/workflowEngine');
 const recordActions = require('../lib/recordActions');
 const { insertTask } = require('../lib/taskStore');
+const { withLockedRecordForCollection } = require('../lib/recordStore');
 
 router.use(requireAuth, blockIfMustChangePassword);
 
@@ -30,13 +31,7 @@ router.post('/submissions/:id/respond-info', async (req, res) => {
     // requireAuth đã tra cứu sẵn user hiện tại (kể cả active) và gắn vào req.freshUser.
     const freshUser = req.freshUser;
 
-    let resultItem = null;
-    await withLockedAppDataValue('submissions', (collection) => {
-      const list = Array.isArray(collection) ? collection : [];
-      const idx = list.findIndex(it => it.id === itemId);
-      if (idx === -1) throw new WorkflowError(404, 'Không tìm thấy tờ trình');
-      const sub = list[idx];
-
+    const resultItem = await withLockedRecordForCollection('submissions', itemId, (sub) => {
       // Chỉ chính người tạo tờ trình mới được phản hồi yêu cầu bổ sung của tờ trình đó.
       if (sub.creator !== freshUser.username) {
         throw new WorkflowError(403, 'Chỉ người trình mới được phản hồi yêu cầu bổ sung');
@@ -53,9 +48,7 @@ router.post('/submissions/:id/respond-info', async (req, res) => {
         action: 'RESPOND_INFO', comment: response, time: reqEntry.respondedAt
       });
 
-      resultItem = sub;
-      list[idx] = sub;
-      return list;
+      return sub;
     });
 
     res.json({ ok: true, item: resultItem });
@@ -90,21 +83,14 @@ router.post('/:module/:id/:action', async (req, res) => {
     const appData = await getAllAppData();
     const freshUser = req.freshUser;
 
-    let resultItem = null;
     let transition = null;
 
-    await withLockedAppDataValue(MODULE_CONFIGS[moduleKey].dbKey, (collection) => {
-      const list = Array.isArray(collection) ? collection : [];
-      const idx = list.findIndex(it => it.id === itemId);
-      if (idx === -1) throw new WorkflowError(404, 'Không tìm thấy hồ sơ');
-
+    const resultItem = await withLockedRecordForCollection(MODULE_CONFIGS[moduleKey].dbKey, itemId, (item) => {
       const outcome = applyWorkflowAction({
-        moduleKey, item: list[idx], action, user: freshUser, comment, extraFields, appData
+        moduleKey, item, action, user: freshUser, comment, extraFields, appData
       });
-      resultItem = outcome.item;
       transition = outcome.transition;
-      list[idx] = outcome.item;
-      return list;
+      return outcome.item;
     });
 
     // Tờ trình được phê duyệt HOÀN TẤT (bước cuối cùng) kèm ý kiến chỉ đạo -> tự tạo 1 Công việc theo
