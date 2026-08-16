@@ -126,12 +126,12 @@ const DEFAULTS = {
   officeReqs: [],
   meetingMinutes: [],
   meetingAttendeeTemplates: [],
-  tasks: [],
   internalPosts: []
-  // systemLogs KHÔNG còn ở đây — từ Bước 6a, nhật ký hệ thống lưu ở bảng riêng dbo.SystemLogs (xem
-  // lib/systemLogStore.js), không còn là 1 dòng JSON trong AppData. routes/data.js không nhận
-  // 'systemLogs' làm key hợp lệ nữa (loại khỏi VALID_KEYS một cách tự nhiên vì không còn trong
-  // DEFAULTS) — dùng POST /api/log để ghi, DELETE /api/log để xoá (routes/systemLog.js).
+  // systemLogs (Bước 6a) và tasks (Bước 6b) KHÔNG còn ở đây — lưu ở bảng riêng (dbo.SystemLogs,
+  // dbo.Tasks — xem lib/systemLogStore.js, lib/taskStore.js), không còn là 1 dòng JSON trong AppData.
+  // routes/data.js không nhận 2 key này làm key hợp lệ nữa (loại khỏi VALID_KEYS tự nhiên vì không
+  // còn trong DEFAULTS) — systemLogs dùng POST/DELETE /api/log (routes/systemLog.js), tasks dùng các
+  // route riêng theo hành động dưới /api/records/tasks/... (routes/records.js).
 };
 
 module.exports = { DEFAULTS };

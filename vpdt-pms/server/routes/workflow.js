@@ -7,6 +7,8 @@ const router = express.Router();
 const { getAllAppData, withLockedAppDataValue } = require('../lib/appData');
 const { requireAuth, blockIfMustChangePassword } = require('../lib/auth');
 const { MODULE_CONFIGS, WorkflowError, applyWorkflowAction } = require('../lib/workflowEngine');
+const recordActions = require('../lib/recordActions');
+const { insertTask } = require('../lib/taskStore');
 
 router.use(requireAuth, blockIfMustChangePassword);
 
@@ -105,7 +107,17 @@ router.post('/:module/:id/:action', async (req, res) => {
       return list;
     });
 
-    res.json({ ok: true, item: resultItem, transition });
+    // Tờ trình được phê duyệt HOÀN TẤT (bước cuối cùng) kèm ý kiến chỉ đạo -> tự tạo 1 Công việc theo
+    // dõi (chưa gán người nhận). Trước đây client tự dựng + ghi thẳng qua POST /api/data/tasks (route
+    // generic, không xác minh gì) — cùng dạng lỗ hổng đã vá ở các module khác, nay chuyển vào server
+    // ngay tại điểm server đã tự xác nhận transition.type === 'COMPLETED' (không tin client báo lại).
+    let createdTask = null;
+    if (moduleKey === 'submissions' && transition.type === 'COMPLETED' && comment) {
+      createdTask = recordActions.buildTaskFromSubmissionComment(resultItem, freshUser, comment);
+      await insertTask(createdTask);
+    }
+
+    res.json({ ok: true, item: resultItem, transition, createdTask });
   } catch (err) {
     if (err instanceof WorkflowError) return res.status(err.status).json({ error: err.message });
     console.error(`POST /api/workflow/${moduleKey}/${id}/${rawAction} lỗi:`, err.message);

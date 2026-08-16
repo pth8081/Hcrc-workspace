@@ -155,6 +155,29 @@ function buildTasksFromDirectives(minutes, user) {
   return created;
 }
 
+// ===================== CÔNG VIỆC (tự động tạo khi Tờ trình được phê duyệt hoàn tất — Bước 6b) =====
+// Khớp đúng logic trước đây nằm ở client (processSubmission() trong index.html): khi bước phê duyệt
+// CUỐI CÙNG của 1 tờ trình có kèm ý kiến chỉ đạo (comment), tự tạo 1 Công việc theo dõi — CHƯA gán
+// người nhận (người duyệt cuối/admin sẽ gán sau trong module Công việc). Trước đây client tự dựng
+// object này rồi ghi thẳng qua POST /api/data/tasks (route generic, không xác minh gì) — cùng dạng lỗ
+// hổng đã vá ở các module khác (client tự soạn assignedBy/id...). Chuyển vào server, gọi ngay sau khi
+// applyWorkflowAction() xác nhận transition.type === 'COMPLETED' (xem routes/workflow.js).
+function buildTaskFromSubmissionComment(sub, user, comment) {
+  return {
+    id: Date.now(),
+    title: `Thực hiện theo chỉ đạo: ${sub.title}`,
+    description: comment,
+    deadline: '',
+    assignedTo: '', assignedToName: '',
+    assignedBy: user.username, assignedByName: user.name,
+    sourceType: 'SUBMISSION', sourceCode: sub.code,
+    status: 'TODO',
+    extensionCount: 0, lateCount: 0, pendingExtension: null, pendingCancellation: null,
+    createdAt: nowVN(),
+    history: [{ action: 'CREATED', by: user.username, byName: user.name, time: nowVN() }]
+  };
+}
+
 // ===================== CÔNG VIỆC (sửa/giao/xóa) =====================
 // canManageTasks (sửa) là cờ toàn công ty (admin||taskEdit) — quyền sửa BẤT KỲ công việc nào.
 // Gán người nhận thì hẹp hơn: chỉ admin hoặc CHÍNH người đã giao việc đó (assignedBy) — khớp đúng
@@ -414,7 +437,7 @@ function resolvePendingTaskAction(kind, verb, user, task) {
 module.exports = {
   editContract,
   canEditMinutes, canDeleteMinutes, editMinutes, assertCanDeleteMinutes,
-  canCreateMinutes, createMinutes, buildTasksFromDirectives,
+  canCreateMinutes, createMinutes, buildTasksFromDirectives, buildTaskFromSubmissionComment,
   canManageTasks, canDeleteTaskPerm, canAssignSpecificTask, assignTask, editTask, assertCanDeleteTask,
   createTask,
   acceptTask, confirmCollaboratorParticipation, updateTaskStatusAction, requestExtension,

@@ -80,5 +80,32 @@ BEGIN
 END
 GO
 
+/* CẬP NHẬT (Bước 6b — Công việc, xem lib/taskStore.js): giống hệt lý do ở systemLogs (Bước 6a) —
+   trước đây MỌI thao tác (giao việc, nhận việc, cập nhật tiến độ, xin gia hạn, huỷ việc...) đều phải
+   khoá + đọc/sửa/ghi lại NGUYÊN mảng "tasks" trong AppData, dù chỉ đổi ĐÚNG 1 công việc. Với nhiều
+   người dùng thao tác Công việc khác nhau CÙNG LÚC, mỗi thao tác đều tranh chấp khoá ở mức "cả
+   collection" dù về bản chất không hề đụng tới cùng 1 bản ghi. Chuyển sang bảng riêng, mỗi Công việc
+   = 1 dòng: khoá dòng cụ thể (WITH UPDLOCK, HOLDLOCK WHERE Id=@id) thay vì khoá cả bảng.
+   Id giữ NGUYÊN kiểu tạo cũ (Date.now() ở lib/recordActions.js, KHÔNG dùng IDENTITY) — id đã tồn tại
+   trong dữ liệu cũ (di trú từ AppData) phải khớp đúng, không đổi cách sinh id.
+   Payload giữ NGUYÊN VẸN toàn bộ object Công việc dạng JSON (nguồn dữ liệu chính) — các cột
+   Status/AssignedTo/AssignedBy/SourceType/SourceCode chỉ là bản sao trích xuất để tiện lọc/tra cứu
+   sau này, LUÔN đồng bộ với Payload ở mọi lần ghi (xem lib/taskStore.js). */
+IF OBJECT_ID('dbo.Tasks', 'U') IS NULL
+BEGIN
+    CREATE TABLE dbo.Tasks (
+        Id           BIGINT         NOT NULL PRIMARY KEY,
+        CreatedAt    DATETIME2(3)   NOT NULL DEFAULT SYSUTCDATETIME(),
+        Status       NVARCHAR(20)   NOT NULL,
+        AssignedTo   NVARCHAR(100)  NULL,
+        AssignedBy   NVARCHAR(100)  NULL,
+        SourceType   NVARCHAR(30)   NULL,
+        SourceCode   NVARCHAR(100)  NULL,
+        Payload      NVARCHAR(MAX)  NOT NULL
+    );
+    CREATE INDEX IX_Tasks_CreatedAt ON dbo.Tasks (CreatedAt DESC, Id DESC);
+END
+GO
+
 PRINT 'Schema VPDT_DMS đã sẵn sàng.';
 GO
