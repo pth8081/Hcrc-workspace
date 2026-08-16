@@ -5027,22 +5027,12 @@ async function processSubmission(actionType) {
     // TỰ ĐỘNG tạo Công việc theo dõi ngay khi có ý kiến chỉ đạo ở bước phê duyệt cuối cùng —
     // không cần bấm "📌 Giao việc" thủ công nữa. Chưa gán người nhận (theo yêu cầu), người
     // duyệt cuối (đang thực hiện) hoặc Admin sẽ gán người nhận sau trong module Công việc.
-    if (comment) {
-      const newTask = {
-        id: Date.now(),
-        title: `Thực hiện theo chỉ đạo: ${updatedSub.title}`,
-        description: comment,
-        deadline: '',
-        assignedTo: '', assignedToName: '',
-        assignedBy: currentUser.username, assignedByName: currentUser.name,
-        sourceType: 'SUBMISSION', sourceCode: updatedSub.code,
-        status: 'TODO',
-        extensionCount: 0, lateCount: 0, pendingExtension: null, pendingCancellation: null,
-        createdAt: new Date().toLocaleString('vi-VN'),
-        history: [{ action: 'CREATED', by: currentUser.username, byName: currentUser.name, time: new Date().toLocaleString('vi-VN') }]
-      };
-      DB.tasks.unshift(newTask);
-      syncStorage('tasks');
+    // Server đã tự tạo sẵn (xem lib/recordActions.js buildTaskFromSubmissionComment(), gọi từ
+    // routes/workflow.js ngay khi xác nhận transition COMPLETED) — ở đây chỉ áp kết quả trả về vào
+    // DB.tasks cục bộ, KHÔNG tự tạo việc ở client nữa (tránh giả mạo assignedBy/id... như các luồng
+    // tạo việc tự động khác đã sửa).
+    if (result.createdTask) {
+      DB.tasks.unshift(result.createdTask);
       logSystemAction('TASK', 'CREATE_TASK', `Tự động tạo công việc theo dõi chỉ đạo từ Văn bản trình [${updatedSub.code}] (chưa gán người nhận)`, 'SUCCESS', updatedSub.code);
     }
   } else if (transition.type === 'PARTIAL_APPROVE') {

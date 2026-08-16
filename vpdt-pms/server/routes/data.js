@@ -11,6 +11,7 @@ const { requireAuth, blockIfMustChangePassword, hashPassword, isBcryptHash } = r
 const { validatePasswordStrength } = require('../lib/passwordPolicy');
 const { HttpError } = require('../lib/httpErrors');
 const { getRecentSystemLogs } = require('../lib/systemLogStore');
+const { getAllTasks } = require('../lib/taskStore');
 
 // Số dòng nhật ký hệ thống trả về cho lần tải dữ liệu đầu (GET /api/data) — khớp đúng giới hạn hiển
 // thị cũ ở client (DB.systemLogs tối đa 200 dòng, xem logSystemAction() trong index.html) để không
@@ -111,10 +112,12 @@ router.get('/', async (req, res) => {
       }
     }
     if (data.users) data.users = stripPasswords(data.users);
-    // systemLogs không còn trong dbo.AppData (Bước 6a) — nguồn riêng từ dbo.SystemLogs. Không có
-    // _versions.systemLogs tương ứng (không còn khái niệm "version" AppData cho key này) — an toàn vì
-    // client không còn ghi collection này qua đường chung nữa (xoá log dùng DELETE /api/log riêng).
+    // systemLogs (Bước 6a) và tasks (Bước 6b) không còn trong dbo.AppData — nguồn riêng từ bảng của
+    // chúng. Không có _versions.systemLogs/_versions.tasks tương ứng (không còn khái niệm "version"
+    // AppData cho 2 key này) — an toàn vì client không còn ghi 2 collection này qua đường chung nữa
+    // (tasks đi qua routes/records.js, systemLogs đi qua routes/systemLog.js).
     data.systemLogs = await getRecentSystemLogs(SYSTEM_LOGS_BULK_LOAD_LIMIT);
+    data.tasks = await getAllTasks();
     data._versions = versions;
     res.json(data);
   } catch (err) {

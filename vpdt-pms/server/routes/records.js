@@ -7,6 +7,7 @@ const { withLockedAppDataValue } = require('../lib/appData');
 const { requireAuth, blockIfMustChangePassword } = require('../lib/auth');
 const { HttpError } = require('../lib/httpErrors');
 const recordActions = require('../lib/recordActions');
+const { insertTask, withLockedTaskById, deleteTaskById } = require('../lib/taskStore');
 
 router.use(requireAuth, blockIfMustChangePassword);
 
@@ -45,13 +46,8 @@ router.post('/contracts/:id/edit', async (req, res) => {
 // Bước 4 — lập/sửa biên bản họp xong thì tự suy ra Công việc cần tạo TỪ CHÍNH bản ghi vừa lưu (xem
 // lib/recordActions.js buildTasksFromDirectives()) — dùng chung cho cả tạo mới lẫn sửa bên dưới.
 async function createTasksFromMinutes(minutesItem, freshUser) {
-  let createdTasks = [];
-  await withLockedAppDataValue('tasks', (collection) => {
-    const list = Array.isArray(collection) ? collection : [];
-    createdTasks = recordActions.buildTasksFromDirectives(minutesItem, freshUser);
-    for (const c of createdTasks) list.unshift(c.item);
-    return list;
-  });
+  const createdTasks = recordActions.buildTasksFromDirectives(minutesItem, freshUser);
+  for (const c of createdTasks) await insertTask(c.item);
   return createdTasks;
 }
 
@@ -122,14 +118,7 @@ async function withTaskAction(req, res, action, mutator) {
   if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
   try {
     const { freshUser, users } = await getFreshUser(req);
-    let result = null;
-    await withLockedAppDataValue('tasks', (collection) => {
-      const list = Array.isArray(collection) ? collection : [];
-      const idx = list.findIndex(t => t.id === itemId);
-      if (idx === -1) throw new HttpError(404, 'Không tìm thấy công việc');
-      result = mutator(req.body, freshUser, list[idx], users);
-      return list;
-    });
+    const result = await withLockedTaskById(itemId, (task) => mutator(req.body, freshUser, task, users));
     res.json({ ok: true, item: result });
   } catch (err) {
     handleError(res, `tasks/${req.params.id}/${action}`, err);
@@ -141,13 +130,8 @@ async function withTaskAction(req, res, action, mutator) {
 router.post('/tasks', async (req, res) => {
   try {
     const { freshUser, users } = await getFreshUser(req);
-    let result = null;
-    await withLockedAppDataValue('tasks', (collection) => {
-      const list = Array.isArray(collection) ? collection : [];
-      result = recordActions.createTask(req.body, freshUser, users);
-      list.unshift(result);
-      return list;
-    });
+    const result = recordActions.createTask(req.body, freshUser, users);
+    await insertTask(result);
     res.json({ ok: true, item: result });
   } catch (err) {
     handleError(res, 'tasks (tạo mới)', err);
@@ -193,14 +177,7 @@ router.post('/tasks/:id/delete', async (req, res) => {
   if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
   try {
     const { freshUser } = await getFreshUser(req);
-    await withLockedAppDataValue('tasks', (collection) => {
-      const list = Array.isArray(collection) ? collection : [];
-      const idx = list.findIndex(t => t.id === itemId);
-      if (idx === -1) throw new HttpError(404, 'Không tìm thấy công việc');
-      recordActions.assertCanDeleteTask(freshUser);
-      list.splice(idx, 1);
-      return list;
-    });
+    await deleteTaskById(itemId, () => recordActions.assertCanDeleteTask(freshUser));
     res.json({ ok: true });
   } catch (err) {
     handleError(res, `tasks/${req.params.id}/delete`, err);

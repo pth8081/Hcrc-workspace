@@ -6,6 +6,7 @@ const { DEFAULTS } = require('./defaults');
 const { hashPassword, isBcryptHash, verifyPassword } = require('./lib/auth');
 const { getAppDataValue, setAppDataValue } = require('./lib/appData');
 const { migrateLegacySystemLogs } = require('./lib/systemLogStore');
+const { migrateLegacyTasks } = require('./lib/taskStore');
 
 // Mật khẩu mặc định của các tài khoản seed lúc khởi tạo hệ thống lần đầu (defaults.js) — dùng để dò
 // tài khoản NÀO CÒN đang dùng đúng mật khẩu này (xem flagKnownDefaultPasswords() bên dưới), bất kể
@@ -31,6 +32,7 @@ async function seedDefaults() {
   await migratePlaintextPasswords();
   await flagKnownDefaultPasswords();
   await migrateLegacySystemLogs();
+  await migrateLegacyTasks();
 }
 
 // Trước đây mật khẩu lưu plaintext (cả trong seed mặc định lẫn dữ liệu do admin tạo trước khi có
