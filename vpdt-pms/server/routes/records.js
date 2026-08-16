@@ -3,12 +3,11 @@
 // toàn bộ mảng qua POST /api/data/:key như trước đây.
 const express = require('express');
 const router = express.Router();
-const { withLockedAppDataValue } = require('../lib/appData');
 const { requireAuth, blockIfMustChangePassword } = require('../lib/auth');
 const { HttpError } = require('../lib/httpErrors');
 const recordActions = require('../lib/recordActions');
 const { insertTask, withLockedTaskById, deleteTaskById } = require('../lib/taskStore');
-const { withLockedRecordForCollection } = require('../lib/recordStore');
+const { createForCollection, withLockedRecordForCollection, deleteRecordForCollection } = require('../lib/recordStore');
 
 router.use(requireAuth, blockIfMustChangePassword);
 
@@ -41,25 +40,27 @@ router.post('/contracts/:id/edit', async (req, res) => {
 });
 
 // Bước 4 — lập/sửa biên bản họp xong thì tự suy ra Công việc cần tạo TỪ CHÍNH bản ghi vừa lưu (xem
-// lib/recordActions.js buildTasksFromDirectives()) — dùng chung cho cả tạo mới lẫn sửa bên dưới.
-async function createTasksFromMinutes(minutesItem, freshUser) {
-  const createdTasks = recordActions.buildTasksFromDirectives(minutesItem, freshUser);
+// lib/recordActions.js buildTasksFromDirectives()) — PHẢI tính TRƯỚC KHI lưu biên bản (bên trong
+// builderFn/mutatorFn của dispatch bên dưới, không phải sau khi dispatch đã trả về) để cờ "đã tạo việc"
+// trên từng dòng chỉ đạo (directive.taskCreated, buildTasksFromDirectives tự set) được LƯU LẠI đúng
+// cùng bản ghi — nếu tính sau khi đã lưu (như trước Bước 6i), lần sửa tiếp theo đọc lại bản ghi từ CSDL
+// sẽ không thấy cờ này (vì lúc lưu ở dispatch, đối tượng chưa kịp bị mutate) và tự tạo TRÙNG việc cho
+// đúng chỉ đạo đã tạo việc từ trước.
+async function insertMinutesTasks(createdTasks) {
   for (const c of createdTasks) await insertTask(c.item);
-  return createdTasks;
 }
 
 // POST /api/records/minutes — lập biên bản họp mới (tự tạo kèm Công việc nếu có chỉ đạo đã gán người)
 router.post('/minutes', async (req, res) => {
   try {
     const { freshUser } = await getFreshUser(req);
-    let minutesItem = null;
-    await withLockedAppDataValue('meetingMinutes', (collection) => {
-      const list = Array.isArray(collection) ? collection : [];
-      minutesItem = recordActions.createMinutes(req.body, freshUser, list);
-      list.unshift(minutesItem);
-      return list;
+    let createdTasks = [];
+    const minutesItem = await createForCollection('meetingMinutes', (list) => {
+      const item = recordActions.createMinutes(req.body, freshUser, list);
+      createdTasks = recordActions.buildTasksFromDirectives(item, freshUser);
+      return item;
     });
-    const createdTasks = await createTasksFromMinutes(minutesItem, freshUser);
+    await insertMinutesTasks(createdTasks);
     res.json({ ok: true, item: minutesItem, createdTasks });
   } catch (err) {
     handleError(res, 'minutes (tạo mới)', err);
@@ -72,15 +73,13 @@ router.post('/minutes/:id/edit', async (req, res) => {
   if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
   try {
     const { freshUser } = await getFreshUser(req);
-    let result = null;
-    await withLockedAppDataValue('meetingMinutes', (collection) => {
-      const list = Array.isArray(collection) ? collection : [];
-      const idx = list.findIndex(m => m.id === itemId);
-      if (idx === -1) throw new HttpError(404, 'Không tìm thấy biên bản họp');
-      result = recordActions.editMinutes(req.body, freshUser, list[idx]);
-      return list;
+    let createdTasks = [];
+    const result = await withLockedRecordForCollection('meetingMinutes', itemId, (item) => {
+      const edited = recordActions.editMinutes(req.body, freshUser, item);
+      createdTasks = recordActions.buildTasksFromDirectives(edited, freshUser);
+      return edited;
     });
-    const createdTasks = await createTasksFromMinutes(result, freshUser);
+    await insertMinutesTasks(createdTasks);
     res.json({ ok: true, item: result, createdTasks });
   } catch (err) {
     handleError(res, `minutes/${req.params.id}/edit`, err);
@@ -93,14 +92,7 @@ router.post('/minutes/:id/delete', async (req, res) => {
   if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
   try {
     const { freshUser } = await getFreshUser(req);
-    await withLockedAppDataValue('meetingMinutes', (collection) => {
-      const list = Array.isArray(collection) ? collection : [];
-      const idx = list.findIndex(m => m.id === itemId);
-      if (idx === -1) throw new HttpError(404, 'Không tìm thấy biên bản họp');
-      recordActions.assertCanDeleteMinutes(freshUser, list[idx]);
-      list.splice(idx, 1);
-      return list;
-    });
+    await deleteRecordForCollection('meetingMinutes', itemId, (item) => recordActions.assertCanDeleteMinutes(freshUser, item));
     res.json({ ok: true });
   } catch (err) {
     handleError(res, `minutes/${req.params.id}/delete`, err);
