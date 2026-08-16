@@ -56,5 +56,29 @@ GO
    riêng ở tầng DB: tài khoản nghiệp vụ vẫn là DB.users bên trong AppData (field "users") như thiết
    kế gốc, chỉ khác là server giờ tự xác thực/hash thay vì tin hoàn toàn vào client. */
 
+/* CẬP NHẬT (Bước 6a — bắt đầu tách các collection tăng trưởng nhanh khỏi AppData sang bảng riêng
+   theo dòng, xem lib/systemLogStore.js): nhật ký hệ thống (systemLogs) trước đây là 1 dòng JSON duy
+   nhất trong AppData, GIỚI HẠN CỨNG 200 dòng gần nhất (cũ hơn bị ghi đè mất) vì mỗi lần ghi thêm 1
+   log phải khoá + đọc/sửa/ghi lại NGUYÊN mảng. Chuyển sang bảng riêng, mỗi dòng log = 1 row thật:
+   ghi thêm là 1 lệnh INSERT đơn giản (không còn khoá cả collection), cho phép giữ lịch sử dài hơn
+   nhiều (xem RETENTION_KEEP trong lib/systemLogStore.js) mà không ảnh hưởng hiệu năng ghi. */
+IF OBJECT_ID('dbo.SystemLogs', 'U') IS NULL
+BEGIN
+    CREATE TABLE dbo.SystemLogs (
+        Id            BIGINT IDENTITY(1,1) NOT NULL PRIMARY KEY,
+        CreatedAt     DATETIME2(3)   NOT NULL DEFAULT SYSUTCDATETIME(),
+        Username      NVARCHAR(100)  NOT NULL,
+        FullName      NVARCHAR(200)  NULL,
+        IpAddress     NVARCHAR(100)  NULL,
+        Module        NVARCHAR(50)   NOT NULL,
+        ActionType    NVARCHAR(100)  NOT NULL,
+        TargetObject  NVARCHAR(200)  NULL,
+        Description   NVARCHAR(MAX)  NOT NULL,
+        Status        NVARCHAR(20)   NOT NULL DEFAULT 'SUCCESS'
+    );
+    CREATE INDEX IX_SystemLogs_CreatedAt ON dbo.SystemLogs (CreatedAt DESC, Id DESC);
+END
+GO
+
 PRINT 'Schema VPDT_DMS đã sẵn sàng.';
 GO
