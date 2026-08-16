@@ -4760,13 +4760,6 @@ function renderSubmissionApprovalLayerCheckboxes() {
       .filter(Boolean);
     const disabled = groupUsers.length === 0;
 
-    const memberCheckboxes = groupUsers.map(u => `
-      <label class="flex items-center gap-1.5 text-gray-700 cursor-pointer text-[11px]">
-        <input type="checkbox" class="sub-layer-member" value="${escapeHtml(u.username)}" data-layer="${layer.key}">
-        <span>${escapeHtml(u.name)} <span class="text-gray-400">(${escapeHtml(u.dept)})</span></span>
-      </label>
-    `).join('');
-
     return `
       <div class="border rounded p-2 bg-amber-50/60 min-w-[220px]">
         <label class="flex items-center gap-1.5 font-semibold text-gray-700 ${disabled ? 'opacity-50' : 'cursor-pointer'}">
@@ -4775,11 +4768,19 @@ function renderSubmissionApprovalLayerCheckboxes() {
         </label>
         ${disabled
           ? `<p class="text-[11px] text-gray-400 italic mt-1">Admin chưa gán thành viên nào cho nhóm này.</p>`
-          : `<div id="subLayerMembers_${layer.key}" class="hidden mt-1.5 pl-1 space-y-1 max-h-32 overflow-y-auto border-t pt-1.5">${memberCheckboxes}</div>`
+          : `<div id="subLayerMembers_${layer.key}" class="hidden mt-1.5 pl-1 border-t pt-1.5"><div id="subLayerMemberPicker_${layer.key}"></div></div>`
         }
       </div>
     `;
   }).join('');
+
+  SUBMISSION_APPROVAL_LAYERS.forEach(layer => {
+    const groupUsers = (DB.submissionApprovalGroups[layer.key] || [])
+      .map(un => DB.users.find(u => u.username === un))
+      .filter(Boolean);
+    if (groupUsers.length === 0) return;
+    renderPeopleMultiSelect(`subLayerMemberPicker_${layer.key}`, groupUsers, [], 'sub-layer-member', { 'data-layer': layer.key });
+  });
 }
 
 // Hiện/ẩn khối chọn người của 1 lớp theo trạng thái checkbox lớp đó — bỏ tick thì reset (bỏ chọn
@@ -4790,7 +4791,7 @@ function onSubApprovalLayerToggle(layerKey) {
   const toggle = document.querySelector(`.sub-layer-toggle[value="${layerKey}"]`);
   const checked = !!toggle?.checked;
   box.classList.toggle('hidden', !checked);
-  if (!checked) box.querySelectorAll('input[type="checkbox"]').forEach(cb => { cb.checked = false; });
+  if (!checked) pmsClear(`subLayerMemberPicker_${layerKey}`);
 }
 
 function onSubFilterChange() {
@@ -9961,6 +9962,100 @@ function deletePermGroup(id) {
 }
 
 // ==========================================
+// DROPDOWN CHỌN NHIỀU NGƯỜI (tìm kiếm + chip) — dùng chung cho "Quản Lý Nhóm Phê Duyệt Trình" (chọn
+// thành viên cố định của từng nhóm, có thể chọn từ TOÀN BỘ user) và form tạo Văn bản trình (chọn NGƯỜI
+// CỤ THỂ tham gia duyệt 1 lớp bổ sung cho ĐÚNG tờ trình này, chỉ trong số thành viên nhóm). Thay vì
+// liệt kê checkbox cho toàn bộ danh sách (cồng kềnh khi hệ thống nhiều người dùng), gõ tìm rồi bấm chọn
+// — người đã chọn hiện dạng chip có nút xoá.
+//
+// Để KHÔNG phải sửa lại các hàm ĐỌC lựa chọn đã có sẵn (saveSubmissionApprovalGroup(),
+// submitSubmissionReq()), mỗi người đã chọn vẫn được backing bằng 1 checkbox ẨN mang ĐÚNG
+// class/data-attribute mà code đọc cũ đang query bằng document.querySelectorAll — chỉ đổi PHẦN HIỂN
+// THỊ, giữ nguyên "hợp đồng" dữ liệu giữa các hàm.
+function renderPeopleMultiSelect(containerId, candidates, initialSelected, checkboxClass, checkboxDataAttrs) {
+  const container = document.getElementById(containerId);
+  if (!container) return;
+  const dataAttrsStr = Object.entries(checkboxDataAttrs || {}).map(([k, v]) => `${k}="${escapeHtml(v)}"`).join(' ');
+  const selected = new Set(initialSelected || []);
+  const label = (u) => `${u.name} (${u.username}) - ${u.dept}`;
+
+  function renderChips() {
+    const chipsEl = container.querySelector('[data-pms-chips]');
+    const hiddenEl = container.querySelector('[data-pms-hidden]');
+    chipsEl.innerHTML = [...selected].map(username => {
+      const u = candidates.find(x => x.username === username);
+      return `
+        <span class="inline-flex items-center gap-1 bg-rose-100 text-rose-700 rounded-full px-2 py-0.5 text-[11px]">
+          ${escapeHtml(u ? label(u) : username)}
+          <button type="button" onclick="pmsRemove('${containerId}', '${escapeHtml(username)}')" class="font-bold hover:text-rose-900">×</button>
+        </span>
+      `;
+    }).join('') || '<span class="text-gray-400 italic text-[11px]">Chưa chọn ai.</span>';
+
+    hiddenEl.innerHTML = [...selected].map(username =>
+      `<input type="checkbox" class="${checkboxClass || ''}" ${dataAttrsStr} value="${escapeHtml(username)}" checked style="display:none">`
+    ).join('');
+  }
+
+  function renderDropdown(query) {
+    const ddEl = container.querySelector('[data-pms-dropdown]');
+    const q = (query || '').trim().toLowerCase();
+    const matches = candidates.filter(u => !selected.has(u.username) && (!q || label(u).toLowerCase().includes(q))).slice(0, 30);
+    ddEl.innerHTML = matches.length
+      ? matches.map(u => `<div class="px-2 py-1 text-[11px] hover:bg-rose-50 cursor-pointer" onclick="pmsAdd('${containerId}', '${escapeHtml(u.username)}')">${escapeHtml(label(u))}</div>`).join('')
+      : '<div class="px-2 py-1 text-[11px] text-gray-400 italic">Không tìm thấy.</div>';
+    ddEl.classList.remove('hidden');
+  }
+
+  container.setAttribute('data-pms-root', '');
+  container.innerHTML = `
+    <div data-pms-chips class="flex flex-wrap gap-1 mb-1"></div>
+    <div class="relative">
+      <input type="text" data-pms-search placeholder="Tìm theo tên/username/phòng ban để thêm..." class="w-full border p-1.5 rounded text-[11px]"
+        oninput="pmsFilter('${containerId}', this.value)" onfocus="pmsFilter('${containerId}', this.value)">
+      <div data-pms-dropdown class="hidden absolute z-20 bg-white border rounded shadow max-h-40 overflow-y-auto w-full mt-0.5"></div>
+    </div>
+    <div data-pms-hidden></div>
+  `;
+  container._pmsCandidates = candidates;
+  container._pmsSelected = selected;
+  container._pmsRenderChips = renderChips;
+  container._pmsRenderDropdown = renderDropdown;
+  renderChips();
+}
+function pmsFilter(containerId, query) { document.getElementById(containerId)?._pmsRenderDropdown(query); }
+function pmsAdd(containerId, username) {
+  const container = document.getElementById(containerId);
+  if (!container) return;
+  container._pmsSelected.add(username);
+  container._pmsRenderChips();
+  const search = container.querySelector('[data-pms-search]');
+  search.value = '';
+  container._pmsRenderDropdown('');
+  search.focus();
+}
+function pmsRemove(containerId, username) {
+  const container = document.getElementById(containerId);
+  if (!container) return;
+  container._pmsSelected.delete(username);
+  container._pmsRenderChips();
+}
+function pmsClear(containerId) {
+  const container = document.getElementById(containerId);
+  if (!container || !container._pmsSelected) return;
+  container._pmsSelected.clear();
+  container._pmsRenderChips();
+}
+// Đóng dropdown đang mở khi click ra ngoài — gắn 1 LẦN DUY NHẤT ở top-level (không gắn lại mỗi lần
+// render, tránh chồng listener) — tự áp dụng cho MỌI khối renderPeopleMultiSelect đang có trên trang
+// nhờ query lại theo [data-pms-root] mỗi lần click thay vì nhớ tham chiếu cố định.
+document.addEventListener('click', (ev) => {
+  document.querySelectorAll('[data-pms-root]').forEach(root => {
+    if (!root.contains(ev.target)) root.querySelector('[data-pms-dropdown]')?.classList.add('hidden');
+  });
+});
+
+// ==========================================
 // NHÓM PHÊ DUYỆT TRÌNH (Văn bản trình) — 3 nhóm CỐ ĐỊNH (SUBMISSION_APPROVAL_LAYERS), admin chỉ gán
 // thành viên, không tạo/xoá nhóm mới. Người trình tick chọn nhóm nào khi tạo tờ trình thì nhóm đó
 // được cộng thêm làm 1 bước phê duyệt bổ sung ở cuối quy trình phòng ban (xem
@@ -9970,23 +10065,18 @@ function renderSubmissionApprovalGroups() {
   const container = document.getElementById('submissionApprovalGroupsContainer');
   if (!container) return;
 
-  container.innerHTML = SUBMISSION_APPROVAL_LAYERS.map(layer => {
-    const members = DB.submissionApprovalGroups[layer.key] || [];
-    const checkboxes = DB.users.map(u => `
-      <label class="flex items-center gap-1.5 text-gray-700 cursor-pointer text-[11px]">
-        <input type="checkbox" value="${escapeHtml(u.username)}" data-layer="${layer.key}" ${members.includes(u.username) ? 'checked' : ''}>
-        <span>${escapeHtml(u.name)} (${escapeHtml(u.username)}) <span class="text-gray-400">- ${escapeHtml(u.dept)}</span></span>
-      </label>
-    `).join('');
+  container.innerHTML = SUBMISSION_APPROVAL_LAYERS.map(layer => `
+    <div class="bg-slate-50 p-3 rounded border space-y-2">
+      <div class="font-bold text-gray-800 text-xs">${escapeHtml(layer.label)}</div>
+      <div id="submissionApprovalGroupPicker_${layer.key}"></div>
+      <button type="button" onclick="saveSubmissionApprovalGroup('${layer.key}')" class="w-full bg-rose-600 text-white px-2 py-1 rounded text-[11px] font-bold hover:bg-rose-700">Lưu Thành Viên</button>
+    </div>
+  `).join('');
 
-    return `
-      <div class="bg-slate-50 p-3 rounded border space-y-2">
-        <div class="font-bold text-gray-800 text-xs">${escapeHtml(layer.label)}</div>
-        <div class="space-y-1 max-h-40 overflow-y-auto">${checkboxes || '<span class="text-gray-400 italic text-[11px]">Chưa có người dùng nào.</span>'}</div>
-        <button type="button" onclick="saveSubmissionApprovalGroup('${layer.key}')" class="w-full bg-rose-600 text-white px-2 py-1 rounded text-[11px] font-bold hover:bg-rose-700">Lưu Thành Viên</button>
-      </div>
-    `;
-  }).join('');
+  SUBMISSION_APPROVAL_LAYERS.forEach(layer => {
+    const members = DB.submissionApprovalGroups[layer.key] || [];
+    renderPeopleMultiSelect(`submissionApprovalGroupPicker_${layer.key}`, DB.users, members, '', { 'data-layer': layer.key });
+  });
 }
 
 function saveSubmissionApprovalGroup(layerKey) {
