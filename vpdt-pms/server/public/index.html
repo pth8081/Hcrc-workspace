@@ -10979,14 +10979,18 @@ function viewInternalPostDetail(id) {
   document.getElementById('internalArticleModal').classList.remove('hidden');
 }
 
+// 5 hành động tương tác dưới đây (đánh dấu đã đọc/thích/bình luận/đăng ký đào tạo) đi qua
+// /api/records/internalPosts/:id/<action> (server tự xác thực + gán danh tính từ phiên đăng nhập,
+// không tin giá trị client gửi — xem lib/recordActions.js). Đánh dấu đã đọc/thích vẫn cập nhật CỤC BỘ
+// ngay lập tức trước khi gọi API (không đợi phản hồi) để UI phản hồi tức thì như trước đây (số người
+// xem/trạng thái nút thích), server vẫn là nguồn xác nhận thật cho lần tải lại dữ liệu sau.
 function markInternalRead(id) {
   const p = DB.internalPosts.find(x => x.id === id);
   if (!p) return;
   if (!p.readBy) p.readBy = [];
-  if (!p.readBy.includes(currentUser.username)) {
-    p.readBy.push(currentUser.username);
-    syncStorage('internalPosts');
-  }
+  if (p.readBy.includes(currentUser.username)) return;
+  p.readBy.push(currentUser.username);
+  callRecordAction('internalPosts', id, 'mark-read', {}).catch(err => console.error('Lỗi đánh dấu đã đọc:', err.message));
 }
 
 function toggleInternalLike(id) {
@@ -10996,45 +11000,59 @@ function toggleInternalLike(id) {
   const idx = p.likes.indexOf(currentUser.username);
   if (idx === -1) p.likes.push(currentUser.username);
   else p.likes.splice(idx, 1);
-  syncStorage('internalPosts');
+  callRecordAction('internalPosts', id, 'like', {}).catch(err => console.error('Lỗi cập nhật lượt thích:', err.message));
   viewInternalPostDetail(id);
   renderInternalPosts();
 }
 
-function addInternalComment(id) {
-  const p = DB.internalPosts.find(x => x.id === id);
-  if (!p) return;
+async function addInternalComment(id) {
   const input = document.getElementById('internalCommentInput');
   const content = input.value.trim();
   if (!content) return;
-  if (!p.comments) p.comments = [];
-  p.comments.push({ id: Date.now(), username: currentUser.username, name: currentUser.name, content, time: new Date().toLocaleString('vi-VN') });
-  syncStorage('internalPosts');
+  let updated;
+  try {
+    const result = await callRecordAction('internalPosts', id, 'comment', { content });
+    updated = result.item;
+  } catch (err) {
+    return alert(`⛔ ${err.message}`);
+  }
+  const idx = DB.internalPosts.findIndex(x => x.id === id);
+  if (idx !== -1) DB.internalPosts[idx] = updated;
   viewInternalPostDetail(id);
   renderInternalPosts();
 }
 
-function registerForTraining(id) {
+async function registerForTraining(id) {
   const p = DB.internalPosts.find(x => x.id === id);
   if (!p || !p.training) return;
-  if (!p.training.registeredUsers) p.training.registeredUsers = [];
-  if (p.training.registeredUsers.includes(currentUser.username)) return;
-  if (p.training.capacity > 0 && p.training.registeredUsers.length >= p.training.capacity) {
-    return alert('⛔ Khóa đào tạo đã đủ số lượng đăng ký!');
+  if ((p.training.registeredUsers || []).includes(currentUser.username)) return;
+  let updated;
+  try {
+    const result = await callRecordAction('internalPosts', id, 'register-training', {});
+    updated = result.item;
+  } catch (err) {
+    return alert(`⛔ ${err.message}`);
   }
-  p.training.registeredUsers.push(currentUser.username);
-  syncStorage('internalPosts');
+  const idx = DB.internalPosts.findIndex(x => x.id === id);
+  if (idx !== -1) DB.internalPosts[idx] = updated;
   logSystemAction('INTERNAL', 'REGISTER_TRAINING', `Đăng ký tham gia đào tạo [${p.code} - ${p.title}]`, 'SUCCESS', p.code);
   alert('✅ Đã đăng ký tham gia thành công!');
   viewInternalPostDetail(id);
   renderInternalPosts();
 }
 
-function unregisterFromTraining(id) {
+async function unregisterFromTraining(id) {
   const p = DB.internalPosts.find(x => x.id === id);
   if (!p || !p.training) return;
-  p.training.registeredUsers = (p.training.registeredUsers || []).filter(u => u !== currentUser.username);
-  syncStorage('internalPosts');
+  let updated;
+  try {
+    const result = await callRecordAction('internalPosts', id, 'unregister-training', {});
+    updated = result.item;
+  } catch (err) {
+    return alert(`⛔ ${err.message}`);
+  }
+  const idx = DB.internalPosts.findIndex(x => x.id === id);
+  if (idx !== -1) DB.internalPosts[idx] = updated;
   viewInternalPostDetail(id);
   renderInternalPosts();
 }

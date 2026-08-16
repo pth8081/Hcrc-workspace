@@ -118,21 +118,22 @@ const DEFAULTS = {
     }
   ],
 
-  meetingAttendeeTemplates: [],
-  internalPosts: []
+  meetingAttendeeTemplates: []
   // systemLogs (Bước 6a), tasks (Bước 6b), submissions + docs + carRegs + officeReqs + contracts +
-  // meetings + meetingMinutes (Bước 6c-6i) KHÔNG còn ở đây — lưu ở bảng riêng (dbo.SystemLogs,
-  // dbo.Tasks, dbo.Records — xem lib/systemLogStore.js, lib/taskStore.js, lib/recordStore.js), không
-  // còn là 1 dòng JSON trong AppData. routes/data.js không nhận các key này làm key hợp lệ nữa (loại
-  // khỏi VALID_KEYS tự nhiên vì không còn trong DEFAULTS) — systemLogs dùng POST/DELETE /api/log
-  // (routes/systemLog.js), tasks dùng route riêng theo hành động dưới /api/records/tasks/...
-  // (routes/records.js), submissions/docs/carRegs/officeReqs dùng /api/create/<module> +
-  // /api/workflow/<module>/... (routes/create.js, routes/workflow.js), contracts TẠO qua
-  // /api/create/contracts + SỬA qua /api/records/contracts/:id/edit (routes/records.js), meetings TẠO
-  // qua /api/create/meetings + duyệt/huỷ qua /api/meetings/:id/approve|cancel
-  // (routes/meetingActions.js), meetingMinutes TẠO/SỬA/XOÁ qua /api/records/minutes[/...] (cùng
-  // routes/records.js) — mỗi collection tiếp theo được thêm vào lib/recordStore.js MIGRATED_COLLECTIONS
-  // sẽ tự động theo đúng mẫu này (miễn route đọc/ghi của nó đã đi qua
+  // meetings + meetingMinutes + internalPosts (Bước 6c-6j, HOÀN TẤT lộ trình Bước 6) KHÔNG còn ở đây —
+  // lưu ở bảng riêng (dbo.SystemLogs, dbo.Tasks, dbo.Records — xem lib/systemLogStore.js,
+  // lib/taskStore.js, lib/recordStore.js), không còn là 1 dòng JSON trong AppData. routes/data.js
+  // không nhận các key này làm key hợp lệ nữa (loại khỏi VALID_KEYS tự nhiên vì không còn trong
+  // DEFAULTS) — systemLogs dùng POST/DELETE /api/log (routes/systemLog.js), tasks dùng route riêng
+  // theo hành động dưới /api/records/tasks/... (routes/records.js), submissions/docs/carRegs/officeReqs
+  // dùng /api/create/<module> + /api/workflow/<module>/... (routes/create.js, routes/workflow.js),
+  // contracts TẠO qua /api/create/contracts + SỬA qua /api/records/contracts/:id/edit
+  // (routes/records.js), meetings TẠO qua /api/create/meetings + duyệt/huỷ qua
+  // /api/meetings/:id/approve|cancel (routes/meetingActions.js), meetingMinutes TẠO/SỬA/XOÁ qua
+  // /api/records/minutes[/...], internalPosts TẠO qua /api/create/internalPosts + 5 hành động tương
+  // tác (đánh dấu đã đọc/thích/bình luận/đăng ký đào tạo) qua /api/records/internalPosts/:id/<action>
+  // (cùng routes/records.js) — mỗi collection tiếp theo được thêm vào lib/recordStore.js
+  // MIGRATED_COLLECTIONS sẽ tự động theo đúng mẫu này (miễn route đọc/ghi của nó đã đi qua
   // getAllForCollection/createForCollection/withLockedRecordForCollection/deleteRecordForCollection),
   // không cần sửa gì thêm ở routes/data.js.
 };
