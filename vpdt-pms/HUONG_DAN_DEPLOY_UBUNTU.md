@@ -138,6 +138,15 @@ nano .env
 
 ```
 PORT=3000
+
+# Bắt buộc — server sẽ không khởi động nếu thiếu. Tạo bằng lệnh:
+#   node -e "console.log(require('crypto').randomBytes(48).toString('hex'))"
+JWT_SECRET=change-me-to-a-long-random-string
+
+# Cookie phiên đăng nhập mặc định bắt buộc HTTPS. Chỉ đặt =false khi chạy dev cục bộ qua
+# http://localhost — xem lưu ý HTTPS ở mục 8.
+COOKIE_SECURE=true
+
 DB_SERVER=localhost          # hoặc IP máy chủ SQL Server nếu chạy riêng
 DB_PORT=1433
 DB_NAME=VPDT_DMS
@@ -147,7 +156,12 @@ DB_ENCRYPT=false
 DB_TRUST_CERT=true
 ```
 
-> ⚠️ Không commit file `.env` lên Git — chứa mật khẩu SQL Server.
+> ⚠️ Không commit file `.env` lên Git — chứa `JWT_SECRET` và mật khẩu SQL Server.
+
+Các biến khác trong `.env.example` (`TRUST_PROXY`, `DB_POOL_*`, `SMTP_*`) đều có giá trị mặc định hợp
+lý — chỉ cần điền khi bạn thực sự cần chỉnh khác mặc định (xem chú thích trong chính file
+`.env.example`). Riêng `TRUST_PROXY=1` **bắt buộc phải đặt** nếu bạn triển khai Nginx theo mục 8 — xem
+giải thích ở đó.
 
 ---
 
@@ -172,9 +186,11 @@ Mở trình duyệt: `http://<ip-server>:3000` — đăng nhập thử với tà
 - `admin / 123456` (Quản trị viên - full quyền)
 - `nv_nhansu / 123456`, `ks_kiemsoat / 123456`, `sep_duyet / 123456`
 
-**⚠️ Đổi ngay mật khẩu các tài khoản mặc định này trước khi đưa vào sử dụng
-thật** (qua module Quản trị → Người dùng), vì mật khẩu hiện đang lưu ở dạng
-plain-text — xem khuyến nghị bảo mật ở mục 9.
+Mật khẩu các tài khoản mặc định được lưu **đã băm bằng bcrypt** (không phải
+plain-text). Server tự động phát hiện tài khoản nào còn dùng mật khẩu mặc định
+`123456` và **bắt buộc đổi mật khẩu ngay lần đăng nhập đầu tiên** (màn hình
+đổi mật khẩu hiện ra, không thể bỏ qua) — không cần bạn phải nhớ tự đổi thủ
+công, nhưng vẫn nên đổi ngay khi đưa vào sử dụng thật cho đúng người dùng thật.
 
 ---
 
@@ -226,6 +242,8 @@ server {
         proxy_set_header Host $host;
         proxy_cache_bypass $http_upgrade;
         proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
     }
 }
 ```
@@ -236,6 +254,14 @@ sudo nginx -t
 sudo systemctl reload nginx
 ```
 
+> ⚠️ **Bắt buộc đặt `TRUST_PROXY=1` trong `.env` khi dùng Nginx như trên** (rồi
+> `pm2 restart vpdt`). Tính năng khoá tài khoản/giới hạn số lần đăng nhập sai
+> (mục 9) xác định người dùng dựa theo IP qua `req.ip` của Express — nếu không
+> khai báo `TRUST_PROXY`, Express chỉ thấy IP của chính Nginx (giống nhau cho
+> mọi người dùng), khiến giới hạn theo IP mất tác dụng thực tế dù tính năng
+> vẫn "chạy" bình thường không báo lỗi gì. Cấu hình `proxy_set_header
+> X-Forwarded-For ...` ở trên và `TRUST_PROXY=1` ở `.env` phải đi cùng nhau.
+
 Mở firewall (nếu dùng `ufw`):
 ```bash
 sudo ufw allow 'Nginx Full'
@@ -243,28 +269,89 @@ sudo ufw allow OpenSSH
 sudo ufw enable
 ```
 
-Nếu cần HTTPS nội bộ, dùng `certbot` (nếu có domain public trỏ về server) hoặc
-tự cấp chứng chỉ nội bộ qua CA công ty.
+**Về HTTPS:** `COOKIE_SECURE` mặc định là `true` (bắt buộc HTTPS) — cookie
+phiên đăng nhập sẽ **không được trình duyệt gửi lên** nếu truy cập qua `http://`
+thường (không phải `https://`), khiến đăng nhập không giữ được phiên. Vì vậy
+sau khi cấu hình Nginx, bạn cần bật HTTPS bằng 1 trong 2 cách trước khi đưa
+vào dùng thật:
+- Có domain public trỏ về server: dùng `certbot` (Let's Encrypt, miễn phí).
+- Chỉ dùng nội bộ (LAN/VPN, không có domain public): tự cấp chứng chỉ qua CA
+  nội bộ của công ty, hoặc dùng chứng chỉ self-signed cho môi trường thử
+  nghiệm (trình duyệt sẽ cảnh báo "không an toàn", chấp nhận thủ công 1 lần).
+
+Nếu thực sự không thể bật HTTPS (ví dụ đang thử nghiệm nhanh trong LAN kín),
+có thể tạm đặt `COOKIE_SECURE=false` — nhưng khi đó phiên đăng nhập (cookie
+JWT) đi dạng cleartext trên mạng, **không nên dùng cấu hình này khi đã có dữ
+liệu thật của nhân viên**.
 
 ---
 
-## 9. Khuyến nghị bảo mật trước khi đưa vào sử dụng chính thức
+## 9. Tình trạng bảo mật hiện tại và các việc cần làm trước khi public
 
-Đây là các điểm **quan trọng cần làm thêm**, vì hiện tại ứng dụng vẫn giữ
-nguyên cơ chế xác thực gốc (kiểm tra mật khẩu ở phía trình duyệt) để không
-thay đổi chức năng — nhưng cơ chế này vốn chưa an toàn cho môi trường
-internet mở:
+### 9.1. Đã hoàn thiện ở tầng ứng dụng/server
 
-1. **Đổi toàn bộ mật khẩu mặc định** (`123456`) ngay sau khi triển khai.
-2. **Chỉ mở port 3000/1433 trong mạng nội bộ** (LAN/VPN công ty), không expose
-   trực tiếp ra Internet nếu không có SSL + xác thực bổ sung.
-3. **Backup định kỳ SQL Server** (`sqlcmd`/SQL Server Agent job hoặc script
+- **Xác thực phía server**: đăng nhập kiểm tra mật khẩu bằng bcrypt, phát
+  cookie phiên JWT `httpOnly` — không còn so sánh mật khẩu ở JS trình duyệt.
+  Mọi API nghiệp vụ đều bắt buộc có phiên hợp lệ, server tự kiểm tra lại
+  quyền/trạng thái tài khoản (đã bị vô hiệu hoá hay chưa) trên **mỗi request**
+  chứ không chỉ tin nội dung JWT.
+- **Chống dò mật khẩu**: giới hạn số lần đăng nhập sai theo IP (chặn 15 phút
+  nếu vượt ngưỡng) **và** khoá riêng theo từng tài khoản sau 5 lần sai liên
+  tiếp — 2 lớp độc lập, xem lưu ý bắt buộc về `TRUST_PROXY` ở mục 8.
+- **Chính sách mật khẩu**: mật khẩu mới (khi admin tạo/đặt lại) phải tối
+  thiểu 8 ký tự, không nằm trong danh sách mật khẩu phổ biến/dễ đoán. Tài
+  khoản còn dùng mật khẩu mặc định `123456` bị tự động đánh dấu **bắt buộc
+  đổi mật khẩu ngay lần đăng nhập kế tiếp**, chặn ở cả giao diện lẫn server
+  (không thể bỏ qua bằng cách sửa code phía trình duyệt).
+- **HTTP security headers**: đã bật CSP, `X-Frame-Options`, `X-Content-Type-Options`,
+  HSTS, ẩn `X-Powered-By`, ... (xem `server/lib/securityHeaders.js`).
+- **Chống xung đột dữ liệu (race condition)**: các thao tác lưu dùng optimistic
+  concurrency (If-Match/409) hoặc khoá dòng (`WITH UPDLOCK, HOLDLOCK`) cho các
+  thao tác cần cộng dồn/append an toàn (ví dụ nhật ký hệ thống).
+- **Connection pool** đã tinh chỉnh để chịu tải tốt hơn (xem mục 5, biến
+  `DB_POOL_*` trong `.env.example`).
+
+### 9.2. Việc bạn cần tự làm khi triển khai
+
+1. Đặt `JWT_SECRET` là chuỗi ngẫu nhiên dài, **khác nhau giữa các môi trường**
+   (mục 5) — không dùng lại giá trị mẫu trong `.env.example`.
+2. Bật HTTPS thật (`COOKIE_SECURE=true` là mặc định, xem lưu ý ở mục 8) trước
+   khi cho người dùng thật đăng nhập — nếu không, cookie phiên không hoạt
+   động qua `http://` thường.
+3. Nếu dùng Nginx (khuyến nghị, mục 8): **bắt buộc** đặt `TRUST_PROXY=1` và
+   cấu hình `proxy_set_header X-Forwarded-For ...` — thiếu bước này khiến
+   giới hạn đăng nhập theo IP mất tác dụng thực tế dù không báo lỗi gì.
+4. **Chỉ mở port 3000/1433 trong mạng nội bộ** (LAN/VPN công ty) nếu không
+   qua Nginx + HTTPS; không expose thẳng port 3000/1433 ra Internet.
+5. **Backup định kỳ SQL Server** (`sqlcmd`/SQL Server Agent job hoặc script
    `BACKUP DATABASE VPDT_DMS TO DISK = ...` chạy cron hàng ngày).
-4. Về lâu dài, nên nâng cấp cơ chế đăng nhập sang hash mật khẩu (bcrypt) và xác
-   thực phía server thay vì so sánh ở client — tôi có thể hỗ trợ việc này ở
-   một đợt cập nhật riêng nếu bạn cần (đây là thay đổi về bảo mật/kiến trúc
-   xác thực, ngoài phạm vi "giữ nguyên chức năng" của lần chuyển đổi này nên
-   tôi chưa tự ý thực hiện).
+6. Đổi mật khẩu tài khoản mặc định cho đúng người dùng thật ngay sau khi
+   triển khai (hệ thống sẽ tự bắt buộc đổi ở lần đăng nhập đầu, xem mục 6,
+   nhưng vẫn nên chủ động rà lại danh sách tài khoản trước khi public).
+
+### 9.3. Giới hạn kiến trúc cần biết khi mở rộng quy mô người dùng
+
+Toàn bộ dữ liệu ứng dụng hiện lưu trong **1 bảng `dbo.AppData`, mỗi
+collection (danh sách văn bản, hợp đồng, người dùng, ...) là 1 bản ghi JSON
+duy nhất** — thiết kế port thẳng từ `localStorage` gốc sang SQL Server, ưu
+tiên giữ nguyên 100% chức năng khi chuyển đổi. Thiết kế này **hoạt động tốt
+với quy mô vài chục đến vài trăm người dùng đồng thời**, nhưng có 2 giới hạn
+cần biết nếu công ty phát triển lớn hơn nhiều (ví dụ hàng nghìn người dùng
+đồng thời thao tác liên tục):
+
+- Mỗi lần lưu 1 thay đổi nhỏ (ví dụ sửa 1 dòng trong danh sách người dùng)
+  vẫn phải đọc/ghi lại **toàn bộ** JSON của cả collection đó — dung lượng dữ
+  liệu càng lớn, mỗi lần lưu càng chậm. Cơ chế optimistic concurrency (mục
+  9.1) tránh được mất dữ liệu khi 2 người cùng sửa, nhưng không tránh được
+  việc phải đọc/ghi cả khối.
+- Khả năng lưu đồng thời bị giới hạn ở mức "1 collection tại 1 thời điểm" cho
+  các thao tác cần khoá dòng (`WITH UPDLOCK, HOLDLOCK`).
+
+Đây là giới hạn ở tầng **thiết kế lưu trữ**, không phải lỗi hay thiếu sót có
+thể vá bằng cấu hình — cần thiết kế lại schema (tách theo bảng quan hệ thay
+vì 1 blob JSON) nếu muốn mở rộng lên quy mô lớn hơn nhiều. Đây là hạng mục
+riêng, quy mô lớn hơn các mục ở trên, cần bàn phương án thiết kế cụ thể (schema
+mới + chiến lược migrate dữ liệu cũ không mất gì) trước khi thực hiện.
 
 ---
 
