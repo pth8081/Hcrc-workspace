@@ -10,12 +10,20 @@ const { getAppDataValue, setAppDataValue, setAppDataValueIfVersionMatches } = re
 const { requireAuth, blockIfMustChangePassword, hashPassword, isBcryptHash } = require('../lib/auth');
 const { validatePasswordStrength } = require('../lib/passwordPolicy');
 const { HttpError } = require('../lib/httpErrors');
+const { getRecentSystemLogs } = require('../lib/systemLogStore');
+
+// Số dòng nhật ký hệ thống trả về cho lần tải dữ liệu đầu (GET /api/data) — khớp đúng giới hạn hiển
+// thị cũ ở client (DB.systemLogs tối đa 200 dòng, xem logSystemAction() trong index.html) để không
+// đổi hành vi giao diện. Bảng dbo.SystemLogs vẫn GIỮ LẠI nhiều hơn con số này (xem RETENTION_KEEP ở
+// lib/systemLogStore.js) — chỉ giới hạn ở đây là để lần tải trang đầu tiên không kéo về quá nhiều.
+const SYSTEM_LOGS_BULK_LOAD_LIMIT = 200;
 
 const VALID_KEYS = new Set(Object.keys(DEFAULTS));
 
 // Các collection chỉ Quản Trị Viên mới được GHI — đều là màn hình "Quản trị" trong admin panel
-// (quản lý user/quyền, cấu hình quy trình phê duyệt theo phòng ban/loại, cấu hình SMTP). Không gồm
-// systemLogs vì MỌI hành động nghiệp vụ (tạo/duyệt hồ sơ...) đều tự động ghi log, không riêng admin.
+// (quản lý user/quyền, cấu hình quy trình phê duyệt theo phòng ban/loại, cấu hình SMTP). systemLogs
+// không còn ở đây/không còn trong VALID_KEYS — từ Bước 6a có route + bảng riêng (routes/systemLog.js,
+// lib/systemLogStore.js): ghi (mọi user) qua POST /api/log, xoá (chỉ admin) qua DELETE /api/log.
 const ADMIN_ONLY_KEYS = new Set([
   'users', 'permGroups', 'emailConfig',
   'deptWorkflows', 'submissionDeptWorkflows', 'submissionTypeDeptWorkflows', 'submissionApprovalGroups',
@@ -103,6 +111,10 @@ router.get('/', async (req, res) => {
       }
     }
     if (data.users) data.users = stripPasswords(data.users);
+    // systemLogs không còn trong dbo.AppData (Bước 6a) — nguồn riêng từ dbo.SystemLogs. Không có
+    // _versions.systemLogs tương ứng (không còn khái niệm "version" AppData cho key này) — an toàn vì
+    // client không còn ghi collection này qua đường chung nữa (xoá log dùng DELETE /api/log riêng).
+    data.systemLogs = await getRecentSystemLogs(SYSTEM_LOGS_BULK_LOAD_LIMIT);
     data._versions = versions;
     res.json(data);
   } catch (err) {

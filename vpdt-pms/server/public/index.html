@@ -10379,15 +10379,20 @@ function renderSystemLogs() {
   `).join('');
 }
 
-function clearSystemLogs() {
+// Từ Bước 6a, nhật ký hệ thống lưu ở bảng riêng dbo.SystemLogs (không còn là 1 dòng JSON trong
+// AppData) — xoá đi qua DELETE /api/log (routes/systemLog.js, chỉ admin) thay vì syncStorage('systemLogs').
+async function clearSystemLogs() {
   if (!confirm('Bạn có chắc muốn xóa toàn bộ lịch sử log hệ thống?')) return;
+  try {
+    const res = await fetch('/api/log', { method: 'DELETE' });
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      return alert(body.error || '⛔ Không thể xoá nhật ký hệ thống');
+    }
+  } catch (err) {
+    return alert('⛔ Không thể kết nối tới máy chủ: ' + err.message);
+  }
   DB.systemLogs = [];
-  // logSystemAction() giờ ghi qua /api/log (append riêng, xem routes/systemLog.js) nên không còn cập
-  // nhật DB._versions.systemLogs mỗi lần có log mới — version cache ở đây gần như LUÔN lệch so với
-  // thực tế trên server (vì hầu như thao tác nào cũng ghi log). Xóa nhật ký là hành động chủ đích, ghi
-  // đè toàn bộ mảng vô điều kiện là đúng ý muốn, nên bỏ qua version cache để không bị 409 giả.
-  delete DB._versions.systemLogs;
-  syncStorage('systemLogs');
   renderSystemLogs();
 }
 
