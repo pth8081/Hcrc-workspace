@@ -3,8 +3,13 @@
 // — không đổi gì nếu mật khẩu đã hash rồi).
 const { getPool, sql } = require('./db');
 const { DEFAULTS } = require('./defaults');
-const { hashPassword, isBcryptHash } = require('./lib/auth');
+const { hashPassword, isBcryptHash, verifyPassword } = require('./lib/auth');
 const { getAppDataValue, setAppDataValue } = require('./lib/appData');
+
+// Mật khẩu mặc định của các tài khoản seed lúc khởi tạo hệ thống lần đầu (defaults.js) — dùng để dò
+// tài khoản NÀO CÒN đang dùng đúng mật khẩu này (xem flagKnownDefaultPasswords() bên dưới), bất kể
+// tài khoản đó được tạo từ seed hay admin tự đặt sau này trùng giá trị.
+const KNOWN_DEFAULT_PASSWORDS = ['123456'];
 
 async function seedDefaults() {
   const pool = await getPool();
@@ -23,6 +28,7 @@ async function seedDefaults() {
   }
 
   await migratePlaintextPasswords();
+  await flagKnownDefaultPasswords();
 }
 
 // Trước đây mật khẩu lưu plaintext (cả trong seed mặc định lẫn dữ liệu do admin tạo trước khi có
@@ -44,6 +50,37 @@ async function migratePlaintextPasswords() {
   if (changed) {
     await setAppDataValue('users', migrated);
     console.log('   ↳ Đã di trú mật khẩu người dùng còn ở dạng plaintext sang bcrypt.');
+  }
+}
+
+// Rủi ro thực tế: tài khoản seed (admin/nv_nhansu/...) mặc định mật khẩu "123456" — nếu không ai đổi
+// sau khi triển khai, đây là lỗ hổng rất dễ bị khai thác (mật khẩu đoán được ngay). Chạy mỗi lần khởi
+// động (idempotent — bỏ qua user đã có cờ hoặc đã đổi mật khẩu khác): dùng CHÍNH cơ chế xác minh mật
+// khẩu thật (verifyPassword, so với bcrypt hash đã lưu) để dò xem tài khoản nào CÒN đang dùng đúng 1
+// trong các mật khẩu mặc định đã biết, rồi đánh dấu mustChangePassword=true — buộc đổi ngay lần đăng
+// nhập kế tiếp (xem lib/auth.js blockIfMustChangePassword). Áp dụng cho MỌI tài khoản đang dùng trùng
+// giá trị này, không riêng gì các user được tạo từ seed ban đầu.
+async function flagKnownDefaultPasswords() {
+  const users = await getAppDataValue('users');
+  if (!Array.isArray(users) || users.length === 0) return;
+
+  let changed = false;
+  const flagged = await Promise.all(users.map(async (u) => {
+    if (u.mustChangePassword) return u; // đã đánh dấu rồi (kể cả do admin đặt mật khẩu tạm khác)
+    const hash = u.pass || u.password;
+    if (!hash) return u;
+    for (const guess of KNOWN_DEFAULT_PASSWORDS) {
+      if (await verifyPassword(guess, hash)) {
+        changed = true;
+        return { ...u, mustChangePassword: true };
+      }
+    }
+    return u;
+  }));
+
+  if (changed) {
+    await setAppDataValue('users', flagged);
+    console.log('   ↳ Đã đánh dấu bắt buộc đổi mật khẩu cho các tài khoản còn dùng mật khẩu mặc định.');
   }
 }
 

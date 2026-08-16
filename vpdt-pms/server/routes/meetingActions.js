@@ -6,10 +6,10 @@
 const express = require('express');
 const router = express.Router();
 const { withLockedAppDataValue } = require('../lib/appData');
-const { requireAuth } = require('../lib/auth');
+const { requireAuth, blockIfMustChangePassword } = require('../lib/auth');
 const { HttpError } = require('../lib/httpErrors');
 
-router.use(requireAuth);
+router.use(requireAuth, blockIfMustChangePassword);
 
 const ACTIONS = {
   approve: { perm: 'meetingApprove', status: 'APPROVED' },

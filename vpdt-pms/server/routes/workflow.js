@@ -5,10 +5,10 @@
 const express = require('express');
 const router = express.Router();
 const { getAllAppData, withLockedAppDataValue } = require('../lib/appData');
-const { requireAuth } = require('../lib/auth');
+const { requireAuth, blockIfMustChangePassword } = require('../lib/auth');
 const { MODULE_CONFIGS, WorkflowError, applyWorkflowAction } = require('../lib/workflowEngine');
 
-router.use(requireAuth);
+router.use(requireAuth, blockIfMustChangePassword);
 
 const ACTION_MAP = { approve: 'APPROVE', reject: 'REJECT', 'request-info': 'REQUEST_INFO' };
 

@@ -4,10 +4,10 @@
 const express = require('express');
 const router = express.Router();
 const { getAllAppData, withLockedAppDataValue } = require('../lib/appData');
-const { requireAuth } = require('../lib/auth');
+const { requireAuth, blockIfMustChangePassword } = require('../lib/auth');
 const { CREATE_MODULE_CONFIGS, CreateError, validateAndPrepareCreate } = require('../lib/createValidation');
 
-router.use(requireAuth);
+router.use(requireAuth, blockIfMustChangePassword);
 
 // POST /api/create/:module  (module: submissions|contracts|meetings|carRegs|officeReqs|docs)
 router.post('/:module', async (req, res) => {

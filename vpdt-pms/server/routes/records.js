@@ -4,11 +4,11 @@
 const express = require('express');
 const router = express.Router();
 const { withLockedAppDataValue } = require('../lib/appData');
-const { requireAuth } = require('../lib/auth');
+const { requireAuth, blockIfMustChangePassword } = require('../lib/auth');
 const { HttpError } = require('../lib/httpErrors');
 const recordActions = require('../lib/recordActions');
 
-router.use(requireAuth);
+router.use(requireAuth, blockIfMustChangePassword);
 
 // requireAuth đã tự xác định lại CHÍNH XÁC người dùng hiện tại từ DB (kể cả trạng thái active) và gắn
 // sẵn vào req.freshUser/req.allUsers — không cần đọc lại DB thêm 1 lần nữa cho cùng mục đích.

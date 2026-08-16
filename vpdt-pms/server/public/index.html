@@ -2275,6 +2275,34 @@
   </div>
 </div>
 
+<!-- MODAL BẮT BUỘC ĐỔI MẬT KHẨU — hiện khi tài khoản đang mustChangePassword (admin vừa đặt/reset mật
+     khẩu tạm, hoặc còn đang dùng đúng mật khẩu mặc định lúc khởi tạo hệ thống). KHÔNG có nút đóng/bấm
+     ra ngoài để tắt — chỉ thoát được bằng cách đổi mật khẩu thành công, hoặc Đăng Xuất. Server cũng
+     chặn mọi API nghiệp vụ khác cho tới khi đổi xong (xem lib/auth.js blockIfMustChangePassword), nên
+     đây không chỉ là rào chắn ở giao diện. -->
+<div id="mustChangePasswordModal" class="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center hidden z-[60] p-4">
+  <div class="bg-white p-6 rounded-lg shadow-xl max-w-md w-full space-y-4">
+    <div class="border-b pb-3">
+      <h3 class="font-bold text-gray-800 text-base flex items-center gap-2">🔒 Bắt Buộc Đổi Mật Khẩu</h3>
+      <p class="text-xs text-gray-500 mt-1">Mật khẩu hiện tại của tài khoản đang là mật khẩu tạm/mặc định — vui lòng đặt mật khẩu mới trước khi tiếp tục sử dụng hệ thống.</p>
+    </div>
+    <form onsubmit="submitMustChangePassword(event)" class="space-y-3 text-xs">
+      <div>
+        <label class="block font-semibold text-gray-600 mb-1">Mật khẩu mới (tối thiểu 8 ký tự)</label>
+        <input id="mcpNewPass" type="password" class="w-full border p-2 rounded" required>
+      </div>
+      <div>
+        <label class="block font-semibold text-gray-600 mb-1">Xác nhận mật khẩu mới</label>
+        <input id="mcpConfirmPass" type="password" class="w-full border p-2 rounded" required>
+      </div>
+      <div class="flex justify-between items-center pt-2">
+        <button type="button" onclick="logout()" class="text-gray-500 font-semibold hover:underline">Đăng Xuất</button>
+        <button type="submit" class="bg-blue-600 text-white px-5 py-2 rounded font-bold hover:bg-blue-700">Đổi Mật Khẩu & Tiếp Tục</button>
+      </div>
+    </form>
+  </div>
+</div>
+
 <!-- MODAL CÁ NHÂN HÓA -->
 <div id="profileModal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center hidden z-50 p-4">
   <div class="bg-white p-6 rounded-lg shadow-xl max-w-md w-full space-y-4">
@@ -3480,9 +3508,7 @@ let dataReady = false;
     const res = await fetch('/api/auth/me');
     if (!res.ok) return;
     const user = await res.json();
-    await initDatabase(user);
-    dataReady = true;
-    finishLogin(user);
+    await proceedAfterAuth(user);
   } catch (e) {
     console.warn('Không thể khôi phục phiên đăng nhập cũ:', e.message);
   }
@@ -3781,7 +3807,7 @@ async function savePersonalProfile(e) {
 
   if (newPass || confirmPass) {
     if (newPass !== confirmPass) return alert('❌ Mật khẩu xác nhận không khớp!');
-    if (newPass.length < 6) return alert('❌ Mật khẩu phải có ít nhất 6 ký tự!');
+    if (newPass.length < 8) return alert('❌ Mật khẩu phải có ít nhất 8 ký tự!');
   }
 
   // Tự sửa hồ sơ CỦA CHÍNH MÌNH đi qua API riêng (PATCH /api/auth/me) thay vì ghi đè nguyên cả
@@ -3831,8 +3857,6 @@ async function login() {
       return alert(body.error || 'Tài khoản hoặc mật khẩu không chính xác!');
     }
     user = await res.json();
-    await initDatabase(user);
-    dataReady = true;
   } catch (e) {
     return alert('⛔ Không thể kết nối tới máy chủ: ' + e.message);
   } finally {
@@ -3840,7 +3864,55 @@ async function login() {
   }
 
   logSystemAction('USER_MGM', 'LOGIN_SUCCESS', 'Đăng nhập thành công.', 'SUCCESS', user.username);
+  await proceedAfterAuth(user);
+}
+
+// Sau khi có phiên đăng nhập hợp lệ (đăng nhập mới HOẶC khôi phục phiên cũ lúc tải lại trang) — nếu
+// tài khoản đang bị đánh dấu bắt buộc đổi mật khẩu (mật khẩu tạm do admin đặt, hoặc còn đang dùng
+// đúng mật khẩu mặc định lúc khởi tạo hệ thống), CHỈ hiện modal bắt buộc đổi, KHÔNG tải dữ liệu nghiệp
+// vụ hay vào giao diện chính — server cũng chặn mọi API khác cho tới khi đổi xong (xem lib/auth.js
+// blockIfMustChangePassword), gọi initDatabase() lúc này sẽ chỉ nhận toàn lỗi 403 vô ích.
+async function proceedAfterAuth(user) {
+  currentUser = user;
+  if (user.mustChangePassword) {
+    document.getElementById('loginSection').classList.add('hidden');
+    document.getElementById('mustChangePasswordModal').classList.remove('hidden');
+    return;
+  }
+  await initDatabase(user);
+  dataReady = true;
   finishLogin(user);
+}
+
+function closeMustChangePasswordModal() {
+  document.getElementById('mustChangePasswordModal').classList.add('hidden');
+}
+
+async function submitMustChangePassword(e) {
+  e.preventDefault();
+  const newPass = document.getElementById('mcpNewPass').value;
+  const confirmPass = document.getElementById('mcpConfirmPass').value;
+  if (newPass.length < 8) return alert('❌ Mật khẩu phải có ít nhất 8 ký tự!');
+  if (newPass !== confirmPass) return alert('❌ Mật khẩu xác nhận không khớp!');
+
+  try {
+    const res = await fetch('/api/auth/me', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ password: newPass })
+    });
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      return alert(body.error || '⛔ Lỗi đổi mật khẩu');
+    }
+    const updated = await res.json();
+    closeMustChangePasswordModal();
+    alert('✅ Đã đổi mật khẩu thành công!');
+    logSystemAction('USER_MGM', 'CHANGE_FORCED_PASSWORD', 'Đổi mật khẩu bắt buộc lần đầu thành công.', 'SUCCESS', updated.username);
+    await proceedAfterAuth(updated);
+  } catch (err) {
+    alert('⛔ Không thể kết nối tới máy chủ: ' + err.message);
+  }
 }
 
 // Phần UI sau khi đã có phiên đăng nhập hợp lệ — dùng chung cho đăng nhập thật (login()) và khôi
@@ -3876,6 +3948,7 @@ function logout() {
   fetch('/api/auth/logout', { method: 'POST' }).catch(() => {});
   currentUser = null;
   dataReady = false;
+  document.getElementById('mustChangePasswordModal').classList.add('hidden');
   document.getElementById('loginSection').classList.remove('hidden');
   document.getElementById('docSection').classList.add('hidden');
   document.getElementById('submissionSection').classList.add('hidden');
@@ -10159,6 +10232,7 @@ function renderUsers() {
       <td class="border p-2 font-bold font-mono text-purple-700">
         ${escapeHtml(u.username)}
         ${isInactive ? '<span class="ml-1 inline-block bg-gray-400 text-white text-[10px] font-bold px-1.5 py-0.5 rounded align-middle">Đã vô hiệu hóa</span>' : ''}
+        ${u.mustChangePassword ? '<span class="ml-1 inline-block bg-amber-400 text-white text-[10px] font-bold px-1.5 py-0.5 rounded align-middle">🔑 Chưa đổi mật khẩu tạm</span>' : ''}
       </td>
       <td class="border p-2 font-semibold">${escapeHtml(u.name)}</td>
       <td class="border p-2 text-xs">✉️ ${escapeHtml(u.email || 'N/A')}<br>📞 ${escapeHtml(u.phone || 'N/A')}</td>
