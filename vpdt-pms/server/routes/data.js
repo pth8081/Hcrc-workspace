@@ -7,7 +7,9 @@ const router = express.Router();
 const { getPool } = require('../db');
 const { DEFAULTS } = require('../defaults');
 const { getAppDataValue, setAppDataValue, setAppDataValueIfVersionMatches } = require('../lib/appData');
-const { requireAuth, hashPassword, isBcryptHash } = require('../lib/auth');
+const { requireAuth, blockIfMustChangePassword, hashPassword, isBcryptHash } = require('../lib/auth');
+const { validatePasswordStrength } = require('../lib/passwordPolicy');
+const { HttpError } = require('../lib/httpErrors');
 
 const VALID_KEYS = new Set(Object.keys(DEFAULTS));
 
@@ -20,7 +22,7 @@ const ADMIN_ONLY_KEYS = new Set([
   'carDeptWorkflows', 'officeBuyDeptWorkflows', 'officeFixDeptWorkflows', 'officeInvestDeptWorkflows'
 ]);
 
-router.use(requireAuth);
+router.use(requireAuth, blockIfMustChangePassword);
 
 // Không bao giờ trả field mật khẩu (dù đã hash) ra ngoài — kể cả cho user đã đăng nhập, kể cả admin.
 // Trình duyệt không cần giá trị này để làm bất cứ việc gì (đăng nhập/đổi mật khẩu đều qua API riêng).
@@ -44,18 +46,39 @@ async function isCurrentlyAdmin(username) {
 // Trước khi ghi collection "users": KHÔNG bao giờ lưu lại mật khẩu dạng plaintext.
 // - Nếu admin để trống ô mật khẩu khi sửa user (form không còn hiển thị mật khẩu cũ) -> giữ
 //   nguyên hash đang lưu của đúng user đó (khớp theo id), KHÔNG xoá/ghi đè thành rỗng.
-// - Nếu admin nhập mật khẩu mới (chuỗi thường) -> hash lại bằng bcrypt trước khi lưu.
+// - Nếu admin nhập mật khẩu mới (chuỗi thường, tạo user mới hoặc reset mật khẩu cho user cũ) -> xác
+//   minh đủ mạnh (cùng chuẩn với tự đổi mật khẩu ở PATCH /api/auth/me, xem lib/passwordPolicy.js —
+//   trước đây đường này KHÔNG kiểm tra gì cả, admin có thể đặt mật khẩu 1 ký tự cho user khác), hash
+//   lại bằng bcrypt, và đánh dấu mustChangePassword=true — mật khẩu admin gõ tạm chỉ có giá trị cho
+//   LẦN ĐĂNG NHẬP ĐẦU, buộc chính user đó phải tự đổi lại ngay (xem lib/auth.js blockIfMustChangePassword),
+//   giảm nguy cơ mật khẩu tạm/yếu tồn tại lâu dài không ai để ý.
 async function prepareUsersForSave(incomingUsers) {
   const existing = (await getAppDataValue('users')) || [];
   const existingById = new Map(existing.map(u => [u.id, u]));
 
   return Promise.all(incomingUsers.map(async (u) => {
     const prior = existingById.get(u.id);
+    // mustChangePassword/failedLoginAttempts/lockedUntil do SERVER tự quản lý (client không hề gõ ra
+    // ở form) — nếu client đang cầm bản DB.users CŨ (vd vừa lưu tạo user xong, chưa tải lại trang) thì
+    // object "u" gửi lên sẽ THIẾU các field này. Luôn khôi phục lại từ "prior" khi client không tự
+    // gửi kèm, tránh bị xoá mất mustChangePassword=true oan uổng chỉ vì admin sửa tiếp 1 field khác
+    // (VD sửa email) ngay sau khi tạo, trong cùng phiên chưa kịp đồng bộ lại.
+    const preserved = prior ? {
+      ...(u.mustChangePassword === undefined && { mustChangePassword: prior.mustChangePassword }),
+      ...(u.failedLoginAttempts === undefined && { failedLoginAttempts: prior.failedLoginAttempts }),
+      ...(u.lockedUntil === undefined && { lockedUntil: prior.lockedUntil })
+    } : {};
+
     if (!u.pass) {
-      return { ...u, pass: prior ? prior.pass : undefined };
+      return { ...u, ...preserved, pass: prior ? prior.pass : undefined };
     }
-    if (isBcryptHash(u.pass)) return u; // đã hash sẵn (không phải trường hợp bình thường, nhưng an toàn)
-    return { ...u, pass: await hashPassword(u.pass) };
+    if (isBcryptHash(u.pass)) return { ...u, ...preserved }; // đã hash sẵn (không phải trường hợp bình thường, nhưng an toàn)
+
+    const passwordError = validatePasswordStrength(u.pass);
+    if (passwordError) {
+      throw new HttpError(400, `Mật khẩu của tài khoản "${u.username}": ${passwordError}`);
+    }
+    return { ...u, pass: await hashPassword(u.pass), mustChangePassword: true };
   }));
 }
 
@@ -138,6 +161,7 @@ router.post('/:key', async (req, res) => {
     await setAppDataValue(key, value);
     res.json({ ok: true });
   } catch (err) {
+    if (err instanceof HttpError) return res.status(err.status).json({ error: err.message });
     console.error(`POST /api/data/${key} lỗi:`, err.message);
     res.status(500).json({ error: 'Không thể lưu dữ liệu vào SQL Server', detail: err.message });
   }

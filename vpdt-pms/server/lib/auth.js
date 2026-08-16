@@ -104,6 +104,23 @@ async function requireAuth(req, res, next) {
   }
 }
 
+// Dùng SAU requireAuth (cần req.freshUser đã gắn sẵn) — chặn mọi route NGHIỆP VỤ khi tài khoản đang
+// bị đánh dấu bắt buộc đổi mật khẩu (mustChangePassword: admin vừa đặt/reset mật khẩu tạm cho user,
+// hoặc tài khoản vẫn đang dùng đúng mật khẩu mặc định "123456" từ lúc khởi tạo hệ thống — xem
+// seedDefaults.js flagKnownDefaultPasswords()). KHÔNG mount ở routes/auth.js (GET/PATCH /me, /logout)
+// — đó chính là lối thoát duy nhất để đổi mật khẩu và gỡ cờ này, chặn luôn ở đó sẽ tự khoá người dùng
+// không lối ra. Cũng KHÔNG mount ở routes/systemLog.js — ghi nhật ký (kể cả lúc đang bị buộc đổi mật
+// khẩu) không rủi ro gì và có giá trị lưu vết, không cần chặn.
+function blockIfMustChangePassword(req, res, next) {
+  if (req.freshUser?.mustChangePassword) {
+    return res.status(403).json({
+      error: 'Bạn cần đổi mật khẩu trước khi tiếp tục sử dụng hệ thống.',
+      mustChangePassword: true
+    });
+  }
+  next();
+}
+
 module.exports = {
   COOKIE_NAME,
   isBcryptHash,
@@ -113,5 +130,6 @@ module.exports = {
   verifyToken,
   setAuthCookie,
   clearAuthCookie,
-  requireAuth
+  requireAuth,
+  blockIfMustChangePassword
 };

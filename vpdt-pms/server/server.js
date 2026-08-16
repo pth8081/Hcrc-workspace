@@ -6,7 +6,7 @@ const path = require('path');
 const { version: APP_VERSION } = require('./package.json');
 const { getPool } = require('./db');
 const { seedDefaults } = require('./seedDefaults');
-const { requireAuth } = require('./lib/auth');
+const { requireAuth, blockIfMustChangePassword } = require('./lib/auth');
 const authRoutes = require('./routes/auth');
 const dataRoutes = require('./routes/data');
 const workflowRoutes = require('./routes/workflow');
@@ -36,8 +36,8 @@ app.use('/api/create', createRoutes);
 app.use('/api/meetings', meetingActionsRoutes);
 app.use('/api/records', recordsRoutes);
 app.use('/api/log', systemLogRoutes);
-app.use('/api/upload', requireAuth, uploadRoutes);
-app.use('/api/send-email', requireAuth, emailRoutes);
+app.use('/api/upload', requireAuth, blockIfMustChangePassword, uploadRoutes);
+app.use('/api/send-email', requireAuth, blockIfMustChangePassword, emailRoutes);
 
 // Phục vụ file đính kèm đã tải lên
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));

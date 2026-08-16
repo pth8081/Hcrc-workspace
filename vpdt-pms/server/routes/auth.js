@@ -6,6 +6,7 @@ const router = express.Router();
 const { getAppDataValue, setAppDataValue, withLockedAppDataValue } = require('../lib/appData');
 const { verifyPassword, hashPassword, signToken, setAuthCookie, clearAuthCookie, requireAuth } = require('../lib/auth');
 const { recordFailedLogin, resetLoginAttempts, getLockoutRemainingMinutes } = require('../lib/loginAttempts');
+const { validatePasswordStrength } = require('../lib/passwordPolicy');
 
 // Không bao giờ trả field mật khẩu ra ngoài, dùng chung cho /login và /me.
 function toSafeUser(user) {
@@ -126,9 +127,13 @@ router.patch('/me', requireAuth, async (req, res) => {
     if (typeof email === 'string') updated.email = email;
     if (typeof phone === 'string') updated.phone = phone;
     if (password) {
-      if (password.length < 6) return res.status(400).json({ error: 'Mật khẩu phải có ít nhất 6 ký tự' });
+      const passwordError = validatePasswordStrength(password);
+      if (passwordError) return res.status(400).json({ error: passwordError });
       updated.pass = await hashPassword(password);
       delete updated.password;
+      // Tự đổi mật khẩu thành công -> gỡ cờ bắt buộc đổi (nếu có) — đây chính là lối thoát duy nhất
+      // khỏi trạng thái mustChangePassword (xem lib/auth.js blockIfMustChangePassword).
+      delete updated.mustChangePassword;
     }
 
     users[idx] = updated;
