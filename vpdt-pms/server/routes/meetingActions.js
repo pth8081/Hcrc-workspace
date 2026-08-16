@@ -5,9 +5,9 @@
 // dùng route đơn giản riêng thay vì lib/workflowEngine.js (vốn dành cho quy trình có currentStep).
 const express = require('express');
 const router = express.Router();
-const { withLockedAppDataValue } = require('../lib/appData');
 const { requireAuth, blockIfMustChangePassword } = require('../lib/auth');
 const { HttpError } = require('../lib/httpErrors');
+const { withLockedRecordForCollection } = require('../lib/recordStore');
 
 router.use(requireAuth, blockIfMustChangePassword);
 
@@ -31,14 +31,9 @@ router.post('/:id/:action', async (req, res) => {
       return res.status(403).json({ error: 'Bạn không có quyền thực hiện thao tác này' });
     }
 
-    let resultItem = null;
-    await withLockedAppDataValue('meetings', (collection) => {
-      const list = Array.isArray(collection) ? collection : [];
-      const idx = list.findIndex(m => m.id === itemId);
-      if (idx === -1) throw new HttpError(404, 'Không tìm thấy lịch đặt phòng');
-      list[idx] = { ...list[idx], status: config.status };
-      resultItem = list[idx];
-      return list;
+    const resultItem = await withLockedRecordForCollection('meetings', itemId, (item) => {
+      item.status = config.status;
+      return item;
     });
 
     res.json({ ok: true, item: resultItem });

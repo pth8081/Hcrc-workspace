@@ -17,11 +17,12 @@ const { HttpError } = require('./httpErrors');
 
 // Collection ĐÃ chuyển sang dbo.Records — thêm dần theo đúng lộ trình đã thống nhất, mỗi bước 1
 // collection (Bước 6c: submissions, Bước 6d: docs, Bước 6e: carRegs, Bước 6f: officeReqs, Bước 6g:
-// contracts). Khác 4 collection trước (dùng chung 2 engine createValidation.js/workflowEngine.js qua
-// routes/create.js + routes/workflow.js), contracts SỬA qua route riêng (routes/records.js
-// POST /contracts/:id/edit, dùng lib/recordActions.js::editContract) — vẫn dùng được đúng dispatch
-// withLockedRecordForCollection() ở đây vì hàm sửa chỉ cần 1 bản ghi (không cần cả collection).
-const MIGRATED_COLLECTIONS = new Set(['submissions', 'docs', 'carRegs', 'officeReqs', 'contracts']);
+// contracts, Bước 6h: meetings). Khác 4 collection Bước 6c-6f (dùng chung 2 engine
+// createValidation.js/workflowEngine.js qua routes/create.js + routes/workflow.js), contracts/meetings
+// SỬA qua route riêng đơn giản (routes/records.js POST /contracts/:id/edit,
+// routes/meetingActions.js POST /:id/approve|cancel) — vẫn dùng được đúng dispatch
+// withLockedRecordForCollection() ở đây vì các hàm sửa chỉ cần 1 bản ghi (không cần cả collection).
+const MIGRATED_COLLECTIONS = new Set(['submissions', 'docs', 'carRegs', 'officeReqs', 'contracts', 'meetings']);
 
 function toRecord(row) {
   return JSON.parse(row.Payload);
