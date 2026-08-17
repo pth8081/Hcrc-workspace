@@ -598,6 +598,7 @@
       <div class="bg-white p-3 rounded border text-xs flex flex-wrap items-center gap-3">
         <label class="font-semibold text-gray-600">Xem lịch ngày:</label>
         <input id="meetingCalDate" type="date" onchange="renderMeetingCalendar()" class="border p-1.5 rounded">
+        <span class="text-gray-500 italic">Kéo chuột hoặc giữ Shift rồi bấm ô thứ 2 (cùng cột phòng) để chọn nhiều khung giờ liên tiếp</span>
         <div class="flex items-center gap-1.5 ml-auto">
           <span class="inline-block w-4 h-4 bg-white border border-gray-300"></span><span class="text-gray-600">Còn trống (bấm để đặt)</span>
           <span class="inline-block w-4 h-4 bg-red-500 border border-red-600 ml-3"></span><span class="text-gray-600">Đã có lịch (bấm để xem)</span>
@@ -6911,8 +6912,15 @@ function setMeetingSubTab(subTab) {
   if (subTab === 'CALENDAR') renderMeetingCalendar();
 }
 
-// Lưới xem nhanh phòng trống/bận theo ngày — ô trắng bấm để đặt nhanh (đổ sẵn phòng/ngày/giờ sang
-// tab Đăng Ký), ô đỏ bấm để xem nhanh thông tin lịch đang chiếm chỗ đó.
+// Lưới xem nhanh phòng trống/bận theo ngày — bấm đơn 1 ô: ô trắng đặt nhanh 1 tiếng, ô đỏ xem thông
+// tin lịch đang chiếm chỗ. Ngoài ra hỗ trợ chọn NHIỀU ô liên tiếp trong CÙNG 1 cột phòng kiểu Outlook
+// (kéo chuột, hoặc bấm 1 ô rồi giữ Shift bấm ô thứ 2) để đổ sẵn đúng khoảng thời gian dài hơn sang tab
+// Đăng Ký — xem wireMeetingCalendarSelection() ngay dưới.
+let meetingCalCurrentDate = null;
+let meetingCalSlots = [];
+let meetingCalDrag = null;            // { roomIdx, anchorRow, currentRow } khi đang giữ chuột kéo chọn
+let meetingCalLastClickedSlot = null; // { roomIdx, rowIdx } của lần bấm gần nhất, dùng cho Shift+bấm
+
 function renderMeetingCalendar() {
   const dateInput = document.getElementById('meetingCalDate');
   if (!dateInput) return;
@@ -6921,13 +6929,21 @@ function renderMeetingCalendar() {
   const grid = document.getElementById('meetingCalendarGrid');
   if (!grid) return;
 
+  // Bấm 1 ô (không giữ Shift) tự nhảy sang tab Đăng Ký ngay (xem handleMeetingSingleSlotClick) — vì
+  // vậy CHỈ xoá "ô bấm gần nhất" khi thật sự đổi NGÀY xem (không đổi khi chỉ qua lại giữa 2 tab con
+  // Đăng Ký/Lịch Họp cùng ngày). Nhờ vậy vẫn giữ Shift+bấm được: bấm ô A (nhảy sang Đăng Ký) -> quay
+  // lại tab Lịch Họp -> giữ Shift bấm ô B -> chọn đúng khoảng A-B, dù có nhảy tab ở giữa.
+  if (meetingCalCurrentDate !== dateStr) meetingCalLastClickedSlot = null;
+  meetingCalCurrentDate = dateStr;
+  meetingCalDrag = null;
   const slots = generateMeetingTimeSlots();
+  meetingCalSlots = slots;
 
-  let html = '<div class="overflow-x-auto"><table class="w-full border-collapse border text-xs bg-white">';
+  let html = '<div class="overflow-x-auto"><table class="w-full border-collapse border text-xs bg-white select-none">';
   html += '<thead><tr class="bg-gray-100"><th class="border p-2 w-16">Giờ</th>' +
     MEETING_ROOMS.map(r => `<th class="border p-2">${escapeHtml(r.short)}</th>`).join('') + '</tr></thead><tbody>';
 
-  slots.forEach(slot => {
+  slots.forEach((slot, rowIdx) => {
     const slotStart = new Date(`${dateStr}T${slot}:00`);
     const slotEnd = new Date(slotStart.getTime() + 30 * 60000);
     html += `<tr><td class="border p-1 text-center text-gray-500 font-mono">${slot}</td>`;
@@ -6940,15 +6956,95 @@ function renderMeetingCalendar() {
         return slotStart < mEnd && mStart < slotEnd;
       });
       if (booking) {
-        html += `<td class="border p-1 h-6 text-center bg-red-500 hover:bg-red-600 cursor-pointer" title="${escapeHtml(booking.title)} — bấm để xem" onclick="showMeetingSlotInfo(${booking.id})"></td>`;
+        html += `<td class="meeting-cell border p-1 h-6 text-center bg-red-500 hover:bg-red-600 cursor-pointer" data-room-idx="${ridx}" data-row-idx="${rowIdx}" data-booking-id="${booking.id}" title="${escapeHtml(booking.title)} — bấm để xem, kéo/Shift+bấm để chọn khoảng"></td>`;
       } else {
-        html += `<td class="border p-1 h-6 text-center bg-white hover:bg-emerald-50 cursor-pointer" title="Còn trống — bấm để đặt" onclick="quickBookMeetingSlot(${ridx}, '${dateStr}', '${slot}')"></td>`;
+        html += `<td class="meeting-cell border p-1 h-6 text-center bg-white hover:bg-emerald-50 cursor-pointer" data-room-idx="${ridx}" data-row-idx="${rowIdx}" title="Còn trống — bấm để đặt, kéo hoặc giữ Shift+bấm để chọn nhiều khung giờ liên tiếp"></td>`;
       }
     });
     html += '</tr>';
   });
   html += '</tbody></table></div>';
   grid.innerHTML = html;
+  wireMeetingCalendarSelection(grid);
+}
+
+// Gắn sự kiện chọn ô — chỉ 1 lần cho mỗi lần tạo mới #meetingCalendarGrid (bản thân div này không bị
+// thay thế khi chỉ đổi ngày, chỉ innerHTML bên trong đổi, nên guard bằng cờ trên chính node là đủ,
+// không lo gắn trùng listener qua các lần đổi ngày).
+function wireMeetingCalendarSelection(grid) {
+  if (grid._meetingSelectionWired) return;
+  grid._meetingSelectionWired = true;
+
+  grid.addEventListener('mousedown', (e) => {
+    const cell = e.target.closest('.meeting-cell');
+    if (!cell || e.button !== 0) return;
+    e.preventDefault(); // tránh bôi đen text khi kéo qua nhiều ô
+    const roomIdx = parseInt(cell.dataset.roomIdx, 10);
+    const rowIdx = parseInt(cell.dataset.rowIdx, 10);
+
+    if (e.shiftKey && meetingCalLastClickedSlot && meetingCalLastClickedSlot.roomIdx === roomIdx) {
+      finalizeMeetingSlotSelection(roomIdx, meetingCalLastClickedSlot.rowIdx, rowIdx);
+      meetingCalLastClickedSlot = { roomIdx, rowIdx };
+      return;
+    }
+    meetingCalDrag = { roomIdx, anchorRow: rowIdx, currentRow: rowIdx };
+    highlightMeetingDragRange(grid);
+  });
+
+  grid.addEventListener('mouseover', (e) => {
+    if (!meetingCalDrag) return;
+    const cell = e.target.closest('.meeting-cell');
+    if (!cell) return;
+    const roomIdx = parseInt(cell.dataset.roomIdx, 10);
+    if (roomIdx !== meetingCalDrag.roomIdx) return; // chỉ chọn trong cùng 1 cột phòng
+    const rowIdx = parseInt(cell.dataset.rowIdx, 10);
+    if (rowIdx === meetingCalDrag.currentRow) return;
+    meetingCalDrag.currentRow = rowIdx;
+    highlightMeetingDragRange(grid);
+  });
+
+  // Gắn ở document (không chỉ ở grid) để vẫn chốt được lựa chọn nếu người dùng nhả chuột ngoài lưới.
+  document.addEventListener('mouseup', () => {
+    if (!meetingCalDrag) return;
+    const { roomIdx, anchorRow, currentRow } = meetingCalDrag;
+    meetingCalDrag = null;
+    highlightMeetingDragRange(grid);
+    meetingCalLastClickedSlot = { roomIdx, rowIdx: currentRow };
+    if (anchorRow === currentRow) {
+      handleMeetingSingleSlotClick(roomIdx, anchorRow);
+    } else {
+      finalizeMeetingSlotSelection(roomIdx, anchorRow, currentRow);
+    }
+  });
+}
+
+function highlightMeetingDragRange(grid) {
+  if (!grid) grid = document.getElementById('meetingCalendarGrid');
+  if (!grid) return;
+  const active = meetingCalDrag;
+  const lo = active ? Math.min(active.anchorRow, active.currentRow) : -1;
+  const hi = active ? Math.max(active.anchorRow, active.currentRow) : -1;
+  grid.querySelectorAll('.meeting-cell').forEach(cell => {
+    const inRange = !!active && parseInt(cell.dataset.roomIdx, 10) === active.roomIdx &&
+      parseInt(cell.dataset.rowIdx, 10) >= lo && parseInt(cell.dataset.rowIdx, 10) <= hi;
+    cell.classList.toggle('ring-2', inRange);
+    cell.classList.toggle('ring-inset', inRange);
+    cell.classList.toggle('ring-emerald-600', inRange);
+  });
+}
+
+// Bấm đơn (không kéo, không Shift) đúng 1 ô — giữ nguyên hành vi cũ: ô đỏ xem thông tin, ô trắng đặt
+// nhanh 1 tiếng.
+function handleMeetingSingleSlotClick(roomIdx, rowIdx) {
+  const grid = document.getElementById('meetingCalendarGrid');
+  const cell = grid && grid.querySelector(`.meeting-cell[data-room-idx="${roomIdx}"][data-row-idx="${rowIdx}"]`);
+  if (cell && cell.dataset.bookingId) {
+    showMeetingSlotInfo(parseInt(cell.dataset.bookingId, 10));
+    return;
+  }
+  const slot = meetingCalSlots[rowIdx];
+  if (!slot) return;
+  quickBookMeetingSlot(roomIdx, meetingCalCurrentDate, slot);
 }
 
 function showMeetingSlotInfo(id) {
@@ -6968,6 +7064,25 @@ function quickBookMeetingSlot(roomIdx, dateStr, slot) {
   const startDate = new Date(`${dateStr}T${slot}:00`);
   document.getElementById('meetingStartTime').value = toDatetimeLocalValue(startDate);
   const endDate = new Date(startDate.getTime() + 60 * 60000);
+  document.getElementById('meetingEndTime').value = toDatetimeLocalValue(endDate);
+  document.querySelector('#meetingRegisterTabContent form').scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+// Chọn nhiều ô liên tiếp trong cùng 1 cột phòng (kéo chuột hoặc Shift+bấm) -> chuyển sang tab Đăng Ký,
+// đổ sẵn phòng/ngày + khoảng giờ đúng bằng khoảng đã chọn (không cố định 1 tiếng như bấm đơn).
+function finalizeMeetingSlotSelection(roomIdx, rowA, rowB) {
+  const room = MEETING_ROOMS[roomIdx];
+  if (!room) return;
+  const lo = Math.min(rowA, rowB);
+  const hi = Math.max(rowA, rowB);
+  const startSlot = meetingCalSlots[lo];
+  const endSlotStart = meetingCalSlots[hi];
+  if (!startSlot || !endSlotStart) return;
+  setMeetingSubTab('REGISTER');
+  document.getElementById('meetingRoom').value = room.name;
+  const startDate = new Date(`${meetingCalCurrentDate}T${startSlot}:00`);
+  const endDate = new Date(new Date(`${meetingCalCurrentDate}T${endSlotStart}:00`).getTime() + 30 * 60000);
+  document.getElementById('meetingStartTime').value = toDatetimeLocalValue(startDate);
   document.getElementById('meetingEndTime').value = toDatetimeLocalValue(endDate);
   document.querySelector('#meetingRegisterTabContent form').scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
