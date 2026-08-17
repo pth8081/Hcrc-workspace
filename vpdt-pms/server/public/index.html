@@ -228,9 +228,13 @@
               <option value="Thượng khẩn">⚡ Thượng khẩn</option>
             </select>
           </div>
-          <div class="md:col-span-4">
-            <label class="block font-semibold text-gray-600 mb-1">Tệp Đính Kèm Tờ Trình</label>
+          <div class="md:col-span-2">
+            <label class="block font-semibold text-gray-600 mb-1">Tờ Trình</label>
             <input id="subFile" type="file" accept=".pdf,.doc,.docx,.xls,.xlsx,image/*" class="w-full border p-1 bg-white rounded">
+          </div>
+          <div class="md:col-span-2">
+            <label class="block font-semibold text-gray-600 mb-1">Tài Liệu Bổ Sung Theo Tờ Trình</label>
+            <input id="subExtraFiles" type="file" multiple accept=".pdf,.doc,.docx,.xls,.xlsx,image/*" class="w-full border p-1 bg-white rounded">
           </div>
         </div>
 
@@ -1944,7 +1948,10 @@
 </div>
 
 <!-- MODAL XEM TÀI LIỆU PROTECTED VIEW -->
-<div id="viewDocModal" class="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center hidden z-50 p-4">
+<!-- Khung Xem Bảo Vệ dùng chung (openFileProtectedView) + "Xem quy trình"/Phiếu Phê Duyệt — thường được
+     MỞ TỪ BÊN TRONG 1 modal xử lý khác (Chi tiết Văn bản trình/Xe/Văn phòng...) đều z-50, nên phải cao
+     hơn (z-[55]) để luôn nổi TRÊN modal đang mở nó, không bị modal đó (đứng sau trong DOM) đè lên. -->
+<div id="viewDocModal" class="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center hidden z-[55] p-4">
   <div class="bg-white rounded-lg shadow-2xl max-w-4xl w-full flex flex-col max-h-[90vh] overflow-hidden">
     <div class="flex justify-between items-center bg-gray-800 text-white p-4">
       <div>
@@ -2488,7 +2495,8 @@ const CORE_FIELD_MANIFEST = {
     { id: 'subType', label: 'Loại Tờ Trình', required: true, optionsKey: 'submissionTypes', optionsIsKeyLabel: true },
     { id: 'subTitle', label: 'Tên / Trích Yếu Tờ Trình', required: true },
     { id: 'subPriority', label: 'Độ Khẩn', required: false },
-    { id: 'subFile', label: 'Tệp Đính Kèm Tờ Trình', required: false },
+    { id: 'subFile', label: 'Tờ Trình', required: false },
+    { id: 'subExtraFiles', label: 'Tài Liệu Bổ Sung Theo Tờ Trình', required: false },
     { id: 'subContent', label: 'Nội Dung Trình Chi Tiết & Đề Xuất Cụ Thể', required: true }
   ],
   CONTRACT: [
@@ -4949,6 +4957,7 @@ async function doSubmitSubmissionReq(e) {
   const priority = document.getElementById('subPriority').value;
   const content = document.getElementById('subContent').value.trim();
   const fileInput = document.getElementById('subFile');
+  const extraFilesInput = document.getElementById('subExtraFiles');
   const { selectedLayerKeys, selectedLayerMembers } = readSelectedSubmissionLayers();
 
   if (DB.submissions.some(s => s.code === code)) {
@@ -4974,6 +4983,15 @@ async function doSubmitSubmissionReq(e) {
     }
   }
 
+  let extraFiles = [];
+  if (extraFilesInput.files && extraFilesInput.files.length > 0) {
+    try {
+      extraFiles = await Promise.all(Array.from(extraFilesInput.files).map(f => uploadFileToServer(f)));
+    } catch (err) {
+      return alert(`⛔ Tải tài liệu bổ sung thất bại: ${err.message}`);
+    }
+  }
+
   const effectiveWf = buildEffectiveSubmissionWorkflow(type, dept, selectedLayerKeys, selectedLayerMembers);
 
   const subPayload = {
@@ -4986,6 +5004,7 @@ async function doSubmitSubmissionReq(e) {
     fileName: fileName,
     fileUrl: fileUrl,
     fileType: fileType,
+    extraFiles: extraFiles,
     customData: customData,
     createdAt: new Date().toLocaleString('vi-VN'),
     status: 'PENDING',
@@ -5209,16 +5228,20 @@ function renderSubmissionReqs() {
         <td class="border p-2 text-center">${taskStatusBadge}</td>
         <td class="border p-2 text-center space-x-1">
           ${(() => {
-            const primaryBtnHTML = `<button onclick="runSubmissionAction(${sub.id}, 'process')" class="px-2.5 py-1 ${canApprove ? 'bg-amber-600 text-white' : 'bg-gray-600 text-white'} rounded text-xs hover:opacity-90 font-bold">${canApprove ? '✍️ Bút phê / Duyệt' : '👁️ Xem chi tiết'}</button>`;
+            const primaryBtnHTML = `<button onclick="runSubmissionAction(${sub.id}, 'process')" class="px-2.5 py-1 ${canApprove ? 'bg-amber-600 text-white' : 'bg-gray-600 text-white'} rounded text-xs hover:opacity-90 font-bold">${canApprove ? '✍️ Bút phê / Duyệt' : '👁️ Chi tiết'}</button>`;
             const secondaryOptions = [];
+            const canDL = canDownloadFile(currentUser, 'submission', sub.dept, sub.creator);
             if (sub.status === 'APPROVED') {
               secondaryOptions.push({ value: 'viewSlip', label: '👁️ Xem Phiếu' });
-              if (canDownloadFile(currentUser, 'submission', sub.dept, sub.creator)) {
-                secondaryOptions.push({ value: 'downloadSlip', label: '⬇️ Tải' });
+              if (canDL) {
+                secondaryOptions.push({ value: 'downloadSlip', label: '⬇️ Tải phiếu' });
               }
               if (!hasTask && canManageTasks(currentUser)) {
                 secondaryOptions.push({ value: 'createTask', label: '📌 Giao việc' });
               }
+            }
+            if (canDL && (sub.fileUrl || (sub.extraFiles && sub.extraFiles.length))) {
+              secondaryOptions.push({ value: 'downloadAll', label: '📎 Tải All' });
             }
             return buildActionCell(sub.id, primaryBtnHTML, secondaryOptions, 'runSubmissionAction');
           })()}
@@ -5235,7 +5258,39 @@ function runSubmissionAction(id, action) {
     case 'viewSlip': viewSubmissionApprovalSlip(id); break;
     case 'downloadSlip': downloadSubmissionApprovalSlip(id); break;
     case 'createTask': createTaskFromSubmission(id); break;
+    case 'downloadAll': downloadAllSubmissionFiles(id); break;
   }
+}
+
+// "Tải All" — tải TOÀN BỘ tệp gốc đã đính kèm (Tờ trình + mọi Tài liệu bổ sung theo tờ trình), KHÔNG
+// gồm Phiếu Phê Duyệt (chứng từ hệ thống tự tạo, tải riêng qua "Tải phiếu"). Trình duyệt có thể chặn
+// nhiều lượt tải liên tiếp trong CÙNG 1 tick — giãn cách nhẹ (150ms/tệp) để tải đủ tất cả.
+function downloadAllSubmissionFiles(subId) {
+  const sub = DB.submissions.find(s => s.id === subId);
+  if (!sub) return;
+  if (!canDownloadFile(currentUser, 'submission', sub.dept, sub.creator)) {
+    return alert('⛔ Bạn không có quyền tải tệp của văn bản trình này!');
+  }
+
+  const files = [];
+  const subFileSrc = sub.fileUrl || sub.fileData;
+  if (subFileSrc) files.push({ url: subFileSrc, name: sub.fileName || sub.code });
+  (sub.extraFiles || []).forEach((ef, idx) => {
+    if (ef.fileUrl) files.push({ url: ef.fileUrl, name: ef.fileName || `${sub.code}-${idx + 1}` });
+  });
+
+  if (files.length === 0) return alert('Văn bản trình này chưa có tệp đính kèm nào để tải.');
+
+  files.forEach((f, idx) => {
+    setTimeout(() => {
+      const link = document.createElement('a');
+      link.href = f.url;
+      link.download = f.name;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+    }, idx * 150);
+  });
 }
 
 function openProcessSubmissionModal(subId) {
@@ -5265,11 +5320,11 @@ function openProcessSubmissionModal(subId) {
   }
 
   const subFileSrc = sub.fileUrl || sub.fileData;
+  const canDL = canDownloadFile(currentUser, 'submission', sub.dept, sub.creator);
   if (subFileSrc) {
-    const canDL = canDownloadFile(currentUser, 'submission', sub.dept, sub.creator);
     detailsHTML += `
       <div class="border-t pt-2 mt-2 flex items-center justify-between gap-2">
-        <span><b>📎 Tệp đính kèm:</b> ${escapeHtml(sub.fileName || '')}</span>
+        <span><b>📎 Tờ trình:</b> ${escapeHtml(sub.fileName || '')}</span>
         <div class="flex gap-1">
           <button type="button" onclick="viewSubmissionAttachment(${sub.id})" class="px-2 py-1 bg-blue-600 text-white rounded text-[11px] font-bold hover:bg-blue-700">👁️ Xem</button>
           ${canDL
@@ -5280,20 +5335,44 @@ function openProcessSubmissionModal(subId) {
     `;
   }
 
+  if (sub.extraFiles && sub.extraFiles.length > 0) {
+    const extraRows = sub.extraFiles.map((ef, idx) => `
+      <div class="flex items-center justify-between gap-2 ${idx > 0 ? 'border-t pt-1.5 mt-1.5' : ''}">
+        <span class="truncate">📎 ${escapeHtml(ef.fileName || '')}</span>
+        <div class="flex gap-1 shrink-0">
+          <button type="button" onclick="viewSubmissionExtraFile(${sub.id}, ${idx})" class="px-2 py-1 bg-blue-600 text-white rounded text-[11px] font-bold hover:bg-blue-700">👁️ Xem</button>
+          ${canDL
+            ? `<a href="${ef.fileUrl}" download="${escapeHtml(ef.fileName || `${sub.code}-${idx + 1}`)}" class="px-2 py-1 bg-slate-600 text-white rounded text-[11px] font-bold hover:bg-slate-700">⬇️ Tải</a>`
+            : `<span class="text-[11px] text-gray-400 italic">Không có quyền tải tệp</span>`}
+        </div>
+      </div>
+    `).join('');
+    detailsHTML += `
+      <div class="border-t pt-2 mt-2">
+        <div class="font-semibold mb-1">📎 Tài liệu bổ sung theo tờ trình:</div>
+        <div class="space-y-1">${extraRows}</div>
+      </div>
+    `;
+  }
+
   document.getElementById('subModalDetails').innerHTML = detailsHTML;
   document.getElementById('txtSubmissionComment').value = '';
 
-  // Render history
-  const historyHTML = (sub.history || []).map(h => `
+  // Render history — hiện kèm chức danh (nếu có) dưới tên, đồng bộ với chân ký ở Phiếu Phê Duyệt
+  // (buildApprovalSignatureColumnHTML).
+  const historyHTML = (sub.history || []).map(h => {
+    const jobTitle = getUserJobTitle(h.username);
+    return `
     <div class="bg-white p-2 rounded border text-xs space-y-1">
       <div class="flex justify-between font-bold text-gray-700">
-        <span>${escapeHtml(h.approver)} (${escapeHtml(h.username)})</span>
+        <span>${escapeHtml(h.approver)} (${escapeHtml(h.username)})${jobTitle ? ` <span class="text-gray-400 font-normal italic">— ${escapeHtml(jobTitle)}</span>` : ''}</span>
         <span class="text-gray-400 font-normal">${escapeHtml(h.time)}</span>
       </div>
       <div class="text-gray-600">Hành động: <span class="font-bold text-blue-600">${escapeHtml(h.action)}</span></div>
       ${h.comment ? `<div class="text-gray-800 bg-amber-50 p-1.5 rounded border italic">"${escapeHtml(h.comment)}"</div>` : ''}
     </div>
-  `).join('');
+  `;
+  }).join('');
   document.getElementById('subModalHistory').innerHTML = historyHTML || '<div class="text-gray-400 italic">Chưa có lịch sử xử lý.</div>';
 
   renderSubModalInfoRequests(sub);
@@ -5678,7 +5757,8 @@ function buildSubmissionApprovalSlipHTML(sub) {
       <tr><td class="as-label">Độ khẩn:</td><td>${escapeHtml(sub.priority || '')}</td></tr>
       <tr><td class="as-label">Tiêu đề:</td><td>${escapeHtml(sub.title || '')}</td></tr>
       <tr><td class="as-label">Nội dung chi tiết:</td><td>${escapeHtml(sub.content || '')}</td></tr>
-      ${sub.fileName ? `<tr><td class="as-label">Tệp đính kèm:</td><td>${escapeHtml(sub.fileName)}</td></tr>` : ''}
+      ${sub.fileName ? `<tr><td class="as-label">Tờ trình:</td><td>${escapeHtml(sub.fileName)}</td></tr>` : ''}
+      ${sub.extraFiles && sub.extraFiles.length ? `<tr><td class="as-label">Tài liệu bổ sung:</td><td>${sub.extraFiles.map(ef => escapeHtml(ef.fileName || '')).join(', ')}</td></tr>` : ''}
     </table>
     ${extraFieldsHTML}
     ${finalCommentHTML}
@@ -5711,6 +5791,22 @@ function viewSubmissionAttachment(subId) {
     sub: `Phòng ban: ${sub.dept} | Người trình: ${sub.creatorName}`,
     footerInfo: `Văn bản trình: ${sub.title}`,
     fileSrc, fileType: sub.fileType, fileName: sub.fileName
+  });
+}
+
+// Xem trước 1 tệp trong danh sách "Tài liệu bổ sung theo tờ trình" (sub.extraFiles[idx]) — cùng
+// Khung Xem Bảo Vệ với tệp Tờ trình chính (viewSubmissionAttachment).
+function viewSubmissionExtraFile(subId, idx) {
+  const sub = DB.submissions.find(s => s.id === subId);
+  if (!sub) return;
+  const ef = (sub.extraFiles || [])[idx];
+  if (!ef || !ef.fileUrl) return;
+
+  openFileProtectedView({
+    title: `📎 ${ef.fileName || sub.title} (${sub.code})`,
+    sub: `Phòng ban: ${sub.dept} | Người trình: ${sub.creatorName}`,
+    footerInfo: `Tài liệu bổ sung theo tờ trình: ${sub.title}`,
+    fileSrc: ef.fileUrl, fileType: ef.fileType, fileName: ef.fileName
   });
 }
 
