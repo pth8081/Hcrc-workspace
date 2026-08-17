@@ -17,6 +17,12 @@
   -moz-user-select: none;
   -ms-user-select: none;
 }
+/* Cây phân quyền (mục "Sửa Người Dùng"/"Sửa Nhóm Phân Quyền") — mỗi khối quyền gấp gọn bằng
+   <details>/<summary> gốc trình duyệt (không cần JS quản lý trạng thái mở/đóng riêng). */
+.perm-tree-node > summary { list-style: none; cursor: pointer; }
+.perm-tree-node > summary::-webkit-details-marker { display: none; }
+.perm-tree-node > summary .perm-tree-chevron { transition: transform 0.15s ease; display: inline-block; }
+.perm-tree-node[open] > summary .perm-tree-chevron { transform: rotate(90deg); }
 </style>
 </head>
 <body class="bg-gray-100 min-h-screen p-6 font-sans">
@@ -1402,149 +1408,194 @@
           ℹ️ Quyền bên dưới đã tự điền theo nhóm phân quyền đã chọn. Bạn vẫn tick thêm/bớt tuỳ ý để cấp riêng cho người này — sau này nhóm đổi quyền vẫn tự cập nhật cho người này, nhưng phần bạn đã tick thêm/bớt riêng sẽ được giữ nguyên.
         </div>
 
-        <div id="permFieldsContainer" class="space-y-4">
-        <div class="bg-white p-3 rounded border space-y-2 text-xs">
-          <h4 class="font-bold text-gray-800 border-b pb-1 text-sm">0. Quyền Truy Cập Module</h4>
-          <p class="text-[11px] text-gray-500 italic">Công tắc BẬT/TẮT quyền vào từng module, độc lập với quyền Admin. Tắt module nào thì người dùng không vào được module đó, dù có quyền chi tiết bên dưới. Quyền Admin luôn vào được mọi module. Module nào có nhiều phân hệ con (vd Văn phòng) sẽ tự hiện thêm checkbox con bên dưới để cấp quyền từng phần.</p>
-          <div id="moduleAccessCheckboxes" class="grid grid-cols-2 md:grid-cols-5 gap-2"></div>
+        <div class="flex justify-end gap-2 text-[11px]">
+          <button type="button" onclick="setAllPermTreeNodes(true)" class="text-purple-700 font-semibold hover:underline">Mở rộng tất cả</button>
+          <span class="text-gray-300">|</span>
+          <button type="button" onclick="setAllPermTreeNodes(false)" class="text-purple-700 font-semibold hover:underline">Thu gọn tất cả</button>
         </div>
 
-        <div class="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-3 text-xs">
-          <div class="bg-white p-3 rounded border space-y-3">
-            <h4 class="font-bold text-gray-800 border-b pb-1 text-sm">1. Quyền Hệ Thống</h4>
+        <div id="permFieldsContainer" class="space-y-2">
+        <details open class="perm-tree-node bg-white rounded border text-xs">
+          <summary class="flex items-center justify-between gap-2 px-3 py-2 hover:bg-gray-50 rounded">
+            <span class="font-bold text-gray-800 text-sm flex items-center gap-1.5"><span class="perm-tree-chevron text-gray-400">▸</span><span>🔑 0. Quyền Truy Cập Module</span></span>
+            <span id="permTreeBadge_module" class="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-gray-100 text-gray-500">0/0</span>
+          </summary>
+          <div class="p-3 pt-0 space-y-2">
+            <p class="text-[11px] text-gray-500 italic">Công tắc BẬT/TẮT quyền vào từng module, độc lập với quyền Admin. Tắt module nào thì người dùng không vào được module đó, dù có quyền chi tiết bên dưới. Quyền Admin luôn vào được mọi module. Module nào có nhiều phân hệ con (vd Văn phòng) sẽ tự hiện thêm checkbox con bên dưới để cấp quyền từng phần.</p>
+            <div id="moduleAccessCheckboxes" class="grid grid-cols-2 md:grid-cols-5 gap-2"></div>
+          </div>
+        </details>
+
+        <details class="perm-tree-node bg-white rounded border text-xs">
+          <summary class="flex items-center justify-between gap-2 px-3 py-2 hover:bg-gray-50 rounded">
+            <span class="font-bold text-gray-800 text-sm flex items-center gap-1.5"><span class="perm-tree-chevron text-gray-400">▸</span><span>⚙️ 1. Hệ Thống & Chung</span></span>
+            <span id="permTreeBadge_system" class="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-gray-100 text-gray-500">0/0</span>
+          </summary>
+          <div class="p-3 pt-0 grid grid-cols-1 md:grid-cols-3 gap-3">
             <div class="space-y-2">
+              <span class="font-bold text-purple-800 block text-[11px]">Quyền Admin:</span>
               <label class="flex items-center gap-2 text-purple-700 font-semibold cursor-pointer">
                 <input type="checkbox" id="pAdmin"> Quyền Admin (Trang quản trị)
               </label>
             </div>
+            <div class="space-y-2">
+              <span class="font-bold text-emerald-800 block text-[11px]">Người Duyệt:</span>
+              <label class="flex items-center gap-2 text-emerald-700 font-semibold cursor-pointer">
+                <input type="checkbox" id="pCanBeApprover"> ✅ Có thể được chọn làm người duyệt
+              </label>
+              <p class="text-[11px] text-gray-500 italic">Chỉ để LỌC danh sách ứng viên ở màn "Quy trình & Đồng cấp" cho gọn — không tự cấp quyền duyệt. Quyền duyệt thật vẫn do admin tick chọn đích danh ở từng bước.</p>
+              <div>
+                <label class="block font-semibold text-gray-700 mb-1">🔐 Xác thực bổ sung khi bấm Duyệt</label>
+                <select id="pApproverAuthLevel" class="w-full border p-1.5 rounded bg-white text-xs">
+                  <option value="NONE">Không yêu cầu thêm (mặc định)</option>
+                  <option value="PASSWORD">Yêu cầu nhập lại mật khẩu</option>
+                  <option value="OTP_EMAIL">Yêu cầu mã OTP gửi qua email</option>
+                </select>
+                <p class="text-[11px] text-gray-500 italic mt-1">Chỉ áp dụng cho hành động DUYỆT ở Văn bản trình / Đăng ký xe / Văn phòng (không áp dụng Từ chối/Hủy, Tài liệu, Đặt phòng họp). Mã OTP hiện đang ở chế độ mô phỏng giống các email khác của hệ thống (hiện trong log, chưa gửi hộp thư thật) cho tới khi kết nối SMTP thật.</p>
+              </div>
+            </div>
+            <div class="space-y-2">
+              <span class="font-bold text-sky-800 block text-[11px]">Báo Cáo Quản Trị:</span>
+              <label class="flex items-center gap-2 text-sky-700 font-semibold cursor-pointer">
+                <input type="checkbox" id="pCanViewReports"> 📊 Được xem Báo cáo quản trị
+              </label>
+              <p class="text-[11px] text-gray-500 italic">Xem số liệu tổng hợp toàn hệ thống (không phân biệt phòng ban tạo hồ sơ) — Admin luôn xem được mặc định dù không tick.</p>
+            </div>
           </div>
+        </details>
 
-          <div class="bg-white p-3 rounded border space-y-3">
-            <h4 class="font-bold text-indigo-900 border-b pb-1 text-sm">2. Năng Lực Xử Lý (không phụ thuộc phòng ban)</h4>
-            <p class="text-[11px] text-gray-500 italic">Phạm vi phòng ban của từng module (Xem/Tạo mới/Tải xuống) nay cấu hình riêng ở các khối 4-9 bên dưới. Phân hệ con của Văn phòng (Mua Bán/Sửa Chữa/Đầu Tư) nay cấp quyền ở mục 0 (lồng dưới module "Phê Duyệt Văn Phòng").</p>
-            <div class="space-y-1.5">
-              <div class="space-y-1">
-                <span class="font-bold text-emerald-800 block text-[11px]">📅 Phòng Họp:</span>
-                <label class="flex items-center gap-1.5 text-gray-700 cursor-pointer">
-                  <input type="checkbox" id="pMeetingApprove"> ✅ Phê duyệt phòng họp (toàn công ty)
+        <details class="perm-tree-node bg-white rounded border text-xs">
+          <summary class="flex items-center justify-between gap-2 px-3 py-2 hover:bg-gray-50 rounded">
+            <span class="font-bold text-gray-800 text-sm flex items-center gap-1.5"><span class="perm-tree-chevron text-gray-400">▸</span><span>📂 2. Tài Liệu</span></span>
+            <span id="permTreeBadge_doc" class="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-gray-100 text-gray-500">0/0</span>
+          </summary>
+          <div class="p-3 pt-0 grid grid-cols-2 md:grid-cols-4 gap-3">
+            <div>
+              <div class="flex justify-between items-center mb-1">
+                <span class="font-semibold text-gray-600 text-[11px]">Tải lên</span>
+                <label class="flex items-center gap-1 font-bold text-blue-700 cursor-pointer text-[11px]">
+                  <input type="checkbox" id="pUploadAll" onchange="toggleScopeGroup('pUploadAll', 'pUploadDept')"><span>ALL</span>
                 </label>
-                <label class="flex items-center gap-1.5 text-gray-700 cursor-pointer">
-                  <input type="checkbox" id="pMeetingCancel"> ❌ Hủy phòng họp (toàn công ty)
+              </div>
+              <div id="pUploadDeptContainer" class="space-y-1 pl-1 max-h-32 overflow-y-auto"></div>
+            </div>
+            <div>
+              <div class="flex justify-between items-center mb-1">
+                <span class="font-semibold text-gray-600 text-[11px]">Xem Bản Nháp</span>
+                <label class="flex items-center gap-1 font-bold text-amber-700 cursor-pointer text-[11px]">
+                  <input type="checkbox" id="pViewDraftAll" onchange="toggleScopeGroup('pViewDraftAll', 'pViewDraftDept')"><span>ALL</span>
                 </label>
               </div>
+              <div id="pViewDraftDeptContainer" class="space-y-1 pl-1 max-h-32 overflow-y-auto"></div>
+            </div>
+            <div>
+              <div class="flex justify-between items-center mb-1">
+                <span class="font-semibold text-gray-600 text-[11px]">Xem Đã Duyệt</span>
+                <label class="flex items-center gap-1 font-bold text-emerald-700 cursor-pointer text-[11px]">
+                  <input type="checkbox" id="pViewApprovedAll" onchange="toggleScopeGroup('pViewApprovedAll', 'pViewApprovedDept')"><span>ALL</span>
+                </label>
+              </div>
+              <div id="pViewApprovedDeptContainer" class="space-y-1 pl-1 max-h-32 overflow-y-auto"></div>
+            </div>
+            <div>
+              <div class="flex justify-between items-center mb-1">
+                <span class="font-semibold text-gray-600 text-[11px]">Tải Xuống</span>
+                <label class="flex items-center gap-1 font-bold text-rose-700 cursor-pointer text-[11px]">
+                  <input type="checkbox" id="pDocDownloadAll" onchange="toggleScopeGroup('pDocDownloadAll', 'pDocDownloadDept')"><span>ALL</span>
+                </label>
+              </div>
+              <div id="pDocDownloadDeptContainer" class="space-y-1 pl-1 max-h-32 overflow-y-auto"></div>
             </div>
           </div>
+        </details>
 
-          <div class="bg-white p-3 rounded border space-y-2 lg:col-span-3">
-            <h4 class="font-bold text-blue-800 text-sm border-b pb-1">3. 📂 Quyền Module Tài Liệu</h4>
-            <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
-              <div>
-                <div class="flex justify-between items-center mb-1">
-                  <span class="font-semibold text-gray-600 text-[11px]">Tải lên</span>
-                  <label class="flex items-center gap-1 font-bold text-blue-700 cursor-pointer text-[11px]">
-                    <input type="checkbox" id="pUploadAll" onchange="toggleScopeGroup('pUploadAll', 'pUploadDept')"><span>ALL</span>
-                  </label>
-                </div>
-                <div id="pUploadDeptContainer" class="space-y-1 pl-1 max-h-32 overflow-y-auto"></div>
+        <details class="perm-tree-node bg-white rounded border text-xs">
+          <summary class="flex items-center justify-between gap-2 px-3 py-2 hover:bg-gray-50 rounded">
+            <span class="font-bold text-gray-800 text-sm flex items-center gap-1.5"><span class="perm-tree-chevron text-gray-400">▸</span><span>📜 3. Văn Bản Trình</span></span>
+            <span id="permTreeBadge_sub" class="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-gray-100 text-gray-500">0/0</span>
+          </summary>
+          <div class="p-3 pt-0 grid grid-cols-3 gap-3">
+            <div>
+              <div class="flex justify-between items-center mb-1">
+                <span class="font-semibold text-gray-600 text-[11px]">Xem</span>
+                <label class="flex items-center gap-1 font-bold text-amber-700 cursor-pointer text-[11px]">
+                  <input type="checkbox" id="pSubViewAll" onchange="toggleScopeGroup('pSubViewAll', 'pSubViewDept')"><span>ALL</span>
+                </label>
               </div>
-              <div>
-                <div class="flex justify-between items-center mb-1">
-                  <span class="font-semibold text-gray-600 text-[11px]">Xem Bản Nháp</span>
-                  <label class="flex items-center gap-1 font-bold text-amber-700 cursor-pointer text-[11px]">
-                    <input type="checkbox" id="pViewDraftAll" onchange="toggleScopeGroup('pViewDraftAll', 'pViewDraftDept')"><span>ALL</span>
-                  </label>
-                </div>
-                <div id="pViewDraftDeptContainer" class="space-y-1 pl-1 max-h-32 overflow-y-auto"></div>
+              <div id="pSubViewDeptContainer" class="space-y-1 pl-1 max-h-32 overflow-y-auto"></div>
+            </div>
+            <div>
+              <div class="flex justify-between items-center mb-1">
+                <span class="font-semibold text-gray-600 text-[11px]">Tạo mới</span>
+                <label class="flex items-center gap-1 font-bold text-amber-700 cursor-pointer text-[11px]">
+                  <input type="checkbox" id="pSubCreateAll" onchange="toggleScopeGroup('pSubCreateAll', 'pSubCreateDept')"><span>ALL</span>
+                </label>
               </div>
-              <div>
-                <div class="flex justify-between items-center mb-1">
-                  <span class="font-semibold text-gray-600 text-[11px]">Xem Đã Duyệt</span>
-                  <label class="flex items-center gap-1 font-bold text-emerald-700 cursor-pointer text-[11px]">
-                    <input type="checkbox" id="pViewApprovedAll" onchange="toggleScopeGroup('pViewApprovedAll', 'pViewApprovedDept')"><span>ALL</span>
-                  </label>
-                </div>
-                <div id="pViewApprovedDeptContainer" class="space-y-1 pl-1 max-h-32 overflow-y-auto"></div>
+              <div id="pSubCreateDeptContainer" class="space-y-1 pl-1 max-h-32 overflow-y-auto"></div>
+            </div>
+            <div>
+              <div class="flex justify-between items-center mb-1">
+                <span class="font-semibold text-gray-600 text-[11px]">Tải xuống</span>
+                <label class="flex items-center gap-1 font-bold text-amber-700 cursor-pointer text-[11px]">
+                  <input type="checkbox" id="pSubDownloadAll" onchange="toggleScopeGroup('pSubDownloadAll', 'pSubDownloadDept')"><span>ALL</span>
+                </label>
               </div>
-              <div>
-                <div class="flex justify-between items-center mb-1">
-                  <span class="font-semibold text-gray-600 text-[11px]">Tải Xuống</span>
-                  <label class="flex items-center gap-1 font-bold text-rose-700 cursor-pointer text-[11px]">
-                    <input type="checkbox" id="pDocDownloadAll" onchange="toggleScopeGroup('pDocDownloadAll', 'pDocDownloadDept')"><span>ALL</span>
-                  </label>
-                </div>
-                <div id="pDocDownloadDeptContainer" class="space-y-1 pl-1 max-h-32 overflow-y-auto"></div>
-              </div>
+              <div id="pSubDownloadDeptContainer" class="space-y-1 pl-1 max-h-32 overflow-y-auto"></div>
             </div>
           </div>
+        </details>
 
-          <div class="bg-white p-3 rounded border space-y-2 lg:col-span-3">
-            <h4 class="font-bold text-amber-800 text-sm border-b pb-1">4. 📜 Tờ Trình — Phạm Vi Theo Phòng Ban</h4>
-            <div class="grid grid-cols-3 gap-3">
-              <div>
-                <div class="flex justify-between items-center mb-1">
-                  <span class="font-semibold text-gray-600 text-[11px]">Xem</span>
-                  <label class="flex items-center gap-1 font-bold text-amber-700 cursor-pointer text-[11px]">
-                    <input type="checkbox" id="pSubViewAll" onchange="toggleScopeGroup('pSubViewAll', 'pSubViewDept')"><span>ALL</span>
-                  </label>
-                </div>
-                <div id="pSubViewDeptContainer" class="space-y-1 pl-1 max-h-32 overflow-y-auto"></div>
+        <details class="perm-tree-node bg-white rounded border text-xs">
+          <summary class="flex items-center justify-between gap-2 px-3 py-2 hover:bg-gray-50 rounded">
+            <span class="font-bold text-gray-800 text-sm flex items-center gap-1.5"><span class="perm-tree-chevron text-gray-400">▸</span><span>📄 4. Hợp Đồng & Giấy Phép</span></span>
+            <span id="permTreeBadge_contract" class="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-gray-100 text-gray-500">0/0</span>
+          </summary>
+          <div class="p-3 pt-0 grid grid-cols-3 gap-3">
+            <div>
+              <div class="flex justify-between items-center mb-1">
+                <span class="font-semibold text-gray-600 text-[11px]">Xem</span>
+                <label class="flex items-center gap-1 font-bold text-cyan-700 cursor-pointer text-[11px]">
+                  <input type="checkbox" id="pContractViewAll" onchange="toggleScopeGroup('pContractViewAll', 'pContractViewDept')"><span>ALL</span>
+                </label>
               </div>
-              <div>
-                <div class="flex justify-between items-center mb-1">
-                  <span class="font-semibold text-gray-600 text-[11px]">Tạo mới</span>
-                  <label class="flex items-center gap-1 font-bold text-amber-700 cursor-pointer text-[11px]">
-                    <input type="checkbox" id="pSubCreateAll" onchange="toggleScopeGroup('pSubCreateAll', 'pSubCreateDept')"><span>ALL</span>
-                  </label>
-                </div>
-                <div id="pSubCreateDeptContainer" class="space-y-1 pl-1 max-h-32 overflow-y-auto"></div>
+              <div id="pContractViewDeptContainer" class="space-y-1 pl-1 max-h-32 overflow-y-auto"></div>
+            </div>
+            <div>
+              <div class="flex justify-between items-center mb-1">
+                <span class="font-semibold text-gray-600 text-[11px]">Tạo mới</span>
+                <label class="flex items-center gap-1 font-bold text-cyan-700 cursor-pointer text-[11px]">
+                  <input type="checkbox" id="pContractCreateAll" onchange="toggleScopeGroup('pContractCreateAll', 'pContractCreateDept')"><span>ALL</span>
+                </label>
               </div>
-              <div>
-                <div class="flex justify-between items-center mb-1">
-                  <span class="font-semibold text-gray-600 text-[11px]">Tải xuống</span>
-                  <label class="flex items-center gap-1 font-bold text-amber-700 cursor-pointer text-[11px]">
-                    <input type="checkbox" id="pSubDownloadAll" onchange="toggleScopeGroup('pSubDownloadAll', 'pSubDownloadDept')"><span>ALL</span>
-                  </label>
-                </div>
-                <div id="pSubDownloadDeptContainer" class="space-y-1 pl-1 max-h-32 overflow-y-auto"></div>
+              <div id="pContractCreateDeptContainer" class="space-y-1 pl-1 max-h-32 overflow-y-auto"></div>
+            </div>
+            <div>
+              <div class="flex justify-between items-center mb-1">
+                <span class="font-semibold text-gray-600 text-[11px]">Tải xuống</span>
+                <label class="flex items-center gap-1 font-bold text-cyan-700 cursor-pointer text-[11px]">
+                  <input type="checkbox" id="pContractDownloadAll" onchange="toggleScopeGroup('pContractDownloadAll', 'pContractDownloadDept')"><span>ALL</span>
+                </label>
               </div>
+              <div id="pContractDownloadDeptContainer" class="space-y-1 pl-1 max-h-32 overflow-y-auto"></div>
             </div>
           </div>
+        </details>
 
-          <div class="bg-white p-3 rounded border space-y-2 lg:col-span-3">
-            <h4 class="font-bold text-cyan-800 text-sm border-b pb-1">5. 📄 Hợp Đồng & Giấy Phép — Phạm Vi Theo Phòng Ban</h4>
-            <div class="grid grid-cols-3 gap-3">
-              <div>
-                <div class="flex justify-between items-center mb-1">
-                  <span class="font-semibold text-gray-600 text-[11px]">Xem</span>
-                  <label class="flex items-center gap-1 font-bold text-cyan-700 cursor-pointer text-[11px]">
-                    <input type="checkbox" id="pContractViewAll" onchange="toggleScopeGroup('pContractViewAll', 'pContractViewDept')"><span>ALL</span>
-                  </label>
-                </div>
-                <div id="pContractViewDeptContainer" class="space-y-1 pl-1 max-h-32 overflow-y-auto"></div>
-              </div>
-              <div>
-                <div class="flex justify-between items-center mb-1">
-                  <span class="font-semibold text-gray-600 text-[11px]">Tạo mới</span>
-                  <label class="flex items-center gap-1 font-bold text-cyan-700 cursor-pointer text-[11px]">
-                    <input type="checkbox" id="pContractCreateAll" onchange="toggleScopeGroup('pContractCreateAll', 'pContractCreateDept')"><span>ALL</span>
-                  </label>
-                </div>
-                <div id="pContractCreateDeptContainer" class="space-y-1 pl-1 max-h-32 overflow-y-auto"></div>
-              </div>
-              <div>
-                <div class="flex justify-between items-center mb-1">
-                  <span class="font-semibold text-gray-600 text-[11px]">Tải xuống</span>
-                  <label class="flex items-center gap-1 font-bold text-cyan-700 cursor-pointer text-[11px]">
-                    <input type="checkbox" id="pContractDownloadAll" onchange="toggleScopeGroup('pContractDownloadAll', 'pContractDownloadDept')"><span>ALL</span>
-                  </label>
-                </div>
-                <div id="pContractDownloadDeptContainer" class="space-y-1 pl-1 max-h-32 overflow-y-auto"></div>
-              </div>
+        <details class="perm-tree-node bg-white rounded border text-xs">
+          <summary class="flex items-center justify-between gap-2 px-3 py-2 hover:bg-gray-50 rounded">
+            <span class="font-bold text-gray-800 text-sm flex items-center gap-1.5"><span class="perm-tree-chevron text-gray-400">▸</span><span>📅 5. Phòng Họp</span></span>
+            <span id="permTreeBadge_meeting" class="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-gray-100 text-gray-500">0/0</span>
+          </summary>
+          <div class="p-3 pt-0 space-y-3">
+            <div class="space-y-1">
+              <span class="font-bold text-emerald-800 block text-[11px]">Toàn công ty (không theo phòng ban):</span>
+              <label class="flex items-center gap-1.5 text-gray-700 cursor-pointer">
+                <input type="checkbox" id="pMeetingApprove"> ✅ Phê duyệt phòng họp (toàn công ty)
+              </label>
+              <label class="flex items-center gap-1.5 text-gray-700 cursor-pointer">
+                <input type="checkbox" id="pMeetingCancel"> ❌ Hủy phòng họp (toàn công ty)
+              </label>
             </div>
-          </div>
-
-          <div class="bg-white p-3 rounded border space-y-2 lg:col-span-2">
-            <h4 class="font-bold text-emerald-800 text-sm border-b pb-1">6. 📅 Phòng Họp — Phạm Vi Theo Phòng Ban</h4>
             <div class="grid grid-cols-2 gap-3">
               <div>
                 <div class="flex justify-between items-center mb-1">
@@ -1566,43 +1617,51 @@
               </div>
             </div>
           </div>
+        </details>
 
-          <div class="bg-white p-3 rounded border space-y-2 lg:col-span-3">
-            <h4 class="font-bold text-indigo-800 text-sm border-b pb-1">7. 🚗 Đăng Ký Xe — Phạm Vi Theo Phòng Ban</h4>
-            <div class="grid grid-cols-3 gap-3">
-              <div>
-                <div class="flex justify-between items-center mb-1">
-                  <span class="font-semibold text-gray-600 text-[11px]">Xem</span>
-                  <label class="flex items-center gap-1 font-bold text-indigo-700 cursor-pointer text-[11px]">
-                    <input type="checkbox" id="pCarViewAll" onchange="toggleScopeGroup('pCarViewAll', 'pCarViewDept')"><span>ALL</span>
-                  </label>
-                </div>
-                <div id="pCarViewDeptContainer" class="space-y-1 pl-1 max-h-32 overflow-y-auto"></div>
+        <details class="perm-tree-node bg-white rounded border text-xs">
+          <summary class="flex items-center justify-between gap-2 px-3 py-2 hover:bg-gray-50 rounded">
+            <span class="font-bold text-gray-800 text-sm flex items-center gap-1.5"><span class="perm-tree-chevron text-gray-400">▸</span><span>🚗 6. Đăng Ký Xe</span></span>
+            <span id="permTreeBadge_car" class="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-gray-100 text-gray-500">0/0</span>
+          </summary>
+          <div class="p-3 pt-0 grid grid-cols-3 gap-3">
+            <div>
+              <div class="flex justify-between items-center mb-1">
+                <span class="font-semibold text-gray-600 text-[11px]">Xem</span>
+                <label class="flex items-center gap-1 font-bold text-indigo-700 cursor-pointer text-[11px]">
+                  <input type="checkbox" id="pCarViewAll" onchange="toggleScopeGroup('pCarViewAll', 'pCarViewDept')"><span>ALL</span>
+                </label>
               </div>
-              <div>
-                <div class="flex justify-between items-center mb-1">
-                  <span class="font-semibold text-gray-600 text-[11px]">Tạo mới</span>
-                  <label class="flex items-center gap-1 font-bold text-indigo-700 cursor-pointer text-[11px]">
-                    <input type="checkbox" id="pCarCreateAll" onchange="toggleScopeGroup('pCarCreateAll', 'pCarCreateDept')"><span>ALL</span>
-                  </label>
-                </div>
-                <div id="pCarCreateDeptContainer" class="space-y-1 pl-1 max-h-32 overflow-y-auto"></div>
+              <div id="pCarViewDeptContainer" class="space-y-1 pl-1 max-h-32 overflow-y-auto"></div>
+            </div>
+            <div>
+              <div class="flex justify-between items-center mb-1">
+                <span class="font-semibold text-gray-600 text-[11px]">Tạo mới</span>
+                <label class="flex items-center gap-1 font-bold text-indigo-700 cursor-pointer text-[11px]">
+                  <input type="checkbox" id="pCarCreateAll" onchange="toggleScopeGroup('pCarCreateAll', 'pCarCreateDept')"><span>ALL</span>
+                </label>
               </div>
-              <div>
-                <div class="flex justify-between items-center mb-1">
-                  <span class="font-semibold text-gray-600 text-[11px]">Tải xuống</span>
-                  <label class="flex items-center gap-1 font-bold text-indigo-700 cursor-pointer text-[11px]">
-                    <input type="checkbox" id="pCarDownloadAll" onchange="toggleScopeGroup('pCarDownloadAll', 'pCarDownloadDept')"><span>ALL</span>
-                  </label>
-                </div>
-                <div id="pCarDownloadDeptContainer" class="space-y-1 pl-1 max-h-32 overflow-y-auto"></div>
+              <div id="pCarCreateDeptContainer" class="space-y-1 pl-1 max-h-32 overflow-y-auto"></div>
+            </div>
+            <div>
+              <div class="flex justify-between items-center mb-1">
+                <span class="font-semibold text-gray-600 text-[11px]">Tải xuống</span>
+                <label class="flex items-center gap-1 font-bold text-indigo-700 cursor-pointer text-[11px]">
+                  <input type="checkbox" id="pCarDownloadAll" onchange="toggleScopeGroup('pCarDownloadAll', 'pCarDownloadDept')"><span>ALL</span>
+                </label>
               </div>
+              <div id="pCarDownloadDeptContainer" class="space-y-1 pl-1 max-h-32 overflow-y-auto"></div>
             </div>
           </div>
+        </details>
 
-          <div class="bg-white p-3 rounded border space-y-2 lg:col-span-3">
-            <h4 class="font-bold text-teal-800 text-sm border-b pb-1">8. 🏢 Văn Phòng (Mua/Sửa/Đầu Tư) — Phạm Vi Theo Phòng Ban</h4>
-            <p class="text-[11px] text-gray-500 italic">Dùng chung cho cả 3 phân hệ VP; bật/tắt từng phân hệ cụ thể ở khối 0.</p>
+        <details class="perm-tree-node bg-white rounded border text-xs">
+          <summary class="flex items-center justify-between gap-2 px-3 py-2 hover:bg-gray-50 rounded">
+            <span class="font-bold text-gray-800 text-sm flex items-center gap-1.5"><span class="perm-tree-chevron text-gray-400">▸</span><span>🏢 7. Văn Phòng (Mua/Sửa/Đầu Tư)</span></span>
+            <span id="permTreeBadge_office" class="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-gray-100 text-gray-500">0/0</span>
+          </summary>
+          <div class="p-3 pt-0 space-y-2">
+            <p class="text-[11px] text-gray-500 italic">Dùng chung cho cả 3 phân hệ VP; bật/tắt từng phân hệ cụ thể ở mục 0.</p>
             <div class="grid grid-cols-3 gap-3">
               <div>
                 <div class="flex justify-between items-center mb-1">
@@ -1633,35 +1692,14 @@
               </div>
             </div>
           </div>
+        </details>
 
-          <div class="bg-white p-3 rounded border space-y-2">
-            <h4 class="font-bold text-gray-800 border-b pb-1 text-sm">9. Người Duyệt</h4>
-            <label class="flex items-center gap-2 text-emerald-700 font-semibold cursor-pointer">
-              <input type="checkbox" id="pCanBeApprover"> ✅ Có thể được chọn làm người duyệt
-            </label>
-            <p class="text-[11px] text-gray-500 italic">Chỉ để LỌC danh sách ứng viên ở màn "Quy trình & Đồng cấp" cho gọn — không tự cấp quyền duyệt. Quyền duyệt thật vẫn do admin tick chọn đích danh ở từng bước.</p>
-
-            <div class="border-t pt-2 mt-1">
-              <label class="block font-semibold text-gray-700 mb-1">🔐 Xác thực bổ sung khi bấm Duyệt</label>
-              <select id="pApproverAuthLevel" class="w-full border p-1.5 rounded bg-white text-xs">
-                <option value="NONE">Không yêu cầu thêm (mặc định)</option>
-                <option value="PASSWORD">Yêu cầu nhập lại mật khẩu</option>
-                <option value="OTP_EMAIL">Yêu cầu mã OTP gửi qua email</option>
-              </select>
-              <p class="text-[11px] text-gray-500 italic mt-1">Chỉ áp dụng cho hành động DUYỆT ở Văn bản trình / Đăng ký xe / Văn phòng (không áp dụng Từ chối/Hủy, Tài liệu, Đặt phòng họp). Mã OTP hiện đang ở chế độ mô phỏng giống các email khác của hệ thống (hiện trong log, chưa gửi hộp thư thật) cho tới khi kết nối SMTP thật.</p>
-            </div>
-          </div>
-
-          <div class="bg-white p-3 rounded border space-y-2">
-            <h4 class="font-bold text-gray-800 border-b pb-1 text-sm">10. Báo Cáo Quản Trị</h4>
-            <label class="flex items-center gap-2 text-sky-700 font-semibold cursor-pointer">
-              <input type="checkbox" id="pCanViewReports"> 📊 Được xem Báo cáo quản trị
-            </label>
-            <p class="text-[11px] text-gray-500 italic">Xem số liệu tổng hợp toàn hệ thống (không phân biệt phòng ban tạo hồ sơ) — Admin luôn xem được mặc định dù không tick.</p>
-          </div>
-
-          <div class="bg-white p-3 rounded border space-y-2 lg:col-span-2">
-            <h4 class="font-bold text-fuchsia-800 text-sm border-b pb-1">11. 📣 Truyền Thông Nội Bộ — Quyền Đăng Bài</h4>
+        <details class="perm-tree-node bg-white rounded border text-xs">
+          <summary class="flex items-center justify-between gap-2 px-3 py-2 hover:bg-gray-50 rounded">
+            <span class="font-bold text-gray-800 text-sm flex items-center gap-1.5"><span class="perm-tree-chevron text-gray-400">▸</span><span>📣 8. Truyền Thông Nội Bộ</span></span>
+            <span id="permTreeBadge_internal" class="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-gray-100 text-gray-500">0/0</span>
+          </summary>
+          <div class="p-3 pt-0 space-y-2">
             <p class="text-[11px] text-gray-500 italic">Mọi người dùng đều XEM và tương tác được (bình luận, thả tim) trên cả 4 phân hệ; riêng "Góc chia sẻ" ai cũng đăng được tự do. 3 quyền dưới đây chỉ kiểm soát ai được ĐĂNG BÀI ở Tin nội bộ / Đào tạo / Khen thưởng.</p>
             <div class="grid grid-cols-1 md:grid-cols-3 gap-2">
               <label class="flex items-center gap-2 text-fuchsia-700 font-semibold cursor-pointer">
@@ -1675,9 +1713,14 @@
               </label>
             </div>
           </div>
+        </details>
 
-          <div class="bg-white p-3 rounded border space-y-2 lg:col-span-3">
-            <h4 class="font-bold text-rose-800 text-sm border-b pb-1">12. 📝 Biên Bản Họp & 📋 Công Việc — Quyền Tạo/Xem/Sửa/Xóa/Tải</h4>
+        <details class="perm-tree-node bg-white rounded border text-xs">
+          <summary class="flex items-center justify-between gap-2 px-3 py-2 hover:bg-gray-50 rounded">
+            <span class="font-bold text-gray-800 text-sm flex items-center gap-1.5"><span class="perm-tree-chevron text-gray-400">▸</span><span>📝 9. Biên Bản Họp & 📋 Công Việc</span></span>
+            <span id="permTreeBadge_minutestask" class="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-gray-100 text-gray-500">0/0</span>
+          </summary>
+          <div class="p-3 pt-0 space-y-2">
             <p class="text-[11px] text-gray-500 italic">Mặc định: người TẠO biên bản luôn Xem/Sửa/Xóa/Tải được bản của mình; người có tên trong Thành phần tham dự luôn XEM được (không Tải/Sửa/Xóa). Người NHẬN việc và người GIAO việc luôn xem được công việc liên quan. Các quyền dưới đây mở rộng thêm ra TOÀN BỘ biên bản/công việc của mọi người.</p>
             <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
               <div class="space-y-1">
@@ -1715,7 +1758,7 @@
               </div>
             </div>
           </div>
-        </div>
+        </details>
         </div>
 
         <div class="flex justify-end gap-2 pt-2">
@@ -9765,6 +9808,64 @@ function scopeFromForm(allId, deptPrefix) {
   };
 }
 
+// ==========================================
+// CÂY PHÂN QUYỀN (mục "Sửa Người Dùng"/"Sửa Nhóm Phân Quyền") — mỗi khối quyền là 1 <details> gấp
+// gọn được, có badge tóm tắt "đã cấp X/Y" ngay trên tiêu đề để không cần mở ra mới biết sơ bộ.
+// ==========================================
+
+// Mở/đóng TẤT CẢ khối quyền cùng lúc (nút "Mở rộng tất cả"/"Thu gọn tất cả" phía trên form).
+function setAllPermTreeNodes(open) {
+  document.querySelectorAll('#permFieldsContainer > details.perm-tree-node').forEach(d => { d.open = open; });
+}
+
+// Đếm số "mục quyền" đã cấp / tổng số mục quyền trong 1 khối — dùng CHUNG cho mọi khối, không cần
+// biết ý nghĩa từng quyền cụ thể. 1 "mục" = 1 checkbox độc lập, HOẶC 1 cặp {checkbox ALL + danh sách
+// phòng ban con} tính GỘP là 1 mục (granted nếu ALL được tick HOẶC có ít nhất 1 phòng ban con được
+// tick — khớp đúng cách scopeFromForm() diễn giải), HOẶC 1 <select> (granted nếu khác giá trị mặc
+// định là option đầu tiên, vd pApproverAuthLevel option đầu là "NONE").
+function computePermTreeNodeCount(bodyEl) {
+  let granted = 0, total = 0;
+  const checkboxes = [...bodyEl.querySelectorAll('input[type="checkbox"]')]
+    .filter(cb => !cb.closest('[id$="DeptContainer"]')); // checkbox từng phòng ban chỉ tính gộp vào ALL, không đếm riêng lẻ
+
+  checkboxes.forEach(cb => {
+    total++;
+    if (cb.id.endsWith('All')) {
+      const deptContainer = document.getElementById(cb.id.slice(0, -3) + 'DeptContainer');
+      const anyDeptChecked = deptContainer ? deptContainer.querySelector('input[type="checkbox"]:checked') !== null : false;
+      if (cb.checked || anyDeptChecked) granted++;
+    } else if (cb.checked) {
+      granted++;
+    }
+  });
+
+  [...bodyEl.querySelectorAll('select')].forEach(sel => {
+    total++;
+    if (sel.value && sel.value !== sel.options[0]?.value) granted++;
+  });
+
+  return { granted, total };
+}
+
+// Tính lại toàn bộ badge trên các khối quyền — gọi sau populatePermsForm() (đổ dữ liệu đã lưu lên
+// form) và mỗi khi có thay đổi checkbox/select bên trong (event delegation, xem listener bên dưới).
+function refreshPermTreeBadges() {
+  document.querySelectorAll('#permFieldsContainer > details.perm-tree-node').forEach(node => {
+    const badge = node.querySelector('summary [id^="permTreeBadge_"]');
+    const body = node.querySelector(':scope > div');
+    if (!badge || !body) return;
+    const { granted, total } = computePermTreeNodeCount(body);
+    badge.textContent = `${granted}/${total}`;
+    badge.className = granted > 0
+      ? 'text-[11px] font-semibold px-2 py-0.5 rounded-full bg-purple-100 text-purple-700'
+      : 'text-[11px] font-semibold px-2 py-0.5 rounded-full bg-gray-100 text-gray-500';
+  });
+}
+
+// Event delegation (1 listener duy nhất, không cần gắn riêng cho từng checkbox kể cả các checkbox
+// phòng ban render động sau này) — cập nhật badge ngay khi admin tick/bỏ tick bất kỳ ô nào trong cây.
+document.getElementById('permFieldsContainer')?.addEventListener('change', refreshPermTreeBadges);
+
 // Đọc toàn bộ khối quyền (0-9) từ form — dùng chung cho cả Lưu Người Dùng lẫn Lưu Nhóm Phân Quyền,
 // vì 2 luồng này tái sử dụng ĐÚNG 1 bộ checkbox vật lý trên form (xem toggleUserPermFormMode()).
 function collectPermsFromForm() {
@@ -9911,6 +10012,8 @@ function populatePermsForm(permsInput) {
     const deptPrefix = allId.replace(/All$/, 'Dept');
     toggleScopeGroup(allId, deptPrefix);
   });
+
+  refreshPermTreeBadges();
 }
 
 // ==========================================
@@ -10311,6 +10414,8 @@ function resetUserForm() {
   });
 
   populateModuleAccessForm(defaults.moduleAccess);
+
+  refreshPermTreeBadges();
 }
 
 function editUser(id) {
