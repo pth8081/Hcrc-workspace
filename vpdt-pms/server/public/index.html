@@ -115,14 +115,29 @@
       <p class="text-xs text-amber-700 mb-3 font-semibold">⚠️ Bạn chỉ có thể tải lên tài liệu cho các phòng ban được phân quyền.</p>
       
       <form id="docForm" onsubmit="uploadDoc(event)" class="grid grid-cols-1 md:grid-cols-3 gap-3">
-        <input id="docCode" placeholder="Mã tài liệu (VD: HD-2026-01)" class="border p-2 rounded text-sm" required>
+        <div class="md:col-span-3 flex items-center gap-2">
+          <label class="font-semibold text-sm text-gray-700 shrink-0">Loại thao tác:</label>
+          <select id="docOpMode" onchange="onDocOpModeChange()" class="border p-1.5 rounded text-sm bg-white">
+            <option value="NEW">➕ Nhập mới</option>
+            <option value="UPDATE">🔄 Cập nhật (thêm version cho tài liệu đã có)</option>
+          </select>
+        </div>
+        <div id="docUpdateTargetWrap" class="hidden md:col-span-3">
+          <label class="block text-xs font-semibold text-gray-600 mb-1">Chọn Mã Tài Liệu Cần Cập Nhật</label>
+          <select id="docUpdateTarget" onchange="onDocUpdateTargetChange()" class="w-full border p-2 rounded text-sm bg-white">
+            <option value="">-- Chọn tài liệu --</option>
+          </select>
+          <p class="text-[11px] text-gray-500 italic mt-1">Chỉ hiện tài liệu đã phê duyệt xong (version mới nhất) và thuộc phạm vi bạn được phép cập nhật.</p>
+        </div>
+
+        <input id="docCode" readonly placeholder="Mã tài liệu (tự sinh)" class="border p-2 rounded text-sm bg-gray-100 cursor-not-allowed" required>
         <input id="docTitle" placeholder="Tên / Tiêu đề tài liệu" class="border p-2 rounded text-sm" required>
-        <input id="docVer" placeholder="Phiên bản (VD: v1.0)" value="v1.0" class="border p-2 rounded text-sm" required>
-        
-        <select id="selDept" class="border p-2 rounded text-sm" required><option value="">-- Chọn Phòng Ban Trình --</option></select>
-        <select id="selCat" class="border p-2 rounded text-sm" required><option value="">-- Chọn Phân Loại --</option></select>
+        <input id="docVer" placeholder="Phiên bản (VD: v1.0)" value="v1.0" readonly class="border p-2 rounded text-sm bg-gray-100" required>
+
+        <select id="selDept" onchange="refreshDocCodePreview()" class="border p-2 rounded text-sm" required><option value="">-- Chọn Phòng Ban Trình --</option></select>
+        <select id="selCat" onchange="refreshDocCodePreview()" class="border p-2 rounded text-sm" required><option value="">-- Chọn Phân Loại --</option></select>
         <input id="docFile" type="file" accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,image/*" class="border p-1 bg-white rounded text-sm" required>
-        
+
         <textarea id="docSummary" placeholder="Trích lục / Tóm tắt nội dung tài liệu..." class="md:col-span-3 border p-2 rounded text-sm h-16" required></textarea>
 
         <div id="dynamicFieldsContainer_DOC" class="md:col-span-3 grid grid-cols-1 md:grid-cols-3 gap-3 border-t pt-3"></div>
@@ -1975,6 +1990,23 @@
   </div>
 </div>
 
+<!-- MODAL "CHI TIẾT TÀI LIỆU" (module Quản Lý Tài Liệu) — liệt kê TOÀN BỘ phiên bản của 1 tài liệu
+     (gốc + các version con), người tải lên/người phê duyệt/mô tả từng phiên bản — xem viewDocDetails()
+     trong index.html. Mỗi phiên bản có nút Xem (mở viewDocModal ở trên, z-[55] nên luôn nổi trên modal
+     này z-50) và Tải riêng. -->
+<div id="docDetailModal" class="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center hidden z-50 p-4">
+  <div class="bg-white rounded-lg shadow-2xl max-w-4xl w-full flex flex-col max-h-[90vh] overflow-hidden">
+    <div class="flex justify-between items-center bg-blue-800 text-white p-4">
+      <h3 id="docDetailTitle" class="font-bold text-base flex items-center gap-2">📋 Chi Tiết Tài Liệu</h3>
+      <button onclick="closeDocDetailModal()" class="text-blue-200 hover:text-white font-bold text-xl px-2">✕</button>
+    </div>
+    <div id="docDetailBody" class="p-4 overflow-y-auto flex-1 text-xs"></div>
+    <div class="p-3 bg-gray-50 border-t flex justify-end text-xs">
+      <button onclick="closeDocDetailModal()" class="bg-gray-600 text-white px-5 py-1.5 rounded font-bold hover:bg-gray-700">Đóng</button>
+    </div>
+  </div>
+</div>
+
 <!-- MODAL XEM BÀI VIẾT TRUYỀN THÔNG NỘI BỘ — kiểu "trang báo" thông thường (không phải khung xem
      bảo mật): ảnh đại diện hiện trực tiếp, không chặn chuột phải, vì nội dung không phải hồ sơ mật. -->
 <div id="internalArticleModal" class="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center hidden z-50 p-4">
@@ -2436,6 +2468,7 @@
 // --- KHỞI TẠO DỮ LIỆU DB v6.0 ---
 const DB = {
   depts: [], cats: [], users: [], docs: [],
+  deptAbbrs: {}, docCatAbbrs: {},
   jobTitles: [], submissionTypes: [], contractTypes: [], carTypes: [],
   workflows: [], deptWorkflows: {},
   submissions: [], submissionDeptWorkflows: {},
@@ -2655,6 +2688,9 @@ function saveCoreFieldOptionsList(fieldDef, newLabels) {
   populateDropdowns();
 }
 let currentFilterCard = '';
+// Tài liệu GỐC đang mở rộng (hiện các version con) trong "Danh Sách Tài Liệu Trong Hệ Thống" — id của
+// tài liệu gốc, xem toggleDocFamily()/renderDocs().
+let expandedDocFamilies = new Set();
 let currentProcessingSubId = null;
 let currentProcessingCarId = null;
 let currentProcessingOfficeId = null;
@@ -3533,6 +3569,8 @@ async function initDatabase(loggingInUser) {
 
     DB.depts = data.depts || [];
     DB.cats = data.cats || [];
+    DB.deptAbbrs = data.deptAbbrs || {};
+    DB.docCatAbbrs = data.docCatAbbrs || {};
     DB.jobTitles = data.jobTitles || [];
     DB.submissionTypes = data.submissionTypes || [];
     DB.contractTypes = data.contractTypes || [];
@@ -4277,7 +4315,11 @@ function switchTab(tabName) {
 
   populateDropdowns();
 
-  if (tabName === 'doc') { renderDynamicInputsForModule('DOC', 'dynamicFieldsContainer_DOC'); renderDocs(); updateUploadDeptDropdown(); }
+  if (tabName === 'doc') {
+    renderDynamicInputsForModule('DOC', 'dynamicFieldsContainer_DOC'); renderDocs(); updateUploadDeptDropdown();
+    document.getElementById('docOpMode').value = 'NEW';
+    onDocOpModeChange();
+  }
   if (tabName === 'submission') { renderDynamicInputsForModule('SUBMISSION', 'dynamicFieldsContainer_SUBMISSION'); renderSubmissionApprovalLayerCheckboxes(); renderSubmissionReqs(); }
   if (tabName === 'task') {
     document.getElementById('btnManualTaskCreate').classList.toggle('hidden', !canManageTasks(currentUser));
@@ -4489,6 +4531,148 @@ function onFilterChange() {
   renderDocs();
 }
 
+// ---- Sinh Mã Tài Liệu tự động + quản lý version (Cập nhật/Nhập mới) ----
+
+// Bỏ dấu tiếng Việt để suy ra viết tắt — đ/Đ không tách được qua NFD nên xử lý riêng.
+function stripVnDiacritics(str) {
+  return (str || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\u0111/g, 'd').replace(/\u0110/g, 'D');
+}
+
+// Các từ đứng đầu tên phòng ban không mang nghĩa phân biệt (Phòng/Ban/Bộ phận...) — bỏ qua khi suy ra
+// viết tắt để "Phòng Công Nghệ Thông Tin" ra "CNTT" thay vì "PCNTT".
+const DEPT_ABBR_STOPWORDS = new Set(['phong', 'ban', 'bo', 'phan', 'to', 'trung', 'tam', 'doi', 'khoi']);
+
+function deriveAbbr(name, stopwords) {
+  const words = stripVnDiacritics(name).split(/[\s/\-\u2013]+/).filter(w => /[a-zA-Z]/.test(w));
+  const kept = stopwords ? words.filter(w => !stopwords.has(w.toLowerCase())) : words;
+  const useWords = kept.length ? kept : words;
+  return useWords.map(w => w[0].toUpperCase()).join('');
+}
+
+// Viết tắt Phòng ban/Phân loại — ưu tiên giá trị admin đã cấu hình (DB.deptAbbrs/DB.docCatAbbrs, xem
+// màn Quản Lý Danh Mục), suy ra tự động nếu chưa có. Áp dụng ngay, không cần admin duyệt trước.
+function getDeptAbbr(deptName) {
+  return DB.deptAbbrs[deptName] || deriveAbbr(deptName, DEPT_ABBR_STOPWORDS);
+}
+function getDocCatAbbr(catName) {
+  return DB.docCatAbbrs[catName] || deriveAbbr(catName, null);
+}
+
+// Đếm số tài liệu GỐC (không phải version con) đã có Mã Tài Liệu bắt đầu bằng prefix này, để sinh số
+// thứ tự tiếp theo — đánh số RIÊNG theo từng cặp Phân loại+Phòng ban (không dùng chung 1 dãy số toàn
+// hệ thống) để mã ngắn gọn và có ý nghĩa lâu dài hơn.
+function computeNextDocSeq(prefix) {
+  const existing = DB.docs.filter(d => (d.rootDocId == null) && (d.displayCode || d.code || '').startsWith(prefix));
+  return existing.length + 1;
+}
+
+// Mã Tài Liệu tự sinh cho lần "Nhập mới" = <viết tắt Phân loại>-<viết tắt Phòng ban>-<số thứ tự 3 số>.
+function generateDocCode(cat, dept) {
+  const prefix = `${getDocCatAbbr(cat)}-${getDeptAbbr(dept)}-`;
+  const seq = computeNextDocSeq(prefix);
+  return `${prefix}${String(seq).padStart(3, '0')}`;
+}
+
+// Gom 1 tài liệu GỐC + toàn bộ version con của nó (kể cả bản thân tài liệu gốc), sắp theo versionNumber
+// tăng dần — dùng chung cho khối mở rộng ở "Danh Sách Tài Liệu" và modal "Chi Tiết Tài Liệu".
+function getDocFamily(anyDocId) {
+  const doc = DB.docs.find(d => d.id === anyDocId);
+  if (!doc) return [];
+  const rootId = doc.rootDocId == null ? doc.id : doc.rootDocId;
+  return DB.docs.filter(d => d.id === rootId || d.rootDocId === rootId)
+    .sort((a, b) => (a.versionNumber || 1) - (b.versionNumber || 1));
+}
+
+// Version MỚI NHẤT của 1 tài liệu (dùng để xét điều kiện được phép "Cập nhật" — chỉ cho phép khi
+// version mới nhất đã APPROVED, tránh vừa có version đang chờ duyệt vừa tạo thêm version khác chồng lên).
+function getDocFamilyLatest(anyDocId) {
+  const family = getDocFamily(anyDocId);
+  return family[family.length - 1];
+}
+
+// Đổi giữa "Nhập mới" (mã tự sinh, phiên bản luôn v1.0, chọn Phòng ban/Phân loại như cũ) và "Cập nhật"
+// (khoá Mã/Phòng ban/Phân loại theo đúng tài liệu đã chọn, chỉ đổi Tệp + Tóm tắt + Phiên bản mới).
+function onDocOpModeChange() {
+  const mode = document.getElementById('docOpMode').value;
+  const isUpdate = mode === 'UPDATE';
+  document.getElementById('docUpdateTargetWrap').classList.toggle('hidden', !isUpdate);
+  document.getElementById('selDept').disabled = isUpdate;
+  document.getElementById('selCat').disabled = isUpdate;
+
+  const verInput = document.getElementById('docVer');
+  verInput.readOnly = !isUpdate;
+  verInput.classList.toggle('bg-gray-100', !isUpdate);
+
+  if (isUpdate) {
+    populateDocUpdateTargets();
+    document.getElementById('docUpdateTarget').value = '';
+    document.getElementById('docCode').value = '';
+    document.getElementById('docTitle').value = '';
+    verInput.value = '';
+    document.getElementById('selDept').value = '';
+    document.getElementById('selCat').value = '';
+  } else {
+    document.getElementById('docTitle').value = '';
+    verInput.value = 'v1.0';
+    refreshDocCodePreview();
+  }
+}
+
+// Mã Tài Liệu tự sinh sống theo Phòng ban/Phân loại đang chọn (chỉ áp dụng ở chế độ "Nhập mới") —
+// gọi lại mỗi khi 2 lựa chọn này đổi để người trình luôn thấy trước mã sẽ được cấp.
+function refreshDocCodePreview() {
+  if (document.getElementById('docOpMode').value !== 'NEW') return;
+  const dept = document.getElementById('selDept').value;
+  const cat = document.getElementById('selCat').value;
+  document.getElementById('docCode').value = (dept && cat) ? generateDocCode(cat, dept) : '';
+}
+
+// Danh sách tài liệu được phép "Cập nhật" — chỉ tài liệu GỐC mà version MỚI NHẤT đã APPROVED (không
+// cho cập nhật khi đang có version chờ duyệt), và người dùng có quyền tạo tài liệu cho đúng phòng ban đó.
+function populateDocUpdateTargets() {
+  const sel = document.getElementById('docUpdateTarget');
+  if (!sel) return;
+  const prevVal = sel.value;
+
+  const roots = DB.docs.filter(d => d.rootDocId == null);
+  const scope = { all: !!currentUser.perms?.uploadAll, depts: currentUser.perms?.uploadDepts || [] };
+  const eligible = roots.filter(root => {
+    const latest = getDocFamilyLatest(root.id);
+    if (!latest || latest.status !== 'APPROVED') return false;
+    return currentUser.perms?.admin || scopeAllows(currentUser, scope, root.dept);
+  });
+
+  sel.innerHTML = '<option value="">-- Chọn tài liệu --</option>' + eligible.map(root => {
+    const latest = getDocFamilyLatest(root.id);
+    return `<option value="${root.id}">${escapeHtml(root.displayCode || root.code)} — ${escapeHtml(root.title)} (hiện tại: ${escapeHtml(latest.ver)})</option>`;
+  }).join('');
+
+  if (eligible.some(r => String(r.id) === prevVal)) sel.value = prevVal;
+}
+
+// Chọn xong tài liệu cần cập nhật -> khoá Mã/Tiêu đề/Phòng ban/Phân loại theo đúng tài liệu gốc, đề
+// xuất sẵn số phiên bản tiếp theo (vẫn cho sửa lại nếu cần).
+function onDocUpdateTargetChange() {
+  const rootId = Number(document.getElementById('docUpdateTarget').value);
+  const root = DB.docs.find(d => d.id === rootId);
+  if (!root) {
+    document.getElementById('docCode').value = '';
+    document.getElementById('docTitle').value = '';
+    document.getElementById('docVer').value = '';
+    document.getElementById('selDept').value = '';
+    document.getElementById('selCat').value = '';
+    return;
+  }
+  const latest = getDocFamilyLatest(rootId);
+  document.getElementById('docCode').value = root.displayCode || root.code;
+  document.getElementById('docTitle').value = root.title;
+  document.getElementById('selDept').value = root.dept;
+  document.getElementById('selCat').value = root.cat;
+
+  const prevNum = parseFloat(latest.ver.replace(/[^\d.]/g, ''));
+  document.getElementById('docVer').value = Number.isFinite(prevNum) ? `v${(prevNum + 1).toFixed(1)}` : `v${(latest.versionNumber || 1) + 1}.0`;
+}
+
 function renderDocs() {
   const tbody = document.getElementById('docTableBody');
   if (!tbody) return;
@@ -4510,8 +4694,11 @@ function renderDocs() {
   document.getElementById('dashPending').innerText = pendingDocs;
   document.getElementById('dashRejected').innerText = rejectedDocs;
 
-  // Lọc tài liệu theo quyền truy cập phòng ban & bộ lọc
+  // Lọc tài liệu theo quyền truy cập phòng ban & bộ lọc — CHỈ tài liệu GỐC (rootDocId == null) hiện ở
+  // cấp cao nhất; các version con chỉ hiện khi mở rộng (xem toggleDocFamily()), tránh danh sách tràn
+  // ngập từng version như 1 dòng riêng biệt.
   let filtered = DB.docs.filter(doc => {
+    if (doc.rootDocId != null) return false;
     // Kiểm tra quyền xem — CẬP NHẬT: quyền "Xem Bản Nháp" (viewDraftAll/viewDraftDepts) trước đây
     // được cấu hình ở Module Quản trị nhưng KHÔNG được dùng ở đâu cả (mọi trạng thái tài liệu đều
     // chỉ xét quyền "Xem Đã Duyệt"). Nay tách riêng: tài liệu đã APPROVED xét quyền Xem Đã Duyệt,
@@ -4561,88 +4748,145 @@ function renderDocs() {
   }
 
   tbody.innerHTML = pageDocs.map(doc => {
-    const wfConfig = DB.deptWorkflows[doc.dept] || { workflowId: 'WF_1STEP', approvers: { 1: ['admin'] } };
-    const wf = DB.workflows.find(w => w.id === wfConfig.workflowId) || { steps: [{ name: 'Sếp duyệt' }] };
-
-    // Kiểm tra quyền phê duyệt bước hiện tại — chặn duyệt trùng nếu đã tự mình duyệt bước này rồi
-    const currentStepApprovers = wfConfig.approvers ? (wfConfig.approvers[doc.currentStep] || []) : [];
-    const canApprove = (doc.status === 'PENDING') && canApproveStep(currentUser, currentStepApprovers, doc.history, doc.currentStep);
-
-    // Tiến trình hiển thị — kèm tiến độ đồng phê duyệt (VD: "Đã 1/2 người duyệt") nếu bước có từ 2
-    // người đồng duyệt trở lên.
-    let progressBadge = '';
-    if (doc.status === 'APPROVED') {
-      progressBadge = `<span class="px-2 py-1 bg-green-100 text-green-800 rounded font-bold text-xs">✅ Đã phê duyệt hoàn tất</span>`;
-    } else if (doc.status === 'REJECTED') {
-      progressBadge = `<span class="px-2 py-1 bg-red-100 text-red-800 rounded font-bold text-xs">❌ Bị từ chối / Trả về</span>`;
-    } else {
-      const stepName = wf.steps[doc.currentStep - 1]?.name || `Bước ${doc.currentStep}`;
-      const progressText = getStepApprovalProgressText(currentStepApprovers, doc.history, doc.currentStep);
-      progressBadge = `<span class="px-2 py-1 bg-yellow-100 text-yellow-800 rounded font-semibold text-xs">⏳ Đang ở Bước ${doc.currentStep}/${wf.steps.length}: ${escapeHtml(stepName)}${escapeHtml(progressText)}</span>`;
-    }
-
-    return `
-      <tr class="hover:bg-gray-50 transition border-b">
-        <td class="border p-2 font-mono font-bold text-blue-700">${escapeHtml(doc.code)}</td>
-        <td class="border p-2">
-          <div class="font-bold text-gray-800">${escapeHtml(doc.title)}</div>
-          <div class="text-xs text-gray-500 line-clamp-2 mt-0.5">${escapeHtml(doc.summary)}</div>
-        </td>
-        <td class="border p-2 font-semibold text-gray-700">${escapeHtml(doc.dept)}</td>
-        <td class="border p-2 text-gray-600">${escapeHtml(doc.cat)}</td>
-        <td class="border p-2 text-center font-bold text-purple-700">${escapeHtml(doc.ver)}</td>
-        <td class="border p-2">${progressBadge}</td>
-        <td class="border p-2 text-center space-x-1">
-          ${(() => {
-            const canDownload = (doc.fileUrl || doc.fileData) && canDownloadFile(currentUser, 'doc', doc.dept, doc.uploader);
-            const secondaryOptions = [];
-            let primaryBtnHTML;
-            if (canApprove) {
-              primaryBtnHTML = `<button onclick="runDocAction(${doc.id}, 'approve')" class="px-2 py-1 bg-green-600 text-white rounded text-xs hover:bg-green-700 font-semibold animate-pulse" title="Phê duyệt bước này">✅ Duyệt</button>`;
-              secondaryOptions.push({ value: 'view', label: '👁️ Xem' });
-              secondaryOptions.push({ value: 'reject', label: '❌ Từ chối' });
-            } else {
-              primaryBtnHTML = `<button onclick="runDocAction(${doc.id}, 'view')" class="px-2 py-1 bg-blue-600 text-white rounded text-xs hover:bg-blue-700 font-semibold" title="Xem trực tiếp trong Protected View">👁️ Xem</button>`;
-            }
-            if (canDownload) secondaryOptions.push({ value: 'download', label: '⬇️ Tải' });
-            return buildActionCell(doc.id, primaryBtnHTML, secondaryOptions, 'runDocAction');
-          })()}
-        </td>
-      </tr>
-    `;
+    const versions = getDocFamily(doc.id).filter(d => d.id !== doc.id);
+    const isExpanded = expandedDocFamilies.has(doc.id);
+    const rootRowHTML = buildDocRowHTML(doc, { versionCount: versions.length, isExpanded });
+    const childRowsHTML = isExpanded ? versions.map(v => buildDocRowHTML(v, { isChild: true })).join('') : '';
+    return rootRowHTML + childRowsHTML;
   }).join('');
 }
 
-// Hàm điều phối cho khối "Thao Tác" của Tài liệu (xem buildActionCell()) — riêng 'download' tự tạo
-// và bấm 1 thẻ <a download> tạm thời, thay cho thẻ <a> tĩnh cũ (không đặt được onclick vào <option>).
+// Bấm nút mở/đóng danh sách version con của 1 tài liệu gốc trong "Danh Sách Tài Liệu Trong Hệ Thống".
+function toggleDocFamily(rootId) {
+  if (expandedDocFamilies.has(rootId)) expandedDocFamilies.delete(rootId);
+  else expandedDocFamilies.add(rootId);
+  renderDocs();
+}
+
+// Dựng 1 dòng <tr> trong "Danh Sách Tài Liệu Trong Hệ Thống" — dùng chung cho cả tài liệu gốc (có thể
+// kèm nút mở rộng "▸"/badge số version nếu có version con) và version con (thụt lề + icon "↳" để phân
+// biệt trực quan với tài liệu không có version nào). Mỗi version có Thao Tác RIÊNG vì mỗi version là
+// 1 lượt phê duyệt độc lập (status/currentStep/history của chính nó, không dùng chung với bản gốc).
+function buildDocRowHTML(doc, { versionCount = 0, isExpanded = false, isChild = false } = {}) {
+  const wfConfig = DB.deptWorkflows[doc.dept] || { workflowId: 'WF_1STEP', approvers: { 1: ['admin'] } };
+  const wf = DB.workflows.find(w => w.id === wfConfig.workflowId) || { steps: [{ name: 'Sếp duyệt' }] };
+
+  const currentStepApprovers = wfConfig.approvers ? (wfConfig.approvers[doc.currentStep] || []) : [];
+  const canApprove = (doc.status === 'PENDING') && canApproveStep(currentUser, currentStepApprovers, doc.history, doc.currentStep);
+
+  let progressBadge = '';
+  if (doc.status === 'APPROVED') {
+    progressBadge = `<span class="px-2 py-1 bg-green-100 text-green-800 rounded font-bold text-xs">✅ Đã phê duyệt hoàn tất</span>`;
+  } else if (doc.status === 'REJECTED') {
+    progressBadge = `<span class="px-2 py-1 bg-red-100 text-red-800 rounded font-bold text-xs">❌ Bị từ chối / Trả về</span>`;
+  } else {
+    const stepName = wf.steps[doc.currentStep - 1]?.name || `Bước ${doc.currentStep}`;
+    const progressText = getStepApprovalProgressText(currentStepApprovers, doc.history, doc.currentStep);
+    progressBadge = `<span class="px-2 py-1 bg-yellow-100 text-yellow-800 rounded font-semibold text-xs">⏳ Đang ở Bước ${doc.currentStep}/${wf.steps.length}: ${escapeHtml(stepName)}${escapeHtml(progressText)}</span>`;
+  }
+
+  const codeText = escapeHtml(doc.displayCode || doc.code);
+  const codeCellHTML = isChild
+    ? `<span class="pl-4 text-gray-500">↳ ${codeText}</span>`
+    : (versionCount > 0
+        ? `<button type="button" onclick="toggleDocFamily(${doc.id})" class="font-bold hover:underline" title="${isExpanded ? 'Thu gọn' : 'Xem các phiên bản'}">${isExpanded ? '▾' : '▸'} ${codeText}</button>
+           <span class="ml-1 px-1.5 py-0.5 bg-purple-100 text-purple-700 rounded-full text-[10px] font-bold align-middle" title="Có ${versionCount} phiên bản khác">🗂️ ${versionCount + 1} phiên bản</span>`
+        : codeText);
+
+  return `
+    <tr class="hover:bg-gray-50 transition border-b ${isChild ? 'bg-purple-50/40' : ''}">
+      <td class="border p-2 font-mono font-bold text-blue-700">${codeCellHTML}</td>
+      <td class="border p-2">
+        <div class="font-bold text-gray-800">${escapeHtml(doc.title)}</div>
+        <div class="text-xs text-gray-500 line-clamp-2 mt-0.5">${escapeHtml(doc.summary)}</div>
+      </td>
+      <td class="border p-2 font-semibold text-gray-700">${escapeHtml(doc.dept)}</td>
+      <td class="border p-2 text-gray-600">${escapeHtml(doc.cat)}</td>
+      <td class="border p-2 text-center font-bold text-purple-700">${escapeHtml(doc.ver)}</td>
+      <td class="border p-2">${progressBadge}</td>
+      <td class="border p-2 text-center space-x-1">
+        ${(() => {
+          const canDownload = (doc.fileUrl || doc.fileData) && canDownloadFile(currentUser, 'doc', doc.dept, doc.uploader);
+          const secondaryOptions = [];
+          let primaryBtnHTML;
+          if (canApprove) {
+            primaryBtnHTML = `<button onclick="runDocAction(${doc.id}, 'approve')" class="px-2 py-1 bg-green-600 text-white rounded text-xs hover:bg-green-700 font-semibold animate-pulse" title="Phê duyệt bước này">✅ Duyệt</button>`;
+            secondaryOptions.push({ value: 'view', label: '📋 Chi tiết' });
+            secondaryOptions.push({ value: 'reject', label: '❌ Từ chối' });
+          } else {
+            primaryBtnHTML = `<button onclick="runDocAction(${doc.id}, 'view')" class="px-2 py-1 bg-blue-600 text-white rounded text-xs hover:bg-blue-700 font-semibold" title="Xem chi tiết & lịch sử phiên bản">📋 Chi tiết</button>`;
+          }
+          if (canDownload) secondaryOptions.push({ value: 'download', label: '⬇️ Tải' });
+          return buildActionCell(doc.id, primaryBtnHTML, secondaryOptions, 'runDocAction');
+        })()}
+      </td>
+    </tr>
+  `;
+}
+
+// Hàm điều phối cho khối "Thao Tác" của Tài liệu (xem buildActionCell()) — 'view' giờ mở modal "Chi
+// Tiết Tài Liệu" (lịch sử phiên bản) thay vì mở thẳng khung xem tệp như trước (xem viewDocDetails()).
 function runDocAction(id, action) {
   const doc = DB.docs.find(d => d.id === id);
   if (!doc) return;
   switch (action) {
-    case 'view': viewDoc(id); break;
+    case 'view': viewDocDetails(id); break;
     case 'approve': approveDoc(id); break;
     case 'reject': rejectDoc(id); break;
-    case 'download': {
-      const a = document.createElement('a');
-      a.href = doc.fileUrl || doc.fileData;
-      a.download = doc.fileName || doc.code;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      break;
-    }
+    case 'download': downloadDocFile(id); break;
   }
+}
+
+// Tải trực tiếp tệp gốc của 1 tài liệu/version — tự tạo và bấm 1 thẻ <a download> tạm thời (dùng
+// chung cho cả dropdown "Khác ▾" ở Thao Tác lẫn từng dòng version trong modal "Chi Tiết Tài Liệu").
+function downloadDocFile(id) {
+  const doc = DB.docs.find(d => d.id === id);
+  if (!doc) return;
+  const a = document.createElement('a');
+  a.href = doc.fileUrl || doc.fileData;
+  a.download = doc.fileName || doc.code;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
 }
 
 async function uploadDoc(e) {
   e.preventDefault();
-  const code = document.getElementById('docCode').value.trim();
+  const mode = document.getElementById('docOpMode').value;
   const title = document.getElementById('docTitle').value.trim();
   const ver = document.getElementById('docVer').value.trim();
-  const dept = document.getElementById('selDept').value;
-  const cat = document.getElementById('selCat').value;
   const summary = document.getElementById('docSummary').value.trim();
   const fileInput = document.getElementById('docFile');
+
+  // "Nhập mới": Phòng ban/Phân loại người trình tự chọn, Mã Tài Liệu tự sinh theo đó, luôn là version 1.
+  // "Cập nhật": Phòng ban/Phân loại/Mã Tài Liệu bị KHOÁ theo đúng tài liệu gốc đã chọn (readSelect ở
+  // đây chứ không tin nguyên si giá trị đang hiện trên input, phòng khi người dùng đổi lựa chọn ở
+  // #docUpdateTarget rồi bằng cách nào đó input vẫn giữ giá trị cũ) — số phiên bản tự tăng tiếp theo.
+  let dept, cat, displayCode, code, versionNumber, rootDocId;
+
+  if (mode === 'UPDATE') {
+    const rootId = Number(document.getElementById('docUpdateTarget').value);
+    const rootDoc = DB.docs.find(d => d.id === rootId);
+    if (!rootDoc) return alert('Vui lòng chọn tài liệu cần cập nhật!');
+    const latest = getDocFamilyLatest(rootId);
+    if (!latest || latest.status !== 'APPROVED') {
+      return alert('⛔ Chỉ được cập nhật khi phiên bản mới nhất của tài liệu này đã phê duyệt xong!');
+    }
+    dept = rootDoc.dept;
+    cat = rootDoc.cat;
+    displayCode = rootDoc.displayCode || rootDoc.code;
+    versionNumber = (latest.versionNumber || getDocFamily(rootId).length) + 1;
+    code = `${displayCode}-V${versionNumber}`;
+    rootDocId = rootId;
+  } else {
+    dept = document.getElementById('selDept').value;
+    cat = document.getElementById('selCat').value;
+    if (!dept || !cat) return alert('Vui lòng chọn Phòng Ban Trình và Phân Loại!');
+    displayCode = generateDocCode(cat, dept);
+    code = displayCode;
+    versionNumber = 1;
+    rootDocId = null;
+  }
 
   if (DB.docs.some(d => d.code === code)) {
     return alert('Mã tài liệu đã tồn tại trong hệ thống!');
@@ -4661,6 +4905,9 @@ async function uploadDoc(e) {
 
   const docPayload = {
     code: code,
+    displayCode: displayCode,
+    versionNumber: versionNumber,
+    rootDocId: rootDocId,
     title: title,
     ver: ver,
     dept: dept,
@@ -4693,7 +4940,7 @@ async function uploadDoc(e) {
   }
 
   DB.docs.unshift(newDoc);
-  logSystemAction('DOC', 'UPLOAD_DOC', `Tải lên tài liệu mới [${code} - ${title}]`, 'SUCCESS', code);
+  logSystemAction('DOC', 'UPLOAD_DOC', `Tải lên tài liệu ${mode === 'UPDATE' ? 'phiên bản mới' : 'mới'} [${code} - ${title}]`, 'SUCCESS', code);
 
   const newDocWfConfig = DB.deptWorkflows[dept];
   const newDocApprovers = newDocWfConfig?.approvers?.[1] || [];
@@ -4705,6 +4952,8 @@ async function uploadDoc(e) {
 
   alert('✅ Tải lên và trình ký tài liệu thành công!');
   document.getElementById('docForm').reset();
+  document.getElementById('docOpMode').value = 'NEW';
+  onDocOpModeChange();
   renderDocs();
 }
 
@@ -4892,6 +5141,70 @@ function closeViewDocModal() {
   document.getElementById('viewDocModal').classList.add('hidden');
   document.getElementById('viewModalContent').innerHTML = '';
   document.getElementById('viewModalPrintBtn').classList.remove('hidden');
+}
+
+// Modal "Chi Tiết Tài Liệu" — liệt kê TOÀN BỘ phiên bản của 1 tài liệu (gốc + version con), người tải
+// lên/người phê duyệt cuối/mô tả từng phiên bản. "Người phê duyệt" lấy từ bản ghi APPROVED gần nhất
+// trong lịch sử xử lý của ĐÚNG phiên bản đó (mỗi phiên bản có quy trình duyệt độc lập).
+function viewDocDetails(anyDocId) {
+  const doc = DB.docs.find(d => d.id === anyDocId);
+  if (!doc) return;
+  const family = getDocFamily(anyDocId);
+  const rootDoc = family[0];
+
+  const rowsHTML = family.map(v => {
+    const finalApproval = [...(v.history || [])].reverse().find(h => h.action === 'APPROVED');
+    let approverHTML;
+    if (finalApproval) {
+      approverHTML = `${escapeHtml(finalApproval.approver)}<div class="text-[10px] text-gray-400">${escapeHtml(finalApproval.time)}</div>`;
+    } else if (v.status === 'REJECTED') {
+      approverHTML = `<span class="text-red-600 font-semibold">Đã từ chối</span>`;
+    } else {
+      approverHTML = `<span class="text-gray-400 italic">Chưa duyệt</span>`;
+    }
+    const canDL = (v.fileUrl || v.fileData) && canDownloadFile(currentUser, 'doc', v.dept, v.uploader);
+
+    return `
+      <tr class="border-b hover:bg-gray-50">
+        <td class="border p-2 text-center font-bold text-purple-700">${escapeHtml(v.ver)}</td>
+        <td class="border p-2">
+          <div class="font-semibold text-gray-800">${escapeHtml(v.uploaderName || v.uploader)}</div>
+          <div class="text-[10px] text-gray-400">${escapeHtml(v.createdAt || '')}</div>
+        </td>
+        <td class="border p-2">${approverHTML}</td>
+        <td class="border p-2 text-gray-700">${escapeHtml(v.summary || '')}</td>
+        <td class="border p-2 text-center whitespace-nowrap">
+          <button type="button" onclick="viewDoc(${v.id})" class="px-2 py-1 bg-blue-600 text-white rounded text-[11px] font-bold hover:bg-blue-700">👁️ Xem</button>
+          ${canDL ? `<button type="button" onclick="downloadDocFile(${v.id})" class="px-2 py-1 bg-slate-600 text-white rounded text-[11px] font-bold hover:bg-slate-700 ml-1">⬇️ Tải</button>` : ''}
+        </td>
+      </tr>
+    `;
+  }).join('');
+
+  document.getElementById('docDetailTitle').innerText = `📋 Chi Tiết Tài Liệu: ${rootDoc.title} (${rootDoc.displayCode || rootDoc.code})`;
+  document.getElementById('docDetailBody').innerHTML = `
+    <div class="grid grid-cols-2 gap-2 text-xs mb-3 bg-gray-50 p-2 rounded border">
+      <div><b>Phòng ban:</b> ${escapeHtml(rootDoc.dept)}</div>
+      <div><b>Phân loại:</b> ${escapeHtml(rootDoc.cat)}</div>
+    </div>
+    <table class="w-full border-collapse border text-xs">
+      <thead>
+        <tr class="bg-gray-100 text-left">
+          <th class="border p-2 text-center">Phiên Bản</th>
+          <th class="border p-2">Người Tải Lên</th>
+          <th class="border p-2">Người Phê Duyệt</th>
+          <th class="border p-2">Mô Tả</th>
+          <th class="border p-2 text-center">Thao Tác</th>
+        </tr>
+      </thead>
+      <tbody>${rowsHTML}</tbody>
+    </table>
+  `;
+  document.getElementById('docDetailModal').classList.remove('hidden');
+}
+
+function closeDocDetailModal() {
+  document.getElementById('docDetailModal').classList.add('hidden');
 }
 
 // In trực tiếp nội dung đang hiển thị trong Protected Viewer (tệp đính kèm hoặc phiếu/chứng từ
@@ -10337,18 +10650,31 @@ function saveDept(e) {
 function deleteDept(name) {
   if (!confirm(`Xóa phòng ban ${name}?`)) return;
   DB.depts = DB.depts.filter(d => d !== name);
+  delete DB.deptAbbrs[name];
   syncStorage('depts');
+  syncStorage('deptAbbrs');
   logSystemAction('USER_MGM', 'DELETE_DEPT', `Xóa phòng ban [${name}]`, 'SUCCESS', name);
   renderDeptList();
   populateDropdowns();
+}
+
+// Viết tắt Phòng ban (dùng sinh Mã Tài Liệu, xem generateDocCode()) — tự suy ra mặc định nếu admin
+// chưa từng sửa, áp dụng ngay không cần duyệt.
+function updateDeptAbbr(name, value) {
+  const abbr = (value || '').trim().toUpperCase();
+  if (!abbr) delete DB.deptAbbrs[name];
+  else DB.deptAbbrs[name] = abbr;
+  syncStorage('deptAbbrs');
+  logSystemAction('USER_MGM', 'UPDATE_DEPT_ABBR', `Cập nhật viết tắt phòng ban [${name}] = "${abbr}"`, 'SUCCESS', name);
 }
 
 function renderDeptList() {
   const ul = document.getElementById('deptList');
   if (!ul) return;
   ul.innerHTML = DB.depts.map(d => `
-    <li class="p-2 flex justify-between items-center hover:bg-gray-50">
-      <span>${escapeHtml(d)}</span>
+    <li class="p-2 flex justify-between items-center gap-2 hover:bg-gray-50">
+      <span class="flex-1">${escapeHtml(d)}</span>
+      <input value="${escapeHtml(getDeptAbbr(d))}" onchange="updateDeptAbbr('${escapeHtml(d)}', this.value)" title="Viết tắt (dùng sinh Mã Tài Liệu)" class="w-16 border rounded px-1 py-0.5 text-center text-[11px] font-mono uppercase">
       <button onclick="deleteDept('${escapeHtml(d)}')" class="text-red-500 font-bold hover:underline">Xóa</button>
     </li>
   `).join('');
@@ -10405,18 +10731,31 @@ function saveCat(e) {
 function deleteCat(name) {
   if (!confirm(`Xóa loại tài liệu ${name}?`)) return;
   DB.cats = DB.cats.filter(c => c !== name);
+  delete DB.docCatAbbrs[name];
   syncStorage('cats');
+  syncStorage('docCatAbbrs');
   logSystemAction('USER_MGM', 'DELETE_CAT', `Xóa loại tài liệu [${name}]`, 'SUCCESS', name);
   renderCatList();
   populateDropdowns();
+}
+
+// Viết tắt Phân loại tài liệu (dùng sinh Mã Tài Liệu, xem generateDocCode()) — tự suy ra mặc định nếu
+// admin chưa từng sửa, áp dụng ngay không cần duyệt.
+function updateCatAbbr(name, value) {
+  const abbr = (value || '').trim().toUpperCase();
+  if (!abbr) delete DB.docCatAbbrs[name];
+  else DB.docCatAbbrs[name] = abbr;
+  syncStorage('docCatAbbrs');
+  logSystemAction('USER_MGM', 'UPDATE_CAT_ABBR', `Cập nhật viết tắt phân loại tài liệu [${name}] = "${abbr}"`, 'SUCCESS', name);
 }
 
 function renderCatList() {
   const ul = document.getElementById('catList');
   if (!ul) return;
   ul.innerHTML = DB.cats.map(c => `
-    <li class="p-2 flex justify-between items-center hover:bg-gray-50">
-      <span>${escapeHtml(c)}</span>
+    <li class="p-2 flex justify-between items-center gap-2 hover:bg-gray-50">
+      <span class="flex-1">${escapeHtml(c)}</span>
+      <input value="${escapeHtml(getDocCatAbbr(c))}" onchange="updateCatAbbr('${escapeHtml(c)}', this.value)" title="Viết tắt (dùng sinh Mã Tài Liệu)" class="w-16 border rounded px-1 py-0.5 text-center text-[11px] font-mono uppercase">
       <button onclick="deleteCat('${escapeHtml(c)}')" class="text-red-500 font-bold hover:underline">Xóa</button>
     </li>
   `).join('');
