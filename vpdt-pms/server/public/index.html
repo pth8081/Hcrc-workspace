@@ -206,13 +206,7 @@
           </div>
           <div>
             <label class="block font-semibold text-gray-600 mb-1">Loại Tờ Trình</label>
-            <select id="subType" class="w-full border p-1.5 rounded bg-white" required>
-              <option value="Tờ trình xin chủ trương">Tờ trình xin chủ trương</option>
-              <option value="Tờ trình duyệt kinh phí">Tờ trình duyệt kinh phí</option>
-              <option value="Tờ trình nhân sự / bổ nhiệm">Tờ trình nhân sự / bổ nhiệm</option>
-              <option value="Tờ trình ban hành Quy chế / Quy định">Tờ trình ban hành Quy chế / Quy định</option>
-              <option value="Tờ trình khác">Tờ trình khác</option>
-            </select>
+            <select id="subType" class="w-full border p-1.5 rounded bg-white" required></select>
           </div>
           <div class="md:col-span-2">
             <label class="block font-semibold text-gray-600 mb-1">Tên / Trích Yếu Tờ Trình</label>
@@ -383,13 +377,7 @@
           </div>
           <div>
             <label class="block font-semibold text-gray-600 mb-1">Loại Pháp Lý</label>
-            <select id="contractType" class="w-full border p-1.5 rounded bg-white" required>
-              <option value="Hợp đồng kinh tế">Hợp đồng kinh tế</option>
-              <option value="Hợp đồng lao động">Hợp đồng lao động</option>
-              <option value="Giấy phép kinh doanh / Pháp lý">Giấy phép kinh doanh / Pháp lý</option>
-              <option value="Thỏa thuận bảo mật (NDA)">Thỏa thuận bảo mật (NDA)</option>
-              <option value="Phụ lục hợp đồng">Phụ lục hợp đồng</option>
-            </select>
+            <select id="contractType" class="w-full border p-1.5 rounded bg-white" required></select>
           </div>
           <div class="md:col-span-2">
             <label class="block font-semibold text-gray-600 mb-1">Tên Hợp Đồng / Tên Giấy Phép</label>
@@ -869,10 +857,7 @@
           </div>
           <div>
             <label class="block font-semibold text-gray-600 mb-1">Đăng Ký Sử Dụng Loại Xe</label>
-            <select id="carType" class="w-full border p-1.5 rounded bg-white" required>
-              <option value="5 chỗ">5 chỗ</option>
-              <option value="7 chỗ">7 chỗ</option>
-            </select>
+            <select id="carType" class="w-full border p-1.5 rounded bg-white" required></select>
           </div>
           <div>
             <label class="block font-semibold text-gray-600 mb-1">Số Người Sử Dụng</label>
@@ -1141,7 +1126,7 @@
             <label class="block font-semibold text-gray-600 mb-1">Tên Trường (Label)</label>
             <input id="fldLabel" placeholder="VD: Phạm vi áp dụng..." class="w-full border p-1.5 rounded" required>
           </div>
-          <div>
+          <div id="fldTypeGroup">
             <label class="block font-semibold text-gray-600 mb-1">Kiểu Dữ Liệu</label>
             <select id="fldType" onchange="toggleOptionsInput()" class="w-full border p-1.5 rounded bg-white font-semibold">
               <option value="text">Văn bản ngắn (Text)</option>
@@ -1176,7 +1161,7 @@
       <div class="bg-white rounded border overflow-hidden">
         <div class="p-3 bg-gray-50 border-b flex justify-between items-center">
           <h4 class="font-bold text-gray-800 text-xs">Cấu Trúc Tất Cả Các Trường Đang Áp Dụng</h4>
-          <span class="text-xs text-gray-500 italic">Trường mặc định: chỉ sửa Nhãn hiển thị / Bắt buộc. Trường bổ sung: sửa/xóa/sắp xếp tự do.</span>
+          <span class="text-xs text-gray-500 italic">Trường mặc định: bấm Sửa để đổi Nhãn hiển thị / Bắt buộc (riêng vài trường dropdown còn sửa được cả danh sách lựa chọn) — không xóa được. Trường bổ sung: sửa/xóa/sắp xếp tự do.</span>
         </div>
         <div class="overflow-x-auto">
           <table class="w-full border-collapse text-xs text-left">
@@ -1328,7 +1313,7 @@
       </form>
     </div>
 
-    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+    <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
       <div class="bg-indigo-50 p-4 rounded border border-indigo-200 space-y-3">
         <h3 class="font-bold text-indigo-900 text-sm flex items-center gap-1">🏢 Quản Lý Danh Mục Phòng Ban</h3>
         <form onsubmit="saveDept(event)" class="flex gap-2">
@@ -1350,6 +1335,18 @@
           <ul id="catList" class="divide-y text-xs"></ul>
         </div>
       </div>
+
+      <div class="bg-fuchsia-50 p-4 rounded border border-fuchsia-200 space-y-3">
+        <h3 class="font-bold text-fuchsia-900 text-sm flex items-center gap-1">🎖️ Quản Lý Danh Sách Chức Danh</h3>
+        <p class="text-[11px] text-fuchsia-700">Chức danh gán cho người dùng (mục Cấu hình Quyền Hạn bên dưới) sẽ hiện kèm tên trên các chân ký phê duyệt.</p>
+        <form onsubmit="saveJobTitle(event)" class="flex gap-2">
+          <input id="txtJobTitleName" placeholder="Tên chức danh mới..." class="border p-1.5 rounded text-xs flex-1" required>
+          <button type="submit" class="bg-fuchsia-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-fuchsia-700">Thêm</button>
+        </form>
+        <div class="max-h-32 overflow-y-auto bg-white rounded border">
+          <ul id="jobTitleList" class="divide-y text-xs"></ul>
+        </div>
+      </div>
     </div>
 
     <!-- CẤU HÌNH USER & PHÂN QUYỀN -->
@@ -1361,7 +1358,7 @@
       <form onsubmit="saveUser(event)" class="space-y-4">
         <input id="editUserId" type="hidden">
 
-        <div id="userIdentityFields" class="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-7 gap-3 bg-white p-3 rounded border">
+        <div id="userIdentityFields" class="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-8 gap-3 bg-white p-3 rounded border">
           <div>
             <label class="block text-xs font-semibold text-gray-600 mb-1">Tên đăng nhập</label>
             <input id="uUsername" placeholder="username" class="w-full border p-1.5 rounded text-xs" required>
@@ -1385,6 +1382,10 @@
           <div>
             <label class="block text-xs font-semibold text-gray-600 mb-1">Phòng Ban</label>
             <select id="uDept" class="w-full border p-1.5 rounded text-xs" required></select>
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-gray-600 mb-1">Chức Danh</label>
+            <select id="uJobTitle" class="w-full border p-1.5 rounded text-xs"></select>
           </div>
           <div>
             <label class="block text-xs font-semibold text-gray-600 mb-1">Nhóm Phân Quyền</label>
@@ -2038,6 +2039,8 @@
 
       <div id="subModalOpinions"></div>
 
+      <div id="subModalOpinionWarning"></div>
+
       <div>
         <h4 class="font-bold text-gray-800 mb-2">✍️ Ý Kiến Chỉ Đạo & Bút Phê Phê Duyệt Đồng Cấp</h4>
         <textarea id="txtSubmissionComment" placeholder="Nhập bút phê chỉ đạo, ý kiến phê duyệt hoặc lý do từ chối..." class="w-full border p-2 rounded h-20 text-xs focus:ring-1 focus:ring-amber-500 focus:outline-none"></textarea>
@@ -2399,6 +2402,7 @@
 // --- KHỞI TẠO DỮ LIỆU DB v6.0 ---
 const DB = {
   depts: [], cats: [], users: [], docs: [],
+  jobTitles: [], submissionTypes: [], contractTypes: [], carTypes: [],
   workflows: [], deptWorkflows: {},
   submissions: [], submissionDeptWorkflows: {},
   submissionTypeDeptWorkflows: {}, submissionApprovalGroups: {},
@@ -2427,7 +2431,8 @@ let editingGroupId = null;
 let permFormMode = 'USER'; // 'USER' | 'GROUP' — form Người dùng/Nhóm phân quyền dùng chung 1 bộ checkbox
 let activeWfMod = 'DOC';
 // Loại tờ trình đang chọn để cấu hình quy trình riêng — chỉ áp dụng khi activeWfMod === 'SUBMISSION'.
-// Gán giá trị thật ngay sau khi SUBMISSION_TYPES được khai báo (tránh lỗi tham chiếu trước khai báo).
+// Gán giá trị thật lần đầu mở đúng tab này (switchWfModule()), lúc đó DB.submissionTypes chắc chắn
+// đã tải xong (mặc định activeWfMod ban đầu là 'DOC', không phải 'SUBMISSION').
 let activeWfSubmissionType = null;
 // Lựa chọn mẫu quy trình CHƯA lưu (preview) theo phòng ban khi đang cấu hình — xem onWorkflowTemplateChange().
 let pendingWfTemplate = {};
@@ -2435,17 +2440,25 @@ let activeOfficeSubTab = 'MUA_BAN';
 let activeSystemSubTab = 'ADMIN';
 let activeFormTab = 'SUBMISSION';
 let editingCustomFieldId = null;
+// Khác null khi form Biểu Mẫu đang sửa 1 trường MẶC ĐỊNH (không phải trường bổ sung) — { coreKey,
+// fieldId }. Loại trừ lẫn nhau với editingCustomFieldId (chỉ 1 trong 2 khác null tại 1 thời điểm).
+let editingCoreField = null;
 
 // Danh mục các trường "mặc định" (đã có sẵn trong form nghiệp vụ) của mỗi module — dùng để
 // liệt kê đầy đủ trong module Biểu mẫu. Các trường này chỉ cho phép sửa Nhãn hiển thị + Bắt buộc
 // nhập (áp dụng trực tiếp lên form thật qua applyCoreFieldCustomizations), KHÔNG cho xóa / đổi kiểu
 // dữ liệu vì rất nhiều logic nghiệp vụ (phân quyền, duyệt, kiểm tra trùng lịch, nhắc hết hạn, báo cáo...)
 // phụ thuộc vào tên/kiểu thuộc tính cố định của các trường này.
+// optionsKey: riêng 3 trường dropdown "danh sách lựa chọn cố định" (Loại Tờ Trình/Pháp Lý/Xe — TRƯỚC
+// ĐÂY gõ cứng <option>, nay đổ động từ DB, xem populateDropdowns()) cho sửa thêm DANH SÁCH LỰA CHỌN
+// qua nút Sửa ở màn Biểu Mẫu (không phải đổi kiểu dữ liệu, chỉ thêm/bớt giá trị trong dropdown có
+// sẵn) — trỏ đúng tên key trong DB. optionsIsKeyLabel:true = danh sách dạng {key,label}[] (giữ
+// key ổn định cho submissionTypeDeptWorkflows), false/thiếu = danh sách chuỗi phẳng như depts/cats.
 const CORE_FIELD_MANIFEST = {
   SUBMISSION: [
     { id: 'subCode', label: 'Mã Văn Bản Trình / Tờ Trình', required: true },
     { id: 'subDept', label: 'Phòng Ban Trình', required: true },
-    { id: 'subType', label: 'Loại Tờ Trình', required: true },
+    { id: 'subType', label: 'Loại Tờ Trình', required: true, optionsKey: 'submissionTypes', optionsIsKeyLabel: true },
     { id: 'subTitle', label: 'Tên / Trích Yếu Tờ Trình', required: true },
     { id: 'subPriority', label: 'Độ Khẩn', required: false },
     { id: 'subFile', label: 'Tệp Đính Kèm Tờ Trình', required: false },
@@ -2454,7 +2467,7 @@ const CORE_FIELD_MANIFEST = {
   CONTRACT: [
     { id: 'contractCode', label: 'Mã Hợp Đồng / Giấy Phép', required: true },
     { id: 'contractDept', label: 'Phòng Ban Quản Lý', required: true },
-    { id: 'contractType', label: 'Loại Pháp Lý', required: true },
+    { id: 'contractType', label: 'Loại Pháp Lý', required: true, optionsKey: 'contractTypes' },
     { id: 'contractTitle', label: 'Tên Hợp Đồng / Tên Giấy Phép', required: true },
     { id: 'contractPartner', label: 'Đối Tác / Bên Ký Kết', required: true },
     { id: 'contractAmount', label: 'Giá Trị Hợp Đồng (VNĐ)', required: true },
@@ -2466,7 +2479,7 @@ const CORE_FIELD_MANIFEST = {
   CAR: [
     { id: 'carCode', label: 'Mã Phiếu Đăng Ký', required: true },
     { id: 'carDept', label: 'Đơn Vị (Phòng/Ban/Bộ phận)', required: true },
-    { id: 'carType', label: 'Đăng Ký Sử Dụng Loại Xe', required: true },
+    { id: 'carType', label: 'Đăng Ký Sử Dụng Loại Xe', required: true, optionsKey: 'carTypes' },
     { id: 'carPassengers', label: 'Số Người Sử Dụng', required: true },
     { id: 'carDirectUser', label: 'Người Sử Dụng Trực Tiếp', required: false },
     { id: 'carDirectUserPhone', label: 'SĐT Người Sử Dụng Trực Tiếp', required: false },
@@ -2571,6 +2584,40 @@ function updateCoreFieldOverride(coreKey, fieldId, prop, value) {
   syncStorage('formTemplates');
   applyCoreFieldCustomizations(coreKey);
   logSystemAction('CONFIG', 'UPDATE_CORE_FIELD', `Cập nhật thuộc tính "${prop}" của trường mặc định [${fieldId}] (${coreKey})`, 'SUCCESS', fieldId);
+}
+
+// Lấy danh sách nhãn hiển thị hiện tại của 1 trường mặc định kiểu dropdown "danh sách lựa chọn cố
+// định" (subType/contractType/carType — xem CORE_FIELD_MANIFEST optionsKey). Luôn trả mảng nhãn
+// (string) dù dữ liệu gốc là {key,label}[] (optionsIsKeyLabel:true) hay chuỗi phẳng.
+function getCoreFieldOptionsList(fieldDef) {
+  if (!fieldDef.optionsKey) return [];
+  const list = DB[fieldDef.optionsKey] || [];
+  return fieldDef.optionsIsKeyLabel ? list.map(x => x.label) : list.slice();
+}
+
+// Lưu lại danh sách lựa chọn mới cho 1 trường mặc định kiểu dropdown. Với danh sách dạng {key,label}[]
+// (optionsIsKeyLabel:true — hiện chỉ submissionTypes), GIỮ NGUYÊN key cũ cho nhãn không đổi (tránh làm
+// mồ côi submissionTypeDeptWorkflows đang tra theo key), chỉ sinh key mới cho nhãn thực sự mới.
+function saveCoreFieldOptionsList(fieldDef, newLabels) {
+  if (fieldDef.optionsIsKeyLabel) {
+    const existing = DB[fieldDef.optionsKey] || [];
+    const usedKeys = new Set();
+    DB[fieldDef.optionsKey] = newLabels.map(label => {
+      const match = existing.find(e => e.label === label && !usedKeys.has(e.key));
+      if (match) { usedKeys.add(match.key); return match; }
+      let base = label.normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+        .replace(/đ/g, 'd').replace(/Đ/g, 'D')
+        .toUpperCase().replace(/[^A-Z0-9]+/g, '_').replace(/^_+|_+$/g, '') || 'LOAI';
+      let key = base, n = 1;
+      while (existing.some(e => e.key === key) || usedKeys.has(key)) key = `${base}_${++n}`;
+      usedKeys.add(key);
+      return { key, label };
+    });
+  } else {
+    DB[fieldDef.optionsKey] = newLabels.slice();
+  }
+  syncStorage(fieldDef.optionsKey);
+  populateDropdowns();
 }
 let currentFilterCard = '';
 let currentProcessingSubId = null;
@@ -2836,29 +2883,42 @@ const BUSINESS_MODULES = [
 // Các loại Văn bản trình / Tờ trình cố định (khớp đúng option value ở #subType) — dùng làm khoá để
 // cấu hình quy trình phê duyệt RIÊNG cho từng loại (xem DB.submissionTypeDeptWorkflows,
 // getSubmissionDeptWorkflowConfig()), vì các loại tờ trình khác nhau thường cần luồng duyệt khác nhau.
-const SUBMISSION_TYPES = [
-  { key: 'CHU_TRUONG', label: 'Tờ trình xin chủ trương' },
-  { key: 'KINH_PHI', label: 'Tờ trình duyệt kinh phí' },
-  { key: 'NHAN_SU', label: 'Tờ trình nhân sự / bổ nhiệm' },
-  { key: 'QUY_CHE', label: 'Tờ trình ban hành Quy chế / Quy định' },
-  { key: 'KHAC', label: 'Tờ trình khác' }
-];
-activeWfSubmissionType = SUBMISSION_TYPES[0].key;
+// "Loại Tờ Trình" — TRƯỚC ĐÂY gõ cứng ở đây (const SUBMISSION_TYPES), giờ admin tự thêm/bớt được tại
+// màn Biểu Mẫu (nút Sửa trường mặc định "Loại Tờ Trình") nên chuyển thành dữ liệu DB.submissionTypes
+// (seed đúng 5 giá trị cũ trong defaults.js, xem lib/createValidation.js SUBMISSION_TYPES_FALLBACK để
+// biết vì sao vẫn còn 1 bản fallback y hệt ở server).
 
-// 3 lớp phê duyệt BỔ SUNG tuỳ chọn cho Văn bản trình — cộng thêm vào SAU quy trình phòng ban (gốc),
-// theo đúng thứ tự cố định dưới đây (Đồng trình -> Phê duyệt đồng cấp -> BGD, vì BGD luôn là bước ký
-// cuối cùng mang tính chỉ đạo). Người trình tick chọn lớp nào khi tạo tờ trình thì lớp đó được thêm
-// vào cuối quy trình hiệu lực của đúng tờ trình đó (xem submitSubmissionReq()). Thành viên từng lớp
-// do admin gán ở màn "Quản Lý Nhóm Phê Duyệt Trình" (DB.submissionApprovalGroups).
-// blocking:true = trở thành 1 BƯỚC DUYỆT thật trong effectiveSteps (chặn quy trình). blocking:false
-// (XIN_Y_KIEN) = kênh tham khảo song song, không chặn, không có nút Duyệt/Từ chối — xem
-// buildEffectiveSubmissionWorkflow() bên dưới + lib/createValidation.js (LƯU Ý BẢO TRÌNH, 2 bản độc lập).
+// 4 lớp phê duyệt BỔ SUNG tuỳ chọn cho Văn bản trình — cộng thêm vào SAU quy trình phòng ban (gốc),
+// theo đúng thứ tự cố định dưới đây: Đồng trình -> Phê duyệt đồng cấp -> Xin ý kiến (tham khảo trước,
+// không chặn) -> Ban Giám Đốc/Ban Tổng Giám Đốc -> Tổng Giám Đốc/Chủ Tịch (chỉ đạo cuối cùng). Người
+// trình tick chọn lớp nào khi tạo tờ trình thì lớp đó được thêm vào cuối quy trình hiệu lực của đúng
+// tờ trình đó (xem submitSubmissionReq()). Thành viên từng lớp do admin gán ở màn "Quản Lý Nhóm Phê
+// Duyệt Trình" (DB.submissionApprovalGroups).
+// blocking:true = trở thành 1 BƯỚC DUYỆT thật trong effectiveSteps (chặn quy trình, theo ĐÚNG thứ tự
+// xuất hiện trong mảng này — xem buildEffectiveSubmissionWorkflow()). blocking:false (XIN_Y_KIEN) =
+// kênh tham khảo song song, không chiếm 1 bước, không chặn, không có nút Duyệt/Từ chối — nhưng vị trí
+// của nó trong mảng vẫn có ý nghĩa: các bước CHẶN nằm SAU nó (BGD, TGD_CT) sẽ hiện cảnh báo cho người
+// duyệt nếu còn người được xin ý kiến chưa phản hồi (xem isSubmissionLayerAfterOpinion() +
+// openProcessSubmissionModal()). buildEffectiveSubmissionWorkflow() bên dưới + lib/createValidation.js
+// (LƯU Ý BẢO TRÌ, 2 bản độc lập, phải sửa đồng thời).
 const SUBMISSION_APPROVAL_LAYERS = [
   { key: 'DONG_TRINH', label: 'Đồng trình', blocking: true },
   { key: 'DONG_CAP', label: 'Phê duyệt đồng cấp', blocking: true },
-  { key: 'BGD', label: 'Ban Giám Đốc (Phê duyệt chỉ đạo)', blocking: true },
-  { key: 'XIN_Y_KIEN', label: 'Xin ý kiến', blocking: false }
+  { key: 'XIN_Y_KIEN', label: 'Xin ý kiến', blocking: false },
+  { key: 'BGD', label: 'Ban Giám Đốc/Ban Tổng Giám Đốc', blocking: true },
+  { key: 'TGD_CT', label: 'Tổng Giám Đốc/Chủ Tịch', blocking: true }
 ];
+
+// Vị trí lớp `layerKey` có nằm SAU lớp "Xin ý kiến" trong thứ tự chuẩn ở trên hay không — dùng để
+// quyết định có cảnh báo "còn người chưa cho ý kiến" cho bước phê duyệt đó hay không. Lớp không có
+// trong mảng (vd bước "Phòng ban" gốc, không đến từ 1 layer nào) luôn coi là KHÔNG nằm sau.
+function isSubmissionLayerAfterOpinion(layerKey) {
+  if (!layerKey) return false;
+  const idx = SUBMISSION_APPROVAL_LAYERS.findIndex(l => l.key === layerKey);
+  const opinionIdx = SUBMISSION_APPROVAL_LAYERS.findIndex(l => l.key === 'XIN_Y_KIEN');
+  if (idx === -1 || opinionIdx === -1) return false;
+  return idx > opinionIdx;
+}
 
 // Cổng truy cập module độc lập với các quyền hành động chi tiết (Xem/Tạo/Tải...) — admin luôn qua
 // được; user thường mặc định được BẬT ở mọi module (giữ nguyên hành vi cũ) trừ khi admin tắt riêng.
@@ -2965,7 +3025,7 @@ function getStepAdvanceMessage(stepApprovers) {
 // đã thiết lập, không có thì rơi về cấu hình chung theo phòng ban (DB.submissionDeptWorkflows, hành
 // vi cũ trước khi có tính năng theo loại) — nên chưa cấu hình gì thêm thì hành vi giữ nguyên như cũ.
 function getSubmissionDeptWorkflowConfig(type, dept) {
-  const typeEntry = SUBMISSION_TYPES.find(t => t.label === type);
+  const typeEntry = DB.submissionTypes.find(t => t.label === type);
   const typeKey = typeEntry ? typeEntry.key : 'KHAC';
   const typeMap = DB.submissionTypeDeptWorkflows[typeKey];
   const fromType = typeMap ? typeMap[dept] : null;
@@ -2994,7 +3054,9 @@ function buildEffectiveSubmissionWorkflow(type, dept, selectedLayerKeys, selecte
     const chosen = [...(selectedLayerMembers?.[layerKey] || [])];
     if (layer.blocking) {
       const stepOrder = steps.length + 1;
-      steps.push({ order: stepOrder, name: layer.label });
+      // layerKey: ghi lại lớp gốc sinh ra bước này — dùng để biết bước này có nằm SAU "Xin ý kiến"
+      // trong thứ tự chuẩn hay không (xem isSubmissionLayerAfterOpinion() + openProcessSubmissionModal()).
+      steps.push({ order: stepOrder, name: layer.label, layerKey: layer.key });
       approvers[stepOrder] = chosen;
     } else {
       // XIN_Y_KIEN: không phải bước duyệt — chỉ cosmetic ở client, giá trị THẬT do server tự dựng lại
@@ -3379,6 +3441,10 @@ async function initDatabase(loggingInUser) {
 
     DB.depts = data.depts || [];
     DB.cats = data.cats || [];
+    DB.jobTitles = data.jobTitles || [];
+    DB.submissionTypes = data.submissionTypes || [];
+    DB.contractTypes = data.contractTypes || [];
+    DB.carTypes = data.carTypes || [];
 
     // Di trú phân quyền cũ (cờ bật/tắt toàn công ty theo module) sang mô hình mới theo phòng ban.
     // Nếu có user nào được chuyển đổi, lưu lại ngay lên server để không phải di trú lại mỗi lần tải
@@ -4239,6 +4305,36 @@ function populateDropdowns() {
   if (uDept) {
     uDept.innerHTML = DB.depts.map(d => `<option value="${escapeHtml(d)}">${escapeHtml(d)}</option>`).join('');
   }
+
+  const uJobTitle = document.getElementById('uJobTitle');
+  if (uJobTitle) {
+    const current = uJobTitle.value;
+    uJobTitle.innerHTML = '<option value="">-- Chưa gán --</option>' + DB.jobTitles.map(t => `<option value="${escapeHtml(t)}">${escapeHtml(t)}</option>`).join('');
+    if (!current || DB.jobTitles.includes(current)) uJobTitle.value = current;
+  }
+
+  // Loại Tờ Trình / Loại Pháp Lý (Hợp đồng) / Loại Xe — TRƯỚC ĐÂY <option> gõ cứng, giờ đổ động từ
+  // DB.submissionTypes/contractTypes/carTypes (admin tự thêm/bớt ở màn Biểu Mẫu, xem CORE_FIELD_MANIFEST).
+  const subTypeSel = document.getElementById('subType');
+  if (subTypeSel) {
+    const current = subTypeSel.value;
+    subTypeSel.innerHTML = DB.submissionTypes.map(t => `<option value="${escapeHtml(t.label)}">${escapeHtml(t.label)}</option>`).join('');
+    if (DB.submissionTypes.some(t => t.label === current)) subTypeSel.value = current;
+  }
+
+  const contractTypeSel = document.getElementById('contractType');
+  if (contractTypeSel) {
+    const current = contractTypeSel.value;
+    contractTypeSel.innerHTML = DB.contractTypes.map(t => `<option value="${escapeHtml(t)}">${escapeHtml(t)}</option>`).join('');
+    if (DB.contractTypes.includes(current)) contractTypeSel.value = current;
+  }
+
+  const carTypeSel = document.getElementById('carType');
+  if (carTypeSel) {
+    const current = carTypeSel.value;
+    carTypeSel.innerHTML = DB.carTypes.map(t => `<option value="${escapeHtml(t)}">${escapeHtml(t)}</option>`).join('');
+    if (DB.carTypes.includes(current)) carTypeSel.value = current;
+  }
 }
 
 function updateUploadDeptDropdown() {
@@ -5027,6 +5123,7 @@ function openProcessSubmissionModal(subId) {
 
   renderSubModalInfoRequests(sub);
   renderSubModalOpinions(sub);
+  renderSubModalOpinionWarning(sub, wfConfig);
 
   const currentStepApprovers = wfConfig.approvers ? (wfConfig.approvers[sub.currentStep] || []) : [];
   const canApprove = (sub.status === 'PENDING') && canApproveStep(currentUser, currentStepApprovers, sub.history, sub.currentStep);
@@ -5228,6 +5325,40 @@ function renderSubModalOpinions(sub) {
   `;
 }
 
+// Cảnh báo (không chặn) cho người phê duyệt ở 1 bước nằm SAU "Xin ý kiến" trong thứ tự chuẩn (hiện
+// là Ban Giám Đốc/Ban Tổng Giám Đốc và Tổng Giám Đốc/Chủ Tịch) khi tờ trình có xin ý kiến nhưng còn
+// người CHƯA phản hồi — chỉ mang tính thông báo, người duyệt vẫn bấm Duyệt/Từ chối bình thường được
+// (xem yêu cầu: "đưa cảnh báo... để yêu cầu bổ sung ý kiến hoặc có thể phê duyệt luôn"). Tờ trình cũ
+// (bước không có layerKey do tạo trước khi có tính năng này) không bao giờ hiện cảnh báo — an toàn.
+function renderSubModalOpinionWarning(sub, wfConfig) {
+  const container = document.getElementById('subModalOpinionWarning');
+  if (!container) return;
+  container.innerHTML = '';
+
+  const requestees = sub.opinionRequestees || [];
+  if (requestees.length === 0) return;
+
+  const currentStepDef = (wfConfig.steps || []).find(s => s.order === sub.currentStep);
+  if (!currentStepDef || !isSubmissionLayerAfterOpinion(currentStepDef.layerKey)) return;
+
+  const responses = sub.opinionResponses || [];
+  const respondedUsernames = new Set(responses.map(r => r.username));
+  const pending = requestees.filter(u => !respondedUsernames.has(u));
+  if (pending.length === 0) return;
+
+  const pendingNames = pending.map(username => {
+    const u = DB.users.find(x => x.username === username);
+    return u ? u.name : username;
+  }).join(', ');
+
+  container.innerHTML = `
+    <div class="bg-amber-50 border border-amber-300 text-amber-800 rounded p-2.5 text-xs">
+      ⚠️ Còn <b>${pending.length}/${requestees.length}</b> người được xin ý kiến CHƯA phản hồi:
+      <b>${escapeHtml(pendingNames)}</b>. Bạn có thể liên hệ để bổ sung ý kiến trước, hoặc vẫn phê duyệt/từ chối ngay ở bước này.
+    </div>
+  `;
+}
+
 async function giveSubmissionOpinion() {
   if (!currentProcessingSubId) return;
   const sub = DB.submissions.find(s => s.id === currentProcessingSubId);
@@ -5351,6 +5482,7 @@ function buildSubmissionApprovalSlipHTML(sub) {
     bodyHTML,
     requesterRoleLabel: 'Người trình',
     requesterName: sub.creatorName,
+    requesterUsername: sub.creator,
     requesterTime: `Trình lúc: ${escapeHtml(sub.createdAt || '')}`,
     signatureColumnsHTML,
     footerNote: 'Phiếu được lập và phê duyệt điện tử trên Hệ thống Văn phòng điện tử (VPĐT) — không cần chữ ký tay/con dấu bản cứng. Thông tin phê duyệt có thể tra cứu lại trên hệ thống.'
@@ -8480,10 +8612,20 @@ async function processCarReg(actionType) {
 // trang chính) vì file tải về / cửa sổ in không load Tailwind.
 // ==========================================
 
+// Tra chức danh (DB.jobTitles) của 1 người theo username, dùng để hiện kèm tên trên chân ký phê
+// duyệt — trả '' nếu không tìm thấy user hoặc user chưa được gán chức danh (không hiện gì thêm,
+// không phải lỗi, đa số user hiện tại chưa có chức danh cho tới khi admin gán dần).
+function getUserJobTitle(username) {
+  const u = DB.users.find(x => x.username === username);
+  return u?.jobTitle || '';
+}
+
 // Dựng 1 cột chữ ký cho 1 bước quy trình, dựa trên lịch sử xử lý (history) của hồ sơ — không
 // hard-code cứng tên vai trò để khớp bất kỳ quy trình nào admin tự cấu hình ở module Quy Trình.
 // CẬP NHẬT: 1 bước có thể có NHIỀU người đồng duyệt cùng ký — hiển thị đủ tất cả (trước đây chỉ
-// lấy người duyệt đầu tiên tìm thấy, bỏ sót các đồng phê duyệt còn lại).
+// lấy người duyệt đầu tiên tìm thấy, bỏ sót các đồng phê duyệt còn lại). CẬP NHẬT: hiện thêm chức
+// danh (nếu người duyệt đã được admin gán) ngay dưới tên — tra theo h.username đã có sẵn trong mỗi
+// entry lịch sử (lib/workflowEngine.js luôn ghi kèm cả 2: approver=tên hiển thị, username=định danh).
 function buildApprovalSignatureColumnHTML(step, history) {
   const entries = (history || []).filter(h => h.step === step.order && h.action === 'APPROVED');
   if (entries.length === 0) {
@@ -8494,10 +8636,14 @@ function buildApprovalSignatureColumnHTML(step, history) {
       </td>
     `;
   }
-  const namesHTML = entries.map(e => `
+  const namesHTML = entries.map(e => {
+    const jobTitle = getUserJobTitle(e.username);
+    return `
     <div class="as-sign-name">${escapeHtml(e.approver)}</div>
+    ${jobTitle ? `<div class="as-sign-jobtitle">${escapeHtml(jobTitle)}</div>` : ''}
     <div class="as-sign-time">Lúc: ${escapeHtml(e.time)}</div>
-  `).join('<div style="height:6px;"></div>');
+  `;
+  }).join('<div style="height:6px;"></div>');
   return `
     <td>
       <span class="as-sign-role">${escapeHtml(step.name)}</span>
@@ -8510,9 +8656,10 @@ function buildApprovalSignatureColumnHTML(step, history) {
 function buildApprovalSlipShellHTML(opts) {
   const {
     formCode = '', title, approvedNote, bodyHTML,
-    requesterRoleLabel = 'Người đề nghị', requesterName, requesterTime,
+    requesterRoleLabel = 'Người đề nghị', requesterName, requesterUsername, requesterTime,
     signatureColumnsHTML, footerNote
   } = opts;
+  const requesterJobTitle = requesterUsername ? getUserJobTitle(requesterUsername) : '';
 
   return `
     <div class="approval-slip">
@@ -8538,6 +8685,7 @@ function buildApprovalSlipShellHTML(opts) {
         .approval-slip .as-sign-role { font-weight: bold; text-transform: uppercase; display: block; margin-bottom: 6px; }
         .approval-slip .as-sign-stamp { border: 2px solid #16a34a; color: #16a34a; display: inline-block; padding: 3px 8px; border-radius: 4px; font-weight: bold; font-size: 10px; transform: rotate(-6deg); margin: 6px 0 4px; }
         .approval-slip .as-sign-name { font-weight: bold; margin-top: 2px; }
+        .approval-slip .as-sign-jobtitle { font-size: 11px; color: #444; font-style: italic; }
         .approval-slip .as-sign-time { font-size: 10.5px; color: #555; }
         .approval-slip .as-comment-box { background: #fffbeb; border: 1px solid #fde68a; border-radius: 4px; padding: 8px 10px; margin: 6px 0; }
         .approval-slip .as-comment-box p { margin: 0; font-style: italic; }
@@ -8560,6 +8708,7 @@ function buildApprovalSlipShellHTML(opts) {
             <td>
               <span class="as-sign-role">${escapeHtml(requesterRoleLabel)}</span>
               <div class="as-sign-name">${escapeHtml(requesterName || '')}</div>
+              ${requesterJobTitle ? `<div class="as-sign-jobtitle">${escapeHtml(requesterJobTitle)}</div>` : ''}
               <div class="as-sign-time">${requesterTime || ''}</div>
             </td>
             ${signatureColumnsHTML}
@@ -8608,6 +8757,7 @@ function buildCarApprovalSlipHTML(car) {
     approvedNote: `✅ Đã phê duyệt hoàn tất trên Hệ thống Văn phòng điện tử — Mã phiếu: ${escapeHtml(car.code)}`,
     bodyHTML,
     requesterName: car.creatorName,
+    requesterUsername: car.creator,
     requesterTime: `Đăng ký lúc: ${escapeHtml(car.createdAt || '')}`,
     signatureColumnsHTML,
     footerNote: 'Phiếu được lập và phê duyệt điện tử trên Hệ thống Văn phòng điện tử (VPĐT) — không cần chữ ký tay/con dấu bản cứng. Thông tin phê duyệt có thể tra cứu lại trên hệ thống.'
@@ -9114,6 +9264,7 @@ function buildOfficeApprovalSlipHTML(o) {
     bodyHTML,
     requesterRoleLabel: 'Người đề nghị',
     requesterName: o.creatorName,
+    requesterUsername: o.creator,
     requesterTime: `Đề nghị lúc: ${escapeHtml(o.createdAt || '')}`,
     signatureColumnsHTML,
     footerNote: 'Phiếu được lập và phê duyệt điện tử trên Hệ thống Văn phòng điện tử (VPĐT) — không cần chữ ký tay/con dấu bản cứng. Chữ ký các cấp theo đúng quy trình phê duyệt đã cấu hình cho phòng ban. Thông tin phê duyệt có thể tra cứu lại trên hệ thống.'
@@ -9168,7 +9319,7 @@ function setSystemSubTab(subTab) {
   document.getElementById('btnSystemSubLog').className = subTab === 'LOG' ? activeCls : inactiveCls;
 
   if (subTab === 'ADMIN') {
-    renderDeptList(); renderCatList(); renderDeptCheckboxes(); renderModuleAccessCheckboxes(); renderUsers(); loadEmailConfigToForm(); renderPermGroupsList(); renderSubmissionApprovalGroups();
+    renderDeptList(); renderCatList(); renderJobTitleList(); renderDeptCheckboxes(); renderModuleAccessCheckboxes(); renderUsers(); loadEmailConfigToForm(); renderPermGroupsList(); renderSubmissionApprovalGroups();
   }
   if (subTab === 'FORM') { switchFormTab(activeFormTab); }
   if (subTab === 'WORKFLOW') { renderWorkflowTab(); }
@@ -9206,9 +9357,30 @@ function toggleOptionsInput() {
 function addCustomField(e) {
   e.preventDefault();
   const label = document.getElementById('fldLabel').value.trim();
+  const required = document.getElementById('fldRequired').checked;
+
+  // Đang sửa 1 trường MẶC ĐỊNH (không phải trường bổ sung) — nhánh riêng, không đụng gì tới
+  // DB.formTemplates[activeFormTab] (nơi CHỈ chứa trường bổ sung).
+  if (editingCoreField) {
+    const { coreKey, fieldId } = editingCoreField;
+    const fieldDef = (CORE_FIELD_MANIFEST[coreKey] || []).find(f => f.id === fieldId);
+    if (!fieldDef) { cancelEditCustomField(); return; }
+    updateCoreFieldOverride(coreKey, fieldId, 'label', label || fieldDef.label);
+    updateCoreFieldOverride(coreKey, fieldId, 'required', required);
+    if (fieldDef.optionsKey) {
+      const newLabels = document.getElementById('fldOptions').value.trim().split(',').map(s => s.trim()).filter(Boolean);
+      if (newLabels.length === 0) return alert('⛔ Danh sách lựa chọn không được để trống!');
+      saveCoreFieldOptionsList(fieldDef, newLabels);
+      logSystemAction('CONFIG', 'UPDATE_CORE_FIELD_OPTIONS', `Cập nhật danh sách lựa chọn của trường mặc định [${fieldId}] (${coreKey}): ${newLabels.length} giá trị`, 'SUCCESS', fieldId);
+    }
+    alert('✅ Đã cập nhật trường mặc định thành công!');
+    cancelEditCustomField();
+    renderFormFieldsTable();
+    return;
+  }
+
   const type = document.getElementById('fldType').value;
   const optionsRaw = document.getElementById('fldOptions').value.trim();
-  const required = document.getElementById('fldRequired').checked;
   const optionsArr = ['select', 'multiselect'].includes(type) ? optionsRaw.split(',').map(s => s.trim()).filter(Boolean) : [];
 
   if (!DB.formTemplates[activeFormTab]) DB.formTemplates[activeFormTab] = [];
@@ -9241,7 +9413,9 @@ function addCustomField(e) {
 function editCustomField(fieldId) {
   const field = (DB.formTemplates[activeFormTab] || []).find(f => f.id === fieldId);
   if (!field) return;
+  editingCoreField = null;
   editingCustomFieldId = fieldId;
+  document.getElementById('fldTypeGroup').classList.remove('hidden');
   document.getElementById('fldLabel').value = field.label;
   document.getElementById('fldType').value = field.type;
   document.getElementById('fldOptions').value = (field.options || []).join(', ');
@@ -9250,13 +9424,43 @@ function editCustomField(fieldId) {
   document.getElementById('lblFormFieldFormMode').innerText = '✏️ Đang Sửa Trường Bổ Sung Của:';
   document.getElementById('btnSubmitCustomField').innerText = 'Cập Nhật Trường';
   document.getElementById('btnCancelEditField').classList.remove('hidden');
+  document.getElementById('fldLabel').closest('form').scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+// Mở form phía trên (dùng chung với trường bổ sung) ở chế độ sửa 1 trường MẶC ĐỊNH — chỉ hiện Nhãn
+// hiển thị + Bắt buộc (ẩn hẳn Kiểu Dữ Liệu — không được đổi ở trường mặc định, xem CORE_FIELD_MANIFEST),
+// riêng trường có optionsKey (subType/contractType/carType) hiện thêm ô Tùy Chọn để thêm/bớt lựa chọn.
+function editCoreField(coreKey, fieldId) {
+  const fieldDef = (CORE_FIELD_MANIFEST[coreKey] || []).find(f => f.id === fieldId);
+  if (!fieldDef) return;
+  const overrides = getCoreFieldOverrides(coreKey);
+  const override = overrides[fieldId] || {};
+  const label = (typeof override.label === 'string' && override.label.trim()) ? override.label.trim() : fieldDef.label;
+  const required = ('required' in override) ? !!override.required : fieldDef.required;
+
+  editingCustomFieldId = null;
+  editingCoreField = { coreKey, fieldId };
+
+  document.getElementById('fldLabel').value = label;
+  document.getElementById('fldRequired').checked = required;
+  document.getElementById('fldTypeGroup').classList.add('hidden');
+  const hasOptions = !!fieldDef.optionsKey;
+  document.getElementById('optionsGroup').classList.toggle('hidden', !hasOptions);
+  document.getElementById('fldOptions').value = hasOptions ? getCoreFieldOptionsList(fieldDef).join(', ') : '';
+
+  document.getElementById('lblFormFieldFormMode').innerText = '✏️ Đang Sửa Trường Mặc Định Của:';
+  document.getElementById('btnSubmitCustomField').innerText = 'Cập Nhật Trường Mặc Định';
+  document.getElementById('btnCancelEditField').classList.remove('hidden');
+  document.getElementById('fldLabel').closest('form').scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
 function cancelEditCustomField() {
   editingCustomFieldId = null;
+  editingCoreField = null;
   const form = document.getElementById('btnSubmitCustomField')?.closest('form');
   if (form) form.reset();
   document.getElementById('optionsGroup')?.classList.add('hidden');
+  document.getElementById('fldTypeGroup')?.classList.remove('hidden');
   const modeLbl = document.getElementById('lblFormFieldFormMode');
   if (modeLbl) modeLbl.innerText = '➕ Thêm Trường Dữ Liệu Bổ Sung Cho:';
   const submitBtn = document.getElementById('btnSubmitCustomField');
@@ -9306,6 +9510,7 @@ function renderFormFieldsTable() {
     const override = coreOverrides[f.id] || {};
     const label = (typeof override.label === 'string' && override.label.trim()) ? override.label.trim() : f.label;
     const required = ('required' in override) ? !!override.required : f.required;
+    const optionsDisplay = f.optionsKey ? escapeHtml(getCoreFieldOptionsList(f).join(', ')) : '-';
     return `
     <tr class="border-b hover:bg-gray-50 bg-gray-50/50">
       <td class="p-2 border font-mono font-bold text-gray-700">${escapeHtml(f.id)}</td>
@@ -9313,12 +9518,14 @@ function renderFormFieldsTable() {
         <input value="${escapeHtml(label)}" oninput="updateCoreFieldOverride('${coreKey}', '${f.id}', 'label', this.value.trim() || '${escapeHtml(f.label).replace(/'/g, "\\'")}')" class="w-full border-0 bg-transparent p-0.5 font-bold text-gray-800 focus:outline-none focus:bg-white rounded">
       </td>
       <td class="p-2 border text-gray-500">Trường Hệ Thống</td>
-      <td class="p-2 border">-</td>
+      <td class="p-2 border">${optionsDisplay}</td>
       <td class="p-2 border text-center">
         <input type="checkbox" ${required ? 'checked' : ''} onchange="updateCoreFieldOverride('${coreKey}', '${f.id}', 'required', this.checked)" class="w-4 h-4">
       </td>
       <td class="p-2 border text-center"><span class="text-gray-400">Mặc định</span></td>
-      <td class="p-2 border text-center text-gray-400">-</td>
+      <td class="p-2 border text-center whitespace-nowrap">
+        <button type="button" onclick="editCoreField('${coreKey}', '${f.id}')" class="text-blue-600 font-bold hover:underline">✏️ Sửa</button>
+      </td>
     </tr>`;
   }).join('');
 
@@ -9431,17 +9638,25 @@ async function collectDynamicFieldsData(modKey, containerId) {
 // module mới chỉ cần sửa 1 chỗ, tránh nguy cơ quên đồng bộ 1 trong nhiều hàm).
 const WF_MODULE_CONFIG = {
   DOC: { dbKey: 'deptWorkflows', label: 'Tài liệu', title: '📂 Cấu Hình Quy Trình Phê Duyệt Tài Liệu Theo Phòng Ban' },
-  // types: cấu hình quy trình theo phòng ban RIÊNG cho từng loại tờ trình (xem SUBMISSION_TYPES) —
-  // dbKey trỏ tới cấu trúc LỒNG {loại: {phòng ban: config}}. legacyDbKey là cấu hình chung cũ (chỉ
-  // theo phòng ban, trước khi có tính năng theo loại) — dùng làm phương án dự phòng hiển thị/lưu khi
-  // loại đang chọn CHƯA được admin cấu hình riêng, để không đổi hành vi cho tới khi admin chủ động
-  // tuỳ chỉnh (xem getSubmissionDeptWorkflowConfig()).
-  SUBMISSION: { dbKey: 'submissionTypeDeptWorkflows', legacyDbKey: 'submissionDeptWorkflows', types: SUBMISSION_TYPES, label: 'Văn bản trình', title: '📜 Cấu Hình Quy Trình Văn Bản Trình / Tờ Trình Theo Phòng Ban' },
+  // hasTypes: cấu hình quy trình theo phòng ban RIÊNG cho từng loại tờ trình (danh sách loại lấy từ
+  // DB.submissionTypes, admin tự thêm/bớt được ở màn Biểu Mẫu — xem getWfModuleTypes()) — dbKey trỏ
+  // tới cấu trúc LỒNG {loại: {phòng ban: config}}. legacyDbKey là cấu hình chung cũ (chỉ theo phòng
+  // ban, trước khi có tính năng theo loại) — dùng làm phương án dự phòng hiển thị/lưu khi loại đang
+  // chọn CHƯA được admin cấu hình riêng, để không đổi hành vi cho tới khi admin chủ động tuỳ chỉnh
+  // (xem getSubmissionDeptWorkflowConfig()).
+  SUBMISSION: { dbKey: 'submissionTypeDeptWorkflows', legacyDbKey: 'submissionDeptWorkflows', hasTypes: true, label: 'Văn bản trình', title: '📜 Cấu Hình Quy Trình Văn Bản Trình / Tờ Trình Theo Phòng Ban' },
   CAR: { dbKey: 'carDeptWorkflows', label: 'Đăng ký xe', title: '🚗 Cấu Hình Quy Trình Đăng Ký Xe Theo Phòng Ban' },
   OFFICE_BUY: { dbKey: 'officeBuyDeptWorkflows', label: 'Mua bán VP', title: '🛒 Cấu Hình Quy Trình Phê Duyệt Mua Bán VP Theo Phòng Ban' },
   OFFICE_FIX: { dbKey: 'officeFixDeptWorkflows', label: 'Sửa chữa VP', title: '🔧 Cấu Hình Quy Trình Phê Duyệt Sửa Chữa VP Theo Phòng Ban' },
   OFFICE_INVEST: { dbKey: 'officeInvestDeptWorkflows', label: 'Đầu tư VP', title: '📈 Cấu Hình Quy Trình Phê Duyệt Đầu Tư VP Theo Phòng Ban' }
 };
+
+// Danh sách LOẠI của 1 module quy trình (hiện chỉ Văn bản trình có) — đọc trực tiếp từ DB.submissionTypes
+// (không cache tham chiếu tĩnh vào WF_MODULE_CONFIG) vì admin có thể sửa danh sách này bất kỳ lúc nào
+// ở màn Biểu Mẫu, cần luôn thấy đúng dữ liệu mới nhất.
+function getWfModuleTypes(mod) {
+  return WF_MODULE_CONFIG[mod]?.hasTypes ? DB.submissionTypes : null;
+}
 
 function switchWfModule(mod) {
   activeWfMod = mod;
@@ -9458,13 +9673,14 @@ function switchWfModule(mod) {
   // Văn bản trình có thêm 1 hàng tab chọn LOẠI tờ trình (mỗi loại cấu hình quy trình riêng) — chỉ
   // hiện khi đang ở đúng module này, module khác vẫn cấu hình 1 quy trình duy nhất theo phòng ban.
   const typeTabsEl = document.getElementById('wfSubmissionTypeTabs');
-  const hasTypes = !!WF_MODULE_CONFIG[mod].types;
+  const types = getWfModuleTypes(mod);
+  const hasTypes = !!(types && types.length);
   if (typeTabsEl) {
     typeTabsEl.classList.toggle('hidden', !hasTypes);
     typeTabsEl.classList.toggle('flex', hasTypes);
   }
   if (hasTypes) {
-    activeWfSubmissionType = WF_MODULE_CONFIG[mod].types[0].key;
+    activeWfSubmissionType = types[0].key;
     renderWfSubmissionTypeTabs();
   }
 
@@ -9476,7 +9692,7 @@ function switchWfModule(mod) {
 function renderWfSubmissionTypeTabs() {
   const container = document.getElementById('wfSubmissionTypeTabs');
   if (!container) return;
-  const types = WF_MODULE_CONFIG[activeWfMod].types || [];
+  const types = getWfModuleTypes(activeWfMod) || [];
   container.innerHTML = types.map(t => `
     <button onclick="switchWfSubmissionType('${t.key}')" class="px-3 py-1.5 rounded text-xs font-bold ${t.key === activeWfSubmissionType ? 'bg-emerald-600 text-white' : 'bg-gray-100 text-gray-700'}">${escapeHtml(t.label)}</button>
   `).join('');
@@ -9519,7 +9735,7 @@ function renderWorkflowTab() {
   // hiển thị, để không đổi hành vi cho tới khi admin chủ động tuỳ chỉnh riêng loại đó.
   const modConfig = WF_MODULE_CONFIG[activeWfMod];
   let deptWfMap, legacyMap;
-  if (modConfig.types) {
+  if (modConfig.hasTypes) {
     if (!DB[modConfig.dbKey][activeWfSubmissionType]) DB[modConfig.dbKey][activeWfSubmissionType] = {};
     deptWfMap = DB[modConfig.dbKey][activeWfSubmissionType];
     legacyMap = modConfig.legacyDbKey ? DB[modConfig.legacyDbKey] : {};
@@ -9626,7 +9842,7 @@ function saveDeptWorkflowConfig(dept) {
   const newConfig = { workflowId: selectedWfId, approvers: approversObj };
   const modConfig = WF_MODULE_CONFIG[activeWfMod];
   const dbKey = modConfig.dbKey;
-  if (modConfig.types) {
+  if (modConfig.hasTypes) {
     if (!DB[dbKey][activeWfSubmissionType]) DB[dbKey][activeWfSubmissionType] = {};
     DB[dbKey][activeWfSubmissionType][dept] = newConfig;
   } else {
@@ -9795,6 +10011,42 @@ function renderDeptList() {
     <li class="p-2 flex justify-between items-center hover:bg-gray-50">
       <span>${escapeHtml(d)}</span>
       <button onclick="deleteDept('${escapeHtml(d)}')" class="text-red-500 font-bold hover:underline">Xóa</button>
+    </li>
+  `).join('');
+}
+
+// Danh sách Chức Danh — cùng mô hình với Phòng Ban/Phân Loại Tài Liệu ở trên (danh sách chuỗi phẳng,
+// admin tự thêm/xóa). Không kiểm tra ai đang dùng chức danh sắp xóa (giống hệt xóa Phòng Ban) — chân
+// ký của các hồ sơ đã tạo trước đó chỉ đơn giản không còn hiện chức danh nếu người đó bị gỡ khỏi danh
+// sách sau này, không phá vỡ dữ liệu cũ.
+function saveJobTitle(e) {
+  e.preventDefault();
+  const name = document.getElementById('txtJobTitleName').value.trim();
+  if (DB.jobTitles.includes(name)) return alert('Chức danh đã tồn tại!');
+  DB.jobTitles.push(name);
+  syncStorage('jobTitles');
+  logSystemAction('USER_MGM', 'ADD_JOB_TITLE', `Thêm chức danh mới [${name}]`, 'SUCCESS', name);
+  document.getElementById('txtJobTitleName').value = '';
+  renderJobTitleList();
+  populateDropdowns();
+}
+
+function deleteJobTitle(name) {
+  if (!confirm(`Xóa chức danh ${name}?`)) return;
+  DB.jobTitles = DB.jobTitles.filter(t => t !== name);
+  syncStorage('jobTitles');
+  logSystemAction('USER_MGM', 'DELETE_JOB_TITLE', `Xóa chức danh [${name}]`, 'SUCCESS', name);
+  renderJobTitleList();
+  populateDropdowns();
+}
+
+function renderJobTitleList() {
+  const ul = document.getElementById('jobTitleList');
+  if (!ul) return;
+  ul.innerHTML = DB.jobTitles.map(t => `
+    <li class="p-2 flex justify-between items-center hover:bg-gray-50">
+      <span>${escapeHtml(t)}</span>
+      <button onclick="deleteJobTitle('${escapeHtml(t)}')" class="text-red-500 font-bold hover:underline">Xóa</button>
     </li>
   `).join('');
 }
@@ -10434,6 +10686,7 @@ function saveUser(e) {
   const email = document.getElementById('uEmail').value.trim();
   const phone = document.getElementById('uPhone').value.trim();
   const dept = document.getElementById('uDept').value;
+  const jobTitle = document.getElementById('uJobTitle').value || null;
   const groupId = document.getElementById('uPermGroup').value || null;
 
   // Nếu gán vào nhóm phân quyền: khối checkbox trên form KHÔNG còn bị khoá, cho phép tick thêm/bớt
@@ -10456,6 +10709,7 @@ function saveUser(e) {
       user.email = email;
       user.phone = phone;
       user.dept = dept;
+      user.jobTitle = jobTitle;
       user.perms = perms;
       user.groupId = groupId;
       user.permOverrides = permOverrides;
@@ -10465,7 +10719,7 @@ function saveUser(e) {
     if (DB.users.some(u => u.username === username)) return alert('Tên đăng nhập đã tồn tại!');
     DB.users.push({
       id: Date.now(),
-      username, pass, name, email, phone, dept, perms, groupId, permOverrides
+      username, pass, name, email, phone, dept, jobTitle, perms, groupId, permOverrides
     });
   }
 
@@ -10484,6 +10738,7 @@ function resetUserForm() {
   document.getElementById('uFullName').value = '';
   document.getElementById('uEmail').value = '';
   document.getElementById('uPhone').value = '';
+  document.getElementById('uJobTitle').value = '';
   document.getElementById('uPermGroup').value = '';
   updatePermGroupNote(false);
   // CẬP NHẬT: mặc định AN TOÀN cho user mới — không bật sẵn quyền xem/tạo liên phòng ban nào ở
@@ -10547,6 +10802,7 @@ function editUser(id) {
   document.getElementById('uEmail').value = user.email || '';
   document.getElementById('uPhone').value = user.phone || '';
   document.getElementById('uDept').value = user.dept;
+  document.getElementById('uJobTitle').value = user.jobTitle || '';
   document.getElementById('uPermGroup').value = user.groupId || '';
 
   // Perms của user cũ (nếu chưa từng được di trú vì lý do nào đó) sẽ được quy đổi tạm thời ở đây để
@@ -10674,9 +10930,9 @@ function downloadUserTemplate() {
 // KHÔNG export cột mật khẩu — server không còn gửi mật khẩu (dù đã hash) về trình duyệt cho bất kỳ
 // ai, kể cả admin, nên không có gì để xuất ra CSV ở đây nữa (và không nên có, dù là hash).
 function exportUsersCSV() {
-  let csv = "username,name,email,phone,dept\n";
+  let csv = "username,name,email,phone,dept,jobTitle\n";
   DB.users.forEach(u => {
-    csv += `"${u.username}","${u.name}","${u.email || ''}","${u.phone || ''}","${u.dept}"\n`;
+    csv += `"${u.username}","${u.name}","${u.email || ''}","${u.phone || ''}","${u.dept}","${u.jobTitle || ''}"\n`;
   });
   const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
   const url = URL.createObjectURL(blob);
@@ -10698,11 +10954,11 @@ function importUsersCSV(evt) {
       if (!line) continue;
       const parts = line.split(',').map(p => p.replace(/"/g, '').trim());
       if (parts.length >= 6) {
-        const [username, pass, name, email, phone, dept] = parts;
+        const [username, pass, name, email, phone, dept, jobTitle] = parts;
         if (!DB.users.some(u => u.username === username)) {
           DB.users.push({
             id: Date.now() + Math.random(),
-            username, pass, name, email, phone, dept,
+            username, pass, name, email, phone, dept, jobTitle: jobTitle || null,
             perms: defaultNewUserPerms()
           });
           count++;

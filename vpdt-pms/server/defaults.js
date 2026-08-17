@@ -12,6 +12,30 @@ const DEFAULTS = {
 
   cats: ['Quy trình / Quy định', 'Báo cáo tài chính', 'Hợp đồng / Hồ sơ'],
 
+  // Danh sách chức danh — dùng cho field "Chức danh" trong hồ sơ user (hiện kèm tên trên các chân ký
+  // phê duyệt). Chỉ 1 danh sách dùng chung toàn hệ thống, admin thêm/xoá tại màn Quản trị (giống hệt
+  // mô hình depts/cats ở trên).
+  jobTitles: ['Nhân viên', 'Chuyên viên', 'Trưởng phòng', 'Phó phòng', 'Giám đốc', 'Phó giám đốc', 'Tổng Giám Đốc', 'Chủ Tịch'],
+
+  // Danh sách "Loại Tờ Trình" — TRƯỚC ĐÂY gõ cứng trong index.html (const SUBMISSION_TYPES), giờ
+  // chuyển thành dữ liệu để admin tự thêm/bớt tại màn Biểu Mẫu (nút Sửa trường mặc định "Loại Tờ
+  // Trình"). GIỮ NGUYÊN đúng key/label hiện có để không đổi hành vi cho dữ liệu cũ (submissionType
+  // DeptWorkflows đang tra cứu theo các key này — xem getSubmissionDeptWorkflowConfig() trong
+  // index.html + lib/createValidation.js).
+  submissionTypes: [
+    { key: 'CHU_TRUONG', label: 'Tờ trình xin chủ trương' },
+    { key: 'KINH_PHI', label: 'Tờ trình duyệt kinh phí' },
+    { key: 'NHAN_SU', label: 'Tờ trình nhân sự / bổ nhiệm' },
+    { key: 'QUY_CHE', label: 'Tờ trình ban hành Quy chế / Quy định' },
+    { key: 'KHAC', label: 'Tờ trình khác' }
+  ],
+
+  // Danh sách "Loại Pháp Lý" (Hợp đồng) và "Đăng Ký Sử Dụng Loại Xe" — TRƯỚC ĐÂY gõ cứng thẳng
+  // <option> trong HTML, giờ chuyển thành dữ liệu để admin tự thêm/bớt (nút Sửa trường mặc định
+  // tương ứng ở màn Biểu Mẫu). Giữ nguyên đúng các giá trị hiện có.
+  contractTypes: ['Hợp đồng kinh tế', 'Hợp đồng lao động', 'Giấy phép kinh doanh / Pháp lý', 'Thỏa thuận bảo mật (NDA)', 'Phụ lục hợp đồng'],
+  carTypes: ['5 chỗ', '7 chỗ'],
+
   emailConfig: {
     enabled: true, smtpHost: 'smtp.gmail.com', smtpPort: 587, senderEmail: 'dms-noreply@company.com',
     contractExpiryReminderDays: [30, 15, 7], contractExpiryCcEmails: []

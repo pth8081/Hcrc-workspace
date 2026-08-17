@@ -33,9 +33,12 @@ function findMeetingConflict(meetings, room, startTime, endTime) {
 
 const OFFICE_SUBTYPE_TO_PERM_FLAG = { MUA_BAN: 'officeBuy', SUA_CHUA: 'officeFix', DAU_TU: 'officeInvest' };
 
-// Khớp đúng SUBMISSION_TYPES và SUBMISSION_APPROVAL_LAYERS trong index.html — xem "LƯU Ý BẢO TRÌ" ở
-// đầu file, 2 cài đặt độc lập vì client (trình duyệt) không import chung được với server (Node).
-const SUBMISSION_TYPES = [
+// Khớp đúng SUBMISSION_APPROVAL_LAYERS trong index.html — xem "LƯU Ý BẢO TRÌ" ở đầu file, 2 cài đặt
+// độc lập vì client (trình duyệt) không import chung được với server (Node).
+// "Loại Tờ Trình" giờ là dữ liệu (appData.submissionTypes, admin tự thêm/bớt ở màn Biểu Mẫu) thay vì
+// hằng số gõ cứng — SUBMISSION_TYPES_FALLBACK chỉ dùng khi appData chưa có key này (dữ liệu cũ trước
+// khi có tính năng, hoặc seed lỗi), khớp đúng giá trị seed mặc định trong defaults.js.
+const SUBMISSION_TYPES_FALLBACK = [
   { key: 'CHU_TRUONG', label: 'Tờ trình xin chủ trương' },
   { key: 'KINH_PHI', label: 'Tờ trình duyệt kinh phí' },
   { key: 'NHAN_SU', label: 'Tờ trình nhân sự / bổ nhiệm' },
@@ -44,14 +47,16 @@ const SUBMISSION_TYPES = [
 ];
 
 // blocking:true = lớp trở thành 1 BƯỚC DUYỆT thật trong effectiveSteps (chặn quy trình, phải xử lý
-// xong mới qua bước sau). blocking:false (XIN_Y_KIEN) = kênh tham khảo song song — người được chọn
-// để lại ý kiến vào opinionRequestees/opinionResponses của hồ sơ, KHÔNG tham gia effectiveSteps,
-// KHÔNG có hành động Duyệt/Từ chối (xem buildEffectiveSubmissionWorkflowServer bên dưới).
+// xong mới qua bước sau, theo ĐÚNG thứ tự xuất hiện trong mảng này). blocking:false (XIN_Y_KIEN) =
+// kênh tham khảo song song — người được chọn để lại ý kiến vào opinionRequestees/opinionResponses
+// của hồ sơ, KHÔNG tham gia effectiveSteps, KHÔNG có hành động Duyệt/Từ chối (xem
+// buildEffectiveSubmissionWorkflowServer bên dưới).
 const SUBMISSION_APPROVAL_LAYERS = [
   { key: 'DONG_TRINH', label: 'Đồng trình', blocking: true },
   { key: 'DONG_CAP', label: 'Phê duyệt đồng cấp', blocking: true },
-  { key: 'BGD', label: 'Ban Giám Đốc (Phê duyệt chỉ đạo)', blocking: true },
-  { key: 'XIN_Y_KIEN', label: 'Xin ý kiến', blocking: false }
+  { key: 'XIN_Y_KIEN', label: 'Xin ý kiến', blocking: false },
+  { key: 'BGD', label: 'Ban Giám Đốc/Ban Tổng Giám Đốc', blocking: true },
+  { key: 'TGD_CT', label: 'Tổng Giám Đốc/Chủ Tịch', blocking: true }
 ];
 
 // Tự dựng lại TOÀN BỘ quy trình hiệu lực (steps/approvers) của 1 tờ trình mới từ dữ liệu ĐÃ XÁC MINH
@@ -62,7 +67,8 @@ const SUBMISSION_APPROVAL_LAYERS = [
 // không thì từ chối tạo. Khớp đúng buildEffectiveSubmissionWorkflow() + getSubmissionDeptWorkflowConfig()
 // trong index.html.
 function buildEffectiveSubmissionWorkflowServer(type, dept, selectedLayerKeys, selectedLayerMembers, appData) {
-  const typeEntry = SUBMISSION_TYPES.find(t => t.label === type);
+  const submissionTypes = (appData.submissionTypes && appData.submissionTypes.length) ? appData.submissionTypes : SUBMISSION_TYPES_FALLBACK;
+  const typeEntry = submissionTypes.find(t => t.label === type);
   const typeKey = typeEntry ? typeEntry.key : 'KHAC';
   const typeMap = appData.submissionTypeDeptWorkflows || {};
   const deptMap = appData.submissionDeptWorkflows || {};
@@ -94,7 +100,9 @@ function buildEffectiveSubmissionWorkflowServer(type, dept, selectedLayerKeys, s
 
     if (layer.blocking) {
       const stepOrder = steps.length + 1;
-      steps.push({ order: stepOrder, name: layer.label });
+      // layerKey: khớp đúng index.html buildEffectiveSubmissionWorkflow() — dùng ở client để hiện
+      // cảnh báo "còn người chưa cho ý kiến" cho các bước nằm sau lớp Xin ý kiến.
+      steps.push({ order: stepOrder, name: layer.label, layerKey: layer.key });
       approvers[stepOrder] = chosen;
     } else {
       // XIN_Y_KIEN (hoặc lớp không chặn khác trong tương lai): KHÔNG trở thành bước duyệt — chỉ ghi
