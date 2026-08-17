@@ -12,6 +12,13 @@ const DEFAULTS = {
 
   cats: ['Quy trình / Quy định', 'Báo cáo tài chính', 'Hợp đồng / Hồ sơ'],
 
+  // Viết tắt Phòng ban/Phân loại Tài liệu — dùng để tự sinh Mã Tài Liệu (xem generateDocCode() trong
+  // index.html: <viết tắt Phân loại>-<viết tắt Phòng ban>-<số thứ tự>). Rỗng mặc định — nếu 1 tên chưa
+  // có viết tắt riêng ở đây, client tự suy ra (chữ cái đầu mỗi từ, bỏ dấu) làm giá trị tạm; admin có
+  // thể sửa lại bất cứ lúc nào tại màn Quản Lý Danh Mục, áp dụng ngay không cần duyệt.
+  deptAbbrs: {},
+  docCatAbbrs: {},
+
   // Danh sách chức danh — dùng cho field "Chức danh" trong hồ sơ user (hiện kèm tên trên các chân ký
   // phê duyệt). Chỉ 1 danh sách dùng chung toàn hệ thống, admin thêm/xoá tại màn Quản trị (giống hệt
   // mô hình depts/cats ở trên).
