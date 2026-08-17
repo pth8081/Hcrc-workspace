@@ -27,7 +27,7 @@ const VALID_KEYS = new Set(Object.keys(DEFAULTS));
 // không còn ở đây/không còn trong VALID_KEYS — từ Bước 6a có route + bảng riêng (routes/systemLog.js,
 // lib/systemLogStore.js): ghi (mọi user) qua POST /api/log, xoá (chỉ admin) qua DELETE /api/log.
 const ADMIN_ONLY_KEYS = new Set([
-  'users', 'permGroups', 'emailConfig',
+  'users', 'permGroups', 'emailConfig', 'workflows',
   'deptWorkflows', 'submissionDeptWorkflows', 'submissionTypeDeptWorkflows', 'submissionApprovalGroups',
   'carDeptWorkflows', 'officeBuyDeptWorkflows', 'officeFixDeptWorkflows', 'officeInvestDeptWorkflows'
 ]);
@@ -36,9 +36,14 @@ router.use(requireAuth, blockIfMustChangePassword);
 
 // Không bao giờ trả field mật khẩu (dù đã hash) ra ngoài — kể cả cho user đã đăng nhập, kể cả admin.
 // Trình duyệt không cần giá trị này để làm bất cứ việc gì (đăng nhập/đổi mật khẩu đều qua API riêng).
+// Cũng bỏ luôn failedLoginAttempts/lockedUntil (lib/loginAttempts.js) — GET /api/data trả nguyên mảng
+// "users" cho MỌI người đã đăng nhập (không riêng admin), nên 2 field này trước đây vô tình để lộ cho
+// bất kỳ nhân viên nào biết đồng nghiệp nào đang bị khoá tài khoản/bị dò mật khẩu — front-end không hề
+// đọc dùng 2 field này ở đâu cả nên bỏ hẳn, không ảnh hưởng tính năng. mustChangePassword GIỮ LẠI vì
+// màn quản lý người dùng (admin) có hiện badge "Chưa đổi mật khẩu tạm" dựa trên đúng field này.
 function stripPasswords(users) {
   if (!Array.isArray(users)) return users;
-  return users.map(({ pass, password, ...rest }) => rest);
+  return users.map(({ pass, password, failedLoginAttempts, lockedUntil, ...rest }) => rest);
 }
 
 // Xác nhận LẠI quyền admin từ CSDL tại thời điểm ghi, không tin cờ "admin" cache sẵn trong JWT lúc

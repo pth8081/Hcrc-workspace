@@ -195,6 +195,55 @@ async function createForCollection(collection, builderFn) {
   return record;
 }
 
+// Giống createForCollection() nhưng dùng sp_getapplock để khoá NGHIÊM TÚC theo 1 khoá nghiệp vụ (vd
+// "phòng họp X") trong SUỐT lúc đọc-kiểm tra-ghi — dành cho trường hợp điều kiện trùng lặp KHÔNG diễn
+// đạt được bằng UNIQUE INDEX đơn giản như trùng "Code" (vd trùng khung giờ/phòng họp — kiểm tra
+// khoảng thời gian chồng lấn, không phải so bằng đúng 1 giá trị cột). Hầu hết collection khác không
+// cần hàm này — UNIQUE INDEX (Collection, Code) ở createForCollection() thường đã đủ chặn race thật.
+// @LockOwner='Transaction' -> khoá tự nhả khi commit/rollback, không cần tự gọi sp_releaseapplock.
+async function createForCollectionSerialized(collection, lockKey, builderFn) {
+  const pool = await getPool();
+  const tx = new sql.Transaction(pool);
+  await tx.begin();
+  let record;
+  try {
+    const lockReq = new sql.Request(tx);
+    lockReq.input('Resource', sql.NVarChar(255), lockKey);
+    lockReq.input('LockMode', sql.VarChar(32), 'Exclusive');
+    lockReq.input('LockOwner', sql.VarChar(32), 'Transaction');
+    lockReq.input('LockTimeout', sql.Int, 15000);
+    const lockResult = await lockReq.execute('sp_getapplock');
+    if (lockResult.returnValue < 0) {
+      throw new HttpError(409, 'Hệ thống đang bận xử lý một yêu cầu trùng — vui lòng thử lại.');
+    }
+
+    const readReq = new sql.Request(tx);
+    const readResult = await readReq
+      .input('collection', sql.NVarChar(50), collection)
+      .query('SELECT Payload FROM dbo.Records WHERE Collection = @collection ORDER BY CreatedAt DESC, Id DESC');
+    const existing = readResult.recordset.map(toRecord);
+
+    record = await builderFn(existing);
+
+    const writeReq = new sql.Request(tx);
+    await writeReq
+      .input('collection', sql.NVarChar(50), collection)
+      .input('id', sql.BigInt, record.id)
+      .input('code', sql.NVarChar(100), record.code || null)
+      .input('payload', sql.NVarChar(sql.MAX), JSON.stringify(record))
+      .query('INSERT INTO dbo.Records (Collection, Id, Code, Payload) VALUES (@collection, @id, @code, @payload);');
+
+    await tx.commit();
+    return record;
+  } catch (err) {
+    await tx.rollback().catch(() => {});
+    if (isUniqueConstraintViolation(err)) {
+      throw new HttpError(409, `Mã "${record?.code}" đã tồn tại`);
+    }
+    throw err;
+  }
+}
+
 // mutatorFn(item) -> bản ghi đã sửa (hoặc throw HttpError, ví dụ 404/403/409, để huỷ giao dịch).
 async function withLockedRecordForCollection(collection, id, mutatorFn) {
   if (MIGRATED_COLLECTIONS.has(collection)) return withLockedRecordById(collection, id, mutatorFn);
@@ -226,5 +275,5 @@ async function deleteRecordForCollection(collection, id, checkFn) {
 module.exports = {
   MIGRATED_COLLECTIONS,
   getAllRecords, insertRecord, withLockedRecordById, deleteRecordById, migrateLegacyCollection, migrateAllLegacyCollections,
-  getAllForCollection, createForCollection, withLockedRecordForCollection, deleteRecordForCollection
+  getAllForCollection, createForCollection, createForCollectionSerialized, withLockedRecordForCollection, deleteRecordForCollection
 };

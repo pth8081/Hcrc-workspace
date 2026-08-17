@@ -144,6 +144,14 @@ const CREATE_MODULE_CONFIGS = {
     dbKey: 'meetings',
     getScope: (user) => user.perms?.meetingBookScope,
     creatorField: 'creator', creatorNameField: 'creatorName',
+    // Trùng phòng/khung giờ là kiểm tra khoảng thời gian CHỒNG LẤN — không diễn đạt được bằng 1 UNIQUE
+    // INDEX như trùng "Code" ở các module khác, nên chỉ kiểm tra ở tầng ứng dụng (findMeetingConflict)
+    // không đủ chặn 2 request tạo lịch trùng phòng CÙNG LÚC (race thật). getLockKey báo cho
+    // routes/create.js biết cần khoá nghiêm túc theo PHÒNG HỌP (sp_getapplock, xem
+    // lib/recordStore.js createForCollectionSerialized) trong suốt lúc đọc-kiểm tra-ghi, thay vì
+    // createForCollection() thường (chỉ có DB unique index chặn trùng Code, không chặn được kiểu
+    // trùng lặp này).
+    getLockKey: (payload) => `meeting_room:${payload.room}`,
     extraValidate: (payload, collection) => {
       const conflict = findMeetingConflict(collection, payload.room, payload.startTime, payload.endTime);
       if (conflict) {

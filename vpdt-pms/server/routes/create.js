@@ -6,7 +6,7 @@ const router = express.Router();
 const { getAllAppData } = require('../lib/appData');
 const { requireAuth, blockIfMustChangePassword } = require('../lib/auth');
 const { CREATE_MODULE_CONFIGS, CreateError, validateAndPrepareCreate } = require('../lib/createValidation');
-const { createForCollection } = require('../lib/recordStore');
+const { createForCollection, createForCollectionSerialized } = require('../lib/recordStore');
 
 router.use(requireAuth, blockIfMustChangePassword);
 
@@ -27,9 +27,15 @@ router.post('/:module', async (req, res) => {
     // bỏ qua tham số này.
     const appData = await getAllAppData();
 
-    const record = await createForCollection(CREATE_MODULE_CONFIGS[moduleKey].dbKey, (list) =>
-      validateAndPrepareCreate(moduleKey, req.body, freshUser, list, appData)
-    );
+    const config = CREATE_MODULE_CONFIGS[moduleKey];
+    const builderFn = (list) => validateAndPrepareCreate(moduleKey, req.body, freshUser, list, appData);
+    // meetings: điều kiện trùng lặp là khoảng thời gian chồng lấn (không diễn đạt được bằng UNIQUE
+    // INDEX như Code) — dùng đường khoá nghiêm túc theo phòng họp thay vì createForCollection() thường
+    // (xem lib/createValidation.js CREATE_MODULE_CONFIGS.meetings.getLockKey +
+    // lib/recordStore.js createForCollectionSerialized).
+    const record = config.getLockKey
+      ? await createForCollectionSerialized(config.dbKey, config.getLockKey(req.body), builderFn)
+      : await createForCollection(config.dbKey, builderFn);
 
     res.json({ ok: true, item: record });
   } catch (err) {
