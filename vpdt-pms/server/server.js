@@ -2,6 +2,7 @@
 require('dotenv').config();
 const express = require('express');
 const cookieParser = require('cookie-parser');
+const rateLimit = require('express-rate-limit');
 const path = require('path');
 const securityHeaders = require('./lib/securityHeaders');
 const { version: APP_VERSION } = require('./package.json');
@@ -31,6 +32,29 @@ if (process.env.TRUST_PROXY) {
   app.set('trust proxy', process.env.TRUST_PROXY === 'true' ? true : parseInt(process.env.TRUST_PROXY, 10));
 }
 
+// CORS — whitelist tường minh qua ALLOWED_ORIGINS (.env, phân tách bằng dấu phẩy). Trước đây KHÔNG hề
+// cấu hình gì (không phải "mở toang *" — Express không tự thêm header CORS nào nên trình duyệt áp
+// same-origin mặc định — nhưng đó là an toàn NGẪU NHIÊN, không tường minh). Mặc định KHÔNG đặt biến
+// này thì vẫn giữ nguyên hành vi cũ (chỉ same-origin, không có Origin nào được whitelist) — chỉ khi
+// cần 1 frontend khác domain gọi tới (hiện chưa có) mới cần khai báo. KHÔNG BAO GIỜ dùng "*": ứng dụng
+// xác thực bằng cookie (Allow-Credentials bắt buộc true), origin "*" + credentials bị chính trình
+// duyệt từ chối, và nếu cho qua được thì tương đương vô hiệu hoá same-origin policy hoàn toàn.
+const ALLOWED_ORIGINS = (process.env.ALLOWED_ORIGINS || '').split(',').map(o => o.trim()).filter(Boolean);
+app.use((req, res, next) => {
+  const origin = req.headers.origin;
+  if (origin && ALLOWED_ORIGINS.includes(origin)) {
+    res.setHeader('Access-Control-Allow-Origin', origin);
+    res.setHeader('Access-Control-Allow-Credentials', 'true');
+    res.setHeader('Vary', 'Origin');
+  }
+  if (req.method === 'OPTIONS') {
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PATCH, DELETE, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, If-Match');
+    return res.sendStatus(204);
+  }
+  next();
+});
+
 app.use(securityHeaders);
 
 // Tài liệu/hồ sơ không còn nhúng base64 trong JSON — file đính kèm được tải lên qua
@@ -38,6 +62,21 @@ app.use(securityHeaders);
 app.use(express.json({ limit: '5mb' }));
 app.use(express.urlencoded({ extended: true, limit: '5mb' }));
 app.use(cookieParser());
+
+// Rate limit TOÀN CỤC cho mọi /api/* — trước đây chỉ có /api/auth/login (routes/auth.js) được giới
+// hạn, mọi API còn lại (đọc/ghi dữ liệu, tải file, gửi email...) không giới hạn tần suất, 1 tài khoản
+// hợp lệ (dù quyền thấp) vẫn có thể gọi API dồn dập không giới hạn. Ngưỡng đủ rộng cho thao tác bình
+// thường của 1 người dùng thật (SPA tải nhiều đợt dữ liệu khi chuyển tab/lọc/tìm kiếm) nhưng vẫn chặn
+// được lạm dụng bằng script. Route nhạy cảm hơn (login, upload, gửi email) đã/sẽ có limiter RIÊNG chặt
+// hơn nằm chồng lên (xem routes/auth.js, routes/upload.js, routes/email.js).
+const globalApiRateLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  limit: 200,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Bạn đang gửi quá nhiều yêu cầu, vui lòng thử lại sau ít phút.' }
+});
+app.use('/api', globalApiRateLimiter);
 
 // API — /api/auth (đăng nhập/đăng xuất) đứng ngoài yêu cầu đăng nhập vì đó CHÍNH LÀ chỗ đăng nhập;
 // mọi API còn lại bắt buộc có phiên hợp lệ (requireAuth) — trước đây hoàn toàn không có bước này.
@@ -72,7 +111,12 @@ app.get('/api/health', async (req, res) => {
     await getPool();
     res.json({ status: 'ok', db: 'connected', version: APP_VERSION });
   } catch (err) {
-    res.status(500).json({ status: 'error', db: 'disconnected', detail: err.message, version: APP_VERSION });
+    console.error('⛔ GET /api/health: kết nối DB lỗi:', err.message);
+    const isProd = process.env.NODE_ENV === 'production';
+    res.status(500).json({
+      status: 'error', db: 'disconnected', version: APP_VERSION,
+      ...(isProd ? {} : { detail: err.message })
+    });
   }
 });
 

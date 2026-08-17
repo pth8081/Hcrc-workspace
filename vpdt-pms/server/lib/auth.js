@@ -7,7 +7,12 @@ const jwt = require('jsonwebtoken');
 const { getAppDataValue } = require('./appData');
 
 const COOKIE_NAME = 'vpdt_token';
-const TOKEN_TTL = '8h';
+const TOKEN_TTL_MS = 60 * 60 * 1000; // 1h — xem cơ chế "trượt hạn theo hoạt động" ở requireAuth() bên dưới
+const TOKEN_TTL = '1h';
+// Còn lại dưới mốc này (tính từ token hiện tại) thì requireAuth() tự cấp lại token mới đủ 1h — người
+// dùng còn đang thao tác (còn gửi request) sẽ không bao giờ bị văng ra giữa chừng; chỉ thật sự hết hạn
+// khi ngừng hoạt động liên tục quá 1h (không request nào trong suốt thời gian đó).
+const TOKEN_RENEW_THRESHOLD_MS = 45 * 60 * 1000;
 const BCRYPT_ROUNDS = 10;
 
 function getJwtSecret() {
@@ -55,7 +60,7 @@ function setAuthCookie(res, token) {
     httpOnly: true,
     secure: process.env.COOKIE_SECURE !== 'false', // mặc định bật (HTTPS) — chỉ tắt khi dev local qua http
     sameSite: 'strict',
-    maxAge: 8 * 60 * 60 * 1000
+    maxAge: TOKEN_TTL_MS
   });
 }
 
@@ -97,6 +102,16 @@ async function requireAuth(req, res, next) {
     req.user = { username: freshUser.username, admin: !!freshUser.perms?.admin };
     req.freshUser = freshUser;
     req.allUsers = users || [];
+
+    // Trượt hạn theo hoạt động: token JWT tuyệt đối hết hạn sau 1h (TOKEN_TTL, xác minh ở verifyToken()
+    // phía trên) — nhưng nếu người dùng còn đang thao tác (còn request nào đó tới trước khi hết hạn),
+    // cấp lại 1 token mới đủ 1h ngay khi thời gian còn lại xuống dưới TOKEN_RENEW_THRESHOLD_MS. Chỉ
+    // hết hạn thật khi không có request nào trong suốt 1h liên tục (đúng ý "đang hoạt động thì không
+    // bị văng"). payload.exp tính bằng giây (chuẩn JWT), quy đổi ra mili giây để so sánh với Date.now().
+    if (payload.exp && (payload.exp * 1000 - Date.now()) < TOKEN_RENEW_THRESHOLD_MS) {
+      setAuthCookie(res, signToken(freshUser));
+    }
+
     next();
   } catch (err) {
     console.error('requireAuth: lỗi khi xác minh trạng thái tài khoản:', err.message);
