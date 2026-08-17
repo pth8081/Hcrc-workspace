@@ -59,6 +59,11 @@ function editMinutes(payload, user, minutes) {
   if (!canEditMinutes(user, minutes)) {
     throw new HttpError(403, 'Bạn không có quyền sửa biên bản họp này');
   }
+  // Biên bản đã "Giao việc" (assignMinutesTasks(), xem dưới) bị khoá sửa với TẤT CẢ mọi người, kể cả
+  // người tạo/minutesEdit — chỉ admin được sửa tiếp trong trường hợp khẩn cấp (đúng yêu cầu nghiệp vụ).
+  if (minutes.tasksAssigned && !user.perms?.admin) {
+    throw new HttpError(403, 'Biên bản này đã giao việc nên bị khoá, không thể sửa (chỉ Admin được sửa trong trường hợp khẩn cấp)');
+  }
   if (!payload || typeof payload !== 'object') throw new HttpError(400, 'Thiếu dữ liệu cập nhật');
 
   for (const field of MINUTES_EDITABLE_FIELDS) {
@@ -106,15 +111,20 @@ function resolveDirectiveAttendeeServer(attendeesList, attendeeId) {
   return { name: a.name.trim(), email: (a.email || '').trim(), username: a.hasAccount === 'YES' ? (a.username || null) : null };
 }
 
-// Tự động chuyển các dòng "chỉ đạo" đã gán người thực hiện thành Công việc mới — khớp đúng
-// autoCreateTasksFromDirectives() ở index.html, nhưng SERVER TỰ SUY LẠI từ chính bản ghi biên bản vừa
-// lưu (minutes.attendees/minutes.directives), không tin danh sách việc do client tự gửi kèm.
+// Chuyển các dòng "chỉ đạo" đã gán người thực hiện thành Công việc mới — SERVER TỰ SUY LẠI từ chính
+// bản ghi biên bản vừa lưu (minutes.attendees/minutes.directives), không tin danh sách việc do client
+// tự gửi kèm. Gọi từ assignMinutesTasks() (nút "Giao việc" thủ công, xem dưới) — KHÔNG còn gọi tự
+// động ngay khi lập/sửa biên bản như trước nữa (đúng yêu cầu nghiệp vụ: Giao việc là 1 bước riêng,
+// người dùng chủ động bấm, sau đó biên bản mới bị khoá).
 //
 // LƯU Ý quyền hạn: bước này KHÔNG đòi canManageTasks (taskEdit) — quyền tạo việc ở đây tới từ việc
-// user đã được phép tạo/sửa CHÍNH biên bản này (đã xác minh ở createMinutes()/editMinutes() trước khi
-// gọi hàm này), khớp đúng hành vi cũ (client trước đây tạo việc kèm theo không đòi thêm quyền quản lý
-// việc riêng). Tạo việc THỦ CÔNG qua modal Giao Việc là luồng khác, vẫn đòi canManageTasks — xem
-// createTask() bên dưới.
+// user đã được phép tạo/sửa CHÍNH biên bản này (đã xác minh ở assignMinutesTasks() trước khi gọi hàm
+// này). Tạo việc THỦ CÔNG qua modal Giao Việc (1 dòng chỉ đạo chưa gán người) là luồng khác, vẫn đòi
+// canManageTasks — xem createTask() bên dưới.
+//
+// sourceDirectiveId: gắn lại ĐÚNG dòng chỉ đạo đã sinh ra Công việc này (d.id, hoặc chỉ số mảng cho
+// biên bản cũ chưa có id) — để phía Xem chi tiết biên bản tra được đúng 1-1 trạng thái/lịch sử Công
+// việc ứng với từng dòng chỉ đạo khi biên bản có nhiều hơn 1 chỉ đạo.
 function buildTasksFromDirectives(minutes, user) {
   const created = [];
   (minutes.directives || []).forEach((d, i) => {
@@ -136,7 +146,7 @@ function buildTasksFromDirectives(minutes, user) {
       collaborators: collaboratorsResolved.filter(r => r.username).map(r => r.username),
       externalCollaborators: collaboratorsResolved.filter(r => !r.username).map(r => ({ name: r.name, email: r.email })),
       assignedBy: user.username, assignedByName: user.name,
-      sourceType: 'MEETING_MINUTES', sourceCode: minutes.code,
+      sourceType: 'MEETING_MINUTES', sourceCode: minutes.code, sourceDirectiveId: d.id != null ? d.id : i,
       status: 'TODO',
       extensionCount: 0, lateCount: 0, pendingExtension: null, pendingCancellation: null,
       createdAt: nowVN(),
@@ -152,6 +162,28 @@ function buildTasksFromDirectives(minutes, user) {
       }
     });
   });
+  return created;
+}
+
+// "Giao việc" thủ công cho TOÀN BỘ chỉ đạo đã gán người trong 1 biên bản (nút ở danh sách biên bản
+// họp) — thay cho cơ chế tự động cũ. Sau khi giao việc, biên bản chuyển sang tasksAssigned=true, bị
+// editMinutes() ở trên khoá sửa (trừ admin khẩn cấp). Dùng lại đúng quyền sửa biên bản (canEditMinutes)
+// làm điều kiện, không đòi canManageTasks — khớp lý do đã nêu ở buildTasksFromDirectives().
+function assignMinutesTasks(user, minutes) {
+  if (!canEditMinutes(user, minutes)) {
+    throw new HttpError(403, 'Bạn không có quyền giao việc cho biên bản họp này');
+  }
+  if (minutes.tasksAssigned) {
+    throw new HttpError(409, 'Biên bản này đã được giao việc rồi');
+  }
+  const created = buildTasksFromDirectives(minutes, user);
+  if (created.length === 0) {
+    throw new HttpError(400, 'Không có chỉ đạo nào đã gán người thực hiện để giao việc');
+  }
+  minutes.tasksAssigned = true;
+  minutes.tasksAssignedBy = user.username;
+  minutes.tasksAssignedByName = user.name;
+  minutes.tasksAssignedAt = nowVN();
   return created;
 }
 
@@ -488,7 +520,7 @@ function resolvePendingTaskAction(kind, verb, user, task) {
 module.exports = {
   editContract,
   canEditMinutes, canDeleteMinutes, editMinutes, assertCanDeleteMinutes,
-  canCreateMinutes, createMinutes, buildTasksFromDirectives, buildTaskFromSubmissionComment,
+  canCreateMinutes, createMinutes, buildTasksFromDirectives, assignMinutesTasks, buildTaskFromSubmissionComment,
   markInternalPostRead, toggleInternalPostLike, addInternalPostComment,
   registerInternalPostTraining, unregisterInternalPostTraining,
   canManageTasks, canDeleteTaskPerm, canAssignSpecificTask, assignTask, editTask, assertCanDeleteTask,

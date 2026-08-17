@@ -39,29 +39,24 @@ router.post('/contracts/:id/edit', async (req, res) => {
   }
 });
 
-// Bước 4 — lập/sửa biên bản họp xong thì tự suy ra Công việc cần tạo TỪ CHÍNH bản ghi vừa lưu (xem
-// lib/recordActions.js buildTasksFromDirectives()) — PHẢI tính TRƯỚC KHI lưu biên bản (bên trong
-// builderFn/mutatorFn của dispatch bên dưới, không phải sau khi dispatch đã trả về) để cờ "đã tạo việc"
-// trên từng dòng chỉ đạo (directive.taskCreated, buildTasksFromDirectives tự set) được LƯU LẠI đúng
-// cùng bản ghi — nếu tính sau khi đã lưu (như trước Bước 6i), lần sửa tiếp theo đọc lại bản ghi từ CSDL
-// sẽ không thấy cờ này (vì lúc lưu ở dispatch, đối tượng chưa kịp bị mutate) và tự tạo TRÙNG việc cho
-// đúng chỉ đạo đã tạo việc từ trước.
+// Lập/sửa biên bản họp KHÔNG còn tự suy ra Công việc ngay khi lưu nữa — Công việc chỉ được tạo khi
+// người dùng chủ động bấm "Giao việc" (xem POST /minutes/:id/assign-tasks bên dưới), sau đó biên bản
+// bị khoá sửa. insertMinutesTasks() dùng chung cho endpoint đó (PHẢI tính created bên trong mutatorFn
+// của dispatch, không phải sau khi dispatch đã trả về, để cờ "đã tạo việc" trên từng dòng chỉ đạo
+// (directive.taskCreated) được LƯU LẠI đúng cùng bản ghi — tính sau khi đã lưu thì lần đọc lại từ CSDL
+// sẽ không thấy cờ này và có thể tạo trùng việc).
 async function insertMinutesTasks(createdTasks) {
   for (const c of createdTasks) await insertTask(c.item);
 }
 
-// POST /api/records/minutes — lập biên bản họp mới (tự tạo kèm Công việc nếu có chỉ đạo đã gán người)
+// POST /api/records/minutes — lập biên bản họp mới
 router.post('/minutes', async (req, res) => {
   try {
     const { freshUser } = await getFreshUser(req);
-    let createdTasks = [];
-    const minutesItem = await createForCollection('meetingMinutes', (list) => {
-      const item = recordActions.createMinutes(req.body, freshUser, list);
-      createdTasks = recordActions.buildTasksFromDirectives(item, freshUser);
-      return item;
-    });
-    await insertMinutesTasks(createdTasks);
-    res.json({ ok: true, item: minutesItem, createdTasks });
+    const minutesItem = await createForCollection('meetingMinutes', (list) =>
+      recordActions.createMinutes(req.body, freshUser, list)
+    );
+    res.json({ ok: true, item: minutesItem });
   } catch (err) {
     handleError(res, 'minutes (tạo mới)', err);
   }
@@ -73,16 +68,31 @@ router.post('/minutes/:id/edit', async (req, res) => {
   if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
   try {
     const { freshUser } = await getFreshUser(req);
+    const result = await withLockedRecordForCollection('meetingMinutes', itemId, (item) =>
+      recordActions.editMinutes(req.body, freshUser, item)
+    );
+    res.json({ ok: true, item: result });
+  } catch (err) {
+    handleError(res, `minutes/${req.params.id}/edit`, err);
+  }
+});
+
+// POST /api/records/minutes/:id/assign-tasks — "Giao việc" thủ công (nút ở danh sách biên bản họp):
+// tạo Công việc hàng loạt cho mọi chỉ đạo đã gán người thực hiện, rồi khoá biên bản (tasksAssigned).
+router.post('/minutes/:id/assign-tasks', async (req, res) => {
+  const itemId = Number(req.params.id);
+  if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
+  try {
+    const { freshUser } = await getFreshUser(req);
     let createdTasks = [];
     const result = await withLockedRecordForCollection('meetingMinutes', itemId, (item) => {
-      const edited = recordActions.editMinutes(req.body, freshUser, item);
-      createdTasks = recordActions.buildTasksFromDirectives(edited, freshUser);
-      return edited;
+      createdTasks = recordActions.assignMinutesTasks(freshUser, item);
+      return item;
     });
     await insertMinutesTasks(createdTasks);
     res.json({ ok: true, item: result, createdTasks });
   } catch (err) {
-    handleError(res, `minutes/${req.params.id}/edit`, err);
+    handleError(res, `minutes/${req.params.id}/assign-tasks`, err);
   }
 });
 
