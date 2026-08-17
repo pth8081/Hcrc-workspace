@@ -2296,6 +2296,29 @@
   </div>
 </div>
 
+<!-- MODAL SOẠN NỘI DUNG EMAIL THÔNG BÁO BIÊN BẢN HỌP — mở sau khi Lưu/Cập nhật biên bản thành công
+     (xem openMinutesEmailComposeModal() trong index.html). "Hủy" KHÔNG gửi gì cả; nhập nội dung rồi
+     bấm "Gửi Email" thì gửi ngay cho người tham dự có email với đúng nội dung đã nhập. -->
+<div id="minutesEmailComposeModal" class="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center hidden z-50 p-4">
+  <div class="bg-white rounded-lg shadow-2xl max-w-lg w-full overflow-hidden">
+    <div class="flex justify-between items-center bg-rose-800 text-white p-4">
+      <h3 class="font-bold text-base flex items-center gap-2">📧 Soạn Email Thông Báo Người Tham Dự</h3>
+      <button onclick="closeMinutesEmailComposeModal()" class="text-rose-200 hover:text-white font-bold text-xl px-2">✕</button>
+    </div>
+    <div class="p-4 space-y-3 text-xs">
+      <div id="minutesEmailComposeInfo" class="text-gray-500 italic"></div>
+      <div>
+        <label class="block font-semibold text-gray-600 mb-1">Nội dung email (bắt buộc)</label>
+        <textarea id="minutesEmailComposeContent" class="w-full border p-2 rounded text-sm h-28" placeholder="Nhập nội dung gửi cho người tham dự..." required></textarea>
+      </div>
+    </div>
+    <div class="p-3 bg-gray-100 border-t flex justify-end gap-2 text-xs">
+      <button onclick="closeMinutesEmailComposeModal()" class="bg-gray-500 text-white px-4 py-1.5 rounded font-bold hover:bg-gray-600">Hủy</button>
+      <button onclick="confirmSendMinutesEmail()" class="bg-rose-600 text-white px-5 py-1.5 rounded font-bold hover:bg-rose-700">📧 Gửi Email</button>
+    </div>
+  </div>
+</div>
+
 <!-- MODAL QUẢN LÝ MẪU DANH SÁCH THAM DỰ — soạn/sửa mẫu ĐỘC LẬP, không cần có sẵn 1 Biên bản họp thật
      đang mở (trước đây chỉ "Lưu Mẫu" được từ danh sách người tham dự ĐANG có trong form đang soạn dở).
      2 chế độ trong cùng 1 modal: danh sách mẫu <-> soạn/sửa 1 mẫu (bảng nhập người tham dự riêng, dùng
@@ -2705,6 +2728,10 @@ let minutesDirectives = [];
 // việc khớp tên với tài khoản hệ thống — Người thực hiện/phối hợp lấy trực tiếp từ danh sách này.
 let minutesAttendeesRows = [];
 function genAttendeeId() { return `${Date.now()}-${Math.floor(Math.random() * 100000)}`; }
+// id ổn định riêng cho từng dòng "Ý kiến chỉ đạo" — để Công việc sinh ra từ 1 dòng chỉ đạo cụ thể tra
+// ngược lại ĐÚNG dòng đó (Task.sourceDirectiveId) khi biên bản có nhiều hơn 1 chỉ đạo, phục vụ hiện
+// trạng thái/tiến độ trực tiếp trong "Xem chi tiết" biên bản (xem viewMeetingMinutesDetails()).
+function genMinutesDirectiveId() { return `dir-${Date.now()}-${Math.floor(Math.random() * 100000)}`; }
 
 // Tra cứu 1 người trong Thành phần tham dự theo id ổn định — dùng cho cả lúc đang nhập biên bản (đọc
 // từ minutesAttendeesRows, phản ứng ngay khi sửa/thêm/xoá người tham dự) lẫn sau khi đã lưu (đọc từ
@@ -3329,9 +3356,13 @@ function canViewMeetingMinutesRecord(user, m) {
   return isMeetingMinutesAttendee(user, m);
 }
 
+// Biên bản đã "Giao việc" (m.tasksAssigned, xem assignMinutesTasks()) bị khoá sửa với TẤT CẢ mọi
+// người, kể cả người tạo/minutesEdit — chỉ admin còn sửa được, coi như trường hợp khẩn cấp (server
+// xác minh lại đúng luật này ở editMinutes(), đây chỉ là ẩn/hiện nút cho khớp UI).
 function canEditMeetingMinutesRecord(user, m) {
   if (!user) return false;
   if (user.perms?.admin) return true;
+  if (m.tasksAssigned) return false;
   if (user.perms?.minutesEdit) return true;
   return m.creator === user.username;
 }
@@ -8446,7 +8477,7 @@ function renderAttendeesTable() {
 // dòng nào có gán người thực hiện sẽ TỰ ĐỘNG được tạo thành Công việc ngay khi lưu biên bản (xem
 // autoCreateTasksFromDirectives()) — không cần bấm "Giao việc" thủ công từng dòng như trước nữa. ---
 function addMinutesDirectiveRow() {
-  minutesDirectives.push({ content: '', assignedToAttendeeId: '', collaboratorAttendeeIds: [], deadline: '' });
+  minutesDirectives.push({ id: genMinutesDirectiveId(), content: '', assignedToAttendeeId: '', collaboratorAttendeeIds: [], deadline: '' });
   renderMinutesDirectivesTable();
 }
 
@@ -8496,16 +8527,15 @@ function renderMinutesDirectivesTable() {
   }).join('');
 }
 
-// Tự động tạo Công việc cho các dòng chỉ đạo CÓ gán người thực hiện và CHƯA từng tạo việc
-// (d.taskCreated) — gọi ngay sau khi Lưu/Cập nhật biên bản, không cần bấm "Giao việc" thủ công.
-// An toàn khi Sửa biên bản nhiều lần: chỉ tạo bổ sung cho dòng mới/chưa có việc, không tạo trùng.
-// Bước 4: server tự suy ra + tạo Công việc từ chỉ đạo đã gán người thực hiện ngay khi lập/sửa Biên bản
-// họp (xem lib/recordActions.js buildTasksFromDirectives()) — hàm này chỉ còn áp kết quả trả về vào
-// DB.tasks cục bộ + gửi thông báo, KHÔNG tự tạo việc ở client nữa (tránh giả mạo assignedBy/id...).
+// Áp kết quả tạo Công việc (server tự suy ra từ chỉ đạo đã gán người thực hiện, xem
+// lib/recordActions.js buildTasksFromDirectives()/assignMinutesTasks()) vào DB.tasks cục bộ + gửi
+// thông báo — gọi từ assignMinutesTasks() (nút "Giao việc" thủ công ở danh sách biên bản), KHÔNG còn
+// gọi tự động ngay sau khi Lưu/Cập nhật biên bản nữa (đúng yêu cầu nghiệp vụ). KHÔNG tự tạo việc ở
+// client (tránh giả mạo assignedBy/id...), chỉ áp kết quả server đã trả về.
 function applyAutoCreatedTasks(createdTasks, minutesCode, minutesTitle) {
   (createdTasks || []).forEach(({ item: newTask, notify }) => {
     DB.tasks.unshift(newTask);
-    logSystemAction('TASK', 'CREATE_TASK', `Tự động giao việc [${newTask.title}] cho ${newTask.assignedToName}${newTask.externalAssignee ? ' (ngoài hệ thống)' : ''} (từ ${minutesCode})`, 'SUCCESS', minutesCode);
+    logSystemAction('TASK', 'CREATE_TASK', `Giao việc [${newTask.title}] cho ${newTask.assignedToName}${newTask.externalAssignee ? ' (ngoài hệ thống)' : ''} (từ ${minutesCode})`, 'SUCCESS', minutesCode);
 
     // Email LUÔN lấy đúng email đã nhập ở Thành phần tham dự (không fallback email hệ thống) — áp
     // dụng đồng nhất cho cả người có và không có tài khoản hệ thống, đúng yêu cầu nghiệp vụ.
@@ -8521,6 +8551,40 @@ function applyAutoCreatedTasks(createdTasks, minutesCode, minutesTitle) {
     }
   });
   return (createdTasks || []).length > 0;
+}
+
+// ==========================================
+// HỘP NHẬP NỘI DUNG EMAIL TRƯỚC KHI GỬI CHO NGƯỜI THAM DỰ — mở ngay sau khi Lưu/Cập nhật biên bản
+// thành công (cả 2 trường hợp). Khác các thông báo email khác trong hệ thống (nội dung cố định, gửi
+// luôn) — ở đây người dùng tự soạn nội dung trước, "Hủy" thì KHÔNG gửi gì cả, nhập rồi bấm "Gửi" thì
+// gửi ngay với đúng nội dung đã nhập.
+// ==========================================
+let pendingMinutesEmailNotify = null;
+
+function openMinutesEmailComposeModal(recipients, code, title, isEdit) {
+  pendingMinutesEmailNotify = { recipients: recipients || [], code, title };
+  document.getElementById('minutesEmailComposeInfo').innerText =
+    `Biên bản: ${title} (${code}) — ${(recipients || []).length} người tham dự có email sẽ nhận thông báo.`;
+  document.getElementById('minutesEmailComposeContent').value = isEdit
+    ? `Biên bản họp "${title}" (${code}) vừa được cập nhật. Vui lòng đăng nhập hệ thống Văn phòng điện tử để xem chi tiết.`
+    : `Biên bản họp "${title}" (${code}) đã được lập. Vui lòng đăng nhập hệ thống Văn phòng điện tử để xem chi tiết.`;
+  document.getElementById('minutesEmailComposeModal').classList.remove('hidden');
+}
+
+function closeMinutesEmailComposeModal() {
+  document.getElementById('minutesEmailComposeModal').classList.add('hidden');
+  pendingMinutesEmailNotify = null;
+}
+
+function confirmSendMinutesEmail() {
+  if (!pendingMinutesEmailNotify) return closeMinutesEmailComposeModal();
+  const content = document.getElementById('minutesEmailComposeContent').value.trim();
+  if (!content) return alert('Vui lòng nhập nội dung email!');
+
+  const { recipients, code, title } = pendingMinutesEmailNotify;
+  notifyRecipientsByEmail('MINUTES', 'NOTIFY_MINUTES_CREATED', code, recipients,
+    `[VPDT] Biên bản họp: ${title} (${code})`, content);
+  closeMinutesEmailComposeModal();
 }
 
 async function submitMeetingMinutes(e) {
@@ -8565,31 +8629,28 @@ async function submitMeetingMinutes(e) {
     createdAt: new Date().toLocaleString('vi-VN')
   };
 
-  let newMinutes, createdTasks;
+  let newMinutes;
   try {
     const result = await callRecordCreate('minutes', minutesPayload);
     newMinutes = result.item;
-    createdTasks = result.createdTasks;
   } catch (err) {
     return alert(`⛔ ${err.message}`);
   }
 
   DB.meetingMinutes.unshift(newMinutes);
-  const anyTaskCreated = applyAutoCreatedTasks(createdTasks, newMinutes.code, newMinutes.title);
   logSystemAction('MINUTES', 'CREATE_MINUTES', `Lập biên bản họp [${code} - ${title}]`, 'SUCCESS', code);
-  const attendeeRecipients = validAttendees
-    .filter(a => a.email && a.email.trim())
-    .map(a => ({ name: a.name, email: a.email.trim() }));
-  notifyRecipientsByEmail('MINUTES', 'NOTIFY_MINUTES_CREATED', code, attendeeRecipients,
-    `[VPDT] Biên bản họp mới: ${title} (${code})`,
-    `Biên bản họp "${title}" (${code}) đã được lập. Vui lòng đăng nhập hệ thống Văn phòng điện tử để xem chi tiết.`);
-  alert('✅ Đã lưu biên bản họp thành công!' + (anyTaskCreated ? ' Các chỉ đạo đã gán người thực hiện đã được tự động chuyển thành Công việc.' : ''));
+  alert('✅ Đã lưu biên bản họp thành công! Vui lòng nhập nội dung email để thông báo người tham dự (hoặc bấm Hủy nếu không cần gửi).');
   e.target.reset();
   minutesDirectives = [];
   minutesAttendeesRows = [];
   renderMinutesDirectivesTable();
   renderAttendeesTable();
   renderMeetingMinutes();
+
+  const attendeeRecipients = validAttendees
+    .filter(a => a.email && a.email.trim())
+    .map(a => ({ name: a.name, email: a.email.trim() }));
+  openMinutesEmailComposeModal(attendeeRecipients, newMinutes.code, newMinutes.title, false);
 }
 
 function openEditMeetingMinutes(id) {
@@ -8597,6 +8658,11 @@ function openEditMeetingMinutes(id) {
   if (!m) return;
   if (!canEditMeetingMinutesRecord(currentUser, m)) {
     return alert('⛔ Bạn không có quyền sửa biên bản họp này!');
+  }
+  // Chỉ admin còn qua được canEditMeetingMinutesRecord() ở trên khi biên bản đã khoá (m.tasksAssigned)
+  // — hỏi lại rõ ràng để không sửa nhầm 1 biên bản đã giao việc như sửa bình thường.
+  if (m.tasksAssigned && !confirm('⚠️ Biên bản này đã "Giao việc" nên bị khoá. Bạn đang sửa với quyền Admin (trường hợp khẩn cấp) — tiếp tục?')) {
+    return;
   }
 
   editingMinutesId = id;
@@ -8622,7 +8688,9 @@ function openEditMeetingMinutes(id) {
   }) : [];
   renderAttendeesTable();
 
-  minutesDirectives = (m.directives || []).map(d => ({ ...d, collaboratorAttendeeIds: Array.isArray(d.collaboratorAttendeeIds) ? [...d.collaboratorAttendeeIds] : [] }));
+  // Bù id ổn định cho chỉ đạo của biên bản cũ lưu trước khi có trường này (giống cách bù genAttendeeId
+  // ở trên) — chỉ tạo mới khi thật sự thiếu, không đổi id đã có (Công việc cũ đã tạo còn tham chiếu tới).
+  minutesDirectives = (m.directives || []).map(d => ({ ...d, id: d.id || genMinutesDirectiveId(), collaboratorAttendeeIds: Array.isArray(d.collaboratorAttendeeIds) ? [...d.collaboratorAttendeeIds] : [] }));
   renderMinutesDirectivesTable();
 
   document.getElementById('minutesSubmitBtn').innerText = '💾 Cập Nhật Biên Bản';
@@ -8654,8 +8722,9 @@ async function updateMeetingMinutes(e) {
   const linkedMeetingRaw = document.getElementById('minutesLinkedMeeting').value;
   const attendees = minutesAttendeesRows.filter(a => a.name.trim()).map(a => ({ ...a }));
 
-  // Giữ lại cờ taskCreated của các dòng chỉ đạo CŨ khớp nội dung+người thực hiện, để không tạo lại
-  // Công việc đã có; dòng thực sự mới sẽ được autoCreateTasksFromDirectives() xử lý bên dưới.
+  // Giữ lại cờ taskCreated của các dòng chỉ đạo CŨ khớp nội dung+người thực hiện — để nếu sau này biên
+  // bản được "Giao việc" (assignMinutesTasks(), nút thủ công ở danh sách) thì không tạo trùng Công
+  // việc cho dòng đã có, chỉ những dòng thực sự mới/chưa từng giao việc mới được tính vào.
   const oldDirectivesByKey = new Map((m.directives || []).map(d => [`${d.content}::${d.assignedToAttendeeId}`, d]));
   const directives = minutesDirectives.filter(d => d.content.trim()).map(d => {
     const old = oldDirectivesByKey.get(`${d.content}::${d.assignedToAttendeeId}`);
@@ -8673,11 +8742,10 @@ async function updateMeetingMinutes(e) {
     directives
   };
 
-  let updated, createdTasks;
+  let updated;
   try {
     const result = await callRecordAction('minutes', m.id, 'edit', editPayload);
     updated = result.item;
-    createdTasks = result.createdTasks;
   } catch (err) {
     return alert(`⛔ ${err.message}`);
   }
@@ -8685,11 +8753,15 @@ async function updateMeetingMinutes(e) {
   const idx = DB.meetingMinutes.findIndex(x => x.id === m.id);
   if (idx !== -1) DB.meetingMinutes[idx] = updated;
 
-  const anyTaskCreated = applyAutoCreatedTasks(createdTasks, updated.code, updated.title);
   logSystemAction('MINUTES', 'EDIT_MINUTES', `Cập nhật biên bản họp [${updated.code}]`, 'SUCCESS', updated.code);
-  alert('✅ Đã cập nhật biên bản họp thành công!' + (anyTaskCreated ? ' Các chỉ đạo mới đã gán người thực hiện đã được tự động chuyển thành Công việc.' : ''));
+  alert('✅ Đã cập nhật biên bản họp thành công! Vui lòng nhập nội dung email để thông báo người tham dự (hoặc bấm Hủy nếu không cần gửi).');
   cancelEditMeetingMinutes();
   renderMeetingMinutes();
+
+  const attendeeRecipients = attendees
+    .filter(a => a.email && a.email.trim())
+    .map(a => ({ name: a.name, email: a.email.trim() }));
+  openMinutesEmailComposeModal(attendeeRecipients, updated.code, updated.title, true);
 }
 
 function renderMeetingMinutes() {
@@ -8725,11 +8797,15 @@ function renderMeetingMinutes() {
       <td class="border p-2 font-mono font-bold text-rose-800">${escapeHtml(m.code)}<br><span class="text-xs text-gray-500 font-normal">${escapeHtml(m.title)}</span></td>
       <td class="border p-2 text-xs">${escapeHtml(m.time)}${m.location ? `<br><span class="text-gray-400">${escapeHtml(m.location)}</span>` : ''}</td>
       <td class="border p-2 text-xs">CT: ${escapeHtml(m.chair)}<br>TK: ${escapeHtml(m.secretary)}</td>
-      <td class="border p-2 text-center">${(m.directives || []).length}</td>
+      <td class="border p-2 text-center">${m.tasksAssigned ? '<span class="text-emerald-700 font-bold">✅ Đã hoàn thành giao việc theo chỉ đạo</span>' : (m.directives || []).length}</td>
       <td class="border p-2 text-center space-x-1">
         ${(() => {
           const primaryBtnHTML = `<button onclick="runMinutesAction(${m.id}, 'detail')" class="bg-rose-600 text-white px-2 py-1 rounded text-xs hover:bg-rose-700 font-bold">🔍 Xem chi tiết</button>`;
           const secondaryOptions = [];
+          // "Giao việc" chỉ hiện khi CHƯA giao (chưa khoá) và có ít nhất 1 chỉ đạo đã gán người thực
+          // hiện, chưa từng tạo việc — không có chỉ đạo đã gán thì không có gì để giao việc.
+          const hasAssignableDirectives = (m.directives || []).some(d => d.assignedToAttendeeId && !d.taskCreated);
+          if (!m.tasksAssigned && hasAssignableDirectives && canEditMeetingMinutesRecord(currentUser, m)) secondaryOptions.push({ value: 'assignTasks', label: '📌 Giao việc' });
           if (canDownloadMeetingMinutesRecord(currentUser, m)) secondaryOptions.push({ value: 'download', label: '⬇️ Tải' });
           if (canEditMeetingMinutesRecord(currentUser, m)) secondaryOptions.push({ value: 'edit', label: '✏️ Sửa' });
           if (canDeleteMeetingMinutesRecord(currentUser, m)) secondaryOptions.push({ value: 'delete', label: '🗑️ Xóa' });
@@ -8744,10 +8820,44 @@ function renderMeetingMinutes() {
 function runMinutesAction(id, action) {
   switch (action) {
     case 'detail': viewMeetingMinutesDetails(id); break;
+    case 'assignTasks': confirmAssignMinutesTasks(id); break;
     case 'download': downloadMeetingMinutes(id); break;
     case 'edit': openEditMeetingMinutes(id); break;
     case 'delete': deleteMeetingMinutes(id); break;
   }
+}
+
+// "Giao việc" thủ công (nút ở danh sách biên bản họp) — tạo Công việc hàng loạt cho MỌI chỉ đạo đã
+// gán người thực hiện, rồi khoá biên bản (không sửa được nữa, trừ admin khẩn cấp — xem
+// canEditMeetingMinutesRecord()/editMinutes() ở lib/recordActions.js).
+function confirmAssignMinutesTasks(id) {
+  const m = DB.meetingMinutes.find(x => x.id === id);
+  if (!m) return;
+  const count = (m.directives || []).filter(d => d.assignedToAttendeeId && !d.taskCreated).length;
+  showConfirmModal({
+    title: '📌 Giao Việc Theo Chỉ Đạo',
+    bodyHTML: `Sẽ tạo <b>${count}</b> công việc từ các chỉ đạo đã gán người thực hiện trong biên bản <b>${escapeHtml(m.code)}</b>. Sau khi giao việc, biên bản này sẽ bị <b>khoá, không thể sửa</b> (trừ Admin trong trường hợp khẩn cấp). Bạn có chắc chắn muốn tiếp tục?`,
+    confirmLabel: '📌 Giao Việc',
+    onConfirm: () => assignMinutesTasksAction(id)
+  });
+}
+
+async function assignMinutesTasksAction(id) {
+  let updated, createdTasks;
+  try {
+    const result = await callRecordAction('minutes', id, 'assign-tasks', {});
+    updated = result.item;
+    createdTasks = result.createdTasks;
+  } catch (err) {
+    return alert(`⛔ ${err.message}`);
+  }
+
+  const idx = DB.meetingMinutes.findIndex(x => x.id === id);
+  if (idx !== -1) DB.meetingMinutes[idx] = updated;
+  applyAutoCreatedTasks(createdTasks, updated.code, updated.title);
+  logSystemAction('MINUTES', 'ASSIGN_MINUTES_TASKS', `Giao việc theo chỉ đạo biên bản họp [${updated.code}] — đã tạo ${createdTasks.length} công việc, biên bản chuyển sang khoá`, 'SUCCESS', updated.code);
+  alert(`✅ Đã giao việc thành công! Đã tạo ${createdTasks.length} công việc. Biên bản đã được khoá, không thể sửa nữa.`);
+  renderMeetingMinutes();
 }
 
 async function deleteMeetingMinutes(id) {
@@ -8790,18 +8900,41 @@ function viewMeetingMinutesDetails(id) {
     </table>
   ` : '<p class="text-gray-400 italic">Không có thành phần tham dự nào được ghi nhận.</p>';
 
+  // Tra đúng Công việc đã sinh ra từ TỪNG dòng chỉ đạo (Task.sourceDirectiveId khớp d.id, hoặc chỉ số
+  // mảng cho biên bản cũ chưa có id — xem buildTasksFromDirectives() ở lib/recordActions.js) để hiện
+  // trực tiếp trạng thái/tiến độ/gia hạn/huỷ MỚI NHẤT ngay tại đây, không cần mở thêm màn hình khác
+  // (modal Chi tiết Công việc dùng chung id "taskDetailModal" z-50 sẽ bị che khuất phía sau modal Chi
+  // tiết Biên bản đang mở ở z-[55] — xem quy ước z-index chung của hệ thống — nên KHÔNG mở lồng ở đây).
   const directivesHTML = (m.directives || []).length ? `
     <table class="w-full border-collapse border text-xs mt-2">
-      <thead><tr class="bg-gray-100"><th class="border p-1">STT</th><th class="border p-1">Nội dung chỉ đạo</th><th class="border p-1">Người thực hiện</th><th class="border p-1">Người phối hợp</th><th class="border p-1">Hạn hoàn thành</th><th class="border p-1">Thao tác</th></tr></thead>
+      <thead><tr class="bg-gray-100"><th class="border p-1">STT</th><th class="border p-1">Nội dung chỉ đạo</th><th class="border p-1">Người thực hiện</th><th class="border p-1">Người phối hợp</th><th class="border p-1">Hạn hoàn thành</th><th class="border p-1">Tình trạng giao việc</th></tr></thead>
       <tbody>
         ${m.directives.map((d, idx) => {
           const resolved = resolveDirectiveAttendee(m.attendees, d.assignedToAttendeeId);
           const collaboratorNames = (Array.isArray(d.collaboratorAttendeeIds) ? d.collaboratorAttendeeIds : [])
             .map(id => resolveDirectiveAttendee(m.attendees, id)?.name).filter(Boolean);
-          const actionCell = d.taskCreated
-            ? `<span class="text-emerald-700 font-bold text-[11px]">✅ Đã giao việc</span>`
-            : (canManageTasks(currentUser) ? `<button onclick="createTaskFromMinutesDirective(${m.id}, ${idx})" class="bg-violet-600 text-white px-2 py-0.5 rounded text-[11px] font-bold hover:bg-violet-700">📌 Giao việc</button>` : '<span class="text-gray-400 italic text-[11px]">Chưa gán</span>');
-          return `<tr><td class="border p-1 text-center">${idx + 1}</td><td class="border p-1">${escapeHtml(d.content)}</td><td class="border p-1">${escapeHtml(resolved ? resolved.name : 'Chưa gán')}</td><td class="border p-1">${collaboratorNames.length ? escapeHtml(collaboratorNames.join(', ')) : '<span class="text-gray-400 italic">Không có</span>'}</td><td class="border p-1">${escapeHtml(d.deadline || '')}</td><td class="border p-1 text-center">${actionCell}</td></tr>`;
+          const task = DB.tasks.find(t => t.sourceType === 'MEETING_MINUTES' && t.sourceCode === m.code && t.sourceDirectiveId === (d.id != null ? d.id : idx));
+
+          let statusCell;
+          if (task) {
+            const recentHistory = (task.history || []).slice(-3).reverse()
+              .map(h => `<li>${escapeHtml(h.time)} — ${escapeHtml(h.byName)}: ${escapeHtml(h.action)}${h.note ? ` (${escapeHtml(h.note)})` : ''}</li>`).join('');
+            statusCell = `
+              <div class="text-left space-y-1">
+                <div><b>${TASK_STATUS_LABELS[task.status] || task.status}</b>${task.extensionCount ? ` <span class="text-orange-700">(gia hạn ${task.extensionCount} lần)</span>` : ''}</div>
+                ${task.pendingExtension ? `<div class="bg-orange-50 border border-orange-200 p-1 rounded text-[10px]">⏳ Đang chờ duyệt gia hạn tới <b>${escapeHtml(task.pendingExtension.newDeadline)}</b> — Lý do: ${escapeHtml(task.pendingExtension.reason)}</div>` : ''}
+                ${task.pendingCancellation ? `<div class="bg-red-50 border border-red-200 p-1 rounded text-[10px]">⏳ Đang chờ duyệt huỷ — Lý do: ${escapeHtml(task.pendingCancellation.reason)}</div>` : ''}
+                ${recentHistory ? `<ul class="text-[10px] text-gray-500 list-disc list-inside">${recentHistory}</ul>` : ''}
+              </div>`;
+          } else if (d.assignedToAttendeeId) {
+            statusCell = m.tasksAssigned
+              ? '<span class="text-gray-400 italic text-[11px]">Chưa giao việc</span>'
+              : (canManageTasks(currentUser) ? `<button onclick="createTaskFromMinutesDirective(${m.id}, ${idx})" class="bg-violet-600 text-white px-2 py-0.5 rounded text-[11px] font-bold hover:bg-violet-700">📌 Giao việc</button>` : '<span class="text-gray-400 italic text-[11px]">Chưa giao việc</span>');
+          } else {
+            statusCell = '<span class="text-gray-400 italic text-[11px]">Chưa gán</span>';
+          }
+
+          return `<tr><td class="border p-1 text-center">${idx + 1}</td><td class="border p-1">${escapeHtml(d.content)}</td><td class="border p-1">${escapeHtml(resolved ? resolved.name : 'Chưa gán')}</td><td class="border p-1">${collaboratorNames.length ? escapeHtml(collaboratorNames.join(', ')) : '<span class="text-gray-400 italic">Không có</span>'}</td><td class="border p-1">${escapeHtml(d.deadline || '')}</td><td class="border p-1 text-center">${statusCell}</td></tr>`;
         }).join('')}
       </tbody>
     </table>
