@@ -195,7 +195,7 @@
       <p class="text-xs text-amber-800">Soạn thảo tờ trình đề xuất chủ trương, kinh phí hoặc quy chế. Luồng chuyển duyệt tích hợp phê duyệt đồng cấp đa cấp.</p>
       
       <form onsubmit="submitSubmissionReq(event)" class="bg-white p-3 rounded border text-xs space-y-3">
-        <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-3">
           <div>
             <label class="block font-semibold text-gray-600 mb-1">Mã Văn Bản Trình / Tờ Trình</label>
             <input id="subCode" placeholder="VD: TT-2026-001" class="w-full border p-1.5 rounded" required>
@@ -208,7 +208,15 @@
             <label class="block font-semibold text-gray-600 mb-1">Loại Tờ Trình</label>
             <select id="subType" class="w-full border p-1.5 rounded bg-white" required></select>
           </div>
-          <div class="md:col-span-2">
+          <div class="relative">
+            <label class="block font-semibold text-gray-600 mb-1">Phê Duyệt</label>
+            <button type="button" id="subApprovalDropdownBtn" onclick="toggleSubApprovalDropdown(event)" class="w-full border p-1.5 rounded bg-white text-left flex justify-between items-center gap-1">
+              <span id="subApprovalDropdownLabel" class="text-gray-500 truncate">-- Chọn cấp phê duyệt --</span>
+              <span class="text-gray-400 shrink-0">▾</span>
+            </button>
+            <div id="subApprovalDropdownPanel" class="hidden absolute z-20 mt-1 w-72 right-0 bg-white border rounded shadow-lg p-2 space-y-1 max-h-72 overflow-y-auto"></div>
+          </div>
+          <div class="md:col-span-3">
             <label class="block font-semibold text-gray-600 mb-1">Tên / Trích Yếu Tờ Trình</label>
             <input id="subTitle" placeholder="V/v Đề xuất phê duyệt chủ trương..." class="w-full border p-1.5 rounded" required>
           </div>
@@ -220,7 +228,7 @@
               <option value="Thượng khẩn">⚡ Thượng khẩn</option>
             </select>
           </div>
-          <div class="md:col-span-3">
+          <div class="md:col-span-4">
             <label class="block font-semibold text-gray-600 mb-1">Tệp Đính Kèm Tờ Trình</label>
             <input id="subFile" type="file" accept=".pdf,.doc,.docx,.xls,.xlsx,image/*" class="w-full border p-1 bg-white rounded">
           </div>
@@ -228,9 +236,9 @@
 
         <div id="dynamicFieldsContainer_SUBMISSION" class="grid grid-cols-1 md:grid-cols-3 gap-3 border-t pt-3"></div>
 
-        <div class="border-t pt-3">
+        <div id="subApprovalLayersSection" class="hidden border-t pt-3">
           <label class="block font-semibold text-gray-600 mb-1">Cấp Phê Duyệt Bổ Sung & Xin Ý Kiến (tuỳ chọn)</label>
-          <p class="text-[11px] text-gray-500 italic mb-1.5">Tick chọn lớp cần dùng, rồi chọn CỤ THỂ những ai (trong số người admin đã gán vào nhóm đó). "Đồng trình/Đồng cấp/BGD" cộng thêm 1 bước duyệt vào cuối quy trình; riêng "Xin ý kiến" chỉ để tham khảo, không chặn quy trình duyệt.</p>
+          <p class="text-[11px] text-gray-500 italic mb-1.5">Chọn CỤ THỂ những ai (trong số người admin đã gán vào nhóm đó) cho từng lớp đã tick ở "Phê duyệt". "Đồng trình/Đồng cấp/BGD" cộng thêm 1 bước duyệt vào cuối quy trình; riêng "Xin ý kiến" chỉ để tham khảo, không chặn quy trình duyệt.</p>
           <div id="subApprovalLayersContainer" class="flex flex-wrap gap-3"></div>
         </div>
 
@@ -238,7 +246,8 @@
           <label class="block font-semibold text-gray-600 mb-1">Nội Dung Trình Chi Tiết & Đề Xuất Cụ Thể</label>
           <textarea id="subContent" placeholder="Kính trình Lãnh đạo xem xét và phê duyệt nội dung..." class="w-full border p-1.5 rounded h-20" required></textarea>
         </div>
-        <div class="flex justify-end">
+        <div class="flex justify-end gap-2">
+          <button type="button" onclick="previewSubmissionWorkflow()" class="bg-gray-200 text-gray-700 px-4 py-2 rounded font-bold hover:bg-gray-300">🔍 Xem Quy Trình</button>
           <button type="submit" class="bg-amber-600 text-white px-5 py-2 rounded font-bold hover:bg-amber-700">Trình Văn Bản / Tờ Trình</button>
         </div>
       </form>
@@ -288,6 +297,7 @@
               <th class="border p-2">Phòng Ban & Người Trình</th>
               <th class="border p-2">Loại & Độ Khẩn</th>
               <th class="border p-2">Tiến Trình & Phê Duyệt Đồng Cấp</th>
+              <th class="border p-2 text-center">Trạng Thái Công Việc</th>
               <th class="border p-2 text-center min-w-[120px]">Thao Tác</th>
             </tr>
           </thead>
@@ -2324,6 +2334,23 @@
   </div>
 </div>
 
+<!-- MODAL XÁC NHẬN DÙNG CHUNG (Đồng Ý/Hủy) — xem showConfirmModal() trong index.html. Dùng cho các
+     hành động cần "chắc chắn trước khi làm" (trình văn bản, phê duyệt, từ chối, yêu cầu bổ sung...) ở
+     Văn bản trình/Đăng ký xe/Đề xuất văn phòng — z-[60] để luôn nổi TRÊN các modal xử lý khác (z-50). -->
+<div id="genericConfirmModal" class="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center hidden z-[60] p-4">
+  <div class="bg-white rounded-lg shadow-2xl max-w-lg w-full overflow-hidden">
+    <div class="flex justify-between items-center bg-slate-800 text-white p-4">
+      <h3 id="genericConfirmTitle" class="font-bold text-base"></h3>
+      <button onclick="closeGenericConfirmModal()" class="text-slate-300 hover:text-white font-bold text-xl px-2">✕</button>
+    </div>
+    <div id="genericConfirmBody" class="p-4 text-xs text-gray-700 max-h-[60vh] overflow-y-auto"></div>
+    <div class="p-3 bg-gray-100 border-t flex justify-end gap-2 text-xs">
+      <button onclick="closeGenericConfirmModal()" class="bg-gray-400 text-white px-4 py-1.5 rounded font-bold hover:bg-gray-500">Hủy</button>
+      <button id="genericConfirmOkBtn" onclick="runConfirmedAction()" class="bg-emerald-600 text-white px-5 py-1.5 rounded font-bold hover:bg-emerald-700">Đồng Ý</button>
+    </div>
+  </div>
+</div>
+
 <!-- MODAL BẮT BUỘC ĐỔI MẬT KHẨU — hiện khi tài khoản đang mustChangePassword (admin vừa đặt/reset mật
      khẩu tạm, hoặc còn đang dùng đúng mật khẩu mặc định lúc khởi tạo hệ thống). KHÔNG có nút đóng/bấm
      ra ngoài để tắt — chỉ thoát được bằng cách đổi mật khẩu thành công, hoặc Đăng Xuất. Server cũng
@@ -3068,6 +3095,63 @@ function buildEffectiveSubmissionWorkflow(type, dept, selectedLayerKeys, selecte
   return { steps, approvers, opinionRequestees: [...new Set(opinionRequestees)] };
 }
 
+// Dựng HTML xem trước quy trình (danh sách bước + người duyệt từng bước + ai được xin ý kiến) từ
+// đúng trạng thái form hiện tại — dùng chung cho nút "Xem quy trình" (previewSubmissionWorkflow()) và
+// hộp thoại xác nhận trước khi Trình (xem submitSubmissionReq()). CHỈ MANG TÍNH THAM KHẢO cho người
+// trình tự kiểm tra lại — quy trình THẬT SỰ vẫn do server tự dựng lại và xác minh khi trình (khớp
+// buildEffectiveSubmissionWorkflowServer() trong lib/createValidation.js).
+function buildSubmissionWorkflowPreviewHTML(type, dept, selectedLayerKeys, selectedLayerMembers) {
+  if (!type || !dept) {
+    return '<div class="text-amber-600 italic">Vui lòng chọn Phòng Ban Trình và Loại Tờ Trình để xem quy trình.</div>';
+  }
+  const userLabel = (username) => {
+    const u = DB.users.find(x => x.username === username);
+    return escapeHtml(u ? u.name : username);
+  };
+  const wf = buildEffectiveSubmissionWorkflow(type, dept, selectedLayerKeys, selectedLayerMembers);
+  const stepsHTML = wf.steps.map(s => {
+    const names = (wf.approvers[s.order] || []).map(userLabel).join(', ') ||
+      '<span class="text-amber-600 italic">(chưa có người duyệt — kiểm tra lại cấu hình quy trình phòng ban)</span>';
+    return `
+      <div class="bg-slate-50 border rounded p-2 mb-1.5">
+        <div class="font-bold text-gray-800">Bước ${s.order}: ${escapeHtml(s.name)}</div>
+        <div class="text-gray-600 mt-0.5">Người duyệt: ${names}</div>
+      </div>`;
+  }).join('');
+  const opinionHTML = wf.opinionRequestees.length ? `
+      <div class="bg-purple-50 border border-purple-200 rounded p-2 mt-1">
+        <div class="font-bold text-purple-700">💬 Xin ý kiến tham khảo (không chặn quy trình)</div>
+        <div class="text-gray-600 mt-0.5">${wf.opinionRequestees.map(userLabel).join(', ')}</div>
+      </div>` : '';
+  return `<div>${stepsHTML}${opinionHTML}</div>`;
+}
+
+// Đọc lại đúng lớp phê duyệt bổ sung + người đã chọn TỪ FORM HIỆN TẠI — dùng chung ở nhiều nơi
+// (submitSubmissionReq(), previewSubmissionWorkflow()) để không lặp lại cùng 1 đoạn đọc DOM.
+function readSelectedSubmissionLayers() {
+  const selectedLayerKeys = [...document.querySelectorAll('#subApprovalDropdownPanel input.sub-layer-toggle:checked')].map(cb => cb.value);
+  const selectedLayerMembers = {};
+  for (const layerKey of selectedLayerKeys) {
+    selectedLayerMembers[layerKey] = [...document.querySelectorAll(`input.sub-layer-member[data-layer="${layerKey}"]:checked`)].map(cb => cb.value);
+  }
+  return { selectedLayerKeys, selectedLayerMembers };
+}
+
+// Nút "🔍 Xem quy trình" cạnh nút Trình — cho người trình xem trước quy trình sẽ áp dụng dựa trên
+// Phòng ban/Loại tờ trình/lớp bổ sung đã chọn NGAY LÚC NÀY trên form, trước khi thực sự bấm Trình.
+function previewSubmissionWorkflow() {
+  const dept = document.getElementById('subDept').value;
+  const type = document.getElementById('subType').value;
+  if (!dept || !type) return alert('Vui lòng chọn Phòng Ban Trình và Loại Tờ Trình trước khi xem quy trình!');
+  const { selectedLayerKeys, selectedLayerMembers } = readSelectedSubmissionLayers();
+
+  document.getElementById('viewModalTitle').innerText = '🔍 Xem Trước Quy Trình Phê Duyệt';
+  document.getElementById('viewModalSub').innerText = `Phòng ban: ${dept} | Loại tờ trình: ${type}`;
+  document.getElementById('viewModalFooterInfo').innerText = 'Chỉ mang tính tham khảo — quy trình thật sự do server xác minh lại khi bạn bấm Trình.';
+  document.getElementById('viewModalContent').innerHTML = buildSubmissionWorkflowPreviewHTML(type, dept, selectedLayerKeys, selectedLayerMembers);
+  document.getElementById('viewDocModal').classList.remove('hidden');
+}
+
 // Lấy quy trình HIỆU LỰC của 1 tờ trình ĐÃ TẠO — dùng snapshot đã chốt lúc tạo (effectiveSteps/
 // effectiveApprovers) nếu có; tờ trình cũ tạo trước khi có tính năng này thì suy ra như cách cũ
 // (quy trình phòng ban theo loại, không có lớp bổ sung nào) để không phá vỡ dữ liệu đã có.
@@ -3742,6 +3826,37 @@ function notifyRecipientsByEmail(module, actionType, targetCode, recipients, sub
     valid.length ? 'SUCCESS' : 'WARNING',
     targetCode
   );
+}
+
+// ==========================================
+// MODAL XÁC NHẬN DÙNG CHUNG (Đồng Ý/Hủy) — khác hẳn withApprovalAuth() bên dưới (đó là xác THỰC lại
+// mật khẩu/OTP, còn đây chỉ là hỏi "bạn có chắc chắn không" trước khi thực hiện 1 hành động, không
+// yêu cầu nhập gì thêm). Dùng cho: trình văn bản, phê duyệt, từ chối/hủy, yêu cầu bổ sung ở Văn bản
+// trình/Đăng ký xe/Đề xuất văn phòng — xem các lời gọi showConfirmModal() ở từng module.
+// ==========================================
+let _pendingConfirmAction = null;
+
+function showConfirmModal({ title, bodyHTML, onConfirm, confirmLabel }) {
+  document.getElementById('genericConfirmTitle').innerText = title || 'Xác nhận';
+  document.getElementById('genericConfirmBody').innerHTML = bodyHTML || '';
+  document.getElementById('genericConfirmOkBtn').innerText = confirmLabel || 'Đồng Ý';
+  _pendingConfirmAction = typeof onConfirm === 'function' ? onConfirm : null;
+  document.getElementById('genericConfirmModal').classList.remove('hidden');
+}
+
+function closeGenericConfirmModal() {
+  document.getElementById('genericConfirmModal').classList.add('hidden');
+  _pendingConfirmAction = null;
+}
+
+// Tách hành động ra khỏi biến toàn cục TRƯỚC khi đóng modal/gọi hành động — tránh trường hợp hành
+// động (vd mở tiếp modal xác thực mật khẩu/OTP của withApprovalAuth) vô tình bị closeGenericConfirmModal()
+// gọi sau đó xoá mất state đang cần dùng.
+function runConfirmedAction() {
+  const fn = _pendingConfirmAction;
+  document.getElementById('genericConfirmModal').classList.add('hidden');
+  _pendingConfirmAction = null;
+  if (fn) fn();
 }
 
 // ==========================================
@@ -4802,8 +4917,31 @@ function printViewModalContent() {
 // ==========================================
 // 2. MODULE VĂN BẢN TRÌNH / TỜ TRÌNH (SUBMISSION)
 // ==========================================
-async function submitSubmissionReq(e) {
+// Chặn form submit ngay lập tức + xác nhận lại lựa chọn lớp bổ sung/người duyệt HỢP LỆ, rồi hiện
+// hộp thoại Đồng Ý/Hủy kèm xem trước quy trình (dùng chung buildSubmissionWorkflowPreviewHTML() với
+// nút "Xem Quy Trình") trước khi thực sự gửi lên server — xem doSubmitSubmissionReq() bên dưới.
+function submitSubmissionReq(e) {
   e.preventDefault();
+  const dept = document.getElementById('subDept').value;
+  const type = document.getElementById('subType').value;
+  const { selectedLayerKeys, selectedLayerMembers } = readSelectedSubmissionLayers();
+
+  for (const layerKey of selectedLayerKeys) {
+    if ((selectedLayerMembers[layerKey] || []).length === 0) {
+      const layer = SUBMISSION_APPROVAL_LAYERS.find(l => l.key === layerKey);
+      return alert(`⛔ Đã tick lớp "${layer?.label}" nhưng chưa chọn người nào duyệt — vui lòng chọn ít nhất 1 người!`);
+    }
+  }
+
+  const previewHTML = buildSubmissionWorkflowPreviewHTML(type, dept, selectedLayerKeys, selectedLayerMembers);
+  showConfirmModal({
+    title: '📜 Xác Nhận Trình Văn Bản / Tờ Trình',
+    bodyHTML: `<p class="mb-2">Tờ trình sẽ đi theo đúng luồng phê duyệt sau:</p>${previewHTML}<p class="mt-3 font-semibold">Bạn có chắc chắn muốn trình văn bản này?</p>`,
+    onConfirm: () => doSubmitSubmissionReq(e)
+  });
+}
+
+async function doSubmitSubmissionReq(e) {
   const code = document.getElementById('subCode').value.trim();
   const dept = document.getElementById('subDept').value;
   const type = document.getElementById('subType').value;
@@ -4811,17 +4949,7 @@ async function submitSubmissionReq(e) {
   const priority = document.getElementById('subPriority').value;
   const content = document.getElementById('subContent').value.trim();
   const fileInput = document.getElementById('subFile');
-  const selectedLayerKeys = [...document.querySelectorAll('#subApprovalLayersContainer input.sub-layer-toggle:checked')].map(cb => cb.value);
-
-  const selectedLayerMembers = {};
-  for (const layerKey of selectedLayerKeys) {
-    const members = [...document.querySelectorAll(`input.sub-layer-member[data-layer="${layerKey}"]:checked`)].map(cb => cb.value);
-    if (members.length === 0) {
-      const layer = SUBMISSION_APPROVAL_LAYERS.find(l => l.key === layerKey);
-      return alert(`⛔ Đã tick lớp "${layer?.label}" nhưng chưa chọn người nào duyệt — vui lòng chọn ít nhất 1 người!`);
-    }
-    selectedLayerMembers[layerKey] = members;
-  }
+  const { selectedLayerKeys, selectedLayerMembers } = readSelectedSubmissionLayers();
 
   if (DB.submissions.some(s => s.code === code)) {
     return alert('Mã văn bản trình / tờ trình đã tồn tại!');
@@ -4912,47 +5040,91 @@ async function submitSubmissionReq(e) {
 // Với mỗi lớp phê duyệt bổ sung, chỉ liệt kê ĐÚNG những người admin đã gán vào nhóm đó (màn "Quản Lý
 // Nhóm Phê Duyệt Trình") — người trình tick chọn lớp rồi chọn CỤ THỂ ai trong nhóm tham gia duyệt tờ
 // trình này (không còn bắt buộc CẢ nhóm phải duyệt như trước). Nhóm chưa có ai -> khoá checkbox lớp.
+// "Phê duyệt" là 1 dropdown-checklist gọn trong ô lưới (KHÔNG dùng <select multiple> vì UX kém trong
+// ô hẹp) — panel chỉ chứa các ô tick lớp; phần chọn CỤ THỂ người cho từng lớp đã tick được chuyển
+// sang khối "Cấp Phê Duyệt Bổ Sung & Xin Ý Kiến" bên dưới (ẩn mặc định, chỉ hiện lớp nào đã tick).
 function renderSubmissionApprovalLayerCheckboxes() {
-  const container = document.getElementById('subApprovalLayersContainer');
-  if (!container) return;
-  container.innerHTML = SUBMISSION_APPROVAL_LAYERS.map(layer => {
+  const panel = document.getElementById('subApprovalDropdownPanel');
+  if (!panel) return;
+  panel.innerHTML = SUBMISSION_APPROVAL_LAYERS.map(layer => {
     const groupUsers = (DB.submissionApprovalGroups[layer.key] || [])
       .map(un => DB.users.find(u => u.username === un))
       .filter(Boolean);
     const disabled = groupUsers.length === 0;
 
     return `
-      <div class="border rounded p-2 bg-amber-50/60 min-w-[220px]">
-        <label class="flex items-center gap-1.5 font-semibold text-gray-700 ${disabled ? 'opacity-50' : 'cursor-pointer'}">
-          <input type="checkbox" class="sub-layer-toggle" value="${layer.key}" ${disabled ? 'disabled' : ''} onchange="onSubApprovalLayerToggle('${layer.key}')">
-          <span>${escapeHtml(layer.label)}</span>
-        </label>
-        ${disabled
-          ? `<p class="text-[11px] text-gray-400 italic mt-1">Admin chưa gán thành viên nào cho nhóm này.</p>`
-          : `<div id="subLayerMembers_${layer.key}" class="hidden mt-1.5 pl-1 border-t pt-1.5"><div id="subLayerMemberPicker_${layer.key}"></div></div>`
-        }
-      </div>
+      <label class="flex items-start gap-1.5 text-xs p-1 rounded ${disabled ? 'opacity-50' : 'cursor-pointer hover:bg-amber-50'}">
+        <input type="checkbox" class="sub-layer-toggle mt-0.5" value="${layer.key}" ${disabled ? 'disabled' : ''} onchange="onSubApprovalLayerToggle('${layer.key}')">
+        <span>
+          <span class="font-semibold text-gray-700">${escapeHtml(layer.label)}</span>
+          ${disabled ? `<span class="block text-[10px] text-gray-400 italic">Admin chưa gán thành viên nào cho nhóm này.</span>` : ''}
+        </span>
+      </label>
     `;
   }).join('');
 
-  SUBMISSION_APPROVAL_LAYERS.forEach(layer => {
-    const groupUsers = (DB.submissionApprovalGroups[layer.key] || [])
-      .map(un => DB.users.find(u => u.username === un))
-      .filter(Boolean);
-    if (groupUsers.length === 0) return;
-    renderPeopleMultiSelect(`subLayerMemberPicker_${layer.key}`, groupUsers, [], 'sub-layer-member', { 'data-layer': layer.key });
-  });
+  const section = document.getElementById('subApprovalLayersSection');
+  const container = document.getElementById('subApprovalLayersContainer');
+  if (section) section.classList.add('hidden');
+  if (container) container.innerHTML = '';
+  updateSubApprovalDropdownLabel();
 }
 
-// Hiện/ẩn khối chọn người của 1 lớp theo trạng thái checkbox lớp đó — bỏ tick thì reset (bỏ chọn
-// hết người) để không lỡ giữ lại lựa chọn cũ của lần trước khi người dùng bỏ rồi tick lại.
+function toggleSubApprovalDropdown(e) {
+  e.stopPropagation();
+  document.getElementById('subApprovalDropdownPanel')?.classList.toggle('hidden');
+}
+
+document.addEventListener('click', (ev) => {
+  const panel = document.getElementById('subApprovalDropdownPanel');
+  const btn = document.getElementById('subApprovalDropdownBtn');
+  if (!panel || panel.classList.contains('hidden')) return;
+  if (!panel.contains(ev.target) && ev.target !== btn && !btn?.contains(ev.target)) panel.classList.add('hidden');
+});
+
+function updateSubApprovalDropdownLabel() {
+  const labelEl = document.getElementById('subApprovalDropdownLabel');
+  if (!labelEl) return;
+  const checked = [...document.querySelectorAll('#subApprovalDropdownPanel input.sub-layer-toggle:checked')];
+  if (checked.length === 0) {
+    labelEl.textContent = '-- Chọn cấp phê duyệt --';
+    labelEl.className = 'text-gray-500 truncate';
+  } else {
+    const labels = checked.map(cb => SUBMISSION_APPROVAL_LAYERS.find(l => l.key === cb.value)?.label || cb.value);
+    labelEl.textContent = checked.length <= 2 ? labels.join(', ') : `Đã chọn ${checked.length} lớp`;
+    labelEl.className = 'text-gray-800 font-semibold truncate';
+  }
+}
+
+// Tick/bỏ tick 1 lớp trong dropdown "Phê duyệt" — thêm/gỡ đúng 1 card chọn người trong khối "Cấp Phê
+// Duyệt Bổ Sung & Xin Ý Kiến" bên dưới form, và ẩn cả khối đó nếu không còn lớp nào được chọn.
 function onSubApprovalLayerToggle(layerKey) {
-  const box = document.getElementById(`subLayerMembers_${layerKey}`);
-  if (!box) return;
   const toggle = document.querySelector(`.sub-layer-toggle[value="${layerKey}"]`);
   const checked = !!toggle?.checked;
-  box.classList.toggle('hidden', !checked);
-  if (!checked) pmsClear(`subLayerMemberPicker_${layerKey}`);
+  const layer = SUBMISSION_APPROVAL_LAYERS.find(l => l.key === layerKey);
+  const container = document.getElementById('subApprovalLayersContainer');
+  const section = document.getElementById('subApprovalLayersSection');
+
+  if (checked) {
+    const groupUsers = (DB.submissionApprovalGroups[layerKey] || [])
+      .map(un => DB.users.find(u => u.username === un))
+      .filter(Boolean);
+    const card = document.createElement('div');
+    card.id = `subLayerCard_${layerKey}`;
+    card.className = 'border rounded p-2 bg-amber-50/60 min-w-[220px]';
+    card.innerHTML = `
+      <div class="font-semibold text-gray-700 mb-1">${escapeHtml(layer?.label || layerKey)}</div>
+      <div id="subLayerMemberPicker_${layerKey}"></div>
+    `;
+    container.appendChild(card);
+    renderPeopleMultiSelect(`subLayerMemberPicker_${layerKey}`, groupUsers, [], 'sub-layer-member', { 'data-layer': layerKey });
+  } else {
+    pmsClear(`subLayerMemberPicker_${layerKey}`);
+    document.getElementById(`subLayerCard_${layerKey}`)?.remove();
+  }
+
+  if (section) section.classList.toggle('hidden', container.children.length === 0);
+  updateSubApprovalDropdownLabel();
 }
 
 function onSubFilterChange() {
@@ -4991,7 +5163,7 @@ function renderSubmissionReqs() {
   const pageSubs = paginateList('sub', visibleSubs, 'renderSubmissionReqs', 'tờ trình');
 
   if (pageSubs.length === 0) {
-    tbody.innerHTML = `<tr><td colspan="6" class="text-center p-6 text-gray-500 italic">Không tìm thấy tờ trình phù hợp.</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="7" class="text-center p-6 text-gray-500 italic">Không tìm thấy tờ trình phù hợp.</td></tr>`;
     return;
   }
 
@@ -5013,6 +5185,11 @@ function renderSubmissionReqs() {
       progressBadge = `<span class="px-2 py-1 bg-amber-100 text-amber-800 rounded font-semibold text-xs">⏳ Bước ${sub.currentStep}/${wf.steps.length}: ${escapeHtml(stepName)}${escapeHtml(progressText)}</span>`;
     }
 
+    const hasTask = DB.tasks.some(t => t.sourceType === 'SUBMISSION' && t.sourceCode === sub.code);
+    const taskStatusBadge = hasTask
+      ? `<span class="px-2 py-1 bg-emerald-100 text-emerald-800 rounded text-xs font-bold" title="Đã tự động tạo Công việc theo dõi khi phê duyệt">✅ Đã có công việc</span>`
+      : `<span class="text-gray-400 italic text-xs">Chưa giao việc</span>`;
+
     return `
       <tr class="hover:bg-gray-50 border-b">
         <td class="border p-2 font-mono font-bold text-amber-800">${escapeHtml(sub.code)}</td>
@@ -5029,23 +5206,21 @@ function renderSubmissionReqs() {
           <div class="text-rose-600 font-bold">${escapeHtml(sub.priority)}</div>
         </td>
         <td class="border p-2">${progressBadge}</td>
+        <td class="border p-2 text-center">${taskStatusBadge}</td>
         <td class="border p-2 text-center space-x-1">
           ${(() => {
             const primaryBtnHTML = `<button onclick="runSubmissionAction(${sub.id}, 'process')" class="px-2.5 py-1 ${canApprove ? 'bg-amber-600 text-white' : 'bg-gray-600 text-white'} rounded text-xs hover:opacity-90 font-bold">${canApprove ? '✍️ Bút phê / Duyệt' : '👁️ Xem chi tiết'}</button>`;
             const secondaryOptions = [];
-            let extraBadge = '';
             if (sub.status === 'APPROVED') {
               secondaryOptions.push({ value: 'viewSlip', label: '👁️ Xem Phiếu' });
               if (canDownloadFile(currentUser, 'submission', sub.dept, sub.creator)) {
                 secondaryOptions.push({ value: 'downloadSlip', label: '⬇️ Tải' });
               }
-              if (DB.tasks.some(t => t.sourceType === 'SUBMISSION' && t.sourceCode === sub.code)) {
-                extraBadge = `<span class="px-2 py-1 bg-emerald-100 text-emerald-800 rounded text-xs font-bold" title="Đã tự động tạo Công việc theo dõi khi phê duyệt">✅ Đã có công việc</span>`;
-              } else if (canManageTasks(currentUser)) {
+              if (!hasTask && canManageTasks(currentUser)) {
                 secondaryOptions.push({ value: 'createTask', label: '📌 Giao việc' });
               }
             }
-            return buildActionCell(sub.id, primaryBtnHTML, secondaryOptions, 'runSubmissionAction') + extraBadge;
+            return buildActionCell(sub.id, primaryBtnHTML, secondaryOptions, 'runSubmissionAction');
           })()}
         </td>
       </tr>
@@ -5131,9 +5306,9 @@ function openProcessSubmissionModal(subId) {
   const actionBtns = document.getElementById('subModalActionBtns');
   if (canApprove) {
     actionBtns.innerHTML = `
-      <button onclick="processSubmission('REJECT')" class="bg-red-600 text-white px-4 py-1.5 rounded font-bold hover:bg-red-700 text-xs">❌ Từ Chối / Trả Về</button>
-      <button onclick="requestSubmissionInfo()" class="bg-blue-600 text-white px-4 py-1.5 rounded font-bold hover:bg-blue-700 text-xs">📋 Yêu Cầu Bổ Sung</button>
-      <button onclick="withApprovalAuth(() => processSubmission('APPROVE'))" class="bg-green-600 text-white px-5 py-1.5 rounded font-bold hover:bg-green-700 text-xs">✅ Phê Duyệt & Chuyển Bước</button>
+      <button onclick="confirmProcessSubmission('REJECT')" class="bg-red-600 text-white px-4 py-1.5 rounded font-bold hover:bg-red-700 text-xs">❌ Từ Chối / Trả Về</button>
+      <button onclick="confirmRequestSubmissionInfo()" class="bg-blue-600 text-white px-4 py-1.5 rounded font-bold hover:bg-blue-700 text-xs">📋 Yêu Cầu Bổ Sung</button>
+      <button onclick="confirmProcessSubmission('APPROVE')" class="bg-green-600 text-white px-5 py-1.5 rounded font-bold hover:bg-green-700 text-xs">✅ Phê Duyệt & Chuyển Bước</button>
     `;
   } else {
     actionBtns.innerHTML = `<span class="text-gray-500 italic text-xs">Bạn chỉ có quyền xem thông tin tờ trình này.</span>`;
@@ -5145,6 +5320,40 @@ function openProcessSubmissionModal(subId) {
 function closeProcessSubmissionModal() {
   document.getElementById('submissionProcessModal').classList.add('hidden');
   currentProcessingSubId = null;
+}
+
+// Cổng xác nhận Đồng Ý/Hủy trước khi thực hiện — xem showConfirmModal() trong index.html. Thứ tự:
+// xác nhận ý định TRƯỚC, rồi mới tới withApprovalAuth() (xác thực lại mật khẩu/OTP nếu có cấu hình)
+// SAU, rồi mới gọi API thật sự — processSubmission()/requestSubmissionInfo() vẫn tự kiểm tra lại
+// (vd. bắt buộc nhập lý do từ chối) làm lớp an toàn thứ hai.
+function confirmProcessSubmission(actionType) {
+  const comment = document.getElementById('txtSubmissionComment').value.trim();
+  if (actionType === 'REJECT' && !comment) {
+    return alert('Vui lòng nhập lý do từ chối vào ô Ý kiến chỉ đạo!');
+  }
+  const isApprove = actionType === 'APPROVE';
+  showConfirmModal({
+    title: isApprove ? '✅ Xác Nhận Phê Duyệt' : '❌ Xác Nhận Từ Chối / Trả Về',
+    bodyHTML: `<p>Bạn có chắc chắn muốn <b>${isApprove ? 'phê duyệt và chuyển bước' : 'từ chối / trả về'}</b> tờ trình này?</p>${comment ? `<p class="mt-2 italic text-gray-600">Ý kiến chỉ đạo: "${escapeHtml(comment)}"</p>` : ''}`,
+    confirmLabel: isApprove ? 'Phê Duyệt' : 'Từ Chối',
+    onConfirm: () => {
+      if (isApprove) withApprovalAuth(() => processSubmission('APPROVE'));
+      else processSubmission('REJECT');
+    }
+  });
+}
+
+function confirmRequestSubmissionInfo() {
+  const comment = document.getElementById('txtSubmissionComment').value.trim();
+  if (!comment) {
+    return alert('Vui lòng nhập nội dung cần bổ sung vào ô Ý kiến chỉ đạo!');
+  }
+  showConfirmModal({
+    title: '📋 Xác Nhận Yêu Cầu Bổ Sung',
+    bodyHTML: `<p>Bạn có chắc chắn muốn yêu cầu bổ sung thông tin cho tờ trình này?</p><p class="mt-2 italic text-gray-600">"${escapeHtml(comment)}"</p>`,
+    confirmLabel: 'Gửi Yêu Cầu',
+    onConfirm: () => requestSubmissionInfo()
+  });
 }
 
 async function processSubmission(actionType) {
@@ -8531,8 +8740,8 @@ function openCarProcessModal(carId) {
   const actionBtns = document.getElementById('carModalActionBtns');
   if (canApprove) {
     actionBtns.innerHTML = `
-      <button onclick="processCarReg('REJECT')" class="bg-red-600 text-white px-4 py-1.5 rounded font-bold hover:bg-red-700 text-xs">❌ Từ Chối</button>
-      <button onclick="withApprovalAuth(() => processCarReg('APPROVE'))" class="bg-green-600 text-white px-5 py-1.5 rounded font-bold hover:bg-green-700 text-xs">✅ Phê Duyệt & Chuyển Bước</button>
+      <button onclick="confirmProcessCarReg('REJECT')" class="bg-red-600 text-white px-4 py-1.5 rounded font-bold hover:bg-red-700 text-xs">❌ Từ Chối</button>
+      <button onclick="confirmProcessCarReg('APPROVE')" class="bg-green-600 text-white px-5 py-1.5 rounded font-bold hover:bg-green-700 text-xs">✅ Phê Duyệt & Chuyển Bước</button>
     `;
   } else {
     actionBtns.innerHTML = `<span class="text-gray-500 italic text-xs">Bạn chỉ có quyền xem thông tin đăng ký này.</span>`;
@@ -8544,6 +8753,23 @@ function openCarProcessModal(carId) {
 function closeCarProcessModal() {
   document.getElementById('carProcessModal').classList.add('hidden');
   currentProcessingCarId = null;
+}
+
+function confirmProcessCarReg(actionType) {
+  const comment = document.getElementById('txtCarComment').value.trim();
+  if (actionType === 'REJECT' && !comment) {
+    return alert('Vui lòng nhập lý do từ chối!');
+  }
+  const isApprove = actionType === 'APPROVE';
+  showConfirmModal({
+    title: isApprove ? '✅ Xác Nhận Phê Duyệt' : '❌ Xác Nhận Từ Chối',
+    bodyHTML: `<p>Bạn có chắc chắn muốn <b>${isApprove ? 'phê duyệt và chuyển bước' : 'từ chối'}</b> đăng ký xe này?</p>${comment ? `<p class="mt-2 italic text-gray-600">Ý kiến: "${escapeHtml(comment)}"</p>` : ''}`,
+    confirmLabel: isApprove ? 'Phê Duyệt' : 'Từ Chối',
+    onConfirm: () => {
+      if (isApprove) withApprovalAuth(() => processCarReg('APPROVE'));
+      else processCarReg('REJECT');
+    }
+  });
 }
 
 async function processCarReg(actionType) {
@@ -9102,8 +9328,8 @@ function openOfficeProcessModal(officeId) {
   const actionBtns = document.getElementById('officeModalActionBtns');
   if (canApprove) {
     actionBtns.innerHTML = `
-      <button onclick="processOfficeReq('REJECT')" class="bg-red-600 text-white px-4 py-1.5 rounded font-bold hover:bg-red-700 text-xs">❌ Từ Chối</button>
-      <button onclick="withApprovalAuth(() => processOfficeReq('APPROVE'))" class="bg-green-600 text-white px-5 py-1.5 rounded font-bold hover:bg-green-700 text-xs">✅ Phê Duyệt & Chuyển Bước</button>
+      <button onclick="confirmProcessOfficeReq('REJECT')" class="bg-red-600 text-white px-4 py-1.5 rounded font-bold hover:bg-red-700 text-xs">❌ Từ Chối</button>
+      <button onclick="confirmProcessOfficeReq('APPROVE')" class="bg-green-600 text-white px-5 py-1.5 rounded font-bold hover:bg-green-700 text-xs">✅ Phê Duyệt & Chuyển Bước</button>
     `;
   } else {
     actionBtns.innerHTML = `<span class="text-gray-500 italic text-xs">Bạn chỉ có quyền xem thông tin đề xuất này.</span>`;
@@ -9115,6 +9341,23 @@ function openOfficeProcessModal(officeId) {
 function closeOfficeProcessModal() {
   document.getElementById('officeProcessModal').classList.add('hidden');
   currentProcessingOfficeId = null;
+}
+
+function confirmProcessOfficeReq(actionType) {
+  const comment = document.getElementById('txtOfficeComment').value.trim();
+  if (actionType === 'REJECT' && !comment) {
+    return alert('Vui lòng nhập lý do từ chối vào ô Ý kiến chỉ đạo!');
+  }
+  const isApprove = actionType === 'APPROVE';
+  showConfirmModal({
+    title: isApprove ? '✅ Xác Nhận Phê Duyệt' : '❌ Xác Nhận Từ Chối',
+    bodyHTML: `<p>Bạn có chắc chắn muốn <b>${isApprove ? 'phê duyệt và chuyển bước' : 'từ chối'}</b> đề xuất này?</p>${comment ? `<p class="mt-2 italic text-gray-600">Ý kiến: "${escapeHtml(comment)}"</p>` : ''}`,
+    confirmLabel: isApprove ? 'Phê Duyệt' : 'Từ Chối',
+    onConfirm: () => {
+      if (isApprove) withApprovalAuth(() => processOfficeReq('APPROVE'));
+      else processOfficeReq('REJECT');
+    }
+  });
 }
 
 async function processOfficeReq(actionType) {
