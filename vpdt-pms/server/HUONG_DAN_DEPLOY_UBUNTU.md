@@ -434,3 +434,45 @@ cập nhật giao diện/code **không làm mất dữ liệu người dùng đ�
 > (script viết để chạy lại nhiều lần an toàn, không mất dữ liệu cũ) và đảm
 > bảo file `.env` đã có đủ biến bắt buộc mới (ví dụ `JWT_SECRET`) — xem
 > `.env.example`.
+
+---
+
+## 12. Ghi chú đợt rà soát trước khi đưa vào chạy thật (rà soát code PR #40–59)
+
+Đợt cập nhật này sửa 6 vấn đề phát hiện khi rà soát lại toàn bộ code trước khi
+đưa vào chạy thật (sửa lỗi/bảo mật, không phải tính năng mới). **Không cần đổi
+gì ở `.env` (mục 5), không cần chạy lại `schema.sql` (mục 3), không có gói npm
+mới** — chỉ cần làm đúng bước "Cập nhật code" ở mục 11 như bình thường
+(`npm install` vẫn nên chạy cho chắc, dù `package.json` không đổi ở đợt này).
+
+Các thay đổi hành vi cần biết trước khi thông báo cho người dùng:
+
+- **`/uploads` (tải file đính kèm) giờ bắt buộc phải đăng nhập mới tải
+  được.** Trước đây ai có đúng URL file — kể cả chưa đăng nhập vào hệ thống —
+  đều tải thẳng được. Nếu công ty có thói quen gửi thẳng link file đính kèm ra
+  ngoài (email, Zalo/chat...) cho người **chưa có tài khoản** trong hệ thống,
+  các link đó sẽ ngừng hoạt động sau đợt cập nhật này — cần báo trước cho
+  người dùng liên quan hoặc đổi quy trình gửi file.
+- **API ghi cấu hình quy trình mẫu (`/api/data/workflows`) giờ chỉ Quản trị
+  viên mới ghi được** — trước đây bất kỳ ai đã đăng nhập cũng ghi trực tiếp
+  được qua API chung (dù giao diện không hiện nút cho phép).
+- **Xác minh mật khẩu cho thao tác nhạy cảm (duyệt hồ sơ mức PASSWORD...)
+  giờ có giới hạn: sai 5 lần liên tiếp/tài khoản sẽ tạm khoá 15 phút** —
+  cùng cơ chế đã áp dụng cho màn đăng nhập từ trước, giờ áp dụng thêm cho màn
+  xác minh này.
+- **Danh sách người dùng trả về từ API không còn lộ số lần đăng nhập sai /
+  thời điểm khoá tài khoản** của người khác cho các tài khoản không phải quản
+  trị viên — chỉ ẩn bớt field trả về, không ảnh hưởng tính năng nào trên giao
+  diện.
+- **Đổi thông tin cá nhân (`Hồ sơ của tôi` — số điện thoại/mật khẩu)** đổi
+  sang cơ chế khoá dòng khi ghi xuống CSDL, tránh mất dữ liệu nếu vô tình có 2
+  request ghi cùng lúc — hành vi với người dùng cuối không đổi.
+- **Chống đặt trùng phòng họp cùng khung giờ khi 2 người bấm tạo gần như
+  đồng thời** (trước đây có khe hở nhỏ có thể tạo trùng nếu bấm rất sát
+  nhau) — dùng cơ chế khoá `sp_getapplock` sẵn có của SQL Server. Đã kiểm thử
+  kỹ ở tầng logic ứng dụng (giả lập CSDL), nhưng **chưa kiểm thử được với SQL
+  Server thật** trong môi trường phát triển hiện tại (không có sẵn instance
+  MSSQL thật để nối). **Khuyến nghị:** sau khi triển khai lên server thật, thử
+  tạo 2 booking trùng phòng + trùng giờ từ 2 tab/2 người gần như đồng thời một
+  lần để xác nhận chỉ 1 yêu cầu thành công, yêu cầu còn lại báo lỗi trùng lịch
+  rõ ràng (không phải lỗi 500 chung chung).

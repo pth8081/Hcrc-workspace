@@ -3,10 +3,11 @@
 const express = require('express');
 const rateLimit = require('express-rate-limit');
 const router = express.Router();
-const { getAppDataValue, setAppDataValue, withLockedAppDataValue } = require('../lib/appData');
+const { getAppDataValue, withLockedAppDataValue } = require('../lib/appData');
 const { verifyPassword, hashPassword, signToken, setAuthCookie, clearAuthCookie, requireAuth } = require('../lib/auth');
 const { recordFailedLogin, resetLoginAttempts, getLockoutRemainingMinutes } = require('../lib/loginAttempts');
 const { validatePasswordStrength } = require('../lib/passwordPolicy');
+const { HttpError } = require('../lib/httpErrors');
 
 // Không bao giờ trả field mật khẩu ra ngoài, dùng chung cho /login và /me.
 function toSafeUser(user) {
@@ -96,14 +97,41 @@ router.get('/me', requireAuth, async (req, res) => {
 // POST /api/auth/verify-password — xác thực LẠI mật khẩu của CHÍNH người đang đăng nhập, dùng cho
 // lớp "xác thực trước khi phê duyệt" (approverAuthLevel = PASSWORD). Trước đây so sánh thẳng ở JS
 // client (currentUser.pass) — không có giá trị bảo mật thật vì có thể sửa bằng DevTools.
-router.post('/verify-password', requireAuth, async (req, res) => {
+// Cùng 2 lớp chống dò mật khẩu như /login: rate-limit theo IP (loginRateLimiter) + khoá theo TÀI
+// KHOẢN sau nhiều lần sai (lib/loginAttempts.js) — trước đây route này bỏ sót cả 2 lớp, dù đây cũng
+// là 1 chỗ cho phép thử mật khẩu lặp lại không giới hạn.
+router.post('/verify-password', loginRateLimiter, requireAuth, async (req, res) => {
   const { password } = req.body || {};
   if (!password) return res.status(400).json({ error: 'Thiếu mật khẩu' });
 
   try {
-    const user = req.freshUser;
-    const ok = await verifyPassword(password, user.pass || user.password);
-    res.json({ ok: !!ok });
+    const username = req.freshUser.username;
+    const remainingLockMinutes = getLockoutRemainingMinutes(req.freshUser);
+    if (remainingLockMinutes !== null) {
+      return res.status(429).json({ error: `Tài khoản tạm khóa do nhập sai mật khẩu quá nhiều lần. Vui lòng thử lại sau ${remainingLockMinutes} phút.` });
+    }
+
+    const ok = await verifyPassword(password, req.freshUser.pass || req.freshUser.password);
+    if (!ok) {
+      await withLockedAppDataValue('users', (collection) => {
+        const list = Array.isArray(collection) ? collection : [];
+        const idx = list.findIndex(u => u.username === username);
+        if (idx !== -1) recordFailedLogin(list[idx]);
+        return list;
+      });
+      return res.json({ ok: false });
+    }
+
+    if (req.freshUser.failedLoginAttempts) {
+      await withLockedAppDataValue('users', (collection) => {
+        const list = Array.isArray(collection) ? collection : [];
+        const idx = list.findIndex(u => u.username === username);
+        if (idx !== -1) resetLoginAttempts(list[idx]);
+        return list;
+      });
+    }
+
+    res.json({ ok: true });
   } catch (err) {
     console.error('POST /api/auth/verify-password lỗi:', err.message);
     res.status(500).json({ error: 'Không thể xác thực mật khẩu' });
@@ -118,28 +146,36 @@ router.patch('/me', requireAuth, async (req, res) => {
   const { name, email, phone, password } = req.body || {};
 
   try {
-    const users = (await getAppDataValue('users')) || [];
-    const idx = users.findIndex(u => u.username === req.user.username);
-    if (idx === -1) return res.status(401).json({ error: 'Tài khoản không còn tồn tại' });
+    let updated;
+    // withLockedAppDataValue (thay vì đọc/sửa/ghi rời rạc như trước) — khoá đúng dòng "users" trong
+    // lúc đọc-sửa-ghi, tránh mất dữ liệu nếu có request khác (admin sửa quyền người khác, hoặc chính
+    // người này tự sửa hồ sơ từ 2 tab) ghi đè "users" gần như đồng thời.
+    await withLockedAppDataValue('users', async (collection) => {
+      const list = Array.isArray(collection) ? collection : [];
+      const idx = list.findIndex(u => u.username === req.user.username);
+      if (idx === -1) throw new HttpError(401, 'Tài khoản không còn tồn tại');
 
-    const updated = { ...users[idx] };
-    if (typeof name === 'string') updated.name = name;
-    if (typeof email === 'string') updated.email = email;
-    if (typeof phone === 'string') updated.phone = phone;
-    if (password) {
-      const passwordError = validatePasswordStrength(password);
-      if (passwordError) return res.status(400).json({ error: passwordError });
-      updated.pass = await hashPassword(password);
-      delete updated.password;
-      // Tự đổi mật khẩu thành công -> gỡ cờ bắt buộc đổi (nếu có) — đây chính là lối thoát duy nhất
-      // khỏi trạng thái mustChangePassword (xem lib/auth.js blockIfMustChangePassword).
-      delete updated.mustChangePassword;
-    }
+      updated = { ...list[idx] };
+      if (typeof name === 'string') updated.name = name;
+      if (typeof email === 'string') updated.email = email;
+      if (typeof phone === 'string') updated.phone = phone;
+      if (password) {
+        const passwordError = validatePasswordStrength(password);
+        if (passwordError) throw new HttpError(400, passwordError);
+        updated.pass = await hashPassword(password);
+        delete updated.password;
+        // Tự đổi mật khẩu thành công -> gỡ cờ bắt buộc đổi (nếu có) — đây chính là lối thoát duy nhất
+        // khỏi trạng thái mustChangePassword (xem lib/auth.js blockIfMustChangePassword).
+        delete updated.mustChangePassword;
+      }
 
-    users[idx] = updated;
-    await setAppDataValue('users', users);
+      list[idx] = updated;
+      return list;
+    });
+
     res.json(toSafeUser(updated));
   } catch (err) {
+    if (err instanceof HttpError) return res.status(err.status).json({ error: err.message });
     console.error('PATCH /api/auth/me lỗi:', err.message);
     res.status(500).json({ error: 'Không thể cập nhật hồ sơ cá nhân' });
   }

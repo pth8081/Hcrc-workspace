@@ -51,8 +51,12 @@ app.use('/api/log', systemLogRoutes);
 app.use('/api/upload', requireAuth, blockIfMustChangePassword, uploadRoutes);
 app.use('/api/send-email', requireAuth, blockIfMustChangePassword, emailRoutes);
 
-// Phục vụ file đính kèm đã tải lên
-app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+// Phục vụ file đính kèm đã tải lên — PHẢI đăng nhập mới tải được (trước đây express.static phục vụ
+// thẳng, ai có đúng URL — kể cả chưa đăng nhập — đều tải được, vô hiệu hoá các quyền Xem/Tải file theo
+// module đã cấp). Chưa phân biệt được quyền theo TỪNG hồ sơ cụ thể (vd nhân viên phòng khác vẫn tải
+// được nếu đoán/có sẵn đúng URL) — chỉ chặn được người hoàn toàn CHƯA đăng nhập; phân quyền chi tiết
+// hơn theo hồ sơ sẽ cần thiết kế riêng (route tải có kiểm tra ngược lại hồ sơ chứa fileUrl đó).
+app.use('/uploads', requireAuth, blockIfMustChangePassword, express.static(path.join(__dirname, 'uploads')));
 
 // Phục vụ PDF.js (tự lưu trên server, không qua CDN) — dùng để vẽ PDF ra <canvas> ở Khung Xem Bảo Vệ
 // thay vì plugin PDF gốc của trình duyệt (bị Chrome/Edge chặn khi nằm trong modal có lớp nền mờ, và
