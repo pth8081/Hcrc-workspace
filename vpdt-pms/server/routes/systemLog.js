@@ -7,9 +7,30 @@
 const express = require('express');
 const router = express.Router();
 const { requireAuth } = require('../lib/auth');
-const { insertSystemLog, clearAllSystemLogs } = require('../lib/systemLogStore');
+const { insertSystemLog, clearAllSystemLogs, getRecentSystemLogs } = require('../lib/systemLogStore');
 
 router.use(requireAuth);
+
+const MAX_GET_LIMIT = 1000;
+const DEFAULT_GET_LIMIT = 200;
+
+// GET /api/log — đọc nhật ký hệ thống, endpoint RIÊNG (trước đây chỉ đọc được qua GET /api/data bulk
+// chung, trả kèm cho MỌI người đã đăng nhập dù giao diện Nhật ký chỉ admin mới thấy — lộ dữ liệu qua
+// API dù đã ẩn ở giao diện). CHỈ Quản Trị Viên mới đọc được, khớp đúng quyền xem màn Nhật ký hệ thống
+// trên giao diện (btnSystemTab chỉ hiện cho admin) và quyền xoá đã có sẵn (DELETE bên dưới).
+router.get('/', async (req, res) => {
+  if (!req.user.admin) {
+    return res.status(403).json({ error: 'Chỉ Quản Trị Viên mới có quyền xem nhật ký hệ thống' });
+  }
+  const limit = Math.min(MAX_GET_LIMIT, Math.max(1, parseInt(req.query.limit, 10) || DEFAULT_GET_LIMIT));
+  try {
+    const items = await getRecentSystemLogs(limit);
+    res.json({ items });
+  } catch (err) {
+    console.error('GET /api/log lỗi:', err.message);
+    res.status(500).json({ error: 'Không thể tải nhật ký hệ thống' });
+  }
+});
 
 // POST /api/log — ghi 1 dòng nhật ký hệ thống. username/fullName lấy từ phiên đăng nhập đã xác thực
 // (req.freshUser), KHÔNG tin bất kỳ giá trị nào client tự gửi cho 2 field này. ipAddress lấy từ

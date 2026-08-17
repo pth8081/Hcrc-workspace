@@ -10,15 +10,9 @@ const { getAppDataValue, setAppDataValue, setAppDataValueIfVersionMatches } = re
 const { requireAuth, blockIfMustChangePassword, hashPassword, isBcryptHash } = require('../lib/auth');
 const { validatePasswordStrength } = require('../lib/passwordPolicy');
 const { HttpError } = require('../lib/httpErrors');
-const { getRecentSystemLogs } = require('../lib/systemLogStore');
 const { getAllTasks } = require('../lib/taskStore');
 const { getAllForCollection, MIGRATED_COLLECTIONS } = require('../lib/recordStore');
-
-// Số dòng nhật ký hệ thống trả về cho lần tải dữ liệu đầu (GET /api/data) — khớp đúng giới hạn hiển
-// thị cũ ở client (DB.systemLogs tối đa 200 dòng, xem logSystemAction() trong index.html) để không
-// đổi hành vi giao diện. Bảng dbo.SystemLogs vẫn GIỮ LẠI nhiều hơn con số này (xem RETENTION_KEEP ở
-// lib/systemLogStore.js) — chỉ giới hạn ở đây là để lần tải trang đầu tiên không kéo về quá nhiều.
-const SYSTEM_LOGS_BULK_LOAD_LIMIT = 200;
+const { sendServerError } = require('../lib/errorResponse');
 
 const VALID_KEYS = new Set(Object.keys(DEFAULTS));
 
@@ -123,13 +117,13 @@ router.get('/', async (req, res) => {
       }
     }
     if (data.users) data.users = stripPasswords(data.users);
-    // systemLogs (Bước 6a), tasks (Bước 6b) và mọi collection trong MIGRATED_COLLECTIONS (Bước 6c trở
-    // đi — hiện tại: submissions) không còn trong dbo.AppData — nguồn riêng từ bảng của chúng. Không
-    // có _versions.<key> tương ứng cho các key này (không còn khái niệm "version" AppData) — an toàn
-    // vì client không còn ghi các collection này qua đường chung nữa (tasks đi qua routes/records.js,
-    // systemLogs đi qua routes/systemLog.js, các collection trong MIGRATED_COLLECTIONS đi qua
-    // routes/create.js + routes/workflow.js).
-    data.systemLogs = await getRecentSystemLogs(SYSTEM_LOGS_BULK_LOAD_LIMIT);
+    // tasks (Bước 6b) và mọi collection trong MIGRATED_COLLECTIONS (Bước 6c trở đi — hiện tại:
+    // submissions) không còn trong dbo.AppData — nguồn riêng từ bảng của chúng. Không có
+    // _versions.<key> tương ứng cho các key này (không còn khái niệm "version" AppData) — an toàn vì
+    // client không còn ghi các collection này qua đường chung nữa (tasks đi qua routes/records.js, các
+    // collection trong MIGRATED_COLLECTIONS đi qua routes/create.js + routes/workflow.js). systemLogs
+    // KHÔNG còn trả kèm ở đây nữa (trước đây lộ cho MỌI người đăng nhập dù chỉ admin xem được trên
+    // giao diện) — đọc riêng qua GET /api/log (routes/systemLog.js, chỉ admin) khi mở tab Nhật ký.
     data.tasks = await getAllTasks();
     for (const collection of MIGRATED_COLLECTIONS) {
       data[collection] = await getAllForCollection(collection);
@@ -137,8 +131,7 @@ router.get('/', async (req, res) => {
     data._versions = versions;
     res.json(data);
   } catch (err) {
-    console.error('GET /api/data lỗi:', err.message);
-    res.status(500).json({ error: 'Không thể tải dữ liệu từ SQL Server', detail: err.message });
+    sendServerError(res, 500, err, 'GET /api/data', 'Không thể tải dữ liệu từ SQL Server');
   }
 });
 
@@ -152,8 +145,7 @@ router.get('/:key', async (req, res) => {
     if (value === null) return res.json(DEFAULTS[key]);
     res.json(key === 'users' ? stripPasswords(value) : value);
   } catch (err) {
-    console.error(`GET /api/data/${key} lỗi:`, err.message);
-    res.status(500).json({ error: 'Không thể tải dữ liệu từ SQL Server', detail: err.message });
+    sendServerError(res, 500, err, `GET /api/data/${key}`, 'Không thể tải dữ liệu từ SQL Server');
   }
 });
 
@@ -193,8 +185,7 @@ router.post('/:key', async (req, res) => {
     res.json({ ok: true });
   } catch (err) {
     if (err instanceof HttpError) return res.status(err.status).json({ error: err.message });
-    console.error(`POST /api/data/${key} lỗi:`, err.message);
-    res.status(500).json({ error: 'Không thể lưu dữ liệu vào SQL Server', detail: err.message });
+    sendServerError(res, 500, err, `POST /api/data/${key}`, 'Không thể lưu dữ liệu vào SQL Server');
   }
 });
 

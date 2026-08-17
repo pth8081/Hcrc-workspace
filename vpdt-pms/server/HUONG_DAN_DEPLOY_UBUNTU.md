@@ -189,6 +189,10 @@ DB_ENCRYPT=false
 DB_TRUST_CERT=true
 ```
 
+> ⚠️ `DB_ENCRYPT=false` chỉ chấp nhận được khi SQL Server và server ứng dụng cùng nằm trong mạng nội
+> bộ tin cậy — server sẽ in cảnh báo lúc khởi động nếu vẫn để `false`. Đổi thành `true` ngay khi SQL
+> Server đã cấu hình chứng chỉ TLS.
+
 Tạo `JWT_SECRET` bằng lệnh:
 ```bash
 node -e "console.log(require('crypto').randomBytes(48).toString('hex'))"

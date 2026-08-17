@@ -3,9 +3,21 @@
 // mô phỏng như trước — không đổi hành vi các hàm gọi, chỉ thêm bước gửi thật nếu đã cấu hình đủ
 // Host SMTP (xem lib/mailer.js).
 const express = require('express');
+const rateLimit = require('express-rate-limit');
 const router = express.Router();
 const { getPool, sql } = require('../db');
 const { sendMail, hasAuthConfigured } = require('../lib/mailer');
+const { sendServerError } = require('../lib/errorResponse');
+
+// Giới hạn riêng cho gửi email (đụng tới máy chủ SMTP thật, có thể bị lợi dụng làm relay spam) — chặt
+// hơn giới hạn chung toàn /api (xem server.js).
+const sendEmailRateLimiter = rateLimit({
+  windowMs: 10 * 60 * 1000,
+  limit: 30,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Bạn đang gửi email quá nhiều, vui lòng thử lại sau ít phút.' }
+});
 
 // Host/Port/Secure/Email người gửi/Bật-tắt: nguồn DUY NHẤT là DB.emailConfig (admin chỉnh trong màn
 // Quản trị) — không nhạy cảm nên không cần đặt trong biến môi trường. Xem lib/mailer.js để biết vì
@@ -31,7 +43,7 @@ router.get('/status', (req, res) => {
   res.json({ hasAuth: hasAuthConfigured() });
 });
 
-router.post('/', async (req, res) => {
+router.post('/', sendEmailRateLimiter, async (req, res) => {
   const { to, subject, text, html } = req.body || {};
   if (!to || !subject) return res.status(400).json({ error: 'Thiếu "to" hoặc "subject"' });
 
@@ -50,8 +62,7 @@ router.post('/', async (req, res) => {
     });
     res.json(result);
   } catch (err) {
-    console.error('⛔ POST /api/send-email lỗi:', err.message);
-    res.status(500).json({ error: err.message });
+    sendServerError(res, 500, err, 'POST /api/send-email', 'Không thể gửi email');
   }
 });
 

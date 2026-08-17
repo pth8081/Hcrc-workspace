@@ -2908,7 +2908,11 @@ function logSystemAction(module, actionType, description, status = 'SUCCESS', ta
     timestamp: new Date().toLocaleString('vi-VN'),
     username: currentUser ? currentUser.username : 'system_guest',
     fullName: currentUser ? currentUser.name : 'Khách',
-    ipAddress: '127.0.0.1 (Localhost)',
+    // Chỉ là placeholder hiển thị TẠM ngay khi thao tác (chưa biết IP thật ở phía client) — IP thật
+    // do SERVER tự xác định (req.ip, xem routes/systemLog.js) khi ghi dòng log thật bên dưới, và sẽ
+    // thay thế đúng giá trị này ở lần tải lại Nhật ký hệ thống sau (loadSystemLogs()). KHÔNG phải giá
+    // trị đã lưu — trước đây hard-code "127.0.0.1 (Localhost)" trông như 1 IP thật gây hiểu nhầm.
+    ipAddress: '(đang xác nhận...)',
     module: module,
     actionType: actionType,
     targetObject: target,
@@ -3636,7 +3640,10 @@ async function initDatabase(loggingInUser) {
     DB.formTemplates = data.formTemplates || {};
     DB.permGroups = data.permGroups || [];
     DB.emailConfig = data.emailConfig || {};
-    DB.systemLogs = data.systemLogs || [];
+    // Nhật ký hệ thống KHÔNG còn tải kèm trong GET /api/data (trước đây trả sẵn cho MỌI người đăng
+    // nhập dù chỉ admin mới thấy được màn Nhật ký — lộ dữ liệu qua API dù giao diện đã ẩn) — giờ tải
+    // riêng qua GET /api/log (chỉ admin gọi được) đúng lúc mở tab Nhật ký, xem loadSystemLogs().
+    DB.systemLogs = [];
 
     DB.deptWorkflows = data.deptWorkflows || {};
     DB.submissionDeptWorkflows = data.submissionDeptWorkflows || {};
@@ -10108,7 +10115,7 @@ function setSystemSubTab(subTab) {
   }
   if (subTab === 'FORM') { switchFormTab(activeFormTab); }
   if (subTab === 'WORKFLOW') { renderWorkflowTab(); }
-  if (subTab === 'LOG') { renderSystemLogs(); }
+  if (subTab === 'LOG') { loadSystemLogs(); }
 }
 
 // ==========================================
@@ -11801,6 +11808,25 @@ function populateLogFilterSelect(selectId, values) {
 
 function onLogFilterChange() {
   resetListPage('log');
+  renderSystemLogs();
+}
+
+// Tải nhật ký hệ thống qua endpoint riêng GET /api/log (chỉ admin gọi được, xem routes/systemLog.js)
+// — gọi đúng lúc mở tab Nhật ký (setSystemSubTab('LOG')), KHÔNG còn kèm sẵn trong GET /api/data cho
+// mọi người đăng nhập như trước.
+async function loadSystemLogs() {
+  try {
+    const res = await fetch('/api/log?limit=200');
+    if (res.status === 401) return handleSessionExpired();
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      console.error('Không tải được nhật ký hệ thống:', body.error);
+      return;
+    }
+    DB.systemLogs = body.items || [];
+  } catch (err) {
+    console.error('Không tải được nhật ký hệ thống:', err.message);
+  }
   renderSystemLogs();
 }
 

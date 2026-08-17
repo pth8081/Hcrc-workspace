@@ -33,6 +33,14 @@ const config = {
   connectionTimeout: parseInt(process.env.DB_CONNECTION_TIMEOUT_MS || '15000', 10)
 };
 
+// Cảnh báo khởi động nếu chưa bật mã hoá kết nối tới SQL Server (DB_ENCRYPT) — KHÔNG tự đổi mặc định
+// (vẫn giữ tắt) vì nhiều SQL Server nội bộ hiện tại chưa cấu hình chứng chỉ TLS, bật ép buộc sẽ làm
+// server không kết nối được. In cảnh báo rõ ràng để admin biết cần bật khi hạ tầng đã sẵn sàng — dự
+// kiến sẽ BẮT BUỘC bật ở đợt rà soát bảo mật kế tiếp.
+if (!config.options.encrypt) {
+  console.warn('⚠️  DB_ENCRYPT chưa bật (kết nối SQL Server hiện KHÔNG mã hoá) — chỉ chấp nhận được nếu SQL Server & ứng dụng cùng nằm trong mạng nội bộ tin cậy. Bật DB_ENCRYPT=true trong .env ngay khi SQL Server đã có chứng chỉ TLS (xem .env.example).');
+}
+
 let poolPromise = null;
 
 function getPool() {

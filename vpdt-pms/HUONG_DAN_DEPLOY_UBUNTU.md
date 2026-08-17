@@ -156,6 +156,10 @@ DB_ENCRYPT=false
 DB_TRUST_CERT=true
 ```
 
+> ⚠️ `DB_ENCRYPT=false` chỉ chấp nhận được khi SQL Server và server ứng dụng cùng nằm trong mạng nội
+> bộ tin cậy — server sẽ in cảnh báo lúc khởi động nếu vẫn để `false`. Đổi thành `true` ngay khi SQL
+> Server đã cấu hình chứng chỉ TLS.
+
 > ⚠️ Không commit file `.env` lên Git — chứa `JWT_SECRET` và mật khẩu SQL Server.
 
 Các biến khác trong `.env.example` (`TRUST_PROXY`, `DB_POOL_*`, `SMTP_*`) đều có giá trị mặc định hợp

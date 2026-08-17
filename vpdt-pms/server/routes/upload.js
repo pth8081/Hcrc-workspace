@@ -6,8 +6,19 @@ const multer = require('multer');
 const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
+const rateLimit = require('express-rate-limit');
 
 const router = express.Router();
+
+// Giới hạn riêng cho tải file (ghi ra ổ đĩa, tốn tài nguyên hơn API JSON thường) — chặt hơn giới hạn
+// chung toàn /api (xem server.js) để tránh 1 tài khoản làm đầy ổ đĩa bằng cách tải liên tục.
+const uploadRateLimiter = rateLimit({
+  windowMs: 10 * 60 * 1000,
+  limit: 30,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Bạn đang tải lên quá nhiều tệp, vui lòng thử lại sau ít phút.' }
+});
 
 const UPLOAD_DIR = path.join(__dirname, '..', 'uploads');
 const MAX_MB = parseInt(process.env.UPLOAD_MAX_MB || '20', 10);
@@ -42,7 +53,7 @@ const upload = multer({
 });
 
 // POST /api/upload  → nhận field "file", trả về thông tin để lưu vào collection JSON tương ứng
-router.post('/', (req, res) => {
+router.post('/', uploadRateLimiter, (req, res) => {
   upload.single('file')(req, res, (err) => {
     if (err instanceof multer.MulterError) {
       if (err.code === 'LIMIT_FILE_SIZE') {
