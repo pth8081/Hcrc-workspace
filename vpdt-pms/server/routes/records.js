@@ -325,8 +325,29 @@ router.post('/tasks', async (req, res) => {
   }
 });
 
-// POST /api/records/tasks/:id/assign
-router.post('/tasks/:id/assign', (req, res) => withTaskAction(req, res, 'assign', recordActions.assignTask));
+// POST /api/records/tasks/:id/assign — payload.assignedTo có thể là mảng nhiều username (Văn bản
+// trình chỉ đạo giao cho nhiều người thực hiện cùng lúc). Không dùng withTaskAction() vì assignTask()
+// giờ trả về { item, extraTasks } thay vì thẳng bản ghi — người đầu tiên gán vào task hiện có (trong
+// khoá), những người còn lại là bản sao (extraTasks) được insertTask() SAU KHI khoá bản ghi gốc đã nhả
+// (cùng khuôn draft-phụ đã dùng cho paymentRequests ở /contracts/:id/start-payment).
+router.post('/tasks/:id/assign', async (req, res) => {
+  const itemId = Number(req.params.id);
+  if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
+  try {
+    const { freshUser, users } = await getFreshUser(req);
+    let extraTasks = [];
+    const result = await withLockedTaskById(itemId, (task) => {
+      const outcome = recordActions.assignTask(req.body, freshUser, task, users);
+      extraTasks = outcome.extraTasks || [];
+      return outcome.item;
+    });
+    const createdExtra = [];
+    for (const t of extraTasks) createdExtra.push(await insertTask(t));
+    res.json({ ok: true, item: result, extraItems: createdExtra });
+  } catch (err) {
+    handleError(res, `tasks/${req.params.id}/assign`, err);
+  }
+});
 
 // POST /api/records/tasks/:id/edit
 router.post('/tasks/:id/edit', (req, res) => withTaskAction(req, res, 'edit', recordActions.editTask));
@@ -357,6 +378,12 @@ router.post('/tasks/:id/approve-cancellation', (req, res) =>
   withTaskAction(req, res, 'approve-cancellation', (payload, user, task) => recordActions.resolvePendingTaskAction('cancellation', 'approve', user, task)));
 router.post('/tasks/:id/reject-cancellation', (req, res) =>
   withTaskAction(req, res, 'reject-cancellation', (payload, user, task) => recordActions.resolvePendingTaskAction('cancellation', 'reject', user, task)));
+
+// POST /api/records/tasks/:id/add-subtask | toggle-subtask | delete-subtask — công việc nhỏ tự chia
+// trong "Cập Nhật Tiến Độ" (chỉ chính người nhận việc/admin, xem lib/recordActions.js canManageSubtasks()).
+router.post('/tasks/:id/add-subtask', (req, res) => withTaskAction(req, res, 'add-subtask', recordActions.addSubtask));
+router.post('/tasks/:id/toggle-subtask', (req, res) => withTaskAction(req, res, 'toggle-subtask', recordActions.toggleSubtask));
+router.post('/tasks/:id/delete-subtask', (req, res) => withTaskAction(req, res, 'delete-subtask', recordActions.deleteSubtask));
 
 // POST /api/records/tasks/:id/delete
 router.post('/tasks/:id/delete', async (req, res) => {

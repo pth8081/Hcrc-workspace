@@ -326,6 +326,10 @@ function buildTasksFromDirectives(minutes, user) {
       .map(id => resolveDirectiveAttendeeServer(minutes.attendees, id))
       .filter(Boolean);
 
+    // Công việc giao từ Biên bản họp được TÍNH TIẾN ĐỘ NGAY (status DOING, startedAt = lúc giao việc)
+    // — không qua bước "Nhận Việc" như công việc giao trực tiếp (MANUAL). Chỉ đạo đã do người có thẩm
+    // quyền (chủ trì/thư ký) ghi lại trong biên bản chính thức, coi như đã được giao xong ngay lúc lập.
+    const startedAt = nowVN();
     const item = {
       id: Date.now() + i,
       title: `Chỉ đạo từ biên bản họp: ${minutes.title}`,
@@ -337,10 +341,13 @@ function buildTasksFromDirectives(minutes, user) {
       externalCollaborators: collaboratorsResolved.filter(r => !r.username).map(r => ({ name: r.name, email: r.email })),
       assignedBy: user.username, assignedByName: user.name,
       sourceType: 'MEETING_MINUTES', sourceCode: minutes.code, sourceDirectiveId: d.id != null ? d.id : i,
-      status: 'TODO',
+      status: 'DOING', startedAt,
       extensionCount: 0, lateCount: 0, pendingExtension: null, pendingCancellation: null,
       createdAt: nowVN(),
-      history: [{ action: 'CREATED', by: user.username, byName: user.name, time: nowVN() }]
+      history: [
+        { action: 'CREATED', by: user.username, byName: user.name, time: nowVN() },
+        { action: 'ACCEPTED', by: user.username, byName: user.name, time: startedAt, note: 'Tự động tính tiến độ ngay khi giao việc từ biên bản họp' }
+      ]
     };
     d.taskCreated = true;
     // notify: thông tin CHỈ để trả về cho client gửi email — không thuộc bản ghi Công việc được lưu.
@@ -500,20 +507,75 @@ function resolveAssigneeName(usersList, username) {
   return u ? u.name : username;
 }
 
+// Công việc tới từ Biên bản họp/Văn bản trình bỏ qua bước "Nhận Việc" — tính tiến độ ngay lúc
+// giao/gán, khớp yêu cầu nghiệp vụ (chỉ đạo chính thức coi như đã được giao xong, không cần người
+// nhận xác nhận lại). Việc giao trực tiếp (MANUAL) không đi qua assignTask() (đã có assignedTo ngay
+// lúc tạo, xem createTask()) nên không bị ảnh hưởng — vẫn giữ TODO + Nhận Việc như cũ.
+function shouldSkipAcceptStep(task) {
+  return task.sourceType === 'MEETING_MINUTES' || task.sourceType === 'SUBMISSION';
+}
+
+// Gán "người nhận" cho 1 Công việc CHƯA có người nhận (tự động sinh từ ý kiến chỉ đạo cuối cùng của
+// Văn bản trình — xem buildTaskFromSubmissionComment()). payload.assignedTo có thể là 1 username hoặc
+// mảng nhiều username — Văn bản trình chỉ đạo có thể giao cho NHIỀU người thực hiện cùng lúc, mỗi
+// người 1 bản ghi Công việc riêng để theo dõi tiến độ độc lập (không dùng chung 1 "assignedTo" mảng vì
+// toàn bộ hệ thống — lọc/thống kê/Nhận việc/Cập nhật tiến độ — đều giả định assignedTo là 1 người).
+// Người ĐẦU TIÊN trong danh sách được gán thẳng vào bản ghi hiện có (task tham số); những người còn
+// lại trả về dưới dạng "extraTasks" (bản sao cùng nội dung, KHÁC id) để route (routes/records.js) tự
+// insertTask() sau khi khoá bản ghi gốc đã nhả — cùng khuôn "mutator trả draft phụ, route mới ghi" đã
+// dùng cho paymentRequests (xem startContractPayment()).
 function assignTask(payload, user, task, usersList) {
   if (!canAssignSpecificTask(user, task)) {
     throw new HttpError(403, 'Bạn không có quyền gán người nhận cho công việc này');
   }
-  if (!payload || typeof payload !== 'object' || !payload.assignedTo) {
+  const rawAssignees = Array.isArray(payload?.assignedTo) ? payload.assignedTo : [payload?.assignedTo];
+  const assignees = [...new Set(rawAssignees.filter(u => typeof u === 'string' && u.trim()))];
+  if (assignees.length === 0) {
     throw new HttpError(400, 'Thiếu người nhận việc');
   }
-  task.assignedTo = payload.assignedTo;
-  task.assignedToName = resolveAssigneeName(usersList, payload.assignedTo);
-  task.deadline = payload.deadline || '';
-  task.collaborators = Array.isArray(payload.collaborators) ? payload.collaborators : [];
+  const deadline = payload.deadline || '';
+  const collaborators = Array.isArray(payload.collaborators) ? payload.collaborators : [];
+  const skipAccept = shouldSkipAcceptStep(task);
+  const startedAt = skipAccept ? nowVN() : null;
+
+  const [firstAssignee, ...restAssignees] = assignees;
+  task.assignedTo = firstAssignee;
+  task.assignedToName = resolveAssigneeName(usersList, firstAssignee);
+  task.deadline = deadline;
+  task.collaborators = collaborators;
   task.history = Array.isArray(task.history) ? task.history : [];
   task.history.push({ action: 'ASSIGNED', by: user.username, byName: user.name, time: nowVN() });
-  return task;
+  if (skipAccept) {
+    task.status = 'DOING';
+    task.startedAt = startedAt;
+    task.history.push({ action: 'ACCEPTED', by: user.username, byName: user.name, time: startedAt, note: 'Tự động tính tiến độ ngay khi gán người nhận' });
+  }
+
+  const extraTasks = restAssignees.map((username, i) => {
+    const cloneStartedAt = skipAccept ? nowVN() : null;
+    const cloneHistory = [
+      { action: 'CREATED', by: user.username, byName: user.name, time: nowVN() },
+      { action: 'ASSIGNED', by: user.username, byName: user.name, time: nowVN() }
+    ];
+    if (skipAccept) cloneHistory.push({ action: 'ACCEPTED', by: user.username, byName: user.name, time: cloneStartedAt, note: 'Tự động tính tiến độ ngay khi gán người nhận' });
+    return {
+      id: Date.now() + i + 1,
+      title: task.title,
+      description: task.description,
+      deadline,
+      assignedTo: username, assignedToName: resolveAssigneeName(usersList, username),
+      externalAssignee: null,
+      collaborators, externalCollaborators: [],
+      assignedBy: user.username, assignedByName: user.name,
+      sourceType: task.sourceType, sourceCode: task.sourceCode, sourceDirectiveId: task.sourceDirectiveId,
+      status: skipAccept ? 'DOING' : 'TODO', startedAt: cloneStartedAt,
+      extensionCount: 0, lateCount: 0, pendingExtension: null, pendingCancellation: null,
+      createdAt: nowVN(),
+      history: cloneHistory
+    };
+  });
+
+  return { item: task, extraTasks };
 }
 
 function editTask(payload, user, task, usersList) {
@@ -626,6 +688,64 @@ function confirmCollaboratorParticipation(payload, user, task) {
     task.collaboratorAccepts.push({ username: user.username, name: user.name, acceptedAt: nowVN() });
     task.history.push({ action: 'COLLABORATOR_CONFIRMED', by: user.username, byName: user.name, time: nowVN(), note: 'Xác nhận tham gia phối hợp' });
   }
+  return task;
+}
+
+// ===================== CÔNG VIỆC NHỎ (subtask) — người nhận việc tự chia nhỏ việc mình đang làm =====
+// Tạo/đánh dấu hoàn thành/xoá công việc nhỏ ngay trong "Cập Nhật Tiến Độ" — mỗi subtask có hạn hoàn
+// thành riêng (dueDate) nhưng KHÔNG được vượt quá hạn hoàn thành của việc gốc (task.deadline), đúng yêu
+// cầu "tổng các công việc không lớn hơn thời hạn được giao việc ban đầu". Chỉ CHÍNH người nhận việc
+// (hoặc admin) mới được thao tác — không phải người giao việc/phối hợp.
+function canManageSubtasks(user, task) {
+  return !!(user.perms?.admin || task.assignedTo === user.username);
+}
+
+function addSubtask(payload, user, task) {
+  if (!canManageSubtasks(user, task)) {
+    throw new HttpError(403, 'Chỉ người nhận việc mới có thể tạo công việc nhỏ');
+  }
+  if (task.status !== 'DOING') {
+    throw new HttpError(409, 'Chỉ tạo được công việc nhỏ khi việc chính đang thực hiện');
+  }
+  const title = (payload?.title || '').trim();
+  const dueDate = (payload?.dueDate || '').trim();
+  if (!title) throw new HttpError(400, 'Thiếu tên công việc nhỏ');
+  if (!dueDate) throw new HttpError(400, 'Thiếu hạn hoàn thành công việc nhỏ');
+  if (task.deadline && dueDate > task.deadline) {
+    throw new HttpError(400, `Hạn công việc nhỏ không được vượt quá hạn hoàn thành của việc chính (${task.deadline})`);
+  }
+
+  task.subtasks = Array.isArray(task.subtasks) ? task.subtasks : [];
+  task.subtasks.push({ id: Date.now(), title, dueDate, done: false, createdAt: nowVN() });
+  task.history = Array.isArray(task.history) ? task.history : [];
+  task.history.push({ action: 'SUBTASK_ADDED', by: user.username, byName: user.name, time: nowVN(), note: `Tạo công việc nhỏ "${title}" (hạn ${dueDate})` });
+  return task;
+}
+
+function toggleSubtask(payload, user, task) {
+  if (!canManageSubtasks(user, task)) {
+    throw new HttpError(403, 'Chỉ người nhận việc mới có thể cập nhật công việc nhỏ');
+  }
+  const subtaskId = Number(payload?.subtaskId);
+  const sub = (task.subtasks || []).find(s => s.id === subtaskId);
+  if (!sub) throw new HttpError(404, 'Không tìm thấy công việc nhỏ');
+  sub.done = !sub.done;
+  sub.doneAt = sub.done ? nowVN() : null;
+  task.history = Array.isArray(task.history) ? task.history : [];
+  task.history.push({ action: 'SUBTASK_TOGGLED', by: user.username, byName: user.name, time: nowVN(), note: `${sub.done ? 'Hoàn thành' : 'Mở lại'} công việc nhỏ "${sub.title}"` });
+  return task;
+}
+
+function deleteSubtask(payload, user, task) {
+  if (!canManageSubtasks(user, task)) {
+    throw new HttpError(403, 'Chỉ người nhận việc mới có thể xoá công việc nhỏ');
+  }
+  const subtaskId = Number(payload?.subtaskId);
+  const idx = (task.subtasks || []).findIndex(s => s.id === subtaskId);
+  if (idx === -1) throw new HttpError(404, 'Không tìm thấy công việc nhỏ');
+  const [removed] = task.subtasks.splice(idx, 1);
+  task.history = Array.isArray(task.history) ? task.history : [];
+  task.history.push({ action: 'SUBTASK_DELETED', by: user.username, byName: user.name, time: nowVN(), note: `Xoá công việc nhỏ "${removed.title}"` });
   return task;
 }
 
@@ -752,5 +872,6 @@ module.exports = {
   canManageTasks, canDeleteTaskPerm, canAssignSpecificTask, assignTask, editTask, assertCanDeleteTask,
   createTask,
   acceptTask, confirmCollaboratorParticipation, updateTaskStatusAction, requestExtension,
-  cancelOrRequestCancelTask, resolvePendingTaskAction
+  cancelOrRequestCancelTask, resolvePendingTaskAction,
+  addSubtask, toggleSubtask, deleteSubtask
 };
