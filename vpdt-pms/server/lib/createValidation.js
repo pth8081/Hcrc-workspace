@@ -212,6 +212,12 @@ const CREATE_MODULE_CONFIGS = {
         (type === 'REWARD' && user.perms?.internalRewardCreate)
       );
       if (!allowed) throw new CreateError(403, 'Bạn không có quyền đăng bài ở phân hệ này');
+      // Góc Chia Sẻ (SHARE) cần người có quyền internalPostApprove/admin duyệt trước khi công khai —
+      // status GÁN Ở SERVER (không tin giá trị client tự gửi). Người đăng đã có quyền duyệt thì không
+      // cần tự duyệt lại bài của chính mình. 3 type còn lại không qua bước duyệt (đã gác quyền đăng ở
+      // trên) nên luôn APPROVED.
+      payload.status = (type === 'SHARE' && !user.perms?.admin && !user.perms?.internalPostApprove)
+        ? 'PENDING' : 'APPROVED';
     }
   }
 };

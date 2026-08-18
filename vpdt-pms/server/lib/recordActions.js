@@ -261,6 +261,36 @@ function unregisterInternalPostTraining(user, post) {
   return post;
 }
 
+// Duyệt/từ chối bài "Góc chia sẻ" (status PENDING gán sẵn khi tạo — xem lib/createValidation.js) —
+// cờ toàn công ty internalPostApprove, khớp đúng hình dạng meetingApprove (routes/meetingActions.js),
+// không theo phòng ban. Từ chối bắt buộc nhập lý do (khớp pattern Văn Phòng/Tài liệu).
+function canApproveInternalPost(user) {
+  return !!(user.perms?.admin || user.perms?.internalPostApprove);
+}
+
+function approveInternalPost(user, post) {
+  if (!canApproveInternalPost(user)) throw new HttpError(403, 'Bạn không có quyền phê duyệt bài đăng này');
+  if (post.status !== 'PENDING') throw new HttpError(409, 'Bài đăng không ở trạng thái chờ duyệt');
+  post.status = 'APPROVED';
+  post.approvedBy = user.username;
+  post.approvedByName = user.name;
+  post.approvedAt = nowVN();
+  return post;
+}
+
+function rejectInternalPost(payload, user, post) {
+  if (!canApproveInternalPost(user)) throw new HttpError(403, 'Bạn không có quyền từ chối bài đăng này');
+  if (post.status !== 'PENDING') throw new HttpError(409, 'Bài đăng không ở trạng thái chờ duyệt');
+  const reason = (payload?.reason || '').trim();
+  if (!reason) throw new HttpError(400, 'Vui lòng nhập lý do từ chối');
+  post.status = 'REJECTED';
+  post.rejectedBy = user.username;
+  post.rejectedByName = user.name;
+  post.rejectedAt = nowVN();
+  post.rejectReason = reason;
+  return post;
+}
+
 // ===================== CÔNG VIỆC (sửa/giao/xóa) =====================
 // canManageTasks (sửa) là cờ toàn công ty (admin||taskEdit) — quyền sửa BẤT KỲ công việc nào.
 // Gán người nhận thì hẹp hơn: chỉ admin hoặc CHÍNH người đã giao việc đó (assignedBy) — khớp đúng
@@ -523,6 +553,7 @@ module.exports = {
   canCreateMinutes, createMinutes, buildTasksFromDirectives, assignMinutesTasks, buildTaskFromSubmissionComment,
   markInternalPostRead, toggleInternalPostLike, addInternalPostComment,
   registerInternalPostTraining, unregisterInternalPostTraining,
+  canApproveInternalPost, approveInternalPost, rejectInternalPost,
   canManageTasks, canDeleteTaskPerm, canAssignSpecificTask, assignTask, editTask, assertCanDeleteTask,
   createTask,
   acceptTask, confirmCollaboratorParticipation, updateTaskStatusAction, requestExtension,

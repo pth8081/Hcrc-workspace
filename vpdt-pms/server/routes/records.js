@@ -145,6 +145,15 @@ router.post('/internalPosts/:id/register-training', (req, res) =>
 router.post('/internalPosts/:id/unregister-training', (req, res) =>
   withInternalPostAction(req, res, 'unregister-training', (payload, user, item) => recordActions.unregisterInternalPostTraining(user, item)));
 
+// POST /api/records/internalPosts/:id/approve|reject — duyệt/từ chối bài "Góc chia sẻ" (status PENDING
+// gán sẵn khi tạo, xem lib/createValidation.js). Khác 5 hành động ở trên (mở cho mọi người), 2 hành
+// động này cần quyền internalPostApprove/admin — kiểm tra ở lib/recordActions.js.
+router.post('/internalPosts/:id/approve', (req, res) =>
+  withInternalPostAction(req, res, 'approve', (payload, user, item) => recordActions.approveInternalPost(user, item)));
+
+router.post('/internalPosts/:id/reject', (req, res) =>
+  withInternalPostAction(req, res, 'reject', recordActions.rejectInternalPost));
+
 // Bước 3 — Công việc có nhiều action cùng khuôn "tìm việc trong collection, khoá, gọi hàm xác minh +
 // mutate ở lib/recordActions.js, trả về bản ghi mới" — gom vào 1 helper dùng chung thay vì lặp lại
 // nguyên khối try/withLockedAppDataValue cho từng action (assign/edit/accept/status/gia hạn/huỷ việc...).

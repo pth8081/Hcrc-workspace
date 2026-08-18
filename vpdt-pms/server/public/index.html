@@ -1731,7 +1731,7 @@
             <span id="permTreeBadge_internal" class="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-gray-100 text-gray-500">0/0</span>
           </summary>
           <div class="p-3 pt-0 space-y-2">
-            <p class="text-[11px] text-gray-500 italic">Mọi người dùng đều XEM và tương tác được (bình luận, thả tim) trên cả 4 phân hệ; riêng "Góc chia sẻ" ai cũng đăng được tự do. 3 quyền dưới đây chỉ kiểm soát ai được ĐĂNG BÀI ở Tin nội bộ / Đào tạo / Khen thưởng.</p>
+            <p class="text-[11px] text-gray-500 italic">Mọi người dùng đều XEM và tương tác được (bình luận, thả tim) trên cả 4 phân hệ. 3 quyền dưới đây kiểm soát ai được ĐĂNG BÀI ở Tin nội bộ / Đào tạo / Khen thưởng; riêng "Góc chia sẻ" ai cũng đăng được nhưng bài chỉ công khai sau khi được người có quyền duyệt bên dưới phê duyệt.</p>
             <div class="grid grid-cols-1 md:grid-cols-3 gap-2">
               <label class="flex items-center gap-2 text-fuchsia-700 font-semibold cursor-pointer">
                 <input type="checkbox" id="pInternalNewsCreate"> 📰 Đăng Tin nội bộ
@@ -1741,6 +1741,11 @@
               </label>
               <label class="flex items-center gap-2 text-fuchsia-700 font-semibold cursor-pointer">
                 <input type="checkbox" id="pInternalRewardCreate"> 🏆 Đăng Khen thưởng
+              </label>
+            </div>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-2 pt-2 border-t">
+              <label class="flex items-center gap-2 text-emerald-700 font-semibold cursor-pointer">
+                <input type="checkbox" id="pInternalPostApprove"> ✅ Duyệt bài "Góc chia sẻ" (toàn công ty)
               </label>
             </div>
           </div>
@@ -3405,6 +3410,14 @@ function canCreateInternalPost(user, type) {
   return false;
 }
 
+// Bài Góc Chia Sẻ (SHARE) ai cũng đăng được nhưng cần người có quyền internalPostApprove (hoặc admin)
+// duyệt trước khi công khai — status PENDING/APPROVED/REJECTED do SERVER gán (xem
+// lib/createValidation.js), client chỉ dùng để quyết định hiện nút Duyệt/Từ chối và ẩn bài chưa duyệt
+// khỏi người không liên quan (không phải tác giả, không phải người duyệt).
+function canApproveInternalPost(user) {
+  return !!(user?.perms?.admin || user?.perms?.internalPostApprove);
+}
+
 const INTERNAL_TYPE_LABELS = { NEWS: 'Tin Nội Bộ', TRAINING: 'Đào Tạo', REWARD: 'Khen Thưởng', SHARE: 'Góc Chia Sẻ' };
 const INTERNAL_TYPE_PREFIX = { NEWS: 'TN', TRAINING: 'DT', REWARD: 'KT', SHARE: 'CS' };
 
@@ -3471,6 +3484,7 @@ function defaultNewUserPerms() {
     canBeApprover: false,
     canViewReports: false,
     internalNewsCreate: false, internalTrainingCreate: false, internalRewardCreate: false,
+    internalPostApprove: false,
     uploadAll: false, uploadDepts: [],
     viewDraftAll: false, viewDraftDepts: [],
     viewApprovedAll: false, viewApprovedDepts: [],
@@ -4029,6 +4043,12 @@ async function confirmApprovalAuth() {
 // không gắn theo bước quy trình như 4 module kia) — dùng để xác định người nhận thông báo email.
 function getMeetingApproverUsernames() {
   return DB.users.filter(u => u.perms?.admin || u.perms?.meetingApprove).map(u => u.username);
+}
+
+// Toàn bộ user có quyền duyệt bài "Góc chia sẻ" (cờ toàn công ty internalPostApprove) — dùng để xác
+// định người nhận thông báo email khi có bài mới chờ duyệt.
+function getInternalPostApproverUsernames() {
+  return DB.users.filter(u => u.perms?.admin || u.perms?.internalPostApprove).map(u => u.username);
 }
 
 // Parse "30, 15, 7" -> [30, 15, 7] (số nguyên không âm, loại trùng, sắp giảm dần)
@@ -11063,6 +11083,7 @@ function collectPermsFromForm() {
     internalNewsCreate: document.getElementById('pInternalNewsCreate').checked,
     internalTrainingCreate: document.getElementById('pInternalTrainingCreate').checked,
     internalRewardCreate: document.getElementById('pInternalRewardCreate').checked,
+    internalPostApprove: document.getElementById('pInternalPostApprove').checked,
     meetingApprove: document.getElementById('pMeetingApprove').checked,
     meetingCancel: document.getElementById('pMeetingCancel').checked,
     officeBuy: document.getElementById('pOfficeBuy').checked,
@@ -11119,6 +11140,7 @@ function populatePermsForm(permsInput) {
   document.getElementById('pInternalNewsCreate').checked = !!perms.internalNewsCreate;
   document.getElementById('pInternalTrainingCreate').checked = !!perms.internalTrainingCreate;
   document.getElementById('pInternalRewardCreate').checked = !!perms.internalRewardCreate;
+  document.getElementById('pInternalPostApprove').checked = !!perms.internalPostApprove;
   document.getElementById('pMeetingApprove').checked = !!perms.meetingApprove;
   document.getElementById('pMeetingCancel').checked = !!perms.meetingCancel;
   document.getElementById('pOfficeBuy').checked = !!perms.officeBuy;
@@ -11574,6 +11596,7 @@ function resetUserForm() {
   document.getElementById('pInternalNewsCreate').checked = !!defaults.internalNewsCreate;
   document.getElementById('pInternalTrainingCreate').checked = !!defaults.internalTrainingCreate;
   document.getElementById('pInternalRewardCreate').checked = !!defaults.internalRewardCreate;
+  document.getElementById('pInternalPostApprove').checked = !!defaults.internalPostApprove;
   document.getElementById('pMeetingApprove').checked = defaults.meetingApprove;
   document.getElementById('pMeetingCancel').checked = defaults.meetingCancel;
   document.getElementById('pOfficeBuy').checked = defaults.officeBuy;
@@ -11680,6 +11703,7 @@ function summarizeUserPerms(perms) {
   if (perms.minutesCreate) parts.push('📝 Biên bản họp');
   if (perms.canViewReports) parts.push('📊 Báo cáo');
   if (perms.internalNewsCreate || perms.internalTrainingCreate || perms.internalRewardCreate) parts.push('📣 Truyền thông (đăng bài)');
+  if (perms.internalPostApprove) parts.push('📣 Truyền thông (duyệt Góc chia sẻ)');
   return parts.length ? parts.join(', ') : '<span class="text-gray-400 italic">Chưa cấp quyền module nào</span>';
 }
 
@@ -12332,7 +12356,16 @@ async function submitInternalPost(e) {
 
   DB.internalPosts.unshift(newPost);
   logSystemAction('INTERNAL', 'CREATE_INTERNAL_POST', `Đăng ${INTERNAL_TYPE_LABELS[type]} [${newPost.code} - ${title}]`, 'SUCCESS', newPost.code);
-  alert('✅ Đã đăng bài thành công!');
+
+  if (newPost.status === 'PENDING') {
+    const approvers = getInternalPostApproverUsernames();
+    notifyUsersByEmail('INTERNAL', 'NOTIFY_APPROVAL_NEEDED', newPost.code, approvers,
+      `[VPDT] Bài đăng Góc Chia Sẻ chờ duyệt: ${title}`,
+      `${currentUser.name} vừa đăng bài "${title}" trong Góc Chia Sẻ, đang chờ phê duyệt trước khi công khai.`);
+    alert('✅ Đã gửi bài, bài viết sẽ hiển thị công khai sau khi được phê duyệt!');
+  } else {
+    alert('✅ Đã đăng bài thành công!');
+  }
   e.target.reset();
   renderInternalPosts();
 }
@@ -12352,8 +12385,13 @@ function renderInternalPosts() {
   const toDate = document.getElementById('filterToDateInternal')?.value || '';
   const keyword = (document.getElementById('filterKeywordInternal')?.value || '').trim();
 
+  const canApprove = canApproveInternalPost(currentUser);
   const visible = DB.internalPosts.filter(p => {
     if (p.type !== activeInternalSubTab) return false;
+    // Bài PENDING/REJECTED (chỉ có ở Góc chia sẻ) chỉ hiện với chính tác giả và người có quyền duyệt —
+    // status undefined (bài cũ trước khi có tính năng này) coi như đã duyệt, vẫn hiện bình thường.
+    const isPendingOrRejected = p.status === 'PENDING' || p.status === 'REJECTED';
+    if (isPendingOrRejected && p.author !== currentUser.username && !canApprove) return false;
     if (!isInDateRange(p.createdAt, fromDate, toDate)) return false;
     if (!matchesKeywordFields([p.title, p.content, p.authorName, p.dept], keyword)) return false;
     return true;
@@ -12383,11 +12421,22 @@ function renderInternalPosts() {
     const coverThumbHTML = isInternalImageAttachment(p.attachment)
       ? `<img src="${escapeHtml(p.attachment.fileUrl)}" alt="" class="w-full sm:w-48 h-40 sm:h-auto object-cover cursor-pointer flex-shrink-0" onclick="viewInternalPostDetail(${p.id})">`
       : '';
+    const statusBadgeHTML = p.status === 'PENDING'
+      ? `<span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 align-middle ml-2">⏳ Chờ duyệt</span>`
+      : p.status === 'REJECTED'
+        ? `<span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-red-100 text-red-700 align-middle ml-2">❌ Bị từ chối</span>`
+        : '';
+    const approveActionsHTML = (p.status === 'PENDING' && canApprove)
+      ? `<div class="flex gap-2">
+           <button onclick="approveInternalPostAction(${p.id})" class="bg-emerald-600 text-white px-3 py-1 rounded text-xs font-bold hover:bg-emerald-700">✅ Duyệt</button>
+           <button onclick="rejectInternalPostAction(${p.id})" class="bg-red-600 text-white px-3 py-1 rounded text-xs font-bold hover:bg-red-700">❌ Từ chối</button>
+         </div>`
+      : '';
     return `
       <div class="bg-white rounded border hover:shadow overflow-hidden flex flex-col sm:flex-row">
         ${coverThumbHTML}
         <div class="p-4 flex-1 flex flex-col">
-          <div class="font-bold text-fuchsia-800 text-base cursor-pointer hover:underline" onclick="viewInternalPostDetail(${p.id})">${escapeHtml(p.title)}</div>
+          <div class="font-bold text-fuchsia-800 text-base cursor-pointer hover:underline" onclick="viewInternalPostDetail(${p.id})">${escapeHtml(p.title)}${statusBadgeHTML}</div>
           <div class="text-xs text-gray-500 mt-0.5">${escapeHtml(p.authorName)} (${escapeHtml(p.dept)}) — ${escapeHtml(p.createdAt)}</div>
           <p class="text-sm text-gray-700 mt-2 flex-1">${escapeHtml(snippet)}${(p.content || '').length > 200 ? '…' : ''}</p>
           ${extraInfo}
@@ -12397,7 +12446,10 @@ function renderInternalPosts() {
               <span>💬 ${commentCount}</span>
               <span>👁️ ${readCount} đã xem</span>
             </div>
-            <button onclick="viewInternalPostDetail(${p.id})" class="bg-fuchsia-600 text-white px-3 py-1 rounded text-xs font-bold hover:bg-fuchsia-700">📄 Chi tiết</button>
+            <div class="flex gap-2">
+              ${approveActionsHTML}
+              <button onclick="viewInternalPostDetail(${p.id})" class="bg-fuchsia-600 text-white px-3 py-1 rounded text-xs font-bold hover:bg-fuchsia-700">📄 Chi tiết</button>
+            </div>
           </div>
         </div>
       </div>
@@ -12416,8 +12468,22 @@ function viewInternalPostDetail(id) {
   markInternalRead(id);
 
   const icons = { NEWS: '📰', TRAINING: '🎓', REWARD: '🏆', SHARE: '💬' };
-  document.getElementById('internalArticleTitle').innerText = `${icons[p.type] || '📣'} ${p.title}`;
+  const statusSuffix = p.status === 'PENDING' ? ' ⏳ (Chờ duyệt)' : p.status === 'REJECTED' ? ' ❌ (Bị từ chối)' : '';
+  document.getElementById('internalArticleTitle').innerText = `${icons[p.type] || '📣'} ${p.title}${statusSuffix}`;
   document.getElementById('internalArticleSub').innerText = `${p.authorName} (${p.dept}) — ${p.createdAt} | Mã: ${p.code}`;
+
+  const approveActionsHTML = (p.status === 'PENDING' && canApproveInternalPost(currentUser))
+    ? `<div class="bg-amber-50 border border-amber-200 rounded p-3 mb-3 flex items-center justify-between gap-2">
+        <span class="text-xs text-amber-800">⏳ Bài đăng đang chờ phê duyệt để công khai trong Góc chia sẻ.</span>
+        <div class="flex gap-2 flex-shrink-0">
+          <button onclick="approveInternalPostAction(${p.id})" class="bg-emerald-600 text-white px-3 py-1 rounded text-xs font-bold hover:bg-emerald-700">✅ Duyệt</button>
+          <button onclick="rejectInternalPostAction(${p.id})" class="bg-red-600 text-white px-3 py-1 rounded text-xs font-bold hover:bg-red-700">❌ Từ chối</button>
+        </div>
+      </div>`
+    : '';
+  const rejectReasonHTML = (p.status === 'REJECTED' && p.rejectReason)
+    ? `<div class="bg-red-50 border border-red-200 rounded p-3 mb-3 text-xs text-red-800"><b>Lý do từ chối:</b> ${escapeHtml(p.rejectReason)}</div>`
+    : '';
 
   let typeInfoHTML = '';
   if (p.type === 'TRAINING' && p.training) {
@@ -12467,6 +12533,8 @@ function viewInternalPostDetail(id) {
   document.getElementById('internalArticleContent').innerHTML = `
     ${coverHTML}
     <div class="w-full p-6 text-sm">
+      ${approveActionsHTML}
+      ${rejectReasonHTML}
       ${typeInfoHTML}
       <div class="whitespace-pre-wrap text-gray-800">${escapeHtml(p.content)}</div>
       ${attachmentLinkHTML}
@@ -12565,6 +12633,66 @@ async function unregisterFromTraining(id) {
   if (idx !== -1) DB.internalPosts[idx] = updated;
   viewInternalPostDetail(id);
   renderInternalPosts();
+}
+
+// Duyệt/Từ chối bài "Góc chia sẻ" (status PENDING) — qua modal xác nhận Đồng Ý/Hủy dùng chung
+// (showConfirmModal(), khớp pattern Văn bản trình/Đăng ký xe/Đề xuất văn phòng), server tự xác thực lại
+// quyền internalPostApprove/admin (xem lib/recordActions.js) nên không tin riêng việc ẩn/hiện nút này.
+function approveInternalPostAction(id) {
+  const p = DB.internalPosts.find(x => x.id === id);
+  if (!p) return;
+  showConfirmModal({
+    title: 'Phê duyệt bài đăng',
+    bodyHTML: `Bạn có chắc chắn muốn phê duyệt bài "<b>${escapeHtml(p.title)}</b>" để công khai trong Góc chia sẻ?`,
+    confirmLabel: 'Phê Duyệt',
+    onConfirm: async () => {
+      let updated;
+      try {
+        const result = await callRecordAction('internalPosts', id, 'approve', {});
+        updated = result.item;
+      } catch (err) {
+        return alert(`⛔ ${err.message}`);
+      }
+      const idx = DB.internalPosts.findIndex(x => x.id === id);
+      if (idx !== -1) DB.internalPosts[idx] = updated;
+      logSystemAction('INTERNAL', 'APPROVE_INTERNAL_POST', `Phê duyệt bài Góc chia sẻ [${updated.code} - ${updated.title}]`, 'SUCCESS', updated.code);
+      notifyUsersByEmail('INTERNAL', 'NOTIFY_APPROVED', updated.code, [updated.author],
+        `[VPDT] Bài đăng "${updated.title}" đã được phê duyệt`,
+        `Bài đăng Góc chia sẻ "${updated.title}" (${updated.code}) của bạn đã được phê duyệt và hiển thị công khai.`);
+      closeInternalArticleModal();
+      renderInternalPosts();
+    }
+  });
+}
+
+function rejectInternalPostAction(id) {
+  const p = DB.internalPosts.find(x => x.id === id);
+  if (!p) return;
+  const reason = prompt('Nhập lý do từ chối bài đăng:');
+  if (reason === null) return;
+  if (!reason.trim()) return alert('⛔ Vui lòng nhập lý do từ chối!');
+  showConfirmModal({
+    title: 'Từ chối bài đăng',
+    bodyHTML: `Bạn có chắc chắn muốn từ chối bài "<b>${escapeHtml(p.title)}</b>"?<br><span class="text-xs text-gray-500">Lý do: ${escapeHtml(reason.trim())}</span>`,
+    confirmLabel: 'Từ Chối',
+    onConfirm: async () => {
+      let updated;
+      try {
+        const result = await callRecordAction('internalPosts', id, 'reject', { reason: reason.trim() });
+        updated = result.item;
+      } catch (err) {
+        return alert(`⛔ ${err.message}`);
+      }
+      const idx = DB.internalPosts.findIndex(x => x.id === id);
+      if (idx !== -1) DB.internalPosts[idx] = updated;
+      logSystemAction('INTERNAL', 'REJECT_INTERNAL_POST', `Từ chối bài Góc chia sẻ [${updated.code} - ${updated.title}] - Lý do: ${reason.trim()}`, 'WARNING', updated.code);
+      notifyUsersByEmail('INTERNAL', 'NOTIFY_REJECTED', updated.code, [updated.author],
+        `[VPDT] Bài đăng "${updated.title}" đã bị từ chối`,
+        `Bài đăng Góc chia sẻ "${updated.title}" (${updated.code}) của bạn đã bị từ chối.\nLý do: ${reason.trim()}`);
+      closeInternalArticleModal();
+      renderInternalPosts();
+    }
+  });
 }
 </script>
 
