@@ -18,6 +18,10 @@ const DEFAULTS = {
   // thể sửa lại bất cứ lúc nào tại màn Quản Lý Danh Mục, áp dụng ngay không cần duyệt.
   deptAbbrs: {},
   docCatAbbrs: {},
+  // Viết tắt Loại Pháp Lý hợp đồng — dùng sinh Mã Hợp Đồng (xem generateContractCode() trong
+  // index.html: HCRC-<viết tắt Phòng ban>-<viết tắt Loại Pháp Lý>-<số thứ tự>), cùng mô hình với
+  // deptAbbrs/docCatAbbrs ở trên (rỗng mặc định, client tự suy ra nếu chưa cấu hình).
+  contractTypeAbbrs: {},
 
   // Danh sách chức danh — dùng cho field "Chức danh" trong hồ sơ user (hiện kèm tên trên các chân ký
   // phê duyệt). Chỉ 1 danh sách dùng chung toàn hệ thống, admin thêm/xoá tại màn Quản trị (giống hệt
@@ -124,7 +128,7 @@ const DEFAULTS = {
         contractView: { all: true, depts: [] }, contractCreate: { all: false, depts: ['Phòng IT'] }, contractDownload: { all: false, depts: [] },
         meetingView: { all: true, depts: [] }, meetingBookScope: { all: false, depts: ['Phòng IT'] },
         meetingApprove: true, meetingCancel: true,
-        internalPostApprove: true,
+        internalPostApprove: true, contractApprove: true,
         carView: { all: true, depts: [] }, carCreate: { all: false, depts: ['Phòng IT'] }, carDownload: { all: false, depts: [] },
         officeView: { all: true, depts: [] }, officeCreate: { all: false, depts: ['Phòng IT'] }, officeDownload: { all: false, depts: [] },
         officeBuy: true, officeFix: true, officeInvest: true
@@ -143,7 +147,7 @@ const DEFAULTS = {
         contractView: { all: true, depts: [] }, contractCreate: { all: true, depts: [] }, contractDownload: { all: true, depts: [] },
         meetingView: { all: true, depts: [] }, meetingBookScope: { all: true, depts: [] },
         meetingApprove: true, meetingCancel: true,
-        internalPostApprove: true,
+        internalPostApprove: true, contractApprove: true, paymentManage: true,
         carView: { all: true, depts: [] }, carCreate: { all: true, depts: [] }, carDownload: { all: true, depts: [] },
         officeView: { all: true, depts: [] }, officeCreate: { all: true, depts: [] }, officeDownload: { all: true, depts: [] },
         officeBuy: true, officeFix: true, officeInvest: true

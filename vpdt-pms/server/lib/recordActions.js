@@ -9,6 +9,7 @@
 // họp thêm cờ minutesEdit/minutesDelete (toàn công ty, không theo phòng ban); Công việc theo NGƯỜI
 // (assignedBy/assignee), hoàn toàn không có khái niệm phòng ban.
 const { HttpError } = require('./httpErrors');
+const { scopeAllows, OFFICE_SUBTYPE_TO_PERM_FLAG } = require('./createValidation');
 
 function nowVN() {
   return new Date().toLocaleString('vi-VN');
@@ -41,6 +42,195 @@ function editContract(payload, user, contract) {
   // Đổi ngày hết hạn thì tính lại từ đầu các mốc đã nhắc, tránh bỏ sót/lặp mốc mới (khớp logic cũ).
   if (endDateChanged) contract.notifiedThresholds = [];
   return contract;
+}
+
+// Duyệt/từ chối hợp đồng GỐC (approvalStatus PENDING gán sẵn khi tạo — xem lib/createValidation.js) —
+// cờ toàn công ty contractApprove, khớp đúng hình dạng meetingApprove/internalPostApprove, không theo
+// phòng ban. Từ chối bắt buộc nhập lý do. Phụ lục không qua đây (luôn APPROVED ngay khi tạo).
+function canApproveContract(user) {
+  return !!(user.perms?.admin || user.perms?.contractApprove);
+}
+
+function approveContract(user, contract) {
+  if (contract.isAddendum) throw new HttpError(400, 'Phụ lục hợp đồng không qua bước duyệt riêng');
+  if (!canApproveContract(user)) throw new HttpError(403, 'Bạn không có quyền phê duyệt hợp đồng này');
+  if (contract.approvalStatus !== 'PENDING') throw new HttpError(409, 'Hợp đồng không ở trạng thái chờ duyệt');
+  contract.approvalStatus = 'APPROVED';
+  contract.approvedBy = user.username;
+  contract.approvedByName = user.name;
+  contract.approvedAt = nowVN();
+  return contract;
+}
+
+function rejectContract(payload, user, contract) {
+  if (contract.isAddendum) throw new HttpError(400, 'Phụ lục hợp đồng không qua bước duyệt riêng');
+  if (!canApproveContract(user)) throw new HttpError(403, 'Bạn không có quyền từ chối hợp đồng này');
+  if (contract.approvalStatus !== 'PENDING') throw new HttpError(409, 'Hợp đồng không ở trạng thái chờ duyệt');
+  const reason = (payload?.reason || '').trim();
+  if (!reason) throw new HttpError(400, 'Vui lòng nhập lý do từ chối');
+  contract.approvalStatus = 'REJECTED';
+  contract.rejectedBy = user.username;
+  contract.rejectedByName = user.name;
+  contract.rejectedAt = nowVN();
+  contract.rejectReason = reason;
+  return contract;
+}
+
+// Upload "Tài liệu ký" (bản cứng đã ký) + bấm nút "Thanh toán" — cùng phạm vi quyền với người được
+// tạo/quản lý hợp đồng của phòng ban đó (contractCreate scope, khớp getScope() ở CREATE_MODULE_CONFIGS.
+// contracts), không mở thêm quyền riêng cho 2 thao tác vận hành này.
+function canManageContractPayment(user, contract) {
+  return !!(user.perms?.admin || scopeAllows(user, user.perms?.contractCreate, contract.dept));
+}
+
+function uploadContractSignedFile(payload, user, contract) {
+  if (contract.isAddendum) throw new HttpError(400, 'Phụ lục không có tệp tài liệu ký riêng');
+  if (!canManageContractPayment(user, contract)) throw new HttpError(403, 'Bạn không có quyền tải lên tài liệu ký cho hợp đồng này');
+  if (contract.approvalStatus !== 'APPROVED') throw new HttpError(409, 'Hợp đồng chưa được phê duyệt');
+  const { fileName, fileType, fileUrl } = payload || {};
+  if (!fileName || !fileUrl) throw new HttpError(400, 'Thiếu tệp tài liệu ký');
+  contract.signedFileName = fileName;
+  contract.signedFileType = fileType;
+  contract.signedFileUrl = fileUrl;
+  contract.signedUploadedBy = user.username;
+  contract.signedUploadedAt = nowVN();
+  return contract;
+}
+
+// Sinh sẵn danh sách các đợt xác nhận thanh toán cho 1 đề nghị thanh toán — nếu nguồn có sẵn các đợt
+// đã khai (paymentInstallments, chỉ Hợp đồng mới nhập ở form Phê duyệt) thì dùng nguyên, không thì mặc
+// định 1 đợt duy nhất = toàn bộ giá trị (Mua Bán/Sửa Chữa/Đầu Tư không có form nhập nhiều đợt riêng).
+function buildPaymentInstallments(sourceInstallments, totalAmount, fallbackDesc) {
+  const list = Array.isArray(sourceInstallments) ? sourceInstallments : [];
+  const base = list.length ? list : [{ description: fallbackDesc, amount: totalAmount, dueDate: '' }];
+  return base.map(it => ({ description: it.description || fallbackDesc, amount: it.amount || 0, dueDate: it.dueDate || '', confirmed: false, confirmedAt: null, confirmedBy: null }));
+}
+
+// Chuyển hợp đồng sang "Chờ thanh toán" + trả về BẢN NHÁP đề nghị thanh toán (CHƯA lưu — route gọi
+// createForCollection('paymentRequests', ...) ngay sau khi mutatorFn này chạy xong, cùng khuôn với
+// assignMinutesTasks()/insertMinutesTasks() ở routes/records.js).
+function startContractPayment(user, contract) {
+  if (contract.isAddendum) throw new HttpError(400, 'Phụ lục không có luồng thanh toán riêng');
+  if (!canManageContractPayment(user, contract)) throw new HttpError(403, 'Bạn không có quyền chuyển hợp đồng này sang thanh toán');
+  if (!contract.signedFileUrl) throw new HttpError(409, 'Cần tải lên Tài liệu ký trước khi chuyển sang thanh toán');
+  if (contract.paymentStatus !== 'CHUA_THANH_TOAN') throw new HttpError(409, 'Hợp đồng không ở trạng thái chưa thanh toán');
+  contract.paymentStatus = 'CHO_THANH_TOAN';
+  return {
+    sourceModule: 'CONTRACT', sourceId: contract.id, sourceCode: contract.code,
+    dept: contract.dept, title: contract.title, amount: contract.amount,
+    installments: buildPaymentInstallments(contract.paymentInstallments, contract.amount, 'Thanh toán toàn bộ giá trị hợp đồng'),
+    status: 'PENDING',
+    createdBy: user.username, createdByName: user.name, createdAt: nowVN()
+  };
+}
+
+// Upload "Tài liệu ký" + bấm nút "Thanh toán" cho officeReqs (Mua Bán/Sửa Chữa/Đầu Tư, module "Tổng
+// Hợp") — cùng khuôn với uploadContractSignedFile()/startContractPayment() ở trên, chỉ khác phạm vi
+// quyền: officeCreate scope + đúng cờ theo subType (officeBuy/officeFix/officeInvest).
+function canManageOfficePayment(user, item) {
+  const flag = OFFICE_SUBTYPE_TO_PERM_FLAG[item.subType];
+  return !!(user.perms?.admin || (scopeAllows(user, user.perms?.officeCreate, item.dept) && (!flag || user.perms?.[flag])));
+}
+
+function uploadOfficeSignedFile(payload, user, item) {
+  if (!canManageOfficePayment(user, item)) throw new HttpError(403, 'Bạn không có quyền tải lên tài liệu ký cho đề xuất này');
+  if (item.status !== 'APPROVED') throw new HttpError(409, 'Đề xuất chưa được phê duyệt xong');
+  const { fileName, fileType, fileUrl } = payload || {};
+  if (!fileName || !fileUrl) throw new HttpError(400, 'Thiếu tệp tài liệu ký');
+  item.signedFileName = fileName;
+  item.signedFileType = fileType;
+  item.signedFileUrl = fileUrl;
+  item.signedUploadedBy = user.username;
+  item.signedUploadedAt = nowVN();
+  return item;
+}
+
+function startOfficePayment(user, item) {
+  if (!canManageOfficePayment(user, item)) throw new HttpError(403, 'Bạn không có quyền chuyển đề xuất này sang thanh toán');
+  if (!item.signedFileUrl) throw new HttpError(409, 'Cần tải lên Tài liệu ký trước khi chuyển sang thanh toán');
+  if (item.paymentStatus !== 'CHUA_THANH_TOAN') throw new HttpError(409, 'Đề xuất không ở trạng thái chưa thanh toán');
+  item.paymentStatus = 'CHO_THANH_TOAN';
+  return {
+    sourceModule: item.subType, sourceId: item.id, sourceCode: item.code,
+    dept: item.dept, title: item.title, amount: item.amount,
+    installments: buildPaymentInstallments(null, item.amount, 'Thanh toán toàn bộ giá trị đề xuất'),
+    status: 'PENDING',
+    createdBy: user.username, createdByName: user.name, createdAt: nowVN()
+  };
+}
+
+// ===================== THANH TOÁN (module "Tổng Hợp" > "Thanh toán") =====================
+// Vòng đời: PENDING (sửa được) -> [NEED_INFO (sửa được)] -> APPROVED (xác nhận từng đợt) -> PAID
+// (khoá cứng, không sửa/xoá/huỷ được — đúng yêu cầu nghiệp vụ). PAID ghi ngược paymentStatus =
+// DA_THANH_TOAN về đúng bản ghi nguồn (Hợp đồng/officeReqs) nếu có sourceModule/sourceId — xem
+// routes/records.js (2 lần khoá bản ghi tuần tự: paymentRequests rồi tới bản ghi nguồn).
+const PAYMENT_EDITABLE_FIELDS = ['title', 'dept', 'amount', 'installments'];
+
+function canManagePaymentRequests(user) {
+  return !!(user.perms?.admin || user.perms?.paymentManage);
+}
+
+function editPaymentRequest(payload, user, pr) {
+  if (!canManagePaymentRequests(user)) throw new HttpError(403, 'Bạn không có quyền sửa đề nghị thanh toán');
+  if (pr.status !== 'PENDING' && pr.status !== 'NEED_INFO') throw new HttpError(409, 'Đề nghị thanh toán không còn ở trạng thái được sửa');
+  for (const field of PAYMENT_EDITABLE_FIELDS) {
+    if (payload[field] !== undefined) pr[field] = payload[field];
+  }
+  if (Array.isArray(pr.installments)) {
+    pr.installments = pr.installments.map(it => ({
+      description: (it?.description || '').trim(), amount: Number(it?.amount) || 0, dueDate: it?.dueDate || '',
+      confirmed: false, confirmedAt: null, confirmedBy: null
+    }));
+    pr.amount = pr.installments.reduce((sum, it) => sum + it.amount, 0);
+  }
+  pr.status = 'PENDING';
+  return pr;
+}
+
+function requestPaymentInfo(payload, user, pr) {
+  if (!canManagePaymentRequests(user)) throw new HttpError(403, 'Bạn không có quyền yêu cầu bổ sung');
+  if (pr.status !== 'PENDING') throw new HttpError(409, 'Đề nghị thanh toán không ở trạng thái chờ duyệt');
+  const comment = (payload?.comment || '').trim();
+  if (!comment) throw new HttpError(400, 'Vui lòng nhập nội dung cần bổ sung');
+  pr.status = 'NEED_INFO';
+  pr.infoRequestComment = comment;
+  return pr;
+}
+
+function approvePaymentRequest(user, pr) {
+  if (!canManagePaymentRequests(user)) throw new HttpError(403, 'Bạn không có quyền duyệt đề nghị thanh toán');
+  if (pr.status !== 'PENDING' && pr.status !== 'NEED_INFO') throw new HttpError(409, 'Đề nghị thanh toán không ở trạng thái chờ duyệt');
+  pr.status = 'APPROVED';
+  pr.approvedBy = user.username;
+  pr.approvedByName = user.name;
+  pr.approvedAt = nowVN();
+  return pr;
+}
+
+// Xác nhận đã thanh toán 1 đợt — đủ hết các đợt (không còn đợt nào chưa confirmed) thì tự chuyển PAID
+// ("thanh toán thành công", khớp yêu cầu). Trả về cờ justCompleted để route biết có cần ghi ngược
+// paymentStatus về bản ghi nguồn hay không.
+function confirmPaymentInstallment(payload, user, pr) {
+  if (!canManagePaymentRequests(user)) throw new HttpError(403, 'Bạn không có quyền xác nhận thanh toán');
+  if (pr.status !== 'APPROVED') throw new HttpError(409, 'Đề nghị thanh toán chưa được duyệt hoặc đã hoàn tất');
+  const idx = Number(payload?.index);
+  if (!Array.isArray(pr.installments) || !pr.installments[idx]) throw new HttpError(400, 'Đợt thanh toán không hợp lệ');
+  if (pr.installments[idx].confirmed) throw new HttpError(409, 'Đợt thanh toán này đã được xác nhận trước đó');
+  pr.installments[idx].confirmed = true;
+  pr.installments[idx].confirmedBy = user.username;
+  pr.installments[idx].confirmedAt = nowVN();
+
+  const justCompleted = pr.installments.every(it => it.confirmed);
+  if (justCompleted) {
+    pr.status = 'PAID';
+    pr.paidAt = nowVN();
+  }
+  return { item: pr, justCompleted };
+}
+
+function assertCanDeletePaymentRequest(user, pr) {
+  if (!canManagePaymentRequests(user)) throw new HttpError(403, 'Bạn không có quyền xoá đề nghị thanh toán');
+  if (pr.status === 'PAID') throw new HttpError(409, 'Đề nghị thanh toán đã hoàn tất — không thể xoá');
 }
 
 // ===================== BIÊN BẢN HỌP (sửa/xóa) =====================
@@ -549,6 +739,11 @@ function resolvePendingTaskAction(kind, verb, user, task) {
 
 module.exports = {
   editContract,
+  canApproveContract, approveContract, rejectContract,
+  canManageContractPayment, uploadContractSignedFile, startContractPayment,
+  canManageOfficePayment, uploadOfficeSignedFile, startOfficePayment,
+  canManagePaymentRequests, editPaymentRequest, requestPaymentInfo, approvePaymentRequest,
+  confirmPaymentInstallment, assertCanDeletePaymentRequest,
   canEditMinutes, canDeleteMinutes, editMinutes, assertCanDeleteMinutes,
   canCreateMinutes, createMinutes, buildTasksFromDirectives, assignMinutesTasks, buildTaskFromSubmissionComment,
   markInternalPostRead, toggleInternalPostLike, addInternalPostComment,

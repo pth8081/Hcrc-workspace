@@ -39,6 +39,149 @@ router.post('/contracts/:id/edit', async (req, res) => {
   }
 });
 
+// POST /api/records/contracts/:id/approve|reject — duyệt/từ chối hợp đồng gốc (approvalStatus PENDING
+// gán sẵn khi tạo, xem lib/createValidation.js). POST /api/records/contracts/:id/upload-signed +
+// /start-payment — tải "Tài liệu ký" + chuyển sang "Chờ thanh toán" (xem lib/recordActions.js).
+async function withContractAction(req, res, action, mutator) {
+  const itemId = Number(req.params.id);
+  if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
+  try {
+    const { freshUser } = await getFreshUser(req);
+    const result = await withLockedRecordForCollection('contracts', itemId, (item) => mutator(req.body, freshUser, item));
+    res.json({ ok: true, item: result });
+  } catch (err) {
+    handleError(res, `contracts/${req.params.id}/${action}`, err);
+  }
+}
+
+router.post('/contracts/:id/approve', (req, res) =>
+  withContractAction(req, res, 'approve', (payload, user, item) => recordActions.approveContract(user, item)));
+
+router.post('/contracts/:id/reject', (req, res) =>
+  withContractAction(req, res, 'reject', recordActions.rejectContract));
+
+router.post('/contracts/:id/upload-signed', (req, res) =>
+  withContractAction(req, res, 'upload-signed', recordActions.uploadContractSignedFile));
+
+// "Chuyển Sang Thanh Toán" KHÔNG dùng withContractAction() thường — mutatorFn trả về BẢN NHÁP đề nghị
+// thanh toán (chưa lưu) thay vì bản ghi hợp đồng, PHẢI insert thêm vào collection paymentRequests
+// ngay sau khi khoá hợp đồng nhả ra (cùng khuôn insertMinutesTasks() ở /minutes/:id/assign-tasks bên
+// dưới) — 1 request duy nhất vừa cập nhật hợp đồng vừa sinh đề nghị thanh toán, không tách 2 lượt gọi
+// API để tránh client tự ý bỏ qua bước tạo đề nghị.
+router.post('/contracts/:id/start-payment', async (req, res) => {
+  const itemId = Number(req.params.id);
+  if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
+  try {
+    const { freshUser } = await getFreshUser(req);
+    let draft = null;
+    const result = await withLockedRecordForCollection('contracts', itemId, (item) => {
+      draft = recordActions.startContractPayment(freshUser, item);
+      return item;
+    });
+    const paymentRequest = await createForCollection('paymentRequests', () => ({ ...draft, id: Date.now() }));
+    res.json({ ok: true, item: result, paymentRequest });
+  } catch (err) {
+    handleError(res, `contracts/${req.params.id}/start-payment`, err);
+  }
+});
+
+// POST /api/records/officeReqs/:id/upload-signed + /start-payment — tải "Tài liệu ký" + chuyển đề xuất
+// Mua Bán/Sửa Chữa/Đầu Tư (module "Tổng Hợp") đã duyệt xong sang "Chờ thanh toán" (xem
+// lib/recordActions.js), cùng khuôn với contracts ở trên.
+async function withOfficeReqAction(req, res, action, mutator) {
+  const itemId = Number(req.params.id);
+  if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
+  try {
+    const { freshUser } = await getFreshUser(req);
+    const result = await withLockedRecordForCollection('officeReqs', itemId, (item) => mutator(req.body, freshUser, item));
+    res.json({ ok: true, item: result });
+  } catch (err) {
+    handleError(res, `officeReqs/${req.params.id}/${action}`, err);
+  }
+}
+
+router.post('/officeReqs/:id/upload-signed', (req, res) =>
+  withOfficeReqAction(req, res, 'upload-signed', recordActions.uploadOfficeSignedFile));
+
+router.post('/officeReqs/:id/start-payment', async (req, res) => {
+  const itemId = Number(req.params.id);
+  if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
+  try {
+    const { freshUser } = await getFreshUser(req);
+    let draft = null;
+    const result = await withLockedRecordForCollection('officeReqs', itemId, (item) => {
+      draft = recordActions.startOfficePayment(freshUser, item);
+      return item;
+    });
+    const paymentRequest = await createForCollection('paymentRequests', () => ({ ...draft, id: Date.now() }));
+    res.json({ ok: true, item: result, paymentRequest });
+  } catch (err) {
+    handleError(res, `officeReqs/${req.params.id}/start-payment`, err);
+  }
+});
+
+// ===================== THANH TOÁN (module "Tổng Hợp" > "Thanh toán") =====================
+async function withPaymentAction(req, res, action, mutator) {
+  const itemId = Number(req.params.id);
+  if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
+  try {
+    const { freshUser } = await getFreshUser(req);
+    const result = await withLockedRecordForCollection('paymentRequests', itemId, (item) => mutator(req.body, freshUser, item));
+    res.json({ ok: true, item: result });
+  } catch (err) {
+    handleError(res, `paymentRequests/${req.params.id}/${action}`, err);
+  }
+}
+
+router.post('/paymentRequests/:id/edit', (req, res) =>
+  withPaymentAction(req, res, 'edit', recordActions.editPaymentRequest));
+
+router.post('/paymentRequests/:id/request-info', (req, res) =>
+  withPaymentAction(req, res, 'request-info', recordActions.requestPaymentInfo));
+
+router.post('/paymentRequests/:id/approve', (req, res) =>
+  withPaymentAction(req, res, 'approve', (payload, user, item) => recordActions.approvePaymentRequest(user, item)));
+
+router.post('/paymentRequests/:id/delete', async (req, res) => {
+  const itemId = Number(req.params.id);
+  if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
+  try {
+    const { freshUser } = await getFreshUser(req);
+    await deleteRecordForCollection('paymentRequests', itemId, (item) => recordActions.assertCanDeletePaymentRequest(freshUser, item));
+    res.json({ ok: true });
+  } catch (err) {
+    handleError(res, `paymentRequests/${req.params.id}/delete`, err);
+  }
+});
+
+// Xác nhận từng đợt — đủ hết các đợt thì tự chuyển PAID VÀ ghi ngược paymentStatus = DA_THANH_TOAN về
+// đúng bản ghi nguồn (Hợp đồng/officeReqs), khớp yêu cầu "trả lại Đã thanh toán cho các module nguồn".
+// Khoá TUẦN TỰ 2 collection (paymentRequests trước, bản ghi nguồn sau) trong CÙNG 1 request — không
+// tách 2 lượt gọi để tránh trường hợp PAID rồi nhưng quên/lỗi bước ghi ngược.
+router.post('/paymentRequests/:id/confirm-installment', async (req, res) => {
+  const itemId = Number(req.params.id);
+  if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
+  try {
+    const { freshUser } = await getFreshUser(req);
+    let justCompleted = false;
+    const result = await withLockedRecordForCollection('paymentRequests', itemId, (item) => {
+      const outcome = recordActions.confirmPaymentInstallment(req.body, freshUser, item);
+      justCompleted = outcome.justCompleted;
+      return outcome.item;
+    });
+    if (justCompleted && result.sourceModule && result.sourceId != null) {
+      const sourceCollection = result.sourceModule === 'CONTRACT' ? 'contracts' : 'officeReqs';
+      await withLockedRecordForCollection(sourceCollection, result.sourceId, (item) => {
+        item.paymentStatus = 'DA_THANH_TOAN';
+        return item;
+      }).catch(() => {}); // nguồn có thể đã bị xoá — không chặn việc đề nghị thanh toán đã PAID hợp lệ
+    }
+    res.json({ ok: true, item: result, justCompleted });
+  } catch (err) {
+    handleError(res, `paymentRequests/${req.params.id}/confirm-installment`, err);
+  }
+});
+
 // Lập/sửa biên bản họp KHÔNG còn tự suy ra Công việc ngay khi lưu nữa — Công việc chỉ được tạo khi
 // người dùng chủ động bấm "Giao việc" (xem POST /minutes/:id/assign-tasks bên dưới), sau đó biên bản
 // bị khoá sửa. insertMinutesTasks() dùng chung cho endpoint đó (PHẢI tính created bên trong mutatorFn

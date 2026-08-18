@@ -82,6 +82,9 @@ async function checkContractExpiryReminders() {
 
     for (const c of contracts) {
       if (!c || !c.endDate) continue;
+      // Hợp đồng đang chờ duyệt/bị từ chối chưa chính thức có hiệu lực — không nhắc hạn (khớp
+      // approvalStatus gán ở lib/createValidation.js). Phụ lục luôn APPROVED nên không bị loại ở đây.
+      if (c.approvalStatus && c.approvalStatus !== 'APPROVED') continue;
       const diffDays = daysUntil(c.endDate);
       if (diffDays === null) continue;
       if (!Array.isArray(c.notifiedThresholds)) c.notifiedThresholds = [];
