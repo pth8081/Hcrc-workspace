@@ -196,6 +196,11 @@ function applyWorkflowAction({ moduleKey, item, action, user, comment, extraFiel
   }
 
   item.status = 'APPROVED';
+  // officeReqs (Mua Bán/Sửa Chữa/Đầu Tư, sub-module "Tổng Hợp") duyệt xong bước cuối -> mặc định
+  // "Chưa thanh toán", khớp đúng paymentStatus gán ở lib/createValidation.js cho hợp đồng — cùng 1 mô
+  // hình thanh toán, chỉ officeReqs mới cần field này (docs/submissions/carRegs không có luồng thanh
+  // toán, không gán để tránh field thừa).
+  if (moduleKey === 'officeReqs') item.paymentStatus = 'CHUA_THANH_TOAN';
   return { item, transition: { type: 'COMPLETED' } };
 }
 

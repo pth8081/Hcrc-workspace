@@ -146,7 +146,26 @@ const CREATE_MODULE_CONFIGS = {
   contracts: {
     dbKey: 'contracts',
     getScope: (user) => user.perms?.contractCreate,
-    creatorField: 'creator', creatorNameField: null // Hợp đồng KHÔNG có field creatorName (khớp index.html)
+    creatorField: 'creator', creatorNameField: null, // Hợp đồng KHÔNG có field creatorName (khớp index.html)
+    // Hợp đồng GỐC (isAddendum=false) cần người có quyền contractApprove/admin duyệt trước khi chuyển
+    // sang "Quản Lý Hợp Đồng & Giấy Phép" (status GÁN Ở SERVER, không tin giá trị client gửi — khớp
+    // internalPosts SHARE ở trên). Phụ lục (isAddendum=true) chỉ gắn được vào 1 hợp đồng GỐC ĐÃ
+    // APPROVED, không qua bước duyệt riêng (xem index.html generateAddendumCode()/onContractOpModeChange()).
+    extraValidate: (payload, collection, user) => {
+      if (payload.isAddendum) {
+        const root = (collection || []).find(c => c.id === payload.rootContractId && !c.isAddendum);
+        if (!root) throw new CreateError(400, 'Hợp đồng gốc không tồn tại');
+        if (root.approvalStatus !== 'APPROVED') throw new CreateError(409, 'Chỉ được bổ sung phụ lục cho hợp đồng đã được phê duyệt');
+        if (payload.dept !== root.dept) throw new CreateError(400, 'Phòng ban của phụ lục phải khớp với hợp đồng gốc');
+        payload.type = root.type;
+        payload.approvalStatus = 'APPROVED';
+        payload.paymentInstallments = [];
+      } else {
+        payload.approvalStatus = (user.perms?.admin || user.perms?.contractApprove) ? 'APPROVED' : 'PENDING';
+        payload.paymentStatus = 'CHUA_THANH_TOAN';
+        payload.paymentInstallments = Array.isArray(payload.paymentInstallments) ? payload.paymentInstallments : [];
+      }
+    }
   },
   meetings: {
     dbKey: 'meetings',
@@ -212,6 +231,38 @@ const CREATE_MODULE_CONFIGS = {
         (type === 'REWARD' && user.perms?.internalRewardCreate)
       );
       if (!allowed) throw new CreateError(403, 'Bạn không có quyền đăng bài ở phân hệ này');
+      // Góc Chia Sẻ (SHARE) cần người có quyền internalPostApprove/admin duyệt trước khi công khai —
+      // status GÁN Ở SERVER (không tin giá trị client tự gửi). Người đăng đã có quyền duyệt thì không
+      // cần tự duyệt lại bài của chính mình. 3 type còn lại không qua bước duyệt (đã gác quyền đăng ở
+      // trên) nên luôn APPROVED.
+      payload.status = (type === 'SHARE' && !user.perms?.admin && !user.perms?.internalPostApprove)
+        ? 'PENDING' : 'APPROVED';
+    }
+  },
+  // Đề nghị thanh toán TẠO THỦ CÔNG (module "Tổng Hợp" > "Thanh toán" > "Tạo đề nghị thủ công") —
+  // không có dept-scope (kế toán tạo được cho bất kỳ phòng ban nào), chỉ cần quyền paymentManage.
+  // Đề nghị tự sinh từ Hợp đồng/Mua Bán/Sửa Chữa/Đầu Tư (sourceModule khác 'MANUAL') KHÔNG đi qua
+  // route này — chúng được tạo trực tiếp ở routes/records.js khi bấm "Chuyển Sang Thanh Toán" (xem
+  // lib/recordActions.js startContractPayment()/startOfficePayment()).
+  paymentRequests: {
+    dbKey: 'paymentRequests',
+    getScope: () => ({ all: true, depts: [] }),
+    creatorField: 'createdBy', creatorNameField: 'createdByName',
+    extraValidate: (payload, collection, user) => {
+      if (!user.perms?.admin && !user.perms?.paymentManage) {
+        throw new CreateError(403, 'Bạn không có quyền tạo đề nghị thanh toán');
+      }
+      payload.sourceModule = 'MANUAL';
+      payload.sourceId = null;
+      payload.sourceCode = null;
+      payload.status = 'PENDING';
+      const installments = Array.isArray(payload.installments) ? payload.installments : [];
+      if (!installments.length) throw new CreateError(400, 'Cần ít nhất 1 đợt thanh toán');
+      payload.installments = installments.map(it => ({
+        description: (it?.description || '').trim(), amount: Number(it?.amount) || 0, dueDate: it?.dueDate || '',
+        confirmed: false, confirmedAt: null, confirmedBy: null
+      }));
+      payload.amount = payload.installments.reduce((sum, it) => sum + it.amount, 0);
     }
   }
 };
@@ -244,4 +295,4 @@ function validateAndPrepareCreate(moduleKey, payload, user, existingCollection, 
   return record;
 }
 
-module.exports = { CREATE_MODULE_CONFIGS, CreateError, validateAndPrepareCreate, scopeAllows, findMeetingConflict };
+module.exports = { CREATE_MODULE_CONFIGS, CreateError, validateAndPrepareCreate, scopeAllows, findMeetingConflict, OFFICE_SUBTYPE_TO_PERM_FLAG };

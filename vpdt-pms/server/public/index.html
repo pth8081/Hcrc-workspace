@@ -52,7 +52,7 @@
         <button id="btnMeetingTab" onclick="switchTab('meeting')" class="hidden text-xs bg-emerald-600 text-white px-2 py-1 rounded hover:bg-emerald-700 font-semibold">📅 Phòng họp</button>
         <button id="btnMinutesTab" onclick="switchTab('minutes')" class="hidden text-xs bg-rose-600 text-white px-2 py-1 rounded hover:bg-rose-700 font-semibold">📝 Biên bản họp</button>
         <button id="btnCarTab" onclick="switchTab('car')" class="hidden text-xs bg-indigo-600 text-white px-2 py-1 rounded hover:bg-indigo-700 font-semibold">🚗 Đăng ký xe</button>
-        <button id="btnOfficeTab" onclick="switchTab('office')" class="hidden text-xs bg-teal-600 text-white px-2 py-1 rounded hover:bg-teal-700 font-semibold">🏢 Phê duyệt VP</button>
+        <button id="btnOfficeTab" onclick="switchTab('office')" class="hidden text-xs bg-teal-600 text-white px-2 py-1 rounded hover:bg-teal-700 font-semibold">🗂️ Tổng Hợp</button>
         <button id="btnReportsTab" onclick="switchTab('reports')" class="hidden text-xs bg-sky-600 text-white px-2 py-1 rounded hover:bg-sky-700 font-semibold">📊 Báo cáo</button>
         <button id="btnSystemTab" onclick="switchTab('system')" class="hidden text-xs bg-purple-600 text-white px-2 py-1 rounded hover:bg-purple-700 font-semibold">🛠️ Hệ Thống</button>
         <button onclick="logout()" class="text-xs text-red-500 underline py-1 hover:text-red-700">Đăng xuất</button>
@@ -390,26 +390,42 @@
 
   <!-- Màn hình MODULE HỢP ĐỒNG & GIẤY PHÉP -->
   <div id="contractSection" class="hidden space-y-6">
-    <div class="bg-cyan-50 p-4 rounded border border-cyan-200 space-y-3">
-      <h3 class="font-bold text-cyan-900 text-base flex items-center gap-2">📄 Quản Lý Hợp Đồng & Giấy Phép</h3>
-      <p class="text-xs text-cyan-800">Quản lý và theo dõi thời hạn hợp đồng, giấy phép để tự động thông báo hết hạn.</p> 
-      
+    <div class="flex gap-2">
+      <button onclick="setContractSubTab('APPROVAL')" id="btnContractSubApproval" class="px-3 py-1 rounded text-xs font-bold bg-cyan-700 text-white">⏳ Phê Duyệt</button>
+      <button onclick="setContractSubTab('MANAGE')" id="btnContractSubManage" class="px-3 py-1 rounded text-xs font-bold bg-gray-200 text-gray-700">📄 Quản Lý Hợp Đồng & Giấy Phép</button>
+    </div>
+
+    <div id="contractManageFormWrap" class="hidden bg-cyan-50 p-4 rounded border border-cyan-200 space-y-3">
+      <h3 class="font-bold text-cyan-900 text-base flex items-center gap-2">📄 Tạo Mới / Bổ Sung Phụ Lục Hợp Đồng</h3>
+      <p class="text-xs text-cyan-800">Hợp đồng mới sẽ chuyển qua sub-tab "Phê Duyệt" chờ duyệt trước khi hiển thị chính thức tại đây. Phụ lục gắn thẳng vào hợp đồng đã duyệt, không cần duyệt lại.</p>
+
       <form id="contractForm" onsubmit="submitContractReq(event)" class="bg-white p-3 rounded border text-xs space-y-3">
+        <div>
+          <label class="block font-semibold text-gray-600 mb-1">Loại Thao Tác</label>
+          <select id="contractOpMode" onchange="onContractOpModeChange()" class="w-full md:w-64 border p-1.5 rounded bg-white font-semibold">
+            <option value="NEW">➕ Tạo Mới Hợp Đồng</option>
+            <option value="ADDENDUM">📎 Bổ Sung Phụ Lục</option>
+          </select>
+        </div>
+        <div id="contractAddendumTargetWrap" class="hidden">
+          <label class="block font-semibold text-gray-600 mb-1">Chọn Hợp Đồng Để Bổ Sung Phụ Lục</label>
+          <select id="contractAddendumTarget" onchange="onContractAddendumTargetChange()" class="w-full border p-1.5 rounded bg-white"></select>
+        </div>
         <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
           <div>
-            <label class="block font-semibold text-gray-600 mb-1">Mã Hợp Đồng / Giấy Phép</label>
-            <input id="contractCode" placeholder="VD: HDKT-2026-001" class="w-full border p-1.5 rounded" required>
+            <label class="block font-semibold text-gray-600 mb-1">Mã Hợp Đồng / Phụ Lục</label>
+            <input id="contractCode" readonly class="w-full border p-1.5 rounded bg-gray-100 font-mono">
           </div>
           <div>
             <label class="block font-semibold text-gray-600 mb-1">Phòng Ban Quản Lý</label>
-            <select id="contractDept" class="w-full border p-1.5 rounded bg-white font-semibold" required></select>
+            <select id="contractDept" onchange="refreshContractCodePreview()" class="w-full border p-1.5 rounded bg-white font-semibold" required></select>
           </div>
           <div>
             <label class="block font-semibold text-gray-600 mb-1">Loại Pháp Lý</label>
-            <select id="contractType" class="w-full border p-1.5 rounded bg-white" required></select>
+            <select id="contractType" onchange="refreshContractCodePreview()" class="w-full border p-1.5 rounded bg-white" required></select>
           </div>
           <div class="md:col-span-2">
-            <label class="block font-semibold text-gray-600 mb-1">Tên Hợp Đồng / Tên Giấy Phép</label>
+            <label class="block font-semibold text-gray-600 mb-1" id="contractTitleLabel">Tên Hợp Đồng / Tên Giấy Phép</label>
             <input id="contractTitle" placeholder="Hợp đồng cung cấp dịch vụ công nghệ..." class="w-full border p-1.5 rounded" required>
           </div>
           <div>
@@ -429,7 +445,7 @@
             <input id="contractEndDate" type="date" class="w-full border p-1.5 rounded" required>
           </div>
           <div class="md:col-span-3">
-            <label class="block font-semibold text-gray-600 mb-1">Tệp Đính Kèm Hợp Đồng / Giấy Phép</label>
+            <label class="block font-semibold text-gray-600 mb-1" id="contractFileLabel">Tệp Đính Kèm Hợp Đồng / Giấy Phép</label>
             <input id="contractFile" type="file" accept=".pdf,.doc,.docx" class="w-full border p-1 bg-white rounded" required>
             <p id="contractFileEditHint" class="hidden text-[11px] text-gray-500 italic mt-1">Để trống nếu không muốn thay tệp đính kèm hiện tại.</p>
           </div>
@@ -439,9 +455,16 @@
           <textarea id="contractContent" placeholder="Ghi chú các điều khoản thanh toán, nghĩa vụ..." class="w-full border p-1.5 rounded h-16" required></textarea>
         </div>
         <div id="dynamicFieldsContainer_CONTRACT" class="grid grid-cols-1 md:grid-cols-3 gap-3 border-t pt-3"></div>
+        <div id="contractInstallmentsWrap" class="border-t pt-3">
+          <div class="flex justify-between items-center mb-2">
+            <label class="font-semibold text-gray-600">Các Đợt Thanh Toán</label>
+            <button type="button" onclick="addContractInstallmentRow()" class="text-cyan-600 font-bold hover:underline">+ Thêm Đợt</button>
+          </div>
+          <div id="contractInstallmentsList" class="space-y-2"></div>
+        </div>
         <div class="flex justify-end gap-2">
           <button type="button" id="contractCancelEditBtn" onclick="cancelEditContract()" class="hidden bg-gray-200 text-gray-700 px-5 py-2 rounded font-bold hover:bg-gray-300">Huỷ Sửa</button>
-          <button type="submit" id="contractSubmitBtn" class="bg-cyan-600 text-white px-5 py-2 rounded font-bold hover:bg-cyan-700">Lưu & Theo Dõi Hết Hạn</button>
+          <button type="submit" id="contractSubmitBtn" class="bg-cyan-600 text-white px-5 py-2 rounded font-bold hover:bg-cyan-700">Gửi Duyệt</button>
         </div>
       </form>
     </div>
@@ -480,7 +503,7 @@
     </div>
 
     <div class="space-y-3">
-      <h3 class="font-bold text-gray-800">📋 Danh Sách Hợp Đồng & Giấy Phép & Trạng Thái Cảnh Báo</h3>
+      <h3 id="contractListTitle" class="font-bold text-gray-800">📋 Danh Sách Hợp Đồng Chờ Duyệt</h3>
       <div class="overflow-x-auto">
         <table class="w-full border-collapse border text-xs bg-white">
           <thead>
@@ -490,6 +513,7 @@
               <th class="border p-2">Giá Trị & Thời Hạn</th>
               <th class="border p-2">Phòng Ban & Người Tạo</th>
               <th class="border p-2">Trạng Thái & Cảnh Báo Hết Hạn</th>
+              <th id="contractPaymentColHeader" class="hidden border p-2">Thanh Toán</th>
               <th class="border p-2 text-center min-w-[100px]">Thao Tác</th>
             </tr>
           </thead>
@@ -499,6 +523,7 @@
       <div id="paginationContainer_contract"></div>
     </div>
   </div>
+
 
   <!-- Màn hình MODULE QUẢN LÝ PHÒNG HỌP -->
   <div id="meetingSection" class="hidden space-y-6">
@@ -995,19 +1020,23 @@
     </div>
   </div>
 
-  <!-- Màn hình MODULE PHÊ DUYỆT VĂN PHÒNG -->
+  <!-- Màn hình MODULE TỔNG HỢP (Mua Bán / Sửa Chữa / Đầu Tư / Thanh Toán) -->
   <div id="officeSection" class="hidden space-y-6">
     <div class="bg-teal-50 p-4 rounded border border-teal-200 space-y-3">
-      <div class="flex justify-between items-center">
-        <h3 class="font-bold text-teal-900 text-base flex items-center gap-2">🏢 Phê Duyệt Văn Phòng (Mua Bán - Sửa Chữa - Đầu Tư)</h3>
+      <div class="flex justify-between items-center flex-wrap gap-2">
+        <h3 class="font-bold text-teal-900 text-base flex items-center gap-2">🗂️ Tổng Hợp (Mua Bán - Sửa Chữa - Đầu Tư - Thanh Toán)</h3>
         <div class="flex gap-2">
           <button onclick="setOfficeSubTab('MUA_BAN')" id="btnSubBuy" class="px-3 py-1 rounded text-xs font-bold bg-teal-700 text-white">🛒 Mua Bán</button>
           <button onclick="setOfficeSubTab('SUA_CHUA')" id="btnSubFix" class="px-3 py-1 rounded text-xs font-bold bg-gray-200 text-gray-700">🔧 Sửa Chữa</button>
           <button onclick="setOfficeSubTab('DAU_TU')" id="btnSubInvest" class="px-3 py-1 rounded text-xs font-bold bg-gray-200 text-gray-700">📈 Đầu Tư</button>
+          <button onclick="setOfficeSubTab('PAYMENT')" id="btnSubPayment" class="px-3 py-1 rounded text-xs font-bold bg-gray-200 text-gray-700">💰 Thanh Toán</button>
         </div>
       </div>
       <p class="text-xs text-teal-800" id="officeSubTitle">Phân hệ Mua Sắm Trang Thiết Bị / Vật Tư Văn Phòng.</p>
-      
+    </div>
+
+    <div id="officeReqsContentWrap" class="space-y-6">
+    <div class="bg-teal-50 p-4 rounded border border-teal-200 space-y-3">
       <form id="officeForm" onsubmit="submitOfficeReq(event)" class="bg-white p-3 rounded border text-xs space-y-3">
         <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
           <div>
@@ -1126,6 +1155,7 @@
               <th class="border p-2">Tên Hạng Mục & Số Lượng</th>
               <th class="border p-2">Dự Toán & Trường Tùy Biến</th>
               <th class="border p-2">Trạng Thái & Lịch Sử Duyệt Đồng Cấp</th>
+              <th class="border p-2">Thanh Toán</th>
               <th class="border p-2 text-center">Thao Tác</th>
             </tr>
           </thead>
@@ -1133,6 +1163,74 @@
         </table>
       </div>
       <div id="paginationContainer_office"></div>
+    </div>
+    </div>
+
+    <!-- Sub-tab "💰 Thanh Toán" — module con của Tổng Hợp, xem lại cả đề nghị thanh toán tự sinh từ
+         Hợp đồng/Mua Bán/Sửa Chữa/Đầu Tư lẫn đề nghị tạo thủ công. -->
+    <div id="paymentSection" class="hidden space-y-6">
+      <div class="flex gap-2">
+        <button onclick="setPaymentSubTab('CREATE')" id="btnPaymentSubCreate" class="px-3 py-1 rounded text-xs font-bold bg-gray-200 text-gray-700">➕ Tạo Đề Nghị Thủ Công</button>
+        <button onclick="setPaymentSubTab('APPROVE')" id="btnPaymentSubApprove" class="px-3 py-1 rounded text-xs font-bold bg-amber-700 text-white">✅ Duyệt Đề Nghị Thanh Toán</button>
+      </div>
+
+      <div id="paymentCreateWrap" class="hidden bg-amber-50 p-4 rounded border border-amber-200 space-y-3">
+        <h3 class="font-bold text-amber-900 text-base flex items-center gap-2">➕ Tạo Đề Nghị Thanh Toán Thủ Công</h3>
+        <form id="paymentCreateForm" onsubmit="submitManualPaymentRequest(event)" class="bg-white p-3 rounded border text-xs space-y-3">
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <div>
+              <label class="block font-semibold text-gray-600 mb-1">Phòng Ban</label>
+              <select id="paymentDept" class="w-full border p-1.5 rounded bg-white font-semibold" required></select>
+            </div>
+            <div>
+              <label class="block font-semibold text-gray-600 mb-1">Tiêu Đề / Nội Dung Thanh Toán</label>
+              <input id="paymentTitle" placeholder="VD: Thanh toán chi phí văn phòng phẩm quý 3" class="w-full border p-1.5 rounded" required>
+            </div>
+          </div>
+          <div class="border-t pt-3">
+            <div class="flex justify-between items-center mb-2">
+              <label class="font-semibold text-gray-600">Các Đợt Thanh Toán</label>
+              <button type="button" onclick="addPaymentCreateInstallmentRow()" class="text-amber-600 font-bold hover:underline">+ Thêm Đợt</button>
+            </div>
+            <div id="paymentCreateInstallmentsList" class="space-y-2"></div>
+          </div>
+          <div class="flex justify-end">
+            <button type="submit" class="bg-amber-600 text-white px-5 py-2 rounded font-bold hover:bg-amber-700">Tạo Đề Nghị Thanh Toán</button>
+          </div>
+        </form>
+      </div>
+
+      <div id="paymentApproveWrap" class="space-y-3">
+        <h3 class="font-bold text-gray-800">📋 Danh Sách Đề Nghị Thanh Toán</h3>
+        <div class="overflow-x-auto">
+          <table class="w-full border-collapse border text-xs bg-white">
+            <thead>
+              <tr class="bg-gray-100 text-left text-gray-700">
+                <th class="border p-2">Nguồn</th>
+                <th class="border p-2">Phòng Ban & Nội Dung</th>
+                <th class="border p-2">Giá Trị & Các Đợt</th>
+                <th class="border p-2">Trạng Thái</th>
+                <th class="border p-2 text-center min-w-[140px]">Thao Tác</th>
+              </tr>
+            </thead>
+            <tbody id="paymentTableBody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal tải lên "Tài liệu ký" cho Hợp đồng/Mua Bán/Sửa Chữa/Đầu Tư (dùng chung, xem
+       openSignedUploadModal()) -->
+  <div id="signedUploadModal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+    <div class="bg-white rounded-lg p-5 w-full max-w-md space-y-3">
+      <h3 class="font-bold text-gray-800">📤 Tải Lên Tài Liệu Ký</h3>
+      <p id="signedUploadSub" class="text-xs text-gray-500"></p>
+      <input id="signedUploadFile" type="file" accept=".pdf,.doc,.docx,image/*" class="w-full border p-1.5 bg-white rounded text-xs">
+      <div class="flex justify-end gap-2 pt-1">
+        <button onclick="closeSignedUploadModal()" class="bg-gray-200 text-gray-700 px-4 py-1.5 rounded text-xs font-bold hover:bg-gray-300">Hủy</button>
+        <button onclick="submitSignedUpload()" class="bg-cyan-600 text-white px-4 py-1.5 rounded text-xs font-bold hover:bg-cyan-700">Tải Lên</button>
+      </div>
     </div>
   </div>
 
@@ -1362,6 +1460,14 @@
         </form>
         <div class="max-h-32 overflow-y-auto bg-white rounded border">
           <ul id="catList" class="divide-y text-xs"></ul>
+        </div>
+      </div>
+
+      <div class="bg-cyan-50 p-4 rounded border border-cyan-200 space-y-3">
+        <h3 class="font-bold text-cyan-900 text-sm flex items-center gap-1">🏷️ Viết Tắt Loại Hợp Đồng (dùng sinh Mã Hợp Đồng)</h3>
+        <p class="text-[11px] text-gray-500 italic">Danh sách "Loại Pháp Lý" tự thêm/bớt ở màn Biểu Mẫu (nút Sửa trường mặc định) — ở đây chỉ chỉnh viết tắt dùng sinh Mã Hợp Đồng.</p>
+        <div class="max-h-32 overflow-y-auto bg-white rounded border">
+          <ul id="contractTypeAbbrList" class="divide-y text-xs"></ul>
         </div>
       </div>
 
@@ -1610,6 +1716,11 @@
               <div id="pContractDownloadDeptContainer" class="space-y-1 pl-1 max-h-32 overflow-y-auto"></div>
             </div>
           </div>
+          <div class="px-3 pb-3">
+            <label class="flex items-center gap-2 text-emerald-700 font-semibold cursor-pointer text-[11px]">
+              <input type="checkbox" id="pContractApprove"> ✅ Duyệt hợp đồng (toàn công ty, sub-tab "Phê Duyệt")
+            </label>
+          </div>
         </details>
 
         <details class="perm-tree-node bg-white rounded border text-xs">
@@ -1731,7 +1842,7 @@
             <span id="permTreeBadge_internal" class="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-gray-100 text-gray-500">0/0</span>
           </summary>
           <div class="p-3 pt-0 space-y-2">
-            <p class="text-[11px] text-gray-500 italic">Mọi người dùng đều XEM và tương tác được (bình luận, thả tim) trên cả 4 phân hệ; riêng "Góc chia sẻ" ai cũng đăng được tự do. 3 quyền dưới đây chỉ kiểm soát ai được ĐĂNG BÀI ở Tin nội bộ / Đào tạo / Khen thưởng.</p>
+            <p class="text-[11px] text-gray-500 italic">Mọi người dùng đều XEM và tương tác được (bình luận, thả tim) trên cả 4 phân hệ. 3 quyền dưới đây kiểm soát ai được ĐĂNG BÀI ở Tin nội bộ / Đào tạo / Khen thưởng; riêng "Góc chia sẻ" ai cũng đăng được nhưng bài chỉ công khai sau khi được người có quyền duyệt bên dưới phê duyệt.</p>
             <div class="grid grid-cols-1 md:grid-cols-3 gap-2">
               <label class="flex items-center gap-2 text-fuchsia-700 font-semibold cursor-pointer">
                 <input type="checkbox" id="pInternalNewsCreate"> 📰 Đăng Tin nội bộ
@@ -1741,6 +1852,11 @@
               </label>
               <label class="flex items-center gap-2 text-fuchsia-700 font-semibold cursor-pointer">
                 <input type="checkbox" id="pInternalRewardCreate"> 🏆 Đăng Khen thưởng
+              </label>
+            </div>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-2 pt-2 border-t">
+              <label class="flex items-center gap-2 text-emerald-700 font-semibold cursor-pointer">
+                <input type="checkbox" id="pInternalPostApprove"> ✅ Duyệt bài "Góc chia sẻ" (toàn công ty)
               </label>
             </div>
           </div>
@@ -1788,6 +1904,19 @@
                 </label>
               </div>
             </div>
+          </div>
+        </details>
+
+        <details class="perm-tree-node bg-white rounded border text-xs">
+          <summary class="flex items-center justify-between gap-2 px-3 py-2 hover:bg-gray-50 rounded">
+            <span class="font-bold text-gray-800 text-sm flex items-center gap-1.5"><span class="perm-tree-chevron text-gray-400">▸</span><span>💰 10. Thanh Toán</span></span>
+            <span id="permTreeBadge_payment" class="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-gray-100 text-gray-500">0/0</span>
+          </summary>
+          <div class="p-3 pt-0 space-y-2">
+            <p class="text-[11px] text-gray-500 italic">Quản lý toàn bộ module "Thanh toán" (mục con của "Tổng Hợp"): tạo đề nghị thủ công, sửa/duyệt/yêu cầu bổ sung/xoá đề nghị, xác nhận từng đợt đã thanh toán. Cũng là quyền tải "Tài liệu ký" + bấm nút "Thanh toán" ở Hợp đồng/Mua Bán/Sửa Chữa/Đầu Tư (dùng chung phạm vi phòng ban với quyền Tạo mới của từng module đó).</p>
+            <label class="flex items-center gap-2 text-emerald-700 font-semibold cursor-pointer">
+              <input type="checkbox" id="pPaymentManage"> ✅ Quản lý Thanh toán (toàn công ty)
+            </label>
           </div>
         </details>
         </div>
@@ -2491,7 +2620,7 @@
 // --- KHỞI TẠO DỮ LIỆU DB v6.0 ---
 const DB = {
   depts: [], cats: [], users: [], docs: [],
-  deptAbbrs: {}, docCatAbbrs: {},
+  deptAbbrs: {}, docCatAbbrs: {}, contractTypeAbbrs: {},
   jobTitles: [], submissionTypes: [], contractTypes: [], carTypes: [],
   workflows: [], deptWorkflows: {},
   submissions: [], submissionDeptWorkflows: {},
@@ -2507,6 +2636,7 @@ const DB = {
   meetingAttendeeTemplates: [],
   tasks: [],
   internalPosts: [],
+  paymentRequests: [],
   formTemplates: {},
   permGroups: [],
   emailConfig: {}, systemLogs: [],
@@ -2714,6 +2844,9 @@ let currentFilterCard = '';
 // Tài liệu GỐC đang mở rộng (hiện các version con) trong "Danh Sách Tài Liệu Trong Hệ Thống" — id của
 // tài liệu gốc, xem toggleDocFamily()/renderDocs().
 let expandedDocFamilies = new Set();
+let activeContractSubTab = 'APPROVAL';
+let activePaymentSubTab = 'APPROVE';
+let expandedContractFamilies = new Set();
 let currentProcessingSubId = null;
 let currentProcessingCarId = null;
 let currentProcessingOfficeId = null;
@@ -2974,7 +3107,7 @@ const BUSINESS_MODULES = [
   { key: 'meeting', label: 'Đặt Phòng Họp' },
   { key: 'minutes', label: 'Biên Bản Họp' },
   { key: 'car', label: 'Đăng Ký Xe' },
-  { key: 'office', label: 'Phê Duyệt Văn Phòng', subModules: [
+  { key: 'office', label: 'Tổng Hợp', subModules: [
     { id: 'pOfficeBuy', label: '🛒 Mua Bán', checkedByDefault: true },
     { id: 'pOfficeFix', label: '🔧 Sửa Chữa', checkedByDefault: true },
     { id: 'pOfficeInvest', label: '📈 Đầu Tư', checkedByDefault: false }
@@ -3298,6 +3431,25 @@ function canAccessContractModule(user) {
   return scopeHasAny(user, user.perms?.contractView);
 }
 
+// Cờ toàn công ty contractApprove — khớp đúng canApproveContract() ở lib/recordActions.js (server tự
+// xác thực lại, đây chỉ để quyết định hiện/ẩn nút Duyệt/Từ chối).
+function canApproveContract(user) {
+  return !!(user?.perms?.admin || user?.perms?.contractApprove);
+}
+
+// Upload "Tài liệu ký" + bấm nút "Thanh toán" — cùng phạm vi quyền contractCreate của phòng ban đó,
+// khớp đúng canManageContractPayment() ở lib/recordActions.js.
+function canManageContractPaymentClient(user, contract) {
+  return !!(user?.perms?.admin || scopeAllows(user, user?.perms?.contractCreate, contract.dept));
+}
+
+// Khớp đúng canManageOfficePayment() ở lib/recordActions.js.
+const OFFICE_SUBTYPE_TO_PERM_FLAG_CLIENT = { MUA_BAN: 'officeBuy', SUA_CHUA: 'officeFix', DAU_TU: 'officeInvest' };
+function canManageOfficePaymentClient(user, item) {
+  const flag = OFFICE_SUBTYPE_TO_PERM_FLAG_CLIENT[item.subType];
+  return !!(user?.perms?.admin || (scopeAllows(user, user?.perms?.officeCreate, item.dept) && (!flag || user?.perms?.[flag])));
+}
+
 function canBookMeeting(user) {
   if (!user) return false;
   if (user.perms?.admin) return true;
@@ -3405,6 +3557,14 @@ function canCreateInternalPost(user, type) {
   return false;
 }
 
+// Bài Góc Chia Sẻ (SHARE) ai cũng đăng được nhưng cần người có quyền internalPostApprove (hoặc admin)
+// duyệt trước khi công khai — status PENDING/APPROVED/REJECTED do SERVER gán (xem
+// lib/createValidation.js), client chỉ dùng để quyết định hiện nút Duyệt/Từ chối và ẩn bài chưa duyệt
+// khỏi người không liên quan (không phải tác giả, không phải người duyệt).
+function canApproveInternalPost(user) {
+  return !!(user?.perms?.admin || user?.perms?.internalPostApprove);
+}
+
 const INTERNAL_TYPE_LABELS = { NEWS: 'Tin Nội Bộ', TRAINING: 'Đào Tạo', REWARD: 'Khen Thưởng', SHARE: 'Góc Chia Sẻ' };
 const INTERNAL_TYPE_PREFIX = { NEWS: 'TN', TRAINING: 'DT', REWARD: 'KT', SHARE: 'CS' };
 
@@ -3471,12 +3631,14 @@ function defaultNewUserPerms() {
     canBeApprover: false,
     canViewReports: false,
     internalNewsCreate: false, internalTrainingCreate: false, internalRewardCreate: false,
+    internalPostApprove: false,
     uploadAll: false, uploadDepts: [],
     viewDraftAll: false, viewDraftDepts: [],
     viewApprovedAll: false, viewApprovedDepts: [],
     docDownload: emptyScope(),
     submissionView: emptyScope(), submissionCreate: emptyScope(), submissionDownload: emptyScope(),
-    contractView: emptyScope(), contractCreate: emptyScope(), contractDownload: emptyScope(),
+    contractView: emptyScope(), contractCreate: emptyScope(), contractDownload: emptyScope(), contractApprove: false,
+    paymentManage: false,
     meetingView: emptyScope(), meetingBookScope: emptyScope(),
     meetingApprove: false, meetingCancel: false,
     carView: emptyScope(), carCreate: emptyScope(), carDownload: emptyScope(),
@@ -3606,6 +3768,7 @@ async function initDatabase(loggingInUser) {
     DB.cats = data.cats || [];
     DB.deptAbbrs = data.deptAbbrs || {};
     DB.docCatAbbrs = data.docCatAbbrs || {};
+    DB.contractTypeAbbrs = data.contractTypeAbbrs || {};
     DB.jobTitles = data.jobTitles || [];
     DB.submissionTypes = data.submissionTypes || [];
     DB.contractTypes = data.contractTypes || [];
@@ -3636,6 +3799,7 @@ async function initDatabase(loggingInUser) {
     DB.meetingAttendeeTemplates = data.meetingAttendeeTemplates || [];
     DB.tasks = data.tasks || [];
     DB.internalPosts = data.internalPosts || [];
+    DB.paymentRequests = data.paymentRequests || [];
     DB.workflows = data.workflows || [];
     DB.formTemplates = data.formTemplates || {};
     DB.permGroups = data.permGroups || [];
@@ -4031,6 +4195,12 @@ function getMeetingApproverUsernames() {
   return DB.users.filter(u => u.perms?.admin || u.perms?.meetingApprove).map(u => u.username);
 }
 
+// Toàn bộ user có quyền duyệt bài "Góc chia sẻ" (cờ toàn công ty internalPostApprove) — dùng để xác
+// định người nhận thông báo email khi có bài mới chờ duyệt.
+function getInternalPostApproverUsernames() {
+  return DB.users.filter(u => u.perms?.admin || u.perms?.internalPostApprove).map(u => u.username);
+}
+
 // Parse "30, 15, 7" -> [30, 15, 7] (số nguyên không âm, loại trùng, sắp giảm dần)
 function parseDaysListInput(str) {
   const days = (str || '').split(',')
@@ -4363,7 +4533,7 @@ function switchTab(tabName) {
     document.getElementById('btnManualTaskCreate').classList.toggle('hidden', !canManageTasks(currentUser));
     renderTasks();
   }
-  if (tabName === 'contract') { renderDynamicInputsForModule('CONTRACT', 'dynamicFieldsContainer_CONTRACT'); renderContracts(); }
+  if (tabName === 'contract') { renderDynamicInputsForModule('CONTRACT', 'dynamicFieldsContainer_CONTRACT'); setContractSubTab(activeContractSubTab); }
   if (tabName === 'meeting') { renderDynamicInputsForModule('MEETING_ROOM', 'dynamicFieldsContainer_MEETING_ROOM'); renderMeetings(); setMeetingSubTab(activeMeetingSubTab); }
   if (tabName === 'minutes') {
     renderDynamicInputsForModule('MEETING_MINUTES', 'dynamicFieldsContainer_MEETING_MINUTES');
@@ -4389,9 +4559,20 @@ function switchTab(tabName) {
   if (tabName === 'reports' && canAccessReportsModule(currentUser)) { renderReports(); }
 }
 
+// Quyền vào sub-tab "💰 Thanh Toán" của Tổng Hợp — khác hẳn canAccessOfficeSubTab() (không có khái
+// niệm officeBuy/Fix/Invest), chỉ cần paymentManage/admin.
+function canAccessPaymentModule(user) {
+  return !!(user?.perms?.admin || user?.perms?.paymentManage);
+}
+
 function setOfficeSubTab(subTab) {
   resetListPage('office');
-  if (!canAccessOfficeSubTab(currentUser, subTab)) {
+  if (subTab === 'PAYMENT') {
+    if (!canAccessPaymentModule(currentUser)) {
+      alert('⛔ Bạn không có quyền truy cập module Thanh toán!');
+      return;
+    }
+  } else if (!canAccessOfficeSubTab(currentUser, subTab)) {
     alert('⛔ Bạn không có quyền truy cập phân hệ văn phòng này!');
     return;
   }
@@ -4400,18 +4581,33 @@ function setOfficeSubTab(subTab) {
   const btnBuy = document.getElementById('btnSubBuy');
   const btnFix = document.getElementById('btnSubFix');
   const btnInvest = document.getElementById('btnSubInvest');
+  const btnPayment = document.getElementById('btnSubPayment');
+  const activeCls = 'px-3 py-1 rounded text-xs font-bold bg-teal-700 text-white';
+  const inactiveCls = 'px-3 py-1 rounded text-xs font-bold bg-gray-200 text-gray-700';
 
   if (btnBuy) {
     btnBuy.classList.toggle('hidden', !canAccessOfficeSubTab(currentUser, 'MUA_BAN'));
-    btnBuy.className = subTab === 'MUA_BAN' ? 'px-3 py-1 rounded text-xs font-bold bg-teal-700 text-white' : 'px-3 py-1 rounded text-xs font-bold bg-gray-200 text-gray-700';
+    btnBuy.className = subTab === 'MUA_BAN' ? activeCls : inactiveCls;
   }
   if (btnFix) {
     btnFix.classList.toggle('hidden', !canAccessOfficeSubTab(currentUser, 'SUA_CHUA'));
-    btnFix.className = subTab === 'SUA_CHUA' ? 'px-3 py-1 rounded text-xs font-bold bg-teal-700 text-white' : 'px-3 py-1 rounded text-xs font-bold bg-gray-200 text-gray-700';
+    btnFix.className = subTab === 'SUA_CHUA' ? activeCls : inactiveCls;
   }
   if (btnInvest) {
     btnInvest.classList.toggle('hidden', !canAccessOfficeSubTab(currentUser, 'DAU_TU'));
-    btnInvest.className = subTab === 'DAU_TU' ? 'px-3 py-1 rounded text-xs font-bold bg-teal-700 text-white' : 'px-3 py-1 rounded text-xs font-bold bg-gray-200 text-gray-700';
+    btnInvest.className = subTab === 'DAU_TU' ? activeCls : inactiveCls;
+  }
+  if (btnPayment) {
+    const canPay = canAccessPaymentModule(currentUser);
+    btnPayment.className = (subTab === 'PAYMENT' ? 'px-3 py-1 rounded text-xs font-bold bg-amber-700 text-white' : inactiveCls) + (canPay ? '' : ' hidden');
+  }
+
+  document.getElementById('officeReqsContentWrap').classList.toggle('hidden', subTab === 'PAYMENT');
+  document.getElementById('paymentSection').classList.toggle('hidden', subTab !== 'PAYMENT');
+  if (subTab === 'PAYMENT') {
+    document.getElementById('officeSubTitle').innerText = 'Module con "Thanh toán": tổng hợp đề nghị thanh toán từ Hợp đồng/Mua Bán/Sửa Chữa/Đầu Tư và tạo thủ công.';
+    setPaymentSubTab(activePaymentSubTab);
+    return;
   }
 
   const lblSub = document.getElementById('officeSubTitle');
@@ -4502,6 +4698,12 @@ function populateDropdowns() {
   const offDept = document.getElementById('offDept');
   if (offDept) {
     offDept.innerHTML = getScopedDepts(currentUser, currentUser.perms?.officeCreate).map(d => `<option value="${escapeHtml(d)}">${escapeHtml(d)}</option>`).join('');
+  }
+  // paymentManage là quyền toàn công ty (không theo phòng ban) — dropdown Phòng Ban ở form tạo đề
+  // nghị thanh toán thủ công liệt kê TOÀN BỘ DB.depts, không lọc theo scope như các module khác.
+  const paymentDept = document.getElementById('paymentDept');
+  if (paymentDept) {
+    paymentDept.innerHTML = DB.depts.map(d => `<option value="${escapeHtml(d)}">${escapeHtml(d)}</option>`).join('');
   }
 
   const uDept = document.getElementById('uDept');
@@ -4609,6 +4811,37 @@ function generateDocCode(cat, dept) {
   const prefix = `${getDocCatAbbr(cat)}-${getDeptAbbr(dept)}-`;
   const seq = computeNextDocSeq(prefix);
   return `${prefix}${String(seq).padStart(3, '0')}`;
+}
+
+// Viết tắt Loại Pháp Lý hợp đồng — cùng mô hình getDocCatAbbr() ở trên (ưu tiên DB.contractTypeAbbrs
+// admin đã cấu hình, tự suy ra nếu chưa có).
+function getContractTypeAbbr(typeName) {
+  return DB.contractTypeAbbrs[typeName] || deriveAbbr(typeName, null);
+}
+
+// Đếm số HỢP ĐỒNG GỐC (không tính phụ lục — isAddendum) đã có mã bắt đầu bằng prefix này, để sinh số
+// thứ tự tiếp theo — cùng mô hình computeNextDocSeq() ở trên.
+function computeNextContractSeq(prefix) {
+  const existing = DB.contracts.filter(c => !c.isAddendum && (c.code || '').startsWith(prefix));
+  return existing.length + 1;
+}
+
+// Mã Hợp Đồng tự sinh = HCRC-<viết tắt Phòng ban>-<viết tắt Loại Pháp Lý>-<số thứ tự 3 số>.
+function generateContractCode(dept, type) {
+  const prefix = `HCRC-${getDeptAbbr(dept)}-${getContractTypeAbbr(type)}-`;
+  const seq = computeNextContractSeq(prefix);
+  return `${prefix}${String(seq).padStart(3, '0')}`;
+}
+
+// Mã Phụ Lục Hợp Đồng = <Mã hợp đồng gốc>-PLHD<số thứ tự 2 số> — đánh số RIÊNG theo từng hợp đồng
+// (không dùng chung 1 dãy số toàn hệ thống), tăng dần so với các phụ lục đã có của CHÍNH hợp đồng đó.
+function computeNextAddendumSeq(rootContractId) {
+  const existing = DB.contracts.filter(c => c.isAddendum && c.rootContractId === rootContractId);
+  return existing.length + 1;
+}
+function generateAddendumCode(rootContract) {
+  const seq = computeNextAddendumSeq(rootContract.id);
+  return `${rootContract.code}-PLHD${String(seq).padStart(2, '0')}`;
 }
 
 // Gom 1 tài liệu GỐC + toàn bộ version con của nó (kể cả bản thân tài liệu gốc), sắp theo versionNumber
@@ -7293,10 +7526,136 @@ function resetTaskFilters() {
 // Khi khác null: form đang ở chế độ SỬA hồ sơ hợp đồng có id này (thay vì tạo mới).
 let editingContractId = null;
 
+// Đổi sub-tab "Phê Duyệt" (approvalStatus PENDING) / "Quản Lý Hợp Đồng & Giấy Phép" (APPROVED) — chỉ
+// tab MANAGE mới hiện form Tạo Mới/Bổ Sung Phụ Lục, khớp đúng yêu cầu (nút tạo đặt ở tab Quản Lý HĐ,
+// hồ sơ vẫn phải qua Phê Duyệt trước khi "quay lại" đây).
+function setContractSubTab(subTab) {
+  resetListPage('contract');
+  activeContractSubTab = subTab;
+  const activeCls = 'px-3 py-1 rounded text-xs font-bold bg-cyan-700 text-white';
+  const inactiveCls = 'px-3 py-1 rounded text-xs font-bold bg-gray-200 text-gray-700';
+  document.getElementById('btnContractSubApproval').className = subTab === 'APPROVAL' ? activeCls : inactiveCls;
+  document.getElementById('btnContractSubManage').className = subTab === 'MANAGE' ? activeCls : inactiveCls;
+  document.getElementById('contractManageFormWrap').classList.toggle('hidden', subTab !== 'MANAGE');
+  document.getElementById('contractPaymentColHeader').classList.toggle('hidden', subTab !== 'MANAGE');
+  document.getElementById('contractListTitle').innerText = subTab === 'APPROVAL' ? '📋 Danh Sách Hợp Đồng Chờ Duyệt' : '📋 Danh Sách Hợp Đồng & Giấy Phép';
+  if (subTab === 'MANAGE') { cancelEditContract(); onContractOpModeChange(); }
+  renderContracts();
+}
+
+// Đổi "Tạo Mới" (mã tự sinh HCRC-..., phiếu thanh toán nhập được) / "Bổ Sung Phụ Lục" (khoá Phòng
+// ban/Loại Pháp Lý/Đối tác theo đúng hợp đồng gốc đã chọn, mã tự sinh <mã gốc>-PLHD<số>, không có các
+// đợt thanh toán riêng) — cùng mô hình onDocOpModeChange().
+function onContractOpModeChange() {
+  const mode = document.getElementById('contractOpMode').value;
+  const isAddendum = mode === 'ADDENDUM';
+  document.getElementById('contractAddendumTargetWrap').classList.toggle('hidden', !isAddendum);
+  document.getElementById('contractInstallmentsWrap').classList.toggle('hidden', isAddendum);
+  document.getElementById('contractTitleLabel').innerText = isAddendum ? 'Tên Phụ Lục' : 'Tên Hợp Đồng / Tên Giấy Phép';
+  document.getElementById('contractFileLabel').innerText = isAddendum ? 'Tệp Đính Kèm Phụ Lục' : 'Tệp Đính Kèm Hợp Đồng / Giấy Phép';
+  document.getElementById('contractDept').disabled = isAddendum;
+  document.getElementById('contractType').disabled = isAddendum;
+  document.getElementById('contractPartner').readOnly = isAddendum;
+
+  if (isAddendum) {
+    populateContractAddendumTargets();
+    document.getElementById('contractAddendumTarget').value = '';
+    document.getElementById('contractCode').value = '';
+    document.getElementById('contractTitle').value = '';
+    document.getElementById('contractDept').value = '';
+    document.getElementById('contractType').value = '';
+    document.getElementById('contractPartner').value = '';
+  } else {
+    document.getElementById('contractTitle').value = '';
+    document.getElementById('contractPartner').value = '';
+    renderContractInstallmentsList([]);
+    refreshContractCodePreview();
+  }
+}
+
+// Mã Hợp Đồng tự sinh sống theo Phòng ban/Loại Pháp Lý đang chọn (chỉ áp dụng ở chế độ "Tạo Mới").
+function refreshContractCodePreview() {
+  if (document.getElementById('contractOpMode').value !== 'NEW') return;
+  const dept = document.getElementById('contractDept').value;
+  const type = document.getElementById('contractType').value;
+  document.getElementById('contractCode').value = (dept && type) ? generateContractCode(dept, type) : '';
+}
+
+// Danh sách hợp đồng được phép "Bổ Sung Phụ Lục" — chỉ hợp đồng GỐC đã APPROVED, người dùng có quyền
+// tạo hồ sơ hợp đồng cho đúng phòng ban đó (contractCreate scope, khớp getScope() ở
+// CREATE_MODULE_CONFIGS.contracts).
+function populateContractAddendumTargets() {
+  const sel = document.getElementById('contractAddendumTarget');
+  if (!sel) return;
+  const prevVal = sel.value;
+  const eligible = DB.contracts.filter(c =>
+    !c.isAddendum && c.approvalStatus === 'APPROVED' &&
+    (currentUser.perms?.admin || scopeAllows(currentUser, currentUser.perms?.contractCreate, c.dept))
+  );
+  sel.innerHTML = '<option value="">-- Chọn hợp đồng --</option>' + eligible.map(c =>
+    `<option value="${c.id}">${escapeHtml(c.code)} — ${escapeHtml(c.title)}</option>`
+  ).join('');
+  if (eligible.some(c => String(c.id) === prevVal)) sel.value = prevVal;
+}
+
+// Chọn xong hợp đồng cần bổ sung phụ lục -> khoá Mã/Phòng ban/Loại/Đối tác theo đúng hợp đồng gốc,
+// đề xuất sẵn mã phụ lục tiếp theo.
+function onContractAddendumTargetChange() {
+  const rootId = Number(document.getElementById('contractAddendumTarget').value);
+  const root = DB.contracts.find(c => c.id === rootId);
+  if (!root) {
+    document.getElementById('contractCode').value = '';
+    document.getElementById('contractDept').value = '';
+    document.getElementById('contractType').value = '';
+    document.getElementById('contractPartner').value = '';
+    return;
+  }
+  document.getElementById('contractCode').value = generateAddendumCode(root);
+  document.getElementById('contractDept').value = root.dept;
+  document.getElementById('contractType').value = root.type;
+  document.getElementById('contractPartner').value = root.partner;
+}
+
+// Các Đợt Thanh Toán — mảng {description, amount, dueDate} nhập ở form Tạo Mới, đi kèm hồ sơ chờ
+// duyệt (chỉ hợp đồng GỐC mới có, phụ lục không có — xem onContractOpModeChange()).
+function renderContractInstallmentsList(installments) {
+  const container = document.getElementById('contractInstallmentsList');
+  if (!container) return;
+  container.innerHTML = (installments || []).map((it, idx) => `
+    <div class="flex gap-2 items-center" data-installment-row="${idx}">
+      <input placeholder="Mô tả đợt (VD: Đợt 1 - tạm ứng 30%)" value="${escapeHtml(it.description || '')}" class="flex-1 border p-1.5 rounded contract-installment-desc">
+      <input type="number" placeholder="Số tiền (VNĐ)" value="${it.amount || ''}" class="w-40 border p-1.5 rounded contract-installment-amount">
+      <input type="date" value="${it.dueDate || ''}" class="w-40 border p-1.5 rounded contract-installment-due">
+      <button type="button" onclick="removeContractInstallmentRow(${idx})" class="text-red-500 font-bold hover:underline px-1">✕</button>
+    </div>
+  `).join('') || '<p class="text-gray-400 italic text-[11px]">Chưa có đợt thanh toán nào — bấm "+ Thêm Đợt" nếu cần.</p>';
+}
+
+function addContractInstallmentRow() {
+  const current = collectContractInstallments();
+  current.push({ description: '', amount: '', dueDate: '' });
+  renderContractInstallmentsList(current);
+}
+
+function removeContractInstallmentRow(idx) {
+  const current = collectContractInstallments();
+  current.splice(idx, 1);
+  renderContractInstallmentsList(current);
+}
+
+function collectContractInstallments() {
+  return [...document.querySelectorAll('#contractInstallmentsList [data-installment-row]')].map(row => ({
+    description: row.querySelector('.contract-installment-desc').value.trim(),
+    amount: parseFloat(row.querySelector('.contract-installment-amount').value) || 0,
+    dueDate: row.querySelector('.contract-installment-due').value
+  }));
+}
+
 async function submitContractReq(e) {
   e.preventDefault();
   if (editingContractId !== null) return updateContractReq(e);
 
+  const isAddendum = document.getElementById('contractOpMode').value === 'ADDENDUM';
   const code = document.getElementById('contractCode').value.trim();
   const dept = document.getElementById('contractDept').value;
   const type = document.getElementById('contractType').value;
@@ -7308,12 +7667,18 @@ async function submitContractReq(e) {
   const content = document.getElementById('contractContent').value.trim();
   const fileInput = document.getElementById('contractFile');
 
+  let rootContractId = null;
+  if (isAddendum) {
+    rootContractId = Number(document.getElementById('contractAddendumTarget').value);
+    if (!rootContractId) return alert('Vui lòng chọn hợp đồng cần bổ sung phụ lục!');
+  }
+
   if (DB.contracts.some(c => c.code === code)) {
     return alert('Mã hợp đồng đã tồn tại!');
   }
 
   const file = fileInput.files[0];
-  if (!file) return alert('Vui lòng chọn tệp hợp đồng / giấy phép đính kèm!');
+  if (!file) return alert(`Vui lòng chọn tệp ${isAddendum ? 'phụ lục' : 'hợp đồng / giấy phép'} đính kèm!`);
 
   let uploaded, customData;
   try {
@@ -7324,21 +7689,16 @@ async function submitContractReq(e) {
   }
 
   const contractPayload = {
-    code: code,
-    dept: dept,
-    type: type,
-    title: title,
-    partner: partner,
-    amount: amount,
-    startDate: startDate,
-    endDate: endDate,
-    content: content,
-    customData: customData,
+    code, dept, type, title, partner, amount, startDate, endDate, content,
+    customData,
     fileName: uploaded.fileName,
     fileType: uploaded.fileType,
     fileUrl: uploaded.fileUrl,
     createdAt: new Date().toLocaleString('vi-VN'),
-    notifiedThresholds: []
+    notifiedThresholds: [],
+    isAddendum,
+    rootContractId: isAddendum ? rootContractId : null,
+    paymentInstallments: isAddendum ? [] : collectContractInstallments()
   };
 
   let newContract;
@@ -7350,9 +7710,23 @@ async function submitContractReq(e) {
   }
 
   DB.contracts.unshift(newContract);
-  logSystemAction('CONTRACT', 'CREATE_CONTRACT', `Tạo hồ sơ hợp đồng [${code} - ${title}]`, 'SUCCESS', code);
-  alert('✅ Đã lưu thông tin Hợp đồng / Giấy phép thành công!');
+  if (isAddendum) {
+    logSystemAction('CONTRACT', 'CREATE_CONTRACT_ADDENDUM', `Bổ sung phụ lục [${newContract.code} - ${title}] cho hợp đồng [${newContract.rootContractId}]`, 'SUCCESS', newContract.code);
+    alert('✅ Đã bổ sung phụ lục thành công!');
+  } else {
+    logSystemAction('CONTRACT', 'CREATE_CONTRACT', `Tạo hồ sơ hợp đồng [${code} - ${title}]`, 'SUCCESS', code);
+    if (newContract.approvalStatus === 'PENDING') {
+      const approvers = DB.users.filter(u => u.perms?.admin || u.perms?.contractApprove).map(u => u.username);
+      notifyUsersByEmail('CONTRACT', 'NOTIFY_APPROVAL_NEEDED', newContract.code, approvers,
+        `[VPDT] Hợp đồng chờ duyệt: ${title}`,
+        `${currentUser.name} vừa tạo hồ sơ hợp đồng "${title}" (${newContract.code}), đang chờ phê duyệt.`);
+      alert('✅ Đã gửi hồ sơ hợp đồng, đang chờ phê duyệt!');
+    } else {
+      alert('✅ Đã lưu thông tin Hợp đồng / Giấy phép thành công!');
+    }
+  }
   e.target.reset();
+  onContractOpModeChange();
   renderContracts();
 }
 
@@ -7365,18 +7739,23 @@ function openEditContract(contractId) {
   }
 
   editingContractId = contractId;
+  document.getElementById('contractManageFormWrap').classList.remove('hidden');
+  document.getElementById('contractOpMode').value = 'NEW';
+  onContractOpModeChange();
 
   document.getElementById('contractCode').value = c.code;
-  document.getElementById('contractCode').readOnly = true;
-  document.getElementById('contractCode').classList.add('bg-gray-100', 'cursor-not-allowed');
   document.getElementById('contractDept').value = c.dept;
+  document.getElementById('contractDept').disabled = !!c.isAddendum;
   document.getElementById('contractType').value = c.type;
+  document.getElementById('contractType').disabled = !!c.isAddendum;
   document.getElementById('contractTitle').value = c.title;
   document.getElementById('contractPartner').value = c.partner;
   document.getElementById('contractAmount').value = c.amount;
   document.getElementById('contractStartDate').value = c.startDate;
   document.getElementById('contractEndDate').value = c.endDate;
   document.getElementById('contractContent').value = c.content;
+  document.getElementById('contractInstallmentsWrap').classList.toggle('hidden', !!c.isAddendum);
+  renderContractInstallmentsList(c.paymentInstallments || []);
 
   const fileInput = document.getElementById('contractFile');
   fileInput.value = '';
@@ -7392,12 +7771,14 @@ function openEditContract(contractId) {
 function cancelEditContract() {
   editingContractId = null;
   document.getElementById('contractForm').reset();
-  document.getElementById('contractCode').readOnly = false;
-  document.getElementById('contractCode').classList.remove('bg-gray-100', 'cursor-not-allowed');
+  document.getElementById('contractDept').disabled = false;
+  document.getElementById('contractType').disabled = false;
   document.getElementById('contractFile').required = true;
   document.getElementById('contractFileEditHint').classList.add('hidden');
-  document.getElementById('contractSubmitBtn').innerText = 'Lưu & Theo Dõi Hết Hạn';
+  document.getElementById('contractSubmitBtn').innerText = 'Gửi Duyệt';
   document.getElementById('contractCancelEditBtn').classList.add('hidden');
+  document.getElementById('contractOpMode').value = 'NEW';
+  renderContractInstallmentsList([]);
 }
 
 async function updateContractReq(e) {
@@ -7471,6 +7852,24 @@ function onContractFilterChange() {
   renderContracts();
 }
 
+// Gom 1 hợp đồng GỐC + toàn bộ phụ lục của nó (kể cả bản thân hợp đồng gốc) — cùng mô hình
+// getDocFamily() của module Tài liệu.
+function getContractFamily(anyContractId) {
+  const c = DB.contracts.find(x => x.id === anyContractId);
+  if (!c) return [];
+  const rootId = c.isAddendum ? c.rootContractId : c.id;
+  return DB.contracts.filter(x => x.id === rootId || (x.isAddendum && x.rootContractId === rootId));
+}
+
+function toggleContractFamily(rootId) {
+  if (expandedContractFamilies.has(rootId)) expandedContractFamilies.delete(rootId);
+  else expandedContractFamilies.add(rootId);
+  renderContracts();
+}
+
+const CONTRACT_PAYMENT_LABELS = { CHUA_THANH_TOAN: 'Chưa thanh toán', CHO_THANH_TOAN: 'Chờ thanh toán', DA_THANH_TOAN: 'Đã thanh toán' };
+const CONTRACT_PAYMENT_BADGE_CLS = { CHUA_THANH_TOAN: 'bg-gray-100 text-gray-700', CHO_THANH_TOAN: 'bg-amber-100 text-amber-800', DA_THANH_TOAN: 'bg-green-100 text-green-800' };
+
 function renderContracts() {
   const tbody = document.getElementById('contractTableBody');
   if (!tbody) return;
@@ -7482,9 +7881,15 @@ function renderContracts() {
   const toDate = document.getElementById('filterToDateContract')?.value || '';
   const keyword = (document.getElementById('filterKeywordContract')?.value || '').trim();
 
-  // CẬP NHẬT: lọc theo phạm vi Xem (contractView) thay vì hiển thị hợp đồng của mọi phòng ban.
+  // Chỉ hợp đồng GỐC hiện ở cấp cao nhất (phụ lục chỉ hiện khi mở rộng — xem toggleContractFamily()).
+  // Sub-tab "Phê Duyệt" chỉ hiện PENDING, "Quản Lý Hợp Đồng & Giấy Phép" chỉ hiện APPROVED — hợp đồng
+  // vừa được duyệt xong sẽ "biến mất" khỏi tab này và "xuất hiện" ở tab kia ngay khi render lại.
   const visibleContracts = DB.contracts.filter(c => {
-    const canView = scopeAllows(currentUser, currentUser.perms?.contractView, c.dept) || c.creator === currentUser.username;
+    if (c.isAddendum) return false;
+    if (activeContractSubTab === 'APPROVAL' && c.approvalStatus !== 'PENDING') return false;
+    if (activeContractSubTab === 'MANAGE' && c.approvalStatus !== 'APPROVED') return false;
+
+    const canView = scopeAllows(currentUser, currentUser.perms?.contractView, c.dept) || c.creator === currentUser.username || canApproveContract(currentUser);
     if (!canView) return false;
 
     if (deptFilter && c.dept !== deptFilter) return false;
@@ -7503,54 +7908,93 @@ function renderContracts() {
 
   document.getElementById('paginationContainer_contract').innerHTML = buildPaginationBoxHTML('contract', 'renderContracts');
   const pageContracts = paginateList('contract', visibleContracts, 'renderContracts', 'hợp đồng');
+  const colspan = activeContractSubTab === 'MANAGE' ? 7 : 6;
 
   if (pageContracts.length === 0) {
-    tbody.innerHTML = `<tr><td colspan="6" class="text-center p-6 text-gray-500 italic">Không tìm thấy hợp đồng phù hợp.</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="${colspan}" class="text-center p-6 text-gray-500 italic">Không tìm thấy hợp đồng phù hợp.</td></tr>`;
     return;
   }
 
   tbody.innerHTML = pageContracts.map(c => {
-    const endD = new Date(c.endDate);
-    const diffDays = Math.ceil((endD - now) / (1000 * 60 * 60 * 24));
-
-    let warningBadge = '';
-    if (diffDays < 0) {
-      warningBadge = `<span class="px-2 py-0.5 bg-red-100 text-red-800 rounded font-bold text-xs">⚠️ Đã hết hạn (${Math.abs(diffDays)} ngày)</span>`;
-    } else if (diffDays <= 30) {
-      warningBadge = `<span class="px-2 py-0.5 bg-yellow-100 text-yellow-800 rounded font-bold text-xs">⏰ Sắp hết hạn (Còn ${diffDays} ngày)</span>`;
-    } else {
-      warningBadge = `<span class="px-2 py-0.5 bg-green-100 text-green-800 rounded font-semibold text-xs">✅ Còn hiệu lực</span>`;
-    }
-
-    return `
-      <tr class="hover:bg-gray-50 border-b">
-        <td class="border p-2 font-mono font-bold text-cyan-800">${escapeHtml(c.code)}<br><span class="text-xs text-gray-500 font-normal">${escapeHtml(c.type)}</span></td>
-        <td class="border p-2">
-          <div class="font-bold text-gray-800">${escapeHtml(c.title)}</div>
-          <div class="text-xs text-gray-500">Bên ký kết: ${escapeHtml(c.partner)}</div>
-        </td>
-        <td class="border p-2">
-          <div class="font-bold text-purple-700">${c.amount.toLocaleString('vi-VN')} VNĐ</div>
-          <div class="text-xs text-gray-500">${escapeHtml(c.startDate)} ➔ ${escapeHtml(c.endDate)}</div>
-        </td>
-        <td class="border p-2">${escapeHtml(c.dept)}</td>
-        <td class="border p-2">${warningBadge}</td>
-        <td class="border p-2 text-center space-x-1">
-          ${(() => {
-            const primaryBtnHTML = `<button onclick="runContractAction(${c.id}, 'detail')" class="bg-teal-600 text-white px-2 py-1 rounded text-xs hover:bg-teal-700 font-bold" title="Xem đầy đủ thông tin đã nhập">🔍 Xem chi tiết</button>`;
-            const secondaryOptions = [{ value: 'view', label: '👁️ Xem' }];
-            if ((c.fileUrl || c.fileData) && canDownloadFile(currentUser, 'contract', c.dept, c.creator)) {
-              secondaryOptions.push({ value: 'download', label: '⬇️ Tải' });
-            }
-            if (c.creator === currentUser.username) {
-              secondaryOptions.push({ value: 'edit', label: '✏️ Sửa' });
-            }
-            return buildActionCell(c.id, primaryBtnHTML, secondaryOptions, 'runContractAction');
-          })()}
-        </td>
-      </tr>
-    `;
+    const addenda = activeContractSubTab === 'MANAGE' ? getContractFamily(c.id).filter(x => x.id !== c.id) : [];
+    const isExpanded = expandedContractFamilies.has(c.id);
+    const rootRowHTML = buildContractRowHTML(c, { addendumCount: addenda.length, isExpanded });
+    const childRowsHTML = isExpanded ? addenda.map(a => buildContractRowHTML(a, { isChild: true })).join('') : '';
+    return rootRowHTML + childRowsHTML;
   }).join('');
+}
+
+// Dựng 1 dòng <tr> trong Danh Sách Hợp Đồng — dùng chung cho cả hợp đồng gốc (có thể kèm nút mở rộng
+// "▸"/badge số phụ lục nếu có) và phụ lục con (thụt lề + icon "↳"), cùng mô hình buildDocRowHTML().
+function buildContractRowHTML(c, { addendumCount = 0, isExpanded = false, isChild = false } = {}) {
+  let warningBadge = '';
+  if (!isChild) {
+    const now = new Date();
+    const diffDays = Math.ceil((new Date(c.endDate) - now) / (1000 * 60 * 60 * 24));
+    if (diffDays < 0) warningBadge = `<span class="px-2 py-0.5 bg-red-100 text-red-800 rounded font-bold text-xs">⚠️ Đã hết hạn (${Math.abs(diffDays)} ngày)</span>`;
+    else if (diffDays <= 30) warningBadge = `<span class="px-2 py-0.5 bg-yellow-100 text-yellow-800 rounded font-bold text-xs">⏰ Sắp hết hạn (Còn ${diffDays} ngày)</span>`;
+    else warningBadge = `<span class="px-2 py-0.5 bg-green-100 text-green-800 rounded font-semibold text-xs">✅ Còn hiệu lực</span>`;
+  }
+
+  const statusBadge = c.approvalStatus === 'PENDING'
+    ? `<span class="px-2 py-0.5 bg-amber-100 text-amber-800 rounded font-bold text-xs ml-1">⏳ Chờ duyệt</span>`
+    : c.approvalStatus === 'REJECTED'
+      ? `<span class="px-2 py-0.5 bg-red-100 text-red-800 rounded font-bold text-xs ml-1">❌ Bị từ chối</span>`
+      : '';
+
+  const expandToggleHTML = addendumCount > 0
+    ? `<button onclick="toggleContractFamily(${c.id})" class="text-cyan-700 font-bold mr-1">${isExpanded ? '▾' : '▸'}</button><span class="text-[10px] bg-cyan-100 text-cyan-800 px-1.5 py-0.5 rounded-full">${addendumCount} phụ lục</span>`
+    : '';
+
+  const codeCell = isChild
+    ? `<td class="border p-2 font-mono text-cyan-700 pl-6">↳ ${escapeHtml(c.code)}<br><span class="text-xs text-gray-500 font-normal">Phụ lục</span></td>`
+    : `<td class="border p-2 font-mono font-bold text-cyan-800">${expandToggleHTML}${escapeHtml(c.code)}<br><span class="text-xs text-gray-500 font-normal">${escapeHtml(c.type)}</span></td>`;
+
+  let paymentCell = '';
+  if (activeContractSubTab === 'MANAGE') {
+    paymentCell = !isChild
+      ? `<td class="border p-2"><span class="px-2 py-0.5 rounded font-bold text-xs ${CONTRACT_PAYMENT_BADGE_CLS[c.paymentStatus] || ''}">${CONTRACT_PAYMENT_LABELS[c.paymentStatus] || '-'}</span>${c.signedFileUrl ? '<div class="text-[10px] text-gray-500 mt-0.5">📎 Đã có tài liệu ký</div>' : ''}</td>`
+      : `<td class="border p-2 text-gray-300 text-center">—</td>`;
+  }
+
+  const primaryBtnHTML = `<button onclick="runContractAction(${c.id}, 'detail')" class="bg-teal-600 text-white px-2 py-1 rounded text-xs hover:bg-teal-700 font-bold" title="Xem đầy đủ thông tin đã nhập">🔍 Xem chi tiết</button>`;
+  const secondaryOptions = [{ value: 'view', label: '👁️ Xem' }];
+  if ((c.fileUrl || c.fileData) && canDownloadFile(currentUser, 'contract', c.dept, c.creator)) {
+    secondaryOptions.push({ value: 'download', label: '⬇️ Tải' });
+  }
+  if (!c.isAddendum && c.creator === currentUser.username) {
+    secondaryOptions.push({ value: 'edit', label: '✏️ Sửa' });
+  }
+  if (!isChild && c.approvalStatus === 'PENDING' && canApproveContract(currentUser)) {
+    secondaryOptions.push({ value: 'approve', label: '✅ Duyệt' });
+    secondaryOptions.push({ value: 'reject', label: '❌ Từ chối' });
+  }
+  if (!isChild && activeContractSubTab === 'MANAGE' && !c.signedFileUrl && canManageContractPaymentClient(currentUser, c)) {
+    secondaryOptions.push({ value: 'uploadSigned', label: '📤 Tải Tài Liệu Ký' });
+  }
+  if (!isChild && activeContractSubTab === 'MANAGE' && c.signedFileUrl && c.paymentStatus === 'CHUA_THANH_TOAN' && canManageContractPaymentClient(currentUser, c)) {
+    secondaryOptions.push({ value: 'startPayment', label: '💰 Chuyển Sang Thanh Toán' });
+  }
+
+  return `
+    <tr class="hover:bg-gray-50 border-b ${isChild ? 'bg-cyan-50/30' : ''}">
+      ${codeCell}
+      <td class="border p-2">
+        <div class="font-bold text-gray-800">${escapeHtml(c.title)}${statusBadge}</div>
+        <div class="text-xs text-gray-500">Bên ký kết: ${escapeHtml(c.partner)}</div>
+      </td>
+      <td class="border p-2">
+        <div class="font-bold text-purple-700">${(c.amount || 0).toLocaleString('vi-VN')} VNĐ</div>
+        <div class="text-xs text-gray-500">${escapeHtml(c.startDate || '')} ➔ ${escapeHtml(c.endDate || '')}</div>
+      </td>
+      <td class="border p-2">${escapeHtml(c.dept)}</td>
+      <td class="border p-2">${warningBadge}</td>
+      ${paymentCell}
+      <td class="border p-2 text-center space-x-1">
+        ${buildActionCell(c.id, primaryBtnHTML, secondaryOptions, 'runContractAction')}
+      </td>
+    </tr>
+  `;
 }
 
 // Hàm điều phối cho khối "Thao Tác" của Hợp đồng (xem buildActionCell()).
@@ -7559,6 +8003,10 @@ function runContractAction(id, action) {
     case 'detail': viewContractDetails(id); break;
     case 'view': viewContract(id); break;
     case 'edit': openEditContract(id); break;
+    case 'approve': approveContractAction(id); break;
+    case 'reject': rejectContractAction(id); break;
+    case 'uploadSigned': openSignedUploadModal('contracts', id); break;
+    case 'startPayment': startContractPaymentAction(id); break;
     case 'download': {
       const c = DB.contracts.find(x => x.id === id);
       if (!c) return;
@@ -7571,6 +8019,414 @@ function runContractAction(id, action) {
       break;
     }
   }
+}
+
+// Duyệt/Từ chối hợp đồng gốc — qua modal xác nhận Đồng Ý/Hủy dùng chung (showConfirmModal()), server
+// tự xác thực lại quyền contractApprove/admin (xem lib/recordActions.js).
+function approveContractAction(id) {
+  const c = DB.contracts.find(x => x.id === id);
+  if (!c) return;
+  showConfirmModal({
+    title: 'Phê duyệt hợp đồng',
+    bodyHTML: `Bạn có chắc chắn muốn phê duyệt hợp đồng "<b>${escapeHtml(c.title)}</b>" (${escapeHtml(c.code)})?`,
+    confirmLabel: 'Phê Duyệt',
+    onConfirm: async () => {
+      let updated;
+      try {
+        const result = await callRecordAction('contracts', id, 'approve', {});
+        updated = result.item;
+      } catch (err) {
+        return alert(`⛔ ${err.message}`);
+      }
+      const idx = DB.contracts.findIndex(x => x.id === id);
+      if (idx !== -1) DB.contracts[idx] = updated;
+      logSystemAction('CONTRACT', 'APPROVE_CONTRACT', `Phê duyệt hợp đồng [${updated.code} - ${updated.title}]`, 'SUCCESS', updated.code);
+      notifyUsersByEmail('CONTRACT', 'NOTIFY_APPROVED', updated.code, [updated.creator],
+        `[VPDT] Hợp đồng ${updated.code} đã được phê duyệt`,
+        `Hợp đồng "${updated.title}" (${updated.code}) đã được phê duyệt và chuyển sang "Quản Lý Hợp Đồng & Giấy Phép".`);
+      renderContracts();
+    }
+  });
+}
+
+function rejectContractAction(id) {
+  const c = DB.contracts.find(x => x.id === id);
+  if (!c) return;
+  const reason = prompt('Nhập lý do từ chối hợp đồng:');
+  if (reason === null) return;
+  if (!reason.trim()) return alert('⛔ Vui lòng nhập lý do từ chối!');
+  showConfirmModal({
+    title: 'Từ chối hợp đồng',
+    bodyHTML: `Bạn có chắc chắn muốn từ chối hợp đồng "<b>${escapeHtml(c.title)}</b>"?<br><span class="text-xs text-gray-500">Lý do: ${escapeHtml(reason.trim())}</span>`,
+    confirmLabel: 'Từ Chối',
+    onConfirm: async () => {
+      let updated;
+      try {
+        const result = await callRecordAction('contracts', id, 'reject', { reason: reason.trim() });
+        updated = result.item;
+      } catch (err) {
+        return alert(`⛔ ${err.message}`);
+      }
+      const idx = DB.contracts.findIndex(x => x.id === id);
+      if (idx !== -1) DB.contracts[idx] = updated;
+      logSystemAction('CONTRACT', 'REJECT_CONTRACT', `Từ chối hợp đồng [${updated.code} - ${updated.title}] - Lý do: ${reason.trim()}`, 'WARNING', updated.code);
+      notifyUsersByEmail('CONTRACT', 'NOTIFY_REJECTED', updated.code, [updated.creator],
+        `[VPDT] Hợp đồng ${updated.code} đã bị từ chối`,
+        `Hợp đồng "${updated.title}" (${updated.code}) đã bị từ chối.\nLý do: ${reason.trim()}`);
+      renderContracts();
+    }
+  });
+}
+
+// Tải lên "Tài liệu ký" (bản cứng đã ký) — nút Thanh Toán chỉ hiện SAU khi có tệp này (đúng req #5).
+// Modal tải "Tài liệu ký" DÙNG CHUNG cho Hợp đồng (contracts) và Mua Bán/Sửa Chữa/Đầu Tư (officeReqs)
+// — chỉ khác collection/route đích, cùng 1 hành vi (xem uploadContractSignedFile()/
+// uploadOfficeSignedFile() ở lib/recordActions.js).
+let signedUploadTarget = null; // { module: 'contracts'|'officeReqs', id }
+function openSignedUploadModal(module, id) {
+  const list = module === 'contracts' ? DB.contracts : DB.officeReqs;
+  const item = list.find(x => x.id === id);
+  if (!item) return;
+  signedUploadTarget = { module, id };
+  document.getElementById('signedUploadSub').innerText = `${item.code} — ${item.title}`;
+  document.getElementById('signedUploadFile').value = '';
+  document.getElementById('signedUploadModal').classList.remove('hidden');
+}
+function closeSignedUploadModal() {
+  signedUploadTarget = null;
+  document.getElementById('signedUploadModal').classList.add('hidden');
+}
+async function submitSignedUpload() {
+  if (!signedUploadTarget) return;
+  const { module, id } = signedUploadTarget;
+  const list = module === 'contracts' ? DB.contracts : DB.officeReqs;
+  const item = list.find(x => x.id === id);
+  if (!item) return;
+  const file = document.getElementById('signedUploadFile').files[0];
+  if (!file) return alert('⛔ Vui lòng chọn tệp tài liệu ký!');
+
+  let uploaded;
+  try {
+    uploaded = await uploadFileToServer(file);
+  } catch (err) {
+    return alert(`⛔ Tải tệp lên thất bại: ${err.message}`);
+  }
+
+  let updated;
+  try {
+    const result = await callRecordAction(module, id, 'upload-signed', { fileName: uploaded.fileName, fileType: uploaded.fileType, fileUrl: uploaded.fileUrl });
+    updated = result.item;
+  } catch (err) {
+    return alert(`⛔ ${err.message}`);
+  }
+  const idx = list.findIndex(x => x.id === id);
+  if (idx !== -1) list[idx] = updated;
+  const logModule = module === 'contracts' ? 'CONTRACT' : 'OFFICE';
+  logSystemAction(logModule, 'UPLOAD_SIGNED_FILE', `Tải lên tài liệu ký cho [${updated.code}]`, 'SUCCESS', updated.code);
+  closeSignedUploadModal();
+  if (module === 'contracts') renderContracts(); else renderOfficeReqs();
+  alert('✅ Đã tải lên tài liệu ký. Vui lòng bấm nút "💰 Chuyển Sang Thanh Toán" để tiếp tục.');
+}
+
+function startContractPaymentAction(id) {
+  const c = DB.contracts.find(x => x.id === id);
+  if (!c) return;
+  showConfirmModal({
+    title: 'Chuyển sang thanh toán',
+    bodyHTML: `Chuyển hợp đồng "<b>${escapeHtml(c.title)}</b>" (${escapeHtml(c.code)}) sang trạng thái "Chờ thanh toán"?`,
+    confirmLabel: 'Chuyển Thanh Toán',
+    onConfirm: async () => {
+      let updated, paymentRequest;
+      try {
+        const result = await callRecordAction('contracts', id, 'start-payment', {});
+        updated = result.item;
+        paymentRequest = result.paymentRequest;
+      } catch (err) {
+        return alert(`⛔ ${err.message}`);
+      }
+      const idx = DB.contracts.findIndex(x => x.id === id);
+      if (idx !== -1) DB.contracts[idx] = updated;
+      if (paymentRequest) DB.paymentRequests.unshift(paymentRequest);
+      logSystemAction('CONTRACT', 'START_CONTRACT_PAYMENT', `Chuyển hợp đồng [${updated.code}] sang chờ thanh toán`, 'SUCCESS', updated.code);
+      renderContracts();
+    }
+  });
+}
+
+function startOfficePaymentAction(id) {
+  const o = DB.officeReqs.find(x => x.id === id);
+  if (!o) return;
+  showConfirmModal({
+    title: 'Chuyển sang thanh toán',
+    bodyHTML: `Chuyển đề xuất "<b>${escapeHtml(o.title)}</b>" (${escapeHtml(o.code)}) sang trạng thái "Chờ thanh toán"?`,
+    confirmLabel: 'Chuyển Thanh Toán',
+    onConfirm: async () => {
+      let updated, paymentRequest;
+      try {
+        const result = await callRecordAction('officeReqs', id, 'start-payment', {});
+        updated = result.item;
+        paymentRequest = result.paymentRequest;
+      } catch (err) {
+        return alert(`⛔ ${err.message}`);
+      }
+      const idx = DB.officeReqs.findIndex(x => x.id === id);
+      if (idx !== -1) DB.officeReqs[idx] = updated;
+      if (paymentRequest) DB.paymentRequests.unshift(paymentRequest);
+      logSystemAction('OFFICE', 'START_OFFICE_PAYMENT', `Chuyển đề xuất [${updated.code}] sang chờ thanh toán`, 'SUCCESS', updated.code);
+      renderOfficeReqs();
+    }
+  });
+}
+
+// ==========================================
+// MODULE CON "THANH TOÁN" (module "Tổng Hợp") — tổng hợp đề nghị thanh toán tự sinh từ Hợp đồng/Mua
+// Bán/Sửa Chữa/Đầu Tư (bấm "Chuyển Sang Thanh Toán") lẫn tạo thủ công. Vòng đời PENDING (sửa được) ->
+// [NEED_INFO (sửa được)] -> APPROVED (xác nhận từng đợt) -> PAID (khoá cứng) — xem lib/recordActions.js.
+// ==========================================
+let editingPaymentRequestId = null;
+
+function canManagePaymentRequestsClient(user) {
+  return !!(user?.perms?.admin || user?.perms?.paymentManage);
+}
+
+function setPaymentSubTab(subTab) {
+  activePaymentSubTab = subTab;
+  const activeCls = 'px-3 py-1 rounded text-xs font-bold bg-amber-700 text-white';
+  const inactiveCls = 'px-3 py-1 rounded text-xs font-bold bg-gray-200 text-gray-700';
+  document.getElementById('btnPaymentSubCreate').className = subTab === 'CREATE' ? activeCls : inactiveCls;
+  document.getElementById('btnPaymentSubApprove').className = subTab === 'APPROVE' ? activeCls : inactiveCls;
+  document.getElementById('paymentCreateWrap').classList.toggle('hidden', subTab !== 'CREATE');
+  if (subTab === 'CREATE' && editingPaymentRequestId === null) cancelEditPaymentRequest();
+  renderPaymentRequests();
+}
+
+function renderPaymentCreateInstallmentsList(installments) {
+  const container = document.getElementById('paymentCreateInstallmentsList');
+  if (!container) return;
+  container.innerHTML = (installments || []).map((it, idx) => `
+    <div class="flex gap-2 items-center" data-installment-row="${idx}">
+      <input placeholder="Mô tả đợt (VD: Đợt 1)" value="${escapeHtml(it.description || '')}" class="flex-1 border p-1.5 rounded payment-installment-desc">
+      <input type="number" placeholder="Số tiền (VNĐ)" value="${it.amount || ''}" class="w-40 border p-1.5 rounded payment-installment-amount">
+      <input type="date" value="${it.dueDate || ''}" class="w-40 border p-1.5 rounded payment-installment-due">
+      <button type="button" onclick="removePaymentCreateInstallmentRow(${idx})" class="text-red-500 font-bold hover:underline px-1">✕</button>
+    </div>
+  `).join('') || '<p class="text-gray-400 italic text-[11px]">Chưa có đợt thanh toán nào — bấm "+ Thêm Đợt".</p>';
+}
+function addPaymentCreateInstallmentRow() {
+  const current = collectPaymentCreateInstallments();
+  current.push({ description: '', amount: '', dueDate: '' });
+  renderPaymentCreateInstallmentsList(current);
+}
+function removePaymentCreateInstallmentRow(idx) {
+  const current = collectPaymentCreateInstallments();
+  current.splice(idx, 1);
+  renderPaymentCreateInstallmentsList(current);
+}
+function collectPaymentCreateInstallments() {
+  return [...document.querySelectorAll('#paymentCreateInstallmentsList [data-installment-row]')].map(row => ({
+    description: row.querySelector('.payment-installment-desc').value.trim(),
+    amount: parseFloat(row.querySelector('.payment-installment-amount').value) || 0,
+    dueDate: row.querySelector('.payment-installment-due').value
+  }));
+}
+
+async function submitManualPaymentRequest(e) {
+  e.preventDefault();
+  const dept = document.getElementById('paymentDept').value;
+  const title = document.getElementById('paymentTitle').value.trim();
+  const installments = collectPaymentCreateInstallments();
+  if (!installments.length) return alert('Vui lòng thêm ít nhất 1 đợt thanh toán!');
+
+  if (editingPaymentRequestId !== null) {
+    let updated;
+    try {
+      const result = await callRecordAction('paymentRequests', editingPaymentRequestId, 'edit', { title, dept, installments });
+      updated = result.item;
+    } catch (err) {
+      return alert(`⛔ ${err.message}`);
+    }
+    const idx = DB.paymentRequests.findIndex(x => x.id === editingPaymentRequestId);
+    if (idx !== -1) DB.paymentRequests[idx] = updated;
+    logSystemAction('OFFICE', 'EDIT_PAYMENT_REQUEST', `Cập nhật đề nghị thanh toán [${updated.title}]`, 'SUCCESS', String(updated.id));
+    alert('✅ Đã cập nhật đề nghị thanh toán!');
+    cancelEditPaymentRequest();
+    setPaymentSubTab('APPROVE');
+    return;
+  }
+
+  let newPr;
+  try {
+    const result = await callCreateAction('paymentRequests', { dept, title, installments });
+    newPr = result.item;
+  } catch (err) {
+    return alert(`⛔ ${err.message}`);
+  }
+  DB.paymentRequests.unshift(newPr);
+  logSystemAction('OFFICE', 'CREATE_PAYMENT_REQUEST', `Tạo đề nghị thanh toán thủ công [${title}]`, 'SUCCESS', String(newPr.id));
+  alert('✅ Đã tạo đề nghị thanh toán!');
+  cancelEditPaymentRequest();
+  setPaymentSubTab('APPROVE');
+}
+
+function cancelEditPaymentRequest() {
+  editingPaymentRequestId = null;
+  const form = document.getElementById('paymentCreateForm');
+  form.reset();
+  renderPaymentCreateInstallmentsList([]);
+  form.querySelector('button[type="submit"]').innerText = 'Tạo Đề Nghị Thanh Toán';
+}
+
+function openEditPaymentRequest(id) {
+  const pr = DB.paymentRequests.find(x => x.id === id);
+  if (!pr) return;
+  editingPaymentRequestId = id;
+  setPaymentSubTab('CREATE');
+  document.getElementById('paymentDept').value = pr.dept;
+  document.getElementById('paymentTitle').value = pr.title;
+  renderPaymentCreateInstallmentsList(pr.installments || []);
+  document.getElementById('paymentCreateForm').querySelector('button[type="submit"]').innerText = '💾 Cập Nhật Đề Nghị Thanh Toán';
+  document.getElementById('paymentCreateForm').scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+const PAYMENT_STATUS_LABELS = { PENDING: '⏳ Chờ duyệt', NEED_INFO: '📝 Cần bổ sung', APPROVED: '✅ Đã duyệt (chờ xác nhận)', PAID: '💰 Đã thanh toán' };
+const PAYMENT_STATUS_BADGE_CLS = { PENDING: 'bg-amber-100 text-amber-800', NEED_INFO: 'bg-orange-100 text-orange-800', APPROVED: 'bg-blue-100 text-blue-800', PAID: 'bg-green-100 text-green-800' };
+const PAYMENT_SOURCE_LABELS = { CONTRACT: '📄 Hợp đồng', MUA_BAN: '🛒 Mua Bán', SUA_CHUA: '🔧 Sửa Chữa', DAU_TU: '📈 Đầu Tư', MANUAL: '✍️ Thủ công' };
+
+function renderPaymentRequests() {
+  const tbody = document.getElementById('paymentTableBody');
+  if (!tbody) return;
+  const list = DB.paymentRequests || [];
+  if (list.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="5" class="text-center p-6 text-gray-500 italic">Chưa có đề nghị thanh toán nào.</td></tr>`;
+    return;
+  }
+  const canManage = canManagePaymentRequestsClient(currentUser);
+  tbody.innerHTML = list.map(pr => {
+    const installmentsHTML = (pr.installments || []).map((it, idx) => `
+      <div class="flex items-center justify-between gap-2 text-[11px] ${it.confirmed ? 'text-green-700' : 'text-gray-600'}">
+        <span>${it.confirmed ? '✅' : '⬜'} ${escapeHtml(it.description || '')} — ${(it.amount || 0).toLocaleString('vi-VN')} VNĐ</span>
+        ${(!it.confirmed && pr.status === 'APPROVED' && canManage) ? `<button onclick="confirmPaymentInstallmentAction(${pr.id}, ${idx})" class="text-cyan-600 font-bold hover:underline">Xác nhận</button>` : ''}
+      </div>
+    `).join('');
+    return `
+      <tr class="hover:bg-gray-50 border-b align-top">
+        <td class="border p-2 font-bold">${PAYMENT_SOURCE_LABELS[pr.sourceModule] || pr.sourceModule}${pr.sourceCode ? `<div class="text-[10px] text-gray-500 font-normal font-mono">${escapeHtml(pr.sourceCode)}</div>` : ''}</td>
+        <td class="border p-2">${escapeHtml(pr.dept)}<br><span class="text-xs text-gray-500">${escapeHtml(pr.title)}</span></td>
+        <td class="border p-2">
+          <div class="font-bold text-purple-700">${(pr.amount || 0).toLocaleString('vi-VN')} VNĐ</div>
+          <div class="mt-1 space-y-0.5">${installmentsHTML}</div>
+        </td>
+        <td class="border p-2"><span class="px-2 py-0.5 rounded font-bold text-xs ${PAYMENT_STATUS_BADGE_CLS[pr.status] || ''}">${PAYMENT_STATUS_LABELS[pr.status] || pr.status}</span></td>
+        <td class="border p-2 text-center space-y-1">
+          ${canManage && (pr.status === 'PENDING' || pr.status === 'NEED_INFO') ? `<button onclick="openEditPaymentRequest(${pr.id})" class="block w-full bg-gray-500 text-white px-2 py-1 rounded text-xs font-bold hover:bg-gray-600">✏️ Sửa</button>` : ''}
+          ${canManage && (pr.status === 'PENDING' || pr.status === 'NEED_INFO') ? `<button onclick="approvePaymentRequestAction(${pr.id})" class="block w-full bg-emerald-600 text-white px-2 py-1 rounded text-xs font-bold hover:bg-emerald-700">✅ Duyệt</button>` : ''}
+          ${canManage && pr.status === 'PENDING' ? `<button onclick="requestPaymentInfoAction(${pr.id})" class="block w-full bg-orange-500 text-white px-2 py-1 rounded text-xs font-bold hover:bg-orange-600">📝 Yêu Cầu Bổ Sung</button>` : ''}
+          ${canManage && pr.status !== 'PAID' ? `<button onclick="deletePaymentRequestAction(${pr.id})" class="block w-full bg-red-500 text-white px-2 py-1 rounded text-xs font-bold hover:bg-red-600">🗑️ Xoá</button>` : ''}
+        </td>
+      </tr>
+    `;
+  }).join('');
+}
+
+function approvePaymentRequestAction(id) {
+  const pr = DB.paymentRequests.find(x => x.id === id);
+  if (!pr) return;
+  showConfirmModal({
+    title: 'Duyệt đề nghị thanh toán',
+    bodyHTML: `Duyệt đề nghị thanh toán "<b>${escapeHtml(pr.title)}</b>"?`,
+    confirmLabel: 'Duyệt',
+    onConfirm: async () => {
+      let updated;
+      try {
+        const result = await callRecordAction('paymentRequests', id, 'approve', {});
+        updated = result.item;
+      } catch (err) { return alert(`⛔ ${err.message}`); }
+      const idx = DB.paymentRequests.findIndex(x => x.id === id);
+      if (idx !== -1) DB.paymentRequests[idx] = updated;
+      logSystemAction('OFFICE', 'APPROVE_PAYMENT_REQUEST', `Duyệt đề nghị thanh toán [${updated.title}]`, 'SUCCESS', String(updated.id));
+      renderPaymentRequests();
+    }
+  });
+}
+
+function requestPaymentInfoAction(id) {
+  const pr = DB.paymentRequests.find(x => x.id === id);
+  if (!pr) return;
+  const comment = prompt('Nhập nội dung cần bổ sung:');
+  if (comment === null) return;
+  if (!comment.trim()) return alert('⛔ Vui lòng nhập nội dung cần bổ sung!');
+  showConfirmModal({
+    title: 'Yêu cầu bổ sung',
+    bodyHTML: `Yêu cầu bổ sung cho đề nghị "<b>${escapeHtml(pr.title)}</b>"?<br><span class="text-xs text-gray-500">${escapeHtml(comment.trim())}</span>`,
+    confirmLabel: 'Gửi Yêu Cầu',
+    onConfirm: async () => {
+      let updated;
+      try {
+        const result = await callRecordAction('paymentRequests', id, 'request-info', { comment: comment.trim() });
+        updated = result.item;
+      } catch (err) { return alert(`⛔ ${err.message}`); }
+      const idx = DB.paymentRequests.findIndex(x => x.id === id);
+      if (idx !== -1) DB.paymentRequests[idx] = updated;
+      logSystemAction('OFFICE', 'REQUEST_PAYMENT_INFO', `Yêu cầu bổ sung đề nghị thanh toán [${updated.title}]: ${comment.trim()}`, 'SUCCESS', String(updated.id));
+      renderPaymentRequests();
+    }
+  });
+}
+
+function deletePaymentRequestAction(id) {
+  const pr = DB.paymentRequests.find(x => x.id === id);
+  if (!pr) return;
+  showConfirmModal({
+    title: 'Xoá đề nghị thanh toán',
+    bodyHTML: `Bạn có chắc chắn muốn xoá đề nghị "<b>${escapeHtml(pr.title)}</b>"?`,
+    confirmLabel: 'Xoá',
+    onConfirm: async () => {
+      try {
+        await callRecordAction('paymentRequests', id, 'delete', {});
+      } catch (err) { return alert(`⛔ ${err.message}`); }
+      DB.paymentRequests = DB.paymentRequests.filter(x => x.id !== id);
+      logSystemAction('OFFICE', 'DELETE_PAYMENT_REQUEST', `Xoá đề nghị thanh toán [${pr.title}]`, 'SUCCESS', String(id));
+      renderPaymentRequests();
+    }
+  });
+}
+
+// Xác nhận đã thanh toán 1 đợt — đủ hết các đợt thì server tự chuyển PAID (justCompleted=true) và đã
+// ghi ngược paymentStatus vào bản ghi nguồn; client chỉ cần đồng bộ lại cục bộ để UI cập nhật ngay,
+// không cần tải lại trang.
+function confirmPaymentInstallmentAction(id, index) {
+  const pr = DB.paymentRequests.find(x => x.id === id);
+  if (!pr) return;
+  const it = pr.installments[index];
+  showConfirmModal({
+    title: 'Xác nhận đã thanh toán',
+    bodyHTML: `Xác nhận đã thanh toán đợt "<b>${escapeHtml(it.description || '')}</b>" (${(it.amount || 0).toLocaleString('vi-VN')} VNĐ)?`,
+    confirmLabel: 'Xác Nhận',
+    onConfirm: async () => {
+      let updated, justCompleted;
+      try {
+        const result = await callRecordAction('paymentRequests', id, 'confirm-installment', { index });
+        updated = result.item;
+        justCompleted = result.justCompleted;
+      } catch (err) { return alert(`⛔ ${err.message}`); }
+      const idx = DB.paymentRequests.findIndex(x => x.id === id);
+      if (idx !== -1) DB.paymentRequests[idx] = updated;
+      logSystemAction('OFFICE', 'CONFIRM_PAYMENT_INSTALLMENT', `Xác nhận thanh toán đợt [${it.description}] cho [${updated.title}]`, 'SUCCESS', String(updated.id));
+      if (justCompleted) {
+        if (updated.sourceModule === 'CONTRACT') {
+          const c = DB.contracts.find(x => x.id === updated.sourceId);
+          if (c) c.paymentStatus = 'DA_THANH_TOAN';
+        } else if (updated.sourceId != null) {
+          const o = DB.officeReqs.find(x => x.id === updated.sourceId);
+          if (o) o.paymentStatus = 'DA_THANH_TOAN';
+        }
+        alert('✅ Thanh toán thành công! Đề nghị đã hoàn tất tất cả các đợt.');
+      }
+      renderPaymentRequests();
+      if (activeContractSubTab) renderContracts();
+      if (activeOfficeSubTab && activeOfficeSubTab !== 'PAYMENT') renderOfficeReqs();
+    }
+  });
 }
 
 // Xem đầy đủ TOÀN BỘ thông tin đã nhập của hồ sơ hợp đồng (khác với viewContract() ở dưới, vốn chỉ
@@ -7615,7 +8471,19 @@ function viewContractDetails(contractId) {
           <div><b>Thời Gian Sửa:</b> ${escapeHtml(c.lastEditedAt || '')}</div>
         ` : ''}
         ${c.fileName ? `<div class="md:col-span-2"><b>Tệp Đính Kèm:</b> ${escapeHtml(c.fileName)}</div>` : ''}
+        ${c.isAddendum ? `<div class="md:col-span-2"><b>Phụ lục của hợp đồng:</b> ${escapeHtml((DB.contracts.find(r => r.id === c.rootContractId) || {}).code || '')}</div>` : `
+          <div><b>Trạng Thái Duyệt:</b> ${c.approvalStatus === 'PENDING' ? '⏳ Chờ duyệt' : c.approvalStatus === 'REJECTED' ? `❌ Bị từ chối${c.rejectReason ? ` (${escapeHtml(c.rejectReason)})` : ''}` : '✅ Đã duyệt'}</div>
+          <div><b>Thanh Toán:</b> ${CONTRACT_PAYMENT_LABELS[c.paymentStatus] || '-'}${c.signedFileUrl ? ' (đã có tài liệu ký)' : ''}</div>
+        `}
       </div>
+      ${(!c.isAddendum && (c.paymentInstallments || []).length) ? `
+        <div class="border-t mt-4 pt-3">
+          <b>Các Đợt Thanh Toán:</b>
+          <ul class="list-disc pl-5 mt-1 text-gray-800">
+            ${c.paymentInstallments.map(it => `<li>${escapeHtml(it.description || '')} — ${(it.amount || 0).toLocaleString('vi-VN')} VNĐ${it.dueDate ? ` (hạn ${escapeHtml(it.dueDate)})` : ''}</li>`).join('')}
+          </ul>
+        </div>
+      ` : ''}
       <div class="border-t mt-4 pt-3">
         <b>Nội Dung Tóm Tắt & Điều Khoản Chính:</b>
         <div class="bg-gray-50 p-3 rounded border mt-1 text-gray-800">${escapeHtml(c.content || 'Không có mô tả.')}</div>
@@ -9735,7 +10603,7 @@ function renderOfficeReqs() {
   const pageList = paginateList('office', list, 'renderOfficeReqs', 'đề xuất');
 
   if (pageList.length === 0) {
-    tbody.innerHTML = `<tr><td colspan="7" class="text-center p-6 text-gray-500 italic">Không có đề xuất nào phù hợp.</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="8" class="text-center p-6 text-gray-500 italic">Không có đề xuất nào phù hợp.</td></tr>`;
     return;
   }
 
@@ -9753,6 +10621,9 @@ function renderOfficeReqs() {
     else statusBadge = `<span class="px-2 py-0.5 bg-teal-100 text-teal-800 rounded font-bold text-xs">⏳ Bước ${o.currentStep}/${wf.steps.length}${escapeHtml(getStepApprovalProgressText(currentStepApprovers, o.history, o.currentStep))}</span>`;
 
     const canDL = o.status === 'APPROVED' && canDownloadFile(currentUser, 'office', o.dept, o.creator);
+    const paymentCell = o.status === 'APPROVED'
+      ? `<span class="px-2 py-0.5 rounded font-bold text-xs ${CONTRACT_PAYMENT_BADGE_CLS[o.paymentStatus] || ''}">${CONTRACT_PAYMENT_LABELS[o.paymentStatus] || '-'}</span>${o.signedFileUrl ? '<div class="text-[10px] text-gray-500 mt-0.5">📎 Đã có tài liệu ký</div>' : ''}`
+      : '<span class="text-gray-300">—</span>';
 
     return `
       <tr class="hover:bg-gray-50 border-b">
@@ -9768,6 +10639,7 @@ function renderOfficeReqs() {
           <div class="text-xs text-gray-500">${Array.isArray(o.items) ? '' : `NCC: ${escapeHtml(o.supplier || 'N/A')}`}</div>
         </td>
         <td class="border p-2">${statusBadge}</td>
+        <td class="border p-2">${paymentCell}</td>
         <td class="border p-2 text-center space-x-1">
           ${(() => {
             const primaryBtnHTML = `<button onclick="runOfficeAction(${o.id}, 'process')" class="px-2.5 py-1 ${canApprove ? 'bg-teal-600 text-white' : 'bg-gray-600 text-white'} rounded text-xs hover:opacity-90 font-bold">${canApprove ? '✍️ Xử lý / Duyệt' : '👁️ Xem chi tiết'}</button>`;
@@ -9775,6 +10647,10 @@ function renderOfficeReqs() {
             if (o.status === 'APPROVED') {
               secondaryOptions.push({ value: 'viewSlip', label: '👁️ Xem Phiếu' });
               if (canDL) secondaryOptions.push({ value: 'downloadSlip', label: '⬇️ Tải' });
+              if (canManageOfficePaymentClient(currentUser, o)) {
+                if (!o.signedFileUrl) secondaryOptions.push({ value: 'uploadSigned', label: '📤 Tải Tài Liệu Ký' });
+                else if (o.paymentStatus === 'CHUA_THANH_TOAN') secondaryOptions.push({ value: 'startPayment', label: '💰 Chuyển Sang Thanh Toán' });
+              }
             }
             return buildActionCell(o.id, primaryBtnHTML, secondaryOptions, 'runOfficeAction');
           })()}
@@ -9790,6 +10666,8 @@ function runOfficeAction(id, action) {
     case 'process': openOfficeProcessModal(id); break;
     case 'viewSlip': viewOfficeApprovalSlip(id); break;
     case 'downloadSlip': downloadOfficeApprovalSlip(id); break;
+    case 'uploadSigned': openSignedUploadModal('officeReqs', id); break;
+    case 'startPayment': startOfficePaymentAction(id); break;
   }
 }
 
@@ -10111,7 +10989,7 @@ function setSystemSubTab(subTab) {
   document.getElementById('btnSystemSubLog').className = subTab === 'LOG' ? activeCls : inactiveCls;
 
   if (subTab === 'ADMIN') {
-    renderDeptList(); renderCatList(); renderJobTitleList(); renderDeptCheckboxes(); renderModuleAccessCheckboxes(); renderUsers(); loadEmailConfigToForm(); renderPermGroupsList(); renderSubmissionApprovalGroups();
+    renderDeptList(); renderCatList(); renderContractTypeAbbrList(); renderJobTitleList(); renderDeptCheckboxes(); renderModuleAccessCheckboxes(); renderUsers(); loadEmailConfigToForm(); renderPermGroupsList(); renderSubmissionApprovalGroups();
   }
   if (subTab === 'FORM') { switchFormTab(activeFormTab); }
   if (subTab === 'WORKFLOW') { renderWorkflowTab(); }
@@ -10901,6 +11779,28 @@ function renderCatList() {
   `).join('');
 }
 
+// Viết tắt Loại Pháp Lý hợp đồng (dùng sinh Mã Hợp Đồng, xem generateContractCode()) — tự suy ra mặc
+// định nếu admin chưa từng sửa, áp dụng ngay không cần duyệt. Danh sách DB.contractTypes tự thêm/bớt
+// ở màn Biểu Mẫu (không có nút Thêm/Xóa riêng ở đây, chỉ chỉnh viết tắt).
+function updateContractTypeAbbr(name, value) {
+  const abbr = (value || '').trim().toUpperCase();
+  if (!abbr) delete DB.contractTypeAbbrs[name];
+  else DB.contractTypeAbbrs[name] = abbr;
+  syncStorage('contractTypeAbbrs');
+  logSystemAction('USER_MGM', 'UPDATE_CONTRACT_TYPE_ABBR', `Cập nhật viết tắt loại hợp đồng [${name}] = "${abbr}"`, 'SUCCESS', name);
+}
+
+function renderContractTypeAbbrList() {
+  const ul = document.getElementById('contractTypeAbbrList');
+  if (!ul) return;
+  ul.innerHTML = DB.contractTypes.map(t => `
+    <li class="p-2 flex justify-between items-center gap-2 hover:bg-gray-50">
+      <span class="flex-1">${escapeHtml(t)}</span>
+      <input value="${escapeHtml(getContractTypeAbbr(t))}" onchange="updateContractTypeAbbr('${escapeHtml(t)}', this.value)" title="Viết tắt (dùng sinh Mã Hợp Đồng)" class="w-16 border rounded px-1 py-0.5 text-center text-[11px] font-mono uppercase">
+    </li>
+  `).join('');
+}
+
 // Vẽ danh sách checkbox "Quyền Truy Cập Module" (khối 0.) theo BUSINESS_MODULES — dùng lại cho cả
 // form Người dùng (prefix 'p') lẫn form Nhóm phân quyền (prefix 'g') qua tham số containerId/prefix.
 function renderModuleAccessCheckboxes(containerId = 'moduleAccessCheckboxes', prefix = 'pModuleAccess') {
@@ -11063,6 +11963,7 @@ function collectPermsFromForm() {
     internalNewsCreate: document.getElementById('pInternalNewsCreate').checked,
     internalTrainingCreate: document.getElementById('pInternalTrainingCreate').checked,
     internalRewardCreate: document.getElementById('pInternalRewardCreate').checked,
+    internalPostApprove: document.getElementById('pInternalPostApprove').checked,
     meetingApprove: document.getElementById('pMeetingApprove').checked,
     meetingCancel: document.getElementById('pMeetingCancel').checked,
     officeBuy: document.getElementById('pOfficeBuy').checked,
@@ -11082,6 +11983,8 @@ function collectPermsFromForm() {
     contractView: scopeFromForm('pContractViewAll', 'pContractViewDept'),
     contractCreate: scopeFromForm('pContractCreateAll', 'pContractCreateDept'),
     contractDownload: scopeFromForm('pContractDownloadAll', 'pContractDownloadDept'),
+    contractApprove: document.getElementById('pContractApprove').checked,
+    paymentManage: document.getElementById('pPaymentManage').checked,
     meetingView: scopeFromForm('pMeetingViewAll', 'pMeetingViewDept'),
     meetingBookScope: scopeFromForm('pMeetingBookAll', 'pMeetingBookDept'),
     carView: scopeFromForm('pCarViewAll', 'pCarViewDept'),
@@ -11119,6 +12022,7 @@ function populatePermsForm(permsInput) {
   document.getElementById('pInternalNewsCreate').checked = !!perms.internalNewsCreate;
   document.getElementById('pInternalTrainingCreate').checked = !!perms.internalTrainingCreate;
   document.getElementById('pInternalRewardCreate').checked = !!perms.internalRewardCreate;
+  document.getElementById('pInternalPostApprove').checked = !!perms.internalPostApprove;
   document.getElementById('pMeetingApprove').checked = !!perms.meetingApprove;
   document.getElementById('pMeetingCancel').checked = !!perms.meetingCancel;
   document.getElementById('pOfficeBuy').checked = !!perms.officeBuy;
@@ -11145,6 +12049,8 @@ function populatePermsForm(permsInput) {
   document.getElementById('pContractViewAll').checked = !!perms.contractView?.all;
   document.getElementById('pContractCreateAll').checked = !!perms.contractCreate?.all;
   document.getElementById('pContractDownloadAll').checked = !!perms.contractDownload?.all;
+  document.getElementById('pContractApprove').checked = !!perms.contractApprove;
+  document.getElementById('pPaymentManage').checked = !!perms.paymentManage;
   document.getElementById('pMeetingViewAll').checked = !!perms.meetingView?.all;
   document.getElementById('pMeetingBookAll').checked = !!perms.meetingBookScope?.all;
   document.getElementById('pCarViewAll').checked = !!perms.carView?.all;
@@ -11574,6 +12480,9 @@ function resetUserForm() {
   document.getElementById('pInternalNewsCreate').checked = !!defaults.internalNewsCreate;
   document.getElementById('pInternalTrainingCreate').checked = !!defaults.internalTrainingCreate;
   document.getElementById('pInternalRewardCreate').checked = !!defaults.internalRewardCreate;
+  document.getElementById('pInternalPostApprove').checked = !!defaults.internalPostApprove;
+  document.getElementById('pContractApprove').checked = !!defaults.contractApprove;
+  document.getElementById('pPaymentManage').checked = !!defaults.paymentManage;
   document.getElementById('pMeetingApprove').checked = defaults.meetingApprove;
   document.getElementById('pMeetingCancel').checked = defaults.meetingCancel;
   document.getElementById('pOfficeBuy').checked = defaults.officeBuy;
@@ -11674,12 +12583,15 @@ function summarizeUserPerms(perms) {
   if (perms.uploadAll || (perms.uploadDepts || []).length) parts.push('📄 Tài liệu');
   if (hasScope(perms.submissionView) || hasScope(perms.submissionCreate)) parts.push('📜 Tờ trình');
   if (hasScope(perms.contractView) || hasScope(perms.contractCreate)) parts.push('📄 Hợp đồng');
+  if (perms.contractApprove) parts.push('📄 Hợp đồng (duyệt)');
+  if (perms.paymentManage) parts.push('💰 Thanh toán');
   if (hasScope(perms.meetingView) || hasScope(perms.meetingBookScope) || perms.meetingApprove || perms.meetingCancel) parts.push('📅 Phòng họp');
   if (hasScope(perms.carView) || hasScope(perms.carCreate)) parts.push('🚗 Xe');
   if ((hasScope(perms.officeView) || hasScope(perms.officeCreate)) && (perms.officeBuy || perms.officeFix || perms.officeInvest)) parts.push('🏢 VP');
   if (perms.minutesCreate) parts.push('📝 Biên bản họp');
   if (perms.canViewReports) parts.push('📊 Báo cáo');
   if (perms.internalNewsCreate || perms.internalTrainingCreate || perms.internalRewardCreate) parts.push('📣 Truyền thông (đăng bài)');
+  if (perms.internalPostApprove) parts.push('📣 Truyền thông (duyệt Góc chia sẻ)');
   return parts.length ? parts.join(', ') : '<span class="text-gray-400 italic">Chưa cấp quyền module nào</span>';
 }
 
@@ -12332,7 +13244,16 @@ async function submitInternalPost(e) {
 
   DB.internalPosts.unshift(newPost);
   logSystemAction('INTERNAL', 'CREATE_INTERNAL_POST', `Đăng ${INTERNAL_TYPE_LABELS[type]} [${newPost.code} - ${title}]`, 'SUCCESS', newPost.code);
-  alert('✅ Đã đăng bài thành công!');
+
+  if (newPost.status === 'PENDING') {
+    const approvers = getInternalPostApproverUsernames();
+    notifyUsersByEmail('INTERNAL', 'NOTIFY_APPROVAL_NEEDED', newPost.code, approvers,
+      `[VPDT] Bài đăng Góc Chia Sẻ chờ duyệt: ${title}`,
+      `${currentUser.name} vừa đăng bài "${title}" trong Góc Chia Sẻ, đang chờ phê duyệt trước khi công khai.`);
+    alert('✅ Đã gửi bài, bài viết sẽ hiển thị công khai sau khi được phê duyệt!');
+  } else {
+    alert('✅ Đã đăng bài thành công!');
+  }
   e.target.reset();
   renderInternalPosts();
 }
@@ -12352,8 +13273,13 @@ function renderInternalPosts() {
   const toDate = document.getElementById('filterToDateInternal')?.value || '';
   const keyword = (document.getElementById('filterKeywordInternal')?.value || '').trim();
 
+  const canApprove = canApproveInternalPost(currentUser);
   const visible = DB.internalPosts.filter(p => {
     if (p.type !== activeInternalSubTab) return false;
+    // Bài PENDING/REJECTED (chỉ có ở Góc chia sẻ) chỉ hiện với chính tác giả và người có quyền duyệt —
+    // status undefined (bài cũ trước khi có tính năng này) coi như đã duyệt, vẫn hiện bình thường.
+    const isPendingOrRejected = p.status === 'PENDING' || p.status === 'REJECTED';
+    if (isPendingOrRejected && p.author !== currentUser.username && !canApprove) return false;
     if (!isInDateRange(p.createdAt, fromDate, toDate)) return false;
     if (!matchesKeywordFields([p.title, p.content, p.authorName, p.dept], keyword)) return false;
     return true;
@@ -12383,11 +13309,22 @@ function renderInternalPosts() {
     const coverThumbHTML = isInternalImageAttachment(p.attachment)
       ? `<img src="${escapeHtml(p.attachment.fileUrl)}" alt="" class="w-full sm:w-48 h-40 sm:h-auto object-cover cursor-pointer flex-shrink-0" onclick="viewInternalPostDetail(${p.id})">`
       : '';
+    const statusBadgeHTML = p.status === 'PENDING'
+      ? `<span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 align-middle ml-2">⏳ Chờ duyệt</span>`
+      : p.status === 'REJECTED'
+        ? `<span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-red-100 text-red-700 align-middle ml-2">❌ Bị từ chối</span>`
+        : '';
+    const approveActionsHTML = (p.status === 'PENDING' && canApprove)
+      ? `<div class="flex gap-2">
+           <button onclick="approveInternalPostAction(${p.id})" class="bg-emerald-600 text-white px-3 py-1 rounded text-xs font-bold hover:bg-emerald-700">✅ Duyệt</button>
+           <button onclick="rejectInternalPostAction(${p.id})" class="bg-red-600 text-white px-3 py-1 rounded text-xs font-bold hover:bg-red-700">❌ Từ chối</button>
+         </div>`
+      : '';
     return `
       <div class="bg-white rounded border hover:shadow overflow-hidden flex flex-col sm:flex-row">
         ${coverThumbHTML}
         <div class="p-4 flex-1 flex flex-col">
-          <div class="font-bold text-fuchsia-800 text-base cursor-pointer hover:underline" onclick="viewInternalPostDetail(${p.id})">${escapeHtml(p.title)}</div>
+          <div class="font-bold text-fuchsia-800 text-base cursor-pointer hover:underline" onclick="viewInternalPostDetail(${p.id})">${escapeHtml(p.title)}${statusBadgeHTML}</div>
           <div class="text-xs text-gray-500 mt-0.5">${escapeHtml(p.authorName)} (${escapeHtml(p.dept)}) — ${escapeHtml(p.createdAt)}</div>
           <p class="text-sm text-gray-700 mt-2 flex-1">${escapeHtml(snippet)}${(p.content || '').length > 200 ? '…' : ''}</p>
           ${extraInfo}
@@ -12397,7 +13334,10 @@ function renderInternalPosts() {
               <span>💬 ${commentCount}</span>
               <span>👁️ ${readCount} đã xem</span>
             </div>
-            <button onclick="viewInternalPostDetail(${p.id})" class="bg-fuchsia-600 text-white px-3 py-1 rounded text-xs font-bold hover:bg-fuchsia-700">📄 Chi tiết</button>
+            <div class="flex gap-2">
+              ${approveActionsHTML}
+              <button onclick="viewInternalPostDetail(${p.id})" class="bg-fuchsia-600 text-white px-3 py-1 rounded text-xs font-bold hover:bg-fuchsia-700">📄 Chi tiết</button>
+            </div>
           </div>
         </div>
       </div>
@@ -12416,8 +13356,22 @@ function viewInternalPostDetail(id) {
   markInternalRead(id);
 
   const icons = { NEWS: '📰', TRAINING: '🎓', REWARD: '🏆', SHARE: '💬' };
-  document.getElementById('internalArticleTitle').innerText = `${icons[p.type] || '📣'} ${p.title}`;
+  const statusSuffix = p.status === 'PENDING' ? ' ⏳ (Chờ duyệt)' : p.status === 'REJECTED' ? ' ❌ (Bị từ chối)' : '';
+  document.getElementById('internalArticleTitle').innerText = `${icons[p.type] || '📣'} ${p.title}${statusSuffix}`;
   document.getElementById('internalArticleSub').innerText = `${p.authorName} (${p.dept}) — ${p.createdAt} | Mã: ${p.code}`;
+
+  const approveActionsHTML = (p.status === 'PENDING' && canApproveInternalPost(currentUser))
+    ? `<div class="bg-amber-50 border border-amber-200 rounded p-3 mb-3 flex items-center justify-between gap-2">
+        <span class="text-xs text-amber-800">⏳ Bài đăng đang chờ phê duyệt để công khai trong Góc chia sẻ.</span>
+        <div class="flex gap-2 flex-shrink-0">
+          <button onclick="approveInternalPostAction(${p.id})" class="bg-emerald-600 text-white px-3 py-1 rounded text-xs font-bold hover:bg-emerald-700">✅ Duyệt</button>
+          <button onclick="rejectInternalPostAction(${p.id})" class="bg-red-600 text-white px-3 py-1 rounded text-xs font-bold hover:bg-red-700">❌ Từ chối</button>
+        </div>
+      </div>`
+    : '';
+  const rejectReasonHTML = (p.status === 'REJECTED' && p.rejectReason)
+    ? `<div class="bg-red-50 border border-red-200 rounded p-3 mb-3 text-xs text-red-800"><b>Lý do từ chối:</b> ${escapeHtml(p.rejectReason)}</div>`
+    : '';
 
   let typeInfoHTML = '';
   if (p.type === 'TRAINING' && p.training) {
@@ -12467,6 +13421,8 @@ function viewInternalPostDetail(id) {
   document.getElementById('internalArticleContent').innerHTML = `
     ${coverHTML}
     <div class="w-full p-6 text-sm">
+      ${approveActionsHTML}
+      ${rejectReasonHTML}
       ${typeInfoHTML}
       <div class="whitespace-pre-wrap text-gray-800">${escapeHtml(p.content)}</div>
       ${attachmentLinkHTML}
@@ -12565,6 +13521,66 @@ async function unregisterFromTraining(id) {
   if (idx !== -1) DB.internalPosts[idx] = updated;
   viewInternalPostDetail(id);
   renderInternalPosts();
+}
+
+// Duyệt/Từ chối bài "Góc chia sẻ" (status PENDING) — qua modal xác nhận Đồng Ý/Hủy dùng chung
+// (showConfirmModal(), khớp pattern Văn bản trình/Đăng ký xe/Đề xuất văn phòng), server tự xác thực lại
+// quyền internalPostApprove/admin (xem lib/recordActions.js) nên không tin riêng việc ẩn/hiện nút này.
+function approveInternalPostAction(id) {
+  const p = DB.internalPosts.find(x => x.id === id);
+  if (!p) return;
+  showConfirmModal({
+    title: 'Phê duyệt bài đăng',
+    bodyHTML: `Bạn có chắc chắn muốn phê duyệt bài "<b>${escapeHtml(p.title)}</b>" để công khai trong Góc chia sẻ?`,
+    confirmLabel: 'Phê Duyệt',
+    onConfirm: async () => {
+      let updated;
+      try {
+        const result = await callRecordAction('internalPosts', id, 'approve', {});
+        updated = result.item;
+      } catch (err) {
+        return alert(`⛔ ${err.message}`);
+      }
+      const idx = DB.internalPosts.findIndex(x => x.id === id);
+      if (idx !== -1) DB.internalPosts[idx] = updated;
+      logSystemAction('INTERNAL', 'APPROVE_INTERNAL_POST', `Phê duyệt bài Góc chia sẻ [${updated.code} - ${updated.title}]`, 'SUCCESS', updated.code);
+      notifyUsersByEmail('INTERNAL', 'NOTIFY_APPROVED', updated.code, [updated.author],
+        `[VPDT] Bài đăng "${updated.title}" đã được phê duyệt`,
+        `Bài đăng Góc chia sẻ "${updated.title}" (${updated.code}) của bạn đã được phê duyệt và hiển thị công khai.`);
+      closeInternalArticleModal();
+      renderInternalPosts();
+    }
+  });
+}
+
+function rejectInternalPostAction(id) {
+  const p = DB.internalPosts.find(x => x.id === id);
+  if (!p) return;
+  const reason = prompt('Nhập lý do từ chối bài đăng:');
+  if (reason === null) return;
+  if (!reason.trim()) return alert('⛔ Vui lòng nhập lý do từ chối!');
+  showConfirmModal({
+    title: 'Từ chối bài đăng',
+    bodyHTML: `Bạn có chắc chắn muốn từ chối bài "<b>${escapeHtml(p.title)}</b>"?<br><span class="text-xs text-gray-500">Lý do: ${escapeHtml(reason.trim())}</span>`,
+    confirmLabel: 'Từ Chối',
+    onConfirm: async () => {
+      let updated;
+      try {
+        const result = await callRecordAction('internalPosts', id, 'reject', { reason: reason.trim() });
+        updated = result.item;
+      } catch (err) {
+        return alert(`⛔ ${err.message}`);
+      }
+      const idx = DB.internalPosts.findIndex(x => x.id === id);
+      if (idx !== -1) DB.internalPosts[idx] = updated;
+      logSystemAction('INTERNAL', 'REJECT_INTERNAL_POST', `Từ chối bài Góc chia sẻ [${updated.code} - ${updated.title}] - Lý do: ${reason.trim()}`, 'WARNING', updated.code);
+      notifyUsersByEmail('INTERNAL', 'NOTIFY_REJECTED', updated.code, [updated.author],
+        `[VPDT] Bài đăng "${updated.title}" đã bị từ chối`,
+        `Bài đăng Góc chia sẻ "${updated.title}" (${updated.code}) của bạn đã bị từ chối.\nLý do: ${reason.trim()}`);
+      closeInternalArticleModal();
+      renderInternalPosts();
+    }
+  });
 }
 </script>
 
