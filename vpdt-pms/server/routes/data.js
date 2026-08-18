@@ -42,7 +42,7 @@ router.use(requireAuth, blockIfMustChangePassword);
 // màn quản lý người dùng (admin) có hiện badge "Chưa đổi mật khẩu tạm" dựa trên đúng field này.
 function stripPasswords(users) {
   if (!Array.isArray(users)) return users;
-  return users.map(({ pass, password, failedLoginAttempts, lockedUntil, ...rest }) => rest);
+  return users.map(({ pass, password, pinHash, failedLoginAttempts, lockedUntil, ...rest }) => rest);
 }
 
 // Xác nhận LẠI quyền admin từ CSDL tại thời điểm ghi, không tin cờ "admin" cache sẵn trong JWT lúc
@@ -66,6 +66,13 @@ async function isCurrentlyAdmin(username) {
 //   lại bằng bcrypt, và đánh dấu mustChangePassword=true — mật khẩu admin gõ tạm chỉ có giá trị cho
 //   LẦN ĐĂNG NHẬP ĐẦU, buộc chính user đó phải tự đổi lại ngay (xem lib/auth.js blockIfMustChangePassword),
 //   giảm nguy cơ mật khẩu tạm/yếu tồn tại lâu dài không ai để ý.
+// Mã PIN (xác thực bổ sung khi Duyệt, perms.approverAuthLevel = 'PIN') — dãy số, tối thiểu 4 chữ số.
+// null = hợp lệ; string = lý do bị từ chối.
+function validatePin(pin) {
+  if (!/^\d{4,}$/.test(pin)) return 'Mã PIN phải là dãy số, tối thiểu 4 chữ số';
+  return null;
+}
+
 async function prepareUsersForSave(incomingUsers) {
   const existing = (await getAppDataValue('users')) || [];
   const existingById = new Map(existing.map(u => [u.id, u]));
@@ -80,19 +87,31 @@ async function prepareUsersForSave(incomingUsers) {
     const preserved = prior ? {
       ...(u.mustChangePassword === undefined && { mustChangePassword: prior.mustChangePassword }),
       ...(u.failedLoginAttempts === undefined && { failedLoginAttempts: prior.failedLoginAttempts }),
-      ...(u.lockedUntil === undefined && { lockedUntil: prior.lockedUntil })
+      ...(u.lockedUntil === undefined && { lockedUntil: prior.lockedUntil }),
+      // pinHash CHỈ được server tự ghi (từ u.pin plaintext bên dưới) — nếu client không gửi u.pin (để
+      // trống ô = giữ nguyên PIN cũ), giữ lại pinHash cũ, KHÔNG để mất chỉ vì admin sửa field khác.
+      ...(u.pin === undefined && { pinHash: prior.pinHash })
     } : {};
 
-    if (!u.pass) {
-      return { ...u, ...preserved, pass: prior ? prior.pass : undefined };
+    let record = { ...u, ...preserved };
+    delete record.pin; // KHÔNG BAO GIỜ lưu PIN dạng plaintext — chỉ lưu pinHash bên dưới.
+
+    if (u.pin) {
+      const pinError = validatePin(u.pin);
+      if (pinError) throw new HttpError(400, `Mã PIN của tài khoản "${u.username}": ${pinError}`);
+      record.pinHash = await hashPassword(u.pin);
     }
-    if (isBcryptHash(u.pass)) return { ...u, ...preserved }; // đã hash sẵn (không phải trường hợp bình thường, nhưng an toàn)
+
+    if (!u.pass) {
+      return { ...record, pass: prior ? prior.pass : undefined };
+    }
+    if (isBcryptHash(u.pass)) return record; // đã hash sẵn (không phải trường hợp bình thường, nhưng an toàn)
 
     const passwordError = validatePasswordStrength(u.pass);
     if (passwordError) {
       throw new HttpError(400, `Mật khẩu của tài khoản "${u.username}": ${passwordError}`);
     }
-    return { ...u, pass: await hashPassword(u.pass), mustChangePassword: true };
+    return { ...record, pass: await hashPassword(u.pass), mustChangePassword: true };
   }));
 }
 

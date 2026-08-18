@@ -257,7 +257,7 @@
 
         <div id="subApprovalLayersSection" class="hidden border-t pt-3">
           <label class="block font-semibold text-gray-600 mb-1">Cấp Phê Duyệt Bổ Sung & Xin Ý Kiến (tuỳ chọn)</label>
-          <p class="text-[11px] text-gray-500 italic mb-1.5">Chọn CỤ THỂ những ai (trong số người admin đã gán vào nhóm đó) cho từng lớp đã tick ở "Phê duyệt". "Đồng trình/Đồng cấp/BGD" cộng thêm 1 bước duyệt vào cuối quy trình; riêng "Xin ý kiến" chỉ để tham khảo, không chặn quy trình duyệt.</p>
+          <p class="text-[11px] text-gray-500 italic mb-1.5">Chọn CỤ THỂ những ai (trong số người admin đã gán vào nhóm đó) cho từng lớp đã tick ở "Phê duyệt". "Đồng trình/Đồng cấp/BGD/Trợ lý-Thư ký/TGĐ-Chủ tịch" cộng thêm 1 bước duyệt vào cuối quy trình; riêng "Xin ý kiến" chỉ để tham khảo, không chặn quy trình duyệt.</p>
           <div id="subApprovalLayersContainer" class="flex flex-wrap gap-3"></div>
         </div>
 
@@ -1583,12 +1583,17 @@
               <p class="text-[11px] text-gray-500 italic">Chỉ để LỌC danh sách ứng viên ở màn "Quy trình & Đồng cấp" cho gọn — không tự cấp quyền duyệt. Quyền duyệt thật vẫn do admin tick chọn đích danh ở từng bước.</p>
               <div>
                 <label class="block font-semibold text-gray-700 mb-1">🔐 Xác thực bổ sung khi bấm Duyệt</label>
-                <select id="pApproverAuthLevel" class="w-full border p-1.5 rounded bg-white text-xs">
+                <select id="pApproverAuthLevel" onchange="onApproverAuthLevelChange()" class="w-full border p-1.5 rounded bg-white text-xs">
                   <option value="NONE">Không yêu cầu thêm (mặc định)</option>
                   <option value="PASSWORD">Yêu cầu nhập lại mật khẩu</option>
                   <option value="OTP_EMAIL">Yêu cầu mã OTP gửi qua email</option>
+                  <option value="PIN">Yêu cầu nhập mã PIN</option>
                 </select>
                 <p class="text-[11px] text-gray-500 italic mt-1">Chỉ áp dụng cho hành động DUYỆT ở Văn bản trình / Đăng ký xe / Văn phòng (không áp dụng Từ chối/Hủy, Tài liệu, Đặt phòng họp). Mã OTP hiện đang ở chế độ mô phỏng giống các email khác của hệ thống (hiện trong log, chưa gửi hộp thư thật) cho tới khi kết nối SMTP thật.</p>
+                <div id="uPinWrap" class="hidden mt-2">
+                  <label class="block font-semibold text-gray-700 mb-1">Mã PIN duyệt (tối thiểu 4 số)</label>
+                  <input id="uPin" type="text" inputmode="numeric" pattern="[0-9]*" placeholder="Để trống = giữ nguyên mã PIN hiện tại" class="w-full border p-1.5 rounded text-xs">
+                </div>
               </div>
             </div>
             <div class="space-y-2">
@@ -1953,9 +1958,9 @@
       <div class="bg-white p-4 rounded border space-y-3">
         <div>
           <h4 class="font-bold text-sm text-gray-800">🖋️ Quản Lý Nhóm Phê Duyệt Trình (Văn Bản Trình)</h4>
-          <p class="text-[11px] text-gray-500 italic">4 nhóm tuỳ chọn — người trình tick chọn khi tạo tờ trình. 3 nhóm đầu (Đồng trình/Đồng cấp/BGD) cộng thêm 1 bước duyệt vào cuối quy trình phòng ban (gốc); riêng "Xin ý kiến" chỉ là kênh tham khảo song song, không chặn quy trình. Gán thành viên cho từng nhóm ở đây.</p>
+          <p class="text-[11px] text-gray-500 italic">6 nhóm tuỳ chọn — người trình tick chọn khi tạo tờ trình. 5 nhóm chặn (Đồng trình/Đồng cấp/BGD/Trợ lý-Thư ký/TGĐ-Chủ tịch) cộng thêm 1 bước duyệt vào cuối quy trình phòng ban (gốc), theo đúng thứ tự; riêng "Xin ý kiến" chỉ là kênh tham khảo song song, không chặn quy trình. Gán thành viên cho từng nhóm ở đây.</p>
         </div>
-        <div id="submissionApprovalGroupsContainer" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3"></div>
+        <div id="submissionApprovalGroupsContainer" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3"></div>
       </div>
 
       <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 my-3 border-t pt-3">
@@ -2403,6 +2408,16 @@
         <label class="block font-semibold text-gray-600 mb-1">Ghi chú tiến độ (tuỳ chọn)</label>
         <textarea id="progressNote" class="w-full border p-2 rounded text-sm h-16" placeholder="VD: đã hoàn thành 50%, đang chờ đối tác phản hồi..."></textarea>
       </div>
+      <div id="progressSubtasksWrap" class="hidden border-t pt-2">
+        <label class="block font-semibold text-gray-600 mb-1">📋 Chia Nhỏ Công Việc (tuỳ chọn)</label>
+        <p class="text-[11px] text-gray-400 mb-1">Hạn từng công việc nhỏ không được vượt quá hạn hoàn thành của việc chính.</p>
+        <div id="progressSubtasksList" class="space-y-1 mb-2"></div>
+        <div class="flex gap-1.5">
+          <input id="newSubtaskTitle" placeholder="Tên công việc nhỏ..." class="flex-1 border p-1.5 rounded text-xs">
+          <input id="newSubtaskDueDate" type="date" class="border p-1.5 rounded text-xs">
+          <button type="button" onclick="addSubtaskAction()" class="bg-blue-600 text-white px-2.5 py-1 rounded text-xs font-bold hover:bg-blue-700 whitespace-nowrap">+ Thêm</button>
+        </div>
+      </div>
     </div>
     <div class="p-3 bg-gray-100 border-t flex justify-end gap-2 text-xs">
       <button onclick="closeTaskProgressModal()" class="bg-gray-500 text-white px-4 py-1.5 rounded font-bold hover:bg-gray-600">Huỷ</button>
@@ -2434,8 +2449,15 @@
       <h3 class="font-bold text-base flex items-center gap-2">📧 Soạn Email Thông Báo Người Tham Dự</h3>
       <button onclick="closeMinutesEmailComposeModal()" class="text-rose-200 hover:text-white font-bold text-xl px-2">✕</button>
     </div>
-    <div class="p-4 space-y-3 text-xs">
+    <div class="p-4 space-y-3 text-xs max-h-[70vh] overflow-y-auto">
       <div id="minutesEmailComposeInfo" class="text-gray-500 italic"></div>
+      <div>
+        <div class="flex justify-between items-center mb-1">
+          <label class="font-semibold text-gray-600">Người nhận</label>
+          <button type="button" onclick="toggleAllMinutesEmailRecipients()" class="text-rose-700 font-semibold hover:underline">Chọn/Bỏ chọn tất cả</button>
+        </div>
+        <div id="minutesEmailRecipientsList" class="border rounded p-2 space-y-1 max-h-32 overflow-y-auto bg-gray-50"></div>
+      </div>
       <div>
         <label class="block font-semibold text-gray-600 mb-1">Nội dung email (bắt buộc)</label>
         <textarea id="minutesEmailComposeContent" class="w-full border p-2 rounded text-sm h-28" placeholder="Nhập nội dung gửi cho người tham dự..." required></textarea>
@@ -2516,6 +2538,10 @@
         <label class="block font-semibold text-gray-600 mb-1">Nhập mã OTP đã gửi tới email của bạn</label>
         <input id="approvalAuthOtpInput" type="text" inputmode="numeric" maxlength="6" class="w-full border p-2 rounded text-sm tracking-widest" placeholder="000000">
         <button type="button" onclick="sendApprovalOtp(true)" class="text-emerald-700 font-semibold hover:underline mt-1">↻ Gửi lại mã</button>
+      </div>
+      <div id="approvalAuthPinGroup" class="hidden">
+        <label class="block font-semibold text-gray-600 mb-1">Nhập mã PIN duyệt</label>
+        <input id="approvalAuthPinInput" type="password" inputmode="numeric" pattern="[0-9]*" class="w-full border p-2 rounded text-sm tracking-widest" placeholder="••••">
       </div>
     </div>
     <div class="p-3 bg-gray-100 border-t flex justify-end gap-2 text-xs">
@@ -3141,6 +3167,7 @@ const SUBMISSION_APPROVAL_LAYERS = [
   { key: 'DONG_CAP', label: 'Phê duyệt đồng cấp', blocking: true },
   { key: 'XIN_Y_KIEN', label: 'Xin ý kiến', blocking: false },
   { key: 'BGD', label: 'Ban Giám Đốc/Ban Tổng Giám Đốc', blocking: true },
+  { key: 'TRO_LY_THU_KY', label: 'Bộ Phận Trợ Lý/Thư Ký', blocking: true },
   { key: 'TGD_CT', label: 'Tổng Giám Đốc/Chủ Tịch', blocking: true }
 ];
 
@@ -4124,8 +4151,10 @@ function withApprovalAuth(actionFn) {
   pendingApprovalAction = actionFn;
   document.getElementById('approvalAuthPasswordGroup').classList.toggle('hidden', level !== 'PASSWORD');
   document.getElementById('approvalAuthOtpGroup').classList.toggle('hidden', level !== 'OTP_EMAIL');
+  document.getElementById('approvalAuthPinGroup').classList.toggle('hidden', level !== 'PIN');
   document.getElementById('approvalAuthPasswordInput').value = '';
   document.getElementById('approvalAuthOtpInput').value = '';
+  document.getElementById('approvalAuthPinInput').value = '';
   document.getElementById('approvalAuthModal').classList.remove('hidden');
 
   if (level === 'OTP_EMAIL') sendApprovalOtp(false);
@@ -4180,9 +4209,27 @@ async function confirmApprovalAuth() {
     if (!entered || entered !== pendingApprovalOtpCode) {
       return alert('⛔ Mã OTP không đúng hoặc đã hết hạn, vui lòng thử lại!');
     }
+  } else if (level === 'PIN') {
+    const entered = document.getElementById('approvalAuthPinInput').value.trim();
+    if (!entered) return alert('⛔ Vui lòng nhập mã PIN!');
+    // Xác thực PIN qua server (POST /api/auth/verify-pin) — cùng lý do với PASSWORD ở trên, không so
+    // sánh gì ở client vì client không hề (và không nên) cầm PIN thật.
+    let ok = false;
+    try {
+      const res = await fetch('/api/auth/verify-pin', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ pin: entered })
+      });
+      const body = await res.json().catch(() => ({}));
+      ok = res.ok && body.ok;
+    } catch (e) {
+      return alert('⛔ Không thể kết nối tới máy chủ để xác thực mã PIN: ' + e.message);
+    }
+    if (!ok) return alert('⛔ Mã PIN không đúng, vui lòng thử lại!');
   }
 
-  logSystemAction('AUTH', 'APPROVAL_AUTH_SUCCESS', `Xác thực ${level === 'PASSWORD' ? 'mật khẩu' : 'OTP email'} thành công trước khi phê duyệt`, 'SUCCESS', currentUser.username);
+  logSystemAction('AUTH', 'APPROVAL_AUTH_SUCCESS', `Xác thực ${level === 'PASSWORD' ? 'mật khẩu' : level === 'PIN' ? 'mã PIN' : 'OTP email'} thành công trước khi phê duyệt`, 'SUCCESS', currentUser.username);
 
   const action = pendingApprovalAction;
   closeApprovalAuthModal();
@@ -6455,6 +6502,8 @@ function openCreateTaskModal(opts) {
   document.getElementById('taskDeadlineInput').value = opts.deadline || '';
 
   const assigneeSel = document.getElementById('taskAssigneeInput');
+  assigneeSel.multiple = false;
+  assigneeSel.size = 1;
   assigneeSel.innerHTML = '<option value="">-- Chọn người nhận --</option>' +
     DB.users.map(u => `<option value="${escapeHtml(u.username)}" ${opts.assignedTo === u.username ? 'selected' : ''}>${escapeHtml(u.name)} (${escapeHtml(u.username)})</option>`).join('');
   populateTaskCollaboratorsSelect(opts.collaborators);
@@ -6484,12 +6533,15 @@ function openAssignTaskModal(taskId) {
   document.getElementById('taskDeadlineInput').value = t.deadline || '';
 
   const assigneeSel = document.getElementById('taskAssigneeInput');
-  assigneeSel.innerHTML = '<option value="">-- Chọn người nhận --</option>' +
-    DB.users.map(u => `<option value="${escapeHtml(u.username)}">${escapeHtml(u.name)} (${escapeHtml(u.username)})</option>`).join('');
+  // Chỉ chế độ ASSIGN mới cho chọn NHIỀU người thực hiện cùng lúc (Văn bản trình chỉ đạo có thể giao
+  // cho nhiều người) — xem confirmCreateTask() nhánh ASSIGN + assignTask() ở server.
+  assigneeSel.multiple = true;
+  assigneeSel.size = 5;
+  assigneeSel.innerHTML = DB.users.map(u => `<option value="${escapeHtml(u.username)}">${escapeHtml(u.name)} (${escapeHtml(u.username)})</option>`).join('');
   populateTaskCollaboratorsSelect(t.collaborators);
 
   const labels = { SUBMISSION: 'Từ Văn bản trình', MEETING_MINUTES: 'Từ Biên bản họp', MANUAL: 'Giao việc trực tiếp' };
-  document.getElementById('createTaskSourceLabel').innerText = `Gán người nhận cho công việc ${t.sourceCode ? `${labels[t.sourceType] || t.sourceType}: ${t.sourceCode}` : labels[t.sourceType] || ''}`;
+  document.getElementById('createTaskSourceLabel').innerText = `Gán người nhận cho công việc ${t.sourceCode ? `${labels[t.sourceType] || t.sourceType}: ${t.sourceCode}` : labels[t.sourceType] || ''} — giữ Ctrl/Cmd để chọn nhiều người thực hiện cùng lúc`;
   document.getElementById('createTaskConfirmBtn').innerText = '✅ Gán Người Nhận';
 
   document.getElementById('createTaskModal').classList.remove('hidden');
@@ -6511,6 +6563,8 @@ function openEditTaskModal(taskId) {
   document.getElementById('taskDeadlineInput').value = t.deadline || '';
 
   const assigneeSel = document.getElementById('taskAssigneeInput');
+  assigneeSel.multiple = false;
+  assigneeSel.size = 1;
   assigneeSel.innerHTML = '<option value="">-- Chọn người nhận --</option>' +
     DB.users.map(u => `<option value="${escapeHtml(u.username)}" ${t.assignedTo === u.username ? 'selected' : ''}>${escapeHtml(u.name)} (${escapeHtml(u.username)})</option>`).join('');
   populateTaskCollaboratorsSelect(t.collaborators);
@@ -6541,12 +6595,18 @@ function notifyTaskCollaborators(t, collaboratorUsernames, title, description, d
 async function confirmCreateTask() {
   const title = document.getElementById('taskTitleInput').value.trim();
   const description = document.getElementById('taskDescInput').value.trim();
-  const assignedTo = document.getElementById('taskAssigneeInput').value;
+  const assigneeSelEl = document.getElementById('taskAssigneeInput');
+  // ASSIGN mode (gán người nhận cho việc tự sinh từ Văn bản trình) cho phép chọn NHIỀU người thực
+  // hiện cùng lúc (select multiple, xem openAssignTaskModal()) — CREATE/EDIT vẫn 1 người như cũ.
+  const assignedToList = assigneeSelEl.multiple
+    ? Array.from(assigneeSelEl.selectedOptions).map(o => o.value)
+    : (assigneeSelEl.value ? [assigneeSelEl.value] : []);
+  const assignedTo = assignedToList[0] || '';
   const deadline = document.getElementById('taskDeadlineInput').value;
   const collaborators = Array.from(document.getElementById('taskCollaboratorsInput').selectedOptions).map(o => o.value);
 
   if (!title) return alert('Vui lòng nhập tiêu đề công việc!');
-  if (!assignedTo) return alert('Vui lòng chọn người nhận!');
+  if (assignedToList.length === 0) return alert('Vui lòng chọn người nhận!');
 
   const assignee = DB.users.find(u => u.username === assignedTo);
 
@@ -6555,26 +6615,32 @@ async function confirmCreateTask() {
     if (!t) { closeCreateTaskModal(); return; }
     const oldCollaborators = new Set(t.collaborators || []);
 
-    let updated;
+    let updated, extraItems;
     try {
-      const result = await callRecordAction('tasks', t.id, 'assign', { assignedTo, assignedToName: assignee ? assignee.name : assignedTo, deadline, collaborators });
+      const result = await callRecordAction('tasks', t.id, 'assign', { assignedTo: assignedToList, deadline, collaborators });
       updated = result.item;
+      extraItems = result.extraItems || [];
     } catch (err) {
       closeCreateTaskModal();
       return alert(`⛔ ${err.message}`);
     }
     const idx = DB.tasks.findIndex(x => x.id === t.id);
     if (idx !== -1) DB.tasks[idx] = updated;
-    logSystemAction('TASK', 'ASSIGN_TASK', `Gán người nhận [${updated.assignedToName}] cho công việc [${updated.title}]`, 'SUCCESS', updated.sourceCode || updated.title);
+    DB.tasks.push(...extraItems);
+    const allNewTasks = [updated, ...extraItems];
+    logSystemAction('TASK', 'ASSIGN_TASK', `Gán người nhận [${allNewTasks.map(x => x.assignedToName).join(', ')}] cho công việc [${updated.title}]`, 'SUCCESS', updated.sourceCode || updated.title);
 
-    if (assignee && assignee.email) {
-      notifyUsersByEmail('TASK', 'NOTIFY_TASK_ASSIGNED', updated.sourceCode || updated.title, [assignedTo],
-        `[VPDT] Bạn được giao công việc: ${updated.title}`,
-        `${currentUser.name} đã gán cho bạn công việc "${updated.title}"${description ? `: ${description}` : ''}.${deadline ? ` Hạn hoàn thành: ${deadline}.` : ''}`);
-    }
+    allNewTasks.forEach(nt => {
+      const a = DB.users.find(u => u.username === nt.assignedTo);
+      if (a && a.email) {
+        notifyUsersByEmail('TASK', 'NOTIFY_TASK_ASSIGNED', nt.sourceCode || nt.title, [nt.assignedTo],
+          `[VPDT] Bạn được giao công việc: ${nt.title}`,
+          `${currentUser.name} đã gán cho bạn công việc "${nt.title}"${description ? `: ${description}` : ''}.${deadline ? ` Hạn hoàn thành: ${deadline}.` : ''}`);
+      }
+    });
     notifyTaskCollaborators(updated, collaborators.filter(u => !oldCollaborators.has(u)), updated.title, description, deadline);
 
-    alert('✅ Đã gán người nhận thành công!');
+    alert(assignedToList.length > 1 ? `✅ Đã gán ${assignedToList.length} người thực hiện thành công!` : '✅ Đã gán người nhận thành công!');
     closeCreateTaskModal();
     renderTasks();
     return;
@@ -6848,7 +6914,82 @@ function openTaskProgressModal(taskId) {
     || `<option value="">-- Không có lựa chọn hợp lệ --</option>`;
   document.getElementById('progressNote').value = '';
 
+  // Chia nhỏ công việc chỉ mở cho CHÍNH người nhận việc, khi việc chính đang DOING (khớp gate ở server
+  // — xem canManageSubtasks() trong lib/recordActions.js).
+  const canManageSub = t.assignedTo === currentUser.username && t.status === 'DOING';
+  document.getElementById('progressSubtasksWrap').classList.toggle('hidden', !canManageSub);
+  if (canManageSub) {
+    document.getElementById('newSubtaskTitle').value = '';
+    document.getElementById('newSubtaskDueDate').value = '';
+    document.getElementById('newSubtaskDueDate').max = t.deadline || '';
+    renderProgressSubtasksList(t);
+  }
+
   document.getElementById('taskProgressModal').classList.remove('hidden');
+}
+
+function renderProgressSubtasksList(t) {
+  const list = document.getElementById('progressSubtasksList');
+  const subtasks = t.subtasks || [];
+  list.innerHTML = subtasks.length
+    ? subtasks.map(s => `
+        <div class="flex items-center gap-1.5 text-xs bg-gray-50 border rounded px-2 py-1">
+          <input type="checkbox" ${s.done ? 'checked' : ''} onchange="toggleSubtaskAction(${s.id})">
+          <span class="flex-1 ${s.done ? 'line-through text-gray-400' : ''}">${escapeHtml(s.title)}</span>
+          <span class="text-gray-400">Hạn: ${escapeHtml(s.dueDate)}</span>
+          <button type="button" onclick="deleteSubtaskAction(${s.id})" class="text-red-500 hover:text-red-700 font-bold" title="Xoá">✕</button>
+        </div>
+      `).join('')
+    : `<p class="text-[11px] text-gray-400 italic">Chưa có công việc nhỏ nào.</p>`;
+}
+
+async function addSubtaskAction() {
+  if (progressingTaskId === null) return;
+  const title = document.getElementById('newSubtaskTitle').value.trim();
+  const dueDate = document.getElementById('newSubtaskDueDate').value;
+  if (!title) return alert('Vui lòng nhập tên công việc nhỏ!');
+  if (!dueDate) return alert('Vui lòng chọn hạn hoàn thành công việc nhỏ!');
+
+  let updated;
+  try {
+    const result = await callRecordAction('tasks', progressingTaskId, 'add-subtask', { title, dueDate });
+    updated = result.item;
+  } catch (err) {
+    return alert(`⛔ ${err.message}`);
+  }
+  const idx = DB.tasks.findIndex(x => x.id === progressingTaskId);
+  if (idx !== -1) DB.tasks[idx] = updated;
+  document.getElementById('newSubtaskTitle').value = '';
+  document.getElementById('newSubtaskDueDate').value = '';
+  renderProgressSubtasksList(updated);
+}
+
+async function toggleSubtaskAction(subtaskId) {
+  if (progressingTaskId === null) return;
+  let updated;
+  try {
+    const result = await callRecordAction('tasks', progressingTaskId, 'toggle-subtask', { subtaskId });
+    updated = result.item;
+  } catch (err) {
+    return alert(`⛔ ${err.message}`);
+  }
+  const idx = DB.tasks.findIndex(x => x.id === progressingTaskId);
+  if (idx !== -1) DB.tasks[idx] = updated;
+  renderProgressSubtasksList(updated);
+}
+
+async function deleteSubtaskAction(subtaskId) {
+  if (progressingTaskId === null) return;
+  let updated;
+  try {
+    const result = await callRecordAction('tasks', progressingTaskId, 'delete-subtask', { subtaskId });
+    updated = result.item;
+  } catch (err) {
+    return alert(`⛔ ${err.message}`);
+  }
+  const idx = DB.tasks.findIndex(x => x.id === progressingTaskId);
+  if (idx !== -1) DB.tasks[idx] = updated;
+  renderProgressSubtasksList(updated);
 }
 
 function closeTaskProgressModal() {
@@ -7246,6 +7387,7 @@ function openTaskDetailModal(taskId) {
       <div><b>Số lần trễ hạn:</b> <span class="font-bold text-red-700">${t.lateCount || 0}</span></div>
     </div>
     ${collabRows.length ? `<div><b>Người phối hợp:</b><ul class="list-disc list-inside mt-1 space-y-0.5">${collabRows.join('')}</ul></div>` : ''}
+    ${(t.subtasks || []).length ? `<div><b>Công việc nhỏ:</b><ul class="list-disc list-inside mt-1 space-y-0.5">${t.subtasks.map(s => `<li>${s.done ? '<span class="line-through text-gray-400">' + escapeHtml(s.title) + '</span> <span class="text-emerald-700 font-bold">✅</span>' : escapeHtml(s.title)} — Hạn: ${escapeHtml(s.dueDate)}</li>`).join('')}</ul></div>` : ''}
     ${t.description ? `<div><b>Mô tả / Nội dung:</b><div class="bg-gray-50 p-2 rounded border mt-1">${escapeHtml(t.description)}</div></div>` : ''}
     ${t.pendingExtension ? `
       <div class="bg-orange-50 border border-orange-200 p-2 rounded">
@@ -9439,11 +9581,32 @@ let pendingMinutesEmailNotify = null;
 function openMinutesEmailComposeModal(recipients, code, title, isEdit) {
   pendingMinutesEmailNotify = { recipients: recipients || [], code, title };
   document.getElementById('minutesEmailComposeInfo').innerText =
-    `Biên bản: ${title} (${code}) — ${(recipients || []).length} người tham dự có email sẽ nhận thông báo.`;
+    `Biên bản: ${title} (${code}) — ${(recipients || []).length} người tham dự có email. Bỏ tick người nào không muốn gửi.`;
+  renderMinutesEmailRecipientsList(recipients || []);
   document.getElementById('minutesEmailComposeContent').value = isEdit
     ? `Biên bản họp "${title}" (${code}) vừa được cập nhật. Vui lòng đăng nhập hệ thống Văn phòng điện tử để xem chi tiết.`
     : `Biên bản họp "${title}" (${code}) đã được lập. Vui lòng đăng nhập hệ thống Văn phòng điện tử để xem chi tiết.`;
   document.getElementById('minutesEmailComposeModal').classList.remove('hidden');
+}
+
+// Danh sách người tham dự có email — mặc định tick hết (khớp hành vi cũ: gửi cho toàn bộ), người gửi
+// có thể bỏ tick bớt trước khi bấm Gửi Email (xem confirmSendMinutesEmail() lọc theo checkbox này).
+function renderMinutesEmailRecipientsList(recipients) {
+  const container = document.getElementById('minutesEmailRecipientsList');
+  container.innerHTML = recipients.length
+    ? recipients.map((r, i) => `
+        <label class="flex items-center gap-2 cursor-pointer hover:bg-rose-50 rounded px-1 py-0.5">
+          <input type="checkbox" class="minutes-email-recipient-toggle" data-idx="${i}" checked>
+          <span>${escapeHtml(r.name)} <span class="text-gray-400">(${escapeHtml(r.email)})</span></span>
+        </label>
+      `).join('')
+    : `<p class="text-gray-400 italic">Không có người tham dự nào có email.</p>`;
+}
+
+function toggleAllMinutesEmailRecipients() {
+  const boxes = document.querySelectorAll('.minutes-email-recipient-toggle');
+  const allChecked = [...boxes].every(b => b.checked);
+  boxes.forEach(b => { b.checked = !allChecked; });
 }
 
 function closeMinutesEmailComposeModal() {
@@ -9457,7 +9620,11 @@ function confirmSendMinutesEmail() {
   if (!content) return alert('Vui lòng nhập nội dung email!');
 
   const { recipients, code, title } = pendingMinutesEmailNotify;
-  notifyRecipientsByEmail('MINUTES', 'NOTIFY_MINUTES_CREATED', code, recipients,
+  const checkedIdx = new Set([...document.querySelectorAll('.minutes-email-recipient-toggle:checked')].map(b => Number(b.dataset.idx)));
+  const selectedRecipients = recipients.filter((r, i) => checkedIdx.has(i));
+  if (selectedRecipients.length === 0) return alert('Vui lòng chọn ít nhất 1 người nhận!');
+
+  notifyRecipientsByEmail('MINUTES', 'NOTIFY_MINUTES_CREATED', code, selectedRecipients,
     `[VPDT] Biên bản họp: ${title} (${code})`, content);
   closeMinutesEmailComposeModal();
 }
@@ -11951,6 +12118,13 @@ function refreshPermTreeBadges() {
 // phòng ban render động sau này) — cập nhật badge ngay khi admin tick/bỏ tick bất kỳ ô nào trong cây.
 document.getElementById('permFieldsContainer')?.addEventListener('change', refreshPermTreeBadges);
 
+// Ô nhập mã PIN chỉ hiện khi đang chọn mức xác thực PIN — tránh admin tưởng nhầm phải nhập PIN cho
+// mọi user (mặc định NONE không cần gì thêm, khớp đúng hành vi PASSWORD/OTP_EMAIL đã có từ trước).
+function onApproverAuthLevelChange() {
+  const level = document.getElementById('pApproverAuthLevel').value;
+  document.getElementById('uPinWrap').classList.toggle('hidden', level !== 'PIN');
+}
+
 // Đọc toàn bộ khối quyền (0-9) từ form — dùng chung cho cả Lưu Người Dùng lẫn Lưu Nhóm Phân Quyền,
 // vì 2 luồng này tái sử dụng ĐÚNG 1 bộ checkbox vật lý trên form (xem toggleUserPermFormMode()).
 function collectPermsFromForm() {
@@ -12018,6 +12192,8 @@ function populatePermsForm(permsInput) {
   document.getElementById('pAdmin').checked = !!perms.admin;
   document.getElementById('pCanBeApprover').checked = !!perms.canBeApprover;
   document.getElementById('pApproverAuthLevel').value = perms.approverAuthLevel || 'NONE';
+  document.getElementById('uPin').value = '';
+  onApproverAuthLevelChange();
   document.getElementById('pCanViewReports').checked = !!perms.canViewReports;
   document.getElementById('pInternalNewsCreate').checked = !!perms.internalNewsCreate;
   document.getElementById('pInternalTrainingCreate').checked = !!perms.internalTrainingCreate;
@@ -12406,6 +12582,7 @@ function saveUser(e) {
   const editId = document.getElementById('editUserId').value;
   const username = document.getElementById('uUsername').value.trim();
   const pass = document.getElementById('uPassword').value.trim();
+  const pin = document.getElementById('uPin').value.trim();
   const name = document.getElementById('uFullName').value.trim();
   const email = document.getElementById('uEmail').value.trim();
   const phone = document.getElementById('uPhone').value.trim();
@@ -12422,13 +12599,21 @@ function saveUser(e) {
   const permOverrides = group ? diffPerms(formPerms, group.perms) : null;
   const perms = group ? mergePerms(group.perms, permOverrides) : formPerms;
 
+  // Mã PIN kiểm tra sơ bộ ở client (server vẫn xác minh lại) — chỉ ép buộc khi thực sự nhập giá trị
+  // mới, để trống = giữ nguyên PIN cũ (khớp hành vi mật khẩu ở trên).
+  if (pin && !/^\d{4,}$/.test(pin)) return alert('Mã PIN phải là dãy số, tối thiểu 4 chữ số!');
+  if (perms.approverAuthLevel === 'PIN' && !editId && !pin) {
+    return alert('Vui lòng nhập mã PIN cho người dùng mới đang chọn mức xác thực "Yêu cầu nhập mã PIN"!');
+  }
+
   if (editId) {
     const user = DB.users.find(u => u.id === parseInt(editId, 10));
     if (user) {
       user.username = username;
-      // Để trống ô mật khẩu khi sửa = giữ nguyên mật khẩu hiện tại (server không bao giờ gửi mật khẩu
-      // thật về trình duyệt để hiển thị lại nữa, nên chỉ gửi khi admin thực sự nhập giá trị mới).
+      // Để trống ô mật khẩu/PIN khi sửa = giữ nguyên giá trị hiện tại (server không bao giờ gửi mật
+      // khẩu/PIN thật về trình duyệt để hiển thị lại, nên chỉ gửi khi admin thực sự nhập giá trị mới).
       if (pass) user.pass = pass;
+      if (pin) user.pin = pin; else delete user.pin;
       user.name = name;
       user.email = email;
       user.phone = phone;
@@ -12443,7 +12628,7 @@ function saveUser(e) {
     if (DB.users.some(u => u.username === username)) return alert('Tên đăng nhập đã tồn tại!');
     DB.users.push({
       id: Date.now(),
-      username, pass, name, email, phone, dept, jobTitle, perms, groupId, permOverrides
+      username, pass, ...(pin && { pin }), name, email, phone, dept, jobTitle, perms, groupId, permOverrides
     });
   }
 
@@ -12476,6 +12661,8 @@ function resetUserForm() {
   document.getElementById('pAdmin').checked = defaults.admin;
   document.getElementById('pCanBeApprover').checked = !!defaults.canBeApprover;
   document.getElementById('pApproverAuthLevel').value = defaults.approverAuthLevel || 'NONE';
+  document.getElementById('uPin').value = '';
+  onApproverAuthLevelChange();
   document.getElementById('pCanViewReports').checked = !!defaults.canViewReports;
   document.getElementById('pInternalNewsCreate').checked = !!defaults.internalNewsCreate;
   document.getElementById('pInternalTrainingCreate').checked = !!defaults.internalTrainingCreate;

@@ -56,6 +56,7 @@ const SUBMISSION_APPROVAL_LAYERS = [
   { key: 'DONG_CAP', label: 'Phê duyệt đồng cấp', blocking: true },
   { key: 'XIN_Y_KIEN', label: 'Xin ý kiến', blocking: false },
   { key: 'BGD', label: 'Ban Giám Đốc/Ban Tổng Giám Đốc', blocking: true },
+  { key: 'TRO_LY_THU_KY', label: 'Bộ Phận Trợ Lý/Thư Ký', blocking: true },
   { key: 'TGD_CT', label: 'Tổng Giám Đốc/Chủ Tịch', blocking: true }
 ];
 

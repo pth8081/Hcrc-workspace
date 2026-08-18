@@ -138,6 +138,48 @@ router.post('/verify-password', loginRateLimiter, requireAuth, async (req, res) 
   }
 });
 
+// POST /api/auth/verify-pin — xác thực mã PIN của CHÍNH người đang đăng nhập, dùng cho lớp "xác thực
+// trước khi phê duyệt" (approverAuthLevel = PIN) — cùng khuôn /verify-password ở trên (rate-limit theo
+// IP + khoá theo tài khoản sau nhiều lần sai, dùng CHUNG bộ đếm lockout với mật khẩu vì cùng mục đích
+// chống dò). PIN chưa được admin đặt (pinHash rỗng) -> luôn từ chối, không rơi vào so sánh "undefined".
+router.post('/verify-pin', loginRateLimiter, requireAuth, async (req, res) => {
+  const { pin } = req.body || {};
+  if (!pin) return res.status(400).json({ error: 'Thiếu mã PIN' });
+
+  try {
+    const username = req.freshUser.username;
+    const remainingLockMinutes = getLockoutRemainingMinutes(req.freshUser);
+    if (remainingLockMinutes !== null) {
+      return res.status(429).json({ error: `Tài khoản tạm khóa do nhập sai quá nhiều lần. Vui lòng thử lại sau ${remainingLockMinutes} phút.` });
+    }
+
+    const ok = !!req.freshUser.pinHash && await verifyPassword(pin, req.freshUser.pinHash);
+    if (!ok) {
+      await withLockedAppDataValue('users', (collection) => {
+        const list = Array.isArray(collection) ? collection : [];
+        const idx = list.findIndex(u => u.username === username);
+        if (idx !== -1) recordFailedLogin(list[idx]);
+        return list;
+      });
+      return res.json({ ok: false });
+    }
+
+    if (req.freshUser.failedLoginAttempts) {
+      await withLockedAppDataValue('users', (collection) => {
+        const list = Array.isArray(collection) ? collection : [];
+        const idx = list.findIndex(u => u.username === username);
+        if (idx !== -1) resetLoginAttempts(list[idx]);
+        return list;
+      });
+    }
+
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('POST /api/auth/verify-pin lỗi:', err.message);
+    res.status(500).json({ error: 'Không thể xác thực mã PIN' });
+  }
+});
+
 // PATCH /api/auth/me — người dùng tự sửa hồ sơ CỦA CHÍNH MÌNH (tên/email/SĐT/mật khẩu). Xác định
 // user cần sửa từ req.user.username (lấy từ JWT đã ký), KHÔNG từ bất kỳ id/username nào client gửi
 // trong body — nên không thể dùng route này để sửa hồ sơ người khác hay tự cấp quyền/đổi phòng ban
