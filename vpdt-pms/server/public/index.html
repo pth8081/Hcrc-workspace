@@ -713,10 +713,13 @@
       <button type="button" onclick="setPeriodicReportSubTab('PUBLISHED')" id="btnPRSubPublished" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">📣 Đã Phát Hành</button>
     </div>
 
-    <!-- Sub-tab: Nhập Báo Cáo (ai đã đăng nhập, còn quyền vào module, đều nộp được cho đúng phòng ban
-         của mình nếu phòng ban đó nằm trong phạm vi kỳ — không cần quyền riêng, giống Văn Phòng Phẩm) -->
+    <!-- Sub-tab: Nhập Báo Cáo — CHỈ người có quyền reportEntryCreate (hoặc admin) mới thấy khối tạo báo
+         cáo bên dưới; luôn tạo được cho ĐÚNG phòng ban của mình (forceOwnDept, khoá cứng ở server),
+         không chọn được phòng ban khác. Danh sách báo cáo (bảng dưới) ai cũng xem được, phạm vi phòng
+         ban mình (xem renderPrEntryTable()). -->
     <div id="prSubEntry" class="space-y-4">
-      <div class="bg-sky-50 p-4 rounded border border-sky-200 space-y-3">
+      <div id="prEntryNoCreatePermNote" class="hidden text-xs text-gray-500 italic bg-gray-50 p-3 rounded border">⛔ Bạn không có quyền nộp Báo Cáo Định Kỳ — chỉ xem được danh sách báo cáo của phòng ban mình bên dưới.</div>
+      <div id="prEntryFormBox" class="hidden bg-sky-50 p-4 rounded border border-sky-200 space-y-3">
         <h3 class="font-bold text-sky-900 text-sm flex items-center gap-1">📝 Nhập Báo Cáo</h3>
         <div>
           <label class="block text-xs font-semibold text-gray-600 mb-1">Chọn kỳ báo cáo (đang mở, áp dụng cho phòng ban của bạn)</label>
@@ -2337,12 +2340,15 @@
             <span id="permTreeBadge_periodicReport" class="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-gray-100 text-gray-500">0/0</span>
           </summary>
           <div class="p-3 pt-0 space-y-3">
-            <p class="text-[11px] text-gray-500 italic">Còn quyền vào module "Báo Cáo Định Kỳ" ở mục 0 mới thấy được các màn dưới đây. "Quản lý" = tạo/đóng kỳ báo cáo. "Tổng hợp" = quyền CHUNG, tổng hợp/sửa/phát hành được MỌI kỳ (không phân biệt ai tạo kỳ đó). Nộp báo cáo KHÔNG cần quyền riêng — ai đã đăng nhập đều nộp được cho đúng phòng ban của mình, miễn phòng ban đó nằm trong phạm vi kỳ (giống Văn Phòng Phẩm).</p>
+            <p class="text-[11px] text-gray-500 italic">Còn quyền vào module "Báo Cáo Định Kỳ" ở mục 0 mới thấy được các màn dưới đây. "Quản lý" = tạo/đóng kỳ báo cáo. "Tổng hợp" = quyền CHUNG, tổng hợp/sửa/phát hành được MỌI kỳ (không phân biệt ai tạo kỳ đó). "Nộp báo cáo" = ai KHÔNG có quyền này thì không nộp được — có quyền rồi thì CHỈ nộp được cho đúng phòng ban của mình, không chọn phòng ban khác (khoá cứng ở server). Xem danh sách báo cáo vẫn luôn xem được (không cần quyền riêng), nhưng chỉ xem trong phạm vi phòng ban mình — trừ ai có "Quản lý"/"Tổng hợp" ở trên thì xem được mọi phòng ban.</p>
             <label class="flex items-center gap-2 text-orange-700 font-semibold cursor-pointer">
               <input type="checkbox" id="pReportManage"> ✅ Quản lý kỳ báo cáo (tạo/đóng kỳ sớm)
             </label>
             <label class="flex items-center gap-2 text-orange-700 font-semibold cursor-pointer">
               <input type="checkbox" id="pReportAggregate"> ✅ Tổng hợp báo cáo (chọn, merge, sửa, phát hành/hủy phát hành)
+            </label>
+            <label class="flex items-center gap-2 text-orange-700 font-semibold cursor-pointer">
+              <input type="checkbox" id="pReportEntryCreate"> ✅ Nộp báo cáo (chỉ tạo được cho đúng phòng ban của mình)
             </label>
           </div>
         </details>
@@ -4025,8 +4031,9 @@ function canAccessVppModule(user) {
 
 // Vào được module "Báo Cáo Định Kỳ" (kỳ báo cáo tuần → nhập liệu → tổng hợp → phát hành) hay không —
 // cổng chung, không phải "được làm gì trong đó" (tạo kỳ = reportManage, tổng hợp/phát hành =
-// reportAggregate — xét riêng ở từng màn con; nhập báo cáo không cần quyền riêng, chỉ cần phòng ban
-// nằm trong phạm vi kỳ, giống Văn Phòng Phẩm).
+// reportAggregate, nộp báo cáo = reportEntryCreate — xét riêng ở từng màn con, xem
+// canCreateReportEntryClient(). Còn quyền vào module rồi thì ai cũng XEM được danh sách báo cáo trong
+// phạm vi phòng ban mình dù không có reportEntryCreate — xem renderPrEntryTable()).
 function canAccessPeriodicReportModule(user) {
   if (!user) return false;
   if (user.perms?.admin) return true;
@@ -4189,7 +4196,7 @@ function defaultNewUserPerms() {
     contractView: emptyScope(), contractCreate: emptyScope(), contractDownload: emptyScope(), contractApprove: false,
     paymentManage: false,
     vppManage: false,
-    reportManage: false, reportAggregate: false,
+    reportManage: false, reportAggregate: false, reportEntryCreate: false,
     meetingView: emptyScope(), meetingBookScope: emptyScope(),
     meetingApprove: false, meetingCancel: false,
     carView: emptyScope(), carCreate: emptyScope(), carDownload: emptyScope(),
@@ -6213,7 +6220,16 @@ function closeDocDetailModal() {
 function printViewModalContent() {
   const container = document.getElementById('viewModalContent');
   if (!container || !container.innerHTML.trim()) return alert('Không có nội dung để in.');
+  printHtmlViaHiddenIframe(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>In</title></head><body>${container.innerHTML}</body></html>`);
+}
 
+// In qua iframe ẩn (KHÔNG thêm thư viện tạo PDF nào — người dùng chọn "Save as PDF" ở hộp thoại In của
+// trình duyệt). QUAN TRỌNG: gọi print() NGAY SAU doc.close(), KHÔNG chờ sự kiện "load" của iframe — nội
+// dung ghi bằng document.write()/close() đã có sẵn NGAY LÚC close() trả về (đồng bộ), trong khi "load"
+// của 1 iframe rỗng thường bắn ra NGAY LÚC appendChild (trước khi kịp gán onload ở dưới) nên callback
+// gán SAU dễ không bao giờ chạy — bấm nút không thấy gì cả, không báo lỗi (bug thật đã gặp ở nút "Tải
+// PDF" Báo Cáo Định Kỳ, cùng 1 khuôn mẫu này bị sao chép qua nên sửa chung ở đây).
+function printHtmlViaHiddenIframe(html) {
   const printFrame = document.createElement('iframe');
   printFrame.style.position = 'fixed';
   printFrame.style.right = '0';
@@ -6225,14 +6241,12 @@ function printViewModalContent() {
 
   const doc = printFrame.contentWindow.document;
   doc.open();
-  doc.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>In</title></head><body>${container.innerHTML}</body></html>`);
+  doc.write(html);
   doc.close();
 
-  printFrame.onload = () => {
-    printFrame.contentWindow.focus();
-    printFrame.contentWindow.print();
-    setTimeout(() => document.body.removeChild(printFrame), 1000);
-  };
+  printFrame.contentWindow.focus();
+  printFrame.contentWindow.print();
+  setTimeout(() => document.body.removeChild(printFrame), 1000);
 }
 
 // ==========================================
@@ -13643,6 +13657,7 @@ function collectPermsFromForm() {
     vppManage: document.getElementById('pVppManage').checked,
     reportManage: document.getElementById('pReportManage').checked,
     reportAggregate: document.getElementById('pReportAggregate').checked,
+    reportEntryCreate: document.getElementById('pReportEntryCreate').checked,
     meetingView: scopeFromForm('pMeetingViewAll', 'pMeetingViewDept'),
     meetingBookScope: scopeFromForm('pMeetingBookAll', 'pMeetingBookDept'),
     carView: scopeFromForm('pCarViewAll', 'pCarViewDept'),
@@ -13712,6 +13727,7 @@ function populatePermsForm(permsInput) {
   document.getElementById('pVppManage').checked = !!perms.vppManage;
   document.getElementById('pReportManage').checked = !!perms.reportManage;
   document.getElementById('pReportAggregate').checked = !!perms.reportAggregate;
+  document.getElementById('pReportEntryCreate').checked = !!perms.reportEntryCreate;
   document.getElementById('pMeetingViewAll').checked = !!perms.meetingView?.all;
   document.getElementById('pMeetingBookAll').checked = !!perms.meetingBookScope?.all;
   document.getElementById('pCarViewAll').checked = !!perms.carView?.all;
@@ -14031,6 +14047,9 @@ function canManageReportPeriodsClient(user) {
 function canAggregateReportsClient(user) {
   return !!(user?.perms?.admin || user?.perms?.reportAggregate);
 }
+function canCreateReportEntryClient(user) {
+  return !!(user?.perms?.admin || user?.perms?.reportEntryCreate);
+}
 
 // Kỳ coi là ĐANG MỞ (còn nhận nhập liệu) nếu status=OPEN VÀ chưa qua endTime — khớp đúng điều kiện
 // server (xem lib/createValidation.js CREATE_MODULE_CONFIGS.reportEntries + isReportPeriodClosed()
@@ -14084,12 +14103,17 @@ function setPeriodicReportSubTab(subTab) {
   if (subTab === 'PUBLISHED') { renderPrPublishedTable(); }
 }
 
-// ============ NHẬP BÁO CÁO (nhân viên thuộc phòng ban trong phạm vi kỳ) ============
+// ============ NHẬP BÁO CÁO (chỉ người có quyền reportEntryCreate, nộp cho ĐÚNG phòng ban mình) ============
 function findOwnReportEntryForPeriod(periodId) {
   return DB.reportEntries.find(e => e.periodId === periodId && e.creator === currentUser.username);
 }
 
 function renderPrEntryPeriodOptions() {
+  const canCreate = canCreateReportEntryClient(currentUser);
+  document.getElementById('prEntryNoCreatePermNote').classList.toggle('hidden', canCreate);
+  document.getElementById('prEntryFormBox').classList.toggle('hidden', !canCreate);
+  if (!canCreate) return;
+
   const sel = document.getElementById('prEntryPeriodSelect');
   const openPeriods = DB.reportPeriods.filter(p => reportPeriodIsOpen(p) && reportPeriodDeptAllowed(p, currentUser.dept));
   sel.innerHTML = `<option value="">-- Chọn kỳ báo cáo --</option>` +
@@ -14201,11 +14225,16 @@ function prEntryStatusBadge(e) {
   return `<span class="px-2 py-0.5 bg-emerald-100 text-emerald-800 rounded font-bold text-xs">✅ Đã gửi</span>`;
 }
 
+// Phạm vi xem: reportManage/reportAggregate/admin xem MỌI phòng ban. Còn lại xem được báo cáo ĐÃ GỬI
+// (status !== 'DRAFT') của TOÀN BỘ phòng ban mình (không riêng của mình) — bản nháp (chưa gửi, còn
+// đang soạn dở) chỉ chính người tạo nháp đó mới thấy, đồng nghiệp cùng phòng chưa thấy được.
 function renderPrEntryTable() {
   const tbody = document.getElementById('prEntryTableBody');
   if (!tbody) return;
   const canSeeAll = canManageReportPeriodsClient(currentUser) || canAggregateReportsClient(currentUser);
-  const visible = DB.reportEntries.filter(e => canSeeAll || e.creator === currentUser.username);
+  const visible = DB.reportEntries.filter(e =>
+    canSeeAll || e.creator === currentUser.username || (e.dept === currentUser.dept && e.status !== 'DRAFT')
+  );
   if (!visible.length) {
     tbody.innerHTML = `<tr><td colspan="5" class="text-center p-6 text-gray-500 italic">Chưa có báo cáo nào.</td></tr>`;
     return;
@@ -14660,8 +14689,9 @@ document.addEventListener('keydown', (ev) => {
   else if (ev.key === 'Escape') closePrSlideshow();
 });
 
-// ============ XUẤT PDF — tái dùng cơ chế in iframe ẩn có sẵn (xem printViewModalContent()), KHÔNG
-// thêm thư viện tạo PDF phía server nào. Người dùng chọn "Save as PDF" ở hộp thoại in của trình duyệt. ============
+// ============ XUẤT PDF — tái dùng cơ chế in iframe ẩn có sẵn (xem printHtmlViaHiddenIframe(), khai báo
+// cùng printViewModalContent()), KHÔNG thêm thư viện tạo PDF phía server nào. Người dùng chọn "Save as
+// PDF" ở hộp thoại in của trình duyệt. ============
 function downloadPrPdf(periodId) {
   const period = DB.reportPeriods.find(p => p.id === periodId);
   if (!period || period.compilation?.status !== 'PUBLISHED') return alert('Kỳ báo cáo này chưa phát hành.');
@@ -14674,25 +14704,7 @@ function downloadPrPdf(periodId) {
     </div>
   `).join('');
 
-  const printFrame = document.createElement('iframe');
-  printFrame.style.position = 'fixed';
-  printFrame.style.right = '0';
-  printFrame.style.bottom = '0';
-  printFrame.style.width = '0';
-  printFrame.style.height = '0';
-  printFrame.style.border = '0';
-  document.body.appendChild(printFrame);
-
-  const doc = printFrame.contentWindow.document;
-  doc.open();
-  doc.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>${escapeHtml(period.name)}</title></head><body style="font-family: Arial, sans-serif;"><h1 style="padding: 40px 40px 0;">${escapeHtml(period.name)}</h1>${slidesHTML}</body></html>`);
-  doc.close();
-
-  printFrame.onload = () => {
-    printFrame.contentWindow.focus();
-    printFrame.contentWindow.print();
-    setTimeout(() => document.body.removeChild(printFrame), 1000);
-  };
+  printHtmlViaHiddenIframe(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>${escapeHtml(period.name)}</title></head><body style="font-family: Arial, sans-serif;"><h1 style="padding: 40px 40px 0;">${escapeHtml(period.name)}</h1>${slidesHTML}</body></html>`);
 }
 
 // ==========================================
@@ -14841,6 +14853,7 @@ function resetUserForm() {
   document.getElementById('pVppManage').checked = !!defaults.vppManage;
   document.getElementById('pReportManage').checked = !!defaults.reportManage;
   document.getElementById('pReportAggregate').checked = !!defaults.reportAggregate;
+  document.getElementById('pReportEntryCreate').checked = !!defaults.reportEntryCreate;
   document.getElementById('pMeetingApprove').checked = defaults.meetingApprove;
   document.getElementById('pMeetingCancel').checked = defaults.meetingCancel;
   document.getElementById('pOfficeBuy').checked = defaults.officeBuy;
@@ -14943,7 +14956,7 @@ function summarizeUserPerms(perms) {
   if (perms.contractApprove) parts.push('📄 Hợp đồng (duyệt)');
   if (perms.paymentManage) parts.push('💰 Thanh toán');
   if (perms.vppManage) parts.push('🖇️ Quản lý VPP');
-  if (perms.reportManage || perms.reportAggregate) parts.push('📅 Báo cáo định kỳ');
+  if (perms.reportManage || perms.reportAggregate || perms.reportEntryCreate) parts.push('📅 Báo cáo định kỳ');
   if (hasScope(perms.meetingView) || hasScope(perms.meetingBookScope) || perms.meetingApprove || perms.meetingCancel) parts.push('📅 Phòng họp');
   if (hasScope(perms.carView) || hasScope(perms.carCreate)) parts.push('🚗 Xe');
   if ((hasScope(perms.officeView) || hasScope(perms.officeCreate)) && (perms.officeBuy || perms.officeFix || perms.officeInvest)) parts.push('🏢 VP');
