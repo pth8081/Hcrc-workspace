@@ -304,6 +304,28 @@ const CREATE_MODULE_CONFIGS = {
       // trên) nên luôn APPROVED.
       payload.status = (type === 'SHARE' && !user.perms?.admin && !user.perms?.internalPostApprove)
         ? 'PENDING' : 'APPROVED';
+
+      // Ghim lên trang chủ (Đợt E) — chỉ Tin tức/Đào tạo/Khen thưởng (Góc chia sẻ còn phải qua duyệt
+      // mới công khai nên không ghim được), chỉ người có quyền internalPostApprove/admin. pinExpiresAt
+      // TÍNH Ở SERVER từ số ngày client chọn (payload.pinDurationDays) — không tin thẳng timestamp
+      // client tự gửi để tránh ghim vĩnh viễn/quá hạn cho phép.
+      const PIN_DURATION_DAYS_ALLOWED = [3, 7, 14, 30];
+      const pinDurationDaysRaw = payload.pinDurationDays;
+      delete payload.pinDurationDays;
+      const wantsPin = pinDurationDaysRaw !== undefined && pinDurationDaysRaw !== null && pinDurationDaysRaw !== '';
+      if (wantsPin) {
+        if (type === 'SHARE') throw new CreateError(400, 'Không thể ghim bài Góc Chia Sẻ lên trang chủ');
+        if (!user.perms?.admin && !user.perms?.internalPostApprove) throw new CreateError(403, 'Bạn không có quyền ghim bài lên trang chủ');
+        const days = Number(pinDurationDaysRaw);
+        if (!PIN_DURATION_DAYS_ALLOWED.includes(days)) throw new CreateError(400, 'Thời hạn ghim không hợp lệ');
+        payload.pinned = true;
+        payload.pinExpiresAt = new Date(Date.now() + days * 24 * 60 * 60 * 1000).toISOString();
+        payload.pinnedBy = user.username;
+      } else {
+        payload.pinned = false;
+        payload.pinExpiresAt = null;
+        payload.pinnedBy = null;
+      }
     }
   },
   // Đề nghị thanh toán TẠO THỦ CÔNG (module "Tổng Hợp" > "Thanh toán" > "Tạo đề nghị thủ công") —

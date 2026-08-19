@@ -1163,6 +1163,24 @@ h1, h2, h3, h4 { letter-spacing: -0.01em !important; }
         <label class="block font-semibold text-gray-600 mb-1">Tệp Đính Kèm (tuỳ chọn)</label>
         <input id="internalFile" type="file" class="w-full border p-1.5 rounded bg-white">
       </div>
+      <!-- Ghim lên trang chủ (Đợt E) — chỉ hiện cho Tin tức/Đào tạo/Khen thưởng, chỉ người có quyền
+           internalPostApprove/admin mới thấy (toggle ẩn/hiện ở setInternalSubTab()/finishLogin()).
+           Thời hạn tính Ở SERVER từ pinDurationDays, không tin timestamp client tự gửi. -->
+      <div id="internalPinField" class="hidden bg-amber-50 border border-amber-200 rounded p-2 space-y-1.5">
+        <label class="flex items-center gap-1.5 font-semibold text-amber-800 cursor-pointer">
+          <input type="checkbox" id="internalPinCheckbox" onchange="document.getElementById('internalPinDurationWrap').classList.toggle('hidden', !this.checked)">
+          📌 Ghim bài này lên trang chủ (Dashboard)
+        </label>
+        <div id="internalPinDurationWrap" class="hidden pl-5">
+          <label class="block text-gray-600 mb-1">Ghim trong</label>
+          <select id="internalPinDuration" class="border p-1.5 rounded bg-white">
+            <option value="3">3 ngày</option>
+            <option value="7" selected>7 ngày</option>
+            <option value="14">14 ngày</option>
+            <option value="30">30 ngày</option>
+          </select>
+        </div>
+      </div>
       <div class="flex justify-end">
         <button type="submit" id="internalSubmitBtn" class="bg-fuchsia-600 text-white px-5 py-2 rounded font-bold hover:bg-fuchsia-700">Đăng Tin</button>
       </div>
@@ -5298,12 +5316,17 @@ function renderDashboardNews() {
   if (!canAccessInternalModule(currentUser)) { section.classList.add('hidden'); return; }
 
   const typeLabel = { NEWS: '📰 Tin tức', TRAINING: '🎓 Đào tạo', REWARD: '🏆 Khen thưởng' };
-  // "Nổi bật" = mới nhất trước — sắp theo id (Date.now() lúc tạo, xem lib/createValidation.js) thay vì
-  // parse chuỗi createdAt (đã format vi-VN, không parse ngược lại đáng tin cậy được).
-  const posts = (DB.internalPosts || [])
-    .filter(p => p.type !== 'SHARE' && p.status !== 'PENDING' && p.status !== 'REJECTED')
-    .sort((a, b) => b.id - a.id)
-    .slice(0, 6);
+  const now = Date.now();
+  const visiblePosts = (DB.internalPosts || []).filter(p => p.type !== 'SHARE' && p.status !== 'PENDING' && p.status !== 'REJECTED');
+
+  // Ưu tiên bài đang GHIM (còn hạn) lên đầu — sắp theo hạn ghim còn XA NHẤT trước (Đợt E). Bài thường
+  // (không ghim/đã hết hạn ghim) xếp sau, mới nhất trước — sắp theo id (Date.now() lúc tạo, xem
+  // lib/createValidation.js) thay vì parse chuỗi createdAt (đã format vi-VN, không parse ngược lại
+  // đáng tin cậy được). Giữ 2 nhóm tách biệt (không trộn) để bài ghim luôn nổi bật lên đầu.
+  const isActivePinned = p => p.pinned && p.pinExpiresAt && new Date(p.pinExpiresAt).getTime() > now;
+  const pinnedPosts = visiblePosts.filter(isActivePinned).sort((a, b) => new Date(b.pinExpiresAt) - new Date(a.pinExpiresAt));
+  const otherPosts = visiblePosts.filter(p => !isActivePinned(p)).sort((a, b) => b.id - a.id);
+  const posts = [...pinnedPosts, ...otherPosts].slice(0, 6);
 
   section.classList.remove('hidden');
   const container = document.getElementById('dashboardNewsContainer');
@@ -5313,7 +5336,7 @@ function renderDashboardNews() {
   }
   container.innerHTML = posts.map(p => `
     <div onclick="switchTab('internal'); setInternalSubTab('${p.type}'); viewInternalPostDetail(${p.id});" class="bg-white rounded border hover:shadow p-3 cursor-pointer">
-      <div class="text-[10px] font-bold text-fuchsia-700">${typeLabel[p.type] || p.type}</div>
+      <div class="text-[10px] font-bold text-fuchsia-700">${typeLabel[p.type] || p.type}${isActivePinned(p) ? ' <span class="text-amber-600">📌 Đã ghim</span>' : ''}</div>
       <div class="font-bold text-gray-800 text-sm">${escapeHtml(p.title)}</div>
       <div class="text-xs text-gray-500 mt-0.5">${escapeHtml(p.authorName)} — ${escapeHtml(p.createdAt)}</div>
     </div>
@@ -15876,6 +15899,13 @@ function setInternalSubTab(subTab) {
   document.getElementById('internalRewardPeriodField').classList.toggle('hidden', subTab !== 'REWARD');
   document.getElementById('internalRewardRecipientsField').classList.toggle('hidden', subTab !== 'REWARD');
 
+  // Ghim lên trang chủ (Đợt E) — không áp dụng Góc chia sẻ (còn phải qua duyệt mới công khai), chỉ
+  // người có quyền internalPostApprove/admin mới thấy. Đặt lại checkbox mỗi lần đổi tab để không vô
+  // tình mang theo lựa chọn ghim của loại bài trước đó.
+  document.getElementById('internalPinField').classList.toggle('hidden', subTab === 'SHARE' || !canApproveInternalPost(currentUser));
+  document.getElementById('internalPinCheckbox').checked = false;
+  document.getElementById('internalPinDurationWrap').classList.add('hidden');
+
   const icons = { NEWS: '📰', TRAINING: '🎓', REWARD: '🏆', SHARE: '💬' };
   document.getElementById('internalFormTitle').innerText = `📝 Đăng ${INTERNAL_TYPE_LABELS[subTab]} Mới`;
   document.getElementById('internalListTitle').innerText = `${icons[subTab]} Danh Sách ${INTERNAL_TYPE_LABELS[subTab]}`;
@@ -15945,6 +15975,11 @@ async function submitInternalPost(e) {
     likes: [],
     readBy: [currentUser.username]
   };
+  // Ghim lên trang chủ (Đợt E) — chỉ gửi kèm số ngày muốn ghim khi có tick chọn; server tự tính
+  // pinExpiresAt và kiểm tra lại quyền (không tin trực tiếp bất kỳ giá trị pin nào từ client).
+  if (document.getElementById('internalPinCheckbox').checked) {
+    postPayload.pinDurationDays = document.getElementById('internalPinDuration').value;
+  }
 
   let newPost;
   try {
@@ -16026,6 +16061,11 @@ function renderInternalPosts() {
       : p.status === 'REJECTED'
         ? `<span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-red-100 text-red-700 align-middle ml-2">❌ Bị từ chối</span>`
         : '';
+    // Ghim lên trang chủ (Đợt E) — chỉ hiện badge khi CÒN hạn (pinExpiresAt tương lai), không hiện lại
+    // cho bài đã hết hạn ghim dù field pinned vẫn còn true trong dữ liệu cũ.
+    const pinBadgeHTML = (p.pinned && p.pinExpiresAt && new Date(p.pinExpiresAt).getTime() > Date.now())
+      ? `<span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 align-middle ml-2">📌 Đã ghim trang chủ</span>`
+      : '';
     const approveActionsHTML = (p.status === 'PENDING' && canApprove)
       ? `<div class="flex gap-2">
            <button onclick="approveInternalPostAction(${p.id})" class="bg-emerald-600 text-white px-3 py-1 rounded text-xs font-bold hover:bg-emerald-700">✅ Duyệt</button>
@@ -16036,7 +16076,7 @@ function renderInternalPosts() {
       <div class="bg-white rounded border hover:shadow overflow-hidden flex flex-col sm:flex-row">
         ${coverThumbHTML}
         <div class="p-4 flex-1 flex flex-col">
-          <div class="font-bold text-fuchsia-800 text-base cursor-pointer hover:underline" onclick="viewInternalPostDetail(${p.id})">${escapeHtml(p.title)}${statusBadgeHTML}</div>
+          <div class="font-bold text-fuchsia-800 text-base cursor-pointer hover:underline" onclick="viewInternalPostDetail(${p.id})">${escapeHtml(p.title)}${statusBadgeHTML}${pinBadgeHTML}</div>
           <div class="text-xs text-gray-500 mt-0.5">${escapeHtml(p.authorName)} (${escapeHtml(p.dept)}) — ${escapeHtml(p.createdAt)}</div>
           <p class="text-sm text-gray-700 mt-2 flex-1">${escapeHtml(snippet)}${(p.content || '').length > 200 ? '…' : ''}</p>
           ${extraInfo}
