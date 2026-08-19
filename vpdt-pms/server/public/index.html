@@ -96,9 +96,21 @@ h1, h2, h3, h4 { letter-spacing: -0.01em !important; }
       <button id="btnSubmissionTab" onclick="switchTab('submission')" class="hidden sidebar-item">
         <span class="sidebar-icon">📜</span><span class="sidebar-label">Văn bản trình</span>
       </button>
-      <button id="btnInternalTab" onclick="switchTab('internal')" class="hidden sidebar-item">
-        <span class="sidebar-icon">📣</span><span class="sidebar-label">Truyền thông</span>
-      </button>
+      <!-- Truyền Thông — cùng khuôn Hợp Đồng (dropdown TĨNH, không cần hàm updateXNavVisibility riêng):
+           cả 4 loại bài (Tin Nội Bộ/Đào Tạo/Khen Thưởng/Góc Chia Sẻ) dùng CHUNG 1 điều kiện quyền XEM
+           (canAccessInternalModule) — chỉ quyền ĐĂNG bài mới khác nhau theo loại (canCreateInternalPost),
+           không ảnh hưởng gì tới việc hiện/ẩn mục nav này. -->
+      <div id="truyenThongNavWrap" class="hidden">
+        <button id="btnInternalTab" onclick="toggleTruyenThongDropdown(event)" class="sidebar-item">
+          <span class="sidebar-icon">📣</span><span class="sidebar-label flex-1">Truyền thông</span><span class="sidebar-label text-[10px]">▾</span>
+        </button>
+        <div id="truyenThongDropdownPanel" class="hidden pl-7 space-y-0.5 sidebar-label">
+          <button onclick="closeTruyenThongDropdown(); switchTab('internal'); setInternalSubTab('NEWS')" class="sidebar-subitem">📰 Tin Nội Bộ</button>
+          <button onclick="closeTruyenThongDropdown(); switchTab('internal'); setInternalSubTab('TRAINING')" class="sidebar-subitem">🎓 Đào Tạo</button>
+          <button onclick="closeTruyenThongDropdown(); switchTab('internal'); setInternalSubTab('REWARD')" class="sidebar-subitem">🏆 Khen Thưởng</button>
+          <button onclick="closeTruyenThongDropdown(); switchTab('internal'); setInternalSubTab('SHARE')" class="sidebar-subitem">💬 Góc Chia Sẻ</button>
+        </div>
+      </div>
 
       <div id="hopDongNavWrap" class="hidden">
         <button id="btnHopDongTab" onclick="toggleHopDongDropdown(event)" class="sidebar-item">
@@ -150,9 +162,20 @@ h1, h2, h3, h4 { letter-spacing: -0.01em !important; }
       <button id="btnReportsTab" onclick="switchTab('reports')" class="hidden sidebar-item">
         <span class="sidebar-icon">📊</span><span class="sidebar-label">Báo cáo</span>
       </button>
-      <button id="btnSystemTab" onclick="switchTab('system')" class="hidden sidebar-item">
-        <span class="sidebar-icon">🛠️</span><span class="sidebar-label">Hệ Thống</span>
-      </button>
+      <!-- Hệ Thống — cùng khuôn Hợp Đồng (dropdown TĨNH): cả 4 mục con đều yêu cầu admin (không có
+           quyền riêng từng mục như Điều Hành/Hành Chính, xem setSystemSubTab() chặn thẳng !admin ở đầu
+           hàm) nên không cần hàm updateXNavVisibility riêng — hiện đủ 4 mục ngay khi mục cha hiện ra. -->
+      <div id="heThongNavWrap" class="hidden">
+        <button id="btnSystemTab" onclick="toggleHeThongDropdown(event)" class="sidebar-item">
+          <span class="sidebar-icon">🛠️</span><span class="sidebar-label flex-1">Hệ Thống</span><span class="sidebar-label text-[10px]">▾</span>
+        </button>
+        <div id="heThongDropdownPanel" class="hidden pl-7 space-y-0.5 sidebar-label">
+          <button onclick="closeHeThongDropdown(); switchTab('system'); setSystemSubTab('ADMIN')" class="sidebar-subitem">⚙️ Quản Trị</button>
+          <button onclick="closeHeThongDropdown(); switchTab('system'); setSystemSubTab('FORM')" class="sidebar-subitem">📋 Biểu Mẫu</button>
+          <button onclick="closeHeThongDropdown(); switchTab('system'); setSystemSubTab('WORKFLOW')" class="sidebar-subitem">🔄 Quy Trình & Phê Duyệt</button>
+          <button onclick="closeHeThongDropdown(); switchTab('system'); setSystemSubTab('LOG')" class="sidebar-subitem">📊 Log</button>
+        </div>
+      </div>
     </nav>
 
     <div class="p-3 border-t border-slate-700 space-y-2">
@@ -5218,6 +5241,14 @@ function countDeptWorkflowPending(records, wfConfigFor, user) {
 // (không thể stringify closure có biến bắt giữ như subType), build lại mỗi lần renderDashboard().
 let dashboardCardActions = {};
 
+// Đặt sẵn bộ lọc Trạng Thái = "Đang Chờ Duyệt" của module rồi kích hoạt lại render — dùng cho các thẻ
+// Dashboard mà module đích ĐÃ CÓ SẴN ô lọc trạng thái (không phải mọi module đều có, xem ghi chú từng
+// addCard bên dưới) để bấm vào thẳng đúng danh sách cần xử lý, không phải tự lọc tay thêm 1 bước.
+function applyPendingStatusFilter(selectId, onChangeFn) {
+  const el = document.getElementById(selectId);
+  if (el) { el.value = 'PENDING'; onChangeFn(); }
+}
+
 function buildDashboardCards(user) {
   dashboardCardActions = {};
   const cards = [];
@@ -5225,11 +5256,11 @@ function buildDashboardCards(user) {
 
   const docCount = countDeptWorkflowPending(DB.docs, doc => DB.deptWorkflows[doc.dept], user);
   addCard({ key: 'doc', icon: '📂', label: 'Tài liệu chờ duyệt', count: docCount, show: docCount > 0,
-    action: () => switchTab('doc') });
+    action: () => { switchTab('doc'); applyPendingStatusFilter('filterStatus', onFilterChange); } });
 
   const subCount = countDeptWorkflowPending(DB.submissions, sub => resolveSubmissionWorkflow(sub), user);
   addCard({ key: 'submission', icon: '📜', label: 'Văn bản trình chờ duyệt', count: subCount, show: subCount > 0,
-    action: () => switchTab('submission') });
+    action: () => { switchTab('submission'); applyPendingStatusFilter('filterStatusSub', onSubFilterChange); } });
 
   const contractCanApprove = canApproveContract(user);
   const contractCount = contractCanApprove ? (DB.contracts || []).filter(c => c.approvalStatus === 'PENDING').length : 0;
@@ -5239,11 +5270,11 @@ function buildDashboardCards(user) {
   const meetingCanApprove = canApproveMeeting(user);
   const meetingCount = meetingCanApprove ? (DB.meetings || []).filter(m => m.status === 'PENDING').length : 0;
   addCard({ key: 'meeting', icon: '📅', label: 'Đặt phòng họp chờ duyệt', count: meetingCount, show: meetingCanApprove,
-    action: () => switchTab('meeting') });
+    action: () => { switchTab('meeting'); applyPendingStatusFilter('filterStatusMeeting', onMeetingFilterChange); } });
 
   const carCount = countDeptWorkflowPending(DB.carRegs, c => DB.carDeptWorkflows[c.dept], user);
   addCard({ key: 'car', icon: '🚗', label: 'Đăng ký xe chờ duyệt', count: carCount, show: carCount > 0,
-    action: () => switchTab('car') });
+    action: () => { switchTab('car'); applyPendingStatusFilter('filterStatusCar', onCarFilterChange); } });
 
   [
     { key: 'officeBuy', subType: 'MUA_BAN', icon: '🛒', label: 'Mua Bán chờ duyệt' },
@@ -5254,7 +5285,7 @@ function buildDashboardCards(user) {
     const subTypeReqs = (DB.officeReqs || []).filter(o => o.subType === subType);
     const count = countDeptWorkflowPending(subTypeReqs, o => wfMap[o.dept], user);
     addCard({ key, icon, label, count, show: count > 0,
-      action: () => { switchTab('office'); setOfficeSubTab(subType); } });
+      action: () => { switchTab('office'); setOfficeSubTab(subType); applyPendingStatusFilter('filterStatusOffice', onOfficeFilterChange); } });
   });
 
   const paymentCanManage = canManagePaymentRequestsClient(user);
@@ -5385,7 +5416,7 @@ function finishLogin(user) {
   document.getElementById('userInfo').innerText = `${user.name} (${user.dept})`;
   document.getElementById('userPhoneInfo').innerText = `📞 ${user.phone || 'Chưa có SĐT'} | ✉️ ${user.email || 'Chưa có Email'}`;
 
-  document.getElementById('btnSystemTab').classList.toggle('hidden', !user.perms.admin);
+  document.getElementById('heThongNavWrap').classList.toggle('hidden', !user.perms.admin);
   document.getElementById('btnReportsTab').classList.toggle('hidden', !canAccessReportsModule(user));
   document.getElementById('btnDocTab').classList.toggle('hidden', !canAccessDocModule(user));
 
@@ -5396,7 +5427,7 @@ function finishLogin(user) {
   document.getElementById('btnTaskTab').classList.toggle('hidden', !canAccessTaskModule(user));
   document.getElementById('btnPeriodicReportTab').classList.toggle('hidden', !canAccessPeriodicReportModule(user));
   updateDieuHanhNavVisibility();
-  document.getElementById('btnInternalTab').classList.toggle('hidden', !canAccessInternalModule(user));
+  document.getElementById('truyenThongNavWrap').classList.toggle('hidden', !canAccessInternalModule(user));
   document.getElementById('btnCarTab').classList.toggle('hidden', !canAccessCarModule(user));
   document.getElementById('btnVppTab').classList.toggle('hidden', !canAccessVppModule(user));
   updateHanhChinhNavVisibility();
@@ -5522,6 +5553,42 @@ function closeHopDongDropdown() {
 document.addEventListener('click', (ev) => {
   const panel = document.getElementById('hopDongDropdownPanel');
   const btn = document.getElementById('btnHopDongTab');
+  if (!panel || panel.classList.contains('hidden')) return;
+  if (!panel.contains(ev.target) && ev.target !== btn && !btn?.contains(ev.target)) panel.classList.add('hidden');
+});
+
+// "Truyền Thông" — cùng khuôn Hợp Đồng, bọc 4 loại bài Tin Nội Bộ/Đào Tạo/Khen Thưởng/Góc Chia Sẻ
+// (module "internal", xem HTML #truyenThongNavWrap). Không có hàm updateXNavVisibility riêng vì cả 4
+// loại dùng CHUNG 1 điều kiện quyền XEM (canAccessInternalModule) — nút cha ẩn/hiện thẳng theo đúng
+// điều kiện đó ở finishLogin().
+function toggleTruyenThongDropdown(e) {
+  e.stopPropagation();
+  document.getElementById('truyenThongDropdownPanel')?.classList.toggle('hidden');
+}
+function closeTruyenThongDropdown() {
+  document.getElementById('truyenThongDropdownPanel')?.classList.add('hidden');
+}
+document.addEventListener('click', (ev) => {
+  const panel = document.getElementById('truyenThongDropdownPanel');
+  const btn = document.getElementById('btnInternalTab');
+  if (!panel || panel.classList.contains('hidden')) return;
+  if (!panel.contains(ev.target) && ev.target !== btn && !btn?.contains(ev.target)) panel.classList.add('hidden');
+});
+
+// "Hệ Thống" — cùng khuôn Hợp Đồng, bọc 4 mục con Quản Trị/Biểu Mẫu/Quy Trình & Phê Duyệt/Log (module
+// "system", xem HTML #heThongNavWrap). Không có hàm updateXNavVisibility riêng vì cả 4 mục đều yêu cầu
+// admin (setSystemSubTab() tự chặn !admin ở đầu hàm, không có quyền riêng từng mục) — nút cha ẩn/hiện
+// thẳng theo user.perms.admin ở finishLogin().
+function toggleHeThongDropdown(e) {
+  e.stopPropagation();
+  document.getElementById('heThongDropdownPanel')?.classList.toggle('hidden');
+}
+function closeHeThongDropdown() {
+  document.getElementById('heThongDropdownPanel')?.classList.add('hidden');
+}
+document.addEventListener('click', (ev) => {
+  const panel = document.getElementById('heThongDropdownPanel');
+  const btn = document.getElementById('btnSystemTab');
   if (!panel || panel.classList.contains('hidden')) return;
   if (!panel.contains(ev.target) && ev.target !== btn && !btn?.contains(ev.target)) panel.classList.add('hidden');
 });
