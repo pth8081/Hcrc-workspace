@@ -46,11 +46,21 @@
       <div class="flex gap-2 justify-end mt-1 flex-wrap">
         <button id="btnDocTab" onclick="switchTab('doc')" class="hidden text-xs bg-blue-600 text-white px-2 py-1 rounded hover:bg-blue-700 font-semibold">📂 Tài liệu</button>
         <button id="btnSubmissionTab" onclick="switchTab('submission')" class="hidden text-xs bg-amber-600 text-white px-2 py-1 rounded hover:bg-amber-700 font-semibold">📜 Văn bản trình</button>
-        <button id="btnTaskTab" onclick="switchTab('task')" class="hidden text-xs bg-violet-600 text-white px-2 py-1 rounded hover:bg-violet-700 font-semibold">📋 Công việc</button>
         <button id="btnInternalTab" onclick="switchTab('internal')" class="hidden text-xs bg-fuchsia-600 text-white px-2 py-1 rounded hover:bg-fuchsia-700 font-semibold">📣 Truyền thông</button>
         <button id="btnContractTab" onclick="switchTab('contract')" class="hidden text-xs bg-cyan-600 text-white px-2 py-1 rounded hover:bg-cyan-700 font-semibold">📄 Hợp đồng</button>
         <button id="btnMeetingTab" onclick="switchTab('meeting')" class="hidden text-xs bg-emerald-600 text-white px-2 py-1 rounded hover:bg-emerald-700 font-semibold">📅 Phòng họp</button>
-        <button id="btnMinutesTab" onclick="switchTab('minutes')" class="hidden text-xs bg-rose-600 text-white px-2 py-1 rounded hover:bg-rose-700 font-semibold">📝 Biên bản họp</button>
+        <!-- "Điều Hành" — gộp NHẸ ở nav: 1 nút dropdown mở ra 2 lựa chọn Biên bản họp/Công việc, mỗi lựa
+             chọn vẫn gọi ĐÚNG switchTab('minutes')/switchTab('task') như cũ (giữ nguyên 100% code/logic
+             bên trong 2 module — chỉ đổi cách vào). btnMinutesTab/btnTaskTab GIỮ NGUYÊN id để
+             finishLogin()/logout() không cần sửa gì thêm (vẫn toggle 'hidden' theo đúng quyền như cũ) —
+             xem updateDieuHanhNavVisibility() gọi ngay sau đó để ẩn/hiện nút cha bọc ngoài. -->
+        <div id="dieuHanhNavWrap" class="hidden relative inline-block">
+          <button id="btnDieuHanhTab" onclick="toggleDieuHanhDropdown(event)" class="text-xs bg-rose-600 text-white px-2 py-1 rounded hover:bg-rose-700 font-semibold">🗂️ Điều Hành ▾</button>
+          <div id="dieuHanhDropdownPanel" class="hidden absolute right-0 mt-1 bg-white border rounded shadow-lg z-30 min-w-[170px] overflow-hidden">
+            <button id="btnMinutesTab" onclick="closeDieuHanhDropdown(); switchTab('minutes')" class="hidden w-full text-left px-3 py-2 text-xs hover:bg-rose-50 font-semibold text-gray-700">📝 Biên bản họp</button>
+            <button id="btnTaskTab" onclick="closeDieuHanhDropdown(); switchTab('task')" class="hidden w-full text-left px-3 py-2 text-xs hover:bg-violet-50 font-semibold text-gray-700">📋 Công việc</button>
+          </div>
+        </div>
         <button id="btnCarTab" onclick="switchTab('car')" class="hidden text-xs bg-indigo-600 text-white px-2 py-1 rounded hover:bg-indigo-700 font-semibold">🚗 Đăng ký xe</button>
         <button id="btnOfficeTab" onclick="switchTab('office')" class="hidden text-xs bg-teal-600 text-white px-2 py-1 rounded hover:bg-teal-700 font-semibold">🗂️ Tổng Hợp</button>
         <button id="btnReportsTab" onclick="switchTab('reports')" class="hidden text-xs bg-sky-600 text-white px-2 py-1 rounded hover:bg-sky-700 font-semibold">📊 Báo cáo</button>
@@ -1391,8 +1401,14 @@
   </div>
 
   <div id="adminSection" class="hidden space-y-6">
+    <div class="flex flex-wrap gap-2 border-b pb-2">
+      <button type="button" onclick="setAdminSubTab('EMAIL')" id="btnAdminSubEmail" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">📧 Cấu Hình Email</button>
+      <button type="button" onclick="setAdminSubTab('CATALOG')" id="btnAdminSubCatalog" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">🗂️ Quản Lý Danh Mục</button>
+      <button type="button" onclick="setAdminSubTab('PERMS')" id="btnAdminSubPerms" class="px-3 py-1.5 rounded text-xs font-bold bg-amber-700 text-white">🔐 Phân Quyền</button>
+    </div>
+
     <!-- CẤU HÌNH HỆ THỐNG EMAIL -->
-    <div class="bg-amber-50 p-4 rounded border border-amber-300 space-y-3">
+    <div id="adminSubEmail" class="hidden bg-amber-50 p-4 rounded border border-amber-300 space-y-3">
       <h3 class="font-bold text-amber-900 text-sm flex items-center gap-1">✉️ Cấu Hình Máy Chủ Gửi Email Thông Báo</h3>
       <p class="text-[11px] text-gray-500 italic">Host/Port/Mã hoá TLS/Email người gửi/Bật-tắt cấu hình đầy đủ ngay tại đây, không cần đụng tới server. Riêng tài khoản/mật khẩu đăng nhập SMTP (chỉ cần nếu máy chủ SMTP yêu cầu xác thực) bắt buộc đặt trong file <code>.env</code> trên server vì lý do bảo mật (không lưu trong dữ liệu ứng dụng) — để trống cả 2 biến đó nếu máy chủ SMTP không yêu cầu đăng nhập (ví dụ mail relay nội bộ). Chưa nhập SMTP Server bên dưới thì hệ thống tự chuyển sang chế độ mô phỏng (ghi Nhật ký hệ thống, không gửi hộp thư thật).</p>
       <p id="cfgSmtpAuthStatus" class="text-[11px] font-semibold rounded px-2 py-1 bg-white border"></p>
@@ -1440,7 +1456,7 @@
       </form>
     </div>
 
-    <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+    <div id="adminSubCatalog" class="hidden grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
       <div class="bg-indigo-50 p-4 rounded border border-indigo-200 space-y-3">
         <h3 class="font-bold text-indigo-900 text-sm flex items-center gap-1">🏢 Quản Lý Danh Mục Phòng Ban</h3>
         <form onsubmit="saveDept(event)" class="flex gap-2">
@@ -1485,7 +1501,7 @@
     </div>
 
     <!-- CẤU HÌNH USER & PHÂN QUYỀN -->
-    <div class="bg-slate-50 p-4 rounded border border-slate-300 space-y-4">
+    <div id="adminSubPerms" class="bg-slate-50 p-4 rounded border border-slate-300 space-y-4">
       <div>
         <h3 class="font-bold text-base text-gray-800">Cấu hình Quyền Hạn, Email, Số Điện Thoại & Phạm Vi Truy Cập Theo Phòng Ban</h3>
       </div>
@@ -1539,6 +1555,11 @@
             <label class="block text-xs font-semibold text-gray-600 mb-1">Mô Tả</label>
             <input id="gGroupDesc" placeholder="Mô tả ngắn về nhóm quyền này..." class="w-full border p-1.5 rounded text-xs">
           </div>
+        </div>
+
+        <div class="flex justify-end gap-2 pt-1">
+          <button type="button" onclick="cancelPermFormEdit()" class="bg-gray-400 text-white px-4 py-1.5 rounded text-xs font-bold">Hủy</button>
+          <button type="submit" id="btnSavePermForm" class="bg-purple-600 text-white px-6 py-1.5 rounded text-xs font-bold hover:bg-purple-700">Lưu Người Dùng & Phân Quyền</button>
         </div>
 
         <div id="permGroupInfoNote" class="hidden bg-blue-50 border border-blue-300 text-blue-800 text-[11px] rounded p-2">
@@ -1740,7 +1761,7 @@
                 <input type="checkbox" id="pMeetingApprove"> ✅ Phê duyệt phòng họp (toàn công ty)
               </label>
               <label class="flex items-center gap-1.5 text-gray-700 cursor-pointer">
-                <input type="checkbox" id="pMeetingCancel"> ❌ Hủy phòng họp (toàn công ty)
+                <input type="checkbox" id="pMeetingCancel"> ❌ Người quản lý phòng họp (hủy được lịch của TẤT CẢ mọi người — ai cũng tự hủy được lịch do chính mình đặt, không cần quyền này)
               </label>
             </div>
             <div class="grid grid-cols-2 gap-3">
@@ -1887,11 +1908,9 @@
                   <input type="checkbox" id="pMinutesEdit"> ✏️ Sửa tất cả biên bản
                 </label>
                 <label class="flex items-center gap-1.5 text-gray-700 cursor-pointer">
-                  <input type="checkbox" id="pMinutesDelete"> 🗑️ Xóa tất cả biên bản
-                </label>
-                <label class="flex items-center gap-1.5 text-gray-700 cursor-pointer">
                   <input type="checkbox" id="pMinutesDownload"> ⬇️ Tải tất cả biên bản
                 </label>
+                <p class="text-[10px] text-gray-400 italic">Xóa biên bản họp là quyền tối cao, chỉ Quản Trị Viên (quyền Admin) mới xóa được.</p>
               </div>
               <div class="space-y-1">
                 <span class="font-bold text-violet-800 block text-[11px]">📋 Công Việc:</span>
@@ -1924,11 +1943,16 @@
             </label>
           </div>
         </details>
-        </div>
 
-        <div class="flex justify-end gap-2 pt-2">
-          <button type="button" onclick="cancelPermFormEdit()" class="bg-gray-400 text-white px-4 py-1.5 rounded text-xs font-bold">Hủy</button>
-          <button type="submit" id="btnSavePermForm" class="bg-purple-600 text-white px-6 py-1.5 rounded text-xs font-bold hover:bg-purple-700">Lưu Người Dùng & Phân Quyền</button>
+        <details class="perm-tree-node bg-white rounded border text-xs">
+          <summary class="flex items-center justify-between gap-2 px-3 py-2 hover:bg-gray-50 rounded">
+            <span class="font-bold text-gray-800 text-sm flex items-center gap-1.5"><span class="perm-tree-chevron text-gray-400">▸</span><span>🖋️ 11. Nhóm Phê Duyệt Trình (Văn Bản Trình)</span></span>
+          </summary>
+          <div class="p-3 pt-0 space-y-2">
+            <p class="text-[11px] text-gray-500 italic">6 nhóm tuỳ chọn — người trình tick chọn khi tạo tờ trình. 5 nhóm chặn (Đồng trình/Đồng cấp/BGD/Trợ lý-Thư ký/TGĐ-Chủ tịch) cộng thêm 1 bước duyệt vào cuối quy trình phòng ban (gốc), theo đúng thứ tự; riêng "Xin ý kiến" chỉ là kênh tham khảo song song, không chặn quy trình. Gán thành viên cho từng nhóm ở đây.</p>
+            <div id="submissionApprovalGroupsContainer" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3"></div>
+          </div>
+        </details>
         </div>
       </form>
 
@@ -1953,14 +1977,6 @@
             <tbody id="permGroupsTableBody"></tbody>
           </table>
         </div>
-      </div>
-
-      <div class="bg-white p-4 rounded border space-y-3">
-        <div>
-          <h4 class="font-bold text-sm text-gray-800">🖋️ Quản Lý Nhóm Phê Duyệt Trình (Văn Bản Trình)</h4>
-          <p class="text-[11px] text-gray-500 italic">6 nhóm tuỳ chọn — người trình tick chọn khi tạo tờ trình. 5 nhóm chặn (Đồng trình/Đồng cấp/BGD/Trợ lý-Thư ký/TGĐ-Chủ tịch) cộng thêm 1 bước duyệt vào cuối quy trình phòng ban (gốc), theo đúng thứ tự; riêng "Xin ý kiến" chỉ là kênh tham khảo song song, không chặn quy trình. Gán thành viên cho từng nhóm ở đây.</p>
-        </div>
-        <div id="submissionApprovalGroupsContainer" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3"></div>
       </div>
 
       <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 my-3 border-t pt-3">
@@ -2684,6 +2700,7 @@ let activeWfSubmissionType = null;
 let pendingWfTemplate = {};
 let activeOfficeSubTab = 'MUA_BAN';
 let activeSystemSubTab = 'ADMIN';
+let activeAdminSubTab = 'PERMS';
 let activeFormTab = 'SUBMISSION';
 let editingCustomFieldId = null;
 // Khác null khi form Biểu Mẫu đang sửa 1 trường MẶC ĐỊNH (không phải trường bổ sung) — { coreKey,
@@ -3489,10 +3506,13 @@ function canApproveMeeting(user) {
   return !!user.perms?.meetingApprove;
 }
 
-function canCancelMeeting(user) {
+// Mọi user LUÔN huỷ được lịch do CHÍNH MÌNH đặt (creator === self, không cần quyền gì thêm) —
+// meetingCancel ("Người quản lý phòng họp") + admin huỷ được lịch của BẤT KỲ ai. Tham số "meeting" tuỳ
+// chọn (bỏ trống khi chỉ cần biết user có phải "quản lý phòng họp" hay không, vd hiện nhãn quyền).
+function canCancelMeeting(user, meeting) {
   if (!user) return false;
-  if (user.perms?.admin) return true;
-  return !!user.perms?.meetingCancel;
+  if (user.perms?.admin || user.perms?.meetingCancel) return true;
+  return !!(meeting && meeting.creator === user.username);
 }
 
 function canAccessMeetingModule(user) {
@@ -3550,11 +3570,9 @@ function canEditMeetingMinutesRecord(user, m) {
   return m.creator === user.username;
 }
 
-function canDeleteMeetingMinutesRecord(user, m) {
-  if (!user) return false;
-  if (user.perms?.admin) return true;
-  if (user.perms?.minutesDelete) return true;
-  return m.creator === user.username;
+// Xoá biên bản họp là "quyền tối cao" — chỉ Admin (khoá lại cho người dùng thường, kể cả người tạo).
+function canDeleteMeetingMinutesRecord(user) {
+  return !!user?.perms?.admin;
 }
 
 function canDownloadMeetingMinutesRecord(user, m) {
@@ -3671,7 +3689,7 @@ function defaultNewUserPerms() {
     carView: emptyScope(), carCreate: emptyScope(), carDownload: emptyScope(),
     officeView: emptyScope(), officeCreate: emptyScope(), officeDownload: emptyScope(),
     officeBuy: true, officeFix: true, officeInvest: false,
-    minutesCreate: false, minutesView: false, minutesEdit: false, minutesDelete: false, minutesDownload: false,
+    minutesCreate: false, minutesView: false, minutesEdit: false, minutesDownload: false,
     taskView: false, taskEdit: false, taskDelete: false, taskDownload: false,
     approverAuthLevel: 'NONE'
   };
@@ -4135,6 +4153,28 @@ function runConfirmedAction() {
 }
 
 // ==========================================
+// XÓA "QUYỀN TỐI CAO" — chỉ Quản Trị Viên (admin), dùng chung cho các module trước đây KHÔNG có chức
+// năng xóa nào (Tài liệu/Văn bản trình/Hợp đồng/Mua Bán-Sửa Chữa-Đầu Tư/Đăng Ký Xe — xem
+// deleteDocAction/deleteSubmissionAction/deleteContractAction/deleteOfficeReqAction/deleteCarRegAction
+// bên dưới mỗi module). Người dùng thường KHÔNG còn xóa được ở bất kỳ module nghiệp vụ nào (Biên bản
+// họp/Thanh toán cũng đã khóa riêng — xem canDeleteMeetingMinutesRecord()/assertCanDeletePaymentRequest()).
+// ==========================================
+function deleteRecordAdminOnly(collection, id, label, onDeleted) {
+  if (!currentUser.perms?.admin) return alert('⛔ Chỉ Quản Trị Viên mới có quyền xóa dữ liệu ở module này!');
+  showConfirmModal({
+    title: 'Xóa dữ liệu',
+    bodyHTML: `Bạn có chắc chắn muốn xóa <b>${escapeHtml(label)}</b>? Hành động này không thể hoàn tác.`,
+    confirmLabel: 'Xóa',
+    onConfirm: async () => {
+      try {
+        await callRecordAction(collection, id, 'delete', {});
+      } catch (err) { return alert(`⛔ ${err.message}`); }
+      onDeleted();
+    }
+  });
+}
+
+// ==========================================
 // XÁC THỰC BỔ SUNG KHI DUYỆT (nhập lại mật khẩu / OTP email) — perms.approverAuthLevel, cấu hình ở
 // khối "9. Người Duyệt" trong Quản trị. Chỉ áp dụng cho hành động DUYỆT (không phải Từ chối/Hủy) ở
 // 3 module Văn bản trình/Đăng ký xe/Văn phòng — xem lời gọi withApprovalAuth() ở mỗi module.
@@ -4474,6 +4514,7 @@ function finishLogin(user) {
   document.getElementById('btnMeetingTab').classList.toggle('hidden', !canAccessMeetingModule(user));
   document.getElementById('btnMinutesTab').classList.toggle('hidden', !canAccessMeetingMinutesModule(user));
   document.getElementById('btnTaskTab').classList.toggle('hidden', !canAccessTaskModule(user));
+  updateDieuHanhNavVisibility();
   document.getElementById('btnInternalTab').classList.toggle('hidden', !canAccessInternalModule(user));
   document.getElementById('btnCarTab').classList.toggle('hidden', !canAccessCarModule(user));
   document.getElementById('btnOfficeTab').classList.toggle('hidden', !canAccessOfficeModule(user));
@@ -4507,6 +4548,28 @@ function logout() {
   document.getElementById('reportsSection').classList.add('hidden');
   document.getElementById('userHeader').classList.add('hidden');
 }
+
+// "Điều Hành" — nút nav cha bọc dropdown chứa Biên bản họp/Công việc (xem HTML #dieuHanhNavWrap).
+// Hiện nút cha nếu có quyền vào ÍT NHẤT 1 trong 2 (mỗi nút con vẫn tự ẩn/hiện riêng theo đúng quyền
+// như trước — xem finishLogin()); đóng dropdown khi bấm ra ngoài, cùng khuôn subApprovalDropdownPanel.
+function updateDieuHanhNavVisibility() {
+  const minutesVisible = !document.getElementById('btnMinutesTab').classList.contains('hidden');
+  const taskVisible = !document.getElementById('btnTaskTab').classList.contains('hidden');
+  document.getElementById('dieuHanhNavWrap').classList.toggle('hidden', !minutesVisible && !taskVisible);
+}
+function toggleDieuHanhDropdown(e) {
+  e.stopPropagation();
+  document.getElementById('dieuHanhDropdownPanel')?.classList.toggle('hidden');
+}
+function closeDieuHanhDropdown() {
+  document.getElementById('dieuHanhDropdownPanel')?.classList.add('hidden');
+}
+document.addEventListener('click', (ev) => {
+  const panel = document.getElementById('dieuHanhDropdownPanel');
+  const btn = document.getElementById('btnDieuHanhTab');
+  if (!panel || panel.classList.contains('hidden')) return;
+  if (!panel.contains(ev.target) && ev.target !== btn && !btn?.contains(ev.target)) panel.classList.add('hidden');
+});
 
 function switchTab(tabName) {
   if (!currentUser) return logout();
@@ -5135,6 +5198,7 @@ function buildDocRowHTML(doc, { versionCount = 0, isExpanded = false, isChild = 
             primaryBtnHTML = `<button onclick="runDocAction(${doc.id}, 'view')" class="px-2 py-1 bg-blue-600 text-white rounded text-xs hover:bg-blue-700 font-semibold" title="Xem chi tiết & lịch sử phiên bản">📋 Chi tiết</button>`;
           }
           if (canDownload) secondaryOptions.push({ value: 'download', label: '⬇️ Tải' });
+          if (currentUser.perms?.admin) secondaryOptions.push({ value: 'delete', label: '🗑️ Xóa' });
           return buildActionCell(doc.id, primaryBtnHTML, secondaryOptions, 'runDocAction');
         })()}
       </td>
@@ -5152,7 +5216,18 @@ function runDocAction(id, action) {
     case 'approve': approveDoc(id); break;
     case 'reject': rejectDoc(id); break;
     case 'download': downloadDocFile(id); break;
+    case 'delete': deleteDocAction(id); break;
   }
+}
+
+function deleteDocAction(id) {
+  const doc = DB.docs.find(d => d.id === id);
+  if (!doc) return;
+  deleteRecordAdminOnly('docs', id, `tài liệu ${doc.displayCode || doc.code}`, () => {
+    DB.docs = DB.docs.filter(x => x.id !== id);
+    logSystemAction('DOC', 'DELETE_DOC', `Xóa tài liệu [${doc.code} - ${doc.title}]`, 'SUCCESS', doc.code);
+    renderDocs();
+  });
 }
 
 // Tải trực tiếp tệp gốc của 1 tài liệu/version — tự tạo và bấm 1 thẻ <a download> tạm thời (dùng
@@ -5874,6 +5949,7 @@ function renderSubmissionReqs() {
             if (canDL && (sub.fileUrl || (sub.extraFiles && sub.extraFiles.length))) {
               secondaryOptions.push({ value: 'downloadAll', label: '📎 Tải All' });
             }
+            if (currentUser.perms?.admin) secondaryOptions.push({ value: 'delete', label: '🗑️ Xóa' });
             return buildActionCell(sub.id, primaryBtnHTML, secondaryOptions, 'runSubmissionAction');
           })()}
         </td>
@@ -5890,7 +5966,18 @@ function runSubmissionAction(id, action) {
     case 'downloadSlip': downloadSubmissionApprovalSlip(id); break;
     case 'createTask': createTaskFromSubmission(id); break;
     case 'downloadAll': downloadAllSubmissionFiles(id); break;
+    case 'delete': deleteSubmissionAction(id); break;
   }
+}
+
+function deleteSubmissionAction(id) {
+  const sub = DB.submissions.find(s => s.id === id);
+  if (!sub) return;
+  deleteRecordAdminOnly('submissions', id, `tờ trình ${sub.code}`, () => {
+    DB.submissions = DB.submissions.filter(x => x.id !== id);
+    logSystemAction('SUBMISSION', 'DELETE_SUBMISSION', `Xóa tờ trình [${sub.code} - ${sub.title}]`, 'SUCCESS', sub.code);
+    renderSubmissionReqs();
+  });
 }
 
 // "Tải All" — tải TOÀN BỘ tệp gốc đã đính kèm (Tờ trình + mọi Tài liệu bổ sung theo tờ trình), KHÔNG
@@ -8117,6 +8204,7 @@ function buildContractRowHTML(c, { addendumCount = 0, isExpanded = false, isChil
   if (!isChild && activeContractSubTab === 'MANAGE' && c.signedFileUrl && c.paymentStatus === 'CHUA_THANH_TOAN' && canManageContractPaymentClient(currentUser, c)) {
     secondaryOptions.push({ value: 'startPayment', label: '💰 Chuyển Sang Thanh Toán' });
   }
+  if (currentUser.perms?.admin) secondaryOptions.push({ value: 'delete', label: '🗑️ Xóa' });
 
   return `
     <tr class="hover:bg-gray-50 border-b ${isChild ? 'bg-cyan-50/30' : ''}">
@@ -8160,7 +8248,18 @@ function runContractAction(id, action) {
       a.remove();
       break;
     }
+    case 'delete': deleteContractAction(id); break;
   }
+}
+
+function deleteContractAction(id) {
+  const c = DB.contracts.find(x => x.id === id);
+  if (!c) return;
+  deleteRecordAdminOnly('contracts', id, `${c.isAddendum ? 'phụ lục' : 'hợp đồng'} ${c.code}`, () => {
+    DB.contracts = DB.contracts.filter(x => x.id !== id);
+    logSystemAction('CONTRACT', 'DELETE_CONTRACT', `Xóa ${c.isAddendum ? 'phụ lục' : 'hợp đồng'} [${c.code} - ${c.title}]`, 'SUCCESS', c.code);
+    renderContracts();
+  });
 }
 
 // Duyệt/Từ chối hợp đồng gốc — qua modal xác nhận Đồng Ý/Hủy dùng chung (showConfirmModal()), server
@@ -8463,7 +8562,7 @@ function renderPaymentRequests() {
           ${canManage && (pr.status === 'PENDING' || pr.status === 'NEED_INFO') ? `<button onclick="openEditPaymentRequest(${pr.id})" class="block w-full bg-gray-500 text-white px-2 py-1 rounded text-xs font-bold hover:bg-gray-600">✏️ Sửa</button>` : ''}
           ${canManage && (pr.status === 'PENDING' || pr.status === 'NEED_INFO') ? `<button onclick="approvePaymentRequestAction(${pr.id})" class="block w-full bg-emerald-600 text-white px-2 py-1 rounded text-xs font-bold hover:bg-emerald-700">✅ Duyệt</button>` : ''}
           ${canManage && pr.status === 'PENDING' ? `<button onclick="requestPaymentInfoAction(${pr.id})" class="block w-full bg-orange-500 text-white px-2 py-1 rounded text-xs font-bold hover:bg-orange-600">📝 Yêu Cầu Bổ Sung</button>` : ''}
-          ${canManage && pr.status !== 'PAID' ? `<button onclick="deletePaymentRequestAction(${pr.id})" class="block w-full bg-red-500 text-white px-2 py-1 rounded text-xs font-bold hover:bg-red-600">🗑️ Xoá</button>` : ''}
+          ${currentUser.perms?.admin && pr.status !== 'PAID' ? `<button onclick="deletePaymentRequestAction(${pr.id})" class="block w-full bg-red-500 text-white px-2 py-1 rounded text-xs font-bold hover:bg-red-600">🗑️ Xoá</button>` : ''}
         </td>
       </tr>
     `;
@@ -9015,7 +9114,7 @@ function renderMeetings() {
         <td class="border p-2 text-center space-x-1">
           ${(() => {
             const canApprove = canApproveMeeting(currentUser) && m.status === 'PENDING';
-            const canCancel = canCancelMeeting(currentUser) && m.status !== 'CANCELLED';
+            const canCancel = canCancelMeeting(currentUser, m) && m.status !== 'CANCELLED';
             if (canApprove) {
               const primaryBtnHTML = `<button onclick="runMeetingAction(${m.id}, 'approve')" class="bg-green-600 text-white px-2 py-1 rounded text-xs hover:bg-green-700 font-bold">Duyệt</button>`;
               return buildActionCell(m.id, primaryBtnHTML, canCancel ? [{ value: 'cancel', label: 'Hủy' }] : [], 'runMeetingAction');
@@ -9902,23 +10001,25 @@ async function assignMinutesTasksAction(id) {
   renderMeetingMinutes();
 }
 
-async function deleteMeetingMinutes(id) {
+function deleteMeetingMinutes(id) {
   const m = DB.meetingMinutes.find(x => x.id === id);
   if (!m) return;
-  if (!canDeleteMeetingMinutesRecord(currentUser, m)) {
+  if (!canDeleteMeetingMinutesRecord(currentUser)) {
     return alert('⛔ Bạn không có quyền xóa biên bản họp này!');
   }
-  if (!confirm(`Bạn có chắc chắn muốn xóa biên bản họp [${m.code}]? Hành động này không thể hoàn tác.`)) return;
-
-  try {
-    await callRecordAction('minutes', id, 'delete');
-  } catch (err) {
-    return alert(`⛔ ${err.message}`);
-  }
-
-  DB.meetingMinutes = DB.meetingMinutes.filter(x => x.id !== id);
-  logSystemAction('MINUTES', 'DELETE_MINUTES', `Xóa biên bản họp [${m.code} - ${m.title}]`, 'SUCCESS', m.code);
-  renderMeetingMinutes();
+  showConfirmModal({
+    title: 'Xóa biên bản họp',
+    bodyHTML: `Bạn có chắc chắn muốn xóa biên bản họp <b>${escapeHtml(m.code)}</b>? Hành động này không thể hoàn tác.`,
+    confirmLabel: 'Xóa',
+    onConfirm: async () => {
+      try {
+        await callRecordAction('minutes', id, 'delete');
+      } catch (err) { return alert(`⛔ ${err.message}`); }
+      DB.meetingMinutes = DB.meetingMinutes.filter(x => x.id !== id);
+      logSystemAction('MINUTES', 'DELETE_MINUTES', `Xóa biên bản họp [${m.code} - ${m.title}]`, 'SUCCESS', m.code);
+      renderMeetingMinutes();
+    }
+  });
 }
 
 function viewMeetingMinutesDetails(id) {
@@ -10259,6 +10360,7 @@ function renderCarRegs() {
               secondaryOptions.push({ value: 'viewSlip', label: '👁️ Xem Phiếu' });
               if (canDL) secondaryOptions.push({ value: 'downloadSlip', label: '⬇️ Tải' });
             }
+            if (currentUser.perms?.admin) secondaryOptions.push({ value: 'delete', label: '🗑️ Xóa' });
             return buildActionCell(c.id, primaryBtnHTML, secondaryOptions, 'runCarAction');
           })()}
         </td>
@@ -10273,7 +10375,18 @@ function runCarAction(id, action) {
     case 'process': openCarProcessModal(id); break;
     case 'viewSlip': viewCarApprovalSlip(id); break;
     case 'downloadSlip': downloadCarApprovalSlip(id); break;
+    case 'delete': deleteCarRegAction(id); break;
   }
+}
+
+function deleteCarRegAction(id) {
+  const c = DB.carRegs.find(x => x.id === id);
+  if (!c) return;
+  deleteRecordAdminOnly('carRegs', id, `phiếu đăng ký xe ${c.code}`, () => {
+    DB.carRegs = DB.carRegs.filter(x => x.id !== id);
+    logSystemAction('CAR', 'DELETE_CAR_REG', `Xóa phiếu đăng ký xe [${c.code} - ${c.destination}]`, 'SUCCESS', c.code);
+    renderCarRegs();
+  });
 }
 
 function openCarProcessModal(carId) {
@@ -10819,6 +10932,7 @@ function renderOfficeReqs() {
                 else if (o.paymentStatus === 'CHUA_THANH_TOAN') secondaryOptions.push({ value: 'startPayment', label: '💰 Chuyển Sang Thanh Toán' });
               }
             }
+            if (currentUser.perms?.admin) secondaryOptions.push({ value: 'delete', label: '🗑️ Xóa' });
             return buildActionCell(o.id, primaryBtnHTML, secondaryOptions, 'runOfficeAction');
           })()}
         </td>
@@ -10835,7 +10949,18 @@ function runOfficeAction(id, action) {
     case 'downloadSlip': downloadOfficeApprovalSlip(id); break;
     case 'uploadSigned': openSignedUploadModal('officeReqs', id); break;
     case 'startPayment': startOfficePaymentAction(id); break;
+    case 'delete': deleteOfficeReqAction(id); break;
   }
+}
+
+function deleteOfficeReqAction(id) {
+  const o = DB.officeReqs.find(x => x.id === id);
+  if (!o) return;
+  deleteRecordAdminOnly('officeReqs', id, `đề xuất ${o.code}`, () => {
+    DB.officeReqs = DB.officeReqs.filter(x => x.id !== id);
+    logSystemAction('OFFICE', 'DELETE_OFFICE_REQ', `Xóa đề xuất văn phòng [${o.code} - ${o.title}]`, 'SUCCESS', o.code);
+    renderOfficeReqs();
+  });
 }
 
 function openOfficeProcessModal(officeId) {
@@ -11157,10 +11282,26 @@ function setSystemSubTab(subTab) {
 
   if (subTab === 'ADMIN') {
     renderDeptList(); renderCatList(); renderContractTypeAbbrList(); renderJobTitleList(); renderDeptCheckboxes(); renderModuleAccessCheckboxes(); renderUsers(); loadEmailConfigToForm(); renderPermGroupsList(); renderSubmissionApprovalGroups();
+    setAdminSubTab(activeAdminSubTab);
   }
   if (subTab === 'FORM') { switchFormTab(activeFormTab); }
   if (subTab === 'WORKFLOW') { renderWorkflowTab(); }
   if (subTab === 'LOG') { loadSystemLogs(); }
+}
+
+// 3 module con của "⚙️ Quản Trị" (mục Hệ Thống): Cấu Hình Email / Quản Lý Danh Mục / Phân Quyền
+// (chứa cây quyền + danh sách người dùng + nhóm phân quyền + nhóm phê duyệt trình).
+function setAdminSubTab(subTab) {
+  activeAdminSubTab = subTab;
+  document.getElementById('adminSubEmail').classList.toggle('hidden', subTab !== 'EMAIL');
+  document.getElementById('adminSubCatalog').classList.toggle('hidden', subTab !== 'CATALOG');
+  document.getElementById('adminSubPerms').classList.toggle('hidden', subTab !== 'PERMS');
+
+  const activeCls = 'px-3 py-1.5 rounded text-xs font-bold bg-amber-700 text-white';
+  const inactiveCls = 'px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700';
+  document.getElementById('btnAdminSubEmail').className = subTab === 'EMAIL' ? activeCls : inactiveCls;
+  document.getElementById('btnAdminSubCatalog').className = subTab === 'CATALOG' ? activeCls : inactiveCls;
+  document.getElementById('btnAdminSubPerms').className = subTab === 'PERMS' ? activeCls : inactiveCls;
 }
 
 // ==========================================
@@ -12170,7 +12311,6 @@ function collectPermsFromForm() {
     minutesCreate: document.getElementById('pMinutesCreate').checked,
     minutesView: document.getElementById('pMinutesView').checked,
     minutesEdit: document.getElementById('pMinutesEdit').checked,
-    minutesDelete: document.getElementById('pMinutesDelete').checked,
     minutesDownload: document.getElementById('pMinutesDownload').checked,
     taskView: document.getElementById('pTaskView').checked,
     taskEdit: document.getElementById('pTaskEdit').checked,
@@ -12207,7 +12347,6 @@ function populatePermsForm(permsInput) {
   document.getElementById('pMinutesCreate').checked = !!perms.minutesCreate;
   document.getElementById('pMinutesView').checked = !!perms.minutesView;
   document.getElementById('pMinutesEdit').checked = !!perms.minutesEdit;
-  document.getElementById('pMinutesDelete').checked = !!perms.minutesDelete;
   document.getElementById('pMinutesDownload').checked = !!perms.minutesDownload;
   document.getElementById('pTaskView').checked = !!perms.taskView;
   document.getElementById('pTaskEdit').checked = !!perms.taskEdit;
@@ -12678,7 +12817,6 @@ function resetUserForm() {
   document.getElementById('pMinutesCreate').checked = !!defaults.minutesCreate;
   document.getElementById('pMinutesView').checked = !!defaults.minutesView;
   document.getElementById('pMinutesEdit').checked = !!defaults.minutesEdit;
-  document.getElementById('pMinutesDelete').checked = !!defaults.minutesDelete;
   document.getElementById('pMinutesDownload').checked = !!defaults.minutesDownload;
   document.getElementById('pTaskView').checked = !!defaults.taskView;
   document.getElementById('pTaskEdit').checked = !!defaults.taskEdit;

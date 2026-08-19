@@ -398,4 +398,29 @@ router.post('/tasks/:id/delete', async (req, res) => {
   }
 });
 
+// ===================== XÓA "QUYỀN TỐI CAO" (chỉ Admin) =====================
+// Tài liệu/Văn bản trình/Hợp đồng/Mua Bán-Sửa Chữa-Đầu Tư/Đăng Ký Xe trước đây KHÔNG có chức năng xóa
+// nào cả (không nút, không route) — giờ thêm, nhưng CHỈ Admin mới xóa được (đúng yêu cầu nghiệp vụ:
+// người dùng thường bị khóa xóa hoàn toàn ở các module này, quyền xóa dồn hết về 1 "quyền tối cao").
+// Dùng chung deleteRecordForCollection() (5 collection này đều đã ở dbo.Records, xem lib/recordStore.js).
+function assertAdminForDelete(user) {
+  if (!user.perms?.admin) throw new HttpError(403, 'Chỉ Quản Trị Viên mới có quyền xóa dữ liệu ở module này');
+}
+async function deleteAdminOnly(req, res, collection) {
+  const itemId = Number(req.params.id);
+  if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
+  try {
+    const { freshUser } = await getFreshUser(req);
+    await deleteRecordForCollection(collection, itemId, () => assertAdminForDelete(freshUser));
+    res.json({ ok: true });
+  } catch (err) {
+    handleError(res, `${collection}/${req.params.id}/delete`, err);
+  }
+}
+router.post('/docs/:id/delete', (req, res) => deleteAdminOnly(req, res, 'docs'));
+router.post('/submissions/:id/delete', (req, res) => deleteAdminOnly(req, res, 'submissions'));
+router.post('/contracts/:id/delete', (req, res) => deleteAdminOnly(req, res, 'contracts'));
+router.post('/officeReqs/:id/delete', (req, res) => deleteAdminOnly(req, res, 'officeReqs'));
+router.post('/carRegs/:id/delete', (req, res) => deleteAdminOnly(req, res, 'carRegs'));
+
 module.exports = router;
