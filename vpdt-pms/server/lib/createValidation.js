@@ -449,9 +449,18 @@ const CREATE_MODULE_CONFIGS = {
   reportEntries: {
     dbKey: 'reportEntries',
     forceOwnDept: true,
+    // getScope() KHÔNG dùng {all,depts} như các module khác — forceOwnDept:true khiến scopeAllows()
+    // LUÔN cho qua khi dept === user.dept (không cần xét scope permission), nên 1 permission dạng
+    // scope gắn ở đây sẽ vĩnh viễn "chết" (đã phát hiện + gỡ bỏ hẳn 1 quyền dạng này trước đó). Cổng
+    // "ai được nộp báo cáo" giờ dùng cờ boolean THẬT — reportEntryCreate — kiểm tra ngay trong
+    // extraValidate bên dưới (không đặt ở getScope vì getScope chỉ nhận (dept) làm input, không có
+    // chỗ chặn "không ai được tạo cả" một cách rõ ràng).
     getScope: () => ({}),
     creatorField: 'creator', creatorNameField: 'creatorName',
     extraValidate: (payload, collection, user, appData) => {
+      if (!user.perms?.admin && !user.perms?.reportEntryCreate) {
+        throw new CreateError(403, 'Bạn không có quyền nộp Báo Cáo Định Kỳ');
+      }
       const periodId = Number(payload.periodId);
       if (!Number.isFinite(periodId)) throw new CreateError(400, 'Thiếu kỳ báo cáo');
       const periods = appData?.reportPeriods || [];
