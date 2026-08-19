@@ -23,88 +23,132 @@
 .perm-tree-node > summary::-webkit-details-marker { display: none; }
 .perm-tree-node > summary .perm-tree-chevron { transition: transform 0.15s ease; display: inline-block; }
 .perm-tree-node[open] > summary .perm-tree-chevron { transform: rotate(90deg); }
+
+/* Sidebar điều hành (thay thanh nav ngang cũ) — #userHeader GIỮ NGUYÊN id cũ (finishLogin()/logout()
+   chỉ toggle add/remove('hidden'), không sửa JS), giờ gắn vào chính khối <aside>. Tailwind ".hidden"
+   có !important nên luôn thắng khi còn class đó; khi JS gỡ "hidden", quy tắc ID bên dưới (đặc hiệu cao
+   hơn ".hidden") mới có hiệu lực, tự chuyển sang flex-column mà không cần thêm class Tailwind nào khác. */
+#userHeader:not(.hidden) { display: flex; flex-direction: column; }
+.sidebar-item, .sidebar-subitem {
+  display: flex; align-items: center; gap: 0.5rem; width: 100%;
+  padding: 0.55rem 0.75rem; border-radius: 0.375rem; font-weight: 600; font-size: 0.8rem;
+  color: #cbd5e1; text-align: left; background: transparent; border: 0; cursor: pointer;
+}
+.sidebar-item:hover, .sidebar-subitem:hover { background: #1e293b; color: #fff; }
+.sidebar-subitem { font-weight: 500; padding: 0.4rem 0.75rem; font-size: 0.75rem; }
+.sidebar-icon { font-size: 1rem; width: 1.25rem; text-align: center; flex-shrink: 0; }
+/* Thu gọn (toggleSidebarCollapse(), lưu localStorage) — chỉ còn icon, ẩn hết nhãn chữ + khối con đang mở. */
+#userHeader.sidebar-collapsed { width: 4.5rem; }
+#userHeader.sidebar-collapsed .sidebar-label { display: none; }
+#userHeader.sidebar-collapsed .sidebar-item, #userHeader.sidebar-collapsed .sidebar-subitem { justify-content: center; }
+#userHeader.sidebar-collapsed #hopDongDropdownPanel,
+#userHeader.sidebar-collapsed #dieuHanhDropdownPanel,
+#userHeader.sidebar-collapsed #hanhChinhDropdownPanel,
+#userHeader.sidebar-collapsed #tongHopDropdownPanel { display: none !important; }
 </style>
 </head>
-<body class="bg-gray-100 min-h-screen p-6 font-sans">
+<body class="bg-gray-100 min-h-screen font-sans">
 <!-- Số phiên bản đang chạy trên server — lấy từ GET /api/health (xem server.js), không phải giá trị
      tĩnh ghi cứng ở đây, để luôn khớp đúng bản code server đang thực sự chạy. Dùng để xác nhận nhanh
      sau khi deploy (đè code + npm install + pm2 restart) đã áp dụng đúng bản mới hay chưa. -->
 <div id="appVersionBadge" class="fixed bottom-1 right-2 text-[10px] text-gray-400 select-none z-10"></div>
-<div class="max-w-7xl mx-auto bg-white p-6 rounded-lg shadow-md space-y-6">
 
-  <!-- Header -->
-  <div class="flex justify-between items-center border-b pb-4">
-    <div>
-      <h1 class="text-2xl font-bold text-gray-800">Văn Phòng Điện Tử</h1>
-      <p class="text-xs text-gray-500">Tài liệu | Xử lý văn bản trình | Phê duyệt đồng cấp | Hợp đồng & Giấy phép | Phòng họp | Công việc | Xe | Văn phòng</p>
+<div class="flex min-h-screen">
+  <!-- SIDEBAR (Đợt A — thay thanh nav ngang cũ). GIỮ NGUYÊN id "userHeader": finishLogin()/logout()
+       chỉ toggle classList add/remove('hidden') cho đúng 1 id này, không cần sửa JS gì thêm — id đó giờ
+       gắn thẳng vào <aside>, ẩn/hiện luôn CẢ sidebar cùng lúc (xem CSS #userHeader:not(.hidden) ở
+       <style> đầu file). Mọi nút con bên trong GIỮ NGUYÊN 100% id/onclick so với bản nav ngang cũ — chỉ
+       đổi class cho hợp bố cục dọc (bỏ kiểu dropdown nổi "absolute", chuyển thành khối mở rộng ngay
+       trong dòng chảy sidebar khi bấm, dùng lại NGUYÊN các hàm toggleXDropdown()/closeXDropdown() cũ,
+       không đổi 1 dòng JS nào cho phần mở/đóng nhóm). "Hợp Đồng" và "Tổng Hợp" vẫn là 2 nhóm ngang hàng,
+       độc lập — không lồng module này vào module kia (giữ nguyên quyết định thiết kế trước đó). -->
+  <aside id="userHeader" class="hidden w-64 shrink-0 bg-slate-900 overflow-y-auto">
+    <div class="p-4 border-b border-slate-700 flex items-center gap-2">
+      <span class="text-xl">🏢</span>
+      <span class="font-bold text-white text-sm sidebar-label">Văn Phòng Điện Tử</span>
     </div>
-    <div id="userHeader" class="text-right hidden">
-      <div class="cursor-pointer group inline-block" onclick="openProfileModal()" title="Bấm để cập nhật thông tin cá nhân & đổi mật khẩu">
-        <span id="userInfo" class="font-bold text-blue-600 block text-sm group-hover:underline"></span>
-        <span id="userPhoneInfo" class="text-xs text-gray-500 block"></span>
+
+    <nav class="flex-1 p-2 space-y-1">
+      <button id="btnDocTab" onclick="switchTab('doc')" class="hidden sidebar-item">
+        <span class="sidebar-icon">📂</span><span class="sidebar-label">Tài liệu</span>
+      </button>
+      <button id="btnSubmissionTab" onclick="switchTab('submission')" class="hidden sidebar-item">
+        <span class="sidebar-icon">📜</span><span class="sidebar-label">Văn bản trình</span>
+      </button>
+      <button id="btnInternalTab" onclick="switchTab('internal')" class="hidden sidebar-item">
+        <span class="sidebar-icon">📣</span><span class="sidebar-label">Truyền thông</span>
+      </button>
+
+      <div id="hopDongNavWrap" class="hidden">
+        <button id="btnHopDongTab" onclick="toggleHopDongDropdown(event)" class="sidebar-item">
+          <span class="sidebar-icon">📄</span><span class="sidebar-label flex-1">Hợp Đồng</span><span class="sidebar-label text-[10px]">▾</span>
+        </button>
+        <div id="hopDongDropdownPanel" class="hidden pl-7 space-y-0.5 sidebar-label">
+          <button onclick="closeHopDongDropdown(); switchTab('contract'); setContractSubTab('APPROVAL')" class="sidebar-subitem">⏳ Phê Duyệt</button>
+          <button onclick="closeHopDongDropdown(); switchTab('contract'); setContractSubTab('MANAGE')" class="sidebar-subitem">📄 Quản Lý HĐ &amp; Giấy Phép</button>
+        </div>
       </div>
-      <div class="flex gap-2 justify-end mt-1 flex-wrap">
-        <button id="btnDocTab" onclick="switchTab('doc')" class="hidden text-xs bg-blue-600 text-white px-2 py-1 rounded hover:bg-blue-700 font-semibold">📂 Tài liệu</button>
-        <button id="btnSubmissionTab" onclick="switchTab('submission')" class="hidden text-xs bg-amber-600 text-white px-2 py-1 rounded hover:bg-amber-700 font-semibold">📜 Văn bản trình</button>
-        <button id="btnInternalTab" onclick="switchTab('internal')" class="hidden text-xs bg-fuchsia-600 text-white px-2 py-1 rounded hover:bg-fuchsia-700 font-semibold">📣 Truyền thông</button>
-        <!-- "Hợp Đồng" — cùng khuôn Điều Hành/Hành Chính bên dưới: 1 nút dropdown mở ra 2 sub-tab CÓ SẴN
-             của module contract (Phê Duyệt/Quản Lý HĐ & Giấy Phép), mỗi lựa chọn gọi switchTab('contract')
-             rồi setContractSubTab(...) để vào đúng sub-tab (giữ nguyên 100% logic/quyền bên trong module
-             — chỉ đổi cách vào). "Hợp Đồng" và "Tổng Hợp" (#tongHopNavWrap bên dưới) là 2 dropdown NGANG
-             HÀNG, độc lập với nhau — KHÔNG lồng module này vào module kia. -->
-        <div id="hopDongNavWrap" class="hidden relative inline-block">
-          <button id="btnHopDongTab" onclick="toggleHopDongDropdown(event)" class="text-xs bg-cyan-600 text-white px-2 py-1 rounded hover:bg-cyan-700 font-semibold">📄 Hợp Đồng ▾</button>
-          <div id="hopDongDropdownPanel" class="hidden absolute right-0 mt-1 bg-white border rounded shadow-lg z-30 min-w-[220px] overflow-hidden">
-            <button onclick="closeHopDongDropdown(); switchTab('contract'); setContractSubTab('APPROVAL')" class="w-full text-left px-3 py-2 text-xs hover:bg-cyan-50 font-semibold text-gray-700">⏳ Phê Duyệt</button>
-            <button onclick="closeHopDongDropdown(); switchTab('contract'); setContractSubTab('MANAGE')" class="w-full text-left px-3 py-2 text-xs hover:bg-cyan-50 font-semibold text-gray-700">📄 Quản Lý Hợp Đồng & Giấy Phép</button>
-          </div>
+
+      <div id="dieuHanhNavWrap" class="hidden">
+        <button id="btnDieuHanhTab" onclick="toggleDieuHanhDropdown(event)" class="sidebar-item">
+          <span class="sidebar-icon">🗂️</span><span class="sidebar-label flex-1">Điều Hành</span><span class="sidebar-label text-[10px]">▾</span>
+        </button>
+        <div id="dieuHanhDropdownPanel" class="hidden pl-7 space-y-0.5 sidebar-label">
+          <button id="btnMinutesTab" onclick="closeDieuHanhDropdown(); switchTab('minutes')" class="hidden sidebar-subitem">📝 Biên bản họp</button>
+          <button id="btnTaskTab" onclick="closeDieuHanhDropdown(); switchTab('task')" class="hidden sidebar-subitem">📋 Công việc</button>
+          <button id="btnPeriodicReportTab" onclick="closeDieuHanhDropdown(); switchTab('periodicReport')" class="hidden sidebar-subitem">📅 Báo Cáo Định Kỳ</button>
         </div>
-        <!-- "Điều Hành" — gộp NHẸ ở nav: 1 nút dropdown mở ra 2 lựa chọn Biên bản họp/Công việc, mỗi lựa
-             chọn vẫn gọi ĐÚNG switchTab('minutes')/switchTab('task') như cũ (giữ nguyên 100% code/logic
-             bên trong 2 module — chỉ đổi cách vào). btnMinutesTab/btnTaskTab GIỮ NGUYÊN id để
-             finishLogin()/logout() không cần sửa gì thêm (vẫn toggle 'hidden' theo đúng quyền như cũ) —
-             xem updateDieuHanhNavVisibility() gọi ngay sau đó để ẩn/hiện nút cha bọc ngoài. -->
-        <div id="dieuHanhNavWrap" class="hidden relative inline-block">
-          <button id="btnDieuHanhTab" onclick="toggleDieuHanhDropdown(event)" class="text-xs bg-rose-600 text-white px-2 py-1 rounded hover:bg-rose-700 font-semibold">🗂️ Điều Hành ▾</button>
-          <div id="dieuHanhDropdownPanel" class="hidden absolute right-0 mt-1 bg-white border rounded shadow-lg z-30 min-w-[170px] overflow-hidden">
-            <button id="btnMinutesTab" onclick="closeDieuHanhDropdown(); switchTab('minutes')" class="hidden w-full text-left px-3 py-2 text-xs hover:bg-rose-50 font-semibold text-gray-700">📝 Biên bản họp</button>
-            <button id="btnTaskTab" onclick="closeDieuHanhDropdown(); switchTab('task')" class="hidden w-full text-left px-3 py-2 text-xs hover:bg-violet-50 font-semibold text-gray-700">📋 Công việc</button>
-            <button id="btnPeriodicReportTab" onclick="closeDieuHanhDropdown(); switchTab('periodicReport')" class="hidden w-full text-left px-3 py-2 text-xs hover:bg-sky-50 font-semibold text-gray-700">📅 Báo Cáo Định Kỳ</button>
-          </div>
+      </div>
+
+      <!-- 3 module con dưới đây còn có quyền CHA thật trong cây phân quyền (BUSINESS_MODULES field
+           "parent" + hasModuleAccess()) — tắt quyền vào "Hành Chính" khoá cả 3 dù mỗi module vẫn giữ
+           quyền chi tiết riêng (không đổi so với bản nav ngang cũ). -->
+      <div id="hanhChinhNavWrap" class="hidden">
+        <button id="btnHanhChinhTab" onclick="toggleHanhChinhDropdown(event)" class="sidebar-item">
+          <span class="sidebar-icon">🏢</span><span class="sidebar-label flex-1">Hành Chính</span><span class="sidebar-label text-[10px]">▾</span>
+        </button>
+        <div id="hanhChinhDropdownPanel" class="hidden pl-7 space-y-0.5 sidebar-label">
+          <button id="btnMeetingTab" onclick="closeHanhChinhDropdown(); switchTab('meeting')" class="hidden sidebar-subitem">📅 Phòng họp</button>
+          <button id="btnCarTab" onclick="closeHanhChinhDropdown(); switchTab('car')" class="hidden sidebar-subitem">🚗 Đăng ký xe</button>
+          <button id="btnVppTab" onclick="closeHanhChinhDropdown(); switchTab('vpp')" class="hidden sidebar-subitem">🖇️ Văn phòng phẩm</button>
         </div>
-        <!-- "Hành Chính" — cùng kiểu gộp NHẸ ở nav như Điều Hành: gộp Phòng họp/Đăng ký xe/Văn phòng
-             phẩm vào 1 dropdown. btnMeetingTab/btnCarTab GIỮ NGUYÊN id (chỉ đổi HTML lồng vào dropdown),
-             thêm mới btnVppTab. Khác Điều Hành: 3 module con này còn có quyền CHA thật trong cây phân
-             quyền (xem BUSINESS_MODULES field "parent" + hasModuleAccess()) — tắt quyền vào "Hành
-             Chính" sẽ khoá cả 3 dù mỗi module vẫn giữ quyền chi tiết riêng. -->
-        <div id="hanhChinhNavWrap" class="hidden relative inline-block">
-          <button id="btnHanhChinhTab" onclick="toggleHanhChinhDropdown(event)" class="text-xs bg-orange-600 text-white px-2 py-1 rounded hover:bg-orange-700 font-semibold">🏢 Hành Chính ▾</button>
-          <div id="hanhChinhDropdownPanel" class="hidden absolute right-0 mt-1 bg-white border rounded shadow-lg z-30 min-w-[170px] overflow-hidden">
-            <button id="btnMeetingTab" onclick="closeHanhChinhDropdown(); switchTab('meeting')" class="hidden w-full text-left px-3 py-2 text-xs hover:bg-emerald-50 font-semibold text-gray-700">📅 Phòng họp</button>
-            <button id="btnCarTab" onclick="closeHanhChinhDropdown(); switchTab('car')" class="hidden w-full text-left px-3 py-2 text-xs hover:bg-indigo-50 font-semibold text-gray-700">🚗 Đăng ký xe</button>
-            <button id="btnVppTab" onclick="closeHanhChinhDropdown(); switchTab('vpp')" class="hidden w-full text-left px-3 py-2 text-xs hover:bg-orange-50 font-semibold text-gray-700">🖇️ Văn phòng phẩm</button>
-          </div>
+      </div>
+
+      <div id="tongHopNavWrap" class="hidden">
+        <button id="btnTongHopTab" onclick="toggleTongHopDropdown(event)" class="sidebar-item">
+          <span class="sidebar-icon">🗂️</span><span class="sidebar-label flex-1">Tổng Hợp</span><span class="sidebar-label text-[10px]">▾</span>
+        </button>
+        <div id="tongHopDropdownPanel" class="hidden pl-7 space-y-0.5 sidebar-label">
+          <button id="btnOfficeSubBuyNav" onclick="closeTongHopDropdown(); switchTab('office'); setOfficeSubTab('MUA_BAN')" class="hidden sidebar-subitem">🛒 Mua Bán</button>
+          <button id="btnOfficeSubFixNav" onclick="closeTongHopDropdown(); switchTab('office'); setOfficeSubTab('SUA_CHUA')" class="hidden sidebar-subitem">🔧 Sửa Chữa</button>
+          <button id="btnOfficeSubInvestNav" onclick="closeTongHopDropdown(); switchTab('office'); setOfficeSubTab('DAU_TU')" class="hidden sidebar-subitem">📈 Đầu Tư</button>
+          <button id="btnOfficeSubPaymentNav" onclick="closeTongHopDropdown(); switchTab('office'); setOfficeSubTab('PAYMENT')" class="hidden sidebar-subitem">💰 Thanh Toán</button>
         </div>
-        <!-- "Tổng Hợp" — cùng khuôn Điều Hành/Hành Chính: 1 nút dropdown mở ra 4 sub-tab CÓ SẴN của
-             module office (Mua Bán/Sửa Chữa/Đầu Tư/Thanh Toán), mỗi lựa chọn gọi switchTab('office') rồi
-             setOfficeSubTab(...). Mỗi nút con tự ẩn/hiện riêng theo đúng quyền hiện có
-             (canAccessOfficeSubTab()/canAccessPaymentModule() — KHÔNG đổi field quyền), xem
-             updateTongHopNavVisibility() bên dưới để ẩn/hiện nút cha. -->
-        <div id="tongHopNavWrap" class="hidden relative inline-block">
-          <button id="btnTongHopTab" onclick="toggleTongHopDropdown(event)" class="text-xs bg-teal-600 text-white px-2 py-1 rounded hover:bg-teal-700 font-semibold">🗂️ Tổng Hợp ▾</button>
-          <div id="tongHopDropdownPanel" class="hidden absolute right-0 mt-1 bg-white border rounded shadow-lg z-30 min-w-[170px] overflow-hidden">
-            <button id="btnOfficeSubBuyNav" onclick="closeTongHopDropdown(); switchTab('office'); setOfficeSubTab('MUA_BAN')" class="hidden w-full text-left px-3 py-2 text-xs hover:bg-teal-50 font-semibold text-gray-700">🛒 Mua Bán</button>
-            <button id="btnOfficeSubFixNav" onclick="closeTongHopDropdown(); switchTab('office'); setOfficeSubTab('SUA_CHUA')" class="hidden w-full text-left px-3 py-2 text-xs hover:bg-teal-50 font-semibold text-gray-700">🔧 Sửa Chữa</button>
-            <button id="btnOfficeSubInvestNav" onclick="closeTongHopDropdown(); switchTab('office'); setOfficeSubTab('DAU_TU')" class="hidden w-full text-left px-3 py-2 text-xs hover:bg-teal-50 font-semibold text-gray-700">📈 Đầu Tư</button>
-            <button id="btnOfficeSubPaymentNav" onclick="closeTongHopDropdown(); switchTab('office'); setOfficeSubTab('PAYMENT')" class="hidden w-full text-left px-3 py-2 text-xs hover:bg-teal-50 font-semibold text-gray-700">💰 Thanh Toán</button>
-          </div>
-        </div>
-        <button id="btnReportsTab" onclick="switchTab('reports')" class="hidden text-xs bg-sky-600 text-white px-2 py-1 rounded hover:bg-sky-700 font-semibold">📊 Báo cáo</button>
-        <button id="btnSystemTab" onclick="switchTab('system')" class="hidden text-xs bg-purple-600 text-white px-2 py-1 rounded hover:bg-purple-700 font-semibold">🛠️ Hệ Thống</button>
-        <button onclick="logout()" class="text-xs text-red-500 underline py-1 hover:text-red-700">Đăng xuất</button>
+      </div>
+
+      <button id="btnReportsTab" onclick="switchTab('reports')" class="hidden sidebar-item">
+        <span class="sidebar-icon">📊</span><span class="sidebar-label">Báo cáo</span>
+      </button>
+      <button id="btnSystemTab" onclick="switchTab('system')" class="hidden sidebar-item">
+        <span class="sidebar-icon">🛠️</span><span class="sidebar-label">Hệ Thống</span>
+      </button>
+    </nav>
+
+    <div class="p-3 border-t border-slate-700 space-y-2">
+      <div class="cursor-pointer group" onclick="openProfileModal()" title="Bấm để cập nhật thông tin cá nhân & đổi mật khẩu">
+        <span id="userInfo" class="font-bold text-white block text-xs group-hover:underline sidebar-label"></span>
+        <span id="userPhoneInfo" class="text-[11px] text-slate-400 block sidebar-label"></span>
+      </div>
+      <div class="flex items-center gap-2">
+        <button onclick="toggleSidebarCollapse()" class="text-slate-400 hover:text-white text-xs px-2 py-1 rounded hover:bg-slate-800" title="Thu gọn/Mở rộng menu">↔️</button>
+        <button onclick="logout()" class="flex-1 text-xs text-red-400 hover:text-red-300 font-semibold text-left sidebar-label">Đăng xuất</button>
       </div>
     </div>
-  </div>
+  </aside>
+
+  <!-- NỘI DUNG CHÍNH -->
+  <div class="flex-1 min-w-0">
+    <div class="max-w-6xl mx-auto p-4 md:p-6 space-y-6">
 
   <!-- Màn hình 1: Đăng nhập -->
   <div id="loginSection" class="max-w-md mx-auto my-10 p-6 border rounded-lg bg-gray-50 space-y-4 shadow-sm">
@@ -2509,7 +2553,9 @@
     <div id="reportsContent" class="space-y-6"></div>
   </div>
 
-</div>
+      </div>
+    </div>
+  </div>
 
 <!-- MODAL XEM TÀI LIỆU PROTECTED VIEW -->
 <!-- Khung Xem Bảo Vệ dùng chung (openFileProtectedView) + "Xem quy trình"/Phiếu Phê Duyệt — thường được
@@ -5017,11 +5063,19 @@ async function submitMustChangePassword(e) {
 
 // Phần UI sau khi đã có phiên đăng nhập hợp lệ — dùng chung cho đăng nhập thật (login()) và khôi
 // phục phiên cũ khi tải lại trang (tryRestoreSession()), vì cả 2 đều kết thúc bằng cùng 1 trạng thái.
+// Thu gọn/mở rộng sidebar — chỉ toggle 1 class trên #userHeader (xem CSS .sidebar-collapsed),
+// lưu lựa chọn vào localStorage để giữ nguyên qua các lần load lại trang / đăng nhập lại.
+function toggleSidebarCollapse() {
+  const collapsed = document.getElementById('userHeader').classList.toggle('sidebar-collapsed');
+  localStorage.setItem('vpdt_sidebar_collapsed', collapsed ? '1' : '0');
+}
+
 function finishLogin(user) {
   currentUser = user;
 
   document.getElementById('loginSection').classList.add('hidden');
   document.getElementById('userHeader').classList.remove('hidden');
+  document.getElementById('userHeader').classList.toggle('sidebar-collapsed', localStorage.getItem('vpdt_sidebar_collapsed') === '1');
   document.getElementById('userInfo').innerText = `${user.name} (${user.dept})`;
   document.getElementById('userPhoneInfo').innerText = `📞 ${user.phone || 'Chưa có SĐT'} | ✉️ ${user.email || 'Chưa có Email'}`;
 
