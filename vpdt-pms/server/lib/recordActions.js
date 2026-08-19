@@ -45,17 +45,18 @@ function editContract(payload, user, contract) {
   return contract;
 }
 
-// Duyệt/từ chối hợp đồng GỐC (approvalStatus PENDING gán sẵn khi tạo — xem lib/createValidation.js) —
-// cờ toàn công ty contractApprove, khớp đúng hình dạng meetingApprove/internalPostApprove, không theo
-// phòng ban. Từ chối bắt buộc nhập lý do. Phụ lục không qua đây (luôn APPROVED ngay khi tạo).
+// Duyệt/từ chối hợp đồng GỐC hoặc phụ lục — cờ toàn công ty contractApprove, khớp đúng hình dạng
+// meetingApprove/internalPostApprove, không theo phòng ban. Từ chối bắt buộc nhập lý do. CẢ hợp đồng
+// gốc lẫn phụ lục đều có thể ở PENDING (xem lib/createValidation.js: chỉ hồ sơ "Nhập ... Đã Ký"/
+// isSignedImport mới bỏ qua bước duyệt, tạo thẳng ở trạng thái APPROVED — hồ sơ đó sẽ không bao giờ
+// PENDING nên không lọt qua được đây).
 function canApproveContract(user) {
   return !!(user.perms?.admin || user.perms?.contractApprove);
 }
 
 function approveContract(user, contract) {
-  if (contract.isAddendum) throw new HttpError(400, 'Phụ lục hợp đồng không qua bước duyệt riêng');
-  if (!canApproveContract(user)) throw new HttpError(403, 'Bạn không có quyền phê duyệt hợp đồng này');
-  if (contract.approvalStatus !== 'PENDING') throw new HttpError(409, 'Hợp đồng không ở trạng thái chờ duyệt');
+  if (!canApproveContract(user)) throw new HttpError(403, 'Bạn không có quyền phê duyệt hồ sơ này');
+  if (contract.approvalStatus !== 'PENDING') throw new HttpError(409, 'Hồ sơ không ở trạng thái chờ duyệt');
   contract.approvalStatus = 'APPROVED';
   contract.approvedBy = user.username;
   contract.approvedByName = user.name;
@@ -64,9 +65,8 @@ function approveContract(user, contract) {
 }
 
 function rejectContract(payload, user, contract) {
-  if (contract.isAddendum) throw new HttpError(400, 'Phụ lục hợp đồng không qua bước duyệt riêng');
-  if (!canApproveContract(user)) throw new HttpError(403, 'Bạn không có quyền từ chối hợp đồng này');
-  if (contract.approvalStatus !== 'PENDING') throw new HttpError(409, 'Hợp đồng không ở trạng thái chờ duyệt');
+  if (!canApproveContract(user)) throw new HttpError(403, 'Bạn không có quyền từ chối hồ sơ này');
+  if (contract.approvalStatus !== 'PENDING') throw new HttpError(409, 'Hồ sơ không ở trạng thái chờ duyệt');
   const reason = (payload?.reason || '').trim();
   if (!reason) throw new HttpError(400, 'Vui lòng nhập lý do từ chối');
   contract.approvalStatus = 'REJECTED';

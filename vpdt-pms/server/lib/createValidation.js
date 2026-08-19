@@ -197,23 +197,40 @@ const CREATE_MODULE_CONFIGS = {
     dbKey: 'contracts',
     getScope: (user) => user.perms?.contractCreate,
     creatorField: 'creator', creatorNameField: null, // Hợp đồng KHÔNG có field creatorName (khớp index.html)
-    // Hợp đồng GỐC (isAddendum=false) cần người có quyền contractApprove/admin duyệt trước khi chuyển
-    // sang "Quản Lý Hợp Đồng & Giấy Phép" (status GÁN Ở SERVER, không tin giá trị client gửi — khớp
-    // internalPosts SHARE ở trên). Phụ lục (isAddendum=true) chỉ gắn được vào 1 hợp đồng GỐC ĐÃ
-    // APPROVED, không qua bước duyệt riêng (xem index.html generateAddendumCode()/onContractOpModeChange()).
+    // 2 luồng tạo hồ sơ hợp đồng/phụ lục (status GÁN Ở SERVER theo ĐÚNG luồng, không tin approvalStatus
+    // client gửi — khớp internalPosts SHARE ở trên):
+    // 1) isSignedImport=true ("Nhập Hợp Đồng/Phụ Lục Đã Ký" — tab Quản Lý HĐ, index.html
+    //    onContractOpModeChange() mode IMPORT_CONTRACT/IMPORT_ADDENDUM): hồ sơ ĐÃ CÓ chữ ký thật ký
+    //    ngoài hệ thống, nhập tay để lưu — luôn APPROVED ngay, KHÔNG qua hàng chờ Phê Duyệt, không có
+    //    Đợt Thanh Toán riêng (tệp đính kèm CHÍNH LÀ tài liệu đã ký, gán luôn vào signedFileUrl).
+    // 2) isSignedImport=false (mặc định — "Tạo Mới"/"Bổ Sung Phụ Lục" ở tab Phê Duyệt): CẢ 2 đều qua
+    //    ĐÚNG 1 luật duyệt — PENDING trừ khi người tạo đã có quyền contractApprove/admin (tự duyệt
+    //    luôn) — và CẢ 2 đều khai được Đợt Thanh Toán (phụ lục trước đây ép rỗng, giờ không còn ép nữa
+    //    vì phụ lục cũng có thể đi kèm điều chỉnh giá trị/điều khoản thanh toán).
+    // Phụ lục (isAddendum=true, áp dụng cho CẢ 2 luồng trên) chỉ gắn được vào 1 hợp đồng GỐC ĐÃ APPROVED
+    // (xem index.html generateAddendumCode()/onContractAddendumTargetChange()).
     extraValidate: (payload, collection, user) => {
+      const isSignedImport = !!payload.isSignedImport;
+      delete payload.isSignedImport; // chỉ là cờ tạm quyết định nhánh xử lý bên dưới, không lưu vào hồ sơ
+
       if (payload.isAddendum) {
         const root = (collection || []).find(c => c.id === payload.rootContractId && !c.isAddendum);
         if (!root) throw new CreateError(400, 'Hợp đồng gốc không tồn tại');
         if (root.approvalStatus !== 'APPROVED') throw new CreateError(409, 'Chỉ được bổ sung phụ lục cho hợp đồng đã được phê duyệt');
         if (payload.dept !== root.dept) throw new CreateError(400, 'Phòng ban của phụ lục phải khớp với hợp đồng gốc');
         payload.type = root.type;
+      }
+
+      if (isSignedImport) {
         payload.approvalStatus = 'APPROVED';
         payload.paymentInstallments = [];
+        payload.signedFileUrl = payload.fileUrl || null;
       } else {
         payload.approvalStatus = (user.perms?.admin || user.perms?.contractApprove) ? 'APPROVED' : 'PENDING';
-        payload.paymentStatus = 'CHUA_THANH_TOAN';
         payload.paymentInstallments = Array.isArray(payload.paymentInstallments) ? payload.paymentInstallments : [];
+      }
+      if (!payload.isAddendum) {
+        payload.paymentStatus = 'CHUA_THANH_TOAN';
       }
     }
   },
