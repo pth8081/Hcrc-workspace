@@ -105,7 +105,8 @@ const MODULE_CONFIGS = {
   },
   vppRegistrations: {
     dbKey: 'vppRegistrations',
-    resolveWfConfig: (item, appData) => flatWorkflowConfigToSteps(appData.vppDeptWorkflows?.[item.dept], appData)
+    resolveWfConfig: (item, appData) => flatWorkflowConfigToSteps(appData.vppDeptWorkflows?.[item.dept], appData),
+    supportsRequestChanges: true
   }
 };
 
@@ -146,6 +147,21 @@ function applyWorkflowAction({ moduleKey, item, action, user, comment, extraFiel
     item.infoRequests.push(reqEntry);
     item.history.push({ step: item.currentStep, approver: user.name, username: user.username, action: 'REQUEST_INFO', comment, time: reqEntry.requestedAt });
     return { item, transition: { type: 'REQUEST_INFO' } };
+  }
+
+  // Khác REQUEST_INFO (chỉ ghi thêm 1 dòng phản hồi, giữ nguyên PENDING — dùng cho Văn bản trình):
+  // REQUEST_CHANGES đưa hẳn hồ sơ về NHÁP để người tạo SỬA LẠI nội dung rồi gửi lại từ đầu — hợp lý hơn
+  // cho Văn phòng phẩm vì nội dung cần sửa là số lượng/mặt hàng cụ thể, không chỉ bổ sung giấy tờ.
+  if (action === 'REQUEST_CHANGES') {
+    if (!config.supportsRequestChanges) throw new WorkflowError(400, 'Module này không hỗ trợ yêu cầu bổ sung/chỉnh sửa');
+    if (!comment) throw new WorkflowError(400, 'Vui lòng nhập lý do yêu cầu bổ sung/chỉnh sửa');
+    if (!canApproveStep(user, currentStepApprovers, item.history, item.currentStep)) {
+      throw new WorkflowError(403, 'Bạn không có quyền yêu cầu bổ sung ở bước hiện tại, hoặc đã xử lý bước này rồi');
+    }
+    item.history.push({ step: item.currentStep, approver: user.name, username: user.username, action: 'REQUEST_CHANGES', comment, time: nowVN() });
+    item.status = 'DRAFT';
+    item.currentStep = 0;
+    return { item, transition: { type: 'REQUEST_CHANGES' } };
   }
 
   if (action !== 'APPROVE' && action !== 'REJECT') throw new WorkflowError(400, `Hành động không hợp lệ: ${action}`);

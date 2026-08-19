@@ -8,6 +8,8 @@
 // LƯU Ý BẢO TRÌ: scopeAllows() PHẢI giữ giống hệt hàm cùng tên trong index.html (2 cài đặt độc lập,
 // xem lib/workflowEngine.js để biết lý do không import chung được).
 const { HttpError: CreateError } = require('./httpErrors');
+// vppCatalog.js là tiện ích THUẦN (không đọc DB, giống httpErrors.js) — an toàn require thẳng ở đây.
+const { validateRegistrationItems: validateVppRegItems } = require('./vppCatalog');
 
 function scopeAllows(user, scope, dept) {
   if (!user) return false;
@@ -281,7 +283,15 @@ const CREATE_MODULE_CONFIGS = {
       if (!payload.name || !String(payload.name).trim()) throw new CreateError(400, 'Thiếu tên kỳ đăng ký');
       const items = Array.isArray(payload.catalogItems) ? payload.catalogItems : [];
       const cleaned = items
-        .map(it => ({ name: String(it?.name || '').trim(), unit: String(it?.unit || '').trim() }))
+        .map(it => ({
+          code: String(it?.code || '').trim(),
+          name: String(it?.name || '').trim(),
+          unit: String(it?.unit || '').trim(),
+          origin: String(it?.origin || '').trim(),
+          spec: String(it?.spec || '').trim(),
+          price: (it?.price === null || it?.price === undefined || it?.price === '') ? null
+            : (Number.isFinite(Number(it.price)) ? Number(it.price) : null)
+        }))
         .filter(it => it.name);
       if (!cleaned.length) throw new CreateError(400, 'Danh mục mặt hàng trống — vui lòng tải lên file danh mục hợp lệ');
       payload.catalogItems = cleaned;
@@ -300,6 +310,10 @@ const CREATE_MODULE_CONFIGS = {
   // (routes/create.js) đọc sẵn và gộp vào appData.vppPeriods TRƯỚC khi gọi (giống cách submissions dùng
   // appData.submissionDeptWorkflows) — file này KHÔNG tự đọc DB/collection khác, giữ đúng nguyên tắc cũ
   // (xem đầu file) để stub test vẫn tái dùng được y nguyên, không cần async.
+  //
+  // "Kết thúc chọn" (nút ở giao diện) LUÔN tạo hồ sơ ở trạng thái NHÁP — CHƯA vào quy trình duyệt (bấm
+  // "Gửi" riêng mới chuyển NHÁP -> CHỜ DUYỆT, xem routes/records.js POST .../submit). NHÁP còn sửa được
+  // (routes/records.js POST .../update, tái dùng đúng logic làm sạch mặt hàng ở dưới qua vppCatalog.js).
   vppRegistrations: {
     dbKey: 'vppRegistrations',
     forceOwnDept: true,
@@ -316,26 +330,17 @@ const CREATE_MODULE_CONFIGS = {
       if (period.status !== 'OPEN' || pastEndDate) {
         throw new CreateError(409, 'Kỳ đăng ký này đã kết thúc, không thể đăng ký thêm');
       }
+      // 1 hồ sơ/người/kỳ — kể cả đang NHÁP (sửa nháp phải đi qua route .../update, không tạo hồ sơ thứ 2).
+      // Từ chối (REJECTED) là trạng thái kết thúc hẳn nên vẫn cho phép đăng ký lại từ đầu như trước.
       const duplicate = (collection || []).some(r =>
         r.periodId === periodId && r.creator === user.username && r.status !== 'REJECTED');
-      if (duplicate) throw new CreateError(409, 'Bạn đã đăng ký ở kỳ này rồi (chỉ 1 đăng ký/người/kỳ)');
+      if (duplicate) throw new CreateError(409, 'Bạn đã có đăng ký ở kỳ này rồi (chỉ 1 đăng ký/người/kỳ) — vui lòng sửa hồ sơ nháp hiện có');
 
-      const catalogNames = new Set(period.catalogItems.map(it => it.name));
-      const items = Array.isArray(payload.items) ? payload.items : [];
-      const cleaned = [];
-      for (const it of items) {
-        const name = String(it?.name || '').trim();
-        const qty = Number(it?.qty);
-        if (!name || !Number.isFinite(qty) || qty <= 0) continue;
-        if (!catalogNames.has(name)) throw new CreateError(400, `Mặt hàng "${name}" không có trong danh mục kỳ này`);
-        cleaned.push({ name, unit: period.catalogItems.find(c => c.name === name)?.unit || '', qty });
-      }
-      if (!cleaned.length) throw new CreateError(400, 'Vui lòng chọn ít nhất 1 mặt hàng với số lượng hợp lệ');
-      payload.items = cleaned;
+      payload.items = validateVppRegItems(payload.items, period.catalogItems);
       payload.periodCode = period.code;
       payload.periodName = period.name;
-      payload.status = 'PENDING';
-      payload.currentStep = 1;
+      payload.status = 'DRAFT';
+      payload.currentStep = 0;
       payload.history = [];
     }
   }

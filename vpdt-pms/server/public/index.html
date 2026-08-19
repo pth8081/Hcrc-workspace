@@ -1058,20 +1058,30 @@
           <select id="vppRegPeriodSelect" onchange="onVppRegPeriodChange()" class="w-full border p-2 rounded text-sm bg-white"></select>
         </div>
         <div id="vppRegNoPeriodNote" class="hidden text-xs text-gray-500 italic bg-white p-3 rounded border">Hiện chưa có kỳ đăng ký nào đang mở.</div>
+        <div id="vppRegAlreadySentNote" class="hidden text-xs text-amber-800 italic bg-amber-50 p-3 rounded border border-amber-200"></div>
         <div id="vppRegItemsWrap" class="hidden space-y-2">
-          <label class="block text-xs font-semibold text-gray-600">Chọn mặt hàng & số lượng</label>
+          <div class="flex items-center justify-between gap-2 flex-wrap">
+            <label class="block text-xs font-semibold text-gray-600">Chọn mặt hàng & số lượng (chỉ mặt hàng nhập Số lượng &gt; 0 mới tính là đã chọn)</label>
+            <input id="vppRegItemSearch" type="text" oninput="filterVppRegItemsTable()" placeholder="🔍 Tìm theo tên mặt hàng..." class="border p-1.5 rounded text-xs w-56">
+          </div>
           <div class="max-h-80 overflow-y-auto border rounded bg-white">
             <table class="w-full text-xs">
               <thead class="bg-gray-100 sticky top-0"><tr>
-                <th class="border p-2 text-left">Mặt Hàng</th>
-                <th class="border p-2 text-left w-24">Đơn Vị</th>
-                <th class="border p-2 text-left w-28">Số Lượng</th>
+                <th class="border p-2 text-left w-24">Mã Hàng</th>
+                <th class="border p-2 text-left">Tên Hàng</th>
+                <th class="border p-2 text-left w-24">Xuất Xứ</th>
+                <th class="border p-2 text-left w-16">ĐVT</th>
+                <th class="border p-2 text-left w-28">Quy Cách</th>
+                <th class="border p-2 text-right w-24">Đơn Giá</th>
+                <th class="border p-2 text-left w-24">Số Lượng</th>
               </tr></thead>
               <tbody id="vppRegItemsTableBody"></tbody>
             </table>
           </div>
-          <div class="flex justify-end">
-            <button type="button" onclick="submitVppRegistration()" class="bg-orange-600 text-white px-4 py-1.5 rounded text-xs font-bold hover:bg-orange-700">✅ Hoàn Thành Đăng Ký</button>
+          <div id="vppRegItemsNoMatch" class="hidden text-xs text-gray-400 italic text-center p-3">Không tìm thấy mặt hàng khớp từ khoá tìm kiếm.</div>
+          <div class="flex justify-end gap-2">
+            <button type="button" onclick="saveVppRegDraft()" class="bg-gray-600 text-white px-4 py-1.5 rounded text-xs font-bold hover:bg-gray-700">💾 Kết Thúc Chọn (Lưu Nháp)</button>
+            <button type="button" id="btnVppRegSubmitDraft" class="hidden bg-orange-600 text-white px-4 py-1.5 rounded text-xs font-bold hover:bg-orange-700">📤 Gửi Duyệt</button>
           </div>
         </div>
       </div>
@@ -1112,14 +1122,18 @@
           </div>
         </div>
         <div class="bg-white p-3 rounded border space-y-2">
-          <label class="block text-xs font-semibold text-gray-600">File danh mục mặt hàng (Excel .xlsx/.xls hoặc CSV — cột 1: Tên mặt hàng, cột 2: Đơn vị tính)</label>
+          <label class="block text-xs font-semibold text-gray-600">File danh mục mặt hàng (Excel .xlsx/.xls hoặc CSV — tự nhận diện cột theo tiêu đề: Tên mặt hàng, ĐVT, Mã hàng, Xuất xứ, Quy cách, Đơn giá; nếu không có tiêu đề thì cột 1 = tên, cột 2 = đơn vị)</label>
           <input id="vppCatalogFileInput" type="file" accept=".xlsx,.xls,.csv" onchange="onVppCatalogFileChange(event)" class="text-xs">
           <p id="vppCatalogStatus" class="text-[11px] text-gray-500 italic"></p>
           <div id="vppCatalogPreviewWrap" class="hidden">
             <p class="text-[11px] font-semibold text-gray-600 mb-1">Xem trước danh mục (<span id="vppCatalogPreviewCount">0</span> mặt hàng):</p>
             <div class="max-h-48 overflow-y-auto border rounded">
               <table class="w-full text-[11px]">
-                <thead class="bg-gray-100 sticky top-0"><tr><th class="border p-1 text-left">Tên mặt hàng</th><th class="border p-1 text-left">Đơn vị</th></tr></thead>
+                <thead class="bg-gray-100 sticky top-0"><tr>
+                  <th class="border p-1 text-left">Mã hàng</th><th class="border p-1 text-left">Tên mặt hàng</th>
+                  <th class="border p-1 text-left">Xuất xứ</th><th class="border p-1 text-left">ĐVT</th>
+                  <th class="border p-1 text-left">Quy cách</th><th class="border p-1 text-right">Đơn giá</th>
+                </tr></thead>
                 <tbody id="vppCatalogPreviewBody"></tbody>
               </table>
             </div>
@@ -1149,9 +1163,13 @@
 
     <!-- Sub-tab: Báo Cáo Tổng Hợp (chỉ vppManage/admin) -->
     <div id="vppSubReports" class="hidden space-y-4">
-      <div>
-        <label class="block text-xs font-semibold text-gray-600 mb-1">Chọn kỳ để xem báo cáo tổng hợp</label>
-        <select id="vppReportPeriodSelect" onchange="renderVppReports()" class="w-full md:w-96 border p-2 rounded text-sm bg-white"></select>
+      <div class="flex flex-wrap items-end gap-2">
+        <div class="flex-1 min-w-[220px]">
+          <label class="block text-xs font-semibold text-gray-600 mb-1">Chọn kỳ để xem báo cáo tổng hợp</label>
+          <select id="vppReportPeriodSelect" onchange="renderVppReports()" class="w-full md:w-96 border p-2 rounded text-sm bg-white"></select>
+        </div>
+        <button type="button" onclick="downloadVppExport('summary')" class="bg-emerald-600 text-white px-3 py-2 rounded text-xs font-bold hover:bg-emerald-700">⬇️ Tải File Tổng Hợp</button>
+        <button type="button" onclick="downloadVppExport('by-dept')" class="bg-emerald-700 text-white px-3 py-2 rounded text-xs font-bold hover:bg-emerald-800">⬇️ Tải File Tổng Quát Theo Phòng Ban</button>
       </div>
       <div class="bg-white p-4 rounded border space-y-2">
         <h4 class="font-bold text-sm text-gray-800">🏢 Tổng Hợp Theo Phòng Ban</h4>
@@ -2899,6 +2917,8 @@ let activeSystemSubTab = 'ADMIN';
 let activeAdminSubTab = 'PERMS';
 let activeVppSubTab = 'REGISTER';
 let currentProcessingVppRegId = null;
+// Id hồ sơ NHÁP đang được sửa trong form đăng ký ở trên (null = form đang tạo mới, chưa lưu lần nào).
+let vppFormDraftId = null;
 let activeFormTab = 'SUBMISSION';
 let editingCustomFieldId = null;
 // Khác null khi form Biểu Mẫu đang sửa 1 trường MẶC ĐỊNH (không phải trường bổ sung) — { coreKey,
@@ -11432,68 +11452,165 @@ function renderVppRegPeriodOptions() {
     openPeriods.map(p => `<option value="${p.id}">${escapeHtml(p.name)}${p.endDate ? ` (hạn ${escapeHtml(p.endDate)})` : ''}</option>`).join('');
   document.getElementById('vppRegNoPeriodNote').classList.toggle('hidden', openPeriods.length > 0);
   document.getElementById('vppRegItemsWrap').classList.add('hidden');
+  document.getElementById('vppRegAlreadySentNote').classList.add('hidden');
+  vppFormDraftId = null;
   sel.value = '';
+}
+
+// Bỏ dấu tiếng Việt để so khớp tìm kiếm không phân biệt hoa-thường/dấu — cùng cách xử lý "đ/Đ" độc lập
+// (không phải d + dấu) như phía server (xem lib/vppCatalog.js normalizeHeader()).
+function vppStripAccents(s) {
+  return String(s || '').replace(/đ/g, 'd').replace(/Đ/g, 'D')
+    .normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim();
+}
+
+// Tìm hồ sơ đăng ký (khác REJECTED — REJECTED coi như kết thúc, cho đăng ký lại từ đầu) của CHÍNH
+// người dùng hiện tại ở 1 kỳ — quyết định form ở trên hiển thị tạo mới trống, sửa tiếp NHÁP đã lưu,
+// hay chỉ xem (đã Gửi/đã duyệt, không sửa qua form này được nữa).
+function findOwnVppRegForPeriod(periodId) {
+  return DB.vppRegistrations.find(r => r.periodId === periodId && r.creator === currentUser.username && r.status !== 'REJECTED');
 }
 
 function onVppRegPeriodChange() {
   const periodId = Number(document.getElementById('vppRegPeriodSelect').value);
   const wrap = document.getElementById('vppRegItemsWrap');
-  if (!periodId) { wrap.classList.add('hidden'); return; }
+  const noteEl = document.getElementById('vppRegAlreadySentNote');
+  vppFormDraftId = null;
+  if (!periodId) { wrap.classList.add('hidden'); noteEl.classList.add('hidden'); return; }
   const period = DB.vppPeriods.find(p => p.id === periodId);
-  if (!period) { wrap.classList.add('hidden'); return; }
+  if (!period) { wrap.classList.add('hidden'); noteEl.classList.add('hidden'); return; }
+
+  const existing = findOwnVppRegForPeriod(periodId);
+  if (existing && existing.status !== 'DRAFT') {
+    wrap.classList.add('hidden');
+    noteEl.innerHTML = existing.status === 'APPROVED'
+      ? '✅ Bạn đã đăng ký ở kỳ này và đã được phê duyệt — xem chi tiết trong danh sách bên dưới.'
+      : '⏳ Bạn đã gửi đăng ký ở kỳ này, đang chờ phê duyệt — xem chi tiết trong danh sách bên dưới. Nếu cần sửa lại nội dung, hãy chờ người duyệt bấm "Yêu cầu bổ sung" để đưa hồ sơ về nháp.';
+    noteEl.classList.remove('hidden');
+    return;
+  }
+  noteEl.classList.add('hidden');
+
+  vppFormDraftId = existing ? existing.id : null; // existing (nếu có) chắc chắn đang DRAFT ở nhánh này
+  const savedQtyByName = new Map((existing?.items || []).map(it => [it.name, it.qty]));
 
   document.getElementById('vppRegItemsTableBody').innerHTML = period.catalogItems.map((it, idx) => `
-    <tr>
+    <tr data-vpp-item-name="${escapeHtml(vppStripAccents(it.name))}">
+      <td class="border p-2 text-gray-500">${escapeHtml(it.code || '')}</td>
       <td class="border p-2">${escapeHtml(it.name)}</td>
-      <td class="border p-2 text-gray-500">${escapeHtml(it.unit)}</td>
-      <td class="border p-1"><input type="number" min="0" step="1" id="vppItemQty_${idx}" class="w-full border p-1 rounded text-xs" placeholder="0"></td>
+      <td class="border p-2 text-gray-500">${escapeHtml(it.origin || '')}</td>
+      <td class="border p-2 text-gray-500">${escapeHtml(it.unit || '')}</td>
+      <td class="border p-2 text-gray-500">${escapeHtml(it.spec || '')}</td>
+      <td class="border p-2 text-right text-gray-500">${it.price != null ? Number(it.price).toLocaleString('vi-VN') : ''}</td>
+      <td class="border p-1"><input type="number" min="0" step="1" id="vppItemQty_${idx}" value="${savedQtyByName.get(it.name) || ''}" class="w-full border p-1 rounded text-xs" placeholder="0"></td>
     </tr>
   `).join('');
+  document.getElementById('vppRegItemSearch').value = '';
+  document.getElementById('vppRegItemsNoMatch').classList.add('hidden');
   wrap.classList.remove('hidden');
+
+  const submitBtn = document.getElementById('btnVppRegSubmitDraft');
+  submitBtn.classList.toggle('hidden', !vppFormDraftId);
+  submitBtn.onclick = () => submitVppRegDraftAction(vppFormDraftId, true);
 }
 
-async function submitVppRegistration() {
+// Lọc bảng chọn mặt hàng theo tên — chỉ ẩn/hiện dòng (KHÔNG re-render), giữ nguyên các ô Số lượng đã
+// gõ dở, tránh mất dữ liệu khi người dùng vừa tìm kiếm vừa nhập số lượng xen kẽ.
+function filterVppRegItemsTable() {
+  const kw = vppStripAccents(document.getElementById('vppRegItemSearch').value.trim());
+  const rows = [...document.querySelectorAll('#vppRegItemsTableBody tr')];
+  let visibleCount = 0;
+  rows.forEach(row => {
+    const match = !kw || (row.dataset.vppItemName || '').includes(kw);
+    row.classList.toggle('hidden', !match);
+    if (match) visibleCount++;
+  });
+  document.getElementById('vppRegItemsNoMatch').classList.toggle('hidden', visibleCount > 0 || rows.length === 0);
+}
+
+function collectVppRegFormItems(period) {
+  return period.catalogItems
+    .map((it, idx) => ({ name: it.name, qty: Number(document.getElementById(`vppItemQty_${idx}`)?.value) || 0 }))
+    .filter(it => it.qty > 0);
+}
+
+// "Kết Thúc Chọn (Lưu Nháp)" — tạo hồ sơ NHÁP mới (lần đầu chọn) hoặc cập nhật lại NHÁP đã có (sửa
+// tiếp), tuỳ vppFormDraftId. Chưa vào quy trình duyệt — phải bấm "Gửi Duyệt" riêng mới chuyển bước.
+async function saveVppRegDraft() {
   const periodId = Number(document.getElementById('vppRegPeriodSelect').value);
   if (!periodId) return alert('Vui lòng chọn kỳ đăng ký!');
   const period = DB.vppPeriods.find(p => p.id === periodId);
   if (!period) return alert('Không tìm thấy kỳ đăng ký!');
 
-  const items = period.catalogItems
-    .map((it, idx) => ({ name: it.name, unit: it.unit, qty: Number(document.getElementById(`vppItemQty_${idx}`)?.value) || 0 }))
-    .filter(it => it.qty > 0);
+  const items = collectVppRegFormItems(period);
   if (!items.length) return alert('Vui lòng nhập số lượng cho ít nhất 1 mặt hàng!');
 
-  const payload = {
-    code: `DK-VPP-${period.code || period.id}-${currentUser.username}-${Date.now()}`,
-    periodId, items,
-    createdAt: new Date().toLocaleString('vi-VN'),
-    status: 'PENDING', currentStep: 1, history: []
-  };
-
-  let newReg;
+  let savedReg;
   try {
-    const result = await callCreateAction('vppRegistrations', payload);
-    newReg = result.item;
+    if (vppFormDraftId) {
+      const result = await callRecordAction('vppRegistrations', vppFormDraftId, 'update', { items });
+      savedReg = result.item;
+    } else {
+      const payload = {
+        code: `DK-VPP-${period.code || period.id}-${currentUser.username}-${Date.now()}`,
+        periodId, items, createdAt: new Date().toLocaleString('vi-VN')
+      };
+      const result = await callCreateAction('vppRegistrations', payload);
+      savedReg = result.item;
+    }
   } catch (err) {
     return alert(`⛔ ${err.message}`);
   }
 
-  DB.vppRegistrations.unshift(newReg);
-  logSystemAction('VPP', 'CREATE_VPP_REG', `Đăng ký Văn phòng phẩm kỳ [${period.name}]: ${items.length} mặt hàng`, 'SUCCESS', newReg.code);
-  alert('✅ Đăng ký Văn phòng phẩm thành công, đang chờ phê duyệt!');
-  renderVppRegPeriodOptions();
+  const idx = DB.vppRegistrations.findIndex(r => r.id === savedReg.id);
+  if (idx !== -1) DB.vppRegistrations[idx] = savedReg; else DB.vppRegistrations.unshift(savedReg);
+  vppFormDraftId = savedReg.id;
+  logSystemAction('VPP', 'SAVE_VPP_REG_DRAFT', `Lưu nháp đăng ký Văn phòng phẩm kỳ [${period.name}]: ${items.length} mặt hàng`, 'SUCCESS', savedReg.code);
+  alert('✅ Đã lưu nháp — bạn có thể sửa tiếp hoặc bấm "Gửi Duyệt" khi đã chọn xong.');
   renderVppRegistrations();
 
-  const wfConfig = DB.vppDeptWorkflows[newReg.dept] || { workflowId: 'WF_1STEP', approvers: { 1: ['admin'] } };
-  const approvers = wfConfig.approvers?.[1] || [];
-  if (approvers.length) {
-    notifyUsersByEmail('VPP', 'NOTIFY_APPROVAL_NEEDED', newReg.code, approvers,
-      `[VPDT] Đăng ký Văn phòng phẩm ${newReg.code} cần bạn phê duyệt`,
-      `Đăng ký Văn phòng phẩm kỳ "${period.name}" của ${newReg.creatorName} đang chờ bạn phê duyệt.`);
-  }
+  const submitBtn = document.getElementById('btnVppRegSubmitDraft');
+  submitBtn.classList.remove('hidden');
+  submitBtn.onclick = () => submitVppRegDraftAction(vppFormDraftId, true);
+}
+
+// "Gửi Duyệt": NHÁP -> CHỜ DUYỆT. fromForm=true khi bấm từ form đăng ký (ẩn form đi sau khi gửi xong);
+// false khi bấm trực tiếp từ dropdown thao tác ở danh sách (không đụng tới form).
+async function submitVppRegDraftAction(regId, fromForm) {
+  if (!regId) return;
+  const r = DB.vppRegistrations.find(x => x.id === regId);
+  if (!r) return;
+  showConfirmModal({
+    title: '📤 Xác Nhận Gửi Duyệt',
+    bodyHTML: `<p>Gửi đăng ký Văn phòng phẩm kỳ <b>${escapeHtml(r.periodName)}</b> (${r.items.length} mặt hàng) để bắt đầu quy trình phê duyệt? Sau khi gửi sẽ không tự sửa được nữa.</p>`,
+    confirmLabel: 'Gửi Duyệt',
+    onConfirm: async () => {
+      let result;
+      try {
+        result = await callRecordAction('vppRegistrations', regId, 'submit', {});
+      } catch (err) { return alert(`⛔ ${err.message}`); }
+      const updatedReg = result.item;
+      const idx = DB.vppRegistrations.findIndex(x => x.id === regId);
+      if (idx !== -1) DB.vppRegistrations[idx] = updatedReg;
+
+      logSystemAction('VPP', 'SUBMIT_VPP_REG', `Gửi duyệt đăng ký Văn phòng phẩm [${updatedReg.code}]`, 'SUCCESS', updatedReg.code);
+      alert('✅ Đã gửi đăng ký, đang chờ phê duyệt!');
+      if (fromForm) { document.getElementById('vppRegItemsWrap').classList.add('hidden'); vppFormDraftId = null; onVppRegPeriodChange(); }
+      renderVppRegistrations();
+
+      const wfConfig = DB.vppDeptWorkflows[updatedReg.dept] || { workflowId: 'WF_1STEP', approvers: { 1: ['admin'] } };
+      const approvers = wfConfig.approvers?.[1] || [];
+      if (approvers.length) {
+        notifyUsersByEmail('VPP', 'NOTIFY_APPROVAL_NEEDED', updatedReg.code, approvers,
+          `[VPDT] Đăng ký Văn phòng phẩm ${updatedReg.code} cần bạn phê duyệt`,
+          `Đăng ký Văn phòng phẩm kỳ "${updatedReg.periodName}" của ${updatedReg.creatorName} đang chờ bạn phê duyệt.`);
+      }
+    }
+  });
 }
 
 function vppRegStatusBadge(r) {
+  if (r.status === 'DRAFT') return `<span class="px-2 py-0.5 bg-gray-200 text-gray-700 rounded font-bold text-xs">📝 Nháp</span>`;
   if (r.status === 'APPROVED') return `<span class="px-2 py-0.5 bg-green-100 text-green-800 rounded font-bold text-xs">✅ Đã phê duyệt</span>`;
   if (r.status === 'REJECTED') return `<span class="px-2 py-0.5 bg-red-100 text-red-800 rounded font-bold text-xs">❌ Từ chối</span>`;
   return `<span class="px-2 py-0.5 bg-indigo-100 text-indigo-800 rounded font-bold text-xs">⏳ Chờ duyệt</span>`;
@@ -11519,8 +11636,16 @@ function renderVppRegistrations() {
     const wfConfig = DB.vppDeptWorkflows[r.dept] || { workflowId: 'WF_1STEP', approvers: { 1: ['admin'] } };
     const currentStepApprovers = wfConfig.approvers?.[r.currentStep] || [];
     const canApprove = (r.status === 'PENDING') && canApproveStep(currentUser, currentStepApprovers, r.history, r.currentStep);
-    const primaryBtnHTML = `<button onclick="openVppRegModal(${r.id})" class="px-2.5 py-1 ${canApprove ? 'bg-orange-600 text-white' : 'bg-gray-600 text-white'} rounded text-xs hover:opacity-90 font-bold">${canApprove ? '✍️ Xử lý / Duyệt' : '👁️ Xem chi tiết'}</button>`;
+    const isOwnDraft = r.status === 'DRAFT' && r.creator === currentUser.username;
+
+    let primaryBtnHTML;
     const secondaryOptions = [];
+    if (isOwnDraft) {
+      primaryBtnHTML = `<button onclick="editVppRegDraft(${r.id})" class="px-2.5 py-1 bg-gray-600 text-white rounded text-xs hover:opacity-90 font-bold">✏️ Sửa Nháp</button>`;
+      secondaryOptions.push({ value: 'submit', label: '📤 Gửi Duyệt' });
+    } else {
+      primaryBtnHTML = `<button onclick="openVppRegModal(${r.id})" class="px-2.5 py-1 ${canApprove ? 'bg-orange-600 text-white' : 'bg-gray-600 text-white'} rounded text-xs hover:opacity-90 font-bold">${canApprove ? '✍️ Xử lý / Duyệt' : '👁️ Xem chi tiết'}</button>`;
+    }
     if (currentUser.perms?.admin) secondaryOptions.push({ value: 'delete', label: '🗑️ Xóa' });
     return `
       <tr class="hover:bg-gray-50 border-b">
@@ -11534,8 +11659,19 @@ function renderVppRegistrations() {
   }).join('');
 }
 
+// "Sửa Nháp" ở danh sách -> chọn đúng kỳ trong form phía trên rồi nạp lại nội dung NHÁP để sửa tiếp
+// (dùng chung onVppRegPeriodChange() — form tự nhận ra đây là NHÁP của chính mình qua findOwnVppRegForPeriod()).
+function editVppRegDraft(id) {
+  const r = DB.vppRegistrations.find(x => x.id === id);
+  if (!r) return;
+  document.getElementById('vppRegPeriodSelect').value = String(r.periodId);
+  onVppRegPeriodChange();
+  document.getElementById('vppRegItemsWrap').scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
 function runVppRegAction(id, action) {
   switch (action) {
+    case 'submit': submitVppRegDraftAction(id, false); break;
     case 'delete': deleteVppRegAction(id); break;
   }
 }
@@ -11561,13 +11697,25 @@ function openVppRegModal(regId) {
   document.getElementById('vppRegModalTitle').innerText = `🖇️ Xử Lý Đăng Ký Văn Phòng Phẩm: ${r.code}`;
   document.getElementById('vppRegModalSub').innerText = `Kỳ: ${r.periodName} | Phòng ban: ${r.dept} | Người đăng ký: ${r.creatorName}`;
 
+  const itemsTotal = r.items.reduce((sum, it) => sum + (Number(it.price) || 0) * (Number(it.qty) || 0), 0);
   document.getElementById('vppRegModalItems').innerHTML = `
     <div class="overflow-x-auto">
       <table class="w-full border-collapse border text-xs bg-white">
-        <thead><tr class="bg-gray-100 text-left"><th class="border p-1">Mặt hàng</th><th class="border p-1">Đơn vị</th><th class="border p-1 text-center">Số lượng</th></tr></thead>
+        <thead><tr class="bg-gray-100 text-left">
+          <th class="border p-1">Mã hàng</th><th class="border p-1">Mặt hàng</th><th class="border p-1">Đơn vị</th>
+          <th class="border p-1 text-center">Số lượng</th><th class="border p-1 text-right">Đơn giá</th><th class="border p-1 text-right">Thành tiền</th>
+        </tr></thead>
         <tbody>
-          ${r.items.map(it => `<tr><td class="border p-1">${escapeHtml(it.name)}</td><td class="border p-1">${escapeHtml(it.unit)}</td><td class="border p-1 text-center">${it.qty}</td></tr>`).join('')}
+          ${r.items.map(it => `<tr>
+            <td class="border p-1 text-gray-500">${escapeHtml(it.code || '')}</td>
+            <td class="border p-1">${escapeHtml(it.name)}</td>
+            <td class="border p-1">${escapeHtml(it.unit)}</td>
+            <td class="border p-1 text-center">${it.qty}</td>
+            <td class="border p-1 text-right">${it.price != null ? Number(it.price).toLocaleString('vi-VN') : ''}</td>
+            <td class="border p-1 text-right">${it.price != null ? (it.price * it.qty).toLocaleString('vi-VN') : ''}</td>
+          </tr>`).join('')}
         </tbody>
+        ${itemsTotal ? `<tfoot><tr class="font-bold bg-gray-50"><td class="border p-1" colspan="5">Tổng cộng</td><td class="border p-1 text-right">${itemsTotal.toLocaleString('vi-VN')}</td></tr></tfoot>` : ''}
       </table>
     </div>
   `;
@@ -11591,6 +11739,7 @@ function openVppRegModal(regId) {
   if (canApprove) {
     actionBtns.innerHTML = `
       <button onclick="confirmProcessVppReg('REJECT')" class="bg-red-600 text-white px-4 py-1.5 rounded font-bold hover:bg-red-700 text-xs">❌ Từ Chối</button>
+      <button onclick="confirmProcessVppReg('REQUEST_CHANGES')" class="bg-amber-500 text-white px-4 py-1.5 rounded font-bold hover:bg-amber-600 text-xs">🔄 Yêu Cầu Bổ Sung</button>
       <button onclick="confirmProcessVppReg('APPROVE')" class="bg-green-600 text-white px-5 py-1.5 rounded font-bold hover:bg-green-700 text-xs">✅ Phê Duyệt & Chuyển Bước</button>
     `;
   } else {
@@ -11608,11 +11757,14 @@ function closeVppRegModal() {
 function confirmProcessVppReg(actionType) {
   const comment = document.getElementById('txtVppRegComment').value.trim();
   if (actionType === 'REJECT' && !comment) return alert('Vui lòng nhập lý do từ chối!');
-  const isApprove = actionType === 'APPROVE';
+  if (actionType === 'REQUEST_CHANGES' && !comment) return alert('Vui lòng nhập lý do cần bổ sung/chỉnh sửa!');
+  const titleMap = { APPROVE: '✅ Xác Nhận Phê Duyệt', REJECT: '❌ Xác Nhận Từ Chối', REQUEST_CHANGES: '🔄 Xác Nhận Yêu Cầu Bổ Sung' };
+  const labelMap = { APPROVE: 'Phê Duyệt', REJECT: 'Từ Chối', REQUEST_CHANGES: 'Yêu Cầu Bổ Sung' };
+  const actionTextMap = { APPROVE: 'phê duyệt', REJECT: 'từ chối', REQUEST_CHANGES: 'yêu cầu bổ sung/chỉnh sửa (đưa hồ sơ về nháp để người đăng ký sửa lại)' };
   showConfirmModal({
-    title: isApprove ? '✅ Xác Nhận Phê Duyệt' : '❌ Xác Nhận Từ Chối',
-    bodyHTML: `<p>Bạn có chắc chắn muốn <b>${isApprove ? 'phê duyệt' : 'từ chối'}</b> đăng ký này?</p>${comment ? `<p class="mt-2 italic text-gray-600">Ghi chú: "${escapeHtml(comment)}"</p>` : ''}`,
-    confirmLabel: isApprove ? 'Phê Duyệt' : 'Từ Chối',
+    title: titleMap[actionType],
+    bodyHTML: `<p>Bạn có chắc chắn muốn <b>${actionTextMap[actionType]}</b> đăng ký này?</p>${comment ? `<p class="mt-2 italic text-gray-600">Ghi chú: "${escapeHtml(comment)}"</p>` : ''}`,
+    confirmLabel: labelMap[actionType],
     onConfirm: () => processVppReg(actionType)
   });
 }
@@ -11622,10 +11774,11 @@ async function processVppReg(actionType) {
   const r = DB.vppRegistrations.find(item => item.id === currentProcessingVppRegId);
   if (!r) return;
   const comment = document.getElementById('txtVppRegComment').value.trim();
+  const actionUrlMap = { APPROVE: 'approve', REJECT: 'reject', REQUEST_CHANGES: 'request-changes' };
 
   let result;
   try {
-    result = await callWorkflowAction('vppRegistrations', r.id, actionType === 'REJECT' ? 'reject' : 'approve', { comment });
+    result = await callWorkflowAction('vppRegistrations', r.id, actionUrlMap[actionType], { comment });
   } catch (e) {
     return alert('⛔ ' + e.message);
   }
@@ -11636,7 +11789,12 @@ async function processVppReg(actionType) {
 
   let msg = '✅ Đã cập nhật trạng thái đăng ký!';
   const transition = result.transition;
-  if (transition.type === 'REJECTED') {
+  if (transition.type === 'REQUEST_CHANGES') {
+    notifyUsersByEmail('VPP', 'NOTIFY_REQUEST_CHANGES', updatedReg.code, [updatedReg.creator],
+      `[VPDT] Đăng ký Văn phòng phẩm ${updatedReg.code} cần bổ sung/chỉnh sửa`,
+      `Đăng ký Văn phòng phẩm của bạn cần được sửa lại. Lý do: ${comment}. Vui lòng vào mục Văn Phòng Phẩm để sửa và gửi lại.`);
+    msg = '✅ Đã yêu cầu bổ sung — hồ sơ đã chuyển về NHÁP để người đăng ký sửa lại!';
+  } else if (transition.type === 'REJECTED') {
     notifyUsersByEmail('VPP', 'NOTIFY_REJECTED', updatedReg.code, [updatedReg.creator],
       `[VPDT] Đăng ký Văn phòng phẩm ${updatedReg.code} bị từ chối`,
       `Đăng ký Văn phòng phẩm của bạn đã bị từ chối. Lý do: ${comment}`);
@@ -11683,8 +11841,14 @@ async function onVppCatalogFileChange(event) {
     vppPendingCatalog = data;
     statusEl.innerText = `✅ Đọc thành công ${data.items.length} mặt hàng từ file "${data.fileName}".`;
     document.getElementById('vppCatalogPreviewCount').innerText = data.items.length;
-    document.getElementById('vppCatalogPreviewBody').innerHTML = data.items.map(it =>
-      `<tr><td class="border p-1">${escapeHtml(it.name)}</td><td class="border p-1">${escapeHtml(it.unit)}</td></tr>`).join('');
+    document.getElementById('vppCatalogPreviewBody').innerHTML = data.items.map(it => `<tr>
+      <td class="border p-1 text-gray-500">${escapeHtml(it.code || '')}</td>
+      <td class="border p-1">${escapeHtml(it.name)}</td>
+      <td class="border p-1 text-gray-500">${escapeHtml(it.origin || '')}</td>
+      <td class="border p-1 text-gray-500">${escapeHtml(it.unit || '')}</td>
+      <td class="border p-1 text-gray-500">${escapeHtml(it.spec || '')}</td>
+      <td class="border p-1 text-right text-gray-500">${it.price != null ? Number(it.price).toLocaleString('vi-VN') : ''}</td>
+    </tr>`).join('');
     document.getElementById('vppCatalogPreviewWrap').classList.remove('hidden');
   } catch (err) {
     statusEl.innerText = `⛔ ${err.message}`;
@@ -11799,6 +11963,16 @@ function deleteVppPeriodAction(id) {
 }
 
 // ============ BÁO CÁO TỔNG HỢP (quản lý — chỉ vppManage/admin) ============
+// Tải file Excel sinh trực tiếp từ DB hiện tại (xem routes/vppCatalog.js + lib/vppExport.js) — điều
+// hướng bằng thẻ <a> tạm (kèm cookie phiên đăng nhập hiện có, không cần fetch+blob thủ công).
+function downloadVppExport(kind) {
+  const periodId = Number(document.getElementById('vppReportPeriodSelect').value);
+  if (!periodId) return alert('Vui lòng chọn kỳ đăng ký để tải báo cáo!');
+  const a = document.createElement('a');
+  a.href = `/api/vpp/export/${kind}/${periodId}`;
+  a.click();
+}
+
 function renderVppReportPeriodOptions() {
   const sel = document.getElementById('vppReportPeriodSelect');
   const prevValue = sel.value;

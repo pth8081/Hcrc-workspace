@@ -10,6 +10,7 @@
 // chỉ Admin; Công việc theo NGƯỜI (assignedBy/assignee), hoàn toàn không có khái niệm phòng ban.
 const { HttpError } = require('./httpErrors');
 const { scopeAllows, OFFICE_SUBTYPE_TO_PERM_FLAG } = require('./createValidation');
+const { validateRegistrationItems: validateVppRegItems } = require('./vppCatalog');
 
 function nowVN() {
   return new Date().toLocaleString('vi-VN');
@@ -876,6 +877,38 @@ function closeVppPeriod(user, period) {
   return period;
 }
 
+// ===================== VĂN PHÒNG PHẨM (nộp/sửa đăng ký NHÁP) =====================
+// "Kết thúc chọn" ở giao diện tạo hồ sơ NHÁP qua route /api/create/vppRegistrations (xem
+// lib/createValidation.js) — 2 hàm dưới xử lý phần còn lại của vòng đời: sửa nội dung khi còn NHÁP,
+// và "Gửi" để chính thức vào quy trình duyệt (NHÁP -> CHỜ DUYỆT, bắt đầu từ bước 1).
+function submitVppRegistration(user, item) {
+  if (item.creator !== user.username) throw new HttpError(403, 'Chỉ người tạo đăng ký mới được gửi hồ sơ này');
+  if (item.status !== 'DRAFT') throw new HttpError(409, 'Đăng ký này không còn ở trạng thái nháp (có thể đã gửi hoặc đã bị xử lý)');
+  if (!Array.isArray(item.items) || !item.items.length) {
+    throw new HttpError(400, 'Chưa chọn mặt hàng nào — vui lòng chọn ít nhất 1 mặt hàng trước khi gửi');
+  }
+  if (!item.history) item.history = [];
+  item.history.push({ step: 0, approver: user.name, username: user.username, action: 'SUBMITTED', comment: '', time: nowVN() });
+  item.status = 'PENDING';
+  item.currentStep = 1;
+  return item;
+}
+
+// period: bản ghi kỳ đăng ký tương ứng item.periodId — CALLER (routes/records.js) tự đọc trước rồi
+// truyền vào (hàm này không tự đọc DB, giữ đúng nguyên tắc chung — xem đầu file lib/createValidation.js).
+function updateVppRegistrationDraft(user, item, payload, period) {
+  if (item.creator !== user.username) throw new HttpError(403, 'Chỉ người tạo đăng ký mới được sửa hồ sơ này');
+  if (item.status !== 'DRAFT') throw new HttpError(409, 'Đăng ký này không còn ở trạng thái nháp, không thể sửa');
+  if (!period) throw new HttpError(404, 'Không tìm thấy kỳ đăng ký');
+  const todayStr = new Date().toISOString().slice(0, 10);
+  const pastEndDate = !!(period.endDate && todayStr > period.endDate);
+  if (period.status !== 'OPEN' || pastEndDate) {
+    throw new HttpError(409, 'Kỳ đăng ký này đã kết thúc, không thể sửa đăng ký nữa');
+  }
+  item.items = validateVppRegItems(payload.items, period.catalogItems);
+  return item;
+}
+
 module.exports = {
   editContract,
   canApproveContract, approveContract, rejectContract,
@@ -893,5 +926,5 @@ module.exports = {
   acceptTask, confirmCollaboratorParticipation, updateTaskStatusAction, requestExtension,
   cancelOrRequestCancelTask, resolvePendingTaskAction,
   addSubtask, toggleSubtask, deleteSubtask,
-  closeVppPeriod
+  closeVppPeriod, submitVppRegistration, updateVppRegistrationDraft
 };

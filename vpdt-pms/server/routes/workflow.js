@@ -13,7 +13,7 @@ const { withLockedRecordForCollection } = require('../lib/recordStore');
 
 router.use(requireAuth, blockIfMustChangePassword);
 
-const ACTION_MAP = { approve: 'APPROVE', reject: 'REJECT', 'request-info': 'REQUEST_INFO' };
+const ACTION_MAP = { approve: 'APPROVE', reject: 'REJECT', 'request-info': 'REQUEST_INFO', 'request-changes': 'REQUEST_CHANGES' };
 
 // POST /api/workflow/submissions/:id/respond-info  — người TRÌNH phản hồi 1 yêu cầu bổ sung cụ thể
 // (không phải approver nên không dùng chung route bên dưới — action riêng, chỉ submissions mới có).
