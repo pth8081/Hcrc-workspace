@@ -861,6 +861,21 @@ function resolvePendingTaskAction(kind, verb, user, task) {
   return task;
 }
 
+// ===================== VĂN PHÒNG PHẨM (đóng kỳ đăng ký) =====================
+// "Kỳ đăng ký" tự coi là đóng khi đã qua endDate (kiểm tra ngay lúc nộp đăng ký, xem
+// lib/createValidation.js CREATE_MODULE_CONFIGS.vppRegistrations) — hàm này chỉ xử lý nhánh NGƯỜI
+// QUẢN LÝ tự bấm kết thúc kỳ SỚM (trước endDate, hoặc kỳ không đặt endDate).
+function closeVppPeriod(user, period) {
+  if (!user.perms?.admin && !user.perms?.vppManage) {
+    throw new HttpError(403, 'Chỉ người có quyền quản lý Văn phòng phẩm mới được kết thúc kỳ đăng ký');
+  }
+  if (period.status === 'CLOSED') throw new HttpError(409, 'Kỳ đăng ký này đã kết thúc từ trước');
+  period.status = 'CLOSED';
+  period.closedAt = nowVN();
+  period.closedBy = user.username;
+  return period;
+}
+
 module.exports = {
   editContract,
   canApproveContract, approveContract, rejectContract,
@@ -877,5 +892,6 @@ module.exports = {
   createTask,
   acceptTask, confirmCollaboratorParticipation, updateTaskStatusAction, requestExtension,
   cancelOrRequestCancelTask, resolvePendingTaskAction,
-  addSubtask, toggleSubtask, deleteSubtask
+  addSubtask, toggleSubtask, deleteSubtask,
+  closeVppPeriod
 };

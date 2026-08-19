@@ -265,6 +265,79 @@ const CREATE_MODULE_CONFIGS = {
       }));
       payload.amount = payload.installments.reduce((sum, it) => sum + it.amount, 0);
     }
+  },
+  // Văn phòng phẩm — "kỳ đăng ký": KHÔNG có khái niệm phòng ban để chọn (dùng chung toàn công ty),
+  // dept trong hồ sơ chỉ để hiển thị "ai tạo kỳ này" — giống internalPosts, forceOwnDept + getScope
+  // rỗng nên scopeAllows() luôn qua, quyền thật nằm ở extraValidate (chỉ vppManage/admin).
+  vppPeriods: {
+    dbKey: 'vppPeriods',
+    forceOwnDept: true,
+    getScope: () => ({}),
+    creatorField: 'creator', creatorNameField: 'creatorName',
+    extraValidate: (payload, collection, user) => {
+      if (!user.perms?.admin && !user.perms?.vppManage) {
+        throw new CreateError(403, 'Chỉ người có quyền quản lý Văn phòng phẩm mới được tạo kỳ đăng ký');
+      }
+      if (!payload.name || !String(payload.name).trim()) throw new CreateError(400, 'Thiếu tên kỳ đăng ký');
+      const items = Array.isArray(payload.catalogItems) ? payload.catalogItems : [];
+      const cleaned = items
+        .map(it => ({ name: String(it?.name || '').trim(), unit: String(it?.unit || '').trim() }))
+        .filter(it => it.name);
+      if (!cleaned.length) throw new CreateError(400, 'Danh mục mặt hàng trống — vui lòng tải lên file danh mục hợp lệ');
+      payload.catalogItems = cleaned;
+      if (payload.startDate && payload.endDate && payload.endDate < payload.startDate) {
+        throw new CreateError(400, 'Ngày kết thúc phải sau ngày bắt đầu');
+      }
+      payload.status = 'OPEN';
+      payload.closedAt = null;
+      payload.closedBy = null;
+    }
+  },
+  // Văn phòng phẩm — đăng ký của từng nhân viên cho 1 kỳ. Cũng forceOwnDept (dept = phòng ban thật của
+  // người đăng ký, dùng để tra cứu quy trình duyệt theo phòng qua vppDeptWorkflows) — AI đã đăng nhập
+  // đều đăng ký được (không cần cờ quyền riêng, giống internalPosts loại SHARE), quyền thật sự nằm ở
+  // kiểm tra kỳ còn mở + chưa đăng ký trùng bên dưới. Phải tra cứu SANG collection vppPeriods — CALLER
+  // (routes/create.js) đọc sẵn và gộp vào appData.vppPeriods TRƯỚC khi gọi (giống cách submissions dùng
+  // appData.submissionDeptWorkflows) — file này KHÔNG tự đọc DB/collection khác, giữ đúng nguyên tắc cũ
+  // (xem đầu file) để stub test vẫn tái dùng được y nguyên, không cần async.
+  vppRegistrations: {
+    dbKey: 'vppRegistrations',
+    forceOwnDept: true,
+    getScope: () => ({}),
+    creatorField: 'creator', creatorNameField: 'creatorName',
+    extraValidate: (payload, collection, user, appData) => {
+      const periodId = Number(payload.periodId);
+      if (!Number.isFinite(periodId)) throw new CreateError(400, 'Thiếu kỳ đăng ký');
+      const periods = appData?.vppPeriods || [];
+      const period = periods.find(p => p.id === periodId);
+      if (!period) throw new CreateError(404, 'Không tìm thấy kỳ đăng ký');
+      const todayStr = new Date().toISOString().slice(0, 10);
+      const pastEndDate = !!(period.endDate && todayStr > period.endDate);
+      if (period.status !== 'OPEN' || pastEndDate) {
+        throw new CreateError(409, 'Kỳ đăng ký này đã kết thúc, không thể đăng ký thêm');
+      }
+      const duplicate = (collection || []).some(r =>
+        r.periodId === periodId && r.creator === user.username && r.status !== 'REJECTED');
+      if (duplicate) throw new CreateError(409, 'Bạn đã đăng ký ở kỳ này rồi (chỉ 1 đăng ký/người/kỳ)');
+
+      const catalogNames = new Set(period.catalogItems.map(it => it.name));
+      const items = Array.isArray(payload.items) ? payload.items : [];
+      const cleaned = [];
+      for (const it of items) {
+        const name = String(it?.name || '').trim();
+        const qty = Number(it?.qty);
+        if (!name || !Number.isFinite(qty) || qty <= 0) continue;
+        if (!catalogNames.has(name)) throw new CreateError(400, `Mặt hàng "${name}" không có trong danh mục kỳ này`);
+        cleaned.push({ name, unit: period.catalogItems.find(c => c.name === name)?.unit || '', qty });
+      }
+      if (!cleaned.length) throw new CreateError(400, 'Vui lòng chọn ít nhất 1 mặt hàng với số lượng hợp lệ');
+      payload.items = cleaned;
+      payload.periodCode = period.code;
+      payload.periodName = period.name;
+      payload.status = 'PENDING';
+      payload.currentStep = 1;
+      payload.history = [];
+    }
   }
 };
 

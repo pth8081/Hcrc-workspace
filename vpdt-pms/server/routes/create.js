@@ -6,7 +6,7 @@ const router = express.Router();
 const { getAllAppData } = require('../lib/appData');
 const { requireAuth, blockIfMustChangePassword } = require('../lib/auth');
 const { CREATE_MODULE_CONFIGS, CreateError, validateAndPrepareCreate } = require('../lib/createValidation');
-const { createForCollection, createForCollectionSerialized } = require('../lib/recordStore');
+const { createForCollection, createForCollectionSerialized, getAllForCollection } = require('../lib/recordStore');
 
 router.use(requireAuth, blockIfMustChangePassword);
 
@@ -26,6 +26,11 @@ router.post('/:module', async (req, res) => {
     // dùng tới (dựng lại quy trình hiệu lực server-side, xem lib/createValidation.js), các module khác
     // bỏ qua tham số này.
     const appData = await getAllAppData();
+    // vppRegistrations cần tra cứu chéo sang collection vppPeriods (kỳ đăng ký còn mở/danh mục mặt
+    // hàng hợp lệ) — vppPeriods đã chuyển sang dbo.Records (không còn trong AppData) nên gộp thêm vào
+    // đây, CALLER đọc sẵn rồi truyền vào (khớp đúng nguyên tắc appData ở lib/createValidation.js — file
+    // đó không tự đọc DB/collection khác).
+    if (moduleKey === 'vppRegistrations') appData.vppPeriods = await getAllForCollection('vppPeriods');
 
     const config = CREATE_MODULE_CONFIGS[moduleKey];
     const builderFn = (list) => validateAndPrepareCreate(moduleKey, req.body, freshUser, list, appData);

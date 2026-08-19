@@ -422,5 +422,22 @@ router.post('/submissions/:id/delete', (req, res) => deleteAdminOnly(req, res, '
 router.post('/contracts/:id/delete', (req, res) => deleteAdminOnly(req, res, 'contracts'));
 router.post('/officeReqs/:id/delete', (req, res) => deleteAdminOnly(req, res, 'officeReqs'));
 router.post('/carRegs/:id/delete', (req, res) => deleteAdminOnly(req, res, 'carRegs'));
+router.post('/vppPeriods/:id/delete', (req, res) => deleteAdminOnly(req, res, 'vppPeriods'));
+router.post('/vppRegistrations/:id/delete', (req, res) => deleteAdminOnly(req, res, 'vppRegistrations'));
+
+// POST /api/records/vppPeriods/:id/close — người quản lý VPP (hoặc admin) tự kết thúc kỳ sớm.
+router.post('/vppPeriods/:id/close', async (req, res) => {
+  const itemId = Number(req.params.id);
+  if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
+  try {
+    const { freshUser } = await getFreshUser(req);
+    const result = await withLockedRecordForCollection('vppPeriods', itemId, (item) =>
+      recordActions.closeVppPeriod(freshUser, item)
+    );
+    res.json({ ok: true, item: result });
+  } catch (err) {
+    handleError(res, `vppPeriods/${req.params.id}/close`, err);
+  }
+});
 
 module.exports = router;

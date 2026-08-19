@@ -102,6 +102,10 @@ const MODULE_CONFIGS = {
       const mapKey = OFFICE_SUBTYPE_TO_DBKEY[item.subType] || 'officeBuyDeptWorkflows';
       return flatWorkflowConfigToSteps(appData[mapKey]?.[item.dept], appData);
     }
+  },
+  vppRegistrations: {
+    dbKey: 'vppRegistrations',
+    resolveWfConfig: (item, appData) => flatWorkflowConfigToSteps(appData.vppDeptWorkflows?.[item.dept], appData)
   }
 };
 
