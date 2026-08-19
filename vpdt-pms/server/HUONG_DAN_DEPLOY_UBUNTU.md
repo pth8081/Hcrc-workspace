@@ -1,62 +1,44 @@
 # HƯỚNG DẪN TRIỂN KHAI VPDT (VĂN PHÒNG ĐIỆN TỬ) TRÊN UBUNTU SERVER
-### Node.js + SQL Server (MSSQL) — thay thế localStorage
+### Node.js + SQL Server (MSSQL) — dựng mới hoàn toàn trên máy chủ thật
 
 ---
 
-## 0. Tổng quan kiến trúc sau khi chuyển đổi
+## 0. Tổng quan kiến trúc
 
 ```
 [Trình duyệt người dùng]
-        │  HTTP(S) (http://<ip-server>:3000, cookie phiên đăng nhập httpOnly)
+        │  HTTP(S) (qua Nginx cổng 80/443, cookie phiên đăng nhập httpOnly)
         ▼
 [Ubuntu Server]
-   ├─ Node.js (Express) — port 3000 — phục vụ giao diện + API, xác thực bằng
-   │  JWT ký ở server (xem mục 5)
+   ├─ Nginx — reverse proxy cổng 80/443 → 127.0.0.1:3000 (mục 9)
+   ├─ Node.js (Express, chạy dưới PM2) — port 3000 — phục vụ giao diện + API,
+   │  xác thực bằng JWT ký ở server (xem mục 6)
    └─ SQL Server (MSSQL) — port 1433 — lưu trữ dữ liệu (dbo.AppData + các bảng
-      riêng theo loại hồ sơ: dbo.SystemLogs, dbo.Tasks, dbo.Records — xem ghi
-      chú cập nhật bên dưới)
+      riêng theo loại hồ sơ: dbo.SystemLogs, dbo.Tasks, dbo.Records)
 ```
 
-Bản mô tả gốc ở đây (lần đầu chuyển từ `localStorage` sang SQL Server) nói
-giao diện/chức năng **giữ nguyên 100%**, chỉ đổi nơi lưu trữ. Từ đó tới nay
-ứng dụng đã trải qua nhiều đợt nâng cấp bảo mật/kiến trúc lớn nên mô tả đó
-**không còn đúng nữa** — xem ghi chú cập nhật ngay dưới đây trước khi triển
-khai, đặc biệt là phần cấu hình `.env` ở mục 5.
+**Đặc điểm kiến trúc cần biết trước khi triển khai:**
 
-**Lưu ý về 1 lỗi đã sửa trong quá trình chuyển đổi (lịch sử, không còn liên
-quan tới bản hiện tại):** một số hàm cấu hình quy trình (`dept_workflows`,
-`car_regs`, `office_reqs`...) trong code gốc gọi lưu dữ liệu với tên khóa
-không khớp với tên trường thực tế trong bộ nhớ, khiến các thay đổi này bị mất
-khi tải lại trang. Đã sửa lại cho khớp đúng.
-
-**Cập nhật quan trọng sau lần chuyển đổi ban đầu — ĐỌC TRƯỚC KHI TRIỂN KHAI:**
-
-- **Xác thực đã chuyển hẳn sang phía SERVER.** Mật khẩu lưu dạng hash
-  (bcrypt, không đọc lại được nguyên văn dù có quyền truy cập CSDL trực
-  tiếp). Đăng nhập cấp 1 phiên qua cookie JWT httpOnly, ký bằng `JWT_SECRET`
-  — biến này **bắt buộc phải có trong `.env`, server sẽ không khởi động nếu
-  thiếu** (xem mục 5, đã bổ sung vào ví dụ `.env` bên dưới). Có giới hạn số
-  lần đăng nhập sai liên tiếp + khoá tạm tài khoản.
-- **Cookie phiên đăng nhập mặc định bắt buộc HTTPS** (`COOKIE_SECURE=true`
-  theo mặc định). Nếu triển khai theo đường tối giản ở mục 6-7 (chạy thẳng
-  qua `http://<ip>:3000`, **chưa** làm mục 8 Nginx+HTTPS), trình duyệt sẽ
-  **không gửi lại cookie này** — đăng nhập có vẻ thành công nhưng ngay sau đó
-  bị coi như chưa đăng nhập, không có thông báo lỗi rõ ràng. Phải đặt
-  `COOKIE_SECURE=false` trong `.env` nếu thật sự chạy qua HTTP thuần trong
-  mạng nội bộ tin cậy (xem cảnh báo lại ở mục 5 và mục 8).
-- **Toàn bộ thao tác tạo/sửa/xoá/duyệt hồ sơ nghiệp vụ** (Văn bản trình, Tài
-  liệu, Hợp đồng, Đăng ký xe, Đề xuất văn phòng, Phòng họp, Biên bản họp,
-  Công việc, Truyền thông nội bộ...) đều được SERVER tự xác minh lại quyền +
-  đúng bước quy trình trước khi ghi — không chỉ dựa vào ẩn/hiện nút trên giao
-  diện như bản gốc.
-- **Phần lớn dữ liệu nghiệp vụ đã tách khỏi `dbo.AppData`** (vốn chỉ lưu 1
-  dòng JSON cho cả collection, phải khoá/đọc/ghi lại NGUYÊN dòng mỗi lần sửa
-  1 bản ghi) sang các bảng riêng có khoá đúng từng dòng (`dbo.SystemLogs`,
-  `dbo.Tasks`, `dbo.Records`). `dbo.AppData` giờ chỉ còn giữ dữ liệu cấu hình
-  (người dùng, phân quyền, quy trình mẫu, cấu hình email...). `schema.sql`
-  (mục 3) đã tạo sẵn đầy đủ các bảng này.
-
-Mục 9 (Khuyến nghị bảo mật) đã cập nhật lại đúng hiện trạng này.
+- **Xác thực hoàn toàn ở phía SERVER.** Mật khẩu lưu dạng hash (bcrypt, không
+  đọc lại được nguyên văn dù có quyền truy cập CSDL trực tiếp). Đăng nhập cấp
+  1 phiên qua cookie JWT httpOnly, ký bằng `JWT_SECRET` — biến này **bắt buộc
+  phải có trong `.env`, server sẽ không khởi động nếu thiếu** (xem mục 6). Có
+  giới hạn số lần đăng nhập sai liên tiếp + khoá tạm tài khoản.
+- **Cookie phiên đăng nhập mặc định bắt buộc HTTPS** (`COOKIE_SECURE=true`).
+  Hướng dẫn này đi thẳng qua Nginx (mục 9) nên giữ nguyên mặc định `true` —
+  chỉ đổi `false` nếu bạn cố tình bỏ qua Nginx và chạy thẳng qua
+  `http://<ip>:3000` trong mạng nội bộ hoàn toàn tin cậy (xem cảnh báo lại ở
+  mục 6).
+- **Toàn bộ thao tác tạo/sửa/xoá/duyệt hồ sơ nghiệp vụ** đều được SERVER tự
+  xác minh lại quyền + đúng bước quy trình trước khi ghi — không chỉ dựa vào
+  ẩn/hiện nút trên giao diện.
+- **Dữ liệu nghiệp vụ** (Văn bản trình, Tài liệu, Hợp đồng, Đăng ký xe, Đề
+  xuất văn phòng, Công việc, Báo cáo định kỳ...) nằm trong các bảng riêng có
+  khoá đúng từng dòng (`dbo.SystemLogs`, `dbo.Tasks`, `dbo.Records`).
+  `dbo.AppData` chỉ còn giữ dữ liệu cấu hình (người dùng, phân quyền, quy
+  trình mẫu, cấu hình email...). `schema.sql` (mục 4) tạo sẵn đầy đủ các bảng
+  này — **không cần chạy tay thêm gì khác, không cần seed dữ liệu tay**, ứng
+  dụng tự seed dữ liệu mặc định khi khởi động lần đầu (mục 8).
 
 ---
 
@@ -76,7 +58,7 @@ npm -v
 
 ## 2. Cài đặt SQL Server (MSSQL) trên Ubuntu
 
-Có 2 lựa chọn — chọn 1 trong 2:
+Có 3 lựa chọn — chọn 1:
 
 ### Lựa chọn A: Cài SQL Server trực tiếp trên Ubuntu (khuyến nghị cho server riêng)
 
@@ -119,58 +101,83 @@ sudo docker run -e "ACCEPT_EULA=Y" -e "MSSQL_SA_PASSWORD=Your_Strong_Password_He
 
 ### Lựa chọn C: Dùng SQL Server có sẵn trên máy chủ Windows khác trong công ty
 
-Nếu công ty đã có máy chủ SQL Server riêng (ví dụ theo tiêu chuẩn Dell
-PowerEdge R760xs đã cấu hình trước đó), bạn **không cần cài SQL Server trên
-Ubuntu** — chỉ cần đảm bảo Ubuntu server có thể kết nối tới máy chủ SQL Server
-đó qua mạng nội bộ (port 1433 mở trên firewall Windows), rồi trỏ file `.env`
-(bước 5) tới địa chỉIP của máy chủ đó.
+Nếu công ty đã có máy chủ SQL Server riêng, bạn **không cần cài SQL Server
+trên Ubuntu** — chỉ cần đảm bảo Ubuntu server có thể kết nối tới máy chủ SQL
+Server đó qua mạng nội bộ (port 1433 mở trên firewall Windows), rồi trỏ file
+`.env` (mục 6) tới địa chỉ IP của máy chủ đó.
 
 ---
 
-## 3. Tạo Database và bảng dữ liệu
+## 3. Chuẩn bị thư mục ứng dụng trên Ubuntu
 
-Chạy script SQL đã cung cấp (`server/sql/schema.sql`) bằng `sqlcmd`:
-
-```bash
-sqlcmd -S localhost -U sa -P 'Your_Strong_Password_Here' -i schema.sql
-```
-
-Nếu dùng Docker, chạy từ trong container hoặc trỏ `-S localhost,1433` từ máy host.
-
-Script này sẽ (an toàn để chạy lại nhiều lần — chỉ tạo bảng nào chưa có, không đụng dữ liệu cũ):
-- Tạo database `VPDT_DMS`
-- Tạo bảng `dbo.AppData` (dữ liệu cấu hình: người dùng, phân quyền, quy trình
-  mẫu, cấu hình email... — mỗi collection 1 dòng JSON)
-- Tạo `dbo.SystemLogs`, `dbo.Tasks`, `dbo.Records` (dữ liệu hồ sơ nghiệp vụ —
-  mỗi bản ghi 1 dòng riêng, xem ghi chú kiến trúc ở mục 0)
-
-Dữ liệu mặc định (phòng ban, user admin, quy trình mẫu...) sẽ được **tự động
-seed khi server Node.js khởi động lần đầu** (không cần chạy tay).
-
----
-
-## 4. Chuẩn bị thư mục ứng dụng trên Ubuntu
+**Làm bước này TRƯỚC khi tạo database ở mục 4** — script SQL nằm sẵn trong
+mã nguồn (`sql/schema.sql`), phải có mã nguồn trên máy trước mới chạy được.
 
 ```bash
-# Tạo thư mục và copy toàn bộ thư mục "server/" đã cung cấp lên đây
 sudo mkdir -p /opt/vpdt
 sudo chown $USER:$USER /opt/vpdt
 cd /opt/vpdt
-# (copy toàn bộ nội dung thư mục server/ vào đây, ví dụ qua scp/rsync từ máy local)
+# Copy TOÀN BỘ nội dung thư mục server/ đã cung cấp vào đây (scp/rsync/git clone từ máy local)
 
 npm install
 ```
 
+`npm install` đọc `package.json` và cài đủ mọi gói ứng dụng cần (Express,
+mssql, bcryptjs, exceljs...) — bỏ sót bước này ở lần dựng đầu tiên khiến
+server báo lỗi `Cannot find module '...'` và thoát ngay lúc khởi động (xem
+cảnh báo tương tự ở mục 12 cho các lần cập nhật code sau này).
+
 ---
 
-## 5. Cấu hình kết nối SQL Server + xác thực đăng nhập
+## 4. Tạo Database và bảng dữ liệu
+
+Từ trong thư mục `/opt/vpdt` (đã có `sql/schema.sql` từ mục 3):
 
 ```bash
+cd /opt/vpdt/sql
+sqlcmd -S localhost -U sa -P 'Your_Strong_Password_Here' -i schema.sql
+```
+
+Nếu dùng Docker (Lựa chọn B ở mục 2), chạy `sqlcmd` từ máy host trỏ
+`-S localhost,1433`, hoặc `docker exec` vào container rồi chạy từ trong đó.
+Nếu dùng SQL Server có sẵn ở máy khác (Lựa chọn C), đổi `-S localhost` thành
+đúng IP máy chủ đó.
+
+Script này **an toàn để chạy lại nhiều lần** (chỉ tạo bảng nào chưa có,
+không đụng dữ liệu cũ) — sẽ:
+- Tạo database `VPDT_DMS`
+- Tạo bảng `dbo.AppData` (dữ liệu cấu hình — mỗi collection 1 dòng JSON)
+- Tạo `dbo.SystemLogs`, `dbo.Tasks`, `dbo.Records` (dữ liệu hồ sơ nghiệp vụ —
+  mỗi bản ghi 1 dòng riêng, xem ghi chú kiến trúc ở mục 0)
+
+Dữ liệu mặc định (phòng ban, user admin, quy trình mẫu...) sẽ được **tự động
+seed khi server Node.js khởi động lần đầu** (mục 8) — không cần chạy tay.
+
+---
+
+## 5. Kiểm tra kết nối SQL Server trước khi cấu hình ứng dụng
+
+```bash
+sqlcmd -S localhost -U sa -P 'Your_Strong_Password_Here' -Q "SELECT name FROM sys.databases;"
+```
+
+Phải thấy `VPDT_DMS` trong danh sách trả về. Nếu lỗi kết nối ở bước này, xử
+lý dứt điểm trước khi sang mục 6 — mọi lỗi kết nối DB sau này (mục 8, mục 9)
+đều bắt nguồn từ đây.
+
+---
+
+## 6. Cấu hình kết nối SQL Server + xác thực đăng nhập
+
+```bash
+cd /opt/vpdt
 cp .env.example .env
 nano .env
 ```
 
-Điền đúng thông tin:
+Điền đúng thông tin (các dòng dưới là **bắt buộc**, phần còn lại trong
+`.env.example` đã copy sẵn qua `.env` — để nguyên comment, chỉ sửa giá trị
+cần thiết):
 
 ```
 PORT=3000
@@ -180,7 +187,7 @@ JWT_SECRET=change-me-to-a-long-random-string
 COOKIE_SECURE=true
 
 # --- Kết nối SQL Server ---
-DB_SERVER=localhost          # hoặc IP máy chủ SQL Server nếu chạy riêng
+DB_SERVER=localhost          # hoặc IP máy chủ SQL Server nếu chạy riêng (Lựa chọn C ở mục 2)
 DB_PORT=1433
 DB_NAME=VPDT_DMS
 DB_USER=sa
@@ -202,21 +209,24 @@ kín, và khác nhau giữa các môi trường** (dev/staging/production). Đ�
 này sẽ khiến mọi phiên đăng nhập đang mở bị đăng xuất (không sao, chỉ cần
 đăng nhập lại) — hữu ích nếu nghi ngờ khoá đã lộ.
 
-> ⚠️ **`COOKIE_SECURE=true` (mặc định) yêu cầu truy cập qua HTTPS.** Nếu bạn
-> làm theo mục 8 (Nginx + HTTPS nội bộ) thì giữ nguyên giá trị này. Nếu bạn
-> **bỏ qua mục 8** và chạy thẳng qua `http://<ip>:3000` (chỉ nên làm trong
-> mạng nội bộ hoàn toàn tin cậy), phải đổi thành `COOKIE_SECURE=false` — nếu
-> không, trình duyệt sẽ không lưu lại cookie phiên đăng nhập và người dùng
-> **không đăng nhập được dù nhập đúng mật khẩu** (không có thông báo lỗi rõ
-> ràng, chỉ tự động bị coi như chưa đăng nhập ngay sau khi vào được màn
-> chính).
+> ⚠️ **`COOKIE_SECURE=true` (mặc định) yêu cầu truy cập qua HTTPS/qua Nginx
+> đúng cấu hình ở mục 9.** Nếu bạn cố tình bỏ qua mục 9 và chạy thẳng qua
+> `http://<ip>:3000` (chỉ nên làm trong mạng nội bộ hoàn toàn tin cậy), phải
+> đổi thành `COOKIE_SECURE=false` — nếu không, trình duyệt sẽ không lưu lại
+> cookie phiên đăng nhập và người dùng **không đăng nhập được dù nhập đúng
+> mật khẩu** (không có thông báo lỗi rõ ràng, chỉ tự động bị coi như chưa
+> đăng nhập ngay sau khi vào được màn chính).
 
 > ⚠️ Không commit file `.env` lên Git — chứa mật khẩu SQL Server và khoá
 > `JWT_SECRET`.
 
+**Bỏ qua `TRUST_PROXY` và `ALLOWED_ORIGINS` ở bước này** — 2 biến đó chỉ cần
+đặt sau khi dựng xong Nginx, xem lại ở cuối mục 9 (dễ quên vì làm ở đây trước
+khi có Nginx sẽ không có tác dụng gì, phải quay lại sau).
+
 ---
 
-## 5b. Cấu hình gửi email thật (SMTP)
+## 7. Cấu hình gửi email thật (SMTP)
 
 Cấu hình gửi email chia làm 2 nơi, **mỗi phần chỉ có đúng 1 nguồn**, không trùng lặp/không chồng
 chéo ưu tiên:
@@ -256,9 +266,10 @@ lại đúng chế độ đang chạy, không cần mở file `.env` để kiể
 
 ---
 
-## 6. Chạy thử (kiểm tra trước khi đưa vào production)
+## 8. Chạy thử (kiểm tra trước khi đưa vào production)
 
 ```bash
+cd /opt/vpdt
 npm start
 ```
 
@@ -269,7 +280,7 @@ Kỳ vọng thấy log:
 ⏳ Đang kiểm tra / khởi tạo dữ liệu mặc định...
    ↳ Seed mặc định cho "depts"
    ↳ Seed mặc định cho "users"
-   ... (19 dòng seed cho lần chạy đầu tiên)
+   ... (nhiều dòng seed cho lần chạy đầu tiên)
 ✅ VPDT server đang chạy tại http://localhost:3000
 ```
 
@@ -277,19 +288,24 @@ Mở trình duyệt: `http://<ip-server>:3000` — đăng nhập thử với tà
 - `admin / 123456` (Quản trị viên - full quyền)
 - `nv_nhansu / 123456`, `ks_kiemsoat / 123456`, `sep_duyet / 123456`
 
-Nếu đang chạy thử qua `http://` thuần (chưa làm mục 8) mà đăng nhập không ăn
-(vào được màn chính rồi lại bị đá về màn đăng nhập), xem lại cảnh báo
-`COOKIE_SECURE` ở mục 5 — nguyên nhân hầu hết là do đó.
+Nếu đăng nhập không ăn (vào được màn chính rồi lại bị đá về màn đăng nhập),
+xem lại cảnh báo `COOKIE_SECURE` ở mục 6 — nguyên nhân hầu hết là do đó (đang
+thử qua `http://` thuần mà `COOKIE_SECURE` vẫn để `true`).
+
+Dừng lại (Ctrl+C) sau khi xác nhận chạy được — bước này chỉ để kiểm tra
+trước khi chuyển sang chạy nền bằng PM2 (mục 9).
 
 **⚠️ Đổi ngay mật khẩu các tài khoản mặc định này trước khi đưa vào sử dụng
 thật** (qua module Quản trị → Người dùng). Mật khẩu đã lưu dạng hash (bcrypt,
 không đọc lại được nguyên văn dù có quyền truy cập CSDL trực tiếp), nhưng giá
 trị mặc định `123456` thì ai cũng biết trước — xem thêm khuyến nghị bảo mật ở
-mục 9.
+mục 10.
 
 ---
 
-## 7. Chạy production ổn định bằng PM2 (tự khởi động lại khi lỗi/reboot server)
+## 9. Chạy production ổn định bằng PM2 + Nginx (reverse proxy, HTTPS)
+
+### 9a. PM2 (giữ tiến trình chạy nền, tự khởi động lại khi lỗi/reboot server)
 
 ```bash
 sudo npm install -g pm2
@@ -313,24 +329,24 @@ pm2 restart vpdt        # khởi động lại sau khi cập nhật code
 pm2 stop vpdt
 ```
 
----
-
-## 8. Cấu hình Nginx làm Reverse Proxy (khuyến nghị cho production)
-
-Giúp chạy ứng dụng qua cổng 80/443 (thay vì :3000), dễ gắn domain nội bộ và SSL.
+### 9b. Nginx (reverse proxy cổng 80/443 → 3000)
 
 ```bash
 sudo apt-get install -y nginx
 sudo nano /etc/nginx/sites-available/vpdt
 ```
 
-Nội dung:
+Nội dung — `client_max_body_size` PHẢI ≥ `UPLOAD_MAX_MB` trong `.env` (mặc
+định `UPLOAD_MAX_MB=20` nếu không đặt — xem `.env.example`), nếu không file
+người dùng tải lên nằm giữa 2 giới hạn này sẽ bị Nginx chặn với lỗi
+"413 Request Entity Too Large" mơ hồ thay vì thông báo rõ ràng của ứng dụng:
+
 ```nginx
 server {
     listen 80;
     server_name vpdt.congty.local;   # đổi thành domain/IP nội bộ của bạn
 
-    client_max_body_size 60M;        # cho phép upload file lớn (tài liệu/hợp đồng)
+    client_max_body_size 20M;        # khớp UPLOAD_MAX_MB (.env) — đổi cả 2 cùng lúc nếu cần nâng
 
     location / {
         proxy_pass http://localhost:3000;
@@ -350,7 +366,8 @@ sudo nginx -t
 sudo systemctl reload nginx
 ```
 
-Mở firewall (nếu dùng `ufw`):
+Mở firewall (nếu dùng `ufw`) — sau lệnh `enable`, chỉ còn 80/443/22 mở ra
+ngoài, cổng 3000 (Node) và 1433 (SQL Server) tự động bị chặn từ bên ngoài:
 ```bash
 sudo ufw allow 'Nginx Full'
 sudo ufw allow OpenSSH
@@ -360,48 +377,76 @@ sudo ufw enable
 Nếu cần HTTPS nội bộ, dùng `certbot` (nếu có domain public trỏ về server) hoặc
 tự cấp chứng chỉ nội bộ qua CA công ty.
 
+### 9c. Bật `TRUST_PROXY` sau khi có Nginx (BẮT BUỘC, dễ bỏ sót)
+
+Giờ mọi request tới Node đều đi qua Nginx trên CÙNG máy — nếu không khai báo
+`TRUST_PROXY`, Express sẽ thấy MỌI người dùng đều gọi từ cùng 1 địa chỉ
+(`127.0.0.1`, IP của Nginx) thay vì IP thật của từng người. Hậu quả: giới hạn
+đăng nhập sai/khoá tạm tài khoản và rate-limit tính GỘP CHUNG cho cả công ty
+thay vì theo từng người — 1 người gõ sai mật khẩu 5 lần có thể khiến TOÀN BỘ
+người dùng khác bị chặn tạm thời.
+
+```bash
+cd /opt/vpdt
+nano .env
+```
+Bỏ dấu `#` trước dòng sau (đã có sẵn, chỉ đang comment):
+```
+TRUST_PROXY=1
+```
+Rồi khởi động lại:
+```bash
+pm2 restart vpdt
+```
+
 ---
 
-## 9. Khuyến nghị bảo mật trước khi đưa vào sử dụng chính thức
-
-**Cập nhật:** mục "nâng cấp hash mật khẩu (bcrypt) + xác thực phía server"
-trong bản hướng dẫn gốc **đã hoàn tất từ lâu** — không còn là việc cần làm
-thêm. Xác thực hiện đã hoàn toàn ở phía server (mật khẩu hash bcrypt, phiên
-đăng nhập bằng JWT httpOnly, có giới hạn số lần đăng nhập sai + khoá tạm tài
-khoản), và toàn bộ thao tác tạo/sửa/xoá/duyệt hồ sơ nghiệp vụ đều được server
-tự xác minh lại quyền trước khi ghi (xem ghi chú cập nhật ở mục 0). Các điểm
-dưới đây vẫn là khuyến nghị **vận hành** thật sự cần làm khi triển khai —
-không phụ thuộc vào code, chỉ phụ thuộc vào cách bạn cấu hình/vận hành server:
+## 10. Khuyến nghị bảo mật + kiểm tra vận hành trước khi đưa vào sử dụng chính thức
 
 1. **Đổi toàn bộ mật khẩu mặc định** (`123456`) ngay sau khi triển khai —
    mật khẩu đã hash nên không đọc lại được nguyên văn, nhưng giá trị mặc định
    này ai cũng biết trước, vẫn là điểm yếu nếu không đổi.
 2. **Đặt `JWT_SECRET` đủ mạnh, ngẫu nhiên, và giữ bí mật** trong `.env` (mục
-   5). Đây là khoá ký phiên đăng nhập — lộ khoá này coi như lộ khả năng tự
+   6). Đây là khoá ký phiên đăng nhập — lộ khoá này coi như lộ khả năng tự
    tạo phiên đăng nhập giả mạo bất kỳ tài khoản nào mà không cần biết mật
    khẩu. Không dùng chung 1 giá trị `JWT_SECRET` giữa các môi trường
    (dev/staging/production).
-3. **Giữ `COOKIE_SECURE=true`** (mặc định) và triển khai HTTPS thật (mục 8)
-   khi có thể — cookie phiên đăng nhập chỉ thật sự an toàn khi truyền qua
-   HTTPS. Chỉ tắt (`false`) khi chạy hoàn toàn trong mạng nội bộ tin cậy và
-   chấp nhận đánh đổi (xem cảnh báo ở mục 5).
-4. **Chỉ mở port 3000/1433 trong mạng nội bộ** (LAN/VPN công ty), không expose
-   trực tiếp ra Internet nếu không có SSL + xác thực bổ sung.
-5. **Backup định kỳ SQL Server** (`sqlcmd`/SQL Server Agent job hoặc script
-   `BACKUP DATABASE VPDT_DMS TO DISK = ...` chạy cron hàng ngày).
+3. **Giữ `COOKIE_SECURE=true`** (mặc định) — cookie phiên đăng nhập chỉ thật
+   sự an toàn khi truyền qua HTTPS. Chỉ tắt (`false`) khi chạy hoàn toàn
+   trong mạng nội bộ tin cậy và chấp nhận đánh đổi (xem cảnh báo ở mục 6).
+4. **Đã bật `TRUST_PROXY=1`** sau khi dựng Nginx (mục 9c) — kiểm tra lại nếu
+   quên, đây là lỗi hay bị bỏ sót nhất vì không gây crash/lỗi rõ ràng, chỉ
+   âm thầm làm sai chức năng rate-limit.
+5. **Chỉ mở port 3000/1433 trong mạng nội bộ** (đã tự động đúng nếu làm theo
+   mục 9b với `ufw`) — không expose trực tiếp ra Internet nếu không có SSL +
+   xác thực bổ sung.
+6. **Backup định kỳ CẢ 2 nơi, không chỉ SQL Server:**
+   - **Database**: `sqlcmd`/SQL Server Agent job hoặc script
+     `BACKUP DATABASE VPDT_DMS TO DISK = ...` chạy cron hàng ngày.
+   - **Thư mục `/opt/vpdt/uploads/`**: file đính kèm (Tài liệu, Tờ trình, Hợp
+     đồng, tài liệu ký...) lưu VẬT LÝ ở đây, KHÔNG nằm trong SQL Server —
+     backup riêng DB mà quên thư mục này thì phục hồi xong vẫn mất toàn bộ
+     file đính kèm (chỉ còn đường dẫn trong DB trỏ tới file không còn tồn
+     tại). `rsync`/`tar` định kỳ ra nơi lưu trữ khác cùng lịch với backup DB.
+7. **Thử nghiệm 1 lần tình huống 2 người thao tác đồng thời** trước khi
+   thông báo cho toàn công ty dùng thật — ví dụ 2 người cùng đặt trùng 1
+   phòng họp/khung giờ từ 2 tài khoản gần như đồng thời: chỉ 1 yêu cầu phải
+   thành công, yêu cầu còn lại báo lỗi trùng lịch rõ ràng (không phải lỗi 500
+   chung chung). Hệ thống đã có cơ chế khoá ở tầng CSDL cho các trường hợp
+   này nhưng nên tự xác nhận 1 lần trên đúng SQL Server thật đang dùng.
 
 ---
 
-## 10. Kiểm tra sức khỏe hệ thống
+## 11. Kiểm tra sức khỏe hệ thống
 
 Endpoint kiểm tra nhanh:
 ```
 GET http://<ip-server>:3000/api/health
-→ {"status":"ok","db":"connected","version":"1.1.0"}
+→ {"status":"ok","db":"connected","version":"1.4.0"}
 ```
 
 `version` khớp đúng trường `version` trong `package.json` của bản code server
-đang chạy — dùng để xác nhận sau khi cập nhật code (mục 11) đã áp dụng đúng
+đang chạy — dùng để xác nhận sau khi cập nhật code (mục 12) đã áp dụng đúng
 bản mới hay chưa, không cần đoán. Cùng số phiên bản này cũng hiện ở góc dưới
 bên phải màn hình web (không cần đăng nhập).
 
@@ -409,14 +454,14 @@ Dùng cho giám sát (uptime monitor, script cron cảnh báo qua email/Zalo n�
 
 ---
 
-## 11. Cập nhật code sau này
+## 12. Cập nhật code sau này
 
 ```bash
 cd /opt/vpdt
-# copy toàn bộ code mới (backend + public/index.html) đè lên
-npm install     # BẮT BUỘC nếu package.json có thay đổi (thêm/đổi gói) — xem cảnh báo bên dưới
+# copy toàn bộ code mới (backend + public/index.html) đè lên, HOẶC git pull nếu deploy bằng git
+npm install     # LUÔN chạy, kể cả khi không chắc package.json có đổi hay không — xem cảnh báo bên dưới
 pm2 restart vpdt
-pm2 status      # phải thấy "online", không phải liên tục "restart"/"errored"
+pm2 status      # phải thấy "online", KHÔNG phải liên tục "restart"/"errored"
 ```
 
 Vì toàn bộ dữ liệu đã nằm trong SQL Server (không còn trong trình duyệt), việc
@@ -426,60 +471,18 @@ cập nhật giao diện/code **không làm mất dữ liệu người dùng đ�
 > được.** Nguyên nhân hầu hết là bỏ sót bước `npm install` — nếu code mới
 > thêm gói mới trong `package.json` (`dependencies`) mà chưa cài, tiến trình
 > Node sẽ báo lỗi `Cannot find module '...'` và **thoát ngay khi khởi động**,
-> khiến PM2 cứ khởi động rồi crash liên tục, Nginx không có gì để chuyển tiếp
-> request tới nên trả về 502/503. Cách kiểm tra và khắc phục:
+> khiến PM2 cứ khởi động rồi crash liên tục (`pm2 status` sẽ thấy số lần
+> restart tăng rất nhanh), Nginx không có gì để chuyển tiếp request tới nên
+> trả về 502/503. Cách kiểm tra và khắc phục:
 > ```bash
 > pm2 logs vpdt --lines 50 --err   # tìm dòng "Cannot find module ..."
 > cd /opt/vpdt && npm install
 > pm2 restart vpdt
 > ```
-> Sau khi sửa, mở `GET /api/health` (mục 10) để xác nhận server đã lên và
+> Sau khi sửa, mở `GET /api/health` (mục 11) để xác nhận server đã lên và
 > đúng phiên bản mới trước khi báo cho người dùng thử lại.
 >
 > Ngoài `npm install`, nếu bản cập nhật có ghi chú đổi cấu trúc bảng
-> (`server/sql/schema.sql`), cũng cần chạy lại script đó trên SQL Server thật
-> (script viết để chạy lại nhiều lần an toàn, không mất dữ liệu cũ) và đảm
-> bảo file `.env` đã có đủ biến bắt buộc mới (ví dụ `JWT_SECRET`) — xem
-> `.env.example`.
-
----
-
-## 12. Ghi chú đợt rà soát trước khi đưa vào chạy thật (rà soát code PR #40–59)
-
-Đợt cập nhật này sửa 6 vấn đề phát hiện khi rà soát lại toàn bộ code trước khi
-đưa vào chạy thật (sửa lỗi/bảo mật, không phải tính năng mới). **Không cần đổi
-gì ở `.env` (mục 5), không cần chạy lại `schema.sql` (mục 3), không có gói npm
-mới** — chỉ cần làm đúng bước "Cập nhật code" ở mục 11 như bình thường
-(`npm install` vẫn nên chạy cho chắc, dù `package.json` không đổi ở đợt này).
-
-Các thay đổi hành vi cần biết trước khi thông báo cho người dùng:
-
-- **`/uploads` (tải file đính kèm) giờ bắt buộc phải đăng nhập mới tải
-  được.** Trước đây ai có đúng URL file — kể cả chưa đăng nhập vào hệ thống —
-  đều tải thẳng được. Nếu công ty có thói quen gửi thẳng link file đính kèm ra
-  ngoài (email, Zalo/chat...) cho người **chưa có tài khoản** trong hệ thống,
-  các link đó sẽ ngừng hoạt động sau đợt cập nhật này — cần báo trước cho
-  người dùng liên quan hoặc đổi quy trình gửi file.
-- **API ghi cấu hình quy trình mẫu (`/api/data/workflows`) giờ chỉ Quản trị
-  viên mới ghi được** — trước đây bất kỳ ai đã đăng nhập cũng ghi trực tiếp
-  được qua API chung (dù giao diện không hiện nút cho phép).
-- **Xác minh mật khẩu cho thao tác nhạy cảm (duyệt hồ sơ mức PASSWORD...)
-  giờ có giới hạn: sai 5 lần liên tiếp/tài khoản sẽ tạm khoá 15 phút** —
-  cùng cơ chế đã áp dụng cho màn đăng nhập từ trước, giờ áp dụng thêm cho màn
-  xác minh này.
-- **Danh sách người dùng trả về từ API không còn lộ số lần đăng nhập sai /
-  thời điểm khoá tài khoản** của người khác cho các tài khoản không phải quản
-  trị viên — chỉ ẩn bớt field trả về, không ảnh hưởng tính năng nào trên giao
-  diện.
-- **Đổi thông tin cá nhân (`Hồ sơ của tôi` — số điện thoại/mật khẩu)** đổi
-  sang cơ chế khoá dòng khi ghi xuống CSDL, tránh mất dữ liệu nếu vô tình có 2
-  request ghi cùng lúc — hành vi với người dùng cuối không đổi.
-- **Chống đặt trùng phòng họp cùng khung giờ khi 2 người bấm tạo gần như
-  đồng thời** (trước đây có khe hở nhỏ có thể tạo trùng nếu bấm rất sát
-  nhau) — dùng cơ chế khoá `sp_getapplock` sẵn có của SQL Server. Đã kiểm thử
-  kỹ ở tầng logic ứng dụng (giả lập CSDL), nhưng **chưa kiểm thử được với SQL
-  Server thật** trong môi trường phát triển hiện tại (không có sẵn instance
-  MSSQL thật để nối). **Khuyến nghị:** sau khi triển khai lên server thật, thử
-  tạo 2 booking trùng phòng + trùng giờ từ 2 tab/2 người gần như đồng thời một
-  lần để xác nhận chỉ 1 yêu cầu thành công, yêu cầu còn lại báo lỗi trùng lịch
-  rõ ràng (không phải lỗi 500 chung chung).
+> (`sql/schema.sql`), cũng cần chạy lại script đó trên SQL Server thật (mục
+> 4 — script viết để chạy lại nhiều lần an toàn, không mất dữ liệu cũ) và
+> đảm bảo file `.env` đã có đủ biến bắt buộc mới — xem `.env.example`.
