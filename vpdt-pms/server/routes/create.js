@@ -31,6 +31,9 @@ router.post('/:module', async (req, res) => {
     // đây, CALLER đọc sẵn rồi truyền vào (khớp đúng nguyên tắc appData ở lib/createValidation.js — file
     // đó không tự đọc DB/collection khác).
     if (moduleKey === 'vppRegistrations') appData.vppPeriods = await getAllForCollection('vppPeriods');
+    // reportEntries cần tra cứu chéo sang collection reportPeriods (kỳ báo cáo còn mở/phạm vi phòng
+    // ban/hạn chót) — cùng lý do vppRegistrations ở trên, reportPeriods cũng đã ở dbo.Records.
+    if (moduleKey === 'reportEntries') appData.reportPeriods = await getAllForCollection('reportPeriods');
 
     const config = CREATE_MODULE_CONFIGS[moduleKey];
     const builderFn = (list) => validateAndPrepareCreate(moduleKey, req.body, freshUser, list, appData);

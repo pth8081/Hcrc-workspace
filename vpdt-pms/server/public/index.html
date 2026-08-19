@@ -58,6 +58,7 @@
           <div id="dieuHanhDropdownPanel" class="hidden absolute right-0 mt-1 bg-white border rounded shadow-lg z-30 min-w-[170px] overflow-hidden">
             <button id="btnMinutesTab" onclick="closeDieuHanhDropdown(); switchTab('minutes')" class="hidden w-full text-left px-3 py-2 text-xs hover:bg-rose-50 font-semibold text-gray-700">📝 Biên bản họp</button>
             <button id="btnTaskTab" onclick="closeDieuHanhDropdown(); switchTab('task')" class="hidden w-full text-left px-3 py-2 text-xs hover:bg-violet-50 font-semibold text-gray-700">📋 Công việc</button>
+            <button id="btnPeriodicReportTab" onclick="closeDieuHanhDropdown(); switchTab('periodicReport')" class="hidden w-full text-left px-3 py-2 text-xs hover:bg-sky-50 font-semibold text-gray-700">📅 Báo Cáo Định Kỳ</button>
           </div>
         </div>
         <!-- "Hành Chính" — cùng kiểu gộp NHẸ ở nav như Điều Hành: gộp Phòng họp/Đăng ký xe/Văn phòng
@@ -672,6 +673,166 @@
         </div>
       </div>
       <div id="meetingCalendarGrid"></div>
+    </div>
+  </div>
+
+  <!-- Màn hình MODULE BÁO CÁO ĐỊNH KỲ (con "Điều Hành") — kỳ báo cáo (thường theo tuần) -> nhân viên
+       nhập/gửi báo cáo -> người có quyền tổng hợp (reportAggregate) chọn+sắp thứ tự+merge -> sửa slide
+       -> phát hành (xem trình chiếu toàn màn hình / xuất PDF). -->
+  <div id="periodicReportSection" class="hidden space-y-6">
+    <div class="flex flex-wrap gap-2 border-b pb-2">
+      <button type="button" onclick="setPeriodicReportSubTab('ENTRY')" id="btnPRSubEntry" class="px-3 py-1.5 rounded text-xs font-bold bg-sky-700 text-white">📝 Nhập Báo Cáo</button>
+      <button type="button" onclick="setPeriodicReportSubTab('PERIODS')" id="btnPRSubPeriods" class="hidden px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">📅 Kỳ Báo Cáo</button>
+      <button type="button" onclick="setPeriodicReportSubTab('AGGREGATE')" id="btnPRSubAggregate" class="hidden px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">🧩 Tổng Hợp</button>
+      <button type="button" onclick="setPeriodicReportSubTab('PUBLISHED')" id="btnPRSubPublished" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">📣 Đã Phát Hành</button>
+    </div>
+
+    <!-- Sub-tab: Nhập Báo Cáo (ai đã đăng nhập, còn quyền vào module, đều nộp được cho đúng phòng ban
+         của mình nếu phòng ban đó nằm trong phạm vi kỳ — không cần quyền riêng, giống Văn Phòng Phẩm) -->
+    <div id="prSubEntry" class="space-y-4">
+      <div class="bg-sky-50 p-4 rounded border border-sky-200 space-y-3">
+        <h3 class="font-bold text-sky-900 text-sm flex items-center gap-1">📝 Nhập Báo Cáo</h3>
+        <div>
+          <label class="block text-xs font-semibold text-gray-600 mb-1">Chọn kỳ báo cáo (đang mở, áp dụng cho phòng ban của bạn)</label>
+          <select id="prEntryPeriodSelect" onchange="onPrEntryPeriodChange()" class="w-full border p-2 rounded text-sm bg-white"></select>
+        </div>
+        <div id="prEntryNoPeriodNote" class="hidden text-xs text-gray-500 italic bg-white p-3 rounded border">Hiện chưa có kỳ báo cáo nào đang mở cho phòng ban của bạn.</div>
+        <div id="prEntryAlreadySentNote" class="hidden text-xs text-amber-800 italic bg-amber-50 p-3 rounded border border-amber-200"></div>
+        <div id="prEntryFormWrap" class="hidden space-y-2">
+          <div>
+            <label class="block text-xs font-semibold text-gray-600 mb-1">Tiêu đề báo cáo</label>
+            <input id="prEntryTitle" placeholder="VD: Báo cáo công việc tuần 12 - Phòng Kinh Doanh" class="w-full border p-2 rounded text-sm">
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-gray-600 mb-1">Nội dung báo cáo</label>
+            <textarea id="prEntryContent" placeholder="Kết quả công việc, khó khăn vướng mắc, kế hoạch tuần tới..." class="w-full border p-2 rounded text-sm h-40"></textarea>
+          </div>
+          <div class="flex justify-end gap-2">
+            <button type="button" onclick="savePrEntryDraft()" class="bg-gray-600 text-white px-4 py-1.5 rounded text-xs font-bold hover:bg-gray-700">💾 Lưu Nháp</button>
+            <button type="button" id="btnPrEntrySubmit" onclick="submitPrEntry()" class="hidden bg-sky-600 text-white px-4 py-1.5 rounded text-xs font-bold hover:bg-sky-700">📤 Gửi Báo Cáo</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="bg-white rounded border overflow-x-auto">
+        <table class="w-full border-collapse text-xs">
+          <thead>
+            <tr class="bg-gray-100 text-left">
+              <th class="border p-2">Kỳ Báo Cáo</th>
+              <th class="border p-2">Hạn Chót</th>
+              <th class="border p-2">Tiêu Đề</th>
+              <th class="border p-2">Trạng Thái</th>
+              <th class="border p-2 text-center">Thao Tác</th>
+            </tr>
+          </thead>
+          <tbody id="prEntryTableBody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Sub-tab: Kỳ Báo Cáo (chỉ reportManage/admin) -->
+    <div id="prSubPeriods" class="hidden space-y-4">
+      <form onsubmit="createReportPeriod(event)" class="bg-sky-50 p-4 rounded border border-sky-200 space-y-3">
+        <h3 class="font-bold text-sky-900 text-sm flex items-center gap-1">📅 Tạo Kỳ Báo Cáo Mới</h3>
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+          <div class="md:col-span-2">
+            <label class="block text-xs font-semibold text-gray-600 mb-1">Tên Kỳ Báo Cáo</label>
+            <input id="prPeriodName" placeholder="VD: Báo cáo tuần 12 (17/03 - 23/03/2026)" class="w-full border p-2 rounded text-sm" required>
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-gray-600 mb-1">Hạn Chót Nộp</label>
+            <input id="prPeriodEndTime" type="datetime-local" class="w-full border p-2 rounded text-sm" required>
+          </div>
+        </div>
+        <div>
+          <label class="flex items-center gap-2 text-xs font-semibold text-gray-600 mb-1">
+            <input type="checkbox" id="prPeriodDeptAll" onchange="toggleScopeGroup('prPeriodDeptAll', 'prPeriodDept')"> Áp dụng cho TẤT CẢ phòng ban
+          </label>
+          <div id="prPeriodDeptContainer" class="grid grid-cols-2 md:grid-cols-4 gap-1 pl-1 max-h-32 overflow-y-auto"></div>
+        </div>
+        <div class="flex justify-end">
+          <button type="submit" class="bg-sky-600 text-white px-4 py-1.5 rounded text-xs font-bold hover:bg-sky-700">➕ Tạo Kỳ Báo Cáo</button>
+        </div>
+      </form>
+
+      <div class="bg-white rounded border overflow-x-auto">
+        <table class="w-full border-collapse text-xs">
+          <thead>
+            <tr class="bg-gray-100 text-left">
+              <th class="border p-2">Tên Kỳ</th>
+              <th class="border p-2">Phòng Ban Áp Dụng</th>
+              <th class="border p-2">Hạn Chót</th>
+              <th class="border p-2">Trạng Thái</th>
+              <th class="border p-2 text-center">Thao Tác</th>
+            </tr>
+          </thead>
+          <tbody id="prPeriodsTableBody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Sub-tab: Tổng Hợp (chỉ reportAggregate/admin — tổng hợp được MỌI kỳ, không riêng kỳ mình tạo) -->
+    <div id="prSubAggregate" class="hidden space-y-4">
+      <div class="bg-white p-4 rounded border space-y-2">
+        <label class="block text-xs font-semibold text-gray-600 mb-1">Chọn kỳ cần tổng hợp (đã kết thúc)</label>
+        <select id="prAggPeriodSelect" onchange="onPrAggPeriodChange()" class="w-full border p-2 rounded text-sm bg-white"></select>
+      </div>
+      <div id="prAggNoPeriodNote" class="hidden text-xs text-gray-500 italic bg-white p-3 rounded border">Chưa có kỳ báo cáo nào đã kết thúc để tổng hợp.</div>
+      <div id="prAggWrap" class="hidden space-y-4">
+        <div class="bg-white rounded border p-3">
+          <div class="font-semibold text-xs text-gray-600 mb-2">Báo cáo đã gửi trong kỳ (tick để chọn vào bản tổng hợp)</div>
+          <div id="prAggEntriesList" class="space-y-1"></div>
+        </div>
+        <div class="bg-white rounded border p-3">
+          <div class="flex justify-between items-center mb-2">
+            <span class="font-semibold text-xs text-gray-600">Thứ tự đã chọn (▲▼ để sắp lại)</span>
+            <button type="button" onclick="mergeReportPeriodAction()" class="bg-sky-600 text-white px-3 py-1 rounded text-xs font-bold hover:bg-sky-700">🧩 Tổng Hợp (Merge)</button>
+          </div>
+          <div id="prAggOrderList" class="space-y-1"></div>
+        </div>
+        <div id="prAggCompilationWrap" class="hidden bg-white rounded border p-3">
+          <div class="font-semibold text-xs text-gray-600 mb-2">Bản tổng hợp — sửa tự do từng slide trước khi phát hành</div>
+          <div id="prAggSlidesList" class="space-y-3"></div>
+          <div class="flex justify-end gap-2 mt-3 pt-3 border-t">
+            <button type="button" onclick="savePrCompilation()" class="bg-gray-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-gray-700">💾 Lưu Chỉnh Sửa</button>
+            <button type="button" id="btnPrPublish" onclick="publishPrCompilation()" class="hidden bg-emerald-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-emerald-700">🚀 Phát Hành</button>
+            <button type="button" id="btnPrUnpublish" onclick="unpublishPrCompilation()" class="hidden bg-amber-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-amber-700">↩️ Hủy Phát Hành</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Sub-tab: Đã Phát Hành (ai còn quyền vào module đều xem được) -->
+    <div id="prSubPublished" class="hidden space-y-4">
+      <div class="bg-white rounded border overflow-x-auto">
+        <table class="w-full border-collapse text-xs">
+          <thead>
+            <tr class="bg-gray-100 text-left">
+              <th class="border p-2">Tên Kỳ</th>
+              <th class="border p-2">Phát Hành Lúc</th>
+              <th class="border p-2">Số Phần (Slide)</th>
+              <th class="border p-2 text-center">Thao Tác</th>
+            </tr>
+          </thead>
+          <tbody id="prPublishedTableBody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal Trình Chiếu Báo Cáo Định Kỳ — toàn màn hình, mỗi slide 1 phần đã tổng hợp -->
+  <div id="prSlideshowModal" class="hidden fixed inset-0 bg-black z-50 flex flex-col">
+    <div class="flex justify-between items-center px-4 py-2 bg-gray-900 text-white text-xs">
+      <div id="prSlideshowTitle" class="font-semibold truncate"></div>
+      <div class="flex items-center gap-3">
+        <span id="prSlideshowCounter" class="text-gray-300"></span>
+        <button type="button" onclick="closePrSlideshow()" class="hover:text-rose-400 font-bold text-sm">✕ Đóng</button>
+      </div>
+    </div>
+    <div class="flex-1 relative overflow-hidden">
+      <button type="button" onclick="prSlideshowNav(-1)" class="absolute left-2 top-1/2 -translate-y-1/2 bg-white/10 hover:bg-white/25 text-white rounded-full w-10 h-10 text-lg">‹</button>
+      <div id="prSlideshowBody" class="h-full overflow-y-auto p-10 md:p-16 text-white"></div>
+      <button type="button" onclick="prSlideshowNav(1)" class="absolute right-2 top-1/2 -translate-y-1/2 bg-white/10 hover:bg-white/25 text-white rounded-full w-10 h-10 text-lg">›</button>
     </div>
   </div>
 
@@ -2143,6 +2304,22 @@
             </label>
           </div>
         </details>
+
+        <details class="perm-tree-node bg-white rounded border text-xs">
+          <summary class="flex items-center justify-between gap-2 px-3 py-2 hover:bg-gray-50 rounded">
+            <span class="font-bold text-gray-800 text-sm flex items-center gap-1.5"><span class="perm-tree-chevron text-gray-400">▸</span><span>📅 13. Báo Cáo Định Kỳ</span></span>
+            <span id="permTreeBadge_periodicReport" class="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-gray-100 text-gray-500">0/0</span>
+          </summary>
+          <div class="p-3 pt-0 space-y-3">
+            <p class="text-[11px] text-gray-500 italic">Còn quyền vào module "Báo Cáo Định Kỳ" ở mục 0 mới thấy được các màn dưới đây. "Quản lý" = tạo/đóng kỳ báo cáo. "Tổng hợp" = quyền CHUNG, tổng hợp/sửa/phát hành được MỌI kỳ (không phân biệt ai tạo kỳ đó). Nộp báo cáo KHÔNG cần quyền riêng — ai đã đăng nhập đều nộp được cho đúng phòng ban của mình, miễn phòng ban đó nằm trong phạm vi kỳ (giống Văn Phòng Phẩm).</p>
+            <label class="flex items-center gap-2 text-orange-700 font-semibold cursor-pointer">
+              <input type="checkbox" id="pReportManage"> ✅ Quản lý kỳ báo cáo (tạo/đóng kỳ sớm)
+            </label>
+            <label class="flex items-center gap-2 text-orange-700 font-semibold cursor-pointer">
+              <input type="checkbox" id="pReportAggregate"> ✅ Tổng hợp báo cáo (chọn, merge, sửa, phát hành/hủy phát hành)
+            </label>
+          </div>
+        </details>
         </div>
       </form>
 
@@ -3386,7 +3563,8 @@ const BUSINESS_MODULES = [
     { id: 'pOfficeFix', label: '🔧 Sửa Chữa', checkedByDefault: true },
     { id: 'pOfficeInvest', label: '📈 Đầu Tư', checkedByDefault: false }
   ] },
-  { key: 'reports', label: 'Báo Cáo' }
+  { key: 'reports', label: 'Báo Cáo' },
+  { key: 'periodicReport', label: 'Báo Cáo Định Kỳ' }
 ];
 
 // Các loại Văn bản trình / Tờ trình cố định (khớp đúng option value ở #subType) — dùng làm khoá để
@@ -3819,6 +3997,16 @@ function canAccessVppModule(user) {
   return hasModuleAccess(user, 'vpp');
 }
 
+// Vào được module "Báo Cáo Định Kỳ" (kỳ báo cáo tuần → nhập liệu → tổng hợp → phát hành) hay không —
+// cổng chung, không phải "được làm gì trong đó" (tạo kỳ = reportManage, tổng hợp/phát hành =
+// reportAggregate — xét riêng ở từng màn con; nhập báo cáo không cần quyền riêng, chỉ cần phòng ban
+// nằm trong phạm vi kỳ, giống Văn Phòng Phẩm).
+function canAccessPeriodicReportModule(user) {
+  if (!user) return false;
+  if (user.perms?.admin) return true;
+  return hasModuleAccess(user, 'periodicReport');
+}
+
 // Vào được module Biên bản họp hay không (cổng chung, chưa xét từng biên bản cụ thể). XEM/Sửa/Xóa/
 // Tải từng biên bản cụ thể xét riêng ở canView/Edit/Delete/DownloadMeetingMinutesRecord() bên dưới.
 function canAccessMeetingMinutesModule(user) {
@@ -3975,6 +4163,7 @@ function defaultNewUserPerms() {
     contractView: emptyScope(), contractCreate: emptyScope(), contractDownload: emptyScope(), contractApprove: false,
     paymentManage: false,
     vppManage: false,
+    reportManage: false, reportAggregate: false,
     meetingView: emptyScope(), meetingBookScope: emptyScope(),
     meetingApprove: false, meetingCancel: false,
     carView: emptyScope(), carCreate: emptyScope(), carDownload: emptyScope(),
@@ -4158,6 +4347,9 @@ async function initDatabase(loggingInUser) {
 
     DB.vppPeriods = data.vppPeriods || [];
     DB.vppRegistrations = data.vppRegistrations || [];
+
+    DB.reportPeriods = data.reportPeriods || [];
+    DB.reportEntries = data.reportEntries || [];
 
     DB._versions = data._versions || {};
 
@@ -4809,6 +5001,7 @@ function finishLogin(user) {
   document.getElementById('btnMeetingTab').classList.toggle('hidden', !canAccessMeetingModule(user));
   document.getElementById('btnMinutesTab').classList.toggle('hidden', !canAccessMeetingMinutesModule(user));
   document.getElementById('btnTaskTab').classList.toggle('hidden', !canAccessTaskModule(user));
+  document.getElementById('btnPeriodicReportTab').classList.toggle('hidden', !canAccessPeriodicReportModule(user));
   updateDieuHanhNavVisibility();
   document.getElementById('btnInternalTab').classList.toggle('hidden', !canAccessInternalModule(user));
   document.getElementById('btnCarTab').classList.toggle('hidden', !canAccessCarModule(user));
@@ -4837,6 +5030,7 @@ function logout() {
   document.getElementById('internalSection').classList.add('hidden');
   document.getElementById('carSection').classList.add('hidden');
   document.getElementById('vppSection').classList.add('hidden');
+  document.getElementById('periodicReportSection').classList.add('hidden');
   document.getElementById('officeSection').classList.add('hidden');
   document.getElementById('systemSection').classList.add('hidden');
   document.getElementById('formSection').classList.add('hidden');
@@ -4847,13 +5041,15 @@ function logout() {
   document.getElementById('userHeader').classList.add('hidden');
 }
 
-// "Điều Hành" — nút nav cha bọc dropdown chứa Biên bản họp/Công việc (xem HTML #dieuHanhNavWrap).
-// Hiện nút cha nếu có quyền vào ÍT NHẤT 1 trong 2 (mỗi nút con vẫn tự ẩn/hiện riêng theo đúng quyền
-// như trước — xem finishLogin()); đóng dropdown khi bấm ra ngoài, cùng khuôn subApprovalDropdownPanel.
+// "Điều Hành" — nút nav cha bọc dropdown chứa Biên bản họp/Công việc/Báo Cáo Định Kỳ (xem HTML
+// #dieuHanhNavWrap). Hiện nút cha nếu có quyền vào ÍT NHẤT 1 trong 3 (mỗi nút con vẫn tự ẩn/hiện riêng
+// theo đúng quyền như trước — xem finishLogin()); đóng dropdown khi bấm ra ngoài, cùng khuôn
+// subApprovalDropdownPanel.
 function updateDieuHanhNavVisibility() {
   const minutesVisible = !document.getElementById('btnMinutesTab').classList.contains('hidden');
   const taskVisible = !document.getElementById('btnTaskTab').classList.contains('hidden');
-  document.getElementById('dieuHanhNavWrap').classList.toggle('hidden', !minutesVisible && !taskVisible);
+  const reportVisible = !document.getElementById('btnPeriodicReportTab').classList.contains('hidden');
+  document.getElementById('dieuHanhNavWrap').classList.toggle('hidden', !minutesVisible && !taskVisible && !reportVisible);
 }
 function toggleDieuHanhDropdown(e) {
   e.stopPropagation();
@@ -4929,6 +5125,10 @@ function switchTab(tabName) {
     alert('⛔ Bạn không có quyền truy cập Module Văn phòng phẩm!');
     return;
   }
+  if (tabName === 'periodicReport' && !canAccessPeriodicReportModule(currentUser)) {
+    alert('⛔ Bạn không có quyền truy cập Module Báo Cáo Định Kỳ!');
+    return;
+  }
   if (tabName === 'office' && !canAccessOfficeModule(currentUser)) {
     alert('⛔ Bạn không có quyền truy cập Module Phê duyệt Văn phòng!');
     return;
@@ -4947,6 +5147,7 @@ function switchTab(tabName) {
   document.getElementById('internalSection').classList.toggle('hidden', tabName !== 'internal');
   document.getElementById('carSection').classList.toggle('hidden', tabName !== 'car');
   document.getElementById('vppSection').classList.toggle('hidden', tabName !== 'vpp');
+  document.getElementById('periodicReportSection').classList.toggle('hidden', tabName !== 'periodicReport');
   document.getElementById('officeSection').classList.toggle('hidden', tabName !== 'office');
   document.getElementById('systemSection').classList.toggle('hidden', tabName !== 'system');
   document.getElementById('formSection').classList.toggle('hidden', !(tabName === 'system' && activeSystemSubTab === 'FORM'));
@@ -4981,6 +5182,7 @@ function switchTab(tabName) {
   if (tabName === 'internal') { setInternalSubTab(activeInternalSubTab); }
   if (tabName === 'car') { renderDynamicInputsForModule('CAR', 'dynamicFieldsContainer_CAR'); renderCarRegs(); }
   if (tabName === 'vpp') { setVppSubTab(activeVppSubTab); }
+  if (tabName === 'periodicReport') { setPeriodicReportSubTab(activePeriodicReportSubTab); }
   if (tabName === 'office') {
     let targetSub = activeOfficeSubTab;
     if (!canAccessOfficeSubTab(currentUser, targetSub)) {
@@ -13299,6 +13501,8 @@ function collectPermsFromForm() {
     contractApprove: document.getElementById('pContractApprove').checked,
     paymentManage: document.getElementById('pPaymentManage').checked,
     vppManage: document.getElementById('pVppManage').checked,
+    reportManage: document.getElementById('pReportManage').checked,
+    reportAggregate: document.getElementById('pReportAggregate').checked,
     meetingView: scopeFromForm('pMeetingViewAll', 'pMeetingViewDept'),
     meetingBookScope: scopeFromForm('pMeetingBookAll', 'pMeetingBookDept'),
     carView: scopeFromForm('pCarViewAll', 'pCarViewDept'),
@@ -13366,6 +13570,8 @@ function populatePermsForm(permsInput) {
   document.getElementById('pContractApprove').checked = !!perms.contractApprove;
   document.getElementById('pPaymentManage').checked = !!perms.paymentManage;
   document.getElementById('pVppManage').checked = !!perms.vppManage;
+  document.getElementById('pReportManage').checked = !!perms.reportManage;
+  document.getElementById('pReportAggregate').checked = !!perms.reportAggregate;
   document.getElementById('pMeetingViewAll').checked = !!perms.meetingView?.all;
   document.getElementById('pMeetingBookAll').checked = !!perms.meetingBookScope?.all;
   document.getElementById('pCarViewAll').checked = !!perms.carView?.all;
@@ -13407,7 +13613,6 @@ function populatePermsForm(permsInput) {
   setGroupCheckboxes(perms.officeView?.depts, 'pOfficeViewDept');
   setGroupCheckboxes(perms.officeCreate?.depts, 'pOfficeCreateDept');
   setGroupCheckboxes(perms.officeDownload?.depts, 'pOfficeDownloadDept');
-
   ['pUploadAll', 'pViewDraftAll', 'pViewApprovedAll', 'pDocDownloadAll',
    'pSubViewAll', 'pSubCreateAll', 'pSubDownloadAll',
    'pContractViewAll', 'pContractCreateAll', 'pContractDownloadAll',
@@ -13667,6 +13872,690 @@ document.addEventListener('click', (ev) => {
 });
 
 // ==========================================
+// BÁO CÁO ĐỊNH KỲ (module con "Điều Hành") — kỳ báo cáo (thường theo tuần) -> nhân viên nhập/gửi báo
+// cáo -> người có quyền reportAggregate (CHUNG cho mọi kỳ, không riêng ai tạo kỳ đó) chọn + sắp thứ
+// tự + merge -> sửa từng phần tự do -> phát hành (trình chiếu toàn màn hình / xuất PDF). Cùng khuôn
+// "kỳ + hồ sơ từng người" như Văn Phòng Phẩm ở trên (xem lib/createValidation.js/recordActions.js).
+// ==========================================
+let activePeriodicReportSubTab = 'ENTRY';
+let prEntryDraftId = null;
+let prAggCurrentPeriodId = null;
+let prAggSelectedIds = [];
+let prAggPendingSlides = null;
+let prSlideshowSlides = [];
+let prSlideshowIndex = 0;
+
+function canManageReportPeriodsClient(user) {
+  return !!(user?.perms?.admin || user?.perms?.reportManage);
+}
+function canAggregateReportsClient(user) {
+  return !!(user?.perms?.admin || user?.perms?.reportAggregate);
+}
+
+// Kỳ coi là ĐANG MỞ (còn nhận nhập liệu) nếu status=OPEN VÀ chưa qua endTime — khớp đúng điều kiện
+// server (xem lib/createValidation.js CREATE_MODULE_CONFIGS.reportEntries + isReportPeriodClosed()
+// trong lib/recordActions.js).
+function reportPeriodIsOpen(p) {
+  if (p.status !== 'OPEN') return false;
+  if (!p.endTime) return true;
+  return Date.now() <= new Date(p.endTime).getTime();
+}
+function reportPeriodIsClosed(p) { return !reportPeriodIsOpen(p); }
+
+function reportPeriodDeptAllowed(p, dept) {
+  const scope = p.deptScope || {};
+  return !!scope.all || (Array.isArray(scope.depts) && scope.depts.includes(dept));
+}
+
+function reportPeriodDeptLabel(p) {
+  const scope = p.deptScope || {};
+  if (scope.all) return 'Tất cả phòng ban';
+  return (scope.depts || []).join(', ') || '(chưa chọn)';
+}
+
+function formatDateTimeVN(iso) {
+  if (!iso) return '';
+  try { return new Date(iso).toLocaleString('vi-VN'); } catch { return iso; }
+}
+
+function setPeriodicReportSubTab(subTab) {
+  if (subTab === 'PERIODS' && !canManageReportPeriodsClient(currentUser)) subTab = 'ENTRY';
+  if (subTab === 'AGGREGATE' && !canAggregateReportsClient(currentUser)) subTab = 'ENTRY';
+  activePeriodicReportSubTab = subTab;
+
+  document.getElementById('btnPRSubPeriods').classList.toggle('hidden', !canManageReportPeriodsClient(currentUser));
+  document.getElementById('btnPRSubAggregate').classList.toggle('hidden', !canAggregateReportsClient(currentUser));
+
+  document.getElementById('prSubEntry').classList.toggle('hidden', subTab !== 'ENTRY');
+  document.getElementById('prSubPeriods').classList.toggle('hidden', subTab !== 'PERIODS');
+  document.getElementById('prSubAggregate').classList.toggle('hidden', subTab !== 'AGGREGATE');
+  document.getElementById('prSubPublished').classList.toggle('hidden', subTab !== 'PUBLISHED');
+
+  const activeCls = 'px-3 py-1.5 rounded text-xs font-bold bg-sky-700 text-white';
+  const inactiveCls = 'px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700';
+  document.getElementById('btnPRSubEntry').className = subTab === 'ENTRY' ? activeCls : inactiveCls;
+  document.getElementById('btnPRSubPeriods').className = subTab === 'PERIODS' ? activeCls : inactiveCls;
+  document.getElementById('btnPRSubAggregate').className = subTab === 'AGGREGATE' ? activeCls : inactiveCls;
+  document.getElementById('btnPRSubPublished').className = subTab === 'PUBLISHED' ? activeCls : inactiveCls;
+
+  if (subTab === 'ENTRY') { renderPrEntryPeriodOptions(); renderPrEntryTable(); }
+  if (subTab === 'PERIODS') { renderReportDeptCheckboxes(); renderPrPeriodsTable(); }
+  if (subTab === 'AGGREGATE') { renderPrAggPeriodOptions(); }
+  if (subTab === 'PUBLISHED') { renderPrPublishedTable(); }
+}
+
+// ============ NHẬP BÁO CÁO (nhân viên thuộc phòng ban trong phạm vi kỳ) ============
+function findOwnReportEntryForPeriod(periodId) {
+  return DB.reportEntries.find(e => e.periodId === periodId && e.creator === currentUser.username);
+}
+
+function renderPrEntryPeriodOptions() {
+  const sel = document.getElementById('prEntryPeriodSelect');
+  const openPeriods = DB.reportPeriods.filter(p => reportPeriodIsOpen(p) && reportPeriodDeptAllowed(p, currentUser.dept));
+  sel.innerHTML = `<option value="">-- Chọn kỳ báo cáo --</option>` +
+    openPeriods.map(p => `<option value="${p.id}">${escapeHtml(p.name)} (hạn ${formatDateTimeVN(p.endTime)})</option>`).join('');
+  document.getElementById('prEntryNoPeriodNote').classList.toggle('hidden', openPeriods.length > 0);
+  document.getElementById('prEntryFormWrap').classList.add('hidden');
+  document.getElementById('prEntryAlreadySentNote').classList.add('hidden');
+  prEntryDraftId = null;
+  sel.value = '';
+}
+
+function onPrEntryPeriodChange() {
+  const periodId = Number(document.getElementById('prEntryPeriodSelect').value);
+  const wrap = document.getElementById('prEntryFormWrap');
+  const noteEl = document.getElementById('prEntryAlreadySentNote');
+  prEntryDraftId = null;
+  if (!periodId) { wrap.classList.add('hidden'); noteEl.classList.add('hidden'); return; }
+  const period = DB.reportPeriods.find(p => p.id === periodId);
+  if (!period) { wrap.classList.add('hidden'); noteEl.classList.add('hidden'); return; }
+
+  const existing = findOwnReportEntryForPeriod(periodId);
+  if (existing && existing.status !== 'DRAFT') {
+    wrap.classList.add('hidden');
+    noteEl.innerHTML = '⏳ Bạn đã gửi báo cáo ở kỳ này — xem chi tiết trong danh sách bên dưới. Báo cáo đã gửi không sửa lại được nữa.';
+    noteEl.classList.remove('hidden');
+    return;
+  }
+  noteEl.classList.add('hidden');
+
+  prEntryDraftId = existing ? existing.id : null; // existing (nếu có) chắc chắn đang DRAFT ở nhánh này
+  document.getElementById('prEntryTitle').value = existing?.title || '';
+  document.getElementById('prEntryContent').value = existing?.contentHtml || '';
+  wrap.classList.remove('hidden');
+
+  const submitBtn = document.getElementById('btnPrEntrySubmit');
+  submitBtn.classList.toggle('hidden', !prEntryDraftId);
+  submitBtn.onclick = () => submitPrEntryAction(prEntryDraftId, true);
+}
+
+// "Lưu Nháp" — tạo hồ sơ NHÁP mới (lần đầu) hoặc cập nhật NHÁP đã có (sửa tiếp), tuỳ prEntryDraftId.
+// Chưa gửi — phải bấm "Gửi Báo Cáo" riêng mới chốt (không sửa lại được nữa).
+async function savePrEntryDraft() {
+  const periodId = Number(document.getElementById('prEntryPeriodSelect').value);
+  if (!periodId) return alert('Vui lòng chọn kỳ báo cáo!');
+  const period = DB.reportPeriods.find(p => p.id === periodId);
+  if (!period) return alert('Không tìm thấy kỳ báo cáo!');
+  const title = document.getElementById('prEntryTitle').value.trim();
+  const contentHtml = document.getElementById('prEntryContent').value.trim();
+  if (!title) return alert('Vui lòng nhập tiêu đề báo cáo!');
+  if (!contentHtml) return alert('Vui lòng nhập nội dung báo cáo!');
+
+  let savedEntry;
+  try {
+    if (prEntryDraftId) {
+      const result = await callRecordAction('reportEntries', prEntryDraftId, 'update', { title, contentHtml });
+      savedEntry = result.item;
+    } else {
+      const payload = { periodId, title, contentHtml, createdAt: new Date().toLocaleString('vi-VN') };
+      const result = await callCreateAction('reportEntries', payload);
+      savedEntry = result.item;
+    }
+  } catch (err) {
+    return alert(`⛔ ${err.message}`);
+  }
+
+  const idx = DB.reportEntries.findIndex(e => e.id === savedEntry.id);
+  if (idx !== -1) DB.reportEntries[idx] = savedEntry; else DB.reportEntries.unshift(savedEntry);
+  prEntryDraftId = savedEntry.id;
+  logSystemAction('PERIODIC_REPORT', 'SAVE_REPORT_ENTRY_DRAFT', `Lưu nháp báo cáo kỳ [${period.name}]`, 'SUCCESS', String(savedEntry.id));
+  alert('✅ Đã lưu nháp — bạn có thể sửa tiếp hoặc bấm "Gửi Báo Cáo" khi đã hoàn tất.');
+  renderPrEntryTable();
+
+  const submitBtn = document.getElementById('btnPrEntrySubmit');
+  submitBtn.classList.remove('hidden');
+  submitBtn.onclick = () => submitPrEntryAction(prEntryDraftId, true);
+}
+
+function submitPrEntry() { submitPrEntryAction(prEntryDraftId, true); }
+
+// fromForm=true khi bấm từ form nhập liệu (ẩn form đi sau khi gửi xong); false khi bấm trực tiếp từ
+// dropdown thao tác ở danh sách (không đụng tới form).
+async function submitPrEntryAction(entryId, fromForm) {
+  if (!entryId) return;
+  const e = DB.reportEntries.find(x => x.id === entryId);
+  if (!e) return;
+  showConfirmModal({
+    title: '📤 Xác Nhận Gửi Báo Cáo',
+    bodyHTML: `<p>Gửi báo cáo <b>${escapeHtml(e.title)}</b> cho kỳ <b>${escapeHtml(e.periodName)}</b>? Sau khi gửi sẽ không sửa lại được nữa.</p>`,
+    confirmLabel: 'Gửi Báo Cáo',
+    onConfirm: async () => {
+      let result;
+      try {
+        result = await callRecordAction('reportEntries', entryId, 'submit', {});
+      } catch (err) { return alert(`⛔ ${err.message}`); }
+      const updated = result.item;
+      const idx = DB.reportEntries.findIndex(x => x.id === entryId);
+      if (idx !== -1) DB.reportEntries[idx] = updated;
+
+      logSystemAction('PERIODIC_REPORT', 'SUBMIT_REPORT_ENTRY', `Gửi báo cáo [${updated.title}]`, 'SUCCESS', String(updated.id));
+      alert('✅ Đã gửi báo cáo!');
+      if (fromForm) { document.getElementById('prEntryFormWrap').classList.add('hidden'); prEntryDraftId = null; onPrEntryPeriodChange(); }
+      renderPrEntryTable();
+    }
+  });
+}
+
+function prEntryStatusBadge(e) {
+  if (e.status === 'DRAFT') return `<span class="px-2 py-0.5 bg-gray-200 text-gray-700 rounded font-bold text-xs">📝 Nháp</span>`;
+  return `<span class="px-2 py-0.5 bg-emerald-100 text-emerald-800 rounded font-bold text-xs">✅ Đã gửi</span>`;
+}
+
+function renderPrEntryTable() {
+  const tbody = document.getElementById('prEntryTableBody');
+  if (!tbody) return;
+  const canSeeAll = canManageReportPeriodsClient(currentUser) || canAggregateReportsClient(currentUser);
+  const visible = DB.reportEntries.filter(e => canSeeAll || e.creator === currentUser.username);
+  if (!visible.length) {
+    tbody.innerHTML = `<tr><td colspan="5" class="text-center p-6 text-gray-500 italic">Chưa có báo cáo nào.</td></tr>`;
+    return;
+  }
+  tbody.innerHTML = visible.map(e => {
+    const isOwnDraft = e.status === 'DRAFT' && e.creator === currentUser.username;
+    let primaryBtnHTML;
+    const secondaryOptions = [];
+    if (isOwnDraft) {
+      primaryBtnHTML = `<button onclick="editPrEntryDraft(${e.id})" class="px-2.5 py-1 bg-gray-600 text-white rounded text-xs hover:opacity-90 font-bold">✏️ Sửa Nháp</button>`;
+      secondaryOptions.push({ value: 'submit', label: '📤 Gửi Báo Cáo' });
+    } else {
+      primaryBtnHTML = `<span class="text-gray-400 italic text-[11px]">${escapeHtml(e.creatorName)} (${escapeHtml(e.dept)})</span>`;
+    }
+    if (currentUser.perms?.admin) secondaryOptions.push({ value: 'delete', label: '🗑️ Xóa' });
+    return `
+      <tr class="hover:bg-gray-50 border-b">
+        <td class="border p-2">${escapeHtml(e.periodName || '')}</td>
+        <td class="border p-2 text-xs">${formatDateTimeVN(e.periodEndTime)}</td>
+        <td class="border p-2">${escapeHtml(e.title)}</td>
+        <td class="border p-2">${prEntryStatusBadge(e)}</td>
+        <td class="border p-2 text-center space-x-1">${buildActionCell(e.id, primaryBtnHTML, secondaryOptions, 'runPrEntryAction')}</td>
+      </tr>
+    `;
+  }).join('');
+}
+
+function runPrEntryAction(id, action) {
+  switch (action) {
+    case 'submit': submitPrEntryAction(id, false); break;
+    case 'delete': deletePrEntryAction(id); break;
+  }
+}
+
+function editPrEntryDraft(id) {
+  const e = DB.reportEntries.find(x => x.id === id);
+  if (!e) return;
+  setPeriodicReportSubTab('ENTRY');
+  document.getElementById('prEntryPeriodSelect').value = String(e.periodId);
+  onPrEntryPeriodChange();
+}
+
+function deletePrEntryAction(id) {
+  deleteRecordAdminOnly('reportEntries', id, 'báo cáo', () => {
+    DB.reportEntries = DB.reportEntries.filter(x => x.id !== id);
+    renderPrEntryTable();
+  });
+}
+
+// ============ KỲ BÁO CÁO (quản lý — chỉ reportManage/admin) ============
+function renderReportDeptCheckboxes() {
+  const el = document.getElementById('prPeriodDeptContainer');
+  if (!el) return;
+  el.innerHTML = DB.depts.map((d, idx) => `
+    <label class="flex items-center gap-1 text-gray-700 cursor-pointer text-xs">
+      <input type="checkbox" id="prPeriodDept_${idx}" value="${escapeHtml(d)}">
+      <span class="truncate">${escapeHtml(d)}</span>
+    </label>
+  `).join('');
+}
+
+async function createReportPeriod(e) {
+  e.preventDefault();
+  const name = document.getElementById('prPeriodName').value.trim();
+  const endTimeLocal = document.getElementById('prPeriodEndTime').value;
+  if (!name) return alert('Vui lòng nhập tên kỳ báo cáo!');
+  if (!endTimeLocal) return alert('Vui lòng chọn hạn chót nộp báo cáo!');
+  const endTime = new Date(endTimeLocal).toISOString();
+  if (new Date(endTime).getTime() <= Date.now()) return alert('Hạn chót nộp báo cáo phải ở trong tương lai!');
+
+  const deptScope = {
+    all: document.getElementById('prPeriodDeptAll').checked,
+    depts: Array.from(document.querySelectorAll('[id^="prPeriodDept_"]:checked')).map(cb => cb.value)
+  };
+  if (!deptScope.all && !deptScope.depts.length) return alert('Vui lòng chọn ít nhất 1 phòng ban áp dụng, hoặc chọn "Tất cả phòng ban"!');
+
+  const payload = { name, endTime, deptScope, createdAt: new Date().toLocaleString('vi-VN') };
+  let newPeriod;
+  try {
+    const result = await callCreateAction('reportPeriods', payload);
+    newPeriod = result.item;
+  } catch (err) {
+    return alert(`⛔ ${err.message}`);
+  }
+
+  DB.reportPeriods.unshift(newPeriod);
+  logSystemAction('PERIODIC_REPORT', 'CREATE_REPORT_PERIOD', `Tạo kỳ báo cáo [${newPeriod.name}]`, 'SUCCESS', String(newPeriod.id));
+  alert('✅ Đã tạo kỳ báo cáo mới!');
+
+  document.getElementById('prPeriodName').value = '';
+  document.getElementById('prPeriodEndTime').value = '';
+  document.getElementById('prPeriodDeptAll').checked = false;
+  renderReportDeptCheckboxes();
+  renderPrPeriodsTable();
+}
+
+function prPeriodStatusBadge(p) {
+  if (reportPeriodIsOpen(p)) return `<span class="px-2 py-0.5 bg-green-100 text-green-800 rounded font-bold text-xs">🟢 Đang mở</span>`;
+  if (p.compilation?.status === 'PUBLISHED') return `<span class="px-2 py-0.5 bg-emerald-100 text-emerald-800 rounded font-bold text-xs">📣 Đã phát hành</span>`;
+  if (p.compilation?.status === 'MERGED') return `<span class="px-2 py-0.5 bg-indigo-100 text-indigo-800 rounded font-bold text-xs">🧩 Đã tổng hợp</span>`;
+  return `<span class="px-2 py-0.5 bg-gray-200 text-gray-700 rounded font-bold text-xs">🔒 Đã kết thúc</span>`;
+}
+
+function renderPrPeriodsTable() {
+  const tbody = document.getElementById('prPeriodsTableBody');
+  if (!tbody) return;
+  if (!DB.reportPeriods.length) {
+    tbody.innerHTML = `<tr><td colspan="5" class="text-center p-6 text-gray-500 italic">Chưa có kỳ báo cáo nào.</td></tr>`;
+    return;
+  }
+  tbody.innerHTML = DB.reportPeriods.map(p => {
+    const isOpen = reportPeriodIsOpen(p);
+    const secondaryOptions = [];
+    if (isOpen) secondaryOptions.push({ value: 'close', label: '🔒 Đóng Kỳ Sớm' });
+    if (currentUser.perms?.admin) secondaryOptions.push({ value: 'delete', label: '🗑️ Xóa' });
+    const primaryBtnHTML = `<span class="text-gray-400 italic text-[11px]">—</span>`;
+    return `
+      <tr class="hover:bg-gray-50 border-b">
+        <td class="border p-2 font-bold text-sky-800">${escapeHtml(p.name)}</td>
+        <td class="border p-2 text-xs">${escapeHtml(reportPeriodDeptLabel(p))}</td>
+        <td class="border p-2 text-xs">${formatDateTimeVN(p.endTime)}</td>
+        <td class="border p-2">${prPeriodStatusBadge(p)}</td>
+        <td class="border p-2 text-center space-x-1">${buildActionCell(p.id, primaryBtnHTML, secondaryOptions, 'runPrPeriodAction')}</td>
+      </tr>
+    `;
+  }).join('');
+}
+
+function runPrPeriodAction(id, action) {
+  switch (action) {
+    case 'close': closePrPeriodAction(id); break;
+    case 'delete': deletePrPeriodAction(id); break;
+  }
+}
+
+function closePrPeriodAction(id) {
+  const p = DB.reportPeriods.find(x => x.id === id);
+  if (!p) return;
+  showConfirmModal({
+    title: 'Đóng Kỳ Báo Cáo Sớm',
+    bodyHTML: `Bạn có chắc chắn muốn đóng kỳ <b>${escapeHtml(p.name)}</b>? Sau khi đóng, không ai nộp/sửa báo cáo thêm được nữa.`,
+    confirmLabel: 'Đóng Kỳ',
+    onConfirm: async () => {
+      let result;
+      try {
+        result = await callRecordAction('reportPeriods', id, 'close', {});
+      } catch (err) { return alert(`⛔ ${err.message}`); }
+      const updated = result.item;
+      const idx = DB.reportPeriods.findIndex(x => x.id === id);
+      if (idx !== -1) DB.reportPeriods[idx] = updated;
+      logSystemAction('PERIODIC_REPORT', 'CLOSE_REPORT_PERIOD', `Đóng sớm kỳ báo cáo [${updated.name}]`, 'SUCCESS', String(updated.id));
+      alert('✅ Đã đóng kỳ báo cáo!');
+      renderPrPeriodsTable();
+    }
+  });
+}
+
+function deletePrPeriodAction(id) {
+  deleteRecordAdminOnly('reportPeriods', id, 'kỳ báo cáo', () => {
+    DB.reportPeriods = DB.reportPeriods.filter(x => x.id !== id);
+    renderPrPeriodsTable();
+  });
+}
+
+// ============ TỔNG HỢP (reportAggregate/admin — tổng hợp được MỌI kỳ, không riêng kỳ mình tạo) ============
+function renderPrAggPeriodOptions() {
+  const sel = document.getElementById('prAggPeriodSelect');
+  const closedPeriods = DB.reportPeriods.filter(reportPeriodIsClosed);
+  sel.innerHTML = `<option value="">-- Chọn kỳ --</option>` +
+    closedPeriods.map(p => {
+      const tag = p.compilation?.status === 'PUBLISHED' ? ' (đã phát hành)' : p.compilation?.status === 'MERGED' ? ' (đã tổng hợp)' : '';
+      return `<option value="${p.id}">${escapeHtml(p.name)}${tag}</option>`;
+    }).join('');
+  document.getElementById('prAggNoPeriodNote').classList.toggle('hidden', closedPeriods.length > 0);
+  document.getElementById('prAggWrap').classList.add('hidden');
+  prAggCurrentPeriodId = null;
+  sel.value = '';
+}
+
+function onPrAggPeriodChange() {
+  const periodId = Number(document.getElementById('prAggPeriodSelect').value);
+  const wrap = document.getElementById('prAggWrap');
+  if (!periodId) { wrap.classList.add('hidden'); prAggCurrentPeriodId = null; return; }
+  const period = DB.reportPeriods.find(p => p.id === periodId);
+  if (!period) { wrap.classList.add('hidden'); return; }
+
+  prAggCurrentPeriodId = periodId;
+  // Khởi tạo lại thứ tự đã chọn + bản đang sửa từ bản tổng hợp hiện có (nếu có), không mất lựa chọn cũ.
+  prAggSelectedIds = (period.compilation?.slides || []).map(s => s.sourceEntryId).filter(id => id != null);
+  prAggPendingSlides = period.compilation ? period.compilation.slides.map(s => ({ ...s })) : null;
+  wrap.classList.remove('hidden');
+  renderPrAggEntriesList();
+  renderPrAggOrderList();
+  renderPrAggCompilation();
+}
+
+function getPrAggPeriodEntries() {
+  return DB.reportEntries.filter(e => e.periodId === prAggCurrentPeriodId && e.status === 'SUBMITTED');
+}
+
+function renderPrAggEntriesList() {
+  const el = document.getElementById('prAggEntriesList');
+  const entries = getPrAggPeriodEntries();
+  if (!entries.length) {
+    el.innerHTML = `<div class="text-xs text-gray-400 italic">Chưa có báo cáo nào được gửi trong kỳ này.</div>`;
+    return;
+  }
+  el.innerHTML = entries.map(e => `
+    <label class="flex items-center gap-2 text-xs p-1.5 rounded hover:bg-sky-50 cursor-pointer">
+      <input type="checkbox" onchange="togglePrAggEntry(${e.id}, this.checked)" ${prAggSelectedIds.includes(e.id) ? 'checked' : ''}>
+      <span class="font-semibold text-gray-700">${escapeHtml(e.title)}</span>
+      <span class="text-gray-400">— ${escapeHtml(e.creatorName)} (${escapeHtml(e.dept)})</span>
+    </label>
+  `).join('');
+}
+
+function togglePrAggEntry(entryId, checked) {
+  if (checked) {
+    if (!prAggSelectedIds.includes(entryId)) prAggSelectedIds.push(entryId);
+  } else {
+    prAggSelectedIds = prAggSelectedIds.filter(id => id !== entryId);
+  }
+  renderPrAggEntriesList();
+  renderPrAggOrderList();
+}
+
+function movePrAggEntry(idx, dir) {
+  const target = idx + dir;
+  if (target < 0 || target >= prAggSelectedIds.length) return;
+  [prAggSelectedIds[idx], prAggSelectedIds[target]] = [prAggSelectedIds[target], prAggSelectedIds[idx]];
+  renderPrAggOrderList();
+}
+
+function renderPrAggOrderList() {
+  const el = document.getElementById('prAggOrderList');
+  const byId = new Map(getPrAggPeriodEntries().map(e => [e.id, e]));
+  if (!prAggSelectedIds.length) {
+    el.innerHTML = `<div class="text-xs text-gray-400 italic">Chưa chọn báo cáo nào.</div>`;
+    return;
+  }
+  el.innerHTML = prAggSelectedIds.map((id, idx) => {
+    const e = byId.get(id);
+    if (!e) return '';
+    return `
+      <div class="flex items-center gap-2 text-xs p-1.5 rounded border bg-sky-50/60">
+        <span class="font-bold text-sky-700 w-5 text-center">${idx + 1}</span>
+        <span class="flex-1 truncate">${escapeHtml(e.title)} <span class="text-gray-400">— ${escapeHtml(e.creatorName)}</span></span>
+        <button type="button" onclick="movePrAggEntry(${idx}, -1)" class="px-1.5 py-0.5 bg-gray-200 rounded hover:bg-gray-300" ${idx === 0 ? 'disabled' : ''}>▲</button>
+        <button type="button" onclick="movePrAggEntry(${idx}, 1)" class="px-1.5 py-0.5 bg-gray-200 rounded hover:bg-gray-300" ${idx === prAggSelectedIds.length - 1 ? 'disabled' : ''}>▼</button>
+        <button type="button" onclick="togglePrAggEntry(${id}, false)" class="px-1.5 py-0.5 bg-rose-100 text-rose-700 rounded hover:bg-rose-200">✕</button>
+      </div>
+    `;
+  }).join('');
+}
+
+async function mergeReportPeriodAction() {
+  if (!prAggCurrentPeriodId) return;
+  if (!prAggSelectedIds.length) return alert('Vui lòng chọn ít nhất 1 báo cáo để tổng hợp!');
+  const period = DB.reportPeriods.find(p => p.id === prAggCurrentPeriodId);
+  if (!period) return;
+  if (period.compilation?.status === 'PUBLISHED') {
+    return alert('⛔ Bản tổng hợp đã phát hành — vui lòng "Hủy phát hành" trước khi tổng hợp lại.');
+  }
+  let result;
+  try {
+    result = await callRecordAction('reportPeriods', prAggCurrentPeriodId, 'merge', { entryIds: prAggSelectedIds });
+  } catch (err) { return alert(`⛔ ${err.message}`); }
+  const updated = result.item;
+  const idx = DB.reportPeriods.findIndex(p => p.id === updated.id);
+  if (idx !== -1) DB.reportPeriods[idx] = updated;
+  prAggPendingSlides = updated.compilation.slides.map(s => ({ ...s }));
+  logSystemAction('PERIODIC_REPORT', 'MERGE_REPORT_PERIOD', `Tổng hợp kỳ báo cáo [${updated.name}]: ${prAggSelectedIds.length} báo cáo`, 'SUCCESS', String(updated.id));
+  alert('✅ Đã tổng hợp — bạn có thể sửa lại từng phần trước khi phát hành.');
+  renderPrAggCompilation();
+  renderPrPeriodsTable();
+}
+
+// Danh sách slide đang sửa (prAggPendingSlides) là bản nháp CHỈ Ở CLIENT — chỉ thực sự lưu lại khi
+// bấm "Lưu Chỉnh Sửa" (savePrCompilation()), tránh gọi API liên tục mỗi lần gõ phím.
+function renderPrAggCompilation() {
+  const wrap = document.getElementById('prAggCompilationWrap');
+  const el = document.getElementById('prAggSlidesList');
+  if (!prAggPendingSlides || !prAggPendingSlides.length) {
+    wrap.classList.add('hidden');
+    return;
+  }
+  wrap.classList.remove('hidden');
+  const period = DB.reportPeriods.find(p => p.id === prAggCurrentPeriodId);
+  const isPublished = period?.compilation?.status === 'PUBLISHED';
+  el.innerHTML = prAggPendingSlides.map((s, idx) => `
+    <div class="border rounded p-2 bg-gray-50 space-y-1">
+      <div class="flex justify-between items-center">
+        <span class="text-[11px] font-bold text-sky-700">Phần ${idx + 1}${s.sourceCreatorName ? ` — ${escapeHtml(s.sourceCreatorName)} (${escapeHtml(s.sourceDept || '')})` : ''}</span>
+        <div class="space-x-1">
+          <button type="button" onclick="movePrAggSlide(${idx}, -1)" class="px-1.5 py-0.5 bg-gray-200 rounded hover:bg-gray-300 text-[11px]" ${idx === 0 || isPublished ? 'disabled' : ''}>▲</button>
+          <button type="button" onclick="movePrAggSlide(${idx}, 1)" class="px-1.5 py-0.5 bg-gray-200 rounded hover:bg-gray-300 text-[11px]" ${idx === prAggPendingSlides.length - 1 || isPublished ? 'disabled' : ''}>▼</button>
+          <button type="button" onclick="removePrAggSlide(${idx})" class="px-1.5 py-0.5 bg-rose-100 text-rose-700 rounded hover:bg-rose-200 text-[11px]" ${isPublished ? 'disabled' : ''}>✕</button>
+        </div>
+      </div>
+      <input type="text" value="${escapeHtml(s.title)}" oninput="updatePrAggSlideField(${idx}, 'title', this.value)" class="w-full border p-1.5 rounded text-xs font-semibold" ${isPublished ? 'disabled' : ''}>
+      <textarea oninput="updatePrAggSlideField(${idx}, 'contentHtml', this.value)" class="w-full border p-1.5 rounded text-xs h-24" ${isPublished ? 'disabled' : ''}>${escapeHtml(s.contentHtml)}</textarea>
+    </div>
+  `).join('');
+
+  document.getElementById('btnPrPublish').classList.toggle('hidden', isPublished);
+  document.getElementById('btnPrUnpublish').classList.toggle('hidden', !isPublished);
+}
+
+function updatePrAggSlideField(idx, field, value) {
+  if (!prAggPendingSlides?.[idx]) return;
+  prAggPendingSlides[idx][field] = value;
+}
+
+function movePrAggSlide(idx, dir) {
+  const target = idx + dir;
+  if (!prAggPendingSlides || target < 0 || target >= prAggPendingSlides.length) return;
+  [prAggPendingSlides[idx], prAggPendingSlides[target]] = [prAggPendingSlides[target], prAggPendingSlides[idx]];
+  renderPrAggCompilation();
+}
+
+function removePrAggSlide(idx) {
+  if (!prAggPendingSlides) return;
+  prAggPendingSlides.splice(idx, 1);
+  renderPrAggCompilation();
+}
+
+async function savePrCompilation() {
+  if (!prAggCurrentPeriodId || !prAggPendingSlides) return;
+  if (!prAggPendingSlides.length) return alert('Bản tổng hợp cần có ít nhất 1 phần!');
+  let result;
+  try {
+    result = await callRecordAction('reportPeriods', prAggCurrentPeriodId, 'compilation', { slides: prAggPendingSlides });
+  } catch (err) { return alert(`⛔ ${err.message}`); }
+  const updated = result.item;
+  const idx = DB.reportPeriods.findIndex(p => p.id === updated.id);
+  if (idx !== -1) DB.reportPeriods[idx] = updated;
+  prAggPendingSlides = updated.compilation.slides.map(s => ({ ...s }));
+  logSystemAction('PERIODIC_REPORT', 'UPDATE_REPORT_COMPILATION', `Sửa bản tổng hợp kỳ báo cáo [${updated.name}]`, 'SUCCESS', String(updated.id));
+  alert('✅ Đã lưu chỉnh sửa!');
+  renderPrAggCompilation();
+}
+
+async function publishPrCompilation() {
+  if (!prAggCurrentPeriodId) return;
+  const period = DB.reportPeriods.find(p => p.id === prAggCurrentPeriodId);
+  showConfirmModal({
+    title: '🚀 Xác Nhận Phát Hành',
+    bodyHTML: `<p>Phát hành bản tổng hợp kỳ <b>${escapeHtml(period?.name || '')}</b>? Sau khi phát hành, ai còn quyền vào module đều xem/trình chiếu/tải PDF được.</p>`,
+    confirmLabel: 'Phát Hành',
+    onConfirm: async () => {
+      let result;
+      try {
+        result = await callRecordAction('reportPeriods', prAggCurrentPeriodId, 'publish', {});
+      } catch (err) { return alert(`⛔ ${err.message}`); }
+      const updated = result.item;
+      const idx = DB.reportPeriods.findIndex(p => p.id === updated.id);
+      if (idx !== -1) DB.reportPeriods[idx] = updated;
+      logSystemAction('PERIODIC_REPORT', 'PUBLISH_REPORT_PERIOD', `Phát hành kỳ báo cáo [${updated.name}]`, 'SUCCESS', String(updated.id));
+      alert('✅ Đã phát hành!');
+      renderPrAggCompilation();
+      renderPrPeriodsTable();
+    }
+  });
+}
+
+async function unpublishPrCompilation() {
+  if (!prAggCurrentPeriodId) return;
+  const period = DB.reportPeriods.find(p => p.id === prAggCurrentPeriodId);
+  showConfirmModal({
+    title: '↩️ Xác Nhận Hủy Phát Hành',
+    bodyHTML: `<p>Hủy phát hành kỳ <b>${escapeHtml(period?.name || '')}</b> để sửa lại? Người xem sẽ không truy cập được bản trình chiếu/PDF cho tới khi phát hành lại.</p>`,
+    confirmLabel: 'Hủy Phát Hành',
+    onConfirm: async () => {
+      let result;
+      try {
+        result = await callRecordAction('reportPeriods', prAggCurrentPeriodId, 'unpublish', {});
+      } catch (err) { return alert(`⛔ ${err.message}`); }
+      const updated = result.item;
+      const idx = DB.reportPeriods.findIndex(p => p.id === updated.id);
+      if (idx !== -1) DB.reportPeriods[idx] = updated;
+      prAggPendingSlides = updated.compilation.slides.map(s => ({ ...s }));
+      logSystemAction('PERIODIC_REPORT', 'UNPUBLISH_REPORT_PERIOD', `Hủy phát hành kỳ báo cáo [${updated.name}]`, 'SUCCESS', String(updated.id));
+      alert('✅ Đã hủy phát hành, có thể sửa lại.');
+      renderPrAggCompilation();
+      renderPrPeriodsTable();
+    }
+  });
+}
+
+// ============ ĐÃ PHÁT HÀNH (ai còn quyền vào module đều xem được) ============
+function renderPrPublishedTable() {
+  const tbody = document.getElementById('prPublishedTableBody');
+  if (!tbody) return;
+  const published = DB.reportPeriods.filter(p => p.compilation?.status === 'PUBLISHED');
+  if (!published.length) {
+    tbody.innerHTML = `<tr><td colspan="4" class="text-center p-6 text-gray-500 italic">Chưa có báo cáo nào được phát hành.</td></tr>`;
+    return;
+  }
+  tbody.innerHTML = published.map(p => `
+    <tr class="hover:bg-gray-50 border-b">
+      <td class="border p-2 font-bold text-sky-800">${escapeHtml(p.name)}</td>
+      <td class="border p-2 text-xs">${formatDateTimeVN(p.compilation.publishedAt)} — ${escapeHtml(p.compilation.publishedByName || '')}</td>
+      <td class="border p-2 text-center">${p.compilation.slides.length}</td>
+      <td class="border p-2 text-center space-x-1">
+        <button onclick="openPrSlideshow(${p.id})" class="px-2.5 py-1 bg-sky-600 text-white rounded text-xs hover:opacity-90 font-bold">🎬 Trình Chiếu</button>
+        <button onclick="downloadPrPdf(${p.id})" class="px-2.5 py-1 bg-gray-600 text-white rounded text-xs hover:opacity-90 font-bold">📄 Tải PDF</button>
+      </td>
+    </tr>
+  `).join('');
+}
+
+// ============ TRÌNH CHIẾU TOÀN MÀN HÌNH ============
+function openPrSlideshow(periodId) {
+  const period = DB.reportPeriods.find(p => p.id === periodId);
+  if (!period || period.compilation?.status !== 'PUBLISHED') return;
+  prSlideshowSlides = period.compilation.slides;
+  prSlideshowIndex = 0;
+  document.getElementById('prSlideshowTitle').innerText = period.name;
+  document.getElementById('prSlideshowModal').classList.remove('hidden');
+  renderPrSlideshowSlide();
+}
+
+function renderPrSlideshowSlide() {
+  const s = prSlideshowSlides[prSlideshowIndex];
+  if (!s) return;
+  document.getElementById('prSlideshowCounter').innerText = `${prSlideshowIndex + 1} / ${prSlideshowSlides.length}`;
+  document.getElementById('prSlideshowBody').innerHTML = `
+    <div class="max-w-4xl mx-auto space-y-6">
+      <h2 class="text-2xl md:text-4xl font-bold">${escapeHtml(s.title)}</h2>
+      ${s.sourceCreatorName ? `<div class="text-sm text-gray-300">${escapeHtml(s.sourceCreatorName)}${s.sourceDept ? ` — ${escapeHtml(s.sourceDept)}` : ''}</div>` : ''}
+      <div class="whitespace-pre-wrap text-base md:text-lg leading-relaxed">${escapeHtml(s.contentHtml)}</div>
+    </div>
+  `;
+}
+
+function prSlideshowNav(dir) {
+  const target = prSlideshowIndex + dir;
+  if (target < 0 || target >= prSlideshowSlides.length) return;
+  prSlideshowIndex = target;
+  renderPrSlideshowSlide();
+}
+
+function closePrSlideshow() {
+  document.getElementById('prSlideshowModal').classList.add('hidden');
+  prSlideshowSlides = [];
+}
+
+document.addEventListener('keydown', (ev) => {
+  if (document.getElementById('prSlideshowModal')?.classList.contains('hidden')) return;
+  if (ev.key === 'ArrowRight') prSlideshowNav(1);
+  else if (ev.key === 'ArrowLeft') prSlideshowNav(-1);
+  else if (ev.key === 'Escape') closePrSlideshow();
+});
+
+// ============ XUẤT PDF — tái dùng cơ chế in iframe ẩn có sẵn (xem printViewModalContent()), KHÔNG
+// thêm thư viện tạo PDF phía server nào. Người dùng chọn "Save as PDF" ở hộp thoại in của trình duyệt. ============
+function downloadPrPdf(periodId) {
+  const period = DB.reportPeriods.find(p => p.id === periodId);
+  if (!period || period.compilation?.status !== 'PUBLISHED') return alert('Kỳ báo cáo này chưa phát hành.');
+
+  const slidesHTML = period.compilation.slides.map(s => `
+    <div style="page-break-after: always; padding: 40px;">
+      <h2 style="font-size: 22px; margin-bottom: 8px;">${escapeHtml(s.title)}</h2>
+      ${s.sourceCreatorName ? `<div style="font-size: 12px; color: #666; margin-bottom: 16px;">${escapeHtml(s.sourceCreatorName)}${s.sourceDept ? ` — ${escapeHtml(s.sourceDept)}` : ''}</div>` : ''}
+      <div style="white-space: pre-wrap; font-size: 14px; line-height: 1.6;">${escapeHtml(s.contentHtml)}</div>
+    </div>
+  `).join('');
+
+  const printFrame = document.createElement('iframe');
+  printFrame.style.position = 'fixed';
+  printFrame.style.right = '0';
+  printFrame.style.bottom = '0';
+  printFrame.style.width = '0';
+  printFrame.style.height = '0';
+  printFrame.style.border = '0';
+  document.body.appendChild(printFrame);
+
+  const doc = printFrame.contentWindow.document;
+  doc.open();
+  doc.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>${escapeHtml(period.name)}</title></head><body style="font-family: Arial, sans-serif;"><h1 style="padding: 40px 40px 0;">${escapeHtml(period.name)}</h1>${slidesHTML}</body></html>`);
+  doc.close();
+
+  printFrame.onload = () => {
+    printFrame.contentWindow.focus();
+    printFrame.contentWindow.print();
+    setTimeout(() => document.body.removeChild(printFrame), 1000);
+  };
+}
+
+// ==========================================
 // NHÓM PHÊ DUYỆT TRÌNH (Văn bản trình) — 3 nhóm CỐ ĐỊNH (SUBMISSION_APPROVAL_LAYERS), admin chỉ gán
 // thành viên, không tạo/xoá nhóm mới. Người trình tick chọn nhóm nào khi tạo tờ trình thì nhóm đó
 // được cộng thêm làm 1 bước phê duyệt bổ sung ở cuối quy trình phòng ban (xem
@@ -13810,6 +14699,8 @@ function resetUserForm() {
   document.getElementById('pContractApprove').checked = !!defaults.contractApprove;
   document.getElementById('pPaymentManage').checked = !!defaults.paymentManage;
   document.getElementById('pVppManage').checked = !!defaults.vppManage;
+  document.getElementById('pReportManage').checked = !!defaults.reportManage;
+  document.getElementById('pReportAggregate').checked = !!defaults.reportAggregate;
   document.getElementById('pMeetingApprove').checked = defaults.meetingApprove;
   document.getElementById('pMeetingCancel').checked = defaults.meetingCancel;
   document.getElementById('pOfficeBuy').checked = defaults.officeBuy;
@@ -13912,6 +14803,7 @@ function summarizeUserPerms(perms) {
   if (perms.contractApprove) parts.push('📄 Hợp đồng (duyệt)');
   if (perms.paymentManage) parts.push('💰 Thanh toán');
   if (perms.vppManage) parts.push('🖇️ Quản lý VPP');
+  if (perms.reportManage || perms.reportAggregate) parts.push('📅 Báo cáo định kỳ');
   if (hasScope(perms.meetingView) || hasScope(perms.meetingBookScope) || perms.meetingApprove || perms.meetingCancel) parts.push('📅 Phòng họp');
   if (hasScope(perms.carView) || hasScope(perms.carCreate)) parts.push('🚗 Xe');
   if ((hasScope(perms.officeView) || hasScope(perms.officeCreate)) && (perms.officeBuy || perms.officeFix || perms.officeInvest)) parts.push('🏢 VP');
