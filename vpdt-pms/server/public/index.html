@@ -450,15 +450,14 @@
       <p id="contractManageFormHint" class="text-xs text-cyan-800">Hồ sơ mới sẽ chờ phê duyệt (trừ khi bạn có quyền tự duyệt) rồi mới chuyển sang "Quản Lý Hợp Đồng & Giấy Phép" để theo dõi.</p>
 
       <form id="contractForm" onsubmit="submitContractReq(event)" class="bg-white p-3 rounded border text-xs space-y-3">
-        <!-- "Loại Thao Tác" không còn cho người dùng tự chọn — sub-tab đang đứng (Phê Duyệt/Quản Lý HĐ)
-             quyết định thẳng contractOpMode (xem setContractSubTab()), tránh trường hợp lệch nghĩa: đứng
-             ở tab Phê Duyệt mà tạo Phụ Lục (vốn tự động APPROVED, không qua duyệt) hoặc ngược lại. -->
-        <div id="contractOpModeWrap" class="hidden">
+        <!-- "Loại Thao Tác" — danh sách option đổi theo đúng sub-tab đang đứng (xem setContractSubTab()):
+             tab Phê Duyệt = Tạo Mới/Bổ Sung Phụ Lục (CẦN duyệt, có Đợt Thanh Toán); tab Quản Lý HĐ =
+             Nhập Hợp Đồng/Phụ Lục ĐÃ KÝ (tự động APPROVED ngay, không qua hàng chờ — chỉ hồ sơ được
+             duyệt THẬT qua tab Phê Duyệt mới tự chuyển sang tab này theo luồng thường; 2 nút ở đây thuần
+             là nhập tay hồ sơ đã có chữ ký sẵn ngoài hệ thống, không có bước "chờ duyệt"). -->
+        <div id="contractOpModeWrap">
           <label class="block font-semibold text-gray-600 mb-1">Loại Thao Tác</label>
-          <select id="contractOpMode" onchange="onContractOpModeChange()" class="w-full md:w-64 border p-1.5 rounded bg-white font-semibold">
-            <option value="NEW">➕ Tạo Mới Hợp Đồng</option>
-            <option value="ADDENDUM">📎 Bổ Sung Phụ Lục</option>
-          </select>
+          <select id="contractOpMode" onchange="onContractOpModeChange()" class="w-full md:w-64 border p-1.5 rounded bg-white font-semibold"></select>
         </div>
         <div id="contractAddendumTargetWrap" class="hidden">
           <label class="block font-semibold text-gray-600 mb-1">Chọn Hợp Đồng Để Bổ Sung Phụ Lục</label>
@@ -8380,12 +8379,12 @@ function resetTaskFilters() {
 // Khi khác null: form đang ở chế độ SỬA hồ sơ hợp đồng có id này (thay vì tạo mới).
 let editingContractId = null;
 
-// Đổi sub-tab "Phê Duyệt" (tạo mới hồ sơ GỐC + khai báo Đợt Thanh Toán + duyệt hồ sơ PENDING) / "Quản
-// Lý Hợp Đồng & Giấy Phép" (chỉ hồ sơ ĐÃ APPROVED — bổ sung phụ lục, tải Tài liệu ký, theo dõi thanh
-// toán/hạn hợp đồng). Form Tạo Mới/Bổ Sung Phụ Lục giờ hiện ở CẢ HAI tab (dùng chung 1 <form>), nhưng
-// contractOpMode bị KHOÁ theo đúng tab đang đứng (không cho tự chọn) — Phê Duyệt luôn là "Tạo Mới"
-// (kèm Đợt Thanh Toán), Quản Lý HĐ luôn là "Bổ Sung Phụ Lục" (tự động APPROVED, không có Đợt Thanh
-// Toán riêng — khớp đúng lib/createValidation.js CREATE_MODULE_CONFIGS.contracts).
+// Đổi sub-tab "Phê Duyệt" (tạo mới hồ sơ GỐC hoặc phụ lục — CẢ HAI đều qua hàng chờ duyệt PENDING trừ
+// khi người tạo có quyền tự duyệt, đều khai được Đợt Thanh Toán) / "Quản Lý Hợp Đồng & Giấy Phép" (chỉ
+// hồ sơ ĐÃ APPROVED — nhập tay hồ sơ hợp đồng/phụ lục ĐÃ CÓ chữ ký thật ký ngoài hệ thống, tự động
+// APPROVED ngay lập tức, không có Đợt Thanh Toán, không qua hàng chờ). contractOpMode đổi hẳn danh sách
+// option theo tab đang đứng — không dùng chung 1 bộ option như trước, vì "Bổ Sung Phụ Lục" giờ tách
+// làm 2 nghĩa khác nhau tuỳ tab (chờ duyệt thật ở Phê Duyệt, hay nhập tay đã ký ở Quản Lý HĐ).
 function setContractSubTab(subTab) {
   resetListPage('contract');
   activeContractSubTab = subTab;
@@ -8396,31 +8395,48 @@ function setContractSubTab(subTab) {
   document.getElementById('contractManageFormWrap').classList.remove('hidden');
   document.getElementById('contractPaymentColHeader').classList.toggle('hidden', subTab !== 'MANAGE');
   document.getElementById('contractListTitle').innerText = subTab === 'APPROVAL' ? '📋 Danh Sách Hợp Đồng Chờ Duyệt' : '📋 Danh Sách Hợp Đồng & Giấy Phép';
-  document.getElementById('contractManageFormTitle').innerText = subTab === 'APPROVAL' ? '➕ Tạo Mới Hợp Đồng / Giấy Phép' : '📎 Bổ Sung Phụ Lục Hợp Đồng';
+  document.getElementById('contractManageFormTitle').innerText = subTab === 'APPROVAL' ? '➕ Tạo Mới / Bổ Sung Phụ Lục Hợp Đồng' : '📥 Nhập Hợp Đồng / Phụ Lục Đã Ký';
   document.getElementById('contractManageFormHint').innerText = subTab === 'APPROVAL'
-    ? 'Hồ sơ mới sẽ chờ phê duyệt (trừ khi bạn có quyền tự duyệt) rồi mới chuyển sang "Quản Lý Hợp Đồng & Giấy Phép" để theo dõi.'
-    : 'Phụ lục chỉ gắn được vào hợp đồng GỐC đã được phê duyệt, tự động có hiệu lực ngay, không cần duyệt lại.';
+    ? 'Hồ sơ mới (hợp đồng gốc hoặc phụ lục) sẽ chờ phê duyệt (trừ khi bạn có quyền tự duyệt) rồi mới chuyển sang "Quản Lý Hợp Đồng & Giấy Phép" để theo dõi.'
+    : 'Dùng khi đã có bản hợp đồng/phụ lục ký sẵn ngoài hệ thống cần nhập lưu — tự động ở trạng thái đã duyệt ngay, không qua hàng chờ Phê Duyệt.';
+
+  const opModeSelect = document.getElementById('contractOpMode');
+  opModeSelect.innerHTML = subTab === 'APPROVAL'
+    ? '<option value="NEW">➕ Tạo Mới Hợp Đồng</option><option value="ADDENDUM">📎 Bổ Sung Phụ Lục (chờ duyệt)</option>'
+    : '<option value="IMPORT_CONTRACT">📥 Nhập Hợp Đồng Đã Ký</option><option value="IMPORT_ADDENDUM">📎 Nhập Phụ Lục Đã Ký</option>';
+
   cancelEditContract();
-  document.getElementById('contractOpMode').value = subTab === 'MANAGE' ? 'ADDENDUM' : 'NEW';
+  opModeSelect.value = subTab === 'APPROVAL' ? 'NEW' : 'IMPORT_CONTRACT';
   onContractOpModeChange();
   renderContracts();
 }
 
-// Đổi "Tạo Mới" (mã tự sinh HCRC-..., phiếu thanh toán nhập được) / "Bổ Sung Phụ Lục" (khoá Phòng
-// ban/Loại Pháp Lý/Đối tác theo đúng hợp đồng gốc đã chọn, mã tự sinh <mã gốc>-PLHD<số>, không có các
-// đợt thanh toán riêng) — cùng mô hình onDocOpModeChange().
+// 4 chế độ: NEW (Tạo Mới, tab Phê Duyệt) / ADDENDUM (Bổ Sung Phụ Lục CHỜ DUYỆT, tab Phê Duyệt) /
+// IMPORT_CONTRACT (Nhập Hợp Đồng Đã Ký, tab Quản Lý HĐ) / IMPORT_ADDENDUM (Nhập Phụ Lục Đã Ký, tab
+// Quản Lý HĐ). isAddendumMode = có phải phụ lục không (khoá Phòng ban/Loại Pháp Lý/Đối tác theo hợp
+// đồng gốc, mã tự sinh <mã gốc>-PLHD<số>) — đúng cho cả ADDENDUM và IMPORT_ADDENDUM. isImportMode = có
+// phải nhập hồ sơ đã ký sẵn không (ẩn Đợt Thanh Toán, đổi nhãn tệp đính kèm thành "... Đã Ký") — đúng
+// cho cả IMPORT_CONTRACT và IMPORT_ADDENDUM. Cùng mô hình onDocOpModeChange().
 function onContractOpModeChange() {
   const mode = document.getElementById('contractOpMode').value;
-  const isAddendum = mode === 'ADDENDUM';
-  document.getElementById('contractAddendumTargetWrap').classList.toggle('hidden', !isAddendum);
-  document.getElementById('contractInstallmentsWrap').classList.toggle('hidden', isAddendum);
-  document.getElementById('contractTitleLabel').innerText = isAddendum ? 'Tên Phụ Lục' : 'Tên Hợp Đồng / Tên Giấy Phép';
-  document.getElementById('contractFileLabel').innerText = isAddendum ? 'Tệp Đính Kèm Phụ Lục' : 'Tệp Đính Kèm Hợp Đồng / Giấy Phép';
-  document.getElementById('contractDept').disabled = isAddendum;
-  document.getElementById('contractType').disabled = isAddendum;
-  document.getElementById('contractPartner').readOnly = isAddendum;
+  const isAddendumMode = (mode === 'ADDENDUM' || mode === 'IMPORT_ADDENDUM');
+  const isImportMode = (mode === 'IMPORT_CONTRACT' || mode === 'IMPORT_ADDENDUM');
+  document.getElementById('contractAddendumTargetWrap').classList.toggle('hidden', !isAddendumMode);
+  // Đợt Thanh Toán: hiện cho NEW/ADDENDUM (cả 2 đều qua Phê Duyệt, phụ lục giờ CŨNG khai được — theo
+  // yêu cầu "phụ lục cũng phê duyệt và thanh toán"), ẩn cho 2 chế độ IMPORT (nhập hồ sơ đã ký sẵn,
+  // không cần khai lại đợt thanh toán ở đây).
+  document.getElementById('contractInstallmentsWrap').classList.toggle('hidden', isImportMode);
+  document.getElementById('contractTitleLabel').innerText = isAddendumMode ? 'Tên Phụ Lục' : 'Tên Hợp Đồng / Tên Giấy Phép';
+  let fileLabel = 'Tệp Đính Kèm Hợp Đồng / Giấy Phép';
+  if (mode === 'ADDENDUM') fileLabel = 'Tệp Đính Kèm Phụ Lục';
+  else if (mode === 'IMPORT_CONTRACT') fileLabel = 'Hợp Đồng Đã Ký (bản scan)';
+  else if (mode === 'IMPORT_ADDENDUM') fileLabel = 'Phụ Lục Hợp Đồng Đã Ký (bản scan)';
+  document.getElementById('contractFileLabel').innerText = fileLabel;
+  document.getElementById('contractDept').disabled = isAddendumMode;
+  document.getElementById('contractType').disabled = isAddendumMode;
+  document.getElementById('contractPartner').readOnly = isAddendumMode;
 
-  if (isAddendum) {
+  if (isAddendumMode) {
     populateContractAddendumTargets();
     document.getElementById('contractAddendumTarget').value = '';
     document.getElementById('contractCode').value = '';
@@ -8428,6 +8444,7 @@ function onContractOpModeChange() {
     document.getElementById('contractDept').value = '';
     document.getElementById('contractType').value = '';
     document.getElementById('contractPartner').value = '';
+    renderContractInstallmentsList([]);
   } else {
     document.getElementById('contractTitle').value = '';
     document.getElementById('contractPartner').value = '';
@@ -8436,9 +8453,11 @@ function onContractOpModeChange() {
   }
 }
 
-// Mã Hợp Đồng tự sinh sống theo Phòng ban/Loại Pháp Lý đang chọn (chỉ áp dụng ở chế độ "Tạo Mới").
+// Mã Hợp Đồng tự sinh sống theo Phòng ban/Loại Pháp Lý đang chọn — áp dụng cho cả "Tạo Mới" (NEW) lẫn
+// "Nhập Hợp Đồng Đã Ký" (IMPORT_CONTRACT), vì cả 2 đều tạo 1 hồ sơ hợp đồng GỐC mới (khác ADDENDUM/
+// IMPORT_ADDENDUM — mã phụ lục tự sinh riêng theo hợp đồng gốc, xem onContractAddendumTargetChange()).
 function refreshContractCodePreview() {
-  if (document.getElementById('contractOpMode').value !== 'NEW') return;
+  if (!['NEW', 'IMPORT_CONTRACT'].includes(document.getElementById('contractOpMode').value)) return;
   const dept = document.getElementById('contractDept').value;
   const type = document.getElementById('contractType').value;
   document.getElementById('contractCode').value = (dept && type) ? generateContractCode(dept, type) : '';
@@ -8518,7 +8537,9 @@ async function submitContractReq(e) {
   e.preventDefault();
   if (editingContractId !== null) return updateContractReq(e);
 
-  const isAddendum = document.getElementById('contractOpMode').value === 'ADDENDUM';
+  const mode = document.getElementById('contractOpMode').value;
+  const isAddendum = (mode === 'ADDENDUM' || mode === 'IMPORT_ADDENDUM');
+  const isSignedImport = (mode === 'IMPORT_CONTRACT' || mode === 'IMPORT_ADDENDUM');
   const code = document.getElementById('contractCode').value.trim();
   const dept = document.getElementById('contractDept').value;
   const type = document.getElementById('contractType').value;
@@ -8541,7 +8562,10 @@ async function submitContractReq(e) {
   }
 
   const file = fileInput.files[0];
-  if (!file) return alert(`Vui lòng chọn tệp ${isAddendum ? 'phụ lục' : 'hợp đồng / giấy phép'} đính kèm!`);
+  if (!file) {
+    const missingLabel = isSignedImport ? (isAddendum ? 'phụ lục hợp đồng đã ký' : 'hợp đồng đã ký') : (isAddendum ? 'phụ lục' : 'hợp đồng / giấy phép');
+    return alert(`Vui lòng chọn tệp ${missingLabel}!`);
+  }
 
   let uploaded, customData;
   try {
@@ -8561,7 +8585,8 @@ async function submitContractReq(e) {
     notifiedThresholds: [],
     isAddendum,
     rootContractId: isAddendum ? rootContractId : null,
-    paymentInstallments: isAddendum ? [] : collectContractInstallments()
+    paymentInstallments: isSignedImport ? [] : collectContractInstallments(),
+    isSignedImport
   };
 
   let newContract;
@@ -8573,9 +8598,22 @@ async function submitContractReq(e) {
   }
 
   DB.contracts.unshift(newContract);
-  if (isAddendum) {
+  if (isSignedImport) {
+    logSystemAction('CONTRACT', isAddendum ? 'IMPORT_CONTRACT_ADDENDUM_SIGNED' : 'IMPORT_CONTRACT_SIGNED',
+      `Nhập ${isAddendum ? `phụ lục [${newContract.code}] cho hợp đồng [${newContract.rootContractId}]` : `hợp đồng [${code} - ${title}]`} đã ký sẵn`,
+      'SUCCESS', newContract.code);
+    alert(`✅ Đã nhập ${isAddendum ? 'phụ lục' : 'hợp đồng'} đã ký thành công!`);
+  } else if (isAddendum) {
     logSystemAction('CONTRACT', 'CREATE_CONTRACT_ADDENDUM', `Bổ sung phụ lục [${newContract.code} - ${title}] cho hợp đồng [${newContract.rootContractId}]`, 'SUCCESS', newContract.code);
-    alert('✅ Đã bổ sung phụ lục thành công!');
+    if (newContract.approvalStatus === 'PENDING') {
+      const approvers = DB.users.filter(u => u.perms?.admin || u.perms?.contractApprove).map(u => u.username);
+      notifyUsersByEmail('CONTRACT', 'NOTIFY_APPROVAL_NEEDED', newContract.code, approvers,
+        `[VPDT] Phụ lục hợp đồng chờ duyệt: ${title}`,
+        `${currentUser.name} vừa tạo phụ lục "${title}" (${newContract.code}), đang chờ phê duyệt.`);
+      alert('✅ Đã gửi phụ lục, đang chờ phê duyệt!');
+    } else {
+      alert('✅ Đã bổ sung phụ lục thành công!');
+    }
   } else {
     logSystemAction('CONTRACT', 'CREATE_CONTRACT', `Tạo hồ sơ hợp đồng [${code} - ${title}]`, 'SUCCESS', code);
     if (newContract.approvalStatus === 'PENDING') {
@@ -8640,7 +8678,11 @@ function cancelEditContract() {
   document.getElementById('contractFileEditHint').classList.add('hidden');
   document.getElementById('contractSubmitBtn').innerText = 'Gửi Duyệt';
   document.getElementById('contractCancelEditBtn').classList.add('hidden');
-  document.getElementById('contractOpMode').value = 'NEW';
+  // Đặt lại mode = option ĐẦU TIÊN đang có trong <select> (không hardcode 'NEW' — danh sách option đổi
+  // theo tab, xem setContractSubTab(); setContractSubTab() luôn tự set lại giá trị đúng NGAY SAU khi
+  // gọi hàm này nên dòng dưới chỉ là an toàn khi cancelEditContract() được gọi độc lập, vd nút "Huỷ Sửa").
+  const opModeSelect = document.getElementById('contractOpMode');
+  if (opModeSelect.options.length) opModeSelect.value = opModeSelect.options[0].value;
   renderContractInstallmentsList([]);
 }
 
@@ -8744,13 +8786,19 @@ function renderContracts() {
   const toDate = document.getElementById('filterToDateContract')?.value || '';
   const keyword = (document.getElementById('filterKeywordContract')?.value || '').trim();
 
-  // Chỉ hợp đồng GỐC hiện ở cấp cao nhất (phụ lục chỉ hiện khi mở rộng — xem toggleContractFamily()).
-  // Sub-tab "Phê Duyệt" chỉ hiện PENDING, "Quản Lý Hợp Đồng & Giấy Phép" chỉ hiện APPROVED — hợp đồng
-  // vừa được duyệt xong sẽ "biến mất" khỏi tab này và "xuất hiện" ở tab kia ngay khi render lại.
+  // Hợp đồng GỐC ĐÃ APPROVED hiện ở cấp cao nhất tại tab Quản Lý HĐ (phụ lục ĐÃ APPROVED chỉ hiện khi
+  // mở rộng — xem toggleContractFamily()). Phụ lục CÒN PENDING (từ chế độ "Bổ Sung Phụ Lục — chờ duyệt"
+  // ở tab Phê Duyệt) không có hợp đồng gốc nào để "lồng vào" hiển thị ở tab đó (gốc của nó luôn đã
+  // APPROVED, đang nằm ở tab Quản Lý HĐ) — nên hiện THẲNG như 1 dòng độc lập tại tab Phê Duyệt, y hệt
+  // hợp đồng gốc PENDING (buildContractRowHTML() đã đủ tổng quát để render đúng, kể cả nút Duyệt/Từ chối).
   const visibleContracts = DB.contracts.filter(c => {
-    if (c.isAddendum) return false;
-    if (activeContractSubTab === 'APPROVAL' && c.approvalStatus !== 'PENDING') return false;
-    if (activeContractSubTab === 'MANAGE' && c.approvalStatus !== 'APPROVED') return false;
+    if (c.isAddendum) {
+      if (c.approvalStatus === 'APPROVED') return false;
+      if (activeContractSubTab !== 'APPROVAL') return false;
+    } else {
+      if (activeContractSubTab === 'APPROVAL' && c.approvalStatus !== 'PENDING') return false;
+      if (activeContractSubTab === 'MANAGE' && c.approvalStatus !== 'APPROVED') return false;
+    }
 
     const canView = scopeAllows(currentUser, currentUser.perms?.contractView, c.dept) || c.creator === currentUser.username || canApproveContract(currentUser);
     if (!canView) return false;
@@ -8779,7 +8827,10 @@ function renderContracts() {
   }
 
   tbody.innerHTML = pageContracts.map(c => {
-    const addenda = activeContractSubTab === 'MANAGE' ? getContractFamily(c.id).filter(x => x.id !== c.id) : [];
+    // Chỉ lồng phụ lục ĐÃ APPROVED dưới hợp đồng gốc ở đây — phụ lục còn PENDING hiện độc lập ở tab Phê
+    // Duyệt (xem lọc visibleContracts phía trên), không lặp lại ở đây (tab này không có nút Duyệt/Từ
+    // chối cho dòng con nên tránh gây hiểu nhầm "đã lên danh sách nhưng bấm gì cũng không được").
+    const addenda = activeContractSubTab === 'MANAGE' ? getContractFamily(c.id).filter(x => x.id !== c.id && x.approvalStatus === 'APPROVED') : [];
     const isExpanded = expandedContractFamilies.has(c.id);
     const rootRowHTML = buildContractRowHTML(c, { addendumCount: addenda.length, isExpanded });
     const childRowsHTML = isExpanded ? addenda.map(a => buildContractRowHTML(a, { isChild: true })).join('') : '';
@@ -8840,12 +8891,19 @@ function buildContractRowHTML(c, { addendumCount = 0, isExpanded = false, isChil
   }
   if (currentUser.perms?.admin) secondaryOptions.push({ value: 'delete', label: '🗑️ Xóa' });
 
+  // Phụ lục CÒN CHỜ DUYỆT hiện độc lập (không lồng dưới hợp đồng gốc — xem renderContracts()), ghi rõ
+  // thuộc hợp đồng gốc nào để người duyệt không nhầm với hợp đồng mới hoàn toàn.
+  const rootRefNote = (c.isAddendum && !isChild)
+    ? `<div class="text-xs text-gray-500">📎 Phụ lục của hợp đồng: <span class="font-mono">${escapeHtml(DB.contracts.find(r => r.id === c.rootContractId)?.code || '?')}</span></div>`
+    : '';
+
   return `
     <tr class="hover:bg-gray-50 border-b ${isChild ? 'bg-cyan-50/30' : ''}">
       ${codeCell}
       <td class="border p-2">
         <div class="font-bold text-gray-800">${escapeHtml(c.title)}${statusBadge}</div>
         <div class="text-xs text-gray-500">Bên ký kết: ${escapeHtml(c.partner)}</div>
+        ${rootRefNote}
       </td>
       <td class="border p-2">
         <div class="font-bold text-purple-700">${(c.amount || 0).toLocaleString('vi-VN')} VNĐ</div>
