@@ -9,6 +9,8 @@ const path = require('path');
 const rateLimit = require('express-rate-limit');
 const { requireAuth, blockIfMustChangePassword } = require('../lib/auth');
 const { parseCatalogFile } = require('../lib/vppCatalog');
+const { buildSummaryWorkbook, buildByDeptWorkbook } = require('../lib/vppExport');
+const { getAllForCollection } = require('../lib/recordStore');
 
 const router = express.Router();
 router.use(requireAuth, blockIfMustChangePassword);
@@ -81,6 +83,61 @@ router.post('/parse-catalog', uploadRateLimiter, (req, res) => {
       res.status(status).json({ error: parseErr.message || 'Không đọc được nội dung file danh mục' });
     }
   });
+});
+
+// Ký tự an toàn cho tên file tải xuống — loại bỏ mọi thứ ngoài chữ/số/gạch ngang/gạch dưới, tránh chèn
+// ký tự lạ vào header Content-Disposition (điều khiển bởi mã kỳ do admin đặt, không hoàn toàn tin cậy).
+function safeFileFragment(s) {
+  return String(s || '').replace(/[^\p{L}\p{N}_-]+/gu, '_').slice(0, 60) || 'ky-dang-ky';
+}
+
+async function loadPeriodOr404(periodId) {
+  const periods = await getAllForCollection('vppPeriods');
+  const period = periods.find(p => p.id === periodId);
+  if (!period) { const e = new Error('Không tìm thấy kỳ đăng ký'); e.status = 404; throw e; }
+  return period;
+}
+
+// GET /api/vpp/export/summary/:periodId — file chi tiết từng dòng đăng ký đã duyệt trong kỳ.
+router.get('/export/summary/:periodId', async (req, res) => {
+  if (!req.freshUser.perms?.admin && !req.freshUser.perms?.vppManage) {
+    return res.status(403).json({ error: 'Chỉ người có quyền quản lý Văn phòng phẩm mới được xuất báo cáo' });
+  }
+  const periodId = Number(req.params.periodId);
+  if (!Number.isFinite(periodId)) return res.status(400).json({ error: 'periodId không hợp lệ' });
+  try {
+    const period = await loadPeriodOr404(periodId);
+    const registrations = await getAllForCollection('vppRegistrations');
+    const wb = await buildSummaryWorkbook(period, registrations);
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `attachment; filename="VPP_TongHop_${safeFileFragment(period.code)}.xlsx"`);
+    await wb.xlsx.write(res);
+    res.end();
+  } catch (err) {
+    const status = err.status || 500;
+    res.status(status).json({ error: err.message || 'Không thể xuất báo cáo' });
+  }
+});
+
+// GET /api/vpp/export/by-dept/:periodId — ma trận mặt hàng x phòng ban, chỉ tính đăng ký đã duyệt.
+router.get('/export/by-dept/:periodId', async (req, res) => {
+  if (!req.freshUser.perms?.admin && !req.freshUser.perms?.vppManage) {
+    return res.status(403).json({ error: 'Chỉ người có quyền quản lý Văn phòng phẩm mới được xuất báo cáo' });
+  }
+  const periodId = Number(req.params.periodId);
+  if (!Number.isFinite(periodId)) return res.status(400).json({ error: 'periodId không hợp lệ' });
+  try {
+    const period = await loadPeriodOr404(periodId);
+    const registrations = await getAllForCollection('vppRegistrations');
+    const wb = await buildByDeptWorkbook(period, registrations);
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `attachment; filename="VPP_TongQuatTheoPhongBan_${safeFileFragment(period.code)}.xlsx"`);
+    await wb.xlsx.write(res);
+    res.end();
+  } catch (err) {
+    const status = err.status || 500;
+    res.status(status).json({ error: err.message || 'Không thể xuất báo cáo' });
+  }
 });
 
 module.exports = router;

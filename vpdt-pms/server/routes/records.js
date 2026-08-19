@@ -7,7 +7,7 @@ const { requireAuth, blockIfMustChangePassword } = require('../lib/auth');
 const { HttpError } = require('../lib/httpErrors');
 const recordActions = require('../lib/recordActions');
 const { insertTask, withLockedTaskById, deleteTaskById } = require('../lib/taskStore');
-const { createForCollection, withLockedRecordForCollection, deleteRecordForCollection } = require('../lib/recordStore');
+const { createForCollection, withLockedRecordForCollection, deleteRecordForCollection, getAllForCollection } = require('../lib/recordStore');
 
 router.use(requireAuth, blockIfMustChangePassword);
 
@@ -437,6 +437,42 @@ router.post('/vppPeriods/:id/close', async (req, res) => {
     res.json({ ok: true, item: result });
   } catch (err) {
     handleError(res, `vppPeriods/${req.params.id}/close`, err);
+  }
+});
+
+// POST /api/records/vppRegistrations/:id/submit — "Gửi": NHÁP -> CHỜ DUYỆT (bắt đầu bước 1). Chỉ
+// chính người tạo hồ sơ mới gửi được (xem lib/recordActions.js submitVppRegistration).
+router.post('/vppRegistrations/:id/submit', async (req, res) => {
+  const itemId = Number(req.params.id);
+  if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
+  try {
+    const { freshUser } = await getFreshUser(req);
+    const result = await withLockedRecordForCollection('vppRegistrations', itemId, (item) =>
+      recordActions.submitVppRegistration(freshUser, item)
+    );
+    res.json({ ok: true, item: result });
+  } catch (err) {
+    handleError(res, `vppRegistrations/${req.params.id}/submit`, err);
+  }
+});
+
+// POST /api/records/vppRegistrations/:id/update — sửa lại mặt hàng/số lượng khi hồ sơ còn NHÁP. Cần
+// đọc lại kỳ đăng ký (vppPeriods) để xác thực danh mục/thời hạn hiện tại — vppPeriods đã chuyển sang
+// dbo.Records (không có sẵn trong appData chung) nên tự đọc riêng, giống routes/create.js đã làm cho
+// tạo mới vppRegistrations.
+router.post('/vppRegistrations/:id/update', async (req, res) => {
+  const itemId = Number(req.params.id);
+  if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
+  try {
+    const { freshUser } = await getFreshUser(req);
+    const periods = await getAllForCollection('vppPeriods');
+    const result = await withLockedRecordForCollection('vppRegistrations', itemId, (item) => {
+      const period = periods.find(p => p.id === item.periodId);
+      return recordActions.updateVppRegistrationDraft(freshUser, item, req.body, period);
+    });
+    res.json({ ok: true, item: result });
+  } catch (err) {
+    handleError(res, `vppRegistrations/${req.params.id}/update`, err);
   }
 });
 
