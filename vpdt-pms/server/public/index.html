@@ -48,7 +48,6 @@
         <button id="btnSubmissionTab" onclick="switchTab('submission')" class="hidden text-xs bg-amber-600 text-white px-2 py-1 rounded hover:bg-amber-700 font-semibold">📜 Văn bản trình</button>
         <button id="btnInternalTab" onclick="switchTab('internal')" class="hidden text-xs bg-fuchsia-600 text-white px-2 py-1 rounded hover:bg-fuchsia-700 font-semibold">📣 Truyền thông</button>
         <button id="btnContractTab" onclick="switchTab('contract')" class="hidden text-xs bg-cyan-600 text-white px-2 py-1 rounded hover:bg-cyan-700 font-semibold">📄 Hợp đồng</button>
-        <button id="btnMeetingTab" onclick="switchTab('meeting')" class="hidden text-xs bg-emerald-600 text-white px-2 py-1 rounded hover:bg-emerald-700 font-semibold">📅 Phòng họp</button>
         <!-- "Điều Hành" — gộp NHẸ ở nav: 1 nút dropdown mở ra 2 lựa chọn Biên bản họp/Công việc, mỗi lựa
              chọn vẫn gọi ĐÚNG switchTab('minutes')/switchTab('task') như cũ (giữ nguyên 100% code/logic
              bên trong 2 module — chỉ đổi cách vào). btnMinutesTab/btnTaskTab GIỮ NGUYÊN id để
@@ -61,7 +60,19 @@
             <button id="btnTaskTab" onclick="closeDieuHanhDropdown(); switchTab('task')" class="hidden w-full text-left px-3 py-2 text-xs hover:bg-violet-50 font-semibold text-gray-700">📋 Công việc</button>
           </div>
         </div>
-        <button id="btnCarTab" onclick="switchTab('car')" class="hidden text-xs bg-indigo-600 text-white px-2 py-1 rounded hover:bg-indigo-700 font-semibold">🚗 Đăng ký xe</button>
+        <!-- "Hành Chính" — cùng kiểu gộp NHẸ ở nav như Điều Hành: gộp Phòng họp/Đăng ký xe/Văn phòng
+             phẩm vào 1 dropdown. btnMeetingTab/btnCarTab GIỮ NGUYÊN id (chỉ đổi HTML lồng vào dropdown),
+             thêm mới btnVppTab. Khác Điều Hành: 3 module con này còn có quyền CHA thật trong cây phân
+             quyền (xem BUSINESS_MODULES field "parent" + hasModuleAccess()) — tắt quyền vào "Hành
+             Chính" sẽ khoá cả 3 dù mỗi module vẫn giữ quyền chi tiết riêng. -->
+        <div id="hanhChinhNavWrap" class="hidden relative inline-block">
+          <button id="btnHanhChinhTab" onclick="toggleHanhChinhDropdown(event)" class="text-xs bg-orange-600 text-white px-2 py-1 rounded hover:bg-orange-700 font-semibold">🏢 Hành Chính ▾</button>
+          <div id="hanhChinhDropdownPanel" class="hidden absolute right-0 mt-1 bg-white border rounded shadow-lg z-30 min-w-[170px] overflow-hidden">
+            <button id="btnMeetingTab" onclick="closeHanhChinhDropdown(); switchTab('meeting')" class="hidden w-full text-left px-3 py-2 text-xs hover:bg-emerald-50 font-semibold text-gray-700">📅 Phòng họp</button>
+            <button id="btnCarTab" onclick="closeHanhChinhDropdown(); switchTab('car')" class="hidden w-full text-left px-3 py-2 text-xs hover:bg-indigo-50 font-semibold text-gray-700">🚗 Đăng ký xe</button>
+            <button id="btnVppTab" onclick="closeHanhChinhDropdown(); switchTab('vpp')" class="hidden w-full text-left px-3 py-2 text-xs hover:bg-orange-50 font-semibold text-gray-700">🖇️ Văn phòng phẩm</button>
+          </div>
+        </div>
         <button id="btnOfficeTab" onclick="switchTab('office')" class="hidden text-xs bg-teal-600 text-white px-2 py-1 rounded hover:bg-teal-700 font-semibold">🗂️ Tổng Hợp</button>
         <button id="btnReportsTab" onclick="switchTab('reports')" class="hidden text-xs bg-sky-600 text-white px-2 py-1 rounded hover:bg-sky-700 font-semibold">📊 Báo cáo</button>
         <button id="btnSystemTab" onclick="switchTab('system')" class="hidden text-xs bg-purple-600 text-white px-2 py-1 rounded hover:bg-purple-700 font-semibold">🛠️ Hệ Thống</button>
@@ -1030,6 +1041,149 @@
     </div>
   </div>
 
+  <!-- Màn hình VĂN PHÒNG PHẨM -->
+  <div id="vppSection" class="hidden space-y-6">
+    <div class="flex flex-wrap gap-2 border-b pb-2">
+      <button type="button" onclick="setVppSubTab('REGISTER')" id="btnVppSubRegister" class="px-3 py-1.5 rounded text-xs font-bold bg-orange-700 text-white">📝 Đăng Ký</button>
+      <button type="button" onclick="setVppSubTab('PERIODS')" id="btnVppSubPeriods" class="hidden px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">📅 Kỳ Đăng Ký</button>
+      <button type="button" onclick="setVppSubTab('REPORTS')" id="btnVppSubReports" class="hidden px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">📊 Báo Cáo Tổng Hợp</button>
+    </div>
+
+    <!-- Sub-tab: Đăng Ký (ai cũng vào được) -->
+    <div id="vppSubRegister" class="space-y-4">
+      <div class="bg-orange-50 p-4 rounded border border-orange-200 space-y-3">
+        <h3 class="font-bold text-orange-900 text-sm flex items-center gap-1">📝 Đăng Ký Văn Phòng Phẩm</h3>
+        <div>
+          <label class="block text-xs font-semibold text-gray-600 mb-1">Chọn kỳ đăng ký (đang mở)</label>
+          <select id="vppRegPeriodSelect" onchange="onVppRegPeriodChange()" class="w-full border p-2 rounded text-sm bg-white"></select>
+        </div>
+        <div id="vppRegNoPeriodNote" class="hidden text-xs text-gray-500 italic bg-white p-3 rounded border">Hiện chưa có kỳ đăng ký nào đang mở.</div>
+        <div id="vppRegItemsWrap" class="hidden space-y-2">
+          <label class="block text-xs font-semibold text-gray-600">Chọn mặt hàng & số lượng</label>
+          <div class="max-h-80 overflow-y-auto border rounded bg-white">
+            <table class="w-full text-xs">
+              <thead class="bg-gray-100 sticky top-0"><tr>
+                <th class="border p-2 text-left">Mặt Hàng</th>
+                <th class="border p-2 text-left w-24">Đơn Vị</th>
+                <th class="border p-2 text-left w-28">Số Lượng</th>
+              </tr></thead>
+              <tbody id="vppRegItemsTableBody"></tbody>
+            </table>
+          </div>
+          <div class="flex justify-end">
+            <button type="button" onclick="submitVppRegistration()" class="bg-orange-600 text-white px-4 py-1.5 rounded text-xs font-bold hover:bg-orange-700">✅ Hoàn Thành Đăng Ký</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="bg-white rounded border overflow-x-auto">
+        <table class="w-full border-collapse text-xs">
+          <thead>
+            <tr class="bg-gray-100 text-left">
+              <th class="border p-2">Kỳ Đăng Ký</th>
+              <th class="border p-2">Người Đăng Ký</th>
+              <th class="border p-2">Số Mặt Hàng</th>
+              <th class="border p-2">Trạng Thái</th>
+              <th class="border p-2 text-center">Thao Tác</th>
+            </tr>
+          </thead>
+          <tbody id="vppRegTableBody"></tbody>
+        </table>
+      </div>
+      <div id="paginationContainer_vppReg"></div>
+    </div>
+
+    <!-- Sub-tab: Kỳ Đăng Ký (chỉ vppManage/admin) -->
+    <div id="vppSubPeriods" class="hidden space-y-4">
+      <div class="bg-orange-50 p-4 rounded border border-orange-200 space-y-3">
+        <h3 class="font-bold text-orange-900 text-sm flex items-center gap-1">➕ Tạo Kỳ Đăng Ký Mới</h3>
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-3 bg-white p-3 rounded border">
+          <div class="md:col-span-3">
+            <label class="block text-xs font-semibold text-gray-600 mb-1">Tên kỳ đăng ký</label>
+            <input id="vppNewPeriodName" placeholder="VD: Đăng ký Văn phòng phẩm tháng 9/2026" class="w-full border p-1.5 rounded text-xs">
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-gray-600 mb-1">Ngày bắt đầu (tuỳ chọn)</label>
+            <input id="vppNewPeriodStart" type="date" class="w-full border p-1.5 rounded text-xs">
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-gray-600 mb-1">Ngày kết thúc (tuỳ chọn — để trống = không tự đóng theo ngày)</label>
+            <input id="vppNewPeriodEnd" type="date" class="w-full border p-1.5 rounded text-xs">
+          </div>
+        </div>
+        <div class="bg-white p-3 rounded border space-y-2">
+          <label class="block text-xs font-semibold text-gray-600">File danh mục mặt hàng (Excel .xlsx/.xls hoặc CSV — cột 1: Tên mặt hàng, cột 2: Đơn vị tính)</label>
+          <input id="vppCatalogFileInput" type="file" accept=".xlsx,.xls,.csv" onchange="onVppCatalogFileChange(event)" class="text-xs">
+          <p id="vppCatalogStatus" class="text-[11px] text-gray-500 italic"></p>
+          <div id="vppCatalogPreviewWrap" class="hidden">
+            <p class="text-[11px] font-semibold text-gray-600 mb-1">Xem trước danh mục (<span id="vppCatalogPreviewCount">0</span> mặt hàng):</p>
+            <div class="max-h-48 overflow-y-auto border rounded">
+              <table class="w-full text-[11px]">
+                <thead class="bg-gray-100 sticky top-0"><tr><th class="border p-1 text-left">Tên mặt hàng</th><th class="border p-1 text-left">Đơn vị</th></tr></thead>
+                <tbody id="vppCatalogPreviewBody"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+        <div class="flex justify-end">
+          <button type="button" onclick="createVppPeriod()" class="bg-orange-600 text-white px-4 py-1.5 rounded text-xs font-bold hover:bg-orange-700">Tạo Kỳ Đăng Ký</button>
+        </div>
+      </div>
+
+      <div class="bg-white rounded border overflow-x-auto">
+        <table class="w-full border-collapse text-xs">
+          <thead>
+            <tr class="bg-gray-100 text-left">
+              <th class="border p-2">Tên Kỳ</th>
+              <th class="border p-2">Thời Gian</th>
+              <th class="border p-2">Số Mặt Hàng</th>
+              <th class="border p-2">Số Đăng Ký</th>
+              <th class="border p-2">Trạng Thái</th>
+              <th class="border p-2 text-center">Thao Tác</th>
+            </tr>
+          </thead>
+          <tbody id="vppPeriodsTableBody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Sub-tab: Báo Cáo Tổng Hợp (chỉ vppManage/admin) -->
+    <div id="vppSubReports" class="hidden space-y-4">
+      <div>
+        <label class="block text-xs font-semibold text-gray-600 mb-1">Chọn kỳ để xem báo cáo tổng hợp</label>
+        <select id="vppReportPeriodSelect" onchange="renderVppReports()" class="w-full md:w-96 border p-2 rounded text-sm bg-white"></select>
+      </div>
+      <div class="bg-white p-4 rounded border space-y-2">
+        <h4 class="font-bold text-sm text-gray-800">🏢 Tổng Hợp Theo Phòng Ban</h4>
+        <div class="overflow-x-auto">
+          <table class="w-full border-collapse text-xs">
+            <thead><tr class="bg-gray-100 text-left">
+              <th class="border p-2">Phòng Ban</th>
+              <th class="border p-2 text-center">Số Người Đăng Ký</th>
+              <th class="border p-2 text-center">Chờ Duyệt</th>
+              <th class="border p-2 text-center">Đã Duyệt</th>
+              <th class="border p-2 text-center">Từ Chối</th>
+            </tr></thead>
+            <tbody id="vppReportByDeptBody"></tbody>
+          </table>
+        </div>
+      </div>
+      <div class="bg-white p-4 rounded border space-y-2">
+        <h4 class="font-bold text-sm text-gray-800">📦 Tổng Hợp Theo Mặt Hàng (đã đăng ký, gồm cả chờ duyệt + đã duyệt)</h4>
+        <div class="overflow-x-auto">
+          <table class="w-full border-collapse text-xs">
+            <thead><tr class="bg-gray-100 text-left">
+              <th class="border p-2">Mặt Hàng</th>
+              <th class="border p-2">Đơn Vị</th>
+              <th class="border p-2 text-center">Tổng Số Lượng</th>
+            </tr></thead>
+            <tbody id="vppReportByItemBody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- Màn hình MODULE TỔNG HỢP (Mua Bán / Sửa Chữa / Đầu Tư / Thanh Toán) -->
   <div id="officeSection" class="hidden space-y-6">
     <div class="bg-teal-50 p-4 rounded border border-teal-200 space-y-3">
@@ -1329,6 +1483,7 @@
       <button onclick="switchWfModule('OFFICE_BUY')" id="btnWfModOfficeBuy" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">🛒 QT Mua Bán</button>
       <button onclick="switchWfModule('OFFICE_FIX')" id="btnWfModOfficeFix" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">🔧 QT Sửa Chữa</button>
       <button onclick="switchWfModule('OFFICE_INVEST')" id="btnWfModOfficeInvest" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">📈 QT Đầu Tư</button>
+      <button onclick="switchWfModule('VPP')" id="btnWfModVpp" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">🖇️ QT Văn Phòng Phẩm</button>
     </div>
 
     <div id="wfSubmissionTypeTabs" class="hidden gap-2 flex-wrap"></div>
@@ -1953,6 +2108,19 @@
             <div id="submissionApprovalGroupsContainer" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3"></div>
           </div>
         </details>
+
+        <details class="perm-tree-node bg-white rounded border text-xs">
+          <summary class="flex items-center justify-between gap-2 px-3 py-2 hover:bg-gray-50 rounded">
+            <span class="font-bold text-gray-800 text-sm flex items-center gap-1.5"><span class="perm-tree-chevron text-gray-400">▸</span><span>🖇️ 12. Văn Phòng Phẩm</span></span>
+            <span id="permTreeBadge_vpp" class="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-gray-100 text-gray-500">0/0</span>
+          </summary>
+          <div class="p-3 pt-0 space-y-2">
+            <p class="text-[11px] text-gray-500 italic">Mọi người đã đăng nhập (còn quyền vào module "Văn Phòng Phẩm" ở mục 0) đều tự đăng ký được ở kỳ đang mở. Quyền dưới đây dành riêng cho người QUẢN LÝ: tạo/kết thúc kỳ đăng ký, tải lên danh mục, xem báo cáo tổng hợp toàn công ty theo phòng ban & theo mặt hàng.</p>
+            <label class="flex items-center gap-2 text-orange-700 font-semibold cursor-pointer">
+              <input type="checkbox" id="pVppManage"> ✅ Quản lý Văn phòng phẩm (tạo/kết thúc kỳ, xem báo cáo tổng hợp)
+            </label>
+          </div>
+        </details>
         </div>
       </form>
 
@@ -2283,6 +2451,34 @@
     <div class="p-3 bg-gray-100 border-t flex justify-between items-center text-xs">
       <button onclick="closeOfficeProcessModal()" class="bg-gray-500 text-white px-4 py-1.5 rounded font-bold hover:bg-gray-600">Đóng</button>
       <div id="officeModalActionBtns" class="flex gap-2"></div>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL XỬ LÝ ĐĂNG KÝ VĂN PHÒNG PHẨM -->
+<div id="vppRegModal" class="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center hidden z-50 p-4">
+  <div class="bg-white rounded-lg shadow-2xl max-w-2xl w-full flex flex-col max-h-[90vh] overflow-hidden">
+    <div class="flex justify-between items-center bg-orange-700 text-white p-4">
+      <div>
+        <h3 id="vppRegModalTitle" class="font-bold text-base flex items-center gap-2">🖇️ Xử Lý Đăng Ký Văn Phòng Phẩm</h3>
+        <p id="vppRegModalSub" class="text-xs text-orange-200"></p>
+      </div>
+      <button onclick="closeVppRegModal()" class="text-orange-200 hover:text-white font-bold text-xl px-2">✕</button>
+    </div>
+    <div class="p-4 overflow-y-auto flex-1 space-y-4 text-xs">
+      <div id="vppRegModalItems" class="bg-gray-50 p-3 rounded border"></div>
+      <div>
+        <h4 class="font-bold text-gray-800 mb-2">✍️ Ghi Chú / Lý Do Từ Chối</h4>
+        <textarea id="txtVppRegComment" placeholder="Nhập ghi chú phê duyệt hoặc lý do từ chối..." class="w-full border p-2 rounded h-20 text-xs focus:ring-1 focus:ring-orange-500 focus:outline-none"></textarea>
+      </div>
+      <div>
+        <h4 class="font-bold text-gray-800 mb-2">📜 Lịch Sử Xử Lý</h4>
+        <div id="vppRegModalHistory" class="space-y-2 bg-slate-50 p-3 rounded border max-h-40 overflow-y-auto"></div>
+      </div>
+    </div>
+    <div class="p-3 bg-gray-100 border-t flex justify-between items-center text-xs">
+      <button onclick="closeVppRegModal()" class="bg-gray-500 text-white px-4 py-1.5 rounded font-bold hover:bg-gray-600">Đóng</button>
+      <div id="vppRegModalActionBtns" class="flex gap-2"></div>
     </div>
   </div>
 </div>
@@ -2701,6 +2897,8 @@ let pendingWfTemplate = {};
 let activeOfficeSubTab = 'MUA_BAN';
 let activeSystemSubTab = 'ADMIN';
 let activeAdminSubTab = 'PERMS';
+let activeVppSubTab = 'REGISTER';
+let currentProcessingVppRegId = null;
 let activeFormTab = 'SUBMISSION';
 let editingCustomFieldId = null;
 // Khác null khi form Biểu Mẫu đang sửa 1 trường MẶC ĐỊNH (không phải trường bổ sung) — { coreKey,
@@ -3141,15 +3339,24 @@ function scopeHasAny(user, scope) {
 // ở chỗ khác trong form nữa. `id`/`checkedByDefault` khớp đúng với key trong đối tượng perms của user
 // (vd perms.officeBuy) — collectPermsFromForm()/populatePermsForm() đọc/ghi theo id này, không phụ
 // thuộc vị trí trong DOM.
+// "car"/"meeting"/"vpp" mang field "parent" = con của "hanhchinh" (module Hành Chính) — hasModuleAccess()
+// đọc field này để khoá CẢ 3 module con cùng lúc khi tắt quyền vào module cha, dù mỗi con vẫn giữ
+// checkbox pModuleAccess_<key> riêng (đọc/ghi không đổi, xem readModuleAccessFromForm()/
+// populateModuleAccessForm() — 2 hàm đó lặp phẳng qua TOÀN BỘ mảng này bất kể lồng cha/con hay không).
+// Khác "office.subModules" (chỉ là checkbox quyền phụ dạng boolean thường, KHÔNG phải khoá module
+// riêng) — "car"/"meeting"/"vpp" vẫn là module ĐỘC LẬP đầy đủ (nav/section/quyền chi tiết riêng), chỉ
+// thêm 1 lớp khoá cha bên trên.
 const BUSINESS_MODULES = [
   { key: 'doc', label: 'Tài Liệu' },
   { key: 'submission', label: 'Văn Bản Trình / Tờ Trình' },
   { key: 'task', label: 'Công Việc' },
   { key: 'internal', label: 'Truyền Thông Nội Bộ' },
   { key: 'contract', label: 'Hợp Đồng' },
-  { key: 'meeting', label: 'Đặt Phòng Họp' },
   { key: 'minutes', label: 'Biên Bản Họp' },
-  { key: 'car', label: 'Đăng Ký Xe' },
+  { key: 'hanhchinh', label: 'Hành Chính' },
+  { key: 'meeting', label: 'Đặt Phòng Họp', parent: 'hanhchinh' },
+  { key: 'car', label: 'Đăng Ký Xe', parent: 'hanhchinh' },
+  { key: 'vpp', label: 'Văn Phòng Phẩm', parent: 'hanhchinh' },
   { key: 'office', label: 'Tổng Hợp', subModules: [
     { id: 'pOfficeBuy', label: '🛒 Mua Bán', checkedByDefault: true },
     { id: 'pOfficeFix', label: '🔧 Sửa Chữa', checkedByDefault: true },
@@ -3206,6 +3413,10 @@ function hasModuleAccess(user, moduleKey) {
   if (user.perms?.admin) return true;
   const ma = user.perms?.moduleAccess;
   if (!ma) return true;
+  // Module con (vd "car"/"meeting"/"vpp" thuộc cha "hanhchinh", xem BUSINESS_MODULES) bị khoá NGAY nếu
+  // module cha tắt, bất kể checkbox riêng của module con đang bật hay tắt — cha khoá là khoá hết con.
+  const mod = BUSINESS_MODULES.find(m => m.key === moduleKey);
+  if (mod?.parent && ma[mod.parent] === false) return false;
   return ma[moduleKey] !== false;
 }
 
@@ -3529,6 +3740,16 @@ function canAccessCarModule(user) {
   return scopeHasAny(user, user.perms?.carView) || isApproverInWorkflowMap(DB.carDeptWorkflows, user.username);
 }
 
+// Văn phòng phẩm: KHÔNG có khái niệm quyền "Xem/Tạo" riêng theo phòng ban (khác Xe/Phòng họp) — mọi
+// người đã đăng nhập (còn quyền vào module ở mục 0) đều tự đăng ký được ở kỳ đang mở, người duyệt theo
+// vppDeptWorkflows cũng vào được để xử lý, người có vppManage/admin quản lý toàn bộ. Vào module được là
+// đủ, không cần thêm điều kiện phụ như Xe/Phòng họp.
+function canAccessVppModule(user) {
+  if (!user) return false;
+  if (user.perms?.admin) return true;
+  return hasModuleAccess(user, 'vpp');
+}
+
 // Vào được module Biên bản họp hay không (cổng chung, chưa xét từng biên bản cụ thể). XEM/Sửa/Xóa/
 // Tải từng biên bản cụ thể xét riêng ở canView/Edit/Delete/DownloadMeetingMinutesRecord() bên dưới.
 function canAccessMeetingMinutesModule(user) {
@@ -3684,6 +3905,7 @@ function defaultNewUserPerms() {
     submissionView: emptyScope(), submissionCreate: emptyScope(), submissionDownload: emptyScope(),
     contractView: emptyScope(), contractCreate: emptyScope(), contractDownload: emptyScope(), contractApprove: false,
     paymentManage: false,
+    vppManage: false,
     meetingView: emptyScope(), meetingBookScope: emptyScope(),
     meetingApprove: false, meetingCancel: false,
     carView: emptyScope(), carCreate: emptyScope(), carDownload: emptyScope(),
@@ -3863,6 +4085,10 @@ async function initDatabase(loggingInUser) {
     DB.officeBuyDeptWorkflows = data.officeBuyDeptWorkflows || {};
     DB.officeFixDeptWorkflows = data.officeFixDeptWorkflows || {};
     DB.officeInvestDeptWorkflows = data.officeInvestDeptWorkflows || {};
+    DB.vppDeptWorkflows = data.vppDeptWorkflows || {};
+
+    DB.vppPeriods = data.vppPeriods || [];
+    DB.vppRegistrations = data.vppRegistrations || [];
 
     DB._versions = data._versions || {};
 
@@ -4517,6 +4743,8 @@ function finishLogin(user) {
   updateDieuHanhNavVisibility();
   document.getElementById('btnInternalTab').classList.toggle('hidden', !canAccessInternalModule(user));
   document.getElementById('btnCarTab').classList.toggle('hidden', !canAccessCarModule(user));
+  document.getElementById('btnVppTab').classList.toggle('hidden', !canAccessVppModule(user));
+  updateHanhChinhNavVisibility();
   document.getElementById('btnOfficeTab').classList.toggle('hidden', !canAccessOfficeModule(user));
 
   populateDropdowns();
@@ -4539,6 +4767,7 @@ function logout() {
   document.getElementById('minutesSection').classList.add('hidden');
   document.getElementById('internalSection').classList.add('hidden');
   document.getElementById('carSection').classList.add('hidden');
+  document.getElementById('vppSection').classList.add('hidden');
   document.getElementById('officeSection').classList.add('hidden');
   document.getElementById('systemSection').classList.add('hidden');
   document.getElementById('formSection').classList.add('hidden');
@@ -4567,6 +4796,27 @@ function closeDieuHanhDropdown() {
 document.addEventListener('click', (ev) => {
   const panel = document.getElementById('dieuHanhDropdownPanel');
   const btn = document.getElementById('btnDieuHanhTab');
+  if (!panel || panel.classList.contains('hidden')) return;
+  if (!panel.contains(ev.target) && ev.target !== btn && !btn?.contains(ev.target)) panel.classList.add('hidden');
+});
+
+// "Hành Chính" — cùng khuôn Điều Hành, bọc Phòng họp/Đăng ký xe/Văn phòng phẩm (xem HTML #hanhChinhNavWrap).
+function updateHanhChinhNavVisibility() {
+  const meetingVisible = !document.getElementById('btnMeetingTab').classList.contains('hidden');
+  const carVisible = !document.getElementById('btnCarTab').classList.contains('hidden');
+  const vppVisible = !document.getElementById('btnVppTab').classList.contains('hidden');
+  document.getElementById('hanhChinhNavWrap').classList.toggle('hidden', !meetingVisible && !carVisible && !vppVisible);
+}
+function toggleHanhChinhDropdown(e) {
+  e.stopPropagation();
+  document.getElementById('hanhChinhDropdownPanel')?.classList.toggle('hidden');
+}
+function closeHanhChinhDropdown() {
+  document.getElementById('hanhChinhDropdownPanel')?.classList.add('hidden');
+}
+document.addEventListener('click', (ev) => {
+  const panel = document.getElementById('hanhChinhDropdownPanel');
+  const btn = document.getElementById('btnHanhChinhTab');
   if (!panel || panel.classList.contains('hidden')) return;
   if (!panel.contains(ev.target) && ev.target !== btn && !btn?.contains(ev.target)) panel.classList.add('hidden');
 });
@@ -4606,6 +4856,10 @@ function switchTab(tabName) {
     alert('⛔ Bạn không có quyền truy cập Module Đăng ký xe!');
     return;
   }
+  if (tabName === 'vpp' && !canAccessVppModule(currentUser)) {
+    alert('⛔ Bạn không có quyền truy cập Module Văn phòng phẩm!');
+    return;
+  }
   if (tabName === 'office' && !canAccessOfficeModule(currentUser)) {
     alert('⛔ Bạn không có quyền truy cập Module Phê duyệt Văn phòng!');
     return;
@@ -4623,6 +4877,7 @@ function switchTab(tabName) {
   document.getElementById('minutesSection').classList.toggle('hidden', tabName !== 'minutes');
   document.getElementById('internalSection').classList.toggle('hidden', tabName !== 'internal');
   document.getElementById('carSection').classList.toggle('hidden', tabName !== 'car');
+  document.getElementById('vppSection').classList.toggle('hidden', tabName !== 'vpp');
   document.getElementById('officeSection').classList.toggle('hidden', tabName !== 'office');
   document.getElementById('systemSection').classList.toggle('hidden', tabName !== 'system');
   document.getElementById('formSection').classList.toggle('hidden', !(tabName === 'system' && activeSystemSubTab === 'FORM'));
@@ -4656,6 +4911,7 @@ function switchTab(tabName) {
   }
   if (tabName === 'internal') { setInternalSubTab(activeInternalSubTab); }
   if (tabName === 'car') { renderDynamicInputsForModule('CAR', 'dynamicFieldsContainer_CAR'); renderCarRegs(); }
+  if (tabName === 'vpp') { setVppSubTab(activeVppSubTab); }
   if (tabName === 'office') {
     let targetSub = activeOfficeSubTab;
     if (!canAccessOfficeSubTab(currentUser, targetSub)) {
@@ -11129,6 +11385,481 @@ async function processOfficeReq(actionType) {
   renderOfficeReqs();
 }
 
+// ==========================================
+// VĂN PHÒNG PHẨM — kỳ đăng ký (vppPeriods) + đăng ký của nhân viên (vppRegistrations). 3 sub-tab:
+// Đăng Ký (ai cũng vào được) / Kỳ Đăng Ký + Báo Cáo Tổng Hợp (chỉ vppManage/admin).
+// ==========================================
+function canManageVpp(user) {
+  return !!(user?.perms?.admin || user?.perms?.vppManage);
+}
+
+// Kỳ coi là ĐANG MỞ nếu status=OPEN VÀ (không đặt ngày kết thúc HOẶC chưa qua ngày kết thúc) — khớp
+// đúng điều kiện server kiểm tra ở lib/createValidation.js CREATE_MODULE_CONFIGS.vppRegistrations.
+function vppPeriodIsOpen(p) {
+  if (p.status !== 'OPEN') return false;
+  if (!p.endDate) return true;
+  const todayStr = new Date().toISOString().slice(0, 10);
+  return todayStr <= p.endDate;
+}
+
+function setVppSubTab(subTab) {
+  if ((subTab === 'PERIODS' || subTab === 'REPORTS') && !canManageVpp(currentUser)) subTab = 'REGISTER';
+  activeVppSubTab = subTab;
+
+  document.getElementById('btnVppSubPeriods').classList.toggle('hidden', !canManageVpp(currentUser));
+  document.getElementById('btnVppSubReports').classList.toggle('hidden', !canManageVpp(currentUser));
+
+  document.getElementById('vppSubRegister').classList.toggle('hidden', subTab !== 'REGISTER');
+  document.getElementById('vppSubPeriods').classList.toggle('hidden', subTab !== 'PERIODS');
+  document.getElementById('vppSubReports').classList.toggle('hidden', subTab !== 'REPORTS');
+
+  const activeCls = 'px-3 py-1.5 rounded text-xs font-bold bg-orange-700 text-white';
+  const inactiveCls = 'px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700';
+  document.getElementById('btnVppSubRegister').className = subTab === 'REGISTER' ? activeCls : inactiveCls;
+  document.getElementById('btnVppSubPeriods').className = subTab === 'PERIODS' ? activeCls : inactiveCls;
+  document.getElementById('btnVppSubReports').className = subTab === 'REPORTS' ? activeCls : inactiveCls;
+
+  if (subTab === 'REGISTER') { renderVppRegPeriodOptions(); renderVppRegistrations(); }
+  if (subTab === 'PERIODS') { renderVppPeriods(); }
+  if (subTab === 'REPORTS') { renderVppReportPeriodOptions(); renderVppReports(); }
+}
+
+// ============ ĐĂNG KÝ (mọi nhân viên) ============
+function renderVppRegPeriodOptions() {
+  const sel = document.getElementById('vppRegPeriodSelect');
+  const openPeriods = DB.vppPeriods.filter(vppPeriodIsOpen);
+  sel.innerHTML = `<option value="">-- Chọn kỳ đăng ký --</option>` +
+    openPeriods.map(p => `<option value="${p.id}">${escapeHtml(p.name)}${p.endDate ? ` (hạn ${escapeHtml(p.endDate)})` : ''}</option>`).join('');
+  document.getElementById('vppRegNoPeriodNote').classList.toggle('hidden', openPeriods.length > 0);
+  document.getElementById('vppRegItemsWrap').classList.add('hidden');
+  sel.value = '';
+}
+
+function onVppRegPeriodChange() {
+  const periodId = Number(document.getElementById('vppRegPeriodSelect').value);
+  const wrap = document.getElementById('vppRegItemsWrap');
+  if (!periodId) { wrap.classList.add('hidden'); return; }
+  const period = DB.vppPeriods.find(p => p.id === periodId);
+  if (!period) { wrap.classList.add('hidden'); return; }
+
+  document.getElementById('vppRegItemsTableBody').innerHTML = period.catalogItems.map((it, idx) => `
+    <tr>
+      <td class="border p-2">${escapeHtml(it.name)}</td>
+      <td class="border p-2 text-gray-500">${escapeHtml(it.unit)}</td>
+      <td class="border p-1"><input type="number" min="0" step="1" id="vppItemQty_${idx}" class="w-full border p-1 rounded text-xs" placeholder="0"></td>
+    </tr>
+  `).join('');
+  wrap.classList.remove('hidden');
+}
+
+async function submitVppRegistration() {
+  const periodId = Number(document.getElementById('vppRegPeriodSelect').value);
+  if (!periodId) return alert('Vui lòng chọn kỳ đăng ký!');
+  const period = DB.vppPeriods.find(p => p.id === periodId);
+  if (!period) return alert('Không tìm thấy kỳ đăng ký!');
+
+  const items = period.catalogItems
+    .map((it, idx) => ({ name: it.name, unit: it.unit, qty: Number(document.getElementById(`vppItemQty_${idx}`)?.value) || 0 }))
+    .filter(it => it.qty > 0);
+  if (!items.length) return alert('Vui lòng nhập số lượng cho ít nhất 1 mặt hàng!');
+
+  const payload = {
+    code: `DK-VPP-${period.code || period.id}-${currentUser.username}-${Date.now()}`,
+    periodId, items,
+    createdAt: new Date().toLocaleString('vi-VN'),
+    status: 'PENDING', currentStep: 1, history: []
+  };
+
+  let newReg;
+  try {
+    const result = await callCreateAction('vppRegistrations', payload);
+    newReg = result.item;
+  } catch (err) {
+    return alert(`⛔ ${err.message}`);
+  }
+
+  DB.vppRegistrations.unshift(newReg);
+  logSystemAction('VPP', 'CREATE_VPP_REG', `Đăng ký Văn phòng phẩm kỳ [${period.name}]: ${items.length} mặt hàng`, 'SUCCESS', newReg.code);
+  alert('✅ Đăng ký Văn phòng phẩm thành công, đang chờ phê duyệt!');
+  renderVppRegPeriodOptions();
+  renderVppRegistrations();
+
+  const wfConfig = DB.vppDeptWorkflows[newReg.dept] || { workflowId: 'WF_1STEP', approvers: { 1: ['admin'] } };
+  const approvers = wfConfig.approvers?.[1] || [];
+  if (approvers.length) {
+    notifyUsersByEmail('VPP', 'NOTIFY_APPROVAL_NEEDED', newReg.code, approvers,
+      `[VPDT] Đăng ký Văn phòng phẩm ${newReg.code} cần bạn phê duyệt`,
+      `Đăng ký Văn phòng phẩm kỳ "${period.name}" của ${newReg.creatorName} đang chờ bạn phê duyệt.`);
+  }
+}
+
+function vppRegStatusBadge(r) {
+  if (r.status === 'APPROVED') return `<span class="px-2 py-0.5 bg-green-100 text-green-800 rounded font-bold text-xs">✅ Đã phê duyệt</span>`;
+  if (r.status === 'REJECTED') return `<span class="px-2 py-0.5 bg-red-100 text-red-800 rounded font-bold text-xs">❌ Từ chối</span>`;
+  return `<span class="px-2 py-0.5 bg-indigo-100 text-indigo-800 rounded font-bold text-xs">⏳ Chờ duyệt</span>`;
+}
+
+function renderVppRegistrations() {
+  const tbody = document.getElementById('vppRegTableBody');
+  if (!tbody) return;
+
+  const canManage = canManageVpp(currentUser);
+  const visible = DB.vppRegistrations.filter(r =>
+    canManage || r.creator === currentUser.username || isApproverForDeptWorkflow(DB.vppDeptWorkflows[r.dept], currentUser.username));
+
+  document.getElementById('paginationContainer_vppReg').innerHTML = buildPaginationBoxHTML('vppReg', 'renderVppRegistrations');
+  const page = paginateList('vppReg', visible, 'renderVppRegistrations', 'đăng ký');
+
+  if (page.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="5" class="text-center p-6 text-gray-500 italic">Chưa có đăng ký nào.</td></tr>`;
+    return;
+  }
+
+  tbody.innerHTML = page.map(r => {
+    const wfConfig = DB.vppDeptWorkflows[r.dept] || { workflowId: 'WF_1STEP', approvers: { 1: ['admin'] } };
+    const currentStepApprovers = wfConfig.approvers?.[r.currentStep] || [];
+    const canApprove = (r.status === 'PENDING') && canApproveStep(currentUser, currentStepApprovers, r.history, r.currentStep);
+    const primaryBtnHTML = `<button onclick="openVppRegModal(${r.id})" class="px-2.5 py-1 ${canApprove ? 'bg-orange-600 text-white' : 'bg-gray-600 text-white'} rounded text-xs hover:opacity-90 font-bold">${canApprove ? '✍️ Xử lý / Duyệt' : '👁️ Xem chi tiết'}</button>`;
+    const secondaryOptions = [];
+    if (currentUser.perms?.admin) secondaryOptions.push({ value: 'delete', label: '🗑️ Xóa' });
+    return `
+      <tr class="hover:bg-gray-50 border-b">
+        <td class="border p-2">${escapeHtml(r.periodName || '')}</td>
+        <td class="border p-2">${escapeHtml(r.creatorName)}<br><span class="text-xs text-gray-500">${escapeHtml(r.dept)}</span></td>
+        <td class="border p-2 text-center">${r.items.length}</td>
+        <td class="border p-2">${vppRegStatusBadge(r)}</td>
+        <td class="border p-2 text-center space-x-1">${buildActionCell(r.id, primaryBtnHTML, secondaryOptions, 'runVppRegAction')}</td>
+      </tr>
+    `;
+  }).join('');
+}
+
+function runVppRegAction(id, action) {
+  switch (action) {
+    case 'delete': deleteVppRegAction(id); break;
+  }
+}
+
+function deleteVppRegAction(id) {
+  const r = DB.vppRegistrations.find(x => x.id === id);
+  if (!r) return;
+  deleteRecordAdminOnly('vppRegistrations', id, `đăng ký Văn phòng phẩm ${r.code}`, () => {
+    DB.vppRegistrations = DB.vppRegistrations.filter(x => x.id !== id);
+    logSystemAction('VPP', 'DELETE_VPP_REG', `Xóa đăng ký Văn phòng phẩm [${r.code}]`, 'SUCCESS', r.code);
+    renderVppRegistrations();
+  });
+}
+
+function openVppRegModal(regId) {
+  currentProcessingVppRegId = regId;
+  const r = DB.vppRegistrations.find(item => item.id === regId);
+  if (!r) return;
+
+  const wfConfig = DB.vppDeptWorkflows[r.dept] || { workflowId: 'WF_1STEP', approvers: { 1: ['admin'] } };
+  const wf = DB.workflows.find(w => w.id === wfConfig.workflowId) || { steps: [{ name: 'Sếp duyệt' }] };
+
+  document.getElementById('vppRegModalTitle').innerText = `🖇️ Xử Lý Đăng Ký Văn Phòng Phẩm: ${r.code}`;
+  document.getElementById('vppRegModalSub').innerText = `Kỳ: ${r.periodName} | Phòng ban: ${r.dept} | Người đăng ký: ${r.creatorName}`;
+
+  document.getElementById('vppRegModalItems').innerHTML = `
+    <div class="overflow-x-auto">
+      <table class="w-full border-collapse border text-xs bg-white">
+        <thead><tr class="bg-gray-100 text-left"><th class="border p-1">Mặt hàng</th><th class="border p-1">Đơn vị</th><th class="border p-1 text-center">Số lượng</th></tr></thead>
+        <tbody>
+          ${r.items.map(it => `<tr><td class="border p-1">${escapeHtml(it.name)}</td><td class="border p-1">${escapeHtml(it.unit)}</td><td class="border p-1 text-center">${it.qty}</td></tr>`).join('')}
+        </tbody>
+      </table>
+    </div>
+  `;
+  document.getElementById('txtVppRegComment').value = '';
+
+  const historyHTML = (r.history || []).map(h => `
+    <div class="bg-white p-2 rounded border text-xs space-y-1">
+      <div class="flex justify-between font-bold text-gray-700">
+        <span>${escapeHtml(h.approver)} (${escapeHtml(h.username)})</span>
+        <span class="text-gray-400 font-normal">${escapeHtml(h.time)}</span>
+      </div>
+      <div class="text-gray-600">Hành động: <span class="font-bold text-blue-600">${escapeHtml(h.action)}</span> — Bước ${h.step}${h.stepName ? ` (${escapeHtml(h.stepName)})` : ''}</div>
+      ${h.comment ? `<div class="text-gray-800 bg-amber-50 p-1.5 rounded border italic">"${escapeHtml(h.comment)}"</div>` : ''}
+    </div>
+  `).join('');
+  document.getElementById('vppRegModalHistory').innerHTML = historyHTML || '<div class="text-gray-400 italic">Chưa có lịch sử xử lý.</div>';
+
+  const currentStepApprovers = wfConfig.approvers?.[r.currentStep] || [];
+  const canApprove = (r.status === 'PENDING') && canApproveStep(currentUser, currentStepApprovers, r.history, r.currentStep);
+  const actionBtns = document.getElementById('vppRegModalActionBtns');
+  if (canApprove) {
+    actionBtns.innerHTML = `
+      <button onclick="confirmProcessVppReg('REJECT')" class="bg-red-600 text-white px-4 py-1.5 rounded font-bold hover:bg-red-700 text-xs">❌ Từ Chối</button>
+      <button onclick="confirmProcessVppReg('APPROVE')" class="bg-green-600 text-white px-5 py-1.5 rounded font-bold hover:bg-green-700 text-xs">✅ Phê Duyệt & Chuyển Bước</button>
+    `;
+  } else {
+    actionBtns.innerHTML = `<span class="text-gray-500 italic text-xs">Bạn chỉ có quyền xem thông tin đăng ký này.</span>`;
+  }
+
+  document.getElementById('vppRegModal').classList.remove('hidden');
+}
+
+function closeVppRegModal() {
+  document.getElementById('vppRegModal').classList.add('hidden');
+  currentProcessingVppRegId = null;
+}
+
+function confirmProcessVppReg(actionType) {
+  const comment = document.getElementById('txtVppRegComment').value.trim();
+  if (actionType === 'REJECT' && !comment) return alert('Vui lòng nhập lý do từ chối!');
+  const isApprove = actionType === 'APPROVE';
+  showConfirmModal({
+    title: isApprove ? '✅ Xác Nhận Phê Duyệt' : '❌ Xác Nhận Từ Chối',
+    bodyHTML: `<p>Bạn có chắc chắn muốn <b>${isApprove ? 'phê duyệt' : 'từ chối'}</b> đăng ký này?</p>${comment ? `<p class="mt-2 italic text-gray-600">Ghi chú: "${escapeHtml(comment)}"</p>` : ''}`,
+    confirmLabel: isApprove ? 'Phê Duyệt' : 'Từ Chối',
+    onConfirm: () => processVppReg(actionType)
+  });
+}
+
+async function processVppReg(actionType) {
+  if (!currentProcessingVppRegId) return;
+  const r = DB.vppRegistrations.find(item => item.id === currentProcessingVppRegId);
+  if (!r) return;
+  const comment = document.getElementById('txtVppRegComment').value.trim();
+
+  let result;
+  try {
+    result = await callWorkflowAction('vppRegistrations', r.id, actionType === 'REJECT' ? 'reject' : 'approve', { comment });
+  } catch (e) {
+    return alert('⛔ ' + e.message);
+  }
+
+  const updatedReg = result.item;
+  const idx = DB.vppRegistrations.findIndex(item => item.id === r.id);
+  if (idx !== -1) DB.vppRegistrations[idx] = updatedReg;
+
+  let msg = '✅ Đã cập nhật trạng thái đăng ký!';
+  const transition = result.transition;
+  if (transition.type === 'REJECTED') {
+    notifyUsersByEmail('VPP', 'NOTIFY_REJECTED', updatedReg.code, [updatedReg.creator],
+      `[VPDT] Đăng ký Văn phòng phẩm ${updatedReg.code} bị từ chối`,
+      `Đăng ký Văn phòng phẩm của bạn đã bị từ chối. Lý do: ${comment}`);
+    msg = '✅ Đã từ chối đăng ký!';
+  } else if (transition.type === 'ADVANCED') {
+    msg = getStepAdvanceMessage(transition.stepApprovers);
+    if (transition.nextApprovers.length) {
+      notifyUsersByEmail('VPP', 'NOTIFY_APPROVAL_NEEDED', updatedReg.code, transition.nextApprovers,
+        `[VPDT] Đăng ký Văn phòng phẩm ${updatedReg.code} cần bạn phê duyệt`,
+        `Đăng ký Văn phòng phẩm của ${updatedReg.creatorName} đang chờ bạn phê duyệt ở bước "${transition.nextStepName}".`);
+    }
+  } else if (transition.type === 'COMPLETED') {
+    msg = '✅ Phê duyệt đăng ký Văn phòng phẩm thành công!';
+    notifyUsersByEmail('VPP', 'NOTIFY_APPROVED', updatedReg.code, [updatedReg.creator],
+      `[VPDT] Đăng ký Văn phòng phẩm ${updatedReg.code} đã được phê duyệt`,
+      `Đăng ký Văn phòng phẩm của bạn đã được phê duyệt hoàn tất.`);
+  } else if (transition.type === 'PARTIAL_APPROVE') {
+    msg = '✅ Đã ghi nhận phê duyệt của bạn — đang chờ các đồng phê duyệt còn lại ở bước này.';
+  }
+
+  logSystemAction('VPP', `PROCESS_${actionType}`, `Xử lý đăng ký Văn phòng phẩm [${updatedReg.code}]: ${actionType}`, 'SUCCESS', updatedReg.code);
+  alert(msg);
+  closeVppRegModal();
+  renderVppRegistrations();
+}
+
+// ============ KỲ ĐĂNG KÝ (quản lý — chỉ vppManage/admin) ============
+let vppPendingCatalog = null; // { items, fileUrl, fileName } — kết quả đọc file gần nhất, chờ bấm "Tạo Kỳ Đăng Ký"
+
+async function onVppCatalogFileChange(event) {
+  const file = event.target.files[0];
+  vppPendingCatalog = null;
+  document.getElementById('vppCatalogPreviewWrap').classList.add('hidden');
+  const statusEl = document.getElementById('vppCatalogStatus');
+  if (!file) { statusEl.innerText = ''; return; }
+
+  statusEl.innerText = '⏳ Đang đọc file...';
+  const formData = new FormData();
+  formData.append('file', file);
+  try {
+    const res = await fetch('/api/vpp/parse-catalog', { method: 'POST', body: formData });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Lỗi không xác định');
+    vppPendingCatalog = data;
+    statusEl.innerText = `✅ Đọc thành công ${data.items.length} mặt hàng từ file "${data.fileName}".`;
+    document.getElementById('vppCatalogPreviewCount').innerText = data.items.length;
+    document.getElementById('vppCatalogPreviewBody').innerHTML = data.items.map(it =>
+      `<tr><td class="border p-1">${escapeHtml(it.name)}</td><td class="border p-1">${escapeHtml(it.unit)}</td></tr>`).join('');
+    document.getElementById('vppCatalogPreviewWrap').classList.remove('hidden');
+  } catch (err) {
+    statusEl.innerText = `⛔ ${err.message}`;
+    event.target.value = '';
+  }
+}
+
+async function createVppPeriod() {
+  const name = document.getElementById('vppNewPeriodName').value.trim();
+  const startDate = document.getElementById('vppNewPeriodStart').value;
+  const endDate = document.getElementById('vppNewPeriodEnd').value;
+  if (!name) return alert('Vui lòng nhập tên kỳ đăng ký!');
+  if (!vppPendingCatalog) return alert('Vui lòng tải lên file danh mục mặt hàng!');
+  if (startDate && endDate && endDate < startDate) return alert('Ngày kết thúc phải sau ngày bắt đầu!');
+
+  const payload = {
+    code: `VPP-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}-${Date.now().toString().slice(-5)}`,
+    name, startDate: startDate || '', endDate: endDate || '',
+    catalogItems: vppPendingCatalog.items,
+    catalogFileUrl: vppPendingCatalog.fileUrl, catalogFileName: vppPendingCatalog.fileName,
+    createdAt: new Date().toLocaleString('vi-VN')
+  };
+
+  let newPeriod;
+  try {
+    const result = await callCreateAction('vppPeriods', payload);
+    newPeriod = result.item;
+  } catch (err) {
+    return alert(`⛔ ${err.message}`);
+  }
+
+  DB.vppPeriods.unshift(newPeriod);
+  logSystemAction('VPP', 'CREATE_VPP_PERIOD', `Tạo kỳ đăng ký Văn phòng phẩm [${newPeriod.name}]`, 'SUCCESS', newPeriod.code);
+  alert('✅ Đã tạo kỳ đăng ký mới!');
+
+  document.getElementById('vppNewPeriodName').value = '';
+  document.getElementById('vppNewPeriodStart').value = '';
+  document.getElementById('vppNewPeriodEnd').value = '';
+  document.getElementById('vppCatalogFileInput').value = '';
+  document.getElementById('vppCatalogPreviewWrap').classList.add('hidden');
+  document.getElementById('vppCatalogStatus').innerText = '';
+  vppPendingCatalog = null;
+  renderVppPeriods();
+}
+
+function vppPeriodStatusBadge(p) {
+  if (!vppPeriodIsOpen(p)) return `<span class="px-2 py-0.5 bg-gray-200 text-gray-700 rounded font-bold text-xs">🔒 Đã kết thúc</span>`;
+  return `<span class="px-2 py-0.5 bg-green-100 text-green-800 rounded font-bold text-xs">🟢 Đang mở</span>`;
+}
+
+function renderVppPeriods() {
+  const tbody = document.getElementById('vppPeriodsTableBody');
+  if (!tbody) return;
+  if (!DB.vppPeriods.length) {
+    tbody.innerHTML = `<tr><td colspan="6" class="text-center p-6 text-gray-500 italic">Chưa có kỳ đăng ký nào.</td></tr>`;
+    return;
+  }
+  tbody.innerHTML = DB.vppPeriods.map(p => {
+    const regCount = DB.vppRegistrations.filter(r => r.periodId === p.id).length;
+    const isOpen = vppPeriodIsOpen(p);
+    const secondaryOptions = [];
+    if (isOpen) secondaryOptions.push({ value: 'close', label: '🔒 Kết Thúc Kỳ' });
+    if (currentUser.perms?.admin) secondaryOptions.push({ value: 'delete', label: '🗑️ Xóa' });
+    const primaryBtnHTML = `<span class="text-gray-400 italic text-[11px]">—</span>`;
+    return `
+      <tr class="hover:bg-gray-50 border-b">
+        <td class="border p-2 font-bold text-orange-800">${escapeHtml(p.name)}</td>
+        <td class="border p-2 text-xs">${p.startDate ? escapeHtml(p.startDate) : '(không giới hạn)'} ➔ ${p.endDate ? escapeHtml(p.endDate) : '(không giới hạn)'}</td>
+        <td class="border p-2 text-center">${p.catalogItems.length}</td>
+        <td class="border p-2 text-center">${regCount}</td>
+        <td class="border p-2">${vppPeriodStatusBadge(p)}</td>
+        <td class="border p-2 text-center space-x-1">${buildActionCell(p.id, primaryBtnHTML, secondaryOptions, 'runVppPeriodAction')}</td>
+      </tr>
+    `;
+  }).join('');
+}
+
+function runVppPeriodAction(id, action) {
+  switch (action) {
+    case 'close': closeVppPeriodAction(id); break;
+    case 'delete': deleteVppPeriodAction(id); break;
+  }
+}
+
+function closeVppPeriodAction(id) {
+  const p = DB.vppPeriods.find(x => x.id === id);
+  if (!p) return;
+  showConfirmModal({
+    title: 'Kết Thúc Kỳ Đăng Ký',
+    bodyHTML: `Bạn có chắc chắn muốn kết thúc kỳ <b>${escapeHtml(p.name)}</b>? Sau khi kết thúc, không ai đăng ký thêm được nữa.`,
+    confirmLabel: 'Kết Thúc Kỳ',
+    onConfirm: async () => {
+      try {
+        const result = await callRecordAction('vppPeriods', id, 'close', {});
+        const idx = DB.vppPeriods.findIndex(x => x.id === id);
+        if (idx !== -1) DB.vppPeriods[idx] = result.item;
+      } catch (err) { return alert(`⛔ ${err.message}`); }
+      logSystemAction('VPP', 'CLOSE_VPP_PERIOD', `Kết thúc kỳ đăng ký Văn phòng phẩm [${p.name}]`, 'SUCCESS', p.code);
+      renderVppPeriods();
+    }
+  });
+}
+
+function deleteVppPeriodAction(id) {
+  const p = DB.vppPeriods.find(x => x.id === id);
+  if (!p) return;
+  deleteRecordAdminOnly('vppPeriods', id, `kỳ đăng ký Văn phòng phẩm ${p.name}`, () => {
+    DB.vppPeriods = DB.vppPeriods.filter(x => x.id !== id);
+    logSystemAction('VPP', 'DELETE_VPP_PERIOD', `Xóa kỳ đăng ký Văn phòng phẩm [${p.name}]`, 'SUCCESS', p.code);
+    renderVppPeriods();
+  });
+}
+
+// ============ BÁO CÁO TỔNG HỢP (quản lý — chỉ vppManage/admin) ============
+function renderVppReportPeriodOptions() {
+  const sel = document.getElementById('vppReportPeriodSelect');
+  const prevValue = sel.value;
+  sel.innerHTML = DB.vppPeriods.map(p => `<option value="${p.id}">${escapeHtml(p.name)}</option>`).join('');
+  if (prevValue && DB.vppPeriods.some(p => String(p.id) === prevValue)) sel.value = prevValue;
+}
+
+function renderVppReports() {
+  const periodId = Number(document.getElementById('vppReportPeriodSelect').value);
+  const byDeptBody = document.getElementById('vppReportByDeptBody');
+  const byItemBody = document.getElementById('vppReportByItemBody');
+  if (!periodId) {
+    byDeptBody.innerHTML = `<tr><td colspan="5" class="text-center p-4 text-gray-500 italic">Chưa có kỳ đăng ký nào để xem báo cáo.</td></tr>`;
+    byItemBody.innerHTML = '';
+    return;
+  }
+  const regs = DB.vppRegistrations.filter(r => r.periodId === periodId);
+
+  // Tổng hợp theo phòng ban — cùng kiểu reducer với computeApprovalStats() (Báo cáo quản trị).
+  const byDept = {};
+  regs.forEach(r => {
+    if (!byDept[r.dept]) byDept[r.dept] = { total: 0, pending: 0, approved: 0, rejected: 0 };
+    byDept[r.dept].total++;
+    if (r.status === 'PENDING') byDept[r.dept].pending++;
+    else if (r.status === 'APPROVED') byDept[r.dept].approved++;
+    else if (r.status === 'REJECTED') byDept[r.dept].rejected++;
+  });
+  const deptRows = Object.entries(byDept);
+  byDeptBody.innerHTML = deptRows.length
+    ? deptRows.map(([dept, s]) => `
+        <tr>
+          <td class="border p-2 font-semibold">${escapeHtml(dept)}</td>
+          <td class="border p-2 text-center">${s.total}</td>
+          <td class="border p-2 text-center text-indigo-700">${s.pending}</td>
+          <td class="border p-2 text-center text-green-700">${s.approved}</td>
+          <td class="border p-2 text-center text-red-700">${s.rejected}</td>
+        </tr>
+      `).join('')
+    : `<tr><td colspan="5" class="text-center p-4 text-gray-500 italic">Chưa có đăng ký nào ở kỳ này.</td></tr>`;
+
+  // Tổng hợp theo mặt hàng — gộp trùng tên (đã đảm bảo tên khớp chính xác vì chọn từ danh mục có sẵn),
+  // cộng dồn số lượng từ TẤT CẢ đăng ký (chờ duyệt + đã duyệt), không tính bản bị từ chối.
+  const byItem = {};
+  regs.filter(r => r.status !== 'REJECTED').forEach(r => {
+    r.items.forEach(it => {
+      if (!byItem[it.name]) byItem[it.name] = { unit: it.unit, qty: 0 };
+      byItem[it.name].qty += it.qty;
+    });
+  });
+  const itemRows = Object.entries(byItem).sort((a, b) => b[1].qty - a[1].qty);
+  byItemBody.innerHTML = itemRows.length
+    ? itemRows.map(([name, s]) => `
+        <tr>
+          <td class="border p-2">${escapeHtml(name)}</td>
+          <td class="border p-2 text-gray-500">${escapeHtml(s.unit)}</td>
+          <td class="border p-2 text-center font-bold">${s.qty}</td>
+        </tr>
+      `).join('')
+    : `<tr><td colspan="3" class="text-center p-4 text-gray-500 italic">Chưa có mặt hàng nào được đăng ký.</td></tr>`;
+}
+
 // Dựng HTML "Phiếu Phê Duyệt Đề Xuất Văn Phòng" — dùng lại khung chung buildApprovalSlipShellHTML()
 // giống hệt pattern đã áp dụng cho Đăng Ký Xe và Văn Bản Trình.
 function buildOfficeApprovalSlipHTML(o) {
@@ -11626,7 +12357,8 @@ const WF_MODULE_CONFIG = {
   CAR: { dbKey: 'carDeptWorkflows', label: 'Đăng ký xe', title: '🚗 Cấu Hình Quy Trình Đăng Ký Xe Theo Phòng Ban' },
   OFFICE_BUY: { dbKey: 'officeBuyDeptWorkflows', label: 'Mua bán VP', title: '🛒 Cấu Hình Quy Trình Phê Duyệt Mua Bán VP Theo Phòng Ban' },
   OFFICE_FIX: { dbKey: 'officeFixDeptWorkflows', label: 'Sửa chữa VP', title: '🔧 Cấu Hình Quy Trình Phê Duyệt Sửa Chữa VP Theo Phòng Ban' },
-  OFFICE_INVEST: { dbKey: 'officeInvestDeptWorkflows', label: 'Đầu tư VP', title: '📈 Cấu Hình Quy Trình Phê Duyệt Đầu Tư VP Theo Phòng Ban' }
+  OFFICE_INVEST: { dbKey: 'officeInvestDeptWorkflows', label: 'Đầu tư VP', title: '📈 Cấu Hình Quy Trình Phê Duyệt Đầu Tư VP Theo Phòng Ban' },
+  VPP: { dbKey: 'vppDeptWorkflows', label: 'Văn phòng phẩm', title: '🖇️ Cấu Hình Quy Trình Phê Duyệt Đăng Ký Văn Phòng Phẩm Theo Phòng Ban' }
 };
 
 // Danh sách LOẠI của 1 module quy trình (hiện chỉ Văn bản trình có) — đọc trực tiếp từ DB.submissionTypes
@@ -12114,12 +12846,29 @@ function renderContractTypeAbbrList() {
 function renderModuleAccessCheckboxes(containerId = 'moduleAccessCheckboxes', prefix = 'pModuleAccess') {
   const el = document.getElementById(containerId);
   if (!el) return;
-  el.innerHTML = BUSINESS_MODULES.map(m => `
+  // Module con (field "parent", vd Xe/Phòng họp/VPP thuộc "hanhchinh") render LỒNG dưới đúng module
+  // cha thay vì liệt kê ngang hàng — nhưng vẫn là checkbox pModuleAccess_<key> ĐẦY ĐỦ (không phải
+  // subModules dạng boolean phụ), nên readModuleAccessFromForm()/populateModuleAccessForm() không cần
+  // đổi gì (đã lặp qua toàn bộ mảng phẳng sẵn).
+  const topLevel = BUSINESS_MODULES.filter(m => !m.parent);
+  el.innerHTML = topLevel.map(m => {
+    const childModules = BUSINESS_MODULES.filter(c => c.parent === m.key);
+    return `
     <div class="bg-slate-50 px-2 py-1 rounded border">
       <label class="flex items-center gap-1.5 text-gray-700 cursor-pointer">
         <input type="checkbox" id="${prefix}_${m.key}" checked>
         <span>${escapeHtml(m.label)}</span>
       </label>
+      ${childModules.length ? `
+        <div class="pl-4 mt-1 space-y-0.5 border-l-2 border-slate-200">
+          ${childModules.map(c => `
+            <label class="flex items-center gap-1.5 text-gray-600 text-[11px] cursor-pointer">
+              <input type="checkbox" id="${prefix}_${c.key}" checked>
+              <span>${escapeHtml(c.label)}</span>
+            </label>
+          `).join('')}
+        </div>
+      ` : ''}
       ${(m.subModules && m.subModules.length) ? `
         <div class="pl-4 mt-1 space-y-0.5 border-l-2 border-slate-200">
           ${m.subModules.map(sm => `
@@ -12131,7 +12880,8 @@ function renderModuleAccessCheckboxes(containerId = 'moduleAccessCheckboxes', pr
         </div>
       ` : ''}
     </div>
-  `).join('');
+  `;
+  }).join('');
 }
 
 function readModuleAccessFromForm(prefix = 'pModuleAccess') {
@@ -12300,6 +13050,7 @@ function collectPermsFromForm() {
     contractDownload: scopeFromForm('pContractDownloadAll', 'pContractDownloadDept'),
     contractApprove: document.getElementById('pContractApprove').checked,
     paymentManage: document.getElementById('pPaymentManage').checked,
+    vppManage: document.getElementById('pVppManage').checked,
     meetingView: scopeFromForm('pMeetingViewAll', 'pMeetingViewDept'),
     meetingBookScope: scopeFromForm('pMeetingBookAll', 'pMeetingBookDept'),
     carView: scopeFromForm('pCarViewAll', 'pCarViewDept'),
@@ -12366,6 +13117,7 @@ function populatePermsForm(permsInput) {
   document.getElementById('pContractDownloadAll').checked = !!perms.contractDownload?.all;
   document.getElementById('pContractApprove').checked = !!perms.contractApprove;
   document.getElementById('pPaymentManage').checked = !!perms.paymentManage;
+  document.getElementById('pVppManage').checked = !!perms.vppManage;
   document.getElementById('pMeetingViewAll').checked = !!perms.meetingView?.all;
   document.getElementById('pMeetingBookAll').checked = !!perms.meetingBookScope?.all;
   document.getElementById('pCarViewAll').checked = !!perms.carView?.all;
@@ -12809,6 +13561,7 @@ function resetUserForm() {
   document.getElementById('pInternalPostApprove').checked = !!defaults.internalPostApprove;
   document.getElementById('pContractApprove').checked = !!defaults.contractApprove;
   document.getElementById('pPaymentManage').checked = !!defaults.paymentManage;
+  document.getElementById('pVppManage').checked = !!defaults.vppManage;
   document.getElementById('pMeetingApprove').checked = defaults.meetingApprove;
   document.getElementById('pMeetingCancel').checked = defaults.meetingCancel;
   document.getElementById('pOfficeBuy').checked = defaults.officeBuy;
@@ -12910,6 +13663,7 @@ function summarizeUserPerms(perms) {
   if (hasScope(perms.contractView) || hasScope(perms.contractCreate)) parts.push('📄 Hợp đồng');
   if (perms.contractApprove) parts.push('📄 Hợp đồng (duyệt)');
   if (perms.paymentManage) parts.push('💰 Thanh toán');
+  if (perms.vppManage) parts.push('🖇️ Quản lý VPP');
   if (hasScope(perms.meetingView) || hasScope(perms.meetingBookScope) || perms.meetingApprove || perms.meetingCancel) parts.push('📅 Phòng họp');
   if (hasScope(perms.carView) || hasScope(perms.carCreate)) parts.push('🚗 Xe');
   if ((hasScope(perms.officeView) || hasScope(perms.officeCreate)) && (perms.officeBuy || perms.officeFix || perms.officeInvest)) parts.push('🏢 VP');

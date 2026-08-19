@@ -88,6 +88,7 @@ const DEFAULTS = {
   officeBuyDeptWorkflows: {},
   officeFixDeptWorkflows: {},
   officeInvestDeptWorkflows: {},
+  vppDeptWorkflows: {},
 
   // Phân quyền theo module (submissionView/Create, contractView/Create, meetingView/BookScope,
   // carView/Create, officeView/Create) dùng dạng { all, depts } — xem/tạo mới theo TOÀN CÔNG TY
