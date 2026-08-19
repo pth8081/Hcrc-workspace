@@ -244,6 +244,10 @@
             <label class="block font-semibold text-gray-600 mb-1">Loại Tờ Trình</label>
             <select id="subType" class="w-full border p-1.5 rounded bg-white" required></select>
           </div>
+          <div>
+            <label class="block font-semibold text-gray-600 mb-1">Cấp Phê Duyệt Cuối Cùng</label>
+            <select id="subApprovalLevel" class="w-full border p-1.5 rounded bg-white font-semibold" onchange="renderSubmissionApprovalLayerCheckboxes()"></select>
+          </div>
           <div class="relative">
             <label class="block font-semibold text-gray-600 mb-1">Phê Duyệt</label>
             <button type="button" id="subApprovalDropdownBtn" onclick="toggleSubApprovalDropdown(event)" class="w-full border p-1.5 rounded bg-white text-left flex justify-between items-center gap-1">
@@ -277,8 +281,8 @@
         <div id="dynamicFieldsContainer_SUBMISSION" class="grid grid-cols-1 md:grid-cols-3 gap-3 border-t pt-3"></div>
 
         <div id="subApprovalLayersSection" class="hidden border-t pt-3">
-          <label class="block font-semibold text-gray-600 mb-1">Cấp Phê Duyệt Bổ Sung & Xin Ý Kiến (tuỳ chọn)</label>
-          <p class="text-[11px] text-gray-500 italic mb-1.5">Chọn CỤ THỂ những ai (trong số người admin đã gán vào nhóm đó) cho từng lớp đã tick ở "Phê duyệt". "Đồng trình/Đồng cấp/BGD/Trợ lý-Thư ký/TGĐ-Chủ tịch" cộng thêm 1 bước duyệt vào cuối quy trình; riêng "Xin ý kiến" chỉ để tham khảo, không chặn quy trình duyệt.</p>
+          <label class="block font-semibold text-gray-600 mb-1">Cấp Phê Duyệt Bổ Sung & Xin Ý Kiến</label>
+          <p class="text-[11px] text-gray-500 italic mb-1.5">Chọn CỤ THỂ những ai (trong số người admin đã gán vào nhóm đó) cho từng lớp đã tick ở "Phê duyệt". "Đồng trình/Đồng cấp/GĐ-PGĐ/Phó TGĐ/Trợ lý-Thư ký/TGĐ" cộng thêm 1 bước duyệt vào cuối quy trình; riêng "Xin ý kiến" chỉ để tham khảo, không chặn quy trình duyệt. Các lớp đánh dấu "bắt buộc" do "Cấp Phê Duyệt Cuối Cùng" quyết định, không thể bỏ tick.</p>
           <div id="subApprovalLayersContainer" class="flex flex-wrap gap-3"></div>
         </div>
 
@@ -3393,27 +3397,72 @@ const BUSINESS_MODULES = [
 // (seed đúng 5 giá trị cũ trong defaults.js, xem lib/createValidation.js SUBMISSION_TYPES_FALLBACK để
 // biết vì sao vẫn còn 1 bản fallback y hệt ở server).
 
-// 4 lớp phê duyệt BỔ SUNG tuỳ chọn cho Văn bản trình — cộng thêm vào SAU quy trình phòng ban (gốc),
-// theo đúng thứ tự cố định dưới đây: Đồng trình -> Phê duyệt đồng cấp -> Xin ý kiến (tham khảo trước,
-// không chặn) -> Ban Giám Đốc/Ban Tổng Giám Đốc -> Tổng Giám Đốc/Chủ Tịch (chỉ đạo cuối cùng). Người
-// trình tick chọn lớp nào khi tạo tờ trình thì lớp đó được thêm vào cuối quy trình hiệu lực của đúng
-// tờ trình đó (xem submitSubmissionReq()). Thành viên từng lớp do admin gán ở màn "Quản Lý Nhóm Phê
-// Duyệt Trình" (DB.submissionApprovalGroups).
+// 7 lớp phê duyệt BỔ SUNG tuỳ chọn cho Văn bản trình — cộng thêm vào SAU quy trình phòng ban (gốc,
+// theo Loại Tờ Trình/phòng ban, KHÔNG đổi), theo đúng thứ tự cố định dưới đây: Đồng trình -> Phê duyệt
+// đồng cấp -> Xin ý kiến (tham khảo trước, không chặn) -> Giám Đốc/Phó Giám Đốc -> Phó Tổng Giám Đốc ->
+// Bộ Phận Trợ Lý/Thư Ký -> Tổng Giám Đốc (chỉ đạo cuối cùng). Người trình tick chọn lớp nào khi tạo tờ
+// trình thì lớp đó được thêm vào cuối quy trình hiệu lực của đúng tờ trình đó (xem
+// submitSubmissionReq()). Thành viên từng lớp do admin gán ở màn "Quản Lý Nhóm Phê Duyệt Trình"
+// (DB.submissionApprovalGroups).
 // blocking:true = trở thành 1 BƯỚC DUYỆT thật trong effectiveSteps (chặn quy trình, theo ĐÚNG thứ tự
 // xuất hiện trong mảng này — xem buildEffectiveSubmissionWorkflow()). blocking:false (XIN_Y_KIEN) =
 // kênh tham khảo song song, không chiếm 1 bước, không chặn, không có nút Duyệt/Từ chối — nhưng vị trí
-// của nó trong mảng vẫn có ý nghĩa: các bước CHẶN nằm SAU nó (BGD, TGD_CT) sẽ hiện cảnh báo cho người
-// duyệt nếu còn người được xin ý kiến chưa phản hồi (xem isSubmissionLayerAfterOpinion() +
-// openProcessSubmissionModal()). buildEffectiveSubmissionWorkflow() bên dưới + lib/createValidation.js
-// (LƯU Ý BẢO TRÌ, 2 bản độc lập, phải sửa đồng thời).
+// của nó trong mảng vẫn có ý nghĩa: các bước CHẶN nằm SAU nó sẽ hiện cảnh báo cho người duyệt nếu còn
+// người được xin ý kiến chưa phản hồi (xem isSubmissionLayerAfterOpinion() + openProcessSubmissionModal()).
+// buildEffectiveSubmissionWorkflow() bên dưới + lib/createValidation.js (LƯU Ý BẢO TRÌ, 2 bản độc lập,
+// phải sửa đồng thời).
 const SUBMISSION_APPROVAL_LAYERS = [
   { key: 'DONG_TRINH', label: 'Đồng trình', blocking: true },
   { key: 'DONG_CAP', label: 'Phê duyệt đồng cấp', blocking: true },
   { key: 'XIN_Y_KIEN', label: 'Xin ý kiến', blocking: false },
-  { key: 'BGD', label: 'Ban Giám Đốc/Ban Tổng Giám Đốc', blocking: true },
+  { key: 'GD_PGD', label: 'Giám Đốc/Phó Giám Đốc', blocking: true },
+  { key: 'PTGD', label: 'Phó Tổng Giám Đốc', blocking: true },
   { key: 'TRO_LY_THU_KY', label: 'Bộ Phận Trợ Lý/Thư Ký', blocking: true },
-  { key: 'TGD_CT', label: 'Tổng Giám Đốc/Chủ Tịch', blocking: true }
+  { key: 'TGD', label: 'Tổng Giám Đốc', blocking: true }
 ];
+
+// "Cấp Phê Duyệt Cuối Cùng" — người trình chọn 1 trong 4 mức này (gắn với chức danh người duyệt cuối
+// cùng), quyết định trong số 7 lớp ở trên, lớp nào được PHÉP hiện ra để tick (visible), lớp nào trong
+// số đó bị KHOÁ BẮT BUỘC luôn tick sẵn không được bỏ (locked, con của visible), lớp nào ẨN HẲN không
+// hiện trong dropdown "Phê duyệt" (mọi lớp không thuộc visible). "Phê duyệt khác" (KHAC) = hành vi cũ,
+// đủ cả 7 lớp và không khoá lớp nào — ĐẶT MẶC ĐỊNH cho <select> để không phá luồng thao tác quen thuộc
+// hiện tại nếu người trình không chủ động chọn cấp cao hơn. Server (lib/createValidation.js) tự áp lại
+// đúng luật này từ appData, không tin approvalLevel/selectedApprovalLayers client tự gửi lên (LƯU Ý BẢO
+// TRÌ, 2 bản độc lập, phải sửa đồng thời).
+const SUBMISSION_APPROVAL_LEVELS = [
+  { key: 'TGD', label: 'Tổng giám đốc phê duyệt' },
+  { key: 'PTGD', label: 'Phó tổng giám đốc phê duyệt' },
+  { key: 'GD_PGD', label: 'Giám đốc/phó giám đốc phê duyệt' },
+  { key: 'KHAC', label: 'Phê duyệt khác' }
+];
+
+const SUBMISSION_APPROVAL_LEVEL_RULES = {
+  TGD: { visible: ['DONG_TRINH', 'DONG_CAP', 'XIN_Y_KIEN', 'GD_PGD', 'PTGD', 'TRO_LY_THU_KY', 'TGD'], locked: ['TRO_LY_THU_KY', 'TGD'] },
+  PTGD: { visible: ['DONG_TRINH', 'DONG_CAP', 'XIN_Y_KIEN', 'GD_PGD', 'PTGD'], locked: ['PTGD'] },
+  GD_PGD: { visible: ['DONG_TRINH', 'DONG_CAP', 'XIN_Y_KIEN', 'GD_PGD'], locked: ['GD_PGD'] },
+  KHAC: { visible: SUBMISSION_APPROVAL_LAYERS.map(l => l.key), locked: [] }
+};
+
+function getSubmissionApprovalLevelRule(levelKey) {
+  return SUBMISSION_APPROVAL_LEVEL_RULES[levelKey] || SUBMISSION_APPROVAL_LEVEL_RULES.KHAC;
+}
+
+// Di chuyển thành viên nhóm phê duyệt admin đã gán TRƯỚC KHI đổi tên lớp (khoá "BGD" -> "GD_PGD",
+// "TGD_CT" -> "TGD") sang đúng khoá mới — CHỈ áp dụng trong bộ nhớ lúc tải dữ liệu, không tự ghi đè
+// persisted storage (chỉ thực sự lưu lại khi admin bấm "Lưu Thành Viên" ở màn "Quản Lý Nhóm Phê Duyệt
+// Trình", xem saveSubmissionApprovalGroup()) — để không mất thành viên đã gán trước khi có tính năng
+// "Cấp Phê Duyệt Cuối Cùng". Khớp đúng hàm cùng tên trong lib/createValidation.js (LƯU Ý BẢO TRÌ).
+function migrateSubmissionApprovalGroupKeys(groups) {
+  const migrated = { ...(groups || {}) };
+  const RENAME_MAP = { BGD: 'GD_PGD', TGD_CT: 'TGD' };
+  Object.entries(RENAME_MAP).forEach(([oldKey, newKey]) => {
+    if (Array.isArray(migrated[oldKey]) && migrated[oldKey].length) {
+      migrated[newKey] = [...new Set([...(migrated[newKey] || []), ...migrated[oldKey]])];
+    }
+    delete migrated[oldKey];
+  });
+  return migrated;
+}
 
 // Vị trí lớp `layerKey` có nằm SAU lớp "Xin ý kiến" trong thứ tự chuẩn ở trên hay không — dùng để
 // quyết định có cảnh báo "còn người chưa cho ý kiến" cho bước phê duyệt đó hay không. Lớp không có
@@ -4099,7 +4148,7 @@ async function initDatabase(loggingInUser) {
     DB.deptWorkflows = data.deptWorkflows || {};
     DB.submissionDeptWorkflows = data.submissionDeptWorkflows || {};
     DB.submissionTypeDeptWorkflows = data.submissionTypeDeptWorkflows || {};
-    DB.submissionApprovalGroups = data.submissionApprovalGroups || {};
+    DB.submissionApprovalGroups = migrateSubmissionApprovalGroupKeys(data.submissionApprovalGroups || {});
     DB.carDeptWorkflows = data.carDeptWorkflows || {};
 
     DB.officeBuyDeptWorkflows = data.officeBuyDeptWorkflows || {};
@@ -5113,6 +5162,14 @@ function populateDropdowns() {
     if (DB.submissionTypes.some(t => t.label === current)) subTypeSel.value = current;
   }
 
+  // "Cấp Phê Duyệt Cuối Cùng" — KHAC ("Phê duyệt khác") đặt ĐẦU danh sách nên là option mặc định
+  // (kể cả sau khi form.reset() trả select về option đầu tiên, không có thuộc tính selected riêng).
+  const subApprovalLevelSel = document.getElementById('subApprovalLevel');
+  if (subApprovalLevelSel && !subApprovalLevelSel.options.length) {
+    const ordered = [SUBMISSION_APPROVAL_LEVELS.find(l => l.key === 'KHAC'), ...SUBMISSION_APPROVAL_LEVELS.filter(l => l.key !== 'KHAC')];
+    subApprovalLevelSel.innerHTML = ordered.map(l => `<option value="${escapeHtml(l.key)}">${escapeHtml(l.label)}</option>`).join('');
+  }
+
   const contractTypeSel = document.getElementById('contractType');
   if (contractTypeSel) {
     const current = contractTypeSel.value;
@@ -5938,6 +5995,7 @@ async function doSubmitSubmissionReq(e) {
   const title = document.getElementById('subTitle').value.trim();
   const priority = document.getElementById('subPriority').value;
   const content = document.getElementById('subContent').value.trim();
+  const approvalLevel = document.getElementById('subApprovalLevel').value;
   const fileInput = document.getElementById('subFile');
   const extraFilesInput = document.getElementById('subExtraFiles');
   const { selectedLayerKeys, selectedLayerMembers } = readSelectedSubmissionLayers();
@@ -5991,6 +6049,7 @@ async function doSubmitSubmissionReq(e) {
     createdAt: new Date().toLocaleString('vi-VN'),
     status: 'PENDING',
     currentStep: 1,
+    approvalLevel: approvalLevel,
     selectedApprovalLayers: selectedLayerKeys,
     selectedLayerMembers: selectedLayerMembers,
     effectiveSteps: effectiveWf.steps,
@@ -6044,21 +6103,31 @@ async function doSubmitSubmissionReq(e) {
 // "Phê duyệt" là 1 dropdown-checklist gọn trong ô lưới (KHÔNG dùng <select multiple> vì UX kém trong
 // ô hẹp) — panel chỉ chứa các ô tick lớp; phần chọn CỤ THỂ người cho từng lớp đã tick được chuyển
 // sang khối "Cấp Phê Duyệt Bổ Sung & Xin Ý Kiến" bên dưới (ẩn mặc định, chỉ hiện lớp nào đã tick).
+// "Cấp Phê Duyệt Cuối Cùng" quyết định danh sách lớp nào được PHÉP hiện ra (rule.visible) và trong số
+// đó lớp nào bị khoá bắt buộc tick sẵn (rule.locked) — lớp không thuộc visible bị ẨN HẲN, không render
+// <input> nào cho nó nên không thể lọt vào readSelectedSubmissionLayers(). Lớp bị khoá vẫn tick được
+// (checked) dù input disabled — DOM :checked của input disabled vẫn đọc đúng qua querySelectorAll.
 function renderSubmissionApprovalLayerCheckboxes() {
   const panel = document.getElementById('subApprovalDropdownPanel');
   if (!panel) return;
-  panel.innerHTML = SUBMISSION_APPROVAL_LAYERS.map(layer => {
+  const levelKey = document.getElementById('subApprovalLevel')?.value || 'KHAC';
+  const rule = getSubmissionApprovalLevelRule(levelKey);
+  const visibleLayers = SUBMISSION_APPROVAL_LAYERS.filter(l => rule.visible.includes(l.key));
+
+  panel.innerHTML = visibleLayers.map(layer => {
     const groupUsers = (DB.submissionApprovalGroups[layer.key] || [])
       .map(un => DB.users.find(u => u.username === un))
       .filter(Boolean);
-    const disabled = groupUsers.length === 0;
+    const locked = rule.locked.includes(layer.key);
+    const disabled = locked || groupUsers.length === 0;
 
     return `
       <label class="flex items-start gap-1.5 text-xs p-1 rounded ${disabled ? 'opacity-50' : 'cursor-pointer hover:bg-amber-50'}">
-        <input type="checkbox" class="sub-layer-toggle mt-0.5" value="${layer.key}" ${disabled ? 'disabled' : ''} onchange="onSubApprovalLayerToggle('${layer.key}')">
+        <input type="checkbox" class="sub-layer-toggle mt-0.5" value="${layer.key}" ${locked ? 'checked' : ''} ${disabled ? 'disabled' : ''} onchange="onSubApprovalLayerToggle('${layer.key}')">
         <span>
           <span class="font-semibold text-gray-700">${escapeHtml(layer.label)}</span>
-          ${disabled ? `<span class="block text-[10px] text-gray-400 italic">Admin chưa gán thành viên nào cho nhóm này.</span>` : ''}
+          ${locked ? `<span class="block text-[10px] text-amber-600 italic">Bắt buộc theo cấp phê duyệt đã chọn.</span>`
+            : (disabled ? `<span class="block text-[10px] text-gray-400 italic">Admin chưa gán thành viên nào cho nhóm này.</span>` : '')}
         </span>
       </label>
     `;
@@ -6068,6 +6137,11 @@ function renderSubmissionApprovalLayerCheckboxes() {
   const container = document.getElementById('subApprovalLayersContainer');
   if (section) section.classList.add('hidden');
   if (container) container.innerHTML = '';
+  // Lớp bị khoá bắt buộc: tự động hiện card chọn người ngay (checkbox disabled nên onchange không tự
+  // bắn được từ thao tác click của người dùng) — dùng lại đúng logic dựng card của onSubApprovalLayerToggle().
+  rule.locked.forEach(layerKey => {
+    if (visibleLayers.some(l => l.key === layerKey)) onSubApprovalLayerToggle(layerKey);
+  });
   updateSubApprovalDropdownLabel();
 }
 

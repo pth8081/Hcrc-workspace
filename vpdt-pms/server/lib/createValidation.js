@@ -57,19 +57,66 @@ const SUBMISSION_APPROVAL_LAYERS = [
   { key: 'DONG_TRINH', label: 'Đồng trình', blocking: true },
   { key: 'DONG_CAP', label: 'Phê duyệt đồng cấp', blocking: true },
   { key: 'XIN_Y_KIEN', label: 'Xin ý kiến', blocking: false },
-  { key: 'BGD', label: 'Ban Giám Đốc/Ban Tổng Giám Đốc', blocking: true },
+  { key: 'GD_PGD', label: 'Giám Đốc/Phó Giám Đốc', blocking: true },
+  { key: 'PTGD', label: 'Phó Tổng Giám Đốc', blocking: true },
   { key: 'TRO_LY_THU_KY', label: 'Bộ Phận Trợ Lý/Thư Ký', blocking: true },
-  { key: 'TGD_CT', label: 'Tổng Giám Đốc/Chủ Tịch', blocking: true }
+  { key: 'TGD', label: 'Tổng Giám Đốc', blocking: true }
 ];
+
+// Khớp đúng SUBMISSION_APPROVAL_LEVELS/SUBMISSION_APPROVAL_LEVEL_RULES trong index.html — xem "LƯU Ý
+// BẢO TRÌ" ở đầu file. "Cấp Phê Duyệt Cuối Cùng" người trình chọn quyết định lớp nào được PHÉP tick
+// (visible) và trong số đó lớp nào bị KHOÁ BẮT BUỘC (locked, con của visible) — server PHẢI tự áp lại
+// đúng luật này, không tin approvalLevel/selectedApprovalLayers client gửi lên: từ chối tạo nếu có lớp
+// ngoài visible, hoặc thiếu 1 lớp locked nào đó (xem buildEffectiveSubmissionWorkflowServer bên dưới).
+const SUBMISSION_APPROVAL_LEVELS = ['TGD', 'PTGD', 'GD_PGD', 'KHAC'];
+const SUBMISSION_APPROVAL_LEVEL_RULES = {
+  TGD: { visible: ['DONG_TRINH', 'DONG_CAP', 'XIN_Y_KIEN', 'GD_PGD', 'PTGD', 'TRO_LY_THU_KY', 'TGD'], locked: ['TRO_LY_THU_KY', 'TGD'] },
+  PTGD: { visible: ['DONG_TRINH', 'DONG_CAP', 'XIN_Y_KIEN', 'GD_PGD', 'PTGD'], locked: ['PTGD'] },
+  GD_PGD: { visible: ['DONG_TRINH', 'DONG_CAP', 'XIN_Y_KIEN', 'GD_PGD'], locked: ['GD_PGD'] },
+  KHAC: { visible: SUBMISSION_APPROVAL_LAYERS.map(l => l.key), locked: [] }
+};
+
+// Di chuyển thành viên nhóm phê duyệt admin đã gán TRƯỚC KHI đổi tên lớp (khoá "BGD" -> "GD_PGD",
+// "TGD_CT" -> "TGD") sang đúng khoá mới — khớp đúng hàm cùng tên trong index.html (LƯU Ý BẢO TRÌ). Áp
+// dụng ngay trong buildEffectiveSubmissionWorkflowServer() để không mất quyền của thành viên đã gán
+// trước khi có tính năng "Cấp Phê Duyệt Cuối Cùng" (appData luôn đọc trực tiếp từ DB, chưa qua migrate
+// nào khác ở tầng lưu trữ).
+function migrateSubmissionApprovalGroupKeys(groups) {
+  const migrated = { ...(groups || {}) };
+  const RENAME_MAP = { BGD: 'GD_PGD', TGD_CT: 'TGD' };
+  Object.entries(RENAME_MAP).forEach(([oldKey, newKey]) => {
+    if (Array.isArray(migrated[oldKey]) && migrated[oldKey].length) {
+      migrated[newKey] = [...new Set([...(migrated[newKey] || []), ...migrated[oldKey]])];
+    }
+    delete migrated[oldKey];
+  });
+  return migrated;
+}
 
 // Tự dựng lại TOÀN BỘ quy trình hiệu lực (steps/approvers) của 1 tờ trình mới từ dữ liệu ĐÃ XÁC MINH
 // trong DB (quy trình phòng ban theo loại + thành viên nhóm phê duyệt do admin gán) — KHÔNG dùng
 // effectiveSteps/effectiveApprovers client tự gửi lên (trước đây tin nguyên client, ai đó tự soạn
 // request có thể nhét bất kỳ ai làm "người duyệt"). selectedLayerMembers[layerKey] là danh sách người
 // người trình chọn cho lớp đó — bắt buộc phải là TẬP CON của DB.submissionApprovalGroups[layerKey],
-// không thì từ chối tạo. Khớp đúng buildEffectiveSubmissionWorkflow() + getSubmissionDeptWorkflowConfig()
-// trong index.html.
-function buildEffectiveSubmissionWorkflowServer(type, dept, selectedLayerKeys, selectedLayerMembers, appData) {
+// không thì từ chối tạo. approvalLevel bắt buộc phải là 1 trong SUBMISSION_APPROVAL_LEVELS, và
+// selectedLayerKeys phải khớp đúng luật visible/locked của cấp đó (xem SUBMISSION_APPROVAL_LEVEL_RULES
+// ở trên) — request tự soạn tick lớp ngoài phạm vi cho phép, hoặc bỏ bớt 1 lớp bắt buộc, đều bị từ
+// chối ở đây. Khớp đúng buildEffectiveSubmissionWorkflow() + getSubmissionDeptWorkflowConfig() trong
+// index.html.
+function buildEffectiveSubmissionWorkflowServer(type, dept, selectedLayerKeys, selectedLayerMembers, appData, approvalLevel) {
+  if (!SUBMISSION_APPROVAL_LEVELS.includes(approvalLevel)) {
+    throw new CreateError(400, `Cấp phê duyệt cuối cùng không hợp lệ: ${approvalLevel}`);
+  }
+  const rule = SUBMISSION_APPROVAL_LEVEL_RULES[approvalLevel];
+  const layerKeysInput = Array.isArray(selectedLayerKeys) ? [...new Set(selectedLayerKeys)] : [];
+  const outOfScope = layerKeysInput.filter(k => !rule.visible.includes(k));
+  if (outOfScope.length) {
+    throw new CreateError(403, `Lớp phê duyệt không thuộc phạm vi cấp "${approvalLevel}": ${outOfScope.join(', ')}`);
+  }
+  const missingLocked = rule.locked.filter(k => !layerKeysInput.includes(k));
+  if (missingLocked.length) {
+    throw new CreateError(400, `Thiếu lớp phê duyệt bắt buộc theo cấp "${approvalLevel}": ${missingLocked.join(', ')}`);
+  }
   const submissionTypes = (appData.submissionTypes && appData.submissionTypes.length) ? appData.submissionTypes : SUBMISSION_TYPES_FALLBACK;
   const typeEntry = submissionTypes.find(t => t.label === type);
   const typeKey = typeEntry ? typeEntry.key : 'KHAC';
@@ -83,8 +130,8 @@ function buildEffectiveSubmissionWorkflowServer(type, dept, selectedLayerKeys, s
   const approvers = {};
   baseWf.steps.forEach(s => { approvers[s.order] = baseConfig.approvers?.[s.order] || []; });
 
-  const groups = appData.submissionApprovalGroups || {};
-  const layerKeys = Array.isArray(selectedLayerKeys) ? selectedLayerKeys : [];
+  const groups = migrateSubmissionApprovalGroupKeys(appData.submissionApprovalGroups || {});
+  const layerKeys = layerKeysInput;
   const opinionRequestees = [];
 
   layerKeys.forEach(layerKey => {
@@ -134,7 +181,7 @@ const CREATE_MODULE_CONFIGS = {
     // để routes/create.js thật VÀ stub test (dùng data in-memory) đều gọi chung được hàm này.
     extraValidate: (payload, collection, user, appData) => {
       const effectiveWf = buildEffectiveSubmissionWorkflowServer(
-        payload.type, payload.dept, payload.selectedApprovalLayers, payload.selectedLayerMembers, appData || {}
+        payload.type, payload.dept, payload.selectedApprovalLayers, payload.selectedLayerMembers, appData || {}, payload.approvalLevel
       );
       payload.selectedApprovalLayers = effectiveWf.layerKeys;
       payload.selectedLayerMembers = payload.selectedLayerMembers || {};
