@@ -424,6 +424,8 @@ router.post('/officeReqs/:id/delete', (req, res) => deleteAdminOnly(req, res, 'o
 router.post('/carRegs/:id/delete', (req, res) => deleteAdminOnly(req, res, 'carRegs'));
 router.post('/vppPeriods/:id/delete', (req, res) => deleteAdminOnly(req, res, 'vppPeriods'));
 router.post('/vppRegistrations/:id/delete', (req, res) => deleteAdminOnly(req, res, 'vppRegistrations'));
+router.post('/reportPeriods/:id/delete', (req, res) => deleteAdminOnly(req, res, 'reportPeriods'));
+router.post('/reportEntries/:id/delete', (req, res) => deleteAdminOnly(req, res, 'reportEntries'));
 
 // POST /api/records/vppPeriods/:id/close — người quản lý VPP (hoặc admin) tự kết thúc kỳ sớm.
 router.post('/vppPeriods/:id/close', async (req, res) => {
@@ -473,6 +475,118 @@ router.post('/vppRegistrations/:id/update', async (req, res) => {
     res.json({ ok: true, item: result });
   } catch (err) {
     handleError(res, `vppRegistrations/${req.params.id}/update`, err);
+  }
+});
+
+// ===================== BÁO CÁO ĐỊNH KỲ =====================
+
+// POST /api/records/reportPeriods/:id/close — người quản lý (reportManage/admin) tự đóng kỳ sớm.
+router.post('/reportPeriods/:id/close', async (req, res) => {
+  const itemId = Number(req.params.id);
+  if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
+  try {
+    const { freshUser } = await getFreshUser(req);
+    const result = await withLockedRecordForCollection('reportPeriods', itemId, (item) =>
+      recordActions.closeReportPeriod(freshUser, item)
+    );
+    res.json({ ok: true, item: result });
+  } catch (err) {
+    handleError(res, `reportPeriods/${req.params.id}/close`, err);
+  }
+});
+
+// POST /api/records/reportPeriods/:id/merge — người có quyền reportAggregate/admin chọn + sắp thứ tự
+// các báo cáo SUBMITTED của kỳ, dựng bản tổng hợp. Body: { entryIds: [id,...] } (đúng thứ tự đã chọn).
+router.post('/reportPeriods/:id/merge', async (req, res) => {
+  const itemId = Number(req.params.id);
+  if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
+  try {
+    const { freshUser } = await getFreshUser(req);
+    const entries = await getAllForCollection('reportEntries');
+    const result = await withLockedRecordForCollection('reportPeriods', itemId, (item) =>
+      recordActions.mergeReportPeriod(freshUser, item, req.body?.entryIds, entries)
+    );
+    res.json({ ok: true, item: result });
+  } catch (err) {
+    handleError(res, `reportPeriods/${req.params.id}/merge`, err);
+  }
+});
+
+// POST /api/records/reportPeriods/:id/compilation — sửa slide (nội dung/thứ tự) khi bản tổng hợp còn
+// đang MERGED (chưa phát hành). Body: { slides: [{title, contentHtml, ...}, ...] } theo đúng thứ tự.
+router.post('/reportPeriods/:id/compilation', async (req, res) => {
+  const itemId = Number(req.params.id);
+  if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
+  try {
+    const { freshUser } = await getFreshUser(req);
+    const result = await withLockedRecordForCollection('reportPeriods', itemId, (item) =>
+      recordActions.updateReportCompilation(freshUser, item, req.body?.slides)
+    );
+    res.json({ ok: true, item: result });
+  } catch (err) {
+    handleError(res, `reportPeriods/${req.params.id}/compilation`, err);
+  }
+});
+
+router.post('/reportPeriods/:id/publish', async (req, res) => {
+  const itemId = Number(req.params.id);
+  if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
+  try {
+    const { freshUser } = await getFreshUser(req);
+    const result = await withLockedRecordForCollection('reportPeriods', itemId, (item) =>
+      recordActions.publishReportPeriod(freshUser, item)
+    );
+    res.json({ ok: true, item: result });
+  } catch (err) {
+    handleError(res, `reportPeriods/${req.params.id}/publish`, err);
+  }
+});
+
+router.post('/reportPeriods/:id/unpublish', async (req, res) => {
+  const itemId = Number(req.params.id);
+  if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
+  try {
+    const { freshUser } = await getFreshUser(req);
+    const result = await withLockedRecordForCollection('reportPeriods', itemId, (item) =>
+      recordActions.unpublishReportPeriod(freshUser, item)
+    );
+    res.json({ ok: true, item: result });
+  } catch (err) {
+    handleError(res, `reportPeriods/${req.params.id}/unpublish`, err);
+  }
+});
+
+// POST /api/records/reportEntries/:id/submit — "Gửi": NHÁP -> SUBMITTED, chốt hẳn.
+router.post('/reportEntries/:id/submit', async (req, res) => {
+  const itemId = Number(req.params.id);
+  if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
+  try {
+    const { freshUser } = await getFreshUser(req);
+    const periods = await getAllForCollection('reportPeriods');
+    const result = await withLockedRecordForCollection('reportEntries', itemId, (item) => {
+      const period = periods.find(p => p.id === item.periodId);
+      return recordActions.submitReportEntry(freshUser, item, period);
+    });
+    res.json({ ok: true, item: result });
+  } catch (err) {
+    handleError(res, `reportEntries/${req.params.id}/submit`, err);
+  }
+});
+
+// POST /api/records/reportEntries/:id/update — sửa tiêu đề/nội dung khi báo cáo còn NHÁP.
+router.post('/reportEntries/:id/update', async (req, res) => {
+  const itemId = Number(req.params.id);
+  if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
+  try {
+    const { freshUser } = await getFreshUser(req);
+    const periods = await getAllForCollection('reportPeriods');
+    const result = await withLockedRecordForCollection('reportEntries', itemId, (item) => {
+      const period = periods.find(p => p.id === item.periodId);
+      return recordActions.updateReportEntryDraft(freshUser, item, req.body, period);
+    });
+    res.json({ ok: true, item: result });
+  } catch (err) {
+    handleError(res, `reportEntries/${req.params.id}/update`, err);
   }
 });
 

@@ -390,6 +390,71 @@ const CREATE_MODULE_CONFIGS = {
       payload.currentStep = 0;
       payload.history = [];
     }
+  },
+  // ===== BÁO CÁO ĐỊNH KỲ (module con "Điều Hành", thường dùng cho báo cáo tuần) =====
+  // Mô hình 2 tầng giống hệt VPP (kỳ + hồ sơ từng người) ở trên: reportPeriods = "kỳ báo cáo" (tên +
+  // hạn chót nộp + phòng ban áp dụng), reportEntries = báo cáo NHÁP/Gửi của TỪNG nhân viên cho 1 kỳ.
+  // Khác VPP: (1) reportPeriods có deptScope (phòng ban nào phải nộp — VPP dùng chung toàn công ty,
+  // không cần), (2) không có "Yêu cầu bổ sung" (đã chốt bỏ qua) — SUBMITTED là chốt hẳn, nhân viên
+  // không sửa lại được nữa. reportEntries dùng forceOwnDept + getScope rỗng giống hệt vppRegistrations
+  // (KHÔNG gắn quyền scope riêng — với forceOwnDept, scopeAllows() LUÔN cho qua hành động trên đúng
+  // phòng ban của chính người dùng bất kể scope, nên 1 quyền scope ở đây sẽ là quyền "chết", không bao
+  // giờ thực sự chặn được gì — xem lib/workflowEngine.js/index.html scopeAllows()). Quyền thật sự nằm
+  // ở kiểm tra "phòng ban của bạn có thuộc phạm vi kỳ" bên dưới.
+  // Khâu Tổng hợp (Merge)/Chỉnh sửa/Phát hành xử lý ở lib/recordActions.js + routes/records.js (không
+  // đi qua đường "tạo mới" này) — xem closeReportPeriod/mergeReportPeriod/... ở đó.
+  reportPeriods: {
+    dbKey: 'reportPeriods',
+    forceOwnDept: true,
+    getScope: () => ({}),
+    creatorField: 'creator', creatorNameField: 'creatorName',
+    extraValidate: (payload, collection, user) => {
+      if (!user.perms?.admin && !user.perms?.reportManage) {
+        throw new CreateError(403, 'Chỉ người có quyền quản lý Báo Cáo Định Kỳ mới được tạo kỳ báo cáo');
+      }
+      if (!payload.name || !String(payload.name).trim()) throw new CreateError(400, 'Thiếu tên kỳ báo cáo');
+      if (!payload.endTime) throw new CreateError(400, 'Thiếu hạn chót nộp báo cáo');
+      if (new Date(payload.endTime).getTime() <= Date.now()) {
+        throw new CreateError(400, 'Hạn chót nộp báo cáo phải ở trong tương lai');
+      }
+      const deptScope = payload.deptScope || {};
+      const cleanedDepts = Array.isArray(deptScope.depts) ? deptScope.depts.filter(d => typeof d === 'string' && d.trim()) : [];
+      if (!deptScope.all && !cleanedDepts.length) {
+        throw new CreateError(400, 'Vui lòng chọn ít nhất 1 phòng ban áp dụng, hoặc chọn "Tất cả phòng ban"');
+      }
+      payload.deptScope = { all: !!deptScope.all, depts: deptScope.all ? [] : cleanedDepts };
+      payload.status = 'OPEN';
+      payload.closedAt = null;
+      payload.closedBy = null;
+      payload.compilation = null;
+    }
+  },
+  reportEntries: {
+    dbKey: 'reportEntries',
+    forceOwnDept: true,
+    getScope: () => ({}),
+    creatorField: 'creator', creatorNameField: 'creatorName',
+    extraValidate: (payload, collection, user, appData) => {
+      const periodId = Number(payload.periodId);
+      if (!Number.isFinite(periodId)) throw new CreateError(400, 'Thiếu kỳ báo cáo');
+      const periods = appData?.reportPeriods || [];
+      const period = periods.find(p => p.id === periodId);
+      if (!period) throw new CreateError(404, 'Không tìm thấy kỳ báo cáo');
+      const scope = period.deptScope || {};
+      const deptAllowed = !!scope.all || (Array.isArray(scope.depts) && scope.depts.includes(user.dept));
+      if (!deptAllowed) throw new CreateError(403, 'Phòng ban của bạn không thuộc phạm vi kỳ báo cáo này');
+      const pastDeadline = !!(period.endTime && Date.now() > new Date(period.endTime).getTime());
+      if (period.status !== 'OPEN' || pastDeadline) {
+        throw new CreateError(409, 'Kỳ báo cáo này đã kết thúc, không thể nộp báo cáo nữa');
+      }
+      if (!payload.title || !String(payload.title).trim()) throw new CreateError(400, 'Thiếu tiêu đề báo cáo');
+      if (!payload.contentHtml || !String(payload.contentHtml).trim()) throw new CreateError(400, 'Thiếu nội dung báo cáo');
+      const duplicate = (collection || []).some(r => r.periodId === periodId && r.creator === user.username);
+      if (duplicate) throw new CreateError(409, 'Bạn đã có báo cáo ở kỳ này rồi — vui lòng sửa báo cáo nháp hiện có');
+      payload.periodName = period.name;
+      payload.periodEndTime = period.endTime;
+      payload.status = 'DRAFT';
+    }
   }
 };
 

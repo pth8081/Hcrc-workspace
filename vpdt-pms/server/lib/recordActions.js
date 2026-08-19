@@ -909,6 +909,172 @@ function updateVppRegistrationDraft(user, item, payload, period) {
   return item;
 }
 
+// ===================== BÁO CÁO ĐỊNH KỲ (kỳ báo cáo: đóng sớm/tổng hợp/phát hành) =====================
+// Vòng đời: OPEN (nhận nhập liệu, tới khi qua endTime HOẶC admin/reportAggregate đóng sớm) -> CLOSED
+// -> Tổng hợp (Merge, dựng compilation.slides từ các reportEntries SUBMITTED đã chọn+sắp thứ tự) ->
+// Chỉnh sửa (compilation.status='MERGED', sửa tự do từng slide) -> Phát hành (compilation.status=
+// 'PUBLISHED', khoá sửa — có thể "Hủy phát hành" quay lại 'MERGED' để sửa tiếp). Quyền tổng hợp
+// (`reportAggregate`) là quyền CHUNG — bất kỳ ai có quyền này đều tổng hợp được MỌI kỳ, không phân
+// biệt ai tạo kỳ đó (đã chốt với người yêu cầu, khác mô hình "người duyệt được chỉ định theo từng
+// bước" ở nơi khác trong hệ thống).
+function isReportPeriodClosed(period) {
+  if (period.status === 'CLOSED') return true;
+  return !!(period.endTime && Date.now() > new Date(period.endTime).getTime());
+}
+
+function canManageReportPeriods(user) {
+  return !!(user.perms?.admin || user.perms?.reportManage);
+}
+
+function canAggregateReports(user) {
+  return !!(user.perms?.admin || user.perms?.reportAggregate);
+}
+
+// Người quản lý kỳ tự đóng SỚM (trước endTime) — giống closeVppPeriod(). Đóng rồi thì reportEntries
+// không tạo/sửa được nữa (xem CREATE_MODULE_CONFIGS.reportEntries + updateReportEntryDraft dưới đây),
+// dù endTime chưa tới.
+function closeReportPeriod(user, period) {
+  if (!canManageReportPeriods(user)) {
+    throw new HttpError(403, 'Chỉ người có quyền quản lý Báo Cáo Định Kỳ mới được đóng kỳ báo cáo');
+  }
+  if (period.status === 'CLOSED') throw new HttpError(409, 'Kỳ báo cáo này đã đóng từ trước');
+  period.status = 'CLOSED';
+  period.closedAt = nowVN();
+  period.closedBy = user.username;
+  return period;
+}
+
+// "Gửi": NHÁP -> SUBMITTED (chốt hẳn — đã bỏ luồng "yêu cầu bổ sung", nhân viên không sửa lại được
+// nữa sau khi gửi). period: bản ghi kỳ tương ứng item.periodId — CALLER (routes/records.js) đọc trước
+// rồi truyền vào, cùng nguyên tắc với updateVppRegistrationDraft().
+function submitReportEntry(user, item, period) {
+  if (item.creator !== user.username) throw new HttpError(403, 'Chỉ người tạo báo cáo mới được gửi báo cáo này');
+  if (item.status !== 'DRAFT') throw new HttpError(409, 'Báo cáo này không còn ở trạng thái nháp (có thể đã gửi rồi)');
+  if (!period) throw new HttpError(404, 'Không tìm thấy kỳ báo cáo');
+  if (isReportPeriodClosed(period)) {
+    throw new HttpError(409, 'Kỳ báo cáo này đã kết thúc, không thể gửi báo cáo nữa');
+  }
+  if (!item.title || !String(item.title).trim() || !item.contentHtml || !String(item.contentHtml).trim()) {
+    throw new HttpError(400, 'Báo cáo còn thiếu tiêu đề hoặc nội dung — vui lòng bổ sung trước khi gửi');
+  }
+  item.status = 'SUBMITTED';
+  item.submittedAt = nowVN();
+  return item;
+}
+
+// Sửa nội dung khi báo cáo còn NHÁP — period truyền vào giống submitReportEntry().
+function updateReportEntryDraft(user, item, payload, period) {
+  if (item.creator !== user.username) throw new HttpError(403, 'Chỉ người tạo báo cáo mới được sửa báo cáo này');
+  if (item.status !== 'DRAFT') throw new HttpError(409, 'Báo cáo này không còn ở trạng thái nháp, không thể sửa');
+  if (!period) throw new HttpError(404, 'Không tìm thấy kỳ báo cáo');
+  if (isReportPeriodClosed(period)) {
+    throw new HttpError(409, 'Kỳ báo cáo này đã kết thúc, không thể sửa báo cáo nữa');
+  }
+  const title = String(payload?.title || '').trim();
+  const contentHtml = String(payload?.contentHtml || '').trim();
+  if (!title) throw new HttpError(400, 'Thiếu tiêu đề báo cáo');
+  if (!contentHtml) throw new HttpError(400, 'Thiếu nội dung báo cáo');
+  item.title = title;
+  item.contentHtml = contentHtml;
+  return item;
+}
+
+// Tổng hợp (Merge): dựng compilation.slides từ các reportEntries SUBMITTED thuộc ĐÚNG kỳ này mà người
+// tổng hợp đã chọn + sắp thứ tự (orderedEntryIds) — snapshot nội dung NGAY LÚC merge (đổi báo cáo gốc
+// sau đó, nếu có, không ảnh hưởng slide đã snapshot — nhưng thực tế báo cáo gốc cũng không sửa được
+// nữa vì đã SUBMITTED). Cho phép merge lại nhiều lần (chọn lại danh sách/thứ tự khác) khi
+// compilation chưa PUBLISHED — muốn sửa sau khi đã phát hành phải "Hủy phát hành" trước.
+// entries: TOÀN BỘ reportEntries hiện có — CALLER tự đọc rồi truyền vào (không tự đọc DB, giữ đúng
+// nguyên tắc chung của file này).
+function mergeReportPeriod(user, period, orderedEntryIds, entries) {
+  if (!canAggregateReports(user)) {
+    throw new HttpError(403, 'Bạn không có quyền tổng hợp Báo Cáo Định Kỳ');
+  }
+  if (!isReportPeriodClosed(period)) {
+    throw new HttpError(409, 'Kỳ báo cáo chưa kết thúc — chưa thể tổng hợp');
+  }
+  if (period.compilation?.status === 'PUBLISHED') {
+    throw new HttpError(409, 'Bản tổng hợp đã phát hành — vui lòng "Hủy phát hành" trước khi tổng hợp lại');
+  }
+  const ids = Array.isArray(orderedEntryIds) ? [...new Set(orderedEntryIds)] : [];
+  if (!ids.length) throw new HttpError(400, 'Vui lòng chọn ít nhất 1 báo cáo để tổng hợp');
+  const periodEntries = (entries || []).filter(e => e.periodId === period.id && e.status === 'SUBMITTED');
+  const slides = ids.map((id, idx) => {
+    const entry = periodEntries.find(e => e.id === id);
+    if (!entry) throw new HttpError(400, `Báo cáo #${id} không hợp lệ (không thuộc kỳ này hoặc chưa được gửi)`);
+    return {
+      order: idx + 1,
+      title: entry.title,
+      contentHtml: entry.contentHtml,
+      sourceEntryId: entry.id,
+      sourceCreatorName: entry.creatorName,
+      sourceDept: entry.dept
+    };
+  });
+  period.compilation = {
+    slides,
+    status: 'MERGED',
+    compiledBy: user.username, compiledByName: user.name, compiledAt: nowVN(),
+    updatedBy: null, updatedByName: null, updatedAt: null,
+    publishedBy: null, publishedByName: null, publishedAt: null
+  };
+  return period;
+}
+
+// Chỉnh sửa slide sau khi đã tổng hợp (thêm/xoá/sửa nội dung/sắp lại thứ tự) — chỉ khi
+// compilation.status = 'MERGED' (chưa phát hành).
+function updateReportCompilation(user, period, slides) {
+  if (!canAggregateReports(user)) {
+    throw new HttpError(403, 'Bạn không có quyền tổng hợp Báo Cáo Định Kỳ');
+  }
+  if (!period.compilation || period.compilation.status !== 'MERGED') {
+    throw new HttpError(409, 'Kỳ báo cáo chưa có bản tổng hợp ở trạng thái đang sửa');
+  }
+  const list = Array.isArray(slides) ? slides : [];
+  if (!list.length) throw new HttpError(400, 'Bản tổng hợp cần có ít nhất 1 slide');
+  const cleaned = list.map((s, idx) => {
+    const title = String(s?.title || '').trim();
+    const contentHtml = String(s?.contentHtml || '').trim();
+    if (!title) throw new HttpError(400, `Slide thứ ${idx + 1} thiếu tiêu đề`);
+    if (!contentHtml) throw new HttpError(400, `Slide thứ ${idx + 1} thiếu nội dung`);
+    return { order: idx + 1, title, contentHtml, sourceEntryId: s?.sourceEntryId ?? null, sourceCreatorName: s?.sourceCreatorName || '', sourceDept: s?.sourceDept || '' };
+  });
+  period.compilation.slides = cleaned;
+  period.compilation.updatedBy = user.username;
+  period.compilation.updatedByName = user.name;
+  period.compilation.updatedAt = nowVN();
+  return period;
+}
+
+function publishReportPeriod(user, period) {
+  if (!canAggregateReports(user)) {
+    throw new HttpError(403, 'Bạn không có quyền tổng hợp Báo Cáo Định Kỳ');
+  }
+  if (!period.compilation || period.compilation.status !== 'MERGED') {
+    throw new HttpError(409, 'Chưa có bản tổng hợp ở trạng thái sẵn sàng phát hành');
+  }
+  period.compilation.status = 'PUBLISHED';
+  period.compilation.publishedBy = user.username;
+  period.compilation.publishedByName = user.name;
+  period.compilation.publishedAt = nowVN();
+  return period;
+}
+
+// Hủy phát hành — quay lại 'MERGED' để sửa tiếp, không xoá slide đã có.
+function unpublishReportPeriod(user, period) {
+  if (!canAggregateReports(user)) {
+    throw new HttpError(403, 'Bạn không có quyền tổng hợp Báo Cáo Định Kỳ');
+  }
+  if (!period.compilation || period.compilation.status !== 'PUBLISHED') {
+    throw new HttpError(409, 'Bản tổng hợp này chưa phát hành');
+  }
+  period.compilation.status = 'MERGED';
+  period.compilation.publishedBy = null;
+  period.compilation.publishedByName = null;
+  period.compilation.publishedAt = null;
+  return period;
+}
+
 module.exports = {
   editContract,
   canApproveContract, approveContract, rejectContract,
@@ -926,5 +1092,7 @@ module.exports = {
   acceptTask, confirmCollaboratorParticipation, updateTaskStatusAction, requestExtension,
   cancelOrRequestCancelTask, resolvePendingTaskAction,
   addSubtask, toggleSubtask, deleteSubtask,
-  closeVppPeriod, submitVppRegistration, updateVppRegistrationDraft
+  closeVppPeriod, submitVppRegistration, updateVppRegistrationDraft,
+  closeReportPeriod, submitReportEntry, updateReportEntryDraft,
+  mergeReportPeriod, updateReportCompilation, publishReportPeriod, unpublishReportPeriod
 };
