@@ -87,6 +87,9 @@ h1, h2, h3, h4 { letter-spacing: -0.01em !important; }
     </div>
 
     <nav class="flex-1 p-2 space-y-1">
+      <button id="btnDashboardTab" onclick="switchTab('dashboard')" class="sidebar-item">
+        <span class="sidebar-icon">🏠</span><span class="sidebar-label">Trang chủ</span>
+      </button>
       <button id="btnDocTab" onclick="switchTab('doc')" class="hidden sidebar-item">
         <span class="sidebar-icon">📂</span><span class="sidebar-label">Tài liệu</span>
       </button>
@@ -181,6 +184,27 @@ h1, h2, h3, h4 { letter-spacing: -0.01em !important; }
       <input id="txtPass" type="password" autocomplete="current-password" class="w-full border p-2 rounded text-sm focus:outline-none focus:border-blue-500">
     </div>
     <button id="btnLogin" onclick="login()" class="w-full bg-blue-600 text-white p-2 rounded font-bold hover:bg-blue-700 transition">Đăng Nhập</button>
+  </div>
+
+  <!-- Màn hình Dashboard (Đợt C) — trang chủ cá nhân hoá sau đăng nhập: thẻ thống kê "cần bạn xử lý"
+       theo từng module (chỉ hiện thẻ liên quan tới quyền/công việc của CHÍNH người đang đăng nhập) +
+       tin tức nổi bật từ Truyền Thông. Không có API riêng — dùng lại nguyên DB.* đã tải sẵn ở client. -->
+  <div id="dashboardSection" class="hidden space-y-6">
+    <div class="flex justify-between items-center flex-wrap gap-2">
+      <div>
+        <h2 id="dashboardGreeting" class="text-xl font-bold text-gray-800"></h2>
+        <p class="text-sm text-gray-500">Tổng quan các mục đang chờ bạn xử lý.</p>
+      </div>
+      <button onclick="openDashboardCustomizeModal()" class="bg-gray-200 text-gray-700 px-3 py-1.5 rounded text-xs font-bold hover:bg-gray-300">⚙️ Tuỳ chỉnh</button>
+    </div>
+
+    <div id="dashboardStatsGrid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4"></div>
+    <div id="dashboardEmptyNote" class="hidden text-center p-8 text-gray-500 italic bg-white rounded border">🎉 Hiện không có mục nào cần bạn xử lý.</div>
+
+    <div id="dashboardNewsSection" class="hidden space-y-3">
+      <h3 class="font-bold text-gray-800 text-base">📣 Tin Tức Nổi Bật</h3>
+      <div id="dashboardNewsContainer" class="grid grid-cols-1 md:grid-cols-2 gap-3"></div>
+    </div>
   </div>
 
   <!-- Màn hình 2: Tab Quản Lý Tài Liệu -->
@@ -2574,6 +2598,19 @@ h1, h2, h3, h4 { letter-spacing: -0.01em !important; }
       </div>
     </div>
   </div>
+
+<!-- MODAL TUỲ CHỈNH DASHBOARD (Đợt C) — ẩn/hiện từng thẻ thống kê, lưu tạm ở localStorage (nâng lên
+     lưu server ở Đợt D). Chỉ liệt kê các thẻ ĐANG liên quan tới người dùng hiện tại (show:true). -->
+<div id="dashboardCustomizeModal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-40 p-4">
+  <div class="bg-white rounded-lg p-5 w-full max-w-md space-y-3">
+    <h3 class="font-bold text-lg text-gray-800">⚙️ Tuỳ Chỉnh Dashboard</h3>
+    <p class="text-xs text-gray-500">Bỏ chọn để ẩn thẻ khỏi trang chủ của riêng bạn.</p>
+    <div id="dashboardCustomizeList" class="space-y-1.5 max-h-80 overflow-y-auto"></div>
+    <div class="flex justify-end gap-2 pt-2">
+      <button type="button" onclick="closeDashboardCustomizeModal()" class="bg-blue-600 text-white px-5 py-2 rounded font-bold hover:bg-blue-700">Đóng</button>
+    </div>
+  </div>
+</div>
 
 <!-- MODAL XEM TÀI LIỆU PROTECTED VIEW -->
 <!-- Khung Xem Bảo Vệ dùng chung (openFileProtectedView) + "Xem quy trình"/Phiếu Phê Duyệt — thường được
@@ -5088,6 +5125,202 @@ function toggleSidebarCollapse() {
   localStorage.setItem('vpdt_sidebar_collapsed', collapsed ? '1' : '0');
 }
 
+// ============================================================
+// DASHBOARD (Đợt C) — trang chủ cá nhân hoá: mỗi thẻ dùng lại NGUYÊN điều kiện "canApprove" đã có sẵn
+// ở từng module (canApproveStep() + dept-workflow map riêng của module đó, hoặc cờ quyền phẳng như
+// canApproveContract()) — không có API/permission mới nào, không đổi logic phê duyệt hiện có.
+// Cá nhân hoá (ẩn/hiện từng thẻ) lưu tạm ở localStorage — sẽ chuyển sang lưu server ở Đợt D.
+// ============================================================
+const DASHBOARD_HIDDEN_KEY = 'vpdt_dashboard_hidden_cards';
+
+function getDashboardHiddenCards() {
+  try { return JSON.parse(localStorage.getItem(DASHBOARD_HIDDEN_KEY) || '[]'); }
+  catch { return []; }
+}
+function setDashboardHiddenCards(arr) {
+  localStorage.setItem(DASHBOARD_HIDDEN_KEY, JSON.stringify(arr));
+}
+
+// Task không có 1 cờ "approvalStatus" duy nhất — "cần hành động" là hợp của nhiều điều kiện, y hệt
+// logic chọn nút chính urgent:true trong renderTasks() (xem candidates.push({..., urgent:true}) ở đó).
+function taskNeedsMyAction(t, user) {
+  const isAssignee = t.assignedTo === user.username;
+  const isCollaborator = (t.collaborators || []).includes(user.username);
+  const isAssigner = t.assignedBy === user.username || user.perms?.admin;
+  const isOpenTask = t.status !== 'DONE' && t.status !== 'CANCELLED';
+  const hasAccepted = (t.collaboratorAccepts || []).some(c => c.username === user.username);
+  if (isAssignee && t.status === 'TODO') return true;
+  if (isAssigner && t.externalAssignee && t.status === 'TODO') return true;
+  if (isCollaborator && !hasAccepted && isOpenTask) return true;
+  if (t.pendingExtension && isAssigner) return true;
+  if (t.pendingCancellation && isAssigner) return true;
+  return false;
+}
+
+// Đếm số bản ghi PENDING mà user hiện tại được phép duyệt ở BƯỚC hiện tại — dùng chung cho các module
+// có quy trình duyệt theo phòng ban (Tài liệu/Đăng ký xe/Văn phòng/VPP), mirror đúng điều kiện
+// "canApprove" đang dùng để hiện nút Duyệt ở từng dòng của renderDocs()/renderCarRegs()/... .
+function countDeptWorkflowPending(records, wfConfigFor, user) {
+  return (records || []).filter(rec => {
+    if (rec.status !== 'PENDING') return false;
+    const wfConfig = wfConfigFor(rec) || {};
+    const currentStepApprovers = wfConfig.approvers ? (wfConfig.approvers[rec.currentStep] || []) : [];
+    return canApproveStep(user, currentStepApprovers, rec.history, rec.currentStep);
+  }).length;
+}
+
+// Registry hành động click cho từng thẻ — dùng key thay vì nhúng thẳng closure vào chuỗi onclick=""
+// (không thể stringify closure có biến bắt giữ như subType), build lại mỗi lần renderDashboard().
+let dashboardCardActions = {};
+
+function buildDashboardCards(user) {
+  dashboardCardActions = {};
+  const cards = [];
+  function addCard(cfg) { dashboardCardActions[cfg.key] = cfg.action; cards.push(cfg); }
+
+  const docCount = countDeptWorkflowPending(DB.docs, doc => DB.deptWorkflows[doc.dept], user);
+  addCard({ key: 'doc', icon: '📂', label: 'Tài liệu chờ duyệt', count: docCount, show: docCount > 0,
+    action: () => switchTab('doc') });
+
+  const subCount = countDeptWorkflowPending(DB.submissions, sub => resolveSubmissionWorkflow(sub), user);
+  addCard({ key: 'submission', icon: '📜', label: 'Văn bản trình chờ duyệt', count: subCount, show: subCount > 0,
+    action: () => switchTab('submission') });
+
+  const contractCanApprove = canApproveContract(user);
+  const contractCount = contractCanApprove ? (DB.contracts || []).filter(c => c.approvalStatus === 'PENDING').length : 0;
+  addCard({ key: 'contract', icon: '📄', label: 'Hợp đồng chờ duyệt', count: contractCount, show: contractCanApprove,
+    action: () => { switchTab('contract'); setContractSubTab('APPROVAL'); } });
+
+  const meetingCanApprove = canApproveMeeting(user);
+  const meetingCount = meetingCanApprove ? (DB.meetings || []).filter(m => m.status === 'PENDING').length : 0;
+  addCard({ key: 'meeting', icon: '📅', label: 'Đặt phòng họp chờ duyệt', count: meetingCount, show: meetingCanApprove,
+    action: () => switchTab('meeting') });
+
+  const carCount = countDeptWorkflowPending(DB.carRegs, c => DB.carDeptWorkflows[c.dept], user);
+  addCard({ key: 'car', icon: '🚗', label: 'Đăng ký xe chờ duyệt', count: carCount, show: carCount > 0,
+    action: () => switchTab('car') });
+
+  [
+    { key: 'officeBuy', subType: 'MUA_BAN', icon: '🛒', label: 'Mua Bán chờ duyệt' },
+    { key: 'officeFix', subType: 'SUA_CHUA', icon: '🔧', label: 'Sửa Chữa chờ duyệt' },
+    { key: 'officeInvest', subType: 'DAU_TU', icon: '📈', label: 'Đầu Tư chờ duyệt' }
+  ].forEach(({ key, subType, icon, label }) => {
+    const wfMap = getOfficeWorkflowMap(subType);
+    const subTypeReqs = (DB.officeReqs || []).filter(o => o.subType === subType);
+    const count = countDeptWorkflowPending(subTypeReqs, o => wfMap[o.dept], user);
+    addCard({ key, icon, label, count, show: count > 0,
+      action: () => { switchTab('office'); setOfficeSubTab(subType); } });
+  });
+
+  const paymentCanManage = canManagePaymentRequestsClient(user);
+  const paymentCount = paymentCanManage ? (DB.paymentRequests || []).filter(pr => pr.status === 'PENDING' || pr.status === 'NEED_INFO').length : 0;
+  addCard({ key: 'payment', icon: '💰', label: 'Thanh toán chờ duyệt', count: paymentCount, show: paymentCanManage,
+    action: () => { switchTab('office'); setOfficeSubTab('PAYMENT'); } });
+
+  const vppCount = countDeptWorkflowPending(DB.vppRegistrations, r => DB.vppDeptWorkflows[r.dept], user);
+  addCard({ key: 'vpp', icon: '🖇️', label: 'Văn phòng phẩm chờ duyệt', count: vppCount, show: vppCount > 0,
+    action: () => { switchTab('vpp'); setVppSubTab('REGISTER'); } });
+
+  const reportAggCan = canAggregateReportsClient(user);
+  const reportAggCount = reportAggCan ? (DB.reportEntries || []).filter(e => e.status === 'SUBMITTED').length : 0;
+  addCard({ key: 'periodicReport', icon: '📅', label: 'Báo cáo định kỳ chờ tổng hợp', count: reportAggCount, show: reportAggCan,
+    action: () => { switchTab('periodicReport'); setPeriodicReportSubTab('AGGREGATE'); } });
+
+  const shareCanApprove = canApproveInternalPost(user);
+  const shareCount = shareCanApprove ? (DB.internalPosts || []).filter(p => p.type === 'SHARE' && p.status === 'PENDING').length : 0;
+  addCard({ key: 'internalShare', icon: '💬', label: 'Góc chia sẻ chờ duyệt', count: shareCount, show: shareCanApprove,
+    action: () => { switchTab('internal'); setInternalSubTab('SHARE'); } });
+
+  const taskCount = (DB.tasks || []).filter(t => taskNeedsMyAction(t, user)).length;
+  addCard({ key: 'task', icon: '📋', label: 'Công việc cần xử lý', count: taskCount, show: true,
+    action: () => switchTab('task') });
+
+  return cards;
+}
+
+function handleDashboardCardClick(key) {
+  const fn = dashboardCardActions[key];
+  if (fn) fn();
+}
+
+function renderDashboard() {
+  document.getElementById('dashboardGreeting').innerText = `Xin chào, ${currentUser.name}!`;
+
+  const hidden = getDashboardHiddenCards();
+  const allCards = buildDashboardCards(currentUser);
+  const relevantCards = allCards.filter(c => c.show);
+  const visibleCards = relevantCards.filter(c => !hidden.includes(c.key));
+
+  const grid = document.getElementById('dashboardStatsGrid');
+  document.getElementById('dashboardEmptyNote').classList.toggle('hidden', visibleCards.length > 0);
+  grid.innerHTML = visibleCards.map(c => `
+    <div onclick="handleDashboardCardClick('${c.key}')" class="dash-card bg-white border rounded-lg p-4 shadow-sm border-l-4 ${c.count > 0 ? 'border-l-amber-500' : 'border-l-slate-300'} flex justify-between items-center cursor-pointer transition-all hover:scale-[1.02]">
+      <div>
+        <p class="text-xs text-gray-500 uppercase font-bold">${escapeHtml(c.label)}</p>
+        <h3 class="text-2xl font-bold ${c.count > 0 ? 'text-amber-600' : 'text-gray-400'}">${c.count}</h3>
+      </div>
+      <div class="text-2xl">${c.icon}</div>
+    </div>
+  `).join('');
+
+  renderDashboardNews();
+}
+
+function renderDashboardNews() {
+  const section = document.getElementById('dashboardNewsSection');
+  if (!canAccessInternalModule(currentUser)) { section.classList.add('hidden'); return; }
+
+  const typeLabel = { NEWS: '📰 Tin tức', TRAINING: '🎓 Đào tạo', REWARD: '🏆 Khen thưởng' };
+  // "Nổi bật" = mới nhất trước — sắp theo id (Date.now() lúc tạo, xem lib/createValidation.js) thay vì
+  // parse chuỗi createdAt (đã format vi-VN, không parse ngược lại đáng tin cậy được).
+  const posts = (DB.internalPosts || [])
+    .filter(p => p.type !== 'SHARE' && p.status !== 'PENDING' && p.status !== 'REJECTED')
+    .sort((a, b) => b.id - a.id)
+    .slice(0, 6);
+
+  section.classList.remove('hidden');
+  const container = document.getElementById('dashboardNewsContainer');
+  if (posts.length === 0) {
+    container.innerHTML = `<div class="md:col-span-2 text-center p-6 text-gray-500 italic bg-white rounded border">Chưa có tin tức nào.</div>`;
+    return;
+  }
+  container.innerHTML = posts.map(p => `
+    <div onclick="switchTab('internal'); setInternalSubTab('${p.type}'); viewInternalPostDetail(${p.id});" class="bg-white rounded border hover:shadow p-3 cursor-pointer">
+      <div class="text-[10px] font-bold text-fuchsia-700">${typeLabel[p.type] || p.type}</div>
+      <div class="font-bold text-gray-800 text-sm">${escapeHtml(p.title)}</div>
+      <div class="text-xs text-gray-500 mt-0.5">${escapeHtml(p.authorName)} — ${escapeHtml(p.createdAt)}</div>
+    </div>
+  `).join('');
+}
+
+function openDashboardCustomizeModal() {
+  const hidden = getDashboardHiddenCards();
+  const relevantCards = buildDashboardCards(currentUser).filter(c => c.show);
+  const list = document.getElementById('dashboardCustomizeList');
+  if (relevantCards.length === 0) {
+    list.innerHTML = `<p class="text-sm text-gray-500 italic">Hiện chưa có thẻ nào liên quan tới bạn.</p>`;
+  } else {
+    list.innerHTML = relevantCards.map(c => `
+      <label class="flex items-center gap-2 text-sm p-1.5 rounded hover:bg-gray-50 cursor-pointer">
+        <input type="checkbox" onchange="onDashboardCustomizeToggle('${c.key}', this.checked)" ${hidden.includes(c.key) ? '' : 'checked'}>
+        <span>${c.icon} ${escapeHtml(c.label)}</span>
+      </label>
+    `).join('');
+  }
+  document.getElementById('dashboardCustomizeModal').classList.remove('hidden');
+}
+
+function closeDashboardCustomizeModal() {
+  document.getElementById('dashboardCustomizeModal').classList.add('hidden');
+  renderDashboard();
+}
+
+function onDashboardCustomizeToggle(key, checked) {
+  const hidden = getDashboardHiddenCards();
+  const next = checked ? hidden.filter(k => k !== key) : [...new Set([...hidden, key])];
+  setDashboardHiddenCards(next);
+}
+
 function finishLogin(user) {
   currentUser = user;
 
@@ -5119,7 +5352,7 @@ function finishLogin(user) {
   updateTongHopNavVisibility();
 
   populateDropdowns();
-  switchTab('doc');
+  switchTab('dashboard');
 }
 
 // Đăng xuất phía server (xoá cookie phiên) — chạy song song (fire-and-forget), không chặn việc dọn
@@ -5130,6 +5363,7 @@ function logout() {
   dataReady = false;
   document.getElementById('mustChangePasswordModal').classList.add('hidden');
   document.getElementById('loginSection').classList.remove('hidden');
+  document.getElementById('dashboardSection').classList.add('hidden');
   document.getElementById('docSection').classList.add('hidden');
   document.getElementById('submissionSection').classList.add('hidden');
   document.getElementById('taskSection').classList.add('hidden');
@@ -5289,6 +5523,7 @@ function switchTab(tabName) {
     return;
   }
 
+  document.getElementById('dashboardSection').classList.toggle('hidden', tabName !== 'dashboard');
   document.getElementById('docSection').classList.toggle('hidden', tabName !== 'doc');
   document.getElementById('submissionSection').classList.toggle('hidden', tabName !== 'submission');
   document.getElementById('taskSection').classList.toggle('hidden', tabName !== 'task');
@@ -5309,6 +5544,7 @@ function switchTab(tabName) {
 
   populateDropdowns();
 
+  if (tabName === 'dashboard') { renderDashboard(); }
   if (tabName === 'doc') {
     renderDynamicInputsForModule('DOC', 'dynamicFieldsContainer_DOC'); renderDocs(); updateUploadDeptDropdown();
     document.getElementById('docOpMode').value = 'NEW';
