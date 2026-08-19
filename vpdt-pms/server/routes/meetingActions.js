@@ -3,6 +3,10 @@
 // dựa vào việc ẩn/hiện nút bấm theo perms.meetingApprove/meetingCancel. Khác 4 module đã có ở Bước 1
 // (routes/workflow.js), lịch phòng họp không có quy trình nhiều bước, chỉ 1 cờ quyền toàn công ty nên
 // dùng route đơn giản riêng thay vì lib/workflowEngine.js (vốn dành cho quy trình có currentStep).
+//
+// "cancel" — mọi user LUÔN huỷ được lịch do CHÍNH MÌNH tạo (creator === self, không cần quyền gì thêm);
+// meetingCancel (đổi ngữ nghĩa thành "Người quản lý phòng họp") + admin huỷ được TẤT CẢ lịch của mọi
+// người. Khác "approve" (vẫn 1 cờ quyền toàn công ty như cũ, không có khái niệm "tự duyệt lịch của mình").
 const express = require('express');
 const router = express.Router();
 const { requireAuth, blockIfMustChangePassword } = require('../lib/auth');
@@ -27,11 +31,17 @@ router.post('/:id/:action', async (req, res) => {
   try {
     // requireAuth đã tự tra cứu user hiện tại (kể cả active) và gắn vào req.freshUser.
     const freshUser = req.freshUser;
-    if (!freshUser.perms?.admin && !freshUser.perms?.[config.perm]) {
+    const hasPerm = !!(freshUser.perms?.admin || freshUser.perms?.[config.perm]);
+    // "approve" vẫn đòi đúng 1 cờ quyền như cũ — chỉ "cancel" có thêm lối "tự huỷ lịch của mình", nên
+    // phải kiểm tra creator NGAY TRONG mutatorFn (chỉ biết được item.creator sau khi đã khoá/đọc bản ghi).
+    if (action === 'approve' && !hasPerm) {
       return res.status(403).json({ error: 'Bạn không có quyền thực hiện thao tác này' });
     }
 
     const resultItem = await withLockedRecordForCollection('meetings', itemId, (item) => {
+      if (action === 'cancel' && !hasPerm && item.creator !== freshUser.username) {
+        throw new HttpError(403, 'Bạn chỉ có thể huỷ lịch do chính mình đặt');
+      }
       item.status = config.status;
       return item;
     });

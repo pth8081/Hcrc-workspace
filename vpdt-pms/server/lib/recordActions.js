@@ -6,8 +6,8 @@
 //
 // Khác lib/createValidation.js (đều là {all,depts} cho 6 module), 3 module ở đây có hình dạng quyền
 // khác nhau nên không gộp vào 1 engine chung được: Hợp đồng chỉ theo "người tạo hoặc admin"; Biên bản
-// họp thêm cờ minutesEdit/minutesDelete (toàn công ty, không theo phòng ban); Công việc theo NGƯỜI
-// (assignedBy/assignee), hoàn toàn không có khái niệm phòng ban.
+// họp thêm cờ minutesEdit (toàn công ty, không theo phòng ban) cho SỬA — riêng XÓA là quyền tối cao,
+// chỉ Admin; Công việc theo NGƯỜI (assignedBy/assignee), hoàn toàn không có khái niệm phòng ban.
 const { HttpError } = require('./httpErrors');
 const { scopeAllows, OFFICE_SUBTYPE_TO_PERM_FLAG } = require('./createValidation');
 
@@ -228,19 +228,23 @@ function confirmPaymentInstallment(payload, user, pr) {
   return { item: pr, justCompleted };
 }
 
+// Xoá đề nghị thanh toán giờ là "quyền tối cao" — chỉ Admin, không còn qua paymentManage (kế toán vẫn
+// sửa/duyệt/yêu cầu bổ sung được như cũ, chỉ riêng XOÁ bị khoá lại theo đúng yêu cầu nghiệp vụ).
 function assertCanDeletePaymentRequest(user, pr) {
-  if (!canManagePaymentRequests(user)) throw new HttpError(403, 'Bạn không có quyền xoá đề nghị thanh toán');
+  if (!user.perms?.admin) throw new HttpError(403, 'Chỉ Quản Trị Viên mới có quyền xoá đề nghị thanh toán');
   if (pr.status === 'PAID') throw new HttpError(409, 'Đề nghị thanh toán đã hoàn tất — không thể xoá');
 }
 
 // ===================== BIÊN BẢN HỌP (sửa/xóa) =====================
-// minutesEdit/minutesDelete là cờ toàn công ty (không phải {all,depts}) — khớp đúng
-// canEditMeetingMinutesRecord()/canDeleteMeetingMinutesRecord() ở index.html.
+// minutesEdit là cờ toàn công ty (không phải {all,depts}) — khớp đúng canEditMeetingMinutesRecord()
+// ở index.html. Xóa KHÔNG dùng cờ riêng nữa — xem canDeleteMinutes() bên dưới.
 function canEditMinutes(user, minutes) {
   return !!(user.perms?.admin || user.perms?.minutesEdit || minutes.creator === user.username);
 }
-function canDeleteMinutes(user, minutes) {
-  return !!(user.perms?.admin || user.perms?.minutesDelete || minutes.creator === user.username);
+// Xoá biên bản họp giờ là "quyền tối cao" — chỉ Admin (bỏ minutesDelete + tự xoá bản của chính mình,
+// khớp đúng yêu cầu khoá xoá cho người dùng thường). Sửa (canEditMinutes) không đổi.
+function canDeleteMinutes(user) {
+  return !!user.perms?.admin;
 }
 
 const MINUTES_EDITABLE_FIELDS = ['linkedMeetingId', 'title', 'time', 'location', 'chair', 'secretary', 'attendees', 'content', 'directives'];
