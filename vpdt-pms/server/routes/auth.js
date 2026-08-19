@@ -185,7 +185,7 @@ router.post('/verify-pin', loginRateLimiter, requireAuth, async (req, res) => {
 // trong body — nên không thể dùng route này để sửa hồ sơ người khác hay tự cấp quyền/đổi phòng ban
 // (chỉ nhận đúng 4 field liệt kê dưới, bỏ qua mọi field khác kể cả nếu client cố gửi kèm perms/admin).
 router.patch('/me', requireAuth, async (req, res) => {
-  const { name, email, phone, password } = req.body || {};
+  const { name, email, phone, password, dashboardHiddenCards } = req.body || {};
 
   try {
     let updated;
@@ -201,6 +201,12 @@ router.patch('/me', requireAuth, async (req, res) => {
       if (typeof name === 'string') updated.name = name;
       if (typeof email === 'string') updated.email = email;
       if (typeof phone === 'string') updated.phone = phone;
+      // Danh sách key thẻ Dashboard người dùng đã tự ẩn (Đợt D — chuyển từ localStorage sang lưu
+      // server để đồng bộ giữa các thiết bị). Chỉ là 1 mảng string tuỳ ý lưu riêng cho từng người, KHÔNG
+      // cấp/ảnh hưởng quyền gì — không cần đối chiếu với danh sách key thật ở client.
+      if (Array.isArray(dashboardHiddenCards) && dashboardHiddenCards.every(k => typeof k === 'string')) {
+        updated.dashboardHiddenCards = dashboardHiddenCards;
+      }
       if (password) {
         const passwordError = validatePasswordStrength(password);
         if (passwordError) throw new HttpError(400, passwordError);

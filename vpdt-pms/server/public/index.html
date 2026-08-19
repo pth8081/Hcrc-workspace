@@ -5129,16 +5129,43 @@ function toggleSidebarCollapse() {
 // DASHBOARD (Đợt C) — trang chủ cá nhân hoá: mỗi thẻ dùng lại NGUYÊN điều kiện "canApprove" đã có sẵn
 // ở từng module (canApproveStep() + dept-workflow map riêng của module đó, hoặc cờ quyền phẳng như
 // canApproveContract()) — không có API/permission mới nào, không đổi logic phê duyệt hiện có.
-// Cá nhân hoá (ẩn/hiện từng thẻ) lưu tạm ở localStorage — sẽ chuyển sang lưu server ở Đợt D.
+// Cá nhân hoá (ẩn/hiện từng thẻ) lưu ở SERVER (Đợt D — user.dashboardHiddenCards, qua PATCH
+// /api/auth/me) để đồng bộ giữa các thiết bị, thay vì chỉ lưu riêng ở từng trình duyệt như Đợt C.
 // ============================================================
-const DASHBOARD_HIDDEN_KEY = 'vpdt_dashboard_hidden_cards';
+const DASHBOARD_HIDDEN_LOCAL_KEY = 'vpdt_dashboard_hidden_cards'; // key localStorage cũ (Đợt C) — chỉ còn dùng để di trú 1 lần
 
 function getDashboardHiddenCards() {
-  try { return JSON.parse(localStorage.getItem(DASHBOARD_HIDDEN_KEY) || '[]'); }
-  catch { return []; }
+  return Array.isArray(currentUser?.dashboardHiddenCards) ? currentUser.dashboardHiddenCards : [];
 }
-function setDashboardHiddenCards(arr) {
-  localStorage.setItem(DASHBOARD_HIDDEN_KEY, JSON.stringify(arr));
+
+// Ghi lên server rồi cập nhật currentUser tại chỗ (không cần gọi lại /me) — dùng chung cho toggle 1
+// thẻ và cho di trú dữ liệu cũ từ localStorage (migrateDashboardHiddenCardsFromLocalStorage()).
+async function saveDashboardHiddenCards(arr) {
+  try {
+    const res = await fetch('/api/auth/me', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ dashboardHiddenCards: arr })
+    });
+    if (!res.ok) return;
+    const updated = await res.json();
+    currentUser.dashboardHiddenCards = updated.dashboardHiddenCards || [];
+  } catch (e) {
+    // Mất mạng lúc lưu tuỳ chỉnh không phải lỗi nghiêm trọng — bỏ qua, lần bấm tuỳ chỉnh sau sẽ thử lại.
+  }
+}
+
+// Di trú 1 LẦN DUY NHẤT dữ liệu ẩn/hiện thẻ cũ từ localStorage (Đợt C, trước khi có lưu server) lên
+// hồ sơ server — chỉ chạy khi server CHƯA có dashboardHiddenCards (tài khoản chưa từng lưu qua Đợt D)
+// và trình duyệt này còn giữ lựa chọn cũ, để không làm mất tuỳ chỉnh người dùng đã chọn trước đó.
+async function migrateDashboardHiddenCardsFromLocalStorage() {
+  if (Array.isArray(currentUser?.dashboardHiddenCards)) return; // đã có trên server, không cần di trú
+  let localHidden = [];
+  try { localHidden = JSON.parse(localStorage.getItem(DASHBOARD_HIDDEN_LOCAL_KEY) || '[]'); } catch { /* bỏ qua */ }
+  if (!Array.isArray(localHidden) || localHidden.length === 0) return;
+  await saveDashboardHiddenCards(localHidden);
+  localStorage.removeItem(DASHBOARD_HIDDEN_LOCAL_KEY);
+  if (!document.getElementById('dashboardSection').classList.contains('hidden')) renderDashboard();
 }
 
 // Task không có 1 cờ "approvalStatus" duy nhất — "cần hành động" là hợp của nhiều điều kiện, y hệt
@@ -5294,7 +5321,7 @@ function renderDashboardNews() {
 }
 
 function openDashboardCustomizeModal() {
-  const hidden = getDashboardHiddenCards();
+  const hidden = dashboardHiddenWorking = [...getDashboardHiddenCards()];
   const relevantCards = buildDashboardCards(currentUser).filter(c => c.show);
   const list = document.getElementById('dashboardCustomizeList');
   if (relevantCards.length === 0) {
@@ -5315,14 +5342,19 @@ function closeDashboardCustomizeModal() {
   renderDashboard();
 }
 
+// Mảng key đang thao tác dở trong modal — mutate trực tiếp thay vì đọc lại currentUser.
+// dashboardHiddenCards mỗi lần tick (đọc lại dễ bị "mất" lượt tick nhanh liên tiếp trước khi PATCH
+// trước đó kịp phản hồi cập nhật currentUser). Khởi tạo lại mỗi lần mở modal.
+let dashboardHiddenWorking = [];
+
 function onDashboardCustomizeToggle(key, checked) {
-  const hidden = getDashboardHiddenCards();
-  const next = checked ? hidden.filter(k => k !== key) : [...new Set([...hidden, key])];
-  setDashboardHiddenCards(next);
+  dashboardHiddenWorking = checked ? dashboardHiddenWorking.filter(k => k !== key) : [...new Set([...dashboardHiddenWorking, key])];
+  saveDashboardHiddenCards(dashboardHiddenWorking);
 }
 
 function finishLogin(user) {
   currentUser = user;
+  migrateDashboardHiddenCardsFromLocalStorage();
 
   document.getElementById('loginSection').classList.add('hidden');
   document.getElementById('userHeader').classList.remove('hidden');
