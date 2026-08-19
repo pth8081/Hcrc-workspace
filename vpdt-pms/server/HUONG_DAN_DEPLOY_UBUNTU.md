@@ -295,7 +295,10 @@ mục 9.
 sudo npm install -g pm2
 
 cd /opt/vpdt
-pm2 start server.js --name vpdt
+# NODE_ENV=production BẮT BUỘC — thiếu biến này, lỗi máy chủ (500) sẽ trả kèm chi tiết exception thật
+# (có thể chứa lỗi SQL, đường dẫn file nội bộ...) ra thẳng cho trình duyệt thay vì chỉ ghi vào log server
+# (xem lib/errorResponse.js). KHÔNG bỏ qua bước này khi deploy lên máy chủ thật.
+NODE_ENV=production pm2 start server.js --name vpdt
 
 # Tự khởi động lại khi server reboot
 pm2 startup systemd
