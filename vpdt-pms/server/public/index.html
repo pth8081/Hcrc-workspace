@@ -47,7 +47,18 @@
         <button id="btnDocTab" onclick="switchTab('doc')" class="hidden text-xs bg-blue-600 text-white px-2 py-1 rounded hover:bg-blue-700 font-semibold">📂 Tài liệu</button>
         <button id="btnSubmissionTab" onclick="switchTab('submission')" class="hidden text-xs bg-amber-600 text-white px-2 py-1 rounded hover:bg-amber-700 font-semibold">📜 Văn bản trình</button>
         <button id="btnInternalTab" onclick="switchTab('internal')" class="hidden text-xs bg-fuchsia-600 text-white px-2 py-1 rounded hover:bg-fuchsia-700 font-semibold">📣 Truyền thông</button>
-        <button id="btnContractTab" onclick="switchTab('contract')" class="hidden text-xs bg-cyan-600 text-white px-2 py-1 rounded hover:bg-cyan-700 font-semibold">📄 Hợp đồng</button>
+        <!-- "Hợp Đồng" — cùng khuôn Điều Hành/Hành Chính bên dưới: 1 nút dropdown mở ra 2 sub-tab CÓ SẴN
+             của module contract (Phê Duyệt/Quản Lý HĐ & Giấy Phép), mỗi lựa chọn gọi switchTab('contract')
+             rồi setContractSubTab(...) để vào đúng sub-tab (giữ nguyên 100% logic/quyền bên trong module
+             — chỉ đổi cách vào). "Hợp Đồng" và "Tổng Hợp" (#tongHopNavWrap bên dưới) là 2 dropdown NGANG
+             HÀNG, độc lập với nhau — KHÔNG lồng module này vào module kia. -->
+        <div id="hopDongNavWrap" class="hidden relative inline-block">
+          <button id="btnHopDongTab" onclick="toggleHopDongDropdown(event)" class="text-xs bg-cyan-600 text-white px-2 py-1 rounded hover:bg-cyan-700 font-semibold">📄 Hợp Đồng ▾</button>
+          <div id="hopDongDropdownPanel" class="hidden absolute right-0 mt-1 bg-white border rounded shadow-lg z-30 min-w-[220px] overflow-hidden">
+            <button onclick="closeHopDongDropdown(); switchTab('contract'); setContractSubTab('APPROVAL')" class="w-full text-left px-3 py-2 text-xs hover:bg-cyan-50 font-semibold text-gray-700">⏳ Phê Duyệt</button>
+            <button onclick="closeHopDongDropdown(); switchTab('contract'); setContractSubTab('MANAGE')" class="w-full text-left px-3 py-2 text-xs hover:bg-cyan-50 font-semibold text-gray-700">📄 Quản Lý Hợp Đồng & Giấy Phép</button>
+          </div>
+        </div>
         <!-- "Điều Hành" — gộp NHẸ ở nav: 1 nút dropdown mở ra 2 lựa chọn Biên bản họp/Công việc, mỗi lựa
              chọn vẫn gọi ĐÚNG switchTab('minutes')/switchTab('task') như cũ (giữ nguyên 100% code/logic
              bên trong 2 module — chỉ đổi cách vào). btnMinutesTab/btnTaskTab GIỮ NGUYÊN id để
@@ -74,7 +85,20 @@
             <button id="btnVppTab" onclick="closeHanhChinhDropdown(); switchTab('vpp')" class="hidden w-full text-left px-3 py-2 text-xs hover:bg-orange-50 font-semibold text-gray-700">🖇️ Văn phòng phẩm</button>
           </div>
         </div>
-        <button id="btnOfficeTab" onclick="switchTab('office')" class="hidden text-xs bg-teal-600 text-white px-2 py-1 rounded hover:bg-teal-700 font-semibold">🗂️ Tổng Hợp</button>
+        <!-- "Tổng Hợp" — cùng khuôn Điều Hành/Hành Chính: 1 nút dropdown mở ra 4 sub-tab CÓ SẴN của
+             module office (Mua Bán/Sửa Chữa/Đầu Tư/Thanh Toán), mỗi lựa chọn gọi switchTab('office') rồi
+             setOfficeSubTab(...). Mỗi nút con tự ẩn/hiện riêng theo đúng quyền hiện có
+             (canAccessOfficeSubTab()/canAccessPaymentModule() — KHÔNG đổi field quyền), xem
+             updateTongHopNavVisibility() bên dưới để ẩn/hiện nút cha. -->
+        <div id="tongHopNavWrap" class="hidden relative inline-block">
+          <button id="btnTongHopTab" onclick="toggleTongHopDropdown(event)" class="text-xs bg-teal-600 text-white px-2 py-1 rounded hover:bg-teal-700 font-semibold">🗂️ Tổng Hợp ▾</button>
+          <div id="tongHopDropdownPanel" class="hidden absolute right-0 mt-1 bg-white border rounded shadow-lg z-30 min-w-[170px] overflow-hidden">
+            <button id="btnOfficeSubBuyNav" onclick="closeTongHopDropdown(); switchTab('office'); setOfficeSubTab('MUA_BAN')" class="hidden w-full text-left px-3 py-2 text-xs hover:bg-teal-50 font-semibold text-gray-700">🛒 Mua Bán</button>
+            <button id="btnOfficeSubFixNav" onclick="closeTongHopDropdown(); switchTab('office'); setOfficeSubTab('SUA_CHUA')" class="hidden w-full text-left px-3 py-2 text-xs hover:bg-teal-50 font-semibold text-gray-700">🔧 Sửa Chữa</button>
+            <button id="btnOfficeSubInvestNav" onclick="closeTongHopDropdown(); switchTab('office'); setOfficeSubTab('DAU_TU')" class="hidden w-full text-left px-3 py-2 text-xs hover:bg-teal-50 font-semibold text-gray-700">📈 Đầu Tư</button>
+            <button id="btnOfficeSubPaymentNav" onclick="closeTongHopDropdown(); switchTab('office'); setOfficeSubTab('PAYMENT')" class="hidden w-full text-left px-3 py-2 text-xs hover:bg-teal-50 font-semibold text-gray-700">💰 Thanh Toán</button>
+          </div>
+        </div>
         <button id="btnReportsTab" onclick="switchTab('reports')" class="hidden text-xs bg-sky-600 text-white px-2 py-1 rounded hover:bg-sky-700 font-semibold">📊 Báo cáo</button>
         <button id="btnSystemTab" onclick="switchTab('system')" class="hidden text-xs bg-purple-600 text-white px-2 py-1 rounded hover:bg-purple-700 font-semibold">🛠️ Hệ Thống</button>
         <button onclick="logout()" class="text-xs text-red-500 underline py-1 hover:text-red-700">Đăng xuất</button>
@@ -422,11 +446,14 @@
     </div>
 
     <div id="contractManageFormWrap" class="hidden bg-cyan-50 p-4 rounded border border-cyan-200 space-y-3">
-      <h3 class="font-bold text-cyan-900 text-base flex items-center gap-2">📄 Tạo Mới / Bổ Sung Phụ Lục Hợp Đồng</h3>
-      <p class="text-xs text-cyan-800">Hợp đồng mới sẽ chuyển qua sub-tab "Phê Duyệt" chờ duyệt trước khi hiển thị chính thức tại đây. Phụ lục gắn thẳng vào hợp đồng đã duyệt, không cần duyệt lại.</p>
+      <h3 id="contractManageFormTitle" class="font-bold text-cyan-900 text-base flex items-center gap-2">➕ Tạo Mới Hợp Đồng / Giấy Phép</h3>
+      <p id="contractManageFormHint" class="text-xs text-cyan-800">Hồ sơ mới sẽ chờ phê duyệt (trừ khi bạn có quyền tự duyệt) rồi mới chuyển sang "Quản Lý Hợp Đồng & Giấy Phép" để theo dõi.</p>
 
       <form id="contractForm" onsubmit="submitContractReq(event)" class="bg-white p-3 rounded border text-xs space-y-3">
-        <div>
+        <!-- "Loại Thao Tác" không còn cho người dùng tự chọn — sub-tab đang đứng (Phê Duyệt/Quản Lý HĐ)
+             quyết định thẳng contractOpMode (xem setContractSubTab()), tránh trường hợp lệch nghĩa: đứng
+             ở tab Phê Duyệt mà tạo Phụ Lục (vốn tự động APPROVED, không qua duyệt) hoặc ngược lại. -->
+        <div id="contractOpModeWrap" class="hidden">
           <label class="block font-semibold text-gray-600 mb-1">Loại Thao Tác</label>
           <select id="contractOpMode" onchange="onContractOpModeChange()" class="w-full md:w-64 border p-1.5 rounded bg-white font-semibold">
             <option value="NEW">➕ Tạo Mới Hợp Đồng</option>
@@ -4997,7 +5024,7 @@ function finishLogin(user) {
   document.getElementById('btnDocTab').classList.toggle('hidden', !canAccessDocModule(user));
 
   document.getElementById('btnSubmissionTab').classList.toggle('hidden', !canAccessSubmissionModule(user));
-  document.getElementById('btnContractTab').classList.toggle('hidden', !canAccessContractModule(user));
+  document.getElementById('hopDongNavWrap').classList.toggle('hidden', !canAccessContractModule(user));
   document.getElementById('btnMeetingTab').classList.toggle('hidden', !canAccessMeetingModule(user));
   document.getElementById('btnMinutesTab').classList.toggle('hidden', !canAccessMeetingMinutesModule(user));
   document.getElementById('btnTaskTab').classList.toggle('hidden', !canAccessTaskModule(user));
@@ -5007,7 +5034,11 @@ function finishLogin(user) {
   document.getElementById('btnCarTab').classList.toggle('hidden', !canAccessCarModule(user));
   document.getElementById('btnVppTab').classList.toggle('hidden', !canAccessVppModule(user));
   updateHanhChinhNavVisibility();
-  document.getElementById('btnOfficeTab').classList.toggle('hidden', !canAccessOfficeModule(user));
+  document.getElementById('btnOfficeSubBuyNav').classList.toggle('hidden', !canAccessOfficeSubTab(user, 'MUA_BAN'));
+  document.getElementById('btnOfficeSubFixNav').classList.toggle('hidden', !canAccessOfficeSubTab(user, 'SUA_CHUA'));
+  document.getElementById('btnOfficeSubInvestNav').classList.toggle('hidden', !canAccessOfficeSubTab(user, 'DAU_TU'));
+  document.getElementById('btnOfficeSubPaymentNav').classList.toggle('hidden', !canAccessPaymentModule(user));
+  updateTongHopNavVisibility();
 
   populateDropdowns();
   switchTab('doc');
@@ -5082,6 +5113,48 @@ function closeHanhChinhDropdown() {
 document.addEventListener('click', (ev) => {
   const panel = document.getElementById('hanhChinhDropdownPanel');
   const btn = document.getElementById('btnHanhChinhTab');
+  if (!panel || panel.classList.contains('hidden')) return;
+  if (!panel.contains(ev.target) && ev.target !== btn && !btn?.contains(ev.target)) panel.classList.add('hidden');
+});
+
+// "Tổng Hợp" — cùng khuôn Điều Hành/Hành Chính, bọc Mua Bán/Sửa Chữa/Đầu Tư/Thanh Toán (module "office",
+// xem HTML #tongHopNavWrap). "Hợp Đồng" (#hopDongNavWrap) là dropdown NGANG HÀNG riêng biệt — 2 module
+// độc lập, không lồng vào nhau.
+function updateTongHopNavVisibility() {
+  const buyVisible = !document.getElementById('btnOfficeSubBuyNav').classList.contains('hidden');
+  const fixVisible = !document.getElementById('btnOfficeSubFixNav').classList.contains('hidden');
+  const investVisible = !document.getElementById('btnOfficeSubInvestNav').classList.contains('hidden');
+  const paymentVisible = !document.getElementById('btnOfficeSubPaymentNav').classList.contains('hidden');
+  document.getElementById('tongHopNavWrap').classList.toggle('hidden', !buyVisible && !fixVisible && !investVisible && !paymentVisible);
+}
+function toggleTongHopDropdown(e) {
+  e.stopPropagation();
+  document.getElementById('tongHopDropdownPanel')?.classList.toggle('hidden');
+}
+function closeTongHopDropdown() {
+  document.getElementById('tongHopDropdownPanel')?.classList.add('hidden');
+}
+document.addEventListener('click', (ev) => {
+  const panel = document.getElementById('tongHopDropdownPanel');
+  const btn = document.getElementById('btnTongHopTab');
+  if (!panel || panel.classList.contains('hidden')) return;
+  if (!panel.contains(ev.target) && ev.target !== btn && !btn?.contains(ev.target)) panel.classList.add('hidden');
+});
+
+// "Hợp Đồng" — cùng khuôn Điều Hành/Hành Chính, bọc 2 sub-tab Phê Duyệt/Quản Lý HĐ & Giấy Phép (module
+// "contract", xem HTML #hopDongNavWrap). Không có hàm updateXNavVisibility riêng như Điều Hành/Hành
+// Chính/Tổng Hợp vì 2 sub-tab này dùng CHUNG 1 điều kiện quyền (canAccessContractModule — không có
+// phân quyền riêng theo từng sub-tab) — nút cha ẩn/hiện thẳng theo đúng điều kiện đó ở finishLogin().
+function toggleHopDongDropdown(e) {
+  e.stopPropagation();
+  document.getElementById('hopDongDropdownPanel')?.classList.toggle('hidden');
+}
+function closeHopDongDropdown() {
+  document.getElementById('hopDongDropdownPanel')?.classList.add('hidden');
+}
+document.addEventListener('click', (ev) => {
+  const panel = document.getElementById('hopDongDropdownPanel');
+  const btn = document.getElementById('btnHopDongTab');
   if (!panel || panel.classList.contains('hidden')) return;
   if (!panel.contains(ev.target) && ev.target !== btn && !btn?.contains(ev.target)) panel.classList.add('hidden');
 });
@@ -8307,9 +8380,12 @@ function resetTaskFilters() {
 // Khi khác null: form đang ở chế độ SỬA hồ sơ hợp đồng có id này (thay vì tạo mới).
 let editingContractId = null;
 
-// Đổi sub-tab "Phê Duyệt" (approvalStatus PENDING) / "Quản Lý Hợp Đồng & Giấy Phép" (APPROVED) — chỉ
-// tab MANAGE mới hiện form Tạo Mới/Bổ Sung Phụ Lục, khớp đúng yêu cầu (nút tạo đặt ở tab Quản Lý HĐ,
-// hồ sơ vẫn phải qua Phê Duyệt trước khi "quay lại" đây).
+// Đổi sub-tab "Phê Duyệt" (tạo mới hồ sơ GỐC + khai báo Đợt Thanh Toán + duyệt hồ sơ PENDING) / "Quản
+// Lý Hợp Đồng & Giấy Phép" (chỉ hồ sơ ĐÃ APPROVED — bổ sung phụ lục, tải Tài liệu ký, theo dõi thanh
+// toán/hạn hợp đồng). Form Tạo Mới/Bổ Sung Phụ Lục giờ hiện ở CẢ HAI tab (dùng chung 1 <form>), nhưng
+// contractOpMode bị KHOÁ theo đúng tab đang đứng (không cho tự chọn) — Phê Duyệt luôn là "Tạo Mới"
+// (kèm Đợt Thanh Toán), Quản Lý HĐ luôn là "Bổ Sung Phụ Lục" (tự động APPROVED, không có Đợt Thanh
+// Toán riêng — khớp đúng lib/createValidation.js CREATE_MODULE_CONFIGS.contracts).
 function setContractSubTab(subTab) {
   resetListPage('contract');
   activeContractSubTab = subTab;
@@ -8317,10 +8393,16 @@ function setContractSubTab(subTab) {
   const inactiveCls = 'px-3 py-1 rounded text-xs font-bold bg-gray-200 text-gray-700';
   document.getElementById('btnContractSubApproval').className = subTab === 'APPROVAL' ? activeCls : inactiveCls;
   document.getElementById('btnContractSubManage').className = subTab === 'MANAGE' ? activeCls : inactiveCls;
-  document.getElementById('contractManageFormWrap').classList.toggle('hidden', subTab !== 'MANAGE');
+  document.getElementById('contractManageFormWrap').classList.remove('hidden');
   document.getElementById('contractPaymentColHeader').classList.toggle('hidden', subTab !== 'MANAGE');
   document.getElementById('contractListTitle').innerText = subTab === 'APPROVAL' ? '📋 Danh Sách Hợp Đồng Chờ Duyệt' : '📋 Danh Sách Hợp Đồng & Giấy Phép';
-  if (subTab === 'MANAGE') { cancelEditContract(); onContractOpModeChange(); }
+  document.getElementById('contractManageFormTitle').innerText = subTab === 'APPROVAL' ? '➕ Tạo Mới Hợp Đồng / Giấy Phép' : '📎 Bổ Sung Phụ Lục Hợp Đồng';
+  document.getElementById('contractManageFormHint').innerText = subTab === 'APPROVAL'
+    ? 'Hồ sơ mới sẽ chờ phê duyệt (trừ khi bạn có quyền tự duyệt) rồi mới chuyển sang "Quản Lý Hợp Đồng & Giấy Phép" để theo dõi.'
+    : 'Phụ lục chỉ gắn được vào hợp đồng GỐC đã được phê duyệt, tự động có hiệu lực ngay, không cần duyệt lại.';
+  cancelEditContract();
+  document.getElementById('contractOpMode').value = subTab === 'MANAGE' ? 'ADDENDUM' : 'NEW';
+  onContractOpModeChange();
   renderContracts();
 }
 
