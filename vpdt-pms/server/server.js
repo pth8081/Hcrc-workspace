@@ -2,13 +2,13 @@
 require('dotenv').config();
 const express = require('express');
 const cookieParser = require('cookie-parser');
-const rateLimit = require('express-rate-limit');
+const { rateLimit, ipKeyGenerator } = require('express-rate-limit');
 const path = require('path');
 const securityHeaders = require('./lib/securityHeaders');
 const { version: APP_VERSION } = require('./package.json');
 const { getPool } = require('./db');
 const { seedDefaults } = require('./seedDefaults');
-const { requireAuth, blockIfMustChangePassword } = require('./lib/auth');
+const { requireAuth, blockIfMustChangePassword, verifyToken, COOKIE_NAME } = require('./lib/auth');
 const authRoutes = require('./routes/auth');
 const dataRoutes = require('./routes/data');
 const workflowRoutes = require('./routes/workflow');
@@ -70,12 +70,29 @@ app.use(cookieParser());
 // thường của 1 người dùng thật (SPA tải nhiều đợt dữ liệu khi chuyển tab/lọc/tìm kiếm) nhưng vẫn chặn
 // được lạm dụng bằng script. Route nhạy cảm hơn (login, upload, gửi email) đã/sẽ có limiter RIÊNG chặt
 // hơn nằm chồng lên (xem routes/auth.js, routes/upload.js, routes/email.js).
+//
+// Khoá theo USERNAME đã đăng nhập (giải mã thẳng từ cookie JWT, KHÔNG tra DB — chỉ để định danh, việc
+// xác thực thật vẫn do requireAuth() lo sau) thay vì theo IP khi có phiên hợp lệ — nhiều người dùng
+// thật trong cùng công ty thường ra Internet qua CHUNG 1 IP (NAT văn phòng), khoá thuần theo IP dễ
+// khiến cả văn phòng cùng bị tính chung 1 hạn mức, người này dùng nhiều thì người khác bị chặn oan.
+// Chưa có/không còn phiên hợp lệ (trước khi đăng nhập, hoặc token đã hết hạn) thì rơi về khoá theo IP
+// như cũ (ipKeyGenerator() chuẩn hoá đúng theo IPv4/IPv6, tránh cảnh báo/đụng độ dải mạng của thư viện).
 const globalApiRateLimiter = rateLimit({
   windowMs: 60 * 1000,
-  limit: 200,
+  limit: 600,
   standardHeaders: true,
   legacyHeaders: false,
-  message: { error: 'Bạn đang gửi quá nhiều yêu cầu, vui lòng thử lại sau ít phút.' }
+  message: { error: 'Bạn đang gửi quá nhiều yêu cầu, vui lòng thử lại sau ít phút.' },
+  keyGenerator: (req, res) => {
+    const token = req.cookies?.[COOKIE_NAME];
+    if (token) {
+      try {
+        const payload = verifyToken(token);
+        if (payload?.sub) return `u:${payload.sub}`;
+      } catch { /* token hết hạn/không hợp lệ — rơi về khoá theo IP bên dưới */ }
+    }
+    return ipKeyGenerator(req.ip);
+  }
 });
 app.use('/api', globalApiRateLimiter);
 
@@ -99,18 +116,23 @@ app.use('/api/vpp', vppCatalogRoutes);
 // hơn theo hồ sơ sẽ cần thiết kế riêng (route tải có kiểm tra ngược lại hồ sơ chứa fileUrl đó).
 app.use('/uploads', requireAuth, blockIfMustChangePassword, express.static(path.join(__dirname, 'uploads')));
 
+// Thư viện vendor lấy thẳng từ node_modules theo đúng bản đã `npm install` — nội dung chỉ đổi khi
+// đổi phiên bản package (đi kèm redeploy), nên cache dài hạn được an toàn ở trình duyệt thay vì tải
+// lại nguyên file (vài trăm KB - vài MB mỗi thư viện) ở mỗi phiên/mỗi người dùng.
+const VENDOR_STATIC_OPTS = { maxAge: '7d', immutable: true };
+
 // Phục vụ PDF.js (tự lưu trên server, không qua CDN) — dùng để vẽ PDF ra <canvas> ở Khung Xem Bảo Vệ
 // thay vì plugin PDF gốc của trình duyệt (bị Chrome/Edge chặn khi nằm trong modal có lớp nền mờ, và
 // không thể ẩn thanh công cụ In/Tải có sẵn của plugin). Lấy trực tiếp từ node_modules nên luôn khớp
 // phiên bản đã cài qua npm, không cần bước copy thủ công.
-app.use('/vendor/pdfjs', express.static(path.join(__dirname, 'node_modules', 'pdfjs-dist', 'legacy', 'build')));
+app.use('/vendor/pdfjs', express.static(path.join(__dirname, 'node_modules', 'pdfjs-dist', 'legacy', 'build'), VENDOR_STATIC_OPTS));
 
 // Phục vụ jsPDF + html2canvas (tự lưu trên server, không qua CDN — cùng lý do với pdfjs ở trên) — dùng
 // để XUẤT PDF thật ở Báo Cáo Định Kỳ (chụp từng slide đã render sẵn bằng HTML/CSS thành ảnh rồi ghép
 // vào 1 file PDF nhiều trang), thay cho cách cũ dùng window.print() qua iframe ẩn (mở hộp thoại in của
 // trình duyệt, không phải tải file thật — xem downloadPrPdf() ở index.html).
-app.use('/vendor/jspdf', express.static(path.join(__dirname, 'node_modules', 'jspdf', 'dist')));
-app.use('/vendor/html2canvas', express.static(path.join(__dirname, 'node_modules', 'html2canvas', 'dist')));
+app.use('/vendor/jspdf', express.static(path.join(__dirname, 'node_modules', 'jspdf', 'dist'), VENDOR_STATIC_OPTS));
+app.use('/vendor/html2canvas', express.static(path.join(__dirname, 'node_modules', 'html2canvas', 'dist'), VENDOR_STATIC_OPTS));
 
 // Health check (dùng cho giám sát / load balancer / kiểm tra nhanh sau khi deploy). "version" luôn
 // trả về ngay cả khi DB lỗi — dùng để xác nhận server đang chạy ĐÚNG bản code vừa deploy (so khớp với
@@ -147,8 +169,16 @@ async function start() {
 
     // Nhắc hết hạn hợp đồng: kiểm tra ngay lúc khởi động, sau đó lặp lại mỗi 24h.
     // Không phụ thuộc việc có ai mở trình duyệt hay không.
-    checkContractExpiryReminders();
-    setInterval(checkContractExpiryReminders, 24 * 60 * 60 * 1000);
+    // CHỈ chạy ở 1 tiến trình khi deploy nhiều tiến trình (PM2 cluster mode, xem
+    // ecosystem.config.js/HUONG_DAN_DEPLOY_UBUNTU.md mục 9) — PM2 gán NODE_APP_INSTANCE=0,1,2...
+    // cho từng tiến trình trong cluster; không đặt biến này khi chạy 1 tiến trình (fork mode, mặc
+    // định trước đây) nên vẫn chạy như cũ. Không chặn ở đây thì mỗi tiến trình đều tự lặp lại job này,
+    // gửi trùng email nhắc hạn N lần (N = số tiến trình).
+    const isSchedulerInstance = !process.env.NODE_APP_INSTANCE || process.env.NODE_APP_INSTANCE === '0';
+    if (isSchedulerInstance) {
+      checkContractExpiryReminders();
+      setInterval(checkContractExpiryReminders, 24 * 60 * 60 * 1000);
+    }
   } catch (err) {
     console.error('⛔ Không thể khởi động server:', err.message);
     process.exit(1);

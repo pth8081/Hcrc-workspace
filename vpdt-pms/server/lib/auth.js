@@ -4,7 +4,7 @@
 // request từ client, khiến GET/POST /api/data không có xác thực gì. Module này là gốc để vá lỗ đó.
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
-const { getAppDataValue } = require('./appData');
+const { getAppDataValueCached } = require('./appData');
 
 const COOKIE_NAME = 'vpdt_token';
 const TOKEN_TTL_MS = 60 * 60 * 1000; // 1h — xem cơ chế "trượt hạn theo hoạt động" ở requireAuth() bên dưới
@@ -101,7 +101,11 @@ async function requireAuth(req, res, next) {
   }
 
   try {
-    const users = await getAppDataValue('users');
+    // Dùng bản có cache ngắn hạn (vài giây, xem lib/appData.js) thay vì đọc DB ở MỌI request — đây là
+    // middleware chạy trên gần như mọi API, nên đây từng là điểm nhân DB round-trip theo số request
+    // (không phải số người dùng) khi tải cao. Vẫn "vô hiệu hóa gần như ngay lập tức" vì cache bị xoá
+    // ngay khi có ghi (cùng tiến trình) và tự hết hạn rất nhanh nếu ghi từ tiến trình khác.
+    const users = await getAppDataValueCached('users');
     const freshUser = (users || []).find(u => u.username === payload.sub);
     if (!freshUser) return res.status(401).json({ error: 'Tài khoản không còn tồn tại' });
     if (freshUser.active === false) {

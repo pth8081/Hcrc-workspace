@@ -2,6 +2,31 @@
 // routes/auth.js, routes/workflow.js và seedDefaults.js (trước đây mỗi nơi tự viết lại cùng 1 đoạn SQL).
 const { getPool, sql } = require('../db');
 
+// Cache ngắn hạn TRONG BỘ NHỚ, chỉ áp dụng cho getAppDataValueCached() bên dưới (KHÔNG ảnh hưởng
+// getAppDataValue() thường — mọi nơi khác trong code vẫn đọc thẳng DB như cũ). Lý do: requireAuth()
+// (lib/auth.js) đọc lại TOÀN BỘ collection "users" ở MỖI request có xác thực để kiểm tra tài khoản
+// còn active hay không — với nhiều người dùng thao tác đồng thời, đây là 1 DB round-trip nhân theo
+// SỐ REQUEST chứ không phải số người, dễ thành điểm nghẽn đầu tiên khi tải cao. TTL vài giây vẫn giữ
+// đúng ý "vô hiệu hóa có hiệu lực gần như ngay lập tức" (chỉ trễ tối đa TTL) trong khi giảm mạnh số
+// lần đọc DB. Cache bị xoá NGAY khi có ghi (setAppDataValue/setAppDataValueIfVersionMatches/
+// withLockedAppDataValue, xem cuối các hàm bên dưới) nên trong CÙNG 1 tiến trình Node, thay đổi luôn
+// thấy ngay không cần chờ hết TTL — độ trễ TTL chỉ còn ý nghĩa khi chạy nhiều tiến trình (PM2 cluster
+// mode), vì mỗi tiến trình giữ cache riêng.
+const CACHE_TTL_MS = parseInt(process.env.APPDATA_CACHE_TTL_MS || '3000', 10);
+const cache = new Map(); // DataKey -> { value, expiresAt }
+
+function cacheInvalidate(key) {
+  cache.delete(key);
+}
+
+async function getAppDataValueCached(key) {
+  const hit = cache.get(key);
+  if (hit && hit.expiresAt > Date.now()) return hit.value;
+  const value = await getAppDataValue(key);
+  cache.set(key, { value, expiresAt: Date.now() + CACHE_TTL_MS });
+  return value;
+}
+
 async function getAppDataValue(key) {
   const pool = await getPool();
   const result = await pool.request()
@@ -38,6 +63,7 @@ async function setAppDataValue(key, value) {
       WHEN NOT MATCHED THEN
         INSERT (DataKey, DataValue) VALUES (@k, @v);
     `);
+  cacheInvalidate(key);
 }
 
 // Ghi CÓ ĐIỀU KIỆN: chỉ áp dụng nếu UpdatedAt hiện tại trong DB vẫn khớp đúng expectedVersion đã đọc
@@ -59,6 +85,7 @@ async function setAppDataValueIfVersionMatches(key, value, expectedVersion) {
     `);
   const conflict = result.rowsAffected[0] === 0;
   const newVersion = result.recordset?.[0]?.UpdatedAt?.toISOString() || null;
+  if (!conflict) cacheInvalidate(key);
   return { conflict, version: newVersion };
 }
 
@@ -104,6 +131,7 @@ async function withLockedAppDataValue(key, mutatorFn) {
       .query('UPDATE dbo.AppData SET DataValue = @v, UpdatedAt = SYSUTCDATETIME() WHERE DataKey = @k');
 
     await tx.commit();
+    cacheInvalidate(key);
     return newValue;
   } catch (err) {
     await tx.rollback().catch(() => {});
@@ -112,6 +140,6 @@ async function withLockedAppDataValue(key, mutatorFn) {
 }
 
 module.exports = {
-  getAppDataValue, getAppDataValueWithVersion, getAllAppData,
+  getAppDataValue, getAppDataValueCached, getAppDataValueWithVersion, getAllAppData,
   setAppDataValue, setAppDataValueIfVersionMatches, withLockedAppDataValue
 };
