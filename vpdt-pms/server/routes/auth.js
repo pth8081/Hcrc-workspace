@@ -4,15 +4,19 @@ const express = require('express');
 const rateLimit = require('express-rate-limit');
 const router = express.Router();
 const { getAppDataValue, withLockedAppDataValue } = require('../lib/appData');
-const { verifyPassword, hashPassword, signToken, setAuthCookie, clearAuthCookie, requireAuth } = require('../lib/auth');
+const { verifyPassword, hashPassword, validatePin, signToken, setAuthCookie, clearAuthCookie, requireAuth } = require('../lib/auth');
 const { recordFailedLogin, resetLoginAttempts, getLockoutRemainingMinutes } = require('../lib/loginAttempts');
 const { validatePasswordStrength } = require('../lib/passwordPolicy');
 const { HttpError } = require('../lib/httpErrors');
 
-// Không bao giờ trả field mật khẩu ra ngoài, dùng chung cho /login và /me.
+// Không bao giờ trả field mật khẩu/PIN (dù đã hash) hay dữ liệu khoá đăng nhập ra ngoài, dùng chung cho
+// /login, /me và /change-pin — khớp đúng stripPasswords() ở routes/data.js (trước đây route này bỏ sót
+// pinHash/failedLoginAttempts/lockedUntil, chỉ lọc pass/password). Thêm hasPin (boolean, KHÔNG phải hash
+// thật) để client biết hiện đã có mã PIN hay chưa mà không cần thấy giá trị — dùng để quyết định hiện ô
+// "Mã PIN hiện tại" khi đổi PIN (xem #pfCurrentPinWrap ở index.html).
 function toSafeUser(user) {
-  const { pass, password, ...safe } = user;
-  return safe;
+  const { pass, password, pinHash, failedLoginAttempts, lockedUntil, ...safe } = user;
+  return { ...safe, hasPin: !!pinHash };
 }
 
 // Chặn dò mật khẩu ồ ạt từ 1 nguồn (IP) — bổ sung cho khoá theo TÀI KHOẢN ở lib/loginAttempts.js (2
@@ -177,6 +181,65 @@ router.post('/verify-pin', loginRateLimiter, requireAuth, async (req, res) => {
   } catch (err) {
     console.error('POST /api/auth/verify-pin lỗi:', err.message);
     res.status(500).json({ error: 'Không thể xác thực mã PIN' });
+  }
+});
+
+// POST /api/auth/change-pin — người dùng TỰ đặt/đổi mã PIN phê duyệt của CHÍNH mình (perms.
+// approverAuthLevel = 'PIN'). Khác PATCH /api/auth/me (đổi mật khẩu không cần xác nhận mật khẩu cũ, chỉ
+// dựa vào phiên đăng nhập đang mở) — PIN là lớp xác thực THỨ HAI trước khi Duyệt, nên bắt buộc gõ đúng
+// PIN hiện tại (nếu đã có) mới đổi được sang PIN mới, để không ai lợi dụng phiên trình duyệt đang mở sẵn
+// (vd máy dùng chung) đổi PIN người khác mà không biết PIN cũ. Nếu CHƯA từng có PIN (hasPin=false, lần
+// đầu thiết lập) thì bỏ qua bước xác nhận PIN cũ — không có gì để xác nhận. Cùng 2 lớp chống dò như
+// /verify-pin: rate-limit theo IP + khoá theo tài khoản sau nhiều lần sai PIN hiện tại (dùng CHUNG bộ
+// đếm lockout với /login, /verify-password, /verify-pin — cùng mục đích chống dò 1 tài khoản).
+router.post('/change-pin', loginRateLimiter, requireAuth, async (req, res) => {
+  const { currentPin, newPin } = req.body || {};
+  if (!newPin) return res.status(400).json({ error: 'Thiếu mã PIN mới' });
+
+  const pinError = validatePin(String(newPin));
+  if (pinError) return res.status(400).json({ error: pinError });
+
+  try {
+    const username = req.freshUser.username;
+    const hasPin = !!req.freshUser.pinHash;
+
+    if (hasPin) {
+      if (!currentPin) return res.status(400).json({ error: 'Vui lòng nhập mã PIN hiện tại' });
+
+      const remainingLockMinutes = getLockoutRemainingMinutes(req.freshUser);
+      if (remainingLockMinutes !== null) {
+        return res.status(429).json({ error: `Tài khoản tạm khóa do nhập sai quá nhiều lần. Vui lòng thử lại sau ${remainingLockMinutes} phút.` });
+      }
+
+      const ok = await verifyPassword(currentPin, req.freshUser.pinHash);
+      if (!ok) {
+        await withLockedAppDataValue('users', (collection) => {
+          const list = Array.isArray(collection) ? collection : [];
+          const idx = list.findIndex(u => u.username === username);
+          if (idx !== -1) recordFailedLogin(list[idx]);
+          return list;
+        });
+        return res.status(401).json({ error: 'Mã PIN hiện tại không chính xác' });
+      }
+    }
+
+    const newPinHash = await hashPassword(String(newPin));
+    let updated;
+    await withLockedAppDataValue('users', (collection) => {
+      const list = Array.isArray(collection) ? collection : [];
+      const idx = list.findIndex(u => u.username === username);
+      if (idx === -1) throw new HttpError(401, 'Tài khoản không còn tồn tại');
+      updated = { ...list[idx], pinHash: newPinHash };
+      resetLoginAttempts(updated); // đổi PIN thành công (kể cả sau khi vừa gõ sai vài lần) -> xoá lịch sử sai
+      list[idx] = updated;
+      return list;
+    });
+
+    res.json(toSafeUser(updated));
+  } catch (err) {
+    if (err instanceof HttpError) return res.status(err.status).json({ error: err.message });
+    console.error('POST /api/auth/change-pin lỗi:', err.message);
+    res.status(500).json({ error: 'Không thể đổi mã PIN' });
   }
 });
 

@@ -3420,12 +3420,35 @@ table { display: block; overflow-x: auto; max-width: 100%; }
           <input id="pfConfirmPass" type="password" class="w-full border p-2 rounded">
         </div>
       </div>
-      
+
       <div class="flex justify-end gap-2 pt-2">
         <button type="button" onclick="closeProfileModal()" class="bg-gray-400 text-white px-4 py-2 rounded font-bold">Hủy</button>
         <button type="submit" class="bg-blue-600 text-white px-5 py-2 rounded font-bold hover:bg-blue-700">Lưu Thay Đổi</button>
       </div>
     </form>
+
+    <!-- Chỉ hiện với người có perms.approverAuthLevel = 'PIN' (xem openProfileModal()) — tách riêng
+         khỏi <form> ở trên vì đổi PIN cần xác nhận PIN CŨ + đi qua route riêng (/api/auth/change-pin,
+         khác PATCH /api/auth/me của phần mật khẩu), không nên gộp chung 1 lần submit. -->
+    <div id="pfPinSection" class="hidden border-t pt-3 space-y-3">
+      <h4 class="font-bold text-gray-700">🔑 Đổi Mã PIN Phê Duyệt</h4>
+      <p id="pfPinHint" class="text-[11px] text-gray-500"></p>
+      <div id="pfCurrentPinWrap">
+        <label class="block font-semibold text-gray-600 mb-1">Mã PIN hiện tại</label>
+        <input id="pfCurrentPin" type="password" inputmode="numeric" autocomplete="off" class="w-full border p-2 rounded">
+      </div>
+      <div>
+        <label class="block font-semibold text-gray-600 mb-1">Mã PIN mới (số, tối thiểu 4 chữ số)</label>
+        <input id="pfNewPin" type="password" inputmode="numeric" autocomplete="off" class="w-full border p-2 rounded">
+      </div>
+      <div>
+        <label class="block font-semibold text-gray-600 mb-1">Xác nhận mã PIN mới</label>
+        <input id="pfConfirmPin" type="password" inputmode="numeric" autocomplete="off" class="w-full border p-2 rounded">
+      </div>
+      <div class="flex justify-end">
+        <button type="button" onclick="changeMyApprovalPin()" class="bg-amber-600 text-white px-4 py-2 rounded font-bold hover:bg-amber-700">🔑 Cập Nhật Mã PIN</button>
+      </div>
+    </div>
   </div>
 </div>
 
@@ -5256,6 +5279,24 @@ function openProfileModal() {
   document.getElementById('pfPhone').value = currentUser.phone || '';
   document.getElementById('pfNewPass').value = '';
   document.getElementById('pfConfirmPass').value = '';
+
+  // Chỉ người đang ở mức xác thực phê duyệt PIN (perms.approverAuthLevel = 'PIN') mới cần quản lý mã
+  // PIN của mình — người khác không thấy khối này, giống cách form Sửa Người Dùng của admin cũng chỉ
+  // hiện ô PIN khi chọn đúng mức này (xem onApproverAuthLevelChange()).
+  const usesPin = currentUser.perms?.approverAuthLevel === 'PIN';
+  document.getElementById('pfPinSection').classList.toggle('hidden', !usesPin);
+  if (usesPin) {
+    // hasPin do server tính sẵn (toSafeUser() ở routes/auth.js) — true/false, KHÔNG phải giá trị PIN
+    // thật. Chưa từng có PIN thì ẩn hẳn ô "PIN hiện tại" (không có gì để xác nhận).
+    document.getElementById('pfCurrentPinWrap').classList.toggle('hidden', !currentUser.hasPin);
+    document.getElementById('pfPinHint').innerText = currentUser.hasPin
+      ? 'Nhập đúng mã PIN hiện tại để đổi sang mã mới.'
+      : 'Bạn chưa thiết lập mã PIN — đặt mã PIN bên dưới để dùng khi phê duyệt.';
+    document.getElementById('pfCurrentPin').value = '';
+    document.getElementById('pfNewPin').value = '';
+    document.getElementById('pfConfirmPin').value = '';
+  }
+
   document.getElementById('profileModal').classList.remove('hidden');
 }
 
@@ -5301,6 +5342,44 @@ async function savePersonalProfile(e) {
 
   closeProfileModal();
   alert('✅ Cập nhật thông tin cá nhân thành công!');
+}
+
+// Đổi/thiết lập mã PIN phê duyệt của CHÍNH mình — tách riêng khỏi savePersonalProfile() vì đi qua route
+// riêng có xác nhận PIN cũ (POST /api/auth/change-pin, xem routes/auth.js), khác PATCH /api/auth/me của
+// tên/email/SĐT/mật khẩu. Chỉ hiện được ở #profileModal khi perms.approverAuthLevel = 'PIN'
+// (xem openProfileModal()).
+async function changeMyApprovalPin() {
+  const currentPin = document.getElementById('pfCurrentPin').value.trim();
+  const newPin = document.getElementById('pfNewPin').value.trim();
+  const confirmPin = document.getElementById('pfConfirmPin').value.trim();
+
+  if (!newPin) return alert('❌ Vui lòng nhập mã PIN mới!');
+  if (!/^\d{4,}$/.test(newPin)) return alert('❌ Mã PIN phải là dãy số, tối thiểu 4 chữ số!');
+  if (newPin !== confirmPin) return alert('❌ Mã PIN xác nhận không khớp!');
+  if (currentUser.hasPin && !currentPin) return alert('❌ Vui lòng nhập mã PIN hiện tại!');
+
+  try {
+    const res = await fetch('/api/auth/change-pin', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ currentPin: currentPin || undefined, newPin })
+    });
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) return alert(`⛔ ${body.error || 'Không thể đổi mã PIN'}`);
+
+    currentUser = body;
+    const userIdx = DB.users.findIndex(u => u.username === currentUser.username);
+    if (userIdx !== -1) DB.users[userIdx] = { ...DB.users[userIdx], ...body };
+
+    document.getElementById('pfCurrentPin').value = '';
+    document.getElementById('pfNewPin').value = '';
+    document.getElementById('pfConfirmPin').value = '';
+    document.getElementById('pfCurrentPinWrap').classList.remove('hidden');
+    document.getElementById('pfPinHint').innerText = 'Nhập đúng mã PIN hiện tại để đổi sang mã mới.';
+    alert('✅ Đã cập nhật mã PIN phê duyệt!');
+  } catch (err) {
+    alert('⛔ Không thể kết nối tới máy chủ: ' + err.message);
+  }
 }
 
 // --- ĐĂNG NHẬP & TABS ---

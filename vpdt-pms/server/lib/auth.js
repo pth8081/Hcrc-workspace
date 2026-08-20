@@ -43,6 +43,15 @@ async function verifyPassword(plain, hashOrPlain) {
   return plain === hashOrPlain;
 }
 
+// Mã PIN (xác thực bổ sung khi Duyệt, perms.approverAuthLevel = 'PIN') — dãy số, tối thiểu 4 chữ số.
+// null = hợp lệ; string = lý do bị từ chối. Dùng chung cho cả admin đặt PIN cho người khác
+// (routes/data.js prepareUsersForSave) lẫn người dùng tự đổi PIN của chính mình
+// (routes/auth.js POST /change-pin) — trước đây chỉ định nghĩa ở routes/data.js.
+function validatePin(pin) {
+  if (!/^\d{4,}$/.test(pin)) return 'Mã PIN phải là dãy số, tối thiểu 4 chữ số';
+  return null;
+}
+
 function signToken(user) {
   return jwt.sign(
     { sub: user.username, admin: !!(user.perms && user.perms.admin) },
@@ -141,6 +150,7 @@ module.exports = {
   isBcryptHash,
   hashPassword,
   verifyPassword,
+  validatePin,
   signToken,
   verifyToken,
   setAuthCookie,

@@ -7,7 +7,7 @@ const router = express.Router();
 const { getPool } = require('../db');
 const { DEFAULTS } = require('../defaults');
 const { getAppDataValue, setAppDataValue, setAppDataValueIfVersionMatches } = require('../lib/appData');
-const { requireAuth, blockIfMustChangePassword, hashPassword, isBcryptHash } = require('../lib/auth');
+const { requireAuth, blockIfMustChangePassword, hashPassword, isBcryptHash, validatePin } = require('../lib/auth');
 const { validatePasswordStrength } = require('../lib/passwordPolicy');
 const { HttpError } = require('../lib/httpErrors');
 const { getAllTasks } = require('../lib/taskStore');
@@ -66,13 +66,6 @@ async function isCurrentlyAdmin(username) {
 //   lại bằng bcrypt, và đánh dấu mustChangePassword=true — mật khẩu admin gõ tạm chỉ có giá trị cho
 //   LẦN ĐĂNG NHẬP ĐẦU, buộc chính user đó phải tự đổi lại ngay (xem lib/auth.js blockIfMustChangePassword),
 //   giảm nguy cơ mật khẩu tạm/yếu tồn tại lâu dài không ai để ý.
-// Mã PIN (xác thực bổ sung khi Duyệt, perms.approverAuthLevel = 'PIN') — dãy số, tối thiểu 4 chữ số.
-// null = hợp lệ; string = lý do bị từ chối.
-function validatePin(pin) {
-  if (!/^\d{4,}$/.test(pin)) return 'Mã PIN phải là dãy số, tối thiểu 4 chữ số';
-  return null;
-}
-
 async function prepareUsersForSave(incomingUsers) {
   const existing = (await getAppDataValue('users')) || [];
   const existingById = new Map(existing.map(u => [u.id, u]));
