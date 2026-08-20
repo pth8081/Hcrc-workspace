@@ -88,6 +88,7 @@ function uploadContractSignedFile(payload, user, contract) {
   if (contract.isAddendum) throw new HttpError(400, 'Phụ lục không có tệp tài liệu ký riêng');
   if (!canManageContractPayment(user, contract)) throw new HttpError(403, 'Bạn không có quyền tải lên tài liệu ký cho hợp đồng này');
   if (contract.approvalStatus !== 'APPROVED') throw new HttpError(409, 'Hợp đồng chưa được phê duyệt');
+  if (contract.signedFileStatus === 'APPROVED') throw new HttpError(409, 'Tài liệu ký đã được phê duyệt, không thể tải lên lại');
   const { fileName, fileType, fileUrl } = payload || {};
   if (!fileName || !fileUrl) throw new HttpError(400, 'Thiếu tệp tài liệu ký');
   contract.signedFileName = fileName;
@@ -95,6 +96,38 @@ function uploadContractSignedFile(payload, user, contract) {
   contract.signedFileUrl = fileUrl;
   contract.signedUploadedBy = user.username;
   contract.signedUploadedAt = nowVN();
+  // Mỗi lần tải lên (mới hoặc tải lại sau khi bị từ chối) đều phải qua lại đúng 1 luồng duyệt tài liệu
+  // ký của sub module Quản Lý HĐ — dùng lại canManageContractPayment() ở trên, không mở quyền riêng.
+  contract.signedFileStatus = 'PENDING';
+  contract.signedFileApprovedBy = null;
+  contract.signedFileApprovedAt = null;
+  contract.signedFileRejectedBy = null;
+  contract.signedFileRejectedAt = null;
+  contract.signedFileRejectReason = null;
+  return contract;
+}
+
+// Duyệt/từ chối "Tài liệu ký" — cùng phạm vi quyền với người tải lên (canManageContractPayment, khớp
+// yêu cầu "duyệt tài liệu ký dùng lại của sub module quản lý hợp đồng", không tách quyền phê duyệt
+// riêng). Chỉ khi APPROVED mới cho phép "Chuyển Sang Thanh Toán" (xem startContractPayment() bên dưới).
+function approveContractSignedFile(user, contract) {
+  if (!canManageContractPayment(user, contract)) throw new HttpError(403, 'Bạn không có quyền duyệt tài liệu ký cho hợp đồng này');
+  if (contract.signedFileStatus !== 'PENDING') throw new HttpError(409, 'Tài liệu ký không ở trạng thái chờ duyệt');
+  contract.signedFileStatus = 'APPROVED';
+  contract.signedFileApprovedBy = user.username;
+  contract.signedFileApprovedAt = nowVN();
+  return contract;
+}
+
+function rejectContractSignedFile(payload, user, contract) {
+  if (!canManageContractPayment(user, contract)) throw new HttpError(403, 'Bạn không có quyền duyệt tài liệu ký cho hợp đồng này');
+  if (contract.signedFileStatus !== 'PENDING') throw new HttpError(409, 'Tài liệu ký không ở trạng thái chờ duyệt');
+  const reason = (payload?.reason || '').trim();
+  if (!reason) throw new HttpError(400, 'Vui lòng nhập lý do từ chối');
+  contract.signedFileStatus = 'REJECTED';
+  contract.signedFileRejectedBy = user.username;
+  contract.signedFileRejectedAt = nowVN();
+  contract.signedFileRejectReason = reason;
   return contract;
 }
 
@@ -114,6 +147,7 @@ function startContractPayment(user, contract) {
   if (contract.isAddendum) throw new HttpError(400, 'Phụ lục không có luồng thanh toán riêng');
   if (!canManageContractPayment(user, contract)) throw new HttpError(403, 'Bạn không có quyền chuyển hợp đồng này sang thanh toán');
   if (!contract.signedFileUrl) throw new HttpError(409, 'Cần tải lên Tài liệu ký trước khi chuyển sang thanh toán');
+  if (contract.signedFileStatus !== 'APPROVED') throw new HttpError(409, 'Tài liệu ký cần được phê duyệt trước khi chuyển sang thanh toán');
   if (contract.paymentStatus !== 'CHUA_THANH_TOAN') throw new HttpError(409, 'Hợp đồng không ở trạng thái chưa thanh toán');
   contract.paymentStatus = 'CHO_THANH_TOAN';
   return {
@@ -1158,7 +1192,7 @@ function unpublishReportPeriod(user, period) {
 module.exports = {
   editContract,
   canApproveContract, approveContract, rejectContract,
-  canManageContractPayment, uploadContractSignedFile, startContractPayment,
+  canManageContractPayment, uploadContractSignedFile, approveContractSignedFile, rejectContractSignedFile, startContractPayment,
   canManageOfficePayment, uploadOfficeSignedFile, startOfficePayment,
   canManagePaymentRequests, editPaymentRequest, requestPaymentInfo, approvePaymentRequest,
   confirmPaymentInstallment, assertCanDeletePaymentRequest,
