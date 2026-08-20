@@ -4,6 +4,9 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Văn Phòng Điện Tử</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <script src="https://cdn.tailwindcss.com"></script>
 <style>
 .dash-card.active-card {
@@ -63,6 +66,73 @@ h1, h2, h3, h4 { letter-spacing: -0.01em !important; }
 .bg-gray-100 { background-color: #f1f5f9 !important; }
 .bg-gray-200 { background-color: #e2e8f0 !important; }
 .hover\:bg-blue-700:hover { background-color: #1d4ed8 !important; }
+
+/* ================== Đợt UI Polish (A1-A3) ==================
+   Cùng nguyên tắc Đợt B ở trên: chỉ ĐỊNH NGHĨA LẠI diện mạo của class/thẻ HTML ĐÃ DÙNG SẴN khắp file,
+   không đổi 1 className hay cấu trúc HTML nào — rủi ro rất thấp, áp dụng toàn cục ngay lập tức. */
+
+/* A1 — Font tiếng Việt riêng (Be Vietnam Pro, xem <link> Google Fonts ở đầu <head>) thay cho font hệ
+   thống mặc định trước đây, tạo phân cấp tiêu đề/nhãn rõ hơn qua letter-spacing đã có ở Đợt B. */
+body, input, select, textarea, button {
+  font-family: 'Be Vietnam Pro', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif !important;
+}
+h1, h2, h3 { font-weight: 800 !important; }
+
+/* A2 — Bảng dữ liệu: bỏ viền kẻ ô kiểu lưới nặng (Tailwind .border trên từng <td>/<th>), chuyển sang
+   viền ngang mảnh + hover dòng, ÁP DỤNG TOÀN CỤC cho mọi bảng hiện có. Chọn "td.border, th.border" (class
+   + thẻ) để đủ độ đặc hiệu THẮNG bare ".border" ở trên mà KHÔNG đụng tới .border dùng cho card/box khác
+   (xem specificity: "td.border" > ".border" do có thêm 1 tag selector, không liên quan !important).
+   table.no-cell-border cho phép 1 vài bảng tự loại trừ nếu cần (không có bảng nào dùng hiện tại). */
+table:not(.no-cell-border) td.border, table:not(.no-cell-border) th.border {
+  border-left-width: 0 !important;
+  border-right-width: 0 !important;
+  border-top-width: 0 !important;
+  border-bottom-width: 1px !important;
+  border-bottom-color: #eef2f7 !important;
+}
+table:not(.no-cell-border) { border-collapse: collapse !important; }
+table:not(.no-cell-border) tbody tr:hover { background-color: #f8fafc !important; }
+
+/* A3 — Input/select/file-upload: đồng bộ viền/bo góc/focus ring, style lại nút "Choose File" mặc định
+   của trình duyệt (::file-selector-button) và icon lịch (date/datetime picker) cho khớp phần còn lại. */
+input[type="text"], input[type="number"], input[type="password"], input[type="email"],
+input[type="tel"], input[type="date"], input[type="datetime-local"], input[type="search"],
+select, textarea {
+  transition: border-color .15s ease, box-shadow .15s ease;
+}
+input[type="text"]:focus, input[type="number"]:focus, input[type="password"]:focus,
+input[type="email"]:focus, input[type="tel"]:focus, input[type="date"]:focus,
+input[type="datetime-local"]:focus, input[type="search"]:focus, select:focus, textarea:focus {
+  outline: none !important;
+  border-color: #2563eb !important;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, .12) !important;
+}
+input[type="file"] {
+  font-size: .8rem !important;
+  color: #64748b !important;
+}
+input[type="file"]::file-selector-button {
+  font-family: inherit;
+  font-size: .75rem;
+  font-weight: 600;
+  padding: .4rem .75rem;
+  margin-right: .6rem;
+  border: 1px solid #cbd5e1;
+  border-radius: .5rem;
+  background: #f8fafc;
+  color: #334155;
+  cursor: pointer;
+  transition: background-color .15s ease;
+}
+input[type="file"]::file-selector-button:hover { background: #e2e8f0; }
+input[type="date"]::-webkit-calendar-picker-indicator,
+input[type="datetime-local"]::-webkit-calendar-picker-indicator {
+  cursor: pointer;
+  opacity: .55;
+}
+select {
+  cursor: pointer;
+}
 </style>
 </head>
 <body class="bg-gray-100 min-h-screen font-sans">
@@ -352,7 +422,9 @@ h1, h2, h3, h4 { letter-spacing: -0.01em !important; }
 
         <div id="dynamicFieldsContainer_DOC" class="md:col-span-3 grid grid-cols-1 md:grid-cols-3 gap-3 border-t pt-3"></div>
 
-        <button type="submit" class="md:col-span-3 bg-green-600 text-white p-2 rounded font-bold hover:bg-green-700 transition">Tải Lên & Trình Ký Phê Duyệt</button>
+        <div class="md:col-span-3 flex justify-end">
+          <button type="submit" class="bg-green-600 text-white px-5 py-2 rounded font-bold hover:bg-green-700 transition">Tải Lên & Trình Ký Phê Duyệt</button>
+        </div>
       </form>
     </div>
 
@@ -6525,10 +6597,10 @@ function buildDocRowHTML(doc, { versionCount = 0, isExpanded = false, isChild = 
           if (canApprove) {
             // Duyệt/Từ chối giờ xử lý ở Hub "✅ Phê Duyệt" (xem goToApprovalHub()) — không còn duyệt
             // ngay tại đây, chỉ điều hướng sang Hub đã tự lọc sẵn đúng mã hồ sơ này.
-            primaryBtnHTML = `<button onclick="goToApprovalHub('${escapeHtml(doc.displayCode || doc.code)}')" class="px-2 py-1 bg-green-600 text-white rounded text-xs hover:bg-green-700 font-semibold animate-pulse" title="Sang Hộp thư Phê Duyệt để xử lý">✅ Duyệt</button>`;
+            primaryBtnHTML = `<button onclick="goToApprovalHub('${escapeHtml(doc.displayCode || doc.code)}')" class="px-2 py-1 bg-emerald-600 text-white rounded text-xs hover:bg-emerald-700 font-semibold animate-pulse" title="Sang Hộp thư Phê Duyệt để xử lý">✅ Duyệt</button>`;
             secondaryOptions.push({ value: 'view', label: '📋 Chi tiết' });
           } else {
-            primaryBtnHTML = `<button onclick="runDocAction(${doc.id}, 'view')" class="px-2 py-1 bg-blue-600 text-white rounded text-xs hover:bg-blue-700 font-semibold" title="Xem chi tiết & lịch sử phiên bản">📋 Chi tiết</button>`;
+            primaryBtnHTML = `<button onclick="runDocAction(${doc.id}, 'view')" class="px-2 py-1 bg-gray-600 text-white rounded text-xs hover:bg-gray-700 font-semibold" title="Xem chi tiết & lịch sử phiên bản">📋 Chi tiết</button>`;
           }
           if (canDownload) secondaryOptions.push({ value: 'download', label: '⬇️ Tải' });
           if (currentUser.perms?.admin) secondaryOptions.push({ value: 'delete', label: '🗑️ Xóa' });
@@ -7294,7 +7366,7 @@ function renderSubmissionReqs() {
             // canApprove: điều hướng sang Hub "✅ Phê Duyệt" thay vì mở modal xử lý ngay tại đây; không
             // đổi gì cho trường hợp chỉ xem (giữ nguyên mở modal xem-only như cũ).
             const primaryBtnHTML = canApprove
-              ? `<button onclick="goToApprovalHub('${escapeHtml(sub.code)}')" class="px-2.5 py-1 bg-amber-600 text-white rounded text-xs hover:opacity-90 font-bold">✍️ Bút phê / Duyệt</button>`
+              ? `<button onclick="goToApprovalHub('${escapeHtml(sub.code)}')" class="px-2.5 py-1 bg-emerald-600 text-white rounded text-xs hover:opacity-90 font-bold">✍️ Bút phê / Duyệt</button>`
               : `<button onclick="runSubmissionAction(${sub.id}, 'process')" class="px-2.5 py-1 bg-gray-600 text-white rounded text-xs hover:opacity-90 font-bold">👁️ Chi tiết</button>`;
             const secondaryOptions = [];
             const canDL = canDownloadFile(currentUser, 'submission', sub.dept, sub.creator);
@@ -8823,7 +8895,7 @@ function openTaskDetailModal(taskId) {
   document.getElementById('taskDetailContent').innerHTML = `
     <div class="grid grid-cols-2 gap-3 bg-gray-50 p-3 rounded border">
       <div><b>Ngày giao:</b> ${escapeHtml(t.createdAt || '')}</div>
-      <div><b>Loại giao việc:</b> ${sourceLabels[t.sourceType] || t.sourceType}${t.sourceCode ? ` (${escapeHtml(t.sourceCode)})` : ''}</div>
+      <div><b>Loại giao việc:</b> ${escapeHtml(sourceLabels[t.sourceType] || t.sourceType || '—')}${t.sourceCode ? ` (${escapeHtml(t.sourceCode)})` : ''}</div>
       <div><b>Người giao:</b> ${escapeHtml(t.assignedByName || '')}</div>
       <div><b>Người nhận:</b> ${t.assignedToName ? escapeHtml(t.assignedToName) : '<span class="text-amber-600 font-bold">Chưa gán</span>'}${t.externalAssignee ? ' <span class="text-gray-400">(ngoài hệ thống — không có tài khoản đăng nhập)</span>' : ''}
         ${t.externalAssignee && t.status === 'TODO' && isAssigner ? ` <button onclick="acceptTaskOnBehalf(${t.id})" class="ml-1 bg-emerald-600 text-white px-1.5 py-0.5 rounded text-[10px] font-bold hover:bg-emerald-700">Nhận việc thay</button>` : ''}
@@ -8969,7 +9041,7 @@ function renderTasks() {
           <div class="text-xs text-gray-500 line-clamp-1">${escapeHtml(t.description || '')}</div>
         </td>
         <td class="border p-2 text-xs">Nhận: ${t.assignedToName ? `<b>${escapeHtml(t.assignedToName)}</b>${t.externalAssignee ? ' <span class="text-gray-400">(ngoài hệ thống)</span>' : ''}` : '<span class="text-amber-600 font-bold">Chưa gán</span>'}<br>Giao: ${escapeHtml(t.assignedByName)}${collabNames.length ? `<br>Phối hợp: ${escapeHtml(collabNames.join(', '))}` : ''}</td>
-        <td class="border p-2 text-xs">${sourceLabels[t.sourceType] || t.sourceType}${t.sourceCode ? `<br><span class="text-gray-400">${escapeHtml(t.sourceCode)}</span>` : ''}</td>
+        <td class="border p-2 text-xs">${escapeHtml(sourceLabels[t.sourceType] || t.sourceType || '—')}${t.sourceCode ? `<br><span class="text-gray-400">${escapeHtml(t.sourceCode)}</span>` : ''}</td>
         <td class="border p-2 text-xs">${escapeHtml(t.deadline || 'Chưa đặt')}${t.pendingExtension ? `<br><span class="text-orange-600 font-bold">⏳ Chờ duyệt gia hạn</span>` : ''}${t.pendingCancellation ? `<br><span class="text-red-600 font-bold">⏳ Chờ duyệt huỷ</span>` : ''}</td>
         <td class="border p-2">${statusBadges[t.status] || t.status}</td>
         <td class="border p-2 text-center text-xs">
@@ -9060,7 +9132,7 @@ function buildTaskSlipHTML(t) {
         </div>
 
         <table class="td-field-table">
-          <tr><td class="td-label">Nguồn gốc:</td><td>${escapeHtml(sourceLabels[t.sourceType] || t.sourceType)}${t.sourceCode ? ` (${escapeHtml(t.sourceCode)})` : ''}</td></tr>
+          <tr><td class="td-label">Nguồn gốc:</td><td>${escapeHtml(sourceLabels[t.sourceType] || t.sourceType || '—')}${t.sourceCode ? ` (${escapeHtml(t.sourceCode)})` : ''}</td></tr>
           <tr><td class="td-label">Người giao:</td><td>${escapeHtml(t.assignedByName)}</td></tr>
           <tr><td class="td-label">Người nhận:</td><td>${escapeHtml(t.assignedToName || 'Chưa gán')}${t.externalAssignee ? ' (ngoài hệ thống)' : ''}</td></tr>
           <tr><td class="td-label">Người phối hợp:</td><td>${collabNames.length ? escapeHtml(collabNames.join(', ')) : 'Không có'}</td></tr>
@@ -10552,7 +10624,7 @@ function renderMeetings() {
             const canCancel = canCancelMeeting(currentUser, m) && m.status !== 'CANCELLED';
             if (canApprove) {
               // Duyệt giờ xử lý ở Hub "✅ Phê Duyệt" — điều hướng sang đó thay vì gọi approveMeeting() tại đây.
-              const primaryBtnHTML = `<button onclick="goToApprovalHub('${escapeHtml(m.code)}')" class="bg-green-600 text-white px-2 py-1 rounded text-xs hover:bg-green-700 font-bold">Duyệt</button>`;
+              const primaryBtnHTML = `<button onclick="goToApprovalHub('${escapeHtml(m.code)}')" class="bg-emerald-600 text-white px-2 py-1 rounded text-xs hover:bg-emerald-700 font-bold">Duyệt</button>`;
               return buildActionCell(m.id, primaryBtnHTML, canCancel ? [{ value: 'cancel', label: 'Hủy' }] : [], 'runMeetingAction');
             }
             if (canCancel) {
@@ -11792,7 +11864,7 @@ function renderCarRegs() {
           ${(() => {
             // canApprove: điều hướng sang Hub "✅ Phê Duyệt" thay vì mở modal xử lý ngay tại đây.
             const primaryBtnHTML = canApprove
-              ? `<button onclick="goToApprovalHub('${escapeHtml(c.code)}')" class="px-2.5 py-1 bg-indigo-600 text-white rounded text-xs hover:opacity-90 font-bold">✍️ Xử lý / Duyệt</button>`
+              ? `<button onclick="goToApprovalHub('${escapeHtml(c.code)}')" class="px-2.5 py-1 bg-emerald-600 text-white rounded text-xs hover:opacity-90 font-bold">✍️ Xử lý / Duyệt</button>`
               : `<button onclick="runCarAction(${c.id}, 'process')" class="px-2.5 py-1 bg-gray-600 text-white rounded text-xs hover:opacity-90 font-bold">👁️ Xem chi tiết</button>`;
             const secondaryOptions = [];
             if (c.status === 'APPROVED') {
@@ -12363,7 +12435,7 @@ function renderOfficeReqs() {
           ${(() => {
             // canApprove: điều hướng sang Hub "✅ Phê Duyệt" thay vì mở modal xử lý ngay tại đây.
             const primaryBtnHTML = canApprove
-              ? `<button onclick="goToApprovalHub('${escapeHtml(o.code)}')" class="px-2.5 py-1 bg-teal-600 text-white rounded text-xs hover:opacity-90 font-bold">✍️ Xử lý / Duyệt</button>`
+              ? `<button onclick="goToApprovalHub('${escapeHtml(o.code)}')" class="px-2.5 py-1 bg-emerald-600 text-white rounded text-xs hover:opacity-90 font-bold">✍️ Xử lý / Duyệt</button>`
               : `<button onclick="runOfficeAction(${o.id}, 'process')" class="px-2.5 py-1 bg-gray-600 text-white rounded text-xs hover:opacity-90 font-bold">👁️ Xem chi tiết</button>`;
             const secondaryOptions = [];
             if (o.status === 'APPROVED') {
@@ -12812,7 +12884,7 @@ function renderVppRegistrations() {
     } else {
       // canApprove: điều hướng sang Hub "✅ Phê Duyệt" thay vì mở modal xử lý ngay tại đây.
       primaryBtnHTML = canApprove
-        ? `<button onclick="goToApprovalHub('${escapeHtml(r.code)}')" class="px-2.5 py-1 bg-orange-600 text-white rounded text-xs hover:opacity-90 font-bold">✍️ Xử lý / Duyệt</button>`
+        ? `<button onclick="goToApprovalHub('${escapeHtml(r.code)}')" class="px-2.5 py-1 bg-emerald-600 text-white rounded text-xs hover:opacity-90 font-bold">✍️ Xử lý / Duyệt</button>`
         : `<button onclick="openVppRegModal(${r.id})" class="px-2.5 py-1 bg-gray-600 text-white rounded text-xs hover:opacity-90 font-bold">👁️ Xem chi tiết</button>`;
     }
     if (currentUser.perms?.admin) secondaryOptions.push({ value: 'delete', label: '🗑️ Xóa' });
