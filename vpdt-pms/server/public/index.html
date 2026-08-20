@@ -54,6 +54,22 @@
 #userHeader.sidebar-collapsed #hanhChinhDropdownPanel,
 #userHeader.sidebar-collapsed #tongHopDropdownPanel { display: none !important; }
 
+/* Responsive điện thoại (< 768px, khớp breakpoint "md" của Tailwind) — sidebar 16rem cố định trước đây
+   chiếm gần hết bề ngang màn hình điện thoại, gần như không dùng được. Chuyển sang dạng "off-canvas":
+   mặc định trượt ra ngoài bên trái (ẩn), bấm ☰ ở thanh trên cùng mới trượt vào đè lên nội dung (có lớp
+   nền mờ phía sau). Dùng transform CSS thuần (không phải class Tailwind translate-x) để JS chỉ cần
+   toggle đúng 1 class .mobile-sidebar-open, không bị đụng độ đặc hiệu với các class Tailwind khác —
+   cùng kiểu với .sidebar-collapsed đã có sẵn ở trên. Từ 768px trở lên, đoạn @media này không áp dụng gì
+   cả nên hành vi sidebar tại chỗ (desktop) giữ nguyên 100% như cũ. */
+@media (max-width: 767px) {
+  #userHeader:not(.hidden) {
+    position: fixed; top: 0; bottom: 0; left: 0; z-index: 40;
+    transform: translateX(-100%);
+    transition: transform 0.2s ease;
+  }
+  #userHeader.mobile-sidebar-open { transform: translateX(0); }
+}
+
 /* Đợt B — polish màu sắc/bo góc/đổ bóng cho chuyên nghiệp hơn, ĐỊNH NGHĨA LẠI diện mạo của các
    class Tailwind ĐÃ DÙNG SẴN khắp file (không đổi 1 className nào trong HTML/JS) nên rủi ro rất thấp.
    Dùng !important vì Tailwind CDN chạy JIT (MutationObserver quét DOM liên tục, có thể chèn/ghi đè lại
@@ -152,6 +168,18 @@ table { display: block; overflow-x: auto; max-width: 100%; }
      tĩnh ghi cứng ở đây, để luôn khớp đúng bản code server đang thực sự chạy. Dùng để xác nhận nhanh
      sau khi deploy (đè code + npm install + pm2 restart) đã áp dụng đúng bản mới hay chưa. -->
 <div id="appVersionBadge" class="fixed bottom-1 right-2 text-[10px] text-gray-400 select-none z-10"></div>
+
+<!-- Thanh trên cùng CHỈ hiện trên điện thoại (< 768px, ẩn hẳn từ md trở lên bằng "md:hidden") — nút ☰
+     mở/đóng sidebar dạng "off-canvas" (xem CSS #userHeader ở khối <style> đầu file). finishLogin()/
+     logout() toggle "hidden" y hệt cách đang làm với #userHeader, nên vòng đời ẩn/hiện luôn khớp nhau. -->
+<div id="mobileTopBar" class="hidden md:hidden fixed top-0 inset-x-0 z-30 bg-slate-900 text-white flex items-center justify-between px-3 py-2.5 shadow">
+  <button type="button" onclick="toggleMobileSidebar()" class="text-2xl leading-none px-1" aria-label="Mở menu điều hướng">☰</button>
+  <span class="font-bold text-sm">🏢 Văn Phòng Điện Tử</span>
+  <span class="w-8"></span>
+</div>
+<!-- Lớp nền mờ phía sau sidebar khi mở trên điện thoại — bấm vào để đóng lại, giống hành vi drawer
+     tiêu chuẩn. Chỉ hiện khi #userHeader có class .mobile-sidebar-open (xem toggleMobileSidebar()). -->
+<div id="sidebarBackdrop" onclick="closeMobileSidebar()" class="hidden md:hidden fixed inset-0 bg-black/50 z-30"></div>
 
 <div class="flex min-h-screen">
   <!-- SIDEBAR (Đợt A — thay thanh nav ngang cũ). GIỮ NGUYÊN id "userHeader": finishLogin()/logout()
@@ -282,7 +310,7 @@ table { display: block; overflow-x: auto; max-width: 100%; }
   </aside>
 
   <!-- NỘI DUNG CHÍNH -->
-  <div class="flex-1 min-w-0">
+  <div class="flex-1 min-w-0 pt-14 md:pt-0">
     <div class="max-w-6xl mx-auto p-4 md:p-6 space-y-6">
 
   <!-- Màn hình 1: Đăng nhập -->
@@ -5469,6 +5497,22 @@ function toggleSidebarCollapse() {
   localStorage.setItem('vpdt_sidebar_collapsed', collapsed ? '1' : '0');
 }
 
+// Sidebar "off-canvas" trên điện thoại (< 768px, xem CSS #userHeader trong khối <style> đầu file) —
+// bấm ☰ ở #mobileTopBar mở ra, bấm lại/bấm vào lớp nền mờ/bấm 1 mục điều hướng (xem switchTab()) đều
+// đóng lại. Chỉ toggle 1 class .mobile-sidebar-open trên #userHeader, không đụng gì tới hành vi desktop.
+function toggleMobileSidebar() {
+  const isOpen = document.getElementById('userHeader').classList.contains('mobile-sidebar-open');
+  if (isOpen) closeMobileSidebar(); else openMobileSidebar();
+}
+function openMobileSidebar() {
+  document.getElementById('userHeader').classList.add('mobile-sidebar-open');
+  document.getElementById('sidebarBackdrop').classList.remove('hidden');
+}
+function closeMobileSidebar() {
+  document.getElementById('userHeader').classList.remove('mobile-sidebar-open');
+  document.getElementById('sidebarBackdrop').classList.add('hidden');
+}
+
 // ============================================================
 // DASHBOARD (Đợt C) — trang chủ cá nhân hoá: mỗi thẻ dùng lại NGUYÊN điều kiện "canApprove" đã có sẵn
 // ở từng module (canApproveStep() + dept-workflow map riêng của module đó, hoặc cờ quyền phẳng như
@@ -5916,6 +5960,7 @@ function finishLogin(user) {
 
   document.getElementById('loginSection').classList.add('hidden');
   document.getElementById('userHeader').classList.remove('hidden');
+  document.getElementById('mobileTopBar').classList.remove('hidden');
   document.getElementById('userHeader').classList.toggle('sidebar-collapsed', localStorage.getItem('vpdt_sidebar_collapsed') === '1');
   document.getElementById('userInfo').innerText = `${user.name} (${user.dept})`;
   document.getElementById('userPhoneInfo').innerText = `📞 ${user.phone || 'Chưa có SĐT'} | ✉️ ${user.email || 'Chưa có Email'}`;
@@ -5975,6 +6020,8 @@ function logout() {
   document.getElementById('logSection').classList.add('hidden');
   document.getElementById('reportsSection').classList.add('hidden');
   document.getElementById('userHeader').classList.add('hidden');
+  document.getElementById('mobileTopBar').classList.add('hidden');
+  closeMobileSidebar();
 }
 
 // "Điều Hành" — nút nav cha bọc dropdown chứa Biên bản họp/Công việc/Báo Cáo Định Kỳ (xem HTML
@@ -6140,6 +6187,7 @@ document.addEventListener('click', (ev) => {
 
 function switchTab(tabName) {
   if (!currentUser) return logout();
+  closeMobileSidebar(); // Đóng sidebar off-canvas trên điện thoại mỗi khi chuyển màn hình (không ảnh hưởng desktop).
 
   if (tabName === 'approvalHub' && !canAccessApprovalHub(currentUser)) {
     alert('⛔ Bạn không nằm trong luồng phê duyệt của bất kỳ hồ sơ nào.');
