@@ -6,7 +6,7 @@ const router = express.Router();
 const { requireAuth, blockIfMustChangePassword } = require('../lib/auth');
 const { HttpError } = require('../lib/httpErrors');
 const recordActions = require('../lib/recordActions');
-const { insertTask, withLockedTaskById, deleteTaskById } = require('../lib/taskStore');
+const { insertTask, withLockedTaskById, deleteTaskById, getAllTasks } = require('../lib/taskStore');
 const { createForCollection, withLockedRecordForCollection, deleteRecordForCollection, getAllForCollection } = require('../lib/recordStore');
 
 router.use(requireAuth, blockIfMustChangePassword);
@@ -505,6 +505,25 @@ router.post('/reportPeriods/:id/merge', async (req, res) => {
     res.json({ ok: true, item: result });
   } catch (err) {
     handleError(res, `reportPeriods/${req.params.id}/merge`, err);
+  }
+});
+
+// POST /api/records/reportPeriods/:id/mergeByTasks — CÁCH THỨ 2 để dựng bản tổng hợp của kỳ, tự động
+// từ module Công Việc (DB.tasks) thay vì các reportEntries do từng phòng gửi — không cần body, mọi
+// logic lọc phạm vi/thời gian nằm ở lib/recordActions.js (mergeReportPeriodByTasks).
+router.post('/reportPeriods/:id/mergeByTasks', async (req, res) => {
+  const itemId = Number(req.params.id);
+  if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
+  try {
+    const { freshUser, users } = await getFreshUser(req);
+    const tasks = await getAllTasks();
+    const allPeriods = await getAllForCollection('reportPeriods');
+    const result = await withLockedRecordForCollection('reportPeriods', itemId, (item) =>
+      recordActions.mergeReportPeriodByTasks(freshUser, item, tasks, users, allPeriods)
+    );
+    res.json({ ok: true, item: result });
+  } catch (err) {
+    handleError(res, `reportPeriods/${req.params.id}/mergeByTasks`, err);
   }
 });
 

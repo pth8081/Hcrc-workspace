@@ -1047,6 +1047,140 @@ function mergeReportPeriod(user, period, orderedEntryIds, entries) {
   return period;
 }
 
+// Parse ngược chuỗi "HH:MM:SS D/M/YYYY" do new Date().toLocaleString('vi-VN') sinh ra (nowVN(), dùng
+// cho mọi task.history[].time) — bản sao server-side của parseVNDateTime() ở public/index.html (LƯU Ý
+// BẢO TRÌ, 2 bản độc lập, phải sửa đồng thời) vì lib/ không dùng chung code với client.
+function parseVNDateTime(str) {
+  if (!str || typeof str !== 'string') return null;
+  const parts = str.trim().split(' ');
+  if (parts.length !== 2) return null;
+  const [timePart, datePart] = parts;
+  const timeBits = timePart.split(':').map(Number);
+  const dateBits = datePart.split('/').map(Number);
+  if (dateBits.length !== 3 || dateBits.some(isNaN)) return null;
+  const [h, mi, s] = timeBits;
+  const [d, mo, y] = dateBits;
+  const dt = new Date(y, mo - 1, d, h || 0, mi || 0, s || 0);
+  return isNaN(dt.getTime()) ? null : dt;
+}
+
+const TASK_STATUS_LABELS = { TODO: 'Chưa bắt đầu', DOING: 'Đang thực hiện', DONE: 'Đã hoàn thành', CANCELLED: 'Đã hủy' };
+
+// Tổng Hợp Theo Công Việc — CÁCH THỨ 2 để dựng compilation.slides của 1 kỳ (cùng khuôn dữ liệu, cùng
+// dùng chung updateReportCompilation()/publishReportPeriod()/unpublishReportPeriod() phía sau với
+// mergeReportPeriod() ở trên), nhưng nguồn là DB.tasks — TỰ ĐỘNG lấy công việc thật của từng người,
+// không cần ai gõ tay báo cáo. Hai nút "Tổng Hợp Theo Báo Cáo"/"Tổng Hợp Theo Công Việc" ở client là 2
+// LỰA CHỌN NGUỒN khác nhau cho CÙNG 1 compilation — bấm cái nào sau cùng thì compilation theo cách đó
+// (y hệt hành vi "tổng hợp lại" đã có của mergeReportPeriod(), không cộng dồn 2 nguồn).
+//
+// Phạm vi thời gian tính vào kỳ = (mốc hạn chót của kỳ ĐÃ ĐÓNG gần nhất kết thúc TRƯỚC kỳ này, nếu có]
+// -> hạn chót kỳ này; kỳ đầu tiên (không có kỳ nào đóng trước đó) thì không giới hạn mốc bắt đầu. Việc
+// ĐÃ XONG chỉ tính nếu hoàn thành (history STATUS_DONE gần nhất) rơi vào khoảng này; việc CÒN MỞ
+// (TODO/DOING) chỉ tính nếu hạn chót không vượt quá hạn chót kỳ này (việc hạn xa hơn thuộc kỳ sau).
+// tasks/users/allPeriods: CALLER tự đọc rồi truyền vào (không tự đọc DB), giữ đúng nguyên tắc chung.
+function mergeReportPeriodByTasks(user, period, tasks, users, allPeriods) {
+  if (!canAggregateReports(user)) {
+    throw new HttpError(403, 'Bạn không có quyền tổng hợp Báo Cáo Định Kỳ');
+  }
+  if (!isReportPeriodClosed(period)) {
+    throw new HttpError(409, 'Kỳ báo cáo chưa kết thúc — chưa thể tổng hợp');
+  }
+  if (period.compilation?.status === 'PUBLISHED') {
+    throw new HttpError(409, 'Bản tổng hợp đã phát hành — vui lòng "Hủy phát hành" trước khi tổng hợp lại');
+  }
+  const endBoundary = new Date(period.endTime);
+  if (isNaN(endBoundary.getTime())) throw new HttpError(400, 'Kỳ báo cáo thiếu hạn chót hợp lệ');
+
+  let startBoundary = null;
+  (allPeriods || []).forEach((p) => {
+    if (p.id === period.id || p.status !== 'CLOSED' || !p.endTime) return;
+    const t = new Date(p.endTime);
+    if (isNaN(t.getTime()) || t >= endBoundary) return;
+    if (!startBoundary || t > startBoundary) startBoundary = t;
+  });
+
+  const usersByUsername = new Map((users || []).map(u => [u.username, u]));
+  const inScope = (dept) => !!(period.deptScope?.all || (period.deptScope?.depts || []).includes(dept));
+  const isOverdue = (t) => t.status !== 'DONE' && t._deadlineDate && !isNaN(t._deadlineDate.getTime()) && t._deadlineDate < endBoundary;
+  const GROUP_ORDER = { 'Quá hạn': 0, 'Đang thực hiện': 1, 'Đã hoàn thành': 2 };
+
+  // Gom công việc theo phòng ban của NGƯỜI ĐƯỢC GIAO (assignedTo) — không xác định được phòng ban
+  // (tài khoản assignedTo không còn tồn tại) thì bỏ qua, không tính vào tổng hợp.
+  const deptOrder = [];
+  const byDept = new Map(); // dept -> Map(username -> { name, tasks: [] })
+  (tasks || []).forEach((raw) => {
+    if (raw.status === 'CANCELLED') return;
+    const assignee = usersByUsername.get(raw.assignedTo);
+    const dept = assignee?.dept;
+    if (!dept || !inScope(dept)) return;
+
+    const t = { ...raw };
+    t._deadlineDate = t.deadline ? new Date(t.deadline) : null;
+    if (t.status === 'DONE') {
+      const doneEntry = [...(t.history || [])].reverse().find(h => h.action === 'STATUS_DONE');
+      const doneAt = doneEntry ? parseVNDateTime(doneEntry.time) : null;
+      if (!doneAt || doneAt > endBoundary || (startBoundary && doneAt < startBoundary)) return;
+    } else if (t._deadlineDate && !isNaN(t._deadlineDate.getTime()) && t._deadlineDate > endBoundary) {
+      return; // hạn chót thuộc kỳ sau, chưa cần báo cáo ở kỳ này
+    }
+
+    if (!byDept.has(dept)) { byDept.set(dept, new Map()); deptOrder.push(dept); }
+    const deptMap = byDept.get(dept);
+    if (!deptMap.has(t.assignedTo)) deptMap.set(t.assignedTo, { name: assignee.name || t.assignedToName || t.assignedTo, tasks: [] });
+    deptMap.get(t.assignedTo).tasks.push(t);
+  });
+
+  if (!deptOrder.length) {
+    throw new HttpError(400, 'Không có công việc nào phù hợp phạm vi/khoảng thời gian của kỳ này để tổng hợp');
+  }
+
+  const slides = [{ kind: 'COVER', title: `TỔNG HỢP CÔNG VIỆC — ${period.name}` }];
+  deptOrder.forEach((dept) => {
+    slides.push({ kind: 'DEPT', title: dept });
+    const deptMap = byDept.get(dept);
+    const allDeptTasks = [...deptMap.values()].flatMap(v => v.tasks);
+    const counts = { DONE: 0, DOING: 0, TODO: 0 };
+    let overdueCount = 0;
+    allDeptTasks.forEach((t) => {
+      counts[t.status] = (counts[t.status] || 0) + 1;
+      if (isOverdue(t)) overdueCount++;
+    });
+    const statsText = [
+      `Tổng số công việc: ${allDeptTasks.length}`,
+      `— Đã hoàn thành: ${counts.DONE}`,
+      `— Đang thực hiện: ${counts.DOING}`,
+      `— Chưa bắt đầu: ${counts.TODO}`,
+      `— Quá hạn: ${overdueCount}`
+    ].join('\n');
+    slides.push({ kind: 'TASK_STATS', title: 'THỐNG KÊ CÔNG VIỆC', text: statsText, sourceDept: dept });
+
+    [...deptMap.entries()].forEach(([, info]) => {
+      const items = info.tasks
+        .map(t => ({
+          _group: isOverdue(t) ? 'Quá hạn' : (t.status === 'DONE' ? 'Đã hoàn thành' : 'Đang thực hiện'),
+          group: isOverdue(t) ? 'Quá hạn' : (t.status === 'DONE' ? 'Đã hoàn thành' : 'Đang thực hiện'),
+          content: t.title || '',
+          progress: TASK_STATUS_LABELS[t.status] || t.status,
+          deadline: t.deadline || '',
+          support: (t.collaborators || []).length ? `Phối hợp: ${t.collaborators.length} người` : ''
+        }))
+        .sort((a, b) => (GROUP_ORDER[a._group] ?? 9) - (GROUP_ORDER[b._group] ?? 9))
+        .map(({ _group, ...rest }) => rest);
+      slides.push({ kind: 'TASKS', title: 'DANH SÁCH CÔNG VIỆC', items, sourceCreatorName: info.name, sourceDept: dept });
+    });
+  });
+  slides.forEach((s, idx) => { s.order = idx + 1; });
+
+  period.compilation = {
+    slides,
+    status: 'MERGED',
+    compiledBy: user.username, compiledByName: user.name, compiledAt: nowVN(),
+    updatedBy: null, updatedByName: null, updatedAt: null,
+    publishedBy: null, publishedByName: null, publishedAt: null
+  };
+  return period;
+}
+
 // Gom + dọn danh sách dòng bảng Công Việc/Kế Hoạch — dùng chung cho cả TASKS (progressField='progress')
 // và PLAN (progressField='plan'), khớp normalizeReportEntryPayload() ở lib/createValidation.js.
 function cleanReportTableItems(arr, progressField) {
@@ -1073,7 +1207,7 @@ function updateReportCompilation(user, period, slides) {
   }
   const list = Array.isArray(slides) ? slides : [];
   if (!list.length) throw new HttpError(400, 'Bản tổng hợp cần có ít nhất 1 slide');
-  const validKinds = ['COVER', 'DEPT', 'TASKS', 'PLAN', 'NUMBERS', 'OTHER', 'FILE'];
+  const validKinds = ['COVER', 'DEPT', 'TASKS', 'PLAN', 'NUMBERS', 'OTHER', 'FILE', 'TASK_STATS'];
   const cleaned = list.map((s, idx) => {
     const kind = validKinds.includes(s?.kind) ? s.kind : 'OTHER';
     const title = String(s?.title || '').trim();
@@ -1084,6 +1218,7 @@ function updateReportCompilation(user, period, slides) {
     };
     if (kind === 'TASKS') return { ...base, items: cleanReportTableItems(s.items, 'progress') };
     if (kind === 'PLAN') return { ...base, items: cleanReportTableItems(s.items, 'plan') };
+    if (kind === 'TASK_STATS') return { ...base, text: String(s?.text || '').trim() };
     if (kind === 'NUMBERS' || kind === 'OTHER') {
       return {
         ...base, text: String(s?.text || '').trim(),
@@ -1156,5 +1291,5 @@ module.exports = {
   addSubtask, toggleSubtask, deleteSubtask,
   closeVppPeriod, submitVppRegistration, updateVppRegistrationDraft,
   closeReportPeriod, submitReportEntry, updateReportEntryDraft,
-  mergeReportPeriod, updateReportCompilation, publishReportPeriod, unpublishReportPeriod
+  mergeReportPeriod, mergeReportPeriodByTasks, updateReportCompilation, publishReportPeriod, unpublishReportPeriod
 };
