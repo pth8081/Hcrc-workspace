@@ -79,8 +79,34 @@ const OFFICE_SUBTYPE_TO_DBKEY = {
   DAU_TU: 'officeInvestDeptWorkflows'
 };
 
+// ===== Hợp đồng — 2 quy trình TÁCH RIÊNG trên CÙNG 1 bản ghi contracts (khớp index.html) =====
+// 1) "Phê Duyệt" (contracts): approvalStatus/currentStep/history — quy trình theo phòng ban + tối đa 4
+//    lớp bổ sung tuỳ chọn (GD_PGD/PTGD/TRO_LY_THU_KY/TGD), snapshot effectiveSteps/effectiveApprovers
+//    lúc tạo (khớp cơ chế Văn Bản Trình, xem buildEffectiveContractApprovalWorkflowServer ở
+//    lib/createValidation.js), NHƯNG bỏ Đồng trình/Xin ý kiến/Phê duyệt đồng cấp và dùng nhóm phê duyệt
+//    RIÊNG (contractApprovalGroups) — không dùng chung dữ liệu với Văn Bản Trình.
+// 2) "Quản Lý HĐ" (Tài liệu ký, module key ảo "contractsSignedFile" — cùng dbKey 'contracts' nhưng field
+//    riêng signedFileStatus/signedFileCurrentStep/signedFileHistory): quy trình ĐƠN GIẢN theo phòng ban
+//    (giống Xe/Mua Bán/VPP — không snapshot, tra cấu hình admin MỚI NHẤT mỗi lần duyệt), độc lập hoàn
+//    toàn với quy trình Phê Duyệt ở trên.
+function resolveContractApprovalWorkflow(item, appData) {
+  if (item.effectiveSteps && item.effectiveApprovers) {
+    return { steps: item.effectiveSteps, approvers: item.effectiveApprovers };
+  }
+  const deptMap = appData.contractApprovalDeptWorkflows || {};
+  const baseConfig = deptMap[item.dept] || { workflowId: 'WF_1STEP', approvers: { 1: ['admin'] } };
+  return flatWorkflowConfigToSteps(baseConfig, appData);
+}
+
+function resolveContractManageWorkflow(item, appData) {
+  return flatWorkflowConfigToSteps(appData.contractManageDeptWorkflows?.[item.dept], appData);
+}
+
 // Cấu hình từng module — CHỈ những gì khác nhau: khoá collection AppData và cách tra ra {steps,
 // approvers} của 1 hồ sơ cụ thể. Phần logic chuyển bước/duyệt/từ chối dùng chung applyWorkflowAction().
+// statusField/currentStepField/historyField mặc định 'status'/'currentStep'/'history' — chỉ hợp đồng
+// cần khai riêng (approvalStatus cho luồng gốc, "contractsSignedFile" ảo cho luồng Tài liệu ký, vì cả 2
+// đều nằm trên CÙNG 1 bản ghi contracts nên không thể dùng chung tên field currentStep/history).
 const MODULE_CONFIGS = {
   docs: {
     dbKey: 'docs',
@@ -107,6 +133,18 @@ const MODULE_CONFIGS = {
     dbKey: 'vppRegistrations',
     resolveWfConfig: (item, appData) => flatWorkflowConfigToSteps(appData.vppDeptWorkflows?.[item.dept], appData),
     supportsRequestChanges: true
+  },
+  contracts: {
+    dbKey: 'contracts',
+    statusField: 'approvalStatus',
+    resolveWfConfig: (item, appData) => resolveContractApprovalWorkflow(item, appData)
+  },
+  contractsSignedFile: {
+    dbKey: 'contracts',
+    statusField: 'signedFileStatus',
+    currentStepField: 'signedFileCurrentStep',
+    historyField: 'signedFileHistory',
+    resolveWfConfig: (item, appData) => resolveContractManageWorkflow(item, appData)
   }
 };
 
@@ -123,29 +161,35 @@ function applyWorkflowAction({ moduleKey, item, action, user, comment, extraFiel
   const config = MODULE_CONFIGS[moduleKey];
   if (!config) throw new WorkflowError(400, `Module không hợp lệ: ${moduleKey}`);
   if (!item) throw new WorkflowError(404, 'Không tìm thấy hồ sơ');
-  if (item.status !== 'PENDING') throw new WorkflowError(409, 'Hồ sơ không còn ở trạng thái chờ xử lý (có thể đã được xử lý ở nơi khác)');
+  // Tên field trạng thái/bước hiện tại/lịch sử — mặc định 'status'/'currentStep'/'history', chỉ hợp
+  // đồng khai riêng vì 1 bản ghi contracts mang 2 quy trình độc lập (xem MODULE_CONFIGS ở trên).
+  const statusField = config.statusField || 'status';
+  const currentStepField = config.currentStepField || 'currentStep';
+  const historyField = config.historyField || 'history';
+  if (item[statusField] !== 'PENDING') throw new WorkflowError(409, 'Hồ sơ không còn ở trạng thái chờ xử lý (có thể đã được xử lý ở nơi khác)');
 
   const { steps, approvers } = config.resolveWfConfig(item, appData);
-  const currentStepApprovers = approvers?.[item.currentStep] || [];
-  const stepName = steps[item.currentStep - 1]?.name || `Bước ${item.currentStep}`;
+  const currentStep = item[currentStepField];
+  const currentStepApprovers = approvers?.[currentStep] || [];
+  const stepName = steps[currentStep - 1]?.name || `Bước ${currentStep}`;
 
-  if (!item.history) item.history = [];
+  if (!item[historyField]) item[historyField] = [];
 
   if (action === 'REQUEST_INFO') {
     if (!config.supportsRequestInfo) throw new WorkflowError(400, 'Module này không hỗ trợ yêu cầu bổ sung');
     if (!comment) throw new WorkflowError(400, 'Vui lòng nhập nội dung cần bổ sung');
-    if (!canApproveStep(user, currentStepApprovers, item.history, item.currentStep)) {
+    if (!canApproveStep(user, currentStepApprovers, item[historyField], currentStep)) {
       throw new WorkflowError(403, 'Bạn không có quyền yêu cầu bổ sung ở bước hiện tại, hoặc đã xử lý bước này rồi');
     }
     if (!item.infoRequests) item.infoRequests = [];
     const reqEntry = {
-      id: Date.now(), step: item.currentStep,
+      id: Date.now(), step: currentStep,
       requestedBy: user.username, requestedByName: user.name,
       reason: comment, requestedAt: nowVN(),
       response: null, respondedAt: null
     };
     item.infoRequests.push(reqEntry);
-    item.history.push({ step: item.currentStep, approver: user.name, username: user.username, action: 'REQUEST_INFO', comment, time: reqEntry.requestedAt });
+    item[historyField].push({ step: currentStep, approver: user.name, username: user.username, action: 'REQUEST_INFO', comment, time: reqEntry.requestedAt });
     return { item, transition: { type: 'REQUEST_INFO' } };
   }
 
@@ -155,18 +199,18 @@ function applyWorkflowAction({ moduleKey, item, action, user, comment, extraFiel
   if (action === 'REQUEST_CHANGES') {
     if (!config.supportsRequestChanges) throw new WorkflowError(400, 'Module này không hỗ trợ yêu cầu bổ sung/chỉnh sửa');
     if (!comment) throw new WorkflowError(400, 'Vui lòng nhập lý do yêu cầu bổ sung/chỉnh sửa');
-    if (!canApproveStep(user, currentStepApprovers, item.history, item.currentStep)) {
+    if (!canApproveStep(user, currentStepApprovers, item[historyField], currentStep)) {
       throw new WorkflowError(403, 'Bạn không có quyền yêu cầu bổ sung ở bước hiện tại, hoặc đã xử lý bước này rồi');
     }
-    item.history.push({ step: item.currentStep, approver: user.name, username: user.username, action: 'REQUEST_CHANGES', comment, time: nowVN() });
-    item.status = 'DRAFT';
-    item.currentStep = 0;
+    item[historyField].push({ step: currentStep, approver: user.name, username: user.username, action: 'REQUEST_CHANGES', comment, time: nowVN() });
+    item[statusField] = 'DRAFT';
+    item[currentStepField] = 0;
     return { item, transition: { type: 'REQUEST_CHANGES' } };
   }
 
   if (action !== 'APPROVE' && action !== 'REJECT') throw new WorkflowError(400, `Hành động không hợp lệ: ${action}`);
   if (action === 'REJECT' && !comment) throw new WorkflowError(400, 'Vui lòng nhập lý do từ chối');
-  if (!canApproveStep(user, currentStepApprovers, item.history, item.currentStep)) {
+  if (!canApproveStep(user, currentStepApprovers, item[historyField], currentStep)) {
     throw new WorkflowError(403, 'Bạn không có quyền xử lý ở bước hiện tại, hoặc đã xử lý bước này rồi');
   }
 
@@ -183,43 +227,44 @@ function applyWorkflowAction({ moduleKey, item, action, user, comment, extraFiel
   }
 
   if (action === 'REJECT') {
-    item.status = 'REJECTED';
-    item.history.push({
-      step: item.currentStep, stepName, approver: user.name, username: user.username,
+    item[statusField] = 'REJECTED';
+    item[historyField].push({
+      step: currentStep, stepName, approver: user.name, username: user.username,
       action: 'REJECTED', comment, time: nowVN(), ...extraSnapshot
     });
     return { item, transition: { type: 'REJECTED' } };
   }
 
   // APPROVE
-  item.history.push({
-    step: item.currentStep, stepName, approver: user.name, username: user.username,
+  item[historyField].push({
+    step: currentStep, stepName, approver: user.name, username: user.username,
     action: 'APPROVED', comment, time: nowVN(), ...extraSnapshot
   });
 
-  if (!isStepApprovalComplete(user, currentStepApprovers, item.history, item.currentStep)) {
+  if (!isStepApprovalComplete(user, currentStepApprovers, item[historyField], currentStep)) {
     return { item, transition: { type: 'PARTIAL_APPROVE', stepApprovers: currentStepApprovers } };
   }
 
-  if (item.currentStep < steps.length) {
-    item.currentStep += 1;
-    item.status = 'PENDING';
-    const nextApprovers = approvers?.[item.currentStep] || [];
+  if (currentStep < steps.length) {
+    item[currentStepField] = currentStep + 1;
+    item[statusField] = 'PENDING';
+    const nextApprovers = approvers?.[item[currentStepField]] || [];
     return {
       item,
       transition: {
         type: 'ADVANCED', stepApprovers: currentStepApprovers,
-        nextStep: item.currentStep, nextStepName: steps[item.currentStep - 1]?.name || '',
+        nextStep: item[currentStepField], nextStepName: steps[item[currentStepField] - 1]?.name || '',
         nextApprovers
       }
     };
   }
 
-  item.status = 'APPROVED';
+  item[statusField] = 'APPROVED';
   // officeReqs (Mua Bán/Sửa Chữa/Đầu Tư, sub-module "Tổng Hợp") duyệt xong bước cuối -> mặc định
   // "Chưa thanh toán", khớp đúng paymentStatus gán ở lib/createValidation.js cho hợp đồng — cùng 1 mô
   // hình thanh toán, chỉ officeReqs mới cần field này (docs/submissions/carRegs không có luồng thanh
-  // toán, không gán để tránh field thừa).
+  // toán, không gán để tránh field thừa; hợp đồng đã tự gán paymentStatus lúc TẠO hồ sơ, xem
+  // lib/createValidation.js, không cần gán lại ở đây cho cả 2 module key contracts/contractsSignedFile).
   if (moduleKey === 'officeReqs') item.paymentStatus = 'CHUA_THANH_TOAN';
   return { item, transition: { type: 'COMPLETED' } };
 }
@@ -230,5 +275,7 @@ module.exports = {
   applyWorkflowAction,
   canApproveStep,
   isStepApprovalComplete,
-  resolveSubmissionWorkflow
+  resolveSubmissionWorkflow,
+  resolveContractApprovalWorkflow,
+  resolveContractManageWorkflow
 };

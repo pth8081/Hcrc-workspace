@@ -165,6 +165,80 @@ function buildEffectiveSubmissionWorkflowServer(type, dept, selectedLayerKeys, s
   return { steps, approvers, layerKeys, opinionRequestees: [...new Set(opinionRequestees)] };
 }
 
+// Quy trình Phê Duyệt HĐ — CHẠY ĐỘNG giống Văn Bản Trình (quy trình gốc theo phòng ban + tối đa 4 lớp
+// bổ sung tuỳ chọn theo "Cấp Phê Duyệt Cuối Cùng") nhưng TÁCH RIÊNG hoàn toàn: bỏ 3 lớp Đồng
+// trình/Xin ý kiến/Phê duyệt đồng cấp (chỉ giữ lại 4 lớp cấp bậc), và dùng nhóm phê duyệt RIÊNG
+// (appData.contractApprovalGroups, KHÔNG dùng chung DB.submissionApprovalGroups của Văn Bản Trình).
+// Quy trình "Quản Lý HĐ" (Tài liệu ký) đơn giản hơn — theo phòng ban như Xe/Mua Bán/VPP, không có lớp
+// tuỳ chọn, không snapshot lúc tạo (xem lib/workflowEngine.js resolveContractManageWorkflow).
+const CONTRACT_APPROVAL_LAYERS = [
+  { key: 'GD_PGD', label: 'Giám Đốc/Phó Giám Đốc' },
+  { key: 'PTGD', label: 'Phó Tổng Giám Đốc' },
+  { key: 'TRO_LY_THU_KY', label: 'Bộ Phận Trợ Lý/Thư Ký' },
+  { key: 'TGD', label: 'Tổng Giám Đốc' }
+];
+const CONTRACT_APPROVAL_LEVELS = ['TGD', 'PTGD', 'GD_PGD', 'KHAC'];
+const CONTRACT_APPROVAL_LEVEL_RULES = {
+  TGD: { visible: ['GD_PGD', 'PTGD', 'TRO_LY_THU_KY', 'TGD'], locked: ['TRO_LY_THU_KY', 'TGD'] },
+  PTGD: { visible: ['GD_PGD', 'PTGD'], locked: ['PTGD'] },
+  GD_PGD: { visible: ['GD_PGD'], locked: ['GD_PGD'] },
+  KHAC: { visible: CONTRACT_APPROVAL_LAYERS.map(l => l.key), locked: [] }
+};
+
+// Tự dựng lại quy trình Phê Duyệt HĐ hiệu lực (steps/approvers) cho 1 hợp đồng/phụ lục mới — cùng
+// khuôn xác minh với buildEffectiveSubmissionWorkflowServer() ở trên (approvalLevel hợp lệ ->
+// selectedLayerKeys đúng luật visible/locked -> mỗi lớp chọn phải là tập con của
+// appData.contractApprovalGroups[layerKey]) nhưng KHÔNG có nhánh "Xin ý kiến" (cả 4 lớp đều chặn quy
+// trình, không có opinionRequestees).
+function buildEffectiveContractApprovalWorkflowServer(dept, selectedLayerKeys, selectedLayerMembers, appData, approvalLevel) {
+  if (!CONTRACT_APPROVAL_LEVELS.includes(approvalLevel)) {
+    throw new CreateError(400, `Cấp phê duyệt cuối cùng không hợp lệ: ${approvalLevel}`);
+  }
+  const rule = CONTRACT_APPROVAL_LEVEL_RULES[approvalLevel];
+  const layerKeysInput = Array.isArray(selectedLayerKeys) ? [...new Set(selectedLayerKeys)] : [];
+  const outOfScope = layerKeysInput.filter(k => !rule.visible.includes(k));
+  if (outOfScope.length) {
+    throw new CreateError(403, `Lớp phê duyệt không thuộc phạm vi cấp "${approvalLevel}": ${outOfScope.join(', ')}`);
+  }
+  const missingLocked = rule.locked.filter(k => !layerKeysInput.includes(k));
+  if (missingLocked.length) {
+    throw new CreateError(400, `Thiếu lớp phê duyệt bắt buộc theo cấp "${approvalLevel}": ${missingLocked.join(', ')}`);
+  }
+
+  const deptMap = appData.contractApprovalDeptWorkflows || {};
+  const baseConfig = deptMap[dept] || { workflowId: 'WF_1STEP', approvers: { 1: ['admin'] } };
+  const workflows = appData.workflows || [];
+  const baseWf = workflows.find(w => w.id === baseConfig.workflowId) || { steps: [{ order: 1, name: 'Sếp duyệt' }] };
+
+  const steps = baseWf.steps.map(s => ({ order: s.order, name: s.name }));
+  const approvers = {};
+  baseWf.steps.forEach(s => { approvers[s.order] = baseConfig.approvers?.[s.order] || []; });
+
+  const groups = appData.contractApprovalGroups || {};
+  const layerKeys = layerKeysInput;
+
+  layerKeys.forEach(layerKey => {
+    const layer = CONTRACT_APPROVAL_LAYERS.find(l => l.key === layerKey);
+    if (!layer) throw new CreateError(400, `Lớp không hợp lệ: ${layerKey}`);
+
+    const groupMembers = groups[layerKey] || [];
+    const chosen = Array.isArray(selectedLayerMembers?.[layerKey]) ? [...new Set(selectedLayerMembers[layerKey])] : [];
+    if (chosen.length === 0) {
+      throw new CreateError(400, `Chưa chọn người cho lớp "${layer.label}"`);
+    }
+    const invalid = chosen.filter(u => !groupMembers.includes(u));
+    if (invalid.length) {
+      throw new CreateError(403, `Người được chọn cho lớp "${layer.label}" không thuộc nhóm được admin gán: ${invalid.join(', ')}`);
+    }
+
+    const stepOrder = steps.length + 1;
+    steps.push({ order: stepOrder, name: layer.label, layerKey: layer.key });
+    approvers[stepOrder] = chosen;
+  });
+
+  return { steps, approvers, layerKeys };
+}
+
 // Mỗi module: khoá collection AppData, cách lấy phạm vi phòng ban được phép tạo ({all,depts}), tên
 // field ghi người tạo, và kiểm tra bổ sung riêng (nếu có) — phần logic chung (xác minh dept, chặn mã
 // trùng, gán người tạo) nằm ở validateAndPrepareCreate() bên dưới, dùng chung cho mọi module.
@@ -203,13 +277,14 @@ const CREATE_MODULE_CONFIGS = {
     //    onContractOpModeChange() mode IMPORT_CONTRACT/IMPORT_ADDENDUM): hồ sơ ĐÃ CÓ chữ ký thật ký
     //    ngoài hệ thống, nhập tay để lưu — luôn APPROVED ngay, KHÔNG qua hàng chờ Phê Duyệt, không có
     //    Đợt Thanh Toán riêng (tệp đính kèm CHÍNH LÀ tài liệu đã ký, gán luôn vào signedFileUrl).
-    // 2) isSignedImport=false (mặc định — "Tạo Mới"/"Bổ Sung Phụ Lục" ở tab Phê Duyệt): CẢ 2 đều qua
-    //    ĐÚNG 1 luật duyệt — PENDING trừ khi người tạo đã có quyền contractApprove/admin (tự duyệt
-    //    luôn) — và CẢ 2 đều khai được Đợt Thanh Toán (phụ lục trước đây ép rỗng, giờ không còn ép nữa
-    //    vì phụ lục cũng có thể đi kèm điều chỉnh giá trị/điều khoản thanh toán).
+    // 2) isSignedImport=false (mặc định — "Tạo Mới"/"Bổ Sung Phụ Lục" ở tab Phê Duyệt): CẢ 2 đều LUÔN
+    //    vào hàng chờ PENDING và đi qua ĐÚNG quy trình Phê Duyệt HĐ đã cấu hình (xem
+    //    buildEffectiveContractApprovalWorkflowServer ở trên) — KHÔNG còn tự duyệt ngay dù người tạo có
+    //    quyền admin/contractApprove (trước đây có short-circuit này, gây đúng lỗi "chưa phê duyệt xong
+    //    đã bị chuyển sang Quản Lý HĐ" mà nghiệp vụ yêu cầu sửa). CẢ 2 đều khai được Đợt Thanh Toán.
     // Phụ lục (isAddendum=true, áp dụng cho CẢ 2 luồng trên) chỉ gắn được vào 1 hợp đồng GỐC ĐÃ APPROVED
     // (xem index.html generateAddendumCode()/onContractAddendumTargetChange()).
-    extraValidate: (payload, collection, user) => {
+    extraValidate: (payload, collection, user, appData) => {
       const isSignedImport = !!payload.isSignedImport;
       delete payload.isSignedImport; // chỉ là cờ tạm quyết định nhánh xử lý bên dưới, không lưu vào hồ sơ
 
@@ -228,8 +303,17 @@ const CREATE_MODULE_CONFIGS = {
         // Tài liệu đã ký thật ngoài hệ thống, nhập tay để lưu — không cần qua bước duyệt tài liệu ký.
         payload.signedFileStatus = payload.signedFileUrl ? 'APPROVED' : null;
       } else {
-        payload.approvalStatus = (user.perms?.admin || user.perms?.contractApprove) ? 'APPROVED' : 'PENDING';
         payload.paymentInstallments = Array.isArray(payload.paymentInstallments) ? payload.paymentInstallments : [];
+        const effectiveWf = buildEffectiveContractApprovalWorkflowServer(
+          payload.dept, payload.selectedApprovalLayers, payload.selectedLayerMembers, appData || {}, payload.approvalLevel
+        );
+        payload.approvalStatus = 'PENDING';
+        payload.currentStep = 1;
+        payload.history = [];
+        payload.selectedApprovalLayers = effectiveWf.layerKeys;
+        payload.selectedLayerMembers = payload.selectedLayerMembers || {};
+        payload.effectiveSteps = effectiveWf.steps;
+        payload.effectiveApprovers = effectiveWf.approvers;
       }
       if (!payload.isAddendum) {
         // Hợp đồng nhập lại (đã ký sẵn ngoài hệ thống) coi như đã thanh toán từ trước — chỉ hồ sơ đi
@@ -585,4 +669,9 @@ function validateAndPrepareCreate(moduleKey, payload, user, existingCollection, 
   return record;
 }
 
-module.exports = { CREATE_MODULE_CONFIGS, CreateError, validateAndPrepareCreate, scopeAllows, findMeetingConflict, OFFICE_SUBTYPE_TO_PERM_FLAG, normalizeReportEntryPayload };
+module.exports = {
+  CREATE_MODULE_CONFIGS, CreateError, validateAndPrepareCreate, scopeAllows, findMeetingConflict,
+  OFFICE_SUBTYPE_TO_PERM_FLAG, normalizeReportEntryPayload,
+  CONTRACT_APPROVAL_LAYERS, CONTRACT_APPROVAL_LEVELS, CONTRACT_APPROVAL_LEVEL_RULES,
+  buildEffectiveContractApprovalWorkflowServer
+};

@@ -39,9 +39,11 @@ router.post('/contracts/:id/edit', async (req, res) => {
   }
 });
 
-// POST /api/records/contracts/:id/approve|reject — duyệt/từ chối hợp đồng gốc (approvalStatus PENDING
-// gán sẵn khi tạo, xem lib/createValidation.js). POST /api/records/contracts/:id/upload-signed +
-// /start-payment — tải "Tài liệu ký" + chuyển sang "Chờ thanh toán" (xem lib/recordActions.js).
+// POST /api/records/contracts/:id/upload-signed — tải "Tài liệu ký" (xem lib/recordActions.js). Duyệt/
+// từ chối hợp đồng gốc VÀ duyệt/từ chối Tài liệu ký giờ đều đi qua route generic
+// POST /api/workflow/contracts/:id/approve|reject và POST /api/workflow/contractsSignedFile/:id/
+// approve|reject (xem routes/workflow.js + lib/workflowEngine.js) — không còn 2 cặp route
+// approve/reject riêng ở đây nữa (trước đây là flat-permission, không có khái niệm bước/phòng ban).
 async function withContractAction(req, res, action, mutator) {
   const itemId = Number(req.params.id);
   if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
@@ -54,20 +56,8 @@ async function withContractAction(req, res, action, mutator) {
   }
 }
 
-router.post('/contracts/:id/approve', (req, res) =>
-  withContractAction(req, res, 'approve', (payload, user, item) => recordActions.approveContract(user, item)));
-
-router.post('/contracts/:id/reject', (req, res) =>
-  withContractAction(req, res, 'reject', recordActions.rejectContract));
-
 router.post('/contracts/:id/upload-signed', (req, res) =>
   withContractAction(req, res, 'upload-signed', recordActions.uploadContractSignedFile));
-
-router.post('/contracts/:id/approve-signed', (req, res) =>
-  withContractAction(req, res, 'approve-signed', (payload, user, item) => recordActions.approveContractSignedFile(user, item)));
-
-router.post('/contracts/:id/reject-signed', (req, res) =>
-  withContractAction(req, res, 'reject-signed', recordActions.rejectContractSignedFile));
 
 // "Chuyển Sang Thanh Toán" KHÔNG dùng withContractAction() thường — mutatorFn trả về BẢN NHÁP đề nghị
 // thanh toán (chưa lưu) thay vì bản ghi hợp đồng, PHẢI insert thêm vào collection paymentRequests
