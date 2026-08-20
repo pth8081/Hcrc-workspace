@@ -2306,6 +2306,25 @@ table { display: block; overflow-x: auto; max-width: 100%; }
           </div>
         </div>
 
+        <div id="pendingNewUsersSection" class="hidden bg-white p-3 rounded border border-amber-300">
+          <div class="flex items-center justify-between mb-2 flex-wrap gap-2">
+            <h4 class="font-bold text-sm text-amber-800">📋 Danh Sách Người Dùng Chờ Lưu (<span id="pendingNewUsersCount">0</span>)</h4>
+            <button type="button" onclick="commitPendingNewUsers()" class="bg-emerald-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-emerald-700">💾 Lưu Tất Cả Danh Sách</button>
+          </div>
+          <div class="overflow-x-auto">
+            <table class="w-full text-xs border-collapse">
+              <thead><tr class="bg-gray-100">
+                <th class="border p-1.5 text-left">Tên đăng nhập</th>
+                <th class="border p-1.5 text-left">Họ và Tên</th>
+                <th class="border p-1.5 text-left">Phòng Ban</th>
+                <th class="border p-1.5 text-left">Nhóm Phân Quyền</th>
+                <th class="border p-1.5 w-24">Thao Tác</th>
+              </tr></thead>
+              <tbody id="pendingNewUsersTableBody"></tbody>
+            </table>
+          </div>
+        </div>
+
         <div id="groupIdentityFields" class="hidden grid grid-cols-1 md:grid-cols-2 gap-3 bg-white p-3 rounded border">
           <div>
             <label class="block text-xs font-semibold text-gray-600 mb-1">Tên Nhóm Phân Quyền</label>
@@ -2315,10 +2334,16 @@ table { display: block; overflow-x: auto; max-width: 100%; }
             <label class="block text-xs font-semibold text-gray-600 mb-1">Mô Tả</label>
             <input id="gGroupDesc" placeholder="Mô tả ngắn về nhóm quyền này..." class="w-full border p-1.5 rounded text-xs">
           </div>
+          <div class="md:col-span-2">
+            <label class="block text-xs font-semibold text-gray-600 mb-1">👥 Thành Viên Nhóm (thêm/bớt nhiều người cùng lúc, giống quản lý nhóm AD)</label>
+            <div id="groupMembersPicker"></div>
+            <p class="text-[11px] text-gray-500 italic mt-1">Gõ tên/username để tìm và thêm người vào nhóm. Khi bấm Lưu: người được thêm sẽ nhận quyền của nhóm này (nếu đang ở nhóm khác sẽ được CHUYỂN sang nhóm này); người bị bỏ chọn sẽ ra khỏi nhóm nhưng vẫn giữ nguyên quyền hiện tại làm quyền riêng.</p>
+          </div>
         </div>
 
         <div class="flex justify-end gap-2 pt-1">
           <button type="button" onclick="cancelPermFormEdit()" class="bg-gray-400 text-white px-4 py-1.5 rounded text-xs font-bold">Hủy</button>
+          <button type="button" id="btnAddToStagingList" onclick="addUserToStagingList()" class="bg-amber-500 text-white px-4 py-1.5 rounded text-xs font-bold hover:bg-amber-600">➕ Thêm Vào Danh Sách</button>
           <button type="submit" id="btnSavePermForm" class="bg-purple-600 text-white px-6 py-1.5 rounded text-xs font-bold hover:bg-purple-700">Lưu Người Dùng & Phân Quyền</button>
         </div>
 
@@ -3565,6 +3590,9 @@ const DB = {
 let currentUser = null;
 let editingGroupId = null;
 let permFormMode = 'USER'; // 'USER' | 'GROUP' — form Người dùng/Nhóm phân quyền dùng chung 1 bộ checkbox
+// Danh sách người dùng mới đang xếp hàng chờ, CHƯA lưu lên server — cho phép tạo nhiều người rồi mới
+// bấm lưu 1 lần thay vì phải lưu ngay sau mỗi người (xem addUserToStagingList()/commitPendingNewUsers()).
+let pendingNewUsers = [];
 let activeWfMod = 'DOC';
 // Loại tờ trình đang chọn để cấu hình quy trình riêng — chỉ áp dụng khi activeWfMod === 'SUBMISSION'.
 // Gán giá trị thật lần đầu mở đúng tab này (switchWfModule()), lúc đó DB.submissionTypes chắc chắn
@@ -15401,6 +15429,8 @@ function toggleUserPermFormMode(mode) {
     document.getElementById(id).required = (mode === 'USER');
   });
   document.getElementById('btnSavePermForm').innerText = mode === 'GROUP' ? 'Lưu Nhóm Phân Quyền' : 'Lưu Người Dùng & Phân Quyền';
+  document.getElementById('btnAddToStagingList').classList.toggle('hidden', mode !== 'USER');
+  document.getElementById('pendingNewUsersSection').classList.toggle('hidden', mode !== 'USER' || pendingNewUsers.length === 0);
   if (mode === 'GROUP') updatePermGroupNote(false);
 }
 
@@ -15453,12 +15483,21 @@ function renderPermGroupsList() {
   }).join('');
 }
 
+// Khối chọn nhiều thành viên cho 1 nhóm phân quyền, cùng khuôn multi-select đang dùng cho Nhóm Phê
+// Duyệt Trình/HĐ (renderPeopleMultiSelect()) — cho phép thêm/bớt hàng loạt người ngay tại màn hình
+// Nhóm thay vì phải vào sửa từng người một, giống cách quản lý thành viên nhóm trong AD.
+function renderGroupMembersPicker(initialSelected) {
+  const candidates = DB.users.map(u => ({ username: u.username, name: u.name, dept: u.dept }));
+  renderPeopleMultiSelect('groupMembersPicker', candidates, initialSelected || [], 'group-member-toggle', {});
+}
+
 function startCreateGroup() {
   editingGroupId = null;
   resetUserForm();
   toggleUserPermFormMode('GROUP');
   document.getElementById('gGroupName').value = '';
   document.getElementById('gGroupDesc').value = '';
+  renderGroupMembersPicker([]);
   document.getElementById('gGroupName').scrollIntoView({ behavior: 'smooth', block: 'center' });
 }
 
@@ -15470,6 +15509,8 @@ function editPermGroup(id) {
   document.getElementById('gGroupName').value = group.name;
   document.getElementById('gGroupDesc').value = group.description || '';
   populatePermsForm(group.perms);
+  const currentMembers = DB.users.filter(u => u.groupId === id).map(u => u.username);
+  renderGroupMembersPicker(currentMembers);
   document.getElementById('gGroupName').scrollIntoView({ behavior: 'smooth', block: 'center' });
 }
 
@@ -15478,6 +15519,7 @@ function savePermGroup(e) {
   const name = document.getElementById('gGroupName').value.trim();
   if (!name) return alert('Vui lòng nhập Tên Nhóm Phân Quyền!');
   const perms = collectPermsFromForm();
+  const selectedMembers = new Set([...document.querySelectorAll('input.group-member-toggle:checked')].map(cb => cb.value));
 
   let group;
   if (editingGroupId) {
@@ -15498,16 +15540,33 @@ function savePermGroup(e) {
 
   // Nhóm là "vai trò" (role) — sửa quyền của nhóm phải cập nhật NGAY cho mọi thành viên đang gán,
   // NHƯNG vẫn giữ nguyên phần quyền tuỳ chỉnh riêng (permOverrides) từng người đã được cấp thêm/bớt
-  // trên nền quyền của nhóm (xem diffPerms()/mergePerms() + saveUser()).
+  // trên nền quyền của nhóm (xem diffPerms()/mergePerms() + saveUser()). Đồng thời áp luôn kết quả
+  // thêm/bớt hàng loạt từ khối "Thành Viên Nhóm" (xem renderGroupMembersPicker()) — người vừa được
+  // thêm (kể cả đang ở nhóm khác) sẽ CHUYỂN sang nhóm này, người bị bỏ chọn sẽ ra khỏi nhóm và giữ
+  // nguyên quyền hiện tại làm quyền riêng (khớp hành vi deletePermGroup() hiện có).
   let membersUpdated = 0;
   DB.users.forEach(u => {
-    if (u.groupId === group.id) { u.perms = mergePerms(perms, u.permOverrides); membersUpdated++; }
+    const shouldBeMember = selectedMembers.has(u.username);
+    const wasMember = u.groupId === group.id;
+    if (shouldBeMember && wasMember) {
+      u.perms = mergePerms(perms, u.permOverrides);
+      membersUpdated++;
+    } else if (shouldBeMember && !wasMember) {
+      u.groupId = group.id;
+      u.permOverrides = null;
+      u.perms = perms;
+      membersUpdated++;
+    } else if (!shouldBeMember && wasMember) {
+      u.groupId = null;
+      u.permOverrides = null;
+      membersUpdated++;
+    }
   });
 
   syncStorage('permGroups');
   if (membersUpdated > 0) syncStorage('users');
-  logSystemAction('USER_MGM', 'SAVE_PERM_GROUP', `Lưu nhóm phân quyền [${name}]${membersUpdated ? `, cập nhật quyền cho ${membersUpdated} thành viên` : ''}`, 'SUCCESS', name);
-  alert(`✅ Đã lưu nhóm phân quyền!${membersUpdated ? ` Đã tự động cập nhật quyền cho ${membersUpdated} thành viên.` : ''}`);
+  logSystemAction('USER_MGM', 'SAVE_PERM_GROUP', `Lưu nhóm phân quyền [${name}]${membersUpdated ? `, cập nhật ${membersUpdated} thành viên` : ''}`, 'SUCCESS', name);
+  alert(`✅ Đã lưu nhóm phân quyền!${membersUpdated ? ` Đã cập nhật ${membersUpdated} thành viên.` : ''}`);
 
   cancelPermFormEdit();
   renderPermGroupsList();
@@ -16803,10 +16862,10 @@ function cancelPermFormEdit() {
   resetUserForm();
 }
 
-function saveUser(e) {
-  e.preventDefault();
-  if (permFormMode === 'GROUP') return savePermGroup(e); // form đang ở chế độ Nhóm — xem savePermGroup()
-
+// Đọc + xác thực phần DỮ LIỆU CHUNG của form Người dùng (dùng cho cả sửa người có sẵn, lưu ngay 1
+// người mới, và thêm 1 người mới vào danh sách chờ — xem saveUser()/addUserToStagingList()). Trả về
+// null (đã tự alert lý do) nếu có lỗi.
+function readUserFormState() {
   const editId = document.getElementById('editUserId').value;
   const username = document.getElementById('uUsername').value.trim();
   const pass = document.getElementById('uPassword').value.trim();
@@ -16829,10 +16888,36 @@ function saveUser(e) {
 
   // Mã PIN kiểm tra sơ bộ ở client (server vẫn xác minh lại) — chỉ ép buộc khi thực sự nhập giá trị
   // mới, để trống = giữ nguyên PIN cũ (khớp hành vi mật khẩu ở trên).
-  if (pin && !/^\d{4,}$/.test(pin)) return alert('Mã PIN phải là dãy số, tối thiểu 4 chữ số!');
+  if (pin && !/^\d{4,}$/.test(pin)) { alert('Mã PIN phải là dãy số, tối thiểu 4 chữ số!'); return null; }
   if (perms.approverAuthLevel === 'PIN' && !editId && !pin) {
-    return alert('Vui lòng nhập mã PIN cho người dùng mới đang chọn mức xác thực "Yêu cầu nhập mã PIN"!');
+    alert('Vui lòng nhập mã PIN cho người dùng mới đang chọn mức xác thực "Yêu cầu nhập mã PIN"!');
+    return null;
   }
+
+  return { editId, username, pass, pin, name, email, phone, dept, jobTitle, groupId, perms, permOverrides };
+}
+
+// Dựng 1 bản ghi người dùng MỚI từ state đã đọc — dùng chung cho lưu ngay (saveUser()) lẫn thêm vào
+// danh sách chờ (addUserToStagingList()). Kiểm tra trùng username với CẢ DB.users lẫn danh sách chờ
+// hiện tại (tránh 2 người trong cùng danh sách trùng tên đăng nhập nhau).
+function buildNewUserFromState(state) {
+  const { username, pass, pin, name, email, phone, dept, jobTitle, groupId, perms, permOverrides } = state;
+  if (!pass) { alert('Vui lòng nhập mật khẩu cho người dùng mới!'); return null; }
+  if (DB.users.some(u => u.username === username)) { alert('Tên đăng nhập đã tồn tại!'); return null; }
+  if (pendingNewUsers.some(u => u.username === username)) { alert('Tên đăng nhập đã có trong danh sách chờ lưu!'); return null; }
+  return {
+    id: Date.now() + pendingNewUsers.length,
+    username, pass, ...(pin && { pin }), name, email, phone, dept, jobTitle, perms, groupId, permOverrides
+  };
+}
+
+function saveUser(e) {
+  e.preventDefault();
+  if (permFormMode === 'GROUP') return savePermGroup(e); // form đang ở chế độ Nhóm — xem savePermGroup()
+
+  const state = readUserFormState();
+  if (!state) return;
+  const { editId, username, pass, pin, name, email, phone, dept, jobTitle, groupId, perms, permOverrides } = state;
 
   if (editId) {
     const user = DB.users.find(u => u.id === parseInt(editId, 10));
@@ -16852,17 +16937,110 @@ function saveUser(e) {
       user.permOverrides = permOverrides;
     }
   } else {
-    if (!pass) return alert('Vui lòng nhập mật khẩu cho người dùng mới!');
-    if (DB.users.some(u => u.username === username)) return alert('Tên đăng nhập đã tồn tại!');
-    DB.users.push({
-      id: Date.now(),
-      username, pass, ...(pin && { pin }), name, email, phone, dept, jobTitle, perms, groupId, permOverrides
-    });
+    // Tạo mới ngay lập tức, lưu 1 người — nếu muốn gộp nhiều người rồi lưu 1 lần, dùng "+ Thêm Vào
+    // Danh Sách" / "Lưu Tất Cả Danh Sách" (xem addUserToStagingList()/commitPendingNewUsers()).
+    const newUser = buildNewUserFromState(state);
+    if (!newUser) return;
+    DB.users.push(newUser);
   }
 
   syncStorage('users');
   logSystemAction('USER_MGM', 'SAVE_USER', `Lưu thông tin người dùng [${username}]`, 'SUCCESS', username);
   alert('✅ Đã lưu thông tin người dùng và phân quyền!');
+  resetUserForm();
+  renderUsers();
+  renderPermGroupsList();
+}
+
+// ==========================================
+// DANH SÁCH NGƯỜI DÙNG MỚI CHỜ LƯU — cho phép admin điền form nhiều lần, mỗi lần bấm "+ Thêm Vào
+// Danh Sách" để xếp vào hàng chờ (KHÔNG gọi server), rồi bấm "Lưu Tất Cả Danh Sách" 1 lần duy nhất để
+// gửi tất cả lên server cùng lúc — tiện khi cần tạo nhiều tài khoản cùng lúc (vd. nhân viên mới hàng
+// loạt) thay vì phải chờ round-trip lưu từng người một.
+// ==========================================
+function addUserToStagingList() {
+  const editId = document.getElementById('editUserId').value;
+  if (editId) return alert('⛔ Đang sửa 1 người dùng có sẵn — không thể thêm vào danh sách chờ. Bấm "Hủy" trước nếu muốn tạo người dùng mới.');
+  const state = readUserFormState();
+  if (!state) return;
+  const newUser = buildNewUserFromState(state);
+  if (!newUser) return;
+  pendingNewUsers.push(newUser);
+  resetUserForm();
+  renderPendingNewUsersList();
+  document.getElementById('pendingNewUsersSection').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+function renderPendingNewUsersList() {
+  const section = document.getElementById('pendingNewUsersSection');
+  const tbody = document.getElementById('pendingNewUsersTableBody');
+  const countEl = document.getElementById('pendingNewUsersCount');
+  if (!section || !tbody) return;
+  section.classList.toggle('hidden', permFormMode !== 'USER' || pendingNewUsers.length === 0);
+  if (countEl) countEl.textContent = pendingNewUsers.length;
+  tbody.innerHTML = pendingNewUsers.map((u, idx) => {
+    const group = u.groupId ? DB.permGroups.find(g => g.id === u.groupId) : null;
+    return `
+    <tr class="border-b hover:bg-gray-50">
+      <td class="border p-1.5 font-mono">${escapeHtml(u.username)}</td>
+      <td class="border p-1.5">${escapeHtml(u.name)}</td>
+      <td class="border p-1.5">${escapeHtml(u.dept)}</td>
+      <td class="border p-1.5">${escapeHtml(group ? group.name : '(quyền riêng)')}</td>
+      <td class="border p-1.5 text-center">
+        <button type="button" onclick="editPendingNewUser(${idx})" class="text-blue-600 font-bold hover:underline mr-2">Sửa</button>
+        <button type="button" onclick="removePendingNewUser(${idx})" class="text-red-600 font-bold hover:underline">Xóa</button>
+      </td>
+    </tr>`;
+  }).join('');
+}
+
+function removePendingNewUser(idx) {
+  pendingNewUsers.splice(idx, 1);
+  renderPendingNewUsersList();
+}
+
+// Gỡ 1 người khỏi danh sách chờ và đổ lại thông tin lên form để sửa — bấm "+ Thêm Vào Danh Sách" lại
+// để đưa trở lại hàng chờ sau khi sửa xong (giống hệt cách editPermGroup() đổ dữ liệu lên form dùng
+// chung populatePermsForm()).
+function editPendingNewUser(idx) {
+  const u = pendingNewUsers[idx];
+  if (!u) return;
+  pendingNewUsers.splice(idx, 1);
+  renderPendingNewUsersList();
+
+  toggleUserPermFormMode('USER');
+  document.getElementById('editUserId').value = '';
+  document.getElementById('uUsername').value = u.username;
+  document.getElementById('uPassword').value = u.pass;
+  document.getElementById('uFullName').value = u.name;
+  document.getElementById('uEmail').value = u.email || '';
+  document.getElementById('uPhone').value = u.phone || '';
+  document.getElementById('uDept').value = u.dept;
+  document.getElementById('uJobTitle').value = u.jobTitle || '';
+  document.getElementById('uPermGroup').value = u.groupId || '';
+  populatePermsForm(u.perms);
+  document.getElementById('uPin').value = u.pin || '';
+  updatePermGroupNote(!!u.groupId);
+  document.getElementById('uUsername').scrollIntoView({ behavior: 'smooth', block: 'center' });
+}
+
+function commitPendingNewUsers() {
+  if (pendingNewUsers.length === 0) return;
+  // Kiểm tra lại lần cuối phòng trường hợp có người khác đã tạo trùng username trong lúc mình đang
+  // xếp danh sách — server (prepareUsersForSave) vẫn xác minh/hash lại toàn bộ 1 lần nữa khi ghi.
+  const dupWithExisting = pendingNewUsers.filter(u => DB.users.some(existing => existing.username === u.username));
+  if (dupWithExisting.length) {
+    return alert(`⛔ Tên đăng nhập đã tồn tại trong hệ thống: ${dupWithExisting.map(u => u.username).join(', ')} — vui lòng sửa lại trong danh sách trước khi lưu.`);
+  }
+  if (!confirm(`Lưu ${pendingNewUsers.length} người dùng mới trong danh sách?`)) return;
+
+  DB.users.push(...pendingNewUsers);
+  syncStorage('users');
+  const names = pendingNewUsers.map(u => u.username).join(', ');
+  logSystemAction('USER_MGM', 'SAVE_USER_BATCH', `Lưu danh sách ${pendingNewUsers.length} người dùng mới [${names}]`, 'SUCCESS', names);
+  alert(`✅ Đã lưu ${pendingNewUsers.length} người dùng mới!`);
+  pendingNewUsers = [];
+  renderPendingNewUsersList();
   resetUserForm();
   renderUsers();
   renderPermGroupsList();
