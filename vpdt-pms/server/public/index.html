@@ -774,6 +774,18 @@ table { display: block; overflow-x: auto; max-width: 100%; }
             <label class="block font-semibold text-gray-600 mb-1">Loại Pháp Lý</label>
             <select id="contractType" onchange="refreshContractCodePreview()" class="w-full border p-1.5 rounded bg-white" required></select>
           </div>
+          <div id="contractApprovalLevelWrap">
+            <label class="block font-semibold text-gray-600 mb-1">Cấp Phê Duyệt Cuối Cùng</label>
+            <select id="contractApprovalLevel" class="w-full border p-1.5 rounded bg-white font-semibold" onchange="renderContractApprovalLayerCheckboxes()"></select>
+          </div>
+          <div id="contractApprovalDropdownWrap" class="relative">
+            <label class="block font-semibold text-gray-600 mb-1">Phê Duyệt</label>
+            <button type="button" id="contractApprovalDropdownBtn" onclick="toggleContractApprovalDropdown(event)" class="w-full border p-1.5 rounded bg-white text-left flex justify-between items-center gap-1">
+              <span id="contractApprovalDropdownLabel" class="text-gray-500 truncate">-- Chọn cấp phê duyệt --</span>
+              <span class="text-gray-400 shrink-0">▾</span>
+            </button>
+            <div id="contractApprovalDropdownPanel" class="hidden absolute z-20 mt-1 w-72 right-0 bg-white border rounded shadow-lg p-2 space-y-1 max-h-72 overflow-y-auto"></div>
+          </div>
           <div class="md:col-span-2">
             <label class="block font-semibold text-gray-600 mb-1" id="contractTitleLabel">Tên Hợp Đồng / Tên Giấy Phép</label>
             <input id="contractTitle" placeholder="Hợp đồng cung cấp dịch vụ công nghệ..." class="w-full border p-1.5 rounded" required>
@@ -805,6 +817,11 @@ table { display: block; overflow-x: auto; max-width: 100%; }
           <textarea id="contractContent" placeholder="Ghi chú các điều khoản thanh toán, nghĩa vụ..." class="w-full border p-1.5 rounded h-16" required></textarea>
         </div>
         <div id="dynamicFieldsContainer_CONTRACT" class="grid grid-cols-1 md:grid-cols-3 gap-3 border-t pt-3"></div>
+        <div id="contractApprovalLayersSection" class="hidden border-t pt-3">
+          <label class="block font-semibold text-gray-600 mb-1">Cấp Phê Duyệt Bổ Sung</label>
+          <p class="text-[11px] text-gray-500 italic mb-1.5">Chọn CỤ THỂ những ai (trong số người admin đã gán vào nhóm đó, mục "Nhóm Phê Duyệt HĐ") cho từng lớp đã tick ở "Phê duyệt" — mỗi lớp cộng thêm 1 bước duyệt vào cuối quy trình gốc theo phòng ban. Các lớp đánh dấu "bắt buộc" do "Cấp Phê Duyệt Cuối Cùng" quyết định, không thể bỏ tick.</p>
+          <div id="contractApprovalLayersContainer" class="flex flex-wrap gap-3"></div>
+        </div>
         <div id="contractInstallmentsWrap" class="border-t pt-3">
           <div class="flex justify-between items-center mb-2">
             <label class="font-semibold text-gray-600">Các Đợt Thanh Toán</label>
@@ -814,6 +831,7 @@ table { display: block; overflow-x: auto; max-width: 100%; }
         </div>
         <div class="flex justify-end gap-2">
           <button type="button" id="contractCancelEditBtn" onclick="cancelEditContract()" class="hidden bg-gray-200 text-gray-700 px-5 py-2 rounded font-bold hover:bg-gray-300">Huỷ Sửa</button>
+          <button type="button" id="contractPreviewWfBtn" onclick="previewContractApprovalWorkflow()" class="bg-gray-200 text-gray-700 px-4 py-2 rounded font-bold hover:bg-gray-300">🔍 Xem Quy Trình</button>
           <button type="submit" id="contractSubmitBtn" class="bg-cyan-600 text-white px-5 py-2 rounded font-bold hover:bg-cyan-700">Gửi Duyệt</button>
         </div>
       </form>
@@ -2069,6 +2087,8 @@ table { display: block; overflow-x: auto; max-width: 100%; }
       <button onclick="switchWfModule('OFFICE_FIX')" id="btnWfModOfficeFix" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">🔧 QT Sửa Chữa</button>
       <button onclick="switchWfModule('OFFICE_INVEST')" id="btnWfModOfficeInvest" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">📈 QT Đầu Tư</button>
       <button onclick="switchWfModule('VPP')" id="btnWfModVpp" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">🖇️ QT Văn Phòng Phẩm</button>
+      <button onclick="switchWfModule('CONTRACT_APPROVAL')" id="btnWfModContractApproval" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">📄 QT Hợp Đồng - Phê Duyệt</button>
+      <button onclick="switchWfModule('CONTRACT_MANAGE')" id="btnWfModContractManage" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">📋 QT Hợp Đồng - Quản Lý HĐ</button>
     </div>
 
     <div id="wfSubmissionTypeTabs" class="hidden gap-2 flex-wrap"></div>
@@ -2729,6 +2749,16 @@ table { display: block; overflow-x: auto; max-width: 100%; }
             <label class="flex items-center gap-2 text-orange-700 font-semibold cursor-pointer">
               <input type="checkbox" id="pReportEntryCreate"> ✅ Nộp báo cáo (chỉ tạo được cho đúng phòng ban của mình)
             </label>
+          </div>
+        </details>
+
+        <details class="perm-tree-node bg-white rounded border text-xs">
+          <summary class="flex items-center justify-between gap-2 px-3 py-2 hover:bg-gray-50 rounded">
+            <span class="font-bold text-gray-800 text-sm flex items-center gap-1.5"><span class="perm-tree-chevron text-gray-400">▸</span><span>📄 14. Nhóm Phê Duyệt HĐ (Hợp Đồng)</span></span>
+          </summary>
+          <div class="p-3 pt-0 space-y-2">
+            <p class="text-[11px] text-gray-500 italic">4 nhóm tuỳ chọn RIÊNG cho quy trình Phê Duyệt Hợp Đồng (không dùng chung với Nhóm Phê Duyệt Trình ở mục 11) — người tạo hợp đồng tick chọn khi tạo, mỗi nhóm đã tick cộng thêm 1 bước duyệt vào cuối quy trình gốc theo phòng ban (cấu hình ở Hệ Thống → Quy trình phê duyệt → "QT Hợp Đồng - Phê Duyệt"), theo đúng thứ tự Giám Đốc/PGĐ → Phó TGĐ → Trợ lý/Thư ký → TGĐ. Gán thành viên cho từng nhóm ở đây.</p>
+            <div id="contractApprovalGroupsContainer" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3"></div>
           </div>
         </details>
         </div>
@@ -4074,6 +4104,33 @@ function getSubmissionApprovalLevelRule(levelKey) {
   return SUBMISSION_APPROVAL_LEVEL_RULES[levelKey] || SUBMISSION_APPROVAL_LEVEL_RULES.KHAC;
 }
 
+// Quy trình Phê Duyệt HĐ (module Hợp đồng) — CHẠY ĐỘNG giống Văn Bản Trình (quy trình gốc theo phòng
+// ban + lớp bổ sung tuỳ chọn theo "Cấp Phê Duyệt Cuối Cùng") nhưng TÁCH RIÊNG hoàn toàn: chỉ giữ 4 lớp
+// cấp bậc (bỏ Đồng trình/Phê duyệt đồng cấp/Xin ý kiến), và dùng nhóm phê duyệt RIÊNG
+// (DB.contractApprovalGroups, KHÔNG dùng chung DB.submissionApprovalGroups). Khớp đúng
+// CONTRACT_APPROVAL_LAYERS/LEVELS/RULES ở lib/createValidation.js (LƯU Ý BẢO TRÌ — 2 cài đặt độc lập).
+const CONTRACT_APPROVAL_LAYERS = [
+  { key: 'GD_PGD', label: 'Giám Đốc/Phó Giám Đốc' },
+  { key: 'PTGD', label: 'Phó Tổng Giám Đốc' },
+  { key: 'TRO_LY_THU_KY', label: 'Bộ Phận Trợ Lý/Thư Ký' },
+  { key: 'TGD', label: 'Tổng Giám Đốc' }
+];
+const CONTRACT_APPROVAL_LEVELS = [
+  { key: 'TGD', label: 'Tổng giám đốc phê duyệt' },
+  { key: 'PTGD', label: 'Phó tổng giám đốc phê duyệt' },
+  { key: 'GD_PGD', label: 'Giám đốc/phó giám đốc phê duyệt' },
+  { key: 'KHAC', label: 'Phê duyệt khác' }
+];
+const CONTRACT_APPROVAL_LEVEL_RULES = {
+  TGD: { visible: ['GD_PGD', 'PTGD', 'TRO_LY_THU_KY', 'TGD'], locked: ['TRO_LY_THU_KY', 'TGD'] },
+  PTGD: { visible: ['GD_PGD', 'PTGD'], locked: ['PTGD'] },
+  GD_PGD: { visible: ['GD_PGD'], locked: ['GD_PGD'] },
+  KHAC: { visible: CONTRACT_APPROVAL_LAYERS.map(l => l.key), locked: [] }
+};
+function getContractApprovalLevelRule(levelKey) {
+  return CONTRACT_APPROVAL_LEVEL_RULES[levelKey] || CONTRACT_APPROVAL_LEVEL_RULES.KHAC;
+}
+
 // Di chuyển thành viên nhóm phê duyệt admin đã gán TRƯỚC KHI đổi tên lớp (khoá "BGD" -> "GD_PGD",
 // "TGD_CT" -> "TGD") sang đúng khoá mới — CHỈ áp dụng trong bộ nhớ lúc tải dữ liệu, không tự ghi đè
 // persisted storage (chỉ thực sự lưu lại khi admin bấm "Lưu Thành Viên" ở màn "Quản Lý Nhóm Phê Duyệt
@@ -4225,7 +4282,7 @@ function getSubmissionDeptWorkflowConfig(type, dept) {
 // người trình đã chọn cụ thể cho lớp đó (trong số thành viên admin gán), KHÔNG phải cả nhóm — snapshot
 // ngay lúc tạo nên sau này admin đổi thành viên nhóm không ảnh hưởng tới tờ trình đang xử lý dở. Server
 // (lib/createValidation.js) tự dựng lại y hệt và xác minh lại từ DB, không tin kết quả này của client.
-function buildEffectiveSubmissionWorkflow(type, dept, selectedLayerKeys, selectedLayerMembers) {
+function buildEffectiveSubmissionWorkflow(type, dept, selectedLayerKeys, selectedLayerMembers, approvalLevel) {
   const baseConfig = getSubmissionDeptWorkflowConfig(type, dept);
   const baseWf = DB.workflows.find(w => w.id === baseConfig.workflowId) || { steps: [{ order: 1, name: 'Sếp duyệt' }] };
 
@@ -4233,11 +4290,16 @@ function buildEffectiveSubmissionWorkflow(type, dept, selectedLayerKeys, selecte
   const approvers = {};
   baseWf.steps.forEach(s => { approvers[s.order] = baseConfig.approvers?.[s.order] || []; });
 
+  const rule = getSubmissionApprovalLevelRule(approvalLevel);
   const opinionRequestees = [];
   (selectedLayerKeys || []).forEach(layerKey => {
     const layer = SUBMISSION_APPROVAL_LAYERS.find(l => l.key === layerKey);
     if (!layer) return;
-    const chosen = [...(selectedLayerMembers?.[layerKey] || [])];
+    // Lớp bị khoá bắt buộc theo cấp phê duyệt (vd. TGD, Trợ Lý/Thư Ký ở cấp TGD): không có card chọn
+    // người (xem renderSubmissionApprovalLayerCheckboxes()) — luôn dùng TOÀN BỘ nhóm admin gán.
+    const chosen = rule.locked.includes(layerKey)
+      ? [...(DB.submissionApprovalGroups[layerKey] || [])]
+      : [...(selectedLayerMembers?.[layerKey] || [])];
     if (layer.blocking) {
       const stepOrder = steps.length + 1;
       // layerKey: ghi lại lớp gốc sinh ra bước này — dùng để biết bước này có nằm SAU "Xin ý kiến"
@@ -4259,7 +4321,7 @@ function buildEffectiveSubmissionWorkflow(type, dept, selectedLayerKeys, selecte
 // hộp thoại xác nhận trước khi Trình (xem submitSubmissionReq()). CHỈ MANG TÍNH THAM KHẢO cho người
 // trình tự kiểm tra lại — quy trình THẬT SỰ vẫn do server tự dựng lại và xác minh khi trình (khớp
 // buildEffectiveSubmissionWorkflowServer() trong lib/createValidation.js).
-function buildSubmissionWorkflowPreviewHTML(type, dept, selectedLayerKeys, selectedLayerMembers) {
+function buildSubmissionWorkflowPreviewHTML(type, dept, selectedLayerKeys, selectedLayerMembers, approvalLevel) {
   if (!type || !dept) {
     return '<div class="text-amber-600 italic">Vui lòng chọn Phòng Ban Trình và Loại Tờ Trình để xem quy trình.</div>';
   }
@@ -4267,7 +4329,7 @@ function buildSubmissionWorkflowPreviewHTML(type, dept, selectedLayerKeys, selec
     const u = DB.users.find(x => x.username === username);
     return escapeHtml(u ? u.name : username);
   };
-  const wf = buildEffectiveSubmissionWorkflow(type, dept, selectedLayerKeys, selectedLayerMembers);
+  const wf = buildEffectiveSubmissionWorkflow(type, dept, selectedLayerKeys, selectedLayerMembers, approvalLevel);
   const stepsHTML = wf.steps.map(s => {
     const names = (wf.approvers[s.order] || []).map(userLabel).join(', ') ||
       '<span class="text-amber-600 italic">(chưa có người duyệt — kiểm tra lại cấu hình quy trình phòng ban)</span>';
@@ -4302,12 +4364,13 @@ function previewSubmissionWorkflow() {
   const dept = document.getElementById('subDept').value;
   const type = document.getElementById('subType').value;
   if (!dept || !type) return alert('Vui lòng chọn Phòng Ban Trình và Loại Tờ Trình trước khi xem quy trình!');
+  const approvalLevel = document.getElementById('subApprovalLevel')?.value;
   const { selectedLayerKeys, selectedLayerMembers } = readSelectedSubmissionLayers();
 
   document.getElementById('viewModalTitle').innerText = '🔍 Xem Trước Quy Trình Phê Duyệt';
   document.getElementById('viewModalSub').innerText = `Phòng ban: ${dept} | Loại tờ trình: ${type}`;
   document.getElementById('viewModalFooterInfo').innerText = 'Chỉ mang tính tham khảo — quy trình thật sự do server xác minh lại khi bạn bấm Trình.';
-  document.getElementById('viewModalContent').innerHTML = buildSubmissionWorkflowPreviewHTML(type, dept, selectedLayerKeys, selectedLayerMembers);
+  document.getElementById('viewModalContent').innerHTML = buildSubmissionWorkflowPreviewHTML(type, dept, selectedLayerKeys, selectedLayerMembers, approvalLevel);
   document.getElementById('viewDocModal').classList.remove('hidden');
 }
 
@@ -4324,6 +4387,86 @@ function resolveSubmissionWorkflow(sub) {
   const approvers = {};
   baseWf.steps.forEach(s => { approvers[s.order] = baseConfig.approvers?.[s.order] || []; });
   return { steps, approvers };
+}
+
+// Hợp đồng — 2 quy trình TÁCH RIÊNG trên CÙNG 1 bản ghi (khớp lib/workflowEngine.js): "Phê Duyệt"
+// (approvalStatus/currentStep/history, snapshot effectiveSteps/effectiveApprovers lúc tạo — cùng khuôn
+// resolveSubmissionWorkflow() ở trên) và "Quản Lý HĐ"/Tài liệu ký (signedFileStatus/
+// signedFileCurrentStep/signedFileHistory, KHÔNG snapshot — luôn tra DB.contractManageDeptWorkflows
+// mới nhất, cùng khuôn Xe/Mua Bán/VPP).
+function resolveContractApprovalWorkflow(contract) {
+  if (contract.effectiveSteps && contract.effectiveApprovers) {
+    return { steps: contract.effectiveSteps, approvers: contract.effectiveApprovers };
+  }
+  const baseConfig = DB.contractApprovalDeptWorkflows?.[contract.dept] || { workflowId: 'WF_1STEP', approvers: { 1: ['admin'] } };
+  const baseWf = DB.workflows.find(w => w.id === baseConfig.workflowId) || { steps: [{ order: 1, name: 'Sếp duyệt' }] };
+  const steps = baseWf.steps.map(s => ({ order: s.order, name: s.name }));
+  const approvers = {};
+  baseWf.steps.forEach(s => { approvers[s.order] = baseConfig.approvers?.[s.order] || []; });
+  return { steps, approvers };
+}
+
+function resolveContractManageWorkflow(contract) {
+  const wfConfig = DB.contractManageDeptWorkflows?.[contract.dept];
+  const baseWf = DB.workflows.find(w => w.id === wfConfig?.workflowId) || { steps: [{ order: 1, name: 'Duyệt' }] };
+  return { steps: baseWf.steps, approvers: wfConfig?.approvers || {} };
+}
+
+// Dựng quy trình HIỆU LỰC cho 1 hợp đồng/phụ lục MỚI (lúc tạo) — cùng khuôn buildEffectiveSubmissionWorkflow()
+// nhưng dùng CONTRACT_APPROVAL_LAYERS/DB.contractApprovalGroups/DB.contractApprovalDeptWorkflows riêng,
+// và KHÔNG có nhánh không-chặn (cả 4 lớp đều blocking, không có opinionRequestees).
+function buildEffectiveContractApprovalWorkflow(dept, selectedLayerKeys, selectedLayerMembers) {
+  const baseConfig = DB.contractApprovalDeptWorkflows?.[dept] || { workflowId: 'WF_1STEP', approvers: { 1: ['admin'] } };
+  const baseWf = DB.workflows.find(w => w.id === baseConfig.workflowId) || { steps: [{ order: 1, name: 'Sếp duyệt' }] };
+
+  const steps = baseWf.steps.map(s => ({ order: s.order, name: s.name }));
+  const approvers = {};
+  baseWf.steps.forEach(s => { approvers[s.order] = baseConfig.approvers?.[s.order] || []; });
+
+  (selectedLayerKeys || []).forEach(layerKey => {
+    const layer = CONTRACT_APPROVAL_LAYERS.find(l => l.key === layerKey);
+    if (!layer) return;
+    const chosen = [...(selectedLayerMembers?.[layerKey] || [])];
+    const stepOrder = steps.length + 1;
+    steps.push({ order: stepOrder, name: layer.label, layerKey: layer.key });
+    approvers[stepOrder] = chosen;
+  });
+
+  return { steps, approvers };
+}
+
+// Xem trước quy trình Phê Duyệt HĐ — cùng khuôn buildSubmissionWorkflowPreviewHTML(), không có khối
+// "Xin ý kiến" (không tồn tại trong quy trình này).
+function buildContractApprovalWorkflowPreviewHTML(dept, selectedLayerKeys, selectedLayerMembers) {
+  if (!dept) {
+    return '<div class="text-amber-600 italic">Vui lòng chọn Phòng Ban Quản Lý để xem quy trình.</div>';
+  }
+  const userLabel = (username) => {
+    const u = DB.users.find(x => x.username === username);
+    return escapeHtml(u ? u.name : username);
+  };
+  const wf = buildEffectiveContractApprovalWorkflow(dept, selectedLayerKeys, selectedLayerMembers);
+  const stepsHTML = wf.steps.map(s => {
+    const names = (wf.approvers[s.order] || []).map(userLabel).join(', ') ||
+      '<span class="text-amber-600 italic">(chưa có người duyệt — kiểm tra lại cấu hình quy trình phòng ban)</span>';
+    return `
+      <div class="bg-slate-50 border rounded p-2 mb-1.5">
+        <div class="font-bold text-gray-800">Bước ${s.order}: ${escapeHtml(s.name)}</div>
+        <div class="text-gray-600 mt-0.5">Người duyệt: ${names}</div>
+      </div>`;
+  }).join('');
+  return `<div>${stepsHTML}</div>`;
+}
+
+// Đọc lại đúng lớp phê duyệt bổ sung + người đã chọn TỪ FORM HỢP ĐỒNG HIỆN TẠI — cùng khuôn
+// readSelectedSubmissionLayers() nhưng đọc từ panel/checkbox class riêng của form Hợp đồng.
+function readSelectedContractLayers() {
+  const selectedLayerKeys = [...document.querySelectorAll('#contractApprovalDropdownPanel input.contract-layer-toggle:checked')].map(cb => cb.value);
+  const selectedLayerMembers = {};
+  for (const layerKey of selectedLayerKeys) {
+    selectedLayerMembers[layerKey] = [...document.querySelectorAll(`input.contract-layer-member[data-layer="${layerKey}"]:checked`)].map(cb => cb.value);
+  }
+  return { selectedLayerKeys, selectedLayerMembers };
 }
 
 // --- HÀM KIỂM TRA PHÂN QUYỀN THEO MODULE ---
@@ -4382,10 +4525,14 @@ function canAccessContractModule(user) {
   return scopeHasAny(user, user.perms?.contractView);
 }
 
-// Cờ toàn công ty contractApprove — khớp đúng canApproveContract() ở lib/recordActions.js (server tự
-// xác thực lại, đây chỉ để quyết định hiện/ẩn nút Duyệt/Từ chối).
-function canApproveContract(user) {
-  return !!(user?.perms?.admin || user?.perms?.contractApprove);
+// Người dùng có được duyệt hợp đồng này ở ĐÚNG bước hiện tại của quy trình Phê Duyệt HĐ hay không —
+// dùng canApproveStep() chung (xem "ĐỒNG PHÊ DUYỆT" ở trên) + resolveContractApprovalWorkflow(), thay
+// cho cờ quyền phẳng contractApprove trước đây (quy trình giờ theo bước/phòng ban, server tự xác thực
+// lại ở lib/workflowEngine.js, đây chỉ để quyết định hiện/ẩn nút Duyệt/Từ chối).
+function canApproveContractStep(user, contract) {
+  const wfConfig = resolveContractApprovalWorkflow(contract);
+  const stepApprovers = wfConfig.approvers?.[contract.currentStep] || [];
+  return canApproveStep(user, stepApprovers, contract.history, contract.currentStep);
 }
 
 // Upload "Tài liệu ký" + bấm nút "Thanh toán" — cùng phạm vi quyền contractCreate của phòng ban đó,
@@ -4488,6 +4635,9 @@ function canAccessApprovalHub(user) {
   if (isApproverInWorkflowMap(DB.officeFixDeptWorkflows, user.username)) return true;
   if (isApproverInWorkflowMap(DB.officeInvestDeptWorkflows, user.username)) return true;
   if (isApproverInWorkflowMap(DB.vppDeptWorkflows, user.username)) return true;
+  if (isApproverInWorkflowMap(DB.contractApprovalDeptWorkflows, user.username)) return true;
+  if (isApproverInWorkflowMap(DB.contractManageDeptWorkflows, user.username)) return true;
+  if (Object.values(DB.contractApprovalGroups || {}).some(list => Array.isArray(list) && list.includes(user.username))) return true;
   return false;
 }
 
@@ -5537,8 +5687,8 @@ function closeMobileSidebar() {
 
 // ============================================================
 // DASHBOARD (Đợt C) — trang chủ cá nhân hoá: mỗi thẻ dùng lại NGUYÊN điều kiện "canApprove" đã có sẵn
-// ở từng module (canApproveStep() + dept-workflow map riêng của module đó, hoặc cờ quyền phẳng như
-// canApproveContract()) — không có API/permission mới nào, không đổi logic phê duyệt hiện có.
+// ở từng module (canApproveStep() + dept-workflow map riêng của module đó, kể cả Hợp đồng từ khi có quy
+// trình theo bước) — không có API/permission mới nào, không đổi logic phê duyệt hiện có.
 // Cá nhân hoá (ẩn/hiện từng thẻ) lưu ở SERVER (Đợt D — user.dashboardHiddenCards, qua PATCH
 // /api/auth/me) để đồng bộ giữa các thiết bị, thay vì chỉ lưu riêng ở từng trình duyệt như Đợt C.
 // ============================================================
@@ -5597,9 +5747,10 @@ function taskNeedsMyAction(t, user) {
 // Đếm số bản ghi PENDING mà user hiện tại được phép duyệt ở BƯỚC hiện tại — dùng chung cho các module
 // có quy trình duyệt theo phòng ban (Tài liệu/Đăng ký xe/Văn phòng/VPP), mirror đúng điều kiện
 // "canApprove" đang dùng để hiện nút Duyệt ở từng dòng của renderDocs()/renderCarRegs()/... .
-function countDeptWorkflowPending(records, wfConfigFor, user) {
+function countDeptWorkflowPending(records, wfConfigFor, user, statusField) {
+  const f = statusField || 'status';
   return (records || []).filter(rec => {
-    if (rec.status !== 'PENDING') return false;
+    if (rec[f] !== 'PENDING') return false;
     const wfConfig = wfConfigFor(rec) || {};
     const currentStepApprovers = wfConfig.approvers ? (wfConfig.approvers[rec.currentStep] || []) : [];
     return canApproveStep(user, currentStepApprovers, rec.history, rec.currentStep);
@@ -5631,9 +5782,8 @@ function buildDashboardCards(user) {
   addCard({ key: 'submission', icon: '📜', label: 'Văn bản trình chờ duyệt', count: subCount, show: subCount > 0,
     action: () => { switchTab('submission'); applyPendingStatusFilter('filterStatusSub', onSubFilterChange); } });
 
-  const contractCanApprove = canApproveContract(user);
-  const contractCount = contractCanApprove ? (DB.contracts || []).filter(c => c.approvalStatus === 'PENDING').length : 0;
-  addCard({ key: 'contract', icon: '📄', label: 'Hợp đồng chờ duyệt', count: contractCount, show: contractCanApprove,
+  const contractCount = countDeptWorkflowPending((DB.contracts || []).filter(c => !c.isAddendum), c => resolveContractApprovalWorkflow(c), user, 'approvalStatus');
+  addCard({ key: 'contract', icon: '📄', label: 'Hợp đồng chờ duyệt', count: contractCount, show: contractCount > 0,
     action: () => { switchTab('contract'); setContractSubTab('APPROVAL'); } });
 
   const meetingCanApprove = canApproveMeeting(user);
@@ -5720,16 +5870,22 @@ function getMyPendingApprovals(user) {
   if (!user) return [];
   const items = [];
 
-  function addDeptWorkflowItems(records, wfConfigFor, cfg) {
+  // fields: tên field trạng thái/bước hiện tại/lịch sử — mặc định 'status'/'currentStep'/'history'.
+  // Hợp đồng cần khai riêng vì 1 bản ghi contracts mang 2 quy trình độc lập (Phê Duyệt gốc dùng tên mặc
+  // định, Tài liệu ký dùng signedFileStatus/signedFileCurrentStep/signedFileHistory — khớp
+  // lib/workflowEngine.js MODULE_CONFIGS.contracts/contractsSignedFile).
+  function addDeptWorkflowItems(records, wfConfigFor, cfg, fields) {
+    const f = { status: 'status', currentStep: 'currentStep', history: 'history', ...(fields || {}) };
     (records || []).forEach(rec => {
-      if (rec.status !== 'PENDING') return;
+      if (rec[f.status] !== 'PENDING') return;
       const wfConfig = wfConfigFor(rec) || {};
-      const currentStepApprovers = wfConfig.approvers ? (wfConfig.approvers[rec.currentStep] || []) : [];
-      if (!canApproveStep(user, currentStepApprovers, rec.history, rec.currentStep)) return;
+      const step = rec[f.currentStep];
+      const currentStepApprovers = wfConfig.approvers ? (wfConfig.approvers[step] || []) : [];
+      if (!canApproveStep(user, currentStepApprovers, rec[f.history], step)) return;
       items.push({
         type: cfg.type, typeLabel: cfg.typeLabel,
         code: cfg.codeOf(rec), title: cfg.titleOf(rec), dept: rec.dept,
-        stepLabel: buildStepLabelForHub(wfConfig, rec.currentStep),
+        stepLabel: buildStepLabelForHub(wfConfig, step),
         createdAt: rec.createdAt,
         actions: cfg.actionsOf(rec)
       });
@@ -5776,35 +5932,36 @@ function getMyPendingApprovals(user) {
     actionsOf: r => [{ label: '✍️ Xử lý / Duyệt', onclick: `openVppRegModal(${r.id})`, primary: true }]
   });
 
-  // 4 module còn lại KHÔNG có khái niệm bước quy trình phòng ban (chỉ cần đúng 1 quyền phẳng là duyệt
-  // được toàn bộ hồ sơ PENDING của module đó) — không dùng canApproveStep, mirror đúng gate đang dùng ở
-  // buildContractRowHTML()/renderMeetings()/renderInternalPosts()/renderPaymentRequests().
-  if (canApproveContract(user)) {
-    (DB.contracts || []).filter(c => !c.isAddendum && c.approvalStatus === 'PENDING').forEach(c => {
-      items.push({
-        type: 'contract', typeLabel: '📄 Hợp đồng', code: c.code, title: c.title, dept: c.dept,
-        stepLabel: '', createdAt: c.createdAt,
-        actions: [
-          { label: '✅ Duyệt', onclick: `approveContractAction(${c.id})`, primary: true },
-          { label: '❌ Từ chối', onclick: `rejectContractAction(${c.id})` }
-        ]
-      });
-    });
-  }
-
-  // Duyệt "Tài liệu ký" của sub module Quản Lý HĐ — dùng lại đúng quyền canManageContractPaymentClient
-  // (theo phòng ban) thay vì quyền phê duyệt hợp đồng gốc phía trên (2 bước khác nhau, xem
-  // uploadContractSignedFile()/approveContractSignedFile() ở lib/recordActions.js).
-  (DB.contracts || []).filter(c => !c.isAddendum && c.signedFileStatus === 'PENDING' && canManageContractPaymentClient(user, c)).forEach(c => {
-    items.push({
-      type: 'contractSigned', typeLabel: '📝 Tài liệu ký HĐ', code: c.code, title: c.title, dept: c.dept,
-      stepLabel: '', createdAt: c.signedUploadedAt || c.createdAt,
-      actions: [
-        { label: '✅ Duyệt', onclick: `approveContractSignedFileAction(${c.id})`, primary: true },
-        { label: '❌ Từ chối', onclick: `rejectContractSignedFileAction(${c.id})` }
+  // Hợp đồng — GIỜ ĐÃ có bước quy trình riêng (xem lib/workflowEngine.js), dùng addDeptWorkflowItems()
+  // như 5 module phía trên thay vì quyền phẳng contractApprove trước đây. 2 quy trình TÁCH RIÊNG trên
+  // cùng bản ghi: "Phê Duyệt" gốc (approvalStatus/currentStep/history, resolveContractApprovalWorkflow)
+  // và "Quản Lý HĐ"/Tài liệu ký (signedFileStatus/signedFileCurrentStep/signedFileHistory,
+  // resolveContractManageWorkflow) — không dùng chung field, gọi 2 lần với fields khác nhau.
+  addDeptWorkflowItems(
+    (DB.contracts || []).filter(c => !c.isAddendum),
+    c => resolveContractApprovalWorkflow(c),
+    {
+      type: 'contract', typeLabel: '📄 Hợp đồng', codeOf: r => r.code, titleOf: r => r.title,
+      actionsOf: r => [
+        { label: '✅ Duyệt', onclick: `approveContractAction(${r.id})`, primary: true },
+        { label: '❌ Từ chối', onclick: `rejectContractAction(${r.id})` }
       ]
-    });
-  });
+    },
+    { status: 'approvalStatus' }
+  );
+
+  addDeptWorkflowItems(
+    (DB.contracts || []).filter(c => !c.isAddendum),
+    c => resolveContractManageWorkflow(c),
+    {
+      type: 'contractSigned', typeLabel: '📝 Tài liệu ký HĐ', codeOf: r => r.code, titleOf: r => r.title,
+      actionsOf: r => [
+        { label: '✅ Duyệt', onclick: `approveContractSignedFileAction(${r.id})`, primary: true },
+        { label: '❌ Từ chối', onclick: `rejectContractSignedFileAction(${r.id})` }
+      ]
+    },
+    { status: 'signedFileStatus', currentStep: 'signedFileCurrentStep', history: 'signedFileHistory' }
+  );
 
   if (canApproveMeeting(user)) {
     (DB.meetings || []).filter(m => m.status === 'PENDING').forEach(m => {
@@ -6555,6 +6712,13 @@ function populateDropdowns() {
     const current = contractTypeSel.value;
     contractTypeSel.innerHTML = DB.contractTypes.map(t => `<option value="${escapeHtml(t)}">${escapeHtml(t)}</option>`).join('');
     if (DB.contractTypes.includes(current)) contractTypeSel.value = current;
+  }
+
+  // Cùng khuôn subApprovalLevelSel ở trên — KHAC ("Phê duyệt khác") đặt đầu danh sách làm mặc định.
+  const contractApprovalLevelSel = document.getElementById('contractApprovalLevel');
+  if (contractApprovalLevelSel && !contractApprovalLevelSel.options.length) {
+    const orderedC = [CONTRACT_APPROVAL_LEVELS.find(l => l.key === 'KHAC'), ...CONTRACT_APPROVAL_LEVELS.filter(l => l.key !== 'KHAC')];
+    contractApprovalLevelSel.innerHTML = orderedC.map(l => `<option value="${escapeHtml(l.key)}">${escapeHtml(l.label)}</option>`).join('');
   }
 
   const carTypeSel = document.getElementById('carType');
@@ -7376,16 +7540,20 @@ function submitSubmissionReq(e) {
   e.preventDefault();
   const dept = document.getElementById('subDept').value;
   const type = document.getElementById('subType').value;
+  const approvalLevel = document.getElementById('subApprovalLevel').value;
+  const rule = getSubmissionApprovalLevelRule(approvalLevel);
   const { selectedLayerKeys, selectedLayerMembers } = readSelectedSubmissionLayers();
 
   for (const layerKey of selectedLayerKeys) {
+    // Lớp bị khoá bắt buộc không có card chọn người (dùng cả nhóm) — chỉ kiểm tra các lớp tuỳ chọn.
+    if (rule.locked.includes(layerKey)) continue;
     if ((selectedLayerMembers[layerKey] || []).length === 0) {
       const layer = SUBMISSION_APPROVAL_LAYERS.find(l => l.key === layerKey);
       return alert(`⛔ Đã tick lớp "${layer?.label}" nhưng chưa chọn người nào duyệt — vui lòng chọn ít nhất 1 người!`);
     }
   }
 
-  const previewHTML = buildSubmissionWorkflowPreviewHTML(type, dept, selectedLayerKeys, selectedLayerMembers);
+  const previewHTML = buildSubmissionWorkflowPreviewHTML(type, dept, selectedLayerKeys, selectedLayerMembers, approvalLevel);
   showConfirmModal({
     title: '📜 Xác Nhận Trình Văn Bản / Tờ Trình',
     bodyHTML: `<p class="mb-2">Tờ trình sẽ đi theo đúng luồng phê duyệt sau:</p>${previewHTML}<p class="mt-3 font-semibold">Bạn có chắc chắn muốn trình văn bản này?</p>`,
@@ -7437,7 +7605,7 @@ async function doSubmitSubmissionReq(e) {
     }
   }
 
-  const effectiveWf = buildEffectiveSubmissionWorkflow(type, dept, selectedLayerKeys, selectedLayerMembers);
+  const effectiveWf = buildEffectiveSubmissionWorkflow(type, dept, selectedLayerKeys, selectedLayerMembers, approvalLevel);
 
   const subPayload = {
     code: code,
@@ -7542,11 +7710,9 @@ function renderSubmissionApprovalLayerCheckboxes() {
   const container = document.getElementById('subApprovalLayersContainer');
   if (section) section.classList.add('hidden');
   if (container) container.innerHTML = '';
-  // Lớp bị khoá bắt buộc: tự động hiện card chọn người ngay (checkbox disabled nên onchange không tự
-  // bắn được từ thao tác click của người dùng) — dùng lại đúng logic dựng card của onSubApprovalLayerToggle().
-  rule.locked.forEach(layerKey => {
-    if (visibleLayers.some(l => l.key === layerKey)) onSubApprovalLayerToggle(layerKey);
-  });
+  // Lớp bị khoá bắt buộc (vd. TGD, Trợ Lý/Thư Ký ở cấp TGD) là kết quả CHẮC CHẮN của cấp phê duyệt đã
+  // chọn, không phải lựa chọn của người trình — nên KHÔNG hiện card chọn người, luôn dùng cả nhóm được
+  // admin gán (xem buildEffectiveSubmissionWorkflow()). Chỉ các lớp tuỳ chọn (không locked) mới có card.
   updateSubApprovalDropdownLabel();
 }
 
@@ -7605,6 +7771,114 @@ function onSubApprovalLayerToggle(layerKey) {
 
   if (section) section.classList.toggle('hidden', container.children.length === 0);
   updateSubApprovalDropdownLabel();
+}
+
+// Cùng khuôn renderSubmissionApprovalLayerCheckboxes()/toggleSubApprovalDropdown()/
+// updateSubApprovalDropdownLabel()/onSubApprovalLayerToggle() ở trên nhưng cho form Hợp đồng — dùng
+// CONTRACT_APPROVAL_LAYERS/DB.contractApprovalGroups riêng, không có nhánh "Xin ý kiến" (cả 4 lớp đều
+// blocking).
+function renderContractApprovalLayerCheckboxes() {
+  const panel = document.getElementById('contractApprovalDropdownPanel');
+  if (!panel) return;
+  const levelKey = document.getElementById('contractApprovalLevel')?.value || 'KHAC';
+  const rule = getContractApprovalLevelRule(levelKey);
+  const visibleLayers = CONTRACT_APPROVAL_LAYERS.filter(l => rule.visible.includes(l.key));
+
+  panel.innerHTML = visibleLayers.map(layer => {
+    const groupUsers = (DB.contractApprovalGroups[layer.key] || [])
+      .map(un => DB.users.find(u => u.username === un))
+      .filter(Boolean);
+    const locked = rule.locked.includes(layer.key);
+    const disabled = locked || groupUsers.length === 0;
+
+    return `
+      <label class="flex items-start gap-1.5 text-xs p-1 rounded ${disabled ? 'opacity-50' : 'cursor-pointer hover:bg-cyan-50'}">
+        <input type="checkbox" class="contract-layer-toggle mt-0.5" value="${layer.key}" ${locked ? 'checked' : ''} ${disabled ? 'disabled' : ''} onchange="onContractApprovalLayerToggle('${layer.key}')">
+        <span>
+          <span class="font-semibold text-gray-700">${escapeHtml(layer.label)}</span>
+          ${locked ? `<span class="block text-[10px] text-amber-600 italic">Bắt buộc theo cấp phê duyệt đã chọn.</span>`
+            : (disabled ? `<span class="block text-[10px] text-gray-400 italic">Admin chưa gán thành viên nào cho nhóm này.</span>` : '')}
+        </span>
+      </label>
+    `;
+  }).join('');
+
+  const section = document.getElementById('contractApprovalLayersSection');
+  const container = document.getElementById('contractApprovalLayersContainer');
+  if (section) section.classList.add('hidden');
+  if (container) container.innerHTML = '';
+  rule.locked.forEach(layerKey => {
+    if (visibleLayers.some(l => l.key === layerKey)) onContractApprovalLayerToggle(layerKey);
+  });
+  updateContractApprovalDropdownLabel();
+}
+
+function toggleContractApprovalDropdown(e) {
+  e.stopPropagation();
+  document.getElementById('contractApprovalDropdownPanel')?.classList.toggle('hidden');
+}
+
+document.addEventListener('click', (ev) => {
+  const panel = document.getElementById('contractApprovalDropdownPanel');
+  const btn = document.getElementById('contractApprovalDropdownBtn');
+  if (!panel || panel.classList.contains('hidden')) return;
+  if (!panel.contains(ev.target) && ev.target !== btn && !btn?.contains(ev.target)) panel.classList.add('hidden');
+});
+
+function updateContractApprovalDropdownLabel() {
+  const labelEl = document.getElementById('contractApprovalDropdownLabel');
+  if (!labelEl) return;
+  const checked = [...document.querySelectorAll('#contractApprovalDropdownPanel input.contract-layer-toggle:checked')];
+  if (checked.length === 0) {
+    labelEl.textContent = '-- Chọn cấp phê duyệt --';
+    labelEl.className = 'text-gray-500 truncate';
+  } else {
+    const labels = checked.map(cb => CONTRACT_APPROVAL_LAYERS.find(l => l.key === cb.value)?.label || cb.value);
+    labelEl.textContent = checked.length <= 2 ? labels.join(', ') : `Đã chọn ${checked.length} lớp`;
+    labelEl.className = 'text-gray-800 font-semibold truncate';
+  }
+}
+
+function onContractApprovalLayerToggle(layerKey) {
+  const toggle = document.querySelector(`.contract-layer-toggle[value="${layerKey}"]`);
+  const checked = !!toggle?.checked;
+  const layer = CONTRACT_APPROVAL_LAYERS.find(l => l.key === layerKey);
+  const container = document.getElementById('contractApprovalLayersContainer');
+  const section = document.getElementById('contractApprovalLayersSection');
+
+  if (checked) {
+    const groupUsers = (DB.contractApprovalGroups[layerKey] || [])
+      .map(un => DB.users.find(u => u.username === un))
+      .filter(Boolean);
+    const card = document.createElement('div');
+    card.id = `contractLayerCard_${layerKey}`;
+    card.className = 'border rounded p-2 bg-cyan-50/60 min-w-[220px]';
+    card.innerHTML = `
+      <div class="font-semibold text-gray-700 mb-1">${escapeHtml(layer?.label || layerKey)}</div>
+      <div id="contractLayerMemberPicker_${layerKey}"></div>
+    `;
+    container.appendChild(card);
+    renderPeopleMultiSelect(`contractLayerMemberPicker_${layerKey}`, groupUsers, [], 'contract-layer-member', { 'data-layer': layerKey });
+  } else {
+    pmsClear(`contractLayerMemberPicker_${layerKey}`);
+    document.getElementById(`contractLayerCard_${layerKey}`)?.remove();
+  }
+
+  if (section) section.classList.toggle('hidden', container.children.length === 0);
+  updateContractApprovalDropdownLabel();
+}
+
+// Xem trước quy trình Phê Duyệt HĐ dựa trên Phòng ban/lớp bổ sung đã chọn NGAY LÚC NÀY trên form.
+function previewContractApprovalWorkflow() {
+  const dept = document.getElementById('contractDept').value;
+  if (!dept) return alert('Vui lòng chọn Phòng Ban Quản Lý trước khi xem quy trình!');
+  const { selectedLayerKeys, selectedLayerMembers } = readSelectedContractLayers();
+
+  document.getElementById('viewModalTitle').innerText = '🔍 Xem Trước Quy Trình Phê Duyệt Hợp Đồng';
+  document.getElementById('viewModalSub').innerText = `Phòng ban: ${dept}`;
+  document.getElementById('viewModalFooterInfo').innerText = 'Chỉ mang tính tham khảo — quy trình thật sự do server xác minh lại khi bạn bấm Gửi Duyệt.';
+  document.getElementById('viewModalContent').innerHTML = buildContractApprovalWorkflowPreviewHTML(dept, selectedLayerKeys, selectedLayerMembers);
+  document.getElementById('viewDocModal').classList.remove('hidden');
 }
 
 function onSubFilterChange() {
@@ -9561,6 +9835,18 @@ function onContractOpModeChange() {
   // yêu cầu "phụ lục cũng phê duyệt và thanh toán"), ẩn cho 2 chế độ IMPORT (nhập hồ sơ đã ký sẵn,
   // không cần khai lại đợt thanh toán ở đây).
   document.getElementById('contractInstallmentsWrap').classList.toggle('hidden', isImportMode);
+  // Cấp Phê Duyệt Cuối Cùng/lớp bổ sung: chỉ áp dụng cho hồ sơ đi qua quy trình Phê Duyệt HĐ (NEW/
+  // ADDENDUM) — 2 chế độ IMPORT bỏ qua hàng chờ nên ẩn hẳn, không cần chọn.
+  document.getElementById('contractApprovalLevelWrap').classList.toggle('hidden', isImportMode);
+  document.getElementById('contractApprovalDropdownWrap').classList.toggle('hidden', isImportMode);
+  if (isImportMode) {
+    document.getElementById('contractApprovalLayersSection').classList.add('hidden');
+    document.getElementById('contractApprovalLayersContainer').innerHTML = '';
+    document.getElementById('contractApprovalDropdownPanel').innerHTML = '';
+    updateContractApprovalDropdownLabel();
+  } else {
+    renderContractApprovalLayerCheckboxes();
+  }
   document.getElementById('contractTitleLabel').innerText = isAddendumMode ? 'Tên Phụ Lục' : 'Tên Hợp Đồng / Tên Giấy Phép';
   let fileLabel = 'Tệp Đính Kèm Hợp Đồng / Giấy Phép';
   if (mode === 'ADDENDUM') fileLabel = 'Tệp Đính Kèm Phụ Lục';
@@ -9710,6 +9996,11 @@ async function submitContractReq(e) {
     return alert(`⛔ Tải tệp lên thất bại: ${err.message}`);
   }
 
+  // Cấp Phê Duyệt Cuối Cùng/lớp bổ sung — chỉ đọc khi KHÔNG phải luồng nhập hồ sơ đã ký sẵn (server tự
+  // bỏ qua các field này ở nhánh isSignedImport, xem lib/createValidation.js).
+  const { selectedLayerKeys, selectedLayerMembers } = isSignedImport ? { selectedLayerKeys: [], selectedLayerMembers: {} } : readSelectedContractLayers();
+  const approvalLevel = isSignedImport ? null : (document.getElementById('contractApprovalLevel').value || 'KHAC');
+
   const contractPayload = {
     code, dept, type, title, partner, amount, startDate, endDate, content,
     customData,
@@ -9721,7 +10012,10 @@ async function submitContractReq(e) {
     isAddendum,
     rootContractId: isAddendum ? rootContractId : null,
     paymentInstallments: isSignedImport ? [] : collectContractInstallments(),
-    isSignedImport
+    isSignedImport,
+    approvalLevel,
+    selectedApprovalLayers: selectedLayerKeys,
+    selectedLayerMembers
   };
 
   let newContract;
@@ -9740,26 +10034,20 @@ async function submitContractReq(e) {
     alert(`✅ Đã nhập ${isAddendum ? 'phụ lục' : 'hợp đồng'} đã ký thành công!`);
   } else if (isAddendum) {
     logSystemAction('CONTRACT', 'CREATE_CONTRACT_ADDENDUM', `Bổ sung phụ lục [${newContract.code} - ${title}] cho hợp đồng [${newContract.rootContractId}]`, 'SUCCESS', newContract.code);
-    if (newContract.approvalStatus === 'PENDING') {
-      const approvers = DB.users.filter(u => u.perms?.admin || u.perms?.contractApprove).map(u => u.username);
-      notifyUsersByEmail('CONTRACT', 'NOTIFY_APPROVAL_NEEDED', newContract.code, approvers,
-        `[VPDT] Phụ lục hợp đồng chờ duyệt: ${title}`,
-        `${currentUser.name} vừa tạo phụ lục "${title}" (${newContract.code}), đang chờ phê duyệt.`);
-      alert('✅ Đã gửi phụ lục, đang chờ phê duyệt!');
-    } else {
-      alert('✅ Đã bổ sung phụ lục thành công!');
-    }
+    // Luôn PENDING (bỏ tự duyệt) — báo đúng người duyệt BƯỚC 1 của quy trình vừa được server tự dựng
+    // (newContract.effectiveApprovers), không còn dò theo cờ quyền phẳng contractApprove cũ.
+    const approvers = newContract.effectiveApprovers?.[1] || [];
+    notifyUsersByEmail('CONTRACT', 'NOTIFY_APPROVAL_NEEDED', newContract.code, approvers,
+      `[VPDT] Phụ lục hợp đồng chờ duyệt: ${title}`,
+      `${currentUser.name} vừa tạo phụ lục "${title}" (${newContract.code}), đang chờ phê duyệt.`);
+    alert('✅ Đã gửi phụ lục, đang chờ phê duyệt!');
   } else {
     logSystemAction('CONTRACT', 'CREATE_CONTRACT', `Tạo hồ sơ hợp đồng [${code} - ${title}]`, 'SUCCESS', code);
-    if (newContract.approvalStatus === 'PENDING') {
-      const approvers = DB.users.filter(u => u.perms?.admin || u.perms?.contractApprove).map(u => u.username);
-      notifyUsersByEmail('CONTRACT', 'NOTIFY_APPROVAL_NEEDED', newContract.code, approvers,
-        `[VPDT] Hợp đồng chờ duyệt: ${title}`,
-        `${currentUser.name} vừa tạo hồ sơ hợp đồng "${title}" (${newContract.code}), đang chờ phê duyệt.`);
-      alert('✅ Đã gửi hồ sơ hợp đồng, đang chờ phê duyệt!');
-    } else {
-      alert('✅ Đã lưu thông tin Hợp đồng / Giấy phép thành công!');
-    }
+    const approvers = newContract.effectiveApprovers?.[1] || [];
+    notifyUsersByEmail('CONTRACT', 'NOTIFY_APPROVAL_NEEDED', newContract.code, approvers,
+      `[VPDT] Hợp đồng chờ duyệt: ${title}`,
+      `${currentUser.name} vừa tạo hồ sơ hợp đồng "${title}" (${newContract.code}), đang chờ phê duyệt.`);
+    alert('✅ Đã gửi hồ sơ hợp đồng, đang chờ phê duyệt!');
   }
   e.target.reset();
   onContractOpModeChange();
@@ -9935,7 +10223,9 @@ function renderContracts() {
       if (activeContractSubTab === 'MANAGE' && c.approvalStatus !== 'APPROVED') return false;
     }
 
-    const canView = scopeAllows(currentUser, currentUser.perms?.contractView, c.dept) || c.creator === currentUser.username || canApproveContract(currentUser);
+    const canView = scopeAllows(currentUser, currentUser.perms?.contractView, c.dept) || c.creator === currentUser.username ||
+      isApproverForDeptWorkflow(resolveContractApprovalWorkflow(c), currentUser.username) ||
+      isApproverForDeptWorkflow(resolveContractManageWorkflow(c), currentUser.username);
     if (!canView) return false;
 
     if (deptFilter && c.dept !== deptFilter) return false;
@@ -10019,7 +10309,7 @@ function buildContractRowHTML(c, { addendumCount = 0, isExpanded = false, isChil
   if (!c.isAddendum && c.creator === currentUser.username) {
     secondaryOptions.push({ value: 'edit', label: '✏️ Sửa' });
   }
-  if (!isChild && c.approvalStatus === 'PENDING' && canApproveContract(currentUser)) {
+  if (!isChild && c.approvalStatus === 'PENDING' && canApproveContractStep(currentUser, c)) {
     secondaryOptions.push({ value: 'approve', label: '✅ Duyệt' });
     secondaryOptions.push({ value: 'reject', label: '❌ Từ chối' });
   }
@@ -10118,6 +10408,9 @@ function deleteContractAction(id) {
 
 // Duyệt/Từ chối hợp đồng gốc — qua modal xác nhận Đồng Ý/Hủy dùng chung (showConfirmModal()), server
 // tự xác thực lại quyền contractApprove/admin (xem lib/recordActions.js).
+// Duyệt/Từ chối hợp đồng gốc/phụ lục — đi qua quy trình Phê Duyệt HĐ theo bước (POST
+// /api/workflow/contracts/:id/approve|reject, xem callWorkflowAction()/lib/workflowEngine.js) thay cho
+// route /api/records/contracts/:id/approve|reject cũ (quyền phẳng, không có khái niệm bước).
 function approveContractAction(id) {
   const c = DB.contracts.find(x => x.id === id);
   if (!c) return;
@@ -10126,19 +10419,35 @@ function approveContractAction(id) {
     bodyHTML: `Bạn có chắc chắn muốn phê duyệt hợp đồng "<b>${escapeHtml(c.title)}</b>" (${escapeHtml(c.code)})?`,
     confirmLabel: 'Phê Duyệt',
     onConfirm: async () => {
-      let updated;
+      let result;
       try {
-        const result = await callRecordAction('contracts', id, 'approve', {});
-        updated = result.item;
+        result = await callWorkflowAction('contracts', id, 'approve', {});
       } catch (err) {
         return alert(`⛔ ${err.message}`);
       }
+      const updated = result.item;
+      const transition = result.transition;
       const idx = DB.contracts.findIndex(x => x.id === id);
       if (idx !== -1) DB.contracts[idx] = updated;
       logSystemAction('CONTRACT', 'APPROVE_CONTRACT', `Phê duyệt hợp đồng [${updated.code} - ${updated.title}]`, 'SUCCESS', updated.code);
-      notifyUsersByEmail('CONTRACT', 'NOTIFY_APPROVED', updated.code, [updated.creator],
-        `[VPDT] Hợp đồng ${updated.code} đã được phê duyệt`,
-        `Hợp đồng "${updated.title}" (${updated.code}) đã được phê duyệt và chuyển sang "Quản Lý Hợp Đồng & Giấy Phép".`);
+
+      let msg = '✅ Đã ghi nhận phê duyệt của bạn!';
+      if (transition.type === 'COMPLETED') {
+        msg = '✅ Phê duyệt hợp đồng thành công!';
+        notifyUsersByEmail('CONTRACT', 'NOTIFY_APPROVED', updated.code, [updated.creator],
+          `[VPDT] Hợp đồng ${updated.code} đã được phê duyệt`,
+          `Hợp đồng "${updated.title}" (${updated.code}) đã được phê duyệt và chuyển sang "Quản Lý Hợp Đồng & Giấy Phép".`);
+      } else if (transition.type === 'ADVANCED') {
+        msg = getStepAdvanceMessage(transition.stepApprovers);
+        if (transition.nextApprovers.length) {
+          notifyUsersByEmail('CONTRACT', 'NOTIFY_APPROVAL_NEEDED', updated.code, transition.nextApprovers,
+            `[VPDT] Hợp đồng ${updated.code} cần bạn phê duyệt`,
+            `Hợp đồng "${updated.title}" (${updated.code}) đang chờ bạn phê duyệt ở bước "${transition.nextStepName}".`);
+        }
+      } else if (transition.type === 'PARTIAL_APPROVE') {
+        msg = '✅ Đã ghi nhận phê duyệt của bạn — đang chờ các đồng phê duyệt còn lại ở bước này.';
+      }
+      alert(msg);
       renderContracts();
     }
   });
@@ -10155,27 +10464,28 @@ function rejectContractAction(id) {
     bodyHTML: `Bạn có chắc chắn muốn từ chối hợp đồng "<b>${escapeHtml(c.title)}</b>"?<br><span class="text-xs text-gray-500">Lý do: ${escapeHtml(reason.trim())}</span>`,
     confirmLabel: 'Từ Chối',
     onConfirm: async () => {
-      let updated;
+      let result;
       try {
-        const result = await callRecordAction('contracts', id, 'reject', { reason: reason.trim() });
-        updated = result.item;
+        result = await callWorkflowAction('contracts', id, 'reject', { comment: reason.trim() });
       } catch (err) {
         return alert(`⛔ ${err.message}`);
       }
+      const updated = result.item;
       const idx = DB.contracts.findIndex(x => x.id === id);
       if (idx !== -1) DB.contracts[idx] = updated;
       logSystemAction('CONTRACT', 'REJECT_CONTRACT', `Từ chối hợp đồng [${updated.code} - ${updated.title}] - Lý do: ${reason.trim()}`, 'WARNING', updated.code);
       notifyUsersByEmail('CONTRACT', 'NOTIFY_REJECTED', updated.code, [updated.creator],
         `[VPDT] Hợp đồng ${updated.code} đã bị từ chối`,
         `Hợp đồng "${updated.title}" (${updated.code}) đã bị từ chối.\nLý do: ${reason.trim()}`);
+      alert('❌ Đã từ chối hợp đồng!');
       renderContracts();
     }
   });
 }
 
-// Duyệt/Từ chối "Tài liệu ký" — bước duyệt riêng của sub module Quản Lý HĐ, dùng lại đúng quyền của
-// người quản lý hợp đồng (canManageContractPaymentClient, khớp approveContractSignedFile() ở
-// lib/recordActions.js). Chỉ khi APPROVED mới mở được nút "💰 Chuyển Sang Thanh Toán".
+// Duyệt/Từ chối "Tài liệu ký" — quy trình RIÊNG của sub module Quản Lý HĐ theo phòng ban (module key
+// ảo "contractsSignedFile", POST /api/workflow/contractsSignedFile/:id/approve|reject — xem
+// lib/workflowEngine.js). Chỉ khi APPROVED (đủ hết các bước) mới mở được nút "💰 Chuyển Sang Thanh Toán".
 function approveContractSignedFileAction(id) {
   const c = DB.contracts.find(x => x.id === id);
   if (!c) return;
@@ -10184,16 +10494,23 @@ function approveContractSignedFileAction(id) {
     bodyHTML: `Bạn có chắc chắn muốn duyệt tài liệu ký của hợp đồng "<b>${escapeHtml(c.title)}</b>" (${escapeHtml(c.code)})?`,
     confirmLabel: 'Duyệt',
     onConfirm: async () => {
-      let updated;
+      let result;
       try {
-        const result = await callRecordAction('contracts', id, 'approve-signed', {});
-        updated = result.item;
+        result = await callWorkflowAction('contractsSignedFile', id, 'approve', {});
       } catch (err) {
         return alert(`⛔ ${err.message}`);
       }
+      const updated = result.item;
+      const transition = result.transition;
       const idx = DB.contracts.findIndex(x => x.id === id);
       if (idx !== -1) DB.contracts[idx] = updated;
       logSystemAction('CONTRACT', 'APPROVE_CONTRACT_SIGNED_FILE', `Duyệt tài liệu ký hợp đồng [${updated.code} - ${updated.title}]`, 'SUCCESS', updated.code);
+
+      let msg = '✅ Đã ghi nhận phê duyệt của bạn!';
+      if (transition.type === 'COMPLETED') msg = '✅ Duyệt tài liệu ký thành công — có thể chuyển sang thanh toán!';
+      else if (transition.type === 'ADVANCED') msg = getStepAdvanceMessage(transition.stepApprovers);
+      else if (transition.type === 'PARTIAL_APPROVE') msg = '✅ Đã ghi nhận phê duyệt của bạn — đang chờ các đồng phê duyệt còn lại ở bước này.';
+      alert(msg);
       renderContracts();
     }
   });
@@ -10210,16 +10527,17 @@ function rejectContractSignedFileAction(id) {
     bodyHTML: `Bạn có chắc chắn muốn từ chối tài liệu ký của hợp đồng "<b>${escapeHtml(c.title)}</b>"?<br><span class="text-xs text-gray-500">Lý do: ${escapeHtml(reason.trim())}</span>`,
     confirmLabel: 'Từ Chối',
     onConfirm: async () => {
-      let updated;
+      let result;
       try {
-        const result = await callRecordAction('contracts', id, 'reject-signed', { reason: reason.trim() });
-        updated = result.item;
+        result = await callWorkflowAction('contractsSignedFile', id, 'reject', { comment: reason.trim() });
       } catch (err) {
         return alert(`⛔ ${err.message}`);
       }
+      const updated = result.item;
       const idx = DB.contracts.findIndex(x => x.id === id);
       if (idx !== -1) DB.contracts[idx] = updated;
       logSystemAction('CONTRACT', 'REJECT_CONTRACT_SIGNED_FILE', `Từ chối tài liệu ký hợp đồng [${updated.code} - ${updated.title}] - Lý do: ${reason.trim()}`, 'WARNING', updated.code);
+      alert('❌ Đã từ chối tài liệu ký!');
       renderContracts();
     }
   });
@@ -11311,6 +11629,7 @@ function applyTplRowSystemUser(idx, user) {
   if (!a) return;
   a.username = user.username;
   a.name = user.name;
+  a.title = a.title || user.jobTitle || '';
   a.dept = a.dept || user.dept || '';
   a.phone = a.phone || user.phone || '';
   a.email = a.email || user.email || '';
@@ -11436,6 +11755,7 @@ function applyAttendeeSystemUser(idx, user) {
   if (!a) return;
   a.username = user.username;
   a.name = user.name;
+  a.title = a.title || user.jobTitle || '';
   a.dept = a.dept || user.dept || '';
   a.phone = a.phone || user.phone || '';
   a.email = a.email || user.email || '';
@@ -13863,7 +14183,7 @@ function setSystemSubTab(subTab) {
   document.getElementById('btnSystemSubLog').className = subTab === 'LOG' ? activeCls : inactiveCls;
 
   if (subTab === 'ADMIN') {
-    renderDeptList(); renderCatList(); renderContractTypeAbbrList(); renderJobTitleList(); renderDeptCheckboxes(); renderModuleAccessCheckboxes(); renderUsers(); loadEmailConfigToForm(); renderPermGroupsList(); renderSubmissionApprovalGroups();
+    renderDeptList(); renderCatList(); renderContractTypeAbbrList(); renderJobTitleList(); renderDeptCheckboxes(); renderModuleAccessCheckboxes(); renderUsers(); loadEmailConfigToForm(); renderPermGroupsList(); renderSubmissionApprovalGroups(); renderContractApprovalGroups();
     setAdminSubTab(activeAdminSubTab);
   }
   if (subTab === 'FORM') { switchFormTab(activeFormTab); }
@@ -14209,7 +14529,13 @@ const WF_MODULE_CONFIG = {
   OFFICE_BUY: { dbKey: 'officeBuyDeptWorkflows', label: 'Mua bán VP', title: '🛒 Cấu Hình Quy Trình Phê Duyệt Mua Bán VP Theo Phòng Ban' },
   OFFICE_FIX: { dbKey: 'officeFixDeptWorkflows', label: 'Sửa chữa VP', title: '🔧 Cấu Hình Quy Trình Phê Duyệt Sửa Chữa VP Theo Phòng Ban' },
   OFFICE_INVEST: { dbKey: 'officeInvestDeptWorkflows', label: 'Đầu tư VP', title: '📈 Cấu Hình Quy Trình Phê Duyệt Đầu Tư VP Theo Phòng Ban' },
-  VPP: { dbKey: 'vppDeptWorkflows', label: 'Văn phòng phẩm', title: '🖇️ Cấu Hình Quy Trình Phê Duyệt Đăng Ký Văn Phòng Phẩm Theo Phòng Ban' }
+  VPP: { dbKey: 'vppDeptWorkflows', label: 'Văn phòng phẩm', title: '🖇️ Cấu Hình Quy Trình Phê Duyệt Đăng Ký Văn Phòng Phẩm Theo Phòng Ban' },
+  // Hợp đồng — 2 quy trình TÁCH RIÊNG (khớp lib/workflowEngine.js): CONTRACT_APPROVAL là quy trình GỐC
+  // cho sub-tab "Phê Duyệt" (còn có thêm 4 lớp bổ sung tuỳ chọn cấu hình riêng ở "Nhóm Phê Duyệt HĐ",
+  // khối Phân Quyền — không thuộc màn này); CONTRACT_MANAGE là quy trình đơn giản theo phòng ban cho
+  // bước duyệt "Tài liệu ký" ở sub-tab "Quản Lý HĐ" — độc lập hoàn toàn, không liên quan CONTRACT_APPROVAL.
+  CONTRACT_APPROVAL: { dbKey: 'contractApprovalDeptWorkflows', label: 'Hợp đồng - Phê duyệt', title: '📄 Cấu Hình Quy Trình GỐC Phê Duyệt Hợp Đồng Theo Phòng Ban' },
+  CONTRACT_MANAGE: { dbKey: 'contractManageDeptWorkflows', label: 'Hợp đồng - Quản Lý HĐ', title: '📋 Cấu Hình Quy Trình Duyệt Tài Liệu Ký (Quản Lý HĐ) Theo Phòng Ban' }
 };
 
 // Danh sách LOẠI của 1 module quy trình (hiện chỉ Văn bản trình có) — đọc trực tiếp từ DB.submissionTypes
@@ -16433,6 +16759,41 @@ function saveSubmissionApprovalGroup(layerKey) {
 
   const layer = SUBMISSION_APPROVAL_LAYERS.find(l => l.key === layerKey);
   logSystemAction('SUBMISSION', 'SAVE_APPROVAL_GROUP', `Cập nhật nhóm phê duyệt trình [${layer?.label}]: ${members.length} thành viên`, 'SUCCESS', layerKey);
+  alert(`✅ Đã lưu thành viên nhóm "${layer?.label}"!`);
+}
+
+// Nhóm Phê Duyệt HĐ (Hợp Đồng) — cùng khuôn renderSubmissionApprovalGroups()/saveSubmissionApprovalGroup()
+// ở trên nhưng dữ liệu RIÊNG (DB.contractApprovalGroups, KHÔNG dùng chung DB.submissionApprovalGroups).
+function renderContractApprovalGroups() {
+  const container = document.getElementById('contractApprovalGroupsContainer');
+  if (!container) return;
+
+  container.innerHTML = CONTRACT_APPROVAL_LAYERS.map(layer => `
+    <div class="bg-slate-50 p-3 rounded border space-y-2">
+      <div class="font-bold text-gray-800 text-xs">${escapeHtml(layer.label)}</div>
+      <div id="contractApprovalGroupPicker_${layer.key}"></div>
+      <button type="button" onclick="saveContractApprovalGroup('${layer.key}')" class="w-full bg-rose-600 text-white px-2 py-1 rounded text-[11px] font-bold hover:bg-rose-700">Lưu Thành Viên</button>
+    </div>
+  `).join('');
+
+  CONTRACT_APPROVAL_LAYERS.forEach(layer => {
+    const members = DB.contractApprovalGroups[layer.key] || [];
+    renderPeopleMultiSelect(`contractApprovalGroupPicker_${layer.key}`, DB.users, members, '', { 'data-layer': layer.key });
+  });
+}
+
+function saveContractApprovalGroup(layerKey) {
+  // PHẢI scope theo #contractApprovalGroupsContainer — cùng lý do saveSubmissionApprovalGroup() ở trên
+  // (widget chọn người ở form TẠO hợp đồng, contractLayerMemberPicker_*, cũng mang data-layer trùng key).
+  const checkboxes = document.querySelectorAll(`#contractApprovalGroupsContainer input[data-layer="${layerKey}"]`);
+  const members = [];
+  checkboxes.forEach(cb => { if (cb.checked) members.push(cb.value); });
+
+  DB.contractApprovalGroups[layerKey] = members;
+  syncStorage('contractApprovalGroups');
+
+  const layer = CONTRACT_APPROVAL_LAYERS.find(l => l.key === layerKey);
+  logSystemAction('CONTRACT', 'SAVE_APPROVAL_GROUP', `Cập nhật nhóm phê duyệt HĐ [${layer?.label}]: ${members.length} thành viên`, 'SUCCESS', layerKey);
   alert(`✅ Đã lưu thành viên nhóm "${layer?.label}"!`);
 }
 

@@ -442,7 +442,7 @@ pm2 restart vpdt
 Endpoint kiểm tra nhanh:
 ```
 GET http://<ip-server>:3000/api/health
-→ {"status":"ok","db":"connected","version":"1.20.0"}
+→ {"status":"ok","db":"connected","version":"1.21.1"}
 ```
 
 `version` khớp đúng trường `version` trong `package.json` của bản code server

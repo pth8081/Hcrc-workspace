@@ -89,6 +89,13 @@ const DEFAULTS = {
   officeFixDeptWorkflows: {},
   officeInvestDeptWorkflows: {},
   vppDeptWorkflows: {},
+  // Hợp đồng — 2 quy trình TÁCH RIÊNG (xem lib/workflowEngine.js/lib/createValidation.js): "Phê Duyệt"
+  // (contractApprovalDeptWorkflows, cùng khuôn deptWorkflows/carDeptWorkflows) + tối đa 4 lớp bổ sung
+  // tuỳ chọn (contractApprovalGroups, cùng khuôn submissionApprovalGroups nhưng RIÊNG, không dùng
+  // chung dữ liệu); "Quản Lý HĐ" (contractManageDeptWorkflows) đơn giản theo phòng ban, không có lớp.
+  contractApprovalDeptWorkflows: DEFAULT_MAP,
+  contractApprovalGroups: {},
+  contractManageDeptWorkflows: DEFAULT_MAP,
 
   // Phân quyền theo module (submissionView/Create, contractView/Create, meetingView/BookScope,
   // carView/Create, officeView/Create) dùng dạng { all, depts } — xem/tạo mới theo TOÀN CÔNG TY

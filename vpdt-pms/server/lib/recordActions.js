@@ -45,37 +45,10 @@ function editContract(payload, user, contract) {
   return contract;
 }
 
-// Duyệt/từ chối hợp đồng GỐC hoặc phụ lục — cờ toàn công ty contractApprove, khớp đúng hình dạng
-// meetingApprove/internalPostApprove, không theo phòng ban. Từ chối bắt buộc nhập lý do. CẢ hợp đồng
-// gốc lẫn phụ lục đều có thể ở PENDING (xem lib/createValidation.js: chỉ hồ sơ "Nhập ... Đã Ký"/
-// isSignedImport mới bỏ qua bước duyệt, tạo thẳng ở trạng thái APPROVED — hồ sơ đó sẽ không bao giờ
-// PENDING nên không lọt qua được đây).
-function canApproveContract(user) {
-  return !!(user.perms?.admin || user.perms?.contractApprove);
-}
-
-function approveContract(user, contract) {
-  if (!canApproveContract(user)) throw new HttpError(403, 'Bạn không có quyền phê duyệt hồ sơ này');
-  if (contract.approvalStatus !== 'PENDING') throw new HttpError(409, 'Hồ sơ không ở trạng thái chờ duyệt');
-  contract.approvalStatus = 'APPROVED';
-  contract.approvedBy = user.username;
-  contract.approvedByName = user.name;
-  contract.approvedAt = nowVN();
-  return contract;
-}
-
-function rejectContract(payload, user, contract) {
-  if (!canApproveContract(user)) throw new HttpError(403, 'Bạn không có quyền từ chối hồ sơ này');
-  if (contract.approvalStatus !== 'PENDING') throw new HttpError(409, 'Hồ sơ không ở trạng thái chờ duyệt');
-  const reason = (payload?.reason || '').trim();
-  if (!reason) throw new HttpError(400, 'Vui lòng nhập lý do từ chối');
-  contract.approvalStatus = 'REJECTED';
-  contract.rejectedBy = user.username;
-  contract.rejectedByName = user.name;
-  contract.rejectedAt = nowVN();
-  contract.rejectReason = reason;
-  return contract;
-}
+// Duyệt/từ chối hợp đồng GỐC hoặc phụ lục — GIỜ đi qua quy trình Phê Duyệt HĐ theo bước (xem
+// lib/workflowEngine.js MODULE_CONFIGS.contracts + routes/workflow.js POST /api/workflow/contracts/:id/
+// approve|reject), KHÔNG còn là 1 cờ quyền phẳng contractApprove nữa — bỏ hẳn canApproveContract()/
+// approveContract()/rejectContract() ở đây (trước là flat-permission, không có khái niệm bước/phòng ban).
 
 // Upload "Tài liệu ký" (bản cứng đã ký) + bấm nút "Thanh toán" — cùng phạm vi quyền với người được
 // tạo/quản lý hợp đồng của phòng ban đó (contractCreate scope, khớp getScope() ở CREATE_MODULE_CONFIGS.
@@ -96,38 +69,14 @@ function uploadContractSignedFile(payload, user, contract) {
   contract.signedFileUrl = fileUrl;
   contract.signedUploadedBy = user.username;
   contract.signedUploadedAt = nowVN();
-  // Mỗi lần tải lên (mới hoặc tải lại sau khi bị từ chối) đều phải qua lại đúng 1 luồng duyệt tài liệu
-  // ký của sub module Quản Lý HĐ — dùng lại canManageContractPayment() ở trên, không mở quyền riêng.
+  // Mỗi lần tải lên (mới hoặc tải lại sau khi bị từ chối) đều phải qua lại quy trình "Quản Lý HĐ" theo
+  // phòng ban (module key ảo "contractsSignedFile", xem lib/workflowEngine.js) — KHÔNG snapshot lúc tải
+  // lên (khác quy trình Phê Duyệt gốc), luôn tra cấu hình admin mới nhất mỗi lần duyệt, giống Xe/Mua
+  // Bán/VPP. signedFileCurrentStep/signedFileHistory là cặp field currentStep/history RIÊNG của quy
+  // trình này (contract.currentStep/history vẫn thuộc về quy trình Phê Duyệt gốc, không đụng tới).
   contract.signedFileStatus = 'PENDING';
-  contract.signedFileApprovedBy = null;
-  contract.signedFileApprovedAt = null;
-  contract.signedFileRejectedBy = null;
-  contract.signedFileRejectedAt = null;
-  contract.signedFileRejectReason = null;
-  return contract;
-}
-
-// Duyệt/từ chối "Tài liệu ký" — cùng phạm vi quyền với người tải lên (canManageContractPayment, khớp
-// yêu cầu "duyệt tài liệu ký dùng lại của sub module quản lý hợp đồng", không tách quyền phê duyệt
-// riêng). Chỉ khi APPROVED mới cho phép "Chuyển Sang Thanh Toán" (xem startContractPayment() bên dưới).
-function approveContractSignedFile(user, contract) {
-  if (!canManageContractPayment(user, contract)) throw new HttpError(403, 'Bạn không có quyền duyệt tài liệu ký cho hợp đồng này');
-  if (contract.signedFileStatus !== 'PENDING') throw new HttpError(409, 'Tài liệu ký không ở trạng thái chờ duyệt');
-  contract.signedFileStatus = 'APPROVED';
-  contract.signedFileApprovedBy = user.username;
-  contract.signedFileApprovedAt = nowVN();
-  return contract;
-}
-
-function rejectContractSignedFile(payload, user, contract) {
-  if (!canManageContractPayment(user, contract)) throw new HttpError(403, 'Bạn không có quyền duyệt tài liệu ký cho hợp đồng này');
-  if (contract.signedFileStatus !== 'PENDING') throw new HttpError(409, 'Tài liệu ký không ở trạng thái chờ duyệt');
-  const reason = (payload?.reason || '').trim();
-  if (!reason) throw new HttpError(400, 'Vui lòng nhập lý do từ chối');
-  contract.signedFileStatus = 'REJECTED';
-  contract.signedFileRejectedBy = user.username;
-  contract.signedFileRejectedAt = nowVN();
-  contract.signedFileRejectReason = reason;
+  contract.signedFileCurrentStep = 1;
+  contract.signedFileHistory = [];
   return contract;
 }
 
@@ -1191,8 +1140,7 @@ function unpublishReportPeriod(user, period) {
 
 module.exports = {
   editContract,
-  canApproveContract, approveContract, rejectContract,
-  canManageContractPayment, uploadContractSignedFile, approveContractSignedFile, rejectContractSignedFile, startContractPayment,
+  canManageContractPayment, uploadContractSignedFile, startContractPayment,
   canManageOfficePayment, uploadOfficeSignedFile, startOfficePayment,
   canManagePaymentRequests, editPaymentRequest, requestPaymentInfo, approvePaymentRequest,
   confirmPaymentInstallment, assertCanDeletePaymentRequest,
