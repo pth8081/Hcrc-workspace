@@ -90,6 +90,15 @@ h1, h2, h3, h4 { letter-spacing: -0.01em !important; }
       <button id="btnDashboardTab" onclick="switchTab('dashboard')" class="sidebar-item">
         <span class="sidebar-icon">🏠</span><span class="sidebar-label">Trang chủ</span>
       </button>
+      <!-- "✅ Phê Duyệt" — hộp thư duyệt tổng hợp, ĐỨNG ĐỘC LẬP (không lồng trong dropdown Điều Hành)
+           vì đối tượng dùng khác nhau: Điều Hành chỉ hiện với người có quyền vào Biên bản họp/Công
+           việc-quản lý/Báo Cáo Định Kỳ (thường là cấp quản lý), còn người NẰM TRONG luồng duyệt (vd
+           trưởng phòng chỉ duyệt xe của phòng mình) có thể không có bất kỳ quyền nào trong 3 mục đó.
+           Đặt ngay sau Trang chủ để dễ thấy nhất — đúng mục đích "phê duyệt nhanh" của tính năng này.
+           Số đếm hiện thẳng trên nhãn nút (không cần mở gì cả), xem updateApprovalHubBadge(). -->
+      <button id="btnApprovalHubTab" onclick="switchTab('approvalHub')" class="hidden sidebar-item">
+        <span class="sidebar-icon">✅</span><span id="approvalHubNavLabel" class="sidebar-label">Phê Duyệt</span>
+      </button>
       <button id="btnDocTab" onclick="switchTab('doc')" class="hidden sidebar-item">
         <span class="sidebar-icon">📂</span><span class="sidebar-label">Tài liệu</span>
       </button>
@@ -227,6 +236,52 @@ h1, h2, h3, h4 { letter-spacing: -0.01em !important; }
     <div id="dashboardNewsSection" class="hidden space-y-3">
       <h3 class="font-bold text-gray-800 text-base">📣 Tin Tức Nổi Bật</h3>
       <div id="dashboardNewsContainer" class="grid grid-cols-1 md:grid-cols-2 gap-3"></div>
+    </div>
+  </div>
+
+  <!-- "✅ Phê Duyệt" — hộp thư duyệt tổng hợp (xem canAccessApprovalHub()/getMyPendingApprovals()/
+       renderApprovalHub() ở khối script). Chỉ hiển thị hồ sơ mà ĐÚNG người đang đăng nhập được duyệt
+       NGAY BÂY GIỜ — nút Duyệt/Từ chối gọi thẳng lại đúng hàm xử lý của module gốc (không có logic
+       duyệt riêng ở đây), nên kết quả/side-effect (email, chuyển bước, tự tạo Công việc...) y hệt như
+       duyệt tại module gốc. -->
+  <div id="approvalHubSection" class="hidden space-y-4">
+    <div class="flex justify-between items-center flex-wrap gap-2">
+      <div>
+        <h2 class="text-xl font-bold text-gray-800">✅ Phê Duyệt</h2>
+        <p class="text-sm text-gray-500">Toàn bộ hồ sơ đang chờ ĐÚNG bạn duyệt, gộp từ mọi module — bấm Duyệt/Từ chối ngay tại đây không cần vào từng module.</p>
+      </div>
+    </div>
+
+    <div class="bg-white p-3 rounded border flex flex-wrap gap-3 items-end">
+      <div>
+        <label class="block text-xs font-bold text-gray-600 mb-1">Lọc Theo Loại</label>
+        <select id="approvalHubFilterType" onchange="renderApprovalHub()" class="border rounded px-2 py-1.5 text-sm">
+          <option value="">-- Tất cả loại --</option>
+        </select>
+      </div>
+      <div class="flex-1 min-w-[200px]">
+        <label class="block text-xs font-bold text-gray-600 mb-1">Tìm Theo Mã / Trích Yếu</label>
+        <input id="approvalHubSearch" type="text" oninput="renderApprovalHub()" placeholder="Mã hồ sơ, tiêu đề..." class="border rounded px-2 py-1.5 text-sm w-full">
+      </div>
+    </div>
+
+    <div id="approvalHubEmptyNote" class="hidden text-center p-8 text-gray-500 italic bg-white rounded border">🎉 Hiện không có hồ sơ nào chờ bạn duyệt.</div>
+
+    <div id="approvalHubListWrap" class="hidden bg-white rounded border overflow-x-auto">
+      <table class="w-full text-sm">
+        <thead class="bg-gray-100 text-left text-xs font-bold text-gray-600">
+          <tr>
+            <th class="p-2">Loại</th>
+            <th class="p-2">Mã</th>
+            <th class="p-2">Trích Yếu</th>
+            <th class="p-2">Phòng Ban</th>
+            <th class="p-2">Bước Hiện Tại</th>
+            <th class="p-2">Ngày Tạo</th>
+            <th class="p-2">Thao Tác</th>
+          </tr>
+        </thead>
+        <tbody id="approvalHubTableBody"></tbody>
+      </table>
     </div>
   </div>
 
@@ -4194,6 +4249,28 @@ function canCreateMeetingMinutes(user) {
   return !!(user.perms?.admin || user.perms?.minutesCreate);
 }
 
+// Cổng vào module "✅ Phê Duyệt" (hộp thư duyệt tổng hợp, gom mọi hồ sơ PENDING mà đúng người này
+// đang được duyệt từ 9 module có luồng duyệt — Tài liệu/Văn bản trình/Đăng ký xe/Mua Bán/Sửa Chữa/
+// Đầu Tư/VPP/Hợp đồng/Phòng họp/Góc chia sẻ/Thanh toán). KHÔNG phải 1 quyền admin cấp riêng — hiện ra
+// cho BẤT KỲ ai đang thực sự nằm trong ít nhất 1 luồng duyệt (đang được gán làm approver ở 1 bước quy
+// trình phòng ban nào đó, hoặc có 1 trong các quyền duyệt phẳng không theo bước) để không phải đợi
+// admin cấp thêm quyền mới thấy được hộp thư của chính mình.
+function canAccessApprovalHub(user) {
+  if (!user) return false;
+  if (user.perms?.admin) return true;
+  if (user.perms?.contractApprove || user.perms?.meetingApprove || user.perms?.internalPostApprove || user.perms?.paymentManage) return true;
+  if (isApproverInWorkflowMap(DB.deptWorkflows, user.username)) return true;
+  if (isApproverInWorkflowMap(DB.submissionDeptWorkflows, user.username)) return true;
+  if (Object.values(DB.submissionTypeDeptWorkflows || {}).some(typeMap => isApproverInWorkflowMap(typeMap, user.username))) return true;
+  if (Object.values(DB.submissionApprovalGroups || {}).some(list => Array.isArray(list) && list.includes(user.username))) return true;
+  if (isApproverInWorkflowMap(DB.carDeptWorkflows, user.username)) return true;
+  if (isApproverInWorkflowMap(DB.officeBuyDeptWorkflows, user.username)) return true;
+  if (isApproverInWorkflowMap(DB.officeFixDeptWorkflows, user.username)) return true;
+  if (isApproverInWorkflowMap(DB.officeInvestDeptWorkflows, user.username)) return true;
+  if (isApproverInWorkflowMap(DB.vppDeptWorkflows, user.username)) return true;
+  return false;
+}
+
 // Có tên trong Thành phần tham dự của 1 biên bản cụ thể hay không (khớp theo Họ và Tên).
 function isMeetingMinutesAttendee(user, m) {
   if (!user) return false;
@@ -5319,6 +5396,207 @@ function handleDashboardCardClick(key) {
   if (fn) fn();
 }
 
+// ==========================================
+// ✅ PHÊ DUYỆT — HỘP THƯ DUYỆT TỔNG HỢP (xem canAccessApprovalHub() + HTML #approvalHubSection).
+// Điều kiện lọc từng hồ sơ ("đúng người này được duyệt NGAY BÂY GIỜ") COPY Y HỆT điều kiện canApprove
+// đang dùng ở render function gốc của module đó (không tạo logic duyệt mới ở đây) — nút Duyệt/Từ chối
+// bên dưới cũng gọi THẲNG lại đúng hàm xử lý gốc (approveDoc/openProcessSubmissionModal/...), nên
+// không có rủi ro lệch hành vi hay side-effect (email, chuyển bước, tự tạo Công việc...) giữa duyệt ở
+// Hub và duyệt tại module gốc — Hub thuần là 1 lớp UI tổng hợp, không đụng gì tới lib/workflowEngine.js.
+// ==========================================
+
+// Mảng steps thống nhất từ 1 wfConfig — Văn bản trình đã tự resolve sẵn .steps (xem
+// resolveSubmissionWorkflow()), còn Tài liệu/Xe/Văn phòng/VPP chỉ có .workflowId nên phải tra thêm
+// DB.workflows (mirror đúng cách buildDocRowHTML()/buildContractRowHTML() đang làm).
+function resolveWfStepsForHub(wfConfig) {
+  if (!wfConfig) return [];
+  if (wfConfig.steps) return wfConfig.steps;
+  const wf = DB.workflows.find(w => w.id === wfConfig.workflowId);
+  return wf ? wf.steps : [];
+}
+function buildStepLabelForHub(wfConfig, currentStep) {
+  const steps = resolveWfStepsForHub(wfConfig);
+  const name = steps[currentStep - 1]?.name;
+  return name ? `Bước ${currentStep}/${steps.length}: ${name}` : `Bước ${currentStep}`;
+}
+
+// Gộp toàn bộ hồ sơ PENDING mà ĐÚNG `user` được duyệt NGAY BÂY GIỜ, từ 9 module có luồng duyệt (5
+// module theo BƯỚC quy trình phòng ban dùng canApproveStep + 4 module theo 1 QUYỀN PHẲNG không có
+// khái niệm bước). Không có DB collection riêng — thuần đọc lại DB.* đã tải sẵn, cùng nguồn dữ liệu
+// countDeptWorkflowPending()/buildDashboardCards() đang dùng cho các thẻ Dashboard.
+function getMyPendingApprovals(user) {
+  if (!user) return [];
+  const items = [];
+
+  function addDeptWorkflowItems(records, wfConfigFor, cfg) {
+    (records || []).forEach(rec => {
+      if (rec.status !== 'PENDING') return;
+      const wfConfig = wfConfigFor(rec) || {};
+      const currentStepApprovers = wfConfig.approvers ? (wfConfig.approvers[rec.currentStep] || []) : [];
+      if (!canApproveStep(user, currentStepApprovers, rec.history, rec.currentStep)) return;
+      items.push({
+        type: cfg.type, typeLabel: cfg.typeLabel,
+        code: cfg.codeOf(rec), title: cfg.titleOf(rec), dept: rec.dept,
+        stepLabel: buildStepLabelForHub(wfConfig, rec.currentStep),
+        createdAt: rec.createdAt,
+        actions: cfg.actionsOf(rec)
+      });
+    });
+  }
+
+  addDeptWorkflowItems(DB.docs, doc => DB.deptWorkflows[doc.dept], {
+    type: 'doc', typeLabel: '📂 Tài liệu',
+    codeOf: r => r.displayCode || r.code, titleOf: r => r.title,
+    actionsOf: r => [
+      { label: '✅ Duyệt', onclick: `runDocAction(${r.id}, 'approve')`, primary: true },
+      { label: '❌ Từ chối', onclick: `runDocAction(${r.id}, 'reject')` }
+    ]
+  });
+
+  addDeptWorkflowItems(DB.submissions, sub => resolveSubmissionWorkflow(sub), {
+    type: 'submission', typeLabel: '📜 Văn bản trình',
+    codeOf: r => r.code, titleOf: r => r.title,
+    actionsOf: r => [{ label: '✍️ Xử lý / Duyệt', onclick: `openProcessSubmissionModal(${r.id})`, primary: true }]
+  });
+
+  addDeptWorkflowItems(DB.carRegs, c => DB.carDeptWorkflows[c.dept], {
+    type: 'car', typeLabel: '🚗 Đăng ký xe',
+    codeOf: r => r.code, titleOf: r => r.destination,
+    actionsOf: r => [{ label: '✍️ Xử lý / Duyệt', onclick: `openCarProcessModal(${r.id})`, primary: true }]
+  });
+
+  [
+    { subType: 'MUA_BAN', type: 'officeBuy', typeLabel: '🛒 Mua Bán' },
+    { subType: 'SUA_CHUA', type: 'officeFix', typeLabel: '🔧 Sửa Chữa' },
+    { subType: 'DAU_TU', type: 'officeInvest', typeLabel: '📈 Đầu Tư' }
+  ].forEach(({ subType, type, typeLabel }) => {
+    const wfMap = getOfficeWorkflowMap(subType);
+    const subTypeReqs = (DB.officeReqs || []).filter(o => o.subType === subType);
+    addDeptWorkflowItems(subTypeReqs, o => wfMap[o.dept], {
+      type, typeLabel, codeOf: r => r.code, titleOf: r => r.title,
+      actionsOf: r => [{ label: '✍️ Xử lý / Duyệt', onclick: `openOfficeProcessModal(${r.id})`, primary: true }]
+    });
+  });
+
+  addDeptWorkflowItems(DB.vppRegistrations, r => DB.vppDeptWorkflows[r.dept], {
+    type: 'vpp', typeLabel: '🖇️ Văn phòng phẩm',
+    codeOf: r => r.code, titleOf: r => r.periodName || r.code,
+    actionsOf: r => [{ label: '✍️ Xử lý / Duyệt', onclick: `openVppRegModal(${r.id})`, primary: true }]
+  });
+
+  // 4 module còn lại KHÔNG có khái niệm bước quy trình phòng ban (chỉ cần đúng 1 quyền phẳng là duyệt
+  // được toàn bộ hồ sơ PENDING của module đó) — không dùng canApproveStep, mirror đúng gate đang dùng ở
+  // buildContractRowHTML()/renderMeetings()/renderInternalPosts()/renderPaymentRequests().
+  if (canApproveContract(user)) {
+    (DB.contracts || []).filter(c => !c.isAddendum && c.approvalStatus === 'PENDING').forEach(c => {
+      items.push({
+        type: 'contract', typeLabel: '📄 Hợp đồng', code: c.code, title: c.title, dept: c.dept,
+        stepLabel: '', createdAt: c.createdAt,
+        actions: [
+          { label: '✅ Duyệt', onclick: `approveContractAction(${c.id})`, primary: true },
+          { label: '❌ Từ chối', onclick: `rejectContractAction(${c.id})` }
+        ]
+      });
+    });
+  }
+
+  if (canApproveMeeting(user)) {
+    (DB.meetings || []).filter(m => m.status === 'PENDING').forEach(m => {
+      items.push({
+        type: 'meeting', typeLabel: '📅 Phòng họp', code: m.code, title: m.title, dept: m.dept,
+        stepLabel: '', createdAt: m.createdAt,
+        actions: [{ label: '✅ Duyệt', onclick: `approveMeeting(${m.id})`, primary: true }]
+      });
+    });
+  }
+
+  if (canApproveInternalPost(user)) {
+    (DB.internalPosts || []).filter(p => p.type === 'SHARE' && p.status === 'PENDING').forEach(p => {
+      items.push({
+        type: 'internalShare', typeLabel: '💬 Góc chia sẻ', code: p.code, title: p.title, dept: p.dept,
+        stepLabel: '', createdAt: p.createdAt,
+        actions: [
+          { label: '✅ Duyệt', onclick: `approveInternalPostAction(${p.id})`, primary: true },
+          { label: '❌ Từ chối', onclick: `rejectInternalPostAction(${p.id})` }
+        ]
+      });
+    });
+  }
+
+  if (canManagePaymentRequestsClient(user)) {
+    (DB.paymentRequests || []).filter(pr => pr.status === 'PENDING' || pr.status === 'NEED_INFO').forEach(pr => {
+      items.push({
+        type: 'payment', typeLabel: '💰 Thanh toán', code: pr.sourceCode || String(pr.id), title: pr.title,
+        dept: pr.dept, stepLabel: '', createdAt: pr.createdAt,
+        actions: [{ label: '✅ Duyệt', onclick: `approvePaymentRequestAction(${pr.id})`, primary: true }]
+      });
+    });
+  }
+
+  return items;
+}
+
+// Nhãn nút nav hiện thẳng số hồ sơ chờ (không cần mở hộp thư mới thấy — đúng mục đích "phê duyệt
+// nhanh") — gọi lại ở finishLogin() và mỗi lần switchTab() để số luôn khớp thực tế.
+function updateApprovalHubBadge() {
+  const label = document.getElementById('approvalHubNavLabel');
+  if (!label) return;
+  if (!currentUser || !canAccessApprovalHub(currentUser)) { label.innerText = 'Phê Duyệt'; return; }
+  const count = getMyPendingApprovals(currentUser).length;
+  label.innerText = count > 0 ? `Phê Duyệt (${count})` : 'Phê Duyệt';
+}
+
+// Điều hướng từ nút Duyệt của 1 module gốc sang Hộp thư Phê Duyệt, tự điền sẵn ô tìm kiếm theo đúng mã
+// hồ sơ đó để lọc ra ngay dòng cần xử lý — dùng chung cho cả 9 module (xem finishLogin()/mỗi buildXRowHTML()).
+function goToApprovalHub(code) {
+  const searchBox = document.getElementById('approvalHubSearch');
+  if (searchBox) searchBox.value = code || '';
+  switchTab('approvalHub');
+}
+
+function renderApprovalHub() {
+  const items = getMyPendingApprovals(currentUser);
+
+  // Đổ danh sách Loại vào bộ lọc — chỉ liệt kê loại THỰC SỰ đang có hồ sơ chờ, không hiện loại rỗng.
+  const typeSelect = document.getElementById('approvalHubFilterType');
+  const typesPresent = [...new Map(items.map(it => [it.type, it.typeLabel])).entries()];
+  const prevTypeValue = typeSelect.value;
+  typeSelect.innerHTML = '<option value="">-- Tất cả loại --</option>' +
+    typesPresent.map(([type, label]) => `<option value="${escapeHtml(type)}">${escapeHtml(label)}</option>`).join('');
+  typeSelect.value = typesPresent.some(([type]) => type === prevTypeValue) ? prevTypeValue : '';
+
+  const typeFilter = typeSelect.value;
+  const keyword = (document.getElementById('approvalHubSearch').value || '').trim().toLowerCase();
+
+  let filtered = items;
+  if (typeFilter) filtered = filtered.filter(it => it.type === typeFilter);
+  if (keyword) {
+    filtered = filtered.filter(it =>
+      (it.code || '').toLowerCase().includes(keyword) || (it.title || '').toLowerCase().includes(keyword)
+    );
+  }
+  filtered.sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
+
+  document.getElementById('approvalHubEmptyNote').classList.toggle('hidden', items.length > 0);
+  document.getElementById('approvalHubListWrap').classList.toggle('hidden', filtered.length === 0);
+
+  document.getElementById('approvalHubTableBody').innerHTML = filtered.map(it => `
+    <tr class="hover:bg-gray-50 transition border-b">
+      <td class="p-2 whitespace-nowrap">${escapeHtml(it.typeLabel)}</td>
+      <td class="p-2 font-mono font-bold text-blue-700">${escapeHtml(it.code || '')}</td>
+      <td class="p-2 font-semibold text-gray-800">${escapeHtml(it.title || '')}</td>
+      <td class="p-2 text-gray-600">${escapeHtml(it.dept || '')}</td>
+      <td class="p-2 text-xs text-gray-600">${escapeHtml(it.stepLabel || '')}</td>
+      <td class="p-2 text-xs text-gray-500 whitespace-nowrap">${escapeHtml(it.createdAt || '')}</td>
+      <td class="p-2 text-center space-x-1 whitespace-nowrap">
+        ${it.actions.map(a => `<button onclick="${a.onclick}" class="px-2 py-1 rounded text-xs font-bold ${a.primary ? 'bg-emerald-600 text-white hover:bg-emerald-700' : 'bg-red-600 text-white hover:bg-red-700'}">${a.label}</button>`).join(' ')}
+      </td>
+    </tr>
+  `).join('');
+
+  updateApprovalHubBadge();
+}
+
 function renderDashboard() {
   document.getElementById('dashboardGreeting').innerText = `Xin chào, ${currentUser.name}!`;
 
@@ -5418,6 +5696,8 @@ function finishLogin(user) {
 
   document.getElementById('heThongNavWrap').classList.toggle('hidden', !user.perms.admin);
   document.getElementById('btnReportsTab').classList.toggle('hidden', !canAccessReportsModule(user));
+  document.getElementById('btnApprovalHubTab').classList.toggle('hidden', !canAccessApprovalHub(user));
+  updateApprovalHubBadge();
   document.getElementById('btnDocTab').classList.toggle('hidden', !canAccessDocModule(user));
 
   document.getElementById('btnSubmissionTab').classList.toggle('hidden', !canAccessSubmissionModule(user));
@@ -5450,6 +5730,7 @@ function logout() {
   document.getElementById('mustChangePasswordModal').classList.add('hidden');
   document.getElementById('loginSection').classList.remove('hidden');
   document.getElementById('dashboardSection').classList.add('hidden');
+  document.getElementById('approvalHubSection').classList.add('hidden');
   document.getElementById('docSection').classList.add('hidden');
   document.getElementById('submissionSection').classList.add('hidden');
   document.getElementById('taskSection').classList.add('hidden');
@@ -5596,6 +5877,10 @@ document.addEventListener('click', (ev) => {
 function switchTab(tabName) {
   if (!currentUser) return logout();
 
+  if (tabName === 'approvalHub' && !canAccessApprovalHub(currentUser)) {
+    alert('⛔ Bạn không nằm trong luồng phê duyệt của bất kỳ hồ sơ nào.');
+    return;
+  }
   if (tabName === 'doc' && !canAccessDocModule(currentUser)) {
     alert('⛔ Bạn không có quyền truy cập Module Tài liệu!');
     return;
@@ -5646,6 +5931,7 @@ function switchTab(tabName) {
   }
 
   document.getElementById('dashboardSection').classList.toggle('hidden', tabName !== 'dashboard');
+  document.getElementById('approvalHubSection').classList.toggle('hidden', tabName !== 'approvalHub');
   document.getElementById('docSection').classList.toggle('hidden', tabName !== 'doc');
   document.getElementById('submissionSection').classList.toggle('hidden', tabName !== 'submission');
   document.getElementById('taskSection').classList.toggle('hidden', tabName !== 'task');
@@ -5665,8 +5951,10 @@ function switchTab(tabName) {
   document.getElementById('reportsSection').classList.toggle('hidden', tabName !== 'reports');
 
   populateDropdowns();
+  updateApprovalHubBadge();
 
   if (tabName === 'dashboard') { renderDashboard(); }
+  if (tabName === 'approvalHub') { renderApprovalHub(); }
   if (tabName === 'doc') {
     renderDynamicInputsForModule('DOC', 'dynamicFieldsContainer_DOC'); renderDocs(); updateUploadDeptDropdown();
     document.getElementById('docOpMode').value = 'NEW';
@@ -6235,9 +6523,10 @@ function buildDocRowHTML(doc, { versionCount = 0, isExpanded = false, isChild = 
           const secondaryOptions = [];
           let primaryBtnHTML;
           if (canApprove) {
-            primaryBtnHTML = `<button onclick="runDocAction(${doc.id}, 'approve')" class="px-2 py-1 bg-green-600 text-white rounded text-xs hover:bg-green-700 font-semibold animate-pulse" title="Phê duyệt bước này">✅ Duyệt</button>`;
+            // Duyệt/Từ chối giờ xử lý ở Hub "✅ Phê Duyệt" (xem goToApprovalHub()) — không còn duyệt
+            // ngay tại đây, chỉ điều hướng sang Hub đã tự lọc sẵn đúng mã hồ sơ này.
+            primaryBtnHTML = `<button onclick="goToApprovalHub('${escapeHtml(doc.displayCode || doc.code)}')" class="px-2 py-1 bg-green-600 text-white rounded text-xs hover:bg-green-700 font-semibold animate-pulse" title="Sang Hộp thư Phê Duyệt để xử lý">✅ Duyệt</button>`;
             secondaryOptions.push({ value: 'view', label: '📋 Chi tiết' });
-            secondaryOptions.push({ value: 'reject', label: '❌ Từ chối' });
           } else {
             primaryBtnHTML = `<button onclick="runDocAction(${doc.id}, 'view')" class="px-2 py-1 bg-blue-600 text-white rounded text-xs hover:bg-blue-700 font-semibold" title="Xem chi tiết & lịch sử phiên bản">📋 Chi tiết</button>`;
           }
@@ -7002,7 +7291,11 @@ function renderSubmissionReqs() {
         <td class="border p-2 text-center">${taskStatusBadge}</td>
         <td class="border p-2 text-center space-x-1">
           ${(() => {
-            const primaryBtnHTML = `<button onclick="runSubmissionAction(${sub.id}, 'process')" class="px-2.5 py-1 ${canApprove ? 'bg-amber-600 text-white' : 'bg-gray-600 text-white'} rounded text-xs hover:opacity-90 font-bold">${canApprove ? '✍️ Bút phê / Duyệt' : '👁️ Chi tiết'}</button>`;
+            // canApprove: điều hướng sang Hub "✅ Phê Duyệt" thay vì mở modal xử lý ngay tại đây; không
+            // đổi gì cho trường hợp chỉ xem (giữ nguyên mở modal xem-only như cũ).
+            const primaryBtnHTML = canApprove
+              ? `<button onclick="goToApprovalHub('${escapeHtml(sub.code)}')" class="px-2.5 py-1 bg-amber-600 text-white rounded text-xs hover:opacity-90 font-bold">✍️ Bút phê / Duyệt</button>`
+              : `<button onclick="runSubmissionAction(${sub.id}, 'process')" class="px-2.5 py-1 bg-gray-600 text-white rounded text-xs hover:opacity-90 font-bold">👁️ Chi tiết</button>`;
             const secondaryOptions = [];
             const canDL = canDownloadFile(currentUser, 'submission', sub.dept, sub.creator);
             if (sub.status === 'APPROVED') {
@@ -9369,8 +9662,14 @@ function runContractAction(id, action) {
     case 'detail': viewContractDetails(id); break;
     case 'view': viewContract(id); break;
     case 'edit': openEditContract(id); break;
-    case 'approve': approveContractAction(id); break;
-    case 'reject': rejectContractAction(id); break;
+    // Duyệt/Từ chối giờ xử lý ở Hub "✅ Phê Duyệt" — điều hướng sang đó thay vì gọi thẳng
+    // approveContractAction()/rejectContractAction() tại đây (xem goToApprovalHub()).
+    case 'approve':
+    case 'reject': {
+      const c = DB.contracts.find(x => x.id === id);
+      if (c) goToApprovalHub(c.code);
+      break;
+    }
     case 'uploadSigned': openSignedUploadModal('contracts', id); break;
     case 'startPayment': startContractPaymentAction(id); break;
     case 'download': {
@@ -9696,7 +9995,7 @@ function renderPaymentRequests() {
         <td class="border p-2"><span class="px-2 py-0.5 rounded font-bold text-xs ${PAYMENT_STATUS_BADGE_CLS[pr.status] || ''}">${PAYMENT_STATUS_LABELS[pr.status] || pr.status}</span></td>
         <td class="border p-2 text-center space-y-1">
           ${canManage && (pr.status === 'PENDING' || pr.status === 'NEED_INFO') ? `<button onclick="openEditPaymentRequest(${pr.id})" class="block w-full bg-gray-500 text-white px-2 py-1 rounded text-xs font-bold hover:bg-gray-600">✏️ Sửa</button>` : ''}
-          ${canManage && (pr.status === 'PENDING' || pr.status === 'NEED_INFO') ? `<button onclick="approvePaymentRequestAction(${pr.id})" class="block w-full bg-emerald-600 text-white px-2 py-1 rounded text-xs font-bold hover:bg-emerald-700">✅ Duyệt</button>` : ''}
+          ${canManage && (pr.status === 'PENDING' || pr.status === 'NEED_INFO') ? `<button onclick="goToApprovalHub('${escapeHtml(pr.sourceCode || String(pr.id))}')" class="block w-full bg-emerald-600 text-white px-2 py-1 rounded text-xs font-bold hover:bg-emerald-700">✅ Duyệt</button>` : ''}
           ${canManage && pr.status === 'PENDING' ? `<button onclick="requestPaymentInfoAction(${pr.id})" class="block w-full bg-orange-500 text-white px-2 py-1 rounded text-xs font-bold hover:bg-orange-600">📝 Yêu Cầu Bổ Sung</button>` : ''}
           ${currentUser.perms?.admin && pr.status !== 'PAID' ? `<button onclick="deletePaymentRequestAction(${pr.id})" class="block w-full bg-red-500 text-white px-2 py-1 rounded text-xs font-bold hover:bg-red-600">🗑️ Xoá</button>` : ''}
         </td>
@@ -10252,7 +10551,8 @@ function renderMeetings() {
             const canApprove = canApproveMeeting(currentUser) && m.status === 'PENDING';
             const canCancel = canCancelMeeting(currentUser, m) && m.status !== 'CANCELLED';
             if (canApprove) {
-              const primaryBtnHTML = `<button onclick="runMeetingAction(${m.id}, 'approve')" class="bg-green-600 text-white px-2 py-1 rounded text-xs hover:bg-green-700 font-bold">Duyệt</button>`;
+              // Duyệt giờ xử lý ở Hub "✅ Phê Duyệt" — điều hướng sang đó thay vì gọi approveMeeting() tại đây.
+              const primaryBtnHTML = `<button onclick="goToApprovalHub('${escapeHtml(m.code)}')" class="bg-green-600 text-white px-2 py-1 rounded text-xs hover:bg-green-700 font-bold">Duyệt</button>`;
               return buildActionCell(m.id, primaryBtnHTML, canCancel ? [{ value: 'cancel', label: 'Hủy' }] : [], 'runMeetingAction');
             }
             if (canCancel) {
@@ -11490,7 +11790,10 @@ function renderCarRegs() {
         <td class="border p-2">${statusBadge}</td>
         <td class="border p-2 text-center space-x-1">
           ${(() => {
-            const primaryBtnHTML = `<button onclick="runCarAction(${c.id}, 'process')" class="px-2.5 py-1 ${canApprove ? 'bg-indigo-600 text-white' : 'bg-gray-600 text-white'} rounded text-xs hover:opacity-90 font-bold">${canApprove ? '✍️ Xử lý / Duyệt' : '👁️ Xem chi tiết'}</button>`;
+            // canApprove: điều hướng sang Hub "✅ Phê Duyệt" thay vì mở modal xử lý ngay tại đây.
+            const primaryBtnHTML = canApprove
+              ? `<button onclick="goToApprovalHub('${escapeHtml(c.code)}')" class="px-2.5 py-1 bg-indigo-600 text-white rounded text-xs hover:opacity-90 font-bold">✍️ Xử lý / Duyệt</button>`
+              : `<button onclick="runCarAction(${c.id}, 'process')" class="px-2.5 py-1 bg-gray-600 text-white rounded text-xs hover:opacity-90 font-bold">👁️ Xem chi tiết</button>`;
             const secondaryOptions = [];
             if (c.status === 'APPROVED') {
               secondaryOptions.push({ value: 'viewSlip', label: '👁️ Xem Phiếu' });
@@ -12058,7 +12361,10 @@ function renderOfficeReqs() {
         <td class="border p-2">${paymentCell}</td>
         <td class="border p-2 text-center space-x-1">
           ${(() => {
-            const primaryBtnHTML = `<button onclick="runOfficeAction(${o.id}, 'process')" class="px-2.5 py-1 ${canApprove ? 'bg-teal-600 text-white' : 'bg-gray-600 text-white'} rounded text-xs hover:opacity-90 font-bold">${canApprove ? '✍️ Xử lý / Duyệt' : '👁️ Xem chi tiết'}</button>`;
+            // canApprove: điều hướng sang Hub "✅ Phê Duyệt" thay vì mở modal xử lý ngay tại đây.
+            const primaryBtnHTML = canApprove
+              ? `<button onclick="goToApprovalHub('${escapeHtml(o.code)}')" class="px-2.5 py-1 bg-teal-600 text-white rounded text-xs hover:opacity-90 font-bold">✍️ Xử lý / Duyệt</button>`
+              : `<button onclick="runOfficeAction(${o.id}, 'process')" class="px-2.5 py-1 bg-gray-600 text-white rounded text-xs hover:opacity-90 font-bold">👁️ Xem chi tiết</button>`;
             const secondaryOptions = [];
             if (o.status === 'APPROVED') {
               secondaryOptions.push({ value: 'viewSlip', label: '👁️ Xem Phiếu' });
@@ -12504,7 +12810,10 @@ function renderVppRegistrations() {
       primaryBtnHTML = `<button onclick="editVppRegDraft(${r.id})" class="px-2.5 py-1 bg-gray-600 text-white rounded text-xs hover:opacity-90 font-bold">✏️ Sửa Nháp</button>`;
       secondaryOptions.push({ value: 'submit', label: '📤 Gửi Duyệt' });
     } else {
-      primaryBtnHTML = `<button onclick="openVppRegModal(${r.id})" class="px-2.5 py-1 ${canApprove ? 'bg-orange-600 text-white' : 'bg-gray-600 text-white'} rounded text-xs hover:opacity-90 font-bold">${canApprove ? '✍️ Xử lý / Duyệt' : '👁️ Xem chi tiết'}</button>`;
+      // canApprove: điều hướng sang Hub "✅ Phê Duyệt" thay vì mở modal xử lý ngay tại đây.
+      primaryBtnHTML = canApprove
+        ? `<button onclick="goToApprovalHub('${escapeHtml(r.code)}')" class="px-2.5 py-1 bg-orange-600 text-white rounded text-xs hover:opacity-90 font-bold">✍️ Xử lý / Duyệt</button>`
+        : `<button onclick="openVppRegModal(${r.id})" class="px-2.5 py-1 bg-gray-600 text-white rounded text-xs hover:opacity-90 font-bold">👁️ Xem chi tiết</button>`;
     }
     if (currentUser.perms?.admin) secondaryOptions.push({ value: 'delete', label: '🗑️ Xóa' });
     return `
@@ -16133,10 +16442,11 @@ function renderInternalPosts() {
     const pinBadgeHTML = (p.pinned && p.pinExpiresAt && new Date(p.pinExpiresAt).getTime() > Date.now())
       ? `<span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 align-middle ml-2">📌 Đã ghim trang chủ</span>`
       : '';
+    // Duyệt/Từ chối giờ xử lý ở Hub "✅ Phê Duyệt" — điều hướng sang đó thay vì gọi thẳng
+    // approveInternalPostAction()/rejectInternalPostAction() tại đây.
     const approveActionsHTML = (p.status === 'PENDING' && canApprove)
       ? `<div class="flex gap-2">
-           <button onclick="approveInternalPostAction(${p.id})" class="bg-emerald-600 text-white px-3 py-1 rounded text-xs font-bold hover:bg-emerald-700">✅ Duyệt</button>
-           <button onclick="rejectInternalPostAction(${p.id})" class="bg-red-600 text-white px-3 py-1 rounded text-xs font-bold hover:bg-red-700">❌ Từ chối</button>
+           <button onclick="goToApprovalHub('${escapeHtml(p.code)}')" class="bg-emerald-600 text-white px-3 py-1 rounded text-xs font-bold hover:bg-emerald-700">✅ Duyệt</button>
          </div>`
       : '';
     return `
@@ -16179,12 +16489,13 @@ function viewInternalPostDetail(id) {
   document.getElementById('internalArticleTitle').innerText = `${icons[p.type] || '📣'} ${p.title}${statusSuffix}`;
   document.getElementById('internalArticleSub').innerText = `${p.authorName} (${p.dept}) — ${p.createdAt} | Mã: ${p.code}`;
 
+  // Duyệt/Từ chối giờ xử lý ở Hub "✅ Phê Duyệt" — điều hướng sang đó thay vì gọi thẳng
+  // approveInternalPostAction()/rejectInternalPostAction() tại đây.
   const approveActionsHTML = (p.status === 'PENDING' && canApproveInternalPost(currentUser))
     ? `<div class="bg-amber-50 border border-amber-200 rounded p-3 mb-3 flex items-center justify-between gap-2">
         <span class="text-xs text-amber-800">⏳ Bài đăng đang chờ phê duyệt để công khai trong Góc chia sẻ.</span>
         <div class="flex gap-2 flex-shrink-0">
-          <button onclick="approveInternalPostAction(${p.id})" class="bg-emerald-600 text-white px-3 py-1 rounded text-xs font-bold hover:bg-emerald-700">✅ Duyệt</button>
-          <button onclick="rejectInternalPostAction(${p.id})" class="bg-red-600 text-white px-3 py-1 rounded text-xs font-bold hover:bg-red-700">❌ Từ chối</button>
+          <button onclick="goToApprovalHub('${escapeHtml(p.code)}')" class="bg-emerald-600 text-white px-3 py-1 rounded text-xs font-bold hover:bg-emerald-700">✅ Duyệt</button>
         </div>
       </div>`
     : '';
