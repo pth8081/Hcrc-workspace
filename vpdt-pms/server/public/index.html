@@ -978,15 +978,66 @@ table { display: block; overflow-x: auto; max-width: 100%; }
         </div>
         <div id="prEntryNoPeriodNote" class="hidden text-xs text-gray-500 italic bg-white p-3 rounded border">Hiện chưa có kỳ báo cáo nào đang mở cho phòng ban của bạn.</div>
         <div id="prEntryAlreadySentNote" class="hidden text-xs text-amber-800 italic bg-amber-50 p-3 rounded border border-amber-200"></div>
-        <div id="prEntryFormWrap" class="hidden space-y-2">
+        <div id="prEntryFormWrap" class="hidden space-y-3">
           <div>
-            <label class="block text-xs font-semibold text-gray-600 mb-1">Tiêu đề báo cáo</label>
+            <label class="block text-xs font-semibold text-gray-600 mb-1">Tiêu đề báo cáo (chỉ để nhận diện trong danh sách, không hiện trên slide)</label>
             <input id="prEntryTitle" placeholder="VD: Báo cáo công việc tuần 12 - Phòng Kinh Doanh" class="w-full border p-2 rounded text-sm">
           </div>
           <div>
-            <label class="block text-xs font-semibold text-gray-600 mb-1">Nội dung báo cáo</label>
-            <textarea id="prEntryContent" placeholder="Kết quả công việc, khó khăn vướng mắc, kế hoạch tuần tới..." class="w-full border p-2 rounded text-sm h-40"></textarea>
+            <label class="block text-xs font-semibold text-gray-600 mb-1">Cách nhập báo cáo</label>
+            <select id="prEntryMode" onchange="onPrEntryModeChange()" class="w-full border p-2 rounded text-sm bg-white">
+              <option value="STRUCTURED">📝 Nhập Theo Mẫu (khuyến nghị)</option>
+              <option value="FILE_UPLOAD">📎 Tải Lên Báo Cáo (đã làm sẵn — PDF/Word/PowerPoint/ảnh)</option>
+            </select>
           </div>
+
+          <!-- Nhập Theo Mẫu — khớp đúng cấu trúc slide PowerPoint mẫu công ty cung cấp: bảng Công Việc
+               Tuần Này / Kế Hoạch Tiếp Theo (nhóm theo "Mục lớn", xem renderPrItemsTable()), Số Liệu, tối
+               đa 2 mục Khác — mỗi phần đều cho phép gõ chữ VÀ/HOẶC đính kèm 1 ảnh/tệp. -->
+          <div id="prEntryStructuredWrap" class="space-y-3">
+            <div class="bg-white p-3 rounded border">
+              <div class="flex justify-between items-center mb-1">
+                <label class="text-xs font-bold text-gray-700">📋 Các Công Việc Thực Hiện Trong Tuần</label>
+                <button type="button" onclick="addPrItemRow('prEntryTaskItemsList', 'progress', 'Tiến độ')" class="text-xs bg-sky-100 text-sky-700 px-2 py-1 rounded hover:bg-sky-200 font-semibold">+ Thêm Công Việc</button>
+              </div>
+              <p class="text-[11px] text-gray-500 mb-2">"Mục lớn" dùng để nhóm các công việc cùng 1 đầu việc lớn (VD: "Dự án A") — các dòng cùng tên Mục lớn sẽ tự gộp nhóm khi lên slide; có thể để trống nếu không cần nhóm.</p>
+              <div id="prEntryTaskItemsList" class="space-y-2"></div>
+            </div>
+            <div class="bg-white p-3 rounded border">
+              <div class="flex justify-between items-center mb-2">
+                <label class="text-xs font-bold text-gray-700">🗓️ Kế Hoạch Công Việc Tiếp Theo</label>
+                <button type="button" onclick="addPrItemRow('prEntryPlanItemsList', 'plan', 'Kế hoạch tiếp theo')" class="text-xs bg-sky-100 text-sky-700 px-2 py-1 rounded hover:bg-sky-200 font-semibold">+ Thêm Kế Hoạch</button>
+              </div>
+              <div id="prEntryPlanItemsList" class="space-y-2"></div>
+            </div>
+            <div class="bg-white p-3 rounded border">
+              <label class="text-xs font-bold text-gray-700 block mb-2">📊 Số Liệu</label>
+              <textarea id="prEntryNumbersText" placeholder="Số liệu, kết quả, KPI tuần này... (có thể để trống nếu chỉ đính kèm ảnh/biểu đồ bên dưới)" class="w-full border p-2 rounded text-sm h-20 mb-2"></textarea>
+              <input type="file" id="prEntryNumbersFile" class="w-full text-xs" accept="image/*,.pdf,.xls,.xlsx">
+              <div id="prEntryNumbersFileExisting" class="hidden text-[11px] text-gray-500 mt-1"></div>
+            </div>
+            <div class="bg-white p-3 rounded border">
+              <label class="text-xs font-bold text-gray-700 block mb-2">📎 Khác — Mục 1 (tuỳ chọn)</label>
+              <textarea id="prEntryOtherText0" placeholder="Nội dung khác (nếu có)..." class="w-full border p-2 rounded text-sm h-16 mb-2"></textarea>
+              <input type="file" id="prEntryOtherFile0" class="w-full text-xs" accept="image/*,.pdf">
+              <div id="prEntryOtherFileExisting0" class="hidden text-[11px] text-gray-500 mt-1"></div>
+            </div>
+            <div class="bg-white p-3 rounded border">
+              <label class="text-xs font-bold text-gray-700 block mb-2">📎 Khác — Mục 2 (tuỳ chọn)</label>
+              <textarea id="prEntryOtherText1" placeholder="Nội dung khác (nếu có)..." class="w-full border p-2 rounded text-sm h-16 mb-2"></textarea>
+              <input type="file" id="prEntryOtherFile1" class="w-full text-xs" accept="image/*,.pdf">
+              <div id="prEntryOtherFileExisting1" class="hidden text-[11px] text-gray-500 mt-1"></div>
+            </div>
+          </div>
+
+          <!-- Tải Lên Báo Cáo — cho người đã có sẵn file báo cáo, không cần gõ lại theo mẫu; khi gộp
+               slide, báo cáo này chỉ chèn 1 trang tham chiếu tới tệp (xem mergeReportPeriod() server). -->
+          <div id="prEntryFileUploadWrap" class="hidden bg-white p-3 rounded border">
+            <label class="text-xs font-bold text-gray-700 block mb-2">📎 Tệp Báo Cáo Đã Làm Sẵn</label>
+            <input type="file" id="prEntryWholeFile" class="w-full text-xs" accept=".pdf,.doc,.docx,.ppt,.pptx,image/*">
+            <div id="prEntryWholeFileExisting" class="hidden text-[11px] text-gray-500 mt-1"></div>
+          </div>
+
           <div class="flex justify-end gap-2">
             <button type="button" onclick="savePrEntryDraft()" class="bg-gray-600 text-white px-4 py-1.5 rounded text-xs font-bold hover:bg-gray-700">💾 Lưu Nháp</button>
             <button type="button" id="btnPrEntrySubmit" onclick="submitPrEntry()" class="hidden bg-sky-600 text-white px-4 py-1.5 rounded text-xs font-bold hover:bg-sky-700">📤 Gửi Báo Cáo</button>
@@ -3369,12 +3420,35 @@ table { display: block; overflow-x: auto; max-width: 100%; }
           <input id="pfConfirmPass" type="password" class="w-full border p-2 rounded">
         </div>
       </div>
-      
+
       <div class="flex justify-end gap-2 pt-2">
         <button type="button" onclick="closeProfileModal()" class="bg-gray-400 text-white px-4 py-2 rounded font-bold">Hủy</button>
         <button type="submit" class="bg-blue-600 text-white px-5 py-2 rounded font-bold hover:bg-blue-700">Lưu Thay Đổi</button>
       </div>
     </form>
+
+    <!-- Chỉ hiện với người có perms.approverAuthLevel = 'PIN' (xem openProfileModal()) — tách riêng
+         khỏi <form> ở trên vì đổi PIN cần xác nhận PIN CŨ + đi qua route riêng (/api/auth/change-pin,
+         khác PATCH /api/auth/me của phần mật khẩu), không nên gộp chung 1 lần submit. -->
+    <div id="pfPinSection" class="hidden border-t pt-3 space-y-3">
+      <h4 class="font-bold text-gray-700">🔑 Đổi Mã PIN Phê Duyệt</h4>
+      <p id="pfPinHint" class="text-[11px] text-gray-500"></p>
+      <div id="pfCurrentPinWrap">
+        <label class="block font-semibold text-gray-600 mb-1">Mã PIN hiện tại</label>
+        <input id="pfCurrentPin" type="password" inputmode="numeric" autocomplete="off" class="w-full border p-2 rounded">
+      </div>
+      <div>
+        <label class="block font-semibold text-gray-600 mb-1">Mã PIN mới (số, tối thiểu 4 chữ số)</label>
+        <input id="pfNewPin" type="password" inputmode="numeric" autocomplete="off" class="w-full border p-2 rounded">
+      </div>
+      <div>
+        <label class="block font-semibold text-gray-600 mb-1">Xác nhận mã PIN mới</label>
+        <input id="pfConfirmPin" type="password" inputmode="numeric" autocomplete="off" class="w-full border p-2 rounded">
+      </div>
+      <div class="flex justify-end">
+        <button type="button" onclick="changeMyApprovalPin()" class="bg-amber-600 text-white px-4 py-2 rounded font-bold hover:bg-amber-700">🔑 Cập Nhật Mã PIN</button>
+      </div>
+    </div>
   </div>
 </div>
 
@@ -5205,6 +5279,24 @@ function openProfileModal() {
   document.getElementById('pfPhone').value = currentUser.phone || '';
   document.getElementById('pfNewPass').value = '';
   document.getElementById('pfConfirmPass').value = '';
+
+  // Chỉ người đang ở mức xác thực phê duyệt PIN (perms.approverAuthLevel = 'PIN') mới cần quản lý mã
+  // PIN của mình — người khác không thấy khối này, giống cách form Sửa Người Dùng của admin cũng chỉ
+  // hiện ô PIN khi chọn đúng mức này (xem onApproverAuthLevelChange()).
+  const usesPin = currentUser.perms?.approverAuthLevel === 'PIN';
+  document.getElementById('pfPinSection').classList.toggle('hidden', !usesPin);
+  if (usesPin) {
+    // hasPin do server tính sẵn (toSafeUser() ở routes/auth.js) — true/false, KHÔNG phải giá trị PIN
+    // thật. Chưa từng có PIN thì ẩn hẳn ô "PIN hiện tại" (không có gì để xác nhận).
+    document.getElementById('pfCurrentPinWrap').classList.toggle('hidden', !currentUser.hasPin);
+    document.getElementById('pfPinHint').innerText = currentUser.hasPin
+      ? 'Nhập đúng mã PIN hiện tại để đổi sang mã mới.'
+      : 'Bạn chưa thiết lập mã PIN — đặt mã PIN bên dưới để dùng khi phê duyệt.';
+    document.getElementById('pfCurrentPin').value = '';
+    document.getElementById('pfNewPin').value = '';
+    document.getElementById('pfConfirmPin').value = '';
+  }
+
   document.getElementById('profileModal').classList.remove('hidden');
 }
 
@@ -5250,6 +5342,44 @@ async function savePersonalProfile(e) {
 
   closeProfileModal();
   alert('✅ Cập nhật thông tin cá nhân thành công!');
+}
+
+// Đổi/thiết lập mã PIN phê duyệt của CHÍNH mình — tách riêng khỏi savePersonalProfile() vì đi qua route
+// riêng có xác nhận PIN cũ (POST /api/auth/change-pin, xem routes/auth.js), khác PATCH /api/auth/me của
+// tên/email/SĐT/mật khẩu. Chỉ hiện được ở #profileModal khi perms.approverAuthLevel = 'PIN'
+// (xem openProfileModal()).
+async function changeMyApprovalPin() {
+  const currentPin = document.getElementById('pfCurrentPin').value.trim();
+  const newPin = document.getElementById('pfNewPin').value.trim();
+  const confirmPin = document.getElementById('pfConfirmPin').value.trim();
+
+  if (!newPin) return alert('❌ Vui lòng nhập mã PIN mới!');
+  if (!/^\d{4,}$/.test(newPin)) return alert('❌ Mã PIN phải là dãy số, tối thiểu 4 chữ số!');
+  if (newPin !== confirmPin) return alert('❌ Mã PIN xác nhận không khớp!');
+  if (currentUser.hasPin && !currentPin) return alert('❌ Vui lòng nhập mã PIN hiện tại!');
+
+  try {
+    const res = await fetch('/api/auth/change-pin', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ currentPin: currentPin || undefined, newPin })
+    });
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) return alert(`⛔ ${body.error || 'Không thể đổi mã PIN'}`);
+
+    currentUser = body;
+    const userIdx = DB.users.findIndex(u => u.username === currentUser.username);
+    if (userIdx !== -1) DB.users[userIdx] = { ...DB.users[userIdx], ...body };
+
+    document.getElementById('pfCurrentPin').value = '';
+    document.getElementById('pfNewPin').value = '';
+    document.getElementById('pfConfirmPin').value = '';
+    document.getElementById('pfCurrentPinWrap').classList.remove('hidden');
+    document.getElementById('pfPinHint').innerText = 'Nhập đúng mã PIN hiện tại để đổi sang mã mới.';
+    alert('✅ Đã cập nhật mã PIN phê duyệt!');
+  } catch (err) {
+    alert('⛔ Không thể kết nối tới máy chủ: ' + err.message);
+  }
 }
 
 // --- ĐĂNG NHẬP & TABS ---
@@ -14976,6 +15106,10 @@ document.addEventListener('click', (ev) => {
 // ==========================================
 let activePeriodicReportSubTab = 'ENTRY';
 let prEntryDraftId = null;
+// Tệp đã tải lên sẵn của bản nháp đang sửa (numbers/other0/other1/wholeFile) — giữ lại nếu người dùng
+// không chọn tệp mới khi lưu nháp tiếp, giống mô hình "sửa hồ sơ không bắt buộc chọn lại file" của
+// Hợp đồng (xem openEditContract()). null nếu đang tạo báo cáo mới hoặc mục đó chưa có tệp.
+let prEntryExistingFiles = { numbers: null, other0: null, other1: null, wholeFile: null };
 let prAggCurrentPeriodId = null;
 let prAggSelectedIds = [];
 let prAggPendingSlides = null;
@@ -15066,11 +15200,84 @@ function renderPrEntryPeriodOptions() {
   sel.value = '';
 }
 
+// Bảng dòng động dùng chung cho Công Việc/Kế Hoạch — mỗi dòng: Mục lớn, Nội dung, [Tiến độ|Kế hoạch
+// tiếp theo], Deadline, Hỗ trợ — khớp đúng cột trong slide PowerPoint mẫu. progressField đổi tên field
+// lưu trong data ('progress' cho bảng Công Việc Tuần Này | 'plan' cho bảng Kế Hoạch Tiếp Theo),
+// progressLabel đổi nhãn hiện trên form. removeFnName (mặc định removePrItemRow) cho phép khung sửa
+// slide ở Tổng Hợp gắn hàm xoá RIÊNG có đồng bộ lại prAggPendingSlides (xem syncPrAggSlideItems() +
+// removePrAggItemRow() ở khối Tổng Hợp) — form Nhập Báo Cáo dùng thẳng bản mặc định vì chỉ đọc field
+// lúc bấm Lưu/Gửi, không cần đồng bộ theo từng phím gõ.
+function renderPrItemsTable(containerId, items, progressField, progressLabel, removeFnName) {
+  const container = document.getElementById(containerId);
+  if (!container) return;
+  const removeFn = removeFnName || 'removePrItemRow';
+  container.innerHTML = (items || []).map((it, idx) => `
+    <div class="border rounded p-2 bg-gray-50 space-y-1" data-pr-item-row="${idx}">
+      <div class="flex justify-between items-center">
+        <span class="text-[11px] font-bold text-gray-500">Dòng ${idx + 1}</span>
+        <button type="button" onclick="${escapeHtml(`${removeFn}('${containerId}', ${idx}, '${progressField}', ${JSON.stringify(progressLabel)})`)}" class="text-red-500 text-[11px] font-bold hover:underline">✕ Xoá dòng</button>
+      </div>
+      <div class="grid grid-cols-1 md:grid-cols-4 gap-1">
+        <input placeholder="Mục lớn (VD: I)" value="${escapeHtml(it.group || '')}" class="pr-item-group border p-1 rounded text-xs">
+        <input placeholder="Nội dung công việc" value="${escapeHtml(it.content || '')}" class="pr-item-content border p-1 rounded text-xs md:col-span-2">
+        <input placeholder="Deadline" value="${escapeHtml(it.deadline || '')}" class="pr-item-deadline border p-1 rounded text-xs">
+      </div>
+      <textarea placeholder="${escapeHtml(progressLabel)}" class="pr-item-progress w-full border p-1 rounded text-xs h-10">${escapeHtml(it[progressField] || '')}</textarea>
+      <textarea placeholder="Hỗ trợ cần" class="pr-item-support w-full border p-1 rounded text-xs h-8">${escapeHtml(it.support || '')}</textarea>
+    </div>
+  `).join('') || '<p class="text-gray-400 italic text-[11px]">Chưa có mục nào — bấm "+ Thêm..." ở trên nếu cần.</p>';
+}
+
+function collectPrItemsTable(containerId, progressField) {
+  return [...document.querySelectorAll(`#${containerId} [data-pr-item-row]`)].map(row => ({
+    group: row.querySelector('.pr-item-group').value.trim(),
+    content: row.querySelector('.pr-item-content').value.trim(),
+    [progressField]: row.querySelector('.pr-item-progress').value.trim(),
+    deadline: row.querySelector('.pr-item-deadline').value.trim(),
+    support: row.querySelector('.pr-item-support').value.trim()
+  }));
+}
+
+function addPrItemRow(containerId, progressField, progressLabel, removeFnName) {
+  const current = collectPrItemsTable(containerId, progressField);
+  current.push({ group: '', content: '', [progressField]: '', deadline: '', support: '' });
+  renderPrItemsTable(containerId, current, progressField, progressLabel, removeFnName);
+}
+
+function removePrItemRow(containerId, idx, progressField, progressLabel, removeFnName) {
+  const current = collectPrItemsTable(containerId, progressField);
+  current.splice(idx, 1);
+  renderPrItemsTable(containerId, current, progressField, progressLabel, removeFnName);
+}
+
+// Đổi mode STRUCTURED (nhập theo mẫu, các khối bảng/Số Liệu/Khác) <-> FILE_UPLOAD (đính nguyên 1 tệp
+// báo cáo đã làm sẵn, không gõ lại).
+function onPrEntryModeChange() {
+  const mode = document.getElementById('prEntryMode').value;
+  document.getElementById('prEntryStructuredWrap').classList.toggle('hidden', mode !== 'STRUCTURED');
+  document.getElementById('prEntryFileUploadWrap').classList.toggle('hidden', mode !== 'FILE_UPLOAD');
+}
+
+// Hiện gợi ý "đã có tệp X" cho 1 ô file input khi sửa tiếp báo cáo nháp — không chọn tệp mới thì giữ
+// nguyên tệp cũ (existingMeta), giống openEditContract() không bắt buộc chọn lại file khi sửa.
+function showPrExistingFileHint(hintId, meta) {
+  const el = document.getElementById(hintId);
+  if (!el) return;
+  if (meta?.fileUrl) {
+    el.innerText = `📎 Đã có tệp: ${meta.fileName || 'tệp đính kèm'} (không chọn tệp mới = giữ nguyên)`;
+    el.classList.remove('hidden');
+  } else {
+    el.innerText = '';
+    el.classList.add('hidden');
+  }
+}
+
 function onPrEntryPeriodChange() {
   const periodId = Number(document.getElementById('prEntryPeriodSelect').value);
   const wrap = document.getElementById('prEntryFormWrap');
   const noteEl = document.getElementById('prEntryAlreadySentNote');
   prEntryDraftId = null;
+  prEntryExistingFiles = { numbers: null, other0: null, other1: null, wholeFile: null };
   if (!periodId) { wrap.classList.add('hidden'); noteEl.classList.add('hidden'); return; }
   const period = DB.reportPeriods.find(p => p.id === periodId);
   if (!period) { wrap.classList.add('hidden'); noteEl.classList.add('hidden'); return; }
@@ -15086,12 +15293,45 @@ function onPrEntryPeriodChange() {
 
   prEntryDraftId = existing ? existing.id : null; // existing (nếu có) chắc chắn đang DRAFT ở nhánh này
   document.getElementById('prEntryTitle').value = existing?.title || '';
-  document.getElementById('prEntryContent').value = existing?.contentHtml || '';
+  document.getElementById('prEntryMode').value = existing?.mode === 'FILE_UPLOAD' ? 'FILE_UPLOAD' : 'STRUCTURED';
+  onPrEntryModeChange();
+
+  renderPrItemsTable('prEntryTaskItemsList', existing?.taskItems || [], 'progress', 'Tiến độ');
+  renderPrItemsTable('prEntryPlanItemsList', existing?.planItems || [], 'plan', 'Kế hoạch tiếp theo');
+  document.getElementById('prEntryNumbersText').value = existing?.numbersText || '';
+  document.getElementById('prEntryOtherText0').value = existing?.otherItems?.[0]?.text || '';
+  document.getElementById('prEntryOtherText1').value = existing?.otherItems?.[1]?.text || '';
+  document.getElementById('prEntryNumbersFile').value = '';
+  document.getElementById('prEntryOtherFile0').value = '';
+  document.getElementById('prEntryOtherFile1').value = '';
+  document.getElementById('prEntryWholeFile').value = '';
+
+  prEntryExistingFiles = {
+    numbers: existing?.numbersFileUrl ? { fileUrl: existing.numbersFileUrl, fileName: existing.numbersFileName, fileType: existing.numbersFileType } : null,
+    other0: existing?.otherItems?.[0]?.fileUrl ? { ...existing.otherItems[0] } : null,
+    other1: existing?.otherItems?.[1]?.fileUrl ? { ...existing.otherItems[1] } : null,
+    wholeFile: existing?.fileUrl ? { fileUrl: existing.fileUrl, fileName: existing.fileName, fileType: existing.fileType } : null
+  };
+  showPrExistingFileHint('prEntryNumbersFileExisting', prEntryExistingFiles.numbers);
+  showPrExistingFileHint('prEntryOtherFileExisting0', prEntryExistingFiles.other0);
+  showPrExistingFileHint('prEntryOtherFileExisting1', prEntryExistingFiles.other1);
+  showPrExistingFileHint('prEntryWholeFileExisting', prEntryExistingFiles.wholeFile);
+
   wrap.classList.remove('hidden');
 
   const submitBtn = document.getElementById('btnPrEntrySubmit');
   submitBtn.classList.toggle('hidden', !prEntryDraftId);
   submitBtn.onclick = () => submitPrEntryAction(prEntryDraftId, true);
+}
+
+// Tải tệp cho 1 ô (nếu người dùng chọn tệp mới) — không chọn gì thì giữ nguyên tệp cũ (existingMeta,
+// null khi tạo mới/mục chưa có tệp trước đó). Trả về {fileUrl,fileName,fileType} hoặc null cả 3.
+async function uploadPrOptionalFile(inputId, existingMeta) {
+  const input = document.getElementById(inputId);
+  const file = input?.files?.[0];
+  if (!file) return existingMeta ? { fileUrl: existingMeta.fileUrl, fileName: existingMeta.fileName, fileType: existingMeta.fileType } : { fileUrl: null, fileName: null, fileType: null };
+  const uploaded = await uploadFileToServer(file);
+  return { fileUrl: uploaded.fileUrl, fileName: uploaded.fileName, fileType: uploaded.fileType };
 }
 
 // "Lưu Nháp" — tạo hồ sơ NHÁP mới (lần đầu) hoặc cập nhật NHÁP đã có (sửa tiếp), tuỳ prEntryDraftId.
@@ -15102,17 +15342,39 @@ async function savePrEntryDraft() {
   const period = DB.reportPeriods.find(p => p.id === periodId);
   if (!period) return alert('Không tìm thấy kỳ báo cáo!');
   const title = document.getElementById('prEntryTitle').value.trim();
-  const contentHtml = document.getElementById('prEntryContent').value.trim();
   if (!title) return alert('Vui lòng nhập tiêu đề báo cáo!');
-  if (!contentHtml) return alert('Vui lòng nhập nội dung báo cáo!');
+  const mode = document.getElementById('prEntryMode').value;
+
+  const payload = { periodId, title, mode };
+  try {
+    if (mode === 'FILE_UPLOAD') {
+      const wholeFile = await uploadPrOptionalFile('prEntryWholeFile', prEntryExistingFiles.wholeFile);
+      if (!wholeFile.fileUrl) return alert('Vui lòng chọn tệp báo cáo cần tải lên!');
+      Object.assign(payload, wholeFile);
+    } else {
+      payload.taskItems = collectPrItemsTable('prEntryTaskItemsList', 'progress');
+      payload.planItems = collectPrItemsTable('prEntryPlanItemsList', 'plan');
+      payload.numbersText = document.getElementById('prEntryNumbersText').value.trim();
+      const numbersFile = await uploadPrOptionalFile('prEntryNumbersFile', prEntryExistingFiles.numbers);
+      payload.numbersFileUrl = numbersFile.fileUrl; payload.numbersFileName = numbersFile.fileName; payload.numbersFileType = numbersFile.fileType;
+      const other0File = await uploadPrOptionalFile('prEntryOtherFile0', prEntryExistingFiles.other0);
+      const other1File = await uploadPrOptionalFile('prEntryOtherFile1', prEntryExistingFiles.other1);
+      payload.otherItems = [
+        { text: document.getElementById('prEntryOtherText0').value.trim(), ...other0File },
+        { text: document.getElementById('prEntryOtherText1').value.trim(), ...other1File }
+      ];
+    }
+  } catch (err) {
+    return alert(`⛔ Tải tệp lên thất bại: ${err.message}`);
+  }
 
   let savedEntry;
   try {
     if (prEntryDraftId) {
-      const result = await callRecordAction('reportEntries', prEntryDraftId, 'update', { title, contentHtml });
+      const result = await callRecordAction('reportEntries', prEntryDraftId, 'update', payload);
       savedEntry = result.item;
     } else {
-      const payload = { periodId, title, contentHtml, createdAt: new Date().toLocaleString('vi-VN') };
+      payload.createdAt = new Date().toLocaleString('vi-VN');
       const result = await callCreateAction('reportEntries', payload);
       savedEntry = result.item;
     }
@@ -15126,6 +15388,7 @@ async function savePrEntryDraft() {
   logSystemAction('PERIODIC_REPORT', 'SAVE_REPORT_ENTRY_DRAFT', `Lưu nháp báo cáo kỳ [${period.name}]`, 'SUCCESS', String(savedEntry.id));
   alert('✅ Đã lưu nháp — bạn có thể sửa tiếp hoặc bấm "Gửi Báo Cáo" khi đã hoàn tất.');
   renderPrEntryTable();
+  onPrEntryPeriodChange();
 
   const submitBtn = document.getElementById('btnPrEntrySubmit');
   submitBtn.classList.remove('hidden');
@@ -15453,8 +15716,13 @@ async function mergeReportPeriodAction() {
   renderPrPeriodsTable();
 }
 
+const PR_SLIDE_KIND_LABELS = { COVER: 'Trang bìa', DEPT: 'Chia phòng ban', TASKS: 'Bảng công việc', PLAN: 'Bảng kế hoạch', NUMBERS: 'Số liệu', OTHER: 'Khác', FILE: 'Tệp đính kèm' };
+
 // Danh sách slide đang sửa (prAggPendingSlides) là bản nháp CHỈ Ở CLIENT — chỉ thực sự lưu lại khi
-// bấm "Lưu Chỉnh Sửa" (savePrCompilation()), tránh gọi API liên tục mỗi lần gõ phím.
+// bấm "Lưu Chỉnh Sửa" (savePrCompilation()), tránh gọi API liên tục mỗi lần gõ phím. Mỗi slide.kind
+// (đặt lúc Tổng Hợp — xem mergeReportPeriod() ở lib/recordActions.js) có khối sửa RIÊNG khớp đúng field
+// của kind đó: TASKS/PLAN sửa bằng bảng dòng động (renderPrItemsTable(), dùng chung với form Nhập Báo
+// Cáo), NUMBERS/OTHER sửa text + có thể "Bỏ tệp" đã đính, COVER/DEPT/FILE chỉ sửa được tiêu đề.
 function renderPrAggCompilation() {
   const wrap = document.getElementById('prAggCompilationWrap');
   const el = document.getElementById('prAggSlidesList');
@@ -15465,20 +15733,49 @@ function renderPrAggCompilation() {
   wrap.classList.remove('hidden');
   const period = DB.reportPeriods.find(p => p.id === prAggCurrentPeriodId);
   const isPublished = period?.compilation?.status === 'PUBLISHED';
-  el.innerHTML = prAggPendingSlides.map((s, idx) => `
-    <div class="border rounded p-2 bg-gray-50 space-y-1">
-      <div class="flex justify-between items-center">
-        <span class="text-[11px] font-bold text-sky-700">Phần ${idx + 1}${s.sourceCreatorName ? ` — ${escapeHtml(s.sourceCreatorName)} (${escapeHtml(s.sourceDept || '')})` : ''}</span>
-        <div class="space-x-1">
-          <button type="button" onclick="movePrAggSlide(${idx}, -1)" class="px-1.5 py-0.5 bg-gray-200 rounded hover:bg-gray-300 text-[11px]" ${idx === 0 || isPublished ? 'disabled' : ''}>▲</button>
-          <button type="button" onclick="movePrAggSlide(${idx}, 1)" class="px-1.5 py-0.5 bg-gray-200 rounded hover:bg-gray-300 text-[11px]" ${idx === prAggPendingSlides.length - 1 || isPublished ? 'disabled' : ''}>▼</button>
-          <button type="button" onclick="removePrAggSlide(${idx})" class="px-1.5 py-0.5 bg-rose-100 text-rose-700 rounded hover:bg-rose-200 text-[11px]" ${isPublished ? 'disabled' : ''}>✕</button>
+  el.innerHTML = prAggPendingSlides.map((s, idx) => {
+    const kindLabel = PR_SLIDE_KIND_LABELS[s.kind] || s.kind;
+    const sourceInfo = s.sourceCreatorName ? ` — ${escapeHtml(s.sourceCreatorName)} (${escapeHtml(s.sourceDept || '')})` : '';
+    let bodyHTML = '';
+    if (s.kind === 'TASKS' || s.kind === 'PLAN') {
+      const progressField = s.kind === 'TASKS' ? 'progress' : 'plan';
+      const progressLabel = s.kind === 'TASKS' ? 'Tiến độ' : 'Kế hoạch tiếp theo';
+      bodyHTML = `
+        <div class="flex justify-end">
+          <button type="button" onclick="${escapeHtml(`addPrAggItemRow('prAggItemsTable_${idx}', '${progressField}', ${JSON.stringify(progressLabel)})`)}" class="text-xs bg-sky-100 text-sky-700 px-2 py-1 rounded hover:bg-sky-200 font-semibold" ${isPublished ? 'disabled' : ''}>+ Thêm dòng</button>
         </div>
+        <div id="prAggItemsTable_${idx}" class="space-y-2" oninput="syncPrAggSlideItems(${idx}, '${progressField}')"></div>
+      `;
+    } else if (s.kind === 'NUMBERS' || s.kind === 'OTHER') {
+      bodyHTML = `
+        <textarea oninput="updatePrAggSlideField(${idx}, 'text', this.value)" class="w-full border p-1.5 rounded text-xs h-20" ${isPublished ? 'disabled' : ''}>${escapeHtml(s.text || '')}</textarea>
+        ${s.fileUrl ? `<div class="flex items-center justify-between text-[11px] bg-white border rounded p-1.5"><span>📎 ${escapeHtml(s.fileName || 'tệp đính kèm')}</span>${!isPublished ? `<button type="button" onclick="removePrAggSlideFile(${idx})" class="text-red-500 font-bold hover:underline">✕ Bỏ tệp</button>` : ''}</div>` : ''}
+      `;
+    } else if (s.kind === 'FILE') {
+      bodyHTML = `<div class="text-[11px] bg-white border rounded p-1.5">📎 ${escapeHtml(s.fileName || 'tệp đính kèm')}</div>`;
+    }
+    return `
+      <div class="border rounded p-2 bg-gray-50 space-y-1">
+        <div class="flex justify-between items-center">
+          <span class="text-[11px] font-bold text-sky-700">Phần ${idx + 1} — ${escapeHtml(kindLabel)}${sourceInfo}</span>
+          <div class="space-x-1">
+            <button type="button" onclick="movePrAggSlide(${idx}, -1)" class="px-1.5 py-0.5 bg-gray-200 rounded hover:bg-gray-300 text-[11px]" ${idx === 0 || isPublished ? 'disabled' : ''}>▲</button>
+            <button type="button" onclick="movePrAggSlide(${idx}, 1)" class="px-1.5 py-0.5 bg-gray-200 rounded hover:bg-gray-300 text-[11px]" ${idx === prAggPendingSlides.length - 1 || isPublished ? 'disabled' : ''}>▼</button>
+            <button type="button" onclick="removePrAggSlide(${idx})" class="px-1.5 py-0.5 bg-rose-100 text-rose-700 rounded hover:bg-rose-200 text-[11px]" ${isPublished ? 'disabled' : ''}>✕</button>
+          </div>
+        </div>
+        <input type="text" value="${escapeHtml(s.title)}" oninput="updatePrAggSlideField(${idx}, 'title', this.value)" class="w-full border p-1.5 rounded text-xs font-semibold" ${isPublished ? 'disabled' : ''}>
+        ${bodyHTML}
       </div>
-      <input type="text" value="${escapeHtml(s.title)}" oninput="updatePrAggSlideField(${idx}, 'title', this.value)" class="w-full border p-1.5 rounded text-xs font-semibold" ${isPublished ? 'disabled' : ''}>
-      <textarea oninput="updatePrAggSlideField(${idx}, 'contentHtml', this.value)" class="w-full border p-1.5 rounded text-xs h-24" ${isPublished ? 'disabled' : ''}>${escapeHtml(s.contentHtml)}</textarea>
-    </div>
-  `).join('');
+    `;
+  }).join('');
+
+  // renderPrItemsTable() thao tác trực tiếp theo id trên DOM thật — phải gọi SAU KHI khung `.innerHTML`
+  // ở trên đã chèn xong, nếu không container `#prAggItemsTable_N` chưa tồn tại trong trang.
+  prAggPendingSlides.forEach((s, idx) => {
+    if (s.kind === 'TASKS') renderPrItemsTable(`prAggItemsTable_${idx}`, s.items, 'progress', 'Tiến độ', 'removePrAggItemRow');
+    if (s.kind === 'PLAN') renderPrItemsTable(`prAggItemsTable_${idx}`, s.items, 'plan', 'Kế hoạch tiếp theo', 'removePrAggItemRow');
+  });
 
   document.getElementById('btnPrPublish').classList.toggle('hidden', isPublished);
   document.getElementById('btnPrUnpublish').classList.toggle('hidden', !isPublished);
@@ -15487,6 +15784,33 @@ function renderPrAggCompilation() {
 function updatePrAggSlideField(idx, field, value) {
   if (!prAggPendingSlides?.[idx]) return;
   prAggPendingSlides[idx][field] = value;
+}
+
+// Đọc lại toàn bộ dòng đang hiện trong bảng của slide idx, ghi đè vào prAggPendingSlides[idx].items —
+// gọi ngay mỗi lần gõ (event delegation qua oninput ở div bọc ngoài #prAggItemsTable_N, xem
+// renderPrAggCompilation()) để prAggPendingSlides luôn khớp DOM, không mất dữ liệu khi render lại toàn
+// bộ danh sách (di chuyển/xoá slide khác, thêm/xoá dòng...).
+function syncPrAggSlideItems(idx, progressField) {
+  if (!prAggPendingSlides?.[idx]) return;
+  prAggPendingSlides[idx].items = collectPrItemsTable(`prAggItemsTable_${idx}`, progressField);
+}
+
+function addPrAggItemRow(containerId, progressField, progressLabel) {
+  addPrItemRow(containerId, progressField, progressLabel, 'removePrAggItemRow');
+  syncPrAggSlideItems(Number(containerId.replace('prAggItemsTable_', '')), progressField);
+}
+
+function removePrAggItemRow(containerId, itemIdx, progressField, progressLabel) {
+  removePrItemRow(containerId, itemIdx, progressField, progressLabel, 'removePrAggItemRow');
+  syncPrAggSlideItems(Number(containerId.replace('prAggItemsTable_', '')), progressField);
+}
+
+function removePrAggSlideFile(idx) {
+  if (!prAggPendingSlides?.[idx]) return;
+  prAggPendingSlides[idx].fileUrl = null;
+  prAggPendingSlides[idx].fileName = null;
+  prAggPendingSlides[idx].fileType = null;
+  renderPrAggCompilation();
 }
 
 function movePrAggSlide(idx, dir) {
@@ -15598,15 +15922,106 @@ function openPrSlideshow(periodId) {
   renderPrSlideshowSlide();
 }
 
+// Số La Mã cho khối "Mục lớn" trong bảng Công Việc/Kế Hoạch — đủ dùng tới vài chục mục lớn/kỳ báo cáo.
+function toRomanNumeral(n) {
+  const table = [[1000, 'M'], [900, 'CM'], [500, 'D'], [400, 'CD'], [100, 'C'], [90, 'XC'], [50, 'L'], [40, 'XL'], [10, 'X'], [9, 'IX'], [5, 'V'], [4, 'IV'], [1, 'I']];
+  let res = '';
+  for (const [val, sym] of table) { while (n >= val) { res += sym; n -= val; } }
+  return res || String(n);
+}
+
+// Dựng bảng Công Việc/Kế Hoạch để hiển thị (trình chiếu/PDF) — tự nhóm các dòng liên tiếp CÙNG "group"
+// thành 1 khối "Mục lớn" đánh số La Mã (I, II, III...), dòng con trong khối đánh số thường (1, 2, 3...)
+// — đúng khuôn mẫu PowerPoint công ty cung cấp. Dòng không điền "group" không có khối cha, đánh số
+// thường liên tục riêng. mode='screen' (trình chiếu, dark nền + Tailwind) hoặc 'print' (xuất PDF, style
+// inline vì tài liệu in không load được Tailwind của trang chính — cùng lý do buildMeetingMinutesDocumentHTML() ở trên đã áp dụng).
+function buildPrTaskTableHTML(items, progressField, progressLabel, mode) {
+  const list = Array.isArray(items) ? items : [];
+  if (!list.length) return `<p style="font-style:italic;color:#9ca3af;">Không có nội dung.</p>`;
+  const isPrint = mode === 'print';
+  const cellAttr = isPrint ? 'style="border:1px solid #ccc;padding:6px;font-size:12px;vertical-align:top;"' : 'class="border border-white/20 p-2 align-top text-sm"';
+  const headAttr = isPrint ? 'style="border:1px solid #ccc;padding:6px;font-size:12px;background:#f3f4f6;text-align:left;"' : 'class="border border-white/20 p-2 text-left bg-white/10 text-sm"';
+  const groupAttr = isPrint ? 'style="border:1px solid #ccc;padding:6px;font-size:12px;font-weight:700;background:#f3f4f6;"' : 'class="border border-white/20 p-2 font-bold bg-white/10 text-sm"';
+  let romanCounter = 0, lastGroup = null, subCounter = 0;
+  const rows = list.map((it) => {
+    let groupRowHTML = '';
+    if (it.group && it.group !== lastGroup) {
+      romanCounter++; lastGroup = it.group; subCounter = 0;
+      groupRowHTML = `<tr><td ${groupAttr}>${escapeHtml(toRomanNumeral(romanCounter))}</td><td ${groupAttr} colspan="4">${escapeHtml(it.group)}</td></tr>`;
+    }
+    subCounter++;
+    const rowHTML = `<tr>
+      <td ${cellAttr}${isPrint ? '' : ' style="text-align:center;"'}>${it.group ? subCounter : romanCounter + subCounter}</td>
+      <td ${cellAttr}>${escapeHtml(it.content || '')}</td>
+      <td ${cellAttr}>${escapeHtml(it[progressField] || '')}</td>
+      <td ${cellAttr}>${escapeHtml(it.deadline || '')}</td>
+      <td ${cellAttr}>${escapeHtml(it.support || '')}</td>
+    </tr>`;
+    return groupRowHTML + rowHTML;
+  }).join('');
+  return `
+    <table style="width:100%;border-collapse:collapse;">
+      <thead><tr>
+        <th ${headAttr} width="40">#</th>
+        <th ${headAttr}>Nội dung công việc</th>
+        <th ${headAttr}>${escapeHtml(progressLabel)}</th>
+        <th ${headAttr}>Deadline</th>
+        <th ${headAttr}>Hỗ trợ</th>
+      </tr></thead>
+      <tbody>${rows}</tbody>
+    </table>
+  `;
+}
+
+// Xem tệp đính kèm của slide ĐANG hiện trong khung trình chiếu — đọc thẳng từ prSlideshowSlides/Index
+// (không truyền dữ liệu qua onclick) để tránh escaping fileName/fileUrl chứa dấu nháy. Dùng chung
+// openFileProtectedView() nên tự động có watermark như mọi tệp đính kèm khác trong hệ thống.
+function viewPrCurrentSlideFile() {
+  const s = prSlideshowSlides[prSlideshowIndex];
+  if (!s?.fileUrl) return;
+  openFileProtectedView({ title: `📎 ${s.fileName || 'Tệp đính kèm'}`, fileSrc: s.fileUrl, fileType: s.fileType, fileName: s.fileName });
+}
+
+// Khối tệp đính kèm của slide NUMBERS/OTHER/FILE — screen: ảnh hiện thẳng, tệp khác hiện nút mở khung
+// xem có watermark; print: chỉ hiện tên tệp (tài liệu in không mang theo được JS của trang để mở khung
+// xem, xem thêm downloadPrPdf() bên dưới).
+function buildPrFileBlockHTML(s, mode) {
+  if (!s.fileUrl) return '';
+  if (mode === 'print') {
+    return `<div style="font-size:12px;color:#666;margin-top:8px;">📎 Tệp đính kèm: ${escapeHtml(s.fileName || '')} (xem trong hệ thống)</div>`;
+  }
+  const kind = getFileKind(s.fileType, s.fileName);
+  if (kind === 'image') {
+    return `<img src="${s.fileUrl}" class="max-h-96 mx-auto rounded border border-white/20 mt-3 block" oncontextmenu="return false;">`;
+  }
+  return `<button type="button" onclick="viewPrCurrentSlideFile()" class="mt-3 text-sm bg-white/10 hover:bg-white/20 px-3 py-1.5 rounded">📎 Xem tệp: ${escapeHtml(s.fileName || 'tệp đính kèm')}</button>`;
+}
+
+// Nội dung chính của 1 slide theo đúng kind (đặt lúc Tổng Hợp — xem mergeReportPeriod() ở
+// lib/recordActions.js): TASKS/PLAN ra bảng, NUMBERS/OTHER/FILE ra text + tệp, COVER/DEPT chỉ có tiêu
+// đề (không có thân) — dùng chung cho cả renderPrSlideshowSlide() lẫn downloadPrPdf().
+function buildPrSlideBodyHTML(s, mode) {
+  if (s.kind === 'TASKS') return buildPrTaskTableHTML(s.items, 'progress', 'Tiến độ', mode);
+  if (s.kind === 'PLAN') return buildPrTaskTableHTML(s.items, 'plan', 'Kế hoạch tiếp theo', mode);
+  if (s.kind === 'NUMBERS' || s.kind === 'OTHER' || s.kind === 'FILE') {
+    const isPrint = mode === 'print';
+    const textHTML = s.text ? `<div ${isPrint ? 'style="white-space:pre-wrap;font-size:14px;line-height:1.6;"' : 'class="whitespace-pre-wrap text-base leading-relaxed"'}>${escapeHtml(s.text)}</div>` : '';
+    const fileHTML = buildPrFileBlockHTML(s, mode);
+    return (textHTML + fileHTML) || `<p style="font-style:italic;color:#9ca3af;">Không có nội dung.</p>`;
+  }
+  return ''; // COVER / DEPT — chỉ có tiêu đề
+}
+
 function renderPrSlideshowSlide() {
   const s = prSlideshowSlides[prSlideshowIndex];
   if (!s) return;
   document.getElementById('prSlideshowCounter').innerText = `${prSlideshowIndex + 1} / ${prSlideshowSlides.length}`;
+  const showSource = s.sourceCreatorName && s.kind !== 'DEPT';
   document.getElementById('prSlideshowBody').innerHTML = `
     <div class="max-w-4xl mx-auto space-y-6">
       <h2 class="text-2xl md:text-4xl font-bold">${escapeHtml(s.title)}</h2>
-      ${s.sourceCreatorName ? `<div class="text-sm text-gray-300">${escapeHtml(s.sourceCreatorName)}${s.sourceDept ? ` — ${escapeHtml(s.sourceDept)}` : ''}</div>` : ''}
-      <div class="whitespace-pre-wrap text-base md:text-lg leading-relaxed">${escapeHtml(s.contentHtml)}</div>
+      ${showSource ? `<div class="text-sm text-gray-300">${escapeHtml(s.sourceCreatorName)}${s.sourceDept ? ` — ${escapeHtml(s.sourceDept)}` : ''}</div>` : ''}
+      ${buildPrSlideBodyHTML(s, 'screen')}
     </div>
   `;
 }
@@ -15637,13 +16052,16 @@ function downloadPrPdf(periodId) {
   const period = DB.reportPeriods.find(p => p.id === periodId);
   if (!period || period.compilation?.status !== 'PUBLISHED') return alert('Kỳ báo cáo này chưa phát hành.');
 
-  const slidesHTML = period.compilation.slides.map(s => `
+  const slidesHTML = period.compilation.slides.map(s => {
+    const showSource = s.sourceCreatorName && s.kind !== 'DEPT';
+    return `
     <div style="page-break-after: always; padding: 40px;">
       <h2 style="font-size: 22px; margin-bottom: 8px;">${escapeHtml(s.title)}</h2>
-      ${s.sourceCreatorName ? `<div style="font-size: 12px; color: #666; margin-bottom: 16px;">${escapeHtml(s.sourceCreatorName)}${s.sourceDept ? ` — ${escapeHtml(s.sourceDept)}` : ''}</div>` : ''}
-      <div style="white-space: pre-wrap; font-size: 14px; line-height: 1.6;">${escapeHtml(s.contentHtml)}</div>
+      ${showSource ? `<div style="font-size: 12px; color: #666; margin-bottom: 16px;">${escapeHtml(s.sourceCreatorName)}${s.sourceDept ? ` — ${escapeHtml(s.sourceDept)}` : ''}</div>` : ''}
+      ${buildPrSlideBodyHTML(s, 'print')}
     </div>
-  `).join('');
+  `;
+  }).join('');
 
   printHtmlViaHiddenIframe(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>${escapeHtml(period.name)}</title></head><body style="font-family: Arial, sans-serif;"><h1 style="padding: 40px 40px 0;">${escapeHtml(period.name)}</h1>${slidesHTML}</body></html>`);
 }

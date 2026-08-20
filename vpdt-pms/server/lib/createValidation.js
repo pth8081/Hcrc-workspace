@@ -496,15 +496,58 @@ const CREATE_MODULE_CONFIGS = {
         throw new CreateError(409, 'Kỳ báo cáo này đã kết thúc, không thể nộp báo cáo nữa');
       }
       if (!payload.title || !String(payload.title).trim()) throw new CreateError(400, 'Thiếu tiêu đề báo cáo');
-      if (!payload.contentHtml || !String(payload.contentHtml).trim()) throw new CreateError(400, 'Thiếu nội dung báo cáo');
       const duplicate = (collection || []).some(r => r.periodId === periodId && r.creator === user.username);
       if (duplicate) throw new CreateError(409, 'Bạn đã có báo cáo ở kỳ này rồi — vui lòng sửa báo cáo nháp hiện có');
+      normalizeReportEntryPayload(payload);
       payload.periodName = period.name;
       payload.periodEndTime = period.endTime;
       payload.status = 'DRAFT';
     }
   }
 };
+
+// Chuẩn hoá + kiểm tra tối thiểu nội dung báo cáo theo đúng mẫu (mode STRUCTURED: bảng Công Việc Tuần
+// Này/Kế Hoạch Tiếp Theo/Số Liệu/Khác x2 — khớp cấu trúc slide PowerPoint mẫu; mode FILE_UPLOAD: đính
+// nguyên 1 tệp báo cáo đã làm sẵn, không cần gõ lại). Dùng chung cho cả tạo mới (extraValidate ở trên)
+// lẫn sửa nháp (updateReportEntryDraft ở lib/recordActions.js) để 2 luồng luôn validate giống hệt nhau.
+function normalizeReportEntryPayload(payload) {
+  const mode = payload.mode === 'FILE_UPLOAD' ? 'FILE_UPLOAD' : 'STRUCTURED';
+  payload.mode = mode;
+  if (mode === 'FILE_UPLOAD') {
+    if (!payload.fileUrl) throw new CreateError(400, 'Vui lòng chọn tệp báo cáo cần tải lên');
+    payload.taskItems = [];
+    payload.planItems = [];
+    payload.numbersText = '';
+    payload.numbersFileUrl = null; payload.numbersFileName = null; payload.numbersFileType = null;
+    payload.otherItems = [];
+    return;
+  }
+  const cleanItems = (arr, progressField) => (Array.isArray(arr) ? arr : [])
+    .map(it => ({
+      group: String(it?.group || '').trim(),
+      content: String(it?.content || '').trim(),
+      [progressField]: String(it?.[progressField] || '').trim(),
+      deadline: String(it?.deadline || '').trim(),
+      support: String(it?.support || '').trim()
+    }))
+    .filter(it => it.content || it[progressField] || it.deadline || it.support);
+  payload.taskItems = cleanItems(payload.taskItems, 'progress');
+  payload.planItems = cleanItems(payload.planItems, 'plan');
+  payload.numbersText = String(payload.numbersText || '').trim();
+  payload.numbersFileUrl = payload.numbersFileUrl || null;
+  payload.numbersFileName = payload.numbersFileUrl ? String(payload.numbersFileName || '') : null;
+  payload.numbersFileType = payload.numbersFileUrl ? String(payload.numbersFileType || '') : null;
+  payload.otherItems = (Array.isArray(payload.otherItems) ? payload.otherItems : []).slice(0, 2).map(it => ({
+    text: String(it?.text || '').trim(),
+    fileUrl: it?.fileUrl || null,
+    fileName: it?.fileUrl ? String(it?.fileName || '') : null,
+    fileType: it?.fileUrl ? String(it?.fileType || '') : null
+  }));
+  payload.fileUrl = null; payload.fileName = null; payload.fileType = null;
+  const hasContent = payload.taskItems.length || payload.planItems.length || payload.numbersText ||
+    payload.numbersFileUrl || payload.otherItems.some(o => o.text || o.fileUrl);
+  if (!hasContent) throw new CreateError(400, 'Báo cáo còn trống — vui lòng nhập ít nhất 1 phần (Công việc/Kế hoạch/Số liệu/Khác)');
+}
 
 // payload: dữ liệu hồ sơ client gửi lên (mọi field nghiệp vụ giữ nguyên) — chỉ id/creator/creatorName
 // bị SERVER ghi đè bằng giá trị xác thực từ phiên đăng nhập, không tin bất kỳ giá trị nào client tự
@@ -534,4 +577,4 @@ function validateAndPrepareCreate(moduleKey, payload, user, existingCollection, 
   return record;
 }
 
-module.exports = { CREATE_MODULE_CONFIGS, CreateError, validateAndPrepareCreate, scopeAllows, findMeetingConflict, OFFICE_SUBTYPE_TO_PERM_FLAG };
+module.exports = { CREATE_MODULE_CONFIGS, CreateError, validateAndPrepareCreate, scopeAllows, findMeetingConflict, OFFICE_SUBTYPE_TO_PERM_FLAG, normalizeReportEntryPayload };

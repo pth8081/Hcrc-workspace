@@ -513,7 +513,8 @@ router.post('/reportPeriods/:id/merge', async (req, res) => {
 });
 
 // POST /api/records/reportPeriods/:id/compilation — sửa slide (nội dung/thứ tự) khi bản tổng hợp còn
-// đang MERGED (chưa phát hành). Body: { slides: [{title, contentHtml, ...}, ...] } theo đúng thứ tự.
+// đang MERGED (chưa phát hành). Body: { slides: [{kind, title, ...}, ...] } theo đúng thứ tự — field
+// theo từng kind xem updateReportCompilation() ở lib/recordActions.js.
 router.post('/reportPeriods/:id/compilation', async (req, res) => {
   const itemId = Number(req.params.id);
   if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
