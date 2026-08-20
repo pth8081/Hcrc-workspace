@@ -4282,7 +4282,7 @@ function getSubmissionDeptWorkflowConfig(type, dept) {
 // người trình đã chọn cụ thể cho lớp đó (trong số thành viên admin gán), KHÔNG phải cả nhóm — snapshot
 // ngay lúc tạo nên sau này admin đổi thành viên nhóm không ảnh hưởng tới tờ trình đang xử lý dở. Server
 // (lib/createValidation.js) tự dựng lại y hệt và xác minh lại từ DB, không tin kết quả này của client.
-function buildEffectiveSubmissionWorkflow(type, dept, selectedLayerKeys, selectedLayerMembers) {
+function buildEffectiveSubmissionWorkflow(type, dept, selectedLayerKeys, selectedLayerMembers, approvalLevel) {
   const baseConfig = getSubmissionDeptWorkflowConfig(type, dept);
   const baseWf = DB.workflows.find(w => w.id === baseConfig.workflowId) || { steps: [{ order: 1, name: 'Sếp duyệt' }] };
 
@@ -4290,11 +4290,16 @@ function buildEffectiveSubmissionWorkflow(type, dept, selectedLayerKeys, selecte
   const approvers = {};
   baseWf.steps.forEach(s => { approvers[s.order] = baseConfig.approvers?.[s.order] || []; });
 
+  const rule = getSubmissionApprovalLevelRule(approvalLevel);
   const opinionRequestees = [];
   (selectedLayerKeys || []).forEach(layerKey => {
     const layer = SUBMISSION_APPROVAL_LAYERS.find(l => l.key === layerKey);
     if (!layer) return;
-    const chosen = [...(selectedLayerMembers?.[layerKey] || [])];
+    // Lớp bị khoá bắt buộc theo cấp phê duyệt (vd. TGD, Trợ Lý/Thư Ký ở cấp TGD): không có card chọn
+    // người (xem renderSubmissionApprovalLayerCheckboxes()) — luôn dùng TOÀN BỘ nhóm admin gán.
+    const chosen = rule.locked.includes(layerKey)
+      ? [...(DB.submissionApprovalGroups[layerKey] || [])]
+      : [...(selectedLayerMembers?.[layerKey] || [])];
     if (layer.blocking) {
       const stepOrder = steps.length + 1;
       // layerKey: ghi lại lớp gốc sinh ra bước này — dùng để biết bước này có nằm SAU "Xin ý kiến"
@@ -4316,7 +4321,7 @@ function buildEffectiveSubmissionWorkflow(type, dept, selectedLayerKeys, selecte
 // hộp thoại xác nhận trước khi Trình (xem submitSubmissionReq()). CHỈ MANG TÍNH THAM KHẢO cho người
 // trình tự kiểm tra lại — quy trình THẬT SỰ vẫn do server tự dựng lại và xác minh khi trình (khớp
 // buildEffectiveSubmissionWorkflowServer() trong lib/createValidation.js).
-function buildSubmissionWorkflowPreviewHTML(type, dept, selectedLayerKeys, selectedLayerMembers) {
+function buildSubmissionWorkflowPreviewHTML(type, dept, selectedLayerKeys, selectedLayerMembers, approvalLevel) {
   if (!type || !dept) {
     return '<div class="text-amber-600 italic">Vui lòng chọn Phòng Ban Trình và Loại Tờ Trình để xem quy trình.</div>';
   }
@@ -4324,7 +4329,7 @@ function buildSubmissionWorkflowPreviewHTML(type, dept, selectedLayerKeys, selec
     const u = DB.users.find(x => x.username === username);
     return escapeHtml(u ? u.name : username);
   };
-  const wf = buildEffectiveSubmissionWorkflow(type, dept, selectedLayerKeys, selectedLayerMembers);
+  const wf = buildEffectiveSubmissionWorkflow(type, dept, selectedLayerKeys, selectedLayerMembers, approvalLevel);
   const stepsHTML = wf.steps.map(s => {
     const names = (wf.approvers[s.order] || []).map(userLabel).join(', ') ||
       '<span class="text-amber-600 italic">(chưa có người duyệt — kiểm tra lại cấu hình quy trình phòng ban)</span>';
@@ -4359,12 +4364,13 @@ function previewSubmissionWorkflow() {
   const dept = document.getElementById('subDept').value;
   const type = document.getElementById('subType').value;
   if (!dept || !type) return alert('Vui lòng chọn Phòng Ban Trình và Loại Tờ Trình trước khi xem quy trình!');
+  const approvalLevel = document.getElementById('subApprovalLevel')?.value;
   const { selectedLayerKeys, selectedLayerMembers } = readSelectedSubmissionLayers();
 
   document.getElementById('viewModalTitle').innerText = '🔍 Xem Trước Quy Trình Phê Duyệt';
   document.getElementById('viewModalSub').innerText = `Phòng ban: ${dept} | Loại tờ trình: ${type}`;
   document.getElementById('viewModalFooterInfo').innerText = 'Chỉ mang tính tham khảo — quy trình thật sự do server xác minh lại khi bạn bấm Trình.';
-  document.getElementById('viewModalContent').innerHTML = buildSubmissionWorkflowPreviewHTML(type, dept, selectedLayerKeys, selectedLayerMembers);
+  document.getElementById('viewModalContent').innerHTML = buildSubmissionWorkflowPreviewHTML(type, dept, selectedLayerKeys, selectedLayerMembers, approvalLevel);
   document.getElementById('viewDocModal').classList.remove('hidden');
 }
 
@@ -7534,16 +7540,20 @@ function submitSubmissionReq(e) {
   e.preventDefault();
   const dept = document.getElementById('subDept').value;
   const type = document.getElementById('subType').value;
+  const approvalLevel = document.getElementById('subApprovalLevel').value;
+  const rule = getSubmissionApprovalLevelRule(approvalLevel);
   const { selectedLayerKeys, selectedLayerMembers } = readSelectedSubmissionLayers();
 
   for (const layerKey of selectedLayerKeys) {
+    // Lớp bị khoá bắt buộc không có card chọn người (dùng cả nhóm) — chỉ kiểm tra các lớp tuỳ chọn.
+    if (rule.locked.includes(layerKey)) continue;
     if ((selectedLayerMembers[layerKey] || []).length === 0) {
       const layer = SUBMISSION_APPROVAL_LAYERS.find(l => l.key === layerKey);
       return alert(`⛔ Đã tick lớp "${layer?.label}" nhưng chưa chọn người nào duyệt — vui lòng chọn ít nhất 1 người!`);
     }
   }
 
-  const previewHTML = buildSubmissionWorkflowPreviewHTML(type, dept, selectedLayerKeys, selectedLayerMembers);
+  const previewHTML = buildSubmissionWorkflowPreviewHTML(type, dept, selectedLayerKeys, selectedLayerMembers, approvalLevel);
   showConfirmModal({
     title: '📜 Xác Nhận Trình Văn Bản / Tờ Trình',
     bodyHTML: `<p class="mb-2">Tờ trình sẽ đi theo đúng luồng phê duyệt sau:</p>${previewHTML}<p class="mt-3 font-semibold">Bạn có chắc chắn muốn trình văn bản này?</p>`,
@@ -7595,7 +7605,7 @@ async function doSubmitSubmissionReq(e) {
     }
   }
 
-  const effectiveWf = buildEffectiveSubmissionWorkflow(type, dept, selectedLayerKeys, selectedLayerMembers);
+  const effectiveWf = buildEffectiveSubmissionWorkflow(type, dept, selectedLayerKeys, selectedLayerMembers, approvalLevel);
 
   const subPayload = {
     code: code,
@@ -7700,11 +7710,9 @@ function renderSubmissionApprovalLayerCheckboxes() {
   const container = document.getElementById('subApprovalLayersContainer');
   if (section) section.classList.add('hidden');
   if (container) container.innerHTML = '';
-  // Lớp bị khoá bắt buộc: tự động hiện card chọn người ngay (checkbox disabled nên onchange không tự
-  // bắn được từ thao tác click của người dùng) — dùng lại đúng logic dựng card của onSubApprovalLayerToggle().
-  rule.locked.forEach(layerKey => {
-    if (visibleLayers.some(l => l.key === layerKey)) onSubApprovalLayerToggle(layerKey);
-  });
+  // Lớp bị khoá bắt buộc (vd. TGD, Trợ Lý/Thư Ký ở cấp TGD) là kết quả CHẮC CHẮN của cấp phê duyệt đã
+  // chọn, không phải lựa chọn của người trình — nên KHÔNG hiện card chọn người, luôn dùng cả nhóm được
+  // admin gán (xem buildEffectiveSubmissionWorkflow()). Chỉ các lớp tuỳ chọn (không locked) mới có card.
   updateSubApprovalDropdownLabel();
 }
 
@@ -11621,6 +11629,7 @@ function applyTplRowSystemUser(idx, user) {
   if (!a) return;
   a.username = user.username;
   a.name = user.name;
+  a.title = a.title || user.jobTitle || '';
   a.dept = a.dept || user.dept || '';
   a.phone = a.phone || user.phone || '';
   a.email = a.email || user.email || '';
@@ -11746,6 +11755,7 @@ function applyAttendeeSystemUser(idx, user) {
   if (!a) return;
   a.username = user.username;
   a.name = user.name;
+  a.title = a.title || user.jobTitle || '';
   a.dept = a.dept || user.dept || '';
   a.phone = a.phone || user.phone || '';
   a.email = a.email || user.email || '';

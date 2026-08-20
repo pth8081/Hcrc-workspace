@@ -139,13 +139,24 @@ function buildEffectiveSubmissionWorkflowServer(type, dept, selectedLayerKeys, s
     if (!layer) throw new CreateError(400, `Lớp không hợp lệ: ${layerKey}`);
 
     const groupMembers = groups[layerKey] || [];
-    const chosen = Array.isArray(selectedLayerMembers?.[layerKey]) ? [...new Set(selectedLayerMembers[layerKey])] : [];
-    if (chosen.length === 0) {
-      throw new CreateError(400, `Chưa chọn người cho lớp "${layer.label}"`);
-    }
-    const invalid = chosen.filter(u => !groupMembers.includes(u));
-    if (invalid.length) {
-      throw new CreateError(403, `Người được chọn cho lớp "${layer.label}" không thuộc nhóm được admin gán: ${invalid.join(', ')}`);
+    const isLocked = rule.locked.includes(layerKey);
+    let chosen;
+    if (isLocked) {
+      // Lớp bắt buộc theo cấp phê duyệt (vd. TGD, Trợ Lý/Thư Ký ở cấp TGD): không phải lựa chọn của
+      // người trình, luôn dùng TOÀN BỘ nhóm được admin gán, không cho chọn subset.
+      if (groupMembers.length === 0) {
+        throw new CreateError(400, `Chưa gán thành viên nào cho lớp bắt buộc "${layer.label}"`);
+      }
+      chosen = [...groupMembers];
+    } else {
+      chosen = Array.isArray(selectedLayerMembers?.[layerKey]) ? [...new Set(selectedLayerMembers[layerKey])] : [];
+      if (chosen.length === 0) {
+        throw new CreateError(400, `Chưa chọn người cho lớp "${layer.label}"`);
+      }
+      const invalid = chosen.filter(u => !groupMembers.includes(u));
+      if (invalid.length) {
+        throw new CreateError(403, `Người được chọn cho lớp "${layer.label}" không thuộc nhóm được admin gán: ${invalid.join(', ')}`);
+      }
     }
 
     if (layer.blocking) {
