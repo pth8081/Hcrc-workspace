@@ -462,6 +462,10 @@ const CREATE_MODULE_CONFIGS = {
         throw new CreateError(400, 'Vui lòng chọn ít nhất 1 phòng ban áp dụng, hoặc chọn "Tất cả phòng ban"');
       }
       payload.deptScope = { all: !!deptScope.all, depts: deptScope.all ? [] : cleanedDepts };
+      // Mẫu trình chiếu/PDF áp dụng cho CẢ kỳ (không đổi được sau khi tạo, tránh 1 kỳ đã phát hành đổi
+      // giao diện giữa chừng) — client không gửi/gửi giá trị lạ đều rơi về 'DEFAULT' (giao diện nền tối
+      // đang dùng từ trước), đúng ý "không áp dụng thì giữ mẫu cũ".
+      payload.slideTemplate = payload.slideTemplate === 'ORANGE_GOLD' ? 'ORANGE_GOLD' : 'DEFAULT';
       payload.status = 'OPEN';
       payload.closedAt = null;
       payload.closedBy = null;

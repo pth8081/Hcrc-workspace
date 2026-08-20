@@ -105,6 +105,13 @@ app.use('/uploads', requireAuth, blockIfMustChangePassword, express.static(path.
 // phiên bản đã cài qua npm, không cần bước copy thủ công.
 app.use('/vendor/pdfjs', express.static(path.join(__dirname, 'node_modules', 'pdfjs-dist', 'legacy', 'build')));
 
+// Phục vụ jsPDF + html2canvas (tự lưu trên server, không qua CDN — cùng lý do với pdfjs ở trên) — dùng
+// để XUẤT PDF thật ở Báo Cáo Định Kỳ (chụp từng slide đã render sẵn bằng HTML/CSS thành ảnh rồi ghép
+// vào 1 file PDF nhiều trang), thay cho cách cũ dùng window.print() qua iframe ẩn (mở hộp thoại in của
+// trình duyệt, không phải tải file thật — xem downloadPrPdf() ở index.html).
+app.use('/vendor/jspdf', express.static(path.join(__dirname, 'node_modules', 'jspdf', 'dist')));
+app.use('/vendor/html2canvas', express.static(path.join(__dirname, 'node_modules', 'html2canvas', 'dist')));
+
 // Health check (dùng cho giám sát / load balancer / kiểm tra nhanh sau khi deploy). "version" luôn
 // trả về ngay cả khi DB lỗi — dùng để xác nhận server đang chạy ĐÚNG bản code vừa deploy (so khớp với
 // package.json trên máy), độc lập với tình trạng kết nối SQL Server.
