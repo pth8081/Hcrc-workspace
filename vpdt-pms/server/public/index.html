@@ -5990,11 +5990,42 @@ function finishLogin(user) {
 
   populateDropdowns();
   switchTab('dashboard');
+  startSessionKeepAlive();
+}
+
+// Giữ phiên đăng nhập không bị hết hạn khi người dùng vẫn đang mở trang nhưng KHÔNG gọi API nào (vd.
+// đang soạn 1 văn bản dài, đọc lâu 1 hồ sơ) — trước đây cơ chế "trượt hạn theo hoạt động" ở
+// requireAuth() (lib/auth.js) chỉ cấp lại token mới khi có SẴN 1 request nào đó tới server, mà toàn bộ
+// trang không hề có request định kỳ nào cả (không setInterval nào gọi API) nên nếu người dùng im lặng
+// quá ~44 phút, token chạm mốc hết hạn tuyệt đối (1h) và request tiếp theo (vd bấm "Lưu") bị 401, văng
+// ra ngay giữa chừng, có thể mất nội dung đang nhập dở — đúng triệu chứng "hay bị văng khi đang làm
+// việc". Ping nhẹ (chỉ đọc lại /api/auth/me, không tải dữ liệu gì nặng) mỗi 10 phút là đủ dày để token
+// luôn được làm mới trước khi chạm ngưỡng, miễn tab còn mở và còn mạng.
+let sessionKeepAliveTimer = null;
+const SESSION_KEEPALIVE_INTERVAL_MS = 10 * 60 * 1000;
+function startSessionKeepAlive() {
+  stopSessionKeepAlive();
+  sessionKeepAliveTimer = setInterval(async () => {
+    try {
+      const res = await fetch('/api/auth/me');
+      if (res.status === 401) {
+        stopSessionKeepAlive();
+        handleSessionExpired();
+      }
+    } catch (e) { /* mất mạng tạm thời — bỏ qua, thử lại ở lượt ping kế tiếp */ }
+  }, SESSION_KEEPALIVE_INTERVAL_MS);
+}
+function stopSessionKeepAlive() {
+  if (sessionKeepAliveTimer) {
+    clearInterval(sessionKeepAliveTimer);
+    sessionKeepAliveTimer = null;
+  }
 }
 
 // Đăng xuất phía server (xoá cookie phiên) — chạy song song (fire-and-forget), không chặn việc dọn
 // UI ngay lập tức, vì nhiều nơi gọi logout() đồng bộ (vd. switchTab() khi currentUser rỗng).
 function logout() {
+  stopSessionKeepAlive();
   fetch('/api/auth/logout', { method: 'POST' }).catch(() => {});
   currentUser = null;
   dataReady = false;
