@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Văn Phòng Điện Tử</title>
+<title>HCRC Workspace</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700;800&display=swap" rel="stylesheet">
@@ -174,7 +174,14 @@ table { display: block; overflow-x: auto; max-width: 100%; }
      logout() toggle "hidden" y hệt cách đang làm với #userHeader, nên vòng đời ẩn/hiện luôn khớp nhau. -->
 <div id="mobileTopBar" class="hidden md:hidden fixed top-0 inset-x-0 z-30 bg-slate-900 text-white flex items-center justify-between px-3 py-2.5 shadow">
   <button type="button" onclick="toggleMobileSidebar()" class="text-2xl leading-none px-1" aria-label="Mở menu điều hướng">☰</button>
-  <span class="font-bold text-sm">🏢 Văn Phòng Điện Tử</span>
+  <span class="font-bold text-sm flex items-center gap-1.5">
+    <svg viewBox="0 0 100 100" fill="none" style="width:1.1rem;height:1.1rem;flex-shrink:0;" aria-hidden="true">
+      <rect x="27" y="47" width="46" height="15" rx="7.5" fill="#38bdf8"/>
+      <rect x="27" y="17" width="17" height="66" rx="8.5" fill="#1d4ed8"/>
+      <rect x="56" y="29" width="17" height="54" rx="8.5" fill="#2563eb"/>
+    </svg>
+    HCRC Workspace
+  </span>
   <span class="w-8"></span>
 </div>
 <!-- Lớp nền mờ phía sau sidebar khi mở trên điện thoại — bấm vào để đóng lại, giống hành vi drawer
@@ -192,8 +199,15 @@ table { display: block; overflow-x: auto; max-width: 100%; }
        độc lập — không lồng module này vào module kia (giữ nguyên quyết định thiết kế trước đó). -->
   <aside id="userHeader" class="hidden w-64 shrink-0 bg-slate-900 overflow-y-auto">
     <div class="p-4 border-b border-slate-700 flex items-center gap-2">
-      <span class="text-xl">🏢</span>
-      <span class="font-bold text-white text-sm sidebar-label">Văn Phòng Điện Tử</span>
+      <svg viewBox="0 0 100 100" fill="none" style="width:1.5rem;height:1.5rem;flex-shrink:0;" aria-hidden="true">
+        <rect x="27" y="47" width="46" height="15" rx="7.5" fill="#38bdf8"/>
+        <rect x="27" y="17" width="17" height="66" rx="8.5" fill="#1d4ed8"/>
+        <rect x="56" y="29" width="17" height="54" rx="8.5" fill="#2563eb"/>
+      </svg>
+      <span class="sidebar-label leading-tight">
+        <span class="font-bold text-white text-sm block">HCRC</span>
+        <span class="block text-[9px] font-semibold text-slate-400 tracking-[0.2em]">WORKSPACE</span>
+      </span>
     </div>
 
     <nav class="flex-1 p-2 space-y-1">
@@ -315,7 +329,14 @@ table { display: block; overflow-x: auto; max-width: 100%; }
 
   <!-- Màn hình 1: Đăng nhập -->
   <div id="loginSection" class="max-w-md mx-auto my-10 p-6 border rounded-lg bg-gray-50 space-y-4 shadow-sm">
-    <h2 class="text-xl font-bold text-center text-gray-800">Đăng Nhập Văn Phòng Điện Tử</h2>
+    <div class="flex flex-col items-center gap-3">
+      <svg viewBox="0 0 100 100" fill="none" style="width:2.75rem;height:2.75rem;" aria-hidden="true">
+        <rect x="27" y="47" width="46" height="15" rx="7.5" fill="#38bdf8"/>
+        <rect x="27" y="17" width="17" height="66" rx="8.5" fill="#1d4ed8"/>
+        <rect x="56" y="29" width="17" height="54" rx="8.5" fill="#2563eb"/>
+      </svg>
+      <h2 class="text-xl font-bold text-center text-gray-800">Đăng Nhập HCRC Workspace</h2>
+    </div>
 
     <div>
       <label class="block text-xs font-semibold text-gray-600 mb-1">Tên đăng nhập</label>
@@ -1898,8 +1919,8 @@ table { display: block; overflow-x: auto; max-width: 100%; }
          Hợp đồng/Mua Bán/Sửa Chữa/Đầu Tư lẫn đề nghị tạo thủ công. -->
     <div id="paymentSection" class="hidden space-y-6">
       <div class="flex gap-2">
-        <button onclick="setPaymentSubTab('CREATE')" id="btnPaymentSubCreate" class="px-3 py-1 rounded text-xs font-bold bg-gray-200 text-gray-700">➕ Tạo Đề Nghị Thủ Công</button>
-        <button onclick="setPaymentSubTab('APPROVE')" id="btnPaymentSubApprove" class="px-3 py-1 rounded text-xs font-bold bg-amber-700 text-white">✅ Duyệt Đề Nghị Thanh Toán</button>
+        <button onclick="setPaymentSubTab('CREATE')" id="btnPaymentSubCreate" class="px-3 py-1 rounded text-xs font-bold bg-gray-200 text-gray-700">➕ Tạo Mới</button>
+        <button onclick="setPaymentSubTab('APPROVE')" id="btnPaymentSubApprove" class="px-3 py-1 rounded text-xs font-bold bg-amber-700 text-white">✅ Xác Nhận Đề Nghị Thanh Toán</button>
       </div>
 
       <div id="paymentCreateWrap" class="hidden bg-amber-50 p-4 rounded border border-amber-200 space-y-3">
@@ -5771,6 +5792,20 @@ function getMyPendingApprovals(user) {
     });
   }
 
+  // Duyệt "Tài liệu ký" của sub module Quản Lý HĐ — dùng lại đúng quyền canManageContractPaymentClient
+  // (theo phòng ban) thay vì quyền phê duyệt hợp đồng gốc phía trên (2 bước khác nhau, xem
+  // uploadContractSignedFile()/approveContractSignedFile() ở lib/recordActions.js).
+  (DB.contracts || []).filter(c => !c.isAddendum && c.signedFileStatus === 'PENDING' && canManageContractPaymentClient(user, c)).forEach(c => {
+    items.push({
+      type: 'contractSigned', typeLabel: '📝 Tài liệu ký HĐ', code: c.code, title: c.title, dept: c.dept,
+      stepLabel: '', createdAt: c.signedUploadedAt || c.createdAt,
+      actions: [
+        { label: '✅ Duyệt', onclick: `approveContractSignedFileAction(${c.id})`, primary: true },
+        { label: '❌ Từ chối', onclick: `rejectContractSignedFileAction(${c.id})` }
+      ]
+    });
+  });
+
   if (canApproveMeeting(user)) {
     (DB.meetings || []).filter(m => m.status === 'PENDING').forEach(m => {
       items.push({
@@ -5799,7 +5834,7 @@ function getMyPendingApprovals(user) {
       items.push({
         type: 'payment', typeLabel: '💰 Thanh toán', code: pr.sourceCode || String(pr.id), title: pr.title,
         dept: pr.dept, stepLabel: '', createdAt: pr.createdAt,
-        actions: [{ label: '✅ Duyệt', onclick: `approvePaymentRequestAction(${pr.id})`, primary: true }]
+        actions: [{ label: '✅ Xác nhận', onclick: `approvePaymentRequestAction(${pr.id})`, primary: true }]
       });
     });
   }
@@ -7114,6 +7149,11 @@ function getFileKind(fileType, fileName) {
   return 'other';
 }
 
+// Tên pháp nhân đầy đủ hiển thị ở dòng 2 của watermark chống lộ tài liệu (áp dụng cho MỌI tệp đính kèm
+// xem qua Protected View — Tài liệu, Hợp đồng, Văn bản trình, Xe, Văn phòng, Biên bản...), tách riêng
+// dòng "PROTECTED VIEW - tên người xem" động theo từng người ở trên.
+const PROTECTED_VIEW_WATERMARK_COMPANY = 'CÔNG TY TNHH XUẤT NHẬP KHẨU & BÁN LẺ HÀNG TIÊU DÙNG HÀ NỘI';
+
 // Dựng HTML khung xem Protected View cho 1 tệp — dùng cho ảnh / định dạng văn phòng / khác. PDF
 // KHÔNG còn đi qua hàm này (xem openFileProtectedView + renderPdfProtected ở script type="module"
 // cuối trang) — PDF được vẽ ra <canvas> bằng PDF.js thay vì plugin PDF gốc của trình duyệt, vì plugin
@@ -7132,7 +7172,10 @@ function buildProtectedViewerHTML(fileSrc, fileType, fileName, altLabel) {
       <div class="relative flex flex-col items-center justify-center p-4 w-full protected-view-container" oncontextmenu="return false;">
         <img src="${fileSrc}" alt="${escapeHtml(altLabel || '')}" class="max-h-[65vh] max-w-full rounded border shadow-md object-contain pointer-events-none select-none" oncontextmenu="return false;" />
         <div class="absolute inset-0 flex items-center justify-center pointer-events-none select-none overflow-hidden">
-          <span class="text-2xl font-bold whitespace-nowrap" style="transform: rotate(-30deg); color: rgba(120,120,120,0.35);">PROTECTED VIEW - ${escapeHtml(currentUser.name)}</span>
+          <div class="text-center" style="transform: rotate(-30deg);">
+            <div class="text-2xl font-bold whitespace-nowrap" style="color: rgba(120,120,120,0.35);">PROTECTED VIEW - ${escapeHtml(currentUser.name)}</div>
+            <div class="text-sm font-semibold whitespace-nowrap" style="color: rgba(120,120,120,0.35);">${escapeHtml(PROTECTED_VIEW_WATERMARK_COMPANY)}</div>
+          </div>
         </div>
       </div>
     `;
@@ -7168,7 +7211,7 @@ function openFileProtectedView({ title, sub, footerInfo, fileSrc, fileType, file
     const pdfContainer = container.firstElementChild;
     document.getElementById('viewDocModal').classList.remove('hidden');
     if (window.renderPdfProtected) {
-      window.renderPdfProtected(pdfContainer, fileSrc, `PROTECTED VIEW - ${currentUser.name}`);
+      window.renderPdfProtected(pdfContainer, fileSrc, `PROTECTED VIEW - ${currentUser.name}\n${PROTECTED_VIEW_WATERMARK_COMPANY}`);
     } else {
       pdfContainer.innerHTML = '<div class="p-6 text-center text-gray-500 text-sm">⏳ Đang tải bộ xem PDF...</div>';
     }
@@ -7197,8 +7240,11 @@ function viewDoc(docId) {
     fileSrc, fileType: doc.fileType, fileName: doc.fileName,
     noFileFallbackHTML: `
       <div class="w-full h-[60vh] bg-white p-6 rounded shadow border overflow-y-auto relative protected-view-container" oncontextmenu="return false;">
-        <div class="absolute inset-0 flex items-center justify-center pointer-events-none opacity-10 font-bold text-4xl text-gray-500 transform -rotate-45 select-none">
-          PROTECTED VIEW - ${escapeHtml(currentUser.name)}
+        <div class="absolute inset-0 flex items-center justify-center pointer-events-none opacity-10 text-gray-500 transform -rotate-45 select-none text-center">
+          <div>
+            <div class="font-bold text-4xl whitespace-nowrap">PROTECTED VIEW - ${escapeHtml(currentUser.name)}</div>
+            <div class="font-bold text-xl whitespace-nowrap">${escapeHtml(PROTECTED_VIEW_WATERMARK_COMPANY)}</div>
+          </div>
         </div>
         <h4 class="font-bold text-lg text-gray-800 border-b pb-2 mb-4">${escapeHtml(doc.title)} (${escapeHtml(doc.code)})</h4>
         <div class="text-sm text-gray-700 space-y-3">
@@ -9403,7 +9449,7 @@ function buildTaskSlipHTML(t) {
         .task-doc .td-footer-note { margin-top: 16px; font-size: 11px; color: #444; border-top: 1px solid #ccc; padding-top: 6px; }
         @media print { .task-doc { padding: 0; } }
       </style>
-      <div class="td-watermark">VĂN PHÒNG ĐIỆN TỬ</div>
+      <div class="td-watermark">HCRC WORKSPACE</div>
       <div class="td-content">
         <div class="td-header">
           <div class="td-code">${t.sourceCode ? `Nguồn: ${escapeHtml(t.sourceCode)}` : ''}</div>
@@ -9953,10 +9999,15 @@ function buildContractRowHTML(c, { addendumCount = 0, isExpanded = false, isChil
     ? `<td class="border p-2 font-mono text-cyan-700 pl-6">↳ ${escapeHtml(c.code)}<br><span class="text-xs text-gray-500 font-normal">Phụ lục</span></td>`
     : `<td class="border p-2 font-mono font-bold text-cyan-800">${expandToggleHTML}${escapeHtml(c.code)}<br><span class="text-xs text-gray-500 font-normal">${escapeHtml(c.type)}</span></td>`;
 
+  const SIGNED_FILE_STATUS_NOTE = {
+    PENDING: '<div class="text-[10px] text-amber-700 mt-0.5">📎 Tài liệu ký: ⏳ Chờ duyệt</div>',
+    APPROVED: '<div class="text-[10px] text-green-700 mt-0.5">📎 Tài liệu ký: ✅ Đã duyệt</div>',
+    REJECTED: '<div class="text-[10px] text-red-700 mt-0.5">📎 Tài liệu ký: ❌ Bị từ chối</div>'
+  };
   let paymentCell = '';
   if (activeContractSubTab === 'MANAGE') {
     paymentCell = !isChild
-      ? `<td class="border p-2"><span class="px-2 py-0.5 rounded font-bold text-xs ${CONTRACT_PAYMENT_BADGE_CLS[c.paymentStatus] || ''}">${CONTRACT_PAYMENT_LABELS[c.paymentStatus] || '-'}</span>${c.signedFileUrl ? '<div class="text-[10px] text-gray-500 mt-0.5">📎 Đã có tài liệu ký</div>' : ''}</td>`
+      ? `<td class="border p-2"><span class="px-2 py-0.5 rounded font-bold text-xs ${CONTRACT_PAYMENT_BADGE_CLS[c.paymentStatus] || ''}">${CONTRACT_PAYMENT_LABELS[c.paymentStatus] || '-'}</span>${SIGNED_FILE_STATUS_NOTE[c.signedFileStatus] || ''}</td>`
       : `<td class="border p-2 text-gray-300 text-center">—</td>`;
   }
 
@@ -9975,10 +10026,14 @@ function buildContractRowHTML(c, { addendumCount = 0, isExpanded = false, isChil
   if (!isChild && c.signedFileUrl && canDownloadFile(currentUser, 'contract', c.dept, c.creator)) {
     secondaryOptions.push({ value: 'viewSigned', label: '👁️ Xem Tài Liệu Ký' });
   }
-  if (!isChild && activeContractSubTab === 'MANAGE' && !c.signedFileUrl && canManageContractPaymentClient(currentUser, c)) {
-    secondaryOptions.push({ value: 'uploadSigned', label: '📤 Tải Tài Liệu Ký' });
+  if (!isChild && activeContractSubTab === 'MANAGE' && (!c.signedFileUrl || c.signedFileStatus === 'REJECTED') && canManageContractPaymentClient(currentUser, c)) {
+    secondaryOptions.push({ value: 'uploadSigned', label: c.signedFileStatus === 'REJECTED' ? '📤 Tải Lại Tài Liệu Ký' : '📤 Tải Tài Liệu Ký' });
   }
-  if (!isChild && activeContractSubTab === 'MANAGE' && c.signedFileUrl && c.paymentStatus === 'CHUA_THANH_TOAN' && canManageContractPaymentClient(currentUser, c)) {
+  if (!isChild && activeContractSubTab === 'MANAGE' && c.signedFileStatus === 'PENDING' && canManageContractPaymentClient(currentUser, c)) {
+    secondaryOptions.push({ value: 'approveSigned', label: '✅ Duyệt Tài Liệu Ký' });
+    secondaryOptions.push({ value: 'rejectSigned', label: '❌ Từ Chối Tài Liệu Ký' });
+  }
+  if (!isChild && activeContractSubTab === 'MANAGE' && c.signedFileStatus === 'APPROVED' && c.paymentStatus === 'CHUA_THANH_TOAN' && canManageContractPaymentClient(currentUser, c)) {
     secondaryOptions.push({ value: 'startPayment', label: '💰 Chuyển Sang Thanh Toán' });
   }
   if (currentUser.perms?.admin) secondaryOptions.push({ value: 'delete', label: '🗑️ Xóa' });
@@ -10027,6 +10082,14 @@ function runContractAction(id, action) {
     }
     case 'uploadSigned': openSignedUploadModal('contracts', id); break;
     case 'viewSigned': viewContractSignedFile(id); break;
+    // Duyệt/Từ chối Tài liệu ký cũng xử lý ở Hub "✅ Phê Duyệt" (khớp cùng khuôn approve/reject hợp
+    // đồng gốc phía trên — xem getMyPendingApprovals()/goToApprovalHub()).
+    case 'approveSigned':
+    case 'rejectSigned': {
+      const c = DB.contracts.find(x => x.id === id);
+      if (c) goToApprovalHub(c.code);
+      break;
+    }
     case 'startPayment': startContractPaymentAction(id); break;
     case 'download': {
       const c = DB.contracts.find(x => x.id === id);
@@ -10110,6 +10173,58 @@ function rejectContractAction(id) {
   });
 }
 
+// Duyệt/Từ chối "Tài liệu ký" — bước duyệt riêng của sub module Quản Lý HĐ, dùng lại đúng quyền của
+// người quản lý hợp đồng (canManageContractPaymentClient, khớp approveContractSignedFile() ở
+// lib/recordActions.js). Chỉ khi APPROVED mới mở được nút "💰 Chuyển Sang Thanh Toán".
+function approveContractSignedFileAction(id) {
+  const c = DB.contracts.find(x => x.id === id);
+  if (!c) return;
+  showConfirmModal({
+    title: 'Duyệt tài liệu ký',
+    bodyHTML: `Bạn có chắc chắn muốn duyệt tài liệu ký của hợp đồng "<b>${escapeHtml(c.title)}</b>" (${escapeHtml(c.code)})?`,
+    confirmLabel: 'Duyệt',
+    onConfirm: async () => {
+      let updated;
+      try {
+        const result = await callRecordAction('contracts', id, 'approve-signed', {});
+        updated = result.item;
+      } catch (err) {
+        return alert(`⛔ ${err.message}`);
+      }
+      const idx = DB.contracts.findIndex(x => x.id === id);
+      if (idx !== -1) DB.contracts[idx] = updated;
+      logSystemAction('CONTRACT', 'APPROVE_CONTRACT_SIGNED_FILE', `Duyệt tài liệu ký hợp đồng [${updated.code} - ${updated.title}]`, 'SUCCESS', updated.code);
+      renderContracts();
+    }
+  });
+}
+
+function rejectContractSignedFileAction(id) {
+  const c = DB.contracts.find(x => x.id === id);
+  if (!c) return;
+  const reason = prompt('Nhập lý do từ chối tài liệu ký:');
+  if (reason === null) return;
+  if (!reason.trim()) return alert('⛔ Vui lòng nhập lý do từ chối!');
+  showConfirmModal({
+    title: 'Từ chối tài liệu ký',
+    bodyHTML: `Bạn có chắc chắn muốn từ chối tài liệu ký của hợp đồng "<b>${escapeHtml(c.title)}</b>"?<br><span class="text-xs text-gray-500">Lý do: ${escapeHtml(reason.trim())}</span>`,
+    confirmLabel: 'Từ Chối',
+    onConfirm: async () => {
+      let updated;
+      try {
+        const result = await callRecordAction('contracts', id, 'reject-signed', { reason: reason.trim() });
+        updated = result.item;
+      } catch (err) {
+        return alert(`⛔ ${err.message}`);
+      }
+      const idx = DB.contracts.findIndex(x => x.id === id);
+      if (idx !== -1) DB.contracts[idx] = updated;
+      logSystemAction('CONTRACT', 'REJECT_CONTRACT_SIGNED_FILE', `Từ chối tài liệu ký hợp đồng [${updated.code} - ${updated.title}] - Lý do: ${reason.trim()}`, 'WARNING', updated.code);
+      renderContracts();
+    }
+  });
+}
+
 // Tải lên "Tài liệu ký" (bản cứng đã ký) — nút Thanh Toán chỉ hiện SAU khi có tệp này (đúng req #5).
 // Modal tải "Tài liệu ký" DÙNG CHUNG cho Hợp đồng (contracts) và Mua Bán/Sửa Chữa/Đầu Tư (officeReqs)
 // — chỉ khác collection/route đích, cùng 1 hành vi (xem uploadContractSignedFile()/
@@ -10156,8 +10271,13 @@ async function submitSignedUpload() {
   const logModule = module === 'contracts' ? 'CONTRACT' : 'OFFICE';
   logSystemAction(logModule, 'UPLOAD_SIGNED_FILE', `Tải lên tài liệu ký cho [${updated.code}]`, 'SUCCESS', updated.code);
   closeSignedUploadModal();
-  if (module === 'contracts') renderContracts(); else renderOfficeReqs();
-  alert('✅ Đã tải lên tài liệu ký. Vui lòng bấm nút "💰 Chuyển Sang Thanh Toán" để tiếp tục.');
+  if (module === 'contracts') {
+    renderContracts();
+    alert('✅ Đã tải lên tài liệu ký. Tài liệu cần được duyệt (Hộp thư "✅ Phê Duyệt") trước khi chuyển sang thanh toán.');
+  } else {
+    renderOfficeReqs();
+    alert('✅ Đã tải lên tài liệu ký. Vui lòng bấm nút "💰 Chuyển Sang Thanh Toán" để tiếp tục.');
+  }
 }
 
 function startContractPaymentAction(id) {
@@ -10351,7 +10471,7 @@ function renderPaymentRequests() {
         <td class="border p-2"><span class="px-2 py-0.5 rounded font-bold text-xs ${PAYMENT_STATUS_BADGE_CLS[pr.status] || ''}">${PAYMENT_STATUS_LABELS[pr.status] || pr.status}</span></td>
         <td class="border p-2 text-center space-y-1">
           ${canManage && (pr.status === 'PENDING' || pr.status === 'NEED_INFO') ? `<button onclick="openEditPaymentRequest(${pr.id})" class="block w-full bg-gray-500 text-white px-2 py-1 rounded text-xs font-bold hover:bg-gray-600">✏️ Sửa</button>` : ''}
-          ${canManage && (pr.status === 'PENDING' || pr.status === 'NEED_INFO') ? `<button onclick="goToApprovalHub('${escapeHtml(pr.sourceCode || String(pr.id))}')" class="block w-full bg-emerald-600 text-white px-2 py-1 rounded text-xs font-bold hover:bg-emerald-700">✅ Duyệt</button>` : ''}
+          ${canManage && (pr.status === 'PENDING' || pr.status === 'NEED_INFO') ? `<button onclick="goToApprovalHub('${escapeHtml(pr.sourceCode || String(pr.id))}')" class="block w-full bg-emerald-600 text-white px-2 py-1 rounded text-xs font-bold hover:bg-emerald-700">✅ Xác nhận</button>` : ''}
           ${canManage && pr.status === 'PENDING' ? `<button onclick="requestPaymentInfoAction(${pr.id})" class="block w-full bg-orange-500 text-white px-2 py-1 rounded text-xs font-bold hover:bg-orange-600">📝 Yêu Cầu Bổ Sung</button>` : ''}
           ${currentUser.perms?.admin && pr.status !== 'PAID' ? `<button onclick="deletePaymentRequestAction(${pr.id})" class="block w-full bg-red-500 text-white px-2 py-1 rounded text-xs font-bold hover:bg-red-600">🗑️ Xoá</button>` : ''}
         </td>
@@ -10364,9 +10484,9 @@ function approvePaymentRequestAction(id) {
   const pr = DB.paymentRequests.find(x => x.id === id);
   if (!pr) return;
   showConfirmModal({
-    title: 'Duyệt đề nghị thanh toán',
-    bodyHTML: `Duyệt đề nghị thanh toán "<b>${escapeHtml(pr.title)}</b>"?`,
-    confirmLabel: 'Duyệt',
+    title: 'Xác nhận đề nghị thanh toán',
+    bodyHTML: `Xác nhận đề nghị thanh toán "<b>${escapeHtml(pr.title)}</b>"?`,
+    confirmLabel: 'Xác Nhận',
     onConfirm: async () => {
       let updated;
       try {
@@ -10375,7 +10495,7 @@ function approvePaymentRequestAction(id) {
       } catch (err) { return alert(`⛔ ${err.message}`); }
       const idx = DB.paymentRequests.findIndex(x => x.id === id);
       if (idx !== -1) DB.paymentRequests[idx] = updated;
-      logSystemAction('OFFICE', 'APPROVE_PAYMENT_REQUEST', `Duyệt đề nghị thanh toán [${updated.title}]`, 'SUCCESS', String(updated.id));
+      logSystemAction('OFFICE', 'APPROVE_PAYMENT_REQUEST', `Xác nhận đề nghị thanh toán [${updated.title}]`, 'SUCCESS', String(updated.id));
       renderPaymentRequests();
     }
   });
@@ -10537,8 +10657,11 @@ function viewContract(contractId) {
     fileSrc, fileType: c.fileType, fileName: c.fileName,
     noFileFallbackHTML: `
       <div class="w-full h-[60vh] bg-white p-6 rounded shadow border overflow-y-auto relative protected-view-container" oncontextmenu="return false;">
-        <div class="absolute inset-0 flex items-center justify-center pointer-events-none opacity-10 font-bold text-4xl text-gray-500 transform -rotate-45 select-none">
-          PROTECTED VIEW - ${escapeHtml(currentUser.name)}
+        <div class="absolute inset-0 flex items-center justify-center pointer-events-none opacity-10 text-gray-500 transform -rotate-45 select-none text-center">
+          <div>
+            <div class="font-bold text-4xl whitespace-nowrap">PROTECTED VIEW - ${escapeHtml(currentUser.name)}</div>
+            <div class="font-bold text-xl whitespace-nowrap">${escapeHtml(PROTECTED_VIEW_WATERMARK_COMPANY)}</div>
+          </div>
         </div>
         <h4 class="font-bold text-lg text-gray-800 border-b pb-2 mb-4">${escapeHtml(c.title)} (${escapeHtml(c.code)})</h4>
         <div class="text-sm text-gray-700 space-y-3">
@@ -11952,7 +12075,7 @@ function buildMeetingMinutesDocumentHTML(m) {
         .minutes-doc .md-footer-note { margin-top: 16px; font-size: 11px; color: #444; border-top: 1px solid #ccc; padding-top: 6px; }
         @media print { .minutes-doc { padding: 0; } }
       </style>
-      <div class="md-watermark">VĂN PHÒNG ĐIỆN TỬ</div>
+      <div class="md-watermark">HCRC WORKSPACE</div>
       <div class="md-content">
         <div class="md-header">
           <div class="md-code">Mã biên bản: ${escapeHtml(m.code)}</div>
@@ -12425,7 +12548,7 @@ function buildApprovalSlipShellHTML(opts) {
         .approval-slip .as-footer-note { margin-top: 16px; font-size: 11px; color: #444; border-top: 1px solid #ccc; padding-top: 6px; }
         @media print { .approval-slip { padding: 0; } }
       </style>
-      <div class="as-watermark">PHÊ DUYỆT TRÊN HỆ THỐNG<br>VĂN PHÒNG ĐIỆN TỬ</div>
+      <div class="as-watermark">PHÊ DUYỆT TRÊN HỆ THỐNG<br>HCRC WORKSPACE</div>
       <div class="as-content">
         <div class="as-header">
           ${formCode ? `<div class="as-form-code">${escapeHtml(formCode)}</div>` : ''}
@@ -17584,10 +17707,15 @@ function rejectInternalPostAction(id) {
         if (watermarkText) {
           const wm = document.createElement('div');
           wm.className = 'absolute inset-0 flex items-center justify-center pointer-events-none select-none overflow-hidden';
-          const span = document.createElement('span');
-          span.style.cssText = 'transform: rotate(-30deg); font-size: 2rem; font-weight: 700; color: rgba(120,120,120,0.18); white-space: nowrap;';
-          span.textContent = watermarkText;
-          wm.appendChild(span);
+          const box = document.createElement('div');
+          box.style.cssText = 'transform: rotate(-30deg); text-align: center;';
+          watermarkText.split('\n').forEach((line, idx) => {
+            const lineEl = document.createElement('div');
+            lineEl.style.cssText = `font-size: ${idx === 0 ? '2rem' : '1rem'}; font-weight: 700; color: rgba(120,120,120,0.18); white-space: nowrap;`;
+            lineEl.textContent = line;
+            box.appendChild(lineEl);
+          });
+          wm.appendChild(box);
           pageWrap.appendChild(wm);
         }
 

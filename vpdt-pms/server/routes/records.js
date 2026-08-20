@@ -63,6 +63,12 @@ router.post('/contracts/:id/reject', (req, res) =>
 router.post('/contracts/:id/upload-signed', (req, res) =>
   withContractAction(req, res, 'upload-signed', recordActions.uploadContractSignedFile));
 
+router.post('/contracts/:id/approve-signed', (req, res) =>
+  withContractAction(req, res, 'approve-signed', (payload, user, item) => recordActions.approveContractSignedFile(user, item)));
+
+router.post('/contracts/:id/reject-signed', (req, res) =>
+  withContractAction(req, res, 'reject-signed', recordActions.rejectContractSignedFile));
+
 // "Chuyển Sang Thanh Toán" KHÔNG dùng withContractAction() thường — mutatorFn trả về BẢN NHÁP đề nghị
 // thanh toán (chưa lưu) thay vì bản ghi hợp đồng, PHẢI insert thêm vào collection paymentRequests
 // ngay sau khi khoá hợp đồng nhả ra (cùng khuôn insertMinutesTasks() ở /minutes/:id/assign-tasks bên

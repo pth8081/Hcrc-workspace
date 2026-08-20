@@ -225,12 +225,16 @@ const CREATE_MODULE_CONFIGS = {
         payload.approvalStatus = 'APPROVED';
         payload.paymentInstallments = [];
         payload.signedFileUrl = payload.fileUrl || null;
+        // Tài liệu đã ký thật ngoài hệ thống, nhập tay để lưu — không cần qua bước duyệt tài liệu ký.
+        payload.signedFileStatus = payload.signedFileUrl ? 'APPROVED' : null;
       } else {
         payload.approvalStatus = (user.perms?.admin || user.perms?.contractApprove) ? 'APPROVED' : 'PENDING';
         payload.paymentInstallments = Array.isArray(payload.paymentInstallments) ? payload.paymentInstallments : [];
       }
       if (!payload.isAddendum) {
-        payload.paymentStatus = 'CHUA_THANH_TOAN';
+        // Hợp đồng nhập lại (đã ký sẵn ngoài hệ thống) coi như đã thanh toán từ trước — chỉ hồ sơ đi
+        // qua đúng luồng Phê Duyệt -> Quản Lý HĐ mới bắt đầu ở trạng thái chưa thanh toán.
+        payload.paymentStatus = isSignedImport ? 'DA_THANH_TOAN' : 'CHUA_THANH_TOAN';
       }
     }
   },
