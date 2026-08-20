@@ -1183,9 +1183,12 @@ table { display: block; overflow-x: auto; max-width: 100%; }
           <div id="prAggEntriesList" class="space-y-1"></div>
         </div>
         <div class="bg-white rounded border p-3">
-          <div class="flex justify-between items-center mb-2">
-            <span class="font-semibold text-xs text-gray-600">Thứ tự đã chọn (▲▼ để sắp lại)</span>
-            <button type="button" onclick="mergeReportPeriodAction()" class="bg-sky-600 text-white px-3 py-1 rounded text-xs font-bold hover:bg-sky-700">🧩 Tổng Hợp (Merge)</button>
+          <div class="flex justify-between items-center mb-2 flex-wrap gap-2">
+            <span class="font-semibold text-xs text-gray-600">Thứ tự đã chọn (▲▼ để sắp lại) — chỉ áp dụng cho "Tổng Hợp Theo Báo Cáo"</span>
+            <div class="space-x-2">
+              <button type="button" onclick="mergeReportPeriodAction()" class="bg-sky-600 text-white px-3 py-1 rounded text-xs font-bold hover:bg-sky-700">🧩 Tổng Hợp Theo Báo Cáo</button>
+              <button type="button" onclick="mergeReportPeriodByTasksAction()" class="bg-teal-600 text-white px-3 py-1 rounded text-xs font-bold hover:bg-teal-700">🗂️ Tổng Hợp Theo Công Việc</button>
+            </div>
           </div>
           <div id="prAggOrderList" class="space-y-1"></div>
         </div>
@@ -16316,7 +16319,33 @@ async function mergeReportPeriodAction() {
   renderPrPeriodsTable();
 }
 
-const PR_SLIDE_KIND_LABELS = { COVER: 'Trang bìa', DEPT: 'Chia phòng ban', TASKS: 'Bảng công việc', PLAN: 'Bảng kế hoạch', NUMBERS: 'Số liệu', OTHER: 'Khác', FILE: 'Tệp đính kèm' };
+// Tổng Hợp Theo Công Việc — CÁCH THỨ 2 để dựng bản tổng hợp (xem mergeReportPeriodByTasks() ở
+// lib/recordActions.js), tự động lấy công việc thật từ module Công Việc, không cần chọn/sắp báo cáo
+// như mergeReportPeriodAction() ở trên. Bấm cái nào sau cùng thì compilation theo cách đó.
+async function mergeReportPeriodByTasksAction() {
+  if (!prAggCurrentPeriodId) return;
+  const period = DB.reportPeriods.find(p => p.id === prAggCurrentPeriodId);
+  if (!period) return;
+  if (period.compilation?.status === 'PUBLISHED') {
+    return alert('⛔ Bản tổng hợp đã phát hành — vui lòng "Hủy phát hành" trước khi tổng hợp lại.');
+  }
+  if (period.compilation?.status === 'MERGED' &&
+      !confirm('Kỳ này đã có bản tổng hợp (theo cách khác) — tổng hợp lại theo Công Việc sẽ THAY THẾ toàn bộ nội dung hiện tại. Tiếp tục?')) return;
+  let result;
+  try {
+    result = await callRecordAction('reportPeriods', prAggCurrentPeriodId, 'mergeByTasks', {});
+  } catch (err) { return alert(`⛔ ${err.message}`); }
+  const updated = result.item;
+  const idx = DB.reportPeriods.findIndex(p => p.id === updated.id);
+  if (idx !== -1) DB.reportPeriods[idx] = updated;
+  prAggPendingSlides = updated.compilation.slides.map(s => ({ ...s }));
+  logSystemAction('PERIODIC_REPORT', 'MERGE_REPORT_PERIOD_BY_TASKS', `Tổng hợp kỳ báo cáo [${updated.name}] theo Công Việc`, 'SUCCESS', String(updated.id));
+  alert('✅ Đã tổng hợp theo Công Việc — bạn có thể sửa lại từng phần trước khi phát hành.');
+  renderPrAggCompilation();
+  renderPrPeriodsTable();
+}
+
+const PR_SLIDE_KIND_LABELS = { COVER: 'Trang bìa', DEPT: 'Chia phòng ban', TASKS: 'Bảng công việc', PLAN: 'Bảng kế hoạch', NUMBERS: 'Số liệu', OTHER: 'Khác', FILE: 'Tệp đính kèm', TASK_STATS: 'Thống kê công việc' };
 
 // 2 mẫu màu cho trình chiếu/PDF Báo Cáo Định Kỳ — chọn lúc "Tạo Kỳ Báo Cáo" (period.slideTemplate),
 // không đổi được sau khi tạo. 'DEFAULT' giữ NGUYÊN giao diện nền tối đã có từ trước (không đổi 1 màu
@@ -16369,7 +16398,7 @@ function renderPrAggCompilation() {
         </div>
         <div id="prAggItemsTable_${idx}" class="space-y-2" oninput="syncPrAggSlideItems(${idx}, '${progressField}')"></div>
       `;
-    } else if (s.kind === 'NUMBERS' || s.kind === 'OTHER') {
+    } else if (s.kind === 'NUMBERS' || s.kind === 'OTHER' || s.kind === 'TASK_STATS') {
       bodyHTML = `
         <textarea oninput="updatePrAggSlideField(${idx}, 'text', this.value)" class="w-full border p-1.5 rounded text-xs h-20" ${isPublished ? 'disabled' : ''}>${escapeHtml(s.text || '')}</textarea>
         ${s.fileUrl ? `<div class="flex items-center justify-between text-[11px] bg-white border rounded p-1.5"><span>📎 ${escapeHtml(s.fileName || 'tệp đính kèm')}</span>${!isPublished ? `<button type="button" onclick="removePrAggSlideFile(${idx})" class="text-red-500 font-bold hover:underline">✕ Bỏ tệp</button>` : ''}</div>` : ''}
@@ -16631,7 +16660,7 @@ function buildPrSlideBodyHTML(s, colors) {
   const c = colors || getPrSlideTemplateColors(prSlideshowTemplate);
   if (s.kind === 'TASKS') return buildPrTaskTableHTML(s.items, 'progress', 'Tiến độ', c);
   if (s.kind === 'PLAN') return buildPrTaskTableHTML(s.items, 'plan', 'Kế hoạch tiếp theo', c);
-  if (s.kind === 'NUMBERS' || s.kind === 'OTHER' || s.kind === 'FILE') {
+  if (s.kind === 'NUMBERS' || s.kind === 'OTHER' || s.kind === 'FILE' || s.kind === 'TASK_STATS') {
     const textHTML = s.text ? `<div style="white-space:pre-wrap;font-size:16px;line-height:1.7;color:${c.bodyTextColor};">${escapeHtml(s.text)}</div>` : '';
     const fileHTML = buildPrFileBlockHTML(s, c);
     return (textHTML + fileHTML) || `<p style="font-style:italic;color:#9ca3af;">Không có nội dung.</p>`;
