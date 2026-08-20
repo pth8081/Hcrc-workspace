@@ -26,6 +26,11 @@
 .perm-tree-node > summary::-webkit-details-marker { display: none; }
 .perm-tree-node > summary .perm-tree-chevron { transition: transform 0.15s ease; display: inline-block; }
 .perm-tree-node[open] > summary .perm-tree-chevron { transform: rotate(90deg); }
+/* Giai đoạn B — đánh dấu khối quyền vừa bị admin sửa (tick/bỏ tick/đổi select) nhưng CHƯA bấm "Lưu
+   Người Dùng & Phân Quyền" — chỉ là dấu hiệu thị giác (viền/nền cam), không giữ lại giá trị cũ để so
+   sánh nên không chặn được trường hợp tick rồi tick lại y hệt ban đầu, nhưng đủ để admin nhận ra ngay
+   khối nào mình vừa đụng vào giữa 1 cây quyền dài gần 14 khối (xem markPermTreeDirty()/clearPermTreeDirtyMarks()). */
+.perm-tree-node.perm-tree-dirty { border-left: 3px solid #f59e0b !important; background-color: #fffbeb !important; }
 
 /* Sidebar điều hành (thay thanh nav ngang cũ) — #userHeader GIỮ NGUYÊN id cũ (finishLogin()/logout()
    chỉ toggle add/remove('hidden'), không sửa JS), giờ gắn vào chính khối <aside>. Tailwind ".hidden"
@@ -133,6 +138,13 @@ input[type="datetime-local"]::-webkit-calendar-picker-indicator {
 select {
   cursor: pointer;
 }
+
+/* Giai đoạn B — responsive cho bảng nhiều cột: mỗi bảng TỰ trở thành khung cuộn ngang khi tràn màn
+   hình, không phụ thuộc việc HTML có sẵn khối bọc overflow-x-auto ngoài hay chưa (nhiều bảng cũ trong
+   hệ thống chưa có) — áp dụng ĐỒNG LOẠT cho mọi bảng, không cần rà từng chỗ. Không set
+   white-space:nowrap để các ô có mô tả dài vẫn xuống dòng bình thường như cũ; chỉ bảng nào thực sự
+   rộng hơn khung chứa mới xuất hiện thanh cuộn ngang. */
+table { display: block; overflow-x: auto; max-width: 100%; }
 </style>
 </head>
 <body class="bg-gray-100 min-h-screen font-sans">
@@ -2187,10 +2199,16 @@ select {
           ℹ️ Quyền bên dưới đã tự điền theo nhóm phân quyền đã chọn. Bạn vẫn tick thêm/bớt tuỳ ý để cấp riêng cho người này — sau này nhóm đổi quyền vẫn tự cập nhật cho người này, nhưng phần bạn đã tick thêm/bớt riêng sẽ được giữ nguyên.
         </div>
 
-        <div class="flex justify-end gap-2 text-[11px]">
-          <button type="button" onclick="setAllPermTreeNodes(true)" class="text-purple-700 font-semibold hover:underline">Mở rộng tất cả</button>
-          <span class="text-gray-300">|</span>
-          <button type="button" onclick="setAllPermTreeNodes(false)" class="text-purple-700 font-semibold hover:underline">Thu gọn tất cả</button>
+        <div class="flex items-center justify-between gap-2 flex-wrap">
+          <div class="flex items-center gap-2">
+            <input type="text" id="permTreeSearch" oninput="filterPermTree()" placeholder="🔍 Tìm quyền theo tên (vd: duyệt, xóa, xem)..." class="border rounded px-2 py-1.5 text-xs w-64">
+            <span class="text-[11px] text-gray-500">🟠 Viền cam = khối vừa sửa, chưa lưu</span>
+          </div>
+          <div class="flex gap-2 text-[11px]">
+            <button type="button" onclick="setAllPermTreeNodes(true)" class="text-purple-700 font-semibold hover:underline">Mở rộng tất cả</button>
+            <span class="text-gray-300">|</span>
+            <button type="button" onclick="setAllPermTreeNodes(false)" class="text-purple-700 font-semibold hover:underline">Thu gọn tất cả</button>
+          </div>
         </div>
 
         <div id="permFieldsContainer" class="space-y-2">
@@ -14420,9 +14438,35 @@ function refreshPermTreeBadges() {
   });
 }
 
+// Lọc cây quyền theo từ khoá (tên quyền) — Giai đoạn B, cây quyền có tới 14 khối nên cần tìm nhanh
+// thay vì kéo cuộn dò từng khối. Ẩn khối KHÔNG có chữ nào khớp, tự mở khối CÓ khớp; xoá ô tìm kiếm sẽ
+// hiện lại toàn bộ (không tự thu gọn lại, dùng nút "Thu gọn tất cả" nếu cần).
+function filterPermTree() {
+  const q = (document.getElementById('permTreeSearch')?.value || '').trim().toLowerCase();
+  document.querySelectorAll('#permFieldsContainer > details.perm-tree-node').forEach(node => {
+    if (!q) { node.classList.remove('hidden'); return; }
+    const match = node.innerText.toLowerCase().includes(q);
+    node.classList.toggle('hidden', !match);
+    if (match) node.open = true;
+  });
+}
+
+// Đánh dấu khối quyền chứa ô vừa bị đổi là "chưa lưu" (viền cam, xem CSS .perm-tree-dirty) — chỉ 1
+// listener duy nhất, không cần gắn riêng từng checkbox/select kể cả các ô render động sau này.
+function markPermTreeDirty(ev) {
+  ev.target.closest('details.perm-tree-node')?.classList.add('perm-tree-dirty');
+}
+// Xoá hết dấu "chưa lưu" — gọi khi form được đổ lại dữ liệu gốc (chọn user khác để sửa, mở form Thêm
+// Mới, hoặc vừa lưu xong) để không còn hiểu nhầm là còn thay đổi dang dở từ trước.
+function clearPermTreeDirtyMarks() {
+  document.querySelectorAll('#permFieldsContainer > details.perm-tree-node.perm-tree-dirty')
+    .forEach(node => node.classList.remove('perm-tree-dirty'));
+}
+
 // Event delegation (1 listener duy nhất, không cần gắn riêng cho từng checkbox kể cả các checkbox
 // phòng ban render động sau này) — cập nhật badge ngay khi admin tick/bỏ tick bất kỳ ô nào trong cây.
 document.getElementById('permFieldsContainer')?.addEventListener('change', refreshPermTreeBadges);
+document.getElementById('permFieldsContainer')?.addEventListener('change', markPermTreeDirty);
 
 // Ô nhập mã PIN chỉ hiện khi đang chọn mức xác thực PIN — tránh admin tưởng nhầm phải nhập PIN cho
 // mọi user (mặc định NONE không cần gì thêm, khớp đúng hành vi PASSWORD/OTP_EMAIL đã có từ trước).
@@ -14592,6 +14636,7 @@ function populatePermsForm(permsInput) {
   });
 
   refreshPermTreeBadges();
+  clearPermTreeDirtyMarks();
 }
 
 // ==========================================
