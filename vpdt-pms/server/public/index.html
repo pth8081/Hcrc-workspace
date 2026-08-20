@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Văn Phòng Điện Tử</title>
+<title>HCRC Workplace</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700;800&display=swap" rel="stylesheet">
@@ -174,7 +174,14 @@ table { display: block; overflow-x: auto; max-width: 100%; }
      logout() toggle "hidden" y hệt cách đang làm với #userHeader, nên vòng đời ẩn/hiện luôn khớp nhau. -->
 <div id="mobileTopBar" class="hidden md:hidden fixed top-0 inset-x-0 z-30 bg-slate-900 text-white flex items-center justify-between px-3 py-2.5 shadow">
   <button type="button" onclick="toggleMobileSidebar()" class="text-2xl leading-none px-1" aria-label="Mở menu điều hướng">☰</button>
-  <span class="font-bold text-sm">🏢 Văn Phòng Điện Tử</span>
+  <span class="font-bold text-sm flex items-center gap-1.5">
+    <svg viewBox="0 0 100 100" fill="none" style="width:1.1rem;height:1.1rem;flex-shrink:0;" aria-hidden="true">
+      <rect x="27" y="47" width="46" height="15" rx="7.5" fill="#38bdf8"/>
+      <rect x="27" y="17" width="17" height="66" rx="8.5" fill="#1d4ed8"/>
+      <rect x="56" y="29" width="17" height="54" rx="8.5" fill="#2563eb"/>
+    </svg>
+    HCRC Workplace
+  </span>
   <span class="w-8"></span>
 </div>
 <!-- Lớp nền mờ phía sau sidebar khi mở trên điện thoại — bấm vào để đóng lại, giống hành vi drawer
@@ -192,8 +199,15 @@ table { display: block; overflow-x: auto; max-width: 100%; }
        độc lập — không lồng module này vào module kia (giữ nguyên quyết định thiết kế trước đó). -->
   <aside id="userHeader" class="hidden w-64 shrink-0 bg-slate-900 overflow-y-auto">
     <div class="p-4 border-b border-slate-700 flex items-center gap-2">
-      <span class="text-xl">🏢</span>
-      <span class="font-bold text-white text-sm sidebar-label">Văn Phòng Điện Tử</span>
+      <svg viewBox="0 0 100 100" fill="none" style="width:1.5rem;height:1.5rem;flex-shrink:0;" aria-hidden="true">
+        <rect x="27" y="47" width="46" height="15" rx="7.5" fill="#38bdf8"/>
+        <rect x="27" y="17" width="17" height="66" rx="8.5" fill="#1d4ed8"/>
+        <rect x="56" y="29" width="17" height="54" rx="8.5" fill="#2563eb"/>
+      </svg>
+      <span class="sidebar-label leading-tight">
+        <span class="font-bold text-white text-sm block">HCRC</span>
+        <span class="block text-[9px] font-semibold text-slate-400 tracking-[0.2em]">WORKPLACE</span>
+      </span>
     </div>
 
     <nav class="flex-1 p-2 space-y-1">
@@ -315,7 +329,14 @@ table { display: block; overflow-x: auto; max-width: 100%; }
 
   <!-- Màn hình 1: Đăng nhập -->
   <div id="loginSection" class="max-w-md mx-auto my-10 p-6 border rounded-lg bg-gray-50 space-y-4 shadow-sm">
-    <h2 class="text-xl font-bold text-center text-gray-800">Đăng Nhập Văn Phòng Điện Tử</h2>
+    <div class="flex flex-col items-center gap-3">
+      <svg viewBox="0 0 100 100" fill="none" style="width:2.75rem;height:2.75rem;" aria-hidden="true">
+        <rect x="27" y="47" width="46" height="15" rx="7.5" fill="#38bdf8"/>
+        <rect x="27" y="17" width="17" height="66" rx="8.5" fill="#1d4ed8"/>
+        <rect x="56" y="29" width="17" height="54" rx="8.5" fill="#2563eb"/>
+      </svg>
+      <h2 class="text-xl font-bold text-center text-gray-800">Đăng Nhập HCRC Workplace</h2>
+    </div>
 
     <div>
       <label class="block text-xs font-semibold text-gray-600 mb-1">Tên đăng nhập</label>
@@ -9403,7 +9424,7 @@ function buildTaskSlipHTML(t) {
         .task-doc .td-footer-note { margin-top: 16px; font-size: 11px; color: #444; border-top: 1px solid #ccc; padding-top: 6px; }
         @media print { .task-doc { padding: 0; } }
       </style>
-      <div class="td-watermark">VĂN PHÒNG ĐIỆN TỬ</div>
+      <div class="td-watermark">HCRC WORKPLACE</div>
       <div class="td-content">
         <div class="td-header">
           <div class="td-code">${t.sourceCode ? `Nguồn: ${escapeHtml(t.sourceCode)}` : ''}</div>
@@ -11952,7 +11973,7 @@ function buildMeetingMinutesDocumentHTML(m) {
         .minutes-doc .md-footer-note { margin-top: 16px; font-size: 11px; color: #444; border-top: 1px solid #ccc; padding-top: 6px; }
         @media print { .minutes-doc { padding: 0; } }
       </style>
-      <div class="md-watermark">VĂN PHÒNG ĐIỆN TỬ</div>
+      <div class="md-watermark">HCRC WORKPLACE</div>
       <div class="md-content">
         <div class="md-header">
           <div class="md-code">Mã biên bản: ${escapeHtml(m.code)}</div>
@@ -12425,7 +12446,7 @@ function buildApprovalSlipShellHTML(opts) {
         .approval-slip .as-footer-note { margin-top: 16px; font-size: 11px; color: #444; border-top: 1px solid #ccc; padding-top: 6px; }
         @media print { .approval-slip { padding: 0; } }
       </style>
-      <div class="as-watermark">PHÊ DUYỆT TRÊN HỆ THỐNG<br>VĂN PHÒNG ĐIỆN TỬ</div>
+      <div class="as-watermark">PHÊ DUYỆT TRÊN HỆ THỐNG<br>HCRC WORKPLACE</div>
       <div class="as-content">
         <div class="as-header">
           ${formCode ? `<div class="as-form-code">${escapeHtml(formCode)}</div>` : ''}
