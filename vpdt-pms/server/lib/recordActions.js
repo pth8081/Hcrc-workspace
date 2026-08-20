@@ -1017,23 +1017,40 @@ function mergeReportPeriod(user, period, orderedEntryIds, entries) {
   // thay vì 1 người = 1 slide như trước — slide nào không có nội dung thì bỏ qua, không sinh trang trống.
   // Báo cáo mode FILE_UPLOAD (đính nguyên 1 tệp đã làm sẵn, không gõ lại) chỉ sinh đúng 1 slide tham
   // chiếu tới tệp đó. Trang bìa "BÁO CÁO TUẦN" chỉ sinh 1 lần duy nhất cho cả bản tổng hợp.
-  const slides = [{ kind: 'COVER', title: `BÁO CÁO TUẦN — ${period.name}` }];
+  //
+  // Gom TRƯỚC theo phòng ban (không sinh slide xen kẽ theo đúng thứ tự orderedEntryIds như trước) — mỗi
+  // phòng chỉ ra ĐÚNG 1 slide chia (kind DEPT, tên phòng thuần, không kèm tên người) đứng trước TOÀN BỘ
+  // nội dung của mọi báo cáo thuộc phòng đó, kể cả khi người tổng hợp chọn/sắp các báo cáo cùng phòng ở
+  // các vị trí không liền nhau — để khi họp nhiều phòng, người điều hành chuyển sang phòng nào là gặp
+  // đúng 1 slide chia rồi tới hết nội dung phòng đó, không bị lặp lại slide chia giữa chừng. Thứ tự các
+  // phòng = thứ tự phòng xuất hiện LẦN ĐẦU trong danh sách đã chọn (người tổng hợp vẫn kiểm soát được
+  // phòng nào lên trước qua cách sắp thứ tự); thứ tự người trong cùng 1 phòng giữ nguyên như đã chọn.
+  const deptOrder = [];
+  const entriesByDept = new Map();
   ids.forEach((id) => {
     const entry = periodEntries.find(e => e.id === id);
     if (!entry) throw new HttpError(400, `Báo cáo #${id} không hợp lệ (không thuộc kỳ này hoặc chưa được gửi)`);
-    const common = { sourceEntryId: entry.id, sourceCreatorName: entry.creatorName, sourceDept: entry.dept };
-    if (entry.mode === 'FILE_UPLOAD') {
-      slides.push({ kind: 'FILE', title: `${entry.dept} — ${entry.creatorName}`, fileUrl: entry.fileUrl, fileName: entry.fileName, fileType: entry.fileType, ...common });
-      return;
-    }
-    slides.push({ kind: 'DEPT', title: `${entry.dept} — ${entry.creatorName}`, ...common });
-    if (entry.taskItems?.length) slides.push({ kind: 'TASKS', title: 'CÁC CÔNG VIỆC THỰC HIỆN TRONG TUẦN', items: entry.taskItems, ...common });
-    if (entry.planItems?.length) slides.push({ kind: 'PLAN', title: 'KẾ HOẠCH CÔNG VIỆC TIẾP THEO', items: entry.planItems, ...common });
-    if (entry.numbersText || entry.numbersFileUrl) {
-      slides.push({ kind: 'NUMBERS', title: 'SỐ LIỆU', text: entry.numbersText, fileUrl: entry.numbersFileUrl, fileName: entry.numbersFileName, fileType: entry.numbersFileType, ...common });
-    }
-    (entry.otherItems || []).forEach((o) => {
-      if (o.text || o.fileUrl) slides.push({ kind: 'OTHER', title: 'KHÁC', text: o.text, fileUrl: o.fileUrl, fileName: o.fileName, fileType: o.fileType, ...common });
+    if (!entriesByDept.has(entry.dept)) { entriesByDept.set(entry.dept, []); deptOrder.push(entry.dept); }
+    entriesByDept.get(entry.dept).push(entry);
+  });
+
+  const slides = [{ kind: 'COVER', title: `BÁO CÁO TUẦN — ${period.name}` }];
+  deptOrder.forEach((dept) => {
+    slides.push({ kind: 'DEPT', title: dept });
+    entriesByDept.get(dept).forEach((entry) => {
+      const common = { sourceEntryId: entry.id, sourceCreatorName: entry.creatorName, sourceDept: entry.dept };
+      if (entry.mode === 'FILE_UPLOAD') {
+        slides.push({ kind: 'FILE', title: 'TỆP BÁO CÁO ĐÍNH KÈM', fileUrl: entry.fileUrl, fileName: entry.fileName, fileType: entry.fileType, ...common });
+        return;
+      }
+      if (entry.taskItems?.length) slides.push({ kind: 'TASKS', title: 'CÁC CÔNG VIỆC THỰC HIỆN TRONG TUẦN', items: entry.taskItems, ...common });
+      if (entry.planItems?.length) slides.push({ kind: 'PLAN', title: 'KẾ HOẠCH CÔNG VIỆC TIẾP THEO', items: entry.planItems, ...common });
+      if (entry.numbersText || entry.numbersFileUrl) {
+        slides.push({ kind: 'NUMBERS', title: 'SỐ LIỆU', text: entry.numbersText, fileUrl: entry.numbersFileUrl, fileName: entry.numbersFileName, fileType: entry.numbersFileType, ...common });
+      }
+      (entry.otherItems || []).forEach((o) => {
+        if (o.text || o.fileUrl) slides.push({ kind: 'OTHER', title: 'KHÁC', text: o.text, fileUrl: o.fileUrl, fileName: o.fileName, fileType: o.fileType, ...common });
+      });
     });
   });
   slides.forEach((s, idx) => { s.order = idx + 1; });

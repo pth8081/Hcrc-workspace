@@ -1044,24 +1044,16 @@ table { display: block; overflow-x: auto; max-width: 100%; }
               <input type="file" id="prEntryNumbersFile" class="w-full text-xs" accept="image/*,.pdf,.xls,.xlsx">
               <div id="prEntryNumbersFileExisting" class="hidden text-[11px] text-gray-500 mt-1"></div>
             </div>
-            <div class="bg-white p-3 rounded border">
-              <label class="text-xs font-bold text-gray-700 block mb-2">📎 Khác — Mục 1 (tuỳ chọn)</label>
-              <textarea id="prEntryOtherText0" placeholder="Nội dung khác (nếu có)..." class="w-full border p-2 rounded text-sm h-16 mb-2"></textarea>
-              <input type="file" id="prEntryOtherFile0" class="w-full text-xs" accept="image/*,.pdf">
-              <div id="prEntryOtherFileExisting0" class="hidden text-[11px] text-gray-500 mt-1"></div>
-            </div>
-            <div class="bg-white p-3 rounded border">
-              <label class="text-xs font-bold text-gray-700 block mb-2">📎 Khác — Mục 2 (tuỳ chọn)</label>
-              <textarea id="prEntryOtherText1" placeholder="Nội dung khác (nếu có)..." class="w-full border p-2 rounded text-sm h-16 mb-2"></textarea>
-              <input type="file" id="prEntryOtherFile1" class="w-full text-xs" accept="image/*,.pdf">
-              <div id="prEntryOtherFileExisting1" class="hidden text-[11px] text-gray-500 mt-1"></div>
-            </div>
           </div>
 
           <!-- Tải Lên Báo Cáo — cho người đã có sẵn file báo cáo, không cần gõ lại theo mẫu; khi gộp
-               slide, báo cáo này chỉ chèn 1 trang tham chiếu tới tệp (xem mergeReportPeriod() server). -->
+               slide, báo cáo này chỉ chèn 1 trang tham chiếu tới tệp (xem mergeReportPeriod() server).
+               File mẫu .pptx tải về khớp đúng cấu trúc bảng của "Nhập Theo Mẫu" bên trên (Mục lớn/Nội
+               dung/Tiến độ/Deadline/Hỗ trợ + Số Liệu) và đúng theme màu công ty — điền trực tiếp vào
+               PowerPoint rồi tải nguyên file lên đây, hệ thống không đọc nội dung file. -->
           <div id="prEntryFileUploadWrap" class="hidden bg-white p-3 rounded border">
             <label class="text-xs font-bold text-gray-700 block mb-2">📎 Tệp Báo Cáo Đã Làm Sẵn</label>
+            <a href="/templates/mau-bao-cao-dinh-ky.pptx" download class="inline-block text-xs text-sky-700 bg-sky-50 border border-sky-200 px-2.5 py-1.5 rounded mb-2 hover:bg-sky-100 font-semibold">📥 Tải mẫu file báo cáo (.pptx)</a>
             <input type="file" id="prEntryWholeFile" class="w-full text-xs" accept=".pdf,.doc,.docx,.ppt,.pptx,image/*">
             <div id="prEntryWholeFileExisting" class="hidden text-[11px] text-gray-500 mt-1"></div>
           </div>
@@ -15194,10 +15186,10 @@ document.addEventListener('click', (ev) => {
 // ==========================================
 let activePeriodicReportSubTab = 'ENTRY';
 let prEntryDraftId = null;
-// Tệp đã tải lên sẵn của bản nháp đang sửa (numbers/other0/other1/wholeFile) — giữ lại nếu người dùng
+// Tệp đã tải lên sẵn của bản nháp đang sửa (numbers/wholeFile) — giữ lại nếu người dùng
 // không chọn tệp mới khi lưu nháp tiếp, giống mô hình "sửa hồ sơ không bắt buộc chọn lại file" của
 // Hợp đồng (xem openEditContract()). null nếu đang tạo báo cáo mới hoặc mục đó chưa có tệp.
-let prEntryExistingFiles = { numbers: null, other0: null, other1: null, wholeFile: null };
+let prEntryExistingFiles = { numbers: null, wholeFile: null };
 let prAggCurrentPeriodId = null;
 let prAggSelectedIds = [];
 let prAggPendingSlides = null;
@@ -15239,6 +15231,15 @@ function reportPeriodDeptLabel(p) {
 function formatDateTimeVN(iso) {
   if (!iso) return '';
   try { return new Date(iso).toLocaleString('vi-VN'); } catch { return iso; }
+}
+
+// Hiển thị deadline dd/mm/yyyy quen thuộc dù lưu nội bộ theo chuẩn ISO yyyy-mm-dd (từ <input
+// type="date">) — dữ liệu deadline cũ (nhập tự do trước khi đổi sang ô lịch) không đúng chuẩn ISO thì
+// hiện nguyên chuỗi đã lưu, không có gì để quy đổi.
+function formatDateVN(value) {
+  const str = String(value || '').trim();
+  const m = str.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  return m ? `${m[3]}/${m[2]}/${m[1]}` : str;
 }
 
 function setPeriodicReportSubTab(subTab) {
@@ -15296,6 +15297,18 @@ function renderPrEntryPeriodOptions() {
 // slide ở Tổng Hợp gắn hàm xoá RIÊNG có đồng bộ lại prAggPendingSlides (xem syncPrAggSlideItems() +
 // removePrAggItemRow() ở khối Tổng Hợp) — form Nhập Báo Cáo dùng thẳng bản mặc định vì chỉ đọc field
 // lúc bấm Lưu/Gửi, không cần đồng bộ theo từng phím gõ.
+// Deadline lưu dạng chuỗi tự do (lịch sử có thể có dữ liệu cũ không đúng chuẩn ISO, gõ tay kiểu
+// dd/mm/yyyy hoặc khác) nhưng ô nhập giờ là <input type="date"> (chuẩn ISO yyyy-mm-dd) — quy đổi
+// dd/mm/yyyy quen thuộc sang ISO để vẫn tự điền lại được khi mở sửa nháp cũ; chuỗi khác không nhận
+// dạng được thì để trống ô (không có cách nào giữ nguyên chuỗi tự do trong ô kiểu date của trình duyệt).
+function toIsoDateForInput(deadline) {
+  const str = String(deadline || '').trim();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(str)) return str;
+  const m = str.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  if (m) return `${m[3]}-${m[2].padStart(2, '0')}-${m[1].padStart(2, '0')}`;
+  return '';
+}
+
 function renderPrItemsTable(containerId, items, progressField, progressLabel, removeFnName) {
   const container = document.getElementById(containerId);
   if (!container) return;
@@ -15309,7 +15322,7 @@ function renderPrItemsTable(containerId, items, progressField, progressLabel, re
       <div class="grid grid-cols-1 md:grid-cols-4 gap-1">
         <input placeholder="Mục lớn (VD: I)" value="${escapeHtml(it.group || '')}" class="pr-item-group border p-1 rounded text-xs">
         <input placeholder="Nội dung công việc" value="${escapeHtml(it.content || '')}" class="pr-item-content border p-1 rounded text-xs md:col-span-2">
-        <input placeholder="Deadline" value="${escapeHtml(it.deadline || '')}" class="pr-item-deadline border p-1 rounded text-xs">
+        <input type="date" value="${escapeHtml(toIsoDateForInput(it.deadline))}" class="pr-item-deadline border p-1 rounded text-xs">
       </div>
       <textarea placeholder="${escapeHtml(progressLabel)}" class="pr-item-progress w-full border p-1 rounded text-xs h-10">${escapeHtml(it[progressField] || '')}</textarea>
       <textarea placeholder="Hỗ trợ cần" class="pr-item-support w-full border p-1 rounded text-xs h-8">${escapeHtml(it.support || '')}</textarea>
@@ -15322,7 +15335,7 @@ function collectPrItemsTable(containerId, progressField) {
     group: row.querySelector('.pr-item-group').value.trim(),
     content: row.querySelector('.pr-item-content').value.trim(),
     [progressField]: row.querySelector('.pr-item-progress').value.trim(),
-    deadline: row.querySelector('.pr-item-deadline').value.trim(),
+    deadline: row.querySelector('.pr-item-deadline').value,
     support: row.querySelector('.pr-item-support').value.trim()
   }));
 }
@@ -15366,7 +15379,7 @@ function onPrEntryPeriodChange() {
   const wrap = document.getElementById('prEntryFormWrap');
   const noteEl = document.getElementById('prEntryAlreadySentNote');
   prEntryDraftId = null;
-  prEntryExistingFiles = { numbers: null, other0: null, other1: null, wholeFile: null };
+  prEntryExistingFiles = { numbers: null, wholeFile: null };
   if (!periodId) { wrap.classList.add('hidden'); noteEl.classList.add('hidden'); return; }
   const period = DB.reportPeriods.find(p => p.id === periodId);
   if (!period) { wrap.classList.add('hidden'); noteEl.classList.add('hidden'); return; }
@@ -15388,22 +15401,14 @@ function onPrEntryPeriodChange() {
   renderPrItemsTable('prEntryTaskItemsList', existing?.taskItems || [], 'progress', 'Tiến độ');
   renderPrItemsTable('prEntryPlanItemsList', existing?.planItems || [], 'plan', 'Kế hoạch tiếp theo');
   document.getElementById('prEntryNumbersText').value = existing?.numbersText || '';
-  document.getElementById('prEntryOtherText0').value = existing?.otherItems?.[0]?.text || '';
-  document.getElementById('prEntryOtherText1').value = existing?.otherItems?.[1]?.text || '';
   document.getElementById('prEntryNumbersFile').value = '';
-  document.getElementById('prEntryOtherFile0').value = '';
-  document.getElementById('prEntryOtherFile1').value = '';
   document.getElementById('prEntryWholeFile').value = '';
 
   prEntryExistingFiles = {
     numbers: existing?.numbersFileUrl ? { fileUrl: existing.numbersFileUrl, fileName: existing.numbersFileName, fileType: existing.numbersFileType } : null,
-    other0: existing?.otherItems?.[0]?.fileUrl ? { ...existing.otherItems[0] } : null,
-    other1: existing?.otherItems?.[1]?.fileUrl ? { ...existing.otherItems[1] } : null,
     wholeFile: existing?.fileUrl ? { fileUrl: existing.fileUrl, fileName: existing.fileName, fileType: existing.fileType } : null
   };
   showPrExistingFileHint('prEntryNumbersFileExisting', prEntryExistingFiles.numbers);
-  showPrExistingFileHint('prEntryOtherFileExisting0', prEntryExistingFiles.other0);
-  showPrExistingFileHint('prEntryOtherFileExisting1', prEntryExistingFiles.other1);
   showPrExistingFileHint('prEntryWholeFileExisting', prEntryExistingFiles.wholeFile);
 
   wrap.classList.remove('hidden');
@@ -15446,12 +15451,6 @@ async function savePrEntryDraft() {
       payload.numbersText = document.getElementById('prEntryNumbersText').value.trim();
       const numbersFile = await uploadPrOptionalFile('prEntryNumbersFile', prEntryExistingFiles.numbers);
       payload.numbersFileUrl = numbersFile.fileUrl; payload.numbersFileName = numbersFile.fileName; payload.numbersFileType = numbersFile.fileType;
-      const other0File = await uploadPrOptionalFile('prEntryOtherFile0', prEntryExistingFiles.other0);
-      const other1File = await uploadPrOptionalFile('prEntryOtherFile1', prEntryExistingFiles.other1);
-      payload.otherItems = [
-        { text: document.getElementById('prEntryOtherText0').value.trim(), ...other0File },
-        { text: document.getElementById('prEntryOtherText1').value.trim(), ...other1File }
-      ];
     }
   } catch (err) {
     return alert(`⛔ Tải tệp lên thất bại: ${err.message}`);
@@ -16074,7 +16073,7 @@ function buildPrTaskTableHTML(items, progressField, progressLabel, colors) {
       <td ${cellAttrCenter}>${it.group ? subCounter : romanCounter + subCounter}</td>
       <td ${cellAttr}>${escapeHtml(it.content || '')}</td>
       <td ${cellAttr}>${escapeHtml(it[progressField] || '')}</td>
-      <td ${cellAttr}>${escapeHtml(it.deadline || '')}</td>
+      <td ${cellAttr}>${escapeHtml(formatDateVN(it.deadline))}</td>
       <td ${cellAttr}>${escapeHtml(it.support || '')}</td>
     </tr>`;
     return groupRowHTML + rowHTML;
@@ -16135,20 +16134,26 @@ function buildPrSlideBodyHTML(s, colors) {
 // Dựng nội dung 1 slide (tiêu đề + nguồn + thân) theo màu "c" của mẫu đang chọn — dùng CHUNG cho khung
 // trình chiếu (renderPrSlideshowSlide, gắn thẳng vào #prSlideshowBody) lẫn khung dựng ẩn để chụp ảnh xuất
 // PDF thật (downloadPrPdf bên dưới), đảm bảo file PDF tải về giống HỆT những gì đã xem ở trình chiếu —
-// không viết lại giao diện 2 lần. Trang bìa (kind COVER) có bố cục riêng — tiêu đề lớn căn giữa + gạch
-// chân màu nhấn (coverAccentColor) — đúng phong cách trang bìa của mẫu PowerPoint công ty; mẫu DEFAULT có
-// coverAccentColor='transparent' nên gạch chân tự ẩn, không ảnh hưởng giao diện cũ.
+// không viết lại giao diện 2 lần. Trang bìa (kind COVER) và slide chia phòng ban (kind DEPT, xem
+// mergeReportPeriod() ở lib/recordActions.js — mỗi phòng đúng 1 slide, đứng trước hết nội dung của
+// phòng đó) đều có bố cục riêng — tiêu đề lớn căn giữa, để rõ ràng khi họp nhiều phòng cần chuyển
+// nhanh từ phòng này sang phòng khác. Cover có thêm gạch chân màu nhấn (coverAccentColor) — đúng phong
+// cách trang bìa của mẫu PowerPoint công ty; mẫu DEFAULT có coverAccentColor='transparent' nên gạch
+// chân tự ẩn, không ảnh hưởng giao diện cũ.
 function buildPrSlideScreenHTML(s, c) {
   const showSource = s.sourceCreatorName && s.kind !== 'DEPT';
   const isCover = s.kind === 'COVER';
+  const isDept = s.kind === 'DEPT';
   const titleHTML = isCover
     ? `<div class="text-center">
         <h2 class="text-3xl md:text-6xl font-extrabold" style="color:${c.coverTitleColor};">${escapeHtml(s.title)}</h2>
         ${c.coverAccentColor !== 'transparent' ? `<div class="mx-auto mt-4" style="width:120px;height:4px;background:${c.coverAccentColor};border-radius:2px;"></div>` : ''}
       </div>`
+    : isDept
+    ? `<h2 class="text-3xl md:text-5xl font-extrabold text-center" style="color:${c.sectionTitleColor};">${escapeHtml(s.title)}</h2>`
     : `<h2 class="text-2xl md:text-4xl font-bold" style="color:${c.sectionTitleColor};">${escapeHtml(s.title)}</h2>`;
   return `
-    <div class="max-w-4xl mx-auto space-y-6${isCover ? ' flex flex-col items-center justify-center min-h-full text-center' : ''}">
+    <div class="max-w-4xl mx-auto space-y-6${(isCover || isDept) ? ' flex flex-col items-center justify-center min-h-full text-center' : ''}">
       ${titleHTML}
       ${showSource ? `<div class="text-sm" style="color:${c.sourceLabelColor};">${escapeHtml(s.sourceCreatorName)}${s.sourceDept ? ` — ${escapeHtml(s.sourceDept)}` : ''}</div>` : ''}
       ${buildPrSlideBodyHTML(s, c)}
