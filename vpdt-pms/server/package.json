@@ -1,6 +1,6 @@
 {
   "name": "vpdt-server",
-  "version": "1.12.1",
+  "version": "1.13.0",
   "description": "Backend Node.js + MSSQL cho ứng dụng Văn Phòng Điện Tử (VPDT), thay thế localStorage",
   "main": "server.js",
   "scripts": {
