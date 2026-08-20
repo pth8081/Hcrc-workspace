@@ -9,7 +9,7 @@
 // họp thêm cờ minutesEdit (toàn công ty, không theo phòng ban) cho SỬA — riêng XÓA là quyền tối cao,
 // chỉ Admin; Công việc theo NGƯỜI (assignedBy/assignee), hoàn toàn không có khái niệm phòng ban.
 const { HttpError } = require('./httpErrors');
-const { scopeAllows, OFFICE_SUBTYPE_TO_PERM_FLAG } = require('./createValidation');
+const { scopeAllows, OFFICE_SUBTYPE_TO_PERM_FLAG, normalizeReportEntryPayload } = require('./createValidation');
 const { validateRegistrationItems: validateVppRegItems } = require('./vppCatalog');
 
 function nowVN() {
@@ -954,15 +954,18 @@ function submitReportEntry(user, item, period) {
   if (isReportPeriodClosed(period)) {
     throw new HttpError(409, 'Kỳ báo cáo này đã kết thúc, không thể gửi báo cáo nữa');
   }
-  if (!item.title || !String(item.title).trim() || !item.contentHtml || !String(item.contentHtml).trim()) {
-    throw new HttpError(400, 'Báo cáo còn thiếu tiêu đề hoặc nội dung — vui lòng bổ sung trước khi gửi');
+  if (!item.title || !String(item.title).trim()) {
+    throw new HttpError(400, 'Báo cáo còn thiếu tiêu đề — vui lòng bổ sung trước khi gửi');
   }
   item.status = 'SUBMITTED';
   item.submittedAt = nowVN();
   return item;
 }
 
-// Sửa nội dung khi báo cáo còn NHÁP — period truyền vào giống submitReportEntry().
+// Sửa nội dung khi báo cáo còn NHÁP — period truyền vào giống submitReportEntry(). Dùng chung
+// normalizeReportEntryPayload() với lúc tạo mới (xem lib/createValidation.js CREATE_MODULE_CONFIGS.
+// reportEntries) để 2 luồng tạo/sửa luôn validate/chuẩn hoá dữ liệu giống hệt nhau — CreateError ném ra
+// từ đó chính là HttpError đổi tên (xem lib/httpErrors.js), nên bắt lỗi phía route vẫn hoạt động đúng.
 function updateReportEntryDraft(user, item, payload, period) {
   if (item.creator !== user.username) throw new HttpError(403, 'Chỉ người tạo báo cáo mới được sửa báo cáo này');
   if (item.status !== 'DRAFT') throw new HttpError(409, 'Báo cáo này không còn ở trạng thái nháp, không thể sửa');
@@ -971,11 +974,21 @@ function updateReportEntryDraft(user, item, payload, period) {
     throw new HttpError(409, 'Kỳ báo cáo này đã kết thúc, không thể sửa báo cáo nữa');
   }
   const title = String(payload?.title || '').trim();
-  const contentHtml = String(payload?.contentHtml || '').trim();
   if (!title) throw new HttpError(400, 'Thiếu tiêu đề báo cáo');
-  if (!contentHtml) throw new HttpError(400, 'Thiếu nội dung báo cáo');
-  item.title = title;
-  item.contentHtml = contentHtml;
+  const draft = { ...payload, title };
+  normalizeReportEntryPayload(draft);
+  item.title = draft.title;
+  item.mode = draft.mode;
+  item.taskItems = draft.taskItems;
+  item.planItems = draft.planItems;
+  item.numbersText = draft.numbersText;
+  item.numbersFileUrl = draft.numbersFileUrl;
+  item.numbersFileName = draft.numbersFileName;
+  item.numbersFileType = draft.numbersFileType;
+  item.otherItems = draft.otherItems;
+  item.fileUrl = draft.fileUrl;
+  item.fileName = draft.fileName;
+  item.fileType = draft.fileType;
   return item;
 }
 
@@ -999,18 +1012,31 @@ function mergeReportPeriod(user, period, orderedEntryIds, entries) {
   const ids = Array.isArray(orderedEntryIds) ? [...new Set(orderedEntryIds)] : [];
   if (!ids.length) throw new HttpError(400, 'Vui lòng chọn ít nhất 1 báo cáo để tổng hợp');
   const periodEntries = (entries || []).filter(e => e.periodId === period.id && e.status === 'SUBMITTED');
-  const slides = ids.map((id, idx) => {
+  // Mỗi báo cáo (1 người/1 kỳ) giờ dựng ra NHIỀU slide theo đúng khuôn mẫu PowerPoint công ty cung cấp
+  // (Phòng ban -> Bảng Công Việc Tuần Này -> Bảng Kế Hoạch Tiếp Theo -> Số Liệu -> tối đa 2 slide Khác)
+  // thay vì 1 người = 1 slide như trước — slide nào không có nội dung thì bỏ qua, không sinh trang trống.
+  // Báo cáo mode FILE_UPLOAD (đính nguyên 1 tệp đã làm sẵn, không gõ lại) chỉ sinh đúng 1 slide tham
+  // chiếu tới tệp đó. Trang bìa "BÁO CÁO TUẦN" chỉ sinh 1 lần duy nhất cho cả bản tổng hợp.
+  const slides = [{ kind: 'COVER', title: `BÁO CÁO TUẦN — ${period.name}` }];
+  ids.forEach((id) => {
     const entry = periodEntries.find(e => e.id === id);
     if (!entry) throw new HttpError(400, `Báo cáo #${id} không hợp lệ (không thuộc kỳ này hoặc chưa được gửi)`);
-    return {
-      order: idx + 1,
-      title: entry.title,
-      contentHtml: entry.contentHtml,
-      sourceEntryId: entry.id,
-      sourceCreatorName: entry.creatorName,
-      sourceDept: entry.dept
-    };
+    const common = { sourceEntryId: entry.id, sourceCreatorName: entry.creatorName, sourceDept: entry.dept };
+    if (entry.mode === 'FILE_UPLOAD') {
+      slides.push({ kind: 'FILE', title: `${entry.dept} — ${entry.creatorName}`, fileUrl: entry.fileUrl, fileName: entry.fileName, fileType: entry.fileType, ...common });
+      return;
+    }
+    slides.push({ kind: 'DEPT', title: `${entry.dept} — ${entry.creatorName}`, ...common });
+    if (entry.taskItems?.length) slides.push({ kind: 'TASKS', title: 'CÁC CÔNG VIỆC THỰC HIỆN TRONG TUẦN', items: entry.taskItems, ...common });
+    if (entry.planItems?.length) slides.push({ kind: 'PLAN', title: 'KẾ HOẠCH CÔNG VIỆC TIẾP THEO', items: entry.planItems, ...common });
+    if (entry.numbersText || entry.numbersFileUrl) {
+      slides.push({ kind: 'NUMBERS', title: 'SỐ LIỆU', text: entry.numbersText, fileUrl: entry.numbersFileUrl, fileName: entry.numbersFileName, fileType: entry.numbersFileType, ...common });
+    }
+    (entry.otherItems || []).forEach((o) => {
+      if (o.text || o.fileUrl) slides.push({ kind: 'OTHER', title: 'KHÁC', text: o.text, fileUrl: o.fileUrl, fileName: o.fileName, fileType: o.fileType, ...common });
+    });
   });
+  slides.forEach((s, idx) => { s.order = idx + 1; });
   period.compilation = {
     slides,
     status: 'MERGED',
@@ -1021,8 +1047,23 @@ function mergeReportPeriod(user, period, orderedEntryIds, entries) {
   return period;
 }
 
-// Chỉnh sửa slide sau khi đã tổng hợp (thêm/xoá/sửa nội dung/sắp lại thứ tự) — chỉ khi
-// compilation.status = 'MERGED' (chưa phát hành).
+// Gom + dọn danh sách dòng bảng Công Việc/Kế Hoạch — dùng chung cho cả TASKS (progressField='progress')
+// và PLAN (progressField='plan'), khớp normalizeReportEntryPayload() ở lib/createValidation.js.
+function cleanReportTableItems(arr, progressField) {
+  return (Array.isArray(arr) ? arr : [])
+    .map(it => ({
+      group: String(it?.group || '').trim(),
+      content: String(it?.content || '').trim(),
+      [progressField]: String(it?.[progressField] || '').trim(),
+      deadline: String(it?.deadline || '').trim(),
+      support: String(it?.support || '').trim()
+    }))
+    .filter(it => it.content || it[progressField] || it.deadline || it.support);
+}
+
+// Chỉnh sửa slide sau khi đã tổng hợp (thêm/xoá dòng bảng, sửa nội dung/sắp lại thứ tự) — chỉ khi
+// compilation.status = 'MERGED' (chưa phát hành). Mỗi loại slide (kind) có bộ field riêng khớp đúng
+// mergeReportPeriod() ở trên — không cho đổi kind của 1 slide đã có (chỉ sửa nội dung/xoá/sắp thứ tự).
 function updateReportCompilation(user, period, slides) {
   if (!canAggregateReports(user)) {
     throw new HttpError(403, 'Bạn không có quyền tổng hợp Báo Cáo Định Kỳ');
@@ -1032,12 +1073,34 @@ function updateReportCompilation(user, period, slides) {
   }
   const list = Array.isArray(slides) ? slides : [];
   if (!list.length) throw new HttpError(400, 'Bản tổng hợp cần có ít nhất 1 slide');
+  const validKinds = ['COVER', 'DEPT', 'TASKS', 'PLAN', 'NUMBERS', 'OTHER', 'FILE'];
   const cleaned = list.map((s, idx) => {
+    const kind = validKinds.includes(s?.kind) ? s.kind : 'OTHER';
     const title = String(s?.title || '').trim();
-    const contentHtml = String(s?.contentHtml || '').trim();
     if (!title) throw new HttpError(400, `Slide thứ ${idx + 1} thiếu tiêu đề`);
-    if (!contentHtml) throw new HttpError(400, `Slide thứ ${idx + 1} thiếu nội dung`);
-    return { order: idx + 1, title, contentHtml, sourceEntryId: s?.sourceEntryId ?? null, sourceCreatorName: s?.sourceCreatorName || '', sourceDept: s?.sourceDept || '' };
+    const base = {
+      order: idx + 1, kind, title,
+      sourceEntryId: s?.sourceEntryId ?? null, sourceCreatorName: s?.sourceCreatorName || '', sourceDept: s?.sourceDept || ''
+    };
+    if (kind === 'TASKS') return { ...base, items: cleanReportTableItems(s.items, 'progress') };
+    if (kind === 'PLAN') return { ...base, items: cleanReportTableItems(s.items, 'plan') };
+    if (kind === 'NUMBERS' || kind === 'OTHER') {
+      return {
+        ...base, text: String(s?.text || '').trim(),
+        fileUrl: s?.fileUrl || null,
+        fileName: s?.fileUrl ? String(s?.fileName || '') : null,
+        fileType: s?.fileUrl ? String(s?.fileType || '') : null
+      };
+    }
+    if (kind === 'FILE') {
+      return {
+        ...base,
+        fileUrl: s?.fileUrl || null,
+        fileName: s?.fileUrl ? String(s?.fileName || '') : null,
+        fileType: s?.fileUrl ? String(s?.fileType || '') : null
+      };
+    }
+    return base; // COVER / DEPT — chỉ có title
   });
   period.compilation.slides = cleaned;
   period.compilation.updatedBy = user.username;
