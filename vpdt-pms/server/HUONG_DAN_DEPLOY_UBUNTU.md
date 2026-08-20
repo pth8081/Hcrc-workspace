@@ -307,6 +307,8 @@ mục 10.
 
 ### 9a. PM2 (giữ tiến trình chạy nền, tự khởi động lại khi lỗi/reboot server)
 
+**Ứng dụng nội bộ, ít người dùng đồng thời (dưới ~100)** — chạy 1 tiến trình đơn (fork mode) là đủ:
+
 ```bash
 sudo npm install -g pm2
 
@@ -321,9 +323,32 @@ pm2 startup systemd
 pm2 save
 ```
 
-Các lệnh quản lý thường dùng:
+**Public cho nhiều người dùng đồng thời (vài trăm người trở lên)** — nên chạy CLUSTER MODE thay vì
+lệnh trên, tận dụng hết số nhân CPU của máy chủ (Node đơn luồng, 1 tiến trình chỉ dùng 1 nhân):
+
 ```bash
-pm2 status              # xem trạng thái
+cd /opt/vpdt
+pm2 start ecosystem.config.js --env production
+
+pm2 startup systemd
+pm2 save
+```
+
+`ecosystem.config.js` (có sẵn trong repo) chạy `instances: 'max'` — PM2 tự chạy đúng bằng số nhân CPU
+thật của máy. Ứng dụng đã thiết kế stateless giữa các request (xác thực qua JWT + tra DB, không giữ
+session trong bộ nhớ tiến trình) nên chạy nhiều tiến trình an toàn, không cần cấu hình sticky session ở
+Nginx. Job định kỳ (nhắc hết hạn hợp đồng) tự nhận biết chỉ chạy ở 1 tiến trình, không bị gửi email
+trùng lặp N lần theo số tiến trình.
+
+**⚠️ Lưu ý pool kết nối SQL Server khi chạy cluster mode**: mỗi tiến trình giữ 1 pool kết nối RIÊNG
+(mặc định tối đa 20 — `DB_POOL_MAX` trong `.env`, xem mục 7). Chạy 4 tiến trình × 20 = tối đa 80 kết
+nối đồng thời tới SQL Server — kiểm tra SQL Server (RAM/CPU/giới hạn kết nối theo license, đặc biệt nếu
+dùng bản Express có giới hạn) có đủ sức chịu; nếu không, hạ `DB_POOL_MAX` xuống (vd. 10) để tổng kết
+nối across mọi tiến trình ở mức hợp lý.
+
+Các lệnh quản lý thường dùng (giống nhau cho cả 2 cách chạy ở trên):
+```bash
+pm2 status              # xem trạng thái (cluster mode sẽ thấy nhiều dòng "vpdt" — mỗi dòng 1 tiến trình)
 pm2 logs vpdt           # xem log realtime
 pm2 restart vpdt        # khởi động lại sau khi cập nhật code
 pm2 stop vpdt
@@ -399,6 +424,24 @@ Rồi khởi động lại:
 pm2 restart vpdt
 ```
 
+### 9d. Public cho nhiều người dùng đồng thời (vài trăm người trở lên)
+
+Trước khi public rộng, ngoài việc chạy cluster mode (mục 9a) cần lưu ý thêm:
+
+- **`DB_POOL_MAX`** (`.env`, mục 7) — cân đối với số tiến trình cluster, xem lưu ý ở mục 9a.
+- **`APPDATA_CACHE_TTL_MS`** (mặc định 3000 = 3 giây, `.env`, tuỳ chọn) — thời gian cache tạm trong bộ
+  nhớ cho các lượt đọc lặp lại nhiều (vd. `requireAuth()` tra trạng thái tài khoản ở mỗi request có xác
+  thực). Tăng lên nếu vẫn thấy nghẽn DB dưới tải cao, giảm xuống (hoặc đặt `0`) nếu cần thay đổi quyền/
+  vô hiệu hoá tài khoản có hiệu lực ngay lập tức tuyệt đối, chấp nhận đổi lại tải DB cao hơn.
+- **Rate limit toàn cục** (`server.js`, mặc định 600 request/phút, khoá theo người dùng đã đăng nhập
+  chứ không theo IP) — nếu vẫn thấy người dùng bị chặn nhầm (lỗi "gửi quá nhiều yêu cầu") lúc dùng bình
+  thường, có thể nâng thêm `limit` trong `globalApiRateLimiter`.
+- **Load test thật trước khi công bố chính thức** — cấu hình đúng không đảm bảo chịu tải đúng, nên mô
+  phỏng vài trăm người dùng đồng thời (vd. bằng k6/Artillery: đăng nhập + các thao tác CRUD phổ biến)
+  nhắm vào server thật (staging hoặc production ngoài giờ) để đo thời gian phản hồi/tỷ lệ lỗi thực tế,
+  rồi mới quyết định có cần nâng cấp máy chủ (CPU/RAM) hoặc tinh chỉnh thêm các thông số ở trên hay
+  không.
+
 ---
 
 ## 10. Khuyến nghị bảo mật + kiểm tra vận hành trước khi đưa vào sử dụng chính thức
@@ -442,7 +485,7 @@ pm2 restart vpdt
 Endpoint kiểm tra nhanh:
 ```
 GET http://<ip-server>:3000/api/health
-→ {"status":"ok","db":"connected","version":"1.23.0"}
+→ {"status":"ok","db":"connected","version":"1.24.0"}
 ```
 
 `version` khớp đúng trường `version` trong `package.json` của bản code server
