@@ -162,6 +162,15 @@ select {
    rộng hơn khung chứa mới xuất hiện thanh cuộn ngang. */
 table { display: block; overflow-x: auto; max-width: 100%; }
 
+/* Khung xem file Word (.docx) qua mammoth.js (renderWordProtected(), xem script cuối trang) — mammoth
+   xuất HTML thuần (p/h1-h6/table/ul/img...) không kèm style riêng, cần giới hạn lại trong khung xem
+   (không để ảnh/bảng tràn khổ) và khoá bôi đen văn bản khớp chính sách "Protected View" chung (chống
+   sao chép thông thường, không phải bảo mật tuyệt đối — xem ghi chú ở script cuối trang). */
+.word-view-content { user-select: none; line-height: 1.6; }
+.word-view-content img { max-width: 100%; height: auto; }
+.word-view-content table { display: table; width: auto; max-width: 100%; overflow-x: visible; border-collapse: collapse; }
+.word-view-content table td, .word-view-content table th { border: 1px solid #d1d5db; padding: 4px 8px; }
+
 /* ================== Trang Đăng Nhập (#loginSection) ==================
    Chia đôi màn hình: panel thương hiệu (trái, nền xanh navy) + form đăng nhập (phải, nền trắng) —
    xếp chồng dọc dưới 880px. Toàn bộ class con dùng tiền tố "loginpage-" để không đụng class nào khác
@@ -7529,13 +7538,20 @@ async function rejectDoc(docId) {
   renderDocs();
 }
 
-// Xác định loại tệp (ảnh / pdf / văn phòng / khác) dựa trên fileType (MIME) và phần mở rộng tên tệp
+// Xác định loại tệp (ảnh / pdf / word / excel / văn phòng khác / khác) dựa trên fileType (MIME) và
+// phần mở rộng tên tệp. "word"/"excel" CHỈ áp dụng cho định dạng mới .docx/.xlsx (dạng nén zip+XML) —
+// mammoth.js/exceljs (xem renderWordProtected()/renderExcelProtected() ở script cuối trang) chỉ đọc
+// được 2 định dạng này. File .doc/.xls đời cũ (nhị phân, không phải zip) và .ppt/.pptx (chưa có thư
+// viện JS nào render tốt trong trình duyệt) vẫn rơi về "office" — khung "chưa hỗ trợ xem trực tuyến,
+// vui lòng Tải về" như trước.
 function getFileKind(fileType, fileName) {
   const t = (fileType || '').toLowerCase();
   const ext = (fileName || '').toLowerCase().split('.').pop();
   if (t.startsWith('image/') || ['png', 'jpg', 'jpeg', 'gif', 'webp'].includes(ext)) return 'image';
   if (t === 'application/pdf' || ext === 'pdf') return 'pdf';
-  if (['doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx'].includes(ext)) return 'office';
+  if (ext === 'docx') return 'word';
+  if (ext === 'xlsx') return 'excel';
+  if (['doc', 'xls', 'ppt', 'pptx'].includes(ext)) return 'office';
   return 'other';
 }
 
@@ -7571,7 +7587,7 @@ function buildProtectedViewerHTML(fileSrc, fileType, fileName, altLabel) {
     `;
   }
 
-  const kindLabel = kind === 'office' ? 'Định dạng văn phòng (Word/Excel/PowerPoint)' : 'Định dạng tệp này';
+  const kindLabel = kind === 'office' ? 'Định dạng này (Word/Excel đời cũ .doc/.xls, hoặc PowerPoint)' : 'Định dạng tệp này';
   return `
     <div class="w-full h-[65vh] bg-white rounded border shadow-inner flex flex-col items-center justify-center gap-2 p-6 text-center protected-view-container" oncontextmenu="return false;">
       <div class="text-5xl">📎</div>
@@ -7604,6 +7620,24 @@ function openFileProtectedView({ title, sub, footerInfo, fileSrc, fileType, file
       window.renderPdfProtected(pdfContainer, fileSrc, `PROTECTED VIEW - ${currentUser.name}\n${PROTECTED_VIEW_WATERMARK_COMPANY}`);
     } else {
       pdfContainer.innerHTML = '<div class="p-6 text-center text-gray-500 text-sm">⏳ Đang tải bộ xem PDF...</div>';
+    }
+    return;
+  }
+
+  // Word (.docx)/Excel (.xlsx) — xem trực tiếp trong trình duyệt qua mammoth.js/exceljs (xem
+  // renderWordProtected()/renderExcelProtected() ở script cuối trang), cùng cơ chế tải thư viện + hiện
+  // trạng thái "Đang tải..." như nhánh PDF ở trên (khác biệt: PDF.js đã tải sẵn lúc mở trang vì dùng
+  // type="module" import tĩnh, còn mammoth/exceljs tải LÚC CẦN qua loadVendorScript() vì khá nặng, đa
+  // số tệp đính kèm KHÔNG phải Word/Excel nên không đáng tải sẵn cho mọi người).
+  if (kind === 'word' || kind === 'excel') {
+    container.innerHTML = `<div class="w-full h-[65vh] overflow-y-auto bg-gray-100 rounded protected-view-container" oncontextmenu="return false;"></div>`;
+    const officeContainer = container.firstElementChild;
+    document.getElementById('viewDocModal').classList.remove('hidden');
+    const renderFn = kind === 'word' ? window.renderWordProtected : window.renderExcelProtected;
+    if (renderFn) {
+      renderFn(officeContainer, fileSrc);
+    } else {
+      officeContainer.innerHTML = '<div class="p-6 text-center text-gray-500 text-sm">⏳ Đang tải bộ xem...</div>';
     }
     return;
   }
@@ -18549,6 +18583,141 @@ function rejectInternalPostAction(id) {
       }
     } catch (err) {
       container.innerHTML = `<div class="p-6 text-center text-red-600 text-sm">⛔ Không tải được PDF để xem: ${err.message}</div>`;
+    }
+  };
+</script>
+
+<!-- Xem file Word (.docx)/Excel (.xlsx) NGAY TRONG trình duyệt người xem, qua mammoth.js (docx -> HTML)
+     và exceljs (xlsx -> bảng HTML) — tự lưu trên server (/vendor/mammoth, /vendor/exceljs, không qua
+     CDN, cùng lý do với pdfjs ở trên). Toàn bộ xử lý chạy trong trình duyệt người xem, KHÔNG có bước
+     nào chạy trên máy chủ — không tốn thêm tài nguyên server dù nhiều người xem cùng lúc. Khác PDF.js
+     (tải sẵn lúc mở trang qua type="module" import tĩnh), 2 thư viện này khá nặng (~600KB-950KB) mà đa
+     số tệp đính kèm không phải Word/Excel, nên chỉ tải LÚC THỰC SỰ CẦN (loadVendorScript(), có cache
+     theo src để mở nhiều lần trong 1 phiên không tải lại). File .doc/.xls đời cũ (nhị phân, không phải
+     .docx/.xlsx) không đọc được bằng cách này — rơi về khung "chưa hỗ trợ xem trực tuyến" (getFileKind()
+     đã loại 2 định dạng cũ này khỏi kind "word"/"excel" từ đầu, không tới được đây). LƯU Ý GIỚI HẠN:
+     đây là chống sao chép thông thường (khoá bôi đen văn bản, chặn chuột phải) chứ không phải bảo mật
+     tuyệt đối, giống PDF.js ở trên. -->
+<script>
+  const _loadedVendorScripts = {};
+  function loadVendorScript(src) {
+    if (_loadedVendorScripts[src]) return _loadedVendorScripts[src];
+    _loadedVendorScripts[src] = new Promise((resolve, reject) => {
+      const s = document.createElement('script');
+      s.src = src;
+      s.onload = () => resolve();
+      s.onerror = () => { delete _loadedVendorScripts[src]; reject(new Error('Không tải được thư viện ' + src)); };
+      document.head.appendChild(s);
+    });
+    return _loadedVendorScripts[src];
+  }
+
+  function buildOfficeWatermarkOverlayEl() {
+    const wm = document.createElement('div');
+    wm.className = 'absolute inset-0 flex items-center justify-center pointer-events-none select-none overflow-hidden';
+    const box = document.createElement('div');
+    box.style.cssText = 'transform: rotate(-30deg); text-align: center;';
+    [`PROTECTED VIEW - ${currentUser.name}`, PROTECTED_VIEW_WATERMARK_COMPANY].forEach((line, idx) => {
+      const lineEl = document.createElement('div');
+      lineEl.style.cssText = `font-size: ${idx === 0 ? '2rem' : '1rem'}; font-weight: 700; color: rgba(120,120,120,0.18); white-space: nowrap;`;
+      lineEl.textContent = line;
+      box.appendChild(lineEl);
+    });
+    wm.appendChild(box);
+    return wm;
+  }
+
+  window.renderWordProtected = async function(container, fileSrc) {
+    container.innerHTML = '<div class="p-6 text-center text-gray-500 text-sm">⏳ Đang tải bộ xem Word...</div>';
+    try {
+      await loadVendorScript('/vendor/mammoth/mammoth.browser.min.js');
+      const res = await fetch(fileSrc);
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      const arrayBuffer = await res.arrayBuffer();
+      const result = await window.mammoth.convertToHtml({ arrayBuffer });
+
+      container.innerHTML = '';
+      const wrap = document.createElement('div');
+      wrap.className = 'relative bg-white shadow-md rounded p-6 max-w-3xl mx-auto my-2 word-view-content';
+      wrap.oncontextmenu = () => false;
+      wrap.innerHTML = result.value;
+      container.appendChild(wrap);
+      wrap.appendChild(buildOfficeWatermarkOverlayEl());
+    } catch (err) {
+      container.innerHTML = `<div class="p-6 text-center text-red-600 text-sm">⛔ Không xem được file Word này: ${err.message}<br><span class="text-gray-500 text-xs">Có thể do file .doc đời cũ hoặc file bị lỗi — vui lòng dùng nút "⬇️ Tải" để tải về.</span></div>`;
+    }
+  };
+
+  window.renderExcelProtected = async function(container, fileSrc) {
+    container.innerHTML = '<div class="p-6 text-center text-gray-500 text-sm">⏳ Đang tải bộ xem Excel...</div>';
+    try {
+      await loadVendorScript('/vendor/exceljs/exceljs.min.js');
+      const res = await fetch(fileSrc);
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      const arrayBuffer = await res.arrayBuffer();
+      const wb = new window.ExcelJS.Workbook();
+      await wb.xlsx.load(arrayBuffer);
+
+      container.innerHTML = '';
+      const outer = document.createElement('div');
+      outer.className = 'relative bg-white shadow-md rounded p-3';
+      outer.oncontextmenu = () => false;
+      container.appendChild(outer);
+
+      const tabBar = document.createElement('div');
+      tabBar.className = 'flex gap-1 mb-2 flex-wrap select-none';
+      const sheetsWrap = document.createElement('div');
+      outer.appendChild(tabBar);
+      outer.appendChild(sheetsWrap);
+
+      const cellText = (cell) => {
+        let v = cell.value;
+        if (v && typeof v === 'object') {
+          if (Array.isArray(v.richText)) v = v.richText.map(t => t.text).join('');
+          else if (v.result !== undefined) v = v.result;
+          else if (v.text !== undefined) v = v.text;
+          else v = '';
+        }
+        return v == null ? '' : String(v);
+      };
+
+      function renderSheet(sheet) {
+        sheetsWrap.innerHTML = '';
+        const table = document.createElement('table');
+        table.className = 'text-xs border-collapse';
+        sheet.eachRow((row) => {
+          const tr = document.createElement('tr');
+          row.eachCell({ includeEmpty: true }, (cell) => {
+            const td = document.createElement('td');
+            td.className = 'border px-2 py-1 whitespace-nowrap';
+            td.textContent = cellText(cell);
+            tr.appendChild(td);
+          });
+          table.appendChild(tr);
+        });
+        const scrollWrap = document.createElement('div');
+        scrollWrap.className = 'overflow-auto max-h-[55vh]';
+        scrollWrap.appendChild(table);
+        sheetsWrap.appendChild(scrollWrap);
+      }
+
+      wb.worksheets.forEach((sheet, i) => {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'text-xs px-2 py-1 rounded border ' + (i === 0 ? 'bg-emerald-600 text-white border-emerald-600' : 'bg-gray-100 text-gray-700');
+        btn.textContent = sheet.name;
+        btn.onclick = () => {
+          [...tabBar.children].forEach(b => b.className = 'text-xs px-2 py-1 rounded border bg-gray-100 text-gray-700');
+          btn.className = 'text-xs px-2 py-1 rounded border bg-emerald-600 text-white border-emerald-600';
+          renderSheet(sheet);
+        };
+        tabBar.appendChild(btn);
+      });
+      if (wb.worksheets[0]) renderSheet(wb.worksheets[0]);
+
+      outer.appendChild(buildOfficeWatermarkOverlayEl());
+    } catch (err) {
+      container.innerHTML = `<div class="p-6 text-center text-red-600 text-sm">⛔ Không xem được file Excel này: ${err.message}<br><span class="text-gray-500 text-xs">Có thể do file .xls đời cũ hoặc file bị lỗi — vui lòng dùng nút "⬇️ Tải" để tải về.</span></div>`;
     }
   };
 </script>

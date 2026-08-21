@@ -136,6 +136,15 @@ app.use('/vendor/pdfjs', express.static(path.join(__dirname, 'node_modules', 'pd
 app.use('/vendor/jspdf', express.static(path.join(__dirname, 'node_modules', 'jspdf', 'dist'), VENDOR_STATIC_OPTS));
 app.use('/vendor/html2canvas', express.static(path.join(__dirname, 'node_modules', 'html2canvas', 'dist'), VENDOR_STATIC_OPTS));
 
+// Phục vụ exceljs + mammoth (tự lưu trên server, không qua CDN — cùng lý do với pdfjs/jspdf ở trên) —
+// dùng để xem trực tiếp file Excel/Word đính kèm NGAY TRONG trình duyệt người xem (Khung Xem Bảo Vệ),
+// thay vì chỉ "Tải về" như trước — xử lý HOÀN TOÀN phía trình duyệt, không có bước xử lý nào chạy trên
+// máy chủ, nên không tốn thêm tài nguyên server dù có bao nhiêu người xem cùng lúc (giống hệt cách
+// PDF.js/jsPDF/html2canvas ở trên đã làm). exceljs đã sẵn là dependency server-side (đọc/ghi Excel cho
+// module Văn phòng phẩm + Quản trị) nên dùng lại đúng file .min.js có sẵn, không cần cài thêm gì.
+app.use('/vendor/exceljs', express.static(path.join(__dirname, 'node_modules', 'exceljs', 'dist'), VENDOR_STATIC_OPTS));
+app.use('/vendor/mammoth', express.static(path.join(__dirname, 'node_modules', 'mammoth'), VENDOR_STATIC_OPTS));
+
 // Health check (dùng cho giám sát / load balancer / kiểm tra nhanh sau khi deploy). "version" luôn
 // trả về ngay cả khi DB lỗi — dùng để xác nhận server đang chạy ĐÚNG bản code vừa deploy (so khớp với
 // package.json trên máy), độc lập với tình trạng kết nối SQL Server.
