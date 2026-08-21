@@ -7690,7 +7690,14 @@ function toggleUploadTypeExt(moduleKey, ext, checked) {
 }
 
 // CẬP NHẬT: Phê duyệt cấp đơn đơn giản hóa (Sequential Step Approval)
-async function approveDoc(docId) {
+// Xác thực lại (mật khẩu/OTP/PIN) trước khi Duyệt (perms.approverAuthLevel) — trước đây chỉ 3/7 module
+// dùng chung engine phê duyệt (Văn bản trình/Xe/Văn phòng) gọi withApprovalAuth(), khiến người dùng
+// tưởng cấu hình này áp dụng cho MỌI lượt duyệt của mình nhưng Tài Liệu/Hợp Đồng/VPP lại không được
+// bảo vệ. Nay áp cho cả 7 module (khớp routes/workflow.js APPROVAL_REAUTH_MODULES đã mở rộng).
+function approveDoc(docId) {
+  withApprovalAuth(() => approveDocConfirmed(docId));
+}
+async function approveDocConfirmed(docId) {
   const doc = DB.docs.find(d => d.id === docId);
   if (!doc) return;
 
@@ -10961,7 +10968,9 @@ function approveContractAction(id) {
     title: 'Phê duyệt hợp đồng',
     bodyHTML: `Bạn có chắc chắn muốn phê duyệt hợp đồng "<b>${escapeHtml(c.title)}</b>" (${escapeHtml(c.code)})?`,
     confirmLabel: 'Phê Duyệt',
-    onConfirm: async () => {
+    // Xác thực lại (mật khẩu/OTP/PIN) trước khi Duyệt — khớp đúng cách approveDoc() ở trên, mở rộng
+    // withApprovalAuth() ra cả 7 module dùng chung engine phê duyệt (trước đây Hợp Đồng không có).
+    onConfirm: () => withApprovalAuth(async () => {
       let result;
       try {
         result = await callWorkflowAction('contracts', id, 'approve', {});
@@ -10993,7 +11002,7 @@ function approveContractAction(id) {
       alert(msg);
       renderContracts();
       refreshApprovalSurfaces();
-    }
+    })
   });
 }
 
@@ -11038,7 +11047,7 @@ function approveContractSignedFileAction(id) {
     title: 'Duyệt tài liệu ký',
     bodyHTML: `Bạn có chắc chắn muốn duyệt tài liệu ký của hợp đồng "<b>${escapeHtml(c.title)}</b>" (${escapeHtml(c.code)})?`,
     confirmLabel: 'Duyệt',
-    onConfirm: async () => {
+    onConfirm: () => withApprovalAuth(async () => {
       let result;
       try {
         result = await callWorkflowAction('contractsSignedFile', id, 'approve', {});
@@ -11058,7 +11067,7 @@ function approveContractSignedFileAction(id) {
       alert(msg);
       renderContracts();
       refreshApprovalSurfaces();
-    }
+    })
   });
 }
 
@@ -14329,7 +14338,10 @@ function confirmProcessVppReg(actionType) {
     title: titleMap[actionType],
     bodyHTML: `<p>Bạn có chắc chắn muốn <b>${actionTextMap[actionType]}</b> đăng ký này?</p>${comment ? `<p class="mt-2 italic text-gray-600">Ghi chú: "${escapeHtml(comment)}"</p>` : ''}`,
     confirmLabel: labelMap[actionType],
-    onConfirm: () => processVppReg(actionType)
+    // Xác thực lại (mật khẩu/OTP/PIN) trước khi Duyệt — chỉ áp cho APPROVE, khớp đúng phạm vi
+    // withApprovalAuth() (không phải Từ chối/Yêu cầu bổ sung). Mở rộng ra VPP cùng đợt với Tài
+    // Liệu/Hợp Đồng ở trên (trước đây chỉ 3/7 module dùng chung engine phê duyệt được bảo vệ).
+    onConfirm: () => actionType === 'APPROVE' ? withApprovalAuth(() => processVppReg(actionType)) : processVppReg(actionType)
   });
 }
 

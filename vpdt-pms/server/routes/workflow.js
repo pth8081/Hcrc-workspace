@@ -16,10 +16,15 @@ router.use(requireAuth, blockIfMustChangePassword);
 
 const ACTION_MAP = { approve: 'APPROVE', reject: 'REJECT', 'request-info': 'REQUEST_INFO', 'request-changes': 'REQUEST_CHANGES' };
 
-// Xác thực bổ sung khi Duyệt (mật khẩu/OTP/PIN, perms.approverAuthLevel) — CHỈ áp dụng cho 3 module đã
-// bật ở giao diện (withApprovalAuth() ở index.html, xem Văn bản trình/Đăng ký xe/Văn phòng), khớp đúng
-// phạm vi nghiệp vụ đã cấu hình (không áp cho docs/contracts/vppRegistrations — chưa có UI này).
-const APPROVAL_REAUTH_MODULES = new Set(['submissions', 'carRegs', 'officeReqs']);
+// Xác thực bổ sung khi Duyệt (mật khẩu/OTP/PIN, perms.approverAuthLevel) — áp dụng cho MỌI module dùng
+// chung engine phê duyệt này (MODULE_CONFIGS). Trước đây chỉ khai đúng 3/7 module (submissions/carRegs/
+// officeReqs, khớp withApprovalAuth() ở giao diện lúc đó) — người dùng cấu hình approverAuthLevel với
+// chủ đích áp dụng cho MỌI lượt Duyệt của mình, nhưng Tài Liệu/Hợp Đồng/Tài liệu ký hợp đồng/VPP lại
+// hoàn toàn không được bảo vệ mà không ai biết. Nay lấy trực tiếp từ MODULE_CONFIGS thay vì khai tay
+// lại 1 danh sách con dễ lệch mỗi khi thêm module mới — index.html cũng đã gọi withApprovalAuth() ở
+// đủ cả 7 nơi tương ứng (approveDoc/approveContractAction/approveContractSignedFileAction/
+// processSubmission/processCarReg/processOfficeReq/processVppReg).
+const APPROVAL_REAUTH_MODULES = new Set(Object.keys(MODULE_CONFIGS));
 
 // POST /api/workflow/submissions/:id/respond-info  — người TRÌNH phản hồi 1 yêu cầu bổ sung cụ thể
 // (không phải approver nên không dùng chung route bên dưới — action riêng, chỉ submissions mới có).

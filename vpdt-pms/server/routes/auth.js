@@ -237,12 +237,15 @@ router.post('/change-pin', loginRateLimiter, requireAuth, async (req, res) => {
       const list = Array.isArray(collection) ? collection : [];
       const idx = list.findIndex(u => u.username === username);
       if (idx === -1) throw new HttpError(401, 'Tài khoản không còn tồn tại');
-      updated = { ...list[idx], pinHash: newPinHash };
+      updated = { ...list[idx], pinHash: newPinHash, sessionVersion: (list[idx].sessionVersion || 0) + 1 };
       resetLoginAttempts(updated); // đổi PIN thành công (kể cả sau khi vừa gõ sai vài lần) -> xoá lịch sử sai
       list[idx] = updated;
       return list;
     });
 
+    // Vô hiệu hóa mọi phiên JWT KHÁC đang mở của chính người này (xem lib/auth.js) — cấp ngay 1 token
+    // mới khớp sessionVersion vừa tăng cho PHIÊN HIỆN TẠI, để không tự đăng xuất người vừa đổi PIN.
+    setAuthCookie(res, signToken(updated));
     res.json(toSafeUser(updated));
   } catch (err) {
     if (err instanceof HttpError) return res.status(err.status).json({ error: err.message });
@@ -286,12 +289,19 @@ router.patch('/me', requireAuth, async (req, res) => {
         // Tự đổi mật khẩu thành công -> gỡ cờ bắt buộc đổi (nếu có) — đây chính là lối thoát duy nhất
         // khỏi trạng thái mustChangePassword (xem lib/auth.js blockIfMustChangePassword).
         delete updated.mustChangePassword;
+        // Vô hiệu hóa mọi phiên JWT KHÁC đang mở của chính người này (xem lib/auth.js signToken/
+        // requireAuth) — mất mật khẩu/thiết bị cũ vẫn đăng nhập được vô thời hạn cho tới khi token hết
+        // hạn (tối đa 1h, có thể lâu hơn do trượt hạn theo hoạt động) trước khi có sessionVersion này.
+        updated.sessionVersion = (updated.sessionVersion || 0) + 1;
       }
 
       list[idx] = updated;
       return list;
     });
 
+    // Cấp lại token mới khớp sessionVersion vừa tăng cho PHIÊN HIỆN TẠI (nếu có đổi mật khẩu) — để
+    // không tự đăng xuất người vừa đổi mật khẩu của chính mình.
+    if (password) setAuthCookie(res, signToken(updated));
     res.json(toSafeUser(updated));
   } catch (err) {
     if (err instanceof HttpError) return res.status(err.status).json({ error: err.message });
