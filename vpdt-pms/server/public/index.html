@@ -666,7 +666,7 @@ table { display: block; overflow-x: auto; max-width: 100%; }
         <div id="dynamicFieldsContainer_DOC" class="md:col-span-3 grid grid-cols-1 md:grid-cols-3 gap-3 border-t pt-3"></div>
 
         <div class="md:col-span-3 flex justify-end">
-          <button type="submit" class="bg-green-600 text-white px-5 py-2 rounded font-bold hover:bg-green-700 transition">Tải Lên & Trình Ký Phê Duyệt</button>
+          <button type="submit" class="bg-green-600 text-white px-5 py-2 rounded font-bold hover:bg-green-700 transition">Gửi phê duyệt</button>
         </div>
       </form>
     </div>
@@ -796,7 +796,7 @@ table { display: block; overflow-x: auto; max-width: 100%; }
         </div>
         <div class="flex justify-end gap-2">
           <button type="button" onclick="previewSubmissionWorkflow()" class="bg-gray-200 text-gray-700 px-4 py-2 rounded font-bold hover:bg-gray-300">🔍 Xem Quy Trình</button>
-          <button type="submit" class="bg-amber-600 text-white px-5 py-2 rounded font-bold hover:bg-amber-700">Trình Văn Bản / Tờ Trình</button>
+          <button type="submit" class="bg-amber-600 text-white px-5 py-2 rounded font-bold hover:bg-amber-700">Gửi phê duyệt</button>
         </div>
       </form>
     </div>
@@ -1014,7 +1014,7 @@ table { display: block; overflow-x: auto; max-width: 100%; }
         <div class="flex justify-end gap-2">
           <button type="button" id="contractCancelEditBtn" onclick="cancelEditContract()" class="hidden bg-gray-200 text-gray-700 px-5 py-2 rounded font-bold hover:bg-gray-300">Huỷ Sửa</button>
           <button type="button" id="contractPreviewWfBtn" onclick="previewContractApprovalWorkflow()" class="bg-gray-200 text-gray-700 px-4 py-2 rounded font-bold hover:bg-gray-300">🔍 Xem Quy Trình</button>
-          <button type="submit" id="contractSubmitBtn" class="bg-cyan-600 text-white px-5 py-2 rounded font-bold hover:bg-cyan-700">Gửi Duyệt</button>
+          <button type="submit" id="contractSubmitBtn" class="bg-cyan-600 text-white px-5 py-2 rounded font-bold hover:bg-cyan-700">Gửi phê duyệt</button>
         </div>
       </form>
     </div>
@@ -1129,7 +1129,7 @@ table { display: block; overflow-x: auto; max-width: 100%; }
         </div>
         <div id="dynamicFieldsContainer_MEETING_ROOM" class="grid grid-cols-1 md:grid-cols-3 gap-3 border-t pt-3"></div>
         <div class="flex justify-end">
-          <button type="submit" class="bg-emerald-600 text-white px-5 py-2 rounded font-bold hover:bg-emerald-700">Gửi Đăng Ký Phòng Họp</button>
+          <button type="submit" class="bg-emerald-600 text-white px-5 py-2 rounded font-bold hover:bg-emerald-700">Gửi phê duyệt</button>
         </div>
       </form>
 
@@ -1209,6 +1209,7 @@ table { display: block; overflow-x: auto; max-width: 100%; }
     <div class="flex flex-wrap gap-2 border-b pb-2">
       <button type="button" onclick="setPeriodicReportSubTab('ENTRY')" id="btnPRSubEntry" class="px-3 py-1.5 rounded text-xs font-bold bg-sky-700 text-white">📝 Nhập Báo Cáo</button>
       <button type="button" onclick="setPeriodicReportSubTab('PERIODS')" id="btnPRSubPeriods" class="hidden px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">📅 Kỳ Báo Cáo</button>
+      <button type="button" onclick="setPeriodicReportSubTab('TEMPLATES')" id="btnPRSubTemplates" class="hidden px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">🎨 Mẫu Trình Chiếu</button>
       <button type="button" onclick="setPeriodicReportSubTab('AGGREGATE')" id="btnPRSubAggregate" class="hidden px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">🧩 Tổng Hợp</button>
       <button type="button" onclick="setPeriodicReportSubTab('PUBLISHED')" id="btnPRSubPublished" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">📣 Đã Phát Hành</button>
     </div>
@@ -1232,50 +1233,19 @@ table { display: block; overflow-x: auto; max-width: 100%; }
             <label class="block text-xs font-semibold text-gray-600 mb-1">Tiêu đề báo cáo (chỉ để nhận diện trong danh sách, không hiện trên slide)</label>
             <input id="prEntryTitle" placeholder="VD: Báo cáo công việc tuần 12 - Phòng Kinh Doanh" class="w-full border p-2 rounded text-sm">
           </div>
-          <div>
-            <label class="block text-xs font-semibold text-gray-600 mb-1">Cách nhập báo cáo</label>
-            <select id="prEntryMode" onchange="onPrEntryModeChange()" class="w-full border p-2 rounded text-sm bg-white">
-              <option value="STRUCTURED">📝 Nhập Theo Mẫu (khuyến nghị)</option>
-              <option value="FILE_UPLOAD">📎 Tải Lên Báo Cáo (đã làm sẵn — PDF/Word/PowerPoint/ảnh)</option>
-            </select>
-          </div>
-
-          <!-- Nhập Theo Mẫu — khớp đúng cấu trúc slide PowerPoint mẫu công ty cung cấp: bảng Công Việc
-               Tuần Này / Kế Hoạch Tiếp Theo (nhóm theo "Mục lớn", xem renderPrItemsTable()), Số Liệu, tối
-               đa 2 mục Khác — mỗi phần đều cho phép gõ chữ VÀ/HOẶC đính kèm 1 ảnh/tệp. -->
-          <div id="prEntryStructuredWrap" class="space-y-3">
-            <div class="bg-white p-3 rounded border">
-              <div class="flex justify-between items-center mb-1">
-                <label class="text-xs font-bold text-gray-700">📋 Các Công Việc Thực Hiện Trong Tuần</label>
-                <button type="button" onclick="addPrItemRow('prEntryTaskItemsList', 'progress', 'Tiến độ')" class="text-xs bg-sky-100 text-sky-700 px-2 py-1 rounded hover:bg-sky-200 font-semibold">+ Thêm Công Việc</button>
-              </div>
-              <p class="text-[11px] text-gray-500 mb-2">"Mục lớn" dùng để nhóm các công việc cùng 1 đầu việc lớn (VD: "Dự án A") — các dòng cùng tên Mục lớn sẽ tự gộp nhóm khi lên slide; có thể để trống nếu không cần nhóm.</p>
-              <div id="prEntryTaskItemsList" class="space-y-2"></div>
-            </div>
-            <div class="bg-white p-3 rounded border">
-              <div class="flex justify-between items-center mb-2">
-                <label class="text-xs font-bold text-gray-700">🗓️ Kế Hoạch Công Việc Tiếp Theo</label>
-                <button type="button" onclick="addPrItemRow('prEntryPlanItemsList', 'plan', 'Kế hoạch tiếp theo')" class="text-xs bg-sky-100 text-sky-700 px-2 py-1 rounded hover:bg-sky-200 font-semibold">+ Thêm Kế Hoạch</button>
-              </div>
-              <div id="prEntryPlanItemsList" class="space-y-2"></div>
-            </div>
-            <div class="bg-white p-3 rounded border">
-              <label class="text-xs font-bold text-gray-700 block mb-2">📊 Số Liệu</label>
-              <textarea id="prEntryNumbersText" placeholder="Số liệu, kết quả, KPI tuần này... (có thể để trống nếu chỉ đính kèm ảnh/biểu đồ bên dưới)" class="w-full border p-2 rounded text-sm h-20 mb-2"></textarea>
-              <input type="file" id="prEntryNumbersFile" class="w-full text-xs" accept="image/*,.pdf,.xls,.xlsx">
-              <div id="prEntryNumbersFileExisting" class="hidden text-[11px] text-gray-500 mt-1"></div>
-            </div>
-          </div>
-
-          <!-- Tải Lên Báo Cáo — cho người đã có sẵn file báo cáo, không cần gõ lại theo mẫu; khi gộp
-               slide, báo cáo này chỉ chèn 1 trang tham chiếu tới tệp (xem mergeReportPeriod() server).
-               File mẫu .pptx tải về khớp đúng cấu trúc bảng của "Nhập Theo Mẫu" bên trên (Mục lớn/Nội
-               dung/Tiến độ/Deadline/Hỗ trợ + Số Liệu) và đúng theme màu công ty — điền trực tiếp vào
-               PowerPoint rồi tải nguyên file lên đây, hệ thống không đọc nội dung file. -->
-          <div id="prEntryFileUploadWrap" class="hidden bg-white p-3 rounded border">
-            <label class="text-xs font-bold text-gray-700 block mb-2">📎 Tệp Báo Cáo Đã Làm Sẵn</label>
-            <a href="/templates/mau-bao-cao-dinh-ky.pptx" download class="inline-block text-xs text-sky-700 bg-sky-50 border border-sky-200 px-2.5 py-1.5 rounded mb-2 hover:bg-sky-100 font-semibold">📥 Tải mẫu file báo cáo (.pptx)</a>
-            <input type="file" id="prEntryWholeFile" class="w-full text-xs" accept=".pdf,.doc,.docx,.ppt,.pptx,image/*">
+          <!-- CHỈ nhận file .pptx — trình duyệt tự đọc nội dung (văn bản + bảng/biểu đồ/ảnh) NGAY LÚC
+               chọn tệp qua parsePptxToSlideContents() (JSZip + DOMParser gốc, KHÔNG qua server, xem
+               script cuối trang) rồi hiện xem trước số slide/nội dung bên dưới — nội dung đọc được sẽ
+               GỘP THẲNG vào bản trình chiếu khi Tổng Hợp (không phải kiểu đính kèm tệp thô như trước):
+               văn bản (tiêu đề/đoạn văn) sửa được trực tiếp ở bước Tổng Hợp; bảng/biểu đồ được vẽ lại
+               thành ảnh (không sửa được nội dung, chỉ hiển thị nguyên trạng). KHÔNG đọc được .ppt nhị
+               phân đời cũ (giống hệt giới hạn Word .doc/.docx trước đây) — chỉ đọc được .pptx. Mẫu NỀN
+               (màu sắc) do người tạo Kỳ Báo Cáo chọn sẵn, người nộp không cần chọn gì ở đây. -->
+          <div class="bg-white p-3 rounded border">
+            <label class="text-xs font-bold text-gray-700 block mb-2">📎 Tệp Báo Cáo (.pptx)</label>
+            <input type="file" id="prEntryPptxFile" onchange="onPrEntryPptxFileChange(event)" class="w-full text-xs" accept=".pptx,application/vnd.openxmlformats-officedocument.presentationml.presentation">
+            <p class="text-[11px] text-gray-500 mt-1">Chỉ nhận file PowerPoint <b>.pptx</b> — không nhận được <b>.ppt</b> đời cũ, vui lòng lưu lại bằng .pptx rồi tải lên lại nếu gặp lỗi.</p>
+            <div id="prEntryPptxStatus" class="hidden text-xs mt-2 p-2 rounded border"></div>
             <div id="prEntryWholeFileExisting" class="hidden text-[11px] text-gray-500 mt-1"></div>
           </div>
 
@@ -1323,12 +1293,9 @@ table { display: block; overflow-x: auto; max-width: 100%; }
           <div id="prPeriodDeptContainer" class="grid grid-cols-2 md:grid-cols-4 gap-1 pl-1 max-h-32 overflow-y-auto"></div>
         </div>
         <div>
-          <label class="block text-xs font-semibold text-gray-600 mb-1">Mẫu Báo Cáo (áp dụng cho trình chiếu &amp; PDF của kỳ này)</label>
-          <select id="prPeriodSlideTemplate" class="w-full md:w-80 border p-2 rounded text-sm bg-white">
-            <option value="DEFAULT">Mặc định (nền tối)</option>
-            <option value="ORANGE_GOLD">Cam - Vàng (theo mẫu công ty)</option>
-          </select>
-          <p class="text-[11px] text-gray-500 mt-1">Không chọn gì thì giữ nguyên mẫu mặc định như các kỳ trước.</p>
+          <label class="block text-xs font-semibold text-gray-600 mb-1">Mẫu Trình Chiếu (áp dụng cho trình chiếu &amp; PDF của kỳ này, không đổi được sau khi tạo)</label>
+          <select id="prPeriodSlideTemplate" class="w-full md:w-80 border p-2 rounded text-sm bg-white"></select>
+          <p id="prPeriodNoTemplateNote" class="hidden text-[11px] text-red-600 mt-1">Chưa có mẫu trình chiếu nào — vui lòng tạo ở tab "🎨 Mẫu Trình Chiếu" trước khi tạo kỳ báo cáo.</p>
         </div>
         <div class="flex justify-end">
           <button type="submit" class="bg-sky-600 text-white px-4 py-1.5 rounded text-xs font-bold hover:bg-sky-700">➕ Tạo Kỳ Báo Cáo</button>
@@ -1348,6 +1315,51 @@ table { display: block; overflow-x: auto; max-width: 100%; }
             </tr>
           </thead>
           <tbody id="prPeriodsTableBody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Sub-tab: Mẫu Trình Chiếu (chỉ reportManage/admin) — mẫu CHỈ là màu nền/màu chữ áp dụng cho khung
+         HTML render sẵn (buildPrSlideScreenHTML()), KHÔNG phải tệp đính kèm — chọn 1 mẫu lúc tạo Kỳ Báo
+         Cáo (prSubPeriods ở trên), người nộp báo cáo không tự chọn. Thay cho 2 lựa chọn DEFAULT/
+         ORANGE_GOLD gõ cứng trước đây — admin tạo được không giới hạn số lượng mẫu. -->
+    <div id="prSubTemplates" class="hidden space-y-4">
+      <form onsubmit="submitSlideTemplateForm(event)" class="bg-sky-50 p-4 rounded border border-sky-200 space-y-3">
+        <h3 id="prTplFormTitle" class="font-bold text-sky-900 text-sm flex items-center gap-1">🎨 Tạo Mẫu Trình Chiếu Mới</h3>
+        <p class="text-[11px] text-gray-500">Mẫu chỉ gồm màu nền/màu chữ cho khung trình chiếu — không phải tệp PowerPoint đính kèm.</p>
+        <div>
+          <label class="block text-xs font-semibold text-gray-600 mb-1">Tên Mẫu</label>
+          <input id="prTplName" placeholder="VD: Nền tối mặc định" class="w-full md:w-80 border p-2 rounded text-sm" required>
+        </div>
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
+          <div><label class="block text-[11px] text-gray-600 mb-1">Nền trang</label><input type="color" id="prTplColor_pageBg" value="#000000" class="w-full h-8 border rounded"></div>
+          <div><label class="block text-[11px] text-gray-600 mb-1">Tiêu đề trang bìa</label><input type="color" id="prTplColor_coverTitleColor" value="#ffffff" class="w-full h-8 border rounded"></div>
+          <div><label class="block text-[11px] text-gray-600 mb-1">Điểm nhấn trang bìa</label><input type="color" id="prTplColor_coverAccentColor" value="#111827" class="w-full h-8 border rounded"></div>
+          <div><label class="block text-[11px] text-gray-600 mb-1">Tiêu đề mục</label><input type="color" id="prTplColor_sectionTitleColor" value="#ffffff" class="w-full h-8 border rounded"></div>
+          <div><label class="block text-[11px] text-gray-600 mb-1">Nội dung chữ</label><input type="color" id="prTplColor_bodyTextColor" value="#e5e7eb" class="w-full h-8 border rounded"></div>
+          <div><label class="block text-[11px] text-gray-600 mb-1">Nhãn nguồn</label><input type="color" id="prTplColor_sourceLabelColor" value="#d1d5db" class="w-full h-8 border rounded"></div>
+          <div><label class="block text-[11px] text-gray-600 mb-1">Viền bảng</label><input type="color" id="prTplColor_tableBorder" value="#444444" class="w-full h-8 border rounded"></div>
+          <div><label class="block text-[11px] text-gray-600 mb-1">Nền tiêu đề bảng</label><input type="color" id="prTplColor_tableHeadBg" value="#222222" class="w-full h-8 border rounded"></div>
+          <div><label class="block text-[11px] text-gray-600 mb-1">Chữ trong bảng</label><input type="color" id="prTplColor_tableText" value="#ffffff" class="w-full h-8 border rounded"></div>
+          <div><label class="block text-[11px] text-gray-600 mb-1">Nền nút điều hướng</label><input type="color" id="prTplColor_navBtnBg" value="#222222" class="w-full h-8 border rounded"></div>
+          <div><label class="block text-[11px] text-gray-600 mb-1">Chữ nút điều hướng</label><input type="color" id="prTplColor_navBtnText" value="#ffffff" class="w-full h-8 border rounded"></div>
+          <div><label class="block text-[11px] text-gray-600 mb-1">Thanh trên cùng</label><input type="color" id="prTplColor_topBarBg" value="#111827" class="w-full h-8 border rounded"></div>
+        </div>
+        <div class="flex justify-end gap-2">
+          <button type="button" onclick="cancelEditSlideTemplate()" id="btnPrTplCancelEdit" class="hidden bg-gray-400 text-white px-4 py-1.5 rounded text-xs font-bold hover:bg-gray-500">Hủy Sửa</button>
+          <button type="submit" id="btnPrTplSubmit" class="bg-sky-600 text-white px-4 py-1.5 rounded text-xs font-bold hover:bg-sky-700">➕ Tạo Mẫu</button>
+        </div>
+      </form>
+      <div class="bg-white rounded border overflow-x-auto">
+        <table class="w-full border-collapse text-xs">
+          <thead>
+            <tr class="bg-gray-100 text-left">
+              <th class="border p-2">Tên Mẫu</th>
+              <th class="border p-2">Xem Trước</th>
+              <th class="border p-2 text-center">Thao Tác</th>
+            </tr>
+          </thead>
+          <tbody id="prTemplatesTableBody"></tbody>
         </table>
       </div>
     </div>
@@ -1750,7 +1762,7 @@ table { display: block; overflow-x: auto; max-width: 100%; }
         </div>
         <p class="text-[11px] text-gray-500 italic">💡 Loại xe cụ thể, biển kiểm soát và lái xe được phân công sẽ do Phòng Hành Chính điền khi xử lý duyệt — không cần nhập ở bước đăng ký.</p>
         <div class="flex justify-end">
-          <button type="submit" class="bg-indigo-600 text-white px-5 py-2 rounded font-bold hover:bg-indigo-700">Gửi Đăng Ký Xe & Trình Duyệt</button>
+          <button type="submit" class="bg-indigo-600 text-white px-5 py-2 rounded font-bold hover:bg-indigo-700">Gửi phê duyệt</button>
         </div>
       </form>
     </div>
@@ -1851,7 +1863,7 @@ table { display: block; overflow-x: auto; max-width: 100%; }
           <div id="vppRegItemsNoMatch" class="hidden text-xs text-gray-400 italic text-center p-3">Không tìm thấy mặt hàng khớp từ khoá tìm kiếm.</div>
           <div class="flex justify-end gap-2">
             <button type="button" onclick="saveVppRegDraft()" class="bg-gray-600 text-white px-4 py-1.5 rounded text-xs font-bold hover:bg-gray-700">💾 Kết Thúc Chọn (Lưu Nháp)</button>
-            <button type="button" id="btnVppRegSubmitDraft" class="hidden bg-orange-600 text-white px-4 py-1.5 rounded text-xs font-bold hover:bg-orange-700">📤 Gửi Duyệt</button>
+            <button type="button" id="btnVppRegSubmitDraft" class="hidden bg-orange-600 text-white px-4 py-1.5 rounded text-xs font-bold hover:bg-orange-700">Gửi phê duyệt</button>
           </div>
         </div>
       </div>
@@ -2057,7 +2069,7 @@ table { display: block; overflow-x: auto; max-width: 100%; }
           <textarea id="offReason" placeholder="Cần thiết mua mới / lý do hỏng hóc / hiệu quả đầu tư..." class="w-full border p-1.5 rounded h-16" required></textarea>
         </div>
         <div class="flex justify-end">
-          <button type="submit" class="bg-teal-600 text-white px-5 py-2 rounded font-bold hover:bg-teal-700">Trình Duyệt Văn Phòng</button>
+          <button type="submit" class="bg-teal-600 text-white px-5 py-2 rounded font-bold hover:bg-teal-700">Gửi phê duyệt</button>
         </div>
       </form>
     </div>
@@ -2147,7 +2159,7 @@ table { display: block; overflow-x: auto; max-width: 100%; }
             <div id="paymentCreateInstallmentsList" class="space-y-2"></div>
           </div>
           <div class="flex justify-end">
-            <button type="submit" class="bg-amber-600 text-white px-5 py-2 rounded font-bold hover:bg-amber-700">Tạo Đề Nghị Thanh Toán</button>
+            <button type="submit" class="bg-amber-600 text-white px-5 py-2 rounded font-bold hover:bg-amber-700">Gửi phê duyệt</button>
           </div>
         </form>
       </div>
@@ -2917,10 +2929,7 @@ table { display: block; overflow-x: auto; max-width: 100%; }
             <span id="permTreeBadge_payment" class="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-gray-100 text-gray-500">0/0</span>
           </summary>
           <div class="p-3 pt-0 space-y-2">
-            <p class="text-[11px] text-gray-500 italic">Quản lý toàn bộ module "Thanh toán" (mục con của "Tổng Hợp"): tạo đề nghị thủ công, sửa/duyệt/yêu cầu bổ sung/xoá đề nghị, xác nhận từng đợt đã thanh toán. Cũng là quyền tải "Tài liệu ký" + bấm nút "Thanh toán" ở Hợp đồng/Mua Bán/Sửa Chữa/Đầu Tư (dùng chung phạm vi phòng ban với quyền Tạo mới của từng module đó).</p>
-            <label class="flex items-center gap-2 text-emerald-700 font-semibold cursor-pointer">
-              <input type="checkbox" id="pPaymentManage"> ✅ Quản lý Thanh toán (toàn công ty)
-            </label>
+            <p class="text-[11px] text-gray-500 italic">Quản lý toàn bộ module "Thanh toán" (mục con của "Tổng Hợp"): tạo đề nghị thủ công, sửa/duyệt/yêu cầu bổ sung/xoá đề nghị, xác nhận từng đợt đã thanh toán. Cũng là quyền tải "Tài liệu ký" + bấm nút "Thanh toán" ở Hợp đồng/Mua Bán/Sửa Chữa/Đầu Tư (dùng chung phạm vi phòng ban với quyền Tạo mới của từng module đó). Bật/tắt ở mục "0. Quyền Truy Cập Module" phía trên (lồng dưới "Tổng Hợp").</p>
           </div>
         </details>
 
@@ -2940,10 +2949,7 @@ table { display: block; overflow-x: auto; max-width: 100%; }
             <span id="permTreeBadge_vpp" class="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-gray-100 text-gray-500">0/0</span>
           </summary>
           <div class="p-3 pt-0 space-y-2">
-            <p class="text-[11px] text-gray-500 italic">Mọi người đã đăng nhập (còn quyền vào module "Văn Phòng Phẩm" ở mục 0) đều tự đăng ký được ở kỳ đang mở. Quyền dưới đây dành riêng cho người QUẢN LÝ: tạo/kết thúc kỳ đăng ký, tải lên danh mục, xem báo cáo tổng hợp toàn công ty theo phòng ban & theo mặt hàng.</p>
-            <label class="flex items-center gap-2 text-orange-700 font-semibold cursor-pointer">
-              <input type="checkbox" id="pVppManage"> ✅ Quản lý Văn phòng phẩm (tạo/kết thúc kỳ, xem báo cáo tổng hợp)
-            </label>
+            <p class="text-[11px] text-gray-500 italic">Mọi người đã đăng nhập (còn quyền vào module "Văn Phòng Phẩm" ở mục 0) đều tự đăng ký được ở kỳ đang mở. Quyền dưới đây dành riêng cho người QUẢN LÝ: tạo/kết thúc kỳ đăng ký, tải lên danh mục, xem báo cáo tổng hợp toàn công ty theo phòng ban & theo mặt hàng. Bật/tắt ở mục "0. Quyền Truy Cập Module" phía trên (lồng dưới "Văn Phòng Phẩm").</p>
           </div>
         </details>
 
@@ -2953,16 +2959,7 @@ table { display: block; overflow-x: auto; max-width: 100%; }
             <span id="permTreeBadge_periodicReport" class="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-gray-100 text-gray-500">0/0</span>
           </summary>
           <div class="p-3 pt-0 space-y-3">
-            <p class="text-[11px] text-gray-500 italic">Còn quyền vào module "Báo Cáo Định Kỳ" ở mục 0 mới thấy được các màn dưới đây. "Quản lý" = tạo/đóng kỳ báo cáo. "Tổng hợp" = quyền CHUNG, tổng hợp/sửa/phát hành được MỌI kỳ (không phân biệt ai tạo kỳ đó). "Nộp báo cáo" = ai KHÔNG có quyền này thì không nộp được — có quyền rồi thì CHỈ nộp được cho đúng phòng ban của mình, không chọn phòng ban khác (khoá cứng ở server). Xem danh sách báo cáo vẫn luôn xem được (không cần quyền riêng), nhưng chỉ xem trong phạm vi phòng ban mình — trừ ai có "Quản lý"/"Tổng hợp" ở trên thì xem được mọi phòng ban.</p>
-            <label class="flex items-center gap-2 text-orange-700 font-semibold cursor-pointer">
-              <input type="checkbox" id="pReportManage"> ✅ Quản lý kỳ báo cáo (tạo/đóng kỳ sớm)
-            </label>
-            <label class="flex items-center gap-2 text-orange-700 font-semibold cursor-pointer">
-              <input type="checkbox" id="pReportAggregate"> ✅ Tổng hợp báo cáo (chọn, merge, sửa, phát hành/hủy phát hành)
-            </label>
-            <label class="flex items-center gap-2 text-orange-700 font-semibold cursor-pointer">
-              <input type="checkbox" id="pReportEntryCreate"> ✅ Nộp báo cáo (chỉ tạo được cho đúng phòng ban của mình)
-            </label>
+            <p class="text-[11px] text-gray-500 italic">Còn quyền vào module "Báo Cáo Định Kỳ" ở mục 0 mới thấy được các màn dưới đây. "Quản lý" = tạo/đóng kỳ báo cáo. "Tổng hợp" = quyền CHUNG, tổng hợp/sửa/phát hành được MỌI kỳ (không phân biệt ai tạo kỳ đó). "Nộp báo cáo" = ai KHÔNG có quyền này thì không nộp được — có quyền rồi thì CHỈ nộp được cho đúng phòng ban của mình, không chọn phòng ban khác (khoá cứng ở server). Xem danh sách báo cáo vẫn luôn xem được (không cần quyền riêng), nhưng chỉ xem trong phạm vi phòng ban mình — trừ ai có "Quản lý"/"Tổng hợp" ở trên thì xem được mọi phòng ban. Bật/tắt 3 quyền này ở mục "0. Quyền Truy Cập Module" phía trên (lồng dưới "Báo Cáo Định Kỳ").</p>
           </div>
         </details>
 
@@ -4235,19 +4232,25 @@ function scopeHasAny(user, scope) {
 
 // Danh sách các module nghiệp vụ có công tắc "Quyền Truy Cập Module" độc lập (không cần quyền
 // admin) — admin bật/tắt riêng cho từng người dùng ở khối "0. Quyền Truy Cập Module".
-// `subModules` (tuỳ chọn): module nào có nhiều phân hệ con cần cấp quyền riêng lẻ (vd Văn phòng có
-// Mua Bán/Sửa Chữa/Đầu Tư) thì khai báo ở đây — mục "0. Quyền Truy Cập Module" sẽ TỰ ĐỘNG lồng các
-// checkbox con này ngay dưới module cha (xem renderModuleAccessCheckboxes()), không cần đặt rải rác
-// ở chỗ khác trong form nữa. `id`/`checkedByDefault` khớp đúng với key trong đối tượng perms của user
-// (vd perms.officeBuy) — collectPermsFromForm()/populatePermsForm() đọc/ghi theo id này, không phụ
-// thuộc vị trí trong DOM.
+// `subModules` (tuỳ chọn): module nào có nhiều phân hệ con/tab cần cấp quyền riêng lẻ (vd Văn phòng
+// có Mua Bán/Sửa Chữa/Đầu Tư/Thanh Toán, Văn Phòng Phẩm có tab Quản lý, Báo Cáo Định Kỳ có 3 tab Quản
+// lý/Tổng hợp/Nộp báo cáo) thì khai báo ở đây — mục "0. Quyền Truy Cập Module" sẽ TỰ ĐỘNG lồng các
+// checkbox con này ngay dưới module cha (xem renderModuleAccessCheckboxes(), áp dụng được cho CẢ module
+// gốc lẫn module con có field "parent" như "vpp"), không cần đặt rải rác ở chỗ khác trong form nữa —
+// module mới thêm sau này chỉ cần khai báo subModules ở đây là tự có đủ checkbox, không phải sửa thêm
+// gì trong renderModuleAccessCheckboxes()/readModuleAccessFromForm()/populateModuleAccessForm(). Các
+// khối quyền chi tiết cũ (mục 10/12/13) chỉ còn giữ đoạn giải thích, checkbox thật đã chuyển hẳn về đây
+// (KHÔNG lặp lại ở 2 nơi — trùng "id" trong HTML là lỗi). `id`/`checkedByDefault` khớp đúng với key
+// trong đối tượng perms của user (vd perms.officeBuy, perms.paymentManage, perms.vppManage,
+// perms.reportManage/reportAggregate/reportEntryCreate) — collectPermsFromForm()/populatePermsForm()
+// đọc/ghi theo id này, không phụ thuộc vị trí trong DOM.
 // "car"/"meeting"/"vpp" mang field "parent" = con của "hanhchinh" (module Hành Chính) — hasModuleAccess()
 // đọc field này để khoá CẢ 3 module con cùng lúc khi tắt quyền vào module cha, dù mỗi con vẫn giữ
 // checkbox pModuleAccess_<key> riêng (đọc/ghi không đổi, xem readModuleAccessFromForm()/
 // populateModuleAccessForm() — 2 hàm đó lặp phẳng qua TOÀN BỘ mảng này bất kể lồng cha/con hay không).
-// Khác "office.subModules" (chỉ là checkbox quyền phụ dạng boolean thường, KHÔNG phải khoá module
-// riêng) — "car"/"meeting"/"vpp" vẫn là module ĐỘC LẬP đầy đủ (nav/section/quyền chi tiết riêng), chỉ
-// thêm 1 lớp khoá cha bên trên.
+// Khác "subModules" (chỉ là checkbox quyền phụ dạng boolean thường, KHÔNG phải khoá module riêng, và
+// KHÔNG được hasModuleAccess() đọc tới) — "car"/"meeting"/"vpp" vẫn là module ĐỘC LẬP đầy đủ (nav/
+// section/quyền chi tiết riêng), chỉ thêm 1 lớp khoá cha bên trên.
 const BUSINESS_MODULES = [
   { key: 'doc', label: 'Tài Liệu' },
   { key: 'submission', label: 'Văn Bản Trình / Tờ Trình' },
@@ -4258,14 +4261,21 @@ const BUSINESS_MODULES = [
   { key: 'hanhchinh', label: 'Hành Chính' },
   { key: 'meeting', label: 'Đặt Phòng Họp', parent: 'hanhchinh' },
   { key: 'car', label: 'Đăng Ký Xe', parent: 'hanhchinh' },
-  { key: 'vpp', label: 'Văn Phòng Phẩm', parent: 'hanhchinh' },
+  { key: 'vpp', label: 'Văn Phòng Phẩm', parent: 'hanhchinh', subModules: [
+    { id: 'pVppManage', label: '✅ Quản lý (tạo/kết thúc kỳ, báo cáo tổng hợp)', checkedByDefault: false }
+  ] },
   { key: 'office', label: 'Tổng Hợp', subModules: [
     { id: 'pOfficeBuy', label: '🛒 Mua Bán', checkedByDefault: true },
     { id: 'pOfficeFix', label: '🔧 Sửa Chữa', checkedByDefault: true },
-    { id: 'pOfficeInvest', label: '📈 Đầu Tư', checkedByDefault: false }
+    { id: 'pOfficeInvest', label: '📈 Đầu Tư', checkedByDefault: false },
+    { id: 'pPaymentManage', label: '💰 Quản lý Thanh Toán (toàn công ty)', checkedByDefault: false }
   ] },
   { key: 'reports', label: 'Báo Cáo' },
-  { key: 'periodicReport', label: 'Báo Cáo Định Kỳ' }
+  { key: 'periodicReport', label: 'Báo Cáo Định Kỳ', subModules: [
+    { id: 'pReportManage', label: '✅ Quản lý kỳ báo cáo (tạo/đóng kỳ sớm)', checkedByDefault: false },
+    { id: 'pReportAggregate', label: '✅ Tổng hợp báo cáo (chọn, merge, sửa, phát hành)', checkedByDefault: false },
+    { id: 'pReportEntryCreate', label: '✅ Nộp báo cáo (đúng phòng ban mình)', checkedByDefault: false }
+  ] }
 ];
 
 // Các loại Văn bản trình / Tờ trình cố định (khớp đúng option value ở #subType) — dùng làm khoá để
@@ -8155,7 +8165,7 @@ function previewContractApprovalWorkflow() {
 
   document.getElementById('viewModalTitle').innerText = '🔍 Xem Trước Quy Trình Phê Duyệt Hợp Đồng';
   document.getElementById('viewModalSub').innerText = `Phòng ban: ${dept}`;
-  document.getElementById('viewModalFooterInfo').innerText = 'Chỉ mang tính tham khảo — quy trình thật sự do server xác minh lại khi bạn bấm Gửi Duyệt.';
+  document.getElementById('viewModalFooterInfo').innerText = 'Chỉ mang tính tham khảo — quy trình thật sự do server xác minh lại khi bạn bấm Gửi phê duyệt.';
   document.getElementById('viewModalContent').innerHTML = buildContractApprovalWorkflowPreviewHTML(dept, selectedLayerKeys, selectedLayerMembers);
   document.getElementById('viewDocModal').classList.remove('hidden');
 }
@@ -10383,7 +10393,7 @@ function cancelEditContract() {
   document.getElementById('contractType').disabled = false;
   document.getElementById('contractFile').required = true;
   document.getElementById('contractFileEditHint').classList.add('hidden');
-  document.getElementById('contractSubmitBtn').innerText = 'Gửi Duyệt';
+  document.getElementById('contractSubmitBtn').innerText = 'Gửi phê duyệt';
   document.getElementById('contractCancelEditBtn').classList.add('hidden');
   // Đặt lại mode = option ĐẦU TIÊN đang có trong <select> (không hardcode 'NEW' — danh sách option đổi
   // theo tab, xem setContractSubTab(); setContractSubTab() luôn tự set lại giá trị đúng NGAY SAU khi
@@ -11027,7 +11037,7 @@ function cancelEditPaymentRequest() {
   const form = document.getElementById('paymentCreateForm');
   form.reset();
   renderPaymentCreateInstallmentsList([]);
-  form.querySelector('button[type="submit"]').innerText = 'Tạo Đề Nghị Thanh Toán';
+  form.querySelector('button[type="submit"]').innerText = 'Gửi phê duyệt';
 }
 
 function openEditPaymentRequest(id) {
@@ -13795,7 +13805,7 @@ function collectVppRegFormItems(period) {
 }
 
 // "Kết Thúc Chọn (Lưu Nháp)" — tạo hồ sơ NHÁP mới (lần đầu chọn) hoặc cập nhật lại NHÁP đã có (sửa
-// tiếp), tuỳ vppFormDraftId. Chưa vào quy trình duyệt — phải bấm "Gửi Duyệt" riêng mới chuyển bước.
+// tiếp), tuỳ vppFormDraftId. Chưa vào quy trình duyệt — phải bấm "Gửi phê duyệt" riêng mới chuyển bước.
 async function saveVppRegDraft() {
   const periodId = Number(document.getElementById('vppRegPeriodSelect').value);
   if (!periodId) return alert('Vui lòng chọn kỳ đăng ký!');
@@ -13826,7 +13836,7 @@ async function saveVppRegDraft() {
   if (idx !== -1) DB.vppRegistrations[idx] = savedReg; else DB.vppRegistrations.unshift(savedReg);
   vppFormDraftId = savedReg.id;
   logSystemAction('VPP', 'SAVE_VPP_REG_DRAFT', `Lưu nháp đăng ký Văn phòng phẩm kỳ [${period.name}]: ${items.length} mặt hàng`, 'SUCCESS', savedReg.code);
-  alert('✅ Đã lưu nháp — bạn có thể sửa tiếp hoặc bấm "Gửi Duyệt" khi đã chọn xong.');
+  alert('✅ Đã lưu nháp — bạn có thể sửa tiếp hoặc bấm "Gửi phê duyệt" khi đã chọn xong.');
   renderVppRegistrations();
 
   const submitBtn = document.getElementById('btnVppRegSubmitDraft');
@@ -13834,16 +13844,16 @@ async function saveVppRegDraft() {
   submitBtn.onclick = () => submitVppRegDraftAction(vppFormDraftId, true);
 }
 
-// "Gửi Duyệt": NHÁP -> CHỜ DUYỆT. fromForm=true khi bấm từ form đăng ký (ẩn form đi sau khi gửi xong);
+// "Gửi phê duyệt": NHÁP -> CHỜ DUYỆT. fromForm=true khi bấm từ form đăng ký (ẩn form đi sau khi gửi xong);
 // false khi bấm trực tiếp từ dropdown thao tác ở danh sách (không đụng tới form).
 async function submitVppRegDraftAction(regId, fromForm) {
   if (!regId) return;
   const r = DB.vppRegistrations.find(x => x.id === regId);
   if (!r) return;
   showConfirmModal({
-    title: '📤 Xác Nhận Gửi Duyệt',
+    title: '📤 Xác Nhận Gửi Phê Duyệt',
     bodyHTML: `<p>Gửi đăng ký Văn phòng phẩm kỳ <b>${escapeHtml(r.periodName)}</b> (${r.items.length} mặt hàng) để bắt đầu quy trình phê duyệt? Sau khi gửi sẽ không tự sửa được nữa.</p>`,
-    confirmLabel: 'Gửi Duyệt',
+    confirmLabel: 'Gửi phê duyệt',
     onConfirm: async () => {
       let result;
       try {
@@ -13902,7 +13912,7 @@ function renderVppRegistrations() {
     const secondaryOptions = [];
     if (isOwnDraft) {
       primaryBtnHTML = `<button onclick="editVppRegDraft(${r.id})" class="px-2.5 py-1 bg-gray-600 text-white rounded text-xs hover:opacity-90 font-bold">✏️ Sửa Nháp</button>`;
-      secondaryOptions.push({ value: 'submit', label: '📤 Gửi Duyệt' });
+      secondaryOptions.push({ value: 'submit', label: 'Gửi phê duyệt' });
     } else {
       // canApprove: điều hướng sang Hub "✅ Phê Duyệt" thay vì mở modal xử lý ngay tại đây.
       primaryBtnHTML = canApprove
@@ -15322,6 +15332,16 @@ function renderModuleAccessCheckboxes(containerId = 'moduleAccessCheckboxes', pr
               <input type="checkbox" id="${prefix}_${c.key}" checked>
               <span>${escapeHtml(c.label)}</span>
             </label>
+            ${(c.subModules && c.subModules.length) ? `
+              <div class="pl-4 space-y-0.5 border-l-2 border-slate-200">
+                ${c.subModules.map(sm => `
+                  <label class="flex items-center gap-1.5 text-gray-500 text-[11px] cursor-pointer">
+                    <input type="checkbox" id="${escapeHtml(sm.id)}" ${sm.checkedByDefault ? 'checked' : ''}>
+                    <span>${escapeHtml(sm.label)}</span>
+                  </label>
+                `).join('')}
+              </div>
+            ` : ''}
           `).join('')}
         </div>
       ` : ''}
@@ -15948,10 +15968,14 @@ document.addEventListener('click', (ev) => {
 // ==========================================
 let activePeriodicReportSubTab = 'ENTRY';
 let prEntryDraftId = null;
-// Tệp đã tải lên sẵn của bản nháp đang sửa (numbers/wholeFile) — giữ lại nếu người dùng
-// không chọn tệp mới khi lưu nháp tiếp, giống mô hình "sửa hồ sơ không bắt buộc chọn lại file" của
-// Hợp đồng (xem openEditContract()). null nếu đang tạo báo cáo mới hoặc mục đó chưa có tệp.
-let prEntryExistingFiles = { numbers: null, wholeFile: null };
+// Tệp .pptx + nội dung ĐÃ ĐỌC (parsedSlides) của bản nháp đang sửa — giữ lại nếu người dùng không chọn
+// tệp mới khi lưu nháp tiếp, giống mô hình "sửa hồ sơ không bắt buộc chọn lại file" của Hợp đồng (xem
+// openEditContract()). null nếu đang tạo báo cáo mới hoặc chưa từng chọn tệp.
+let prEntryExistingFile = null; // { fileUrl, fileName, fileType, parsedSlides } | null
+// Tệp .pptx VỪA chọn ở ô file (chưa tải lên server) — trình duyệt đã tự đọc xong (parsePptxToSlideContents())
+// ngay lúc chọn, chỉ thực sự tải file gốc lên server lúc bấm Lưu Nháp/Gửi (tránh tải lên nhiều lần nếu
+// người dùng đổi ý chọn lại tệp khác trước khi lưu).
+let prEntryPendingFile = null; // { file, parsedSlides } | null
 let prAggCurrentPeriodId = null;
 let prAggSelectedIds = [];
 let prAggPendingSlides = null;
@@ -16007,13 +16031,16 @@ function formatDateVN(value) {
 function setPeriodicReportSubTab(subTab) {
   if (subTab === 'PERIODS' && !canManageReportPeriodsClient(currentUser)) subTab = 'ENTRY';
   if (subTab === 'AGGREGATE' && !canAggregateReportsClient(currentUser)) subTab = 'ENTRY';
+  if (subTab === 'TEMPLATES' && !canManageReportPeriodsClient(currentUser)) subTab = 'ENTRY';
   activePeriodicReportSubTab = subTab;
 
   document.getElementById('btnPRSubPeriods').classList.toggle('hidden', !canManageReportPeriodsClient(currentUser));
   document.getElementById('btnPRSubAggregate').classList.toggle('hidden', !canAggregateReportsClient(currentUser));
+  document.getElementById('btnPRSubTemplates').classList.toggle('hidden', !canManageReportPeriodsClient(currentUser));
 
   document.getElementById('prSubEntry').classList.toggle('hidden', subTab !== 'ENTRY');
   document.getElementById('prSubPeriods').classList.toggle('hidden', subTab !== 'PERIODS');
+  document.getElementById('prSubTemplates').classList.toggle('hidden', subTab !== 'TEMPLATES');
   document.getElementById('prSubAggregate').classList.toggle('hidden', subTab !== 'AGGREGATE');
   document.getElementById('prSubPublished').classList.toggle('hidden', subTab !== 'PUBLISHED');
 
@@ -16021,11 +16048,13 @@ function setPeriodicReportSubTab(subTab) {
   const inactiveCls = 'px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700';
   document.getElementById('btnPRSubEntry').className = subTab === 'ENTRY' ? activeCls : inactiveCls;
   document.getElementById('btnPRSubPeriods').className = subTab === 'PERIODS' ? activeCls : inactiveCls;
+  document.getElementById('btnPRSubTemplates').className = subTab === 'TEMPLATES' ? activeCls : inactiveCls;
   document.getElementById('btnPRSubAggregate').className = subTab === 'AGGREGATE' ? activeCls : inactiveCls;
   document.getElementById('btnPRSubPublished').className = subTab === 'PUBLISHED' ? activeCls : inactiveCls;
 
   if (subTab === 'ENTRY') { renderPrEntryPeriodOptions(); renderPrEntryTable(); }
-  if (subTab === 'PERIODS') { renderReportDeptCheckboxes(); renderPrPeriodsTable(); }
+  if (subTab === 'PERIODS') { renderReportDeptCheckboxes(); renderPrPeriodTemplateOptions(); renderPrPeriodsTable(); }
+  if (subTab === 'TEMPLATES') { cancelEditSlideTemplate(); renderPrTemplatesTable(); }
   if (subTab === 'AGGREGATE') { renderPrAggPeriodOptions(); }
   if (subTab === 'PUBLISHED') { renderPrPublishedTable(); }
 }
@@ -16114,12 +16143,32 @@ function removePrItemRow(containerId, idx, progressField, progressLabel, removeF
   renderPrItemsTable(containerId, current, progressField, progressLabel, removeFnName);
 }
 
-// Đổi mode STRUCTURED (nhập theo mẫu, các khối bảng/Số Liệu/Khác) <-> FILE_UPLOAD (đính nguyên 1 tệp
-// báo cáo đã làm sẵn, không gõ lại).
-function onPrEntryModeChange() {
-  const mode = document.getElementById('prEntryMode').value;
-  document.getElementById('prEntryStructuredWrap').classList.toggle('hidden', mode !== 'STRUCTURED');
-  document.getElementById('prEntryFileUploadWrap').classList.toggle('hidden', mode !== 'FILE_UPLOAD');
+// Chọn file .pptx ở form Nhập Báo Cáo — đọc luôn nội dung (JSZip + DOMParser gốc, KHÔNG qua server)
+// bằng parsePptxToSlideContents() NGAY LÚC chọn tệp, lưu tạm vào prEntryPendingFile (chưa tải file gốc
+// lên server) — chỉ thực sự tải lên lúc bấm Lưu Nháp/Gửi. Báo lỗi rõ ràng nếu không đọc được (thường do
+// chọn nhầm .ppt nhị phân đời cũ, JSZip không mở được vì không phải định dạng zip).
+async function onPrEntryPptxFileChange(event) {
+  const file = event.target.files?.[0];
+  const statusEl = document.getElementById('prEntryPptxStatus');
+  prEntryPendingFile = null;
+  if (!file) { statusEl.classList.add('hidden'); return; }
+
+  statusEl.className = 'text-xs mt-2 p-2 rounded border bg-gray-50 text-gray-600 border-gray-200';
+  statusEl.innerText = '⏳ Đang đọc nội dung tệp...';
+  statusEl.classList.remove('hidden');
+  try {
+    await loadVendorScript('/vendor/jszip/jszip.min.js');
+    const arrayBuffer = await file.arrayBuffer();
+    const slides = await parsePptxToSlideContents(arrayBuffer);
+    if (!slides.length) throw new Error('Không đọc được nội dung nào từ tệp này');
+    prEntryPendingFile = { file, parsedSlides: slides };
+    statusEl.className = 'text-xs mt-2 p-2 rounded border bg-emerald-50 text-emerald-800 border-emerald-200';
+    statusEl.innerText = `✅ Đã đọc ${slides.length} trang từ "${file.name}" — nội dung sẽ được gộp vào bản trình chiếu khi Tổng Hợp.`;
+  } catch (err) {
+    statusEl.className = 'text-xs mt-2 p-2 rounded border bg-red-50 text-red-700 border-red-200';
+    statusEl.innerText = `⛔ Không đọc được tệp này: ${err.message}. Chỉ đọc được định dạng .pptx — nếu tệp là .ppt đời cũ, vui lòng lưu lại bằng .pptx rồi chọn lại.`;
+    event.target.value = '';
+  }
 }
 
 // Hiện gợi ý "đã có tệp X" cho 1 ô file input khi sửa tiếp báo cáo nháp — không chọn tệp mới thì giữ
@@ -16141,7 +16190,8 @@ function onPrEntryPeriodChange() {
   const wrap = document.getElementById('prEntryFormWrap');
   const noteEl = document.getElementById('prEntryAlreadySentNote');
   prEntryDraftId = null;
-  prEntryExistingFiles = { numbers: null, wholeFile: null };
+  prEntryExistingFile = null;
+  prEntryPendingFile = null;
   if (!periodId) { wrap.classList.add('hidden'); noteEl.classList.add('hidden'); return; }
   const period = DB.reportPeriods.find(p => p.id === periodId);
   if (!period) { wrap.classList.add('hidden'); noteEl.classList.add('hidden'); return; }
@@ -16157,21 +16207,13 @@ function onPrEntryPeriodChange() {
 
   prEntryDraftId = existing ? existing.id : null; // existing (nếu có) chắc chắn đang DRAFT ở nhánh này
   document.getElementById('prEntryTitle').value = existing?.title || '';
-  document.getElementById('prEntryMode').value = existing?.mode === 'FILE_UPLOAD' ? 'FILE_UPLOAD' : 'STRUCTURED';
-  onPrEntryModeChange();
+  document.getElementById('prEntryPptxFile').value = '';
+  document.getElementById('prEntryPptxStatus').classList.add('hidden');
 
-  renderPrItemsTable('prEntryTaskItemsList', existing?.taskItems || [], 'progress', 'Tiến độ');
-  renderPrItemsTable('prEntryPlanItemsList', existing?.planItems || [], 'plan', 'Kế hoạch tiếp theo');
-  document.getElementById('prEntryNumbersText').value = existing?.numbersText || '';
-  document.getElementById('prEntryNumbersFile').value = '';
-  document.getElementById('prEntryWholeFile').value = '';
-
-  prEntryExistingFiles = {
-    numbers: existing?.numbersFileUrl ? { fileUrl: existing.numbersFileUrl, fileName: existing.numbersFileName, fileType: existing.numbersFileType } : null,
-    wholeFile: existing?.fileUrl ? { fileUrl: existing.fileUrl, fileName: existing.fileName, fileType: existing.fileType } : null
-  };
-  showPrExistingFileHint('prEntryNumbersFileExisting', prEntryExistingFiles.numbers);
-  showPrExistingFileHint('prEntryWholeFileExisting', prEntryExistingFiles.wholeFile);
+  prEntryExistingFile = existing?.fileUrl
+    ? { fileUrl: existing.fileUrl, fileName: existing.fileName, fileType: existing.fileType, parsedSlides: existing.parsedSlides || [] }
+    : null;
+  showPrExistingFileHint('prEntryWholeFileExisting', prEntryExistingFile);
 
   wrap.classList.remove('hidden');
 
@@ -16199,20 +16241,18 @@ async function savePrEntryDraft() {
   if (!period) return alert('Không tìm thấy kỳ báo cáo!');
   const title = document.getElementById('prEntryTitle').value.trim();
   if (!title) return alert('Vui lòng nhập tiêu đề báo cáo!');
-  const mode = document.getElementById('prEntryMode').value;
 
-  const payload = { periodId, title, mode };
+  const payload = { periodId, title };
   try {
-    if (mode === 'FILE_UPLOAD') {
-      const wholeFile = await uploadPrOptionalFile('prEntryWholeFile', prEntryExistingFiles.wholeFile);
-      if (!wholeFile.fileUrl) return alert('Vui lòng chọn tệp báo cáo cần tải lên!');
-      Object.assign(payload, wholeFile);
+    if (prEntryPendingFile) {
+      const uploaded = await uploadFileToServer(prEntryPendingFile.file);
+      payload.fileUrl = uploaded.fileUrl; payload.fileName = uploaded.fileName; payload.fileType = uploaded.fileType;
+      payload.parsedSlides = prEntryPendingFile.parsedSlides;
+    } else if (prEntryExistingFile) {
+      payload.fileUrl = prEntryExistingFile.fileUrl; payload.fileName = prEntryExistingFile.fileName; payload.fileType = prEntryExistingFile.fileType;
+      payload.parsedSlides = prEntryExistingFile.parsedSlides;
     } else {
-      payload.taskItems = collectPrItemsTable('prEntryTaskItemsList', 'progress');
-      payload.planItems = collectPrItemsTable('prEntryPlanItemsList', 'plan');
-      payload.numbersText = document.getElementById('prEntryNumbersText').value.trim();
-      const numbersFile = await uploadPrOptionalFile('prEntryNumbersFile', prEntryExistingFiles.numbers);
-      payload.numbersFileUrl = numbersFile.fileUrl; payload.numbersFileName = numbersFile.fileName; payload.numbersFileType = numbersFile.fileType;
+      return alert('Vui lòng chọn tệp báo cáo (.pptx) cần tải lên!');
     }
   } catch (err) {
     return alert(`⛔ Tải tệp lên thất bại: ${err.message}`);
@@ -16350,6 +16390,114 @@ function renderReportDeptCheckboxes() {
   `).join('');
 }
 
+// ============ MẪU TRÌNH CHIẾU (quản lý — chỉ reportManage/admin) — mẫu CHỈ gồm màu nền/chữ (không
+// phải tệp PowerPoint), áp dụng 1 lần lúc tạo kỳ (createReportPeriod()), người nộp báo cáo không chọn
+// lại — xem PR_SLIDE_TEMPLATES ở khối Tổng Hợp bên dưới cho 2 mẫu cứng đời cũ (chỉ còn áp cho kỳ báo
+// cáo tạo TRƯỚC tính năng này, xem getPrSlideTemplateColors()). ============
+let editingSlideTemplateId = null;
+const PR_TPL_COLOR_FIELDS = ['pageBg', 'coverTitleColor', 'coverAccentColor', 'sectionTitleColor', 'bodyTextColor', 'sourceLabelColor', 'tableBorder', 'tableHeadBg', 'tableText', 'navBtnBg', 'navBtnText', 'topBarBg'];
+
+function renderPrPeriodTemplateOptions() {
+  const sel = document.getElementById('prPeriodSlideTemplate');
+  if (!sel) return;
+  sel.innerHTML = DB.reportSlideTemplates.map(t => `<option value="${t.id}">${escapeHtml(t.name)}</option>`).join('');
+  document.getElementById('prPeriodNoTemplateNote').classList.toggle('hidden', DB.reportSlideTemplates.length > 0);
+}
+
+function renderPrTemplatesTable() {
+  const tbody = document.getElementById('prTemplatesTableBody');
+  if (!tbody) return;
+  if (!DB.reportSlideTemplates.length) {
+    tbody.innerHTML = `<tr><td colspan="3" class="text-center p-6 text-gray-500 italic">Chưa có mẫu trình chiếu nào — tạo mẫu ở form bên trên trước khi tạo kỳ báo cáo.</td></tr>`;
+    return;
+  }
+  tbody.innerHTML = DB.reportSlideTemplates.map(t => {
+    const c = t.colors || {};
+    return `
+      <tr class="hover:bg-gray-50 border-b">
+        <td class="border p-2 font-bold text-sky-800">${escapeHtml(t.name)}</td>
+        <td class="border p-2">
+          <div class="w-24 h-12 rounded border flex items-center justify-center text-[10px] font-bold" style="background:${c.pageBg};color:${c.coverTitleColor};">Aa</div>
+        </td>
+        <td class="border p-2 text-center space-x-1">
+          <button onclick="editSlideTemplate(${t.id})" class="px-2.5 py-1 bg-gray-600 text-white rounded text-xs hover:opacity-90 font-bold">✏️ Sửa</button>
+          ${currentUser.perms?.admin ? `<button onclick="deleteSlideTemplateAction(${t.id})" class="px-2.5 py-1 bg-rose-100 text-rose-700 rounded text-xs hover:bg-rose-200 font-bold">🗑️ Xóa</button>` : ''}
+        </td>
+      </tr>
+    `;
+  }).join('');
+}
+
+function readSlideTemplateColorsFromForm() {
+  const colors = {};
+  PR_TPL_COLOR_FIELDS.forEach(f => { colors[f] = document.getElementById(`prTplColor_${f}`).value; });
+  return colors;
+}
+
+function fillSlideTemplateColorsForm(colors) {
+  const c = colors || PR_SLIDE_TEMPLATES.DEFAULT;
+  PR_TPL_COLOR_FIELDS.forEach(f => {
+    const input = document.getElementById(`prTplColor_${f}`);
+    if (input && c[f] && /^#[0-9a-fA-F]{6}$/.test(c[f])) input.value = c[f];
+  });
+}
+
+async function submitSlideTemplateForm(event) {
+  event.preventDefault();
+  const name = document.getElementById('prTplName').value.trim();
+  if (!name) return alert('Vui lòng nhập tên mẫu!');
+  const payload = { name, colors: readSlideTemplateColorsFromForm() };
+  let saved;
+  try {
+    if (editingSlideTemplateId) {
+      const result = await callRecordAction('reportSlideTemplates', editingSlideTemplateId, 'update', payload);
+      saved = result.item;
+    } else {
+      payload.createdAt = new Date().toLocaleString('vi-VN');
+      const result = await callCreateAction('reportSlideTemplates', payload);
+      saved = result.item;
+    }
+  } catch (err) { return alert(`⛔ ${err.message}`); }
+  const idx = DB.reportSlideTemplates.findIndex(t => t.id === saved.id);
+  if (idx !== -1) DB.reportSlideTemplates[idx] = saved; else DB.reportSlideTemplates.unshift(saved);
+  logSystemAction('PERIODIC_REPORT', editingSlideTemplateId ? 'UPDATE_REPORT_SLIDE_TEMPLATE' : 'CREATE_REPORT_SLIDE_TEMPLATE', `${editingSlideTemplateId ? 'Sửa' : 'Tạo'} mẫu trình chiếu [${saved.name}]`, 'SUCCESS', String(saved.id));
+  alert(editingSlideTemplateId ? '✅ Đã lưu mẫu trình chiếu!' : '✅ Đã tạo mẫu trình chiếu mới!');
+  cancelEditSlideTemplate();
+  renderPrTemplatesTable();
+  renderPrPeriodTemplateOptions();
+}
+
+function editSlideTemplate(id) {
+  const t = DB.reportSlideTemplates.find(x => x.id === id);
+  if (!t) return;
+  editingSlideTemplateId = id;
+  document.getElementById('prTplFormTitle').innerText = `🎨 Sửa Mẫu Trình Chiếu — ${t.name}`;
+  document.getElementById('prTplName').value = t.name;
+  fillSlideTemplateColorsForm(t.colors);
+  document.getElementById('btnPrTplSubmit').innerText = '💾 Lưu Thay Đổi';
+  document.getElementById('btnPrTplCancelEdit').classList.remove('hidden');
+}
+
+function cancelEditSlideTemplate() {
+  editingSlideTemplateId = null;
+  const titleEl = document.getElementById('prTplFormTitle');
+  if (titleEl) titleEl.innerText = '🎨 Tạo Mẫu Trình Chiếu Mới';
+  const nameEl = document.getElementById('prTplName');
+  if (nameEl) nameEl.value = '';
+  fillSlideTemplateColorsForm(null);
+  const submitEl = document.getElementById('btnPrTplSubmit');
+  if (submitEl) submitEl.innerText = '➕ Tạo Mẫu';
+  document.getElementById('btnPrTplCancelEdit')?.classList.add('hidden');
+}
+
+function deleteSlideTemplateAction(id) {
+  deleteRecordAdminOnly('reportSlideTemplates', id, 'mẫu trình chiếu', () => {
+    DB.reportSlideTemplates = DB.reportSlideTemplates.filter(x => x.id !== id);
+    renderPrTemplatesTable();
+    renderPrPeriodTemplateOptions();
+  });
+}
+
 async function createReportPeriod(e) {
   e.preventDefault();
   const name = document.getElementById('prPeriodName').value.trim();
@@ -16365,8 +16513,9 @@ async function createReportPeriod(e) {
   };
   if (!deptScope.all && !deptScope.depts.length) return alert('Vui lòng chọn ít nhất 1 phòng ban áp dụng, hoặc chọn "Tất cả phòng ban"!');
 
-  const slideTemplate = document.getElementById('prPeriodSlideTemplate').value;
-  const payload = { name, endTime, deptScope, slideTemplate, createdAt: new Date().toLocaleString('vi-VN') };
+  const slideTemplateId = Number(document.getElementById('prPeriodSlideTemplate').value);
+  if (!slideTemplateId) return alert('Vui lòng chọn mẫu trình chiếu! Nếu chưa có mẫu nào, hãy tạo ở tab "🎨 Mẫu Trình Chiếu" trước.');
+  const payload = { name, endTime, deptScope, slideTemplateId, createdAt: new Date().toLocaleString('vi-VN') };
   let newPeriod;
   try {
     const result = await callCreateAction('reportPeriods', payload);
@@ -16382,7 +16531,6 @@ async function createReportPeriod(e) {
   document.getElementById('prPeriodName').value = '';
   document.getElementById('prPeriodEndTime').value = '';
   document.getElementById('prPeriodDeptAll').checked = false;
-  document.getElementById('prPeriodSlideTemplate').value = 'DEFAULT';
   renderReportDeptCheckboxes();
   renderPrPeriodsTable();
 }
@@ -16407,7 +16555,8 @@ function renderPrPeriodsTable() {
     if (isOpen) secondaryOptions.push({ value: 'close', label: '🔒 Đóng Kỳ Sớm' });
     if (currentUser.perms?.admin) secondaryOptions.push({ value: 'delete', label: '🗑️ Xóa' });
     const primaryBtnHTML = `<span class="text-gray-400 italic text-[11px]">—</span>`;
-    const templateLabel = p.slideTemplate === 'ORANGE_GOLD' ? 'Cam - Vàng' : 'Mặc định';
+    const tpl = DB.reportSlideTemplates.find(t => t.id === p.slideTemplateId);
+    const templateLabel = tpl ? tpl.name : (p.slideTemplate === 'ORANGE_GOLD' ? 'Cam - Vàng (mẫu cũ)' : 'Mặc định (mẫu cũ)');
     return `
       <tr class="hover:bg-gray-50 border-b">
         <td class="border p-2 font-bold text-sky-800">${escapeHtml(p.name)}</td>
@@ -16596,7 +16745,7 @@ async function mergeReportPeriodByTasksAction() {
   renderPrPeriodsTable();
 }
 
-const PR_SLIDE_KIND_LABELS = { COVER: 'Trang bìa', DEPT: 'Chia phòng ban', TASKS: 'Bảng công việc', PLAN: 'Bảng kế hoạch', NUMBERS: 'Số liệu', OTHER: 'Khác', FILE: 'Tệp đính kèm', TASK_STATS: 'Thống kê công việc' };
+const PR_SLIDE_KIND_LABELS = { COVER: 'Trang bìa', DEPT: 'Chia phòng ban', TASKS: 'Bảng công việc', PLAN: 'Bảng kế hoạch', NUMBERS: 'Số liệu', OTHER: 'Khác', FILE: 'Tệp đính kèm', TASK_STATS: 'Thống kê công việc', PPTX_SLIDE: 'Trang PowerPoint' };
 
 // 2 mẫu màu cho trình chiếu/PDF Báo Cáo Định Kỳ — chọn lúc "Tạo Kỳ Báo Cáo" (period.slideTemplate),
 // không đổi được sau khi tạo. 'DEFAULT' giữ NGUYÊN giao diện nền tối đã có từ trước (không đổi 1 màu
@@ -16617,8 +16766,15 @@ const PR_SLIDE_TEMPLATES = {
     navBtnBg: 'rgba(245,131,32,0.12)', navBtnText: '#D86C0A', topBarBg: '#111827'
   }
 };
-function getPrSlideTemplateColors(template) {
-  return PR_SLIDE_TEMPLATES[template] || PR_SLIDE_TEMPLATES.DEFAULT;
+// templateRef: id (number) của DB.reportSlideTemplates (mẫu do người dùng tự tạo — xem tab "🎨 Mẫu
+// Trình Chiếu") cho các kỳ MỚI, hoặc chuỗi 'DEFAULT'/'ORANGE_GOLD' (mẫu cứng đời cũ, chỉ còn dùng cho
+// các kỳ báo cáo đã tạo TRƯỚC khi có tính năng mẫu tự tạo — xem slideTemplate ở reportPeriods cũ).
+function getPrSlideTemplateColors(templateRef) {
+  if (typeof templateRef === 'number') {
+    const tpl = DB.reportSlideTemplates.find(t => t.id === templateRef);
+    if (tpl?.colors) return tpl.colors;
+  }
+  return PR_SLIDE_TEMPLATES[templateRef] || PR_SLIDE_TEMPLATES.DEFAULT;
 }
 
 // Danh sách slide đang sửa (prAggPendingSlides) là bản nháp CHỈ Ở CLIENT — chỉ thực sự lưu lại khi
@@ -16656,6 +16812,17 @@ function renderPrAggCompilation() {
       `;
     } else if (s.kind === 'FILE') {
       bodyHTML = `<div class="text-[11px] bg-white border rounded p-1.5">📎 ${escapeHtml(s.fileName || 'tệp đính kèm')}</div>`;
+    } else if (s.kind === 'PPTX_SLIDE') {
+      // Text đọc từ .pptx (bodyLines) SỬA ĐƯỢC trực tiếp (mỗi dòng textarea = 1 gạch đầu dòng khi
+      // trình chiếu). Ảnh (embedded/bảng/đồ thị — bảng và đồ thị đã được vẽ lại thành ảnh lúc đọc file,
+      // xem parsePptxToSlideContents()) CHỈ ĐỌC, không sửa lại được nội dung bên trong ảnh.
+      const imagesHTML = (s.images || []).length
+        ? `<div class="flex flex-wrap gap-2 mt-1.5">${(s.images || []).map(im => `<img src="${im.dataUrl}" class="h-20 rounded border" oncontextmenu="return false;">`).join('')}</div>`
+        : '';
+      bodyHTML = `
+        <textarea oninput="updatePrAggPptxBodyLines(${idx}, this.value)" placeholder="Nội dung (mỗi dòng là 1 gạch đầu dòng)" class="w-full border p-1.5 rounded text-xs h-24" ${isPublished ? 'disabled' : ''}>${escapeHtml((s.bodyLines || []).join('\n'))}</textarea>
+        ${imagesHTML ? `<div class="text-[11px] text-gray-500">🖼️ Ảnh/bảng/đồ thị từ tệp gốc (không sửa được nội dung bên trong):</div>${imagesHTML}` : ''}
+      `;
     }
     return `
       <div class="border rounded p-2 bg-gray-50 space-y-1">
@@ -16687,6 +16854,11 @@ function renderPrAggCompilation() {
 function updatePrAggSlideField(idx, field, value) {
   if (!prAggPendingSlides?.[idx]) return;
   prAggPendingSlides[idx][field] = value;
+}
+
+function updatePrAggPptxBodyLines(idx, value) {
+  if (!prAggPendingSlides?.[idx]) return;
+  prAggPendingSlides[idx].bodyLines = value.split('\n').map(l => l.trim()).filter(Boolean);
 }
 
 // Đọc lại toàn bộ dòng đang hiện trong bảng của slide idx, ghi đè vào prAggPendingSlides[idx].items —
@@ -16820,7 +16992,7 @@ function openPrSlideshow(periodId) {
   if (!period || period.compilation?.status !== 'PUBLISHED') return;
   prSlideshowSlides = period.compilation.slides;
   prSlideshowIndex = 0;
-  prSlideshowTemplate = period.slideTemplate === 'ORANGE_GOLD' ? 'ORANGE_GOLD' : 'DEFAULT';
+  prSlideshowTemplate = period.slideTemplateId || (period.slideTemplate === 'ORANGE_GOLD' ? 'ORANGE_GOLD' : 'DEFAULT');
   document.getElementById('prSlideshowTitle').innerText = period.name;
   document.getElementById('prSlideshowModal').classList.remove('hidden');
   renderPrSlideshowSlide();
@@ -16916,7 +17088,27 @@ function buildPrSlideBodyHTML(s, colors) {
     const fileHTML = buildPrFileBlockHTML(s, c);
     return (textHTML + fileHTML) || `<p style="font-style:italic;color:#9ca3af;">Không có nội dung.</p>`;
   }
+  if (s.kind === 'PPTX_SLIDE') return buildPrPptxSlideBodyHTML(s, c);
   return ''; // COVER / DEPT — chỉ có tiêu đề
+}
+
+// Thân 1 trang lấy từ tệp .pptx tải lên (kind PPTX_SLIDE) — bodyLines là các dòng text ĐỌC ĐƯỢC và
+// SỬA ĐƯỢC (xem renderPrAggCompilation() ở khối Tổng Hợp), images là ảnh CHỈ ĐỌC (ảnh gốc nhúng trong
+// slide, hoặc bảng/đồ thị đã được vẽ lại thành ảnh — xem parser.js: drawTableImage()/drawChartImage() —
+// vì bảng/đồ thị PowerPoint không sửa lại được trực tiếp trên trình duyệt, chỉ text mới sửa được, đúng
+// theo phương án đã chọn).
+function buildPrPptxSlideBodyHTML(s, c) {
+  const linesHTML = (s.bodyLines || []).length
+    ? `<ul style="margin:0;padding-left:1.25em;font-size:16px;line-height:1.8;color:${c.bodyTextColor};">
+        ${(s.bodyLines || []).map(l => `<li>${escapeHtml(l)}</li>`).join('')}
+      </ul>`
+    : '';
+  const imagesHTML = (s.images || []).length
+    ? `<div class="flex flex-wrap gap-3 justify-center mt-3">
+        ${(s.images || []).map(im => `<img src="${im.dataUrl}" class="max-h-72 max-w-full" style="border-radius:6px;border:1px solid ${c.tableBorder};" oncontextmenu="return false;">`).join('')}
+      </div>`
+    : '';
+  return (linesHTML + imagesHTML) || `<p style="font-style:italic;color:#9ca3af;">Không có nội dung.</p>`;
 }
 
 // Dựng nội dung 1 slide (tiêu đề + nguồn + thân) theo màu "c" của mẫu đang chọn — dùng CHUNG cho khung
@@ -16932,7 +17124,10 @@ function buildPrSlideScreenHTML(s, c) {
   const showSource = s.sourceCreatorName && s.kind !== 'DEPT';
   const isCover = s.kind === 'COVER';
   const isDept = s.kind === 'DEPT';
-  const titleHTML = isCover
+  // PPTX_SLIDE (trang lấy từ tệp .pptx tải lên, xem parsePptxToSlideContents()) tiêu đề KHÔNG bắt
+  // buộc — nhiều slide gốc (bảng/đồ thị/ảnh thuần) không có ô tiêu đề nào, để trống thay vì hiện tiêu
+  // đề rỗng chiếm chỗ.
+  const titleHTML = (s.kind === 'PPTX_SLIDE' && !s.title) ? '' : isCover
     ? `<div class="text-center">
         <h2 class="text-3xl md:text-6xl font-extrabold" style="color:${c.coverTitleColor};">${escapeHtml(s.title)}</h2>
         ${c.coverAccentColor !== 'transparent' ? `<div class="mx-auto mt-4" style="width:120px;height:4px;background:${c.coverAccentColor};border-radius:2px;"></div>` : ''}
@@ -17021,7 +17216,7 @@ async function downloadPrPdf(periodId, btnEl) {
   const stage = document.createElement('div');
   try {
     await loadPrPdfLibs();
-    const c = getPrSlideTemplateColors(period.slideTemplate === 'ORANGE_GOLD' ? 'ORANGE_GOLD' : 'DEFAULT');
+    const c = getPrSlideTemplateColors(period.slideTemplateId || (period.slideTemplate === 'ORANGE_GOLD' ? 'ORANGE_GOLD' : 'DEFAULT'));
     const slides = period.compilation.slides;
     if (!slides.length) return alert('Kỳ báo cáo này chưa có slide nào.');
 
@@ -18813,6 +19008,258 @@ function rejectInternalPostAction(id) {
     } catch (err) {
       container.innerHTML = `<div class="p-6 text-center text-red-600 text-sm">⛔ Không xem được file Excel này: ${err.message}<br><span class="text-gray-500 text-xs">Có thể do file .xls đời cũ hoặc file bị lỗi — vui lòng dùng nút "⬇️ Tải" để tải về.</span></div>`;
     }
+  };
+
+  // ============ ĐỌC NỘI DUNG FILE .pptx TẢI LÊN Ở BÁO CÁO ĐỊNH KỲ (module Điều Hành > Báo Cáo) ============
+  // Chuyển 1 file .pptx (ArrayBuffer) thành mảng slide content nhẹ {title, bodyLines, images} — dùng
+  // JSZip (đã có sẵn trong node_modules qua exceljs/mammoth, khai báo tường minh ở package.json, tự lưu
+  // trên server qua /vendor/jszip cùng lý do với mammoth/exceljs ở trên) để giải nén + DOMParser gốc của
+  // trình duyệt để đọc XML (KHÔNG cần thêm thư viện XML riêng). Chỉ đọc được .pptx (OOXML/zip) — KHÔNG
+  // đọc được .ppt nhị phân đời cũ, giống hệt giới hạn mammoth với .doc.
+  //
+  // Bảng/biểu đồ (a:tbl / c:chart) được VẼ LẠI thành ảnh (canvas -> PNG dataURL) chứ không giữ dạng dữ
+  // liệu có thể sửa — vẽ lại đơn giản để không cần layout engine đầy đủ (không cần LibreOffice). Text
+  // (tiêu đề + đoạn văn bản/bullet) được giữ dạng chuỗi để có thể sửa trực tiếp ở bước Tổng Hợp (xem
+  // renderPrAggCompilation()).
+  window.parsePptxToSlideContents = async function parsePptxToSlideContents(arrayBuffer) {
+    const zip = await window.JSZip.loadAsync(arrayBuffer);
+
+    const readText = async (path) => {
+      const f = zip.file(path);
+      if (!f) return null;
+      return f.async('text');
+    };
+    const readBase64 = async (path) => {
+      const f = zip.file(path);
+      if (!f) return null;
+      return f.async('base64');
+    };
+    const parseXml = (text) => new DOMParser().parseFromString(text, 'application/xml');
+    // Ghép/normalize đường dẫn tương đối trong .rels (vd "../media/image1.png") theo ĐÚNG thư mục chứa
+    // slide (không phải thư mục _rels) — không được nối chuỗi thô kẻo ra sai đường dẫn ("../" phải lùi
+    // đúng 1 cấp so với thư mục cha, không phải so với chính nó).
+    const resolveZipPath = (baseDir, target) => {
+      const parts = baseDir.split('/').filter(Boolean);
+      target.split('/').forEach(part => {
+        if (part === '..') parts.pop();
+        else if (part !== '.' && part !== '') parts.push(part);
+      });
+      return parts.join('/');
+    };
+    const firstText = (el, tag) => {
+      const nodes = el.getElementsByTagName(tag);
+      return nodes.length ? nodes[0].textContent : null;
+    };
+
+    // 1. Thứ tự slide THẬT lấy từ presentation.xml (không phải theo tên file slideN.xml, vì thứ tự hiển
+    //    thị có thể khác thứ tự đặt tên file khi 1 slide bị xoá/thêm giữa chừng).
+    const presXml = parseXml(await readText('ppt/presentation.xml'));
+    const relsXml = parseXml(await readText('ppt/_rels/presentation.xml.rels'));
+    const relMap = {};
+    Array.from(relsXml.getElementsByTagName('Relationship')).forEach(r => {
+      relMap[r.getAttribute('Id')] = r.getAttribute('Target');
+    });
+    const slideIds = Array.from(presXml.getElementsByTagName('p:sldId'));
+    const slidePaths = slideIds.map(sid => {
+      const rId = sid.getAttribute('r:id');
+      const target = relMap[rId]; // vd "slides/slide3.xml"
+      return 'ppt/' + target;
+    });
+
+    const mimeByExt = { png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', gif: 'image/gif', bmp: 'image/bmp', emf: 'image/x-emf', wmf: 'image/x-wmf' };
+
+    const drawTableImage = (rows) => {
+      const colCount = Math.max(1, ...rows.map(r => r.length));
+      const cellW = 160, cellH = 34, pad = 8;
+      const canvas = document.createElement('canvas');
+      canvas.width = colCount * cellW;
+      canvas.height = rows.length * cellH;
+      const ctx = canvas.getContext('2d');
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.font = '14px Arial, sans-serif';
+      ctx.textBaseline = 'middle';
+      rows.forEach((row, ri) => {
+        row.forEach((cellText, ci) => {
+          const x = ci * cellW, y = ri * cellH;
+          ctx.strokeStyle = '#cbd5e1';
+          ctx.strokeRect(x, y, cellW, cellH);
+          if (ri === 0) { ctx.fillStyle = '#f1f5f9'; ctx.fillRect(x, y, cellW, cellH); }
+          ctx.fillStyle = '#111827';
+          ctx.font = ri === 0 ? 'bold 14px Arial, sans-serif' : '14px Arial, sans-serif';
+          const text = String(cellText || '').slice(0, 24);
+          ctx.fillText(text, x + pad, y + cellH / 2);
+        });
+      });
+      return canvas.toDataURL('image/png');
+    };
+
+    const CHART_COLORS = ['#2563eb', '#f59e0b', '#10b981', '#ef4444', '#8b5cf6'];
+    const drawChartImage = (chartTitle, chartType, categories, series) => {
+      const W = 560, H = 360, marginL = 50, marginB = 40, marginT = 30, marginR = 20;
+      const canvas = document.createElement('canvas');
+      canvas.width = W; canvas.height = H;
+      const ctx = canvas.getContext('2d');
+      ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, W, H);
+      ctx.fillStyle = '#111827'; ctx.font = 'bold 15px Arial, sans-serif'; ctx.textAlign = 'center';
+      if (chartTitle) ctx.fillText(chartTitle, W / 2, 20);
+
+      const plotW = W - marginL - marginR, plotH = H - marginT - marginB;
+      const allVals = series.flatMap(s => s.values).filter(v => typeof v === 'number');
+      const maxV = Math.max(1, ...allVals);
+      ctx.strokeStyle = '#94a3b8'; ctx.beginPath();
+      ctx.moveTo(marginL, marginT); ctx.lineTo(marginL, marginT + plotH); ctx.lineTo(marginL + plotW, marginT + plotH); ctx.stroke();
+
+      if (chartType === 'pie') {
+        const vals = series[0]?.values || [];
+        const total = vals.reduce((a, b) => a + (b || 0), 0) || 1;
+        const cx = marginL + plotW / 2, cy = marginT + plotH / 2, r = Math.min(plotW, plotH) / 2 - 10;
+        let angle = -Math.PI / 2;
+        vals.forEach((v, i) => {
+          const slice = (v / total) * Math.PI * 2;
+          ctx.fillStyle = CHART_COLORS[i % CHART_COLORS.length];
+          ctx.beginPath(); ctx.moveTo(cx, cy); ctx.arc(cx, cy, r, angle, angle + slice); ctx.closePath(); ctx.fill();
+          angle += slice;
+        });
+      } else if (chartType === 'line') {
+        const stepX = plotW / Math.max(1, categories.length - 1 || 1);
+        series.forEach((s, si) => {
+          ctx.strokeStyle = CHART_COLORS[si % CHART_COLORS.length]; ctx.lineWidth = 2; ctx.beginPath();
+          s.values.forEach((v, i) => {
+            const x = marginL + i * stepX, y = marginT + plotH - (v / maxV) * plotH;
+            if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+          });
+          ctx.stroke();
+        });
+      } else {
+        const groupW = plotW / Math.max(1, categories.length);
+        const barW = groupW / (series.length + 1);
+        series.forEach((s, si) => {
+          ctx.fillStyle = CHART_COLORS[si % CHART_COLORS.length];
+          s.values.forEach((v, i) => {
+            const barH = (v / maxV) * plotH;
+            const x = marginL + i * groupW + si * barW + barW * 0.5;
+            ctx.fillRect(x, marginT + plotH - barH, barW * 0.8, barH);
+          });
+        });
+      }
+      ctx.fillStyle = '#334155'; ctx.font = '11px Arial, sans-serif'; ctx.textAlign = 'center';
+      categories.forEach((c, i) => {
+        const x = marginL + (plotW / Math.max(1, categories.length)) * (i + 0.5);
+        ctx.fillText(String(c).slice(0, 10), x, marginT + plotH + 16);
+      });
+      return canvas.toDataURL('image/png');
+    };
+
+    const parseChartXml = (xmlDoc) => {
+      const plotArea = xmlDoc.getElementsByTagName('c:plotArea')[0];
+      if (!plotArea) return null;
+      let chartType = 'bar';
+      if (plotArea.getElementsByTagName('c:pieChart').length) chartType = 'pie';
+      else if (plotArea.getElementsByTagName('c:lineChart').length) chartType = 'line';
+      else if (plotArea.getElementsByTagName('c:barChart').length) chartType = 'bar';
+      const sers = Array.from(xmlDoc.getElementsByTagName('c:ser'));
+      let categories = [];
+      const series = sers.map(ser => {
+        const nameNode = ser.getElementsByTagName('c:tx')[0];
+        const name = nameNode ? (firstText(nameNode, 'c:v') || '') : '';
+        const catNode = ser.getElementsByTagName('c:cat')[0];
+        if (catNode && !categories.length) {
+          categories = Array.from(catNode.getElementsByTagName('c:pt')).map(pt => firstText(pt, 'c:v') || '');
+        }
+        const valNode = ser.getElementsByTagName('c:val')[0];
+        const values = valNode ? Array.from(valNode.getElementsByTagName('c:pt')).map(pt => parseFloat(firstText(pt, 'c:v')) || 0) : [];
+        return { name, values };
+      });
+      const titleNode = xmlDoc.getElementsByTagName('c:title')[0];
+      const chartTitle = titleNode ? firstText(titleNode, 'a:t') : null;
+      return { chartType, categories, series, chartTitle };
+    };
+
+    const extractCellText = (tc) => {
+      const paras = Array.from(tc.getElementsByTagName('a:p'));
+      return paras.map(p => Array.from(p.getElementsByTagName('a:t')).map(t => t.textContent).join('')).join(' ').trim();
+    };
+
+    const slides = [];
+    for (let idx = 0; idx < slidePaths.length; idx++) {
+      const slidePath = slidePaths[idx];
+      const slideName = slidePath.split('/').pop();
+      const slideRelsPath = `ppt/slides/_rels/${slideName}.rels`;
+      const slideXmlText = await readText(slidePath);
+      if (!slideXmlText) continue;
+      const slideXml = parseXml(slideXmlText);
+      const slideRelsText = await readText(slideRelsPath);
+      const slideRelMap = {};
+      if (slideRelsText) {
+        Array.from(parseXml(slideRelsText).getElementsByTagName('Relationship')).forEach(r => {
+          slideRelMap[r.getAttribute('Id')] = r.getAttribute('Target');
+        });
+      }
+
+      const spTree = slideXml.getElementsByTagName('p:spTree')[0];
+      let title = '';
+      const bodyLines = [];
+      const images = [];
+
+      const children = spTree ? Array.from(spTree.childNodes).filter(n => n.nodeType === 1) : [];
+      for (const node of children) {
+        const tag = node.nodeName;
+        if (tag === 'p:sp') {
+          const ph = node.getElementsByTagName('p:ph')[0];
+          const phType = ph ? ph.getAttribute('type') : null;
+          const isTitle = phType === 'title' || phType === 'ctrTitle';
+          const paras = Array.from(node.getElementsByTagName('a:p'));
+          const lines = paras.map(p => Array.from(p.getElementsByTagName('a:t')).map(t => t.textContent).join('')).filter(l => l.trim().length > 0);
+          if (isTitle) {
+            title = lines.join(' ').trim() || title;
+          } else {
+            lines.forEach(l => bodyLines.push(l));
+          }
+        } else if (tag === 'p:pic') {
+          const blip = node.getElementsByTagName('a:blip')[0];
+          const embedId = blip ? blip.getAttribute('r:embed') : null;
+          const target = embedId ? slideRelMap[embedId] : null;
+          if (target) {
+            const mediaPath = resolveZipPath('ppt/slides', target);
+            const ext = (mediaPath.split('.').pop() || '').toLowerCase();
+            const mime = mimeByExt[ext] || 'application/octet-stream';
+            const b64 = await readBase64(mediaPath);
+            if (b64 && mimeByExt[ext]) images.push({ dataUrl: `data:${mime};base64,${b64}`, kind: 'embedded' });
+          }
+        } else if (tag === 'p:graphicFrame') {
+          const graphicData = node.getElementsByTagName('a:graphicData')[0];
+          const uri = graphicData ? graphicData.getAttribute('uri') : '';
+          if (uri && uri.endsWith('/table')) {
+            const tbl = node.getElementsByTagName('a:tbl')[0];
+            if (tbl) {
+              const rows = Array.from(tbl.getElementsByTagName('a:tr')).map(tr =>
+                Array.from(tr.getElementsByTagName('a:tc')).map(tc => extractCellText(tc))
+              );
+              if (rows.length) images.push({ dataUrl: drawTableImage(rows), kind: 'table' });
+            }
+          } else if (uri && uri.endsWith('/chart')) {
+            const chartRef = node.getElementsByTagName('c:chart')[0];
+            const chartRId = chartRef ? chartRef.getAttribute('r:id') : null;
+            const chartTarget = chartRId ? slideRelMap[chartRId] : null;
+            if (chartTarget) {
+              const chartPath = resolveZipPath('ppt/slides', chartTarget);
+              const chartXmlText = await readText(chartPath);
+              if (chartXmlText) {
+                const parsed = parseChartXml(parseXml(chartXmlText));
+                if (parsed && parsed.series.length) {
+                  images.push({ dataUrl: drawChartImage(parsed.chartTitle, parsed.chartType, parsed.categories, parsed.series), kind: 'chart' });
+                }
+              }
+            }
+          }
+        }
+      }
+
+      slides.push({ order: idx + 1, title, bodyLines, images });
+    }
+
+    return slides;
   };
 </script>
 </body>

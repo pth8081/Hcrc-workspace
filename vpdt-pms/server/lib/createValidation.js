@@ -546,7 +546,7 @@ const CREATE_MODULE_CONFIGS = {
     forceOwnDept: true,
     getScope: () => ({}),
     creatorField: 'creator', creatorNameField: 'creatorName',
-    extraValidate: (payload, collection, user) => {
+    extraValidate: (payload, collection, user, appData) => {
       if (!user.perms?.admin && !user.perms?.reportManage) {
         throw new CreateError(403, 'Chỉ người có quyền quản lý Báo Cáo Định Kỳ mới được tạo kỳ báo cáo');
       }
@@ -561,14 +561,35 @@ const CREATE_MODULE_CONFIGS = {
         throw new CreateError(400, 'Vui lòng chọn ít nhất 1 phòng ban áp dụng, hoặc chọn "Tất cả phòng ban"');
       }
       payload.deptScope = { all: !!deptScope.all, depts: deptScope.all ? [] : cleanedDepts };
-      // Mẫu trình chiếu/PDF áp dụng cho CẢ kỳ (không đổi được sau khi tạo, tránh 1 kỳ đã phát hành đổi
-      // giao diện giữa chừng) — client không gửi/gửi giá trị lạ đều rơi về 'DEFAULT' (giao diện nền tối
-      // đang dùng từ trước), đúng ý "không áp dụng thì giữ mẫu cũ".
-      payload.slideTemplate = payload.slideTemplate === 'ORANGE_GOLD' ? 'ORANGE_GOLD' : 'DEFAULT';
+      // Mẫu trình chiếu áp dụng cho CẢ kỳ (không đổi được sau khi tạo, tránh 1 kỳ đã phát hành đổi giao
+      // diện giữa chừng) — người nhập báo cáo KHÔNG tự chọn, kỳ dùng mẫu nào thì mọi slide của kỳ đó vẽ
+      // theo đúng mẫu đó (xem DB.reportSlideTemplates, quản lý ở lib/createValidation.js.reportSlideTemplates
+      // bên dưới). Phải là 1 mẫu có thật, tồn tại lúc tạo kỳ.
+      const templates = appData?.reportSlideTemplates || [];
+      const templateId = Number(payload.slideTemplateId);
+      if (!Number.isFinite(templateId) || !templates.some(t => t.id === templateId)) {
+        throw new CreateError(400, 'Vui lòng chọn 1 mẫu trình chiếu hợp lệ (tạo mẫu ở tab "Mẫu Trình Chiếu" nếu chưa có)');
+      }
+      payload.slideTemplateId = templateId;
       payload.status = 'OPEN';
       payload.closedAt = null;
       payload.closedBy = null;
       payload.compilation = null;
+    }
+  },
+  // Mẫu trình chiếu (background/màu sắc dùng khi phát hành) — admin/reportManage tạo trước, chọn lúc
+  // tạo kỳ báo cáo (reportPeriods.slideTemplateId ở trên) — KHÔNG phải tệp đính kèm, chỉ là 1 bộ màu áp
+  // dụng cho khung HTML render sẵn (buildPrSlideScreenHTML() ở index.html), giống hệt 2 mẫu DEFAULT/
+  // ORANGE_GOLD gõ cứng trước đây (PR_SLIDE_TEMPLATES) — nay admin tạo được KHÔNG GIỚI HẠN số lượng mẫu
+  // qua đây thay vì chỉ 2 lựa chọn cố định.
+  reportSlideTemplates: {
+    dbKey: 'reportSlideTemplates',
+    getScope: () => ({ all: true }),
+    creatorField: 'creator', creatorNameField: 'creatorName',
+    extraValidate: (payload) => {
+      if (!payload.name || !String(payload.name).trim()) throw new CreateError(400, 'Thiếu tên mẫu trình chiếu');
+      payload.name = String(payload.name).trim();
+      payload.colors = normalizeSlideTemplateColors(payload.colors);
     }
   },
   reportEntries: {
@@ -609,47 +630,52 @@ const CREATE_MODULE_CONFIGS = {
   }
 };
 
-// Chuẩn hoá + kiểm tra tối thiểu nội dung báo cáo theo đúng mẫu (mode STRUCTURED: bảng Công Việc Tuần
-// Này/Kế Hoạch Tiếp Theo/Số Liệu/Khác x2 — khớp cấu trúc slide PowerPoint mẫu; mode FILE_UPLOAD: đính
-// nguyên 1 tệp báo cáo đã làm sẵn, không cần gõ lại). Dùng chung cho cả tạo mới (extraValidate ở trên)
-// lẫn sửa nháp (updateReportEntryDraft ở lib/recordActions.js) để 2 luồng luôn validate giống hệt nhau.
+// Chuẩn hoá + kiểm tra tối thiểu nội dung báo cáo — CHỈ nhận đúng 1 tệp .pptx (không còn nhập tay/đính
+// nhiều loại tệp như trước). `parsedSlides` do TRÌNH DUYỆT tự đọc/phân tích tệp .pptx ngay lúc chọn tệp
+// (JSZip + DOMParser gốc, xem parsePptxToSlideContents() ở index.html — KHÔNG xử lý gì trên server, tệp
+// .pptx gốc dù có lưu qua /api/upload cũng chỉ để lưu vết/xem lại, KHÔNG dùng để dựng slide tổng hợp,
+// mọi thứ dựng từ parsedSlides) — server chỉ kiểm tra LẠI hình dạng dữ liệu (không tin tưởng mù quáng
+// dữ liệu từ client), không tự đọc/parse lại tệp gốc. Mỗi phần tử parsedSlides khớp đúng 1 slide gốc
+// trong .pptx: `title` (tiêu đề, có thể rỗng nếu slide gốc không có), `bodyLines` (mảng dòng văn bản —
+// sửa được trực tiếp ở bước Tổng Hợp), `images` (bảng/biểu đồ/ảnh nhúng đã được trình duyệt vẽ lại
+// thành ảnh PNG dạng base64 — KHÔNG sửa được, chỉ hiển thị nguyên trạng). Dùng chung cho cả tạo mới
+// (extraValidate ở trên) lẫn sửa nháp (updateReportEntryDraft ở lib/recordActions.js) để 2 luồng luôn
+// validate giống hệt nhau.
 function normalizeReportEntryPayload(payload) {
-  const mode = payload.mode === 'FILE_UPLOAD' ? 'FILE_UPLOAD' : 'STRUCTURED';
-  payload.mode = mode;
-  if (mode === 'FILE_UPLOAD') {
-    if (!payload.fileUrl) throw new CreateError(400, 'Vui lòng chọn tệp báo cáo cần tải lên');
-    payload.taskItems = [];
-    payload.planItems = [];
-    payload.numbersText = '';
-    payload.numbersFileUrl = null; payload.numbersFileName = null; payload.numbersFileType = null;
-    payload.otherItems = [];
-    return;
-  }
-  const cleanItems = (arr, progressField) => (Array.isArray(arr) ? arr : [])
-    .map(it => ({
-      group: String(it?.group || '').trim(),
-      content: String(it?.content || '').trim(),
-      [progressField]: String(it?.[progressField] || '').trim(),
-      deadline: String(it?.deadline || '').trim(),
-      support: String(it?.support || '').trim()
-    }))
-    .filter(it => it.content || it[progressField] || it.deadline || it.support);
-  payload.taskItems = cleanItems(payload.taskItems, 'progress');
-  payload.planItems = cleanItems(payload.planItems, 'plan');
-  payload.numbersText = String(payload.numbersText || '').trim();
-  payload.numbersFileUrl = payload.numbersFileUrl || null;
-  payload.numbersFileName = payload.numbersFileUrl ? String(payload.numbersFileName || '') : null;
-  payload.numbersFileType = payload.numbersFileUrl ? String(payload.numbersFileType || '') : null;
-  payload.otherItems = (Array.isArray(payload.otherItems) ? payload.otherItems : []).slice(0, 2).map(it => ({
-    text: String(it?.text || '').trim(),
-    fileUrl: it?.fileUrl || null,
-    fileName: it?.fileUrl ? String(it?.fileName || '') : null,
-    fileType: it?.fileUrl ? String(it?.fileType || '') : null
+  if (!payload.fileUrl) throw new CreateError(400, 'Vui lòng chọn tệp báo cáo (.pptx) cần tải lên');
+  payload.fileName = String(payload.fileName || '').trim();
+  payload.fileType = String(payload.fileType || '');
+  const rawSlides = Array.isArray(payload.parsedSlides) ? payload.parsedSlides : [];
+  const IMAGE_KINDS = ['embedded', 'table', 'chart'];
+  payload.parsedSlides = rawSlides.map((s, idx) => ({
+    order: idx + 1,
+    title: String(s?.title || '').trim(),
+    bodyLines: (Array.isArray(s?.bodyLines) ? s.bodyLines : []).map(l => String(l || '').trim()).filter(Boolean),
+    images: (Array.isArray(s?.images) ? s.images : [])
+      .filter(im => im && typeof im.dataUrl === 'string' && im.dataUrl.startsWith('data:image/'))
+      .map(im => ({ dataUrl: im.dataUrl, kind: IMAGE_KINDS.includes(im.kind) ? im.kind : 'embedded' }))
   }));
-  payload.fileUrl = null; payload.fileName = null; payload.fileType = null;
-  const hasContent = payload.taskItems.length || payload.planItems.length || payload.numbersText ||
-    payload.numbersFileUrl || payload.otherItems.some(o => o.text || o.fileUrl);
-  if (!hasContent) throw new CreateError(400, 'Báo cáo còn trống — vui lòng nhập ít nhất 1 phần (Công việc/Kế hoạch/Số liệu/Khác)');
+  if (!payload.parsedSlides.length) {
+    throw new CreateError(400, 'Không đọc được nội dung nào từ tệp — chỉ đọc được định dạng .pptx (không đọc được .ppt nhị phân đời cũ), vui lòng lưu lại bằng .pptx rồi tải lên lại');
+  }
+}
+
+// Bộ màu mặc định khi admin tạo mẫu trình chiếu không điền đủ — khớp đúng PR_SLIDE_TEMPLATES.DEFAULT cũ
+// ở index.html (giao diện nền tối vẫn dùng từ trước khi có tính năng mẫu tự tạo).
+const SLIDE_TEMPLATE_COLOR_DEFAULTS = {
+  pageBg: '#000000', coverTitleColor: '#ffffff', coverAccentColor: 'transparent',
+  sectionTitleColor: '#ffffff', bodyTextColor: '#e5e7eb', sourceLabelColor: '#d1d5db',
+  tableBorder: 'rgba(255,255,255,0.2)', tableHeadBg: 'rgba(255,255,255,0.1)', tableText: '#ffffff',
+  navBtnBg: 'rgba(255,255,255,0.1)', navBtnText: '#ffffff', topBarBg: '#111827'
+};
+function normalizeSlideTemplateColors(colors) {
+  const src = colors && typeof colors === 'object' ? colors : {};
+  const out = {};
+  Object.keys(SLIDE_TEMPLATE_COLOR_DEFAULTS).forEach((key) => {
+    const v = src[key];
+    out[key] = (typeof v === 'string' && v.trim()) ? v.trim() : SLIDE_TEMPLATE_COLOR_DEFAULTS[key];
+  });
+  return out;
 }
 
 // payload: dữ liệu hồ sơ client gửi lên (mọi field nghiệp vụ giữ nguyên) — chỉ id/creator/creatorName
@@ -682,7 +708,7 @@ function validateAndPrepareCreate(moduleKey, payload, user, existingCollection, 
 
 module.exports = {
   CREATE_MODULE_CONFIGS, CreateError, validateAndPrepareCreate, scopeAllows, findMeetingConflict,
-  OFFICE_SUBTYPE_TO_PERM_FLAG, normalizeReportEntryPayload,
+  OFFICE_SUBTYPE_TO_PERM_FLAG, normalizeReportEntryPayload, normalizeSlideTemplateColors,
   CONTRACT_APPROVAL_LAYERS, CONTRACT_APPROVAL_LEVELS, CONTRACT_APPROVAL_LEVEL_RULES,
   buildEffectiveContractApprovalWorkflowServer
 };
