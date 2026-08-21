@@ -4116,9 +4116,15 @@ function matchesKeywordFields(fields, keyword) {
 
 // true nếu dateStr nằm trong khoảng [fromDate, toDate] (dạng yyyy-mm-dd từ input type=date); bỏ
 // trống 1 hoặc cả 2 đầu = không giới hạn phía đó.
+//
+// dateStr trong hệ thống thường là chuỗi nowVN() ("hh:mm:ss dd/mm/yyyy", vd createdAt) — new Date(...)
+// KHÔNG parse được định dạng này (trả về Invalid Date) nên trước đây isNaN() luôn true, hàm luôn trả
+// về true (coi như "không lọc được nên giữ lại") cho MỌI bản ghi có dateStr kiểu này — bộ lọc khoảng
+// ngày ở mọi báo cáo trong hệ thống thực chất KHÔNG lọc gì cả. Dùng parseVNDateTime() trước, chỉ khi
+// đó không parse được (dateStr đã là ISO, vd startTime của input datetime-local) mới rơi về new Date().
 function isInDateRange(dateStr, fromDate, toDate) {
   if (!fromDate && !toDate) return true;
-  const d = new Date(dateStr);
+  const d = parseVNDateTime(dateStr) || new Date(dateStr);
   if (isNaN(d.getTime())) return true; // dữ liệu thiếu ngày thì không loại bỏ khỏi kết quả
   if (fromDate && d < new Date(fromDate)) return false;
   if (toDate && d > new Date(toDate + 'T23:59:59')) return false;
@@ -5593,7 +5599,6 @@ function deleteRecordAdminOnly(collection, id, label, onDeleted) {
 // 3 module Văn bản trình/Đăng ký xe/Văn phòng — xem lời gọi withApprovalAuth() ở mỗi module.
 // ==========================================
 let pendingApprovalAction = null;
-let pendingApprovalOtpCode = null;
 
 // Gọi hàm actionFn() ngay nếu người dùng không cấu hình xác thực bổ sung (mặc định), ngược lại mở
 // modal yêu cầu nhập mật khẩu/OTP trước, chỉ gọi actionFn() sau khi xác thực đúng.
@@ -5613,14 +5618,19 @@ function withApprovalAuth(actionFn) {
   if (level === 'OTP_EMAIL') sendApprovalOtp(false);
 }
 
-// Sinh mã OTP 6 số mới và "gửi" (mô phỏng) tới email của chính người đang cần xác thực.
-function sendApprovalOtp(isResend) {
-  pendingApprovalOtpCode = String(Math.floor(100000 + Math.random() * 900000));
-  if (currentUser.email) {
-    const otpSubject = '[VPDT] Mã xác thực phê duyệt';
-    const otpBody = `Mã OTP của bạn: ${pendingApprovalOtpCode} (chỉ dùng 1 lần cho lượt duyệt này)`;
-    console.log(`[DMS EMAIL SIMULATOR] To: ${currentUser.name} <${currentUser.email}> | Subject: ${otpSubject}\n  ${otpBody}`);
-    dispatchRealEmail([currentUser.email], otpSubject, otpBody, { module: 'AUTH', targetCode: currentUser.username });
+// Yêu cầu SERVER sinh mã OTP mới + gửi email thật (POST /api/auth/request-approval-otp) — trước đây
+// mã OTP được sinh/so sánh hoàn toàn ở JS trình duyệt (không có giá trị bảo mật thật), giờ server tự
+// giữ mã + cấp "phiếu Duyệt" khi xác thực đúng (xem lib/approvalAuth.js).
+async function sendApprovalOtp(isResend) {
+  try {
+    const res = await fetch('/api/auth/request-approval-otp', { method: 'POST' });
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok || !body.ok) {
+      alert(`⛔ Không thể gửi mã OTP: ${body.error || 'Lỗi không xác định'}`);
+      return;
+    }
+  } catch (e) {
+    return alert('⛔ Không thể kết nối tới máy chủ để gửi mã OTP: ' + e.message);
   }
   logSystemAction(
     'AUTH', 'SEND_APPROVAL_OTP',
@@ -5633,7 +5643,6 @@ function sendApprovalOtp(isResend) {
 function closeApprovalAuthModal() {
   document.getElementById('approvalAuthModal').classList.add('hidden');
   pendingApprovalAction = null;
-  pendingApprovalOtpCode = null;
 }
 
 async function confirmApprovalAuth() {
@@ -5659,9 +5668,22 @@ async function confirmApprovalAuth() {
     if (!ok) return alert('⛔ Mật khẩu không đúng, vui lòng thử lại!');
   } else if (level === 'OTP_EMAIL') {
     const entered = document.getElementById('approvalAuthOtpInput').value.trim();
-    if (!entered || entered !== pendingApprovalOtpCode) {
-      return alert('⛔ Mã OTP không đúng hoặc đã hết hạn, vui lòng thử lại!');
+    if (!entered) return alert('⛔ Vui lòng nhập mã OTP!');
+    // Xác thực OTP qua server (POST /api/auth/verify-approval-otp) — trước đây so sánh với biến JS cục
+    // bộ pendingApprovalOtpCode ở trình duyệt, không có giá trị bảo mật thật (mã cũng sinh ở client).
+    let ok = false;
+    try {
+      const res = await fetch('/api/auth/verify-approval-otp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ code: entered })
+      });
+      const body = await res.json().catch(() => ({}));
+      ok = res.ok && body.ok;
+    } catch (e) {
+      return alert('⛔ Không thể kết nối tới máy chủ để xác thực mã OTP: ' + e.message);
     }
+    if (!ok) return alert('⛔ Mã OTP không đúng hoặc đã hết hạn, vui lòng thử lại!');
   } else if (level === 'PIN') {
     const entered = document.getElementById('approvalAuthPinInput').value.trim();
     if (!entered) return alert('⛔ Vui lòng nhập mã PIN!');
@@ -7094,12 +7116,19 @@ function getDocCatAbbr(catName) {
   return DB.docCatAbbrs[catName] || deriveAbbr(catName, null);
 }
 
-// Đếm số tài liệu GỐC (không phải version con) đã có Mã Tài Liệu bắt đầu bằng prefix này, để sinh số
-// thứ tự tiếp theo — đánh số RIÊNG theo từng cặp Phân loại+Phòng ban (không dùng chung 1 dãy số toàn
-// hệ thống) để mã ngắn gọn và có ý nghĩa lâu dài hơn.
+// Số thứ tự TIẾP THEO chưa từng dùng cho prefix này, tính từ số thứ tự LỚN NHẤT từng xuất hiện trong
+// các Mã Tài Liệu gốc hiện có (không phải đếm số lượng còn lại) — nếu dùng đếm số lượng, xóa 1 tài
+// liệu ở giữa dãy (vd xóa 002 trong 001/002/003) sẽ khiến số kế tiếp tính ra trùng với 003 đang tồn
+// tại, bị chặn nhầm là "Mã tài liệu đã tồn tại" khi tải lên. Đánh số RIÊNG theo từng cặp Phân
+// loại+Phòng ban (không dùng chung 1 dãy số toàn hệ thống) để mã ngắn gọn và có ý nghĩa lâu dài hơn.
 function computeNextDocSeq(prefix) {
   const existing = DB.docs.filter(d => (d.rootDocId == null) && (d.displayCode || d.code || '').startsWith(prefix));
-  return existing.length + 1;
+  const maxSeq = existing.reduce((max, d) => {
+    const code = d.displayCode || d.code || '';
+    const n = parseInt(code.slice(prefix.length), 10);
+    return Number.isFinite(n) && n > max ? n : max;
+  }, 0);
+  return maxSeq + 1;
 }
 
 // Mã Tài Liệu tự sinh cho lần "Nhập mới" = <viết tắt Phân loại>-<viết tắt Phòng ban>-<số thứ tự 3 số>.
@@ -7661,7 +7690,14 @@ function toggleUploadTypeExt(moduleKey, ext, checked) {
 }
 
 // CẬP NHẬT: Phê duyệt cấp đơn đơn giản hóa (Sequential Step Approval)
-async function approveDoc(docId) {
+// Xác thực lại (mật khẩu/OTP/PIN) trước khi Duyệt (perms.approverAuthLevel) — trước đây chỉ 3/7 module
+// dùng chung engine phê duyệt (Văn bản trình/Xe/Văn phòng) gọi withApprovalAuth(), khiến người dùng
+// tưởng cấu hình này áp dụng cho MỌI lượt duyệt của mình nhưng Tài Liệu/Hợp Đồng/VPP lại không được
+// bảo vệ. Nay áp cho cả 7 module (khớp routes/workflow.js APPROVAL_REAUTH_MODULES đã mở rộng).
+function approveDoc(docId) {
+  withApprovalAuth(() => approveDocConfirmed(docId));
+}
+async function approveDocConfirmed(docId) {
   const doc = DB.docs.find(d => d.id === docId);
   if (!doc) return;
 
@@ -10583,6 +10619,9 @@ function openEditContract(contractId) {
   if (c.creator !== currentUser.username) {
     return alert('⛔ Bạn chỉ có thể sửa hồ sơ hợp đồng do chính mình tạo!');
   }
+  if (c.approvalStatus === 'APPROVED') {
+    return alert('⛔ Hợp đồng đã được phê duyệt xong, không thể sửa nữa!');
+  }
 
   editingContractId = contractId;
   document.getElementById('contractManageFormWrap').classList.remove('hidden');
@@ -10829,7 +10868,7 @@ function buildContractRowHTML(c, { addendumCount = 0, isExpanded = false, isChil
   if ((c.fileUrl || c.fileData) && canDownloadFile(currentUser, 'contract', c.dept, c.creator)) {
     secondaryOptions.push({ value: 'download', label: '⬇️ Tải' });
   }
-  if (!c.isAddendum && c.creator === currentUser.username) {
+  if (!c.isAddendum && c.creator === currentUser.username && c.approvalStatus !== 'APPROVED') {
     secondaryOptions.push({ value: 'edit', label: '✏️ Sửa' });
   }
   if (!isChild && c.approvalStatus === 'PENDING' && canApproveContractStep(currentUser, c)) {
@@ -10929,7 +10968,9 @@ function approveContractAction(id) {
     title: 'Phê duyệt hợp đồng',
     bodyHTML: `Bạn có chắc chắn muốn phê duyệt hợp đồng "<b>${escapeHtml(c.title)}</b>" (${escapeHtml(c.code)})?`,
     confirmLabel: 'Phê Duyệt',
-    onConfirm: async () => {
+    // Xác thực lại (mật khẩu/OTP/PIN) trước khi Duyệt — khớp đúng cách approveDoc() ở trên, mở rộng
+    // withApprovalAuth() ra cả 7 module dùng chung engine phê duyệt (trước đây Hợp Đồng không có).
+    onConfirm: () => withApprovalAuth(async () => {
       let result;
       try {
         result = await callWorkflowAction('contracts', id, 'approve', {});
@@ -10961,7 +11002,7 @@ function approveContractAction(id) {
       alert(msg);
       renderContracts();
       refreshApprovalSurfaces();
-    }
+    })
   });
 }
 
@@ -11006,7 +11047,7 @@ function approveContractSignedFileAction(id) {
     title: 'Duyệt tài liệu ký',
     bodyHTML: `Bạn có chắc chắn muốn duyệt tài liệu ký của hợp đồng "<b>${escapeHtml(c.title)}</b>" (${escapeHtml(c.code)})?`,
     confirmLabel: 'Duyệt',
-    onConfirm: async () => {
+    onConfirm: () => withApprovalAuth(async () => {
       let result;
       try {
         result = await callWorkflowAction('contractsSignedFile', id, 'approve', {});
@@ -11026,7 +11067,7 @@ function approveContractSignedFileAction(id) {
       alert(msg);
       renderContracts();
       refreshApprovalSurfaces();
-    }
+    })
   });
 }
 
@@ -11323,7 +11364,7 @@ function renderPaymentRequests() {
         <td class="border p-2"><span class="px-2 py-0.5 rounded font-bold text-xs ${PAYMENT_STATUS_BADGE_CLS[pr.status] || ''}">${PAYMENT_STATUS_LABELS[pr.status] || pr.status}</span></td>
         <td class="border p-2 text-center space-y-1">
           ${canManage && (pr.status === 'PENDING' || pr.status === 'NEED_INFO') ? `<button onclick="openEditPaymentRequest(${pr.id})" class="block w-full bg-gray-500 text-white px-2 py-1 rounded text-xs font-bold hover:bg-gray-600">✏️ Sửa</button>` : ''}
-          ${canManage && (pr.status === 'PENDING' || pr.status === 'NEED_INFO') ? `<button onclick="approvePaymentRequestAction(${pr.id})" class="block w-full bg-emerald-600 text-white px-2 py-1 rounded text-xs font-bold hover:bg-emerald-700">✅ Xác nhận</button>` : ''}
+          ${canManage && pr.status === 'PENDING' ? `<button onclick="approvePaymentRequestAction(${pr.id})" class="block w-full bg-emerald-600 text-white px-2 py-1 rounded text-xs font-bold hover:bg-emerald-700">✅ Xác nhận</button>` : ''}
           ${canManage && pr.status === 'PENDING' ? `<button onclick="requestPaymentInfoAction(${pr.id})" class="block w-full bg-orange-500 text-white px-2 py-1 rounded text-xs font-bold hover:bg-orange-600">📝 Yêu Cầu Bổ Sung</button>` : ''}
           ${currentUser.perms?.admin && pr.status !== 'PAID' ? `<button onclick="deletePaymentRequestAction(${pr.id})" class="block w-full bg-red-500 text-white px-2 py-1 rounded text-xs font-bold hover:bg-red-600">🗑️ Xoá</button>` : ''}
         </td>
@@ -14297,7 +14338,10 @@ function confirmProcessVppReg(actionType) {
     title: titleMap[actionType],
     bodyHTML: `<p>Bạn có chắc chắn muốn <b>${actionTextMap[actionType]}</b> đăng ký này?</p>${comment ? `<p class="mt-2 italic text-gray-600">Ghi chú: "${escapeHtml(comment)}"</p>` : ''}`,
     confirmLabel: labelMap[actionType],
-    onConfirm: () => processVppReg(actionType)
+    // Xác thực lại (mật khẩu/OTP/PIN) trước khi Duyệt — chỉ áp cho APPROVE, khớp đúng phạm vi
+    // withApprovalAuth() (không phải Từ chối/Yêu cầu bổ sung). Mở rộng ra VPP cùng đợt với Tài
+    // Liệu/Hợp Đồng ở trên (trước đây chỉ 3/7 module dùng chung engine phê duyệt được bảo vệ).
+    onConfirm: () => actionType === 'APPROVE' ? withApprovalAuth(() => processVppReg(actionType)) : processVppReg(actionType)
   });
 }
 
@@ -18730,7 +18774,9 @@ const REPORT_MODULE_CONFIGS = {
   internal: {
     title: '📣 Báo Cáo Truyền Thông Nội Bộ',
     // Kênh toàn công ty, không lọc theo phòng ban (khớp hành vi Góc chia sẻ hiện tại — ai cũng xem được).
-    getRecords: (dept, from, to) => DB.internalPosts.filter(r => isInDateRange(r.createdAt, from, to)),
+    // Loại bài PENDING/REJECTED (chỉ xảy ra ở Góc chia sẻ, xem canViewInternalPost() ở lib/recordViewScope.js)
+    // — chưa từng công khai thật sự, tính vào báo cáo sẽ thổi phồng số liệu hoạt động.
+    getRecords: (dept, from, to) => DB.internalPosts.filter(r => r.status !== 'PENDING' && r.status !== 'REJECTED' && isInDateRange(r.createdAt, from, to)),
     deptBreakdown: false,
     renderExtra: renderInternalReportExtra
   },
@@ -18803,7 +18849,11 @@ function renderModuleReport(moduleKey, container) {
 }
 
 function renderContractReportExtra(records) {
-  const now = new Date();
+  // So theo NGÀY LỊCH (bỏ giờ/phút), khớp daysUntil() ở jobs/contractExpiryReminder.js — trước đây so
+  // c.endDate (parse ra 0h) với "now" có giờ/phút thực tế, khiến hợp đồng hết hạn ĐÚNG hôm nay bị tính
+  // nhầm "đã hết hạn" suốt cả ngày thay vì "còn hiệu lực"/"sắp hết hạn".
+  const rawNow = new Date();
+  const now = new Date(rawNow.getFullYear(), rawNow.getMonth(), rawNow.getDate());
   const activeValue = records.filter(c => new Date(c.endDate) >= now).reduce((s, c) => s + (c.amount || 0), 0);
   const expiredValue = records.filter(c => new Date(c.endDate) < now).reduce((s, c) => s + (c.amount || 0), 0);
   const soon = new Date(now.getTime() + 30 * 24 * 3600 * 1000);
@@ -19013,8 +19063,10 @@ function renderReportsSummary(container) {
   const activeContractValue = visibleContracts.filter(c => new Date(c.endDate) >= now).reduce((sum, c) => sum + (c.amount || 0), 0);
   const expiredContractValue = visibleContracts.filter(c => new Date(c.endDate) < now).reduce((sum, c) => sum + (c.amount || 0), 0);
 
+  // Chỉ cộng dồn đề nghị ĐÃ DUYỆT — trước đây cộng cả PENDING/REJECTED, khiến 1 đề nghị Đầu Tư bị từ
+  // chối vẫn cộng vào cột dự toán, trông như đã được duyệt/chi thực tế.
   const officeBySubType = { MUA_BAN: 0, SUA_CHUA: 0, DAU_TU: 0 };
-  visibleOffice.forEach(o => { officeBySubType[o.subType] = (officeBySubType[o.subType] || 0) + (o.amount || 0); });
+  visibleOffice.filter(o => o.status === 'APPROVED').forEach(o => { officeBySubType[o.subType] = (officeBySubType[o.subType] || 0) + (o.amount || 0); });
   const maxOfficeAmount = Math.max(1, ...Object.values(officeBySubType));
 
   const financeHTML = `
@@ -19047,7 +19099,10 @@ function renderReportsSummary(container) {
   `;
 
   // --- Vận hành ---
-  const totalKm = visibleCars.reduce((sum, c) => sum + (c.km || 0), 0);
+  // Chỉ cộng dồn km của chuyến ĐÃ DUYỆT — trước đây cộng cả PENDING/REJECTED, khiến 1 chuyến bị từ
+  // chối vẫn tính vào "Tổng số km đăng ký xe" dù chuyến đó không thực sự diễn ra.
+  const approvedCars = visibleCars.filter(c => c.status === 'APPROVED');
+  const totalKm = approvedCars.reduce((sum, c) => sum + (c.km || 0), 0);
   const meetingApproved = visibleMeetings.filter(m => m.status === 'APPROVED').length;
   const meetingPending = visibleMeetings.filter(m => m.status === 'PENDING').length;
   const meetingCancelled = visibleMeetings.filter(m => m.status === 'CANCELLED').length;
@@ -19058,7 +19113,7 @@ function renderReportsSummary(container) {
       <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div class="bg-gray-50 border rounded p-3 text-center">
           <div class="text-2xl font-bold text-indigo-700">${totalKm.toLocaleString('vi-VN')} km</div>
-          <div class="text-xs text-gray-600 mt-1">Tổng số km đăng ký xe (${visibleCars.length} chuyến)</div>
+          <div class="text-xs text-gray-600 mt-1">Tổng số km đăng ký xe (${approvedCars.length} chuyến đã duyệt)</div>
         </div>
         <div class="space-y-2">
           <div class="text-xs font-semibold text-gray-600 mb-1">Lịch phòng họp (${visibleMeetings.length})</div>

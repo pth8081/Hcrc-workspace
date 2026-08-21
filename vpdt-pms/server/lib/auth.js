@@ -54,7 +54,13 @@ function validatePin(pin) {
 
 function signToken(user) {
   return jwt.sign(
-    { sub: user.username, admin: !!(user.perms && user.perms.admin) },
+    // sv (sessionVersion): ký kèm giá trị hiện tại của user để requireAuth() bên dưới có thể phát hiện
+    // token đã bị "vô hiệu hóa từ xa" khi mật khẩu/PIN đổi (xem routes/data.js prepareUsersForSave và
+    // routes/auth.js change-pin/PATCH /me — cả 2 nơi đều tăng sessionVersion mỗi khi đổi pass/pin).
+    // Trước đây đổi mật khẩu/PIN cho user khác (admin reset) hay chính user tự đổi không hề vô hiệu
+    // hóa các phiên JWT ĐANG MỞ ở nơi khác (điện thoại bị mất, máy dùng chung...) — token cũ vẫn xác
+    // thực bình thường tới tận khi hết hạn (tối đa 1h, có thể lâu hơn do trượt hạn theo hoạt động).
+    { sub: user.username, admin: !!(user.perms && user.perms.admin), sv: user.sessionVersion || 0 },
     getJwtSecret(),
     { expiresIn: TOKEN_TTL }
   );
@@ -110,6 +116,12 @@ async function requireAuth(req, res, next) {
     if (!freshUser) return res.status(401).json({ error: 'Tài khoản không còn tồn tại' });
     if (freshUser.active === false) {
       return res.status(401).json({ error: 'Tài khoản đã bị vô hiệu hóa — vui lòng liên hệ quản trị viên' });
+    }
+    // Mật khẩu/PIN đã đổi (bởi admin hoặc chính người dùng ở phiên/thiết bị khác) kể từ lúc token này
+    // được ký -> sessionVersion trong DB đã tăng, không còn khớp "sv" đã ký cứng trong token -> buộc
+    // đăng nhập lại thay vì tiếp tục tin 1 token biết chắc đã lỗi thời (xem signToken() ở trên).
+    if ((payload.sv || 0) !== (freshUser.sessionVersion || 0)) {
+      return res.status(401).json({ error: 'Mật khẩu/PIN vừa được thay đổi — vui lòng đăng nhập lại' });
     }
 
     req.user = { username: freshUser.username, admin: !!freshUser.perms?.admin };

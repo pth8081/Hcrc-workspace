@@ -17,7 +17,7 @@ function normalizeApproversList(stepApprovers) {
 }
 
 function getStepApprovedUsernames(history, step) {
-  return new Set((history || []).filter(h => h.step === step && h.action === 'APPROVED').map(h => h.username));
+  return new Set((history || []).filter(h => h.step === step && h.action === 'APPROVED' && !h.invalidated).map(h => h.username));
 }
 
 function canApproveStep(user, stepApprovers, history, step) {
@@ -34,6 +34,25 @@ function isStepApprovalComplete(user, stepApprovers, history, step) {
   if (approversList.length === 0) return true;
   const approved = getStepApprovedUsernames(history, step);
   return approversList.every(u => approved.has(u));
+}
+
+// Đăng Ký Xe không có hàm kiểm tra trùng lịch tương đương findMeetingConflict() (Phòng Họp) — biển số
+// xe chỉ được Phòng Hành Chính GÁN lúc DUYỆT (extraFields.assignedPlate, không phải lúc tạo phiếu như
+// phòng họp), nên kiểm tra trùng phải chạy ngay tại đây, ngay trước khi ghi assignedPlate. existingCar
+// Regs do CALLER (routes/workflow.js) tự đọc collection carRegs truyền vào (chỉ carRegs cần).
+function findCarPlateConflict(existingCarRegs, itemId, plate, startTime, endTime) {
+  if (!plate) return null;
+  const newStart = new Date(startTime).getTime();
+  const newEnd = new Date(endTime).getTime();
+  if (!Number.isFinite(newStart) || !Number.isFinite(newEnd)) return null;
+  return (existingCarRegs || []).find(c => {
+    if (c.id === itemId || c.assignedPlate !== plate) return false;
+    if (c.status === 'REJECTED' || c.status === 'CANCELLED') return false;
+    const cStart = new Date(c.startTime).getTime();
+    const cEnd = new Date(c.endTime).getTime();
+    if (!Number.isFinite(cStart) || !Number.isFinite(cEnd)) return false;
+    return newStart < cEnd && cStart < newEnd;
+  });
 }
 
 // ===== Văn Bản Trình: quy trình theo loại + lớp phê duyệt bổ sung (khớp index.html) =====
@@ -157,7 +176,7 @@ const nowVN = () => new Date().toLocaleString('vi-VN');
 // Thực hiện HÀNH ĐỘNG (APPROVE/REJECT) trên 1 hồ sơ — mọi kiểm tra quyền đều dựa vào approver list
 // đã resolve từ đúng cấu hình quy trình của module đó, KHÔNG tin bất kỳ trường status/currentStep
 // nào client có thể tự gửi kèm — server tự tính toán lại toàn bộ dựa trên state hiện có + hành động.
-function applyWorkflowAction({ moduleKey, item, action, user, comment, extraFields, appData }) {
+function applyWorkflowAction({ moduleKey, item, action, user, comment, extraFields, appData, existingCollection }) {
   const config = MODULE_CONFIGS[moduleKey];
   if (!config) throw new WorkflowError(400, `Module không hợp lệ: ${moduleKey}`);
   if (!item) throw new WorkflowError(404, 'Không tìm thấy hồ sơ');
@@ -202,6 +221,12 @@ function applyWorkflowAction({ moduleKey, item, action, user, comment, extraFiel
     if (!canApproveStep(user, currentStepApprovers, item[historyField], currentStep)) {
       throw new WorkflowError(403, 'Bạn không có quyền yêu cầu bổ sung ở bước hiện tại, hoặc đã xử lý bước này rồi');
     }
+    // Hồ sơ quay lại NHÁP để sửa & GỬI LẠI TỪ ĐẦU (currentStep về 0) — mọi lượt "APPROVED" đã ghi ở
+    // vòng nộp TRƯỚC không còn giá trị cho vòng MỚI (nội dung đã đổi), nhưng vẫn giữ nguyên trong lịch
+    // sử để tra cứu — đánh dấu invalidated để getStepApprovedUsernames() không tính nhầm là "đã duyệt
+    // bước này rồi": trước đây không đánh dấu gì, khiến người duyệt DUY NHẤT của 1 bước từng duyệt ở
+    // vòng cũ bị chặn "đã xử lý bước này rồi" khi thử duyệt lại nội dung đã sửa, kẹt hồ sơ vĩnh viễn.
+    item[historyField].forEach(h => { if (h.action === 'APPROVED') h.invalidated = true; });
     item[historyField].push({ step: currentStep, approver: user.name, username: user.username, action: 'REQUEST_CHANGES', comment, time: nowVN() });
     item[statusField] = 'DRAFT';
     item[currentStepField] = 0;
@@ -218,6 +243,13 @@ function applyWorkflowAction({ moduleKey, item, action, user, comment, extraFiel
   // vào hồ sơ lẫn snapshot trong dòng lịch sử (khớp hiển thị "🚘 Phân công" theo từng bước ở client).
   const extraSnapshot = {};
   if (config.extraFields) {
+    const newPlate = extraFields?.assignedPlate;
+    if (moduleKey === 'carRegs' && newPlate && newPlate !== item.assignedPlate) {
+      const conflict = findCarPlateConflict(existingCollection, item.id, newPlate, item.startTime, item.endTime);
+      if (conflict) {
+        throw new WorkflowError(409, `Biển số "${newPlate}" đã được gán cho phiếu "${conflict.code}" trùng khung giờ này`);
+      }
+    }
     for (const f of config.extraFields) {
       if (extraFields && extraFields[f]) {
         item[f] = extraFields[f];

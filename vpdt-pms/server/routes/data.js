@@ -6,13 +6,16 @@ const express = require('express');
 const router = express.Router();
 const { getPool } = require('../db');
 const { DEFAULTS } = require('../defaults');
-const { getAppDataValue, setAppDataValue, setAppDataValueIfVersionMatches } = require('../lib/appData');
+const { getAppDataValue, setAppDataValue, setAppDataValueIfVersionMatches, withLockedAppDataValue } = require('../lib/appData');
 const { requireAuth, blockIfMustChangePassword, hashPassword, isBcryptHash, validatePin } = require('../lib/auth');
 const { validatePasswordStrength } = require('../lib/passwordPolicy');
 const { HttpError } = require('../lib/httpErrors');
 const { getAllTasks } = require('../lib/taskStore');
 const { getAllForCollection, MIGRATED_COLLECTIONS } = require('../lib/recordStore');
 const { sendServerError } = require('../lib/errorResponse');
+const {
+  filterDocsForUser, filterSubmissionsForUser, filterInternalPostsForUser, sanitizeReportPeriodsForUser
+} = require('../lib/recordViewScope');
 
 const VALID_KEYS = new Set(Object.keys(DEFAULTS));
 
@@ -58,6 +61,24 @@ async function isCurrentlyAdmin(username) {
   return !!freshUser?.perms?.admin;
 }
 
+// Áp phần quyền tuỳ chỉnh riêng (overrides) lên trên nền quyền của nhóm -> quyền hiệu lực thực tế —
+// khớp Y HỆT mergePerms() ở public/index.html (2 cài đặt độc lập, client không import chung được với
+// server). PHẢI giữ giống hệt nếu sửa 1 bên.
+function mergePermsServer(basePerms, overrides) {
+  return { ...(basePerms || {}), ...(overrides || {}) };
+}
+
+// Bắt buộc còn ít nhất 1 tài khoản perms.admin=true sau khi ghi — trước đây không có ràng buộc này ở
+// bất kỳ đâu: xoá tài khoản "admin" mặc định khỏi mảng, hoặc chính 1 admin tự bỏ tick quyền admin của
+// mình rồi lưu, đều được server chấp nhận vô điều kiện (chỉ cần người GỌI đang là admin tại thời điểm
+// gọi) — khoá cứng toàn bộ màn Quản Trị cho TẤT CẢ mọi người vĩnh viễn, không có đường lùi qua giao
+// diện hay khởi động lại server (seedDefaults() chỉ seed lại "users" nếu key CHƯA TỪNG tồn tại).
+function assertAtLeastOneAdmin(users) {
+  if (!(users || []).some(u => u.perms?.admin)) {
+    throw new HttpError(400, 'Không thể lưu: thao tác này sẽ khiến hệ thống không còn tài khoản nào có quyền Quản Trị Viên (Admin).');
+  }
+}
+
 // Trước khi ghi collection "users": KHÔNG bao giờ lưu lại mật khẩu dạng plaintext.
 // - Nếu admin để trống ô mật khẩu khi sửa user (form không còn hiển thị mật khẩu cũ) -> giữ
 //   nguyên hash đang lưu của đúng user đó (khớp theo id), KHÔNG xoá/ghi đè thành rỗng.
@@ -70,8 +91,14 @@ async function isCurrentlyAdmin(username) {
 async function prepareUsersForSave(incomingUsers) {
   const existing = (await getAppDataValue('users')) || [];
   const existingById = new Map(existing.map(u => [u.id, u]));
+  // Quyền hiệu lực (perms) của user CÓ groupId PHẢI luôn tính từ quyền nhóm + permOverrides tại thời
+  // điểm ghi — trước đây server tin nguyên field "perms" client gửi lên, cho phép 1 request tự soạn
+  // gửi thẳng "perms" khác với quyền hiệu lực mà Nhóm/permOverrides của user đó lẽ ra phải ra (giao
+  // diện luôn tự tính đúng nên hành vi sai này chỉ lộ ra khi gọi thẳng API).
+  const permGroups = (await getAppDataValue('permGroups')) || [];
+  const permGroupsById = new Map(permGroups.map(g => [g.id, g.perms]));
 
-  return Promise.all(incomingUsers.map(async (u) => {
+  const prepared = await Promise.all(incomingUsers.map(async (u) => {
     const prior = existingById.get(u.id);
     // mustChangePassword/failedLoginAttempts/lockedUntil do SERVER tự quản lý (client không hề gõ ra
     // ở form) — nếu client đang cầm bản DB.users CŨ (vd vừa lưu tạo user xong, chưa tải lại trang) thì
@@ -97,12 +124,19 @@ async function prepareUsersForSave(incomingUsers) {
     // thuộc việc giao diện có khoá đúng hay không.
     if (record.username === 'admin') {
       record.perms = { admin: true };
+    } else if (record.groupId) {
+      const groupPerms = permGroupsById.get(record.groupId);
+      if (groupPerms) record.perms = mergePermsServer(groupPerms, record.permOverrides);
     }
 
     if (u.pin) {
       const pinError = validatePin(u.pin);
       if (pinError) throw new HttpError(400, `Mã PIN của tài khoản "${u.username}": ${pinError}`);
       record.pinHash = await hashPassword(u.pin);
+      // Admin đặt/đổi PIN cho user khác -> vô hiệu hóa mọi phiên JWT đang mở của user đó (xem
+      // lib/auth.js signToken/requireAuth) — không phải chính người đang gọi request này nên không
+      // cần cấp lại cookie ở đây, requireAuth sẽ tự chặn ở lượt request kế tiếp của họ.
+      record.sessionVersion = (prior?.sessionVersion || 0) + 1;
     }
 
     if (!u.pass) {
@@ -114,8 +148,41 @@ async function prepareUsersForSave(incomingUsers) {
     if (passwordError) {
       throw new HttpError(400, `Mật khẩu của tài khoản "${u.username}": ${passwordError}`);
     }
-    return { ...record, pass: await hashPassword(u.pass), mustChangePassword: true };
+    // Admin đặt mật khẩu tạm cho user khác -> cùng lý do vô hiệu hóa phiên như đổi PIN ở trên.
+    return {
+      ...record,
+      pass: await hashPassword(u.pass),
+      mustChangePassword: true,
+      sessionVersion: (prior?.sessionVersion || 0) + 1
+    };
   }));
+
+  assertAtLeastOneAdmin(prepared);
+  return prepared;
+}
+
+// Khi Nhóm Phân Quyền (permGroups) được lưu/xoá: quyền hiệu lực của MỌI thành viên phải cập nhật NGAY,
+// KHÔNG chỉ dựa vào việc client (savePermGroup()/deletePermGroup() ở index.html) có tự gọi thêm 1 lượt
+// POST /api/data/users riêng hay không — trước đây permGroups/users là 2 lượt HTTP hoàn toàn tách rời
+// do CLIENT tự phát, không có giao dịch chung: gọi thẳng POST /api/data/permGroups (bỏ qua UI, hoặc
+// lượt ghi "users" đi kèm bị lỗi/409) để lại quyền CŨ tồn tại vô thời hạn ở các thành viên dù màn Nhóm
+// đã hiển thị đúng quyền mới. Nay server tự tính lại NGAY trong CÙNG request ghi permGroups — khoá đúng
+// dòng "users" (withLockedAppDataValue) để tránh mất đồng thời 1 admin khác đang sửa user khác.
+async function syncUsersWithPermGroupsChange(newGroups) {
+  const groupPermsById = new Map((newGroups || []).map(g => [g.id, g.perms]));
+  await withLockedAppDataValue('users', (currentUsers) => {
+    const updated = (currentUsers || []).map(u => {
+      if (u.username === 'admin') return { ...u, perms: { admin: true } };
+      if (!u.groupId) return u;
+      const groupPerms = groupPermsById.get(u.groupId);
+      if (groupPerms) return { ...u, perms: mergePermsServer(groupPerms, u.permOverrides) };
+      // Nhóm đã bị xoá khỏi mảng mới lưu -> gỡ liên kết, giữ nguyên quyền hiện tại làm quyền riêng
+      // (khớp đúng hành vi deletePermGroup() ở index.html).
+      return { ...u, groupId: null, permOverrides: null };
+    });
+    assertAtLeastOneAdmin(updated);
+    return updated;
+  });
 }
 
 // GET /api/data  → trả về TOÀN BỘ dữ liệu app dưới dạng { depts, cats, users, docs, ..., _versions }
@@ -158,6 +225,15 @@ router.get('/', async (req, res) => {
     ]);
     data.tasks = tasksResult;
     migratedList.forEach((collection, i) => { data[collection] = collectionResults[i]; });
+
+    // Lọc lại quyền XEM phía server cho các collection trước đây chỉ ẩn ở giao diện (xem
+    // lib/recordViewScope.js) — ai gọi thẳng GET /api/data cũng không còn đọc được hồ sơ ngoài phạm vi
+    // phòng ban/quyền xem của mình nữa.
+    if (data.docs) data.docs = await filterDocsForUser(data.docs, req.freshUser);
+    if (data.submissions) data.submissions = await filterSubmissionsForUser(data.submissions, req.freshUser);
+    if (data.internalPosts) data.internalPosts = filterInternalPostsForUser(data.internalPosts, req.freshUser);
+    if (data.reportPeriods) data.reportPeriods = sanitizeReportPeriodsForUser(data.reportPeriods, req.freshUser);
+
     data._versions = versions;
     res.json(data);
   } catch (err) {
@@ -197,6 +273,7 @@ router.post('/:key', async (req, res) => {
     }
 
     if (key === 'users') value = await prepareUsersForSave(value);
+    if (key === 'permGroups') await syncUsersWithPermGroupsChange(value);
 
     const ifMatch = req.get('If-Match');
     if (ifMatch) {

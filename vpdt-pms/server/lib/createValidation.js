@@ -29,6 +29,10 @@ function findMeetingConflict(meetings, room, startTime, endTime) {
     if (m.room !== room) return false;
     const mStart = new Date(m.startTime).getTime();
     const mEnd = new Date(m.endTime).getTime();
+    // Giờ NaN (bản ghi cũ lỗi định dạng) so sánh với bất kỳ số nào cũng ra false — coi là "không
+    // trùng" là KHÔNG AN TOÀN (chính là lỗ hổng đã phát hiện). Coi bản ghi lỗi định dạng là CÓ trùng
+    // (an toàn hơn: chặn tạo mới cho tới khi bản ghi lỗi được xử lý) thay vì bỏ qua như trước.
+    if (!Number.isFinite(mStart) || !Number.isFinite(mEnd)) return true;
     return newStart < mEnd && mStart < newEnd;
   });
 }
@@ -131,7 +135,12 @@ function buildEffectiveSubmissionWorkflowServer(type, dept, selectedLayerKeys, s
   baseWf.steps.forEach(s => { approvers[s.order] = baseConfig.approvers?.[s.order] || []; });
 
   const groups = migrateSubmissionApprovalGroupKeys(appData.submissionApprovalGroups || {});
-  const layerKeys = layerKeysInput;
+  // Sắp lại ĐÚNG thứ tự chuẩn SUBMISSION_APPROVAL_LAYERS (Đồng trình -> Đồng cấp -> ... -> TGĐ) — trước
+  // đây ghép bước duyệt theo đúng thứ tự MẢNG client gửi lên, không tự sắp lại: giao diện bình thường
+  // luôn gửi đúng thứ tự (checkbox render sẵn theo thứ tự chuẩn) nhưng request tự soạn có thể đảo thứ
+  // tự (vd TGĐ trước Đồng trình/Đồng cấp), khiến TGĐ duyệt trước, ngược thứ bậc quy định.
+  const canonicalOrder = SUBMISSION_APPROVAL_LAYERS.map(l => l.key);
+  const layerKeys = [...layerKeysInput].sort((a, b) => canonicalOrder.indexOf(a) - canonicalOrder.indexOf(b));
   const opinionRequestees = [];
 
   layerKeys.forEach(layerKey => {
@@ -226,7 +235,10 @@ function buildEffectiveContractApprovalWorkflowServer(dept, selectedLayerKeys, s
   baseWf.steps.forEach(s => { approvers[s.order] = baseConfig.approvers?.[s.order] || []; });
 
   const groups = appData.contractApprovalGroups || {};
-  const layerKeys = layerKeysInput;
+  // Cùng lỗi/cùng cách sửa với buildEffectiveSubmissionWorkflowServer() ở trên — sắp lại đúng thứ tự
+  // chuẩn CONTRACT_APPROVAL_LAYERS thay vì tin thứ tự mảng client gửi.
+  const canonicalOrder = CONTRACT_APPROVAL_LAYERS.map(l => l.key);
+  const layerKeys = [...layerKeysInput].sort((a, b) => canonicalOrder.indexOf(a) - canonicalOrder.indexOf(b));
 
   layerKeys.forEach(layerKey => {
     const layer = CONTRACT_APPROVAL_LAYERS.find(l => l.key === layerKey);
@@ -314,7 +326,21 @@ const CREATE_MODULE_CONFIGS = {
         // Tài liệu đã ký thật ngoài hệ thống, nhập tay để lưu — không cần qua bước duyệt tài liệu ký.
         payload.signedFileStatus = payload.signedFileUrl ? 'APPROVED' : null;
       } else {
-        payload.paymentInstallments = Array.isArray(payload.paymentInstallments) ? payload.paymentInstallments : [];
+        const rawInstallments = Array.isArray(payload.paymentInstallments) ? payload.paymentInstallments : [];
+        payload.paymentInstallments = rawInstallments.map(it => ({
+          description: (it?.description || '').trim(), amount: Number(it?.amount) || 0, dueDate: it?.dueDate || ''
+        }));
+        // Khớp buildPaymentInstallments()/confirmPaymentInstallment() ở lib/recordActions.js — khai
+        // đủ hết các đợt (confirmed=true) là hệ thống coi hợp đồng "Đã thanh toán" toàn bộ, nên tổng
+        // các đợt khai lúc tạo PHẢI khớp đúng giá trị hợp đồng, không thì có thể xác nhận "đã thanh
+        // toán xong" dù mới thu một phần nhỏ.
+        if (payload.paymentInstallments.length) {
+          const sum = payload.paymentInstallments.reduce((s, it) => s + it.amount, 0);
+          const total = Number(payload.amount) || 0;
+          if (Math.abs(sum - total) > 1) {
+            throw new CreateError(400, `Tổng các đợt thanh toán (${sum.toLocaleString('vi-VN')}) phải khớp với giá trị hợp đồng (${total.toLocaleString('vi-VN')})`);
+          }
+        }
         const effectiveWf = buildEffectiveContractApprovalWorkflowServer(
           payload.dept, payload.selectedApprovalLayers, payload.selectedLayerMembers, appData || {}, payload.approvalLevel
         );
@@ -345,7 +371,19 @@ const CREATE_MODULE_CONFIGS = {
     // createForCollection() thường (chỉ có DB unique index chặn trùng Code, không chặn được kiểu
     // trùng lặp này).
     getLockKey: (payload) => `meeting_room:${payload.room}`,
+    // Trước đây "giờ bắt đầu < giờ kết thúc" chỉ được kiểm tra ở trình duyệt — request tự soạn gửi giờ
+    // sai định dạng hoặc kết thúc trước bắt đầu vẫn qua được, và tệ hơn: new Date(...).getTime() trả về
+    // NaN cho giờ sai định dạng, mọi phép so sánh với NaN đều false nên findMeetingConflict() (dưới)
+    // kết luận "không trùng" cho MỌI trường hợp giờ lỗi định dạng — vượt qua luôn cơ chế khoá-theo-phòng.
     extraValidate: (payload, collection) => {
+      const newStart = new Date(payload.startTime).getTime();
+      const newEnd = new Date(payload.endTime).getTime();
+      if (!Number.isFinite(newStart) || !Number.isFinite(newEnd)) {
+        throw new CreateError(400, 'Thời gian bắt đầu/kết thúc không hợp lệ');
+      }
+      if (newStart >= newEnd) {
+        throw new CreateError(400, 'Thời gian kết thúc phải sau thời gian bắt đầu');
+      }
       const conflict = findMeetingConflict(collection, payload.room, payload.startTime, payload.endTime);
       if (conflict) {
         throw new CreateError(409, `Phòng "${payload.room}" đã có lịch trùng khung giờ này (${conflict.code})`);
@@ -375,7 +413,40 @@ const CREATE_MODULE_CONFIGS = {
   docs: {
     dbKey: 'docs',
     getScope: (user) => ({ all: !!user.perms?.uploadAll, depts: user.perms?.uploadDepts || [] }),
-    creatorField: 'uploader', creatorNameField: 'uploaderName'
+    creatorField: 'uploader', creatorNameField: 'uploaderName',
+    // Khớp uploadDoc()/getDocFamily()/getDocFamilyLatest() ở index.html — nhánh "Cập nhật" (rootDocId
+    // khác null) để CLIENT tự tính cat/displayCode/versionNumber/code rồi gửi nguyên payload lên, server
+    // TRƯỚC ĐÂY (module docs không có extraValidate nào) không xác minh lại gì cả: 1 request tự soạn có
+    // thể tự xưng rootDocId của tài liệu bất kỳ (kể cả phòng ban khác), tự đặt versionNumber tuỳ ý (đâm
+    // ra 2 version trùng số hoặc "nhảy cóc"), hoặc bổ sung version cho tài liệu gốc CHƯA duyệt xong.
+    extraValidate: (payload, collection) => {
+      if (payload.rootDocId != null) {
+        const rootId = Number(payload.rootDocId);
+        const root = (collection || []).find(d => d.id === rootId && d.rootDocId == null);
+        if (!root) throw new CreateError(400, 'Tài liệu gốc không tồn tại');
+        const family = (collection || []).filter(d => d.id === rootId || d.rootDocId === rootId)
+          .sort((a, b) => (a.versionNumber || 1) - (b.versionNumber || 1));
+        const latest = family[family.length - 1];
+        if (!latest || latest.status !== 'APPROVED') {
+          throw new CreateError(409, 'Chỉ được cập nhật khi phiên bản mới nhất của tài liệu này đã phê duyệt xong');
+        }
+        if (payload.dept !== root.dept) {
+          throw new CreateError(400, 'Phòng ban của phiên bản mới phải khớp với tài liệu gốc');
+        }
+        // cat/displayCode/versionNumber/code PHẢI tự tính lại ở server, không tin giá trị client gửi.
+        payload.cat = root.cat;
+        payload.rootDocId = rootId;
+        payload.displayCode = root.displayCode || root.code;
+        payload.versionNumber = (latest.versionNumber || family.length) + 1;
+        payload.code = `${payload.displayCode}-V${payload.versionNumber}`;
+        if ((collection || []).some(d => d.code === payload.code)) {
+          throw new CreateError(409, `Mã "${payload.code}" đã tồn tại`);
+        }
+      } else {
+        payload.versionNumber = 1;
+        payload.rootDocId = null;
+      }
+    }
   },
   // Tin nội bộ (Bước 2b): KHÔNG có khái niệm phòng ban để chọn — dept trong hồ sơ chỉ là thông tin
   // hiển thị (phòng ban của người đăng), không phải phạm vi được cấp. forceOwnDept ép dept = phòng ban

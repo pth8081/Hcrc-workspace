@@ -9,11 +9,22 @@ const { requireAuth, blockIfMustChangePassword } = require('../lib/auth');
 const { MODULE_CONFIGS, WorkflowError, applyWorkflowAction } = require('../lib/workflowEngine');
 const recordActions = require('../lib/recordActions');
 const { insertTask } = require('../lib/taskStore');
-const { withLockedRecordForCollection } = require('../lib/recordStore');
+const { withLockedRecordForCollection, getAllForCollection } = require('../lib/recordStore');
+const { consumeApprovalGrant } = require('../lib/approvalAuth');
 
 router.use(requireAuth, blockIfMustChangePassword);
 
 const ACTION_MAP = { approve: 'APPROVE', reject: 'REJECT', 'request-info': 'REQUEST_INFO', 'request-changes': 'REQUEST_CHANGES' };
+
+// Xác thực bổ sung khi Duyệt (mật khẩu/OTP/PIN, perms.approverAuthLevel) — áp dụng cho MỌI module dùng
+// chung engine phê duyệt này (MODULE_CONFIGS). Trước đây chỉ khai đúng 3/7 module (submissions/carRegs/
+// officeReqs, khớp withApprovalAuth() ở giao diện lúc đó) — người dùng cấu hình approverAuthLevel với
+// chủ đích áp dụng cho MỌI lượt Duyệt của mình, nhưng Tài Liệu/Hợp Đồng/Tài liệu ký hợp đồng/VPP lại
+// hoàn toàn không được bảo vệ mà không ai biết. Nay lấy trực tiếp từ MODULE_CONFIGS thay vì khai tay
+// lại 1 danh sách con dễ lệch mỗi khi thêm module mới — index.html cũng đã gọi withApprovalAuth() ở
+// đủ cả 7 nơi tương ứng (approveDoc/approveContractAction/approveContractSignedFileAction/
+// processSubmission/processCarReg/processOfficeReq/processVppReg).
+const APPROVAL_REAUTH_MODULES = new Set(Object.keys(MODULE_CONFIGS));
 
 // POST /api/workflow/submissions/:id/respond-info  — người TRÌNH phản hồi 1 yêu cầu bổ sung cụ thể
 // (không phải approver nên không dùng chung route bên dưới — action riêng, chỉ submissions mới có).
@@ -127,12 +138,28 @@ router.post('/:module/:id/:action', async (req, res) => {
     // tại từ DB (kể cả trạng thái active) và gắn sẵn vào req.freshUser, không cần đọc lại lần nữa.
     const appData = await getAllAppData();
     const freshUser = req.freshUser;
+    // carRegs: cần đọc trước toàn bộ collection để kiểm tra trùng biển số/khung giờ ngay lúc gán biển
+    // số ở bước duyệt (xem findCarPlateConflict() ở lib/workflowEngine.js) — module khác không cần.
+    const existingCollection = moduleKey === 'carRegs' ? await getAllForCollection('carRegs') : null;
+
+    // Trước đây "xác thực lại mật khẩu/OTP/PIN trước khi Duyệt" (withApprovalAuth() ở index.html) chỉ
+    // là lớp UI thuần JS — xác thực xong rồi mới GỌI HÀM duyệt thật ở trình duyệt, nhưng route này
+    // không hề biết/kiểm tra lại việc đó đã xảy ra: gọi thẳng API vẫn duyệt được luôn dù tài khoản đã
+    // cấu hình approverAuthLevel khác NONE. Giờ đòi đúng 1 "phiếu" đã cấp bởi POST /api/auth/
+    // verify-password|verify-pin|verify-approval-otp (xem lib/approvalAuth.js), dùng 1 lần cho lượt
+    // Duyệt này rồi mất — không áp dụng cho Từ chối/Yêu cầu bổ sung (khớp đúng phạm vi UI cũ).
+    if (action === 'APPROVE' && APPROVAL_REAUTH_MODULES.has(moduleKey)) {
+      const level = freshUser.perms?.approverAuthLevel || 'NONE';
+      if (level !== 'NONE' && !consumeApprovalGrant(freshUser.username)) {
+        return res.status(403).json({ error: 'Cần xác thực lại (mật khẩu/OTP/PIN) trước khi duyệt' });
+      }
+    }
 
     let transition = null;
 
     const resultItem = await withLockedRecordForCollection(MODULE_CONFIGS[moduleKey].dbKey, itemId, (item) => {
       const outcome = applyWorkflowAction({
-        moduleKey, item, action, user: freshUser, comment, extraFields, appData
+        moduleKey, item, action, user: freshUser, comment, extraFields, appData, existingCollection
       });
       transition = outcome.transition;
       return outcome.item;

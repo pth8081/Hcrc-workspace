@@ -11,7 +11,8 @@ const express = require('express');
 const router = express.Router();
 const { requireAuth, blockIfMustChangePassword } = require('../lib/auth');
 const { HttpError } = require('../lib/httpErrors');
-const { withLockedRecordForCollection } = require('../lib/recordStore');
+const { withLockedRecordForCollection, getAllForCollection } = require('../lib/recordStore');
+const { findMeetingConflict } = require('../lib/createValidation');
 
 router.use(requireAuth, blockIfMustChangePassword);
 
@@ -38,9 +39,31 @@ router.post('/:id/:action', async (req, res) => {
       return res.status(403).json({ error: 'Bạn không có quyền thực hiện thao tác này' });
     }
 
+    // Duyệt cần đọc trước các lịch khác để tái kiểm tra trùng phòng ngay tại thời điểm duyệt (không chỉ
+    // lúc tạo) — dùng cho nhánh approve bên dưới, đọc trước khi khoá bản ghi (cùng mức chặt chẽ với
+    // editContract() kiểm tra phụ lục, không cần khoá cả collection).
+    const allMeetings = action === 'approve' ? await getAllForCollection('meetings') : null;
+
     const resultItem = await withLockedRecordForCollection('meetings', itemId, (item) => {
       if (action === 'cancel' && !hasPerm && item.creator !== freshUser.username) {
         throw new HttpError(403, 'Bạn chỉ có thể huỷ lịch do chính mình đặt');
+      }
+      // Trước đây ghi đè status vô điều kiện, không kiểm tra trạng thái hiện tại — cho phép "hồi sinh"
+      // lịch đã hủy (CANCELLED -> APPROVED) nếu ai đó bấm duyệt trên tab cũ/gọi thẳng API, dù phòng đó
+      // lúc này có thể đã được đặt cho lịch khác. Duyệt chỉ hợp lệ từ PENDING; huỷ hợp lệ từ PENDING/
+      // APPROVED (không huỷ lại 1 lịch đã huỷ).
+      if (action === 'approve') {
+        if (item.status !== 'PENDING') {
+          throw new HttpError(409, 'Lịch này không còn ở trạng thái chờ duyệt (có thể đã được xử lý ở nơi khác)');
+        }
+        const conflict = findMeetingConflict(
+          (allMeetings || []).filter(m => m.id !== item.id), item.room, item.startTime, item.endTime
+        );
+        if (conflict) {
+          throw new HttpError(409, `Phòng "${item.room}" đã có lịch trùng khung giờ này (${conflict.code})`);
+        }
+      } else if (item.status === 'CANCELLED') {
+        throw new HttpError(409, 'Lịch này đã bị huỷ trước đó');
       }
       item.status = config.status;
       return item;
