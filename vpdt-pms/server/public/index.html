@@ -1326,24 +1326,19 @@ table { display: block; overflow-x: auto; max-width: 100%; }
     <div id="prSubTemplates" class="hidden space-y-4">
       <form onsubmit="submitSlideTemplateForm(event)" class="bg-sky-50 p-4 rounded border border-sky-200 space-y-3">
         <h3 id="prTplFormTitle" class="font-bold text-sky-900 text-sm flex items-center gap-1">🎨 Tạo Mẫu Trình Chiếu Mới</h3>
-        <p class="text-[11px] text-gray-500">Mẫu chỉ gồm màu nền/màu chữ cho khung trình chiếu — không phải tệp PowerPoint đính kèm.</p>
+        <p class="text-[11px] text-gray-500">Tải lên 1 tệp mẫu báo cáo (ảnh, PDF hoặc PowerPoint) — hệ thống sẽ dùng đúng giao diện nền của tệp này cho toàn bộ khung trình chiếu, tự chọn màu chữ trắng/đen phù hợp, không cần chọn màu tay.</p>
         <div>
           <label class="block text-xs font-semibold text-gray-600 mb-1">Tên Mẫu</label>
           <input id="prTplName" placeholder="VD: Nền tối mặc định" class="w-full md:w-80 border p-2 rounded text-sm" required>
         </div>
-        <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
-          <div><label class="block text-[11px] text-gray-600 mb-1">Nền trang</label><input type="color" id="prTplColor_pageBg" value="#000000" class="w-full h-8 border rounded"></div>
-          <div><label class="block text-[11px] text-gray-600 mb-1">Tiêu đề trang bìa</label><input type="color" id="prTplColor_coverTitleColor" value="#ffffff" class="w-full h-8 border rounded"></div>
-          <div><label class="block text-[11px] text-gray-600 mb-1">Điểm nhấn trang bìa</label><input type="color" id="prTplColor_coverAccentColor" value="#111827" class="w-full h-8 border rounded"></div>
-          <div><label class="block text-[11px] text-gray-600 mb-1">Tiêu đề mục</label><input type="color" id="prTplColor_sectionTitleColor" value="#ffffff" class="w-full h-8 border rounded"></div>
-          <div><label class="block text-[11px] text-gray-600 mb-1">Nội dung chữ</label><input type="color" id="prTplColor_bodyTextColor" value="#e5e7eb" class="w-full h-8 border rounded"></div>
-          <div><label class="block text-[11px] text-gray-600 mb-1">Nhãn nguồn</label><input type="color" id="prTplColor_sourceLabelColor" value="#d1d5db" class="w-full h-8 border rounded"></div>
-          <div><label class="block text-[11px] text-gray-600 mb-1">Viền bảng</label><input type="color" id="prTplColor_tableBorder" value="#444444" class="w-full h-8 border rounded"></div>
-          <div><label class="block text-[11px] text-gray-600 mb-1">Nền tiêu đề bảng</label><input type="color" id="prTplColor_tableHeadBg" value="#222222" class="w-full h-8 border rounded"></div>
-          <div><label class="block text-[11px] text-gray-600 mb-1">Chữ trong bảng</label><input type="color" id="prTplColor_tableText" value="#ffffff" class="w-full h-8 border rounded"></div>
-          <div><label class="block text-[11px] text-gray-600 mb-1">Nền nút điều hướng</label><input type="color" id="prTplColor_navBtnBg" value="#222222" class="w-full h-8 border rounded"></div>
-          <div><label class="block text-[11px] text-gray-600 mb-1">Chữ nút điều hướng</label><input type="color" id="prTplColor_navBtnText" value="#ffffff" class="w-full h-8 border rounded"></div>
-          <div><label class="block text-[11px] text-gray-600 mb-1">Thanh trên cùng</label><input type="color" id="prTplColor_topBarBg" value="#111827" class="w-full h-8 border rounded"></div>
+        <div>
+          <label class="block text-xs font-semibold text-gray-600 mb-1">Tệp Mẫu (ảnh / PDF / PowerPoint)</label>
+          <input type="file" id="prTplFile" accept="image/*,.pdf,.pptx" onchange="onSlideTemplateFileChange(event)" class="w-full md:w-80 border p-1.5 bg-white rounded text-xs">
+          <div id="prTplFileStatus" class="text-[11px] text-gray-500 mt-1"></div>
+        </div>
+        <div id="prTplPreviewWrap" class="hidden">
+          <label class="block text-[11px] text-gray-600 mb-1">Xem Trước</label>
+          <img id="prTplPreviewImg" class="w-40 h-24 object-cover rounded border">
         </div>
         <div class="flex justify-end gap-2">
           <button type="button" onclick="cancelEditSlideTemplate()" id="btnPrTplCancelEdit" class="hidden bg-gray-400 text-white px-4 py-1.5 rounded text-xs font-bold hover:bg-gray-500">Hủy Sửa</button>
@@ -2191,6 +2186,7 @@ table { display: block; overflow-x: auto; max-width: 100%; }
       <h3 class="font-bold text-gray-800">📤 Tải Lên Tài Liệu Ký</h3>
       <p id="signedUploadSub" class="text-xs text-gray-500"></p>
       <input id="signedUploadFile" type="file" accept=".pdf,.doc,.docx,image/*" class="w-full border p-1.5 bg-white rounded text-xs">
+      <div id="signedUploadDynamicFields" class="space-y-2"></div>
       <div class="flex justify-end gap-2 pt-1">
         <button onclick="closeSignedUploadModal()" class="bg-gray-200 text-gray-700 px-4 py-1.5 rounded text-xs font-bold hover:bg-gray-300">Hủy</button>
         <button onclick="submitSignedUpload()" class="bg-cyan-600 text-white px-4 py-1.5 rounded text-xs font-bold hover:bg-cyan-700">Tải Lên</button>
@@ -3893,7 +3889,14 @@ const CORE_FIELD_MANIFEST = {
 // (và chung 1 bộ trường mặc định 'OFFICE') nhưng mỗi phân hệ có bộ trường bổ sung riêng.
 const FORM_TABS = [
   { key: 'SUBMISSION', coreKey: 'SUBMISSION', label: 'Văn Bản Trình / Tờ Trình', icon: '📜', short: 'Tờ Trình' },
-  { key: 'CONTRACT', coreKey: 'CONTRACT', label: 'Hợp Đồng', icon: '📄', short: 'Hợp Đồng' },
+  // Hợp Đồng TÁCH 2 bộ trường bổ sung riêng theo đúng 2 sub-tab (Phê Duyệt / Quản Lý HĐ &amp; Giấy
+  // Phép) — cùng chung 1 coreKey 'CONTRACT' (trường mặc định là các field DOM dùng chung giữa 2 sub-tab
+  // nên vẫn sửa nhãn/bắt buộc chung), nhưng key riêng để mỗi bên có DANH SÁCH TRƯỜNG BỔ SUNG khác nhau.
+  // CONTRACT_APPROVAL áp cho chế độ Tạo Mới/Bổ Sung Phụ Lục (renderDynamicInputsForModule() gọi tuỳ
+  // theo contractOpMode, xem onContractOpModeChange()); CONTRACT_MANAGE áp cho chế độ Nhập Đã Ký VÀ
+  // cho bước "Tải Tài Liệu Ký" riêng (modal #signedUploadModal, xem openSignedUploadModal()).
+  { key: 'CONTRACT_APPROVAL', coreKey: 'CONTRACT', label: 'Hợp Đồng - Phê Duyệt', icon: '📄', short: 'HĐ - Phê Duyệt' },
+  { key: 'CONTRACT_MANAGE', coreKey: 'CONTRACT', label: 'Hợp Đồng - Quản Lý HĐ & Giấy Phép', icon: '📋', short: 'HĐ - Quản Lý' },
   { key: 'CAR', coreKey: 'CAR', label: 'Đăng Ký Xe', icon: '🚗', short: 'Đăng Ký Xe' },
   { key: 'MUA_BAN', coreKey: 'OFFICE', label: 'Văn Phòng - Mua Bán', icon: '🛒', short: 'Mua Bán' },
   { key: 'SUA_CHUA', coreKey: 'OFFICE', label: 'Văn Phòng - Sửa Chữa', icon: '🔧', short: 'Sửa Chữa' },
@@ -6774,7 +6777,7 @@ function switchTab(tabName) {
     document.getElementById('btnManualTaskCreate').classList.toggle('hidden', !canManageTasks(currentUser));
     renderTasks();
   }
-  if (tabName === 'contract') { renderDynamicInputsForModule('CONTRACT', 'dynamicFieldsContainer_CONTRACT'); setContractSubTab(activeContractSubTab); }
+  if (tabName === 'contract') { setContractSubTab(activeContractSubTab); }
   if (tabName === 'meeting') { renderDynamicInputsForModule('MEETING_ROOM', 'dynamicFieldsContainer_MEETING_ROOM'); renderMeetings(); setMeetingSubTab(activeMeetingSubTab); document.getElementById('meetingCode').value = generateMeetingCode(); }
   if (tabName === 'minutes') {
     renderDynamicInputsForModule('MEETING_MINUTES', 'dynamicFieldsContainer_MEETING_MINUTES');
@@ -10178,6 +10181,9 @@ function onContractOpModeChange() {
   const mode = document.getElementById('contractOpMode').value;
   const isAddendumMode = (mode === 'ADDENDUM' || mode === 'IMPORT_ADDENDUM');
   const isImportMode = (mode === 'IMPORT_CONTRACT' || mode === 'IMPORT_ADDENDUM');
+  // Trường bổ sung đổi đúng bộ theo sub-tab đang ở (Phê Duyệt dùng CONTRACT_APPROVAL, Quản Lý HĐ dùng
+  // CONTRACT_MANAGE) — xem FORM_TABS. submitContractReq() đọc lại đúng bộ này khi thu thập dữ liệu.
+  renderDynamicInputsForModule(isImportMode ? 'CONTRACT_MANAGE' : 'CONTRACT_APPROVAL', 'dynamicFieldsContainer_CONTRACT');
   document.getElementById('contractAddendumTargetWrap').classList.toggle('hidden', !isAddendumMode);
   // Đợt Thanh Toán: hiện cho NEW/ADDENDUM (cả 2 đều qua Phê Duyệt, phụ lục giờ CŨNG khai được — theo
   // yêu cầu "phụ lục cũng phê duyệt và thanh toán"), ẩn cho 2 chế độ IMPORT (nhập hồ sơ đã ký sẵn,
@@ -10339,7 +10345,7 @@ async function submitContractReq(e) {
   let uploaded, customData;
   try {
     uploaded = await uploadFileToServer(file);
-    customData = await collectDynamicFieldsData('CONTRACT');
+    customData = await collectDynamicFieldsData(isSignedImport ? 'CONTRACT_MANAGE' : 'CONTRACT_APPROVAL', 'dynamicFieldsContainer_CONTRACT');
   } catch (err) {
     return alert(`⛔ Tải tệp lên thất bại: ${err.message}`);
   }
@@ -10903,6 +10909,13 @@ function openSignedUploadModal(module, id) {
   signedUploadTarget = { module, id };
   document.getElementById('signedUploadSub').innerText = `${item.code} — ${item.title}`;
   document.getElementById('signedUploadFile').value = '';
+  // Chỉ Hợp đồng có bộ trường bổ sung riêng cho bước Tải Tài Liệu Ký (CONTRACT_MANAGE, xem FORM_TABS) —
+  // Mua Bán/Sửa Chữa/Đầu Tư dùng chung modal này nhưng không có bộ trường riêng cho bước này.
+  if (module === 'contracts') {
+    renderDynamicInputsForModule('CONTRACT_MANAGE', 'signedUploadDynamicFields');
+  } else {
+    document.getElementById('signedUploadDynamicFields').innerHTML = '';
+  }
   document.getElementById('signedUploadModal').classList.remove('hidden');
 }
 function closeSignedUploadModal() {
@@ -10925,9 +10938,18 @@ async function submitSignedUpload() {
     return alert(`⛔ Tải tệp lên thất bại: ${err.message}`);
   }
 
+  let customData = {};
+  if (module === 'contracts') {
+    try {
+      customData = await collectDynamicFieldsData('CONTRACT_MANAGE', 'signedUploadDynamicFields');
+    } catch (err) {
+      return alert(`⛔ ${err.message}`);
+    }
+  }
+
   let updated;
   try {
-    const result = await callRecordAction(module, id, 'upload-signed', { fileName: uploaded.fileName, fileType: uploaded.fileType, fileUrl: uploaded.fileUrl });
+    const result = await callRecordAction(module, id, 'upload-signed', { fileName: uploaded.fileName, fileType: uploaded.fileType, fileUrl: uploaded.fileUrl, customData });
     updated = result.item;
   } catch (err) {
     return alert(`⛔ ${err.message}`);
@@ -11306,6 +11328,22 @@ function viewContractDetails(contractId) {
         <b>Nội Dung Tóm Tắt & Điều Khoản Chính:</b>
         <div class="bg-gray-50 p-3 rounded border mt-1 text-gray-800">${escapeHtml(c.content || 'Không có mô tả.')}</div>
       </div>
+      ${(c.customData && Object.keys(c.customData).length > 0) ? `
+        <div class="border-t mt-4 pt-3">
+          <b>Trường Bổ Sung (Phê Duyệt):</b>
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-2 mt-1">
+            ${Object.keys(c.customData).map(k => `<div><b>${escapeHtml(k)}:</b> ${escapeHtml(String(c.customData[k]))}</div>`).join('')}
+          </div>
+        </div>
+      ` : ''}
+      ${(c.signedCustomData && Object.keys(c.signedCustomData).length > 0) ? `
+        <div class="border-t mt-4 pt-3">
+          <b>Trường Bổ Sung (Quản Lý HĐ & Giấy Phép):</b>
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-2 mt-1">
+            ${Object.keys(c.signedCustomData).map(k => `<div><b>${escapeHtml(k)}:</b> ${escapeHtml(String(c.signedCustomData[k]))}</div>`).join('')}
+          </div>
+        </div>
+      ` : ''}
     </div>
   `;
   document.getElementById('viewDocModal').classList.remove('hidden');
@@ -16486,12 +16524,15 @@ function renderReportDeptCheckboxes() {
   `).join('');
 }
 
-// ============ MẪU TRÌNH CHIẾU (quản lý — chỉ reportManage/admin) — mẫu CHỈ gồm màu nền/chữ (không
-// phải tệp PowerPoint), áp dụng 1 lần lúc tạo kỳ (createReportPeriod()), người nộp báo cáo không chọn
-// lại — xem PR_SLIDE_TEMPLATES ở khối Tổng Hợp bên dưới cho 2 mẫu cứng đời cũ (chỉ còn áp cho kỳ báo
-// cáo tạo TRƯỚC tính năng này, xem getPrSlideTemplateColors()). ============
+// ============ MẪU TRÌNH CHIẾU (quản lý — chỉ reportManage/admin) — mẫu là 1 ẢNH NỀN DUY NHẤT (trích từ
+// tệp ảnh/PDF/PowerPoint tải lên, xem extractSlideTemplateBackgroundFromFile() ở khối Tổng Hợp bên
+// dưới) áp dụng 1 lần lúc tạo kỳ (createReportPeriod()), người nộp báo cáo không chọn lại. Trước đây
+// chọn tay 12 màu riêng lẻ — nay chỉ tải 1 tệp, hệ thống tự suy ra màu chữ trắng/đen phù hợp từ độ sáng
+// ảnh nền (isDark, xem derivePrTemplateStyle()). PR_SLIDE_TEMPLATES ở khối Tổng Hợp bên dưới vẫn giữ 2
+// mẫu cứng đời cũ (chỉ còn áp cho kỳ báo cáo tạo TRƯỚC tính năng mẫu tự tạo, xem getPrSlideTemplateColors());
+// mẫu tự tạo dạng 12-màu cũ (colors) từ trước bản nâng cấp này cũng ĐỌC được nguyên vẹn, không ép migrate. ============
 let editingSlideTemplateId = null;
-const PR_TPL_COLOR_FIELDS = ['pageBg', 'coverTitleColor', 'coverAccentColor', 'sectionTitleColor', 'bodyTextColor', 'sourceLabelColor', 'tableBorder', 'tableHeadBg', 'tableText', 'navBtnBg', 'navBtnText', 'topBarBg'];
+let pendingSlideTemplateBg = null; // { bgImageUrl, isDark } — kết quả xử lý tệp vừa chọn, null nếu chưa chọn/chưa xử lý xong.
 
 function renderPrPeriodTemplateOptions() {
   const sel = document.getElementById('prPeriodSlideTemplate');
@@ -16508,13 +16549,14 @@ function renderPrTemplatesTable() {
     return;
   }
   tbody.innerHTML = DB.reportSlideTemplates.map(t => {
-    const c = t.colors || {};
+    const c = getPrSlideTemplateColors(t.id);
+    const previewHTML = c.bgImageUrl
+      ? `<div class="w-24 h-12 rounded border" style="background-image:url('${c.bgImageUrl}');background-size:cover;background-position:center;"></div>`
+      : `<div class="w-24 h-12 rounded border flex items-center justify-center text-[10px] font-bold" style="background:${c.pageBg};color:${c.coverTitleColor};">Aa</div>`;
     return `
       <tr class="hover:bg-gray-50 border-b">
         <td class="border p-2 font-bold text-sky-800">${escapeHtml(t.name)}</td>
-        <td class="border p-2">
-          <div class="w-24 h-12 rounded border flex items-center justify-center text-[10px] font-bold" style="background:${c.pageBg};color:${c.coverTitleColor};">Aa</div>
-        </td>
+        <td class="border p-2">${previewHTML}</td>
         <td class="border p-2 text-center space-x-1">
           <button onclick="editSlideTemplate(${t.id})" class="px-2.5 py-1 bg-gray-600 text-white rounded text-xs hover:opacity-90 font-bold">✏️ Sửa</button>
           ${currentUser.perms?.admin ? `<button onclick="deleteSlideTemplateAction(${t.id})" class="px-2.5 py-1 bg-rose-100 text-rose-700 rounded text-xs hover:bg-rose-200 font-bold">🗑️ Xóa</button>` : ''}
@@ -16524,25 +16566,41 @@ function renderPrTemplatesTable() {
   }).join('');
 }
 
-function readSlideTemplateColorsFromForm() {
-  const colors = {};
-  PR_TPL_COLOR_FIELDS.forEach(f => { colors[f] = document.getElementById(`prTplColor_${f}`).value; });
-  return colors;
-}
-
-function fillSlideTemplateColorsForm(colors) {
-  const c = colors || PR_SLIDE_TEMPLATES.DEFAULT;
-  PR_TPL_COLOR_FIELDS.forEach(f => {
-    const input = document.getElementById(`prTplColor_${f}`);
-    if (input && c[f] && /^#[0-9a-fA-F]{6}$/.test(c[f])) input.value = c[f];
-  });
+// Xử lý tệp vừa chọn ở ô "Tệp Mẫu" ngay khi chọn (không đợi bấm Lưu) để người dùng thấy ngay ảnh xem
+// trước + biết ngay có cảnh báo gì không (vd PowerPoint không đọc được nền riêng) trước khi quyết định
+// lưu. Kết quả tạm giữ ở pendingSlideTemplateBg, chỉ thật sự gửi lên server lúc submitSlideTemplateForm().
+async function onSlideTemplateFileChange(event) {
+  const file = event.target.files[0];
+  const statusEl = document.getElementById('prTplFileStatus');
+  const previewWrap = document.getElementById('prTplPreviewWrap');
+  const previewImg = document.getElementById('prTplPreviewImg');
+  if (!file) { pendingSlideTemplateBg = null; return; }
+  pendingSlideTemplateBg = null;
+  statusEl.textContent = '⏳ Đang xử lý tệp...';
+  previewWrap.classList.add('hidden');
+  try {
+    const result = await processSlideTemplateFile(file);
+    pendingSlideTemplateBg = result;
+    previewImg.src = result.bgImageUrl;
+    previewWrap.classList.remove('hidden');
+    statusEl.textContent = result.warning ? `⚠️ ${result.warning}` : '✅ Đã xử lý xong tệp mẫu.';
+  } catch (err) {
+    statusEl.textContent = `⛔ ${err.message}`;
+  }
 }
 
 async function submitSlideTemplateForm(event) {
   event.preventDefault();
   const name = document.getElementById('prTplName').value.trim();
   if (!name) return alert('Vui lòng nhập tên mẫu!');
-  const payload = { name, colors: readSlideTemplateColorsFromForm() };
+  if (!editingSlideTemplateId && !pendingSlideTemplateBg) return alert('Vui lòng chọn tệp mẫu (ảnh/PDF/PowerPoint) trước khi tạo!');
+  const payload = { name };
+  // Sửa mà không chọn tệp mới → giữ nguyên ảnh nền/isDark hiện có (chỉ đổi tên); có chọn tệp mới → thay
+  // hẳn ảnh nền + isDark theo tệp mới (kể cả với mẫu 12-màu đời cũ, chuyển hẳn sang dạng ảnh nền mới).
+  if (pendingSlideTemplateBg) {
+    payload.bgImageUrl = pendingSlideTemplateBg.bgImageUrl;
+    payload.isDark = pendingSlideTemplateBg.isDark;
+  }
   let saved;
   try {
     if (editingSlideTemplateId) {
@@ -16567,20 +16625,37 @@ function editSlideTemplate(id) {
   const t = DB.reportSlideTemplates.find(x => x.id === id);
   if (!t) return;
   editingSlideTemplateId = id;
+  pendingSlideTemplateBg = null;
   document.getElementById('prTplFormTitle').innerText = `🎨 Sửa Mẫu Trình Chiếu — ${t.name}`;
   document.getElementById('prTplName').value = t.name;
-  fillSlideTemplateColorsForm(t.colors);
+  document.getElementById('prTplFile').value = '';
+  const c = getPrSlideTemplateColors(id);
+  const statusEl = document.getElementById('prTplFileStatus');
+  const previewWrap = document.getElementById('prTplPreviewWrap');
+  const previewImg = document.getElementById('prTplPreviewImg');
+  if (c.bgImageUrl) {
+    previewImg.src = c.bgImageUrl;
+    previewWrap.classList.remove('hidden');
+    statusEl.textContent = 'Ảnh nền hiện tại — chọn tệp mới ở trên nếu muốn thay đổi, để trống nếu chỉ đổi tên.';
+  } else {
+    previewWrap.classList.add('hidden');
+    statusEl.textContent = 'Mẫu này đang dùng bảng màu cũ (chưa có ảnh nền) — chọn 1 tệp mẫu để chuyển sang xem trước bằng ảnh, hoặc để trống nếu chỉ đổi tên.';
+  }
   document.getElementById('btnPrTplSubmit').innerText = '💾 Lưu Thay Đổi';
   document.getElementById('btnPrTplCancelEdit').classList.remove('hidden');
 }
 
 function cancelEditSlideTemplate() {
   editingSlideTemplateId = null;
+  pendingSlideTemplateBg = null;
   const titleEl = document.getElementById('prTplFormTitle');
   if (titleEl) titleEl.innerText = '🎨 Tạo Mẫu Trình Chiếu Mới';
   const nameEl = document.getElementById('prTplName');
   if (nameEl) nameEl.value = '';
-  fillSlideTemplateColorsForm(null);
+  const fileEl = document.getElementById('prTplFile');
+  if (fileEl) fileEl.value = '';
+  document.getElementById('prTplFileStatus').textContent = '';
+  document.getElementById('prTplPreviewWrap')?.classList.add('hidden');
   const submitEl = document.getElementById('btnPrTplSubmit');
   if (submitEl) submitEl.innerText = '➕ Tạo Mẫu';
   document.getElementById('btnPrTplCancelEdit')?.classList.add('hidden');
@@ -16862,15 +16937,234 @@ const PR_SLIDE_TEMPLATES = {
     navBtnBg: 'rgba(245,131,32,0.12)', navBtnText: '#D86C0A', topBarBg: '#111827'
   }
 };
+// Suy ra bộ 12 màu chữ/viền/overlay THEO ĐÚNG khuôn cũ (pageBg, coverTitleColor, ...) từ 1 giá trị
+// isDark DUY NHẤT — dùng cho mẫu MỚI (chỉ có {bgImageUrl, isDark}, không còn chọn màu tay, xem quyết
+// định người dùng). Overlay/viền dùng rgba mờ để chữ/bảng vẫn đọc được rõ trên BẤT KỲ ảnh nền nào mà
+// không che khuất hẳn ảnh — khác mẫu cũ dùng màu đặc vì mẫu cũ không có ảnh nền để che.
+function derivePrTemplateStyle(isDark) {
+  return isDark ? {
+    pageBg: '#000000',
+    coverTitleColor: '#ffffff', coverAccentColor: 'rgba(255,255,255,0.55)',
+    sectionTitleColor: '#ffffff', bodyTextColor: '#f3f4f6', sourceLabelColor: '#d1d5db',
+    tableBorder: 'rgba(255,255,255,0.25)', tableHeadBg: 'rgba(0,0,0,0.55)', tableText: '#ffffff',
+    navBtnBg: 'rgba(255,255,255,0.18)', navBtnText: '#ffffff', topBarBg: 'rgba(0,0,0,0.45)'
+  } : {
+    pageBg: '#ffffff',
+    coverTitleColor: '#111827', coverAccentColor: 'rgba(17,24,39,0.55)',
+    sectionTitleColor: '#111827', bodyTextColor: '#1f2937', sourceLabelColor: '#4b5563',
+    tableBorder: 'rgba(0,0,0,0.2)', tableHeadBg: 'rgba(255,255,255,0.7)', tableText: '#111827',
+    navBtnBg: 'rgba(0,0,0,0.08)', navBtnText: '#111827', topBarBg: 'rgba(255,255,255,0.55)'
+  };
+}
+
 // templateRef: id (number) của DB.reportSlideTemplates (mẫu do người dùng tự tạo — xem tab "🎨 Mẫu
 // Trình Chiếu") cho các kỳ MỚI, hoặc chuỗi 'DEFAULT'/'ORANGE_GOLD' (mẫu cứng đời cũ, chỉ còn dùng cho
-// các kỳ báo cáo đã tạo TRƯỚC khi có tính năng mẫu tự tạo — xem slideTemplate ở reportPeriods cũ).
+// các kỳ báo cáo đã tạo TRƯỚC khi có tính năng mẫu tự tạo — xem slideTemplate ở reportPeriods cũ). Luôn
+// trả về đủ 12 field màu (dù mẫu mới chỉ lưu {bgImageUrl, isDark}, xem derivePrTemplateStyle()) CỘNG
+// thêm bgImageUrl (null nếu mẫu không có ảnh nền, vd mẫu 12-màu đời cũ/2 mẫu cứng DEFAULT/ORANGE_GOLD)
+// để các hàm dựng slide (buildPrSlideScreenHTML()...) áp background-image lên khung ngoài cùng.
 function getPrSlideTemplateColors(templateRef) {
   if (typeof templateRef === 'number') {
     const tpl = DB.reportSlideTemplates.find(t => t.id === templateRef);
-    if (tpl?.colors) return tpl.colors;
+    if (tpl) {
+      if (tpl.colors) return { ...tpl.colors, bgImageUrl: null };
+      return { ...derivePrTemplateStyle(!!tpl.isDark), bgImageUrl: tpl.bgImageUrl || null };
+    }
   }
-  return PR_SLIDE_TEMPLATES[templateRef] || PR_SLIDE_TEMPLATES.DEFAULT;
+  return { ...(PR_SLIDE_TEMPLATES[templateRef] || PR_SLIDE_TEMPLATES.DEFAULT), bgImageUrl: null };
+}
+
+// ============ MẪU TRÌNH CHIẾU: chuyển 1 tệp mẫu (ảnh/PDF/PowerPoint) tải lên thành 1 ẢNH NỀN DUY NHẤT
+// dùng cho toàn khung trình chiếu (background-size:cover ở buildPrSlideScreenHTML()) — thay cho việc tự
+// chọn 12 màu riêng lẻ trước đây. Ảnh → dùng thẳng. PDF → vẽ lại TRANG 1 bằng PDF.js (đã tự lưu sẵn, xem
+// window.pdfjsLib gán ở script render PDF cuối trang). PowerPoint (.pptx) → đọc nền theo ĐÚNG chuỗi thừa
+// kế OOXML slide→slideLayout→slideMaster (xem extractPptxBackgroundImage()), trắng mặc định + báo rõ nếu
+// không tìm thấy ở cấp nào (theo đúng quyết định người dùng). isDark tính 1 LẦN lúc lưu bằng cách lấy
+// mẫu độ sáng trung bình ảnh nền qua canvas — từ đó suy ra toàn bộ màu chữ/overlay tự động (xem
+// derivePrTemplateStyle()), không còn chọn màu tay. ============
+
+// Vẽ trang 1 tệp PDF thành ảnh PNG (Blob) — dùng lại PDF.js đã tải sẵn cho khung xem PDF bảo vệ
+// (renderPdfProtected(), xem window.pdfjsLib).
+async function rasterizePdfFirstPageToBlob(arrayBuffer) {
+  if (!window.pdfjsLib) throw new Error('Chưa tải xong thư viện đọc PDF, vui lòng thử lại sau giây lát.');
+  const pdf = await window.pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+  const page = await pdf.getPage(1);
+  const viewport = page.getViewport({ scale: 2 });
+  const canvas = document.createElement('canvas');
+  canvas.width = viewport.width;
+  canvas.height = viewport.height;
+  await page.render({ canvasContext: canvas.getContext('2d'), viewport }).promise;
+  return new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
+}
+
+// Vẽ 1 ảnh nền phẳng 1 màu đặc — dùng khi PowerPoint khai nền màu đặc (<a:solidFill>), hoặc khi KHÔNG
+// tìm thấy nền ở bất kỳ cấp nào trong chuỗi slide→slideLayout→slideMaster (lúc đó dùng trắng mặc định,
+// xem extractPptxBackgroundImage()).
+function drawSolidColorBackgroundBlob(hexColor) {
+  const canvas = document.createElement('canvas');
+  canvas.width = 1280; canvas.height = 720;
+  const ctx = canvas.getContext('2d');
+  ctx.fillStyle = hexColor || '#ffffff';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  return new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
+}
+
+// Đọc nền (background) của 1 tệp .pptx tải lên cho Mẫu Trình Chiếu — đi đúng chuỗi thừa kế nền chuẩn
+// OOXML: (1) nền RIÊNG của slide 1 (<p:cSld><p:bg><p:bgPr>) → (2) nếu slide không khai nền riêng, dùng
+// nền của slideLayout mà slide 1 tham chiếu (qua .rels của chính slide) → (3) nếu layout cũng không
+// khai, dùng nền của slideMaster mà layout đó tham chiếu (qua .rels của chính layout). Mỗi cấp có thể
+// khai nền dạng màu đặc (<a:solidFill><a:srgbClr>) hoặc ảnh (<a:blipFill><a:blip r:embed>, ảnh thật nằm
+// trong media/ — PHẢI tự resolve qua .rels của ĐÚNG file đang xét ở cấp đó, không dùng chung 1 rels cho
+// cả 3 cấp, cùng khuôn resolveZipPath()/đọc .rels như parsePptxToSlideContents() ở trên). Trả về
+// { blob, warning } — warning != null nếu không tìm thấy nền ở bất kỳ cấp nào (dùng nền trắng mặc định
+// thay thế, đúng quyết định người dùng: "Dùng nền trắng mặc định + báo rõ").
+async function extractPptxBackgroundImage(arrayBuffer) {
+  const zip = await window.JSZip.loadAsync(arrayBuffer);
+  const parseXml = (text) => new DOMParser().parseFromString(text, 'application/xml');
+  const readText = async (path) => { const f = zip.file(path); return f ? f.async('text') : null; };
+  const resolveZipPath = (baseDir, target) => {
+    const parts = baseDir.split('/').filter(Boolean);
+    target.split('/').forEach(part => {
+      if (part === '..') parts.pop();
+      else if (part !== '.' && part !== '') parts.push(part);
+    });
+    return parts.join('/');
+  };
+  const mimeByExt = { png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', gif: 'image/gif', bmp: 'image/bmp' };
+
+  const readRelMap = async (xmlPath) => {
+    const dir = xmlPath.substring(0, xmlPath.lastIndexOf('/'));
+    const fileName = xmlPath.substring(xmlPath.lastIndexOf('/') + 1);
+    const relsText = await readText(`${dir}/_rels/${fileName}.rels`);
+    if (!relsText) return {};
+    const map = {};
+    Array.from(parseXml(relsText).getElementsByTagName('Relationship')).forEach(r => {
+      map[r.getAttribute('Id')] = { target: r.getAttribute('Target'), type: r.getAttribute('Type') };
+    });
+    return map;
+  };
+
+  // Đọc <p:bg> của 1 file XML (slide/layout/master đều CÙNG cấu trúc <p:bg><p:bgPr>) — trả về
+  // { kind: 'image', blob } hoặc { kind: 'color', hex } hoặc null nếu file không tự khai nền riêng.
+  const readBgFromXmlDoc = async (xmlDoc, xmlPath, relMap) => {
+    const bgPrEls = xmlDoc.getElementsByTagName('p:bg')[0]?.getElementsByTagName('p:bgPr');
+    if (!bgPrEls || !bgPrEls.length) return null;
+    const bgPr = bgPrEls[0];
+
+    const blipEls = bgPr.getElementsByTagName('a:blip');
+    if (blipEls.length) {
+      const rel = relMap[blipEls[0].getAttribute('r:embed')];
+      if (rel) {
+        const imgPath = resolveZipPath(xmlPath.substring(0, xmlPath.lastIndexOf('/')), rel.target);
+        const imgFile = zip.file(imgPath);
+        const mime = mimeByExt[(imgPath.split('.').pop() || '').toLowerCase()];
+        if (imgFile && mime) {
+          const base64 = await imgFile.async('base64');
+          const byteChars = atob(base64);
+          const byteNumbers = new Array(byteChars.length);
+          for (let i = 0; i < byteChars.length; i++) byteNumbers[i] = byteChars.charCodeAt(i);
+          return { kind: 'image', blob: new Blob([new Uint8Array(byteNumbers)], { type: mime }) };
+        }
+      }
+    }
+
+    const srgbEls = bgPr.getElementsByTagName('a:srgbClr');
+    if (srgbEls.length) return { kind: 'color', hex: '#' + srgbEls[0].getAttribute('val') };
+    return null;
+  };
+
+  const NO_BG_WARNING = 'Không tìm thấy nền thiết kế riêng trong tệp PowerPoint này (ở slide, slideLayout lẫn slideMaster) — đã dùng nền trắng mặc định. Nếu cần đúng màu/hình nền thiết kế, vui lòng xuất/chụp slide đó thành ảnh (PNG/JPG) rồi tải lại làm mẫu.';
+
+  const slide1Path = 'ppt/slides/slide1.xml';
+  const slide1Text = await readText(slide1Path);
+  if (!slide1Text) return { blob: await drawSolidColorBackgroundBlob('#ffffff'), warning: 'Không đọc được nội dung tệp PowerPoint này.' };
+  const slide1RelMap = await readRelMap(slide1Path);
+  let bg = await readBgFromXmlDoc(parseXml(slide1Text), slide1Path, slide1RelMap);
+
+  if (!bg) {
+    const layoutRel = Object.values(slide1RelMap).find(r => (r.type || '').endsWith('/slideLayout'));
+    if (layoutRel) {
+      const layoutPath = resolveZipPath('ppt/slides', layoutRel.target);
+      const layoutText = await readText(layoutPath);
+      if (layoutText) {
+        const layoutRelMap = await readRelMap(layoutPath);
+        bg = await readBgFromXmlDoc(parseXml(layoutText), layoutPath, layoutRelMap);
+        if (!bg) {
+          const masterRel = Object.values(layoutRelMap).find(r => (r.type || '').endsWith('/slideMaster'));
+          if (masterRel) {
+            const masterPath = resolveZipPath(layoutPath.substring(0, layoutPath.lastIndexOf('/')), masterRel.target);
+            const masterText = await readText(masterPath);
+            if (masterText) {
+              const masterRelMap = await readRelMap(masterPath);
+              bg = await readBgFromXmlDoc(parseXml(masterText), masterPath, masterRelMap);
+            }
+          }
+        }
+      }
+    }
+  }
+
+  if (!bg) return { blob: await drawSolidColorBackgroundBlob('#ffffff'), warning: NO_BG_WARNING };
+  if (bg.kind === 'color') return { blob: await drawSolidColorBackgroundBlob(bg.hex), warning: null };
+  return { blob: bg.blob, warning: null };
+}
+
+// Chuyển 1 tệp mẫu bất kỳ (ảnh/PDF/PowerPoint) người dùng tải lên ở Mẫu Trình Chiếu thành 1 Blob ảnh nền
+// DUY NHẤT — dispatch theo loại tệp, xem 3 hàm con ở trên. Trả về { blob, warning }.
+async function extractSlideTemplateBackgroundFromFile(file) {
+  const name = (file.name || '').toLowerCase();
+  if (file.type.startsWith('image/') || /\.(png|jpe?g|gif|bmp|webp)$/.test(name)) {
+    return { blob: file, warning: null };
+  }
+  if (file.type === 'application/pdf' || name.endsWith('.pdf')) {
+    return { blob: await rasterizePdfFirstPageToBlob(await file.arrayBuffer()), warning: null };
+  }
+  if (name.endsWith('.pptx')) {
+    return extractPptxBackgroundImage(await file.arrayBuffer());
+  }
+  throw new Error('Định dạng tệp không được hỗ trợ — chỉ nhận ảnh (PNG/JPG...), PDF hoặc PowerPoint (.pptx).');
+}
+
+// Lấy mẫu độ sáng trung bình của 1 ảnh (qua URL blob: cục bộ) bằng canvas để tự suy ra chữ trắng/đen phù
+// hợp — xem derivePrTemplateStyle(). Co ảnh về 32x32 trước khi lấy mẫu để tính nhanh, đủ chính xác cho
+// mục đích tương phản chữ/nền (không cần độ chính xác cao).
+function computeImageIsDark(imgUrl) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => {
+      const canvas = document.createElement('canvas');
+      canvas.width = 32; canvas.height = 32;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(img, 0, 0, 32, 32);
+      let data;
+      try { data = ctx.getImageData(0, 0, 32, 32).data; } catch (e) { return resolve(false); }
+      let total = 0, count = 0;
+      for (let i = 0; i < data.length; i += 4) {
+        total += (0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2]);
+        count++;
+      }
+      resolve((total / count) < 140);
+    };
+    img.onerror = () => reject(new Error('Không đọc được ảnh để phân tích độ sáng.'));
+    img.src = imgUrl;
+  });
+}
+
+// Hàm tổng: tệp người dùng chọn ở form Mẫu Trình Chiếu → { bgImageUrl, isDark, warning } sẵn sàng đưa
+// vào payload lưu (xem submitSlideTemplateForm()). Tính isDark từ URL blob: cục bộ TRƯỚC khi tải lên
+// server để không phải tải ảnh về lại từ server chỉ để phân tích độ sáng.
+async function processSlideTemplateFile(file) {
+  const { blob, warning } = await extractSlideTemplateBackgroundFromFile(file);
+  const objectUrl = URL.createObjectURL(blob);
+  let isDark;
+  try {
+    isDark = await computeImageIsDark(objectUrl);
+  } finally {
+    URL.revokeObjectURL(objectUrl);
+  }
+  const uploadFile = (blob instanceof File) ? blob : new File([blob], `slide-template-bg-${Date.now()}.png`, { type: blob.type || 'image/png' });
+  const uploaded = await uploadFileToServer(uploadFile);
+  return { bgImageUrl: uploaded.fileUrl, isDark, warning };
 }
 
 // Danh sách slide đang sửa (prAggPendingSlides) là bản nháp CHỈ Ở CLIENT — chỉ thực sự lưu lại khi
@@ -17240,13 +17534,40 @@ function buildPrSlideScreenHTML(s, c) {
   `;
 }
 
+// Áp nền của mẫu (màu đặc, mẫu cũ KHÔNG có bgImageUrl — hoặc ảnh phủ kín (cover), mẫu mới CÓ bgImageUrl,
+// xem getPrSlideTemplateColors()) lên 1 khung ngoài cùng — dùng chung cho khung trình chiếu thật
+// (#prSlideshowModal) lẫn khung dựng ẩn để xuất PDF (stage ở downloadPrPdf()) để 2 nơi luôn khớp nhau.
+function applyPrTemplateBackground(el, c) {
+  el.style.backgroundColor = c.pageBg;
+  if (c.bgImageUrl) {
+    el.style.backgroundImage = `url("${c.bgImageUrl}")`;
+    el.style.backgroundSize = 'cover';
+    el.style.backgroundPosition = 'center';
+    el.style.backgroundRepeat = 'no-repeat';
+  } else {
+    el.style.backgroundImage = 'none';
+  }
+}
+
+// Tải trước 1 ảnh vào cache trình duyệt trước khi html2canvas chụp — background-image CSS không có sự
+// kiện "đã tải xong" để chờ như thẻ <img>, nên phải tự tải trước bằng Image() (xem downloadPrPdf()).
+function preloadImage(url) {
+  return new Promise((resolve) => {
+    if (!url) return resolve();
+    const img = new Image();
+    img.onload = () => resolve();
+    img.onerror = () => resolve();
+    img.src = url;
+  });
+}
+
 // Áp màu theo mẫu đang chọn của kỳ (prSlideshowTemplate) lên cả khung modal (nền), nút điều hướng và
 // thân slide.
 function renderPrSlideshowSlide() {
   const s = prSlideshowSlides[prSlideshowIndex];
   if (!s) return;
   const c = getPrSlideTemplateColors(prSlideshowTemplate);
-  document.getElementById('prSlideshowModal').style.background = c.pageBg;
+  applyPrTemplateBackground(document.getElementById('prSlideshowModal'), c);
   const prevBtn = document.getElementById('prSlideshowPrevBtn');
   const nextBtn = document.getElementById('prSlideshowNextBtn');
   if (prevBtn) { prevBtn.style.background = c.navBtnBg; prevBtn.style.color = c.navBtnText; }
@@ -17318,8 +17639,10 @@ async function downloadPrPdf(periodId, btnEl) {
 
     // Dựng ẩn ngoài màn hình (không dùng display:none — html2canvas không chụp được phần tử display:none)
     // nhưng vẫn nằm trong DOM chính nên kế thừa đúng Tailwind + font của trang.
-    stage.style.cssText = `position:fixed;left:-10000px;top:0;width:${PR_PDF_SLIDE_WIDTH}px;height:${PR_PDF_SLIDE_HEIGHT}px;overflow:hidden;background:${c.pageBg};color:${c.bodyTextColor};box-sizing:border-box;padding:56px;font-family:Arial,'Segoe UI',sans-serif;`;
+    stage.style.cssText = `position:fixed;left:-10000px;top:0;width:${PR_PDF_SLIDE_WIDTH}px;height:${PR_PDF_SLIDE_HEIGHT}px;overflow:hidden;color:${c.bodyTextColor};box-sizing:border-box;padding:56px;font-family:Arial,'Segoe UI',sans-serif;`;
     document.body.appendChild(stage);
+    applyPrTemplateBackground(stage, c);
+    await preloadImage(c.bgImageUrl);
 
     const { jsPDF } = window.jspdf;
     const doc = new jsPDF({ orientation: 'landscape', unit: 'px', format: [PR_PDF_SLIDE_WIDTH, PR_PDF_SLIDE_HEIGHT], compress: true });
@@ -18837,6 +19160,10 @@ function rejectInternalPostAction(id) {
 <script type="module">
   import * as pdfjsLib from '/vendor/pdfjs/pdf.mjs';
   pdfjsLib.GlobalWorkerOptions.workerSrc = '/vendor/pdfjs/pdf.worker.mjs';
+  // Gán ra window để dùng lại ở script chính — vd extractSlideTemplateBackgroundFromFile() (Mẫu Trình
+  // Chiếu, module Điều Hành > Báo Cáo) cần vẽ trang 1 tệp PDF tải lên thành ảnh nền, không tải lại thư
+  // viện lần 2.
+  window.pdfjsLib = pdfjsLib;
 
   window.renderPdfProtected = async function(container, fileSrc, watermarkText) {
     container.innerHTML = '<div class="p-6 text-center text-gray-500 text-sm">⏳ Đang tải PDF để xem...</div>';

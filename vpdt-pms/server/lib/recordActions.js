@@ -9,7 +9,7 @@
 // họp thêm cờ minutesEdit (toàn công ty, không theo phòng ban) cho SỬA — riêng XÓA là quyền tối cao,
 // chỉ Admin; Công việc theo NGƯỜI (assignedBy/assignee), hoàn toàn không có khái niệm phòng ban.
 const { HttpError } = require('./httpErrors');
-const { scopeAllows, OFFICE_SUBTYPE_TO_PERM_FLAG, normalizeReportEntryPayload, normalizeSlideTemplateColors } = require('./createValidation');
+const { scopeAllows, OFFICE_SUBTYPE_TO_PERM_FLAG, normalizeReportEntryPayload } = require('./createValidation');
 const { validateRegistrationItems: validateVppRegItems } = require('./vppCatalog');
 
 function nowVN() {
@@ -62,11 +62,12 @@ function uploadContractSignedFile(payload, user, contract) {
   if (!canManageContractPayment(user, contract)) throw new HttpError(403, 'Bạn không có quyền tải lên tài liệu ký cho hợp đồng này');
   if (contract.approvalStatus !== 'APPROVED') throw new HttpError(409, 'Hợp đồng chưa được phê duyệt');
   if (contract.signedFileStatus === 'APPROVED') throw new HttpError(409, 'Tài liệu ký đã được phê duyệt, không thể tải lên lại');
-  const { fileName, fileType, fileUrl } = payload || {};
+  const { fileName, fileType, fileUrl, customData } = payload || {};
   if (!fileName || !fileUrl) throw new HttpError(400, 'Thiếu tệp tài liệu ký');
   contract.signedFileName = fileName;
   contract.signedFileType = fileType;
   contract.signedFileUrl = fileUrl;
+  contract.signedCustomData = customData || {};
   contract.signedUploadedBy = user.username;
   contract.signedUploadedAt = nowVN();
   // Mỗi lần tải lên (mới hoặc tải lại sau khi bị từ chối) đều phải qua lại quy trình "Quản Lý HĐ" theo
@@ -1258,7 +1259,15 @@ function updateReportSlideTemplate(user, item, payload) {
   const name = String(payload?.name || '').trim();
   if (!name) throw new HttpError(400, 'Thiếu tên mẫu trình chiếu');
   item.name = name;
-  item.colors = normalizeSlideTemplateColors(payload?.colors);
+  // Có chọn tệp mới (bgImageUrl) → chuyển hẳn sang dạng ảnh nền mới, xoá bộ 12 màu cũ nếu có (kể cả khi
+  // sửa 1 mẫu 12-màu đời cũ — chuyển thẳng sang dạng mới, không giữ cả 2 dữ liệu song song). Không chọn
+  // tệp mới → chỉ đổi tên, giữ NGUYÊN dữ liệu nền hiện có (dù {colors} cũ hay {bgImageUrl,isDark} mới) —
+  // không ép migrate mẫu cũ khi admin chỉ muốn đổi tên.
+  if (payload && typeof payload.bgImageUrl === 'string' && payload.bgImageUrl.trim()) {
+    item.bgImageUrl = payload.bgImageUrl.trim();
+    item.isDark = !!payload.isDark;
+    delete item.colors;
+  }
   return item;
 }
 
