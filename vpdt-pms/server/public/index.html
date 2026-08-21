@@ -660,7 +660,7 @@ table { display: block; overflow-x: auto; max-width: 100%; }
 
         <select id="selDept" onchange="refreshDocCodePreview()" class="border p-2 rounded text-sm" required><option value="">-- Chọn Phòng Ban Trình --</option></select>
         <select id="selCat" onchange="refreshDocCodePreview()" class="border p-2 rounded text-sm" required><option value="">-- Chọn Phân Loại --</option></select>
-        <input id="docFile" type="file" accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,image/*" class="border p-1 bg-white rounded text-sm" required>
+        <input id="docFile" type="file" accept=".pdf,.docx,.xlsx" class="border p-1 bg-white rounded text-sm" required>
 
         <textarea id="docSummary" placeholder="Trích lục / Tóm tắt nội dung tài liệu..." class="md:col-span-3 border p-2 rounded text-sm h-16" required></textarea>
 
@@ -775,11 +775,11 @@ table { display: block; overflow-x: auto; max-width: 100%; }
           </div>
           <div class="md:col-span-2">
             <label class="block font-semibold text-gray-600 mb-1">Tờ Trình</label>
-            <input id="subFile" type="file" accept=".pdf,.doc,.docx,.xls,.xlsx,image/*" class="w-full border p-1 bg-white rounded">
+            <input id="subFile" type="file" accept=".pdf,.docx,.xlsx" class="w-full border p-1 bg-white rounded">
           </div>
           <div class="md:col-span-2">
             <label class="block font-semibold text-gray-600 mb-1">Tài Liệu Bổ Sung Theo Tờ Trình</label>
-            <input id="subExtraFiles" type="file" multiple accept=".pdf,.doc,.docx,.xls,.xlsx,image/*" class="w-full border p-1 bg-white rounded">
+            <input id="subExtraFiles" type="file" multiple accept=".pdf,.docx,.xlsx" class="w-full border p-1 bg-white rounded">
           </div>
         </div>
 
@@ -1003,7 +1003,7 @@ table { display: block; overflow-x: auto; max-width: 100%; }
           </div>
           <div class="md:col-span-3">
             <label class="block font-semibold text-gray-600 mb-1" id="contractFileLabel">Tệp Đính Kèm Hợp Đồng / Giấy Phép</label>
-            <input id="contractFile" type="file" accept=".pdf,.doc,.docx" class="w-full border p-1 bg-white rounded" required>
+            <input id="contractFile" type="file" accept=".pdf,.docx,.xlsx" class="w-full border p-1 bg-white rounded" required>
             <p id="contractFileEditHint" class="hidden text-[11px] text-gray-500 italic mt-1">Để trống nếu không muốn thay tệp đính kèm hiện tại.</p>
           </div>
         </div>
@@ -1651,7 +1651,7 @@ table { display: block; overflow-x: auto; max-width: 100%; }
       </div>
       <div>
         <label class="block font-semibold text-gray-600 mb-1">Tệp Đính Kèm (tuỳ chọn)</label>
-        <input id="internalFile" type="file" class="w-full border p-1.5 rounded bg-white">
+        <input id="internalFile" type="file" accept=".pdf,.docx,.xlsx" class="w-full border p-1.5 rounded bg-white">
       </div>
       <!-- Ghim lên trang chủ (Đợt E) — chỉ hiện cho Tin tức/Đào tạo/Khen thưởng, chỉ người có quyền
            internalPostApprove/admin mới thấy (toggle ẩn/hiện ở setInternalSubTab()/finishLogin()).
@@ -2198,7 +2198,7 @@ table { display: block; overflow-x: auto; max-width: 100%; }
     <div class="bg-white rounded-lg p-5 w-full max-w-md space-y-3">
       <h3 class="font-bold text-gray-800">📤 Tải Lên Tài Liệu Ký</h3>
       <p id="signedUploadSub" class="text-xs text-gray-500"></p>
-      <input id="signedUploadFile" type="file" accept=".pdf,.doc,.docx,image/*" class="w-full border p-1.5 bg-white rounded text-xs">
+      <input id="signedUploadFile" type="file" accept=".pdf,.docx,.xlsx" class="w-full border p-1.5 bg-white rounded text-xs">
       <div id="signedUploadDynamicFields" class="space-y-2"></div>
       <div class="flex justify-end gap-2 pt-1">
         <button onclick="closeSignedUploadModal()" class="bg-gray-200 text-gray-700 px-4 py-1.5 rounded text-xs font-bold hover:bg-gray-300">Hủy</button>
@@ -7614,7 +7614,10 @@ function applyUploadAcceptAttrs() {
 
 // Vũ trụ phần mở rộng khả dụng — PHẢI khớp ALLOWED_EXT ở routes/upload.js (đó mới là chặn thật, admin
 // chỉ chọn ra 1 tập con của danh sách này cho từng module qua màn "Loại Tệp" bên dưới).
-const UPLOAD_EXT_UNIVERSE = ['.pdf', '.doc', '.docx', '.xls', '.xlsx', '.ppt', '.pptx', '.png', '.jpg', '.jpeg', '.gif', '.webp'];
+// Chỉ còn 3 định dạng phổ biến cho hồ sơ/tài liệu văn phòng — KHÔNG gồm Báo Cáo Định Kỳ (module đó
+// cần .pptx + ảnh nền cho Mẫu Trình Chiếu, xem processSlideTemplateFile()/onPrEntryPptxFileChange(),
+// nên không đưa vào màn cấu hình 3 định dạng này, luôn dùng nguyên ALLOWED_EXT mặc định phía server).
+const UPLOAD_EXT_UNIVERSE = ['.pdf', '.docx', '.xlsx'];
 const UPLOAD_MODULE_LIST = [
   { key: 'doc', label: '📂 Tài Liệu' },
   { key: 'submission', label: '📜 Văn Bản Trình' },
@@ -7623,8 +7626,7 @@ const UPLOAD_MODULE_LIST = [
   { key: 'meeting', label: '🏢 Phòng Họp' },
   { key: 'minutes', label: '📝 Biên Bản Họp' },
   { key: 'office', label: '🛒 Văn Phòng Tổng Hợp' },
-  { key: 'internal', label: '📣 Truyền Thông Nội Bộ' },
-  { key: 'periodicReport', label: '📅 Báo Cáo Định Kỳ' }
+  { key: 'internal', label: '📣 Truyền Thông Nội Bộ' }
 ];
 
 function renderUploadTypeConfig() {

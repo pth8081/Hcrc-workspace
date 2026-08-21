@@ -19,10 +19,23 @@ const DEFAULTS = {
   deptAbbrs: {},
   docCatAbbrs: {},
   // Danh sách phần mở rộng cho phép tải lên theo TỪNG MODULE nghiệp vụ (key: 'doc'/'submission'/
-  // 'contract'/'car'/'meeting'/'minutes'/'office'/'internal'/'periodicReport' — xem
-  // UPLOAD_MODULE_LIST trong index.html), admin cấu hình ở Hệ Thống → "📎 Loại Tệp". Module chưa có
-  // key ở đây (mặc định, rỗng) dùng nguyên danh sách mặc định chung ALLOWED_EXT (xem routes/upload.js).
-  uploadFileTypeConfig: {},
+  // 'contract'/'car'/'meeting'/'minutes'/'office'/'internal' — xem UPLOAD_MODULE_LIST trong
+  // index.html), admin cấu hình lại tuỳ ý ở Hệ Thống → "📎 Loại Tệp". Mặc định GIỚI HẠN chỉ .pdf/.docx/
+  // .xlsx cho 8 module tài liệu/hồ sơ thông thường này. KHÔNG có key "periodicReport" ở đây — Báo Cáo
+  // Định Kỳ cần tải lên cả .pptx (tệp trình chiếu gốc) lẫn ảnh nền (Mẫu Trình Chiếu, xem
+  // processSlideTemplateFile() trong index.html) nên module này KHÔNG đưa vào màn cấu hình 3 định dạng
+  // ở đây — vẫn dùng nguyên danh sách mặc định chung ALLOWED_EXT (xem routes/upload.js), không giới
+  // hạn riêng.
+  uploadFileTypeConfig: {
+    doc: ['.pdf', '.docx', '.xlsx'],
+    submission: ['.pdf', '.docx', '.xlsx'],
+    contract: ['.pdf', '.docx', '.xlsx'],
+    car: ['.pdf', '.docx', '.xlsx'],
+    meeting: ['.pdf', '.docx', '.xlsx'],
+    minutes: ['.pdf', '.docx', '.xlsx'],
+    office: ['.pdf', '.docx', '.xlsx'],
+    internal: ['.pdf', '.docx', '.xlsx']
+  },
   // Viết tắt Loại Pháp Lý hợp đồng — dùng sinh Mã Hợp Đồng (xem generateContractCode() trong
   // index.html: HCRC-<viết tắt Phòng ban>-<viết tắt Loại Pháp Lý>-<số thứ tự>), cùng mô hình với
   // deptAbbrs/docCatAbbrs ở trên (rỗng mặc định, client tự suy ra nếu chưa cấu hình).
