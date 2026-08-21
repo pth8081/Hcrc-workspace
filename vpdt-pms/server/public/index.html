@@ -2991,10 +2991,10 @@ table { display: block; overflow-x: auto; max-width: 100%; }
       <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 my-3 border-t pt-3">
         <h4 class="font-bold text-sm text-gray-800">Danh Sách Người Dùng & Quyền Hạn</h4>
         <div class="flex flex-wrap gap-2 text-xs">
-          <button type="button" onclick="downloadUserTemplate()" class="bg-gray-600 text-white px-2.5 py-1.5 rounded font-semibold hover:bg-gray-700 transition">📄 Tải File Mẫu (.csv)</button>
-          <button type="button" onclick="exportUsersCSV()" class="bg-emerald-600 text-white px-2.5 py-1.5 rounded font-semibold hover:bg-emerald-700 transition">📤 Export CSV</button>
+          <button type="button" onclick="downloadUserTemplate()" class="bg-gray-600 text-white px-2.5 py-1.5 rounded font-semibold hover:bg-gray-700 transition">📄 Tải File Mẫu (.xlsx)</button>
+          <button type="button" onclick="exportUsersExcel()" class="bg-emerald-600 text-white px-2.5 py-1.5 rounded font-semibold hover:bg-emerald-700 transition">📤 Export Excel</button>
           <label class="bg-blue-600 text-white px-2.5 py-1.5 rounded font-semibold hover:bg-blue-700 cursor-pointer transition">
-            📥 Import CSV <input type="file" accept=".csv" onchange="importUsersCSV(event)" class="hidden">
+            📥 Import Excel <input type="file" accept=".xlsx" onchange="importUsersExcel(event)" class="hidden">
           </label>
         </div>
       </div>
@@ -3030,7 +3030,7 @@ table { display: block; overflow-x: auto; max-width: 100%; }
         </div>
         <div class="flex gap-2">
           <button onclick="clearSystemLogs()" class="text-xs bg-red-600 text-white px-3 py-1.5 rounded font-bold hover:bg-red-700">🗑️ Xóa Log</button>
-          <button onclick="exportSystemLogsCSV()" class="text-xs bg-emerald-600 text-white px-3 py-1.5 rounded font-bold hover:bg-emerald-700">📥 Xuất Log CSV</button>
+          <button onclick="exportSystemLogsExcel()" class="text-xs bg-emerald-600 text-white px-3 py-1.5 rounded font-bold hover:bg-emerald-700">📥 Xuất Log Excel</button>
         </div>
       </div>
 
@@ -3092,7 +3092,7 @@ table { display: block; overflow-x: auto; max-width: 100%; }
           <h3 class="font-bold text-sky-900 text-base flex items-center gap-1">📊 Báo Cáo Quản Trị Tổng Hợp</h3>
           <p class="text-xs text-sky-800">Số liệu tổng hợp toàn hệ thống theo khoảng thời gian & phòng ban đã chọn.</p>
         </div>
-        <button onclick="exportReportsCSV()" class="text-xs bg-emerald-600 text-white px-3 py-1.5 rounded font-bold hover:bg-emerald-700">📥 Xuất Báo Cáo CSV</button>
+        <button onclick="exportReportsExcel()" class="text-xs bg-emerald-600 text-white px-3 py-1.5 rounded font-bold hover:bg-emerald-700">📥 Xuất Báo Cáo Excel</button>
       </div>
 
       <div class="grid grid-cols-1 md:grid-cols-4 gap-3 bg-white p-3 rounded border text-xs">
@@ -17446,60 +17446,96 @@ function renderUsers() {
   }).join('');
 }
 
+// Gọi chung cho mọi màn "Xuất Excel" ở Quản trị (Người dùng, Nhật ký hệ thống, Báo Cáo Quản Trị) —
+// server (POST /api/admin/export-xlsx) chỉ đổi định dạng {columns, rows} thành file .xlsx thật bằng
+// exceljs, không đọc/tính toán gì thêm (dữ liệu đã có sẵn ở client qua các API đã phân quyền từ trước).
+// Thay hẳn cách cũ (tự dựng chuỗi CSV bằng tay) — vừa hết lỗi vỡ font tiếng Việt (thiếu BOM), vừa có
+// định dạng (dòng tiêu đề in đậm, độ rộng cột) như file Excel thật.
+async function downloadXlsxFromServer(fileName, sheetName, columns, rows) {
+  try {
+    const res = await fetch('/api/admin/export-xlsx', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ fileName, sheetName, columns, rows })
+    });
+    if (res.status === 401) return handleSessionExpired();
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      return alert(body.error || 'Không thể tạo file Excel');
+    }
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = fileName;
+    link.click();
+    URL.revokeObjectURL(url);
+  } catch (e) {
+    alert('⛔ Không thể kết nối tới máy chủ: ' + e.message);
+  }
+}
+
 function downloadUserTemplate() {
-  const csvContent = "data:text/csv;charset=utf-8,username,pass,name,email,phone,dept\nuser1,123456,Nguyen Van One,user1@company.com,0901234567,Phong Nhan Su";
-  const encodedUri = encodeURI(csvContent);
-  const link = document.createElement("a");
-  link.setAttribute("href", encodedUri);
-  link.setAttribute("download", "user_template.csv");
-  document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
+  downloadXlsxFromServer('user_template.xlsx', 'Mẫu Người Dùng',
+    [
+      { header: 'username', key: 'username', width: 16 },
+      { header: 'pass', key: 'pass', width: 14 },
+      { header: 'name', key: 'name', width: 22 },
+      { header: 'email', key: 'email', width: 24 },
+      { header: 'phone', key: 'phone', width: 14 },
+      { header: 'dept', key: 'dept', width: 20 }
+    ],
+    [{ username: 'user1', pass: '123456', name: 'Nguyen Van One', email: 'user1@company.com', phone: '0901234567', dept: 'Phong Nhan Su' }]
+  );
 }
 
 // KHÔNG export cột mật khẩu — server không còn gửi mật khẩu (dù đã hash) về trình duyệt cho bất kỳ
-// ai, kể cả admin, nên không có gì để xuất ra CSV ở đây nữa (và không nên có, dù là hash).
-function exportUsersCSV() {
-  let csv = "username,name,email,phone,dept,jobTitle\n";
-  DB.users.forEach(u => {
-    csv += `"${u.username}","${u.name}","${u.email || ''}","${u.phone || ''}","${u.dept}","${u.jobTitle || ''}"\n`;
-  });
-  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement("a");
-  link.href = url;
-  link.download = "dms_users_export.csv";
-  link.click();
+// ai, kể cả admin, nên không có gì để xuất ra đây nữa (và không nên có, dù là hash).
+function exportUsersExcel() {
+  const columns = [
+    { header: 'username', key: 'username', width: 16 },
+    { header: 'name', key: 'name', width: 22 },
+    { header: 'email', key: 'email', width: 24 },
+    { header: 'phone', key: 'phone', width: 14 },
+    { header: 'dept', key: 'dept', width: 20 },
+    { header: 'jobTitle', key: 'jobTitle', width: 20 }
+  ];
+  const rows = DB.users.map(u => ({ username: u.username, name: u.name, email: u.email || '', phone: u.phone || '', dept: u.dept, jobTitle: u.jobTitle || '' }));
+  downloadXlsxFromServer('dms_users_export.xlsx', 'Người Dùng', columns, rows);
 }
 
-function importUsersCSV(evt) {
+async function importUsersExcel(evt) {
   const file = evt.target.files[0];
   if (!file) return;
-  const reader = new FileReader();
-  reader.onload = function(e) {
-    const lines = e.target.result.split('\n');
-    let count = 0;
-    for (let i = 1; i < lines.length; i++) {
-      const line = lines[i].trim();
-      if (!line) continue;
-      const parts = line.split(',').map(p => p.replace(/"/g, '').trim());
-      if (parts.length >= 6) {
-        const [username, pass, name, email, phone, dept, jobTitle] = parts;
-        if (!DB.users.some(u => u.username === username)) {
-          DB.users.push({
-            id: Date.now() + Math.random(),
-            username, pass, name, email, phone, dept, jobTitle: jobTitle || null,
-            perms: defaultNewUserPerms()
-          });
-          count++;
-        }
-      }
+  evt.target.value = ''; // cho phép chọn lại đúng cùng 1 file lần sau nếu cần import lại
+
+  const formData = new FormData();
+  formData.append('file', file);
+  let rows;
+  try {
+    const res = await fetch('/api/admin/users/import-xlsx', { method: 'POST', body: formData });
+    if (res.status === 401) return handleSessionExpired();
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) return alert(body.error || 'Không đọc được nội dung file Excel');
+    rows = body.rows;
+  } catch (e) {
+    return alert('⛔ Không thể kết nối tới máy chủ: ' + e.message);
+  }
+
+  let count = 0;
+  rows.forEach(({ username, pass, name, email, phone, dept, jobTitle }) => {
+    if (!DB.users.some(u => u.username === username)) {
+      DB.users.push({
+        id: Date.now() + Math.random(),
+        username, pass, name, email, phone, dept, jobTitle: jobTitle || null,
+        perms: defaultNewUserPerms()
+      });
+      count++;
     }
-    syncStorage('users');
-    alert(`✅ Đã import thành công ${count} người dùng mới!`);
-    renderUsers();
-  };
-  reader.readAsText(file);
+  });
+  syncStorage('users');
+  alert(`✅ Đã import thành công ${count} người dùng mới!`);
+  renderUsers();
 }
 
 // ==========================================
@@ -17608,17 +17644,22 @@ async function clearSystemLogs() {
   renderSystemLogs();
 }
 
-function exportSystemLogsCSV() {
-  let csv = "timestamp,username,fullName,ipAddress,module,actionType,description,status\n";
-  DB.systemLogs.forEach(l => {
-    csv += `"${l.timestamp}","${l.username}","${l.fullName}","${l.ipAddress}","${l.module}","${l.actionType}","${l.description}","${l.status}"\n`;
-  });
-  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement("a");
-  link.href = url;
-  link.download = "dms_system_logs_export.csv";
-  link.click();
+function exportSystemLogsExcel() {
+  const columns = [
+    { header: 'timestamp', key: 'timestamp', width: 20 },
+    { header: 'username', key: 'username', width: 16 },
+    { header: 'fullName', key: 'fullName', width: 22 },
+    { header: 'ipAddress', key: 'ipAddress', width: 16 },
+    { header: 'module', key: 'module', width: 16 },
+    { header: 'actionType', key: 'actionType', width: 20 },
+    { header: 'description', key: 'description', width: 50 },
+    { header: 'status', key: 'status', width: 12 }
+  ];
+  const rows = DB.systemLogs.map(l => ({
+    timestamp: l.timestamp, username: l.username, fullName: l.fullName, ipAddress: l.ipAddress,
+    module: l.module, actionType: l.actionType, description: l.description, status: l.status
+  }));
+  downloadXlsxFromServer('dms_system_logs_export.xlsx', 'Nhật Ký Hệ Thống', columns, rows);
 }
 
 function resetLogFilters() {
@@ -17904,7 +17945,7 @@ function renderReports() {
   container.innerHTML = overviewHTML + approvalHTML + deptHTML + financeHTML + operationsHTML + perfHTML + tasksHTML;
 }
 
-function exportReportsCSV() {
+function exportReportsExcel() {
   const fromDate = document.getElementById('reportsFromDate')?.value || '';
   const toDate = document.getElementById('reportsToDate')?.value || '';
   const deptFilter = document.getElementById('reportsDeptFilter')?.value || '';
@@ -17920,7 +17961,6 @@ function exportReportsCSV() {
   const activeContractValue = visibleContracts.filter(c => new Date(c.endDate) >= now).reduce((sum, c) => sum + (c.amount || 0), 0);
 
   const rows = [
-    ['Chỉ số', 'Giá trị'],
     ['Tổng Tài liệu', docStats.total], ['Tài liệu - Đang chờ', docStats.pending], ['Tài liệu - Đã duyệt', docStats.approved], ['Tài liệu - Từ chối', docStats.rejected],
     ['Tổng Văn bản trình', subStats.total], ['Văn bản trình - Đang chờ', subStats.pending], ['Văn bản trình - Đã duyệt', subStats.approved], ['Văn bản trình - Từ chối', subStats.rejected],
     ['Tổng Đăng ký xe', carStats.total], ['Đăng ký xe - Đang chờ', carStats.pending], ['Đăng ký xe - Đã duyệt', carStats.approved], ['Đăng ký xe - Từ chối', carStats.rejected],
@@ -17928,14 +17968,12 @@ function exportReportsCSV() {
     ['Tổng Hợp đồng', visibleContracts.length], ['Giá trị Hợp đồng còn hiệu lực (VNĐ)', activeContractValue]
   ];
 
-  const csv = rows.map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(',')).join('\n');
-  const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement('a');
-  link.href = url;
-  link.download = `BaoCaoQuanTri_${new Date().toISOString().slice(0, 10)}.csv`;
-  link.click();
-  URL.revokeObjectURL(url);
+  const columns = [
+    { header: 'Chỉ số', key: 'label', width: 40 },
+    { header: 'Giá trị', key: 'value', width: 20 }
+  ];
+  const dataRows = rows.map(([label, value]) => ({ label, value }));
+  downloadXlsxFromServer(`BaoCaoQuanTri_${new Date().toISOString().slice(0, 10)}.xlsx`, 'Báo Cáo Quản Trị', columns, dataRows);
 }
 
 // ==========================================
