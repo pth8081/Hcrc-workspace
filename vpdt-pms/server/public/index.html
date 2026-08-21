@@ -738,7 +738,7 @@ table { display: block; overflow-x: auto; max-width: 100%; }
         <div class="grid grid-cols-1 md:grid-cols-4 gap-3">
           <div>
             <label class="block font-semibold text-gray-600 mb-1">Mã Văn Bản Trình / Tờ Trình</label>
-            <input id="subCode" placeholder="VD: TT-2026-001" class="w-full border p-1.5 rounded" required>
+            <input id="subCode" readonly placeholder="Mã tự sinh" class="w-full border p-1.5 rounded bg-gray-100 cursor-not-allowed" required>
           </div>
           <div>
             <label class="block font-semibold text-gray-600 mb-1">Phòng Ban Trình</label>
@@ -1092,7 +1092,7 @@ table { display: block; overflow-x: auto; max-width: 100%; }
         <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
           <div>
             <label class="block font-semibold text-gray-600 mb-1">Mã Phiếu Đặt Phòng</label>
-            <input id="meetingCode" placeholder="VD: HOP-2026-001" class="w-full border p-1.5 rounded" required>
+            <input id="meetingCode" readonly placeholder="Mã tự sinh" class="w-full border p-1.5 rounded bg-gray-100 cursor-not-allowed" required>
           </div>
           <div>
             <label class="block font-semibold text-gray-600 mb-1">Phòng Ban Đặt Lịch</label>
@@ -1443,7 +1443,7 @@ table { display: block; overflow-x: auto; max-width: 100%; }
         <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
           <div>
             <label class="block font-semibold text-gray-600 mb-1">Mã Biên Bản</label>
-            <input id="minutesCode" placeholder="VD: BB-2026-001" class="w-full border p-1.5 rounded" required>
+            <input id="minutesCode" readonly placeholder="Mã tự sinh" class="w-full border p-1.5 rounded bg-gray-100 cursor-not-allowed" required>
           </div>
           <div class="md:col-span-2">
             <label class="block font-semibold text-gray-600 mb-1">Liên Kết Lịch Đặt Phòng Họp (tuỳ chọn)</label>
@@ -1705,7 +1705,7 @@ table { display: block; overflow-x: auto; max-width: 100%; }
         <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
           <div>
             <label class="block font-semibold text-gray-600 mb-1">Mã Phiếu Đăng Ký</label>
-            <input id="carCode" placeholder="Mã tự động hoặc nhập (VD: XE-2026-001)" class="w-full border p-1.5 rounded" required>
+            <input id="carCode" readonly placeholder="Mã tự sinh" class="w-full border p-1.5 rounded bg-gray-100 cursor-not-allowed" required>
           </div>
           <div>
             <label class="block font-semibold text-gray-600 mb-1">Đơn Vị (Phòng/Ban/Bộ phận)</label>
@@ -2005,7 +2005,7 @@ table { display: block; overflow-x: auto; max-width: 100%; }
         <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
           <div>
             <label class="block font-semibold text-gray-600 mb-1">Mã Yêu Cầu</label>
-            <input id="offCode" placeholder="VD: MB-2026-001" class="w-full border p-1.5 rounded" required>
+            <input id="offCode" readonly placeholder="Mã tự sinh" class="w-full border p-1.5 rounded bg-gray-100 cursor-not-allowed" required>
           </div>
           <div>
             <label class="block font-semibold text-gray-600 mb-1">Phòng Ban Trình</label>
@@ -2294,8 +2294,11 @@ table { display: block; overflow-x: auto; max-width: 100%; }
       <h3 class="font-bold text-emerald-900 text-base flex items-center gap-2" id="wfConfigTitle">
         🏢 Cấu Hình Quy Trình Theo Phòng Ban
       </h3>
-      <p class="text-xs text-emerald-800">💡 Cấu hình luồng duyệt chuyển tiếp theo các cấp thẩm quyền phòng ban.</p>
-      
+      <div class="flex items-center justify-between gap-2 flex-wrap">
+        <p class="text-xs text-emerald-800">💡 Cấu hình luồng duyệt chuyển tiếp theo các cấp thẩm quyền phòng ban. Có thể sửa nhiều phòng ban rồi bấm "Lưu Cấu Hình Tất Cả" 1 lần, hoặc lưu riêng từng phòng ban ở mỗi thẻ bên dưới.</p>
+        <button onclick="saveAllDeptWorkflowConfigs()" class="shrink-0 bg-emerald-700 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-emerald-800">💾 Lưu Cấu Hình Tất Cả</button>
+      </div>
+
       <div id="deptWorkflowConfigContainer" class="space-y-4"></div>
     </div>
 
@@ -4131,15 +4134,18 @@ function paginateList(moduleKey, filteredItems, renderFnName, unitLabel) {
 // Khối HTML "thanh phân trang" dùng chung, chèn dưới mỗi bảng danh sách — id gắn theo moduleKey để
 // không đụng nhau giữa các module trên cùng 1 trang.
 function buildPaginationBoxHTML(moduleKey, renderFnName) {
+  // BUG ĐÃ SỬA: trước đây "10" bị ĐÓNG CỨNG là option "selected" trong chuỗi HTML, trong khi khối này
+  // được innerHTML lại (thay hẳn <select> cũ) ở MỌI lần render — kể cả lần render do CHÍNH việc đổi số
+  // dòng/trang gây ra — nên chọn 20/50/5 xong là ô chọn tự nhảy lại về "10" dù bảng đã phân trang đúng
+  // theo số vừa chọn. Phải đọc lại đúng pageSize hiện tại từ state để đánh dấu "selected" cho khớp.
+  const currentPageSize = getListPageState(moduleKey).pageSize;
+  const sizeOptionHTML = (size) => `<option value="${size}" ${currentPageSize === size ? 'selected' : ''}>${size}</option>`;
   return `
     <div id="paginationBox_${moduleKey}" class="mt-3 flex flex-col sm:flex-row justify-between items-center gap-3 bg-gray-50 p-3 rounded border text-xs text-gray-700">
       <div class="flex items-center gap-2">
         <span>Hiển thị</span>
         <select onchange="changeListPageSize('${moduleKey}', this.value, '${renderFnName}')" class="border p-1 rounded bg-white font-semibold">
-          <option value="5">5</option>
-          <option value="10" selected>10</option>
-          <option value="20">20</option>
-          <option value="50">50</option>
+          ${[5, 10, 20, 50].map(sizeOptionHTML).join('')}
         </select>
         <span>dòng / trang.</span>
         <span id="pageInfoText_${moduleKey}" class="font-semibold text-gray-600 border-l pl-2 ml-1"></span>
@@ -6748,13 +6754,13 @@ function switchTab(tabName) {
     document.getElementById('docOpMode').value = 'NEW';
     onDocOpModeChange();
   }
-  if (tabName === 'submission') { renderDynamicInputsForModule('SUBMISSION', 'dynamicFieldsContainer_SUBMISSION'); renderSubmissionApprovalLayerCheckboxes(); renderSubmissionReqs(); }
+  if (tabName === 'submission') { renderDynamicInputsForModule('SUBMISSION', 'dynamicFieldsContainer_SUBMISSION'); renderSubmissionApprovalLayerCheckboxes(); renderSubmissionReqs(); document.getElementById('subCode').value = generateSubCode(); }
   if (tabName === 'task') {
     document.getElementById('btnManualTaskCreate').classList.toggle('hidden', !canManageTasks(currentUser));
     renderTasks();
   }
   if (tabName === 'contract') { renderDynamicInputsForModule('CONTRACT', 'dynamicFieldsContainer_CONTRACT'); setContractSubTab(activeContractSubTab); }
-  if (tabName === 'meeting') { renderDynamicInputsForModule('MEETING_ROOM', 'dynamicFieldsContainer_MEETING_ROOM'); renderMeetings(); setMeetingSubTab(activeMeetingSubTab); }
+  if (tabName === 'meeting') { renderDynamicInputsForModule('MEETING_ROOM', 'dynamicFieldsContainer_MEETING_ROOM'); renderMeetings(); setMeetingSubTab(activeMeetingSubTab); document.getElementById('meetingCode').value = generateMeetingCode(); }
   if (tabName === 'minutes') {
     renderDynamicInputsForModule('MEETING_MINUTES', 'dynamicFieldsContainer_MEETING_MINUTES');
     renderMeetingMinutes();
@@ -6763,9 +6769,10 @@ function switchTab(tabName) {
     const canCreate = canCreateMeetingMinutes(currentUser);
     document.getElementById('minutesForm').classList.toggle('hidden', !canCreate);
     document.getElementById('minutesNoPermNote').classList.toggle('hidden', canCreate);
+    if (editingMinutesId === null) document.getElementById('minutesCode').value = generateMinutesCode();
   }
   if (tabName === 'internal') { setInternalSubTab(activeInternalSubTab); }
-  if (tabName === 'car') { renderDynamicInputsForModule('CAR', 'dynamicFieldsContainer_CAR'); renderCarRegs(); }
+  if (tabName === 'car') { renderDynamicInputsForModule('CAR', 'dynamicFieldsContainer_CAR'); renderCarRegs(); document.getElementById('carCode').value = generateCarCode(); }
   if (tabName === 'vpp') { setVppSubTab(activeVppSubTab); }
   if (tabName === 'periodicReport') { setPeriodicReportSubTab(activePeriodicReportSubTab); }
   if (tabName === 'office') {
@@ -6853,6 +6860,7 @@ function setOfficeSubTab(subTab) {
 
   renderDynamicInputsForModule(subTab, 'dynamicFieldsContainer_OFFICE');
   renderOfficeReqs();
+  document.getElementById('offCode').value = generateOfficeCode(); // viết tắt mã đổi theo subTab (MB/SC/DT)
 }
 
 function populateDropdowns() {
@@ -7080,6 +7088,36 @@ function generateAddendumCode(rootContract) {
   const seq = computeNextAddendumSeq(rootContract.id);
   return `${rootContract.code}-PLHD${String(seq).padStart(2, '0')}`;
 }
+
+// ============ MÃ TỰ SINH cho 5 module trước đây phải gõ tay: Văn Bản Trình, Đăng Ký Xe, Mua Bán/Sửa
+// Chữa/Đầu Tư (dùng chung 1 form theo activeOfficeSubTab), Biên Bản Họp, Đặt Phòng Họp. Định dạng
+// HCRC-<viết tắt module>-<ngày tạo YYYYMMDD>-<số thứ tự 3 số>, số thứ tự đánh RIÊNG theo từng ngày+
+// module (không dùng chung 1 dãy số toàn hệ thống) — cùng nguyên lý computeNextDocSeq()/
+// computeNextContractSeq() ở trên, gộp lại 1 hàm dùng chung vì cả 5 module đếm-theo-tiền-tố giống hệt
+// nhau (khác computeNextDocSeq/computeNextContractSeq chỉ vì 2 hàm đó có thêm điều kiện lọc riêng —
+// bỏ qua version con/phụ lục — không áp dụng cho 5 module này).
+function todayCodeDatePart() {
+  const d = new Date();
+  return `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}`;
+}
+function computeNextHcrcSeq(records, prefix) {
+  const existing = records.filter(r => (r.code || '').startsWith(prefix));
+  return existing.length + 1;
+}
+function generateHcrcCode(records, moduleAbbr) {
+  const prefix = `HCRC-${moduleAbbr}-${todayCodeDatePart()}-`;
+  const seq = computeNextHcrcSeq(records, prefix);
+  return `${prefix}${String(seq).padStart(3, '0')}`;
+}
+function generateSubCode() { return generateHcrcCode(DB.submissions, 'VBT'); }
+function generateCarCode() { return generateHcrcCode(DB.carRegs, 'DKX'); }
+// Mua Bán/Sửa Chữa/Đầu Tư dùng CHUNG 1 form (activeOfficeSubTab quyết định), mỗi loại 1 viết tắt riêng.
+function generateOfficeCode() {
+  const abbr = activeOfficeSubTab === 'SUA_CHUA' ? 'SC' : activeOfficeSubTab === 'DAU_TU' ? 'DT' : 'MB';
+  return generateHcrcCode(DB.officeReqs, abbr);
+}
+function generateMinutesCode() { return generateHcrcCode(DB.meetingMinutes, 'BBH'); }
+function generateMeetingCode() { return generateHcrcCode(DB.meetings, 'DPH'); }
 
 // Gom 1 tài liệu GỐC + toàn bộ version con của nó (kể cả bản thân tài liệu gốc), sắp theo versionNumber
 // tăng dần — dùng chung cho khối mở rộng ở "Danh Sách Tài Liệu" và modal "Chi Tiết Tài Liệu".
@@ -7955,6 +7993,7 @@ async function doSubmitSubmissionReq(e) {
 
   alert('✅ Trình văn bản / tờ trình thành công!');
   e.target.reset();
+  document.getElementById('subCode').value = generateSubCode();
   renderSubmissionApprovalLayerCheckboxes();
   renderSubmissionReqs();
 }
@@ -11587,6 +11626,7 @@ async function submitMeetingReq(e) {
 
   alert('✅ Đã gửi đăng ký lịch phòng họp thành công!');
   e.target.reset();
+  document.getElementById('meetingCode').value = generateMeetingCode();
   renderMeetings();
 }
 
@@ -12320,6 +12360,7 @@ async function submitMeetingMinutes(e) {
   logSystemAction('MINUTES', 'CREATE_MINUTES', `Lập biên bản họp [${code} - ${title}]`, 'SUCCESS', code);
   alert('✅ Đã lưu biên bản họp thành công! Vui lòng nhập nội dung email để thông báo người tham dự (hoặc bấm Hủy nếu không cần gửi).');
   e.target.reset();
+  document.getElementById('minutesCode').value = generateMinutesCode();
   minutesDirectives = [];
   minutesAttendeesRows = [];
   renderMinutesDirectivesTable();
@@ -12380,8 +12421,7 @@ function openEditMeetingMinutes(id) {
 function cancelEditMeetingMinutes() {
   editingMinutesId = null;
   document.getElementById('minutesForm').reset();
-  document.getElementById('minutesCode').readOnly = false;
-  document.getElementById('minutesCode').classList.remove('bg-gray-100', 'cursor-not-allowed');
+  document.getElementById('minutesCode').value = generateMinutesCode(); // mã tự sinh cho lần lập MỚI tiếp theo (ô luôn readonly, không mở khoá nữa)
   minutesDirectives = [];
   minutesAttendeesRows = [];
   renderMinutesDirectivesTable();
@@ -12820,6 +12860,7 @@ async function submitCarReq(e) {
 
   alert('✅ Đã gửi phiếu đăng ký xe thành công!');
   e.target.reset();
+  document.getElementById('carCode').value = generateCarCode();
   renderCarRegs();
 }
 
@@ -13381,6 +13422,7 @@ async function submitOfficeReq(e) {
 
   alert('✅ Đã gửi đề xuất văn phòng thành công!');
   e.target.reset();
+  document.getElementById('offCode').value = generateOfficeCode();
   if (isMuaSam) {
     officeItems = [];
     addOfficeItemRow();
@@ -14986,49 +15028,88 @@ function renderWorkflowTab() {
   renderWorkflowTemplatesTable();
 }
 
-function saveDeptWorkflowConfig(dept) {
+// Đọc mẫu quy trình + người duyệt từng bước đang chọn trên DOM cho 1 phòng ban — dùng CHUNG cho cả
+// saveDeptWorkflowConfig() (lưu riêng 1 phòng ban) lẫn saveAllDeptWorkflowConfigs() (lưu 1 lần cho mọi
+// phòng ban), tránh lặp lại cùng 1 logic đọc DOM 2 nơi. Trả về null nếu thẻ phòng ban đó không có trên
+// màn hình (không nên xảy ra vì cả 2 hàm gọi đều lấy dept từ DB.depts — cùng nguồn renderWorkflowTab()
+// dùng để vẽ ra các thẻ này).
+function collectDeptWorkflowConfig(dept) {
   const deptKey = dept.replace(/\s+/g, '_');
   const wfSelect = document.getElementById(`wfSelect_${deptKey}`);
-  if (!wfSelect) return;
+  if (!wfSelect) return null;
 
   const selectedWfId = wfSelect.value;
   const approversObj = {};
-
-  const checkboxes = document.querySelectorAll(`input[data-dept="${dept}"]`);
-  checkboxes.forEach(cb => {
+  document.querySelectorAll(`input[data-dept="${dept}"]`).forEach(cb => {
     const stepOrder = parseInt(cb.getAttribute('data-step'), 10);
     if (!approversObj[stepOrder]) approversObj[stepOrder] = [];
-    if (cb.checked) {
-      approversObj[stepOrder].push(cb.value);
-    }
+    if (cb.checked) approversObj[stepOrder].push(cb.value);
   });
 
-  // Cảnh báo (không chặn cứng) nếu có bước hoàn toàn chưa có người duyệt — hồ sơ tới bước đó sẽ
-  // không ai (ngoài Admin) duyệt được, admin cần biết rõ trước khi lưu thay vì phát hiện sau này.
   const selectedWf = DB.workflows.find(w => w.id === selectedWfId);
-  if (selectedWf) {
-    const emptySteps = selectedWf.steps.filter(s => !(approversObj[s.order] && approversObj[s.order].length > 0));
-    if (emptySteps.length > 0) {
-      const stepNames = emptySteps.map(s => `Bước ${s.order} (${s.name})`).join(', ');
-      const proceed = confirm(`⚠️ Các bước sau CHƯA có người duyệt nào được chọn:\n${stepNames}\n\nHồ sơ tới các bước này sẽ không ai (ngoài Admin) duyệt được. Vẫn lưu?`);
-      if (!proceed) return;
-    }
-  }
+  const emptySteps = selectedWf ? selectedWf.steps.filter(s => !(approversObj[s.order] && approversObj[s.order].length > 0)) : [];
+  return { config: { workflowId: selectedWfId, approvers: approversObj }, emptySteps };
+}
 
-  const newConfig = { workflowId: selectedWfId, approvers: approversObj };
+// Ghi 1 cấu hình phòng ban đã đọc được (từ collectDeptWorkflowConfig()) vào đúng chỗ trong DB theo
+// dbKey của module đang chọn (có phân biệt hasTypes — lồng thêm theo loại tờ trình nếu có).
+function writeDeptWorkflowConfig(dbKey, dept, newConfig) {
   const modConfig = WF_MODULE_CONFIG[activeWfMod];
-  const dbKey = modConfig.dbKey;
   if (modConfig.hasTypes) {
     if (!DB[dbKey][activeWfSubmissionType]) DB[dbKey][activeWfSubmissionType] = {};
     DB[dbKey][activeWfSubmissionType][dept] = newConfig;
   } else {
     DB[dbKey][dept] = newConfig;
   }
+}
+
+function saveDeptWorkflowConfig(dept) {
+  const result = collectDeptWorkflowConfig(dept);
+  if (!result) return;
+
+  // Cảnh báo (không chặn cứng) nếu có bước hoàn toàn chưa có người duyệt — hồ sơ tới bước đó sẽ
+  // không ai (ngoài Admin) duyệt được, admin cần biết rõ trước khi lưu thay vì phát hiện sau này.
+  if (result.emptySteps.length > 0) {
+    const stepNames = result.emptySteps.map(s => `Bước ${s.order} (${s.name})`).join(', ');
+    const proceed = confirm(`⚠️ Các bước sau CHƯA có người duyệt nào được chọn:\n${stepNames}\n\nHồ sơ tới các bước này sẽ không ai (ngoài Admin) duyệt được. Vẫn lưu?`);
+    if (!proceed) return;
+  }
+
+  const dbKey = WF_MODULE_CONFIG[activeWfMod].dbKey;
+  writeDeptWorkflowConfig(dbKey, dept, result.config);
   syncStorage(dbKey);
 
   delete pendingWfTemplate[dept];
   logSystemAction('CONFIG', 'UPDATE_DEPT_WORKFLOW', `Cập nhật cấu hình quy trình phòng ban [${dept}]`, 'SUCCESS', dept);
   alert(`✅ Đã lưu cấu hình quy trình cho phòng ban [${dept}] thành công!`);
+  renderWorkflowTab();
+}
+
+// "Lưu Cấu Hình Tất Cả" — gom trạng thái đang chọn trên MỌI thẻ phòng ban đang hiện (module + loại tờ
+// trình hiện tại, nếu có) rồi lưu 1 lần duy nhất, thay vì phải bấm "Lưu Cấu Hình [Phòng ban]" từng thẻ
+// một. Payload gửi lên server VỐN DĨ đã luôn là NGUYÊN khối dữ liệu module (xem syncStorage() — ghi đè
+// cả DB[dbKey]), nên các nút "Lưu Cấu Hình [Phòng ban]" riêng lẻ thực ra cũng đã gửi đủ dữ liệu mọi
+// phòng ban mỗi lần bấm — nút này chỉ gom việc đọc DOM của TẤT CẢ thẻ + 1 lần gọi syncStorage() thay vì
+// phải bấm lại nhiều lần. Nút lưu riêng từng phòng ban vẫn giữ nguyên song song, không thay thế.
+function saveAllDeptWorkflowConfigs() {
+  const dbKey = WF_MODULE_CONFIG[activeWfMod].dbKey;
+  const collected = DB.depts.map(dept => ({ dept, ...collectDeptWorkflowConfig(dept) })).filter(r => r.config);
+  if (!collected.length) return;
+
+  const deptsWithEmptySteps = collected.filter(r => r.emptySteps.length > 0);
+  if (deptsWithEmptySteps.length > 0) {
+    const detail = deptsWithEmptySteps.map(r => `- ${r.dept}: ${r.emptySteps.map(s => `Bước ${s.order} (${s.name})`).join(', ')}`).join('\n');
+    const proceed = confirm(`⚠️ Các phòng ban sau có bước CHƯA có người duyệt nào được chọn:\n${detail}\n\nHồ sơ tới các bước này sẽ không ai (ngoài Admin) duyệt được. Vẫn lưu tất cả?`);
+    if (!proceed) return;
+  }
+
+  collected.forEach(r => writeDeptWorkflowConfig(dbKey, r.dept, r.config));
+  syncStorage(dbKey);
+
+  pendingWfTemplate = {};
+  const deptNames = collected.map(r => r.dept).join(', ');
+  logSystemAction('CONFIG', 'UPDATE_DEPT_WORKFLOW', `Cập nhật cấu hình quy trình tất cả phòng ban [${deptNames}]`, 'SUCCESS', activeWfMod);
+  alert(`✅ Đã lưu cấu hình quy trình cho ${collected.length} phòng ban thành công!`);
   renderWorkflowTab();
 }
 
