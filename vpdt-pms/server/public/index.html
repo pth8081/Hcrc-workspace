@@ -4134,15 +4134,18 @@ function paginateList(moduleKey, filteredItems, renderFnName, unitLabel) {
 // Khối HTML "thanh phân trang" dùng chung, chèn dưới mỗi bảng danh sách — id gắn theo moduleKey để
 // không đụng nhau giữa các module trên cùng 1 trang.
 function buildPaginationBoxHTML(moduleKey, renderFnName) {
+  // BUG ĐÃ SỬA: trước đây "10" bị ĐÓNG CỨNG là option "selected" trong chuỗi HTML, trong khi khối này
+  // được innerHTML lại (thay hẳn <select> cũ) ở MỌI lần render — kể cả lần render do CHÍNH việc đổi số
+  // dòng/trang gây ra — nên chọn 20/50/5 xong là ô chọn tự nhảy lại về "10" dù bảng đã phân trang đúng
+  // theo số vừa chọn. Phải đọc lại đúng pageSize hiện tại từ state để đánh dấu "selected" cho khớp.
+  const currentPageSize = getListPageState(moduleKey).pageSize;
+  const sizeOptionHTML = (size) => `<option value="${size}" ${currentPageSize === size ? 'selected' : ''}>${size}</option>`;
   return `
     <div id="paginationBox_${moduleKey}" class="mt-3 flex flex-col sm:flex-row justify-between items-center gap-3 bg-gray-50 p-3 rounded border text-xs text-gray-700">
       <div class="flex items-center gap-2">
         <span>Hiển thị</span>
         <select onchange="changeListPageSize('${moduleKey}', this.value, '${renderFnName}')" class="border p-1 rounded bg-white font-semibold">
-          <option value="5">5</option>
-          <option value="10" selected>10</option>
-          <option value="20">20</option>
-          <option value="50">50</option>
+          ${[5, 10, 20, 50].map(sizeOptionHTML).join('')}
         </select>
         <span>dòng / trang.</span>
         <span id="pageInfoText_${moduleKey}" class="font-semibold text-gray-600 border-l pl-2 ml-1"></span>
