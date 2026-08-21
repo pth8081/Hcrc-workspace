@@ -5171,7 +5171,11 @@ async function initDatabase(loggingInUser) {
     });
     if (permsMigrated && loggingInUser?.perms?.admin) {
       console.log('ℹ️ Đã tự động chuyển đổi phân quyền người dùng sang mô hình theo phòng ban (module-level).');
-      syncStorage('users');
+      // silent:true — đây là lưu NGẦM tự động, người dùng không hề bấm gì; nếu 2 tab/thiết bị admin
+      // cùng đăng nhập gần như đồng thời thì tab thua cuộc gặp 409 là bình thường (tab kia đã lưu đúng
+      // kết quả di trú rồi, không mất dữ liệu gì) — không được phép hiện alert chặn màn hình cho việc
+      // này, kẻo người dùng tưởng lỗi trong khi họ chẳng thao tác gì cả.
+      syncStorage('users', { silent: true });
     }
 
     DB.docs = data.docs || [];
@@ -5321,7 +5325,14 @@ async function callRecordCreate(module, payload) {
 // giữa "users" và "permGroups" chẳng hạn) để không làm chậm các key không liên quan.
 const syncStorageQueues = {};
 
-function syncStorageOnce(key) {
+// silent=true: dùng cho các lượt lưu TỰ ĐỘNG chạy ngầm, người dùng không hề bấm nút lưu nào (hiện chỉ
+// có đúng 1 chỗ — di trú phân quyền cũ tự lưu lại lúc initDatabase(), xem dưới) — 409/lỗi mạng ở đây
+// KHÔNG được phép hiện alert chặn màn hình, vì người dùng không biết "vừa thao tác gì" mà lại thấy lỗi.
+// Hàng đợi theo key (syncStorageQueues) chỉ tránh được race giữa các lượt lưu TRONG CÙNG 1 tab — 409
+// vẫn có thể xảy ra bình thường khi 2 tab/thiết bị admin cùng tự động di trú gần như đồng thời lúc mới
+// đăng nhập (mỗi tab có DB._versions riêng); do di trú là thao tác idempotent, tab thua cuộc không mất
+// gì cả — dữ liệu đã migrate đúng vẫn đang nằm trên server (do tab kia vừa ghi), im lặng bỏ qua là đủ.
+function syncStorageOnce(key, silent) {
   // If-Match: version đọc gần nhất (nếu có) — cho server biết "tôi đang ghi dựa trên bản đã đọc
   // này", để phát hiện nếu người khác ghi đè "${key}" ở nơi khác sau đó (xem routes/data.js).
   // Lần đầu (chưa từng có version, vd. vừa tạo collection mới) thì bỏ qua, ghi vô điều kiện như cũ.
@@ -5337,6 +5348,7 @@ function syncStorageOnce(key) {
     if (res.status === 401) return handleSessionExpired();
     if (res.status === 409) {
       const body = await res.json().catch(() => ({}));
+      if (silent) { console.warn(`Bỏ qua lưu ngầm "${key}" — đã bị nơi khác ghi trước:`, body.error); return; }
       alert(`⚠️ ${body.error || `Dữ liệu "${key}" vừa bị người khác thay đổi — vui lòng tải lại trang.`}`);
       return;
     }
@@ -5345,19 +5357,22 @@ function syncStorageOnce(key) {
     if (body.version) DB._versions[key] = body.version;
   }).catch(e => {
     console.error(`Lỗi khi lưu "${key}" lên máy chủ:`, e);
+    if (silent) return;
     alert(`⛔ Lỗi lưu dữ liệu "${key}" lên máy chủ: ` + e.message);
   });
 }
 
-function syncStorage(key) {
+function syncStorage(key, opts) {
+  const silent = !!opts?.silent;
   try {
     const previous = syncStorageQueues[key] || Promise.resolve();
     // .then(fn, fn): chạy lượt kế tiếp dù lượt trước lỗi/bị 409 — 1 lần lỗi không được phép chặn mãi
     // mãi các lượt lưu sau của cùng key.
-    const next = previous.then(() => syncStorageOnce(key), () => syncStorageOnce(key));
+    const next = previous.then(() => syncStorageOnce(key, silent), () => syncStorageOnce(key, silent));
     syncStorageQueues[key] = next;
     return true;
   } catch (e) {
+    if (silent) { console.error('Lỗi lưu dữ liệu ngầm:', e); return false; }
     alert('Lỗi lưu dữ liệu: ' + e.message);
     return false;
   }
