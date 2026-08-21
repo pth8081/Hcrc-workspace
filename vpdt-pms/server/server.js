@@ -19,6 +19,7 @@ const systemLogRoutes = require('./routes/systemLog');
 const uploadRoutes = require('./routes/upload');
 const emailRoutes = require('./routes/email');
 const vppCatalogRoutes = require('./routes/vppCatalog');
+const adminExportRoutes = require('./routes/adminExport');
 const { checkContractExpiryReminders } = require('./jobs/contractExpiryReminder');
 
 const app = express();
@@ -108,6 +109,7 @@ app.use('/api/log', systemLogRoutes);
 app.use('/api/upload', requireAuth, blockIfMustChangePassword, uploadRoutes);
 app.use('/api/send-email', requireAuth, blockIfMustChangePassword, emailRoutes);
 app.use('/api/vpp', vppCatalogRoutes);
+app.use('/api/admin', adminExportRoutes);
 
 // Phục vụ file đính kèm đã tải lên — PHẢI đăng nhập mới tải được (trước đây express.static phục vụ
 // thẳng, ai có đúng URL — kể cả chưa đăng nhập — đều tải được, vô hiệu hoá các quyền Xem/Tải file theo

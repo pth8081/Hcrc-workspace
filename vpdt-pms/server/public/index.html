@@ -517,7 +517,7 @@ table { display: block; overflow-x: auto; max-width: 100%; }
           </button>
         </form>
 
-        <div class="loginpage-card-foot">Quên mật khẩu hoặc chưa có tài khoản? Liên hệ Phòng Hành chính / IT.</div>
+        <div class="loginpage-card-foot">Quên mật khẩu hoặc chưa có tài khoản? Liên hệ Phòng CNTT.</div>
       </div>
     </div>
   </div>
@@ -2527,6 +2527,10 @@ table { display: block; overflow-x: auto; max-width: 100%; }
           ℹ️ Quyền bên dưới đã tự điền theo nhóm phân quyền đã chọn. Bạn vẫn tick thêm/bớt tuỳ ý để cấp riêng cho người này — sau này nhóm đổi quyền vẫn tự cập nhật cho người này, nhưng phần bạn đã tick thêm/bớt riêng sẽ được giữ nguyên.
         </div>
 
+        <div id="adminPermsLockedNote" class="hidden bg-purple-50 border border-purple-300 text-purple-800 text-[11px] rounded p-2 font-semibold">
+          🔒 Tài khoản "admin" luôn có toàn quyền hệ thống và không thể chỉnh sửa/bớt quyền — đảm bảo hệ thống luôn còn 1 tài khoản toàn quyền không thể bị khoá nhầm.
+        </div>
+
         <div class="flex items-center justify-between gap-2 flex-wrap">
           <div class="flex items-center gap-2">
             <input type="text" id="permTreeSearch" oninput="filterPermTree()" placeholder="🔍 Tìm quyền theo tên (vd: duyệt, xóa, xem)..." class="border rounded px-2 py-1.5 text-xs w-64">
@@ -2991,10 +2995,10 @@ table { display: block; overflow-x: auto; max-width: 100%; }
       <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 my-3 border-t pt-3">
         <h4 class="font-bold text-sm text-gray-800">Danh Sách Người Dùng & Quyền Hạn</h4>
         <div class="flex flex-wrap gap-2 text-xs">
-          <button type="button" onclick="downloadUserTemplate()" class="bg-gray-600 text-white px-2.5 py-1.5 rounded font-semibold hover:bg-gray-700 transition">📄 Tải File Mẫu (.csv)</button>
-          <button type="button" onclick="exportUsersCSV()" class="bg-emerald-600 text-white px-2.5 py-1.5 rounded font-semibold hover:bg-emerald-700 transition">📤 Export CSV</button>
+          <button type="button" onclick="downloadUserTemplate()" class="bg-gray-600 text-white px-2.5 py-1.5 rounded font-semibold hover:bg-gray-700 transition">📄 Tải File Mẫu (.xlsx)</button>
+          <button type="button" onclick="exportUsersExcel()" class="bg-emerald-600 text-white px-2.5 py-1.5 rounded font-semibold hover:bg-emerald-700 transition">📤 Export Excel</button>
           <label class="bg-blue-600 text-white px-2.5 py-1.5 rounded font-semibold hover:bg-blue-700 cursor-pointer transition">
-            📥 Import CSV <input type="file" accept=".csv" onchange="importUsersCSV(event)" class="hidden">
+            📥 Import Excel <input type="file" accept=".xlsx" onchange="importUsersExcel(event)" class="hidden">
           </label>
         </div>
       </div>
@@ -3030,7 +3034,7 @@ table { display: block; overflow-x: auto; max-width: 100%; }
         </div>
         <div class="flex gap-2">
           <button onclick="clearSystemLogs()" class="text-xs bg-red-600 text-white px-3 py-1.5 rounded font-bold hover:bg-red-700">🗑️ Xóa Log</button>
-          <button onclick="exportSystemLogsCSV()" class="text-xs bg-emerald-600 text-white px-3 py-1.5 rounded font-bold hover:bg-emerald-700">📥 Xuất Log CSV</button>
+          <button onclick="exportSystemLogsExcel()" class="text-xs bg-emerald-600 text-white px-3 py-1.5 rounded font-bold hover:bg-emerald-700">📥 Xuất Log Excel</button>
         </div>
       </div>
 
@@ -3092,7 +3096,7 @@ table { display: block; overflow-x: auto; max-width: 100%; }
           <h3 class="font-bold text-sky-900 text-base flex items-center gap-1">📊 Báo Cáo Quản Trị Tổng Hợp</h3>
           <p class="text-xs text-sky-800">Số liệu tổng hợp toàn hệ thống theo khoảng thời gian & phòng ban đã chọn.</p>
         </div>
-        <button onclick="exportReportsCSV()" class="text-xs bg-emerald-600 text-white px-3 py-1.5 rounded font-bold hover:bg-emerald-700">📥 Xuất Báo Cáo CSV</button>
+        <button onclick="exportReportsExcel()" class="text-xs bg-emerald-600 text-white px-3 py-1.5 rounded font-bold hover:bg-emerald-700">📥 Xuất Báo Cáo Excel</button>
       </div>
 
       <div class="grid grid-cols-1 md:grid-cols-4 gap-3 bg-white p-3 rounded border text-xs">
@@ -5277,33 +5281,51 @@ async function callRecordCreate(module, payload) {
   return body; // { ok, item, createdTasks? }
 }
 
+// Hàng đợi request lưu THEO TỪNG KEY — nếu syncStorage("users") được gọi lần nữa trong khi lượt gọi
+// trước ĐÓ VẪN CHƯA CÓ PHẢN HỒI (vd admin sửa xong 1 người rồi bấm Khóa/Mở ngay người kế tiếp, hoặc
+// bấm 2-3 thao tác liên tiếp trong Danh Sách Người Dùng), request sau phải ĐỢI request trước cập nhật
+// xong DB._versions[key] rồi mới gửi — nếu không, cả 2 request cùng mang If-Match là PHIÊN BẢN CŨ (đọc
+// từ lúc tải trang), request thứ 2 tới server SAU khi request thứ 1 đã ghi xong sẽ bị từ chối 409 "vừa
+// bị người khác thay đổi" dù thực ra chỉ có đúng 1 admin thao tác liên tục — đây chính là nguyên nhân
+// hay gặp báo lỗi lưu khi thao tác nhanh liên tiếp ở màn Người Dùng. Xếp hàng theo key (không khoá lẫn
+// giữa "users" và "permGroups" chẳng hạn) để không làm chậm các key không liên quan.
+const syncStorageQueues = {};
+
+function syncStorageOnce(key) {
+  // If-Match: version đọc gần nhất (nếu có) — cho server biết "tôi đang ghi dựa trên bản đã đọc
+  // này", để phát hiện nếu người khác ghi đè "${key}" ở nơi khác sau đó (xem routes/data.js).
+  // Lần đầu (chưa từng có version, vd. vừa tạo collection mới) thì bỏ qua, ghi vô điều kiện như cũ.
+  const headers = { 'Content-Type': 'application/json' };
+  const knownVersion = DB._versions?.[key];
+  if (knownVersion) headers['If-Match'] = knownVersion;
+
+  return fetch(`/api/data/${key}`, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify(DB[key])
+  }).then(async res => {
+    if (res.status === 401) return handleSessionExpired();
+    if (res.status === 409) {
+      const body = await res.json().catch(() => ({}));
+      alert(`⚠️ ${body.error || `Dữ liệu "${key}" vừa bị người khác thay đổi — vui lòng tải lại trang.`}`);
+      return;
+    }
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const body = await res.json().catch(() => ({}));
+    if (body.version) DB._versions[key] = body.version;
+  }).catch(e => {
+    console.error(`Lỗi khi lưu "${key}" lên máy chủ:`, e);
+    alert(`⛔ Lỗi lưu dữ liệu "${key}" lên máy chủ: ` + e.message);
+  });
+}
+
 function syncStorage(key) {
   try {
-    // If-Match: version đọc gần nhất (nếu có) — cho server biết "tôi đang ghi dựa trên bản đã đọc
-    // này", để phát hiện nếu người khác ghi đè "${key}" ở nơi khác sau đó (xem routes/data.js).
-    // Lần đầu (chưa từng có version, vd. vừa tạo collection mới) thì bỏ qua, ghi vô điều kiện như cũ.
-    const headers = { 'Content-Type': 'application/json' };
-    const knownVersion = DB._versions?.[key];
-    if (knownVersion) headers['If-Match'] = knownVersion;
-
-    fetch(`/api/data/${key}`, {
-      method: 'POST',
-      headers,
-      body: JSON.stringify(DB[key])
-    }).then(async res => {
-      if (res.status === 401) return handleSessionExpired();
-      if (res.status === 409) {
-        const body = await res.json().catch(() => ({}));
-        alert(`⚠️ ${body.error || `Dữ liệu "${key}" vừa bị người khác thay đổi — vui lòng tải lại trang.`}`);
-        return;
-      }
-      if (!res.ok) throw new Error('HTTP ' + res.status);
-      const body = await res.json().catch(() => ({}));
-      if (body.version) DB._versions[key] = body.version;
-    }).catch(e => {
-      console.error(`Lỗi khi lưu "${key}" lên máy chủ:`, e);
-      alert(`⛔ Lỗi lưu dữ liệu "${key}" lên máy chủ: ` + e.message);
-    });
+    const previous = syncStorageQueues[key] || Promise.resolve();
+    // .then(fn, fn): chạy lượt kế tiếp dù lượt trước lỗi/bị 409 — 1 lần lỗi không được phép chặn mãi
+    // mãi các lượt lưu sau của cùng key.
+    const next = previous.then(() => syncStorageOnce(key), () => syncStorageOnce(key));
+    syncStorageQueues[key] = next;
     return true;
   } catch (e) {
     alert('Lỗi lưu dữ liệu: ' + e.message);
@@ -15663,7 +15685,10 @@ function renderPermGroupsList() {
 // Duyệt Trình/HĐ (renderPeopleMultiSelect()) — cho phép thêm/bớt hàng loạt người ngay tại màn hình
 // Nhóm thay vì phải vào sửa từng người một, giống cách quản lý thành viên nhóm trong AD.
 function renderGroupMembersPicker(initialSelected) {
-  const candidates = DB.users.map(u => ({ username: u.username, name: u.name, dept: u.dept }));
+  // Loại tài khoản "admin" khỏi danh sách ứng viên — gán vào nhóm phân quyền cũng là 1 cách gián tiếp
+  // đổi quyền của tài khoản này (savePermGroup() sẽ ghi đè u.perms theo quyền nhóm), trong khi tài
+  // khoản "admin" phải luôn toàn quyền, không ai sửa được (xem setAdminAccountPermsLocked()).
+  const candidates = DB.users.filter(u => u.username !== 'admin').map(u => ({ username: u.username, name: u.name, dept: u.dept }));
   renderPeopleMultiSelect('groupMembersPicker', candidates, initialSelected || [], 'group-member-toggle', {});
 }
 
@@ -17134,9 +17159,13 @@ function saveUser(e) {
       user.phone = phone;
       user.dept = dept;
       user.jobTitle = jobTitle;
-      user.perms = perms;
-      user.groupId = groupId;
-      user.permOverrides = permOverrides;
+      // Tài khoản "admin" luôn toàn quyền, không cho sửa qua form (khối cây phân quyền đã bị khoá ở
+      // editUser() khi mở form sửa đúng tài khoản này) — ép lại đây phòng trường hợp form vẫn đọc được
+      // giá trị khác đi (vd DevTools bỏ qua thuộc tính disabled); server cũng ép lại lần nữa khi ghi
+      // (routes/data.js) nên đây chỉ là lớp phòng vệ bổ sung, không phải chốt chặn duy nhất.
+      user.perms = username === 'admin' ? { admin: true } : perms;
+      user.groupId = username === 'admin' ? null : groupId;
+      user.permOverrides = username === 'admin' ? null : permOverrides;
     }
   } else {
     // Tạo mới ngay lập tức, lưu 1 người — nếu muốn gộp nhiều người rồi lưu 1 lần, dùng "+ Thêm Vào
@@ -17249,6 +17278,7 @@ function commitPendingNewUsers() {
 }
 
 function resetUserForm() {
+  setAdminAccountPermsLocked(false);
   document.getElementById('editUserId').value = '';
   document.getElementById('uUsername').value = '';
   document.getElementById('uPassword').value = '';
@@ -17313,6 +17343,17 @@ function resetUserForm() {
   refreshPermTreeBadges();
 }
 
+// Tài khoản "admin" mặc định (id=1, xem defaults.js) LUÔN toàn quyền và KHÔNG cho sửa quyền qua form
+// — khoá khối cây phân quyền + dropdown Nhóm Phân Quyền (chọn nhóm cũng là 1 cách gián tiếp đổi quyền)
+// khi đang sửa đúng tài khoản này. Đây chỉ là lớp UI cho rõ ràng/dễ hiểu — chốt chặn thật sự nằm ở
+// server (routes/data.js prepareUsersForSave), nên kể cả bỏ qua lớp này bằng cách nào đó cũng không
+// đổi được quyền admin thật sự.
+function setAdminAccountPermsLocked(locked) {
+  document.getElementById('adminPermsLockedNote')?.classList.toggle('hidden', !locked);
+  document.getElementById('uPermGroup').disabled = locked;
+  document.querySelectorAll('#permFieldsContainer input, #permFieldsContainer select').forEach(el => { el.disabled = locked; });
+}
+
 function editUser(id) {
   const user = DB.users.find(u => u.id === id);
   if (!user) return;
@@ -17335,6 +17376,7 @@ function editUser(id) {
   // này thực tế chỉ là lớp phòng vệ bổ sung.
   populatePermsForm(user.perms);
   updatePermGroupNote(!!user.groupId);
+  setAdminAccountPermsLocked(user.username === 'admin');
 }
 
 function deleteUser(id) {
@@ -17361,13 +17403,13 @@ function toggleUserActive(id) {
     return alert('⛔ Không thể tự vô hiệu hóa chính tài khoản đang đăng nhập!');
   }
 
-  const verb = willActivate ? 'kích hoạt lại' : 'vô hiệu hóa';
-  if (!confirm(`Bạn có chắc chắn muốn ${verb} tài khoản "${u.username}" (${u.name})?${willActivate ? '' : '\n\nSau khi vô hiệu hóa, người này sẽ KHÔNG đăng nhập được nữa và mọi phiên đang mở sẵn (nếu có) sẽ bị chặn ngay ở lần thao tác tiếp theo.'}`)) return;
+  const verb = willActivate ? 'mở khóa' : 'khóa';
+  if (!confirm(`Bạn có chắc chắn muốn ${verb} tài khoản "${u.username}" (${u.name})?${willActivate ? '' : '\n\nSau khi khóa, người này sẽ KHÔNG đăng nhập được nữa và mọi phiên đang mở sẵn (nếu có) sẽ bị chặn ngay ở lần thao tác tiếp theo.'}`)) return;
 
   u.active = willActivate;
   syncStorage('users');
   logSystemAction('USER_MGM', willActivate ? 'ACTIVATE_USER' : 'DEACTIVATE_USER',
-    `${willActivate ? 'Kích hoạt lại' : 'Vô hiệu hóa'} người dùng [${u.username}]`, 'SUCCESS', u.username);
+    `${willActivate ? 'Mở khóa' : 'Khóa'} người dùng [${u.username}]`, 'SUCCESS', u.username);
   renderUsers();
 }
 
@@ -17424,7 +17466,7 @@ function renderUsers() {
     <tr class="hover:bg-gray-50 border-b${isInactive ? ' bg-gray-50 opacity-60' : ''}">
       <td class="border p-2 font-bold font-mono text-purple-700">
         ${escapeHtml(u.username)}
-        ${isInactive ? '<span class="ml-1 inline-block bg-gray-400 text-white text-[10px] font-bold px-1.5 py-0.5 rounded align-middle">Đã vô hiệu hóa</span>' : ''}
+        ${isInactive ? '<span class="ml-1 inline-block bg-gray-400 text-white text-[10px] font-bold px-1.5 py-0.5 rounded align-middle">🔒 Đã khóa</span>' : ''}
         ${u.mustChangePassword ? '<span class="ml-1 inline-block bg-amber-400 text-white text-[10px] font-bold px-1.5 py-0.5 rounded align-middle">🔑 Chưa đổi mật khẩu tạm</span>' : ''}
       </td>
       <td class="border p-2 font-semibold">${escapeHtml(u.name)}</td>
@@ -17439,67 +17481,103 @@ function renderUsers() {
       <td class="border p-2 text-center space-x-1">
         <button onclick="editUser(${u.id})" class="text-blue-600 font-bold hover:underline">Sửa</button>
         <button onclick="deleteUser(${u.id})" class="text-red-600 font-bold hover:underline">Xóa</button>
-        <button onclick="toggleUserActive(${u.id})" class="${isInactive ? 'text-emerald-600' : 'text-amber-600'} font-bold hover:underline">${isInactive ? 'Kích Hoạt' : 'Vô Hiệu Hóa'}</button>
+        <button onclick="toggleUserActive(${u.id})" class="${isInactive ? 'text-emerald-600' : 'text-amber-600'} font-bold hover:underline">${isInactive ? 'Mở' : 'Khóa'}</button>
       </td>
     </tr>
   `;
   }).join('');
 }
 
+// Gọi chung cho mọi màn "Xuất Excel" ở Quản trị (Người dùng, Nhật ký hệ thống, Báo Cáo Quản Trị) —
+// server (POST /api/admin/export-xlsx) chỉ đổi định dạng {columns, rows} thành file .xlsx thật bằng
+// exceljs, không đọc/tính toán gì thêm (dữ liệu đã có sẵn ở client qua các API đã phân quyền từ trước).
+// Thay hẳn cách cũ (tự dựng chuỗi CSV bằng tay) — vừa hết lỗi vỡ font tiếng Việt (thiếu BOM), vừa có
+// định dạng (dòng tiêu đề in đậm, độ rộng cột) như file Excel thật.
+async function downloadXlsxFromServer(fileName, sheetName, columns, rows) {
+  try {
+    const res = await fetch('/api/admin/export-xlsx', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ fileName, sheetName, columns, rows })
+    });
+    if (res.status === 401) return handleSessionExpired();
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      return alert(body.error || 'Không thể tạo file Excel');
+    }
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = fileName;
+    link.click();
+    URL.revokeObjectURL(url);
+  } catch (e) {
+    alert('⛔ Không thể kết nối tới máy chủ: ' + e.message);
+  }
+}
+
 function downloadUserTemplate() {
-  const csvContent = "data:text/csv;charset=utf-8,username,pass,name,email,phone,dept\nuser1,123456,Nguyen Van One,user1@company.com,0901234567,Phong Nhan Su";
-  const encodedUri = encodeURI(csvContent);
-  const link = document.createElement("a");
-  link.setAttribute("href", encodedUri);
-  link.setAttribute("download", "user_template.csv");
-  document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
+  downloadXlsxFromServer('user_template.xlsx', 'Mẫu Người Dùng',
+    [
+      { header: 'username', key: 'username', width: 16 },
+      { header: 'pass', key: 'pass', width: 14 },
+      { header: 'name', key: 'name', width: 22 },
+      { header: 'email', key: 'email', width: 24 },
+      { header: 'phone', key: 'phone', width: 14 },
+      { header: 'dept', key: 'dept', width: 20 }
+    ],
+    [{ username: 'user1', pass: '123456', name: 'Nguyen Van One', email: 'user1@company.com', phone: '0901234567', dept: 'Phong Nhan Su' }]
+  );
 }
 
 // KHÔNG export cột mật khẩu — server không còn gửi mật khẩu (dù đã hash) về trình duyệt cho bất kỳ
-// ai, kể cả admin, nên không có gì để xuất ra CSV ở đây nữa (và không nên có, dù là hash).
-function exportUsersCSV() {
-  let csv = "username,name,email,phone,dept,jobTitle\n";
-  DB.users.forEach(u => {
-    csv += `"${u.username}","${u.name}","${u.email || ''}","${u.phone || ''}","${u.dept}","${u.jobTitle || ''}"\n`;
-  });
-  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement("a");
-  link.href = url;
-  link.download = "dms_users_export.csv";
-  link.click();
+// ai, kể cả admin, nên không có gì để xuất ra đây nữa (và không nên có, dù là hash).
+function exportUsersExcel() {
+  const columns = [
+    { header: 'username', key: 'username', width: 16 },
+    { header: 'name', key: 'name', width: 22 },
+    { header: 'email', key: 'email', width: 24 },
+    { header: 'phone', key: 'phone', width: 14 },
+    { header: 'dept', key: 'dept', width: 20 },
+    { header: 'jobTitle', key: 'jobTitle', width: 20 }
+  ];
+  const rows = DB.users.map(u => ({ username: u.username, name: u.name, email: u.email || '', phone: u.phone || '', dept: u.dept, jobTitle: u.jobTitle || '' }));
+  downloadXlsxFromServer('dms_users_export.xlsx', 'Người Dùng', columns, rows);
 }
 
-function importUsersCSV(evt) {
+async function importUsersExcel(evt) {
   const file = evt.target.files[0];
   if (!file) return;
-  const reader = new FileReader();
-  reader.onload = function(e) {
-    const lines = e.target.result.split('\n');
-    let count = 0;
-    for (let i = 1; i < lines.length; i++) {
-      const line = lines[i].trim();
-      if (!line) continue;
-      const parts = line.split(',').map(p => p.replace(/"/g, '').trim());
-      if (parts.length >= 6) {
-        const [username, pass, name, email, phone, dept, jobTitle] = parts;
-        if (!DB.users.some(u => u.username === username)) {
-          DB.users.push({
-            id: Date.now() + Math.random(),
-            username, pass, name, email, phone, dept, jobTitle: jobTitle || null,
-            perms: defaultNewUserPerms()
-          });
-          count++;
-        }
-      }
+  evt.target.value = ''; // cho phép chọn lại đúng cùng 1 file lần sau nếu cần import lại
+
+  const formData = new FormData();
+  formData.append('file', file);
+  let rows;
+  try {
+    const res = await fetch('/api/admin/users/import-xlsx', { method: 'POST', body: formData });
+    if (res.status === 401) return handleSessionExpired();
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) return alert(body.error || 'Không đọc được nội dung file Excel');
+    rows = body.rows;
+  } catch (e) {
+    return alert('⛔ Không thể kết nối tới máy chủ: ' + e.message);
+  }
+
+  let count = 0;
+  rows.forEach(({ username, pass, name, email, phone, dept, jobTitle }) => {
+    if (!DB.users.some(u => u.username === username)) {
+      DB.users.push({
+        id: Date.now() + Math.random(),
+        username, pass, name, email, phone, dept, jobTitle: jobTitle || null,
+        perms: defaultNewUserPerms()
+      });
+      count++;
     }
-    syncStorage('users');
-    alert(`✅ Đã import thành công ${count} người dùng mới!`);
-    renderUsers();
-  };
-  reader.readAsText(file);
+  });
+  syncStorage('users');
+  alert(`✅ Đã import thành công ${count} người dùng mới!`);
+  renderUsers();
 }
 
 // ==========================================
@@ -17608,17 +17686,22 @@ async function clearSystemLogs() {
   renderSystemLogs();
 }
 
-function exportSystemLogsCSV() {
-  let csv = "timestamp,username,fullName,ipAddress,module,actionType,description,status\n";
-  DB.systemLogs.forEach(l => {
-    csv += `"${l.timestamp}","${l.username}","${l.fullName}","${l.ipAddress}","${l.module}","${l.actionType}","${l.description}","${l.status}"\n`;
-  });
-  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement("a");
-  link.href = url;
-  link.download = "dms_system_logs_export.csv";
-  link.click();
+function exportSystemLogsExcel() {
+  const columns = [
+    { header: 'timestamp', key: 'timestamp', width: 20 },
+    { header: 'username', key: 'username', width: 16 },
+    { header: 'fullName', key: 'fullName', width: 22 },
+    { header: 'ipAddress', key: 'ipAddress', width: 16 },
+    { header: 'module', key: 'module', width: 16 },
+    { header: 'actionType', key: 'actionType', width: 20 },
+    { header: 'description', key: 'description', width: 50 },
+    { header: 'status', key: 'status', width: 12 }
+  ];
+  const rows = DB.systemLogs.map(l => ({
+    timestamp: l.timestamp, username: l.username, fullName: l.fullName, ipAddress: l.ipAddress,
+    module: l.module, actionType: l.actionType, description: l.description, status: l.status
+  }));
+  downloadXlsxFromServer('dms_system_logs_export.xlsx', 'Nhật Ký Hệ Thống', columns, rows);
 }
 
 function resetLogFilters() {
@@ -17904,7 +17987,7 @@ function renderReports() {
   container.innerHTML = overviewHTML + approvalHTML + deptHTML + financeHTML + operationsHTML + perfHTML + tasksHTML;
 }
 
-function exportReportsCSV() {
+function exportReportsExcel() {
   const fromDate = document.getElementById('reportsFromDate')?.value || '';
   const toDate = document.getElementById('reportsToDate')?.value || '';
   const deptFilter = document.getElementById('reportsDeptFilter')?.value || '';
@@ -17920,7 +18003,6 @@ function exportReportsCSV() {
   const activeContractValue = visibleContracts.filter(c => new Date(c.endDate) >= now).reduce((sum, c) => sum + (c.amount || 0), 0);
 
   const rows = [
-    ['Chỉ số', 'Giá trị'],
     ['Tổng Tài liệu', docStats.total], ['Tài liệu - Đang chờ', docStats.pending], ['Tài liệu - Đã duyệt', docStats.approved], ['Tài liệu - Từ chối', docStats.rejected],
     ['Tổng Văn bản trình', subStats.total], ['Văn bản trình - Đang chờ', subStats.pending], ['Văn bản trình - Đã duyệt', subStats.approved], ['Văn bản trình - Từ chối', subStats.rejected],
     ['Tổng Đăng ký xe', carStats.total], ['Đăng ký xe - Đang chờ', carStats.pending], ['Đăng ký xe - Đã duyệt', carStats.approved], ['Đăng ký xe - Từ chối', carStats.rejected],
@@ -17928,14 +18010,12 @@ function exportReportsCSV() {
     ['Tổng Hợp đồng', visibleContracts.length], ['Giá trị Hợp đồng còn hiệu lực (VNĐ)', activeContractValue]
   ];
 
-  const csv = rows.map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(',')).join('\n');
-  const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement('a');
-  link.href = url;
-  link.download = `BaoCaoQuanTri_${new Date().toISOString().slice(0, 10)}.csv`;
-  link.click();
-  URL.revokeObjectURL(url);
+  const columns = [
+    { header: 'Chỉ số', key: 'label', width: 40 },
+    { header: 'Giá trị', key: 'value', width: 20 }
+  ];
+  const dataRows = rows.map(([label, value]) => ({ label, value }));
+  downloadXlsxFromServer(`BaoCaoQuanTri_${new Date().toISOString().slice(0, 10)}.xlsx`, 'Báo Cáo Quản Trị', columns, dataRows);
 }
 
 // ==========================================

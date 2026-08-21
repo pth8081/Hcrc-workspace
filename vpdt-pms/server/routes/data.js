@@ -90,6 +90,15 @@ async function prepareUsersForSave(incomingUsers) {
     let record = { ...u, ...preserved };
     delete record.pin; // KHÔNG BAO GIỜ lưu PIN dạng plaintext — chỉ lưu pinHash bên dưới.
 
+    // Tài khoản "admin" mặc định (xem defaults.js) LUÔN có toàn quyền và KHÔNG bị sửa quyền bởi bất kỳ
+    // ai — kể cả từ form phân quyền hay gán vào nhóm phân quyền — đảm bảo hệ thống luôn còn đúng 1 tài
+    // khoản toàn quyền không thể bị khoá/gỡ quyền nhầm, tránh tình huống không còn ai đủ quyền tự sửa
+    // lại. Ép ở ĐÂY (điểm ghi CSDL duy nhất cho collection "users") thay vì chỉ ở client để không phụ
+    // thuộc việc giao diện có khoá đúng hay không.
+    if (record.username === 'admin') {
+      record.perms = { admin: true };
+    }
+
     if (u.pin) {
       const pinError = validatePin(u.pin);
       if (pinError) throw new HttpError(400, `Mã PIN của tài khoản "${u.username}": ${pinError}`);
@@ -137,10 +146,18 @@ router.get('/', async (req, res) => {
     // collection trong MIGRATED_COLLECTIONS đi qua routes/create.js + routes/workflow.js). systemLogs
     // KHÔNG còn trả kèm ở đây nữa (trước đây lộ cho MỌI người đăng nhập dù chỉ admin xem được trên
     // giao diện) — đọc riêng qua GET /api/log (routes/systemLog.js, chỉ admin) khi mở tab Nhật ký.
-    data.tasks = await getAllTasks();
-    for (const collection of MIGRATED_COLLECTIONS) {
-      data[collection] = await getAllForCollection(collection);
-    }
+    // Đọc SONG SONG (Promise.all) thay vì tuần tự từng collection một — trước đây vòng lặp for..await
+    // khiến GET /api/data phải đợi ĐỦ 13 lượt round-trip DB (mỗi collection trong MIGRATED_COLLECTIONS)
+    // nối tiếp nhau, cộng dồn độ trễ mạng/DB của từng lượt (đây là nguyên nhân chính khiến lần tải dữ
+    // liệu đầu tiên sau khi đăng nhập mất nhiều giây) — các collection này độc lập nhau, pool kết nối
+    // (db.js, mặc định 20) thừa sức phục vụ song song, không có lý do gì phải chờ tuần tự.
+    const migratedList = [...MIGRATED_COLLECTIONS];
+    const [tasksResult, ...collectionResults] = await Promise.all([
+      getAllTasks(),
+      ...migratedList.map(collection => getAllForCollection(collection))
+    ]);
+    data.tasks = tasksResult;
+    migratedList.forEach((collection, i) => { data[collection] = collectionResults[i]; });
     data._versions = versions;
     res.json(data);
   } catch (err) {
