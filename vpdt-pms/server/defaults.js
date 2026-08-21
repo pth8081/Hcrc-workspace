@@ -18,6 +18,11 @@ const DEFAULTS = {
   // thể sửa lại bất cứ lúc nào tại màn Quản Lý Danh Mục, áp dụng ngay không cần duyệt.
   deptAbbrs: {},
   docCatAbbrs: {},
+  // Danh sách phần mở rộng cho phép tải lên theo TỪNG MODULE nghiệp vụ (key: 'doc'/'submission'/
+  // 'contract'/'car'/'meeting'/'minutes'/'office'/'internal'/'periodicReport' — xem
+  // UPLOAD_MODULE_LIST trong index.html), admin cấu hình ở Hệ Thống → "📎 Loại Tệp". Module chưa có
+  // key ở đây (mặc định, rỗng) dùng nguyên danh sách mặc định chung ALLOWED_EXT (xem routes/upload.js).
+  uploadFileTypeConfig: {},
   // Viết tắt Loại Pháp Lý hợp đồng — dùng sinh Mã Hợp Đồng (xem generateContractCode() trong
   // index.html: HCRC-<viết tắt Phòng ban>-<viết tắt Loại Pháp Lý>-<số thứ tự>), cùng mô hình với
   // deptAbbrs/docCatAbbrs ở trên (rỗng mặc định, client tự suy ra nếu chưa cấu hình).
