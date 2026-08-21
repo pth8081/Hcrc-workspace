@@ -30,8 +30,10 @@ router.post('/contracts/:id/edit', async (req, res) => {
   if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
   try {
     const { freshUser } = await getFreshUser(req);
+    const allContracts = await getAllForCollection('contracts');
+    const hasAddenda = allContracts.some(c => c.isAddendum && c.rootContractId === itemId);
     const result = await withLockedRecordForCollection('contracts', itemId, (item) =>
-      recordActions.editContract(req.body, freshUser, item)
+      recordActions.editContract(req.body, freshUser, item, hasAddenda)
     );
     res.json({ ok: true, item: result });
   } catch (err) {
@@ -413,9 +415,56 @@ async function deleteAdminOnly(req, res, collection) {
     handleError(res, `${collection}/${req.params.id}/delete`, err);
   }
 }
-router.post('/docs/:id/delete', (req, res) => deleteAdminOnly(req, res, 'docs'));
+// Xóa 1 "họ" tài liệu (Tài liệu gốc + toàn bộ version con) khi xóa tài liệu GỐC — trước đây xóa tài
+// liệu gốc chỉ xóa đúng 1 dòng qua deleteAdminOnly() chung, để lại các version con với rootDocId trỏ
+// vào 1 id không còn tồn tại (mồ côi): getDocFamily()/getDocFamilyLatest() ở client vẫn lọc theo
+// rootDocId nên hiện ra lẫn lộn, và nhánh "Cập nhật" (lib/createValidation.js docs.extraValidate) sẽ
+// luôn báo "Tài liệu gốc không tồn tại" cho họ tài liệu đó. Xóa 1 version CON (không phải gốc) thì
+// không cần cascade gì thêm — các version khác trong họ không phụ thuộc vào nó.
+router.post('/docs/:id/delete', async (req, res) => {
+  const itemId = Number(req.params.id);
+  if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
+  try {
+    const { freshUser } = await getFreshUser(req);
+    assertAdminForDelete(freshUser);
+    const docs = await getAllForCollection('docs');
+    const target = docs.find(d => d.id === itemId);
+    if (!target) throw new HttpError(404, 'Không tìm thấy hồ sơ');
+    const memberIds = target.rootDocId == null
+      ? docs.filter(d => d.id === itemId || d.rootDocId === itemId).map(d => d.id)
+      : [itemId];
+    for (const id of memberIds) {
+      await deleteRecordForCollection('docs', id, () => assertAdminForDelete(freshUser));
+    }
+    res.json({ ok: true });
+  } catch (err) {
+    handleError(res, `docs/${req.params.id}/delete`, err);
+  }
+});
 router.post('/submissions/:id/delete', (req, res) => deleteAdminOnly(req, res, 'submissions'));
-router.post('/contracts/:id/delete', (req, res) => deleteAdminOnly(req, res, 'contracts'));
+// Xóa hợp đồng GỐC kèm cascade toàn bộ phụ lục của nó — trước đây chỉ xóa đúng 1 dòng qua
+// deleteAdminOnly() chung, để lại phụ lục với rootContractId trỏ vào 1 id không còn tồn tại (hiển thị
+// mã hợp đồng gốc là "?" ở Chi tiết). Xóa 1 PHỤ LỤC (không phải gốc) thì không cần cascade gì thêm.
+router.post('/contracts/:id/delete', async (req, res) => {
+  const itemId = Number(req.params.id);
+  if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
+  try {
+    const { freshUser } = await getFreshUser(req);
+    assertAdminForDelete(freshUser);
+    const contracts = await getAllForCollection('contracts');
+    const target = contracts.find(c => c.id === itemId);
+    if (!target) throw new HttpError(404, 'Không tìm thấy hồ sơ');
+    const memberIds = !target.isAddendum
+      ? contracts.filter(c => c.id === itemId || c.rootContractId === itemId).map(c => c.id)
+      : [itemId];
+    for (const id of memberIds) {
+      await deleteRecordForCollection('contracts', id, () => assertAdminForDelete(freshUser));
+    }
+    res.json({ ok: true });
+  } catch (err) {
+    handleError(res, `contracts/${req.params.id}/delete`, err);
+  }
+});
 router.post('/officeReqs/:id/delete', (req, res) => deleteAdminOnly(req, res, 'officeReqs'));
 router.post('/carRegs/:id/delete', (req, res) => deleteAdminOnly(req, res, 'carRegs'));
 router.post('/vppPeriods/:id/delete', (req, res) => deleteAdminOnly(req, res, 'vppPeriods'));
@@ -446,9 +495,11 @@ router.post('/vppRegistrations/:id/submit', async (req, res) => {
   if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
   try {
     const { freshUser } = await getFreshUser(req);
-    const result = await withLockedRecordForCollection('vppRegistrations', itemId, (item) =>
-      recordActions.submitVppRegistration(freshUser, item)
-    );
+    const periods = await getAllForCollection('vppPeriods');
+    const result = await withLockedRecordForCollection('vppRegistrations', itemId, (item) => {
+      const period = periods.find(p => p.id === item.periodId);
+      return recordActions.submitVppRegistration(freshUser, item, period);
+    });
     res.json({ ok: true, item: result });
   } catch (err) {
     handleError(res, `vppRegistrations/${req.params.id}/submit`, err);

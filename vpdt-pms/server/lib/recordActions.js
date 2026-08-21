@@ -21,13 +21,28 @@ function nowVN() {
 // (không đổi được), KHÔNG gồm customData (form sửa hợp đồng không thu thập lại).
 const CONTRACT_EDITABLE_FIELDS = ['dept', 'type', 'title', 'partner', 'amount', 'startDate', 'endDate', 'content'];
 
-function editContract(payload, user, contract) {
+// hasAddenda: caller (routes/records.js) tự tra collection để biết hợp đồng gốc này đã có phụ lục
+// nào kế thừa dept của nó hay chưa — file này không tự đọc DB (giữ đúng nguyên tắc cũ, xem đầu file).
+function editContract(payload, user, contract, hasAddenda) {
   // Khớp đúng luật cũ ở client (openEditContract/updateContractReq): CHỈ người tạo mới sửa được, kể
   // cả admin cũng không có ngoại lệ — không mở rộng quyền so với hành vi trước Bước 2b.
   if (contract.creator !== user.username) {
     throw new HttpError(403, 'Bạn chỉ có thể sửa hồ sơ hợp đồng do chính mình tạo!');
   }
+  // Trước đây editContract() chỉ xét người tạo, không xét approvalStatus — hợp đồng đã qua đủ các
+  // bước duyệt (thậm chí đã bắt đầu thanh toán) vẫn sửa được amount/dept/ngày hiệu lực tự do, khiến
+  // giá trị/điều khoản thực tế lệch khỏi những gì đã được duyệt mà không ai hay.
+  if (contract.approvalStatus === 'APPROVED') {
+    throw new HttpError(409, 'Hợp đồng đã được phê duyệt xong, không thể sửa nữa');
+  }
   if (!payload || typeof payload !== 'object') throw new HttpError(400, 'Thiếu dữ liệu cập nhật');
+
+  // Phụ lục kế thừa dept của hợp đồng gốc lúc tạo (xem createValidation.js contracts.extraValidate) —
+  // đổi dept của hợp đồng gốc sau khi đã có phụ lục sẽ phá vỡ ràng buộc "phụ lục cùng phòng ban với
+  // gốc", ảnh hưởng tới mọi chỗ lọc quyền theo phòng ban của phụ lục đó.
+  if (!contract.isAddendum && hasAddenda && payload.dept !== undefined && payload.dept !== contract.dept) {
+    throw new HttpError(409, 'Hợp đồng gốc đã có phụ lục — không thể đổi phòng ban');
+  }
 
   const endDateChanged = typeof payload.endDate === 'string' && contract.endDate !== payload.endDate;
   for (const field of CONTRACT_EDITABLE_FIELDS) {
@@ -184,7 +199,10 @@ function requestPaymentInfo(payload, user, pr) {
 
 function approvePaymentRequest(user, pr) {
   if (!canManagePaymentRequests(user)) throw new HttpError(403, 'Bạn không có quyền duyệt đề nghị thanh toán');
-  if (pr.status !== 'PENDING' && pr.status !== 'NEED_INFO') throw new HttpError(409, 'Đề nghị thanh toán không ở trạng thái chờ duyệt');
+  // NEED_INFO KHÔNG được duyệt trực tiếp — phải qua editPaymentRequest() (nút "Sửa & Gửi lại") để tự
+  // chuyển về PENDING trước, khớp đúng bước "phản hồi yêu cầu bổ sung" bắt buộc như Văn Bản Trình.
+  // Trước đây cho duyệt thẳng từ NEED_INFO khiến bước "Yêu cầu bổ sung" chỉ mang tính hình thức.
+  if (pr.status !== 'PENDING') throw new HttpError(409, 'Đề nghị thanh toán không ở trạng thái chờ duyệt');
   pr.status = 'APPROVED';
   pr.approvedBy = user.username;
   pr.approvedByName = user.name;
@@ -244,6 +262,25 @@ function editMinutes(payload, user, minutes) {
     throw new HttpError(403, 'Biên bản này đã giao việc nên bị khoá, không thể sửa (chỉ Admin được sửa trong trường hợp khẩn cấp)');
   }
   if (!payload || typeof payload !== 'object') throw new HttpError(400, 'Thiếu dữ liệu cập nhật');
+
+  // Dòng chỉ đạo đã "Giao việc" (taskCreated=true) đã sinh ra 1 Công Việc THẬT (buildTasksFromDirectives()
+  // ở trên) — hệ thống KHÔNG có cơ chế đồng bộ lại Công Việc khi biên bản đổi sau đó, nên PHẢI giữ
+  // nguyên nội dung/người thực hiện của dòng đó (kể cả Admin), tránh Công Việc bị lệch khỏi biên bản.
+  // Chỉ đạo cũ không có id ổn định (biên bản tạo trước khi có tính năng này) khớp theo VỊ TRÍ trong
+  // mảng, khớp đúng quy ước ở resolveDirectiveAttendeeServer()/buildTasksFromDirectives() phía trên.
+  if (payload.directives !== undefined) {
+    const directiveKey = (d, idx) => (d.id != null ? `id:${d.id}` : `idx:${idx}`);
+    const newDirectives = Array.isArray(payload.directives) ? payload.directives : [];
+    const newByKey = new Map(newDirectives.map((d, idx) => [directiveKey(d, idx), d]));
+    (minutes.directives || []).forEach((old, idx) => {
+      if (!old.taskCreated) return;
+      const next = newByKey.get(directiveKey(old, idx));
+      if (!next) throw new HttpError(409, 'Không thể xoá dòng chỉ đạo đã giao việc');
+      if (next.content !== old.content || next.assignedToAttendeeId !== old.assignedToAttendeeId) {
+        throw new HttpError(409, 'Không thể sửa nội dung/người thực hiện của dòng chỉ đạo đã giao việc');
+      }
+    });
+  }
 
   for (const field of MINUTES_EDITABLE_FIELDS) {
     if (payload[field] !== undefined) minutes[field] = payload[field];
@@ -434,6 +471,14 @@ function registerInternalPostTraining(user, post) {
   if (post.type !== 'TRAINING' || !post.training) throw new HttpError(400, 'Bài đăng không phải khóa đào tạo');
   if (!Array.isArray(post.training.registeredUsers)) post.training.registeredUsers = [];
   if (post.training.registeredUsers.includes(user.username)) return post;
+  // Trước đây KHÔNG kiểm tra hạn đăng ký — chỉ giao diện ẩn nút khi đã qua hạn, request tự soạn vẫn
+  // đăng ký được sau khi hạn đăng ký đã qua. registerDeadline là input type="date" (YYYY-MM-DD) — so
+  // sánh chuỗi ISO ngày (cùng khuôn period.endDate ở VPP/Báo Cáo), không dùng nowVN() (định dạng
+  // dd/mm/yyyy tiếng Việt, so sánh chuỗi sai thứ tự).
+  const todayStr = new Date().toISOString().slice(0, 10);
+  if (post.training.registerDeadline && todayStr > post.training.registerDeadline) {
+    throw new HttpError(409, 'Đã hết hạn đăng ký khóa đào tạo này');
+  }
   if (post.training.capacity > 0 && post.training.registeredUsers.length >= post.training.capacity) {
     throw new HttpError(409, 'Khóa đào tạo đã đủ số lượng đăng ký!');
   }
@@ -516,6 +561,11 @@ function shouldSkipAcceptStep(task) {
 function assignTask(payload, user, task, usersList) {
   if (!canAssignSpecificTask(user, task)) {
     throw new HttpError(403, 'Bạn không có quyền gán người nhận cho công việc này');
+  }
+  // Trước đây không kiểm tra công việc còn "chưa có người nhận" hay không — gọi thẳng API vẫn âm thầm
+  // đổi người nhận của 1 việc đã có người đang làm dở (lịch sử/subtask cũ vẫn giữ nguyên của người cũ).
+  if (task.assignedTo) {
+    throw new HttpError(409, 'Công việc này đã có người nhận, không thể gán lại qua thao tác này');
   }
   const rawAssignees = Array.isArray(payload?.assignedTo) ? payload.assignedTo : [payload?.assignedTo];
   const assignees = [...new Set(rawAssignees.filter(u => typeof u === 'string' && u.trim()))];
@@ -715,6 +765,11 @@ function toggleSubtask(payload, user, task) {
   if (!canManageSubtasks(user, task)) {
     throw new HttpError(403, 'Chỉ người nhận việc mới có thể cập nhật công việc nhỏ');
   }
+  // Khớp guard của addSubtask() — thiếu ở đây trước đây khiến việc đã Hoàn thành/Huỷ vẫn bật/tắt được
+  // công việc nhỏ, âm thầm đổi trạng thái hoàn thành của 1 việc đã đóng.
+  if (task.status !== 'DOING') {
+    throw new HttpError(409, 'Chỉ cập nhật được công việc nhỏ khi việc chính đang thực hiện');
+  }
   const subtaskId = Number(payload?.subtaskId);
   const sub = (task.subtasks || []).find(s => s.id === subtaskId);
   if (!sub) throw new HttpError(404, 'Không tìm thấy công việc nhỏ');
@@ -728,6 +783,9 @@ function toggleSubtask(payload, user, task) {
 function deleteSubtask(payload, user, task) {
   if (!canManageSubtasks(user, task)) {
     throw new HttpError(403, 'Chỉ người nhận việc mới có thể xoá công việc nhỏ');
+  }
+  if (task.status !== 'DOING') {
+    throw new HttpError(409, 'Chỉ xoá được công việc nhỏ khi việc chính đang thực hiện');
   }
   const subtaskId = Number(payload?.subtaskId);
   const idx = (task.subtasks || []).findIndex(s => s.id === subtaskId);
@@ -749,6 +807,11 @@ function updateTaskStatusAction(payload, user, task) {
   }
   if (newStatus === 'DONE' && task.pendingCancellation) {
     throw new HttpError(409, 'Công việc đang có 1 yêu cầu huỷ chờ duyệt. Vui lòng Đồng ý hoặc Từ chối yêu cầu đó trước khi đóng công việc.');
+  }
+  // Trước đây chỉ chặn DONE khi có yêu cầu gia hạn/huỷ đang chờ — không kiểm tra công việc nhỏ (subtask)
+  // còn dở dang, nên có thể đánh dấu "Hoàn thành" dù còn subtask chưa xong, không có dấu hiệu cảnh báo.
+  if (newStatus === 'DONE' && (task.subtasks || []).some(s => !s.done)) {
+    throw new HttpError(409, 'Công việc còn công việc nhỏ (subtask) chưa hoàn thành. Vui lòng hoàn thành hết trước khi đóng công việc.');
   }
   task.status = newStatus;
   task.history = Array.isArray(task.history) ? task.history : [];
@@ -865,9 +928,18 @@ function closeVppPeriod(user, period) {
 // "Kết thúc chọn" ở giao diện tạo hồ sơ NHÁP qua route /api/create/vppRegistrations (xem
 // lib/createValidation.js) — 2 hàm dưới xử lý phần còn lại của vòng đời: sửa nội dung khi còn NHÁP,
 // và "Gửi" để chính thức vào quy trình duyệt (NHÁP -> CHỜ DUYỆT, bắt đầu từ bước 1).
-function submitVppRegistration(user, item) {
+// period: CALLER (routes/records.js) tự đọc trước rồi truyền vào, cùng khuôn với
+// updateVppRegistrationDraft() bên dưới — trước đây hàm này KHÔNG kiểm tra kỳ còn mở hay không (khác
+// updateVppRegistrationDraft đã có), nên NHÁP tạo lúc kỳ còn mở vẫn "Gửi" được sau khi kỳ đã đóng.
+function submitVppRegistration(user, item, period) {
   if (item.creator !== user.username) throw new HttpError(403, 'Chỉ người tạo đăng ký mới được gửi hồ sơ này');
   if (item.status !== 'DRAFT') throw new HttpError(409, 'Đăng ký này không còn ở trạng thái nháp (có thể đã gửi hoặc đã bị xử lý)');
+  if (!period) throw new HttpError(404, 'Không tìm thấy kỳ đăng ký');
+  const todayStr = new Date().toISOString().slice(0, 10);
+  const pastEndDate = !!(period.endDate && todayStr > period.endDate);
+  if (period.status !== 'OPEN' || pastEndDate) {
+    throw new HttpError(409, 'Kỳ đăng ký này đã kết thúc, không thể gửi đăng ký nữa');
+  }
   if (!Array.isArray(item.items) || !item.items.length) {
     throw new HttpError(400, 'Chưa chọn mặt hàng nào — vui lòng chọn ít nhất 1 mặt hàng trước khi gửi');
   }

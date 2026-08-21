@@ -13,6 +13,9 @@ const { HttpError } = require('../lib/httpErrors');
 const { getAllTasks } = require('../lib/taskStore');
 const { getAllForCollection, MIGRATED_COLLECTIONS } = require('../lib/recordStore');
 const { sendServerError } = require('../lib/errorResponse');
+const {
+  filterDocsForUser, filterSubmissionsForUser, filterInternalPostsForUser, sanitizeReportPeriodsForUser
+} = require('../lib/recordViewScope');
 
 const VALID_KEYS = new Set(Object.keys(DEFAULTS));
 
@@ -158,6 +161,15 @@ router.get('/', async (req, res) => {
     ]);
     data.tasks = tasksResult;
     migratedList.forEach((collection, i) => { data[collection] = collectionResults[i]; });
+
+    // Lọc lại quyền XEM phía server cho các collection trước đây chỉ ẩn ở giao diện (xem
+    // lib/recordViewScope.js) — ai gọi thẳng GET /api/data cũng không còn đọc được hồ sơ ngoài phạm vi
+    // phòng ban/quyền xem của mình nữa.
+    if (data.docs) data.docs = await filterDocsForUser(data.docs, req.freshUser);
+    if (data.submissions) data.submissions = await filterSubmissionsForUser(data.submissions, req.freshUser);
+    if (data.internalPosts) data.internalPosts = filterInternalPostsForUser(data.internalPosts, req.freshUser);
+    if (data.reportPeriods) data.reportPeriods = sanitizeReportPeriodsForUser(data.reportPeriods, req.freshUser);
+
     data._versions = versions;
     res.json(data);
   } catch (err) {

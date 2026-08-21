@@ -51,10 +51,32 @@ function detectColumnMap(headerCells) {
   return foundName ? map : null;
 }
 
+// Trước đây bỏ hết dấu phẩy rồi để parseFloat() hiểu MỌI dấu chấm là dấu thập phân — trong khi giá
+// VNĐ theo kiểu Việt Nam thường viết dấu chấm là phân cách hàng nghìn (vd "15.000" = 15 nghìn,
+// "1.234.567" = 1.234.567), khiến "15.000" đọc ra 15 và "1.234.567" đọc ra 1.234 — sai lệch tới hàng
+// nghìn lần. Quy tắc: nếu có CẢ 2 ký tự (. và ,) thì dấu xuất hiện SAU CÙNG là dấu thập phân, dấu còn
+// lại là phân cách hàng nghìn (kiểu số quốc tế thông thường). Nếu chỉ có 1 loại dấu, coi là phân cách
+// hàng nghìn khi xuất hiện nhiều lần HOẶC nhóm sau dấu đó đúng 3 chữ số (đúng cách viết số VNĐ), còn
+// lại (vd "15.5") coi là dấu thập phân.
 function parsePrice(raw) {
   if (raw == null || raw === '') return null;
-  const cleaned = String(raw).replace(/[^\d.,-]/g, '').replace(/,/g, '');
-  const n = parseFloat(cleaned);
+  if (typeof raw === 'number') return Number.isFinite(raw) ? raw : null;
+  let s = String(raw).replace(/[^\d.,-]/g, '').trim();
+  if (!s) return null;
+  const lastDot = s.lastIndexOf('.');
+  const lastComma = s.lastIndexOf(',');
+  if (lastDot !== -1 && lastComma !== -1) {
+    const decimalSep = lastDot > lastComma ? '.' : ',';
+    const thousandSep = decimalSep === '.' ? ',' : '.';
+    s = s.split(thousandSep).join('');
+    if (decimalSep === ',') s = s.replace(',', '.');
+  } else if (lastDot !== -1 || lastComma !== -1) {
+    const sep = lastDot !== -1 ? '.' : ',';
+    const parts = s.split(sep);
+    const isThousandsGrouping = parts.length > 2 || (parts.length === 2 && parts[1].length === 3);
+    s = isThousandsGrouping ? parts.join('') : parts.join('.');
+  }
+  const n = parseFloat(s);
   return Number.isFinite(n) ? n : null;
 }
 

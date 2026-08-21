@@ -8,6 +8,9 @@ const { verifyPassword, hashPassword, validatePin, signToken, setAuthCookie, cle
 const { recordFailedLogin, resetLoginAttempts, getLockoutRemainingMinutes } = require('../lib/loginAttempts');
 const { validatePasswordStrength } = require('../lib/passwordPolicy');
 const { HttpError } = require('../lib/httpErrors');
+const { issueApprovalGrant, issueApprovalOtp, verifyApprovalOtp } = require('../lib/approvalAuth');
+const { getPool, sql } = require('../db');
+const { sendMail } = require('../lib/mailer');
 
 // Không bao giờ trả field mật khẩu/PIN (dù đã hash) hay dữ liệu khoá đăng nhập ra ngoài, dùng chung cho
 // /login, /me và /change-pin — khớp đúng stripPasswords() ở routes/data.js (trước đây route này bỏ sót
@@ -135,6 +138,9 @@ router.post('/verify-password', loginRateLimiter, requireAuth, async (req, res) 
       });
     }
 
+    // Cấp phiếu xác thực phê duyệt ngắn hạn (5 phút) — routes/workflow.js đòi phiếu này trước khi
+    // chấp nhận Duyệt cho tài khoản có approverAuthLevel=PASSWORD, xem lib/approvalAuth.js.
+    issueApprovalGrant(username);
     res.json({ ok: true });
   } catch (err) {
     console.error('POST /api/auth/verify-password lỗi:', err.message);
@@ -177,6 +183,8 @@ router.post('/verify-pin', loginRateLimiter, requireAuth, async (req, res) => {
       });
     }
 
+    // Cấp phiếu xác thực phê duyệt ngắn hạn — cùng cơ chế với /verify-password ở trên (approverAuthLevel=PIN).
+    issueApprovalGrant(username);
     res.json({ ok: true });
   } catch (err) {
     console.error('POST /api/auth/verify-pin lỗi:', err.message);
@@ -290,6 +298,58 @@ router.patch('/me', requireAuth, async (req, res) => {
     console.error('PATCH /api/auth/me lỗi:', err.message);
     res.status(500).json({ error: 'Không thể cập nhật hồ sơ cá nhân' });
   }
+});
+
+// Cấu hình SMTP đọc từ DB.emailConfig — cùng nguồn với routes/email.js (admin cấu hình ở màn Quản trị,
+// không tách hàm dùng chung vì routes/email.js không export helper này, xem comment ở đó).
+async function getEmailConfig() {
+  try {
+    const pool = await getPool();
+    const result = await pool.request()
+      .input('k', sql.NVarChar(100), 'emailConfig')
+      .query('SELECT DataValue FROM dbo.AppData WHERE DataKey = @k');
+    if (result.recordset.length === 0) return {};
+    return JSON.parse(result.recordset[0].DataValue) || {};
+  } catch (err) {
+    console.error('⛔ Không đọc được emailConfig, coi như mặc định (đang bật):', err.message);
+    return {};
+  }
+}
+
+// POST /api/auth/request-approval-otp — sinh mã OTP 6 số MỚI ở SERVER (không phải JS trình duyệt như
+// trước) và gửi qua email thật của CHÍNH người đang cần xác thực (approverAuthLevel=OTP_EMAIL), dùng
+// chung rate-limit chống dò với /verify-password|/verify-pin.
+router.post('/request-approval-otp', loginRateLimiter, requireAuth, async (req, res) => {
+  try {
+    if (!req.freshUser.email) {
+      return res.status(400).json({ error: 'Tài khoản chưa có email, không thể gửi mã OTP' });
+    }
+    const code = issueApprovalOtp(req.freshUser.username);
+    const emailConfig = await getEmailConfig();
+    if (emailConfig.enabled === false) {
+      return res.json({ ok: true, simulated: true });
+    }
+    await sendMail({
+      to: [req.freshUser.email],
+      subject: '[VPDT] Mã xác thực phê duyệt',
+      text: `Mã OTP của bạn: ${code} (chỉ dùng 1 lần cho lượt duyệt này, hết hạn sau 5 phút)`,
+      host: emailConfig.smtpHost, port: emailConfig.smtpPort, secure: emailConfig.smtpSecure,
+      from: emailConfig.senderEmail
+    });
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('POST /api/auth/request-approval-otp lỗi:', err.message);
+    res.status(500).json({ error: 'Không thể gửi mã OTP' });
+  }
+});
+
+// POST /api/auth/verify-approval-otp — xác thực mã OTP đã gửi ở trên, cấp phiếu Duyệt nếu đúng (xem
+// lib/approvalAuth.js verifyApprovalOtp() — đã tự cấp phiếu bên trong khi khớp mã).
+router.post('/verify-approval-otp', loginRateLimiter, requireAuth, async (req, res) => {
+  const { code } = req.body || {};
+  if (!code) return res.status(400).json({ error: 'Thiếu mã OTP' });
+  const ok = verifyApprovalOtp(req.freshUser.username, code);
+  res.json({ ok });
 });
 
 module.exports = router;

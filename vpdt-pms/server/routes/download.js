@@ -11,8 +11,27 @@ const path = require('path');
 const fs = require('fs');
 const { PDFDocument, rgb } = require('pdf-lib');
 const fontkit = require('@pdf-lib/fontkit');
+const { getAllForCollection } = require('../lib/recordStore');
+const { canDownloadRecordFile } = require('../lib/recordViewScope');
 
 const router = express.Router();
+
+// Tra ngược fileUrl -> bản ghi sở hữu nó, CHỈ cho 2 collection đã xác nhận có lỗ hổng qua rà soát
+// (Tài Liệu, Văn Bản Trình — mỗi bản ghi có scope xem/tải riêng theo phòng ban, xem canDownloadFile()
+// ở public/index.html). Nếu file không thuộc 2 collection này (hợp đồng, đăng ký xe, văn phòng, biên
+// bản họp, bài truyền thông nội bộ...) thì CHO PHÉP như trước (chưa mở rộng kiểm tra sang các module
+// đó — cần rà lại đúng scope riêng của từng module trước khi áp dụng, tránh chặn nhầm).
+async function findOwningRecord(fileUrl) {
+  const [docs, submissions] = await Promise.all([
+    getAllForCollection('docs'),
+    getAllForCollection('submissions')
+  ]);
+  const doc = (docs || []).find(d => d.fileUrl === fileUrl);
+  if (doc) return { moduleKey: 'doc', dept: doc.dept, ownerUsername: doc.uploader };
+  const sub = (submissions || []).find(s => s.fileUrl === fileUrl || (s.extraFiles || []).some(ef => ef.fileUrl === fileUrl));
+  if (sub) return { moduleKey: 'submission', dept: sub.dept, ownerUsername: sub.creator };
+  return null;
+}
 const UPLOAD_DIR = path.join(__dirname, '..', 'uploads');
 const FONT_PATH = path.join(__dirname, '..', 'assets', 'fonts', 'DejaVuSans.ttf');
 
@@ -39,6 +58,11 @@ router.get('/', async (req, res) => {
   const filePath = path.join(UPLOAD_DIR, m[1]);
   if (path.dirname(filePath) !== UPLOAD_DIR || !fs.existsSync(filePath)) {
     return res.status(404).json({ error: 'Không tìm thấy tệp' });
+  }
+
+  const owning = await findOwningRecord(fileUrl);
+  if (owning && !canDownloadRecordFile(req.freshUser, owning.moduleKey, owning.dept, owning.ownerUsername)) {
+    return res.status(403).json({ error: 'Bạn không có quyền tải tệp này' });
   }
 
   const downloadName = String(req.query.name || m[1]).replace(/[\r\n"]/g, '');
