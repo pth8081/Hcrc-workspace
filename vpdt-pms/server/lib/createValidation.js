@@ -577,11 +577,14 @@ const CREATE_MODULE_CONFIGS = {
       payload.compilation = null;
     }
   },
-  // Mẫu trình chiếu (background/màu sắc dùng khi phát hành) — admin/reportManage tạo trước, chọn lúc
-  // tạo kỳ báo cáo (reportPeriods.slideTemplateId ở trên) — KHÔNG phải tệp đính kèm, chỉ là 1 bộ màu áp
-  // dụng cho khung HTML render sẵn (buildPrSlideScreenHTML() ở index.html), giống hệt 2 mẫu DEFAULT/
-  // ORANGE_GOLD gõ cứng trước đây (PR_SLIDE_TEMPLATES) — nay admin tạo được KHÔNG GIỚI HẠN số lượng mẫu
-  // qua đây thay vì chỉ 2 lựa chọn cố định.
+  // Mẫu trình chiếu (ảnh nền dùng khi phát hành) — admin/reportManage tạo trước, chọn lúc tạo kỳ báo cáo
+  // (reportPeriods.slideTemplateId ở trên). Người dùng chỉ tải lên 1 tệp mẫu (ảnh/PDF/PowerPoint) —
+  // trình duyệt tự trích ra 1 ảnh nền DUY NHẤT (bgImageUrl, xem extractSlideTemplateBackgroundFromFile()
+  // ở index.html) + tự tính isDark (độ sáng ảnh) để suy ra màu chữ trắng/đen phù hợp
+  // (derivePrTemplateStyle()) — không còn chọn tay bộ 12 màu như trước (PR_TPL_COLOR_FIELDS cũ, xem mẫu
+  // cứng DEFAULT/ORANGE_GOLD ở PR_SLIDE_TEMPLATES, index.html, vẫn giữ nguyên cho các kỳ báo cáo tạo
+  // TRƯỚC tính năng mẫu tự tạo). Mẫu 12-màu (colors) đã tạo trước bản nâng cấp này vẫn ĐỌC được nguyên
+  // vẹn qua getPrSlideTemplateColors() — không ép migrate.
   reportSlideTemplates: {
     dbKey: 'reportSlideTemplates',
     getScope: () => ({ all: true }),
@@ -589,7 +592,11 @@ const CREATE_MODULE_CONFIGS = {
     extraValidate: (payload) => {
       if (!payload.name || !String(payload.name).trim()) throw new CreateError(400, 'Thiếu tên mẫu trình chiếu');
       payload.name = String(payload.name).trim();
-      payload.colors = normalizeSlideTemplateColors(payload.colors);
+      if (!payload.bgImageUrl || typeof payload.bgImageUrl !== 'string' || !payload.bgImageUrl.trim()) {
+        throw new CreateError(400, 'Vui lòng tải lên tệp mẫu (ảnh/PDF/PowerPoint) trước khi tạo');
+      }
+      payload.bgImageUrl = payload.bgImageUrl.trim();
+      payload.isDark = !!payload.isDark;
     }
   },
   reportEntries: {
@@ -660,24 +667,6 @@ function normalizeReportEntryPayload(payload) {
   }
 }
 
-// Bộ màu mặc định khi admin tạo mẫu trình chiếu không điền đủ — khớp đúng PR_SLIDE_TEMPLATES.DEFAULT cũ
-// ở index.html (giao diện nền tối vẫn dùng từ trước khi có tính năng mẫu tự tạo).
-const SLIDE_TEMPLATE_COLOR_DEFAULTS = {
-  pageBg: '#000000', coverTitleColor: '#ffffff', coverAccentColor: 'transparent',
-  sectionTitleColor: '#ffffff', bodyTextColor: '#e5e7eb', sourceLabelColor: '#d1d5db',
-  tableBorder: 'rgba(255,255,255,0.2)', tableHeadBg: 'rgba(255,255,255,0.1)', tableText: '#ffffff',
-  navBtnBg: 'rgba(255,255,255,0.1)', navBtnText: '#ffffff', topBarBg: '#111827'
-};
-function normalizeSlideTemplateColors(colors) {
-  const src = colors && typeof colors === 'object' ? colors : {};
-  const out = {};
-  Object.keys(SLIDE_TEMPLATE_COLOR_DEFAULTS).forEach((key) => {
-    const v = src[key];
-    out[key] = (typeof v === 'string' && v.trim()) ? v.trim() : SLIDE_TEMPLATE_COLOR_DEFAULTS[key];
-  });
-  return out;
-}
-
 // payload: dữ liệu hồ sơ client gửi lên (mọi field nghiệp vụ giữ nguyên) — chỉ id/creator/creatorName
 // bị SERVER ghi đè bằng giá trị xác thực từ phiên đăng nhập, không tin bất kỳ giá trị nào client tự
 // gửi cho các field này. appData (tuỳ chọn): snapshot toàn bộ AppData do CALLER đọc sẵn (getAllAppData())
@@ -708,7 +697,7 @@ function validateAndPrepareCreate(moduleKey, payload, user, existingCollection, 
 
 module.exports = {
   CREATE_MODULE_CONFIGS, CreateError, validateAndPrepareCreate, scopeAllows, findMeetingConflict,
-  OFFICE_SUBTYPE_TO_PERM_FLAG, normalizeReportEntryPayload, normalizeSlideTemplateColors,
+  OFFICE_SUBTYPE_TO_PERM_FLAG, normalizeReportEntryPayload,
   CONTRACT_APPROVAL_LAYERS, CONTRACT_APPROVAL_LEVELS, CONTRACT_APPROVAL_LEVEL_RULES,
   buildEffectiveContractApprovalWorkflowServer
 };
