@@ -9,7 +9,7 @@
 // họp thêm cờ minutesEdit (toàn công ty, không theo phòng ban) cho SỬA — riêng XÓA là quyền tối cao,
 // chỉ Admin; Công việc theo NGƯỜI (assignedBy/assignee), hoàn toàn không có khái niệm phòng ban.
 const { HttpError } = require('./httpErrors');
-const { scopeAllows, OFFICE_SUBTYPE_TO_PERM_FLAG, normalizeReportEntryPayload } = require('./createValidation');
+const { scopeAllows, OFFICE_SUBTYPE_TO_PERM_FLAG, normalizeReportEntryPayload, normalizeSlideTemplateColors } = require('./createValidation');
 const { validateRegistrationItems: validateVppRegItems } = require('./vppCatalog');
 
 function nowVN() {
@@ -961,17 +961,10 @@ function updateReportEntryDraft(user, item, payload, period) {
   const draft = { ...payload, title };
   normalizeReportEntryPayload(draft);
   item.title = draft.title;
-  item.mode = draft.mode;
-  item.taskItems = draft.taskItems;
-  item.planItems = draft.planItems;
-  item.numbersText = draft.numbersText;
-  item.numbersFileUrl = draft.numbersFileUrl;
-  item.numbersFileName = draft.numbersFileName;
-  item.numbersFileType = draft.numbersFileType;
-  item.otherItems = draft.otherItems;
   item.fileUrl = draft.fileUrl;
   item.fileName = draft.fileName;
   item.fileType = draft.fileType;
+  item.parsedSlides = draft.parsedSlides;
   return item;
 }
 
@@ -1022,17 +1015,18 @@ function mergeReportPeriod(user, period, orderedEntryIds, entries) {
     slides.push({ kind: 'DEPT', title: dept });
     entriesByDept.get(dept).forEach((entry) => {
       const common = { sourceEntryId: entry.id, sourceCreatorName: entry.creatorName, sourceDept: entry.dept };
-      if (entry.mode === 'FILE_UPLOAD') {
-        slides.push({ kind: 'FILE', title: 'TỆP BÁO CÁO ĐÍNH KÈM', fileUrl: entry.fileUrl, fileName: entry.fileName, fileType: entry.fileType, ...common });
-        return;
-      }
-      if (entry.taskItems?.length) slides.push({ kind: 'TASKS', title: 'CÁC CÔNG VIỆC THỰC HIỆN TRONG TUẦN', items: entry.taskItems, ...common });
-      if (entry.planItems?.length) slides.push({ kind: 'PLAN', title: 'KẾ HOẠCH CÔNG VIỆC TIẾP THEO', items: entry.planItems, ...common });
-      if (entry.numbersText || entry.numbersFileUrl) {
-        slides.push({ kind: 'NUMBERS', title: 'SỐ LIỆU', text: entry.numbersText, fileUrl: entry.numbersFileUrl, fileName: entry.numbersFileName, fileType: entry.numbersFileType, ...common });
-      }
-      (entry.otherItems || []).forEach((o) => {
-        if (o.text || o.fileUrl) slides.push({ kind: 'OTHER', title: 'KHÁC', text: o.text, fileUrl: o.fileUrl, fileName: o.fileName, fileType: o.fileType, ...common });
+      // Mỗi báo cáo (.pptx đã được TRÌNH DUYỆT người nộp tự đọc thành parsedSlides lúc nộp — xem
+      // normalizeReportEntryPayload() ở lib/createValidation.js) sinh ra ĐÚNG 1 slide kind PPTX_SLIDE
+      // cho MỖI slide gốc trong file .pptx đó, giữ nguyên thứ tự — không còn gộp theo Công Việc/Kế
+      // Hoạch/Số Liệu/Khác như trước (mô hình nhập tay đã bỏ).
+      (entry.parsedSlides || []).forEach((ps) => {
+        slides.push({
+          kind: 'PPTX_SLIDE',
+          title: ps.title || '',
+          bodyLines: Array.isArray(ps.bodyLines) ? ps.bodyLines : [],
+          images: Array.isArray(ps.images) ? ps.images : [],
+          ...common
+        });
       });
     });
   });
@@ -1207,11 +1201,14 @@ function updateReportCompilation(user, period, slides) {
   }
   const list = Array.isArray(slides) ? slides : [];
   if (!list.length) throw new HttpError(400, 'Bản tổng hợp cần có ít nhất 1 slide');
-  const validKinds = ['COVER', 'DEPT', 'TASKS', 'PLAN', 'NUMBERS', 'OTHER', 'FILE', 'TASK_STATS'];
+  const validKinds = ['COVER', 'DEPT', 'TASKS', 'PLAN', 'NUMBERS', 'OTHER', 'FILE', 'TASK_STATS', 'PPTX_SLIDE'];
+  const IMAGE_KINDS = ['embedded', 'table', 'chart'];
   const cleaned = list.map((s, idx) => {
     const kind = validKinds.includes(s?.kind) ? s.kind : 'OTHER';
     const title = String(s?.title || '').trim();
-    if (!title) throw new HttpError(400, `Slide thứ ${idx + 1} thiếu tiêu đề`);
+    // PPTX_SLIDE: slide gốc trong .pptx có thể KHÔNG có tiêu đề (không phải mọi slide PowerPoint đều có
+    // khung tiêu đề) — chỉ các kind khác mới bắt buộc phải có tiêu đề.
+    if (!title && kind !== 'PPTX_SLIDE') throw new HttpError(400, `Slide thứ ${idx + 1} thiếu tiêu đề`);
     const base = {
       order: idx + 1, kind, title,
       sourceEntryId: s?.sourceEntryId ?? null, sourceCreatorName: s?.sourceCreatorName || '', sourceDept: s?.sourceDept || ''
@@ -1235,6 +1232,13 @@ function updateReportCompilation(user, period, slides) {
         fileType: s?.fileUrl ? String(s?.fileType || '') : null
       };
     }
+    if (kind === 'PPTX_SLIDE') {
+      const bodyLines = (Array.isArray(s?.bodyLines) ? s.bodyLines : []).map(l => String(l || '').trim()).filter(Boolean);
+      const images = (Array.isArray(s?.images) ? s.images : [])
+        .filter(im => im && typeof im.dataUrl === 'string' && im.dataUrl.startsWith('data:image/'))
+        .map(im => ({ dataUrl: im.dataUrl, kind: IMAGE_KINDS.includes(im.kind) ? im.kind : 'embedded' }));
+      return { ...base, bodyLines, images };
+    }
     return base; // COVER / DEPT — chỉ có title
   });
   period.compilation.slides = cleaned;
@@ -1242,6 +1246,20 @@ function updateReportCompilation(user, period, slides) {
   period.compilation.updatedByName = user.name;
   period.compilation.updatedAt = nowVN();
   return period;
+}
+
+// Sửa mẫu trình chiếu đã tạo (tên/màu sắc) — cùng quyền reportManage với tạo/đóng kỳ báo cáo, vì mẫu
+// chỉ dùng lúc TẠO KỲ (xem CREATE_MODULE_CONFIGS.reportPeriods ở lib/createValidation.js), không ảnh
+// hưởng tới kỳ đã tạo trước đó (mỗi kỳ đã "chốt cứng" slideTemplateId của mình lúc tạo).
+function updateReportSlideTemplate(user, item, payload) {
+  if (!canManageReportPeriods(user)) {
+    throw new HttpError(403, 'Chỉ người có quyền quản lý Báo Cáo Định Kỳ mới được sửa mẫu trình chiếu');
+  }
+  const name = String(payload?.name || '').trim();
+  if (!name) throw new HttpError(400, 'Thiếu tên mẫu trình chiếu');
+  item.name = name;
+  item.colors = normalizeSlideTemplateColors(payload?.colors);
+  return item;
 }
 
 function publishReportPeriod(user, period) {
@@ -1291,5 +1309,6 @@ module.exports = {
   addSubtask, toggleSubtask, deleteSubtask,
   closeVppPeriod, submitVppRegistration, updateVppRegistrationDraft,
   closeReportPeriod, submitReportEntry, updateReportEntryDraft,
-  mergeReportPeriod, mergeReportPeriodByTasks, updateReportCompilation, publishReportPeriod, unpublishReportPeriod
+  mergeReportPeriod, mergeReportPeriodByTasks, updateReportCompilation, publishReportPeriod, unpublishReportPeriod,
+  updateReportSlideTemplate
 };

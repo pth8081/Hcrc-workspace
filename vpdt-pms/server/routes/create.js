@@ -34,6 +34,10 @@ router.post('/:module', async (req, res) => {
     // reportEntries cần tra cứu chéo sang collection reportPeriods (kỳ báo cáo còn mở/phạm vi phòng
     // ban/hạn chót) — cùng lý do vppRegistrations ở trên, reportPeriods cũng đã ở dbo.Records.
     if (moduleKey === 'reportEntries') appData.reportPeriods = await getAllForCollection('reportPeriods');
+    // reportPeriods cần tra cứu chéo sang collection reportSlideTemplates (kiểm tra slideTemplateId
+    // client gửi lên có phải mẫu trình chiếu có thật hay không) — cùng lý do, reportSlideTemplates cũng
+    // ở dbo.Records, không nằm trong AppData chung.
+    if (moduleKey === 'reportPeriods') appData.reportSlideTemplates = await getAllForCollection('reportSlideTemplates');
 
     const config = CREATE_MODULE_CONFIGS[moduleKey];
     const builderFn = (list) => validateAndPrepareCreate(moduleKey, req.body, freshUser, list, appData);
