@@ -90,6 +90,15 @@ async function prepareUsersForSave(incomingUsers) {
     let record = { ...u, ...preserved };
     delete record.pin; // KHÔNG BAO GIỜ lưu PIN dạng plaintext — chỉ lưu pinHash bên dưới.
 
+    // Tài khoản "admin" mặc định (xem defaults.js) LUÔN có toàn quyền và KHÔNG bị sửa quyền bởi bất kỳ
+    // ai — kể cả từ form phân quyền hay gán vào nhóm phân quyền — đảm bảo hệ thống luôn còn đúng 1 tài
+    // khoản toàn quyền không thể bị khoá/gỡ quyền nhầm, tránh tình huống không còn ai đủ quyền tự sửa
+    // lại. Ép ở ĐÂY (điểm ghi CSDL duy nhất cho collection "users") thay vì chỉ ở client để không phụ
+    // thuộc việc giao diện có khoá đúng hay không.
+    if (record.username === 'admin') {
+      record.perms = { admin: true };
+    }
+
     if (u.pin) {
       const pinError = validatePin(u.pin);
       if (pinError) throw new HttpError(400, `Mã PIN của tài khoản "${u.username}": ${pinError}`);
