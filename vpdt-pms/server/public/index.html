@@ -161,6 +161,98 @@ select {
    white-space:nowrap để các ô có mô tả dài vẫn xuống dòng bình thường như cũ; chỉ bảng nào thực sự
    rộng hơn khung chứa mới xuất hiện thanh cuộn ngang. */
 table { display: block; overflow-x: auto; max-width: 100%; }
+
+/* ================== Trang Đăng Nhập (#loginSection) ==================
+   Chia đôi màn hình: panel thương hiệu (trái, nền xanh navy) + form đăng nhập (phải, nền trắng) —
+   xếp chồng dọc dưới 880px. Toàn bộ class con dùng tiền tố "loginpage-" để không đụng class nào khác
+   trong file. #loginSection GIỮ NGUYÊN id cũ (login()/finishLogin()/logout() toggle .hidden). Tự thêm
+   riêng #loginSection.hidden { display: none !important } thay vì trông cậy vào việc Tailwind CDN có
+   tự gắn !important cho .hidden hay không (bản Play CDN v3 hiện dùng thì có, nhưng không nên phụ thuộc
+   hành vi ngầm định của bên thứ ba cho phần chuyển màn hình đăng nhập/đăng xuất). Cùng bảng màu/logo
+   với sidebar (xem svg #mobileTopBar phía trên) để nhất quán thương hiệu. */
+#loginSection {
+  display: grid;
+  grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr);
+  border-radius: 20px;
+  overflow: hidden;
+  border: 1px solid #e3e8f2;
+  box-shadow: 0 24px 60px -24px rgba(11, 31, 77, .28);
+  min-height: 560px;
+}
+#loginSection.hidden {
+  display: none !important;
+}
+@media (max-width: 880px) {
+  #loginSection { grid-template-columns: 1fr; min-height: 0; }
+}
+
+.loginpage-hero {
+  position: relative;
+  overflow: hidden;
+  background:
+    radial-gradient(60% 55% at 18% 8%, rgba(56,189,248,.35), transparent 60%),
+    radial-gradient(70% 60% at 90% 100%, rgba(29,78,216,.55), transparent 55%),
+    linear-gradient(155deg, #0b1f4d 0%, #060f26 100%);
+  color: #eef3ff;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: 40px 44px;
+}
+.loginpage-hero-nodes { position: absolute; inset: 0; opacity: .5; pointer-events: none; }
+.loginpage-hero-top, .loginpage-hero-mid, .loginpage-hero-modules, .loginpage-hero-foot { position: relative; z-index: 1; }
+.loginpage-hero-brand { display: flex; align-items: center; gap: 12px; }
+.loginpage-hero-brand svg { width: 32px; height: 32px; flex-shrink: 0; }
+.loginpage-hero-wordmark { font-size: 16px; font-weight: 700; }
+.loginpage-hero-wordmark small { display: block; font-size: 10px; font-weight: 600; letter-spacing: .14em; text-transform: uppercase; color: #a9b8e6; margin-top: 1px; }
+
+.loginpage-hero-mid { max-width: 460px; margin: auto 0; padding: 40px 0; }
+.loginpage-hero-eyebrow { display: inline-flex; align-items: center; gap: 8px; font-size: 11px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: #38bdf8; margin-bottom: 16px; }
+.loginpage-hero-eyebrow::before { content: ''; width: 18px; height: 2px; background: #38bdf8; border-radius: 2px; }
+.loginpage-hero-headline { font-size: clamp(24px, 2.4vw, 32px); line-height: 1.2; font-weight: 700; letter-spacing: -.01em; text-wrap: balance; margin: 0 0 14px; }
+.loginpage-hero-sub { font-size: 14.5px; line-height: 1.65; color: #a9b8e6; max-width: 42ch; margin: 0; }
+
+.loginpage-hero-modules { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1px; background: rgba(255,255,255,.09); border-radius: 12px; overflow: hidden; border: 1px solid rgba(255,255,255,.09); }
+.loginpage-hero-module { background: rgba(255,255,255,.03); padding: 13px 11px; }
+.loginpage-hero-module svg { width: 17px; height: 17px; color: #38bdf8; margin-bottom: 7px; }
+.loginpage-hero-module span { display: block; font-size: 11px; font-weight: 600; color: #eef3ff; line-height: 1.35; }
+.loginpage-hero-foot { font-size: 11.5px; color: #a9b8e6; }
+
+@media (max-width: 880px) { .loginpage-hero-modules { display: none; } }
+@media (max-width: 520px) { .loginpage-hero { padding: 32px 26px; } }
+
+.loginpage-panel { background: #f6f8fc; display: flex; align-items: center; justify-content: center; padding: 44px 32px; }
+.loginpage-card { width: 100%; max-width: 372px; }
+.loginpage-card-head { margin-bottom: 26px; }
+.loginpage-card-title { font-size: 21px; font-weight: 700; margin: 0 0 6px; letter-spacing: -.01em; color: #0f1729; }
+.loginpage-card-sub { font-size: 13.5px; color: #4b5876; margin: 0; line-height: 1.5; }
+
+.loginpage-field { margin-bottom: 16px; }
+.loginpage-field label { display: block; font-size: 12.5px; font-weight: 700; color: #0f1729; margin-bottom: 7px; }
+.loginpage-input-wrap { position: relative; }
+.loginpage-input-wrap svg { position: absolute; left: 13px; top: 50%; transform: translateY(-50%); width: 17px; height: 17px; color: #4b5876; pointer-events: none; }
+.loginpage-input-wrap input {
+  width: 100%; font-size: 14px; color: #0f1729;
+  background: #fff; border: 1.5px solid #e3e8f2; border-radius: 10px;
+  padding: 11px 13px 11px 40px;
+  transition: border-color .15s ease, box-shadow .15s ease;
+}
+.loginpage-input-wrap input::placeholder { color: #a4adc2; }
+.loginpage-input-wrap input:focus { outline: none; border-color: #38bdf8; box-shadow: 0 0 0 3.5px rgba(56,189,248,.18); }
+
+.loginpage-btn {
+  width: 100%; font-size: 14.5px; font-weight: 700; color: #fff;
+  background: linear-gradient(135deg, #2563eb, #1d4ed8);
+  border: 0; border-radius: 10px; padding: 12.5px; margin-top: 6px;
+  cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px;
+  box-shadow: 0 10px 22px -10px rgba(29,78,216,.65);
+  transition: transform .15s ease, box-shadow .15s ease, opacity .15s ease;
+}
+.loginpage-btn:hover { transform: translateY(-1px); box-shadow: 0 14px 26px -10px rgba(29,78,216,.75); }
+.loginpage-btn:disabled { opacity: .65; cursor: not-allowed; transform: none; }
+.loginpage-btn svg { width: 16px; height: 16px; }
+
+.loginpage-card-foot { margin-top: 24px; padding-top: 16px; border-top: 1px solid #eef1f8; font-size: 12.5px; color: #4b5876; text-align: center; line-height: 1.6; }
 </style>
 </head>
 <body class="bg-gray-100 min-h-screen font-sans">
@@ -327,26 +419,107 @@ table { display: block; overflow-x: auto; max-width: 100%; }
   <div class="flex-1 min-w-0 pt-14 md:pt-0">
     <div class="max-w-6xl mx-auto p-4 md:p-6 space-y-6">
 
-  <!-- Màn hình 1: Đăng nhập -->
-  <div id="loginSection" class="max-w-md mx-auto my-10 p-6 border rounded-lg bg-gray-50 space-y-4 shadow-sm">
-    <div class="flex flex-col items-center gap-3">
-      <svg viewBox="0 0 100 100" fill="none" style="width:2.75rem;height:2.75rem;" aria-hidden="true">
-        <rect x="27" y="47" width="46" height="15" rx="7.5" fill="#38bdf8"/>
-        <rect x="27" y="17" width="17" height="66" rx="8.5" fill="#1d4ed8"/>
-        <rect x="56" y="29" width="17" height="54" rx="8.5" fill="#2563eb"/>
+  <!-- Màn hình 1: Đăng nhập — chia đôi màn hình (panel thương hiệu trái + form phải), xem CSS
+       "#loginSection" ở khối <style> đầu file. id/hành vi hidden-toggle giữ nguyên như cũ, chỉ đổi
+       diện mạo bên trong. -->
+  <div id="loginSection" class="my-6 md:my-10">
+    <div class="loginpage-hero">
+      <svg class="loginpage-hero-nodes" viewBox="0 0 600 700" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
+        <g stroke="rgba(148,197,255,.35)" stroke-width="1">
+          <line x1="40" y1="120" x2="220" y2="60"/>
+          <line x1="220" y1="60" x2="410" y2="140"/>
+          <line x1="410" y1="140" x2="560" y2="90"/>
+          <line x1="60" y1="360" x2="230" y2="300"/>
+          <line x1="230" y1="300" x2="230" y2="470"/>
+          <line x1="230" y1="470" x2="70" y2="560"/>
+          <line x1="230" y1="470" x2="420" y2="540"/>
+          <line x1="420" y1="540" x2="540" y2="470"/>
+        </g>
+        <g fill="rgba(148,197,255,.55)">
+          <circle cx="40" cy="120" r="3.5"/>
+          <circle cx="220" cy="60" r="3.5"/>
+          <circle cx="410" cy="140" r="3.5"/>
+          <circle cx="560" cy="90" r="3.5"/>
+          <circle cx="60" cy="360" r="3.5"/>
+          <circle cx="230" cy="300" r="3.5"/>
+          <circle cx="230" cy="470" r="4.5"/>
+          <circle cx="70" cy="560" r="3.5"/>
+          <circle cx="420" cy="540" r="3.5"/>
+          <circle cx="540" cy="470" r="3.5"/>
+        </g>
       </svg>
-      <h2 class="text-xl font-bold text-center text-gray-800">Đăng Nhập HCRC Workspace</h2>
+
+      <div class="loginpage-hero-top">
+        <div class="loginpage-hero-brand">
+          <svg viewBox="0 0 100 100" fill="none" aria-hidden="true">
+            <rect x="27" y="47" width="46" height="15" rx="7.5" fill="#38bdf8"/>
+            <rect x="27" y="17" width="17" height="66" rx="8.5" fill="#93c5fd"/>
+            <rect x="56" y="29" width="17" height="54" rx="8.5" fill="#60a5fa"/>
+          </svg>
+          <div class="loginpage-hero-wordmark">HCRC Workspace<small>Không gian làm việc số</small></div>
+        </div>
+      </div>
+
+      <div class="loginpage-hero-mid">
+        <div class="loginpage-hero-eyebrow">Hệ thống nội bộ</div>
+        <h1 class="loginpage-hero-headline">Vận hành công việc và phê duyệt trên một nền tảng duy nhất.</h1>
+        <p class="loginpage-hero-sub">Văn bản, hợp đồng, công việc, cuộc họp và báo cáo — tập trung, minh bạch, đúng người đúng việc.</p>
+      </div>
+
+      <div class="loginpage-hero-modules">
+        <div class="loginpage-hero-module">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M6 3h9l5 5v13a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1Z"/><path d="M14 3v5h5"/></svg>
+          <span>Văn bản &amp; Hợp đồng</span>
+        </div>
+        <div class="loginpage-hero-module">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M9 11.5 11.5 14 16 8.5"/><circle cx="12" cy="12" r="9"/></svg>
+          <span>Quy trình phê duyệt</span>
+        </div>
+        <div class="loginpage-hero-module">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><rect x="3.5" y="5" width="17" height="16" rx="2"/><path d="M3.5 9.5h17M8 3v4M16 3v4"/></svg>
+          <span>Lịch họp &amp; Công việc</span>
+        </div>
+        <div class="loginpage-hero-module">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M4 19V9M11 19V5M18 19v-6"/></svg>
+          <span>Báo cáo định kỳ</span>
+        </div>
+      </div>
+
+      <div class="loginpage-hero-foot">Hệ thống nội bộ — chỉ dành cho cán bộ nhân viên HCRC.</div>
     </div>
 
-    <div>
-      <label class="block text-xs font-semibold text-gray-600 mb-1">Tên đăng nhập</label>
-      <input id="txtUser" type="text" autocomplete="username" class="w-full border p-2 rounded text-sm focus:outline-none focus:border-blue-500">
+    <div class="loginpage-panel">
+      <div class="loginpage-card">
+        <div class="loginpage-card-head">
+          <h2 class="loginpage-card-title">Đăng nhập</h2>
+          <p class="loginpage-card-sub">Nhập thông tin tài khoản được cấp để truy cập hệ thống.</p>
+        </div>
+
+        <form onsubmit="event.preventDefault(); login();">
+          <div class="loginpage-field">
+            <label for="txtUser">Tên đăng nhập</label>
+            <div class="loginpage-input-wrap">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><circle cx="12" cy="8" r="3.5"/><path d="M4.5 20c1.4-3.6 4.4-5.5 7.5-5.5s6.1 1.9 7.5 5.5"/></svg>
+              <input id="txtUser" type="text" autocomplete="username" placeholder="Tên đăng nhập">
+            </div>
+          </div>
+          <div class="loginpage-field">
+            <label for="txtPass">Mật khẩu</label>
+            <div class="loginpage-input-wrap">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><rect x="5" y="10.5" width="14" height="9.5" rx="2"/><path d="M8 10.5V8a4 4 0 0 1 8 0v2.5"/></svg>
+              <input id="txtPass" type="password" autocomplete="current-password" placeholder="••••••••">
+            </div>
+          </div>
+
+          <button id="btnLogin" type="submit" class="loginpage-btn">
+            Đăng nhập
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+          </button>
+        </form>
+
+        <div class="loginpage-card-foot">Quên mật khẩu hoặc chưa có tài khoản? Liên hệ Phòng Hành chính / IT.</div>
+      </div>
     </div>
-    <div>
-      <label class="block text-xs font-semibold text-gray-600 mb-1">Mật khẩu</label>
-      <input id="txtPass" type="password" autocomplete="current-password" class="w-full border p-2 rounded text-sm focus:outline-none focus:border-blue-500">
-    </div>
-    <button id="btnLogin" onclick="login()" class="w-full bg-blue-600 text-white p-2 rounded font-bold hover:bg-blue-700 transition">Đăng Nhập</button>
   </div>
 
   <!-- Màn hình Dashboard (Đợt C) — trang chủ cá nhân hoá sau đăng nhập: thẻ thống kê "cần bạn xử lý"
