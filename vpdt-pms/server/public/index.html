@@ -3171,6 +3171,7 @@ table { display: block; overflow-x: auto; max-width: 100%; }
       <span id="viewModalFooterInfo" class="text-gray-500 italic"></span>
       <div class="flex gap-2">
         <button id="viewModalPrintBtn" onclick="printViewModalContent()" class="bg-blue-600 text-white px-4 py-1.5 rounded font-bold hover:bg-blue-700">🖨️ In</button>
+        <button id="viewModalWordPrintBtn" onclick="printWordWithWatermark()" class="hidden bg-blue-600 text-white px-4 py-1.5 rounded font-bold hover:bg-blue-700">🖨️ In có watermark</button>
         <button onclick="closeViewDocModal()" class="bg-gray-600 text-white px-5 py-1.5 rounded font-bold hover:bg-gray-700">Đóng</button>
       </div>
     </div>
@@ -3988,6 +3989,10 @@ let expandedContractFamilies = new Set();
 let currentProcessingSubId = null;
 let currentProcessingCarId = null;
 let currentProcessingOfficeId = null;
+// Tệp .docx đang mở trong Khung Xem Bảo Vệ (nếu có) — dùng cho nút "In có watermark" (xem
+// printWordWithWatermark() ở script cuối trang), reset về null mỗi lần openFileProtectedView() xử lý 1
+// tệp KHÔNG phải Word để nút không vô tình dùng nhầm tệp của lượt xem trước.
+let currentWordPrintFile = null;
 // Danh sách hạng mục của phiếu Đề Nghị Mua Sắm đang nhập (theo Mẫu BM-TS01) — reset mỗi khi
 // submit thành công hoặc chuyển sang phân hệ Mua Sắm.
 let officeItems = [];
@@ -7349,7 +7354,7 @@ function downloadDocFile(id) {
   const doc = DB.docs.find(d => d.id === id);
   if (!doc) return;
   const a = document.createElement('a');
-  a.href = doc.fileUrl || doc.fileData;
+  a.href = attachmentDownloadUrl(doc.fileUrl, doc.fileData, doc.fileName || doc.code);
   a.download = doc.fileName || doc.code;
   document.body.appendChild(a);
   a.click();
@@ -7555,10 +7560,28 @@ function getFileKind(fileType, fileName) {
   return 'other';
 }
 
-// Tên pháp nhân đầy đủ hiển thị ở dòng 2 của watermark chống lộ tài liệu (áp dụng cho MỌI tệp đính kèm
-// xem qua Protected View — Tài liệu, Hợp đồng, Văn bản trình, Xe, Văn phòng, Biên bản...), tách riêng
-// dòng "PROTECTED VIEW - tên người xem" động theo từng người ở trên.
-const PROTECTED_VIEW_WATERMARK_COMPANY = 'CÔNG TY TNHH XUẤT NHẬP KHẨU & BÁN LẺ HÀNG TIÊU DÙNG HÀ NỘI';
+// Chữ watermark DUY NHẤT hiển thị khi xem tệp đính kèm qua Protected View (áp dụng cho MỌI tệp — Tài
+// liệu, Hợp đồng, Văn bản trình, Xe, Văn phòng, Biên bản...) — 1 dòng, đặt cố định ở góc dưới-trái mỗi
+// trang/khung xem, cỡ chữ nhỏ (~13px), KHÔNG kèm tên người xem (trước đây có dòng "PROTECTED VIEW - tên
+// người xem" phía trên, đã bỏ theo yêu cầu chỉ giữ đúng 1 dòng tên hệ thống).
+const PROTECTED_VIEW_WATERMARK_COMPANY = 'Hệ thống văn phòng số Công ty HCRC';
+// Style dùng chung cho mọi nơi vẽ watermark ở góc dưới-trái (Protected View) — cỡ chữ vừa (13px), màu
+// xám nhạt không chói mắt nhưng vẫn đủ rõ để nhận diện, không chặn thao tác/không chọn được text.
+const PROTECTED_VIEW_WATERMARK_STYLE = 'position:absolute;left:10px;bottom:6px;font-size:13px;font-weight:600;color:rgba(110,110,110,0.55);white-space:nowrap;pointer-events:none;user-select:none;z-index:5;';
+
+// Trả về URL TẢI THẬT cho 1 tệp đính kèm — khác fileUrl thô dùng để XEM (openFileProtectedView/mammoth/
+// exceljs vẫn fetch thẳng /uploads/... như cũ, không qua đây, để giữ tốc độ xem không tốn thêm xử lý
+// server). Mọi lượt TẢI (nút "⬇️ Tải"/action-dropdown "download") phải qua route dùng chung này —
+// server tự đóng dấu watermark nếu là PDF, còn lại (Word/Excel/ảnh...) trả nguyên vẹn (xem
+// routes/download.js). Bản ghi CŨ còn base64 nhúng sẵn (fileData, không có fileUrl trên server) không
+// có đường đi qua server nên vẫn tải thẳng như trước — không có watermark (giới hạn đã biết với số ít
+// bản ghi cũ còn sót lại từ trước khi chuyển sang lưu file vật lý).
+function attachmentDownloadUrl(fileUrl, fileData, fileName) {
+  if (fileUrl && fileUrl.startsWith('/uploads/')) {
+    return `/api/files/download?fileUrl=${encodeURIComponent(fileUrl)}&name=${encodeURIComponent(fileName || '')}`;
+  }
+  return fileUrl || fileData;
+}
 
 // Dựng HTML khung xem Protected View cho 1 tệp — dùng cho ảnh / định dạng văn phòng / khác. PDF
 // KHÔNG còn đi qua hàm này (xem openFileProtectedView + renderPdfProtected ở script type="module"
@@ -7571,18 +7594,12 @@ function buildProtectedViewerHTML(fileSrc, fileType, fileName, altLabel) {
   const kind = getFileKind(fileType, fileName);
 
   if (kind === 'image') {
-    // Watermark động (tên người xem hiện tại) đè lên ảnh, cùng kiểu chữ xoay -30° như renderPdfProtected()
-    // dùng cho PDF — trước đây nhánh ảnh KHÔNG có watermark, là lỗ hổng vì ảnh scan (hợp đồng/giấy phép
-    // chụp ảnh...) xem được nguyên vẹn không dấu vết nếu chụp lại màn hình.
+    // Watermark đè lên ảnh ở góc dưới-trái — trước đây nhánh ảnh KHÔNG có watermark, là lỗ hổng vì ảnh
+    // scan (hợp đồng/giấy phép chụp ảnh...) xem được nguyên vẹn không dấu vết nếu chụp lại màn hình.
     return `
       <div class="relative flex flex-col items-center justify-center p-4 w-full protected-view-container" oncontextmenu="return false;">
         <img src="${fileSrc}" alt="${escapeHtml(altLabel || '')}" class="max-h-[65vh] max-w-full rounded border shadow-md object-contain pointer-events-none select-none" oncontextmenu="return false;" />
-        <div class="absolute inset-0 flex items-center justify-center pointer-events-none select-none overflow-hidden">
-          <div class="text-center" style="transform: rotate(-30deg);">
-            <div class="text-2xl font-bold whitespace-nowrap" style="color: rgba(120,120,120,0.35);">PROTECTED VIEW - ${escapeHtml(currentUser.name)}</div>
-            <div class="text-sm font-semibold whitespace-nowrap" style="color: rgba(120,120,120,0.35);">${escapeHtml(PROTECTED_VIEW_WATERMARK_COMPANY)}</div>
-          </div>
-        </div>
+        <div style="${PROTECTED_VIEW_WATERMARK_STYLE}">${escapeHtml(PROTECTED_VIEW_WATERMARK_COMPANY)}</div>
       </div>
     `;
   }
@@ -7608,6 +7625,7 @@ function openFileProtectedView({ title, sub, footerInfo, fileSrc, fileType, file
   document.getElementById('viewModalSub').innerText = sub || '';
   document.getElementById('viewModalFooterInfo').innerText = footerInfo || '';
   document.getElementById('viewModalPrintBtn').classList.add('hidden');
+  document.getElementById('viewModalWordPrintBtn').classList.add('hidden');
 
   const container = document.getElementById('viewModalContent');
   const kind = fileSrc ? getFileKind(fileType, fileName) : null;
@@ -7617,7 +7635,7 @@ function openFileProtectedView({ title, sub, footerInfo, fileSrc, fileType, file
     const pdfContainer = container.firstElementChild;
     document.getElementById('viewDocModal').classList.remove('hidden');
     if (window.renderPdfProtected) {
-      window.renderPdfProtected(pdfContainer, fileSrc, `PROTECTED VIEW - ${currentUser.name}\n${PROTECTED_VIEW_WATERMARK_COMPANY}`);
+      window.renderPdfProtected(pdfContainer, fileSrc, PROTECTED_VIEW_WATERMARK_COMPANY);
     } else {
       pdfContainer.innerHTML = '<div class="p-6 text-center text-gray-500 text-sm">⏳ Đang tải bộ xem PDF...</div>';
     }
@@ -7633,6 +7651,12 @@ function openFileProtectedView({ title, sub, footerInfo, fileSrc, fileType, file
     container.innerHTML = `<div class="w-full h-[65vh] overflow-y-auto bg-gray-100 rounded protected-view-container" oncontextmenu="return false;"></div>`;
     const officeContainer = container.firstElementChild;
     document.getElementById('viewDocModal').classList.remove('hidden');
+    if (kind === 'word') {
+      // "In có watermark" — CHỈ áp dụng được cho .docx (mammoth chỉ đọc được định dạng OOXML/zip mới,
+      // KHÔNG đọc được .doc nhị phân đời cũ) — xem printWordWithWatermark() ở script cuối trang.
+      currentWordPrintFile = { fileSrc, fileName };
+      document.getElementById('viewModalWordPrintBtn').classList.remove('hidden');
+    }
     const renderFn = kind === 'word' ? window.renderWordProtected : window.renderExcelProtected;
     if (renderFn) {
       renderFn(officeContainer, fileSrc);
@@ -7664,12 +7688,7 @@ function viewDoc(docId) {
     fileSrc, fileType: doc.fileType, fileName: doc.fileName,
     noFileFallbackHTML: `
       <div class="w-full h-[60vh] bg-white p-6 rounded shadow border overflow-y-auto relative protected-view-container" oncontextmenu="return false;">
-        <div class="absolute inset-0 flex items-center justify-center pointer-events-none opacity-10 text-gray-500 transform -rotate-45 select-none text-center">
-          <div>
-            <div class="font-bold text-4xl whitespace-nowrap">PROTECTED VIEW - ${escapeHtml(currentUser.name)}</div>
-            <div class="font-bold text-xl whitespace-nowrap">${escapeHtml(PROTECTED_VIEW_WATERMARK_COMPANY)}</div>
-          </div>
-        </div>
+        <div style="${PROTECTED_VIEW_WATERMARK_STYLE}">${escapeHtml(PROTECTED_VIEW_WATERMARK_COMPANY)}</div>
         <h4 class="font-bold text-lg text-gray-800 border-b pb-2 mb-4">${escapeHtml(doc.title)} (${escapeHtml(doc.code)})</h4>
         <div class="text-sm text-gray-700 space-y-3">
           <p><b>Phòng ban:</b> ${escapeHtml(doc.dept)}</p>
@@ -8284,10 +8303,15 @@ function downloadAllSubmissionFiles(subId) {
   }
 
   const files = [];
-  const subFileSrc = sub.fileUrl || sub.fileData;
-  if (subFileSrc) files.push({ url: subFileSrc, name: sub.fileName || sub.code });
+  if (sub.fileUrl || sub.fileData) {
+    const name = sub.fileName || sub.code;
+    files.push({ url: attachmentDownloadUrl(sub.fileUrl, sub.fileData, name), name });
+  }
   (sub.extraFiles || []).forEach((ef, idx) => {
-    if (ef.fileUrl) files.push({ url: ef.fileUrl, name: ef.fileName || `${sub.code}-${idx + 1}` });
+    if (ef.fileUrl) {
+      const name = ef.fileName || `${sub.code}-${idx + 1}`;
+      files.push({ url: attachmentDownloadUrl(ef.fileUrl, null, name), name });
+    }
   });
 
   if (files.length === 0) return alert('Văn bản trình này chưa có tệp đính kèm nào để tải.');
@@ -8339,7 +8363,7 @@ function openProcessSubmissionModal(subId) {
         <div class="flex gap-1">
           <button type="button" onclick="viewSubmissionAttachment(${sub.id})" class="px-2 py-1 bg-blue-600 text-white rounded text-[11px] font-bold hover:bg-blue-700">👁️ Xem</button>
           ${canDL
-            ? `<a href="${subFileSrc}" download="${escapeHtml(sub.fileName || sub.code)}" class="px-2 py-1 bg-slate-600 text-white rounded text-[11px] font-bold hover:bg-slate-700">⬇️ Tải</a>`
+            ? `<a href="${attachmentDownloadUrl(sub.fileUrl, sub.fileData, sub.fileName || sub.code)}" download="${escapeHtml(sub.fileName || sub.code)}" class="px-2 py-1 bg-slate-600 text-white rounded text-[11px] font-bold hover:bg-slate-700">⬇️ Tải</a>`
             : `<span class="text-[11px] text-gray-400 italic">Không có quyền tải tệp</span>`}
         </div>
       </div>
@@ -8353,7 +8377,7 @@ function openProcessSubmissionModal(subId) {
         <div class="flex gap-1 shrink-0">
           <button type="button" onclick="viewSubmissionExtraFile(${sub.id}, ${idx})" class="px-2 py-1 bg-blue-600 text-white rounded text-[11px] font-bold hover:bg-blue-700">👁️ Xem</button>
           ${canDL
-            ? `<a href="${ef.fileUrl}" download="${escapeHtml(ef.fileName || `${sub.code}-${idx + 1}`)}" class="px-2 py-1 bg-slate-600 text-white rounded text-[11px] font-bold hover:bg-slate-700">⬇️ Tải</a>`
+            ? `<a href="${attachmentDownloadUrl(ef.fileUrl, null, ef.fileName || `${sub.code}-${idx + 1}`)}" download="${escapeHtml(ef.fileName || `${sub.code}-${idx + 1}`)}" class="px-2 py-1 bg-slate-600 text-white rounded text-[11px] font-bold hover:bg-slate-700">⬇️ Tải</a>`
             : `<span class="text-[11px] text-gray-400 italic">Không có quyền tải tệp</span>`}
         </div>
       </div>
@@ -10645,7 +10669,7 @@ function runContractAction(id, action) {
       const c = DB.contracts.find(x => x.id === id);
       if (!c) return;
       const a = document.createElement('a');
-      a.href = c.fileUrl || c.fileData;
+      a.href = attachmentDownloadUrl(c.fileUrl, c.fileData, c.fileName || c.code);
       a.download = c.fileName || c.code;
       document.body.appendChild(a);
       a.click();
@@ -11235,12 +11259,7 @@ function viewContract(contractId) {
     fileSrc, fileType: c.fileType, fileName: c.fileName,
     noFileFallbackHTML: `
       <div class="w-full h-[60vh] bg-white p-6 rounded shadow border overflow-y-auto relative protected-view-container" oncontextmenu="return false;">
-        <div class="absolute inset-0 flex items-center justify-center pointer-events-none opacity-10 text-gray-500 transform -rotate-45 select-none text-center">
-          <div>
-            <div class="font-bold text-4xl whitespace-nowrap">PROTECTED VIEW - ${escapeHtml(currentUser.name)}</div>
-            <div class="font-bold text-xl whitespace-nowrap">${escapeHtml(PROTECTED_VIEW_WATERMARK_COMPANY)}</div>
-          </div>
-        </div>
+        <div style="${PROTECTED_VIEW_WATERMARK_STYLE}">${escapeHtml(PROTECTED_VIEW_WATERMARK_COMPANY)}</div>
         <h4 class="font-bold text-lg text-gray-800 border-b pb-2 mb-4">${escapeHtml(c.title)} (${escapeHtml(c.code)})</h4>
         <div class="text-sm text-gray-700 space-y-3">
           <p><b>Đối tác:</b> ${escapeHtml(c.partner)}</p>
@@ -18561,16 +18580,8 @@ function rejectInternalPostAction(id) {
 
         if (watermarkText) {
           const wm = document.createElement('div');
-          wm.className = 'absolute inset-0 flex items-center justify-center pointer-events-none select-none overflow-hidden';
-          const box = document.createElement('div');
-          box.style.cssText = 'transform: rotate(-30deg); text-align: center;';
-          watermarkText.split('\n').forEach((line, idx) => {
-            const lineEl = document.createElement('div');
-            lineEl.style.cssText = `font-size: ${idx === 0 ? '2rem' : '1rem'}; font-weight: 700; color: rgba(120,120,120,0.18); white-space: nowrap;`;
-            lineEl.textContent = line;
-            box.appendChild(lineEl);
-          });
-          wm.appendChild(box);
+          wm.style.cssText = PROTECTED_VIEW_WATERMARK_STYLE;
+          wm.textContent = watermarkText;
           pageWrap.appendChild(wm);
         }
 
@@ -18614,16 +18625,8 @@ function rejectInternalPostAction(id) {
 
   function buildOfficeWatermarkOverlayEl() {
     const wm = document.createElement('div');
-    wm.className = 'absolute inset-0 flex items-center justify-center pointer-events-none select-none overflow-hidden';
-    const box = document.createElement('div');
-    box.style.cssText = 'transform: rotate(-30deg); text-align: center;';
-    [`PROTECTED VIEW - ${currentUser.name}`, PROTECTED_VIEW_WATERMARK_COMPANY].forEach((line, idx) => {
-      const lineEl = document.createElement('div');
-      lineEl.style.cssText = `font-size: ${idx === 0 ? '2rem' : '1rem'}; font-weight: 700; color: rgba(120,120,120,0.18); white-space: nowrap;`;
-      lineEl.textContent = line;
-      box.appendChild(lineEl);
-    });
-    wm.appendChild(box);
+    wm.style.cssText = PROTECTED_VIEW_WATERMARK_STYLE;
+    wm.textContent = PROTECTED_VIEW_WATERMARK_COMPANY;
     return wm;
   }
 
@@ -18645,6 +18648,97 @@ function rejectInternalPostAction(id) {
       wrap.appendChild(buildOfficeWatermarkOverlayEl());
     } catch (err) {
       container.innerHTML = `<div class="p-6 text-center text-red-600 text-sm">⛔ Không xem được file Word này: ${err.message}<br><span class="text-gray-500 text-xs">Có thể do file .doc đời cũ hoặc file bị lỗi — vui lòng dùng nút "⬇️ Tải" để tải về.</span></div>`;
+    }
+  };
+
+  // "In có watermark" cho file Word (.docx) — CHỈ áp dụng được cho .docx vì mammoth chỉ đọc được OOXML
+  // (không đọc được .doc nhị phân đời cũ, nút này bị ẩn với .doc — xem openFileProtectedView()). Do
+  // Word không có cách "đóng dấu trực tiếp lên file gốc" như PDF (không có thư viện dựng lại đúng layout
+  // Word phía server mà không cần LibreOffice), giải pháp ở đây là DỰNG LẠI nội dung thành PDF mới có
+  // watermark: mammoth (docx -> HTML) -> html2canvas (chụp toàn bộ nội dung thành 1 ảnh dài) -> cắt ảnh
+  // theo chiều cao 1 trang A4 -> ghép từng lát vào PDF nhiều trang bằng jsPDF (cùng kỹ thuật với
+  // downloadPrPdf() ở Báo Cáo Định Kỳ). Chữ watermark được vẽ bằng Canvas 2D (ctx.fillText, đúng font hệ
+  // thống, hỗ trợ tiếng Việt có dấu đầy đủ) rồi rasterize CÙNG với ảnh nội dung mỗi trang trước khi
+  // addImage — nếu vẽ watermark bằng doc.text() thẳng trong jsPDF thì bị lỗi (font chuẩn của jsPDF chỉ hỗ
+  // trợ bảng mã WinAnsi, không có tiếng Việt có dấu). ĐÁNH ĐỔI ĐÃ BÁO TRƯỚC: PDF dựng lại có thể không
+  // giống 100% bản Word gốc (ngắt trang có thể lệch vài dòng, không giữ được mọi định dạng phức tạp).
+  const WORD_PDF_PAGE_W = 794;  // A4 @ 96dpi (px)
+  const WORD_PDF_PAGE_H = 1123;
+  const WORD_PDF_MARGIN = 40;
+  const WORD_PDF_CAPTURE_SCALE = 2; // nét chữ/ảnh khi in — cũng dùng làm hệ số quy đổi canvas trang <-> canvas nội dung để dán ảnh 1:1, không cần tính lại tỉ lệ.
+
+  window.printWordWithWatermark = async function() {
+    const info = currentWordPrintFile;
+    if (!info || !info.fileSrc) return;
+    const btn = document.getElementById('viewModalWordPrintBtn');
+    const originalLabel = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = '⏳ Đang dựng PDF...';
+
+    const stage = document.createElement('div');
+    try {
+      await Promise.all([
+        loadVendorScript('/vendor/mammoth/mammoth.browser.min.js'),
+        loadVendorScript('/vendor/html2canvas/html2canvas.min.js'),
+        loadVendorScript('/vendor/jspdf/jspdf.umd.min.js')
+      ]);
+
+      const res = await fetch(info.fileSrc);
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      const arrayBuffer = await res.arrayBuffer();
+      const result = await window.mammoth.convertToHtml({ arrayBuffer });
+
+      const contentWidth = WORD_PDF_PAGE_W - WORD_PDF_MARGIN * 2;
+      stage.className = 'word-view-content';
+      stage.style.cssText = `position:fixed;left:-10000px;top:0;width:${contentWidth}px;background:#fff;color:#111;box-sizing:border-box;font-family:Arial,'Segoe UI',sans-serif;font-size:14px;line-height:1.5;`;
+      stage.innerHTML = result.value;
+      document.body.appendChild(stage);
+
+      const imgs = Array.from(stage.querySelectorAll('img'));
+      await Promise.all(imgs.map(img => img.complete ? Promise.resolve() : new Promise(r => { img.onload = img.onerror = r; })));
+
+      const bigCanvas = await window.html2canvas(stage, { backgroundColor: '#ffffff', scale: WORD_PDF_CAPTURE_SCALE, useCORS: true, logging: false });
+
+      const { jsPDF } = window.jspdf;
+      const doc = new jsPDF({ orientation: 'portrait', unit: 'px', format: [WORD_PDF_PAGE_W, WORD_PDF_PAGE_H], compress: true });
+
+      const pageCanvasW = WORD_PDF_PAGE_W * WORD_PDF_CAPTURE_SCALE;
+      const pageCanvasH = WORD_PDF_PAGE_H * WORD_PDF_CAPTURE_SCALE;
+      const marginPx = WORD_PDF_MARGIN * WORD_PDF_CAPTURE_SCALE;
+      const sliceH = (WORD_PDF_PAGE_H - WORD_PDF_MARGIN * 2) * WORD_PDF_CAPTURE_SCALE;
+      const totalPages = Math.min(300, Math.max(1, Math.ceil(bigCanvas.height / sliceH)));
+
+      for (let i = 0; i < totalPages; i++) {
+        const pageCanvas = document.createElement('canvas');
+        pageCanvas.width = pageCanvasW;
+        pageCanvas.height = pageCanvasH;
+        const ctx = pageCanvas.getContext('2d');
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(0, 0, pageCanvasW, pageCanvasH);
+
+        const thisSliceH = Math.min(sliceH, bigCanvas.height - i * sliceH);
+        if (thisSliceH > 0) {
+          ctx.drawImage(bigCanvas, 0, i * sliceH, bigCanvas.width, thisSliceH, marginPx, marginPx, bigCanvas.width, thisSliceH);
+        }
+
+        ctx.font = `${13 * WORD_PDF_CAPTURE_SCALE}px Arial, "Segoe UI", sans-serif`;
+        ctx.fillStyle = 'rgba(110,110,110,0.75)';
+        ctx.textBaseline = 'alphabetic';
+        ctx.fillText(PROTECTED_VIEW_WATERMARK_COMPANY, 14 * WORD_PDF_CAPTURE_SCALE, (WORD_PDF_PAGE_H - 14) * WORD_PDF_CAPTURE_SCALE);
+
+        const imgData = pageCanvas.toDataURL('image/jpeg', 0.92);
+        if (i > 0) doc.addPage([WORD_PDF_PAGE_W, WORD_PDF_PAGE_H], 'portrait');
+        doc.addImage(imgData, 'JPEG', 0, 0, WORD_PDF_PAGE_W, WORD_PDF_PAGE_H);
+      }
+
+      const safeName = (info.fileName || 'TaiLieu').replace(/\.docx?$/i, '').replace(/[\\/:*?"<>|]+/g, '_');
+      doc.save(`${safeName}_watermark.pdf`);
+    } catch (err) {
+      alert('⛔ Không tạo được PDF có watermark: ' + err.message);
+    } finally {
+      stage.remove();
+      btn.disabled = false;
+      btn.innerHTML = originalLabel;
     }
   };
 
