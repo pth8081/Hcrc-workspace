@@ -6,7 +6,7 @@ const router = express.Router();
 const { requireAuth, blockIfMustChangePassword } = require('../lib/auth');
 const { HttpError } = require('../lib/httpErrors');
 const recordActions = require('../lib/recordActions');
-const { insertTask, withLockedTaskById, deleteTaskById, getAllTasks } = require('../lib/taskStore');
+const { insertTask, withLockedTaskById, deleteTaskById, getAllTasks, migrateDirectiveTaskLinks } = require('../lib/taskStore');
 const { createForCollection, withLockedRecordForCollection, deleteRecordForCollection, getAllForCollection } = require('../lib/recordStore');
 
 router.use(requireAuth, blockIfMustChangePassword);
@@ -209,9 +209,19 @@ router.post('/minutes/:id/edit', async (req, res) => {
   if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
   try {
     const { freshUser } = await getFreshUser(req);
-    const result = await withLockedRecordForCollection('meetingMinutes', itemId, (item) =>
-      recordActions.editMinutes(req.body, freshUser, item)
-    );
+    // editMinutes() trả kèm "directiveIdMigrations" (không thuộc bản ghi biên bản) khi 1 dòng chỉ đạo
+    // cũ (biên bản tạo trước tính năng id ổn định) lần đầu được bù id trong khi ĐÃ có Công Việc tham
+    // chiếu theo vị trí — tách field này ra trước khi coi phần còn lại là bản ghi cần lưu, rồi đồng bộ
+    // lại Task NGAY SAU khi lưu biên bản thành công (2 bảng khác nhau nên không chung 1 giao dịch được).
+    let directiveIdMigrations = [];
+    const result = await withLockedRecordForCollection('meetingMinutes', itemId, (item) => {
+      const { directiveIdMigrations: migrations, ...updated } = recordActions.editMinutes(req.body, freshUser, item);
+      directiveIdMigrations = migrations;
+      return updated;
+    });
+    if (directiveIdMigrations.length) {
+      await migrateDirectiveTaskLinks(result.code, directiveIdMigrations);
+    }
     res.json({ ok: true, item: result });
   } catch (err) {
     handleError(res, `minutes/${req.params.id}/edit`, err);

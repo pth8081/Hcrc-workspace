@@ -266,18 +266,30 @@ function editMinutes(payload, user, minutes) {
   // Dòng chỉ đạo đã "Giao việc" (taskCreated=true) đã sinh ra 1 Công Việc THẬT (buildTasksFromDirectives()
   // ở trên) — hệ thống KHÔNG có cơ chế đồng bộ lại Công Việc khi biên bản đổi sau đó, nên PHẢI giữ
   // nguyên nội dung/người thực hiện của dòng đó (kể cả Admin), tránh Công Việc bị lệch khỏi biên bản.
-  // Chỉ đạo cũ không có id ổn định (biên bản tạo trước khi có tính năng này) khớp theo VỊ TRÍ trong
-  // mảng, khớp đúng quy ước ở resolveDirectiveAttendeeServer()/buildTasksFromDirectives() phía trên.
+  // Chỉ đạo ĐÃ có id ổn định từ trước -> tra theo ĐÚNG id đó (vị trí có thể đổi nếu dòng khác bị xoá/
+  // chèn). Chỉ đạo cũ CHƯA có id (biên bản tạo trước khi có tính năng này) -> tra theo ĐÚNG vị trí cũ,
+  // khớp quy ước Task.sourceDirectiveId đã sinh ra ở buildTasksFromDirectives() phía trên — KHÔNG được
+  // so khớp bằng 1 khoá "id nếu có, else vị trí" tính LẠI trên cả 2 phía (bug cũ): phía mới thường đã tự
+  // bù id ổn định ngay khi mở Sửa (xem openEditMeetingMinutes() ở index.html) dù phía cũ chưa từng có,
+  // khiến khoá 2 bên lệch nhau ngay cả khi không ai đổi gì, và bị từ chối lưu như thể đang xoá dòng đó.
+  const directiveIdMigrations = [];
   if (payload.directives !== undefined) {
-    const directiveKey = (d, idx) => (d.id != null ? `id:${d.id}` : `idx:${idx}`);
     const newDirectives = Array.isArray(payload.directives) ? payload.directives : [];
-    const newByKey = new Map(newDirectives.map((d, idx) => [directiveKey(d, idx), d]));
+    const newById = new Map(newDirectives.filter(d => d.id != null).map(d => [d.id, d]));
     (minutes.directives || []).forEach((old, idx) => {
       if (!old.taskCreated) return;
-      const next = newByKey.get(directiveKey(old, idx));
+      const next = old.id != null ? newById.get(old.id) : newDirectives[idx];
       if (!next) throw new HttpError(409, 'Không thể xoá dòng chỉ đạo đã giao việc');
       if (next.content !== old.content || next.assignedToAttendeeId !== old.assignedToAttendeeId) {
         throw new HttpError(409, 'Không thể sửa nội dung/người thực hiện của dòng chỉ đạo đã giao việc');
+      }
+      // Chỉ đạo lần đầu được bù id ổn định (old.id null -> next.id có giá trị) trong khi ĐÃ có Công Việc
+      // tham chiếu theo VỊ TRÍ cũ -> phải viết lại Task.sourceDirectiveId sang id mới (xem
+      // migrateDirectiveTaskLinks() ở lib/taskStore.js, route gọi ngay sau khi lưu biên bản thành công).
+      // Không migrate thì "Xem chi tiết" (index.html, tra theo d.id nếu có, else vị trí) đổi sang tra
+      // theo id ngay từ lần sửa này trong khi Task vẫn giữ vị trí cũ -> mất liên kết vĩnh viễn.
+      if (old.id == null && next.id != null) {
+        directiveIdMigrations.push({ oldSourceDirectiveId: idx, newSourceDirectiveId: next.id });
       }
     });
   }
@@ -287,7 +299,9 @@ function editMinutes(payload, user, minutes) {
   }
   minutes.lastEditedBy = user.username;
   minutes.lastEditedAt = nowVN();
-  return minutes;
+  // "directiveIdMigrations" chỉ để route đọc và đồng bộ Task ngay sau khi lưu — KHÔNG thuộc bản ghi
+  // biên bản, route phải tách field này ra trước khi coi phần còn lại là bản ghi cần lưu.
+  return { ...minutes, directiveIdMigrations };
 }
 
 function assertCanDeleteMinutes(user, minutes) {

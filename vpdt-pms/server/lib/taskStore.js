@@ -127,4 +127,34 @@ async function migrateLegacyTasks() {
   console.log(`   ↳ Đã di chuyển ${legacy.length} công việc cũ sang bảng Tasks.`);
 }
 
-module.exports = { getAllTasks, insertTask, withLockedTaskById, deleteTaskById, migrateLegacyTasks };
+// Tìm 1 Công việc theo sourceType/sourceCode/sourceDirectiveId (không phải id thật của Task) — dùng để
+// đồng bộ lại Task.sourceDirectiveId khi Biên Bản Họp bù id ổn định lần đầu cho 1 dòng chỉ đạo ĐANG có
+// Task tham chiếu theo vị trí cũ (xem migrateDirectiveTaskLinks() bên dưới + editMinutes() ở
+// lib/recordActions.js). Lọc trước bằng 2 cột đã đánh index (SourceType/SourceCode) rồi so
+// sourceDirectiveId ở tầng ứng dụng — số Công việc của riêng 1 biên bản luôn rất ít.
+async function findTaskBySource(sourceType, sourceCode, sourceDirectiveId) {
+  const pool = await getPool();
+  const result = await pool.request()
+    .input('sourceType', sql.NVarChar(30), sourceType)
+    .input('sourceCode', sql.NVarChar(100), sourceCode)
+    .query('SELECT Payload FROM dbo.Tasks WHERE SourceType = @sourceType AND SourceCode = @sourceCode');
+  const tasks = result.recordset.map(toTask);
+  return tasks.find(t => t.sourceDirectiveId === sourceDirectiveId) || null;
+}
+
+// Viết lại Task.sourceDirectiveId sang id mới NGAY sau khi Biên Bản Họp bù id ổn định lần đầu cho 1
+// dòng chỉ đạo cũ (biên bản tạo trước tính năng này) — không migrate thì "Xem chi tiết" (index.html, tra
+// theo d.id nếu có, else vị trí) mất liên kết vĩnh viễn ngay từ lần sửa đó. Không tìm thấy Task (đã bị
+// xoá riêng) thì bỏ qua, không có gì để đồng bộ lại.
+async function migrateDirectiveTaskLinks(minutesCode, migrations) {
+  for (const { oldSourceDirectiveId, newSourceDirectiveId } of migrations || []) {
+    const task = await findTaskBySource('MEETING_MINUTES', minutesCode, oldSourceDirectiveId);
+    if (!task) continue;
+    await withLockedTaskById(task.id, (t) => ({ ...t, sourceDirectiveId: newSourceDirectiveId }));
+  }
+}
+
+module.exports = {
+  getAllTasks, insertTask, withLockedTaskById, deleteTaskById, migrateLegacyTasks,
+  findTaskBySource, migrateDirectiveTaskLinks
+};
