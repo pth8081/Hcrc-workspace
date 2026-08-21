@@ -939,9 +939,21 @@ table { display: block; overflow-x: auto; max-width: 100%; }
           <label class="block font-semibold text-gray-600 mb-1">Loại Thao Tác</label>
           <select id="contractOpMode" onchange="onContractOpModeChange()" class="w-full md:w-64 border p-1.5 rounded bg-white font-semibold"></select>
         </div>
-        <div id="contractAddendumTargetWrap" class="hidden">
+        <!-- Đổi từ <select> gốc sang nút + bảng chọn tự dựng (cùng khuôn contractApprovalDropdownBtn/Panel
+             bên dưới) — 1 số trình duyệt di động lẫn desktop thỉnh thoảng không mở được popup <select>
+             gốc ngay khi phần tử vừa hiện ra (đổi từ hidden sang hiện trong cùng 1 lượt xử lý sự kiện
+             "Loại Thao Tác"), khiến người dùng bấm vào ô "Chọn Hợp Đồng..." mà không phản hồi — dựng bằng
+             div/button tự xử lý click hoàn toàn trong JS thì không còn phụ thuộc popup gốc của hệ điều
+             hành nữa. contractAddendumTarget vẫn còn (input ẩn) để giữ nguyên .value cho
+             onContractAddendumTargetChange()/submitContractReq() đọc, không phải sửa gì thêm ở 2 nơi đó. -->
+        <div id="contractAddendumTargetWrap" class="hidden relative">
           <label class="block font-semibold text-gray-600 mb-1">Chọn Hợp Đồng Để Bổ Sung Phụ Lục</label>
-          <select id="contractAddendumTarget" onchange="onContractAddendumTargetChange()" class="w-full border p-1.5 rounded bg-white"></select>
+          <input type="hidden" id="contractAddendumTarget" value="">
+          <button type="button" id="contractAddendumTargetBtn" onclick="toggleContractAddendumTargetDropdown(event)" class="w-full border p-1.5 rounded bg-white text-left flex justify-between items-center gap-1">
+            <span id="contractAddendumTargetLabel" class="text-gray-500 truncate">-- Chọn hợp đồng --</span>
+            <span class="text-gray-400 shrink-0">▾</span>
+          </button>
+          <div id="contractAddendumTargetPanel" class="hidden absolute z-20 mt-1 w-full bg-white border rounded shadow-lg max-h-72 overflow-y-auto"></div>
         </div>
         <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
           <div>
@@ -10214,6 +10226,7 @@ function onContractOpModeChange() {
   if (isAddendumMode) {
     populateContractAddendumTargets();
     document.getElementById('contractAddendumTarget').value = '';
+    updateContractAddendumTargetLabel();
     document.getElementById('contractCode').value = '';
     document.getElementById('contractTitle').value = '';
     document.getElementById('contractDept').value = '';
@@ -10242,18 +10255,68 @@ function refreshContractCodePreview() {
 // tạo hồ sơ hợp đồng cho đúng phòng ban đó (contractCreate scope, khớp getScope() ở
 // CREATE_MODULE_CONFIGS.contracts).
 function populateContractAddendumTargets() {
-  const sel = document.getElementById('contractAddendumTarget');
-  if (!sel) return;
-  const prevVal = sel.value;
+  const input = document.getElementById('contractAddendumTarget');
+  const panel = document.getElementById('contractAddendumTargetPanel');
+  if (!input || !panel) return;
+  const prevVal = input.value;
+  // Sắp theo Mã Hợp Đồng cho dễ dò tìm — trước đây để nguyên thứ tự DB.contracts (thứ tự tạo), danh
+  // sách dài dần theo thời gian sẽ càng khó lướt tìm đúng hợp đồng cần bổ sung phụ lục.
   const eligible = DB.contracts.filter(c =>
     !c.isAddendum && c.approvalStatus === 'APPROVED' &&
     (currentUser.perms?.admin || scopeAllows(currentUser, currentUser.perms?.contractCreate, c.dept))
-  );
-  sel.innerHTML = '<option value="">-- Chọn hợp đồng --</option>' + eligible.map(c =>
-    `<option value="${c.id}">${escapeHtml(c.code)} — ${escapeHtml(c.title)}</option>`
-  ).join('');
-  if (eligible.some(c => String(c.id) === prevVal)) sel.value = prevVal;
+  ).sort((a, b) => String(a.code).localeCompare(String(b.code)));
+
+  panel.innerHTML = eligible.map(c => `
+    <button type="button" onclick="selectContractAddendumTarget(${c.id})" class="w-full text-left px-2 py-1.5 text-xs hover:bg-cyan-50 rounded">
+      ${escapeHtml(c.code)} — ${escapeHtml(c.title)}
+    </button>
+  `).join('') || '<div class="px-2 py-1.5 text-xs text-gray-400 italic">Không có hợp đồng nào phù hợp.</div>';
+
+  if (eligible.some(c => String(c.id) === prevVal)) {
+    input.value = prevVal;
+  } else {
+    input.value = '';
+  }
+  updateContractAddendumTargetLabel();
 }
+
+function updateContractAddendumTargetLabel() {
+  const labelEl = document.getElementById('contractAddendumTargetLabel');
+  if (!labelEl) return;
+  const id = Number(document.getElementById('contractAddendumTarget')?.value);
+  const c = DB.contracts.find(x => x.id === id);
+  if (c) {
+    labelEl.textContent = `${c.code} — ${c.title}`;
+    labelEl.classList.remove('text-gray-500');
+    labelEl.classList.add('text-gray-800');
+  } else {
+    labelEl.textContent = '-- Chọn hợp đồng --';
+    labelEl.classList.add('text-gray-500');
+    labelEl.classList.remove('text-gray-800');
+  }
+}
+
+function toggleContractAddendumTargetDropdown(e) {
+  e.stopPropagation();
+  document.getElementById('contractAddendumTargetPanel')?.classList.toggle('hidden');
+}
+
+// Chọn 1 dòng trong bảng tự dựng -> ghi vào input ẩn contractAddendumTarget (giữ nguyên .value cho
+// onContractAddendumTargetChange()/submitContractReq() đọc, không đổi gì ở 2 nơi đó), cập nhật nhãn
+// hiển thị, đóng bảng, rồi chạy tiếp đúng logic khoá Mã/Phòng ban/Loại/Đối tác như trước.
+function selectContractAddendumTarget(id) {
+  document.getElementById('contractAddendumTarget').value = String(id);
+  updateContractAddendumTargetLabel();
+  document.getElementById('contractAddendumTargetPanel')?.classList.add('hidden');
+  onContractAddendumTargetChange();
+}
+
+document.addEventListener('click', (ev) => {
+  const panel = document.getElementById('contractAddendumTargetPanel');
+  const btn = document.getElementById('contractAddendumTargetBtn');
+  if (!panel || panel.classList.contains('hidden')) return;
+  if (!panel.contains(ev.target) && ev.target !== btn && !btn?.contains(ev.target)) panel.classList.add('hidden');
+});
 
 // Chọn xong hợp đồng cần bổ sung phụ lục -> khoá Mã/Phòng ban/Loại/Đối tác theo đúng hợp đồng gốc,
 // đề xuất sẵn mã phụ lục tiếp theo.
@@ -10449,6 +10512,7 @@ function openEditContract(contractId) {
 function cancelEditContract() {
   editingContractId = null;
   document.getElementById('contractForm').reset();
+  updateContractAddendumTargetLabel();
   document.getElementById('contractDept').disabled = false;
   document.getElementById('contractType').disabled = false;
   document.getElementById('contractFile').required = true;
