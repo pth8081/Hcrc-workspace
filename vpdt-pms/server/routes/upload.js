@@ -7,6 +7,7 @@ const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
 const rateLimit = require('express-rate-limit');
+const { getAppDataValueCached } = require('../lib/appData');
 
 const router = express.Router();
 
@@ -52,9 +53,10 @@ const upload = multer({
   }
 });
 
-// POST /api/upload  → nhận field "file", trả về thông tin để lưu vào collection JSON tương ứng
+// POST /api/upload  → nhận field "file" (+ field text "module" tuỳ chọn), trả về thông tin để lưu
+// vào collection JSON tương ứng
 router.post('/', uploadRateLimiter, (req, res) => {
-  upload.single('file')(req, res, (err) => {
+  upload.single('file')(req, res, async (err) => {
     if (err instanceof multer.MulterError) {
       if (err.code === 'LIMIT_FILE_SIZE') {
         return res.status(400).json({ error: `Tệp vượt quá dung lượng cho phép (${MAX_MB}MB)` });
@@ -63,6 +65,27 @@ router.post('/', uploadRateLimiter, (req, res) => {
     }
     if (err) return res.status(400).json({ error: err.message });
     if (!req.file) return res.status(400).json({ error: 'Thiếu tệp cần tải lên' });
+
+    // Kiểm tra riêng theo module (xem admin "Loại Tệp Cho Phép") — SAU khi ALLOWED_EXT (danh sách
+    // tổng, dùng ở fileFilter phía trên) đã chặn phần mở rộng nguy hiểm. Module chưa được cấu hình
+    // riêng (hoặc field "module" bỏ trống) thì coi như dùng nguyên danh sách tổng — không phá vỡ các
+    // chỗ gọi /api/upload cũ chưa gửi kèm "module".
+    const moduleKey = (req.body.module || '').trim();
+    if (moduleKey) {
+      try {
+        const config = await getAppDataValueCached('uploadFileTypeConfig');
+        const allowedForModule = config && config[moduleKey];
+        if (Array.isArray(allowedForModule) && allowedForModule.length) {
+          const ext = path.extname(req.file.originalname).toLowerCase();
+          if (!allowedForModule.includes(ext)) {
+            fs.unlink(req.file.path, () => {});
+            return res.status(400).json({ error: `Định dạng tệp không được phép cho mục này: ${ext || '(không rõ)'}` });
+          }
+        }
+      } catch (e) {
+        // Lỗi tra cứu cấu hình không được chặn tải lên bình thường — coi như module chưa cấu hình riêng.
+      }
+    }
 
     res.json({
       fileUrl: `/uploads/${req.file.filename}`,

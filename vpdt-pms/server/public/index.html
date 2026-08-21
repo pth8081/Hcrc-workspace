@@ -407,6 +407,7 @@ table { display: block; overflow-x: auto; max-width: 100%; }
           <button onclick="closeHeThongDropdown(); switchTab('system'); setSystemSubTab('ADMIN')" class="sidebar-subitem">⚙️ Quản Trị</button>
           <button onclick="closeHeThongDropdown(); switchTab('system'); setSystemSubTab('FORM')" class="sidebar-subitem">📋 Biểu Mẫu</button>
           <button onclick="closeHeThongDropdown(); switchTab('system'); setSystemSubTab('WORKFLOW')" class="sidebar-subitem">🔄 Quy Trình & Phê Duyệt</button>
+          <button onclick="closeHeThongDropdown(); switchTab('system'); setSystemSubTab('UPLOAD')" class="sidebar-subitem">📎 Loại Tệp</button>
           <button onclick="closeHeThongDropdown(); switchTab('system'); setSystemSubTab('LOG')" class="sidebar-subitem">📊 Log</button>
         </div>
       </div>
@@ -659,7 +660,7 @@ table { display: block; overflow-x: auto; max-width: 100%; }
 
         <select id="selDept" onchange="refreshDocCodePreview()" class="border p-2 rounded text-sm" required><option value="">-- Chọn Phòng Ban Trình --</option></select>
         <select id="selCat" onchange="refreshDocCodePreview()" class="border p-2 rounded text-sm" required><option value="">-- Chọn Phân Loại --</option></select>
-        <input id="docFile" type="file" accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,image/*" class="border p-1 bg-white rounded text-sm" required>
+        <input id="docFile" type="file" accept=".pdf,.docx,.xlsx" class="border p-1 bg-white rounded text-sm" required>
 
         <textarea id="docSummary" placeholder="Trích lục / Tóm tắt nội dung tài liệu..." class="md:col-span-3 border p-2 rounded text-sm h-16" required></textarea>
 
@@ -774,11 +775,11 @@ table { display: block; overflow-x: auto; max-width: 100%; }
           </div>
           <div class="md:col-span-2">
             <label class="block font-semibold text-gray-600 mb-1">Tờ Trình</label>
-            <input id="subFile" type="file" accept=".pdf,.doc,.docx,.xls,.xlsx,image/*" class="w-full border p-1 bg-white rounded">
+            <input id="subFile" type="file" accept=".pdf,.docx,.xlsx" class="w-full border p-1 bg-white rounded">
           </div>
           <div class="md:col-span-2">
             <label class="block font-semibold text-gray-600 mb-1">Tài Liệu Bổ Sung Theo Tờ Trình</label>
-            <input id="subExtraFiles" type="file" multiple accept=".pdf,.doc,.docx,.xls,.xlsx,image/*" class="w-full border p-1 bg-white rounded">
+            <input id="subExtraFiles" type="file" multiple accept=".pdf,.docx,.xlsx" class="w-full border p-1 bg-white rounded">
           </div>
         </div>
 
@@ -1002,7 +1003,7 @@ table { display: block; overflow-x: auto; max-width: 100%; }
           </div>
           <div class="md:col-span-3">
             <label class="block font-semibold text-gray-600 mb-1" id="contractFileLabel">Tệp Đính Kèm Hợp Đồng / Giấy Phép</label>
-            <input id="contractFile" type="file" accept=".pdf,.doc,.docx" class="w-full border p-1 bg-white rounded" required>
+            <input id="contractFile" type="file" accept=".pdf,.docx,.xlsx" class="w-full border p-1 bg-white rounded" required>
             <p id="contractFileEditHint" class="hidden text-[11px] text-gray-500 italic mt-1">Để trống nếu không muốn thay tệp đính kèm hiện tại.</p>
           </div>
         </div>
@@ -1650,7 +1651,7 @@ table { display: block; overflow-x: auto; max-width: 100%; }
       </div>
       <div>
         <label class="block font-semibold text-gray-600 mb-1">Tệp Đính Kèm (tuỳ chọn)</label>
-        <input id="internalFile" type="file" class="w-full border p-1.5 rounded bg-white">
+        <input id="internalFile" type="file" accept=".pdf,.docx,.xlsx" class="w-full border p-1.5 rounded bg-white">
       </div>
       <!-- Ghim lên trang chủ (Đợt E) — chỉ hiện cho Tin tức/Đào tạo/Khen thưởng, chỉ người có quyền
            internalPostApprove/admin mới thấy (toggle ẩn/hiện ở setInternalSubTab()/finishLogin()).
@@ -2197,7 +2198,7 @@ table { display: block; overflow-x: auto; max-width: 100%; }
     <div class="bg-white rounded-lg p-5 w-full max-w-md space-y-3">
       <h3 class="font-bold text-gray-800">📤 Tải Lên Tài Liệu Ký</h3>
       <p id="signedUploadSub" class="text-xs text-gray-500"></p>
-      <input id="signedUploadFile" type="file" accept=".pdf,.doc,.docx,image/*" class="w-full border p-1.5 bg-white rounded text-xs">
+      <input id="signedUploadFile" type="file" accept=".pdf,.docx,.xlsx" class="w-full border p-1.5 bg-white rounded text-xs">
       <div id="signedUploadDynamicFields" class="space-y-2"></div>
       <div class="flex justify-end gap-2 pt-1">
         <button onclick="closeSignedUploadModal()" class="bg-gray-200 text-gray-700 px-4 py-1.5 rounded text-xs font-bold hover:bg-gray-300">Hủy</button>
@@ -2364,6 +2365,7 @@ table { display: block; overflow-x: auto; max-width: 100%; }
       <button type="button" onclick="setSystemSubTab('ADMIN')" id="btnSystemSubAdmin" class="px-3 py-1.5 rounded text-xs font-bold bg-purple-700 text-white">⚙️ Quản Trị</button>
       <button type="button" onclick="setSystemSubTab('FORM')" id="btnSystemSubForm" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">📋 Biểu Mẫu</button>
       <button type="button" onclick="setSystemSubTab('WORKFLOW')" id="btnSystemSubWorkflow" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">🔄 Quy Trình & Phê Duyệt</button>
+      <button type="button" onclick="setSystemSubTab('UPLOAD')" id="btnSystemSubUpload" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">📎 Loại Tệp</button>
       <button type="button" onclick="setSystemSubTab('LOG')" id="btnSystemSubLog" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">📊 Log</button>
     </div>
   </div>
@@ -2587,6 +2589,10 @@ table { display: block; overflow-x: auto; max-width: 100%; }
           </div>
         </details>
 
+        <!-- Các khối 1-14 xếp dạng lưới 3 cột (desktop) — mỗi <details> tự co giãn theo nội dung riêng,
+             không phụ thuộc chiều cao khối bên cạnh (xem filterPermTree()/setAllPermTreeNodes() vẫn thao
+             tác trực tiếp trên .perm-tree-node nên không cần đổi gì thêm khi chuyển layout). -->
+        <div class="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-2 items-start">
         <details class="perm-tree-node bg-white rounded border text-xs">
           <summary class="flex items-center justify-between gap-2 px-3 py-2 hover:bg-gray-50 rounded">
             <span class="font-bold text-gray-800 text-sm flex items-center gap-1.5"><span class="perm-tree-chevron text-gray-400">▸</span><span>⚙️ 1. Hệ Thống & Chung</span></span>
@@ -2984,6 +2990,7 @@ table { display: block; overflow-x: auto; max-width: 100%; }
           </div>
         </details>
         </div>
+        </div>
       </form>
 
       <div class="bg-white p-4 rounded border space-y-3">
@@ -3105,16 +3112,27 @@ table { display: block; overflow-x: auto; max-width: 100%; }
     <div id="paginationContainer_log"></div>
   </div>
 
+  <!-- Màn hình 6: Loại Tệp Cho Phép Tải Lên (theo từng module nghiệp vụ) -->
+  <div id="uploadTypeSection" class="hidden space-y-4">
+    <div class="bg-teal-50 p-4 rounded border border-teal-200">
+      <h3 class="font-bold text-teal-900 text-base flex items-center gap-1">📎 Loại Tệp Cho Phép Tải Lên</h3>
+      <p class="text-xs text-teal-800 mt-1">Chọn định dạng tệp được phép tải lên cho từng module nghiệp vụ — server sẽ chặn các định dạng không được tick. Tick lại toàn bộ (giống mặc định) coi như không giới hạn riêng.</p>
+    </div>
+    <div id="uploadTypeConfigList" class="space-y-3"></div>
+  </div>
+
   <!-- Màn hình MODULE BÁO CÁO QUẢN TRỊ -->
   <div id="reportsSection" class="hidden space-y-6">
     <div class="bg-sky-50 p-4 rounded border border-sky-200 space-y-3">
       <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
         <div>
-          <h3 class="font-bold text-sky-900 text-base flex items-center gap-1">📊 Báo Cáo Quản Trị Tổng Hợp</h3>
-          <p class="text-xs text-sky-800">Số liệu tổng hợp toàn hệ thống theo khoảng thời gian & phòng ban đã chọn.</p>
+          <h3 class="font-bold text-sky-900 text-base flex items-center gap-1">📊 Báo Cáo</h3>
+          <p class="text-xs text-sky-800">Tổng Hợp đa chiều toàn hệ thống, hoặc chọn báo cáo riêng theo từng module nghiệp vụ. Cùng 1 bộ lọc thời gian & phòng ban áp dụng cho mọi tab.</p>
         </div>
         <button onclick="exportReportsExcel()" class="text-xs bg-emerald-600 text-white px-3 py-1.5 rounded font-bold hover:bg-emerald-700">📥 Xuất Báo Cáo Excel</button>
       </div>
+
+      <div id="reportsSubTabBar" class="flex gap-2 flex-wrap border-b pb-2"></div>
 
       <div class="grid grid-cols-1 md:grid-cols-4 gap-3 bg-white p-3 rounded border text-xs">
         <div>
@@ -6295,12 +6313,14 @@ function updateApprovalHubBadge() {
   label.innerText = count > 0 ? `Phê Duyệt (${count})` : 'Phê Duyệt';
 }
 
-// Điều hướng từ nút Duyệt của 1 module gốc sang Hộp thư Phê Duyệt, tự điền sẵn ô tìm kiếm theo đúng mã
-// hồ sơ đó để lọc ra ngay dòng cần xử lý — dùng chung cho cả 9 module (xem finishLogin()/mỗi buildXRowHTML()).
-function goToApprovalHub(code) {
-  const searchBox = document.getElementById('approvalHubSearch');
-  if (searchBox) searchBox.value = code || '';
-  switchTab('approvalHub');
+// Gọi ở CUỐI mọi hàm duyệt/từ chối/xác nhận (dù được bấm từ đâu — ngay tại module gốc hay từ chính
+// màn "Phê Duyệt") để cả số đếm trên nav lẫn bảng Hộp Thư Phê Duyệt (nếu đang mở) luôn khớp dữ liệu
+// mới nhất ngay lập tức — trước đây mỗi hàm chỉ tự render lại đúng module gốc của nó (vd renderDocs()),
+// không đụng gì tới #approvalHubSection, nên hồ sơ vừa duyệt xong vẫn hiện y nguyên trong danh sách chờ
+// nếu người dùng đang đứng ở màn Phê Duyệt, gây nhầm lẫn "duyệt rồi mà sao vẫn còn đó".
+function refreshApprovalSurfaces() {
+  updateApprovalHubBadge();
+  if (!document.getElementById('approvalHubSection').classList.contains('hidden')) renderApprovalHub();
 }
 
 function renderApprovalHub() {
@@ -6448,6 +6468,7 @@ function finishLogin(user) {
   document.getElementById('btnReportsTab').classList.toggle('hidden', !canAccessReportsModule(user));
   document.getElementById('btnApprovalHubTab').classList.toggle('hidden', !canAccessApprovalHub(user));
   updateApprovalHubBadge();
+  applyUploadAcceptAttrs();
   document.getElementById('btnDocTab').classList.toggle('hidden', !canAccessDocModule(user));
 
   document.getElementById('btnSubmissionTab').classList.toggle('hidden', !canAccessSubmissionModule(user));
@@ -7386,9 +7407,8 @@ function buildDocRowHTML(doc, { versionCount = 0, isExpanded = false, isChild = 
           const secondaryOptions = [];
           let primaryBtnHTML;
           if (canApprove) {
-            // Duyệt/Từ chối giờ xử lý ở Hub "✅ Phê Duyệt" (xem goToApprovalHub()) — không còn duyệt
-            // ngay tại đây, chỉ điều hướng sang Hub đã tự lọc sẵn đúng mã hồ sơ này.
-            primaryBtnHTML = `<button onclick="goToApprovalHub('${escapeHtml(doc.displayCode || doc.code)}')" class="px-2 py-1 bg-emerald-600 text-white rounded text-xs hover:bg-emerald-700 font-semibold animate-pulse" title="Sang Hộp thư Phê Duyệt để xử lý">✅ Duyệt</button>`;
+            primaryBtnHTML = `<button onclick="runDocAction(${doc.id}, 'approve')" class="px-2 py-1 bg-emerald-600 text-white rounded text-xs hover:bg-emerald-700 font-semibold" title="Phê duyệt tài liệu">✅ Duyệt</button>`;
+            secondaryOptions.push({ value: 'reject', label: '❌ Từ chối' });
             secondaryOptions.push({ value: 'view', label: '📋 Chi tiết' });
           } else {
             primaryBtnHTML = `<button onclick="runDocAction(${doc.id}, 'view')" class="px-2 py-1 bg-gray-600 text-white rounded text-xs hover:bg-gray-700 font-semibold" title="Xem chi tiết & lịch sử phiên bản">📋 Chi tiết</button>`;
@@ -7486,7 +7506,7 @@ async function uploadDoc(e) {
 
   let uploaded, customData;
   try {
-    uploaded = await uploadFileToServer(file);
+    uploaded = await uploadFileToServer(file, 'doc');
     customData = await collectDynamicFieldsData('DOC');
   } catch (err) {
     return alert(`⛔ Tải tệp lên thất bại: ${err.message}`);
@@ -7546,14 +7566,98 @@ async function uploadDoc(e) {
   renderDocs();
 }
 
-// Tải 1 file lên server (POST /api/upload) — trả về { fileUrl, fileName, fileType, size }
-async function uploadFileToServer(file) {
+// Tải 1 file lên server (POST /api/upload) — trả về { fileUrl, fileName, fileType, size }. moduleKey
+// (vd 'doc', 'contract'...) cho server biết áp dụng đúng danh sách phần mở rộng cho phép của module
+// nào (xem DB.uploadFileTypeConfig / admin "Loại Tệp Cho Phép") — bỏ trống thì dùng danh sách mặc định.
+async function uploadFileToServer(file, moduleKey) {
   const formData = new FormData();
+  if (moduleKey) formData.append('module', moduleKey);
   formData.append('file', file);
   const res = await fetch('/api/upload', { method: 'POST', body: formData });
   const data = await res.json();
   if (!res.ok) throw new Error(data.error || 'Lỗi không xác định');
   return data;
+}
+
+// Ánh xạ modKey của FORM_TABS (dùng cho trường tùy chỉnh, chi tiết theo tab con) sang moduleKey của
+// cấu hình "Loại Tệp Cho Phép" (theo module nghiệp vụ, xem uploadFileTypeConfig ở admin) — nhiều tab
+// con của cùng 1 module nghiệp vụ (vd CONTRACT_APPROVAL/CONTRACT_MANAGE, hay 3 tab con Tổng Hợp) dùng
+// chung 1 cấu hình loại tệp.
+const UPLOAD_MODULE_KEY_MAP = {
+  DOC: 'doc', SUBMISSION: 'submission', CONTRACT_APPROVAL: 'contract', CONTRACT_MANAGE: 'contract',
+  MEETING_ROOM: 'meeting', MEETING_MINUTES: 'minutes', CAR: 'car',
+  MUA_BAN: 'office', SUA_CHUA: 'office', DAU_TU: 'office'
+};
+function mapFormModKeyToUploadModule(modKey) {
+  return UPLOAD_MODULE_KEY_MAP[modKey] || String(modKey || '').toLowerCase();
+}
+
+// Cập nhật thuộc tính accept của các ô chọn tệp TĨNH theo đúng cấu hình "Loại Tệp Cho Phép" của admin
+// (DB.uploadFileTypeConfig) — chỉ là gợi ý UI (bộ lọc chọn tệp của trình duyệt), việc chặn thật sự vẫn
+// do server quyết định (xem routes/upload.js). Module chưa cấu hình thì giữ nguyên accept mặc định có
+// sẵn trong HTML. Gọi lại sau khi lưu cấu hình ở admin để áp dụng ngay không cần tải lại trang.
+function applyUploadAcceptAttrs() {
+  const STATIC_INPUTS = {
+    doc: ['docFile'], submission: ['subFile', 'subExtraFiles'], contract: ['contractFile'], internal: ['internalFile']
+  };
+  const config = DB.uploadFileTypeConfig || {};
+  for (const moduleKey in STATIC_INPUTS) {
+    const allowed = config[moduleKey];
+    if (!Array.isArray(allowed) || !allowed.length) continue;
+    const acceptValue = allowed.join(',');
+    STATIC_INPUTS[moduleKey].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.setAttribute('accept', acceptValue);
+    });
+  }
+}
+
+// Vũ trụ phần mở rộng khả dụng — PHẢI khớp ALLOWED_EXT ở routes/upload.js (đó mới là chặn thật, admin
+// chỉ chọn ra 1 tập con của danh sách này cho từng module qua màn "Loại Tệp" bên dưới).
+// Chỉ còn 3 định dạng phổ biến cho hồ sơ/tài liệu văn phòng — KHÔNG gồm Báo Cáo Định Kỳ (module đó
+// cần .pptx + ảnh nền cho Mẫu Trình Chiếu, xem processSlideTemplateFile()/onPrEntryPptxFileChange(),
+// nên không đưa vào màn cấu hình 3 định dạng này, luôn dùng nguyên ALLOWED_EXT mặc định phía server).
+const UPLOAD_EXT_UNIVERSE = ['.pdf', '.docx', '.xlsx'];
+const UPLOAD_MODULE_LIST = [
+  { key: 'doc', label: '📂 Tài Liệu' },
+  { key: 'submission', label: '📜 Văn Bản Trình' },
+  { key: 'contract', label: '📄 Hợp Đồng' },
+  { key: 'car', label: '🚗 Đăng Ký Xe' },
+  { key: 'meeting', label: '🏢 Phòng Họp' },
+  { key: 'minutes', label: '📝 Biên Bản Họp' },
+  { key: 'office', label: '🛒 Văn Phòng Tổng Hợp' },
+  { key: 'internal', label: '📣 Truyền Thông Nội Bộ' }
+];
+
+function renderUploadTypeConfig() {
+  const container = document.getElementById('uploadTypeConfigList');
+  const config = DB.uploadFileTypeConfig || {};
+  container.innerHTML = UPLOAD_MODULE_LIST.map(m => {
+    const allowed = Array.isArray(config[m.key]) && config[m.key].length ? config[m.key] : UPLOAD_EXT_UNIVERSE;
+    const checkboxesHTML = UPLOAD_EXT_UNIVERSE.map(ext => `
+      <label class="inline-flex items-center gap-1 mr-4 mb-1 text-xs">
+        <input type="checkbox" onchange="toggleUploadTypeExt('${m.key}', '${ext}', this.checked)" ${allowed.includes(ext) ? 'checked' : ''}>
+        ${ext}
+      </label>`).join('');
+    return `
+      <div class="bg-white p-3 rounded border">
+        <div class="font-bold text-sm text-gray-800 mb-2">${m.label}</div>
+        <div class="flex flex-wrap">${checkboxesHTML}</div>
+      </div>`;
+  }).join('');
+}
+
+// Tự lưu ngay khi tick/bỏ tick 1 định dạng (cùng khuôn updateDeptAbbr()/updateContractTypeAbbr() —
+// không cần nút Lưu riêng). Danh sách rỗng sau khi bỏ hết tick vẫn được lưu (routes/upload.js coi
+// mảng rỗng như "chưa cấu hình", tự rơi về danh sách mặc định — không khoá cứng module về 0 định dạng).
+function toggleUploadTypeExt(moduleKey, ext, checked) {
+  if (!DB.uploadFileTypeConfig) DB.uploadFileTypeConfig = {};
+  const current = Array.isArray(DB.uploadFileTypeConfig[moduleKey]) && DB.uploadFileTypeConfig[moduleKey].length
+    ? DB.uploadFileTypeConfig[moduleKey] : UPLOAD_EXT_UNIVERSE.slice();
+  DB.uploadFileTypeConfig[moduleKey] = checked ? [...new Set([...current, ext])] : current.filter(e => e !== ext);
+  syncStorage('uploadFileTypeConfig');
+  applyUploadAcceptAttrs();
+  logSystemAction('ADMIN', 'UPDATE_UPLOAD_TYPE_CONFIG', `Cập nhật loại tệp cho phép [${moduleKey}]: ${checked ? 'thêm' : 'bỏ'} ${ext}`, 'SUCCESS');
 }
 
 // CẬP NHẬT: Phê duyệt cấp đơn đơn giản hóa (Sequential Step Approval)
@@ -7593,6 +7697,7 @@ async function approveDoc(docId) {
   logSystemAction('DOC', 'APPROVE_DOC', `Phê duyệt tài liệu [${updatedDoc.code}] thành công.`, 'SUCCESS', updatedDoc.code);
   alert(msg);
   renderDocs();
+  refreshApprovalSurfaces();
 }
 
 async function rejectDoc(docId) {
@@ -7619,6 +7724,7 @@ async function rejectDoc(docId) {
     `Tài liệu "${updatedDoc.title}" (${updatedDoc.code}) của bạn đã bị từ chối/trả về. Lý do: ${reason}`);
   alert('❌ Đã chuyển tài liệu sang trạng thái Từ chối / Trả về!');
   renderDocs();
+  refreshApprovalSurfaces();
 }
 
 // Xác định loại tệp (ảnh / pdf / word / excel / văn phòng khác / khác) dựa trên fileType (MIME) và
@@ -7944,7 +8050,7 @@ async function doSubmitSubmissionReq(e) {
   let fileUrl = '', fileName = '', fileType = '';
   if (fileInput.files && fileInput.files[0]) {
     try {
-      const uploaded = await uploadFileToServer(fileInput.files[0]);
+      const uploaded = await uploadFileToServer(fileInput.files[0], 'submission');
       fileUrl = uploaded.fileUrl;
       fileName = uploaded.fileName;
       fileType = uploaded.fileType;
@@ -7956,7 +8062,7 @@ async function doSubmitSubmissionReq(e) {
   let extraFiles = [];
   if (extraFilesInput.files && extraFilesInput.files.length > 0) {
     try {
-      extraFiles = await Promise.all(Array.from(extraFilesInput.files).map(f => uploadFileToServer(f)));
+      extraFiles = await Promise.all(Array.from(extraFilesInput.files).map(f => uploadFileToServer(f, 'submission')));
     } catch (err) {
       return alert(`⛔ Tải tài liệu bổ sung thất bại: ${err.message}`);
     }
@@ -8321,10 +8427,8 @@ function renderSubmissionReqs() {
         <td class="border p-2 text-center">${taskStatusBadge}</td>
         <td class="border p-2 text-center space-x-1">
           ${(() => {
-            // canApprove: điều hướng sang Hub "✅ Phê Duyệt" thay vì mở modal xử lý ngay tại đây; không
-            // đổi gì cho trường hợp chỉ xem (giữ nguyên mở modal xem-only như cũ).
             const primaryBtnHTML = canApprove
-              ? `<button onclick="goToApprovalHub('${escapeHtml(sub.code)}')" class="px-2.5 py-1 bg-emerald-600 text-white rounded text-xs hover:opacity-90 font-bold">✍️ Bút phê / Duyệt</button>`
+              ? `<button onclick="openProcessSubmissionModal(${sub.id})" class="px-2.5 py-1 bg-emerald-600 text-white rounded text-xs hover:opacity-90 font-bold">✍️ Bút phê / Duyệt</button>`
               : `<button onclick="runSubmissionAction(${sub.id}, 'process')" class="px-2.5 py-1 bg-gray-600 text-white rounded text-xs hover:opacity-90 font-bold">👁️ Chi tiết</button>`;
             const secondaryOptions = [];
             const canDL = canDownloadFile(currentUser, 'submission', sub.dept, sub.creator);
@@ -8609,6 +8713,7 @@ async function processSubmission(actionType) {
   alert(msg);
   closeProcessSubmissionModal();
   renderSubmissionReqs();
+  refreshApprovalSurfaces();
 }
 
 // YÊU CẦU BỔ SUNG: theo đúng yêu cầu người dùng, chỉ nhắm tới ĐÚNG người yêu cầu (approver hiện đang
@@ -10407,7 +10512,7 @@ async function submitContractReq(e) {
 
   let uploaded, customData;
   try {
-    uploaded = await uploadFileToServer(file);
+    uploaded = await uploadFileToServer(file, 'contract');
     customData = await collectDynamicFieldsData(isSignedImport ? 'CONTRACT_MANAGE' : 'CONTRACT_APPROVAL', 'dynamicFieldsContainer_CONTRACT');
   } catch (err) {
     return alert(`⛔ Tải tệp lên thất bại: ${err.message}`);
@@ -10563,7 +10668,7 @@ async function updateContractReq(e) {
   if (newFile) {
     let uploaded;
     try {
-      uploaded = await uploadFileToServer(newFile);
+      uploaded = await uploadFileToServer(newFile, 'contract');
     } catch (err) {
       return alert(`⛔ Tải tệp lên thất bại: ${err.message}`);
     }
@@ -10780,24 +10885,12 @@ function runContractAction(id, action) {
     case 'detail': viewContractDetails(id); break;
     case 'view': viewContract(id); break;
     case 'edit': openEditContract(id); break;
-    // Duyệt/Từ chối giờ xử lý ở Hub "✅ Phê Duyệt" — điều hướng sang đó thay vì gọi thẳng
-    // approveContractAction()/rejectContractAction() tại đây (xem goToApprovalHub()).
-    case 'approve':
-    case 'reject': {
-      const c = DB.contracts.find(x => x.id === id);
-      if (c) goToApprovalHub(c.code);
-      break;
-    }
+    case 'approve': approveContractAction(id); break;
+    case 'reject': rejectContractAction(id); break;
     case 'uploadSigned': openSignedUploadModal('contracts', id); break;
     case 'viewSigned': viewContractSignedFile(id); break;
-    // Duyệt/Từ chối Tài liệu ký cũng xử lý ở Hub "✅ Phê Duyệt" (khớp cùng khuôn approve/reject hợp
-    // đồng gốc phía trên — xem getMyPendingApprovals()/goToApprovalHub()).
-    case 'approveSigned':
-    case 'rejectSigned': {
-      const c = DB.contracts.find(x => x.id === id);
-      if (c) goToApprovalHub(c.code);
-      break;
-    }
+    case 'approveSigned': approveContractSignedFileAction(id); break;
+    case 'rejectSigned': rejectContractSignedFileAction(id); break;
     case 'startPayment': startContractPaymentAction(id); break;
     case 'download': {
       const c = DB.contracts.find(x => x.id === id);
@@ -10867,6 +10960,7 @@ function approveContractAction(id) {
       }
       alert(msg);
       renderContracts();
+      refreshApprovalSurfaces();
     }
   });
 }
@@ -10897,6 +10991,7 @@ function rejectContractAction(id) {
         `Hợp đồng "${updated.title}" (${updated.code}) đã bị từ chối.\nLý do: ${reason.trim()}`);
       alert('❌ Đã từ chối hợp đồng!');
       renderContracts();
+      refreshApprovalSurfaces();
     }
   });
 }
@@ -10930,6 +11025,7 @@ function approveContractSignedFileAction(id) {
       else if (transition.type === 'PARTIAL_APPROVE') msg = '✅ Đã ghi nhận phê duyệt của bạn — đang chờ các đồng phê duyệt còn lại ở bước này.';
       alert(msg);
       renderContracts();
+      refreshApprovalSurfaces();
     }
   });
 }
@@ -10957,6 +11053,7 @@ function rejectContractSignedFileAction(id) {
       logSystemAction('CONTRACT', 'REJECT_CONTRACT_SIGNED_FILE', `Từ chối tài liệu ký hợp đồng [${updated.code} - ${updated.title}] - Lý do: ${reason.trim()}`, 'WARNING', updated.code);
       alert('❌ Đã từ chối tài liệu ký!');
       renderContracts();
+      refreshApprovalSurfaces();
     }
   });
 }
@@ -10972,7 +11069,10 @@ function openSignedUploadModal(module, id) {
   if (!item) return;
   signedUploadTarget = { module, id };
   document.getElementById('signedUploadSub').innerText = `${item.code} — ${item.title}`;
-  document.getElementById('signedUploadFile').value = '';
+  const signedFileInput = document.getElementById('signedUploadFile');
+  signedFileInput.value = '';
+  const signedAllowed = (DB.uploadFileTypeConfig || {})[module === 'contracts' ? 'contract' : 'office'];
+  if (Array.isArray(signedAllowed) && signedAllowed.length) signedFileInput.setAttribute('accept', signedAllowed.join(','));
   // Chỉ Hợp đồng có bộ trường bổ sung riêng cho bước Tải Tài Liệu Ký (CONTRACT_MANAGE, xem FORM_TABS) —
   // Mua Bán/Sửa Chữa/Đầu Tư dùng chung modal này nhưng không có bộ trường riêng cho bước này.
   if (module === 'contracts') {
@@ -10997,7 +11097,7 @@ async function submitSignedUpload() {
 
   let uploaded;
   try {
-    uploaded = await uploadFileToServer(file);
+    uploaded = await uploadFileToServer(file, module === 'contracts' ? 'contract' : 'office');
   } catch (err) {
     return alert(`⛔ Tải tệp lên thất bại: ${err.message}`);
   }
@@ -11223,7 +11323,7 @@ function renderPaymentRequests() {
         <td class="border p-2"><span class="px-2 py-0.5 rounded font-bold text-xs ${PAYMENT_STATUS_BADGE_CLS[pr.status] || ''}">${PAYMENT_STATUS_LABELS[pr.status] || pr.status}</span></td>
         <td class="border p-2 text-center space-y-1">
           ${canManage && (pr.status === 'PENDING' || pr.status === 'NEED_INFO') ? `<button onclick="openEditPaymentRequest(${pr.id})" class="block w-full bg-gray-500 text-white px-2 py-1 rounded text-xs font-bold hover:bg-gray-600">✏️ Sửa</button>` : ''}
-          ${canManage && (pr.status === 'PENDING' || pr.status === 'NEED_INFO') ? `<button onclick="goToApprovalHub('${escapeHtml(pr.sourceCode || String(pr.id))}')" class="block w-full bg-emerald-600 text-white px-2 py-1 rounded text-xs font-bold hover:bg-emerald-700">✅ Xác nhận</button>` : ''}
+          ${canManage && (pr.status === 'PENDING' || pr.status === 'NEED_INFO') ? `<button onclick="approvePaymentRequestAction(${pr.id})" class="block w-full bg-emerald-600 text-white px-2 py-1 rounded text-xs font-bold hover:bg-emerald-700">✅ Xác nhận</button>` : ''}
           ${canManage && pr.status === 'PENDING' ? `<button onclick="requestPaymentInfoAction(${pr.id})" class="block w-full bg-orange-500 text-white px-2 py-1 rounded text-xs font-bold hover:bg-orange-600">📝 Yêu Cầu Bổ Sung</button>` : ''}
           ${currentUser.perms?.admin && pr.status !== 'PAID' ? `<button onclick="deletePaymentRequestAction(${pr.id})" class="block w-full bg-red-500 text-white px-2 py-1 rounded text-xs font-bold hover:bg-red-600">🗑️ Xoá</button>` : ''}
         </td>
@@ -11249,6 +11349,7 @@ function approvePaymentRequestAction(id) {
       if (idx !== -1) DB.paymentRequests[idx] = updated;
       logSystemAction('OFFICE', 'APPROVE_PAYMENT_REQUEST', `Xác nhận đề nghị thanh toán [${updated.title}]`, 'SUCCESS', String(updated.id));
       renderPaymentRequests();
+      refreshApprovalSurfaces();
     }
   });
 }
@@ -11808,8 +11909,7 @@ function renderMeetings() {
             const canApprove = canApproveMeeting(currentUser) && m.status === 'PENDING';
             const canCancel = canCancelMeeting(currentUser, m) && m.status !== 'CANCELLED';
             if (canApprove) {
-              // Duyệt giờ xử lý ở Hub "✅ Phê Duyệt" — điều hướng sang đó thay vì gọi approveMeeting() tại đây.
-              const primaryBtnHTML = `<button onclick="goToApprovalHub('${escapeHtml(m.code)}')" class="bg-emerald-600 text-white px-2 py-1 rounded text-xs hover:bg-emerald-700 font-bold">Duyệt</button>`;
+              const primaryBtnHTML = `<button onclick="approveMeeting(${m.id})" class="bg-emerald-600 text-white px-2 py-1 rounded text-xs hover:bg-emerald-700 font-bold">Duyệt</button>`;
               return buildActionCell(m.id, primaryBtnHTML, canCancel ? [{ value: 'cancel', label: 'Hủy' }] : [], 'runMeetingAction');
             }
             if (canCancel) {
@@ -11850,6 +11950,7 @@ async function approveMeeting(id) {
     `[VPDT] Lịch phòng họp ${updated.code} đã được phê duyệt`,
     `Lịch đặt phòng "${updated.room}" (${updated.code}) của bạn đã được phê duyệt.`);
   renderMeetings();
+  refreshApprovalSurfaces();
 }
 
 async function cancelMeeting(id) {
@@ -13050,9 +13151,8 @@ function renderCarRegs() {
         <td class="border p-2">${statusBadge}</td>
         <td class="border p-2 text-center space-x-1">
           ${(() => {
-            // canApprove: điều hướng sang Hub "✅ Phê Duyệt" thay vì mở modal xử lý ngay tại đây.
             const primaryBtnHTML = canApprove
-              ? `<button onclick="goToApprovalHub('${escapeHtml(c.code)}')" class="px-2.5 py-1 bg-emerald-600 text-white rounded text-xs hover:opacity-90 font-bold">✍️ Xử lý / Duyệt</button>`
+              ? `<button onclick="runCarAction(${c.id}, 'process')" class="px-2.5 py-1 bg-emerald-600 text-white rounded text-xs hover:opacity-90 font-bold">✍️ Xử lý / Duyệt</button>`
               : `<button onclick="runCarAction(${c.id}, 'process')" class="px-2.5 py-1 bg-gray-600 text-white rounded text-xs hover:opacity-90 font-bold">👁️ Xem chi tiết</button>`;
             const secondaryOptions = [];
             if (c.status === 'APPROVED') {
@@ -13224,6 +13324,7 @@ async function processCarReg(actionType) {
   alert(msg);
   closeCarProcessModal();
   renderCarRegs();
+  refreshApprovalSurfaces();
 }
 
 // ==========================================
@@ -13622,9 +13723,8 @@ function renderOfficeReqs() {
         <td class="border p-2">${paymentCell}</td>
         <td class="border p-2 text-center space-x-1">
           ${(() => {
-            // canApprove: điều hướng sang Hub "✅ Phê Duyệt" thay vì mở modal xử lý ngay tại đây.
             const primaryBtnHTML = canApprove
-              ? `<button onclick="goToApprovalHub('${escapeHtml(o.code)}')" class="px-2.5 py-1 bg-emerald-600 text-white rounded text-xs hover:opacity-90 font-bold">✍️ Xử lý / Duyệt</button>`
+              ? `<button onclick="runOfficeAction(${o.id}, 'process')" class="px-2.5 py-1 bg-emerald-600 text-white rounded text-xs hover:opacity-90 font-bold">✍️ Xử lý / Duyệt</button>`
               : `<button onclick="runOfficeAction(${o.id}, 'process')" class="px-2.5 py-1 bg-gray-600 text-white rounded text-xs hover:opacity-90 font-bold">👁️ Xem chi tiết</button>`;
             const secondaryOptions = [];
             if (o.status === 'APPROVED') {
@@ -13832,6 +13932,7 @@ async function processOfficeReq(actionType) {
   alert(msg);
   closeOfficeProcessModal();
   renderOfficeReqs();
+  refreshApprovalSurfaces();
 }
 
 // ==========================================
@@ -14073,9 +14174,8 @@ function renderVppRegistrations() {
       primaryBtnHTML = `<button onclick="editVppRegDraft(${r.id})" class="px-2.5 py-1 bg-gray-600 text-white rounded text-xs hover:opacity-90 font-bold">✏️ Sửa Nháp</button>`;
       secondaryOptions.push({ value: 'submit', label: 'Gửi phê duyệt' });
     } else {
-      // canApprove: điều hướng sang Hub "✅ Phê Duyệt" thay vì mở modal xử lý ngay tại đây.
       primaryBtnHTML = canApprove
-        ? `<button onclick="goToApprovalHub('${escapeHtml(r.code)}')" class="px-2.5 py-1 bg-emerald-600 text-white rounded text-xs hover:opacity-90 font-bold">✍️ Xử lý / Duyệt</button>`
+        ? `<button onclick="openVppRegModal(${r.id})" class="px-2.5 py-1 bg-emerald-600 text-white rounded text-xs hover:opacity-90 font-bold">✍️ Xử lý / Duyệt</button>`
         : `<button onclick="openVppRegModal(${r.id})" class="px-2.5 py-1 bg-gray-600 text-white rounded text-xs hover:opacity-90 font-bold">👁️ Xem chi tiết</button>`;
     }
     if (currentUser.perms?.admin) secondaryOptions.push({ value: 'delete', label: '🗑️ Xóa' });
@@ -14251,6 +14351,7 @@ async function processVppReg(actionType) {
   alert(msg);
   closeVppRegModal();
   renderVppRegistrations();
+  refreshApprovalSurfaces();
 }
 
 // ============ KỲ ĐĂNG KÝ (quản lý — chỉ vppManage/admin) ============
@@ -14621,6 +14722,7 @@ function setSystemSubTab(subTab) {
   document.getElementById('formSection').classList.toggle('hidden', subTab !== 'FORM');
   document.getElementById('adminSection').classList.toggle('hidden', subTab !== 'ADMIN');
   document.getElementById('workflowSection').classList.toggle('hidden', subTab !== 'WORKFLOW');
+  document.getElementById('uploadTypeSection').classList.toggle('hidden', subTab !== 'UPLOAD');
   document.getElementById('logSection').classList.toggle('hidden', subTab !== 'LOG');
 
   const activeCls = 'px-3 py-1.5 rounded text-xs font-bold bg-purple-700 text-white';
@@ -14628,6 +14730,7 @@ function setSystemSubTab(subTab) {
   document.getElementById('btnSystemSubAdmin').className = subTab === 'ADMIN' ? activeCls : inactiveCls;
   document.getElementById('btnSystemSubForm').className = subTab === 'FORM' ? activeCls : inactiveCls;
   document.getElementById('btnSystemSubWorkflow').className = subTab === 'WORKFLOW' ? activeCls : inactiveCls;
+  document.getElementById('btnSystemSubUpload').className = subTab === 'UPLOAD' ? activeCls : inactiveCls;
   document.getElementById('btnSystemSubLog').className = subTab === 'LOG' ? activeCls : inactiveCls;
 
   if (subTab === 'ADMIN') {
@@ -14636,6 +14739,7 @@ function setSystemSubTab(subTab) {
   }
   if (subTab === 'FORM') { switchFormTab(activeFormTab); }
   if (subTab === 'WORKFLOW') { renderWorkflowTab(); }
+  if (subTab === 'UPLOAD') { renderUploadTypeConfig(); }
   if (subTab === 'LOG') { loadSystemLogs(); }
 }
 
@@ -14936,7 +15040,7 @@ async function collectDynamicFieldsData(modKey, containerId) {
     if (type === 'file') {
       if (input.files && input.files[0]) {
         try {
-          result[label] = await uploadFileToServer(input.files[0]);
+          result[label] = await uploadFileToServer(input.files[0], mapFormModKeyToUploadModule(modKey));
         } catch (err) {
           throw new Error(`Tải tệp cho trường "${label}" thất bại: ${err.message}`);
         }
@@ -14944,7 +15048,7 @@ async function collectDynamicFieldsData(modKey, containerId) {
     } else if (type === 'multifile') {
       if (input.files && input.files.length) {
         try {
-          result[label] = await Promise.all(Array.from(input.files).map(f => uploadFileToServer(f)));
+          result[label] = await Promise.all(Array.from(input.files).map(f => uploadFileToServer(f, mapFormModKeyToUploadModule(modKey))));
         } catch (err) {
           throw new Error(`Tải tệp cho trường "${label}" thất bại: ${err.message}`);
         }
@@ -15632,7 +15736,9 @@ function scopeFromForm(allId, deptPrefix) {
 
 // Mở/đóng TẤT CẢ khối quyền cùng lúc (nút "Mở rộng tất cả"/"Thu gọn tất cả" phía trên form).
 function setAllPermTreeNodes(open) {
-  document.querySelectorAll('#permFieldsContainer > details.perm-tree-node').forEach(d => { d.open = open; });
+  // Không dùng combinator "trực tiếp" (>) vì các khối 1-14 giờ lồng trong 1 div lưới 3 cột (xem HTML
+  // #permFieldsContainer) — chỉ khối 0 còn là con trực tiếp.
+  document.querySelectorAll('#permFieldsContainer details.perm-tree-node').forEach(d => { d.open = open; });
 }
 
 // Đếm số "mục quyền" đã cấp / tổng số mục quyền trong 1 khối — dùng CHUNG cho mọi khối, không cần
@@ -15667,7 +15773,7 @@ function computePermTreeNodeCount(bodyEl) {
 // Tính lại toàn bộ badge trên các khối quyền — gọi sau populatePermsForm() (đổ dữ liệu đã lưu lên
 // form) và mỗi khi có thay đổi checkbox/select bên trong (event delegation, xem listener bên dưới).
 function refreshPermTreeBadges() {
-  document.querySelectorAll('#permFieldsContainer > details.perm-tree-node').forEach(node => {
+  document.querySelectorAll('#permFieldsContainer details.perm-tree-node').forEach(node => {
     const badge = node.querySelector('summary [id^="permTreeBadge_"]');
     const body = node.querySelector(':scope > div');
     if (!badge || !body) return;
@@ -15684,7 +15790,7 @@ function refreshPermTreeBadges() {
 // hiện lại toàn bộ (không tự thu gọn lại, dùng nút "Thu gọn tất cả" nếu cần).
 function filterPermTree() {
   const q = (document.getElementById('permTreeSearch')?.value || '').trim().toLowerCase();
-  document.querySelectorAll('#permFieldsContainer > details.perm-tree-node').forEach(node => {
+  document.querySelectorAll('#permFieldsContainer details.perm-tree-node').forEach(node => {
     if (!q) { node.classList.remove('hidden'); return; }
     const match = node.innerText.toLowerCase().includes(q);
     node.classList.toggle('hidden', !match);
@@ -15700,7 +15806,7 @@ function markPermTreeDirty(ev) {
 // Xoá hết dấu "chưa lưu" — gọi khi form được đổ lại dữ liệu gốc (chọn user khác để sửa, mở form Thêm
 // Mới, hoặc vừa lưu xong) để không còn hiểu nhầm là còn thay đổi dang dở từ trước.
 function clearPermTreeDirtyMarks() {
-  document.querySelectorAll('#permFieldsContainer > details.perm-tree-node.perm-tree-dirty')
+  document.querySelectorAll('#permFieldsContainer details.perm-tree-node.perm-tree-dirty')
     .forEach(node => node.classList.remove('perm-tree-dirty'));
 }
 
@@ -16426,7 +16532,7 @@ async function uploadPrOptionalFile(inputId, existingMeta) {
   const input = document.getElementById(inputId);
   const file = input?.files?.[0];
   if (!file) return existingMeta ? { fileUrl: existingMeta.fileUrl, fileName: existingMeta.fileName, fileType: existingMeta.fileType } : { fileUrl: null, fileName: null, fileType: null };
-  const uploaded = await uploadFileToServer(file);
+  const uploaded = await uploadFileToServer(file, 'periodicReport');
   return { fileUrl: uploaded.fileUrl, fileName: uploaded.fileName, fileType: uploaded.fileType };
 }
 
@@ -16443,7 +16549,7 @@ async function savePrEntryDraft() {
   const payload = { periodId, title };
   try {
     if (prEntryPendingFile) {
-      const uploaded = await uploadFileToServer(prEntryPendingFile.file);
+      const uploaded = await uploadFileToServer(prEntryPendingFile.file, 'periodicReport');
       payload.fileUrl = uploaded.fileUrl; payload.fileName = uploaded.fileName; payload.fileType = uploaded.fileType;
       payload.parsedSlides = prEntryPendingFile.parsedSlides;
     } else if (prEntryExistingFile) {
@@ -17227,7 +17333,7 @@ async function processSlideTemplateFile(file) {
     URL.revokeObjectURL(objectUrl);
   }
   const uploadFile = (blob instanceof File) ? blob : new File([blob], `slide-template-bg-${Date.now()}.png`, { type: blob.type || 'image/png' });
-  const uploaded = await uploadFileToServer(uploadFile);
+  const uploaded = await uploadFileToServer(uploadFile, 'periodicReport');
   return { bgImageUrl: uploaded.fileUrl, isDark, warning };
 }
 
@@ -18528,10 +18634,308 @@ function resetReportsFilters() {
   renderReports();
 }
 
+// Báo Cáo — Tổng Hợp (đa chiều, xếp đầu) + 1 tab con cho mỗi module nghiệp vụ đã có, dùng CHUNG bộ
+// lọc ngày/phòng ban phía trên (#reportsFromDate/#reportsToDate/#reportsDeptFilter). "Tổng Hợp" giữ
+// nguyên toàn bộ nội dung đa chiều đã có từ trước (renderReportsSummary() bên dưới — trước đây là
+// thân của renderReports()); các tab module dùng chung 1 khuôn renderModuleReport() (tổng số + tình
+// trạng phê duyệt + khối lượng theo phòng ban), cộng thêm vài chỉ số riêng cho Hợp Đồng/Văn Phòng
+// Tổng Hợp/Công Việc (xem REPORT_MODULE_CONFIGS.renderExtra).
+let activeReportsSubTab = 'SUMMARY';
+const REPORTS_SUB_TABS = [
+  { key: 'SUMMARY', label: '📊 Tổng Hợp' },
+  { key: 'doc', label: '📂 Tài Liệu' },
+  { key: 'submission', label: '📜 Văn Bản Trình' },
+  { key: 'task', label: '✅ Công Việc' },
+  { key: 'contract', label: '📄 Hợp Đồng' },
+  { key: 'minutes', label: '📝 Biên Bản Họp' },
+  { key: 'meeting', label: '🏢 Phòng Họp' },
+  { key: 'car', label: '🚗 Đăng Ký Xe' },
+  { key: 'vpp', label: '🖇️ Văn Phòng Phẩm' },
+  { key: 'office', label: '🛒 Văn Phòng Tổng Hợp' },
+  { key: 'internal', label: '📣 Truyền Thông Nội Bộ' }
+];
+
+function renderReportsSubTabBar() {
+  const bar = document.getElementById('reportsSubTabBar');
+  if (!bar) return;
+  bar.innerHTML = REPORTS_SUB_TABS.map(t => {
+    const cls = t.key === activeReportsSubTab
+      ? 'px-3 py-1.5 rounded text-xs font-bold bg-sky-700 text-white'
+      : 'px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700';
+    return `<button type="button" onclick="setReportsSubTab('${t.key}')" class="${cls}">${t.label}</button>`;
+  }).join('');
+}
+
+function setReportsSubTab(key) {
+  activeReportsSubTab = key;
+  renderReportsSubTabBar();
+  renderReports();
+}
+
 function renderReports() {
   const container = document.getElementById('reportsContent');
   if (!container) return;
+  renderReportsSubTabBar();
+  if (activeReportsSubTab !== 'SUMMARY') { renderModuleReport(activeReportsSubTab, container); return; }
+  renderReportsSummary(container);
+}
 
+// Thống kê dùng chung cho mọi tab module con (trừ "Tổng Hợp") — tổng số hồ sơ trong khoảng lọc, tình
+// trạng phê duyệt (nếu module có statusOf) và khối lượng theo phòng ban (trừ khi deptBreakdown:false —
+// dùng cho các module không có field dept đáng tin, vd Công Việc/Truyền Thông Nội Bộ).
+const REPORT_MODULE_CONFIGS = {
+  doc: {
+    title: '📂 Báo Cáo Tài Liệu',
+    getRecords: (dept, from, to) => DB.docs.filter(r => (!dept || r.dept === dept) && isInDateRange(r.createdAt, from, to))
+    , statusOf: r => r.status
+  },
+  submission: {
+    title: '📜 Báo Cáo Văn Bản Trình',
+    getRecords: (dept, from, to) => DB.submissions.filter(r => (!dept || r.dept === dept) && isInDateRange(r.createdAt, from, to)),
+    statusOf: r => r.status
+  },
+  car: {
+    title: '🚗 Báo Cáo Đăng Ký Xe',
+    getRecords: (dept, from, to) => DB.carRegs.filter(r => (!dept || r.dept === dept) && isInDateRange(r.createdAt, from, to)),
+    statusOf: r => r.status
+  },
+  office: {
+    title: '🛒 Báo Cáo Văn Phòng Tổng Hợp',
+    getRecords: (dept, from, to) => DB.officeReqs.filter(r => (!dept || r.dept === dept) && isInDateRange(r.createdAt, from, to)),
+    statusOf: r => r.status,
+    renderExtra: renderOfficeReportExtra
+  },
+  contract: {
+    title: '📄 Báo Cáo Hợp Đồng',
+    getRecords: (dept, from, to) => DB.contracts.filter(r => (!dept || r.dept === dept) && isInDateRange(r.createdAt, from, to)),
+    statusOf: r => r.approvalStatus,
+    renderExtra: renderContractReportExtra
+  },
+  minutes: {
+    title: '📝 Báo Cáo Biên Bản Họp',
+    getRecords: (dept, from, to) => DB.meetingMinutes.filter(r => (!dept || r.dept === dept) && isInDateRange(r.createdAt, from, to))
+  },
+  meeting: {
+    title: '🏢 Báo Cáo Phòng Họp',
+    getRecords: (dept, from, to) => DB.meetings.filter(r => (!dept || r.dept === dept) && isInDateRange(r.createdAt, from, to)),
+    statusOf: r => r.status,
+    statusBuckets: [['PENDING', 'Đang chờ', 'bg-yellow-500'], ['APPROVED', 'Đã duyệt', 'bg-green-500'], ['CANCELLED', 'Đã huỷ', 'bg-red-500']]
+  },
+  vpp: {
+    title: '🖇️ Báo Cáo Văn Phòng Phẩm',
+    getRecords: (dept, from, to) => DB.vppRegistrations.filter(r => (!dept || r.dept === dept) && isInDateRange(r.createdAt, from, to)),
+    statusOf: r => r.status,
+    statusBuckets: [['NHAP', 'Nháp', 'bg-gray-400'], ['PENDING', 'Đang chờ', 'bg-yellow-500'], ['APPROVED', 'Đã duyệt', 'bg-green-500'], ['REJECTED', 'Từ chối', 'bg-red-500']]
+  },
+  internal: {
+    title: '📣 Báo Cáo Truyền Thông Nội Bộ',
+    // Kênh toàn công ty, không lọc theo phòng ban (khớp hành vi Góc chia sẻ hiện tại — ai cũng xem được).
+    getRecords: (dept, from, to) => DB.internalPosts.filter(r => isInDateRange(r.createdAt, from, to)),
+    deptBreakdown: false,
+    renderExtra: renderInternalReportExtra
+  },
+  task: {
+    title: '✅ Báo Cáo Công Việc',
+    // Công việc không có field phòng ban đáng tin (giao theo người, không theo phòng ban) — không lọc/không xếp theo phòng ban, khớp renderReportsSummary() hiện tại.
+    getRecords: (dept, from, to) => DB.tasks.filter(t => isInDateRange(t.createdAt, from, to)),
+    deptBreakdown: false,
+    statusOf: t => t.status,
+    statusBuckets: [['TODO', 'Chưa bắt đầu', 'bg-gray-500'], ['DOING', 'Đang thực hiện', 'bg-blue-500'], ['DONE', 'Hoàn thành', 'bg-green-500'], ['CANCELLED', 'Đã huỷ', 'bg-red-500']],
+    renderExtra: renderTaskReportExtra
+  }
+};
+
+function renderModuleReport(moduleKey, container) {
+  const config = REPORT_MODULE_CONFIGS[moduleKey];
+  if (!config) { container.innerHTML = ''; return; }
+  const fromDate = document.getElementById('reportsFromDate')?.value || '';
+  const toDate = document.getElementById('reportsToDate')?.value || '';
+  const deptFilter = document.getElementById('reportsDeptFilter')?.value || '';
+  const records = config.getRecords(deptFilter, fromDate, toDate);
+
+  const totalHTML = `
+    <div class="bg-white p-4 rounded border">
+      <div class="text-2xl font-bold text-sky-700">${records.length.toLocaleString('vi-VN')}</div>
+      <div class="text-xs text-gray-600 mt-1">Tổng số hồ sơ trong khoảng đã chọn</div>
+    </div>
+  `;
+
+  let statusHTML = '';
+  if (config.statusOf) {
+    const buckets = config.statusBuckets || [['PENDING', 'Đang chờ duyệt', 'bg-yellow-500'], ['APPROVED', 'Đã phê duyệt', 'bg-green-500'], ['REJECTED', 'Bị từ chối', 'bg-red-500']];
+    const counts = {};
+    buckets.forEach(([key]) => { counts[key] = 0; });
+    records.forEach(r => { const s = config.statusOf(r); if (s in counts) counts[s]++; });
+    statusHTML = `
+      <div class="bg-white p-4 rounded border">
+        <h4 class="font-bold text-gray-800 mb-3">⏳ Tình Trạng</h4>
+        <div class="space-y-2">${buckets.map(([key, label, color]) => buildStatBarHTML(label, counts[key], records.length, color)).join('')}</div>
+      </div>
+    `;
+  }
+
+  let deptHTML = '';
+  if (config.deptBreakdown !== false) {
+    const deptTotals = {};
+    records.forEach(r => { if (r.dept) deptTotals[r.dept] = (deptTotals[r.dept] || 0) + 1; });
+    const deptEntries = Object.entries(deptTotals).sort((a, b) => b[1] - a[1]);
+    if (deptEntries.length) {
+      const maxDept = Math.max(1, ...deptEntries.map(e => e[1]));
+      deptHTML = `
+        <div class="bg-white p-4 rounded border">
+          <h4 class="font-bold text-gray-800 mb-3">🏢 Khối Lượng Theo Phòng Ban</h4>
+          <div class="space-y-2">${deptEntries.map(([d, c]) => buildStatBarHTML(d, c, maxDept, 'bg-sky-500')).join('')}</div>
+        </div>
+      `;
+    }
+  }
+
+  const extraHTML = config.renderExtra ? config.renderExtra(records) : '';
+
+  container.innerHTML = `
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+      ${totalHTML}
+      ${statusHTML}
+      ${deptHTML}
+    </div>
+    ${extraHTML}
+  `;
+}
+
+function renderContractReportExtra(records) {
+  const now = new Date();
+  const activeValue = records.filter(c => new Date(c.endDate) >= now).reduce((s, c) => s + (c.amount || 0), 0);
+  const expiredValue = records.filter(c => new Date(c.endDate) < now).reduce((s, c) => s + (c.amount || 0), 0);
+  const soon = new Date(now.getTime() + 30 * 24 * 3600 * 1000);
+  const expiringSoon = records.filter(c => { const end = new Date(c.endDate); return end >= now && end <= soon; });
+  return `
+    <div class="bg-white p-4 rounded border">
+      <h4 class="font-bold text-gray-800 mb-3">💰 Giá Trị Hợp Đồng</h4>
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-3 text-center">
+        <div class="bg-green-50 border border-green-200 rounded p-3">
+          <div class="font-bold text-green-700">${activeValue.toLocaleString('vi-VN')} VNĐ</div>
+          <div class="text-[11px] text-gray-500 mt-1">Còn hiệu lực</div>
+        </div>
+        <div class="bg-red-50 border border-red-200 rounded p-3">
+          <div class="font-bold text-red-700">${expiredValue.toLocaleString('vi-VN')} VNĐ</div>
+          <div class="text-[11px] text-gray-500 mt-1">Đã hết hạn</div>
+        </div>
+        <div class="bg-amber-50 border border-amber-200 rounded p-3">
+          <div class="font-bold text-amber-700">${expiringSoon.length}</div>
+          <div class="text-[11px] text-gray-500 mt-1">Sắp hết hạn (30 ngày tới)</div>
+        </div>
+      </div>
+      ${expiringSoon.length ? `
+        <div class="mt-3 overflow-x-auto">
+          <table class="w-full border-collapse border text-xs">
+            <thead><tr class="bg-gray-100"><th class="border p-2 text-left">Mã HĐ</th><th class="border p-2 text-left">Tên hợp đồng</th><th class="border p-2">Ngày hết hạn</th></tr></thead>
+            <tbody>${expiringSoon.map(c => `<tr><td class="border p-2 font-mono">${escapeHtml(c.code)}</td><td class="border p-2">${escapeHtml(c.title)}</td><td class="border p-2 text-center">${escapeHtml(c.endDate)}</td></tr>`).join('')}</tbody>
+          </table>
+        </div>
+      ` : ''}
+    </div>
+  `;
+}
+
+function renderOfficeReportExtra(records) {
+  const bySubType = { MUA_BAN: 0, SUA_CHUA: 0, DAU_TU: 0 };
+  records.forEach(o => { bySubType[o.subType] = (bySubType[o.subType] || 0) + (o.amount || 0); });
+  const max = Math.max(1, ...Object.values(bySubType));
+  return `
+    <div class="bg-white p-4 rounded border">
+      <h4 class="font-bold text-gray-800 mb-3">💰 Dự Toán Theo Phân Hệ (VNĐ)</h4>
+      <div class="space-y-2">
+        ${buildStatBarHTML('Mua sắm', bySubType.MUA_BAN, max, 'bg-teal-500')}
+        ${buildStatBarHTML('Sửa chữa', bySubType.SUA_CHUA, max, 'bg-amber-500')}
+        ${buildStatBarHTML('Đầu tư', bySubType.DAU_TU, max, 'bg-purple-500')}
+      </div>
+    </div>
+  `;
+}
+
+// Ước tính "đúng hạn" dựa trên thời điểm của mục lịch sử GẦN NHẤT so với hạn hoàn thành (Công Việc
+// chưa lưu thời điểm hoàn thành riêng — xem t.history ở renderTaskDetail()) — đủ dùng làm chỉ báo xu
+// hướng cho báo cáo, không phải số liệu tuyệt đối.
+function renderTaskReportExtra(records) {
+  const done = records.filter(t => t.status === 'DONE');
+  let onTime = 0;
+  const withDeadline = done.filter(t => t.deadline);
+  withDeadline.forEach(t => {
+    const lastEntry = (t.history || [])[(t.history || []).length - 1];
+    const completedTime = lastEntry ? parseVNDateTime(lastEntry.time) : null;
+    if (completedTime && completedTime <= new Date(t.deadline + 'T23:59:59')) onTime++;
+  });
+  const rate = withDeadline.length ? Math.round((onTime / withDeadline.length) * 100) : 0;
+  return `
+    <div class="bg-white p-4 rounded border">
+      <h4 class="font-bold text-gray-800 mb-3">⏱️ Tỷ Lệ Hoàn Thành Đúng Hạn</h4>
+      <div class="bg-gray-50 border rounded p-3 text-center">
+        <div class="text-2xl font-bold ${rate >= 80 ? 'text-green-700' : rate >= 50 ? 'text-amber-700' : 'text-red-700'}">${rate}%</div>
+        <div class="text-xs text-gray-600 mt-1">${onTime}/${withDeadline.length} công việc có hạn hoàn thành đúng hạn (trong ${done.length} đã hoàn thành)</div>
+      </div>
+      <p class="text-[10px] text-gray-400 italic mt-2">* Ước tính theo thời điểm cập nhật gần nhất trong lịch sử xử lý so với hạn hoàn thành.</p>
+    </div>
+  `;
+}
+
+function renderInternalReportExtra(records) {
+  const byType = { NEWS: 0, TRAINING: 0, REWARD: 0, SHARE: 0 };
+  records.forEach(p => { byType[p.type] = (byType[p.type] || 0) + 1; });
+  const totalLikes = records.reduce((s, p) => s + (p.likes?.length || 0), 0);
+  const totalComments = records.reduce((s, p) => s + (p.comments?.length || 0), 0);
+  const max = Math.max(1, ...Object.values(byType));
+  return `
+    <div class="bg-white p-4 rounded border">
+      <h4 class="font-bold text-gray-800 mb-3">📣 Theo Phân Hệ & Tương Tác</h4>
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div class="space-y-2">
+          ${buildStatBarHTML('Tin nội bộ', byType.NEWS, max, 'bg-fuchsia-500')}
+          ${buildStatBarHTML('Đào tạo', byType.TRAINING, max, 'bg-indigo-500')}
+          ${buildStatBarHTML('Khen thưởng', byType.REWARD, max, 'bg-amber-500')}
+          ${buildStatBarHTML('Góc chia sẻ', byType.SHARE, max, 'bg-teal-500')}
+        </div>
+        <div class="grid grid-cols-2 gap-3 content-start">
+          <div class="bg-gray-50 border rounded p-3 text-center">
+            <div class="text-xl font-bold text-rose-700">${totalLikes.toLocaleString('vi-VN')}</div>
+            <div class="text-[11px] text-gray-500 mt-1">Lượt thích</div>
+          </div>
+          <div class="bg-gray-50 border rounded p-3 text-center">
+            <div class="text-xl font-bold text-sky-700">${totalComments.toLocaleString('vi-VN')}</div>
+            <div class="text-[11px] text-gray-500 mt-1">Bình luận</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function exportModuleReportExcel(moduleKey) {
+  const config = REPORT_MODULE_CONFIGS[moduleKey];
+  if (!config) return;
+  const fromDate = document.getElementById('reportsFromDate')?.value || '';
+  const toDate = document.getElementById('reportsToDate')?.value || '';
+  const deptFilter = document.getElementById('reportsDeptFilter')?.value || '';
+  const records = config.getRecords(deptFilter, fromDate, toDate);
+
+  const rows = [['Tổng số hồ sơ', records.length]];
+  if (config.statusOf) {
+    const buckets = config.statusBuckets || [['PENDING', 'Đang chờ duyệt'], ['APPROVED', 'Đã phê duyệt'], ['REJECTED', 'Bị từ chối']];
+    const counts = {};
+    buckets.forEach(([key]) => { counts[key] = 0; });
+    records.forEach(r => { const s = config.statusOf(r); if (s in counts) counts[s]++; });
+    buckets.forEach(([key, label]) => rows.push([label, counts[key]]));
+  }
+
+  const columns = [
+    { header: 'Chỉ số', key: 'label', width: 40 },
+    { header: 'Giá trị', key: 'value', width: 20 }
+  ];
+  const dataRows = rows.map(([label, value]) => ({ label, value }));
+  const sheetName = config.title.replace(/[^\w ]/g, '').trim().slice(0, 31) || 'BaoCao';
+  downloadXlsxFromServer(`BaoCao_${moduleKey}_${new Date().toISOString().slice(0, 10)}.xlsx`, sheetName, columns, dataRows);
+}
+
+function renderReportsSummary(container) {
   const fromDate = document.getElementById('reportsFromDate')?.value || '';
   const toDate = document.getElementById('reportsToDate')?.value || '';
   const deptFilter = document.getElementById('reportsDeptFilter')?.value || '';
@@ -18718,7 +19122,15 @@ function renderReports() {
   container.innerHTML = overviewHTML + approvalHTML + deptHTML + financeHTML + operationsHTML + perfHTML + tasksHTML;
 }
 
+// Nút "Xuất Báo Cáo Excel" dùng chung cho mọi tab — Tổng Hợp xuất đủ mọi chỉ số như trước
+// (exportReportsSummaryExcel giữ nguyên logic cũ), các tab module xuất đúng phạm vi module đó
+// (exportModuleReportExcel(), xem REPORT_MODULE_CONFIGS phía trên).
 function exportReportsExcel() {
+  if (activeReportsSubTab !== 'SUMMARY') { exportModuleReportExcel(activeReportsSubTab); return; }
+  exportReportsSummaryExcel();
+}
+
+function exportReportsSummaryExcel() {
   const fromDate = document.getElementById('reportsFromDate')?.value || '';
   const toDate = document.getElementById('reportsToDate')?.value || '';
   const deptFilter = document.getElementById('reportsDeptFilter')?.value || '';
@@ -18833,7 +19245,7 @@ async function submitInternalPost(e) {
   const file = fileInput.files[0];
   if (file) {
     try {
-      const uploaded = await uploadFileToServer(file);
+      const uploaded = await uploadFileToServer(file, 'internal');
       attachment = { fileName: uploaded.fileName, fileType: uploaded.fileType, fileUrl: uploaded.fileUrl };
     } catch (err) {
       return alert(`⛔ Tải tệp đính kèm thất bại: ${err.message}`);
@@ -18942,11 +19354,10 @@ function renderInternalPosts() {
     const pinBadgeHTML = (p.pinned && p.pinExpiresAt && new Date(p.pinExpiresAt).getTime() > Date.now())
       ? `<span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 align-middle ml-2">📌 Đã ghim trang chủ</span>`
       : '';
-    // Duyệt/Từ chối giờ xử lý ở Hub "✅ Phê Duyệt" — điều hướng sang đó thay vì gọi thẳng
-    // approveInternalPostAction()/rejectInternalPostAction() tại đây.
     const approveActionsHTML = (p.status === 'PENDING' && canApprove)
       ? `<div class="flex gap-2">
-           <button onclick="goToApprovalHub('${escapeHtml(p.code)}')" class="bg-emerald-600 text-white px-3 py-1 rounded text-xs font-bold hover:bg-emerald-700">✅ Duyệt</button>
+           <button onclick="approveInternalPostAction(${p.id})" class="bg-emerald-600 text-white px-3 py-1 rounded text-xs font-bold hover:bg-emerald-700">✅ Duyệt</button>
+           <button onclick="rejectInternalPostAction(${p.id})" class="bg-red-600 text-white px-3 py-1 rounded text-xs font-bold hover:bg-red-700">❌ Từ chối</button>
          </div>`
       : '';
     return `
@@ -18989,13 +19400,12 @@ function viewInternalPostDetail(id) {
   document.getElementById('internalArticleTitle').innerText = `${icons[p.type] || '📣'} ${p.title}${statusSuffix}`;
   document.getElementById('internalArticleSub').innerText = `${p.authorName} (${p.dept}) — ${p.createdAt} | Mã: ${p.code}`;
 
-  // Duyệt/Từ chối giờ xử lý ở Hub "✅ Phê Duyệt" — điều hướng sang đó thay vì gọi thẳng
-  // approveInternalPostAction()/rejectInternalPostAction() tại đây.
   const approveActionsHTML = (p.status === 'PENDING' && canApproveInternalPost(currentUser))
     ? `<div class="bg-amber-50 border border-amber-200 rounded p-3 mb-3 flex items-center justify-between gap-2">
         <span class="text-xs text-amber-800">⏳ Bài đăng đang chờ phê duyệt để công khai trong Góc chia sẻ.</span>
         <div class="flex gap-2 flex-shrink-0">
-          <button onclick="goToApprovalHub('${escapeHtml(p.code)}')" class="bg-emerald-600 text-white px-3 py-1 rounded text-xs font-bold hover:bg-emerald-700">✅ Duyệt</button>
+          <button onclick="approveInternalPostAction(${p.id})" class="bg-emerald-600 text-white px-3 py-1 rounded text-xs font-bold hover:bg-emerald-700">✅ Duyệt</button>
+          <button onclick="rejectInternalPostAction(${p.id})" class="bg-red-600 text-white px-3 py-1 rounded text-xs font-bold hover:bg-red-700">❌ Từ chối</button>
         </div>
       </div>`
     : '';
@@ -19179,6 +19589,7 @@ function approveInternalPostAction(id) {
         `Bài đăng Góc chia sẻ "${updated.title}" (${updated.code}) của bạn đã được phê duyệt và hiển thị công khai.`);
       closeInternalArticleModal();
       renderInternalPosts();
+      refreshApprovalSurfaces();
     }
   });
 }
@@ -19209,6 +19620,7 @@ function rejectInternalPostAction(id) {
         `Bài đăng Góc chia sẻ "${updated.title}" (${updated.code}) của bạn đã bị từ chối.\nLý do: ${reason.trim()}`);
       closeInternalArticleModal();
       renderInternalPosts();
+      refreshApprovalSurfaces();
     }
   });
 }
