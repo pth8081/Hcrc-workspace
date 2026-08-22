@@ -8,6 +8,7 @@ const { getPool } = require('../db');
 const { DEFAULTS } = require('../defaults');
 const { getAppDataValue, setAppDataValue, setAppDataValueIfVersionMatches, withLockedAppDataValue } = require('../lib/appData');
 const { requireAuth, blockIfMustChangePassword, hashPassword, isBcryptHash, validatePin } = require('../lib/auth');
+const { encryptSecret } = require('../lib/emailCrypto');
 const { validatePasswordStrength } = require('../lib/passwordPolicy');
 const { HttpError } = require('../lib/httpErrors');
 const { getAllTasks } = require('../lib/taskStore');
@@ -32,7 +33,10 @@ const ADMIN_ONLY_KEYS = new Set([
   // user thường tự đổi/xoá key đang được cấu hình quy trình riêng. contractTypes/carTypes/jobTitles
   // KHÔNG thêm vào đây (giữ đúng độ mở như depts/cats — thuần danh sách nhãn hiển thị, không có bước
   // tra cứu phụ thuộc nào khác dựa vào giá trị của chúng).
-  'submissionTypes'
+  'submissionTypes',
+  // Người phụ trách nhận thông báo hết hạn hợp đồng theo phòng ban (xem jobs/contractExpiryReminder.js)
+  // — cùng khuôn quản trị như emailConfig ở trên, không phải danh sách hiển thị thuần.
+  'contractExpiryDeptContacts'
 ]);
 
 router.use(requireAuth, blockIfMustChangePassword);
@@ -47,6 +51,18 @@ router.use(requireAuth, blockIfMustChangePassword);
 function stripPasswords(users) {
   if (!Array.isArray(users)) return users;
   return users.map(({ pass, password, pinHash, failedLoginAttempts, lockedUntil, ...rest }) => rest);
+}
+
+// Không bao giờ trả mật khẩu SMTP đã mã hoá (smtpPassEnc, xem lib/emailCrypto.js) ra ngoài — kể cả
+// cho admin. GET /api/data trả nguyên "emailConfig" cho MỌI người đã đăng nhập (không riêng admin,
+// khớp đúng lý do đã strip mật khẩu user ở stripPasswords() trên), và ngay cả route admin-only đọc
+// riêng key này cũng không cần giá trị đã mã hoá cho bất kỳ mục đích hiển thị nào (admin chỉ cần biết
+// "đã cấu hình tài khoản hay chưa" — hasSmtpAuth, không cần thấy lại giá trị cũ để sửa, cùng quy ước
+// "write-only" như mật khẩu đăng nhập: để trống ô khi Sửa = giữ nguyên).
+function sanitizeEmailConfig(emailConfig) {
+  if (!emailConfig || typeof emailConfig !== 'object') return emailConfig;
+  const { smtpPassEnc, ...rest } = emailConfig;
+  return { ...rest, hasSmtpAuth: !!(emailConfig.smtpAuthEnabled && emailConfig.smtpUser && smtpPassEnc) };
 }
 
 // Xác nhận LẠI quyền admin từ CSDL tại thời điểm ghi, không tin cờ "admin" cache sẵn trong JWT lúc
@@ -185,6 +201,24 @@ async function syncUsersWithPermGroupsChange(newGroups) {
   });
 }
 
+// Mật khẩu SMTP là write-only ở giao diện (ô luôn hiện trống, xem index.html) — client gửi lên field
+// tạm "smtpPassPlain" (chỉ có giá trị khi admin thực sự gõ mật khẩu mới), KHÔNG BAO GIỜ gửi lại
+// "smtpPassEnc" (đã bị lọc khỏi mọi response đọc, xem sanitizeEmailConfig() ở trên) nên không có gì để
+// vô tình đè mất. Để trống "smtpPassPlain" = giữ nguyên "smtpPassEnc" đang lưu, khớp đúng quy ước
+// "để trống ô mật khẩu khi sửa = giữ nguyên hash cũ" ở prepareUsersForSave().
+async function prepareEmailConfigForSave(payload) {
+  const { smtpPassPlain, smtpPassEnc: _ignoredFromClient, ...rest } = payload || {};
+  if (smtpPassPlain) {
+    try {
+      return { ...rest, smtpPassEnc: encryptSecret(smtpPassPlain) };
+    } catch (err) {
+      throw new HttpError(400, `Không thể lưu mật khẩu SMTP: ${err.message}`);
+    }
+  }
+  const prior = await getAppDataValue('emailConfig');
+  return { ...rest, smtpPassEnc: prior?.smtpPassEnc };
+}
+
 // GET /api/data  → trả về TOÀN BỘ dữ liệu app dưới dạng { depts, cats, users, docs, ..., _versions }
 // _versions[key] = UpdatedAt (ISO string) tại thời điểm đọc — client lưu lại, gửi kèm header
 // If-Match khi ghi (syncStorage()) để server phát hiện xung đột ghi đồng thời (xem POST /:key bên
@@ -206,6 +240,7 @@ router.get('/', async (req, res) => {
       }
     }
     if (data.users) data.users = stripPasswords(data.users);
+    if (data.emailConfig) data.emailConfig = sanitizeEmailConfig(data.emailConfig);
     // tasks (Bước 6b) và mọi collection trong MIGRATED_COLLECTIONS (Bước 6c trở đi — hiện tại:
     // submissions) không còn trong dbo.AppData — nguồn riêng từ bảng của chúng. Không có
     // _versions.<key> tương ứng cho các key này (không còn khái niệm "version" AppData) — an toàn vì
@@ -249,7 +284,9 @@ router.get('/:key', async (req, res) => {
   try {
     const value = await getAppDataValue(key);
     if (value === null) return res.json(DEFAULTS[key]);
-    res.json(key === 'users' ? stripPasswords(value) : value);
+    if (key === 'users') return res.json(stripPasswords(value));
+    if (key === 'emailConfig') return res.json(sanitizeEmailConfig(value));
+    res.json(value);
   } catch (err) {
     sendServerError(res, 500, err, `GET /api/data/${key}`, 'Không thể tải dữ liệu từ SQL Server');
   }
@@ -274,6 +311,7 @@ router.post('/:key', async (req, res) => {
 
     if (key === 'users') value = await prepareUsersForSave(value);
     if (key === 'permGroups') await syncUsersWithPermGroupsChange(value);
+    if (key === 'emailConfig') value = await prepareEmailConfigForSave(value);
 
     const ifMatch = req.get('If-Match');
     if (ifMatch) {

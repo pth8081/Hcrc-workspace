@@ -10,7 +10,8 @@ const { validatePasswordStrength } = require('../lib/passwordPolicy');
 const { HttpError } = require('../lib/httpErrors');
 const { issueApprovalGrant, issueApprovalOtp, verifyApprovalOtp } = require('../lib/approvalAuth');
 const { getPool, sql } = require('../db');
-const { sendMail } = require('../lib/mailer');
+const { sendMail, resolveEncryption } = require('../lib/mailer');
+const { decryptSecret } = require('../lib/emailCrypto');
 
 // Không bao giờ trả field mật khẩu/PIN (dù đã hash) hay dữ liệu khoá đăng nhập ra ngoài, dùng chung cho
 // /login, /me và /change-pin — khớp đúng stripPasswords() ở routes/data.js (trước đây route này bỏ sót
@@ -339,11 +340,23 @@ router.post('/request-approval-otp', loginRateLimiter, requireAuth, async (req, 
     if (emailConfig.enabled === false) {
       return res.json({ ok: true, simulated: true });
     }
+    // Tài khoản/mật khẩu SMTP: ưu tiên DB.emailConfig (đã mã hoá, xem lib/emailCrypto.js), rơi về
+    // .env nếu chưa cấu hình qua web — khớp đúng routes/email.js/jobs/contractExpiryReminder.js.
+    let smtpUser = null, smtpPass = null;
+    if (emailConfig.smtpAuthEnabled && emailConfig.smtpUser && emailConfig.smtpPassEnc) {
+      try {
+        smtpUser = emailConfig.smtpUser;
+        smtpPass = decryptSecret(emailConfig.smtpPassEnc);
+      } catch (err) {
+        console.error('⛔ Không giải mã được mật khẩu SMTP đã lưu, dùng đường lùi .env nếu có:', err.message);
+      }
+    }
     await sendMail({
       to: [req.freshUser.email],
       subject: '[VPDT] Mã xác thực phê duyệt',
       text: `Mã OTP của bạn: ${code} (chỉ dùng 1 lần cho lượt duyệt này, hết hạn sau 5 phút)`,
-      host: emailConfig.smtpHost, port: emailConfig.smtpPort, secure: emailConfig.smtpSecure,
+      host: emailConfig.smtpHost, port: emailConfig.smtpPort, encryption: resolveEncryption(emailConfig),
+      user: smtpUser, pass: smtpPass,
       from: emailConfig.senderEmail
     });
     res.json({ ok: true });
