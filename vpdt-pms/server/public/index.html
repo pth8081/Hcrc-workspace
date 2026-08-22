@@ -3775,6 +3775,10 @@ table { display: block; overflow-x: auto; max-width: 100%; }
       <div class="border-t pt-3 space-y-3">
         <h4 class="font-bold text-gray-700">🔒 Đổi Mật Khẩu (Để trống nếu giữ nguyên)</h4>
         <div>
+          <label class="block font-semibold text-gray-600 mb-1">Mật khẩu hiện tại</label>
+          <input id="pfCurrentPass" type="password" class="w-full border p-2 rounded" placeholder="Bắt buộc nếu đổi mật khẩu mới">
+        </div>
+        <div>
           <label class="block font-semibold text-gray-600 mb-1">Mật khẩu mới</label>
           <input id="pfNewPass" type="password" class="w-full border p-2 rounded">
         </div>
@@ -6055,6 +6059,7 @@ function openProfileModal() {
   document.getElementById('pfFullName').value = currentUser.name || '';
   document.getElementById('pfEmail').value = currentUser.email || '';
   document.getElementById('pfPhone').value = currentUser.phone || '';
+  document.getElementById('pfCurrentPass').value = '';
   document.getElementById('pfNewPass').value = '';
   document.getElementById('pfConfirmPass').value = '';
 
@@ -6087,12 +6092,17 @@ async function savePersonalProfile(e) {
   const newName = document.getElementById('pfFullName').value.trim();
   const newEmail = document.getElementById('pfEmail').value.trim();
   const newPhone = document.getElementById('pfPhone').value.trim();
+  const currentPass = document.getElementById('pfCurrentPass').value.trim();
   const newPass = document.getElementById('pfNewPass').value.trim();
   const confirmPass = document.getElementById('pfConfirmPass').value.trim();
 
   if (newPass || confirmPass) {
     if (newPass !== confirmPass) return alert('❌ Mật khẩu xác nhận không khớp!');
     if (newPass.length < 8) return alert('❌ Mật khẩu phải có ít nhất 8 ký tự!');
+    // Đổi mật khẩu bắt buộc xác nhận mật khẩu hiện tại (server cũng tự kiểm tra lại, đây chỉ là chặn
+    // sớm ở UI) — tránh ai lợi dụng phiên trình duyệt đang mở sẵn tự đặt mật khẩu mới không cần biết
+    // mật khẩu cũ.
+    if (!currentPass) return alert('❌ Vui lòng nhập mật khẩu hiện tại để đổi mật khẩu mới!');
   }
 
   // Tự sửa hồ sơ CỦA CHÍNH MÌNH đi qua API riêng (PATCH /api/auth/me) thay vì ghi đè nguyên cả
@@ -6101,7 +6111,10 @@ async function savePersonalProfile(e) {
     const res = await fetch('/api/auth/me', {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name: newName, email: newEmail, phone: newPhone, password: newPass || undefined })
+      body: JSON.stringify({
+        name: newName, email: newEmail, phone: newPhone,
+        password: newPass || undefined, currentPassword: newPass ? currentPass : undefined
+      })
     });
     if (!res.ok) {
       const body = await res.json().catch(() => ({}));
@@ -8654,6 +8667,7 @@ function renderSubmissionReqs() {
   const visibleSubs = DB.submissions.filter(sub => {
     const canView = scopeAllows(currentUser, currentUser.perms?.submissionView, sub.dept) ||
       sub.creator === currentUser.username ||
+      (sub.opinionRequestees || []).includes(currentUser.username) ||
       isApproverForDeptWorkflow(resolveSubmissionWorkflow(sub), currentUser.username);
     if (!canView) return false;
 
@@ -10333,7 +10347,8 @@ function renderTasks() {
 
   tbody.innerHTML = pageItems.map(t => {
     const canUpdate = currentUser.perms?.admin || t.assignedTo === currentUser.username || t.assignedBy === currentUser.username;
-    const canAssign = !t.assignedTo && !t.externalAssignee && (currentUser.perms?.admin || t.assignedBy === currentUser.username);
+    const canAssign = !t.assignedTo && !t.externalAssignee && t.status !== 'DONE' && t.status !== 'CANCELLED' &&
+      (currentUser.perms?.admin || t.assignedBy === currentUser.username);
     const canManage = canManageTasks(currentUser);
     const isAssignee = t.assignedTo === currentUser.username;
     const isCollaborator = (t.collaborators || []).includes(currentUser.username);
@@ -17910,13 +17925,19 @@ function buildPrTaskTableHTML(items, progressField, progressLabel, colors) {
   const cellAttrCenter = `style="${cellStyle}text-align:center;"`;
   const headAttr = `style="border:1px solid ${c.tableBorder};padding:8px;font-size:14px;background:${c.tableHeadBg};text-align:left;color:${c.tableText};"`;
   const groupAttr = `style="border:1px solid ${c.tableBorder};padding:8px;font-size:14px;font-weight:700;background:${c.tableHeadBg};color:${c.tableText};"`;
-  let romanCounter = 0, lastGroup = null, subCounter = 0;
+  let romanCounter = 0, lastGroup = null, subCounter = 0, prevHadGroup = false;
   const rows = list.map((it) => {
     let groupRowHTML = '';
     if (it.group && it.group !== lastGroup) {
       romanCounter++; lastGroup = it.group; subCounter = 0;
       groupRowHTML = `<tr><td ${groupAttr}>${escapeHtml(toRomanNumeral(romanCounter))}</td><td ${groupAttr} colspan="4">${escapeHtml(it.group)}</td></tr>`;
+    } else if (!it.group && prevHadGroup) {
+      // Dòng không gán "Mục lớn" xuất hiện NGAY SAU 1 khối có nhóm — subCounter trước đây chỉ được
+      // reset khi gặp nhóm MỚI, không reset khi gặp dòng không nhóm, nên dòng này kế thừa bộ đếm dư
+      // từ nhóm trước, đánh số nhảy cóc thay vì tiếp tục đúng trình tự (1, 2, 3...).
+      subCounter = 0;
     }
+    prevHadGroup = !!it.group;
     subCounter++;
     const rowHTML = `<tr>
       <td ${cellAttrCenter}>${it.group ? subCounter : romanCounter + subCounter}</td>
@@ -18437,7 +18458,7 @@ function editPendingNewUser(idx) {
   document.getElementById('uUsername').scrollIntoView({ behavior: 'smooth', block: 'center' });
 }
 
-function commitPendingNewUsers() {
+async function commitPendingNewUsers() {
   if (pendingNewUsers.length === 0) return;
   // Kiểm tra lại lần cuối phòng trường hợp có người khác đã tạo trùng username trong lúc mình đang
   // xếp danh sách — server (prepareUsersForSave) vẫn xác minh/hash lại toàn bộ 1 lần nữa khi ghi.
@@ -18447,8 +18468,17 @@ function commitPendingNewUsers() {
   }
   if (!confirm(`Lưu ${pendingNewUsers.length} người dùng mới trong danh sách?`)) return;
 
+  // Chờ server xác nhận thật rồi mới báo thành công/xoá danh sách chờ — cùng lỗi đã vá ở saveUser():
+  // trước đây gọi syncStorage() KHÔNG await, báo "Đã lưu..." ngay và xoá pendingNewUsers bất kể server
+  // có từ chối sau đó (409 xung đột version, hoặc 400 do 1 user trong lô mật khẩu yếu — server từ chối
+  // NGUYÊN mảng). Người dùng tưởng đã lưu xong, mất trắng danh sách chờ không phục hồi được.
+  const usersSnapshot = JSON.parse(JSON.stringify(DB.users));
   DB.users.push(...pendingNewUsers);
-  syncStorage('users');
+  const saved = await syncStorage('users');
+  if (!saved) {
+    DB.users = usersSnapshot;
+    return;
+  }
   const names = pendingNewUsers.map(u => u.username).join(', ');
   logSystemAction('USER_MGM', 'SAVE_USER_BATCH', `Lưu danh sách ${pendingNewUsers.length} người dùng mới [${names}]`, 'SUCCESS', names);
   alert(`✅ Đã lưu ${pendingNewUsers.length} người dùng mới!`);
@@ -18760,6 +18790,12 @@ async function importUsersExcel(evt) {
     return alert('⛔ Không thể kết nối tới máy chủ: ' + e.message);
   }
 
+  // Chờ server xác nhận thật rồi mới báo thành công — cùng lỗi đã vá ở commitPendingNewUsers(): route
+  // import-xlsx chỉ PARSE file (comment routes/adminExport.js xác nhận không ghi DB), việc ghi thật vẫn
+  // đi qua syncStorage('users') như bình thường — trước đây gọi không await, báo "Đã import thành
+  // công..." ngay bất kể server sau đó có từ chối (400 do 1 dòng thiếu/sai mật khẩu — từ chối NGUYÊN
+  // mảng, hoặc 409 xung đột version).
+  const usersSnapshot = JSON.parse(JSON.stringify(DB.users));
   let count = 0;
   rows.forEach(({ username, pass, name, email, phone, dept, jobTitle }) => {
     if (!DB.users.some(u => u.username === username)) {
@@ -18771,7 +18807,11 @@ async function importUsersExcel(evt) {
       count++;
     }
   });
-  syncStorage('users');
+  const saved = await syncStorage('users');
+  if (!saved) {
+    DB.users = usersSnapshot;
+    return;
+  }
   alert(`✅ Đã import thành công ${count} người dùng mới!`);
   renderUsers();
 }
@@ -18799,10 +18839,14 @@ function onLogFilterChange() {
 
 // Tải nhật ký hệ thống qua endpoint riêng GET /api/log (chỉ admin gọi được, xem routes/systemLog.js)
 // — gọi đúng lúc mở tab Nhật ký (setSystemSubTab('LOG')), KHÔNG còn kèm sẵn trong GET /api/data cho
-// mọi người đăng nhập như trước.
+// mọi người đăng nhập như trước. limit=1000 (mức tối đa server cho phép, MAX_GET_LIMIT ở
+// routes/systemLog.js) thay vì 200 cứng trước đây — bảng giữ tới 5000 dòng (RETENTION_KEEP,
+// lib/systemLogStore.js) và API chưa hỗ trợ phân trang thật (không có offset/cursor để lấy dòng cũ
+// hơn), nên đây chỉ là cải thiện tăng phạm vi tra cứu/lọc/xuất Excel lên tối đa hiện có, chưa giải
+// quyết dứt điểm — cần bổ sung phân trang thật ở lib/systemLogStore.js nếu cần xem hết 5000 dòng.
 async function loadSystemLogs() {
   try {
-    const res = await fetch('/api/log?limit=200');
+    const res = await fetch('/api/log?limit=1000');
     if (res.status === 401) return handleSessionExpired();
     const body = await res.json().catch(() => ({}));
     if (!res.ok) {
@@ -19384,7 +19428,11 @@ function renderReportsSummary(container) {
   ` : '';
 
   // --- Tài chính ---
-  const now = new Date();
+  // So theo NGÀY LỊCH (bỏ giờ/phút), khớp bản vá ở renderContractReportExtra() (tab "Hợp Đồng" riêng)
+  // — trước đây tab "Tổng Hợp" này vẫn dùng "now" nguyên giờ/phút thực tế, khiến 1 hợp đồng hết hạn
+  // ĐÚNG hôm nay bị 2 tab của cùng module Báo Cáo cho ra 2 kết quả khác nhau (còn hiệu lực/đã hết hạn).
+  const rawNow = new Date();
+  const now = new Date(rawNow.getFullYear(), rawNow.getMonth(), rawNow.getDate());
   // Chỉ tính giá trị trên hợp đồng ĐÃ DUYỆT — khớp đúng cách officeBySubType lọc APPROVED ngay dưới
   // đây; trước đây visibleContracts (mọi trạng thái: PENDING/APPROVED/REJECTED) được cộng thẳng, thổi
   // phồng "Giá trị Hợp đồng" bằng những hồ sơ chưa từng được duyệt.
@@ -19526,8 +19574,13 @@ function exportReportsSummaryExcel() {
 
   const inScope = (r) => (!deptFilter || r.dept === deptFilter) && isInDateRange(r.createdAt, fromDate, toDate);
   const visibleContracts = DB.contracts.filter(inScope);
-  const now = new Date();
-  const activeContractValue = visibleContracts.filter(c => new Date(c.endDate) >= now).reduce((sum, c) => sum + (c.amount || 0), 0);
+  // Khớp đúng 2 bản vá đã áp cho renderReportsSummary() (phần hiển thị màn hình cùng số liệu này) —
+  // trước đây hàm xuất Excel không lọc APPROVED (cộng cả PENDING/REJECTED, thổi phồng "Giá trị Hợp
+  // đồng còn hiệu lực") và so ngày nguyên giờ/phút thực tế thay vì theo ngày lịch.
+  const approvedContracts = visibleContracts.filter(c => c.approvalStatus === 'APPROVED');
+  const rawNow = new Date();
+  const now = new Date(rawNow.getFullYear(), rawNow.getMonth(), rawNow.getDate());
+  const activeContractValue = approvedContracts.filter(c => new Date(c.endDate) >= now).reduce((sum, c) => sum + (c.amount || 0), 0);
 
   const rows = [
     ['Tổng Tài liệu', docStats.total], ['Tài liệu - Đang chờ', docStats.pending], ['Tài liệu - Đã duyệt', docStats.approved], ['Tài liệu - Từ chối', docStats.rejected],
@@ -19846,8 +19899,13 @@ function viewInternalPostDetail(id) {
 
   const isImg = isInternalImageAttachment(p.attachment);
   const coverHTML = isImg ? `<img src="${escapeHtml(p.attachment.fileUrl)}" alt="" class="w-full max-h-96 object-cover">` : '';
+  // Đi qua attachmentDownloadUrl() (route /api/files/download) như mọi module khác — trước đây trỏ
+  // thẳng p.attachment.fileUrl (route tĩnh /uploads/), bỏ qua bước đóng dấu watermark PDF mà mọi luồng
+  // tải PDF khác trong hệ thống đều có (routes/download.js CHO PHÉP tải khi không tìm thấy bản ghi sở
+  // hữu trong 5 collection đã biết — đúng thiết kế "internal posts mở cho mọi người xem", vẫn đóng dấu
+  // watermark nếu là PDF).
   const attachmentLinkHTML = (p.attachment && !isImg)
-    ? `<div class="mt-3"><a href="${escapeHtml(p.attachment.fileUrl)}" target="_blank" class="text-blue-600 underline text-xs">📎 ${escapeHtml(p.attachment.fileName)}</a></div>`
+    ? `<div class="mt-3"><a href="${escapeHtml(attachmentDownloadUrl(p.attachment.fileUrl, p.attachment.fileData, p.attachment.fileName))}" target="_blank" class="text-blue-600 underline text-xs">📎 ${escapeHtml(p.attachment.fileName)}</a></div>`
     : '';
 
   document.getElementById('internalArticleContent').innerHTML = `

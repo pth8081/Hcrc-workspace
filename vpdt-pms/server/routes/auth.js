@@ -260,9 +260,35 @@ router.post('/change-pin', loginRateLimiter, requireAuth, async (req, res) => {
 // trong body — nên không thể dùng route này để sửa hồ sơ người khác hay tự cấp quyền/đổi phòng ban
 // (chỉ nhận đúng 4 field liệt kê dưới, bỏ qua mọi field khác kể cả nếu client cố gửi kèm perms/admin).
 router.patch('/me', requireAuth, async (req, res) => {
-  const { name, email, phone, password, dashboardHiddenCards } = req.body || {};
+  const { name, email, phone, password, currentPassword, dashboardHiddenCards } = req.body || {};
 
   try {
+    // Đổi mật khẩu bắt buộc xác nhận đúng mật khẩu HIỆN TẠI trước — cùng lý do với /change-pin (đổi
+    // PIN): tránh ai lợi dụng phiên trình duyệt đang mở sẵn (máy dùng chung/phiên bị chiếm) tự đặt mật
+    // khẩu mới mà không cần biết mật khẩu cũ, rồi đăng xuất mọi phiên khác qua sessionVersion bên dưới —
+    // chiếm trọn tài khoản trong khi chủ thật không hề bị lộ mật khẩu ban đầu. Người đang phải đổi mật
+    // khẩu tạm lần đầu (mustChangePassword) vẫn còn nhớ đúng mật khẩu tạm vừa dùng để đăng nhập nên
+    // không bị chặn lối thoát duy nhất này.
+    if (password) {
+      if (!currentPassword) return res.status(400).json({ error: 'Vui lòng nhập mật khẩu hiện tại' });
+
+      const remainingLockMinutes = getLockoutRemainingMinutes(req.freshUser);
+      if (remainingLockMinutes !== null) {
+        return res.status(429).json({ error: `Tài khoản tạm khóa do nhập sai quá nhiều lần. Vui lòng thử lại sau ${remainingLockMinutes} phút.` });
+      }
+
+      const ok = await verifyPassword(currentPassword, req.freshUser.pass);
+      if (!ok) {
+        await withLockedAppDataValue('users', (collection) => {
+          const list = Array.isArray(collection) ? collection : [];
+          const idx = list.findIndex(u => u.username === req.user.username);
+          if (idx !== -1) recordFailedLogin(list[idx]);
+          return list;
+        });
+        return res.status(401).json({ error: 'Mật khẩu hiện tại không chính xác' });
+      }
+    }
+
     let updated;
     // withLockedAppDataValue (thay vì đọc/sửa/ghi rời rạc như trước) — khoá đúng dòng "users" trong
     // lúc đọc-sửa-ghi, tránh mất dữ liệu nếu có request khác (admin sửa quyền người khác, hoặc chính
@@ -287,8 +313,10 @@ router.patch('/me', requireAuth, async (req, res) => {
         if (passwordError) throw new HttpError(400, passwordError);
         updated.pass = await hashPassword(password);
         delete updated.password;
-        // Tự đổi mật khẩu thành công -> gỡ cờ bắt buộc đổi (nếu có) — đây chính là lối thoát duy nhất
-        // khỏi trạng thái mustChangePassword (xem lib/auth.js blockIfMustChangePassword).
+        // Tự đổi mật khẩu thành công (kể cả sau khi vừa gõ sai currentPassword vài lần) -> xoá lịch sử
+        // sai + gỡ cờ bắt buộc đổi (nếu có) — đây chính là lối thoát duy nhất khỏi trạng thái
+        // mustChangePassword (xem lib/auth.js blockIfMustChangePassword).
+        resetLoginAttempts(updated);
         delete updated.mustChangePassword;
         // Vô hiệu hóa mọi phiên JWT KHÁC đang mở của chính người này (xem lib/auth.js signToken/
         // requireAuth) — mất mật khẩu/thiết bị cũ vẫn đăng nhập được vô thời hạn cho tới khi token hết

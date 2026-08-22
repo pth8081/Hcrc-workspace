@@ -74,6 +74,9 @@ function editContract(payload, user, contract, hasAddenda, rootDept) {
         description: (it?.description || '').trim(), amount: Number(it?.amount) || 0, dueDate: it?.dueDate || ''
       }));
       if (newInstallments.length) {
+        if (newInstallments.some(it => !(it.amount > 0))) {
+          throw new HttpError(400, 'Mỗi đợt thanh toán phải có số tiền lớn hơn 0');
+        }
         const sum = newInstallments.reduce((s, it) => s + it.amount, 0);
         if (Math.abs(sum - newAmount) > 1) {
           throw new HttpError(400, `Tổng các đợt thanh toán (${sum.toLocaleString('vi-VN')}) phải khớp với giá trị hợp đồng (${newAmount.toLocaleString('vi-VN')})`);
@@ -188,6 +191,15 @@ function canManageOfficePayment(user, item) {
 function uploadOfficeSignedFile(payload, user, item) {
   if (!canManageOfficePayment(user, item)) throw new HttpError(403, 'Bạn không có quyền tải lên tài liệu ký cho đề xuất này');
   if (item.status !== 'APPROVED') throw new HttpError(409, 'Đề xuất chưa được phê duyệt xong');
+  // Khác Hợp đồng (có quy trình duyệt riêng cho Tài liệu ký, khoá lại khi signedFileStatus==='APPROVED'),
+  // officeReqs không có bước duyệt phụ cho tài liệu ký — tệp gắn vào là dùng làm căn cứ thanh toán ngay.
+  // Vẫn cho tải lại/sửa TRƯỚC KHI bắt đầu chuyển sang thanh toán (paymentStatus vẫn CHUA_THANH_TOAN, vd
+  // lỡ chọn nhầm tệp), nhưng khoá cứng ngay khi đã "Chuyển Sang Thanh Toán" hoặc đã thanh toán xong —
+  // trước đây không có điều kiện này, tệp căn cứ thanh toán bị thay được ngay cả sau khi tiền đã giải
+  // ngân xong (paymentStatus === 'DA_THANH_TOAN').
+  if (item.signedFileUrl && item.paymentStatus !== 'CHUA_THANH_TOAN') {
+    throw new HttpError(409, 'Đã chuyển sang thanh toán — không thể thay đổi Tài liệu ký nữa');
+  }
   const { fileName, fileType, fileUrl } = payload || {};
   if (!fileName || !fileUrl) throw new HttpError(400, 'Thiếu tệp tài liệu ký');
   item.signedFileName = fileName;
@@ -234,6 +246,10 @@ function editPaymentRequest(payload, user, pr) {
   if (payload.installments !== undefined) {
     const installments = Array.isArray(payload.installments) ? payload.installments : [];
     if (!installments.length) throw new HttpError(400, 'Cần ít nhất 1 đợt thanh toán');
+    // Mỗi đợt phải dương — cùng lý do lúc TẠO (xem createValidation.js paymentRequests.extraValidate).
+    if (installments.some(it => !(Number(it?.amount) > 0))) {
+      throw new HttpError(400, 'Mỗi đợt thanh toán phải có số tiền lớn hơn 0');
+    }
   }
   for (const field of PAYMENT_EDITABLE_FIELDS) {
     if (payload[field] !== undefined) pr[field] = payload[field];
@@ -643,6 +659,13 @@ function assignTask(payload, user, task, usersList) {
   if (task.assignedTo) {
     throw new HttpError(409, 'Công việc này đã có người nhận, không thể gán lại qua thao tác này');
   }
+  // Khác editTask/requestExtension/cancelOrRequestCancelTask (đã chặn khi DONE/CANCELLED), assignTask()
+  // trước đây không xét task.status — việc đã bị Huỷ (chưa có người nhận, vd chỉ đạo tự sinh) vẫn "Gán
+  // người nhận" được sau đó, tự chuyển DOING, coi như chưa từng bị huỷ (phá vỡ giả định CANCELLED là
+  // trạng thái kết thúc mà báo cáo/thống kê Công Việc đang dựa vào).
+  if (task.status === 'DONE' || task.status === 'CANCELLED') {
+    throw new HttpError(409, 'Công việc đã Hoàn thành/Đã huỷ — không thể gán người nhận');
+  }
   const rawAssignees = Array.isArray(payload?.assignedTo) ? payload.assignedTo : [payload?.assignedTo];
   const assignees = [...new Set(rawAssignees.filter(u => typeof u === 'string' && u.trim()))];
   if (assignees.length === 0) {
@@ -787,6 +810,13 @@ function acceptTask(payload, user, task) {
 }
 
 function confirmCollaboratorParticipation(payload, user, task) {
+  // Client chỉ hiện nút "Xác Nhận Tham Gia" khi isOpenTask (status khác DONE/CANCELLED) — cùng dạng
+  // lỗ hổng "gate chỉ ở client" đã vá cho acceptTask()/requestExtension()/cancelOrRequestCancelTask(),
+  // nhưng trước đây bị bỏ sót cho hàm này: gọi thẳng API sau khi việc đã đóng vẫn ghi thêm xác nhận
+  // tham gia + dòng lịch sử vào 1 việc đã kết thúc, gây nhiễu khi tra cứu lịch sử.
+  if (task.status === 'DONE' || task.status === 'CANCELLED') {
+    throw new HttpError(409, 'Công việc đã Hoàn thành/Đã huỷ — không thể xác nhận tham gia');
+  }
   const externalName = payload?.externalName;
   task.collaboratorAccepts = Array.isArray(task.collaboratorAccepts) ? task.collaboratorAccepts : [];
   task.history = Array.isArray(task.history) ? task.history : [];
@@ -906,6 +936,12 @@ function updateTaskStatusAction(payload, user, task) {
   // còn dở dang, nên có thể đánh dấu "Hoàn thành" dù còn subtask chưa xong, không có dấu hiệu cảnh báo.
   if (newStatus === 'DONE' && (task.subtasks || []).some(s => !s.done)) {
     throw new HttpError(409, 'Công việc còn công việc nhỏ (subtask) chưa hoàn thành. Vui lòng hoàn thành hết trước khi đóng công việc.');
+  }
+  // Chuyển TODO -> DOING qua đường này (người giao việc/admin bấm hộ) trước đây không ghi startedAt
+  // như acceptTask() (đường "Nhận Việc" chính thức) vẫn làm — modal Chi tiết vẫn hiển thị "Chưa nhận
+  // việc" dù việc đã "Đang thực hiện", dữ liệu tiến độ không nhất quán.
+  if (task.status === 'TODO' && newStatus === 'DOING' && !task.startedAt) {
+    task.startedAt = nowVN();
   }
   task.status = newStatus;
   task.history = Array.isArray(task.history) ? task.history : [];
