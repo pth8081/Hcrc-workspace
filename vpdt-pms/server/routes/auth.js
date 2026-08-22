@@ -367,12 +367,48 @@ router.post('/request-approval-otp', loginRateLimiter, requireAuth, async (req, 
 });
 
 // POST /api/auth/verify-approval-otp — xác thực mã OTP đã gửi ở trên, cấp phiếu Duyệt nếu đúng (xem
-// lib/approvalAuth.js verifyApprovalOtp() — đã tự cấp phiếu bên trong khi khớp mã).
+// lib/approvalAuth.js verifyApprovalOtp() — đã tự cấp phiếu bên trong khi khớp mã). Trước đây là điểm
+// DUY NHẤT trong 4 điểm xác thực lại (login, /verify-password, /verify-pin, ở đây) KHÔNG dùng chung bộ
+// đếm khoá tài khoản (lib/loginAttempts.js) — mã OTP chỉ có 6 chữ số (1 triệu khả năng, hết hạn sau 5
+// phút, xem lib/approvalAuth.js), chỉ dựa vào loginRateLimiter (giới hạn theo IP) thì 1 kẻ tấn công có
+// thể đổi IP/dùng nhiều thiết bị để dò thẳng account đang cần OTP mà không bị khoá tài khoản như 3 điểm
+// xác thực còn lại.
 router.post('/verify-approval-otp', loginRateLimiter, requireAuth, async (req, res) => {
   const { code } = req.body || {};
   if (!code) return res.status(400).json({ error: 'Thiếu mã OTP' });
-  const ok = verifyApprovalOtp(req.freshUser.username, code);
-  res.json({ ok });
+
+  try {
+    const username = req.freshUser.username;
+    const remainingLockMinutes = getLockoutRemainingMinutes(req.freshUser);
+    if (remainingLockMinutes !== null) {
+      return res.status(429).json({ error: `Tài khoản tạm khóa do nhập sai quá nhiều lần. Vui lòng thử lại sau ${remainingLockMinutes} phút.` });
+    }
+
+    const ok = verifyApprovalOtp(username, code);
+    if (!ok) {
+      await withLockedAppDataValue('users', (collection) => {
+        const list = Array.isArray(collection) ? collection : [];
+        const idx = list.findIndex(u => u.username === username);
+        if (idx !== -1) recordFailedLogin(list[idx]);
+        return list;
+      });
+      return res.json({ ok: false });
+    }
+
+    if (req.freshUser.failedLoginAttempts) {
+      await withLockedAppDataValue('users', (collection) => {
+        const list = Array.isArray(collection) ? collection : [];
+        const idx = list.findIndex(u => u.username === username);
+        if (idx !== -1) resetLoginAttempts(list[idx]);
+        return list;
+      });
+    }
+
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('POST /api/auth/verify-approval-otp lỗi:', err.message);
+    res.status(500).json({ error: 'Không thể xác thực mã OTP' });
+  }
 });
 
 module.exports = router;

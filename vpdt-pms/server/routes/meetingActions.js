@@ -11,7 +11,7 @@ const express = require('express');
 const router = express.Router();
 const { requireAuth, blockIfMustChangePassword } = require('../lib/auth');
 const { HttpError } = require('../lib/httpErrors');
-const { withLockedRecordForCollection, getAllForCollection } = require('../lib/recordStore');
+const { withLockedRecordForCollection, getAllForCollection, withAppLock } = require('../lib/recordStore');
 const { findMeetingConflict } = require('../lib/createValidation');
 
 router.use(requireAuth, blockIfMustChangePassword);
@@ -44,7 +44,7 @@ router.post('/:id/:action', async (req, res) => {
     // editContract() kiểm tra phụ lục, không cần khoá cả collection).
     const allMeetings = action === 'approve' ? await getAllForCollection('meetings') : null;
 
-    const resultItem = await withLockedRecordForCollection('meetings', itemId, (item) => {
+    const doAction = () => withLockedRecordForCollection('meetings', itemId, (item) => {
       if (action === 'cancel' && !hasPerm && item.creator !== freshUser.username) {
         throw new HttpError(403, 'Bạn chỉ có thể huỷ lịch do chính mình đặt');
       }
@@ -68,6 +68,17 @@ router.post('/:id/:action', async (req, res) => {
       item.status = config.status;
       return item;
     });
+
+    // allMeetings (snapshot đọc TRƯỚC khi khoá) chỉ đủ để chặn trùng phòng nếu KHÔNG CÓ ai khác cũng
+    // đang duyệt 1 lịch KHÁC cùng phòng/trùng giờ CÙNG LÚC — withLockedRecordForCollection chỉ khoá
+    // ĐÚNG 1 dòng theo Id, 2 request duyệt 2 lịch khác nhau cùng phòng trùng giờ vẫn có thể cùng đọc
+    // "chưa ai trùng" trước khi cả hai kịp ghi APPROVED (y hệt race findCarPlateConflict() ở carRegs,
+    // xem routes/workflow.js). Khoá thêm bằng withAppLock() theo TÊN PHÒNG (giống getLockKey() lúc TẠO
+    // lịch ở lib/createValidation.js) bọc quanh toàn bộ đọc-kiểm tra-ghi để chặn đúng race này.
+    const targetRoom = action === 'approve' ? (allMeetings || []).find(m => m.id === itemId)?.room : null;
+    const resultItem = targetRoom
+      ? await withAppLock(`meeting_room:${targetRoom}`, doAction)
+      : await doAction();
 
     res.json({ ok: true, item: resultItem });
   } catch (err) {

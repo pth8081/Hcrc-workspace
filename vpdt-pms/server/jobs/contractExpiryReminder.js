@@ -159,8 +159,19 @@ async function checkContractExpiryReminders() {
             });
           } catch (err) {
             console.error('⛔ [Nhắc hạn hợp đồng] Gửi email thật thất bại:', err.message);
+            // Trước đây sendResult GIỮ NGUYÊN giá trị khởi tạo {sent:[], failed:[], simulated:true} khi
+            // sendMail() throw (VD mất kết nối SMTP) — simulated:true khiến log/điều kiện bên dưới coi
+            // như "chưa từng thử gửi thật" thay vì "đã thử và thất bại cho TẤT CẢ người nhận", sai lệch
+            // cả nội dung log lẫn (nghiêm trọng hơn) điều kiện đánh dấu notifiedThresholds bên dưới.
+            sendResult = { sent: [], failed: recipients.map(r => r.email), simulated: false };
           }
         }
+        // Gửi thật (không phải mô phỏng) nhưng KHÔNG một ai trong danh sách nhận thành công — coi như
+        // chưa nhắc được gì cả, để lần chạy job KẾ TIẾP thử lại nguyên ngưỡng này (không push vào
+        // notifiedThresholds). Trước đây push vô điều kiện: 1 lần lỗi kết nối SMTP thoáng qua (hay cấu
+        // hình sai tạm thời) khiến ngưỡng đó bị đánh dấu "đã nhắc" vĩnh viễn, không bao giờ thử gửi lại
+        // được nữa dù chưa ai thực sự nhận được email nhắc hạn.
+        const totalSendFailure = recipients.length > 0 && !sendResult.simulated && sendResult.sent.length === 0 && sendResult.failed.length > 0;
 
         let statusSuffix = '';
         if (recipients.length && !sendResult.simulated) {
@@ -178,13 +189,15 @@ async function checkContractExpiryReminders() {
           actionType: 'EXPIRY_REMINDER',
           targetObject: c.code,
           description: recipients.length
-            ? `Đã gửi nhắc hạn hợp đồng [${c.code} - ${c.title}] (${label}) tới ${recipients.map(r => r.email).join(', ')}${statusSuffix}`
+            ? `${totalSendFailure ? 'LỖI gửi nhắc hạn' : 'Đã gửi nhắc hạn'} hợp đồng [${c.code} - ${c.title}] (${label}) tới ${recipients.map(r => r.email).join(', ')}${statusSuffix}${totalSendFailure ? ' — sẽ tự thử lại ở lần kiểm tra kế tiếp' : ''}`
             : `Hợp đồng [${c.code} - ${c.title}] (${label}) chưa có người nhận hợp lệ (người tạo chưa có email, không có CC)`,
           status: recipients.length ? (sendResult.failed.length && !sendResult.simulated ? 'WARNING' : 'SUCCESS') : 'WARNING'
         });
 
-        c.notifiedThresholds.push(threshold);
-        contractChanged = true;
+        if (!totalSendFailure) {
+          c.notifiedThresholds.push(threshold);
+          contractChanged = true;
+        }
       }
 
       if (contractChanged) {

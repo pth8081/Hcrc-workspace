@@ -16,20 +16,31 @@ const { canDownloadRecordFile } = require('../lib/recordViewScope');
 
 const router = express.Router();
 
-// Tra ngược fileUrl -> bản ghi sở hữu nó, CHỈ cho 2 collection đã xác nhận có lỗ hổng qua rà soát
-// (Tài Liệu, Văn Bản Trình — mỗi bản ghi có scope xem/tải riêng theo phòng ban, xem canDownloadFile()
-// ở public/index.html). Nếu file không thuộc 2 collection này (hợp đồng, đăng ký xe, văn phòng, biên
-// bản họp, bài truyền thông nội bộ...) thì CHO PHÉP như trước (chưa mở rộng kiểm tra sang các module
-// đó — cần rà lại đúng scope riêng của từng module trước khi áp dụng, tránh chặn nhầm).
+// Tra ngược fileUrl -> bản ghi sở hữu nó — Tài Liệu, Văn Bản Trình, Hợp Đồng, Đăng Ký Xe, Văn Phòng
+// Tổng Hợp đều dùng chung 1 khuôn quyền tải theo phòng ban ({all,depts}, cờ "<moduleKey>Download" +
+// luôn cho phép chính chủ, xem canDownloadFile()/canDownloadRecordFile()). Biên bản họp KHÔNG có mặt ở
+// đây — "Tải" của module đó xuất ra 1 phiếu dựng TỪ DỮ LIỆU bản ghi ngay ở trình duyệt (canvas/PDF),
+// không có fileUrl nào đi qua /uploads/ để cần tra cứu ở route này (khớp đúng cơ chế "Tải phiếu" của
+// Công Việc, không phải file người dùng tự tải lên). Nếu file không thuộc các collection dưới đây (VD
+// bài truyền thông nội bộ) thì CHO PHÉP như trước (chưa rà logic canView riêng của module đó).
 async function findOwningRecord(fileUrl) {
-  const [docs, submissions] = await Promise.all([
+  const [docs, submissions, contracts, carRegs, officeReqs] = await Promise.all([
     getAllForCollection('docs'),
-    getAllForCollection('submissions')
+    getAllForCollection('submissions'),
+    getAllForCollection('contracts'),
+    getAllForCollection('carRegs'),
+    getAllForCollection('officeReqs')
   ]);
   const doc = (docs || []).find(d => d.fileUrl === fileUrl);
   if (doc) return { moduleKey: 'doc', dept: doc.dept, ownerUsername: doc.uploader };
   const sub = (submissions || []).find(s => s.fileUrl === fileUrl || (s.extraFiles || []).some(ef => ef.fileUrl === fileUrl));
   if (sub) return { moduleKey: 'submission', dept: sub.dept, ownerUsername: sub.creator };
+  const contract = (contracts || []).find(c => c.fileUrl === fileUrl || c.signedFileUrl === fileUrl);
+  if (contract) return { moduleKey: 'contract', dept: contract.dept, ownerUsername: contract.creator };
+  const carReg = (carRegs || []).find(c => c.fileUrl === fileUrl);
+  if (carReg) return { moduleKey: 'car', dept: carReg.dept, ownerUsername: carReg.creator };
+  const officeReq = (officeReqs || []).find(o => o.fileUrl === fileUrl || o.signedFileUrl === fileUrl);
+  if (officeReq) return { moduleKey: 'office', dept: officeReq.dept, ownerUsername: officeReq.creator };
   return null;
 }
 const UPLOAD_DIR = path.join(__dirname, '..', 'uploads');

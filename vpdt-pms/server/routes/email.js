@@ -103,10 +103,18 @@ router.post('/test', sendEmailRateLimiter, async (req, res) => {
   try {
     // Ô Mật khẩu SMTP trên form là write-only (luôn hiện trống, xem index.html) — để trống lúc "Gửi
     // thử" nghĩa là "dùng mật khẩu đã lưu", KHÔNG PHẢI "không mật khẩu", khớp đúng quy ước khi Lưu.
+    // NHƯNG mật khẩu đã lưu đó thuộc về ĐÚNG 1 username đã lưu (saved.user) — nếu admin đang gõ dở 1
+    // username KHÁC (VD đổi tài khoản SMTP nhưng để trống ô mật khẩu, tưởng nhầm là "giữ nguyên mật
+    // khẩu cũ" cũng áp dụng được cho username mới), trước đây vẫn lấy nguyên mật khẩu cũ ghép với
+    // username MỚI gửi đi — sai cặp tài khoản/mật khẩu, "Gửi thử" thất bại (hoặc tệ hơn là "thành công"
+    // một cách khó hiểu nếu máy chủ SMTP đó tình cờ chấp nhận) mà không nói rõ nguyên nhân thật.
     let testUser = smtpAuthEnabled ? smtpUser : null;
     let testPass = smtpAuthEnabled ? smtpPass : null;
     if (smtpAuthEnabled && smtpUser && !smtpPass) {
       const saved = resolveSmtpAccount(await getEmailConfig());
+      if (saved.user && saved.user !== smtpUser) {
+        return res.status(400).json({ error: `Tài khoản SMTP "${smtpUser}" chưa có mật khẩu — vui lòng nhập mật khẩu để gửi thử (mật khẩu đã lưu thuộc về tài khoản khác: "${saved.user}").` });
+      }
       testPass = saved.pass;
     }
 

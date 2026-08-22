@@ -23,7 +23,7 @@ const CONTRACT_EDITABLE_FIELDS = ['dept', 'type', 'title', 'partner', 'amount', 
 
 // hasAddenda: caller (routes/records.js) tự tra collection để biết hợp đồng gốc này đã có phụ lục
 // nào kế thừa dept của nó hay chưa — file này không tự đọc DB (giữ đúng nguyên tắc cũ, xem đầu file).
-function editContract(payload, user, contract, hasAddenda) {
+function editContract(payload, user, contract, hasAddenda, rootDept) {
   // Khớp đúng luật cũ ở client (openEditContract/updateContractReq): CHỈ người tạo mới sửa được, kể
   // cả admin cũng không có ngoại lệ — không mở rộng quyền so với hành vi trước Bước 2b.
   if (contract.creator !== user.username) {
@@ -43,10 +43,54 @@ function editContract(payload, user, contract, hasAddenda) {
   if (!contract.isAddendum && hasAddenda && payload.dept !== undefined && payload.dept !== contract.dept) {
     throw new HttpError(409, 'Hợp đồng gốc đã có phụ lục — không thể đổi phòng ban');
   }
+  // Ngược lại, SỬA ngay chính phụ lục (không phải hợp đồng gốc) mà đổi dept lệch khỏi gốc cũng phá vỡ
+  // đúng ràng buộc đó — trước đây chỉ chặn chiều sửa hợp đồng gốc, còn sửa thẳng phụ lục thì không ai
+  // kiểm tra lại gì cả (createValidation.js chỉ áp dụng lúc TẠO, không áp dụng lúc SỬA phụ lục).
+  if (contract.isAddendum && rootDept !== undefined && payload.dept !== undefined && payload.dept !== rootDept) {
+    throw new HttpError(409, 'Phòng ban của phụ lục phải khớp với hợp đồng gốc');
+  }
+
+  if (payload.startDate !== undefined || payload.endDate !== undefined) {
+    const newStart = payload.startDate !== undefined ? payload.startDate : contract.startDate;
+    const newEnd = payload.endDate !== undefined ? payload.endDate : contract.endDate;
+    if (newStart && newEnd && newStart > newEnd) {
+      throw new HttpError(400, 'Ngày hiệu lực phải trước ngày hết hạn');
+    }
+  }
+  if (payload.amount !== undefined && !(Number(payload.amount) > 0)) {
+    throw new HttpError(400, 'Giá trị hợp đồng phải lớn hơn 0');
+  }
+  // Đổi giá trị hợp đồng mà không đổi lại các đợt thanh toán đã khai (paymentInstallments) sẽ để lại
+  // tổng đợt LỆCH với giá trị mới — y hệt lỗ hổng ở createValidation.js contracts.extraValidate (xem
+  // ghi chú "Tổng các đợt thanh toán... phải khớp") nhưng chỉ được chặn lúc TẠO, chưa từng được kiểm
+  // tra lại lúc SỬA. Cho phép gửi kèm paymentInstallments mới (client updateContractReq() gửi cùng
+  // form) và validate lại đúng luật cũ; nếu KHÔNG gửi installments mới nhưng amount đổi khác số cũ và
+  // đợt cũ đã khai (không phải mặc định "1 đợt = toàn bộ"), chặn để bắt buộc khai lại cho khớp.
+  if (!contract.isAddendum) {
+    const newAmount = payload.amount !== undefined ? Number(payload.amount) : contract.amount;
+    let newInstallments = payload.paymentInstallments;
+    if (newInstallments !== undefined) {
+      newInstallments = (Array.isArray(newInstallments) ? newInstallments : []).map(it => ({
+        description: (it?.description || '').trim(), amount: Number(it?.amount) || 0, dueDate: it?.dueDate || ''
+      }));
+      if (newInstallments.length) {
+        const sum = newInstallments.reduce((s, it) => s + it.amount, 0);
+        if (Math.abs(sum - newAmount) > 1) {
+          throw new HttpError(400, `Tổng các đợt thanh toán (${sum.toLocaleString('vi-VN')}) phải khớp với giá trị hợp đồng (${newAmount.toLocaleString('vi-VN')})`);
+        }
+      }
+      payload.paymentInstallments = newInstallments;
+    } else if (payload.amount !== undefined && newAmount !== contract.amount && (contract.paymentInstallments || []).length) {
+      throw new HttpError(409, 'Giá trị hợp đồng thay đổi — vui lòng khai lại các đợt thanh toán cho khớp');
+    }
+  }
 
   const endDateChanged = typeof payload.endDate === 'string' && contract.endDate !== payload.endDate;
   for (const field of CONTRACT_EDITABLE_FIELDS) {
     if (payload[field] !== undefined) contract[field] = payload[field];
+  }
+  if (!contract.isAddendum && payload.paymentInstallments !== undefined) {
+    contract.paymentInstallments = payload.paymentInstallments;
   }
   if (payload.fileName !== undefined) {
     contract.fileName = payload.fileName;
@@ -57,6 +101,15 @@ function editContract(payload, user, contract, hasAddenda) {
   contract.lastEditedAt = nowVN();
   // Đổi ngày hết hạn thì tính lại từ đầu các mốc đã nhắc, tránh bỏ sót/lặp mốc mới (khớp logic cũ).
   if (endDateChanged) contract.notifiedThresholds = [];
+  // Hồ sơ đã bị TỪ CHỐI (REJECTED) hoặc trả về sửa (DRAFT, do REQUEST_CHANGES ở 1 bước duyệt) trước
+  // đây SỬA XONG vẫn treo nguyên ở trạng thái đó — không có đường nào khác đưa hồ sơ về hàng chờ, nội
+  // dung tuy đã sửa đúng theo góp ý nhưng chẳng ai duyệt tiếp/duyệt lại được nữa (kẹt vĩnh viễn). Sửa
+  // xong thì coi như nộp lại từ đầu quy trình duyệt (currentStep=1), khớp đúng hành vi resubmit-from-
+  // scratch mà REQUEST_CHANGES đã dùng cho các module khác (xem lib/workflowEngine.js).
+  if (contract.approvalStatus === 'REJECTED' || contract.approvalStatus === 'DRAFT') {
+    contract.approvalStatus = 'PENDING';
+    contract.currentStep = 1;
+  }
   return contract;
 }
 
@@ -173,6 +226,15 @@ function canManagePaymentRequests(user) {
 function editPaymentRequest(payload, user, pr) {
   if (!canManagePaymentRequests(user)) throw new HttpError(403, 'Bạn không có quyền sửa đề nghị thanh toán');
   if (pr.status !== 'PENDING' && pr.status !== 'NEED_INFO') throw new HttpError(409, 'Đề nghị thanh toán không còn ở trạng thái được sửa');
+  // Khớp đúng luật lúc TẠO (xem createValidation.js CREATE_MODULE_CONFIGS.paymentRequests) — "Cần ít
+  // nhất 1 đợt thanh toán" chỉ được kiểm tra lúc tạo, chưa từng được kiểm tra lại lúc sửa: xoá hết các
+  // đợt trong form Sửa rồi lưu để lại 1 đề nghị thanh toán installments=[] amount=0, không đợt nào để
+  // xác nhận (confirmPaymentInstallment() không có gì lặp qua) -> đề nghị thanh toán kẹt vĩnh viễn ở
+  // APPROVED, không bao giờ tự chuyển PAID được.
+  if (payload.installments !== undefined) {
+    const installments = Array.isArray(payload.installments) ? payload.installments : [];
+    if (!installments.length) throw new HttpError(400, 'Cần ít nhất 1 đợt thanh toán');
+  }
   for (const field of PAYMENT_EDITABLE_FIELDS) {
     if (payload[field] !== undefined) pr[field] = payload[field];
   }
@@ -635,6 +697,13 @@ function editTask(payload, user, task, usersList) {
   if (!canManageTasks(user)) {
     throw new HttpError(403, 'Bạn không có quyền sửa công việc');
   }
+  // Công việc đã Hoàn thành/Đã huỷ là trạng thái kết thúc — sửa lại tiêu đề/người nhận sau đó sẽ làm
+  // lệch số liệu báo cáo của kỳ đã đóng mà không có dấu hiệu gì bất thường. Trước đây route submit
+  // thật không tự kiểm tra lại (chỉ ẩn nút "Sửa" ở UI theo isOpenTask cho các nút KHÁC, riêng nút Sửa
+  // không hề lọc theo trạng thái này).
+  if (task.status === 'DONE' || task.status === 'CANCELLED') {
+    throw new HttpError(409, 'Công việc đã Hoàn thành/Đã huỷ — không thể sửa lại');
+  }
   if (!payload || typeof payload !== 'object' || !payload.title) {
     throw new HttpError(400, 'Thiếu tiêu đề công việc');
   }
@@ -810,12 +879,23 @@ function deleteSubtask(payload, user, task) {
   return task;
 }
 
+// Chuyển trạng thái hợp lệ qua "Cập Nhật Tiến Độ" — khớp ĐÚNG các lựa chọn mà openTaskProgressModal()
+// đưa ra ở client (TODO chỉ được sang DOING; DOING được ở lại DOING (chỉ ghi thêm tiến độ) hoặc sang
+// DONE). Trước đây không whitelist gì cả và không kiểm tra task.status hiện tại — gọi thẳng API có
+// thể "hồi sinh" 1 việc đã CANCELLED quay lại DOING/TODO, hoặc nhảy thẳng TODO->DONE bỏ qua bước Nhận
+// Việc, hoặc gửi 1 chuỗi status tuỳ ý phá vỡ các chỗ đếm/thống kê theo status.
+const TASK_STATUS_TRANSITIONS = { TODO: ['DOING'], DOING: ['DOING', 'DONE'] };
+
 function updateTaskStatusAction(payload, user, task) {
   if (task.assignedTo !== user.username && task.assignedBy !== user.username && !user.perms?.admin) {
     throw new HttpError(403, 'Bạn không có quyền cập nhật công việc này!');
   }
   const newStatus = payload?.newStatus;
   if (!newStatus) throw new HttpError(400, 'Thiếu trạng thái mới');
+  const allowedNext = TASK_STATUS_TRANSITIONS[task.status];
+  if (!allowedNext || !allowedNext.includes(newStatus)) {
+    throw new HttpError(409, `Không thể chuyển công việc từ trạng thái hiện tại sang "${newStatus}"`);
+  }
   if (newStatus === 'DONE' && task.pendingExtension) {
     throw new HttpError(409, 'Công việc đang có 1 yêu cầu gia hạn chờ duyệt. Vui lòng Đồng ý hoặc Từ chối yêu cầu đó trước khi đóng công việc.');
   }
@@ -836,6 +916,9 @@ function updateTaskStatusAction(payload, user, task) {
 function requestExtension(payload, user, task) {
   if (!(task.assignedTo === user.username || user.perms?.admin)) {
     throw new HttpError(403, 'Chỉ người nhận việc mới có thể xin gia hạn!');
+  }
+  if (task.status === 'DONE' || task.status === 'CANCELLED') {
+    throw new HttpError(409, 'Công việc đã Hoàn thành/Đã huỷ — không thể xin gia hạn');
   }
   const newDeadline = payload?.newDeadline;
   const reason = payload?.reason;
@@ -858,6 +941,9 @@ function cancelOrRequestCancelTask(payload, user, task) {
   const isRequester = task.assignedTo === user.username || (task.collaborators || []).includes(user.username);
   if (!isAssignerOrAdmin && !isRequester) {
     throw new HttpError(403, 'Bạn không có quyền huỷ công việc này!');
+  }
+  if (task.status === 'DONE' || task.status === 'CANCELLED') {
+    throw new HttpError(409, 'Công việc đã Hoàn thành/Đã huỷ — không thể huỷ lại');
   }
 
   task.history = Array.isArray(task.history) ? task.history : [];
@@ -1183,7 +1269,12 @@ function mergeReportPeriodByTasks(user, period, tasks, users, allPeriods) {
   const usersByUsername = new Map((users || []).map(u => [u.username, u]));
   const inScope = (dept) => !!(period.deptScope?.all || (period.deptScope?.depts || []).includes(dept));
   const isOverdue = (t) => t.status !== 'DONE' && t._deadlineDate && !isNaN(t._deadlineDate.getTime()) && t._deadlineDate < endBoundary;
-  const GROUP_ORDER = { 'Quá hạn': 0, 'Đang thực hiện': 1, 'Đã hoàn thành': 2 };
+  const GROUP_ORDER = { 'Quá hạn': 0, 'Đang thực hiện': 1, 'Chưa bắt đầu': 2, 'Đã hoàn thành': 3 };
+  // Khớp đúng 3 mốc TASK_STATUS đang dùng ở statsText bên dưới (Đã hoàn thành/Đang thực hiện/Chưa bắt
+  // đầu) — trước đây nhóm mọi việc chưa Quá hạn và chưa DONE chung 1 nhãn "Đang thực hiện", khiến việc
+  // còn TODO (chưa ai Nhận Việc, chưa thực sự bắt đầu) hiện lẫn vào đúng nhóm với việc đang DOING trong
+  // bảng danh sách chi tiết — lệch với số liệu counts.TODO/counts.DOING ở khối thống kê ngay phía trên.
+  const groupOf = (t) => isOverdue(t) ? 'Quá hạn' : (t.status === 'DONE' ? 'Đã hoàn thành' : (t.status === 'DOING' ? 'Đang thực hiện' : 'Chưa bắt đầu'));
 
   // Gom công việc theo phòng ban của NGƯỜI ĐƯỢC GIAO (assignedTo) — không xác định được phòng ban
   // (tài khoản assignedTo không còn tồn tại) thì bỏ qua, không tính vào tổng hợp.
@@ -1238,8 +1329,8 @@ function mergeReportPeriodByTasks(user, period, tasks, users, allPeriods) {
     [...deptMap.entries()].forEach(([, info]) => {
       const items = info.tasks
         .map(t => ({
-          _group: isOverdue(t) ? 'Quá hạn' : (t.status === 'DONE' ? 'Đã hoàn thành' : 'Đang thực hiện'),
-          group: isOverdue(t) ? 'Quá hạn' : (t.status === 'DONE' ? 'Đã hoàn thành' : 'Đang thực hiện'),
+          _group: groupOf(t),
+          group: groupOf(t),
           content: t.title || '',
           progress: TASK_STATUS_LABELS[t.status] || t.status,
           deadline: t.deadline || '',

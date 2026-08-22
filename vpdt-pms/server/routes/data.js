@@ -6,7 +6,7 @@ const express = require('express');
 const router = express.Router();
 const { getPool } = require('../db');
 const { DEFAULTS } = require('../defaults');
-const { getAppDataValue, setAppDataValue, setAppDataValueIfVersionMatches, withLockedAppDataValue } = require('../lib/appData');
+const { getAppDataValue, getAppDataValueWithVersion, setAppDataValue, setAppDataValueIfVersionMatches, withLockedAppDataValue } = require('../lib/appData');
 const { requireAuth, blockIfMustChangePassword, hashPassword, isBcryptHash, validatePin } = require('../lib/auth');
 const { encryptSecret } = require('../lib/emailCrypto');
 const { validatePasswordStrength } = require('../lib/passwordPolicy');
@@ -15,7 +15,8 @@ const { getAllTasks } = require('../lib/taskStore');
 const { getAllForCollection, MIGRATED_COLLECTIONS } = require('../lib/recordStore');
 const { sendServerError } = require('../lib/errorResponse');
 const {
-  filterDocsForUser, filterSubmissionsForUser, filterInternalPostsForUser, sanitizeReportPeriodsForUser
+  filterDocsForUser, filterSubmissionsForUser, filterInternalPostsForUser, sanitizeReportPeriodsForUser,
+  filterReportEntriesForUser
 } = require('../lib/recordViewScope');
 
 const VALID_KEYS = new Set(Object.keys(DEFAULTS));
@@ -268,6 +269,10 @@ router.get('/', async (req, res) => {
     if (data.submissions) data.submissions = await filterSubmissionsForUser(data.submissions, req.freshUser);
     if (data.internalPosts) data.internalPosts = filterInternalPostsForUser(data.internalPosts, req.freshUser);
     if (data.reportPeriods) data.reportPeriods = sanitizeReportPeriodsForUser(data.reportPeriods, req.freshUser);
+    // reportEntries: cùng dạng lỗ hổng như docs/submissions ở trên — GET /api/data trước đây trả nguyên
+    // báo cáo (kể cả bản NHÁP đang soạn dở) của MỌI người ở MỌI phòng ban cho bất kỳ ai đã đăng nhập,
+    // trong khi renderPrEntryTable() (index.html) chỉ ẩn ở giao diện theo đúng logic canViewReportEntry().
+    if (data.reportEntries) data.reportEntries = filterReportEntriesForUser(data.reportEntries, req.freshUser);
 
     data._versions = versions;
     res.json(data);
@@ -310,10 +315,10 @@ router.post('/:key', async (req, res) => {
     }
 
     if (key === 'users') value = await prepareUsersForSave(value);
-    if (key === 'permGroups') await syncUsersWithPermGroupsChange(value);
     if (key === 'emailConfig') value = await prepareEmailConfigForSave(value);
 
     const ifMatch = req.get('If-Match');
+    let savedVersion = null;
     if (ifMatch) {
       const { conflict, version } = await setAppDataValueIfVersionMatches(key, value, ifMatch);
       if (conflict) {
@@ -322,12 +327,33 @@ router.post('/:key', async (req, res) => {
           conflict: true
         });
       }
-      res.set('ETag', version);
-      return res.json({ ok: true, version });
+      savedVersion = version;
+    } else {
+      await setAppDataValue(key, value);
     }
 
-    await setAppDataValue(key, value);
-    res.json({ ok: true });
+    // permGroups: quyền hiệu lực của user gắn nhóm phụ thuộc trực tiếp vào permGroups nên phải đồng bộ
+    // lại "users" ngay khi có nhóm đổi — nhưng chỉ chạy SAU KHI đã chắc chắn ghi permGroups THÀNH CÔNG
+    // (không còn chạy TRƯỚC khi biết If-Match có qua hay không như cũ). Trước đây chạy trước: permGroups
+    // bị 409 từ chối (ai đó vừa sửa permGroups nơi khác) thì "users" vẫn đã bị đồng bộ theo đúng dữ liệu
+    // permGroups CHƯA BAO GIỜ thực sự được lưu — tác dụng phụ xảy ra dù thao tác chính thất bại.
+    let usersVersion;
+    if (key === 'permGroups') {
+      await syncUsersWithPermGroupsChange(value);
+      // syncUsersWithPermGroupsChange() tự ghi vào "users" (bump UpdatedAt) như tác dụng phụ của việc
+      // lưu permGroups — client đang cầm DB._versions.users từ TRƯỚC request này sẽ thành SAI ngay khi
+      // response này về tới nơi, khiến lượt lưu "users" kế tiếp trong CÙNG phiên luôn bị 409 giả (không
+      // ai khác thực sự đổi "users", chính lượt lưu permGroups này gây ra). Trả kèm version MỚI của
+      // "users" để client tự cập nhật lại DB._versions.users (xem syncStorageOnce() ở index.html),
+      // không phải đợi tới lượt sau bị 409 rồi mới biết.
+      usersVersion = (await getAppDataValueWithVersion('users')).version;
+    }
+
+    if (ifMatch) {
+      res.set('ETag', savedVersion);
+      return res.json({ ok: true, version: savedVersion, usersVersion });
+    }
+    res.json({ ok: true, usersVersion });
   } catch (err) {
     if (err instanceof HttpError) return res.status(err.status).json({ error: err.message });
     sendServerError(res, 500, err, `POST /api/data/${key}`, 'Không thể lưu dữ liệu vào SQL Server');

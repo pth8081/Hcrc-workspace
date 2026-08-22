@@ -489,7 +489,7 @@ Trước khi public rộng, ngoài việc chạy cluster mode (mục 9a) cần l
 Endpoint kiểm tra nhanh:
 ```
 GET http://<ip-server>:3000/api/health
-→ {"status":"ok","db":"connected","version":"1.35.0"}
+→ {"status":"ok","db":"connected","version":"1.36.0"}
 ```
 
 `version` khớp đúng trường `version` trong `package.json` của bản code server

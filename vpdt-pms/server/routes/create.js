@@ -46,7 +46,7 @@ router.post('/:module', async (req, res) => {
     // (xem lib/createValidation.js CREATE_MODULE_CONFIGS.meetings.getLockKey +
     // lib/recordStore.js createForCollectionSerialized).
     const record = config.getLockKey
-      ? await createForCollectionSerialized(config.dbKey, config.getLockKey(req.body), builderFn)
+      ? await createForCollectionSerialized(config.dbKey, config.getLockKey(req.body, freshUser), builderFn)
       : await createForCollection(config.dbKey, builderFn);
 
     res.json({ ok: true, item: record });

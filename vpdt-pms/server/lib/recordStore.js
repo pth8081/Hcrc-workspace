@@ -244,6 +244,37 @@ async function createForCollectionSerialized(collection, lockKey, builderFn) {
   }
 }
 
+// Khoá NGHIÊM TÚC theo 1 khoá nghiệp vụ bất kỳ (sp_getapplock, cùng cơ chế createForCollectionSerialized
+// ở trên) bọc quanh TOÀN BỘ chuỗi đọc-kiểm tra-ghi của fn(), không giới hạn ở 1 lượt TẠO mới — dùng cho
+// trường hợp bước DUYỆT (không phải tạo mới) có kiểm tra trùng lặp giữa NHIỀU bản ghi khác nhau (vd
+// trùng biển số xe được GÁN ở bước duyệt carRegs, xem routes/workflow.js). withLockedRecordForCollection
+// chỉ khoá ĐÚNG 1 dòng đang sửa (UPDLOCK theo Id) — 2 yêu cầu duyệt 2 hồ sơ KHÁC NHAU cùng gán 1 biển số
+// trùng khung giờ vẫn đọc được "ảnh chụp" collection của nhau TRƯỚC khi cả hai commit, cả hai đều thấy
+// "chưa ai gán trùng" rồi cùng gán trùng — phải khoá theo GIÁ TRỊ BIỂN SỐ (không phải theo Id bản ghi)
+// trong suốt lúc fn() chạy để chặn đúng race này.
+async function withAppLock(lockKey, fn) {
+  const pool = await getPool();
+  const tx = new sql.Transaction(pool);
+  await tx.begin();
+  try {
+    const lockReq = new sql.Request(tx);
+    lockReq.input('Resource', sql.NVarChar(255), lockKey);
+    lockReq.input('LockMode', sql.VarChar(32), 'Exclusive');
+    lockReq.input('LockOwner', sql.VarChar(32), 'Transaction');
+    lockReq.input('LockTimeout', sql.Int, 15000);
+    const lockResult = await lockReq.execute('sp_getapplock');
+    if (lockResult.returnValue < 0) {
+      throw new HttpError(409, 'Hệ thống đang bận xử lý một yêu cầu trùng — vui lòng thử lại.');
+    }
+    const result = await fn();
+    await tx.commit();
+    return result;
+  } catch (err) {
+    await tx.rollback().catch(() => {});
+    throw err;
+  }
+}
+
 // mutatorFn(item) -> bản ghi đã sửa (hoặc throw HttpError, ví dụ 404/403/409, để huỷ giao dịch).
 async function withLockedRecordForCollection(collection, id, mutatorFn) {
   if (MIGRATED_COLLECTIONS.has(collection)) return withLockedRecordById(collection, id, mutatorFn);
@@ -275,5 +306,5 @@ async function deleteRecordForCollection(collection, id, checkFn) {
 module.exports = {
   MIGRATED_COLLECTIONS,
   getAllRecords, insertRecord, withLockedRecordById, deleteRecordById, migrateLegacyCollection, migrateAllLegacyCollections,
-  getAllForCollection, createForCollection, createForCollectionSerialized, withLockedRecordForCollection, deleteRecordForCollection
+  getAllForCollection, createForCollection, createForCollectionSerialized, withAppLock, withLockedRecordForCollection, deleteRecordForCollection
 };
