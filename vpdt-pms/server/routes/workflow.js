@@ -9,7 +9,7 @@ const { requireAuth, blockIfMustChangePassword } = require('../lib/auth');
 const { MODULE_CONFIGS, WorkflowError, applyWorkflowAction } = require('../lib/workflowEngine');
 const recordActions = require('../lib/recordActions');
 const { insertTask } = require('../lib/taskStore');
-const { withLockedRecordForCollection, getAllForCollection } = require('../lib/recordStore');
+const { withLockedRecordForCollection, getAllForCollection, withAppLock } = require('../lib/recordStore');
 const { consumeApprovalGrant } = require('../lib/approvalAuth');
 
 router.use(requireAuth, blockIfMustChangePassword);
@@ -138,9 +138,6 @@ router.post('/:module/:id/:action', async (req, res) => {
     // tại từ DB (kể cả trạng thái active) và gắn sẵn vào req.freshUser, không cần đọc lại lần nữa.
     const appData = await getAllAppData();
     const freshUser = req.freshUser;
-    // carRegs: cần đọc trước toàn bộ collection để kiểm tra trùng biển số/khung giờ ngay lúc gán biển
-    // số ở bước duyệt (xem findCarPlateConflict() ở lib/workflowEngine.js) — module khác không cần.
-    const existingCollection = moduleKey === 'carRegs' ? await getAllForCollection('carRegs') : null;
 
     // Trước đây "xác thực lại mật khẩu/OTP/PIN trước khi Duyệt" (withApprovalAuth() ở index.html) chỉ
     // là lớp UI thuần JS — xác thực xong rồi mới GỌI HÀM duyệt thật ở trình duyệt, nhưng route này
@@ -157,13 +154,28 @@ router.post('/:module/:id/:action', async (req, res) => {
 
     let transition = null;
 
-    const resultItem = await withLockedRecordForCollection(MODULE_CONFIGS[moduleKey].dbKey, itemId, (item) => {
-      const outcome = applyWorkflowAction({
-        moduleKey, item, action, user: freshUser, comment, extraFields, appData, existingCollection
+    // carRegs: cần đọc trước toàn bộ collection để kiểm tra trùng biển số/khung giờ ngay lúc gán biển
+    // số ở bước duyệt (xem findCarPlateConflict() ở lib/workflowEngine.js). withLockedRecordForCollection
+    // bên dưới chỉ khoá ĐÚNG 1 dòng carReg đang duyệt (theo Id) — 2 yêu cầu duyệt 2 phiếu KHÁC NHAU
+    // cùng gán 1 biển số trùng khung giờ CÙNG LÚC vẫn có thể cùng đọc collection "chưa ai gán trùng"
+    // trước khi cả hai kịp ghi, race y hệt lý do findMeetingConflict()/getLockKey() cần
+    // createForCollectionSerialized() ở lib/createValidation.js cho lịch phòng họp lúc TẠO. Khoá thêm
+    // bằng withAppLock() theo GIÁ TRỊ BIỂN SỐ đang gán (không phải theo Id phiếu) bọc quanh toàn bộ
+    // đọc-kiểm tra-ghi để chặn đúng race này; chỉ cần khi có gán biển số mới (assignedPlate được gửi).
+    const newPlate = moduleKey === 'carRegs' ? extraFields?.assignedPlate : null;
+    const runApprove = async () => {
+      const existingCollection = moduleKey === 'carRegs' ? await getAllForCollection('carRegs') : null;
+      return withLockedRecordForCollection(MODULE_CONFIGS[moduleKey].dbKey, itemId, (item) => {
+        const outcome = applyWorkflowAction({
+          moduleKey, item, action, user: freshUser, comment, extraFields, appData, existingCollection
+        });
+        transition = outcome.transition;
+        return outcome.item;
       });
-      transition = outcome.transition;
-      return outcome.item;
-    });
+    };
+    const resultItem = newPlate
+      ? await withAppLock(`car_plate:${newPlate}`, runApprove)
+      : await runApprove();
 
     // Tờ trình được phê duyệt HOÀN TẤT (bước cuối cùng) kèm ý kiến chỉ đạo -> tự tạo 1 Công việc theo
     // dõi (chưa gán người nhận). Trước đây client tự dựng + ghi thẳng qua POST /api/data/tasks (route

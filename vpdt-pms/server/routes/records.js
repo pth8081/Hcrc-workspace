@@ -32,8 +32,12 @@ router.post('/contracts/:id/edit', async (req, res) => {
     const { freshUser } = await getFreshUser(req);
     const allContracts = await getAllForCollection('contracts');
     const hasAddenda = allContracts.some(c => c.isAddendum && c.rootContractId === itemId);
+    const thisRecord = allContracts.find(c => c.id === itemId);
+    const rootDept = thisRecord && thisRecord.isAddendum
+      ? (allContracts.find(c => c.id === thisRecord.rootContractId) || {}).dept
+      : undefined;
     const result = await withLockedRecordForCollection('contracts', itemId, (item) =>
-      recordActions.editContract(req.body, freshUser, item, hasAddenda)
+      recordActions.editContract(req.body, freshUser, item, hasAddenda, rootDept)
     );
     res.json({ ok: true, item: result });
   } catch (err) {
@@ -140,12 +144,28 @@ router.post('/paymentRequests/:id/request-info', (req, res) =>
 router.post('/paymentRequests/:id/approve', (req, res) =>
   withPaymentAction(req, res, 'approve', (payload, user, item) => recordActions.approvePaymentRequest(user, item)));
 
+// Đề nghị thanh toán tới APPROVED thì bản ghi nguồn (Hợp đồng/officeReqs) đã bị startContractPayment()/
+// tương đương chuyển sang paymentStatus=CHO_THANH_TOAN (xem confirm-installment ở dưới, ghi ngược
+// DA_THANH_TOAN khi PAID) — xoá đề nghị ở PENDING/NEED_INFO/APPROVED trước đây để nguồn kẹt vĩnh viễn ở
+// CHO_THANH_TOAN (contract.startContractPayment() chỉ cho chuyển từ CHUA_THANH_TOAN), không ai bấm lại
+// được nút "Thanh toán" để tạo đề nghị mới. Trả nguồn về CHUA_THANH_TOAN khi xoá để có thể bắt đầu lại.
 router.post('/paymentRequests/:id/delete', async (req, res) => {
   const itemId = Number(req.params.id);
   if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
   try {
     const { freshUser } = await getFreshUser(req);
-    await deleteRecordForCollection('paymentRequests', itemId, (item) => recordActions.assertCanDeletePaymentRequest(freshUser, item));
+    let deletedPr = null;
+    await deleteRecordForCollection('paymentRequests', itemId, (item) => {
+      recordActions.assertCanDeletePaymentRequest(freshUser, item);
+      deletedPr = item;
+    });
+    if (deletedPr && deletedPr.sourceModule && deletedPr.sourceId != null) {
+      const sourceCollection = deletedPr.sourceModule === 'CONTRACT' ? 'contracts' : 'officeReqs';
+      await withLockedRecordForCollection(sourceCollection, deletedPr.sourceId, (item) => {
+        if (item.paymentStatus === 'CHO_THANH_TOAN') item.paymentStatus = 'CHUA_THANH_TOAN';
+        return item;
+      }).catch(() => {}); // nguồn có thể đã bị xoá — không chặn việc xoá đề nghị thanh toán hợp lệ
+    }
     res.json({ ok: true });
   } catch (err) {
     handleError(res, `paymentRequests/${req.params.id}/delete`, err);

@@ -393,7 +393,23 @@ const CREATE_MODULE_CONFIGS = {
   carRegs: {
     dbKey: 'carRegs',
     getScope: (user) => user.perms?.carCreate,
-    creatorField: 'creator', creatorNameField: 'creatorName'
+    creatorField: 'creator', creatorNameField: 'creatorName',
+    // Khớp đúng lỗ hổng đã vá cho meetings ở trên (findMeetingConflict + NaN) — carRegs cũng có
+    // startTime/endTime (xem index.html #carStartTime/#carEndTime) nhưng trước đây CHƯA từng được kiểm
+    // tra lại ở server: request tự soạn gửi giờ kết thúc trước giờ bắt đầu (hoặc sai định dạng) vẫn tạo
+    // được phiếu đăng ký xe, và biển số gán sau đó ở bước duyệt (findCarPlateConflict()) dùng chính
+    // startTime/endTime này để so trùng khung giờ — new Date(...).getTime() trả NaN cho giờ sai định
+    // dạng khiến MỌI so sánh thời gian đều false, "chưa từng trùng" với bất kỳ phiếu nào khác.
+    extraValidate: (payload) => {
+      const newStart = new Date(payload.startTime).getTime();
+      const newEnd = new Date(payload.endTime).getTime();
+      if (!Number.isFinite(newStart) || !Number.isFinite(newEnd)) {
+        throw new CreateError(400, 'Thời gian bắt đầu/kết thúc không hợp lệ');
+      }
+      if (newStart >= newEnd) {
+        throw new CreateError(400, 'Thời gian kết thúc phải sau thời gian bắt đầu');
+      }
+    }
   },
   officeReqs: {
     dbKey: 'officeReqs',
@@ -404,6 +420,25 @@ const CREATE_MODULE_CONFIGS = {
       if (!flag) throw new CreateError(400, `Loại đề xuất văn phòng không hợp lệ: ${payload.subType}`);
       if (!user.perms?.admin && !user.perms?.[flag]) {
         throw new CreateError(403, 'Bạn không có quyền tạo đề xuất văn phòng loại này');
+      }
+      // "Mua Sắm" tự tính amount = tổng (Số lượng × Đơn giá) của từng hạng mục ở CLIENT (xem
+      // recalcOfficeItemsTotal() ở index.html) rồi gửi kèm cả amount lẫn items — trước đây server tin
+      // nguyên payload.amount, không tính lại từ items: request tự soạn gửi items thật (số nhỏ) kèm
+      // amount khống (số lớn hơn nhiều, hoặc âm) vẫn được lưu y nguyên. Tính lại từ items ở đây (không
+      // tin số amount client gửi) khi có items; luôn chặn amount âm cho cả 2 nhánh (Mua Sắm/Sửa Chữa-
+      // Đầu Tư, nhánh sau nhập tay 1 ô số nên parseFloat vẫn cho ra số âm bình thường).
+      if (Array.isArray(payload.items) && payload.items.length) {
+        payload.items = payload.items.map(it => {
+          const qty = Number(it?.qty) || 0;
+          const unitPrice = Number(it?.unitPrice) || 0;
+          return { ...it, qty, unitPrice, amount: qty * unitPrice };
+        });
+        payload.amount = payload.items.reduce((sum, it) => sum + it.amount, 0);
+      } else {
+        payload.amount = Number(payload.amount) || 0;
+      }
+      if (payload.amount < 0) {
+        throw new CreateError(400, 'Dự toán/Tổng chi phí không được là số âm');
       }
     }
   },
@@ -575,6 +610,12 @@ const CREATE_MODULE_CONFIGS = {
     forceOwnDept: true,
     getScope: () => ({}),
     creatorField: 'creator', creatorNameField: 'creatorName',
+    // "1 hồ sơ/người/kỳ" (kiểm tra "duplicate" ở extraValidate bên dưới) là điều kiện trùng lặp GIỮA
+    // NHIỀU bản ghi — không diễn đạt được bằng UNIQUE INDEX (Collection, Code) đơn giản như trùng mã,
+    // giống hệt lý do meetings cần getLockKey ở trên: createForCollection() thường chỉ có unique index
+    // đó chặn race, không chặn được 2 request tạo đăng ký CÙNG LÚC cho CÙNG 1 người ở CÙNG 1 kỳ (cả hai
+    // đọc collection lúc "chưa ai đăng ký" trước khi request nào kịp ghi). Khoá theo cặp kỳ+người tạo.
+    getLockKey: (payload, user) => `vpp_registration:${payload.periodId}:${user.username}`,
     extraValidate: (payload, collection, user, appData) => {
       const periodId = Number(payload.periodId);
       if (!Number.isFinite(periodId)) throw new CreateError(400, 'Thiếu kỳ đăng ký');

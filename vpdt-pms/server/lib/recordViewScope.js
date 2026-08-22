@@ -18,17 +18,35 @@ function scopeAllows(user, scope, dept) {
   return !!(dept && Array.isArray(scope?.depts) && scope.depts.includes(dept));
 }
 
+// Khớp đúng cấu hình quy trình Tài liệu ở lib/workflowEngine.js MODULE_CONFIGS.docs
+// (flatWorkflowConfigToSteps(appData.deptWorkflows?.[doc.dept], appData)) — tài liệu, cũng như Văn Bản
+// Trình, đi qua quy trình duyệt theo BƯỚC/phòng ban, người được gán làm người duyệt (ở BẤT KỲ bước
+// nào trong quy trình, không chỉ đúng bước hiện tại — khớp isApproverForApproversMap() dùng chung ở
+// dưới) có thể không nằm trong viewDraftDepts/viewApprovedDepts của phòng ban đó.
+async function resolveDocApproversServer(doc) {
+  const deptWorkflows = await getAppDataValue('deptWorkflows');
+  return (deptWorkflows || {})[doc.dept]?.approvers || {};
+}
+
 // Khớp đúng khối lọc trong renderDocs() (public/index.html) — Xem Bản Nháp (PENDING/REJECTED) và Xem
 // Đã Duyệt (APPROVED) là 2 quyền TÁCH RIÊNG, không dùng chung scopeAllows (không tự cho phòng ban của
-// chính mình trừ khi nằm trong danh sách depts được cấp).
-function canViewDoc(user, doc) {
+// chính mình trừ khi nằm trong danh sách depts được cấp). Bổ sung nhánh "đang là người duyệt của quy
+// trình hồ sơ này" (cùng khuôn canViewSubmission() ở trên) — trước đây THIẾU nhánh này: 1 người được
+// admin gán làm người duyệt bước 2 của tài liệu phòng ban KHÁC (không nằm trong viewDraftDepts của họ)
+// gọi thẳng GET /api/data vẫn KHÔNG đọc được tài liệu cần duyệt, dù giao diện (renderDocs() ở
+// index.html) chưa từng có logic tương đương để họ dựa vào — đây là lỗ hổng CHẶN NHẦM người có quyền
+// hợp pháp, khác các lỗ hổng "lộ dữ liệu" khác đã vá ở file này.
+async function canViewDoc(user, doc) {
   if (!user) return false;
   if (user.perms?.admin) return true;
   if (doc.uploader === user.username) return true;
   if (doc.status === 'APPROVED') {
-    return !!(user.perms?.viewApprovedAll || (user.perms?.viewApprovedDepts || []).includes(doc.dept));
+    if (user.perms?.viewApprovedAll || (user.perms?.viewApprovedDepts || []).includes(doc.dept)) return true;
+  } else if (user.perms?.viewDraftAll || (user.perms?.viewDraftDepts || []).includes(doc.dept)) {
+    return true;
   }
-  return !!(user.perms?.viewDraftAll || (user.perms?.viewDraftDepts || []).includes(doc.dept));
+  const approvers = await resolveDocApproversServer(doc);
+  return isApproverForApproversMap(approvers, user.username);
 }
 
 function isApproverForApproversMap(approversMap, username) {
@@ -67,7 +85,11 @@ async function canViewSubmission(user, sub) {
 }
 
 async function filterDocsForUser(docs, user) {
-  return (docs || []).filter(d => canViewDoc(user, d));
+  // canViewDoc() giờ là async (cần tra cứu deptWorkflows để xét nhánh "đang là người duyệt") — không
+  // thể dùng .filter() đồng bộ trực tiếp như trước (predicate trả về Promise luôn truthy, coi như mọi
+  // tài liệu đều qua được), phải resolve từng phần tử rồi mới lọc, cùng khuôn filterSubmissionsForUser().
+  const flags = await Promise.all((docs || []).map(d => canViewDoc(user, d)));
+  return (docs || []).filter((_, i) => flags[i]);
 }
 
 async function filterSubmissionsForUser(submissions, user) {
@@ -102,6 +124,22 @@ function sanitizeReportPeriodsForUser(periods, user) {
   return (periods || []).map(p => canSeeReportCompilation(user, p) ? p : { ...p, compilation: null });
 }
 
+// Khớp khối lọc trong renderPrEntryTable() (public/index.html, ~dòng 16904-16913): reportManage/
+// reportAggregate/admin xem MỌI báo cáo; còn lại xem được báo cáo ĐÃ GỬI của TOÀN BỘ phòng ban mình
+// (không riêng của mình) cộng với bản nháp CỦA CHÍNH MÌNH — trước đây GET /api/data trả nguyên mảng
+// reportEntries của MỌI người ở MỌI phòng ban cho bất kỳ ai đã đăng nhập, kể cả bản NHÁP (nội dung
+// đang soạn dở, chưa gửi) của người khác phòng ban khác.
+function canViewReportEntry(user, entry) {
+  if (!user) return false;
+  if (user.perms?.admin || user.perms?.reportManage || user.perms?.reportAggregate) return true;
+  if (entry.creator === user.username) return true;
+  return !!(entry.dept === user.dept && entry.status !== 'DRAFT');
+}
+
+function filterReportEntriesForUser(entries, user) {
+  return (entries || []).filter(e => canViewReportEntry(user, e));
+}
+
 // Khớp canDownloadFile(user, moduleKey, dept, ownerUsername) ở public/index.html — dùng cho
 // routes/download.js để chặn tải file ngoài phạm vi, không chỉ ẩn ở giao diện.
 function canDownloadRecordFile(user, moduleKey, dept, ownerUsername) {
@@ -114,5 +152,6 @@ module.exports = {
   canViewDoc, canViewSubmission, filterDocsForUser, filterSubmissionsForUser,
   canViewInternalPost, filterInternalPostsForUser,
   canSeeReportCompilation, sanitizeReportPeriodsForUser,
+  canViewReportEntry, filterReportEntriesForUser,
   canDownloadRecordFile
 };

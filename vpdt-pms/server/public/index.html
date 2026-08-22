@@ -4534,9 +4534,14 @@ function normalizeApproversList(stepApprovers) {
   return [];
 }
 
-// Tập username đã bấm Duyệt ở ĐÚNG bước hiện tại, dựa theo lịch sử xử lý (history) của hồ sơ.
+// Tập username đã bấm Duyệt ở ĐÚNG bước hiện tại, dựa theo lịch sử xử lý (history) của hồ sơ. Khớp
+// đúng getStepApprovedUsernames() ở lib/workflowEngine.js — REQUEST_CHANGES đánh dấu invalidated=true
+// lên mọi lượt APPROVED cũ khi hồ sơ quay lại NHÁP sửa/gửi lại (nội dung đã đổi, lượt duyệt cũ không
+// còn giá trị cho vòng MỚI). Thiếu "&& !h.invalidated" ở đây khiến giao diện tính SAI: coi 1 người đã
+// duyệt bước này (từ vòng nộp TRƯỚC, đã bị vô hiệu) là "đã xử lý xong", ẩn nhầm nút Duyệt của họ ở vòng
+// nộp lại — trong khi server (đã lọc đúng invalidated) vẫn chờ đúng người đó duyệt lại lần nữa.
 function getStepApprovedUsernames(history, step) {
-  return new Set((history || []).filter(h => h.step === step && h.action === 'APPROVED').map(h => h.username));
+  return new Set((history || []).filter(h => h.step === step && h.action === 'APPROVED' && !h.invalidated).map(h => h.username));
 }
 
 // Người dùng có được phép bấm Duyệt ở bước này không: là admin, hoặc có tên trong danh sách đồng
@@ -5421,28 +5426,61 @@ function syncStorageOnce(key, silent) {
   const knownVersion = DB._versions?.[key];
   if (knownVersion) headers['If-Match'] = knownVersion;
 
+  // "users": mustChangePassword do SERVER tự quản lý hoàn toàn (đặt true khi admin gõ mật khẩu tạm mới,
+  // gỡ khi chính user đó tự đổi mật khẩu — xem prepareUsersForSave()/PATCH /api/auth/me), nhưng vẫn giữ
+  // lại trong response GET /api/data để hiện badge "Chưa đổi mật khẩu tạm" ở màn quản lý người dùng —
+  // nghĩa là DB.users ở trình duyệt LUÔN cầm 1 bản chụp có thể đã CŨ (VD user vừa tự đổi mật khẩu ở tab
+  // khác, gỡ cờ này server-side, nhưng admin đang mở sẵn màn Người Dùng chưa tải lại trang). Trước đây
+  // saveUser() sửa 1 field bất kỳ (VD số điện thoại) rồi gửi NGUYÊN mảng DB.users lên — vì user.
+  // mustChangePassword vẫn có giá trị định sẵn (không phải "undefined"), điều kiện khôi phục ở server
+  // (u.mustChangePassword === undefined) không được kích hoạt, ghi ĐÈ NHẦM cờ cũ (true) lên, âm thầm
+  // buộc user đó phải đổi mật khẩu lại dù họ đã tự đổi xong trước đó. Bỏ hẳn field này khỏi payload gửi
+  // lên — để trống (undefined) luôn đúng nghĩa "không có gì để cập nhật, giữ nguyên giá trị server đang
+  // có", khớp CHÍNH XÁC hành vi mà prepareUsersForSave() đã thiết kế sẵn.
+  const payload = key === 'users'
+    ? (DB.users || []).map(({ mustChangePassword, ...rest }) => rest)
+    : DB[key];
+
+  // Trả về true/false (đã lưu thành công hay không) — trước đây không trả về gì có ý nghĩa (luôn
+  // resolve, kể cả khi 409/lỗi, vì .catch() bên dưới không throw lại) nên saveUser()/deleteUser() ở
+  // dưới KHÔNG THỂ chờ rồi kiểm tra kết quả thật, chỉ có thể "bắn và quên" — hiện luôn alert "Đã lưu
+  // thành công"/tự render lại danh sách như đã lưu xong NGAY LẬP TỨC, dù server sau đó có thể từ chối
+  // (409 xung đột, hoặc 400 "không thể xoá admin cuối cùng").
   return fetch(`/api/data/${key}`, {
     method: 'POST',
     headers,
-    body: JSON.stringify(DB[key])
+    body: JSON.stringify(payload)
   }).then(async res => {
-    if (res.status === 401) return handleSessionExpired();
+    if (res.status === 401) { handleSessionExpired(); return false; }
     if (res.status === 409) {
       const body = await res.json().catch(() => ({}));
-      if (silent) { console.warn(`Bỏ qua lưu ngầm "${key}" — đã bị nơi khác ghi trước:`, body.error); return; }
+      if (silent) { console.warn(`Bỏ qua lưu ngầm "${key}" — đã bị nơi khác ghi trước:`, body.error); return false; }
       alert(`⚠️ ${body.error || `Dữ liệu "${key}" vừa bị người khác thay đổi — vui lòng tải lại trang.`}`);
-      return;
+      return false;
     }
-    if (!res.ok) throw new Error('HTTP ' + res.status);
     const body = await res.json().catch(() => ({}));
+    // Trước đây lỗi 400/403 (VD "Chỉ Quản Trị Viên...", "...không còn tài khoản nào có quyền Quản Trị
+    // Viên") bị nuốt mất, chỉ hiện "HTTP 400"/"HTTP 403" chung chung — người dùng không biết vì sao lưu
+    // thất bại. Đọc đúng body.error server đã trả (route luôn trả {error: "..."} cho lỗi nghiệp vụ, xem
+    // routes/data.js) trước khi rơi về thông báo mặc định.
+    if (!res.ok) throw new Error(body.error || ('HTTP ' + res.status));
     if (body.version) DB._versions[key] = body.version;
+    // Lưu "permGroups" đồng bộ lại "users" như tác dụng phụ ở server (xem routes/data.js) — server trả
+    // kèm version MỚI của "users" sau khi đồng bộ, cập nhật ngay để lượt lưu "users" kế tiếp không bị
+    // 409 giả do chính lượt lưu permGroups này gây ra (chứ không phải ai khác thực sự đổi "users").
+    if (body.usersVersion) DB._versions.users = body.usersVersion;
+    return true;
   }).catch(e => {
     console.error(`Lỗi khi lưu "${key}" lên máy chủ:`, e);
-    if (silent) return;
+    if (silent) return false;
     alert(`⛔ Lỗi lưu dữ liệu "${key}" lên máy chủ: ` + e.message);
+    return false;
   });
 }
 
+// Trả về Promise<boolean> (đã lưu thành công hay chưa) — chỉ để tiện await ở các thao tác cần biết
+// chắc chắn đã lưu xong mới báo thành công/cập nhật giao diện (VD saveUser()/deleteUser()); các chỗ
+// gọi "bắn và quên" khác trong file này không cần quan tâm giá trị trả về, vẫn hoạt động như cũ.
 function syncStorage(key, opts) {
   const silent = !!opts?.silent;
   try {
@@ -5451,11 +5489,11 @@ function syncStorage(key, opts) {
     // mãi các lượt lưu sau của cùng key.
     const next = previous.then(() => syncStorageOnce(key, silent), () => syncStorageOnce(key, silent));
     syncStorageQueues[key] = next;
-    return true;
+    return next;
   } catch (e) {
-    if (silent) { console.error('Lỗi lưu dữ liệu ngầm:', e); return false; }
+    if (silent) { console.error('Lỗi lưu dữ liệu ngầm:', e); return Promise.resolve(false); }
     alert('Lỗi lưu dữ liệu: ' + e.message);
-    return false;
+    return Promise.resolve(false);
   }
 }
 
@@ -5845,12 +5883,25 @@ function saveEmailConfig(e) {
   alert('✅ Đã lưu cấu hình Email thành công!');
 }
 
+// Khớp ĐÚNG resolveEncryption() ở lib/mailer.js — hồ sơ cấu hình email cũ (lưu từ trước khi có trường
+// smtpEncryption, xem lib/defaults.js emailConfig cũ chỉ có smtpSecure/smtpPort) không có smtpEncryption,
+// trước đây form mặc định LUÔN gán STARTTLS bất kể smtpSecure/smtpPort thực tế là gì — 1 hồ sơ cũ cấu
+// hình SSL cổng 465 (smtpSecure=true) mở form Sửa lên sẽ hiện SAI thành STARTTLS, admin không để ý bấm
+// Lưu là ghi đè luôn mất cấu hình mã hoá đúng đang chạy thật.
+function resolveEncryptionClient(emailConfig) {
+  if (emailConfig?.smtpEncryption) return emailConfig.smtpEncryption;
+  const { smtpSecure, smtpPort } = emailConfig || {};
+  if (smtpSecure === true) return 'SSL';
+  if (smtpSecure === false) return 'STARTTLS';
+  return (parseInt(smtpPort, 10) || 587) === 465 ? 'SSL' : 'STARTTLS';
+}
+
 function loadEmailConfigToForm() {
   if (!DB.emailConfig) return;
   document.getElementById('cfgEmailEnabled').value = DB.emailConfig.enabled !== false ? 'true' : 'false';
   document.getElementById('cfgSmtpHost').value = DB.emailConfig.smtpHost || 'smtp.gmail.com';
   document.getElementById('cfgSmtpPort').value = DB.emailConfig.smtpPort || 587;
-  setSmtpEncryption(DB.emailConfig.smtpEncryption || 'STARTTLS');
+  setSmtpEncryption(resolveEncryptionClient(DB.emailConfig));
   document.getElementById('cfgSmtpAuthEnabled').checked = !!DB.emailConfig.smtpAuthEnabled;
   document.getElementById('cfgSmtpUser').value = DB.emailConfig.smtpUser || '';
   document.getElementById('cfgSmtpPassPlain').value = ''; // write-only — không bao giờ có giá trị thật để hiện lại
@@ -10319,7 +10370,7 @@ function renderTasks() {
     } else if (isOpenTask && (isAssigner || isAssignee || isCollaborator) && !t.pendingCancellation) {
       candidates.push({ value: 'cancelRequest', label: `✕ ${isAssigner ? 'Huỷ' : 'Xin huỷ'}`, cls: 'bg-red-600 hover:bg-red-700' });
     }
-    if (canManage) {
+    if (canManage && isOpenTask) {
       candidates.push({ value: 'edit', label: '✏️ Sửa', cls: 'bg-amber-600 hover:bg-amber-700' });
     }
     if (canDeleteTaskRecord(currentUser)) {
@@ -10905,6 +10956,12 @@ async function updateContractReq(e) {
   }
 
   const editPayload = { ...newValues };
+  // Bảng "Các đợt thanh toán" ở form Sửa được điền sẵn từ paymentInstallments hiện có (xem
+  // openEditContract() -> renderContractInstallmentsList()) và sửa/thêm/bớt được như lúc Tạo Mới, nhưng
+  // trước đây updateContractReq() không hề đọc lại nội dung bảng này để gửi lên server — mọi thay đổi
+  // đợt thanh toán trên form BỊ ÂM THẦM BỎ QUA (server vẫn giữ nguyên paymentInstallments cũ), người
+  // dùng tưởng đã lưu đợt mới nhưng thực ra không.
+  if (!c.isAddendum) editPayload.paymentInstallments = collectContractInstallments();
   if (newFile) {
     let uploaded;
     try {
@@ -12281,6 +12338,14 @@ function applyMeetingAttendeeTemplate(templateId) {
   }
 
   minutesAttendeesRows = tpl.attendees.map(a => ({ ...a, id: genAttendeeId() }));
+  // Áp mẫu sinh id MỚI hoàn toàn cho mọi người tham dự (kể cả trùng tên với người cũ) -> mọi dòng Ý
+  // kiến chỉ đạo đang trỏ theo id cũ (assignedToAttendeeId/collaboratorAttendeeIds) chắc chắn không
+  // còn khớp với ai trong danh sách mới, phải gỡ hết để tránh dòng nào đó bị coi như "đã gán người
+  // thực hiện" trong khi người đó đã không còn xuất hiện ở Thành phần tham dự nữa.
+  minutesDirectives.forEach(d => {
+    d.assignedToAttendeeId = '';
+    d.collaboratorAttendeeIds = [];
+  });
   renderAttendeesTable();
   renderMinutesDirectivesTable();
 }
@@ -12522,7 +12587,21 @@ function deleteAttendeeTemplateFromManager(templateId) {
 }
 
 function removeAttendeeRow(idx) {
+  const removed = minutesAttendeesRows[idx];
   minutesAttendeesRows.splice(idx, 1);
+  // Bỏ người tham dự khỏi danh sách thì các dòng Ý kiến chỉ đạo đang trỏ tới người đó (người thực hiện
+  // hoặc người phối hợp) phải được gỡ theo — nếu không, id tham chiếu sẽ trỏ tới 1 người KHÔNG còn
+  // trong Thành phần tham dự (không hiện tên ở đâu cả) nhưng directive vẫn coi như "đã gán người thực
+  // hiện" (assignedToAttendeeId khác rỗng) -> nút "Giao việc" tưởng đã đủ điều kiện, giao việc ra Task
+  // với assignedTo rỗng/không xác định.
+  if (removed && removed.id) {
+    minutesDirectives.forEach(d => {
+      if (String(d.assignedToAttendeeId) === String(removed.id)) d.assignedToAttendeeId = '';
+      if (Array.isArray(d.collaboratorAttendeeIds)) {
+        d.collaboratorAttendeeIds = d.collaboratorAttendeeIds.filter(id => String(id) !== String(removed.id));
+      }
+    });
+  }
   renderAttendeesTable();
   renderMinutesDirectivesTable();
 }
@@ -12901,12 +12980,17 @@ async function updateMeetingMinutes(e) {
   const linkedMeetingRaw = document.getElementById('minutesLinkedMeeting').value;
   const attendees = minutesAttendeesRows.filter(a => a.name.trim()).map(a => ({ ...a }));
 
-  // Giữ lại cờ taskCreated của các dòng chỉ đạo CŨ khớp nội dung+người thực hiện — để nếu sau này biên
-  // bản được "Giao việc" (assignMinutesTasks(), nút thủ công ở danh sách) thì không tạo trùng Công
-  // việc cho dòng đã có, chỉ những dòng thực sự mới/chưa từng giao việc mới được tính vào.
-  const oldDirectivesByKey = new Map((m.directives || []).map(d => [`${d.content}::${d.assignedToAttendeeId}`, d]));
+  // Giữ lại cờ taskCreated của các dòng chỉ đạo CŨ theo id ổn định — để nếu sau này biên bản được
+  // "Giao việc" (assignMinutesTasks(), nút thủ công ở danh sách) thì không tạo trùng Công việc cho
+  // dòng đã có, chỉ những dòng thực sự mới/chưa từng giao việc mới được tính vào. Trước đây khớp bằng
+  // key content+assignedToAttendeeId (chuỗi) — 2 dòng chỉ đạo khác nhau nhưng trùng nội dung+người
+  // thực hiện (VD sửa lại 1 dòng đã giao việc rồi thêm 1 dòng mới y hệt nội dung) sẽ bị trùng key,
+  // khiến dòng MỚI bị gắn nhầm taskCreated=true (không bao giờ giao việc được) hoặc ngược lại dòng CŨ
+  // đã giao việc bị mất cờ. Mỗi dòng chỉ đạo đã có id ổn định (genMinutesDirectiveId(), xem loadMinutesForEdit)
+  // nên khớp thẳng theo id là chính xác tuyệt đối, không còn phụ thuộc nội dung có đổi hay không.
+  const oldDirectivesById = new Map((m.directives || []).map(d => [d.id, d]));
   const directives = minutesDirectives.filter(d => d.content.trim()).map(d => {
-    const old = oldDirectivesByKey.get(`${d.content}::${d.assignedToAttendeeId}`);
+    const old = oldDirectivesById.get(d.id);
     return { ...d, taskCreated: old ? !!old.taskCreated : false };
   });
 
@@ -13958,7 +14042,7 @@ function renderOfficeReqs() {
           <div class="text-xs text-gray-500">${Array.isArray(o.items) ? `${o.items.length} hạng mục` : `Số lượng: ${escapeHtml(o.qty)}`}</div>
         </td>
         <td class="border p-2">
-          <div class="font-bold text-rose-600">${o.amount.toLocaleString('vi-VN')} VNĐ</div>
+          <div class="font-bold text-rose-600">${(o.amount || 0).toLocaleString('vi-VN')} VNĐ</div>
           <div class="text-xs text-gray-500">${Array.isArray(o.items) ? '' : `NCC: ${escapeHtml(o.supplier || 'N/A')}`}</div>
         </td>
         <td class="border p-2">${statusBadge}</td>
@@ -18220,13 +18304,19 @@ function buildNewUserFromState(state) {
   };
 }
 
-function saveUser(e) {
+async function saveUser(e) {
   e.preventDefault();
   if (permFormMode === 'GROUP') return savePermGroup(e); // form đang ở chế độ Nhóm — xem savePermGroup()
 
   const state = readUserFormState();
   if (!state) return;
   const { editId, username, pass, pin, name, email, phone, dept, jobTitle, groupId, perms, permOverrides } = state;
+
+  // Chụp lại nguyên trạng DB.users TRƯỚC khi sửa trực tiếp trong mảng bên dưới — nếu server từ chối
+  // lưu (409/400), phục hồi lại đúng bằng bản chụp này rồi render lại, tránh để "user"/DB.users bị sửa
+  // dở trong bộ nhớ trình duyệt (đã đổi nhưng chưa từng được server chấp nhận) mà giao diện không hề
+  // phản ánh đúng cho tới lần tải lại trang tiếp theo.
+  const usersSnapshot = JSON.parse(JSON.stringify(DB.users));
 
   if (editId) {
     const user = DB.users.find(u => u.id === parseInt(editId, 10));
@@ -18257,7 +18347,17 @@ function saveUser(e) {
     DB.users.push(newUser);
   }
 
-  syncStorage('users');
+  // Chờ server xác nhận đã lưu thật rồi mới báo thành công/dọn form — trước đây gọi syncStorage() rồi
+  // báo "✅ Đã lưu..." và render lại danh sách NGAY LẬP TỨC (không đợi phản hồi), nên nếu server từ
+  // chối sau đó (409 xung đột phiên bản, hoặc 400 "hệ thống sẽ không còn admin nào") người dùng đã
+  // thấy thông báo thành công + giao diện coi như đã lưu xong, chỉ có thêm 1 alert lỗi hiện SAU đó gây
+  // rối chứ không sửa lại được ấn tượng sai ban đầu.
+  const saved = await syncStorage('users');
+  if (!saved) {
+    DB.users = usersSnapshot;
+    renderUsers();
+    return;
+  }
   logSystemAction('USER_MGM', 'SAVE_USER', `Lưu thông tin người dùng [${username}]`, 'SUCCESS', username);
   alert('✅ Đã lưu thông tin người dùng và phân quyền!');
   resetUserForm();
@@ -18461,12 +18561,26 @@ function editUser(id) {
   setAdminAccountPermsLocked(user.username === 'admin');
 }
 
-function deleteUser(id) {
-  if (!confirm('Bạn có chắc chắn muốn xóa người dùng này?')) return;
+async function deleteUser(id) {
   const u = DB.users.find(item => item.id === id);
+  if (!u) return;
+  // Cảnh báo NGAY khi thao tác này sẽ xoá đi tài khoản admin CUỐI CÙNG — trước đây chỉ biết được điều
+  // này khi server từ chối (400 "...không còn tài khoản nào có quyền Quản Trị Viên") SAU khi đã bấm xác
+  // nhận xoá, thông báo lỗi đó chung chung không nói rõ nguyên nhân là do đây là admin cuối cùng.
+  const remainingAdmins = DB.users.filter(x => x.id !== id && x.perms?.admin).length;
+  if (u.perms?.admin && remainingAdmins === 0) {
+    return alert('⛔ Không thể xoá: đây là tài khoản Quản Trị Viên (Admin) DUY NHẤT còn lại — hệ thống bắt buộc phải còn ít nhất 1 tài khoản Admin. Hãy gán quyền Admin cho 1 tài khoản khác trước khi xoá tài khoản này.');
+  }
+  if (!confirm(`Bạn có chắc chắn muốn xóa người dùng "${u.username}" (${u.name})?`)) return;
+  const usersSnapshot = JSON.parse(JSON.stringify(DB.users));
   DB.users = DB.users.filter(item => item.id !== id);
-  syncStorage('users');
-  logSystemAction('USER_MGM', 'DELETE_USER', `Xóa người dùng [${u?.username}]`, 'SUCCESS', u?.username);
+  const saved = await syncStorage('users');
+  if (!saved) {
+    DB.users = usersSnapshot;
+    renderUsers();
+    return;
+  }
+  logSystemAction('USER_MGM', 'DELETE_USER', `Xóa người dùng [${u.username}]`, 'SUCCESS', u.username);
   renderUsers();
   renderPermGroupsList();
 }
@@ -19053,12 +19167,17 @@ function renderContractReportExtra(records) {
   // So theo NGÀY LỊCH (bỏ giờ/phút), khớp daysUntil() ở jobs/contractExpiryReminder.js — trước đây so
   // c.endDate (parse ra 0h) với "now" có giờ/phút thực tế, khiến hợp đồng hết hạn ĐÚNG hôm nay bị tính
   // nhầm "đã hết hạn" suốt cả ngày thay vì "còn hiệu lực"/"sắp hết hạn".
+  // Chỉ tính giá trị/hạn hiệu lực trên hợp đồng ĐÃ DUYỆT — khớp cách renderReportsSummary() lọc
+  // officeBySubType bên dưới (case "Chỉ cộng dồn đề nghị ĐÃ DUYỆT"). Trước đây cộng cả PENDING/
+  // REJECTED, khiến giá trị hợp đồng còn hiệu lực/đã hết hạn bị thổi phồng bằng những hồ sơ chưa từng
+  // được duyệt (thậm chí đã bị từ chối) — không phản ánh đúng cam kết tài chính thực tế.
+  const approvedRecords = records.filter(c => c.approvalStatus === 'APPROVED');
   const rawNow = new Date();
   const now = new Date(rawNow.getFullYear(), rawNow.getMonth(), rawNow.getDate());
-  const activeValue = records.filter(c => new Date(c.endDate) >= now).reduce((s, c) => s + (c.amount || 0), 0);
-  const expiredValue = records.filter(c => new Date(c.endDate) < now).reduce((s, c) => s + (c.amount || 0), 0);
+  const activeValue = approvedRecords.filter(c => new Date(c.endDate) >= now).reduce((s, c) => s + (c.amount || 0), 0);
+  const expiredValue = approvedRecords.filter(c => new Date(c.endDate) < now).reduce((s, c) => s + (c.amount || 0), 0);
   const soon = new Date(now.getTime() + 30 * 24 * 3600 * 1000);
-  const expiringSoon = records.filter(c => { const end = new Date(c.endDate); return end >= now && end <= soon; });
+  const expiringSoon = approvedRecords.filter(c => { const end = new Date(c.endDate); return end >= now && end <= soon; });
   return `
     <div class="bg-white p-4 rounded border">
       <h4 class="font-bold text-gray-800 mb-3">💰 Giá Trị Hợp Đồng</h4>
@@ -19089,8 +19208,13 @@ function renderContractReportExtra(records) {
 }
 
 function renderOfficeReportExtra(records) {
+  // Chỉ cộng dồn đề xuất ĐÃ DUYỆT — khớp đúng cách renderReportsSummary() lọc officeBySubType (tab
+  // "Tổng Hợp"), trước đây 2 nơi lệch nhau: tab "Tổng Hợp" chỉ cộng APPROVED còn tab riêng "Văn Phòng
+  // Tổng Hợp" này cộng cả PENDING/REJECTED, khiến 2 tab cho ra 2 con số dự toán khác nhau cho cùng 1
+  // khoảng thời gian/phòng ban lọc.
+  const approvedRecords = records.filter(o => o.status === 'APPROVED');
   const bySubType = { MUA_BAN: 0, SUA_CHUA: 0, DAU_TU: 0 };
-  records.forEach(o => { bySubType[o.subType] = (bySubType[o.subType] || 0) + (o.amount || 0); });
+  approvedRecords.forEach(o => { bySubType[o.subType] = (bySubType[o.subType] || 0) + (o.amount || 0); });
   const max = Math.max(1, ...Object.values(bySubType));
   return `
     <div class="bg-white p-4 rounded border">
@@ -19261,8 +19385,12 @@ function renderReportsSummary(container) {
 
   // --- Tài chính ---
   const now = new Date();
-  const activeContractValue = visibleContracts.filter(c => new Date(c.endDate) >= now).reduce((sum, c) => sum + (c.amount || 0), 0);
-  const expiredContractValue = visibleContracts.filter(c => new Date(c.endDate) < now).reduce((sum, c) => sum + (c.amount || 0), 0);
+  // Chỉ tính giá trị trên hợp đồng ĐÃ DUYỆT — khớp đúng cách officeBySubType lọc APPROVED ngay dưới
+  // đây; trước đây visibleContracts (mọi trạng thái: PENDING/APPROVED/REJECTED) được cộng thẳng, thổi
+  // phồng "Giá trị Hợp đồng" bằng những hồ sơ chưa từng được duyệt.
+  const approvedContracts = visibleContracts.filter(c => c.approvalStatus === 'APPROVED');
+  const activeContractValue = approvedContracts.filter(c => new Date(c.endDate) >= now).reduce((sum, c) => sum + (c.amount || 0), 0);
+  const expiredContractValue = approvedContracts.filter(c => new Date(c.endDate) < now).reduce((sum, c) => sum + (c.amount || 0), 0);
 
   // Chỉ cộng dồn đề nghị ĐÃ DUYỆT — trước đây cộng cả PENDING/REJECTED, khiến 1 đề nghị Đầu Tư bị từ
   // chối vẫn cộng vào cột dự toán, trông như đã được duyệt/chi thực tế.
@@ -19673,8 +19801,16 @@ function viewInternalPostDetail(id) {
   if (p.type === 'TRAINING' && p.training) {
     const t = p.training;
     const regCount = (t.registeredUsers || []).length;
+    // Khớp đúng kiểm tra hạn đăng ký ở server (registerInternalPostTraining(), lib/recordActions.js —
+    // so chuỗi ISO ngày YYYY-MM-DD, không dùng nowVN()) — trước đây nút ở đây CHỈ tính đủ số lượng
+    // (isFull theo capacity), không hề xét registerDeadline: quá hạn đăng ký nhưng chưa đủ số lượng thì
+    // nút vẫn hiện "✅ Đăng Ký Tham Gia" có thể bấm được, bấm vào chỉ nhận lỗi 409 từ server thay vì
+    // được ẩn/disable đúng ngay từ đầu.
+    const isPastDeadline = !!(t.registerDeadline && new Date().toISOString().slice(0, 10) > t.registerDeadline);
     const isFull = t.capacity > 0 && regCount >= t.capacity;
     const isRegistered = (t.registeredUsers || []).includes(currentUser.username);
+    const blocked = isFull || isPastDeadline;
+    const blockedLabel = isPastDeadline ? 'Đã Hết Hạn Đăng Ký' : 'Đã Đủ Số Lượng';
     typeInfoHTML = `
       <div class="bg-emerald-50 border border-emerald-200 rounded p-3 mb-3 text-sm space-y-1">
         <div><b>Thời gian:</b> ${escapeHtml(t.startTime || '')}${t.endTime ? ` ➔ ${escapeHtml(t.endTime)}` : ''}</div>
@@ -19684,7 +19820,7 @@ function viewInternalPostDetail(id) {
         <div class="pt-1">
           ${isRegistered
             ? `<button onclick="unregisterFromTraining(${p.id})" class="bg-gray-500 text-white px-3 py-1 rounded text-xs font-bold hover:bg-gray-600">Hủy Đăng Ký</button>`
-            : `<button onclick="registerForTraining(${p.id})" ${isFull ? 'disabled' : ''} class="${isFull ? 'bg-gray-300 text-gray-500 cursor-not-allowed' : 'bg-emerald-600 text-white hover:bg-emerald-700'} px-3 py-1 rounded text-xs font-bold">${isFull ? 'Đã Đủ Số Lượng' : '✅ Đăng Ký Tham Gia'}</button>`}
+            : `<button onclick="registerForTraining(${p.id})" ${blocked ? 'disabled' : ''} class="${blocked ? 'bg-gray-300 text-gray-500 cursor-not-allowed' : 'bg-emerald-600 text-white hover:bg-emerald-700'} px-3 py-1 rounded text-xs font-bold">${blocked ? blockedLabel : '✅ Đăng Ký Tham Gia'}</button>`}
         </div>
       </div>
     `;
