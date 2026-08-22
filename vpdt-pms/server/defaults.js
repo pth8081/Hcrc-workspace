@@ -65,10 +65,23 @@ const DEFAULTS = {
   contractTypes: ['Hợp đồng kinh tế', 'Hợp đồng lao động', 'Giấy phép kinh doanh / Pháp lý', 'Thỏa thuận bảo mật (NDA)', 'Phụ lục hợp đồng'],
   carTypes: ['5 chỗ', '7 chỗ'],
 
+  // smtpEncryption: 'NONE' | 'STARTTLS' | 'SSL' (xem lib/mailer.js) — thay cho "smtpSecure" boolean 3
+  // trạng thái cũ, đặt tên khớp các mail client quen thuộc (Outlook/Thunderbird). smtpAuthEnabled +
+  // smtpUser + smtpPassEnc (mã hoá, xem lib/emailCrypto.js): tài khoản đăng nhập SMTP cấu hình ngay
+  // trên web — trước đây CHỈ đọc được từ .env (SMTP_USER/SMTP_PASS, vẫn còn là đường lùi, xem
+  // lib/mailer.js) vì chưa có cách lưu mật khẩu an toàn trong DB.emailConfig (bị GET /api/data trả
+  // nguyên cho mọi người đã đăng nhập).
   emailConfig: {
-    enabled: true, smtpHost: 'smtp.gmail.com', smtpPort: 587, senderEmail: 'dms-noreply@company.com',
+    enabled: true, smtpHost: 'smtp.gmail.com', smtpPort: 587, smtpEncryption: 'STARTTLS',
+    smtpAuthEnabled: false, smtpUser: '', smtpPassEnc: null,
+    senderEmail: 'dms-noreply@company.com',
     contractExpiryReminderDays: [30, 15, 7], contractExpiryCcEmails: []
   },
+
+  // Người phụ trách nhận thông báo hết hạn hợp đồng RIÊNG theo từng phòng ban — dạng { [dept]:
+  // [{name, email}, ...] }, bổ sung cho "contractExpiryCcEmails" ở trên (CC chung, nhận thông báo bất
+  // kỳ hợp đồng phòng nào) chứ không thay thế. Xem jobs/contractExpiryReminder.js.
+  contractExpiryDeptContacts: {},
 
   formTemplates: {
     'SUBMISSION': [

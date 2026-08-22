@@ -228,41 +228,45 @@ khi có Nginx sẽ không có tác dụng gì, phải quay lại sau).
 
 ## 7. Cấu hình gửi email thật (SMTP)
 
-Cấu hình gửi email chia làm 2 nơi, **mỗi phần chỉ có đúng 1 nguồn**, không trùng lặp/không chồng
-chéo ưu tiên:
+Toàn bộ cấu hình — kể cả tài khoản/mật khẩu đăng nhập SMTP — nay cấu hình được **trực tiếp trên web**
+tại màn **Quản trị > Cấu Hình Email**, không cần đụng `.env` hay khởi động lại server. Mật khẩu SMTP
+được mã hoá 2 chiều trước khi lưu vào CSDL bằng khoá `EMAIL_ENCRYPTION_KEY` trong `.env`:
 
-- **Host / Port / Mã hoá TLS / Email người gửi / Bật-tắt gửi mail** — cấu hình trực tiếp trên web,
-  tại màn **Quản trị > Cấu Hình Email**. Đổi ở đây có hiệu lực ngay, không cần đụng server hay
-  khởi động lại. Mặc định hệ thống chỉ **mô phỏng** gửi email (ghi vào Nhật ký hệ thống, không gửi
-  thật) cho tới khi nhập SMTP Server ở màn này.
-- **Tài khoản/mật khẩu đăng nhập SMTP** (`SMTP_USER`/`SMTP_PASS`, chỉ cần nếu máy chủ SMTP yêu cầu
-  xác thực) — bắt buộc đặt trong `.env` trên server vì lý do bảo mật (không lưu trong dữ liệu ứng
-  dụng, vì `GET /api/data` trả nguyên dữ liệu cho mọi client gọi được). Để trống **cả 2** biến này
-  nếu máy chủ SMTP không yêu cầu đăng nhập — hệ thống hỗ trợ song song cả 2 kiểu.
-
-**Trường hợp 1 — Gmail (cần xác thực):**
 ```
-SMTP_USER=your-email@gmail.com
-SMTP_PASS=your-app-password
+EMAIL_ENCRYPTION_KEY=<chuỗi ngẫu nhiên dài, tạo bằng lệnh bên dưới>
 ```
-Bật xác thực 2 bước cho tài khoản Gmail, tạo "Mật khẩu ứng dụng" (App Password) tại
-`https://myaccount.google.com/apppasswords`, dùng mật khẩu đó cho `SMTP_PASS` (Google đã chặn đăng
-nhập SMTP bằng mật khẩu thường). Sau đó vào **Quản trị > Cấu Hình Email** trên web, điền
-`SMTP Server = smtp.gmail.com`, `Port = 587`, `Mã hoá TLS = Tắt / STARTTLS`.
+Tạo nhanh: `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"`. Đặt biến này
+**trước khi** cấu hình mật khẩu SMTP qua web lần đầu — nếu bạn chỉ dùng máy chủ SMTP không yêu cầu
+xác thực, hoặc vẫn muốn giữ tài khoản trong `.env` (đường lùi cũ, xem bên dưới), có thể bỏ qua biến
+này.
 
-**Trường hợp 2 — mail relay nội bộ công ty (KHÔNG cần xác thực):** nếu relay chỉ cho phép kết nối
-từ IP nội bộ tin cậy (không hỏi tài khoản/mật khẩu), để trống cả `SMTP_USER` lẫn `SMTP_PASS` trong
-`.env`. Nếu relay dùng chứng chỉ TLS tự ký (self-signed), thêm:
+Màn Cấu Hình Email có **3 nút Mã Hoá** (Không mã hoá/TLS/SSL) tương ứng port chuẩn 25/587/465 — bấm 1
+nút sẽ tự đổi Port sang giá trị chuẩn (trừ khi Port đang là 1 giá trị tuỳ chỉnh khác). Có nút
+**"Gửi Thử"** ngay trên form để xác minh cấu hình đúng trước khi Lưu, không cần dò log server.
+
+Mặc định hệ thống chỉ **mô phỏng** gửi email (ghi vào Nhật ký hệ thống, không gửi thật) cho tới khi
+nhập SMTP Server ở màn này.
+
+**Trường hợp 1 — Gmail (cần xác thực):** vào **Quản trị > Cấu Hình Email**, điền
+`SMTP Server = smtp.gmail.com`, `Port = 587`, chọn nút mã hoá **TLS**, bật "Máy chủ SMTP yêu cầu xác
+thực" rồi điền Tài khoản = email Gmail, Mật khẩu = "Mật khẩu ứng dụng" (App Password) tạo tại
+`https://myaccount.google.com/apppasswords` (Google đã chặn đăng nhập SMTP bằng mật khẩu thường).
+
+**Trường hợp 2 — mail relay nội bộ công ty (KHÔNG cần xác thực):** điền Host/Port/Email người gửi
+thật của relay, KHÔNG bật "Máy chủ SMTP yêu cầu xác thực". Nếu relay dùng chứng chỉ TLS tự ký
+(self-signed), thêm trong `.env`:
 ```
 SMTP_TLS_REJECT_UNAUTHORIZED=false
 ```
-Sau đó vào **Quản trị > Cấu Hình Email** trên web điền Host/Port/Email người gửi thật của relay nội
-bộ. Màn này cũng hiển thị sẵn dòng trạng thái "Server đang cấu hình CÓ/KHÔNG xác thực" để xác nhận
-lại đúng chế độ đang chạy, không cần mở file `.env` để kiểm tra.
 
-> ⚠️ Sau khi sửa `.env` (chỉ áp dụng cho tài khoản/mật khẩu SMTP), cần khởi động lại server
-> (`pm2 restart vpdt` hoặc tương đương) để áp dụng. Đổi Host/Port/TLS/Email người gửi/Bật-tắt trên
-> màn Cấu Hình Email thì KHÔNG cần khởi động lại.
+**Đường lùi `.env` (`SMTP_USER`/`SMTP_PASS`):** chỉ dành cho máy chủ đã deploy từ trước khi có tính
+năng cấu hình tài khoản trên web — nếu màn Cấu Hình Email chưa lưu tài khoản nào (chưa bật "Máy chủ
+SMTP yêu cầu xác thực"), hệ thống tự dùng `SMTP_USER`/`SMTP_PASS` trong `.env` nếu có. Không bắt buộc
+cho cài đặt mới.
+
+> ⚠️ Sau khi sửa `.env` (`EMAIL_ENCRYPTION_KEY`/`SMTP_USER`/`SMTP_PASS`/`SMTP_TLS_REJECT_UNAUTHORIZED`),
+> cần khởi động lại server (`pm2 restart vpdt` hoặc tương đương) để áp dụng. Mọi thay đổi trên màn
+> Cấu Hình Email (Host/Port/Mã hoá/Tài khoản SMTP/Email người gửi/Bật-tắt) thì KHÔNG cần khởi động lại.
 
 ---
 
@@ -485,7 +489,7 @@ Trước khi public rộng, ngoài việc chạy cluster mode (mục 9a) cần l
 Endpoint kiểm tra nhanh:
 ```
 GET http://<ip-server>:3000/api/health
-→ {"status":"ok","db":"connected","version":"1.34.2"}
+→ {"status":"ok","db":"connected","version":"1.35.0"}
 ```
 
 `version` khớp đúng trường `version` trong `package.json` của bản code server

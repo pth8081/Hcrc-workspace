@@ -2380,50 +2380,92 @@ table { display: block; overflow-x: auto; max-width: 100%; }
     <!-- CẤU HÌNH HỆ THỐNG EMAIL -->
     <div id="adminSubEmail" class="hidden bg-amber-50 p-4 rounded border border-amber-300 space-y-3">
       <h3 class="font-bold text-amber-900 text-sm flex items-center gap-1">✉️ Cấu Hình Máy Chủ Gửi Email Thông Báo</h3>
-      <p class="text-[11px] text-gray-500 italic">Host/Port/Mã hoá TLS/Email người gửi/Bật-tắt cấu hình đầy đủ ngay tại đây, không cần đụng tới server. Riêng tài khoản/mật khẩu đăng nhập SMTP (chỉ cần nếu máy chủ SMTP yêu cầu xác thực) bắt buộc đặt trong file <code>.env</code> trên server vì lý do bảo mật (không lưu trong dữ liệu ứng dụng) — để trống cả 2 biến đó nếu máy chủ SMTP không yêu cầu đăng nhập (ví dụ mail relay nội bộ). Chưa nhập SMTP Server bên dưới thì hệ thống tự chuyển sang chế độ mô phỏng (ghi Nhật ký hệ thống, không gửi hộp thư thật).</p>
+      <p class="text-[11px] text-gray-500 italic">Cấu hình đầy đủ ngay tại đây — kể cả tài khoản/mật khẩu đăng nhập SMTP (nếu máy chủ yêu cầu xác thực), không cần đụng tới server/file .env nữa. Chưa nhập SMTP Server bên dưới thì hệ thống tự chuyển sang chế độ mô phỏng (ghi Nhật ký hệ thống, không gửi hộp thư thật).</p>
       <p id="cfgSmtpAuthStatus" class="text-[11px] font-semibold rounded px-2 py-1 bg-white border"></p>
 
-      <form onsubmit="saveEmailConfig(event)" class="grid grid-cols-1 md:grid-cols-4 gap-3 bg-white p-3 rounded border text-xs">
+      <form onsubmit="saveEmailConfig(event)" class="space-y-3 bg-white p-3 rounded border text-xs">
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-3">
+          <div>
+            <label class="block font-semibold text-gray-600 mb-1">Trạng thái gửi mail</label>
+            <select id="cfgEmailEnabled" class="w-full border p-1.5 rounded bg-white font-bold text-green-700">
+              <option value="true">Bật (Active)</option>
+              <option value="false">Tắt (Disabled)</option>
+            </select>
+          </div>
+          <div>
+            <label class="block font-semibold text-gray-600 mb-1">SMTP Server</label>
+            <input id="cfgSmtpHost" placeholder="smtp.gmail.com" class="w-full border p-1.5 rounded" required>
+          </div>
+          <div>
+            <label class="block font-semibold text-gray-600 mb-1">SMTP Port</label>
+            <input id="cfgSmtpPort" type="number" placeholder="587" class="w-full border p-1.5 rounded" required>
+          </div>
+          <div>
+            <label class="block font-semibold text-gray-600 mb-1">Email Hệ Thống (Sender)</label>
+            <input id="cfgSenderEmail" type="email" placeholder="dms-noreply@company.com" class="w-full border p-1.5 rounded" required>
+          </div>
+        </div>
+
         <div>
-          <label class="block font-semibold text-gray-600 mb-1">Trạng thái gửi mail</label>
-          <select id="cfgEmailEnabled" class="w-full border p-1.5 rounded bg-white font-bold text-green-700">
-            <option value="true">Bật (Active)</option>
-            <option value="false">Tắt (Disabled)</option>
-          </select>
+          <label class="block font-semibold text-gray-600 mb-1">Mã Hoá Kết Nối</label>
+          <div class="flex gap-1.5 flex-wrap">
+            <button type="button" onclick="setSmtpEncryption('NONE')" id="encBtn_NONE" class="px-3 py-1.5 rounded border font-semibold">Không mã hoá <span class="font-normal text-gray-400">(port 25)</span></button>
+            <button type="button" onclick="setSmtpEncryption('STARTTLS')" id="encBtn_STARTTLS" class="px-3 py-1.5 rounded border font-semibold">TLS <span class="font-normal text-gray-400">(port 587)</span></button>
+            <button type="button" onclick="setSmtpEncryption('SSL')" id="encBtn_SSL" class="px-3 py-1.5 rounded border font-semibold">SSL <span class="font-normal text-gray-400">(port 465)</span></button>
+          </div>
+          <input type="hidden" id="cfgSmtpEncryption" value="STARTTLS">
+          <p class="text-[11px] text-gray-400 italic mt-1">Chọn "TLS" hoặc "SSL" sẽ tự chuyển Port sang giá trị chuẩn ở trên — trừ khi Port hiện tại đã là 1 giá trị tuỳ chỉnh khác (sẽ giữ nguyên, sửa tay được như bình thường).</p>
         </div>
-        <div>
-          <label class="block font-semibold text-gray-600 mb-1">SMTP Server</label>
-          <input id="cfgSmtpHost" placeholder="smtp.gmail.com" class="w-full border p-1.5 rounded" required>
+
+        <div class="border-t pt-2">
+          <label class="flex items-center gap-2 font-semibold text-gray-600 mb-2">
+            <input type="checkbox" id="cfgSmtpAuthEnabled" onchange="toggleSmtpAuthFields()">
+            Máy chủ SMTP yêu cầu xác thực (tài khoản/mật khẩu đăng nhập)
+          </label>
+          <div id="cfgSmtpAuthFields" class="hidden grid grid-cols-1 md:grid-cols-2 gap-3">
+            <div>
+              <label class="block font-semibold text-gray-600 mb-1">Tài Khoản SMTP</label>
+              <input id="cfgSmtpUser" placeholder="notify@company.com" class="w-full border p-1.5 rounded">
+            </div>
+            <div>
+              <label class="block font-semibold text-gray-600 mb-1">Mật Khẩu SMTP</label>
+              <input id="cfgSmtpPassPlain" type="password" placeholder="Để trống nếu giữ nguyên mật khẩu đã lưu" class="w-full border p-1.5 rounded" autocomplete="new-password">
+            </div>
+          </div>
         </div>
-        <div>
-          <label class="block font-semibold text-gray-600 mb-1">SMTP Port</label>
-          <input id="cfgSmtpPort" type="number" placeholder="587" class="w-full border p-1.5 rounded" required>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-3 border-t pt-2">
+          <div>
+            <label class="block font-semibold text-gray-600 mb-1">Nhắc Hết Hạn Hợp Đồng — Trước (số ngày, cách nhau dấu phẩy)</label>
+            <input id="cfgContractReminderDays" placeholder="30, 15, 7" class="w-full border p-1.5 rounded" required>
+          </div>
+          <div>
+            <label class="block font-semibold text-gray-600 mb-1">Email CC Cố Định Nhận Cảnh Báo Hết Hạn (tuỳ chọn, cách nhau dấu phẩy)</label>
+            <input id="cfgContractReminderCc" placeholder="bgd@company.com, phaply@company.com" class="w-full border p-1.5 rounded">
+          </div>
         </div>
-        <div>
-          <label class="block font-semibold text-gray-600 mb-1">Mã Hoá Kết Nối (TLS)</label>
-          <select id="cfgSmtpSecure" class="w-full border p-1.5 rounded bg-white">
-            <option value="">Tự động theo Port (khuyến nghị)</option>
-            <option value="true">Bật ngay từ đầu (SSL, thường port 465)</option>
-            <option value="false">Tắt / STARTTLS (thường port 587)</option>
-          </select>
+
+        <div class="flex flex-wrap gap-2 items-center border-t pt-2">
+          <input id="cfgTestEmailTo" type="email" placeholder="Email nhận thử" class="border p-1.5 rounded flex-1 min-w-[180px]">
+          <button type="button" onclick="sendTestEmail()" id="cfgTestEmailBtn" class="bg-blue-600 text-white px-3 py-1.5 rounded font-bold hover:bg-blue-700">📨 Gửi Thử</button>
+          <span id="cfgTestEmailResult" class="text-[11px] font-semibold"></span>
         </div>
-        <div>
-          <label class="block font-semibold text-gray-600 mb-1">Email Hệ Thống (Sender)</label>
-          <input id="cfgSenderEmail" type="email" placeholder="dms-noreply@company.com" class="w-full border p-1.5 rounded" required>
-        </div>
-        <div class="md:col-span-2">
-          <label class="block font-semibold text-gray-600 mb-1">Nhắc Hết Hạn Hợp Đồng — Trước (số ngày, cách nhau dấu phẩy)</label>
-          <input id="cfgContractReminderDays" placeholder="30, 15, 7" class="w-full border p-1.5 rounded" required>
-        </div>
-        <div class="md:col-span-2">
-          <label class="block font-semibold text-gray-600 mb-1">Email CC Cố Định Nhận Cảnh Báo Hết Hạn (tuỳ chọn, cách nhau dấu phẩy)</label>
-          <input id="cfgContractReminderCc" placeholder="bgd@company.com, phaply@company.com" class="w-full border p-1.5 rounded">
-        </div>
-        <div class="md:col-span-4 flex justify-between items-center pt-1">
+
+        <div class="flex justify-between items-center pt-1 border-t">
           <span class="text-gray-500 italic text-[11px]">Hệ thống ghi nhận log thông báo email tại cửa sổ console.</span>
           <button type="submit" class="bg-amber-600 text-white px-4 py-1.5 rounded font-bold hover:bg-amber-700">Lưu Cấu Hình Email</button>
         </div>
       </form>
+
+      <div class="bg-white p-3 rounded border text-xs space-y-2">
+        <h4 class="font-bold text-amber-900 flex items-center gap-1">👥 Người Phụ Trách Nhận Thông Báo Hết Hạn Hợp Đồng Theo Phòng Ban</h4>
+        <p class="text-[11px] text-gray-500 italic">Bổ sung thêm cho "Email CC Cố Định" ở trên (nhận thông báo của MỌI phòng ban) — mỗi phòng ban có thể có người phụ trách riêng, chỉ nhận thông báo hết hạn hợp đồng CỦA phòng đó.</p>
+        <table class="w-full border-collapse">
+          <thead><tr class="border-b text-left text-gray-500"><th class="py-1 pr-2 w-40">Phòng Ban</th><th class="py-1">Người Phụ Trách</th></tr></thead>
+          <tbody id="deptContactsTableBody"></tbody>
+        </table>
+        <button type="button" onclick="saveContractExpiryDeptContacts()" class="bg-amber-600 text-white px-4 py-1.5 rounded font-bold hover:bg-amber-700">Lưu Người Phụ Trách</button>
+      </div>
     </div>
 
     <div id="adminSubCatalog" class="hidden grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
@@ -5736,23 +5778,69 @@ function parseEmailListInput(str) {
   return (str || '').split(',').map(s => s.trim()).filter(Boolean);
 }
 
+// Port chuẩn của từng kiểu mã hoá (xem lib/mailer.js) — dùng để tự nhảy Port khi bấm đổi nút mã hoá.
+const SMTP_ENCRYPTION_STANDARD_PORTS = { NONE: 25, STARTTLS: 587, SSL: 465 };
+const SMTP_STANDARD_PORTS = Object.values(SMTP_ENCRYPTION_STANDARD_PORTS);
+
+// Bấm 1 trong 3 nút Không mã hoá/TLS/SSL: đổi trạng thái nút đang chọn + tự nhảy Port sang giá trị
+// chuẩn — TRỪ KHI Port hiện tại không phải 1 trong 3 giá trị chuẩn (25/587/465), tức admin đã tự gõ 1
+// port tuỳ chỉnh (vd relay nội bộ dùng port 26/2525) — không vô tình ghi đè mất giá trị đó.
+function setSmtpEncryption(mode) {
+  document.getElementById('cfgSmtpEncryption').value = mode;
+  ['NONE', 'STARTTLS', 'SSL'].forEach(m => {
+    const btn = document.getElementById(`encBtn_${m}`);
+    if (m === mode) btn.className = 'px-3 py-1.5 rounded border-2 border-amber-600 bg-amber-50 font-semibold text-amber-800';
+    else btn.className = 'px-3 py-1.5 rounded border font-semibold text-gray-600 hover:bg-gray-50';
+  });
+  const portEl = document.getElementById('cfgSmtpPort');
+  const currentPort = parseInt(portEl.value, 10);
+  if (SMTP_STANDARD_PORTS.includes(currentPort)) {
+    portEl.value = SMTP_ENCRYPTION_STANDARD_PORTS[mode];
+  }
+}
+
+function toggleSmtpAuthFields() {
+  const enabled = document.getElementById('cfgSmtpAuthEnabled').checked;
+  document.getElementById('cfgSmtpAuthFields').classList.toggle('hidden', !enabled);
+}
+
+// Parse "30, 15, 7" -> [30, 15, 7] (số nguyên không âm, loại trùng, sắp giảm dần)
+function parseDaysListInput(str) {
+  const days = (str || '').split(',')
+    .map(s => parseInt(s.trim(), 10))
+    .filter(n => Number.isFinite(n) && n >= 0);
+  return Array.from(new Set(days)).sort((a, b) => b - a);
+}
+
+// Parse "a@x.com, b@y.com" -> ['a@x.com', 'b@y.com']
+function parseEmailListInput(str) {
+  return (str || '').split(',').map(s => s.trim()).filter(Boolean);
+}
+
 function saveEmailConfig(e) {
   e.preventDefault();
   const reminderDays = parseDaysListInput(document.getElementById('cfgContractReminderDays').value);
   if (reminderDays.length === 0) {
     return alert('⛔ Vui lòng nhập ít nhất 1 mốc số ngày nhắc hết hạn hợp lệ (vd: 30, 15, 7)!');
   }
-  const secureRaw = document.getElementById('cfgSmtpSecure').value;
+  const smtpAuthEnabled = document.getElementById('cfgSmtpAuthEnabled').checked;
   DB.emailConfig = {
     enabled: document.getElementById('cfgEmailEnabled').value === 'true',
     smtpHost: document.getElementById('cfgSmtpHost').value.trim(),
     smtpPort: parseInt(document.getElementById('cfgSmtpPort').value, 10) || 587,
-    smtpSecure: secureRaw === '' ? null : secureRaw === 'true',
+    smtpEncryption: document.getElementById('cfgSmtpEncryption').value,
+    smtpAuthEnabled,
+    smtpUser: smtpAuthEnabled ? document.getElementById('cfgSmtpUser').value.trim() : '',
+    // "smtpPassPlain" là field TẠM, chỉ để server đọc 1 lần rồi mã hoá lại thành "smtpPassEnc" —
+    // không phải bản ghi lưu thật (xem prepareEmailConfigForSave() ở routes/data.js). Để trống ô này
+    // = giữ nguyên mật khẩu đã lưu, khớp đúng quy ước "write-only" như đổi mật khẩu người dùng.
+    smtpPassPlain: smtpAuthEnabled ? document.getElementById('cfgSmtpPassPlain').value : '',
     senderEmail: document.getElementById('cfgSenderEmail').value.trim(),
     contractExpiryReminderDays: reminderDays,
     contractExpiryCcEmails: parseEmailListInput(document.getElementById('cfgContractReminderCc').value)
   };
   syncStorage('emailConfig');
+  document.getElementById('cfgSmtpPassPlain').value = ''; // không giữ mật khẩu vừa gõ hiển thị lại trên form
   logSystemAction('CONFIG', 'UPDATE_SMTP_CONFIG', 'Cập nhật SMTP server thành công.', 'SUCCESS', 'SMTP_CONFIG');
   alert('✅ Đã lưu cấu hình Email thành công!');
 }
@@ -5762,38 +5850,151 @@ function loadEmailConfigToForm() {
   document.getElementById('cfgEmailEnabled').value = DB.emailConfig.enabled !== false ? 'true' : 'false';
   document.getElementById('cfgSmtpHost').value = DB.emailConfig.smtpHost || 'smtp.gmail.com';
   document.getElementById('cfgSmtpPort').value = DB.emailConfig.smtpPort || 587;
-  document.getElementById('cfgSmtpSecure').value = DB.emailConfig.smtpSecure === true ? 'true'
-    : DB.emailConfig.smtpSecure === false ? 'false' : '';
+  setSmtpEncryption(DB.emailConfig.smtpEncryption || 'STARTTLS');
+  document.getElementById('cfgSmtpAuthEnabled').checked = !!DB.emailConfig.smtpAuthEnabled;
+  document.getElementById('cfgSmtpUser').value = DB.emailConfig.smtpUser || '';
+  document.getElementById('cfgSmtpPassPlain').value = ''; // write-only — không bao giờ có giá trị thật để hiện lại
+  toggleSmtpAuthFields();
   document.getElementById('cfgSenderEmail').value = DB.emailConfig.senderEmail || 'dms-noreply@company.com';
   document.getElementById('cfgContractReminderDays').value = (DB.emailConfig.contractExpiryReminderDays && DB.emailConfig.contractExpiryReminderDays.length
     ? DB.emailConfig.contractExpiryReminderDays : [30, 15, 7]).join(', ');
   document.getElementById('cfgContractReminderCc').value = (DB.emailConfig.contractExpiryCcEmails || []).join(', ');
+  document.getElementById('cfgTestEmailResult').textContent = '';
   loadSmtpAuthStatus();
+  contractExpiryDeptContactsDraft = JSON.parse(JSON.stringify(DB.contractExpiryDeptContacts || {}));
+  renderDeptContactsTable();
 }
 
-// Hỏi backend server đang cấu hình tài khoản/mật khẩu đăng nhập SMTP (.env) hay không, để hiển thị
-// (không nhạy cảm — chỉ có/không, không lộ giá trị thật) cho admin biết chắc server đang chạy đúng
-// chế độ mình định dùng (có xác thực / relay ẩn danh), vì không xem được nội dung .env từ trình duyệt.
+// Hỏi backend server đang cấu hình tài khoản/mật khẩu đăng nhập SMTP hay không (DB.emailConfig hoặc
+// .env, xem lib/mailer.js hasAuthConfigured()), để hiển thị (không nhạy cảm — chỉ có/không, không lộ
+// giá trị thật) cho admin biết chắc server đang chạy đúng chế độ mình định dùng.
 function loadSmtpAuthStatus() {
   const el = document.getElementById('cfgSmtpAuthStatus');
   if (!el) return;
   el.className = 'text-[11px] font-semibold rounded px-2 py-1 bg-gray-100 border text-gray-500';
-  el.textContent = '⏳ Đang kiểm tra trạng thái xác thực SMTP trên server...';
+  el.textContent = '⏳ Đang kiểm tra trạng thái xác thực SMTP...';
   fetch('/api/send-email/status')
     .then(res => res.json())
     .then(data => {
       if (data.hasAuth) {
         el.className = 'text-[11px] font-semibold rounded px-2 py-1 bg-blue-50 border border-blue-200 text-blue-700';
-        el.textContent = '🔒 Server đang cấu hình CÓ xác thực (SMTP_USER/SMTP_PASS đã đặt trong .env).';
+        el.textContent = '🔒 Đang cấu hình CÓ xác thực SMTP.';
       } else {
         el.className = 'text-[11px] font-semibold rounded px-2 py-1 bg-slate-50 border border-slate-200 text-slate-600';
-        el.textContent = '🔓 Server đang cấu hình KHÔNG xác thực (chưa đặt SMTP_USER/SMTP_PASS trong .env — kết nối ẩn danh tới máy chủ SMTP).';
+        el.textContent = '🔓 Đang cấu hình KHÔNG xác thực (kết nối ẩn danh tới máy chủ SMTP).';
       }
     })
     .catch(() => {
       el.className = 'text-[11px] font-semibold rounded px-2 py-1 bg-red-50 border border-red-200 text-red-700';
       el.textContent = '⚠️ Không kiểm tra được trạng thái xác thực SMTP (không liên hệ được backend).';
     });
+}
+
+// "Gửi thử": dùng THẲNG các giá trị đang gõ dở trên form (chưa lưu) để xác minh cấu hình đúng trước
+// khi bấm "Lưu Cấu Hình Email" — không phải lưu mù rồi tự dò log server như trước (xem routes/email.js
+// POST /test). Để trống ô mật khẩu = dùng mật khẩu ĐÃ LƯU (nếu có), không phải "không mật khẩu".
+async function sendTestEmail() {
+  const to = document.getElementById('cfgTestEmailTo').value.trim();
+  const resultEl = document.getElementById('cfgTestEmailResult');
+  if (!to) { resultEl.className = 'text-[11px] font-semibold text-red-600'; resultEl.textContent = '⛔ Nhập email nhận thử trước.'; return; }
+
+  const btn = document.getElementById('cfgTestEmailBtn');
+  btn.disabled = true;
+  resultEl.className = 'text-[11px] font-semibold text-gray-500';
+  resultEl.textContent = '⏳ Đang gửi thử...';
+
+  const smtpAuthEnabled = document.getElementById('cfgSmtpAuthEnabled').checked;
+  try {
+    const res = await fetch('/api/send-email/test', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        to,
+        host: document.getElementById('cfgSmtpHost').value.trim(),
+        port: parseInt(document.getElementById('cfgSmtpPort').value, 10) || 587,
+        encryption: document.getElementById('cfgSmtpEncryption').value,
+        smtpAuthEnabled,
+        smtpUser: smtpAuthEnabled ? document.getElementById('cfgSmtpUser').value.trim() : '',
+        smtpPass: smtpAuthEnabled ? document.getElementById('cfgSmtpPassPlain').value : '',
+        senderEmail: document.getElementById('cfgSenderEmail').value.trim()
+      })
+    });
+    const body = await res.json().catch(() => ({}));
+    if (res.ok && body.ok) {
+      resultEl.className = 'text-[11px] font-semibold text-green-700';
+      resultEl.textContent = `✅ Đã gửi thử thành công tới máy chủ SMTP ${body.host}:${body.port}!`;
+    } else {
+      resultEl.className = 'text-[11px] font-semibold text-red-600';
+      resultEl.textContent = `⛔ ${body.error || 'Gửi thử thất bại'}`;
+    }
+  } catch (err) {
+    resultEl.className = 'text-[11px] font-semibold text-red-600';
+    resultEl.textContent = '⛔ Không thể kết nối tới máy chủ để gửi thử: ' + err.message;
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+// --- Người phụ trách nhận thông báo hết hạn hợp đồng theo phòng ban (contractExpiryDeptContacts) ---
+// Bản nháp đang sửa trong bộ nhớ trình duyệt — { [dept]: [{name, email}, ...] } — chỉ ghi thật lên
+// server khi bấm "Lưu Người Phụ Trách" (collection RIÊNG với emailConfig, xem defaults.js).
+let contractExpiryDeptContactsDraft = {};
+
+function renderDeptContactsTable() {
+  const tbody = document.getElementById('deptContactsTableBody');
+  if (!tbody) return;
+  tbody.innerHTML = (DB.depts || []).map(dept => {
+    const rows = contractExpiryDeptContactsDraft[dept] || [];
+    const rowsHtml = rows.map((c, idx) => `
+      <div class="flex gap-1 items-center mb-1">
+        <input value="${escapeHtml(c.name || '')}" placeholder="Họ tên" oninput="updateDeptContactField('${escapeHtml(dept)}', ${idx}, 'name', this.value)" class="border p-1 rounded flex-1">
+        <input value="${escapeHtml(c.email || '')}" type="email" placeholder="Email" oninput="updateDeptContactField('${escapeHtml(dept)}', ${idx}, 'email', this.value)" class="border p-1 rounded flex-1">
+        <button type="button" onclick="removeDeptContact('${escapeHtml(dept)}', ${idx})" class="text-red-600 font-bold px-1.5" title="Xoá">✕</button>
+      </div>
+    `).join('');
+    return `
+      <tr class="border-b align-top">
+        <td class="py-2 pr-2 font-semibold">${escapeHtml(dept)}</td>
+        <td class="py-2">
+          ${rowsHtml || '<p class="text-gray-400 italic text-[11px] mb-1">Chưa có người phụ trách riêng</p>'}
+          <button type="button" onclick="addDeptContact('${escapeHtml(dept)}')" class="text-amber-700 font-semibold text-[11px]">+ Thêm người</button>
+        </td>
+      </tr>
+    `;
+  }).join('');
+}
+
+function addDeptContact(dept) {
+  if (!contractExpiryDeptContactsDraft[dept]) contractExpiryDeptContactsDraft[dept] = [];
+  contractExpiryDeptContactsDraft[dept].push({ name: '', email: '' });
+  renderDeptContactsTable();
+}
+
+function removeDeptContact(dept, idx) {
+  contractExpiryDeptContactsDraft[dept]?.splice(idx, 1);
+  renderDeptContactsTable();
+}
+
+function updateDeptContactField(dept, idx, field, value) {
+  if (!contractExpiryDeptContactsDraft[dept]?.[idx]) return;
+  contractExpiryDeptContactsDraft[dept][idx][field] = value;
+}
+
+function saveContractExpiryDeptContacts() {
+  // Loại dòng chưa nhập gì (cả tên lẫn email đều rỗng) và phòng ban không còn dòng nào trước khi lưu.
+  const cleaned = {};
+  for (const dept of Object.keys(contractExpiryDeptContactsDraft)) {
+    const rows = (contractExpiryDeptContactsDraft[dept] || [])
+      .filter(c => (c.name || '').trim() || (c.email || '').trim())
+      .map(c => ({ name: (c.name || '').trim(), email: (c.email || '').trim() }));
+    if (rows.length) cleaned[dept] = rows;
+  }
+  DB.contractExpiryDeptContacts = cleaned;
+  contractExpiryDeptContactsDraft = JSON.parse(JSON.stringify(cleaned));
+  syncStorage('contractExpiryDeptContacts');
+  logSystemAction('CONFIG', 'UPDATE_CONTRACT_EXPIRY_CONTACTS', 'Cập nhật người phụ trách nhận thông báo hết hạn hợp đồng theo phòng ban.', 'SUCCESS', 'EMAIL_CONFIG');
+  alert('✅ Đã lưu người phụ trách theo phòng ban!');
+  renderDeptContactsTable();
 }
 
 // --- CÁ NHÂN HÓA USER ---

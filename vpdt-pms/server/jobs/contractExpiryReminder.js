@@ -11,7 +11,8 @@
 // khỏi Nhật ký hệ thống thật mà không ai biết) — nay ghi qua insertSystemLog() để log thật sự xuất
 // hiện trong Nhật ký hệ thống.
 const { getPool, sql } = require('../db');
-const { sendMail } = require('../lib/mailer');
+const { sendMail, resolveEncryption } = require('../lib/mailer');
+const { decryptSecret } = require('../lib/emailCrypto');
 const { getAllForCollection, withLockedRecordById } = require('../lib/recordStore');
 const { insertSystemLog } = require('../lib/systemLogStore');
 
@@ -74,6 +75,23 @@ async function checkContractExpiryReminders() {
     // Luôn kèm ngưỡng 0 (đúng ngày/đã hết hạn), sắp giảm dần để log theo thứ tự dễ đọc.
     const thresholds = Array.from(new Set([...configuredDays, 0])).sort((a, b) => b - a);
     const ccEmails = Array.isArray(emailConfig.contractExpiryCcEmails) ? emailConfig.contractExpiryCcEmails : [];
+    // Người phụ trách RIÊNG theo từng phòng ban (bổ sung cho ccEmails ở trên, không thay thế — xem
+    // defaults.js/index.html): { [dept]: [{name, email}, ...] }.
+    const deptContacts = await getCollection(pool, 'contractExpiryDeptContacts', {});
+
+    // Tài khoản/mật khẩu SMTP: ưu tiên DB.emailConfig (đã mã hoá, xem lib/emailCrypto.js), rơi về
+    // .env nếu chưa cấu hình qua web (đường lùi cũ, xem lib/mailer.js) — lỗi giải mã (khoá đổi/hỏng)
+    // không nên chặn hẳn job, chỉ log cảnh báo và coi như chưa có tài khoản DB.
+    let smtpUser = null, smtpPass = null;
+    if (emailConfig.smtpAuthEnabled && emailConfig.smtpUser && emailConfig.smtpPassEnc) {
+      try {
+        smtpUser = emailConfig.smtpUser;
+        smtpPass = decryptSecret(emailConfig.smtpPassEnc);
+      } catch (err) {
+        console.error('⛔ [Nhắc hạn hợp đồng] Không giải mã được mật khẩu SMTP đã lưu, dùng đường lùi .env nếu có:', err.message);
+      }
+    }
+    const smtpEncryption = resolveEncryption(emailConfig);
 
     const contracts = await getAllForCollection('contracts');
     if (!Array.isArray(contracts) || contracts.length === 0) return;
@@ -102,12 +120,28 @@ async function checkContractExpiryReminders() {
         const subject = `[VPDT] Hợp đồng ${c.code} ${label}`;
         const body = `Hợp đồng "${c.title}" (${c.code}, đối tác: ${c.partner || 'N/A'}) ${label}. Ngày hết hạn: ${c.endDate}.`;
 
-        const recipients = [];
-        if (creator && creator.email) recipients.push({ email: creator.email, name: creator.name || c.creator });
+        const rawRecipients = [];
+        if (creator && creator.email) rawRecipients.push({ email: creator.email, name: creator.name || c.creator });
+        // Người phụ trách của ĐÚNG phòng ban hợp đồng này — bổ sung, không thay thế ccEmails (CC
+        // chung nhận thông báo bất kỳ hợp đồng phòng nào, vd Ban Giám Đốc).
+        const deptRecipients = Array.isArray(deptContacts[c.dept]) ? deptContacts[c.dept] : [];
+        for (const dr of deptRecipients) {
+          const email = String(dr?.email || '').trim();
+          if (email) rawRecipients.push({ email, name: dr.name || email });
+        }
         for (const cc of ccEmails) {
           const email = String(cc).trim();
-          if (email) recipients.push({ email, name: email });
+          if (email) rawRecipients.push({ email, name: email });
         }
+        // Loại trùng địa chỉ (không phân biệt hoa/thường) — người tạo hợp đồng có thể trùng với người
+        // phụ trách phòng ban hoặc nằm sẵn trong CC chung, tránh gửi lặp 1 email nhiều lần.
+        const seenEmails = new Set();
+        const recipients = rawRecipients.filter(r => {
+          const key = r.email.toLowerCase();
+          if (seenEmails.has(key)) return false;
+          seenEmails.add(key);
+          return true;
+        });
 
         for (const r of recipients) {
           console.log(`[DMS EMAIL SIMULATOR] To: ${r.name} <${r.email}> | Subject: ${subject}\n  ${body}`);
@@ -119,7 +153,8 @@ async function checkContractExpiryReminders() {
             sendResult = await sendMail({
               to: recipients.map(r => r.email),
               subject, text: body,
-              host: emailConfig.smtpHost, port: emailConfig.smtpPort, secure: emailConfig.smtpSecure,
+              host: emailConfig.smtpHost, port: emailConfig.smtpPort, encryption: smtpEncryption,
+              user: smtpUser, pass: smtpPass,
               from: emailConfig.senderEmail
             });
           } catch (err) {
