@@ -262,6 +262,25 @@ function buildEffectiveContractApprovalWorkflowServer(dept, selectedLayerKeys, s
   return { steps, approvers, layerKeys };
 }
 
+// Đối chiếu lại "required" của trường tuỳ biến (renderDynamicInputsForModule()/collectDynamicFieldsData()
+// ở index.html) — trước đây ràng buộc này CHỈ có hiệu lực qua constraint-validation của trình duyệt
+// (thuộc tính HTML "required" trên input), không nơi nào ở server đọc lại DB.formTemplates để xác
+// nhận payload.customData thật sự đủ field bắt buộc hay không. collectDynamicFieldsData() khoá theo
+// f.label (nhãn hiển thị, KHÔNG phải f.id) nên đối chiếu ở đây cũng phải theo đúng field "label".
+function validateRequiredCustomData(customData, formTemplates, modKey) {
+  const fields = (formTemplates || {})[modKey] || [];
+  const data = customData || {};
+  for (const f of fields) {
+    if (!f.required) continue;
+    const value = data[f.label];
+    const missing = value === undefined || value === null || value === '' ||
+      (Array.isArray(value) && value.length === 0);
+    if (missing) {
+      throw new CreateError(400, `Vui lòng nhập đầy đủ trường bắt buộc: "${f.label}"`);
+    }
+  }
+}
+
 // Mỗi module: khoá collection AppData, cách lấy phạm vi phòng ban được phép tạo ({all,depts}), tên
 // field ghi người tạo, và kiểm tra bổ sung riêng (nếu có) — phần logic chung (xác minh dept, chặn mã
 // trùng, gán người tạo) nằm ở validateAndPrepareCreate() bên dưới, dùng chung cho mọi module.
@@ -277,6 +296,7 @@ const CREATE_MODULE_CONFIGS = {
     // do CALLER đọc sẵn từ DB rồi truyền vào (xem validateAndPrepareCreate) — file này không tự đọc DB,
     // để routes/create.js thật VÀ stub test (dùng data in-memory) đều gọi chung được hàm này.
     extraValidate: (payload, collection, user, appData) => {
+      validateRequiredCustomData(payload.customData, appData?.formTemplates, 'SUBMISSION');
       const effectiveWf = buildEffectiveSubmissionWorkflowServer(
         payload.type, payload.dept, payload.selectedApprovalLayers, payload.selectedLayerMembers, appData || {}, payload.approvalLevel
       );
@@ -288,6 +308,20 @@ const CREATE_MODULE_CONFIGS = {
       // client tự gửi (cùng lý do với effectiveSteps/effectiveApprovers ở trên).
       payload.opinionRequestees = effectiveWf.opinionRequestees;
       payload.opinionResponses = [];
+      // status/currentStep/history PHẢI gán cứng ở server (khớp doSubmitSubmissionReq() ở index.html,
+      // dùng đúng thông tin XÁC THỰC của người gọi thay vì tin currentUser.name/username client tự
+      // gửi) — trước đây module này không đụng tới 3 field trạng thái này, 1 request tự soạn (bỏ qua
+      // UI) có thể tự đặt sẵn status:"APPROVED" cùng history giả để bỏ qua toàn bộ quy trình duyệt.
+      payload.status = 'PENDING';
+      payload.currentStep = 1;
+      payload.history = [{
+        step: 0,
+        approver: user.name,
+        username: user.username,
+        action: 'CREATED',
+        comment: 'Khởi tạo và trình duyệt tờ trình mới',
+        time: new Date().toLocaleString('vi-VN')
+      }];
     }
   },
   contracts: {
@@ -310,6 +344,17 @@ const CREATE_MODULE_CONFIGS = {
     extraValidate: (payload, collection, user, appData) => {
       const isSignedImport = !!payload.isSignedImport;
       delete payload.isSignedImport; // chỉ là cờ tạm quyết định nhánh xử lý bên dưới, không lưu vào hồ sơ
+
+      // Khớp đúng 2 kiểm tra editContract() (lib/recordActions.js) đã có cho nhánh SỬA — trước đây
+      // nhánh TẠO MỚI (áp dụng cho cả hợp đồng gốc lẫn phụ lục, cả 2 luồng isSignedImport) không có
+      // ràng buộc nào, cho phép tạo hợp đồng "0 đồng"/âm hoặc hết hạn trước khi có hiệu lực đi hết cả
+      // quy trình phê duyệt.
+      if (payload.startDate && payload.endDate && payload.startDate > payload.endDate) {
+        throw new CreateError(400, 'Ngày hiệu lực phải trước ngày hết hạn');
+      }
+      if (!(Number(payload.amount) > 0)) {
+        throw new CreateError(400, 'Giá trị hợp đồng phải lớn hơn 0');
+      }
 
       if (payload.isAddendum) {
         const root = (collection || []).find(c => c.id === payload.rootContractId && !c.isAddendum);
@@ -335,6 +380,12 @@ const CREATE_MODULE_CONFIGS = {
         // các đợt khai lúc tạo PHẢI khớp đúng giá trị hợp đồng, không thì có thể xác nhận "đã thanh
         // toán xong" dù mới thu một phần nhỏ.
         if (payload.paymentInstallments.length) {
+          // Trước đây chỉ kiểm tra TỔNG khớp giá trị hợp đồng — cho phép khai 1 đợt "khống" giá trị
+          // lớn và 1 đợt bù âm để tổng vẫn khớp, phá vỡ đúng mục đích của kiểm tra tổng (kế toán xác
+          // nhận riêng từng đợt, không xét dấu). Mỗi đợt phải dương thì tổng khớp mới thật sự có ý nghĩa.
+          if (payload.paymentInstallments.some(it => !(it.amount > 0))) {
+            throw new CreateError(400, 'Mỗi đợt thanh toán phải có số tiền lớn hơn 0');
+          }
           const sum = payload.paymentInstallments.reduce((s, it) => s + it.amount, 0);
           const total = Number(payload.amount) || 0;
           if (Math.abs(sum - total) > 1) {
@@ -409,6 +460,12 @@ const CREATE_MODULE_CONFIGS = {
       if (newStart >= newEnd) {
         throw new CreateError(400, 'Thời gian kết thúc phải sau thời gian bắt đầu');
       }
+      // Input client (#carKm) không có "min", parseFloat(...)||0 vẫn chấp nhận số âm bình thường —
+      // server chưa từng kiểm tra lại, số km âm khi duyệt sẽ cộng dồn làm sai lệch "Tổng số km" ở
+      // Dashboard (không có cách nào phát hiện qua giao diện thường).
+      if (payload.km !== undefined && Number(payload.km) < 0) {
+        throw new CreateError(400, 'Số KM dự kiến không được là số âm');
+      }
     }
   },
   officeReqs: {
@@ -431,6 +488,13 @@ const CREATE_MODULE_CONFIGS = {
         payload.items = payload.items.map(it => {
           const qty = Number(it?.qty) || 0;
           const unitPrice = Number(it?.unitPrice) || 0;
+          // Trước đây chỉ chặn TỔNG amount âm — cho phép 1 dòng "khống" âm bù cho 1 dòng dương để tổng
+          // vẫn dương qua được kiểm tra, trong khi hạng mục hiển thị "Thành Tiền" âm vẫn hiện nguyên
+          // trên phiếu duyệt (không có ý nghĩa nghiệp vụ nào — không phải chiết khấu, không có trường
+          // đánh dấu riêng). Chặn ngay từng dòng thay vì chỉ chặn tổng.
+          if (qty < 0 || unitPrice < 0) {
+            throw new CreateError(400, `Hạng mục "${it?.name || ''}": Số lượng/Đơn giá không được là số âm`);
+          }
           return { ...it, qty, unitPrice, amount: qty * unitPrice };
         });
         payload.amount = payload.items.reduce((sum, it) => sum + it.amount, 0);
@@ -454,7 +518,8 @@ const CREATE_MODULE_CONFIGS = {
     // TRƯỚC ĐÂY (module docs không có extraValidate nào) không xác minh lại gì cả: 1 request tự soạn có
     // thể tự xưng rootDocId của tài liệu bất kỳ (kể cả phòng ban khác), tự đặt versionNumber tuỳ ý (đâm
     // ra 2 version trùng số hoặc "nhảy cóc"), hoặc bổ sung version cho tài liệu gốc CHƯA duyệt xong.
-    extraValidate: (payload, collection) => {
+    extraValidate: (payload, collection, user, appData) => {
+      validateRequiredCustomData(payload.customData, appData?.formTemplates, 'DOC');
       if (payload.rootDocId != null) {
         const rootId = Number(payload.rootDocId);
         const root = (collection || []).find(d => d.id === rootId && d.rootDocId == null);
@@ -481,6 +546,20 @@ const CREATE_MODULE_CONFIGS = {
         payload.versionNumber = 1;
         payload.rootDocId = null;
       }
+      // status/currentStep/history PHẢI gán cứng ở server (khớp uploadDoc() ở index.html, dùng đúng
+      // thông tin XÁC THỰC của người gọi thay vì tin currentUser.name/username client tự gửi) — trước
+      // đây module này không đụng tới 3 field trạng thái này, 1 request tự soạn (bỏ qua UI) có thể tự
+      // đặt sẵn status:"APPROVED" cùng history giả để bỏ qua toàn bộ quy trình duyệt.
+      payload.status = 'PENDING';
+      payload.currentStep = 1;
+      payload.history = [{
+        step: 0,
+        stepName: 'Tải lên & Trình ký',
+        approver: user.name,
+        username: user.username,
+        action: 'UPLOADED',
+        time: new Date().toLocaleString('vi-VN')
+      }];
     }
   },
   // Tin nội bộ (Bước 2b): KHÔNG có khái niệm phòng ban để chọn — dept trong hồ sơ chỉ là thông tin
@@ -556,6 +635,10 @@ const CREATE_MODULE_CONFIGS = {
         description: (it?.description || '').trim(), amount: Number(it?.amount) || 0, dueDate: it?.dueDate || '',
         confirmed: false, confirmedAt: null, confirmedBy: null
       }));
+      // Mỗi đợt phải dương — không chỉ ràng buộc tổng (xem cùng lý do ở contracts.extraValidate).
+      if (payload.installments.some(it => !(it.amount > 0))) {
+        throw new CreateError(400, 'Mỗi đợt thanh toán phải có số tiền lớn hơn 0');
+      }
       payload.amount = payload.installments.reduce((sum, it) => sum + it.amount, 0);
     }
   },
@@ -699,6 +782,11 @@ const CREATE_MODULE_CONFIGS = {
   // vẹn qua getPrSlideTemplateColors() — không ép migrate.
   reportSlideTemplates: {
     dbKey: 'reportSlideTemplates',
+    // KHÔNG có khái niệm phòng ban để chọn (dùng chung toàn công ty, giống reportPeriods/vppPeriods/
+    // internalPosts ngay cạnh) — thiếu forceOwnDept:true trước đây khiến validateAndPrepareCreate()
+    // luôn đòi payload.dept trong khi client (submitSlideTemplateForm()) không hề gửi field này, nên
+    // MỌI lần tạo mẫu trình chiếu mới đều bị chặn ngay ở bước đầu với lỗi "Thiếu phòng ban".
+    forceOwnDept: true,
     getScope: () => ({ all: true }),
     creatorField: 'creator', creatorNameField: 'creatorName',
     extraValidate: (payload) => {

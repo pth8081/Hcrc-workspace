@@ -16,7 +16,8 @@ const { getAllForCollection, MIGRATED_COLLECTIONS } = require('../lib/recordStor
 const { sendServerError } = require('../lib/errorResponse');
 const {
   filterDocsForUser, filterSubmissionsForUser, filterInternalPostsForUser, sanitizeReportPeriodsForUser,
-  filterReportEntriesForUser
+  filterReportEntriesForUser, filterContractsForUser, filterCarRegsForUser, filterOfficeReqsForUser,
+  filterMeetingsForUser, filterMeetingMinutesForUser
 } = require('../lib/recordViewScope');
 
 const VALID_KEYS = new Set(Object.keys(DEFAULTS));
@@ -37,7 +38,13 @@ const ADMIN_ONLY_KEYS = new Set([
   'submissionTypes',
   // Người phụ trách nhận thông báo hết hạn hợp đồng theo phòng ban (xem jobs/contractExpiryReminder.js)
   // — cùng khuôn quản trị như emailConfig ở trên, không phải danh sách hiển thị thuần.
-  'contractExpiryDeptContacts'
+  'contractExpiryDeptContacts',
+  // formTemplates (cấu hình trường tuỳ biến bắt buộc/không bắt buộc cho từng module), deptAbbrs/
+  // docCatAbbrs (quy ước viết tắt dùng để sinh Mã Tài Liệu), uploadFileTypeConfig (định dạng file cho
+  // phép tải lên theo từng module) — cả 4 chỉ có màn sửa trong dropdown "Hệ Thống" (setSystemSubTab()
+  // ở index.html chặn !admin cho toàn bộ 4 sub-tab này) nhưng trước đây bị BỎ SÓT khỏi danh sách này,
+  // khiến bất kỳ tài khoản đã đăng nhập nào cũng ghi trực tiếp được qua POST /api/data/<key>.
+  'formTemplates', 'deptAbbrs', 'docCatAbbrs', 'uploadFileTypeConfig'
 ]);
 
 router.use(requireAuth, blockIfMustChangePassword);
@@ -90,9 +97,14 @@ function mergePermsServer(basePerms, overrides) {
 // mình rồi lưu, đều được server chấp nhận vô điều kiện (chỉ cần người GỌI đang là admin tại thời điểm
 // gọi) — khoá cứng toàn bộ màn Quản Trị cho TẤT CẢ mọi người vĩnh viễn, không có đường lùi qua giao
 // diện hay khởi động lại server (seedDefaults() chỉ seed lại "users" nếu key CHƯA TỪNG tồn tại).
+// "Còn admin" phải là còn admin ĐĂNG NHẬP ĐƯỢC — active===false bị requireAuth()/POST /api/auth/login
+// chặn cứng (xem lib/auth.js), nên 1 bản ghi perms.admin=true nhưng active=false không giúp ích gì:
+// vẫn không ai vào lại được màn Quản Trị. Trước đây chỉ xét perms.admin, cho phép 1 request tự soạn
+// (bỏ qua nút "Khoá" ở UI, vốn chỉ chặn tự khoá chính mình ở CLIENT) đặt active:false cho chính admin
+// duy nhất còn lại mà vẫn qua được kiểm tra này.
 function assertAtLeastOneAdmin(users) {
-  if (!(users || []).some(u => u.perms?.admin)) {
-    throw new HttpError(400, 'Không thể lưu: thao tác này sẽ khiến hệ thống không còn tài khoản nào có quyền Quản Trị Viên (Admin).');
+  if (!(users || []).some(u => u.perms?.admin && u.active !== false)) {
+    throw new HttpError(400, 'Không thể lưu: thao tác này sẽ khiến hệ thống không còn tài khoản nào có quyền Quản Trị Viên (Admin) đang hoạt động.');
   }
 }
 
@@ -105,7 +117,17 @@ function assertAtLeastOneAdmin(users) {
 //   lại bằng bcrypt, và đánh dấu mustChangePassword=true — mật khẩu admin gõ tạm chỉ có giá trị cho
 //   LẦN ĐĂNG NHẬP ĐẦU, buộc chính user đó phải tự đổi lại ngay (xem lib/auth.js blockIfMustChangePassword),
 //   giảm nguy cơ mật khẩu tạm/yếu tồn tại lâu dài không ai để ý.
-async function prepareUsersForSave(incomingUsers) {
+async function prepareUsersForSave(incomingUsers, currentUsername) {
+  // Chặn NGAY tại server việc tự khoá chính tài khoản đang gọi request — trước đây chỉ chặn ở JS
+  // trình duyệt (toggleUserActive()), 1 request tự soạn gọi thẳng POST /api/data/users vẫn đặt được
+  // active:false cho chính mình, kết hợp với assertAtLeastOneAdmin() (giờ đã xét active) có thể khoá
+  // vĩnh viễn toàn bộ quyền Quản Trị nếu đây là admin duy nhất còn lại.
+  if (currentUsername) {
+    const self = (incomingUsers || []).find(u => u.username === currentUsername);
+    if (self && self.active === false) {
+      throw new HttpError(400, 'Không thể tự khoá (vô hiệu hoá) chính tài khoản đang đăng nhập.');
+    }
+  }
   const existing = (await getAppDataValue('users')) || [];
   const existingById = new Map(existing.map(u => [u.id, u]));
   // Quyền hiệu lực (perms) của user CÓ groupId PHẢI luôn tính từ quyền nhóm + permOverrides tại thời
@@ -273,6 +295,17 @@ router.get('/', async (req, res) => {
     // báo cáo (kể cả bản NHÁP đang soạn dở) của MỌI người ở MỌI phòng ban cho bất kỳ ai đã đăng nhập,
     // trong khi renderPrEntryTable() (index.html) chỉ ẩn ở giao diện theo đúng logic canViewReportEntry().
     if (data.reportEntries) data.reportEntries = filterReportEntriesForUser(data.reportEntries, req.freshUser);
+    // contracts/carRegs/officeReqs/meetings/meetingMinutes: cùng dạng lỗ hổng như docs/submissions —
+    // trước đây 5 collection này hoàn toàn KHÔNG được lọc lại ở server (chỉ ẩn ở renderContracts()/
+    // renderCarRegs()/renderOfficeReqs()/renderMeetings()/canViewMeetingMinutesRecord() phía giao
+    // diện), để lộ toàn bộ hợp đồng, phiếu xe, đề xuất văn phòng, lịch họp và đặc biệt Biên Bản Họp
+    // (nội dung "Ý kiến chỉ đạo" nội bộ) của MỌI phòng ban cho bất kỳ ai gọi thẳng GET /api/data. Dùng
+    // "data" (đã đọc đủ mọi *DeptWorkflows ở trên) làm appData cho 3 hàm cần tra cứu quy trình duyệt.
+    if (data.contracts) data.contracts = filterContractsForUser(data.contracts, req.freshUser, data);
+    if (data.carRegs) data.carRegs = filterCarRegsForUser(data.carRegs, req.freshUser, data);
+    if (data.officeReqs) data.officeReqs = filterOfficeReqsForUser(data.officeReqs, req.freshUser, data);
+    if (data.meetings) data.meetings = filterMeetingsForUser(data.meetings, req.freshUser);
+    if (data.meetingMinutes) data.meetingMinutes = filterMeetingMinutesForUser(data.meetingMinutes, req.freshUser);
 
     data._versions = versions;
     res.json(data);
@@ -314,7 +347,7 @@ router.post('/:key', async (req, res) => {
       return res.status(403).json({ error: 'Chỉ Quản Trị Viên mới có quyền sửa dữ liệu này' });
     }
 
-    if (key === 'users') value = await prepareUsersForSave(value);
+    if (key === 'users') value = await prepareUsersForSave(value, req.user.username);
     if (key === 'emailConfig') value = await prepareEmailConfigForSave(value);
 
     const ifMatch = req.get('If-Match');

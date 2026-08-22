@@ -5,10 +5,11 @@
 // khớp Y HỆT logic canView tương ứng ở client — nếu 2 bên đổi khác nhau, người dùng sẽ thấy giao diện
 // ẩn nhưng API vẫn lộ (hoặc ngược lại, giao diện hiện nhưng API lại chặn nhầm).
 //
-// Hiện chỉ phủ 2 collection đã xác nhận qua đợt rà soát nghiệp vụ: docs, submissions. Các collection
-// khác có "xView" scope tương tự (contracts/carRegs/officeReqs/meetings/meetingMinutes) chưa được thêm
-// vào đây — cùng khuôn nhưng cần rà lại đúng logic canView riêng của từng module trước khi áp dụng.
+// Phủ đủ mọi collection có "xView" scope theo phòng ban: docs, submissions, contracts, carRegs,
+// officeReqs, meetings, meetingMinutes (internalPosts/reportPeriods/reportEntries dùng khuôn quyền
+// khác, xem các hàm riêng bên dưới).
 const { getAppDataValue } = require('./appData');
+const { MODULE_CONFIGS, resolveContractApprovalWorkflow, resolveContractManageWorkflow } = require('./workflowEngine');
 
 function scopeAllows(user, scope, dept) {
   if (!user) return false;
@@ -74,12 +75,18 @@ async function resolveSubmissionApproversServer(sub) {
 }
 
 // Khớp khối lọc trong renderSubmissionReqs() (public/index.html): scopeAllows(submissionView) HOẶC
-// chính người tạo HOẶC đang là approver ở đúng quy trình hiệu lực của hồ sơ đó (dù ngoài phạm vi Xem).
+// chính người tạo HOẶC đang là approver ở đúng quy trình hiệu lực của hồ sơ đó (dù ngoài phạm vi Xem)
+// HOẶC đang được mời "Xin ý kiến" (opinionRequestees — lớp KHÔNG chặn duyệt, blocking:false, nên
+// KHÔNG nằm trong effectiveApprovers/approvers ở trên) — trước đây thiếu nhánh này khiến người được
+// admin chỉ định xin ý kiến nhưng ngoài phạm vi Xem/không phải approver không thấy được tờ trình ở bất
+// kỳ đâu (kể cả gọi thẳng GET /api/data), không có cách nào mở modal nhập ý kiến dù được chính admin
+// chỉ định.
 async function canViewSubmission(user, sub) {
   if (!user) return false;
   if (user.perms?.admin) return true;
   if (sub.creator === user.username) return true;
   if (scopeAllows(user, user.perms?.submissionView, sub.dept)) return true;
+  if ((sub.opinionRequestees || []).includes(user.username)) return true;
   const approvers = await resolveSubmissionApproversServer(sub);
   return isApproverForApproversMap(approvers, user.username);
 }
@@ -148,10 +155,98 @@ function canDownloadRecordFile(user, moduleKey, dept, ownerUsername) {
   return scopeAllows(user, user.perms?.[`${moduleKey}Download`], dept);
 }
 
+// Khớp khối lọc trong renderContracts() (public/index.html): scopeAllows(contractView) HOẶC chính
+// người tạo HOẶC đang là approver ở 1 trong 2 quy trình TÁCH RIÊNG trên cùng bản ghi hợp đồng (Phê
+// Duyệt gốc + Quản Lý HĐ/Tài liệu ký) — dùng lại đúng 2 hàm resolve đã có ở lib/workflowEngine.js
+// (resolveContractApprovalWorkflow/resolveContractManageWorkflow) để không lặp lại logic. appData ở
+// đây chính là snapshot `data` đã đọc sẵn trong GET /api/data (đã có đủ các *DeptWorkflows cần dùng).
+function canViewContract(user, contract, appData) {
+  if (!user) return false;
+  if (user.perms?.admin) return true;
+  if (contract.creator === user.username) return true;
+  if (scopeAllows(user, user.perms?.contractView, contract.dept)) return true;
+  if (isApproverForApproversMap(resolveContractApprovalWorkflow(contract, appData).approvers, user.username)) return true;
+  return isApproverForApproversMap(resolveContractManageWorkflow(contract, appData).approvers, user.username);
+}
+
+function filterContractsForUser(contracts, user, appData) {
+  return (contracts || []).filter(c => canViewContract(user, c, appData));
+}
+
+// Khớp khối lọc trong renderCarRegs() (public/index.html): scopeAllows(carView) HOẶC chính người tạo
+// HOẶC đang là approver theo carDeptWorkflows của phòng ban hồ sơ đó.
+function canViewCarReg(user, carReg, appData) {
+  if (!user) return false;
+  if (user.perms?.admin) return true;
+  if (carReg.creator === user.username) return true;
+  if (scopeAllows(user, user.perms?.carView, carReg.dept)) return true;
+  return isApproverForApproversMap(MODULE_CONFIGS.carRegs.resolveWfConfig(carReg, appData).approvers, user.username);
+}
+
+function filterCarRegsForUser(carRegs, user, appData) {
+  return (carRegs || []).filter(c => canViewCarReg(user, c, appData));
+}
+
+// Khớp khối lọc trong renderOfficeReqs() (public/index.html): scopeAllows(officeView) HOẶC chính
+// người tạo HOẶC đang là approver theo đúng bộ *DeptWorkflows tương ứng subType (Mua Bán/Sửa Chữa/
+// Đầu Tư — xem OFFICE_SUBTYPE_TO_DBKEY ở lib/workflowEngine.js, dùng lại qua resolveWfConfig).
+function canViewOfficeReq(user, item, appData) {
+  if (!user) return false;
+  if (user.perms?.admin) return true;
+  if (item.creator === user.username) return true;
+  if (scopeAllows(user, user.perms?.officeView, item.dept)) return true;
+  return isApproverForApproversMap(MODULE_CONFIGS.officeReqs.resolveWfConfig(item, appData).approvers, user.username);
+}
+
+function filterOfficeReqsForUser(officeReqs, user, appData) {
+  return (officeReqs || []).filter(o => canViewOfficeReq(user, o, appData));
+}
+
+// Khớp khối lọc trong renderMeetings() (public/index.html): scopeAllows(meetingView) HOẶC chính
+// người tạo HOẶC người có vai trò "quản lý phòng họp" dùng chung toàn công ty (meetingApprove/
+// meetingCancel — không theo phòng ban, luôn cần thấy mọi lịch để xử lý).
+function canViewMeeting(user, meeting) {
+  if (!user) return false;
+  if (user.perms?.admin) return true;
+  if (meeting.creator === user.username) return true;
+  if (scopeAllows(user, user.perms?.meetingView, meeting.dept)) return true;
+  return !!(user.perms?.meetingApprove || user.perms?.meetingCancel);
+}
+
+function filterMeetingsForUser(meetings, user) {
+  return (meetings || []).filter(m => canViewMeeting(user, m));
+}
+
+// Khớp isMeetingMinutesAttendee()/canViewMeetingMinutesRecord() (public/index.html): admin, quyền
+// minutesView (xem toàn bộ), người tạo, hoặc có tên khớp (không phân biệt hoa/thường, đã trim) trong
+// thành phần tham dự của chính biên bản đó — Biên Bản Họp KHÔNG có khái niệm phòng ban để scopeAllows.
+function isMeetingMinutesAttendeeServer(user, m) {
+  const uname = (user.name || '').trim().toLowerCase();
+  if (!uname) return false;
+  return (m.attendees || []).some(a => (a.name || '').trim().toLowerCase() === uname);
+}
+
+function canViewMeetingMinutes(user, m) {
+  if (!user) return false;
+  if (user.perms?.admin) return true;
+  if (user.perms?.minutesView) return true;
+  if (m.creator === user.username) return true;
+  return isMeetingMinutesAttendeeServer(user, m);
+}
+
+function filterMeetingMinutesForUser(meetingMinutes, user) {
+  return (meetingMinutes || []).filter(m => canViewMeetingMinutes(user, m));
+}
+
 module.exports = {
   canViewDoc, canViewSubmission, filterDocsForUser, filterSubmissionsForUser,
   canViewInternalPost, filterInternalPostsForUser,
   canSeeReportCompilation, sanitizeReportPeriodsForUser,
   canViewReportEntry, filterReportEntriesForUser,
+  canViewContract, filterContractsForUser,
+  canViewCarReg, filterCarRegsForUser,
+  canViewOfficeReq, filterOfficeReqsForUser,
+  canViewMeeting, filterMeetingsForUser,
+  canViewMeetingMinutes, filterMeetingMinutesForUser,
   canDownloadRecordFile
 };
