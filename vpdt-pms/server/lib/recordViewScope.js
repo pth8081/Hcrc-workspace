@@ -238,6 +238,22 @@ function filterMeetingMinutesForUser(meetingMinutes, user) {
   return (meetingMinutes || []).filter(m => canViewMeetingMinutes(user, m));
 }
 
+// Khớp canViewTaskRecord() (public/index.html) — trước đây GET /api/data trả nguyên mảng data.tasks
+// cho MỌI người đã đăng nhập (không qua bước lọc nào, khác 9 collection khác đã có filter...ForUser ở
+// trên), dù canViewTaskRecord() chỉ dùng để ẨN Ở GIAO DIỆN: gọi thẳng API vẫn thấy được title/
+// description (thường là "Ý kiến chỉ đạo" nội bộ sao chép từ Biên bản họp/Văn bản trình)/hạn hoàn
+// thành/người liên quan của MỌI công việc công ty, kể cả không có quyền taskView và không liên quan.
+function canViewTaskRecord(user, t) {
+  if (!user) return false;
+  if (user.perms?.admin) return true;
+  if (user.perms?.taskView) return true;
+  return t.assignedTo === user.username || t.assignedBy === user.username || (t.collaborators || []).includes(user.username);
+}
+
+function filterTasksForUser(tasks, user) {
+  return (tasks || []).filter(t => canViewTaskRecord(user, t));
+}
+
 module.exports = {
   canViewDoc, canViewSubmission, filterDocsForUser, filterSubmissionsForUser,
   canViewInternalPost, filterInternalPostsForUser,
@@ -248,5 +264,6 @@ module.exports = {
   canViewOfficeReq, filterOfficeReqsForUser,
   canViewMeeting, filterMeetingsForUser,
   canViewMeetingMinutes, filterMeetingMinutesForUser,
+  canViewTaskRecord, filterTasksForUser,
   canDownloadRecordFile
 };

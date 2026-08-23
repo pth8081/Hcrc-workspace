@@ -3122,6 +3122,7 @@ table { display: block; overflow-x: auto; max-width: 100%; }
           <select id="filterLogStatus" onchange="onLogFilterChange()" class="w-full border p-1.5 rounded bg-white font-semibold">
             <option value="">-- Tất cả --</option>
             <option value="SUCCESS">Thành công (SUCCESS)</option>
+            <option value="WARNING">Cảnh báo (WARNING)</option>
             <option value="FAILED">Thất bại (FAILED)</option>
           </select>
         </div>
@@ -8242,6 +8243,13 @@ function viewDocDetails(anyDocId) {
       approverHTML = `<span class="text-gray-400 italic">Chưa duyệt</span>`;
     }
     const canDL = (v.fileUrl || v.fileData) && canDownloadFile(currentUser, 'doc', v.dept, v.uploader);
+    // Trước đây customData (trường tuỳ biến bắt buộc nhập lúc upload — collectDynamicFieldsData('DOC'),
+    // validateRequiredCustomData ở server) không hiển thị lại ở bất kỳ đâu của module Tài Liệu, khác
+    // Văn Bản Trình/Hợp Đồng/Văn Phòng Tổng Hợp đều hiện đúng trong Chi Tiết — dữ liệu coi như bị "nuốt"
+    // sau khi lưu. Mỗi PHIÊN BẢN có customData riêng (thu thập lại mỗi lần tải lên) nên hiện theo dòng.
+    const customDataHTML = (v.customData && Object.keys(v.customData).length > 0)
+      ? `<div class="mt-1 text-[10px] text-gray-500 space-y-0.5">${Object.keys(v.customData).map(k => `<div><b>${escapeHtml(k)}:</b> ${escapeHtml(String(v.customData[k]))}</div>`).join('')}</div>`
+      : '';
 
     return `
       <tr class="border-b hover:bg-gray-50">
@@ -8251,7 +8259,7 @@ function viewDocDetails(anyDocId) {
           <div class="text-[10px] text-gray-400">${escapeHtml(v.createdAt || '')}</div>
         </td>
         <td class="border p-2">${approverHTML}</td>
-        <td class="border p-2 text-gray-700">${escapeHtml(v.summary || '')}</td>
+        <td class="border p-2 text-gray-700">${escapeHtml(v.summary || '')}${customDataHTML}</td>
         <td class="border p-2 text-center whitespace-nowrap">
           <button type="button" onclick="viewDoc(${v.id})" class="px-2 py-1 bg-blue-600 text-white rounded text-[11px] font-bold hover:bg-blue-700">👁️ Xem</button>
           ${canDL ? `<button type="button" onclick="downloadDocFile(${v.id})" class="px-2 py-1 bg-slate-600 text-white rounded text-[11px] font-bold hover:bg-slate-700 ml-1">⬇️ Tải</button>` : ''}
@@ -10632,10 +10640,13 @@ function onContractOpModeChange() {
   // CONTRACT_MANAGE) — xem FORM_TABS. submitContractReq() đọc lại đúng bộ này khi thu thập dữ liệu.
   renderDynamicInputsForModule(isImportMode ? 'CONTRACT_MANAGE' : 'CONTRACT_APPROVAL', 'dynamicFieldsContainer_CONTRACT');
   document.getElementById('contractAddendumTargetWrap').classList.toggle('hidden', !isAddendumMode);
-  // Đợt Thanh Toán: hiện cho NEW/ADDENDUM (cả 2 đều qua Phê Duyệt, phụ lục giờ CŨNG khai được — theo
-  // yêu cầu "phụ lục cũng phê duyệt và thanh toán"), ẩn cho 2 chế độ IMPORT (nhập hồ sơ đã ký sẵn,
-  // không cần khai lại đợt thanh toán ở đây).
-  document.getElementById('contractInstallmentsWrap').classList.toggle('hidden', isImportMode);
+  // Đợt Thanh Toán: CHỈ hiện cho hợp đồng GỐC (NEW) — trước đây hiện cả cho ADDENDUM theo đúng ý đồ ban
+  // đầu "phụ lục cũng phê duyệt và thanh toán", nhưng uploadContractSignedFile()/startContractPayment()
+  // (2 hàm DUY NHẤT dẫn tới việc tạo paymentRequests) đều chặn thẳng contract.isAddendum, và Chi Tiết
+  // Hợp Đồng cũng chỉ hiện lại Đợt Thanh Toán cho !isAddendum — nghĩa là tính năng "thanh toán phụ lục"
+  // chưa từng được nối tới đâu cả. Ẩn khối nhập ở đây để không buộc người dùng khai (và server validate
+  // chặt) 1 dữ liệu không bao giờ dùng được, tránh hiểu lầm phụ lục đã có luồng thanh toán riêng.
+  document.getElementById('contractInstallmentsWrap').classList.toggle('hidden', isImportMode || isAddendumMode);
   // Cấp Phê Duyệt Cuối Cùng/lớp bổ sung: chỉ áp dụng cho hồ sơ đi qua quy trình Phê Duyệt HĐ (NEW/
   // ADDENDUM) — 2 chế độ IMPORT bỏ qua hàng chờ nên ẩn hẳn, không cần chọn.
   document.getElementById('contractApprovalLevelWrap').classList.toggle('hidden', isImportMode);
@@ -10804,16 +10815,14 @@ function renderContractInstallmentsList(installments) {
   }).join('') || '<p class="text-gray-400 italic text-[11px]">Chưa có đợt thanh toán nào — bấm "+ Thêm Đợt" nếu cần.</p>';
 }
 
-// Gõ % -> tự tính Số tiền = % × Giá Trị Hợp Đồng (làm tròn đồng). Không tự tính nếu chưa nhập Giá Trị
-// Hợp Đồng (totalAmount = 0) — giữ nguyên số tiền đang có, tránh xoá nhầm về 0.
+// Gõ % -> tự tính Số tiền = % × Giá Trị Hợp Đồng. Tính lại TOÀN BỘ các đợt có % (không chỉ riêng đợt
+// vừa gõ) theo phương pháp "làm tròn luỹ kế" (xem recalcContractInstallmentAmountsFromPercent) — nếu
+// làm tròn riêng lẻ từng đợt (VD 3 đợt cùng 33.33%), tổng 3 đợt có thể lệch vài đồng so với Giá Trị
+// Hợp Đồng do sai số làm tròn cộng dồn, khiến server từ chối lưu dù người dùng chỉ dùng đúng công cụ %.
 function onContractInstallmentPercentInput(inputEl) {
-  const row = inputEl.closest('[data-installment-row]');
-  if (!row) return;
   const totalAmount = getContractAmountValue();
   if (totalAmount <= 0) return;
-  const percent = parseFloat(inputEl.value.replace(',', '.')) || 0;
-  const amountInput = row.querySelector('.contract-installment-amount');
-  if (amountInput) amountInput.value = formatMoneyDisplay(Math.round(totalAmount * percent / 100));
+  recalcContractInstallmentAmountsFromPercent();
 }
 
 // Gõ thẳng Số tiền -> suy ngược lại % tương ứng để ô % luôn khớp, không bắt buộc (nếu chưa có Giá Trị
@@ -10828,17 +10837,30 @@ function onContractInstallmentAmountInput(inputEl) {
   percentInput.value = amount > 0 ? (Math.round((amount / totalAmount) * 10000) / 100) : '';
 }
 
-// Khi Giá Trị Hợp Đồng đổi (đang gõ dở #contractAmount), các đợt ĐÃ nhập % phải tính lại Số tiền theo
-// đúng tổng mới — "% dựa trên tổng tiền hợp đồng" chỉ có ý nghĩa khi luôn bám theo tổng hiện tại. Đợt
-// nào chưa từng gõ % (ô % trống) thì giữ nguyên số tiền đã nhập tay, không tự ý đổi.
+// Khi Giá Trị Hợp Đồng đổi (đang gõ dở #contractAmount) hoặc khi 1 ô % đổi, các đợt ĐÃ nhập % phải
+// tính lại Số tiền theo đúng tổng mới — "% dựa trên tổng tiền hợp đồng" chỉ có ý nghĩa khi luôn bám
+// theo tổng hiện tại. Đợt nào chưa từng gõ % (ô % trống) thì giữ nguyên số tiền đã nhập tay, không tự
+// ý đổi.
+//
+// Làm tròn theo % LUỸ KẾ (cumulative), không làm tròn riêng từng đợt: mỗi đợt = làm tròn(tổng ×
+// %cộng-dồn-đến-đợt-này) - làm tròn(tổng × %cộng-dồn-đến-đợt-trước) — đảm bảo tổng các đợt có % LUÔN
+// khớp chính xác làm tròn(tổng × tổng-%-đã-nhập) mà không lệch dần qua nhiều đợt như làm tròn từng đợt
+// riêng lẻ. Nếu tổng % nhập đúng 100% thì tổng các đợt khớp CHÍNH XÁC Giá Trị Hợp Đồng.
 function recalcContractInstallmentAmountsFromPercent() {
   const totalAmount = getContractAmountValue();
+  let cumulativePercent = 0;
+  let prevCumulativeAmount = 0;
   document.querySelectorAll('#contractInstallmentsList [data-installment-row]').forEach(row => {
     const percentInput = row.querySelector('.contract-installment-percent');
     const amountInput = row.querySelector('.contract-installment-amount');
     if (!percentInput || !amountInput) return;
     const percent = parseFloat(percentInput.value.replace(',', '.')) || 0;
-    if (percent > 0) amountInput.value = formatMoneyDisplay(Math.round(totalAmount * percent / 100));
+    if (percent > 0) {
+      cumulativePercent += percent;
+      const cumulativeAmount = Math.round(totalAmount * cumulativePercent / 100);
+      amountInput.value = formatMoneyDisplay(cumulativeAmount - prevCumulativeAmount);
+      prevCumulativeAmount = cumulativeAmount;
+    }
   });
 }
 
@@ -13971,8 +13993,11 @@ function updateOfficeItemField(idx, field, value) {
   recalcOfficeItemsTotal();
 }
 
+// Chỉ cộng dồn dòng HỢP LỆ (có Tên tài sản + Số lượng > 0) — khớp đúng điều kiện lọc validItems ở
+// submitOfficeReq() (nơi thực sự lưu amount). Trước đây hàm này cộng cả dòng thiếu Tên tài sản, khiến
+// "Tổng Dự Toán" hiển thị trên form cao hơn số tiền thực sự được ghi nhận khi gửi.
 function recalcOfficeItemsTotal() {
-  const total = officeItems.reduce((sum, it) => sum + (it.qty || 0) * (it.unitPrice || 0), 0);
+  const total = officeItems.filter(it => (it.name || '').trim() && it.qty > 0).reduce((sum, it) => sum + (it.qty || 0) * (it.unitPrice || 0), 0);
   const el = document.getElementById('officeItemsTotalDisplay');
   if (el) el.innerText = total.toLocaleString('vi-VN');
   return total;
@@ -16526,12 +16551,19 @@ function editPermGroup(id) {
   document.getElementById('gGroupName').scrollIntoView({ behavior: 'smooth', block: 'center' });
 }
 
-function savePermGroup(e) {
+// Trước đây savePermGroup()/deletePermGroup() mutate thẳng DB.permGroups/DB.users rồi gọi syncStorage()
+// KHÔNG await/kiểm tra kết quả trả về (khác saveUser()/importUsersExcel() đã chụp snapshot + await +
+// rollback đúng chuẩn) — báo "✅ Đã lưu"/render UI thành công NGAY dù server sau đó từ chối (409 do
+// version users/permGroups vừa bị đổi bởi thao tác khác), khiến admin tin đã đổi/gỡ quyền cho ai đó
+// trong khi quyền hiệu lực thật trên server chưa hề đổi — chỉ lộ ra sau khi tải lại trang.
+async function savePermGroup(e) {
   e.preventDefault();
   const name = document.getElementById('gGroupName').value.trim();
   if (!name) return alert('Vui lòng nhập Tên Nhóm Phân Quyền!');
   const perms = collectPermsFromForm();
   const selectedMembers = new Set([...document.querySelectorAll('input.group-member-toggle:checked')].map(cb => cb.value));
+  const permGroupsSnapshot = JSON.parse(JSON.stringify(DB.permGroups));
+  const usersSnapshot = JSON.parse(JSON.stringify(DB.users));
 
   let group;
   if (editingGroupId) {
@@ -16575,8 +16607,15 @@ function savePermGroup(e) {
     }
   });
 
-  syncStorage('permGroups');
-  if (membersUpdated > 0) syncStorage('users');
+  const savedGroups = await syncStorage('permGroups');
+  const savedUsers = membersUpdated > 0 ? await syncStorage('users') : true;
+  if (!savedGroups || !savedUsers) {
+    DB.permGroups = permGroupsSnapshot;
+    DB.users = usersSnapshot;
+    renderPermGroupsList();
+    renderUsers();
+    return;
+  }
   logSystemAction('USER_MGM', 'SAVE_PERM_GROUP', `Lưu nhóm phân quyền [${name}]${membersUpdated ? `, cập nhật ${membersUpdated} thành viên` : ''}`, 'SUCCESS', name);
   alert(`✅ Đã lưu nhóm phân quyền!${membersUpdated ? ` Đã cập nhật ${membersUpdated} thành viên.` : ''}`);
 
@@ -16585,7 +16624,7 @@ function savePermGroup(e) {
   renderUsers();
 }
 
-function deletePermGroup(id) {
+async function deletePermGroup(id) {
   const group = DB.permGroups.find(g => g.id === id);
   if (!group) return;
   const memberCount = DB.users.filter(u => u.groupId === id).length;
@@ -16594,11 +16633,20 @@ function deletePermGroup(id) {
     : `Bạn có chắc chắn muốn xóa nhóm phân quyền "${group.name}"?`;
   if (!confirm(msg)) return;
 
+  const permGroupsSnapshot = JSON.parse(JSON.stringify(DB.permGroups));
+  const usersSnapshot = JSON.parse(JSON.stringify(DB.users));
   DB.users.forEach(u => { if (u.groupId === id) u.groupId = null; });
   DB.permGroups = DB.permGroups.filter(g => g.id !== id);
 
-  syncStorage('permGroups');
-  if (memberCount > 0) syncStorage('users');
+  const savedGroups = await syncStorage('permGroups');
+  const savedUsers = memberCount > 0 ? await syncStorage('users') : true;
+  if (!savedGroups || !savedUsers) {
+    DB.permGroups = permGroupsSnapshot;
+    DB.users = usersSnapshot;
+    renderPermGroupsList();
+    renderUsers();
+    return;
+  }
   logSystemAction('USER_MGM', 'DELETE_PERM_GROUP', `Xóa nhóm phân quyền [${group.name}]`, 'SUCCESS', group.name);
   renderPermGroupsList();
   renderUsers();
@@ -18927,6 +18975,31 @@ function onLogFilterChange() {
   renderSystemLogs();
 }
 
+// Dùng chung cho cả bảng hiển thị (renderSystemLogs) lẫn xuất Excel (exportSystemLogsExcel) — trước
+// đây 2 nơi tính khác nhau: bảng lọc đúng theo moduleFilter/actionFilter/statusFilter/keyword đang chọn,
+// còn nút "Xuất Log Excel" lấy thẳng DB.systemLogs (toàn bộ, chưa lọc), khiến admin lọc 1 khoảng cụ thể
+// trên màn hình nhưng file xuất ra lại chứa toàn bộ tối đa 1000 dòng log gần nhất của mọi module.
+function getFilteredSystemLogs() {
+  const moduleFilter = document.getElementById('filterLogModule')?.value || '';
+  const actionFilter = document.getElementById('filterLogAction')?.value || '';
+  const statusFilter = document.getElementById('filterLogStatus')?.value || '';
+  const keyword = (document.getElementById('filterLogKeyword')?.value || '').toLowerCase().trim();
+
+  return DB.systemLogs.filter(l => {
+    if (moduleFilter && l.module !== moduleFilter) return false;
+    if (actionFilter && l.actionType !== actionFilter) return false;
+    if (statusFilter && l.status !== statusFilter) return false;
+    if (keyword) {
+      // Placeholder ô tìm kiếm hứa hẹn "Username, IP, hành động..." nhưng trước đây chỉ so khớp
+      // username/description, bỏ qua hẳn ipAddress/actionType — gõ đúng IP hoặc tên hành động (VD
+      // "REJECT_CONTRACT") không tìm ra log nào trừ khi chuỗi đó tình cờ xuất hiện trong description.
+      const haystacks = [l.username, l.ipAddress, l.actionType, l.description];
+      if (!haystacks.some(v => (v || '').toLowerCase().includes(keyword))) return false;
+    }
+    return true;
+  });
+}
+
 // Tải nhật ký hệ thống qua endpoint riêng GET /api/log (chỉ admin gọi được, xem routes/systemLog.js)
 // — gọi đúng lúc mở tab Nhật ký (setSystemSubTab('LOG')), KHÔNG còn kèm sẵn trong GET /api/data cho
 // mọi người đăng nhập như trước. limit=1000 (mức tối đa server cho phép, MAX_GET_LIMIT ở
@@ -18961,22 +19034,7 @@ function renderSystemLogs() {
   populateLogFilterSelect('filterLogModule', DB.systemLogs.map(l => l.module));
   populateLogFilterSelect('filterLogAction', DB.systemLogs.map(l => l.actionType));
 
-  const moduleFilter = document.getElementById('filterLogModule')?.value || '';
-  const actionFilter = document.getElementById('filterLogAction')?.value || '';
-  const statusFilter = document.getElementById('filterLogStatus')?.value || '';
-  const keyword = (document.getElementById('filterLogKeyword')?.value || '').toLowerCase().trim();
-
-  let logs = DB.systemLogs.filter(l => {
-    if (moduleFilter && l.module !== moduleFilter) return false;
-    if (actionFilter && l.actionType !== actionFilter) return false;
-    if (statusFilter && l.status !== statusFilter) return false;
-    if (keyword) {
-      const matchUser = (l.username || '').toLowerCase().includes(keyword);
-      const matchDesc = (l.description || '').toLowerCase().includes(keyword);
-      if (!matchUser && !matchDesc) return false;
-    }
-    return true;
-  });
+  let logs = getFilteredSystemLogs();
 
   document.getElementById('paginationContainer_log').innerHTML = buildPaginationBoxHTML('log', 'renderSystemLogs');
   const pageLogs = paginateList('log', logs, 'renderSystemLogs', 'dòng log');
@@ -19027,7 +19085,7 @@ function exportSystemLogsExcel() {
     { header: 'description', key: 'description', width: 50 },
     { header: 'status', key: 'status', width: 12 }
   ];
-  const rows = DB.systemLogs.map(l => ({
+  const rows = getFilteredSystemLogs().map(l => ({
     timestamp: l.timestamp, username: l.username, fullName: l.fullName, ipAddress: l.ipAddress,
     module: l.module, actionType: l.actionType, description: l.description, status: l.status
   }));
@@ -19196,13 +19254,26 @@ const REPORT_MODULE_CONFIGS = {
     title: '🛒 Báo Cáo Văn Phòng Tổng Hợp',
     getRecords: (dept, from, to) => DB.officeReqs.filter(r => (!dept || r.dept === dept) && isInDateRange(r.createdAt, from, to)),
     statusOf: r => r.status,
-    renderExtra: renderOfficeReportExtra
+    renderExtra: renderOfficeReportExtra,
+    extraRows: records => {
+      const bySubType = { MUA_BAN: 0, SUA_CHUA: 0, DAU_TU: 0 };
+      records.filter(o => o.status === 'APPROVED').forEach(o => { bySubType[o.subType] = (bySubType[o.subType] || 0) + (o.amount || 0); });
+      return [['Dự toán Mua sắm (VNĐ)', bySubType.MUA_BAN], ['Dự toán Sửa chữa (VNĐ)', bySubType.SUA_CHUA], ['Dự toán Đầu tư (VNĐ)', bySubType.DAU_TU]];
+    }
   },
   contract: {
     title: '📄 Báo Cáo Hợp Đồng',
     getRecords: (dept, from, to) => DB.contracts.filter(r => (!dept || r.dept === dept) && isInDateRange(r.createdAt, from, to)),
     statusOf: r => r.approvalStatus,
-    renderExtra: renderContractReportExtra
+    renderExtra: renderContractReportExtra,
+    extraRows: records => {
+      const approved = records.filter(c => c.approvalStatus === 'APPROVED');
+      const rawNow = new Date();
+      const now = new Date(rawNow.getFullYear(), rawNow.getMonth(), rawNow.getDate());
+      const activeValue = approved.filter(c => new Date(c.endDate) >= now).reduce((s, c) => s + (c.amount || 0), 0);
+      const expiredValue = approved.filter(c => new Date(c.endDate) < now).reduce((s, c) => s + (c.amount || 0), 0);
+      return [['Giá trị Hợp đồng còn hiệu lực (VNĐ)', activeValue], ['Giá trị Hợp đồng đã hết hạn (VNĐ)', expiredValue]];
+    }
   },
   minutes: {
     title: '📝 Báo Cáo Biên Bản Họp',
@@ -19434,6 +19505,11 @@ function exportModuleReportExcel(moduleKey) {
     records.forEach(r => { const s = config.statusOf(r); if (s in counts) counts[s]++; });
     buckets.forEach(([key, label]) => rows.push([label, counts[key]]));
   }
+  // Trước đây file xuất chỉ có số lượng hồ sơ theo trạng thái — bỏ sót hoàn toàn số liệu tài chính
+  // (config.renderExtra) dù màn hình renderModuleReport() cùng tab đã hiển thị (VD "💰 Giá Trị Hợp
+  // Đồng"/"💰 Dự Toán Theo Phân Hệ") — người xem tab Hợp Đồng/Văn Phòng Tổng Hợp bấm xuất Excel ngay
+  // trên tab đó không nhận được số tiền nào để đối chiếu.
+  if (config.extraRows) rows.push(...config.extraRows(records));
 
   const columns = [
     { header: 'Chỉ số', key: 'label', width: 40 },
@@ -19664,6 +19740,8 @@ function exportReportsSummaryExcel() {
 
   const inScope = (r) => (!deptFilter || r.dept === deptFilter) && isInDateRange(r.createdAt, fromDate, toDate);
   const visibleContracts = DB.contracts.filter(inScope);
+  const visibleCars = DB.carRegs.filter(inScope);
+  const visibleOffice = DB.officeReqs.filter(inScope);
   // Khớp đúng 2 bản vá đã áp cho renderReportsSummary() (phần hiển thị màn hình cùng số liệu này) —
   // trước đây hàm xuất Excel không lọc APPROVED (cộng cả PENDING/REJECTED, thổi phồng "Giá trị Hợp
   // đồng còn hiệu lực") và so ngày nguyên giờ/phút thực tế thay vì theo ngày lịch.
@@ -19671,13 +19749,22 @@ function exportReportsSummaryExcel() {
   const rawNow = new Date();
   const now = new Date(rawNow.getFullYear(), rawNow.getMonth(), rawNow.getDate());
   const activeContractValue = approvedContracts.filter(c => new Date(c.endDate) >= now).reduce((sum, c) => sum + (c.amount || 0), 0);
+  // Trước đây file xuất chỉ có "Giá trị Hợp đồng còn hiệu lực" — thiếu hẳn "Đã hết hạn", dự toán Văn
+  // phòng theo 3 phân hệ, và tổng km đăng ký xe dù màn hình renderReportsSummary() cùng tab đã hiển
+  // thị đủ 5 chỉ số này — người xuất báo cáo nhận file thiếu số liệu so với những gì vừa xem trên màn hình.
+  const expiredContractValue = approvedContracts.filter(c => new Date(c.endDate) < now).reduce((sum, c) => sum + (c.amount || 0), 0);
+  const officeBySubType = { MUA_BAN: 0, SUA_CHUA: 0, DAU_TU: 0 };
+  visibleOffice.filter(o => o.status === 'APPROVED').forEach(o => { officeBySubType[o.subType] = (officeBySubType[o.subType] || 0) + (o.amount || 0); });
+  const totalKm = visibleCars.filter(c => c.status === 'APPROVED').reduce((sum, c) => sum + (c.km || 0), 0);
 
   const rows = [
     ['Tổng Tài liệu', docStats.total], ['Tài liệu - Đang chờ', docStats.pending], ['Tài liệu - Đã duyệt', docStats.approved], ['Tài liệu - Từ chối', docStats.rejected],
     ['Tổng Văn bản trình', subStats.total], ['Văn bản trình - Đang chờ', subStats.pending], ['Văn bản trình - Đã duyệt', subStats.approved], ['Văn bản trình - Từ chối', subStats.rejected],
     ['Tổng Đăng ký xe', carStats.total], ['Đăng ký xe - Đang chờ', carStats.pending], ['Đăng ký xe - Đã duyệt', carStats.approved], ['Đăng ký xe - Từ chối', carStats.rejected],
     ['Tổng Văn phòng', offStats.total], ['Văn phòng - Đang chờ', offStats.pending], ['Văn phòng - Đã duyệt', offStats.approved], ['Văn phòng - Từ chối', offStats.rejected],
-    ['Tổng Hợp đồng', visibleContracts.length], ['Giá trị Hợp đồng còn hiệu lực (VNĐ)', activeContractValue]
+    ['Tổng Hợp đồng', visibleContracts.length], ['Giá trị Hợp đồng còn hiệu lực (VNĐ)', activeContractValue], ['Giá trị Hợp đồng đã hết hạn (VNĐ)', expiredContractValue],
+    ['Dự toán Văn phòng - Mua sắm (VNĐ)', officeBySubType.MUA_BAN], ['Dự toán Văn phòng - Sửa chữa (VNĐ)', officeBySubType.SUA_CHUA], ['Dự toán Văn phòng - Đầu tư (VNĐ)', officeBySubType.DAU_TU],
+    ['Tổng số km đăng ký xe (đã duyệt)', totalKm]
   ];
 
   const columns = [

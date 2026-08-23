@@ -277,7 +277,11 @@ router.patch('/me', requireAuth, async (req, res) => {
         return res.status(429).json({ error: `Tài khoản tạm khóa do nhập sai quá nhiều lần. Vui lòng thử lại sau ${remainingLockMinutes} phút.` });
       }
 
-      const ok = await verifyPassword(currentPassword, req.freshUser.pass);
+      // Khớp fallback "pass || password" mà /login và /verify-password đã dùng (tương thích bản ghi cũ
+      // chưa kịp di trú qua migratePlaintextPasswords()) — trước đây chỉ đọc req.freshUser.pass, nên 1
+      // bản ghi hiếm hoi chỉ còn field "password" (phục hồi backup giữa chừng, import thủ công...) vẫn
+      // đăng nhập được nhưng PATCH /me đổi mật khẩu LUÔN báo sai dù nhập đúng, không có lối thoát.
+      const ok = await verifyPassword(currentPassword, req.freshUser.pass || req.freshUser.password);
       if (!ok) {
         await withLockedAppDataValue('users', (collection) => {
           const list = Array.isArray(collection) ? collection : [];
