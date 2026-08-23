@@ -2196,7 +2196,7 @@ table { display: block; overflow-x: auto; max-width: 100%; }
        openSignedUploadModal()) -->
   <div id="signedUploadModal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
     <div class="bg-white rounded-lg p-5 w-full max-w-md space-y-3">
-      <h3 class="font-bold text-gray-800">📤 Tải Lên Tài Liệu Ký</h3>
+      <h3 id="signedUploadModalTitle" class="font-bold text-gray-800">📤 Tải Lên Tài Liệu Ký</h3>
       <p id="signedUploadSub" class="text-xs text-gray-500"></p>
       <input id="signedUploadFile" type="file" accept=".pdf,.docx,.xlsx" class="w-full border p-1.5 bg-white rounded text-xs">
       <div id="signedUploadDynamicFields" class="space-y-2"></div>
@@ -10640,13 +10640,11 @@ function onContractOpModeChange() {
   // CONTRACT_MANAGE) — xem FORM_TABS. submitContractReq() đọc lại đúng bộ này khi thu thập dữ liệu.
   renderDynamicInputsForModule(isImportMode ? 'CONTRACT_MANAGE' : 'CONTRACT_APPROVAL', 'dynamicFieldsContainer_CONTRACT');
   document.getElementById('contractAddendumTargetWrap').classList.toggle('hidden', !isAddendumMode);
-  // Đợt Thanh Toán: CHỈ hiện cho hợp đồng GỐC (NEW) — trước đây hiện cả cho ADDENDUM theo đúng ý đồ ban
-  // đầu "phụ lục cũng phê duyệt và thanh toán", nhưng uploadContractSignedFile()/startContractPayment()
-  // (2 hàm DUY NHẤT dẫn tới việc tạo paymentRequests) đều chặn thẳng contract.isAddendum, và Chi Tiết
-  // Hợp Đồng cũng chỉ hiện lại Đợt Thanh Toán cho !isAddendum — nghĩa là tính năng "thanh toán phụ lục"
-  // chưa từng được nối tới đâu cả. Ẩn khối nhập ở đây để không buộc người dùng khai (và server validate
-  // chặt) 1 dữ liệu không bao giờ dùng được, tránh hiểu lầm phụ lục đã có luồng thanh toán riêng.
-  document.getElementById('contractInstallmentsWrap').classList.toggle('hidden', isImportMode || isAddendumMode);
+  // Đợt Thanh Toán: hiện cho NEW/ADDENDUM (cả 2 đều qua Phê Duyệt, phụ lục CÓ thể phát sinh thanh toán
+  // riêng — độc lập với hợp đồng gốc, xem uploadContractSignedFile()/startContractPayment() ở
+  // lib/recordActions.js), ẩn cho 2 chế độ IMPORT (nhập hồ sơ đã ký sẵn, không cần khai lại đợt thanh
+  // toán ở đây).
+  document.getElementById('contractInstallmentsWrap').classList.toggle('hidden', isImportMode);
   // Cấp Phê Duyệt Cuối Cùng/lớp bổ sung: chỉ áp dụng cho hồ sơ đi qua quy trình Phê Duyệt HĐ (NEW/
   // ADDENDUM) — 2 chế độ IMPORT bỏ qua hàng chờ nên ẩn hẳn, không cần chọn.
   document.getElementById('contractApprovalLevelWrap').classList.toggle('hidden', isImportMode);
@@ -11011,7 +11009,7 @@ function openEditContract(contractId) {
   document.getElementById('contractStartDate').value = c.startDate;
   document.getElementById('contractEndDate').value = c.endDate;
   document.getElementById('contractContent').value = c.content;
-  document.getElementById('contractInstallmentsWrap').classList.toggle('hidden', !!c.isAddendum);
+  document.getElementById('contractInstallmentsWrap').classList.remove('hidden');
   renderContractInstallmentsList(c.paymentInstallments || []);
 
   const fileInput = document.getElementById('contractFile');
@@ -11081,7 +11079,7 @@ async function updateContractReq(e) {
   // trước đây updateContractReq() không hề đọc lại nội dung bảng này để gửi lên server — mọi thay đổi
   // đợt thanh toán trên form BỊ ÂM THẦM BỎ QUA (server vẫn giữ nguyên paymentInstallments cũ), người
   // dùng tưởng đã lưu đợt mới nhưng thực ra không.
-  if (!c.isAddendum) editPayload.paymentInstallments = collectContractInstallments();
+  editPayload.paymentInstallments = collectContractInstallments();
   if (newFile) {
     let uploaded;
     try {
@@ -11234,36 +11232,44 @@ function buildContractRowHTML(c, { addendumCount = 0, isExpanded = false, isChil
     APPROVED: '<div class="text-[10px] text-green-700 mt-0.5">📎 Tài liệu ký: ✅ Đã duyệt</div>',
     REJECTED: '<div class="text-[10px] text-red-700 mt-0.5">📎 Tài liệu ký: ❌ Bị từ chối</div>'
   };
+  // Phụ lục CŨNG theo dõi Thanh Toán/Tài liệu ký độc lập với hợp đồng gốc (có thể phát sinh thanh toán
+  // riêng) — trước đây cột này (và mọi action Tài liệu ký/Thanh toán bên dưới) chỉ hiện cho dòng GỐC
+  // (!isChild), khiến phụ lục đã duyệt xong không có cách nào hoàn tất "Phụ lục hợp đồng đã ký" hay
+  // chuyển sang thanh toán dù có phát sinh riêng.
   let paymentCell = '';
   if (activeContractSubTab === 'MANAGE') {
-    paymentCell = !isChild
-      ? `<td class="border p-2"><span class="px-2 py-0.5 rounded font-bold text-xs ${CONTRACT_PAYMENT_BADGE_CLS[c.paymentStatus] || ''}">${CONTRACT_PAYMENT_LABELS[c.paymentStatus] || '-'}</span>${SIGNED_FILE_STATUS_NOTE[c.signedFileStatus] || ''}</td>`
-      : `<td class="border p-2 text-gray-300 text-center">—</td>`;
+    paymentCell = `<td class="border p-2"><span class="px-2 py-0.5 rounded font-bold text-xs ${CONTRACT_PAYMENT_BADGE_CLS[c.paymentStatus] || ''}">${CONTRACT_PAYMENT_LABELS[c.paymentStatus] || '-'}</span>${SIGNED_FILE_STATUS_NOTE[c.signedFileStatus] || ''}</td>`;
   }
+
+  // Nhãn "Tài liệu ký" đổi thành "...Phụ Lục Hợp Đồng Đã Ký" khi thao tác trên phụ lục, cho rõ ràng —
+  // khớp cách IMPORT_ADDENDUM đã đặt tên ở onContractOpModeChange().
+  const signedDocNoun = c.isAddendum ? 'Phụ Lục Hợp Đồng Đã Ký' : 'Tài Liệu Ký';
 
   const primaryBtnHTML = `<button onclick="runContractAction(${c.id}, 'detail')" class="bg-teal-600 text-white px-2 py-1 rounded text-xs hover:bg-teal-700 font-bold" title="Xem đầy đủ thông tin đã nhập">🔍 Xem chi tiết</button>`;
   const secondaryOptions = [{ value: 'view', label: '👁️ Xem' }];
   if ((c.fileUrl || c.fileData) && canDownloadFile(currentUser, 'contract', c.dept, c.creator)) {
     secondaryOptions.push({ value: 'download', label: '⬇️ Tải' });
   }
-  if (!c.isAddendum && c.creator === currentUser.username && c.approvalStatus !== 'APPROVED') {
+  // "Sửa" (các trường ở tab Phê Duyệt, kể cả Đợt Thanh Toán) áp dụng cho CẢ hợp đồng gốc lẫn phụ lục khi
+  // còn chưa được duyệt xong — trước đây chặn cứng phụ lục dù editContract() (server) vẫn cho sửa được.
+  if (c.creator === currentUser.username && c.approvalStatus !== 'APPROVED') {
     secondaryOptions.push({ value: 'edit', label: '✏️ Sửa' });
   }
   if (!isChild && c.approvalStatus === 'PENDING' && canApproveContractStep(currentUser, c)) {
     secondaryOptions.push({ value: 'approve', label: '✅ Duyệt' });
     secondaryOptions.push({ value: 'reject', label: '❌ Từ chối' });
   }
-  if (!isChild && c.signedFileUrl && canDownloadFile(currentUser, 'contract', c.dept, c.creator)) {
-    secondaryOptions.push({ value: 'viewSigned', label: '👁️ Xem Tài Liệu Ký' });
+  if (c.signedFileUrl && canDownloadFile(currentUser, 'contract', c.dept, c.creator)) {
+    secondaryOptions.push({ value: 'viewSigned', label: `👁️ Xem ${signedDocNoun}` });
   }
-  if (!isChild && activeContractSubTab === 'MANAGE' && (!c.signedFileUrl || c.signedFileStatus === 'REJECTED') && canManageContractPaymentClient(currentUser, c)) {
-    secondaryOptions.push({ value: 'uploadSigned', label: c.signedFileStatus === 'REJECTED' ? '📤 Tải Lại Tài Liệu Ký' : '📤 Tải Tài Liệu Ký' });
+  if (activeContractSubTab === 'MANAGE' && (!c.signedFileUrl || c.signedFileStatus === 'REJECTED') && canManageContractPaymentClient(currentUser, c)) {
+    secondaryOptions.push({ value: 'uploadSigned', label: c.signedFileStatus === 'REJECTED' ? `📤 Tải Lại ${signedDocNoun}` : `📤 Tải ${signedDocNoun}` });
   }
-  if (!isChild && activeContractSubTab === 'MANAGE' && c.signedFileStatus === 'PENDING' && canManageContractPaymentClient(currentUser, c)) {
-    secondaryOptions.push({ value: 'approveSigned', label: '✅ Duyệt Tài Liệu Ký' });
-    secondaryOptions.push({ value: 'rejectSigned', label: '❌ Từ Chối Tài Liệu Ký' });
+  if (activeContractSubTab === 'MANAGE' && c.signedFileStatus === 'PENDING' && canManageContractPaymentClient(currentUser, c)) {
+    secondaryOptions.push({ value: 'approveSigned', label: `✅ Duyệt ${signedDocNoun}` });
+    secondaryOptions.push({ value: 'rejectSigned', label: `❌ Từ Chối ${signedDocNoun}` });
   }
-  if (!isChild && activeContractSubTab === 'MANAGE' && c.signedFileStatus === 'APPROVED' && c.paymentStatus === 'CHUA_THANH_TOAN' && canManageContractPaymentClient(currentUser, c)) {
+  if (activeContractSubTab === 'MANAGE' && c.signedFileStatus === 'APPROVED' && c.paymentStatus === 'CHUA_THANH_TOAN' && canManageContractPaymentClient(currentUser, c)) {
     secondaryOptions.push({ value: 'startPayment', label: '💰 Chuyển Sang Thanh Toán' });
   }
   if (currentUser.perms?.admin) secondaryOptions.push({ value: 'delete', label: '🗑️ Xóa' });
@@ -11487,6 +11493,11 @@ function openSignedUploadModal(module, id) {
   const item = list.find(x => x.id === id);
   if (!item) return;
   signedUploadTarget = { module, id };
+  // Đổi tiêu đề modal thành "Tải Lên Phụ Lục Hợp Đồng Đã Ký" khi thao tác trên phụ lục hợp đồng — rõ
+  // ràng hơn (Mua Bán/Sửa Chữa/Đầu Tư dùng chung modal này không có khái niệm phụ lục nên luôn giữ
+  // nhãn gốc).
+  document.getElementById('signedUploadModalTitle').innerText = (module === 'contracts' && item.isAddendum)
+    ? '📤 Tải Lên Phụ Lục Hợp Đồng Đã Ký' : '📤 Tải Lên Tài Liệu Ký';
   document.getElementById('signedUploadSub').innerText = `${item.code} — ${item.title}`;
   const signedFileInput = document.getElementById('signedUploadFile');
   signedFileInput.value = '';
@@ -11895,12 +11906,11 @@ function viewContractDetails(contractId) {
           <div><b>Thời Gian Sửa:</b> ${escapeHtml(c.lastEditedAt || '')}</div>
         ` : ''}
         ${c.fileName ? `<div class="md:col-span-2"><b>Tệp Đính Kèm:</b> ${escapeHtml(c.fileName)}</div>` : ''}
-        ${c.isAddendum ? `<div class="md:col-span-2"><b>Phụ lục của hợp đồng:</b> ${escapeHtml((DB.contracts.find(r => r.id === c.rootContractId) || {}).code || '')}</div>` : `
-          <div><b>Trạng Thái Duyệt:</b> ${c.approvalStatus === 'PENDING' ? '⏳ Chờ duyệt' : c.approvalStatus === 'REJECTED' ? `❌ Bị từ chối${c.rejectReason ? ` (${escapeHtml(c.rejectReason)})` : ''}` : '✅ Đã duyệt'}</div>
-          <div><b>Thanh Toán:</b> ${CONTRACT_PAYMENT_LABELS[c.paymentStatus] || '-'}${c.signedFileUrl ? ' (đã có tài liệu ký)' : ''}</div>
-        `}
+        ${c.isAddendum ? `<div class="md:col-span-2"><b>Phụ lục của hợp đồng:</b> ${escapeHtml((DB.contracts.find(r => r.id === c.rootContractId) || {}).code || '')}</div>` : ''}
+        <div><b>Trạng Thái Duyệt:</b> ${c.approvalStatus === 'PENDING' ? '⏳ Chờ duyệt' : c.approvalStatus === 'REJECTED' ? `❌ Bị từ chối${c.rejectReason ? ` (${escapeHtml(c.rejectReason)})` : ''}` : '✅ Đã duyệt'}</div>
+        <div><b>Thanh Toán:</b> ${CONTRACT_PAYMENT_LABELS[c.paymentStatus] || '-'}${c.signedFileUrl ? ' (đã có tài liệu ký)' : ''}</div>
       </div>
-      ${(!c.isAddendum && (c.paymentInstallments || []).length) ? `
+      ${(c.paymentInstallments || []).length ? `
         <div class="border-t mt-4 pt-3">
           <b>Các Đợt Thanh Toán:</b>
           <ul class="list-disc pl-5 mt-1 text-gray-800">

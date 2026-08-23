@@ -74,7 +74,9 @@ function editContract(payload, user, contract, hasAddenda, rootDept, appData) {
   // tra lại lúc SỬA. Cho phép gửi kèm paymentInstallments mới (client updateContractReq() gửi cùng
   // form) và validate lại đúng luật cũ; nếu KHÔNG gửi installments mới nhưng amount đổi khác số cũ và
   // đợt cũ đã khai (không phải mặc định "1 đợt = toàn bộ"), chặn để bắt buộc khai lại cho khớp.
-  if (!contract.isAddendum) {
+  // Áp dụng cho CẢ hợp đồng gốc lẫn phụ lục — phụ lục cũng khai/sửa được đợt thanh toán của chính nó
+  // trước khi được duyệt (xem createValidation.js — cùng luật lúc tạo).
+  {
     const newAmount = payload.amount !== undefined ? Number(payload.amount) : contract.amount;
     let newInstallments = payload.paymentInstallments;
     if (newInstallments !== undefined) {
@@ -115,7 +117,7 @@ function editContract(payload, user, contract, hasAddenda, rootDept, appData) {
     contract.effectiveSteps = effectiveWf.steps;
     contract.effectiveApprovers = effectiveWf.approvers;
   }
-  if (!contract.isAddendum && payload.paymentInstallments !== undefined) {
+  if (payload.paymentInstallments !== undefined) {
     contract.paymentInstallments = payload.paymentInstallments;
   }
   if (payload.fileName !== undefined) {
@@ -159,7 +161,9 @@ function canManageContractPayment(user, contract) {
 }
 
 function uploadContractSignedFile(payload, user, contract) {
-  if (contract.isAddendum) throw new HttpError(400, 'Phụ lục không có tệp tài liệu ký riêng');
+  // Phụ lục CŨNG có "Tài liệu ký" + luồng thanh toán riêng của chính nó (độc lập với hợp đồng gốc) —
+  // trước đây chặn cứng contract.isAddendum, khiến phụ lục đã duyệt xong không có cách nào hoàn tất hồ
+  // sơ lưu trữ "Phụ lục hợp đồng đã ký".
   if (!canManageContractPayment(user, contract)) throw new HttpError(403, 'Bạn không có quyền tải lên tài liệu ký cho hợp đồng này');
   if (contract.approvalStatus !== 'APPROVED') throw new HttpError(409, 'Hợp đồng chưa được phê duyệt');
   if (contract.signedFileStatus === 'APPROVED') throw new HttpError(409, 'Tài liệu ký đã được phê duyệt, không thể tải lên lại');
@@ -195,7 +199,10 @@ function buildPaymentInstallments(sourceInstallments, totalAmount, fallbackDesc)
 // createForCollection('paymentRequests', ...) ngay sau khi mutatorFn này chạy xong, cùng khuôn với
 // assignMinutesTasks()/insertMinutesTasks() ở routes/records.js).
 function startContractPayment(user, contract) {
-  if (contract.isAddendum) throw new HttpError(400, 'Phụ lục không có luồng thanh toán riêng');
+  // Phụ lục có thể phát sinh thanh toán riêng (VD bổ sung khối lượng/giá trị) — chuyển sang thanh toán
+  // độc lập với hợp đồng gốc, sourceId/sourceCode dưới đây luôn theo ĐÚNG bản ghi (gốc hay phụ lục)
+  // đang gọi hàm này, nên "Xác nhận đề nghị thanh toán" hiện đúng 2 dòng tách biệt khi cả 2 cùng có đợt
+  // thanh toán đang chờ.
   if (!canManageContractPayment(user, contract)) throw new HttpError(403, 'Bạn không có quyền chuyển hợp đồng này sang thanh toán');
   if (!contract.signedFileUrl) throw new HttpError(409, 'Cần tải lên Tài liệu ký trước khi chuyển sang thanh toán');
   if (contract.signedFileStatus !== 'APPROVED') throw new HttpError(409, 'Tài liệu ký cần được phê duyệt trước khi chuyển sang thanh toán');
