@@ -281,6 +281,11 @@ table { display: block; overflow-x: auto; max-width: 100%; }
      sau khi deploy (đè code + npm install + pm2 restart) đã áp dụng đúng bản mới hay chưa. -->
 <div id="appVersionBadge" class="fixed bottom-1 right-2 text-[10px] text-gray-400 select-none z-10"></div>
 
+<!-- Ghi chú bản quyền — hiện cố định ở mọi màn hình (kể cả trước khi đăng nhập), năm lấy động bằng JS
+     ngay dưới đây để không cần sửa code mỗi năm. -->
+<div id="appCopyright" class="fixed bottom-1 left-2 text-[10px] text-gray-400 select-none z-10">© <span id="copyrightYear"></span> Công ty HCRC. Bảo lưu mọi quyền.</div>
+<script>document.getElementById('copyrightYear').textContent = new Date().getFullYear();</script>
+
 <!-- Thanh trên cùng CHỈ hiện trên điện thoại (< 768px, ẩn hẳn từ md trở lên bằng "md:hidden") — nút ☰
      mở/đóng sidebar dạng "off-canvas" (xem CSS #userHeader ở khối <style> đầu file). finishLogin()/
      logout() toggle "hidden" y hệt cách đang làm với #userHeader, nên vòng đời ẩn/hiện luôn khớp nhau. -->
