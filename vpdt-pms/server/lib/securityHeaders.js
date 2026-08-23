@@ -11,22 +11,21 @@
 // domain lạ (connect-src 'self' — chặn kênh exfiltrate dữ liệu nếu có XSS), và bị nhúng vào iframe của
 // trang khác (frame-ancestors 'self' — chống clickjacking).
 //
-// challenges.cloudflare.com được thêm riêng cho widget CAPTCHA Cloudflare Turnstile ở trang đăng nhập
-// (lib/captcha.js, chỉ tải khi đã cấu hình TURNSTILE_SITE_KEY) — cần cả scriptSrc (tải api.js),
-// frameSrc (widget hiện trong iframe), và connectSrc (widget tự gọi XHR nội bộ khi giải challenge).
+// CAPTCHA (lib/captcha.js) vẽ SVG rồi trả thẳng qua JSON, gán inline vào DOM ở trình duyệt — KHÔNG tải
+// từ domain ngoài nào nên không cần nới thêm directive nào ở đây (khác với phương án Cloudflare Turnstile
+// đã cân nhắc trước đó nhưng không dùng, vốn cần mở scriptSrc/frameSrc/connectSrc cho domain ngoài).
 const helmet = require('helmet');
 
 const securityHeaders = helmet({
   contentSecurityPolicy: {
     directives: {
       defaultSrc: ["'self'"],
-      scriptSrc: ["'self'", "'unsafe-inline'", 'https://cdn.tailwindcss.com', 'https://challenges.cloudflare.com'],
+      scriptSrc: ["'self'", "'unsafe-inline'", 'https://cdn.tailwindcss.com'],
       scriptSrcAttr: ["'unsafe-inline'"],
       styleSrc: ["'self'", "'unsafe-inline'", 'https://cdn.tailwindcss.com'],
       imgSrc: ["'self'", 'data:', 'blob:'],
       fontSrc: ["'self'", 'data:'],
-      connectSrc: ["'self'", 'https://challenges.cloudflare.com'],
-      frameSrc: ["'self'", 'https://challenges.cloudflare.com'],
+      connectSrc: ["'self'"],
       workerSrc: ["'self'", 'blob:'],
       objectSrc: ["'none'"],
       frameAncestors: ["'self'"],

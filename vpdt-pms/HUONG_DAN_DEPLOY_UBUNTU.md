@@ -460,23 +460,22 @@ mục 9.1 (khoá theo IP/tài khoản) vẫn đứng vững, nhưng CAPTCHA ch�
 **từ bước sớm hơn** (trước khi tốn tài nguyên xử lý đăng nhập), đồng thời
 gây khó cho các công cụ dò mật khẩu tự động hàng loạt.
 
-Dùng **Cloudflare Turnstile** (miễn phí, không giới hạn lượt dùng, không
-hiện quảng cáo/theo dõi người dùng như một số dịch vụ CAPTCHA khác):
+Dùng CAPTCHA số đơn giản — **tự vẽ + tự xác minh hoàn toàn trên server**
+(`server/lib/captcha.js`), không cần đăng ký tài khoản/API key ở bất kỳ dịch
+vụ ngoài nào (khác với phương án Cloudflare Turnstile từng cân nhắc trước
+đó): server sinh 1 mã 4 chữ số, vẽ ra ảnh SVG có nhiễu nhẹ (đường kẻ, chấm,
+xoay lệch từng chữ số — đủ chặn kịch bản trích text thô, KHÔNG chống được
+OCR chuyên biệt, chấp nhận được vì mục tiêu chỉ là thêm ma sát cho bot dò
+mật khẩu hàng loạt), người dùng gõ lại đúng mã đó.
 
-1. Vào https://dash.cloudflare.com/ → **Turnstile** (cần tài khoản Cloudflare,
-   không cần domain phải trỏ DNS qua Cloudflare).
-2. Tạo 1 site mới, điền domain thật của bạn (hoặc IP nếu chưa có domain).
-3. Sau khi tạo, Cloudflare cho 2 khoá — **Site Key** (công khai, dùng ở
-   trình duyệt) và **Secret Key** (bí mật, chỉ dùng ở server).
-4. Điền vào `.env`:
+1. Điền vào `.env`:
    ```
-   TURNSTILE_SITE_KEY=<site key vừa lấy>
-   TURNSTILE_SECRET_KEY=<secret key vừa lấy>
+   CAPTCHA_ENABLED=true
    ```
-5. `pm2 restart vpdt-server`. Mở lại trang đăng nhập — widget xác minh
-   "tôi không phải robot" sẽ tự hiện dưới ô mật khẩu.
+2. `pm2 restart vpdt-server`. Mở lại trang đăng nhập — khung "Mã xác nhận"
+   (ảnh số + nút ↻ lấy mã khác) sẽ tự hiện dưới ô mật khẩu.
 
-Không cấu hình (để trống, mặc định) thì trang đăng nhập hoạt động y như
+Không cấu hình (mặc định `false`) thì trang đăng nhập hoạt động y như
 trước — không bắt buộc, chỉ khuyến nghị khi đã public hẳn ra Internet.
 
 ---

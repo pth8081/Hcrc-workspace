@@ -21,7 +21,7 @@ const emailRoutes = require('./routes/email');
 const vppCatalogRoutes = require('./routes/vppCatalog');
 const adminExportRoutes = require('./routes/adminExport');
 const downloadRoutes = require('./routes/download');
-const { isCaptchaEnabled } = require('./lib/captcha');
+const { isCaptchaEnabled, generateCaptcha } = require('./lib/captcha');
 const { checkContractExpiryReminders } = require('./jobs/contractExpiryReminder');
 
 const app = express();
@@ -181,15 +181,20 @@ app.get('/api/health', async (req, res) => {
   }
 });
 
-// Cấu hình công khai cho trang đăng nhập (KHÔNG cần xác thực — phải gọi được TRƯỚC khi đăng nhập).
-// TURNSTILE_SITE_KEY không phải bí mật (site key được thiết kế để nhúng thẳng vào HTML/JS phía trình
-// duyệt, khác với TURNSTILE_SECRET_KEY chỉ dùng ở server, xem lib/captcha.js) — an toàn khi trả ra đây.
-app.get('/api/public-config', (req, res) => {
-  const captchaEnabled = isCaptchaEnabled();
-  res.json({
-    captchaEnabled,
-    captchaSiteKey: captchaEnabled ? process.env.TURNSTILE_SITE_KEY : null
-  });
+// CAPTCHA số ở trang đăng nhập (KHÔNG cần xác thực — phải gọi được TRƯỚC khi đăng nhập, xem
+// lib/captcha.js). CHỈ bật khi CAPTCHA_ENABLED=true (.env); tắt thì trả 404 — client dựa vào đó để ẩn
+// hẳn khung nhập CAPTCHA, không hiện dở dang. Giới hạn riêng (không dùng chung globalApiRateLimiter bên
+// dưới vì route này KHÔNG cần đăng nhập, phải chặn spam sinh mã tràn bộ nhớ độc lập).
+const captchaRateLimiter = rateLimit({
+  windowMs: 10 * 60 * 1000,
+  limit: 60,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Yêu cầu CAPTCHA quá nhiều lần, vui lòng thử lại sau ít phút.' }
+});
+app.get('/api/captcha', captchaRateLimiter, (req, res) => {
+  if (!isCaptchaEnabled()) return res.status(404).json({ error: 'CAPTCHA chưa được bật' });
+  res.json(generateCaptcha());
 });
 
 // Phục vụ frontend tĩnh (file index.html đã chuyển đổi sang gọi API thay vì localStorage)

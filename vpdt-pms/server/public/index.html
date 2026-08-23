@@ -261,6 +261,17 @@ table { display: block; overflow-x: auto; max-width: 100%; }
 .loginpage-btn:disabled { opacity: .65; cursor: not-allowed; transform: none; }
 .loginpage-btn svg { width: 16px; height: 16px; }
 
+.loginpage-captcha-row { display: flex; align-items: center; gap: 8px; margin-bottom: 9px; }
+.loginpage-captcha-img { flex: 1; border: 1.5px solid #e3e8f2; border-radius: 10px; overflow: hidden; line-height: 0; background: #eef0f7; }
+.loginpage-captcha-img svg { display: block; width: 100%; height: 44px; }
+.loginpage-captcha-refresh {
+  flex-shrink: 0; width: 40px; height: 44px; font-size: 17px; color: #4b5876;
+  background: #fff; border: 1.5px solid #e3e8f2; border-radius: 10px; cursor: pointer;
+  transition: border-color .15s ease, transform .15s ease;
+}
+.loginpage-captcha-refresh:hover { border-color: #38bdf8; }
+.loginpage-captcha-refresh:active { transform: rotate(90deg); }
+
 .loginpage-card-foot { margin-top: 24px; padding-top: 16px; border-top: 1px solid #eef1f8; font-size: 12.5px; color: #4b5876; text-align: center; line-height: 1.6; }
 </style>
 </head>
@@ -521,10 +532,19 @@ table { display: block; overflow-x: auto; max-width: 100%; }
             </div>
           </div>
 
-          <!-- Widget CAPTCHA (Cloudflare Turnstile) — chỉ hiện khi server đã cấu hình TURNSTILE_SITE_KEY
-               (xem initCaptchaWidget() ở script cuối trang); nếu chưa cấu hình thì trống, không ảnh
-               hưởng gì tới đăng nhập bình thường. -->
-          <div id="turnstileWidget" class="loginpage-field hidden"></div>
+          <!-- CAPTCHA số tự vẽ trên server — chỉ hiện khi server bật CAPTCHA_ENABLED=true (xem
+               initCaptchaWidget() ở script cuối trang); nếu chưa bật thì trống, không ảnh hưởng gì tới
+               đăng nhập bình thường. -->
+          <div id="captchaField" class="loginpage-field hidden">
+            <label for="txtCaptcha">Mã xác nhận</label>
+            <div class="loginpage-captcha-row">
+              <span id="captchaImgWrap" class="loginpage-captcha-img"></span>
+              <button type="button" id="btnCaptchaRefresh" class="loginpage-captcha-refresh" title="Lấy mã khác" aria-label="Lấy mã khác" onclick="refreshCaptcha()">↻</button>
+            </div>
+            <div class="loginpage-input-wrap">
+              <input id="txtCaptcha" type="text" inputmode="numeric" autocomplete="off" placeholder="Nhập mã số trong ảnh">
+            </div>
+          </div>
 
           <button id="btnLogin" type="submit" class="loginpage-btn">
             Đăng nhập
@@ -6208,45 +6228,39 @@ async function changeMyApprovalPin() {
 
 // --- ĐĂNG NHẬP & TABS ---
 
-// CAPTCHA (Cloudflare Turnstile) — chỉ bật khi server trả captchaEnabled=true (đã cấu hình
-// TURNSTILE_SITE_KEY/TURNSTILE_SECRET_KEY trong .env, xem lib/captcha.js). Không cấu hình thì 2 biến
-// dưới giữ nguyên giá trị mặc định, login() bỏ qua toàn bộ phần CAPTCHA — hành vi giống hệt trước đây.
-let captchaSiteKey = null;
-let turnstileWidgetId = null;
+// CAPTCHA số — chỉ bật khi server trả về challenge thật (đã bật CAPTCHA_ENABLED=true trong .env, xem
+// lib/captcha.js). GET /api/captcha trả 404 khi tắt -> captchaId giữ null, login() bỏ qua toàn bộ phần
+// CAPTCHA, hành vi giống hệt trước đây. Mã vẽ HOÀN TOÀN trên server (SVG), không gọi dịch vụ ngoài nào.
+let captchaId = null;
 
-(async function initCaptchaWidget() {
+async function refreshCaptcha() {
   try {
-    const res = await fetch('/api/public-config');
-    const cfg = await res.json().catch(() => ({}));
-    if (!cfg.captchaEnabled || !cfg.captchaSiteKey) return;
-    captchaSiteKey = cfg.captchaSiteKey;
-
-    await new Promise((resolve, reject) => {
-      const s = document.createElement('script');
-      s.src = 'https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit';
-      s.async = true;
-      s.onload = resolve;
-      s.onerror = () => reject(new Error('Không tải được script Turnstile'));
-      document.head.appendChild(s);
-    });
-
-    const wrap = document.getElementById('turnstileWidget');
-    wrap.classList.remove('hidden');
-    turnstileWidgetId = window.turnstile.render(wrap, { sitekey: captchaSiteKey });
+    const res = await fetch('/api/captcha');
+    if (res.status === 404) {
+      captchaId = null;
+      document.getElementById('captchaField').classList.add('hidden');
+      return;
+    }
+    const cfg = await res.json();
+    captchaId = cfg.captchaId;
+    document.getElementById('captchaImgWrap').innerHTML = cfg.svg;
+    document.getElementById('txtCaptcha').value = '';
+    document.getElementById('captchaField').classList.remove('hidden');
   } catch (e) {
-    console.warn('Không khởi tạo được CAPTCHA:', e.message);
+    console.warn('Không tải được CAPTCHA:', e.message);
   }
-})();
+}
+refreshCaptcha();
 
 async function login() {
   const u = document.getElementById('txtUser').value.trim();
   const p = document.getElementById('txtPass').value.trim();
   if (!u || !p) return alert('Vui lòng nhập tên đăng nhập và mật khẩu!');
 
-  let captchaToken;
-  if (captchaSiteKey) {
-    captchaToken = turnstileWidgetId !== null && window.turnstile ? window.turnstile.getResponse(turnstileWidgetId) : null;
-    if (!captchaToken) return alert('Vui lòng hoàn thành xác minh CAPTCHA trước khi đăng nhập.');
+  let captchaAnswer;
+  if (captchaId) {
+    captchaAnswer = document.getElementById('txtCaptcha').value.trim();
+    if (!captchaAnswer) return alert('Vui lòng nhập mã xác nhận trong ảnh.');
   }
 
   const btn = document.getElementById('btnLogin');
@@ -6256,7 +6270,7 @@ async function login() {
     const res = await fetch('/api/auth/login', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ username: u, password: p, captchaToken })
+      body: JSON.stringify({ username: u, password: p, captchaId, captchaAnswer })
     });
     if (!res.ok) {
       const body = await res.json().catch(() => ({}));
@@ -6267,9 +6281,9 @@ async function login() {
     return alert('⛔ Không thể kết nối tới máy chủ: ' + e.message);
   } finally {
     if (btn) btn.disabled = false;
-    // Token Turnstile chỉ dùng được 1 lần — reset lại widget sau MỌI lượt gọi (thành công hay thất
-    // bại) để lần đăng nhập kế tiếp (nếu có) bắt buộc giải lại challenge, không tái dùng token cũ.
-    if (turnstileWidgetId !== null && window.turnstile) window.turnstile.reset(turnstileWidgetId);
+    // Mã CAPTCHA chỉ dùng được 1 lần (dù đúng hay sai) — lấy mã mới ngay sau MỌI lượt gọi để lần đăng
+    // nhập kế tiếp (nếu có) bắt buộc nhập lại, không tái dùng captchaId cũ.
+    if (captchaId) refreshCaptcha();
   }
 
   logSystemAction('USER_MGM', 'LOGIN_SUCCESS', 'Đăng nhập thành công.', 'SUCCESS', user.username);
