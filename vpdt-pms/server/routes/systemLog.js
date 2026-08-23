@@ -35,7 +35,7 @@ router.get('/', async (req, res) => {
 // POST /api/log — ghi 1 dòng nhật ký hệ thống. username/fullName lấy từ phiên đăng nhập đã xác thực
 // (req.freshUser), KHÔNG tin bất kỳ giá trị nào client tự gửi cho 2 field này. ipAddress lấy từ
 // req.ip — chính xác khi server đứng sau reverse proxy CHỈ nếu đã cấu hình TRUST_PROXY (xem
-// server.js, HUONG_DAN_DEPLOY_UBUNTU.md mục 8); nếu không, đây là IP kết nối trực tiếp tới Node
+// server.js, HUONG_DAN_DEPLOY_UBUNTU.md mục 9c); nếu không, đây là IP kết nối trực tiếp tới Node
 // (thường là IP của Nginx, không phải IP người dùng thật — không phải lỗi ở route này).
 router.post('/', async (req, res) => {
   const { module: moduleKey, actionType, description, status, target } = req.body || {};
