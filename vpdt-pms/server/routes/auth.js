@@ -39,7 +39,9 @@ function toSafeUser(user) {
 // LIÊN TỤC, không phụ thuộc IP), ngưỡng ở đây chỉ cần đủ để chặn lũ quét/DoS thô, không cần thấp.
 const loginRateLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  limit: 2000,
+  // Chỉnh được qua .env (LOGIN_RATE_LIMIT_MAX) không cần sửa code — công ty đông người dùng chung 1 IP
+  // hơn (nhiều chi nhánh cùng NAT, hoặc muốn siết chặt hơn) có thể tự đặt lại mà không cần deploy lại.
+  limit: parseInt(process.env.LOGIN_RATE_LIMIT_MAX || '2000', 10),
   standardHeaders: true,
   legacyHeaders: false,
   skipSuccessfulRequests: true,

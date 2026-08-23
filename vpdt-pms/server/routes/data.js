@@ -4,15 +4,14 @@
 // collection nhạy cảm (users, cấu hình quy trình, nhóm phân quyền...) chỉ admin mới được GHI.
 const express = require('express');
 const router = express.Router();
-const { getPool } = require('../db');
 const { DEFAULTS } = require('../defaults');
-const { getAppDataValue, getAppDataValueWithVersion, setAppDataValue, setAppDataValueIfVersionMatches, withLockedAppDataValue } = require('../lib/appData');
+const { getAppDataValue, getAppDataValueWithVersion, getAllAppDataWithVersionsCached, setAppDataValue, setAppDataValueIfVersionMatches, withLockedAppDataValue } = require('../lib/appData');
 const { requireAuth, blockIfMustChangePassword, hashPassword, isBcryptHash, validatePin } = require('../lib/auth');
 const { encryptSecret } = require('../lib/emailCrypto');
 const { validatePasswordStrength } = require('../lib/passwordPolicy');
 const { HttpError } = require('../lib/httpErrors');
-const { getAllTasks } = require('../lib/taskStore');
-const { getAllForCollection, MIGRATED_COLLECTIONS } = require('../lib/recordStore');
+const { getAllTasksCached } = require('../lib/taskStore');
+const { getAllForCollectionCached, MIGRATED_COLLECTIONS } = require('../lib/recordStore');
 const { sendServerError } = require('../lib/errorResponse');
 const {
   filterDocsForUser, filterSubmissionsForUser, filterInternalPostsForUser, sanitizeReportPeriodsForUser,
@@ -248,20 +247,20 @@ async function prepareEmailConfigForSave(payload) {
 // dưới + lib/appData.js setAppDataValueIfVersionMatches()).
 router.get('/', async (req, res) => {
   try {
-    const pool = await getPool();
-    const result = await pool.request().query('SELECT DataKey, DataValue, UpdatedAt FROM dbo.AppData');
-
-    const data = {};
-    const versions = {};
-    for (const row of result.recordset) {
-      try {
-        data[row.DataKey] = JSON.parse(row.DataValue);
-        versions[row.DataKey] = row.UpdatedAt.toISOString();
-      } catch (e) {
-        console.error(`Lỗi parse JSON cho key "${row.DataKey}":`, e.message);
-        data[row.DataKey] = null;
-      }
-    }
+    // Đọc phần "thô" (giống hệt nhau cho MỌI người dùng, khác nhau chỉ ở bước lọc quyền xem bên dưới)
+    // qua các hàm CÓ CACHE ngắn hạn vài giây (lib/appData.js/taskStore.js/recordStore.js) — phát hiện
+    // qua load test 500 người dùng đồng thời (tháng 8/2026): GET /api/data là API nặng nhất (đọc bảng
+    // AppData + tới 14 truy vấn con song song mỗi request), tải cao khiến độ trễ tăng vọt (trung vị
+    // 7s, p95 27s ở 500 người dùng) dù CSDL không phải điểm nghẽn (CPU tiến trình Node mới là điểm
+    // nghẽn — dựng lại + parse JSON hàng trăm KB, lọc quyền cho từng người, MỖI request). Cache chung
+    // vài giây giúp nhiều người dùng gọi gần như cùng lúc dùng chung 1 lượt đọc CSDL thay vì mỗi người
+    // 1 lượt riêng — dữ liệu có thể trễ tối đa vài giây so với thời điểm ghi mới nhất (cùng mức chấp
+    // nhận được như cache "users" đã áp dụng trước đó ở lib/auth.js requireAuth, xem giải thích ở đó).
+    // getAllAppDataWithVersionsCached() trả object DÙNG CHUNG giữa các request — PHẢI shallow-clone
+    // trước khi gán đè property lên `data` (nếu không, request khác đang đọc cùng cache sẽ thấy sai).
+    const cachedAppData = await getAllAppDataWithVersionsCached();
+    const data = { ...cachedAppData.data };
+    const versions = cachedAppData.versions;
     if (data.users) data.users = stripPasswords(data.users);
     if (data.emailConfig) data.emailConfig = sanitizeEmailConfig(data.emailConfig);
     // tasks (Bước 6b) và mọi collection trong MIGRATED_COLLECTIONS (Bước 6c trở đi — hiện tại:
@@ -278,8 +277,8 @@ router.get('/', async (req, res) => {
     // (db.js, mặc định 20) thừa sức phục vụ song song, không có lý do gì phải chờ tuần tự.
     const migratedList = [...MIGRATED_COLLECTIONS];
     const [tasksResult, ...collectionResults] = await Promise.all([
-      getAllTasks(),
-      ...migratedList.map(collection => getAllForCollection(collection))
+      getAllTasksCached(),
+      ...migratedList.map(collection => getAllForCollectionCached(collection))
     ]);
     data.tasks = tasksResult;
     migratedList.forEach((collection, i) => { data[collection] = collectionResults[i]; });

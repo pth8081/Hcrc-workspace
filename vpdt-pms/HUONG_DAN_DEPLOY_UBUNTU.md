@@ -335,27 +335,43 @@ liệu thật của nhân viên**.
 
 ### 9.3. Giới hạn kiến trúc cần biết khi mở rộng quy mô người dùng
 
-Toàn bộ dữ liệu ứng dụng hiện lưu trong **1 bảng `dbo.AppData`, mỗi
-collection (danh sách văn bản, hợp đồng, người dùng, ...) là 1 bản ghi JSON
-duy nhất** — thiết kế port thẳng từ `localStorage` gốc sang SQL Server, ưu
-tiên giữ nguyên 100% chức năng khi chuyển đổi. Thiết kế này **hoạt động tốt
-với quy mô vài chục đến vài trăm người dùng đồng thời**, nhưng có 2 giới hạn
-cần biết nếu công ty phát triển lớn hơn nhiều (ví dụ hàng nghìn người dùng
-đồng thời thao tác liên tục):
+Thiết kế lưu trữ ban đầu (port thẳng từ `localStorage`) dồn TOÀN BỘ collection
+vào 1 bản ghi JSON duy nhất trong `dbo.AppData`. Từ "Bước 6" trở đi, các
+collection tăng trưởng nhanh/hay ghi nhiều nhất đã được TÁCH sang bảng riêng,
+mỗi bản ghi = 1 dòng thật (khoá đúng 1 dòng thay vì cả collection khi ghi) —
+xem chi tiết ở đầu `server/sql/schema.sql`:
 
-- Mỗi lần lưu 1 thay đổi nhỏ (ví dụ sửa 1 dòng trong danh sách người dùng)
-  vẫn phải đọc/ghi lại **toàn bộ** JSON của cả collection đó — dung lượng dữ
-  liệu càng lớn, mỗi lần lưu càng chậm. Cơ chế optimistic concurrency (mục
-  9.1) tránh được mất dữ liệu khi 2 người cùng sửa, nhưng không tránh được
-  việc phải đọc/ghi cả khối.
-- Khả năng lưu đồng thời bị giới hạn ở mức "1 collection tại 1 thời điểm" cho
-  các thao tác cần khoá dòng (`WITH UPDLOCK, HOLDLOCK`).
+- `dbo.SystemLogs` — nhật ký hệ thống
+- `dbo.Tasks` — Công việc
+- `dbo.Records` — submissions/docs/carRegs/officeReqs/contracts/meetings/
+  meetingMinutes/internalPosts/paymentRequests/vppPeriods/vppRegistrations/
+  reportPeriods/reportEntries/reportSlideTemplates (phân biệt bằng cột
+  `Collection`, mỗi bản ghi vẫn 1 dòng riêng)
 
-Đây là giới hạn ở tầng **thiết kế lưu trữ**, không phải lỗi hay thiếu sót có
-thể vá bằng cấu hình — cần thiết kế lại schema (tách theo bảng quan hệ thay
-vì 1 blob JSON) nếu muốn mở rộng lên quy mô lớn hơn nhiều. Đây là hạng mục
-riêng, quy mô lớn hơn các mục ở trên, cần bàn phương án thiết kế cụ thể (schema
-mới + chiến lược migrate dữ liệu cũ không mất gì) trước khi thực hiện.
+Chỉ còn dữ liệu CẤU HÌNH (người dùng, phân quyền, quy trình phê duyệt theo
+phòng ban, danh mục...) còn ở dạng 1-blob-JSON/collection trong `dbo.AppData`
+— các collection này thay đổi ít, không phải điểm nghẽn ghi.
+
+**Kết quả load test thật với 500 người dùng đồng thời** (k6, tháng 8/2026,
+xem chi tiết tại PR sửa lỗi cùng đợt): `GET /api/data` — API nặng nhất, gọi
+mỗi lần mở app/làm mới dữ liệu — đạt **trung vị 7ms, p95 30ms, 0% lỗi** ở 500
+người dùng đồng thời, **VỚI ĐIỀU KIỆN chạy PM2 cluster mode (mục 9a)**. Chạy
+1 tiến trình đơn (`node server.js` hoặc `pm2 start server.js` không qua
+`ecosystem.config.js`) ở cùng mức tải: trung vị 7s, p95 27s — vẫn không lỗi
+nhưng chậm rõ rệt. **Kết luận: bắt buộc dùng cluster mode (mục 9a) trước khi
+public cho từ khoảng 100-200 người dùng đồng thời trở lên** — không phải tuỳ
+chọn tối ưu thêm.
+
+Điểm nghẽn đo được là CPU xử lý JSON (đọc + lọc quyền xem + serialize hàng
+trăm KB mỗi request), KHÔNG phải database (SQL Server chỉ ~38% CPU lúc app
+nghẽn nặng nhất) — cluster mode phát huy tác dụng vì đúng loại tải này (CPU-
+bound, phân chia được qua nhiều tiến trình) chứ không phải I/O-bound.
+
+Giới hạn còn lại (không phải lỗi, chỉ là ranh giới thiết kế hiện tại): nếu
+công ty phát triển tới quy mô hàng nghìn người dùng đồng thời thao tác liên
+tục, các collection CẤU HÌNH còn ở `dbo.AppData` (đặc biệt "users" nếu công
+ty có hàng nghìn tài khoản) sẽ cần cân nhắc tách bảng tương tự — không cấp
+thiết ở quy mô vài trăm người dùng đã kiểm chứng ở trên.
 
 ---
 
