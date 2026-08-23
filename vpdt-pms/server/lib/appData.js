@@ -14,9 +14,17 @@ const { getPool, sql } = require('../db');
 // mode), vì mỗi tiến trình giữ cache riêng.
 const CACHE_TTL_MS = parseInt(process.env.APPDATA_CACHE_TTL_MS || '3000', 10);
 const cache = new Map(); // DataKey -> { value, expiresAt }
+// Cache riêng cho getAllAppDataWithVersionsCached() bên dưới — TOÀN BỘ bảng AppData trong 1 lượt, dùng
+// cho GET /api/data (xem routes/data.js): trước đây MỖI request đều tự SELECT + JSON.parse lại nguyên
+// bảng AppData (~28 collection), dù nội dung giống hệt nhau giữa các người dùng khác nhau gọi gần như
+// cùng lúc — phần lọc theo quyền xem CHỈ xảy ra SAU bước này (xem routes/data.js), nên bước đọc+parse
+// này an toàn để dùng chung. Xoá CÙNG LÚC với cacheInvalidate(key) bất kỳ bên dưới — đơn giản hơn theo
+// dõi key nào ảnh hưởng gì (bảng AppData có ~28 key, ghi 1 key bất kỳ đều nên coi ảnh hưởng "toàn bộ").
+let allDataCache = null; // { data, versions, expiresAt }
 
 function cacheInvalidate(key) {
   cache.delete(key);
+  allDataCache = null;
 }
 
 async function getAppDataValueCached(key) {
@@ -25,6 +33,30 @@ async function getAppDataValueCached(key) {
   const value = await getAppDataValue(key);
   cache.set(key, { value, expiresAt: Date.now() + CACHE_TTL_MS });
   return value;
+}
+
+// Trả { data: {DataKey: value}, versions: {DataKey: isoString} } — cùng hình dạng vòng lặp đang làm
+// thủ công ở routes/data.js GET /. Đối tượng `data`/`versions` trả về được DÙNG CHUNG giữa nhiều request
+// đồng thời trong TTL — nơi gọi (routes/data.js) PHẢI shallow-clone `data` trước khi gán đè bất kỳ
+// property nào lên nó (vd `data.users = stripPasswords(...)`), tuyệt đối không sửa trực tiếp object trả
+// về ở đây hay các mảng bên trong nó, nếu không request khác đang đọc cùng cache sẽ thấy dữ liệu sai.
+async function getAllAppDataWithVersionsCached() {
+  if (allDataCache && allDataCache.expiresAt > Date.now()) return allDataCache;
+  const pool = await getPool();
+  const result = await pool.request().query('SELECT DataKey, DataValue, UpdatedAt FROM dbo.AppData');
+  const data = {};
+  const versions = {};
+  for (const row of result.recordset) {
+    try {
+      data[row.DataKey] = JSON.parse(row.DataValue);
+      versions[row.DataKey] = row.UpdatedAt.toISOString();
+    } catch (e) {
+      console.error(`Lỗi parse JSON cho key "${row.DataKey}":`, e.message);
+      data[row.DataKey] = null;
+    }
+  }
+  allDataCache = { data, versions, expiresAt: Date.now() + CACHE_TTL_MS };
+  return allDataCache;
 }
 
 async function getAppDataValue(key) {
@@ -141,5 +173,6 @@ async function withLockedAppDataValue(key, mutatorFn) {
 
 module.exports = {
   getAppDataValue, getAppDataValueCached, getAppDataValueWithVersion, getAllAppData,
+  getAllAppDataWithVersionsCached,
   setAppDataValue, setAppDataValueIfVersionMatches, withLockedAppDataValue
 };

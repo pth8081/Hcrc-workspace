@@ -27,6 +27,25 @@ async function getAllTasks() {
   return result.recordset.map(toTask);
 }
 
+// Cache ngắn hạn TRONG BỘ NHỚ, chỉ dùng cho GET /api/data (routes/data.js) — cùng lý do/khuôn với
+// getAppDataValueCached() (lib/appData.js): nhiều người dùng khác nhau gọi gần như cùng lúc đều cần
+// y hệt danh sách Công việc RAW này trước khi lọc theo quyền xem riêng từng người (lib/recordViewScope.js
+// filterTasksForUser, chạy SAU bước này) — an toàn dùng chung. CHỈ dùng biến này ở đây, KHÔNG dùng cho
+// các route ghi/kiểm tra (routes/records.js...) — nơi đó cần dữ liệu mới nhất tuyệt đối.
+const TASKS_CACHE_TTL_MS = parseInt(process.env.APPDATA_CACHE_TTL_MS || '3000', 10);
+let tasksCache = null; // { value, expiresAt }
+
+function invalidateTasksCache() {
+  tasksCache = null;
+}
+
+async function getAllTasksCached() {
+  if (tasksCache && tasksCache.expiresAt > Date.now()) return tasksCache.value;
+  const value = await getAllTasks();
+  tasksCache = { value, expiresAt: Date.now() + TASKS_CACHE_TTL_MS };
+  return value;
+}
+
 // Chèn 1 Công việc MỚI — id đã được lib/recordActions.js sinh sẵn (Date.now()[+offset]), không phải
 // IDENTITY của bảng. Dùng cho cả tạo thủ công (createTask) lẫn tự động sinh từ chỉ đạo biên bản họp/
 // tờ trình (buildTasksFromDirectives/buildTaskFromSubmissionComment) — record đã được validate/build
@@ -46,6 +65,7 @@ async function insertTask(task) {
       INSERT INTO dbo.Tasks (Id, Status, AssignedTo, AssignedBy, SourceType, SourceCode, Payload)
       VALUES (@id, @status, @assignedTo, @assignedBy, @sourceType, @sourceCode, @payload);
     `);
+  invalidateTasksCache();
   return task;
 }
 
@@ -87,6 +107,7 @@ async function withLockedTaskById(id, mutatorFn) {
       `);
 
     await tx.commit();
+    invalidateTasksCache();
     return updated;
   } catch (err) {
     await tx.rollback().catch(() => {});
@@ -106,6 +127,7 @@ async function deleteTaskById(id, permissionCheckFn) {
   permissionCheckFn();
 
   await pool.request().input('id', sql.BigInt, id).query('DELETE FROM dbo.Tasks WHERE Id = @id');
+  invalidateTasksCache();
 }
 
 // Di chuyển dữ liệu cũ (nếu còn) từ AppData.tasks sang bảng Tasks — CHỈ chạy nếu bảng mới đang RỖNG
@@ -155,6 +177,6 @@ async function migrateDirectiveTaskLinks(minutesCode, migrations) {
 }
 
 module.exports = {
-  getAllTasks, insertTask, withLockedTaskById, deleteTaskById, migrateLegacyTasks,
+  getAllTasks, getAllTasksCached, insertTask, withLockedTaskById, deleteTaskById, migrateLegacyTasks,
   findTaskBySource, migrateDirectiveTaskLinks
 };

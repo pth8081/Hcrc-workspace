@@ -68,6 +68,7 @@ async function insertRecord(collection, record) {
     }
     throw err;
   }
+  invalidateCollectionCache(collection);
   return record;
 }
 
@@ -97,6 +98,7 @@ async function withLockedRecordById(collection, id, mutatorFn) {
       .query('UPDATE dbo.Records SET Code = @code, Payload = @payload WHERE Collection = @collection AND Id = @id');
 
     await tx.commit();
+    invalidateCollectionCache(collection);
     return updated;
   } catch (err) {
     await tx.rollback().catch(() => {});
@@ -131,6 +133,7 @@ async function deleteRecordById(collection, id, checkFn) {
       .query('DELETE FROM dbo.Records WHERE Collection = @collection AND Id = @id');
 
     await tx.commit();
+    invalidateCollectionCache(collection);
   } catch (err) {
     await tx.rollback().catch(() => {});
     throw err;
@@ -173,6 +176,27 @@ async function migrateAllLegacyCollections() {
 async function getAllForCollection(collection) {
   if (MIGRATED_COLLECTIONS.has(collection)) return getAllRecords(collection);
   return (await getAppDataValue(collection)) || [];
+}
+
+// Cache ngắn hạn TRONG BỘ NHỚ theo TỪNG collection, chỉ dùng cho GET /api/data (routes/data.js) — cùng
+// khuôn getAppDataValueCached()/getAllTasksCached(): nhiều người dùng khác nhau gọi gần như cùng lúc
+// đều cần y hệt danh sách RAW của 1 collection trước khi lọc theo quyền xem riêng (lib/recordViewScope.js,
+// chạy SAU bước này) — an toàn dùng chung. CHỈ dùng ở routes/data.js, KHÔNG dùng cho các route ghi/kiểm
+// tra trùng lặp (routes/create.js, routes/workflow.js, routes/meetingActions.js...) — nơi đó cần đọc
+// mới nhất tuyệt đối để chặn đúng race (trùng mã, trùng khung giờ...).
+const RECORDS_CACHE_TTL_MS = parseInt(process.env.APPDATA_CACHE_TTL_MS || '3000', 10);
+const collectionCache = new Map(); // collection -> { value, expiresAt }
+
+function invalidateCollectionCache(collection) {
+  collectionCache.delete(collection);
+}
+
+async function getAllForCollectionCached(collection) {
+  const hit = collectionCache.get(collection);
+  if (hit && hit.expiresAt > Date.now()) return hit.value;
+  const value = await getAllForCollection(collection);
+  collectionCache.set(collection, { value, expiresAt: Date.now() + RECORDS_CACHE_TTL_MS });
+  return value;
 }
 
 // builderFn(existingList) -> bản ghi mới (hoặc throw để huỷ, không tạo gì). Với collection ĐÃ migrate,
@@ -234,6 +258,7 @@ async function createForCollectionSerialized(collection, lockKey, builderFn) {
       .query('INSERT INTO dbo.Records (Collection, Id, Code, Payload) VALUES (@collection, @id, @code, @payload);');
 
     await tx.commit();
+    invalidateCollectionCache(collection);
     return record;
   } catch (err) {
     await tx.rollback().catch(() => {});
@@ -306,5 +331,5 @@ async function deleteRecordForCollection(collection, id, checkFn) {
 module.exports = {
   MIGRATED_COLLECTIONS,
   getAllRecords, insertRecord, withLockedRecordById, deleteRecordById, migrateLegacyCollection, migrateAllLegacyCollections,
-  getAllForCollection, createForCollection, createForCollectionSerialized, withAppLock, withLockedRecordForCollection, deleteRecordForCollection
+  getAllForCollection, getAllForCollectionCached, createForCollection, createForCollectionSerialized, withAppLock, withLockedRecordForCollection, deleteRecordForCollection
 };
