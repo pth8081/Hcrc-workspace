@@ -29,6 +29,14 @@ GO
 USE VPDT_DMS;
 GO
 
+-- UX_Records_Collection_Code bên dưới là INDEX LỌC (filtered index, "WHERE Code IS NOT NULL") — bắt
+-- buộc phiên làm việc phải bật QUOTED_IDENTIFIER, nếu không CREATE INDEX sẽ báo lỗi Msg 1934. Driver
+-- cũ (sqlcmd/ODBC) tự bật sẵn nên trước đây không phát hiện ra, nhưng sqlcmd18 (mssql-tools18, khuyến
+-- nghị dùng cho Ubuntu 22.04+ trong HUONG_DAN_DEPLOY_UBUNTU.md) không tự bật — đặt tường minh ở đây để
+-- chạy đúng với cả 2 phiên bản công cụ.
+SET QUOTED_IDENTIFIER ON;
+GO
+
 IF OBJECT_ID('dbo.AppData', 'U') IS NULL
 BEGIN
     CREATE TABLE dbo.AppData (
@@ -51,7 +59,7 @@ BEGIN
 END
 GO
 
-/* CẬP NHẬT: API /api/data/* giờ bắt buộc đăng nhập thật (xem routes/auth.js, lib/auth.js) — mật
+/* CẬP NHẬT: API /api/data (và các route con) giờ bắt buộc đăng nhập thật (xem routes/auth.js, lib/auth.js) — mật
    khẩu hash bằng bcrypt, phiên đăng nhập là JWT lưu trong cookie httpOnly. Không tạo bảng users
    riêng ở tầng DB: tài khoản nghiệp vụ vẫn là DB.users bên trong AppData (field "users") như thiết
    kế gốc, chỉ khác là server giờ tự xác thực/hash thay vì tin hoàn toàn vào client. */

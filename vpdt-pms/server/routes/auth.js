@@ -27,9 +27,19 @@ function toSafeUser(user) {
 // lớp khác nhau: lớp này chặn 1 IP tấn công nhiều tài khoản, lớp kia chặn ai đó kiên trì dò 1 tài
 // khoản cụ thể từ nhiều IP/chậm rãi). skipSuccessfulRequests: chỉ tính các lần đăng nhập THẤT BẠI vào
 // giới hạn — nhiều người dùng chung 1 máy đăng nhập đúng liên tục không bị vạ lây.
+// LƯU Ý (phát hiện qua load test 500 user đồng thời, tháng 8/2026): express-rate-limit tăng bộ đếm
+// NGAY khi request tới, chỉ trừ lại (nhờ skipSuccessfulRequests) SAU KHI response hoàn tất — nên khi
+// nhiều người dùng THẬT SỰ khác nhau (mật khẩu đúng, không phải tấn công) cùng đăng nhập gần như đồng
+// thời từ CÙNG 1 địa chỉ IP (rất phổ biến: cả văn phòng ra Internet qua 1 NAT/proxy chung, ví dụ giờ
+// 8h sáng), bộ đếm có thể vượt ngưỡng trước khi các lần đăng nhập trước đó kịp được trừ lại — và một
+// khi đã vượt, MỌI lần đăng nhập tiếp theo từ IP đó bị chặn 429 trong suốt cả khung 15 phút, kể cả khi
+// dùng đúng mật khẩu. Với ngưỡng cũ (20) điều này xảy ra chỉ với vài chục người dùng chung IP. Nâng lên
+// đủ cao để chịu được cả công ty (nhiều trăm người) cùng IP đăng nhập dồn dập mà không tự khoá nhau —
+// lớp chống dò mật khẩu THẬT SỰ vẫn là khoá theo tài khoản ở lib/loginAttempts.js (khoá sau 5 lần sai
+// LIÊN TỤC, không phụ thuộc IP), ngưỡng ở đây chỉ cần đủ để chặn lũ quét/DoS thô, không cần thấp.
 const loginRateLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  limit: 20,
+  limit: 2000,
   standardHeaders: true,
   legacyHeaders: false,
   skipSuccessfulRequests: true,
