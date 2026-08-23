@@ -288,6 +288,47 @@ có thể tạm đặt `COOKIE_SECURE=false` — nhưng khi đó phiên đăng n
 JWT) đi dạng cleartext trên mạng, **không nên dùng cấu hình này khi đã có dữ
 liệu thật của nhân viên**.
 
+### 8.1. Cài đặt fail2ban (khuyến nghị khi mở ra Internet công khai)
+
+Ứng dụng đã tự chặn dò mật khẩu ở tầng của mình (rate-limit + khoá tài khoản,
+xem mục 9.1), nhưng mỗi lượt vẫn phải đi hết qua Nginx + Node trước khi bị
+từ chối. fail2ban thêm 1 lớp CHẶN Ở FIREWALL — đọc log truy cập Nginx, phát
+hiện 1 địa chỉ IP có hành vi bất thường lặp lại (đăng nhập sai nhiều lần,
+hoặc bị chính ứng dụng trả về 429 quá nhiều lần) thì cấm hẳn IP đó kết nối
+tới server trong 1 khoảng thời gian — đỡ tải cho tầng ứng dụng, đồng thời
+gây khó hơn cho công cụ dò quét tự động so với chỉ bị "từ chối nhẹ nhàng".
+
+```bash
+sudo apt-get install -y fail2ban
+```
+
+Repo đã có sẵn 2 bộ lọc + cấu hình jail mẫu tại `deploy/fail2ban/` — chỉ cần
+copy sang đúng thư mục fail2ban đọc:
+
+```bash
+sudo cp deploy/fail2ban/filter.d/vpdt-login.conf     /etc/fail2ban/filter.d/
+sudo cp deploy/fail2ban/filter.d/vpdt-ratelimit.conf /etc/fail2ban/filter.d/
+sudo cp deploy/fail2ban/jail.d/vpdt.conf             /etc/fail2ban/jail.d/
+sudo systemctl restart fail2ban
+```
+
+Kiểm tra đã chạy đúng:
+```bash
+sudo fail2ban-client status vpdt-login
+sudo fail2ban-client status vpdt-ratelimit
+```
+
+Ngưỡng mặc định trong `deploy/fail2ban/jail.d/vpdt.conf` (10 lần đăng nhập
+sai hoặc 15 lần bị 429 trong 10 phút thì cấm 1 giờ) là điểm khởi đầu hợp lý
+— chỉnh trực tiếp file này (`maxretry`/`findtime`/`bantime`) theo thực tế
+lưu lượng của công ty bạn nếu cần, không cần sửa gì ở code ứng dụng.
+
+> Lưu ý: nếu server của bạn còn đứng sau 1 lớp proxy/CDN khác nữa (ví dụ
+> Cloudflare) TRƯỚC Nginx, `$remote_addr` trong log Nginx sẽ là IP của lớp
+> đó chứ không phải IP người dùng thật — cần cấu hình Nginx `real_ip_header`
+> tương ứng trước khi fail2ban chặn đúng IP. Không áp dụng cho kiến trúc mặc
+> định ở mục 8 (Nginx là lớp nhận traffic Internet đầu tiên).
+
 ---
 
 ## 9. Tình trạng bảo mật hiện tại và các việc cần làm trước khi public
