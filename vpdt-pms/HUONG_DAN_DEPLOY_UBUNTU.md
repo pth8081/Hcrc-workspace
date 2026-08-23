@@ -389,11 +389,51 @@ Dùng cho giám sát (uptime monitor, script cron cảnh báo qua email/Zalo n�
 
 ## 11. Cập nhật code sau này
 
+**Chỉ copy code + `pm2 restart` là đủ CHỈ KHI** bản cập nhật không đổi gì
+ngoài code (đa số các lần sửa giao diện/tính năng nhỏ là vậy). Với bản cập
+nhật lớn hơn — đặc biệt khi máy chủ đã lâu chưa cập nhật (bỏ qua nhiều phiên
+bản) — cần kiểm tra thêm 3 chỗ sau trước khi restart, vì code mới có thể yêu
+cầu:
+
+1. **`server/sql/schema.sql` đổi** — bảng/cột/index mới, hoặc sửa lỗi trong
+   chính script này. An toàn chạy lại nhiều lần (mọi thay đổi đều bọc trong
+   `IF OBJECT_ID(...) IS NULL`), nhưng **PHẢI chạy lại** nếu file này có thay
+   đổi so với bản đang chạy, nếu không tính năng mới liên quan sẽ lỗi ngay khi
+   dùng (thiếu bảng/cột/index).
+2. **`server/.env.example` đổi** — biến môi trường mới hoặc đổi ý nghĩa. Một
+   số biến bắt buộc để server khởi động được (như `JWT_SECRET`), số khác chỉ
+   cần khi dùng đúng tính năng liên quan (ví dụ `EMAIL_ENCRYPTION_KEY` chỉ cần
+   nếu dùng màn Cấu Hình Email trên web). So sánh `.env.example` mới với
+   `.env` hiện tại của bạn (`diff .env server/.env.example` sau khi copy code
+   mới) để biết biến nào cần thêm.
+3. **`server/package.json` đổi `dependencies`** — cần chạy lại `npm install`
+   trong thư mục `server/` trước khi restart, nếu không server có thể báo lỗi
+   "Cannot find module" ngay khi khởi động.
+
+**Quy trình cập nhật đầy đủ, an toàn cho mọi trường hợp:**
+
 ```bash
+# 0. Backup CSDL trước (luôn làm, kể cả khi tưởng chỉ đổi code)
+sqlcmd -S localhost -U sa -Q "BACKUP DATABASE VPDT_DMS TO DISK = '/var/backups/vpdt_$(date +%F).bak'"
+
 cd /opt/vpdt
-# copy file public/index.html hoặc code backend mới đè lên
+# 1. Lấy code mới (git pull hoặc copy đè)
+
+cd server
+# 2. Cài lại dependency (vô hại nếu không có gói mới)
+npm install
+
+# 3. Chạy lại schema.sql — an toàn chạy nhiều lần
+sqlcmd -S localhost -U sa -i sql/schema.sql
+# (dùng sqlcmd18 nếu Ubuntu 22.04+, xem mục 3)
+
+# 4. Xem có biến .env mới cần thêm không
+diff .env .env.example
+
+# 5. Khởi động lại
 pm2 restart vpdt
 ```
 
 Vì toàn bộ dữ liệu đã nằm trong SQL Server (không còn trong trình duyệt), việc
-cập nhật giao diện/code **không làm mất dữ liệu người dùng đã nhập**.
+cập nhật giao diện/code **không làm mất dữ liệu người dùng đã nhập** — kể cả
+khi có chạy lại `schema.sql` (script chỉ thêm mới, không xoá/ghi đè dữ liệu).
