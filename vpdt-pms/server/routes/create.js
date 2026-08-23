@@ -6,7 +6,7 @@ const router = express.Router();
 const { getAllAppData } = require('../lib/appData');
 const { requireAuth, blockIfMustChangePassword } = require('../lib/auth');
 const { CREATE_MODULE_CONFIGS, CreateError, validateAndPrepareCreate } = require('../lib/createValidation');
-const { createForCollection, createForCollectionSerialized, getAllForCollection } = require('../lib/recordStore');
+const { createForCollection, createForCollectionSerialized, getAllForCollection, withAppLock } = require('../lib/recordStore');
 
 router.use(requireAuth, blockIfMustChangePassword);
 
@@ -41,12 +41,24 @@ router.post('/:module', async (req, res) => {
 
     const config = CREATE_MODULE_CONFIGS[moduleKey];
     const builderFn = (list) => validateAndPrepareCreate(moduleKey, req.body, freshUser, list, appData);
+    // docs (version mới)/contracts (phụ lục mới): khoá theo ID GỐC của cả "họ" — cùng khoá mà
+    // routes/records.js dùng khi XOÁ family này (doc_family:<rootDocId>/contract_family:<rootContractId>)
+    // — trước đây tạo version/phụ lục mới chỉ tự kiểm tra root còn tồn tại tại thời điểm đọc mà không
+    // khoá gì, có thể đan xen với 1 lượt xoá root đang chạy song song: root bị xoá xong đúng lúc version
+    // mới vừa ghi xong với rootDocId trỏ vào id đã không còn tồn tại — mồ côi vĩnh viễn, không xoá/sửa
+    // tiếp được (xem đầu file lib/recordActions.js hoặc báo cáo audit). Việc khoá đảm bảo 1 trong 2 phía
+    // luôn chờ phía kia hoàn tất trước khi đọc lại trạng thái mới nhất.
+    const familyLockKey = moduleKey === 'docs' && req.body?.rootDocId != null ? `doc_family:${req.body.rootDocId}`
+      : moduleKey === 'contracts' && req.body?.rootContractId != null ? `contract_family:${req.body.rootContractId}`
+      : null;
     // meetings: điều kiện trùng lặp là khoảng thời gian chồng lấn (không diễn đạt được bằng UNIQUE
     // INDEX như Code) — dùng đường khoá nghiêm túc theo phòng họp thay vì createForCollection() thường
     // (xem lib/createValidation.js CREATE_MODULE_CONFIGS.meetings.getLockKey +
     // lib/recordStore.js createForCollectionSerialized).
     const record = config.getLockKey
       ? await createForCollectionSerialized(config.dbKey, config.getLockKey(req.body, freshUser), builderFn)
+      : familyLockKey
+      ? await withAppLock(familyLockKey, () => createForCollection(config.dbKey, builderFn))
       : await createForCollection(config.dbKey, builderFn);
 
     res.json({ ok: true, item: record });

@@ -9,7 +9,7 @@
 // họp thêm cờ minutesEdit (toàn công ty, không theo phòng ban) cho SỬA — riêng XÓA là quyền tối cao,
 // chỉ Admin; Công việc theo NGƯỜI (assignedBy/assignee), hoàn toàn không có khái niệm phòng ban.
 const { HttpError } = require('./httpErrors');
-const { scopeAllows, OFFICE_SUBTYPE_TO_PERM_FLAG, normalizeReportEntryPayload } = require('./createValidation');
+const { scopeAllows, OFFICE_SUBTYPE_TO_PERM_FLAG, normalizeReportEntryPayload, buildEffectiveContractApprovalWorkflowServer } = require('./createValidation');
 const { validateRegistrationItems: validateVppRegItems } = require('./vppCatalog');
 
 function nowVN() {
@@ -23,7 +23,9 @@ const CONTRACT_EDITABLE_FIELDS = ['dept', 'type', 'title', 'partner', 'amount', 
 
 // hasAddenda: caller (routes/records.js) tự tra collection để biết hợp đồng gốc này đã có phụ lục
 // nào kế thừa dept của nó hay chưa — file này không tự đọc DB (giữ đúng nguyên tắc cũ, xem đầu file).
-function editContract(payload, user, contract, hasAddenda, rootDept) {
+// appData: caller tự đọc sẵn (workflows/contractApprovalDeptWorkflows/contractApprovalGroups) để dựng
+// lại effectiveSteps/effectiveApprovers khi đổi dept — xem giải thích ở khối kiểm tra deptChanged bên dưới.
+function editContract(payload, user, contract, hasAddenda, rootDept, appData) {
   // Khớp đúng luật cũ ở client (openEditContract/updateContractReq): CHỈ người tạo mới sửa được, kể
   // cả admin cũng không có ngoại lệ — không mở rộng quyền so với hành vi trước Bước 2b.
   if (contract.creator !== user.username) {
@@ -40,6 +42,12 @@ function editContract(payload, user, contract, hasAddenda, rootDept) {
   // Phụ lục kế thừa dept của hợp đồng gốc lúc tạo (xem createValidation.js contracts.extraValidate) —
   // đổi dept của hợp đồng gốc sau khi đã có phụ lục sẽ phá vỡ ràng buộc "phụ lục cùng phòng ban với
   // gốc", ảnh hưởng tới mọi chỗ lọc quyền theo phòng ban của phụ lục đó.
+  // Lưu ý: về mặt runtime, nhánh này hiện luôn KHÔNG bao giờ tới lượt chạy — phụ lục chỉ được tạo khi
+  // root.approvalStatus === 'APPROVED' (createValidation.js), và contracts không có đường quay lại
+  // DRAFT/REJECTED sau khi đã APPROVED (không có REQUEST_CHANGES) — nên hasAddenda === true kéo theo
+  // contract.approvalStatus luôn là 'APPROVED', bị chặn sớm hơn bởi khối kiểm tra APPROVED ở trên. Giữ
+  // lại như lớp phòng vệ dự phòng (không phải lỗi) — nếu sau này contracts có thêm đường đưa hợp đồng
+  // APPROVED quay lại sửa được (VD REQUEST_CHANGES), nhánh này mới thực sự phát huy tác dụng.
   if (!contract.isAddendum && hasAddenda && payload.dept !== undefined && payload.dept !== contract.dept) {
     throw new HttpError(409, 'Hợp đồng gốc đã có phụ lục — không thể đổi phòng ban');
   }
@@ -89,8 +97,23 @@ function editContract(payload, user, contract, hasAddenda, rootDept) {
   }
 
   const endDateChanged = typeof payload.endDate === 'string' && contract.endDate !== payload.endDate;
+  // Hợp đồng GỐC (chưa có phụ lục — đã chặn đổi dept khi CÓ phụ lục ở trên) được phép đổi dept, nhưng
+  // effectiveSteps/effectiveApprovers (người/bước duyệt thật) đã được snapshot 1 LẦN lúc tạo theo dept
+  // CŨ và resolveContractApprovalWorkflow() (workflowEngine.js) luôn ưu tiên dùng lại snapshot này nếu
+  // đã có — không có gì dựng lại theo dept MỚI, khiến hồ sơ mang dept mới nhưng vẫn được duyệt bởi
+  // người của phòng ban cũ. Dựng lại đúng như lúc TẠO (buildEffectiveContractApprovalWorkflowServer),
+  // giữ nguyên các lớp phê duyệt tuỳ chọn/người đã chọn trước đó (selectedApprovalLayers/
+  // selectedLayerMembers) và Cấp Phê Duyệt Cuối Cùng (approvalLevel) — chỉ đổi phần quy trình phòng ban.
+  const deptChanged = !contract.isAddendum && payload.dept !== undefined && payload.dept !== contract.dept;
   for (const field of CONTRACT_EDITABLE_FIELDS) {
     if (payload[field] !== undefined) contract[field] = payload[field];
+  }
+  if (deptChanged && appData) {
+    const effectiveWf = buildEffectiveContractApprovalWorkflowServer(
+      contract.dept, contract.selectedApprovalLayers, contract.selectedLayerMembers, appData, contract.approvalLevel
+    );
+    contract.effectiveSteps = effectiveWf.steps;
+    contract.effectiveApprovers = effectiveWf.approvers;
   }
   if (!contract.isAddendum && payload.paymentInstallments !== undefined) {
     contract.paymentInstallments = payload.paymentInstallments;
@@ -110,6 +133,13 @@ function editContract(payload, user, contract, hasAddenda, rootDept) {
   // xong thì coi như nộp lại từ đầu quy trình duyệt (currentStep=1), khớp đúng hành vi resubmit-from-
   // scratch mà REQUEST_CHANGES đã dùng cho các module khác (xem lib/workflowEngine.js).
   if (contract.approvalStatus === 'REJECTED' || contract.approvalStatus === 'DRAFT') {
+    // Mọi lượt "APPROVED" đã ghi ở vòng nộp TRƯỚC (VD bước 1 có 2 đồng duyệt, 1 người đã duyệt trước
+    // khi người kia từ chối) không còn giá trị cho vòng MỚI vì nội dung đã sửa — đánh dấu invalidated
+    // giống hệt cách REQUEST_CHANGES đã làm cho vpp/submissions (xem workflowEngine.js) để
+    // getStepApprovedUsernames()/canApproveStep() không tính nhầm là "đã duyệt bước này rồi" (kẹt hồ
+    // sơ vĩnh viễn) hoặc coi phê duyệt CŨ (chưa từng thấy nội dung đã sửa) vẫn còn hiệu lực cho bước 1
+    // của vòng MỚI (bỏ qua bước duyệt).
+    (contract.history || []).forEach(h => { if (h.action === 'APPROVED') h.invalidated = true; });
     contract.approvalStatus = 'PENDING';
     contract.currentStep = 1;
   }
@@ -361,6 +391,18 @@ function editMinutes(payload, user, minutes) {
       if (next.content !== old.content || next.assignedToAttendeeId !== old.assignedToAttendeeId) {
         throw new HttpError(409, 'Không thể sửa nội dung/người thực hiện của dòng chỉ đạo đã giao việc');
       }
+      // buildTasksFromDirectives() (đã dùng để tạo Task từ CHÍNH dòng chỉ đạo này) cũng lấy cả deadline
+      // lẫn collaboratorAttendeeIds để gán vào Task — guard cũ chỉ chặn content/assignedToAttendeeId
+      // (2/4 field thực sự ảnh hưởng tới Task đã tạo), để lọt sửa hạn/người phối hợp khiến Biên bản họp
+      // và Công Việc thật lệch nhau vĩnh viễn (không có cơ chế đồng bộ lại, đúng như comment phía trên).
+      if (next.deadline !== old.deadline) {
+        throw new HttpError(409, 'Không thể sửa hạn hoàn thành của dòng chỉ đạo đã giao việc');
+      }
+      const oldCollab = JSON.stringify([...(old.collaboratorAttendeeIds || [])].sort());
+      const nextCollab = JSON.stringify([...(next.collaboratorAttendeeIds || [])].sort());
+      if (oldCollab !== nextCollab) {
+        throw new HttpError(409, 'Không thể sửa người phối hợp của dòng chỉ đạo đã giao việc');
+      }
       // Chỉ đạo lần đầu được bù id ổn định (old.id null -> next.id có giá trị) trong khi ĐÃ có Công Việc
       // tham chiếu theo VỊ TRÍ cũ -> phải viết lại Task.sourceDirectiveId sang id mới (xem
       // migrateDirectiveTaskLinks() ở lib/taskStore.js, route gọi ngay sau khi lưu biên bản thành công).
@@ -385,6 +427,14 @@ function editMinutes(payload, user, minutes) {
 function assertCanDeleteMinutes(user, minutes) {
   if (!canDeleteMinutes(user, minutes)) {
     throw new HttpError(403, 'Bạn không có quyền xóa biên bản họp này');
+  }
+  // Biên bản đã "Giao việc" đã sinh Task thật (sourceType='MEETING_MINUTES', sourceCode=mã biên bản
+  // này) — xoá biên bản không cascade các Task đó, để lại mồ côi vĩnh viễn (không còn "Xem chi tiết"
+  // trỏ về nguồn); nghiêm trọng hơn, vì createMinutes() chỉ kiểm tra trùng mã trong collection HIỆN CÓ,
+  // xoá xong cho phép tạo lại 1 biên bản KHÁC dùng đúng mã cũ — Task mồ côi có thể bị hiển thị/liên kết
+  // nhầm sang biên bản mới không liên quan (so khớp theo sourceCode === m.code + sourceDirectiveId).
+  if (minutes.tasksAssigned) {
+    throw new HttpError(409, 'Biên bản này đã giao việc (đã sinh Công Việc thật) — không thể xoá');
   }
 }
 
@@ -956,6 +1006,9 @@ function requestExtension(payload, user, task) {
   if (task.status === 'DONE' || task.status === 'CANCELLED') {
     throw new HttpError(409, 'Công việc đã Hoàn thành/Đã huỷ — không thể xin gia hạn');
   }
+  if (task.pendingCancellation) {
+    throw new HttpError(409, 'Công việc đang có 1 yêu cầu huỷ chờ duyệt — không thể xin gia hạn lúc này');
+  }
   const newDeadline = payload?.newDeadline;
   const reason = payload?.reason;
   if (!newDeadline) throw new HttpError(400, 'Vui lòng chọn hạn hoàn thành mới!');
@@ -984,9 +1037,18 @@ function cancelOrRequestCancelTask(payload, user, task) {
 
   task.history = Array.isArray(task.history) ? task.history : [];
   if (isAssignerOrAdmin) {
+    // Huỷ có hiệu lực NGAY — dọn sạch mọi yêu cầu gia hạn/huỷ đang chờ (nếu có) vì công việc đã đóng,
+    // không còn gì để duyệt/từ chối nữa. Trước đây không xoá, khiến nút "Duyệt gia hạn"/"Duyệt huỷ" vẫn
+    // hiện cho người giao việc trên 1 công việc đã CANCELLED — duyệt được thì đổi deadline/tăng
+    // extensionCount trên công việc đã kết thúc, phá vỡ giả định "CANCELLED là trạng thái kết thúc".
+    task.pendingExtension = null;
+    task.pendingCancellation = null;
     task.status = 'CANCELLED';
     task.history.push({ action: 'CANCELLED', by: user.username, byName: user.name, time: nowVN(), note: reason });
   } else {
+    if (task.pendingExtension) {
+      throw new HttpError(409, 'Công việc đang có 1 yêu cầu gia hạn chờ duyệt — không thể xin huỷ lúc này');
+    }
     task.pendingCancellation = { reason, requestedBy: user.username, requestedByName: user.name, requestedAt: nowVN() };
     task.history.push({ action: 'CANCEL_REQUESTED', by: user.username, byName: user.name, time: nowVN(), note: reason });
   }
@@ -1018,6 +1080,9 @@ const PENDING_TASK_CONFIGS = {
     rejectedAction: 'CANCEL_REJECTED',
     applyApprove: (task, p) => {
       task.status = 'CANCELLED';
+      // Đồng ý huỷ = công việc đóng lại — dọn nốt yêu cầu gia hạn đang chờ (nếu có, xem giải thích ở
+      // cancelOrRequestCancelTask()) để không còn "Duyệt gia hạn" nào treo trên công việc đã CANCELLED.
+      task.pendingExtension = null;
       return `Đồng ý huỷ theo yêu cầu của ${p.requestedByName}. Lý do: ${p.reason}`;
     },
     rejectedNote: (p) => `Từ chối yêu cầu huỷ. Lý do xin huỷ: ${p.reason}`
@@ -1030,6 +1095,14 @@ function resolvePendingTaskAction(kind, verb, user, task) {
   if (!pending) throw new HttpError(404, 'Không tìm thấy yêu cầu đang chờ duyệt');
   if (!(task.assignedBy === user.username || user.perms?.admin)) {
     throw new HttpError(403, config.resolveErrorMsg);
+  }
+  // Công việc có thể đã bị huỷ trực tiếp (isAssignerOrAdmin, xem cancelOrRequestCancelTask()) SAU khi
+  // yêu cầu này được gửi nhưng TRƯỚC khi được duyệt/từ chối — trước đây không kiểm tra, cho phép duyệt
+  // gia hạn (đổi deadline/tăng extensionCount) trên 1 công việc đã CANCELLED. Nhánh này thực ra hiếm khi
+  // chạy tới vì cancelOrRequestCancelTask() giờ đã tự dọn pendingExtension/pendingCancellation khi huỷ
+  // trực tiếp — vẫn giữ lại như lớp phòng vệ thứ 2 phòng trường hợp task.status bị đổi qua đường khác.
+  if (task.status === 'DONE' || task.status === 'CANCELLED') {
+    throw new HttpError(409, 'Công việc đã Hoàn thành/Đã huỷ — không còn yêu cầu nào để xử lý');
   }
 
   task.history = Array.isArray(task.history) ? task.history : [];

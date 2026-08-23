@@ -17,7 +17,7 @@ const { sendServerError } = require('../lib/errorResponse');
 const {
   filterDocsForUser, filterSubmissionsForUser, filterInternalPostsForUser, sanitizeReportPeriodsForUser,
   filterReportEntriesForUser, filterContractsForUser, filterCarRegsForUser, filterOfficeReqsForUser,
-  filterMeetingsForUser, filterMeetingMinutesForUser
+  filterMeetingsForUser, filterMeetingMinutesForUser, filterTasksForUser
 } = require('../lib/recordViewScope');
 
 const VALID_KEYS = new Set(Object.keys(DEFAULTS));
@@ -306,6 +306,10 @@ router.get('/', async (req, res) => {
     if (data.officeReqs) data.officeReqs = filterOfficeReqsForUser(data.officeReqs, req.freshUser, data);
     if (data.meetings) data.meetings = filterMeetingsForUser(data.meetings, req.freshUser);
     if (data.meetingMinutes) data.meetingMinutes = filterMeetingMinutesForUser(data.meetingMinutes, req.freshUser);
+    // tasks: cùng dạng lỗ hổng như 9 collection ở trên — trước đây hoàn toàn KHÔNG được lọc lại ở
+    // server (chỉ ẩn ở renderTasks() qua canViewTaskRecord()), để lộ toàn bộ Công Việc công ty (kể cả
+    // nội dung "Ý kiến chỉ đạo" nhạy cảm) cho bất kỳ ai gọi thẳng GET /api/data.
+    if (data.tasks) data.tasks = filterTasksForUser(data.tasks, req.freshUser);
 
     data._versions = versions;
     res.json(data);

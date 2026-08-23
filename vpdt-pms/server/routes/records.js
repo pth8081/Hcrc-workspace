@@ -7,7 +7,8 @@ const { requireAuth, blockIfMustChangePassword } = require('../lib/auth');
 const { HttpError } = require('../lib/httpErrors');
 const recordActions = require('../lib/recordActions');
 const { insertTask, withLockedTaskById, deleteTaskById, getAllTasks, migrateDirectiveTaskLinks } = require('../lib/taskStore');
-const { createForCollection, withLockedRecordForCollection, deleteRecordForCollection, getAllForCollection } = require('../lib/recordStore');
+const { createForCollection, withLockedRecordForCollection, deleteRecordForCollection, getAllForCollection, withAppLock } = require('../lib/recordStore');
+const { getAllAppData } = require('../lib/appData');
 
 router.use(requireAuth, blockIfMustChangePassword);
 
@@ -36,8 +37,11 @@ router.post('/contracts/:id/edit', async (req, res) => {
     const rootDept = thisRecord && thisRecord.isAddendum
       ? (allContracts.find(c => c.id === thisRecord.rootContractId) || {}).dept
       : undefined;
+    // Chỉ cần đọc AppData khi thực sự có khả năng đổi dept (hợp đồng gốc, không phải phụ lục) — dùng để
+    // dựng lại effectiveSteps/effectiveApprovers nếu dept đổi (xem lib/recordActions.js editContract()).
+    const appData = (thisRecord && !thisRecord.isAddendum) ? await getAllAppData() : null;
     const result = await withLockedRecordForCollection('contracts', itemId, (item) =>
-      recordActions.editContract(req.body, freshUser, item, hasAddenda, rootDept)
+      recordActions.editContract(req.body, freshUser, item, hasAddenda, rootDept, appData)
     );
     res.json({ ok: true, item: result });
   } catch (err) {
@@ -457,15 +461,25 @@ router.post('/docs/:id/delete', async (req, res) => {
   try {
     const { freshUser } = await getFreshUser(req);
     assertAdminForDelete(freshUser);
-    const docs = await getAllForCollection('docs');
-    const target = docs.find(d => d.id === itemId);
-    if (!target) throw new HttpError(404, 'Không tìm thấy hồ sơ');
-    const memberIds = target.rootDocId == null
-      ? docs.filter(d => d.id === itemId || d.rootDocId === itemId).map(d => d.id)
-      : [itemId];
-    for (const id of memberIds) {
-      await deleteRecordForCollection('docs', id, () => assertAdminForDelete(freshUser));
-    }
+    const preDocs = await getAllForCollection('docs');
+    const preTarget = preDocs.find(d => d.id === itemId);
+    if (!preTarget) throw new HttpError(404, 'Không tìm thấy hồ sơ');
+    // Khoá theo ID GỐC của cả "họ" (không phải id đang xoá) — CÙNG khoá mà routes/create.js dùng khi
+    // tạo version mới (doc_family:<rootDocId>) — chặn race giữa "tạo version mới" và "xoá cả family"
+    // chạy đan xen (xem giải thích ở routes/create.js). Đọc lại family BÊN TRONG khoá để cascade đúng
+    // theo trạng thái mới nhất, kể cả khi có 1 version vừa được tạo xong ngay trước khi giành được khoá.
+    const familyRootId = preTarget.rootDocId == null ? itemId : preTarget.rootDocId;
+    await withAppLock(`doc_family:${familyRootId}`, async () => {
+      const docs = await getAllForCollection('docs');
+      const target = docs.find(d => d.id === itemId);
+      if (!target) throw new HttpError(404, 'Không tìm thấy hồ sơ');
+      const memberIds = target.rootDocId == null
+        ? docs.filter(d => d.id === itemId || d.rootDocId === itemId).map(d => d.id)
+        : [itemId];
+      for (const id of memberIds) {
+        await deleteRecordForCollection('docs', id, () => assertAdminForDelete(freshUser));
+      }
+    });
     res.json({ ok: true });
   } catch (err) {
     handleError(res, `docs/${req.params.id}/delete`, err);
@@ -481,15 +495,24 @@ router.post('/contracts/:id/delete', async (req, res) => {
   try {
     const { freshUser } = await getFreshUser(req);
     assertAdminForDelete(freshUser);
-    const contracts = await getAllForCollection('contracts');
-    const target = contracts.find(c => c.id === itemId);
-    if (!target) throw new HttpError(404, 'Không tìm thấy hồ sơ');
-    const memberIds = !target.isAddendum
-      ? contracts.filter(c => c.id === itemId || c.rootContractId === itemId).map(c => c.id)
-      : [itemId];
-    for (const id of memberIds) {
-      await deleteRecordForCollection('contracts', id, () => assertAdminForDelete(freshUser));
-    }
+    const preContracts = await getAllForCollection('contracts');
+    const preTarget = preContracts.find(c => c.id === itemId);
+    if (!preTarget) throw new HttpError(404, 'Không tìm thấy hồ sơ');
+    // Cùng cơ chế/lý do với docs ở trên — khoá theo ID GỐC của cả family (khớp
+    // contract_family:<rootContractId> mà routes/create.js dùng khi tạo phụ lục mới), đọc lại family
+    // bên trong khoá để cascade đúng theo trạng thái mới nhất.
+    const familyRootId = preTarget.isAddendum ? preTarget.rootContractId : itemId;
+    await withAppLock(`contract_family:${familyRootId}`, async () => {
+      const contracts = await getAllForCollection('contracts');
+      const target = contracts.find(c => c.id === itemId);
+      if (!target) throw new HttpError(404, 'Không tìm thấy hồ sơ');
+      const memberIds = !target.isAddendum
+        ? contracts.filter(c => c.id === itemId || c.rootContractId === itemId).map(c => c.id)
+        : [itemId];
+      for (const id of memberIds) {
+        await deleteRecordForCollection('contracts', id, () => assertAdminForDelete(freshUser));
+      }
+    });
     res.json({ ok: true });
   } catch (err) {
     handleError(res, `contracts/${req.params.id}/delete`, err);

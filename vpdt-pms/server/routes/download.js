@@ -12,7 +12,7 @@ const fs = require('fs');
 const { PDFDocument, rgb } = require('pdf-lib');
 const fontkit = require('@pdf-lib/fontkit');
 const { getAllForCollection } = require('../lib/recordStore');
-const { canDownloadRecordFile } = require('../lib/recordViewScope');
+const { canDownloadRecordFile, canViewInternalPost } = require('../lib/recordViewScope');
 
 const router = express.Router();
 
@@ -23,13 +23,21 @@ const router = express.Router();
 // không có fileUrl nào đi qua /uploads/ để cần tra cứu ở route này (khớp đúng cơ chế "Tải phiếu" của
 // Công Việc, không phải file người dùng tự tải lên). Nếu file không thuộc các collection dưới đây (VD
 // bài truyền thông nội bộ) thì CHO PHÉP như trước (chưa rà logic canView riêng của module đó).
+//
+// internalPosts (Góc Chia Sẻ): KHÔNG dùng chung khuôn quyền tải theo phòng ban ở trên — bài PENDING/
+// REJECTED chỉ tác giả/admin/internalPostApprove được XEM (canViewInternalPost(), lib/recordViewScope.js,
+// dùng để lọc GET /api/data). Trước đây route này không tra tới internalPosts nên fileUrl của 1 bài
+// đang chờ duyệt/đã bị từ chối (không hề hiện trên giao diện với người khác) vẫn tải được nếu URL bị lộ
+// ra ngoài (dán vào chat, cache trình duyệt của người đã từng thấy...) — trả riêng owning = {internal:true,
+// post} để caller gọi canViewInternalPost() thay vì canDownloadRecordFile() (2 khuôn quyền khác nhau).
 async function findOwningRecord(fileUrl) {
-  const [docs, submissions, contracts, carRegs, officeReqs] = await Promise.all([
+  const [docs, submissions, contracts, carRegs, officeReqs, internalPosts] = await Promise.all([
     getAllForCollection('docs'),
     getAllForCollection('submissions'),
     getAllForCollection('contracts'),
     getAllForCollection('carRegs'),
-    getAllForCollection('officeReqs')
+    getAllForCollection('officeReqs'),
+    getAllForCollection('internalPosts')
   ]);
   const doc = (docs || []).find(d => d.fileUrl === fileUrl);
   if (doc) return { moduleKey: 'doc', dept: doc.dept, ownerUsername: doc.uploader };
@@ -41,6 +49,8 @@ async function findOwningRecord(fileUrl) {
   if (carReg) return { moduleKey: 'car', dept: carReg.dept, ownerUsername: carReg.creator };
   const officeReq = (officeReqs || []).find(o => o.fileUrl === fileUrl || o.signedFileUrl === fileUrl);
   if (officeReq) return { moduleKey: 'office', dept: officeReq.dept, ownerUsername: officeReq.creator };
+  const post = (internalPosts || []).find(p => p.attachment && p.attachment.fileUrl === fileUrl);
+  if (post) return { internal: true, post };
   return null;
 }
 const UPLOAD_DIR = path.join(__dirname, '..', 'uploads');
@@ -72,7 +82,10 @@ router.get('/', async (req, res) => {
   }
 
   const owning = await findOwningRecord(fileUrl);
-  if (owning && !canDownloadRecordFile(req.freshUser, owning.moduleKey, owning.dept, owning.ownerUsername)) {
+  if (owning && owning.internal && !canViewInternalPost(req.freshUser, owning.post)) {
+    return res.status(403).json({ error: 'Bạn không có quyền tải tệp này' });
+  }
+  if (owning && !owning.internal && !canDownloadRecordFile(req.freshUser, owning.moduleKey, owning.dept, owning.ownerUsername)) {
     return res.status(403).json({ error: 'Bạn không có quyền tải tệp này' });
   }
 
