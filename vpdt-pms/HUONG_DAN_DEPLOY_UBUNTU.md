@@ -411,6 +411,33 @@ TLS do CA nội bộ/công khai ký cho SQL Server rồi đổi `DB_TRUST_CERT=f
 — bước này phức tạp hơn (quản lý CA, gia hạn chứng chỉ định kỳ) nên không
 bắt buộc ở quy mô hiện tại, chỉ nêu để biết hướng nâng cấp sau này.
 
+### 9.5. Bật CAPTCHA chống bot ở trang đăng nhập (khuyến nghị khi mở ra Internet công khai)
+
+Áp dụng khi hệ thống không giới hạn truy cập qua VPN/whitelist IP (ai cũng
+vào được trang đăng nhập từ Internet) — lúc đó các lớp chống dò mật khẩu ở
+mục 9.1 (khoá theo IP/tài khoản) vẫn đứng vững, nhưng CAPTCHA chặn được bot
+**từ bước sớm hơn** (trước khi tốn tài nguyên xử lý đăng nhập), đồng thời
+gây khó cho các công cụ dò mật khẩu tự động hàng loạt.
+
+Dùng **Cloudflare Turnstile** (miễn phí, không giới hạn lượt dùng, không
+hiện quảng cáo/theo dõi người dùng như một số dịch vụ CAPTCHA khác):
+
+1. Vào https://dash.cloudflare.com/ → **Turnstile** (cần tài khoản Cloudflare,
+   không cần domain phải trỏ DNS qua Cloudflare).
+2. Tạo 1 site mới, điền domain thật của bạn (hoặc IP nếu chưa có domain).
+3. Sau khi tạo, Cloudflare cho 2 khoá — **Site Key** (công khai, dùng ở
+   trình duyệt) và **Secret Key** (bí mật, chỉ dùng ở server).
+4. Điền vào `.env`:
+   ```
+   TURNSTILE_SITE_KEY=<site key vừa lấy>
+   TURNSTILE_SECRET_KEY=<secret key vừa lấy>
+   ```
+5. `pm2 restart vpdt-server`. Mở lại trang đăng nhập — widget xác minh
+   "tôi không phải robot" sẽ tự hiện dưới ô mật khẩu.
+
+Không cấu hình (để trống, mặc định) thì trang đăng nhập hoạt động y như
+trước — không bắt buộc, chỉ khuyến nghị khi đã public hẳn ra Internet.
+
 ---
 
 ## 10. Kiểm tra sức khỏe hệ thống

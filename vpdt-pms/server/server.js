@@ -21,6 +21,7 @@ const emailRoutes = require('./routes/email');
 const vppCatalogRoutes = require('./routes/vppCatalog');
 const adminExportRoutes = require('./routes/adminExport');
 const downloadRoutes = require('./routes/download');
+const { isCaptchaEnabled } = require('./lib/captcha');
 const { checkContractExpiryReminders } = require('./jobs/contractExpiryReminder');
 
 const app = express();
@@ -178,6 +179,17 @@ app.get('/api/health', async (req, res) => {
       ...(isProd ? {} : { detail: err.message })
     });
   }
+});
+
+// Cấu hình công khai cho trang đăng nhập (KHÔNG cần xác thực — phải gọi được TRƯỚC khi đăng nhập).
+// TURNSTILE_SITE_KEY không phải bí mật (site key được thiết kế để nhúng thẳng vào HTML/JS phía trình
+// duyệt, khác với TURNSTILE_SECRET_KEY chỉ dùng ở server, xem lib/captcha.js) — an toàn khi trả ra đây.
+app.get('/api/public-config', (req, res) => {
+  const captchaEnabled = isCaptchaEnabled();
+  res.json({
+    captchaEnabled,
+    captchaSiteKey: captchaEnabled ? process.env.TURNSTILE_SITE_KEY : null
+  });
 });
 
 // Phục vụ frontend tĩnh (file index.html đã chuyển đổi sang gọi API thay vì localStorage)
