@@ -216,7 +216,7 @@ async function start() {
     // Nhắc hết hạn hợp đồng: kiểm tra ngay lúc khởi động, sau đó lặp lại mỗi 24h.
     // Không phụ thuộc việc có ai mở trình duyệt hay không.
     // CHỈ chạy ở 1 tiến trình khi deploy nhiều tiến trình (PM2 cluster mode, xem
-    // ecosystem.config.js/HUONG_DAN_DEPLOY_UBUNTU.md mục 9) — PM2 gán NODE_APP_INSTANCE=0,1,2...
+    // ecosystem.config.js/HUONG_DAN_DEPLOY_UBUNTU.md mục 9a) — PM2 gán NODE_APP_INSTANCE=0,1,2...
     // cho từng tiến trình trong cluster; không đặt biến này khi chạy 1 tiến trình (fork mode, mặc
     // định trước đây) nên vẫn chạy như cũ. Không chặn ở đây thì mỗi tiến trình đều tự lặp lại job này,
     // gửi trùng email nhắc hạn N lần (N = số tiến trình).

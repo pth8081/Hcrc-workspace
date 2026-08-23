@@ -22,13 +22,7 @@ Không giả định người dùng tự soát các file diff này — luôn li�
 minh trong phần tóm tắt, kể cả khi câu trả lời là "không cần làm gì thêm
 ngoài copy code".
 
-Quy trình cập nhật đầy đủ đã viết sẵn ở mục 11 `HUONG_DAN_DEPLOY_UBUNTU.md`
-(thư mục gốc) — trỏ người dùng tới đó thay vì lặp lại toàn bộ mỗi lần, chỉ
-nêu phần khác biệt cụ thể của lần cập nhật đang báo cáo.
-
-## Lưu ý khác
-
-- Có 2 bản `HUONG_DAN_DEPLOY_UBUNTU.md` trong repo (thư mục gốc và trong
-  `server/`) đã lệch nội dung — `README.md` trỏ tới bản ở thư mục gốc, coi
-  đó là bản canonical cho tới khi 2 bản được gộp lại (chưa làm, ngoài phạm vi
-  các thay đổi nhỏ lẻ).
+Quy trình cập nhật đầy đủ đã viết sẵn ở mục 12 `HUONG_DAN_DEPLOY_UBUNTU.md`
+(thư mục gốc, bản DUY NHẤT — đã gộp bản trùng lặp từng có trong `server/`) —
+trỏ người dùng tới đó thay vì lặp lại toàn bộ mỗi lần, chỉ nêu phần khác biệt
+cụ thể của lần cập nhật đang báo cáo.
