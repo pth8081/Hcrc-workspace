@@ -371,35 +371,30 @@ const CREATE_MODULE_CONFIGS = {
         // Tài liệu đã ký thật ngoài hệ thống, nhập tay để lưu — không cần qua bước duyệt tài liệu ký.
         payload.signedFileStatus = payload.signedFileUrl ? 'APPROVED' : null;
       } else {
-        // paymentInstallments chỉ áp dụng cho hợp đồng GỐC — uploadContractSignedFile()/
-        // startContractPayment() (2 hàm DUY NHẤT dẫn tới paymentRequests/paymentStatus, lib/recordActions.js)
-        // đều chặn thẳng contract.isAddendum, nên phụ lục khai + validate chặt đợt thanh toán ở đây
-        // trước đây tạo ra dữ liệu không bao giờ dùng tới được (không có đường nào để thực sự thanh
-        // toán) — ép luôn về mảng rỗng cho phụ lục, khớp đúng UI đã ẩn khối này cho ADDENDUM
-        // (onContractOpModeChange()) và Chi Tiết chỉ hiện lại cho !isAddendum.
-        if (payload.isAddendum) {
-          payload.paymentInstallments = [];
-        } else {
-          const rawInstallments = Array.isArray(payload.paymentInstallments) ? payload.paymentInstallments : [];
-          payload.paymentInstallments = rawInstallments.map(it => ({
-            description: (it?.description || '').trim(), amount: Number(it?.amount) || 0, dueDate: it?.dueDate || ''
-          }));
-          // Khớp buildPaymentInstallments()/confirmPaymentInstallment() ở lib/recordActions.js — khai
-          // đủ hết các đợt (confirmed=true) là hệ thống coi hợp đồng "Đã thanh toán" toàn bộ, nên tổng
-          // các đợt khai lúc tạo PHẢI khớp đúng giá trị hợp đồng, không thì có thể xác nhận "đã thanh
-          // toán xong" dù mới thu một phần nhỏ.
-          if (payload.paymentInstallments.length) {
-            // Trước đây chỉ kiểm tra TỔNG khớp giá trị hợp đồng — cho phép khai 1 đợt "khống" giá trị
-            // lớn và 1 đợt bù âm để tổng vẫn khớp, phá vỡ đúng mục đích của kiểm tra tổng (kế toán xác
-            // nhận riêng từng đợt, không xét dấu). Mỗi đợt phải dương thì tổng khớp mới thật sự có ý nghĩa.
-            if (payload.paymentInstallments.some(it => !(it.amount > 0))) {
-              throw new CreateError(400, 'Mỗi đợt thanh toán phải có số tiền lớn hơn 0');
-            }
-            const sum = payload.paymentInstallments.reduce((s, it) => s + it.amount, 0);
-            const total = Number(payload.amount) || 0;
-            if (Math.abs(sum - total) > 1) {
-              throw new CreateError(400, `Tổng các đợt thanh toán (${sum.toLocaleString('vi-VN')}) phải khớp với giá trị hợp đồng (${total.toLocaleString('vi-VN')})`);
-            }
+        // paymentInstallments áp dụng cho CẢ hợp đồng gốc lẫn phụ lục — phụ lục có thể phát sinh thanh
+        // toán riêng (VD bổ sung khối lượng/giá trị), khi đó "Xác nhận đề nghị thanh toán" sẽ hiện đúng
+        // 2 dòng tách biệt (mã hợp đồng gốc + mã phụ lục), theo dõi/xác nhận độc lập nhau (xem
+        // startContractPayment() ở lib/recordActions.js — sourceId/sourceCode luôn theo ĐÚNG bản ghi
+        // đang chuyển sang thanh toán, gốc hay phụ lục không khác gì nhau).
+        const rawInstallments = Array.isArray(payload.paymentInstallments) ? payload.paymentInstallments : [];
+        payload.paymentInstallments = rawInstallments.map(it => ({
+          description: (it?.description || '').trim(), amount: Number(it?.amount) || 0, dueDate: it?.dueDate || ''
+        }));
+        // Khớp buildPaymentInstallments()/confirmPaymentInstallment() ở lib/recordActions.js — khai
+        // đủ hết các đợt (confirmed=true) là hệ thống coi hợp đồng "Đã thanh toán" toàn bộ, nên tổng
+        // các đợt khai lúc tạo PHẢI khớp đúng giá trị hợp đồng, không thì có thể xác nhận "đã thanh
+        // toán xong" dù mới thu một phần nhỏ.
+        if (payload.paymentInstallments.length) {
+          // Trước đây chỉ kiểm tra TỔNG khớp giá trị hợp đồng — cho phép khai 1 đợt "khống" giá trị
+          // lớn và 1 đợt bù âm để tổng vẫn khớp, phá vỡ đúng mục đích của kiểm tra tổng (kế toán xác
+          // nhận riêng từng đợt, không xét dấu). Mỗi đợt phải dương thì tổng khớp mới thật sự có ý nghĩa.
+          if (payload.paymentInstallments.some(it => !(it.amount > 0))) {
+            throw new CreateError(400, 'Mỗi đợt thanh toán phải có số tiền lớn hơn 0');
+          }
+          const sum = payload.paymentInstallments.reduce((s, it) => s + it.amount, 0);
+          const total = Number(payload.amount) || 0;
+          if (Math.abs(sum - total) > 1) {
+            throw new CreateError(400, `Tổng các đợt thanh toán (${sum.toLocaleString('vi-VN')}) phải khớp với giá trị hợp đồng (${total.toLocaleString('vi-VN')})`);
           }
         }
         const effectiveWf = buildEffectiveContractApprovalWorkflowServer(
@@ -413,11 +408,10 @@ const CREATE_MODULE_CONFIGS = {
         payload.effectiveSteps = effectiveWf.steps;
         payload.effectiveApprovers = effectiveWf.approvers;
       }
-      if (!payload.isAddendum) {
-        // Hợp đồng nhập lại (đã ký sẵn ngoài hệ thống) coi như đã thanh toán từ trước — chỉ hồ sơ đi
-        // qua đúng luồng Phê Duyệt -> Quản Lý HĐ mới bắt đầu ở trạng thái chưa thanh toán.
-        payload.paymentStatus = isSignedImport ? 'DA_THANH_TOAN' : 'CHUA_THANH_TOAN';
-      }
+      // paymentStatus áp dụng cho CẢ hợp đồng gốc lẫn phụ lục (mỗi bản ghi theo dõi thanh toán độc lập
+      // của chính nó) — hồ sơ nhập lại (đã ký sẵn ngoài hệ thống) coi như đã thanh toán từ trước, chỉ hồ
+      // sơ đi qua đúng luồng Phê Duyệt -> Quản Lý HĐ mới bắt đầu ở trạng thái chưa thanh toán.
+      payload.paymentStatus = isSignedImport ? 'DA_THANH_TOAN' : 'CHUA_THANH_TOAN';
     }
   },
   meetings: {
