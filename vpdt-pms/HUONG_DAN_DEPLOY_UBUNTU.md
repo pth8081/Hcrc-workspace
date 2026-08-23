@@ -373,6 +373,44 @@ tục, các collection CẤU HÌNH còn ở `dbo.AppData` (đặc biệt "users"
 ty có hàng nghìn tài khoản) sẽ cần cân nhắc tách bảng tương tự — không cấp
 thiết ở quy mô vài trăm người dùng đã kiểm chứng ở trên.
 
+### 9.4. Bật mã hoá kết nối SQL Server (`DB_ENCRYPT=true`) khi app và DB tách máy/VLAN
+
+Áp dụng khi kiến trúc của bạn giống mô hình đã rà soát: máy chủ DB nằm sau
+firewall riêng, máy chủ app là phần cứng khác cũng sau firewall riêng, 2 máy
+ở 2 VLAN khác nhau, firewall chỉ cho phép app → DB kết nối tới đúng port
+1433. Đây KHÔNG còn là "1 phân đoạn mạng tin cậy duy nhất" như điều kiện
+chấp nhận `DB_ENCRYPT=false` nêu ở mục 5 — traffic đi qua firewall/router
+trung gian, dữ liệu (bao gồm mật khẩu SQL Server lúc xác thực) truyền ở dạng
+không mã hoá qua chặng đó nếu vẫn để `false`.
+
+**Không cần cài đặt gì thêm trên SQL Server** — SQL Server tự sinh sẵn 1
+chứng chỉ TLS self-signed ngay từ lần khởi động đầu tiên (không cần bật
+"Force Encryption" trong SQL Server Configuration Manager), driver `mssql`
+phía app chỉ cần chủ động yêu cầu mã hoá:
+
+1. Sửa `.env` trên máy chủ app:
+   ```
+   DB_ENCRYPT=true
+   DB_TRUST_CERT=true
+   ```
+   Giữ nguyên `DB_TRUST_CERT=true` — vì dùng chứng chỉ self-signed (không có
+   CA nào ký), driver cần được phép bỏ qua bước xác minh chuỗi chứng chỉ,
+   nếu không sẽ báo lỗi kết nối `self signed certificate`.
+2. `pm2 restart vpdt-server` (hoặc tên process bạn đặt ở mục 7).
+3. Kiểm tra log khởi động — dòng cảnh báo `⚠️ DB_ENCRYPT chưa bật...` (xem
+   `server/db.js`) phải biến mất, và vẫn thấy `✅ Đã kết nối SQL Server`.
+
+**Giới hạn cần biết**: cách trên mã hoá được đường truyền (chống nghe lén
+thụ động nếu ai đó chen được vào chặng firewall giữa 2 VLAN), nhưng KHÔNG
+xác thực được SQL Server có đúng là SQL Server thật hay không (không chống
+được tấn công chủ động kiểu man-in-the-middle giả làm SQL Server) — vì
+`DB_TRUST_CERT=true` bỏ qua bước xác minh CA. Với topology đã mô tả (firewall
+chỉ cho phép đúng 1 đường app → DB, không có thiết bị lạ chen giữa được),
+đây là đánh đổi hợp lý. Nếu muốn mã hoá + xác thực đầy đủ, cần cài chứng chỉ
+TLS do CA nội bộ/công khai ký cho SQL Server rồi đổi `DB_TRUST_CERT=false`
+— bước này phức tạp hơn (quản lý CA, gia hạn chứng chỉ định kỳ) nên không
+bắt buộc ở quy mô hiện tại, chỉ nêu để biết hướng nâng cấp sau này.
+
 ---
 
 ## 10. Kiểm tra sức khỏe hệ thống
