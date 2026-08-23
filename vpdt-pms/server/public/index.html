@@ -20364,7 +20364,10 @@ function rejectInternalPostAction(id) {
   window.renderWordProtected = async function(container, fileSrc) {
     container.innerHTML = '<div class="p-6 text-center text-gray-500 text-sm">⏳ Đang tải bộ xem Word...</div>';
     try {
-      await loadVendorScript('/vendor/mammoth/mammoth.browser.min.js');
+      await Promise.all([
+        loadVendorScript('/vendor/mammoth/mammoth.browser.min.js'),
+        loadVendorScript('/vendor/dompurify/purify.min.js')
+      ]);
       const res = await fetch(fileSrc);
       if (!res.ok) throw new Error('HTTP ' + res.status);
       const arrayBuffer = await res.arrayBuffer();
@@ -20374,7 +20377,9 @@ function rejectInternalPostAction(id) {
       const wrap = document.createElement('div');
       wrap.className = 'relative bg-white shadow-md rounded p-6 max-w-3xl mx-auto my-2 word-view-content';
       wrap.oncontextmenu = () => false;
-      wrap.innerHTML = result.value;
+      // HTML do mammoth sinh ra đọc trực tiếp từ nội dung .docx người dùng tải lên (kể cả href/src) —
+      // phải lọc qua DOMPurify trước khi gán innerHTML, không được coi là an toàn mặc định.
+      wrap.innerHTML = DOMPurify.sanitize(result.value);
       container.appendChild(wrap);
       wrap.appendChild(buildOfficeWatermarkOverlayEl());
     } catch (err) {
@@ -20411,7 +20416,8 @@ function rejectInternalPostAction(id) {
       await Promise.all([
         loadVendorScript('/vendor/mammoth/mammoth.browser.min.js'),
         loadVendorScript('/vendor/html2canvas/html2canvas.min.js'),
-        loadVendorScript('/vendor/jspdf/jspdf.umd.min.js')
+        loadVendorScript('/vendor/jspdf/jspdf.umd.min.js'),
+        loadVendorScript('/vendor/dompurify/purify.min.js')
       ]);
 
       const res = await fetch(info.fileSrc);
@@ -20422,7 +20428,8 @@ function rejectInternalPostAction(id) {
       const contentWidth = WORD_PDF_PAGE_W - WORD_PDF_MARGIN * 2;
       stage.className = 'word-view-content';
       stage.style.cssText = `position:fixed;left:-10000px;top:0;width:${contentWidth}px;background:#fff;color:#111;box-sizing:border-box;font-family:Arial,'Segoe UI',sans-serif;font-size:14px;line-height:1.5;`;
-      stage.innerHTML = result.value;
+      // Lọc qua DOMPurify trước khi gán innerHTML — xem giải thích ở renderWordProtected() phía trên.
+      stage.innerHTML = DOMPurify.sanitize(result.value);
       document.body.appendChild(stage);
 
       const imgs = Array.from(stage.querySelectorAll('img'));

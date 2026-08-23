@@ -149,6 +149,12 @@ app.use('/vendor/html2canvas', express.static(path.join(__dirname, 'node_modules
 app.use('/vendor/exceljs', express.static(path.join(__dirname, 'node_modules', 'exceljs', 'dist'), VENDOR_STATIC_OPTS));
 app.use('/vendor/mammoth', express.static(path.join(__dirname, 'node_modules', 'mammoth'), VENDOR_STATIC_OPTS));
 
+// Phục vụ DOMPurify — lọc HTML do mammoth.js sinh ra (đọc trực tiếp nội dung .docx người dùng tải lên)
+// trước khi gán vào innerHTML, chặn XSS nếu ai đó tải lên 1 file .docx được chế để chứa liên kết
+// javascript: hoặc thuộc tính sự kiện (onerror=...) trong nội dung. Đã có sẵn qua jspdf (transitive
+// dependency) nên khai báo thẳng làm dependency riêng cho rõ ràng, cùng cách làm với jszip ở dưới.
+app.use('/vendor/dompurify', express.static(path.join(__dirname, 'node_modules', 'dompurify', 'dist'), VENDOR_STATIC_OPTS));
+
 // Phục vụ JSZip (tự lưu trên server, không qua CDN — cùng lý do với các thư viện trên) — dùng để giải
 // nén file .pptx NGAY TRONG trình duyệt người nộp báo cáo lúc chọn tệp (parsePptxToSlideContents() ở
 // index.html, module Báo Cáo Định Kỳ) rồi đọc XML bên trong bằng DOMParser gốc của trình duyệt (không
