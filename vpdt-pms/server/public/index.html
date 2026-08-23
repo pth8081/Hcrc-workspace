@@ -261,6 +261,17 @@ table { display: block; overflow-x: auto; max-width: 100%; }
 .loginpage-btn:disabled { opacity: .65; cursor: not-allowed; transform: none; }
 .loginpage-btn svg { width: 16px; height: 16px; }
 
+.loginpage-captcha-row { display: flex; align-items: center; gap: 8px; margin-bottom: 9px; }
+.loginpage-captcha-img { flex: 1; border: 1.5px solid #e3e8f2; border-radius: 10px; overflow: hidden; line-height: 0; background: #eef0f7; }
+.loginpage-captcha-img svg { display: block; width: 100%; height: 44px; }
+.loginpage-captcha-refresh {
+  flex-shrink: 0; width: 40px; height: 44px; font-size: 17px; color: #4b5876;
+  background: #fff; border: 1.5px solid #e3e8f2; border-radius: 10px; cursor: pointer;
+  transition: border-color .15s ease, transform .15s ease;
+}
+.loginpage-captcha-refresh:hover { border-color: #38bdf8; }
+.loginpage-captcha-refresh:active { transform: rotate(90deg); }
+
 .loginpage-card-foot { margin-top: 24px; padding-top: 16px; border-top: 1px solid #eef1f8; font-size: 12.5px; color: #4b5876; text-align: center; line-height: 1.6; }
 </style>
 </head>
@@ -518,6 +529,20 @@ table { display: block; overflow-x: auto; max-width: 100%; }
             <div class="loginpage-input-wrap">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><rect x="5" y="10.5" width="14" height="9.5" rx="2"/><path d="M8 10.5V8a4 4 0 0 1 8 0v2.5"/></svg>
               <input id="txtPass" type="password" autocomplete="current-password" placeholder="••••••••">
+            </div>
+          </div>
+
+          <!-- CAPTCHA số tự vẽ trên server — chỉ hiện khi server bật CAPTCHA_ENABLED=true (xem
+               initCaptchaWidget() ở script cuối trang); nếu chưa bật thì trống, không ảnh hưởng gì tới
+               đăng nhập bình thường. -->
+          <div id="captchaField" class="loginpage-field hidden">
+            <label for="txtCaptcha">Mã xác nhận</label>
+            <div class="loginpage-captcha-row">
+              <span id="captchaImgWrap" class="loginpage-captcha-img"></span>
+              <button type="button" id="btnCaptchaRefresh" class="loginpage-captcha-refresh" title="Lấy mã khác" aria-label="Lấy mã khác" onclick="refreshCaptcha()">↻</button>
+            </div>
+            <div class="loginpage-input-wrap">
+              <input id="txtCaptcha" type="text" inputmode="numeric" autocomplete="off" placeholder="Nhập mã số trong ảnh">
             </div>
           </div>
 
@@ -6202,10 +6227,41 @@ async function changeMyApprovalPin() {
 }
 
 // --- ĐĂNG NHẬP & TABS ---
+
+// CAPTCHA số — chỉ bật khi server trả về challenge thật (đã bật CAPTCHA_ENABLED=true trong .env, xem
+// lib/captcha.js). GET /api/captcha trả 404 khi tắt -> captchaId giữ null, login() bỏ qua toàn bộ phần
+// CAPTCHA, hành vi giống hệt trước đây. Mã vẽ HOÀN TOÀN trên server (SVG), không gọi dịch vụ ngoài nào.
+let captchaId = null;
+
+async function refreshCaptcha() {
+  try {
+    const res = await fetch('/api/captcha');
+    if (res.status === 404) {
+      captchaId = null;
+      document.getElementById('captchaField').classList.add('hidden');
+      return;
+    }
+    const cfg = await res.json();
+    captchaId = cfg.captchaId;
+    document.getElementById('captchaImgWrap').innerHTML = cfg.svg;
+    document.getElementById('txtCaptcha').value = '';
+    document.getElementById('captchaField').classList.remove('hidden');
+  } catch (e) {
+    console.warn('Không tải được CAPTCHA:', e.message);
+  }
+}
+refreshCaptcha();
+
 async function login() {
   const u = document.getElementById('txtUser').value.trim();
   const p = document.getElementById('txtPass').value.trim();
   if (!u || !p) return alert('Vui lòng nhập tên đăng nhập và mật khẩu!');
+
+  let captchaAnswer;
+  if (captchaId) {
+    captchaAnswer = document.getElementById('txtCaptcha').value.trim();
+    if (!captchaAnswer) return alert('Vui lòng nhập mã xác nhận trong ảnh.');
+  }
 
   const btn = document.getElementById('btnLogin');
   if (btn) btn.disabled = true;
@@ -6214,7 +6270,7 @@ async function login() {
     const res = await fetch('/api/auth/login', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ username: u, password: p })
+      body: JSON.stringify({ username: u, password: p, captchaId, captchaAnswer })
     });
     if (!res.ok) {
       const body = await res.json().catch(() => ({}));
@@ -6225,6 +6281,9 @@ async function login() {
     return alert('⛔ Không thể kết nối tới máy chủ: ' + e.message);
   } finally {
     if (btn) btn.disabled = false;
+    // Mã CAPTCHA chỉ dùng được 1 lần (dù đúng hay sai) — lấy mã mới ngay sau MỌI lượt gọi để lần đăng
+    // nhập kế tiếp (nếu có) bắt buộc nhập lại, không tái dùng captchaId cũ.
+    if (captchaId) refreshCaptcha();
   }
 
   logSystemAction('USER_MGM', 'LOGIN_SUCCESS', 'Đăng nhập thành công.', 'SUCCESS', user.username);
@@ -20364,7 +20423,10 @@ function rejectInternalPostAction(id) {
   window.renderWordProtected = async function(container, fileSrc) {
     container.innerHTML = '<div class="p-6 text-center text-gray-500 text-sm">⏳ Đang tải bộ xem Word...</div>';
     try {
-      await loadVendorScript('/vendor/mammoth/mammoth.browser.min.js');
+      await Promise.all([
+        loadVendorScript('/vendor/mammoth/mammoth.browser.min.js'),
+        loadVendorScript('/vendor/dompurify/purify.min.js')
+      ]);
       const res = await fetch(fileSrc);
       if (!res.ok) throw new Error('HTTP ' + res.status);
       const arrayBuffer = await res.arrayBuffer();
@@ -20374,7 +20436,9 @@ function rejectInternalPostAction(id) {
       const wrap = document.createElement('div');
       wrap.className = 'relative bg-white shadow-md rounded p-6 max-w-3xl mx-auto my-2 word-view-content';
       wrap.oncontextmenu = () => false;
-      wrap.innerHTML = result.value;
+      // HTML do mammoth sinh ra đọc trực tiếp từ nội dung .docx người dùng tải lên (kể cả href/src) —
+      // phải lọc qua DOMPurify trước khi gán innerHTML, không được coi là an toàn mặc định.
+      wrap.innerHTML = DOMPurify.sanitize(result.value);
       container.appendChild(wrap);
       wrap.appendChild(buildOfficeWatermarkOverlayEl());
     } catch (err) {
@@ -20411,7 +20475,8 @@ function rejectInternalPostAction(id) {
       await Promise.all([
         loadVendorScript('/vendor/mammoth/mammoth.browser.min.js'),
         loadVendorScript('/vendor/html2canvas/html2canvas.min.js'),
-        loadVendorScript('/vendor/jspdf/jspdf.umd.min.js')
+        loadVendorScript('/vendor/jspdf/jspdf.umd.min.js'),
+        loadVendorScript('/vendor/dompurify/purify.min.js')
       ]);
 
       const res = await fetch(info.fileSrc);
@@ -20422,7 +20487,8 @@ function rejectInternalPostAction(id) {
       const contentWidth = WORD_PDF_PAGE_W - WORD_PDF_MARGIN * 2;
       stage.className = 'word-view-content';
       stage.style.cssText = `position:fixed;left:-10000px;top:0;width:${contentWidth}px;background:#fff;color:#111;box-sizing:border-box;font-family:Arial,'Segoe UI',sans-serif;font-size:14px;line-height:1.5;`;
-      stage.innerHTML = result.value;
+      // Lọc qua DOMPurify trước khi gán innerHTML — xem giải thích ở renderWordProtected() phía trên.
+      stage.innerHTML = DOMPurify.sanitize(result.value);
       document.body.appendChild(stage);
 
       const imgs = Array.from(stage.querySelectorAll('img'));

@@ -288,6 +288,47 @@ có thể tạm đặt `COOKIE_SECURE=false` — nhưng khi đó phiên đăng n
 JWT) đi dạng cleartext trên mạng, **không nên dùng cấu hình này khi đã có dữ
 liệu thật của nhân viên**.
 
+### 8.1. Cài đặt fail2ban (khuyến nghị khi mở ra Internet công khai)
+
+Ứng dụng đã tự chặn dò mật khẩu ở tầng của mình (rate-limit + khoá tài khoản,
+xem mục 9.1), nhưng mỗi lượt vẫn phải đi hết qua Nginx + Node trước khi bị
+từ chối. fail2ban thêm 1 lớp CHẶN Ở FIREWALL — đọc log truy cập Nginx, phát
+hiện 1 địa chỉ IP có hành vi bất thường lặp lại (đăng nhập sai nhiều lần,
+hoặc bị chính ứng dụng trả về 429 quá nhiều lần) thì cấm hẳn IP đó kết nối
+tới server trong 1 khoảng thời gian — đỡ tải cho tầng ứng dụng, đồng thời
+gây khó hơn cho công cụ dò quét tự động so với chỉ bị "từ chối nhẹ nhàng".
+
+```bash
+sudo apt-get install -y fail2ban
+```
+
+Repo đã có sẵn 2 bộ lọc + cấu hình jail mẫu tại `deploy/fail2ban/` — chỉ cần
+copy sang đúng thư mục fail2ban đọc:
+
+```bash
+sudo cp deploy/fail2ban/filter.d/vpdt-login.conf     /etc/fail2ban/filter.d/
+sudo cp deploy/fail2ban/filter.d/vpdt-ratelimit.conf /etc/fail2ban/filter.d/
+sudo cp deploy/fail2ban/jail.d/vpdt.conf             /etc/fail2ban/jail.d/
+sudo systemctl restart fail2ban
+```
+
+Kiểm tra đã chạy đúng:
+```bash
+sudo fail2ban-client status vpdt-login
+sudo fail2ban-client status vpdt-ratelimit
+```
+
+Ngưỡng mặc định trong `deploy/fail2ban/jail.d/vpdt.conf` (10 lần đăng nhập
+sai hoặc 15 lần bị 429 trong 10 phút thì cấm 1 giờ) là điểm khởi đầu hợp lý
+— chỉnh trực tiếp file này (`maxretry`/`findtime`/`bantime`) theo thực tế
+lưu lượng của công ty bạn nếu cần, không cần sửa gì ở code ứng dụng.
+
+> Lưu ý: nếu server của bạn còn đứng sau 1 lớp proxy/CDN khác nữa (ví dụ
+> Cloudflare) TRƯỚC Nginx, `$remote_addr` trong log Nginx sẽ là IP của lớp
+> đó chứ không phải IP người dùng thật — cần cấu hình Nginx `real_ip_header`
+> tương ứng trước khi fail2ban chặn đúng IP. Không áp dụng cho kiến trúc mặc
+> định ở mục 8 (Nginx là lớp nhận traffic Internet đầu tiên).
+
 ---
 
 ## 9. Tình trạng bảo mật hiện tại và các việc cần làm trước khi public
@@ -372,6 +413,70 @@ công ty phát triển tới quy mô hàng nghìn người dùng đồng thời 
 tục, các collection CẤU HÌNH còn ở `dbo.AppData` (đặc biệt "users" nếu công
 ty có hàng nghìn tài khoản) sẽ cần cân nhắc tách bảng tương tự — không cấp
 thiết ở quy mô vài trăm người dùng đã kiểm chứng ở trên.
+
+### 9.4. Bật mã hoá kết nối SQL Server (`DB_ENCRYPT=true`) khi app và DB tách máy/VLAN
+
+Áp dụng khi kiến trúc của bạn giống mô hình đã rà soát: máy chủ DB nằm sau
+firewall riêng, máy chủ app là phần cứng khác cũng sau firewall riêng, 2 máy
+ở 2 VLAN khác nhau, firewall chỉ cho phép app → DB kết nối tới đúng port
+1433. Đây KHÔNG còn là "1 phân đoạn mạng tin cậy duy nhất" như điều kiện
+chấp nhận `DB_ENCRYPT=false` nêu ở mục 5 — traffic đi qua firewall/router
+trung gian, dữ liệu (bao gồm mật khẩu SQL Server lúc xác thực) truyền ở dạng
+không mã hoá qua chặng đó nếu vẫn để `false`.
+
+**Không cần cài đặt gì thêm trên SQL Server** — SQL Server tự sinh sẵn 1
+chứng chỉ TLS self-signed ngay từ lần khởi động đầu tiên (không cần bật
+"Force Encryption" trong SQL Server Configuration Manager), driver `mssql`
+phía app chỉ cần chủ động yêu cầu mã hoá:
+
+1. Sửa `.env` trên máy chủ app:
+   ```
+   DB_ENCRYPT=true
+   DB_TRUST_CERT=true
+   ```
+   Giữ nguyên `DB_TRUST_CERT=true` — vì dùng chứng chỉ self-signed (không có
+   CA nào ký), driver cần được phép bỏ qua bước xác minh chuỗi chứng chỉ,
+   nếu không sẽ báo lỗi kết nối `self signed certificate`.
+2. `pm2 restart vpdt-server` (hoặc tên process bạn đặt ở mục 7).
+3. Kiểm tra log khởi động — dòng cảnh báo `⚠️ DB_ENCRYPT chưa bật...` (xem
+   `server/db.js`) phải biến mất, và vẫn thấy `✅ Đã kết nối SQL Server`.
+
+**Giới hạn cần biết**: cách trên mã hoá được đường truyền (chống nghe lén
+thụ động nếu ai đó chen được vào chặng firewall giữa 2 VLAN), nhưng KHÔNG
+xác thực được SQL Server có đúng là SQL Server thật hay không (không chống
+được tấn công chủ động kiểu man-in-the-middle giả làm SQL Server) — vì
+`DB_TRUST_CERT=true` bỏ qua bước xác minh CA. Với topology đã mô tả (firewall
+chỉ cho phép đúng 1 đường app → DB, không có thiết bị lạ chen giữa được),
+đây là đánh đổi hợp lý. Nếu muốn mã hoá + xác thực đầy đủ, cần cài chứng chỉ
+TLS do CA nội bộ/công khai ký cho SQL Server rồi đổi `DB_TRUST_CERT=false`
+— bước này phức tạp hơn (quản lý CA, gia hạn chứng chỉ định kỳ) nên không
+bắt buộc ở quy mô hiện tại, chỉ nêu để biết hướng nâng cấp sau này.
+
+### 9.5. Bật CAPTCHA chống bot ở trang đăng nhập (khuyến nghị khi mở ra Internet công khai)
+
+Áp dụng khi hệ thống không giới hạn truy cập qua VPN/whitelist IP (ai cũng
+vào được trang đăng nhập từ Internet) — lúc đó các lớp chống dò mật khẩu ở
+mục 9.1 (khoá theo IP/tài khoản) vẫn đứng vững, nhưng CAPTCHA chặn được bot
+**từ bước sớm hơn** (trước khi tốn tài nguyên xử lý đăng nhập), đồng thời
+gây khó cho các công cụ dò mật khẩu tự động hàng loạt.
+
+Dùng CAPTCHA số đơn giản — **tự vẽ + tự xác minh hoàn toàn trên server**
+(`server/lib/captcha.js`), không cần đăng ký tài khoản/API key ở bất kỳ dịch
+vụ ngoài nào (khác với phương án Cloudflare Turnstile từng cân nhắc trước
+đó): server sinh 1 mã 4 chữ số, vẽ ra ảnh SVG có nhiễu nhẹ (đường kẻ, chấm,
+xoay lệch từng chữ số — đủ chặn kịch bản trích text thô, KHÔNG chống được
+OCR chuyên biệt, chấp nhận được vì mục tiêu chỉ là thêm ma sát cho bot dò
+mật khẩu hàng loạt), người dùng gõ lại đúng mã đó.
+
+1. Điền vào `.env`:
+   ```
+   CAPTCHA_ENABLED=true
+   ```
+2. `pm2 restart vpdt-server`. Mở lại trang đăng nhập — khung "Mã xác nhận"
+   (ảnh số + nút ↻ lấy mã khác) sẽ tự hiện dưới ô mật khẩu.
+
+Không cấu hình (mặc định `false`) thì trang đăng nhập hoạt động y như
+trước — không bắt buộc, chỉ khuyến nghị khi đã public hẳn ra Internet.
 
 ---
 

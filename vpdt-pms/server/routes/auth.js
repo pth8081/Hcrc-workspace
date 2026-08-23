@@ -9,6 +9,7 @@ const { recordFailedLogin, resetLoginAttempts, getLockoutRemainingMinutes } = re
 const { validatePasswordStrength } = require('../lib/passwordPolicy');
 const { HttpError } = require('../lib/httpErrors');
 const { issueApprovalGrant, issueApprovalOtp, verifyApprovalOtp } = require('../lib/approvalAuth');
+const { isCaptchaEnabled, verifyCaptcha } = require('../lib/captcha');
 const { getPool, sql } = require('../db');
 const { sendMail, resolveEncryption } = require('../lib/mailer');
 const { decryptSecret } = require('../lib/emailCrypto');
@@ -49,9 +50,17 @@ const loginRateLimiter = rateLimit({
 });
 
 router.post('/login', loginRateLimiter, async (req, res) => {
-  const { username, password } = req.body || {};
+  const { username, password, captchaId, captchaAnswer } = req.body || {};
   if (!username || !password) {
     return res.status(400).json({ error: 'Thiếu tên đăng nhập hoặc mật khẩu' });
+  }
+
+  // Chỉ áp dụng khi đã bật CAPTCHA_ENABLED=true (.env) — xem lib/captcha.js. Kiểm tra trước cả bước
+  // tra tài khoản/khoá đăng nhập bên dưới vì đây là lớp chặn bot RẺ NHẤT (không tốn DB/bcrypt).
+  if (isCaptchaEnabled()) {
+    if (!verifyCaptcha(captchaId, captchaAnswer)) {
+      return res.status(400).json({ error: 'Mã xác nhận không đúng hoặc đã hết hạn, vui lòng thử lại.' });
+    }
   }
 
   try {

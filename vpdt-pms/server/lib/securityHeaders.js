@@ -10,6 +10,10 @@
 // Đổi lại, CSP này vẫn chặn được: nhúng script/iframe/object từ domain lạ, kết nối XHR/fetch ra ngoài
 // domain lạ (connect-src 'self' — chặn kênh exfiltrate dữ liệu nếu có XSS), và bị nhúng vào iframe của
 // trang khác (frame-ancestors 'self' — chống clickjacking).
+//
+// CAPTCHA (lib/captcha.js) vẽ SVG rồi trả thẳng qua JSON, gán inline vào DOM ở trình duyệt — KHÔNG tải
+// từ domain ngoài nào nên không cần nới thêm directive nào ở đây (khác với phương án Cloudflare Turnstile
+// đã cân nhắc trước đó nhưng không dùng, vốn cần mở scriptSrc/frameSrc/connectSrc cho domain ngoài).
 const helmet = require('helmet');
 
 const securityHeaders = helmet({

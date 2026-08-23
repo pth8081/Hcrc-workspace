@@ -21,6 +21,7 @@ const emailRoutes = require('./routes/email');
 const vppCatalogRoutes = require('./routes/vppCatalog');
 const adminExportRoutes = require('./routes/adminExport');
 const downloadRoutes = require('./routes/download');
+const { isCaptchaEnabled, generateCaptcha } = require('./lib/captcha');
 const { checkContractExpiryReminders } = require('./jobs/contractExpiryReminder');
 
 const app = express();
@@ -149,6 +150,12 @@ app.use('/vendor/html2canvas', express.static(path.join(__dirname, 'node_modules
 app.use('/vendor/exceljs', express.static(path.join(__dirname, 'node_modules', 'exceljs', 'dist'), VENDOR_STATIC_OPTS));
 app.use('/vendor/mammoth', express.static(path.join(__dirname, 'node_modules', 'mammoth'), VENDOR_STATIC_OPTS));
 
+// Phục vụ DOMPurify — lọc HTML do mammoth.js sinh ra (đọc trực tiếp nội dung .docx người dùng tải lên)
+// trước khi gán vào innerHTML, chặn XSS nếu ai đó tải lên 1 file .docx được chế để chứa liên kết
+// javascript: hoặc thuộc tính sự kiện (onerror=...) trong nội dung. Đã có sẵn qua jspdf (transitive
+// dependency) nên khai báo thẳng làm dependency riêng cho rõ ràng, cùng cách làm với jszip ở dưới.
+app.use('/vendor/dompurify', express.static(path.join(__dirname, 'node_modules', 'dompurify', 'dist'), VENDOR_STATIC_OPTS));
+
 // Phục vụ JSZip (tự lưu trên server, không qua CDN — cùng lý do với các thư viện trên) — dùng để giải
 // nén file .pptx NGAY TRONG trình duyệt người nộp báo cáo lúc chọn tệp (parsePptxToSlideContents() ở
 // index.html, module Báo Cáo Định Kỳ) rồi đọc XML bên trong bằng DOMParser gốc của trình duyệt (không
@@ -172,6 +179,22 @@ app.get('/api/health', async (req, res) => {
       ...(isProd ? {} : { detail: err.message })
     });
   }
+});
+
+// CAPTCHA số ở trang đăng nhập (KHÔNG cần xác thực — phải gọi được TRƯỚC khi đăng nhập, xem
+// lib/captcha.js). CHỈ bật khi CAPTCHA_ENABLED=true (.env); tắt thì trả 404 — client dựa vào đó để ẩn
+// hẳn khung nhập CAPTCHA, không hiện dở dang. Giới hạn riêng (không dùng chung globalApiRateLimiter bên
+// dưới vì route này KHÔNG cần đăng nhập, phải chặn spam sinh mã tràn bộ nhớ độc lập).
+const captchaRateLimiter = rateLimit({
+  windowMs: 10 * 60 * 1000,
+  limit: 60,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Yêu cầu CAPTCHA quá nhiều lần, vui lòng thử lại sau ít phút.' }
+});
+app.get('/api/captcha', captchaRateLimiter, (req, res) => {
+  if (!isCaptchaEnabled()) return res.status(404).json({ error: 'CAPTCHA chưa được bật' });
+  res.json(generateCaptcha());
 });
 
 // Phục vụ frontend tĩnh (file index.html đã chuyển đổi sang gọi API thay vì localStorage)
