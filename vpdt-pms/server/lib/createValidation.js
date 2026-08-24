@@ -356,12 +356,26 @@ const CREATE_MODULE_CONFIGS = {
         throw new CreateError(400, 'Giá trị hợp đồng phải lớn hơn 0');
       }
 
+      // custodianDept ("Đơn vị tiếp nhận theo dõi & thanh toán") — chốt NGAY LÚC TẠO, áp dụng CẢ 2
+      // luồng (Phê Duyệt lẫn Nhập Đã Ký) vì canManageContractPayment()/canViewContract() (tương ứng ở
+      // lib/recordActions.js/lib/recordViewScope.js) đọc field này bất kể hồ sơ tạo qua luồng nào.
+      // Không chọn -> mặc định CHÍNH đơn vị tạo (payload.dept) theo dõi & thanh toán, khớp đúng yêu cầu
+      // nghiệp vụ "không chọn đơn vị thì mặc định đơn vị mình sẽ theo dõi và thanh toán" — không bao giờ
+      // để trống, tránh phải xử lý null rải rác ở mọi nơi đọc lại field này sau này.
+      payload.custodianDept = (payload.custodianDept && String(payload.custodianDept).trim()) || payload.dept;
+
       if (payload.isAddendum) {
         const root = (collection || []).find(c => c.id === payload.rootContractId && !c.isAddendum);
         if (!root) throw new CreateError(400, 'Hợp đồng gốc không tồn tại');
         if (root.approvalStatus !== 'APPROVED') throw new CreateError(409, 'Chỉ được bổ sung phụ lục cho hợp đồng đã được phê duyệt');
         if (payload.dept !== root.dept) throw new CreateError(400, 'Phòng ban của phụ lục phải khớp với hợp đồng gốc');
         payload.type = root.type;
+        // Đơn vị theo dõi & thanh toán của phụ lục PHẢI khớp hợp đồng gốc — cùng 1 hồ sơ hợp đồng chỉ
+        // nên có 1 đơn vị custodian xuyên suốt (gốc + mọi phụ lục), tránh phụ lục "trôi" sang custodian
+        // khác khiến ai đang theo dõi hợp đồng gốc mất quyền thấy/thao tác phụ lục phát sinh của chính nó.
+        if (payload.custodianDept !== root.custodianDept) {
+          throw new CreateError(400, 'Đơn vị tiếp nhận theo dõi & thanh toán của phụ lục phải khớp với hợp đồng gốc');
+        }
       }
 
       if (isSignedImport) {

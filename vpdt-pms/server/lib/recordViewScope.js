@@ -207,6 +207,12 @@ function canViewContract(user, contract, appData) {
   if (user.perms?.admin) return true;
   if (contract.creator === user.username) return true;
   if (scopeAllows(user, user.perms?.contractView, contract.dept)) return true;
+  // Đơn vị tiếp nhận theo dõi & thanh toán (custodianDept) được XEM hợp đồng/phụ lục ngay từ lúc tạo
+  // (không đợi approvalStatus === 'APPROVED') — khớp yêu cầu "đơn vị chọn có thể cùng xem hợp đồng và
+  // phụ lục hợp đồng khi được phê duyệt", và nhất quán với cách người tạo (creator) ở trên cũng luôn
+  // xem được ngay không điều kiện. custodianDept luôn có giá trị cụ thể (mặc định = dept khi không
+  // chọn, xem createValidation.js), nên nhánh này là no-op vô hại khi 2 field trùng nhau.
+  if (scopeAllows(user, user.perms?.contractView, contract.custodianDept || contract.dept)) return true;
   if (isApproverForApproversMap(resolveContractApprovalWorkflow(contract, appData).approvers, user.username)) return true;
   return isApproverForApproversMap(resolveContractManageWorkflow(contract, appData).approvers, user.username);
 }

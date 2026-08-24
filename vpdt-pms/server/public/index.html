@@ -996,6 +996,11 @@ table { display: block; overflow-x: auto; max-width: 100%; }
             <select id="contractDept" onchange="refreshContractCodePreview()" class="w-full border p-1.5 rounded bg-white font-semibold" required></select>
           </div>
           <div>
+            <label class="block font-semibold text-gray-600 mb-1">Đơn Vị Tiếp Nhận Theo Dõi &amp; Thanh Toán</label>
+            <select id="contractCustodianDept" class="w-full border p-1.5 rounded bg-white"></select>
+            <p class="text-[11px] text-gray-500 italic mt-1">Để trống = mặc định chính phòng ban quản lý ở trên theo dõi &amp; thanh toán. Chọn đơn vị khác thì đơn vị đó được xem hợp đồng/phụ lục và là đơn vị duy nhất tải tài liệu ký, chuyển sang thanh toán.</p>
+          </div>
+          <div>
             <label class="block font-semibold text-gray-600 mb-1">Loại Pháp Lý</label>
             <select id="contractType" onchange="refreshContractCodePreview()" class="w-full border p-1.5 rounded bg-white" required></select>
           </div>
@@ -2625,7 +2630,23 @@ table { display: block; overflow-x: auto; max-width: 100%; }
         <h3 class="font-bold text-amber-900 text-base flex items-center gap-2">➕ Tạo Đề Nghị Thanh Toán Thủ Công</h3>
         <form id="paymentCreateForm" onsubmit="submitManualPaymentRequest(event)" class="bg-white p-3 rounded border text-xs space-y-3">
           <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
-            <div>
+            <div id="paymentSourceTypeWrap">
+              <label class="block font-semibold text-gray-600 mb-1">Loại Đề Nghị</label>
+              <select id="paymentSourceType" onchange="onPaymentSourceTypeChange()" class="w-full border p-1.5 rounded bg-white font-semibold">
+                <option value="MANUAL">✍️ Thủ công (không gắn nguồn)</option>
+                <option value="CONTRACT">📄 Hợp đồng</option>
+                <option value="MUA_BAN">🛒 Mua Bán</option>
+                <option value="SUA_CHUA">🔧 Sửa Chữa</option>
+                <option value="DAU_TU">📈 Đầu Tư</option>
+              </select>
+            </div>
+            <div id="paymentSourceRecordWrap" class="hidden">
+              <label class="block font-semibold text-gray-600 mb-1">Chọn Hồ Sơ Nguồn (chỉ hồ sơ chưa thanh toán)</label>
+              <select id="paymentSourceRecord" onchange="onPaymentSourceRecordChange()" class="w-full border p-1.5 rounded bg-white" required></select>
+            </div>
+          </div>
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <div id="paymentDeptWrap">
               <label class="block font-semibold text-gray-600 mb-1">Phòng Ban</label>
               <select id="paymentDept" class="w-full border p-1.5 rounded bg-white font-semibold" required></select>
             </div>
@@ -5403,10 +5424,11 @@ function canApproveContractStep(user, contract) {
   return canApproveStep(user, stepApprovers, contract.history, contract.currentStep);
 }
 
-// Upload "Tài liệu ký" + bấm nút "Thanh toán" — cùng phạm vi quyền contractCreate của phòng ban đó,
-// khớp đúng canManageContractPayment() ở lib/recordActions.js.
+// Upload "Tài liệu ký" + bấm nút "Thanh toán" — theo phạm vi quyền contractCreate của ĐƠN VỊ CUSTODIAN
+// (custodianDept, mặc định = dept khi hồ sơ không chọn riêng), khớp đúng canManageContractPayment() ở
+// lib/recordActions.js.
 function canManageContractPaymentClient(user, contract) {
-  return !!(user?.perms?.admin || scopeAllows(user, user?.perms?.contractCreate, contract.dept));
+  return !!(user?.perms?.admin || scopeAllows(user, user?.perms?.contractCreate, contract.custodianDept || contract.dept));
 }
 
 // Khớp đúng canManageOfficePayment() ở lib/recordActions.js.
@@ -5946,6 +5968,26 @@ async function callRecordAction(module, id, action, payload) {
   const body = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(body.error || `Lỗi máy chủ (HTTP ${res.status})`);
   return body; // { ok, item? }
+}
+
+// Kế toán tự khởi tạo đề nghị thanh toán có nguồn (Hợp Đồng/Mua Sắm/Sửa Chữa/Đầu Tư) ngay từ module
+// Thanh Toán — khớp POST /api/records/paymentRequests/from-source ở routes/records.js. Không dùng
+// callRecordAction() (khuôn module/id/action) vì route này không thao tác trên 1 paymentRequests id có
+// sẵn, cũng không dùng callRecordCreate() (khuôn tạo thủ công /api/records/<module>) vì cần thêm
+// sourceModule/sourceId trong payload.
+async function callCreatePaymentRequestFromSource(payload) {
+  const res = await fetch('/api/records/paymentRequests/from-source', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload || {})
+  });
+  if (res.status === 401) {
+    handleSessionExpired();
+    throw new Error('Phiên đăng nhập đã hết hạn');
+  }
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(body.error || `Lỗi máy chủ (HTTP ${res.status})`);
+  return body; // { ok, item, paymentRequest }
 }
 
 // Bước 4: tạo mới Biên bản họp/Công việc — khác callRecordAction() (không thao tác trên 1 id có sẵn).
@@ -7874,6 +7916,16 @@ function populateDropdowns() {
   const contractDept = document.getElementById('contractDept');
   if (contractDept) {
     contractDept.innerHTML = getScopedDepts(currentUser, currentUser.perms?.contractCreate).map(d => `<option value="${escapeHtml(d)}">${escapeHtml(d)}</option>`).join('');
+  }
+
+  // Đơn Vị Tiếp Nhận Theo Dõi & Thanh Toán (custodianDept) — KHÔNG lọc theo scope contractCreate như
+  // contractDept ở trên: người tạo có thể giao cho BẤT KỲ đơn vị nào trong toàn công ty theo dõi & thanh
+  // toán (khớp đúng idiom paymentDept bên dưới — cùng lý do: đây là "giao việc cho đơn vị khác", không
+  // phải "tạo hồ sơ thay mặt đơn vị khác"). Option rỗng đầu = "để trống -> mặc định đơn vị quản lý".
+  const contractCustodianDept = document.getElementById('contractCustodianDept');
+  if (contractCustodianDept) {
+    contractCustodianDept.innerHTML = '<option value="">-- Mặc định (đơn vị quản lý ở trên) --</option>' +
+      DB.depts.map(d => `<option value="${escapeHtml(d)}">${escapeHtml(d)}</option>`).join('');
   }
 
   const meetingDept = document.getElementById('meetingDept');
@@ -11266,6 +11318,7 @@ function onContractOpModeChange() {
   else if (mode === 'IMPORT_ADDENDUM') fileLabel = 'Phụ Lục Hợp Đồng Đã Ký (bản scan)';
   document.getElementById('contractFileLabel').innerText = fileLabel;
   document.getElementById('contractDept').disabled = isAddendumMode;
+  document.getElementById('contractCustodianDept').disabled = isAddendumMode;
   document.getElementById('contractType').disabled = isAddendumMode;
   document.getElementById('contractPartner').readOnly = isAddendumMode;
 
@@ -11276,6 +11329,7 @@ function onContractOpModeChange() {
     document.getElementById('contractCode').value = '';
     document.getElementById('contractTitle').value = '';
     document.getElementById('contractDept').value = '';
+    document.getElementById('contractCustodianDept').value = '';
     document.getElementById('contractType').value = '';
     document.getElementById('contractPartner').value = '';
     renderContractInstallmentsList([]);
@@ -11372,12 +11426,18 @@ function onContractAddendumTargetChange() {
   if (!root) {
     document.getElementById('contractCode').value = '';
     document.getElementById('contractDept').value = '';
+    document.getElementById('contractCustodianDept').value = '';
     document.getElementById('contractType').value = '';
     document.getElementById('contractPartner').value = '';
     return;
   }
   document.getElementById('contractCode').value = generateAddendumCode(root);
   document.getElementById('contractDept').value = root.dept;
+  // Phụ lục PHẢI cùng đơn vị custodian với hợp đồng gốc (server ép buộc, xem
+  // createValidation.js contracts.extraValidate) — khoá sẵn đúng giá trị của gốc, không để trống dù
+  // gốc đang dùng mặc định (custodianDept === dept), tránh gửi rỗng rồi server tự resolve lại theo
+  // dept MỚI nếu sau này dept phụ lục có thể khác gốc.
+  document.getElementById('contractCustodianDept').value = root.custodianDept || root.dept;
   document.getElementById('contractType').value = root.type;
   document.getElementById('contractPartner').value = root.partner;
 }
@@ -11493,6 +11553,7 @@ async function submitContractReq(e) {
   const isSignedImport = (mode === 'IMPORT_CONTRACT' || mode === 'IMPORT_ADDENDUM');
   const code = document.getElementById('contractCode').value.trim();
   const dept = document.getElementById('contractDept').value;
+  const custodianDept = document.getElementById('contractCustodianDept').value;
   const type = document.getElementById('contractType').value;
   const title = document.getElementById('contractTitle').value.trim();
   const partner = document.getElementById('contractPartner').value.trim();
@@ -11532,7 +11593,7 @@ async function submitContractReq(e) {
   const approvalLevel = isSignedImport ? null : (document.getElementById('contractApprovalLevel').value || 'KHAC');
 
   const contractPayload = {
-    code, dept, type, title, partner, amount, startDate, endDate, content,
+    code, dept, custodianDept, type, title, partner, amount, startDate, endDate, content,
     customData,
     fileName: uploaded.fileName,
     fileType: uploaded.fileType,
@@ -11603,6 +11664,8 @@ function openEditContract(contractId) {
   document.getElementById('contractCode').value = c.code;
   document.getElementById('contractDept').value = c.dept;
   document.getElementById('contractDept').disabled = !!c.isAddendum;
+  document.getElementById('contractCustodianDept').value = c.custodianDept || '';
+  document.getElementById('contractCustodianDept').disabled = !!c.isAddendum;
   document.getElementById('contractType').value = c.type;
   document.getElementById('contractType').disabled = !!c.isAddendum;
   document.getElementById('contractTitle').value = c.title;
@@ -11630,6 +11693,7 @@ function cancelEditContract() {
   document.getElementById('contractForm').reset();
   updateContractAddendumTargetLabel();
   document.getElementById('contractDept').disabled = false;
+  document.getElementById('contractCustodianDept').disabled = false;
   document.getElementById('contractType').disabled = false;
   document.getElementById('contractFile').required = true;
   document.getElementById('contractFileEditHint').classList.add('hidden');
@@ -11652,6 +11716,7 @@ async function updateContractReq(e) {
   }
 
   const dept = document.getElementById('contractDept').value;
+  const custodianDept = document.getElementById('contractCustodianDept').value;
   const type = document.getElementById('contractType').value;
   const title = document.getElementById('contractTitle').value.trim();
   const partner = document.getElementById('contractPartner').value.trim();
@@ -11664,10 +11729,10 @@ async function updateContractReq(e) {
 
   // Ghi nhận các trường thực sự thay đổi để đưa vào Nhật ký hệ thống (audit trail).
   const fieldLabels = {
-    dept: 'Phòng Ban', type: 'Loại Pháp Lý', title: 'Tên Hợp Đồng', partner: 'Đối Tác',
+    dept: 'Phòng Ban', custodianDept: 'Đơn Vị Tiếp Nhận Theo Dõi & Thanh Toán', type: 'Loại Pháp Lý', title: 'Tên Hợp Đồng', partner: 'Đối Tác',
     amount: 'Giá Trị', startDate: 'Ngày Hiệu Lực', endDate: 'Ngày Hết Hạn', content: 'Nội Dung'
   };
-  const newValues = { dept, type, title, partner, amount, startDate, endDate, content };
+  const newValues = { dept, custodianDept, type, title, partner, amount, startDate, endDate, content };
   const changes = [];
   for (const key in fieldLabels) {
     if (String(c[key]) !== String(newValues[key])) {
@@ -11763,7 +11828,9 @@ function renderContracts() {
       if (activeContractSubTab === 'MANAGE' && c.approvalStatus !== 'APPROVED') return false;
     }
 
-    const canView = scopeAllows(currentUser, currentUser.perms?.contractView, c.dept) || c.creator === currentUser.username ||
+    const canView = scopeAllows(currentUser, currentUser.perms?.contractView, c.dept) ||
+      scopeAllows(currentUser, currentUser.perms?.contractView, c.custodianDept) ||
+      c.creator === currentUser.username ||
       isApproverForDeptWorkflow(resolveContractApprovalWorkflow(c), currentUser.username) ||
       isApproverForDeptWorkflow(resolveContractManageWorkflow(c), currentUser.username);
     if (!canView) return false;
@@ -11847,9 +11914,14 @@ function buildContractRowHTML(c, { addendumCount = 0, isExpanded = false, isChil
   // khớp cách IMPORT_ADDENDUM đã đặt tên ở onContractOpModeChange().
   const signedDocNoun = c.isAddendum ? 'Phụ Lục Hợp Đồng Đã Ký' : 'Tài Liệu Ký';
 
+  // canDownloadFile() gốc chỉ nhận 1 dept — hợp đồng có thêm custodianDept cũng được tải, OR thêm 1
+  // nhánh nữa ở đây thay vì sửa canDownloadFile() chung (giữ nguyên hành vi cho mọi module khác).
+  const canDownloadContractFile = () => canDownloadFile(currentUser, 'contract', c.dept, c.creator) ||
+    (!!c.custodianDept && c.custodianDept !== c.dept && canDownloadFile(currentUser, 'contract', c.custodianDept, c.creator));
+
   const primaryBtnHTML = `<button onclick="runContractAction(${c.id}, 'detail')" class="bg-teal-600 text-white px-2 py-1 rounded text-xs hover:bg-teal-700 font-bold" title="Xem đầy đủ thông tin đã nhập">🔍 Xem chi tiết</button>`;
   const secondaryOptions = [{ value: 'view', label: '👁️ Xem' }];
-  if ((c.fileUrl || c.fileData) && canDownloadFile(currentUser, 'contract', c.dept, c.creator)) {
+  if ((c.fileUrl || c.fileData) && canDownloadContractFile()) {
     secondaryOptions.push({ value: 'download', label: '⬇️ Tải' });
   }
   // "Sửa" (các trường ở tab Phê Duyệt, kể cả Đợt Thanh Toán) áp dụng cho CẢ hợp đồng gốc lẫn phụ lục khi
@@ -11861,7 +11933,7 @@ function buildContractRowHTML(c, { addendumCount = 0, isExpanded = false, isChil
     secondaryOptions.push({ value: 'approve', label: '✅ Duyệt' });
     secondaryOptions.push({ value: 'reject', label: '❌ Từ chối' });
   }
-  if (c.signedFileUrl && canDownloadFile(currentUser, 'contract', c.dept, c.creator)) {
+  if (c.signedFileUrl && canDownloadContractFile()) {
     secondaryOptions.push({ value: 'viewSigned', label: `👁️ Xem ${signedDocNoun}` });
   }
   if (activeContractSubTab === 'MANAGE' && (!c.signedFileUrl || c.signedFileStatus === 'REJECTED') && canManageContractPaymentClient(currentUser, c)) {
@@ -11894,7 +11966,7 @@ function buildContractRowHTML(c, { addendumCount = 0, isExpanded = false, isChil
         <div class="font-bold text-purple-700">${(c.amount || 0).toLocaleString('vi-VN')} VNĐ</div>
         <div class="text-xs text-gray-500">${escapeHtml(c.startDate || '')} ➔ ${escapeHtml(c.endDate || '')}</div>
       </td>
-      <td class="border p-2">${escapeHtml(c.dept)}</td>
+      <td class="border p-2">${escapeHtml(c.dept)}${(c.custodianDept && c.custodianDept !== c.dept) ? `<div class="text-[10px] text-cyan-700 mt-0.5">📌 Theo dõi &amp; TT: ${escapeHtml(c.custodianDept)}</div>` : ''}</td>
       <td class="border p-2">${warningBadge}</td>
       ${paymentCell}
       <td class="border p-2 text-center space-x-1">
@@ -12266,8 +12338,62 @@ function collectPaymentCreateInstallments() {
   }));
 }
 
+// "Loại Đề Nghị" (sourceType) — chọn Hợp Đồng/Mua Sắm/Sửa Chữa/Đầu Tư thì đổi sang tạo đề nghị thanh
+// toán CÓ NGUỒN (POST /api/records/paymentRequests/from-source), khớp yêu cầu "chọn được trạng thái
+// loại đề nghị ... để làm thanh toán theo đúng mã". Chỉ liệt kê hồ sơ nguồn CÒN CHƯA THANH TOÁN (đã có
+// Tài liệu ký được duyệt) — khớp "chỉ trạng thái nào chưa thanh toán mới được làm đề nghị thanh toán".
+function populatePaymentSourceRecordOptions() {
+  const sourceType = document.getElementById('paymentSourceType').value;
+  const sel = document.getElementById('paymentSourceRecord');
+  if (sourceType === 'MANUAL') {
+    sel.innerHTML = '';
+    return;
+  }
+  const eligible = sourceType === 'CONTRACT'
+    ? DB.contracts.filter(c => c.signedFileUrl && c.signedFileStatus === 'APPROVED' && c.paymentStatus === 'CHUA_THANH_TOAN')
+    : DB.officeReqs.filter(o => o.subType === sourceType && o.signedFileUrl && o.paymentStatus === 'CHUA_THANH_TOAN');
+  sel.innerHTML = '<option value="">-- Chọn hồ sơ --</option>' +
+    eligible.map(r => `<option value="${r.id}">${escapeHtml(r.code)} — ${escapeHtml(r.title)}</option>`).join('');
+}
+
+// Tham khảo đợt thanh toán từ nguồn — khớp buildPaymentInstallments() ở lib/recordActions.js: Hợp đồng
+// dùng nguyên paymentInstallments đã khai (nếu có), còn lại (Mua Sắm/Sửa Chữa/Đầu Tư không có form khai
+// nhiều đợt) mặc định 1 đợt = toàn bộ giá trị. Vẫn SỬA ĐƯỢC tự do trước khi gửi (yêu cầu "thay đổi bằng
+// đề nghị thanh toán nếu có thay đổi").
+function computeSourcePaymentInstallmentsPreview(record) {
+  const list = Array.isArray(record.paymentInstallments) ? record.paymentInstallments : [];
+  if (list.length) return list.map(it => ({ description: it.description || '', amount: it.amount || 0, dueDate: it.dueDate || '' }));
+  return [{ description: 'Thanh toán toàn bộ giá trị', amount: record.amount || 0, dueDate: '' }];
+}
+
+function onPaymentSourceTypeChange() {
+  const sourceType = document.getElementById('paymentSourceType').value;
+  document.getElementById('paymentSourceRecordWrap').classList.toggle('hidden', sourceType === 'MANUAL');
+  // dept do server tự gán theo đơn vị custodian/nguồn khi có sourceType (xem startContractPayment()/
+  // startOfficePayment() ở lib/recordActions.js) — ẩn hẳn ô Phòng Ban để không gây hiểu nhầm là chọn
+  // được, chỉ hiện lại đúng lúc Thủ công (server dùng nguyên giá trị người dùng chọn).
+  document.getElementById('paymentDeptWrap').classList.toggle('hidden', sourceType !== 'MANUAL');
+  populatePaymentSourceRecordOptions();
+  document.getElementById('paymentSourceRecord').value = '';
+  document.getElementById('paymentTitle').value = '';
+  renderPaymentCreateInstallmentsList([]);
+}
+
+function onPaymentSourceRecordChange() {
+  const sourceType = document.getElementById('paymentSourceType').value;
+  const id = Number(document.getElementById('paymentSourceRecord').value);
+  if (sourceType === 'MANUAL' || !id) return;
+  const record = (sourceType === 'CONTRACT' ? DB.contracts : DB.officeReqs).find(r => r.id === id);
+  if (!record) return;
+  document.getElementById('paymentTitle').value = record.title;
+  renderPaymentCreateInstallmentsList(computeSourcePaymentInstallmentsPreview(record));
+}
+
 async function submitManualPaymentRequest(e) {
   e.preventDefault();
+  const sourceType = editingPaymentRequestId === null ? document.getElementById('paymentSourceType').value : 'MANUAL';
+  const sourceId = sourceType !== 'MANUAL' ? Number(document.getElementById('paymentSourceRecord').value) : null;
+  if (sourceType !== 'MANUAL' && !sourceId) return alert('Vui lòng chọn hồ sơ nguồn!');
   const dept = document.getElementById('paymentDept').value;
   const title = document.getElementById('paymentTitle').value.trim();
   const installments = collectPaymentCreateInstallments();
@@ -12291,14 +12417,28 @@ async function submitManualPaymentRequest(e) {
   }
 
   let newPr;
+  let updatedSourceItem = null;
   try {
-    const result = await callCreateAction('paymentRequests', { dept, title, installments });
-    newPr = result.item;
+    if (sourceType === 'MANUAL') {
+      const result = await callCreateAction('paymentRequests', { dept, title, installments });
+      newPr = result.item;
+    } else {
+      const result = await callCreatePaymentRequestFromSource({ sourceModule: sourceType, sourceId, title, installments });
+      newPr = result.paymentRequest;
+      updatedSourceItem = result.item;
+    }
   } catch (err) {
     return alert(`⛔ ${err.message}`);
   }
   DB.paymentRequests.unshift(newPr);
-  logSystemAction('OFFICE', 'CREATE_PAYMENT_REQUEST', `Tạo đề nghị thanh toán thủ công [${title}]`, 'SUCCESS', String(newPr.id));
+  if (updatedSourceItem) {
+    const coll = sourceType === 'CONTRACT' ? DB.contracts : DB.officeReqs;
+    const idx = coll.findIndex(x => x.id === updatedSourceItem.id);
+    if (idx !== -1) coll[idx] = updatedSourceItem;
+    renderContracts();
+    renderOfficeReqs();
+  }
+  logSystemAction('OFFICE', 'CREATE_PAYMENT_REQUEST', `Tạo đề nghị thanh toán ${sourceType === 'MANUAL' ? 'thủ công' : `từ nguồn [${PAYMENT_SOURCE_LABELS[sourceType] || sourceType}]`} [${title}]`, 'SUCCESS', String(newPr.id));
   alert('✅ Đã tạo đề nghị thanh toán!');
   cancelEditPaymentRequest();
   setPaymentSubTab('APPROVE');
@@ -12308,7 +12448,9 @@ function cancelEditPaymentRequest() {
   editingPaymentRequestId = null;
   const form = document.getElementById('paymentCreateForm');
   form.reset();
-  renderPaymentCreateInstallmentsList([]);
+  document.getElementById('paymentSourceTypeWrap').classList.remove('hidden');
+  document.getElementById('paymentSourceType').value = 'MANUAL';
+  onPaymentSourceTypeChange();
   form.querySelector('button[type="submit"]').innerText = 'Gửi phê duyệt';
 }
 
@@ -12317,6 +12459,12 @@ function openEditPaymentRequest(id) {
   if (!pr) return;
   editingPaymentRequestId = id;
   setPaymentSubTab('CREATE');
+  // Sửa đề nghị đã tạo (kể cả đề nghị có nguồn) chỉ đổi title/dept/amount/installments qua
+  // editPaymentRequest() — KHÔNG đổi lại nguồn (sourceModule/sourceId cố định từ lúc tạo) nên ẩn hẳn bộ
+  // chọn Loại Đề Nghị/Hồ Sơ Nguồn khi đang sửa, tránh gây hiểu nhầm là đổi được nguồn.
+  document.getElementById('paymentSourceTypeWrap').classList.add('hidden');
+  document.getElementById('paymentSourceRecordWrap').classList.add('hidden');
+  document.getElementById('paymentDeptWrap').classList.remove('hidden');
   document.getElementById('paymentDept').value = pr.dept;
   document.getElementById('paymentTitle').value = pr.title;
   renderPaymentCreateInstallmentsList(pr.installments || []);
@@ -12495,6 +12643,7 @@ function viewContractDetails(contractId) {
         <div><b>Mã Hợp Đồng / Giấy Phép:</b> ${escapeHtml(c.code)}</div>
         <div><b>Loại Pháp Lý:</b> ${escapeHtml(c.type)}</div>
         <div><b>Phòng Ban Quản Lý:</b> ${escapeHtml(c.dept)}</div>
+        ${c.custodianDept && c.custodianDept !== c.dept ? `<div><b>Đơn Vị Tiếp Nhận Theo Dõi &amp; Thanh Toán:</b> <span class="px-2 py-0.5 bg-cyan-100 text-cyan-800 rounded font-semibold">${escapeHtml(c.custodianDept)}</span></div>` : ''}
         <div><b>Đối Tác / Bên Ký Kết:</b> ${escapeHtml(c.partner)}</div>
         <div class="md:col-span-2"><b>Tên Hợp Đồng / Giấy Phép:</b> ${escapeHtml(c.title)}</div>
         <div><b>Giá Trị Hợp Đồng:</b> ${(c.amount || 0).toLocaleString('vi-VN')} VNĐ</div>

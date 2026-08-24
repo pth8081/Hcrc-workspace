@@ -19,13 +19,13 @@ function nowVN() {
 // ===================== HỢP ĐỒNG (sửa) =====================
 // Khớp đúng danh sách field mà updateContractReq() ở index.html cho sửa — KHÔNG gồm code/creator/id
 // (không đổi được), KHÔNG gồm customData (form sửa hợp đồng không thu thập lại).
-const CONTRACT_EDITABLE_FIELDS = ['dept', 'type', 'title', 'partner', 'amount', 'startDate', 'endDate', 'content'];
+const CONTRACT_EDITABLE_FIELDS = ['dept', 'custodianDept', 'type', 'title', 'partner', 'amount', 'startDate', 'endDate', 'content'];
 
 // hasAddenda: caller (routes/records.js) tự tra collection để biết hợp đồng gốc này đã có phụ lục
 // nào kế thừa dept của nó hay chưa — file này không tự đọc DB (giữ đúng nguyên tắc cũ, xem đầu file).
 // appData: caller tự đọc sẵn (workflows/contractApprovalDeptWorkflows/contractApprovalGroups) để dựng
 // lại effectiveSteps/effectiveApprovers khi đổi dept — xem giải thích ở khối kiểm tra deptChanged bên dưới.
-function editContract(payload, user, contract, hasAddenda, rootDept, appData) {
+function editContract(payload, user, contract, hasAddenda, rootDept, appData, rootCustodianDept) {
   // Khớp đúng luật cũ ở client (openEditContract/updateContractReq): CHỈ người tạo mới sửa được, kể
   // cả admin cũng không có ngoại lệ — không mở rộng quyền so với hành vi trước Bước 2b.
   if (contract.creator !== user.username) {
@@ -56,6 +56,20 @@ function editContract(payload, user, contract, hasAddenda, rootDept, appData) {
   // kiểm tra lại gì cả (createValidation.js chỉ áp dụng lúc TẠO, không áp dụng lúc SỬA phụ lục).
   if (contract.isAddendum && rootDept !== undefined && payload.dept !== undefined && payload.dept !== rootDept) {
     throw new HttpError(409, 'Phòng ban của phụ lục phải khớp với hợp đồng gốc');
+  }
+
+  // custodianDept — cùng ràng buộc "1 đơn vị custodian xuyên suốt gốc + phụ lục" như dept ở trên (xem
+  // giải thích ở createValidation.js contracts.extraValidate). Gửi chuỗi rỗng nghĩa là "bỏ chọn -> quay
+  // lại mặc định đơn vị đang quản lý theo dõi", khớp đúng quy ước resolve lúc TẠO.
+  if (payload.custodianDept !== undefined) {
+    const newDept = payload.dept !== undefined ? payload.dept : contract.dept;
+    payload.custodianDept = (payload.custodianDept && String(payload.custodianDept).trim()) || newDept;
+  }
+  if (!contract.isAddendum && hasAddenda && payload.custodianDept !== undefined && payload.custodianDept !== contract.custodianDept) {
+    throw new HttpError(409, 'Hợp đồng gốc đã có phụ lục — không thể đổi đơn vị tiếp nhận theo dõi & thanh toán');
+  }
+  if (contract.isAddendum && rootCustodianDept !== undefined && payload.custodianDept !== undefined && payload.custodianDept !== rootCustodianDept) {
+    throw new HttpError(409, 'Đơn vị tiếp nhận theo dõi & thanh toán của phụ lục phải khớp với hợp đồng gốc');
   }
 
   if (payload.startDate !== undefined || payload.endDate !== undefined) {
@@ -153,11 +167,17 @@ function editContract(payload, user, contract, hasAddenda, rootDept, appData) {
 // approve|reject), KHÔNG còn là 1 cờ quyền phẳng contractApprove nữa — bỏ hẳn canApproveContract()/
 // approveContract()/rejectContract() ở đây (trước là flat-permission, không có khái niệm bước/phòng ban).
 
-// Upload "Tài liệu ký" (bản cứng đã ký) + bấm nút "Thanh toán" — cùng phạm vi quyền với người được
-// tạo/quản lý hợp đồng của phòng ban đó (contractCreate scope, khớp getScope() ở CREATE_MODULE_CONFIGS.
-// contracts), không mở thêm quyền riêng cho 2 thao tác vận hành này.
+// Upload "Tài liệu ký" (bản cứng đã ký) + bấm nút "Thanh toán" — theo phạm vi quyền contractCreate CỦA
+// ĐÚNG ĐƠN VỊ TIẾP NHẬN THEO DÕI & THANH TOÁN (custodianDept, khớp getScope() ở
+// CREATE_MODULE_CONFIGS.contracts) — KHÔNG còn theo contract.dept (phòng ban tạo/quản lý hồ sơ) như
+// trước, vì custodianDept mới là đơn vị được giao "upload hợp đồng, phụ lục hợp đồng ký bên ta quản lý
+// và theo dõi hợp đồng & giấy phép" theo đúng yêu cầu nghiệp vụ. "|| contract.dept" là lớp phòng vệ cho
+// hồ sơ ĐÃ TỒN TẠI TRƯỚC khi triển khai tính năng này (custodianDept chưa từng có, chắc chắn undefined
+// trong dữ liệu cũ) — createValidation.js chỉ resolve custodianDept = dept cho hồ sơ TẠO/SỬA MỚI từ nay
+// trở đi, không có gì tự điền lại cho hồ sơ cũ đang nằm sẵn trong DB; không có fallback này, hồ sơ cũ sẽ
+// đột ngột không ai thao tác được nữa (scopeAllows(..., undefined) luôn trả false trừ khi admin/scope.all).
 function canManageContractPayment(user, contract) {
-  return !!(user.perms?.admin || scopeAllows(user, user.perms?.contractCreate, contract.dept));
+  return !!(user.perms?.admin || scopeAllows(user, user.perms?.contractCreate, contract.custodianDept || contract.dept));
 }
 
 function uploadContractSignedFile(payload, user, contract) {
@@ -195,23 +215,58 @@ function buildPaymentInstallments(sourceInstallments, totalAmount, fallbackDesc)
   return base.map(it => ({ description: it.description || fallbackDesc, amount: it.amount || 0, dueDate: it.dueDate || '', confirmed: false, confirmedAt: null, confirmedBy: null }));
 }
 
+// Kế toán có thể SỬA LẠI các đợt thanh toán đề xuất (lấy tham khảo từ Hợp đồng/Mua Bán/Sửa Chữa/Đầu
+// Tư) NGAY LÚC tạo đề nghị thanh toán có nguồn, thay vì phải tạo xong rồi mới sửa qua editPaymentRequest()
+// — trả về null nếu không override gì (giữ nguyên hành vi mặc định cũ của startContractPayment()/
+// startOfficePayment()), khớp đúng luật "mỗi đợt phải dương" như paymentRequests.extraValidate ở
+// createValidation.js (tạo thủ công) để 2 đường tạo đề nghị thanh toán không lệch luật nhau.
+function normalizePaymentInstallmentsOverride(raw) {
+  if (!Array.isArray(raw) || !raw.length) return null;
+  const installments = raw.map(it => ({
+    description: (it?.description || '').trim(), amount: Number(it?.amount) || 0, dueDate: it?.dueDate || '',
+    confirmed: false, confirmedAt: null, confirmedBy: null
+  }));
+  if (installments.some(it => !(it.amount > 0))) {
+    throw new HttpError(400, 'Mỗi đợt thanh toán phải có số tiền lớn hơn 0');
+  }
+  return installments;
+}
+
 // Chuyển hợp đồng sang "Chờ thanh toán" + trả về BẢN NHÁP đề nghị thanh toán (CHƯA lưu — route gọi
 // createForCollection('paymentRequests', ...) ngay sau khi mutatorFn này chạy xong, cùng khuôn với
 // assignMinutesTasks()/insertMinutesTasks() ở routes/records.js).
-function startContractPayment(user, contract) {
+// overrides (tuỳ chọn, {installments, title, skipManageGate}) — dùng khi kế toán tự khởi tạo đề nghị
+// thanh toán từ module Thanh Toán (xem POST /api/records/paymentRequests/from-source ở
+// routes/records.js), cho phép sửa lại đợt thanh toán/tên đề nghị tham khảo từ hợp đồng trước khi gửi.
+// skipManageGate=true bỏ qua canManageContractPayment() bên dưới — route from-source đã tự gác bằng
+// paymentManage RIÊNG (kế toán tạo đề nghị có nguồn không nhất thiết thuộc đơn vị custodian của hợp
+// đồng, khác hẳn nút "Chuyển Sang Thanh Toán" ngay trong module Hợp Đồng vẫn PHẢI đúng đơn vị custodian
+// — xem route đó vẫn gọi hàm này KHÔNG kèm overrides nên giữ nguyên gác cổng cũ). Các điều kiện còn lại
+// (đã có Tài liệu ký đã duyệt, chưa thanh toán) áp dụng như nhau cho CẢ 2 đường.
+function startContractPayment(user, contract, overrides) {
   // Phụ lục có thể phát sinh thanh toán riêng (VD bổ sung khối lượng/giá trị) — chuyển sang thanh toán
   // độc lập với hợp đồng gốc, sourceId/sourceCode dưới đây luôn theo ĐÚNG bản ghi (gốc hay phụ lục)
   // đang gọi hàm này, nên "Xác nhận đề nghị thanh toán" hiện đúng 2 dòng tách biệt khi cả 2 cùng có đợt
   // thanh toán đang chờ.
-  if (!canManageContractPayment(user, contract)) throw new HttpError(403, 'Bạn không có quyền chuyển hợp đồng này sang thanh toán');
+  if (!overrides?.skipManageGate && !canManageContractPayment(user, contract)) throw new HttpError(403, 'Bạn không có quyền chuyển hợp đồng này sang thanh toán');
   if (!contract.signedFileUrl) throw new HttpError(409, 'Cần tải lên Tài liệu ký trước khi chuyển sang thanh toán');
   if (contract.signedFileStatus !== 'APPROVED') throw new HttpError(409, 'Tài liệu ký cần được phê duyệt trước khi chuyển sang thanh toán');
   if (contract.paymentStatus !== 'CHUA_THANH_TOAN') throw new HttpError(409, 'Hợp đồng không ở trạng thái chưa thanh toán');
   contract.paymentStatus = 'CHO_THANH_TOAN';
+  const overrideInstallments = normalizePaymentInstallmentsOverride(overrides?.installments);
+  const installments = overrideInstallments || buildPaymentInstallments(contract.paymentInstallments, contract.amount, 'Thanh toán toàn bộ giá trị hợp đồng');
   return {
     sourceModule: 'CONTRACT', sourceId: contract.id, sourceCode: contract.code,
-    dept: contract.dept, title: contract.title, amount: contract.amount,
-    installments: buildPaymentInstallments(contract.paymentInstallments, contract.amount, 'Thanh toán toàn bộ giá trị hợp đồng'),
+    // Đề nghị thanh toán mang dept của ĐƠN VỊ CUSTODIAN (đơn vị đang thao tác chuyển sang thanh toán,
+    // đã xác thực qua canManageContractPayment() ở trên) — không phải contract.dept gốc, để kế toán
+    // thấy đúng đơn vị chịu trách nhiệm theo dõi khoản thanh toán này. Fallback "|| contract.dept" cho
+    // hồ sơ cũ trước khi có custodianDept (xem giải thích ở canManageContractPayment()).
+    dept: contract.custodianDept || contract.dept,
+    title: (overrides?.title && String(overrides.title).trim()) || contract.title,
+    // amount đi theo TỔNG các đợt thực tế gửi lên khi có override (khớp luật tạo thủ công) — không
+    // còn khoá cứng contract.amount, vì override cho phép kế toán khai lại khác giá trị tham khảo gốc.
+    amount: overrideInstallments ? installments.reduce((s, it) => s + it.amount, 0) : contract.amount,
+    installments,
     status: 'PENDING',
     createdBy: user.username, createdByName: user.name, createdAt: nowVN()
   };
@@ -247,15 +302,20 @@ function uploadOfficeSignedFile(payload, user, item) {
   return item;
 }
 
-function startOfficePayment(user, item) {
-  if (!canManageOfficePayment(user, item)) throw new HttpError(403, 'Bạn không có quyền chuyển đề xuất này sang thanh toán');
+// overrides — cùng ý nghĩa như startContractPayment() ở trên (skipManageGate bỏ qua canManageOfficePayment()).
+function startOfficePayment(user, item, overrides) {
+  if (!overrides?.skipManageGate && !canManageOfficePayment(user, item)) throw new HttpError(403, 'Bạn không có quyền chuyển đề xuất này sang thanh toán');
   if (!item.signedFileUrl) throw new HttpError(409, 'Cần tải lên Tài liệu ký trước khi chuyển sang thanh toán');
   if (item.paymentStatus !== 'CHUA_THANH_TOAN') throw new HttpError(409, 'Đề xuất không ở trạng thái chưa thanh toán');
   item.paymentStatus = 'CHO_THANH_TOAN';
+  const overrideInstallments = normalizePaymentInstallmentsOverride(overrides?.installments);
+  const installments = overrideInstallments || buildPaymentInstallments(null, item.amount, 'Thanh toán toàn bộ giá trị đề xuất');
   return {
     sourceModule: item.subType, sourceId: item.id, sourceCode: item.code,
-    dept: item.dept, title: item.title, amount: item.amount,
-    installments: buildPaymentInstallments(null, item.amount, 'Thanh toán toàn bộ giá trị đề xuất'),
+    dept: item.dept,
+    title: (overrides?.title && String(overrides.title).trim()) || item.title,
+    amount: overrideInstallments ? installments.reduce((s, it) => s + it.amount, 0) : item.amount,
+    installments,
     status: 'PENDING',
     createdBy: user.username, createdByName: user.name, createdAt: nowVN()
   };
