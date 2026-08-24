@@ -164,6 +164,14 @@ const MODULE_CONFIGS = {
     currentStepField: 'signedFileCurrentStep',
     historyField: 'signedFileHistory',
     resolveWfConfig: (item, appData) => resolveContractManageWorkflow(item, appData)
+  },
+  // "Phê Duyệt Giá" (Hỗ Trợ IT) — duyệt giá bán mặt hàng siêu thị theo phòng ban, cùng khuôn docs/
+  // carRegs/officeReqs ở trên (không snapshot, tra cấu hình admin MỚI NHẤT mỗi lần duyệt). Bước "IT áp
+  // giá + xác nhận hoàn thành" sau khi APPROVED KHÔNG đi qua engine này — xem applyPriceApproval() ở
+  // lib/recordActions.js, route riêng POST /api/records/itPriceApprovals/:id/apply.
+  itPriceApprovals: {
+    dbKey: 'itPriceApprovals',
+    resolveWfConfig: (item, appData) => flatWorkflowConfigToSteps(appData.itPriceDeptWorkflows?.[item.dept], appData)
   }
 };
 

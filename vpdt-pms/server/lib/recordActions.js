@@ -1920,6 +1920,78 @@ function setRecruitmentReferralStatus(payload, user, referral) {
   return referral;
 }
 
+// ===================== HỖ TRỢ IT =====================
+// Cờ quyền chung cho cả 2 sub-module: xử lý ticket helpdesk + xác nhận đã áp giá xong. Việc DUYỆT giá
+// (Phê Duyệt Giá) không dùng cờ này — đi qua quy trình theo phòng ban ở lib/workflowEngine.js
+// (itPriceDeptWorkflows), giống hệt docs/carRegs/officeReqs.
+function canManageItSupport(user) {
+  return !!(user?.perms?.admin || user?.perms?.itManage);
+}
+
+// "Phê Duyệt Giá" — sau khi duyệt xong (status=APPROVED qua workflowEngine), người Hỗ Trợ IT áp giá vào
+// hệ thống bán hàng NGOÀI app này rồi xác nhận hoàn thành NGAY TẠI ĐÂY — không phải 1 bước duyệt thêm
+// (không đi qua applyWorkflowAction), chỉ đánh dấu đã thực hiện xong.
+function applyPriceApproval(user, item) {
+  if (!canManageItSupport(user)) throw new HttpError(403, 'Bạn không có quyền xác nhận áp giá');
+  if (item.status !== 'APPROVED') throw new HttpError(409, 'Đề xuất này chưa được phê duyệt xong');
+  if (item.applied) throw new HttpError(409, 'Đề xuất này đã được áp giá rồi');
+  item.applied = true;
+  item.appliedBy = user.username;
+  item.appliedByName = user.name;
+  item.appliedAt = nowVN();
+  return item;
+}
+
+// "Hỗ Trợ Yêu Cầu" — ticket helpdesk IT nội bộ, ai cũng tạo được (xem itSupportTickets ở
+// lib/createValidation.js), chỉ người có itManage/admin mới xử lý được. State machine đơn giản:
+// TODO -> DOING (khi có người nhận) -> DONE, hoặc CANCELLED bất kỳ lúc nào trước khi DONE.
+const IT_TICKET_STATUSES = new Set(['TODO', 'DOING', 'DONE', 'CANCELLED']);
+
+function claimItTicket(user, ticket) {
+  if (!canManageItSupport(user)) throw new HttpError(403, 'Bạn không có quyền nhận xử lý yêu cầu hỗ trợ IT');
+  if (ticket.status !== 'TODO') throw new HttpError(409, 'Yêu cầu này đã có người nhận xử lý hoặc đã đóng');
+  ticket.assignee = user.username;
+  ticket.assigneeName = user.name;
+  ticket.status = 'DOING';
+  return ticket;
+}
+
+function updateItTicketStatus(user, ticket, payload) {
+  if (!canManageItSupport(user)) throw new HttpError(403, 'Bạn không có quyền cập nhật yêu cầu hỗ trợ IT');
+  const status = payload?.status;
+  if (!IT_TICKET_STATUSES.has(status)) throw new HttpError(400, 'Trạng thái không hợp lệ');
+  if (ticket.status === 'DONE' || ticket.status === 'CANCELLED') {
+    throw new HttpError(409, 'Yêu cầu này đã kết thúc, không thể cập nhật thêm');
+  }
+  ticket.status = status;
+  if (payload?.resolutionNote != null) ticket.resolutionNote = String(payload.resolutionNote).trim();
+  return ticket;
+}
+
+// Cho phép chính người tạo bình luận thêm vào ticket của mình (vd bổ sung thông tin) chứ không chỉ
+// riêng đội IT — giống cơ chế bình luận Góc chia sẻ, nhưng phạm vi hẹp: chỉ tác giả + đội IT.
+function addItTicketComment(user, ticket, payload) {
+  const content = (payload?.content || '').trim();
+  if (!content) throw new HttpError(400, 'Vui lòng nhập nội dung bình luận');
+  if (!canManageItSupport(user) && ticket.creator !== user.username) {
+    throw new HttpError(403, 'Bạn không có quyền bình luận ở yêu cầu này');
+  }
+  ticket.comments = ticket.comments || [];
+  ticket.comments.push({ id: Date.now(), username: user.username, name: user.name, content, time: nowVN() });
+  return ticket;
+}
+
+function cancelItTicket(user, ticket) {
+  if (!canManageItSupport(user) && ticket.creator !== user.username) {
+    throw new HttpError(403, 'Bạn không có quyền hủy yêu cầu này');
+  }
+  if (ticket.status === 'DONE' || ticket.status === 'CANCELLED') {
+    throw new HttpError(409, 'Yêu cầu này đã kết thúc, không thể hủy');
+  }
+  ticket.status = 'CANCELLED';
+  return ticket;
+}
+
 module.exports = {
   editContract,
   canManageContractPayment, uploadContractSignedFile, startContractPayment,
@@ -1943,5 +2015,6 @@ module.exports = {
   updateReportSlideTemplate,
   canManageTraining, cancelTrainingRegistration, setTrainingRegistrationResult, confirmCareerPathForEmployee,
   bulkRegisterTrainingClass, gradeTrainingTestSubmission, applyAutoGradedTestResult,
-  canManageRecruitment, closeRecruitmentJob, setRecruitmentReferralStatus
+  canManageRecruitment, closeRecruitmentJob, setRecruitmentReferralStatus,
+  canManageItSupport, applyPriceApproval, claimItTicket, updateItTicketStatus, addItTicketComment, cancelItTicket
 };

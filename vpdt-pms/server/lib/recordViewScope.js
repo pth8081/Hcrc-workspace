@@ -250,6 +250,31 @@ function filterOfficeReqsForUser(officeReqs, user, appData) {
   return (officeReqs || []).filter(o => canViewOfficeReq(user, o, appData));
 }
 
+// Khớp canViewItPriceApproval() (public/index.html): admin/itManage (đội Hỗ Trợ IT) xem hết, người đề
+// xuất xem đề xuất của mình, người duyệt xem hồ sơ nằm trong đúng luồng duyệt phòng ban của họ.
+function canViewItPriceApproval(user, item, appData) {
+  if (!user) return false;
+  if (user.perms?.admin || user.perms?.itManage) return true;
+  if (item.creator === user.username) return true;
+  return isApproverForApproversMap(MODULE_CONFIGS.itPriceApprovals.resolveWfConfig(item, appData).approvers, user.username);
+}
+
+function filterItPriceApprovalsForUser(items, user, appData) {
+  return (items || []).filter(p => canViewItPriceApproval(user, p, appData));
+}
+
+// Ticket helpdesk IT nội bộ có thể chứa thông tin tài khoản/sự cố cá nhân — chỉ đội Hỗ Trợ IT
+// (itManage/admin) và chính người tạo được xem, KHÔNG mở rộng theo phòng ban (khớp canViewItTicket()
+// ở public/index.html — phạm vi hẹp hơn hẳn các module dept-workflow khác ở trên).
+function canViewItSupportTicket(user, item) {
+  if (!user) return false;
+  return !!(user.perms?.admin || user.perms?.itManage || item.creator === user.username);
+}
+
+function filterItSupportTicketsForUser(items, user) {
+  return (items || []).filter(t => canViewItSupportTicket(user, t));
+}
+
 // Khớp khối lọc trong renderMeetings() (public/index.html): scopeAllows(meetingView) HOẶC chính
 // người tạo HOẶC người có vai trò "quản lý phòng họp" dùng chung toàn công ty (meetingApprove/
 // meetingCancel — không theo phòng ban, luôn cần thấy mọi lịch để xử lý).
@@ -314,5 +339,7 @@ module.exports = {
   canViewMeeting, filterMeetingsForUser,
   canViewMeetingMinutes, filterMeetingMinutesForUser,
   canViewTaskRecord, filterTasksForUser,
+  canViewItPriceApproval, filterItPriceApprovalsForUser,
+  canViewItSupportTicket, filterItSupportTicketsForUser,
   canDownloadRecordFile
 };

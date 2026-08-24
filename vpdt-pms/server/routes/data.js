@@ -17,7 +17,7 @@ const {
   filterDocsForUser, filterSubmissionsForUser, filterInternalPostsForUser, sanitizeReportPeriodsForUser,
   filterReportEntriesForUser, filterContractsForUser, filterCarRegsForUser, filterOfficeReqsForUser,
   filterMeetingsForUser, filterMeetingMinutesForUser, filterTasksForUser, sanitizeTrainingTestsForUser,
-  filterRecruitmentReferralsForUser
+  filterRecruitmentReferralsForUser, filterItPriceApprovalsForUser, filterItSupportTicketsForUser
 } = require('../lib/recordViewScope');
 
 const VALID_KEYS = new Set(Object.keys(DEFAULTS));
@@ -316,6 +316,12 @@ router.get('/', async (req, res) => {
     if (data.officeReqs) data.officeReqs = filterOfficeReqsForUser(data.officeReqs, req.freshUser, data);
     if (data.meetings) data.meetings = filterMeetingsForUser(data.meetings, req.freshUser);
     if (data.meetingMinutes) data.meetingMinutes = filterMeetingMinutesForUser(data.meetingMinutes, req.freshUser);
+    // itPriceApprovals/itSupportTickets: cùng dạng lỗ hổng như 9 collection ở trên — itPriceApprovals
+    // theo đúng khuôn carRegs/officeReqs (dept-workflow), riêng itSupportTickets hẹp hơn hẳn (chỉ đội Hỗ
+    // Trợ IT + chính người tạo, có thể chứa thông tin tài khoản/sự cố cá nhân) — xem
+    // lib/recordViewScope.js canViewItPriceApproval()/canViewItSupportTicket().
+    if (data.itPriceApprovals) data.itPriceApprovals = filterItPriceApprovalsForUser(data.itPriceApprovals, req.freshUser, data);
+    if (data.itSupportTickets) data.itSupportTickets = filterItSupportTicketsForUser(data.itSupportTickets, req.freshUser);
     // tasks: cùng dạng lỗ hổng như 9 collection ở trên — trước đây hoàn toàn KHÔNG được lọc lại ở
     // server (chỉ ẩn ở renderTasks() qua canViewTaskRecord()), để lộ toàn bộ Công Việc công ty (kể cả
     // nội dung "Ý kiến chỉ đạo" nhạy cảm) cho bất kỳ ai gọi thẳng GET /api/data.
