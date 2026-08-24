@@ -676,6 +676,23 @@ const CREATE_MODULE_CONFIGS = {
       if (payload.startDate && payload.endDate && payload.endDate < payload.startDate) {
         throw new CreateError(400, 'Ngày kết thúc phải sau ngày bắt đầu');
       }
+      // Ngân sách/người (VNĐ, tuỳ chọn — null/0 = không giới hạn): mức trần áp cho TỪNG CÁ NHÂN khi
+      // "Gửi phê duyệt" (xem submitVppRegistration() ở lib/recordActions.js). deptHeadcounts là số
+      // nhân sự từng phòng ban CHỐT (snapshot) tại thời điểm tạo kỳ — admin có thể sửa tay khác số
+      // tài khoản đang hoạt động thật (VD người nghỉ dài hạn, nhân viên mới chưa có tài khoản) — CHỈ
+      // dùng nhân với ngân sách/người ra "Ngân sách phòng ban" để THAM CHIẾU ở báo cáo, không dùng để
+      // chặn đăng ký (mức chặn thật sự luôn áp cho từng người ở trên, tránh race condition tranh nhau
+      // 1 quỹ chung — đã chốt với người yêu cầu tính năng).
+      const perPersonBudgetRaw = payload.perPersonBudget;
+      payload.perPersonBudget = (perPersonBudgetRaw === null || perPersonBudgetRaw === undefined || perPersonBudgetRaw === '')
+        ? null : Math.max(0, Number(perPersonBudgetRaw) || 0);
+      const headcountsRaw = (payload.deptHeadcounts && typeof payload.deptHeadcounts === 'object') ? payload.deptHeadcounts : {};
+      const cleanedHeadcounts = {};
+      Object.keys(headcountsRaw).forEach(dept => {
+        const n = Math.max(0, Math.round(Number(headcountsRaw[dept]) || 0));
+        if (dept && n > 0) cleanedHeadcounts[dept] = n;
+      });
+      payload.deptHeadcounts = cleanedHeadcounts;
       payload.status = 'OPEN';
       payload.closedAt = null;
       payload.closedBy = null;
