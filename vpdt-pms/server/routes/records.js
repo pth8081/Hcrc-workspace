@@ -1097,4 +1097,49 @@ router.post('/itSupportTickets/:id/deny-escalation', async (req, res) => {
   }
 });
 
+// ===================== ĐỒNG PHỤC =====================
+router.post('/uniformPeriods/:id/delete', (req, res) => deleteAdminOnly(req, res, 'uniformPeriods'));
+
+// Giám Đốc Siêu Thị xác nhận đã nhận ĐÚNG phần phân bổ của phòng ban mình trong 1 kỳ — khoá theo bản
+// ghi kỳ (nhiều siêu thị khác nhau xác nhận gần như đồng thời trên CÙNG 1 kỳ chỉ xếp hàng chờ khoá).
+router.post('/uniformPeriods/:id/confirm-allocation', async (req, res) => {
+  const itemId = Number(req.params.id);
+  if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
+  try {
+    const { freshUser } = await getFreshUser(req);
+    const result = await withLockedRecordForCollection('uniformPeriods', itemId, (item) =>
+      recordActions.confirmUniformAllocation(freshUser, item, req.body));
+    res.json({ ok: true, item: result });
+  } catch (err) {
+    handleError(res, `uniformPeriods/${req.params.id}/confirm-allocation`, err);
+  }
+});
+
+router.post('/uniformIssuances/:id/delete', (req, res) => deleteAdminOnly(req, res, 'uniformIssuances'));
+
+// Giám Đốc Siêu Thị cấp phát đồng phục cho nhân viên — tạo mới (không qua /api/create/ chung vì cần
+// đọc chéo uniformPeriods + tính lại tồn kho + khoá theo TỪNG siêu thị, xem buildUniformIssuance() ở
+// lib/recordActions.js). withAppLock('uniform_store:<dept>', ...) bọc quanh TOÀN BỘ đọc-tính-ghi để 2
+// lượt cấp phát gần như đồng thời cùng 1 siêu thị không cùng đọc thấy tồn kho cũ rồi cùng vượt tồn.
+router.post('/uniformIssuances/create', async (req, res) => {
+  try {
+    const { freshUser, users } = await getFreshUser(req);
+    if (!recordActions.canManageUniformStore(freshUser)) {
+      return res.status(403).json({ error: 'Bạn không có quyền cấp phát đồng phục' });
+    }
+    const result = await withAppLock(`uniform_store:${freshUser.dept}`, async () => {
+      const [allPeriods, allIssuances] = await Promise.all([
+        getAllForCollection('uniformPeriods'),
+        getAllForCollection('uniformIssuances')
+      ]);
+      const storeIssuances = allIssuances.filter(x => x.dept === freshUser.dept);
+      const record = recordActions.buildUniformIssuance(freshUser, req.body, allPeriods, storeIssuances, users);
+      return insertRecord('uniformIssuances', record);
+    });
+    res.json({ ok: true, item: result });
+  } catch (err) {
+    handleError(res, 'uniformIssuances/create', err);
+  }
+});
+
 module.exports = router;

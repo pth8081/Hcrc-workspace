@@ -1180,8 +1180,68 @@ const CREATE_MODULE_CONFIGS = {
       payload.statusByName = null;
       payload.statusAt = null;
     }
+  },
+  // ===== ĐỒNG PHỤC (module con của Hành Chính) =====
+  // "Kỳ Cấp Phát Đồng Phục" — mỗi lần Hành Chính (uniformManage) phân bổ 1 lô đồng phục xuống 1 hoặc
+  // nhiều siêu thị là 1 kỳ MỚI (không có khái niệm mở/đóng theo thời gian như kỳ VPP — kỳ ở đây chỉ là
+  // nhãn theo dõi 1 lô, "có thể cấp tiếp" bằng cách tạo kỳ khác, không sửa lại kỳ cũ). `allocations` lồng
+  // ngay trong kỳ (mảng nhỏ, mỗi phần tử = 1 siêu thị) — Giám Đốc Siêu Thị (uniformStoreManage) tự xác
+  // nhận ĐÚNG phần tử của phòng ban mình qua confirmUniformAllocation() ở lib/recordActions.js, khoá theo
+  // đúng bản ghi kỳ (withLockedRecordForCollection) như mọi nơi khác trong hệ thống — vài giám đốc khác
+  // siêu thị xác nhận gần như đồng thời trên CÙNG 1 kỳ chỉ đơn thuần xếp hàng chờ khoá, không mất dữ liệu.
+  uniformPeriods: {
+    dbKey: 'uniformPeriods',
+    forceOwnDept: true, // dept chỉ để hiển thị "phòng ban của người tạo kỳ" (Hành Chính), không phải phạm vi
+    getScope: () => ({}),
+    creatorField: 'creator', creatorNameField: 'creatorName',
+    extraValidate: (payload, collection, user, appData) => {
+      if (!user.perms?.admin && !user.perms?.uniformManage) {
+        throw new CreateError(403, 'Bạn không có quyền tạo kỳ cấp phát đồng phục');
+      }
+      if (!payload.name || !String(payload.name).trim()) throw new CreateError(400, 'Thiếu tên kỳ cấp phát');
+      payload.name = String(payload.name).trim().slice(0, 200);
+      payload.note = (payload.note || '').trim().slice(0, 1000);
+
+      const validDepts = new Set(appData?.depts || []);
+      const rawAllocations = Array.isArray(payload.allocations) ? payload.allocations : [];
+      if (!rawAllocations.length) throw new CreateError(400, 'Vui lòng phân bổ cho ít nhất 1 siêu thị');
+      const allocations = [];
+      for (const raw of rawAllocations) {
+        const dept = String(raw?.dept || '').trim();
+        if (!dept) continue;
+        if (!validDepts.has(dept)) throw new CreateError(400, `Phòng ban/siêu thị không hợp lệ: ${dept}`);
+        const items = sanitizeUniformItems(raw?.items);
+        allocations.push({
+          id: Date.now() + allocations.length,
+          dept, deptName: dept,
+          items,
+          status: 'PENDING_CONFIRM',
+          confirmedBy: null, confirmedByName: null, confirmedAt: null
+        });
+      }
+      if (!allocations.length) throw new CreateError(400, 'Vui lòng phân bổ cho ít nhất 1 siêu thị với danh mục hợp lệ');
+      if (allocations.length > 100) throw new CreateError(400, 'Quá nhiều siêu thị trong 1 kỳ (tối đa 100)');
+      payload.allocations = allocations;
+    }
   }
 };
+
+// Làm sạch danh sách mặt hàng đồng phục (loại/size/số lượng) do client gửi — dùng chung cho cả kỳ cấp
+// phát (uniformPeriods.allocations[].items) lẫn cấp phát cho nhân viên (uniformIssuances.items, xem
+// buildUniformIssuance() ở lib/recordActions.js) để luôn cùng 1 cấu trúc {name, size, qty}.
+function sanitizeUniformItems(rawItems) {
+  const items = Array.isArray(rawItems) ? rawItems : [];
+  const cleaned = [];
+  for (const it of items) {
+    const name = String(it?.name || '').trim();
+    const qty = Number(it?.qty);
+    if (!name || !Number.isFinite(qty) || qty <= 0) continue;
+    cleaned.push({ name: name.slice(0, 200), size: String(it?.size || '').trim().slice(0, 30), qty: Math.floor(qty) });
+    if (cleaned.length >= 200) break;
+  }
+  if (!cleaned.length) throw new CreateError(400, 'Danh mục đồng phục trống hoặc không có dòng hợp lệ (thiếu tên hoặc số lượng)');
+  return cleaned;
+}
 
 // Chuẩn hoá + kiểm tra tối thiểu nội dung báo cáo — CHỈ nhận đúng 1 tệp .pptx (không còn nhập tay/đính
 // nhiều loại tệp như trước). `parsedSlides` do TRÌNH DUYỆT tự đọc/phân tích tệp .pptx ngay lúc chọn tệp
@@ -1245,5 +1305,6 @@ module.exports = {
   CREATE_MODULE_CONFIGS, CreateError, validateAndPrepareCreate, scopeAllows, findMeetingConflict,
   OFFICE_SUBTYPE_TO_PERM_FLAG, normalizeReportEntryPayload,
   CONTRACT_APPROVAL_LAYERS, CONTRACT_APPROVAL_LEVELS, CONTRACT_APPROVAL_LEVEL_RULES,
-  buildEffectiveContractApprovalWorkflowServer
+  buildEffectiveContractApprovalWorkflowServer,
+  sanitizeUniformItems
 };
