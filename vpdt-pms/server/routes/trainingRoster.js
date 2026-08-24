@@ -9,8 +9,10 @@ const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
 const rateLimit = require('express-rate-limit');
+const QRCode = require('qrcode');
 const { requireAuth, blockIfMustChangePassword } = require('../lib/auth');
 const { buildRosterTemplateWorkbook, parseRosterFile } = require('../lib/trainingRoster');
+const { getAllForCollection } = require('../lib/recordStore');
 
 const router = express.Router();
 router.use(requireAuth, blockIfMustChangePassword);
@@ -97,6 +99,37 @@ router.post('/parse-roster', uploadRateLimiter, (req, res) => {
       fs.unlink(req.file.path, () => {}); // chỉ dùng để đọc 1 lần, không cần giữ lại file gốc
     }
   });
+});
+
+// GET /api/training/class-qr/:classId — mã QR cho lớp OFFLINE có gán bài test, giảng viên chiếu/in để
+// học viên quét bằng điện thoại — encode thẳng đường link vào app kèm ?takeTest=<classId>, app tự mở
+// đúng modal làm bài của lớp đó sau khi học viên đăng nhập (xem onTrainingTakeTestQueryParam(),
+// index.html). Bản thân link/QR KHÔNG cấp thêm quyền gì — người quét vẫn phải đăng nhập + đã đăng ký
+// lớp + lớp đã kết thúc mới nộp bài được (POST .../submit-test tự kiểm tra lại toàn bộ), nên chỉ giới
+// hạn AI ĐƯỢC LẤY mã QN này (người tạo lớp/Admin) để tránh lộ link ra ngoài phạm vi cần thiết, không
+// phải vì bản thân link nguy hiểm.
+router.get('/class-qr/:classId', async (req, res) => {
+  const classId = Number(req.params.classId);
+  if (!Number.isFinite(classId)) return res.status(400).json({ error: 'classId không hợp lệ' });
+  try {
+    const classes = await getAllForCollection('trainingClasses');
+    const cls = classes.find(c => c.id === classId);
+    if (!cls) return res.status(404).json({ error: 'Không tìm thấy lớp học' });
+    if (cls.creator !== req.freshUser.username && !req.freshUser.perms?.admin) {
+      return res.status(403).json({ error: 'Chỉ người tạo lớp học hoặc Quản Trị Viên mới được lấy mã QR' });
+    }
+    if (cls.testId == null) return res.status(400).json({ error: 'Lớp học này chưa được gán bài test' });
+
+    const baseUrl = process.env.APP_BASE_URL || `${req.protocol}://${req.get('host')}`;
+    const targetUrl = `${baseUrl.replace(/\/+$/, '')}/?takeTest=${classId}`;
+    const png = await QRCode.toBuffer(targetUrl, { type: 'png', width: 320, margin: 1 });
+    res.setHeader('Content-Type', 'image/png');
+    res.setHeader('Cache-Control', 'no-store');
+    res.send(png);
+  } catch (err) {
+    console.error('GET /api/training/class-qr lỗi:', err.message);
+    res.status(500).json({ error: 'Không thể tạo mã QR' });
+  }
 });
 
 module.exports = router;

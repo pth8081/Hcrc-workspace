@@ -1904,6 +1904,53 @@ table { display: block; overflow-x: auto; max-width: 100%; }
       </div>
     </div>
 
+    <!-- Modal làm bài test — hiện từng câu 1, đếm ngược riêng theo câu (mặc định 2 phút, người tạo lớp
+         chỉnh lúc tạo lớp), hết giờ tự chuyển câu tiếp theo. KHÔNG có nút quay lại câu trước — khớp đúng
+         tinh thần "làm nghiêm túc theo thời gian", nộp bài xong (POST .../submit-test) là chấm điểm và
+         khoá luôn (server chặn nộp lần 2), không sửa lại được. -->
+    <div id="trainingTakeTestModal" class="hidden fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
+      <div class="bg-white rounded-lg shadow-xl max-w-xl w-full max-h-[90vh] overflow-y-auto">
+        <div class="p-4 border-b sticky top-0 bg-white">
+          <div class="flex justify-between items-start gap-3">
+            <div>
+              <h3 id="ttTakeModalTitle" class="font-bold text-gray-800">Làm bài test</h3>
+              <p id="ttTakeModalSubtitle" class="text-xs text-gray-500"></p>
+            </div>
+            <div class="text-right">
+              <div id="ttTakeTimer" class="text-2xl font-bold text-indigo-600 tabular-nums">--:--</div>
+              <button type="button" onclick="ttTakeExit()" class="text-gray-400 hover:text-red-600 text-xs">Thoát (không nộp bài)</button>
+            </div>
+          </div>
+          <div class="w-full bg-gray-200 rounded-full h-1.5 mt-2">
+            <div id="ttTakeProgressBar" class="bg-indigo-600 h-1.5 rounded-full transition-all" style="width:0%"></div>
+          </div>
+        </div>
+        <div class="p-5">
+          <p id="ttTakeQuestionCounter" class="text-xs font-bold text-gray-400 mb-1"></p>
+          <p id="ttTakeQuestionText" class="font-semibold text-gray-800 mb-3"></p>
+          <div id="ttTakeOptionsContainer" class="space-y-2"></div>
+        </div>
+        <div class="p-4 border-t flex justify-end">
+          <button type="button" id="ttTakeNextBtn" onclick="ttTakeGoNext()" class="bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-2 rounded font-bold text-sm">Câu Tiếp Theo →</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Modal mã QR cho lớp offline — chỉ người tạo lớp/Admin mở được (nút gọi modal này bị ẩn với
+         người khác, xem renderTrainingClasses()); mã QR encode thẳng link vào app kèm ?takeTest=classId
+         (routes/trainingRoster.js GET /api/training/class-qr/:classId). -->
+    <div id="trainingClassQrModal" class="hidden fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+      <div class="bg-white rounded-lg shadow-xl max-w-sm w-full p-4 text-center">
+        <div class="flex justify-between items-center mb-2">
+          <h3 class="font-bold text-gray-800 text-sm">📱 Mã QR làm bài test</h3>
+          <button onclick="document.getElementById('trainingClassQrModal').classList.add('hidden')" class="text-gray-400 hover:text-gray-700 text-xl leading-none">&times;</button>
+        </div>
+        <p id="trainingClassQrSubtitle" class="text-xs text-gray-500 mb-3"></p>
+        <img id="trainingClassQrImg" class="mx-auto border rounded" width="280" height="280" alt="Mã QR làm bài test">
+        <p class="text-xs text-gray-400 mt-3">Học viên dùng điện thoại ĐÃ ĐĂNG NHẬP tài khoản của mình quét mã này để vào làm bài ngay sau khi lớp kết thúc.</p>
+      </div>
+    </div>
+
     <form id="internalPostForm" onsubmit="submitInternalPost(event)" class="bg-white p-3 rounded border text-xs space-y-3">
       <h4 id="internalFormTitle" class="font-bold text-gray-700">📝 Đăng Tin Nội Bộ Mới</h4>
       <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -7219,6 +7266,23 @@ function finishLogin(user) {
   populateDropdowns();
   switchTab('dashboard');
   startSessionKeepAlive();
+  openTakeTestFromQueryParam();
+}
+
+// Sau khi quét mã QR ở lớp offline (hoặc bấm link trực tiếp), app mở kèm ?takeTest=<classId> — tự điều
+// hướng vào đúng màn "Đăng Ký Của Tôi" của Đào Tạo LMS rồi mở luôn modal làm bài, thay vì bắt học viên
+// tự bấm qua nhiều lớp điều hướng (Truyền thông > Đào tạo > Đăng Ký Của Tôi) trên điện thoại vừa quét
+// xong. Xoá query param khỏi URL ngay sau khi dùng — tải lại trang (F5) không tự mở lại modal lần nữa.
+function openTakeTestFromQueryParam() {
+  const params = new URLSearchParams(window.location.search);
+  const classId = Number(params.get('takeTest'));
+  if (!Number.isFinite(classId) || !params.has('takeTest')) return;
+  history.replaceState(null, '', window.location.pathname);
+  if (!canAccessInternalModule(currentUser)) return alert('⛔ Bạn không có quyền truy cập Module Truyền thông nội bộ để làm bài test.');
+  switchTab('internal');
+  setInternalSubTab('TRAINING');
+  setTrainingLmsTab('MY_REGS');
+  setTimeout(() => openTakeTestModal(classId), 200);
 }
 
 // Giữ phiên đăng nhập không bị hết hạn khi người dùng vẫn đang mở trang nhưng KHÔNG gọi API nào (vd.
@@ -21205,7 +21269,9 @@ function renderTrainingClasses() {
     } else {
       actionHTML = `<button onclick="registerForTrainingClass(${c.id})" class="bg-emerald-600 text-white px-2 py-1 rounded text-xs font-bold hover:bg-emerald-700">Đăng Ký</button>`;
     }
-    const manageHTML = canManageThis ? `<button onclick="openTrainingResultsModal(${c.id})" class="bg-indigo-600 text-white px-2 py-1 rounded text-xs font-bold hover:bg-indigo-700 ml-1">👥 Kết Quả (${regs.length})</button><button onclick="openTrainingRosterModal(${c.id})" class="bg-teal-600 text-white px-2 py-1 rounded text-xs font-bold hover:bg-teal-700 ml-1">➕ Thêm Học Viên</button>` : '';
+    const qrHTML = (canManageThis && c.mode === 'OFFLINE' && c.testId != null)
+      ? `<button onclick="openTrainingClassQrModal(${c.id})" class="bg-purple-600 text-white px-2 py-1 rounded text-xs font-bold hover:bg-purple-700 ml-1">📱 Mã QR</button>` : '';
+    const manageHTML = canManageThis ? `<button onclick="openTrainingResultsModal(${c.id})" class="bg-indigo-600 text-white px-2 py-1 rounded text-xs font-bold hover:bg-indigo-700 ml-1">👥 Kết Quả (${regs.length})</button><button onclick="openTrainingRosterModal(${c.id})" class="bg-teal-600 text-white px-2 py-1 rounded text-xs font-bold hover:bg-teal-700 ml-1">➕ Thêm Học Viên</button>${qrHTML}` : '';
     const delHTML = currentUser.perms?.admin ? `<button onclick="deleteTrainingClass(${c.id})" class="text-red-500 font-bold hover:underline text-xs ml-2">Xóa</button>` : '';
     return `
       <tr class="hover:bg-gray-50">
@@ -21244,6 +21310,14 @@ function deleteTrainingClass(id) {
     renderTrainingClasses();
     populateTrainingClassMultiSelects();
   }).catch(err => alert(`⛔ ${err.message}`));
+}
+
+function openTrainingClassQrModal(classId) {
+  const cls = DB.trainingClasses.find(c => c.id === classId);
+  if (!cls) return;
+  document.getElementById('trainingClassQrSubtitle').innerText = cls.title;
+  document.getElementById('trainingClassQrImg').src = `/api/training/class-qr/${classId}`;
+  document.getElementById('trainingClassQrModal').classList.remove('hidden');
 }
 
 // ---------- KẾT QUẢ HỌC VIÊN (modal) ----------
@@ -21556,18 +21630,34 @@ function renderTrainingMyRegs() {
   if (!tbody) return;
   const mine = DB.trainingRegistrations.filter(r => r.creator === currentUser.username && r.result !== 'CANCELLED').sort((a, b) => b.id - a.id);
   if (!mine.length) { tbody.innerHTML = `<tr><td colspan="5" class="text-center p-4 text-gray-400 italic">Bạn chưa đăng ký lớp học nào.</td></tr>`; return; }
+  const now = new Date();
   tbody.innerHTML = mine.map(r => {
     const badge = r.result === 'PASSED' ? '<span class="text-emerald-600 font-bold">✅ Đạt' + (r.score != null ? ` (${r.score} điểm)` : '') + '</span>'
       : r.result === 'FAILED' ? '<span class="text-red-600 font-bold">❌ Không đạt' + (r.score != null ? ` (${r.score} điểm)` : '') + '</span>'
       : '<span class="text-indigo-600 font-bold">📌 Đang học</span>';
     const cancelHTML = r.result === 'REGISTERED' ? `<button onclick="cancelTrainingRegistrationAction(${r.id})" class="text-red-500 font-bold hover:underline text-xs">Huỷ Đăng Ký</button>` : '';
+    // Bài test ONLINE tự bật đúng lúc lớp kết thúc (so sánh giờ hiện tại với endTime lúc render, không
+    // cần cron/websocket gì) — OFFLINE thì học viên quét mã QR tại lớp để vào làm, không hiện nút ở đây.
+    let testHTML = '';
+    const cls = DB.trainingClasses.find(c => c.id === r.classId);
+    if (cls && cls.testId != null && r.result === 'REGISTERED') {
+      if (cls.mode === 'OFFLINE') {
+        testHTML = `<div class="text-xs text-gray-400 mt-1">🧪 Quét mã QR tại lớp để làm bài</div>`;
+      } else if (!cls.endTime) {
+        testHTML = `<div class="text-xs text-gray-400 mt-1">🧪 Lớp chưa có giờ kết thúc, chưa thể mở bài test</div>`;
+      } else if (now < new Date(cls.endTime)) {
+        testHTML = `<div class="text-xs text-gray-400 mt-1">🔒 Bài test mở lúc ${escapeHtml(cls.endTime.replace('T', ' '))}</div>`;
+      } else {
+        testHTML = `<button onclick="openTakeTestModal(${cls.id})" class="bg-purple-600 text-white px-2 py-1 rounded text-xs font-bold hover:bg-purple-700 mt-1">📝 Vào Làm Bài Test</button>`;
+      }
+    }
     return `
       <tr class="hover:bg-gray-50">
         <td class="border p-2">${escapeHtml(r.classCode || '')}<br>${escapeHtml(r.className || '')}</td>
         <td class="border p-2">${escapeHtml(r.category || '')}</td>
         <td class="border p-2">${escapeHtml(r.registeredAt || '')}</td>
         <td class="border p-2">${badge}</td>
-        <td class="border p-2 text-center">${cancelHTML}</td>
+        <td class="border p-2 text-center">${cancelHTML}${testHTML}</td>
       </tr>`;
   }).join('');
 }
@@ -21581,6 +21671,108 @@ function cancelTrainingRegistrationAction(regId) {
     renderTrainingMyRegs();
     renderTrainingClasses();
   }).catch(err => alert(`⛔ ${err.message}`));
+}
+
+// ---------- LÀM BÀI TEST (đếm ngược theo từng câu, không cho quay lại câu trước) ----------
+let ttTakeClassId = null;
+let ttTakeQuestions = [];
+let ttTakeAnswers = {}; // questionId -> [selectedOptionIds]
+let ttTakeIndex = 0;
+let ttTakeSecondsPerQuestion = 120;
+let ttTakeSecondsLeft = 0;
+let ttTakeTimerHandle = null;
+
+function openTakeTestModal(classId) {
+  const cls = DB.trainingClasses.find(c => c.id === classId);
+  if (!cls || cls.testId == null) return alert('Lớp học này chưa được gán bài test.');
+  const test = DB.trainingTests.find(t => t.id === cls.testId);
+  if (!test || !Array.isArray(test.questions) || !test.questions.length) return alert('Không tìm thấy nội dung bài test.');
+  clearInterval(ttTakeTimerHandle);
+  ttTakeClassId = classId;
+  ttTakeQuestions = test.questions;
+  ttTakeAnswers = {};
+  ttTakeIndex = 0;
+  ttTakeSecondsPerQuestion = cls.testSecondsPerQuestion > 0 ? cls.testSecondsPerQuestion : 120;
+  document.getElementById('ttTakeModalTitle').innerText = `🧪 ${test.title}`;
+  document.getElementById('ttTakeModalSubtitle').innerText = `Lớp: ${cls.title}`;
+  document.getElementById('trainingTakeTestModal').classList.remove('hidden');
+  ttTakeRenderQuestion();
+}
+
+function ttTakeExit() {
+  if (!confirm('Thoát khỏi bài test? Câu trả lời chưa nộp sẽ không được lưu — bạn có thể vào làm lại từ đầu (miễn là chưa nộp bài lần nào cho lớp này).')) return;
+  clearInterval(ttTakeTimerHandle);
+  document.getElementById('trainingTakeTestModal').classList.add('hidden');
+}
+
+function ttTakeRenderQuestion() {
+  const q = ttTakeQuestions[ttTakeIndex];
+  const total = ttTakeQuestions.length;
+  document.getElementById('ttTakeQuestionCounter').innerText = `Câu ${ttTakeIndex + 1} / ${total}${q.type === 'MULTI' ? ' — có thể chọn nhiều đáp án' : ''}`;
+  document.getElementById('ttTakeQuestionText').innerText = q.text;
+  document.getElementById('ttTakeProgressBar').style.width = `${Math.round((ttTakeIndex / total) * 100)}%`;
+  const selected = ttTakeAnswers[q.id] || [];
+  const inputType = q.type === 'MULTI' ? 'checkbox' : 'radio';
+  document.getElementById('ttTakeOptionsContainer').innerHTML = q.options.map(o => `
+    <label class="flex items-center gap-2 border rounded p-2 hover:bg-gray-50 cursor-pointer">
+      <input type="${inputType}" name="ttTakeOpt" value="${o.id}" ${selected.includes(o.id) ? 'checked' : ''} onchange="ttTakeSelectOption(${o.id},this.checked)">
+      <span class="text-sm">${escapeHtml(o.text)}</span>
+    </label>`).join('');
+  document.getElementById('ttTakeNextBtn').innerText = ttTakeIndex === total - 1 ? '✅ Nộp Bài' : 'Câu Tiếp Theo →';
+
+  ttTakeSecondsLeft = ttTakeSecondsPerQuestion;
+  ttTakeUpdateTimerDisplay();
+  clearInterval(ttTakeTimerHandle);
+  ttTakeTimerHandle = setInterval(() => {
+    ttTakeSecondsLeft--;
+    ttTakeUpdateTimerDisplay();
+    if (ttTakeSecondsLeft <= 0) { clearInterval(ttTakeTimerHandle); ttTakeGoNext(); }
+  }, 1000);
+}
+
+function ttTakeUpdateTimerDisplay() {
+  const secs = Math.max(0, ttTakeSecondsLeft);
+  const m = String(Math.floor(secs / 60)).padStart(2, '0');
+  const s = String(secs % 60).padStart(2, '0');
+  const el = document.getElementById('ttTakeTimer');
+  el.innerText = `${m}:${s}`;
+  el.className = 'text-2xl font-bold tabular-nums ' + (secs <= 10 ? 'text-red-600' : 'text-indigo-600');
+}
+
+function ttTakeSelectOption(optId, checked) {
+  const q = ttTakeQuestions[ttTakeIndex];
+  const cur = ttTakeAnswers[q.id] || [];
+  ttTakeAnswers[q.id] = q.type === 'MULTI' ? (checked ? [...new Set([...cur, optId])] : cur.filter(id => id !== optId)) : [optId];
+}
+
+async function ttTakeGoNext() {
+  clearInterval(ttTakeTimerHandle);
+  if (ttTakeIndex < ttTakeQuestions.length - 1) {
+    ttTakeIndex++;
+    ttTakeRenderQuestion();
+  } else {
+    await ttTakeSubmit();
+  }
+}
+
+async function ttTakeSubmit() {
+  const answers = ttTakeQuestions.map(q => ({ questionId: q.id, selectedOptionIds: ttTakeAnswers[q.id] || [] }));
+  let result;
+  try {
+    result = await callRecordAction('trainingClasses', ttTakeClassId, 'submit-test', { answers });
+  } catch (err) {
+    document.getElementById('trainingTakeTestModal').classList.add('hidden');
+    return alert(`⛔ ${err.message}`);
+  }
+  document.getElementById('trainingTakeTestModal').classList.add('hidden');
+  const idx = DB.trainingRegistrations.findIndex(r => r.id === result.registration.id);
+  if (idx !== -1) DB.trainingRegistrations[idx] = result.registration;
+  else DB.trainingRegistrations.unshift(result.registration);
+  logSystemAction('INTERNAL', 'SUBMIT_TRAINING_TEST', `Nộp bài test lớp [${result.registration.classCode}]`, 'SUCCESS', result.registration.classCode);
+  const sub = result.submission;
+  alert(`✅ Đã nộp bài!\n\nĐiểm: ${sub.score}/${sub.totalPoints} (${sub.percentage}%)\nKết quả: ${sub.passed ? 'ĐẠT' : 'KHÔNG ĐẠT'}`);
+  renderTrainingMyRegs();
+  renderTrainingClasses();
 }
 
 // ---------- KHO TÀI LIỆU ----------
