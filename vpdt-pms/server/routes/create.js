@@ -41,6 +41,9 @@ router.post('/:module', async (req, res) => {
     // trainingRegistrations cần tra cứu chéo sang collection trainingClasses (lớp còn mở/còn chỗ/hạn
     // đăng ký, snapshot tên+mã lớp) — cùng lý do vppRegistrations/reportEntries ở trên.
     if (moduleKey === 'trainingRegistrations') appData.trainingClasses = await getAllForCollection('trainingClasses');
+    // trainingClasses cần tra cứu chéo sang collection trainingTests (kiểm tra testId client gửi lên
+    // khi gán bài test có phải bài test có thật hay không) — cùng lý do trainingRegistrations ở trên.
+    if (moduleKey === 'trainingClasses') appData.trainingTests = await getAllForCollection('trainingTests');
 
     const config = CREATE_MODULE_CONFIGS[moduleKey];
     const builderFn = (list) => validateAndPrepareCreate(moduleKey, req.body, freshUser, list, appData);

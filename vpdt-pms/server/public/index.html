@@ -1648,6 +1648,7 @@ table { display: block; overflow-x: auto; max-width: 100%; }
         <button type="button" onclick="setTrainingLmsTab('MY_REGS')" id="btnTrainingLmsMyRegs" class="px-3 py-1 rounded text-xs font-bold bg-gray-200 text-gray-700">📝 Đăng Ký Của Tôi</button>
         <button type="button" onclick="setTrainingLmsTab('DOCS')" id="btnTrainingLmsDocs" class="px-3 py-1 rounded text-xs font-bold bg-gray-200 text-gray-700">📁 Kho Tài Liệu</button>
         <button type="button" onclick="setTrainingLmsTab('PATHS')" id="btnTrainingLmsPaths" class="px-3 py-1 rounded text-xs font-bold bg-gray-200 text-gray-700">🪜 Lộ Trình Thăng Tiến</button>
+        <button type="button" onclick="setTrainingLmsTab('TESTS')" id="btnTrainingLmsTests" class="px-3 py-1 rounded text-xs font-bold bg-gray-200 text-gray-700">🧪 Ngân Hàng Câu Hỏi</button>
       </div>
 
       <!-- LỚP HỌC -->
@@ -1697,6 +1698,14 @@ table { display: block; overflow-x: auto; max-width: 100%; }
             <div>
               <label class="block font-semibold text-gray-600 mb-1">Điểm Đạt Yêu Cầu (để trống nếu không thi)</label>
               <input id="tcPassScore" type="number" min="0" max="100" class="w-full border p-1.5 rounded">
+            </div>
+            <div>
+              <label class="block font-semibold text-gray-600 mb-1">Bài Test Gán Cho Lớp (tuỳ chọn, tạo ở Ngân Hàng Câu Hỏi)</label>
+              <select id="tcTestId" class="w-full border p-1.5 rounded bg-white"></select>
+            </div>
+            <div>
+              <label class="block font-semibold text-gray-600 mb-1">Số Giây / Câu Hỏi (đếm ngược, mặc định 120s)</label>
+              <input id="tcTestSecondsPerQuestion" type="number" min="10" value="120" class="w-full border p-1.5 rounded">
             </div>
             <div class="md:col-span-3">
               <label id="tcDocumentIdsLabel" class="block font-semibold text-gray-600 mb-1">Giáo Trình Đọc Bắt Buộc (chọn từ Kho Tài Liệu, giữ Ctrl/Cmd để chọn nhiều)</label>
@@ -1799,6 +1808,38 @@ table { display: block; overflow-x: auto; max-width: 100%; }
         <div class="space-y-3">
           <h3 class="font-bold text-gray-800">🪜 Danh Sách Lộ Trình Thăng Tiến</h3>
           <div id="careerPathsContainer" class="space-y-3"></div>
+        </div>
+      </div>
+
+      <!-- NGÂN HÀNG CÂU HỎI — bài test tạo độc lập, gán vào lớp học khi Tạo Lớp Học Mới (xem tcTestId) -->
+      <div id="trainingLmsTestsPanel" class="hidden space-y-4">
+        <form id="trainingTestForm" onsubmit="submitTrainingTest(event)" class="hidden bg-white p-3 rounded border text-xs space-y-3">
+          <h4 class="font-bold text-gray-700">➕ Tạo Bài Test Mới</h4>
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+            <div class="md:col-span-2">
+              <label class="block font-semibold text-gray-600 mb-1">Tên Bài Test</label>
+              <input id="ttTitle" class="w-full border p-1.5 rounded" required>
+            </div>
+            <div>
+              <label class="block font-semibold text-gray-600 mb-1">Loại Đào Tạo (tuỳ chọn)</label>
+              <select id="ttCategory" class="w-full border p-1.5 rounded bg-white"></select>
+            </div>
+            <div>
+              <label class="block font-semibold text-gray-600 mb-1">Điểm Đạt (%, mặc định 60)</label>
+              <input id="ttPassScore" type="number" min="1" max="100" placeholder="60" class="w-full border p-1.5 rounded">
+            </div>
+          </div>
+          <div>
+            <label class="block font-semibold text-gray-600 mb-1">Câu Hỏi</label>
+            <div id="tbQuestionsContainer" class="space-y-2"></div>
+            <button type="button" onclick="tbAddQuestion()" class="mt-2 bg-gray-200 hover:bg-gray-300 px-3 py-1.5 rounded text-xs font-bold">+ Thêm Câu Hỏi</button>
+          </div>
+          <div class="flex justify-end"><button type="submit" class="bg-emerald-600 text-white px-5 py-2 rounded font-bold hover:bg-emerald-700">Tạo Bài Test</button></div>
+        </form>
+        <p id="trainingTestNoPermNote" class="hidden text-xs text-gray-500 italic bg-gray-50 border rounded p-3">⛔ Bạn không có quyền tạo bài test.</p>
+        <div class="space-y-3">
+          <h3 class="font-bold text-gray-800">🧪 Danh Sách Bài Test</h3>
+          <div id="trainingTestsContainer" class="grid grid-cols-1 md:grid-cols-2 gap-2"></div>
         </div>
       </div>
     </div>
@@ -4146,6 +4187,7 @@ const DB = {
   internalPosts: [],
   trainingCategories: [], trainingDocuments: [], trainingClasses: [], trainingRegistrations: [],
   careerPaths: [], careerPathConfirmations: [],
+  trainingTests: [], trainingTestSubmissions: [],
   sensitiveKeywords: [],
   paymentRequests: [],
   formTemplates: {},
@@ -5646,6 +5688,8 @@ async function initDatabase(loggingInUser) {
     DB.trainingRegistrations = data.trainingRegistrations || [];
     DB.careerPaths = data.careerPaths || [];
     DB.careerPathConfirmations = data.careerPathConfirmations || [];
+    DB.trainingTests = data.trainingTests || [];
+    DB.trainingTestSubmissions = data.trainingTestSubmissions || [];
     DB.sensitiveKeywords = data.sensitiveKeywords || [];
 
     DB._versions = data._versions || {};
@@ -21033,7 +21077,7 @@ function canManageTrainingLocal(user) {
 let activeTrainingLmsTab = 'CLASSES';
 function setTrainingLmsTab(tab) {
   activeTrainingLmsTab = tab;
-  const btnMap = { CLASSES: 'btnTrainingLmsClasses', MY_REGS: 'btnTrainingLmsMyRegs', DOCS: 'btnTrainingLmsDocs', PATHS: 'btnTrainingLmsPaths' };
+  const btnMap = { CLASSES: 'btnTrainingLmsClasses', MY_REGS: 'btnTrainingLmsMyRegs', DOCS: 'btnTrainingLmsDocs', PATHS: 'btnTrainingLmsPaths', TESTS: 'btnTrainingLmsTests' };
   Object.entries(btnMap).forEach(([key, btnId]) => {
     const btn = document.getElementById(btnId);
     if (btn) btn.className = key === tab ? 'px-3 py-1 rounded text-xs font-bold bg-emerald-700 text-white' : 'px-3 py-1 rounded text-xs font-bold bg-gray-200 text-gray-700';
@@ -21042,6 +21086,7 @@ function setTrainingLmsTab(tab) {
   document.getElementById('trainingLmsMyRegsPanel').classList.toggle('hidden', tab !== 'MY_REGS');
   document.getElementById('trainingLmsDocsPanel').classList.toggle('hidden', tab !== 'DOCS');
   document.getElementById('trainingLmsPathsPanel').classList.toggle('hidden', tab !== 'PATHS');
+  document.getElementById('trainingLmsTestsPanel').classList.toggle('hidden', tab !== 'TESTS');
   renderTrainingLms();
 }
 
@@ -21053,6 +21098,8 @@ function populateTrainingCategorySelects() {
   });
   const filterSel = document.getElementById('trainingDocFilterCategory');
   if (filterSel) filterSel.innerHTML = `<option value="">-- Tất cả loại đào tạo --</option>` + opts;
+  const ttSel = document.getElementById('ttCategory');
+  if (ttSel) ttSel.innerHTML = `<option value="">-- Không thuộc loại nào --</option>` + opts;
 }
 
 function populateTrainingClassMultiSelects() {
@@ -21064,6 +21111,10 @@ function populateTrainingClassMultiSelects() {
   if (tcDoc) tcDoc.innerHTML = docOpts || `<option value="" disabled>-- Kho tài liệu đang trống --</option>`;
   const cpSel = document.getElementById('cpRequiredClassIds');
   if (cpSel) cpSel.innerHTML = opts || `<option value="" disabled>-- Chưa có lớp học nào để chọn --</option>`;
+  const testOpts = DB.trainingTests.slice().sort((a, b) => b.id - a.id)
+    .map(t => `<option value="${t.id}">${escapeHtml(t.title)} (${t.questions.length} câu)</option>`).join('');
+  const tcTest = document.getElementById('tcTestId');
+  if (tcTest) tcTest.innerHTML = `<option value="">-- Không gán bài test --</option>` + testOpts;
 }
 
 function renderTrainingLms() {
@@ -21076,11 +21127,14 @@ function renderTrainingLms() {
   document.getElementById('trainingDocNoPermNote').classList.toggle('hidden', canManage);
   document.getElementById('careerPathForm').classList.toggle('hidden', !canManage);
   document.getElementById('careerPathNoPermNote').classList.toggle('hidden', canManage);
+  document.getElementById('trainingTestForm').classList.toggle('hidden', !canManage);
+  document.getElementById('trainingTestNoPermNote').classList.toggle('hidden', canManage);
 
   if (activeTrainingLmsTab === 'CLASSES') renderTrainingClasses();
   else if (activeTrainingLmsTab === 'MY_REGS') renderTrainingMyRegs();
   else if (activeTrainingLmsTab === 'DOCS') renderTrainingDocuments();
   else if (activeTrainingLmsTab === 'PATHS') renderCareerPaths();
+  else if (activeTrainingLmsTab === 'TESTS') renderTrainingTests();
 }
 
 // ---------- LỚP HỌC ----------
@@ -21110,6 +21164,8 @@ async function submitTrainingClass(e) {
     registerDeadline: document.getElementById('tcDeadline').value,
     capacity: document.getElementById('tcCapacity').value,
     passScore: document.getElementById('tcPassScore').value,
+    testId: document.getElementById('tcTestId').value,
+    testSecondsPerQuestion: document.getElementById('tcTestSecondsPerQuestion').value,
     documentIds,
     description: document.getElementById('tcDescription').value.trim()
   };
@@ -21153,7 +21209,7 @@ function renderTrainingClasses() {
     const delHTML = currentUser.perms?.admin ? `<button onclick="deleteTrainingClass(${c.id})" class="text-red-500 font-bold hover:underline text-xs ml-2">Xóa</button>` : '';
     return `
       <tr class="hover:bg-gray-50">
-        <td class="border p-2"><span class="font-bold text-emerald-800">${escapeHtml(c.code || '')}</span> <span class="text-xs px-1.5 py-0.5 rounded ${c.mode === 'OFFLINE' ? 'bg-orange-100 text-orange-700' : 'bg-sky-100 text-sky-700'}">${c.mode === 'OFFLINE' ? '🏫 Offline' : '💻 Online'}</span><br>${escapeHtml(c.title)}${c.instructor ? `<br><span class="text-gray-400">GV: ${escapeHtml(c.instructor)}</span>` : ''}</td>
+        <td class="border p-2"><span class="font-bold text-emerald-800">${escapeHtml(c.code || '')}</span> <span class="text-xs px-1.5 py-0.5 rounded ${c.mode === 'OFFLINE' ? 'bg-orange-100 text-orange-700' : 'bg-sky-100 text-sky-700'}">${c.mode === 'OFFLINE' ? '🏫 Offline' : '💻 Online'}</span>${c.testId ? ' <span class="text-xs px-1.5 py-0.5 rounded bg-purple-100 text-purple-700">🧪 Có bài test</span>' : ''}<br>${escapeHtml(c.title)}${c.instructor ? `<br><span class="text-gray-400">GV: ${escapeHtml(c.instructor)}</span>` : ''}</td>
         <td class="border p-2">${escapeHtml(c.category)}</td>
         <td class="border p-2">${escapeHtml((c.startTime || '').replace('T', ' '))}${c.location ? `<br><span class="text-gray-400">${escapeHtml(c.location)}</span>` : ''}</td>
         <td class="border p-2">${regs.length}${c.capacity ? '/' + c.capacity : ''}</td>
@@ -21368,6 +21424,130 @@ async function confirmTrainingRosterAdd() {
   alert(msg);
   closeTrainingRosterModal();
   renderTrainingClasses();
+}
+
+// ---------- NGÂN HÀNG CÂU HỎI (bài test tạo độc lập, gán vào lớp khi Tạo Lớp Học Mới) ----------
+let tbQuestions = []; // [{ text, type: 'SINGLE'|'MULTI', points, options: [{text, correct}] }]
+
+function tbAddQuestion() {
+  tbQuestions.push({ text: '', type: 'SINGLE', points: 1, options: [{ text: '', correct: false }, { text: '', correct: false }] });
+  renderTestBuilderQuestions();
+}
+function tbRemoveQuestion(qi) { tbQuestions.splice(qi, 1); renderTestBuilderQuestions(); }
+function tbAddOption(qi) { tbQuestions[qi].options.push({ text: '', correct: false }); renderTestBuilderQuestions(); }
+function tbRemoveOption(qi, oi) { tbQuestions[qi].options.splice(oi, 1); renderTestBuilderQuestions(); }
+function tbUpdateQuestionField(qi, field, value) { tbQuestions[qi][field] = value; renderTestBuilderQuestions(); }
+// Loại "1 đáp án đúng" mô phỏng hành vi radio (chọn 1 thì bỏ chọn các đáp án khác) dù dùng chung ô
+// checkbox cho cả 2 loại câu hỏi — đơn giản hoá UI, không cần đổi input type qua lại khi đổi loại câu hỏi.
+function tbToggleCorrect(qi, oi, checked) {
+  const q = tbQuestions[qi];
+  if (q.type === 'SINGLE') q.options.forEach((o, idx) => { o.correct = idx === oi; });
+  else q.options[oi].correct = checked;
+  renderTestBuilderQuestions();
+}
+
+function renderTestBuilderQuestions() {
+  const wrap = document.getElementById('tbQuestionsContainer');
+  if (!wrap) return;
+  if (!tbQuestions.length) {
+    wrap.innerHTML = `<p class="text-gray-400 italic text-xs">Chưa có câu hỏi nào — bấm "+ Thêm Câu Hỏi" bên dưới.</p>`;
+    return;
+  }
+  wrap.innerHTML = tbQuestions.map((q, qi) => `
+    <div class="border rounded p-3 space-y-2 bg-gray-50">
+      <div class="flex flex-wrap items-center gap-2">
+        <span class="font-bold text-gray-500">#${qi + 1}</span>
+        <input value="${escapeHtml(q.text)}" oninput="tbQuestions[${qi}].text=this.value" placeholder="Nội dung câu hỏi..." class="flex-1 min-w-[200px] border p-1.5 rounded text-xs">
+        <select onchange="tbUpdateQuestionField(${qi},'type',this.value)" class="border p-1.5 rounded text-xs bg-white">
+          <option value="SINGLE" ${q.type === 'SINGLE' ? 'selected' : ''}>1 đáp án đúng</option>
+          <option value="MULTI" ${q.type === 'MULTI' ? 'selected' : ''}>Nhiều đáp án đúng</option>
+        </select>
+        <input type="number" min="1" value="${q.points}" oninput="tbQuestions[${qi}].points=Number(this.value)||1" title="Điểm câu này" class="w-16 border p-1.5 rounded text-xs">
+        <button type="button" onclick="tbRemoveQuestion(${qi})" class="text-red-500 font-bold text-xs hover:underline">Xoá Câu</button>
+      </div>
+      <div class="space-y-1 pl-4">
+        ${q.options.map((o, oi) => `
+          <div class="flex items-center gap-2">
+            <input type="checkbox" ${o.correct ? 'checked' : ''} onchange="tbToggleCorrect(${qi},${oi},this.checked)" title="Đáp án đúng">
+            <input value="${escapeHtml(o.text)}" oninput="tbQuestions[${qi}].options[${oi}].text=this.value" placeholder="Đáp án ${oi + 1}" class="flex-1 border p-1 rounded text-xs">
+            <button type="button" onclick="tbRemoveOption(${qi},${oi})" class="text-red-400 text-xs hover:underline">&times;</button>
+          </div>`).join('')}
+        <button type="button" onclick="tbAddOption(${qi})" class="text-indigo-600 text-xs font-bold hover:underline">+ Thêm Đáp Án</button>
+      </div>
+    </div>`).join('');
+}
+
+async function submitTrainingTest(e) {
+  e.preventDefault();
+  if (!canManageTrainingLocal(currentUser)) return alert('⛔ Bạn không có quyền tạo bài test!');
+  const title = document.getElementById('ttTitle').value.trim();
+  if (!title) return alert('Vui lòng nhập tên bài test!');
+  if (!tbQuestions.length) return alert('Vui lòng thêm ít nhất 1 câu hỏi!');
+  for (let i = 0; i < tbQuestions.length; i++) {
+    const q = tbQuestions[i];
+    if (!q.text.trim()) return alert(`Câu hỏi số ${i + 1} thiếu nội dung!`);
+    const filled = q.options.filter(o => o.text.trim());
+    if (filled.length < 2) return alert(`Câu hỏi số ${i + 1} cần ít nhất 2 đáp án!`);
+    if (!filled.some(o => o.correct)) return alert(`Câu hỏi số ${i + 1} chưa chọn đáp án đúng!`);
+  }
+  const payload = {
+    title,
+    category: document.getElementById('ttCategory').value,
+    passScore: document.getElementById('ttPassScore').value,
+    questions: tbQuestions.map(q => {
+      const filled = q.options.filter(o => o.text.trim());
+      return {
+        text: q.text.trim(), type: q.type, points: q.points,
+        options: filled.map(o => ({ text: o.text.trim() })),
+        correctOptionIds: filled.map((o, idx) => o.correct ? idx + 1 : null).filter(x => x != null)
+      };
+    })
+  };
+  let newTest;
+  try {
+    const result = await callCreateAction('trainingTests', payload);
+    newTest = result.item;
+  } catch (err) { return alert(`⛔ ${err.message}`); }
+  DB.trainingTests.unshift(newTest);
+  logSystemAction('INTERNAL', 'CREATE_TRAINING_TEST', `Tạo bài test đào tạo [${newTest.title}]`, 'SUCCESS');
+  alert('✅ Đã tạo bài test thành công!');
+  document.getElementById('ttTitle').value = '';
+  document.getElementById('ttPassScore').value = '';
+  document.getElementById('ttCategory').value = '';
+  tbQuestions = [];
+  renderTestBuilderQuestions();
+  renderTrainingTests();
+  populateTrainingClassMultiSelects();
+}
+
+function renderTrainingTests() {
+  const container = document.getElementById('trainingTestsContainer');
+  if (!container) return;
+  const list = DB.trainingTests.slice().sort((a, b) => b.id - a.id);
+  if (!list.length) { container.innerHTML = `<p class="text-gray-400 italic text-xs col-span-2">Chưa có bài test nào.</p>`; return; }
+  container.innerHTML = list.map(t => {
+    const totalPoints = t.questions.reduce((s, q) => s + q.points, 0);
+    const delHTML = currentUser.perms?.admin ? `<button onclick="deleteTrainingTest(${t.id})" class="text-red-500 font-bold hover:underline text-xs ml-2">Xóa</button>` : '';
+    return `<div class="border rounded p-3 bg-white text-xs">
+      <div class="flex justify-between items-start gap-2">
+        <div>
+          <div class="font-bold text-gray-800">${escapeHtml(t.title)}</div>
+          <div class="text-gray-500 mt-0.5">${t.questions.length} câu hỏi · ${totalPoints} điểm · Đạt từ ${t.passScore}%${t.category ? ' · ' + escapeHtml(t.category) : ''}</div>
+        </div>
+        ${delHTML}
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function deleteTrainingTest(id) {
+  if (!confirm('Xóa bài test này? Các lớp học đang gán bài test này sẽ không còn dùng để nộp bài được nữa.')) return;
+  callRecordAction('trainingTests', id, 'delete', {}).then(() => {
+    DB.trainingTests = DB.trainingTests.filter(t => t.id !== id);
+    logSystemAction('INTERNAL', 'DELETE_TRAINING_TEST', `Xóa bài test [id ${id}]`, 'SUCCESS');
+    renderTrainingTests();
+    populateTrainingClassMultiSelects();
+  }).catch(err => alert(`⛔ ${err.message}`));
 }
 
 // ---------- ĐĂNG KÝ CỦA TÔI ----------

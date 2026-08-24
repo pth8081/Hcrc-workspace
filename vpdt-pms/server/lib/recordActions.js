@@ -1753,6 +1753,53 @@ function bulkRegisterTrainingClass(payload, user, cls, existingRegs, users) {
   return { added, skipped };
 }
 
+// Chấm điểm bài test tự động — chốt lại HOÀN TOÀN ở server theo đúng đáp án đúng đã lưu của test
+// (test.questions[].correctOptionIds, xem lib/createValidation.js), KHÔNG tin điểm/kết quả đúng-sai
+// client tự tính gửi kèm, chỉ nhận rawAnswers (câu nào chọn đáp án nào). Đúng 1 câu hỏi = tập hợp đáp án
+// chọn khớp CHÍNH XÁC tập hợp đáp án đúng (không thừa, không thiếu) — áp dụng cho cả loại 1 đáp án lẫn
+// nhiều đáp án, chấm dứt khoát đúng/sai từng câu, không chấm điểm từng phần.
+function gradeTrainingTestSubmission(rawAnswers, test) {
+  const answersByQ = new Map();
+  (Array.isArray(rawAnswers) ? rawAnswers : []).forEach(a => {
+    const qId = Number(a?.questionId);
+    if (Number.isFinite(qId)) answersByQ.set(qId, Array.isArray(a?.selectedOptionIds) ? a.selectedOptionIds.map(Number) : []);
+  });
+
+  let score = 0;
+  let totalPoints = 0;
+  const answers = test.questions.map(q => {
+    totalPoints += q.points;
+    const selected = [...new Set(answersByQ.get(q.id) || [])];
+    const correctSet = new Set(q.correctOptionIds);
+    const isCorrect = selected.length === correctSet.size && selected.every(id => correctSet.has(id));
+    if (isCorrect) score += q.points;
+    return { questionId: q.id, selectedOptionIds: selected, isCorrect };
+  });
+
+  const percentage = totalPoints > 0 ? Math.round((score / totalPoints) * 100) : 0;
+  const passed = percentage >= (test.passScore || 60);
+  return { answers, score, totalPoints, percentage, passed };
+}
+
+// Ghi kết quả chấm tự động vào bản ghi Đăng Ký tương ứng — cùng khuôn setTrainingRegistrationResult()
+// (resultBy/resultByName/resultAt) nhưng resultBy=null + resultByName cố định để phân biệt rõ đây là
+// chấm tự động, không phải người tạo lớp tự tay ghi nhận. Chỉ ghi khi đăng ký còn ở trạng thái
+// REGISTERED — chặn ghi đè 1 kết quả đã có sẵn (vd đã được người tạo lớp ghi tay trước đó, hoặc đã nộp
+// bài test này rồi — dù route gọi hàm này đã tự kiểm tra 1 lượt nộp/lớp ở lớp khoá riêng, kiểm tra lại
+// lần nữa ngay tại đây cho chắc, đúng nguyên tắc "không tin, kiểm tra lại" của mọi mutator ghi đè state).
+function applyAutoGradedTestResult(reg, graded) {
+  if (reg.result !== 'REGISTERED') {
+    throw new HttpError(409, 'Đăng ký này đã có kết quả từ trước, không thể ghi đè bằng kết quả bài test');
+  }
+  reg.result = graded.passed ? 'PASSED' : 'FAILED';
+  reg.score = graded.percentage;
+  reg.resultNote = `Tự động chấm từ bài test (${graded.score}/${graded.totalPoints} điểm)`;
+  reg.resultBy = null;
+  reg.resultByName = 'Hệ thống (tự động chấm bài test)';
+  reg.resultAt = nowVN();
+  return reg;
+}
+
 // Xác nhận 1 nhân viên đã hoàn thành lộ trình thăng tiến — CHỈ cho xác nhận khi nhân viên đó đã có kết
 // quả PASSED ở TẤT CẢ lớp học bắt buộc (path.requiredClassIds), đúng yêu cầu "phải đạt yêu cầu mới được
 // xác nhận qua". Trả về bản NHÁP bản ghi xác nhận (chưa lưu) — routes/records.js insert vào collection
@@ -1803,5 +1850,5 @@ module.exports = {
   mergeReportPeriod, mergeReportPeriodByTasks, updateReportCompilation, publishReportPeriod, unpublishReportPeriod,
   updateReportSlideTemplate,
   canManageTraining, cancelTrainingRegistration, setTrainingRegistrationResult, confirmCareerPathForEmployee,
-  bulkRegisterTrainingClass
+  bulkRegisterTrainingClass, gradeTrainingTestSubmission, applyAutoGradedTestResult
 };

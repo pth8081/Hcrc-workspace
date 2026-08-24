@@ -555,6 +555,7 @@ router.post('/reportSlideTemplates/:id/delete', (req, res) => deleteAdminOnly(re
 router.post('/trainingDocuments/:id/delete', (req, res) => deleteAdminOnly(req, res, 'trainingDocuments'));
 router.post('/trainingClasses/:id/delete', (req, res) => deleteAdminOnly(req, res, 'trainingClasses'));
 router.post('/careerPaths/:id/delete', (req, res) => deleteAdminOnly(req, res, 'careerPaths'));
+router.post('/trainingTests/:id/delete', (req, res) => deleteAdminOnly(req, res, 'trainingTests'));
 
 async function withTrainingRegAction(req, res, action, mutator) {
   const itemId = Number(req.params.id);
@@ -597,6 +598,58 @@ router.post('/trainingClasses/:id/bulk-register', async (req, res) => {
     res.json({ ok: true, ...result });
   } catch (err) {
     handleError(res, `trainingClasses/${req.params.id}/bulk-register`, err);
+  }
+});
+
+// POST /api/records/trainingClasses/:id/submit-test — nộp bài test của lớp học (đăng nhập bắt buộc qua
+// requireAuth ở đầu file, đúng yêu cầu "cần đăng nhập để tránh làm hộ"). Khoá theo classId+username
+// TRONG SUỐT lúc đọc-kiểm tra-chấm-ghi (đọc trainingTestSubmissions để chặn nộp lần 2, đọc/khoá riêng
+// đúng 1 dòng trainingRegistrations để ghi kết quả) — chặn đúng race 2 request nộp bài cùng lúc của
+// CHÍNH người đó (vd double-click nút Nộp Bài).
+router.post('/trainingClasses/:id/submit-test', async (req, res) => {
+  const classId = Number(req.params.id);
+  if (!Number.isFinite(classId)) return res.status(400).json({ error: 'id không hợp lệ' });
+  try {
+    const { freshUser } = await getFreshUser(req);
+    const result = await withAppLock(`training_test_submission:${classId}:${freshUser.username}`, async () => {
+      const classes = await getAllForCollection('trainingClasses');
+      const cls = classes.find(c => c.id === classId);
+      if (!cls) throw new HttpError(404, 'Không tìm thấy lớp học');
+      if (cls.testId == null) throw new HttpError(400, 'Lớp học này chưa được gán bài test');
+
+      const tests = await getAllForCollection('trainingTests');
+      const test = tests.find(t => t.id === cls.testId);
+      if (!test) throw new HttpError(404, 'Không tìm thấy bài test được gán cho lớp học này');
+
+      const existingSubs = await getAllForCollection('trainingTestSubmissions');
+      if (existingSubs.some(s => s.classId === classId && s.username === freshUser.username)) {
+        throw new HttpError(409, 'Bạn đã làm bài test của lớp học này rồi — mỗi người chỉ được làm 1 lần duy nhất');
+      }
+
+      const regs = await getAllForCollection('trainingRegistrations');
+      const reg = regs.find(r => r.classId === classId && r.creator === freshUser.username && r.result !== 'CANCELLED');
+      if (!reg) throw new HttpError(403, 'Bạn chưa đăng ký lớp học này nên không thể làm bài test');
+
+      const graded = recordActions.gradeTrainingTestSubmission(req.body?.answers, test);
+
+      const submission = {
+        id: Date.now(),
+        testId: test.id, testTitle: test.title,
+        classId: cls.id, className: cls.title, classCode: cls.code,
+        username: freshUser.username, name: freshUser.name, dept: freshUser.dept,
+        answers: graded.answers, score: graded.score, totalPoints: graded.totalPoints,
+        percentage: graded.percentage, passed: graded.passed,
+        submittedAt: new Date().toLocaleString('vi-VN')
+      };
+      const insertedSubmission = await insertRecord('trainingTestSubmissions', submission);
+      const updatedReg = await withLockedRecordForCollection('trainingRegistrations', reg.id, (item) =>
+        recordActions.applyAutoGradedTestResult(item, graded));
+
+      return { submission: insertedSubmission, registration: updatedReg };
+    });
+    res.json({ ok: true, ...result });
+  } catch (err) {
+    handleError(res, `trainingClasses/${req.params.id}/submit-test`, err);
   }
 });
 

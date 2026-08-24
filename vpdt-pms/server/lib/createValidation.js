@@ -881,7 +881,7 @@ const CREATE_MODULE_CONFIGS = {
     forceOwnDept: true,
     getScope: () => ({}),
     creatorField: 'creator', creatorNameField: 'creatorName',
-    extraValidate: (payload, collection, user) => {
+    extraValidate: (payload, collection, user, appData) => {
       if (!user.perms?.admin && !user.perms?.internalTrainingCreate) {
         throw new CreateError(403, 'Bạn không có quyền tạo lớp học');
       }
@@ -899,7 +899,63 @@ const CREATE_MODULE_CONFIGS = {
       // Kiểu lớp: ONLINE (mặc định, theo giáo trình đọc bắt buộc) hay OFFLINE (giáo trình chỉ là tài
       // liệu tham khảo giảng viên tự mở khi lên lớp, học viên không bắt buộc phải đọc trước).
       payload.mode = payload.mode === 'OFFLINE' ? 'OFFLINE' : 'ONLINE';
+      // Gán bài test (tuỳ chọn, chọn từ Ngân Hàng Câu Hỏi) — testId phải khớp 1 bài test có thật tại
+      // thời điểm tạo lớp (appData.trainingTests do routes/create.js đọc kèm, xem lib/recordStore.js).
+      const testId = payload.testId === '' || payload.testId == null ? null : Number(payload.testId);
+      if (testId != null) {
+        const tests = appData?.trainingTests || [];
+        if (!Number.isFinite(testId) || !tests.some(t => t.id === testId)) {
+          throw new CreateError(400, 'Bài test được chọn không hợp lệ');
+        }
+      }
+      payload.testId = testId;
+      // Số giây/câu khi làm bài test — mặc định 120s/câu, người tạo lớp được đổi lúc tạo lớp (xem yêu
+      // cầu nghiệp vụ: đếm ngược mỗi câu, mặc định 2 phút).
+      const secPerQ = Number(payload.testSecondsPerQuestion);
+      payload.testSecondsPerQuestion = Number.isFinite(secPerQ) && secPerQ >= 10 ? Math.floor(secPerQ) : 120;
       payload.status = 'OPEN';
+    }
+  },
+  // Ngân Hàng Câu Hỏi — bài test tạo ĐỘC LẬP với lớp học (tạo trước, gán vào lớp sau qua
+  // trainingClasses.testId ở trên), 1 bài test có thể dùng lại cho nhiều lớp khác nhau. Chấm điểm tự
+  // động (xem gradeTrainingTestSubmission(), lib/recordActions.js) nên đáp án đúng PHẢI được chốt lại ở
+  // server tại đây, không tin nguyên payload câu hỏi/đáp án đúng client tự gửi ngoài nội dung text.
+  trainingTests: {
+    dbKey: 'trainingTests',
+    forceOwnDept: true,
+    getScope: () => ({}),
+    creatorField: 'creator', creatorNameField: 'creatorName',
+    extraValidate: (payload, collection, user) => {
+      if (!user.perms?.admin && !user.perms?.internalTrainingCreate) {
+        throw new CreateError(403, 'Bạn không có quyền tạo bài test');
+      }
+      if (!payload.title || !String(payload.title).trim()) throw new CreateError(400, 'Thiếu tên bài test');
+      const rawQuestions = Array.isArray(payload.questions) ? payload.questions : [];
+      if (!rawQuestions.length) throw new CreateError(400, 'Bài test cần ít nhất 1 câu hỏi');
+      if (rawQuestions.length > 100) throw new CreateError(400, 'Bài test tối đa 100 câu hỏi');
+      const questions = rawQuestions.map((q, i) => {
+        const text = String(q?.text || '').trim();
+        if (!text) throw new CreateError(400, `Câu hỏi số ${i + 1} thiếu nội dung`);
+        const type = q?.type === 'MULTI' ? 'MULTI' : 'SINGLE';
+        const optionTexts = Array.isArray(q?.options) ? q.options.map(o => String(o?.text ?? o ?? '').trim()).filter(Boolean) : [];
+        if (optionTexts.length < 2) throw new CreateError(400, `Câu hỏi số ${i + 1} cần ít nhất 2 đáp án`);
+        if (optionTexts.length > 10) throw new CreateError(400, `Câu hỏi số ${i + 1} tối đa 10 đáp án`);
+        const options = optionTexts.map((t, oi) => ({ id: oi + 1, text: t }));
+        const correctOptionIds = Array.isArray(q?.correctOptionIds)
+          ? [...new Set(q.correctOptionIds.map(Number))].filter(id => options.some(o => o.id === id))
+          : [];
+        if (!correctOptionIds.length) throw new CreateError(400, `Câu hỏi số ${i + 1} chưa chọn đáp án đúng`);
+        if (type === 'SINGLE' && correctOptionIds.length > 1) {
+          throw new CreateError(400, `Câu hỏi số ${i + 1} là loại 1 đáp án đúng nhưng lại chọn nhiều hơn 1`);
+        }
+        const points = Number(q?.points) > 0 ? Number(q.points) : 1;
+        return { id: i + 1, text, type, options, correctOptionIds, points };
+      });
+      payload.title = String(payload.title).trim();
+      payload.category = payload.category ? String(payload.category).trim() : '';
+      payload.questions = questions;
+      const passScore = Number(payload.passScore);
+      payload.passScore = Number.isFinite(passScore) && passScore > 0 && passScore <= 100 ? passScore : 60;
     }
   },
   // Đăng ký lớp học — khớp đúng khuôn vppRegistrations (khoá theo cặp lớp+người để chặn race 2 request
