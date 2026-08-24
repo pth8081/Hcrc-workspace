@@ -10,6 +10,7 @@
 // khác, xem các hàm riêng bên dưới).
 const { getAppDataValue } = require('./appData');
 const { MODULE_CONFIGS, resolveContractApprovalWorkflow, resolveContractManageWorkflow } = require('./workflowEngine');
+const { canApproveInternalPost, canManageTraining } = require('./recordActions');
 
 function scopeAllows(user, scope, dept) {
   if (!user) return false;
@@ -113,8 +114,25 @@ function canViewInternalPost(user, post) {
   return post.author === user.username || !!(user.perms?.admin || user.perms?.internalPostApprove);
 }
 
+// Ẩn dữ liệu cờ cảnh báo bình luận nhạy cảm (flagged/flagCategories/flagTerms — xem
+// addInternalPostComment() ở lib/recordActions.js) khỏi người dùng KHÔNG có quyền kiểm duyệt — trước
+// đây stripPasswords()/sanitizeEmailConfig() (routes/data.js) đã theo đúng nguyên tắc "ẩn ở SERVER,
+// không chỉ ẩn ở giao diện" cho dữ liệu nhạy cảm; nhãn cảnh báo + lý do vi phạm cũng cần ẩn tương tự —
+// nếu chỉ ẩn ở client, ai gọi thẳng GET /api/data vẫn đọc được lý do bị đánh dấu của bất kỳ bình luận
+// nào (kể cả bình luận không phải của mình).
+function sanitizeInternalPostCommentsForUser(post, user) {
+  if (!Array.isArray(post.comments) || !post.comments.some(c => c.flagged)) return post;
+  if (canApproveInternalPost(user)) return post;
+  return {
+    ...post,
+    comments: post.comments.map(({ flagged, flagCategories, flagTerms, flagDismissedBy, flagDismissedAt, ...rest }) => rest)
+  };
+}
+
 function filterInternalPostsForUser(posts, user) {
-  return (posts || []).filter(p => canViewInternalPost(user, p));
+  return (posts || [])
+    .filter(p => canViewInternalPost(user, p))
+    .map(p => sanitizeInternalPostCommentsForUser(p, user));
 }
 
 // Báo Cáo Định Kỳ: nội dung slide đã tổng hợp (compilation.slides) chỉ nên lộ cho reportManage/
@@ -129,6 +147,20 @@ function canSeeReportCompilation(user, period) {
 
 function sanitizeReportPeriodsForUser(periods, user) {
   return (periods || []).map(p => canSeeReportCompilation(user, p) ? p : { ...p, compilation: null });
+}
+
+// Bài test đào tạo (trainingTests): correctOptionIds của từng câu hỏi là ĐÁP ÁN ĐÚNG — trước đây GET
+// /api/data trả nguyên mảng câu hỏi kèm đáp án đúng cho MỌI người đã đăng nhập (chỉ ẩn ở giao diện làm
+// bài, xem index.html), bất kỳ ai mở devtools/gọi thẳng API đều đọc được đáp án đúng của bài test mình
+// sắp làm — hỏng hoàn toàn tính xác thực của việc chấm điểm tự động (lib/recordActions.js
+// gradeTrainingTestSubmission()). Chỉ người quản lý đào tạo (canManageTraining — tạo/sửa bài test) mới
+// cần thấy đáp án đúng; học viên chỉ cần text câu hỏi/đáp án để làm bài.
+function sanitizeTrainingTestsForUser(tests, user) {
+  if (canManageTraining(user)) return tests;
+  return (tests || []).map(t => ({
+    ...t,
+    questions: (t.questions || []).map(({ correctOptionIds, ...rest }) => rest)
+  }));
 }
 
 // Khớp khối lọc trong renderPrEntryTable() (public/index.html, ~dòng 16904-16913): reportManage/
@@ -258,6 +290,7 @@ module.exports = {
   canViewDoc, canViewSubmission, filterDocsForUser, filterSubmissionsForUser,
   canViewInternalPost, filterInternalPostsForUser,
   canSeeReportCompilation, sanitizeReportPeriodsForUser,
+  sanitizeTrainingTestsForUser,
   canViewReportEntry, filterReportEntriesForUser,
   canViewContract, filterContractsForUser,
   canViewCarReg, filterCarRegsForUser,

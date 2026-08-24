@@ -19,6 +19,7 @@ const systemLogRoutes = require('./routes/systemLog');
 const uploadRoutes = require('./routes/upload');
 const emailRoutes = require('./routes/email');
 const vppCatalogRoutes = require('./routes/vppCatalog');
+const trainingRosterRoutes = require('./routes/trainingRoster');
 const adminExportRoutes = require('./routes/adminExport');
 const downloadRoutes = require('./routes/download');
 const { isCaptchaEnabled, generateCaptcha } = require('./lib/captcha');
@@ -111,6 +112,7 @@ app.use('/api/log', systemLogRoutes);
 app.use('/api/upload', requireAuth, blockIfMustChangePassword, uploadRoutes);
 app.use('/api/send-email', requireAuth, blockIfMustChangePassword, emailRoutes);
 app.use('/api/vpp', vppCatalogRoutes);
+app.use('/api/training', trainingRosterRoutes);
 app.use('/api/admin', adminExportRoutes);
 // Route TẢI file đính kèm dùng chung (khác /uploads/ tĩnh bên dưới — chỗ đó dùng để XEM trong Khung Xem
 // Bảo Vệ): PDF được đóng dấu watermark trước khi trả về, xem chi tiết ở routes/download.js.

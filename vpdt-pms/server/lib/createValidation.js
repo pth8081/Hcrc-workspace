@@ -855,6 +855,167 @@ const CREATE_MODULE_CONFIGS = {
       payload.periodEndTime = period.endTime;
       payload.status = 'DRAFT';
     }
+  },
+  // ===== ĐÀO TẠO (module con "Truyền Thông Nội Bộ" > Đào tạo) — tạm thời, MVP =====
+  // Dùng chung 1 cờ quyền internalTrainingCreate (đã có sẵn cho việc đăng bài "Đào tạo" kiểu cũ) cho cả
+  // 4 việc: tải tài liệu vào kho, tạo lớp học, tạo lộ trình thăng tiến, và xác nhận nhân viên hoàn thành
+  // lộ trình (routes/records.js) — không thêm cờ quyền riêng để giữ phạm vi gọn, admin luôn làm được.
+  trainingDocuments: {
+    dbKey: 'trainingDocuments',
+    forceOwnDept: true, // không có khái niệm phòng ban để chọn (kho dùng chung toàn công ty)
+    getScope: () => ({}),
+    creatorField: 'uploaderUsername', creatorNameField: 'uploaderName',
+    extraValidate: (payload, collection, user) => {
+      if (!user.perms?.admin && !user.perms?.internalTrainingCreate) {
+        throw new CreateError(403, 'Bạn không có quyền tải lên tài liệu đào tạo');
+      }
+      if (!payload.category || !String(payload.category).trim()) throw new CreateError(400, 'Thiếu loại đào tạo');
+      if (!payload.title || !String(payload.title).trim()) throw new CreateError(400, 'Thiếu tên tài liệu');
+      if (!payload.fileUrl) throw new CreateError(400, 'Vui lòng chọn tệp tài liệu cần tải lên');
+      payload.category = String(payload.category).trim();
+      payload.title = String(payload.title).trim();
+    }
+  },
+  trainingClasses: {
+    dbKey: 'trainingClasses',
+    forceOwnDept: true,
+    getScope: () => ({}),
+    creatorField: 'creator', creatorNameField: 'creatorName',
+    extraValidate: (payload, collection, user, appData) => {
+      if (!user.perms?.admin && !user.perms?.internalTrainingCreate) {
+        throw new CreateError(403, 'Bạn không có quyền tạo lớp học');
+      }
+      if (!payload.category || !String(payload.category).trim()) throw new CreateError(400, 'Thiếu loại đào tạo');
+      if (!payload.title || !String(payload.title).trim()) throw new CreateError(400, 'Thiếu tên lớp học');
+      if (!payload.startTime) throw new CreateError(400, 'Thiếu thời gian bắt đầu lớp học');
+      if (payload.endTime && payload.startTime && payload.endTime < payload.startTime) {
+        throw new CreateError(400, 'Thời gian kết thúc phải sau thời gian bắt đầu');
+      }
+      payload.category = String(payload.category).trim();
+      payload.title = String(payload.title).trim();
+      payload.capacity = Number(payload.capacity) > 0 ? Math.floor(Number(payload.capacity)) : 0;
+      payload.passScore = (payload.passScore === '' || payload.passScore == null) ? null : Number(payload.passScore);
+      payload.documentIds = Array.isArray(payload.documentIds) ? payload.documentIds.map(Number).filter(Number.isFinite) : [];
+      // Kiểu lớp: ONLINE (mặc định, theo giáo trình đọc bắt buộc) hay OFFLINE (giáo trình chỉ là tài
+      // liệu tham khảo giảng viên tự mở khi lên lớp, học viên không bắt buộc phải đọc trước).
+      payload.mode = payload.mode === 'OFFLINE' ? 'OFFLINE' : 'ONLINE';
+      // Gán bài test (tuỳ chọn, chọn từ Ngân Hàng Câu Hỏi) — testId phải khớp 1 bài test có thật tại
+      // thời điểm tạo lớp (appData.trainingTests do routes/create.js đọc kèm, xem lib/recordStore.js).
+      const testId = payload.testId === '' || payload.testId == null ? null : Number(payload.testId);
+      if (testId != null) {
+        const tests = appData?.trainingTests || [];
+        if (!Number.isFinite(testId) || !tests.some(t => t.id === testId)) {
+          throw new CreateError(400, 'Bài test được chọn không hợp lệ');
+        }
+      }
+      payload.testId = testId;
+      // Số giây/câu khi làm bài test — mặc định 120s/câu, người tạo lớp được đổi lúc tạo lớp (xem yêu
+      // cầu nghiệp vụ: đếm ngược mỗi câu, mặc định 2 phút).
+      const secPerQ = Number(payload.testSecondsPerQuestion);
+      payload.testSecondsPerQuestion = Number.isFinite(secPerQ) && secPerQ >= 10 ? Math.floor(secPerQ) : 120;
+      payload.status = 'OPEN';
+    }
+  },
+  // Ngân Hàng Câu Hỏi — bài test tạo ĐỘC LẬP với lớp học (tạo trước, gán vào lớp sau qua
+  // trainingClasses.testId ở trên), 1 bài test có thể dùng lại cho nhiều lớp khác nhau. Chấm điểm tự
+  // động (xem gradeTrainingTestSubmission(), lib/recordActions.js) nên đáp án đúng PHẢI được chốt lại ở
+  // server tại đây, không tin nguyên payload câu hỏi/đáp án đúng client tự gửi ngoài nội dung text.
+  trainingTests: {
+    dbKey: 'trainingTests',
+    forceOwnDept: true,
+    getScope: () => ({}),
+    creatorField: 'creator', creatorNameField: 'creatorName',
+    extraValidate: (payload, collection, user) => {
+      if (!user.perms?.admin && !user.perms?.internalTrainingCreate) {
+        throw new CreateError(403, 'Bạn không có quyền tạo bài test');
+      }
+      if (!payload.title || !String(payload.title).trim()) throw new CreateError(400, 'Thiếu tên bài test');
+      const rawQuestions = Array.isArray(payload.questions) ? payload.questions : [];
+      if (!rawQuestions.length) throw new CreateError(400, 'Bài test cần ít nhất 1 câu hỏi');
+      if (rawQuestions.length > 100) throw new CreateError(400, 'Bài test tối đa 100 câu hỏi');
+      const questions = rawQuestions.map((q, i) => {
+        const text = String(q?.text || '').trim();
+        if (!text) throw new CreateError(400, `Câu hỏi số ${i + 1} thiếu nội dung`);
+        const type = q?.type === 'MULTI' ? 'MULTI' : 'SINGLE';
+        const optionTexts = Array.isArray(q?.options) ? q.options.map(o => String(o?.text ?? o ?? '').trim()).filter(Boolean) : [];
+        if (optionTexts.length < 2) throw new CreateError(400, `Câu hỏi số ${i + 1} cần ít nhất 2 đáp án`);
+        if (optionTexts.length > 10) throw new CreateError(400, `Câu hỏi số ${i + 1} tối đa 10 đáp án`);
+        const options = optionTexts.map((t, oi) => ({ id: oi + 1, text: t }));
+        const correctOptionIds = Array.isArray(q?.correctOptionIds)
+          ? [...new Set(q.correctOptionIds.map(Number))].filter(id => options.some(o => o.id === id))
+          : [];
+        if (!correctOptionIds.length) throw new CreateError(400, `Câu hỏi số ${i + 1} chưa chọn đáp án đúng`);
+        if (type === 'SINGLE' && correctOptionIds.length > 1) {
+          throw new CreateError(400, `Câu hỏi số ${i + 1} là loại 1 đáp án đúng nhưng lại chọn nhiều hơn 1`);
+        }
+        const points = Number(q?.points) > 0 ? Number(q.points) : 1;
+        return { id: i + 1, text, type, options, correctOptionIds, points };
+      });
+      payload.title = String(payload.title).trim();
+      payload.category = payload.category ? String(payload.category).trim() : '';
+      payload.questions = questions;
+      const passScore = Number(payload.passScore);
+      payload.passScore = Number.isFinite(passScore) && passScore > 0 && passScore <= 100 ? passScore : 60;
+    }
+  },
+  // Đăng ký lớp học — khớp đúng khuôn vppRegistrations (khoá theo cặp lớp+người để chặn race 2 request
+  // đăng ký cùng lúc), chỉ khác: cho phép đăng ký lại sau khi tự HUỶ (result='CANCELLED', không phải chỉ
+  // REJECTED) — huỷ ở đây do chính người đăng ký chủ động (không qua quy trình duyệt nào).
+  trainingRegistrations: {
+    dbKey: 'trainingRegistrations',
+    forceOwnDept: true,
+    getScope: () => ({}),
+    creatorField: 'creator', creatorNameField: 'creatorName',
+    getLockKey: (payload, user) => `training_registration:${payload.classId}:${user.username}`,
+    extraValidate: (payload, collection, user, appData) => {
+      const classId = Number(payload.classId);
+      if (!Number.isFinite(classId)) throw new CreateError(400, 'Thiếu lớp học');
+      const classes = appData?.trainingClasses || [];
+      const cls = classes.find(c => c.id === classId);
+      if (!cls) throw new CreateError(404, 'Không tìm thấy lớp học');
+      if (cls.status !== 'OPEN') throw new CreateError(409, 'Lớp học này đã đóng đăng ký');
+      const todayStr = new Date().toISOString().slice(0, 10);
+      if (cls.registerDeadline && todayStr > cls.registerDeadline) {
+        throw new CreateError(409, 'Đã hết hạn đăng ký lớp học này');
+      }
+      const activeRegs = (collection || []).filter(r => r.classId === classId && r.result !== 'CANCELLED');
+      if (cls.capacity > 0 && activeRegs.length >= cls.capacity) {
+        throw new CreateError(409, 'Lớp học đã đủ số lượng đăng ký');
+      }
+      if (activeRegs.some(r => r.creator === user.username)) {
+        throw new CreateError(409, 'Bạn đã đăng ký lớp học này rồi');
+      }
+      // Chốt lại theo đúng dữ liệu lớp học tại thời điểm đăng ký (snapshot) — không tin tên/mã lớp
+      // client tự gửi.
+      payload.className = cls.title;
+      payload.classCode = cls.code;
+      payload.category = cls.category;
+      payload.classCreator = cls.creator;
+      payload.result = 'REGISTERED';
+      payload.score = null;
+      payload.resultNote = '';
+      payload.resultBy = null;
+      payload.resultByName = null;
+      payload.resultAt = null;
+    }
+  },
+  // Lộ trình thăng tiến — danh sách lớp học BẮT BUỘC phải PASSED hết mới đủ điều kiện được "Xác nhận"
+  // hoàn thành (xem confirmCareerPathForEmployee(), lib/recordActions.js).
+  careerPaths: {
+    dbKey: 'careerPaths',
+    forceOwnDept: true,
+    getScope: () => ({}),
+    creatorField: 'creator', creatorNameField: 'creatorName',
+    extraValidate: (payload, collection, user) => {
+      if (!user.perms?.admin && !user.perms?.internalTrainingCreate) {
+        throw new CreateError(403, 'Bạn không có quyền tạo lộ trình thăng tiến');
+      }
+      if (!payload.name || !String(payload.name).trim()) throw new CreateError(400, 'Thiếu tên lộ trình thăng tiến');
+      const requiredClassIds = Array.isArray(payload.requiredClassIds) ? payload.requiredClassIds.map(Number).filter(Number.isFinite) : [];
+      if (!requiredClassIds.length) throw new CreateError(400, 'Vui lòng chọn ít nhất 1 lớp học bắt buộc cho lộ trình');
+      payload.name = String(payload.name).trim();
+      payload.requiredClassIds = requiredClassIds;
+    }
   }
 };
 

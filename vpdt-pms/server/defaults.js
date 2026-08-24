@@ -45,6 +45,28 @@ const DEFAULTS = {
   // phê duyệt). Chỉ 1 danh sách dùng chung toàn hệ thống, admin thêm/xoá tại màn Quản trị (giống hệt
   // mô hình depts/cats ở trên).
   jobTitles: ['Nhân viên', 'Chuyên viên', 'Trưởng phòng', 'Phó phòng', 'Giám đốc', 'Phó giám đốc', 'Tổng Giám Đốc', 'Chủ Tịch'],
+  // Loại đào tạo (module con "Truyền Thông Nội Bộ" > Đào tạo, tạm thời) — phân loại Kho Tài Liệu và Lớp
+  // Học, cùng cơ chế mở như jobTitles ở trên (danh sách nhãn hiển thị thuần, không có tra cứu phụ thuộc).
+  trainingCategories: [],
+
+  // Từ khoá nhạy cảm dùng để QUÉT (không CHẶN) bình luận ở Truyền Thông Nội Bộ — xem
+  // addInternalPostComment() ở lib/recordActions.js. Khác jobTitles/trainingCategories ở trên (danh
+  // sách nhãn hiển thị thuần), đây là dữ liệu cấu hình chính sách kiểm duyệt nên đặt trong
+  // ADMIN_ONLY_KEYS (routes/data.js) — chỉ admin sửa được, không mở như các danh mục thuần khác.
+  // category: 'TUC_TIU' | 'TIEU_CUC' | 'CUC_DOAN' | 'PHAN_DONG'. Seed sẵn 1 danh sách mẫu tối thiểu cho
+  // TUC_TIU/TIEU_CUC để dùng ngay; CỐ Ý để TRỐNG CUC_DOAN/PHAN_DONG — không có căn cứ chung phù hợp
+  // cho mọi doanh nghiệp, để admin công ty tự nhập theo tiêu chí nội bộ.
+  sensitiveKeywords: [
+    { id: 1, term: 'đm', category: 'TUC_TIU' },
+    { id: 2, term: 'đéo', category: 'TUC_TIU' },
+    { id: 3, term: 'vcl', category: 'TUC_TIU' },
+    { id: 4, term: 'vãi lồn', category: 'TUC_TIU' },
+    { id: 5, term: 'thằng chó', category: 'TUC_TIU' },
+    { id: 6, term: 'con chó', category: 'TUC_TIU' },
+    { id: 7, term: 'ngu như chó', category: 'TIEU_CUC' },
+    { id: 8, term: 'đồ rác rưởi', category: 'TIEU_CUC' },
+    { id: 9, term: 'sa thải hết đi', category: 'TIEU_CUC' }
+  ],
 
   // Danh sách "Loại Tờ Trình" — TRƯỚC ĐÂY gõ cứng trong index.html (const SUBMISSION_TYPES), giờ
   // chuyển thành dữ liệu để admin tự thêm/bớt tại màn Biểu Mẫu (nút Sửa trường mặc định "Loại Tờ

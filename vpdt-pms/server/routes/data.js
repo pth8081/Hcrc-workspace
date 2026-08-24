@@ -16,7 +16,7 @@ const { sendServerError } = require('../lib/errorResponse');
 const {
   filterDocsForUser, filterSubmissionsForUser, filterInternalPostsForUser, sanitizeReportPeriodsForUser,
   filterReportEntriesForUser, filterContractsForUser, filterCarRegsForUser, filterOfficeReqsForUser,
-  filterMeetingsForUser, filterMeetingMinutesForUser, filterTasksForUser
+  filterMeetingsForUser, filterMeetingMinutesForUser, filterTasksForUser, sanitizeTrainingTestsForUser
 } = require('../lib/recordViewScope');
 
 const VALID_KEYS = new Set(Object.keys(DEFAULTS));
@@ -43,7 +43,11 @@ const ADMIN_ONLY_KEYS = new Set([
   // phép tải lên theo từng module) — cả 4 chỉ có màn sửa trong dropdown "Hệ Thống" (setSystemSubTab()
   // ở index.html chặn !admin cho toàn bộ 4 sub-tab này) nhưng trước đây bị BỎ SÓT khỏi danh sách này,
   // khiến bất kỳ tài khoản đã đăng nhập nào cũng ghi trực tiếp được qua POST /api/data/<key>.
-  'formTemplates', 'deptAbbrs', 'docCatAbbrs', 'uploadFileTypeConfig'
+  'formTemplates', 'deptAbbrs', 'docCatAbbrs', 'uploadFileTypeConfig',
+  // sensitiveKeywords: dữ liệu cấu hình CHÍNH SÁCH kiểm duyệt bình luận (Truyền Thông Nội Bộ), không
+  // phải danh sách nhãn hiển thị thuần như jobTitles/trainingCategories — chỉ admin mới sửa được danh
+  // sách từ khoá quét (xem defaults.js + lib/recordActions.js scanCommentForSensitiveContent()).
+  'sensitiveKeywords'
 ]);
 
 router.use(requireAuth, blockIfMustChangePassword);
@@ -290,6 +294,9 @@ router.get('/', async (req, res) => {
     if (data.submissions) data.submissions = await filterSubmissionsForUser(data.submissions, req.freshUser);
     if (data.internalPosts) data.internalPosts = filterInternalPostsForUser(data.internalPosts, req.freshUser);
     if (data.reportPeriods) data.reportPeriods = sanitizeReportPeriodsForUser(data.reportPeriods, req.freshUser);
+    // trainingTests: đáp án đúng (correctOptionIds) chỉ để người quản lý đào tạo thấy — xem lý do đầy
+    // đủ ở lib/recordViewScope.js sanitizeTrainingTestsForUser().
+    if (data.trainingTests) data.trainingTests = sanitizeTrainingTestsForUser(data.trainingTests, req.freshUser);
     // reportEntries: cùng dạng lỗ hổng như docs/submissions ở trên — GET /api/data trước đây trả nguyên
     // báo cáo (kể cả bản NHÁP đang soạn dở) của MỌI người ở MỌI phòng ban cho bất kỳ ai đã đăng nhập,
     // trong khi renderPrEntryTable() (index.html) chỉ ẩn ở giao diện theo đúng logic canViewReportEntry().

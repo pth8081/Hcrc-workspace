@@ -605,11 +605,69 @@ function toggleInternalPostLike(user, post) {
   return post;
 }
 
-function addInternalPostComment(payload, user, post) {
+// Chuẩn hoá để so khớp từ khoá nhạy cảm — bỏ dấu tiếng Việt (kể cả "đ/Đ", không có dạng phân rã NFD)
+// + viết thường + gộp khoảng trắng, cùng khuôn normalizeHeader() ở lib/vppCatalog.js.
+function normalizeForScan(s) {
+  return String(s || '').replace(/đ/g, 'd').replace(/Đ/g, 'D')
+    .normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/\s+/g, ' ').trim();
+}
+
+// Quét (KHÔNG chặn đăng) nội dung bình luận theo danh sách từ khoá admin tự cấu hình
+// (DB.sensitiveKeywords, xem defaults.js) — chỉ gắn cờ để người có quyền internalPostApprove xem xét
+// sau, quyết định cuối (bỏ qua/xoá) vẫn do người kiểm duyệt, không tự động xoá gì ở đây. Trả về mảng
+// rỗng nếu không khớp từ nào.
+function scanCommentForSensitiveContent(content, sensitiveKeywords) {
+  const normalized = normalizeForScan(content);
+  if (!normalized) return [];
+  const hits = [];
+  for (const kw of sensitiveKeywords || []) {
+    const term = normalizeForScan(kw.term);
+    if (term && normalized.includes(term)) hits.push({ term: kw.term, category: kw.category });
+  }
+  return hits;
+}
+
+// sensitiveKeywords (mảng {term, category}, xem defaults.js) do routes/records.js đọc sẵn từ AppData
+// và truyền vào — hàm ở đây không tự đọc DB (khớp nguyên tắc appData chỉ do caller đọc, xem
+// lib/createValidation.js). Không truyền (undefined) thì bỏ qua bước quét, không gắn cờ gì (an toàn
+// khi có nơi gọi cũ chưa kịp cập nhật).
+function addInternalPostComment(payload, user, post, sensitiveKeywords) {
   const content = (payload?.content || '').trim();
   if (!content) throw new HttpError(400, 'Vui lòng nhập nội dung bình luận');
   if (!Array.isArray(post.comments)) post.comments = [];
-  post.comments.push({ id: Date.now(), username: user.username, name: user.name, content, time: nowVN() });
+  const comment = { id: Date.now(), username: user.username, name: user.name, content, time: nowVN() };
+  const hits = scanCommentForSensitiveContent(content, sensitiveKeywords);
+  if (hits.length) {
+    comment.flagged = true;
+    comment.flagCategories = [...new Set(hits.map(h => h.category))];
+    comment.flagTerms = [...new Set(hits.map(h => h.term))];
+  }
+  post.comments.push(comment);
+  return post;
+}
+
+// Bỏ cờ cảnh báo (người kiểm duyệt xem xét thấy không có vấn đề gì) — không xoá bình luận, chỉ gỡ
+// đánh dấu để không còn hiện trong hàng chờ kiểm duyệt.
+function dismissInternalCommentFlag(user, post, commentId) {
+  if (!canApproveInternalPost(user)) throw new HttpError(403, 'Bạn không có quyền kiểm duyệt bình luận');
+  const comment = (post.comments || []).find(c => c.id === commentId);
+  if (!comment) throw new HttpError(404, 'Không tìm thấy bình luận');
+  comment.flagged = false;
+  comment.flagCategories = [];
+  comment.flagTerms = [];
+  comment.flagDismissedBy = user.username;
+  comment.flagDismissedAt = nowVN();
+  return post;
+}
+
+// Xoá hẳn 1 bình luận (người kiểm duyệt xử lý bình luận vi phạm) — cho phép xoá bất kỳ bình luận nào,
+// không chỉ bình luận đang bị đánh dấu (khớp quyền hạn chung canApproveInternalPost, tương tự admin
+// xoá được mọi bình luận chứ không riêng bình luận do hệ thống tự phát hiện).
+function deleteInternalPostComment(user, post, commentId) {
+  if (!canApproveInternalPost(user)) throw new HttpError(403, 'Bạn không có quyền xoá bình luận này');
+  const idx = (post.comments || []).findIndex(c => c.id === commentId);
+  if (idx === -1) throw new HttpError(404, 'Không tìm thấy bình luận');
+  post.comments.splice(idx, 1);
   return post;
 }
 
@@ -1604,6 +1662,172 @@ function unpublishReportPeriod(user, period) {
   return period;
 }
 
+// ===== ĐÀO TẠO (module con "Truyền Thông Nội Bộ" > Đào tạo) — tạm thời, MVP =====
+// Dùng chung cờ internalTrainingCreate (đã có sẵn) cho quản lý đào tạo (tạo lớp/tài liệu/lộ trình +
+// xác nhận hoàn thành) — không thêm cờ quyền riêng để giữ phạm vi gọn.
+function canManageTraining(user) {
+  return !!(user.perms?.admin || user.perms?.internalTrainingCreate);
+}
+
+function cancelTrainingRegistration(payload, user, reg) {
+  if (reg.creator !== user.username && !user.perms?.admin) {
+    throw new HttpError(403, 'Bạn chỉ có thể huỷ đăng ký của chính mình');
+  }
+  if (reg.result !== 'REGISTERED') {
+    throw new HttpError(409, 'Đăng ký này không còn ở trạng thái có thể huỷ');
+  }
+  reg.result = 'CANCELLED';
+  reg.resultBy = user.username;
+  reg.resultByName = user.name;
+  reg.resultAt = nowVN();
+  return reg;
+}
+
+// Ghi nhận kết quả (Đạt/Không đạt + điểm nếu có) cho 1 đăng ký — chỉ người TẠO LỚP HỌC đó (snapshot
+// classCreator lúc đăng ký, xem lib/createValidation.js) hoặc Admin mới ghi được, không phải bất kỳ ai
+// có quyền internalTrainingCreate (tránh người quản lý lớp khác sửa kết quả lớp không phải của mình).
+function setTrainingRegistrationResult(payload, user, reg) {
+  if (reg.classCreator !== user.username && !user.perms?.admin) {
+    throw new HttpError(403, 'Chỉ người tạo lớp học hoặc Quản Trị Viên mới được ghi nhận kết quả');
+  }
+  if (reg.result === 'CANCELLED') {
+    throw new HttpError(409, 'Đăng ký này đã bị huỷ, không thể ghi nhận kết quả');
+  }
+  const result = payload?.result;
+  if (result !== 'PASSED' && result !== 'FAILED') {
+    throw new HttpError(400, 'Kết quả không hợp lệ (chỉ nhận Đạt/Không đạt)');
+  }
+  const score = payload?.score;
+  reg.score = (score === '' || score == null) ? null : Number(score);
+  reg.result = result;
+  reg.resultNote = (payload?.resultNote || '').trim();
+  reg.resultBy = user.username;
+  reg.resultByName = user.name;
+  reg.resultAt = nowVN();
+  return reg;
+}
+
+// Nhân sự (người tạo lớp) hoặc Admin thêm HÀNG LOẠT học viên vào 1 lớp học cùng lúc (chọn từng người ở
+// dropdown, hoặc theo danh sách đọc từ file Excel — cả 2 cách đều gửi lên đúng 1 mảng usernames, khác
+// biệt cách nhập chỉ ở phía client). Trả về bản NHÁP các đăng ký hợp lệ (route routes/records.js tự gán
+// id + insertRecord từng dòng trong lúc đang giữ khoá theo classId) + danh sách bị bỏ qua kèm lý do, để
+// người tạo lớp biết chính xác ai chưa được thêm mà không phải đoán.
+function bulkRegisterTrainingClass(payload, user, cls, existingRegs, users) {
+  if (cls.creator !== user.username && !user.perms?.admin) {
+    throw new HttpError(403, 'Chỉ người tạo lớp học hoặc Quản Trị Viên mới được thêm học viên vào lớp');
+  }
+  if (cls.status !== 'OPEN') throw new HttpError(409, 'Lớp học này đã đóng đăng ký');
+
+  const requested = Array.isArray(payload?.usernames) ? payload.usernames : [];
+  const seen = new Set(); // chặn trùng NGAY TRONG 1 lượt gửi (client gửi trùng username 2 lần)
+  const added = [];
+  const skipped = [];
+  let activeCount = (existingRegs || []).filter(r => r.classId === cls.id && r.result !== 'CANCELLED').length;
+
+  for (const raw of requested) {
+    const username = String(raw || '').trim();
+    if (!username || seen.has(username)) continue;
+    seen.add(username);
+
+    const targetUser = (users || []).find(u => u.username === username);
+    if (!targetUser || targetUser.active === false) {
+      skipped.push({ username, reason: 'NOT_FOUND' });
+      continue;
+    }
+    const alreadyRegistered = (existingRegs || []).some(r => r.classId === cls.id && r.creator === username && r.result !== 'CANCELLED');
+    if (alreadyRegistered) {
+      skipped.push({ username, name: targetUser.name, reason: 'ALREADY_REGISTERED' });
+      continue;
+    }
+    if (cls.capacity > 0 && activeCount >= cls.capacity) {
+      skipped.push({ username, name: targetUser.name, reason: 'CAPACITY_FULL' });
+      continue;
+    }
+    activeCount++;
+    added.push({
+      classId: cls.id, className: cls.title, classCode: cls.code, category: cls.category, classCreator: cls.creator,
+      result: 'REGISTERED', score: null, resultNote: '', resultBy: null, resultByName: null, resultAt: null,
+      creator: targetUser.username, creatorName: targetUser.name, dept: targetUser.dept
+    });
+  }
+  return { added, skipped };
+}
+
+// Chấm điểm bài test tự động — chốt lại HOÀN TOÀN ở server theo đúng đáp án đúng đã lưu của test
+// (test.questions[].correctOptionIds, xem lib/createValidation.js), KHÔNG tin điểm/kết quả đúng-sai
+// client tự tính gửi kèm, chỉ nhận rawAnswers (câu nào chọn đáp án nào). Đúng 1 câu hỏi = tập hợp đáp án
+// chọn khớp CHÍNH XÁC tập hợp đáp án đúng (không thừa, không thiếu) — áp dụng cho cả loại 1 đáp án lẫn
+// nhiều đáp án, chấm dứt khoát đúng/sai từng câu, không chấm điểm từng phần.
+function gradeTrainingTestSubmission(rawAnswers, test) {
+  const answersByQ = new Map();
+  (Array.isArray(rawAnswers) ? rawAnswers : []).forEach(a => {
+    const qId = Number(a?.questionId);
+    if (Number.isFinite(qId)) answersByQ.set(qId, Array.isArray(a?.selectedOptionIds) ? a.selectedOptionIds.map(Number) : []);
+  });
+
+  let score = 0;
+  let totalPoints = 0;
+  const answers = test.questions.map(q => {
+    totalPoints += q.points;
+    const selected = [...new Set(answersByQ.get(q.id) || [])];
+    const correctSet = new Set(q.correctOptionIds);
+    const isCorrect = selected.length === correctSet.size && selected.every(id => correctSet.has(id));
+    if (isCorrect) score += q.points;
+    return { questionId: q.id, selectedOptionIds: selected, isCorrect };
+  });
+
+  const percentage = totalPoints > 0 ? Math.round((score / totalPoints) * 100) : 0;
+  const passed = percentage >= (test.passScore || 60);
+  return { answers, score, totalPoints, percentage, passed };
+}
+
+// Ghi kết quả chấm tự động vào bản ghi Đăng Ký tương ứng — cùng khuôn setTrainingRegistrationResult()
+// (resultBy/resultByName/resultAt) nhưng resultBy=null + resultByName cố định để phân biệt rõ đây là
+// chấm tự động, không phải người tạo lớp tự tay ghi nhận. Chỉ ghi khi đăng ký còn ở trạng thái
+// REGISTERED — chặn ghi đè 1 kết quả đã có sẵn (vd đã được người tạo lớp ghi tay trước đó, hoặc đã nộp
+// bài test này rồi — dù route gọi hàm này đã tự kiểm tra 1 lượt nộp/lớp ở lớp khoá riêng, kiểm tra lại
+// lần nữa ngay tại đây cho chắc, đúng nguyên tắc "không tin, kiểm tra lại" của mọi mutator ghi đè state).
+function applyAutoGradedTestResult(reg, graded) {
+  if (reg.result !== 'REGISTERED') {
+    throw new HttpError(409, 'Đăng ký này đã có kết quả từ trước, không thể ghi đè bằng kết quả bài test');
+  }
+  reg.result = graded.passed ? 'PASSED' : 'FAILED';
+  reg.score = graded.percentage;
+  reg.resultNote = `Tự động chấm từ bài test (${graded.score}/${graded.totalPoints} điểm)`;
+  reg.resultBy = null;
+  reg.resultByName = 'Hệ thống (tự động chấm bài test)';
+  reg.resultAt = nowVN();
+  return reg;
+}
+
+// Xác nhận 1 nhân viên đã hoàn thành lộ trình thăng tiến — CHỈ cho xác nhận khi nhân viên đó đã có kết
+// quả PASSED ở TẤT CẢ lớp học bắt buộc (path.requiredClassIds), đúng yêu cầu "phải đạt yêu cầu mới được
+// xác nhận qua". Trả về bản NHÁP bản ghi xác nhận (chưa lưu) — routes/records.js insert vào collection
+// careerPathConfirmations riêng (cùng khuôn startContractPayment() ở trên: mutator vừa xác thực vừa
+// "sinh" ra 1 bản ghi mới ở collection khác, không mutate path).
+function confirmCareerPathForEmployee(payload, user, path, allRegistrations, existingConfirmations, users) {
+  if (!canManageTraining(user)) throw new HttpError(403, 'Bạn không có quyền xác nhận lộ trình thăng tiến');
+  const targetUsername = (payload?.username || '').trim();
+  if (!targetUsername) throw new HttpError(400, 'Thiếu người cần xác nhận');
+  const targetUser = (users || []).find(u => u.username === targetUsername);
+  if (!targetUser) throw new HttpError(404, 'Không tìm thấy nhân viên này');
+  const already = (existingConfirmations || []).some(c => c.pathId === path.id && c.username === targetUsername);
+  if (already) throw new HttpError(409, 'Nhân viên này đã được xác nhận hoàn thành lộ trình này rồi');
+
+  const requiredClassIds = Array.isArray(path.requiredClassIds) ? path.requiredClassIds : [];
+  const missing = requiredClassIds.filter(classId =>
+    !(allRegistrations || []).some(r => r.classId === classId && r.creator === targetUsername && r.result === 'PASSED'));
+  if (missing.length) {
+    throw new HttpError(409, `Nhân viên chưa đạt yêu cầu ở ${missing.length} lớp học bắt buộc của lộ trình này — chưa thể xác nhận`);
+  }
+
+  return {
+    pathId: path.id, pathName: path.name,
+    username: targetUsername, name: targetUser.name, dept: targetUser.dept,
+    confirmedBy: user.username, confirmedByName: user.name, confirmedAt: nowVN()
+  };
+}
+
 module.exports = {
   editContract,
   canManageContractPayment, uploadContractSignedFile, startContractPayment,
@@ -1613,6 +1837,7 @@ module.exports = {
   canEditMinutes, canDeleteMinutes, editMinutes, assertCanDeleteMinutes,
   canCreateMinutes, createMinutes, buildTasksFromDirectives, assignMinutesTasks, buildTaskFromSubmissionComment,
   markInternalPostRead, toggleInternalPostLike, addInternalPostComment,
+  scanCommentForSensitiveContent, dismissInternalCommentFlag, deleteInternalPostComment,
   registerInternalPostTraining, unregisterInternalPostTraining,
   canApproveInternalPost, approveInternalPost, rejectInternalPost,
   canManageTasks, canDeleteTaskPerm, canAssignSpecificTask, assignTask, editTask, assertCanDeleteTask,
@@ -1623,5 +1848,7 @@ module.exports = {
   closeVppPeriod, submitVppRegistration, updateVppRegistrationDraft,
   closeReportPeriod, submitReportEntry, updateReportEntryDraft,
   mergeReportPeriod, mergeReportPeriodByTasks, updateReportCompilation, publishReportPeriod, unpublishReportPeriod,
-  updateReportSlideTemplate
+  updateReportSlideTemplate,
+  canManageTraining, cancelTrainingRegistration, setTrainingRegistrationResult, confirmCareerPathForEmployee,
+  bulkRegisterTrainingClass, gradeTrainingTestSubmission, applyAutoGradedTestResult
 };
