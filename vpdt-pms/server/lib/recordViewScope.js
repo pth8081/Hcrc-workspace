@@ -265,10 +265,13 @@ function filterItPriceApprovalsForUser(items, user, appData) {
 
 // Ticket helpdesk IT nội bộ có thể chứa thông tin tài khoản/sự cố cá nhân — chỉ đội Hỗ Trợ IT
 // (itManage/admin) và chính người tạo được xem, KHÔNG mở rộng theo phòng ban (khớp canViewItTicket()
-// ở public/index.html — phạm vi hẹp hơn hẳn các module dept-workflow khác ở trên).
+// ở public/index.html — phạm vi hẹp hơn hẳn các module dept-workflow khác ở trên). Ngoại lệ DUY NHẤT:
+// người được IT chủ động chỉ định "có trách nhiệm" phê duyệt (escalateItTicket() ở lib/recordActions.js)
+// cũng xem được ĐÚNG 1 ticket đó — không mở cả danh sách, cùng nguyên lý người duyệt phòng ban ở
+// canViewItPriceApproval() trên, nhưng thu hẹp về đúng 1 bản ghi họ được hỏi ý kiến.
 function canViewItSupportTicket(user, item) {
   if (!user) return false;
-  return !!(user.perms?.admin || user.perms?.itManage || item.creator === user.username);
+  return !!(user.perms?.admin || user.perms?.itManage || item.creator === user.username || item.approvalApprover === user.username);
 }
 
 function filterItSupportTicketsForUser(items, user) {

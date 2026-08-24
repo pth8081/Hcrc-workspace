@@ -10,6 +10,7 @@
 const { HttpError: CreateError } = require('./httpErrors');
 // vppCatalog.js là tiện ích THUẦN (không đọc DB, giống httpErrors.js) — an toàn require thẳng ở đây.
 const { validateRegistrationItems: validateVppRegItems } = require('./vppCatalog');
+const { sanitizePriceFileItems } = require('./priceFileParser');
 
 function scopeAllows(user, scope, dept) {
   if (!user) return false;
@@ -887,15 +888,29 @@ const CREATE_MODULE_CONFIGS = {
       if (!user.perms?.admin && !user.perms?.itPriceProposeCreate) {
         throw new CreateError(403, 'Bạn không có quyền đề xuất duyệt giá');
       }
-      if (!payload.productName || !String(payload.productName).trim()) throw new CreateError(400, 'Thiếu tên mặt hàng');
-      payload.productName = String(payload.productName).trim();
-      payload.productCode = payload.productCode ? String(payload.productCode).trim() : '';
-      const newPrice = Number(payload.newPrice);
-      if (!Number.isFinite(newPrice) || newPrice <= 0) throw new CreateError(400, 'Giá đề xuất phải lớn hơn 0');
-      payload.newPrice = newPrice;
-      const oldPriceNum = Number(payload.oldPrice);
-      payload.oldPrice = Number.isFinite(oldPriceNum) && oldPriceNum >= 0 ? oldPriceNum : null;
+      // Đề xuất giờ nộp bằng cách tải lên 1 tệp Excel bảng giá (nhiều dòng/mặt hàng cùng lúc) thay vì
+      // nhập tay 1 mặt hàng — client gọi POST /api/it-price/parse-file trước để server đọc + trả về
+      // items có cấu trúc, rồi echo lại NGUYÊN VĂN vào đây (payload.files[0]) — cùng mức tin cậy với
+      // cách VPP xử lý danh mục (xem lib/vppCatalog.js::validateRegistrationItems), sanitizePriceFileItems()
+      // dưới đây chặn payload giả mạo/kiểu dữ liệu lạ trước khi ghi vào DB.
+      const file = payload.files && payload.files[0];
+      if (!file || !file.fileUrl) throw new CreateError(400, 'Vui lòng tải lên tệp bảng giá (.xlsx) cần duyệt');
+      const items = sanitizePriceFileItems(file.items);
+      payload.files = [{
+        id: Date.now(),
+        fileUrl: String(file.fileUrl).slice(0, 300),
+        fileName: (String(file.fileName || '').trim() || 'bang-gia.xlsx').slice(0, 200),
+        uploadedBy: user.username, uploadedByName: user.name,
+        uploadedAt: new Date().toLocaleString('vi-VN'),
+        items
+      }];
       payload.reason = (payload.reason || '').trim();
+      // Lịch sử "Yêu Cầu Bổ Sung" — có thể đến từ người duyệt phòng ban (trong lúc PENDING, qua hành
+      // động REQUEST_INFO chung của lib/workflowEngine.js) HOẶC từ đội Hỗ Trợ IT (sau khi đã APPROVED,
+      // trước khi áp giá — xem requestPriceInfoFromIt() ở lib/recordActions.js). Cả 2 nguồn dùng CHUNG
+      // 1 mảng này để có đúng 1 chỗ kiểm tra "còn yêu cầu bổ sung chưa xử lý" (xem blockApproveIf ở
+      // lib/workflowEngine.js và applyPriceApproval()/submitPriceSupplementFile() ở lib/recordActions.js).
+      payload.infoRequests = [];
       // Kết quả chống giả mạo — request tự soạn không thể tự xưng đã áp giá xong ngay lúc tạo.
       payload.applied = false;
       payload.appliedBy = null;
@@ -934,6 +949,13 @@ const CREATE_MODULE_CONFIGS = {
       payload.assigneeName = null;
       payload.resolutionNote = '';
       payload.comments = [];
+      // Leo thang phê duyệt (tuỳ chọn, IT tự kích hoạt lúc đang xử lý — xem escalateItTicket() ở
+      // lib/recordActions.js): null lúc tạo, request tự soạn không thể tự xưng đã có người duyệt.
+      payload.approvalStatus = null;
+      payload.approvalApprover = null;
+      payload.approvalApproverName = null;
+      payload.approvalReason = '';
+      payload.approvalComment = '';
     }
   },
   // ===== ĐÀO TẠO (module con "Truyền Thông Nội Bộ" > Đào tạo) — tạm thời, MVP =====

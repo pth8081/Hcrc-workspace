@@ -971,6 +971,37 @@ router.post('/itPriceApprovals/:id/apply', async (req, res) => {
   }
 });
 
+// "Yêu Cầu Bổ Sung" từ đội Hỗ Trợ IT (sau khi đã APPROVED, trước khi áp giá) — dùng chung
+// item.infoRequests với nhánh REQUEST_INFO của người duyệt phòng ban (POST /api/workflow/
+// itPriceApprovals/:id/request-info, xem lib/workflowEngine.js).
+router.post('/itPriceApprovals/:id/request-info', async (req, res) => {
+  const itemId = Number(req.params.id);
+  if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
+  try {
+    const { freshUser } = await getFreshUser(req);
+    const result = await withLockedRecordForCollection('itPriceApprovals', itemId, (item) =>
+      recordActions.requestPriceInfoFromIt(freshUser, item, req.body));
+    res.json({ ok: true, item: result });
+  } catch (err) {
+    handleError(res, `itPriceApprovals/${req.params.id}/request-info`, err);
+  }
+});
+
+// Người đề xuất tải lên tệp bổ sung để phản hồi 1 yêu cầu bổ sung đang chờ (từ CẢ 2 nguồn approver/IT)
+// — tệp mới được THÊM VÀO, không thay thế tệp trước đó (xem submitPriceSupplementFile()).
+router.post('/itPriceApprovals/:id/submit-supplement', async (req, res) => {
+  const itemId = Number(req.params.id);
+  if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
+  try {
+    const { freshUser } = await getFreshUser(req);
+    const result = await withLockedRecordForCollection('itPriceApprovals', itemId, (item) =>
+      recordActions.submitPriceSupplementFile(freshUser, item, req.body));
+    res.json({ ok: true, item: result });
+  } catch (err) {
+    handleError(res, `itPriceApprovals/${req.params.id}/submit-supplement`, err);
+  }
+});
+
 router.post('/itSupportTickets/:id/delete', (req, res) => deleteAdminOnly(req, res, 'itSupportTickets'));
 
 router.post('/itSupportTickets/:id/claim', async (req, res) => {
@@ -1022,6 +1053,47 @@ router.post('/itSupportTickets/:id/cancel', async (req, res) => {
     res.json({ ok: true, item: result });
   } catch (err) {
     handleError(res, `itSupportTickets/${req.params.id}/cancel`, err);
+  }
+});
+
+// Leo thang phê duyệt (xem escalateItTicket() ở lib/recordActions.js) — cần usersList để xác thực
+// approverUsername thực sự tồn tại/còn active, nên dùng getFreshUser(req).users (req.allUsers).
+router.post('/itSupportTickets/:id/escalate', async (req, res) => {
+  const itemId = Number(req.params.id);
+  if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
+  try {
+    const { freshUser, users } = await getFreshUser(req);
+    const result = await withLockedRecordForCollection('itSupportTickets', itemId, (item) =>
+      recordActions.escalateItTicket(freshUser, item, req.body, users));
+    res.json({ ok: true, item: result });
+  } catch (err) {
+    handleError(res, `itSupportTickets/${req.params.id}/escalate`, err);
+  }
+});
+
+router.post('/itSupportTickets/:id/approve-escalation', async (req, res) => {
+  const itemId = Number(req.params.id);
+  if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
+  try {
+    const { freshUser } = await getFreshUser(req);
+    const result = await withLockedRecordForCollection('itSupportTickets', itemId, (item) =>
+      recordActions.approveItTicketEscalation(freshUser, item));
+    res.json({ ok: true, item: result });
+  } catch (err) {
+    handleError(res, `itSupportTickets/${req.params.id}/approve-escalation`, err);
+  }
+});
+
+router.post('/itSupportTickets/:id/deny-escalation', async (req, res) => {
+  const itemId = Number(req.params.id);
+  if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
+  try {
+    const { freshUser } = await getFreshUser(req);
+    const result = await withLockedRecordForCollection('itSupportTickets', itemId, (item) =>
+      recordActions.denyItTicketEscalation(freshUser, item, req.body));
+    res.json({ ok: true, item: result });
+  } catch (err) {
+    handleError(res, `itSupportTickets/${req.params.id}/deny-escalation`, err);
   }
 });
 

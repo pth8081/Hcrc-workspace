@@ -3778,7 +3778,7 @@ table { display: block; overflow-x: auto; max-width: 100%; }
         <p class="text-xs text-sky-700">Đề xuất giá bán mới cho 1 mặt hàng tại siêu thị công ty đang vận hành — KHÔNG phải mua sắm/chi phí, không sinh đề nghị thanh toán. Sau khi được duyệt, đội Hỗ Trợ IT sẽ áp giá vào hệ thống bán hàng rồi xác nhận hoàn thành ngay tại đây.</p>
         <div id="itPriceNoCreatePermNote" class="hidden text-xs text-gray-500 italic bg-gray-50 p-3 rounded border">⛔ Bạn không có quyền đề xuất duyệt giá — chỉ xem được danh sách đề xuất bên dưới.</div>
         <form id="itPriceCreateForm" onsubmit="submitItPriceApproval(event)" class="hidden bg-white p-3 rounded border text-xs space-y-3">
-          <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
             <div>
               <label class="block font-semibold text-gray-600 mb-1">Mã Đề Xuất</label>
               <input id="itPriceCode" readonly placeholder="Mã tự sinh" class="w-full border p-1.5 rounded bg-gray-100 cursor-not-allowed">
@@ -3787,21 +3787,20 @@ table { display: block; overflow-x: auto; max-width: 100%; }
               <label class="block font-semibold text-gray-600 mb-1">Phòng Ban Đề Xuất</label>
               <input id="itPriceDeptDisplay" readonly class="w-full border p-1.5 rounded bg-gray-100 cursor-not-allowed">
             </div>
-            <div>
-              <label class="block font-semibold text-gray-600 mb-1">Mã Hàng (nếu có)</label>
-              <input id="itPriceProductCode" placeholder="VD: SP00123" class="w-full border p-1.5 rounded">
-            </div>
-            <div class="md:col-span-2">
-              <label class="block font-semibold text-gray-600 mb-1">Tên Mặt Hàng <span class="text-red-500">*</span></label>
-              <input id="itPriceProductName" placeholder="VD: Sữa tươi ABC hộp 1L" class="w-full border p-1.5 rounded" required>
-            </div>
-            <div>
-              <label class="block font-semibold text-gray-600 mb-1">Giá Hiện Tại (đ)</label>
-              <input id="itPriceOldPrice" type="text" inputmode="numeric" placeholder="VD: 32.000" class="w-full border p-1.5 rounded money-input">
-            </div>
-            <div class="md:col-span-2">
-              <label class="block font-semibold text-gray-600 mb-1">Giá Đề Xuất Mới (đ) <span class="text-red-500">*</span></label>
-              <input id="itPriceNewPrice" type="text" inputmode="numeric" placeholder="VD: 35.000" class="w-full border p-1.5 rounded money-input" required>
+          </div>
+          <div>
+            <label class="block font-semibold text-gray-600 mb-1">📎 Tệp Bảng Giá (.xlsx) <span class="text-red-500">*</span></label>
+            <input id="itPriceFileInput" type="file" accept=".xlsx,.xls" onchange="onItPriceFileChange(event)" class="w-full border p-1.5 rounded bg-white">
+            <p id="itPriceFileStatus" class="text-gray-500 mt-1"></p>
+            <p class="text-gray-400 mt-1">Tệp cần có cột "Tên mặt hàng"/"Giá mới" (khuyến khích thêm "Mã hàng"/"Giá cũ") — không phân biệt thứ tự cột.</p>
+          </div>
+          <div id="itPriceFilePreviewWrap" class="hidden">
+            <p class="font-semibold text-gray-600 mb-1">Xem trước nội dung tệp (<span id="itPriceFilePreviewCount">0</span> dòng)</p>
+            <div class="overflow-x-auto max-h-48 overflow-y-auto border rounded">
+              <table class="w-full border-collapse text-xs bg-white">
+                <thead><tr class="bg-gray-100 text-left text-gray-700"><th class="border p-1">Mã hàng</th><th class="border p-1">Tên mặt hàng</th><th class="border p-1 text-right">Giá cũ</th><th class="border p-1 text-right">Giá mới</th></tr></thead>
+                <tbody id="itPriceFilePreviewBody"></tbody>
+              </table>
             </div>
           </div>
           <div>
@@ -3849,9 +3848,7 @@ table { display: block; overflow-x: auto; max-width: 100%; }
               <tr class="bg-gray-100 text-left text-gray-700">
                 <th class="border p-2">Mã Đề Xuất</th>
                 <th class="border p-2">Phòng Ban / Người Đề Xuất</th>
-                <th class="border p-2">Mặt Hàng</th>
-                <th class="border p-2">Giá Cũ → Giá Mới</th>
-                <th class="border p-2">Lý Do</th>
+                <th class="border p-2">Tệp Bảng Giá</th>
                 <th class="border p-2">Trạng Thái Duyệt</th>
                 <th class="border p-2">Áp Giá</th>
                 <th class="border p-2 text-center">Thao Tác</th>
@@ -3978,6 +3975,45 @@ table { display: block; overflow-x: auto; max-width: 100%; }
     </div>
     <div class="p-3 bg-gray-100 border-t flex justify-end text-xs">
       <button onclick="closeItTicketModal()" class="bg-gray-500 text-white px-4 py-1.5 rounded font-bold hover:bg-gray-600">Đóng</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL CHI TIẾT ĐỀ XUẤT DUYỆT GIÁ — gộp: trạng thái, lịch sử yêu cầu bổ sung, toàn bộ tệp bảng giá
+     đã tải lên (bản gốc + bổ sung, KHÔNG cái nào bị thay thế), bảng so sánh sai lệch giữa tệp mới nhất
+     và tệp liền trước, và các nút thao tác theo đúng vai trò/trạng thái hiện tại. Xem renderItPriceModal(). -->
+<div id="itPriceModal" class="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center hidden z-50 p-4">
+  <div class="bg-white rounded-lg shadow-2xl max-w-3xl w-full flex flex-col max-h-[90vh] overflow-hidden">
+    <div class="flex justify-between items-center bg-sky-800 text-white p-4">
+      <div>
+        <h3 id="itPriceModalTitle" class="font-bold text-base flex items-center gap-2">🏷️ Đề Xuất Duyệt Giá</h3>
+        <p id="itPriceModalSub" class="text-xs text-sky-200"></p>
+      </div>
+      <button onclick="closeItPriceModal()" class="text-sky-200 hover:text-white font-bold text-xl px-2">✕</button>
+    </div>
+    <div class="p-4 overflow-y-auto flex-1 space-y-4 text-xs">
+      <div id="itPriceModalDetails" class="bg-gray-50 p-3 rounded border space-y-2 text-gray-700"></div>
+      <div id="itPriceModalInfoRequestsWrap" class="hidden">
+        <h4 class="font-bold text-gray-800 mb-2">📎 Lịch Sử Yêu Cầu Bổ Sung</h4>
+        <div id="itPriceModalInfoRequests" class="space-y-2"></div>
+      </div>
+      <div>
+        <h4 class="font-bold text-gray-800 mb-2">🗂️ Tệp Bảng Giá Đã Tải Lên</h4>
+        <div id="itPriceModalFiles" class="space-y-2"></div>
+      </div>
+      <div id="itPriceModalDiffWrap" class="hidden">
+        <h4 class="font-bold text-gray-800 mb-2">🔍 So Sánh Thay Đổi (tệp mới nhất so với tệp trước đó)</h4>
+        <div class="overflow-x-auto border rounded">
+          <table class="w-full border-collapse text-xs bg-white">
+            <thead><tr class="bg-gray-100 text-left text-gray-700"><th class="border p-1">Mã hàng</th><th class="border p-1">Tên mặt hàng</th><th class="border p-1">Thay đổi</th></tr></thead>
+            <tbody id="itPriceModalDiffBody"></tbody>
+          </table>
+        </div>
+      </div>
+      <div id="itPriceModalControls"></div>
+    </div>
+    <div class="p-3 bg-gray-100 border-t flex justify-end text-xs">
+      <button onclick="closeItPriceModal()" class="bg-gray-500 text-white px-4 py-1.5 rounded font-bold hover:bg-gray-600">Đóng</button>
     </div>
   </div>
 </div>
@@ -23370,6 +23406,11 @@ function setItSupportSubTab(subTab) {
     if (canCreate) {
       document.getElementById('itPriceCode').value = generateItPriceCode();
       document.getElementById('itPriceDeptDisplay').value = currentUser.dept;
+      itPricePendingFile = null;
+      document.getElementById('itPriceFileStatus').innerText = '';
+      document.getElementById('itPriceFilePreviewWrap').classList.add('hidden');
+      const fileInput = document.getElementById('itPriceFileInput');
+      if (fileInput) fileInput.value = '';
     }
     renderItPriceApprovals();
   }
@@ -23380,18 +23421,51 @@ function setItSupportSubTab(subTab) {
 }
 
 // ----- 🏷️ Phê Duyệt Giá -----
+// Đề xuất giờ nộp bằng cách tải lên 1 tệp Excel bảng giá (nhiều dòng/mặt hàng cùng lúc, xem
+// lib/priceFileParser.js) thay vì nhập tay 1 mặt hàng — đọc + xem trước ngay ở form tạo (parse-file),
+// rồi echo lại kết quả kèm request tạo (giống hệt luồng danh mục VPP ở onVppCatalogFileChange()).
+let itPricePendingFile = null; // { items, fileUrl, fileName } — kết quả đọc file gần nhất, chờ gửi
+
+async function onItPriceFileChange(event) {
+  const file = event.target.files[0];
+  itPricePendingFile = null;
+  document.getElementById('itPriceFilePreviewWrap').classList.add('hidden');
+  const statusEl = document.getElementById('itPriceFileStatus');
+  if (!file) { statusEl.innerText = ''; return; }
+
+  statusEl.innerText = '⏳ Đang đọc file...';
+  const formData = new FormData();
+  formData.append('file', file);
+  try {
+    const res = await fetch('/api/it-price/parse-file', { method: 'POST', body: formData });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Lỗi không xác định');
+    itPricePendingFile = data;
+    statusEl.innerText = `✅ Đọc thành công ${data.items.length} dòng giá từ file "${data.fileName}".`;
+    document.getElementById('itPriceFilePreviewCount').innerText = data.items.length;
+    document.getElementById('itPriceFilePreviewBody').innerHTML = data.items.map(it => `<tr>
+      <td class="border p-1 text-gray-500">${escapeHtml(it.code || '')}</td>
+      <td class="border p-1">${escapeHtml(it.name)}</td>
+      <td class="border p-1 text-right text-gray-500">${it.oldPrice != null ? Number(it.oldPrice).toLocaleString('vi-VN') : ''}</td>
+      <td class="border p-1 text-right font-bold text-sky-700">${Number(it.newPrice).toLocaleString('vi-VN')}</td>
+    </tr>`).join('');
+    document.getElementById('itPriceFilePreviewWrap').classList.remove('hidden');
+  } catch (err) {
+    statusEl.innerText = `⛔ ${err.message}`;
+    event.target.value = '';
+  }
+}
+
 async function submitItPriceApproval(e) {
   e.preventDefault();
   const code = document.getElementById('itPriceCode').value.trim();
   if (DB.itPriceApprovals.some(p => p.code === code)) {
     return alert('Mã đề xuất đã tồn tại!');
   }
+  if (!itPricePendingFile) return alert('Vui lòng chọn tệp bảng giá (.xlsx) cần duyệt!');
   const payload = {
     code,
-    productCode: document.getElementById('itPriceProductCode').value.trim(),
-    productName: document.getElementById('itPriceProductName').value.trim(),
-    oldPrice: getMoneyValue(document.getElementById('itPriceOldPrice')),
-    newPrice: getMoneyValue(document.getElementById('itPriceNewPrice')),
+    files: [{ fileUrl: itPricePendingFile.fileUrl, fileName: itPricePendingFile.fileName, items: itPricePendingFile.items }],
     reason: document.getElementById('itPriceReason').value.trim(),
     createdAt: new Date().toLocaleString('vi-VN')
   };
@@ -23405,18 +23479,21 @@ async function submitItPriceApproval(e) {
   }
 
   DB.itPriceApprovals.unshift(newItem);
-  logSystemAction('IT_SUPPORT', 'CREATE_IT_PRICE_APPROVAL', `Tạo đề xuất duyệt giá [${code} - ${newItem.productName}]`, 'SUCCESS', code);
+  logSystemAction('IT_SUPPORT', 'CREATE_IT_PRICE_APPROVAL', `Tạo đề xuất duyệt giá [${code}]`, 'SUCCESS', code);
 
   const wfConfig = DB.itPriceDeptWorkflows[newItem.dept];
   const firstStepApprovers = wfConfig?.approvers?.[1] || [];
   if (firstStepApprovers.length) {
     notifyUsersByEmail('IT_SUPPORT', 'NOTIFY_APPROVAL_NEEDED', code, firstStepApprovers,
       `[VPDT] Đề xuất duyệt giá ${code} cần bạn phê duyệt`,
-      `Đề xuất duyệt giá "${newItem.productName}" (${code}) do ${currentUser.name} đề xuất đang chờ bạn phê duyệt.`);
+      `Đề xuất duyệt giá (${code}) do ${currentUser.name} đề xuất đang chờ bạn phê duyệt.`);
   }
 
   alert('✅ Đã gửi đề xuất duyệt giá thành công!');
   e.target.reset();
+  itPricePendingFile = null;
+  document.getElementById('itPriceFileStatus').innerText = '';
+  document.getElementById('itPriceFilePreviewWrap').classList.add('hidden');
   document.getElementById('itPriceCode').value = generateItPriceCode();
   document.getElementById('itPriceDeptDisplay').value = currentUser.dept;
   renderItPriceApprovals();
@@ -23436,6 +23513,33 @@ function canViewItPriceApproval(user, p) {
   return isApproverForDeptWorkflow(DB.itPriceDeptWorkflows[p.dept], user.username);
 }
 
+// Còn ít nhất 1 yêu cầu bổ sung CHƯA được người đề xuất phản hồi (chưa tải tệp bổ sung) — dùng chung
+// item.infoRequests giữa nhánh REQUEST_INFO của người duyệt phòng ban (đang PENDING) và nhánh của đội
+// Hỗ Trợ IT (sau khi đã APPROVED, trước khi áp giá), xem lib/workflowEngine.js + lib/recordActions.js.
+function itPriceHasUnresolvedInfoRequest(p) {
+  return (p.infoRequests || []).some(r => !r.response);
+}
+
+function itPriceStatusBadge(p) {
+  if (p.status === 'REJECTED') return `<span class="px-2 py-0.5 bg-red-100 text-red-800 rounded font-bold text-xs">❌ Từ chối</span>`;
+  if (p.status === 'APPROVED') {
+    if (itPriceHasUnresolvedInfoRequest(p)) return `<span class="px-2 py-0.5 bg-amber-100 text-amber-800 rounded font-bold text-xs">🟠 IT yêu cầu bổ sung</span>`;
+    return `<span class="px-2 py-0.5 bg-green-100 text-green-800 rounded font-bold text-xs">✅ Đã phê duyệt</span>`;
+  }
+  if (itPriceHasUnresolvedInfoRequest(p)) return `<span class="px-2 py-0.5 bg-amber-100 text-amber-800 rounded font-bold text-xs">🟠 Chờ bổ sung</span>`;
+  const wfConfig = DB.itPriceDeptWorkflows[p.dept] || { workflowId: 'WF_1STEP', approvers: { 1: ['admin'] } };
+  const wf = DB.workflows.find(w => w.id === wfConfig.workflowId) || { steps: [{ name: 'Duyệt' }] };
+  const currentStepApprovers = wfConfig.approvers ? (wfConfig.approvers[p.currentStep] || []) : [];
+  return `<span class="px-2 py-0.5 bg-indigo-100 text-indigo-800 rounded font-bold text-xs">⏳ Bước ${p.currentStep}/${wf.steps.length}${escapeHtml(getStepApprovalProgressText(currentStepApprovers, p.history, p.currentStep))}</span>`;
+}
+
+function itPriceAppliedBadge(p) {
+  if (p.status !== 'APPROVED') return '<span class="text-gray-400 text-xs">—</span>';
+  return p.applied
+    ? `<span class="px-2 py-0.5 bg-emerald-100 text-emerald-800 rounded font-bold text-xs">✅ Đã áp giá${p.appliedByName ? ` (${escapeHtml(p.appliedByName)})` : ''}</span>`
+    : `<span class="px-2 py-0.5 bg-amber-100 text-amber-800 rounded font-bold text-xs">⏳ Chưa áp giá</span>`;
+}
+
 function renderItPriceApprovals() {
   const tbody = document.getElementById('itPriceTableBody');
   if (!tbody) return;
@@ -23449,7 +23553,8 @@ function renderItPriceApprovals() {
     if (!canViewItPriceApproval(currentUser, p)) return false;
     if (statusFilter && p.status !== statusFilter) return false;
     if (!isInDateRange(p.createdAt, fromDate, toDate)) return false;
-    if (!matchesKeywordFields([p.code, p.productName, p.creatorName], keyword)) return false;
+    const latestFileName = (p.files && p.files.length) ? p.files[p.files.length - 1].fileName : '';
+    if (!matchesKeywordFields([p.code, latestFileName, p.creatorName], keyword)) return false;
     return true;
   });
 
@@ -23457,67 +23562,28 @@ function renderItPriceApprovals() {
   const page = paginateList('itPrice', visible, 'renderItPriceApprovals', 'đề xuất');
 
   if (page.length === 0) {
-    tbody.innerHTML = `<tr><td colspan="8" class="text-center p-6 text-gray-500 italic">Không tìm thấy đề xuất phù hợp.</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="6" class="text-center p-6 text-gray-500 italic">Không tìm thấy đề xuất phù hợp.</td></tr>`;
     return;
   }
 
   tbody.innerHTML = page.map(p => {
-    const wfConfig = DB.itPriceDeptWorkflows[p.dept] || { workflowId: 'WF_1STEP', approvers: { 1: ['admin'] } };
-    const wf = DB.workflows.find(w => w.id === wfConfig.workflowId) || { steps: [{ name: 'Duyệt' }] };
-    const currentStepApprovers = wfConfig.approvers ? (wfConfig.approvers[p.currentStep] || []) : [];
-    const canApprove = (p.status === 'PENDING') && canApproveStep(currentUser, currentStepApprovers, p.history, p.currentStep);
-
-    let statusBadge = '';
-    if (p.status === 'APPROVED') statusBadge = `<span class="px-2 py-0.5 bg-green-100 text-green-800 rounded font-bold text-xs">✅ Đã phê duyệt</span>`;
-    else if (p.status === 'REJECTED') statusBadge = `<span class="px-2 py-0.5 bg-red-100 text-red-800 rounded font-bold text-xs">❌ Từ chối</span>`;
-    else statusBadge = `<span class="px-2 py-0.5 bg-indigo-100 text-indigo-800 rounded font-bold text-xs">⏳ Bước ${p.currentStep}/${wf.steps.length}${escapeHtml(getStepApprovalProgressText(currentStepApprovers, p.history, p.currentStep))}</span>`;
-
-    let appliedBadge = '<span class="text-gray-400 text-xs">—</span>';
-    if (p.status === 'APPROVED') {
-      appliedBadge = p.applied
-        ? `<span class="px-2 py-0.5 bg-emerald-100 text-emerald-800 rounded font-bold text-xs">✅ Đã áp giá${p.appliedByName ? ` (${escapeHtml(p.appliedByName)})` : ''}</span>`
-        : `<span class="px-2 py-0.5 bg-amber-100 text-amber-800 rounded font-bold text-xs">⏳ Chưa áp giá</span>`;
-    }
-
-    const canApply = p.status === 'APPROVED' && !p.applied && canManageItSupportClient(currentUser);
+    const files = p.files || [];
+    const latestFile = files[files.length - 1] || {};
+    const extraFilesNote = files.length > 1 ? `<br><span class="text-xs text-gray-500">+${files.length - 1} tệp bổ sung</span>` : '';
 
     return `
       <tr class="hover:bg-gray-50 border-b">
         <td class="border p-2 font-mono font-bold text-sky-800">${escapeHtml(p.code)}</td>
         <td class="border p-2">${escapeHtml(p.dept)}<br><span class="text-xs text-gray-500">${escapeHtml(p.creatorName)}</span></td>
-        <td class="border p-2">${escapeHtml(p.productName)}${p.productCode ? `<br><span class="text-xs text-gray-500">Mã: ${escapeHtml(p.productCode)}</span>` : ''}</td>
-        <td class="border p-2 text-xs">${p.oldPrice != null ? p.oldPrice.toLocaleString('vi-VN') + ' đ' : '—'} → <span class="font-bold text-sky-700">${p.newPrice.toLocaleString('vi-VN')} đ</span></td>
-        <td class="border p-2 text-xs">${escapeHtml(p.reason || '')}</td>
-        <td class="border p-2">${statusBadge}</td>
-        <td class="border p-2">${appliedBadge}</td>
-        <td class="border p-2 text-center space-x-1">
-          ${(() => {
-            let primaryBtnHTML;
-            if (canApprove) {
-              primaryBtnHTML = `<button onclick="runItPriceAction(${p.id}, 'approve')" class="px-2.5 py-1 bg-emerald-600 text-white rounded text-xs hover:opacity-90 font-bold">✅ Duyệt</button>`;
-            } else if (canApply) {
-              primaryBtnHTML = `<button onclick="runItPriceAction(${p.id}, 'apply')" class="px-2.5 py-1 bg-teal-600 text-white rounded text-xs hover:opacity-90 font-bold">🏷️ Xác nhận đã áp giá</button>`;
-            } else {
-              primaryBtnHTML = `<span class="text-gray-400 text-xs italic">—</span>`;
-            }
-            const secondaryOptions = [];
-            if (canApprove) secondaryOptions.push({ value: 'reject', label: '❌ Từ chối' });
-            if (currentUser.perms?.admin) secondaryOptions.push({ value: 'delete', label: '🗑️ Xóa' });
-            return buildActionCell(p.id, primaryBtnHTML, secondaryOptions, 'runItPriceAction');
-          })()}
+        <td class="border p-2">📎 ${escapeHtml(latestFile.fileName || '')}${extraFilesNote}</td>
+        <td class="border p-2">${itPriceStatusBadge(p)}</td>
+        <td class="border p-2">${itPriceAppliedBadge(p)}</td>
+        <td class="border p-2 text-center">
+          <button onclick="openItPriceModal(${p.id})" class="px-2.5 py-1 bg-sky-600 text-white rounded text-xs hover:opacity-90 font-bold">👁️ Chi tiết</button>
         </td>
       </tr>
     `;
   }).join('');
-}
-
-function runItPriceAction(id, action) {
-  switch (action) {
-    case 'approve': approveItPrice(id); break;
-    case 'reject': rejectItPrice(id); break;
-    case 'apply': applyItPriceAction(id); break;
-    case 'delete': deleteItPriceAction(id); break;
-  }
 }
 
 function approveItPrice(id) {
@@ -23544,13 +23610,13 @@ async function approveItPriceConfirmed(id) {
     msg = '✅ Phê duyệt đề xuất giá thành công! Đội Hỗ Trợ IT sẽ áp giá vào hệ thống bán hàng rồi xác nhận hoàn thành.';
     notifyUsersByEmail('IT_SUPPORT', 'NOTIFY_APPROVED', updated.code, [updated.creator],
       `[VPDT] Đề xuất duyệt giá ${updated.code} đã được phê duyệt`,
-      `Đề xuất duyệt giá "${updated.productName}" (${updated.code}) của bạn đã được phê duyệt hoàn tất.`);
+      `Đề xuất duyệt giá (${updated.code}) của bạn đã được phê duyệt hoàn tất.`);
   } else if (transition.type === 'ADVANCED') {
     msg = getStepAdvanceMessage(transition.stepApprovers);
     if (transition.nextApprovers.length) {
       notifyUsersByEmail('IT_SUPPORT', 'NOTIFY_APPROVAL_NEEDED', updated.code, transition.nextApprovers,
         `[VPDT] Đề xuất duyệt giá ${updated.code} cần bạn phê duyệt`,
-        `Đề xuất duyệt giá "${updated.productName}" (${updated.code}) đang chờ bạn phê duyệt ở bước "${transition.nextStepName}".`);
+        `Đề xuất duyệt giá (${updated.code}) đang chờ bạn phê duyệt ở bước "${transition.nextStepName}".`);
     }
   } else if (transition.type === 'PARTIAL_APPROVE') {
     msg = '✅ Đã ghi nhận phê duyệt của bạn — đang chờ các đồng phê duyệt còn lại ở bước này.';
@@ -23559,6 +23625,7 @@ async function approveItPriceConfirmed(id) {
   logSystemAction('IT_SUPPORT', 'APPROVE_IT_PRICE', `Phê duyệt đề xuất giá [${updated.code}] thành công.`, 'SUCCESS', updated.code);
   alert(msg);
   renderItPriceApprovals();
+  if (currentItPriceModalId === id) renderItPriceModal();
   refreshApprovalSurfaces();
 }
 
@@ -23583,16 +23650,18 @@ async function rejectItPrice(id) {
   logSystemAction('IT_SUPPORT', 'REJECT_IT_PRICE', `Từ chối đề xuất giá [${updated.code}]. Lý do: ${reason}`, 'SUCCESS', updated.code);
   notifyUsersByEmail('IT_SUPPORT', 'NOTIFY_REJECTED', updated.code, [updated.creator],
     `[VPDT] Đề xuất duyệt giá ${updated.code} bị từ chối`,
-    `Đề xuất duyệt giá "${updated.productName}" (${updated.code}) của bạn đã bị từ chối. Lý do: ${reason}`);
+    `Đề xuất duyệt giá (${updated.code}) của bạn đã bị từ chối. Lý do: ${reason}`);
   alert('❌ Đã từ chối đề xuất duyệt giá!');
   renderItPriceApprovals();
+  if (currentItPriceModalId === id) renderItPriceModal();
   refreshApprovalSurfaces();
 }
 
 async function applyItPriceAction(id) {
   const p = DB.itPriceApprovals.find(x => x.id === id);
   if (!p) return;
-  if (!confirm(`Xác nhận đã áp giá mới (${p.newPrice.toLocaleString('vi-VN')} đ) cho "${p.productName}" vào hệ thống bán hàng?`)) return;
+  const latestFile = (p.files || [])[p.files.length - 1];
+  if (!confirm(`Xác nhận đã áp bảng giá "${latestFile ? latestFile.fileName : ''}" vào hệ thống bán hàng?`)) return;
 
   let result;
   try {
@@ -23606,6 +23675,7 @@ async function applyItPriceAction(id) {
   logSystemAction('IT_SUPPORT', 'APPLY_IT_PRICE', `Xác nhận đã áp giá [${p.code}]`, 'SUCCESS', p.code);
   alert('✅ Đã xác nhận áp giá thành công!');
   renderItPriceApprovals();
+  if (currentItPriceModalId === id) renderItPriceModal();
 }
 
 function deleteItPriceAction(id) {
@@ -23614,8 +23684,269 @@ function deleteItPriceAction(id) {
   deleteRecordAdminOnly('itPriceApprovals', id, `đề xuất duyệt giá ${p.code}`, () => {
     DB.itPriceApprovals = DB.itPriceApprovals.filter(x => x.id !== id);
     logSystemAction('IT_SUPPORT', 'DELETE_IT_PRICE', `Xóa đề xuất duyệt giá [${p.code}]`, 'SUCCESS', p.code);
+    if (currentItPriceModalId === id) closeItPriceModal();
     renderItPriceApprovals();
   });
+}
+
+// So sánh nội dung tệp mới nhất với tệp liền trước — ghép theo Mã hàng (dự phòng Tên mặt hàng), dùng
+// để hiển thị bảng "So Sánh Thay Đổi" trong modal chi tiết (bằng chứng tham chiếu khi có tệp bổ sung).
+function diffPriceFileItems(newItems, oldItems) {
+  const keyOf = (it) => it.code || it.name;
+  const oldMap = new Map((oldItems || []).map(it => [keyOf(it), it]));
+  const newMap = new Map((newItems || []).map(it => [keyOf(it), it]));
+  const keys = Array.from(new Set([...oldMap.keys(), ...newMap.keys()]));
+  return keys.map(key => {
+    const oldIt = oldMap.get(key), newIt = newMap.get(key);
+    if (oldIt && newIt) {
+      const changed = oldIt.oldPrice !== newIt.oldPrice || oldIt.newPrice !== newIt.newPrice;
+      return { code: newIt.code, name: newIt.name, kind: changed ? 'changed' : 'same', oldPrice: oldIt.newPrice, newPrice: newIt.newPrice };
+    }
+    if (newIt) return { code: newIt.code, name: newIt.name, kind: 'added', newPrice: newIt.newPrice };
+    return { code: oldIt.code, name: oldIt.name, kind: 'removed', oldPrice: oldIt.newPrice };
+  });
+}
+
+let currentItPriceModalId = null;
+
+function openItPriceModal(id) {
+  currentItPriceModalId = id;
+  renderItPriceModal();
+  document.getElementById('itPriceModal').classList.remove('hidden');
+}
+function closeItPriceModal() {
+  document.getElementById('itPriceModal').classList.add('hidden');
+  currentItPriceModalId = null;
+  itPriceSupplementPendingFile = null;
+}
+
+function renderItPriceModal() {
+  const p = DB.itPriceApprovals.find(x => x.id === currentItPriceModalId);
+  if (!p) return closeItPriceModal();
+  if (!canViewItPriceApproval(currentUser, p)) { alert('Bạn không có quyền xem đề xuất này.'); return closeItPriceModal(); }
+
+  document.getElementById('itPriceModalTitle').innerText = `🏷️ ${p.code}`;
+  document.getElementById('itPriceModalSub').innerText = `${p.dept} | ${p.creatorName} | ${p.createdAt}`;
+
+  const historyRows = (p.history || []).filter(h => h.action === 'APPROVED' || h.action === 'REJECTED').map(h =>
+    `<div><b>${h.action === 'APPROVED' ? 'Đã duyệt bởi' : 'Đã từ chối bởi'}:</b> ${escapeHtml(h.approver)} · ${escapeHtml(h.time)}${h.comment ? `<br><span class="text-xs text-gray-500">Lý do: ${escapeHtml(h.comment)}</span>` : ''}</div>`
+  ).join('');
+
+  document.getElementById('itPriceModalDetails').innerHTML = `
+    <div><b>Trạng thái:</b> ${itPriceStatusBadge(p)}</div>
+    <div><b>Áp giá:</b> ${itPriceAppliedBadge(p)}</div>
+    <div><b>Lý do điều chỉnh:</b> ${p.reason ? escapeHtml(p.reason) : '<span class="text-gray-400">—</span>'}</div>
+    ${historyRows}
+    ${p.applied ? `<div><b>Đã áp giá:</b> ${escapeHtml(p.appliedByName || '')} · ${escapeHtml(p.appliedAt || '')}</div>` : ''}
+  `;
+
+  const infoWrap = document.getElementById('itPriceModalInfoRequestsWrap');
+  const requests = p.infoRequests || [];
+  if (requests.length) {
+    infoWrap.classList.remove('hidden');
+    document.getElementById('itPriceModalInfoRequests').innerHTML = requests.map(r => `
+      <div class="bg-white p-2 rounded border">
+        <div class="font-bold">${r.byRole === 'it' ? '🛠️ IT' : '✅ Người duyệt'} ${escapeHtml(r.requestedByName)} yêu cầu bổ sung — ${escapeHtml(r.requestedAt)}</div>
+        <div class="text-gray-600">${escapeHtml(r.reason)}</div>
+        <div class="mt-1">${r.response
+          ? `<span class="px-2 py-0.5 bg-green-100 text-green-800 rounded font-bold text-xs">Đã bổ sung</span> <span class="text-gray-500">${escapeHtml(r.response)} · ${escapeHtml(r.respondedAt)}</span>`
+          : `<span class="px-2 py-0.5 bg-amber-100 text-amber-800 rounded font-bold text-xs">Chưa bổ sung</span>`}</div>
+      </div>
+    `).join('');
+  } else {
+    infoWrap.classList.add('hidden');
+  }
+
+  const files = p.files || [];
+  document.getElementById('itPriceModalFiles').innerHTML = files.map((f, idx) => {
+    const isLatest = idx === files.length - 1;
+    const tagLatest = isLatest && files.length > 1 ? ' <span class="px-1.5 py-0.5 bg-sky-100 text-sky-800 rounded text-xs font-bold">Mới nhất</span>' : '';
+    const tagOriginal = idx === 0 && files.length > 1 ? ' <span class="px-1.5 py-0.5 bg-gray-200 text-gray-700 rounded text-xs font-bold">Bản gốc</span>' : '';
+    return `
+      <details class="border rounded bg-white" ${isLatest ? 'open' : ''}>
+        <summary class="p-2 cursor-pointer font-semibold">📎 ${escapeHtml(f.fileName)}${tagLatest}${tagOriginal}
+          <span class="block text-xs font-normal text-gray-500 mt-0.5">Tải lên bởi ${escapeHtml(f.uploadedByName)} · ${escapeHtml(f.uploadedAt)} · ${(f.items || []).length} dòng</span>
+        </summary>
+        <div class="p-2 border-t overflow-x-auto">
+          <table class="w-full border-collapse text-xs">
+            <thead><tr class="bg-gray-100 text-left text-gray-700"><th class="border p-1">Mã hàng</th><th class="border p-1">Tên mặt hàng</th><th class="border p-1 text-right">Giá cũ</th><th class="border p-1 text-right">Giá mới</th></tr></thead>
+            <tbody>${(f.items || []).map(it => `<tr><td class="border p-1 text-gray-500">${escapeHtml(it.code || '')}</td><td class="border p-1">${escapeHtml(it.name)}</td><td class="border p-1 text-right text-gray-500">${it.oldPrice != null ? Number(it.oldPrice).toLocaleString('vi-VN') : ''}</td><td class="border p-1 text-right font-bold text-sky-700">${Number(it.newPrice).toLocaleString('vi-VN')}</td></tr>`).join('')}</tbody>
+          </table>
+        </div>
+      </details>
+    `;
+  }).join('');
+
+  const diffWrap = document.getElementById('itPriceModalDiffWrap');
+  if (files.length > 1) {
+    const diff = diffPriceFileItems(files[files.length - 1].items, files[files.length - 2].items);
+    diffWrap.classList.remove('hidden');
+    document.getElementById('itPriceModalDiffBody').innerHTML = diff.map(d => {
+      let label;
+      if (d.kind === 'added') label = `<span class="text-emerald-700 font-bold">+ Mới thêm · ${Number(d.newPrice).toLocaleString('vi-VN')} đ</span>`;
+      else if (d.kind === 'removed') label = `<span class="text-red-600 font-bold line-through">− Đã bỏ · ${Number(d.oldPrice).toLocaleString('vi-VN')} đ</span>`;
+      else if (d.kind === 'changed') label = `<span class="text-amber-700 font-bold">≠ ${d.oldPrice != null ? Number(d.oldPrice).toLocaleString('vi-VN') : '—'} → ${Number(d.newPrice).toLocaleString('vi-VN')} đ</span>`;
+      else label = `<span class="text-gray-400">Không đổi</span>`;
+      return `<tr><td class="border p-1">${escapeHtml(d.code || '')}</td><td class="border p-1">${escapeHtml(d.name)}</td><td class="border p-1">${label}</td></tr>`;
+    }).join('');
+  } else {
+    diffWrap.classList.add('hidden');
+  }
+
+  renderItPriceModalControls(p);
+}
+
+function renderItPriceModalControls(p) {
+  const wrap = document.getElementById('itPriceModalControls');
+  const blocked = itPriceHasUnresolvedInfoRequest(p);
+  const wfConfig = DB.itPriceDeptWorkflows[p.dept] || { workflowId: 'WF_1STEP', approvers: { 1: ['admin'] } };
+  const currentStepApprovers = wfConfig.approvers ? (wfConfig.approvers[p.currentStep] || []) : [];
+  const canApprove = p.status === 'PENDING' && canApproveStep(currentUser, currentStepApprovers, p.history, p.currentStep);
+  const canApply = p.status === 'APPROVED' && !p.applied && canManageItSupportClient(currentUser);
+  let html = '';
+
+  if (canApprove) {
+    if (blocked) {
+      html += `<div class="bg-amber-50 text-amber-800 p-2 rounded border border-amber-200">⏳ Đang chờ người đề xuất tải lên tệp bổ sung trước khi có thể duyệt.</div>`;
+    } else {
+      html += `<div class="flex gap-2 flex-wrap">
+        <button type="button" onclick="approveItPrice(${p.id})" class="bg-emerald-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-emerald-700">✅ Duyệt</button>
+        <button type="button" onclick="rejectItPrice(${p.id})" class="bg-red-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-red-700">❌ Từ chối</button>
+        <button type="button" onclick="requestItPriceInfoApprover(${p.id})" class="bg-amber-500 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-amber-600">✉️ Yêu Cầu Bổ Sung</button>
+      </div>`;
+    }
+  }
+
+  if (canApply) {
+    if (blocked) {
+      html += `<div class="bg-amber-50 text-amber-800 p-2 rounded border border-amber-200 mt-2">⏳ Đang chờ người đề xuất tải lên tệp bổ sung trước khi có thể xác nhận áp giá.</div>`;
+    } else {
+      html += `<div class="flex gap-2 flex-wrap mt-2">
+        <button type="button" onclick="applyItPriceAction(${p.id})" class="bg-teal-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-teal-700">🏷️ Xác nhận đã áp giá</button>
+        <button type="button" onclick="requestItPriceInfoIt(${p.id})" class="bg-amber-500 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-amber-600">✉️ Yêu Cầu Bổ Sung</button>
+      </div>`;
+    }
+  }
+
+  if (blocked && p.creator === currentUser.username) {
+    const openReq = (p.infoRequests || []).find(r => !r.response);
+    html += `
+      <div class="bg-sky-50 p-3 rounded border border-sky-200 space-y-2 mt-2">
+        <h4 class="font-bold text-sky-900">📤 Tải Lên Tệp Bổ Sung</h4>
+        <p class="text-amber-700">${escapeHtml(openReq.requestedByName)} yêu cầu: "${escapeHtml(openReq.reason)}"</p>
+        <input id="itPriceSupplementFileInput" type="file" accept=".xlsx,.xls" onchange="onItPriceSupplementFileChange(event)" class="w-full border p-1.5 rounded bg-white">
+        <p id="itPriceSupplementFileStatus" class="text-gray-500"></p>
+        <p class="text-gray-400">Tệp bổ sung sẽ được thêm vào bên cạnh tệp gốc, không thay thế — người duyệt/IT sẽ xem được cả bảng so sánh.</p>
+        <button type="button" id="itPriceSupplementSendBtn" onclick="submitItPriceSupplementAction(${p.id})" class="bg-sky-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-sky-700 disabled:opacity-50" disabled>Gửi Tệp Bổ Sung</button>
+      </div>`;
+  }
+
+  if (currentUser.perms?.admin) {
+    html += `<div class="mt-2"><button type="button" onclick="deleteItPriceAction(${p.id})" class="bg-gray-500 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-gray-600">🗑️ Xóa</button></div>`;
+  }
+
+  if (!html) html = '<p class="text-gray-400 italic">Không có thao tác nào khả dụng cho vai trò hiện tại.</p>';
+  wrap.innerHTML = html;
+}
+
+// Yêu Cầu Bổ Sung từ người duyệt phòng ban (bước hiện tại, đang PENDING) — dùng chung hành động
+// REQUEST_INFO của engine duyệt chung (lib/workflowEngine.js), ghi vào item.infoRequests.
+async function requestItPriceInfoApprover(id) {
+  const reason = prompt('Nhập nội dung cần bổ sung:');
+  if (reason === null) return;
+  if (!reason.trim()) return alert('Vui lòng nhập nội dung cần bổ sung.');
+
+  let result;
+  try {
+    result = await callWorkflowAction('itPriceApprovals', id, 'request-info', { comment: reason.trim() });
+  } catch (e) {
+    return alert('⛔ ' + e.message);
+  }
+  const updated = result.item;
+  const idx = DB.itPriceApprovals.findIndex(x => x.id === id);
+  if (idx !== -1) DB.itPriceApprovals[idx] = updated;
+  logSystemAction('IT_SUPPORT', 'REQUEST_INFO_IT_PRICE', `Yêu cầu bổ sung đề xuất giá [${updated.code}]`, 'SUCCESS', updated.code);
+  notifyUsersByEmail('IT_SUPPORT', 'NOTIFY_REQUEST_INFO', updated.code, [updated.creator],
+    `[VPDT] Đề xuất duyệt giá ${updated.code} cần bổ sung`,
+    `Đề xuất duyệt giá (${updated.code}) của bạn cần bổ sung: ${reason.trim()}`);
+  alert('✅ Đã gửi yêu cầu bổ sung tới người đề xuất.');
+  renderItPriceApprovals();
+  if (currentItPriceModalId === id) renderItPriceModal();
+}
+
+// Yêu Cầu Bổ Sung từ đội Hỗ Trợ IT (sau khi đã APPROVED, trước khi áp giá) — route riêng (không đi qua
+// engine duyệt chung vì hồ sơ không còn PENDING), xem requestPriceInfoFromIt() ở lib/recordActions.js.
+async function requestItPriceInfoIt(id) {
+  const reason = prompt('Nhập nội dung cần bổ sung:');
+  if (reason === null) return;
+  if (!reason.trim()) return alert('Vui lòng nhập nội dung cần bổ sung.');
+
+  let result;
+  try {
+    result = await callRecordAction('itPriceApprovals', id, 'request-info', { reason: reason.trim() });
+  } catch (e) {
+    return alert('⛔ ' + e.message);
+  }
+  const updated = result.item;
+  const idx = DB.itPriceApprovals.findIndex(x => x.id === id);
+  if (idx !== -1) DB.itPriceApprovals[idx] = updated;
+  logSystemAction('IT_SUPPORT', 'REQUEST_INFO_IT_PRICE', `Yêu cầu bổ sung đề xuất giá [${updated.code}]`, 'SUCCESS', updated.code);
+  notifyUsersByEmail('IT_SUPPORT', 'NOTIFY_REQUEST_INFO', updated.code, [updated.creator],
+    `[VPDT] Đề xuất duyệt giá ${updated.code} cần bổ sung`,
+    `Đề xuất duyệt giá (${updated.code}) của bạn cần bổ sung: ${reason.trim()}`);
+  alert('✅ Đã gửi yêu cầu bổ sung tới người đề xuất.');
+  renderItPriceApprovals();
+  if (currentItPriceModalId === id) renderItPriceModal();
+}
+
+let itPriceSupplementPendingFile = null;
+
+async function onItPriceSupplementFileChange(event) {
+  const file = event.target.files[0];
+  itPriceSupplementPendingFile = null;
+  const sendBtn = document.getElementById('itPriceSupplementSendBtn');
+  if (sendBtn) sendBtn.disabled = true;
+  const statusEl = document.getElementById('itPriceSupplementFileStatus');
+  if (!file) { if (statusEl) statusEl.innerText = ''; return; }
+
+  if (statusEl) statusEl.innerText = '⏳ Đang đọc file...';
+  const formData = new FormData();
+  formData.append('file', file);
+  try {
+    const res = await fetch('/api/it-price/parse-file', { method: 'POST', body: formData });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Lỗi không xác định');
+    itPriceSupplementPendingFile = data;
+    if (statusEl) statusEl.innerText = `✅ Đọc thành công ${data.items.length} dòng giá từ file "${data.fileName}".`;
+    if (sendBtn) sendBtn.disabled = false;
+  } catch (err) {
+    if (statusEl) statusEl.innerText = `⛔ ${err.message}`;
+    event.target.value = '';
+  }
+}
+
+// Tệp bổ sung được THÊM VÀO cuối item.files, KHÔNG thay thế/xoá tệp trước đó — xem
+// submitPriceSupplementFile() ở lib/recordActions.js (yêu cầu nghiệp vụ: giữ đủ mọi phiên bản làm
+// bằng chứng tham chiếu).
+async function submitItPriceSupplementAction(id) {
+  if (!itPriceSupplementPendingFile) return alert('Vui lòng chọn tệp bảng giá bổ sung (.xlsx).');
+
+  let result;
+  try {
+    result = await callRecordAction('itPriceApprovals', id, 'submit-supplement', {
+      file: { fileUrl: itPriceSupplementPendingFile.fileUrl, fileName: itPriceSupplementPendingFile.fileName, items: itPriceSupplementPendingFile.items }
+    });
+  } catch (e) {
+    return alert('⛔ ' + e.message);
+  }
+  const updated = result.item;
+  const idx = DB.itPriceApprovals.findIndex(x => x.id === id);
+  if (idx !== -1) DB.itPriceApprovals[idx] = updated;
+  itPriceSupplementPendingFile = null;
+  logSystemAction('IT_SUPPORT', 'SUBMIT_IT_PRICE_SUPPLEMENT', `Tải lên tệp bổ sung đề xuất giá [${updated.code}]`, 'SUCCESS', updated.code);
+  alert('✅ Đã gửi tệp bổ sung — không thay thế tệp gốc, người duyệt/IT sẽ thấy cả bảng so sánh.');
+  renderItPriceApprovals();
+  if (currentItPriceModalId === id) renderItPriceModal();
 }
 
 // ----- 🎫 Hỗ Trợ Yêu Cầu -----
@@ -23733,11 +24064,26 @@ function deleteItTicketAction(id) {
 }
 
 let currentItTicketModalId = null;
+let showItTicketEscalateForm = false;
+
+// Nhãn trạng thái leo thang phê duyệt (xem escalateItTicket() ở lib/recordActions.js) — tách biệt hoàn
+// toàn khỏi IT_TICKET_STATUS_BADGES (t.status: TODO/DOING/DONE/CANCELLED).
+const IT_TICKET_APPROVAL_BADGES = {
+  PENDING: (t) => `<span class="px-2 py-0.5 bg-amber-100 text-amber-800 rounded font-bold text-xs">⏳ Chờ ${escapeHtml(t.approvalApproverName)} duyệt</span>`,
+  APPROVED: (t) => `<span class="px-2 py-0.5 bg-green-100 text-green-800 rounded font-bold text-xs">✅ ${escapeHtml(t.approvalApproverName)} đã duyệt</span>`,
+  REJECTED: (t) => `<span class="px-2 py-0.5 bg-red-100 text-red-800 rounded font-bold text-xs">❌ ${escapeHtml(t.approvalApproverName)} đã từ chối</span>`
+};
 
 function openItTicketModal(id) {
   currentItTicketModalId = id;
-  const t = DB.itSupportTickets.find(x => x.id === id);
-  if (!t) return;
+  showItTicketEscalateForm = false;
+  renderItTicketModal();
+  document.getElementById('itTicketModal').classList.remove('hidden');
+}
+
+function renderItTicketModal() {
+  const t = DB.itSupportTickets.find(x => x.id === currentItTicketModalId);
+  if (!t) return closeItTicketModal();
 
   document.getElementById('itTicketModalTitle').innerText = `🎫 ${t.code}: ${t.title}`;
   document.getElementById('itTicketModalSub').innerText = `${t.dept} | ${t.creatorName} | ${IT_TICKET_CATEGORY_LABELS[t.category] || t.category}`;
@@ -23745,27 +24091,77 @@ function openItTicketModal(id) {
   document.getElementById('itTicketModalDetails').innerHTML = `
     <div><b>Trạng thái:</b> ${IT_TICKET_STATUS_BADGES[t.status] || escapeHtml(t.status)}</div>
     <div><b>Người xử lý:</b> ${t.assigneeName ? escapeHtml(t.assigneeName) : 'Chưa có người nhận'}</div>
+    ${t.approvalStatus ? `<div><b>Phê duyệt:</b> ${IT_TICKET_APPROVAL_BADGES[t.approvalStatus](t)}</div>` : ''}
     <div><b>Mô tả:</b><p class="bg-white p-2 rounded border mt-1">${escapeHtml(t.description)}</p></div>
     ${t.resolutionNote ? `<div><b>Ghi chú xử lý:</b><p class="bg-white p-2 rounded border mt-1">${escapeHtml(t.resolutionNote)}</p></div>` : ''}
   `;
 
   const canManage = canManageItSupportClient(currentUser);
   const isCreator = t.creator === currentUser.username;
+  const isDesignatedApprover = t.approvalApprover === currentUser.username;
+  const awaitingApproval = t.approvalStatus === 'PENDING';
+  const blockedByRejection = t.approvalStatus === 'REJECTED';
   let controlsHTML = '';
+
+  // Người có trách nhiệm được IT hỏi ý kiến — thấy thẻ Duyệt/Từ chối ngay khi mở, bất kể có phải đội
+  // IT hay không (đúng yêu cầu: IT chủ động xin phép người có trách nhiệm trước khi tiếp tục xử lý).
+  if (isDesignatedApprover && awaitingApproval) {
+    controlsHTML += `
+      <div class="bg-sky-50 p-3 rounded border border-sky-200 space-y-2 mb-2">
+        <h4 class="font-bold text-sky-900">📨 Yêu Cầu Phê Duyệt Từ Đội Hỗ Trợ IT</h4>
+        <p class="text-gray-600">${escapeHtml(t.approvalReason)}</p>
+        <div class="flex gap-2">
+          <button type="button" onclick="approveItTicketEscalationAction()" class="bg-emerald-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-emerald-700">✅ Duyệt</button>
+          <button type="button" onclick="denyItTicketEscalationAction()" class="bg-red-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-red-700">❌ Từ chối</button>
+        </div>
+      </div>`;
+  }
+
   if (canManage && t.status === 'TODO') {
     controlsHTML += `<button type="button" onclick="claimItTicketAction()" class="bg-sky-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-sky-700 mr-2">🎯 Nhận Xử Lý</button>`;
   }
+
   if (canManage && t.status === 'DOING') {
-    controlsHTML += `
-      <div class="bg-sky-50 p-3 rounded border border-sky-200 space-y-2 mb-2">
-        <h4 class="font-bold text-sky-900">🔧 Cập Nhật Xử Lý</h4>
-        <select id="itTicketUpdateStatus" class="w-full border p-1.5 rounded bg-white text-xs">
-          <option value="DONE">✅ Hoàn thành</option>
-          <option value="CANCELLED">❌ Hủy yêu cầu</option>
-        </select>
-        <textarea id="itTicketUpdateNote" placeholder="Ghi chú xử lý (VD: đã thay ổ cứng, đã cấp lại mật khẩu...)" class="w-full border p-1.5 rounded h-16 text-xs">${escapeHtml(t.resolutionNote || '')}</textarea>
-        <button type="button" onclick="updateItTicketStatusAction()" class="bg-sky-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-sky-700">💾 Cập Nhật</button>
-      </div>`;
+    // Đang chờ duyệt hoặc vừa bị từ chối — CHƯA cho phép đóng yêu cầu (Hoàn thành/Hủy qua nút dưới),
+    // đúng yêu cầu "sau khi nhận phê duyệt thì IT mới tiếp tục xử lý" (server chặn lại ở
+    // updateItTicketStatus(), đây chỉ là UI phản ánh đúng trạng thái).
+    if (awaitingApproval) {
+      controlsHTML += `<div class="bg-amber-50 text-amber-800 text-xs p-2 rounded border border-amber-200 mb-2">⏳ Đang chờ <b>${escapeHtml(t.approvalApproverName)}</b> phê duyệt trước khi tiếp tục xử lý.<br>Lý do đã gửi: "${escapeHtml(t.approvalReason)}"</div>`;
+    } else {
+      if (blockedByRejection) {
+        controlsHTML += `<div class="bg-red-50 text-red-700 text-xs p-2 rounded border border-red-200 mb-2">❌ <b>${escapeHtml(t.approvalApproverName)}</b> đã từ chối yêu cầu phê duyệt${t.approvalComment ? `: "${escapeHtml(t.approvalComment)}"` : '.'}<br>Gửi lại yêu cầu tới người khác hoặc hủy yêu cầu hỗ trợ này.</div>`;
+      }
+      if (!showItTicketEscalateForm) {
+        controlsHTML += `<button type="button" onclick="showItTicketEscalateForm = true; renderItTicketModal();" class="bg-gray-200 text-gray-700 px-3 py-1.5 rounded text-xs font-bold hover:bg-gray-300 mb-2">📨 ${blockedByRejection ? 'Gửi Lại' : 'Gửi'} Yêu Cầu Phê Duyệt</button>`;
+      } else {
+        const approverOptions = DB.users.filter(u => u.active !== false && u.username !== currentUser.username)
+          .map(u => `<option value="${escapeHtml(u.username)}">${escapeHtml(u.name)} — ${escapeHtml(u.dept || '')}</option>`).join('');
+        controlsHTML += `
+          <div class="bg-sky-50 p-3 rounded border border-sky-200 space-y-2 mb-2">
+            <h4 class="font-bold text-sky-900">📨 Gửi Yêu Cầu Phê Duyệt</h4>
+            <select id="itTicketApproverSelect" class="w-full border p-1.5 rounded bg-white text-xs">${approverOptions}</select>
+            <textarea id="itTicketApprovalReason" placeholder="Vì sao yêu cầu này cần phê duyệt trước khi xử lý?" class="w-full border p-1.5 rounded h-16 text-xs"></textarea>
+            <div class="flex gap-2">
+              <button type="button" onclick="escalateItTicketAction()" class="bg-sky-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-sky-700">Gửi phê duyệt</button>
+              <button type="button" onclick="showItTicketEscalateForm = false; renderItTicketModal();" class="bg-gray-300 text-gray-700 px-3 py-1.5 rounded text-xs font-bold hover:bg-gray-400">Huỷ</button>
+            </div>
+          </div>`;
+      }
+      // Bị từ chối thì KHÔNG cho đóng yêu cầu qua đây nữa (phải gửi lại phê duyệt và được duyệt, hoặc
+      // dùng nút "Hủy Yêu Cầu" riêng bên dưới).
+      if (!blockedByRejection) {
+        controlsHTML += `
+          <div class="bg-sky-50 p-3 rounded border border-sky-200 space-y-2 mb-2">
+            <h4 class="font-bold text-sky-900">🔧 Cập Nhật Xử Lý</h4>
+            <select id="itTicketUpdateStatus" class="w-full border p-1.5 rounded bg-white text-xs">
+              <option value="DONE">✅ Hoàn thành</option>
+              <option value="CANCELLED">❌ Hủy yêu cầu</option>
+            </select>
+            <textarea id="itTicketUpdateNote" placeholder="Ghi chú xử lý (VD: đã thay ổ cứng, đã cấp lại mật khẩu...)" class="w-full border p-1.5 rounded h-16 text-xs">${escapeHtml(t.resolutionNote || '')}</textarea>
+            <button type="button" onclick="updateItTicketStatusAction()" class="bg-sky-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-sky-700">💾 Cập Nhật</button>
+          </div>`;
+      }
+    }
   }
   if ((canManage || isCreator) && (t.status === 'TODO' || t.status === 'DOING')) {
     controlsHTML += `<button type="button" onclick="cancelItTicketAction()" class="bg-red-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-red-700">❌ Hủy Yêu Cầu</button>`;
@@ -23776,14 +24172,13 @@ function openItTicketModal(id) {
   document.getElementById('itTicketModalComments').innerHTML = comments.length
     ? comments.map(c => `<div class="text-xs bg-white p-2 rounded border"><b>${escapeHtml(c.name)}</b> <span class="text-gray-400">(${escapeHtml(c.time)})</span><br>${escapeHtml(c.content)}</div>`).join('')
     : `<p class="text-xs text-gray-400 italic">Chưa có trao đổi nào.</p>`;
-  document.getElementById('itTicketModalCommentBox').classList.toggle('hidden', !(canManage || isCreator));
-
-  document.getElementById('itTicketModal').classList.remove('hidden');
+  document.getElementById('itTicketModalCommentBox').classList.toggle('hidden', !(canManage || isCreator || isDesignatedApprover));
 }
 
 function closeItTicketModal() {
   document.getElementById('itTicketModal').classList.add('hidden');
   currentItTicketModalId = null;
+  showItTicketEscalateForm = false;
 }
 
 async function claimItTicketAction() {
@@ -23798,7 +24193,80 @@ async function claimItTicketAction() {
   if (idx !== -1) DB.itSupportTickets[idx] = result.item;
   logSystemAction('IT_SUPPORT', 'CLAIM_IT_TICKET', `Nhận xử lý yêu cầu hỗ trợ IT [${result.item.code}]`, 'SUCCESS', result.item.code);
   renderItTickets();
-  openItTicketModal(currentItTicketModalId);
+  renderItTicketModal();
+}
+
+async function escalateItTicketAction() {
+  if (!currentItTicketModalId) return;
+  const approverUsername = document.getElementById('itTicketApproverSelect').value;
+  const reason = document.getElementById('itTicketApprovalReason').value.trim();
+  if (!reason) return alert('Vui lòng nhập lý do cần phê duyệt.');
+
+  let result;
+  try {
+    result = await callRecordAction('itSupportTickets', currentItTicketModalId, 'escalate', { approverUsername, reason });
+  } catch (e) {
+    return alert('⛔ ' + e.message);
+  }
+  const updated = result.item;
+  const idx = DB.itSupportTickets.findIndex(x => x.id === currentItTicketModalId);
+  if (idx !== -1) DB.itSupportTickets[idx] = updated;
+  logSystemAction('IT_SUPPORT', 'ESCALATE_IT_TICKET', `Gửi yêu cầu phê duyệt yêu cầu hỗ trợ IT [${updated.code}] tới ${updated.approvalApproverName}`, 'SUCCESS', updated.code);
+  notifyUsersByEmail('IT_SUPPORT', 'NOTIFY_TICKET_APPROVAL_NEEDED', updated.code, [updated.approvalApprover],
+    `[VPDT] Yêu cầu hỗ trợ IT ${updated.code} cần bạn phê duyệt`,
+    `Đội Hỗ Trợ IT đang xin ý kiến phê duyệt của bạn cho yêu cầu "${updated.title}" (${updated.code}). Lý do: ${reason}`);
+  showItTicketEscalateForm = false;
+  renderItTickets();
+  renderItTicketModal();
+  alert(`✅ Đã gửi yêu cầu phê duyệt tới ${updated.approvalApproverName}.`);
+}
+
+async function approveItTicketEscalationAction() {
+  if (!currentItTicketModalId) return;
+  let result;
+  try {
+    result = await callRecordAction('itSupportTickets', currentItTicketModalId, 'approve-escalation', {});
+  } catch (e) {
+    return alert('⛔ ' + e.message);
+  }
+  const updated = result.item;
+  const idx = DB.itSupportTickets.findIndex(x => x.id === currentItTicketModalId);
+  if (idx !== -1) DB.itSupportTickets[idx] = updated;
+  logSystemAction('IT_SUPPORT', 'APPROVE_IT_TICKET_ESCALATION', `Duyệt yêu cầu phê duyệt cho yêu cầu hỗ trợ IT [${updated.code}]`, 'SUCCESS', updated.code);
+  if (updated.assignee) {
+    notifyUsersByEmail('IT_SUPPORT', 'NOTIFY_TICKET_ESCALATION_APPROVED', updated.code, [updated.assignee],
+      `[VPDT] Yêu cầu phê duyệt cho ${updated.code} đã được duyệt`,
+      `${currentUser.name} đã duyệt yêu cầu phê duyệt cho "${updated.title}" (${updated.code}) — bạn có thể tiếp tục xử lý.`);
+  }
+  renderItTickets();
+  renderItTicketModal();
+  alert('✅ Đã duyệt yêu cầu phê duyệt.');
+}
+
+async function denyItTicketEscalationAction() {
+  if (!currentItTicketModalId) return;
+  const comment = prompt('Nhập lý do từ chối:');
+  if (comment === null) return;
+  if (!comment.trim()) return alert('Vui lòng nhập lý do từ chối.');
+
+  let result;
+  try {
+    result = await callRecordAction('itSupportTickets', currentItTicketModalId, 'deny-escalation', { comment });
+  } catch (e) {
+    return alert('⛔ ' + e.message);
+  }
+  const updated = result.item;
+  const idx = DB.itSupportTickets.findIndex(x => x.id === currentItTicketModalId);
+  if (idx !== -1) DB.itSupportTickets[idx] = updated;
+  logSystemAction('IT_SUPPORT', 'DENY_IT_TICKET_ESCALATION', `Từ chối yêu cầu phê duyệt cho yêu cầu hỗ trợ IT [${updated.code}]`, 'SUCCESS', updated.code);
+  if (updated.assignee) {
+    notifyUsersByEmail('IT_SUPPORT', 'NOTIFY_TICKET_ESCALATION_DENIED', updated.code, [updated.assignee],
+      `[VPDT] Yêu cầu phê duyệt cho ${updated.code} bị từ chối`,
+      `${currentUser.name} đã từ chối yêu cầu phê duyệt cho "${updated.title}" (${updated.code}). Lý do: ${comment}`);
+  }
+  renderItTickets();
+  renderItTicketModal();
+  alert('❌ Đã từ chối yêu cầu phê duyệt.');
 }
 
 async function updateItTicketStatusAction() {
