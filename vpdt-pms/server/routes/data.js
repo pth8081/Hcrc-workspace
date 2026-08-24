@@ -43,7 +43,11 @@ const ADMIN_ONLY_KEYS = new Set([
   // phép tải lên theo từng module) — cả 4 chỉ có màn sửa trong dropdown "Hệ Thống" (setSystemSubTab()
   // ở index.html chặn !admin cho toàn bộ 4 sub-tab này) nhưng trước đây bị BỎ SÓT khỏi danh sách này,
   // khiến bất kỳ tài khoản đã đăng nhập nào cũng ghi trực tiếp được qua POST /api/data/<key>.
-  'formTemplates', 'deptAbbrs', 'docCatAbbrs', 'uploadFileTypeConfig'
+  'formTemplates', 'deptAbbrs', 'docCatAbbrs', 'uploadFileTypeConfig',
+  // sensitiveKeywords: dữ liệu cấu hình CHÍNH SÁCH kiểm duyệt bình luận (Truyền Thông Nội Bộ), không
+  // phải danh sách nhãn hiển thị thuần như jobTitles/trainingCategories — chỉ admin mới sửa được danh
+  // sách từ khoá quét (xem defaults.js + lib/recordActions.js scanCommentForSensitiveContent()).
+  'sensitiveKeywords'
 ]);
 
 router.use(requireAuth, blockIfMustChangePassword);

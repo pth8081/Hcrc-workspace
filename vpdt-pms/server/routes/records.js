@@ -8,7 +8,7 @@ const { HttpError } = require('../lib/httpErrors');
 const recordActions = require('../lib/recordActions');
 const { insertTask, withLockedTaskById, deleteTaskById, getAllTasks, migrateDirectiveTaskLinks } = require('../lib/taskStore');
 const { createForCollection, withLockedRecordForCollection, deleteRecordForCollection, getAllForCollection, withAppLock } = require('../lib/recordStore');
-const { getAllAppData } = require('../lib/appData');
+const { getAllAppData, getAppDataValue } = require('../lib/appData');
 
 router.use(requireAuth, blockIfMustChangePassword);
 
@@ -308,9 +308,34 @@ router.post('/internalPosts/:id/mark-read', (req, res) =>
 router.post('/internalPosts/:id/like', (req, res) =>
   withInternalPostAction(req, res, 'like', (payload, user, item) => recordActions.toggleInternalPostLike(user, item)));
 
-// POST /api/records/internalPosts/:id/comment
-router.post('/internalPosts/:id/comment', (req, res) =>
-  withInternalPostAction(req, res, 'comment', recordActions.addInternalPostComment));
+// POST /api/records/internalPosts/:id/comment — đọc sẵn danh sách từ khoá nhạy cảm (DB.sensitiveKeywords)
+// TRƯỚC khi khoá+ghi, truyền vào addInternalPostComment() để tự gắn cờ nếu khớp (xem
+// lib/recordActions.js scanCommentForSensitiveContent()) — không dùng withInternalPostAction() chung
+// vì cần đọc thêm AppData, khác các action còn lại chỉ cần đúng post đang khoá.
+router.post('/internalPosts/:id/comment', async (req, res) => {
+  const itemId = Number(req.params.id);
+  if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
+  try {
+    const { freshUser } = await getFreshUser(req);
+    const sensitiveKeywords = (await getAppDataValue('sensitiveKeywords')) || [];
+    const result = await withLockedRecordForCollection('internalPosts', itemId, (item) =>
+      recordActions.addInternalPostComment(req.body, freshUser, item, sensitiveKeywords));
+    res.json({ ok: true, item: result });
+  } catch (err) {
+    handleError(res, `internalPosts/${req.params.id}/comment`, err);
+  }
+});
+
+// POST /api/records/internalPosts/:id/comment/:commentId/dismiss-flag — người kiểm duyệt xem xét thấy
+// bình luận không có vấn đề gì, chỉ gỡ cờ (không xoá). POST .../delete-comment — xoá hẳn bình luận vi
+// phạm. Cả 2 chỉ dành cho canApproveInternalPost (kiểm tra ở lib/recordActions.js).
+router.post('/internalPosts/:id/comment/:commentId/dismiss-flag', (req, res) =>
+  withInternalPostAction(req, res, 'comment-dismiss-flag', (payload, user, item) =>
+    recordActions.dismissInternalCommentFlag(user, item, Number(req.params.commentId))));
+
+router.post('/internalPosts/:id/comment/:commentId/delete-comment', (req, res) =>
+  withInternalPostAction(req, res, 'comment-delete', (payload, user, item) =>
+    recordActions.deleteInternalPostComment(user, item, Number(req.params.commentId))));
 
 // POST /api/records/internalPosts/:id/register-training
 router.post('/internalPosts/:id/register-training', (req, res) =>

@@ -10,6 +10,7 @@
 // khác, xem các hàm riêng bên dưới).
 const { getAppDataValue } = require('./appData');
 const { MODULE_CONFIGS, resolveContractApprovalWorkflow, resolveContractManageWorkflow } = require('./workflowEngine');
+const { canApproveInternalPost } = require('./recordActions');
 
 function scopeAllows(user, scope, dept) {
   if (!user) return false;
@@ -113,8 +114,25 @@ function canViewInternalPost(user, post) {
   return post.author === user.username || !!(user.perms?.admin || user.perms?.internalPostApprove);
 }
 
+// Ẩn dữ liệu cờ cảnh báo bình luận nhạy cảm (flagged/flagCategories/flagTerms — xem
+// addInternalPostComment() ở lib/recordActions.js) khỏi người dùng KHÔNG có quyền kiểm duyệt — trước
+// đây stripPasswords()/sanitizeEmailConfig() (routes/data.js) đã theo đúng nguyên tắc "ẩn ở SERVER,
+// không chỉ ẩn ở giao diện" cho dữ liệu nhạy cảm; nhãn cảnh báo + lý do vi phạm cũng cần ẩn tương tự —
+// nếu chỉ ẩn ở client, ai gọi thẳng GET /api/data vẫn đọc được lý do bị đánh dấu của bất kỳ bình luận
+// nào (kể cả bình luận không phải của mình).
+function sanitizeInternalPostCommentsForUser(post, user) {
+  if (!Array.isArray(post.comments) || !post.comments.some(c => c.flagged)) return post;
+  if (canApproveInternalPost(user)) return post;
+  return {
+    ...post,
+    comments: post.comments.map(({ flagged, flagCategories, flagTerms, flagDismissedBy, flagDismissedAt, ...rest }) => rest)
+  };
+}
+
 function filterInternalPostsForUser(posts, user) {
-  return (posts || []).filter(p => canViewInternalPost(user, p));
+  return (posts || [])
+    .filter(p => canViewInternalPost(user, p))
+    .map(p => sanitizeInternalPostCommentsForUser(p, user));
 }
 
 // Báo Cáo Định Kỳ: nội dung slide đã tổng hợp (compilation.slides) chỉ nên lộ cho reportManage/

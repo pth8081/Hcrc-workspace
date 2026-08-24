@@ -2745,6 +2745,24 @@ table { display: block; overflow-x: auto; max-width: 100%; }
           <ul id="trainingCategoryList" class="divide-y text-xs"></ul>
         </div>
       </div>
+
+      <div class="bg-red-50 p-4 rounded border border-red-200 space-y-3">
+        <h3 class="font-bold text-red-900 text-sm flex items-center gap-1">🚨 Từ Khoá Nhạy Cảm (kiểm duyệt bình luận)</h3>
+        <p class="text-[11px] text-red-700">Dùng để QUÉT (không chặn đăng) bình luận ở Truyền Thông Nội Bộ — khớp thì chỉ gắn cờ cảnh báo cho người có quyền Duyệt Bài Đăng xem xét ở màn Phê Duyệt, không tự động xoá gì.</p>
+        <form onsubmit="saveSensitiveKeyword(event)" class="flex gap-2">
+          <input id="txtSensitiveKeywordTerm" placeholder="Từ/cụm từ..." class="border p-1.5 rounded text-xs flex-1" required>
+          <select id="selSensitiveKeywordCategory" class="border p-1.5 rounded text-xs bg-white">
+            <option value="TUC_TIU">Tục tĩu</option>
+            <option value="TIEU_CUC">Tiêu cực</option>
+            <option value="CUC_DOAN">Cực đoan</option>
+            <option value="PHAN_DONG">Phản động nhà nước</option>
+          </select>
+          <button type="submit" class="bg-red-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-red-700">Thêm</button>
+        </form>
+        <div class="max-h-40 overflow-y-auto bg-white rounded border">
+          <ul id="sensitiveKeywordList" class="divide-y text-xs"></ul>
+        </div>
+      </div>
     </div>
 
     <!-- CẤU HÌNH USER & PHÂN QUYỀN -->
@@ -4077,6 +4095,7 @@ const DB = {
   internalPosts: [],
   trainingCategories: [], trainingDocuments: [], trainingClasses: [], trainingRegistrations: [],
   careerPaths: [], careerPathConfirmations: [],
+  sensitiveKeywords: [],
   paymentRequests: [],
   formTemplates: {},
   permGroups: [],
@@ -5576,6 +5595,7 @@ async function initDatabase(loggingInUser) {
     DB.trainingRegistrations = data.trainingRegistrations || [];
     DB.careerPaths = data.careerPaths || [];
     DB.careerPathConfirmations = data.careerPathConfirmations || [];
+    DB.sensitiveKeywords = data.sensitiveKeywords || [];
 
     DB._versions = data._versions || {};
 
@@ -6879,6 +6899,26 @@ function getMyPendingApprovals(user) {
           { label: '✅ Duyệt', onclick: `approveInternalPostAction(${p.id})`, primary: true },
           { label: '❌ Từ chối', onclick: `rejectInternalPostAction(${p.id})` }
         ]
+      });
+    });
+
+    // Bình luận bị hệ thống tự đánh dấu nghi vấn (xem addInternalPostComment() ở
+    // lib/recordActions.js scanCommentForSensitiveContent()) — KHÔNG chặn đăng, chỉ báo ở đây để người
+    // kiểm duyệt xử lý ngay. CUC_DOAN/PHAN_DONG nổi bật hơn (🚨 đỏ) — theo đúng yêu cầu "chỉ cần thông
+    // báo khi duyệt comment để người duyệt xử lý ngay", không gửi email riêng cho mức này.
+    (DB.internalPosts || []).forEach(p => {
+      (p.comments || []).filter(c => c.flagged).forEach(c => {
+        const isSevere = (c.flagCategories || []).some(cat => SENSITIVE_CATEGORY_SEVERE.has(cat));
+        const catLabels = (c.flagCategories || []).map(cat => SENSITIVE_CATEGORY_LABELS[cat] || cat).join(', ');
+        items.push({
+          type: 'flaggedComment', typeLabel: `${isSevere ? '🚨' : '⚠️'} Bình luận nhạy cảm (${catLabels})`,
+          code: '', title: `"${c.content}" — trong bài "${p.title}" (${c.name})`, dept: p.dept,
+          stepLabel: '', createdAt: c.time,
+          actions: [
+            { label: '🗑️ Xoá bình luận', onclick: `deleteFlaggedCommentAction(${p.id}, ${c.id})`, primary: true },
+            { label: '✅ Bỏ qua (không vấn đề)', onclick: `dismissCommentFlagAction(${p.id}, ${c.id})` }
+          ]
+        });
       });
     });
   }
@@ -15596,7 +15636,7 @@ function setSystemSubTab(subTab) {
   document.getElementById('btnSystemSubLog').className = subTab === 'LOG' ? activeCls : inactiveCls;
 
   if (subTab === 'ADMIN') {
-    renderDeptList(); renderCatList(); renderContractTypeAbbrList(); renderJobTitleList(); renderTrainingCategoryList(); renderDeptCheckboxes(); renderModuleAccessCheckboxes(); renderUsers(); loadEmailConfigToForm(); renderPermGroupsList(); renderSubmissionApprovalGroups(); renderContractApprovalGroups();
+    renderDeptList(); renderCatList(); renderContractTypeAbbrList(); renderJobTitleList(); renderTrainingCategoryList(); renderSensitiveKeywordList(); renderDeptCheckboxes(); renderModuleAccessCheckboxes(); renderUsers(); loadEmailConfigToForm(); renderPermGroupsList(); renderSubmissionApprovalGroups(); renderContractApprovalGroups();
     setAdminSubTab(activeAdminSubTab);
   }
   if (subTab === 'FORM') { switchFormTab(activeFormTab); }
@@ -16432,6 +16472,46 @@ function renderTrainingCategoryList() {
     <li class="p-2 flex justify-between items-center hover:bg-gray-50">
       <span>${escapeHtml(t)}</span>
       <button onclick="deleteTrainingCategory('${escapeHtml(t)}')" class="text-red-500 font-bold hover:underline">Xóa</button>
+    </li>
+  `).join('');
+}
+
+const SENSITIVE_CATEGORY_LABELS = { TUC_TIU: 'Tục tĩu', TIEU_CUC: 'Tiêu cực', CUC_DOAN: 'Cực đoan', PHAN_DONG: 'Phản động nhà nước' };
+// CUC_DOAN/PHAN_DONG hiện nổi bật hơn (đỏ đậm) trong màn Phê Duyệt — cần người kiểm duyệt xử lý ngay,
+// khác 2 nhóm còn lại (vàng, xử lý khi rảnh) — xem getMyPendingApprovals()/renderInternalNewsCard().
+const SENSITIVE_CATEGORY_SEVERE = new Set(['CUC_DOAN', 'PHAN_DONG']);
+
+function saveSensitiveKeyword(e) {
+  e.preventDefault();
+  const term = document.getElementById('txtSensitiveKeywordTerm').value.trim();
+  const category = document.getElementById('selSensitiveKeywordCategory').value;
+  if (DB.sensitiveKeywords.some(k => k.term.toLowerCase() === term.toLowerCase() && k.category === category)) {
+    return alert('Từ khoá này đã có trong danh sách!');
+  }
+  const nextId = (Math.max(0, ...DB.sensitiveKeywords.map(k => k.id)) || 0) + 1;
+  DB.sensitiveKeywords.push({ id: nextId, term, category });
+  syncStorage('sensitiveKeywords');
+  logSystemAction('USER_MGM', 'ADD_SENSITIVE_KEYWORD', `Thêm từ khoá nhạy cảm [${term}] (${SENSITIVE_CATEGORY_LABELS[category]})`, 'SUCCESS', term);
+  document.getElementById('txtSensitiveKeywordTerm').value = '';
+  renderSensitiveKeywordList();
+}
+
+function deleteSensitiveKeyword(id) {
+  const kw = DB.sensitiveKeywords.find(k => k.id === id);
+  if (!kw || !confirm(`Xóa từ khoá "${kw.term}"?`)) return;
+  DB.sensitiveKeywords = DB.sensitiveKeywords.filter(k => k.id !== id);
+  syncStorage('sensitiveKeywords');
+  logSystemAction('USER_MGM', 'DELETE_SENSITIVE_KEYWORD', `Xóa từ khoá nhạy cảm [${kw.term}]`, 'SUCCESS', kw.term);
+  renderSensitiveKeywordList();
+}
+
+function renderSensitiveKeywordList() {
+  const ul = document.getElementById('sensitiveKeywordList');
+  if (!ul) return;
+  ul.innerHTML = DB.sensitiveKeywords.map(k => `
+    <li class="p-2 flex justify-between items-center hover:bg-gray-50">
+      <span>${escapeHtml(k.term)} <span class="text-[10px] px-1.5 py-0.5 rounded-full ${SENSITIVE_CATEGORY_SEVERE.has(k.category) ? 'bg-red-100 text-red-700' : 'bg-amber-100 text-amber-700'}">${SENSITIVE_CATEGORY_LABELS[k.category] || k.category}</span></span>
+      <button onclick="deleteSensitiveKeyword(${k.id})" class="text-red-500 font-bold hover:underline">Xóa</button>
     </li>
   `).join('');
 }
@@ -20509,15 +20589,31 @@ function renderInternalNewsCard(p) {
     ? `<img src="${escapeHtml(p.attachment.fileUrl)}" alt="" class="w-full max-h-80 object-cover cursor-pointer" onclick="viewInternalPostDetail(${p.id})">`
     : '';
   const snippet = (p.content || '').slice(0, 300);
+  // ⚠️/🚨 chỉ hiện cho người có quyền kiểm duyệt (canApproveInternalPost) — server đã tự ẩn field
+  // flagged/flagCategories khỏi người khác (xem sanitizeInternalPostCommentsForUser() ở
+  // lib/recordViewScope.js), nên với người dùng thường c.flagged luôn undefined, khối này tự nhiên
+  // không render gì thêm, không cần kiểm tra quyền lại ở đây.
+  const canModerate = canApproveInternalPost(currentUser);
   const commentsHTML = comments.length
-    ? comments.map(c => `
+    ? comments.map(c => {
+        const isSevere = (c.flagCategories || []).some(cat => SENSITIVE_CATEGORY_SEVERE.has(cat));
+        const flagHTML = c.flagged && canModerate
+          ? `<div class="mt-1 flex flex-wrap items-center gap-1.5 text-[11px]">
+               <span class="px-1.5 py-0.5 rounded-full font-bold ${isSevere ? 'bg-red-100 text-red-700' : 'bg-amber-100 text-amber-700'}">${isSevere ? '🚨' : '⚠️'} ${(c.flagCategories || []).map(cat => SENSITIVE_CATEGORY_LABELS[cat] || cat).join(', ')}</span>
+               <button onclick="dismissCommentFlagAction(${p.id}, ${c.id})" class="text-emerald-700 font-bold hover:underline">Bỏ qua</button>
+               <button onclick="deleteFlaggedCommentAction(${p.id}, ${c.id})" class="text-red-700 font-bold hover:underline">Xoá</button>
+             </div>`
+          : '';
+        return `
         <div class="flex gap-2 text-sm">
           <div class="w-7 h-7 rounded-full bg-fuchsia-200 text-fuchsia-800 flex items-center justify-center font-bold text-xs flex-shrink-0">${escapeHtml((c.name || '?').charAt(0).toUpperCase())}</div>
           <div class="bg-gray-100 rounded-2xl px-3 py-1.5 flex-1">
             <div class="font-bold text-xs text-gray-800">${escapeHtml(c.name || '')}</div>
             <div class="text-gray-700">${escapeHtml(c.content)}</div>
+            ${flagHTML}
           </div>
-        </div>`).join('')
+        </div>`;
+      }).join('')
     : `<div class="text-xs text-gray-400 italic">Chưa có bình luận nào — hãy là người đầu tiên!</div>`;
 
   return `
@@ -20568,6 +20664,45 @@ async function addInternalCommentInline(id) {
   const idx = DB.internalPosts.findIndex(x => x.id === id);
   if (idx !== -1) DB.internalPosts[idx] = updated;
   renderInternalNewsFeed();
+  // Bình luận vừa gửi có thể vừa bị hệ thống tự đánh dấu nghi vấn (xem
+  // scanCommentForSensitiveContent() ở lib/recordActions.js) — cập nhật ngay badge/khung Phê Duyệt cho
+  // người kiểm duyệt (vô hại/không đổi gì với người không có quyền, refreshApprovalSurfaces() tự chặn).
+  refreshApprovalSurfaces();
+}
+
+// Người kiểm duyệt xem xét bình luận bị đánh dấu (⚠️/🚨, xem renderInternalNewsCard()) thấy KHÔNG có
+// vấn đề gì — chỉ gỡ cờ, không xoá bình luận. Xoá hẳn bình luận vi phạm dùng deleteFlaggedCommentAction().
+async function dismissCommentFlagAction(postId, commentId) {
+  let updated;
+  try {
+    const result = await callRecordAction('internalPosts', postId, `comment/${commentId}/dismiss-flag`, {});
+    updated = result.item;
+  } catch (err) {
+    return alert(`⛔ ${err.message}`);
+  }
+  const idx = DB.internalPosts.findIndex(x => x.id === postId);
+  if (idx !== -1) DB.internalPosts[idx] = updated;
+  logSystemAction('INTERNAL', 'DISMISS_COMMENT_FLAG', `Bỏ cờ cảnh báo bình luận (không vấn đề gì) ở bài [${updated.title}]`, 'SUCCESS', updated.code || '');
+  renderInternalPosts();
+  refreshApprovalSurfaces();
+}
+
+function deleteFlaggedCommentAction(postId, commentId) {
+  if (!confirm('Xoá hẳn bình luận này? Không thể hoàn tác.')) return;
+  (async () => {
+    let updated;
+    try {
+      const result = await callRecordAction('internalPosts', postId, `comment/${commentId}/delete-comment`, {});
+      updated = result.item;
+    } catch (err) {
+      return alert(`⛔ ${err.message}`);
+    }
+    const idx = DB.internalPosts.findIndex(x => x.id === postId);
+    if (idx !== -1) DB.internalPosts[idx] = updated;
+    logSystemAction('INTERNAL', 'DELETE_FLAGGED_COMMENT', `Xoá bình luận nhạy cảm ở bài [${updated.title}]`, 'SUCCESS', updated.code || '');
+    renderInternalPosts();
+    refreshApprovalSurfaces();
+  })();
 }
 
 function closeInternalArticleModal() {
@@ -20636,13 +20771,25 @@ function viewInternalPostDetail(id) {
   }
 
   const isLiked = (p.likes || []).includes(currentUser.username);
+  const canModerateDetail = canApproveInternalPost(currentUser);
   const commentsHTML = (p.comments || []).length
-    ? p.comments.map(c => `
+    ? p.comments.map(c => {
+        const isSevere = (c.flagCategories || []).some(cat => SENSITIVE_CATEGORY_SEVERE.has(cat));
+        const flagHTML = c.flagged && canModerateDetail
+          ? `<div class="mt-1 flex flex-wrap items-center gap-1.5">
+               <span class="px-1.5 py-0.5 rounded-full font-bold ${isSevere ? 'bg-red-100 text-red-700' : 'bg-amber-100 text-amber-700'}">${isSevere ? '🚨' : '⚠️'} ${(c.flagCategories || []).map(cat => SENSITIVE_CATEGORY_LABELS[cat] || cat).join(', ')}</span>
+               <button onclick="dismissCommentFlagAction(${p.id}, ${c.id})" class="text-emerald-700 font-bold hover:underline">Bỏ qua</button>
+               <button onclick="deleteFlaggedCommentAction(${p.id}, ${c.id})" class="text-red-700 font-bold hover:underline">Xoá</button>
+             </div>`
+          : '';
+        return `
         <div class="bg-gray-50 border rounded p-2 text-xs">
           <div class="font-bold text-gray-700">${escapeHtml(c.name)} <span class="text-gray-400 font-normal">${escapeHtml(c.time)}</span></div>
           <div class="text-gray-800 mt-0.5">${escapeHtml(c.content)}</div>
+          ${flagHTML}
         </div>
-      `).join('')
+      `;
+      }).join('')
     : '<div class="text-gray-400 italic text-xs">Chưa có bình luận nào.</div>';
 
   const isImg = isInternalImageAttachment(p.attachment);

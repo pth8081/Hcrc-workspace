@@ -605,11 +605,69 @@ function toggleInternalPostLike(user, post) {
   return post;
 }
 
-function addInternalPostComment(payload, user, post) {
+// Chuẩn hoá để so khớp từ khoá nhạy cảm — bỏ dấu tiếng Việt (kể cả "đ/Đ", không có dạng phân rã NFD)
+// + viết thường + gộp khoảng trắng, cùng khuôn normalizeHeader() ở lib/vppCatalog.js.
+function normalizeForScan(s) {
+  return String(s || '').replace(/đ/g, 'd').replace(/Đ/g, 'D')
+    .normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/\s+/g, ' ').trim();
+}
+
+// Quét (KHÔNG chặn đăng) nội dung bình luận theo danh sách từ khoá admin tự cấu hình
+// (DB.sensitiveKeywords, xem defaults.js) — chỉ gắn cờ để người có quyền internalPostApprove xem xét
+// sau, quyết định cuối (bỏ qua/xoá) vẫn do người kiểm duyệt, không tự động xoá gì ở đây. Trả về mảng
+// rỗng nếu không khớp từ nào.
+function scanCommentForSensitiveContent(content, sensitiveKeywords) {
+  const normalized = normalizeForScan(content);
+  if (!normalized) return [];
+  const hits = [];
+  for (const kw of sensitiveKeywords || []) {
+    const term = normalizeForScan(kw.term);
+    if (term && normalized.includes(term)) hits.push({ term: kw.term, category: kw.category });
+  }
+  return hits;
+}
+
+// sensitiveKeywords (mảng {term, category}, xem defaults.js) do routes/records.js đọc sẵn từ AppData
+// và truyền vào — hàm ở đây không tự đọc DB (khớp nguyên tắc appData chỉ do caller đọc, xem
+// lib/createValidation.js). Không truyền (undefined) thì bỏ qua bước quét, không gắn cờ gì (an toàn
+// khi có nơi gọi cũ chưa kịp cập nhật).
+function addInternalPostComment(payload, user, post, sensitiveKeywords) {
   const content = (payload?.content || '').trim();
   if (!content) throw new HttpError(400, 'Vui lòng nhập nội dung bình luận');
   if (!Array.isArray(post.comments)) post.comments = [];
-  post.comments.push({ id: Date.now(), username: user.username, name: user.name, content, time: nowVN() });
+  const comment = { id: Date.now(), username: user.username, name: user.name, content, time: nowVN() };
+  const hits = scanCommentForSensitiveContent(content, sensitiveKeywords);
+  if (hits.length) {
+    comment.flagged = true;
+    comment.flagCategories = [...new Set(hits.map(h => h.category))];
+    comment.flagTerms = [...new Set(hits.map(h => h.term))];
+  }
+  post.comments.push(comment);
+  return post;
+}
+
+// Bỏ cờ cảnh báo (người kiểm duyệt xem xét thấy không có vấn đề gì) — không xoá bình luận, chỉ gỡ
+// đánh dấu để không còn hiện trong hàng chờ kiểm duyệt.
+function dismissInternalCommentFlag(user, post, commentId) {
+  if (!canApproveInternalPost(user)) throw new HttpError(403, 'Bạn không có quyền kiểm duyệt bình luận');
+  const comment = (post.comments || []).find(c => c.id === commentId);
+  if (!comment) throw new HttpError(404, 'Không tìm thấy bình luận');
+  comment.flagged = false;
+  comment.flagCategories = [];
+  comment.flagTerms = [];
+  comment.flagDismissedBy = user.username;
+  comment.flagDismissedAt = nowVN();
+  return post;
+}
+
+// Xoá hẳn 1 bình luận (người kiểm duyệt xử lý bình luận vi phạm) — cho phép xoá bất kỳ bình luận nào,
+// không chỉ bình luận đang bị đánh dấu (khớp quyền hạn chung canApproveInternalPost, tương tự admin
+// xoá được mọi bình luận chứ không riêng bình luận do hệ thống tự phát hiện).
+function deleteInternalPostComment(user, post, commentId) {
+  if (!canApproveInternalPost(user)) throw new HttpError(403, 'Bạn không có quyền xoá bình luận này');
+  const idx = (post.comments || []).findIndex(c => c.id === commentId);
+  if (idx === -1) throw new HttpError(404, 'Không tìm thấy bình luận');
+  post.comments.splice(idx, 1);
   return post;
 }
 
@@ -1686,6 +1744,7 @@ module.exports = {
   canEditMinutes, canDeleteMinutes, editMinutes, assertCanDeleteMinutes,
   canCreateMinutes, createMinutes, buildTasksFromDirectives, assignMinutesTasks, buildTaskFromSubmissionComment,
   markInternalPostRead, toggleInternalPostLike, addInternalPostComment,
+  scanCommentForSensitiveContent, dismissInternalCommentFlag, deleteInternalPostComment,
   registerInternalPostTraining, unregisterInternalPostTraining,
   canApproveInternalPost, approveInternalPost, rejectInternalPost,
   canManageTasks, canDeleteTaskPerm, canAssignSpecificTask, assignTask, editTask, assertCanDeleteTask,
