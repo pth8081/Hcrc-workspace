@@ -34,14 +34,16 @@ router.post('/contracts/:id/edit', async (req, res) => {
     const allContracts = await getAllForCollection('contracts');
     const hasAddenda = allContracts.some(c => c.isAddendum && c.rootContractId === itemId);
     const thisRecord = allContracts.find(c => c.id === itemId);
-    const rootDept = thisRecord && thisRecord.isAddendum
-      ? (allContracts.find(c => c.id === thisRecord.rootContractId) || {}).dept
+    const rootRecord = (thisRecord && thisRecord.isAddendum)
+      ? allContracts.find(c => c.id === thisRecord.rootContractId)
       : undefined;
+    const rootDept = rootRecord?.dept;
+    const rootCustodianDept = rootRecord?.custodianDept;
     // Chỉ cần đọc AppData khi thực sự có khả năng đổi dept (hợp đồng gốc, không phải phụ lục) — dùng để
     // dựng lại effectiveSteps/effectiveApprovers nếu dept đổi (xem lib/recordActions.js editContract()).
     const appData = (thisRecord && !thisRecord.isAddendum) ? await getAllAppData() : null;
     const result = await withLockedRecordForCollection('contracts', itemId, (item) =>
-      recordActions.editContract(req.body, freshUser, item, hasAddenda, rootDept, appData)
+      recordActions.editContract(req.body, freshUser, item, hasAddenda, rootDept, appData, rootCustodianDept)
     );
     res.json({ ok: true, item: result });
   } catch (err) {
@@ -123,6 +125,51 @@ router.post('/officeReqs/:id/start-payment', async (req, res) => {
     res.json({ ok: true, item: result, paymentRequest });
   } catch (err) {
     handleError(res, `officeReqs/${req.params.id}/start-payment`, err);
+  }
+});
+
+// POST /api/records/paymentRequests/from-source — kế toán (paymentManage) tự khởi tạo đề nghị thanh
+// toán NGAY TỪ module Thanh Toán, chọn "Loại Đề Nghị" (Hợp Đồng/Mua Sắm/Sửa Chữa/Đầu Tư) + đúng bản ghi
+// nguồn còn CHUA_THANH_TOAN, có thể sửa lại đợt thanh toán/tên tham khảo từ nguồn trước khi gửi (xem
+// startContractPayment()/startOfficePayment() ở lib/recordActions.js, tham số overrides). Cùng khuôn
+// atomic "khoá nguồn -> xác thực + gắn CHO_THANH_TOAN -> insert paymentRequests" như 2 route
+// /contracts/:id/start-payment và /officeReqs/:id/start-payment ở trên — chỉ khác gác cổng: ở đây gác
+// bằng paymentManage (kế toán không nhất thiết thuộc đơn vị custodian của nguồn), 2 route kia vẫn gác
+// bằng canManageContractPayment()/canManageOfficePayment() (đúng đơn vị custodian) như cũ.
+router.post('/paymentRequests/from-source', async (req, res) => {
+  try {
+    const { freshUser } = await getFreshUser(req);
+    if (!recordActions.canManagePaymentRequests(freshUser)) {
+      return res.status(403).json({ error: 'Bạn không có quyền tạo đề nghị thanh toán' });
+    }
+    const sourceModule = String(req.body?.sourceModule || '');
+    const sourceId = Number(req.body?.sourceId);
+    if (!Number.isFinite(sourceId)) return res.status(400).json({ error: 'sourceId không hợp lệ' });
+    const overrides = {
+      title: req.body?.title,
+      installments: req.body?.installments,
+      skipManageGate: true
+    };
+
+    let draft = null;
+    let result;
+    if (sourceModule === 'CONTRACT') {
+      result = await withLockedRecordForCollection('contracts', sourceId, (item) => {
+        draft = recordActions.startContractPayment(freshUser, item, overrides);
+        return item;
+      });
+    } else if (['MUA_BAN', 'SUA_CHUA', 'DAU_TU'].includes(sourceModule)) {
+      result = await withLockedRecordForCollection('officeReqs', sourceId, (item) => {
+        draft = recordActions.startOfficePayment(freshUser, item, overrides);
+        return item;
+      });
+    } else {
+      return res.status(400).json({ error: 'Loại đề nghị không hợp lệ' });
+    }
+    const paymentRequest = await createForCollection('paymentRequests', () => ({ ...draft, id: Date.now() }));
+    res.json({ ok: true, item: result, paymentRequest });
+  } catch (err) {
+    handleError(res, 'paymentRequests/from-source', err);
   }
 });
 
@@ -650,6 +697,35 @@ router.post('/trainingClasses/:id/submit-test', async (req, res) => {
     res.json({ ok: true, ...result });
   } catch (err) {
     handleError(res, `trainingClasses/${req.params.id}/submit-test`, err);
+  }
+});
+
+// ===================== TUYỂN DỤNG (thay thế mục "Khen Thưởng" cũ) =====================
+router.post('/recruitmentJobs/:id/delete', (req, res) => deleteAdminOnly(req, res, 'recruitmentJobs'));
+
+router.post('/recruitmentJobs/:id/close', async (req, res) => {
+  const itemId = Number(req.params.id);
+  if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
+  try {
+    const { freshUser } = await getFreshUser(req);
+    const result = await withLockedRecordForCollection('recruitmentJobs', itemId, (item) =>
+      recordActions.closeRecruitmentJob(req.body, freshUser, item));
+    res.json({ ok: true, item: result });
+  } catch (err) {
+    handleError(res, `recruitmentJobs/${req.params.id}/close`, err);
+  }
+});
+
+router.post('/recruitmentReferrals/:id/set-status', async (req, res) => {
+  const itemId = Number(req.params.id);
+  if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
+  try {
+    const { freshUser } = await getFreshUser(req);
+    const result = await withLockedRecordForCollection('recruitmentReferrals', itemId, (item) =>
+      recordActions.setRecruitmentReferralStatus(req.body, freshUser, item));
+    res.json({ ok: true, item: result });
+  } catch (err) {
+    handleError(res, `recruitmentReferrals/${req.params.id}/set-status`, err);
   }
 });
 

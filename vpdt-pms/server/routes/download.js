@@ -44,7 +44,7 @@ async function findOwningRecord(fileUrl) {
   const sub = (submissions || []).find(s => s.fileUrl === fileUrl || (s.extraFiles || []).some(ef => ef.fileUrl === fileUrl));
   if (sub) return { moduleKey: 'submission', dept: sub.dept, ownerUsername: sub.creator };
   const contract = (contracts || []).find(c => c.fileUrl === fileUrl || c.signedFileUrl === fileUrl);
-  if (contract) return { moduleKey: 'contract', dept: contract.dept, ownerUsername: contract.creator };
+  if (contract) return { moduleKey: 'contract', dept: contract.dept, custodianDept: contract.custodianDept, ownerUsername: contract.creator };
   const carReg = (carRegs || []).find(c => c.fileUrl === fileUrl);
   if (carReg) return { moduleKey: 'car', dept: carReg.dept, ownerUsername: carReg.creator };
   const officeReq = (officeReqs || []).find(o => o.fileUrl === fileUrl || o.signedFileUrl === fileUrl);
@@ -85,8 +85,15 @@ router.get('/', async (req, res) => {
   if (owning && owning.internal && !canViewInternalPost(req.freshUser, owning.post)) {
     return res.status(403).json({ error: 'Bạn không có quyền tải tệp này' });
   }
-  if (owning && !owning.internal && !canDownloadRecordFile(req.freshUser, owning.moduleKey, owning.dept, owning.ownerUsername)) {
-    return res.status(403).json({ error: 'Bạn không có quyền tải tệp này' });
+  // custodianDept chỉ có mặt ở owning trả về cho hợp đồng (findOwningRecord() ở trên) — undefined cho
+  // mọi module khác, nên nhánh OR dưới đây là no-op cho các module không có khái niệm custodian.
+  if (owning && !owning.internal) {
+    const allowedByDept = canDownloadRecordFile(req.freshUser, owning.moduleKey, owning.dept, owning.ownerUsername);
+    const allowedByCustodian = owning.custodianDept && owning.custodianDept !== owning.dept &&
+      canDownloadRecordFile(req.freshUser, owning.moduleKey, owning.custodianDept, owning.ownerUsername);
+    if (!allowedByDept && !allowedByCustodian) {
+      return res.status(403).json({ error: 'Bạn không có quyền tải tệp này' });
+    }
   }
 
   const downloadName = String(req.query.name || m[1]).replace(/[\r\n"]/g, '');

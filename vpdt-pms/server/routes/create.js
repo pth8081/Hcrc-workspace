@@ -44,6 +44,9 @@ router.post('/:module', async (req, res) => {
     // trainingClasses cần tra cứu chéo sang collection trainingTests (kiểm tra testId client gửi lên
     // khi gán bài test có phải bài test có thật hay không) — cùng lý do trainingRegistrations ở trên.
     if (moduleKey === 'trainingClasses') appData.trainingTests = await getAllForCollection('trainingTests');
+    // recruitmentReferrals cần tra cứu chéo sang collection recruitmentJobs (tin còn OPEN/snapshot
+    // jobTitle) — cùng lý do trainingRegistrations ở trên.
+    if (moduleKey === 'recruitmentReferrals') appData.recruitmentJobs = await getAllForCollection('recruitmentJobs');
 
     const config = CREATE_MODULE_CONFIGS[moduleKey];
     const builderFn = (list) => validateAndPrepareCreate(moduleKey, req.body, freshUser, list, appData);
