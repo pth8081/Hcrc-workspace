@@ -160,4 +160,12 @@ function validateRegistrationItems(rawItems, catalogItems) {
   return cleaned;
 }
 
-module.exports = { parseCatalogFile, validateRegistrationItems };
+// Tổng tiền của 1 đăng ký — dùng chung cho kiểm tra ngân sách/người lúc "Gửi phê duyệt"
+// (submitVppRegistration() ở lib/recordActions.js) và báo cáo Tổng Hợp Theo Phòng Ban (index.html).
+// items đã snapshot đúng đơn giá của danh mục kỳ (xem validateRegistrationItems ở trên), mặt hàng
+// chưa có đơn giá (price=null) coi như 0đ, không làm hỏng tổng của các mặt hàng khác.
+function calcItemsTotal(items) {
+  return (items || []).reduce((sum, it) => sum + (Number(it.price) || 0) * (Number(it.qty) || 0), 0);
+}
+
+module.exports = { parseCatalogFile, validateRegistrationItems, calcItemsTotal };

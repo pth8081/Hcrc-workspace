@@ -1899,6 +1899,7 @@ table { display: block; overflow-x: auto; max-width: 100%; }
             </table>
           </div>
           <div id="vppRegItemsNoMatch" class="hidden text-xs text-gray-400 italic text-center p-3">Không tìm thấy mặt hàng khớp từ khoá tìm kiếm.</div>
+          <div id="vppRegTotalWrap" class="text-sm font-bold text-right p-2 bg-white rounded border"></div>
           <div class="flex justify-end gap-2">
             <button type="button" onclick="saveVppRegDraft()" class="bg-gray-600 text-white px-4 py-1.5 rounded text-xs font-bold hover:bg-gray-700">💾 Kết Thúc Chọn (Lưu Nháp)</button>
             <button type="button" id="btnVppRegSubmitDraft" class="hidden bg-orange-600 text-white px-4 py-1.5 rounded text-xs font-bold hover:bg-orange-700">Gửi phê duyệt</button>
@@ -1940,6 +1941,22 @@ table { display: block; overflow-x: auto; max-width: 100%; }
             <label class="block text-xs font-semibold text-gray-600 mb-1">Ngày kết thúc (tuỳ chọn — để trống = không tự đóng theo ngày)</label>
             <input id="vppNewPeriodEnd" type="date" class="w-full border p-1.5 rounded text-xs">
           </div>
+        </div>
+        <div class="bg-white p-3 rounded border space-y-2">
+          <label class="block text-xs font-semibold text-gray-600 mb-1">Ngân sách Văn phòng phẩm / người (VNĐ) — tuỳ chọn, để trống = không giới hạn</label>
+          <input id="vppNewPeriodBudget" type="text" inputmode="numeric" placeholder="500.000" oninput="onVppBudgetInput()" class="w-full md:w-64 border p-1.5 rounded money-input">
+          <p class="text-[11px] text-gray-500 italic">Đây là mức trần áp cho TỪNG NGƯỜI khi đăng ký (tổng tiền các mặt hàng đã chọn không được vượt quá số này). Bảng nhân sự bên dưới chỉ dùng để tính "Ngân sách phòng ban" tham khảo ở Báo Cáo Tổng Hợp, KHÔNG dùng để chặn đăng ký.</p>
+          <div class="overflow-x-auto">
+            <table class="w-full border-collapse text-xs">
+              <thead><tr class="bg-gray-100 text-left">
+                <th class="border p-1.5">Phòng Ban</th>
+                <th class="border p-1.5 text-center w-32">Số Nhân Sự</th>
+                <th class="border p-1.5 text-right w-40">Ngân Sách Phòng Ban</th>
+              </tr></thead>
+              <tbody id="vppDeptHeadcountBody"></tbody>
+            </table>
+          </div>
+          <p class="text-[11px] text-gray-500 italic">Số nhân sự tự điền theo số tài khoản đang hoạt động của từng phòng ban — sửa tay được (VD người đang nghỉ dài hạn, nhân viên mới chưa có tài khoản...).</p>
         </div>
         <div class="bg-white p-3 rounded border space-y-2">
           <label class="block text-xs font-semibold text-gray-600">File danh mục mặt hàng (Excel .xlsx/.xls hoặc CSV — tự nhận diện cột theo tiêu đề: Tên mặt hàng, ĐVT, Mã hàng, Xuất xứ, Quy cách, Đơn giá; nếu không có tiêu đề thì cột 1 = tên, cột 2 = đơn vị)</label>
@@ -2001,6 +2018,9 @@ table { display: block; overflow-x: auto; max-width: 100%; }
               <th class="border p-2 text-center">Chờ Duyệt</th>
               <th class="border p-2 text-center">Đã Duyệt</th>
               <th class="border p-2 text-center">Từ Chối</th>
+              <th class="border p-2 text-right">Ngân Sách Phòng Ban</th>
+              <th class="border p-2 text-right">Đã Dùng (Đã Duyệt)</th>
+              <th class="border p-2 text-right">Còn Lại</th>
             </tr></thead>
             <tbody id="vppReportByDeptBody"></tbody>
           </table>
@@ -14473,6 +14493,72 @@ function canManageVpp(user) {
   return !!(user?.perms?.admin || user?.perms?.vppManage);
 }
 
+// Tổng tiền của 1 đăng ký (dùng chung cho form đăng ký hiện tổng realtime + báo cáo Tổng Hợp Theo
+// Phòng Ban) — items đã snapshot đúng đơn giá của danh mục kỳ tại thời điểm chọn, mặt hàng chưa có
+// đơn giá (price=null) coi như 0đ, không làm hỏng tổng của các mặt hàng khác.
+function vppCalcItemsTotal(items) {
+  return (items || []).reduce((sum, it) => sum + (Number(it.price) || 0) * (Number(it.qty) || 0), 0);
+}
+
+// Số nhân sự đang hoạt động (chưa bị khoá) của 1 phòng ban — dùng làm giá trị GỢI Ý ban đầu cho bảng
+// "Nhân sự theo phòng ban" lúc tạo kỳ, admin vẫn sửa tay lại được (xem renderVppDeptHeadcountTable()).
+function vppActiveHeadcountForDept(dept) {
+  return DB.users.filter(u => u.dept === dept && u.active !== false).length;
+}
+
+// Dựng bảng "Nhân sự theo phòng ban" — CHỈ dựng 1 lần khi mở form (mỗi dòng input tự có handler riêng
+// onVppHeadcountInput() để chỉ cập nhật đúng ô "Ngân Sách Phòng Ban" của dòng đó, KHÔNG render lại cả
+// bảng mỗi lần gõ — tránh mất focus/con trỏ đang gõ dở giữa chừng).
+function renderVppDeptHeadcountTable() {
+  const tbody = document.getElementById('vppDeptHeadcountBody');
+  if (!tbody) return;
+  const budget = getMoneyValue(document.getElementById('vppNewPeriodBudget'));
+  tbody.innerHTML = DB.depts.map(dept => {
+    const headcount = vppActiveHeadcountForDept(dept);
+    const deptBudget = budget * headcount;
+    return `
+      <tr data-vpp-dept="${escapeHtml(dept)}">
+        <td class="border p-1.5">${escapeHtml(dept)}</td>
+        <td class="border p-1"><input type="number" min="0" step="1" value="${headcount}" oninput="onVppHeadcountInput(this)" class="vpp-headcount-input w-24 border p-1 rounded text-xs text-center"></td>
+        <td class="border p-1.5 text-right font-semibold text-orange-700 vpp-dept-budget-cell">${budget > 0 ? deptBudget.toLocaleString('vi-VN') + ' đ' : '—'}</td>
+      </tr>`;
+  }).join('');
+}
+
+// Đổi "Ngân sách / người" -> cập nhật lại cột "Ngân Sách Phòng Ban" của MỌI dòng đang có, giữ nguyên
+// số nhân sự đã sửa tay (không render lại toàn bảng).
+function onVppBudgetInput() {
+  const budget = getMoneyValue(document.getElementById('vppNewPeriodBudget'));
+  document.querySelectorAll('#vppDeptHeadcountBody tr').forEach(tr => {
+    const hcInput = tr.querySelector('.vpp-headcount-input');
+    const cell = tr.querySelector('.vpp-dept-budget-cell');
+    if (!hcInput || !cell) return;
+    const headcount = Math.max(0, Math.round(Number(hcInput.value) || 0));
+    cell.textContent = budget > 0 ? `${(budget * headcount).toLocaleString('vi-VN')} đ` : '—';
+  });
+}
+
+// Sửa tay 1 dòng "Số Nhân Sự" -> chỉ cập nhật đúng ô "Ngân Sách Phòng Ban" của dòng đó.
+function onVppHeadcountInput(input) {
+  const budget = getMoneyValue(document.getElementById('vppNewPeriodBudget'));
+  const headcount = Math.max(0, Math.round(Number(input.value) || 0));
+  const cell = input.closest('tr')?.querySelector('.vpp-dept-budget-cell');
+  if (cell) cell.textContent = budget > 0 ? `${(budget * headcount).toLocaleString('vi-VN')} đ` : '—';
+}
+
+// Đọc lại bảng "Nhân sự theo phòng ban" thành {dept: headcount} để gửi lên server lúc Tạo Kỳ Đăng Ký.
+function collectVppDeptHeadcounts() {
+  const out = {};
+  document.querySelectorAll('#vppDeptHeadcountBody tr').forEach(tr => {
+    const dept = tr.dataset.vppDept;
+    const hcInput = tr.querySelector('.vpp-headcount-input');
+    if (!dept || !hcInput) return;
+    const n = Math.max(0, Math.round(Number(hcInput.value) || 0));
+    if (n > 0) out[dept] = n;
+  });
+  return out;
+}
+
 // Kỳ coi là ĐANG MỞ nếu status=OPEN VÀ (không đặt ngày kết thúc HOẶC chưa qua ngày kết thúc) — khớp
 // đúng điều kiện server kiểm tra ở lib/createValidation.js CREATE_MODULE_CONFIGS.vppRegistrations.
 function vppPeriodIsOpen(p) {
@@ -14500,7 +14586,7 @@ function setVppSubTab(subTab) {
   document.getElementById('btnVppSubReports').className = subTab === 'REPORTS' ? activeCls : inactiveCls;
 
   if (subTab === 'REGISTER') { renderVppRegPeriodOptions(); renderVppRegistrations(); }
-  if (subTab === 'PERIODS') { renderVppPeriods(); }
+  if (subTab === 'PERIODS') { renderVppPeriods(); renderVppDeptHeadcountTable(); }
   if (subTab === 'REPORTS') { renderVppReportPeriodOptions(); renderVppReports(); }
 }
 
@@ -14562,12 +14648,13 @@ function onVppRegPeriodChange() {
       <td class="border p-2 text-gray-500">${escapeHtml(it.unit || '')}</td>
       <td class="border p-2 text-gray-500">${escapeHtml(it.spec || '')}</td>
       <td class="border p-2 text-right text-gray-500">${it.price != null ? Number(it.price).toLocaleString('vi-VN') : ''}</td>
-      <td class="border p-1"><input type="number" min="0" step="1" id="vppItemQty_${idx}" value="${savedQtyByName.get(it.name) || ''}" class="w-full border p-1 rounded text-xs" placeholder="0"></td>
+      <td class="border p-1"><input type="number" min="0" step="1" id="vppItemQty_${idx}" value="${savedQtyByName.get(it.name) || ''}" oninput="updateVppRegTotalDisplay()" class="w-full border p-1 rounded text-xs" placeholder="0"></td>
     </tr>
   `).join('');
   document.getElementById('vppRegItemSearch').value = '';
   document.getElementById('vppRegItemsNoMatch').classList.add('hidden');
   wrap.classList.remove('hidden');
+  updateVppRegTotalDisplay();
 
   const submitBtn = document.getElementById('btnVppRegSubmitDraft');
   submitBtn.classList.toggle('hidden', !vppFormDraftId);
@@ -14592,6 +14679,25 @@ function collectVppRegFormItems(period) {
   return period.catalogItems
     .map((it, idx) => ({ name: it.name, qty: Number(document.getElementById(`vppItemQty_${idx}`)?.value) || 0 }))
     .filter(it => it.qty > 0);
+}
+
+// Hiện tổng tiền đang chọn realtime mỗi khi đổi số lượng — so với "Ngân sách / người" của kỳ (nếu
+// kỳ có đặt ngân sách). CHỈ hiển thị cảnh báo ở đây, việc CHẶN thật sự nằm ở lúc bấm "Gửi phê duyệt"
+// (xem submitVppRegDraftAction()) — cho phép lưu Nháp thoải mái trong lúc còn đang cân nhắc.
+function updateVppRegTotalDisplay() {
+  const periodId = Number(document.getElementById('vppRegPeriodSelect').value);
+  const period = DB.vppPeriods.find(p => p.id === periodId);
+  const wrap = document.getElementById('vppRegTotalWrap');
+  if (!period || !wrap) return;
+  const items = period.catalogItems
+    .map((it, idx) => ({ price: it.price, qty: Number(document.getElementById(`vppItemQty_${idx}`)?.value) || 0 }))
+    .filter(it => it.qty > 0);
+  const total = vppCalcItemsTotal(items);
+  const budget = period.perPersonBudget;
+  const overBudget = budget > 0 && total > budget;
+  wrap.innerHTML = `Tổng tiền đã chọn: <span class="${overBudget ? 'text-red-600' : 'text-gray-800'}">${total.toLocaleString('vi-VN')} đ</span>` +
+    (budget > 0 ? ` / Ngân sách: ${budget.toLocaleString('vi-VN')} đ` : '') +
+    (overBudget ? ' <span class="text-red-600">⚠️ Vượt ngân sách — vui lòng giảm bớt số lượng trước khi gửi phê duyệt.</span>' : '');
 }
 
 // "Kết Thúc Chọn (Lưu Nháp)" — tạo hồ sơ NHÁP mới (lần đầu chọn) hoặc cập nhật lại NHÁP đã có (sửa
@@ -14640,6 +14746,15 @@ async function submitVppRegDraftAction(regId, fromForm) {
   if (!regId) return;
   const r = DB.vppRegistrations.find(x => x.id === regId);
   if (!r) return;
+  // Chặn Gửi khi vượt ngân sách/người của kỳ — kiểm tra ngay ở client cho phản hồi tức thì, server
+  // vẫn tự kiểm tra lại (submitVppRegistration() ở lib/recordActions.js) nên không tin riêng bước này.
+  const period = DB.vppPeriods.find(p => p.id === r.periodId);
+  if (period?.perPersonBudget > 0) {
+    const total = vppCalcItemsTotal(r.items);
+    if (total > period.perPersonBudget) {
+      return alert(`⛔ Tổng tiền đăng ký (${total.toLocaleString('vi-VN')} đ) vượt quá ngân sách được cấp cho 1 người (${period.perPersonBudget.toLocaleString('vi-VN')} đ) — vui lòng sửa nháp và giảm bớt số lượng trước khi gửi.`);
+    }
+  }
   showConfirmModal({
     title: '📤 Xác Nhận Gửi Phê Duyệt',
     bodyHTML: `<p>Gửi đăng ký Văn phòng phẩm kỳ <b>${escapeHtml(r.periodName)}</b> (${r.items.length} mặt hàng) để bắt đầu quy trình phê duyệt? Sau khi gửi sẽ không tự sửa được nữa.</p>`,
@@ -14930,11 +15045,14 @@ async function createVppPeriod() {
   if (!vppPendingCatalog) return alert('Vui lòng tải lên file danh mục mặt hàng!');
   if (startDate && endDate && endDate < startDate) return alert('Ngày kết thúc phải sau ngày bắt đầu!');
 
+  const budgetInput = document.getElementById('vppNewPeriodBudget');
+  const perPersonBudget = budgetInput.value.trim() ? getMoneyValue(budgetInput) : null;
   const payload = {
     code: `VPP-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}-${Date.now().toString().slice(-5)}`,
     name, startDate: startDate || '', endDate: endDate || '',
     catalogItems: vppPendingCatalog.items,
     catalogFileUrl: vppPendingCatalog.fileUrl, catalogFileName: vppPendingCatalog.fileName,
+    perPersonBudget, deptHeadcounts: collectVppDeptHeadcounts(),
     createdAt: new Date().toLocaleString('vi-VN')
   };
 
@@ -14953,11 +15071,13 @@ async function createVppPeriod() {
   document.getElementById('vppNewPeriodName').value = '';
   document.getElementById('vppNewPeriodStart').value = '';
   document.getElementById('vppNewPeriodEnd').value = '';
+  document.getElementById('vppNewPeriodBudget').value = '';
   document.getElementById('vppCatalogFileInput').value = '';
   document.getElementById('vppCatalogPreviewWrap').classList.add('hidden');
   document.getElementById('vppCatalogStatus').innerText = '';
   vppPendingCatalog = null;
   renderVppPeriods();
+  renderVppDeptHeadcountTable();
 }
 
 function vppPeriodStatusBadge(p) {
@@ -15051,33 +15171,48 @@ function renderVppReports() {
   const byDeptBody = document.getElementById('vppReportByDeptBody');
   const byItemBody = document.getElementById('vppReportByItemBody');
   if (!periodId) {
-    byDeptBody.innerHTML = `<tr><td colspan="5" class="text-center p-4 text-gray-500 italic">Chưa có kỳ đăng ký nào để xem báo cáo.</td></tr>`;
+    byDeptBody.innerHTML = `<tr><td colspan="8" class="text-center p-4 text-gray-500 italic">Chưa có kỳ đăng ký nào để xem báo cáo.</td></tr>`;
     byItemBody.innerHTML = '';
     return;
   }
+  const period = DB.vppPeriods.find(p => p.id === periodId);
   const regs = DB.vppRegistrations.filter(r => r.periodId === periodId);
 
   // Tổng hợp theo phòng ban — cùng kiểu reducer với computeApprovalStats() (Báo cáo quản trị).
+  // "Đã Dùng" chỉ tính tổng tiền của các đăng ký ĐÃ DUYỆT (khớp đúng nghiệp vụ file xuất Excel ở
+  // lib/vppExport.js — chỉ hồ sơ đã duyệt mới coi là chi tiêu thật). "Ngân Sách Phòng Ban" =
+  // ngân sách/người (period.perPersonBudget) × số nhân sự đã chốt cho phòng đó lúc tạo kỳ
+  // (period.deptHeadcounts) — chỉ mang tính tham khảo, KHÔNG dùng để chặn đăng ký (mức chặn áp
+  // riêng cho từng cá nhân, xem submitVppRegDraftAction()/server).
   const byDept = {};
   regs.forEach(r => {
-    if (!byDept[r.dept]) byDept[r.dept] = { total: 0, pending: 0, approved: 0, rejected: 0 };
+    if (!byDept[r.dept]) byDept[r.dept] = { total: 0, pending: 0, approved: 0, rejected: 0, used: 0 };
     byDept[r.dept].total++;
     if (r.status === 'PENDING') byDept[r.dept].pending++;
-    else if (r.status === 'APPROVED') byDept[r.dept].approved++;
+    else if (r.status === 'APPROVED') { byDept[r.dept].approved++; byDept[r.dept].used += vppCalcItemsTotal(r.items); }
     else if (r.status === 'REJECTED') byDept[r.dept].rejected++;
   });
   const deptRows = Object.entries(byDept);
+  const hasBudget = !!(period?.perPersonBudget > 0);
   byDeptBody.innerHTML = deptRows.length
-    ? deptRows.map(([dept, s]) => `
+    ? deptRows.map(([dept, s]) => {
+        const headcount = period?.deptHeadcounts?.[dept] || 0;
+        const deptBudget = hasBudget ? period.perPersonBudget * headcount : null;
+        const remain = deptBudget != null ? deptBudget - s.used : null;
+        return `
         <tr>
           <td class="border p-2 font-semibold">${escapeHtml(dept)}</td>
           <td class="border p-2 text-center">${s.total}</td>
           <td class="border p-2 text-center text-indigo-700">${s.pending}</td>
           <td class="border p-2 text-center text-green-700">${s.approved}</td>
           <td class="border p-2 text-center text-red-700">${s.rejected}</td>
+          <td class="border p-2 text-right">${deptBudget != null ? deptBudget.toLocaleString('vi-VN') + ' đ' : '—'}</td>
+          <td class="border p-2 text-right">${s.used.toLocaleString('vi-VN')} đ</td>
+          <td class="border p-2 text-right font-semibold ${remain != null && remain < 0 ? 'text-red-700' : ''}">${remain != null ? remain.toLocaleString('vi-VN') + ' đ' : '—'}</td>
         </tr>
-      `).join('')
-    : `<tr><td colspan="5" class="text-center p-4 text-gray-500 italic">Chưa có đăng ký nào ở kỳ này.</td></tr>`;
+      `;
+      }).join('')
+    : `<tr><td colspan="8" class="text-center p-4 text-gray-500 italic">Chưa có đăng ký nào ở kỳ này.</td></tr>`;
 
   // Tổng hợp theo mặt hàng — gộp trùng tên (đã đảm bảo tên khớp chính xác vì chọn từ danh mục có sẵn),
   // cộng dồn số lượng từ TẤT CẢ đăng ký (chờ duyệt + đã duyệt), không tính bản bị từ chối.

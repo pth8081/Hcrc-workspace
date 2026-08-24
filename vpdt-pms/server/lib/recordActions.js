@@ -10,7 +10,7 @@
 // chỉ Admin; Công việc theo NGƯỜI (assignedBy/assignee), hoàn toàn không có khái niệm phòng ban.
 const { HttpError } = require('./httpErrors');
 const { scopeAllows, OFFICE_SUBTYPE_TO_PERM_FLAG, normalizeReportEntryPayload, buildEffectiveContractApprovalWorkflowServer } = require('./createValidation');
-const { validateRegistrationItems: validateVppRegItems } = require('./vppCatalog');
+const { validateRegistrationItems: validateVppRegItems, calcItemsTotal: calcVppItemsTotal } = require('./vppCatalog');
 
 function nowVN() {
   return new Date().toLocaleString('vi-VN');
@@ -1158,6 +1158,17 @@ function submitVppRegistration(user, item, period) {
   }
   if (!Array.isArray(item.items) || !item.items.length) {
     throw new HttpError(400, 'Chưa chọn mặt hàng nào — vui lòng chọn ít nhất 1 mặt hàng trước khi gửi');
+  }
+  // Ngân sách/người của kỳ (period.perPersonBudget, tuỳ chọn — null/0 = không giới hạn) là mức trần
+  // cho TỪNG NGƯỜI, kiểm tra ở chính bước "Gửi phê duyệt" này (không chặn lúc lưu Nháp, để người
+  // đăng ký thoải mái nháp thử trước khi chỉnh lại cho vừa ngân sách — client đã có cảnh báo realtime
+  // + chặn trước ở đây, xem submitVppRegDraftAction()/updateVppRegTotalDisplay() ở index.html, nhưng
+  // vẫn PHẢI kiểm tra lại ở server, không tin riêng client).
+  if (period.perPersonBudget > 0) {
+    const total = calcVppItemsTotal(item.items);
+    if (total > period.perPersonBudget) {
+      throw new HttpError(400, `Tổng tiền đăng ký (${total.toLocaleString('vi-VN')} đ) vượt quá ngân sách được cấp cho 1 người (${period.perPersonBudget.toLocaleString('vi-VN')} đ) — vui lòng giảm bớt số lượng trước khi gửi.`);
+    }
   }
   if (!item.history) item.history = [];
   item.history.push({ step: 0, approver: user.name, username: user.username, action: 'SUBMITTED', comment: '', time: nowVN() });
