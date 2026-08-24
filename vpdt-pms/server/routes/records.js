@@ -952,4 +952,77 @@ router.post('/reportSlideTemplates/:id/update', async (req, res) => {
   }
 });
 
+// ===================== HỖ TRỢ IT =====================
+router.post('/itPriceApprovals/:id/delete', (req, res) => deleteAdminOnly(req, res, 'itPriceApprovals'));
+
+// "Xác nhận đã áp giá" — sau khi đề xuất đã APPROVED (qua POST /api/workflow/itPriceApprovals/:id/approve,
+// dùng chung engine với docs/carRegs), người Hỗ Trợ IT áp giá vào hệ thống bán hàng ngoài app rồi bấm
+// xác nhận NGAY TẠI ĐÂY — route riêng, không đi qua routes/workflow.js vì đây không phải 1 bước duyệt.
+router.post('/itPriceApprovals/:id/apply', async (req, res) => {
+  const itemId = Number(req.params.id);
+  if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
+  try {
+    const { freshUser } = await getFreshUser(req);
+    const result = await withLockedRecordForCollection('itPriceApprovals', itemId, (item) =>
+      recordActions.applyPriceApproval(freshUser, item));
+    res.json({ ok: true, item: result });
+  } catch (err) {
+    handleError(res, `itPriceApprovals/${req.params.id}/apply`, err);
+  }
+});
+
+router.post('/itSupportTickets/:id/delete', (req, res) => deleteAdminOnly(req, res, 'itSupportTickets'));
+
+router.post('/itSupportTickets/:id/claim', async (req, res) => {
+  const itemId = Number(req.params.id);
+  if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
+  try {
+    const { freshUser } = await getFreshUser(req);
+    const result = await withLockedRecordForCollection('itSupportTickets', itemId, (item) =>
+      recordActions.claimItTicket(freshUser, item));
+    res.json({ ok: true, item: result });
+  } catch (err) {
+    handleError(res, `itSupportTickets/${req.params.id}/claim`, err);
+  }
+});
+
+router.post('/itSupportTickets/:id/update-status', async (req, res) => {
+  const itemId = Number(req.params.id);
+  if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
+  try {
+    const { freshUser } = await getFreshUser(req);
+    const result = await withLockedRecordForCollection('itSupportTickets', itemId, (item) =>
+      recordActions.updateItTicketStatus(freshUser, item, req.body));
+    res.json({ ok: true, item: result });
+  } catch (err) {
+    handleError(res, `itSupportTickets/${req.params.id}/update-status`, err);
+  }
+});
+
+router.post('/itSupportTickets/:id/comment', async (req, res) => {
+  const itemId = Number(req.params.id);
+  if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
+  try {
+    const { freshUser } = await getFreshUser(req);
+    const result = await withLockedRecordForCollection('itSupportTickets', itemId, (item) =>
+      recordActions.addItTicketComment(freshUser, item, req.body));
+    res.json({ ok: true, item: result });
+  } catch (err) {
+    handleError(res, `itSupportTickets/${req.params.id}/comment`, err);
+  }
+});
+
+router.post('/itSupportTickets/:id/cancel', async (req, res) => {
+  const itemId = Number(req.params.id);
+  if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
+  try {
+    const { freshUser } = await getFreshUser(req);
+    const result = await withLockedRecordForCollection('itSupportTickets', itemId, (item) =>
+      recordActions.cancelItTicket(freshUser, item));
+    res.json({ ok: true, item: result });
+  } catch (err) {
+    handleError(res, `itSupportTickets/${req.params.id}/cancel`, err);
+  }
+});
+
 module.exports = router;

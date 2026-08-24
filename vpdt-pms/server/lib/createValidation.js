@@ -870,6 +870,72 @@ const CREATE_MODULE_CONFIGS = {
       payload.status = 'DRAFT';
     }
   },
+  // ===== HỖ TRỢ IT — 2 sub-module tách biệt hoàn toàn, không chung dữ liệu =====
+  // 1) "Phê Duyệt Giá" (itPriceApprovals): duyệt giá bán MẶT HÀNG TẠI SIÊU THỊ — KHÔNG phải phê duyệt
+  //    mua sắm/chi phí (khác hẳn Đề Xuất Văn Phòng/Hợp Đồng, không sinh đề nghị Thanh Toán). Quy trình
+  //    duyệt theo phòng ban dùng lại NGUYÊN engine chung ở lib/workflowEngine.js (giống docs/carRegs/
+  //    officeReqs — xem itPriceDeptWorkflows). Sau khi APPROVED, người Hỗ Trợ IT (itManage) tự áp giá
+  //    vào hệ thống bán hàng NGOÀI app này rồi bấm xác nhận hoàn thành ngay tại đây (field applied) —
+  //    KHÔNG phải 1 bước duyệt thêm, chỉ là đánh dấu đã thực hiện xong (xem applyPriceApproval() ở
+  //    lib/recordActions.js).
+  itPriceApprovals: {
+    dbKey: 'itPriceApprovals',
+    forceOwnDept: true,
+    getScope: () => ({}),
+    creatorField: 'creator', creatorNameField: 'creatorName',
+    extraValidate: (payload, collection, user) => {
+      if (!user.perms?.admin && !user.perms?.itPriceProposeCreate) {
+        throw new CreateError(403, 'Bạn không có quyền đề xuất duyệt giá');
+      }
+      if (!payload.productName || !String(payload.productName).trim()) throw new CreateError(400, 'Thiếu tên mặt hàng');
+      payload.productName = String(payload.productName).trim();
+      payload.productCode = payload.productCode ? String(payload.productCode).trim() : '';
+      const newPrice = Number(payload.newPrice);
+      if (!Number.isFinite(newPrice) || newPrice <= 0) throw new CreateError(400, 'Giá đề xuất phải lớn hơn 0');
+      payload.newPrice = newPrice;
+      const oldPriceNum = Number(payload.oldPrice);
+      payload.oldPrice = Number.isFinite(oldPriceNum) && oldPriceNum >= 0 ? oldPriceNum : null;
+      payload.reason = (payload.reason || '').trim();
+      // Kết quả chống giả mạo — request tự soạn không thể tự xưng đã áp giá xong ngay lúc tạo.
+      payload.applied = false;
+      payload.appliedBy = null;
+      payload.appliedByName = null;
+      payload.appliedAt = null;
+      // status/currentStep/history PHẢI gán cứng ở server (khớp docs/carRegs/officeReqs) — đây là 3
+      // field mà lib/workflowEngine.js đọc để xác định hồ sơ đang ở bước nào/ai được duyệt tiếp; thiếu
+      // bước này thì applyWorkflowAction() sẽ chặn ngay ("Hồ sơ không còn ở trạng thái chờ xử lý") vì
+      // item.status không phải 'PENDING'.
+      payload.status = 'PENDING';
+      payload.currentStep = 1;
+      payload.history = [];
+    }
+  },
+  // 2) "Hỗ Trợ Yêu Cầu" (itSupportTickets): ticket helpdesk IT nội bộ — MỞ CHO TOÀN BỘ NHÂN VIÊN, không
+  //    cần quyền riêng để tạo (giống Góc Chia Sẻ) vì bất kỳ ai cũng có thể gặp sự cố IT cần hỗ trợ; chỉ
+  //    người có itManage/admin mới nhận xử lý/cập nhật trạng thái (xem claimItTicket()/
+  //    updateItTicketStatus() ở lib/recordActions.js). State machine đơn giản TODO→DOING→DONE, có thể
+  //    CANCELLED bất kỳ lúc nào trước khi DONE.
+  itSupportTickets: {
+    dbKey: 'itSupportTickets',
+    forceOwnDept: true,
+    getScope: () => ({}),
+    creatorField: 'creator', creatorNameField: 'creatorName',
+    extraValidate: (payload) => {
+      if (!payload.title || !String(payload.title).trim()) throw new CreateError(400, 'Thiếu tiêu đề yêu cầu');
+      payload.title = String(payload.title).trim();
+      if (!payload.description || !String(payload.description).trim()) throw new CreateError(400, 'Thiếu mô tả sự cố/yêu cầu');
+      payload.description = String(payload.description).trim();
+      const allowedCategories = new Set(['HARDWARE', 'SOFTWARE', 'NETWORK', 'ACCOUNT', 'OTHER']);
+      payload.category = allowedCategories.has(payload.category) ? payload.category : 'OTHER';
+      // Trạng thái/người xử lý luôn khởi tạo rỗng ở server — request tự soạn không thể tự xưng đã có
+      // người nhận xử lý hay đã hoàn thành ngay lúc tạo.
+      payload.status = 'TODO';
+      payload.assignee = null;
+      payload.assigneeName = null;
+      payload.resolutionNote = '';
+      payload.comments = [];
+    }
+  },
   // ===== ĐÀO TẠO (module con "Truyền Thông Nội Bộ" > Đào tạo) — tạm thời, MVP =====
   // Dùng chung 1 cờ quyền internalTrainingCreate (đã có sẵn cho việc đăng bài "Đào tạo" kiểu cũ) cho cả
   // 4 việc: tải tài liệu vào kho, tạo lớp học, tạo lộ trình thăng tiến, và xác nhận nhân viên hoàn thành

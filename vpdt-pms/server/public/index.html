@@ -412,6 +412,11 @@ table { display: block; overflow-x: auto; max-width: 100%; }
       <button id="btnReportsTab" onclick="switchTab('reports')" class="hidden sidebar-item">
         <span class="sidebar-icon">📊</span><span class="sidebar-label">Báo cáo</span>
       </button>
+      <!-- Hỗ Trợ IT — mở cho toàn bộ nhân viên (giống Công Việc), 2 sub-tab "Phê Duyệt Giá"/"Hỗ Trợ
+           Yêu Cầu" bên trong itSupportSection (xem setItSupportSubTab()). -->
+      <button id="btnItSupportTab" onclick="switchTab('itSupport')" class="hidden sidebar-item">
+        <span class="sidebar-icon">🖥️</span><span class="sidebar-label">Hỗ Trợ IT</span>
+      </button>
       <!-- Hệ Thống — cùng khuôn Hợp Đồng (dropdown TĨNH): cả 4 mục con đều yêu cầu admin (không có
            quyền riêng từng mục như Điều Hành/Hành Chính, xem setSystemSubTab() chặn thẳng !admin ở đầu
            hàm) nên không cần hàm updateXNavVisibility riêng — hiện đủ 4 mục ngay khi mục cha hiện ra. -->
@@ -2791,6 +2796,7 @@ table { display: block; overflow-x: auto; max-width: 100%; }
       <button onclick="switchWfModule('VPP')" id="btnWfModVpp" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">🖇️ QT Văn Phòng Phẩm</button>
       <button onclick="switchWfModule('CONTRACT_APPROVAL')" id="btnWfModContractApproval" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">📄 QT Hợp Đồng - Phê Duyệt</button>
       <button onclick="switchWfModule('CONTRACT_MANAGE')" id="btnWfModContractManage" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">📋 QT Hợp Đồng - Quản Lý HĐ</button>
+      <button onclick="switchWfModule('ITPRICE')" id="btnWfModITPRICE" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">🏷️ QT Hỗ Trợ IT - Duyệt Giá</button>
     </div>
 
     <div id="wfSubmissionTypeTabs" class="hidden gap-2 flex-wrap"></div>
@@ -3563,6 +3569,24 @@ table { display: block; overflow-x: auto; max-width: 100%; }
             <div id="contractApprovalGroupsContainer" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3"></div>
           </div>
         </details>
+
+        <details class="perm-tree-node bg-white rounded border text-xs">
+          <summary class="flex items-center justify-between gap-2 px-3 py-2 hover:bg-gray-50 rounded">
+            <span class="font-bold text-gray-800 text-sm flex items-center gap-1.5"><span class="perm-tree-chevron text-gray-400">▸</span><span>🖥️ 15. Hỗ Trợ IT</span></span>
+            <span id="permTreeBadge_itSupport" class="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-gray-100 text-gray-500">0/0</span>
+          </summary>
+          <div class="p-3 pt-0 space-y-2">
+            <p class="text-[11px] text-gray-500 italic">Còn quyền vào module "Hỗ Trợ IT" ở mục 0 mới thấy được các màn dưới đây. "🎫 Hỗ Trợ Yêu Cầu" mở sẵn cho TOÀN BỘ nhân viên tạo ticket, không cần quyền riêng. 2 quyền dưới đây chỉ kiểm soát: ai được ĐỀ XUẤT duyệt giá bán (siêu thị), và ai thuộc đội Hỗ Trợ IT được nhận xử lý ticket/xác nhận đã áp giá sau khi duyệt xong.</p>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-2">
+              <label class="flex items-center gap-2 text-sky-700 font-semibold cursor-pointer">
+                <input type="checkbox" id="pItPriceProposeCreate"> 🏷️ Đề xuất duyệt giá bán
+              </label>
+              <label class="flex items-center gap-2 text-emerald-700 font-semibold cursor-pointer">
+                <input type="checkbox" id="pItManage"> 🛠️ Đội Hỗ Trợ IT (nhận xử lý ticket, xác nhận đã áp giá)
+              </label>
+            </div>
+          </div>
+        </details>
         </div>
         </div>
       </form>
@@ -3736,6 +3760,227 @@ table { display: block; overflow-x: auto; max-width: 100%; }
       </div>
     </div>
   </div>
+
+  <!-- Màn hình MODULE HỖ TRỢ IT — mở cho toàn bộ nhân viên (giống Công Việc), gồm 2 sub-module tách
+       biệt hoàn toàn: "🏷️ Phê Duyệt Giá" (duyệt giá bán mặt hàng siêu thị theo phòng ban, dùng chung
+       engine dept-workflow ở lib/workflowEngine.js) và "🎫 Hỗ Trợ Yêu Cầu" (ticket helpdesk IT nội bộ,
+       state machine đơn giản TODO->DOING->DONE/CANCELLED, không qua duyệt). Xem setItSupportSubTab(). -->
+  <div id="itSupportSection" class="hidden space-y-6">
+    <div class="flex flex-wrap gap-2 border-b pb-2">
+      <button type="button" onclick="setItSupportSubTab('PRICE')" id="btnItSubPrice" class="px-3 py-1.5 rounded text-xs font-bold bg-sky-700 text-white">🏷️ Phê Duyệt Giá</button>
+      <button type="button" onclick="setItSupportSubTab('TICKET')" id="btnItSubTicket" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">🎫 Hỗ Trợ Yêu Cầu</button>
+    </div>
+
+    <!-- Sub-tab: Phê Duyệt Giá -->
+    <div id="itSubPrice" class="space-y-4">
+      <div class="bg-sky-50 p-4 rounded border border-sky-200 space-y-3">
+        <h3 class="font-bold text-sky-900 text-base flex items-center gap-2">🏷️ Đề Xuất Duyệt Giá Bán (Siêu Thị)</h3>
+        <p class="text-xs text-sky-700">Đề xuất giá bán mới cho 1 mặt hàng tại siêu thị công ty đang vận hành — KHÔNG phải mua sắm/chi phí, không sinh đề nghị thanh toán. Sau khi được duyệt, đội Hỗ Trợ IT sẽ áp giá vào hệ thống bán hàng rồi xác nhận hoàn thành ngay tại đây.</p>
+        <div id="itPriceNoCreatePermNote" class="hidden text-xs text-gray-500 italic bg-gray-50 p-3 rounded border">⛔ Bạn không có quyền đề xuất duyệt giá — chỉ xem được danh sách đề xuất bên dưới.</div>
+        <form id="itPriceCreateForm" onsubmit="submitItPriceApproval(event)" class="hidden bg-white p-3 rounded border text-xs space-y-3">
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+            <div>
+              <label class="block font-semibold text-gray-600 mb-1">Mã Đề Xuất</label>
+              <input id="itPriceCode" readonly placeholder="Mã tự sinh" class="w-full border p-1.5 rounded bg-gray-100 cursor-not-allowed">
+            </div>
+            <div>
+              <label class="block font-semibold text-gray-600 mb-1">Phòng Ban Đề Xuất</label>
+              <input id="itPriceDeptDisplay" readonly class="w-full border p-1.5 rounded bg-gray-100 cursor-not-allowed">
+            </div>
+            <div>
+              <label class="block font-semibold text-gray-600 mb-1">Mã Hàng (nếu có)</label>
+              <input id="itPriceProductCode" placeholder="VD: SP00123" class="w-full border p-1.5 rounded">
+            </div>
+            <div class="md:col-span-2">
+              <label class="block font-semibold text-gray-600 mb-1">Tên Mặt Hàng <span class="text-red-500">*</span></label>
+              <input id="itPriceProductName" placeholder="VD: Sữa tươi ABC hộp 1L" class="w-full border p-1.5 rounded" required>
+            </div>
+            <div>
+              <label class="block font-semibold text-gray-600 mb-1">Giá Hiện Tại (đ)</label>
+              <input id="itPriceOldPrice" type="text" inputmode="numeric" placeholder="VD: 32.000" class="w-full border p-1.5 rounded money-input">
+            </div>
+            <div class="md:col-span-2">
+              <label class="block font-semibold text-gray-600 mb-1">Giá Đề Xuất Mới (đ) <span class="text-red-500">*</span></label>
+              <input id="itPriceNewPrice" type="text" inputmode="numeric" placeholder="VD: 35.000" class="w-full border p-1.5 rounded money-input" required>
+            </div>
+          </div>
+          <div>
+            <label class="block font-semibold text-gray-600 mb-1">Lý Do Điều Chỉnh Giá</label>
+            <textarea id="itPriceReason" placeholder="VD: Giá nhập tăng theo nhà cung cấp, điều chỉnh theo mặt bằng thị trường..." class="w-full border p-1.5 rounded h-16"></textarea>
+          </div>
+          <div class="flex justify-end">
+            <button type="submit" class="bg-sky-600 text-white px-5 py-2 rounded font-bold hover:bg-sky-700">Gửi phê duyệt</button>
+          </div>
+        </form>
+      </div>
+
+      <div class="bg-gray-50 p-4 rounded-lg border space-y-3">
+        <h4 class="font-bold text-gray-700 text-sm">🔍 Tìm Kiếm & Lọc Đề Xuất Duyệt Giá</h4>
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-3">
+          <div>
+            <label class="block text-xs font-semibold text-gray-600 mb-1">Lọc Theo Trạng Thái</label>
+            <select id="filterStatusItPrice" onchange="onItPriceFilterChange()" class="w-full border p-2 rounded text-sm bg-white">
+              <option value="">-- Tất cả trạng thái --</option>
+              <option value="APPROVED">Đã Phê Duyệt</option>
+              <option value="PENDING">Đang Chờ Duyệt</option>
+              <option value="REJECTED">Bị Từ Chối</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-gray-600 mb-1">Từ Ngày</label>
+            <input id="filterFromDateItPrice" type="date" onchange="onItPriceFilterChange()" class="w-full border p-2 rounded text-sm bg-white">
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-gray-600 mb-1">Đến Ngày</label>
+            <input id="filterToDateItPrice" type="date" onchange="onItPriceFilterChange()" class="w-full border p-2 rounded text-sm bg-white">
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-gray-600 mb-1">Từ Khóa</label>
+            <input id="filterKeywordItPrice" oninput="onItPriceFilterChange()" placeholder="Mã, tên hàng, người đề xuất..." class="w-full border p-2 rounded text-sm">
+          </div>
+        </div>
+      </div>
+
+      <div class="space-y-3">
+        <h3 class="font-bold text-gray-800">📋 Danh Sách Đề Xuất Duyệt Giá</h3>
+        <div class="overflow-x-auto">
+          <table class="w-full border-collapse border text-xs bg-white">
+            <thead>
+              <tr class="bg-gray-100 text-left text-gray-700">
+                <th class="border p-2">Mã Đề Xuất</th>
+                <th class="border p-2">Phòng Ban / Người Đề Xuất</th>
+                <th class="border p-2">Mặt Hàng</th>
+                <th class="border p-2">Giá Cũ → Giá Mới</th>
+                <th class="border p-2">Lý Do</th>
+                <th class="border p-2">Trạng Thái Duyệt</th>
+                <th class="border p-2">Áp Giá</th>
+                <th class="border p-2 text-center">Thao Tác</th>
+              </tr>
+            </thead>
+            <tbody id="itPriceTableBody"></tbody>
+          </table>
+        </div>
+        <div id="paginationContainer_itPrice"></div>
+      </div>
+    </div>
+
+    <!-- Sub-tab: Hỗ Trợ Yêu Cầu -->
+    <div id="itSubTicket" class="hidden space-y-4">
+      <div class="bg-emerald-50 p-4 rounded border border-emerald-200 space-y-3">
+        <h3 class="font-bold text-emerald-900 text-base flex items-center gap-2">🎫 Gửi Yêu Cầu Hỗ Trợ IT</h3>
+        <p class="text-xs text-emerald-700">Gặp sự cố máy tính, phần mềm, mạng, tài khoản... gửi yêu cầu ngay để đội Hỗ Trợ IT tiếp nhận xử lý. Mở cho toàn bộ nhân viên.</p>
+        <form id="itTicketCreateForm" onsubmit="submitItTicket(event)" class="bg-white p-3 rounded border text-xs space-y-3">
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+            <div>
+              <label class="block font-semibold text-gray-600 mb-1">Mã Yêu Cầu</label>
+              <input id="itTicketCode" readonly placeholder="Mã tự sinh" class="w-full border p-1.5 rounded bg-gray-100 cursor-not-allowed">
+            </div>
+            <div class="md:col-span-2">
+              <label class="block font-semibold text-gray-600 mb-1">Tiêu Đề <span class="text-red-500">*</span></label>
+              <input id="itTicketTitle" placeholder="VD: Máy tính không kết nối được mạng" class="w-full border p-1.5 rounded" required>
+            </div>
+            <div>
+              <label class="block font-semibold text-gray-600 mb-1">Danh Mục</label>
+              <select id="itTicketCategory" class="w-full border p-1.5 rounded bg-white">
+                <option value="HARDWARE">🖥️ Phần cứng</option>
+                <option value="SOFTWARE">💿 Phần mềm</option>
+                <option value="NETWORK">🌐 Mạng / Internet</option>
+                <option value="ACCOUNT">🔑 Tài khoản / Đăng nhập</option>
+                <option value="OTHER">❓ Khác</option>
+              </select>
+            </div>
+          </div>
+          <div>
+            <label class="block font-semibold text-gray-600 mb-1">Mô Tả Chi Tiết <span class="text-red-500">*</span></label>
+            <textarea id="itTicketDescription" placeholder="Mô tả sự cố/yêu cầu càng chi tiết càng giúp đội IT xử lý nhanh hơn..." class="w-full border p-1.5 rounded h-20" required></textarea>
+          </div>
+          <div class="flex justify-end">
+            <button type="submit" class="bg-emerald-600 text-white px-5 py-2 rounded font-bold hover:bg-emerald-700">Gửi yêu cầu</button>
+          </div>
+        </form>
+      </div>
+
+      <div class="bg-gray-50 p-4 rounded-lg border space-y-3">
+        <h4 class="font-bold text-gray-700 text-sm">🔍 Tìm Kiếm & Lọc Yêu Cầu Hỗ Trợ</h4>
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-3">
+          <div>
+            <label class="block text-xs font-semibold text-gray-600 mb-1">Lọc Theo Trạng Thái</label>
+            <select id="filterStatusItTicket" onchange="onItTicketFilterChange()" class="w-full border p-2 rounded text-sm bg-white">
+              <option value="">-- Tất cả trạng thái --</option>
+              <option value="TODO">Chưa Xử Lý</option>
+              <option value="DOING">Đang Xử Lý</option>
+              <option value="DONE">Hoàn Thành</option>
+              <option value="CANCELLED">Đã Hủy</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-gray-600 mb-1">Lọc Theo Danh Mục</label>
+            <select id="filterCategoryItTicket" onchange="onItTicketFilterChange()" class="w-full border p-2 rounded text-sm bg-white">
+              <option value="">-- Tất cả danh mục --</option>
+              <option value="HARDWARE">🖥️ Phần cứng</option>
+              <option value="SOFTWARE">💿 Phần mềm</option>
+              <option value="NETWORK">🌐 Mạng / Internet</option>
+              <option value="ACCOUNT">🔑 Tài khoản / Đăng nhập</option>
+              <option value="OTHER">❓ Khác</option>
+            </select>
+          </div>
+          <div class="md:col-span-2">
+            <label class="block text-xs font-semibold text-gray-600 mb-1">Từ Khóa</label>
+            <input id="filterKeywordItTicket" oninput="onItTicketFilterChange()" placeholder="Mã, tiêu đề, người tạo..." class="w-full border p-2 rounded text-sm">
+          </div>
+        </div>
+      </div>
+
+      <div class="space-y-3">
+        <h3 class="font-bold text-gray-800">📋 Danh Sách Yêu Cầu Hỗ Trợ</h3>
+        <div class="overflow-x-auto">
+          <table class="w-full border-collapse border text-xs bg-white">
+            <thead>
+              <tr class="bg-gray-100 text-left text-gray-700">
+                <th class="border p-2">Mã Yêu Cầu</th>
+                <th class="border p-2">Người Tạo / Phòng Ban</th>
+                <th class="border p-2">Tiêu Đề</th>
+                <th class="border p-2">Danh Mục</th>
+                <th class="border p-2">Trạng Thái</th>
+                <th class="border p-2">Người Xử Lý</th>
+                <th class="border p-2 text-center">Thao Tác</th>
+              </tr>
+            </thead>
+            <tbody id="itTicketTableBody"></tbody>
+          </table>
+        </div>
+        <div id="paginationContainer_itTicket"></div>
+      </div>
+    </div>
+  </div>
+
+<!-- MODAL XEM/XỬ LÝ YÊU CẦU HỖ TRỢ IT -->
+<div id="itTicketModal" class="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center hidden z-50 p-4">
+  <div class="bg-white rounded-lg shadow-2xl max-w-2xl w-full flex flex-col max-h-[90vh] overflow-hidden">
+    <div class="flex justify-between items-center bg-emerald-800 text-white p-4">
+      <div>
+        <h3 id="itTicketModalTitle" class="font-bold text-base flex items-center gap-2">🎫 Yêu Cầu Hỗ Trợ IT</h3>
+        <p id="itTicketModalSub" class="text-xs text-emerald-200"></p>
+      </div>
+      <button onclick="closeItTicketModal()" class="text-emerald-200 hover:text-white font-bold text-xl px-2">✕</button>
+    </div>
+    <div class="p-4 overflow-y-auto flex-1 space-y-4 text-xs">
+      <div id="itTicketModalDetails" class="bg-gray-50 p-3 rounded border space-y-2 text-gray-700"></div>
+      <div id="itTicketModalControls"></div>
+      <div>
+        <h4 class="font-bold text-gray-800 mb-2">💬 Trao Đổi</h4>
+        <div id="itTicketModalComments" class="space-y-2 bg-slate-50 p-3 rounded border max-h-48 overflow-y-auto"></div>
+        <div id="itTicketModalCommentBox" class="hidden mt-2 flex gap-2">
+          <input id="itTicketCommentInput" placeholder="Nhập bình luận..." class="flex-1 border p-1.5 rounded text-xs">
+          <button type="button" onclick="submitItTicketComment()" class="bg-emerald-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-emerald-700">Gửi</button>
+        </div>
+      </div>
+    </div>
+    <div class="p-3 bg-gray-100 border-t flex justify-end text-xs">
+      <button onclick="closeItTicketModal()" class="bg-gray-500 text-white px-4 py-1.5 rounded font-bold hover:bg-gray-600">Đóng</button>
+    </div>
+  </div>
+</div>
 
 <!-- MODAL TUỲ CHỈNH DASHBOARD (Đợt C) — ẩn/hiện từng thẻ thống kê, lưu tạm ở localStorage (nâng lên
      lưu server ở Đợt D). Chỉ liệt kê các thẻ ĐANG liên quan tới người dùng hiện tại (show:true). -->
@@ -4929,6 +5174,11 @@ const BUSINESS_MODULES = [
     { id: 'pPaymentManage', label: '💰 Quản lý Thanh Toán (toàn công ty)', checkedByDefault: false }
   ] },
   { key: 'reports', label: 'Báo Cáo' },
+  // "Hỗ Trợ IT" — mở cho TOÀN BỘ nhân viên (giống Công Việc/Tài Liệu, admin có thể tắt riêng qua
+  // checkbox này nếu cần) — 2 sub-module con (Phê Duyệt Giá/Hỗ Trợ Yêu Cầu) không cần khoá riêng ở
+  // đây vì quyền thật nằm ở itPriceProposeCreate/itManage (khối 13 cây phân quyền), chỉ chặn AI
+  // ĐƯỢC TẠO/XỬ LÝ chứ không chặn ai được VÀO module.
+  { key: 'itSupport', label: 'Hỗ Trợ IT' },
   { key: 'periodicReport', label: 'Báo Cáo Định Kỳ', subModules: [
     { id: 'pReportManage', label: '✅ Quản lý kỳ báo cáo (tạo/đóng kỳ sớm)', checkedByDefault: false },
     { id: 'pReportAggregate', label: '✅ Tổng hợp báo cáo (chọn, merge, sửa, phát hành)', checkedByDefault: false },
@@ -5375,6 +5625,20 @@ function canAccessTaskModule(user) {
   return hasModuleAccess(user, 'task');
 }
 
+// Hỗ Trợ IT — mở cho toàn bộ nhân viên (giống Công Việc, admin có thể tắt riêng qua checkbox
+// moduleAccess.itSupport nếu cần); quyền thật (đề xuất duyệt giá/quản lý xử lý) nằm ở
+// itPriceProposeCreate/itManage, không phải điều kiện vào module.
+function canAccessItSupportModule(user) {
+  if (!user) return false;
+  return hasModuleAccess(user, 'itSupport');
+}
+function canProposeItPrice(user) {
+  return !!(user?.perms?.admin || user?.perms?.itPriceProposeCreate);
+}
+function canManageItSupportClient(user) {
+  return !!(user?.perms?.admin || user?.perms?.itManage);
+}
+
 // "Quản trị" Công việc: gộp quyền Tạo mới + Sửa (đổi tiêu đề/nội dung/hạn/người nhận) — người có
 // quyền này xử lý được TOÀN BỘ công việc, không chỉ việc của mình.
 function canManageTasks(user) {
@@ -5534,6 +5798,7 @@ function canAccessApprovalHub(user) {
   if (isApproverInWorkflowMap(DB.contractApprovalDeptWorkflows, user.username)) return true;
   if (isApproverInWorkflowMap(DB.contractManageDeptWorkflows, user.username)) return true;
   if (Object.values(DB.contractApprovalGroups || {}).some(list => Array.isArray(list) && list.includes(user.username))) return true;
+  if (isApproverInWorkflowMap(DB.itPriceDeptWorkflows, user.username)) return true;
   return false;
 }
 
@@ -5688,6 +5953,7 @@ function defaultNewUserPerms() {
     officeBuy: true, officeFix: true, officeInvest: false,
     minutesCreate: false, minutesView: false, minutesEdit: false, minutesDownload: false,
     taskView: false, taskEdit: false, taskDelete: false, taskDownload: false,
+    itPriceProposeCreate: false, itManage: false,
     approverAuthLevel: 'NONE'
   };
 }
@@ -5873,6 +6139,7 @@ async function initDatabase(loggingInUser) {
     DB.officeFixDeptWorkflows = data.officeFixDeptWorkflows || {};
     DB.officeInvestDeptWorkflows = data.officeInvestDeptWorkflows || {};
     DB.vppDeptWorkflows = data.vppDeptWorkflows || {};
+    DB.itPriceDeptWorkflows = data.itPriceDeptWorkflows || {};
 
     DB.vppPeriods = data.vppPeriods || [];
     DB.vppRegistrations = data.vppRegistrations || [];
@@ -5892,6 +6159,8 @@ async function initDatabase(loggingInUser) {
     DB.recruitmentJobs = data.recruitmentJobs || [];
     DB.recruitmentReferrals = data.recruitmentReferrals || [];
     DB.sensitiveKeywords = data.sensitiveKeywords || [];
+    DB.itPriceApprovals = data.itPriceApprovals || [];
+    DB.itSupportTickets = data.itSupportTickets || [];
 
     DB._versions = data._versions || {};
 
@@ -7196,6 +7465,15 @@ function getMyPendingApprovals(user) {
     actionsOf: r => [{ label: '✍️ Xử lý / Duyệt', onclick: `openVppRegModal(${r.id})`, primary: true }]
   });
 
+  addDeptWorkflowItems(DB.itPriceApprovals, p => DB.itPriceDeptWorkflows[p.dept], {
+    type: 'itPrice', typeLabel: '🏷️ Hỗ Trợ IT - Duyệt giá',
+    codeOf: r => r.code, titleOf: r => r.productName,
+    actionsOf: r => [
+      { label: '✅ Duyệt', onclick: `runItPriceAction(${r.id}, 'approve')`, primary: true },
+      { label: '❌ Từ chối', onclick: `runItPriceAction(${r.id}, 'reject')` }
+    ]
+  });
+
   // Hợp đồng — GIỜ ĐÃ có bước quy trình riêng (xem lib/workflowEngine.js), dùng addDeptWorkflowItems()
   // như 5 module phía trên thay vì quyền phẳng contractApprove trước đây. 2 quy trình TÁCH RIÊNG trên
   // cùng bản ghi: "Phê Duyệt" gốc (approvalStatus/currentStep/history, resolveContractApprovalWorkflow)
@@ -7467,6 +7745,7 @@ function finishLogin(user) {
 
   document.getElementById('heThongNavWrap').classList.toggle('hidden', !user.perms.admin);
   document.getElementById('btnReportsTab').classList.toggle('hidden', !canAccessReportsModule(user));
+  document.getElementById('btnItSupportTab').classList.toggle('hidden', !canAccessItSupportModule(user));
   document.getElementById('btnApprovalHubTab').classList.toggle('hidden', !canAccessApprovalHub(user));
   updateApprovalHubBadge();
   applyUploadAcceptAttrs();
@@ -7568,6 +7847,7 @@ function logout() {
   document.getElementById('workflowSection').classList.add('hidden');
   document.getElementById('logSection').classList.add('hidden');
   document.getElementById('reportsSection').classList.add('hidden');
+  document.getElementById('itSupportSection').classList.add('hidden');
   document.getElementById('userHeader').classList.add('hidden');
   document.getElementById('mobileTopBar').classList.add('hidden');
   closeMobileSidebar();
@@ -7810,6 +8090,7 @@ function switchTab(tabName) {
   document.getElementById('workflowSection').classList.toggle('hidden', !(tabName === 'system' && activeSystemSubTab === 'WORKFLOW'));
   document.getElementById('logSection').classList.toggle('hidden', !(tabName === 'system' && activeSystemSubTab === 'LOG'));
   document.getElementById('reportsSection').classList.toggle('hidden', tabName !== 'reports');
+  document.getElementById('itSupportSection').classList.toggle('hidden', tabName !== 'itSupport');
 
   populateDropdowns();
   updateApprovalHubBadge();
@@ -7855,6 +8136,7 @@ function switchTab(tabName) {
   }
   if (tabName === 'system' && currentUser.perms.admin) { setSystemSubTab(activeSystemSubTab); }
   if (tabName === 'reports' && canAccessReportsModule(currentUser)) { renderReports(); }
+  if (tabName === 'itSupport') { setItSupportSubTab(activeItSupportSubTab); }
 }
 
 // Quyền vào sub-tab "💰 Thanh Toán" của Tổng Hợp — khác hẳn canAccessOfficeSubTab() (không có khái
@@ -8204,6 +8486,8 @@ function generateOfficeCode() {
 }
 function generateMinutesCode() { return generateHcrcCode(DB.meetingMinutes, 'BBH'); }
 function generateMeetingCode() { return generateHcrcCode(DB.meetings, 'DPH'); }
+function generateItPriceCode() { return generateHcrcCode(DB.itPriceApprovals, 'ITPG'); }
+function generateItTicketCode() { return generateHcrcCode(DB.itSupportTickets, 'ITHT'); }
 
 // Số thứ tự TIẾP THEO cho Mã Quy Trình (WF<số>) — lấy số LỚN NHẤT từng xuất hiện (không phải đếm số
 // lượng còn lại), cùng nguyên lý computeNextDocSeq() ở trên — tránh sinh trùng mã nếu 1 mẫu quy trình
@@ -16500,7 +16784,10 @@ const WF_MODULE_CONFIG = {
   // khối Phân Quyền — không thuộc màn này); CONTRACT_MANAGE là quy trình đơn giản theo phòng ban cho
   // bước duyệt "Tài liệu ký" ở sub-tab "Quản Lý HĐ" — độc lập hoàn toàn, không liên quan CONTRACT_APPROVAL.
   CONTRACT_APPROVAL: { dbKey: 'contractApprovalDeptWorkflows', label: 'Hợp đồng - Phê duyệt', title: '📄 Cấu Hình Quy Trình GỐC Phê Duyệt Hợp Đồng Theo Phòng Ban' },
-  CONTRACT_MANAGE: { dbKey: 'contractManageDeptWorkflows', label: 'Hợp đồng - Quản Lý HĐ', title: '📋 Cấu Hình Quy Trình Duyệt Tài Liệu Ký (Quản Lý HĐ) Theo Phòng Ban' }
+  CONTRACT_MANAGE: { dbKey: 'contractManageDeptWorkflows', label: 'Hợp đồng - Quản Lý HĐ', title: '📋 Cấu Hình Quy Trình Duyệt Tài Liệu Ký (Quản Lý HĐ) Theo Phòng Ban' },
+  // "Hỗ Trợ IT" > "Phê Duyệt Giá" — cùng khuôn CAR/VPP ở trên (không có "loại" như Văn bản trình). Bước
+  // "IT áp giá + xác nhận hoàn thành" sau khi APPROVED KHÔNG thuộc màn này (không phải 1 bước duyệt).
+  ITPRICE: { dbKey: 'itPriceDeptWorkflows', label: 'Hỗ Trợ IT - Duyệt giá', title: '🏷️ Cấu Hình Quy Trình Phê Duyệt Giá Bán (Hỗ Trợ IT) Theo Phòng Ban' }
 };
 
 // Danh sách LOẠI của 1 module quy trình (hiện chỉ Văn bản trình có) — đọc trực tiếp từ DB.submissionTypes
@@ -17359,7 +17646,9 @@ function collectPermsFromForm() {
     taskView: document.getElementById('pTaskView').checked,
     taskEdit: document.getElementById('pTaskEdit').checked,
     taskDelete: document.getElementById('pTaskDelete').checked,
-    taskDownload: document.getElementById('pTaskDownload').checked
+    taskDownload: document.getElementById('pTaskDownload').checked,
+    itPriceProposeCreate: document.getElementById('pItPriceProposeCreate').checked,
+    itManage: document.getElementById('pItManage').checked
   };
 }
 
@@ -17396,6 +17685,8 @@ function populatePermsForm(permsInput) {
   document.getElementById('pTaskEdit').checked = !!perms.taskEdit;
   document.getElementById('pTaskDelete').checked = !!perms.taskDelete;
   document.getElementById('pTaskDownload').checked = !!perms.taskDownload;
+  document.getElementById('pItPriceProposeCreate').checked = !!perms.itPriceProposeCreate;
+  document.getElementById('pItManage').checked = !!perms.itManage;
 
   document.getElementById('pUploadAll').checked = !!perms.uploadAll;
   document.getElementById('pViewDraftAll').checked = !!perms.viewDraftAll;
@@ -19706,6 +19997,8 @@ function resetUserForm() {
   document.getElementById('pTaskEdit').checked = !!defaults.taskEdit;
   document.getElementById('pTaskDelete').checked = !!defaults.taskDelete;
   document.getElementById('pTaskDownload').checked = !!defaults.taskDownload;
+  document.getElementById('pItPriceProposeCreate').checked = !!defaults.itPriceProposeCreate;
+  document.getElementById('pItManage').checked = !!defaults.itManage;
 
   [
     'pUploadAll', 'pViewDraftAll', 'pViewApprovedAll', 'pDocDownloadAll',
@@ -23051,6 +23344,525 @@ function deleteCareerPath(id) {
 
     return slides;
   };
+
+// ==========================================
+// HỖ TRỢ IT — "🏷️ Phê Duyệt Giá" (duyệt giá bán mặt hàng siêu thị theo phòng ban, dùng chung engine
+// dept-workflow ở lib/workflowEngine.js — xem docs/carRegs) + "🎫 Hỗ Trợ Yêu Cầu" (ticket helpdesk IT
+// nội bộ, mở cho toàn bộ nhân viên, state machine đơn giản TODO->DOING->DONE/CANCELLED, không qua
+// duyệt). 2 sub-module tách biệt hoàn toàn dữ liệu (xem lib/createValidation.js, không chung 1 công
+// việc nghiệp vụ nào).
+// ==========================================
+let activeItSupportSubTab = 'PRICE';
+
+function setItSupportSubTab(subTab) {
+  activeItSupportSubTab = subTab;
+  document.getElementById('itSubPrice').classList.toggle('hidden', subTab !== 'PRICE');
+  document.getElementById('itSubTicket').classList.toggle('hidden', subTab !== 'TICKET');
+  const activeCls = 'px-3 py-1.5 rounded text-xs font-bold bg-sky-700 text-white';
+  const inactiveCls = 'px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700';
+  document.getElementById('btnItSubPrice').className = subTab === 'PRICE' ? activeCls : inactiveCls;
+  document.getElementById('btnItSubTicket').className = subTab === 'TICKET' ? activeCls : inactiveCls;
+
+  if (subTab === 'PRICE') {
+    const canCreate = canProposeItPrice(currentUser);
+    document.getElementById('itPriceCreateForm').classList.toggle('hidden', !canCreate);
+    document.getElementById('itPriceNoCreatePermNote').classList.toggle('hidden', canCreate);
+    if (canCreate) {
+      document.getElementById('itPriceCode').value = generateItPriceCode();
+      document.getElementById('itPriceDeptDisplay').value = currentUser.dept;
+    }
+    renderItPriceApprovals();
+  }
+  if (subTab === 'TICKET') {
+    document.getElementById('itTicketCode').value = generateItTicketCode();
+    renderItTickets();
+  }
+}
+
+// ----- 🏷️ Phê Duyệt Giá -----
+async function submitItPriceApproval(e) {
+  e.preventDefault();
+  const code = document.getElementById('itPriceCode').value.trim();
+  if (DB.itPriceApprovals.some(p => p.code === code)) {
+    return alert('Mã đề xuất đã tồn tại!');
+  }
+  const payload = {
+    code,
+    productCode: document.getElementById('itPriceProductCode').value.trim(),
+    productName: document.getElementById('itPriceProductName').value.trim(),
+    oldPrice: getMoneyValue(document.getElementById('itPriceOldPrice')),
+    newPrice: getMoneyValue(document.getElementById('itPriceNewPrice')),
+    reason: document.getElementById('itPriceReason').value.trim(),
+    createdAt: new Date().toLocaleString('vi-VN')
+  };
+
+  let newItem;
+  try {
+    const result = await callCreateAction('itPriceApprovals', payload);
+    newItem = result.item;
+  } catch (err) {
+    return alert(`⛔ ${err.message}`);
+  }
+
+  DB.itPriceApprovals.unshift(newItem);
+  logSystemAction('IT_SUPPORT', 'CREATE_IT_PRICE_APPROVAL', `Tạo đề xuất duyệt giá [${code} - ${newItem.productName}]`, 'SUCCESS', code);
+
+  const wfConfig = DB.itPriceDeptWorkflows[newItem.dept];
+  const firstStepApprovers = wfConfig?.approvers?.[1] || [];
+  if (firstStepApprovers.length) {
+    notifyUsersByEmail('IT_SUPPORT', 'NOTIFY_APPROVAL_NEEDED', code, firstStepApprovers,
+      `[VPDT] Đề xuất duyệt giá ${code} cần bạn phê duyệt`,
+      `Đề xuất duyệt giá "${newItem.productName}" (${code}) do ${currentUser.name} đề xuất đang chờ bạn phê duyệt.`);
+  }
+
+  alert('✅ Đã gửi đề xuất duyệt giá thành công!');
+  e.target.reset();
+  document.getElementById('itPriceCode').value = generateItPriceCode();
+  document.getElementById('itPriceDeptDisplay').value = currentUser.dept;
+  renderItPriceApprovals();
+}
+
+function onItPriceFilterChange() {
+  resetListPage('itPrice');
+  renderItPriceApprovals();
+}
+
+// Phạm vi Xem: admin/itManage (đội Hỗ Trợ IT) xem hết, người đề xuất xem đề xuất của mình, người
+// duyệt xem hồ sơ nằm trong luồng duyệt của họ — không có quyền "Xem" riêng như carView/docView vì
+// module này chưa cần phân biệt xem-rộng theo phòng ban.
+function canViewItPriceApproval(user, p) {
+  if (user.perms?.admin || user.perms?.itManage) return true;
+  if (p.creator === user.username) return true;
+  return isApproverForDeptWorkflow(DB.itPriceDeptWorkflows[p.dept], user.username);
+}
+
+function renderItPriceApprovals() {
+  const tbody = document.getElementById('itPriceTableBody');
+  if (!tbody) return;
+
+  const statusFilter = document.getElementById('filterStatusItPrice')?.value || '';
+  const fromDate = document.getElementById('filterFromDateItPrice')?.value || '';
+  const toDate = document.getElementById('filterToDateItPrice')?.value || '';
+  const keyword = (document.getElementById('filterKeywordItPrice')?.value || '').trim();
+
+  const visible = DB.itPriceApprovals.filter(p => {
+    if (!canViewItPriceApproval(currentUser, p)) return false;
+    if (statusFilter && p.status !== statusFilter) return false;
+    if (!isInDateRange(p.createdAt, fromDate, toDate)) return false;
+    if (!matchesKeywordFields([p.code, p.productName, p.creatorName], keyword)) return false;
+    return true;
+  });
+
+  document.getElementById('paginationContainer_itPrice').innerHTML = buildPaginationBoxHTML('itPrice', 'renderItPriceApprovals');
+  const page = paginateList('itPrice', visible, 'renderItPriceApprovals', 'đề xuất');
+
+  if (page.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="8" class="text-center p-6 text-gray-500 italic">Không tìm thấy đề xuất phù hợp.</td></tr>`;
+    return;
+  }
+
+  tbody.innerHTML = page.map(p => {
+    const wfConfig = DB.itPriceDeptWorkflows[p.dept] || { workflowId: 'WF_1STEP', approvers: { 1: ['admin'] } };
+    const wf = DB.workflows.find(w => w.id === wfConfig.workflowId) || { steps: [{ name: 'Duyệt' }] };
+    const currentStepApprovers = wfConfig.approvers ? (wfConfig.approvers[p.currentStep] || []) : [];
+    const canApprove = (p.status === 'PENDING') && canApproveStep(currentUser, currentStepApprovers, p.history, p.currentStep);
+
+    let statusBadge = '';
+    if (p.status === 'APPROVED') statusBadge = `<span class="px-2 py-0.5 bg-green-100 text-green-800 rounded font-bold text-xs">✅ Đã phê duyệt</span>`;
+    else if (p.status === 'REJECTED') statusBadge = `<span class="px-2 py-0.5 bg-red-100 text-red-800 rounded font-bold text-xs">❌ Từ chối</span>`;
+    else statusBadge = `<span class="px-2 py-0.5 bg-indigo-100 text-indigo-800 rounded font-bold text-xs">⏳ Bước ${p.currentStep}/${wf.steps.length}${escapeHtml(getStepApprovalProgressText(currentStepApprovers, p.history, p.currentStep))}</span>`;
+
+    let appliedBadge = '<span class="text-gray-400 text-xs">—</span>';
+    if (p.status === 'APPROVED') {
+      appliedBadge = p.applied
+        ? `<span class="px-2 py-0.5 bg-emerald-100 text-emerald-800 rounded font-bold text-xs">✅ Đã áp giá${p.appliedByName ? ` (${escapeHtml(p.appliedByName)})` : ''}</span>`
+        : `<span class="px-2 py-0.5 bg-amber-100 text-amber-800 rounded font-bold text-xs">⏳ Chưa áp giá</span>`;
+    }
+
+    const canApply = p.status === 'APPROVED' && !p.applied && canManageItSupportClient(currentUser);
+
+    return `
+      <tr class="hover:bg-gray-50 border-b">
+        <td class="border p-2 font-mono font-bold text-sky-800">${escapeHtml(p.code)}</td>
+        <td class="border p-2">${escapeHtml(p.dept)}<br><span class="text-xs text-gray-500">${escapeHtml(p.creatorName)}</span></td>
+        <td class="border p-2">${escapeHtml(p.productName)}${p.productCode ? `<br><span class="text-xs text-gray-500">Mã: ${escapeHtml(p.productCode)}</span>` : ''}</td>
+        <td class="border p-2 text-xs">${p.oldPrice != null ? p.oldPrice.toLocaleString('vi-VN') + ' đ' : '—'} → <span class="font-bold text-sky-700">${p.newPrice.toLocaleString('vi-VN')} đ</span></td>
+        <td class="border p-2 text-xs">${escapeHtml(p.reason || '')}</td>
+        <td class="border p-2">${statusBadge}</td>
+        <td class="border p-2">${appliedBadge}</td>
+        <td class="border p-2 text-center space-x-1">
+          ${(() => {
+            let primaryBtnHTML;
+            if (canApprove) {
+              primaryBtnHTML = `<button onclick="runItPriceAction(${p.id}, 'approve')" class="px-2.5 py-1 bg-emerald-600 text-white rounded text-xs hover:opacity-90 font-bold">✅ Duyệt</button>`;
+            } else if (canApply) {
+              primaryBtnHTML = `<button onclick="runItPriceAction(${p.id}, 'apply')" class="px-2.5 py-1 bg-teal-600 text-white rounded text-xs hover:opacity-90 font-bold">🏷️ Xác nhận đã áp giá</button>`;
+            } else {
+              primaryBtnHTML = `<span class="text-gray-400 text-xs italic">—</span>`;
+            }
+            const secondaryOptions = [];
+            if (canApprove) secondaryOptions.push({ value: 'reject', label: '❌ Từ chối' });
+            if (currentUser.perms?.admin) secondaryOptions.push({ value: 'delete', label: '🗑️ Xóa' });
+            return buildActionCell(p.id, primaryBtnHTML, secondaryOptions, 'runItPriceAction');
+          })()}
+        </td>
+      </tr>
+    `;
+  }).join('');
+}
+
+function runItPriceAction(id, action) {
+  switch (action) {
+    case 'approve': approveItPrice(id); break;
+    case 'reject': rejectItPrice(id); break;
+    case 'apply': applyItPriceAction(id); break;
+    case 'delete': deleteItPriceAction(id); break;
+  }
+}
+
+function approveItPrice(id) {
+  withApprovalAuth(() => approveItPriceConfirmed(id));
+}
+async function approveItPriceConfirmed(id) {
+  const p = DB.itPriceApprovals.find(x => x.id === id);
+  if (!p) return;
+
+  let result;
+  try {
+    result = await callWorkflowAction('itPriceApprovals', id, 'approve', {});
+  } catch (e) {
+    return alert('⛔ ' + e.message);
+  }
+
+  const updated = result.item;
+  const transition = result.transition;
+  const idx = DB.itPriceApprovals.findIndex(x => x.id === id);
+  if (idx !== -1) DB.itPriceApprovals[idx] = updated;
+
+  let msg = '✅ Đã ghi nhận phê duyệt của bạn!';
+  if (transition.type === 'COMPLETED') {
+    msg = '✅ Phê duyệt đề xuất giá thành công! Đội Hỗ Trợ IT sẽ áp giá vào hệ thống bán hàng rồi xác nhận hoàn thành.';
+    notifyUsersByEmail('IT_SUPPORT', 'NOTIFY_APPROVED', updated.code, [updated.creator],
+      `[VPDT] Đề xuất duyệt giá ${updated.code} đã được phê duyệt`,
+      `Đề xuất duyệt giá "${updated.productName}" (${updated.code}) của bạn đã được phê duyệt hoàn tất.`);
+  } else if (transition.type === 'ADVANCED') {
+    msg = getStepAdvanceMessage(transition.stepApprovers);
+    if (transition.nextApprovers.length) {
+      notifyUsersByEmail('IT_SUPPORT', 'NOTIFY_APPROVAL_NEEDED', updated.code, transition.nextApprovers,
+        `[VPDT] Đề xuất duyệt giá ${updated.code} cần bạn phê duyệt`,
+        `Đề xuất duyệt giá "${updated.productName}" (${updated.code}) đang chờ bạn phê duyệt ở bước "${transition.nextStepName}".`);
+    }
+  } else if (transition.type === 'PARTIAL_APPROVE') {
+    msg = '✅ Đã ghi nhận phê duyệt của bạn — đang chờ các đồng phê duyệt còn lại ở bước này.';
+  }
+
+  logSystemAction('IT_SUPPORT', 'APPROVE_IT_PRICE', `Phê duyệt đề xuất giá [${updated.code}] thành công.`, 'SUCCESS', updated.code);
+  alert(msg);
+  renderItPriceApprovals();
+  refreshApprovalSurfaces();
+}
+
+async function rejectItPrice(id) {
+  const p = DB.itPriceApprovals.find(x => x.id === id);
+  if (!p) return;
+
+  const reason = prompt('Nhập lý do từ chối:');
+  if (reason === null) return;
+
+  let result;
+  try {
+    result = await callWorkflowAction('itPriceApprovals', id, 'reject', { comment: reason });
+  } catch (e) {
+    return alert('⛔ ' + e.message);
+  }
+
+  const updated = result.item;
+  const idx = DB.itPriceApprovals.findIndex(x => x.id === id);
+  if (idx !== -1) DB.itPriceApprovals[idx] = updated;
+
+  logSystemAction('IT_SUPPORT', 'REJECT_IT_PRICE', `Từ chối đề xuất giá [${updated.code}]. Lý do: ${reason}`, 'SUCCESS', updated.code);
+  notifyUsersByEmail('IT_SUPPORT', 'NOTIFY_REJECTED', updated.code, [updated.creator],
+    `[VPDT] Đề xuất duyệt giá ${updated.code} bị từ chối`,
+    `Đề xuất duyệt giá "${updated.productName}" (${updated.code}) của bạn đã bị từ chối. Lý do: ${reason}`);
+  alert('❌ Đã từ chối đề xuất duyệt giá!');
+  renderItPriceApprovals();
+  refreshApprovalSurfaces();
+}
+
+async function applyItPriceAction(id) {
+  const p = DB.itPriceApprovals.find(x => x.id === id);
+  if (!p) return;
+  if (!confirm(`Xác nhận đã áp giá mới (${p.newPrice.toLocaleString('vi-VN')} đ) cho "${p.productName}" vào hệ thống bán hàng?`)) return;
+
+  let result;
+  try {
+    result = await callRecordAction('itPriceApprovals', id, 'apply', {});
+  } catch (e) {
+    return alert('⛔ ' + e.message);
+  }
+
+  const idx = DB.itPriceApprovals.findIndex(x => x.id === id);
+  if (idx !== -1) DB.itPriceApprovals[idx] = result.item;
+  logSystemAction('IT_SUPPORT', 'APPLY_IT_PRICE', `Xác nhận đã áp giá [${p.code}]`, 'SUCCESS', p.code);
+  alert('✅ Đã xác nhận áp giá thành công!');
+  renderItPriceApprovals();
+}
+
+function deleteItPriceAction(id) {
+  const p = DB.itPriceApprovals.find(x => x.id === id);
+  if (!p) return;
+  deleteRecordAdminOnly('itPriceApprovals', id, `đề xuất duyệt giá ${p.code}`, () => {
+    DB.itPriceApprovals = DB.itPriceApprovals.filter(x => x.id !== id);
+    logSystemAction('IT_SUPPORT', 'DELETE_IT_PRICE', `Xóa đề xuất duyệt giá [${p.code}]`, 'SUCCESS', p.code);
+    renderItPriceApprovals();
+  });
+}
+
+// ----- 🎫 Hỗ Trợ Yêu Cầu -----
+const IT_TICKET_CATEGORY_LABELS = {
+  HARDWARE: '🖥️ Phần cứng', SOFTWARE: '💿 Phần mềm', NETWORK: '🌐 Mạng / Internet',
+  ACCOUNT: '🔑 Tài khoản / Đăng nhập', OTHER: '❓ Khác'
+};
+const IT_TICKET_STATUS_BADGES = {
+  TODO: '<span class="px-2 py-0.5 bg-gray-100 text-gray-800 rounded font-bold text-xs">🕒 Chưa xử lý</span>',
+  DOING: '<span class="px-2 py-0.5 bg-amber-100 text-amber-800 rounded font-bold text-xs">🔧 Đang xử lý</span>',
+  DONE: '<span class="px-2 py-0.5 bg-green-100 text-green-800 rounded font-bold text-xs">✅ Hoàn thành</span>',
+  CANCELLED: '<span class="px-2 py-0.5 bg-red-100 text-red-800 rounded font-bold text-xs">❌ Đã hủy</span>'
+};
+
+async function submitItTicket(e) {
+  e.preventDefault();
+  const code = document.getElementById('itTicketCode').value.trim();
+  if (DB.itSupportTickets.some(t => t.code === code)) {
+    return alert('Mã yêu cầu đã tồn tại!');
+  }
+  const payload = {
+    code,
+    title: document.getElementById('itTicketTitle').value.trim(),
+    category: document.getElementById('itTicketCategory').value,
+    description: document.getElementById('itTicketDescription').value.trim(),
+    createdAt: new Date().toLocaleString('vi-VN')
+  };
+
+  let newItem;
+  try {
+    const result = await callCreateAction('itSupportTickets', payload);
+    newItem = result.item;
+  } catch (err) {
+    return alert(`⛔ ${err.message}`);
+  }
+
+  DB.itSupportTickets.unshift(newItem);
+  logSystemAction('IT_SUPPORT', 'CREATE_IT_TICKET', `Tạo yêu cầu hỗ trợ IT [${code} - ${newItem.title}]`, 'SUCCESS', code);
+  alert('✅ Đã gửi yêu cầu hỗ trợ IT thành công!');
+  e.target.reset();
+  document.getElementById('itTicketCode').value = generateItTicketCode();
+  renderItTickets();
+}
+
+function onItTicketFilterChange() {
+  resetListPage('itTicket');
+  renderItTickets();
+}
+
+// Phạm vi Xem: hẹp hơn Phê Duyệt Giá vì ticket có thể chứa thông tin tài khoản/sự cố cá nhân — chỉ
+// đội Hỗ Trợ IT (itManage/admin) và chính người tạo được xem, không mở rộng cho toàn phòng ban.
+function canViewItTicket(user, t) {
+  return !!(user.perms?.admin || user.perms?.itManage || t.creator === user.username);
+}
+
+function renderItTickets() {
+  const tbody = document.getElementById('itTicketTableBody');
+  if (!tbody) return;
+
+  const statusFilter = document.getElementById('filterStatusItTicket')?.value || '';
+  const categoryFilter = document.getElementById('filterCategoryItTicket')?.value || '';
+  const keyword = (document.getElementById('filterKeywordItTicket')?.value || '').trim();
+
+  const visible = DB.itSupportTickets.filter(t => {
+    if (!canViewItTicket(currentUser, t)) return false;
+    if (statusFilter && t.status !== statusFilter) return false;
+    if (categoryFilter && t.category !== categoryFilter) return false;
+    if (!matchesKeywordFields([t.code, t.title, t.creatorName], keyword)) return false;
+    return true;
+  });
+
+  document.getElementById('paginationContainer_itTicket').innerHTML = buildPaginationBoxHTML('itTicket', 'renderItTickets');
+  const page = paginateList('itTicket', visible, 'renderItTickets', 'yêu cầu');
+
+  if (page.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="7" class="text-center p-6 text-gray-500 italic">Không tìm thấy yêu cầu phù hợp.</td></tr>`;
+    return;
+  }
+
+  tbody.innerHTML = page.map(t => `
+    <tr class="hover:bg-gray-50 border-b">
+      <td class="border p-2 font-mono font-bold text-emerald-800">${escapeHtml(t.code)}</td>
+      <td class="border p-2">${escapeHtml(t.dept)}<br><span class="text-xs text-gray-500">${escapeHtml(t.creatorName)}</span></td>
+      <td class="border p-2">${escapeHtml(t.title)}</td>
+      <td class="border p-2 text-xs">${IT_TICKET_CATEGORY_LABELS[t.category] || escapeHtml(t.category)}</td>
+      <td class="border p-2">${IT_TICKET_STATUS_BADGES[t.status] || escapeHtml(t.status)}</td>
+      <td class="border p-2 text-xs">${t.assigneeName ? escapeHtml(t.assigneeName) : '<span class="text-gray-400 italic">Chưa nhận</span>'}</td>
+      <td class="border p-2 text-center space-x-1">
+        ${(() => {
+          const primaryBtnHTML = `<button onclick="runItTicketAction(${t.id}, 'view')" class="px-2.5 py-1 bg-emerald-600 text-white rounded text-xs hover:opacity-90 font-bold">👁️ Xem / Xử lý</button>`;
+          const secondaryOptions = [];
+          if (currentUser.perms?.admin) secondaryOptions.push({ value: 'delete', label: '🗑️ Xóa' });
+          return buildActionCell(t.id, primaryBtnHTML, secondaryOptions, 'runItTicketAction');
+        })()}
+      </td>
+    </tr>
+  `).join('');
+}
+
+function runItTicketAction(id, action) {
+  switch (action) {
+    case 'view': openItTicketModal(id); break;
+    case 'delete': deleteItTicketAction(id); break;
+  }
+}
+
+function deleteItTicketAction(id) {
+  const t = DB.itSupportTickets.find(x => x.id === id);
+  if (!t) return;
+  deleteRecordAdminOnly('itSupportTickets', id, `yêu cầu hỗ trợ ${t.code}`, () => {
+    DB.itSupportTickets = DB.itSupportTickets.filter(x => x.id !== id);
+    logSystemAction('IT_SUPPORT', 'DELETE_IT_TICKET', `Xóa yêu cầu hỗ trợ IT [${t.code}]`, 'SUCCESS', t.code);
+    renderItTickets();
+  });
+}
+
+let currentItTicketModalId = null;
+
+function openItTicketModal(id) {
+  currentItTicketModalId = id;
+  const t = DB.itSupportTickets.find(x => x.id === id);
+  if (!t) return;
+
+  document.getElementById('itTicketModalTitle').innerText = `🎫 ${t.code}: ${t.title}`;
+  document.getElementById('itTicketModalSub').innerText = `${t.dept} | ${t.creatorName} | ${IT_TICKET_CATEGORY_LABELS[t.category] || t.category}`;
+
+  document.getElementById('itTicketModalDetails').innerHTML = `
+    <div><b>Trạng thái:</b> ${IT_TICKET_STATUS_BADGES[t.status] || escapeHtml(t.status)}</div>
+    <div><b>Người xử lý:</b> ${t.assigneeName ? escapeHtml(t.assigneeName) : 'Chưa có người nhận'}</div>
+    <div><b>Mô tả:</b><p class="bg-white p-2 rounded border mt-1">${escapeHtml(t.description)}</p></div>
+    ${t.resolutionNote ? `<div><b>Ghi chú xử lý:</b><p class="bg-white p-2 rounded border mt-1">${escapeHtml(t.resolutionNote)}</p></div>` : ''}
+  `;
+
+  const canManage = canManageItSupportClient(currentUser);
+  const isCreator = t.creator === currentUser.username;
+  let controlsHTML = '';
+  if (canManage && t.status === 'TODO') {
+    controlsHTML += `<button type="button" onclick="claimItTicketAction()" class="bg-sky-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-sky-700 mr-2">🎯 Nhận Xử Lý</button>`;
+  }
+  if (canManage && t.status === 'DOING') {
+    controlsHTML += `
+      <div class="bg-sky-50 p-3 rounded border border-sky-200 space-y-2 mb-2">
+        <h4 class="font-bold text-sky-900">🔧 Cập Nhật Xử Lý</h4>
+        <select id="itTicketUpdateStatus" class="w-full border p-1.5 rounded bg-white text-xs">
+          <option value="DONE">✅ Hoàn thành</option>
+          <option value="CANCELLED">❌ Hủy yêu cầu</option>
+        </select>
+        <textarea id="itTicketUpdateNote" placeholder="Ghi chú xử lý (VD: đã thay ổ cứng, đã cấp lại mật khẩu...)" class="w-full border p-1.5 rounded h-16 text-xs">${escapeHtml(t.resolutionNote || '')}</textarea>
+        <button type="button" onclick="updateItTicketStatusAction()" class="bg-sky-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-sky-700">💾 Cập Nhật</button>
+      </div>`;
+  }
+  if ((canManage || isCreator) && (t.status === 'TODO' || t.status === 'DOING')) {
+    controlsHTML += `<button type="button" onclick="cancelItTicketAction()" class="bg-red-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-red-700">❌ Hủy Yêu Cầu</button>`;
+  }
+  document.getElementById('itTicketModalControls').innerHTML = controlsHTML;
+
+  const comments = t.comments || [];
+  document.getElementById('itTicketModalComments').innerHTML = comments.length
+    ? comments.map(c => `<div class="text-xs bg-white p-2 rounded border"><b>${escapeHtml(c.name)}</b> <span class="text-gray-400">(${escapeHtml(c.time)})</span><br>${escapeHtml(c.content)}</div>`).join('')
+    : `<p class="text-xs text-gray-400 italic">Chưa có trao đổi nào.</p>`;
+  document.getElementById('itTicketModalCommentBox').classList.toggle('hidden', !(canManage || isCreator));
+
+  document.getElementById('itTicketModal').classList.remove('hidden');
+}
+
+function closeItTicketModal() {
+  document.getElementById('itTicketModal').classList.add('hidden');
+  currentItTicketModalId = null;
+}
+
+async function claimItTicketAction() {
+  if (!currentItTicketModalId) return;
+  let result;
+  try {
+    result = await callRecordAction('itSupportTickets', currentItTicketModalId, 'claim', {});
+  } catch (e) {
+    return alert('⛔ ' + e.message);
+  }
+  const idx = DB.itSupportTickets.findIndex(x => x.id === currentItTicketModalId);
+  if (idx !== -1) DB.itSupportTickets[idx] = result.item;
+  logSystemAction('IT_SUPPORT', 'CLAIM_IT_TICKET', `Nhận xử lý yêu cầu hỗ trợ IT [${result.item.code}]`, 'SUCCESS', result.item.code);
+  renderItTickets();
+  openItTicketModal(currentItTicketModalId);
+}
+
+async function updateItTicketStatusAction() {
+  if (!currentItTicketModalId) return;
+  const status = document.getElementById('itTicketUpdateStatus').value;
+  const resolutionNote = document.getElementById('itTicketUpdateNote').value.trim();
+
+  let result;
+  try {
+    result = await callRecordAction('itSupportTickets', currentItTicketModalId, 'update-status', { status, resolutionNote });
+  } catch (e) {
+    return alert('⛔ ' + e.message);
+  }
+
+  const updated = result.item;
+  const idx = DB.itSupportTickets.findIndex(x => x.id === currentItTicketModalId);
+  if (idx !== -1) DB.itSupportTickets[idx] = updated;
+  logSystemAction('IT_SUPPORT', 'UPDATE_IT_TICKET_STATUS', `Cập nhật trạng thái yêu cầu hỗ trợ IT [${updated.code}] -> ${status}`, 'SUCCESS', updated.code);
+  if (status === 'DONE') {
+    notifyUsersByEmail('IT_SUPPORT', 'NOTIFY_TICKET_DONE', updated.code, [updated.creator],
+      `[VPDT] Yêu cầu hỗ trợ IT ${updated.code} đã hoàn thành`,
+      `Yêu cầu hỗ trợ IT "${updated.title}" (${updated.code}) của bạn đã được xử lý xong.${resolutionNote ? ` Ghi chú: ${resolutionNote}` : ''}`);
+  }
+  alert('✅ Đã cập nhật trạng thái yêu cầu!');
+  renderItTickets();
+  closeItTicketModal();
+}
+
+async function cancelItTicketAction() {
+  if (!currentItTicketModalId) return;
+  if (!confirm('Xác nhận hủy yêu cầu hỗ trợ này?')) return;
+
+  let result;
+  try {
+    result = await callRecordAction('itSupportTickets', currentItTicketModalId, 'cancel', {});
+  } catch (e) {
+    return alert('⛔ ' + e.message);
+  }
+
+  const idx = DB.itSupportTickets.findIndex(x => x.id === currentItTicketModalId);
+  if (idx !== -1) DB.itSupportTickets[idx] = result.item;
+  logSystemAction('IT_SUPPORT', 'CANCEL_IT_TICKET', `Hủy yêu cầu hỗ trợ IT [${result.item.code}]`, 'SUCCESS', result.item.code);
+  renderItTickets();
+  closeItTicketModal();
+}
+
+async function submitItTicketComment() {
+  if (!currentItTicketModalId) return;
+  const input = document.getElementById('itTicketCommentInput');
+  const content = input.value.trim();
+  if (!content) return;
+
+  let result;
+  try {
+    result = await callRecordAction('itSupportTickets', currentItTicketModalId, 'comment', { content });
+  } catch (e) {
+    return alert('⛔ ' + e.message);
+  }
+
+  const idx = DB.itSupportTickets.findIndex(x => x.id === currentItTicketModalId);
+  if (idx !== -1) DB.itSupportTickets[idx] = result.item;
+  input.value = '';
+  openItTicketModal(currentItTicketModalId);
+}
 </script>
 </body>
 </html>
