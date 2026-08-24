@@ -288,9 +288,11 @@ router.patch('/me', requireAuth, async (req, res) => {
     // PIN): tránh ai lợi dụng phiên trình duyệt đang mở sẵn (máy dùng chung/phiên bị chiếm) tự đặt mật
     // khẩu mới mà không cần biết mật khẩu cũ, rồi đăng xuất mọi phiên khác qua sessionVersion bên dưới —
     // chiếm trọn tài khoản trong khi chủ thật không hề bị lộ mật khẩu ban đầu. Người đang phải đổi mật
-    // khẩu tạm lần đầu (mustChangePassword) vẫn còn nhớ đúng mật khẩu tạm vừa dùng để đăng nhập nên
-    // không bị chặn lối thoát duy nhất này.
-    if (password) {
+    // khẩu tạm lần đầu (mustChangePassword) vẫn còn nhớ đúng mật khẩu tạm vừa dùng để đăng nhập, NHƯNG
+    // #mustChangePasswordModal (index.html) — lối thoát DUY NHẤT khỏi trạng thái này — chưa từng thu
+    // thập/gửi currentPassword. Nếu vẫn đòi currentPassword ở đây thì tài khoản mustChangePassword bị
+    // khoá cứng vĩnh viễn (chỉ còn nút Đăng Xuất) — nên bỏ qua yêu cầu này khi đang ở trạng thái đó.
+    if (password && !req.freshUser.mustChangePassword) {
       if (!currentPassword) return res.status(400).json({ error: 'Vui lòng nhập mật khẩu hiện tại' });
 
       const remainingLockMinutes = getLockoutRemainingMinutes(req.freshUser);

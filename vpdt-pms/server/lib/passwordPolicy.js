@@ -12,12 +12,8 @@ const COMMON_WEAK_PASSWORDS = new Set([
   'abc123456', 'matkhau123', 'admin123', 'admin1234', 'changeme', 'changeme123'
 ]);
 
-// Đòi đủ 3/4 loại ký tự (chữ hoa, chữ thường, số, ký tự đặc biệt) — theo đúng chuẩn tối thiểu phổ biến
-// (giống chính sách mật khẩu mặc định của Active Directory: "characters from three of the following
-// four categories"), không đòi đủ cả 4 để tránh gây khó khăn quá mức khi đặt mật khẩu.
-const MIN_CHARACTER_CATEGORIES = 3;
-
-// null = hợp lệ; string = lý do bị từ chối (dùng trực tiếp làm thông báo lỗi trả về client).
+// Đòi có đủ CHỮ (không phân biệt hoa/thường) + SỐ + KÝ TỰ ĐẶC BIỆT — theo đúng yêu cầu thực tế (đơn
+// giản hơn chuẩn "3 trong 4 loại" cũ, không còn bắt buộc phải trộn cả chữ hoa lẫn chữ thường).
 function validatePasswordStrength(password) {
   if (!password || password.length < MIN_LENGTH) {
     return `Mật khẩu phải có ít nhất ${MIN_LENGTH} ký tự`;
@@ -25,9 +21,11 @@ function validatePasswordStrength(password) {
   if (COMMON_WEAK_PASSWORDS.has(password.toLowerCase())) {
     return 'Mật khẩu quá phổ biến/dễ đoán, vui lòng chọn mật khẩu khác';
   }
-  const categoriesMet = [/[A-Z]/, /[a-z]/, /[0-9]/, /[^A-Za-z0-9]/].filter(re => re.test(password)).length;
-  if (categoriesMet < MIN_CHARACTER_CATEGORIES) {
-    return 'Mật khẩu cần kết hợp ít nhất 3 trong 4 loại ký tự: chữ hoa, chữ thường, số, ký tự đặc biệt';
+  const hasLetter = /[A-Za-z]/.test(password);
+  const hasDigit = /[0-9]/.test(password);
+  const hasSpecial = /[^A-Za-z0-9]/.test(password);
+  if (!hasLetter || !hasDigit || !hasSpecial) {
+    return 'Mật khẩu cần có đủ chữ, số và ký tự đặc biệt';
   }
   return null;
 }
