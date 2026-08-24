@@ -653,6 +653,35 @@ router.post('/trainingClasses/:id/submit-test', async (req, res) => {
   }
 });
 
+// ===================== TUYỂN DỤNG (thay thế mục "Khen Thưởng" cũ) =====================
+router.post('/recruitmentJobs/:id/delete', (req, res) => deleteAdminOnly(req, res, 'recruitmentJobs'));
+
+router.post('/recruitmentJobs/:id/close', async (req, res) => {
+  const itemId = Number(req.params.id);
+  if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
+  try {
+    const { freshUser } = await getFreshUser(req);
+    const result = await withLockedRecordForCollection('recruitmentJobs', itemId, (item) =>
+      recordActions.closeRecruitmentJob(req.body, freshUser, item));
+    res.json({ ok: true, item: result });
+  } catch (err) {
+    handleError(res, `recruitmentJobs/${req.params.id}/close`, err);
+  }
+});
+
+router.post('/recruitmentReferrals/:id/set-status', async (req, res) => {
+  const itemId = Number(req.params.id);
+  if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
+  try {
+    const { freshUser } = await getFreshUser(req);
+    const result = await withLockedRecordForCollection('recruitmentReferrals', itemId, (item) =>
+      recordActions.setRecruitmentReferralStatus(req.body, freshUser, item));
+    res.json({ ok: true, item: result });
+  } catch (err) {
+    handleError(res, `recruitmentReferrals/${req.params.id}/set-status`, err);
+  }
+});
+
 // "Xác nhận" 1 nhân viên hoàn thành lộ trình thăng tiến — cùng khuôn /contracts/:id/start-payment ở
 // trên (mutatorFn vừa xác thực (đủ điều kiện PASSED hết các lớp bắt buộc) vừa trả bản NHÁP, PHẢI insert
 // thêm vào collection careerPathConfirmations riêng ngay sau khi khoá careerPaths nhả ra).

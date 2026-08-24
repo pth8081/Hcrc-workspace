@@ -1016,6 +1016,68 @@ const CREATE_MODULE_CONFIGS = {
       payload.name = String(payload.name).trim();
       payload.requiredClassIds = requiredClassIds;
     }
+  },
+  // Tuyển Dụng — thay thế mục "Khen Thưởng" cũ (chỉ là 1 loại bài đăng đơn giản trong internalPosts,
+  // không đủ để mô hình hoá tin tuyển dụng + hồ sơ ứng viên). Dùng cờ quyền internalRecruitmentCreate
+  // (đổi tên từ internalRewardCreate cũ, tự động migrate — xem public/index.html normalizeUserPermissions)
+  // riêng cho việc ĐĂNG tin — GIỚI THIỆU ứng viên (recruitmentReferrals bên dưới) thì bất kỳ ai đã đăng
+  // nhập đều làm được, không cần quyền riêng, đúng tinh thần "giới thiệu nội bộ".
+  recruitmentJobs: {
+    dbKey: 'recruitmentJobs',
+    forceOwnDept: true,
+    getScope: () => ({}),
+    creatorField: 'creator', creatorNameField: 'creatorName',
+    extraValidate: (payload, collection, user) => {
+      if (!user.perms?.admin && !user.perms?.internalRecruitmentCreate) {
+        throw new CreateError(403, 'Bạn không có quyền đăng tin tuyển dụng');
+      }
+      if (!payload.title || !String(payload.title).trim()) throw new CreateError(400, 'Thiếu tên vị trí tuyển dụng');
+      if (!payload.description || !String(payload.description).trim()) throw new CreateError(400, 'Thiếu mô tả công việc');
+      payload.title = String(payload.title).trim();
+      payload.description = String(payload.description).trim();
+      payload.requirements = payload.requirements ? String(payload.requirements).trim() : '';
+      payload.location = payload.location ? String(payload.location).trim() : '';
+      payload.slots = Number(payload.slots) > 0 ? Math.floor(Number(payload.slots)) : 0;
+      payload.deadline = payload.deadline || '';
+      payload.status = 'OPEN';
+    }
+  },
+  // Hồ sơ giới thiệu ứng viên — snapshot jobTitle từ tin tuyển dụng tại thời điểm giới thiệu (không tin
+  // client tự gửi, cùng khuôn trainingRegistrations snapshot className/classCode ở trên) — chỉ nhận giới
+  // thiệu vào tin còn OPEN. Người giới thiệu (creatorField) LUÔN là chính người đang đăng nhập, không
+  // cho nhập tay ai khác — khớp yêu cầu nghiệp vụ "để lại thông tin người giới thiệu" (dùng để đối chiếu
+  // thưởng giới thiệu về sau nếu công ty có chính sách này), tránh mạo danh giới thiệu hộ người khác.
+  recruitmentReferrals: {
+    dbKey: 'recruitmentReferrals',
+    forceOwnDept: true,
+    getScope: () => ({}),
+    creatorField: 'referrerUsername', creatorNameField: 'referrerName',
+    extraValidate: (payload, collection, user, appData) => {
+      const jobId = Number(payload.jobId);
+      if (!Number.isFinite(jobId)) throw new CreateError(400, 'Thiếu tin tuyển dụng');
+      const jobs = appData?.recruitmentJobs || [];
+      const job = jobs.find(j => j.id === jobId);
+      if (!job) throw new CreateError(404, 'Không tìm thấy tin tuyển dụng');
+      if (job.status !== 'OPEN') throw new CreateError(409, 'Tin tuyển dụng này đã đóng, không nhận thêm giới thiệu');
+
+      const candidateName = String(payload.candidateName || '').trim();
+      const candidatePhone = String(payload.candidatePhone || '').trim();
+      if (!candidateName) throw new CreateError(400, 'Thiếu tên ứng viên');
+      if (!candidatePhone) throw new CreateError(400, 'Thiếu số điện thoại ứng viên');
+      if (!payload.cvFileUrl) throw new CreateError(400, 'Vui lòng tải lên CV của ứng viên');
+
+      payload.jobId = jobId;
+      payload.jobTitle = job.title;
+      payload.candidateName = candidateName;
+      payload.candidatePhone = candidatePhone;
+      payload.candidateEmail = payload.candidateEmail ? String(payload.candidateEmail).trim() : '';
+      payload.candidateNote = payload.candidateNote ? String(payload.candidateNote).trim() : '';
+      payload.status = 'NEW';
+      payload.statusNote = '';
+      payload.statusBy = null;
+      payload.statusByName = null;
+      payload.statusAt = null;
+    }
   }
 };
 

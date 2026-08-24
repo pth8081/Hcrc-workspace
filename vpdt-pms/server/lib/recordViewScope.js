@@ -10,7 +10,7 @@
 // khác, xem các hàm riêng bên dưới).
 const { getAppDataValue } = require('./appData');
 const { MODULE_CONFIGS, resolveContractApprovalWorkflow, resolveContractManageWorkflow } = require('./workflowEngine');
-const { canApproveInternalPost, canManageTraining } = require('./recordActions');
+const { canApproveInternalPost, canManageTraining, canManageRecruitment } = require('./recordActions');
 
 function scopeAllows(user, scope, dept) {
   if (!user) return false;
@@ -163,6 +163,16 @@ function sanitizeTrainingTestsForUser(tests, user) {
   }));
 }
 
+// Hồ sơ giới thiệu ứng viên (recruitmentReferrals) chứa thông tin cá nhân của người NGOÀI công ty (tên/
+// SĐT/email/CV ứng viên) do nhân viên tự nguyện cung cấp để giới thiệu — khác trainingRegistrations/
+// trainingClasses (công khai toàn công ty có chủ đích, xem đầu file), hồ sơ này CHỈ nên lộ cho chính
+// người đã giới thiệu (xem lại hồ sơ của mình) và bộ phận tuyển dụng (canManageRecruitment) xử lý —
+// tuyệt đối không để lộ thông tin liên hệ ứng viên cho toàn công ty.
+function filterRecruitmentReferralsForUser(referrals, user) {
+  if (canManageRecruitment(user)) return referrals || [];
+  return (referrals || []).filter(r => r.referrerUsername === user.username);
+}
+
 // Khớp khối lọc trong renderPrEntryTable() (public/index.html, ~dòng 16904-16913): reportManage/
 // reportAggregate/admin xem MỌI báo cáo; còn lại xem được báo cáo ĐÃ GỬI của TOÀN BỘ phòng ban mình
 // (không riêng của mình) cộng với bản nháp CỦA CHÍNH MÌNH — trước đây GET /api/data trả nguyên mảng
@@ -290,7 +300,7 @@ module.exports = {
   canViewDoc, canViewSubmission, filterDocsForUser, filterSubmissionsForUser,
   canViewInternalPost, filterInternalPostsForUser,
   canSeeReportCompilation, sanitizeReportPeriodsForUser,
-  sanitizeTrainingTestsForUser,
+  sanitizeTrainingTestsForUser, filterRecruitmentReferralsForUser,
   canViewReportEntry, filterReportEntriesForUser,
   canViewContract, filterContractsForUser,
   canViewCarReg, filterCarRegsForUser,

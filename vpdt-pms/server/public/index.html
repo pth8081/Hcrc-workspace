@@ -357,7 +357,7 @@ table { display: block; overflow-x: auto; max-width: 100%; }
         <div id="truyenThongDropdownPanel" class="hidden pl-7 space-y-0.5 sidebar-label">
           <button onclick="closeTruyenThongDropdown(); switchTab('internal'); setInternalSubTab('NEWS')" class="sidebar-subitem">📰 Tin Nội Bộ</button>
           <button onclick="closeTruyenThongDropdown(); switchTab('internal'); setInternalSubTab('TRAINING')" class="sidebar-subitem">🎓 Đào Tạo</button>
-          <button onclick="closeTruyenThongDropdown(); switchTab('internal'); setInternalSubTab('REWARD')" class="sidebar-subitem">🏆 Khen Thưởng</button>
+          <button onclick="closeTruyenThongDropdown(); switchTab('internal'); setInternalSubTab('RECRUITMENT')" class="sidebar-subitem">💼 Tuyển Dụng</button>
           <button onclick="closeTruyenThongDropdown(); switchTab('internal'); setInternalSubTab('SHARE')" class="sidebar-subitem">💬 Góc Chia Sẻ</button>
         </div>
       </div>
@@ -1634,7 +1634,7 @@ table { display: block; overflow-x: auto; max-width: 100%; }
       <div class="flex gap-2 flex-wrap">
         <button type="button" onclick="setInternalSubTab('NEWS')" id="btnInternalSubNews" class="px-3 py-1 rounded text-xs font-bold bg-fuchsia-700 text-white">📰 Tin Nội Bộ</button>
         <button type="button" onclick="setInternalSubTab('TRAINING')" id="btnInternalSubTraining" class="px-3 py-1 rounded text-xs font-bold bg-gray-200 text-gray-700">🎓 Đào Tạo</button>
-        <button type="button" onclick="setInternalSubTab('REWARD')" id="btnInternalSubReward" class="px-3 py-1 rounded text-xs font-bold bg-gray-200 text-gray-700">🏆 Khen Thưởng</button>
+        <button type="button" onclick="setInternalSubTab('RECRUITMENT')" id="btnInternalSubRecruitment" class="px-3 py-1 rounded text-xs font-bold bg-gray-200 text-gray-700">💼 Tuyển Dụng</button>
         <button type="button" onclick="setInternalSubTab('SHARE')" id="btnInternalSubShare" class="px-3 py-1 rounded text-xs font-bold bg-gray-200 text-gray-700">💬 Góc Chia Sẻ</button>
       </div>
     </div>
@@ -1844,6 +1844,84 @@ table { display: block; overflow-x: auto; max-width: 100%; }
       </div>
     </div>
 
+    <!-- "Tuyển dụng" (thay "Khen thưởng" cũ) — cùng khuôn với "Đào tạo": 1 khối riêng, không dùng khung
+         đăng bài chung. 3 tab con: Tin Tuyển Dụng (ai cũng xem + giới thiệu ứng viên được, chỉ người có
+         quyền internalRecruitmentCreate/admin mới đăng tin), Ứng Viên Tôi Giới Thiệu (mỗi người chỉ thấy
+         ứng viên do CHÍNH MÌNH giới thiệu — lọc CHẶT ở server, xem lib/recordViewScope.js
+         filterRecruitmentReferralsForUser(), không dựa vào ẩn/hiện phía client), Quản Lý Ứng Viên (chỉ HR
+         — internalRecruitmentCreate/admin — thấy toàn bộ, xử lý trạng thái từng ứng viên). -->
+    <div id="internalRecruitmentSection" class="hidden space-y-4">
+      <div class="flex gap-2 flex-wrap">
+        <button type="button" onclick="setRecruitmentTab('JOBS')" id="btnRecruitmentJobs" class="px-3 py-1 rounded text-xs font-bold bg-amber-700 text-white">📋 Tin Tuyển Dụng</button>
+        <button type="button" onclick="setRecruitmentTab('MY_REFERRALS')" id="btnRecruitmentMyReferrals" class="px-3 py-1 rounded text-xs font-bold bg-gray-200 text-gray-700">🙋 Ứng Viên Tôi Giới Thiệu</button>
+        <button type="button" onclick="setRecruitmentTab('MANAGE')" id="btnRecruitmentManage" class="hidden px-3 py-1 rounded text-xs font-bold bg-gray-200 text-gray-700">🗂 Quản Lý Ứng Viên</button>
+      </div>
+
+      <!-- TIN TUYỂN DỤNG -->
+      <div id="recruitmentJobsPanel" class="space-y-4">
+        <form id="recruitmentJobForm" onsubmit="submitRecruitmentJob(event)" class="hidden bg-white p-3 rounded border text-xs space-y-3">
+          <h4 class="font-bold text-gray-700">➕ Đăng Tin Tuyển Dụng Mới</h4>
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+            <div class="md:col-span-2">
+              <label class="block font-semibold text-gray-600 mb-1">Tên Vị Trí</label>
+              <input id="rjTitle" class="w-full border p-1.5 rounded" required>
+            </div>
+            <div>
+              <label class="block font-semibold text-gray-600 mb-1">Số Lượng Cần Tuyển</label>
+              <input id="rjSlots" type="number" min="0" placeholder="Không giới hạn" class="w-full border p-1.5 rounded">
+            </div>
+            <div>
+              <label class="block font-semibold text-gray-600 mb-1">Địa Điểm Làm Việc</label>
+              <input id="rjLocation" class="w-full border p-1.5 rounded">
+            </div>
+            <div>
+              <label class="block font-semibold text-gray-600 mb-1">Hạn Nhận Hồ Sơ (tuỳ chọn)</label>
+              <input id="rjDeadline" type="date" class="w-full border p-1.5 rounded">
+            </div>
+            <div class="md:col-span-3">
+              <label class="block font-semibold text-gray-600 mb-1">Mô Tả Công Việc</label>
+              <textarea id="rjDescription" class="w-full border p-1.5 rounded h-20" required></textarea>
+            </div>
+            <div class="md:col-span-3">
+              <label class="block font-semibold text-gray-600 mb-1">Yêu Cầu Ứng Viên (tuỳ chọn)</label>
+              <textarea id="rjRequirements" class="w-full border p-1.5 rounded h-16"></textarea>
+            </div>
+          </div>
+          <div class="flex justify-end"><button type="submit" class="bg-amber-600 text-white px-5 py-2 rounded font-bold hover:bg-amber-700">Đăng Tin</button></div>
+        </form>
+        <p id="recruitmentJobNoPermNote" class="hidden text-xs text-gray-500 italic bg-gray-50 border rounded p-3">⛔ Bạn không có quyền đăng tin tuyển dụng — mọi người đều xem được tin và giới thiệu ứng viên bên dưới.</p>
+        <div class="space-y-3">
+          <h3 class="font-bold text-gray-800">📋 Danh Sách Tin Tuyển Dụng</h3>
+          <div id="recruitmentJobsContainer" class="grid grid-cols-1 md:grid-cols-2 gap-2"></div>
+        </div>
+      </div>
+
+      <!-- ỨNG VIÊN TÔI GIỚI THIỆU -->
+      <div id="recruitmentMyReferralsPanel" class="hidden space-y-3">
+        <h3 class="font-bold text-gray-800">🙋 Ứng Viên Tôi Đã Giới Thiệu</h3>
+        <div id="recruitmentMyReferralsContainer" class="space-y-2"></div>
+      </div>
+
+      <!-- QUẢN LÝ ỨNG VIÊN (HR) -->
+      <div id="recruitmentManagePanel" class="hidden space-y-3">
+        <div class="flex items-center gap-2 flex-wrap">
+          <label class="text-xs font-semibold text-gray-600">Lọc theo tin tuyển dụng:</label>
+          <select id="recruitmentManageFilterJob" onchange="renderRecruitmentManage()" class="border p-1.5 rounded bg-white text-xs"></select>
+        </div>
+        <h3 class="font-bold text-gray-800">🗂 Toàn Bộ Ứng Viên Được Giới Thiệu</h3>
+        <div class="overflow-x-auto">
+          <table class="w-full border-collapse border text-xs">
+            <thead><tr class="bg-gray-100 text-left">
+              <th class="border p-2">Ứng Viên</th><th class="border p-2">Liên Hệ</th><th class="border p-2">Vị Trí</th>
+              <th class="border p-2">Người Giới Thiệu</th><th class="border p-2">CV</th><th class="border p-2">Trạng Thái</th>
+              <th class="border p-2 text-center">Thao Tác</th>
+            </tr></thead>
+            <tbody id="recruitmentManageTableBody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
     <!-- Modal ghi nhận kết quả học viên (chỉ người tạo lớp/Admin thấy nút mở) -->
     <div id="trainingResultsModal" class="hidden fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
       <div class="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[85vh] overflow-y-auto">
@@ -1951,6 +2029,49 @@ table { display: block; overflow-x: auto; max-width: 100%; }
       </div>
     </div>
 
+    <!-- Modal Giới Thiệu Ứng Viên — ai đăng nhập cũng mở được (không cần quyền riêng), người giới thiệu
+         LUÔN là currentUser (server tự gán từ req.freshUser, xem createValidation.js recruitmentReferrals
+         creatorField, KHÔNG tin bất kỳ giá trị người giới thiệu nào từ client). -->
+    <div id="recruitmentReferModal" class="hidden fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+      <div class="bg-white rounded-lg shadow-xl max-w-lg w-full max-h-[85vh] overflow-y-auto">
+        <div class="p-4 border-b flex justify-between items-center sticky top-0 bg-white">
+          <h3 class="font-bold text-gray-800">🙋 Giới Thiệu Ứng Viên</h3>
+          <button onclick="closeRecruitmentReferModal()" class="text-gray-400 hover:text-gray-700 text-xl leading-none">&times;</button>
+        </div>
+        <form id="recruitmentReferForm" onsubmit="submitRecruitmentReferral(event)" class="p-4 space-y-3 text-xs">
+          <input type="hidden" id="rrJobId">
+          <p class="text-gray-600">Vị trí: <span id="rrJobTitleLabel" class="font-bold text-gray-800"></span></p>
+          <p class="text-gray-500 italic">Người giới thiệu: <span id="rrReferrerLabel" class="font-semibold"></span> (tự động ghi nhận, không thể đổi)</p>
+          <div>
+            <label class="block font-semibold text-gray-600 mb-1">Họ Tên Ứng Viên</label>
+            <input id="rrCandidateName" class="w-full border p-1.5 rounded" required>
+          </div>
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="block font-semibold text-gray-600 mb-1">Số Điện Thoại</label>
+              <input id="rrCandidatePhone" class="w-full border p-1.5 rounded" required>
+            </div>
+            <div>
+              <label class="block font-semibold text-gray-600 mb-1">Email (tuỳ chọn)</label>
+              <input id="rrCandidateEmail" type="email" class="w-full border p-1.5 rounded">
+            </div>
+          </div>
+          <div>
+            <label class="block font-semibold text-gray-600 mb-1">CV Ứng Viên</label>
+            <input id="rrCvFile" type="file" accept=".pdf,.docx" class="w-full border p-1.5 rounded bg-white" required>
+          </div>
+          <div>
+            <label class="block font-semibold text-gray-600 mb-1">Ghi Chú Thêm (tuỳ chọn)</label>
+            <textarea id="rrCandidateNote" class="w-full border p-1.5 rounded h-16"></textarea>
+          </div>
+          <div class="flex justify-end gap-2 pt-2 border-t">
+            <button type="button" onclick="closeRecruitmentReferModal()" class="px-4 py-2 rounded text-xs font-bold text-gray-600 hover:bg-gray-100">Huỷ</button>
+            <button type="submit" class="bg-amber-600 text-white px-5 py-2 rounded font-bold hover:bg-amber-700">Gửi Giới Thiệu</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
     <form id="internalPostForm" onsubmit="submitInternalPost(event)" class="bg-white p-3 rounded border text-xs space-y-3">
       <h4 id="internalFormTitle" class="font-bold text-gray-700">📝 Đăng Tin Nội Bộ Mới</h4>
       <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -1977,14 +2098,6 @@ table { display: block; overflow-x: auto; max-width: 100%; }
         <div id="internalTrainingCapacityField" class="hidden">
           <label class="block font-semibold text-gray-600 mb-1">Số Lượng Học Viên Tối Đa (để trống = không giới hạn)</label>
           <input id="internalTrainingCapacity" type="number" min="0" class="w-full border p-1.5 rounded">
-        </div>
-        <div id="internalRewardPeriodField" class="hidden">
-          <label class="block font-semibold text-gray-600 mb-1">Đợt / Kỳ Khen Thưởng</label>
-          <input id="internalRewardPeriod" placeholder="VD: Quý 3/2026" class="w-full border p-1.5 rounded">
-        </div>
-        <div id="internalRewardRecipientsField" class="hidden md:col-span-2">
-          <label class="block font-semibold text-gray-600 mb-1">Cá Nhân / Tập Thể Được Khen Thưởng</label>
-          <input id="internalRewardRecipients" placeholder="Họ tên, đơn vị... cách nhau dấu phẩy" class="w-full border p-1.5 rounded">
         </div>
       </div>
       <div>
@@ -3311,7 +3424,7 @@ table { display: block; overflow-x: auto; max-width: 100%; }
             <span id="permTreeBadge_internal" class="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-gray-100 text-gray-500">0/0</span>
           </summary>
           <div class="p-3 pt-0 space-y-2">
-            <p class="text-[11px] text-gray-500 italic">Mọi người dùng đều XEM và tương tác được (bình luận, thả tim) trên cả 4 phân hệ. 3 quyền dưới đây kiểm soát ai được ĐĂNG BÀI ở Tin nội bộ / Đào tạo / Khen thưởng; riêng "Góc chia sẻ" ai cũng đăng được nhưng bài chỉ công khai sau khi được người có quyền duyệt bên dưới phê duyệt.</p>
+            <p class="text-[11px] text-gray-500 italic">Mọi người dùng đều XEM và tương tác được (bình luận, thả tim) trên cả 4 phân hệ. 3 quyền dưới đây kiểm soát ai được ĐĂNG BÀI ở Tin nội bộ / Đào tạo; riêng "Góc chia sẻ" ai cũng đăng được nhưng bài chỉ công khai sau khi được người có quyền duyệt bên dưới phê duyệt. Quyền "Đăng Tuyển dụng" cũng dùng chung khối này — người có quyền được đăng tin tuyển dụng và quản lý toàn bộ ứng viên được giới thiệu (xem mục Tuyển Dụng).</p>
             <div class="grid grid-cols-1 md:grid-cols-3 gap-2">
               <label class="flex items-center gap-2 text-fuchsia-700 font-semibold cursor-pointer">
                 <input type="checkbox" id="pInternalNewsCreate"> 📰 Đăng Tin nội bộ
@@ -3320,7 +3433,7 @@ table { display: block; overflow-x: auto; max-width: 100%; }
                 <input type="checkbox" id="pInternalTrainingCreate"> 🎓 Đăng Đào tạo
               </label>
               <label class="flex items-center gap-2 text-fuchsia-700 font-semibold cursor-pointer">
-                <input type="checkbox" id="pInternalRewardCreate"> 🏆 Đăng Khen thưởng
+                <input type="checkbox" id="pInternalRecruitmentCreate"> 💼 Đăng Tuyển dụng
               </label>
             </div>
             <div class="grid grid-cols-1 md:grid-cols-3 gap-2 pt-2 border-t">
@@ -4235,6 +4348,7 @@ const DB = {
   trainingCategories: [], trainingDocuments: [], trainingClasses: [], trainingRegistrations: [],
   careerPaths: [], careerPathConfirmations: [],
   trainingTests: [], trainingTestSubmissions: [],
+  recruitmentJobs: [], recruitmentReferrals: [],
   sensitiveKeywords: [],
   paymentRequests: [],
   formTemplates: {},
@@ -4510,8 +4624,10 @@ const MEETING_ROOMS = [
 let activeMeetingSubTab = 'REGISTER';
 // Khác null khi đang SỬA 1 biên bản đã tạo (thay vì tạo mới) — chỉ người tạo mới sửa được.
 let editingMinutesId = null;
-// Phân hệ đang chọn trong module Truyền thông nội bộ: NEWS/TRAINING/REWARD/SHARE.
+// Phân hệ đang chọn trong module Truyền thông nội bộ: NEWS/TRAINING/RECRUITMENT/SHARE.
 let activeInternalSubTab = 'NEWS';
+// Tab con đang chọn trong khối Tuyển Dụng (thay "Khen Thưởng" cũ): JOBS/MY_REFERRALS/MANAGE.
+let activeRecruitmentTab = 'JOBS';
 
 function escapeHtml(str) {
   if (!str) return '';
@@ -5450,7 +5566,6 @@ function canCreateInternalPost(user, type) {
   if (type === 'SHARE') return true;
   if (type === 'NEWS') return !!user.perms?.internalNewsCreate;
   if (type === 'TRAINING') return !!user.perms?.internalTrainingCreate;
-  if (type === 'REWARD') return !!user.perms?.internalRewardCreate;
   return false;
 }
 
@@ -5527,7 +5642,7 @@ function defaultNewUserPerms() {
     moduleAccess: defaultModuleAccess(),
     canBeApprover: false,
     canViewReports: false,
-    internalNewsCreate: false, internalTrainingCreate: false, internalRewardCreate: false,
+    internalNewsCreate: false, internalTrainingCreate: false, internalRecruitmentCreate: false,
     internalPostApprove: false,
     uploadAll: false, uploadDepts: [],
     viewDraftAll: false, viewDraftDepts: [],
@@ -5648,6 +5763,14 @@ function migrateLegacyPerms(perms) {
     p.approverAuthLevel = 'NONE';
     changed = true;
   }
+  // Mục "Khen Thưởng" trong Truyền Thông Nội Bộ đã đổi thành "Tuyển Dụng" — quyền đăng bài đổi tên
+  // internalRewardCreate -> internalRecruitmentCreate, quy đổi giữ nguyên để ai đã có quyền cũ không
+  // bị mất quyền đăng tin tuyển dụng.
+  if (p.internalRecruitmentCreate === undefined && p.internalRewardCreate !== undefined) {
+    p.internalRecruitmentCreate = p.internalRewardCreate;
+    delete p.internalRewardCreate;
+    changed = true;
+  }
 
   return { perms: p, changed };
 }
@@ -5737,6 +5860,8 @@ async function initDatabase(loggingInUser) {
     DB.careerPathConfirmations = data.careerPathConfirmations || [];
     DB.trainingTests = data.trainingTests || [];
     DB.trainingTestSubmissions = data.trainingTestSubmissions || [];
+    DB.recruitmentJobs = data.recruitmentJobs || [];
+    DB.recruitmentReferrals = data.recruitmentReferrals || [];
     DB.sensitiveKeywords = data.sensitiveKeywords || [];
 
     DB._versions = data._versions || {};
@@ -16966,7 +17091,7 @@ function collectPermsFromForm() {
     canViewReports: document.getElementById('pCanViewReports').checked,
     internalNewsCreate: document.getElementById('pInternalNewsCreate').checked,
     internalTrainingCreate: document.getElementById('pInternalTrainingCreate').checked,
-    internalRewardCreate: document.getElementById('pInternalRewardCreate').checked,
+    internalRecruitmentCreate: document.getElementById('pInternalRecruitmentCreate').checked,
     internalPostApprove: document.getElementById('pInternalPostApprove').checked,
     meetingApprove: document.getElementById('pMeetingApprove').checked,
     meetingCancel: document.getElementById('pMeetingCancel').checked,
@@ -17030,7 +17155,7 @@ function populatePermsForm(permsInput) {
   document.getElementById('pCanViewReports').checked = !!perms.canViewReports;
   document.getElementById('pInternalNewsCreate').checked = !!perms.internalNewsCreate;
   document.getElementById('pInternalTrainingCreate').checked = !!perms.internalTrainingCreate;
-  document.getElementById('pInternalRewardCreate').checked = !!perms.internalRewardCreate;
+  document.getElementById('pInternalRecruitmentCreate').checked = !!perms.internalRecruitmentCreate;
   document.getElementById('pInternalPostApprove').checked = !!perms.internalPostApprove;
   document.getElementById('pMeetingApprove').checked = !!perms.meetingApprove;
   document.getElementById('pMeetingCancel').checked = !!perms.meetingCancel;
@@ -19328,7 +19453,7 @@ function resetUserForm() {
   document.getElementById('pCanViewReports').checked = !!defaults.canViewReports;
   document.getElementById('pInternalNewsCreate').checked = !!defaults.internalNewsCreate;
   document.getElementById('pInternalTrainingCreate').checked = !!defaults.internalTrainingCreate;
-  document.getElementById('pInternalRewardCreate').checked = !!defaults.internalRewardCreate;
+  document.getElementById('pInternalRecruitmentCreate').checked = !!defaults.internalRecruitmentCreate;
   document.getElementById('pInternalPostApprove').checked = !!defaults.internalPostApprove;
   document.getElementById('pContractApprove').checked = !!defaults.contractApprove;
   document.getElementById('pPaymentManage').checked = !!defaults.paymentManage;
@@ -19470,7 +19595,7 @@ function summarizeUserPerms(perms) {
   if ((hasScope(perms.officeView) || hasScope(perms.officeCreate)) && (perms.officeBuy || perms.officeFix || perms.officeInvest)) parts.push('🏢 VP');
   if (perms.minutesCreate) parts.push('📝 Biên bản họp');
   if (perms.canViewReports) parts.push('📊 Báo cáo');
-  if (perms.internalNewsCreate || perms.internalTrainingCreate || perms.internalRewardCreate) parts.push('📣 Truyền thông (đăng bài)');
+  if (perms.internalNewsCreate || perms.internalTrainingCreate || perms.internalRecruitmentCreate) parts.push('📣 Truyền thông (đăng bài)');
   if (perms.internalPostApprove) parts.push('📣 Truyền thông (duyệt Góc chia sẻ)');
   return parts.length ? parts.join(', ') : '<span class="text-gray-400 italic">Chưa cấp quyền module nào</span>';
 }
@@ -20461,7 +20586,7 @@ function setInternalSubTab(subTab) {
   resetListPage('internal');
   activeInternalSubTab = subTab;
 
-  const btnMap = { NEWS: 'btnInternalSubNews', TRAINING: 'btnInternalSubTraining', REWARD: 'btnInternalSubReward', SHARE: 'btnInternalSubShare' };
+  const btnMap = { NEWS: 'btnInternalSubNews', TRAINING: 'btnInternalSubTraining', RECRUITMENT: 'btnInternalSubRecruitment', SHARE: 'btnInternalSubShare' };
   Object.entries(btnMap).forEach(([type, btnId]) => {
     const btn = document.getElementById(btnId);
     if (btn) btn.className = type === subTab ? 'px-3 py-1 rounded text-xs font-bold bg-fuchsia-700 text-white' : 'px-3 py-1 rounded text-xs font-bold bg-gray-200 text-gray-700';
@@ -20470,17 +20595,22 @@ function setInternalSubTab(subTab) {
   // "Đào tạo" (tạm thời) — thay hẳn khung đăng bài đơn giản cũ bằng LMS thu gọn (Lớp Học/Đăng Ký Của
   // Tôi/Kho Tài Liệu/Lộ Trình Thăng Tiến), ẩn toàn bộ khung đăng bài + tìm kiếm + danh sách kiểu cũ.
   document.getElementById('internalTrainingLmsSection').classList.toggle('hidden', subTab !== 'TRAINING');
-  document.getElementById('internalPostForm').classList.toggle('hidden', subTab === 'TRAINING');
+  document.getElementById('internalPostForm').classList.toggle('hidden', subTab === 'TRAINING' || subTab === 'RECRUITMENT');
   document.getElementById('internalNoPermNote').classList.add('hidden');
-  document.getElementById('internalFilterBlock').classList.toggle('hidden', subTab === 'TRAINING');
-  document.getElementById('internalListBlock').classList.toggle('hidden', subTab === 'TRAINING');
+  document.getElementById('internalFilterBlock').classList.toggle('hidden', subTab === 'TRAINING' || subTab === 'RECRUITMENT');
+  document.getElementById('internalListBlock').classList.toggle('hidden', subTab === 'TRAINING' || subTab === 'RECRUITMENT');
   if (subTab === 'TRAINING') {
     renderTrainingLms();
     return;
   }
 
-  document.getElementById('internalRewardPeriodField').classList.toggle('hidden', subTab !== 'REWARD');
-  document.getElementById('internalRewardRecipientsField').classList.toggle('hidden', subTab !== 'REWARD');
+  // "Tuyển dụng" (thay "Khen thưởng" cũ) — cũng là khối riêng như Đào tạo, không dùng khung đăng bài
+  // chung (đăng tin/giới thiệu ứng viên đi qua form + modal riêng, xem renderRecruitment()).
+  document.getElementById('internalRecruitmentSection').classList.toggle('hidden', subTab !== 'RECRUITMENT');
+  if (subTab === 'RECRUITMENT') {
+    renderRecruitment();
+    return;
+  }
 
   // Ghim lên trang chủ (Đợt E) — không áp dụng Góc chia sẻ (còn phải qua duyệt mới công khai), chỉ
   // người có quyền internalPostApprove/admin mới thấy. Đặt lại checkbox mỗi lần đổi tab để không vô
@@ -20489,7 +20619,7 @@ function setInternalSubTab(subTab) {
   document.getElementById('internalPinCheckbox').checked = false;
   document.getElementById('internalPinDurationWrap').classList.add('hidden');
 
-  const icons = { NEWS: '📰', TRAINING: '🎓', REWARD: '🏆', SHARE: '💬' };
+  const icons = { NEWS: '📰', TRAINING: '🎓', SHARE: '💬' };
   document.getElementById('internalFormTitle').innerText = `📝 Đăng ${INTERNAL_TYPE_LABELS[subTab]} Mới`;
   document.getElementById('internalListTitle').innerText = `${icons[subTab]} Danh Sách ${INTERNAL_TYPE_LABELS[subTab]}`;
   document.getElementById('internalSubmitBtn').innerText = `Đăng ${INTERNAL_TYPE_LABELS[subTab]}`;
@@ -20516,7 +20646,7 @@ async function submitInternalPost(e) {
   const title = document.getElementById('internalTitle').value.trim();
   const content = document.getElementById('internalContent').value.trim();
 
-  let training = null, reward = null;
+  let training = null;
   if (type === 'TRAINING') {
     const startTime = document.getElementById('internalTrainingStart').value;
     if (!startTime) return alert('Vui lòng nhập Thời Gian Bắt Đầu cho khóa đào tạo!');
@@ -20528,11 +20658,6 @@ async function submitInternalPost(e) {
       capacity: parseInt(document.getElementById('internalTrainingCapacity').value, 10) || 0,
       registeredUsers: []
     };
-  }
-  if (type === 'REWARD') {
-    const recipients = document.getElementById('internalRewardRecipients').value.trim();
-    if (!recipients) return alert('Vui lòng nhập Cá nhân/Tập thể được khen thưởng!');
-    reward = { period: document.getElementById('internalRewardPeriod').value.trim(), recipients };
   }
 
   const fileInput = document.getElementById('internalFile');
@@ -20552,7 +20677,7 @@ async function submitInternalPost(e) {
     code: `${INTERNAL_TYPE_PREFIX[type]}-${Date.now()}`,
     title, content,
     attachment,
-    training, reward,
+    training,
     createdAt: new Date().toLocaleString('vi-VN'),
     comments: [],
     likes: [],
@@ -20586,6 +20711,229 @@ async function submitInternalPost(e) {
   }
   e.target.reset();
   renderInternalPosts();
+}
+
+// ===== TUYỂN DỤNG (thay thế mục "Khen Thưởng" cũ) =====
+// Khớp đúng lib/recordActions.js canManageRecruitment() ở server: admin hoặc có quyền
+// internalRecruitmentCreate được đăng tin VÀ quản lý toàn bộ ứng viên (coi như "hộp thư chung" của bộ
+// phận nhân sự, không giới hạn theo người đăng tin cụ thể). Chỉ dùng để ẩn/hiện UI — quyền THẬT vẫn do
+// server tự kiểm tra lại ở mọi route (routes/records.js, lib/recordActions.js).
+function canManageRecruitmentLocal(user) {
+  return !!(user?.perms?.admin || user?.perms?.internalRecruitmentCreate);
+}
+
+const RECRUITMENT_STATUS_LABELS = { NEW: 'Mới', CONTACTED: 'Đã liên hệ', HIRED: 'Đã tuyển', REJECTED: 'Từ chối' };
+const RECRUITMENT_STATUS_COLORS = { NEW: 'bg-gray-100 text-gray-700', CONTACTED: 'bg-blue-100 text-blue-700', HIRED: 'bg-emerald-100 text-emerald-700', REJECTED: 'bg-red-100 text-red-700' };
+
+function setRecruitmentTab(tab) {
+  activeRecruitmentTab = tab;
+  renderRecruitment();
+}
+
+function renderRecruitment() {
+  const canManage = canManageRecruitmentLocal(currentUser);
+  document.getElementById('recruitmentJobForm').classList.toggle('hidden', !canManage);
+  document.getElementById('recruitmentJobNoPermNote').classList.toggle('hidden', canManage);
+  if (!canManage && activeRecruitmentTab === 'MANAGE') { activeRecruitmentTab = 'JOBS'; }
+  // Đồng bộ class active/hidden của cả 3 nút tab con — "Quản Lý Ứng Viên" chỉ HR mới thấy nút.
+  const btnMap = { JOBS: 'btnRecruitmentJobs', MY_REFERRALS: 'btnRecruitmentMyReferrals', MANAGE: 'btnRecruitmentManage' };
+  Object.entries(btnMap).forEach(([key, btnId]) => {
+    const btn = document.getElementById(btnId);
+    if (!btn) return;
+    const active = key === activeRecruitmentTab;
+    const isManage = key === 'MANAGE';
+    btn.className = (active ? 'px-3 py-1 rounded text-xs font-bold bg-amber-700 text-white' : 'px-3 py-1 rounded text-xs font-bold bg-gray-200 text-gray-700') + (isManage && !canManage ? ' hidden' : '');
+  });
+  document.getElementById('recruitmentJobsPanel').classList.toggle('hidden', activeRecruitmentTab !== 'JOBS');
+  document.getElementById('recruitmentMyReferralsPanel').classList.toggle('hidden', activeRecruitmentTab !== 'MY_REFERRALS');
+  document.getElementById('recruitmentManagePanel').classList.toggle('hidden', activeRecruitmentTab !== 'MANAGE');
+
+  if (activeRecruitmentTab === 'JOBS') renderRecruitmentJobs();
+  else if (activeRecruitmentTab === 'MY_REFERRALS') renderRecruitmentMyReferrals();
+  else if (activeRecruitmentTab === 'MANAGE') renderRecruitmentManage();
+}
+
+async function submitRecruitmentJob(e) {
+  e.preventDefault();
+  if (!canManageRecruitmentLocal(currentUser)) return alert('⛔ Bạn không có quyền đăng tin tuyển dụng!');
+  const payload = {
+    title: document.getElementById('rjTitle').value.trim(),
+    description: document.getElementById('rjDescription').value.trim(),
+    requirements: document.getElementById('rjRequirements').value.trim(),
+    location: document.getElementById('rjLocation').value.trim(),
+    slots: document.getElementById('rjSlots').value,
+    deadline: document.getElementById('rjDeadline').value
+  };
+  let newJob;
+  try {
+    const result = await callCreateAction('recruitmentJobs', payload);
+    newJob = result.item;
+  } catch (err) { return alert(`⛔ ${err.message}`); }
+  DB.recruitmentJobs.unshift(newJob);
+  logSystemAction('INTERNAL', 'CREATE_RECRUITMENT_JOB', `Đăng tin tuyển dụng [${newJob.title}]`, 'SUCCESS');
+  alert('✅ Đã đăng tin tuyển dụng thành công!');
+  e.target.reset();
+  renderRecruitmentJobs();
+}
+
+function renderRecruitmentJobs() {
+  const container = document.getElementById('recruitmentJobsContainer');
+  const list = (DB.recruitmentJobs || []).slice().sort((a, b) => b.id - a.id);
+  if (!list.length) { container.innerHTML = `<p class="text-gray-400 italic text-xs col-span-2">Chưa có tin tuyển dụng nào.</p>`; return; }
+  const canManage = canManageRecruitmentLocal(currentUser);
+  container.innerHTML = list.map(j => {
+    const referralCount = (DB.recruitmentReferrals || []).filter(r => r.jobId === j.id).length;
+    const isOpen = j.status === 'OPEN';
+    const statusBadge = isOpen ? `<span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700">Đang tuyển</span>` : `<span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-gray-200 text-gray-600">Đã đóng</span>`;
+    return `
+      <div class="bg-white border rounded p-3 space-y-1.5">
+        <div class="flex justify-between items-start gap-2">
+          <h4 class="font-bold text-gray-800 text-sm">${escapeHtml(j.title)}</h4>
+          ${statusBadge}
+        </div>
+        <p class="text-xs text-gray-500">${j.location ? '📍 ' + escapeHtml(j.location) + ' · ' : ''}${j.slots > 0 ? 'Cần ' + j.slots + ' người' : 'Không giới hạn số lượng'}${j.deadline ? ' · Hạn: ' + escapeHtml(j.deadline) : ''}</p>
+        <p class="text-xs text-gray-700 whitespace-pre-wrap">${escapeHtml(j.description)}</p>
+        ${j.requirements ? `<p class="text-xs text-gray-500"><span class="font-semibold">Yêu cầu:</span> ${escapeHtml(j.requirements)}</p>` : ''}
+        <p class="text-[11px] text-gray-400">Đăng bởi ${escapeHtml(j.creatorName || j.creator)} · ${referralCount} lượt giới thiệu</p>
+        <div class="flex gap-2 pt-1 flex-wrap">
+          ${isOpen ? `<button onclick="openRecruitmentReferModal(${j.id})" class="bg-amber-600 hover:bg-amber-700 text-white px-3 py-1 rounded text-xs font-bold">🙋 Giới Thiệu Ứng Viên</button>` : ''}
+          ${canManage && isOpen ? `<button onclick="closeRecruitmentJobUi(${j.id})" class="bg-gray-200 hover:bg-gray-300 px-3 py-1 rounded text-xs font-bold">Đóng Tin</button>` : ''}
+          ${currentUser.perms?.admin ? `<button onclick="deleteRecruitmentJob(${j.id})" class="bg-red-100 hover:bg-red-200 text-red-700 px-3 py-1 rounded text-xs font-bold">Xoá</button>` : ''}
+        </div>
+      </div>`;
+  }).join('');
+}
+
+function closeRecruitmentJobUi(id) {
+  if (!confirm('Đóng tin tuyển dụng này? Sẽ không nhận thêm giới thiệu ứng viên mới.')) return;
+  callRecordAction('recruitmentJobs', id, 'close', {}).then(result => {
+    const idx = DB.recruitmentJobs.findIndex(j => j.id === id);
+    if (idx >= 0) DB.recruitmentJobs[idx] = result.item;
+    logSystemAction('INTERNAL', 'CLOSE_RECRUITMENT_JOB', `Đóng tin tuyển dụng [id ${id}]`, 'SUCCESS');
+    renderRecruitmentJobs();
+  }).catch(err => alert(`⛔ ${err.message}`));
+}
+
+function deleteRecruitmentJob(id) {
+  if (!confirm('Xoá tin tuyển dụng này? Các ứng viên đã giới thiệu vẫn được giữ lại.')) return;
+  callRecordAction('recruitmentJobs', id, 'delete', {}).then(() => {
+    DB.recruitmentJobs = DB.recruitmentJobs.filter(j => j.id !== id);
+    logSystemAction('INTERNAL', 'DELETE_RECRUITMENT_JOB', `Xoá tin tuyển dụng [id ${id}]`, 'SUCCESS');
+    renderRecruitmentJobs();
+  }).catch(err => alert(`⛔ ${err.message}`));
+}
+
+function openRecruitmentReferModal(jobId) {
+  const job = (DB.recruitmentJobs || []).find(j => j.id === jobId);
+  if (!job) return;
+  document.getElementById('recruitmentReferForm').reset();
+  document.getElementById('rrJobId').value = jobId;
+  document.getElementById('rrJobTitleLabel').innerText = job.title;
+  document.getElementById('rrReferrerLabel').innerText = currentUser.name;
+  document.getElementById('recruitmentReferModal').classList.remove('hidden');
+}
+
+function closeRecruitmentReferModal() {
+  document.getElementById('recruitmentReferModal').classList.add('hidden');
+}
+
+async function submitRecruitmentReferral(e) {
+  e.preventDefault();
+  const jobId = Number(document.getElementById('rrJobId').value);
+  const file = document.getElementById('rrCvFile').files[0];
+  if (!file) return alert('Vui lòng tải lên CV của ứng viên!');
+  let uploaded;
+  try {
+    uploaded = await uploadFileToServer(file, 'internal');
+  } catch (err) {
+    return alert(`⛔ Tải CV thất bại: ${err.message}`);
+  }
+  const payload = {
+    jobId,
+    candidateName: document.getElementById('rrCandidateName').value.trim(),
+    candidatePhone: document.getElementById('rrCandidatePhone').value.trim(),
+    candidateEmail: document.getElementById('rrCandidateEmail').value.trim(),
+    candidateNote: document.getElementById('rrCandidateNote').value.trim(),
+    cvFileUrl: uploaded.fileUrl,
+    cvFileName: uploaded.fileName
+  };
+  let newReferral;
+  try {
+    const result = await callCreateAction('recruitmentReferrals', payload);
+    newReferral = result.item;
+  } catch (err) { return alert(`⛔ ${err.message}`); }
+  DB.recruitmentReferrals.unshift(newReferral);
+  logSystemAction('INTERNAL', 'CREATE_RECRUITMENT_REFERRAL', `Giới thiệu ứng viên [${newReferral.candidateName}] cho vị trí [${newReferral.jobTitle}]`, 'SUCCESS');
+  alert('✅ Đã gửi giới thiệu ứng viên, bộ phận nhân sự sẽ liên hệ ứng viên sớm nhất!');
+  closeRecruitmentReferModal();
+  renderRecruitmentJobs();
+  if (activeRecruitmentTab === 'MY_REFERRALS') renderRecruitmentMyReferrals();
+}
+
+// Server đã tự lọc DB.recruitmentReferrals chỉ còn bản ghi của currentUser (nếu không phải HR) —
+// xem lib/recordViewScope.js filterRecruitmentReferralsForUser() — nên ở đây không cần lọc lại theo
+// referrerUsername, chỉ cần hiển thị nguyên những gì server đã trả về.
+function renderRecruitmentMyReferrals() {
+  const container = document.getElementById('recruitmentMyReferralsContainer');
+  const canManage = canManageRecruitmentLocal(currentUser);
+  const list = (DB.recruitmentReferrals || [])
+    .filter(r => canManage ? r.referrerUsername === currentUser.username : true)
+    .slice().sort((a, b) => b.id - a.id);
+  if (!list.length) { container.innerHTML = `<p class="text-gray-400 italic text-xs">Bạn chưa giới thiệu ứng viên nào.</p>`; return; }
+  container.innerHTML = list.map(r => `
+    <div class="bg-white border rounded p-3 flex justify-between items-start gap-3">
+      <div>
+        <p class="font-bold text-gray-800 text-sm">${escapeHtml(r.candidateName)} <span class="font-normal text-gray-500">— ${escapeHtml(r.jobTitle)}</span></p>
+        <p class="text-xs text-gray-500">${escapeHtml(r.candidatePhone)}${r.candidateEmail ? ' · ' + escapeHtml(r.candidateEmail) : ''}</p>
+        ${r.candidateNote ? `<p class="text-xs text-gray-500 italic mt-1">${escapeHtml(r.candidateNote)}</p>` : ''}
+        ${r.statusNote ? `<p class="text-xs text-blue-600 mt-1">📌 Phản hồi từ HR: ${escapeHtml(r.statusNote)}</p>` : ''}
+      </div>
+      <span class="text-[10px] font-bold px-2 py-0.5 rounded-full whitespace-nowrap ${RECRUITMENT_STATUS_COLORS[r.status] || ''}">${RECRUITMENT_STATUS_LABELS[r.status] || r.status}</span>
+    </div>`).join('');
+}
+
+function populateRecruitmentManageFilter() {
+  const sel = document.getElementById('recruitmentManageFilterJob');
+  if (!sel) return;
+  const current = sel.value;
+  const opts = (DB.recruitmentJobs || []).slice().sort((a, b) => b.id - a.id)
+    .map(j => `<option value="${j.id}">${escapeHtml(j.title)}</option>`).join('');
+  sel.innerHTML = `<option value="">-- Tất cả tin tuyển dụng --</option>` + opts;
+  sel.value = current;
+}
+
+function renderRecruitmentManage() {
+  if (!canManageRecruitmentLocal(currentUser)) return;
+  populateRecruitmentManageFilter();
+  const tbody = document.getElementById('recruitmentManageTableBody');
+  const filterJobId = document.getElementById('recruitmentManageFilterJob').value;
+  let list = (DB.recruitmentReferrals || []).slice().sort((a, b) => b.id - a.id);
+  if (filterJobId) list = list.filter(r => String(r.jobId) === filterJobId);
+  if (!list.length) { tbody.innerHTML = `<tr><td colspan="7" class="text-center p-4 text-gray-400 italic">Chưa có ứng viên nào được giới thiệu.</td></tr>`; return; }
+  tbody.innerHTML = list.map(r => `
+    <tr>
+      <td class="border p-2">${escapeHtml(r.candidateName)}</td>
+      <td class="border p-2">${escapeHtml(r.candidatePhone)}${r.candidateEmail ? '<br>' + escapeHtml(r.candidateEmail) : ''}</td>
+      <td class="border p-2">${escapeHtml(r.jobTitle)}</td>
+      <td class="border p-2">${escapeHtml(r.referrerName || r.referrerUsername)}</td>
+      <td class="border p-2">${r.cvFileUrl ? `<a href="${escapeHtml(r.cvFileUrl)}" target="_blank" class="text-indigo-600 font-bold hover:underline">📄 Xem CV</a>` : '-'}</td>
+      <td class="border p-2"><span class="text-[10px] font-bold px-2 py-0.5 rounded-full ${RECRUITMENT_STATUS_COLORS[r.status] || ''}">${RECRUITMENT_STATUS_LABELS[r.status] || r.status}</span></td>
+      <td class="border p-2 text-center">
+        <select onchange="setRecruitmentReferralStatusUi(${r.id}, this.value)" class="border p-1 rounded bg-white text-xs">
+          ${Object.keys(RECRUITMENT_STATUS_LABELS).map(s => `<option value="${s}" ${s === r.status ? 'selected' : ''}>${RECRUITMENT_STATUS_LABELS[s]}</option>`).join('')}
+        </select>
+      </td>
+    </tr>`).join('');
+}
+
+function setRecruitmentReferralStatusUi(id, status) {
+  const statusNote = prompt('Ghi chú thêm cho ứng viên (tuỳ chọn, để trống nếu không có):', '') || '';
+  callRecordAction('recruitmentReferrals', id, 'set-status', { status, statusNote }).then(result => {
+    const idx = DB.recruitmentReferrals.findIndex(r => r.id === id);
+    if (idx >= 0) DB.recruitmentReferrals[idx] = result.item;
+    logSystemAction('INTERNAL', 'SET_RECRUITMENT_REFERRAL_STATUS', `Cập nhật trạng thái ứng viên [id ${id}] -> ${status}`, 'SUCCESS');
+    renderRecruitmentManage();
+  }).catch(err => { alert(`⛔ ${err.message}`); renderRecruitmentManage(); });
 }
 
 // Ảnh đính kèm (theo mimetype trả về từ /api/upload) được hiển thị trực tiếp kiểu trang báo —

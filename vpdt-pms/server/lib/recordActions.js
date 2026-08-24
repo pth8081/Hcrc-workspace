@@ -1828,6 +1828,38 @@ function confirmCareerPathForEmployee(payload, user, path, allRegistrations, exi
   };
 }
 
+// ===== TUYỂN DỤNG (thay thế mục "Khen Thưởng" cũ trong Truyền Thông Nội Bộ) =====
+// Dùng chung 1 cờ quyền internalRecruitmentCreate cho cả việc đăng/đóng tin tuyển dụng lẫn xem/xử lý hồ
+// sơ ứng viên — coi như "hộp thư chung" của cả đội tuyển dụng, KHÔNG giới hạn theo "ai đăng tin nấy xử
+// lý" (khác setTrainingRegistrationResult chỉ cho đúng người tạo lớp) vì thực tế nhiều tin do nhiều
+// người trong bộ phận nhân sự đăng nhưng ai trong đội cũng cần xử lý được ứng viên của nhau.
+function canManageRecruitment(user) {
+  return !!(user.perms?.admin || user.perms?.internalRecruitmentCreate);
+}
+
+function closeRecruitmentJob(payload, user, job) {
+  if (job.creator !== user.username && !user.perms?.admin) {
+    throw new HttpError(403, 'Chỉ người đăng tin hoặc Quản Trị Viên mới được đóng tin tuyển dụng này');
+  }
+  if (job.status !== 'OPEN') throw new HttpError(409, 'Tin tuyển dụng này đã đóng từ trước');
+  job.status = 'CLOSED';
+  return job;
+}
+
+const RECRUITMENT_REFERRAL_STATUSES = new Set(['NEW', 'CONTACTED', 'HIRED', 'REJECTED']);
+
+function setRecruitmentReferralStatus(payload, user, referral) {
+  if (!canManageRecruitment(user)) throw new HttpError(403, 'Bạn không có quyền cập nhật trạng thái ứng viên');
+  const status = payload?.status;
+  if (!RECRUITMENT_REFERRAL_STATUSES.has(status)) throw new HttpError(400, 'Trạng thái không hợp lệ');
+  referral.status = status;
+  referral.statusNote = (payload?.statusNote || '').trim();
+  referral.statusBy = user.username;
+  referral.statusByName = user.name;
+  referral.statusAt = nowVN();
+  return referral;
+}
+
 module.exports = {
   editContract,
   canManageContractPayment, uploadContractSignedFile, startContractPayment,
@@ -1850,5 +1882,6 @@ module.exports = {
   mergeReportPeriod, mergeReportPeriodByTasks, updateReportCompilation, publishReportPeriod, unpublishReportPeriod,
   updateReportSlideTemplate,
   canManageTraining, cancelTrainingRegistration, setTrainingRegistrationResult, confirmCareerPathForEmployee,
-  bulkRegisterTrainingClass, gradeTrainingTestSubmission, applyAutoGradedTestResult
+  bulkRegisterTrainingClass, gradeTrainingTestSubmission, applyAutoGradedTestResult,
+  canManageRecruitment, closeRecruitmentJob, setRecruitmentReferralStatus
 };
