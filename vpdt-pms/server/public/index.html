@@ -394,6 +394,7 @@ table { display: block; overflow-x: auto; max-width: 100%; }
           <button id="btnMeetingTab" onclick="closeHanhChinhDropdown(); switchTab('meeting')" class="hidden sidebar-subitem">📅 Phòng họp</button>
           <button id="btnCarTab" onclick="closeHanhChinhDropdown(); switchTab('car')" class="hidden sidebar-subitem">🚗 Đăng ký xe</button>
           <button id="btnVppTab" onclick="closeHanhChinhDropdown(); switchTab('vpp')" class="hidden sidebar-subitem">🖇️ Văn phòng phẩm</button>
+          <button id="btnUniformTab" onclick="closeHanhChinhDropdown(); switchTab('uniform')" class="hidden sidebar-subitem">👕 Đồng phục</button>
         </div>
       </div>
 
@@ -2477,6 +2478,120 @@ table { display: block; overflow-x: auto; max-width: 100%; }
     </div>
   </div>
 
+  <!-- Màn hình MODULE ĐỒNG PHỤC (con của Hành Chính) — không mở sẵn cho toàn bộ nhân viên như VPP,
+       chỉ Hành Chính (uniformManage) và Giám Đốc Siêu Thị (uniformStoreManage) vào được, xem
+       canAccessUniformModule() -->
+  <div id="uniformSection" class="hidden space-y-6">
+    <div id="hanhChinhTabBar_uniform" class="hidden flex gap-2 flex-wrap"></div>
+    <div class="flex flex-wrap gap-2 border-b pb-2">
+      <button type="button" onclick="setUniformSubTab('PERIODS')" id="btnUniformSubPeriods" class="hidden px-3 py-1.5 rounded text-xs font-bold bg-teal-700 text-white">📦 Kỳ Cấp Phát</button>
+      <button type="button" onclick="setUniformSubTab('STORE')" id="btnUniformSubStore" class="hidden px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">✅ Xác Nhận / Cấp Phát</button>
+      <button type="button" onclick="setUniformSubTab('STOCK')" id="btnUniformSubStock" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">📊 Kho Đồng Phục</button>
+    </div>
+
+    <!-- Sub-tab: Kỳ Cấp Phát (Hành Chính - uniformManage) -->
+    <div id="uniformSubPeriods" class="hidden space-y-4">
+      <div class="bg-teal-50 p-4 rounded border border-teal-200 space-y-3">
+        <h3 class="font-bold text-teal-900 text-base flex items-center gap-2">📦 Tạo Kỳ Cấp Phát Đồng Phục</h3>
+        <p class="text-xs text-teal-700">Mỗi lần phân bổ đồng phục xuống các siêu thị — kể cả cấp bổ sung sau này cho siêu thị đã từng nhận — đều tạo 1 kỳ mới để theo dõi riêng biệt số lượng cấp từng đợt.</p>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+          <div>
+            <label class="block font-semibold text-gray-600 mb-1 text-xs">Tên Kỳ Cấp Phát <span class="text-red-500">*</span></label>
+            <input id="uniformPeriodName" placeholder="VD: Cấp phát đồng phục hè 2026" class="w-full border p-1.5 rounded text-xs">
+          </div>
+          <div>
+            <label class="block font-semibold text-gray-600 mb-1 text-xs">Ghi Chú</label>
+            <input id="uniformPeriodNote" placeholder="Ghi chú thêm (không bắt buộc)" class="w-full border p-1.5 rounded text-xs">
+          </div>
+        </div>
+        <div id="uniformAllocBlocksWrap" class="space-y-3"></div>
+        <div class="flex justify-between items-center">
+          <button type="button" onclick="addUniformAllocationBlock()" class="bg-gray-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-gray-700">+ Thêm Siêu Thị</button>
+          <button type="button" onclick="submitUniformPeriod()" class="bg-teal-600 text-white px-5 py-2 rounded text-xs font-bold hover:bg-teal-700">Tạo Kỳ Cấp Phát</button>
+        </div>
+      </div>
+
+      <div class="space-y-3">
+        <h3 class="font-bold text-gray-800 text-sm">📋 Danh Sách Kỳ Cấp Phát</h3>
+        <div id="uniformPeriodsListWrap" class="space-y-3"></div>
+      </div>
+    </div>
+
+    <!-- Sub-tab: Xác Nhận / Cấp Phát (Giám Đốc Siêu Thị - uniformStoreManage) -->
+    <div id="uniformSubStore" class="hidden space-y-4">
+      <div class="bg-amber-50 p-4 rounded border border-amber-200 space-y-3">
+        <h3 class="font-bold text-amber-900 text-base flex items-center gap-2">✅ Xác Nhận Nhận Đồng Phục Từ Hành Chính</h3>
+        <p class="text-xs text-amber-700">Xác nhận số lượng đồng phục siêu thị của bạn đã nhận trong từng kỳ cấp phát — sau khi xác nhận, số lượng mới được tính vào tồn kho để cấp cho nhân viên.</p>
+        <div id="uniformPendingAllocList" class="space-y-2"></div>
+        <div id="uniformNoPendingAllocNote" class="hidden text-xs text-gray-500 italic bg-white p-3 rounded border">Không có phần phân bổ nào đang chờ xác nhận.</div>
+      </div>
+
+      <div class="bg-emerald-50 p-4 rounded border border-emerald-200 space-y-3">
+        <h3 class="font-bold text-emerald-900 text-base flex items-center gap-2">👕 Cấp Đồng Phục Cho Nhân Viên</h3>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+          <div>
+            <label class="block font-semibold text-gray-600 mb-1 text-xs">Nhân Viên <span class="text-red-500">*</span></label>
+            <select id="uniformIssueEmployee" class="w-full border p-1.5 rounded text-xs bg-white"></select>
+          </div>
+          <div>
+            <label class="block font-semibold text-gray-600 mb-1 text-xs">Mã Phiếu (không bắt buộc)</label>
+            <input id="uniformIssueCode" placeholder="VD: CP-2026-001" class="w-full border p-1.5 rounded text-xs">
+          </div>
+        </div>
+        <div id="uniformIssueItemsWrap" class="space-y-2"></div>
+        <button type="button" onclick="addUniformIssueItemRow()" class="bg-gray-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-gray-700">+ Thêm Mặt Hàng</button>
+        <div>
+          <label class="block font-semibold text-gray-600 mb-1 text-xs">Ghi Chú</label>
+          <input id="uniformIssueNote" class="w-full border p-1.5 rounded text-xs">
+        </div>
+        <div class="flex justify-end">
+          <button type="button" onclick="submitUniformIssuance()" class="bg-emerald-600 text-white px-5 py-2 rounded text-xs font-bold hover:bg-emerald-700">Cấp Phát</button>
+        </div>
+      </div>
+
+      <div class="space-y-3">
+        <h3 class="font-bold text-gray-800 text-sm">📋 Lịch Sử Cấp Phát Cho Nhân Viên</h3>
+        <div class="overflow-x-auto">
+          <table class="w-full border-collapse border text-xs bg-white">
+            <thead><tr class="bg-gray-100 text-left text-gray-700">
+              <th class="border p-2">Mã Phiếu</th>
+              <th class="border p-2">Nhân Viên</th>
+              <th class="border p-2">Mặt Hàng</th>
+              <th class="border p-2">Ngày Cấp</th>
+              <th class="border p-2">Người Cấp</th>
+            </tr></thead>
+            <tbody id="uniformIssuancesTableBody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- Sub-tab: Kho Đồng Phục (xem — uniformManage xem tất cả siêu thị, uniformStoreManage chỉ xem siêu thị mình) -->
+    <div id="uniformSubStock" class="space-y-4">
+      <div class="bg-white p-4 rounded border space-y-3">
+        <div class="flex items-center justify-between gap-2 flex-wrap">
+          <h3 class="font-bold text-gray-800 text-sm">📊 Tồn Kho Đồng Phục</h3>
+          <div id="uniformStockStoreFilterWrap" class="hidden">
+            <select id="uniformStockStoreFilter" onchange="renderUniformStock()" class="border p-1.5 rounded text-xs bg-white"></select>
+          </div>
+        </div>
+        <div class="overflow-x-auto">
+          <table class="w-full border-collapse border text-xs bg-white">
+            <thead><tr class="bg-gray-100 text-left text-gray-700">
+              <th class="border p-2">Siêu Thị</th>
+              <th class="border p-2">Mặt Hàng</th>
+              <th class="border p-2">Size</th>
+              <th class="border p-2 text-right">Đã Nhận (Xác Nhận)</th>
+              <th class="border p-2 text-right">Đã Cấp NV</th>
+              <th class="border p-2 text-right">Tồn Kho</th>
+            </tr></thead>
+            <tbody id="uniformStockTableBody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- Màn hình MODULE TỔNG HỢP (Mua Bán / Sửa Chữa / Đầu Tư / Thanh Toán) -->
   <div id="officeSection" class="hidden space-y-6">
     <div class="bg-teal-50 p-4 rounded border border-teal-200 space-y-3">
@@ -3583,6 +3698,24 @@ table { display: block; overflow-x: auto; max-width: 100%; }
               </label>
               <label class="flex items-center gap-2 text-emerald-700 font-semibold cursor-pointer">
                 <input type="checkbox" id="pItManage"> 🛠️ Đội Hỗ Trợ IT (nhận xử lý ticket, xác nhận đã áp giá)
+              </label>
+            </div>
+          </div>
+        </details>
+
+        <details class="perm-tree-node bg-white rounded border text-xs">
+          <summary class="flex items-center justify-between gap-2 px-3 py-2 hover:bg-gray-50 rounded">
+            <span class="font-bold text-gray-800 text-sm flex items-center gap-1.5"><span class="perm-tree-chevron text-gray-400">▸</span><span>👕 16. Đồng Phục</span></span>
+            <span id="permTreeBadge_uniform" class="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-gray-100 text-gray-500">0/0</span>
+          </summary>
+          <div class="p-3 pt-0 space-y-2">
+            <p class="text-[11px] text-gray-500 italic">Còn quyền vào module "Đồng Phục" ở mục 0 mới thấy được các màn dưới đây — module này KHÔNG mở sẵn cho toàn bộ nhân viên. "Hành Chính" tạo kỳ cấp phát và phân bổ xuống từng siêu thị; "Giám Đốc Siêu Thị" xác nhận đã nhận rồi cấp cho nhân viên (mỗi siêu thị = 1 phòng ban, chỉ xác nhận/cấp phát được cho đúng siêu thị mình).</p>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-2">
+              <label class="flex items-center gap-2 text-teal-700 font-semibold cursor-pointer">
+                <input type="checkbox" id="pUniformManage"> 📦 Hành Chính (tạo kỳ cấp phát, phân bổ xuống siêu thị)
+              </label>
+              <label class="flex items-center gap-2 text-amber-700 font-semibold cursor-pointer">
+                <input type="checkbox" id="pUniformStoreManage"> ✅ Giám Đốc Siêu Thị (xác nhận nhận, cấp phát cho nhân viên)
               </label>
             </div>
           </div>
@@ -5203,6 +5336,11 @@ const BUSINESS_MODULES = [
   { key: 'vpp', label: 'Văn Phòng Phẩm', parent: 'hanhchinh', subModules: [
     { id: 'pVppManage', label: '✅ Quản lý (tạo/kết thúc kỳ, báo cáo tổng hợp)', checkedByDefault: false }
   ] },
+  // "Đồng Phục" — quyền thật nằm ở uniformManage/uniformStoreManage (khối riêng cây phân quyền, cùng
+  // khuôn itPriceProposeCreate/itManage của Hỗ Trợ IT), KHÔNG khai subModules ở đây vì module này không
+  // mở sẵn cho ai — 2 quyền trên vừa quyết định ĐƯỢC LÀM GÌ vừa quyết định VÀO ĐƯỢC MÀN NÀO (ai không có
+  // cả 2 quyền thì vào module cũng không thấy nội dung nào).
+  { key: 'uniform', label: 'Đồng Phục', parent: 'hanhchinh' },
   { key: 'office', label: 'Tổng Hợp', subModules: [
     { id: 'pOfficeBuy', label: '🛒 Mua Bán', checkedByDefault: true },
     { id: 'pOfficeFix', label: '🔧 Sửa Chữa', checkedByDefault: true },
@@ -5789,6 +5927,15 @@ function canAccessVppModule(user) {
   return hasModuleAccess(user, 'vpp');
 }
 
+// Đồng Phục — KHÔNG mở sẵn cho mọi người như VPP (chỉ Hành Chính/uniformManage tạo kỳ, Giám Đốc Siêu
+// Thị/uniformStoreManage xác nhận+cấp phát — không có luồng nào cho nhân viên thường vào module này).
+function canAccessUniformModule(user) {
+  if (!user) return false;
+  if (user.perms?.admin) return true;
+  if (!hasModuleAccess(user, 'uniform')) return false;
+  return !!(user.perms?.uniformManage || user.perms?.uniformStoreManage);
+}
+
 // Vào được module "Báo Cáo Định Kỳ" (kỳ báo cáo tuần → nhập liệu → tổng hợp → phát hành) hay không —
 // cổng chung, không phải "được làm gì trong đó" (tạo kỳ = reportManage, tổng hợp/phát hành =
 // reportAggregate, nộp báo cáo = reportEntryCreate — xét riêng ở từng màn con, xem
@@ -5990,6 +6137,7 @@ function defaultNewUserPerms() {
     minutesCreate: false, minutesView: false, minutesEdit: false, minutesDownload: false,
     taskView: false, taskEdit: false, taskDelete: false, taskDownload: false,
     itPriceProposeCreate: false, itManage: false,
+    uniformManage: false, uniformStoreManage: false,
     approverAuthLevel: 'NONE'
   };
 }
@@ -6197,6 +6345,8 @@ async function initDatabase(loggingInUser) {
     DB.sensitiveKeywords = data.sensitiveKeywords || [];
     DB.itPriceApprovals = data.itPriceApprovals || [];
     DB.itSupportTickets = data.itSupportTickets || [];
+    DB.uniformPeriods = data.uniformPeriods || [];
+    DB.uniformIssuances = data.uniformIssuances || [];
 
     DB._versions = data._versions || {};
 
@@ -7797,6 +7947,7 @@ function finishLogin(user) {
   document.getElementById('truyenThongNavWrap').classList.toggle('hidden', !canAccessInternalModule(user));
   document.getElementById('btnCarTab').classList.toggle('hidden', !canAccessCarModule(user));
   document.getElementById('btnVppTab').classList.toggle('hidden', !canAccessVppModule(user));
+  document.getElementById('btnUniformTab').classList.toggle('hidden', !canAccessUniformModule(user));
   updateHanhChinhNavVisibility();
   document.getElementById('btnOfficeSubBuyNav').classList.toggle('hidden', !canAccessOfficeSubTab(user, 'MUA_BAN'));
   document.getElementById('btnOfficeSubFixNav').classList.toggle('hidden', !canAccessOfficeSubTab(user, 'SUA_CHUA'));
@@ -7875,6 +8026,7 @@ function logout() {
   document.getElementById('internalSection').classList.add('hidden');
   document.getElementById('carSection').classList.add('hidden');
   document.getElementById('vppSection').classList.add('hidden');
+  document.getElementById('uniformSection').classList.add('hidden');
   document.getElementById('periodicReportSection').classList.add('hidden');
   document.getElementById('officeSection').classList.add('hidden');
   document.getElementById('systemSection').classList.add('hidden');
@@ -7918,7 +8070,8 @@ function updateHanhChinhNavVisibility() {
   const meetingVisible = !document.getElementById('btnMeetingTab').classList.contains('hidden');
   const carVisible = !document.getElementById('btnCarTab').classList.contains('hidden');
   const vppVisible = !document.getElementById('btnVppTab').classList.contains('hidden');
-  document.getElementById('hanhChinhNavWrap').classList.toggle('hidden', !meetingVisible && !carVisible && !vppVisible);
+  const uniformVisible = !document.getElementById('btnUniformTab').classList.contains('hidden');
+  document.getElementById('hanhChinhNavWrap').classList.toggle('hidden', !meetingVisible && !carVisible && !vppVisible && !uniformVisible);
 }
 function toggleHanhChinhDropdown(e) {
   e.stopPropagation();
@@ -7952,7 +8105,8 @@ const CROSS_TAB_GROUPS = {
   hanhChinh: [
     { tab: 'meeting', label: '📅 Phòng họp', canAccess: canAccessMeetingModule },
     { tab: 'car', label: '🚗 Đăng ký xe', canAccess: canAccessCarModule },
-    { tab: 'vpp', label: '🖇️ Văn phòng phẩm', canAccess: canAccessVppModule }
+    { tab: 'vpp', label: '🖇️ Văn phòng phẩm', canAccess: canAccessVppModule },
+    { tab: 'uniform', label: '👕 Đồng phục', canAccess: canAccessUniformModule }
   ]
 };
 function renderCrossTabBar(groupKey, activeTab) {
@@ -8094,6 +8248,10 @@ function switchTab(tabName) {
     alert('⛔ Bạn không có quyền truy cập Module Văn phòng phẩm!');
     return;
   }
+  if (tabName === 'uniform' && !canAccessUniformModule(currentUser)) {
+    alert('⛔ Bạn không có quyền truy cập Module Đồng phục!');
+    return;
+  }
   if (tabName === 'periodicReport' && !canAccessPeriodicReportModule(currentUser)) {
     alert('⛔ Bạn không có quyền truy cập Module Báo Cáo Định Kỳ!');
     return;
@@ -8118,6 +8276,7 @@ function switchTab(tabName) {
   document.getElementById('internalSection').classList.toggle('hidden', tabName !== 'internal');
   document.getElementById('carSection').classList.toggle('hidden', tabName !== 'car');
   document.getElementById('vppSection').classList.toggle('hidden', tabName !== 'vpp');
+  document.getElementById('uniformSection').classList.toggle('hidden', tabName !== 'uniform');
   document.getElementById('periodicReportSection').classList.toggle('hidden', tabName !== 'periodicReport');
   document.getElementById('officeSection').classList.toggle('hidden', tabName !== 'office');
   document.getElementById('systemSection').classList.toggle('hidden', tabName !== 'system');
@@ -8131,7 +8290,7 @@ function switchTab(tabName) {
   populateDropdowns();
   updateApprovalHubBadge();
   if (['minutes', 'task', 'periodicReport'].includes(tabName)) renderCrossTabBar('dieuHanh', tabName);
-  if (['meeting', 'car', 'vpp'].includes(tabName)) renderCrossTabBar('hanhChinh', tabName);
+  if (['meeting', 'car', 'vpp', 'uniform'].includes(tabName)) renderCrossTabBar('hanhChinh', tabName);
 
   if (tabName === 'dashboard') { renderDashboard(); }
   if (tabName === 'approvalHub') { renderApprovalHub(); }
@@ -8160,6 +8319,7 @@ function switchTab(tabName) {
   if (tabName === 'internal') { setInternalSubTab(activeInternalSubTab); }
   if (tabName === 'car') { renderDynamicInputsForModule('CAR', 'dynamicFieldsContainer_CAR'); renderCarRegs(); document.getElementById('carCode').value = generateCarCode(); }
   if (tabName === 'vpp') { setVppSubTab(activeVppSubTab); }
+  if (tabName === 'uniform') { setUniformSubTab(activeUniformSubTab); }
   if (tabName === 'periodicReport') { setPeriodicReportSubTab(activePeriodicReportSubTab); }
   if (tabName === 'office') {
     let targetSub = activeOfficeSubTab;
@@ -17684,7 +17844,9 @@ function collectPermsFromForm() {
     taskDelete: document.getElementById('pTaskDelete').checked,
     taskDownload: document.getElementById('pTaskDownload').checked,
     itPriceProposeCreate: document.getElementById('pItPriceProposeCreate').checked,
-    itManage: document.getElementById('pItManage').checked
+    itManage: document.getElementById('pItManage').checked,
+    uniformManage: document.getElementById('pUniformManage').checked,
+    uniformStoreManage: document.getElementById('pUniformStoreManage').checked
   };
 }
 
@@ -17723,6 +17885,8 @@ function populatePermsForm(permsInput) {
   document.getElementById('pTaskDownload').checked = !!perms.taskDownload;
   document.getElementById('pItPriceProposeCreate').checked = !!perms.itPriceProposeCreate;
   document.getElementById('pItManage').checked = !!perms.itManage;
+  document.getElementById('pUniformManage').checked = !!perms.uniformManage;
+  document.getElementById('pUniformStoreManage').checked = !!perms.uniformStoreManage;
 
   document.getElementById('pUploadAll').checked = !!perms.uploadAll;
   document.getElementById('pViewDraftAll').checked = !!perms.viewDraftAll;
@@ -20035,6 +20199,8 @@ function resetUserForm() {
   document.getElementById('pTaskDownload').checked = !!defaults.taskDownload;
   document.getElementById('pItPriceProposeCreate').checked = !!defaults.itPriceProposeCreate;
   document.getElementById('pItManage').checked = !!defaults.itManage;
+  document.getElementById('pUniformManage').checked = !!defaults.uniformManage;
+  document.getElementById('pUniformStoreManage').checked = !!defaults.uniformStoreManage;
 
   [
     'pUploadAll', 'pViewDraftAll', 'pViewApprovedAll', 'pDocDownloadAll',
@@ -20563,7 +20729,8 @@ const REPORTS_SUB_TABS = [
   { key: 'car', label: '🚗 Đăng Ký Xe' },
   { key: 'vpp', label: '🖇️ Văn Phòng Phẩm' },
   { key: 'office', label: '🛒 Văn Phòng Tổng Hợp' },
-  { key: 'internal', label: '📣 Truyền Thông Nội Bộ' }
+  { key: 'internal', label: '📣 Truyền Thông Nội Bộ' },
+  { key: 'uniform', label: '👕 Đồng Phục' }
 ];
 
 function renderReportsSubTabBar() {
@@ -20659,6 +20826,19 @@ const REPORT_MODULE_CONFIGS = {
     getRecords: (dept, from, to) => DB.internalPosts.filter(r => r.status !== 'PENDING' && r.status !== 'REJECTED' && isInDateRange(r.createdAt, from, to)),
     deptBreakdown: false,
     renderExtra: renderInternalReportExtra
+  },
+  uniform: {
+    title: '👕 Báo Cáo Đồng Phục',
+    // uniformIssuances (cấp cho nhân viên) là bản ghi phẳng duy nhất khớp khuôn getRecords()/dept/
+    // createdAt chung — kỳ cấp phát (uniformPeriods) chứa allocations[] lồng nhau nên không đưa vào
+    // records chính, thay vào đó renderUniformReportExtra() bên dưới tự tính thêm số liệu phân bổ/tồn
+    // kho (dùng chung logic computeUniformStockClient() ở phần module Đồng Phục phía trên).
+    getRecords: (dept, from, to) => DB.uniformIssuances.filter(r => (!dept || r.dept === dept) && isInDateRange(r.createdAt, from, to)),
+    renderExtra: renderUniformReportExtra,
+    extraRows: records => {
+      const totalIssuedQty = records.reduce((sum, r) => sum + (r.items || []).reduce((s, it) => s + (it.qty || 0), 0), 0);
+      return [['Tổng SL đã cấp cho nhân viên (trong khoảng lọc)', totalIssuedQty]];
+    }
   },
   task: {
     title: '✅ Báo Cáo Công Việc',
@@ -20796,6 +20976,68 @@ function renderOfficeReportExtra(records) {
 // Ước tính "đúng hạn" dựa trên thời điểm của mục lịch sử GẦN NHẤT so với hạn hoàn thành (Công Việc
 // chưa lưu thời điểm hoàn thành riêng — xem t.history ở renderTaskDetail()) — đủ dùng làm chỉ báo xu
 // hướng cho báo cáo, không phải số liệu tuyệt đối.
+// records = uniformIssuances đã lọc theo dept/ngày (getRecords ở REPORT_MODULE_CONFIGS.uniform) — bảng
+// tồn kho bên dưới KHÔNG áp bộ lọc ngày (tồn kho là ảnh chụp TẠI THỜI ĐIỂM HIỆN TẠI, không phải số
+// liệu phát sinh trong khoảng ngày đã chọn), chỉ áp bộ lọc phòng ban nếu có chọn, dùng chung
+// computeUniformStockClient() với màn hình module Đồng Phục để khỏi lệch logic.
+function renderUniformReportExtra(records) {
+  const totalIssuedQty = records.reduce((sum, r) => sum + (r.items || []).reduce((s, it) => s + (it.qty || 0), 0), 0);
+  const deptFilter = document.getElementById('reportsDeptFilter')?.value || '';
+  const storeDepts = deptFilter ? [deptFilter] : [...new Set((DB.uniformPeriods || []).flatMap(p => (p.allocations || []).map(a => a.dept)))].sort();
+
+  const stockRows = [];
+  for (const dept of storeDepts) {
+    const stock = computeUniformStockClient(dept);
+    for (const row of stock.values()) stockRows.push({ dept, ...row });
+  }
+  const totalAllocatedQty = stockRows.reduce((s, r) => s + r.allocated, 0);
+  const totalStockQty = stockRows.reduce((s, r) => s + r.stock, 0);
+
+  return `
+    <div class="bg-white p-4 rounded border space-y-3">
+      <h4 class="font-bold text-gray-800 mb-1">👕 Đồng Phục — Cấp Phát & Tồn Kho</h4>
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-3 text-center">
+        <div class="bg-emerald-50 border border-emerald-200 rounded p-3">
+          <div class="font-bold text-emerald-700">${totalIssuedQty.toLocaleString('vi-VN')}</div>
+          <div class="text-[11px] text-gray-500 mt-1">Tổng SL đã cấp cho nhân viên (trong khoảng lọc)</div>
+        </div>
+        <div class="bg-sky-50 border border-sky-200 rounded p-3">
+          <div class="font-bold text-sky-700">${totalAllocatedQty.toLocaleString('vi-VN')}</div>
+          <div class="text-[11px] text-gray-500 mt-1">Tổng SL Hành Chính đã phân bổ (đã xác nhận, mọi thời điểm)</div>
+        </div>
+        <div class="bg-amber-50 border border-amber-200 rounded p-3">
+          <div class="font-bold text-amber-700">${totalStockQty.toLocaleString('vi-VN')}</div>
+          <div class="text-[11px] text-gray-500 mt-1">Tổng tồn kho hiện tại</div>
+        </div>
+      </div>
+      <div class="overflow-x-auto">
+        <table class="w-full border-collapse text-xs">
+          <thead><tr class="bg-gray-100 text-left">
+            <th class="border p-2">Siêu Thị</th>
+            <th class="border p-2">Mặt Hàng</th>
+            <th class="border p-2">Size</th>
+            <th class="border p-2 text-right">Đã Nhận</th>
+            <th class="border p-2 text-right">Đã Cấp NV</th>
+            <th class="border p-2 text-right">Tồn Kho</th>
+          </tr></thead>
+          <tbody>
+            ${stockRows.length ? stockRows.map(r => `
+              <tr>
+                <td class="border p-2 font-semibold">${escapeHtml(r.dept)}</td>
+                <td class="border p-2">${escapeHtml(r.name)}</td>
+                <td class="border p-2">${escapeHtml(r.size || '—')}</td>
+                <td class="border p-2 text-right">${r.allocated.toLocaleString('vi-VN')}</td>
+                <td class="border p-2 text-right">${r.issued.toLocaleString('vi-VN')}</td>
+                <td class="border p-2 text-right font-bold ${r.stock <= 0 ? 'text-red-600' : 'text-green-700'}">${r.stock.toLocaleString('vi-VN')}</td>
+              </tr>
+            `).join('') : `<tr><td colspan="6" class="text-center p-4 text-gray-500 italic">Chưa có dữ liệu tồn kho.</td></tr>`}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  `;
+}
+
 function renderTaskReportExtra(records) {
   const done = records.filter(t => t.status === 'DONE');
   let onTime = 0;
@@ -24330,6 +24572,452 @@ async function submitItTicketComment() {
   if (idx !== -1) DB.itSupportTickets[idx] = result.item;
   input.value = '';
   openItTicketModal(currentItTicketModalId);
+}
+
+// ==========================================
+// ĐỒNG PHỤC — module con Hành Chính: Hành Chính (uniformManage) tạo "kỳ cấp phát" phân bổ đồng phục
+// xuống từng siêu thị; Giám Đốc Siêu Thị (uniformStoreManage) xác nhận đã nhận rồi cấp cho nhân viên.
+// "Kho" KHÔNG lưu thành bảng riêng — luôn tính động từ allocations đã CONFIRMED trừ đi uniformIssuances
+// (xem computeUniformStock() ở lib/recordActions.js, hàm computeUniformStockClient() dưới đây là bản
+// mirror phía client để hiển thị tức thời không cần gọi lại server).
+// ==========================================
+let activeUniformSubTab = 'STOCK';
+let uniformAllocBlocks = [];
+let uniformIssueItems = [];
+
+function canManageUniform(user) {
+  return !!(user?.perms?.admin || user?.perms?.uniformManage);
+}
+function canManageUniformStore(user) {
+  return !!(user?.perms?.admin || user?.perms?.uniformStoreManage);
+}
+
+function setUniformSubTab(subTab) {
+  const canHc = canManageUniform(currentUser);
+  const canStore = canManageUniformStore(currentUser);
+  if (subTab === 'PERIODS' && !canHc) subTab = canStore ? 'STORE' : 'STOCK';
+  if (subTab === 'STORE' && !canStore) subTab = canHc ? 'PERIODS' : 'STOCK';
+  activeUniformSubTab = subTab;
+
+  document.getElementById('uniformSubPeriods').classList.toggle('hidden', subTab !== 'PERIODS');
+  document.getElementById('uniformSubStore').classList.toggle('hidden', subTab !== 'STORE');
+  document.getElementById('uniformSubStock').classList.toggle('hidden', subTab !== 'STOCK');
+
+  const activeCls = 'px-3 py-1.5 rounded text-xs font-bold bg-teal-700 text-white';
+  const inactiveCls = 'px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700';
+  document.getElementById('btnUniformSubPeriods').className = (subTab === 'PERIODS' ? activeCls : inactiveCls) + (canHc ? '' : ' hidden');
+  document.getElementById('btnUniformSubStore').className = (subTab === 'STORE' ? activeCls : inactiveCls) + (canStore ? '' : ' hidden');
+  document.getElementById('btnUniformSubStock').className = subTab === 'STOCK' ? activeCls : inactiveCls;
+
+  if (subTab === 'PERIODS') { resetUniformPeriodForm(); renderUniformPeriodsList(); }
+  if (subTab === 'STORE') { renderUniformPendingAllocations(); renderUniformIssueEmployeeOptions(); resetUniformIssueForm(); renderUniformIssuancesTable(); }
+  if (subTab === 'STOCK') { renderUniformStockStoreFilterOptions(); renderUniformStock(); }
+}
+
+function uniformItemsSummary(items) {
+  return (items || []).map(it => `${escapeHtml(it.name)}${it.size ? ` (${escapeHtml(it.size)})` : ''}: ${it.qty}`).join(', ') || '—';
+}
+
+// ============ Kỳ Cấp Phát (Hành Chính — uniformManage) ============
+function resetUniformPeriodForm() {
+  document.getElementById('uniformPeriodName').value = '';
+  document.getElementById('uniformPeriodNote').value = '';
+  uniformAllocBlocks = [];
+  renderUniformAllocationBlocks();
+}
+
+function addUniformAllocationBlock() {
+  uniformAllocBlocks.push({ dept: '', items: [{ name: '', size: '', qty: 0 }] });
+  renderUniformAllocationBlocks();
+}
+
+function removeUniformAllocationBlock(idx) {
+  uniformAllocBlocks.splice(idx, 1);
+  renderUniformAllocationBlocks();
+}
+
+function updateUniformAllocDept(idx, value) {
+  if (!uniformAllocBlocks[idx]) return;
+  uniformAllocBlocks[idx].dept = value;
+}
+
+function addUniformAllocItemRow(blockIdx) {
+  if (!uniformAllocBlocks[blockIdx]) return;
+  uniformAllocBlocks[blockIdx].items.push({ name: '', size: '', qty: 0 });
+  renderUniformAllocationBlocks();
+}
+
+function removeUniformAllocItemRow(blockIdx, itemIdx) {
+  if (!uniformAllocBlocks[blockIdx]) return;
+  uniformAllocBlocks[blockIdx].items.splice(itemIdx, 1);
+  renderUniformAllocationBlocks();
+}
+
+function updateUniformAllocItemField(blockIdx, itemIdx, field, value) {
+  const item = uniformAllocBlocks[blockIdx]?.items?.[itemIdx];
+  if (!item) return;
+  item[field] = field === 'qty' ? (parseFloat(value) || 0) : value;
+}
+
+function renderUniformAllocationBlocks() {
+  const wrap = document.getElementById('uniformAllocBlocksWrap');
+  if (!wrap) return;
+  const chosenDepts = uniformAllocBlocks.map(b => b.dept).filter(Boolean);
+  wrap.innerHTML = uniformAllocBlocks.map((block, bIdx) => `
+    <div class="bg-white p-3 rounded border space-y-2">
+      <div class="flex items-center justify-between gap-2">
+        <select onchange="updateUniformAllocDept(${bIdx}, this.value)" class="border p-1.5 rounded text-xs bg-white flex-1">
+          <option value="">-- Chọn siêu thị --</option>
+          ${DB.depts.filter(d => d === block.dept || !chosenDepts.includes(d)).map(d => `<option value="${escapeHtml(d)}" ${d === block.dept ? 'selected' : ''}>${escapeHtml(d)}</option>`).join('')}
+        </select>
+        <button type="button" onclick="removeUniformAllocationBlock(${bIdx})" class="text-red-600 hover:text-red-800 text-xs font-bold whitespace-nowrap">✕ Bỏ siêu thị này</button>
+      </div>
+      <table class="w-full text-xs border-collapse">
+        <thead><tr class="bg-gray-100 text-left">
+          <th class="border p-1">Tên Đồng Phục</th>
+          <th class="border p-1 w-24">Size</th>
+          <th class="border p-1 w-24">Số Lượng</th>
+          <th class="border p-1 w-10"></th>
+        </tr></thead>
+        <tbody>
+          ${block.items.map((it, iIdx) => `
+            <tr>
+              <td class="border p-1"><input value="${escapeHtml(it.name)}" oninput="updateUniformAllocItemField(${bIdx}, ${iIdx}, 'name', this.value)" class="w-full border-0 p-1 text-xs" placeholder="VD: Áo đồng phục nam"></td>
+              <td class="border p-1"><input value="${escapeHtml(it.size)}" oninput="updateUniformAllocItemField(${bIdx}, ${iIdx}, 'size', this.value)" class="w-full border-0 p-1 text-xs" placeholder="VD: L"></td>
+              <td class="border p-1"><input type="number" min="0" value="${it.qty}" oninput="updateUniformAllocItemField(${bIdx}, ${iIdx}, 'qty', this.value)" class="w-full border-0 p-1 text-xs"></td>
+              <td class="border p-1 text-center"><button type="button" onclick="removeUniformAllocItemRow(${bIdx}, ${iIdx})" class="text-red-500 hover:text-red-700">✕</button></td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
+      <button type="button" onclick="addUniformAllocItemRow(${bIdx})" class="text-teal-700 text-xs font-bold hover:underline">+ Thêm dòng mặt hàng</button>
+    </div>
+  `).join('');
+}
+
+async function submitUniformPeriod() {
+  const name = document.getElementById('uniformPeriodName').value.trim();
+  if (!name) return alert('Vui lòng nhập tên kỳ cấp phát!');
+  if (!uniformAllocBlocks.length) return alert('Vui lòng thêm ít nhất 1 siêu thị để phân bổ!');
+
+  const allocations = [];
+  for (const block of uniformAllocBlocks) {
+    if (!block.dept) return alert('Vui lòng chọn siêu thị cho tất cả các dòng phân bổ đã thêm!');
+    const items = block.items.filter(it => (it.name || '').trim() && it.qty > 0);
+    if (!items.length) return alert(`Vui lòng nhập ít nhất 1 mặt hàng hợp lệ (có tên + số lượng > 0) cho siêu thị "${block.dept}"!`);
+    allocations.push({ dept: block.dept, items });
+  }
+  const depts = allocations.map(a => a.dept);
+  if (new Set(depts).size !== depts.length) return alert('Mỗi siêu thị chỉ được xuất hiện 1 lần trong 1 kỳ cấp phát!');
+
+  const payload = {
+    name,
+    note: document.getElementById('uniformPeriodNote').value.trim(),
+    allocations,
+    createdAt: new Date().toLocaleString('vi-VN')
+  };
+
+  let newPeriod;
+  try {
+    const result = await callCreateAction('uniformPeriods', payload);
+    newPeriod = result.item;
+  } catch (err) {
+    return alert(`⛔ ${err.message}`);
+  }
+
+  DB.uniformPeriods.unshift(newPeriod);
+  logSystemAction('UNIFORM', 'CREATE_UNIFORM_PERIOD', `Tạo kỳ cấp phát đồng phục [${newPeriod.name}]`, 'SUCCESS', newPeriod.name);
+  alert('✅ Đã tạo kỳ cấp phát đồng phục!');
+  resetUniformPeriodForm();
+  renderUniformPeriodsList();
+}
+
+function uniformAllocStatusBadge(status) {
+  if (status === 'CONFIRMED') return `<span class="px-2 py-0.5 bg-green-100 text-green-800 rounded font-bold text-[11px]">✅ Đã xác nhận</span>`;
+  return `<span class="px-2 py-0.5 bg-amber-100 text-amber-800 rounded font-bold text-[11px]">⏳ Chờ xác nhận</span>`;
+}
+
+function renderUniformPeriodsList() {
+  const wrap = document.getElementById('uniformPeriodsListWrap');
+  if (!wrap) return;
+  if (!DB.uniformPeriods.length) {
+    wrap.innerHTML = `<div class="text-center p-6 text-gray-500 italic bg-white rounded border">Chưa có kỳ cấp phát nào.</div>`;
+    return;
+  }
+  wrap.innerHTML = DB.uniformPeriods.map(p => `
+    <div class="bg-white rounded border overflow-hidden">
+      <div class="flex items-center justify-between gap-2 p-3 bg-gray-50 border-b flex-wrap">
+        <div>
+          <div class="font-bold text-teal-800 text-sm">${escapeHtml(p.name)}</div>
+          <div class="text-[11px] text-gray-500">Tạo bởi ${escapeHtml(p.creatorName || p.creator || '')} lúc ${escapeHtml(p.createdAt || '')}${p.note ? ` — ${escapeHtml(p.note)}` : ''}</div>
+        </div>
+        ${currentUser.perms?.admin ? `<button type="button" onclick="deleteUniformPeriodAction(${p.id})" class="text-red-600 hover:text-red-800 text-xs font-bold">🗑️ Xóa</button>` : ''}
+      </div>
+      <div class="overflow-x-auto">
+        <table class="w-full text-xs">
+          <thead><tr class="bg-gray-100 text-left">
+            <th class="border p-2">Siêu Thị</th>
+            <th class="border p-2">Mặt Hàng Phân Bổ</th>
+            <th class="border p-2">Trạng Thái</th>
+            <th class="border p-2">Người Xác Nhận</th>
+          </tr></thead>
+          <tbody>
+            ${(p.allocations || []).map(a => `
+              <tr>
+                <td class="border p-2 font-semibold">${escapeHtml(a.dept)}</td>
+                <td class="border p-2">${uniformItemsSummary(a.items)}</td>
+                <td class="border p-2">${uniformAllocStatusBadge(a.status)}</td>
+                <td class="border p-2 text-[11px]">${a.status === 'CONFIRMED' ? `${escapeHtml(a.confirmedByName || '')} — ${escapeHtml(a.confirmedAt || '')}` : '—'}</td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  `).join('');
+}
+
+function deleteUniformPeriodAction(id) {
+  const p = DB.uniformPeriods.find(x => x.id === id);
+  if (!p) return;
+  deleteRecordAdminOnly('uniformPeriods', id, `kỳ cấp phát đồng phục ${p.name}`, () => {
+    DB.uniformPeriods = DB.uniformPeriods.filter(x => x.id !== id);
+    logSystemAction('UNIFORM', 'DELETE_UNIFORM_PERIOD', `Xóa kỳ cấp phát đồng phục [${p.name}]`, 'SUCCESS', p.name);
+    renderUniformPeriodsList();
+    renderUniformStock();
+  });
+}
+
+// ============ Xác Nhận / Cấp Phát (Giám Đốc Siêu Thị — uniformStoreManage) ============
+function renderUniformPendingAllocations() {
+  const wrap = document.getElementById('uniformPendingAllocList');
+  const noNote = document.getElementById('uniformNoPendingAllocNote');
+  if (!wrap) return;
+  const pending = [];
+  for (const p of DB.uniformPeriods) {
+    for (const a of (p.allocations || [])) {
+      if (a.dept === currentUser.dept && a.status === 'PENDING_CONFIRM') pending.push({ period: p, alloc: a });
+    }
+  }
+  noNote.classList.toggle('hidden', pending.length > 0);
+  wrap.innerHTML = pending.map(({ period, alloc }) => `
+    <div class="bg-white p-3 rounded border flex items-center justify-between gap-2 flex-wrap">
+      <div>
+        <div class="font-bold text-amber-900 text-xs">${escapeHtml(period.name)}</div>
+        <div class="text-[11px] text-gray-600">${uniformItemsSummary(alloc.items)}</div>
+      </div>
+      <button type="button" onclick="confirmUniformAllocationAction(${period.id}, ${alloc.id})" class="bg-amber-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-amber-700">✅ Xác Nhận Đã Nhận</button>
+    </div>
+  `).join('');
+}
+
+function confirmUniformAllocationAction(periodId, allocationId) {
+  showConfirmModal({
+    title: 'Xác Nhận Nhận Đồng Phục',
+    bodyHTML: 'Bạn xác nhận siêu thị đã nhận đủ số lượng đồng phục này từ Hành Chính? Sau khi xác nhận, số lượng sẽ được tính vào tồn kho để cấp cho nhân viên.',
+    confirmLabel: 'Xác Nhận',
+    onConfirm: async () => {
+      let result;
+      try {
+        result = await callRecordAction('uniformPeriods', periodId, 'confirm-allocation', { allocationId });
+      } catch (err) { return alert(`⛔ ${err.message}`); }
+      const idx = DB.uniformPeriods.findIndex(x => x.id === periodId);
+      if (idx !== -1) DB.uniformPeriods[idx] = result.item;
+      logSystemAction('UNIFORM', 'CONFIRM_UNIFORM_ALLOC', `Xác nhận nhận đồng phục kỳ [${result.item.name}]`, 'SUCCESS', result.item.name);
+      renderUniformPendingAllocations();
+      renderUniformStock();
+    }
+  });
+}
+
+function renderUniformIssueEmployeeOptions() {
+  const sel = document.getElementById('uniformIssueEmployee');
+  if (!sel) return;
+  const employees = (DB.users || []).filter(u => u.dept === currentUser.dept && u.active !== false);
+  const prevValue = sel.value;
+  sel.innerHTML = `<option value="">-- Chọn nhân viên --</option>` +
+    employees.map(u => `<option value="${escapeHtml(u.username)}">${escapeHtml(u.name)}</option>`).join('');
+  if (employees.some(u => u.username === prevValue)) sel.value = prevValue;
+}
+
+function resetUniformIssueForm() {
+  document.getElementById('uniformIssueEmployee').value = '';
+  document.getElementById('uniformIssueCode').value = '';
+  document.getElementById('uniformIssueNote').value = '';
+  uniformIssueItems = [{ name: '', size: '', qty: 0 }];
+  renderUniformIssueItems();
+}
+
+function addUniformIssueItemRow() {
+  uniformIssueItems.push({ name: '', size: '', qty: 0 });
+  renderUniformIssueItems();
+}
+
+function removeUniformIssueItemRow(idx) {
+  uniformIssueItems.splice(idx, 1);
+  renderUniformIssueItems();
+}
+
+function updateUniformIssueItemField(idx, field, value) {
+  if (!uniformIssueItems[idx]) return;
+  uniformIssueItems[idx][field] = field === 'qty' ? (parseFloat(value) || 0) : value;
+}
+
+function renderUniformIssueItems() {
+  const wrap = document.getElementById('uniformIssueItemsWrap');
+  if (!wrap) return;
+  wrap.innerHTML = `
+    <table class="w-full text-xs border-collapse bg-white">
+      <thead><tr class="bg-gray-100 text-left">
+        <th class="border p-1">Tên Đồng Phục</th>
+        <th class="border p-1 w-24">Size</th>
+        <th class="border p-1 w-24">Số Lượng</th>
+        <th class="border p-1 w-10"></th>
+      </tr></thead>
+      <tbody>
+        ${uniformIssueItems.map((it, idx) => `
+          <tr>
+            <td class="border p-1"><input value="${escapeHtml(it.name)}" oninput="updateUniformIssueItemField(${idx}, 'name', this.value)" class="w-full border-0 p-1 text-xs" placeholder="VD: Áo đồng phục nam"></td>
+            <td class="border p-1"><input value="${escapeHtml(it.size)}" oninput="updateUniformIssueItemField(${idx}, 'size', this.value)" class="w-full border-0 p-1 text-xs" placeholder="VD: L"></td>
+            <td class="border p-1"><input type="number" min="0" value="${it.qty}" oninput="updateUniformIssueItemField(${idx}, 'qty', this.value)" class="w-full border-0 p-1 text-xs"></td>
+            <td class="border p-1 text-center"><button type="button" onclick="removeUniformIssueItemRow(${idx})" class="text-red-500 hover:text-red-700">✕</button></td>
+          </tr>
+        `).join('')}
+      </tbody>
+    </table>
+  `;
+}
+
+async function callCreateUniformIssuance(payload) {
+  const res = await fetch('/api/records/uniformIssuances/create', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload || {})
+  });
+  if (res.status === 401) {
+    handleSessionExpired();
+    throw new Error('Phiên đăng nhập đã hết hạn');
+  }
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(body.error || `Lỗi máy chủ (HTTP ${res.status})`);
+  return body; // { ok, item }
+}
+
+async function submitUniformIssuance() {
+  const employeeUsername = document.getElementById('uniformIssueEmployee').value;
+  if (!employeeUsername) return alert('Vui lòng chọn nhân viên nhận đồng phục!');
+  const items = uniformIssueItems.filter(it => (it.name || '').trim() && it.qty > 0);
+  if (!items.length) return alert('Vui lòng nhập ít nhất 1 mặt hàng hợp lệ (có tên + số lượng > 0)!');
+
+  const payload = {
+    code: document.getElementById('uniformIssueCode').value.trim(),
+    employeeUsername,
+    items,
+    note: document.getElementById('uniformIssueNote').value.trim()
+  };
+
+  let newIssuance;
+  try {
+    const result = await callCreateUniformIssuance(payload);
+    newIssuance = result.item;
+  } catch (err) {
+    return alert(`⛔ ${err.message}`);
+  }
+
+  DB.uniformIssuances.unshift(newIssuance);
+  logSystemAction('UNIFORM', 'CREATE_UNIFORM_ISSUANCE', `Cấp đồng phục cho nhân viên [${newIssuance.employeeName}]`, 'SUCCESS', newIssuance.code || '');
+  alert('✅ Đã cấp đồng phục cho nhân viên!');
+  resetUniformIssueForm();
+  renderUniformIssuancesTable();
+  renderUniformStock();
+}
+
+function renderUniformIssuancesTable() {
+  const tbody = document.getElementById('uniformIssuancesTableBody');
+  if (!tbody) return;
+  const rows = DB.uniformIssuances.filter(x => x.dept === currentUser.dept);
+  if (!rows.length) {
+    tbody.innerHTML = `<tr><td colspan="5" class="text-center p-6 text-gray-500 italic">Chưa có phiếu cấp phát nào.</td></tr>`;
+    return;
+  }
+  tbody.innerHTML = rows.map(r => `
+    <tr class="hover:bg-gray-50 border-b">
+      <td class="border p-2">${escapeHtml(r.code || '—')}</td>
+      <td class="border p-2">${escapeHtml(r.employeeName || '')}</td>
+      <td class="border p-2">${uniformItemsSummary(r.items)}</td>
+      <td class="border p-2">${escapeHtml(r.createdAt || '')}</td>
+      <td class="border p-2">${escapeHtml(r.creatorName || '')}</td>
+    </tr>
+  `).join('');
+}
+
+// ============ Kho Đồng Phục (xem — computed, không lưu bảng riêng) ============
+// Mirror computeUniformStock() ở lib/recordActions.js — chỉ tính từ allocations đã CONFIRMED trừ đi
+// uniformIssuances, để hiển thị tức thời phía client mà không cần gọi thêm API riêng cho tồn kho.
+function computeUniformStockClient(storeDept) {
+  const stock = new Map();
+  const keyOf = (name, size) => `${name}|||${size || ''}`;
+  const bump = (name, size, field, qty) => {
+    const key = keyOf(name, size);
+    if (!stock.has(key)) stock.set(key, { name, size: size || '', allocated: 0, issued: 0 });
+    stock.get(key)[field] += qty;
+  };
+  for (const period of DB.uniformPeriods) {
+    for (const alloc of (period.allocations || [])) {
+      if (alloc.dept !== storeDept || alloc.status !== 'CONFIRMED') continue;
+      for (const it of (alloc.items || [])) bump(it.name, it.size, 'allocated', it.qty);
+    }
+  }
+  for (const issuance of DB.uniformIssuances) {
+    if (issuance.dept !== storeDept) continue;
+    for (const it of (issuance.items || [])) bump(it.name, it.size, 'issued', it.qty);
+  }
+  for (const row of stock.values()) row.stock = row.allocated - row.issued;
+  return stock;
+}
+
+function renderUniformStockStoreFilterOptions() {
+  const wrap = document.getElementById('uniformStockStoreFilterWrap');
+  const sel = document.getElementById('uniformStockStoreFilter');
+  if (!wrap || !sel) return;
+  if (!canManageUniform(currentUser)) {
+    wrap.classList.add('hidden');
+    return;
+  }
+  wrap.classList.remove('hidden');
+  const depts = [...new Set((DB.uniformPeriods || []).flatMap(p => (p.allocations || []).map(a => a.dept)))].sort();
+  const prevValue = sel.value;
+  sel.innerHTML = `<option value="">-- Tất cả siêu thị --</option>` + depts.map(d => `<option value="${escapeHtml(d)}">${escapeHtml(d)}</option>`).join('');
+  if (depts.includes(prevValue)) sel.value = prevValue;
+}
+
+function renderUniformStock() {
+  const tbody = document.getElementById('uniformStockTableBody');
+  if (!tbody) return;
+  const canHc = canManageUniform(currentUser);
+  const filterVal = document.getElementById('uniformStockStoreFilter')?.value || '';
+  const allStoreDepts = [...new Set((DB.uniformPeriods || []).flatMap(p => (p.allocations || []).map(a => a.dept)))].sort();
+  const targetDepts = canHc ? (filterVal ? [filterVal] : allStoreDepts) : [currentUser.dept];
+
+  const rows = [];
+  for (const dept of targetDepts) {
+    const stock = computeUniformStockClient(dept);
+    for (const row of stock.values()) rows.push({ dept, ...row });
+  }
+  if (!rows.length) {
+    tbody.innerHTML = `<tr><td colspan="6" class="text-center p-6 text-gray-500 italic">Chưa có dữ liệu tồn kho.</td></tr>`;
+    return;
+  }
+  tbody.innerHTML = rows.map(r => `
+    <tr class="hover:bg-gray-50 border-b">
+      <td class="border p-2 font-semibold">${escapeHtml(r.dept)}</td>
+      <td class="border p-2">${escapeHtml(r.name)}</td>
+      <td class="border p-2">${escapeHtml(r.size || '—')}</td>
+      <td class="border p-2 text-right">${r.allocated.toLocaleString('vi-VN')}</td>
+      <td class="border p-2 text-right">${r.issued.toLocaleString('vi-VN')}</td>
+      <td class="border p-2 text-right font-bold ${r.stock <= 0 ? 'text-red-600' : 'text-green-700'}">${r.stock.toLocaleString('vi-VN')}</td>
+    </tr>
+  `).join('');
 }
 </script>
 </body>

@@ -330,6 +330,36 @@ function filterTasksForUser(tasks, user) {
   return (tasks || []).filter(t => canViewTaskRecord(user, t));
 }
 
+// Đồng Phục: Hành Chính (uniformManage/admin) xem trọn vẹn mọi kỳ. Giám Đốc Siêu Thị (uniformStoreManage)
+// chỉ được biết phần phân bổ CỦA SIÊU THỊ MÌNH trong 1 kỳ — không chỉ ẩn nguyên cả kỳ, mà lọc bớt
+// allocations[] xuống còn ĐÚNG 1 phần tử của họ (các siêu thị khác trong cùng kỳ không liên quan gì tới
+// họ, không cần thấy số lượng phân bổ của siêu thị khác). Kỳ không còn phần tử nào khớp thì ẩn hẳn.
+function canViewUniformPeriod(user, item) {
+  if (!user) return false;
+  return !!(user.perms?.admin || user.perms?.uniformManage || user.perms?.uniformStoreManage);
+}
+
+function filterUniformPeriodsForUser(items, user) {
+  if (!user) return [];
+  if (user.perms?.admin || user.perms?.uniformManage) return items || [];
+  if (!user.perms?.uniformStoreManage) return [];
+  return (items || [])
+    .map(p => ({ ...p, allocations: (p.allocations || []).filter(a => a.dept === user.dept) }))
+    .filter(p => p.allocations.length > 0);
+}
+
+// uniformIssuances: Hành Chính xem hết (theo dõi SL thực tế đã cấp toàn công ty); Giám Đốc Siêu Thị chỉ
+// xem đúng lịch sử cấp phát của siêu thị mình.
+function canViewUniformIssuance(user, item) {
+  if (!user) return false;
+  if (user.perms?.admin || user.perms?.uniformManage) return true;
+  return !!(user.perms?.uniformStoreManage && item.dept === user.dept);
+}
+
+function filterUniformIssuancesForUser(items, user) {
+  return (items || []).filter(t => canViewUniformIssuance(user, t));
+}
+
 module.exports = {
   canViewDoc, canViewSubmission, filterDocsForUser, filterSubmissionsForUser,
   canViewInternalPost, filterInternalPostsForUser,
@@ -344,5 +374,7 @@ module.exports = {
   canViewTaskRecord, filterTasksForUser,
   canViewItPriceApproval, filterItPriceApprovalsForUser,
   canViewItSupportTicket, filterItSupportTicketsForUser,
+  canViewUniformPeriod, filterUniformPeriodsForUser,
+  canViewUniformIssuance, filterUniformIssuancesForUser,
   canDownloadRecordFile
 };

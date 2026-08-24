@@ -9,7 +9,7 @@
 // họp thêm cờ minutesEdit (toàn công ty, không theo phòng ban) cho SỬA — riêng XÓA là quyền tối cao,
 // chỉ Admin; Công việc theo NGƯỜI (assignedBy/assignee), hoàn toàn không có khái niệm phòng ban.
 const { HttpError } = require('./httpErrors');
-const { scopeAllows, OFFICE_SUBTYPE_TO_PERM_FLAG, normalizeReportEntryPayload, buildEffectiveContractApprovalWorkflowServer } = require('./createValidation');
+const { scopeAllows, OFFICE_SUBTYPE_TO_PERM_FLAG, normalizeReportEntryPayload, buildEffectiveContractApprovalWorkflowServer, sanitizeUniformItems } = require('./createValidation');
 const { validateRegistrationItems: validateVppRegItems, calcItemsTotal: calcVppItemsTotal } = require('./vppCatalog');
 const { sanitizePriceFileItems } = require('./priceFileParser');
 
@@ -2105,6 +2105,93 @@ function cancelItTicket(user, ticket) {
   return ticket;
 }
 
+// ===================== ĐỒNG PHỤC (module con của Hành Chính) =====================
+// Hành Chính (uniformManage) tạo "Kỳ Cấp Phát" (uniformPeriods, đi qua engine chung ở
+// lib/createValidation.js) phân bổ đồng phục xuống 1 hoặc nhiều siêu thị. Mỗi siêu thị có 1 Giám Đốc
+// (uniformStoreManage, phạm vi = ĐÚNG phòng ban của họ, user.dept = tên siêu thị) tự xác nhận đã nhận
+// phần phân bổ của mình (confirmUniformAllocation) rồi cấp phát cho nhân viên (buildUniformIssuance) —
+// hành động cấp phát của giám đốc CHÍNH LÀ xác nhận, không cần nhân viên thao tác gì thêm. "Kho đồng
+// phục" KHÔNG lưu thành bảng tồn kho riêng (tránh 2 nguồn ghi lệch nhau) mà LUÔN tính lại từ 2 nguồn:
+// tổng đã CONFIRMED trong uniformPeriods.allocations trừ tổng đã ghi trong uniformIssuances — dùng
+// chung 1 hàm computeUniformStock() cho cả bước kiểm tra tồn kho lúc cấp phát lẫn màn hình xem kho.
+function canManageUniform(user) {
+  return !!(user?.perms?.admin || user?.perms?.uniformManage);
+}
+function canManageUniformStore(user) {
+  return !!(user?.perms?.admin || user?.perms?.uniformStoreManage);
+}
+
+// allPeriods: toàn bộ uniformPeriods (đọc từ collection uniformPeriods). allIssuances: toàn bộ
+// uniformIssuances của ĐÚNG siêu thị (caller tự lọc theo dept trước khi gọi, tránh đọc thừa). Trả về
+// Map key `${name}|||${size}` -> { name, size, allocated, issued, stock }.
+function computeUniformStock(allPeriods, storeDept, allIssuances) {
+  const stock = new Map();
+  const keyOf = (name, size) => `${name}|||${size || ''}`;
+  const bump = (name, size, field, qty) => {
+    const key = keyOf(name, size);
+    if (!stock.has(key)) stock.set(key, { name, size: size || '', allocated: 0, issued: 0 });
+    stock.get(key)[field] += qty;
+  };
+  for (const period of allPeriods || []) {
+    for (const alloc of period.allocations || []) {
+      if (alloc.dept !== storeDept || alloc.status !== 'CONFIRMED') continue;
+      for (const it of alloc.items || []) bump(it.name, it.size, 'allocated', it.qty);
+    }
+  }
+  for (const issuance of allIssuances || []) {
+    if (issuance.dept !== storeDept) continue;
+    for (const it of issuance.items || []) bump(it.name, it.size, 'issued', it.qty);
+  }
+  for (const row of stock.values()) row.stock = row.allocated - row.issued;
+  return stock;
+}
+
+function confirmUniformAllocation(user, period, payload) {
+  if (!canManageUniformStore(user)) throw new HttpError(403, 'Bạn không có quyền xác nhận nhận đồng phục');
+  const allocId = Number(payload?.allocationId);
+  const alloc = (period.allocations || []).find(a => a.id === allocId);
+  if (!alloc) throw new HttpError(404, 'Không tìm thấy dòng phân bổ này trong kỳ');
+  if (alloc.dept !== user.dept) throw new HttpError(403, 'Bạn chỉ xác nhận được phần phân bổ của siêu thị mình');
+  if (alloc.status !== 'PENDING_CONFIRM') throw new HttpError(409, 'Phần phân bổ này đã được xác nhận trước đó');
+  alloc.status = 'CONFIRMED';
+  alloc.confirmedBy = user.username;
+  alloc.confirmedByName = user.name;
+  alloc.confirmedAt = nowVN();
+  return period;
+}
+
+// Xây (KHÔNG ghi) 1 bản ghi uniformIssuances mới — caller (routes/records.js) đọc trước toàn bộ
+// uniformPeriods + uniformIssuances CỦA ĐÚNG SIÊU THỊ NÀY, bọc quanh bằng withAppLock('uniform_store:'
+// + user.dept, ...) để 2 lượt cấp phát gần như đồng thời cùng 1 siêu thị không cùng vượt tồn kho (đọc
+// xong-tính-ghi phải nguyên tử theo TỪNG siêu thị, không cần khoá toàn app vì các siêu thị độc lập nhau).
+function buildUniformIssuance(user, payload, allPeriods, allIssuancesOfStore, usersList) {
+  if (!canManageUniformStore(user)) throw new HttpError(403, 'Bạn không có quyền cấp phát đồng phục');
+  const employeeUsername = String(payload?.employeeUsername || '').trim();
+  const employee = (usersList || []).find(u => u.username === employeeUsername && u.active !== false);
+  if (!employee) throw new HttpError(400, 'Không tìm thấy nhân viên này (hoặc tài khoản đã bị khoá)');
+  if (employee.dept !== user.dept) throw new HttpError(400, 'Chỉ cấp phát được cho nhân viên thuộc siêu thị của bạn');
+
+  const items = sanitizeUniformItems(payload?.items);
+  const stock = computeUniformStock(allPeriods, user.dept, allIssuancesOfStore);
+  for (const it of items) {
+    const row = stock.get(`${it.name}|||${it.size || ''}`);
+    const available = row ? row.stock : 0;
+    if (it.qty > available) {
+      throw new HttpError(409, `Không đủ tồn kho "${it.name}"${it.size ? ` (size ${it.size})` : ''}: còn ${available}, cần cấp ${it.qty}`);
+    }
+  }
+
+  return {
+    id: Date.now(), code: String(payload?.code || '').trim(),
+    dept: user.dept, deptName: user.dept,
+    creator: user.username, creatorName: user.name,
+    employeeUsername: employee.username, employeeName: employee.name,
+    items,
+    note: (payload?.note || '').trim().slice(0, 500),
+    createdAt: nowVN()
+  };
+}
+
 module.exports = {
   editContract,
   canManageContractPayment, uploadContractSignedFile, startContractPayment,
@@ -2131,5 +2218,7 @@ module.exports = {
   canManageRecruitment, closeRecruitmentJob, setRecruitmentReferralStatus,
   canManageItSupport, applyPriceApproval, requestPriceInfoFromIt, submitPriceSupplementFile,
   claimItTicket, updateItTicketStatus, addItTicketComment, cancelItTicket,
-  escalateItTicket, approveItTicketEscalation, denyItTicketEscalation
+  escalateItTicket, approveItTicketEscalation, denyItTicketEscalation,
+  canManageUniform, canManageUniformStore, computeUniformStock,
+  confirmUniformAllocation, buildUniformIssuance
 };
