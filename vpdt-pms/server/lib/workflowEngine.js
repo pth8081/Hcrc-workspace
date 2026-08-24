@@ -171,7 +171,18 @@ const MODULE_CONFIGS = {
   // lib/recordActions.js, route riêng POST /api/records/itPriceApprovals/:id/apply.
   itPriceApprovals: {
     dbKey: 'itPriceApprovals',
-    resolveWfConfig: (item, appData) => flatWorkflowConfigToSteps(appData.itPriceDeptWorkflows?.[item.dept], appData)
+    resolveWfConfig: (item, appData) => flatWorkflowConfigToSteps(appData.itPriceDeptWorkflows?.[item.dept], appData),
+    // Người duyệt phòng ban ở bước hiện tại có thể yêu cầu bổ sung (vd file có dòng giá bất thường) mà
+    // KHÔNG từ chối hẳn — ghi vào item.infoRequests dùng CHUNG với yêu cầu bổ sung của đội Hỗ Trợ IT sau
+    // khi đã APPROVED (xem requestPriceInfoFromIt() ở lib/recordActions.js, và extraValidate của
+    // itPriceApprovals ở lib/createValidation.js để biết lý do dùng chung 1 mảng).
+    supportsRequestInfo: true,
+    // Còn ít nhất 1 yêu cầu bổ sung CHƯA được người đề xuất phản hồi (chưa tải tệp bổ sung) -> chặn
+    // Duyệt/Từ chối ở ĐÚNG bước đang chờ đó, để người duyệt luôn thấy đủ tệp mới nhất + bảng so sánh
+    // trước khi quyết định (đúng yêu cầu nghiệp vụ: không phê duyệt trong lúc còn yêu cầu bổ sung treo).
+    blockApproveIf: (item) => ((item.infoRequests || []).some(r => !r.response))
+      ? 'Đề xuất đang có yêu cầu bổ sung chưa được người đề xuất phản hồi (tải tệp bổ sung), chưa thể duyệt/từ chối.'
+      : null
   }
 };
 
@@ -195,6 +206,13 @@ function applyWorkflowAction({ moduleKey, item, action, user, comment, extraFiel
   const historyField = config.historyField || 'history';
   if (item[statusField] !== 'PENDING') throw new WorkflowError(409, 'Hồ sơ không còn ở trạng thái chờ xử lý (có thể đã được xử lý ở nơi khác)');
 
+  // Hook tuỳ chọn theo module (hiện chỉ itPriceApprovals dùng) — chặn APPROVE/REJECT khi hồ sơ đang có
+  // điều kiện riêng chưa thoả (vd còn yêu cầu bổ sung treo chưa phản hồi). Không đụng tới module khác.
+  if (config.blockApproveIf && (action === 'APPROVE' || action === 'REJECT')) {
+    const blockedReason = config.blockApproveIf(item);
+    if (blockedReason) throw new WorkflowError(409, blockedReason);
+  }
+
   const { steps, approvers } = config.resolveWfConfig(item, appData);
   const currentStep = item[currentStepField];
   const currentStepApprovers = approvers?.[currentStep] || [];
@@ -213,7 +231,8 @@ function applyWorkflowAction({ moduleKey, item, action, user, comment, extraFiel
       id: Date.now(), step: currentStep,
       requestedBy: user.username, requestedByName: user.name,
       reason: comment, requestedAt: nowVN(),
-      response: null, respondedAt: null
+      response: null, respondedAt: null,
+      byRole: 'approver' // đến từ người duyệt bước hiện tại — phân biệt với 'it' (xem itPriceApprovals)
     };
     item.infoRequests.push(reqEntry);
     item[historyField].push({ step: currentStep, approver: user.name, username: user.username, action: 'REQUEST_INFO', comment, time: reqEntry.requestedAt });

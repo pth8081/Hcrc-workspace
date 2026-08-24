@@ -11,6 +11,7 @@
 const { HttpError } = require('./httpErrors');
 const { scopeAllows, OFFICE_SUBTYPE_TO_PERM_FLAG, normalizeReportEntryPayload, buildEffectiveContractApprovalWorkflowServer } = require('./createValidation');
 const { validateRegistrationItems: validateVppRegItems, calcItemsTotal: calcVppItemsTotal } = require('./vppCatalog');
+const { sanitizePriceFileItems } = require('./priceFileParser');
 
 function nowVN() {
   return new Date().toLocaleString('vi-VN');
@@ -1931,14 +1932,72 @@ function canManageItSupport(user) {
 // "Phê Duyệt Giá" — sau khi duyệt xong (status=APPROVED qua workflowEngine), người Hỗ Trợ IT áp giá vào
 // hệ thống bán hàng NGOÀI app này rồi xác nhận hoàn thành NGAY TẠI ĐÂY — không phải 1 bước duyệt thêm
 // (không đi qua applyWorkflowAction), chỉ đánh dấu đã thực hiện xong.
+function hasUnresolvedPriceInfoRequest(item) {
+  return (item.infoRequests || []).some(r => !r.response);
+}
+
 function applyPriceApproval(user, item) {
   if (!canManageItSupport(user)) throw new HttpError(403, 'Bạn không có quyền xác nhận áp giá');
   if (item.status !== 'APPROVED') throw new HttpError(409, 'Đề xuất này chưa được phê duyệt xong');
   if (item.applied) throw new HttpError(409, 'Đề xuất này đã được áp giá rồi');
+  if (hasUnresolvedPriceInfoRequest(item)) {
+    throw new HttpError(409, 'Đề xuất đang có yêu cầu bổ sung chưa được người đề xuất phản hồi (tải tệp bổ sung), chưa thể xác nhận áp giá');
+  }
   item.applied = true;
   item.appliedBy = user.username;
   item.appliedByName = user.name;
   item.appliedAt = nowVN();
+  return item;
+}
+
+// Yêu Cầu Bổ Sung — nhánh của đội Hỗ Trợ IT (SAU khi đã APPROVED, TRƯỚC khi áp giá xong). Dùng CHUNG
+// 1 mảng item.infoRequests với nhánh REQUEST_INFO của người duyệt phòng ban trong lúc còn PENDING (xem
+// lib/workflowEngine.js) — cùng 1 chỗ kiểm tra "còn yêu cầu bổ sung chưa xử lý" ở cả 2 nhánh.
+function requestPriceInfoFromIt(user, item, payload) {
+  if (!canManageItSupport(user)) throw new HttpError(403, 'Bạn không có quyền yêu cầu bổ sung ở đây');
+  if (item.status !== 'APPROVED') throw new HttpError(409, 'Đề xuất này chưa được phê duyệt xong');
+  if (item.applied) throw new HttpError(409, 'Đề xuất này đã được áp giá rồi, không thể yêu cầu bổ sung thêm');
+  if (hasUnresolvedPriceInfoRequest(item)) throw new HttpError(409, 'Đã có 1 yêu cầu bổ sung đang chờ xử lý');
+  const reason = (payload?.reason || '').trim();
+  if (!reason) throw new HttpError(400, 'Vui lòng nhập nội dung cần bổ sung');
+  item.infoRequests = item.infoRequests || [];
+  item.infoRequests.push({
+    id: Date.now(), step: null,
+    requestedBy: user.username, requestedByName: user.name,
+    reason, requestedAt: nowVN(), response: null, respondedAt: null,
+    byRole: 'it' // phân biệt với 'approver' (yêu cầu bổ sung từ người duyệt phòng ban, xem workflowEngine.js)
+  });
+  return item;
+}
+
+// Người đề xuất phản hồi yêu cầu bổ sung (từ CẢ 2 nguồn 'approver'/'it') bằng cách tải lên 1 tệp bảng
+// giá MỚI — tệp này được THÊM VÀO cuối item.files, KHÔNG thay thế/xoá các tệp trước đó (yêu cầu nghiệp
+// vụ: giữ đủ mọi phiên bản làm bằng chứng tham chiếu). Người duyệt/IT xem lại sẽ thấy toàn bộ lịch sử
+// tệp + bảng so sánh sai lệch giữa tệp mới nhất và tệp liền trước (dựng ở client từ item.files).
+function submitPriceSupplementFile(user, item, payload) {
+  if (item.creator !== user.username) throw new HttpError(403, 'Chỉ người đề xuất mới được tải lên tệp bổ sung');
+  const openReq = (item.infoRequests || []).find(r => !r.response);
+  if (!openReq) throw new HttpError(409, 'Đề xuất này hiện không có yêu cầu bổ sung nào đang chờ xử lý');
+  const file = payload?.file;
+  if (!file || !file.fileUrl) throw new HttpError(400, 'Vui lòng tải lên tệp bảng giá bổ sung (.xlsx)');
+  const items = sanitizePriceFileItems(file.items);
+  const newFile = {
+    id: Date.now(),
+    fileUrl: String(file.fileUrl).slice(0, 300),
+    fileName: (String(file.fileName || '').trim() || 'bang-gia-bo-sung.xlsx').slice(0, 200),
+    uploadedBy: user.username, uploadedByName: user.name,
+    uploadedAt: nowVN(),
+    items
+  };
+  item.files = item.files || [];
+  item.files.push(newFile);
+  openReq.response = `Đã tải lên tệp bổ sung: ${newFile.fileName}`;
+  openReq.respondedAt = nowVN();
+  item.history = item.history || [];
+  item.history.push({
+    step: item.currentStep, approver: user.name, username: user.username,
+    action: 'SUBMIT_SUPPLEMENT', comment: openReq.response, time: openReq.respondedAt
+  });
   return item;
 }
 
@@ -1963,21 +2022,75 @@ function updateItTicketStatus(user, ticket, payload) {
   if (ticket.status === 'DONE' || ticket.status === 'CANCELLED') {
     throw new HttpError(409, 'Yêu cầu này đã kết thúc, không thể cập nhật thêm');
   }
+  // Đang chờ phê duyệt HOẶC vừa bị từ chối -> chưa cho đóng yêu cầu qua đây (đúng yêu cầu nghiệp vụ:
+  // "sau khi nhận phê duyệt thì IT mới tiếp tục xử lý") — vẫn có thể huỷ hẳn yêu cầu qua cancelItTicket()
+  // riêng (không đi qua route này), hoặc gửi lại yêu cầu phê duyệt qua escalateItTicket().
+  if (ticket.approvalStatus === 'PENDING' || ticket.approvalStatus === 'REJECTED') {
+    throw new HttpError(409, 'Đang chờ hoặc chưa được phê duyệt — gửi lại yêu cầu phê duyệt hoặc hủy yêu cầu này trước khi cập nhật tiến độ');
+  }
   ticket.status = status;
   if (payload?.resolutionNote != null) ticket.resolutionNote = String(payload.resolutionNote).trim();
   return ticket;
 }
 
 // Cho phép chính người tạo bình luận thêm vào ticket của mình (vd bổ sung thông tin) chứ không chỉ
-// riêng đội IT — giống cơ chế bình luận Góc chia sẻ, nhưng phạm vi hẹp: chỉ tác giả + đội IT.
+// riêng đội IT — giống cơ chế bình luận Góc chia sẻ, nhưng phạm vi hẹp: chỉ tác giả + đội IT + người
+// được chỉ định phê duyệt (đúng ticket đó, xem escalateItTicket() bên dưới).
 function addItTicketComment(user, ticket, payload) {
   const content = (payload?.content || '').trim();
   if (!content) throw new HttpError(400, 'Vui lòng nhập nội dung bình luận');
-  if (!canManageItSupport(user) && ticket.creator !== user.username) {
+  if (!canManageItSupport(user) && ticket.creator !== user.username && ticket.approvalApprover !== user.username) {
     throw new HttpError(403, 'Bạn không có quyền bình luận ở yêu cầu này');
   }
   ticket.comments = ticket.comments || [];
   ticket.comments.push({ id: Date.now(), username: user.username, name: user.name, content, time: nowVN() });
+  return ticket;
+}
+
+// Leo thang phê duyệt (tuỳ chọn) — đội Hỗ Trợ IT đang xử lý (DOING) 1 ticket có thể chủ động xin ý
+// kiến/phê duyệt của 1 người có trách nhiệm CỤ THỂ (không nhất thiết thuộc đội IT, vd trưởng phòng liên
+// quan) TRƯỚC KHI tiếp tục xử lý — người được hỏi chỉ xem/duyệt được ĐÚNG ticket đó (canViewItSupportTicket
+// ở lib/recordViewScope.js), không mở cả danh sách. approvalStatus tách biệt hoàn toàn khỏi status
+// (TODO/DOING/DONE/CANCELLED): PENDING/REJECTED chặn updateItTicketStatus() ở trên cho tới khi được duyệt.
+function escalateItTicket(user, ticket, payload, usersList) {
+  if (!canManageItSupport(user)) throw new HttpError(403, 'Bạn không có quyền gửi yêu cầu phê duyệt ở đây');
+  if (ticket.status !== 'DOING') throw new HttpError(409, 'Chỉ gửi được yêu cầu phê duyệt khi yêu cầu đang được xử lý');
+  if (ticket.approvalStatus === 'PENDING') throw new HttpError(409, 'Đã có 1 yêu cầu phê duyệt đang chờ xử lý');
+  const reason = (payload?.reason || '').trim();
+  if (!reason) throw new HttpError(400, 'Vui lòng nhập lý do cần phê duyệt');
+  const approverUsername = payload?.approverUsername;
+  const approver = (usersList || []).find(u => u.username === approverUsername && u.active !== false);
+  if (!approver) throw new HttpError(400, 'Không tìm thấy người được chọn phê duyệt (hoặc tài khoản đã bị khoá)');
+  if (approver.username === user.username) throw new HttpError(400, 'Không thể tự chọn chính mình làm người phê duyệt');
+  ticket.approvalStatus = 'PENDING';
+  ticket.approvalApprover = approver.username;
+  ticket.approvalApproverName = approver.name;
+  ticket.approvalReason = reason;
+  ticket.approvalComment = '';
+  ticket.comments = ticket.comments || [];
+  ticket.comments.push({ id: Date.now(), username: user.username, name: user.name, content: `🔔 Đã gửi yêu cầu phê duyệt tới ${approver.name}: ${reason}`, time: nowVN() });
+  return ticket;
+}
+
+function approveItTicketEscalation(user, ticket) {
+  if (ticket.approvalApprover !== user.username) throw new HttpError(403, 'Bạn không phải người được yêu cầu phê duyệt ở đây');
+  if (ticket.approvalStatus !== 'PENDING') throw new HttpError(409, 'Yêu cầu phê duyệt này không còn ở trạng thái chờ xử lý');
+  ticket.approvalStatus = 'APPROVED';
+  ticket.approvalComment = '';
+  ticket.comments = ticket.comments || [];
+  ticket.comments.push({ id: Date.now(), username: user.username, name: user.name, content: '✅ Đã duyệt yêu cầu phê duyệt', time: nowVN() });
+  return ticket;
+}
+
+function denyItTicketEscalation(user, ticket, payload) {
+  if (ticket.approvalApprover !== user.username) throw new HttpError(403, 'Bạn không phải người được yêu cầu phê duyệt ở đây');
+  if (ticket.approvalStatus !== 'PENDING') throw new HttpError(409, 'Yêu cầu phê duyệt này không còn ở trạng thái chờ xử lý');
+  const comment = (payload?.comment || '').trim();
+  if (!comment) throw new HttpError(400, 'Vui lòng nhập lý do từ chối');
+  ticket.approvalStatus = 'REJECTED';
+  ticket.approvalComment = comment;
+  ticket.comments = ticket.comments || [];
+  ticket.comments.push({ id: Date.now(), username: user.username, name: user.name, content: `❌ Đã từ chối yêu cầu phê duyệt: ${comment}`, time: nowVN() });
   return ticket;
 }
 
@@ -2016,5 +2129,7 @@ module.exports = {
   canManageTraining, cancelTrainingRegistration, setTrainingRegistrationResult, confirmCareerPathForEmployee,
   bulkRegisterTrainingClass, gradeTrainingTestSubmission, applyAutoGradedTestResult,
   canManageRecruitment, closeRecruitmentJob, setRecruitmentReferralStatus,
-  canManageItSupport, applyPriceApproval, claimItTicket, updateItTicketStatus, addItTicketComment, cancelItTicket
+  canManageItSupport, applyPriceApproval, requestPriceInfoFromIt, submitPriceSupplementFile,
+  claimItTicket, updateItTicketStatus, addItTicketComment, cancelItTicket,
+  escalateItTicket, approveItTicketEscalation, denyItTicketEscalation
 };
