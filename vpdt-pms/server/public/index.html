@@ -2816,8 +2816,8 @@ table { display: block; overflow-x: auto; max-width: 100%; }
         
         <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
           <div>
-            <label class="block text-xs font-semibold text-gray-600 mb-1">Mã Quy Trình (VD: WF_5STEP)</label>
-            <input id="wfCode" placeholder="WF_..." class="w-full border p-1.5 rounded text-xs disabled:bg-gray-100 font-mono font-bold" required>
+            <label class="block text-xs font-semibold text-gray-600 mb-1">Mã Quy Trình (tự sinh)</label>
+            <input id="wfCode" readonly placeholder="Mã quy trình (tự sinh)" class="w-full border p-1.5 rounded text-xs bg-gray-100 cursor-not-allowed disabled:bg-gray-100 font-mono font-bold" required>
           </div>
           <div>
             <label class="block text-xs font-semibold text-gray-600 mb-1">Tên Quy Trình</label>
@@ -2857,7 +2857,13 @@ table { display: block; overflow-x: auto; max-width: 100%; }
   <!-- Màn hình 4: Tab Quản Trị Hệ Thống & Phân Quyền -->
   <!-- Màn hình Hệ Thống — gộp Quản trị + Biểu mẫu + Quy trình & Phê duyệt đồng cấp, chỉ dành cho admin -->
   <div id="systemSection" class="hidden space-y-4">
-    <div class="flex gap-2 flex-wrap border-b pb-2">
+    <!-- Ghim thanh chuyển tab con (Quản Trị/Biểu Mẫu/Quy Trình/Loại Tệp/Log) dính ở đầu màn hình khi
+         cuộn — trước đây thanh này nằm trong dòng chảy trang bình thường nên khi nội dung 1 tab con dài
+         (đặc biệt Biểu Mẫu, Quy Trình & Phê Duyệt) cuộn xuống là mất luôn thanh chuyển tab, phải cuộn
+         ngược lên mới đổi được tab khác. top-14 trên điện thoại để tránh đè lên #mobileTopBar (fixed,
+         cao ~56px = pt-14 mà nội dung chính đang chừa sẵn); z-20 thấp hơn #mobileTopBar (z-30) và mọi
+         modal (z-40/z-50) để không che các lớp đó. -->
+    <div class="sticky top-14 md:top-0 z-20 bg-white flex gap-2 flex-wrap border-b pb-2 pt-1">
       <button type="button" onclick="setSystemSubTab('ADMIN')" id="btnSystemSubAdmin" class="px-3 py-1.5 rounded text-xs font-bold bg-purple-700 text-white">⚙️ Quản Trị</button>
       <button type="button" onclick="setSystemSubTab('FORM')" id="btnSystemSubForm" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">📋 Biểu Mẫu</button>
       <button type="button" onclick="setSystemSubTab('WORKFLOW')" id="btnSystemSubWorkflow" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">🔄 Quy Trình & Phê Duyệt</button>
@@ -6781,7 +6787,20 @@ async function changeMyApprovalPin() {
 // CAPTCHA, hành vi giống hệt trước đây. Mã vẽ HOÀN TOÀN trên server (SVG), không gọi dịch vụ ngoài nào.
 let captchaId = null;
 
-async function refreshCaptcha() {
+// focusAfter: true khi gọi để lấy mã MỚI SAU 1 lượt đăng nhập vừa submit (đúng/sai đều gọi, xem
+// login()) — tự đưa con trỏ vào thẳng ô nhập mã mới, đỡ người dùng phải bấm chuột lại. KHÔNG bật ở
+// lượt gọi lúc tải trang lần đầu (tránh cướp focus khỏi ô Tên đăng nhập).
+async function refreshCaptcha(focusAfter = false) {
+  // Phản hồi ngay khi BẮT ĐẦU tải mã mới (không đợi hết round-trip mới đổi gì trên màn hình) — trước
+  // đây ảnh CAPTCHA giữ nguyên y hệt mã VỪA NHẬP SAI cho tới khi có phản hồi, khiến thao tác cảm giác
+  // "đứng hình"/chậm dù request vẫn đang xử lý bình thường. Chỉ áp dụng khi ô CAPTCHA đã đang hiện sẵn
+  // (đúng là 1 lượt refresh, không phải lần tải trang đầu tiên khi còn chưa biết server có bật CAPTCHA
+  // hay không — tránh nháy chữ "Đang tải" rồi lại ẩn ngay nếu server tắt CAPTCHA).
+  const fieldEl = document.getElementById('captchaField');
+  const imgWrap = document.getElementById('captchaImgWrap');
+  if (imgWrap && fieldEl && !fieldEl.classList.contains('hidden')) {
+    imgWrap.innerHTML = '<span style="font-size:11px;color:#94a3b8;padding:0 8px;">Đang tải mã mới…</span>';
+  }
   try {
     const res = await fetch('/api/captcha');
     if (res.status === 404) {
@@ -6794,6 +6813,7 @@ async function refreshCaptcha() {
     document.getElementById('captchaImgWrap').innerHTML = cfg.svg;
     document.getElementById('txtCaptcha').value = '';
     document.getElementById('captchaField').classList.remove('hidden');
+    if (focusAfter) document.getElementById('txtCaptcha').focus();
   } catch (e) {
     console.warn('Không tải được CAPTCHA:', e.message);
   }
@@ -6812,7 +6832,11 @@ async function login() {
   }
 
   const btn = document.getElementById('btnLogin');
-  if (btn) btn.disabled = true;
+  const btnOriginalHTML = btn ? btn.innerHTML : '';
+  // Đổi hẳn chữ trên nút (không chỉ disable) — trước đây nút chỉ mờ đi, không có phản hồi tức thời nào
+  // trong lúc chờ (xác minh mật khẩu bcrypt + CAPTCHA), khiến thao tác cảm giác "đứng hình"/chậm dù
+  // request thực ra vẫn đang xử lý bình thường.
+  if (btn) { btn.disabled = true; btn.innerHTML = 'Đang đăng nhập…'; }
   let user;
   try {
     const res = await fetch('/api/auth/login', {
@@ -6828,10 +6852,23 @@ async function login() {
   } catch (e) {
     return alert('⛔ Không thể kết nối tới máy chủ: ' + e.message);
   } finally {
-    if (btn) btn.disabled = false;
+    if (btn) { btn.disabled = false; btn.innerHTML = btnOriginalHTML; }
     // Mã CAPTCHA chỉ dùng được 1 lần (dù đúng hay sai) — lấy mã mới ngay sau MỌI lượt gọi để lần đăng
-    // nhập kế tiếp (nếu có) bắt buộc nhập lại, không tái dùng captchaId cũ.
-    if (captchaId) refreshCaptcha();
+    // nhập kế tiếp (nếu có) bắt buộc nhập lại, không tái dùng captchaId cũ. Đây LUÔN là lượt refresh
+    // SAU 1 lần submit (không phải tải trang lần đầu) nên tự đưa focus vào thẳng ô mã mới.
+    if (captchaId) refreshCaptcha(true);
+  }
+
+  // Xác nhận NGAY cookie phiên vừa cấp có thực sự được trình duyệt lưu lại hay không — trước đây tin
+  // thẳng response 200 rồi vào thẳng giao diện, nên trường hợp trình duyệt ÂM THẦM từ chối lưu cookie
+  // (phổ biến nhất: truy cập qua http:// thuần trong khi server bắt buộc cookie Secure/HTTPS — xem
+  // cảnh báo cùng nội dung ở routes/auth.js warnIfCookieLikelyNotPersisted()) chỉ lộ ra RẤT MUỘN, ở lần
+  // tải lại trang hoặc thao tác tiếp theo bị bất ngờ coi như chưa đăng nhập — đúng cảm giác "thoát phiên
+  // khó hiểu" người dùng hay gặp. Gọi lại /api/auth/me ngay ở đây để phát hiện và báo rõ nguyên nhân
+  // ngay tại thời điểm đăng nhập, thay vì để lộ ra giữa chừng lúc đang thao tác.
+  const sessionCheck = await fetch('/api/auth/me').catch(() => null);
+  if (!sessionCheck || !sessionCheck.ok) {
+    return alert('⚠️ Đăng nhập đúng nhưng trình duyệt KHÔNG lưu được phiên đăng nhập, nên chưa thể vào hệ thống. Nguyên nhân thường gặp nhất: đang truy cập bằng địa chỉ http:// (không có https). Vui lòng thử lại bằng địa chỉ https://, hoặc liên hệ quản trị viên hệ thống để kiểm tra cấu hình.');
   }
 
   logSystemAction('USER_MGM', 'LOGIN_SUCCESS', 'Đăng nhập thành công.', 'SUCCESS', user.username);
@@ -8145,6 +8182,19 @@ function generateOfficeCode() {
 }
 function generateMinutesCode() { return generateHcrcCode(DB.meetingMinutes, 'BBH'); }
 function generateMeetingCode() { return generateHcrcCode(DB.meetings, 'DPH'); }
+
+// Số thứ tự TIẾP THEO cho Mã Quy Trình (WF<số>) — lấy số LỚN NHẤT từng xuất hiện (không phải đếm số
+// lượng còn lại), cùng nguyên lý computeNextDocSeq() ở trên — tránh sinh trùng mã nếu 1 mẫu quy trình
+// ở giữa dãy số đã bị xóa trước đó (vd xóa WF002 trong WF001/WF002/WF003 vẫn sinh tiếp WF004, không
+// phải WF003 đang tồn tại).
+function computeNextWfSeq() {
+  const maxSeq = (DB.workflows || []).reduce((max, wf) => {
+    const n = parseInt(String(wf.id || '').replace(/^WF/i, ''), 10);
+    return Number.isFinite(n) && n > max ? n : max;
+  }, 0);
+  return maxSeq + 1;
+}
+function generateWfCode() { return `WF${String(computeNextWfSeq()).padStart(3, '0')}`; }
 
 // Gom 1 tài liệu GỐC + toàn bộ version con của nó (kể cả bản thân tài liệu gốc), sắp theo versionNumber
 // tăng dần — dùng chung cho khối mở rộng ở "Danh Sách Tài Liệu" và modal "Chi Tiết Tài Liệu".
@@ -16073,7 +16123,13 @@ function setSystemSubTab(subTab) {
     setAdminSubTab(activeAdminSubTab);
   }
   if (subTab === 'FORM') { switchFormTab(activeFormTab); }
-  if (subTab === 'WORKFLOW') { renderWorkflowTab(); }
+  if (subTab === 'WORKFLOW') {
+    renderWorkflowTab();
+    // Chỉ tự sinh mã khi ô Mã Quy Trình đang trống (lần đầu vào tab trong phiên này) — nếu đang có sẵn
+    // giá trị (đang Sửa 1 mẫu cũ, hoặc vừa tạo mã nháp cho mẫu mới) thì giữ nguyên, không ghi đè mỗi lần
+    // chuyển qua lại giữa các tab con của Hệ Thống.
+    if (!document.getElementById('wfCode').value) document.getElementById('wfCode').value = generateWfCode();
+  }
   if (subTab === 'UPLOAD') { renderUploadTypeConfig(); }
   if (subTab === 'LOG') { loadSystemLogs(); }
 }
@@ -16713,8 +16769,7 @@ function reindexStepRows() {
 
 function resetWorkflowForm() {
   document.getElementById('editingWfCode').value = '';
-  document.getElementById('wfCode').value = '';
-  document.getElementById('wfCode').disabled = false;
+  document.getElementById('wfCode').value = generateWfCode();
   document.getElementById('wfName').value = '';
   document.getElementById('stepBuilderContainer').innerHTML = '';
   document.getElementById('btnCancelWf').classList.add('hidden');
