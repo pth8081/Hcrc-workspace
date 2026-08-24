@@ -38,6 +38,9 @@ router.post('/:module', async (req, res) => {
     // client gửi lên có phải mẫu trình chiếu có thật hay không) — cùng lý do, reportSlideTemplates cũng
     // ở dbo.Records, không nằm trong AppData chung.
     if (moduleKey === 'reportPeriods') appData.reportSlideTemplates = await getAllForCollection('reportSlideTemplates');
+    // trainingRegistrations cần tra cứu chéo sang collection trainingClasses (lớp còn mở/còn chỗ/hạn
+    // đăng ký, snapshot tên+mã lớp) — cùng lý do vppRegistrations/reportEntries ở trên.
+    if (moduleKey === 'trainingRegistrations') appData.trainingClasses = await getAllForCollection('trainingClasses');
 
     const config = CREATE_MODULE_CONFIGS[moduleKey];
     const builderFn = (list) => validateAndPrepareCreate(moduleKey, req.body, freshUser, list, appData);

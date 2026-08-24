@@ -526,6 +526,49 @@ router.post('/reportPeriods/:id/delete', (req, res) => deleteAdminOnly(req, res,
 router.post('/reportEntries/:id/delete', (req, res) => deleteAdminOnly(req, res, 'reportEntries'));
 router.post('/reportSlideTemplates/:id/delete', (req, res) => deleteAdminOnly(req, res, 'reportSlideTemplates'));
 
+// ===================== ĐÀO TẠO (module con "Truyền Thông Nội Bộ" > Đào tạo) — tạm thời, MVP =====================
+router.post('/trainingDocuments/:id/delete', (req, res) => deleteAdminOnly(req, res, 'trainingDocuments'));
+router.post('/trainingClasses/:id/delete', (req, res) => deleteAdminOnly(req, res, 'trainingClasses'));
+router.post('/careerPaths/:id/delete', (req, res) => deleteAdminOnly(req, res, 'careerPaths'));
+
+async function withTrainingRegAction(req, res, action, mutator) {
+  const itemId = Number(req.params.id);
+  if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
+  try {
+    const { freshUser } = await getFreshUser(req);
+    const result = await withLockedRecordForCollection('trainingRegistrations', itemId, (item) => mutator(req.body, freshUser, item));
+    res.json({ ok: true, item: result });
+  } catch (err) {
+    handleError(res, `trainingRegistrations/${req.params.id}/${action}`, err);
+  }
+}
+router.post('/trainingRegistrations/:id/cancel', (req, res) =>
+  withTrainingRegAction(req, res, 'cancel', recordActions.cancelTrainingRegistration));
+router.post('/trainingRegistrations/:id/set-result', (req, res) =>
+  withTrainingRegAction(req, res, 'set-result', recordActions.setTrainingRegistrationResult));
+
+// "Xác nhận" 1 nhân viên hoàn thành lộ trình thăng tiến — cùng khuôn /contracts/:id/start-payment ở
+// trên (mutatorFn vừa xác thực (đủ điều kiện PASSED hết các lớp bắt buộc) vừa trả bản NHÁP, PHẢI insert
+// thêm vào collection careerPathConfirmations riêng ngay sau khi khoá careerPaths nhả ra).
+router.post('/careerPaths/:id/confirm', async (req, res) => {
+  const itemId = Number(req.params.id);
+  if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
+  try {
+    const { freshUser, users } = await getFreshUser(req);
+    const allRegs = await getAllForCollection('trainingRegistrations');
+    const existingConfirmations = await getAllForCollection('careerPathConfirmations');
+    let draft = null;
+    const result = await withLockedRecordForCollection('careerPaths', itemId, (item) => {
+      draft = recordActions.confirmCareerPathForEmployee(req.body, freshUser, item, allRegs, existingConfirmations, users);
+      return item;
+    });
+    const confirmation = await createForCollection('careerPathConfirmations', () => ({ ...draft, id: Date.now() }));
+    res.json({ ok: true, item: result, confirmation });
+  } catch (err) {
+    handleError(res, `careerPaths/${req.params.id}/confirm`, err);
+  }
+});
+
 // POST /api/records/vppPeriods/:id/close — người quản lý VPP (hoặc admin) tự kết thúc kỳ sớm.
 router.post('/vppPeriods/:id/close', async (req, res) => {
   const itemId = Number(req.params.id);

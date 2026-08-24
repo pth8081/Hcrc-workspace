@@ -30,7 +30,7 @@ const { HttpError } = require('./httpErrors');
 // vẫn ghi thẳng qua đường /api/data/internalPosts chung, không xác thực gì — đã xây route riêng cho cả
 // 5 hành động này trong routes/records.js TRƯỚC KHI migrate storage ở bước này (xem
 // lib/recordActions.js phần "TRUYỀN THÔNG NỘI BỘ").
-const MIGRATED_COLLECTIONS = new Set(['submissions', 'docs', 'carRegs', 'officeReqs', 'contracts', 'meetings', 'meetingMinutes', 'internalPosts', 'paymentRequests', 'vppPeriods', 'vppRegistrations', 'reportPeriods', 'reportEntries', 'reportSlideTemplates']);
+const MIGRATED_COLLECTIONS = new Set(['submissions', 'docs', 'carRegs', 'officeReqs', 'contracts', 'meetings', 'meetingMinutes', 'internalPosts', 'paymentRequests', 'vppPeriods', 'vppRegistrations', 'reportPeriods', 'reportEntries', 'reportSlideTemplates', 'trainingDocuments', 'trainingClasses', 'trainingRegistrations', 'careerPaths', 'careerPathConfirmations']);
 
 function toRecord(row) {
   return JSON.parse(row.Payload);

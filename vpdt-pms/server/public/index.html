@@ -1639,6 +1639,179 @@ table { display: block; overflow-x: auto; max-width: 100%; }
       </div>
     </div>
 
+    <!-- "Đào tạo" (tạm thời) — thay hẳn khung đăng bài đơn giản cũ bằng 1 LMS thu gọn: Lớp Học/Đăng Ký
+         Của Tôi/Kho Tài Liệu/Lộ Trình Thăng Tiến. Ẩn/hiện cùng nhóm với form đăng bài chung bên dưới
+         (chỉ 1 trong 2 khối hiện tại 1 thời điểm — xem setInternalSubTab()). -->
+    <div id="internalTrainingLmsSection" class="hidden space-y-4">
+      <div class="flex gap-2 flex-wrap">
+        <button type="button" onclick="setTrainingLmsTab('CLASSES')" id="btnTrainingLmsClasses" class="px-3 py-1 rounded text-xs font-bold bg-emerald-700 text-white">🏫 Lớp Học</button>
+        <button type="button" onclick="setTrainingLmsTab('MY_REGS')" id="btnTrainingLmsMyRegs" class="px-3 py-1 rounded text-xs font-bold bg-gray-200 text-gray-700">📝 Đăng Ký Của Tôi</button>
+        <button type="button" onclick="setTrainingLmsTab('DOCS')" id="btnTrainingLmsDocs" class="px-3 py-1 rounded text-xs font-bold bg-gray-200 text-gray-700">📁 Kho Tài Liệu</button>
+        <button type="button" onclick="setTrainingLmsTab('PATHS')" id="btnTrainingLmsPaths" class="px-3 py-1 rounded text-xs font-bold bg-gray-200 text-gray-700">🪜 Lộ Trình Thăng Tiến</button>
+      </div>
+
+      <!-- LỚP HỌC -->
+      <div id="trainingLmsClassesPanel" class="space-y-4">
+        <form id="trainingClassForm" onsubmit="submitTrainingClass(event)" class="hidden bg-white p-3 rounded border text-xs space-y-3">
+          <h4 class="font-bold text-gray-700">➕ Tạo Lớp Học Mới</h4>
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+            <div>
+              <label class="block font-semibold text-gray-600 mb-1">Loại Đào Tạo</label>
+              <select id="tcCategory" class="w-full border p-1.5 rounded bg-white" required></select>
+            </div>
+            <div class="md:col-span-2">
+              <label class="block font-semibold text-gray-600 mb-1">Tên Lớp Học</label>
+              <input id="tcTitle" class="w-full border p-1.5 rounded" required>
+            </div>
+            <div>
+              <label class="block font-semibold text-gray-600 mb-1">Giảng Viên / Người Phụ Trách</label>
+              <input id="tcInstructor" class="w-full border p-1.5 rounded">
+            </div>
+            <div>
+              <label class="block font-semibold text-gray-600 mb-1">Thời Gian Bắt Đầu</label>
+              <input id="tcStart" type="datetime-local" class="w-full border p-1.5 rounded" required>
+            </div>
+            <div>
+              <label class="block font-semibold text-gray-600 mb-1">Thời Gian Kết Thúc</label>
+              <input id="tcEnd" type="datetime-local" class="w-full border p-1.5 rounded">
+            </div>
+            <div>
+              <label class="block font-semibold text-gray-600 mb-1">Địa Điểm / Hình Thức</label>
+              <input id="tcLocation" placeholder="Phòng đào tạo A / Trực tuyến..." class="w-full border p-1.5 rounded">
+            </div>
+            <div>
+              <label class="block font-semibold text-gray-600 mb-1">Hạn Đăng Ký</label>
+              <input id="tcDeadline" type="date" class="w-full border p-1.5 rounded">
+            </div>
+            <div>
+              <label class="block font-semibold text-gray-600 mb-1">Số Lượng Tối Đa (để trống = không giới hạn)</label>
+              <input id="tcCapacity" type="number" min="0" class="w-full border p-1.5 rounded">
+            </div>
+            <div>
+              <label class="block font-semibold text-gray-600 mb-1">Điểm Đạt Yêu Cầu (để trống nếu không thi)</label>
+              <input id="tcPassScore" type="number" min="0" max="100" class="w-full border p-1.5 rounded">
+            </div>
+            <div class="md:col-span-3">
+              <label class="block font-semibold text-gray-600 mb-1">Tài Liệu Kèm Theo (chọn từ Kho Tài Liệu, giữ Ctrl/Cmd để chọn nhiều)</label>
+              <select id="tcDocumentIds" multiple size="4" class="w-full border p-1.5 rounded bg-white"></select>
+            </div>
+            <div class="md:col-span-3">
+              <label class="block font-semibold text-gray-600 mb-1">Mô Tả / Nội Dung</label>
+              <textarea id="tcDescription" class="w-full border p-1.5 rounded h-20"></textarea>
+            </div>
+          </div>
+          <div class="flex justify-end"><button type="submit" class="bg-emerald-600 text-white px-5 py-2 rounded font-bold hover:bg-emerald-700">Tạo Lớp Học</button></div>
+        </form>
+        <p id="trainingClassNoPermNote" class="hidden text-xs text-gray-500 italic bg-gray-50 border rounded p-3">⛔ Bạn không có quyền tạo lớp học — chỉ có thể xem và đăng ký.</p>
+        <div class="space-y-3">
+          <h3 class="font-bold text-gray-800">🏫 Danh Sách Lớp Học</h3>
+          <div class="overflow-x-auto">
+            <table class="w-full border-collapse border text-xs bg-white">
+              <thead><tr class="bg-gray-100 text-left text-gray-700">
+                <th class="border p-2">Mã & Tên Lớp</th><th class="border p-2">Loại</th><th class="border p-2">Thời Gian Bắt Đầu</th><th class="border p-2">Đăng Ký</th><th class="border p-2 text-center min-w-[160px]">Thao Tác</th>
+              </tr></thead>
+              <tbody id="trainingClassesTableBody"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- ĐĂNG KÝ CỦA TÔI -->
+      <div id="trainingLmsMyRegsPanel" class="hidden space-y-3">
+        <h3 class="font-bold text-gray-800">📝 Đăng Ký Của Tôi</h3>
+        <div class="overflow-x-auto">
+          <table class="w-full border-collapse border text-xs bg-white">
+            <thead><tr class="bg-gray-100 text-left text-gray-700">
+              <th class="border p-2">Lớp Học</th><th class="border p-2">Loại</th><th class="border p-2">Đăng Ký Lúc</th><th class="border p-2">Kết Quả</th><th class="border p-2 text-center">Thao Tác</th>
+            </tr></thead>
+            <tbody id="trainingMyRegsTableBody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- KHO TÀI LIỆU -->
+      <div id="trainingLmsDocsPanel" class="hidden space-y-4">
+        <form id="trainingDocForm" onsubmit="submitTrainingDocument(event)" class="hidden bg-white p-3 rounded border text-xs space-y-3">
+          <h4 class="font-bold text-gray-700">➕ Thêm Tài Liệu Vào Kho</h4>
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+            <div>
+              <label class="block font-semibold text-gray-600 mb-1">Loại Đào Tạo</label>
+              <select id="tdCategory" class="w-full border p-1.5 rounded bg-white" required></select>
+            </div>
+            <div class="md:col-span-2">
+              <label class="block font-semibold text-gray-600 mb-1">Tên Tài Liệu</label>
+              <input id="tdTitle" class="w-full border p-1.5 rounded" required>
+            </div>
+            <div class="md:col-span-3">
+              <label class="block font-semibold text-gray-600 mb-1">Tệp Tài Liệu</label>
+              <input id="tdFile" type="file" accept=".pdf,.docx,.xlsx" class="w-full border p-1.5 rounded bg-white" required>
+            </div>
+            <div class="md:col-span-3">
+              <label class="block font-semibold text-gray-600 mb-1">Mô Tả (tuỳ chọn)</label>
+              <textarea id="tdDescription" class="w-full border p-1.5 rounded h-16"></textarea>
+            </div>
+          </div>
+          <div class="flex justify-end"><button type="submit" class="bg-emerald-600 text-white px-5 py-2 rounded font-bold hover:bg-emerald-700">Thêm Vào Kho</button></div>
+        </form>
+        <p id="trainingDocNoPermNote" class="hidden text-xs text-gray-500 italic bg-gray-50 border rounded p-3">⛔ Bạn không có quyền thêm tài liệu vào kho — chỉ có thể xem/tải.</p>
+        <div>
+          <label class="block text-xs font-semibold text-gray-600 mb-1">Lọc theo Loại Đào Tạo</label>
+          <select id="trainingDocFilterCategory" onchange="renderTrainingDocuments()" class="border p-1.5 rounded bg-white text-xs"></select>
+        </div>
+        <div class="space-y-3">
+          <h3 class="font-bold text-gray-800">📁 Kho Tài Liệu Đào Tạo</h3>
+          <div id="trainingDocumentsContainer" class="grid grid-cols-1 md:grid-cols-2 gap-2"></div>
+        </div>
+      </div>
+
+      <!-- LỘ TRÌNH THĂNG TIẾN -->
+      <div id="trainingLmsPathsPanel" class="hidden space-y-4">
+        <form id="careerPathForm" onsubmit="submitCareerPath(event)" class="hidden bg-white p-3 rounded border text-xs space-y-3">
+          <h4 class="font-bold text-gray-700">➕ Tạo Lộ Trình Thăng Tiến Mới</h4>
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <div>
+              <label class="block font-semibold text-gray-600 mb-1">Tên Lộ Trình</label>
+              <input id="cpName" class="w-full border p-1.5 rounded" required>
+            </div>
+            <div>
+              <label class="block font-semibold text-gray-600 mb-1">Chức Danh Mục Tiêu (tuỳ chọn)</label>
+              <input id="cpTargetTitle" class="w-full border p-1.5 rounded">
+            </div>
+            <div class="md:col-span-2">
+              <label class="block font-semibold text-gray-600 mb-1">Các Lớp Học Bắt Buộc (giữ Ctrl/Cmd để chọn nhiều — phải Đạt hết mới đủ điều kiện xác nhận)</label>
+              <select id="cpRequiredClassIds" multiple size="6" class="w-full border p-1.5 rounded bg-white" required></select>
+            </div>
+            <div class="md:col-span-2">
+              <label class="block font-semibold text-gray-600 mb-1">Mô Tả</label>
+              <textarea id="cpDescription" class="w-full border p-1.5 rounded h-16"></textarea>
+            </div>
+          </div>
+          <div class="flex justify-end"><button type="submit" class="bg-emerald-600 text-white px-5 py-2 rounded font-bold hover:bg-emerald-700">Tạo Lộ Trình</button></div>
+        </form>
+        <p id="careerPathNoPermNote" class="hidden text-xs text-gray-500 italic bg-gray-50 border rounded p-3">⛔ Bạn không có quyền tạo lộ trình thăng tiến — chỉ có thể xem tiến độ của mình.</p>
+        <div class="space-y-3">
+          <h3 class="font-bold text-gray-800">🪜 Danh Sách Lộ Trình Thăng Tiến</h3>
+          <div id="careerPathsContainer" class="space-y-3"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Modal ghi nhận kết quả học viên (chỉ người tạo lớp/Admin thấy nút mở) -->
+    <div id="trainingResultsModal" class="hidden fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+      <div class="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[85vh] overflow-y-auto">
+        <div class="p-4 border-b flex justify-between items-center sticky top-0 bg-white">
+          <h3 id="trainingResultsModalTitle" class="font-bold text-gray-800">Kết quả lớp học</h3>
+          <button onclick="document.getElementById('trainingResultsModal').classList.add('hidden')" class="text-gray-400 hover:text-gray-700 text-xl leading-none">&times;</button>
+        </div>
+        <div class="p-4">
+          <table class="w-full border-collapse border text-xs">
+            <thead><tr class="bg-gray-100 text-left"><th class="border p-2">Học Viên</th><th class="border p-2">Đăng Ký Lúc</th><th class="border p-2">Kết Quả</th><th class="border p-2">Điểm</th><th class="border p-2 text-center">Thao Tác</th></tr></thead>
+            <tbody id="trainingResultsModalBody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
     <form id="internalPostForm" onsubmit="submitInternalPost(event)" class="bg-white p-3 rounded border text-xs space-y-3">
       <h4 id="internalFormTitle" class="font-bold text-gray-700">📝 Đăng Tin Nội Bộ Mới</h4>
       <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -1707,7 +1880,7 @@ table { display: block; overflow-x: auto; max-width: 100%; }
     </form>
     <p id="internalNoPermNote" class="hidden text-xs text-gray-500 italic bg-gray-50 border rounded p-3">⛔ Bạn không có quyền đăng bài ở phân hệ này — chỉ có thể xem và tương tác (bình luận, thả tim).</p>
 
-    <div class="bg-gray-50 p-4 rounded-lg border space-y-3">
+    <div id="internalFilterBlock" class="bg-gray-50 p-4 rounded-lg border space-y-3">
       <h4 class="font-bold text-gray-700 text-sm">🔍 Tìm Kiếm & Lọc</h4>
       <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
         <div>
@@ -1725,7 +1898,7 @@ table { display: block; overflow-x: auto; max-width: 100%; }
       </div>
     </div>
 
-    <div class="space-y-3">
+    <div id="internalListBlock" class="space-y-3">
       <h3 id="internalListTitle" class="font-bold text-gray-800">📰 Danh Sách Tin Nội Bộ</h3>
       <div id="internalPostsContainer" class="space-y-3"></div>
       <div id="paginationContainer_internal"></div>
@@ -2558,6 +2731,18 @@ table { display: block; overflow-x: auto; max-width: 100%; }
         </form>
         <div class="max-h-32 overflow-y-auto bg-white rounded border">
           <ul id="jobTitleList" class="divide-y text-xs"></ul>
+        </div>
+      </div>
+
+      <div class="bg-emerald-50 p-4 rounded border border-emerald-200 space-y-3">
+        <h3 class="font-bold text-emerald-900 text-sm flex items-center gap-1">🎓 Quản Lý Loại Đào Tạo</h3>
+        <p class="text-[11px] text-emerald-700">Dùng để phân loại Kho Tài Liệu và Lớp Học ở màn Truyền Thông Nội Bộ &gt; Đào tạo.</p>
+        <form onsubmit="saveTrainingCategory(event)" class="flex gap-2">
+          <input id="txtTrainingCategoryName" placeholder="Tên loại đào tạo mới..." class="border p-1.5 rounded text-xs flex-1" required>
+          <button type="submit" class="bg-emerald-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-emerald-700">Thêm</button>
+        </form>
+        <div class="max-h-32 overflow-y-auto bg-white rounded border">
+          <ul id="trainingCategoryList" class="divide-y text-xs"></ul>
         </div>
       </div>
     </div>
@@ -3890,6 +4075,8 @@ const DB = {
   meetingAttendeeTemplates: [],
   tasks: [],
   internalPosts: [],
+  trainingCategories: [], trainingDocuments: [], trainingClasses: [], trainingRegistrations: [],
+  careerPaths: [], careerPathConfirmations: [],
   paymentRequests: [],
   formTemplates: {},
   permGroups: [],
@@ -5382,6 +5569,13 @@ async function initDatabase(loggingInUser) {
 
     DB.reportPeriods = data.reportPeriods || [];
     DB.reportEntries = data.reportEntries || [];
+
+    DB.trainingCategories = data.trainingCategories || [];
+    DB.trainingDocuments = data.trainingDocuments || [];
+    DB.trainingClasses = data.trainingClasses || [];
+    DB.trainingRegistrations = data.trainingRegistrations || [];
+    DB.careerPaths = data.careerPaths || [];
+    DB.careerPathConfirmations = data.careerPathConfirmations || [];
 
     DB._versions = data._versions || {};
 
@@ -15402,7 +15596,7 @@ function setSystemSubTab(subTab) {
   document.getElementById('btnSystemSubLog').className = subTab === 'LOG' ? activeCls : inactiveCls;
 
   if (subTab === 'ADMIN') {
-    renderDeptList(); renderCatList(); renderContractTypeAbbrList(); renderJobTitleList(); renderDeptCheckboxes(); renderModuleAccessCheckboxes(); renderUsers(); loadEmailConfigToForm(); renderPermGroupsList(); renderSubmissionApprovalGroups(); renderContractApprovalGroups();
+    renderDeptList(); renderCatList(); renderContractTypeAbbrList(); renderJobTitleList(); renderTrainingCategoryList(); renderDeptCheckboxes(); renderModuleAccessCheckboxes(); renderUsers(); loadEmailConfigToForm(); renderPermGroupsList(); renderSubmissionApprovalGroups(); renderContractApprovalGroups();
     setAdminSubTab(activeAdminSubTab);
   }
   if (subTab === 'FORM') { switchFormTab(activeFormTab); }
@@ -16206,6 +16400,38 @@ function renderJobTitleList() {
     <li class="p-2 flex justify-between items-center hover:bg-gray-50">
       <span>${escapeHtml(t)}</span>
       <button onclick="deleteJobTitle('${escapeHtml(t)}')" class="text-red-500 font-bold hover:underline">Xóa</button>
+    </li>
+  `).join('');
+}
+
+function saveTrainingCategory(e) {
+  e.preventDefault();
+  const name = document.getElementById('txtTrainingCategoryName').value.trim();
+  if (DB.trainingCategories.includes(name)) return alert('Loại đào tạo đã tồn tại!');
+  DB.trainingCategories.push(name);
+  syncStorage('trainingCategories');
+  logSystemAction('USER_MGM', 'ADD_TRAINING_CATEGORY', `Thêm loại đào tạo mới [${name}]`, 'SUCCESS', name);
+  document.getElementById('txtTrainingCategoryName').value = '';
+  renderTrainingCategoryList();
+  populateTrainingCategorySelects();
+}
+
+function deleteTrainingCategory(name) {
+  if (!confirm(`Xóa loại đào tạo ${name}?`)) return;
+  DB.trainingCategories = DB.trainingCategories.filter(t => t !== name);
+  syncStorage('trainingCategories');
+  logSystemAction('USER_MGM', 'DELETE_TRAINING_CATEGORY', `Xóa loại đào tạo [${name}]`, 'SUCCESS', name);
+  renderTrainingCategoryList();
+  populateTrainingCategorySelects();
+}
+
+function renderTrainingCategoryList() {
+  const ul = document.getElementById('trainingCategoryList');
+  if (!ul) return;
+  ul.innerHTML = DB.trainingCategories.map(t => `
+    <li class="p-2 flex justify-between items-center hover:bg-gray-50">
+      <span>${escapeHtml(t)}</span>
+      <button onclick="deleteTrainingCategory('${escapeHtml(t)}')" class="text-red-500 font-bold hover:underline">Xóa</button>
     </li>
   `).join('');
 }
@@ -20002,11 +20228,18 @@ function setInternalSubTab(subTab) {
     if (btn) btn.className = type === subTab ? 'px-3 py-1 rounded text-xs font-bold bg-fuchsia-700 text-white' : 'px-3 py-1 rounded text-xs font-bold bg-gray-200 text-gray-700';
   });
 
-  document.getElementById('internalTrainingTimeField').classList.toggle('hidden', subTab !== 'TRAINING');
-  document.getElementById('internalTrainingEndField').classList.toggle('hidden', subTab !== 'TRAINING');
-  document.getElementById('internalTrainingLocationField').classList.toggle('hidden', subTab !== 'TRAINING');
-  document.getElementById('internalTrainingDeadlineField').classList.toggle('hidden', subTab !== 'TRAINING');
-  document.getElementById('internalTrainingCapacityField').classList.toggle('hidden', subTab !== 'TRAINING');
+  // "Đào tạo" (tạm thời) — thay hẳn khung đăng bài đơn giản cũ bằng LMS thu gọn (Lớp Học/Đăng Ký Của
+  // Tôi/Kho Tài Liệu/Lộ Trình Thăng Tiến), ẩn toàn bộ khung đăng bài + tìm kiếm + danh sách kiểu cũ.
+  document.getElementById('internalTrainingLmsSection').classList.toggle('hidden', subTab !== 'TRAINING');
+  document.getElementById('internalPostForm').classList.toggle('hidden', subTab === 'TRAINING');
+  document.getElementById('internalNoPermNote').classList.add('hidden');
+  document.getElementById('internalFilterBlock').classList.toggle('hidden', subTab === 'TRAINING');
+  document.getElementById('internalListBlock').classList.toggle('hidden', subTab === 'TRAINING');
+  if (subTab === 'TRAINING') {
+    renderTrainingLms();
+    return;
+  }
+
   document.getElementById('internalRewardPeriodField').classList.toggle('hidden', subTab !== 'REWARD');
   document.getElementById('internalRewardRecipientsField').classList.toggle('hidden', subTab !== 'REWARD');
 
@@ -20123,7 +20356,17 @@ function isInternalImageAttachment(att) {
   return !!(att && typeof att.fileType === 'string' && att.fileType.startsWith('image/'));
 }
 
+// "Tin tức" (NEWS) dùng khung hiển thị kiểu Facebook riêng (renderInternalNewsFeed) — bình luận/thích
+// ngay dưới bài, không cần mở "Chi tiết". 3 loại còn lại (Đào tạo/Khen thưởng/Góc chia sẻ) giữ nguyên
+// khung danh sách + phân trang cũ bên dưới.
+let internalNewsSortMode = 'recent'; // 'recent' | 'popular'
+function setInternalNewsSort(mode) {
+  internalNewsSortMode = mode;
+  renderInternalPosts();
+}
+
 function renderInternalPosts() {
+  if (activeInternalSubTab === 'NEWS') return renderInternalNewsFeed();
   const container = document.getElementById('internalPostsContainer');
   if (!container) return;
 
@@ -20206,6 +20449,125 @@ function renderInternalPosts() {
       </div>
     `;
   }).join('');
+}
+
+// Khung "Tin tức" kiểu Facebook: chỉ 5 bài mới nhất (id = Date.now() lúc tạo — dùng trực tiếp để so
+// "mới nhất", không cần parse lại chuỗi createdAt tiếng Việt), có thể đổi sang sắp theo tổng tương tác
+// (thích + bình luận). Mỗi bài có khung bình luận + nút thích NGAY DƯỚI bài — dùng lại nguyên các action
+// 'like'/'comment' đã có sẵn ở server (lib/recordActions.js), không cần đường API mới. "Chi tiết" (mở
+// modal đầy đủ) vẫn giữ nguyên, không đụng tới.
+function renderInternalNewsFeed() {
+  const container = document.getElementById('internalPostsContainer');
+  if (!container) return;
+  // Khung Tin tức không phân trang (chỉ 5 bài) — dọn sạch khối phân trang cũ nếu còn sót lại từ tab khác.
+  const paginationEl = document.getElementById('paginationContainer_internal');
+  if (paginationEl) paginationEl.innerHTML = '';
+
+  const fromDate = document.getElementById('filterFromDateInternal')?.value || '';
+  const toDate = document.getElementById('filterToDateInternal')?.value || '';
+  const keyword = (document.getElementById('filterKeywordInternal')?.value || '').trim();
+
+  let visible = DB.internalPosts.filter(p => {
+    if (p.type !== 'NEWS') return false;
+    if (!isInDateRange(p.createdAt, fromDate, toDate)) return false;
+    if (!matchesKeywordFields([p.title, p.content, p.authorName, p.dept], keyword)) return false;
+    return true;
+  });
+
+  visible = visible.slice().sort((a, b) => {
+    if (internalNewsSortMode === 'popular') {
+      const scoreA = (a.likes?.length || 0) + (a.comments?.length || 0);
+      const scoreB = (b.likes?.length || 0) + (b.comments?.length || 0);
+      if (scoreB !== scoreA) return scoreB - scoreA;
+    }
+    return b.id - a.id; // mới nhất trước
+  });
+  const top5 = visible.slice(0, 5);
+
+  const sortBarHTML = `
+    <div class="flex items-center justify-between mb-3">
+      <div class="text-xs text-gray-500">Hiển thị ${top5.length}/${visible.length} tin mới nhất</div>
+      <div class="flex gap-1">
+        <button onclick="setInternalNewsSort('recent')" class="px-2.5 py-1 rounded text-xs font-bold ${internalNewsSortMode === 'recent' ? 'bg-fuchsia-700 text-white' : 'bg-gray-200 text-gray-700'}">🕐 Mới nhất</button>
+        <button onclick="setInternalNewsSort('popular')" class="px-2.5 py-1 rounded text-xs font-bold ${internalNewsSortMode === 'popular' ? 'bg-fuchsia-700 text-white' : 'bg-gray-200 text-gray-700'}">🔥 Tương tác nhiều</button>
+      </div>
+    </div>`;
+
+  if (top5.length === 0) {
+    container.innerHTML = sortBarHTML + `<div class="text-center p-6 text-gray-500 italic bg-white rounded border">Chưa có tin tức nào phù hợp.</div>`;
+    return;
+  }
+
+  container.innerHTML = sortBarHTML + top5.map(p => renderInternalNewsCard(p)).join('');
+}
+
+function renderInternalNewsCard(p) {
+  const liked = (p.likes || []).includes(currentUser.username);
+  const likeCount = (p.likes || []).length;
+  const comments = p.comments || [];
+  const coverHTML = isInternalImageAttachment(p.attachment)
+    ? `<img src="${escapeHtml(p.attachment.fileUrl)}" alt="" class="w-full max-h-80 object-cover cursor-pointer" onclick="viewInternalPostDetail(${p.id})">`
+    : '';
+  const snippet = (p.content || '').slice(0, 300);
+  const commentsHTML = comments.length
+    ? comments.map(c => `
+        <div class="flex gap-2 text-sm">
+          <div class="w-7 h-7 rounded-full bg-fuchsia-200 text-fuchsia-800 flex items-center justify-center font-bold text-xs flex-shrink-0">${escapeHtml((c.name || '?').charAt(0).toUpperCase())}</div>
+          <div class="bg-gray-100 rounded-2xl px-3 py-1.5 flex-1">
+            <div class="font-bold text-xs text-gray-800">${escapeHtml(c.name || '')}</div>
+            <div class="text-gray-700">${escapeHtml(c.content)}</div>
+          </div>
+        </div>`).join('')
+    : `<div class="text-xs text-gray-400 italic">Chưa có bình luận nào — hãy là người đầu tiên!</div>`;
+
+  return `
+    <div class="bg-white rounded border hover:shadow mb-3">
+      ${coverHTML}
+      <div class="p-4">
+        <div class="font-bold text-fuchsia-800 text-base cursor-pointer hover:underline" onclick="viewInternalPostDetail(${p.id})">${escapeHtml(p.title)}</div>
+        <div class="text-xs text-gray-500 mt-0.5">${escapeHtml(p.authorName)} (${escapeHtml(p.dept)}) — ${escapeHtml(p.createdAt)}</div>
+        <p class="text-sm text-gray-700 mt-2">${escapeHtml(snippet)}${(p.content || '').length > 300 ? '… ' : ' '}<span class="text-fuchsia-700 font-bold cursor-pointer hover:underline" onclick="viewInternalPostDetail(${p.id})">Xem thêm</span></p>
+        <div class="flex items-center justify-between border-t border-b py-1.5 my-2 text-xs text-gray-500">
+          <span>❤️ ${likeCount} lượt thích</span>
+          <span>💬 ${comments.length} bình luận</span>
+        </div>
+        <div class="flex gap-2 mb-3">
+          <button onclick="toggleInternalLikeInline(${p.id})" class="flex-1 py-1.5 rounded font-bold text-sm ${liked ? 'bg-fuchsia-100 text-fuchsia-700' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}">${liked ? '❤️ Đã thích' : '🤍 Thích'}</button>
+          <button onclick="document.getElementById('internalCommentInput_${p.id}').focus()" class="flex-1 py-1.5 rounded font-bold text-sm bg-gray-100 text-gray-600 hover:bg-gray-200">💬 Bình luận</button>
+        </div>
+        <div class="space-y-2 mb-2">${commentsHTML}</div>
+        <div class="flex gap-2 items-center">
+          <input id="internalCommentInput_${p.id}" type="text" placeholder="Viết bình luận..." class="flex-1 border rounded-full px-3 py-1.5 text-sm" onkeydown="if(event.key==='Enter'){event.preventDefault();addInternalCommentInline(${p.id});}">
+          <button onclick="addInternalCommentInline(${p.id})" class="px-3 py-1.5 bg-fuchsia-600 text-white rounded-full text-xs font-bold hover:bg-fuchsia-700">Gửi</button>
+        </div>
+      </div>
+    </div>`;
+}
+
+function toggleInternalLikeInline(id) {
+  const p = DB.internalPosts.find(x => x.id === id);
+  if (!p) return;
+  if (!p.likes) p.likes = [];
+  const idx = p.likes.indexOf(currentUser.username);
+  if (idx === -1) p.likes.push(currentUser.username); else p.likes.splice(idx, 1);
+  callRecordAction('internalPosts', id, 'like', {}).catch(err => console.error('Lỗi cập nhật lượt thích:', err.message));
+  renderInternalNewsFeed();
+}
+
+async function addInternalCommentInline(id) {
+  const input = document.getElementById(`internalCommentInput_${id}`);
+  const content = (input?.value || '').trim();
+  if (!content) return;
+  let updated;
+  try {
+    const result = await callRecordAction('internalPosts', id, 'comment', { content });
+    updated = result.item;
+  } catch (err) {
+    return alert(`⛔ ${err.message}`);
+  }
+  const idx = DB.internalPosts.findIndex(x => x.id === id);
+  if (idx !== -1) DB.internalPosts[idx] = updated;
+  renderInternalNewsFeed();
 }
 
 function closeInternalArticleModal() {
@@ -20459,6 +20821,398 @@ function rejectInternalPostAction(id) {
       refreshApprovalSurfaces();
     }
   });
+}
+
+// ===================== ĐÀO TẠO (module con "Truyền Thông Nội Bộ" > Đào tạo) — tạm thời, MVP =====================
+// LMS thu gọn: Lớp Học (tạo/danh sách/ghi nhận kết quả) + Đăng Ký Của Tôi + Kho Tài Liệu (theo loại) +
+// Lộ Trình Thăng Tiến (danh sách lớp bắt buộc, chỉ "Xác nhận" được khi Đạt hết — xem
+// confirmCareerPathForEmployee(), lib/recordActions.js). Dùng chung cờ quyền internalTrainingCreate cho
+// mọi thao tác quản lý (tạo lớp/tài liệu/lộ trình, ghi kết quả, xác nhận lộ trình).
+function canManageTrainingLocal(user) {
+  return !!(user.perms?.admin || user.perms?.internalTrainingCreate);
+}
+
+let activeTrainingLmsTab = 'CLASSES';
+function setTrainingLmsTab(tab) {
+  activeTrainingLmsTab = tab;
+  const btnMap = { CLASSES: 'btnTrainingLmsClasses', MY_REGS: 'btnTrainingLmsMyRegs', DOCS: 'btnTrainingLmsDocs', PATHS: 'btnTrainingLmsPaths' };
+  Object.entries(btnMap).forEach(([key, btnId]) => {
+    const btn = document.getElementById(btnId);
+    if (btn) btn.className = key === tab ? 'px-3 py-1 rounded text-xs font-bold bg-emerald-700 text-white' : 'px-3 py-1 rounded text-xs font-bold bg-gray-200 text-gray-700';
+  });
+  document.getElementById('trainingLmsClassesPanel').classList.toggle('hidden', tab !== 'CLASSES');
+  document.getElementById('trainingLmsMyRegsPanel').classList.toggle('hidden', tab !== 'MY_REGS');
+  document.getElementById('trainingLmsDocsPanel').classList.toggle('hidden', tab !== 'DOCS');
+  document.getElementById('trainingLmsPathsPanel').classList.toggle('hidden', tab !== 'PATHS');
+  renderTrainingLms();
+}
+
+function populateTrainingCategorySelects() {
+  const opts = (DB.trainingCategories || []).map(c => `<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`).join('');
+  ['tcCategory', 'tdCategory'].forEach(id => {
+    const sel = document.getElementById(id);
+    if (sel) sel.innerHTML = opts || `<option value="">-- Chưa có loại đào tạo, vào Quản Trị &gt; Quản Lý Danh Mục để thêm --</option>`;
+  });
+  const filterSel = document.getElementById('trainingDocFilterCategory');
+  if (filterSel) filterSel.innerHTML = `<option value="">-- Tất cả loại đào tạo --</option>` + opts;
+}
+
+function populateTrainingClassMultiSelects() {
+  const opts = DB.trainingClasses.slice().sort((a, b) => b.id - a.id)
+    .map(c => `<option value="${c.id}">${escapeHtml(c.code || '')} - ${escapeHtml(c.title)} (${escapeHtml(c.category)})</option>`).join('');
+  const docOpts = DB.trainingDocuments.slice().sort((a, b) => b.id - a.id)
+    .map(d => `<option value="${d.id}">${escapeHtml(d.category)} — ${escapeHtml(d.title)}</option>`).join('');
+  const tcDoc = document.getElementById('tcDocumentIds');
+  if (tcDoc) tcDoc.innerHTML = docOpts || `<option value="" disabled>-- Kho tài liệu đang trống --</option>`;
+  const cpSel = document.getElementById('cpRequiredClassIds');
+  if (cpSel) cpSel.innerHTML = opts || `<option value="" disabled>-- Chưa có lớp học nào để chọn --</option>`;
+}
+
+function renderTrainingLms() {
+  populateTrainingCategorySelects();
+  populateTrainingClassMultiSelects();
+  const canManage = canManageTrainingLocal(currentUser);
+  document.getElementById('trainingClassForm').classList.toggle('hidden', !canManage);
+  document.getElementById('trainingClassNoPermNote').classList.toggle('hidden', canManage);
+  document.getElementById('trainingDocForm').classList.toggle('hidden', !canManage);
+  document.getElementById('trainingDocNoPermNote').classList.toggle('hidden', canManage);
+  document.getElementById('careerPathForm').classList.toggle('hidden', !canManage);
+  document.getElementById('careerPathNoPermNote').classList.toggle('hidden', canManage);
+
+  if (activeTrainingLmsTab === 'CLASSES') renderTrainingClasses();
+  else if (activeTrainingLmsTab === 'MY_REGS') renderTrainingMyRegs();
+  else if (activeTrainingLmsTab === 'DOCS') renderTrainingDocuments();
+  else if (activeTrainingLmsTab === 'PATHS') renderCareerPaths();
+}
+
+// ---------- LỚP HỌC ----------
+async function submitTrainingClass(e) {
+  e.preventDefault();
+  if (!canManageTrainingLocal(currentUser)) return alert('⛔ Bạn không có quyền tạo lớp học!');
+  const documentIds = [...document.getElementById('tcDocumentIds').selectedOptions].map(o => Number(o.value));
+  const payload = {
+    code: `LOP-${Date.now()}`,
+    category: document.getElementById('tcCategory').value,
+    title: document.getElementById('tcTitle').value.trim(),
+    instructor: document.getElementById('tcInstructor').value.trim(),
+    startTime: document.getElementById('tcStart').value,
+    endTime: document.getElementById('tcEnd').value,
+    location: document.getElementById('tcLocation').value.trim(),
+    registerDeadline: document.getElementById('tcDeadline').value,
+    capacity: document.getElementById('tcCapacity').value,
+    passScore: document.getElementById('tcPassScore').value,
+    documentIds,
+    description: document.getElementById('tcDescription').value.trim()
+  };
+  if (!payload.category) return alert('Vui lòng chọn Loại Đào Tạo (thêm ở Quản Trị &gt; Quản Lý Danh Mục nếu chưa có)!');
+  let newClass;
+  try {
+    const result = await callCreateAction('trainingClasses', payload);
+    newClass = result.item;
+  } catch (err) { return alert(`⛔ ${err.message}`); }
+  DB.trainingClasses.unshift(newClass);
+  logSystemAction('INTERNAL', 'CREATE_TRAINING_CLASS', `Tạo lớp học đào tạo [${newClass.code} - ${newClass.title}]`, 'SUCCESS', newClass.code);
+  alert('✅ Đã tạo lớp học thành công!');
+  e.target.reset();
+  renderTrainingLms();
+}
+
+function renderTrainingClasses() {
+  const tbody = document.getElementById('trainingClassesTableBody');
+  if (!tbody) return;
+  const list = DB.trainingClasses.slice().sort((a, b) => b.id - a.id);
+  if (!list.length) { tbody.innerHTML = `<tr><td colspan="5" class="text-center p-4 text-gray-400 italic">Chưa có lớp học nào.</td></tr>`; return; }
+  const todayStr = new Date().toISOString().slice(0, 10);
+  tbody.innerHTML = list.map(c => {
+    const regs = DB.trainingRegistrations.filter(r => r.classId === c.id && r.result !== 'CANCELLED');
+    const myReg = regs.find(r => r.creator === currentUser.username);
+    const isFull = c.capacity > 0 && regs.length >= c.capacity;
+    const isPastDeadline = !!(c.registerDeadline && todayStr > c.registerDeadline);
+    const canManageThis = currentUser.perms?.admin || c.creator === currentUser.username;
+    let actionHTML;
+    if (myReg) {
+      const label = myReg.result === 'PASSED' ? '✅ Đã đạt' : myReg.result === 'FAILED' ? '❌ Không đạt' : '📌 Đã đăng ký';
+      const cls = myReg.result === 'PASSED' ? 'text-emerald-600' : myReg.result === 'FAILED' ? 'text-red-600' : 'text-indigo-600';
+      actionHTML = `<span class="text-xs font-bold ${cls}">${label}</span>`;
+    } else if (c.status !== 'OPEN' || isFull || isPastDeadline) {
+      actionHTML = `<span class="text-xs text-gray-400">${c.status !== 'OPEN' ? 'Đã đóng' : isFull ? 'Đã đủ số lượng' : 'Hết hạn đăng ký'}</span>`;
+    } else {
+      actionHTML = `<button onclick="registerForTrainingClass(${c.id})" class="bg-emerald-600 text-white px-2 py-1 rounded text-xs font-bold hover:bg-emerald-700">Đăng Ký</button>`;
+    }
+    const manageHTML = canManageThis ? `<button onclick="openTrainingResultsModal(${c.id})" class="bg-indigo-600 text-white px-2 py-1 rounded text-xs font-bold hover:bg-indigo-700 ml-1">👥 Kết Quả (${regs.length})</button>` : '';
+    const delHTML = currentUser.perms?.admin ? `<button onclick="deleteTrainingClass(${c.id})" class="text-red-500 font-bold hover:underline text-xs ml-2">Xóa</button>` : '';
+    return `
+      <tr class="hover:bg-gray-50">
+        <td class="border p-2"><span class="font-bold text-emerald-800">${escapeHtml(c.code || '')}</span><br>${escapeHtml(c.title)}${c.instructor ? `<br><span class="text-gray-400">GV: ${escapeHtml(c.instructor)}</span>` : ''}</td>
+        <td class="border p-2">${escapeHtml(c.category)}</td>
+        <td class="border p-2">${escapeHtml((c.startTime || '').replace('T', ' '))}${c.location ? `<br><span class="text-gray-400">${escapeHtml(c.location)}</span>` : ''}</td>
+        <td class="border p-2">${regs.length}${c.capacity ? '/' + c.capacity : ''}</td>
+        <td class="border p-2 text-center">${actionHTML}${manageHTML}${delHTML}</td>
+      </tr>`;
+  }).join('');
+}
+
+async function registerForTrainingClass(classId) {
+  const cls = DB.trainingClasses.find(c => c.id === classId);
+  if (!cls) return;
+  let newReg;
+  try {
+    const result = await callCreateAction('trainingRegistrations', {
+      code: `DK-LOP-${classId}-${currentUser.username}-${Date.now()}`,
+      classId, registeredAt: new Date().toLocaleString('vi-VN')
+    });
+    newReg = result.item;
+  } catch (err) { return alert(`⛔ ${err.message}`); }
+  DB.trainingRegistrations.unshift(newReg);
+  logSystemAction('INTERNAL', 'REGISTER_TRAINING_CLASS', `Đăng ký lớp học [${cls.code} - ${cls.title}]`, 'SUCCESS', cls.code);
+  alert('✅ Đã đăng ký lớp học thành công!');
+  renderTrainingClasses();
+  renderTrainingMyRegs();
+}
+
+function deleteTrainingClass(id) {
+  if (!confirm('Xóa lớp học này? Lịch sử đăng ký/kết quả liên quan vẫn được giữ lại.')) return;
+  callRecordAction('trainingClasses', id, 'delete', {}).then(() => {
+    DB.trainingClasses = DB.trainingClasses.filter(c => c.id !== id);
+    logSystemAction('INTERNAL', 'DELETE_TRAINING_CLASS', `Xóa lớp học [id ${id}]`, 'SUCCESS');
+    renderTrainingClasses();
+    populateTrainingClassMultiSelects();
+  }).catch(err => alert(`⛔ ${err.message}`));
+}
+
+// ---------- KẾT QUẢ HỌC VIÊN (modal) ----------
+let trainingResultsModalClassId = null;
+function openTrainingResultsModal(classId) {
+  trainingResultsModalClassId = classId;
+  const cls = DB.trainingClasses.find(c => c.id === classId);
+  if (!cls) return;
+  document.getElementById('trainingResultsModalTitle').innerText = `👥 Kết quả — ${cls.title}`;
+  renderTrainingResultsModalBody();
+  document.getElementById('trainingResultsModal').classList.remove('hidden');
+}
+
+function renderTrainingResultsModalBody() {
+  const regs = DB.trainingRegistrations.filter(r => r.classId === trainingResultsModalClassId && r.result !== 'CANCELLED');
+  const body = document.getElementById('trainingResultsModalBody');
+  if (!regs.length) { body.innerHTML = `<tr><td colspan="5" class="text-center p-4 text-gray-400 italic">Chưa có ai đăng ký.</td></tr>`; return; }
+  body.innerHTML = regs.map(r => `
+    <tr>
+      <td class="border p-2">${escapeHtml(r.creatorName)}<br><span class="text-gray-400">${escapeHtml(r.dept)}</span></td>
+      <td class="border p-2">${escapeHtml(r.registeredAt || '')}</td>
+      <td class="border p-2">
+        <select id="trResult_${r.id}" class="border rounded p-1">
+          <option value="REGISTERED" ${r.result === 'REGISTERED' ? 'selected' : ''}>Đang học</option>
+          <option value="PASSED" ${r.result === 'PASSED' ? 'selected' : ''}>✅ Đạt</option>
+          <option value="FAILED" ${r.result === 'FAILED' ? 'selected' : ''}>❌ Không đạt</option>
+        </select>
+      </td>
+      <td class="border p-2"><input id="trScore_${r.id}" type="number" min="0" max="100" value="${r.score != null ? r.score : ''}" class="w-16 border rounded p-1"></td>
+      <td class="border p-2 text-center"><button onclick="saveTrainingResult(${r.id})" class="bg-emerald-600 text-white px-2 py-1 rounded font-bold hover:bg-emerald-700">Lưu</button></td>
+    </tr>`).join('');
+}
+
+async function saveTrainingResult(regId) {
+  const result = document.getElementById(`trResult_${regId}`).value;
+  if (result === 'REGISTERED') return alert('Vui lòng chọn Đạt hoặc Không đạt để lưu kết quả.');
+  const scoreRaw = document.getElementById(`trScore_${regId}`).value;
+  let updated;
+  try {
+    const res = await callRecordAction('trainingRegistrations', regId, 'set-result', { result, score: scoreRaw === '' ? null : Number(scoreRaw) });
+    updated = res.item;
+  } catch (err) { return alert(`⛔ ${err.message}`); }
+  const idx = DB.trainingRegistrations.findIndex(x => x.id === regId);
+  if (idx !== -1) DB.trainingRegistrations[idx] = updated;
+  logSystemAction('INTERNAL', 'SET_TRAINING_RESULT', `Ghi nhận kết quả [${updated.classCode}] cho ${updated.creatorName}: ${result === 'PASSED' ? 'Đạt' : 'Không đạt'}`, 'SUCCESS', updated.classCode);
+  renderTrainingResultsModalBody();
+  renderTrainingClasses();
+  renderCareerPaths();
+}
+
+// ---------- ĐĂNG KÝ CỦA TÔI ----------
+function renderTrainingMyRegs() {
+  const tbody = document.getElementById('trainingMyRegsTableBody');
+  if (!tbody) return;
+  const mine = DB.trainingRegistrations.filter(r => r.creator === currentUser.username && r.result !== 'CANCELLED').sort((a, b) => b.id - a.id);
+  if (!mine.length) { tbody.innerHTML = `<tr><td colspan="5" class="text-center p-4 text-gray-400 italic">Bạn chưa đăng ký lớp học nào.</td></tr>`; return; }
+  tbody.innerHTML = mine.map(r => {
+    const badge = r.result === 'PASSED' ? '<span class="text-emerald-600 font-bold">✅ Đạt' + (r.score != null ? ` (${r.score} điểm)` : '') + '</span>'
+      : r.result === 'FAILED' ? '<span class="text-red-600 font-bold">❌ Không đạt' + (r.score != null ? ` (${r.score} điểm)` : '') + '</span>'
+      : '<span class="text-indigo-600 font-bold">📌 Đang học</span>';
+    const cancelHTML = r.result === 'REGISTERED' ? `<button onclick="cancelTrainingRegistrationAction(${r.id})" class="text-red-500 font-bold hover:underline text-xs">Huỷ Đăng Ký</button>` : '';
+    return `
+      <tr class="hover:bg-gray-50">
+        <td class="border p-2">${escapeHtml(r.classCode || '')}<br>${escapeHtml(r.className || '')}</td>
+        <td class="border p-2">${escapeHtml(r.category || '')}</td>
+        <td class="border p-2">${escapeHtml(r.registeredAt || '')}</td>
+        <td class="border p-2">${badge}</td>
+        <td class="border p-2 text-center">${cancelHTML}</td>
+      </tr>`;
+  }).join('');
+}
+
+function cancelTrainingRegistrationAction(regId) {
+  if (!confirm('Huỷ đăng ký lớp học này?')) return;
+  callRecordAction('trainingRegistrations', regId, 'cancel', {}).then(result => {
+    const idx = DB.trainingRegistrations.findIndex(x => x.id === regId);
+    if (idx !== -1) DB.trainingRegistrations[idx] = result.item;
+    logSystemAction('INTERNAL', 'CANCEL_TRAINING_REG', `Huỷ đăng ký lớp học [id ${regId}]`, 'SUCCESS');
+    renderTrainingMyRegs();
+    renderTrainingClasses();
+  }).catch(err => alert(`⛔ ${err.message}`));
+}
+
+// ---------- KHO TÀI LIỆU ----------
+async function submitTrainingDocument(e) {
+  e.preventDefault();
+  if (!canManageTrainingLocal(currentUser)) return alert('⛔ Bạn không có quyền thêm tài liệu vào kho!');
+  const category = document.getElementById('tdCategory').value;
+  if (!category) return alert('Vui lòng chọn Loại Đào Tạo (thêm ở Quản Trị &gt; Quản Lý Danh Mục nếu chưa có)!');
+  const file = document.getElementById('tdFile').files[0];
+  if (!file) return alert('Vui lòng chọn tệp tài liệu!');
+  let uploaded;
+  try {
+    uploaded = await uploadFileToServer(file, 'internal');
+  } catch (err) { return alert(`⛔ Tải tệp thất bại: ${err.message}`); }
+  const payload = {
+    code: `TL-DT-${Date.now()}`,
+    category,
+    title: document.getElementById('tdTitle').value.trim(),
+    description: document.getElementById('tdDescription').value.trim(),
+    fileUrl: uploaded.fileUrl, fileName: uploaded.fileName, fileType: uploaded.fileType,
+    createdAt: new Date().toLocaleString('vi-VN')
+  };
+  let newDoc;
+  try {
+    const result = await callCreateAction('trainingDocuments', payload);
+    newDoc = result.item;
+  } catch (err) { return alert(`⛔ ${err.message}`); }
+  DB.trainingDocuments.unshift(newDoc);
+  logSystemAction('INTERNAL', 'CREATE_TRAINING_DOC', `Thêm tài liệu đào tạo [${newDoc.title}]`, 'SUCCESS', newDoc.code);
+  alert('✅ Đã thêm tài liệu vào kho thành công!');
+  e.target.reset();
+  renderTrainingLms();
+}
+
+function renderTrainingDocuments() {
+  const container = document.getElementById('trainingDocumentsContainer');
+  if (!container) return;
+  const filterCat = document.getElementById('trainingDocFilterCategory')?.value || '';
+  const list = DB.trainingDocuments.filter(d => !filterCat || d.category === filterCat).sort((a, b) => b.id - a.id);
+  if (!list.length) { container.innerHTML = `<div class="col-span-2 text-center p-6 text-gray-400 italic bg-white rounded border">Kho tài liệu đang trống.</div>`; return; }
+  container.innerHTML = list.map(d => `
+    <div class="bg-white rounded border p-3 flex justify-between items-start gap-2">
+      <div>
+        <div class="font-bold text-gray-800 text-sm">${escapeHtml(d.title)}</div>
+        <div class="text-xs text-gray-500">${escapeHtml(d.category)} — ${escapeHtml(d.uploaderName || '')}</div>
+        ${d.description ? `<div class="text-xs text-gray-600 mt-1">${escapeHtml(d.description)}</div>` : ''}
+      </div>
+      <div class="flex flex-col gap-1 flex-shrink-0">
+        <a href="${escapeHtml(d.fileUrl)}" target="_blank" rel="noopener" class="bg-indigo-600 text-white px-2 py-1 rounded text-xs font-bold hover:bg-indigo-700 text-center">⬇️ Tải</a>
+        ${currentUser.perms?.admin ? `<button onclick="deleteTrainingDocument(${d.id})" class="text-red-500 font-bold hover:underline text-xs">Xóa</button>` : ''}
+      </div>
+    </div>`).join('');
+}
+
+function deleteTrainingDocument(id) {
+  if (!confirm('Xóa tài liệu này khỏi kho?')) return;
+  callRecordAction('trainingDocuments', id, 'delete', {}).then(() => {
+    DB.trainingDocuments = DB.trainingDocuments.filter(d => d.id !== id);
+    logSystemAction('INTERNAL', 'DELETE_TRAINING_DOC', `Xóa tài liệu đào tạo [id ${id}]`, 'SUCCESS');
+    renderTrainingDocuments();
+    populateTrainingClassMultiSelects();
+  }).catch(err => alert(`⛔ ${err.message}`));
+}
+
+// ---------- LỘ TRÌNH THĂNG TIẾN ----------
+async function submitCareerPath(e) {
+  e.preventDefault();
+  if (!canManageTrainingLocal(currentUser)) return alert('⛔ Bạn không có quyền tạo lộ trình thăng tiến!');
+  const requiredClassIds = [...document.getElementById('cpRequiredClassIds').selectedOptions].map(o => Number(o.value));
+  if (!requiredClassIds.length) return alert('Vui lòng chọn ít nhất 1 lớp học bắt buộc cho lộ trình!');
+  const payload = {
+    code: `LT-${Date.now()}`,
+    name: document.getElementById('cpName').value.trim(),
+    targetTitle: document.getElementById('cpTargetTitle').value.trim(),
+    requiredClassIds,
+    description: document.getElementById('cpDescription').value.trim()
+  };
+  let newPath;
+  try {
+    const result = await callCreateAction('careerPaths', payload);
+    newPath = result.item;
+  } catch (err) { return alert(`⛔ ${err.message}`); }
+  DB.careerPaths.unshift(newPath);
+  logSystemAction('INTERNAL', 'CREATE_CAREER_PATH', `Tạo lộ trình thăng tiến [${newPath.name}]`, 'SUCCESS', newPath.code);
+  alert('✅ Đã tạo lộ trình thăng tiến thành công!');
+  e.target.reset();
+  renderCareerPaths();
+}
+
+// Tiến độ CỦA CHÍNH currentUser trên 1 lộ trình — tính trực tiếp từ trainingRegistrations (không cần
+// gọi API riêng, dữ liệu đã có sẵn trong DB sau lần tải /api/data).
+function getMyCareerPathProgress(path) {
+  const required = Array.isArray(path.requiredClassIds) ? path.requiredClassIds : [];
+  const passedCount = required.filter(classId =>
+    DB.trainingRegistrations.some(r => r.classId === classId && r.creator === currentUser.username && r.result === 'PASSED')).length;
+  const confirmed = DB.careerPathConfirmations.some(c => c.pathId === path.id && c.username === currentUser.username);
+  return { passedCount, total: required.length, confirmed };
+}
+
+function renderCareerPaths() {
+  const container = document.getElementById('careerPathsContainer');
+  if (!container) return;
+  const list = DB.careerPaths.slice().sort((a, b) => b.id - a.id);
+  if (!list.length) { container.innerHTML = `<div class="text-center p-6 text-gray-400 italic bg-white rounded border">Chưa có lộ trình thăng tiến nào.</div>`; return; }
+  const canManage = canManageTrainingLocal(currentUser);
+  container.innerHTML = list.map(p => {
+    const classNames = (p.requiredClassIds || []).map(id => {
+      const c = DB.trainingClasses.find(x => x.id === id);
+      return c ? `${escapeHtml(c.title)}` : `<span class="text-gray-400 italic">(lớp đã xoá)</span>`;
+    });
+    const progress = getMyCareerPathProgress(p);
+    const myStatusHTML = progress.confirmed
+      ? `<span class="text-emerald-600 font-bold">✅ Đã xác nhận hoàn thành</span>`
+      : `<span class="text-gray-600">Tiến độ của bạn: ${progress.passedCount}/${progress.total} lớp đã Đạt</span>`;
+    const manageHTML = canManage ? `
+      <div class="mt-2 pt-2 border-t flex gap-2 items-center flex-wrap">
+        <input id="cpConfirmUsername_${p.id}" placeholder="Nhập username nhân viên cần xác nhận..." class="border rounded p-1 text-xs flex-1 min-w-[160px]">
+        <button onclick="confirmCareerPathAction(${p.id})" class="bg-emerald-600 text-white px-2 py-1 rounded text-xs font-bold hover:bg-emerald-700">Xác Nhận Hoàn Thành</button>
+        <button onclick="deleteCareerPath(${p.id})" class="text-red-500 font-bold hover:underline text-xs">Xóa Lộ Trình</button>
+      </div>` : '';
+    return `
+      <div class="bg-white rounded border p-3">
+        <div class="font-bold text-emerald-800">${escapeHtml(p.name)}${p.targetTitle ? ` <span class="text-xs text-gray-500 font-normal">(mục tiêu: ${escapeHtml(p.targetTitle)})</span>` : ''}</div>
+        ${p.description ? `<div class="text-xs text-gray-600 mt-1">${escapeHtml(p.description)}</div>` : ''}
+        <div class="text-xs text-gray-500 mt-2"><b>Các lớp bắt buộc:</b> ${classNames.join(', ')}</div>
+        <div class="text-xs mt-1">${myStatusHTML}</div>
+        ${manageHTML}
+      </div>`;
+  }).join('');
+}
+
+async function confirmCareerPathAction(pathId) {
+  const usernameInput = document.getElementById(`cpConfirmUsername_${pathId}`);
+  const username = (usernameInput?.value || '').trim();
+  if (!username) return alert('Vui lòng nhập username nhân viên cần xác nhận!');
+  let confirmation;
+  try {
+    const result = await callRecordAction('careerPaths', pathId, 'confirm', { username });
+    confirmation = result.confirmation;
+  } catch (err) { return alert(`⛔ ${err.message}`); }
+  DB.careerPathConfirmations.unshift(confirmation);
+  logSystemAction('INTERNAL', 'CONFIRM_CAREER_PATH', `Xác nhận nhân viên [${username}] hoàn thành lộ trình [id ${pathId}]`, 'SUCCESS');
+  alert(`✅ Đã xác nhận ${confirmation.name} hoàn thành lộ trình!`);
+  if (usernameInput) usernameInput.value = '';
+  renderCareerPaths();
+}
+
+function deleteCareerPath(id) {
+  if (!confirm('Xóa lộ trình thăng tiến này?')) return;
+  callRecordAction('careerPaths', id, 'delete', {}).then(() => {
+    DB.careerPaths = DB.careerPaths.filter(p => p.id !== id);
+    logSystemAction('INTERNAL', 'DELETE_CAREER_PATH', `Xóa lộ trình thăng tiến [id ${id}]`, 'SUCCESS');
+    renderCareerPaths();
+  }).catch(err => alert(`⛔ ${err.message}`));
 }
 </script>
 

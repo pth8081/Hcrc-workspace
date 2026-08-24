@@ -1604,6 +1604,79 @@ function unpublishReportPeriod(user, period) {
   return period;
 }
 
+// ===== ĐÀO TẠO (module con "Truyền Thông Nội Bộ" > Đào tạo) — tạm thời, MVP =====
+// Dùng chung cờ internalTrainingCreate (đã có sẵn) cho quản lý đào tạo (tạo lớp/tài liệu/lộ trình +
+// xác nhận hoàn thành) — không thêm cờ quyền riêng để giữ phạm vi gọn.
+function canManageTraining(user) {
+  return !!(user.perms?.admin || user.perms?.internalTrainingCreate);
+}
+
+function cancelTrainingRegistration(payload, user, reg) {
+  if (reg.creator !== user.username && !user.perms?.admin) {
+    throw new HttpError(403, 'Bạn chỉ có thể huỷ đăng ký của chính mình');
+  }
+  if (reg.result !== 'REGISTERED') {
+    throw new HttpError(409, 'Đăng ký này không còn ở trạng thái có thể huỷ');
+  }
+  reg.result = 'CANCELLED';
+  reg.resultBy = user.username;
+  reg.resultByName = user.name;
+  reg.resultAt = nowVN();
+  return reg;
+}
+
+// Ghi nhận kết quả (Đạt/Không đạt + điểm nếu có) cho 1 đăng ký — chỉ người TẠO LỚP HỌC đó (snapshot
+// classCreator lúc đăng ký, xem lib/createValidation.js) hoặc Admin mới ghi được, không phải bất kỳ ai
+// có quyền internalTrainingCreate (tránh người quản lý lớp khác sửa kết quả lớp không phải của mình).
+function setTrainingRegistrationResult(payload, user, reg) {
+  if (reg.classCreator !== user.username && !user.perms?.admin) {
+    throw new HttpError(403, 'Chỉ người tạo lớp học hoặc Quản Trị Viên mới được ghi nhận kết quả');
+  }
+  if (reg.result === 'CANCELLED') {
+    throw new HttpError(409, 'Đăng ký này đã bị huỷ, không thể ghi nhận kết quả');
+  }
+  const result = payload?.result;
+  if (result !== 'PASSED' && result !== 'FAILED') {
+    throw new HttpError(400, 'Kết quả không hợp lệ (chỉ nhận Đạt/Không đạt)');
+  }
+  const score = payload?.score;
+  reg.score = (score === '' || score == null) ? null : Number(score);
+  reg.result = result;
+  reg.resultNote = (payload?.resultNote || '').trim();
+  reg.resultBy = user.username;
+  reg.resultByName = user.name;
+  reg.resultAt = nowVN();
+  return reg;
+}
+
+// Xác nhận 1 nhân viên đã hoàn thành lộ trình thăng tiến — CHỈ cho xác nhận khi nhân viên đó đã có kết
+// quả PASSED ở TẤT CẢ lớp học bắt buộc (path.requiredClassIds), đúng yêu cầu "phải đạt yêu cầu mới được
+// xác nhận qua". Trả về bản NHÁP bản ghi xác nhận (chưa lưu) — routes/records.js insert vào collection
+// careerPathConfirmations riêng (cùng khuôn startContractPayment() ở trên: mutator vừa xác thực vừa
+// "sinh" ra 1 bản ghi mới ở collection khác, không mutate path).
+function confirmCareerPathForEmployee(payload, user, path, allRegistrations, existingConfirmations, users) {
+  if (!canManageTraining(user)) throw new HttpError(403, 'Bạn không có quyền xác nhận lộ trình thăng tiến');
+  const targetUsername = (payload?.username || '').trim();
+  if (!targetUsername) throw new HttpError(400, 'Thiếu người cần xác nhận');
+  const targetUser = (users || []).find(u => u.username === targetUsername);
+  if (!targetUser) throw new HttpError(404, 'Không tìm thấy nhân viên này');
+  const already = (existingConfirmations || []).some(c => c.pathId === path.id && c.username === targetUsername);
+  if (already) throw new HttpError(409, 'Nhân viên này đã được xác nhận hoàn thành lộ trình này rồi');
+
+  const requiredClassIds = Array.isArray(path.requiredClassIds) ? path.requiredClassIds : [];
+  const missing = requiredClassIds.filter(classId =>
+    !(allRegistrations || []).some(r => r.classId === classId && r.creator === targetUsername && r.result === 'PASSED'));
+  if (missing.length) {
+    throw new HttpError(409, `Nhân viên chưa đạt yêu cầu ở ${missing.length} lớp học bắt buộc của lộ trình này — chưa thể xác nhận`);
+  }
+
+  return {
+    pathId: path.id, pathName: path.name,
+    username: targetUsername, name: targetUser.name, dept: targetUser.dept,
+    confirmedBy: user.username, confirmedByName: user.name, confirmedAt: nowVN()
+  };
+}
+
 module.exports = {
   editContract,
   canManageContractPayment, uploadContractSignedFile, startContractPayment,
@@ -1623,5 +1696,6 @@ module.exports = {
   closeVppPeriod, submitVppRegistration, updateVppRegistrationDraft,
   closeReportPeriod, submitReportEntry, updateReportEntryDraft,
   mergeReportPeriod, mergeReportPeriodByTasks, updateReportCompilation, publishReportPeriod, unpublishReportPeriod,
-  updateReportSlideTemplate
+  updateReportSlideTemplate,
+  canManageTraining, cancelTrainingRegistration, setTrainingRegistrationResult, confirmCareerPathForEmployee
 };

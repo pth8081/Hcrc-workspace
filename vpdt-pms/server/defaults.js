@@ -45,6 +45,9 @@ const DEFAULTS = {
   // phê duyệt). Chỉ 1 danh sách dùng chung toàn hệ thống, admin thêm/xoá tại màn Quản trị (giống hệt
   // mô hình depts/cats ở trên).
   jobTitles: ['Nhân viên', 'Chuyên viên', 'Trưởng phòng', 'Phó phòng', 'Giám đốc', 'Phó giám đốc', 'Tổng Giám Đốc', 'Chủ Tịch'],
+  // Loại đào tạo (module con "Truyền Thông Nội Bộ" > Đào tạo, tạm thời) — phân loại Kho Tài Liệu và Lớp
+  // Học, cùng cơ chế mở như jobTitles ở trên (danh sách nhãn hiển thị thuần, không có tra cứu phụ thuộc).
+  trainingCategories: [],
 
   // Danh sách "Loại Tờ Trình" — TRƯỚC ĐÂY gõ cứng trong index.html (const SUBMISSION_TYPES), giờ
   // chuyển thành dữ liệu để admin tự thêm/bớt tại màn Biểu Mẫu (nút Sửa trường mặc định "Loại Tờ
