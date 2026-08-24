@@ -358,7 +358,7 @@ table { display: block; overflow-x: auto; max-width: 100%; }
           <button onclick="closeTruyenThongDropdown(); switchTab('internal'); setInternalSubTab('NEWS')" class="sidebar-subitem">📰 Tin Nội Bộ</button>
           <button onclick="closeTruyenThongDropdown(); switchTab('internal'); setInternalSubTab('TRAINING')" class="sidebar-subitem">🎓 Đào Tạo</button>
           <button onclick="closeTruyenThongDropdown(); switchTab('internal'); setInternalSubTab('RECRUITMENT')" class="sidebar-subitem">💼 Tuyển Dụng</button>
-          <button onclick="closeTruyenThongDropdown(); switchTab('internal'); setInternalSubTab('SHARE')" class="sidebar-subitem">💬 Góc Chia Sẻ</button>
+          <button onclick="closeTruyenThongDropdown(); switchTab('internal'); setInternalSubTab('SHARE')" class="sidebar-subitem"><span id="internalShareDropdownLabel">💬 Góc Chia Sẻ</span></button>
         </div>
       </div>
 
@@ -1640,7 +1640,7 @@ table { display: block; overflow-x: auto; max-width: 100%; }
         <button type="button" onclick="setInternalSubTab('NEWS')" id="btnInternalSubNews" class="px-3 py-1 rounded text-xs font-bold bg-fuchsia-700 text-white">📰 Tin Nội Bộ</button>
         <button type="button" onclick="setInternalSubTab('TRAINING')" id="btnInternalSubTraining" class="px-3 py-1 rounded text-xs font-bold bg-gray-200 text-gray-700">🎓 Đào Tạo</button>
         <button type="button" onclick="setInternalSubTab('RECRUITMENT')" id="btnInternalSubRecruitment" class="px-3 py-1 rounded text-xs font-bold bg-gray-200 text-gray-700">💼 Tuyển Dụng</button>
-        <button type="button" onclick="setInternalSubTab('SHARE')" id="btnInternalSubShare" class="px-3 py-1 rounded text-xs font-bold bg-gray-200 text-gray-700">💬 Góc Chia Sẻ</button>
+        <button type="button" onclick="setInternalSubTab('SHARE')" id="btnInternalSubShare" class="px-3 py-1 rounded text-xs font-bold bg-gray-200 text-gray-700"><span id="internalShareSubTabLabel">💬 Góc Chia Sẻ</span></button>
       </div>
     </div>
 
@@ -7287,10 +7287,31 @@ function getMyPendingApprovals(user) {
 // nhanh") — gọi lại ở finishLogin() và mỗi lần switchTab() để số luôn khớp thực tế.
 function updateApprovalHubBadge() {
   const label = document.getElementById('approvalHubNavLabel');
+  updateInternalShareBadge();
   if (!label) return;
   if (!currentUser || !canAccessApprovalHub(currentUser)) { label.innerText = 'Phê Duyệt'; return; }
   const count = getMyPendingApprovals(currentUser).length;
   label.innerText = count > 0 ? `Phê Duyệt (${count})` : 'Phê Duyệt';
+}
+
+// Hiện thẳng số bài "Góc chia sẻ" đang chờ duyệt + bình luận bị gắn cờ NGAY TRÊN nhãn nút Góc Chia Sẻ
+// (cả mục dropdown "Truyền thông" lẫn sub-tab bên trong module) — người có quyền internalPostApprove
+// trước đây chỉ thấy số này khi mở riêng "✅ Phê Duyệt", dễ bỏ sót nếu ghé thẳng Truyền Thông Nội Bộ mà
+// không biết hộp thư gộp đó tồn tại. Gọi cùng updateApprovalHubBadge() nên luôn khớp số liệu mới nhất.
+function updateInternalShareBadge() {
+  const dropdownLabel = document.getElementById('internalShareDropdownLabel');
+  const subTabLabel = document.getElementById('internalShareSubTabLabel');
+  if (!dropdownLabel && !subTabLabel) return;
+  let count = 0;
+  if (currentUser && canApproveInternalPost(currentUser)) {
+    (DB.internalPosts || []).forEach(p => {
+      if (p.type === 'SHARE' && p.status === 'PENDING') count++;
+      count += (p.comments || []).filter(c => c.flagged).length;
+    });
+  }
+  const text = count > 0 ? `💬 Góc Chia Sẻ (${count})` : '💬 Góc Chia Sẻ';
+  if (dropdownLabel) dropdownLabel.innerText = text;
+  if (subTabLabel) subTabLabel.innerText = text;
 }
 
 // Gọi ở CUỐI mọi hàm duyệt/từ chối/xác nhận (dù được bấm từ đâu — ngay tại module gốc hay từ chính
