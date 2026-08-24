@@ -1,6 +1,7 @@
 // server.js — Điểm khởi chạy chính của ứng dụng VPDT (Văn Phòng Điện Tử)
 require('dotenv').config();
 const express = require('express');
+const compression = require('compression');
 const cookieParser = require('cookie-parser');
 const { rateLimit, ipKeyGenerator } = require('express-rate-limit');
 const path = require('path');
@@ -59,6 +60,16 @@ app.use((req, res, next) => {
   }
   next();
 });
+
+// Nén gzip cho MỌI response văn bản (HTML/JS/JSON) — trước đây KHÔNG có tầng nén nào (cả ở Node lẫn
+// Nginx mẫu ở HUONG_DAN_DEPLOY_UBUNTU.md mục 9b đều chưa bật gzip), nên public/index.html (đã hơn
+// 1.3MB do gộp rất nhiều module vào 1 file HTML/JS duy nhất qua nhiều đợt tính năng) và snapshot JSON
+// trả về từ GET /api/data đều truyền qua mạng NGUYÊN VĂN không nén — đây là nguyên nhân hợp lý nhất
+// khiến ứng dụng "vào chậm dần" theo thời gian khi file càng lớn, không phải do riêng 1 đợt cập nhật
+// nào. compression() nén tự động khi client gửi "Accept-Encoding: gzip" (mọi trình duyệt hiện đại),
+// giảm được ~70-85% dung lượng với nội dung dạng text như HTML/JS/JSON — không đổi nội dung phản hồi,
+// chỉ nén trên đường truyền.
+app.use(compression());
 
 app.use(securityHeaders);
 
