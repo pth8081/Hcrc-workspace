@@ -5879,6 +5879,7 @@ async function initDatabase(loggingInUser) {
 
     DB.reportPeriods = data.reportPeriods || [];
     DB.reportEntries = data.reportEntries || [];
+    DB.reportSlideTemplates = data.reportSlideTemplates || [];
 
     DB.trainingCategories = data.trainingCategories || [];
     DB.trainingDocuments = data.trainingDocuments || [];
@@ -18775,6 +18776,12 @@ async function extractSlideTemplateBackgroundFromFile(file) {
     return { blob: await rasterizePdfFirstPageToBlob(await file.arrayBuffer()), warning: null };
   }
   if (name.endsWith('.pptx')) {
+    // extractPptxBackgroundImage() dùng window.JSZip — KHÔNG được mặc định đã có sẵn (chỉ luồng khác,
+    // onPrEntryPptxFileChange() ở "Nhập Báo Cáo", tự tải trước) — nếu admin vào thẳng tab "Mẫu Trình
+    // Chiếu" tải .pptx mà chưa từng mở "Nhập Báo Cáo" trong phiên này, window.JSZip vẫn undefined và
+    // vỡ ngay ở TypeError "Cannot read properties of undefined (reading 'loadAsync')". Tự tải trước ở
+    // đây, cùng cách onPrEntryPptxFileChange() đã làm.
+    await loadVendorScript('/vendor/jszip/jszip.min.js');
     return extractPptxBackgroundImage(await file.arrayBuffer());
   }
   throw new Error('Định dạng tệp không được hỗ trợ — chỉ nhận ảnh (PNG/JPG...), PDF hoặc PowerPoint (.pptx).');
