@@ -127,6 +127,20 @@ const DEFAULTS = {
 
   permGroups: [],
 
+  // "Nhóm Quyền Đặc Biệt" (khối 17 cây phân quyền, tách riêng khỏi permGroups ở trên — 1 user chọn
+  // được NHIỀU nhóm loại này cùng lúc, khác permGroups chỉ 1 nhóm/user): mỗi nhóm mang 1 danh sách
+  // chức danh — user có jobTitle nằm trong danh sách của bất kỳ nhóm nào mình được gán vào sẽ bị loại
+  // khỏi việc đăng ký Văn Phòng Phẩm (xem lib/createValidation.js vppRegistrations.extraValidate) và
+  // khỏi số nhân sự gợi ý tính ngân sách/người theo phòng ban (xem vppActiveHeadcountForDept() ở
+  // index.html). user.vppExcludeGroupIds (mảng id nhóm) là field mới trên "users".
+  vppExcludeGroups: [],
+
+  // Danh sách phòng ban "tham gia quy trình" — lọc bớt danh sách phòng ban hiển thị ở màn "Hệ Thống →
+  // Quy Trình & Phê Duyệt" (renderWorkflowTab() ở index.html), tránh liệt kê TOÀN BỘ DB.depts khi công
+  // ty có nhiều phòng ban/siêu thị không cần cấu hình quy trình riêng. Mảng RỖNG (mặc định, chưa ai
+  // cấu hình) = giữ nguyên hành vi cũ, hiện đủ toàn bộ DB.depts (xem getWorkflowParticipatingDepts()).
+  workflowParticipatingDepts: [],
+
   workflows: [
     { id: 'WF_1STEP', name: 'Quy trình 1 bước (Sếp duyệt)', steps: [{ order: 1, name: 'Phê duyệt 1' }] },
     { id: 'WF_2STEP', name: 'Quy trình 2 bước (Trưởng phòng -> BGD)', steps: [{ order: 1, name: 'Trưởng Phòng' }, { order: 2, name: 'Ban Giám Đốc' }] },

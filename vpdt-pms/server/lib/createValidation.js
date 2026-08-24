@@ -746,6 +746,15 @@ const CREATE_MODULE_CONFIGS = {
       if (period.status !== 'OPEN' || pastEndDate) {
         throw new CreateError(409, 'Kỳ đăng ký này đã kết thúc, không thể đăng ký thêm');
       }
+      // Chặn thật (không chỉ ẩn form ở client) — user thuộc "Nhóm Quyền Đặc Biệt" (vppExcludeGroups,
+      // khối 17 cây phân quyền) có chức danh nằm trong danh sách loại trừ của BẤT KỲ nhóm nào mình được
+      // gán vào thì không đăng ký được, bất kể phòng ban. vppExcludeGroups là key AppData thường (không
+      // migrate sang dbo.Records) nên đã có sẵn nguyên trong appData, không cần cross-load thêm gì.
+      const excludeGroups = appData?.vppExcludeGroups || [];
+      const myExcludeGroupIds = new Set(user.vppExcludeGroupIds || []);
+      const isExcluded = !!user.jobTitle && excludeGroups.some(g =>
+        myExcludeGroupIds.has(g.id) && Array.isArray(g.jobTitles) && g.jobTitles.includes(user.jobTitle));
+      if (isExcluded) throw new CreateError(403, 'Bạn không thuộc diện được đăng ký Văn phòng phẩm');
       // 1 hồ sơ/người/kỳ — kể cả đang NHÁP (sửa nháp phải đi qua route .../update, không tạo hồ sơ thứ 2).
       // Từ chối (REJECTED) là trạng thái kết thúc hẳn nên vẫn cho phép đăng ký lại từ đầu như trước.
       const duplicate = (collection || []).some(r =>
