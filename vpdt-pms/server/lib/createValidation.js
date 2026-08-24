@@ -896,6 +896,9 @@ const CREATE_MODULE_CONFIGS = {
       payload.capacity = Number(payload.capacity) > 0 ? Math.floor(Number(payload.capacity)) : 0;
       payload.passScore = (payload.passScore === '' || payload.passScore == null) ? null : Number(payload.passScore);
       payload.documentIds = Array.isArray(payload.documentIds) ? payload.documentIds.map(Number).filter(Number.isFinite) : [];
+      // Kiểu lớp: ONLINE (mặc định, theo giáo trình đọc bắt buộc) hay OFFLINE (giáo trình chỉ là tài
+      // liệu tham khảo giảng viên tự mở khi lên lớp, học viên không bắt buộc phải đọc trước).
+      payload.mode = payload.mode === 'OFFLINE' ? 'OFFLINE' : 'ONLINE';
       payload.status = 'OPEN';
     }
   },

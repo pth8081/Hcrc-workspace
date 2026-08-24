@@ -1,0 +1,102 @@
+// routes/trainingRoster.js — Tải mẫu Excel danh sách học viên + upload/đọc file đã điền, dùng cho form
+// tạo lớp học (Đào tạo LMS) khi nhân sự thêm hàng loạt học viên bằng cách 2 (mẫu Excel) thay vì tìm-chọn
+// từng người ở dropdown. Tách route riêng (không dùng chung routes/upload.js) vì cần ĐỌC NỘI DUNG file
+// ngay để trả về danh sách xem trước (ai hợp lệ/ai không) trước khi nhân sự bấm xác nhận thêm — cùng lý
+// do routes/vppCatalog.js tách riêng.
+const express = require('express');
+const multer = require('multer');
+const crypto = require('crypto');
+const fs = require('fs');
+const path = require('path');
+const rateLimit = require('express-rate-limit');
+const { requireAuth, blockIfMustChangePassword } = require('../lib/auth');
+const { buildRosterTemplateWorkbook, parseRosterFile } = require('../lib/trainingRoster');
+
+const router = express.Router();
+router.use(requireAuth, blockIfMustChangePassword);
+
+const uploadRateLimiter = rateLimit({
+  windowMs: 10 * 60 * 1000,
+  limit: 30,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Bạn đang tải lên quá nhiều tệp, vui lòng thử lại sau ít phút.' }
+});
+
+const UPLOAD_DIR = path.join(__dirname, '..', 'uploads');
+const MAX_MB = parseInt(process.env.UPLOAD_MAX_MB || '20', 10);
+fs.mkdirSync(UPLOAD_DIR, { recursive: true });
+
+const ALLOWED_EXT = new Set(['.xlsx', '.xls', '.csv']);
+
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => cb(null, UPLOAD_DIR),
+  filename: (req, file, cb) => {
+    const ext = path.extname(file.originalname).toLowerCase();
+    const safeExt = ALLOWED_EXT.has(ext) ? ext : '';
+    cb(null, `${Date.now()}-${crypto.randomBytes(8).toString('hex')}${safeExt}`);
+  }
+});
+
+const upload = multer({
+  storage,
+  limits: { fileSize: MAX_MB * 1024 * 1024 },
+  fileFilter: (req, file, cb) => {
+    const ext = path.extname(file.originalname).toLowerCase();
+    if (!ALLOWED_EXT.has(ext)) {
+      return cb(new Error(`Chỉ chấp nhận file Excel (.xlsx/.xls) hoặc CSV, không hỗ trợ: ${ext || '(không rõ)'}`));
+    }
+    cb(null, true);
+  }
+});
+
+// GET /api/training/roster-template — file mẫu Excel để nhân sự điền tài khoản học viên.
+router.get('/roster-template', async (req, res) => {
+  try {
+    const wb = await buildRosterTemplateWorkbook();
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', 'attachment; filename="Mau_Danh_Sach_Hoc_Vien.xlsx"');
+    await wb.xlsx.write(res);
+    res.end();
+  } catch (err) {
+    console.error('GET /api/training/roster-template lỗi:', err.message);
+    res.status(500).json({ error: 'Không thể tạo file mẫu' });
+  }
+});
+
+// POST /api/training/parse-roster — đọc file đã điền, đối chiếu NGAY với danh sách tài khoản hệ thống
+// hiện có để trả về xem trước (ai hợp lệ/ai không tìm thấy) — nhân sự xác nhận thêm thật ở bước sau qua
+// POST /api/records/trainingClasses/:id/bulk-register (route đó tự kiểm tra lại quyền/còn chỗ/trùng,
+// không tin nguyên danh sách "đã xem trước" ở bước này).
+router.post('/parse-roster', uploadRateLimiter, (req, res) => {
+  upload.single('file')(req, res, async (err) => {
+    if (err instanceof multer.MulterError) {
+      if (err.code === 'LIMIT_FILE_SIZE') {
+        return res.status(400).json({ error: `Tệp vượt quá dung lượng cho phép (${MAX_MB}MB)` });
+      }
+      return res.status(400).json({ error: err.message });
+    }
+    if (err) return res.status(400).json({ error: err.message });
+    if (!req.file) return res.status(400).json({ error: 'Thiếu tệp danh sách học viên cần tải lên' });
+
+    try {
+      const ext = path.extname(req.file.originalname).toLowerCase();
+      const buffer = fs.readFileSync(req.file.path);
+      const usernames = await parseRosterFile(buffer, ext);
+      const items = usernames.map(username => {
+        const u = (req.allUsers || []).find(x => x.username === username);
+        return u
+          ? { username, found: true, name: u.name, dept: u.dept, active: u.active !== false }
+          : { username, found: false };
+      });
+      res.json({ items, fileName: req.file.originalname });
+    } catch (parseErr) {
+      const status = parseErr.status || 400;
+      res.status(status).json({ error: parseErr.message || 'Không đọc được nội dung file danh sách học viên' });
+    } finally {
+      fs.unlink(req.file.path, () => {}); // chỉ dùng để đọc 1 lần, không cần giữ lại file gốc
+    }
+  });
+});
+
+module.exports = router;

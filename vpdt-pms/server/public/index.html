@@ -1680,6 +1680,13 @@ table { display: block; overflow-x: auto; max-width: 100%; }
               <input id="tcLocation" placeholder="Phòng đào tạo A / Trực tuyến..." class="w-full border p-1.5 rounded">
             </div>
             <div>
+              <label class="block font-semibold text-gray-600 mb-1">Kiểu Lớp Học</label>
+              <select id="tcMode" onchange="onTrainingClassModeChange()" class="w-full border p-1.5 rounded bg-white">
+                <option value="ONLINE">💻 Online</option>
+                <option value="OFFLINE">🏫 Offline</option>
+              </select>
+            </div>
+            <div>
               <label class="block font-semibold text-gray-600 mb-1">Hạn Đăng Ký</label>
               <input id="tcDeadline" type="date" class="w-full border p-1.5 rounded">
             </div>
@@ -1692,7 +1699,7 @@ table { display: block; overflow-x: auto; max-width: 100%; }
               <input id="tcPassScore" type="number" min="0" max="100" class="w-full border p-1.5 rounded">
             </div>
             <div class="md:col-span-3">
-              <label class="block font-semibold text-gray-600 mb-1">Tài Liệu Kèm Theo (chọn từ Kho Tài Liệu, giữ Ctrl/Cmd để chọn nhiều)</label>
+              <label id="tcDocumentIdsLabel" class="block font-semibold text-gray-600 mb-1">Giáo Trình Đọc Bắt Buộc (chọn từ Kho Tài Liệu, giữ Ctrl/Cmd để chọn nhiều)</label>
               <select id="tcDocumentIds" multiple size="4" class="w-full border p-1.5 rounded bg-white"></select>
             </div>
             <div class="md:col-span-3">
@@ -1808,6 +1815,50 @@ table { display: block; overflow-x: auto; max-width: 100%; }
             <thead><tr class="bg-gray-100 text-left"><th class="border p-2">Học Viên</th><th class="border p-2">Đăng Ký Lúc</th><th class="border p-2">Kết Quả</th><th class="border p-2">Điểm</th><th class="border p-2 text-center">Thao Tác</th></tr></thead>
             <tbody id="trainingResultsModalBody"></tbody>
           </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- Modal thêm hàng loạt học viên vào lớp (chỉ người tạo lớp/Admin thấy nút mở) — 2 cách: tìm-chọn
+         từng người ở dropdown, hoặc tải mẫu Excel điền sẵn rồi upload lại. Cả 2 cách cùng gom vào 1
+         "danh sách tạm" phía dưới, bấm Xác Nhận Thêm 1 lần duy nhất mới thật sự gửi lên server. -->
+    <div id="trainingRosterModal" class="hidden fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+      <div class="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[85vh] overflow-y-auto">
+        <div class="p-4 border-b flex justify-between items-center sticky top-0 bg-white">
+          <h3 id="trainingRosterModalTitle" class="font-bold text-gray-800">Thêm học viên vào lớp</h3>
+          <button onclick="closeTrainingRosterModal()" class="text-gray-400 hover:text-gray-700 text-xl leading-none">&times;</button>
+        </div>
+        <div class="p-4 space-y-4">
+          <div>
+            <label class="block font-semibold text-gray-600 mb-1 text-xs">Cách 1 — Tìm và chọn từng người</label>
+            <div class="flex gap-2">
+              <input id="trRosterPickInput" list="systemUsersDatalist" placeholder="Gõ tên hoặc tài khoản..." class="flex-1 border p-1.5 rounded text-xs" onkeydown="if(event.key==='Enter'){event.preventDefault();addTrainingRosterPick();}">
+              <button type="button" onclick="addTrainingRosterPick()" class="bg-gray-200 hover:bg-gray-300 px-3 py-1.5 rounded text-xs font-bold">Thêm</button>
+            </div>
+          </div>
+          <div>
+            <label class="block font-semibold text-gray-600 mb-1 text-xs">Cách 2 — Tải mẫu Excel, điền danh sách rồi upload lại</label>
+            <div class="flex items-center gap-3 flex-wrap">
+              <a href="/api/training/roster-template" class="text-indigo-600 font-bold text-xs hover:underline">⬇️ Tải Mẫu Excel</a>
+              <input id="trRosterFileInput" type="file" accept=".xlsx,.xls,.csv" onchange="onTrainingRosterFileChange(event)" class="text-xs">
+            </div>
+            <p id="trRosterFileStatus" class="text-xs text-gray-500 mt-1"></p>
+            <div id="trRosterFilePreviewWrap" class="hidden mt-2 border rounded max-h-40 overflow-y-auto">
+              <table class="w-full text-xs">
+                <thead><tr class="bg-gray-100 text-left sticky top-0"><th class="p-1">Tài Khoản</th><th class="p-1">Họ Tên</th><th class="p-1">Trạng Thái</th></tr></thead>
+                <tbody id="trRosterFilePreviewBody"></tbody>
+              </table>
+            </div>
+            <button type="button" id="trRosterFileAddBtn" onclick="addTrainingRosterFileFound()" class="hidden mt-2 bg-gray-200 hover:bg-gray-300 px-3 py-1.5 rounded text-xs font-bold">Thêm những người hợp lệ vào danh sách</button>
+          </div>
+          <div>
+            <label class="block font-semibold text-gray-600 mb-1 text-xs">Danh sách tạm (<span id="trRosterStagedCount">0</span> người) — bấm Xác Nhận Thêm bên dưới mới thật sự lưu</label>
+            <div id="trRosterStagedList" class="border rounded p-2 min-h-[3rem] flex flex-wrap gap-1.5"></div>
+          </div>
+          <div class="flex justify-end gap-2 pt-2 border-t">
+            <button type="button" onclick="closeTrainingRosterModal()" class="px-4 py-2 rounded text-xs font-bold text-gray-600 hover:bg-gray-100">Đóng</button>
+            <button type="button" onclick="confirmTrainingRosterAdd()" class="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded text-xs font-bold">✅ Xác Nhận Thêm Vào Lớp</button>
+          </div>
         </div>
       </div>
     </div>
@@ -2117,7 +2168,7 @@ table { display: block; overflow-x: auto; max-width: 100%; }
         </div>
         <div class="bg-white p-3 rounded border space-y-2">
           <label class="block text-xs font-semibold text-gray-600 mb-1">Ngân sách Văn phòng phẩm / người (VNĐ) — tuỳ chọn, để trống = không giới hạn</label>
-          <input id="vppNewPeriodBudget" type="text" inputmode="numeric" placeholder="500.000" oninput="onVppBudgetInput()" class="w-full md:w-64 border p-1.5 rounded money-input">
+          <input id="vppNewPeriodBudget" type="text" inputmode="numeric" placeholder="500.000" value="100.000" oninput="onVppBudgetInput()" class="w-full md:w-64 border p-1.5 rounded money-input">
           <p class="text-[11px] text-gray-500 italic">Đây là mức trần áp cho TỪNG NGƯỜI khi đăng ký (tổng tiền các mặt hàng đã chọn không được vượt quá số này). Bảng nhân sự bên dưới chỉ dùng để tính "Ngân sách phòng ban" tham khảo ở Báo Cáo Tổng Hợp, KHÔNG dùng để chặn đăng ký.</p>
           <div class="overflow-x-auto">
             <table class="w-full border-collapse text-xs">
@@ -15305,7 +15356,7 @@ async function createVppPeriod() {
   document.getElementById('vppNewPeriodName').value = '';
   document.getElementById('vppNewPeriodStart').value = '';
   document.getElementById('vppNewPeriodEnd').value = '';
-  document.getElementById('vppNewPeriodBudget').value = '';
+  document.getElementById('vppNewPeriodBudget').value = '100.000'; // mặc định ban đầu 100.000đ/người, admin vẫn sửa được ở lượt tạo kỳ tiếp theo
   document.getElementById('vppCatalogFileInput').value = '';
   document.getElementById('vppCatalogPreviewWrap').classList.add('hidden');
   document.getElementById('vppCatalogStatus').innerText = '';
@@ -21033,6 +21084,16 @@ function renderTrainingLms() {
 }
 
 // ---------- LỚP HỌC ----------
+// Online: giáo trình trong tcDocumentIds là bắt buộc đọc trước khi học. Offline: chỉ là tài liệu tham
+// khảo để giảng viên tự mở khi lên lớp (họ có thể mở file bên ngoài nếu không dùng) — đổi nhãn cho đúng
+// kỳ vọng, KHÔNG đổi field/hành vi lưu (vẫn cùng 1 documentIds).
+function onTrainingClassModeChange() {
+  const mode = document.getElementById('tcMode').value;
+  document.getElementById('tcDocumentIdsLabel').innerText = mode === 'OFFLINE'
+    ? 'Giáo Trình Tham Khảo Cho Giảng Viên (không bắt buộc học viên đọc trước, chọn từ Kho Tài Liệu)'
+    : 'Giáo Trình Đọc Bắt Buộc (chọn từ Kho Tài Liệu, giữ Ctrl/Cmd để chọn nhiều)';
+}
+
 async function submitTrainingClass(e) {
   e.preventDefault();
   if (!canManageTrainingLocal(currentUser)) return alert('⛔ Bạn không có quyền tạo lớp học!');
@@ -21045,6 +21106,7 @@ async function submitTrainingClass(e) {
     startTime: document.getElementById('tcStart').value,
     endTime: document.getElementById('tcEnd').value,
     location: document.getElementById('tcLocation').value.trim(),
+    mode: document.getElementById('tcMode').value,
     registerDeadline: document.getElementById('tcDeadline').value,
     capacity: document.getElementById('tcCapacity').value,
     passScore: document.getElementById('tcPassScore').value,
@@ -21061,6 +21123,7 @@ async function submitTrainingClass(e) {
   logSystemAction('INTERNAL', 'CREATE_TRAINING_CLASS', `Tạo lớp học đào tạo [${newClass.code} - ${newClass.title}]`, 'SUCCESS', newClass.code);
   alert('✅ Đã tạo lớp học thành công!');
   e.target.reset();
+  onTrainingClassModeChange();
   renderTrainingLms();
 }
 
@@ -21086,11 +21149,11 @@ function renderTrainingClasses() {
     } else {
       actionHTML = `<button onclick="registerForTrainingClass(${c.id})" class="bg-emerald-600 text-white px-2 py-1 rounded text-xs font-bold hover:bg-emerald-700">Đăng Ký</button>`;
     }
-    const manageHTML = canManageThis ? `<button onclick="openTrainingResultsModal(${c.id})" class="bg-indigo-600 text-white px-2 py-1 rounded text-xs font-bold hover:bg-indigo-700 ml-1">👥 Kết Quả (${regs.length})</button>` : '';
+    const manageHTML = canManageThis ? `<button onclick="openTrainingResultsModal(${c.id})" class="bg-indigo-600 text-white px-2 py-1 rounded text-xs font-bold hover:bg-indigo-700 ml-1">👥 Kết Quả (${regs.length})</button><button onclick="openTrainingRosterModal(${c.id})" class="bg-teal-600 text-white px-2 py-1 rounded text-xs font-bold hover:bg-teal-700 ml-1">➕ Thêm Học Viên</button>` : '';
     const delHTML = currentUser.perms?.admin ? `<button onclick="deleteTrainingClass(${c.id})" class="text-red-500 font-bold hover:underline text-xs ml-2">Xóa</button>` : '';
     return `
       <tr class="hover:bg-gray-50">
-        <td class="border p-2"><span class="font-bold text-emerald-800">${escapeHtml(c.code || '')}</span><br>${escapeHtml(c.title)}${c.instructor ? `<br><span class="text-gray-400">GV: ${escapeHtml(c.instructor)}</span>` : ''}</td>
+        <td class="border p-2"><span class="font-bold text-emerald-800">${escapeHtml(c.code || '')}</span> <span class="text-xs px-1.5 py-0.5 rounded ${c.mode === 'OFFLINE' ? 'bg-orange-100 text-orange-700' : 'bg-sky-100 text-sky-700'}">${c.mode === 'OFFLINE' ? '🏫 Offline' : '💻 Online'}</span><br>${escapeHtml(c.title)}${c.instructor ? `<br><span class="text-gray-400">GV: ${escapeHtml(c.instructor)}</span>` : ''}</td>
         <td class="border p-2">${escapeHtml(c.category)}</td>
         <td class="border p-2">${escapeHtml((c.startTime || '').replace('T', ' '))}${c.location ? `<br><span class="text-gray-400">${escapeHtml(c.location)}</span>` : ''}</td>
         <td class="border p-2">${regs.length}${c.capacity ? '/' + c.capacity : ''}</td>
@@ -21173,6 +21236,138 @@ async function saveTrainingResult(regId) {
   renderTrainingResultsModalBody();
   renderTrainingClasses();
   renderCareerPaths();
+}
+
+// ---------- Thêm hàng loạt học viên vào lớp (Cách 1: tìm-chọn dropdown, Cách 2: mẫu Excel) ----------
+let trainingRosterModalClassId = null;
+let trainingRosterStaged = []; // [{ username, name, dept }] — danh sách tạm, chưa gửi lên server
+let trainingRosterFilePreviewItems = []; // kết quả gần nhất từ /api/training/parse-roster
+
+function openTrainingRosterModal(classId) {
+  trainingRosterModalClassId = classId;
+  const cls = DB.trainingClasses.find(c => c.id === classId);
+  if (!cls) return;
+  trainingRosterStaged = [];
+  trainingRosterFilePreviewItems = [];
+  document.getElementById('trainingRosterModalTitle').innerText = `➕ Thêm học viên — ${cls.title}`;
+  document.getElementById('trRosterPickInput').value = '';
+  document.getElementById('trRosterFileInput').value = '';
+  document.getElementById('trRosterFileStatus').innerText = '';
+  document.getElementById('trRosterFilePreviewWrap').classList.add('hidden');
+  document.getElementById('trRosterFileAddBtn').classList.add('hidden');
+  renderTrainingRosterStagedList();
+  document.getElementById('trainingRosterModal').classList.remove('hidden');
+}
+
+function closeTrainingRosterModal() {
+  document.getElementById('trainingRosterModal').classList.add('hidden');
+}
+
+// Thêm 1 người vào danh sách tạm — dùng chung cho cả 2 cách (tìm-chọn / từ file), chặn trùng username.
+function stageTrainingRosterUser(username, name, dept) {
+  if (!username || trainingRosterStaged.some(p => p.username === username)) return;
+  trainingRosterStaged.push({ username, name: name || username, dept: dept || '' });
+}
+
+function renderTrainingRosterStagedList() {
+  document.getElementById('trRosterStagedCount').innerText = trainingRosterStaged.length;
+  const wrap = document.getElementById('trRosterStagedList');
+  if (!trainingRosterStaged.length) {
+    wrap.innerHTML = `<span class="text-gray-400 italic text-xs">Chưa chọn học viên nào.</span>`;
+    return;
+  }
+  wrap.innerHTML = trainingRosterStaged.map(p => `
+    <span class="inline-flex items-center gap-1 bg-teal-50 border border-teal-200 text-teal-800 rounded-full pl-2 pr-1 py-0.5 text-xs">
+      ${escapeHtml(p.name)}${p.dept ? ` <span class="text-teal-500">(${escapeHtml(p.dept)})</span>` : ''}
+      <button type="button" onclick="removeTrainingRosterStaged('${escapeHtml(p.username)}')" class="text-teal-500 hover:text-red-600 font-bold leading-none px-1">&times;</button>
+    </span>`).join('');
+}
+
+function removeTrainingRosterStaged(username) {
+  trainingRosterStaged = trainingRosterStaged.filter(p => p.username !== username);
+  renderTrainingRosterStagedList();
+}
+
+// Cách 1: gõ vào ô tìm kiếm rồi bấm Thêm/Enter — value khớp đúng định dạng datalist chung
+// "Họ tên — Phòng ban (username)" (xem populateSystemUsersDatalist()).
+function addTrainingRosterPick() {
+  const input = document.getElementById('trRosterPickInput');
+  const raw = input.value.trim();
+  if (!raw) return;
+  const m = raw.match(/^(.*) — .*\(([^()]+)\)$/);
+  const user = m ? DB.users.find(u => u.username === m[2].trim()) : DB.users.find(u => u.username === raw);
+  if (!user) return alert('Không tìm thấy tài khoản này trong danh sách gợi ý — vui lòng chọn đúng từ dropdown.');
+  stageTrainingRosterUser(user.username, user.name, user.dept);
+  renderTrainingRosterStagedList();
+  input.value = '';
+  input.focus();
+}
+
+// Cách 2: upload file mẫu đã điền — đọc + đối chiếu ngay với danh sách tài khoản hệ thống (server tự
+// làm việc này ở /api/training/parse-roster), hiển thị xem trước ai hợp lệ/ai không tìm thấy.
+async function onTrainingRosterFileChange(event) {
+  const file = event.target.files[0];
+  trainingRosterFilePreviewItems = [];
+  document.getElementById('trRosterFilePreviewWrap').classList.add('hidden');
+  document.getElementById('trRosterFileAddBtn').classList.add('hidden');
+  const statusEl = document.getElementById('trRosterFileStatus');
+  if (!file) { statusEl.innerText = ''; return; }
+
+  statusEl.innerText = '⏳ Đang đọc file...';
+  const formData = new FormData();
+  formData.append('file', file);
+  try {
+    const res = await fetch('/api/training/parse-roster', { method: 'POST', body: formData });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Lỗi không xác định');
+    trainingRosterFilePreviewItems = data.items;
+    const foundCount = data.items.filter(it => it.found).length;
+    statusEl.innerText = `✅ Đọc file "${data.fileName}": ${foundCount}/${data.items.length} tài khoản hợp lệ.`;
+    document.getElementById('trRosterFilePreviewBody').innerHTML = data.items.map(it => `<tr>
+      <td class="p-1">${escapeHtml(it.username)}</td>
+      <td class="p-1">${escapeHtml(it.name || '')}</td>
+      <td class="p-1">${it.found ? (it.active === false ? '<span class="text-amber-600">⚠️ Tài khoản đã khoá</span>' : '<span class="text-emerald-600">✅ Hợp lệ</span>') : '<span class="text-red-600">⛔ Không tìm thấy</span>'}</td>
+    </tr>`).join('');
+    document.getElementById('trRosterFilePreviewWrap').classList.remove('hidden');
+    if (foundCount > 0) document.getElementById('trRosterFileAddBtn').classList.remove('hidden');
+  } catch (err) {
+    statusEl.innerText = `⛔ ${err.message}`;
+    event.target.value = '';
+  }
+}
+
+function addTrainingRosterFileFound() {
+  trainingRosterFilePreviewItems.filter(it => it.found && it.active !== false)
+    .forEach(it => stageTrainingRosterUser(it.username, it.name, it.dept));
+  renderTrainingRosterStagedList();
+}
+
+const TRAINING_ROSTER_SKIP_REASON_LABELS = {
+  NOT_FOUND: 'Không tìm thấy tài khoản / tài khoản đã khoá',
+  ALREADY_REGISTERED: 'Đã đăng ký lớp này rồi',
+  CAPACITY_FULL: 'Lớp đã đủ số lượng'
+};
+
+async function confirmTrainingRosterAdd() {
+  if (!trainingRosterStaged.length) return alert('Vui lòng chọn ít nhất 1 học viên trước khi xác nhận.');
+  const classId = trainingRosterModalClassId;
+  const cls = DB.trainingClasses.find(c => c.id === classId);
+  let result;
+  try {
+    result = await callRecordAction('trainingClasses', classId, 'bulk-register', { usernames: trainingRosterStaged.map(p => p.username) });
+  } catch (err) { return alert(`⛔ ${err.message}`); }
+
+  (result.added || []).forEach(reg => DB.trainingRegistrations.unshift(reg));
+  logSystemAction('INTERNAL', 'BULK_REGISTER_TRAINING_CLASS', `Thêm ${result.added.length} học viên vào lớp [${cls ? cls.code : classId}]`, 'SUCCESS', cls ? cls.code : '');
+
+  let msg = `✅ Đã thêm ${result.added.length}/${trainingRosterStaged.length} học viên vào lớp.`;
+  if (result.skipped && result.skipped.length) {
+    msg += `\n\n⛔ ${result.skipped.length} người bị bỏ qua:\n` +
+      result.skipped.map(s => `- ${s.name || s.username}: ${TRAINING_ROSTER_SKIP_REASON_LABELS[s.reason] || s.reason}`).join('\n');
+  }
+  alert(msg);
+  closeTrainingRosterModal();
+  renderTrainingClasses();
 }
 
 // ---------- ĐĂNG KÝ CỦA TÔI ----------

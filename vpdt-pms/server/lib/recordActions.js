@@ -1707,6 +1707,52 @@ function setTrainingRegistrationResult(payload, user, reg) {
   return reg;
 }
 
+// Nhân sự (người tạo lớp) hoặc Admin thêm HÀNG LOẠT học viên vào 1 lớp học cùng lúc (chọn từng người ở
+// dropdown, hoặc theo danh sách đọc từ file Excel — cả 2 cách đều gửi lên đúng 1 mảng usernames, khác
+// biệt cách nhập chỉ ở phía client). Trả về bản NHÁP các đăng ký hợp lệ (route routes/records.js tự gán
+// id + insertRecord từng dòng trong lúc đang giữ khoá theo classId) + danh sách bị bỏ qua kèm lý do, để
+// người tạo lớp biết chính xác ai chưa được thêm mà không phải đoán.
+function bulkRegisterTrainingClass(payload, user, cls, existingRegs, users) {
+  if (cls.creator !== user.username && !user.perms?.admin) {
+    throw new HttpError(403, 'Chỉ người tạo lớp học hoặc Quản Trị Viên mới được thêm học viên vào lớp');
+  }
+  if (cls.status !== 'OPEN') throw new HttpError(409, 'Lớp học này đã đóng đăng ký');
+
+  const requested = Array.isArray(payload?.usernames) ? payload.usernames : [];
+  const seen = new Set(); // chặn trùng NGAY TRONG 1 lượt gửi (client gửi trùng username 2 lần)
+  const added = [];
+  const skipped = [];
+  let activeCount = (existingRegs || []).filter(r => r.classId === cls.id && r.result !== 'CANCELLED').length;
+
+  for (const raw of requested) {
+    const username = String(raw || '').trim();
+    if (!username || seen.has(username)) continue;
+    seen.add(username);
+
+    const targetUser = (users || []).find(u => u.username === username);
+    if (!targetUser || targetUser.active === false) {
+      skipped.push({ username, reason: 'NOT_FOUND' });
+      continue;
+    }
+    const alreadyRegistered = (existingRegs || []).some(r => r.classId === cls.id && r.creator === username && r.result !== 'CANCELLED');
+    if (alreadyRegistered) {
+      skipped.push({ username, name: targetUser.name, reason: 'ALREADY_REGISTERED' });
+      continue;
+    }
+    if (cls.capacity > 0 && activeCount >= cls.capacity) {
+      skipped.push({ username, name: targetUser.name, reason: 'CAPACITY_FULL' });
+      continue;
+    }
+    activeCount++;
+    added.push({
+      classId: cls.id, className: cls.title, classCode: cls.code, category: cls.category, classCreator: cls.creator,
+      result: 'REGISTERED', score: null, resultNote: '', resultBy: null, resultByName: null, resultAt: null,
+      creator: targetUser.username, creatorName: targetUser.name, dept: targetUser.dept
+    });
+  }
+  return { added, skipped };
+}
+
 // Xác nhận 1 nhân viên đã hoàn thành lộ trình thăng tiến — CHỈ cho xác nhận khi nhân viên đó đã có kết
 // quả PASSED ở TẤT CẢ lớp học bắt buộc (path.requiredClassIds), đúng yêu cầu "phải đạt yêu cầu mới được
 // xác nhận qua". Trả về bản NHÁP bản ghi xác nhận (chưa lưu) — routes/records.js insert vào collection
@@ -1756,5 +1802,6 @@ module.exports = {
   closeReportPeriod, submitReportEntry, updateReportEntryDraft,
   mergeReportPeriod, mergeReportPeriodByTasks, updateReportCompilation, publishReportPeriod, unpublishReportPeriod,
   updateReportSlideTemplate,
-  canManageTraining, cancelTrainingRegistration, setTrainingRegistrationResult, confirmCareerPathForEmployee
+  canManageTraining, cancelTrainingRegistration, setTrainingRegistrationResult, confirmCareerPathForEmployee,
+  bulkRegisterTrainingClass
 };

@@ -7,7 +7,7 @@ const { requireAuth, blockIfMustChangePassword } = require('../lib/auth');
 const { HttpError } = require('../lib/httpErrors');
 const recordActions = require('../lib/recordActions');
 const { insertTask, withLockedTaskById, deleteTaskById, getAllTasks, migrateDirectiveTaskLinks } = require('../lib/taskStore');
-const { createForCollection, withLockedRecordForCollection, deleteRecordForCollection, getAllForCollection, withAppLock } = require('../lib/recordStore');
+const { createForCollection, insertRecord, withLockedRecordForCollection, deleteRecordForCollection, getAllForCollection, withAppLock } = require('../lib/recordStore');
 const { getAllAppData, getAppDataValue } = require('../lib/appData');
 
 router.use(requireAuth, blockIfMustChangePassword);
@@ -571,6 +571,34 @@ router.post('/trainingRegistrations/:id/cancel', (req, res) =>
   withTrainingRegAction(req, res, 'cancel', recordActions.cancelTrainingRegistration));
 router.post('/trainingRegistrations/:id/set-result', (req, res) =>
   withTrainingRegAction(req, res, 'set-result', recordActions.setTrainingRegistrationResult));
+
+// POST /api/records/trainingClasses/:id/bulk-register — nhân sự (người tạo lớp) hoặc Admin thêm HÀNG
+// LOẠT học viên vào 1 lớp cùng lúc (dropdown chọn từng người, hoặc theo danh sách đọc từ file Excel —
+// cả 2 cách client đều gửi lên đúng { usernames: [...] }). Khoá theo classId trong SUỐT lúc đọc-kiểm
+// tra-ghi (khác withLockedRecordForCollection chỉ khoá đúng 1 dòng) vì ở đây ghi NHIỀU bản ghi mới cùng
+// lúc, cần đọc "ảnh chụp" trainingRegistrations hiện có ổn định suốt quá trình kiểm tra trùng/còn chỗ.
+router.post('/trainingClasses/:id/bulk-register', async (req, res) => {
+  const classId = Number(req.params.id);
+  if (!Number.isFinite(classId)) return res.status(400).json({ error: 'id không hợp lệ' });
+  try {
+    const { freshUser, users } = await getFreshUser(req);
+    const result = await withAppLock(`training_class_roster:${classId}`, async () => {
+      const classes = await getAllForCollection('trainingClasses');
+      const cls = classes.find(c => c.id === classId);
+      if (!cls) throw new HttpError(404, 'Không tìm thấy lớp học');
+      const existingRegs = await getAllForCollection('trainingRegistrations');
+      const { added, skipped } = recordActions.bulkRegisterTrainingClass(req.body, freshUser, cls, existingRegs, users);
+      const inserted = [];
+      for (let i = 0; i < added.length; i++) {
+        inserted.push(await insertRecord('trainingRegistrations', { ...added[i], id: Date.now() + i }));
+      }
+      return { added: inserted, skipped };
+    });
+    res.json({ ok: true, ...result });
+  } catch (err) {
+    handleError(res, `trainingClasses/${req.params.id}/bulk-register`, err);
+  }
+});
 
 // "Xác nhận" 1 nhân viên hoàn thành lộ trình thăng tiến — cùng khuôn /contracts/:id/start-payment ở
 // trên (mutatorFn vừa xác thực (đủ điều kiện PASSED hết các lớp bắt buộc) vừa trả bản NHÁP, PHẢI insert
