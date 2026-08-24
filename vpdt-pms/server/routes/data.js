@@ -49,7 +49,10 @@ const ADMIN_ONLY_KEYS = new Set([
   // sensitiveKeywords: dữ liệu cấu hình CHÍNH SÁCH kiểm duyệt bình luận (Truyền Thông Nội Bộ), không
   // phải danh sách nhãn hiển thị thuần như jobTitles/trainingCategories — chỉ admin mới sửa được danh
   // sách từ khoá quét (xem defaults.js + lib/recordActions.js scanCommentForSensitiveContent()).
-  'sensitiveKeywords'
+  'sensitiveKeywords',
+  // vppExcludeGroups (khối 17 "Nhóm Quyền Đặc Biệt")/workflowParticipatingDepts: cấu hình quản trị,
+  // chỉ sửa được ở màn Phân Quyền (admin) — xem defaults.js.
+  'vppExcludeGroups', 'workflowParticipatingDepts'
 ]);
 
 router.use(requireAuth, blockIfMustChangePassword);
