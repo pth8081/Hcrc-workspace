@@ -59,7 +59,7 @@ function createMockState(seed) {
   return Object.assign({
     depts: [], stores: [], cats: [], deptAbbrs: {}, jobTitles: [], permGroups: [], users: [],
     itPriceMasterLists: [], itPriceDeptWorkflows: {}, workflows: [],
-    reportSlideTemplates: [], uniformPeriods: [], uniformIssuances: [], uniformStockAdjustments: [],
+    reportSlideTemplates: [], uniformPeriods: [], uniformIssuances: [], uniformStockAdjustments: [], uniformCatalog: [],
     itPriceApprovals: [], itSupportTickets: [], reportPeriods: [], reportEntries: [],
     tasks: [],
     budgetTemplates: [], budgetPeriods: [], budgetEntries: [], budgetDeptWorkflows: {}
@@ -73,7 +73,8 @@ function buildAppDataForCreate(moduleKey, state) {
     stores: state.stores,
     itPriceMasterLists: state.itPriceMasterLists,
     itPriceDeptWorkflows: state.itPriceDeptWorkflows,
-    workflows: state.workflows
+    workflows: state.workflows,
+    uniformCatalog: state.uniformCatalog
   };
   if (moduleKey === 'reportEntries') base.reportPeriods = state.reportPeriods;
   if (moduleKey === 'reportPeriods') base.reportSlideTemplates = state.reportSlideTemplates;

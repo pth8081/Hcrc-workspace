@@ -30,7 +30,10 @@ const EMP_NOPERM = { username: 'emp_noperm', name: 'Người Không Quyền', de
 const state = createMockState({
   depts: ['Hành Chính'],
   stores: STORES,
-  users: [HC, GD_HOIAN, NV_HOIAN, GD_DANANG, EMP_NOPERM]
+  users: [HC, GD_HOIAN, NV_HOIAN, GD_DANANG, EMP_NOPERM],
+  // Danh Mục Đồng Phục — mới thêm (xem sanitizeUniformItems() ở lib/createValidation.js): tạo kỳ cấp
+  // phát giờ bắt buộc CHỌN tên+size từ đúng danh mục này, không còn gõ tự do.
+  uniformCatalog: [{ id: 1, name: 'Áo đồng phục nam', sizes: ['S', 'M', 'L', 'XL'] }]
 });
 
 async function loginAs(page, user) {
@@ -170,8 +173,7 @@ async function main() {
         document.getElementById('uniformIssueEmployee').value = 'Lê Văn Nhân Viên (nv_hoian)';
         resolveUniformEmployeeInput('uniformIssueEmployee', 'uniformIssueEmployeeUsername');
         document.getElementById('uniformIssueCode').value = 'CP001';
-        updateUniformIssueItemField(0, 'name', 'Áo đồng phục nam');
-        updateUniformIssueItemField(0, 'size', 'L');
+        updateUniformIssueItemNameSize(0, 'Áo đồng phục nam|||L');
         updateUniformIssueItemField(0, 'qty', '5');
         await submitUniformIssuance();
         const stock = computeUniformStockClient('Siêu Thị Hội An');
@@ -196,8 +198,7 @@ async function main() {
         resetUniformIssueForm();
         document.getElementById('uniformIssueEmployee').value = 'Lê Văn Nhân Viên (nv_hoian)';
         resolveUniformEmployeeInput('uniformIssueEmployee', 'uniformIssueEmployeeUsername');
-        updateUniformIssueItemField(0, 'name', 'Áo đồng phục nam');
-        updateUniformIssueItemField(0, 'size', 'L');
+        updateUniformIssueItemNameSize(0, 'Áo đồng phục nam|||L');
         updateUniformIssueItemField(0, 'qty', '999');
         await submitUniformIssuance();
         return {
@@ -308,8 +309,9 @@ async function main() {
         resetUniformAdjustForms();
         document.getElementById('uniformAdjEmpEmployee').value = 'Lê Văn Nhân Viên (nv_hoian)';
         resolveUniformEmployeeInput('uniformAdjEmpEmployee', 'uniformAdjEmpEmployeeUsername');
-        document.getElementById('uniformAdjEmpItemName').value = 'Áo đồng phục nam';
-        document.getElementById('uniformAdjEmpSize').value = 'L';
+        renderUniformAdjEmpItemOptions();
+        document.getElementById('uniformAdjEmpItemSize').value = 'Áo đồng phục nam|||L';
+        onUniformAdjEmpItemSizeChange();
         document.getElementById('uniformAdjEmpQty').value = '2';
         document.querySelector('input[name="uniformAdjEmpOutcome"][value="TON"]').checked = true;
         document.getElementById('uniformAdjEmpReason').value = 'Nhân viên đổi size';
@@ -330,8 +332,9 @@ async function main() {
         window.__resetCapture();
         document.getElementById('uniformAdjEmpEmployee').value = 'Lê Văn Nhân Viên (nv_hoian)';
         resolveUniformEmployeeInput('uniformAdjEmpEmployee', 'uniformAdjEmpEmployeeUsername');
-        document.getElementById('uniformAdjEmpItemName').value = 'Áo đồng phục nam';
-        document.getElementById('uniformAdjEmpSize').value = 'L';
+        renderUniformAdjEmpItemOptions();
+        document.getElementById('uniformAdjEmpItemSize').value = 'Áo đồng phục nam|||L';
+        onUniformAdjEmpItemSizeChange();
         document.getElementById('uniformAdjEmpQty').value = '1';
         document.querySelector('input[name="uniformAdjEmpOutcome"][value="HONG"]').checked = true;
         document.getElementById('uniformAdjEmpReason').value = 'Phát hiện rách khi thu hồi';
@@ -352,8 +355,9 @@ async function main() {
         window.__resetCapture();
         document.getElementById('uniformAdjEmpEmployee').value = 'Lê Văn Nhân Viên (nv_hoian)';
         resolveUniformEmployeeInput('uniformAdjEmpEmployee', 'uniformAdjEmpEmployeeUsername');
-        document.getElementById('uniformAdjEmpItemName').value = 'Áo đồng phục nam';
-        document.getElementById('uniformAdjEmpSize').value = 'L';
+        renderUniformAdjEmpItemOptions();
+        document.getElementById('uniformAdjEmpItemSize').value = 'Áo đồng phục nam|||L';
+        onUniformAdjEmpItemSizeChange();
         document.getElementById('uniformAdjEmpQty').value = '999';
         document.querySelector('input[name="uniformAdjEmpOutcome"][value="TON"]').checked = true;
         document.getElementById('uniformAdjEmpReason').value = 'Test vượt số đang giữ';
@@ -419,6 +423,65 @@ async function main() {
       assertEqual(result.hong, 3, 'hong phải đúng 3');
       assertEqual(result.huy, 1, 'huy phải đúng 1');
       assertEqual(result.stock, 14, 'stock cuối cùng phải đúng 14');
+    });
+
+    // ===== 21) Đồng Phục Nhân Viên Đang Giữ — nút Báo Mất trên bảng thao tác nhanh =====
+    await run.run('Đang Giữ: nút Báo Mất trừ đúng vào Mất, không cộng lại tồn kho', async () => {
+      await loginAs(page, GD_HOIAN);
+      const result = await page.evaluate(async () => {
+        window.__resetCapture();
+        renderUniformHoldingsTable();
+        const idx = uniformHoldingsCache.findIndex(h => h.employeeUsername === 'nv_hoian' && h.name === 'Áo đồng phục nam' && h.size === 'L');
+        openUniformHoldingActionModal(idx, 'MAT');
+        document.getElementById('uniformHoldingActionQty').value = '1';
+        document.getElementById('uniformHoldingActionReason').value = 'Nhân viên báo mất áo';
+        await window.__confirmPending();
+        const stock = computeUniformStockClient('Siêu Thị Hội An');
+        const row = stock.get('Áo đồng phục nam|||L');
+        return { alerts: window.__alerts, foundIdx: idx, heldBefore: uniformHoldingsCache[idx]?.held, mat: row.mat, recalled: row.recalled, stockLeft: row.stock };
+      });
+      assert(result.foundIdx !== -1, 'Phải tìm thấy dòng holding của nv_hoian trong bảng Đang Giữ');
+      assertIncludes(result.alerts, 'Đã ghi nhận thao tác', 'Phải có thông báo ghi nhận thành công');
+      assertEqual(result.mat, 1, 'Mất phải đúng 1');
+      assertEqual(result.recalled, 4, 'recalled phải cộng dồn thêm 1 (thao tác Mất cũng tính là thu hồi khỏi nhân viên): 3 + 1 = 4');
+      // Món đã Mất KHÔNG quay lại tồn khả dụng — nhưng cũng không bị trừ THÊM lần nữa: nó đã bị loại khỏi
+      // tồn kho ngay từ lúc issued (giống hệt cách outcome Hỏng ở kịch bản #15 cũng giữ nguyên tồn kho).
+      assertEqual(result.stockLeft, 14, 'Tồn kho GIỮ NGUYÊN 14 — món đã Mất đã bị loại khỏi tồn từ lúc cấp phát, không trừ thêm lần nữa');
+    });
+
+    // ===== 22) Validation: mặt hàng KHÔNG có trong Danh Mục Đồng Phục bị chặn khi tạo kỳ cấp phát =====
+    await run.run('Validation: mặt hàng ngoài Danh Mục Đồng Phục bị chặn khi tạo kỳ cấp phát', async () => {
+      await loginAs(page, HC);
+      const result = await page.evaluate(async () => {
+        window.__resetCapture();
+        try {
+          await callCreateAction('uniformPeriods', {
+            name: 'Kỳ mặt hàng lạ',
+            allocations: [{ dept: 'Siêu Thị Hội An', items: [{ name: 'Mũ bảo hiểm', size: '', qty: 5 }] }]
+          });
+          return { errorMsg: null };
+        } catch (err) {
+          return { errorMsg: err.message };
+        }
+      });
+      assertIncludes(result.errorMsg, 'không có trong Danh Mục Đồng Phục', 'Server phải chặn mặt hàng không có trong danh mục');
+    });
+
+    // ===== 23) Validation: size không thuộc mặt hàng đã chọn bị chặn khi tạo kỳ cấp phát =====
+    await run.run('Validation: size không thuộc mặt hàng đã chọn bị chặn khi tạo kỳ cấp phát', async () => {
+      const result = await page.evaluate(async () => {
+        window.__resetCapture();
+        try {
+          await callCreateAction('uniformPeriods', {
+            name: 'Kỳ size sai',
+            allocations: [{ dept: 'Siêu Thị Hội An', items: [{ name: 'Áo đồng phục nam', size: 'XXXL', qty: 5 }] }]
+          });
+          return { errorMsg: null };
+        } catch (err) {
+          return { errorMsg: err.message };
+        }
+      });
+      assertIncludes(result.errorMsg, 'không hợp lệ cho', 'Server phải chặn size không thuộc mặt hàng đã chọn');
     });
   } finally {
     await browser.close();
