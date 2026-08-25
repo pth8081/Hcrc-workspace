@@ -2612,12 +2612,15 @@ table { display: block; overflow-x: auto; max-width: 100%; }
         <div id="uniformNoPendingAllocNote" class="hidden text-xs text-gray-500 italic bg-white p-3 rounded border">Không có phần phân bổ nào đang chờ xác nhận.</div>
       </div>
 
+      <datalist id="uniformStoreEmployeesDatalist"></datalist>
+
       <div class="bg-emerald-50 p-4 rounded border border-emerald-200 space-y-3">
         <h3 class="font-bold text-emerald-900 text-base flex items-center gap-2">👕 Cấp Đồng Phục Cho Nhân Viên</h3>
         <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
           <div>
             <label class="block font-semibold text-gray-600 mb-1 text-xs">Nhân Viên <span class="text-red-500">*</span></label>
-            <select id="uniformIssueEmployee" class="w-full border p-1.5 rounded text-xs bg-white"></select>
+            <input id="uniformIssueEmployee" list="uniformStoreEmployeesDatalist" oninput="resolveUniformEmployeeInput('uniformIssueEmployee', 'uniformIssueEmployeeUsername')" placeholder="Gõ tên hoặc tài khoản để tìm..." class="w-full border p-1.5 rounded text-xs bg-white">
+            <input type="hidden" id="uniformIssueEmployeeUsername">
           </div>
           <div>
             <label class="block font-semibold text-gray-600 mb-1 text-xs">Mã Phiếu (không bắt buộc)</label>
@@ -2690,7 +2693,8 @@ table { display: block; overflow-x: auto; max-width: 100%; }
         <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
           <div>
             <label class="block font-semibold text-gray-600 mb-1 text-xs">Nhân Viên <span class="text-red-500">*</span></label>
-            <select id="uniformAdjEmpEmployee" class="w-full border p-1.5 rounded text-xs bg-white"></select>
+            <input id="uniformAdjEmpEmployee" list="uniformStoreEmployeesDatalist" oninput="resolveUniformEmployeeInput('uniformAdjEmpEmployee', 'uniformAdjEmpEmployeeUsername')" placeholder="Gõ tên hoặc tài khoản để tìm..." class="w-full border p-1.5 rounded text-xs bg-white">
+            <input type="hidden" id="uniformAdjEmpEmployeeUsername">
           </div>
         </div>
         <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
@@ -2750,7 +2754,8 @@ table { display: block; overflow-x: auto; max-width: 100%; }
         <div class="flex items-center justify-between gap-2 flex-wrap">
           <h3 class="font-bold text-gray-800 text-sm">📊 Tồn Kho Đồng Phục</h3>
           <div id="uniformStockStoreFilterWrap" class="hidden">
-            <select id="uniformStockStoreFilter" onchange="renderUniformStock()" class="border p-1.5 rounded text-xs bg-white"></select>
+            <input id="uniformStockStoreFilter" list="uniformStoresFilterDatalist" oninput="renderUniformStock()" placeholder="Gõ tên siêu thị để tìm (để trống = tất cả)..." class="border p-1.5 rounded text-xs bg-white">
+            <datalist id="uniformStoresFilterDatalist"></datalist>
           </div>
         </div>
         <div class="overflow-x-auto">
@@ -27718,6 +27723,7 @@ async function submitItTicketComment() {
 let activeUniformSubTab = 'STOCK';
 let uniformAllocBlocks = [];
 let uniformIssueItems = [];
+let uniformStoreEmployeesCache = [];
 
 function canManageUniform(user) {
   return !!(user?.perms?.admin || user?.perms?.uniformManage);
@@ -27776,6 +27782,14 @@ function updateUniformAllocDept(idx, value) {
   uniformAllocBlocks[idx].dept = value;
 }
 
+// Ô nhập-tìm-kiếm siêu thị (thay dropdown vì DB.stores có thể rất dài) — chỉ chấp nhận đúng 1 tên siêu
+// thị có thật trong DB.stores (gõ tự do không khớp -> để trống, validation lúc Tạo Kỳ Cấp Phát sẽ bắt).
+function resolveUniformAllocDeptInput(blockIdx, rawValue) {
+  const match = (DB.stores || []).find(s => s === rawValue.trim());
+  updateUniformAllocDept(blockIdx, match || '');
+  renderUniformAllocationBlocks();
+}
+
 function addUniformAllocItemRow(blockIdx) {
   if (!uniformAllocBlocks[blockIdx]) return;
   uniformAllocBlocks[blockIdx].items.push({ name: '', size: '', qty: 0 });
@@ -27801,10 +27815,10 @@ function renderUniformAllocationBlocks() {
   wrap.innerHTML = uniformAllocBlocks.map((block, bIdx) => `
     <div class="bg-white p-3 rounded border space-y-2">
       <div class="flex items-center justify-between gap-2">
-        <select onchange="updateUniformAllocDept(${bIdx}, this.value)" class="border p-1.5 rounded text-xs bg-white flex-1">
-          <option value="">-- Chọn siêu thị --</option>
-          ${DB.stores.filter(d => d === block.dept || !chosenDepts.includes(d)).map(d => `<option value="${escapeHtml(d)}" ${d === block.dept ? 'selected' : ''}>${escapeHtml(d)}</option>`).join('')}
-        </select>
+        <input value="${escapeHtml(block.dept)}" list="uniformAllocStoreDatalist_${bIdx}" onchange="resolveUniformAllocDeptInput(${bIdx}, this.value)" placeholder="Gõ tên siêu thị để tìm..." class="border p-1.5 rounded text-xs bg-white flex-1">
+        <datalist id="uniformAllocStoreDatalist_${bIdx}">
+          ${DB.stores.filter(d => d === block.dept || !chosenDepts.includes(d)).map(d => `<option value="${escapeHtml(d)}"></option>`).join('')}
+        </datalist>
         <button type="button" onclick="removeUniformAllocationBlock(${bIdx})" class="text-red-600 hover:text-red-800 text-xs font-bold whitespace-nowrap">✕ Bỏ siêu thị này</button>
       </div>
       <table class="w-full text-xs border-collapse">
@@ -27965,20 +27979,32 @@ function confirmUniformAllocationAction(periodId, allocationId) {
   });
 }
 
+// Danh sách nhân viên siêu thị mình dùng chung cho 2 ô nhập-tìm-kiếm nhân viên (Cấp Phát + Thu Hồi) —
+// thay dropdown vì 1 siêu thị có thể có rất nhiều nhân viên. Option hiển thị "Tên (tài_khoản)" để gõ
+// tìm được theo cả tên lẫn tài khoản (resolveUniformEmployeeInput() khớp lại nguyên cụm này).
 function renderUniformIssueEmployeeOptions() {
   const employees = (DB.users || []).filter(u => u.dept === currentUser.dept && u.active !== false);
-  for (const selId of ['uniformIssueEmployee', 'uniformAdjEmpEmployee']) {
-    const sel = document.getElementById(selId);
-    if (!sel) continue;
-    const prevValue = sel.value;
-    sel.innerHTML = `<option value="">-- Chọn nhân viên --</option>` +
-      employees.map(u => `<option value="${escapeHtml(u.username)}">${escapeHtml(u.name)}</option>`).join('');
-    if (employees.some(u => u.username === prevValue)) sel.value = prevValue;
+  const datalist = document.getElementById('uniformStoreEmployeesDatalist');
+  if (datalist) {
+    datalist.innerHTML = employees.map(u => `<option value="${escapeHtml(u.name)} (${escapeHtml(u.username)})"></option>`).join('');
   }
+  uniformStoreEmployeesCache = employees;
+}
+
+// Khớp text đang gõ trong ô #inputId (định dạng "Tên (tài_khoản)") với đúng 1 nhân viên còn hiệu lực
+// của siêu thị mình -> ghi username vào input ẩn #hiddenId; không khớp (gõ tự do/chưa chọn xong) thì để
+// trống, validation lúc submit sẽ bắt lỗi "chưa chọn nhân viên".
+function resolveUniformEmployeeInput(inputId, hiddenId) {
+  const raw = document.getElementById(inputId).value;
+  const m = raw.match(/\(([^()]+)\)\s*$/);
+  const username = m ? m[1].trim() : '';
+  const found = (uniformStoreEmployeesCache || []).some(u => u.username === username);
+  document.getElementById(hiddenId).value = found ? username : '';
 }
 
 function resetUniformIssueForm() {
   document.getElementById('uniformIssueEmployee').value = '';
+  document.getElementById('uniformIssueEmployeeUsername').value = '';
   document.getElementById('uniformIssueCode').value = '';
   document.getElementById('uniformIssueNote').value = '';
   uniformIssueItems = [{ name: '', size: '', qty: 0 }];
@@ -28041,7 +28067,7 @@ async function callCreateUniformIssuance(payload) {
 }
 
 async function submitUniformIssuance() {
-  const employeeUsername = document.getElementById('uniformIssueEmployee').value;
+  const employeeUsername = document.getElementById('uniformIssueEmployeeUsername').value;
   if (!employeeUsername) return alert('Vui lòng chọn nhân viên nhận đồng phục!');
   const items = uniformIssueItems.filter(it => (it.name || '').trim() && it.qty > 0);
   if (!items.length) return alert('Vui lòng nhập ít nhất 1 mặt hàng hợp lệ (có tên + số lượng > 0)!');
@@ -28098,6 +28124,7 @@ function resetUniformAdjustForms() {
   if (stockOutcomeDefault) stockOutcomeDefault.checked = true;
 
   document.getElementById('uniformAdjEmpEmployee').value = '';
+  document.getElementById('uniformAdjEmpEmployeeUsername').value = '';
   document.getElementById('uniformAdjEmpItemName').value = '';
   document.getElementById('uniformAdjEmpSize').value = '';
   document.getElementById('uniformAdjEmpQty').value = '';
@@ -28135,7 +28162,7 @@ async function submitUniformStockAdjustment(source) {
 
   const payload = { source, outcome, itemName, size, qty, reason };
   if (source === 'EMPLOYEE') {
-    const employeeUsername = document.getElementById('uniformAdjEmpEmployee').value;
+    const employeeUsername = document.getElementById('uniformAdjEmpEmployeeUsername').value;
     if (!employeeUsername) return alert('Vui lòng chọn nhân viên!');
     payload.employeeUsername = employeeUsername;
   }
@@ -28218,26 +28245,26 @@ function computeUniformStockClient(storeDept) {
 
 function renderUniformStockStoreFilterOptions() {
   const wrap = document.getElementById('uniformStockStoreFilterWrap');
-  const sel = document.getElementById('uniformStockStoreFilter');
-  if (!wrap || !sel) return;
+  const datalist = document.getElementById('uniformStoresFilterDatalist');
+  if (!wrap || !datalist) return;
   if (!canManageUniform(currentUser)) {
     wrap.classList.add('hidden');
     return;
   }
   wrap.classList.remove('hidden');
   const depts = [...new Set((DB.uniformPeriods || []).flatMap(p => (p.allocations || []).map(a => a.dept)))].sort();
-  const prevValue = sel.value;
-  sel.innerHTML = `<option value="">-- Tất cả siêu thị --</option>` + depts.map(d => `<option value="${escapeHtml(d)}">${escapeHtml(d)}</option>`).join('');
-  if (depts.includes(prevValue)) sel.value = prevValue;
+  datalist.innerHTML = depts.map(d => `<option value="${escapeHtml(d)}"></option>`).join('');
 }
 
+// Ô lọc siêu thị là ô nhập-tìm-kiếm (thay dropdown vì danh sách siêu thị có thể rất dài) — khớp
+// SUBSTRING không phân biệt hoa/thường, không cần gõ đúng tuyệt đối như dropdown trước đây.
 function renderUniformStock() {
   const tbody = document.getElementById('uniformStockTableBody');
   if (!tbody) return;
   const canHc = canManageUniform(currentUser);
-  const filterVal = document.getElementById('uniformStockStoreFilter')?.value || '';
+  const filterVal = (document.getElementById('uniformStockStoreFilter')?.value || '').trim().toLowerCase();
   const allStoreDepts = [...new Set((DB.uniformPeriods || []).flatMap(p => (p.allocations || []).map(a => a.dept)))].sort();
-  const targetDepts = canHc ? (filterVal ? [filterVal] : allStoreDepts) : [currentUser.dept];
+  const targetDepts = canHc ? (filterVal ? allStoreDepts.filter(d => d.toLowerCase().includes(filterVal)) : allStoreDepts) : [currentUser.dept];
 
   const rows = [];
   for (const dept of targetDepts) {

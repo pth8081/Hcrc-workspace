@@ -167,7 +167,8 @@ async function main() {
       const result = await page.evaluate(async () => {
         switchTab('uniform');
         setUniformSubTab('STORE');
-        document.getElementById('uniformIssueEmployee').value = 'nv_hoian';
+        document.getElementById('uniformIssueEmployee').value = 'Lê Văn Nhân Viên (nv_hoian)';
+        resolveUniformEmployeeInput('uniformIssueEmployee', 'uniformIssueEmployeeUsername');
         document.getElementById('uniformIssueCode').value = 'CP001';
         updateUniformIssueItemField(0, 'name', 'Áo đồng phục nam');
         updateUniformIssueItemField(0, 'size', 'L');
@@ -193,7 +194,8 @@ async function main() {
       const result = await page.evaluate(async () => {
         window.__resetCapture();
         resetUniformIssueForm();
-        document.getElementById('uniformIssueEmployee').value = 'nv_hoian';
+        document.getElementById('uniformIssueEmployee').value = 'Lê Văn Nhân Viên (nv_hoian)';
+        resolveUniformEmployeeInput('uniformIssueEmployee', 'uniformIssueEmployeeUsername');
         updateUniformIssueItemField(0, 'name', 'Áo đồng phục nam');
         updateUniformIssueItemField(0, 'size', 'L');
         updateUniformIssueItemField(0, 'qty', '999');
@@ -304,7 +306,8 @@ async function main() {
       const result = await page.evaluate(async () => {
         window.__resetCapture();
         resetUniformAdjustForms();
-        document.getElementById('uniformAdjEmpEmployee').value = 'nv_hoian';
+        document.getElementById('uniformAdjEmpEmployee').value = 'Lê Văn Nhân Viên (nv_hoian)';
+        resolveUniformEmployeeInput('uniformAdjEmpEmployee', 'uniformAdjEmpEmployeeUsername');
         document.getElementById('uniformAdjEmpItemName').value = 'Áo đồng phục nam';
         document.getElementById('uniformAdjEmpSize').value = 'L';
         document.getElementById('uniformAdjEmpQty').value = '2';
@@ -325,7 +328,8 @@ async function main() {
     await run.run('Thu hồi từ nhân viên — outcome Hỏng — không cộng lại vào tồn, cộng vào Hỏng', async () => {
       const result = await page.evaluate(async () => {
         window.__resetCapture();
-        document.getElementById('uniformAdjEmpEmployee').value = 'nv_hoian';
+        document.getElementById('uniformAdjEmpEmployee').value = 'Lê Văn Nhân Viên (nv_hoian)';
+        resolveUniformEmployeeInput('uniformAdjEmpEmployee', 'uniformAdjEmpEmployeeUsername');
         document.getElementById('uniformAdjEmpItemName').value = 'Áo đồng phục nam';
         document.getElementById('uniformAdjEmpSize').value = 'L';
         document.getElementById('uniformAdjEmpQty').value = '1';
@@ -346,7 +350,8 @@ async function main() {
     await run.run('Validation: thu hồi vượt quá số nhân viên đang giữ bị chặn (409)', async () => {
       const result = await page.evaluate(async () => {
         window.__resetCapture();
-        document.getElementById('uniformAdjEmpEmployee').value = 'nv_hoian';
+        document.getElementById('uniformAdjEmpEmployee').value = 'Lê Văn Nhân Viên (nv_hoian)';
+        resolveUniformEmployeeInput('uniformAdjEmpEmployee', 'uniformAdjEmpEmployeeUsername');
         document.getElementById('uniformAdjEmpItemName').value = 'Áo đồng phục nam';
         document.getElementById('uniformAdjEmpSize').value = 'L';
         document.getElementById('uniformAdjEmpQty').value = '999';
