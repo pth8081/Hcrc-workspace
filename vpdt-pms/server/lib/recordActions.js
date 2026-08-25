@@ -9,7 +9,7 @@
 // họp thêm cờ minutesEdit (toàn công ty, không theo phòng ban) cho SỬA — riêng XÓA là quyền tối cao,
 // chỉ Admin; Công việc theo NGƯỜI (assignedBy/assignee), hoàn toàn không có khái niệm phòng ban.
 const { HttpError } = require('./httpErrors');
-const { scopeAllows, OFFICE_SUBTYPE_TO_PERM_FLAG, normalizeReportEntryPayload, buildEffectiveContractApprovalWorkflowServer, sanitizeUniformItems } = require('./createValidation');
+const { scopeAllows, OFFICE_SUBTYPE_TO_PERM_FLAG, normalizeReportEntryPayload, buildEffectiveContractApprovalWorkflowServer, sanitizeUniformItems, sanitizeBudgetLines, getBudgetTemplateCustomFields, sanitizeBudgetCustomFields } = require('./createValidation');
 const { validateRegistrationItems: validateVppRegItems, calcItemsTotal: calcVppItemsTotal } = require('./vppCatalog');
 const { sanitizePriceFileItems } = require('./priceFileParser');
 
@@ -2192,6 +2192,94 @@ function buildUniformIssuance(user, payload, allPeriods, allIssuancesOfStore, us
   };
 }
 
+// ===================== NGÂN SÁCH (kỳ: đóng sớm/mở lại — bản ngân sách phòng ban: nháp/gửi/duyệt) =====
+// Vòng đời kỳ: OPEN (nhận lập ngân sách, tới khi qua endTime HOẶC budgetManage/admin đóng sớm) -> CLOSED
+// -> có thể MỞ LẠI (budgetManage/admin, bắt buộc nhập hạn chót mới) -> OPEN trở lại.
+// Vòng đời 1 bản ngân sách (budgetEntries, khoá theo PHÒNG BAN — không phải người tạo, vì đây là ngân
+// sách của ĐƠN VỊ, nhiều người cùng phòng có quyền budgetCreate cùng lập/sửa được): DRAFT (đang soạn,
+// sửa tự do) -> Gửi -> PENDING (Trưởng phòng duyệt theo appData.budgetDeptWorkflows[dept], qua
+// lib/workflowEngine.js — xem MODULE_CONFIGS.budgetEntries, supportsRequestChanges:true) -> APPROVED
+// (mới tính vào Tổng Hợp) | REJECTED, hoặc "Yêu cầu bổ sung" (REQUEST_CHANGES, hành động CHUNG với VPP)
+// đưa PENDING quay lại DRAFT để phòng ban sửa lại rồi gửi lại từ đầu.
+function canManageBudget(user) {
+  return !!(user.perms?.admin || user.perms?.budgetManage);
+}
+
+function canAggregateBudget(user) {
+  return !!(user.perms?.admin || user.perms?.budgetAggregate);
+}
+
+function isBudgetPeriodClosed(period) {
+  if (period.status === 'CLOSED') return true;
+  return !!(period.endTime && Date.now() > new Date(period.endTime).getTime());
+}
+
+// Đóng SỚM (trước endTime) — giống closeReportPeriod()/closeVppPeriod(). Đóng rồi thì budgetEntries
+// không tạo/sửa/gửi được nữa dù đang NHÁP.
+function closeBudgetPeriod(user, period) {
+  if (!canManageBudget(user)) throw new HttpError(403, 'Chỉ người có quyền quản lý Ngân Sách mới được đóng kỳ ngân sách');
+  if (period.status === 'CLOSED') throw new HttpError(409, 'Kỳ ngân sách này đã đóng từ trước');
+  period.status = 'CLOSED';
+  if (!period.closeHistory) period.closeHistory = [];
+  period.closeHistory.push({ action: 'CLOSE', by: user.username, byName: user.name, at: nowVN() });
+  return period;
+}
+
+// Mở lại kỳ đã đóng (thủ công hoặc do hết hạn) — BẮT BUỘC nhập hạn chót MỚI ngay lúc mở lại, tránh
+// trạng thái "đang mở" nhưng hạn cũ đã qua từ trước (vô nghĩa) — xem lib/createValidation.js.
+function reopenBudgetPeriod(user, period, newEndTime) {
+  if (!canManageBudget(user)) throw new HttpError(403, 'Chỉ người có quyền quản lý Ngân Sách mới được mở lại kỳ ngân sách');
+  if (!isBudgetPeriodClosed(period)) throw new HttpError(409, 'Kỳ ngân sách này đang mở, không cần mở lại');
+  if (!newEndTime) throw new HttpError(400, 'Vui lòng nhập hạn chót mới khi mở lại kỳ');
+  if (new Date(newEndTime).getTime() <= Date.now()) throw new HttpError(400, 'Hạn chót mới phải ở trong tương lai');
+  period.status = 'OPEN';
+  period.endTime = newEndTime;
+  if (!period.closeHistory) period.closeHistory = [];
+  period.closeHistory.push({ action: 'REOPEN', by: user.username, byName: user.name, at: nowVN() });
+  return period;
+}
+
+// Sửa 1 bản ngân sách còn NHÁP (kể cả vừa bị trả về từ "Yêu cầu bổ sung") — khoá theo PHÒNG BAN, khác
+// hẳn updateReportEntryDraft()/updateVppRegistrationDraft() (khoá creator) vì đây là "ngân sách của đơn
+// vị", không phải hồ sơ cá nhân.
+function updateBudgetEntryDraft(user, item, payload, period, templates) {
+  if (!user.perms?.admin && !user.perms?.budgetCreate) throw new HttpError(403, 'Bạn không có quyền lập ngân sách');
+  if (item.dept !== user.dept) throw new HttpError(403, 'Bạn chỉ sửa được ngân sách của phòng ban mình');
+  if (item.status !== 'DRAFT') throw new HttpError(409, 'Ngân sách này không còn ở trạng thái nháp, không thể sửa');
+  if (!period) throw new HttpError(404, 'Không tìm thấy kỳ ngân sách');
+  if (isBudgetPeriodClosed(period)) throw new HttpError(409, 'Kỳ ngân sách này đã kết thúc, không thể sửa nữa');
+  const customFields = getBudgetTemplateCustomFields(period.templateId, templates);
+  item.lines = sanitizeBudgetLines(payload?.lines, customFields);
+  return item;
+}
+
+// "Gửi": NHÁP -> PENDING, khởi động (lại) luồng duyệt Trưởng phòng từ bước 1 — kể cả khi gửi lại sau
+// "Yêu cầu bổ sung" (item.history đã có sẵn dòng REQUEST_CHANGES từ lib/workflowEngine.js, giữ nguyên
+// làm dấu vết, không xoá).
+function submitBudgetEntry(user, item, period) {
+  if (!user.perms?.admin && !user.perms?.budgetCreate) throw new HttpError(403, 'Bạn không có quyền lập ngân sách');
+  if (item.dept !== user.dept) throw new HttpError(403, 'Bạn chỉ gửi được ngân sách của phòng ban mình');
+  if (item.status !== 'DRAFT') throw new HttpError(409, 'Ngân sách này không còn ở trạng thái nháp (có thể đã gửi rồi)');
+  if (!period) throw new HttpError(404, 'Không tìm thấy kỳ ngân sách');
+  if (isBudgetPeriodClosed(period)) throw new HttpError(409, 'Kỳ ngân sách này đã kết thúc, không thể gửi nữa');
+  if (!item.lines || !item.lines.length) throw new HttpError(400, 'Vui lòng nhập ít nhất 1 dòng ngân sách trước khi gửi');
+  if (!item.history) item.history = [];
+  item.history.push({ step: 0, approver: user.name, username: user.username, action: 'SUBMITTED', comment: '', time: nowVN() });
+  item.status = 'PENDING';
+  item.currentStep = 1;
+  return item;
+}
+
+// Sửa tên/cột bổ sung của 1 mẫu ngân sách đã tạo — cùng khuôn updateReportSlideTemplate() ở trên.
+function updateBudgetTemplate(user, item, payload) {
+  if (!canManageBudget(user)) throw new HttpError(403, 'Chỉ người có quyền quản lý Ngân Sách mới được sửa mẫu ngân sách');
+  const name = String(payload?.name || '').trim();
+  if (!name) throw new HttpError(400, 'Thiếu tên mẫu ngân sách');
+  item.name = name.slice(0, 150);
+  item.fields = sanitizeBudgetCustomFields(payload?.fields);
+  return item;
+}
+
 module.exports = {
   editContract,
   canManageContractPayment, uploadContractSignedFile, startContractPayment,
@@ -2220,5 +2308,7 @@ module.exports = {
   claimItTicket, updateItTicketStatus, addItTicketComment, cancelItTicket,
   escalateItTicket, approveItTicketEscalation, denyItTicketEscalation,
   canManageUniform, canManageUniformStore, computeUniformStock,
-  confirmUniformAllocation, buildUniformIssuance
+  confirmUniformAllocation, buildUniformIssuance,
+  canManageBudget, canAggregateBudget, isBudgetPeriodClosed,
+  closeBudgetPeriod, reopenBudgetPeriod, updateBudgetEntryDraft, submitBudgetEntry, updateBudgetTemplate
 };

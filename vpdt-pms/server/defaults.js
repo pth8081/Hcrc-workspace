@@ -159,6 +159,9 @@ const DEFAULTS = {
   // Hỗ Trợ IT > Phê Duyệt Giá — quy trình duyệt theo phòng ban, cùng khuôn vppDeptWorkflows (không có
   // lớp bổ sung). Admin cấu hình ở tab "Quy Trình & Phê Duyệt".
   itPriceDeptWorkflows: {},
+  // Ngân Sách — Trưởng phòng duyệt bản ngân sách theo phòng ban, cùng khuôn vppDeptWorkflows/
+  // itPriceDeptWorkflows ở trên. Admin cấu hình ở tab "Quy Trình & Phê Duyệt".
+  budgetDeptWorkflows: {},
   // Hợp đồng — 2 quy trình TÁCH RIÊNG (xem lib/workflowEngine.js/lib/createValidation.js): "Phê Duyệt"
   // (contractApprovalDeptWorkflows, cùng khuôn deptWorkflows/carDeptWorkflows) + tối đa 4 lớp bổ sung
   // tuỳ chọn (contractApprovalGroups, cùng khuôn submissionApprovalGroups nhưng RIÊNG, không dùng

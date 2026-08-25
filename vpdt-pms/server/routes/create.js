@@ -47,6 +47,15 @@ router.post('/:module', async (req, res) => {
     // recruitmentReferrals cần tra cứu chéo sang collection recruitmentJobs (tin còn OPEN/snapshot
     // jobTitle) — cùng lý do trainingRegistrations ở trên.
     if (moduleKey === 'recruitmentReferrals') appData.recruitmentJobs = await getAllForCollection('recruitmentJobs');
+    // budgetEntries cần tra cứu chéo sang budgetPeriods (kỳ còn mở/phạm vi phòng ban/hạn chót/mẫu đã
+    // chọn) + budgetTemplates (đọc field mẫu để validate các dòng ngân sách) — cùng lý do reportEntries
+    // ở trên. budgetPeriods cần tra cứu chéo sang budgetTemplates (kiểm tra templateId có thật) — cùng
+    // lý do reportPeriods ở trên.
+    if (moduleKey === 'budgetEntries') {
+      appData.budgetPeriods = await getAllForCollection('budgetPeriods');
+      appData.budgetTemplates = await getAllForCollection('budgetTemplates');
+    }
+    if (moduleKey === 'budgetPeriods') appData.budgetTemplates = await getAllForCollection('budgetTemplates');
 
     const config = CREATE_MODULE_CONFIGS[moduleKey];
     const builderFn = (list) => validateAndPrepareCreate(moduleKey, req.body, freshUser, list, appData);

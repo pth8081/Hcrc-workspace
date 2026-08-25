@@ -263,6 +263,22 @@ function filterItPriceApprovalsForUser(items, user, appData) {
   return (items || []).filter(p => canViewItPriceApproval(user, p, appData));
 }
 
+// Ngân sách là hồ sơ của CẢ ĐƠN VỊ (không phải cá nhân) — mọi người CÙNG PHÒNG BAN xem được, kể cả bản
+// đang NHÁP (khác canViewReportEntry — báo cáo cá nhân, NHÁP chỉ chính người tạo xem được). admin/
+// budgetManage/budgetAggregate xem được mọi phòng ban (đúng khuôn "Quản lý"/"Tổng hợp" ở Báo Cáo Định
+// Kỳ). Trưởng phòng đang là approver ở bước hiện tại cũng xem được dù khác phòng (hiếm nhưng có thể xảy
+// ra nếu admin gán người duyệt không cùng phòng ban với hồ sơ).
+function canViewBudgetEntry(user, item, appData) {
+  if (!user) return false;
+  if (user.perms?.admin || user.perms?.budgetManage || user.perms?.budgetAggregate) return true;
+  if (item.dept === user.dept) return true;
+  return isApproverForApproversMap(MODULE_CONFIGS.budgetEntries.resolveWfConfig(item, appData).approvers, user.username);
+}
+
+function filterBudgetEntriesForUser(entries, user, appData) {
+  return (entries || []).filter(e => canViewBudgetEntry(user, e, appData));
+}
+
 // Ticket helpdesk IT nội bộ có thể chứa thông tin tài khoản/sự cố cá nhân — chỉ đội Hỗ Trợ IT
 // (itManage/admin) và chính người tạo được xem, KHÔNG mở rộng theo phòng ban (khớp canViewItTicket()
 // ở public/index.html — phạm vi hẹp hơn hẳn các module dept-workflow khác ở trên). Ngoại lệ DUY NHẤT:
@@ -376,5 +392,6 @@ module.exports = {
   canViewItSupportTicket, filterItSupportTicketsForUser,
   canViewUniformPeriod, filterUniformPeriodsForUser,
   canViewUniformIssuance, filterUniformIssuancesForUser,
+  canViewBudgetEntry, filterBudgetEntriesForUser,
   canDownloadRecordFile
 };
