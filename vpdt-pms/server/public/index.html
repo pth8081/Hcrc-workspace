@@ -17,7 +17,15 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-<script src="https://cdn.tailwindcss.com"></script>
+<!-- Tailwind: file build TĨNH tự lưu trên server (KHÔNG còn tải qua cdn.tailwindcss.com lúc chạy) — xem
+     server/tailwind.config.js + npm script "build:css" ở server/package.json. Lý do đổi: mạng nội bộ/tường
+     lửa công ty chặn cdn.tailwindcss.com sẽ khiến TOÀN BỘ class Tailwind mất tác dụng ngay lập tức (các
+     thẻ div dùng class flex rơi về hiển thị block mặc định của trình duyệt, sidebar+nội dung xếp chồng dọc
+     thay vì nằm cạnh nhau) — đã tái hiện được chính xác lỗi "màn Ngân Sách/Hỗ Trợ IT bị đẩy xuống dưới
+     sidebar" theo đúng mô tả người dùng bằng cách mô phỏng mạng bị chặn CDN này. QUAN TRỌNG: mỗi khi thêm
+     class Tailwind MỚI (chưa từng dùng ở đâu trong file) phải chạy lại "npm run build:css" trong server/
+     rồi commit file public/tailwind.css mới, nếu không class mới sẽ không có CSS và hiển thị sai. -->
+<link rel="stylesheet" href="/tailwind.css">
 <style>
 .dash-card.active-card {
   ring-width: 2px;
