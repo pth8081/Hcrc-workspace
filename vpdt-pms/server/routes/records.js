@@ -1257,4 +1257,32 @@ router.post('/uniformIssuances/create', async (req, res) => {
   }
 });
 
+router.post('/uniformStockAdjustments/:id/delete', (req, res) => deleteAdminOnly(req, res, 'uniformStockAdjustments'));
+
+// Giám Đốc Siêu Thị báo Hỏng/Hủy từ tồn kho hoặc thu hồi từ nhân viên — cùng khoá 'uniform_store:<dept>'
+// với uniformIssuances/create vì cả 2 route cùng đọc-tính-ghi trên chung trạng thái tồn kho/số đang giữ
+// của TỪNG siêu thị (không được để 2 thao tác chạy song song đọc cùng 1 số liệu cũ).
+router.post('/uniformStockAdjustments/create', async (req, res) => {
+  try {
+    const { freshUser, users } = await getFreshUser(req);
+    if (!recordActions.canManageUniformStore(freshUser)) {
+      return res.status(403).json({ error: 'Bạn không có quyền thao tác này' });
+    }
+    const result = await withAppLock(`uniform_store:${freshUser.dept}`, async () => {
+      const [allPeriods, allIssuances, allAdjustments] = await Promise.all([
+        getAllForCollection('uniformPeriods'),
+        getAllForCollection('uniformIssuances'),
+        getAllForCollection('uniformStockAdjustments')
+      ]);
+      const storeIssuances = allIssuances.filter(x => x.dept === freshUser.dept);
+      const storeAdjustments = allAdjustments.filter(x => x.dept === freshUser.dept);
+      const record = recordActions.buildUniformStockAdjustment(freshUser, req.body, allPeriods, storeIssuances, storeAdjustments, users);
+      return insertRecord('uniformStockAdjustments', record);
+    });
+    res.json({ ok: true, item: result });
+  } catch (err) {
+    handleError(res, 'uniformStockAdjustments/create', err);
+  }
+});
+
 module.exports = router;

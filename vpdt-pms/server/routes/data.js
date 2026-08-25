@@ -18,7 +18,7 @@ const {
   filterReportEntriesForUser, filterContractsForUser, filterCarRegsForUser, filterOfficeReqsForUser,
   filterMeetingsForUser, filterMeetingMinutesForUser, filterTasksForUser, sanitizeTrainingTestsForUser,
   filterRecruitmentReferralsForUser, filterItPriceApprovalsForUser, filterItSupportTicketsForUser,
-  filterUniformPeriodsForUser, filterUniformIssuancesForUser, filterBudgetEntriesForUser
+  filterUniformPeriodsForUser, filterUniformIssuancesForUser, filterUniformStockAdjustmentsForUser, filterBudgetEntriesForUser
 } = require('../lib/recordViewScope');
 
 const VALID_KEYS = new Set(Object.keys(DEFAULTS));
@@ -391,6 +391,7 @@ router.get('/', async (req, res) => {
     // uniformPeriods còn phải lọc bớt TỪNG PHẦN TỬ allocations[] (không chỉ ẩn nguyên cả kỳ).
     if (data.uniformPeriods) data.uniformPeriods = filterUniformPeriodsForUser(data.uniformPeriods, req.freshUser);
     if (data.uniformIssuances) data.uniformIssuances = filterUniformIssuancesForUser(data.uniformIssuances, req.freshUser);
+    if (data.uniformStockAdjustments) data.uniformStockAdjustments = filterUniformStockAdjustmentsForUser(data.uniformStockAdjustments, req.freshUser);
     // budgetEntries: cùng dạng lỗ hổng như itPriceApprovals ở trên — hồ sơ ngân sách của ĐƠN VỊ (kể cả
     // bản NHÁP đang soạn dở) chỉ nên lộ cho đúng phòng ban mình + người có budgetManage/budgetAggregate/
     // admin — xem lib/recordViewScope.js canViewBudgetEntry().

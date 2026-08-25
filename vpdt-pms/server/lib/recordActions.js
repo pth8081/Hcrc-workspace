@@ -2169,15 +2169,23 @@ function canManageUniformStore(user) {
   return !!(user?.perms?.admin || user?.perms?.uniformStoreManage);
 }
 
-// allPeriods: toàn bộ uniformPeriods (đọc từ collection uniformPeriods). allIssuances: toàn bộ
-// uniformIssuances của ĐÚNG siêu thị (caller tự lọc theo dept trước khi gọi, tránh đọc thừa). Trả về
-// Map key `${name}|||${size}` -> { name, size, allocated, issued, stock }.
-function computeUniformStock(allPeriods, storeDept, allIssuances) {
+// allPeriods: toàn bộ uniformPeriods (đọc từ collection uniformPeriods). allIssuances/allAdjustments:
+// toàn bộ uniformIssuances/uniformStockAdjustments CỦA ĐÚNG siêu thị (caller tự lọc theo dept trước khi
+// gọi, tránh đọc thừa). allAdjustments có thể bỏ trống (backward-compat) — hong/huy/recalled mặc định 0.
+// Trả về Map key `${name}|||${size}` -> { name, size, allocated, issued, recalled, hong, huy, stock }.
+// "issued" giữ nguyên Ý NGHĨA CŨ (tổng đã cấp CỘNG DỒN mọi thời điểm, không trừ thu hồi — khớp số liệu
+// báo cáo "tổng SL đã cấp" ở renderUniformReportExtra()). "recalled" = đã thu hồi lại từ nhân viên
+// (uniformStockAdjustments.source === 'EMPLOYEE', bất kể kết quả sau thu hồi là gì) — dùng để TRỪ RA
+// khỏi "issued" khi tính "stock" (hàng thu hồi coi như không còn nằm ở nhân viên nữa). "hong"/"huy" =
+// đã báo hỏng/hủy CỘNG DỒN cả 2 nguồn: trực tiếp từ tồn kho (source='STOCK') lẫn phát hiện lúc thu hồi
+// từ nhân viên (source='EMPLOYEE', outcome='HONG'/'HUY') — 2 trường hợp này đều làm mất số lượng thật,
+// không phân biệt trong công thức tồn kho. Công thức: stock = allocated - (issued - recalled) - hong - huy.
+function computeUniformStock(allPeriods, storeDept, allIssuances, allAdjustments) {
   const stock = new Map();
   const keyOf = (name, size) => `${name}|||${size || ''}`;
   const bump = (name, size, field, qty) => {
     const key = keyOf(name, size);
-    if (!stock.has(key)) stock.set(key, { name, size: size || '', allocated: 0, issued: 0 });
+    if (!stock.has(key)) stock.set(key, { name, size: size || '', allocated: 0, issued: 0, recalled: 0, hong: 0, huy: 0 });
     stock.get(key)[field] += qty;
   };
   for (const period of allPeriods || []) {
@@ -2190,8 +2198,35 @@ function computeUniformStock(allPeriods, storeDept, allIssuances) {
     if (issuance.dept !== storeDept) continue;
     for (const it of issuance.items || []) bump(it.name, it.size, 'issued', it.qty);
   }
-  for (const row of stock.values()) row.stock = row.allocated - row.issued;
+  for (const adj of allAdjustments || []) {
+    if (adj.dept !== storeDept) continue;
+    if (adj.source === 'EMPLOYEE') bump(adj.itemName, adj.size, 'recalled', adj.qty);
+    if (adj.outcome === 'HONG') bump(adj.itemName, adj.size, 'hong', adj.qty);
+    if (adj.outcome === 'HUY') bump(adj.itemName, adj.size, 'huy', adj.qty);
+  }
+  for (const row of stock.values()) row.stock = row.allocated - (row.issued - row.recalled) - row.hong - row.huy;
   return stock;
+}
+
+// Số lượng 1 nhân viên ĐANG THỰC SỰ GIỮ (đã cấp trừ đi phần đã thu hồi lại của riêng người đó) — dùng để
+// chặn thu hồi vượt quá số đang giữ. allIssuancesOfStore/allAdjustmentsOfStore: đã lọc theo dept (giống
+// tham số computeUniformStock() ở trên). Trả về Map `${name}|||${size}` -> qty đang giữ.
+function computeEmployeeUniformHolding(employeeUsername, allIssuancesOfStore, allAdjustmentsOfStore) {
+  const held = new Map();
+  const keyOf = (name, size) => `${name}|||${size || ''}`;
+  const bump = (name, size, delta) => {
+    const key = keyOf(name, size);
+    held.set(key, (held.get(key) || 0) + delta);
+  };
+  for (const issuance of allIssuancesOfStore || []) {
+    if (issuance.employeeUsername !== employeeUsername) continue;
+    for (const it of issuance.items || []) bump(it.name, it.size, it.qty);
+  }
+  for (const adj of allAdjustmentsOfStore || []) {
+    if (adj.source !== 'EMPLOYEE' || adj.employeeUsername !== employeeUsername) continue;
+    bump(adj.itemName, adj.size, -adj.qty);
+  }
+  return held;
 }
 
 function confirmUniformAllocation(user, period, payload) {
@@ -2238,6 +2273,66 @@ function buildUniformIssuance(user, payload, allPeriods, allIssuancesOfStore, us
     note: (payload?.note || '').trim().slice(0, 500),
     createdAt: nowVN()
   };
+}
+
+// Xây (KHÔNG ghi) 1 bản ghi uniformStockAdjustments mới — báo Hỏng/Hủy trực tiếp từ tồn kho (source=
+// 'STOCK', outcome chỉ 'HONG' hoặc 'HUY') hoặc thu hồi lại từ 1 nhân viên (source='EMPLOYEE', outcome
+// 'TON' = về lại tồn kho, hoặc 'HONG'/'HUY' = phát hiện hỏng/hủy lúc thu hồi). Chỉ Giám Đốc Siêu Thị
+// (canManageUniformStore) thực hiện, PHẠM VI CHÍNH SIÊU THỊ MÌNH — cùng khoá 'uniform_store:'+user.dept
+// với buildUniformIssuance() để 2 thao tác gần như đồng thời không cùng vượt tồn/vượt số đang giữ.
+// Lý do (reason) BẮT BUỘC theo yêu cầu nghiệp vụ (không cho để trống).
+function buildUniformStockAdjustment(user, payload, allPeriods, allIssuancesOfStore, allAdjustmentsOfStore, usersList) {
+  if (!canManageUniformStore(user)) throw new HttpError(403, 'Bạn không có quyền thao tác này');
+
+  const source = String(payload?.source || '').trim().toUpperCase();
+  if (source !== 'STOCK' && source !== 'EMPLOYEE') throw new HttpError(400, 'Nguồn thao tác không hợp lệ');
+
+  const outcome = String(payload?.outcome || '').trim().toUpperCase();
+  const validOutcomes = source === 'EMPLOYEE' ? ['TON', 'HONG', 'HUY'] : ['HONG', 'HUY'];
+  if (!validOutcomes.includes(outcome)) throw new HttpError(400, 'Kết quả thao tác không hợp lệ');
+
+  const itemName = String(payload?.itemName || '').trim().slice(0, 200);
+  const size = String(payload?.size || '').trim().slice(0, 30);
+  const qty = Math.floor(Number(payload?.qty));
+  if (!itemName) throw new HttpError(400, 'Thiếu tên mặt hàng');
+  if (!Number.isFinite(qty) || qty <= 0) throw new HttpError(400, 'Số lượng phải lớn hơn 0');
+
+  const reason = String(payload?.reason || '').trim().slice(0, 500);
+  if (!reason) throw new HttpError(400, 'Vui lòng nhập lý do');
+
+  const record = {
+    id: Date.now(),
+    dept: user.dept, deptName: user.dept,
+    creator: user.username, creatorName: user.name,
+    source, outcome, itemName, size, qty, reason,
+    createdAt: nowVN()
+  };
+
+  if (source === 'STOCK') {
+    const stock = computeUniformStock(allPeriods, user.dept, allIssuancesOfStore, allAdjustmentsOfStore);
+    const row = stock.get(`${itemName}|||${size}`);
+    const available = row ? row.stock : 0;
+    if (qty > available) {
+      throw new HttpError(409, `Không đủ tồn kho "${itemName}"${size ? ` (size ${size})` : ''}: còn ${available}, cần báo ${qty}`);
+    }
+    return record;
+  }
+
+  // source === 'EMPLOYEE'
+  const employeeUsername = String(payload?.employeeUsername || '').trim();
+  const employee = (usersList || []).find(u => u.username === employeeUsername && u.active !== false);
+  if (!employee) throw new HttpError(400, 'Không tìm thấy nhân viên này (hoặc tài khoản đã bị khoá)');
+  if (employee.dept !== user.dept) throw new HttpError(400, 'Chỉ thu hồi được của nhân viên thuộc siêu thị của bạn');
+
+  const holding = computeEmployeeUniformHolding(employeeUsername, allIssuancesOfStore, allAdjustmentsOfStore);
+  const held = holding.get(`${itemName}|||${size}`) || 0;
+  if (qty > held) {
+    throw new HttpError(409, `Nhân viên chỉ đang giữ ${held} "${itemName}"${size ? ` (size ${size})` : ''}, không thể thu hồi ${qty}`);
+  }
+
+  record.employeeUsername = employee.username;
+  record.employeeName = employee.name;
+  return record;
 }
 
 // ===================== NGÂN SÁCH (kỳ: đóng sớm/mở lại — bản ngân sách phòng ban: nháp/gửi/duyệt) =====
@@ -2355,8 +2450,8 @@ module.exports = {
   canManageItSupport, applyPriceApproval, claimPriceApply, releasePriceApplyClaim, requestPriceInfoFromIt, submitPriceSupplementFile,
   claimItTicket, updateItTicketStatus, addItTicketComment, cancelItTicket,
   escalateItTicket, approveItTicketEscalation, denyItTicketEscalation,
-  canManageUniform, canManageUniformStore, computeUniformStock,
-  confirmUniformAllocation, buildUniformIssuance,
+  canManageUniform, canManageUniformStore, computeUniformStock, computeEmployeeUniformHolding,
+  confirmUniformAllocation, buildUniformIssuance, buildUniformStockAdjustment,
   canManageBudget, canAggregateBudget, isBudgetPeriodClosed,
   closeBudgetPeriod, reopenBudgetPeriod, updateBudgetEntryDraft, submitBudgetEntry, updateBudgetTemplate
 };

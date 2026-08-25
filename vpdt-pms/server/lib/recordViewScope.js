@@ -376,6 +376,17 @@ function filterUniformIssuancesForUser(items, user) {
   return (items || []).filter(t => canViewUniformIssuance(user, t));
 }
 
+// uniformStockAdjustments (Hỏng/Hủy/Thu hồi): cùng phạm vi xem như uniformIssuances.
+function canViewUniformStockAdjustment(user, item) {
+  if (!user) return false;
+  if (user.perms?.admin || user.perms?.uniformManage) return true;
+  return !!(user.perms?.uniformStoreManage && item.dept === user.dept);
+}
+
+function filterUniformStockAdjustmentsForUser(items, user) {
+  return (items || []).filter(t => canViewUniformStockAdjustment(user, t));
+}
+
 module.exports = {
   canViewDoc, canViewSubmission, filterDocsForUser, filterSubmissionsForUser,
   canViewInternalPost, filterInternalPostsForUser,
@@ -392,6 +403,7 @@ module.exports = {
   canViewItSupportTicket, filterItSupportTicketsForUser,
   canViewUniformPeriod, filterUniformPeriodsForUser,
   canViewUniformIssuance, filterUniformIssuancesForUser,
+  canViewUniformStockAdjustment, filterUniformStockAdjustmentsForUser,
   canViewBudgetEntry, filterBudgetEntriesForUser,
   canDownloadRecordFile
 };
