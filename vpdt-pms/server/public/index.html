@@ -49,10 +49,13 @@
 #userHeader.sidebar-collapsed { width: 4.5rem; }
 #userHeader.sidebar-collapsed .sidebar-label { display: none; }
 #userHeader.sidebar-collapsed .sidebar-item, #userHeader.sidebar-collapsed .sidebar-subitem { justify-content: center; }
+#userHeader.sidebar-collapsed #truyenThongDropdownPanel,
 #userHeader.sidebar-collapsed #hopDongDropdownPanel,
 #userHeader.sidebar-collapsed #dieuHanhDropdownPanel,
 #userHeader.sidebar-collapsed #hanhChinhDropdownPanel,
-#userHeader.sidebar-collapsed #tongHopDropdownPanel { display: none !important; }
+#userHeader.sidebar-collapsed #tongHopDropdownPanel,
+#userHeader.sidebar-collapsed #itSupportDropdownPanel,
+#userHeader.sidebar-collapsed #heThongDropdownPanel { display: none !important; }
 
 /* Responsive điện thoại (< 768px, khớp breakpoint "md" của Tailwind) — sidebar 16rem cố định trước đây
    chiếm gần hết bề ngang màn hình điện thoại, gần như không dùng được. Chuyển sang dạng "off-canvas":
@@ -276,6 +279,11 @@ table { display: block; overflow-x: auto; max-width: 100%; }
   animation: loginpage-spin .7s linear infinite;
 }
 @keyframes loginpage-spin { to { transform: rotate(360deg); } }
+.boot-splash-spinner {
+  display: inline-block; width: 34px; height: 34px;
+  border: 3px solid rgba(255,255,255,.2); border-top-color: #38bdf8; border-radius: 50%;
+  animation: loginpage-spin .8s linear infinite;
+}
 
 .loginpage-captcha-row { display: flex; align-items: center; gap: 8px; margin-bottom: 9px; }
 .loginpage-captcha-img { flex: 1; border: 1.5px solid #e3e8f2; border-radius: 10px; overflow: hidden; line-height: 0; background: #eef0f7; }
@@ -292,6 +300,20 @@ table { display: block; overflow-x: auto; max-width: 100%; }
 </style>
 </head>
 <body class="bg-gray-100 min-h-screen font-sans">
+<!-- Màn chờ NGẮN hiện NGAY LẬP TỨC bằng HTML thuần (không đợi JS chạy) mỗi khi mở/tải lại trang — tránh
+     "chớp" ra hẳn màn hình Đăng Nhập (ô tên đăng nhập/mật khẩu trống trơn) trong lúc tryRestoreSession()
+     còn đang xác nhận phiên đăng nhập cũ (nếu có) rồi tải dữ liệu (initDatabase(), có thể mất vài giây ở
+     lần đầu) — trước đây #loginSection không có class "hidden" nên LUÔN hiện sẵn theo mặc định, khiến
+     người dùng ĐANG đăng nhập chỉ bấm F5 cũng thấy y hệt cảnh "bị đăng xuất rồi đăng nhập lại" trong
+     thoáng chốc, dù thực ra phiên vẫn còn nguyên. Chỉ ẩn đi ở ĐÚNG 1 chỗ — hàm hideBootSplash() (script
+     cuối trang) — gọi khi biết chắc: hoặc lộ ra màn Đăng Nhập thật (không còn phiên hợp lệ), hoặc chuyển
+     hẳn sang giao diện chính/hộp thoại bắt đổi mật khẩu (phiên vẫn hợp lệ). -->
+<div id="bootSplash" class="fixed inset-0 z-50 flex items-center justify-center" style="background:linear-gradient(155deg,#0b1f4d 0%,#060f26 100%);">
+  <div class="flex flex-col items-center gap-3">
+    <span class="boot-splash-spinner"></span>
+    <span style="font-size:13px;font-weight:600;color:#a9b8e6;letter-spacing:.04em;">Đang tải HCRC Workspace…</span>
+  </div>
+</div>
 <!-- Số phiên bản đang chạy trên server — lấy từ GET /api/health (xem server.js), không phải giá trị
      tĩnh ghi cứng ở đây, để luôn khớp đúng bản code server đang thực sự chạy. Dùng để xác nhận nhanh
      sau khi deploy (đè code + npm install + pm2 restart) đã áp dụng đúng bản mới hay chưa. -->
@@ -478,7 +500,7 @@ table { display: block; overflow-x: auto; max-width: 100%; }
   <!-- Màn hình 1: Đăng nhập — chia đôi màn hình (panel thương hiệu trái + form phải), xem CSS
        "#loginSection" ở khối <style> đầu file. id/hành vi hidden-toggle giữ nguyên như cũ, chỉ đổi
        diện mạo bên trong. -->
-  <div id="loginSection" class="my-6 md:my-10">
+  <div id="loginSection" class="my-6 md:my-10 hidden">
     <div class="loginpage-hero">
       <svg class="loginpage-hero-nodes" viewBox="0 0 600 700" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
         <g stroke="rgba(148,197,255,.35)" stroke-width="1">
@@ -6893,18 +6915,32 @@ function syncStorage(key, opts) {
 
 let dataReady = false;
 
+// Ẩn màn chờ #bootSplash đi — xem chú thích đầy đủ tại chỗ khai báo #bootSplash (đầu <body>). Gọi từ
+// CẢ 2 nhánh thoát của tryRestoreSession() (không còn phiên hợp lệ → lộ màn Đăng Nhập thật) VÀ
+// proceedAfterAuth() (còn phiên hợp lệ → chuyển hẳn sang giao diện chính/hộp thoại bắt đổi mật khẩu) —
+// idempotent, gọi thêm lần nữa (vd từ login() lúc đăng nhập thủ công, màn chờ đã ẩn từ trước) vô hại.
+function hideBootSplash() {
+  document.getElementById('bootSplash')?.classList.add('hidden');
+}
+
 // KHÔNG còn tải dữ liệu ngay khi mở trang — /api/data giờ bắt buộc đăng nhập (trước đây gọi thẳng ở
 // đây vì GET /api/data không có xác thực gì, ai cũng gọi được). Chỉ còn thử khôi phục phiên đăng
 // nhập cũ (nếu trình duyệt vẫn còn cookie hợp lệ từ lần trước, vd. tải lại trang) qua /api/auth/me —
-// nếu không có/hết hạn thì cứ để im màn hình đăng nhập, không báo lỗi.
+// nếu không có/hết hạn thì lộ màn Đăng Nhập thật ra (thay cho #bootSplash), không báo lỗi.
 (async function tryRestoreSession() {
   try {
     const res = await fetch('/api/auth/me');
-    if (!res.ok) return;
+    if (!res.ok) {
+      hideBootSplash();
+      document.getElementById('loginSection').classList.remove('hidden');
+      return;
+    }
     const user = await res.json();
     await proceedAfterAuth(user);
   } catch (e) {
     console.warn('Không thể khôi phục phiên đăng nhập cũ:', e.message);
+    hideBootSplash();
+    document.getElementById('loginSection').classList.remove('hidden');
   }
 })();
 
@@ -7949,12 +7985,17 @@ async function login() {
 async function proceedAfterAuth(user) {
   currentUser = user;
   if (user.mustChangePassword) {
+    hideBootSplash();
     document.getElementById('loginSection').classList.add('hidden');
     document.getElementById('mustChangePasswordModal').classList.remove('hidden');
     return;
   }
+  // #bootSplash (hoặc form Đăng Nhập, nếu là lượt đăng nhập thủ công) vẫn hiện NGUYÊN suốt lúc
+  // initDatabase() tải dữ liệu — chỉ ẩn đi NGAY TRƯỚC khi finishLogin() thật sự lộ giao diện chính, để
+  // không có khoảng trống trắng màn hình giữa 2 lượt ẩn/hiện. Xem chú thích đầy đủ tại hideBootSplash().
   await initDatabase(user);
   dataReady = true;
+  hideBootSplash();
   finishLogin(user);
 }
 
