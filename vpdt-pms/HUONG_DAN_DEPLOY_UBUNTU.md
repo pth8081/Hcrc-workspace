@@ -665,6 +665,44 @@ trước — không bắt buộc, chỉ khuyến nghị khi đã public hẳn ra
 
 ---
 
+### 10.6. Bật đăng nhập/xác thực khi Duyệt bằng vân tay, Face ID (WebAuthn/FIDO2)
+
+Cho phép đăng nhập bằng vân tay/Face ID trên điện thoại (thay gõ mật khẩu)
+và thêm 1 mức xác thực lại khi Duyệt mới ("WEBAUTHN", song song
+PASSWORD/OTP_EMAIL/PIN đã có ở mục 9. Người Duyệt). Vân tay **không bao giờ
+rời khỏi thiết bị người dùng** — máy chủ chỉ lưu 1 public key + credential ID
+(`lib/webauthn.js`), không lưu gì sinh trắc học thật.
+
+**Bắt buộc máy chủ đang chạy qua HTTPS thật** (mục 9b/9c ở trên) — trình
+duyệt không cấp API vân tay/Face ID qua `http://` thường (trừ
+`http://localhost` lúc dev). Nếu server bạn đang chạy chế độ LAN nội bộ
+không qua Nginx/HTTPS (`COOKIE_SECURE=false`), tính năng này sẽ không dùng
+được cho tới khi có HTTPS thật — không cần tắt gì, nút liên quan tự ẩn phía
+trình duyệt.
+
+1. Điền vào `.env` (xem chú thích đầy đủ trong `.env.example`):
+   ```
+   WEBAUTHN_RP_ID=vpdt.company.com   # domain THẬT đang truy cập, không kèm https://, không kèm cổng
+   WEBAUTHN_RP_NAME=HCRC Workspace   # tên hiển thị trong hộp thoại vân tay, không bắt buộc
+   ```
+   `WEBAUTHN_RP_ID` phải khớp **chính xác** domain người dùng gõ trên thanh
+   địa chỉ — sai domain thì vân tay báo lỗi xác thực dù thao tác đúng. Đổi
+   domain truy cập sau này (domain khác/subdomain khác) sẽ khiến mọi thiết bị
+   đã đăng ký cũ ngừng dùng được, người dùng phải đăng ký lại.
+2. `pm2 restart vpdt`. Mỗi người dùng tự đăng ký thiết bị của mình ở
+   "⚙️ Cá Nhân Hóa → 🖐️ Đăng Nhập/Xác Thực Bằng Vân Tay, Face ID" (phải đăng
+   nhập bằng mật khẩu ít nhất 1 lần trước — không có đường đăng ký vân tay
+   cho tài khoản chưa xác minh).
+3. (Tuỳ chọn) Ở mục "9. Người Duyệt" trong Quản trị, đổi mức xác thực khi
+   Duyệt của 1 người sang "Yêu cầu vân tay/Face ID" — **chỉ chọn cho người đã
+   tự đăng ký ít nhất 1 thiết bị**, chọn cho người chưa đăng ký sẽ khiến họ
+   không Duyệt được cho tới khi đăng ký.
+
+Không cấu hình (để trống `WEBAUTHN_RP_ID`, mặc định) thì hệ thống hoạt động y
+như trước — không bắt buộc.
+
+---
+
 ## 11. Kiểm tra sức khỏe hệ thống
 
 Endpoint kiểm tra nhanh:

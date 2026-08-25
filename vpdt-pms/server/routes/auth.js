@@ -10,6 +10,7 @@ const { validatePasswordStrength } = require('../lib/passwordPolicy');
 const { HttpError } = require('../lib/httpErrors');
 const { issueApprovalGrant, issueApprovalOtp, verifyApprovalOtp } = require('../lib/approvalAuth');
 const { isCaptchaEnabled, verifyCaptcha } = require('../lib/captcha');
+const webauthn = require('../lib/webauthn');
 const { getPool, sql } = require('../db');
 const { sendMail, resolveEncryption } = require('../lib/mailer');
 const { decryptSecret } = require('../lib/emailCrypto');
@@ -19,9 +20,12 @@ const { decryptSecret } = require('../lib/emailCrypto');
 // pinHash/failedLoginAttempts/lockedUntil, chỉ lọc pass/password). Thêm hasPin (boolean, KHÔNG phải hash
 // thật) để client biết hiện đã có mã PIN hay chưa mà không cần thấy giá trị — dùng để quyết định hiện ô
 // "Mã PIN hiện tại" khi đổi PIN (xem #pfCurrentPinWrap ở index.html).
+// webauthnCredentials (publicKey/counter) và webauthnUserId cũng không cần lộ ra ngoài — thay bằng
+// webauthnDeviceCount (chỉ 1 số) để client biết đã đăng ký vân tay hay chưa; danh sách chi tiết thiết
+// bị (id/tên/ngày tạo, KHÔNG kèm publicKey/counter) lấy riêng qua GET /webauthn/credentials bên dưới.
 function toSafeUser(user) {
-  const { pass, password, pinHash, failedLoginAttempts, lockedUntil, ...safe } = user;
-  return { ...safe, hasPin: !!pinHash };
+  const { pass, password, pinHash, failedLoginAttempts, lockedUntil, webauthnCredentials, webauthnUserId, ...safe } = user;
+  return { ...safe, hasPin: !!pinHash, webauthnDeviceCount: (webauthnCredentials || []).length };
 }
 
 // Cảnh báo 1 LẦN/tiến trình (không log lại mỗi lượt đăng nhập, tránh rác log) khi phát hiện dấu hiệu
@@ -483,6 +487,238 @@ router.post('/verify-approval-otp', loginRateLimiter, requireAuth, async (req, r
   } catch (err) {
     console.error('POST /api/auth/verify-approval-otp lỗi:', err.message);
     res.status(500).json({ error: 'Không thể xác thực mã OTP' });
+  }
+});
+
+// ==========================================
+// ĐĂNG NHẬP / XÁC THỰC LẠI KHI DUYỆT BẰNG VÂN TAY, FACE ID (WebAuthn/FIDO2) — xem lib/webauthn.js.
+// 4 nhóm route: (1) đăng ký thiết bị mới [requireAuth — chỉ làm được từ phiên đã đăng nhập mật khẩu
+// trước đó] + liệt kê/gỡ thiết bị; (2) đăng nhập bằng vân tay [public, thay /login]; (3) xác thực lại
+// khi Duyệt bằng vân tay [requireAuth, mức WEBAUTHN mới trong approverAuthLevel — song song
+// PASSWORD/OTP_EMAIL/PIN đã có, cùng cấp "phiếu Duyệt" qua issueApprovalGrant()].
+// ==========================================
+
+// POST /api/auth/webauthn/register-options — Bước 1 đăng ký thiết bị mới của CHÍNH người đang đăng
+// nhập. Lần đầu đăng ký thiết bị nào đó, sinh sẵn webauthnUserId dùng chung cho MỌI thiết bị của tài
+// khoản này về sau (không sinh lại mỗi lần).
+router.post('/webauthn/register-options', requireAuth, async (req, res) => {
+  try {
+    const { options, webauthnUserId } = await webauthn.buildRegistrationOptions(req, req.freshUser);
+    if (webauthnUserId !== req.freshUser.webauthnUserId) {
+      await withLockedAppDataValue('users', (collection) => {
+        const list = Array.isArray(collection) ? collection : [];
+        const idx = list.findIndex(u => u.username === req.freshUser.username);
+        if (idx !== -1) list[idx] = { ...list[idx], webauthnUserId };
+        return list;
+      });
+    }
+    res.json(options);
+  } catch (err) {
+    if (err instanceof HttpError) return res.status(err.status).json({ error: err.message });
+    console.error('POST /api/auth/webauthn/register-options lỗi:', err.message);
+    res.status(500).json({ error: 'Không thể khởi tạo đăng ký vân tay' });
+  }
+});
+
+// POST /api/auth/webauthn/register-verify — Bước 2, xác minh attestation trình duyệt gửi lên rồi lưu
+// credential mới vào user.webauthnCredentials. deviceLabel: tên gợi nhớ người dùng tự đặt (không bắt
+// buộc), hiển thị lại ở màn quản lý thiết bị.
+router.post('/webauthn/register-verify', requireAuth, async (req, res) => {
+  const { response, deviceLabel } = req.body || {};
+  if (!response) return res.status(400).json({ error: 'Thiếu dữ liệu xác minh từ trình duyệt' });
+
+  try {
+    const credential = await webauthn.verifyRegistration(req, req.freshUser, response);
+    credential.deviceLabel = String(deviceLabel || '').trim().slice(0, 100) || 'Thiết bị chưa đặt tên';
+
+    await withLockedAppDataValue('users', (collection) => {
+      const list = Array.isArray(collection) ? collection : [];
+      const idx = list.findIndex(u => u.username === req.freshUser.username);
+      if (idx === -1) throw new HttpError(401, 'Tài khoản không còn tồn tại');
+      const existing = Array.isArray(list[idx].webauthnCredentials) ? list[idx].webauthnCredentials : [];
+      list[idx] = { ...list[idx], webauthnCredentials: [...existing, credential] };
+      return list;
+    });
+
+    res.json({ ok: true, credential: { id: credential.id, deviceLabel: credential.deviceLabel, createdAt: credential.createdAt } });
+  } catch (err) {
+    if (err instanceof HttpError) return res.status(err.status).json({ error: err.message });
+    console.error('POST /api/auth/webauthn/register-verify lỗi:', err.message);
+    res.status(500).json({ error: 'Không thể đăng ký thiết bị vân tay' });
+  }
+});
+
+// GET /api/auth/webauthn/credentials — liệt kê thiết bị vân tay CỦA CHÍNH mình (Hồ Sơ Cá Nhân). Chỉ
+// trả id/tên/ngày tạo — KHÔNG trả publicKey/counter (không cần thiết cho client, tránh lộ thừa).
+router.get('/webauthn/credentials', requireAuth, (req, res) => {
+  const list = (req.freshUser.webauthnCredentials || []).map(c => ({ id: c.id, deviceLabel: c.deviceLabel, createdAt: c.createdAt }));
+  res.json(list);
+});
+
+// DELETE /api/auth/webauthn/credentials/:id — gỡ 1 thiết bị vân tay CỦA CHÍNH mình.
+router.delete('/webauthn/credentials/:id', requireAuth, async (req, res) => {
+  try {
+    await withLockedAppDataValue('users', (collection) => {
+      const list = Array.isArray(collection) ? collection : [];
+      const idx = list.findIndex(u => u.username === req.freshUser.username);
+      if (idx === -1) throw new HttpError(401, 'Tài khoản không còn tồn tại');
+      const existing = Array.isArray(list[idx].webauthnCredentials) ? list[idx].webauthnCredentials : [];
+      list[idx] = { ...list[idx], webauthnCredentials: existing.filter(c => c.id !== req.params.id) };
+      return list;
+    });
+    res.json({ ok: true });
+  } catch (err) {
+    if (err instanceof HttpError) return res.status(err.status).json({ error: err.message });
+    console.error('DELETE /api/auth/webauthn/credentials lỗi:', err.message);
+    res.status(500).json({ error: 'Không thể gỡ thiết bị vân tay' });
+  }
+});
+
+// POST /api/auth/webauthn/login-options — Bước 1 đăng nhập bằng vân tay (public, thay /login). Luôn
+// trả về 1 bộ challenge hợp lệ dù username có tồn tại/có đăng ký vân tay hay không — KHÔNG lộ thông
+// tin tài khoản qua sự khác biệt của response (khớp cách /login xử lý sai tài khoản/mật khẩu).
+router.post('/webauthn/login-options', loginRateLimiter, async (req, res) => {
+  const { username } = req.body || {};
+  if (!username) return res.status(400).json({ error: 'Thiếu tên đăng nhập' });
+
+  try {
+    const users = (await getAppDataValue('users')) || [];
+    const user = users.find(u => u.username === username) || null;
+    const options = await webauthn.buildAuthenticationOptions(req, user);
+    res.json(options);
+  } catch (err) {
+    if (err instanceof HttpError) return res.status(err.status).json({ error: err.message });
+    console.error('POST /api/auth/webauthn/login-options lỗi:', err.message);
+    res.status(500).json({ error: 'Không thể khởi tạo đăng nhập vân tay' });
+  }
+});
+
+// POST /api/auth/webauthn/login-verify — Bước 2, xác minh chữ ký rồi cấp cookie phiên Y HỆT /login.
+// Dùng CHUNG bộ đếm khoá tài khoản (lib/loginAttempts.js) với /login — vân tay xác thực sai cũng tính
+// là 1 lần đăng nhập sai, cùng mục đích chống dò/lạm dụng như mật khẩu.
+router.post('/webauthn/login-verify', loginRateLimiter, async (req, res) => {
+  const { username, response } = req.body || {};
+  if (!username || !response) return res.status(400).json({ error: 'Thiếu dữ liệu đăng nhập' });
+
+  try {
+    const users = (await getAppDataValue('users')) || [];
+    const user = users.find(u => u.username === username);
+
+    const remainingLockMinutes = user ? getLockoutRemainingMinutes(user) : null;
+    if (remainingLockMinutes !== null) {
+      return res.status(429).json({ error: `Tài khoản tạm khóa do đăng nhập sai quá nhiều lần. Vui lòng thử lại sau ${remainingLockMinutes} phút.` });
+    }
+
+    // Lỗi cụ thể (hết hạn challenge, sai thiết bị, chữ ký không hợp lệ...) đều gộp về CHUNG 1 thông báo
+    // ra ngoài — không lộ chi tiết nào giúp phân biệt "tài khoản không tồn tại" với "vân tay sai".
+    let verifyResult = null;
+    if (user) {
+      try {
+        verifyResult = await webauthn.verifyAuthentication(req, user, response);
+      } catch (err) {
+        verifyResult = null;
+      }
+    }
+
+    if (!verifyResult) {
+      if (user) {
+        await withLockedAppDataValue('users', (collection) => {
+          const list = Array.isArray(collection) ? collection : [];
+          const idx = list.findIndex(u => u.username === username);
+          if (idx !== -1) recordFailedLogin(list[idx]);
+          return list;
+        });
+      }
+      return res.status(401).json({ error: 'Không thể đăng nhập bằng vân tay, vui lòng thử lại hoặc dùng mật khẩu' });
+    }
+
+    if (user.active === false) {
+      return res.status(403).json({ error: 'Tài khoản đã bị vô hiệu hóa — vui lòng liên hệ quản trị viên' });
+    }
+
+    // Cập nhật counter chống replay + xoá lịch sử đăng nhập sai (nếu có) trong CÙNG 1 lượt ghi khoá
+    // dòng users, tránh mất counter nếu có request khác tới gần như đồng thời.
+    let updatedUser;
+    await withLockedAppDataValue('users', (collection) => {
+      const list = Array.isArray(collection) ? collection : [];
+      const idx = list.findIndex(u => u.username === username);
+      if (idx === -1) throw new HttpError(401, 'Tài khoản không còn tồn tại');
+      const creds = (list[idx].webauthnCredentials || []).map(c =>
+        c.id === verifyResult.credentialId ? { ...c, counter: verifyResult.newCounter } : c
+      );
+      updatedUser = { ...list[idx], webauthnCredentials: creds };
+      resetLoginAttempts(updatedUser);
+      list[idx] = updatedUser;
+      return list;
+    });
+
+    const token = signToken(updatedUser);
+    setAuthCookie(res, token);
+    warnIfCookieLikelyNotPersisted(req);
+    res.json(toSafeUser(updatedUser));
+  } catch (err) {
+    if (err instanceof HttpError) return res.status(err.status).json({ error: err.message });
+    console.error('POST /api/auth/webauthn/login-verify lỗi:', err.message);
+    res.status(500).json({ error: 'Không thể đăng nhập' });
+  }
+});
+
+// POST /api/auth/webauthn/approval-options + /approval-verify — xác thực lại bằng vân tay trước khi
+// Duyệt (approverAuthLevel = 'WEBAUTHN', mức thứ 4 song song PASSWORD/OTP_EMAIL/PIN). Xác minh xong
+// cấp "phiếu Duyệt" y hệt /verify-password|/verify-pin (xem lib/approvalAuth.js issueApprovalGrant()).
+router.post('/webauthn/approval-options', loginRateLimiter, requireAuth, async (req, res) => {
+  try {
+    const options = await webauthn.buildAuthenticationOptions(req, req.freshUser);
+    res.json(options);
+  } catch (err) {
+    if (err instanceof HttpError) return res.status(err.status).json({ error: err.message });
+    console.error('POST /api/auth/webauthn/approval-options lỗi:', err.message);
+    res.status(500).json({ error: 'Không thể khởi tạo xác thực vân tay' });
+  }
+});
+
+router.post('/webauthn/approval-verify', loginRateLimiter, requireAuth, async (req, res) => {
+  const { response } = req.body || {};
+  if (!response) return res.status(400).json({ error: 'Thiếu dữ liệu xác thực từ trình duyệt' });
+
+  try {
+    const username = req.freshUser.username;
+    const remainingLockMinutes = getLockoutRemainingMinutes(req.freshUser);
+    if (remainingLockMinutes !== null) {
+      return res.status(429).json({ error: `Tài khoản tạm khóa do nhập sai quá nhiều lần. Vui lòng thử lại sau ${remainingLockMinutes} phút.` });
+    }
+
+    let verifyResult;
+    try {
+      verifyResult = await webauthn.verifyAuthentication(req, req.freshUser, response);
+    } catch (err) {
+      await withLockedAppDataValue('users', (collection) => {
+        const list = Array.isArray(collection) ? collection : [];
+        const idx = list.findIndex(u => u.username === username);
+        if (idx !== -1) recordFailedLogin(list[idx]);
+        return list;
+      });
+      return res.json({ ok: false });
+    }
+
+    await withLockedAppDataValue('users', (collection) => {
+      const list = Array.isArray(collection) ? collection : [];
+      const idx = list.findIndex(u => u.username === username);
+      if (idx === -1) return list;
+      const creds = (list[idx].webauthnCredentials || []).map(c =>
+        c.id === verifyResult.credentialId ? { ...c, counter: verifyResult.newCounter } : c
+      );
+      const updated = { ...list[idx], webauthnCredentials: creds };
+      resetLoginAttempts(updated);
+      list[idx] = updated;
+      return list;
+    });
+
+    issueApprovalGrant(username);
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('POST /api/auth/webauthn/approval-verify lỗi:', err.message);
+    res.status(500).json({ error: 'Không thể xác thực vân tay' });
   }
 });
 
