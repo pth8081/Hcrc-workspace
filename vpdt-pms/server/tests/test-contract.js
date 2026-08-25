@@ -58,7 +58,10 @@ async function run() {
 
     // ============ Kịch bản 2: Tạo hồ sơ (happy path) với Cấp Phê Duyệt Cuối Cùng = TGD (4 lớp bổ
     // sung bắt buộc: GD_PGD/PTGD/TRO_LY_THU_KY/TGD) + % tự tính Đợt Thanh Toán ============
-    await page.selectOption('#contractApprovalLevel', 'TGD');
+    // contractApprovalLevel là input ẩn (nút + bảng chọn tự dựng, cùng khuôn contractAddendumTarget) —
+    // không còn là <select> nên bấm nút mở rồi chọn dòng tương ứng, không selectOption() được nữa.
+    await page.click('#contractApprovalLevelBtn');
+    await page.getByRole('button', { name: 'Tổng giám đốc phê duyệt', exact: true }).click();
     // Cấp "TGD" chỉ BẮT BUỘC (locked, tự tick sẵn) 2 lớp cuối TRO_LY_THU_KY/TGD — GD_PGD/PTGD vẫn hiện
     // ra cho CHỌN THÊM (tuỳ ý) chứ không tự tick, phải tick tay để đưa cả 4 lớp vào quy trình. Panel
     // dropdown-checklist tự dựng (không phải <select multiple>) chỉ hiện khi bấm nút mở — bấm nút mở
