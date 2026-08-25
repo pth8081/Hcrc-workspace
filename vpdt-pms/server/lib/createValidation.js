@@ -10,7 +10,7 @@
 const { HttpError: CreateError } = require('./httpErrors');
 // vppCatalog.js là tiện ích THUẦN (không đọc DB, giống httpErrors.js) — an toàn require thẳng ở đây.
 const { validateRegistrationItems: validateVppRegItems } = require('./vppCatalog');
-const { sanitizePriceFileItems } = require('./priceFileParser');
+const { sanitizePriceFileItems, matchAgainstMaster } = require('./priceFileParser');
 
 function scopeAllows(user, scope, dept) {
   if (!user) return false;
@@ -736,6 +736,12 @@ const CREATE_MODULE_CONFIGS = {
     // đọc collection lúc "chưa ai đăng ký" trước khi request nào kịp ghi). Khoá theo cặp kỳ+người tạo.
     getLockKey: (payload, user) => `vpp_registration:${payload.periodId}:${user.username}`,
     extraValidate: (payload, collection, user, appData) => {
+      // Người ĐĂNG KÝ được uỷ quyền theo phòng ban (xem checkbox "Người đăng ký" khối 12 cây phân
+      // quyền) — trước đây module mở sẵn cho MỌI người đã đăng nhập, giờ chỉ người được uỷ quyền (hoặc
+      // admin) mới đăng ký được, khớp yêu cầu "người đăng ký chịu trách nhiệm đăng ký cho phòng".
+      if (!user.perms?.admin && !user.perms?.vppRegisterCreate) {
+        throw new CreateError(403, 'Bạn không có quyền đăng ký Văn Phòng Phẩm — liên hệ người được uỷ quyền đăng ký của phòng mình');
+      }
       const periodId = Number(payload.periodId);
       if (!Number.isFinite(periodId)) throw new CreateError(400, 'Thiếu kỳ đăng ký');
       const periods = appData?.vppPeriods || [];
@@ -893,7 +899,7 @@ const CREATE_MODULE_CONFIGS = {
     forceOwnDept: true,
     getScope: () => ({}),
     creatorField: 'creator', creatorNameField: 'creatorName',
-    extraValidate: (payload, collection, user) => {
+    extraValidate: (payload, collection, user, appData) => {
       if (!user.perms?.admin && !user.perms?.itPriceProposeCreate) {
         throw new CreateError(403, 'Bạn không có quyền đề xuất duyệt giá');
       }
@@ -904,7 +910,26 @@ const CREATE_MODULE_CONFIGS = {
       // dưới đây chặn payload giả mạo/kiểu dữ liệu lạ trước khi ghi vào DB.
       const file = payload.files && payload.files[0];
       if (!file || !file.fileUrl) throw new CreateError(400, 'Vui lòng tải lên tệp bảng giá (.xlsx) cần duyệt');
-      const items = sanitizePriceFileItems(file.items);
+      let items = sanitizePriceFileItems(file.items);
+
+      // File Giá Mẫu (tuỳ chọn, payload.masterListId) — người đề xuất tự chọn ĐÚNG file mẫu áp dụng cho
+      // bảng giá của mình lúc nộp (không suy luận tự động theo phòng ban, vì thực tế có thể có nhiều
+      // file mẫu khác nhau — xem defaults.js). Tính lại verdict khớp/lệch NGAY TẠI ĐÂY từ
+      // appData.itPriceMasterLists — KHÔNG tin matched/masterPrice client echo lại từ lúc xem trước ở
+      // POST /api/it-price/parse-file, nếu không 1 request tự soạn có thể tự xưng "đã khớp 100%" để
+      // được bỏ qua thẳng bước duyệt phòng ban.
+      const masterListId = payload.masterListId ? Number(payload.masterListId) : null;
+      const masterList = masterListId
+        ? (appData?.itPriceMasterLists || []).find(m => m.id === masterListId)
+        : null;
+      let autoApproved = false;
+      if (masterList) {
+        items = matchAgainstMaster(items, masterList.items);
+        autoApproved = items.length > 0 && items.every(it => it.matched);
+      }
+      payload.masterListId = masterList ? masterList.id : null;
+      payload.masterListName = masterList ? masterList.name : null;
+
       payload.files = [{
         id: Date.now(),
         fileUrl: String(file.fileUrl).slice(0, 300),
@@ -925,13 +950,45 @@ const CREATE_MODULE_CONFIGS = {
       payload.appliedBy = null;
       payload.appliedByName = null;
       payload.appliedAt = null;
-      // status/currentStep/history PHẢI gán cứng ở server (khớp docs/carRegs/officeReqs) — đây là 3
-      // field mà lib/workflowEngine.js đọc để xác định hồ sơ đang ở bước nào/ai được duyệt tiếp; thiếu
-      // bước này thì applyWorkflowAction() sẽ chặn ngay ("Hồ sơ không còn ở trạng thái chờ xử lý") vì
-      // item.status không phải 'PENDING'.
-      payload.status = 'PENDING';
-      payload.currentStep = 1;
-      payload.history = [];
+      // Khoá "Tôi đang xử lý" — người trong đội Hỗ Trợ IT nhận việc áp giá, xem claimPriceApply()/
+      // applyPriceApproval() ở lib/recordActions.js.
+      payload.applyClaimedBy = null;
+      payload.applyClaimedByName = null;
+      payload.applyClaimedAt = null;
+
+      if (autoApproved) {
+        // Khớp 100% với File Giá Mẫu đã chọn -> bỏ qua toàn bộ quy trình duyệt phòng ban, status
+        // APPROVED ngay từ lúc tạo. currentStep đặt bằng bước cuối của đúng cấu hình quy trình phòng ban
+        // (không phải 0/null) để giữ hình dạng NHẤT QUÁN với 1 hồ sơ đã duyệt xong bình thường qua
+        // lib/workflowEngine.js (item[currentStepField] luôn dừng ở bước cuối khi status='APPROVED', xem
+        // applyWorkflowAction()) — dù itPriceStatusBadge() ở index.html chỉ đọc currentStep khi status
+        // KHÁC APPROVED nên field này hiện không ảnh hưởng hiển thị, giữ đúng hình dạng vẫn an toàn hơn
+        // cho bất kỳ chỗ nào sau này đọc lại currentStep của hồ sơ APPROVED.
+        // action:'APPROVED' (không phải 1 giá trị mới như 'AUTO_APPROVED') để tái dùng NGUYÊN vẹn UI
+        // lịch sử duyệt đã có ở renderItPriceModal() (chỉ lọc hiện đúng 2 action 'APPROVED'/'REJECTED')
+        // — payload.autoApproved (field riêng) mới là chỗ UI dựa vào để phân biệt badge tự động/thủ công.
+        const wfConfig = appData?.itPriceDeptWorkflows?.[user.dept];
+        const wf = (appData?.workflows || []).find(w => w.id === wfConfig?.workflowId) || { steps: [{ order: 1, name: 'Duyệt' }] };
+        const totalSteps = wf.steps.length;
+        payload.status = 'APPROVED';
+        payload.currentStep = totalSteps;
+        payload.autoApproved = true;
+        payload.history = [{
+          step: totalSteps, stepName: wf.steps[totalSteps - 1]?.name || '',
+          approver: 'Hệ thống (Tự động đối chiếu)', username: 'system', action: 'APPROVED',
+          comment: `Khớp 100% với File Giá Mẫu "${masterList.name}" (${items.length}/${items.length} dòng) — bỏ qua bước duyệt phòng ban.`,
+          time: new Date().toLocaleString('vi-VN')
+        }];
+      } else {
+        // status/currentStep/history PHẢI gán cứng ở server (khớp docs/carRegs/officeReqs) — đây là 3
+        // field mà lib/workflowEngine.js đọc để xác định hồ sơ đang ở bước nào/ai được duyệt tiếp; thiếu
+        // bước này thì applyWorkflowAction() sẽ chặn ngay ("Hồ sơ không còn ở trạng thái chờ xử lý") vì
+        // item.status không phải 'PENDING'.
+        payload.status = 'PENDING';
+        payload.currentStep = 1;
+        payload.autoApproved = false;
+        payload.history = [];
+      }
     }
   },
   // 2) "Hỗ Trợ Yêu Cầu" (itSupportTickets): ticket helpdesk IT nội bộ — MỞ CHO TOÀN BỘ NHÂN VIÊN, không
@@ -1211,14 +1268,16 @@ const CREATE_MODULE_CONFIGS = {
       payload.name = String(payload.name).trim().slice(0, 200);
       payload.note = (payload.note || '').trim().slice(0, 1000);
 
-      const validDepts = new Set(appData?.depts || []);
+      // Đối chiếu với Danh Mục Siêu Thị (DB.stores) — TÁCH RIÊNG khỏi DB.depts (xem defaults.js), vì
+      // module này vốn chỉ dùng cho siêu thị chứ không phải phòng ban khối văn phòng.
+      const validStores = new Set(appData?.stores || []);
       const rawAllocations = Array.isArray(payload.allocations) ? payload.allocations : [];
       if (!rawAllocations.length) throw new CreateError(400, 'Vui lòng phân bổ cho ít nhất 1 siêu thị');
       const allocations = [];
       for (const raw of rawAllocations) {
         const dept = String(raw?.dept || '').trim();
         if (!dept) continue;
-        if (!validDepts.has(dept)) throw new CreateError(400, `Phòng ban/siêu thị không hợp lệ: ${dept}`);
+        if (!validStores.has(dept)) throw new CreateError(400, `Siêu thị không hợp lệ: ${dept}`);
         const items = sanitizeUniformItems(raw?.items);
         allocations.push({
           id: Date.now() + allocations.length,

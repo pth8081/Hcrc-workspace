@@ -1936,10 +1936,58 @@ function hasUnresolvedPriceInfoRequest(item) {
   return (item.infoRequests || []).some(r => !r.response);
 }
 
+// "Tôi đang xử lý" — 1 người trong đội Hỗ Trợ IT nhận việc áp giá cho ĐÚNG đề xuất này, khoá lại để
+// CHỈ chính người đó (hoặc admin) mới xác nhận hoàn thành được sau này — tránh 2 người cùng đội tưởng
+// nhầm người kia đã áp giá xong (hoặc ngược lại, cùng áp giá trùng lặp) khi có nhiều đề xuất đang chờ
+// cùng lúc. Cùng khuôn claimItTicket() ở dưới, nhưng ticket không khoá chặt lại được (ai có itManage
+// cũng cập nhật trạng thái được, không riêng người nhận) — ở đây bắt buộc khoá chặt vì hành động sau đó
+// (Xác nhận áp giá) ghi nhận là ĐÃ THỰC SỰ áp giá thật vào hệ thống bán hàng ngoài app, không phải chỉ
+// cập nhật trạng thái nội bộ.
+function claimPriceApply(user, item) {
+  if (!canManageItSupport(user)) throw new HttpError(403, 'Bạn không có quyền nhận xử lý áp giá');
+  if (item.status !== 'APPROVED') throw new HttpError(409, 'Đề xuất này chưa được phê duyệt xong');
+  if (item.applied) throw new HttpError(409, 'Đề xuất này đã được áp giá rồi');
+  if (item.applyClaimedBy) {
+    throw new HttpError(409, `Đề xuất này đã có người nhận xử lý (${item.applyClaimedByName || item.applyClaimedBy})`);
+  }
+  item.applyClaimedBy = user.username;
+  item.applyClaimedByName = user.name;
+  item.applyClaimedAt = nowVN();
+  return item;
+}
+
+// Huỷ nhận xử lý — trả đề xuất về hàng đợi chung cho người khác trong đội nhận lại, dùng khi người đã
+// nhận không xử lý tiếp được nữa (nghỉ phép, bận việc khác...). Chỉ chính người đã nhận hoặc admin gọi
+// được — người khác trong đội không tự ý huỷ giúp người đã nhận.
+function releasePriceApplyClaim(user, item) {
+  if (!canManageItSupport(user)) throw new HttpError(403, 'Bạn không có quyền huỷ nhận xử lý áp giá');
+  if (!item.applyClaimedBy) throw new HttpError(409, 'Đề xuất này chưa có ai nhận xử lý');
+  if (item.applyClaimedBy !== user.username && !user.perms?.admin) {
+    throw new HttpError(403, 'Chỉ người đã nhận xử lý (hoặc Quản Trị Viên) mới huỷ được');
+  }
+  item.applyClaimedBy = null;
+  item.applyClaimedByName = null;
+  item.applyClaimedAt = null;
+  return item;
+}
+
 function applyPriceApproval(user, item) {
   if (!canManageItSupport(user)) throw new HttpError(403, 'Bạn không có quyền xác nhận áp giá');
   if (item.status !== 'APPROVED') throw new HttpError(409, 'Đề xuất này chưa được phê duyệt xong');
   if (item.applied) throw new HttpError(409, 'Đề xuất này đã được áp giá rồi');
+  // Bắt buộc phải bấm "Tôi đang xử lý" trước — chặn cả trường hợp chưa ai nhận (tránh xác nhận "tắt")
+  // lẫn trường hợp người KHÁC đã nhận (chỉ đúng người đó mới xác nhận hoàn thành được, theo đúng yêu
+  // cầu nghiệp vụ: không cho người khác xác nhận hộ việc mình không trực tiếp xử lý). Quản Trị Viên
+  // (admin) luôn được bỏ qua cả 2 điều kiện này — cùng quy ước "admin override mọi bước" đã áp dụng
+  // xuyên suốt engine duyệt theo phòng ban (xem canApproveStep() ở lib/workflowEngine.js).
+  if (!user.perms?.admin) {
+    if (!item.applyClaimedBy) {
+      throw new HttpError(409, 'Vui lòng bấm "Tôi đang xử lý" trước khi xác nhận đã hoàn thành');
+    }
+    if (item.applyClaimedBy !== user.username) {
+      throw new HttpError(403, `Chỉ ${item.applyClaimedByName || item.applyClaimedBy} (người đã nhận xử lý) mới xác nhận được`);
+    }
+  }
   if (hasUnresolvedPriceInfoRequest(item)) {
     throw new HttpError(409, 'Đề xuất đang có yêu cầu bổ sung chưa được người đề xuất phản hồi (tải tệp bổ sung), chưa thể xác nhận áp giá');
   }
@@ -2304,7 +2352,7 @@ module.exports = {
   canManageTraining, cancelTrainingRegistration, setTrainingRegistrationResult, confirmCareerPathForEmployee,
   bulkRegisterTrainingClass, gradeTrainingTestSubmission, applyAutoGradedTestResult,
   canManageRecruitment, closeRecruitmentJob, setRecruitmentReferralStatus,
-  canManageItSupport, applyPriceApproval, requestPriceInfoFromIt, submitPriceSupplementFile,
+  canManageItSupport, applyPriceApproval, claimPriceApply, releasePriceApplyClaim, requestPriceInfoFromIt, submitPriceSupplementFile,
   claimItTicket, updateItTicketStatus, addItTicketComment, cancelItTicket,
   escalateItTicket, approveItTicketEscalation, denyItTicketEscalation,
   canManageUniform, canManageUniformStore, computeUniformStock,

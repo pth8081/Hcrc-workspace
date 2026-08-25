@@ -1056,6 +1056,36 @@ router.post('/itPriceApprovals/:id/apply', async (req, res) => {
   }
 });
 
+// "Tôi đang xử lý" — 1 người trong đội Hỗ Trợ IT khoá đề xuất này về mình trước khi áp giá, để
+// chỉ chính người đó (hoặc admin) mới xác nhận hoàn thành được sau này (xem claimPriceApply()).
+router.post('/itPriceApprovals/:id/claim-apply', async (req, res) => {
+  const itemId = Number(req.params.id);
+  if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
+  try {
+    const { freshUser } = await getFreshUser(req);
+    const result = await withLockedRecordForCollection('itPriceApprovals', itemId, (item) =>
+      recordActions.claimPriceApply(freshUser, item));
+    res.json({ ok: true, item: result });
+  } catch (err) {
+    handleError(res, `itPriceApprovals/${req.params.id}/claim-apply`, err);
+  }
+});
+
+// Huỷ nhận xử lý — trả đề xuất về hàng đợi chung cho người khác trong đội nhận lại (xem
+// releasePriceApplyClaim()).
+router.post('/itPriceApprovals/:id/release-apply-claim', async (req, res) => {
+  const itemId = Number(req.params.id);
+  if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
+  try {
+    const { freshUser } = await getFreshUser(req);
+    const result = await withLockedRecordForCollection('itPriceApprovals', itemId, (item) =>
+      recordActions.releasePriceApplyClaim(freshUser, item));
+    res.json({ ok: true, item: result });
+  } catch (err) {
+    handleError(res, `itPriceApprovals/${req.params.id}/release-apply-claim`, err);
+  }
+});
+
 // "Yêu Cầu Bổ Sung" từ đội Hỗ Trợ IT (sau khi đã APPROVED, trước khi áp giá) — dùng chung
 // item.infoRequests với nhánh REQUEST_INFO của người duyệt phòng ban (POST /api/workflow/
 // itPriceApprovals/:id/request-info, xem lib/workflowEngine.js).

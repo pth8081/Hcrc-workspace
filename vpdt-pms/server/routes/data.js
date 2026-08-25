@@ -58,8 +58,21 @@ const ADMIN_ONLY_KEYS = new Set([
   'vppExcludeGroups', 'workflowParticipatingDepts',
   // pwaShortcutModules: cấu hình "Phím Tắt PWA", chỉ admin sửa được ở màn Hệ Thống → Quản Trị — xem
   // defaults.js + routes/pwaManifest.js.
-  'pwaShortcutModules'
+  'pwaShortcutModules',
+  // itPriceMasterLists: File Giá Mẫu dùng đối chiếu tự động khi duyệt giá — quyết định trực tiếp hồ sơ
+  // nào được BỎ QUA bước duyệt phòng ban, nên chặt hơn cả các key admin-only khác ở trên (không mở cho
+  // itManage như canManageItSupport() vẫn dùng ở nơi khác của module Hỗ Trợ IT) — xem defaults.js.
+  'itPriceMasterLists'
 ]);
+
+// itPriceMasterLists có thể mang hàng nghìn dòng items[] — không trả nguyên cho MỌI người đăng nhập qua
+// GET /api/data (chỉ cần thấy tên/số lượng để hiển thị danh sách quản lý, xem defaults.js). Route
+// upload/đối chiếu (routes/priceFile.js) đọc thẳng qua getAppDataValueCached('itPriceMasterLists'), KHÔNG
+// đi qua đường GET này nên vẫn thấy đủ items thật.
+function stripMasterListItems(lists) {
+  if (!Array.isArray(lists)) return lists;
+  return lists.map(({ items, ...rest }) => rest);
+}
 
 router.use(requireAuth, blockIfMustChangePassword);
 
@@ -104,6 +117,36 @@ async function isCurrentlyAdmin(username) {
 // server). PHẢI giữ giống hệt nếu sửa 1 bên.
 function mergePermsServer(basePerms, overrides) {
   return { ...(basePerms || {}), ...(overrides || {}) };
+}
+
+const APPROVER_AUTH_LEVEL_RANK_SERVER = { NONE: 0, PASSWORD: 1, PIN: 2, WEBAUTHN: 3 };
+
+// Gộp quyền NỀN của NHIỀU nhóm phân quyền — khớp Y HỆT mergeGroupsBasePerms() ở public/index.html
+// (2 cài đặt độc lập, PHẢI giữ giống hệt nếu sửa 1 bên). Kết hợp theo kiểu dữ liệu từng trường: boolean
+// OR, scope {all,depts} hợp (union), approverAuthLevel lấy mức CAO NHẤT trong các nhóm.
+function mergeGroupsBasePermsServer(groupsPerms) {
+  const list = (groupsPerms || []).filter(Boolean);
+  if (!list.length) return {};
+  const keys = new Set();
+  list.forEach(p => Object.keys(p || {}).forEach(k => keys.add(k)));
+  const result = {};
+  keys.forEach(key => {
+    const values = list.map(p => p?.[key]);
+    if (key === 'approverAuthLevel') {
+      result[key] = values.reduce((best, v) =>
+        (APPROVER_AUTH_LEVEL_RANK_SERVER[v] || 0) > (APPROVER_AUTH_LEVEL_RANK_SERVER[best] || 0) ? v : best, 'NONE');
+      return;
+    }
+    const sample = values.find(v => v !== undefined && v !== null);
+    if (typeof sample === 'boolean') {
+      result[key] = values.some(v => v === true);
+    } else if (sample && typeof sample === 'object' && !Array.isArray(sample) && ('all' in sample || 'depts' in sample)) {
+      result[key] = { all: values.some(v => v?.all === true), depts: [...new Set(values.flatMap(v => v?.depts || []))] };
+    } else {
+      result[key] = values[values.length - 1];
+    }
+  });
+  return result;
 }
 
 // Bắt buộc còn ít nhất 1 tài khoản perms.admin=true sau khi ghi — trước đây không có ràng buộc này ở
@@ -177,9 +220,14 @@ async function prepareUsersForSave(incomingUsers, currentUsername) {
     // thuộc việc giao diện có khoá đúng hay không.
     if (record.username === 'admin') {
       record.perms = { admin: true };
-    } else if (record.groupId) {
-      const groupPerms = permGroupsById.get(record.groupId);
-      if (groupPerms) record.perms = mergePermsServer(groupPerms, record.permOverrides);
+    } else {
+      // Tương thích ngược: user cũ chỉ có "groupId" (số ít) trước khi hỗ trợ multi-select nhóm quyền.
+      const groupIds = record.groupIds || (record.groupId ? [record.groupId] : []);
+      const groupsPerms = groupIds.map(id => permGroupsById.get(id)).filter(Boolean);
+      if (groupsPerms.length) {
+        record.groupIds = groupIds;
+        record.perms = mergePermsServer(mergeGroupsBasePermsServer(groupsPerms), record.permOverrides);
+      }
     }
 
     if (u.pin) {
@@ -226,12 +274,17 @@ async function syncUsersWithPermGroupsChange(newGroups) {
   await withLockedAppDataValue('users', (currentUsers) => {
     const updated = (currentUsers || []).map(u => {
       if (u.username === 'admin') return { ...u, perms: { admin: true } };
-      if (!u.groupId) return u;
-      const groupPerms = groupPermsById.get(u.groupId);
-      if (groupPerms) return { ...u, perms: mergePermsServer(groupPerms, u.permOverrides) };
-      // Nhóm đã bị xoá khỏi mảng mới lưu -> gỡ liên kết, giữ nguyên quyền hiện tại làm quyền riêng
-      // (khớp đúng hành vi deletePermGroup() ở index.html).
-      return { ...u, groupId: null, permOverrides: null };
+      // Tương thích ngược: user cũ chỉ có "groupId" (số ít) trước khi hỗ trợ multi-select nhóm quyền.
+      const existingGroupIds = u.groupIds || (u.groupId ? [u.groupId] : []);
+      if (!existingGroupIds.length) return u;
+      const survivingGroupIds = existingGroupIds.filter(id => groupPermsById.has(id));
+      if (!survivingGroupIds.length) {
+        // TẤT CẢ nhóm đang gán đều đã bị xoá khỏi mảng mới lưu -> gỡ liên kết, giữ nguyên quyền hiện
+        // tại làm quyền riêng (khớp đúng hành vi deletePermGroup() ở index.html).
+        return { ...u, groupIds: [], permOverrides: null };
+      }
+      const groupsPerms = survivingGroupIds.map(id => groupPermsById.get(id));
+      return { ...u, groupIds: survivingGroupIds, perms: mergePermsServer(mergeGroupsBasePermsServer(groupsPerms), u.permOverrides) };
     });
     assertAtLeastOneAdmin(updated);
     return updated;
@@ -278,6 +331,7 @@ router.get('/', async (req, res) => {
     const versions = cachedAppData.versions;
     if (data.users) data.users = stripPasswords(data.users);
     if (data.emailConfig) data.emailConfig = sanitizeEmailConfig(data.emailConfig);
+    if (data.itPriceMasterLists) data.itPriceMasterLists = stripMasterListItems(data.itPriceMasterLists);
     // tasks (Bước 6b) và mọi collection trong MIGRATED_COLLECTIONS (Bước 6c trở đi — hiện tại:
     // submissions) không còn trong dbo.AppData — nguồn riêng từ bảng của chúng. Không có
     // _versions.<key> tương ứng cho các key này (không còn khái niệm "version" AppData) — an toàn vì
@@ -363,6 +417,7 @@ router.get('/:key', async (req, res) => {
     if (value === null) return res.json(DEFAULTS[key]);
     if (key === 'users') return res.json(stripPasswords(value));
     if (key === 'emailConfig') return res.json(sanitizeEmailConfig(value));
+    if (key === 'itPriceMasterLists') return res.json(stripMasterListItems(value));
     res.json(value);
   } catch (err) {
     sendServerError(res, 500, err, `GET /api/data/${key}`, 'Không thể tải dữ liệu từ SQL Server');

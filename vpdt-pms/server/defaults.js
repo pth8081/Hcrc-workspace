@@ -10,6 +10,15 @@ const DEFAULT_MAP = {
 const DEFAULTS = {
   depts: ['Phòng Nhân Sự', 'Phòng Kế Toán', 'Phòng IT', 'Ban Giám Đốc'],
 
+  // Danh Mục Siêu Thị — TÁCH RIÊNG khỏi depts ở trên (trước đây siêu thị bị gộp chung vào depts, dùng
+  // chung 1 danh sách phẳng với phòng ban thật của khối văn phòng — xem admin UI "🏬 Quản Lý Danh Mục
+  // Siêu Thị" + nút "Chuyển sang Danh Mục Siêu Thị" ở mỗi dòng Phòng Ban để di chuyển các tên đã có sẵn
+  // sang đây, không đụng tới user/bản ghi cũ). user.dept vẫn LUÔN là 1 field chuỗi DUY NHẤT dùng chung
+  // cho mọi workflow/quyền scope hiện có — giá trị chỉ khác nguồn chọn (DB.depts nếu Vị Trí = HO,
+  // DB.stores nếu Vị Trí = Siêu Thị, xem uPosType/onUserPosTypeChange() ở index.html). Module Đồng Phục
+  // (uniformPeriods) là nơi DUY NHẤT hiện đang dùng danh mục này làm nguồn chọn siêu thị.
+  stores: [],
+
   cats: ['Quy trình / Quy định', 'Báo cáo tài chính', 'Hợp đồng / Hồ sơ'],
 
   // Viết tắt Phòng ban/Phân loại Tài liệu — dùng để tự sinh Mã Tài Liệu (xem generateDocCode() trong
@@ -147,6 +156,16 @@ const DEFAULTS = {
   // ty có nhiều phòng ban/siêu thị không cần cấu hình quy trình riêng. Mảng RỖNG (mặc định, chưa ai
   // cấu hình) = giữ nguyên hành vi cũ, hiện đủ toàn bộ DB.depts (xem getWorkflowParticipatingDepts()).
   workflowParticipatingDepts: [],
+
+  // "File Giá Mẫu" (Phê Duyệt Giá, Hỗ Trợ IT) — 1 hoặc nhiều bảng giá chuẩn admin nạp sẵn, dùng làm căn
+  // cứ đối chiếu tự động mỗi khi ai đó tải lên bảng giá đề xuất: khớp ĐÚNG mã hàng + giá cũ đề xuất khớp
+  // giá mẫu -> tự động bỏ qua bước duyệt phòng ban (xem lib/priceFileParser.js matchAgainstMaster() +
+  // itPriceApprovals.extraValidate ở lib/createValidation.js). Cho phép NHIỀU file (không chỉ 1) vì thực
+  // tế công ty có thể có nhiều bảng giá mẫu khác nhau (theo ngành hàng/đợt cập nhật/siêu thị...) — người
+  // đề xuất tự chọn đúng file mẫu áp dụng cho bảng giá của mình lúc nộp, không suy luận tự động theo
+  // phòng ban. items[] CHỈ đọc được ở server (GET /api/data lọc bỏ, xem routes/data.js) vì có thể lên
+  // tới hàng nghìn dòng — client chỉ thấy id/name/itemCount/ngày nạp để hiển thị danh sách quản lý.
+  itPriceMasterLists: [],
 
   workflows: [
     { id: 'WF_1STEP', name: 'Quy trình 1 bước (Sếp duyệt)', steps: [{ order: 1, name: 'Phê duyệt 1' }] },
