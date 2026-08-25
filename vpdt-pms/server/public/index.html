@@ -260,6 +260,16 @@ table { display: block; overflow-x: auto; max-width: 100%; }
 .loginpage-btn:hover { transform: translateY(-1px); box-shadow: 0 14px 26px -10px rgba(29,78,216,.75); }
 .loginpage-btn:disabled { opacity: .65; cursor: not-allowed; transform: none; }
 .loginpage-btn svg { width: 16px; height: 16px; }
+
+.loginpage-btn-secondary {
+  width: 100%; font-size: 14px; font-weight: 700; color: #1d4ed8;
+  background: #fff; border: 1.5px solid #bfdbfe; border-radius: 10px; padding: 11px;
+  margin-top: 10px; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px;
+  transition: border-color .15s ease, background .15s ease, opacity .15s ease;
+}
+.loginpage-btn-secondary:hover { border-color: #38bdf8; background: #f0f9ff; }
+.loginpage-btn-secondary:disabled { opacity: .6; cursor: not-allowed; }
+.loginpage-btn-secondary svg { width: 17px; height: 17px; }
 .loginpage-spinner {
   display: inline-block; width: 15px; height: 15px; flex-shrink: 0;
   border: 2px solid rgba(255,255,255,.45); border-top-color: #fff; border-radius: 50%;
@@ -569,6 +579,16 @@ table { display: block; overflow-x: auto; max-width: 100%; }
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
           </button>
         </form>
+
+        <!-- Đăng nhập bằng vân tay/Face ID (WebAuthn) — CHỈ hiện khi trình duyệt có API
+             navigator.credentials (xem canShowBiometricLogin() ở script cuối trang; tự ẩn trên trình
+             duyệt cũ/không phải HTTPS, không cần cờ cấu hình riêng phía client). Vẫn cần gõ Tên đăng
+             nhập ở ô phía trên trước khi bấm nút này — chỉ thay bước gõ MẬT KHẨU, không phải đăng nhập
+             không cần tên đăng nhập. -->
+        <button type="button" id="btnBiometricLogin" onclick="loginWithBiometric()" class="loginpage-btn-secondary hidden">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M12 2a5 5 0 0 0-5 5v1.2M12 2a5 5 0 0 1 5 5v1.2M7 8.2a5 5 0 0 0-2 4v1.3a9 9 0 0 0 3.2 6.9M17 8.2a5 5 0 0 1 2 4v1.3c0 1.6-.4 3.1-1.1 4.4M9 8.5a3 3 0 0 1 6 0v1.8M9 8.5v3.8a3 3 0 0 0 1.6 2.7M15 10.3v3a5 5 0 0 1-1.6 3.7"/></svg>
+          Đăng nhập bằng vân tay / Face ID
+        </button>
 
         <div class="loginpage-card-foot">Quên mật khẩu hoặc chưa có tài khoản? Liên hệ Phòng CNTT.</div>
       </div>
@@ -3326,8 +3346,9 @@ table { display: block; overflow-x: auto; max-width: 100%; }
                   <option value="PASSWORD">Yêu cầu nhập lại mật khẩu</option>
                   <option value="OTP_EMAIL">Yêu cầu mã OTP gửi qua email</option>
                   <option value="PIN">Yêu cầu nhập mã PIN</option>
+                  <option value="WEBAUTHN">Yêu cầu vân tay/Face ID (chỉ khi trình duyệt hỗ trợ)</option>
                 </select>
-                <p class="text-[11px] text-gray-500 italic mt-1">Chỉ áp dụng cho hành động DUYỆT ở Văn bản trình / Đăng ký xe / Văn phòng (không áp dụng Từ chối/Hủy, Tài liệu, Đặt phòng họp). Mã OTP hiện đang ở chế độ mô phỏng giống các email khác của hệ thống (hiện trong log, chưa gửi hộp thư thật) cho tới khi kết nối SMTP thật.</p>
+                <p class="text-[11px] text-gray-500 italic mt-1">Chỉ áp dụng cho hành động DUYỆT ở Văn bản trình / Đăng ký xe / Văn phòng (không áp dụng Từ chối/Hủy, Tài liệu, Đặt phòng họp). Mã OTP hiện đang ở chế độ mô phỏng giống các email khác của hệ thống (hiện trong log, chưa gửi hộp thư thật) cho tới khi kết nối SMTP thật. "Vân tay/Face ID" chỉ dùng được nếu người đó đã tự đăng ký thiết bị ở "⚙️ Cá Nhân Hóa → 🖐️ Đăng Nhập/Xác Thực Bằng Vân Tay" VÀ máy chủ đang chạy qua HTTPS thật — chọn mức này cho người CHƯA đăng ký thiết bị nào sẽ khiến họ không Duyệt được cho tới khi đăng ký.</p>
                 <div id="uPinWrap" class="hidden mt-2">
                   <label class="block font-semibold text-gray-700 mb-1">Mã PIN duyệt (tối thiểu 4 số)</label>
                   <input id="uPin" type="text" inputmode="numeric" pattern="[0-9]*" placeholder="Để trống = giữ nguyên mã PIN hiện tại" class="w-full border p-1.5 rounded text-xs">
@@ -5052,6 +5073,20 @@ table { display: block; overflow-x: auto; max-width: 100%; }
       </div>
       <div class="flex justify-end">
         <button type="button" onclick="changeMyApprovalPin()" class="bg-amber-600 text-white px-4 py-2 rounded font-bold hover:bg-amber-700">🔑 Cập Nhật Mã PIN</button>
+      </div>
+    </div>
+
+    <!-- Đăng ký thiết bị vân tay/Face ID (WebAuthn) — CHỈ hiện khi trình duyệt hỗ trợ (xem
+         canShowBiometricLogin() ở script cuối trang). KHÔNG phụ thuộc approverAuthLevel — đây là tiện
+         ích đăng nhập chung cho mọi người, tách biệt khỏi khối PIN ở trên (dù WEBAUTHN cũng là 1 trong 4
+         mức xác thực lại khi Duyệt admin có thể chọn — xem onApproverAuthLevelChange()). -->
+    <div id="pfWebauthnSection" class="hidden border-t pt-3 space-y-2">
+      <h4 class="font-bold text-gray-700">🖐️ Đăng Nhập/Xác Thực Bằng Vân Tay, Face ID</h4>
+      <p class="text-[11px] text-gray-500">Đăng ký thiết bị này để lần sau đăng nhập hoặc xác thực khi Duyệt bằng vân tay/Face ID thay vì gõ mật khẩu.</p>
+      <div id="pfWebauthnListWrap" class="space-y-1 text-xs"></div>
+      <div class="flex gap-2">
+        <input id="pfWebauthnDeviceLabel" type="text" placeholder="Tên thiết bị (VD: iPhone của tôi)" class="flex-1 border p-2 rounded text-xs">
+        <button type="button" id="btnRegisterBiometricDevice" onclick="registerBiometricDevice()" class="bg-emerald-600 text-white px-3 py-2 rounded font-bold hover:bg-emerald-700 text-xs whitespace-nowrap">➕ Đăng Ký Thiết Bị Này</button>
       </div>
     </div>
   </div>
@@ -7037,6 +7072,9 @@ let pendingApprovalAction = null;
 function withApprovalAuth(actionFn) {
   const level = currentUser.perms?.approverAuthLevel || 'NONE';
   if (level === 'NONE') { actionFn(); return; }
+  // WEBAUTHN không dùng modal nhập liệu như 3 mức kia — hộp thoại vân tay/Face ID CỦA HỆ ĐIỀU HÀNH
+  // chính là bước xác nhận, xong ngay là chạy actionFn() luôn (xem runWebauthnApprovalAuth() bên dưới).
+  if (level === 'WEBAUTHN') { runWebauthnApprovalAuth(actionFn); return; }
 
   pendingApprovalAction = actionFn;
   document.getElementById('approvalAuthPasswordGroup').classList.toggle('hidden', level !== 'PASSWORD');
@@ -7075,6 +7113,48 @@ async function sendApprovalOtp(isResend) {
 function closeApprovalAuthModal() {
   document.getElementById('approvalAuthModal').classList.add('hidden');
   pendingApprovalAction = null;
+}
+
+// Nhánh WEBAUTHN của withApprovalAuth() ở trên — xác thực bằng vân tay/Face ID rồi cấp "phiếu Duyệt"
+// qua POST /api/auth/webauthn/approval-verify (issueApprovalGrant() phía server, xem lib/approvalAuth.js
+// + lib/webauthn.js) trước khi chạy actionFn(), cùng khuôn với confirmApprovalAuth() cho 3 mức kia.
+async function runWebauthnApprovalAuth(actionFn) {
+  try {
+    await loadVendorScript('/vendor/simplewebauthn/browser.min.js');
+
+    const optRes = await fetch('/api/auth/webauthn/approval-options', { method: 'POST' });
+    if (!optRes.ok) {
+      const body = await optRes.json().catch(() => ({}));
+      return alert(`⛔ ${body.error || 'Không thể khởi tạo xác thực vân tay'}`);
+    }
+    const optionsJSON = await optRes.json();
+    if (!optionsJSON.allowCredentials || !optionsJSON.allowCredentials.length) {
+      return alert('⛔ Bạn chưa đăng ký thiết bị vân tay/Face ID nào — vào "⚙️ Cá Nhân Hóa" để đăng ký trước khi Duyệt.');
+    }
+
+    let assertion;
+    try {
+      assertion = await window.SimpleWebAuthnBrowser.startAuthentication({ optionsJSON });
+    } catch (e) {
+      if (e.name === 'NotAllowedError') return; // người dùng tự huỷ hộp thoại — không báo lỗi
+      return alert('⛔ Không đọc được vân tay/Face ID: ' + e.message);
+    }
+
+    const verifyRes = await fetch('/api/auth/webauthn/approval-verify', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ response: assertion })
+    });
+    const body = await verifyRes.json().catch(() => ({}));
+    if (!verifyRes.ok || !body.ok) {
+      return alert('⛔ Xác thực vân tay không thành công, vui lòng thử lại!');
+    }
+
+    logSystemAction('AUTH', 'APPROVAL_AUTH_SUCCESS', 'Xác thực vân tay/Face ID thành công trước khi phê duyệt', 'SUCCESS', currentUser.username);
+    actionFn();
+  } catch (e) {
+    alert('⛔ Không thể kết nối tới máy chủ: ' + e.message);
+  }
 }
 
 async function confirmApprovalAuth() {
@@ -7428,6 +7508,12 @@ function openProfileModal() {
     document.getElementById('pfConfirmPin').value = '';
   }
 
+  if (canShowBiometricLogin()) {
+    document.getElementById('pfWebauthnSection').classList.remove('hidden');
+    document.getElementById('pfWebauthnDeviceLabel').value = '';
+    renderWebauthnDeviceList();
+  }
+
   document.getElementById('profileModal').classList.remove('hidden');
 }
 
@@ -7521,6 +7607,94 @@ async function changeMyApprovalPin() {
   }
 }
 
+// ==========================================
+// QUẢN LÝ THIẾT BỊ VÂN TAY/FACE ID CỦA CHÍNH MÌNH (WebAuthn, #pfWebauthnSection ở profileModal) — xem
+// lib/webauthn.js + routes/auth.js. canShowBiometricLogin() khai báo ở khối "ĐĂNG NHẬP BẰNG VÂN TAY"
+// bên dưới (function declaration được hoisted trong cùng khối <script>, gọi được từ đây dù đứng sau).
+// ==========================================
+async function renderWebauthnDeviceList() {
+  const wrap = document.getElementById('pfWebauthnListWrap');
+  wrap.innerHTML = '<p class="text-gray-400 italic">Đang tải...</p>';
+  try {
+    const res = await fetch('/api/auth/webauthn/credentials');
+    if (!res.ok) { wrap.innerHTML = '<p class="text-red-600 italic">Không tải được danh sách thiết bị.</p>'; return; }
+    const list = await res.json();
+    if (!list.length) {
+      wrap.innerHTML = '<p class="text-gray-400 italic">Chưa đăng ký thiết bị nào.</p>';
+      return;
+    }
+    wrap.innerHTML = list.map(c => `
+      <div class="flex justify-between items-center bg-gray-50 border rounded p-2">
+        <div>
+          <div class="font-semibold text-gray-700">${escapeHtml(c.deviceLabel || 'Thiết bị chưa đặt tên')}</div>
+          <div class="text-[10px] text-gray-400">Đăng ký lúc: ${escapeHtml(c.createdAt || '')}</div>
+        </div>
+        <button type="button" onclick="deleteBiometricDevice('${c.id}')" class="text-red-600 font-bold hover:underline">🗑️ Gỡ</button>
+      </div>
+    `).join('');
+  } catch (err) {
+    wrap.innerHTML = '<p class="text-red-600 italic">Không tải được danh sách thiết bị.</p>';
+  }
+}
+
+async function registerBiometricDevice() {
+  const btn = document.getElementById('btnRegisterBiometricDevice');
+  const btnOriginalHTML = btn ? btn.innerHTML : '';
+  if (btn) { btn.disabled = true; btn.innerHTML = '⏳ Đang đăng ký...'; }
+
+  try {
+    await loadVendorScript('/vendor/simplewebauthn/browser.min.js');
+
+    const optRes = await fetch('/api/auth/webauthn/register-options', { method: 'POST' });
+    if (!optRes.ok) {
+      const body = await optRes.json().catch(() => ({}));
+      return alert(`⛔ ${body.error || 'Không thể khởi tạo đăng ký thiết bị'}`);
+    }
+    const optionsJSON = await optRes.json();
+
+    let attestation;
+    try {
+      attestation = await window.SimpleWebAuthnBrowser.startRegistration({ optionsJSON });
+    } catch (e) {
+      if (e.name === 'NotAllowedError') return; // người dùng tự huỷ hộp thoại — không báo lỗi
+      return alert('⛔ Không đăng ký được vân tay/Face ID: ' + e.message);
+    }
+
+    const deviceLabel = document.getElementById('pfWebauthnDeviceLabel').value.trim();
+    const verifyRes = await fetch('/api/auth/webauthn/register-verify', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ response: attestation, deviceLabel })
+    });
+    if (!verifyRes.ok) {
+      const body = await verifyRes.json().catch(() => ({}));
+      return alert(`⛔ ${body.error || 'Không thể lưu thiết bị vân tay'}`);
+    }
+
+    document.getElementById('pfWebauthnDeviceLabel').value = '';
+    await renderWebauthnDeviceList();
+    alert('✅ Đã đăng ký thiết bị này — lần sau đăng nhập/xác thực khi Duyệt có thể dùng vân tay/Face ID.');
+  } catch (err) {
+    alert('⛔ Không thể kết nối tới máy chủ: ' + err.message);
+  } finally {
+    if (btn) { btn.disabled = false; btn.innerHTML = btnOriginalHTML; }
+  }
+}
+
+async function deleteBiometricDevice(id) {
+  if (!confirm('Gỡ thiết bị vân tay này? Bạn sẽ không đăng nhập/xác thực bằng vân tay từ thiết bị này được nữa.')) return;
+  try {
+    const res = await fetch(`/api/auth/webauthn/credentials/${encodeURIComponent(id)}`, { method: 'DELETE' });
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      return alert(`⛔ ${body.error || 'Không thể gỡ thiết bị'}`);
+    }
+    await renderWebauthnDeviceList();
+  } catch (err) {
+    alert('⛔ Không thể kết nối tới máy chủ: ' + err.message);
+  }
+}
+
 // --- ĐĂNG NHẬP & TABS ---
 
 // CAPTCHA số — chỉ bật khi server trả về challenge thật (đã bật CAPTCHA_ENABLED=true trong .env, xem
@@ -7560,6 +7734,84 @@ async function refreshCaptcha(focusAfter = false) {
   }
 }
 refreshCaptcha();
+
+// ==========================================
+// ĐĂNG NHẬP BẰNG VÂN TAY/FACE ID (WebAuthn/FIDO2, xem lib/webauthn.js) — chỉ hiện nút khi trình duyệt
+// CÓ khả năng WebAuthn (API navigator.credentials/window.PublicKeyCredential tồn tại — tự vắng mặt
+// trên trình duyệt cũ hoặc khi trang KHÔNG chạy qua HTTPS thật/localhost, không cần server báo trước
+// qua flag riêng). Thư viện SimpleWebAuthnBrowser (tự lưu trên server, không qua CDN — cùng lý do với
+// html2canvas/jsPDF ở dưới) chỉ tải LÚC THỰC SỰ BẤM nút, không tải sẵn lúc mở trang đăng nhập.
+// ==========================================
+function canShowBiometricLogin() {
+  return typeof window.PublicKeyCredential !== 'undefined';
+}
+if (canShowBiometricLogin()) {
+  document.getElementById('btnBiometricLogin')?.classList.remove('hidden');
+}
+
+let biometricLoginInFlight = false;
+
+async function loginWithBiometric() {
+  if (biometricLoginInFlight || loginInFlight) return;
+  const u = document.getElementById('txtUser').value.trim();
+  if (!u) return alert('Vui lòng nhập tên đăng nhập trước khi dùng vân tay!');
+
+  biometricLoginInFlight = true;
+  const btn = document.getElementById('btnBiometricLogin');
+  const btnOriginalHTML = btn ? btn.innerHTML : '';
+  if (btn) { btn.disabled = true; btn.innerHTML = '<span class="loginpage-spinner"></span> Đang xác thực…'; }
+
+  try {
+    await loadVendorScript('/vendor/simplewebauthn/browser.min.js');
+
+    const optRes = await fetch('/api/auth/webauthn/login-options', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username: u })
+    });
+    if (!optRes.ok) {
+      const body = await optRes.json().catch(() => ({}));
+      return alert(body.error || 'Không thể khởi tạo đăng nhập vân tay.');
+    }
+    const optionsJSON = await optRes.json();
+
+    let assertion;
+    try {
+      assertion = await window.SimpleWebAuthnBrowser.startAuthentication({ optionsJSON });
+    } catch (e) {
+      // Người dùng bấm Huỷ ở hộp thoại vân tay của hệ điều hành (hoặc hết thời gian chờ) — KHÔNG coi
+      // là lỗi hệ thống, chỉ lặng lẽ dừng lại để họ dùng mật khẩu bên trên như bình thường.
+      if (e.name === 'NotAllowedError') return;
+      return alert('⛔ Không đọc được vân tay/Face ID: ' + e.message);
+    }
+
+    const verifyRes = await fetch('/api/auth/webauthn/login-verify', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username: u, response: assertion })
+    });
+    if (!verifyRes.ok) {
+      const body = await verifyRes.json().catch(() => ({}));
+      return alert(body.error || 'Không thể đăng nhập bằng vân tay.');
+    }
+    const user = await verifyRes.json();
+
+    // Xác nhận cookie phiên thực sự được lưu — cùng lý do/cùng cách kiểm tra với login() (mật khẩu)
+    // bên dưới, xem chú thích đầy đủ ở đó.
+    const sessionCheck = await fetch('/api/auth/me').catch(() => null);
+    if (!sessionCheck || !sessionCheck.ok) {
+      return alert('⚠️ Đăng nhập đúng nhưng trình duyệt KHÔNG lưu được phiên đăng nhập. Vui lòng thử lại bằng địa chỉ https://, hoặc liên hệ quản trị viên hệ thống để kiểm tra cấu hình.');
+    }
+
+    logSystemAction('USER_MGM', 'LOGIN_SUCCESS', 'Đăng nhập bằng vân tay/Face ID thành công.', 'SUCCESS', user.username);
+    await proceedAfterAuth(user);
+  } catch (e) {
+    alert('⛔ Không thể kết nối tới máy chủ: ' + e.message);
+  } finally {
+    if (btn) { btn.disabled = false; btn.innerHTML = btnOriginalHTML; }
+    biometricLoginInFlight = false;
+  }
+}
 
 // Chặn gọi chồng /api/auth/login — trước đây chỉ disable nút Đăng nhập (btn.disabled = true) ngay khi
 // login() bắt đầu chạy, nhưng KHÔNG khoá luôn ô nhập mã CAPTCHA/nút "↻ Lấy mã khác": nếu người dùng sốt
