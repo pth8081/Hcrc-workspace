@@ -2387,6 +2387,7 @@ table { display: block; overflow-x: auto; max-width: 100%; }
           <label class="block text-xs font-semibold text-gray-600 mb-1">Chọn kỳ đăng ký (đang mở)</label>
           <select id="vppRegPeriodSelect" onchange="onVppRegPeriodChange()" class="w-full border p-2 rounded text-sm bg-white"></select>
         </div>
+        <div id="vppRegNoPermNote" class="hidden text-xs text-red-700 italic bg-red-50 p-3 rounded border border-red-200">⛔ Bạn không có quyền đăng ký Văn phòng phẩm — chỉ người được uỷ quyền đăng ký của phòng mới đăng ký được. Liên hệ người phụ trách đăng ký của phòng mình.</div>
         <div id="vppRegExcludedNote" class="hidden text-xs text-red-700 italic bg-red-50 p-3 rounded border border-red-200">⛔ Bạn không thuộc diện được cấp Văn phòng phẩm.</div>
         <div id="vppRegNoPeriodNote" class="hidden text-xs text-gray-500 italic bg-white p-3 rounded border">Hiện chưa có kỳ đăng ký nào đang mở.</div>
         <div id="vppRegAlreadySentNote" class="hidden text-xs text-amber-800 italic bg-amber-50 p-3 rounded border border-amber-200"></div>
@@ -3769,10 +3770,15 @@ table { display: block; overflow-x: auto; max-width: 100%; }
             <span id="permTreeBadge_vpp" class="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-gray-100 text-gray-500">0/0</span>
           </summary>
           <div class="p-3 pt-0 space-y-2">
-            <p class="text-[11px] text-gray-500 italic">Mọi người đã đăng nhập (còn quyền vào module "Văn Phòng Phẩm" ở mục 0) đều tự đăng ký được ở kỳ đang mở. Quyền dưới đây dành riêng cho người QUẢN LÝ: tạo/kết thúc kỳ đăng ký, tải lên danh mục, xem báo cáo tổng hợp toàn công ty theo phòng ban & theo mặt hàng.</p>
-            <label class="flex items-center gap-2 text-emerald-700 font-semibold cursor-pointer text-[11px]">
-              <input type="checkbox" id="pVppManage"> ✅ Quản lý (tạo/kết thúc kỳ, báo cáo tổng hợp)
-            </label>
+            <p class="text-[11px] text-gray-500 italic">Người ĐĂNG KÝ được uỷ quyền theo phòng ban và chịu trách nhiệm đăng ký thay cho cả phòng — cần tick "Người đăng ký" dưới đây mới đăng ký được (kể cả khi kỳ đang mở), người khác trong phòng chỉ xem được. Quyền "Quản lý" dành riêng cho người QUẢN LÝ: tạo/kết thúc kỳ đăng ký, tải lên danh mục, xem báo cáo tổng hợp toàn công ty theo phòng ban & theo mặt hàng.</p>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-2">
+              <label class="flex items-center gap-2 text-sky-700 font-semibold cursor-pointer text-[11px]">
+                <input type="checkbox" id="pVppRegisterCreate"> 📝 Người đăng ký (uỷ quyền đăng ký cho phòng mình)
+              </label>
+              <label class="flex items-center gap-2 text-emerald-700 font-semibold cursor-pointer text-[11px]">
+                <input type="checkbox" id="pVppManage"> ✅ Quản lý (tạo/kết thúc kỳ, báo cáo tổng hợp)
+              </label>
+            </div>
           </div>
         </details>
 
@@ -6564,7 +6570,7 @@ function defaultNewUserPerms() {
     submissionView: emptyScope(), submissionCreate: emptyScope(), submissionDownload: emptyScope(),
     contractView: emptyScope(), contractCreate: emptyScope(), contractDownload: emptyScope(), contractApprove: false,
     paymentManage: false,
-    vppManage: false,
+    vppManage: false, vppRegisterCreate: false,
     reportManage: false, reportAggregate: false, reportEntryCreate: false,
     meetingView: emptyScope(), meetingBookScope: emptyScope(),
     meetingApprove: false, meetingCancel: false,
@@ -16706,10 +16712,12 @@ function setVppSubTab(subTab) {
 // ============ ĐĂNG KÝ (mọi nhân viên) ============
 function renderVppRegPeriodOptions() {
   const sel = document.getElementById('vppRegPeriodSelect');
-  const excluded = isUserVppExcluded(currentUser);
+  const noPerm = !canRegisterVpp(currentUser);
+  document.getElementById('vppRegNoPermNote').classList.toggle('hidden', !noPerm);
+  const excluded = !noPerm && isUserVppExcluded(currentUser);
   document.getElementById('vppRegExcludedNote').classList.toggle('hidden', !excluded);
-  sel.disabled = excluded;
-  if (excluded) {
+  sel.disabled = noPerm || excluded;
+  if (noPerm || excluded) {
     sel.innerHTML = '';
     document.getElementById('vppRegNoPeriodNote').classList.add('hidden');
     document.getElementById('vppRegItemsWrap').classList.add('hidden');
@@ -19716,6 +19724,7 @@ function collectPermsFromForm() {
     contractApprove: document.getElementById('pContractApprove').checked,
     paymentManage: document.getElementById('pPaymentManage').checked,
     vppManage: document.getElementById('pVppManage').checked,
+    vppRegisterCreate: document.getElementById('pVppRegisterCreate').checked,
     reportManage: document.getElementById('pReportManage').checked,
     reportAggregate: document.getElementById('pReportAggregate').checked,
     reportEntryCreate: document.getElementById('pReportEntryCreate').checked,
@@ -19800,6 +19809,7 @@ function populatePermsForm(permsInput) {
   document.getElementById('pContractApprove').checked = !!perms.contractApprove;
   document.getElementById('pPaymentManage').checked = !!perms.paymentManage;
   document.getElementById('pVppManage').checked = !!perms.vppManage;
+  document.getElementById('pVppRegisterCreate').checked = !!perms.vppRegisterCreate;
   document.getElementById('pReportManage').checked = !!perms.reportManage;
   document.getElementById('pReportAggregate').checked = !!perms.reportAggregate;
   document.getElementById('pReportEntryCreate').checked = !!perms.reportEntryCreate;
@@ -20166,6 +20176,13 @@ async function savePwaShortcutModules() {
   }
   logSystemAction('USER_MGM', 'SAVE_PWA_SHORTCUTS', `Cập nhật Phím Tắt PWA (${checked.length} module)`, 'SUCCESS');
   alert('✅ Đã lưu Phím Tắt PWA.');
+}
+
+// Người ĐĂNG KÝ được uỷ quyền theo phòng ban (checkbox "Người đăng ký" khối 12 cây phân quyền) — tách
+// riêng khỏi isUserVppExcluded() bên dưới: "excluded" = không thuộc diện ĐƯỢC CẤP văn phòng phẩm (theo
+// chức danh), còn đây = không được phép LÀ NGƯỜI ĐĂNG KÝ cho phòng (theo uỷ quyền), 2 điều kiện độc lập.
+function canRegisterVpp(user) {
+  return !!(user?.perms?.admin || user?.perms?.vppRegisterCreate);
 }
 
 // ============ Nhóm Không Cấp Văn Phòng Phẩm (vppExcludeGroups) ============
@@ -22291,6 +22308,7 @@ function resetUserForm() {
   document.getElementById('pContractApprove').checked = !!defaults.contractApprove;
   document.getElementById('pPaymentManage').checked = !!defaults.paymentManage;
   document.getElementById('pVppManage').checked = !!defaults.vppManage;
+  document.getElementById('pVppRegisterCreate').checked = !!defaults.vppRegisterCreate;
   document.getElementById('pReportManage').checked = !!defaults.reportManage;
   document.getElementById('pReportAggregate').checked = !!defaults.reportAggregate;
   document.getElementById('pReportEntryCreate').checked = !!defaults.reportEntryCreate;
@@ -22430,6 +22448,7 @@ function summarizeUserPerms(perms) {
   if (perms.contractApprove) parts.push('📄 Hợp đồng (duyệt)');
   if (perms.paymentManage) parts.push('💰 Thanh toán');
   if (perms.vppManage) parts.push('🖇️ Quản lý VPP');
+  if (perms.vppRegisterCreate) parts.push('📝 Người đăng ký VPP');
   if (perms.reportManage || perms.reportAggregate || perms.reportEntryCreate) parts.push('📅 Báo cáo định kỳ');
   if (hasScope(perms.meetingView) || hasScope(perms.meetingBookScope) || perms.meetingApprove || perms.meetingCancel) parts.push('📅 Phòng họp');
   if (hasScope(perms.carView) || hasScope(perms.carCreate)) parts.push('🚗 Xe');
@@ -26380,9 +26399,13 @@ function itPriceStatusBadge(p) {
 
 function itPriceAppliedBadge(p) {
   if (p.status !== 'APPROVED') return '<span class="text-gray-400 text-xs">—</span>';
-  return p.applied
-    ? `<span class="px-2 py-0.5 bg-emerald-100 text-emerald-800 rounded font-bold text-xs">✅ Đã áp giá${p.appliedByName ? ` (${escapeHtml(p.appliedByName)})` : ''}</span>`
-    : `<span class="px-2 py-0.5 bg-amber-100 text-amber-800 rounded font-bold text-xs">⏳ Chưa áp giá</span>`;
+  if (p.applied) {
+    return `<span class="px-2 py-0.5 bg-emerald-100 text-emerald-800 rounded font-bold text-xs">✅ Đã áp giá${p.appliedByName ? ` (${escapeHtml(p.appliedByName)})` : ''}</span>`;
+  }
+  if (p.applyClaimedBy) {
+    return `<span class="px-2 py-0.5 bg-sky-100 text-sky-800 rounded font-bold text-xs">🖐️ Đang xử lý${p.applyClaimedByName ? ` (${escapeHtml(p.applyClaimedByName)})` : ''}</span>`;
+  }
+  return `<span class="px-2 py-0.5 bg-amber-100 text-amber-800 rounded font-bold text-xs">⏳ Chưa áp giá</span>`;
 }
 
 function renderItPriceApprovals() {
@@ -26502,6 +26525,42 @@ async function rejectItPrice(id) {
   refreshApprovalSurfaces();
 }
 
+// "Tôi đang xử lý" — 1 người trong đội Hỗ Trợ IT nhận việc áp giá về mình, khoá lại để chỉ chính
+// người đó (hoặc admin) mới xác nhận hoàn thành được sau này (xem claimPriceApply() ở server).
+async function claimPriceApplyAction(id) {
+  const p = DB.itPriceApprovals.find(x => x.id === id);
+  if (!p) return;
+  let result;
+  try {
+    result = await callRecordAction('itPriceApprovals', id, 'claim-apply', {});
+  } catch (e) {
+    return alert('⛔ ' + e.message);
+  }
+  const idx = DB.itPriceApprovals.findIndex(x => x.id === id);
+  if (idx !== -1) DB.itPriceApprovals[idx] = result.item;
+  logSystemAction('IT_SUPPORT', 'CLAIM_IT_PRICE_APPLY', `Nhận xử lý áp giá [${p.code}]`, 'SUCCESS', p.code);
+  renderItPriceApprovals();
+  if (currentItPriceModalId === id) renderItPriceModal();
+}
+
+// Huỷ nhận xử lý — trả về hàng đợi chung cho người khác trong đội nhận lại.
+async function releasePriceApplyClaimAction(id) {
+  const p = DB.itPriceApprovals.find(x => x.id === id);
+  if (!p) return;
+  if (!confirm('Huỷ nhận xử lý đề xuất này? Người khác trong đội Hỗ Trợ IT sẽ nhận lại được.')) return;
+  let result;
+  try {
+    result = await callRecordAction('itPriceApprovals', id, 'release-apply-claim', {});
+  } catch (e) {
+    return alert('⛔ ' + e.message);
+  }
+  const idx = DB.itPriceApprovals.findIndex(x => x.id === id);
+  if (idx !== -1) DB.itPriceApprovals[idx] = result.item;
+  logSystemAction('IT_SUPPORT', 'RELEASE_IT_PRICE_APPLY_CLAIM', `Huỷ nhận xử lý áp giá [${p.code}]`, 'SUCCESS', p.code);
+  renderItPriceApprovals();
+  if (currentItPriceModalId === id) renderItPriceModal();
+}
+
 async function applyItPriceAction(id) {
   const p = DB.itPriceApprovals.find(x => x.id === id);
   if (!p) return;
@@ -26591,6 +26650,7 @@ function renderItPriceModal() {
     <div><b>Lý do điều chỉnh:</b> ${p.reason ? escapeHtml(p.reason) : '<span class="text-gray-400">—</span>'}</div>
     ${historyRows}
     ${p.applied ? `<div><b>Đã áp giá:</b> ${escapeHtml(p.appliedByName || '')} · ${escapeHtml(p.appliedAt || '')}</div>` : ''}
+    ${!p.applied && p.applyClaimedBy ? `<div><b>Đang xử lý bởi:</b> ${escapeHtml(p.applyClaimedByName || p.applyClaimedBy)} · ${escapeHtml(p.applyClaimedAt || '')}</div>` : ''}
   `;
 
   const infoWrap = document.getElementById('itPriceModalInfoRequestsWrap');
@@ -26674,8 +26734,27 @@ function renderItPriceModalControls(p) {
     if (blocked) {
       html += `<div class="bg-amber-50 text-amber-800 p-2 rounded border border-amber-200 mt-2">⏳ Đang chờ người đề xuất tải lên tệp bổ sung trước khi có thể xác nhận áp giá.</div>`;
     } else {
-      html += `<div class="flex gap-2 flex-wrap mt-2">
-        <button type="button" onclick="applyItPriceAction(${p.id})" class="bg-teal-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-teal-700">🏷️ Xác nhận đã áp giá</button>
+      const isAdmin = !!currentUser.perms?.admin;
+      const claimedByMe = p.applyClaimedBy === currentUser.username;
+      const claimedByOther = !!p.applyClaimedBy && !claimedByMe;
+      let claimHtml = '';
+      // Bắt buộc bấm "Tôi đang xử lý" trước — chỉ đúng người đã nhận (hoặc admin) mới thấy nút xác
+      // nhận hoàn thành, khớp yêu cầu nghiệp vụ: người khác không tự ý xác nhận hộ (xem
+      // applyPriceApproval() ở lib/recordActions.js).
+      if (!p.applyClaimedBy) {
+        claimHtml += `<button type="button" onclick="claimPriceApplyAction(${p.id})" class="bg-sky-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-sky-700">🖐️ Tôi Đang Xử Lý</button>`;
+        if (isAdmin) {
+          claimHtml += `<button type="button" onclick="applyItPriceAction(${p.id})" class="bg-teal-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-teal-700">🏷️ Xác nhận đã áp giá</button>`;
+        }
+      } else if (claimedByMe || isAdmin) {
+        claimHtml += `<button type="button" onclick="applyItPriceAction(${p.id})" class="bg-teal-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-teal-700">🏷️ Xác nhận đã áp giá</button>`;
+        claimHtml += `<button type="button" onclick="releasePriceApplyClaimAction(${p.id})" class="bg-gray-400 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-gray-500">↩️ Huỷ Nhận Xử Lý</button>`;
+      }
+      if (claimedByOther && !isAdmin) {
+        claimHtml += `<span class="text-xs text-gray-500 self-center">🖐️ Đang được xử lý bởi <b>${escapeHtml(p.applyClaimedByName || p.applyClaimedBy)}</b> — bạn không xác nhận được đề xuất này.</span>`;
+      }
+      html += `<div class="flex gap-2 flex-wrap items-center mt-2">
+        ${claimHtml}
         <button type="button" onclick="requestItPriceInfoIt(${p.id})" class="bg-amber-500 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-amber-600">✉️ Yêu Cầu Bổ Sung</button>
       </div>`;
     }

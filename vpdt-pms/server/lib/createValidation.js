@@ -736,6 +736,12 @@ const CREATE_MODULE_CONFIGS = {
     // đọc collection lúc "chưa ai đăng ký" trước khi request nào kịp ghi). Khoá theo cặp kỳ+người tạo.
     getLockKey: (payload, user) => `vpp_registration:${payload.periodId}:${user.username}`,
     extraValidate: (payload, collection, user, appData) => {
+      // Người ĐĂNG KÝ được uỷ quyền theo phòng ban (xem checkbox "Người đăng ký" khối 12 cây phân
+      // quyền) — trước đây module mở sẵn cho MỌI người đã đăng nhập, giờ chỉ người được uỷ quyền (hoặc
+      // admin) mới đăng ký được, khớp yêu cầu "người đăng ký chịu trách nhiệm đăng ký cho phòng".
+      if (!user.perms?.admin && !user.perms?.vppRegisterCreate) {
+        throw new CreateError(403, 'Bạn không có quyền đăng ký Văn Phòng Phẩm — liên hệ người được uỷ quyền đăng ký của phòng mình');
+      }
       const periodId = Number(payload.periodId);
       if (!Number.isFinite(periodId)) throw new CreateError(400, 'Thiếu kỳ đăng ký');
       const periods = appData?.vppPeriods || [];
@@ -944,6 +950,11 @@ const CREATE_MODULE_CONFIGS = {
       payload.appliedBy = null;
       payload.appliedByName = null;
       payload.appliedAt = null;
+      // Khoá "Tôi đang xử lý" — người trong đội Hỗ Trợ IT nhận việc áp giá, xem claimPriceApply()/
+      // applyPriceApproval() ở lib/recordActions.js.
+      payload.applyClaimedBy = null;
+      payload.applyClaimedByName = null;
+      payload.applyClaimedAt = null;
 
       if (autoApproved) {
         // Khớp 100% với File Giá Mẫu đã chọn -> bỏ qua toàn bộ quy trình duyệt phòng ban, status
