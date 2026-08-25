@@ -12,25 +12,38 @@ const express = require('express');
 const router = express.Router();
 const { getAppDataValueCached } = require('../lib/appData');
 
-// Danh mục ĐẦY ĐỦ các module có thể chọn làm phím tắt — key PHẢI khớp đúng tên tab dùng ở switchTab()
-// (index.html). Đây là bản sao thủ công của danh sách tương ứng ở PWA_SHORTCUT_CATALOG trong
-// index.html (admin panel dùng để vẽ checkbox) — 2 nơi phải sửa cùng lúc nếu thêm/bớt module nào, không
-// import chung được vì server.js/index.html không dùng chung module JS.
+// Danh mục ĐẦY ĐỦ các module/màn con có thể chọn làm phím tắt. Key là "moduleKey" (khớp đúng tên tab
+// dùng ở switchTab(), index.html) hoặc "moduleKey:subTabKey" cho những module có nhiều màn con điều
+// hướng qua setXSubTab() (khớp đúng giá trị subTab truyền vào hàm đó) — VD "internal:NEWS" mở thẳng
+// "Tin Nội Bộ" thay vì chỉ mở module "Truyền Thông" chung chung rồi phải tự bấm thêm. Trước đây các
+// module có màn con (Hợp Đồng/Truyền Thông/Tổng Hợp/Hỗ Trợ IT) chỉ có 1 mục gộp chung ở đây — admin
+// không chọn được đúng màn con cụ thể muốn làm phím tắt dù màn đó có trong menu điều hướng, đây chính là
+// phần đã bổ sung. Đây là bản sao thủ công của danh sách tương ứng ở PWA_SHORTCUT_CATALOG_CLIENT trong
+// index.html (admin panel dùng để vẽ checkbox) — 2 nơi phải sửa cùng lúc nếu thêm/bớt module/màn con nào,
+// không import chung được vì server.js/index.html không dùng chung module JS.
 const PWA_SHORTCUT_CATALOG = {
   approvalHub: 'Phê Duyệt',
   doc: 'Tài Liệu',
   submission: 'Văn Bản Trình',
   task: 'Công Việc',
-  contract: 'Hợp Đồng',
+  'contract:APPROVAL': 'Hợp Đồng - Phê Duyệt',
+  'contract:MANAGE': 'Hợp Đồng - Quản Lý HĐ & Giấy Phép',
   minutes: 'Biên Bản Họp',
-  internal: 'Truyền Thông',
+  'internal:NEWS': 'Tin Nội Bộ',
+  'internal:TRAINING': 'Đào Tạo',
+  'internal:RECRUITMENT': 'Tuyển Dụng',
+  'internal:SHARE': 'Góc Chia Sẻ',
   meeting: 'Phòng Họp',
   car: 'Đăng Ký Xe',
   vpp: 'Văn Phòng Phẩm',
   uniform: 'Đồng Phục',
-  office: 'Tổng Hợp',
+  'office:MUA_BAN': 'Tổng Hợp - Mua Bán',
+  'office:SUA_CHUA': 'Tổng Hợp - Sửa Chữa',
+  'office:DAU_TU': 'Tổng Hợp - Đầu Tư',
+  'office:PAYMENT': 'Thanh Toán',
   budget: 'Ngân Sách',
-  itSupport: 'Hỗ Trợ IT',
+  'itSupport:PRICE': 'Hỗ Trợ IT - Phê Duyệt Giá',
+  'itSupport:TICKET': 'Hỗ Trợ IT - Hỗ Trợ Yêu Cầu',
   periodicReport: 'Báo Cáo Định Kỳ',
   reports: 'Báo Cáo'
 };

@@ -3851,8 +3851,11 @@ table { display: block; overflow-x: auto; max-width: 100%; }
           <div class="p-3 pt-0 space-y-4">
             <div class="border-b pb-3">
               <h5 class="font-bold text-gray-700 text-xs mb-1">🏢 Đơn Vị Tham Gia Quy Trình</h5>
-              <p class="text-[11px] text-gray-500 italic mb-2">Tick các phòng ban thực sự cần cấu hình quy trình phê duyệt — màn "Hệ Thống → Quy Trình & Phê Duyệt" sẽ CHỈ hiện đúng các phòng đã tick dưới đây thay vì liệt kê toàn bộ danh sách phòng ban. Không tick phòng nào (để trống) thì màn đó vẫn hiện đầy đủ như trước, không ảnh hưởng gì.</p>
+              <p class="text-[11px] text-gray-500 italic mb-2">Tick các phòng ban thực sự cần cấu hình quy trình phê duyệt — màn "Hệ Thống → Quy Trình & Phê Duyệt" sẽ CHỈ hiện đúng các phòng đã tick dưới đây thay vì liệt kê toàn bộ danh sách phòng ban. Không tick phòng nào (để trống) thì màn đó vẫn hiện đầy đủ như trước, không ảnh hưởng gì. Tick xong nhiều phòng thì bấm "Lưu" 1 lần — không cần chờ lưu xong mới tick phòng tiếp theo.</p>
               <div id="workflowParticipatingDeptsChecklist" class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-1 max-h-48 overflow-y-auto border rounded p-2 bg-gray-50"></div>
+              <div class="flex justify-end mt-2">
+                <button type="button" onclick="saveWorkflowParticipatingDepts()" class="bg-emerald-600 text-white px-4 py-1.5 rounded text-xs font-bold hover:bg-emerald-700">💾 Lưu Đơn Vị Tham Gia Quy Trình</button>
+              </div>
             </div>
             <div>
               <h5 class="font-bold text-gray-700 text-xs mb-1">🚫 Nhóm Không Cấp Văn Phòng Phẩm</h5>
@@ -7946,17 +7949,27 @@ async function triggerPwaInstall() {
   initPwaInstallUI();
 }
 
-// Phím tắt PWA (?shortcut=<moduleKey>, do manifest shortcuts[] điều hướng tới — xem routes/pwaManifest.js)
-// — đọc 1 lần lúc tải trang, ÁP DỤNG sau khi finishLogin() hoàn tất (lúc đó switchTab mới có tác dụng vì
-// nav/permissions đã sẵn sàng), rồi dọn khỏi URL để refresh sau đó không bị nhảy tab lại ngoài ý muốn.
+// Phím tắt PWA (?shortcut=<moduleKey> hoặc <moduleKey>:<subTabKey>, do manifest shortcuts[] điều hướng
+// tới — xem routes/pwaManifest.js) — đọc 1 lần lúc tải trang, ÁP DỤNG sau khi finishLogin() hoàn tất (lúc
+// đó switchTab mới có tác dụng vì nav/permissions đã sẵn sàng), rồi dọn khỏi URL để refresh sau đó không
+// bị nhảy tab lại ngoài ý muốn. Phần "subTabKey" (nếu có) gọi tiếp đúng hàm setXSubTab() của module đó —
+// PWA_SUBTAB_SETTERS bên dưới PHẢI khớp đúng module nào đang có key dạng "module:subTab" trong
+// PWA_SHORTCUT_CATALOG_CLIENT.
 const pwaShortcutParam = new URLSearchParams(window.location.search).get('shortcut');
+const PWA_SUBTAB_SETTERS = {
+  contract: 'setContractSubTab', internal: 'setInternalSubTab',
+  office: 'setOfficeSubTab', itSupport: 'setItSupportSubTab'
+};
 function applyPwaShortcutParam() {
   if (!pwaShortcutParam) return;
-  const key = pwaShortcutParam;
+  const [moduleKey, subTabKey] = pwaShortcutParam.split(':');
   window.history.replaceState({}, '', window.location.pathname);
-  if (typeof switchTab === 'function') {
-    try { switchTab(key); } catch (e) { console.warn('Không mở được phím tắt PWA:', key, e.message); }
-  }
+  if (typeof switchTab !== 'function') return;
+  try {
+    switchTab(moduleKey);
+    const setterName = subTabKey && PWA_SUBTAB_SETTERS[moduleKey];
+    if (setterName && typeof window[setterName] === 'function') window[setterName](subTabKey);
+  } catch (e) { console.warn('Không mở được phím tắt PWA:', pwaShortcutParam, e.message); }
 }
 
 async function loginWithBiometric() {
@@ -20033,34 +20046,49 @@ function renderWorkflowParticipatingDeptsChecklist() {
   const selected = new Set(DB.workflowParticipatingDepts || []);
   wrap.innerHTML = DB.depts.map(d => `
     <label class="flex items-center gap-1.5 text-gray-700 cursor-pointer">
-      <input type="checkbox" class="wf-participating-dept-cb" value="${escapeHtml(d)}" ${selected.has(d) ? 'checked' : ''} onchange="saveWorkflowParticipatingDepts()">
+      <input type="checkbox" class="wf-participating-dept-cb" value="${escapeHtml(d)}" ${selected.has(d) ? 'checked' : ''}>
       <span>${escapeHtml(d)}</span>
     </label>
   `).join('');
 }
 
+// Trước đây mỗi checkbox tự lưu ngay (onchange gọi thẳng hàm này) — tick nhiều phòng liên tiếp thì mỗi
+// tick bắn 1 request riêng, xếp hàng nối tiếp nhau, và nếu request nào đó lỗi/409 thì hàm dưới đây RENDER
+// LẠI TOÀN BỘ checklist theo state cũ (rollback), vô tình "nhả" luôn những ô người dùng vừa tick sau đó
+// nhưng request của chúng chưa kịp chạy tới — cảm giác như không tick được nhiều phòng cùng lúc. Đổi
+// sang tick-nhiều-rồi-bấm-Lưu-1-lần (khớp UI "Nhóm Không Cấp Văn Phòng Phẩm" ở ngay bên dưới) để tránh
+// hẳn tình huống này — chỉ 1 request duy nhất khi bấm nút.
 async function saveWorkflowParticipatingDepts() {
   const checked = [...document.querySelectorAll('.wf-participating-dept-cb:checked')].map(cb => cb.value);
   const snapshot = [...(DB.workflowParticipatingDepts || [])];
   DB.workflowParticipatingDepts = checked;
-  const saved = await syncStorage('workflowParticipatingDepts', { silent: true });
+  const saved = await syncStorage('workflowParticipatingDepts');
   if (!saved) {
     DB.workflowParticipatingDepts = snapshot;
     renderWorkflowParticipatingDeptsChecklist();
-    return alert('⛔ Không thể lưu danh sách phòng ban tham gia quy trình — vui lòng thử lại.');
+    return;
   }
   logSystemAction('USER_MGM', 'SAVE_WORKFLOW_DEPTS', `Cập nhật danh sách phòng ban tham gia quy trình (${checked.length} phòng)`, 'SUCCESS');
+  alert('✅ Đã lưu Đơn Vị Tham Gia Quy Trình.');
 }
 
 // ============ Phím Tắt PWA (DB.pwaShortcutModules) ============
 // Bản sao thủ công của PWA_SHORTCUT_CATALOG ở server/routes/pwaManifest.js — 2 nơi phải sửa cùng lúc
-// nếu thêm/bớt module (client chỉ dùng danh mục này để vẽ checkbox, server mới là nơi thật sự build
-// manifest shortcuts[]).
+// nếu thêm/bớt module/màn con (client chỉ dùng danh mục này để vẽ checkbox, server mới là nơi thật sự
+// build manifest shortcuts[]). Key "module:subTab" mở thẳng đúng màn con (khớp giá trị setXSubTab()),
+// xem giải thích đầy đủ ở comment PWA_SHORTCUT_CATALOG trong routes/pwaManifest.js.
 const PWA_SHORTCUT_CATALOG_CLIENT = {
   approvalHub: 'Phê Duyệt', doc: 'Tài Liệu', submission: 'Văn Bản Trình', task: 'Công Việc',
-  contract: 'Hợp Đồng', minutes: 'Biên Bản Họp', internal: 'Truyền Thông', meeting: 'Phòng Họp',
-  car: 'Đăng Ký Xe', vpp: 'Văn Phòng Phẩm', uniform: 'Đồng Phục', office: 'Tổng Hợp',
-  budget: 'Ngân Sách', itSupport: 'Hỗ Trợ IT', periodicReport: 'Báo Cáo Định Kỳ', reports: 'Báo Cáo'
+  'contract:APPROVAL': 'Hợp Đồng - Phê Duyệt', 'contract:MANAGE': 'Hợp Đồng - Quản Lý HĐ & Giấy Phép',
+  minutes: 'Biên Bản Họp',
+  'internal:NEWS': 'Tin Nội Bộ', 'internal:TRAINING': 'Đào Tạo', 'internal:RECRUITMENT': 'Tuyển Dụng',
+  'internal:SHARE': 'Góc Chia Sẻ',
+  meeting: 'Phòng Họp', car: 'Đăng Ký Xe', vpp: 'Văn Phòng Phẩm', uniform: 'Đồng Phục',
+  'office:MUA_BAN': 'Tổng Hợp - Mua Bán', 'office:SUA_CHUA': 'Tổng Hợp - Sửa Chữa',
+  'office:DAU_TU': 'Tổng Hợp - Đầu Tư', 'office:PAYMENT': 'Thanh Toán',
+  budget: 'Ngân Sách',
+  'itSupport:PRICE': 'Hỗ Trợ IT - Phê Duyệt Giá', 'itSupport:TICKET': 'Hỗ Trợ IT - Hỗ Trợ Yêu Cầu',
+  periodicReport: 'Báo Cáo Định Kỳ', reports: 'Báo Cáo'
 };
 const PWA_SHORTCUT_MAX = 4;
 
