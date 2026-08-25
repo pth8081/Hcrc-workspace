@@ -3315,12 +3315,11 @@ table { display: block; overflow-x: auto; max-width: 100%; }
             <label class="block text-xs font-semibold text-gray-600 mb-1">Chức Danh</label>
             <select id="uJobTitle" class="w-full border p-1.5 rounded text-xs"></select>
           </div>
-          <div>
-            <label class="block text-xs font-semibold text-gray-600 mb-1">Nhóm Phân Quyền</label>
-            <select id="uPermGroup" onchange="onUserPermGroupChange()" class="w-full border p-1.5 rounded text-xs bg-white">
-              <option value="">-- Không thuộc nhóm (quyền riêng) --</option>
-            </select>
-          </div>
+        </div>
+
+        <div class="bg-white p-3 rounded border">
+          <label class="block text-xs font-semibold text-gray-600 mb-1">Nhóm Phân Quyền (chọn được nhiều nhóm cùng lúc)</label>
+          <div id="uPermGroupsChecklist" class="flex flex-wrap gap-x-4 gap-y-1 max-h-28 overflow-y-auto border rounded p-2 bg-gray-50"></div>
         </div>
 
         <div class="bg-white p-3 rounded border">
@@ -5144,51 +5143,66 @@ table { display: block; overflow-x: auto; max-width: 100%; }
       <button onclick="closeProfileModal()" class="text-gray-500 font-bold hover:text-gray-700 text-lg">✕</button>
     </div>
     
-    <form onsubmit="savePersonalProfile(event)" class="space-y-3 text-xs">
-      <div>
-        <label class="block font-semibold text-gray-600 mb-1">Tên đăng nhập</label>
-        <input id="pfUsername" type="text" disabled class="w-full border p-2 rounded bg-gray-100 font-bold">
-      </div>
-      <div>
-        <label class="block font-semibold text-gray-600 mb-1">Họ và Tên</label>
-        <input id="pfFullName" type="text" class="w-full border p-2 rounded font-semibold" required>
-      </div>
-      <div>
-        <label class="block font-semibold text-gray-600 mb-1">Email Nhận Thông Báo</label>
-        <input id="pfEmail" type="email" class="w-full border p-2 rounded" required>
-      </div>
-      <div>
-        <label class="block font-semibold text-gray-600 mb-1">Số Điện Thoại</label>
-        <input id="pfPhone" type="tel" class="w-full border p-2 rounded" placeholder="0912345678" required>
-      </div>
-      
-      <div class="border-t pt-3 space-y-3">
-        <h4 class="font-bold text-gray-700">🔒 Đổi Mật Khẩu (Để trống nếu giữ nguyên)</h4>
+    <!-- 4 khối thiết lập cá nhân TÁCH RIÊNG theo tab (Thông Tin / Mật Khẩu / Mã PIN / Vân Tay-Face ID)
+         thay vì gộp chung 1 form dài như trước — mỗi tab tự lưu riêng, không phụ thuộc nhau. 2 tab
+         Mã PIN/Vân Tay chỉ hiện nút khi áp dụng cho tài khoản này (xem openProfileModal()). -->
+    <div id="profileSubTabBar" class="flex flex-wrap gap-1.5 text-xs">
+      <button type="button" id="btnProfileSubInfo" onclick="setProfileSubTab('INFO')" class="px-3 py-1.5 rounded font-bold">👤 Thông Tin</button>
+      <button type="button" id="btnProfileSubPassword" onclick="setProfileSubTab('PASSWORD')" class="px-3 py-1.5 rounded font-bold">🔒 Đổi Mật Khẩu</button>
+      <button type="button" id="btnProfileSubPin" onclick="setProfileSubTab('PIN')" class="hidden px-3 py-1.5 rounded font-bold">🔑 Đổi Mã PIN</button>
+      <button type="button" id="btnProfileSubWebauthn" onclick="setProfileSubTab('WEBAUTHN')" class="hidden px-3 py-1.5 rounded font-bold">🖐️ Vân Tay/Face ID</button>
+    </div>
+
+    <div id="profileSubInfo" class="text-xs">
+      <form onsubmit="savePersonalInfo(event)" class="space-y-3">
+        <div>
+          <label class="block font-semibold text-gray-600 mb-1">Tên đăng nhập</label>
+          <input id="pfUsername" type="text" disabled class="w-full border p-2 rounded bg-gray-100 font-bold">
+        </div>
+        <div>
+          <label class="block font-semibold text-gray-600 mb-1">Họ và Tên</label>
+          <input id="pfFullName" type="text" class="w-full border p-2 rounded font-semibold" required>
+        </div>
+        <div>
+          <label class="block font-semibold text-gray-600 mb-1">Email Nhận Thông Báo</label>
+          <input id="pfEmail" type="email" class="w-full border p-2 rounded" required>
+        </div>
+        <div>
+          <label class="block font-semibold text-gray-600 mb-1">Số Điện Thoại</label>
+          <input id="pfPhone" type="tel" class="w-full border p-2 rounded" placeholder="0912345678" required>
+        </div>
+        <div class="flex justify-end gap-2 pt-2">
+          <button type="button" onclick="closeProfileModal()" class="bg-gray-400 text-white px-4 py-2 rounded font-bold">Hủy</button>
+          <button type="submit" class="bg-blue-600 text-white px-5 py-2 rounded font-bold hover:bg-blue-700">Lưu Thay Đổi</button>
+        </div>
+      </form>
+    </div>
+
+    <div id="profileSubPassword" class="hidden text-xs">
+      <form onsubmit="changeMyPassword(event)" class="space-y-3">
         <div>
           <label class="block font-semibold text-gray-600 mb-1">Mật khẩu hiện tại</label>
-          <input id="pfCurrentPass" type="password" class="w-full border p-2 rounded" placeholder="Bắt buộc nếu đổi mật khẩu mới">
+          <input id="pfCurrentPass" type="password" class="w-full border p-2 rounded" required>
         </div>
         <div>
           <label class="block font-semibold text-gray-600 mb-1">Mật khẩu mới</label>
-          <input id="pfNewPass" type="password" class="w-full border p-2 rounded">
+          <input id="pfNewPass" type="password" class="w-full border p-2 rounded" required>
         </div>
         <div>
           <label class="block font-semibold text-gray-600 mb-1">Xác nhận mật khẩu mới</label>
-          <input id="pfConfirmPass" type="password" class="w-full border p-2 rounded">
+          <input id="pfConfirmPass" type="password" class="w-full border p-2 rounded" required>
         </div>
-      </div>
+        <div class="flex justify-end gap-2 pt-2">
+          <button type="button" onclick="closeProfileModal()" class="bg-gray-400 text-white px-4 py-2 rounded font-bold">Hủy</button>
+          <button type="submit" class="bg-blue-600 text-white px-5 py-2 rounded font-bold hover:bg-blue-700">Đổi Mật Khẩu</button>
+        </div>
+      </form>
+    </div>
 
-      <div class="flex justify-end gap-2 pt-2">
-        <button type="button" onclick="closeProfileModal()" class="bg-gray-400 text-white px-4 py-2 rounded font-bold">Hủy</button>
-        <button type="submit" class="bg-blue-600 text-white px-5 py-2 rounded font-bold hover:bg-blue-700">Lưu Thay Đổi</button>
-      </div>
-    </form>
-
-    <!-- Chỉ hiện với người có perms.approverAuthLevel = 'PIN' (xem openProfileModal()) — tách riêng
-         khỏi <form> ở trên vì đổi PIN cần xác nhận PIN CŨ + đi qua route riêng (/api/auth/change-pin,
-         khác PATCH /api/auth/me của phần mật khẩu), không nên gộp chung 1 lần submit. -->
-    <div id="pfPinSection" class="hidden border-t pt-3 space-y-3">
-      <h4 class="font-bold text-gray-700">🔑 Đổi Mã PIN Phê Duyệt</h4>
+    <!-- Chỉ hiện nút tab với người có perms.approverAuthLevel = 'PIN' (xem openProfileModal()) — tách
+         riêng vì đổi PIN cần xác nhận PIN CŨ + đi qua route riêng (/api/auth/change-pin, khác
+         PATCH /api/auth/me của mật khẩu). -->
+    <div id="pfPinSection" class="hidden space-y-3 text-xs">
       <p id="pfPinHint" class="text-[11px] text-gray-500"></p>
       <div id="pfCurrentPinWrap">
         <label class="block font-semibold text-gray-600 mb-1">Mã PIN hiện tại</label>
@@ -5207,12 +5221,11 @@ table { display: block; overflow-x: auto; max-width: 100%; }
       </div>
     </div>
 
-    <!-- Đăng ký thiết bị vân tay/Face ID (WebAuthn) — CHỈ hiện khi trình duyệt hỗ trợ (xem
+    <!-- Đăng ký thiết bị vân tay/Face ID (WebAuthn) — nút tab CHỈ hiện khi trình duyệt hỗ trợ (xem
          canShowBiometricLogin() ở script cuối trang). KHÔNG phụ thuộc approverAuthLevel — đây là tiện
          ích đăng nhập chung cho mọi người, tách biệt khỏi khối PIN ở trên (dù WEBAUTHN cũng là 1 trong 4
          mức xác thực lại khi Duyệt admin có thể chọn — xem onApproverAuthLevelChange()). -->
-    <div id="pfWebauthnSection" class="hidden border-t pt-3 space-y-2">
-      <h4 class="font-bold text-gray-700">🖐️ Đăng Nhập/Xác Thực Bằng Vân Tay, Face ID</h4>
+    <div id="pfWebauthnSection" class="hidden space-y-2 text-xs">
       <p class="text-[11px] text-gray-500">Đăng ký thiết bị này để lần sau đăng nhập hoặc xác thực khi Duyệt bằng vân tay/Face ID thay vì gõ mật khẩu.</p>
       <div id="pfWebauthnListWrap" class="space-y-1 text-xs"></div>
       <div class="flex gap-2">
@@ -6630,6 +6643,40 @@ function mergePerms(basePerms, overrides) {
   return { ...(basePerms || {}), ...(overrides || {}) };
 }
 
+const APPROVER_AUTH_LEVEL_RANK = { NONE: 0, PASSWORD: 1, PIN: 2, WEBAUTHN: 3 };
+
+// Gộp quyền NỀN của NHIỀU nhóm phân quyền đã gán cho 1 người (chọn được nhiều nhóm cùng lúc, xem
+// uPermGroupsChecklist) thành 1 quyền nền duy nhất, TRƯỚC KHI áp permOverrides như cũ qua mergePerms()
+// — kết hợp theo kiểu dữ liệu từng trường: boolean lấy OR (được cấp ở BẤT KỲ nhóm nào là đủ), scope
+// {all,depts} lấy hợp (union) depts + OR cờ "all", approverAuthLevel lấy mức CAO NHẤT trong các nhóm
+// (an toàn hơn — không để 1 nhóm yêu cầu xác thực thấp vô tình hạ mức của nhóm khác). Không có nhóm nào
+// -> trả về {} (quyền hoàn toàn riêng, dùng thẳng formPerms). Cùng thuật toán với mergeGroupsBasePermsServer
+// ở routes/data.js — PHẢI giữ giống hệt nếu sửa 1 bên.
+function mergeGroupsBasePerms(groupsPerms) {
+  const list = (groupsPerms || []).filter(Boolean);
+  if (!list.length) return {};
+  const keys = new Set();
+  list.forEach(p => Object.keys(p || {}).forEach(k => keys.add(k)));
+  const result = {};
+  keys.forEach(key => {
+    const values = list.map(p => p?.[key]);
+    if (key === 'approverAuthLevel') {
+      result[key] = values.reduce((best, v) =>
+        (APPROVER_AUTH_LEVEL_RANK[v] || 0) > (APPROVER_AUTH_LEVEL_RANK[best] || 0) ? v : best, 'NONE');
+      return;
+    }
+    const sample = values.find(v => v !== undefined && v !== null);
+    if (typeof sample === 'boolean') {
+      result[key] = values.some(v => v === true);
+    } else if (sample && typeof sample === 'object' && !Array.isArray(sample) && ('all' in sample || 'depts' in sample)) {
+      result[key] = { all: values.some(v => v?.all === true), depts: [...new Set(values.flatMap(v => v?.depts || []))] };
+    } else {
+      result[key] = values[values.length - 1];
+    }
+  });
+  return result;
+}
+
 // Chuyển đổi perms kiểu CŨ (cờ bật/tắt toàn công ty: submissionModule, contractModule, carModule,
 // meetingBook dạng boolean) sang mô hình MỚI theo phòng ban ({all, depts}) — không âm thầm bớt
 // quyền của user đang có: nếu cờ cũ = true thì phạm vi mới quy đổi thành "Tất cả phòng ban" (all:
@@ -6747,10 +6794,16 @@ async function initDatabase(loggingInUser) {
     // trang — nhưng chỉ khi người vừa đăng nhập là Admin, vì ghi "users" giờ yêu cầu quyền Admin ở
     // server (trước đây API không có xác thực nên ai load trang cũng lưu được).
     let permsMigrated = false;
+    // groupId (1 nhóm duy nhất) -> groupIds (chọn được nhiều nhóm cùng lúc) — user cũ tạo trước tính
+    // năng multi-select chỉ có field "groupId" đơn, quy đổi 1 LẦN ở đây thành mảng 1 phần tử để mọi nơi
+    // khác trong code chỉ cần đọc "groupIds" là đủ (không phải rải fallback groupId||groupIds khắp nơi).
     DB.users = (data.users || []).map(u => {
       const { perms, changed } = migrateLegacyPerms(u.perms);
       if (changed) permsMigrated = true;
-      return changed ? { ...u, perms } : u;
+      const needsGroupIdsMigration = !u.groupIds && u.groupId;
+      if (needsGroupIdsMigration) permsMigrated = true;
+      if (!changed && !needsGroupIdsMigration) return u;
+      return { ...u, ...(changed && { perms }), groupIds: u.groupIds || (u.groupId ? [u.groupId] : []) };
     });
     if (permsMigrated && loggingInUser?.perms?.admin) {
       console.log('ℹ️ Đã tự động chuyển đổi phân quyền người dùng sang mô hình theo phòng ban (module-level).');
@@ -7654,6 +7707,25 @@ function saveContractExpiryDeptContacts() {
 }
 
 // --- CÁ NHÂN HÓA USER ---
+// Tab đang hiện trong #profileModal — 4 tab tách riêng (xem setProfileSubTab()), nút Mã PIN/Vân Tay chỉ
+// hiện khi áp dụng cho tài khoản đang đăng nhập (openProfileModal() bật/tắt).
+function setProfileSubTab(tab) {
+  const panels = { INFO: 'profileSubInfo', PASSWORD: 'profileSubPassword', PIN: 'pfPinSection', WEBAUTHN: 'pfWebauthnSection' };
+  Object.entries(panels).forEach(([key, id]) => {
+    document.getElementById(id)?.classList.toggle('hidden', key !== tab);
+  });
+  const buttons = { INFO: 'btnProfileSubInfo', PASSWORD: 'btnProfileSubPassword', PIN: 'btnProfileSubPin', WEBAUTHN: 'btnProfileSubWebauthn' };
+  Object.entries(buttons).forEach(([key, id]) => {
+    const btn = document.getElementById(id);
+    if (!btn) return;
+    const active = key === tab;
+    btn.classList.toggle('bg-blue-700', active);
+    btn.classList.toggle('text-white', active);
+    btn.classList.toggle('bg-gray-200', !active);
+    btn.classList.toggle('text-gray-700', !active);
+  });
+}
+
 function openProfileModal() {
   if (!currentUser) return;
   document.getElementById('pfUsername').value = currentUser.username;
@@ -7665,10 +7737,10 @@ function openProfileModal() {
   document.getElementById('pfConfirmPass').value = '';
 
   // Chỉ người đang ở mức xác thực phê duyệt PIN (perms.approverAuthLevel = 'PIN') mới cần quản lý mã
-  // PIN của mình — người khác không thấy khối này, giống cách form Sửa Người Dùng của admin cũng chỉ
+  // PIN của mình — người khác không thấy tab này, giống cách form Sửa Người Dùng của admin cũng chỉ
   // hiện ô PIN khi chọn đúng mức này (xem onApproverAuthLevelChange()).
   const usesPin = currentUser.perms?.approverAuthLevel === 'PIN';
-  document.getElementById('pfPinSection').classList.toggle('hidden', !usesPin);
+  document.getElementById('btnProfileSubPin').classList.toggle('hidden', !usesPin);
   if (usesPin) {
     // hasPin do server tính sẵn (toSafeUser() ở routes/auth.js) — true/false, KHÔNG phải giá trị PIN
     // thật. Chưa từng có PIN thì ẩn hẳn ô "PIN hiện tại" (không có gì để xác nhận).
@@ -7681,14 +7753,16 @@ function openProfileModal() {
     document.getElementById('pfConfirmPin').value = '';
   }
 
-  if (canShowBiometricLogin()) {
-    document.getElementById('pfWebauthnSection').classList.remove('hidden');
+  const usesWebauthn = canShowBiometricLogin();
+  document.getElementById('btnProfileSubWebauthn').classList.toggle('hidden', !usesWebauthn);
+  if (usesWebauthn) {
     document.getElementById('pfWebauthnDeviceLabel').value = '';
     renderWebauthnDeviceList();
   }
 
   initPwaInstallUI();
 
+  setProfileSubTab('INFO');
   document.getElementById('profileModal').classList.remove('hidden');
 }
 
@@ -7696,23 +7770,13 @@ function closeProfileModal() {
   document.getElementById('profileModal').classList.add('hidden');
 }
 
-async function savePersonalProfile(e) {
+// Lưu Họ Tên/Email/SĐT — tách riêng khỏi đổi mật khẩu (changeMyPassword()) để mỗi tab tự lưu độc lập,
+// không bắt người chỉ muốn sửa thông tin phải đi qua các ô mật khẩu.
+async function savePersonalInfo(e) {
   e.preventDefault();
   const newName = document.getElementById('pfFullName').value.trim();
   const newEmail = document.getElementById('pfEmail').value.trim();
   const newPhone = document.getElementById('pfPhone').value.trim();
-  const currentPass = document.getElementById('pfCurrentPass').value.trim();
-  const newPass = document.getElementById('pfNewPass').value.trim();
-  const confirmPass = document.getElementById('pfConfirmPass').value.trim();
-
-  if (newPass || confirmPass) {
-    if (newPass !== confirmPass) return alert('❌ Mật khẩu xác nhận không khớp!');
-    if (newPass.length < 8) return alert('❌ Mật khẩu phải có ít nhất 8 ký tự!');
-    // Đổi mật khẩu bắt buộc xác nhận mật khẩu hiện tại (server cũng tự kiểm tra lại, đây chỉ là chặn
-    // sớm ở UI) — tránh ai lợi dụng phiên trình duyệt đang mở sẵn tự đặt mật khẩu mới không cần biết
-    // mật khẩu cũ.
-    if (!currentPass) return alert('❌ Vui lòng nhập mật khẩu hiện tại để đổi mật khẩu mới!');
-  }
 
   // Tự sửa hồ sơ CỦA CHÍNH MÌNH đi qua API riêng (PATCH /api/auth/me) thay vì ghi đè nguyên cả
   // collection "users" — vì "users" giờ chỉ Admin mới có quyền ghi ở server (xem routes/data.js).
@@ -7720,10 +7784,7 @@ async function savePersonalProfile(e) {
     const res = await fetch('/api/auth/me', {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        name: newName, email: newEmail, phone: newPhone,
-        password: newPass || undefined, currentPassword: newPass ? currentPass : undefined
-      })
+      body: JSON.stringify({ name: newName, email: newEmail, phone: newPhone })
     });
     if (!res.ok) {
       const body = await res.json().catch(() => ({}));
@@ -7742,6 +7803,44 @@ async function savePersonalProfile(e) {
 
   closeProfileModal();
   alert('✅ Cập nhật thông tin cá nhân thành công!');
+}
+
+// Đổi mật khẩu — tách riêng khỏi savePersonalInfo() (xem trên). Bắt buộc nhập đủ 3 ô vì tab này CHỈ
+// dùng để đổi mật khẩu (không còn kiêm "để trống = giữ nguyên" như form gộp trước đây).
+async function changeMyPassword(e) {
+  e.preventDefault();
+  const currentPass = document.getElementById('pfCurrentPass').value.trim();
+  const newPass = document.getElementById('pfNewPass').value.trim();
+  const confirmPass = document.getElementById('pfConfirmPass').value.trim();
+
+  if (newPass !== confirmPass) return alert('❌ Mật khẩu xác nhận không khớp!');
+  if (newPass.length < 8) return alert('❌ Mật khẩu phải có ít nhất 8 ký tự!');
+  if (!currentPass) return alert('❌ Vui lòng nhập mật khẩu hiện tại!');
+
+  try {
+    const res = await fetch('/api/auth/me', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ password: newPass, currentPassword: currentPass })
+    });
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      return alert(body.error || '⛔ Lỗi đổi mật khẩu');
+    }
+    const updated = await res.json();
+    currentUser = updated;
+    const userIdx = DB.users.findIndex(u => u.username === currentUser.username);
+    if (userIdx !== -1) DB.users[userIdx] = { ...DB.users[userIdx], ...updated };
+  } catch (err) {
+    return alert('⛔ Không thể kết nối tới máy chủ: ' + err.message);
+  }
+
+  document.getElementById('pfCurrentPass').value = '';
+  document.getElementById('pfNewPass').value = '';
+  document.getElementById('pfConfirmPass').value = '';
+
+  closeProfileModal();
+  alert('✅ Đổi mật khẩu thành công!');
 }
 
 // Đổi/thiết lập mã PIN phê duyệt của CHÍNH mình — tách riêng khỏi savePersonalProfile() vì đi qua route
@@ -19983,28 +20082,42 @@ function updatePermGroupNote(hasGroup) {
   document.getElementById('permGroupInfoNote').classList.toggle('hidden', !hasGroup);
 }
 
-function onUserPermGroupChange() {
-  const groupId = document.getElementById('uPermGroup').value;
-  if (groupId) {
-    const group = DB.permGroups.find(g => g.id === groupId);
-    if (group) populatePermsForm(group.perms);
+function currentEditingUserGroupIds() {
+  return [...document.querySelectorAll('.u-perm-group-cb:checked')].map(cb => cb.value);
+}
+
+// Gán được NHIỀU nhóm phân quyền cùng lúc cho 1 người (trước đây chỉ 1 nhóm duy nhất) — quyền nền hiển
+// thị lên cây quyền là quyền GỘP của TẤT CẢ nhóm đang tick (xem mergeGroupsBasePerms()), permOverrides
+// vẫn tính là phần khác biệt so với quyền gộp này (xem readUserFormState()).
+function onUserPermGroupsChange() {
+  const groupIds = currentEditingUserGroupIds();
+  if (groupIds.length) {
+    const groups = groupIds.map(id => DB.permGroups.find(g => g.id === id)).filter(Boolean);
+    populatePermsForm(mergeGroupsBasePerms(groups.map(g => g.perms)));
     updatePermGroupNote(true);
   } else {
     updatePermGroupNote(false);
   }
 }
 
-function renderPermGroupDropdown() {
-  const sel = document.getElementById('uPermGroup');
-  if (!sel) return;
-  const current = sel.value;
-  sel.innerHTML = '<option value="">-- Không thuộc nhóm (quyền riêng) --</option>' +
-    DB.permGroups.map(g => `<option value="${escapeHtml(g.id)}">${escapeHtml(g.name)}</option>`).join('');
-  if (DB.permGroups.some(g => g.id === current)) sel.value = current;
+function renderUPermGroupsChecklist(selectedIds) {
+  const wrap = document.getElementById('uPermGroupsChecklist');
+  if (!wrap) return;
+  const selected = new Set(selectedIds || []);
+  if (!DB.permGroups.length) {
+    wrap.innerHTML = `<div class="text-[11px] text-gray-400 italic">Chưa có nhóm phân quyền nào — bấm "+ Tạo Nhóm Phân Quyền Mới" để tạo.</div>`;
+    return;
+  }
+  wrap.innerHTML = DB.permGroups.map(g => `
+    <label class="flex items-center gap-1.5 text-gray-700 cursor-pointer">
+      <input type="checkbox" class="u-perm-group-cb" value="${escapeHtml(g.id)}" onchange="onUserPermGroupsChange()" ${selected.has(g.id) ? 'checked' : ''}>
+      <span>${escapeHtml(g.name)}</span>
+    </label>
+  `).join('');
 }
 
 function renderPermGroupsList() {
-  renderPermGroupDropdown();
+  renderUPermGroupsChecklist(currentEditingUserGroupIds());
   const tbody = document.getElementById('permGroupsTableBody');
   if (!tbody) return;
   if (DB.permGroups.length === 0) {
@@ -20012,7 +20125,7 @@ function renderPermGroupsList() {
     return;
   }
   tbody.innerHTML = DB.permGroups.map(g => {
-    const memberCount = DB.users.filter(u => u.groupId === g.id).length;
+    const memberCount = DB.users.filter(u => (u.groupIds || []).includes(g.id)).length;
     return `
     <tr class="border-b hover:bg-gray-50">
       <td class="border p-2 font-bold text-gray-800">${escapeHtml(g.name)}</td>
@@ -20055,7 +20168,7 @@ function editPermGroup(id) {
   document.getElementById('gGroupName').value = group.name;
   document.getElementById('gGroupDesc').value = group.description || '';
   populatePermsForm(group.perms);
-  const currentMembers = DB.users.filter(u => u.groupId === id).map(u => u.username);
+  const currentMembers = DB.users.filter(u => (u.groupIds || []).includes(id)).map(u => u.username);
   renderGroupMembersPicker(currentMembers);
   document.getElementById('gGroupName').scrollIntoView({ behavior: 'smooth', block: 'center' });
 }
@@ -20094,26 +20207,28 @@ async function savePermGroup(e) {
   // Nhóm là "vai trò" (role) — sửa quyền của nhóm phải cập nhật NGAY cho mọi thành viên đang gán,
   // NHƯNG vẫn giữ nguyên phần quyền tuỳ chỉnh riêng (permOverrides) từng người đã được cấp thêm/bớt
   // trên nền quyền của nhóm (xem diffPerms()/mergePerms() + saveUser()). Đồng thời áp luôn kết quả
-  // thêm/bớt hàng loạt từ khối "Thành Viên Nhóm" (xem renderGroupMembersPicker()) — người vừa được
-  // thêm (kể cả đang ở nhóm khác) sẽ CHUYỂN sang nhóm này, người bị bỏ chọn sẽ ra khỏi nhóm và giữ
-  // nguyên quyền hiện tại làm quyền riêng (khớp hành vi deletePermGroup() hiện có).
+  // thêm/bớt hàng loạt từ khối "Thành Viên Nhóm" (xem renderGroupMembersPicker()) — 1 người giờ THUỘC
+  // ĐƯỢC NHIỀU nhóm cùng lúc (mergeGroupsBasePerms()), nên thêm/bớt CHỈ ĐÚNG NHÓM ĐANG SỬA khỏi
+  // groupIds của họ, không đụng tới các nhóm khác họ đang có; người bị bỏ chọn khỏi nhóm này thì mất
+  // đúng phần đóng góp của nhóm này (permOverrides reset về rỗng vì "nền" đã đổi, khớp hành vi
+  // deletePermGroup() hiện có).
   let membersUpdated = 0;
   DB.users.forEach(u => {
     const shouldBeMember = selectedMembers.has(u.username);
-    const wasMember = u.groupId === group.id;
-    if (shouldBeMember && wasMember) {
-      u.perms = mergePerms(perms, u.permOverrides);
-      membersUpdated++;
-    } else if (shouldBeMember && !wasMember) {
-      u.groupId = group.id;
+    const currentGroupIds = u.groupIds || [];
+    const wasMember = currentGroupIds.includes(group.id);
+    if (!shouldBeMember && !wasMember) return;
+
+    if (shouldBeMember && !wasMember) {
+      u.groupIds = [...currentGroupIds, group.id];
       u.permOverrides = null;
-      u.perms = perms;
-      membersUpdated++;
     } else if (!shouldBeMember && wasMember) {
-      u.groupId = null;
+      u.groupIds = currentGroupIds.filter(gid => gid !== group.id);
       u.permOverrides = null;
-      membersUpdated++;
     }
+    const userGroups = (u.groupIds || []).map(gid => gid === group.id ? group : DB.permGroups.find(x => x.id === gid)).filter(Boolean);
+    u.perms = userGroups.length ? mergePerms(mergeGroupsBasePerms(userGroups.map(g => g.perms)), u.permOverrides) : u.perms;
+    membersUpdated++;
   });
 
   const savedGroups = await syncStorage('permGroups');
@@ -20136,15 +20251,22 @@ async function savePermGroup(e) {
 async function deletePermGroup(id) {
   const group = DB.permGroups.find(g => g.id === id);
   if (!group) return;
-  const memberCount = DB.users.filter(u => u.groupId === id).length;
+  const memberCount = DB.users.filter(u => (u.groupIds || []).includes(id)).length;
   const msg = memberCount > 0
-    ? `Nhóm "${group.name}" đang có ${memberCount} thành viên. Xóa nhóm sẽ gỡ các thành viên này khỏi nhóm (họ giữ nguyên quyền hiện tại như quyền riêng, không còn tự động cập nhật theo nhóm nữa). Tiếp tục xóa?`
+    ? `Nhóm "${group.name}" đang có ${memberCount} thành viên. Xóa nhóm sẽ gỡ các thành viên này khỏi nhóm (những nhóm khác họ đang có không bị ảnh hưởng; quyền hiện tại từ các nhóm còn lại trở thành quyền riêng, không còn tự động cập nhật theo nhóm này nữa). Tiếp tục xóa?`
     : `Bạn có chắc chắn muốn xóa nhóm phân quyền "${group.name}"?`;
   if (!confirm(msg)) return;
 
   const permGroupsSnapshot = JSON.parse(JSON.stringify(DB.permGroups));
   const usersSnapshot = JSON.parse(JSON.stringify(DB.users));
-  DB.users.forEach(u => { if (u.groupId === id) u.groupId = null; });
+  DB.users.forEach(u => {
+    if ((u.groupIds || []).includes(id)) {
+      u.groupIds = u.groupIds.filter(gid => gid !== id);
+      u.permOverrides = null;
+      const remainingGroups = u.groupIds.map(gid => DB.permGroups.find(g => g.id === gid)).filter(Boolean);
+      u.perms = remainingGroups.length ? mergeGroupsBasePerms(remainingGroups.map(g => g.perms)) : u.perms;
+    }
+  });
   DB.permGroups = DB.permGroups.filter(g => g.id !== id);
 
   const savedGroups = await syncStorage('permGroups');
@@ -22170,17 +22292,19 @@ function readUserFormState() {
   const dept = posType === 'STORE' ? document.getElementById('uStore').value : document.getElementById('uDept').value;
   if (!dept) { alert(posType === 'STORE' ? 'Vui lòng chọn Siêu Thị!' : 'Vui lòng chọn Phòng Ban!'); return null; }
   const jobTitle = document.getElementById('uJobTitle').value || null;
-  const groupId = document.getElementById('uPermGroup').value || null;
+  const groupIds = currentEditingUserGroupIds();
   const vppExcludeGroupIds = currentEditingUserVppExcludeGroupIds();
 
-  // Nếu gán vào nhóm phân quyền: khối checkbox trên form KHÔNG còn bị khoá, cho phép tick thêm/bớt
-  // tuỳ chỉnh riêng trên nền quyền của nhóm. Chỉ lưu lại PHẦN KHÁC BIỆT so với nhóm (permOverrides),
-  // không lưu y nguyên toàn bộ như trước — nhờ vậy khi nhóm đổi quyền sau này (savePermGroup()) vẫn
-  // tự động cập nhật đúng cho người này mà không mất phần tuỳ chỉnh riêng.
-  const group = groupId ? DB.permGroups.find(g => g.id === groupId) : null;
+  // Nếu gán vào (một hoặc nhiều) nhóm phân quyền: khối checkbox trên form KHÔNG còn bị khoá, cho phép
+  // tick thêm/bớt tuỳ chỉnh riêng trên nền quyền GỘP của các nhóm (xem mergeGroupsBasePerms()). Chỉ lưu
+  // lại PHẦN KHÁC BIỆT so với nền đó (permOverrides), không lưu y nguyên toàn bộ như trước — nhờ vậy
+  // khi 1 trong các nhóm đổi quyền sau này (savePermGroup()) vẫn tự động cập nhật đúng cho người này mà
+  // không mất phần tuỳ chỉnh riêng.
+  const groups = groupIds.map(id => DB.permGroups.find(g => g.id === id)).filter(Boolean);
+  const basePerms = groups.length ? mergeGroupsBasePerms(groups.map(g => g.perms)) : null;
   const formPerms = collectPermsFromForm();
-  const permOverrides = group ? diffPerms(formPerms, group.perms) : null;
-  const perms = group ? mergePerms(group.perms, permOverrides) : formPerms;
+  const permOverrides = basePerms ? diffPerms(formPerms, basePerms) : null;
+  const perms = basePerms ? mergePerms(basePerms, permOverrides) : formPerms;
 
   // Mã PIN kiểm tra sơ bộ ở client (server vẫn xác minh lại) — chỉ ép buộc khi thực sự nhập giá trị
   // mới, để trống = giữ nguyên PIN cũ (khớp hành vi mật khẩu ở trên).
@@ -22190,20 +22314,20 @@ function readUserFormState() {
     return null;
   }
 
-  return { editId, username, pass, pin, name, email, phone, posType, dept, jobTitle, groupId, vppExcludeGroupIds, perms, permOverrides };
+  return { editId, username, pass, pin, name, email, phone, posType, dept, jobTitle, groupIds, vppExcludeGroupIds, perms, permOverrides };
 }
 
 // Dựng 1 bản ghi người dùng MỚI từ state đã đọc — dùng chung cho lưu ngay (saveUser()) lẫn thêm vào
 // danh sách chờ (addUserToStagingList()). Kiểm tra trùng username với CẢ DB.users lẫn danh sách chờ
 // hiện tại (tránh 2 người trong cùng danh sách trùng tên đăng nhập nhau).
 function buildNewUserFromState(state) {
-  const { username, pass, pin, name, email, phone, posType, dept, jobTitle, groupId, vppExcludeGroupIds, perms, permOverrides } = state;
+  const { username, pass, pin, name, email, phone, posType, dept, jobTitle, groupIds, vppExcludeGroupIds, perms, permOverrides } = state;
   if (!pass) { alert('Vui lòng nhập mật khẩu cho người dùng mới!'); return null; }
   if (DB.users.some(u => u.username === username)) { alert('Tên đăng nhập đã tồn tại!'); return null; }
   if (pendingNewUsers.some(u => u.username === username)) { alert('Tên đăng nhập đã có trong danh sách chờ lưu!'); return null; }
   return {
     id: Date.now() + pendingNewUsers.length,
-    username, pass, ...(pin && { pin }), name, email, phone, posType, dept, jobTitle, perms, groupId, vppExcludeGroupIds, permOverrides
+    username, pass, ...(pin && { pin }), name, email, phone, posType, dept, jobTitle, perms, groupIds, vppExcludeGroupIds, permOverrides
   };
 }
 
@@ -22213,7 +22337,7 @@ async function saveUser(e) {
 
   const state = readUserFormState();
   if (!state) return;
-  const { editId, username, pass, pin, name, email, phone, posType, dept, jobTitle, groupId, vppExcludeGroupIds, perms, permOverrides } = state;
+  const { editId, username, pass, pin, name, email, phone, posType, dept, jobTitle, groupIds, vppExcludeGroupIds, perms, permOverrides } = state;
 
   // Chụp lại nguyên trạng DB.users TRƯỚC khi sửa trực tiếp trong mảng bên dưới — nếu server từ chối
   // lưu (409/400), phục hồi lại đúng bằng bản chụp này rồi render lại, tránh để "user"/DB.users bị sửa
@@ -22240,7 +22364,7 @@ async function saveUser(e) {
       // giá trị khác đi (vd DevTools bỏ qua thuộc tính disabled); server cũng ép lại lần nữa khi ghi
       // (routes/data.js) nên đây chỉ là lớp phòng vệ bổ sung, không phải chốt chặn duy nhất.
       user.perms = username === 'admin' ? { admin: true } : perms;
-      user.groupId = username === 'admin' ? null : groupId;
+      user.groupIds = username === 'admin' ? [] : groupIds;
       user.permOverrides = username === 'admin' ? null : permOverrides;
       user.vppExcludeGroupIds = username === 'admin' ? [] : vppExcludeGroupIds;
     }
@@ -22297,13 +22421,13 @@ function renderPendingNewUsersList() {
   section.classList.toggle('hidden', permFormMode !== 'USER' || pendingNewUsers.length === 0);
   if (countEl) countEl.textContent = pendingNewUsers.length;
   tbody.innerHTML = pendingNewUsers.map((u, idx) => {
-    const group = u.groupId ? DB.permGroups.find(g => g.id === u.groupId) : null;
+    const groups = (u.groupIds || []).map(id => DB.permGroups.find(g => g.id === id)).filter(Boolean);
     return `
     <tr class="border-b hover:bg-gray-50">
       <td class="border p-1.5 font-mono">${escapeHtml(u.username)}</td>
       <td class="border p-1.5">${escapeHtml(u.name)}</td>
       <td class="border p-1.5">${escapeHtml(u.dept)}</td>
-      <td class="border p-1.5">${escapeHtml(group ? group.name : '(quyền riêng)')}</td>
+      <td class="border p-1.5">${groups.length ? groups.map(g => escapeHtml(g.name)).join(', ') : '(quyền riêng)'}</td>
       <td class="border p-1.5 text-center">
         <button type="button" onclick="editPendingNewUser(${idx})" class="text-blue-600 font-bold hover:underline mr-2">Sửa</button>
         <button type="button" onclick="removePendingNewUser(${idx})" class="text-red-600 font-bold hover:underline">Xóa</button>
@@ -22339,10 +22463,10 @@ function editPendingNewUser(idx) {
   if (inferredPosType === 'STORE') document.getElementById('uStore').value = u.dept;
   else document.getElementById('uDept').value = u.dept;
   document.getElementById('uJobTitle').value = u.jobTitle || '';
-  document.getElementById('uPermGroup').value = u.groupId || '';
+  renderUPermGroupsChecklist(u.groupIds || []);
   populatePermsForm(u.perms);
   document.getElementById('uPin').value = u.pin || '';
-  updatePermGroupNote(!!u.groupId);
+  updatePermGroupNote((u.groupIds || []).length > 0);
   document.getElementById('uUsername').scrollIntoView({ behavior: 'smooth', block: 'center' });
 }
 
@@ -22388,7 +22512,7 @@ function resetUserForm() {
   document.getElementById('uPosType').value = 'HO';
   onUserPosTypeChange();
   document.getElementById('uJobTitle').value = '';
-  document.getElementById('uPermGroup').value = '';
+  renderUPermGroupsChecklist([]);
   updatePermGroupNote(false);
   renderUVppExcludeGroupsChecklist([]);
   // CẬP NHẬT: mặc định AN TOÀN cho user mới — không bật sẵn quyền xem/tạo liên phòng ban nào ở
@@ -22461,7 +22585,7 @@ function resetUserForm() {
 // đổi được quyền admin thật sự.
 function setAdminAccountPermsLocked(locked) {
   document.getElementById('adminPermsLockedNote')?.classList.toggle('hidden', !locked);
-  document.getElementById('uPermGroup').disabled = locked;
+  document.querySelectorAll('#uPermGroupsChecklist input[type=checkbox]').forEach(el => { el.disabled = locked; });
   document.querySelectorAll('#permFieldsContainer input, #permFieldsContainer select').forEach(el => { el.disabled = locked; });
 }
 
@@ -22487,14 +22611,18 @@ function editUser(id) {
   if (inferredPosType === 'STORE') document.getElementById('uStore').value = user.dept;
   else document.getElementById('uDept').value = user.dept;
   document.getElementById('uJobTitle').value = user.jobTitle || '';
-  document.getElementById('uPermGroup').value = user.groupId || '';
+  // User cũ chưa từng có groupIds (tạo trước khi có tính năng multi-select, chỉ có groupId đơn) — quy
+  // đổi tạm sang mảng 1 phần tử để form luôn hiển thị đúng (initDatabase() đã tự động di trú DB.users
+  // khi tải dữ liệu, đây chỉ là lớp phòng vệ bổ sung).
+  const userGroupIds = user.groupIds || (user.groupId ? [user.groupId] : []);
+  renderUPermGroupsChecklist(userGroupIds);
   renderUVppExcludeGroupsChecklist(user.vppExcludeGroupIds || []);
 
   // Perms của user cũ (nếu chưa từng được di trú vì lý do nào đó) sẽ được quy đổi tạm thời ở đây để
   // form luôn đọc đúng cấu trúc mới — initDatabase() đã tự động lưu lại bản di trú nên trường hợp
   // này thực tế chỉ là lớp phòng vệ bổ sung.
   populatePermsForm(user.perms);
-  updatePermGroupNote(!!user.groupId);
+  updatePermGroupNote(userGroupIds.length > 0);
   setAdminAccountPermsLocked(user.username === 'admin');
 }
 
@@ -22593,8 +22721,8 @@ function renderUsers() {
   const pageUsers = paginateList('user', filtered, 'renderUsers', 'người dùng');
 
   tbody.innerHTML = pageUsers.map(u => {
-    const group = u.groupId ? DB.permGroups.find(g => g.id === u.groupId) : null;
-    const hasOverrides = group && u.permOverrides && Object.keys(u.permOverrides).length > 0;
+    const groups = (u.groupIds || []).map(id => DB.permGroups.find(g => g.id === id)).filter(Boolean);
+    const hasOverrides = groups.length && u.permOverrides && Object.keys(u.permOverrides).length > 0;
     const isInactive = u.active === false;
     return `
     <tr class="hover:bg-gray-50 border-b${isInactive ? ' bg-gray-50 opacity-60' : ''}">
@@ -22607,9 +22735,9 @@ function renderUsers() {
       <td class="border p-2 text-xs">✉️ ${escapeHtml(u.email || 'N/A')}<br>📞 ${escapeHtml(u.phone || 'N/A')}</td>
       <td class="border p-2">${escapeHtml(u.dept)}</td>
       <td class="border p-2 text-xs">
-        ${group ? `<span class="inline-block bg-purple-100 text-purple-700 font-bold px-1.5 py-0.5 rounded mb-1">🗂️ ${escapeHtml(group.name)}</span>` : ''}
+        ${groups.map(g => `<span class="inline-block bg-purple-100 text-purple-700 font-bold px-1.5 py-0.5 rounded mb-1 mr-1">🗂️ ${escapeHtml(g.name)}</span>`).join('')}
         ${hasOverrides ? `<span class="inline-block bg-blue-100 text-blue-700 font-bold px-1.5 py-0.5 rounded mb-1 ml-1">+ tuỳ chỉnh riêng</span>` : ''}
-        ${group ? '<br>' : ''}
+        ${groups.length ? '<br>' : ''}
         ${summarizeUserPerms(u.perms)}
       </td>
       <td class="border p-2 text-center space-x-1">

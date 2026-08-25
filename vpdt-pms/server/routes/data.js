@@ -119,6 +119,36 @@ function mergePermsServer(basePerms, overrides) {
   return { ...(basePerms || {}), ...(overrides || {}) };
 }
 
+const APPROVER_AUTH_LEVEL_RANK_SERVER = { NONE: 0, PASSWORD: 1, PIN: 2, WEBAUTHN: 3 };
+
+// Gộp quyền NỀN của NHIỀU nhóm phân quyền — khớp Y HỆT mergeGroupsBasePerms() ở public/index.html
+// (2 cài đặt độc lập, PHẢI giữ giống hệt nếu sửa 1 bên). Kết hợp theo kiểu dữ liệu từng trường: boolean
+// OR, scope {all,depts} hợp (union), approverAuthLevel lấy mức CAO NHẤT trong các nhóm.
+function mergeGroupsBasePermsServer(groupsPerms) {
+  const list = (groupsPerms || []).filter(Boolean);
+  if (!list.length) return {};
+  const keys = new Set();
+  list.forEach(p => Object.keys(p || {}).forEach(k => keys.add(k)));
+  const result = {};
+  keys.forEach(key => {
+    const values = list.map(p => p?.[key]);
+    if (key === 'approverAuthLevel') {
+      result[key] = values.reduce((best, v) =>
+        (APPROVER_AUTH_LEVEL_RANK_SERVER[v] || 0) > (APPROVER_AUTH_LEVEL_RANK_SERVER[best] || 0) ? v : best, 'NONE');
+      return;
+    }
+    const sample = values.find(v => v !== undefined && v !== null);
+    if (typeof sample === 'boolean') {
+      result[key] = values.some(v => v === true);
+    } else if (sample && typeof sample === 'object' && !Array.isArray(sample) && ('all' in sample || 'depts' in sample)) {
+      result[key] = { all: values.some(v => v?.all === true), depts: [...new Set(values.flatMap(v => v?.depts || []))] };
+    } else {
+      result[key] = values[values.length - 1];
+    }
+  });
+  return result;
+}
+
 // Bắt buộc còn ít nhất 1 tài khoản perms.admin=true sau khi ghi — trước đây không có ràng buộc này ở
 // bất kỳ đâu: xoá tài khoản "admin" mặc định khỏi mảng, hoặc chính 1 admin tự bỏ tick quyền admin của
 // mình rồi lưu, đều được server chấp nhận vô điều kiện (chỉ cần người GỌI đang là admin tại thời điểm
@@ -190,9 +220,14 @@ async function prepareUsersForSave(incomingUsers, currentUsername) {
     // thuộc việc giao diện có khoá đúng hay không.
     if (record.username === 'admin') {
       record.perms = { admin: true };
-    } else if (record.groupId) {
-      const groupPerms = permGroupsById.get(record.groupId);
-      if (groupPerms) record.perms = mergePermsServer(groupPerms, record.permOverrides);
+    } else {
+      // Tương thích ngược: user cũ chỉ có "groupId" (số ít) trước khi hỗ trợ multi-select nhóm quyền.
+      const groupIds = record.groupIds || (record.groupId ? [record.groupId] : []);
+      const groupsPerms = groupIds.map(id => permGroupsById.get(id)).filter(Boolean);
+      if (groupsPerms.length) {
+        record.groupIds = groupIds;
+        record.perms = mergePermsServer(mergeGroupsBasePermsServer(groupsPerms), record.permOverrides);
+      }
     }
 
     if (u.pin) {
@@ -239,12 +274,17 @@ async function syncUsersWithPermGroupsChange(newGroups) {
   await withLockedAppDataValue('users', (currentUsers) => {
     const updated = (currentUsers || []).map(u => {
       if (u.username === 'admin') return { ...u, perms: { admin: true } };
-      if (!u.groupId) return u;
-      const groupPerms = groupPermsById.get(u.groupId);
-      if (groupPerms) return { ...u, perms: mergePermsServer(groupPerms, u.permOverrides) };
-      // Nhóm đã bị xoá khỏi mảng mới lưu -> gỡ liên kết, giữ nguyên quyền hiện tại làm quyền riêng
-      // (khớp đúng hành vi deletePermGroup() ở index.html).
-      return { ...u, groupId: null, permOverrides: null };
+      // Tương thích ngược: user cũ chỉ có "groupId" (số ít) trước khi hỗ trợ multi-select nhóm quyền.
+      const existingGroupIds = u.groupIds || (u.groupId ? [u.groupId] : []);
+      if (!existingGroupIds.length) return u;
+      const survivingGroupIds = existingGroupIds.filter(id => groupPermsById.has(id));
+      if (!survivingGroupIds.length) {
+        // TẤT CẢ nhóm đang gán đều đã bị xoá khỏi mảng mới lưu -> gỡ liên kết, giữ nguyên quyền hiện
+        // tại làm quyền riêng (khớp đúng hành vi deletePermGroup() ở index.html).
+        return { ...u, groupIds: [], permOverrides: null };
+      }
+      const groupsPerms = survivingGroupIds.map(id => groupPermsById.get(id));
+      return { ...u, groupIds: survivingGroupIds, perms: mergePermsServer(mergeGroupsBasePermsServer(groupsPerms), u.permOverrides) };
     });
     assertAtLeastOneAdmin(updated);
     return updated;
