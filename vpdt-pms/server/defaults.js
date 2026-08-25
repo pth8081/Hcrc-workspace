@@ -148,6 +148,16 @@ const DEFAULTS = {
   // cấu hình) = giữ nguyên hành vi cũ, hiện đủ toàn bộ DB.depts (xem getWorkflowParticipatingDepts()).
   workflowParticipatingDepts: [],
 
+  // "File Giá Mẫu" (Phê Duyệt Giá, Hỗ Trợ IT) — 1 hoặc nhiều bảng giá chuẩn admin nạp sẵn, dùng làm căn
+  // cứ đối chiếu tự động mỗi khi ai đó tải lên bảng giá đề xuất: khớp ĐÚNG mã hàng + giá cũ đề xuất khớp
+  // giá mẫu -> tự động bỏ qua bước duyệt phòng ban (xem lib/priceFileParser.js matchAgainstMaster() +
+  // itPriceApprovals.extraValidate ở lib/createValidation.js). Cho phép NHIỀU file (không chỉ 1) vì thực
+  // tế công ty có thể có nhiều bảng giá mẫu khác nhau (theo ngành hàng/đợt cập nhật/siêu thị...) — người
+  // đề xuất tự chọn đúng file mẫu áp dụng cho bảng giá của mình lúc nộp, không suy luận tự động theo
+  // phòng ban. items[] CHỈ đọc được ở server (GET /api/data lọc bỏ, xem routes/data.js) vì có thể lên
+  // tới hàng nghìn dòng — client chỉ thấy id/name/itemCount/ngày nạp để hiển thị danh sách quản lý.
+  itPriceMasterLists: [],
+
   workflows: [
     { id: 'WF_1STEP', name: 'Quy trình 1 bước (Sếp duyệt)', steps: [{ order: 1, name: 'Phê duyệt 1' }] },
     { id: 'WF_2STEP', name: 'Quy trình 2 bước (Trưởng phòng -> BGD)', steps: [{ order: 1, name: 'Trưởng Phòng' }, { order: 2, name: 'Ban Giám Đốc' }] },
