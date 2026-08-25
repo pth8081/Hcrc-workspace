@@ -3179,6 +3179,18 @@ table { display: block; overflow-x: auto; max-width: 100%; }
         </div>
       </div>
 
+      <div class="bg-orange-50 p-4 rounded border border-orange-200 space-y-3">
+        <h3 class="font-bold text-orange-900 text-sm flex items-center gap-1">🏬 Quản Lý Danh Mục Siêu Thị</h3>
+        <p class="text-[11px] text-gray-500 italic">Danh mục RIÊNG cho siêu thị — dùng khi tạo/sửa Người Dùng (chọn Vị Trí = "Siêu Thị") và module Đồng Phục. Nếu tên siêu thị đang nằm sẵn trong Danh Mục Phòng Ban ở trên, bấm "Chuyển" ở dòng đó thay vì gõ lại từ đầu.</p>
+        <form onsubmit="saveStore(event)" class="flex gap-2">
+          <input id="txtStoreName" placeholder="Tên siêu thị mới..." class="border p-1.5 rounded text-xs flex-1" required>
+          <button type="submit" class="bg-orange-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-orange-700">Thêm</button>
+        </form>
+        <div class="max-h-32 overflow-y-auto bg-white rounded border">
+          <ul id="storeList" class="divide-y text-xs"></ul>
+        </div>
+      </div>
+
       <div class="bg-emerald-50 p-4 rounded border border-emerald-200 space-y-3">
         <h3 class="font-bold text-emerald-900 text-sm flex items-center gap-1">🏷️ Quản Lý Phân Loại Tài Liệu</h3>
         <form onsubmit="saveCat(event)" class="flex gap-2">
@@ -3263,7 +3275,14 @@ table { display: block; overflow-x: auto; max-width: 100%; }
       <form onsubmit="saveUser(event)" class="space-y-4">
         <input id="editUserId" type="hidden">
 
-        <div id="userIdentityFields" class="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-8 gap-3 bg-white p-3 rounded border">
+        <div id="userIdentityFields" class="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-9 gap-3 bg-white p-3 rounded border">
+          <div>
+            <label class="block text-xs font-semibold text-gray-600 mb-1">Vị Trí</label>
+            <select id="uPosType" onchange="onUserPosTypeChange()" class="w-full border p-1.5 rounded text-xs bg-white">
+              <option value="HO">HO (Văn phòng)</option>
+              <option value="STORE">Siêu Thị</option>
+            </select>
+          </div>
           <div>
             <label class="block text-xs font-semibold text-gray-600 mb-1">Tên đăng nhập</label>
             <input id="uUsername" placeholder="username" class="w-full border p-1.5 rounded text-xs" required>
@@ -3284,9 +3303,13 @@ table { display: block; overflow-x: auto; max-width: 100%; }
             <label class="block text-xs font-semibold text-gray-600 mb-1">Số điện thoại</label>
             <input id="uPhone" type="tel" placeholder="0912345678" class="w-full border p-1.5 rounded text-xs" required>
           </div>
-          <div>
+          <div id="uDeptFieldWrap">
             <label class="block text-xs font-semibold text-gray-600 mb-1">Phòng Ban</label>
-            <select id="uDept" class="w-full border p-1.5 rounded text-xs" required></select>
+            <select id="uDept" class="w-full border p-1.5 rounded text-xs"></select>
+          </div>
+          <div id="uStoreFieldWrap" class="hidden">
+            <label class="block text-xs font-semibold text-gray-600 mb-1">Siêu Thị</label>
+            <select id="uStore" class="w-full border p-1.5 rounded text-xs"></select>
           </div>
           <div>
             <label class="block text-xs font-semibold text-gray-600 mb-1">Chức Danh</label>
@@ -3837,7 +3860,7 @@ table { display: block; overflow-x: auto; max-width: 100%; }
             <span id="permTreeBadge_uniform" class="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-gray-100 text-gray-500">0/0</span>
           </summary>
           <div class="p-3 pt-0 space-y-2">
-            <p class="text-[11px] text-gray-500 italic">Còn quyền vào module "Đồng Phục" ở mục 0 mới thấy được các màn dưới đây — module này KHÔNG mở sẵn cho toàn bộ nhân viên. "Hành Chính" tạo kỳ cấp phát và phân bổ xuống từng siêu thị; "Giám Đốc Siêu Thị" xác nhận đã nhận rồi cấp cho nhân viên (mỗi siêu thị = 1 phòng ban, chỉ xác nhận/cấp phát được cho đúng siêu thị mình).</p>
+            <p class="text-[11px] text-gray-500 italic">Còn quyền vào module "Đồng Phục" ở mục 0 mới thấy được các màn dưới đây — module này KHÔNG mở sẵn cho toàn bộ nhân viên. "Hành Chính" tạo kỳ cấp phát và phân bổ xuống từng siêu thị (chọn từ Danh Mục Siêu Thị ở tab Danh Mục); "Giám Đốc Siêu Thị" xác nhận đã nhận rồi cấp cho nhân viên (chỉ xác nhận/cấp phát được cho đúng siêu thị mình — theo Vị Trí đã chọn khi tạo tài khoản).</p>
             <div class="grid grid-cols-1 md:grid-cols-2 gap-2">
               <label class="flex items-center gap-2 text-teal-700 font-semibold cursor-pointer">
                 <input type="checkbox" id="pUniformManage"> 📦 Hành Chính (tạo kỳ cấp phát, phân bổ xuống siêu thị)
@@ -6709,6 +6732,7 @@ async function initDatabase(loggingInUser) {
     const data = await res.json();
 
     DB.depts = data.depts || [];
+    DB.stores = data.stores || [];
     DB.cats = data.cats || [];
     DB.deptAbbrs = data.deptAbbrs || {};
     DB.docCatAbbrs = data.docCatAbbrs || {};
@@ -9392,6 +9416,10 @@ function populateDropdowns() {
   const uDept = document.getElementById('uDept');
   if (uDept) {
     uDept.innerHTML = DB.depts.map(d => `<option value="${escapeHtml(d)}">${escapeHtml(d)}</option>`).join('');
+  }
+  const uStore = document.getElementById('uStore');
+  if (uStore) {
+    uStore.innerHTML = DB.stores.map(s => `<option value="${escapeHtml(s)}">${escapeHtml(s)}</option>`).join('');
   }
 
   const uJobTitle = document.getElementById('uJobTitle');
@@ -19316,9 +19344,63 @@ function renderDeptList() {
     <li class="p-2 flex justify-between items-center gap-2 hover:bg-gray-50">
       <span class="flex-1">${escapeHtml(d)}</span>
       <input value="${escapeHtml(getDeptAbbr(d))}" onchange="updateDeptAbbr('${escapeHtml(d)}', this.value)" title="Viết tắt (dùng sinh Mã Tài Liệu)" class="w-16 border rounded px-1 py-0.5 text-center text-[11px] font-mono uppercase">
+      <button onclick="moveDeptToStore('${escapeHtml(d)}')" title="Chuyển sang Danh Mục Siêu Thị" class="text-orange-600 font-bold hover:underline whitespace-nowrap">Chuyển</button>
       <button onclick="deleteDept('${escapeHtml(d)}')" class="text-red-500 font-bold hover:underline">Xóa</button>
     </li>
   `).join('');
+}
+
+// ===== Danh Mục Siêu Thị (DB.stores) — TÁCH RIÊNG khỏi DB.depts (xem defaults.js), cùng khuôn CRUD
+// đơn giản với Phòng Ban ở trên (không kiểm tra usage trước khi xóa) — dùng cho Vị Trí "Siêu Thị" ở
+// form Người Dùng và module Đồng Phục (xem renderUniformAllocationBlocks()). =====
+function saveStore(e) {
+  e.preventDefault();
+  const name = document.getElementById('txtStoreName').value.trim();
+  if (!name) return;
+  if (DB.stores.includes(name)) return alert('Siêu thị đã tồn tại!');
+  DB.stores.push(name);
+  syncStorage('stores');
+  logSystemAction('USER_MGM', 'ADD_STORE', `Thêm siêu thị mới [${name}]`, 'SUCCESS', name);
+  document.getElementById('txtStoreName').value = '';
+  renderStoreList();
+  populateDropdowns();
+}
+
+function deleteStore(name) {
+  if (!confirm(`Xóa siêu thị ${name}?`)) return;
+  DB.stores = DB.stores.filter(s => s !== name);
+  syncStorage('stores');
+  logSystemAction('USER_MGM', 'DELETE_STORE', `Xóa siêu thị [${name}]`, 'SUCCESS', name);
+  renderStoreList();
+  populateDropdowns();
+}
+
+function renderStoreList() {
+  const ul = document.getElementById('storeList');
+  if (!ul) return;
+  ul.innerHTML = DB.stores.map(s => `
+    <li class="p-2 flex justify-between items-center gap-2 hover:bg-gray-50">
+      <span class="flex-1">${escapeHtml(s)}</span>
+      <button onclick="deleteStore('${escapeHtml(s)}')" class="text-red-500 font-bold hover:underline">Xóa</button>
+    </li>
+  `).join('');
+}
+
+// Chuyển 1 tên đang nằm trong Danh Mục Phòng Ban sang Danh Mục Siêu Thị — CHỈ đổi danh mục sở hữu cái
+// tên (xóa khỏi DB.depts, thêm vào DB.stores GIỮ NGUYÊN chuỗi), KHÔNG đụng tới user.dept/item.dept của
+// bất kỳ user hay bản ghi nào đã có — mọi workflow/quyền scope dùng dept làm khoá tra cứu vẫn hoạt động
+// y hệt vì giá trị chuỗi không đổi, chỉ khác nơi hiển thị trong 2 danh mục quản lý.
+function moveDeptToStore(name) {
+  if (DB.stores.includes(name)) return alert('Tên này đã có trong Danh Mục Siêu Thị!');
+  if (!confirm(`Chuyển "${name}" từ Danh Mục Phòng Ban sang Danh Mục Siêu Thị?\n\nCác user/bản ghi đang thuộc phòng ban này sẽ KHÔNG bị ảnh hưởng — chỉ đổi nơi hiển thị trong danh mục quản lý.`)) return;
+  DB.depts = DB.depts.filter(d => d !== name);
+  DB.stores.push(name);
+  syncStorage('depts');
+  syncStorage('stores');
+  logSystemAction('USER_MGM', 'MOVE_DEPT_TO_STORE', `Chuyển [${name}] từ Danh Mục Phòng Ban sang Danh Mục Siêu Thị`, 'SUCCESS', name);
+  renderDeptList();
+  renderStoreList();
+  populateDropdowns();
 }
 
 // Danh sách Chức Danh — cùng mô hình với Phòng Ban/Phân Loại Tài Liệu ở trên (danh sách chuỗi phẳng,
@@ -19883,7 +19965,10 @@ function toggleUserPermFormMode(mode) {
   // uPassword KHÔNG nằm trong danh sách này — để trống khi SỬA user nghĩa là giữ nguyên mật khẩu cũ
   // (server không còn gửi mật khẩu hiện tại về để hiển thị lại), chỉ bắt buộc nhập khi TẠO MỚI, việc
   // này được kiểm tra riêng trong saveUser() vì phụ thuộc editUserId chứ không phải mode USER/GROUP.
-  ['uUsername', 'uFullName', 'uEmail', 'uPhone', 'uDept'].forEach(id => {
+  // uDept/uStore KHÔNG nằm trong danh sách này — chỉ 1 trong 2 field hiện tại 1 thời điểm (tuỳ Vị Trí,
+  // xem onUserPosTypeChange()), required tĩnh sẽ chặn submit nhầm ở field đang ẩn; kiểm tra bắt buộc dồn
+  // hết vào readUserFormState() (đọc đúng field đang hiện theo posType).
+  ['uUsername', 'uFullName', 'uEmail', 'uPhone'].forEach(id => {
     document.getElementById(id).required = (mode === 'USER');
   });
   document.getElementById('btnSavePermForm').innerText = mode === 'GROUP' ? 'Lưu Nhóm Phân Quyền' : 'Lưu Người Dùng & Phân Quyền';
@@ -22063,6 +22148,16 @@ function cancelPermFormEdit() {
 // Đọc + xác thực phần DỮ LIỆU CHUNG của form Người dùng (dùng cho cả sửa người có sẵn, lưu ngay 1
 // người mới, và thêm 1 người mới vào danh sách chờ — xem saveUser()/addUserToStagingList()). Trả về
 // null (đã tự alert lý do) nếu có lỗi.
+// Vị Trí (HO/Siêu Thị) — chọn HO hiện select Phòng Ban (nguồn DB.depts) + ẩn Siêu Thị, chọn Siêu Thị
+// thì ngược lại. Dù chọn nguồn nào, chỉ 1 giá trị chuỗi duy nhất được ghi vào user.dept khi lưu (xem
+// readUserFormState()) — mọi workflow/quyền scope hiện có dùng user.dept làm khoá tra cứu không cần
+// biết/quan tâm giá trị đó đến từ danh mục nào.
+function onUserPosTypeChange() {
+  const posType = document.getElementById('uPosType').value;
+  document.getElementById('uDeptFieldWrap').classList.toggle('hidden', posType !== 'HO');
+  document.getElementById('uStoreFieldWrap').classList.toggle('hidden', posType !== 'STORE');
+}
+
 function readUserFormState() {
   const editId = document.getElementById('editUserId').value;
   const username = document.getElementById('uUsername').value.trim();
@@ -22071,7 +22166,9 @@ function readUserFormState() {
   const name = document.getElementById('uFullName').value.trim();
   const email = document.getElementById('uEmail').value.trim();
   const phone = document.getElementById('uPhone').value.trim();
-  const dept = document.getElementById('uDept').value;
+  const posType = document.getElementById('uPosType').value;
+  const dept = posType === 'STORE' ? document.getElementById('uStore').value : document.getElementById('uDept').value;
+  if (!dept) { alert(posType === 'STORE' ? 'Vui lòng chọn Siêu Thị!' : 'Vui lòng chọn Phòng Ban!'); return null; }
   const jobTitle = document.getElementById('uJobTitle').value || null;
   const groupId = document.getElementById('uPermGroup').value || null;
   const vppExcludeGroupIds = currentEditingUserVppExcludeGroupIds();
@@ -22093,20 +22190,20 @@ function readUserFormState() {
     return null;
   }
 
-  return { editId, username, pass, pin, name, email, phone, dept, jobTitle, groupId, vppExcludeGroupIds, perms, permOverrides };
+  return { editId, username, pass, pin, name, email, phone, posType, dept, jobTitle, groupId, vppExcludeGroupIds, perms, permOverrides };
 }
 
 // Dựng 1 bản ghi người dùng MỚI từ state đã đọc — dùng chung cho lưu ngay (saveUser()) lẫn thêm vào
 // danh sách chờ (addUserToStagingList()). Kiểm tra trùng username với CẢ DB.users lẫn danh sách chờ
 // hiện tại (tránh 2 người trong cùng danh sách trùng tên đăng nhập nhau).
 function buildNewUserFromState(state) {
-  const { username, pass, pin, name, email, phone, dept, jobTitle, groupId, vppExcludeGroupIds, perms, permOverrides } = state;
+  const { username, pass, pin, name, email, phone, posType, dept, jobTitle, groupId, vppExcludeGroupIds, perms, permOverrides } = state;
   if (!pass) { alert('Vui lòng nhập mật khẩu cho người dùng mới!'); return null; }
   if (DB.users.some(u => u.username === username)) { alert('Tên đăng nhập đã tồn tại!'); return null; }
   if (pendingNewUsers.some(u => u.username === username)) { alert('Tên đăng nhập đã có trong danh sách chờ lưu!'); return null; }
   return {
     id: Date.now() + pendingNewUsers.length,
-    username, pass, ...(pin && { pin }), name, email, phone, dept, jobTitle, perms, groupId, vppExcludeGroupIds, permOverrides
+    username, pass, ...(pin && { pin }), name, email, phone, posType, dept, jobTitle, perms, groupId, vppExcludeGroupIds, permOverrides
   };
 }
 
@@ -22116,7 +22213,7 @@ async function saveUser(e) {
 
   const state = readUserFormState();
   if (!state) return;
-  const { editId, username, pass, pin, name, email, phone, dept, jobTitle, groupId, vppExcludeGroupIds, perms, permOverrides } = state;
+  const { editId, username, pass, pin, name, email, phone, posType, dept, jobTitle, groupId, vppExcludeGroupIds, perms, permOverrides } = state;
 
   // Chụp lại nguyên trạng DB.users TRƯỚC khi sửa trực tiếp trong mảng bên dưới — nếu server từ chối
   // lưu (409/400), phục hồi lại đúng bằng bản chụp này rồi render lại, tránh để "user"/DB.users bị sửa
@@ -22135,6 +22232,7 @@ async function saveUser(e) {
       user.name = name;
       user.email = email;
       user.phone = phone;
+      user.posType = posType;
       user.dept = dept;
       user.jobTitle = jobTitle;
       // Tài khoản "admin" luôn toàn quyền, không cho sửa qua form (khối cây phân quyền đã bị khoá ở
@@ -22235,7 +22333,11 @@ function editPendingNewUser(idx) {
   document.getElementById('uFullName').value = u.name;
   document.getElementById('uEmail').value = u.email || '';
   document.getElementById('uPhone').value = u.phone || '';
-  document.getElementById('uDept').value = u.dept;
+  const inferredPosType = u.posType || (DB.stores.includes(u.dept) ? 'STORE' : 'HO');
+  document.getElementById('uPosType').value = inferredPosType;
+  onUserPosTypeChange();
+  if (inferredPosType === 'STORE') document.getElementById('uStore').value = u.dept;
+  else document.getElementById('uDept').value = u.dept;
   document.getElementById('uJobTitle').value = u.jobTitle || '';
   document.getElementById('uPermGroup').value = u.groupId || '';
   populatePermsForm(u.perms);
@@ -22283,6 +22385,8 @@ function resetUserForm() {
   document.getElementById('uFullName').value = '';
   document.getElementById('uEmail').value = '';
   document.getElementById('uPhone').value = '';
+  document.getElementById('uPosType').value = 'HO';
+  onUserPosTypeChange();
   document.getElementById('uJobTitle').value = '';
   document.getElementById('uPermGroup').value = '';
   updatePermGroupNote(false);
@@ -22374,7 +22478,14 @@ function editUser(id) {
   document.getElementById('uFullName').value = user.name;
   document.getElementById('uEmail').value = user.email || '';
   document.getElementById('uPhone').value = user.phone || '';
-  document.getElementById('uDept').value = user.dept;
+  // User cũ chưa từng có posType (tạo trước khi có tính năng này): suy luận theo DB.stores hiện có —
+  // nếu tên dept của họ đã được admin chuyển/thêm vào Danh Mục Siêu Thị thì coi là Siêu Thị, ngược lại
+  // mặc định HO. Không cần chạy migrate dữ liệu hàng loạt cho user cũ.
+  const inferredPosType = user.posType || (DB.stores.includes(user.dept) ? 'STORE' : 'HO');
+  document.getElementById('uPosType').value = inferredPosType;
+  onUserPosTypeChange();
+  if (inferredPosType === 'STORE') document.getElementById('uStore').value = user.dept;
+  else document.getElementById('uDept').value = user.dept;
   document.getElementById('uJobTitle').value = user.jobTitle || '';
   document.getElementById('uPermGroup').value = user.groupId || '';
   renderUVppExcludeGroupsChecklist(user.vppExcludeGroupIds || []);
@@ -27359,7 +27470,7 @@ function renderUniformAllocationBlocks() {
       <div class="flex items-center justify-between gap-2">
         <select onchange="updateUniformAllocDept(${bIdx}, this.value)" class="border p-1.5 rounded text-xs bg-white flex-1">
           <option value="">-- Chọn siêu thị --</option>
-          ${DB.depts.filter(d => d === block.dept || !chosenDepts.includes(d)).map(d => `<option value="${escapeHtml(d)}" ${d === block.dept ? 'selected' : ''}>${escapeHtml(d)}</option>`).join('')}
+          ${DB.stores.filter(d => d === block.dept || !chosenDepts.includes(d)).map(d => `<option value="${escapeHtml(d)}" ${d === block.dept ? 'selected' : ''}>${escapeHtml(d)}</option>`).join('')}
         </select>
         <button type="button" onclick="removeUniformAllocationBlock(${bIdx})" class="text-red-600 hover:text-red-800 text-xs font-bold whitespace-nowrap">✕ Bỏ siêu thị này</button>
       </div>

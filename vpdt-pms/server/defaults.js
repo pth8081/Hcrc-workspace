@@ -10,6 +10,15 @@ const DEFAULT_MAP = {
 const DEFAULTS = {
   depts: ['Phòng Nhân Sự', 'Phòng Kế Toán', 'Phòng IT', 'Ban Giám Đốc'],
 
+  // Danh Mục Siêu Thị — TÁCH RIÊNG khỏi depts ở trên (trước đây siêu thị bị gộp chung vào depts, dùng
+  // chung 1 danh sách phẳng với phòng ban thật của khối văn phòng — xem admin UI "🏬 Quản Lý Danh Mục
+  // Siêu Thị" + nút "Chuyển sang Danh Mục Siêu Thị" ở mỗi dòng Phòng Ban để di chuyển các tên đã có sẵn
+  // sang đây, không đụng tới user/bản ghi cũ). user.dept vẫn LUÔN là 1 field chuỗi DUY NHẤT dùng chung
+  // cho mọi workflow/quyền scope hiện có — giá trị chỉ khác nguồn chọn (DB.depts nếu Vị Trí = HO,
+  // DB.stores nếu Vị Trí = Siêu Thị, xem uPosType/onUserPosTypeChange() ở index.html). Module Đồng Phục
+  // (uniformPeriods) là nơi DUY NHẤT hiện đang dùng danh mục này làm nguồn chọn siêu thị.
+  stores: [],
+
   cats: ['Quy trình / Quy định', 'Báo cáo tài chính', 'Hợp đồng / Hồ sơ'],
 
   // Viết tắt Phòng ban/Phân loại Tài liệu — dùng để tự sinh Mã Tài Liệu (xem generateDocCode() trong

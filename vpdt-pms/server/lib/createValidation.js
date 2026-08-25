@@ -1268,14 +1268,16 @@ const CREATE_MODULE_CONFIGS = {
       payload.name = String(payload.name).trim().slice(0, 200);
       payload.note = (payload.note || '').trim().slice(0, 1000);
 
-      const validDepts = new Set(appData?.depts || []);
+      // Đối chiếu với Danh Mục Siêu Thị (DB.stores) — TÁCH RIÊNG khỏi DB.depts (xem defaults.js), vì
+      // module này vốn chỉ dùng cho siêu thị chứ không phải phòng ban khối văn phòng.
+      const validStores = new Set(appData?.stores || []);
       const rawAllocations = Array.isArray(payload.allocations) ? payload.allocations : [];
       if (!rawAllocations.length) throw new CreateError(400, 'Vui lòng phân bổ cho ít nhất 1 siêu thị');
       const allocations = [];
       for (const raw of rawAllocations) {
         const dept = String(raw?.dept || '').trim();
         if (!dept) continue;
-        if (!validDepts.has(dept)) throw new CreateError(400, `Phòng ban/siêu thị không hợp lệ: ${dept}`);
+        if (!validStores.has(dept)) throw new CreateError(400, `Siêu thị không hợp lệ: ${dept}`);
         const items = sanitizeUniformItems(raw?.items);
         allocations.push({
           id: Date.now() + allocations.length,
