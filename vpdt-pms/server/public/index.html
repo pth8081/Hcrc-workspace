@@ -260,6 +260,12 @@ table { display: block; overflow-x: auto; max-width: 100%; }
 .loginpage-btn:hover { transform: translateY(-1px); box-shadow: 0 14px 26px -10px rgba(29,78,216,.75); }
 .loginpage-btn:disabled { opacity: .65; cursor: not-allowed; transform: none; }
 .loginpage-btn svg { width: 16px; height: 16px; }
+.loginpage-spinner {
+  display: inline-block; width: 15px; height: 15px; flex-shrink: 0;
+  border: 2px solid rgba(255,255,255,.45); border-top-color: #fff; border-radius: 50%;
+  animation: loginpage-spin .7s linear infinite;
+}
+@keyframes loginpage-spin { to { transform: rotate(360deg); } }
 
 .loginpage-captcha-row { display: flex; align-items: center; gap: 8px; margin-bottom: 9px; }
 .loginpage-captcha-img { flex: 1; border: 1.5px solid #e3e8f2; border-radius: 10px; overflow: hidden; line-height: 0; background: #eef0f7; }
@@ -3285,7 +3291,7 @@ table { display: block; overflow-x: auto; max-width: 100%; }
             <span id="permTreeBadge_module" class="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-gray-100 text-gray-500">0/0</span>
           </summary>
           <div class="p-3 pt-0 space-y-2">
-            <p class="text-[11px] text-gray-500 italic">Công tắc BẬT/TẮT quyền vào từng module, độc lập với quyền Admin. Tắt module nào thì người dùng không vào được module đó, dù có quyền chi tiết bên dưới. Quyền Admin luôn vào được mọi module. Module nào có nhiều phân hệ con (vd Văn phòng) sẽ tự hiện thêm checkbox con bên dưới để cấp quyền từng phần.</p>
+            <p class="text-[11px] text-gray-500 italic">Công tắc BẬT/TẮT quyền vào từng module, độc lập với quyền Admin. Tắt module nào thì người dùng không vào được module đó, dù có quyền chi tiết bên dưới. Quyền Admin luôn vào được mọi module. Quyền chi tiết làm được gì bên trong từng module (vd Mua Bán/Sửa Chữa/Đầu Tư, Thanh Toán, Văn Phòng Phẩm, Báo Cáo Định Kỳ...) cấu hình riêng ở các khối 1-16 bên dưới.</p>
             <div id="moduleAccessCheckboxes" class="grid grid-cols-2 md:grid-cols-5 gap-2"></div>
           </div>
         </details>
@@ -3539,7 +3545,18 @@ table { display: block; overflow-x: auto; max-width: 100%; }
             <span id="permTreeBadge_office" class="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-gray-100 text-gray-500">0/0</span>
           </summary>
           <div class="p-3 pt-0 space-y-2">
-            <p class="text-[11px] text-gray-500 italic">Dùng chung cho cả 3 phân hệ VP; bật/tắt từng phân hệ cụ thể ở mục 0.</p>
+            <p class="text-[11px] text-gray-500 italic">Dùng chung cho cả 3 phân hệ VP; bật/tắt từng phân hệ cụ thể ngay dưới đây.</p>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-2 pb-2 border-b">
+              <label class="flex items-center gap-2 text-teal-700 font-semibold cursor-pointer text-[11px]">
+                <input type="checkbox" id="pOfficeBuy"> 🛒 Mua Bán
+              </label>
+              <label class="flex items-center gap-2 text-teal-700 font-semibold cursor-pointer text-[11px]">
+                <input type="checkbox" id="pOfficeFix"> 🔧 Sửa Chữa
+              </label>
+              <label class="flex items-center gap-2 text-teal-700 font-semibold cursor-pointer text-[11px]">
+                <input type="checkbox" id="pOfficeInvest"> 📈 Đầu Tư
+              </label>
+            </div>
             <div class="grid grid-cols-3 gap-3">
               <div>
                 <div class="flex justify-between items-center mb-1">
@@ -3647,7 +3664,10 @@ table { display: block; overflow-x: auto; max-width: 100%; }
             <span id="permTreeBadge_payment" class="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-gray-100 text-gray-500">0/0</span>
           </summary>
           <div class="p-3 pt-0 space-y-2">
-            <p class="text-[11px] text-gray-500 italic">Quản lý toàn bộ module "Thanh toán" (mục con của "Tổng Hợp"): tạo đề nghị thủ công, sửa/duyệt/yêu cầu bổ sung/xoá đề nghị, xác nhận từng đợt đã thanh toán. Cũng là quyền tải "Tài liệu ký" + bấm nút "Thanh toán" ở Hợp đồng/Mua Bán/Sửa Chữa/Đầu Tư (dùng chung phạm vi phòng ban với quyền Tạo mới của từng module đó). Bật/tắt ở mục "0. Quyền Truy Cập Module" phía trên (lồng dưới "Tổng Hợp").</p>
+            <p class="text-[11px] text-gray-500 italic">Quản lý toàn bộ module "Thanh toán" (mục con của "Tổng Hợp"): tạo đề nghị thủ công, sửa/duyệt/yêu cầu bổ sung/xoá đề nghị, xác nhận từng đợt đã thanh toán. Cũng là quyền tải "Tài liệu ký" + bấm nút "Thanh toán" ở Hợp đồng/Mua Bán/Sửa Chữa/Đầu Tư (dùng chung phạm vi phòng ban với quyền Tạo mới của từng module đó).</p>
+            <label class="flex items-center gap-2 text-emerald-700 font-semibold cursor-pointer text-[11px]">
+              <input type="checkbox" id="pPaymentManage"> 💰 Quản lý Thanh Toán (toàn công ty)
+            </label>
           </div>
         </details>
 
@@ -3667,7 +3687,10 @@ table { display: block; overflow-x: auto; max-width: 100%; }
             <span id="permTreeBadge_vpp" class="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-gray-100 text-gray-500">0/0</span>
           </summary>
           <div class="p-3 pt-0 space-y-2">
-            <p class="text-[11px] text-gray-500 italic">Mọi người đã đăng nhập (còn quyền vào module "Văn Phòng Phẩm" ở mục 0) đều tự đăng ký được ở kỳ đang mở. Quyền dưới đây dành riêng cho người QUẢN LÝ: tạo/kết thúc kỳ đăng ký, tải lên danh mục, xem báo cáo tổng hợp toàn công ty theo phòng ban & theo mặt hàng. Bật/tắt ở mục "0. Quyền Truy Cập Module" phía trên (lồng dưới "Văn Phòng Phẩm").</p>
+            <p class="text-[11px] text-gray-500 italic">Mọi người đã đăng nhập (còn quyền vào module "Văn Phòng Phẩm" ở mục 0) đều tự đăng ký được ở kỳ đang mở. Quyền dưới đây dành riêng cho người QUẢN LÝ: tạo/kết thúc kỳ đăng ký, tải lên danh mục, xem báo cáo tổng hợp toàn công ty theo phòng ban & theo mặt hàng.</p>
+            <label class="flex items-center gap-2 text-emerald-700 font-semibold cursor-pointer text-[11px]">
+              <input type="checkbox" id="pVppManage"> ✅ Quản lý (tạo/kết thúc kỳ, báo cáo tổng hợp)
+            </label>
           </div>
         </details>
 
@@ -3677,7 +3700,18 @@ table { display: block; overflow-x: auto; max-width: 100%; }
             <span id="permTreeBadge_periodicReport" class="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-gray-100 text-gray-500">0/0</span>
           </summary>
           <div class="p-3 pt-0 space-y-3">
-            <p class="text-[11px] text-gray-500 italic">Còn quyền vào module "Báo Cáo Định Kỳ" ở mục 0 mới thấy được các màn dưới đây. "Quản lý" = tạo/đóng kỳ báo cáo. "Tổng hợp" = quyền CHUNG, tổng hợp/sửa/phát hành được MỌI kỳ (không phân biệt ai tạo kỳ đó). "Nộp báo cáo" = ai KHÔNG có quyền này thì không nộp được — có quyền rồi thì CHỈ nộp được cho đúng phòng ban của mình, không chọn phòng ban khác (khoá cứng ở server). Xem danh sách báo cáo vẫn luôn xem được (không cần quyền riêng), nhưng chỉ xem trong phạm vi phòng ban mình — trừ ai có "Quản lý"/"Tổng hợp" ở trên thì xem được mọi phòng ban. Bật/tắt 3 quyền này ở mục "0. Quyền Truy Cập Module" phía trên (lồng dưới "Báo Cáo Định Kỳ").</p>
+            <p class="text-[11px] text-gray-500 italic">Còn quyền vào module "Báo Cáo Định Kỳ" ở mục 0 mới thấy được các màn dưới đây. "Quản lý" = tạo/đóng kỳ báo cáo. "Tổng hợp" = quyền CHUNG, tổng hợp/sửa/phát hành được MỌI kỳ (không phân biệt ai tạo kỳ đó). "Nộp báo cáo" = ai KHÔNG có quyền này thì không nộp được — có quyền rồi thì CHỈ nộp được cho đúng phòng ban của mình, không chọn phòng ban khác (khoá cứng ở server). Xem danh sách báo cáo vẫn luôn xem được (không cần quyền riêng), nhưng chỉ xem trong phạm vi phòng ban mình — trừ ai có "Quản lý"/"Tổng hợp" ở trên thì xem được mọi phòng ban.</p>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-2">
+              <label class="flex items-center gap-2 text-sky-700 font-semibold cursor-pointer text-[11px]">
+                <input type="checkbox" id="pReportManage"> ✅ Quản lý kỳ báo cáo (tạo/đóng kỳ sớm)
+              </label>
+              <label class="flex items-center gap-2 text-sky-700 font-semibold cursor-pointer text-[11px]">
+                <input type="checkbox" id="pReportAggregate"> ✅ Tổng hợp báo cáo (chọn, merge, sửa, phát hành)
+              </label>
+              <label class="flex items-center gap-2 text-sky-700 font-semibold cursor-pointer text-[11px]">
+                <input type="checkbox" id="pReportEntryCreate"> ✅ Nộp báo cáo (đúng phòng ban mình)
+              </label>
+            </div>
           </div>
         </details>
 
@@ -5333,26 +5367,15 @@ function scopeHasAny(user, scope) {
 }
 
 // Danh sách các module nghiệp vụ có công tắc "Quyền Truy Cập Module" độc lập (không cần quyền
-// admin) — admin bật/tắt riêng cho từng người dùng ở khối "0. Quyền Truy Cập Module".
-// `subModules` (tuỳ chọn): module nào có nhiều phân hệ con/tab cần cấp quyền riêng lẻ (vd Văn phòng
-// có Mua Bán/Sửa Chữa/Đầu Tư/Thanh Toán, Văn Phòng Phẩm có tab Quản lý, Báo Cáo Định Kỳ có 3 tab Quản
-// lý/Tổng hợp/Nộp báo cáo) thì khai báo ở đây — mục "0. Quyền Truy Cập Module" sẽ TỰ ĐỘNG lồng các
-// checkbox con này ngay dưới module cha (xem renderModuleAccessCheckboxes(), áp dụng được cho CẢ module
-// gốc lẫn module con có field "parent" như "vpp"), không cần đặt rải rác ở chỗ khác trong form nữa —
-// module mới thêm sau này chỉ cần khai báo subModules ở đây là tự có đủ checkbox, không phải sửa thêm
-// gì trong renderModuleAccessCheckboxes()/readModuleAccessFromForm()/populateModuleAccessForm(). Các
-// khối quyền chi tiết cũ (mục 10/12/13) chỉ còn giữ đoạn giải thích, checkbox thật đã chuyển hẳn về đây
-// (KHÔNG lặp lại ở 2 nơi — trùng "id" trong HTML là lỗi). `id`/`checkedByDefault` khớp đúng với key
-// trong đối tượng perms của user (vd perms.officeBuy, perms.paymentManage, perms.vppManage,
-// perms.reportManage/reportAggregate/reportEntryCreate) — collectPermsFromForm()/populatePermsForm()
-// đọc/ghi theo id này, không phụ thuộc vị trí trong DOM.
+// admin) — admin bật/tắt riêng cho từng người dùng ở khối "0. Quyền Truy Cập Module". Đây CHỈ là công
+// tắc VÀO ĐƯỢC MODULE hay không — quyền chi tiết làm được gì bên trong (vd officeBuy/paymentManage/
+// vppManage/reportManage...) nằm hẳn ở các khối 1-16 trong cây phân quyền, không khai ở đây nữa (trước
+// đây có cơ chế `subModules` lồng checkbox quyền ngay dưới mục 0, đã bỏ để tránh 2 nơi cấu hình cho
+// cùng 1 quyền — xem lịch sử ở git log nếu cần đối chiếu).
 // "car"/"meeting"/"vpp" mang field "parent" = con của "hanhchinh" (module Hành Chính) — hasModuleAccess()
 // đọc field này để khoá CẢ 3 module con cùng lúc khi tắt quyền vào module cha, dù mỗi con vẫn giữ
 // checkbox pModuleAccess_<key> riêng (đọc/ghi không đổi, xem readModuleAccessFromForm()/
 // populateModuleAccessForm() — 2 hàm đó lặp phẳng qua TOÀN BỘ mảng này bất kể lồng cha/con hay không).
-// Khác "subModules" (chỉ là checkbox quyền phụ dạng boolean thường, KHÔNG phải khoá module riêng, và
-// KHÔNG được hasModuleAccess() đọc tới) — "car"/"meeting"/"vpp" vẫn là module ĐỘC LẬP đầy đủ (nav/
-// section/quyền chi tiết riêng), chỉ thêm 1 lớp khoá cha bên trên.
 const BUSINESS_MODULES = [
   { key: 'doc', label: 'Tài Liệu' },
   { key: 'submission', label: 'Văn Bản Trình / Tờ Trình' },
@@ -5363,31 +5386,23 @@ const BUSINESS_MODULES = [
   { key: 'hanhchinh', label: 'Hành Chính' },
   { key: 'meeting', label: 'Đặt Phòng Họp', parent: 'hanhchinh' },
   { key: 'car', label: 'Đăng Ký Xe', parent: 'hanhchinh' },
-  { key: 'vpp', label: 'Văn Phòng Phẩm', parent: 'hanhchinh', subModules: [
-    { id: 'pVppManage', label: '✅ Quản lý (tạo/kết thúc kỳ, báo cáo tổng hợp)', checkedByDefault: false }
-  ] },
-  // "Đồng Phục" — quyền thật nằm ở uniformManage/uniformStoreManage (khối riêng cây phân quyền, cùng
-  // khuôn itPriceProposeCreate/itManage của Hỗ Trợ IT), KHÔNG khai subModules ở đây vì module này không
-  // mở sẵn cho ai — 2 quyền trên vừa quyết định ĐƯỢC LÀM GÌ vừa quyết định VÀO ĐƯỢC MÀN NÀO (ai không có
-  // cả 2 quyền thì vào module cũng không thấy nội dung nào).
+  // "Văn Phòng Phẩm" — quyền quản lý thật nằm ở pVppManage (khối 12 cây phân quyền), không khai ở đây.
+  { key: 'vpp', label: 'Văn Phòng Phẩm', parent: 'hanhchinh' },
+  // "Đồng Phục" — quyền thật nằm ở uniformManage/uniformStoreManage (khối 16 cây phân quyền, cùng
+  // khuôn itPriceProposeCreate/itManage của Hỗ Trợ IT) — module này không mở sẵn cho ai, 2 quyền trên
+  // vừa quyết định ĐƯỢC LÀM GÌ vừa quyết định VÀO ĐƯỢC MÀN NÀO (ai không có cả 2 quyền thì vào module
+  // cũng không thấy nội dung nào).
   { key: 'uniform', label: 'Đồng Phục', parent: 'hanhchinh' },
-  { key: 'office', label: 'Tổng Hợp', subModules: [
-    { id: 'pOfficeBuy', label: '🛒 Mua Bán', checkedByDefault: true },
-    { id: 'pOfficeFix', label: '🔧 Sửa Chữa', checkedByDefault: true },
-    { id: 'pOfficeInvest', label: '📈 Đầu Tư', checkedByDefault: false },
-    { id: 'pPaymentManage', label: '💰 Quản lý Thanh Toán (toàn công ty)', checkedByDefault: false }
-  ] },
+  // "Tổng Hợp" — quyền officeBuy/officeFix/officeInvest/paymentManage nằm ở khối 7/10 cây phân quyền.
+  { key: 'office', label: 'Tổng Hợp' },
   { key: 'reports', label: 'Báo Cáo' },
   // "Hỗ Trợ IT" — mở cho TOÀN BỘ nhân viên (giống Công Việc/Tài Liệu, admin có thể tắt riêng qua
   // checkbox này nếu cần) — 2 sub-module con (Phê Duyệt Giá/Hỗ Trợ Yêu Cầu) không cần khoá riêng ở
   // đây vì quyền thật nằm ở itPriceProposeCreate/itManage (khối 13 cây phân quyền), chỉ chặn AI
   // ĐƯỢC TẠO/XỬ LÝ chứ không chặn ai được VÀO module.
   { key: 'itSupport', label: 'Hỗ Trợ IT' },
-  { key: 'periodicReport', label: 'Báo Cáo Định Kỳ', subModules: [
-    { id: 'pReportManage', label: '✅ Quản lý kỳ báo cáo (tạo/đóng kỳ sớm)', checkedByDefault: false },
-    { id: 'pReportAggregate', label: '✅ Tổng hợp báo cáo (chọn, merge, sửa, phát hành)', checkedByDefault: false },
-    { id: 'pReportEntryCreate', label: '✅ Nộp báo cáo (đúng phòng ban mình)', checkedByDefault: false }
-  ] }
+  // "Báo Cáo Định Kỳ" — quyền pReportManage/pReportAggregate/pReportEntryCreate nằm ở khối 13.
+  { key: 'periodicReport', label: 'Báo Cáo Định Kỳ' }
 ];
 
 // Các loại Văn bản trình / Tờ trình cố định (khớp đúng option value ở #subType) — dùng làm khoá để
@@ -7308,7 +7323,18 @@ async function refreshCaptcha(focusAfter = false) {
 }
 refreshCaptcha();
 
+// Chặn gọi chồng /api/auth/login — trước đây chỉ disable nút Đăng nhập (btn.disabled = true) ngay khi
+// login() bắt đầu chạy, nhưng KHÔNG khoá luôn ô nhập mã CAPTCHA/nút "↻ Lấy mã khác": nếu người dùng sốt
+// ruột (round-trip bcrypt + SQL Server có độ trễ thật, cảm giác "chậm") tự bấm "↻" TRONG LÚC request cũ
+// còn đang treo, biến `captchaId` toàn cục bị đè bởi ảnh MỚI trong khi request cũ vẫn đang gửi answer
+// khớp với ảnh CŨ — tới khi request cũ trả lời xong, khối finally lại refresh() THÊM 1 LẦN NỮA (đọc
+// đúng captchaId hiện tại, đã bị đổi), khiến ảnh đổi liên tục "một mình" và người dùng cứ phải đoán lại
+// mã theo ảnh mới nhất. `loginInFlight` chặn đứng khả năng 1 lượt login() thứ 2 chạy chồng lên lượt đầu
+// (dù do double-click/Enter dồn dập hay do tự bấm refresh) — xem thêm phần khoá cả captcha widget dưới.
+let loginInFlight = false;
+
 async function login() {
+  if (loginInFlight) return;
   const u = document.getElementById('txtUser').value.trim();
   const p = document.getElementById('txtPass').value.trim();
   if (!u || !p) return alert('Vui lòng nhập tên đăng nhập và mật khẩu!');
@@ -7319,12 +7345,18 @@ async function login() {
     if (!captchaAnswer) return alert('Vui lòng nhập mã xác nhận trong ảnh.');
   }
 
+  loginInFlight = true;
   const btn = document.getElementById('btnLogin');
   const btnOriginalHTML = btn ? btn.innerHTML : '';
-  // Đổi hẳn chữ trên nút (không chỉ disable) — trước đây nút chỉ mờ đi, không có phản hồi tức thời nào
-  // trong lúc chờ (xác minh mật khẩu bcrypt + CAPTCHA), khiến thao tác cảm giác "đứng hình"/chậm dù
-  // request thực ra vẫn đang xử lý bình thường.
-  if (btn) { btn.disabled = true; btn.innerHTML = 'Đang đăng nhập…'; }
+  const btnCaptchaRefresh = document.getElementById('btnCaptchaRefresh');
+  const txtCaptchaEl = document.getElementById('txtCaptcha');
+  // Đổi hẳn chữ trên nút + thêm icon xoay (không chỉ disable/mờ đi) — chữ đổi đơn thuần rất dễ bị bỏ
+  // qua khi mắt người dùng đang nhìn vào ảnh CAPTCHA, khiến thao tác cảm giác "đứng hình"/chậm dù
+  // request (xác minh mật khẩu bcrypt + CAPTCHA) thực ra vẫn đang xử lý bình thường. Khoá luôn cả ô
+  // nhập mã + nút "↻ Lấy mã khác" trong lúc chờ — lý do xem chú thích loginInFlight ở trên.
+  if (btn) { btn.disabled = true; btn.innerHTML = '<span class="loginpage-spinner"></span> Đang đăng nhập…'; }
+  if (btnCaptchaRefresh) btnCaptchaRefresh.disabled = true;
+  if (txtCaptchaEl) txtCaptchaEl.disabled = true;
   let user;
   try {
     const res = await fetch('/api/auth/login', {
@@ -7341,6 +7373,9 @@ async function login() {
     return alert('⛔ Không thể kết nối tới máy chủ: ' + e.message);
   } finally {
     if (btn) { btn.disabled = false; btn.innerHTML = btnOriginalHTML; }
+    if (btnCaptchaRefresh) btnCaptchaRefresh.disabled = false;
+    if (txtCaptchaEl) txtCaptchaEl.disabled = false;
+    loginInFlight = false;
     // Mã CAPTCHA chỉ dùng được 1 lần (dù đúng hay sai) — lấy mã mới ngay sau MỌI lượt gọi để lần đăng
     // nhập kế tiếp (nếu có) bắt buộc nhập lại, không tái dùng captchaId cũ. Đây LUÔN là lượt refresh
     // SAU 1 lần submit (không phải tải trang lần đầu) nên tự đưa focus vào thẳng ô mã mới.
@@ -17625,9 +17660,9 @@ function renderModuleAccessCheckboxes(containerId = 'moduleAccessCheckboxes', pr
   const el = document.getElementById(containerId);
   if (!el) return;
   // Module con (field "parent", vd Xe/Phòng họp/VPP thuộc "hanhchinh") render LỒNG dưới đúng module
-  // cha thay vì liệt kê ngang hàng — nhưng vẫn là checkbox pModuleAccess_<key> ĐẦY ĐỦ (không phải
-  // subModules dạng boolean phụ), nên readModuleAccessFromForm()/populateModuleAccessForm() không cần
-  // đổi gì (đã lặp qua toàn bộ mảng phẳng sẵn).
+  // cha thay vì liệt kê ngang hàng — vẫn là checkbox pModuleAccess_<key> ĐẦY ĐỦ, nên
+  // readModuleAccessFromForm()/populateModuleAccessForm() không cần đổi gì (đã lặp qua toàn bộ mảng
+  // phẳng sẵn).
   const topLevel = BUSINESS_MODULES.filter(m => !m.parent);
   el.innerHTML = topLevel.map(m => {
     const childModules = BUSINESS_MODULES.filter(c => c.parent === m.key);
@@ -17643,26 +17678,6 @@ function renderModuleAccessCheckboxes(containerId = 'moduleAccessCheckboxes', pr
             <label class="flex items-center gap-1.5 text-gray-600 text-[11px] cursor-pointer">
               <input type="checkbox" id="${prefix}_${c.key}" checked>
               <span>${escapeHtml(c.label)}</span>
-            </label>
-            ${(c.subModules && c.subModules.length) ? `
-              <div class="pl-4 space-y-0.5 border-l-2 border-slate-200">
-                ${c.subModules.map(sm => `
-                  <label class="flex items-center gap-1.5 text-gray-500 text-[11px] cursor-pointer">
-                    <input type="checkbox" id="${escapeHtml(sm.id)}" ${sm.checkedByDefault ? 'checked' : ''}>
-                    <span>${escapeHtml(sm.label)}</span>
-                  </label>
-                `).join('')}
-              </div>
-            ` : ''}
-          `).join('')}
-        </div>
-      ` : ''}
-      ${(m.subModules && m.subModules.length) ? `
-        <div class="pl-4 mt-1 space-y-0.5 border-l-2 border-slate-200">
-          ${m.subModules.map(sm => `
-            <label class="flex items-center gap-1.5 text-gray-600 text-[11px] cursor-pointer">
-              <input type="checkbox" id="${escapeHtml(sm.id)}" ${sm.checkedByDefault ? 'checked' : ''}>
-              <span>${escapeHtml(sm.label)}</span>
             </label>
           `).join('')}
         </div>
@@ -21089,6 +21104,7 @@ function renderModuleReport(moduleKey, container) {
   }
 
   const extraHTML = config.renderExtra ? config.renderExtra(records) : '';
+  const detailHTML = renderReportDetailSection(moduleKey, records, config);
 
   container.innerHTML = `
     <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -21097,6 +21113,294 @@ function renderModuleReport(moduleKey, container) {
       ${deptHTML}
     </div>
     ${extraHTML}
+    ${detailHTML}
+  `;
+}
+
+// ==========================================
+// TRA CỨU CHI TIẾT — lọc đa chiều theo TỪNG TRƯỜNG/trạng thái thực tế có trong dữ liệu module (không
+// hardcode danh sách trường cho từng module, tự suy ra từ chính bản ghi trong `records` đã được
+// getRecords() lọc theo ngày/phòng ban ở trên) + tự chọn cột hiển thị/xuất Excel. Đặt NGAY DƯỚI khối
+// thống kê (tổng số/tình trạng/theo phòng ban), KHÔNG thay thế — chỉ bổ sung khả năng xem/lọc từng hồ
+// sơ đơn lẻ thay vì chỉ số tổng hợp.
+// Kiến trúc: renderReportDetailSection() vẽ TOÀN BỘ khối (bộ lọc + bảng chọn cột + bảng kết quả) khi
+// đổi tab/đổi bộ lọc trên cùng (ngày/phòng ban) — lúc đó rebuild input cũng không sao vì người dùng vừa
+// thao tác 1 control khác (mất focus ô lọc chi tiết không đáng kể). Khi gõ/chọn NGAY TRONG bộ lọc chi
+// tiết, chỉ gọi renderReportDetailResultsOnly() để thay mỗi phần bảng kết quả (#reportDetailResultsWrap),
+// giữ nguyên các input lọc để không mất focus/con trỏ đang gõ dở (theo đúng khuôn renderApprovalHub()
+// đọc input.value trực tiếp thay vì render lại input đó).
+let reportDetailContext = { moduleKey: null, records: [], columns: [], config: null };
+const reportDetailFilterValues = {}; // moduleKey -> { [colKey]: string | {min,max} | {from,to} }
+const reportDetailSelectedCols = {}; // moduleKey -> string[] (thứ tự cột đang hiển thị/xuất)
+
+// Nhãn tiếng Việt cho các trường thường gặp ở nhiều module — trường lạ không có trong danh sách này sẽ
+// tự tách theo chữ hoa (humanizeReportFieldKey) thay vì làm hỏng cả bảng.
+const REPORT_FIELD_LABELS = {
+  code: 'Mã hồ sơ', title: 'Tiêu đề', name: 'Tên', dept: 'Phòng ban', __status: 'Trạng thái',
+  status: 'Trạng thái', approvalStatus: 'Trạng thái duyệt', paymentStatus: 'Trạng thái thanh toán',
+  subType: 'Phân hệ', type: 'Loại', amount: 'Số tiền', createdAt: 'Ngày tạo', createdBy: 'Người tạo',
+  startDate: 'Ngày bắt đầu', endDate: 'Ngày kết thúc', deadline: 'Hạn hoàn thành', room: 'Phòng họp',
+  driverName: 'Người lái xe', plateNumber: 'Biển số xe', destination: 'Điểm đến', purpose: 'Mục đích',
+  assignee: 'Người phụ trách', reason: 'Lý do', note: 'Ghi chú', content: 'Nội dung', qty: 'Số lượng',
+  quantity: 'Số lượng', price: 'Đơn giá', jobTitle: 'Chức danh', username: 'Tài khoản', fullName: 'Họ tên'
+};
+
+function humanizeReportFieldKey(key) {
+  const spaced = key.replace(/([a-z0-9])([A-Z])/g, '$1 $2').replace(/^_+/, '');
+  return spaced.charAt(0).toUpperCase() + spaced.slice(1);
+}
+
+// Các trường KHÔNG đưa vào bộ lọc/bảng chi tiết — object/array lồng nhau (lịch sử, file đính kèm, mặt
+// hàng...) không phải kiểu dữ liệu đơn (scalar) nên tự động bị loại ở buildReportDetailColumns() (chỉ
+// nhận string/number/boolean), danh sách dưới đây chỉ để loại thêm vài trường scalar nhưng không có ý
+// nghĩa lọc/hiển thị (id nội bộ, url file...).
+const REPORT_FIELD_EXCLUDE_KEYS = new Set(['id', 'password', 'passwordHash', 'fileUrl', 'pdfFileUrl', 'avatarUrl', 'photoUrl', 'signatureUrl']);
+
+function inferReportFieldType(key, values) {
+  const nonNull = values.filter(v => v !== null && v !== undefined && v !== '');
+  if (!nonNull.length) return 'text';
+  if (nonNull.every(v => typeof v === 'boolean')) return 'select';
+  if (nonNull.every(v => typeof v === 'number')) return 'number';
+  if (/status$/i.test(key)) return 'select';
+  if (/(date|at)$/i.test(key) && nonNull.every(v => typeof v === 'string' && /^\d{4}-\d{2}-\d{2}/.test(v))) return 'date';
+  const uniq = new Set(nonNull.map(String));
+  if (uniq.size > 0 && uniq.size <= 15 && uniq.size < nonNull.length) return 'select';
+  return 'text';
+}
+
+function buildReportDetailColumns(moduleKey, records, config) {
+  const cols = [];
+  const excludeRawKeys = new Set();
+  if (config.statusOf) {
+    const options = (config.statusBuckets || [['PENDING', 'Đang chờ duyệt'], ['APPROVED', 'Đã phê duyệt'], ['REJECTED', 'Bị từ chối']]).map(b => [b[0], b[1]]);
+    cols.push({ key: '__status', label: REPORT_FIELD_LABELS.__status, type: 'select', options, getValue: r => config.statusOf(r) });
+    excludeRawKeys.add('status'); excludeRawKeys.add('approvalStatus');
+  }
+
+  const sampleSize = Math.min(records.length, 300);
+  const valuesByKey = {};
+  for (let i = 0; i < sampleSize; i++) {
+    const r = records[i];
+    Object.keys(r).forEach(k => {
+      if (excludeRawKeys.has(k) || REPORT_FIELD_EXCLUDE_KEYS.has(k) || k.startsWith('_')) return;
+      const v = r[k];
+      const t = typeof v;
+      if (v !== null && v !== undefined && t !== 'string' && t !== 'number' && t !== 'boolean') return;
+      (valuesByKey[k] = valuesByKey[k] || []).push(v);
+    });
+  }
+
+  Object.keys(valuesByKey).forEach(k => {
+    cols.push({ key: k, label: REPORT_FIELD_LABELS[k] || humanizeReportFieldKey(k), type: inferReportFieldType(k, valuesByKey[k]), getValue: r => r[k] });
+  });
+
+  cols.forEach(c => {
+    if (c.type === 'select' && !c.options) {
+      const uniq = [...new Set(records.map(r => c.getValue(r)).filter(v => v !== null && v !== undefined && v !== ''))].sort();
+      c.options = uniq.map(v => [v, typeof v === 'boolean' ? (v ? 'Có' : 'Không') : String(v)]);
+    }
+  });
+
+  const PRIORITY = ['code', '__status', 'title', 'name', 'dept', 'subType', 'type', 'amount', 'createdAt', 'startDate', 'endDate', 'deadline'];
+  cols.sort((a, b) => {
+    const ai = PRIORITY.indexOf(a.key), bi = PRIORITY.indexOf(b.key);
+    if (ai !== -1 || bi !== -1) return (ai === -1 ? 999 : ai) - (bi === -1 ? 999 : bi);
+    return a.label.localeCompare(b.label, 'vi');
+  });
+  return cols;
+}
+
+function formatReportDetailValue(col, v) {
+  if (v === null || v === undefined || v === '') return '';
+  if (typeof v === 'boolean') return v ? 'Có' : 'Không';
+  if (col.type === 'number') return Number(v).toLocaleString('vi-VN');
+  return String(v);
+}
+
+function applyReportDetailFilters(records, columns, filters) {
+  if (!filters) return records;
+  return records.filter(r => columns.every(col => {
+    const f = filters[col.key];
+    if (col.type === 'number') {
+      if (!f || ((f.min === undefined || f.min === '') && (f.max === undefined || f.max === ''))) return true;
+      const num = col.getValue(r);
+      if (typeof num !== 'number' || Number.isNaN(num)) return false;
+      if (f.min !== undefined && f.min !== '' && num < parseFloat(f.min)) return false;
+      if (f.max !== undefined && f.max !== '' && num > parseFloat(f.max)) return false;
+      return true;
+    }
+    if (col.type === 'date') {
+      if (!f || (!f.from && !f.to)) return true;
+      const v = col.getValue(r);
+      if (!v) return false;
+      const vDate = String(v).slice(0, 10);
+      if (f.from && vDate < f.from) return false;
+      if (f.to && vDate > f.to) return false;
+      return true;
+    }
+    if (!f) return true;
+    const v = col.getValue(r);
+    if (col.type === 'select') return String(v ?? '') === String(f);
+    return String(v ?? '').toLowerCase().includes(String(f).toLowerCase());
+  }));
+}
+
+function buildReportDetailFilterControlHTML(moduleKey, col) {
+  const base = `rdf_${moduleKey}_${col.key}`;
+  const fv = (reportDetailFilterValues[moduleKey] && reportDetailFilterValues[moduleKey][col.key]) || null;
+  if (col.type === 'select') {
+    const cur = typeof fv === 'string' ? fv : '';
+    return `<select id="${base}" onchange="onReportDetailFilterInput('${moduleKey}','${col.key}','select')" class="w-full border p-1 rounded text-[11px] bg-white">
+      <option value="">-- Tất cả --</option>
+      ${col.options.map(([v, l]) => `<option value="${escapeHtml(String(v))}" ${cur === String(v) ? 'selected' : ''}>${escapeHtml(l)}</option>`).join('')}
+    </select>`;
+  }
+  if (col.type === 'number') {
+    const min = (fv && fv.min !== undefined) ? fv.min : '';
+    const max = (fv && fv.max !== undefined) ? fv.max : '';
+    return `<div class="flex gap-1">
+      <input type="number" id="${base}_min" value="${escapeHtml(String(min))}" oninput="onReportDetailFilterInput('${moduleKey}','${col.key}','number')" placeholder="Từ" class="w-1/2 border p-1 rounded text-[11px]">
+      <input type="number" id="${base}_max" value="${escapeHtml(String(max))}" oninput="onReportDetailFilterInput('${moduleKey}','${col.key}','number')" placeholder="Đến" class="w-1/2 border p-1 rounded text-[11px]">
+    </div>`;
+  }
+  if (col.type === 'date') {
+    const from = (fv && fv.from) || '';
+    const to = (fv && fv.to) || '';
+    return `<div class="flex gap-1">
+      <input type="date" id="${base}_from" value="${escapeHtml(from)}" onchange="onReportDetailFilterInput('${moduleKey}','${col.key}','date')" class="w-1/2 border p-1 rounded text-[11px]">
+      <input type="date" id="${base}_to" value="${escapeHtml(to)}" onchange="onReportDetailFilterInput('${moduleKey}','${col.key}','date')" class="w-1/2 border p-1 rounded text-[11px]">
+    </div>`;
+  }
+  const cur = typeof fv === 'string' ? fv : '';
+  return `<input type="text" id="${base}" value="${escapeHtml(cur)}" oninput="onReportDetailFilterInput('${moduleKey}','${col.key}','text')" placeholder="Tìm ${escapeHtml(col.label.toLowerCase())}..." class="w-full border p-1 rounded text-[11px]">`;
+}
+
+function onReportDetailFilterInput(moduleKey, colKey, type) {
+  const base = `rdf_${moduleKey}_${colKey}`;
+  reportDetailFilterValues[moduleKey] = reportDetailFilterValues[moduleKey] || {};
+  if (type === 'number') {
+    const min = document.getElementById(base + '_min')?.value ?? '';
+    const max = document.getElementById(base + '_max')?.value ?? '';
+    reportDetailFilterValues[moduleKey][colKey] = { min, max };
+  } else if (type === 'date') {
+    const from = document.getElementById(base + '_from')?.value ?? '';
+    const to = document.getElementById(base + '_to')?.value ?? '';
+    reportDetailFilterValues[moduleKey][colKey] = { from, to };
+  } else {
+    reportDetailFilterValues[moduleKey][colKey] = document.getElementById(base)?.value ?? '';
+  }
+  renderReportDetailResultsOnly(moduleKey);
+}
+
+function onReportDetailColumnToggle(moduleKey, colKey, checked) {
+  const sel = reportDetailSelectedCols[moduleKey] || [];
+  reportDetailSelectedCols[moduleKey] = checked ? [...sel.filter(k => k !== colKey), colKey] : sel.filter(k => k !== colKey);
+  renderReportDetailResultsOnly(moduleKey);
+}
+
+function resetReportDetailFilters(moduleKey) {
+  reportDetailFilterValues[moduleKey] = {};
+  const container = document.getElementById('reportsContent');
+  if (container) renderModuleReport(moduleKey, container);
+}
+
+function buildReportDetailResultsHTML(moduleKey) {
+  const ctx = reportDetailContext;
+  if (!ctx || ctx.moduleKey !== moduleKey) return '';
+  const filtered = applyReportDetailFilters(ctx.records, ctx.columns, reportDetailFilterValues[moduleKey]);
+  const selectedKeys = reportDetailSelectedCols[moduleKey] || [];
+  const selectedCols = selectedKeys.map(k => ctx.columns.find(c => c.key === k)).filter(Boolean);
+
+  if (!selectedCols.length) {
+    return `<p class="text-xs text-gray-500 italic p-3">Chọn ít nhất 1 trường ở trên để xem bảng kết quả.</p>`;
+  }
+
+  const MAX_ROWS = 500;
+  const rowsToShow = filtered.slice(0, MAX_ROWS);
+  return `
+    <div class="text-[11px] text-gray-600 mb-1">Tìm thấy <span class="font-bold">${filtered.length.toLocaleString('vi-VN')}</span> hồ sơ khớp bộ lọc${filtered.length > MAX_ROWS ? ` (chỉ hiện ${MAX_ROWS} dòng đầu — xuất Excel để lấy đủ)` : ''}.</div>
+    <div class="overflow-x-auto border rounded">
+      <table class="w-full border-collapse text-[11px]">
+        <thead><tr class="bg-gray-100 text-left">${selectedCols.map(c => `<th class="border p-1.5">${escapeHtml(c.label)}</th>`).join('')}</tr></thead>
+        <tbody>${rowsToShow.length ? rowsToShow.map(r => `<tr>${selectedCols.map(c => `<td class="border p-1.5">${escapeHtml(formatReportDetailValue(c, c.getValue(r)))}</td>`).join('')}</tr>`).join('') : `<tr><td colspan="${selectedCols.length}" class="text-center p-4 text-gray-500 italic">Không có hồ sơ nào khớp bộ lọc.</td></tr>`}</tbody>
+      </table>
+    </div>
+  `;
+}
+
+function renderReportDetailResultsOnly(moduleKey) {
+  const wrap = document.getElementById('reportDetailResultsWrap');
+  if (wrap) wrap.innerHTML = buildReportDetailResultsHTML(moduleKey);
+}
+
+function exportReportDetailExcel(moduleKey) {
+  const ctx = reportDetailContext;
+  if (!ctx || ctx.moduleKey !== moduleKey) return;
+  const selectedKeys = reportDetailSelectedCols[moduleKey] || [];
+  const cols = selectedKeys.map(k => ctx.columns.find(c => c.key === k)).filter(Boolean);
+  if (!cols.length) return alert('Vui lòng chọn ít nhất 1 trường để xuất.');
+  const filtered = applyReportDetailFilters(ctx.records, ctx.columns, reportDetailFilterValues[moduleKey]);
+  const columns = cols.map(c => ({ header: c.label, key: c.key, width: 22 }));
+  const dataRows = filtered.map(r => {
+    const row = {};
+    cols.forEach(c => { row[c.key] = formatReportDetailValue(c, c.getValue(r)); });
+    return row;
+  });
+  downloadXlsxFromServer(`BaoCaoChiTiet_${moduleKey}_${new Date().toISOString().slice(0, 10)}.xlsx`, ('ChiTiet_' + moduleKey).slice(0, 31), columns, dataRows);
+}
+
+function renderReportDetailSection(moduleKey, records, config) {
+  const columns = buildReportDetailColumns(moduleKey, records, config);
+  reportDetailContext = { moduleKey, records, columns, config };
+  if (!reportDetailFilterValues[moduleKey]) reportDetailFilterValues[moduleKey] = {};
+  // Chỉ gán mặc định khi CHƯA từng gán VÀ đang có ít nhất 1 cột — tránh trường hợp lần render đầu tiên
+  // rơi vào đúng lúc records rỗng (vd bộ lọc ngày/phòng ban ở trên đang không khớp hồ sơ nào) khiến
+  // columns = [] rồi gán reportDetailSelectedCols[moduleKey] = [] (mảng rỗng vẫn là giá trị truthy
+  // trong JS) — khoá cứng "chưa gán" mãi mãi, khiến module đó không bao giờ tự chọn lại cột mặc định
+  // dù sau đó records đã có dữ liệu thật.
+  if (!reportDetailSelectedCols[moduleKey] && columns.length) reportDetailSelectedCols[moduleKey] = columns.slice(0, 6).map(c => c.key);
+  const selectedSet = new Set(reportDetailSelectedCols[moduleKey] || []);
+
+  if (!columns.length) return '';
+
+  return `
+    <details class="bg-white rounded border text-xs">
+      <summary class="flex items-center justify-between gap-2 px-3 py-2 cursor-pointer hover:bg-gray-50 rounded">
+        <span class="font-bold text-gray-800 text-sm">🔍 Tra Cứu Chi Tiết</span>
+        <span class="text-[11px] text-gray-500">Lọc theo nhiều điều kiện + tự chọn cột hiển thị</span>
+      </summary>
+      <div class="p-3 pt-0 space-y-3">
+        <div>
+          <div class="flex items-center justify-between mb-1">
+            <span class="font-semibold text-gray-600 text-[11px]">Điều kiện lọc</span>
+            <button type="button" onclick="resetReportDetailFilters('${moduleKey}')" class="text-[11px] text-gray-500 hover:underline">Đặt lại bộ lọc</button>
+          </div>
+          <div class="grid grid-cols-2 md:grid-cols-4 gap-2">
+            ${columns.map(c => `
+              <div>
+                <label class="block text-[10px] text-gray-500 mb-0.5">${escapeHtml(c.label)}</label>
+                ${buildReportDetailFilterControlHTML(moduleKey, c)}
+              </div>
+            `).join('')}
+          </div>
+        </div>
+        <div>
+          <span class="font-semibold text-gray-600 text-[11px] block mb-1">Trường hiển thị / xuất Excel</span>
+          <div class="flex flex-wrap gap-x-3 gap-y-1 border rounded p-2 bg-gray-50 max-h-24 overflow-y-auto">
+            ${columns.map(c => `
+              <label class="flex items-center gap-1 text-[11px] text-gray-700 cursor-pointer">
+                <input type="checkbox" id="rdc_${moduleKey}_${c.key}" onchange="onReportDetailColumnToggle('${moduleKey}','${c.key}', this.checked)" ${selectedSet.has(c.key) ? 'checked' : ''}>
+                <span>${escapeHtml(c.label)}</span>
+              </label>
+            `).join('')}
+          </div>
+        </div>
+        <div class="flex justify-end">
+          <button type="button" onclick="exportReportDetailExcel('${moduleKey}')" class="text-[11px] bg-emerald-600 text-white px-3 py-1.5 rounded font-bold hover:bg-emerald-700">⬇️ Xuất Excel (chi tiết)</button>
+        </div>
+        <div id="reportDetailResultsWrap">${buildReportDetailResultsHTML(moduleKey)}</div>
+      </div>
+    </details>
   `;
 }
 
