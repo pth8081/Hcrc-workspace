@@ -21,6 +21,12 @@
 // CAPTCHA (lib/captcha.js) vẽ SVG rồi trả thẳng qua JSON, gán inline vào DOM ở trình duyệt — KHÔNG tải
 // từ domain ngoài nào nên không cần nới thêm directive nào ở đây (khác với phương án Cloudflare Turnstile
 // đã cân nhắc trước đó nhưng không dùng, vốn cần mở scriptSrc/frameSrc/connectSrc cho domain ngoài).
+//
+// Google Fonts (font "Be Vietnam Pro" tiếng Việt, xem <link> đầu public/index.html): CSS lấy từ
+// fonts.googleapis.com, còn file .woff2 thật lại nằm ở fonts.gstatic.com (2 domain KHÁC NHAU) — cả 2
+// đều PHẢI được mở tương ứng ở styleSrc/fontSrc, thiếu 1 trong 2 sẽ khiến trình duyệt lặng lẽ chặn (bị
+// phát hiện qua báo lỗi thực tế trên server thật: CSP chặn cả stylesheet lẫn font, chữ rơi về font hệ
+// thống mặc định, không báo lỗi rõ ràng cho người dùng thường).
 const helmet = require('helmet');
 
 const securityHeaders = helmet({
@@ -29,9 +35,9 @@ const securityHeaders = helmet({
       defaultSrc: ["'self'"],
       scriptSrc: ["'self'", "'unsafe-inline'"],
       scriptSrcAttr: ["'unsafe-inline'"],
-      styleSrc: ["'self'", "'unsafe-inline'"],
+      styleSrc: ["'self'", "'unsafe-inline'", 'https://fonts.googleapis.com'],
       imgSrc: ["'self'", 'data:', 'blob:'],
-      fontSrc: ["'self'", 'data:'],
+      fontSrc: ["'self'", 'data:', 'https://fonts.gstatic.com'],
       connectSrc: ["'self'"],
       workerSrc: ["'self'", 'blob:'],
       objectSrc: ["'none'"],
