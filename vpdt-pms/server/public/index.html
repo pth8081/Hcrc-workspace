@@ -17313,6 +17313,12 @@ function setSystemSubTab(subTab) {
   if (!currentUser?.perms?.admin) return;
   activeSystemSubTab = subTab;
 
+  // Cuộn về đầu trang mỗi khi đổi tab con — không làm vậy thì vị trí cuộn CŨ (vd đang cuộn giữa/cuối cây
+  // phân quyền rất dài của tab "Quản Trị") bị giữ nguyên khi chuyển sang tab NGẮN HƠN nhiều (Biểu Mẫu/Quy
+  // Trình & Phê Duyệt) — trang mới không đủ dài để giữ đúng vị trí đó, trình duyệt tự kẹp cuộn xuống gần
+  // cuối trang mới, tạo cảm giác "bay xuống cuối" dù không có gì chủ động cuộn xuống cả.
+  window.scrollTo({ top: 0, behavior: 'auto' });
+
   document.getElementById('formSection').classList.toggle('hidden', subTab !== 'FORM');
   document.getElementById('adminSection').classList.toggle('hidden', subTab !== 'ADMIN');
   document.getElementById('workflowSection').classList.toggle('hidden', subTab !== 'WORKFLOW');
