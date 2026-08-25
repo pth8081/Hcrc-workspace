@@ -2847,8 +2847,9 @@ table { display: block; overflow-x: auto; max-width: 100%; }
               </select>
             </div>
             <div id="paymentSourceRecordWrap" class="hidden">
-              <label class="block font-semibold text-gray-600 mb-1">Chọn Hồ Sơ Nguồn (chỉ hồ sơ chưa thanh toán)</label>
+              <label class="block font-semibold text-gray-600 mb-1">Chọn Hồ Sơ Nguồn</label>
               <select id="paymentSourceRecord" onchange="onPaymentSourceRecordChange()" class="w-full border p-1.5 rounded bg-white" required></select>
+              <p class="text-[11px] text-gray-500 italic mt-1">Chỉ liệt kê hồ sơ CHƯA thanh toán và ĐÃ tải Tài liệu ký (hợp đồng còn cần Tài liệu ký đã được DUYỆT XONG) — hồ sơ chưa đủ điều kiện hiện dạng mờ, không chọn được, ngay bên dưới.</p>
             </div>
           </div>
           <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -3889,8 +3890,12 @@ table { display: block; overflow-x: auto; max-width: 100%; }
           <div class="p-3 pt-0 space-y-4">
             <div class="border-b pb-3">
               <h5 class="font-bold text-gray-700 text-xs mb-1">🏢 Đơn Vị Tham Gia Quy Trình</h5>
-              <p class="text-[11px] text-gray-500 italic mb-2">Tick các phòng ban thực sự cần cấu hình quy trình phê duyệt — màn "Hệ Thống → Quy Trình & Phê Duyệt" sẽ CHỈ hiện đúng các phòng đã tick dưới đây thay vì liệt kê toàn bộ danh sách phòng ban. Không tick phòng nào (để trống) thì màn đó vẫn hiện đầy đủ như trước, không ảnh hưởng gì. Tick xong nhiều phòng thì bấm "Lưu" 1 lần — không cần chờ lưu xong mới tick phòng tiếp theo.</p>
-              <div id="workflowParticipatingDeptsChecklist" class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-1 max-h-48 overflow-y-auto border rounded p-2 bg-gray-50"></div>
+              <p class="text-[11px] text-gray-500 italic mb-2">Chọn phòng ban từ ô bên dưới rồi bấm "Thêm" để đưa vào danh sách đơn vị tham gia — màn "Hệ Thống → Quy Trình & Phê Duyệt" sẽ CHỈ hiện đúng các đơn vị đã thêm ở đây thay vì liệt kê toàn bộ danh sách phòng ban. Không thêm đơn vị nào (để trống) thì màn đó vẫn hiện đầy đủ như trước, không ảnh hưởng gì. Thêm/bớt xong thì bấm "Lưu" 1 lần.</p>
+              <div class="flex gap-2 items-center mb-2">
+                <select id="workflowParticipatingDeptPicker" class="flex-1 border p-1.5 rounded bg-white text-xs"></select>
+                <button type="button" onclick="addWorkflowParticipatingDept()" class="bg-gray-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-gray-700 whitespace-nowrap">➕ Thêm Đơn Vị</button>
+              </div>
+              <div id="workflowParticipatingDeptsList" class="flex flex-wrap gap-1.5 min-h-[2rem] border rounded p-2 bg-gray-50"></div>
               <div class="flex justify-end mt-2">
                 <button type="button" onclick="saveWorkflowParticipatingDepts()" class="bg-emerald-600 text-white px-4 py-1.5 rounded text-xs font-bold hover:bg-emerald-700">💾 Lưu Đơn Vị Tham Gia Quy Trình</button>
               </div>
@@ -13990,11 +13995,23 @@ function populatePaymentSourceRecordOptions() {
     sel.innerHTML = '';
     return;
   }
-  const eligible = sourceType === 'CONTRACT'
-    ? DB.contracts.filter(c => c.signedFileUrl && c.signedFileStatus === 'APPROVED' && c.paymentStatus === 'CHUA_THANH_TOAN')
-    : DB.officeReqs.filter(o => o.subType === sourceType && o.signedFileUrl && o.paymentStatus === 'CHUA_THANH_TOAN');
+  // Hợp đồng đòi hỏi Tài liệu ký đã DUYỆT XONG (signedFileStatus APPROVED, khớp startContractPayment()
+  // ở lib/recordActions.js); đề xuất Tổng Hợp (Mua Bán/Sửa Chữa/Đầu Tư) chỉ cần ĐÃ TẢI LÊN (signedFileUrl,
+  // khớp startOfficePayment() — module này không có bước duyệt riêng cho Tài liệu ký) — 2 điều kiện khác
+  // nhau tuỳ nguồn, giữ đúng logic gốc.
+  const unpaid = sourceType === 'CONTRACT'
+    ? DB.contracts.filter(c => c.paymentStatus === 'CHUA_THANH_TOAN')
+    : DB.officeReqs.filter(o => o.subType === sourceType && o.paymentStatus === 'CHUA_THANH_TOAN');
+  const isReady = r => sourceType === 'CONTRACT' ? (r.signedFileUrl && r.signedFileStatus === 'APPROVED') : !!r.signedFileUrl;
+  const eligible = unpaid.filter(isReady);
+  // Hồ sơ chưa thanh toán nhưng CHƯA đủ điều kiện — liệt kê riêng dạng disabled để người dùng hiểu vì
+  // sao không thấy trong danh sách chọn được, thay vì tưởng bị lỗi.
+  const notReady = unpaid.filter(r => !isReady(r));
+  const notReadyHint = sourceType === 'CONTRACT' ? 'thiếu/chưa duyệt Tài liệu ký' : 'thiếu Tài liệu ký';
   sel.innerHTML = '<option value="">-- Chọn hồ sơ --</option>' +
-    eligible.map(r => `<option value="${r.id}">${escapeHtml(r.code)} — ${escapeHtml(r.title)}</option>`).join('');
+    eligible.map(r => `<option value="${r.id}">${escapeHtml(r.code)} — ${escapeHtml(r.title)}</option>`).join('') +
+    (notReady.length ? `<option value="" disabled>── Chưa đủ điều kiện (${notReadyHint}) ──</option>` +
+      notReady.map(r => `<option value="" disabled>${escapeHtml(r.code)} — ${escapeHtml(r.title)}</option>`).join('') : '');
 }
 
 // Tham khảo đợt thanh toán từ nguồn — khớp buildPaymentInstallments() ở lib/recordActions.js: Hợp đồng
@@ -17731,7 +17748,7 @@ function setSystemSubTab(subTab) {
   document.getElementById('btnSystemSubLog').className = subTab === 'LOG' ? activeCls : inactiveCls;
 
   if (subTab === 'ADMIN') {
-    renderDeptList(); renderCatList(); renderContractTypeAbbrList(); renderJobTitleList(); renderTrainingCategoryList(); renderSensitiveKeywordList(); renderDeptCheckboxes(); renderModuleAccessCheckboxes(); renderUsers(); loadEmailConfigToForm(); renderPermGroupsList(); renderSubmissionApprovalGroups(); renderContractApprovalGroups(); renderWorkflowParticipatingDeptsChecklist(); vppExcludeGroupsDraft = null; renderVppExcludeGroupsAdmin(); renderPwaShortcutCheckboxes();
+    renderDeptList(); renderCatList(); renderContractTypeAbbrList(); renderJobTitleList(); renderTrainingCategoryList(); renderSensitiveKeywordList(); renderDeptCheckboxes(); renderModuleAccessCheckboxes(); renderUsers(); loadEmailConfigToForm(); renderPermGroupsList(); renderSubmissionApprovalGroups(); renderContractApprovalGroups(); workflowParticipatingDeptsDraft = null; renderWorkflowParticipatingDeptsChecklist(); vppExcludeGroupsDraft = null; renderVppExcludeGroupsAdmin(); renderPwaShortcutCheckboxes();
     setAdminSubTab(activeAdminSubTab);
   }
   if (subTab === 'FORM') { switchFormTab(activeFormTab); }
@@ -20361,35 +20378,59 @@ function getWorkflowParticipatingDepts() {
   return (DB.workflowParticipatingDepts && DB.workflowParticipatingDepts.length) ? DB.workflowParticipatingDepts : DB.depts;
 }
 
+// Draft chỉnh sửa trực tiếp trong cây quyền (thêm/bớt qua nút, chưa ghi DB.workflowParticipatingDepts
+// thật) — chỉ ghi thật xuống khi bấm "Lưu", cùng khuôn vppExcludeGroupsDraft ngay bên dưới, tránh hẳn
+// tình huống nhiều lượt thêm liên tiếp bắn nhiều request riêng rồi rollback đè lên nhau.
+let workflowParticipatingDeptsDraft = null;
+
 function renderWorkflowParticipatingDeptsChecklist() {
-  const wrap = document.getElementById('workflowParticipatingDeptsChecklist');
-  if (!wrap) return;
-  const selected = new Set(DB.workflowParticipatingDepts || []);
-  wrap.innerHTML = DB.depts.map(d => `
-    <label class="flex items-center gap-1.5 text-gray-700 cursor-pointer">
-      <input type="checkbox" class="wf-participating-dept-cb" value="${escapeHtml(d)}" ${selected.has(d) ? 'checked' : ''}>
-      <span>${escapeHtml(d)}</span>
-    </label>
-  `).join('');
+  const picker = document.getElementById('workflowParticipatingDeptPicker');
+  const list = document.getElementById('workflowParticipatingDeptsList');
+  if (!picker || !list) return;
+  if (!workflowParticipatingDeptsDraft) workflowParticipatingDeptsDraft = [...(DB.workflowParticipatingDepts || [])];
+  const remaining = DB.depts.filter(d => !workflowParticipatingDeptsDraft.includes(d));
+  picker.innerHTML = remaining.length
+    ? remaining.map(d => `<option value="${escapeHtml(d)}">${escapeHtml(d)}</option>`).join('')
+    : '<option value="">-- Đã thêm hết phòng ban --</option>';
+  picker.disabled = !remaining.length;
+  list.innerHTML = workflowParticipatingDeptsDraft.length
+    ? workflowParticipatingDeptsDraft.map(d => `
+      <span class="inline-flex items-center gap-1 bg-white border rounded-full pl-2.5 pr-1 py-1 text-xs text-gray-700">
+        ${escapeHtml(d)}
+        <button type="button" onclick="removeWorkflowParticipatingDept('${escapeHtml(d)}')" class="text-gray-400 hover:text-red-600 font-bold px-1" title="Bỏ đơn vị này">✕</button>
+      </span>
+    `).join('')
+    : '<span class="text-[11px] text-gray-400 italic">Chưa thêm đơn vị nào — để trống thì màn Quy Trình & Phê Duyệt hiện đầy đủ mọi phòng ban.</span>';
 }
 
-// Trước đây mỗi checkbox tự lưu ngay (onchange gọi thẳng hàm này) — tick nhiều phòng liên tiếp thì mỗi
-// tick bắn 1 request riêng, xếp hàng nối tiếp nhau, và nếu request nào đó lỗi/409 thì hàm dưới đây RENDER
-// LẠI TOÀN BỘ checklist theo state cũ (rollback), vô tình "nhả" luôn những ô người dùng vừa tick sau đó
-// nhưng request của chúng chưa kịp chạy tới — cảm giác như không tick được nhiều phòng cùng lúc. Đổi
-// sang tick-nhiều-rồi-bấm-Lưu-1-lần (khớp UI "Nhóm Không Cấp Văn Phòng Phẩm" ở ngay bên dưới) để tránh
-// hẳn tình huống này — chỉ 1 request duy nhất khi bấm nút.
+function addWorkflowParticipatingDept() {
+  const picker = document.getElementById('workflowParticipatingDeptPicker');
+  const dept = picker?.value;
+  if (!dept) return;
+  if (!workflowParticipatingDeptsDraft) workflowParticipatingDeptsDraft = [...(DB.workflowParticipatingDepts || [])];
+  if (!workflowParticipatingDeptsDraft.includes(dept)) workflowParticipatingDeptsDraft.push(dept);
+  renderWorkflowParticipatingDeptsChecklist();
+}
+
+function removeWorkflowParticipatingDept(dept) {
+  if (!workflowParticipatingDeptsDraft) return;
+  workflowParticipatingDeptsDraft = workflowParticipatingDeptsDraft.filter(d => d !== dept);
+  renderWorkflowParticipatingDeptsChecklist();
+}
+
 async function saveWorkflowParticipatingDepts() {
-  const checked = [...document.querySelectorAll('.wf-participating-dept-cb:checked')].map(cb => cb.value);
+  const next = [...(workflowParticipatingDeptsDraft || [])];
   const snapshot = [...(DB.workflowParticipatingDepts || [])];
-  DB.workflowParticipatingDepts = checked;
+  DB.workflowParticipatingDepts = next;
   const saved = await syncStorage('workflowParticipatingDepts');
   if (!saved) {
     DB.workflowParticipatingDepts = snapshot;
+    workflowParticipatingDeptsDraft = [...snapshot];
     renderWorkflowParticipatingDeptsChecklist();
     return;
   }
-  logSystemAction('USER_MGM', 'SAVE_WORKFLOW_DEPTS', `Cập nhật danh sách phòng ban tham gia quy trình (${checked.length} phòng)`, 'SUCCESS');
+  workflowParticipatingDeptsDraft = [...next];
+  logSystemAction('USER_MGM', 'SAVE_WORKFLOW_DEPTS', `Cập nhật danh sách phòng ban tham gia quy trình (${next.length} phòng)`, 'SUCCESS');
   alert('✅ Đã lưu Đơn Vị Tham Gia Quy Trình.');
 }
 
