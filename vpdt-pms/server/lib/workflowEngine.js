@@ -139,7 +139,10 @@ const MODULE_CONFIGS = {
   carRegs: {
     dbKey: 'carRegs',
     resolveWfConfig: (item, appData) => flatWorkflowConfigToSteps(appData.carDeptWorkflows?.[item.dept], appData),
-    extraFields: ['assignedDriver', 'assignedVehicleType', 'assignedPlate']
+    // assignedDriver KHÔNG còn nằm trong danh sách này — lái xe giờ bắt buộc là 1 tài khoản hệ thống có
+    // thật (xem xử lý riêng ở applyWorkflowAction() bên dưới), server tự tra display name từ user thay
+    // vì tin bất kỳ text nào client gửi kèm.
+    extraFields: ['assignedVehicleType', 'assignedPlate']
   },
   officeReqs: {
     dbKey: 'officeReqs',
@@ -205,7 +208,7 @@ const nowVN = () => new Date().toLocaleString('vi-VN');
 // Thực hiện HÀNH ĐỘNG (APPROVE/REJECT) trên 1 hồ sơ — mọi kiểm tra quyền đều dựa vào approver list
 // đã resolve từ đúng cấu hình quy trình của module đó, KHÔNG tin bất kỳ trường status/currentStep
 // nào client có thể tự gửi kèm — server tự tính toán lại toàn bộ dựa trên state hiện có + hành động.
-function applyWorkflowAction({ moduleKey, item, action, user, comment, extraFields, appData, existingCollection }) {
+function applyWorkflowAction({ moduleKey, item, action, user, comment, extraFields, appData, existingCollection, users }) {
   const config = MODULE_CONFIGS[moduleKey];
   if (!config) throw new WorkflowError(400, `Module không hợp lệ: ${moduleKey}`);
   if (!item) throw new WorkflowError(404, 'Không tìm thấy hồ sơ');
@@ -285,6 +288,25 @@ function applyWorkflowAction({ moduleKey, item, action, user, comment, extraFiel
       const conflict = findCarPlateConflict(existingCollection, item.id, newPlate, item.startTime, item.endTime);
       if (conflict) {
         throw new WorkflowError(409, `Biển số "${newPlate}" đã được gán cho phiếu "${conflict.code}" trùng khung giờ này`);
+      }
+    }
+    // Lái xe PHẢI là 1 tài khoản hệ thống có thật (không cho gõ tên tự do nữa) — để đúng tài khoản đó
+    // vào được sub-tab "Lái Xe" tự xác nhận chuyến của mình (xem confirmCarDriverAssignment() ở
+    // lib/recordActions.js). Server tự tra display name từ user thay vì tin bất kỳ tên nào client gửi
+    // kèm, tránh lệch giữa assignedDriverUsername (dùng để so quyền xác nhận) và assignedDriver (chỉ
+    // hiển thị) — 2 trường trước đây độc lập nhau khi assignedDriver còn là ô text tự do.
+    if (moduleKey === 'carRegs' && extraFields?.assignedDriverUsername) {
+      const driverUser = (users || []).find(u => u.username === extraFields.assignedDriverUsername && u.active !== false);
+      if (!driverUser) throw new WorkflowError(400, 'Không tìm thấy tài khoản lái xe này (hoặc đã bị khoá)');
+      item.assignedDriverUsername = driverUser.username;
+      item.assignedDriver = driverUser.name;
+      extraSnapshot.assignedDriverUsername = driverUser.username;
+      extraSnapshot.assignedDriver = driverUser.name;
+      // Đổi sang lái xe khác -> hủy xác nhận cũ (nếu phiếu này trước đó đã được lái xe khác xác nhận) vì
+      // trách nhiệm chuyến đi đã chuyển sang người khác, không thể giữ "đã xác nhận" hộ người cũ.
+      if (item.driverConfirmed) {
+        item.driverConfirmed = false;
+        item.driverConfirmedAt = null;
       }
     }
     for (const f of config.extraFields) {

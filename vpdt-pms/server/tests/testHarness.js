@@ -59,7 +59,7 @@ function createMockState(seed) {
   return Object.assign({
     depts: [], stores: [], cats: [], deptAbbrs: {}, jobTitles: [], permGroups: [], users: [],
     itPriceMasterLists: [], itPriceDeptWorkflows: {}, workflows: [],
-    reportSlideTemplates: [], uniformPeriods: [], uniformIssuances: [],
+    reportSlideTemplates: [], uniformPeriods: [], uniformIssuances: [], uniformStockAdjustments: [],
     itPriceApprovals: [], itSupportTickets: [], reportPeriods: [], reportEntries: [],
     tasks: [],
     budgetTemplates: [], budgetPeriods: [], budgetEntries: [], budgetDeptWorkflows: {}
@@ -166,6 +166,17 @@ function createDispatcher(state) {
         const storeIssuances = state.uniformIssuances.filter(x => x.dept === freshUser.dept);
         const record = recordActions.buildUniformIssuance(freshUser, body, state.uniformPeriods, storeIssuances, state.users);
         state.uniformIssuances.push(record);
+        return { status: 200, body: { ok: true, item: record } };
+      }
+
+      if (pathName === '/api/records/uniformStockAdjustments/create' && method === 'POST') {
+        if (!recordActions.canManageUniformStore(freshUser)) {
+          return { status: 403, body: { error: 'Bạn không có quyền thao tác này' } };
+        }
+        const storeIssuances = state.uniformIssuances.filter(x => x.dept === freshUser.dept);
+        const storeAdjustments = state.uniformStockAdjustments.filter(x => x.dept === freshUser.dept);
+        const record = recordActions.buildUniformStockAdjustment(freshUser, body, state.uniformPeriods, storeIssuances, storeAdjustments, state.users);
+        state.uniformStockAdjustments.push(record);
         return { status: 200, body: { ok: true, item: record } };
       }
 

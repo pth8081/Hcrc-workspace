@@ -131,7 +131,7 @@ function buildBrowserDB(state) {
     systemLogs: [], itPriceApprovals: [], itSupportTickets: [], vppPeriods: [], vppRegistrations: [],
     reportPeriods: [], reportEntries: [], reportSlideTemplates: [], trainingClasses: [], trainingDocuments: [],
     trainingTests: [], trainingRegistrations: [], trainingTestSubmissions: [], careerPaths: [],
-    careerPathConfirmations: [], recruitmentJobs: [], recruitmentReferrals: [], uniformPeriods: [], uniformIssuances: [],
+    careerPathConfirmations: [], recruitmentJobs: [], recruitmentReferrals: [], uniformPeriods: [], uniformIssuances: [], uniformStockAdjustments: [],
     _versions: {}
   });
 }

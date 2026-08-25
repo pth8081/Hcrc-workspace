@@ -17,6 +17,8 @@ const { chromium } = require('/opt/node22/lib/node_modules/playwright');
 const { validateAndPrepareCreate, findMeetingConflict, CreateError } = require('../lib/createValidation');
 const { applyWorkflowAction, WorkflowError } = require('../lib/workflowEngine');
 const { HttpError } = require('../lib/httpErrors');
+const recordActions = require('../lib/recordActions');
+const { canViewCarReg } = require('../lib/recordViewScope');
 
 const INDEX_HTML_PATH = path.join(__dirname, '..', 'public', 'index.html');
 const PORT = 8972;
@@ -28,7 +30,7 @@ function record(name, pass, detail) {
 }
 
 // ===================== In-memory "server" state =====================
-const store = { meetings: [], carRegs: [] };
+const store = { meetings: [], carRegs: [], users: [] };
 let activeServerUser = null;
 
 function sendJson(res, status, obj) {
@@ -106,9 +108,23 @@ const server = http.createServer(async (req, res) => {
         moduleKey: 'carRegs', item, action: rawAction === 'approve' ? 'APPROVE' : 'REJECT',
         user: activeServerUser, comment: body.comment, extraFields: body.extraFields,
         appData: { carDeptWorkflows: {}, workflows: [] },
-        existingCollection: store.carRegs
+        existingCollection: store.carRegs, users: store.users
       });
       return sendJson(res, 200, { ok: true, item: outcome.item, transition: outcome.transition });
+    } catch (err) {
+      return sendJson(res, err.status || 500, { error: err.message });
+    }
+  }
+
+  // POST /api/records/carRegs/:id/confirm-driver — mirrors routes/records.js.
+  const confirmDriverMatch = url.pathname.match(/^\/api\/records\/carRegs\/(\d+)\/confirm-driver$/);
+  if (req.method === 'POST' && confirmDriverMatch) {
+    const id = Number(confirmDriverMatch[1]);
+    const item = store.carRegs.find((c) => c.id === id);
+    if (!item) return sendJson(res, 404, { error: 'Không tìm thấy hồ sơ' });
+    try {
+      const result = recordActions.confirmCarDriverAssignment(activeServerUser, item);
+      return sendJson(res, 200, { ok: true, item: result });
     } catch (err) {
       return sendJson(res, err.status || 500, { error: err.message });
     }
@@ -133,6 +149,16 @@ const adminUser = {
   phone: '0955555555', email: 'admin@company.com', jobTitle: 'Admin',
   active: true, perms: { admin: true }
 };
+const driverUser = {
+  username: 'lx1', name: 'Nguyễn Văn Tài', dept: 'Phòng Hành Chính', role: 'STAFF',
+  phone: '0966666666', email: 'lx1@company.com', jobTitle: 'Lái xe',
+  active: true, perms: {}
+};
+const driverUser2 = {
+  username: 'lx2', name: 'Trần Văn Lái', dept: 'Phòng Hành Chính', role: 'STAFF',
+  phone: '0977777777', email: 'lx2@company.com', jobTitle: 'Lái xe',
+  active: true, perms: {}
+};
 
 const ROOM = 'Phòng Họp Lớn A (Tầng 3 - Sức chứa 50 người)';
 
@@ -142,7 +168,7 @@ const seedDB = {
   jobTitles: ['Nhân viên', 'Quản lý phòng họp', 'Admin'],
   submissionTypes: [], contractTypes: [],
   carTypes: ['Xe 4 chỗ', 'Xe 7 chỗ', 'Xe 16 chỗ'],
-  users: [bookerUser, roomManagerUser, adminUser],
+  users: [bookerUser, roomManagerUser, adminUser, driverUser, driverUser2],
   meetings: [], meetingMinutes: [], meetingAttendeeTemplates: [],
   carRegs: [], carDeptWorkflows: {},
   tasks: [], permGroups: [], vppExcludeGroups: [],
@@ -151,6 +177,7 @@ const seedDB = {
   itPriceApprovals: [], itPriceDeptWorkflows: {},
   _versions: {}
 };
+store.users = seedDB.users; // mirror routes/workflow.js's req.allUsers cho applyWorkflowAction xác thực assignedDriverUsername.
 
 async function loginAs(page, user) {
   activeServerUser = user;
@@ -336,7 +363,8 @@ async function main() {
     document.getElementById('carKm').value = '120';
     document.getElementById('carStartTime').value = '2026-09-05T08:00';
     document.getElementById('carEndTime').value = '2026-09-05T12:00';
-    document.getElementById('carDestination').value = 'HN -> Hải Phòng -> HN';
+    carRoutePoints = ['HN', 'Hải Phòng', 'HN'];
+    renderCarRoutePoints();
     document.getElementById('carReason').value = 'Gặp đối tác ký hợp đồng.';
     const form = document.querySelector('#carSection form');
     await submitCarReq({ preventDefault() {}, target: form });
@@ -344,9 +372,11 @@ async function main() {
   });
 
   record(
-    'Car: happy-path registration saved as PENDING step 1',
-    c1.count === 1 && c1.saved.status === 'PENDING' && c1.saved.currentStep === 1,
-    `count=${c1.count} status=${c1.saved && c1.saved.status} alerts=${JSON.stringify(c1.alerts)}`
+    'Car: happy-path registration (multi-point route) saved as PENDING step 1',
+    c1.count === 1 && c1.saved.status === 'PENDING' && c1.saved.currentStep === 1
+      && c1.saved.destination === 'HN → Hải Phòng → HN'
+      && Array.isArray(c1.saved.routePoints) && c1.saved.routePoints.length === 3,
+    `count=${c1.count} status=${c1.saved && c1.saved.status} dest=${c1.saved && c1.saved.destination} alerts=${JSON.stringify(c1.alerts)}`
   );
 
   const c2 = await page.evaluate(async () => {
@@ -359,7 +389,8 @@ async function main() {
     document.getElementById('carKm').value = '80';
     document.getElementById('carStartTime').value = '2026-09-05T10:00'; // chồng lấn với phiếu C1 (08:00-12:00)
     document.getElementById('carEndTime').value = '2026-09-05T14:00';
-    document.getElementById('carDestination').value = 'HN -> Bắc Ninh -> HN';
+    carRoutePoints = ['HN', 'Bắc Ninh', 'HN'];
+    renderCarRoutePoints();
     document.getElementById('carReason').value = 'Giao hàng gấp.';
     const form = document.querySelector('#carSection form');
     await submitCarReq({ preventDefault() {}, target: form });
@@ -373,26 +404,32 @@ async function main() {
     window.__alerts = [];
     switchTab('car');
     currentProcessingCarId = carId;
-    document.getElementById('carAssignedDriver').value = 'Nguyễn Văn Tài';
+    document.getElementById('carAssignedDriver').value = 'Nguyễn Văn Tài — Phòng Hành Chính (lx1)';
+    resolveCarAssignedDriverInput(document.getElementById('carAssignedDriver').value);
     document.getElementById('carAssignedVehicleType').value = 'Toyota Innova 7 chỗ';
     document.getElementById('carAssignedPlate').value = '30F-123.45';
     document.getElementById('txtCarComment').value = '';
     await processCarReg('APPROVE');
     const item = DB.carRegs.find((c) => c.id === carId);
-    return { alerts: window.__alerts.slice(), status: item.status, plate: item.assignedPlate };
+    return {
+      alerts: window.__alerts.slice(), status: item.status, plate: item.assignedPlate,
+      driverUsername: item.assignedDriverUsername, driverName: item.assignedDriver
+    };
   }, c1.saved.id);
 
   record(
-    'Car: admin approves and assigns plate — single-step workflow completes',
-    c3.status === 'APPROVED' && c3.plate === '30F-123.45',
-    `status=${c3.status} plate=${c3.plate} alerts=${JSON.stringify(c3.alerts)}`
+    'Car: admin approves and assigns plate + driver account — single-step workflow completes',
+    c3.status === 'APPROVED' && c3.plate === '30F-123.45'
+      && c3.driverUsername === 'lx1' && c3.driverName === 'Nguyễn Văn Tài',
+    `status=${c3.status} plate=${c3.plate} driver=${c3.driverUsername}/${c3.driverName} alerts=${JSON.stringify(c3.alerts)}`
   );
 
   // Duyệt phiếu 2, cố gán TRÙNG biển số 30F-123.45 trong khung giờ chồng lấn với phiếu 1 -> phải bị chặn.
   const c4 = await page.evaluate(async (carId) => {
     window.__alerts = [];
     currentProcessingCarId = carId;
-    document.getElementById('carAssignedDriver').value = 'Trần Văn Lái';
+    document.getElementById('carAssignedDriver').value = 'Trần Văn Lái — Phòng Hành Chính (lx2)';
+    resolveCarAssignedDriverInput(document.getElementById('carAssignedDriver').value);
     document.getElementById('carAssignedVehicleType').value = 'Toyota Innova 7 chỗ';
     document.getElementById('carAssignedPlate').value = '30F-123.45';
     document.getElementById('txtCarComment').value = '';
@@ -414,6 +451,7 @@ async function main() {
     // Từ chối thì không gán xe/lái xe nữa — để trống các ô phân công (khớp thao tác thật của người duyệt
     // khi quyết định từ chối), tránh input còn giữ lại giá trị biển số đã thử gán ở bước trước đó.
     document.getElementById('carAssignedDriver').value = '';
+    document.getElementById('carAssignedDriverUsername').value = '';
     document.getElementById('carAssignedVehicleType').value = '';
     document.getElementById('carAssignedPlate').value = '';
     document.getElementById('txtCarComment').value = 'Không đủ điều kiện xe cho khung giờ này.';
@@ -426,6 +464,163 @@ async function main() {
     'Car: rejection with a reason transitions the registration to REJECTED',
     c5.status === 'REJECTED',
     `status=${c5.status} alerts=${JSON.stringify(c5.alerts)}`
+  );
+
+  // ===================== CAR REGISTRATION — new behaviors: multi-point route validation, mandatory
+  // driver account, driver self-confirm, cross-department visibility for the assigned driver =====
+  await loginAs(page, bookerUser);
+  const carCountBeforeC6 = await page.evaluate(() => DB.carRegs.length);
+  const c6 = await page.evaluate(async () => {
+    window.__alerts = [];
+    switchTab('car');
+    document.getElementById('carDept').value = 'Phòng Kinh Doanh';
+    document.getElementById('carType').value = document.getElementById('carType').options[0].value;
+    document.getElementById('carPassengers').value = '01';
+    document.getElementById('carPurpose').value = 'Công tác';
+    document.getElementById('carKm').value = '50';
+    document.getElementById('carStartTime').value = '2026-09-06T08:00';
+    document.getElementById('carEndTime').value = '2026-09-06T12:00';
+    carRoutePoints = ['HN']; // chỉ có Điểm xuất phát, thiếu điểm đến
+    renderCarRoutePoints();
+    document.getElementById('carReason').value = 'Thiếu điểm đến.';
+    const form = document.querySelector('#carSection form');
+    await submitCarReq({ preventDefault() {}, target: form });
+    return { alerts: window.__alerts.slice(), count: DB.carRegs.length };
+  });
+  record(
+    'Car: registering with fewer than 2 route points is blocked client-side (no record created)',
+    c6.count === carCountBeforeC6 && c6.alerts.some((a) => a.includes('Vui lòng nhập ít nhất Điểm xuất phát')),
+    `count=${c6.count} (was ${carCountBeforeC6}) alerts=${JSON.stringify(c6.alerts)}`
+  );
+
+  const c7 = await page.evaluate(async () => {
+    window.__alerts = [];
+    document.getElementById('carCode').value = generateCarCode();
+    document.getElementById('carDept').value = 'Phòng Kinh Doanh';
+    document.getElementById('carType').value = document.getElementById('carType').options[0].value;
+    document.getElementById('carPassengers').value = '01';
+    document.getElementById('carPurpose').value = 'Công tác';
+    document.getElementById('carKm').value = '60';
+    document.getElementById('carStartTime').value = '2026-09-06T08:00';
+    document.getElementById('carEndTime').value = '2026-09-06T12:00';
+    carRoutePoints = ['HN', 'Hạ Long', 'HN'];
+    renderCarRoutePoints();
+    document.getElementById('carReason').value = 'Khảo sát công trình.';
+    const form = document.querySelector('#carSection form');
+    await submitCarReq({ preventDefault() {}, target: form });
+    return { count: DB.carRegs.length, saved: DB.carRegs[0] };
+  });
+  record(
+    'Car: valid multi-point registration saved as PENDING (route bed for driver-account scenarios below)',
+    c7.saved.status === 'PENDING' && c7.saved.destination === 'HN → Hạ Long → HN',
+    `status=${c7.saved && c7.saved.status} dest=${c7.saved && c7.saved.destination}`
+  );
+
+  // Admin gõ tên lái xe tự do, KHÔNG chọn từ gợi ý (không gọi resolveCarAssignedDriverInput) -> phải bị
+  // chặn ngay ở client, không gửi lên server, hồ sơ vẫn PENDING.
+  await loginAs(page, adminUser);
+  const c8 = await page.evaluate(async (carId) => {
+    window.__alerts = [];
+    switchTab('car');
+    currentProcessingCarId = carId;
+    document.getElementById('carAssignedDriver').value = 'Tên Tự Gõ Không Khớp Ai';
+    document.getElementById('carAssignedVehicleType').value = 'Toyota Innova 7 chỗ';
+    document.getElementById('carAssignedPlate').value = '29A-999.99';
+    document.getElementById('txtCarComment').value = '';
+    await processCarReg('APPROVE');
+    const item = DB.carRegs.find((c) => c.id === carId);
+    return { alerts: window.__alerts.slice(), status: item.status };
+  }, c7.saved.id);
+  record(
+    'Car: approving with a driver name that does not resolve to a real account is blocked (mandatory account rule)',
+    c8.status === 'PENDING' && c8.alerts.some((a) => a.includes('Vui lòng chọn đúng lái xe')),
+    `status=${c8.status} alerts=${JSON.stringify(c8.alerts)}`
+  );
+
+  // Gõ lại đúng định dạng gợi ý (kích hoạt resolveCarAssignedDriverInput) rồi duyệt lại -> thành công.
+  const c9 = await page.evaluate(async (carId) => {
+    window.__alerts = [];
+    currentProcessingCarId = carId;
+    document.getElementById('carAssignedDriver').value = 'Nguyễn Văn Tài — Phòng Hành Chính (lx1)';
+    resolveCarAssignedDriverInput(document.getElementById('carAssignedDriver').value);
+    document.getElementById('carAssignedVehicleType').value = 'Toyota Innova 7 chỗ';
+    document.getElementById('carAssignedPlate').value = '29A-999.99';
+    document.getElementById('txtCarComment').value = '';
+    await processCarReg('APPROVE');
+    const item = DB.carRegs.find((c) => c.id === carId);
+    return {
+      alerts: window.__alerts.slice(), status: item.status,
+      driverUsername: item.assignedDriverUsername, driverConfirmed: item.driverConfirmed
+    };
+  }, c7.saved.id);
+  record(
+    'Car: approving with a resolved driver account succeeds and starts unconfirmed',
+    c9.status === 'APPROVED' && c9.driverUsername === 'lx1' && !c9.driverConfirmed,
+    `status=${c9.status} driver=${c9.driverUsername} confirmed=${c9.driverConfirmed} alerts=${JSON.stringify(c9.alerts)}`
+  );
+
+  // Người KHÔNG phải lái xe được phân công (lx2) không tự xác nhận được chuyến của lx1 -> 403.
+  let c10Error = null;
+  try {
+    const carRegOnServer = store.carRegs.find((c) => c.id === c7.saved.id);
+    recordActions.confirmCarDriverAssignment(driverUser2, carRegOnServer);
+  } catch (err) {
+    c10Error = err;
+  }
+  record(
+    'Car: a driver who is not the assigned one cannot confirm the trip (403)',
+    !!c10Error && c10Error.status === 403,
+    `error=${c10Error && c10Error.message}`
+  );
+
+  // Lái xe được phân công (lx1) tự vào sub-tab "Lái Xe" xác nhận đúng chuyến của mình.
+  await loginAs(page, driverUser);
+  const c11 = await page.evaluate(async (carId) => {
+    window.__alerts = [];
+    switchTab('car');
+    setCarSubTab('DRIVER');
+    const listedBeforeConfirm = document.getElementById('carDriverListWrap').innerHTML.includes(String(carId)) ||
+      DB.carRegs.some((c) => c.id === carId && c.assignedDriverUsername === currentUser.username && c.status === 'APPROVED');
+    confirmCarDriverAssignmentAction(carId);
+    runConfirmedAction();
+    await new Promise((r) => setTimeout(r, 200));
+    const item = DB.carRegs.find((c) => c.id === carId);
+    return { alerts: window.__alerts.slice(), listedBeforeConfirm, confirmed: item.driverConfirmed, confirmedAt: item.driverConfirmedAt };
+  }, c7.saved.id);
+  record(
+    'Car: assigned driver self-confirms their trip from the "Lái Xe" sub-tab',
+    c11.listedBeforeConfirm && c11.confirmed === true && !!c11.confirmedAt,
+    `listedBeforeConfirm=${c11.listedBeforeConfirm} confirmed=${c11.confirmed} confirmedAt=${c11.confirmedAt} alerts=${JSON.stringify(c11.alerts)}`
+  );
+
+  // Lái xe được phân công luôn xem được phiếu của mình dù khác phòng ban và không có quyền carView; lái
+  // xe KHÁC (chưa được phân công) thì không (canViewCarReg() — xem lib/recordViewScope.js).
+  const c7ServerRecord = store.carRegs.find((c) => c.id === c7.saved.id);
+  const c12CanDriver1View = canViewCarReg(driverUser, c7ServerRecord, { carDeptWorkflows: {}, workflows: [] });
+  const c12CanDriver2View = canViewCarReg(driverUser2, c7ServerRecord, { carDeptWorkflows: {}, workflows: [] });
+  record(
+    'Car: assigned driver can view the trip across departments; an unassigned driver cannot',
+    c12CanDriver1View === true && c12CanDriver2View === false,
+    `driver1(assigned)=${c12CanDriver1View} driver2(unassigned)=${c12CanDriver2View}`
+  );
+
+  // Đổi sang lái xe khác trên 1 hồ sơ đã từng được xác nhận trước đó -> phải hủy xác nhận cũ, vì trách
+  // nhiệm chuyến đi đã chuyển người (xem applyWorkflowAction() ở lib/workflowEngine.js).
+  const c13Item = {
+    id: 900001, code: 'HCRC-DPH-REASSIGN', dept: 'Phòng Kinh Doanh', status: 'PENDING', currentStep: 1,
+    history: [], startTime: '2026-09-07T08:00', endTime: '2026-09-07T12:00',
+    assignedDriverUsername: 'lx1', assignedDriver: 'Nguyễn Văn Tài',
+    driverConfirmed: true, driverConfirmedAt: '01/09/2026 07:00'
+  };
+  const c13Outcome = applyWorkflowAction({
+    moduleKey: 'carRegs', item: c13Item, action: 'APPROVE', user: adminUser, comment: '',
+    extraFields: { assignedDriverUsername: 'lx2', assignedPlate: '29A-111.11' },
+    appData: { carDeptWorkflows: {}, workflows: [] }, existingCollection: [], users: seedDB.users
+  });
+  record(
+    'Car: reassigning to a different driver resets a prior driver confirmation',
+    c13Outcome.item.assignedDriverUsername === 'lx2' && c13Outcome.item.driverConfirmed === false && c13Outcome.item.driverConfirmedAt === null,
+    `driver=${c13Outcome.item.assignedDriverUsername} confirmed=${c13Outcome.item.driverConfirmed} confirmedAt=${c13Outcome.item.driverConfirmedAt}`
   );
 
   await browser.close();

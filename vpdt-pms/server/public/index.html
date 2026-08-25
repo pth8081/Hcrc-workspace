@@ -2255,6 +2255,12 @@ table { display: block; overflow-x: auto; max-width: 100%; }
   <!-- Màn hình MODULE ĐĂNG KÝ XE -->
   <div id="carSection" class="hidden space-y-6">
     <div id="hanhChinhTabBar_car" class="hidden flex gap-2 flex-wrap"></div>
+    <div class="flex flex-wrap gap-2 border-b pb-2">
+      <button type="button" onclick="setCarSubTab('REG')" id="btnCarSubReg" class="px-3 py-1.5 rounded text-xs font-bold bg-indigo-700 text-white">🚗 Đăng Ký Xe</button>
+      <button type="button" onclick="setCarSubTab('DRIVER')" id="btnCarSubDriver" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">🧑‍✈️ Lái Xe</button>
+    </div>
+
+    <div id="carSubReg" class="space-y-6">
     <div class="bg-indigo-50 p-4 rounded border border-indigo-200 space-y-3">
       <h3 class="font-bold text-indigo-900 text-base flex items-center gap-2">🚗 Mẫu Biểu Đăng Ký Xe Ô Tô / Phương Tiện</h3>
       <p class="text-xs text-indigo-700">Tạo phiếu đăng ký lịch trình xe. Luồng duyệt tích hợp phê duyệt đồng cấp.</p>
@@ -2306,9 +2312,11 @@ table { display: block; overflow-x: auto; max-width: 100%; }
             <label class="block font-semibold text-gray-600 mb-1">Thời Gian Dự Kiến Về</label>
             <input id="carEndTime" type="datetime-local" class="w-full border p-1.5 rounded" required>
           </div>
-          <div class="md:col-span-2">
-            <label class="block font-semibold text-gray-600 mb-1">Lộ Trình Di Chuyển</label>
-            <input id="carDestination" placeholder="HN -> Hải Phòng -> HN" class="w-full border p-1.5 rounded" required>
+          <div class="md:col-span-3">
+            <label class="block font-semibold text-gray-600 mb-1">Lộ Trình Di Chuyển <span class="text-red-500">*</span></label>
+            <div id="carRoutePointsWrap" class="space-y-1.5"></div>
+            <button type="button" onclick="addCarRoutePoint()" class="mt-1.5 bg-gray-600 text-white px-3 py-1 rounded text-xs font-bold hover:bg-gray-700">+ Thêm Điểm</button>
+            <input id="carDestination" type="hidden" required>
           </div>
         </div>
 
@@ -2377,6 +2385,17 @@ table { display: block; overflow-x: auto; max-width: 100%; }
         </table>
       </div>
       <div id="paginationContainer_car"></div>
+    </div>
+    </div>
+
+    <!-- Sub-tab: Lái Xe (tự xác nhận chuyến được phân công — assignedDriverUsername === currentUser) -->
+    <div id="carSubDriver" class="hidden space-y-4">
+      <div class="bg-indigo-50 p-4 rounded border border-indigo-200 space-y-3">
+        <h3 class="font-bold text-indigo-900 text-base flex items-center gap-2">🧑‍✈️ Chuyến Xe Được Phân Công Cho Tôi</h3>
+        <p class="text-xs text-indigo-700">Danh sách phiếu đăng ký xe đã phê duyệt xong và phân công bạn làm lái xe — xác nhận để Phòng Hành Chính biết bạn đã nắm thông tin chuyến đi.</p>
+        <div id="carDriverListWrap" class="space-y-2"></div>
+        <div id="carDriverNoneNote" class="hidden text-xs text-gray-500 italic bg-white p-3 rounded border">Bạn chưa được phân công chuyến xe nào.</div>
+      </div>
     </div>
   </div>
 
@@ -2612,12 +2631,15 @@ table { display: block; overflow-x: auto; max-width: 100%; }
         <div id="uniformNoPendingAllocNote" class="hidden text-xs text-gray-500 italic bg-white p-3 rounded border">Không có phần phân bổ nào đang chờ xác nhận.</div>
       </div>
 
+      <datalist id="uniformStoreEmployeesDatalist"></datalist>
+
       <div class="bg-emerald-50 p-4 rounded border border-emerald-200 space-y-3">
         <h3 class="font-bold text-emerald-900 text-base flex items-center gap-2">👕 Cấp Đồng Phục Cho Nhân Viên</h3>
         <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
           <div>
             <label class="block font-semibold text-gray-600 mb-1 text-xs">Nhân Viên <span class="text-red-500">*</span></label>
-            <select id="uniformIssueEmployee" class="w-full border p-1.5 rounded text-xs bg-white"></select>
+            <input id="uniformIssueEmployee" list="uniformStoreEmployeesDatalist" oninput="resolveUniformEmployeeInput('uniformIssueEmployee', 'uniformIssueEmployeeUsername')" placeholder="Gõ tên hoặc tài khoản để tìm..." class="w-full border p-1.5 rounded text-xs bg-white">
+            <input type="hidden" id="uniformIssueEmployeeUsername">
           </div>
           <div>
             <label class="block font-semibold text-gray-600 mb-1 text-xs">Mã Phiếu (không bắt buộc)</label>
@@ -2650,6 +2672,99 @@ table { display: block; overflow-x: auto; max-width: 100%; }
           </table>
         </div>
       </div>
+
+      <div class="bg-rose-50 p-4 rounded border border-rose-200 space-y-3">
+        <h3 class="font-bold text-rose-900 text-base flex items-center gap-2">🗑️ Báo Hỏng / Hủy (Từ Kho)</h3>
+        <p class="text-xs text-rose-700">Dùng khi đồng phục còn NẰM TRONG KHO (chưa cấp cho nhân viên) bị hỏng hoặc cần loại bỏ không sử dụng.</p>
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+          <div>
+            <label class="block font-semibold text-gray-600 mb-1 text-xs">Tên Đồng Phục <span class="text-red-500">*</span></label>
+            <input id="uniformAdjStockItemName" placeholder="VD: Áo đồng phục nam" class="w-full border p-1.5 rounded text-xs">
+          </div>
+          <div>
+            <label class="block font-semibold text-gray-600 mb-1 text-xs">Size</label>
+            <input id="uniformAdjStockSize" placeholder="VD: L" class="w-full border p-1.5 rounded text-xs">
+          </div>
+          <div>
+            <label class="block font-semibold text-gray-600 mb-1 text-xs">Số Lượng <span class="text-red-500">*</span></label>
+            <input id="uniformAdjStockQty" type="number" min="1" class="w-full border p-1.5 rounded text-xs">
+          </div>
+        </div>
+        <div>
+          <label class="block font-semibold text-gray-600 mb-1 text-xs">Kết Quả <span class="text-red-500">*</span></label>
+          <div class="flex gap-4 text-xs">
+            <label class="flex items-center gap-1"><input type="radio" name="uniformAdjStockOutcome" value="HONG" checked> Hỏng</label>
+            <label class="flex items-center gap-1"><input type="radio" name="uniformAdjStockOutcome" value="HUY"> Hủy không sử dụng</label>
+          </div>
+        </div>
+        <div>
+          <label class="block font-semibold text-gray-600 mb-1 text-xs">Lý Do <span class="text-red-500">*</span></label>
+          <textarea id="uniformAdjStockReason" rows="2" class="w-full border p-1.5 rounded text-xs" placeholder="Bắt buộc nhập lý do..."></textarea>
+        </div>
+        <div class="flex justify-end">
+          <button type="button" onclick="submitUniformStockAdjustment('STOCK')" class="bg-rose-600 text-white px-5 py-2 rounded text-xs font-bold hover:bg-rose-700">Báo Hỏng / Hủy</button>
+        </div>
+      </div>
+
+      <div class="bg-orange-50 p-4 rounded border border-orange-200 space-y-3">
+        <h3 class="font-bold text-orange-900 text-base flex items-center gap-2">↩️ Thu Hồi Từ Nhân Viên</h3>
+        <p class="text-xs text-orange-700">Dùng khi thu hồi lại đồng phục ĐÃ CẤP cho nhân viên (nghỉ việc, đổi size...). Nếu đồ vẫn còn tốt, chọn "Về Tồn Kho" để nhập lại kho; nếu đã hỏng/không dùng được, chọn Hỏng/Hủy.</p>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+          <div>
+            <label class="block font-semibold text-gray-600 mb-1 text-xs">Nhân Viên <span class="text-red-500">*</span></label>
+            <input id="uniformAdjEmpEmployee" list="uniformStoreEmployeesDatalist" oninput="resolveUniformEmployeeInput('uniformAdjEmpEmployee', 'uniformAdjEmpEmployeeUsername')" placeholder="Gõ tên hoặc tài khoản để tìm..." class="w-full border p-1.5 rounded text-xs bg-white">
+            <input type="hidden" id="uniformAdjEmpEmployeeUsername">
+          </div>
+        </div>
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+          <div>
+            <label class="block font-semibold text-gray-600 mb-1 text-xs">Tên Đồng Phục <span class="text-red-500">*</span></label>
+            <input id="uniformAdjEmpItemName" placeholder="VD: Áo đồng phục nam" class="w-full border p-1.5 rounded text-xs">
+          </div>
+          <div>
+            <label class="block font-semibold text-gray-600 mb-1 text-xs">Size</label>
+            <input id="uniformAdjEmpSize" placeholder="VD: L" class="w-full border p-1.5 rounded text-xs">
+          </div>
+          <div>
+            <label class="block font-semibold text-gray-600 mb-1 text-xs">Số Lượng <span class="text-red-500">*</span></label>
+            <input id="uniformAdjEmpQty" type="number" min="1" class="w-full border p-1.5 rounded text-xs">
+          </div>
+        </div>
+        <div>
+          <label class="block font-semibold text-gray-600 mb-1 text-xs">Kết Quả <span class="text-red-500">*</span></label>
+          <div class="flex gap-4 text-xs">
+            <label class="flex items-center gap-1"><input type="radio" name="uniformAdjEmpOutcome" value="TON" checked> Về Tồn Kho</label>
+            <label class="flex items-center gap-1"><input type="radio" name="uniformAdjEmpOutcome" value="HONG"> Hỏng</label>
+            <label class="flex items-center gap-1"><input type="radio" name="uniformAdjEmpOutcome" value="HUY"> Hủy không sử dụng</label>
+          </div>
+        </div>
+        <div>
+          <label class="block font-semibold text-gray-600 mb-1 text-xs">Lý Do <span class="text-red-500">*</span></label>
+          <textarea id="uniformAdjEmpReason" rows="2" class="w-full border p-1.5 rounded text-xs" placeholder="Bắt buộc nhập lý do..."></textarea>
+        </div>
+        <div class="flex justify-end">
+          <button type="button" onclick="submitUniformStockAdjustment('EMPLOYEE')" class="bg-orange-600 text-white px-5 py-2 rounded text-xs font-bold hover:bg-orange-700">Thu Hồi</button>
+        </div>
+      </div>
+
+      <div class="space-y-3">
+        <h3 class="font-bold text-gray-800 text-sm">📋 Lịch Sử Hỏng / Hủy / Thu Hồi</h3>
+        <div class="overflow-x-auto">
+          <table class="w-full border-collapse border text-xs bg-white">
+            <thead><tr class="bg-gray-100 text-left text-gray-700">
+              <th class="border p-2">Ngày</th>
+              <th class="border p-2">Nguồn</th>
+              <th class="border p-2">Mặt Hàng</th>
+              <th class="border p-2 text-right">SL</th>
+              <th class="border p-2">Kết Quả</th>
+              <th class="border p-2">Nhân Viên</th>
+              <th class="border p-2">Lý Do</th>
+              <th class="border p-2">Người Thực Hiện</th>
+            </tr></thead>
+            <tbody id="uniformAdjustmentsTableBody"></tbody>
+          </table>
+        </div>
+      </div>
     </div>
 
     <!-- Sub-tab: Kho Đồng Phục (xem — uniformManage xem tất cả siêu thị, uniformStoreManage chỉ xem siêu thị mình) -->
@@ -2658,7 +2773,8 @@ table { display: block; overflow-x: auto; max-width: 100%; }
         <div class="flex items-center justify-between gap-2 flex-wrap">
           <h3 class="font-bold text-gray-800 text-sm">📊 Tồn Kho Đồng Phục</h3>
           <div id="uniformStockStoreFilterWrap" class="hidden">
-            <select id="uniformStockStoreFilter" onchange="renderUniformStock()" class="border p-1.5 rounded text-xs bg-white"></select>
+            <input id="uniformStockStoreFilter" list="uniformStoresFilterDatalist" oninput="renderUniformStock()" placeholder="Gõ tên siêu thị để tìm (để trống = tất cả)..." class="border p-1.5 rounded text-xs bg-white">
+            <datalist id="uniformStoresFilterDatalist"></datalist>
           </div>
         </div>
         <div class="overflow-x-auto">
@@ -2669,6 +2785,8 @@ table { display: block; overflow-x: auto; max-width: 100%; }
               <th class="border p-2">Size</th>
               <th class="border p-2 text-right">Đã Nhận (Xác Nhận)</th>
               <th class="border p-2 text-right">Đã Cấp NV</th>
+              <th class="border p-2 text-right">Hỏng</th>
+              <th class="border p-2 text-right">Hủy</th>
               <th class="border p-2 text-right">Tồn Kho</th>
             </tr></thead>
             <tbody id="uniformStockTableBody"></tbody>
@@ -3876,7 +3994,7 @@ table { display: block; overflow-x: auto; max-width: 100%; }
                 <input type="checkbox" id="pUniformManage"> 📦 Hành Chính (tạo kỳ cấp phát, phân bổ xuống siêu thị)
               </label>
               <label class="flex items-center gap-2 text-amber-700 font-semibold cursor-pointer">
-                <input type="checkbox" id="pUniformStoreManage"> ✅ Giám Đốc Siêu Thị (xác nhận nhận, cấp phát cho nhân viên)
+                <input type="checkbox" id="pUniformStoreManage"> ✅ Giám Đốc Siêu Thị (xác nhận nhận, cấp phát, báo Hỏng/Hủy, thu hồi từ nhân viên)
               </label>
             </div>
           </div>
@@ -4699,8 +4817,9 @@ table { display: block; overflow-x: auto; max-width: 100%; }
         <h4 class="font-bold text-indigo-900 mb-1">🏢 Phần Dành Cho Phòng Hành Chính (phân công xe)</h4>
         <div class="grid grid-cols-1 md:grid-cols-3 gap-2">
           <div>
-            <label class="block font-semibold text-gray-600 mb-1">Lái xe được phân công</label>
-            <input id="carAssignedDriver" placeholder="Tên tài xế hoặc 'Tự lái'" class="w-full border p-1.5 rounded">
+            <label class="block font-semibold text-gray-600 mb-1">Lái xe được phân công <span class="text-red-500">*</span></label>
+            <input id="carAssignedDriver" list="systemUsersDatalist" oninput="resolveCarAssignedDriverInput(this.value)" placeholder="Gõ tên hoặc tài khoản để tìm..." class="w-full border p-1.5 rounded">
+            <input type="hidden" id="carAssignedDriverUsername">
           </div>
           <div>
             <label class="block font-semibold text-gray-600 mb-1">Loại xe cụ thể</label>
@@ -5527,6 +5646,8 @@ let activePaymentSubTab = 'APPROVE';
 let expandedContractFamilies = new Set();
 let currentProcessingSubId = null;
 let currentProcessingCarId = null;
+let carRoutePoints = ['', ''];
+let activeCarSubTab = 'REG';
 let currentProcessingOfficeId = null;
 // Tệp .docx đang mở trong Khung Xem Bảo Vệ (nếu có) — dùng cho nút "In có watermark" (xem
 // printWordWithWatermark() ở script cuối trang), reset về null mỗi lần openFileProtectedView() xử lý 1
@@ -6890,6 +7011,7 @@ async function initDatabase(loggingInUser) {
     DB.itSupportTickets = data.itSupportTickets || [];
     DB.uniformPeriods = data.uniformPeriods || [];
     DB.uniformIssuances = data.uniformIssuances || [];
+    DB.uniformStockAdjustments = data.uniformStockAdjustments || [];
     DB.budgetDeptWorkflows = data.budgetDeptWorkflows || {};
     DB.budgetTemplates = data.budgetTemplates || [];
     DB.budgetPeriods = data.budgetPeriods || [];
@@ -9344,7 +9466,7 @@ function switchTab(tabName) {
     if (editingMinutesId === null) document.getElementById('minutesCode').value = generateMinutesCode();
   }
   if (tabName === 'internal') { setInternalSubTab(activeInternalSubTab); }
-  if (tabName === 'car') { renderDynamicInputsForModule('CAR', 'dynamicFieldsContainer_CAR'); renderCarRegs(); document.getElementById('carCode').value = generateCarCode(); }
+  if (tabName === 'car') { setCarSubTab(activeCarSubTab); }
   if (tabName === 'vpp') { setVppSubTab(activeVppSubTab); }
   if (tabName === 'uniform') { setUniformSubTab(activeUniformSubTab); }
   if (tabName === 'periodicReport') { setPeriodicReportSubTab(activePeriodicReportSubTab); }
@@ -15882,9 +16004,13 @@ async function submitCarReq(e) {
   const km = parseFloat(document.getElementById('carKm').value) || 0;
   const startTime = document.getElementById('carStartTime').value;
   const endTime = document.getElementById('carEndTime').value;
-  const destination = document.getElementById('carDestination').value.trim();
+  const routePoints = carRoutePoints.map(p => p.trim()).filter(Boolean);
+  const destination = routePoints.join(' → ');
   const reason = document.getElementById('carReason').value.trim();
 
+  if (routePoints.length < 2) {
+    return alert('Vui lòng nhập ít nhất Điểm xuất phát và 1 điểm đến!');
+  }
   if (DB.carRegs.some(c => c.code === code)) {
     return alert('Mã phiếu đăng ký xe đã tồn tại!');
   }
@@ -15908,6 +16034,7 @@ async function submitCarReq(e) {
     km: km,
     startTime: startTime,
     endTime: endTime,
+    routePoints: routePoints,
     destination: destination,
     reason: reason,
     customData: customData,
@@ -15944,8 +16071,104 @@ async function submitCarReq(e) {
 
   alert('✅ Đã gửi phiếu đăng ký xe thành công!');
   e.target.reset();
+  resetCarRoutePoints();
   document.getElementById('carCode').value = generateCarCode();
   renderCarRegs();
+}
+
+// ============ Lộ Trình Di Chuyển nhiều điểm (thay 1 ô text tự do) ============
+function resetCarRoutePoints() {
+  carRoutePoints = ['', ''];
+  renderCarRoutePoints();
+}
+
+function addCarRoutePoint() {
+  carRoutePoints.push('');
+  renderCarRoutePoints();
+}
+
+function removeCarRoutePoint(idx) {
+  if (carRoutePoints.length <= 2) return; // luôn giữ tối thiểu Điểm xuất phát + 1 điểm đến
+  carRoutePoints.splice(idx, 1);
+  renderCarRoutePoints();
+}
+
+function updateCarRoutePoint(idx, value) {
+  carRoutePoints[idx] = value;
+  document.getElementById('carDestination').value = carRoutePoints.map(p => p.trim()).filter(Boolean).join(' → ');
+}
+
+function renderCarRoutePoints() {
+  const wrap = document.getElementById('carRoutePointsWrap');
+  if (!wrap) return;
+  wrap.innerHTML = carRoutePoints.map((p, idx) => `
+    <div class="flex items-center gap-2">
+      <span class="text-xs text-gray-500 w-24 shrink-0">${idx === 0 ? 'Điểm xuất phát' : `Điểm ${idx}`}</span>
+      <input value="${escapeHtml(p)}" oninput="updateCarRoutePoint(${idx}, this.value)" placeholder="${idx === 0 ? 'VD: Hội An' : 'VD: Đà Nẵng'}" class="flex-1 border p-1.5 rounded text-xs">
+      ${carRoutePoints.length > 2 ? `<button type="button" onclick="removeCarRoutePoint(${idx})" class="text-red-500 hover:text-red-700 text-xs font-bold">✕</button>` : ''}
+    </div>
+  `).join('');
+  document.getElementById('carDestination').value = carRoutePoints.map(p => p.trim()).filter(Boolean).join(' → ');
+}
+
+function setCarSubTab(subTab) {
+  window.scrollTo({ top: 0, behavior: 'auto' }); // Tránh "bay xuống cuối" khi đổi tab con — xem setSystemSubTab().
+  activeCarSubTab = subTab;
+  document.getElementById('carSubReg').classList.toggle('hidden', subTab !== 'REG');
+  document.getElementById('carSubDriver').classList.toggle('hidden', subTab !== 'DRIVER');
+  const activeCls = 'px-3 py-1.5 rounded text-xs font-bold bg-indigo-700 text-white';
+  const inactiveCls = 'px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700';
+  document.getElementById('btnCarSubReg').className = subTab === 'REG' ? activeCls : inactiveCls;
+  document.getElementById('btnCarSubDriver').className = subTab === 'DRIVER' ? activeCls : inactiveCls;
+  if (subTab === 'REG') {
+    renderDynamicInputsForModule('CAR', 'dynamicFieldsContainer_CAR');
+    renderCarRegs();
+    document.getElementById('carCode').value = generateCarCode();
+    if (!carRoutePoints.length) resetCarRoutePoints(); else renderCarRoutePoints();
+  }
+  if (subTab === 'DRIVER') renderCarDriverTab();
+}
+
+// ============ Lái Xe (tự xác nhận chuyến được phân công) ============
+function renderCarDriverTab() {
+  const wrap = document.getElementById('carDriverListWrap');
+  const noneNote = document.getElementById('carDriverNoneNote');
+  if (!wrap) return;
+  const myTrips = DB.carRegs.filter(c => c.assignedDriverUsername === currentUser.username && c.status === 'APPROVED');
+  noneNote.classList.toggle('hidden', myTrips.length > 0);
+  wrap.innerHTML = myTrips.map(c => `
+    <div class="bg-white p-3 rounded border space-y-1">
+      <div class="flex items-center justify-between gap-2 flex-wrap">
+        <div>
+          <div class="font-bold text-indigo-800 text-sm">${escapeHtml(c.code)} — ${escapeHtml(c.dept)}</div>
+          <div class="text-xs text-gray-600">${escapeHtml(c.destination)}</div>
+          <div class="text-xs text-gray-500">${escapeHtml(c.startTime)} ➔ ${escapeHtml(c.endTime)} | Xe: ${escapeHtml(c.type)}${c.assignedPlate ? ` (${escapeHtml(c.assignedPlate)})` : ''}</div>
+        </div>
+        ${c.driverConfirmed
+          ? `<span class="px-2 py-0.5 bg-green-100 text-green-800 rounded font-bold text-[11px]">✅ Đã xác nhận lúc ${escapeHtml(c.driverConfirmedAt || '')}</span>`
+          : `<button type="button" onclick="confirmCarDriverAssignmentAction(${c.id})" class="bg-indigo-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-indigo-700">✅ Xác Nhận Đăng Ký</button>`
+        }
+      </div>
+    </div>
+  `).join('');
+}
+
+function confirmCarDriverAssignmentAction(carId) {
+  showConfirmModal({
+    title: 'Xác Nhận Đăng Ký Xe',
+    bodyHTML: '<p>Bạn xác nhận đã nắm thông tin và sẽ thực hiện chuyến đi này?</p>',
+    confirmLabel: 'Xác Nhận',
+    onConfirm: async () => {
+      let result;
+      try {
+        result = await callRecordAction('carRegs', carId, 'confirm-driver', {});
+      } catch (err) { return alert(`⛔ ${err.message}`); }
+      const idx = DB.carRegs.findIndex(x => x.id === carId);
+      if (idx !== -1) DB.carRegs[idx] = result.item;
+      logSystemAction('CAR', 'CONFIRM_DRIVER', `Lái xe xác nhận đăng ký [${result.item.code}]`, 'SUCCESS', result.item.code);
+      renderCarDriverTab();
+    }
+  });
 }
 
 function onCarFilterChange() {
@@ -16054,6 +16277,14 @@ function deleteCarRegAction(id) {
   });
 }
 
+// Khớp regex resolveAttendeeAccountInput() ở trên — cùng định dạng "Tên — Phòng (tài_khoản)" của
+// <datalist id="systemUsersDatalist">. Lái xe bắt buộc là 1 tài khoản hệ thống có thật (gõ tự do không
+// khớp -> để trống, submit sẽ bị chặn "Vui lòng chọn lái xe").
+function resolveCarAssignedDriverInput(rawValue) {
+  const m = rawValue.match(/^(.*) — .*\(([^()]+)\)$/);
+  document.getElementById('carAssignedDriverUsername').value = m ? m[2].trim() : '';
+}
+
 function openCarProcessModal(carId) {
   currentProcessingCarId = carId;
   const c = DB.carRegs.find(item => item.id === carId);
@@ -16078,7 +16309,12 @@ function openCarProcessModal(carId) {
   `;
   document.getElementById('carModalDetails').innerHTML = detailsHTML;
 
-  document.getElementById('carAssignedDriver').value = c.assignedDriver || c.driver || '';
+  populateSystemUsersDatalist();
+  const assignedDriverUser = c.assignedDriverUsername ? DB.users.find(u => u.username === c.assignedDriverUsername) : null;
+  document.getElementById('carAssignedDriver').value = assignedDriverUser
+    ? `${assignedDriverUser.name} — ${assignedDriverUser.dept || 'Chưa rõ phòng'} (${assignedDriverUser.username})`
+    : '';
+  document.getElementById('carAssignedDriverUsername').value = c.assignedDriverUsername || '';
   document.getElementById('carAssignedVehicleType').value = c.assignedVehicleType || '';
   document.getElementById('carAssignedPlate').value = c.assignedPlate || c.plate || '';
   document.getElementById('txtCarComment').value = '';
@@ -16145,9 +16381,16 @@ async function processCarReg(actionType) {
   }
 
   // Bất kỳ bước nào cũng có thể điền/điều chỉnh thông tin phân công xe (thường do Phòng Hành Chính
-  // thực hiện ở bước cuối) — gửi kèm cùng request duyệt/từ chối, ghi nhận ngay khi có nhập.
+  // thực hiện ở bước cuối) — gửi kèm cùng request duyệt/từ chối, ghi nhận ngay khi có nhập. Lái xe bắt
+  // buộc là 1 tài khoản hệ thống có thật — nếu ô còn text nhưng chưa khớp được tài khoản (gõ tự do,
+  // chưa chọn xong từ gợi ý) thì chặn ngay ở đây, không gửi lên server.
+  const carAssignedDriverText = document.getElementById('carAssignedDriver').value.trim();
+  const carAssignedDriverUsername = document.getElementById('carAssignedDriverUsername').value;
+  if (carAssignedDriverText && !carAssignedDriverUsername) {
+    return alert('Vui lòng chọn đúng lái xe từ danh sách gợi ý (gõ tên hoặc tài khoản để tìm)!');
+  }
   const extraFields = {
-    assignedDriver: document.getElementById('carAssignedDriver').value.trim(),
+    assignedDriverUsername: carAssignedDriverUsername,
     assignedVehicleType: document.getElementById('carAssignedVehicleType').value.trim(),
     assignedPlate: document.getElementById('carAssignedPlate').value.trim()
   };
@@ -27623,6 +27866,7 @@ async function submitItTicketComment() {
 let activeUniformSubTab = 'STOCK';
 let uniformAllocBlocks = [];
 let uniformIssueItems = [];
+let uniformStoreEmployeesCache = [];
 
 function canManageUniform(user) {
   return !!(user?.perms?.admin || user?.perms?.uniformManage);
@@ -27650,7 +27894,7 @@ function setUniformSubTab(subTab) {
   document.getElementById('btnUniformSubStock').className = subTab === 'STOCK' ? activeCls : inactiveCls;
 
   if (subTab === 'PERIODS') { resetUniformPeriodForm(); renderUniformPeriodsList(); }
-  if (subTab === 'STORE') { renderUniformPendingAllocations(); renderUniformIssueEmployeeOptions(); resetUniformIssueForm(); renderUniformIssuancesTable(); }
+  if (subTab === 'STORE') { renderUniformPendingAllocations(); renderUniformIssueEmployeeOptions(); resetUniformIssueForm(); renderUniformIssuancesTable(); resetUniformAdjustForms(); renderUniformAdjustmentsTable(); }
   if (subTab === 'STOCK') { renderUniformStockStoreFilterOptions(); renderUniformStock(); }
 }
 
@@ -27681,6 +27925,14 @@ function updateUniformAllocDept(idx, value) {
   uniformAllocBlocks[idx].dept = value;
 }
 
+// Ô nhập-tìm-kiếm siêu thị (thay dropdown vì DB.stores có thể rất dài) — chỉ chấp nhận đúng 1 tên siêu
+// thị có thật trong DB.stores (gõ tự do không khớp -> để trống, validation lúc Tạo Kỳ Cấp Phát sẽ bắt).
+function resolveUniformAllocDeptInput(blockIdx, rawValue) {
+  const match = (DB.stores || []).find(s => s === rawValue.trim());
+  updateUniformAllocDept(blockIdx, match || '');
+  renderUniformAllocationBlocks();
+}
+
 function addUniformAllocItemRow(blockIdx) {
   if (!uniformAllocBlocks[blockIdx]) return;
   uniformAllocBlocks[blockIdx].items.push({ name: '', size: '', qty: 0 });
@@ -27706,10 +27958,10 @@ function renderUniformAllocationBlocks() {
   wrap.innerHTML = uniformAllocBlocks.map((block, bIdx) => `
     <div class="bg-white p-3 rounded border space-y-2">
       <div class="flex items-center justify-between gap-2">
-        <select onchange="updateUniformAllocDept(${bIdx}, this.value)" class="border p-1.5 rounded text-xs bg-white flex-1">
-          <option value="">-- Chọn siêu thị --</option>
-          ${DB.stores.filter(d => d === block.dept || !chosenDepts.includes(d)).map(d => `<option value="${escapeHtml(d)}" ${d === block.dept ? 'selected' : ''}>${escapeHtml(d)}</option>`).join('')}
-        </select>
+        <input value="${escapeHtml(block.dept)}" list="uniformAllocStoreDatalist_${bIdx}" onchange="resolveUniformAllocDeptInput(${bIdx}, this.value)" placeholder="Gõ tên siêu thị để tìm..." class="border p-1.5 rounded text-xs bg-white flex-1">
+        <datalist id="uniformAllocStoreDatalist_${bIdx}">
+          ${DB.stores.filter(d => d === block.dept || !chosenDepts.includes(d)).map(d => `<option value="${escapeHtml(d)}"></option>`).join('')}
+        </datalist>
         <button type="button" onclick="removeUniformAllocationBlock(${bIdx})" class="text-red-600 hover:text-red-800 text-xs font-bold whitespace-nowrap">✕ Bỏ siêu thị này</button>
       </div>
       <table class="w-full text-xs border-collapse">
@@ -27870,18 +28122,32 @@ function confirmUniformAllocationAction(periodId, allocationId) {
   });
 }
 
+// Danh sách nhân viên siêu thị mình dùng chung cho 2 ô nhập-tìm-kiếm nhân viên (Cấp Phát + Thu Hồi) —
+// thay dropdown vì 1 siêu thị có thể có rất nhiều nhân viên. Option hiển thị "Tên (tài_khoản)" để gõ
+// tìm được theo cả tên lẫn tài khoản (resolveUniformEmployeeInput() khớp lại nguyên cụm này).
 function renderUniformIssueEmployeeOptions() {
-  const sel = document.getElementById('uniformIssueEmployee');
-  if (!sel) return;
   const employees = (DB.users || []).filter(u => u.dept === currentUser.dept && u.active !== false);
-  const prevValue = sel.value;
-  sel.innerHTML = `<option value="">-- Chọn nhân viên --</option>` +
-    employees.map(u => `<option value="${escapeHtml(u.username)}">${escapeHtml(u.name)}</option>`).join('');
-  if (employees.some(u => u.username === prevValue)) sel.value = prevValue;
+  const datalist = document.getElementById('uniformStoreEmployeesDatalist');
+  if (datalist) {
+    datalist.innerHTML = employees.map(u => `<option value="${escapeHtml(u.name)} (${escapeHtml(u.username)})"></option>`).join('');
+  }
+  uniformStoreEmployeesCache = employees;
+}
+
+// Khớp text đang gõ trong ô #inputId (định dạng "Tên (tài_khoản)") với đúng 1 nhân viên còn hiệu lực
+// của siêu thị mình -> ghi username vào input ẩn #hiddenId; không khớp (gõ tự do/chưa chọn xong) thì để
+// trống, validation lúc submit sẽ bắt lỗi "chưa chọn nhân viên".
+function resolveUniformEmployeeInput(inputId, hiddenId) {
+  const raw = document.getElementById(inputId).value;
+  const m = raw.match(/\(([^()]+)\)\s*$/);
+  const username = m ? m[1].trim() : '';
+  const found = (uniformStoreEmployeesCache || []).some(u => u.username === username);
+  document.getElementById(hiddenId).value = found ? username : '';
 }
 
 function resetUniformIssueForm() {
   document.getElementById('uniformIssueEmployee').value = '';
+  document.getElementById('uniformIssueEmployeeUsername').value = '';
   document.getElementById('uniformIssueCode').value = '';
   document.getElementById('uniformIssueNote').value = '';
   uniformIssueItems = [{ name: '', size: '', qty: 0 }];
@@ -27944,7 +28210,7 @@ async function callCreateUniformIssuance(payload) {
 }
 
 async function submitUniformIssuance() {
-  const employeeUsername = document.getElementById('uniformIssueEmployee').value;
+  const employeeUsername = document.getElementById('uniformIssueEmployeeUsername').value;
   if (!employeeUsername) return alert('Vui lòng chọn nhân viên nhận đồng phục!');
   const items = uniformIssueItems.filter(it => (it.name || '').trim() && it.qty > 0);
   if (!items.length) return alert('Vui lòng nhập ít nhất 1 mặt hàng hợp lệ (có tên + số lượng > 0)!');
@@ -27991,15 +28257,113 @@ function renderUniformIssuancesTable() {
   `).join('');
 }
 
+// ============ Hỏng / Hủy / Thu Hồi (Giám Đốc Siêu Thị — uniformStoreManage) ============
+function resetUniformAdjustForms() {
+  document.getElementById('uniformAdjStockItemName').value = '';
+  document.getElementById('uniformAdjStockSize').value = '';
+  document.getElementById('uniformAdjStockQty').value = '';
+  document.getElementById('uniformAdjStockReason').value = '';
+  const stockOutcomeDefault = document.querySelector('input[name="uniformAdjStockOutcome"][value="HONG"]');
+  if (stockOutcomeDefault) stockOutcomeDefault.checked = true;
+
+  document.getElementById('uniformAdjEmpEmployee').value = '';
+  document.getElementById('uniformAdjEmpEmployeeUsername').value = '';
+  document.getElementById('uniformAdjEmpItemName').value = '';
+  document.getElementById('uniformAdjEmpSize').value = '';
+  document.getElementById('uniformAdjEmpQty').value = '';
+  document.getElementById('uniformAdjEmpReason').value = '';
+  const empOutcomeDefault = document.querySelector('input[name="uniformAdjEmpOutcome"][value="TON"]');
+  if (empOutcomeDefault) empOutcomeDefault.checked = true;
+}
+
+async function callCreateUniformStockAdjustment(payload) {
+  const res = await fetch('/api/records/uniformStockAdjustments/create', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload || {})
+  });
+  if (res.status === 401) {
+    handleSessionExpired();
+    throw new Error('Phiên đăng nhập đã hết hạn');
+  }
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(body.error || `Lỗi máy chủ (HTTP ${res.status})`);
+  return body; // { ok, item }
+}
+
+async function submitUniformStockAdjustment(source) {
+  const prefix = source === 'EMPLOYEE' ? 'uniformAdjEmp' : 'uniformAdjStock';
+  const itemName = document.getElementById(`${prefix}ItemName`).value.trim();
+  const size = document.getElementById(`${prefix}Size`).value.trim();
+  const qty = parseFloat(document.getElementById(`${prefix}Qty`).value);
+  const reason = document.getElementById(`${prefix}Reason`).value.trim();
+  const outcome = document.querySelector(`input[name="${prefix}Outcome"]:checked`)?.value || '';
+
+  if (!itemName) return alert('Vui lòng nhập tên đồng phục!');
+  if (!qty || qty <= 0) return alert('Vui lòng nhập số lượng hợp lệ (> 0)!');
+  if (!reason) return alert('Vui lòng nhập lý do (bắt buộc)!');
+
+  const payload = { source, outcome, itemName, size, qty, reason };
+  if (source === 'EMPLOYEE') {
+    const employeeUsername = document.getElementById('uniformAdjEmpEmployeeUsername').value;
+    if (!employeeUsername) return alert('Vui lòng chọn nhân viên!');
+    payload.employeeUsername = employeeUsername;
+  }
+
+  let newAdj;
+  try {
+    const result = await callCreateUniformStockAdjustment(payload);
+    newAdj = result.item;
+  } catch (err) {
+    return alert(`⛔ ${err.message}`);
+  }
+
+  DB.uniformStockAdjustments.unshift(newAdj);
+  logSystemAction('UNIFORM', 'CREATE_UNIFORM_STOCK_ADJUSTMENT', `${source === 'EMPLOYEE' ? 'Thu hồi từ nhân viên' : 'Báo hỏng/hủy từ kho'} [${newAdj.itemName}]`, 'SUCCESS', newAdj.itemName);
+  alert('✅ Đã ghi nhận thao tác!');
+  resetUniformAdjustForms();
+  renderUniformAdjustmentsTable();
+  renderUniformStock();
+}
+
+function uniformAdjOutcomeLabel(outcome) {
+  if (outcome === 'HONG') return '🔴 Hỏng';
+  if (outcome === 'HUY') return '⚫ Hủy';
+  return '🟢 Về tồn kho';
+}
+
+function renderUniformAdjustmentsTable() {
+  const tbody = document.getElementById('uniformAdjustmentsTableBody');
+  if (!tbody) return;
+  const rows = DB.uniformStockAdjustments.filter(x => x.dept === currentUser.dept);
+  if (!rows.length) {
+    tbody.innerHTML = `<tr><td colspan="8" class="text-center p-6 text-gray-500 italic">Chưa có thao tác nào.</td></tr>`;
+    return;
+  }
+  tbody.innerHTML = rows.map(r => `
+    <tr class="hover:bg-gray-50 border-b">
+      <td class="border p-2">${escapeHtml(r.createdAt || '')}</td>
+      <td class="border p-2">${r.source === 'EMPLOYEE' ? 'Thu hồi từ NV' : 'Từ kho'}</td>
+      <td class="border p-2">${escapeHtml(r.itemName)}${r.size ? ` (${escapeHtml(r.size)})` : ''}</td>
+      <td class="border p-2 text-right">${r.qty.toLocaleString('vi-VN')}</td>
+      <td class="border p-2">${uniformAdjOutcomeLabel(r.outcome)}</td>
+      <td class="border p-2">${escapeHtml(r.employeeName || '—')}</td>
+      <td class="border p-2">${escapeHtml(r.reason || '')}</td>
+      <td class="border p-2">${escapeHtml(r.creatorName || '')}</td>
+    </tr>
+  `).join('');
+}
+
 // ============ Kho Đồng Phục (xem — computed, không lưu bảng riêng) ============
 // Mirror computeUniformStock() ở lib/recordActions.js — chỉ tính từ allocations đã CONFIRMED trừ đi
-// uniformIssuances, để hiển thị tức thời phía client mà không cần gọi thêm API riêng cho tồn kho.
+// uniformIssuances (đã trừ phần thu hồi) và trừ luôn hỏng/hủy, để hiển thị tức thời phía client mà
+// không cần gọi thêm API riêng cho tồn kho.
 function computeUniformStockClient(storeDept) {
   const stock = new Map();
   const keyOf = (name, size) => `${name}|||${size || ''}`;
   const bump = (name, size, field, qty) => {
     const key = keyOf(name, size);
-    if (!stock.has(key)) stock.set(key, { name, size: size || '', allocated: 0, issued: 0 });
+    if (!stock.has(key)) stock.set(key, { name, size: size || '', allocated: 0, issued: 0, recalled: 0, hong: 0, huy: 0 });
     stock.get(key)[field] += qty;
   };
   for (const period of DB.uniformPeriods) {
@@ -28012,32 +28376,38 @@ function computeUniformStockClient(storeDept) {
     if (issuance.dept !== storeDept) continue;
     for (const it of (issuance.items || [])) bump(it.name, it.size, 'issued', it.qty);
   }
-  for (const row of stock.values()) row.stock = row.allocated - row.issued;
+  for (const adj of (DB.uniformStockAdjustments || [])) {
+    if (adj.dept !== storeDept) continue;
+    if (adj.source === 'EMPLOYEE') bump(adj.itemName, adj.size, 'recalled', adj.qty);
+    if (adj.outcome === 'HONG') bump(adj.itemName, adj.size, 'hong', adj.qty);
+    if (adj.outcome === 'HUY') bump(adj.itemName, adj.size, 'huy', adj.qty);
+  }
+  for (const row of stock.values()) row.stock = row.allocated - (row.issued - row.recalled) - row.hong - row.huy;
   return stock;
 }
 
 function renderUniformStockStoreFilterOptions() {
   const wrap = document.getElementById('uniformStockStoreFilterWrap');
-  const sel = document.getElementById('uniformStockStoreFilter');
-  if (!wrap || !sel) return;
+  const datalist = document.getElementById('uniformStoresFilterDatalist');
+  if (!wrap || !datalist) return;
   if (!canManageUniform(currentUser)) {
     wrap.classList.add('hidden');
     return;
   }
   wrap.classList.remove('hidden');
   const depts = [...new Set((DB.uniformPeriods || []).flatMap(p => (p.allocations || []).map(a => a.dept)))].sort();
-  const prevValue = sel.value;
-  sel.innerHTML = `<option value="">-- Tất cả siêu thị --</option>` + depts.map(d => `<option value="${escapeHtml(d)}">${escapeHtml(d)}</option>`).join('');
-  if (depts.includes(prevValue)) sel.value = prevValue;
+  datalist.innerHTML = depts.map(d => `<option value="${escapeHtml(d)}"></option>`).join('');
 }
 
+// Ô lọc siêu thị là ô nhập-tìm-kiếm (thay dropdown vì danh sách siêu thị có thể rất dài) — khớp
+// SUBSTRING không phân biệt hoa/thường, không cần gõ đúng tuyệt đối như dropdown trước đây.
 function renderUniformStock() {
   const tbody = document.getElementById('uniformStockTableBody');
   if (!tbody) return;
   const canHc = canManageUniform(currentUser);
-  const filterVal = document.getElementById('uniformStockStoreFilter')?.value || '';
+  const filterVal = (document.getElementById('uniformStockStoreFilter')?.value || '').trim().toLowerCase();
   const allStoreDepts = [...new Set((DB.uniformPeriods || []).flatMap(p => (p.allocations || []).map(a => a.dept)))].sort();
-  const targetDepts = canHc ? (filterVal ? [filterVal] : allStoreDepts) : [currentUser.dept];
+  const targetDepts = canHc ? (filterVal ? allStoreDepts.filter(d => d.toLowerCase().includes(filterVal)) : allStoreDepts) : [currentUser.dept];
 
   const rows = [];
   for (const dept of targetDepts) {
@@ -28045,7 +28415,7 @@ function renderUniformStock() {
     for (const row of stock.values()) rows.push({ dept, ...row });
   }
   if (!rows.length) {
-    tbody.innerHTML = `<tr><td colspan="6" class="text-center p-6 text-gray-500 italic">Chưa có dữ liệu tồn kho.</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="8" class="text-center p-6 text-gray-500 italic">Chưa có dữ liệu tồn kho.</td></tr>`;
     return;
   }
   tbody.innerHTML = rows.map(r => `
@@ -28055,6 +28425,8 @@ function renderUniformStock() {
       <td class="border p-2">${escapeHtml(r.size || '—')}</td>
       <td class="border p-2 text-right">${r.allocated.toLocaleString('vi-VN')}</td>
       <td class="border p-2 text-right">${r.issued.toLocaleString('vi-VN')}</td>
+      <td class="border p-2 text-right ${r.hong > 0 ? 'text-rose-600 font-bold' : ''}">${r.hong.toLocaleString('vi-VN')}</td>
+      <td class="border p-2 text-right ${r.huy > 0 ? 'text-gray-600 font-bold' : ''}">${r.huy.toLocaleString('vi-VN')}</td>
       <td class="border p-2 text-right font-bold ${r.stock <= 0 ? 'text-red-600' : 'text-green-700'}">${r.stock.toLocaleString('vi-VN')}</td>
     </tr>
   `).join('');

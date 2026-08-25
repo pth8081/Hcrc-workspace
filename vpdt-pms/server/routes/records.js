@@ -592,6 +592,22 @@ router.post('/contracts/:id/delete', async (req, res) => {
 });
 router.post('/officeReqs/:id/delete', (req, res) => deleteAdminOnly(req, res, 'officeReqs'));
 router.post('/carRegs/:id/delete', (req, res) => deleteAdminOnly(req, res, 'carRegs'));
+
+// Lái xe được phân công (assignedDriverUsername, gán lúc duyệt — xem routes/workflow.js) tự xác nhận
+// đúng chuyến của mình ở sub-tab "Lái Xe" — chỉ đúng tài khoản được gán mới gọi được (kiểm tra trong
+// confirmCarDriverAssignment()), không cần quyền admin/carView riêng gì thêm.
+router.post('/carRegs/:id/confirm-driver', async (req, res) => {
+  const itemId = Number(req.params.id);
+  if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
+  try {
+    const { freshUser } = await getFreshUser(req);
+    const result = await withLockedRecordForCollection('carRegs', itemId, (item) =>
+      recordActions.confirmCarDriverAssignment(freshUser, item));
+    res.json({ ok: true, item: result });
+  } catch (err) {
+    handleError(res, `carRegs/${req.params.id}/confirm-driver`, err);
+  }
+});
 router.post('/vppPeriods/:id/delete', (req, res) => deleteAdminOnly(req, res, 'vppPeriods'));
 router.post('/vppRegistrations/:id/delete', (req, res) => deleteAdminOnly(req, res, 'vppRegistrations'));
 router.post('/reportPeriods/:id/delete', (req, res) => deleteAdminOnly(req, res, 'reportPeriods'));
@@ -1254,6 +1270,34 @@ router.post('/uniformIssuances/create', async (req, res) => {
     res.json({ ok: true, item: result });
   } catch (err) {
     handleError(res, 'uniformIssuances/create', err);
+  }
+});
+
+router.post('/uniformStockAdjustments/:id/delete', (req, res) => deleteAdminOnly(req, res, 'uniformStockAdjustments'));
+
+// Giám Đốc Siêu Thị báo Hỏng/Hủy từ tồn kho hoặc thu hồi từ nhân viên — cùng khoá 'uniform_store:<dept>'
+// với uniformIssuances/create vì cả 2 route cùng đọc-tính-ghi trên chung trạng thái tồn kho/số đang giữ
+// của TỪNG siêu thị (không được để 2 thao tác chạy song song đọc cùng 1 số liệu cũ).
+router.post('/uniformStockAdjustments/create', async (req, res) => {
+  try {
+    const { freshUser, users } = await getFreshUser(req);
+    if (!recordActions.canManageUniformStore(freshUser)) {
+      return res.status(403).json({ error: 'Bạn không có quyền thao tác này' });
+    }
+    const result = await withAppLock(`uniform_store:${freshUser.dept}`, async () => {
+      const [allPeriods, allIssuances, allAdjustments] = await Promise.all([
+        getAllForCollection('uniformPeriods'),
+        getAllForCollection('uniformIssuances'),
+        getAllForCollection('uniformStockAdjustments')
+      ]);
+      const storeIssuances = allIssuances.filter(x => x.dept === freshUser.dept);
+      const storeAdjustments = allAdjustments.filter(x => x.dept === freshUser.dept);
+      const record = recordActions.buildUniformStockAdjustment(freshUser, req.body, allPeriods, storeIssuances, storeAdjustments, users);
+      return insertRecord('uniformStockAdjustments', record);
+    });
+    res.json({ ok: true, item: result });
+  } catch (err) {
+    handleError(res, 'uniformStockAdjustments/create', err);
   }
 });
 

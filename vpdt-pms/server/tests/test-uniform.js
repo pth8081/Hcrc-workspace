@@ -167,7 +167,8 @@ async function main() {
       const result = await page.evaluate(async () => {
         switchTab('uniform');
         setUniformSubTab('STORE');
-        document.getElementById('uniformIssueEmployee').value = 'nv_hoian';
+        document.getElementById('uniformIssueEmployee').value = 'Lê Văn Nhân Viên (nv_hoian)';
+        resolveUniformEmployeeInput('uniformIssueEmployee', 'uniformIssueEmployeeUsername');
         document.getElementById('uniformIssueCode').value = 'CP001';
         updateUniformIssueItemField(0, 'name', 'Áo đồng phục nam');
         updateUniformIssueItemField(0, 'size', 'L');
@@ -193,7 +194,8 @@ async function main() {
       const result = await page.evaluate(async () => {
         window.__resetCapture();
         resetUniformIssueForm();
-        document.getElementById('uniformIssueEmployee').value = 'nv_hoian';
+        document.getElementById('uniformIssueEmployee').value = 'Lê Văn Nhân Viên (nv_hoian)';
+        resolveUniformEmployeeInput('uniformIssueEmployee', 'uniformIssueEmployeeUsername');
         updateUniformIssueItemField(0, 'name', 'Áo đồng phục nam');
         updateUniformIssueItemField(0, 'size', 'L');
         updateUniformIssueItemField(0, 'qty', '999');
@@ -223,6 +225,200 @@ async function main() {
       assertEqual(result.subTabAfterPeriods, 'STOCK', 'Không có quyền uniformManage thì không được ở lại tab Kỳ Cấp Phát');
       assertEqual(result.subTabAfterStore, 'STOCK', 'Không có quyền uniformStoreManage thì không được ở lại tab Xác Nhận/Cấp Phát');
       assertEqual(result.stockLeft, 15, 'Nhân viên vẫn phải xem được đúng số tồn kho hiện tại của siêu thị mình (15)');
+    });
+
+    // ===== 10) Báo Hỏng từ kho (happy path) — allocated=20, issued=5, stock=15 trước khi báo hỏng =====
+    await run.run('Giám Đốc Siêu Thị báo Hỏng từ kho — trừ đúng vào tồn, không đụng issued', async () => {
+      await loginAs(page, GD_HOIAN);
+      const result = await page.evaluate(async () => {
+        switchTab('uniform');
+        setUniformSubTab('STORE');
+        document.getElementById('uniformAdjStockItemName').value = 'Áo đồng phục nam';
+        document.getElementById('uniformAdjStockSize').value = 'L';
+        document.getElementById('uniformAdjStockQty').value = '2';
+        document.querySelector('input[name="uniformAdjStockOutcome"][value="HONG"]').checked = true;
+        document.getElementById('uniformAdjStockReason').value = 'Ố vàng, rách chỉ';
+        await submitUniformStockAdjustment('STOCK');
+        const stock = computeUniformStockClient('Siêu Thị Hội An');
+        const row = stock.get('Áo đồng phục nam|||L');
+        return { alerts: window.__alerts, adjCount: DB.uniformStockAdjustments.length, hong: row.hong, huy: row.huy, issued: row.issued, stockLeft: row.stock };
+      });
+      assertIncludes(result.alerts, 'Đã ghi nhận thao tác', 'Phải có thông báo ghi nhận thành công');
+      assertEqual(result.adjCount, 1, 'Phải có đúng 1 bản ghi điều chỉnh');
+      assertEqual(result.hong, 2, 'Số lượng Hỏng phải đúng 2');
+      assertEqual(result.issued, 5, 'issued (tổng đã cấp cộng dồn) không được đổi khi báo hỏng từ kho');
+      assertEqual(result.stockLeft, 13, 'Tồn kho phải giảm còn 20 - 5 - 2 = 13');
+    });
+
+    // ===== 11) Báo Hủy từ kho (happy path) =====
+    await run.run('Giám Đốc Siêu Thị báo Hủy không sử dụng từ kho — trừ đúng vào tồn', async () => {
+      const result = await page.evaluate(async () => {
+        window.__resetCapture();
+        document.getElementById('uniformAdjStockItemName').value = 'Áo đồng phục nam';
+        document.getElementById('uniformAdjStockSize').value = 'L';
+        document.getElementById('uniformAdjStockQty').value = '1';
+        document.querySelector('input[name="uniformAdjStockOutcome"][value="HUY"]').checked = true;
+        document.getElementById('uniformAdjStockReason').value = 'Lỗi sản xuất, không dùng được';
+        await submitUniformStockAdjustment('STOCK');
+        const stock = computeUniformStockClient('Siêu Thị Hội An');
+        const row = stock.get('Áo đồng phục nam|||L');
+        return { alerts: window.__alerts, huy: row.huy, stockLeft: row.stock };
+      });
+      assertIncludes(result.alerts, 'Đã ghi nhận thao tác', 'Phải có thông báo ghi nhận thành công');
+      assertEqual(result.huy, 1, 'Số lượng Hủy phải đúng 1');
+      assertEqual(result.stockLeft, 12, 'Tồn kho phải giảm còn 13 - 1 = 12');
+    });
+
+    // ===== 12) Validation: thiếu lý do bị server chặn (mandatory) =====
+    await run.run('Validation: báo Hỏng/Hủy thiếu lý do bị server chặn', async () => {
+      const before = await page.evaluate(() => DB.uniformStockAdjustments.length);
+      const result = await page.evaluate(async () => {
+        window.__resetCapture();
+        try {
+          await callCreateUniformStockAdjustment({ source: 'STOCK', outcome: 'HONG', itemName: 'Áo đồng phục nam', size: 'L', qty: 1, reason: '' });
+          return { errorMsg: null };
+        } catch (err) {
+          return { errorMsg: err.message };
+        }
+      });
+      assertIncludes(result.errorMsg, 'Vui lòng nhập lý do', 'Server phải báo lỗi thiếu lý do (bắt buộc)');
+      const after = await page.evaluate(() => DB.uniformStockAdjustments.length);
+      assertEqual(after, before, 'Không được tạo bản ghi nào khi thiếu lý do');
+    });
+
+    // ===== 13) Validation: báo Hỏng vượt quá tồn kho hiện có bị chặn =====
+    await run.run('Validation: báo Hỏng vượt quá tồn kho hiện có bị chặn (409)', async () => {
+      const result = await page.evaluate(async () => {
+        window.__resetCapture();
+        document.getElementById('uniformAdjStockItemName').value = 'Áo đồng phục nam';
+        document.getElementById('uniformAdjStockSize').value = 'L';
+        document.getElementById('uniformAdjStockQty').value = '999';
+        document.querySelector('input[name="uniformAdjStockOutcome"][value="HONG"]').checked = true;
+        document.getElementById('uniformAdjStockReason').value = 'Test vượt tồn';
+        await submitUniformStockAdjustment('STOCK');
+        return { alerts: window.__alerts };
+      });
+      assertIncludes(result.alerts, 'Không đủ tồn kho', 'Phải báo lỗi không đủ tồn kho khi báo hỏng vượt quá số hiện có');
+    });
+
+    // ===== 14) Thu hồi từ nhân viên, outcome = Về Tồn Kho (happy path) =====
+    await run.run('Thu hồi từ nhân viên — outcome Về Tồn Kho — cộng lại vào tồn, giữ nguyên issued', async () => {
+      const result = await page.evaluate(async () => {
+        window.__resetCapture();
+        resetUniformAdjustForms();
+        document.getElementById('uniformAdjEmpEmployee').value = 'Lê Văn Nhân Viên (nv_hoian)';
+        resolveUniformEmployeeInput('uniformAdjEmpEmployee', 'uniformAdjEmpEmployeeUsername');
+        document.getElementById('uniformAdjEmpItemName').value = 'Áo đồng phục nam';
+        document.getElementById('uniformAdjEmpSize').value = 'L';
+        document.getElementById('uniformAdjEmpQty').value = '2';
+        document.querySelector('input[name="uniformAdjEmpOutcome"][value="TON"]').checked = true;
+        document.getElementById('uniformAdjEmpReason').value = 'Nhân viên đổi size';
+        await submitUniformStockAdjustment('EMPLOYEE');
+        const stock = computeUniformStockClient('Siêu Thị Hội An');
+        const row = stock.get('Áo đồng phục nam|||L');
+        return { alerts: window.__alerts, issued: row.issued, recalled: row.recalled, stockLeft: row.stock };
+      });
+      assertIncludes(result.alerts, 'Đã ghi nhận thao tác', 'Phải có thông báo ghi nhận thành công');
+      assertEqual(result.issued, 5, 'issued (tổng đã cấp cộng dồn) không được đổi khi thu hồi');
+      assertEqual(result.recalled, 2, 'recalled phải đúng 2');
+      assertEqual(result.stockLeft, 14, 'Tồn kho phải tăng lại: 12 - (5-2) - 2(hỏng) - 1(hủy) = 14');
+    });
+
+    // ===== 15) Thu hồi từ nhân viên, outcome = Hỏng — KHÔNG cộng lại vào tồn =====
+    await run.run('Thu hồi từ nhân viên — outcome Hỏng — không cộng lại vào tồn, cộng vào Hỏng', async () => {
+      const result = await page.evaluate(async () => {
+        window.__resetCapture();
+        document.getElementById('uniformAdjEmpEmployee').value = 'Lê Văn Nhân Viên (nv_hoian)';
+        resolveUniformEmployeeInput('uniformAdjEmpEmployee', 'uniformAdjEmpEmployeeUsername');
+        document.getElementById('uniformAdjEmpItemName').value = 'Áo đồng phục nam';
+        document.getElementById('uniformAdjEmpSize').value = 'L';
+        document.getElementById('uniformAdjEmpQty').value = '1';
+        document.querySelector('input[name="uniformAdjEmpOutcome"][value="HONG"]').checked = true;
+        document.getElementById('uniformAdjEmpReason').value = 'Phát hiện rách khi thu hồi';
+        await submitUniformStockAdjustment('EMPLOYEE');
+        const stock = computeUniformStockClient('Siêu Thị Hội An');
+        const row = stock.get('Áo đồng phục nam|||L');
+        return { alerts: window.__alerts, hong: row.hong, recalled: row.recalled, stockLeft: row.stock };
+      });
+      assertIncludes(result.alerts, 'Đã ghi nhận thao tác', 'Phải có thông báo ghi nhận thành công');
+      assertEqual(result.hong, 3, 'Hỏng phải cộng dồn thành 2 (từ kho) + 1 (thu hồi) = 3');
+      assertEqual(result.recalled, 3, 'recalled phải cộng dồn thành 2 + 1 = 3');
+      assertEqual(result.stockLeft, 14, 'Tồn kho GIỮ NGUYÊN 14 vì hàng thu hồi hỏng không quay lại tồn: 20-(5-3)-3-1=14');
+    });
+
+    // ===== 16) Validation: thu hồi vượt quá số nhân viên đang giữ bị chặn =====
+    await run.run('Validation: thu hồi vượt quá số nhân viên đang giữ bị chặn (409)', async () => {
+      const result = await page.evaluate(async () => {
+        window.__resetCapture();
+        document.getElementById('uniformAdjEmpEmployee').value = 'Lê Văn Nhân Viên (nv_hoian)';
+        resolveUniformEmployeeInput('uniformAdjEmpEmployee', 'uniformAdjEmpEmployeeUsername');
+        document.getElementById('uniformAdjEmpItemName').value = 'Áo đồng phục nam';
+        document.getElementById('uniformAdjEmpSize').value = 'L';
+        document.getElementById('uniformAdjEmpQty').value = '999';
+        document.querySelector('input[name="uniformAdjEmpOutcome"][value="TON"]').checked = true;
+        document.getElementById('uniformAdjEmpReason').value = 'Test vượt số đang giữ';
+        await submitUniformStockAdjustment('EMPLOYEE');
+        return { alerts: window.__alerts };
+      });
+      assertIncludes(result.alerts, 'chỉ đang giữ', 'Phải báo lỗi nhân viên chỉ đang giữ số lượng ít hơn yêu cầu thu hồi');
+    });
+
+    // ===== 17) Cross-store: không thu hồi được của nhân viên siêu thị khác =====
+    await run.run('Permission: không thu hồi được của nhân viên thuộc siêu thị khác', async () => {
+      const result = await page.evaluate(async () => {
+        window.__resetCapture();
+        try {
+          await callCreateUniformStockAdjustment({ source: 'EMPLOYEE', outcome: 'TON', itemName: 'Áo đồng phục nam', size: 'L', qty: 1, reason: 'test khác siêu thị', employeeUsername: 'gd_danang' });
+          return { errorMsg: null };
+        } catch (err) {
+          return { errorMsg: err.message };
+        }
+      });
+      assertIncludes(result.errorMsg, 'Chỉ thu hồi được của nhân viên thuộc siêu thị của bạn', 'Server phải chặn thu hồi của nhân viên khác siêu thị');
+    });
+
+    // ===== 18) Permission: nhân viên thường không có uniformStoreManage bị chặn =====
+    await run.run('Permission: nhân viên không có uniformStoreManage bị chặn khi báo Hỏng/Hủy/Thu hồi', async () => {
+      await loginAs(page, NV_HOIAN);
+      const result = await page.evaluate(async () => {
+        try {
+          await callCreateUniformStockAdjustment({ source: 'STOCK', outcome: 'HONG', itemName: 'Áo đồng phục nam', size: 'L', qty: 1, reason: 'test' });
+          return { errorMsg: null };
+        } catch (err) {
+          return { errorMsg: err.message };
+        }
+      });
+      assertIncludes(result.errorMsg, 'Bạn không có quyền thao tác này', 'Server phải chặn người không có quyền uniformStoreManage');
+    });
+
+    // ===== 19) Permission: Hành Chính (chỉ uniformManage, KHÔNG uniformStoreManage) cũng bị chặn =====
+    await run.run('Permission: Hành Chính (chỉ uniformManage) không tự ý báo Hỏng/Hủy/Thu hồi kho siêu thị được', async () => {
+      await loginAs(page, HC);
+      const result = await page.evaluate(async () => {
+        try {
+          await callCreateUniformStockAdjustment({ source: 'STOCK', outcome: 'HONG', itemName: 'Áo đồng phục nam', size: 'L', qty: 1, reason: 'test' });
+          return { errorMsg: null };
+        } catch (err) {
+          return { errorMsg: err.message };
+        }
+      });
+      assertIncludes(result.errorMsg, 'Bạn không có quyền thao tác này', 'Chỉ Giám Đốc Siêu Thị (uniformStoreManage) mới thao tác được, kể cả Hành Chính (uniformManage) cũng không được');
+    });
+
+    // ===== 20) Kho: view-only vẫn thấy đúng số Hỏng/Hủy/Tồn cuối cùng =====
+    await run.run('Kho: view-only thấy đúng số Hỏng/Hủy/Tồn sau toàn bộ thao tác', async () => {
+      await loginAs(page, NV_HOIAN);
+      const result = await page.evaluate(() => {
+        const stock = computeUniformStockClient('Siêu Thị Hội An');
+        const row = stock.get('Áo đồng phục nam|||L');
+        return { hong: row.hong, huy: row.huy, recalled: row.recalled, issued: row.issued, allocated: row.allocated, stock: row.stock };
+      });
+      assertEqual(result.allocated, 20, 'allocated phải giữ nguyên 20');
+      assertEqual(result.issued, 5, 'issued phải giữ nguyên 5 (tổng cộng dồn đã cấp)');
+      assertEqual(result.recalled, 3, 'recalled phải đúng 3');
+      assertEqual(result.hong, 3, 'hong phải đúng 3');
+      assertEqual(result.huy, 1, 'huy phải đúng 1');
+      assertEqual(result.stock, 14, 'stock cuối cùng phải đúng 14');
     });
   } finally {
     await browser.close();

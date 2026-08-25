@@ -167,7 +167,7 @@ router.post('/:module/:id/:action', async (req, res) => {
       const existingCollection = moduleKey === 'carRegs' ? await getAllForCollection('carRegs') : null;
       return withLockedRecordForCollection(MODULE_CONFIGS[moduleKey].dbKey, itemId, (item) => {
         const outcome = applyWorkflowAction({
-          moduleKey, item, action, user: freshUser, comment, extraFields, appData, existingCollection
+          moduleKey, item, action, user: freshUser, comment, extraFields, appData, existingCollection, users: req.allUsers
         });
         transition = outcome.transition;
         return outcome.item;
