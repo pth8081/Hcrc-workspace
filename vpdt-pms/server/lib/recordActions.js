@@ -2423,6 +2423,29 @@ function updateBudgetTemplate(user, item, payload) {
   return item;
 }
 
+// ===================== ĐĂNG KÝ XE (Lái Xe tự xác nhận) =====
+// Lái xe được phân công (carReg.assignedDriverUsername, gán lúc duyệt — xem applyWorkflowAction() ở
+// lib/workflowEngine.js) tự vào sub-tab "Lái Xe" xác nhận đúng chuyến của mình, giống khuôn tự-xác-nhận
+// đã dùng cho confirmUniformAllocation() ở trên — chỉ đúng người được gán mới xác nhận được.
+function canConfirmCarDriverAssignment(user, carReg) {
+  return !!(carReg?.assignedDriverUsername && user?.username === carReg.assignedDriverUsername);
+}
+
+function confirmCarDriverAssignment(user, carReg) {
+  if (!canConfirmCarDriverAssignment(user, carReg)) {
+    throw new HttpError(403, 'Bạn không phải là lái xe được phân công cho phiếu đăng ký này');
+  }
+  if (carReg.status !== 'APPROVED') {
+    throw new HttpError(409, 'Chỉ xác nhận được khi phiếu đăng ký đã được phê duyệt xong toàn bộ');
+  }
+  if (carReg.driverConfirmed) {
+    throw new HttpError(409, 'Phiếu đăng ký này đã được xác nhận trước đó');
+  }
+  carReg.driverConfirmed = true;
+  carReg.driverConfirmedAt = nowVN();
+  return carReg;
+}
+
 module.exports = {
   editContract,
   canManageContractPayment, uploadContractSignedFile, startContractPayment,
@@ -2453,5 +2476,6 @@ module.exports = {
   canManageUniform, canManageUniformStore, computeUniformStock, computeEmployeeUniformHolding,
   confirmUniformAllocation, buildUniformIssuance, buildUniformStockAdjustment,
   canManageBudget, canAggregateBudget, isBudgetPeriodClosed,
-  closeBudgetPeriod, reopenBudgetPeriod, updateBudgetEntryDraft, submitBudgetEntry, updateBudgetTemplate
+  closeBudgetPeriod, reopenBudgetPeriod, updateBudgetEntryDraft, submitBudgetEntry, updateBudgetTemplate,
+  canConfirmCarDriverAssignment, confirmCarDriverAssignment
 };

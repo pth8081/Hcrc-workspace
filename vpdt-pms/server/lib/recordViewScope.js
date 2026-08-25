@@ -227,6 +227,9 @@ function canViewCarReg(user, carReg, appData) {
   if (!user) return false;
   if (user.perms?.admin) return true;
   if (carReg.creator === user.username) return true;
+  // Lái xe được phân công (assignedDriverUsername) luôn xem được phiếu của mình dù khác phòng ban với
+  // carView — cần thấy để vào sub-tab "Lái Xe" xác nhận (xem confirmCarDriverAssignment()).
+  if (carReg.assignedDriverUsername === user.username) return true;
   if (scopeAllows(user, user.perms?.carView, carReg.dept)) return true;
   return isApproverForApproversMap(MODULE_CONFIGS.carRegs.resolveWfConfig(carReg, appData).approvers, user.username);
 }

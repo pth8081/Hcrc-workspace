@@ -485,6 +485,16 @@ const CREATE_MODULE_CONFIGS = {
       if (payload.km !== undefined && Number(payload.km) < 0) {
         throw new CreateError(400, 'Số KM dự kiến không được là số âm');
       }
+      // Lộ trình nhiều điểm (Điểm xuất phát + N điểm tiếp theo) thay cho 1 ô text tự do trước đây — vẫn
+      // tính lại payload.destination (nối các điểm bằng " → ") để KHÔNG phải sửa mọi chỗ đang đọc thẳng
+      // c.destination để hiển thị (bảng danh sách, phiếu in, email thông báo...).
+      const points = (Array.isArray(payload.routePoints) ? payload.routePoints : [])
+        .map(p => String(p || '').trim()).filter(Boolean);
+      if (points.length < 2) {
+        throw new CreateError(400, 'Vui lòng nhập ít nhất Điểm xuất phát và 1 điểm đến');
+      }
+      payload.routePoints = points;
+      payload.destination = points.join(' → ');
     }
   },
   officeReqs: {

@@ -2255,6 +2255,12 @@ table { display: block; overflow-x: auto; max-width: 100%; }
   <!-- Màn hình MODULE ĐĂNG KÝ XE -->
   <div id="carSection" class="hidden space-y-6">
     <div id="hanhChinhTabBar_car" class="hidden flex gap-2 flex-wrap"></div>
+    <div class="flex flex-wrap gap-2 border-b pb-2">
+      <button type="button" onclick="setCarSubTab('REG')" id="btnCarSubReg" class="px-3 py-1.5 rounded text-xs font-bold bg-indigo-700 text-white">🚗 Đăng Ký Xe</button>
+      <button type="button" onclick="setCarSubTab('DRIVER')" id="btnCarSubDriver" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">🧑‍✈️ Lái Xe</button>
+    </div>
+
+    <div id="carSubReg" class="space-y-6">
     <div class="bg-indigo-50 p-4 rounded border border-indigo-200 space-y-3">
       <h3 class="font-bold text-indigo-900 text-base flex items-center gap-2">🚗 Mẫu Biểu Đăng Ký Xe Ô Tô / Phương Tiện</h3>
       <p class="text-xs text-indigo-700">Tạo phiếu đăng ký lịch trình xe. Luồng duyệt tích hợp phê duyệt đồng cấp.</p>
@@ -2306,9 +2312,11 @@ table { display: block; overflow-x: auto; max-width: 100%; }
             <label class="block font-semibold text-gray-600 mb-1">Thời Gian Dự Kiến Về</label>
             <input id="carEndTime" type="datetime-local" class="w-full border p-1.5 rounded" required>
           </div>
-          <div class="md:col-span-2">
-            <label class="block font-semibold text-gray-600 mb-1">Lộ Trình Di Chuyển</label>
-            <input id="carDestination" placeholder="HN -> Hải Phòng -> HN" class="w-full border p-1.5 rounded" required>
+          <div class="md:col-span-3">
+            <label class="block font-semibold text-gray-600 mb-1">Lộ Trình Di Chuyển <span class="text-red-500">*</span></label>
+            <div id="carRoutePointsWrap" class="space-y-1.5"></div>
+            <button type="button" onclick="addCarRoutePoint()" class="mt-1.5 bg-gray-600 text-white px-3 py-1 rounded text-xs font-bold hover:bg-gray-700">+ Thêm Điểm</button>
+            <input id="carDestination" type="hidden" required>
           </div>
         </div>
 
@@ -2377,6 +2385,17 @@ table { display: block; overflow-x: auto; max-width: 100%; }
         </table>
       </div>
       <div id="paginationContainer_car"></div>
+    </div>
+    </div>
+
+    <!-- Sub-tab: Lái Xe (tự xác nhận chuyến được phân công — assignedDriverUsername === currentUser) -->
+    <div id="carSubDriver" class="hidden space-y-4">
+      <div class="bg-indigo-50 p-4 rounded border border-indigo-200 space-y-3">
+        <h3 class="font-bold text-indigo-900 text-base flex items-center gap-2">🧑‍✈️ Chuyến Xe Được Phân Công Cho Tôi</h3>
+        <p class="text-xs text-indigo-700">Danh sách phiếu đăng ký xe đã phê duyệt xong và phân công bạn làm lái xe — xác nhận để Phòng Hành Chính biết bạn đã nắm thông tin chuyến đi.</p>
+        <div id="carDriverListWrap" class="space-y-2"></div>
+        <div id="carDriverNoneNote" class="hidden text-xs text-gray-500 italic bg-white p-3 rounded border">Bạn chưa được phân công chuyến xe nào.</div>
+      </div>
     </div>
   </div>
 
@@ -4798,8 +4817,9 @@ table { display: block; overflow-x: auto; max-width: 100%; }
         <h4 class="font-bold text-indigo-900 mb-1">🏢 Phần Dành Cho Phòng Hành Chính (phân công xe)</h4>
         <div class="grid grid-cols-1 md:grid-cols-3 gap-2">
           <div>
-            <label class="block font-semibold text-gray-600 mb-1">Lái xe được phân công</label>
-            <input id="carAssignedDriver" placeholder="Tên tài xế hoặc 'Tự lái'" class="w-full border p-1.5 rounded">
+            <label class="block font-semibold text-gray-600 mb-1">Lái xe được phân công <span class="text-red-500">*</span></label>
+            <input id="carAssignedDriver" list="systemUsersDatalist" oninput="resolveCarAssignedDriverInput(this.value)" placeholder="Gõ tên hoặc tài khoản để tìm..." class="w-full border p-1.5 rounded">
+            <input type="hidden" id="carAssignedDriverUsername">
           </div>
           <div>
             <label class="block font-semibold text-gray-600 mb-1">Loại xe cụ thể</label>
@@ -5626,6 +5646,8 @@ let activePaymentSubTab = 'APPROVE';
 let expandedContractFamilies = new Set();
 let currentProcessingSubId = null;
 let currentProcessingCarId = null;
+let carRoutePoints = ['', ''];
+let activeCarSubTab = 'REG';
 let currentProcessingOfficeId = null;
 // Tệp .docx đang mở trong Khung Xem Bảo Vệ (nếu có) — dùng cho nút "In có watermark" (xem
 // printWordWithWatermark() ở script cuối trang), reset về null mỗi lần openFileProtectedView() xử lý 1
@@ -9444,7 +9466,7 @@ function switchTab(tabName) {
     if (editingMinutesId === null) document.getElementById('minutesCode').value = generateMinutesCode();
   }
   if (tabName === 'internal') { setInternalSubTab(activeInternalSubTab); }
-  if (tabName === 'car') { renderDynamicInputsForModule('CAR', 'dynamicFieldsContainer_CAR'); renderCarRegs(); document.getElementById('carCode').value = generateCarCode(); }
+  if (tabName === 'car') { setCarSubTab(activeCarSubTab); }
   if (tabName === 'vpp') { setVppSubTab(activeVppSubTab); }
   if (tabName === 'uniform') { setUniformSubTab(activeUniformSubTab); }
   if (tabName === 'periodicReport') { setPeriodicReportSubTab(activePeriodicReportSubTab); }
@@ -15982,9 +16004,13 @@ async function submitCarReq(e) {
   const km = parseFloat(document.getElementById('carKm').value) || 0;
   const startTime = document.getElementById('carStartTime').value;
   const endTime = document.getElementById('carEndTime').value;
-  const destination = document.getElementById('carDestination').value.trim();
+  const routePoints = carRoutePoints.map(p => p.trim()).filter(Boolean);
+  const destination = routePoints.join(' → ');
   const reason = document.getElementById('carReason').value.trim();
 
+  if (routePoints.length < 2) {
+    return alert('Vui lòng nhập ít nhất Điểm xuất phát và 1 điểm đến!');
+  }
   if (DB.carRegs.some(c => c.code === code)) {
     return alert('Mã phiếu đăng ký xe đã tồn tại!');
   }
@@ -16008,6 +16034,7 @@ async function submitCarReq(e) {
     km: km,
     startTime: startTime,
     endTime: endTime,
+    routePoints: routePoints,
     destination: destination,
     reason: reason,
     customData: customData,
@@ -16044,8 +16071,104 @@ async function submitCarReq(e) {
 
   alert('✅ Đã gửi phiếu đăng ký xe thành công!');
   e.target.reset();
+  resetCarRoutePoints();
   document.getElementById('carCode').value = generateCarCode();
   renderCarRegs();
+}
+
+// ============ Lộ Trình Di Chuyển nhiều điểm (thay 1 ô text tự do) ============
+function resetCarRoutePoints() {
+  carRoutePoints = ['', ''];
+  renderCarRoutePoints();
+}
+
+function addCarRoutePoint() {
+  carRoutePoints.push('');
+  renderCarRoutePoints();
+}
+
+function removeCarRoutePoint(idx) {
+  if (carRoutePoints.length <= 2) return; // luôn giữ tối thiểu Điểm xuất phát + 1 điểm đến
+  carRoutePoints.splice(idx, 1);
+  renderCarRoutePoints();
+}
+
+function updateCarRoutePoint(idx, value) {
+  carRoutePoints[idx] = value;
+  document.getElementById('carDestination').value = carRoutePoints.map(p => p.trim()).filter(Boolean).join(' → ');
+}
+
+function renderCarRoutePoints() {
+  const wrap = document.getElementById('carRoutePointsWrap');
+  if (!wrap) return;
+  wrap.innerHTML = carRoutePoints.map((p, idx) => `
+    <div class="flex items-center gap-2">
+      <span class="text-xs text-gray-500 w-24 shrink-0">${idx === 0 ? 'Điểm xuất phát' : `Điểm ${idx}`}</span>
+      <input value="${escapeHtml(p)}" oninput="updateCarRoutePoint(${idx}, this.value)" placeholder="${idx === 0 ? 'VD: Hội An' : 'VD: Đà Nẵng'}" class="flex-1 border p-1.5 rounded text-xs">
+      ${carRoutePoints.length > 2 ? `<button type="button" onclick="removeCarRoutePoint(${idx})" class="text-red-500 hover:text-red-700 text-xs font-bold">✕</button>` : ''}
+    </div>
+  `).join('');
+  document.getElementById('carDestination').value = carRoutePoints.map(p => p.trim()).filter(Boolean).join(' → ');
+}
+
+function setCarSubTab(subTab) {
+  window.scrollTo({ top: 0, behavior: 'auto' }); // Tránh "bay xuống cuối" khi đổi tab con — xem setSystemSubTab().
+  activeCarSubTab = subTab;
+  document.getElementById('carSubReg').classList.toggle('hidden', subTab !== 'REG');
+  document.getElementById('carSubDriver').classList.toggle('hidden', subTab !== 'DRIVER');
+  const activeCls = 'px-3 py-1.5 rounded text-xs font-bold bg-indigo-700 text-white';
+  const inactiveCls = 'px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700';
+  document.getElementById('btnCarSubReg').className = subTab === 'REG' ? activeCls : inactiveCls;
+  document.getElementById('btnCarSubDriver').className = subTab === 'DRIVER' ? activeCls : inactiveCls;
+  if (subTab === 'REG') {
+    renderDynamicInputsForModule('CAR', 'dynamicFieldsContainer_CAR');
+    renderCarRegs();
+    document.getElementById('carCode').value = generateCarCode();
+    if (!carRoutePoints.length) resetCarRoutePoints(); else renderCarRoutePoints();
+  }
+  if (subTab === 'DRIVER') renderCarDriverTab();
+}
+
+// ============ Lái Xe (tự xác nhận chuyến được phân công) ============
+function renderCarDriverTab() {
+  const wrap = document.getElementById('carDriverListWrap');
+  const noneNote = document.getElementById('carDriverNoneNote');
+  if (!wrap) return;
+  const myTrips = DB.carRegs.filter(c => c.assignedDriverUsername === currentUser.username && c.status === 'APPROVED');
+  noneNote.classList.toggle('hidden', myTrips.length > 0);
+  wrap.innerHTML = myTrips.map(c => `
+    <div class="bg-white p-3 rounded border space-y-1">
+      <div class="flex items-center justify-between gap-2 flex-wrap">
+        <div>
+          <div class="font-bold text-indigo-800 text-sm">${escapeHtml(c.code)} — ${escapeHtml(c.dept)}</div>
+          <div class="text-xs text-gray-600">${escapeHtml(c.destination)}</div>
+          <div class="text-xs text-gray-500">${escapeHtml(c.startTime)} ➔ ${escapeHtml(c.endTime)} | Xe: ${escapeHtml(c.type)}${c.assignedPlate ? ` (${escapeHtml(c.assignedPlate)})` : ''}</div>
+        </div>
+        ${c.driverConfirmed
+          ? `<span class="px-2 py-0.5 bg-green-100 text-green-800 rounded font-bold text-[11px]">✅ Đã xác nhận lúc ${escapeHtml(c.driverConfirmedAt || '')}</span>`
+          : `<button type="button" onclick="confirmCarDriverAssignmentAction(${c.id})" class="bg-indigo-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-indigo-700">✅ Xác Nhận Đăng Ký</button>`
+        }
+      </div>
+    </div>
+  `).join('');
+}
+
+function confirmCarDriverAssignmentAction(carId) {
+  showConfirmModal({
+    title: 'Xác Nhận Đăng Ký Xe',
+    bodyHTML: '<p>Bạn xác nhận đã nắm thông tin và sẽ thực hiện chuyến đi này?</p>',
+    confirmLabel: 'Xác Nhận',
+    onConfirm: async () => {
+      let result;
+      try {
+        result = await callRecordAction('carRegs', carId, 'confirm-driver', {});
+      } catch (err) { return alert(`⛔ ${err.message}`); }
+      const idx = DB.carRegs.findIndex(x => x.id === carId);
+      if (idx !== -1) DB.carRegs[idx] = result.item;
+      logSystemAction('CAR', 'CONFIRM_DRIVER', `Lái xe xác nhận đăng ký [${result.item.code}]`, 'SUCCESS', result.item.code);
+      renderCarDriverTab();
+    }
+  });
 }
 
 function onCarFilterChange() {
@@ -16154,6 +16277,14 @@ function deleteCarRegAction(id) {
   });
 }
 
+// Khớp regex resolveAttendeeAccountInput() ở trên — cùng định dạng "Tên — Phòng (tài_khoản)" của
+// <datalist id="systemUsersDatalist">. Lái xe bắt buộc là 1 tài khoản hệ thống có thật (gõ tự do không
+// khớp -> để trống, submit sẽ bị chặn "Vui lòng chọn lái xe").
+function resolveCarAssignedDriverInput(rawValue) {
+  const m = rawValue.match(/^(.*) — .*\(([^()]+)\)$/);
+  document.getElementById('carAssignedDriverUsername').value = m ? m[2].trim() : '';
+}
+
 function openCarProcessModal(carId) {
   currentProcessingCarId = carId;
   const c = DB.carRegs.find(item => item.id === carId);
@@ -16178,7 +16309,12 @@ function openCarProcessModal(carId) {
   `;
   document.getElementById('carModalDetails').innerHTML = detailsHTML;
 
-  document.getElementById('carAssignedDriver').value = c.assignedDriver || c.driver || '';
+  populateSystemUsersDatalist();
+  const assignedDriverUser = c.assignedDriverUsername ? DB.users.find(u => u.username === c.assignedDriverUsername) : null;
+  document.getElementById('carAssignedDriver').value = assignedDriverUser
+    ? `${assignedDriverUser.name} — ${assignedDriverUser.dept || 'Chưa rõ phòng'} (${assignedDriverUser.username})`
+    : '';
+  document.getElementById('carAssignedDriverUsername').value = c.assignedDriverUsername || '';
   document.getElementById('carAssignedVehicleType').value = c.assignedVehicleType || '';
   document.getElementById('carAssignedPlate').value = c.assignedPlate || c.plate || '';
   document.getElementById('txtCarComment').value = '';
@@ -16245,9 +16381,16 @@ async function processCarReg(actionType) {
   }
 
   // Bất kỳ bước nào cũng có thể điền/điều chỉnh thông tin phân công xe (thường do Phòng Hành Chính
-  // thực hiện ở bước cuối) — gửi kèm cùng request duyệt/từ chối, ghi nhận ngay khi có nhập.
+  // thực hiện ở bước cuối) — gửi kèm cùng request duyệt/từ chối, ghi nhận ngay khi có nhập. Lái xe bắt
+  // buộc là 1 tài khoản hệ thống có thật — nếu ô còn text nhưng chưa khớp được tài khoản (gõ tự do,
+  // chưa chọn xong từ gợi ý) thì chặn ngay ở đây, không gửi lên server.
+  const carAssignedDriverText = document.getElementById('carAssignedDriver').value.trim();
+  const carAssignedDriverUsername = document.getElementById('carAssignedDriverUsername').value;
+  if (carAssignedDriverText && !carAssignedDriverUsername) {
+    return alert('Vui lòng chọn đúng lái xe từ danh sách gợi ý (gõ tên hoặc tài khoản để tìm)!');
+  }
   const extraFields = {
-    assignedDriver: document.getElementById('carAssignedDriver').value.trim(),
+    assignedDriverUsername: carAssignedDriverUsername,
     assignedVehicleType: document.getElementById('carAssignedVehicleType').value.trim(),
     assignedPlate: document.getElementById('carAssignedPlate').value.trim()
   };

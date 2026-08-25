@@ -592,6 +592,22 @@ router.post('/contracts/:id/delete', async (req, res) => {
 });
 router.post('/officeReqs/:id/delete', (req, res) => deleteAdminOnly(req, res, 'officeReqs'));
 router.post('/carRegs/:id/delete', (req, res) => deleteAdminOnly(req, res, 'carRegs'));
+
+// Lái xe được phân công (assignedDriverUsername, gán lúc duyệt — xem routes/workflow.js) tự xác nhận
+// đúng chuyến của mình ở sub-tab "Lái Xe" — chỉ đúng tài khoản được gán mới gọi được (kiểm tra trong
+// confirmCarDriverAssignment()), không cần quyền admin/carView riêng gì thêm.
+router.post('/carRegs/:id/confirm-driver', async (req, res) => {
+  const itemId = Number(req.params.id);
+  if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
+  try {
+    const { freshUser } = await getFreshUser(req);
+    const result = await withLockedRecordForCollection('carRegs', itemId, (item) =>
+      recordActions.confirmCarDriverAssignment(freshUser, item));
+    res.json({ ok: true, item: result });
+  } catch (err) {
+    handleError(res, `carRegs/${req.params.id}/confirm-driver`, err);
+  }
+});
 router.post('/vppPeriods/:id/delete', (req, res) => deleteAdminOnly(req, res, 'vppPeriods'));
 router.post('/vppRegistrations/:id/delete', (req, res) => deleteAdminOnly(req, res, 'vppRegistrations'));
 router.post('/reportPeriods/:id/delete', (req, res) => deleteAdminOnly(req, res, 'reportPeriods'));
