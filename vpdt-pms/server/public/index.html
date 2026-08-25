@@ -430,11 +430,18 @@ table { display: block; overflow-x: auto; max-width: 100%; }
       <button id="btnReportsTab" onclick="switchTab('reports')" class="hidden sidebar-item">
         <span class="sidebar-icon">📊</span><span class="sidebar-label">Báo cáo</span>
       </button>
-      <!-- Hỗ Trợ IT — mở cho toàn bộ nhân viên (giống Công Việc), 2 sub-tab "Phê Duyệt Giá"/"Hỗ Trợ
-           Yêu Cầu" bên trong itSupportSection (xem setItSupportSubTab()). -->
-      <button id="btnItSupportTab" onclick="switchTab('itSupport')" class="hidden sidebar-item">
-        <span class="sidebar-icon">🖥️</span><span class="sidebar-label">Hỗ Trợ IT</span>
-      </button>
+      <!-- Hỗ Trợ IT — cùng khuôn dropdown Hợp Đồng: mở cho toàn bộ nhân viên (giống Công Việc), 2
+           sub-tab "Phê Duyệt Giá"/"Hỗ Trợ Yêu Cầu" dùng CHUNG 1 điều kiện quyền canAccessItSupportModule
+           (không phân quyền riêng theo từng sub-tab, xem setItSupportSubTab()/toggleItSupportDropdown()). -->
+      <div id="itSupportNavWrap" class="hidden">
+        <button id="btnItSupportTab" onclick="toggleItSupportDropdown(event)" class="sidebar-item">
+          <span class="sidebar-icon">🖥️</span><span class="sidebar-label flex-1">Hỗ Trợ IT</span><span class="sidebar-label text-[10px]">▾</span>
+        </button>
+        <div id="itSupportDropdownPanel" class="hidden pl-7 space-y-0.5 sidebar-label">
+          <button onclick="closeItSupportDropdown(); switchTab('itSupport'); setItSupportSubTab('PRICE')" class="sidebar-subitem">🏷️ Phê Duyệt Giá</button>
+          <button onclick="closeItSupportDropdown(); switchTab('itSupport'); setItSupportSubTab('TICKET')" class="sidebar-subitem">🎫 Hỗ Trợ Yêu Cầu</button>
+        </div>
+      </div>
       <!-- Hệ Thống — cùng khuôn Hợp Đồng (dropdown TĨNH): cả 4 mục con đều yêu cầu admin (không có
            quyền riêng từng mục như Điều Hành/Hành Chính, xem setSystemSubTab() chặn thẳng !admin ở đầu
            hàm) nên không cần hàm updateXNavVisibility riêng — hiện đủ 4 mục ngay khi mục cha hiện ra. -->
@@ -8494,7 +8501,7 @@ function finishLogin(user) {
 
   document.getElementById('heThongNavWrap').classList.toggle('hidden', !user.perms.admin);
   document.getElementById('btnReportsTab').classList.toggle('hidden', !canAccessReportsModule(user));
-  document.getElementById('btnItSupportTab').classList.toggle('hidden', !canAccessItSupportModule(user));
+  document.getElementById('itSupportNavWrap').classList.toggle('hidden', !canAccessItSupportModule(user));
   document.getElementById('btnApprovalHubTab').classList.toggle('hidden', !canAccessApprovalHub(user));
   updateApprovalHubBadge();
   applyUploadAcceptAttrs();
@@ -8730,6 +8737,24 @@ function closeHopDongDropdown() {
 document.addEventListener('click', (ev) => {
   const panel = document.getElementById('hopDongDropdownPanel');
   const btn = document.getElementById('btnHopDongTab');
+  if (!panel || panel.classList.contains('hidden')) return;
+  if (!panel.contains(ev.target) && ev.target !== btn && !btn?.contains(ev.target)) panel.classList.add('hidden');
+});
+
+// "Hỗ Trợ IT" — cùng khuôn Hợp Đồng ở trên: bọc 2 sub-tab Phê Duyệt Giá/Hỗ Trợ Yêu Cầu (module
+// "itSupport", xem HTML #itSupportNavWrap). Không có hàm updateXNavVisibility riêng vì 2 sub-tab dùng
+// CHUNG 1 điều kiện quyền canAccessItSupportModule — nút cha ẩn/hiện thẳng theo đúng điều kiện đó ở
+// finishLogin().
+function toggleItSupportDropdown(e) {
+  e.stopPropagation();
+  document.getElementById('itSupportDropdownPanel')?.classList.toggle('hidden');
+}
+function closeItSupportDropdown() {
+  document.getElementById('itSupportDropdownPanel')?.classList.add('hidden');
+}
+document.addEventListener('click', (ev) => {
+  const panel = document.getElementById('itSupportDropdownPanel');
+  const btn = document.getElementById('btnItSupportTab');
   if (!panel || panel.classList.contains('hidden')) return;
   if (!panel.contains(ev.target) && ev.target !== btn && !btn?.contains(ev.target)) panel.classList.add('hidden');
 });
