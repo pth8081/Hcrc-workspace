@@ -7742,6 +7742,37 @@ async function refreshCaptcha(focusAfter = false) {
 }
 refreshCaptcha();
 
+// HTML gốc của nút "Đăng Nhập"/"Đăng nhập bằng vân tay" — chụp lại NGAY LÚC TẢI TRANG (trước khi bất kỳ
+// lượt đăng nhập nào chạy) để dùng làm giá trị "trả lại nguyên trạng" ở resetLoginWidgets()/
+// resetBiometricLoginWidget() bên dưới — không thể chụp động ngay trước lúc reset như trước đây nữa vì
+// đăng nhập THÀNH CÔNG giờ cố tình không tự reset (xem chú thích trong login()), lúc logout() gọi lại
+// hàm reset thì nút có thể đang ở trạng thái "Đang đăng nhập…"/"Đang xác thực…" chứ không còn nguyên bản.
+const btnLoginOriginalHTML = document.getElementById('btnLogin')?.innerHTML || 'Đăng nhập';
+const btnBiometricLoginOriginalHTML = document.getElementById('btnBiometricLogin')?.innerHTML || 'Đăng nhập bằng vân tay / Face ID';
+
+// Trả nút "Đăng Nhập" + ô CAPTCHA + nút "↻ Lấy mã khác" về trạng thái sẵn sàng nhập lại (mở khoá, đổi chữ
+// nút về nguyên bản, lấy 1 mã CAPTCHA MỚI). Dùng khi đăng nhập THẤT BẠI (sai mật khẩu/CAPTCHA, lỗi mạng,
+// phiên không lưu được) hoặc lỗi bất ngờ lúc tải giao diện chính, VÀ khi đăng xuất (để lần đăng nhập SAU
+// vẫn dùng form bình thường được) — xem chú thích đầy đủ trong login()/logout() về lý do đăng nhập THÀNH
+// CÔNG cố tình KHÔNG gọi hàm này.
+function resetLoginWidgets(focusCaptcha = true) {
+  const btn = document.getElementById('btnLogin');
+  const btnCaptchaRefresh = document.getElementById('btnCaptchaRefresh');
+  const txtCaptchaEl = document.getElementById('txtCaptcha');
+  if (btn) { btn.disabled = false; btn.innerHTML = btnLoginOriginalHTML; }
+  if (btnCaptchaRefresh) btnCaptchaRefresh.disabled = false;
+  if (txtCaptchaEl) txtCaptchaEl.disabled = false;
+  loginInFlight = false;
+  if (captchaId) refreshCaptcha(focusCaptcha);
+}
+
+// Cùng khuôn resetLoginWidgets() ở trên, riêng cho nút vân tay/Face ID (không đụng gì tới CAPTCHA).
+function resetBiometricLoginWidget() {
+  const btn = document.getElementById('btnBiometricLogin');
+  if (btn) { btn.disabled = false; btn.innerHTML = btnBiometricLoginOriginalHTML; }
+  biometricLoginInFlight = false;
+}
+
 // ==========================================
 // ĐĂNG NHẬP BẰNG VÂN TAY/FACE ID (WebAuthn/FIDO2, xem lib/webauthn.js) — chỉ hiện nút khi trình duyệt
 // CÓ khả năng WebAuthn (API navigator.credentials/window.PublicKeyCredential tồn tại — tự vắng mặt
@@ -7765,7 +7796,6 @@ async function loginWithBiometric() {
 
   biometricLoginInFlight = true;
   const btn = document.getElementById('btnBiometricLogin');
-  const btnOriginalHTML = btn ? btn.innerHTML : '';
   if (btn) { btn.disabled = true; btn.innerHTML = '<span class="loginpage-spinner"></span> Đang xác thực…'; }
 
   try {
@@ -7778,6 +7808,7 @@ async function loginWithBiometric() {
     });
     if (!optRes.ok) {
       const body = await optRes.json().catch(() => ({}));
+      resetBiometricLoginWidget();
       return alert(body.error || 'Không thể khởi tạo đăng nhập vân tay.');
     }
     const optionsJSON = await optRes.json();
@@ -7788,6 +7819,7 @@ async function loginWithBiometric() {
     } catch (e) {
       // Người dùng bấm Huỷ ở hộp thoại vân tay của hệ điều hành (hoặc hết thời gian chờ) — KHÔNG coi
       // là lỗi hệ thống, chỉ lặng lẽ dừng lại để họ dùng mật khẩu bên trên như bình thường.
+      resetBiometricLoginWidget();
       if (e.name === 'NotAllowedError') return;
       return alert('⛔ Không đọc được vân tay/Face ID: ' + e.message);
     }
@@ -7799,6 +7831,7 @@ async function loginWithBiometric() {
     });
     if (!verifyRes.ok) {
       const body = await verifyRes.json().catch(() => ({}));
+      resetBiometricLoginWidget();
       return alert(body.error || 'Không thể đăng nhập bằng vân tay.');
     }
     const user = await verifyRes.json();
@@ -7807,16 +7840,25 @@ async function loginWithBiometric() {
     // bên dưới, xem chú thích đầy đủ ở đó.
     const sessionCheck = await fetch('/api/auth/me').catch(() => null);
     if (!sessionCheck || !sessionCheck.ok) {
+      resetBiometricLoginWidget();
       return alert('⚠️ Đăng nhập đúng nhưng trình duyệt KHÔNG lưu được phiên đăng nhập. Vui lòng thử lại bằng địa chỉ https://, hoặc liên hệ quản trị viên hệ thống để kiểm tra cấu hình.');
     }
 
     logSystemAction('USER_MGM', 'LOGIN_SUCCESS', 'Đăng nhập bằng vân tay/Face ID thành công.', 'SUCCESS', user.username);
-    await proceedAfterAuth(user);
+    // ĐĂNG NHẬP THÀNH CÔNG — cố tình KHÔNG gọi resetBiometricLoginWidget() ở đây, giữ nguyên trạng thái
+    // "Đang xác thực…" cho tới khi thật sự chuyển màn hình, tránh đúng lỗi UX đã sửa ở login() (mật khẩu)
+    // bên dưới — xem chú thích đầy đủ ở đó. Chỉ bọc riêng proceedAfterAuth() để có lưới an toàn nếu lỗi
+    // bất ngờ lúc tải giao diện chính, không để nút kẹt vĩnh viễn.
+    try {
+      await proceedAfterAuth(user);
+    } catch (e) {
+      console.error('Lỗi khi vào giao diện chính sau đăng nhập vân tay:', e);
+      resetBiometricLoginWidget();
+      alert('⛔ Đăng nhập thành công nhưng có lỗi khi tải giao diện chính. Vui lòng tải lại trang (F5).');
+    }
   } catch (e) {
+    resetBiometricLoginWidget();
     alert('⛔ Không thể kết nối tới máy chủ: ' + e.message);
-  } finally {
-    if (btn) { btn.disabled = false; btn.innerHTML = btnOriginalHTML; }
-    biometricLoginInFlight = false;
   }
 }
 
@@ -7844,7 +7886,6 @@ async function login() {
 
   loginInFlight = true;
   const btn = document.getElementById('btnLogin');
-  const btnOriginalHTML = btn ? btn.innerHTML : '';
   const btnCaptchaRefresh = document.getElementById('btnCaptchaRefresh');
   const txtCaptchaEl = document.getElementById('txtCaptcha');
   // Đổi hẳn chữ trên nút + thêm icon xoay (không chỉ disable/mờ đi) — chữ đổi đơn thuần rất dễ bị bỏ
@@ -7863,36 +7904,41 @@ async function login() {
     });
     if (!res.ok) {
       const body = await res.json().catch(() => ({}));
+      resetLoginWidgets();
       return alert(body.error || 'Tài khoản hoặc mật khẩu không chính xác!');
     }
     user = await res.json();
   } catch (e) {
+    resetLoginWidgets();
     return alert('⛔ Không thể kết nối tới máy chủ: ' + e.message);
-  } finally {
-    if (btn) { btn.disabled = false; btn.innerHTML = btnOriginalHTML; }
-    if (btnCaptchaRefresh) btnCaptchaRefresh.disabled = false;
-    if (txtCaptchaEl) txtCaptchaEl.disabled = false;
-    loginInFlight = false;
-    // Mã CAPTCHA chỉ dùng được 1 lần (dù đúng hay sai) — lấy mã mới ngay sau MỌI lượt gọi để lần đăng
-    // nhập kế tiếp (nếu có) bắt buộc nhập lại, không tái dùng captchaId cũ. Đây LUÔN là lượt refresh
-    // SAU 1 lần submit (không phải tải trang lần đầu) nên tự đưa focus vào thẳng ô mã mới.
-    if (captchaId) refreshCaptcha(true);
   }
 
-  // Xác nhận NGAY cookie phiên vừa cấp có thực sự được trình duyệt lưu lại hay không — trước đây tin
-  // thẳng response 200 rồi vào thẳng giao diện, nên trường hợp trình duyệt ÂM THẦM từ chối lưu cookie
-  // (phổ biến nhất: truy cập qua http:// thuần trong khi server bắt buộc cookie Secure/HTTPS — xem
-  // cảnh báo cùng nội dung ở routes/auth.js warnIfCookieLikelyNotPersisted()) chỉ lộ ra RẤT MUỘN, ở lần
-  // tải lại trang hoặc thao tác tiếp theo bị bất ngờ coi như chưa đăng nhập — đúng cảm giác "thoát phiên
-  // khó hiểu" người dùng hay gặp. Gọi lại /api/auth/me ngay ở đây để phát hiện và báo rõ nguyên nhân
-  // ngay tại thời điểm đăng nhập, thay vì để lộ ra giữa chừng lúc đang thao tác.
+  // ĐĂNG NHẬP THÀNH CÔNG — cố tình KHÔNG gọi resetLoginWidgets() ở đây (khác bản trước): trước đây khối
+  // finally luôn chạy dù thành công hay thất bại, bật lại nút "Đăng Nhập" + lấy ngay 1 mã CAPTCHA MỚI
+  // TRẮNG TRƠN ngay khi POST /login vừa trả lời xong — nhưng đăng nhập thành công thì CHƯA vào giao diện
+  // chính ngay, còn phải xác nhận cookie phiên (bước dưới) rồi tải toàn bộ dữ liệu nghiệp vụ qua
+  // initDatabase() (từng đo được 5-7 giây ở lần đầu, xem task điều tra hiệu năng trước đây) mới thật sự
+  // ẩn màn đăng nhập. Trong khoảng vài giây "trông như đã xong" đó, người dùng thấy nút trở lại bình
+  // thường + CAPTCHA trắng mới nên hiểu lầm là CHƯA bấm/CHƯA đăng nhập, gõ mã mới rồi bấm lại — đây chính
+  // là nguồn gốc lỗi UX cần sửa. Giữ nguyên nút "Đang đăng nhập…"/CAPTCHA cũ liên tục cho tới khi THẬT SỰ
+  // chuyển màn hình. Chỉ còn 3 chỗ gọi resetLoginWidgets(): 2 nhánh lỗi ở trên, nhánh lỗi xác nhận phiên
+  // ngay dưới đây, và logout() (để lần đăng nhập SAU vẫn dùng form bình thường được).
   const sessionCheck = await fetch('/api/auth/me').catch(() => null);
   if (!sessionCheck || !sessionCheck.ok) {
+    resetLoginWidgets();
     return alert('⚠️ Đăng nhập đúng nhưng trình duyệt KHÔNG lưu được phiên đăng nhập, nên chưa thể vào hệ thống. Nguyên nhân thường gặp nhất: đang truy cập bằng địa chỉ http:// (không có https). Vui lòng thử lại bằng địa chỉ https://, hoặc liên hệ quản trị viên hệ thống để kiểm tra cấu hình.');
   }
 
   logSystemAction('USER_MGM', 'LOGIN_SUCCESS', 'Đăng nhập thành công.', 'SUCCESS', user.username);
-  await proceedAfterAuth(user);
+  // Bọc riêng proceedAfterAuth() — lưới an toàn cho trường hợp cực hiếm có lỗi JS bất ngờ lúc dựng giao
+  // diện chính, tránh để nút/CAPTCHA kẹt vĩnh viễn ở trạng thái "Đang đăng nhập…" không bấm được.
+  try {
+    await proceedAfterAuth(user);
+  } catch (e) {
+    console.error('Lỗi khi vào giao diện chính sau đăng nhập:', e);
+    resetLoginWidgets();
+    alert('⛔ Đăng nhập thành công nhưng có lỗi khi tải giao diện chính. Vui lòng tải lại trang (F5).');
+  }
 }
 
 // Sau khi có phiên đăng nhập hợp lệ (đăng nhập mới HOẶC khôi phục phiên cũ lúc tải lại trang) — nếu
@@ -8586,6 +8632,12 @@ function logout() {
   dataReady = false;
   document.getElementById('mustChangePasswordModal').classList.add('hidden');
   document.getElementById('loginSection').classList.remove('hidden');
+  // Trả nút "Đăng Nhập"/"Đăng nhập bằng vân tay" về trạng thái dùng được bình thường — kể từ khi login()/
+  // loginWithBiometric() cố tình KHÔNG tự reset lúc đăng nhập THÀNH CÔNG (xem chú thích trong 2 hàm đó),
+  // logout() là nơi DUY NHẤT còn lại cần làm việc này, nếu không nút sẽ kẹt ở trạng thái "Đang đăng
+  // nhập…"/"Đang xác thực…" từ lượt đăng nhập trước, chặn luôn lượt đăng nhập kế tiếp.
+  resetLoginWidgets(false);
+  resetBiometricLoginWidget();
   document.getElementById('dashboardSection').classList.add('hidden');
   document.getElementById('approvalHubSection').classList.add('hidden');
   document.getElementById('docSection').classList.add('hidden');
