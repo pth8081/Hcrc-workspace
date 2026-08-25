@@ -9257,8 +9257,13 @@ function switchTab(tabName) {
     alert('⛔ Bạn không có quyền truy cập Module Báo Cáo Định Kỳ!');
     return;
   }
-  if (tabName === 'office' && !canAccessOfficeModule(currentUser)) {
-    alert('⛔ Bạn không có quyền truy cập Module Phê duyệt Văn phòng!');
+  // "office" còn chứa sub-tab Thanh Toán (quyền RIÊNG canAccessPaymentModule(), không dùng
+  // officeBuy/Fix/Invest như canAccessOfficeModule() — xem chú thích tại canAccessPaymentModule()) —
+  // trước đây chỉ xét canAccessOfficeModule() nên người CHỈ có paymentManage (vd kế toán, không có
+  // quyền tạo đề nghị Mua Bán/Sửa Chữa/Đầu Tư nào) thấy đúng nút "💰 Thanh Toán" ở sidebar (tự ẩn/hiện
+  // theo canAccessPaymentModule() riêng) nhưng bấm vào lại bị chặn ngay tại đây, không vào được.
+  if (tabName === 'office' && !canAccessOfficeModule(currentUser) && !canAccessPaymentModule(currentUser)) {
+    alert('⛔ Bạn không có quyền truy cập Module Tổng Hợp!');
     return;
   }
   if (tabName === 'reports' && !canAccessReportsModule(currentUser)) {
@@ -27170,7 +27175,12 @@ function onItTicketFilterChange() {
 // Phạm vi Xem: hẹp hơn Phê Duyệt Giá vì ticket có thể chứa thông tin tài khoản/sự cố cá nhân — chỉ
 // đội Hỗ Trợ IT (itManage/admin) và chính người tạo được xem, không mở rộng cho toàn phòng ban.
 function canViewItTicket(user, t) {
-  return !!(user.perms?.admin || user.perms?.itManage || t.creator === user.username);
+  // Người được leo thang tới (t.approvalApprover) PHẢI thấy được ticket trong danh sách để mở ra phê
+  // duyệt/từ chối — trước đây thiếu nhánh này nên chỉ admin/itManage/người tạo thấy được, người được
+  // chỉ định phê duyệt (thường không có itManage) không có cách nào tìm lại đúng ticket đã escalate tới
+  // mình qua renderItTickets(), dù modal chi tiết (đã có isDesignatedApprover riêng) cho họ thao tác
+  // được NẾU mở đúng ticket bằng cách nào đó khác.
+  return !!(user.perms?.admin || user.perms?.itManage || t.creator === user.username || t.approvalApprover === user.username);
 }
 
 function renderItTickets() {

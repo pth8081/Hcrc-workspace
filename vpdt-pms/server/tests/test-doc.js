@@ -1,0 +1,388 @@
+'use strict';
+// Regression suite for module "Tài Liệu" (doc) — HCRC Workspace.
+//
+// There is no real SQL Server backend available in this environment, so this script serves
+// server/public/index.html as a static file, boots a real Chromium (Playwright) against it, seeds
+// the in-memory `DB` global + a fake `window.fetch` that emulates the handful of server routes the
+// Document module actually calls (/api/upload, /api/create/docs, /api/workflow/docs/:id/:action),
+// then drives the exact same functions the real UI wires up (uploadDoc(), approveDoc(), rejectDoc(),
+// toggleDocFamily(), viewDocDetails()...) via document.getElementById(...)/click()/direct calls.
+//
+// Run: node server/tests/test-doc.js
+
+const path = require('path');
+const http = require('http');
+const fs = require('fs');
+const { chromium } = require('/opt/node22/lib/node_modules/playwright');
+
+const PUBLIC_DIR = path.join(__dirname, '..', 'public');
+const PORT = 8951;
+
+const MIME = {
+  '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'text/javascript', '.css': 'text/css',
+  '.json': 'application/json', '.png': 'image/png', '.svg': 'image/svg+xml', '.woff2': 'font/woff2',
+  '.wasm': 'application/wasm'
+};
+
+function startServer() {
+  return new Promise((resolve) => {
+    const server = http.createServer((req, res) => {
+      let urlPath = decodeURIComponent(req.url.split('?')[0]);
+      if (urlPath === '/') urlPath = '/index.html';
+      const filePath = path.join(PUBLIC_DIR, urlPath);
+      if (!filePath.startsWith(PUBLIC_DIR)) { res.writeHead(403); return res.end(); }
+      fs.readFile(filePath, (err, data) => {
+        if (err) { res.writeHead(404); return res.end('not found'); }
+        res.writeHead(200, { 'Content-Type': MIME[path.extname(filePath)] || 'application/octet-stream' });
+        res.end(data);
+      });
+    });
+    server.listen(PORT, () => resolve(server));
+  });
+}
+
+async function main() {
+  const server = await startServer();
+  const browser = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium' });
+  let results;
+  let pageErrors = [];
+  try {
+  const page = await browser.newPage();
+  page.on('pageerror', (e) => pageErrors.push(String(e)));
+  page.on('console', (msg) => { if (msg.type() === 'error') pageErrors.push(msg.text()); });
+
+  await page.goto(`http://localhost:${PORT}/index.html`, { waitUntil: 'load' });
+
+  results = await page.evaluate(async () => {
+    const results = [];
+    function check(name, cond, detail) {
+      results.push({ name, pass: !!cond, detail: cond ? '' : (detail || '') });
+    }
+
+    // ---------- Test doubles: fetch stub + alert/confirm capture ----------
+    const alerts = [];
+    window.alert = (m) => { alerts.push(String(m)); };
+    window.confirm = () => true;
+    let promptAnswer = null;
+    window.prompt = () => promptAnswer;
+
+    let nextId = 5000;
+    const nowVN = () => new Date().toLocaleString('vi-VN');
+
+    // Minimal in-page "fake server" — mirrors the client-visible contract of routes/create.js +
+    // routes/workflow.js for the 2 endpoints the Document module actually calls. It mutates the same
+    // record object already sitting in DB.docs (found by id) so `DB.docs[idx] = updatedDoc` in the
+    // real client code is a same-object assignment — safe either way.
+    function applyDocWorkflowAction(rec, action, body) {
+      const wfConfig = DB.deptWorkflows[rec.dept] || { workflowId: 'WF_1STEP', approvers: { 1: ['admin'] } };
+      const wf = DB.workflows.find(w => w.id === wfConfig.workflowId) || { steps: [{ order: 1, name: 'Sếp duyệt' }] };
+      const totalSteps = wf.steps.length;
+      const approvers = wfConfig.approvers || {};
+
+      if (action === 'reject') {
+        rec.status = 'REJECTED';
+        rec.history = [...(rec.history || []), {
+          step: rec.currentStep, approver: currentUser.name, username: currentUser.username,
+          action: 'REJECTED', comment: body.comment, time: nowVN()
+        }];
+        return { item: rec, transition: { type: 'REJECTED' } };
+      }
+
+      if (action === 'approve') {
+        rec.history = [...(rec.history || []), {
+          step: rec.currentStep, approver: currentUser.name, username: currentUser.username,
+          action: 'APPROVED', time: nowVN()
+        }];
+        const stepApprovers = approvers[rec.currentStep] || [];
+        const approvedSet = new Set(rec.history.filter(h => h.step === rec.currentStep && h.action === 'APPROVED' && !h.invalidated).map(h => h.username));
+        const allApproved = stepApprovers.length <= 1 || stepApprovers.every(u => approvedSet.has(u));
+        if (!allApproved) return { item: rec, transition: { type: 'PARTIAL_APPROVE' } };
+        if (rec.currentStep >= totalSteps) {
+          rec.status = 'APPROVED';
+          return { item: rec, transition: { type: 'COMPLETED' } };
+        }
+        rec.currentStep += 1;
+        const nextApprovers = approvers[rec.currentStep] || [];
+        return { item: rec, transition: { type: 'ADVANCED', stepApprovers: nextApprovers, nextApprovers, nextStepName: (wf.steps[rec.currentStep - 1] || {}).name || '' } };
+      }
+      throw new Error('unsupported action ' + action);
+    }
+
+    window.fetch = async (url, opts = {}) => {
+      const method = opts.method || 'GET';
+      let body = {};
+      if (typeof opts.body === 'string') { try { body = JSON.parse(opts.body); } catch (e) { /* ignore */ } }
+
+      if (url === '/api/upload' && method === 'POST') {
+        const file = opts.body && opts.body.get ? opts.body.get('file') : null;
+        const fileName = file ? file.name : 'file.bin';
+        return { ok: true, status: 200, json: async () => ({ fileName, fileType: file ? file.type : '', fileUrl: `/uploads/fake_${nextId++}_${fileName}`, size: file ? file.size : 0 }) };
+      }
+
+      let m = url.match(/^\/api\/create\/([a-zA-Z]+)$/);
+      if (m && method === 'POST') {
+        const id = nextId++;
+        const item = { ...body, id, uploader: currentUser.username, uploaderName: currentUser.name };
+        return { ok: true, status: 200, json: async () => ({ ok: true, item }) };
+      }
+
+      m = url.match(/^\/api\/workflow\/([a-zA-Z]+)\/(\d+)\/([a-zA-Z-]+)$/);
+      if (m && method === 'POST') {
+        const [, moduleKey, idStr, action] = m;
+        const arr = DB[moduleKey] || [];
+        const rec = arr.find(r => r.id === Number(idStr));
+        if (!rec) return { ok: false, status: 404, json: async () => ({ error: 'Không tìm thấy' }) };
+        const result = applyDocWorkflowAction(rec, action, body);
+        return { ok: true, status: 200, json: async () => ({ ok: true, item: result.item, transition: result.transition }) };
+      }
+
+      // Fallback for /api/log, /api/auth/request-approval-otp, etc — fire-and-forget calls the app
+      // makes that this suite doesn't need to model.
+      return { ok: true, status: 200, json: async () => ({ ok: true }) };
+    };
+
+    // ---------- DB seed ----------
+    Object.assign(DB, {
+      depts: ['Phòng Kinh Doanh', 'Phòng Hành Chính'],
+      cats: ['Quy Định Nội Bộ', 'Biểu Mẫu'],
+      stores: [],
+      jobTitles: ['Trưởng Phòng', 'Nhân Viên'],
+      deptAbbrs: {}, docCatAbbrs: {},
+      submissionTypes: [], contractTypes: [], carTypes: [],
+      workflows: [], deptWorkflows: {},
+      submissionDeptWorkflows: {}, submissionTypeDeptWorkflows: {}, submissionApprovalGroups: {},
+      permGroups: [],
+      docs: []
+    });
+
+    const adminUser = {
+      username: 'admin', name: 'Quản Trị Viên', dept: 'Phòng Hành Chính', role: 'admin',
+      jobTitle: 'Trưởng Phòng', email: 'admin@hcrc.vn', phone: '0900000001',
+      perms: { admin: true }
+    };
+    DB.users = [adminUser];
+
+    finishLogin(adminUser);
+    switchTab('doc');
+
+    function setFileInput(id, filename, content, mime) {
+      const dt = new DataTransfer();
+      dt.items.add(new File([content], filename, { type: mime }));
+      document.getElementById(id).files = dt.files;
+    }
+
+    // ================= Scenario 1: happy path — upload new document =================
+    {
+      document.getElementById('docOpMode').value = 'NEW';
+      onDocOpModeChange();
+      document.getElementById('selDept').value = 'Phòng Kinh Doanh';
+      document.getElementById('selCat').value = 'Quy Định Nội Bộ';
+      refreshDocCodePreview();
+      const expectedCode = document.getElementById('docCode').value;
+      document.getElementById('docTitle').value = 'Quy định nghỉ phép 2026';
+      document.getElementById('docSummary').value = 'Quy định mới về nghỉ phép năm 2026.';
+      setFileInput('docFile', 'quy-dinh-nghi-phep.pdf', 'PDF nội dung giả lập', 'application/pdf');
+
+      const before = DB.docs.length;
+      await uploadDoc({ preventDefault() {} });
+      const created = DB.docs[0];
+
+      check(
+        'doc: upload new document creates a versioned record with auto-generated code',
+        DB.docs.length === before + 1 &&
+        created && created.code === expectedCode && created.versionNumber === 1 && created.ver === 'v1.0' &&
+        created.status === 'PENDING' && created.currentStep === 1 && created.rootDocId === null &&
+        expectedCode === `QDNB-KD-001`,
+        `expectedCode=${expectedCode} created=${JSON.stringify(created && { code: created.code, versionNumber: created.versionNumber, status: created.status })}`
+      );
+
+      check(
+        'doc: success alert fired and doc list re-rendered with the new code',
+        alerts.some(a => a.includes('Tải lên và trình ký tài liệu thành công')) &&
+        document.getElementById('docTableBody').innerHTML.includes(expectedCode),
+        `alerts=${JSON.stringify(alerts)}`
+      );
+    }
+
+    // ================= Scenario 2: validation — missing Phòng Ban/Phân Loại blocks upload =================
+    {
+      alerts.length = 0;
+      document.getElementById('docOpMode').value = 'NEW';
+      onDocOpModeChange();
+      document.getElementById('selDept').value = '';
+      document.getElementById('selCat').value = '';
+      document.getElementById('docTitle').value = 'Tài liệu thiếu thông tin';
+      document.getElementById('docSummary').value = 'Không chọn phòng ban/phân loại.';
+      setFileInput('docFile', 'thieu-thong-tin.pdf', 'noi dung', 'application/pdf');
+
+      const before = DB.docs.length;
+      await uploadDoc({ preventDefault() {} });
+
+      check(
+        'doc: uploading without Phòng Ban Trình/Phân Loại is rejected client-side with no record created',
+        DB.docs.length === before &&
+        alerts.some(a => a.includes('Vui lòng chọn Phòng Ban Trình và Phân Loại')),
+        `alerts=${JSON.stringify(alerts)} docsCount=${DB.docs.length}`
+      );
+    }
+
+    // ================= Scenario 3: approve workflow completes in 1 step =================
+    let approvedDocId = null;
+    {
+      alerts.length = 0;
+      const doc = DB.docs.find(d => d.status === 'PENDING');
+      approvedDocId = doc.id;
+      const before = doc.status;
+      approveDoc(doc.id); // withApprovalAuth() runs actionFn immediately since perms.approverAuthLevel unset
+      await new Promise(r => setTimeout(r, 0)); // let the async approveDocConfirmed() microtasks settle
+
+      const updated = DB.docs.find(d => d.id === approvedDocId);
+      check(
+        'doc: approving the only pending doc (1-step workflow) transitions PENDING -> APPROVED',
+        before === 'PENDING' && updated.status === 'APPROVED' &&
+        updated.history.some(h => h.action === 'APPROVED' && h.username === 'admin') &&
+        alerts.some(a => a.includes('Phê duyệt tài liệu thành công')),
+        `before=${before} after=${updated.status} alerts=${JSON.stringify(alerts)}`
+      );
+
+      check(
+        'doc: dashboard counters reflect the approval (APPROVED count incremented, PENDING count decremented)',
+        document.getElementById('dashApproved').innerText === String(DB.docs.filter(d => d.status === 'APPROVED').length) &&
+        document.getElementById('dashPending').innerText === String(DB.docs.filter(d => d.status === 'PENDING').length),
+        `dashApproved=${document.getElementById('dashApproved').innerText} dashPending=${document.getElementById('dashPending').innerText}`
+      );
+    }
+
+    // ================= Scenario 4: reject workflow with a reason =================
+    {
+      alerts.length = 0;
+      document.getElementById('docOpMode').value = 'NEW';
+      onDocOpModeChange();
+      document.getElementById('selDept').value = 'Phòng Kinh Doanh';
+      document.getElementById('selCat').value = 'Biểu Mẫu';
+      refreshDocCodePreview();
+      document.getElementById('docTitle').value = 'Biểu mẫu chấm công';
+      document.getElementById('docSummary').value = 'Biểu mẫu chấm công mới.';
+      setFileInput('docFile', 'bieu-mau-cham-cong.pdf', 'noi dung', 'application/pdf');
+      await uploadDoc({ preventDefault() {} });
+      const doc = DB.docs.find(d => d.title === 'Biểu mẫu chấm công');
+
+      promptAnswer = 'Sai biểu mẫu, cần chỉnh lại tiêu đề cột.';
+      alerts.length = 0;
+      await rejectDoc(doc.id);
+      const updated = DB.docs.find(d => d.id === doc.id);
+
+      check(
+        'doc: rejecting a pending doc with a reason moves it to REJECTED and records the reason in history',
+        updated.status === 'REJECTED' &&
+        updated.history.some(h => h.action === 'REJECTED' && h.comment === promptAnswer) &&
+        alerts.some(a => a.includes('Từ chối')),
+        `status=${updated.status} history=${JSON.stringify(updated.history)}`
+      );
+    }
+
+    // ================= Scenario 5: versioning — update only allowed after latest version approved, =====
+    // ================= then version history expand/collapse + detail modal show all versions ===========
+    {
+      // 5a. Trying to "Cập nhật" before the family's latest version is approved must not be an eligible target.
+      populateDocUpdateTargets();
+      const eligibleBefore = [...document.getElementById('docUpdateTarget').options].map(o => o.value).filter(Boolean);
+      check(
+        'doc: a doc whose latest version is REJECTED is NOT offered as an update target',
+        !eligibleBefore.includes(String(DB.docs.find(d => d.title === 'Biểu mẫu chấm công').id)),
+        `eligible=${JSON.stringify(eligibleBefore)}`
+      );
+
+      check(
+        'doc: the already-APPROVED doc from scenario 3 IS offered as an update target',
+        eligibleBefore.includes(String(approvedDocId)),
+        `eligible=${JSON.stringify(eligibleBefore)} approvedDocId=${approvedDocId}`
+      );
+
+      // 5b. Perform the update (new version) against the approved root doc.
+      alerts.length = 0;
+      document.getElementById('docOpMode').value = 'UPDATE';
+      onDocOpModeChange();
+      document.getElementById('docUpdateTarget').value = String(approvedDocId);
+      onDocUpdateTargetChange();
+      document.getElementById('docSummary').value = 'Bổ sung điều khoản nghỉ phép cho lao động nữ.';
+      setFileInput('docFile', 'quy-dinh-nghi-phep-v2.pdf', 'noi dung v2', 'application/pdf');
+
+      const beforeCount = DB.docs.length;
+      await uploadDoc({ preventDefault() {} });
+      const newVersion = DB.docs.find(d => d.rootDocId === approvedDocId);
+
+      check(
+        'doc: updating an approved doc creates version 2 with an incremented code (-V2), status back to PENDING',
+        DB.docs.length === beforeCount + 1 &&
+        newVersion && newVersion.versionNumber === 2 && newVersion.status === 'PENDING' &&
+        newVersion.code.endsWith('-V2') && newVersion.rootDocId === approvedDocId,
+        `newVersion=${JSON.stringify(newVersion && { code: newVersion.code, versionNumber: newVersion.versionNumber, status: newVersion.status })}`
+      );
+
+      // 5c. Expand/collapse version history in the list. Child version rows re-use the ROOT doc's
+      // displayCode (by design — the version number is shown in a separate column, not baked into the
+      // code text), so the presence marker for "is this child row rendered right now" is its row action
+      // button, which is keyed by the child's own numeric id (runDocAction(<id>, ...)).
+      renderDocs();
+      const collapsedHTML = document.getElementById('docTableBody').innerHTML;
+      const versionBadgeVisible = collapsedHTML.includes('2 phiên bản');
+      const childMarker = `runDocAction(${newVersion.id},`;
+      toggleDocFamily(approvedDocId);
+      const expandedHTML = document.getElementById('docTableBody').innerHTML;
+      toggleDocFamily(approvedDocId); // collapse back
+      const collapsedAgainHTML = document.getElementById('docTableBody').innerHTML;
+
+      check(
+        'doc: expanding a doc family via toggleDocFamily() reveals the child version row, collapsing hides it again',
+        versionBadgeVisible &&
+        !collapsedHTML.includes(childMarker) &&
+        expandedHTML.includes(childMarker) && expandedHTML.includes('v2.0') &&
+        !collapsedAgainHTML.includes(childMarker),
+        `versionBadgeVisible=${versionBadgeVisible} collapsedHas=${collapsedHTML.includes(childMarker)} expandedHas=${expandedHTML.includes(childMarker)} collapsedAgainHas=${collapsedAgainHTML.includes(childMarker)}`
+      );
+
+      // 5d. Detail modal lists every version of the family.
+      viewDocDetails(approvedDocId);
+      const detailHTML = document.getElementById('docDetailBody').innerHTML;
+
+      check(
+        'doc: "Chi Tiết Tài Liệu" modal lists both v1.0 (approved) and v2.0 (pending) rows',
+        detailHTML.includes('v1.0') && detailHTML.includes('v2.0') &&
+        document.getElementById('docDetailTitle').innerText.includes('Quy định nghỉ phép 2026'),
+        `detailHTML.length=${detailHTML.length}`
+      );
+    }
+
+    return results;
+  });
+
+  if (pageErrors.length) {
+    console.log('--- Uncaught page errors/console errors observed during the run ---');
+    pageErrors.forEach((e) => console.log('  ' + e));
+  }
+  } finally {
+    // Always tear down the browser + static server, even if page.evaluate() throws — otherwise the
+    // Chromium subprocess (and the still-listening HTTP server) keep the event loop alive forever and
+    // this script never exits, which looks exactly like a hang.
+    await browser.close().catch(() => {});
+    await new Promise((resolve) => server.close(resolve));
+  }
+
+  let failCount = 0;
+  for (const r of results) {
+    if (r.pass) {
+      console.log(`PASS: ${r.name}`);
+    } else {
+      failCount++;
+      console.log(`FAIL: ${r.name} — ${r.detail}`);
+    }
+  }
+  console.log(`\n${results.length - failCount}/${results.length} scenarios passed.`);
+  if (failCount > 0) process.exitCode = 1;
+}
+
+main().catch((err) => {
+  console.error('FATAL:', err);
+  process.exitCode = 1;
+});
