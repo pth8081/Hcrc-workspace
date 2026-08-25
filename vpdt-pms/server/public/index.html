@@ -4381,14 +4381,18 @@ table { display: block; overflow-x: auto; max-width: 100%; }
             <input id="budgetTemplateName" placeholder="VD: Ngân sách Marketing" class="w-full border p-1.5 rounded" required>
           </div>
           <div>
-            <div class="flex justify-between items-center mb-1">
-              <label class="font-semibold text-gray-600">Cột Bổ Sung (ngoài 5 cột lõi STT/Tên hạng mục/Mô tả/Số tiền/Loại NS)</label>
-              <button type="button" onclick="addBudgetTemplateField()" class="text-violet-700 font-bold hover:underline">➕ Thêm cột</button>
+            <div class="flex justify-between items-center mb-1 flex-wrap gap-2">
+              <label class="font-semibold text-gray-600">Danh Sách Cột (đầy đủ — Tên Hạng Mục/Số Tiền/Loại NS bắt buộc có mặt, dùng nút ▲▼ để tự sắp thứ tự)</label>
+              <div class="flex gap-2 items-center text-[11px]">
+                <a href="/api/budget/template-fields-template" class="text-gray-600 font-bold hover:underline whitespace-nowrap">📥 Tải Mẫu Excel</a>
+                <label class="text-violet-700 font-bold hover:underline cursor-pointer whitespace-nowrap">📤 Tải Lên Từ Excel<input type="file" accept=".xlsx,.xls" class="hidden" onchange="uploadBudgetTemplateFieldsXlsx(event)"></label>
+                <button type="button" onclick="addBudgetTemplateField()" class="text-violet-700 font-bold hover:underline whitespace-nowrap">➕ Thêm cột</button>
+              </div>
             </div>
             <div class="overflow-x-auto">
               <table class="w-full border-collapse border text-xs">
                 <thead class="bg-gray-100 text-left">
-                  <tr><th class="border p-1.5">Tên Cột</th><th class="border p-1.5">Kiểu</th><th class="border p-1.5">Tuỳ chọn (kiểu Chọn)</th><th class="border p-1.5 text-center">Bắt buộc</th><th class="border p-1.5"></th></tr>
+                  <tr><th class="border p-1.5 w-14">Thứ Tự</th><th class="border p-1.5">Tên Cột</th><th class="border p-1.5">Kiểu</th><th class="border p-1.5">Tuỳ chọn (kiểu Chọn)</th><th class="border p-1.5 text-center">Bắt buộc</th><th class="border p-1.5"></th></tr>
                 </thead>
                 <tbody id="budgetTemplateFieldsBody"></tbody>
               </table>
@@ -9072,6 +9076,11 @@ function switchTab(tabName) {
     return;
   }
 
+  // Cuộn về đầu trang mỗi khi đổi MODULE — cùng lý do như setSystemSubTab()/các setXXXSubTab() khác:
+  // tránh giữ nguyên vị trí cuộn cũ (đang ở giữa/cuối 1 màn dài) khi module mới ngắn hơn nhiều, trình
+  // duyệt tự kẹp cuộn xuống gần cuối màn mới trông như tự "bay xuống cuối".
+  window.scrollTo({ top: 0, behavior: 'auto' });
+
   document.getElementById('dashboardSection').classList.toggle('hidden', tabName !== 'dashboard');
   document.getElementById('approvalHubSection').classList.toggle('hidden', tabName !== 'approvalHub');
   document.getElementById('docSection').classList.toggle('hidden', tabName !== 'doc');
@@ -9161,6 +9170,7 @@ function canAccessBudgetModule(user) {
 }
 
 function setOfficeSubTab(subTab) {
+  window.scrollTo({ top: 0, behavior: 'auto' }); // Tránh "bay xuống cuối" khi đổi tab con — xem setSystemSubTab().
   resetListPage('office');
   if (subTab === 'PAYMENT') {
     if (!canAccessPaymentModule(currentUser)) {
@@ -12626,6 +12636,7 @@ let editingContractId = null;
 // option theo tab đang đứng — không dùng chung 1 bộ option như trước, vì "Bổ Sung Phụ Lục" giờ tách
 // làm 2 nghĩa khác nhau tuỳ tab (chờ duyệt thật ở Phê Duyệt, hay nhập tay đã ký ở Quản Lý HĐ).
 function setContractSubTab(subTab) {
+  window.scrollTo({ top: 0, behavior: 'auto' }); // Tránh "bay xuống cuối" khi đổi tab con — xem setSystemSubTab().
   resetListPage('contract');
   activeContractSubTab = subTab;
   const activeCls = 'px-3 py-1 rounded text-xs font-bold bg-cyan-700 text-white';
@@ -13669,6 +13680,7 @@ function canManagePaymentRequestsClient(user) {
 }
 
 function setPaymentSubTab(subTab) {
+  window.scrollTo({ top: 0, behavior: 'auto' }); // Tránh "bay xuống cuối" khi đổi tab con — xem setSystemSubTab().
   activePaymentSubTab = subTab;
   const activeCls = 'px-3 py-1 rounded text-xs font-bold bg-amber-700 text-white';
   const inactiveCls = 'px-3 py-1 rounded text-xs font-bold bg-gray-200 text-gray-700';
@@ -14142,6 +14154,7 @@ function generateMeetingTimeSlots() {
 }
 
 function setMeetingSubTab(subTab) {
+  window.scrollTo({ top: 0, behavior: 'auto' }); // Tránh "bay xuống cuối" khi đổi tab con — xem setSystemSubTab().
   activeMeetingSubTab = subTab;
   const btnRegister = document.getElementById('btnMeetingSubRegister');
   const btnCalendar = document.getElementById('btnMeetingSubCalendar');
@@ -16607,6 +16620,7 @@ function vppPeriodIsOpen(p) {
 }
 
 function setVppSubTab(subTab) {
+  window.scrollTo({ top: 0, behavior: 'auto' }); // Tránh "bay xuống cuối" khi đổi tab con — xem setSystemSubTab().
   if ((subTab === 'PERIODS' || subTab === 'REPORTS') && !canManageVpp(currentUser)) subTab = 'REGISTER';
   activeVppSubTab = subTab;
 
@@ -17841,7 +17855,18 @@ let editingBudgetTemplateId = null; // id mẫu ngân sách đang sửa (null = 
 let budgetTemplateFormFields = []; // cột bổ sung đang sửa trong form Mẫu Ngân Sách
 let currentProcessingBudgetEntryId = null; // id bản ngân sách đang mở trong budgetProcessModal
 let currentBudgetSummaryData = null; // { period, entries, customFields } của lần Tổng Hợp gần nhất — dùng cho xuất Excel/PDF
-const BUDGET_FIELD_TYPE_LABELS = { text: 'Văn bản (Text)', number: 'Số (Number)', select: 'Danh sách chọn (Select)', date: 'Ngày (Date)' };
+const BUDGET_FIELD_TYPE_LABELS = { text: 'Văn bản (Text)', number: 'Số (Number)', money: 'Tiền (Money)', select: 'Danh sách chọn (Select)', date: 'Ngày (Date)' };
+// Bản sao thủ công của BUDGET_CORE_FIELD_DEFS ở lib/createValidation.js — server LUÔN tự chuẩn hoá lại
+// khi lưu (sanitizeBudgetCustomFields()) nên client có sai gì cũng không phá được dữ liệu, bản sao này
+// chỉ để vẽ đúng UI mặc định + khoá type/xoá cho 3 cột lõi bắt buộc (name/amount/budgetType).
+const BUDGET_CORE_FIELD_DEFS = {
+  name: { coreKey: 'name', label: 'Tên Hạng Mục', type: 'text', required: true, removable: false },
+  description: { coreKey: 'description', label: 'Mô Tả Chi Tiết', type: 'text', required: false, removable: true },
+  amount: { coreKey: 'amount', label: 'Số Tiền', type: 'money', required: true, removable: false },
+  budgetType: { coreKey: 'budgetType', label: 'Loại NS', type: 'select', options: ['OPEX', 'CAPEX'], required: true, removable: false }
+};
+const BUDGET_CORE_ORDER_DEFAULT = ['name', 'description', 'amount', 'budgetType'];
+function defaultBudgetFields() { return BUDGET_CORE_ORDER_DEFAULT.map(k => ({ id: k, ...BUDGET_CORE_FIELD_DEFS[k] })); }
 
 function canManageBudgetClient(user) { return !!(user?.perms?.admin || user?.perms?.budgetManage); }
 function canCreateBudgetEntryClient(user) { return !!(user?.perms?.admin || user?.perms?.budgetCreate); }
@@ -17859,6 +17884,7 @@ function budgetPeriodDeptAllowed(p, dept) {
 }
 
 function setBudgetSubTab(subTab) {
+  window.scrollTo({ top: 0, behavior: 'auto' }); // Tránh "bay xuống cuối" khi đổi tab con — xem setSystemSubTab().
   const canManage = canManageBudgetClient(currentUser);
   const canAggregate = canAggregateBudgetClient(currentUser);
   if (subTab === 'PERIOD' && !canManage) subTab = 'ENTRY';
@@ -17905,11 +17931,23 @@ function renderBudgetEntryPeriodOptions() {
   onBudgetEntryPeriodChange();
 }
 
-function getBudgetPeriodTemplateFields(period) {
-  if (!period?.templateId) return [];
-  const tpl = DB.budgetTemplates.find(t => t.id === period.templateId);
-  return (tpl && Array.isArray(tpl.fields)) ? tpl.fields : [];
+// Mẫu tạo TRƯỚC khi có tính năng "cột lõi hiển thị tường minh" (fields hoàn toàn không có coreKey nào)
+// — tự chèn đủ 4 cột lõi mặc định lên đầu để hiển thị đúng, cùng logic sanitizeBudgetCustomFields() ở
+// server (server luôn tự vá lại khi lưu, ở đây chỉ để HIỂN THỊ đúng ngay cả khi mẫu chưa được lưu lại).
+function normalizeBudgetTemplateFieldsForDisplay(rawFields) {
+  const list = Array.isArray(rawFields) ? rawFields : [];
+  if (!list.length) return defaultBudgetFields();
+  return list.some(f => f.coreKey) ? list : [...defaultBudgetFields(), ...list];
 }
+
+function getBudgetPeriodTemplateFields(period) {
+  if (!period?.templateId) return defaultBudgetFields();
+  const tpl = DB.budgetTemplates.find(t => t.id === period.templateId);
+  if (!tpl) return defaultBudgetFields();
+  return normalizeBudgetTemplateFieldsForDisplay(tpl.fields);
+}
+
+function getBudgetLineFieldValue(line, f) { return f.coreKey ? line[f.coreKey] : line.extra?.[f.id]; }
 
 function blankBudgetLine() { return { name: '', description: '', amount: null, budgetType: 'OPEX', extra: {} }; }
 
@@ -17947,82 +17985,79 @@ function onBudgetEntryPeriodChange() {
   wrap.classList.remove('hidden');
 }
 
-function buildBudgetLinesTableHead(customFields, readonly) {
+function buildBudgetLinesTableHead(fields, readonly) {
   return `<tr>
     <th class="border p-1.5 text-center w-10">STT</th>
-    <th class="border p-1.5">Tên Hạng Mục</th>
-    <th class="border p-1.5">Mô Tả Chi Tiết</th>
-    ${customFields.map(f => `<th class="border p-1.5">${escapeHtml(f.label)}${f.required ? ' *' : ''}</th>`).join('')}
-    <th class="border p-1.5 text-right w-32">Số Tiền</th>
-    <th class="border p-1.5 w-24">Loại NS</th>
+    ${fields.map(f => `<th class="border p-1.5 ${f.type === 'money' ? 'text-right w-32' : ''} ${f.coreKey === 'budgetType' ? 'w-24' : ''}">${escapeHtml(f.label)}${f.required ? ' *' : ''}</th>`).join('')}
     ${readonly ? '' : '<th class="border p-1.5 w-10"></th>'}
   </tr>`;
 }
 
-function formatBudgetExtraValue(value, field) {
+function formatBudgetFieldDisplayValue(value, field) {
   if (value === undefined || value === null || value === '') return '';
+  if (field.type === 'money') return Number(value).toLocaleString('vi-VN') + ' đ';
   if (field.type === 'number') return Number(value).toLocaleString('vi-VN');
   return String(value);
 }
 
-function buildBudgetExtraFieldInputHTML(f, value) {
+// Cùng dùng cho CẢ cột lõi (coreKey: name/description/amount/budgetType) lẫn cột tuỳ biến — cột lõi
+// "amount" LUÔN type 'money' (khoá ở BUDGET_CORE_FIELD_DEFS), "budgetType" LUÔN type 'select' với đúng
+// 2 lựa chọn OPEX/CAPEX cố định (không đọc theo f.options tuỳ biến của người dùng).
+function buildBudgetFieldInputHTML(f, value) {
+  const dataAttr = f.coreKey ? `data-core-key="${f.coreKey}"` : `data-field-id="${f.id}"`;
+  const cls = f.coreKey ? 'budget-line-core' : 'budget-line-extra';
   if (f.type === 'select') {
-    return `<td class="border p-1.5"><select class="budget-line-extra" data-field-id="${f.id}"><option value="">--</option>${(f.options || []).map(o => `<option value="${escapeHtml(o)}" ${value === o ? 'selected' : ''}>${escapeHtml(o)}</option>`).join('')}</select></td>`;
+    const options = f.coreKey === 'budgetType' ? ['OPEX', 'CAPEX'] : (f.options || []);
+    const blankOption = f.coreKey === 'budgetType' ? '' : `<option value="">--</option>`;
+    return `<td class="border p-1.5"><select class="${cls}" ${dataAttr}>${blankOption}${options.map(o => `<option value="${escapeHtml(o)}" ${value === o ? 'selected' : ''}>${escapeHtml(o)}</option>`).join('')}</select></td>`;
+  }
+  if (f.type === 'money') {
+    return `<td class="border p-1.5"><input type="text" inputmode="numeric" class="${cls} money-input w-full border p-1 rounded text-right" ${dataAttr} value="${formatMoneyDisplay(value)}"></td>`;
   }
   if (f.type === 'number') {
-    return `<td class="border p-1.5"><input type="number" class="budget-line-extra w-full border p-1 rounded" data-field-id="${f.id}" value="${value != null ? value : ''}"></td>`;
+    return `<td class="border p-1.5"><input type="number" class="${cls} w-full border p-1 rounded" ${dataAttr} value="${value != null ? value : ''}"></td>`;
   }
   if (f.type === 'date') {
-    return `<td class="border p-1.5"><input type="date" class="budget-line-extra w-full border p-1 rounded" data-field-id="${f.id}" value="${escapeHtml(value || '')}"></td>`;
+    return `<td class="border p-1.5"><input type="date" class="${cls} w-full border p-1 rounded" ${dataAttr} value="${escapeHtml(value || '')}"></td>`;
   }
-  return `<td class="border p-1.5"><input type="text" class="budget-line-extra w-full border p-1 rounded" data-field-id="${f.id}" value="${escapeHtml(value || '')}"></td>`;
+  return `<td class="border p-1.5"><input type="text" class="${cls} w-full border p-1 rounded" ${dataAttr} value="${escapeHtml(value || '')}"></td>`;
 }
 
-function buildBudgetLineRowHTML(line, idx, customFields, readonly) {
+function buildBudgetLineRowHTML(line, idx, fields, readonly) {
   if (readonly) {
     return `<tr>
       <td class="border p-1.5 text-center">${idx + 1}</td>
-      <td class="border p-1.5">${escapeHtml(line.name)}</td>
-      <td class="border p-1.5">${escapeHtml(line.description || '')}</td>
-      ${customFields.map(f => `<td class="border p-1.5">${escapeHtml(formatBudgetExtraValue(line.extra?.[f.id], f))}</td>`).join('')}
-      <td class="border p-1.5 text-right">${Number(line.amount || 0).toLocaleString('vi-VN')} đ</td>
-      <td class="border p-1.5">${line.budgetType === 'CAPEX' ? 'CAPEX' : 'OPEX'}</td>
+      ${fields.map(f => `<td class="border p-1.5 ${f.type === 'money' ? 'text-right' : ''}">${escapeHtml(formatBudgetFieldDisplayValue(getBudgetLineFieldValue(line, f), f))}</td>`).join('')}
     </tr>`;
   }
   return `<tr data-budget-line-idx="${idx}">
     <td class="border p-1.5 text-center">${idx + 1}</td>
-    <td class="border p-1.5"><input type="text" class="budget-line-name w-full border p-1 rounded" value="${escapeHtml(line.name || '')}"></td>
-    <td class="border p-1.5"><input type="text" class="budget-line-desc w-full border p-1 rounded" value="${escapeHtml(line.description || '')}"></td>
-    ${customFields.map(f => buildBudgetExtraFieldInputHTML(f, line.extra?.[f.id])).join('')}
-    <td class="border p-1.5"><input type="number" min="0" step="1000" class="budget-line-amount w-full border p-1 rounded text-right" value="${line.amount != null ? line.amount : ''}"></td>
-    <td class="border p-1.5">
-      <select class="budget-line-type w-full border p-1 rounded">
-        <option value="OPEX" ${line.budgetType !== 'CAPEX' ? 'selected' : ''}>OPEX</option>
-        <option value="CAPEX" ${line.budgetType === 'CAPEX' ? 'selected' : ''}>CAPEX</option>
-      </select>
-    </td>
+    ${fields.map(f => buildBudgetFieldInputHTML(f, getBudgetLineFieldValue(line, f))).join('')}
     <td class="border p-1.5 text-center"><button type="button" onclick="removeBudgetEntryLine(${idx})" class="text-red-600 font-bold hover:underline">✕</button></td>
   </tr>`;
 }
 
-function renderBudgetEntryLinesTable(customFields, readonly) {
-  document.getElementById('budgetEntryLinesHead').innerHTML = buildBudgetLinesTableHead(customFields, readonly);
+function renderBudgetEntryLinesTable(fields, readonly) {
+  document.getElementById('budgetEntryLinesHead').innerHTML = buildBudgetLinesTableHead(fields, readonly);
   document.getElementById('budgetEntryLinesBody').innerHTML = budgetEntryFormLines.length
-    ? budgetEntryFormLines.map((line, idx) => buildBudgetLineRowHTML(line, idx, customFields, readonly)).join('')
-    : `<tr><td colspan="${(readonly ? 5 : 6) + customFields.length}" class="text-center p-3 text-gray-400 italic">Chưa có dòng nào.</td></tr>`;
+    ? budgetEntryFormLines.map((line, idx) => buildBudgetLineRowHTML(line, idx, fields, readonly)).join('')
+    : `<tr><td colspan="${(readonly ? 1 : 2) + fields.length}" class="text-center p-3 text-gray-400 italic">Chưa có dòng nào.</td></tr>`;
   updateBudgetEntryTotalDisplay();
 }
 
 function collectBudgetEntryLinesFromForm() {
   return Array.from(document.querySelectorAll('#budgetEntryLinesBody tr[data-budget-line-idx]')).map(row => {
-    const name = row.querySelector('.budget-line-name')?.value.trim() || '';
-    const description = row.querySelector('.budget-line-desc')?.value.trim() || '';
-    const amountRaw = row.querySelector('.budget-line-amount')?.value;
-    const amount = (amountRaw === '' || amountRaw == null) ? null : Number(amountRaw);
-    const budgetType = row.querySelector('.budget-line-type')?.value || 'OPEX';
-    const extra = {};
-    row.querySelectorAll('.budget-line-extra').forEach(el => { extra[el.dataset.fieldId] = el.value; });
-    return { name, description, amount, budgetType, extra };
+    const line = { name: '', description: '', amount: null, budgetType: 'OPEX', extra: {} };
+    row.querySelectorAll('.budget-line-core').forEach(el => {
+      const key = el.dataset.coreKey;
+      if (key === 'amount') line.amount = getMoneyValue(el);
+      else if (key === 'budgetType') line.budgetType = el.value || 'OPEX';
+      else line[key] = el.value.trim(); // name/description
+    });
+    row.querySelectorAll('.budget-line-extra').forEach(el => {
+      line.extra[el.dataset.fieldId] = el.classList.contains('money-input') ? getMoneyValue(el) : el.value;
+    });
+    return line;
   });
 }
 
@@ -18040,14 +18075,14 @@ function removeBudgetEntryLine(idx) {
 }
 
 document.addEventListener('input', (e) => {
-  if (e.target?.classList?.contains('budget-line-amount')) updateBudgetEntryTotalDisplay();
+  if (e.target?.dataset?.coreKey === 'amount') updateBudgetEntryTotalDisplay();
 });
 
 function updateBudgetEntryTotalDisplay() {
   const el = document.getElementById('budgetEntryTotalDisplay');
   if (!el) return;
-  const total = Array.from(document.querySelectorAll('#budgetEntryLinesBody .budget-line-amount'))
-    .reduce((sum, input) => sum + (Number(input.value) || 0), 0);
+  const total = Array.from(document.querySelectorAll('#budgetEntryLinesBody .budget-line-core[data-core-key="amount"]'))
+    .reduce((sum, input) => sum + getMoneyValue(input), 0);
   el.innerText = total.toLocaleString('vi-VN') + ' đ';
 }
 
@@ -18355,7 +18390,7 @@ function renderBudgetTemplateList() {
     return `
       <tr class="hover:bg-gray-50 border-b">
         <td class="border p-2 font-bold text-violet-800">${escapeHtml(t.name)}</td>
-        <td class="border p-2 text-center">${(t.fields || []).length}</td>
+        <td class="border p-2 text-center">${(t.fields || []).filter(f => !f.coreKey).length}</td>
         <td class="border p-2 text-center space-x-1">${buildActionCell(t.id, primaryBtnHTML, secondaryOptions, 'runBudgetTemplateAction')}</td>
       </tr>
     `;
@@ -18369,7 +18404,7 @@ function runBudgetTemplateAction(id, action) {
 }
 function startNewBudgetTemplate() {
   editingBudgetTemplateId = null;
-  budgetTemplateFormFields = [];
+  budgetTemplateFormFields = defaultBudgetFields();
   document.getElementById('budgetTemplateName').value = '';
   renderBudgetTemplateFieldsBuilder();
   document.getElementById('btnBudgetTemplateSubmit').innerText = '➕ Tạo Mẫu';
@@ -18380,7 +18415,12 @@ function editBudgetTemplateAction(id) {
   const t = DB.budgetTemplates.find(x => x.id === id);
   if (!t) return;
   editingBudgetTemplateId = id;
-  budgetTemplateFormFields = (t.fields || []).map(f => ({ ...f, options: [...(f.options || [])] }));
+  const loaded = (t.fields || []).map(f => ({ ...f, options: [...(f.options || [])] }));
+  // Mẫu tạo TRƯỚC khi có tính năng "cột lõi hiển thị tường minh" (chỉ toàn cột tuỳ biến, không có
+  // coreKey nào) — chèn đủ 4 cột lõi mặc định lên đầu ngay khi mở sửa để admin thấy + sắp xếp được luôn
+  // (server cũng tự vá y hệt lúc đọc/lưu, xem sanitizeBudgetCustomFields() ở lib/createValidation.js).
+  const hasCore = loaded.some(f => f.coreKey);
+  budgetTemplateFormFields = hasCore ? loaded : [...defaultBudgetFields(), ...loaded];
   document.getElementById('budgetTemplateName').value = t.name;
   renderBudgetTemplateFieldsBuilder();
   document.getElementById('btnBudgetTemplateSubmit').innerText = '💾 Lưu Thay Đổi';
@@ -18396,42 +18436,77 @@ function renderBudgetTemplateFieldsBuilder() {
   const tbody = document.getElementById('budgetTemplateFieldsBody');
   if (!tbody) return;
   if (!budgetTemplateFormFields.length) {
-    tbody.innerHTML = `<tr><td colspan="5" class="text-center p-3 text-gray-400 italic">Chưa có cột bổ sung nào.</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="6" class="text-center p-3 text-gray-400 italic">Chưa có cột nào.</td></tr>`;
     return;
   }
+  const lastIdx = budgetTemplateFormFields.length - 1;
   tbody.innerHTML = budgetTemplateFormFields.map((f, idx) => `
     <tr>
+      <td class="border p-1 text-center whitespace-nowrap">
+        <button type="button" onclick="moveBudgetTemplateField(${idx}, -1)" ${idx === 0 ? 'disabled' : ''} class="px-1 font-bold text-gray-600 disabled:text-gray-300 hover:text-violet-700">▲</button>
+        <button type="button" onclick="moveBudgetTemplateField(${idx}, 1)" ${idx === lastIdx ? 'disabled' : ''} class="px-1 font-bold text-gray-600 disabled:text-gray-300 hover:text-violet-700">▼</button>
+      </td>
       <td class="border p-1"><input type="text" value="${escapeHtml(f.label || '')}" oninput="updateBudgetTemplateField(${idx}, 'label', this.value)" class="w-full border p-1 rounded" placeholder="VD: Nhà cung cấp"></td>
       <td class="border p-1">
-        <select onchange="updateBudgetTemplateField(${idx}, 'type', this.value)" class="w-full border p-1 rounded">
-          ${Object.entries(BUDGET_FIELD_TYPE_LABELS).map(([v, label]) => `<option value="${v}" ${f.type === v ? 'selected' : ''}>${label}</option>`).join('')}
-        </select>
+        ${f.coreKey
+          ? `<span class="inline-block px-2 py-0.5 rounded bg-gray-100 text-gray-500 font-semibold whitespace-nowrap">${BUDGET_FIELD_TYPE_LABELS[f.type] || f.type} <span class="italic font-normal">(cột lõi)</span></span>`
+          : `<select onchange="updateBudgetTemplateField(${idx}, 'type', this.value)" class="w-full border p-1 rounded">${Object.entries(BUDGET_FIELD_TYPE_LABELS).map(([v, label]) => `<option value="${v}" ${f.type === v ? 'selected' : ''}>${label}</option>`).join('')}</select>`}
       </td>
       <td class="border p-1">
         ${f.type === 'select'
-          ? `<input type="text" value="${escapeHtml((f.options || []).join(', '))}" oninput="updateBudgetTemplateField(${idx}, 'options', this.value)" class="w-full border p-1 rounded" placeholder="Cách nhau bởi dấu phẩy">`
+          ? (f.coreKey
+              ? `<span class="text-gray-500 italic">${escapeHtml((f.options || []).join(', '))}</span>`
+              : `<input type="text" value="${escapeHtml((f.options || []).join(', '))}" oninput="updateBudgetTemplateField(${idx}, 'options', this.value)" class="w-full border p-1 rounded" placeholder="Cách nhau bởi dấu phẩy">`)
           : `<span class="text-gray-400 italic">—</span>`}
       </td>
-      <td class="border p-1 text-center"><input type="checkbox" ${f.required ? 'checked' : ''} onchange="updateBudgetTemplateField(${idx}, 'required', this.checked)"></td>
-      <td class="border p-1 text-center"><button type="button" onclick="removeBudgetTemplateField(${idx})" class="text-red-600 font-bold hover:underline">✕</button></td>
+      <td class="border p-1 text-center"><input type="checkbox" ${f.required ? 'checked' : ''} ${f.removable === false ? 'disabled' : ''} onchange="updateBudgetTemplateField(${idx}, 'required', this.checked)"></td>
+      <td class="border p-1 text-center">${f.removable === false ? '' : `<button type="button" onclick="removeBudgetTemplateField(${idx})" class="text-red-600 font-bold hover:underline">✕</button>`}</td>
     </tr>
   `).join('');
 }
+function moveBudgetTemplateField(idx, dir) {
+  const target = idx + dir;
+  if (target < 0 || target >= budgetTemplateFormFields.length) return;
+  [budgetTemplateFormFields[idx], budgetTemplateFormFields[target]] = [budgetTemplateFormFields[target], budgetTemplateFormFields[idx]];
+  renderBudgetTemplateFieldsBuilder();
+}
 function addBudgetTemplateField() {
-  budgetTemplateFormFields.push({ label: '', type: 'text', options: [], required: false });
+  budgetTemplateFormFields.push({ label: '', type: 'text', options: [], required: false, removable: true });
   renderBudgetTemplateFieldsBuilder();
 }
 function removeBudgetTemplateField(idx) {
+  if (budgetTemplateFormFields[idx]?.removable === false) return;
   budgetTemplateFormFields.splice(idx, 1);
   renderBudgetTemplateFieldsBuilder();
 }
 function updateBudgetTemplateField(idx, key, value) {
   const f = budgetTemplateFormFields[idx];
   if (!f) return;
+  if (f.coreKey && (key === 'type' || key === 'options')) return; // cột lõi khoá type/options, xem renderBudgetTemplateFieldsBuilder()
   if (key === 'options') f.options = value.split(',').map(s => s.trim()).filter(Boolean);
   else if (key === 'required') f.required = !!value;
   else f[key] = value;
   if (key === 'type') renderBudgetTemplateFieldsBuilder();
+}
+// Đọc file Excel đã điền cột tuỳ biến (mẫu tải ở nút "📥 Tải Mẫu Excel"), thêm thẳng vào cuối danh sách
+// đang sửa — KHÔNG tự lưu, admin vẫn phải xem lại + bấm "Tạo Mẫu"/"Lưu Thay Đổi" như bình thường.
+async function uploadBudgetTemplateFieldsXlsx(event) {
+  const file = event.target.files?.[0];
+  event.target.value = ''; // cho chọn lại đúng file đó ở lần sau
+  if (!file) return;
+  const fd = new FormData();
+  fd.append('file', file);
+  let data;
+  try {
+    const res = await fetch('/api/budget/parse-template-fields', { method: 'POST', body: fd });
+    data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Không đọc được file');
+  } catch (err) { return alert(`⛔ ${err.message}`); }
+
+  const added = data.fields.map(f => ({ label: f.label, type: f.type, options: f.options || [], required: !!f.required, removable: true }));
+  budgetTemplateFormFields = [...budgetTemplateFormFields, ...added];
+  renderBudgetTemplateFieldsBuilder();
+  alert(`✅ Đã thêm ${added.length} cột từ file "${data.fileName}" — kiểm tra lại danh sách rồi bấm Lưu.`);
 }
 async function saveBudgetTemplate(e) {
   e.preventDefault();
@@ -18494,12 +18569,12 @@ function buildBudgetSummary() {
   const period = DB.budgetPeriods.find(p => p.id === periodId);
   if (!period) return alert('Không tìm thấy kỳ ngân sách!');
   const approvedEntries = DB.budgetEntries.filter(e => e.periodId === periodId && e.status === 'APPROVED');
-  const customFields = getBudgetPeriodTemplateFields(period);
-  currentBudgetSummaryData = { period, entries: approvedEntries, customFields };
-  renderBudgetSummaryResult(period, approvedEntries, customFields);
+  const fields = getBudgetPeriodTemplateFields(period);
+  currentBudgetSummaryData = { period, entries: approvedEntries, fields };
+  renderBudgetSummaryResult(period, approvedEntries, fields);
   logSystemAction('BUDGET', 'BUILD_BUDGET_SUMMARY', `Tổng hợp ngân sách kỳ [${period.name}]: ${approvedEntries.length} phòng ban`, 'SUCCESS', String(period.id));
 }
-function renderBudgetSummaryResult(period, entries, customFields) {
+function renderBudgetSummaryResult(period, entries, fields) {
   const wrap = document.getElementById('budgetSummaryResultWrap');
   const grandTotal = entries.reduce((sum, e) => sum + budgetEntryTotal(e), 0);
   const opexTotal = entries.reduce((sum, e) => sum + (e.lines || []).filter(l => l.budgetType === 'OPEX').reduce((s, l) => s + (Number(l.amount) || 0), 0), 0);
@@ -18518,11 +18593,7 @@ function renderBudgetSummaryResult(period, entries, customFields) {
       <tr>
         <td class="border p-1.5 text-center">${idx + 1}</td>
         <td class="border p-1.5">${escapeHtml(l.dept)}</td>
-        <td class="border p-1.5">${escapeHtml(l.name)}</td>
-        <td class="border p-1.5">${escapeHtml(l.description || '')}</td>
-        ${customFields.map(f => `<td class="border p-1.5">${escapeHtml(formatBudgetExtraValue(l.extra?.[f.id], f))}</td>`).join('')}
-        <td class="border p-1.5 text-right">${Number(l.amount || 0).toLocaleString('vi-VN')} đ</td>
-        <td class="border p-1.5">${l.budgetType === 'CAPEX' ? 'CAPEX' : 'OPEX'}</td>
+        ${fields.map(f => `<td class="border p-1.5 ${f.type === 'money' ? 'text-right' : ''}">${escapeHtml(formatBudgetFieldDisplayValue(getBudgetLineFieldValue(l, f), f))}</td>`).join('')}
       </tr>
     `).join('');
 
@@ -18545,11 +18616,10 @@ function renderBudgetSummaryResult(period, entries, customFields) {
         <h4 class="font-bold text-sm text-gray-700 mb-1">Chi Tiết Hạng Mục</h4>
         <table class="w-full border-collapse text-xs bg-white">
           <thead><tr class="bg-gray-100 text-left">
-            <th class="border p-1.5 w-10">STT</th><th class="border p-1.5">Phòng Ban</th><th class="border p-1.5">Tên Hạng Mục</th><th class="border p-1.5">Mô Tả</th>
-            ${customFields.map(f => `<th class="border p-1.5">${escapeHtml(f.label)}</th>`).join('')}
-            <th class="border p-1.5 text-right">Số Tiền</th><th class="border p-1.5">Loại NS</th>
+            <th class="border p-1.5 w-10">STT</th><th class="border p-1.5">Phòng Ban</th>
+            ${fields.map(f => `<th class="border p-1.5 ${f.type === 'money' ? 'text-right' : ''}">${escapeHtml(f.label)}</th>`).join('')}
           </tr></thead>
-          <tbody>${allLinesRows || `<tr><td colspan="${6 + customFields.length}" class="text-center p-3 text-gray-400 italic">Không có hạng mục nào.</td></tr>`}</tbody>
+          <tbody>${allLinesRows || `<tr><td colspan="${2 + fields.length}" class="text-center p-3 text-gray-400 italic">Không có hạng mục nào.</td></tr>`}</tbody>
         </table>
       </div>
     </div>
@@ -18564,18 +18634,18 @@ function renderBudgetSummaryResult(period, entries, customFields) {
 }
 async function exportBudgetSummaryExcel() {
   if (!currentBudgetSummaryData) return;
-  const { period, entries, customFields } = currentBudgetSummaryData;
+  const { period, entries, fields } = currentBudgetSummaryData;
   const columns = [
     { header: 'Phòng Ban', key: 'dept', width: 20 },
-    { header: 'Tên Hạng Mục', key: 'name', width: 28 },
-    { header: 'Mô Tả Chi Tiết', key: 'description', width: 32 },
-    ...customFields.map(f => ({ header: f.label, key: 'extra_' + f.id, width: 18 })),
-    { header: 'Số Tiền', key: 'amount', width: 16 },
-    { header: 'Loại Ngân Sách', key: 'budgetType', width: 14 }
+    ...fields.map(f => ({ header: f.label, key: f.coreKey ? 'core_' + f.coreKey : 'extra_' + f.id, width: f.type === 'text' ? 28 : 18 }))
   ];
   const rows = entries.flatMap(e => (e.lines || []).map(l => {
-    const row = { dept: e.dept, name: l.name, description: l.description || '', amount: Number(l.amount) || 0, budgetType: l.budgetType };
-    customFields.forEach(f => { row['extra_' + f.id] = l.extra?.[f.id] ?? ''; });
+    const row = { dept: e.dept };
+    fields.forEach(f => {
+      const key = f.coreKey ? 'core_' + f.coreKey : 'extra_' + f.id;
+      const v = getBudgetLineFieldValue(l, f);
+      row[key] = (f.type === 'number' || f.type === 'money') ? (Number(v) || 0) : (v ?? '');
+    });
     return row;
   }));
   const safeName = period.name.replace(/[^\p{L}\p{N}]+/gu, '_');
@@ -18664,7 +18734,7 @@ function openBudgetProcessModal(entryId) {
   document.getElementById('budgetProcessModalLinesHead').innerHTML = buildBudgetLinesTableHead(customFields, true);
   document.getElementById('budgetProcessModalLinesBody').innerHTML = (item.lines || []).length
     ? item.lines.map((l, idx) => buildBudgetLineRowHTML(l, idx, customFields, true)).join('')
-    : `<tr><td colspan="${5 + customFields.length}" class="text-center p-3 text-gray-400 italic">Chưa có hạng mục nào.</td></tr>`;
+    : `<tr><td colspan="${1 + customFields.length}" class="text-center p-3 text-gray-400 italic">Chưa có hạng mục nào.</td></tr>`;
 
   const historyHTML = (item.history || []).map(h => `
     <div class="bg-white p-2 rounded border text-xs space-y-1">
@@ -20291,6 +20361,7 @@ function formatDateVN(value) {
 }
 
 function setPeriodicReportSubTab(subTab) {
+  window.scrollTo({ top: 0, behavior: 'auto' }); // Tránh "bay xuống cuối" khi đổi tab con — xem setSystemSubTab().
   if (subTab === 'PERIODS' && !canManageReportPeriodsClient(currentUser)) subTab = 'ENTRY';
   if (subTab === 'AGGREGATE' && !canAggregateReportsClient(currentUser)) subTab = 'ENTRY';
   if (subTab === 'TEMPLATES' && !canManageReportPeriodsClient(currentUser)) subTab = 'ENTRY';
@@ -22712,6 +22783,7 @@ function renderReportsSubTabBar() {
 }
 
 function setReportsSubTab(key) {
+  window.scrollTo({ top: 0, behavior: 'auto' }); // Tránh "bay xuống cuối" khi đổi tab con — xem setSystemSubTab().
   activeReportsSubTab = key;
   renderReportsSubTabBar();
   renderReports();
@@ -23642,6 +23714,7 @@ function exportReportsSummaryExcel() {
 // toàn công ty; chỉ việc ĐĂNG BÀI ở Tin nội bộ/Đào tạo/Khen thưởng mới cần quyền riêng.
 
 function setInternalSubTab(subTab) {
+  window.scrollTo({ top: 0, behavior: 'auto' }); // Tránh "bay xuống cuối" khi đổi tab con — xem setSystemSubTab().
   resetListPage('internal');
   activeInternalSubTab = subTab;
 
@@ -25889,6 +25962,7 @@ function deleteCareerPath(id) {
 let activeItSupportSubTab = 'PRICE';
 
 function setItSupportSubTab(subTab) {
+  window.scrollTo({ top: 0, behavior: 'auto' }); // Tránh "bay xuống cuối" khi đổi tab con — xem setSystemSubTab().
   activeItSupportSubTab = subTab;
   document.getElementById('itSubPrice').classList.toggle('hidden', subTab !== 'PRICE');
   document.getElementById('itSubTicket').classList.toggle('hidden', subTab !== 'TICKET');
@@ -26849,6 +26923,7 @@ function canManageUniformStore(user) {
 }
 
 function setUniformSubTab(subTab) {
+  window.scrollTo({ top: 0, behavior: 'auto' }); // Tránh "bay xuống cuối" khi đổi tab con — xem setSystemSubTab().
   const canHc = canManageUniform(currentUser);
   const canStore = canManageUniformStore(currentUser);
   if (subTab === 'PERIODS' && !canHc) subTab = canStore ? 'STORE' : 'STOCK';

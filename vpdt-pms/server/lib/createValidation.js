@@ -1234,11 +1234,11 @@ const CREATE_MODULE_CONFIGS = {
     }
   },
   // ===== NGÂN SÁCH (module con "Tổng Hợp") =====
-  // 5 cột LÕI (STT tự tăng theo thứ tự dòng/name/description/amount/budgetType) luôn có ở MỌI dòng ngân
-  // sách bất kể có chọn mẫu hay không — đảm bảo Tổng Hợp luôn cộng dồn được theo amount/budgetType dù
-  // đơn vị nào dùng mẫu nào. "Mẫu ngân sách" (budgetTemplates) chỉ định nghĩa thêm CỘT BỔ SUNG tuỳ biến
-  // (extra), cùng khuôn formTemplates (custom field cộng thêm, không thay thế trường hệ thống) — khác
-  // reportSlideTemplates (đó là mẫu HÌNH ẢNH trình chiếu, không liên quan cấu trúc dữ liệu).
+  // Mỗi mẫu ngân sách là 1 danh sách CỘT ĐẦY ĐỦ, admin tự chọn/sắp xếp từ đầu — không phải kiểu "chỉ
+  // thêm cột bổ sung vào cột cũ ẩn sẵn" như trước. Tên Hạng Mục/Số Tiền/Loại NS bắt buộc có mặt ở mọi
+  // mẫu (đảm bảo Tổng Hợp Ngân Sách luôn cộng dồn được theo amount/budgetType dù đơn vị dùng mẫu khác
+  // nhau); Mô Tả Chi Tiết tuỳ chọn; ngoài ra thêm bao nhiêu cột tuỳ biến cũng được — xem
+  // sanitizeBudgetCustomFields()/BUDGET_CORE_FIELD_DEFS bên dưới.
   budgetTemplates: {
     dbKey: 'budgetTemplates',
     forceOwnDept: true, // không có khái niệm phòng ban (dùng chung toàn công ty) — giữ đúng lý do như reportSlideTemplates
@@ -1346,40 +1346,92 @@ function sanitizeUniformItems(rawItems) {
 
 // ===== NGÂN SÁCH — helper chuẩn hoá mẫu (budgetTemplates.fields) + dòng ngân sách (budgetEntries.lines) =====
 const BUDGET_TYPE_OPTIONS = ['OPEX', 'CAPEX'];
-const BUDGET_FIELD_TYPES = new Set(['text', 'number', 'select', 'date']);
+const BUDGET_FIELD_TYPES = new Set(['text', 'number', 'money', 'select', 'date']);
 
-// Cột BỔ SUNG tuỳ biến của 1 mẫu ngân sách — cùng khuôn formTemplates (id/label/type/options/required),
-// KHÔNG thay thế 5 cột lõi (name/description/amount/budgetType) — xem sanitizeBudgetLines() bên dưới.
+// 4 cột LÕI — LUÔN hiện diện tường minh trong danh sách field của MỌI mẫu (kể cả mẫu tạo trước khi có
+// tính năng này, tự vá lúc đọc — xem sanitizeBudgetCustomFields()) thay vì ẩn đi rồi chỉ cho "thêm cột
+// bổ sung" như trước. Admin chọn được thứ tự hiển thị + xoá/thêm cho MỌI cột, TRỪ "Tên Hạng Mục"/"Số
+// Tiền"/"Loại NS" (removable:false) — 3 cột này bắt buộc có mặt ở mọi dòng vì bản thân dữ liệu 1 dòng
+// ngân sách (budgetEntries.lines[]) vẫn lưu name/amount/budgetType ở property CỐ ĐỊNH riêng (không đổi
+// cấu trúc lưu trữ để không phải viết script di trú dữ liệu cũ) — xem sanitizeBudgetLines() bên dưới.
+// type/options/required/removable của 4 cột này LUÔN lấy từ định nghĩa gốc ở đây, KHÔNG tin dữ liệu
+// client gửi lên cho các thuộc tính đó (chỉ label được phép đổi).
+const BUDGET_CORE_FIELD_DEFS = {
+  name: { coreKey: 'name', label: 'Tên Hạng Mục', type: 'text', required: true, removable: false },
+  description: { coreKey: 'description', label: 'Mô Tả Chi Tiết', type: 'text', required: false, removable: true },
+  amount: { coreKey: 'amount', label: 'Số Tiền', type: 'money', required: true, removable: false },
+  budgetType: { coreKey: 'budgetType', label: 'Loại NS', type: 'select', options: BUDGET_TYPE_OPTIONS, required: true, removable: false }
+};
+const BUDGET_CORE_ORDER_DEFAULT = ['name', 'description', 'amount', 'budgetType'];
+
+function defaultBudgetFields() {
+  return BUDGET_CORE_ORDER_DEFAULT.map(k => ({ id: k, ...BUDGET_CORE_FIELD_DEFS[k] }));
+}
+
+// Chuẩn hoá TOÀN BỘ danh sách cột của 1 mẫu ngân sách — bao gồm cả 4 cột lõi (nếu client có gửi kèm,
+// cùng khuôn formTemplates cho phần cột tuỳ biến: id/label/type/options/required) THAY VÌ chỉ nhận
+// riêng cột bổ sung như trước. Tự vá cho 2 trường hợp dữ liệu cũ/thiếu:
+// 1) Mẫu tạo TRƯỚC khi có tính năng này (fields hoàn toàn không có coreKey nào) — coi là "mẫu cũ", chèn
+//    đủ 4 cột lõi mặc định (kể cả Mô Tả Chi Tiết) lên đầu, giữ ĐÚNG hành vi hiển thị cũ thay vì coi như
+//    admin đã chủ động bỏ cột nào.
+// 2) Mẫu đã ở dạng mới (có ít nhất 1 coreKey) nhưng thiếu 1 trong 3 cột KHÔNG được phép xoá (name/
+//    amount/budgetType, có thể do lỗi client) — chèn bù đúng 3 cột đó, KHÔNG đụng tới Mô Tả Chi Tiết vì
+//    admin có quyền chủ động bỏ cột này.
 function sanitizeBudgetCustomFields(rawFields) {
-  const fields = Array.isArray(rawFields) ? rawFields : [];
+  const rawList = Array.isArray(rawFields) ? rawFields : [];
+  const isLegacyAllCustom = rawList.length > 0 && !rawList.some(f => typeof f?.coreKey === 'string' && BUDGET_CORE_FIELD_DEFS[f.coreKey]);
+
   const out = [];
-  for (const raw of fields) {
+  const seenCore = new Set();
+  for (const raw of rawList) {
+    const coreKey = typeof raw?.coreKey === 'string' && BUDGET_CORE_FIELD_DEFS[raw.coreKey] ? raw.coreKey : null;
+    if (coreKey) {
+      if (seenCore.has(coreKey)) continue; // bỏ trùng, phòng client gửi lặp
+      seenCore.add(coreKey);
+      const def = BUDGET_CORE_FIELD_DEFS[coreKey];
+      const label = String(raw?.label || '').trim().slice(0, 100) || def.label;
+      out.push({ id: coreKey, coreKey, label, type: def.type, ...(def.options ? { options: def.options } : {}), required: def.required, removable: def.removable });
+      continue;
+    }
     const label = String(raw?.label || '').trim().slice(0, 100);
     if (!label) continue;
     const type = BUDGET_FIELD_TYPES.has(raw?.type) ? raw.type : 'text';
     const options = type === 'select'
       ? (Array.isArray(raw?.options) ? raw.options.map(o => String(o || '').trim()).filter(Boolean).slice(0, 50) : [])
       : [];
-    out.push({ id: 'f' + (Date.now() + out.length), label, type, options, required: !!raw?.required });
-    if (out.length >= 30) break;
+    out.push({ id: 'f' + (Date.now() + out.length), label, type, options, required: !!raw?.required, removable: true });
+    if (out.length >= 34) break; // 4 cột lõi + tối đa 30 cột tuỳ biến
   }
-  return out;
+
+  if (isLegacyAllCustom) return [...defaultBudgetFields(), ...out];
+  const missingMandatory = BUDGET_CORE_ORDER_DEFAULT
+    .filter(k => !BUDGET_CORE_FIELD_DEFS[k].removable && !seenCore.has(k))
+    .map(k => ({ id: k, ...BUDGET_CORE_FIELD_DEFS[k] }));
+  return [...missingMandatory, ...out];
 }
 
+// Trả về TOÀN BỘ danh sách cột (lõi + tuỳ biến, đúng thứ tự đã lưu) của mẫu đang chọn ở kỳ — không chọn
+// mẫu thì dùng 4 cột lõi mặc định. Luôn chạy lại sanitizeBudgetCustomFields() ngay cả khi đọc (không chỉ
+// lúc lưu) để tự vá những mẫu đã tồn tại từ TRƯỚC khi có tính năng "cột lõi tường minh" này — tránh phải
+// viết script di trú dữ liệu, mẫu cũ tự nâng cấp ngay lần đọc kế tiếp.
 function getBudgetTemplateCustomFields(templateId, templates) {
-  if (!templateId) return [];
+  if (!templateId) return defaultBudgetFields();
   const tpl = (templates || []).find(t => t.id === templateId);
-  return (tpl && Array.isArray(tpl.fields)) ? tpl.fields : [];
+  if (!tpl) return defaultBudgetFields();
+  return sanitizeBudgetCustomFields(tpl.fields);
 }
 
-// 1 dòng ngân sách = 5 cột lõi (name/description/amount/budgetType, cộng STT tự tính theo thứ tự dòng
-// khi hiển thị — không lưu riêng, tránh lệch khi thêm/xoá/sắp lại dòng) + `extra` theo đúng field của
-// mẫu đã chọn ở kỳ (rỗng nếu kỳ không chọn mẫu). Giữ NGUYÊN 5 cột lõi ở MỌI dòng bất kể mẫu nào — đảm
-// bảo Tổng Hợp Ngân Sách luôn cộng dồn được theo amount/budgetType dù đơn vị dùng mẫu khác nhau.
-function sanitizeBudgetLines(rawLines, customFields) {
+// 1 dòng ngân sách = name/description/amount/budgetType (cộng STT tự tính theo thứ tự dòng khi hiển thị
+// — không lưu riêng, tránh lệch khi thêm/xoá/sắp lại dòng) + `extra` theo đúng CỘT TUỲ BIẾN (không phải
+// cột lõi) của mẫu đã chọn ở kỳ. `fields` truyền vào là danh sách ĐẦY ĐỦ (lõi + tuỳ biến) từ
+// getBudgetTemplateCustomFields() — chỉ lọc lấy phần không có coreKey để duyệt qua extra, phần lõi luôn
+// validate cứng bên dưới bất kể mẫu có liệt kê hay không (đảm bảo Tổng Hợp Ngân Sách luôn cộng dồn được
+// theo amount/budgetType dù đơn vị dùng mẫu khác nhau).
+function sanitizeBudgetLines(rawLines, fields) {
   const lines = Array.isArray(rawLines) ? rawLines : [];
   if (!lines.length) throw new CreateError(400, 'Vui lòng nhập ít nhất 1 dòng ngân sách');
   if (lines.length > 500) throw new CreateError(400, 'Quá nhiều dòng ngân sách (tối đa 500 dòng/bản)');
+  const customFields = (fields || []).filter(f => !f.coreKey);
   const out = [];
   for (const raw of lines) {
     const name = String(raw?.name || '').trim();
@@ -1391,7 +1443,7 @@ function sanitizeBudgetLines(rawLines, customFields) {
     const extra = {};
     for (const f of customFields) {
       let v = raw?.extra ? raw.extra[f.id] : undefined;
-      if (f.type === 'number') {
+      if (f.type === 'number' || f.type === 'money') {
         v = (v === '' || v === null || v === undefined) ? null : Number(v);
         if (f.required && (v === null || Number.isNaN(v))) throw new CreateError(400, `Thiếu giá trị bắt buộc "${f.label}" ở dòng "${name}"`);
         if (v !== null && Number.isNaN(v)) throw new CreateError(400, `Giá trị không hợp lệ cho "${f.label}" ở dòng "${name}"`);
@@ -1479,5 +1531,5 @@ module.exports = {
   CONTRACT_APPROVAL_LAYERS, CONTRACT_APPROVAL_LEVELS, CONTRACT_APPROVAL_LEVEL_RULES,
   buildEffectiveContractApprovalWorkflowServer,
   sanitizeUniformItems,
-  BUDGET_TYPE_OPTIONS, sanitizeBudgetLines, getBudgetTemplateCustomFields, sanitizeBudgetCustomFields
+  BUDGET_TYPE_OPTIONS, BUDGET_FIELD_TYPES, sanitizeBudgetLines, getBudgetTemplateCustomFields, sanitizeBudgetCustomFields
 };

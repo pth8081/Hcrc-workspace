@@ -24,6 +24,7 @@ const priceFileRoutes = require('./routes/priceFile');
 const trainingRosterRoutes = require('./routes/trainingRoster');
 const adminExportRoutes = require('./routes/adminExport');
 const pwaManifestRoutes = require('./routes/pwaManifest');
+const budgetTemplateImportRoutes = require('./routes/budgetTemplateImport');
 const downloadRoutes = require('./routes/download');
 const { isCaptchaEnabled, generateCaptcha } = require('./lib/captcha');
 const { checkContractExpiryReminders } = require('./jobs/contractExpiryReminder');
@@ -128,6 +129,7 @@ app.use('/api/vpp', vppCatalogRoutes);
 app.use('/api/it-price', priceFileRoutes);
 app.use('/api/training', trainingRosterRoutes);
 app.use('/api/admin', adminExportRoutes);
+app.use('/api/budget', budgetTemplateImportRoutes);
 // Route TẢI file đính kèm dùng chung (khác /uploads/ tĩnh bên dưới — chỗ đó dùng để XEM trong Khung Xem
 // Bảo Vệ): PDF được đóng dấu watermark trước khi trả về, xem chi tiết ở routes/download.js.
 app.use('/api/files/download', requireAuth, blockIfMustChangePassword, downloadRoutes);

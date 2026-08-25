@@ -1,0 +1,111 @@
+// lib/budgetTemplateImport.js — Tải mẫu Excel để nhập nhanh các CỘT TUỲ BIẾN của 1 mẫu ngân sách (thay
+// vì phải bấm "+ Thêm cột" từng dòng thủ công) + đọc file đã điền. Cùng khuôn lib/trainingRoster.js
+// (buildXxxTemplateWorkbook/parseXxxFile qua ExcelJS, dò cột theo tiêu đề không phân biệt hoa-thường/
+// dấu) — KHÔNG đụng tới 4 cột LÕI (Tên Hạng Mục/Mô Tả Chi Tiết/Số Tiền/Loại NS), những cột đó LUÔN được
+// server tự thêm vào (xem BUDGET_CORE_FIELD_DEFS ở lib/createValidation.js) bất kể file upload có gì.
+const ExcelJS = require('exceljs');
+const { HttpError } = require('./httpErrors');
+const { BUDGET_FIELD_TYPES } = require('./createValidation');
+
+const TYPE_LABEL_VN = { text: 'Văn bản', number: 'Số', money: 'Tiền', select: 'Danh sách chọn', date: 'Ngày' };
+
+function styleHeaderRow(row) {
+  row.font = { bold: true };
+  row.eachCell(cell => {
+    cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE5E7EB' } };
+    cell.border = { bottom: { style: 'thin' } };
+  });
+}
+
+async function buildBudgetTemplateFieldsWorkbook() {
+  const wb = new ExcelJS.Workbook();
+  const sheet = wb.addWorksheet('Cột Tuỳ Biến');
+  sheet.columns = [
+    { header: 'Tên Cột', key: 'label', width: 28 },
+    { header: 'Kiểu Dữ Liệu (text/number/money/select/date)', key: 'type', width: 32 },
+    { header: 'Bắt Buộc (co/khong)', key: 'required', width: 18 },
+    { header: 'Danh Sách Chọn (chỉ dùng nếu Kiểu = select, cách nhau dấu phẩy)', key: 'options', width: 40 }
+  ];
+  styleHeaderRow(sheet.getRow(1));
+  sheet.addRow({ label: 'Nhà cung cấp', type: 'text', required: 'khong', options: '' });
+  sheet.addRow({ label: 'Phụ cấp phát sinh', type: 'money', required: 'khong', options: '' });
+  sheet.addRow({ label: 'Trạng thái duyệt nội bộ', type: 'select', required: 'co', options: 'Chưa duyệt, Đã duyệt' });
+  sheet.getRow(2).font = { italic: true, color: { argb: 'FF6B7280' } };
+  sheet.getRow(3).font = { italic: true, color: { argb: 'FF6B7280' } };
+  sheet.getRow(4).font = { italic: true, color: { argb: 'FF6B7280' } };
+  sheet.addRow([]);
+  const noteRow = sheet.addRow(['Lưu ý: KHÔNG cần khai "Tên Hạng Mục"/"Mô Tả Chi Tiết"/"Số Tiền"/"Loại NS" — 4 cột này hệ thống tự thêm vào mọi mẫu, chỉ khai thêm các cột RIÊNG của mẫu này.']);
+  noteRow.font = { italic: true, color: { argb: 'FFDC2626' } };
+  return wb;
+}
+
+// Cùng lib/vppCatalog.js/lib/trainingRoster.js — dò cột theo tiêu đề không phân biệt hoa-thường/dấu.
+function normalizeHeader(s) {
+  return String(s || '').replace(/đ/g, 'd').replace(/Đ/g, 'D')
+    .normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/\s+/g, ' ').trim();
+}
+
+const TYPE_ALIASES = {
+  'text': 'text', 'van ban': 'text', 'chu': 'text',
+  'number': 'number', 'so': 'number',
+  'money': 'money', 'tien': 'money', 'tien te': 'money',
+  'select': 'select', 'danh sach chon': 'select', 'lua chon': 'select',
+  'date': 'date', 'ngay': 'date'
+};
+
+function normalizeType(raw) {
+  const key = normalizeHeader(raw);
+  return TYPE_ALIASES[key] || null;
+}
+
+function normalizeRequired(raw) {
+  const key = normalizeHeader(raw);
+  return ['co', 'x', 'yes', 'true', 'bat buoc'].includes(key);
+}
+
+function rowsToBudgetFields(rows) {
+  if (!rows.length) throw new HttpError(400, 'File trống, không có dữ liệu cột nào');
+  // Dòng đầu là header (Tên Cột/Kiểu Dữ Liệu/...) — luôn bỏ qua, mẫu tải về cũng theo đúng thứ tự này.
+  const dataRows = rows.slice(1);
+
+  const fields = [];
+  for (const cells of dataRows) {
+    const label = String(cells[0] ?? '').trim();
+    // Gặp dòng trống là DỪNG hẳn (không đọc tiếp) — mẫu tải về có 1 dòng trống ngăn cách trước dòng ghi
+    // chú cuối file, dừng ở đây để không lỡ đọc nhầm dòng ghi chú thành 1 cột.
+    if (!label) break;
+    const type = normalizeType(cells[1]);
+    if (!type || !BUDGET_FIELD_TYPES.has(type)) {
+      throw new HttpError(400, `Kiểu dữ liệu không hợp lệ ở cột "${label}" — chỉ chấp nhận text/number/money/select/date`);
+    }
+    const required = normalizeRequired(cells[2]);
+    const options = type === 'select'
+      ? String(cells[3] ?? '').split(',').map(o => o.trim()).filter(Boolean)
+      : [];
+    if (type === 'select' && !options.length) {
+      throw new HttpError(400, `Cột "${label}" kiểu Danh sách chọn nhưng chưa khai Danh Sách Chọn`);
+    }
+    fields.push({ label: label.slice(0, 100), type, required, options: options.slice(0, 50) });
+    if (fields.length >= 30) break; // khớp giới hạn tối đa cột tuỳ biến ở sanitizeBudgetCustomFields()
+  }
+  if (!fields.length) throw new HttpError(400, 'Không đọc được cột hợp lệ nào từ file');
+  return fields;
+}
+
+async function parseBudgetTemplateFieldsExcelBuffer(buffer) {
+  const workbook = new ExcelJS.Workbook();
+  await workbook.xlsx.load(buffer);
+  const sheet = workbook.worksheets[0];
+  if (!sheet) throw new HttpError(400, 'File Excel không có sheet dữ liệu nào');
+  const rows = [];
+  // includeEmpty: true — PHẢI giữ lại dòng trống thật (không bỏ qua) để rowsToBudgetFields() nhận biết
+  // đúng ranh giới "hết dữ liệu cột, phần còn lại là ghi chú" (xem mẫu tải về ở buildBudgetTemplateFieldsWorkbook()).
+  sheet.eachRow({ includeEmpty: true }, (row) => {
+    const cells = [];
+    row.eachCell({ includeEmpty: true }, (cell) => { cells.push(cell.value == null ? '' : String(cell.value)); });
+    rows.push(cells);
+  });
+  return rowsToBudgetFields(rows);
+}
+
+module.exports = { buildBudgetTemplateFieldsWorkbook, parseBudgetTemplateFieldsExcelBuffer, TYPE_LABEL_VN };
