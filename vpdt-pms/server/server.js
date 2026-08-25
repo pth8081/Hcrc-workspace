@@ -23,6 +23,7 @@ const vppCatalogRoutes = require('./routes/vppCatalog');
 const priceFileRoutes = require('./routes/priceFile');
 const trainingRosterRoutes = require('./routes/trainingRoster');
 const adminExportRoutes = require('./routes/adminExport');
+const pwaManifestRoutes = require('./routes/pwaManifest');
 const downloadRoutes = require('./routes/download');
 const { isCaptchaEnabled, generateCaptcha } = require('./lib/captcha');
 const { checkContractExpiryReminders } = require('./jobs/contractExpiryReminder');
@@ -211,6 +212,10 @@ app.get('/api/captcha', captchaRateLimiter, (req, res) => {
   if (!isCaptchaEnabled()) return res.status(404).json({ error: 'CAPTCHA chưa được bật' });
   res.json(generateCaptcha());
 });
+
+// manifest.json cho PWA (KHÔNG cần xác thực, xem routes/pwaManifest.js — phải sinh động vì có phần
+// "shortcuts" đọc cấu hình admin) — đăng ký TRƯỚC static/catch-all bên dưới để không bị index.html nuốt.
+app.use(pwaManifestRoutes);
 
 // Phục vụ frontend tĩnh (file index.html đã chuyển đổi sang gọi API thay vì localStorage)
 app.use(express.static(path.join(__dirname, 'public')));

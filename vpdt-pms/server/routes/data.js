@@ -55,7 +55,10 @@ const ADMIN_ONLY_KEYS = new Set([
   'sensitiveKeywords',
   // vppExcludeGroups (khối 17 "Nhóm Quyền Đặc Biệt")/workflowParticipatingDepts: cấu hình quản trị,
   // chỉ sửa được ở màn Phân Quyền (admin) — xem defaults.js.
-  'vppExcludeGroups', 'workflowParticipatingDepts'
+  'vppExcludeGroups', 'workflowParticipatingDepts',
+  // pwaShortcutModules: cấu hình "Phím Tắt PWA", chỉ admin sửa được ở màn Hệ Thống → Quản Trị — xem
+  // defaults.js + routes/pwaManifest.js.
+  'pwaShortcutModules'
 ]);
 
 router.use(requireAuth, blockIfMustChangePassword);

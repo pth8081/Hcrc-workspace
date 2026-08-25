@@ -4,6 +4,16 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>HCRC Workspace</title>
+<!-- PWA: manifest sinh động (xem routes/pwaManifest.js) + các thẻ riêng cho iOS Safari (không tự đọc
+     manifest.json đầy đủ như Android/Chrome nên cần khai thêm apple-touch-icon/meta bên dưới). -->
+<link rel="manifest" href="/manifest.json">
+<meta name="theme-color" content="#0b1f4d">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="HCRC WS">
+<link rel="apple-touch-icon" href="/icons/icon-180.png">
+<link rel="icon" href="/icons/icon-192.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700;800&display=swap" rel="stylesheet">
@@ -3220,6 +3230,19 @@ table { display: block; overflow-x: auto; max-width: 100%; }
           <ul id="sensitiveKeywordList" class="divide-y text-xs"></ul>
         </div>
       </div>
+
+      <!-- Danh mục nguồn: PWA_SHORTCUT_CATALOG (client, hàm renderPwaShortcutCheckboxes()) — bản sao
+           thủ công của cùng danh mục ở server/routes/pwaManifest.js, phải sửa cùng lúc 2 nơi nếu
+           thêm/bớt module. Tick tối đa 4 mục — hầu hết launcher Android chỉ hiện được từng đó dù khai
+           nhiều hơn (manifest route cũng tự cắt bớt phòng khi ai đó ghi thẳng qua API). -->
+      <div class="bg-blue-50 p-4 rounded border border-blue-200 space-y-3">
+        <h3 class="font-bold text-blue-900 text-sm flex items-center gap-1">📲 Phím Tắt PWA (Android/Chrome)</h3>
+        <p class="text-[11px] text-blue-700">Chọn tối đa 4 module hiện ra khi người dùng nhấn giữ icon ứng dụng đã cài trên màn hình chính điện thoại/máy tính Android/Chrome — bấm thẳng vào đúng module đó thay vì phải mở app rồi tự điều hướng. Không hỗ trợ trên iPhone/iPad (Apple chưa cho phép trình duyệt làm việc này).</p>
+        <div id="pwaShortcutChecklist" class="grid grid-cols-1 sm:grid-cols-2 gap-1 max-h-48 overflow-y-auto border rounded p-2 bg-white text-xs"></div>
+        <div class="flex justify-end">
+          <button type="button" onclick="savePwaShortcutModules()" class="bg-blue-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-blue-700">💾 Lưu Phím Tắt PWA</button>
+        </div>
+      </div>
     </div>
 
     <!-- CẤU HÌNH USER & PHÂN QUYỀN -->
@@ -5118,6 +5141,26 @@ table { display: block; overflow-x: auto; max-width: 100%; }
         <button type="button" id="btnRegisterBiometricDevice" onclick="registerBiometricDevice()" class="bg-emerald-600 text-white px-3 py-2 rounded font-bold hover:bg-emerald-700 text-xs whitespace-nowrap">➕ Đăng Ký Thiết Bị Này</button>
       </div>
     </div>
+
+    <!-- Cài đặt ứng dụng lên màn hình chính (PWA) — initPwaInstallUI() (script cuối trang) chọn ĐÚNG 1
+         trong 3 khối con bên dưới tùy trạng thái thiết bị: đã cài / cài được ngay (Android-Chrome, có sự
+         kiện beforeinstallprompt) / phải hướng dẫn thủ công (iOS Safari không có sự kiện đó). -->
+    <div id="pfPwaSection" class="border-t pt-3 space-y-2">
+      <h4 class="font-bold text-gray-700">📲 Cài Đặt Ứng Dụng</h4>
+      <div id="pfPwaInstalled" class="hidden text-[11px] text-emerald-700 bg-emerald-50 border border-emerald-200 rounded p-2">✅ Ứng dụng đã được cài đặt trên thiết bị này.</div>
+      <div id="pfPwaInstallReady" class="hidden space-y-2">
+        <p class="text-[11px] text-gray-500">Cài đặt HCRC Workspace như một ứng dụng lên màn hình chính để mở nhanh hơn, có icon riêng.</p>
+        <button type="button" onclick="triggerPwaInstall()" class="bg-blue-600 text-white px-3 py-2 rounded font-bold hover:bg-blue-700 text-xs">⬇️ Cài Đặt Ngay</button>
+      </div>
+      <div id="pfPwaInstallIos" class="hidden space-y-1 text-[11px] text-gray-600 bg-gray-50 border rounded p-2">
+        <p class="font-semibold text-gray-700">Trên iPhone/iPad (Safari):</p>
+        <p>1. Nhấn nút <b>Chia sẻ</b> (hình vuông có mũi tên ⬆️) trên thanh công cụ Safari.</p>
+        <p>2. Chọn <b>"Thêm vào MH chính"</b> (Add to Home Screen).</p>
+        <p>3. Nhấn <b>"Thêm"</b> ở góc trên bên phải.</p>
+        <p class="text-amber-700">⚠️ Chỉ dùng được với trình duyệt Safari — Chrome/Cốc Cốc trên iPhone/iPad không hỗ trợ cài đặt.</p>
+      </div>
+      <div id="pfPwaInstallUnsupported" class="hidden text-[11px] text-gray-500">Trình duyệt này chưa hỗ trợ cài đặt ứng dụng — hãy thử mở bằng Chrome/Safari bản mới nhất.</div>
+    </div>
   </div>
 </div>
 
@@ -5150,6 +5193,7 @@ const DB = {
   formTemplates: {},
   permGroups: [],
   vppExcludeGroups: [], workflowParticipatingDepts: [],
+  pwaShortcutModules: [],
   emailConfig: {}, systemLogs: [],
   // Version (UpdatedAt) từng collection tại lần đọc gần nhất — gửi kèm header If-Match khi ghi
   // (syncStorage()) để server phát hiện xung đột nếu người khác đã ghi đè kể từ lúc đọc (Bước 1:
@@ -6652,6 +6696,7 @@ async function initDatabase(loggingInUser) {
     DB.permGroups = data.permGroups || [];
     DB.vppExcludeGroups = data.vppExcludeGroups || [];
     DB.workflowParticipatingDepts = data.workflowParticipatingDepts || [];
+    DB.pwaShortcutModules = data.pwaShortcutModules || [];
     DB.emailConfig = data.emailConfig || {};
     // Nhật ký hệ thống KHÔNG còn tải kèm trong GET /api/data (trước đây trả sẵn cho MỌI người đăng
     // nhập dù chỉ admin mới thấy được màn Nhật ký — lộ dữ liệu qua API dù giao diện đã ẩn) — giờ tải
@@ -7557,6 +7602,8 @@ function openProfileModal() {
     renderWebauthnDeviceList();
   }
 
+  initPwaInstallUI();
+
   document.getElementById('profileModal').classList.remove('hidden');
 }
 
@@ -7824,6 +7871,81 @@ if (canShowBiometricLogin()) {
 }
 
 let biometricLoginInFlight = false;
+
+// ================== PWA: CÀI ĐẶT ỨNG DỤNG + SERVICE WORKER ==================
+// Đăng ký sw.js — bắt buộc phải TỒN TẠI để Chrome/Android coi trang là "cài đặt được", nhưng bản thân
+// nó không cache gì (xem comment đầu file public/sw.js) nên đăng ký xong là xong, không cần chờ hay xử
+// lý gì thêm ở đây.
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/sw.js').catch(err => console.warn('Không đăng ký được Service Worker (không ảnh hưởng chức năng chính):', err.message));
+  });
+}
+
+// Android/Chrome: trình duyệt tự bắn sự kiện này khi trang đủ điều kiện cài đặt — PHẢI preventDefault()
+// + giữ lại để tự quyết định lúc nào hiện nút cài (ở đây là khi mở "⚙️ Cá Nhân Hóa"), thay vì để trình
+// duyệt tự hiện banner cài đặt riêng của nó.
+let pwaDeferredInstallPrompt = null;
+window.addEventListener('beforeinstallprompt', (e) => {
+  e.preventDefault();
+  pwaDeferredInstallPrompt = e;
+});
+window.addEventListener('appinstalled', () => {
+  pwaDeferredInstallPrompt = null;
+});
+
+// Safari iOS không có sự kiện beforeinstallprompt (Apple chưa hỗ trợ) — chỉ có thể phát hiện gián tiếp
+// qua User-Agent để hiện hướng dẫn cài thủ công thay vì nút bấm.
+function isIosDevice() {
+  return /iphone|ipad|ipod/i.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+}
+// display-mode:standalone (Android/desktop) hoặc navigator.standalone (iOS Safari, thuộc tính riêng của
+// Apple không có trong chuẩn) — 2 cách kiểm tra khác nhau tùy nền tảng, phải OR cả hai.
+function isPwaInstalled() {
+  return window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
+}
+
+function initPwaInstallUI() {
+  const elInstalled = document.getElementById('pfPwaInstalled');
+  const elReady = document.getElementById('pfPwaInstallReady');
+  const elIos = document.getElementById('pfPwaInstallIos');
+  const elUnsupported = document.getElementById('pfPwaInstallUnsupported');
+  [elInstalled, elReady, elIos, elUnsupported].forEach(el => el?.classList.add('hidden'));
+
+  if (isPwaInstalled()) {
+    elInstalled?.classList.remove('hidden');
+  } else if (pwaDeferredInstallPrompt) {
+    elReady?.classList.remove('hidden');
+  } else if (isIosDevice()) {
+    elIos?.classList.remove('hidden');
+  } else {
+    elUnsupported?.classList.remove('hidden');
+  }
+}
+
+async function triggerPwaInstall() {
+  if (!pwaDeferredInstallPrompt) return;
+  pwaDeferredInstallPrompt.prompt();
+  await pwaDeferredInstallPrompt.userChoice;
+  // Chrome chỉ cho gọi prompt() 1 lần trên mỗi sự kiện beforeinstallprompt — dùng xong phải bỏ, dù
+  // người dùng chọn Cài hay Hủy, tự vẽ lại UI (sẽ rơi về nhánh "unsupported/iOS" cho tới lần sau trình
+  // duyệt bắn sự kiện mới, hoặc nhánh "đã cài" nếu vừa đồng ý).
+  pwaDeferredInstallPrompt = null;
+  initPwaInstallUI();
+}
+
+// Phím tắt PWA (?shortcut=<moduleKey>, do manifest shortcuts[] điều hướng tới — xem routes/pwaManifest.js)
+// — đọc 1 lần lúc tải trang, ÁP DỤNG sau khi finishLogin() hoàn tất (lúc đó switchTab mới có tác dụng vì
+// nav/permissions đã sẵn sàng), rồi dọn khỏi URL để refresh sau đó không bị nhảy tab lại ngoài ý muốn.
+const pwaShortcutParam = new URLSearchParams(window.location.search).get('shortcut');
+function applyPwaShortcutParam() {
+  if (!pwaShortcutParam) return;
+  const key = pwaShortcutParam;
+  window.history.replaceState({}, '', window.location.pathname);
+  if (typeof switchTab === 'function') {
+    try { switchTab(key); } catch (e) { console.warn('Không mở được phím tắt PWA:', key, e.message); }
+  }
+}
 
 async function loginWithBiometric() {
   if (biometricLoginInFlight || loginInFlight) return;
@@ -8617,6 +8739,7 @@ function finishLogin(user) {
   switchTab('dashboard');
   startSessionKeepAlive();
   openTakeTestFromQueryParam();
+  applyPwaShortcutParam();
 }
 
 // Sau khi quét mã QR ở lớp offline (hoặc bấm link trực tiếp), app mở kèm ?takeTest=<classId> — tự điều
@@ -17334,7 +17457,7 @@ function setSystemSubTab(subTab) {
   document.getElementById('btnSystemSubLog').className = subTab === 'LOG' ? activeCls : inactiveCls;
 
   if (subTab === 'ADMIN') {
-    renderDeptList(); renderCatList(); renderContractTypeAbbrList(); renderJobTitleList(); renderTrainingCategoryList(); renderSensitiveKeywordList(); renderDeptCheckboxes(); renderModuleAccessCheckboxes(); renderUsers(); loadEmailConfigToForm(); renderPermGroupsList(); renderSubmissionApprovalGroups(); renderContractApprovalGroups(); renderWorkflowParticipatingDeptsChecklist(); vppExcludeGroupsDraft = null; renderVppExcludeGroupsAdmin();
+    renderDeptList(); renderCatList(); renderContractTypeAbbrList(); renderJobTitleList(); renderTrainingCategoryList(); renderSensitiveKeywordList(); renderDeptCheckboxes(); renderModuleAccessCheckboxes(); renderUsers(); loadEmailConfigToForm(); renderPermGroupsList(); renderSubmissionApprovalGroups(); renderContractApprovalGroups(); renderWorkflowParticipatingDeptsChecklist(); vppExcludeGroupsDraft = null; renderVppExcludeGroupsAdmin(); renderPwaShortcutCheckboxes();
     setAdminSubTab(activeAdminSubTab);
   }
   if (subTab === 'FORM') { switchFormTab(activeFormTab); }
@@ -19849,6 +19972,54 @@ async function saveWorkflowParticipatingDepts() {
     return alert('⛔ Không thể lưu danh sách phòng ban tham gia quy trình — vui lòng thử lại.');
   }
   logSystemAction('USER_MGM', 'SAVE_WORKFLOW_DEPTS', `Cập nhật danh sách phòng ban tham gia quy trình (${checked.length} phòng)`, 'SUCCESS');
+}
+
+// ============ Phím Tắt PWA (DB.pwaShortcutModules) ============
+// Bản sao thủ công của PWA_SHORTCUT_CATALOG ở server/routes/pwaManifest.js — 2 nơi phải sửa cùng lúc
+// nếu thêm/bớt module (client chỉ dùng danh mục này để vẽ checkbox, server mới là nơi thật sự build
+// manifest shortcuts[]).
+const PWA_SHORTCUT_CATALOG_CLIENT = {
+  approvalHub: 'Phê Duyệt', doc: 'Tài Liệu', submission: 'Văn Bản Trình', task: 'Công Việc',
+  contract: 'Hợp Đồng', minutes: 'Biên Bản Họp', internal: 'Truyền Thông', meeting: 'Phòng Họp',
+  car: 'Đăng Ký Xe', vpp: 'Văn Phòng Phẩm', uniform: 'Đồng Phục', office: 'Tổng Hợp',
+  budget: 'Ngân Sách', itSupport: 'Hỗ Trợ IT', periodicReport: 'Báo Cáo Định Kỳ', reports: 'Báo Cáo'
+};
+const PWA_SHORTCUT_MAX = 4;
+
+function renderPwaShortcutCheckboxes() {
+  const wrap = document.getElementById('pwaShortcutChecklist');
+  if (!wrap) return;
+  const selected = new Set(DB.pwaShortcutModules || []);
+  wrap.innerHTML = Object.entries(PWA_SHORTCUT_CATALOG_CLIENT).map(([key, label]) => `
+    <label class="flex items-center gap-1.5 text-gray-700 cursor-pointer">
+      <input type="checkbox" class="pwa-shortcut-cb" value="${escapeHtml(key)}" ${selected.has(key) ? 'checked' : ''} onchange="enforcePwaShortcutMax(this)">
+      <span>${escapeHtml(label)}</span>
+    </label>
+  `).join('');
+}
+
+// Chặn ngay khi tick quá 4 — không đợi tới lúc bấm Lưu mới báo lỗi, vì hầu hết launcher Android chỉ
+// hiện được tối đa 4 phím tắt dù khai nhiều hơn (xem MAX_SHORTCUTS ở routes/pwaManifest.js).
+function enforcePwaShortcutMax(changedCb) {
+  const checked = [...document.querySelectorAll('.pwa-shortcut-cb:checked')];
+  if (checked.length > PWA_SHORTCUT_MAX) {
+    changedCb.checked = false;
+    alert(`⛔ Chỉ chọn được tối đa ${PWA_SHORTCUT_MAX} phím tắt (hầu hết điện thoại Android chỉ hiện được từng đó).`);
+  }
+}
+
+async function savePwaShortcutModules() {
+  const checked = [...document.querySelectorAll('.pwa-shortcut-cb:checked')].map(cb => cb.value);
+  const snapshot = [...(DB.pwaShortcutModules || [])];
+  DB.pwaShortcutModules = checked;
+  const saved = await syncStorage('pwaShortcutModules', { silent: true });
+  if (!saved) {
+    DB.pwaShortcutModules = snapshot;
+    renderPwaShortcutCheckboxes();
+    return alert('⛔ Không thể lưu Phím Tắt PWA — vui lòng thử lại.');
+  }
+  logSystemAction('USER_MGM', 'SAVE_PWA_SHORTCUTS', `Cập nhật Phím Tắt PWA (${checked.length} module)`, 'SUCCESS');
+  alert('✅ Đã lưu Phím Tắt PWA.');
 }
 
 // ============ Nhóm Không Cấp Văn Phòng Phẩm (vppExcludeGroups) ============
