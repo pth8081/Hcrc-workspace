@@ -703,6 +703,33 @@ như trước — không bắt buộc.
 
 ---
 
+### 10.7. Cài đặt ứng dụng lên màn hình chính (PWA)
+
+Cho phép người dùng "cài" HCRC Workspace như 1 ứng dụng (icon riêng, mở
+không qua trình duyệt) trên điện thoại/máy tính — **hoạt động tự động ngay
+sau khi cập nhật code, không cần cấu hình `.env` hay bước thủ công nào**.
+Giai đoạn này CHƯA làm thông báo đẩy (push notification), chỉ dừng ở cài đặt
++ phím tắt module.
+
+- **Android/Chrome**: trình duyệt tự gợi ý cài đặt; người dùng cũng chủ động
+  cài ở "⚙️ Cá Nhân Hóa → 📲 Cài Đặt Ứng Dụng → Cài Đặt Ngay". Sau khi cài,
+  nhấn giữ icon app trên màn hình chính sẽ hiện các "phím tắt" nhảy thẳng vào
+  module — admin chọn module nào hiện ở "Hệ Thống → Quản Trị → Quản Lý Danh
+  Mục → 📲 Phím Tắt PWA" (tối đa 4 module, mặc định chưa chọn module nào).
+- **iPhone/iPad (Safari)**: Apple không cho trình duyệt tự gợi ý cài như
+  Android — người dùng phải làm thủ công qua Share → "Thêm vào MH chính",
+  có hướng dẫn từng bước ngay trong "⚙️ Cá Nhân Hóa → 📲 Cài Đặt Ứng Dụng".
+  Safari trên iOS cũng KHÔNG hỗ trợ menu phím tắt khi nhấn giữ icon (giới hạn
+  của Apple, không phải thiếu sót) — chỉ mở được thẳng vào trang chủ.
+- Bắt buộc máy chủ chạy HTTPS thật để cài đặt hoạt động đúng chuẩn trên điện
+  thoại thật (cùng yêu cầu như CAPTCHA/WebAuthn ở trên) — chạy `http://` LAN
+  nội bộ vẫn dùng bình thường được trên `localhost` lúc dev/test.
+
+Không cần làm gì thêm ngoài `git pull` + `pm2 restart` — không có biến môi
+trường mới, không đổi `schema.sql`, không thêm gói npm nào.
+
+---
+
 ## 11. Kiểm tra sức khỏe hệ thống
 
 Endpoint kiểm tra nhanh:

@@ -23,6 +23,8 @@ const vppCatalogRoutes = require('./routes/vppCatalog');
 const priceFileRoutes = require('./routes/priceFile');
 const trainingRosterRoutes = require('./routes/trainingRoster');
 const adminExportRoutes = require('./routes/adminExport');
+const pwaManifestRoutes = require('./routes/pwaManifest');
+const budgetTemplateImportRoutes = require('./routes/budgetTemplateImport');
 const downloadRoutes = require('./routes/download');
 const { isCaptchaEnabled, generateCaptcha } = require('./lib/captcha');
 const { checkContractExpiryReminders } = require('./jobs/contractExpiryReminder');
@@ -127,6 +129,7 @@ app.use('/api/vpp', vppCatalogRoutes);
 app.use('/api/it-price', priceFileRoutes);
 app.use('/api/training', trainingRosterRoutes);
 app.use('/api/admin', adminExportRoutes);
+app.use('/api/budget', budgetTemplateImportRoutes);
 // Route TẢI file đính kèm dùng chung (khác /uploads/ tĩnh bên dưới — chỗ đó dùng để XEM trong Khung Xem
 // Bảo Vệ): PDF được đóng dấu watermark trước khi trả về, xem chi tiết ở routes/download.js.
 app.use('/api/files/download', requireAuth, blockIfMustChangePassword, downloadRoutes);
@@ -211,6 +214,10 @@ app.get('/api/captcha', captchaRateLimiter, (req, res) => {
   if (!isCaptchaEnabled()) return res.status(404).json({ error: 'CAPTCHA chưa được bật' });
   res.json(generateCaptcha());
 });
+
+// manifest.json cho PWA (KHÔNG cần xác thực, xem routes/pwaManifest.js — phải sinh động vì có phần
+// "shortcuts" đọc cấu hình admin) — đăng ký TRƯỚC static/catch-all bên dưới để không bị index.html nuốt.
+app.use(pwaManifestRoutes);
 
 // Phục vụ frontend tĩnh (file index.html đã chuyển đổi sang gọi API thay vì localStorage)
 app.use(express.static(path.join(__dirname, 'public')));

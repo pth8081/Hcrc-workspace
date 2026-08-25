@@ -135,6 +135,13 @@ const DEFAULTS = {
   // index.html). user.vppExcludeGroupIds (mảng id nhóm) là field mới trên "users".
   vppExcludeGroups: [],
 
+  // PWA — danh sách module (key khớp đúng tên tab dùng ở switchTab()/BUSINESS_MODULES) admin chọn làm
+  // "phím tắt" khi nhấn giữ icon app đã cài trên màn hình chính (Android/Chrome — xem routes/pwaManifest.js
+  // build shortcuts[] động từ đây, và khối "Phím Tắt PWA" ở admin panel). Mặc định RỖNG = chưa cấu hình
+  // phím tắt nào, app vẫn cài đặt bình thường (không phải cờ bật/tắt cả tính năng PWA, chỉ ảnh hưởng có
+  // menu phím tắt hay không) — Safari iOS không hỗ trợ shortcuts, luôn bỏ qua trên iPhone/iPad.
+  pwaShortcutModules: [],
+
   // Danh sách phòng ban "tham gia quy trình" — lọc bớt danh sách phòng ban hiển thị ở màn "Hệ Thống →
   // Quy Trình & Phê Duyệt" (renderWorkflowTab() ở index.html), tránh liệt kê TOÀN BỘ DB.depts khi công
   // ty có nhiều phòng ban/siêu thị không cần cấu hình quy trình riêng. Mảng RỖNG (mặc định, chưa ai
