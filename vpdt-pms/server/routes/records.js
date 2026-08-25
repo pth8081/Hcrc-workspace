@@ -597,6 +597,9 @@ router.post('/vppRegistrations/:id/delete', (req, res) => deleteAdminOnly(req, r
 router.post('/reportPeriods/:id/delete', (req, res) => deleteAdminOnly(req, res, 'reportPeriods'));
 router.post('/reportEntries/:id/delete', (req, res) => deleteAdminOnly(req, res, 'reportEntries'));
 router.post('/reportSlideTemplates/:id/delete', (req, res) => deleteAdminOnly(req, res, 'reportSlideTemplates'));
+router.post('/budgetPeriods/:id/delete', (req, res) => deleteAdminOnly(req, res, 'budgetPeriods'));
+router.post('/budgetEntries/:id/delete', (req, res) => deleteAdminOnly(req, res, 'budgetEntries'));
+router.post('/budgetTemplates/:id/delete', (req, res) => deleteAdminOnly(req, res, 'budgetTemplates'));
 
 // ===================== ĐÀO TẠO (module con "Truyền Thông Nội Bộ" > Đào tạo) — tạm thời, MVP =====================
 router.post('/trainingDocuments/:id/delete', (req, res) => deleteAdminOnly(req, res, 'trainingDocuments'));
@@ -949,6 +952,88 @@ router.post('/reportSlideTemplates/:id/update', async (req, res) => {
     res.json({ ok: true, item: result });
   } catch (err) {
     handleError(res, `reportSlideTemplates/${req.params.id}/update`, err);
+  }
+});
+
+// ===================== NGÂN SÁCH =====================
+
+// POST /api/records/budgetPeriods/:id/close — người quản lý (budgetManage/admin) tự đóng kỳ sớm.
+router.post('/budgetPeriods/:id/close', async (req, res) => {
+  const itemId = Number(req.params.id);
+  if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
+  try {
+    const { freshUser } = await getFreshUser(req);
+    const result = await withLockedRecordForCollection('budgetPeriods', itemId, (item) =>
+      recordActions.closeBudgetPeriod(freshUser, item)
+    );
+    res.json({ ok: true, item: result });
+  } catch (err) {
+    handleError(res, `budgetPeriods/${req.params.id}/close`, err);
+  }
+});
+
+// POST /api/records/budgetPeriods/:id/reopen — mở lại kỳ đã đóng, bắt buộc body { endTime } (hạn chót mới).
+router.post('/budgetPeriods/:id/reopen', async (req, res) => {
+  const itemId = Number(req.params.id);
+  if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
+  try {
+    const { freshUser } = await getFreshUser(req);
+    const result = await withLockedRecordForCollection('budgetPeriods', itemId, (item) =>
+      recordActions.reopenBudgetPeriod(freshUser, item, req.body?.endTime)
+    );
+    res.json({ ok: true, item: result });
+  } catch (err) {
+    handleError(res, `budgetPeriods/${req.params.id}/reopen`, err);
+  }
+});
+
+// POST /api/records/budgetEntries/:id/submit — "Gửi": NHÁP -> PENDING (bắt đầu duyệt Trưởng phòng).
+router.post('/budgetEntries/:id/submit', async (req, res) => {
+  const itemId = Number(req.params.id);
+  if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
+  try {
+    const { freshUser } = await getFreshUser(req);
+    const periods = await getAllForCollection('budgetPeriods');
+    const result = await withLockedRecordForCollection('budgetEntries', itemId, (item) => {
+      const period = periods.find(p => p.id === item.periodId);
+      return recordActions.submitBudgetEntry(freshUser, item, period);
+    });
+    res.json({ ok: true, item: result });
+  } catch (err) {
+    handleError(res, `budgetEntries/${req.params.id}/submit`, err);
+  }
+});
+
+// POST /api/records/budgetEntries/:id/update — sửa các dòng ngân sách khi bản còn NHÁP.
+router.post('/budgetEntries/:id/update', async (req, res) => {
+  const itemId = Number(req.params.id);
+  if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
+  try {
+    const { freshUser } = await getFreshUser(req);
+    const periods = await getAllForCollection('budgetPeriods');
+    const templates = await getAllForCollection('budgetTemplates');
+    const result = await withLockedRecordForCollection('budgetEntries', itemId, (item) => {
+      const period = periods.find(p => p.id === item.periodId);
+      return recordActions.updateBudgetEntryDraft(freshUser, item, req.body, period, templates);
+    });
+    res.json({ ok: true, item: result });
+  } catch (err) {
+    handleError(res, `budgetEntries/${req.params.id}/update`, err);
+  }
+});
+
+// POST /api/records/budgetTemplates/:id/update — sửa tên/cột bổ sung 1 mẫu ngân sách đã tạo.
+router.post('/budgetTemplates/:id/update', async (req, res) => {
+  const itemId = Number(req.params.id);
+  if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
+  try {
+    const { freshUser } = await getFreshUser(req);
+    const result = await withLockedRecordForCollection('budgetTemplates', itemId, (item) =>
+      recordActions.updateBudgetTemplate(freshUser, item, req.body)
+    );
+    res.json({ ok: true, item: result });
+  } catch (err) {
+    handleError(res, `budgetTemplates/${req.params.id}/update`, err);
   }
 });
 

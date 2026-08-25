@@ -1232,6 +1232,98 @@ const CREATE_MODULE_CONFIGS = {
       if (allocations.length > 100) throw new CreateError(400, 'Quá nhiều siêu thị trong 1 kỳ (tối đa 100)');
       payload.allocations = allocations;
     }
+  },
+  // ===== NGÂN SÁCH (module con "Tổng Hợp") =====
+  // 5 cột LÕI (STT tự tăng theo thứ tự dòng/name/description/amount/budgetType) luôn có ở MỌI dòng ngân
+  // sách bất kể có chọn mẫu hay không — đảm bảo Tổng Hợp luôn cộng dồn được theo amount/budgetType dù
+  // đơn vị nào dùng mẫu nào. "Mẫu ngân sách" (budgetTemplates) chỉ định nghĩa thêm CỘT BỔ SUNG tuỳ biến
+  // (extra), cùng khuôn formTemplates (custom field cộng thêm, không thay thế trường hệ thống) — khác
+  // reportSlideTemplates (đó là mẫu HÌNH ẢNH trình chiếu, không liên quan cấu trúc dữ liệu).
+  budgetTemplates: {
+    dbKey: 'budgetTemplates',
+    forceOwnDept: true, // không có khái niệm phòng ban (dùng chung toàn công ty) — giữ đúng lý do như reportSlideTemplates
+    getScope: () => ({ all: true }),
+    creatorField: 'creator', creatorNameField: 'creatorName',
+    extraValidate: (payload, collection, user) => {
+      if (!user.perms?.admin && !user.perms?.budgetManage) {
+        throw new CreateError(403, 'Chỉ người có quyền quản lý Ngân Sách mới được tạo mẫu ngân sách');
+      }
+      if (!payload.name || !String(payload.name).trim()) throw new CreateError(400, 'Thiếu tên mẫu ngân sách');
+      payload.name = String(payload.name).trim().slice(0, 150);
+      payload.fields = sanitizeBudgetCustomFields(payload.fields);
+    }
+  },
+  budgetPeriods: {
+    dbKey: 'budgetPeriods',
+    forceOwnDept: true,
+    getScope: () => ({}),
+    creatorField: 'creator', creatorNameField: 'creatorName',
+    extraValidate: (payload, collection, user, appData) => {
+      if (!user.perms?.admin && !user.perms?.budgetManage) {
+        throw new CreateError(403, 'Chỉ người có quyền quản lý Ngân Sách mới được tạo kỳ ngân sách');
+      }
+      if (!payload.name || !String(payload.name).trim()) throw new CreateError(400, 'Thiếu tên kỳ ngân sách');
+      payload.name = String(payload.name).trim().slice(0, 200);
+      if (!payload.endTime) throw new CreateError(400, 'Thiếu hạn chót lập ngân sách');
+      if (new Date(payload.endTime).getTime() <= Date.now()) {
+        throw new CreateError(400, 'Hạn chót lập ngân sách phải ở trong tương lai');
+      }
+      const deptScope = payload.deptScope || {};
+      const cleanedDepts = Array.isArray(deptScope.depts) ? deptScope.depts.filter(d => typeof d === 'string' && d.trim()) : [];
+      if (!deptScope.all && !cleanedDepts.length) {
+        throw new CreateError(400, 'Vui lòng chọn ít nhất 1 phòng ban áp dụng, hoặc chọn "Tất cả phòng ban"');
+      }
+      payload.deptScope = { all: !!deptScope.all, depts: deptScope.all ? [] : cleanedDepts };
+      // Mẫu ngân sách là TUỲ CHỌN (khác reportPeriods.slideTemplateId bắt buộc) — không chọn thì mọi
+      // dòng ngân sách của kỳ chỉ dùng 5 cột lõi mặc định.
+      const templates = appData?.budgetTemplates || [];
+      const templateId = payload.templateId ? Number(payload.templateId) : null;
+      if (templateId !== null && (!Number.isFinite(templateId) || !templates.some(t => t.id === templateId))) {
+        throw new CreateError(400, 'Mẫu ngân sách đã chọn không tồn tại');
+      }
+      payload.templateId = templateId;
+      payload.status = 'OPEN';
+      payload.closeHistory = [];
+    }
+  },
+  budgetEntries: {
+    dbKey: 'budgetEntries',
+    forceOwnDept: true,
+    getScope: () => ({}),
+    creatorField: 'creator', creatorNameField: 'creatorName',
+    extraValidate: (payload, collection, user, appData) => {
+      if (!user.perms?.admin && !user.perms?.budgetCreate) {
+        throw new CreateError(403, 'Bạn không có quyền lập ngân sách');
+      }
+      const periodId = Number(payload.periodId);
+      if (!Number.isFinite(periodId)) throw new CreateError(400, 'Thiếu kỳ ngân sách');
+      const periods = appData?.budgetPeriods || [];
+      const period = periods.find(p => p.id === periodId);
+      if (!period) throw new CreateError(404, 'Không tìm thấy kỳ ngân sách');
+      const scope = period.deptScope || {};
+      const deptAllowed = !!scope.all || (Array.isArray(scope.depts) && scope.depts.includes(user.dept));
+      if (!deptAllowed) throw new CreateError(403, 'Phòng ban của bạn không thuộc phạm vi kỳ ngân sách này');
+      const pastDeadline = !!(period.endTime && Date.now() > new Date(period.endTime).getTime());
+      if (period.status !== 'OPEN' || pastDeadline) {
+        throw new CreateError(409, 'Kỳ ngân sách này đã kết thúc, không thể lập ngân sách nữa');
+      }
+      // Mỗi phòng ban CHỈ 1 bản ngân sách / kỳ (khoá theo PHÒNG BAN chứ không theo người tạo — nhiều
+      // người cùng phòng có quyền budgetCreate cùng sửa chung 1 bản nháp của đơn vị, xem
+      // updateBudgetEntryDraft() ở lib/recordActions.js).
+      const duplicate = (collection || []).some(r => r.periodId === periodId && r.dept === user.dept);
+      if (duplicate) throw new CreateError(409, 'Phòng ban bạn đã có ngân sách ở kỳ này rồi — vui lòng sửa bản nháp hiện có');
+      const templates = appData?.budgetTemplates || [];
+      const customFields = getBudgetTemplateCustomFields(period.templateId, templates);
+      payload.lines = sanitizeBudgetLines(payload.lines, customFields);
+      payload.periodName = period.name;
+      payload.periodEndTime = period.endTime;
+      // status/currentStep/history gán cứng ở server — dòng ngân sách bắt đầu ở NHÁP, người lập tự Gửi
+      // (submitBudgetEntry ở lib/recordActions.js) mới chuyển PENDING để lib/workflowEngine.js xử lý
+      // bước duyệt Trưởng phòng theo appData.budgetDeptWorkflows[dept] (giống itPriceApprovals).
+      payload.status = 'DRAFT';
+      payload.currentStep = 1;
+      payload.history = [];
+    }
   }
 };
 
@@ -1250,6 +1342,77 @@ function sanitizeUniformItems(rawItems) {
   }
   if (!cleaned.length) throw new CreateError(400, 'Danh mục đồng phục trống hoặc không có dòng hợp lệ (thiếu tên hoặc số lượng)');
   return cleaned;
+}
+
+// ===== NGÂN SÁCH — helper chuẩn hoá mẫu (budgetTemplates.fields) + dòng ngân sách (budgetEntries.lines) =====
+const BUDGET_TYPE_OPTIONS = ['OPEX', 'CAPEX'];
+const BUDGET_FIELD_TYPES = new Set(['text', 'number', 'select', 'date']);
+
+// Cột BỔ SUNG tuỳ biến của 1 mẫu ngân sách — cùng khuôn formTemplates (id/label/type/options/required),
+// KHÔNG thay thế 5 cột lõi (name/description/amount/budgetType) — xem sanitizeBudgetLines() bên dưới.
+function sanitizeBudgetCustomFields(rawFields) {
+  const fields = Array.isArray(rawFields) ? rawFields : [];
+  const out = [];
+  for (const raw of fields) {
+    const label = String(raw?.label || '').trim().slice(0, 100);
+    if (!label) continue;
+    const type = BUDGET_FIELD_TYPES.has(raw?.type) ? raw.type : 'text';
+    const options = type === 'select'
+      ? (Array.isArray(raw?.options) ? raw.options.map(o => String(o || '').trim()).filter(Boolean).slice(0, 50) : [])
+      : [];
+    out.push({ id: 'f' + (Date.now() + out.length), label, type, options, required: !!raw?.required });
+    if (out.length >= 30) break;
+  }
+  return out;
+}
+
+function getBudgetTemplateCustomFields(templateId, templates) {
+  if (!templateId) return [];
+  const tpl = (templates || []).find(t => t.id === templateId);
+  return (tpl && Array.isArray(tpl.fields)) ? tpl.fields : [];
+}
+
+// 1 dòng ngân sách = 5 cột lõi (name/description/amount/budgetType, cộng STT tự tính theo thứ tự dòng
+// khi hiển thị — không lưu riêng, tránh lệch khi thêm/xoá/sắp lại dòng) + `extra` theo đúng field của
+// mẫu đã chọn ở kỳ (rỗng nếu kỳ không chọn mẫu). Giữ NGUYÊN 5 cột lõi ở MỌI dòng bất kể mẫu nào — đảm
+// bảo Tổng Hợp Ngân Sách luôn cộng dồn được theo amount/budgetType dù đơn vị dùng mẫu khác nhau.
+function sanitizeBudgetLines(rawLines, customFields) {
+  const lines = Array.isArray(rawLines) ? rawLines : [];
+  if (!lines.length) throw new CreateError(400, 'Vui lòng nhập ít nhất 1 dòng ngân sách');
+  if (lines.length > 500) throw new CreateError(400, 'Quá nhiều dòng ngân sách (tối đa 500 dòng/bản)');
+  const out = [];
+  for (const raw of lines) {
+    const name = String(raw?.name || '').trim();
+    if (!name) throw new CreateError(400, 'Mỗi dòng ngân sách phải có Tên hạng mục');
+    const amount = Number(raw?.amount);
+    if (!Number.isFinite(amount) || amount < 0) throw new CreateError(400, `Số tiền không hợp lệ ở dòng "${name}"`);
+    const budgetType = BUDGET_TYPE_OPTIONS.includes(raw?.budgetType) ? raw.budgetType : null;
+    if (!budgetType) throw new CreateError(400, `Vui lòng chọn Loại ngân sách (OPEX/CAPEX) ở dòng "${name}"`);
+    const extra = {};
+    for (const f of customFields) {
+      let v = raw?.extra ? raw.extra[f.id] : undefined;
+      if (f.type === 'number') {
+        v = (v === '' || v === null || v === undefined) ? null : Number(v);
+        if (f.required && (v === null || Number.isNaN(v))) throw new CreateError(400, `Thiếu giá trị bắt buộc "${f.label}" ở dòng "${name}"`);
+        if (v !== null && Number.isNaN(v)) throw new CreateError(400, `Giá trị không hợp lệ cho "${f.label}" ở dòng "${name}"`);
+      } else if (f.type === 'select') {
+        v = String(v || '').trim();
+        if (v && f.options.length && !f.options.includes(v)) throw new CreateError(400, `Giá trị không hợp lệ cho "${f.label}" ở dòng "${name}"`);
+        if (f.required && !v) throw new CreateError(400, `Thiếu giá trị bắt buộc "${f.label}" ở dòng "${name}"`);
+      } else {
+        v = String(v || '').trim().slice(0, 2000);
+        if (f.required && !v) throw new CreateError(400, `Thiếu giá trị bắt buộc "${f.label}" ở dòng "${name}"`);
+      }
+      extra[f.id] = v;
+    }
+    out.push({
+      id: 'l' + (Date.now() + out.length) + Math.floor(Math.random() * 1000),
+      name: name.slice(0, 200),
+      description: String(raw?.description || '').trim().slice(0, 2000),
+      amount, budgetType, extra
+    });
+  }
+  return out;
 }
 
 // Chuẩn hoá + kiểm tra tối thiểu nội dung báo cáo — CHỈ nhận đúng 1 tệp .pptx (không còn nhập tay/đính
@@ -1315,5 +1478,6 @@ module.exports = {
   OFFICE_SUBTYPE_TO_PERM_FLAG, normalizeReportEntryPayload,
   CONTRACT_APPROVAL_LAYERS, CONTRACT_APPROVAL_LEVELS, CONTRACT_APPROVAL_LEVEL_RULES,
   buildEffectiveContractApprovalWorkflowServer,
-  sanitizeUniformItems
+  sanitizeUniformItems,
+  BUDGET_TYPE_OPTIONS, sanitizeBudgetLines, getBudgetTemplateCustomFields, sanitizeBudgetCustomFields
 };

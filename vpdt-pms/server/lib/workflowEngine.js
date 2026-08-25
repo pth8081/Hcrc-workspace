@@ -183,6 +183,16 @@ const MODULE_CONFIGS = {
     blockApproveIf: (item) => ((item.infoRequests || []).some(r => !r.response))
       ? 'Đề xuất đang có yêu cầu bổ sung chưa được người đề xuất phản hồi (tải tệp bổ sung), chưa thể duyệt/từ chối.'
       : null
+  },
+  // Ngân Sách — Trưởng phòng duyệt bản ngân sách của phòng ban mình theo appData.budgetDeptWorkflows
+  // (cùng khuôn docs/carRegs/officeReqs/itPriceApprovals ở trên). supportsRequestChanges (không phải
+  // supportsRequestInfo) vì "nút bổ sung" cần đưa hẳn hồ sơ về NHÁP để người lập SỬA LẠI trực tiếp các
+  // dòng ngân sách rồi gửi lại từ đầu (đúng khuôn vppRegistrations — nội dung cần sửa là số liệu cụ thể,
+  // không chỉ đính kèm thêm giấy tờ như itPriceApprovals).
+  budgetEntries: {
+    dbKey: 'budgetEntries',
+    resolveWfConfig: (item, appData) => flatWorkflowConfigToSteps(appData.budgetDeptWorkflows?.[item.dept], appData),
+    supportsRequestChanges: true
   }
 };
 
