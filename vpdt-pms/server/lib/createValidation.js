@@ -1442,6 +1442,7 @@ function sanitizeBudgetCustomFields(rawFields) {
 
   const out = [];
   const seenCore = new Set();
+  const seenCustomIds = new Set();
   for (const raw of rawList) {
     const coreKey = typeof raw?.coreKey === 'string' && BUDGET_CORE_FIELD_DEFS[raw.coreKey] ? raw.coreKey : null;
     if (coreKey) {
@@ -1458,7 +1459,16 @@ function sanitizeBudgetCustomFields(rawFields) {
     const options = type === 'select'
       ? (Array.isArray(raw?.options) ? raw.options.map(o => String(o || '').trim()).filter(Boolean).slice(0, 50) : [])
       : [];
-    out.push({ id: 'f' + (Date.now() + out.length), label, type, options, required: !!raw?.required, removable: true });
+    // Giữ NGUYÊN id đã có thay vì sinh mới mỗi lần — hàm này chạy lại ở CẢ lúc đọc (xem
+    // getBudgetTemplateCustomFields(), gọi lại mỗi GET /api/data lẫn mỗi lần validate dòng ngân sách
+    // gửi lên), nếu luôn sinh id mới thì id lúc client hiển thị/nhập dữ liệu (budgetEntries.lines[].extra)
+    // sẽ KHÁC id lúc server validate lại, làm mất trắng dữ liệu cột tuỳ biến đã nhập mà không báo lỗi gì
+    // (extra[idMới] luôn undefined vì client chỉ gửi extra[idCũ]). Chỉ sinh id mới khi cột thực sự chưa
+    // có id hợp lệ (lần đầu thêm cột) hoặc bị trùng id với 1 cột khác trong cùng mẫu.
+    let id = typeof raw?.id === 'string' && raw.id.trim() && !BUDGET_CORE_FIELD_DEFS[raw.id.trim()] ? raw.id.trim() : null;
+    if (!id || seenCustomIds.has(id)) id = 'f' + (Date.now() + out.length + Math.floor(Math.random() * 1000));
+    seenCustomIds.add(id);
+    out.push({ id, label, type, options, required: !!raw?.required, removable: true });
     if (out.length >= 34) break; // 4 cột lõi + tối đa 30 cột tuỳ biến
   }
 
