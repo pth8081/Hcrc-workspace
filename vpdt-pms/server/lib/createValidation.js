@@ -1288,7 +1288,7 @@ const CREATE_MODULE_CONFIGS = {
         const dept = String(raw?.dept || '').trim();
         if (!dept) continue;
         if (!validStores.has(dept)) throw new CreateError(400, `Siêu thị không hợp lệ: ${dept}`);
-        const items = sanitizeUniformItems(raw?.items);
+        const items = sanitizeUniformItems(raw?.items, appData?.uniformCatalog);
         allocations.push({
           id: Date.now() + allocations.length,
           dept, deptName: dept,
@@ -1399,14 +1399,27 @@ const CREATE_MODULE_CONFIGS = {
 // Làm sạch danh sách mặt hàng đồng phục (loại/size/số lượng) do client gửi — dùng chung cho cả kỳ cấp
 // phát (uniformPeriods.allocations[].items) lẫn cấp phát cho nhân viên (uniformIssuances.items, xem
 // buildUniformIssuance() ở lib/recordActions.js) để luôn cùng 1 cấu trúc {name, size, qty}.
-function sanitizeUniformItems(rawItems) {
+// `catalog` (DB.uniformCatalog, dạng [{id, name, sizes:[string]}]) CHỈ truyền vào ở nơi cần chặn theo
+// đúng Danh Mục Đồng Phục (hiện chỉ uniformPeriods lúc Hành Chính tạo kỳ cấp phát) — bỏ qua (undefined)
+// thì giữ nguyên hành vi cũ, vì buildUniformIssuance() đã có lớp chặn riêng qua tồn kho thực tế của siêu
+// thị (không thể cấp món chưa từng được phân bổ/xác nhận, xem computeUniformStock()).
+function sanitizeUniformItems(rawItems, catalog) {
   const items = Array.isArray(rawItems) ? rawItems : [];
+  const catalogMap = Array.isArray(catalog) ? new Map(catalog.map(c => [c.name, c])) : null;
   const cleaned = [];
   for (const it of items) {
     const name = String(it?.name || '').trim();
     const qty = Number(it?.qty);
     if (!name || !Number.isFinite(qty) || qty <= 0) continue;
-    cleaned.push({ name: name.slice(0, 200), size: String(it?.size || '').trim().slice(0, 30), qty: Math.floor(qty) });
+    const size = String(it?.size || '').trim().slice(0, 30);
+    if (catalogMap) {
+      const catEntry = catalogMap.get(name);
+      if (!catEntry) throw new CreateError(400, `Mặt hàng "${name}" không có trong Danh Mục Đồng Phục`);
+      if (!size || !(catEntry.sizes || []).includes(size)) {
+        throw new CreateError(400, `Size "${size || '(trống)'}" không hợp lệ cho "${name}"`);
+      }
+    }
+    cleaned.push({ name: name.slice(0, 200), size, qty: Math.floor(qty) });
     if (cleaned.length >= 200) break;
   }
   if (!cleaned.length) throw new CreateError(400, 'Danh mục đồng phục trống hoặc không có dòng hợp lệ (thiếu tên hoặc số lượng)');

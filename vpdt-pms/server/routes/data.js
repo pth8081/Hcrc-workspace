@@ -62,7 +62,11 @@ const ADMIN_ONLY_KEYS = new Set([
   // itPriceMasterLists: File Giá Mẫu dùng đối chiếu tự động khi duyệt giá — quyết định trực tiếp hồ sơ
   // nào được BỎ QUA bước duyệt phòng ban, nên chặt hơn cả các key admin-only khác ở trên (không mở cho
   // itManage như canManageItSupport() vẫn dùng ở nơi khác của module Hỗ Trợ IT) — xem defaults.js.
-  'itPriceMasterLists'
+  'itPriceMasterLists',
+  // uniformCatalog: Danh Mục Đồng Phục (tên + size khả dụng) — quyết định trực tiếp những gì được phép
+  // phân bổ/cấp phát ở module Đồng Phục (xem sanitizeUniformItems() ở lib/createValidation.js), cùng lý
+  // do itPriceMasterLists ở trên nên không mở cho uniformManage như các hành động khác của module này.
+  'uniformCatalog'
 ]);
 
 // itPriceMasterLists có thể mang hàng nghìn dòng items[] — không trả nguyên cho MỌI người đăng nhập qua

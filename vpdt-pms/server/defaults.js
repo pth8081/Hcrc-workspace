@@ -96,6 +96,19 @@ const DEFAULTS = {
   contractTypes: ['Hợp đồng kinh tế', 'Hợp đồng lao động', 'Giấy phép kinh doanh / Pháp lý', 'Thỏa thuận bảo mật (NDA)', 'Phụ lục hợp đồng'],
   carTypes: ['5 chỗ', '7 chỗ'],
 
+  // Danh Mục Đồng Phục — mỗi mục = 1 loại đồng phục + các size khả dụng của loại đó. Trước đây Hành
+  // Chính gõ tay tên/size tự do khi phân bổ (uniformPeriods.allocations[].items), dễ sai lệch chính tả
+  // (khoá tồn kho ghép chuỗi "tên|||size" — gõ khác 1 ký tự là tính thành 1 dòng tồn kho khác hẳn).
+  // Giờ bắt buộc CHỌN từ danh mục này khi tạo kỳ cấp phát (xem sanitizeUniformItems() trong
+  // lib/createValidation.js). Khác cats/carTypes/jobTitles ở trên (danh sách nhãn hiển thị thuần), đây
+  // là dữ liệu quyết định trực tiếp validate được phép phân bổ/cấp phát những gì — nên đặt trong
+  // ADMIN_ONLY_KEYS (routes/data.js), cùng lý do itPriceMasterLists ở dưới.
+  uniformCatalog: [
+    { id: 1, name: 'Áo đồng phục nam', sizes: ['S', 'M', 'L', 'XL'] },
+    { id: 2, name: 'Áo đồng phục nữ', sizes: ['S', 'M', 'L'] },
+    { id: 3, name: 'Quần đồng phục', sizes: ['29', '30', '31', '32', '33', '34'] }
+  ],
+
   // smtpEncryption: 'NONE' | 'STARTTLS' | 'SSL' (xem lib/mailer.js) — thay cho "smtpSecure" boolean 3
   // trạng thái cũ, đặt tên khớp các mail client quen thuộc (Outlook/Thunderbird). smtpAuthEnabled +
   // smtpUser + smtpPassEnc (mã hoá, xem lib/emailCrypto.js): tài khoản đăng nhập SMTP cấu hình ngay

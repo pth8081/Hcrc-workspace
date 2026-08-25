@@ -2596,6 +2596,25 @@ table { display: block; overflow-x: auto; max-width: 100%; }
 
     <!-- Sub-tab: Kỳ Cấp Phát (Hành Chính - uniformManage) -->
     <div id="uniformSubPeriods" class="hidden space-y-4">
+      <div class="bg-slate-50 p-4 rounded border border-slate-200 space-y-3">
+        <div class="flex items-center justify-between gap-2 flex-wrap">
+          <h3 class="font-bold text-gray-800 text-base flex items-center gap-2">📋 Danh Mục Đồng Phục</h3>
+          <span class="text-xs text-gray-500">Chỉ Quản Trị Viên thêm/sửa/xoá được — dùng để chọn khi phân bổ bên dưới.</span>
+        </div>
+        <div id="uniformCatalogAdminForm" class="hidden grid grid-cols-1 md:grid-cols-3 gap-2 items-end">
+          <div>
+            <label class="block font-semibold text-gray-600 mb-1 text-xs">Tên Đồng Phục</label>
+            <input id="uniformCatalogName" placeholder="VD: Áo đồng phục nam" class="w-full border p-1.5 rounded text-xs">
+          </div>
+          <div>
+            <label class="block font-semibold text-gray-600 mb-1 text-xs">Các Size (cách nhau bằng dấu phẩy)</label>
+            <input id="uniformCatalogSizes" placeholder="VD: S, M, L, XL" class="w-full border p-1.5 rounded text-xs">
+          </div>
+          <button type="button" onclick="saveUniformCatalogItem()" class="bg-gray-600 text-white px-4 py-1.5 rounded text-xs font-bold hover:bg-gray-700">+ Thêm</button>
+        </div>
+        <div id="uniformCatalogListWrap" class="space-y-1.5"></div>
+      </div>
+
       <div class="bg-teal-50 p-4 rounded border border-teal-200 space-y-3">
         <h3 class="font-bold text-teal-900 text-base flex items-center gap-2">📦 Tạo Kỳ Cấp Phát Đồng Phục</h3>
         <p class="text-xs text-teal-700">Mỗi lần phân bổ đồng phục xuống các siêu thị — kể cả cấp bổ sung sau này cho siêu thị đã từng nhận — đều tạo 1 kỳ mới để theo dõi riêng biệt số lượng cấp từng đợt.</p>
@@ -2673,6 +2692,23 @@ table { display: block; overflow-x: auto; max-width: 100%; }
         </div>
       </div>
 
+      <div class="space-y-3">
+        <h3 class="font-bold text-gray-800 text-sm">🧍 Đồng Phục Nhân Viên Đang Giữ</h3>
+        <p class="text-xs text-gray-500">Thao tác nhanh cho từng dòng — Thu Hồi (về tồn kho), Báo Hỏng, Báo Mất. Số lượng tính gộp từ mọi phiếu cấp cho đúng nhân viên/mặt hàng/size này.</p>
+        <div class="overflow-x-auto">
+          <table class="w-full border-collapse border text-xs bg-white">
+            <thead><tr class="bg-gray-100 text-left text-gray-700">
+              <th class="border p-2">Nhân Viên</th>
+              <th class="border p-2">Mặt Hàng</th>
+              <th class="border p-2">Size</th>
+              <th class="border p-2 text-right">Đang Giữ</th>
+              <th class="border p-2 text-center">Thao Tác</th>
+            </tr></thead>
+            <tbody id="uniformHoldingsTableBody"></tbody>
+          </table>
+        </div>
+      </div>
+
       <div class="bg-rose-50 p-4 rounded border border-rose-200 space-y-3">
         <h3 class="font-bold text-rose-900 text-base flex items-center gap-2">🗑️ Báo Hỏng / Hủy (Từ Kho)</h3>
         <p class="text-xs text-rose-700">Dùng khi đồng phục còn NẰM TRONG KHO (chưa cấp cho nhân viên) bị hỏng hoặc cần loại bỏ không sử dụng.</p>
@@ -2712,21 +2748,19 @@ table { display: block; overflow-x: auto; max-width: 100%; }
         <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
           <div>
             <label class="block font-semibold text-gray-600 mb-1 text-xs">Nhân Viên <span class="text-red-500">*</span></label>
-            <input id="uniformAdjEmpEmployee" list="uniformStoreEmployeesDatalist" oninput="resolveUniformEmployeeInput('uniformAdjEmpEmployee', 'uniformAdjEmpEmployeeUsername')" placeholder="Gõ tên hoặc tài khoản để tìm..." class="w-full border p-1.5 rounded text-xs bg-white">
+            <input id="uniformAdjEmpEmployee" list="uniformStoreEmployeesDatalist" oninput="resolveUniformEmployeeInput('uniformAdjEmpEmployee', 'uniformAdjEmpEmployeeUsername'); renderUniformAdjEmpItemOptions();" placeholder="Gõ tên hoặc tài khoản để tìm..." class="w-full border p-1.5 rounded text-xs bg-white">
             <input type="hidden" id="uniformAdjEmpEmployeeUsername">
           </div>
         </div>
-        <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
           <div>
-            <label class="block font-semibold text-gray-600 mb-1 text-xs">Tên Đồng Phục <span class="text-red-500">*</span></label>
-            <input id="uniformAdjEmpItemName" placeholder="VD: Áo đồng phục nam" class="w-full border p-1.5 rounded text-xs">
+            <label class="block font-semibold text-gray-600 mb-1 text-xs">Mặt Hàng — Size <span class="text-red-500">*</span></label>
+            <select id="uniformAdjEmpItemSize" onchange="onUniformAdjEmpItemSizeChange()" class="w-full border p-1.5 rounded text-xs bg-white">
+              <option value="">-- Chọn nhân viên trước --</option>
+            </select>
           </div>
           <div>
-            <label class="block font-semibold text-gray-600 mb-1 text-xs">Size</label>
-            <input id="uniformAdjEmpSize" placeholder="VD: L" class="w-full border p-1.5 rounded text-xs">
-          </div>
-          <div>
-            <label class="block font-semibold text-gray-600 mb-1 text-xs">Số Lượng <span class="text-red-500">*</span></label>
+            <label class="block font-semibold text-gray-600 mb-1 text-xs">Số Lượng <span class="text-red-500">*</span> <span id="uniformAdjEmpHeldHint" class="text-gray-400 font-normal"></span></label>
             <input id="uniformAdjEmpQty" type="number" min="1" class="w-full border p-1.5 rounded text-xs">
           </div>
         </div>
@@ -2736,6 +2770,7 @@ table { display: block; overflow-x: auto; max-width: 100%; }
             <label class="flex items-center gap-1"><input type="radio" name="uniformAdjEmpOutcome" value="TON" checked> Về Tồn Kho</label>
             <label class="flex items-center gap-1"><input type="radio" name="uniformAdjEmpOutcome" value="HONG"> Hỏng</label>
             <label class="flex items-center gap-1"><input type="radio" name="uniformAdjEmpOutcome" value="HUY"> Hủy không sử dụng</label>
+            <label class="flex items-center gap-1"><input type="radio" name="uniformAdjEmpOutcome" value="MAT"> Mất</label>
           </div>
         </div>
         <div>
@@ -2787,6 +2822,7 @@ table { display: block; overflow-x: auto; max-width: 100%; }
               <th class="border p-2 text-right">Đã Cấp NV</th>
               <th class="border p-2 text-right">Hỏng</th>
               <th class="border p-2 text-right">Hủy</th>
+              <th class="border p-2 text-right">Mất</th>
               <th class="border p-2 text-right">Tồn Kho</th>
             </tr></thead>
             <tbody id="uniformStockTableBody"></tbody>
@@ -5395,7 +5431,7 @@ table { display: block; overflow-x: auto; max-width: 100%; }
 const DB = {
   depts: [], cats: [], users: [], docs: [],
   deptAbbrs: {}, docCatAbbrs: {}, contractTypeAbbrs: {},
-  jobTitles: [], submissionTypes: [], contractTypes: [], carTypes: [],
+  jobTitles: [], submissionTypes: [], contractTypes: [], carTypes: [], uniformCatalog: [],
   workflows: [], deptWorkflows: {},
   submissions: [], submissionDeptWorkflows: {},
   submissionTypeDeptWorkflows: {}, submissionApprovalGroups: {},
@@ -6924,6 +6960,7 @@ async function initDatabase(loggingInUser) {
     DB.submissionTypes = data.submissionTypes || [];
     DB.contractTypes = data.contractTypes || [];
     DB.carTypes = data.carTypes || [];
+    DB.uniformCatalog = data.uniformCatalog || [];
 
     // Di trú phân quyền cũ (cờ bật/tắt toàn công ty theo module) sang mô hình mới theo phòng ban.
     // Nếu có user nào được chuyển đổi, lưu lại ngay lên server để không phải di trú lại mỗi lần tải
@@ -27893,13 +27930,62 @@ function setUniformSubTab(subTab) {
   document.getElementById('btnUniformSubStore').className = (subTab === 'STORE' ? activeCls : inactiveCls) + (canStore ? '' : ' hidden');
   document.getElementById('btnUniformSubStock').className = subTab === 'STOCK' ? activeCls : inactiveCls;
 
-  if (subTab === 'PERIODS') { resetUniformPeriodForm(); renderUniformPeriodsList(); }
-  if (subTab === 'STORE') { renderUniformPendingAllocations(); renderUniformIssueEmployeeOptions(); resetUniformIssueForm(); renderUniformIssuancesTable(); resetUniformAdjustForms(); renderUniformAdjustmentsTable(); }
+  if (subTab === 'PERIODS') { renderUniformCatalogList(); resetUniformPeriodForm(); renderUniformPeriodsList(); }
+  if (subTab === 'STORE') { renderUniformPendingAllocations(); renderUniformIssueEmployeeOptions(); resetUniformIssueForm(); renderUniformIssuancesTable(); renderUniformHoldingsTable(); resetUniformAdjustForms(); renderUniformAdjustmentsTable(); }
   if (subTab === 'STOCK') { renderUniformStockStoreFilterOptions(); renderUniformStock(); }
 }
 
 function uniformItemsSummary(items) {
   return (items || []).map(it => `${escapeHtml(it.name)}${it.size ? ` (${escapeHtml(it.size)})` : ''}: ${it.qty}`).join(', ') || '—';
+}
+
+// ============ Danh Mục Đồng Phục (chỉ admin thêm/sửa/xoá — xem ADMIN_ONLY_KEYS ở routes/data.js) ============
+function renderUniformCatalogList() {
+  const wrap = document.getElementById('uniformCatalogListWrap');
+  const form = document.getElementById('uniformCatalogAdminForm');
+  if (!wrap) return;
+  const isAdmin = !!currentUser.perms?.admin;
+  if (form) form.classList.toggle('hidden', !isAdmin);
+  const catalog = DB.uniformCatalog || [];
+  if (!catalog.length) {
+    wrap.innerHTML = `<div class="text-xs text-gray-500 italic bg-white p-3 rounded border">Chưa có mặt hàng nào trong danh mục.</div>`;
+    return;
+  }
+  wrap.innerHTML = catalog.map(c => `
+    <div class="bg-white p-2.5 rounded border flex items-center justify-between gap-2 flex-wrap">
+      <div>
+        <span class="font-bold text-slate-800 text-xs">${escapeHtml(c.name)}</span>
+        <span class="text-[11px] text-gray-500 ml-2">${(c.sizes || []).map(s => escapeHtml(s)).join(', ') || 'Không có size'}</span>
+      </div>
+      ${isAdmin ? `<button type="button" onclick="deleteUniformCatalogItem(${c.id})" class="text-red-600 hover:text-red-800 text-xs font-bold">🗑️ Xóa</button>` : ''}
+    </div>
+  `).join('');
+}
+
+function saveUniformCatalogItem() {
+  const name = document.getElementById('uniformCatalogName').value.trim();
+  const sizesRaw = document.getElementById('uniformCatalogSizes').value.trim();
+  if (!name) return alert('Vui lòng nhập tên đồng phục!');
+  const sizes = sizesRaw.split(',').map(s => s.trim()).filter(Boolean);
+  if (!sizes.length) return alert('Vui lòng nhập ít nhất 1 size (cách nhau bằng dấu phẩy)!');
+  if ((DB.uniformCatalog || []).some(c => c.name === name)) return alert('Mặt hàng này đã có trong danh mục!');
+  const nextId = (Math.max(0, ...(DB.uniformCatalog || []).map(c => c.id)) || 0) + 1;
+  DB.uniformCatalog = [...(DB.uniformCatalog || []), { id: nextId, name, sizes }];
+  syncStorage('uniformCatalog');
+  logSystemAction('UNIFORM', 'ADD_UNIFORM_CATALOG', `Thêm mặt hàng vào Danh Mục Đồng Phục [${name}]`, 'SUCCESS', name);
+  document.getElementById('uniformCatalogName').value = '';
+  document.getElementById('uniformCatalogSizes').value = '';
+  renderUniformCatalogList();
+}
+
+function deleteUniformCatalogItem(id) {
+  const item = (DB.uniformCatalog || []).find(c => c.id === id);
+  if (!item) return;
+  if (!confirm(`Xóa mặt hàng "${item.name}" khỏi Danh Mục Đồng Phục? Các kỳ cấp phát đã tạo trước đó vẫn giữ nguyên dữ liệu, chỉ không còn chọn được mặt hàng này cho kỳ mới.`)) return;
+  DB.uniformCatalog = (DB.uniformCatalog || []).filter(c => c.id !== id);
+  syncStorage('uniformCatalog');
+  logSystemAction('UNIFORM', 'DELETE_UNIFORM_CATALOG', `Xóa mặt hàng khỏi Danh Mục Đồng Phục [${item.name}]`, 'SUCCESS', item.name);
+  renderUniformCatalogList();
 }
 
 // ============ Kỳ Cấp Phát (Hành Chính — uniformManage) ============
@@ -27949,6 +28035,12 @@ function updateUniformAllocItemField(blockIdx, itemIdx, field, value) {
   const item = uniformAllocBlocks[blockIdx]?.items?.[itemIdx];
   if (!item) return;
   item[field] = field === 'qty' ? (parseFloat(value) || 0) : value;
+  // Đổi mặt hàng thì size cũ (thuộc mặt hàng khác trong Danh Mục Đồng Phục) không còn hợp lệ nữa — reset
+  // rồi render lại để dropdown Size chỉ hiện đúng size của mặt hàng vừa chọn.
+  if (field === 'name') {
+    item.size = '';
+    renderUniformAllocationBlocks();
+  }
 }
 
 function renderUniformAllocationBlocks() {
@@ -27972,14 +28064,27 @@ function renderUniformAllocationBlocks() {
           <th class="border p-1 w-10"></th>
         </tr></thead>
         <tbody>
-          ${block.items.map((it, iIdx) => `
+          ${block.items.map((it, iIdx) => {
+            const catEntry = (DB.uniformCatalog || []).find(c => c.name === it.name);
+            const sizes = catEntry ? (catEntry.sizes || []) : [];
+            return `
             <tr>
-              <td class="border p-1"><input value="${escapeHtml(it.name)}" oninput="updateUniformAllocItemField(${bIdx}, ${iIdx}, 'name', this.value)" class="w-full border-0 p-1 text-xs" placeholder="VD: Áo đồng phục nam"></td>
-              <td class="border p-1"><input value="${escapeHtml(it.size)}" oninput="updateUniformAllocItemField(${bIdx}, ${iIdx}, 'size', this.value)" class="w-full border-0 p-1 text-xs" placeholder="VD: L"></td>
+              <td class="border p-1">
+                <select onchange="updateUniformAllocItemField(${bIdx}, ${iIdx}, 'name', this.value)" class="w-full border-0 p-1 text-xs bg-white">
+                  <option value="">-- Chọn mặt hàng --</option>
+                  ${(DB.uniformCatalog || []).map(c => `<option value="${escapeHtml(c.name)}" ${c.name === it.name ? 'selected' : ''}>${escapeHtml(c.name)}</option>`).join('')}
+                </select>
+              </td>
+              <td class="border p-1">
+                <select onchange="updateUniformAllocItemField(${bIdx}, ${iIdx}, 'size', this.value)" class="w-full border-0 p-1 text-xs bg-white" ${sizes.length ? '' : 'disabled'}>
+                  <option value="">-- Size --</option>
+                  ${sizes.map(s => `<option value="${escapeHtml(s)}" ${s === it.size ? 'selected' : ''}>${escapeHtml(s)}</option>`).join('')}
+                </select>
+              </td>
               <td class="border p-1"><input type="number" min="0" value="${it.qty}" oninput="updateUniformAllocItemField(${bIdx}, ${iIdx}, 'qty', this.value)" class="w-full border-0 p-1 text-xs"></td>
               <td class="border p-1 text-center"><button type="button" onclick="removeUniformAllocItemRow(${bIdx}, ${iIdx})" class="text-red-500 hover:text-red-700">✕</button></td>
             </tr>
-          `).join('')}
+          `; }).join('')}
         </tbody>
       </table>
       <button type="button" onclick="addUniformAllocItemRow(${bIdx})" class="text-teal-700 text-xs font-bold hover:underline">+ Thêm dòng mặt hàng</button>
@@ -28169,28 +28274,49 @@ function updateUniformIssueItemField(idx, field, value) {
   uniformIssueItems[idx][field] = field === 'qty' ? (parseFloat(value) || 0) : value;
 }
 
+// Chọn mặt hàng CHỌN được 1 dòng "tên|||size" duy nhất từ ĐÚNG những gì siêu thị đang có tồn kho > 0
+// (đã được Hành Chính phân bổ VÀ Giám Đốc Siêu Thị xác nhận) — không còn 2 ô tên/size gõ tự do như
+// trước (dễ gõ sai lệch với đúng dữ liệu đã phân bổ, xem computeUniformStockClient()).
+function updateUniformIssueItemNameSize(idx, value) {
+  if (!uniformIssueItems[idx]) return;
+  const sep = value.indexOf('|||');
+  uniformIssueItems[idx].name = sep === -1 ? '' : value.slice(0, sep);
+  uniformIssueItems[idx].size = sep === -1 ? '' : value.slice(sep + 3);
+}
+
 function renderUniformIssueItems() {
   const wrap = document.getElementById('uniformIssueItemsWrap');
   if (!wrap) return;
+  const stock = computeUniformStockClient(currentUser.dept);
+  const options = Array.from(stock.values()).filter(r => r.stock > 0).sort((a, b) => a.name.localeCompare(b.name, 'vi') || a.size.localeCompare(b.size, 'vi'));
   wrap.innerHTML = `
     <table class="w-full text-xs border-collapse bg-white">
       <thead><tr class="bg-gray-100 text-left">
-        <th class="border p-1">Tên Đồng Phục</th>
-        <th class="border p-1 w-24">Size</th>
+        <th class="border p-1">Đồng Phục — Size (còn tồn kho)</th>
         <th class="border p-1 w-24">Số Lượng</th>
         <th class="border p-1 w-10"></th>
       </tr></thead>
       <tbody>
-        ${uniformIssueItems.map((it, idx) => `
+        ${uniformIssueItems.map((it, idx) => {
+          const currentKey = `${it.name}|||${it.size || ''}`;
+          return `
           <tr>
-            <td class="border p-1"><input value="${escapeHtml(it.name)}" oninput="updateUniformIssueItemField(${idx}, 'name', this.value)" class="w-full border-0 p-1 text-xs" placeholder="VD: Áo đồng phục nam"></td>
-            <td class="border p-1"><input value="${escapeHtml(it.size)}" oninput="updateUniformIssueItemField(${idx}, 'size', this.value)" class="w-full border-0 p-1 text-xs" placeholder="VD: L"></td>
+            <td class="border p-1">
+              <select onchange="updateUniformIssueItemNameSize(${idx}, this.value)" class="w-full border-0 p-1 text-xs bg-white">
+                <option value="">-- Chọn mặt hàng --</option>
+                ${options.map(o => {
+                  const key = `${o.name}|||${o.size}`;
+                  return `<option value="${escapeHtml(key)}" ${key === currentKey ? 'selected' : ''}>${escapeHtml(o.name)}${o.size ? ` - ${escapeHtml(o.size)}` : ''} (còn ${o.stock})</option>`;
+                }).join('')}
+              </select>
+            </td>
             <td class="border p-1"><input type="number" min="0" value="${it.qty}" oninput="updateUniformIssueItemField(${idx}, 'qty', this.value)" class="w-full border-0 p-1 text-xs"></td>
             <td class="border p-1 text-center"><button type="button" onclick="removeUniformIssueItemRow(${idx})" class="text-red-500 hover:text-red-700">✕</button></td>
           </tr>
-        `).join('')}
+        `; }).join('')}
       </tbody>
     </table>
+    ${!options.length ? `<p class="text-xs text-gray-500 italic mt-1">Siêu thị chưa có tồn kho đồng phục nào (chưa xác nhận nhận, hoặc đã cấp/hỏng/hủy/mất hết).</p>` : ''}
   `;
 }
 
@@ -28257,6 +28383,95 @@ function renderUniformIssuancesTable() {
   `).join('');
 }
 
+// ============ Đồng Phục Nhân Viên Đang Giữ (thao tác nhanh Thu Hồi/Báo Hỏng/Báo Mất theo từng dòng) ====
+// Mirror computeAllEmployeeUniformHoldings() ở lib/recordActions.js — hệ thống chỉ track tổng số 1
+// (nhân viên × mặt hàng × size) đang giữ, KHÔNG track "phiếu nào cấp phần nào chưa bị thu hồi" — nên
+// gộp theo đúng 3 chiều này (không theo từng phiếu cấp riêng lẻ) là đúng khớp cách dữ liệu được tính.
+function computeAllEmployeeUniformHoldingsClient(storeDept) {
+  const held = new Map();
+  const keyOf = (empUsername, name, size) => `${empUsername}|||${name}|||${size || ''}`;
+  const bump = (empUsername, empName, name, size, delta) => {
+    const key = keyOf(empUsername, name, size);
+    if (!held.has(key)) held.set(key, { employeeUsername: empUsername, employeeName: empName, name, size: size || '', held: 0 });
+    held.get(key).held += delta;
+  };
+  for (const issuance of DB.uniformIssuances) {
+    if (issuance.dept !== storeDept) continue;
+    for (const it of (issuance.items || [])) bump(issuance.employeeUsername, issuance.employeeName, it.name, it.size, it.qty);
+  }
+  for (const adj of (DB.uniformStockAdjustments || [])) {
+    if (adj.dept !== storeDept || adj.source !== 'EMPLOYEE') continue;
+    bump(adj.employeeUsername, adj.employeeName, adj.itemName, adj.size, -adj.qty);
+  }
+  return Array.from(held.values()).filter(r => r.held > 0).sort((a, b) => a.employeeName.localeCompare(b.employeeName, 'vi'));
+}
+
+let uniformHoldingsCache = [];
+function renderUniformHoldingsTable() {
+  const tbody = document.getElementById('uniformHoldingsTableBody');
+  if (!tbody) return;
+  uniformHoldingsCache = computeAllEmployeeUniformHoldingsClient(currentUser.dept);
+  if (!uniformHoldingsCache.length) {
+    tbody.innerHTML = `<tr><td colspan="5" class="text-center p-6 text-gray-500 italic">Không có nhân viên nào đang giữ đồng phục.</td></tr>`;
+    return;
+  }
+  tbody.innerHTML = uniformHoldingsCache.map((h, idx) => `
+    <tr class="hover:bg-gray-50 border-b">
+      <td class="border p-2">${escapeHtml(h.employeeName)}</td>
+      <td class="border p-2">${escapeHtml(h.name)}</td>
+      <td class="border p-2">${escapeHtml(h.size || '—')}</td>
+      <td class="border p-2 text-right font-bold">${h.held.toLocaleString('vi-VN')}</td>
+      <td class="border p-2 text-center space-x-1 whitespace-nowrap">
+        <button type="button" onclick="openUniformHoldingActionModal(${idx}, 'TON')" class="bg-emerald-600 text-white px-2 py-1 rounded text-[11px] font-bold hover:bg-emerald-700">↩️ Thu Hồi</button>
+        <button type="button" onclick="openUniformHoldingActionModal(${idx}, 'HONG')" class="bg-rose-600 text-white px-2 py-1 rounded text-[11px] font-bold hover:bg-rose-700">🔴 Báo Hỏng</button>
+        <button type="button" onclick="openUniformHoldingActionModal(${idx}, 'MAT')" class="bg-slate-600 text-white px-2 py-1 rounded text-[11px] font-bold hover:bg-slate-700">❓ Báo Mất</button>
+      </td>
+    </tr>
+  `).join('');
+}
+
+function openUniformHoldingActionModal(idx, outcome) {
+  const h = uniformHoldingsCache[idx];
+  if (!h) return;
+  const outcomeLabel = { TON: 'Thu Hồi (Về Tồn Kho)', HONG: 'Báo Hỏng', MAT: 'Báo Mất' }[outcome];
+  showConfirmModal({
+    title: `${outcomeLabel} — ${h.employeeName}`,
+    bodyHTML: `
+      <div class="space-y-3">
+        <div class="text-xs text-gray-600">${escapeHtml(h.name)}${h.size ? ` (size ${escapeHtml(h.size)})` : ''} — đang giữ <b>${h.held}</b>.</div>
+        <div>
+          <label class="block font-semibold text-gray-600 mb-1 text-xs">Số Lượng <span class="text-red-500">*</span></label>
+          <input id="uniformHoldingActionQty" type="number" min="1" max="${h.held}" value="${h.held}" class="w-full border p-1.5 rounded text-xs">
+        </div>
+        <div>
+          <label class="block font-semibold text-gray-600 mb-1 text-xs">Lý Do <span class="text-red-500">*</span></label>
+          <textarea id="uniformHoldingActionReason" rows="2" class="w-full border p-1.5 rounded text-xs" placeholder="Bắt buộc nhập lý do..."></textarea>
+        </div>
+      </div>
+    `,
+    confirmLabel: outcomeLabel,
+    onConfirm: async () => {
+      const qty = parseFloat(document.getElementById('uniformHoldingActionQty').value);
+      const reason = document.getElementById('uniformHoldingActionReason').value.trim();
+      if (!qty || qty <= 0) return alert('Vui lòng nhập số lượng hợp lệ (> 0)!');
+      if (!reason) return alert('Vui lòng nhập lý do (bắt buộc)!');
+      let newAdj;
+      try {
+        const result = await callCreateUniformStockAdjustment({
+          source: 'EMPLOYEE', outcome, employeeUsername: h.employeeUsername, itemName: h.name, size: h.size, qty, reason
+        });
+        newAdj = result.item;
+      } catch (err) { return alert(`⛔ ${err.message}`); }
+      DB.uniformStockAdjustments.unshift(newAdj);
+      logSystemAction('UNIFORM', 'CREATE_UNIFORM_STOCK_ADJUSTMENT', `${outcomeLabel} [${newAdj.itemName}] của ${h.employeeName}`, 'SUCCESS', newAdj.itemName);
+      alert('✅ Đã ghi nhận thao tác!');
+      renderUniformHoldingsTable();
+      renderUniformAdjustmentsTable();
+      renderUniformStock();
+    }
+  });
+}
+
 // ============ Hỏng / Hủy / Thu Hồi (Giám Đốc Siêu Thị — uniformStoreManage) ============
 function resetUniformAdjustForms() {
   document.getElementById('uniformAdjStockItemName').value = '';
@@ -28268,12 +28483,44 @@ function resetUniformAdjustForms() {
 
   document.getElementById('uniformAdjEmpEmployee').value = '';
   document.getElementById('uniformAdjEmpEmployeeUsername').value = '';
-  document.getElementById('uniformAdjEmpItemName').value = '';
-  document.getElementById('uniformAdjEmpSize').value = '';
+  renderUniformAdjEmpItemOptions();
   document.getElementById('uniformAdjEmpQty').value = '';
   document.getElementById('uniformAdjEmpReason').value = '';
   const empOutcomeDefault = document.querySelector('input[name="uniformAdjEmpOutcome"][value="TON"]');
   if (empOutcomeDefault) empOutcomeDefault.checked = true;
+}
+
+// Chọn nhân viên xong mới hiện dropdown mặt hàng — giới hạn CHÍNH XÁC những gì nhân viên đó đang giữ
+// (computeAllEmployeeUniformHoldingsClient()), không còn 2 ô tên/size gõ tự do như trước.
+function renderUniformAdjEmpItemOptions() {
+  const sel = document.getElementById('uniformAdjEmpItemSize');
+  const hint = document.getElementById('uniformAdjEmpHeldHint');
+  if (!sel) return;
+  const employeeUsername = document.getElementById('uniformAdjEmpEmployeeUsername').value;
+  if (!employeeUsername) {
+    sel.innerHTML = '<option value="">-- Chọn nhân viên trước --</option>';
+    if (hint) hint.textContent = '';
+    return;
+  }
+  const holdings = computeAllEmployeeUniformHoldingsClient(currentUser.dept).filter(h => h.employeeUsername === employeeUsername);
+  if (!holdings.length) {
+    sel.innerHTML = '<option value="">-- Nhân viên này không đang giữ mặt hàng nào --</option>';
+    if (hint) hint.textContent = '';
+    return;
+  }
+  sel.innerHTML = '<option value="">-- Chọn mặt hàng --</option>' +
+    holdings.map(h => `<option value="${escapeHtml(h.name)}|||${escapeHtml(h.size)}" data-held="${h.held}">${escapeHtml(h.name)}${h.size ? ` - ${escapeHtml(h.size)}` : ''} (đang giữ ${h.held})</option>`).join('');
+  onUniformAdjEmpItemSizeChange();
+}
+
+function onUniformAdjEmpItemSizeChange() {
+  const sel = document.getElementById('uniformAdjEmpItemSize');
+  const hint = document.getElementById('uniformAdjEmpHeldHint');
+  const opt = sel?.selectedOptions?.[0];
+  const held = opt ? Number(opt.dataset.held || 0) : 0;
+  if (hint) hint.textContent = (opt && opt.value) ? `(đang giữ ${held})` : '';
+  const qtyInput = document.getElementById('uniformAdjEmpQty');
+  if (qtyInput) qtyInput.max = held || '';
 }
 
 async function callCreateUniformStockAdjustment(payload) {
@@ -28293,8 +28540,16 @@ async function callCreateUniformStockAdjustment(payload) {
 
 async function submitUniformStockAdjustment(source) {
   const prefix = source === 'EMPLOYEE' ? 'uniformAdjEmp' : 'uniformAdjStock';
-  const itemName = document.getElementById(`${prefix}ItemName`).value.trim();
-  const size = document.getElementById(`${prefix}Size`).value.trim();
+  let itemName, size;
+  if (source === 'EMPLOYEE') {
+    const combo = document.getElementById('uniformAdjEmpItemSize').value;
+    const sep = combo.indexOf('|||');
+    itemName = sep === -1 ? '' : combo.slice(0, sep);
+    size = sep === -1 ? '' : combo.slice(sep + 3);
+  } else {
+    itemName = document.getElementById(`${prefix}ItemName`).value.trim();
+    size = document.getElementById(`${prefix}Size`).value.trim();
+  }
   const qty = parseFloat(document.getElementById(`${prefix}Qty`).value);
   const reason = document.getElementById(`${prefix}Reason`).value.trim();
   const outcome = document.querySelector(`input[name="${prefix}Outcome"]:checked`)?.value || '';
@@ -28329,6 +28584,7 @@ async function submitUniformStockAdjustment(source) {
 function uniformAdjOutcomeLabel(outcome) {
   if (outcome === 'HONG') return '🔴 Hỏng';
   if (outcome === 'HUY') return '⚫ Hủy';
+  if (outcome === 'MAT') return '❓ Mất';
   return '🟢 Về tồn kho';
 }
 
@@ -28363,7 +28619,7 @@ function computeUniformStockClient(storeDept) {
   const keyOf = (name, size) => `${name}|||${size || ''}`;
   const bump = (name, size, field, qty) => {
     const key = keyOf(name, size);
-    if (!stock.has(key)) stock.set(key, { name, size: size || '', allocated: 0, issued: 0, recalled: 0, hong: 0, huy: 0 });
+    if (!stock.has(key)) stock.set(key, { name, size: size || '', allocated: 0, issued: 0, recalled: 0, hong: 0, huy: 0, mat: 0 });
     stock.get(key)[field] += qty;
   };
   for (const period of DB.uniformPeriods) {
@@ -28381,8 +28637,9 @@ function computeUniformStockClient(storeDept) {
     if (adj.source === 'EMPLOYEE') bump(adj.itemName, adj.size, 'recalled', adj.qty);
     if (adj.outcome === 'HONG') bump(adj.itemName, adj.size, 'hong', adj.qty);
     if (adj.outcome === 'HUY') bump(adj.itemName, adj.size, 'huy', adj.qty);
+    if (adj.outcome === 'MAT') bump(adj.itemName, adj.size, 'mat', adj.qty);
   }
-  for (const row of stock.values()) row.stock = row.allocated - (row.issued - row.recalled) - row.hong - row.huy;
+  for (const row of stock.values()) row.stock = row.allocated - (row.issued - row.recalled) - row.hong - row.huy - row.mat;
   return stock;
 }
 
@@ -28415,7 +28672,7 @@ function renderUniformStock() {
     for (const row of stock.values()) rows.push({ dept, ...row });
   }
   if (!rows.length) {
-    tbody.innerHTML = `<tr><td colspan="8" class="text-center p-6 text-gray-500 italic">Chưa có dữ liệu tồn kho.</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="9" class="text-center p-6 text-gray-500 italic">Chưa có dữ liệu tồn kho.</td></tr>`;
     return;
   }
   tbody.innerHTML = rows.map(r => `
@@ -28427,6 +28684,7 @@ function renderUniformStock() {
       <td class="border p-2 text-right">${r.issued.toLocaleString('vi-VN')}</td>
       <td class="border p-2 text-right ${r.hong > 0 ? 'text-rose-600 font-bold' : ''}">${r.hong.toLocaleString('vi-VN')}</td>
       <td class="border p-2 text-right ${r.huy > 0 ? 'text-gray-600 font-bold' : ''}">${r.huy.toLocaleString('vi-VN')}</td>
+      <td class="border p-2 text-right ${r.mat > 0 ? 'text-orange-600 font-bold' : ''}">${r.mat.toLocaleString('vi-VN')}</td>
       <td class="border p-2 text-right font-bold ${r.stock <= 0 ? 'text-red-600' : 'text-green-700'}">${r.stock.toLocaleString('vi-VN')}</td>
     </tr>
   `).join('');
