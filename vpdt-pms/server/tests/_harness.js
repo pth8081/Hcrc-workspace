@@ -124,7 +124,11 @@ function baseCatalogSeed() {
     sensitiveKeywords: [
       { id: 1, term: 'nghỉ việc tập thể', category: 'RISK' },
       { id: 2, term: 'chửi', category: 'ABUSE' }
-    ]
+    ],
+    // Chuyên đề Nhịp Sống HCRC/Góc Chia Sẻ (Đợt 1) — bắt buộc để tạo được internalPosts type NEWS/SHARE
+    // (xem __mockValidateInternalPostCreate ở _mock-backend.js, mirrors createValidation.js).
+    internalNewsCategories: [{ key: 'HOAT_DONG_CHUNG', label: 'Hoạt động chung' }],
+    internalShareCategories: [{ key: 'CONG_VIEC', label: 'Góc công việc' }]
   };
 }
 

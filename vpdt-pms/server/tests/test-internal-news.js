@@ -30,6 +30,7 @@ async function main() {
       await page.evaluate(() => {
         document.getElementById('internalTitle').value = 'Thông báo nghỉ lễ 2/9';
         document.getElementById('internalContent').value = 'Công ty nghỉ lễ Quốc khánh từ ngày 1/9 đến 3/9.';
+        document.getElementById('internalPostCategory').value = 'HOAT_DONG_CHUNG';
       });
       await page.evaluate(() => submitInternalPost({ preventDefault() {}, target: { reset() {} } }));
 

@@ -106,12 +106,16 @@ async function filterSubmissionsForUser(submissions, user) {
 }
 
 // Khớp khối lọc trong render bài Truyền Thông Nội Bộ (public/index.html, ~dòng 19311-19317) — bài
-// PENDING/REJECTED (chỉ xảy ra ở Góc chia sẻ) chỉ hiện cho chính tác giả hoặc người có quyền duyệt.
+// DRAFT/PENDING/REJECTED/NEED_INFO/HIDDEN chỉ hiện cho chính tác giả hoặc người có quyền duyệt. Riêng
+// APPROVED còn thêm 1 điều kiện: nếu có publishAt (lịch đăng, chỉ NEWS) và CHƯA tới giờ, bài vẫn ở
+// trạng thái hiển thị "Chờ đăng" — tính LIVE theo Date.now() (không cron, giống pinExpiresAt) — cũng chỉ
+// tác giả/người duyệt xem được cho tới khi tới giờ.
 function canViewInternalPost(user, post) {
   if (!user) return false;
-  const isPendingOrRejected = post.status === 'PENDING' || post.status === 'REJECTED';
-  if (!isPendingOrRejected) return true;
-  return post.author === user.username || !!(user.perms?.admin || user.perms?.internalPostApprove);
+  const isAuthorOrApprover = post.author === user.username || !!(user.perms?.admin || user.perms?.internalPostApprove);
+  if (post.status !== 'APPROVED') return isAuthorOrApprover;
+  if (post.publishAt && new Date(post.publishAt).getTime() > Date.now()) return isAuthorOrApprover;
+  return true;
 }
 
 // Ẩn dữ liệu cờ cảnh báo bình luận nhạy cảm (flagged/flagCategories/flagTerms — xem
@@ -119,13 +123,17 @@ function canViewInternalPost(user, post) {
 // đây stripPasswords()/sanitizeEmailConfig() (routes/data.js) đã theo đúng nguyên tắc "ẩn ở SERVER,
 // không chỉ ẩn ở giao diện" cho dữ liệu nhạy cảm; nhãn cảnh báo + lý do vi phạm cũng cần ẩn tương tự —
 // nếu chỉ ẩn ở client, ai gọi thẳng GET /api/data vẫn đọc được lý do bị đánh dấu của bất kỳ bình luận
-// nào (kể cả bình luận không phải của mình).
+// nào (kể cả bình luận không phải của mình). Bình luận pendingModeration (Chờ Kiểm Duyệt) còn bị LOẠI
+// HẲN khỏi mảng trả về cho người không có quyền duyệt — không chỉ ẩn cờ như trước, vì bản thân nội dung
+// bình luận vi phạm cũng không được công khai cho tới khi người kiểm duyệt xử lý.
 function sanitizeInternalPostCommentsForUser(post, user) {
-  if (!Array.isArray(post.comments) || !post.comments.some(c => c.flagged)) return post;
+  if (!Array.isArray(post.comments) || !post.comments.length) return post;
   if (canApproveInternalPost(user)) return post;
   return {
     ...post,
-    comments: post.comments.map(({ flagged, flagCategories, flagTerms, flagDismissedBy, flagDismissedAt, ...rest }) => rest)
+    comments: post.comments
+      .filter(c => !c.pendingModeration || c.username === user.username)
+      .map(({ flagged, flagCategories, flagTerms, flagDismissedBy, flagDismissedAt, ...rest }) => rest)
   };
 }
 

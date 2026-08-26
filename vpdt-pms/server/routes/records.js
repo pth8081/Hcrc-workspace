@@ -384,6 +384,13 @@ router.post('/internalPosts/:id/comment/:commentId/delete-comment', (req, res) =
   withInternalPostAction(req, res, 'comment-delete', (payload, user, item) =>
     recordActions.deleteInternalPostComment(user, item, Number(req.params.commentId))));
 
+// POST /api/records/internalPosts/:id/comment/:commentId/like — reaction cấp bình luận (Đợt 1 Nhịp
+// Sống HCRC, dùng để xếp hạng "3-5 bình luận nổi bật" ở client), mở cho mọi người đã đăng nhập như
+// like cấp bài viết ở trên.
+router.post('/internalPosts/:id/comment/:commentId/like', (req, res) =>
+  withInternalPostAction(req, res, 'comment-like', (payload, user, item) =>
+    recordActions.toggleInternalPostCommentLike(user, item, Number(req.params.commentId))));
+
 // POST /api/records/internalPosts/:id/register-training
 router.post('/internalPosts/:id/register-training', (req, res) =>
   withInternalPostAction(req, res, 'register-training', (payload, user, item) => recordActions.registerInternalPostTraining(user, item)));
@@ -400,6 +407,25 @@ router.post('/internalPosts/:id/approve', (req, res) =>
 
 router.post('/internalPosts/:id/reject', (req, res) =>
   withInternalPostAction(req, res, 'reject', recordActions.rejectInternalPost));
+
+// POST /api/records/internalPosts/:id/request-info — "Yêu cầu bổ sung" cho Góc Chia Sẻ (PENDING ->
+// NEED_INFO), cùng khuôn Thanh Toán (requestPaymentInfo). Chỉ canApproveInternalPost (kiểm tra ở
+// lib/recordActions.js).
+router.post('/internalPosts/:id/request-info', (req, res) =>
+  withInternalPostAction(req, res, 'request-info', recordActions.requestInternalPostInfo));
+
+// POST /api/records/internalPosts/:id/hide|unhide — Admin chủ động ẩn/hiện lại bài đã đăng (APPROVED
+// <-> HIDDEN, khác PENDING/REJECTED vốn là kết quả duyệt nội dung).
+router.post('/internalPosts/:id/hide', (req, res) =>
+  withInternalPostAction(req, res, 'hide', (payload, user, item) => recordActions.hideInternalPost(user, item)));
+
+router.post('/internalPosts/:id/unhide', (req, res) =>
+  withInternalPostAction(req, res, 'unhide', (payload, user, item) => recordActions.unhideInternalPost(user, item)));
+
+// POST /api/records/internalPosts/:id/edit — sửa bài Nháp/bài "Yêu cầu bổ sung" (NEED_INFO) rồi tự gửi
+// lại theo đúng luật gán status lúc tạo (chỉ tác giả/admin, kiểm tra ở lib/recordActions.js).
+router.post('/internalPosts/:id/edit', (req, res) =>
+  withInternalPostAction(req, res, 'edit', recordActions.editInternalPost));
 
 // Bước 3 — Công việc có nhiều action cùng khuôn "tìm việc trong collection, khoá, gọi hàm xác minh +
 // mutate ở lib/recordActions.js, trả về bản ghi mới" — gom vào 1 helper dùng chung thay vì lặp lại
@@ -622,6 +648,113 @@ router.post('/trainingDocuments/:id/delete', (req, res) => deleteAdminOnly(req, 
 router.post('/trainingClasses/:id/delete', (req, res) => deleteAdminOnly(req, res, 'trainingClasses'));
 router.post('/careerPaths/:id/delete', (req, res) => deleteAdminOnly(req, res, 'careerPaths'));
 router.post('/trainingTests/:id/delete', (req, res) => deleteAdminOnly(req, res, 'trainingTests'));
+// Đợt 4: trainingCourses — xoá cùng khuôn "xóa = quyền tối cao, chỉ Admin" của mọi collection Đào Tạo khác ở trên.
+router.post('/trainingCourses/:id/delete', (req, res) => deleteAdminOnly(req, res, 'trainingCourses'));
+
+// POST /api/records/trainingPlans/:id/edit (Đợt 5: Kế Hoạch Đào Tạo) — sửa 1 dòng kế hoạch đã lập. Đọc
+// kèm appData (depts/stores có sẵn, dùng để kiểm tra targetDept) + trainingCourses (kiểm tra courseId
+// mới nếu có đổi) TRƯỚC khi khoá đúng 1 dòng trainingPlans để sửa — cùng khuôn trainingClasses/:id/edit
+// ở dưới xa hơn trong file này.
+router.post('/trainingPlans/:id/edit', async (req, res) => {
+  const itemId = Number(req.params.id);
+  if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
+  try {
+    const { freshUser } = await getFreshUser(req);
+    const appData = await getAllAppData();
+    appData.trainingCourses = await getAllForCollection('trainingCourses');
+    const result = await withLockedRecordForCollection('trainingPlans', itemId, (item) =>
+      recordActions.editTrainingPlan(req.body, freshUser, item, appData));
+    res.json({ ok: true, item: result });
+  } catch (err) {
+    handleError(res, `trainingPlans/${req.params.id}/edit`, err);
+  }
+});
+// Xoá kế hoạch — cùng khuôn "xóa = quyền tối cao, chỉ Admin" như trainingCourses ở trên (KHÔNG chỉ
+// trainingManage — số thực tế đối chiếu vẫn tính sống từ trainingClasses/trainingRegistrations, không
+// phụ thuộc gì vào việc kế hoạch còn tồn tại hay không, nên xoá nhầm không làm mất dữ liệu đã phát sinh).
+router.post('/trainingPlans/:id/delete', (req, res) => deleteAdminOnly(req, res, 'trainingPlans'));
+
+// ===================== ĐÀO TẠO TÂN BINH (Đợt 6) =====================
+// POST /api/records/onboardingPaths/:id/edit — sửa 1 Lộ Trình đã tạo. Đọc kèm trainingTests +
+// trainingDocuments (kiểm tra test1Id/test2Id/stage{1,2}DocumentIds mới nếu có đổi) TRƯỚC khi khoá đúng
+// 1 dòng onboardingPaths để sửa — cùng khuôn trainingPlans/:id/edit ở trên.
+router.post('/onboardingPaths/:id/edit', async (req, res) => {
+  const itemId = Number(req.params.id);
+  if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
+  try {
+    const { freshUser } = await getFreshUser(req);
+    const appData = await getAllAppData();
+    appData.trainingTests = await getAllForCollection('trainingTests');
+    appData.trainingDocuments = await getAllForCollection('trainingDocuments');
+    const result = await withLockedRecordForCollection('onboardingPaths', itemId, (item) =>
+      recordActions.editOnboardingPath(req.body, freshUser, item, appData));
+    res.json({ ok: true, item: result });
+  } catch (err) {
+    handleError(res, `onboardingPaths/${req.params.id}/edit`, err);
+  }
+});
+// Xoá Lộ Trình — cùng khuôn "xóa = quyền tối cao, chỉ Admin" như mọi catalog Đào Tạo khác ở trên (KHÔNG
+// xoá kèm theo các onboardingProgress đã phân công theo lộ trình này — những hồ sơ đó giữ nguyên
+// pathName đã snapshot, chỉ mất khả năng tra cứu lại path.test1Id/test2Id/stage3Criteria gốc; chấp nhận
+// đánh đổi này, cùng tinh thần trainingCourses/trainingPlans xoá không dọn dẹp dữ liệu đã phát sinh).
+router.post('/onboardingPaths/:id/delete', (req, res) => deleteAdminOnly(req, res, 'onboardingPaths'));
+
+// POST /api/records/onboardingProgress/:id/submit-stage-test — chính nhân viên được phân công tự làm
+// bài test Giai đoạn 1/2 (đăng nhập bắt buộc qua requireAuth ở đầu file). Đọc onboardingPaths +
+// trainingTests TRƯỚC khi khoá đúng 1 dòng onboardingProgress để chấm+ghi — khoá theo ĐÚNG 1 dòng
+// (UPDLOCK) đã đủ chặn race 2 request nộp bài cùng lúc của CHÍNH người đó (khác submit-test của
+// trainingClasses cần khoá theo classId+username vì còn phải ghi thêm 1 collection khác
+// (trainingTestSubmissions) — ở đây kết quả ghi thẳng vào ĐÚNG 1 dòng đang khoá, không có collection phụ
+// nào khác cần đồng bộ).
+router.post('/onboardingProgress/:id/submit-stage-test', async (req, res) => {
+  const itemId = Number(req.params.id);
+  if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
+  try {
+    const { freshUser } = await getFreshUser(req);
+    const paths = await getAllForCollection('onboardingPaths');
+    const tests = await getAllForCollection('trainingTests');
+    const result = await withLockedRecordForCollection('onboardingProgress', itemId, (item) => {
+      const path = paths.find(p => p.id === item.pathId);
+      return recordActions.submitOnboardingStageTest(req.body, freshUser, item, path, tests);
+    });
+    res.json({ ok: true, item: result });
+  } catch (err) {
+    handleError(res, `onboardingProgress/${req.params.id}/submit-stage-test`, err);
+  }
+});
+// POST /api/records/onboardingProgress/:id/evaluate-stage3 — quản lý CÙNG phòng ban/siêu thị với nhân
+// viên được phân công (onboardingEvaluate) đánh giá Giai đoạn 3. Cần req.allUsers (dept THẬT hiện tại
+// của nhân viên, đọc sống — xem canEvaluateOnboardingStage3(), lib/recordActions.js) — getFreshUser() đã
+// có sẵn từ requireAuth, không cần đọc DB thêm lần nào nữa.
+router.post('/onboardingProgress/:id/evaluate-stage3', async (req, res) => {
+  const itemId = Number(req.params.id);
+  if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
+  try {
+    const { freshUser, users } = await getFreshUser(req);
+    const result = await withLockedRecordForCollection('onboardingProgress', itemId, (item) =>
+      recordActions.evaluateOnboardingStage3(req.body, freshUser, item, users));
+    res.json({ ok: true, item: result });
+  } catch (err) {
+    handleError(res, `onboardingProgress/${req.params.id}/evaluate-stage3`, err);
+  }
+});
+// POST /api/records/onboardingProgress/:id/issue-certificate — trainingManage/admin cấp Chứng Chỉ Hoàn
+// Thành sau khi cả 3 giai đoạn đã Đạt. Server CHỈ đánh dấu certificateIssued/issuedAt/issuedBy — PDF
+// dựng lại hoàn toàn ở client (xem lib/recordActions.js issueOnboardingCertificate()).
+router.post('/onboardingProgress/:id/issue-certificate', async (req, res) => {
+  const itemId = Number(req.params.id);
+  if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
+  try {
+    const { freshUser } = await getFreshUser(req);
+    const result = await withLockedRecordForCollection('onboardingProgress', itemId, (item) =>
+      recordActions.issueOnboardingCertificate(freshUser, item));
+    res.json({ ok: true, item: result });
+  } catch (err) {
+    handleError(res, `onboardingProgress/${req.params.id}/issue-certificate`, err);
+  }
+});
+// Xoá 1 dòng Phân Công — cùng khuôn "xóa = quyền tối cao, chỉ Admin" như mọi collection Đào Tạo khác.
+router.post('/onboardingProgress/:id/delete', (req, res) => deleteAdminOnly(req, res, 'onboardingProgress'));
 
 async function withTrainingRegAction(req, res, action, mutator) {
   const itemId = Number(req.params.id);
@@ -636,8 +769,29 @@ async function withTrainingRegAction(req, res, action, mutator) {
 }
 router.post('/trainingRegistrations/:id/cancel', (req, res) =>
   withTrainingRegAction(req, res, 'cancel', recordActions.cancelTrainingRegistration));
-router.post('/trainingRegistrations/:id/set-result', (req, res) =>
-  withTrainingRegAction(req, res, 'set-result', recordActions.setTrainingRegistrationResult));
+
+// set-result (Đợt 3) cần đọc kèm trainingClasses — quyền ghi giờ so theo canManageTrainingClass()
+// (trainingManage quản lý MỌI lớp, trainingInstruct chỉ đúng lớp mình được gán làm giảng viên, xem
+// lib/recordActions.js), không còn so trực tiếp reg.classCreator như trước Đợt 3 nên không dùng chung
+// được withTrainingRegAction() ở trên nữa (không có cls sẵn).
+router.post('/trainingRegistrations/:id/set-result', async (req, res) => {
+  const itemId = Number(req.params.id);
+  if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
+  try {
+    const { freshUser } = await getFreshUser(req);
+    const regs = await getAllForCollection('trainingRegistrations');
+    const reg = regs.find(r => r.id === itemId);
+    if (!reg) throw new HttpError(404, 'Không tìm thấy đăng ký');
+    const classes = await getAllForCollection('trainingClasses');
+    const cls = classes.find(c => c.id === reg.classId);
+    if (!cls) throw new HttpError(404, 'Không tìm thấy lớp học của đăng ký này');
+    const result = await withLockedRecordForCollection('trainingRegistrations', itemId, (item) =>
+      recordActions.setTrainingRegistrationResult(req.body, freshUser, item, cls));
+    res.json({ ok: true, item: result });
+  } catch (err) {
+    handleError(res, `trainingRegistrations/${req.params.id}/set-result`, err);
+  }
+});
 
 // POST /api/records/trainingClasses/:id/bulk-register — nhân sự (người tạo lớp) hoặc Admin thêm HÀNG
 // LOẠT học viên vào 1 lớp cùng lúc (dropdown chọn từng người, hoặc theo danh sách đọc từ file Excel —
@@ -664,6 +818,53 @@ router.post('/trainingClasses/:id/bulk-register', async (req, res) => {
     res.json({ ok: true, ...result });
   } catch (err) {
     handleError(res, `trainingClasses/${req.params.id}/bulk-register`, err);
+  }
+});
+
+// POST /api/records/trainingClasses/:id/edit (Đợt 3) — sửa nội dung/lịch lớp học đã tạo. Đọc kèm
+// trainingTests (kiểm tra testId mới nếu có đổi, cùng lý do routes/create.js) + req.allUsers (resolve
+// lại instructorUsername nếu có đổi giảng viên) + trainingCourses (Đợt 4: kiểm tra courseId mới nếu có
+// đổi) TRƯỚC khi khoá đúng 1 dòng trainingClasses để sửa.
+router.post('/trainingClasses/:id/edit', async (req, res) => {
+  const itemId = Number(req.params.id);
+  if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
+  try {
+    const { freshUser, users } = await getFreshUser(req);
+    const tests = await getAllForCollection('trainingTests');
+    const courses = await getAllForCollection('trainingCourses');
+    const result = await withLockedRecordForCollection('trainingClasses', itemId, (item) =>
+      recordActions.editTrainingClass(req.body, freshUser, item, tests, users, courses));
+    res.json({ ok: true, item: result });
+  } catch (err) {
+    handleError(res, `trainingClasses/${req.params.id}/edit`, err);
+  }
+});
+
+// POST /api/records/trainingClasses/:id/start-session và .../end-session (Đợt 3) — vòng đời trạng thái
+// buổi học THỦ CÔNG cho lớp OFFLINE ("Bắt Đầu Lớp"/"Kết Thúc Lớp"), KHÁC hẳn "status" (còn mở/đóng đăng
+// ký). Lớp ONLINE không có 2 action này (tính sống theo giờ, xem createValidation.js/index.html).
+router.post('/trainingClasses/:id/start-session', async (req, res) => {
+  const itemId = Number(req.params.id);
+  if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
+  try {
+    const { freshUser } = await getFreshUser(req);
+    const result = await withLockedRecordForCollection('trainingClasses', itemId, (item) =>
+      recordActions.startOfflineTrainingClass(freshUser, item));
+    res.json({ ok: true, item: result });
+  } catch (err) {
+    handleError(res, `trainingClasses/${req.params.id}/start-session`, err);
+  }
+});
+router.post('/trainingClasses/:id/end-session', async (req, res) => {
+  const itemId = Number(req.params.id);
+  if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
+  try {
+    const { freshUser } = await getFreshUser(req);
+    const result = await withLockedRecordForCollection('trainingClasses', itemId, (item) =>
+      recordActions.endOfflineTrainingClass(freshUser, item));
+    res.json({ ok: true, item: result });
+  } catch (err) {
+    handleError(res, `trainingClasses/${req.params.id}/end-session`, err);
   }
 });
 
@@ -735,6 +936,20 @@ router.post('/recruitmentJobs/:id/close', async (req, res) => {
   }
 });
 
+// Đợt 2: Bản Tin Tuyển Dụng — "Xác Nhận Đã Tuyển Đủ" (OPEN -> FILLED), cùng khuôn /close ở trên.
+router.post('/recruitmentJobs/:id/confirm-filled', async (req, res) => {
+  const itemId = Number(req.params.id);
+  if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
+  try {
+    const { freshUser } = await getFreshUser(req);
+    const result = await withLockedRecordForCollection('recruitmentJobs', itemId, (item) =>
+      recordActions.confirmRecruitmentJobFilled(req.body, freshUser, item));
+    res.json({ ok: true, item: result });
+  } catch (err) {
+    handleError(res, `recruitmentJobs/${req.params.id}/confirm-filled`, err);
+  }
+});
+
 router.post('/recruitmentReferrals/:id/set-status', async (req, res) => {
   const itemId = Number(req.params.id);
   if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
@@ -748,9 +963,10 @@ router.post('/recruitmentReferrals/:id/set-status', async (req, res) => {
   }
 });
 
-// "Xác nhận" 1 nhân viên hoàn thành lộ trình thăng tiến — cùng khuôn /contracts/:id/start-payment ở
-// trên (mutatorFn vừa xác thực (đủ điều kiện PASSED hết các lớp bắt buộc) vừa trả bản NHÁP, PHẢI insert
-// thêm vào collection careerPathConfirmations riêng ngay sau khi khoá careerPaths nhả ra).
+// "Xác nhận" 1 nhân viên hoàn thành 1 CẤP BẬC (stageIndex) của lộ trình thăng tiến (Đợt 7) — cùng khuôn
+// /contracts/:id/start-payment ở trên (mutatorFn vừa xác thực (đủ điều kiện PASSED hết các chương trình
+// bắt buộc của ĐÚNG cấp bậc này + cấp trước đó đã được xác nhận) vừa trả bản NHÁP, PHẢI insert thêm vào
+// collection careerPathConfirmations riêng ngay sau khi khoá careerPaths nhả ra).
 router.post('/careerPaths/:id/confirm', async (req, res) => {
   const itemId = Number(req.params.id);
   if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
@@ -758,9 +974,12 @@ router.post('/careerPaths/:id/confirm', async (req, res) => {
     const { freshUser, users } = await getFreshUser(req);
     const allRegs = await getAllForCollection('trainingRegistrations');
     const existingConfirmations = await getAllForCollection('careerPathConfirmations');
+    // Cần tra cứu chéo classId -> courseId (stage.requiredCourseIds trỏ vào chương trình, không phải
+    // lớp cụ thể — xem confirmCareerPathForEmployee()).
+    const trainingClasses = await getAllForCollection('trainingClasses');
     let draft = null;
     const result = await withLockedRecordForCollection('careerPaths', itemId, (item) => {
-      draft = recordActions.confirmCareerPathForEmployee(req.body, freshUser, item, allRegs, existingConfirmations, users);
+      draft = recordActions.confirmCareerPathForEmployee(req.body, freshUser, item, allRegs, existingConfirmations, users, trainingClasses);
       return item;
     });
     const confirmation = await createForCollection('careerPathConfirmations', () => ({ ...draft, id: Date.now() }));

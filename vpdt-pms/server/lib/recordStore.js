@@ -30,7 +30,17 @@ const { HttpError } = require('./httpErrors');
 // vẫn ghi thẳng qua đường /api/data/internalPosts chung, không xác thực gì — đã xây route riêng cho cả
 // 5 hành động này trong routes/records.js TRƯỚC KHI migrate storage ở bước này (xem
 // lib/recordActions.js phần "TRUYỀN THÔNG NỘI BỘ").
-const MIGRATED_COLLECTIONS = new Set(['submissions', 'docs', 'carRegs', 'officeReqs', 'contracts', 'meetings', 'meetingMinutes', 'internalPosts', 'paymentRequests', 'vppPeriods', 'vppRegistrations', 'reportPeriods', 'reportEntries', 'reportSlideTemplates', 'trainingDocuments', 'trainingClasses', 'trainingRegistrations', 'careerPaths', 'careerPathConfirmations', 'trainingTests', 'trainingTestSubmissions', 'recruitmentJobs', 'recruitmentReferrals', 'itPriceApprovals', 'itSupportTickets', 'uniformPeriods', 'uniformIssuances', 'uniformStockAdjustments', 'budgetTemplates', 'budgetPeriods', 'budgetEntries']);
+// trainingCourses (Đợt 4): catalog "Chương Trình" — id+name+category+description, TÁI SỬ DỤNG được cho
+// nhiều trainingClasses/trainingDocuments (courseId, tuỳ chọn) — cùng khuôn budgetTemplates/
+// reportSlideTemplates ở trên (catalog nhỏ, quản lý qua create/delete chung, không cần bảng riêng).
+// trainingPlans (Đợt 5): "Kế Hoạch Đào Tạo" theo tháng — cùng khuôn trainingCourses ở trên (catalog nhỏ,
+// quản lý qua create/edit/delete chung), số thực tế (actual) hoàn toàn KHÔNG lưu ở đây — tính SỐNG từ
+// trainingClasses/trainingRegistrations tại thời điểm xem (xem index.html renderTrainingPlanDashboard()).
+// onboardingPaths/onboardingProgress (Đợt 6, Đào Tạo Tân Binh): onboardingPaths là catalog tái sử dụng
+// (cùng khuôn trainingCourses), onboardingProgress là 1 dòng/1 nhân viên được phân công — hạn Giai đoạn
+// 1/2/3 tính SỐNG từ onboardingProgress.startDate (đã snapshot lúc phân công) tại thời điểm xem, KHÔNG
+// lưu deadline, cùng tinh thần trainingPlans ở trên.
+const MIGRATED_COLLECTIONS = new Set(['submissions', 'docs', 'carRegs', 'officeReqs', 'contracts', 'meetings', 'meetingMinutes', 'internalPosts', 'paymentRequests', 'vppPeriods', 'vppRegistrations', 'reportPeriods', 'reportEntries', 'reportSlideTemplates', 'trainingDocuments', 'trainingClasses', 'trainingRegistrations', 'careerPaths', 'careerPathConfirmations', 'trainingTests', 'trainingTestSubmissions', 'trainingCourses', 'trainingPlans', 'onboardingPaths', 'onboardingProgress', 'recruitmentJobs', 'recruitmentReferrals', 'itPriceApprovals', 'itSupportTickets', 'uniformPeriods', 'uniformIssuances', 'uniformStockAdjustments', 'budgetTemplates', 'budgetPeriods', 'budgetEntries']);
 
 function toRecord(row) {
   return JSON.parse(row.Payload);

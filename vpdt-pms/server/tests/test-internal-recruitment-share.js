@@ -43,6 +43,9 @@ async function main() {
         document.getElementById('rjRequirements').value = 'Tốt nghiệp Đại học chuyên ngành Kế toán, tối thiểu 1 năm kinh nghiệm.';
         document.getElementById('rjLocation').value = 'Trụ sở chính';
         document.getElementById('rjSlots').value = '1';
+        document.getElementById('rjMonth').value = '2026-08';
+        document.getElementById('rjDept').value = 'Phòng Kế Toán';
+        document.getElementById('rjContactInfo').value = 'hr.mai@company.com - 0900000010';
       });
       await page.evaluate(() => submitRecruitmentJob({ preventDefault() {}, target: { reset() {} } }));
       const jobs = await page.evaluate(() => DB.recruitmentJobs);
@@ -50,8 +53,30 @@ async function main() {
       jobId = jobs[0].id;
       assertEqual(jobs[0].status, 'OPEN', 'new job should be OPEN');
       assertEqual(jobs[0].slots, 1, 'slots mismatch');
+      // Đợt 2: Bản Tin Tuyển Dụng — month/dept/contactInfo mới.
+      assertEqual(jobs[0].month, '2026-08', 'month mismatch');
+      assertEqual(jobs[0].hiringDept, 'Phòng Kế Toán', 'hiringDept mismatch');
+      assertEqual(jobs[0].dept, hr.dept, 'dept (creator dept, forceOwnDept) should stay the HR user\'s own dept, not hiringDept');
+      assertEqual(jobs[0].contactInfo, 'hr.mai@company.com - 0900000010', 'contactInfo mismatch');
       const alerts = await page.evaluate(() => window.__alerts.slice());
       assert(alerts.some((a) => a.includes('Đã đăng tin tuyển dụng thành công')), 'expected success alert');
+    });
+
+    await run('posting a job without contactInfo is rejected (Đợt 2 bắt buộc)', async () => {
+      await page.evaluate(() => {
+        document.getElementById('rjTitle').value = 'Tin thiếu liên hệ';
+        document.getElementById('rjDescription').value = 'Nội dung...';
+        document.getElementById('rjContactInfo').value = '';
+      });
+      await page.evaluate(() => { window.__alerts.length = 0; });
+      const countBefore = await page.evaluate(() => DB.recruitmentJobs.length);
+      await page.evaluate(() => submitRecruitmentJob({ preventDefault() {}, target: { reset() {} } }));
+      const countAfter = await page.evaluate(() => DB.recruitmentJobs.length);
+      assertEqual(countAfter, countBefore, 'job count should not change when contactInfo is missing');
+      const alerts = await page.evaluate(() => window.__alerts.slice());
+      assert(alerts.some((a) => a.includes('Thiếu thông tin liên hệ')), `expected contactInfo-required alert, got ${JSON.stringify(alerts)}`);
+      // Restore contactInfo for the rest of the suite (form fields persist across evaluate() calls).
+      await page.evaluate(() => { document.getElementById('rjContactInfo').value = 'hr.mai@company.com - 0900000010'; });
     });
 
     await run('staff without internalRecruitmentCreate is blocked from posting a job', async () => {
@@ -114,6 +139,68 @@ async function main() {
       assertEqual(referral.statusByName, 'Phạm Thị Mai', 'statusByName should be the HR user');
     });
 
+    // ===== Đợt 2: Bản Tin Tuyển Dụng — trạng thái FILLED ("Đã tuyển đủ") =====
+    let job2Id = null;
+    await run('HR posts a second job to exercise the FILLED (Đã tuyển đủ) flow', async () => {
+      await page.evaluate((u) => { currentUser = u; }, hr);
+      await page.evaluate(() => {
+        document.getElementById('rjTitle').value = 'Nhân viên Thu Ngân';
+        document.getElementById('rjDescription').value = 'Thu ngân tại siêu thị.';
+        document.getElementById('rjRequirements').value = '';
+        document.getElementById('rjLocation').value = 'Siêu thị Quận 1';
+        document.getElementById('rjSlots').value = '2';
+        document.getElementById('rjContactInfo').value = 'hr.mai@company.com';
+      });
+      await page.evaluate(() => submitRecruitmentJob({ preventDefault() {}, target: { reset() {} } }));
+      const jobs = await page.evaluate(() => DB.recruitmentJobs);
+      assertEqual(jobs.length, 2, 'expected exactly 2 recruitment jobs so far');
+      job2Id = jobs.find((j) => j.title === 'Nhân viên Thu Ngân').id;
+      assertEqual((await page.evaluate((id) => DB.recruitmentJobs.find((j) => j.id === id).status, job2Id)), 'OPEN', 'job2 should start OPEN');
+    });
+
+    await run('staff without internalRecruitmentCreate cannot confirm a job as "Đã tuyển đủ"', async () => {
+      await page.evaluate((u) => { currentUser = u; }, staff);
+      await page.evaluate(() => { window.__alerts.length = 0; });
+      await page.evaluate((id) => confirmRecruitmentJobFilledUi(id), job2Id);
+      const job = await page.evaluate((id) => DB.recruitmentJobs.find((j) => j.id === id), job2Id);
+      assertEqual(job.status, 'OPEN', 'job2 should remain OPEN when a non-HR user tries to confirm it filled');
+      const alerts = await page.evaluate(() => window.__alerts.slice());
+      assert(alerts.some((a) => a.includes('không có quyền xác nhận')), `expected permission alert, got ${JSON.stringify(alerts)}`);
+    });
+
+    await run('HR confirms job2 as "Đã tuyển đủ" (OPEN -> FILLED)', async () => {
+      await page.evaluate((u) => { currentUser = u; }, hr);
+      await page.evaluate((id) => confirmRecruitmentJobFilledUi(id), job2Id);
+      const job = await page.evaluate((id) => DB.recruitmentJobs.find((j) => j.id === id), job2Id);
+      assertEqual(job.status, 'FILLED', 'job2 should now be FILLED');
+      assertEqual(job.filledByName, 'Phạm Thị Mai', 'filledByName should be the HR user');
+      assert(!!job.filledAt, 'filledAt should be set');
+    });
+
+    await run('confirming an already-FILLED job again is rejected', async () => {
+      await page.evaluate(() => { window.__alerts.length = 0; });
+      await page.evaluate((id) => confirmRecruitmentJobFilledUi(id), job2Id);
+      const job = await page.evaluate((id) => DB.recruitmentJobs.find((j) => j.id === id), job2Id);
+      assertEqual(job.status, 'FILLED', 'job2 should remain FILLED');
+      const alerts = await page.evaluate(() => window.__alerts.slice());
+      assert(alerts.some((a) => a.includes('Chỉ có thể xác nhận đã tuyển đủ với tin đang tuyển')), `expected FILLED-guard alert, got ${JSON.stringify(alerts)}`);
+    });
+
+    await run('HR closes job2 from FILLED (Đợt 2 cho phép đóng từ OPEN hoặc FILLED)', async () => {
+      await page.evaluate((id) => closeRecruitmentJobUi(id), job2Id);
+      const job = await page.evaluate((id) => DB.recruitmentJobs.find((j) => j.id === id), job2Id);
+      assertEqual(job.status, 'CLOSED', 'job2 should now be CLOSED');
+    });
+
+    await run('closing an already-CLOSED job is rejected', async () => {
+      await page.evaluate(() => { window.__alerts.length = 0; });
+      await page.evaluate((id) => closeRecruitmentJobUi(id), job2Id);
+      const job = await page.evaluate((id) => DB.recruitmentJobs.find((j) => j.id === id), job2Id);
+      assertEqual(job.status, 'CLOSED', 'job2 should remain CLOSED');
+      const alerts = await page.evaluate(() => window.__alerts.slice());
+      assert(alerts.some((a) => a.includes('đã đóng từ trước')), `expected already-closed alert, got ${JSON.stringify(alerts)}`);
+    });
+
     await run('HR closes the job posting', async () => {
       await page.evaluate((id) => closeRecruitmentJobUi(id), jobId);
       const job = await page.evaluate((id) => DB.recruitmentJobs.find((j) => j.id === id), jobId);
@@ -143,6 +230,7 @@ async function main() {
       await page.evaluate(() => {
         document.getElementById('internalTitle').value = 'Cảm nhận sau 1 năm gắn bó với công ty';
         document.getElementById('internalContent').value = 'Mình rất vui khi được làm việc cùng mọi người ở đây!';
+        document.getElementById('internalPostCategoryShare').value = 'CONG_VIEC';
       });
       await page.evaluate(() => submitInternalPost({ preventDefault() {}, target: { reset() {} } }));
       const posts = await page.evaluate(() => DB.internalPosts.filter((p) => p.type === 'SHARE'));
@@ -170,6 +258,7 @@ async function main() {
       await page.evaluate(() => {
         document.getElementById('internalTitle').value = 'Bài chia sẻ thứ hai';
         document.getElementById('internalContent').value = 'Nội dung bài chia sẻ thứ hai...';
+        document.getElementById('internalPostCategoryShare').value = 'CONG_VIEC';
       });
       await page.evaluate(() => submitInternalPost({ preventDefault() {}, target: { reset() {} } }));
       const posts = await page.evaluate(() => DB.internalPosts.filter((p) => p.type === 'SHARE' && p.status === 'PENDING'));

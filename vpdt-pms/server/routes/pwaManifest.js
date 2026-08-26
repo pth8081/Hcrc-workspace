@@ -15,7 +15,7 @@ const { getAppDataValueCached } = require('../lib/appData');
 // Danh mục ĐẦY ĐỦ các module/màn con có thể chọn làm phím tắt. Key là "moduleKey" (khớp đúng tên tab
 // dùng ở switchTab(), index.html) hoặc "moduleKey:subTabKey" cho những module có nhiều màn con điều
 // hướng qua setXSubTab() (khớp đúng giá trị subTab truyền vào hàm đó) — VD "internal:NEWS" mở thẳng
-// "Tin Nội Bộ" thay vì chỉ mở module "Truyền Thông" chung chung rồi phải tự bấm thêm. Trước đây các
+// "Nhịp Sống HCRC" thay vì chỉ mở module "Truyền Thông" chung chung rồi phải tự bấm thêm. Trước đây các
 // module có màn con (Hợp Đồng/Truyền Thông/Tổng Hợp/Hỗ Trợ IT) chỉ có 1 mục gộp chung ở đây — admin
 // không chọn được đúng màn con cụ thể muốn làm phím tắt dù màn đó có trong menu điều hướng, đây chính là
 // phần đã bổ sung. Đây là bản sao thủ công của danh sách tương ứng ở PWA_SHORTCUT_CATALOG_CLIENT trong
@@ -29,7 +29,7 @@ const PWA_SHORTCUT_CATALOG = {
   'contract:APPROVAL': 'Hợp Đồng - Phê Duyệt',
   'contract:MANAGE': 'Hợp Đồng - Quản Lý HĐ & Giấy Phép',
   minutes: 'Biên Bản Họp',
-  'internal:NEWS': 'Tin Nội Bộ',
+  'internal:NEWS': 'Nhịp Sống HCRC',
   'internal:TRAINING': 'Đào Tạo',
   'internal:RECRUITMENT': 'Tuyển Dụng',
   'internal:SHARE': 'Góc Chia Sẻ',

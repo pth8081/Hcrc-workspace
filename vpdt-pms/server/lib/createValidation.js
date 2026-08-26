@@ -601,22 +601,61 @@ const CREATE_MODULE_CONFIGS = {
     forceOwnDept: true,
     getScope: () => ({}),
     creatorField: 'author', creatorNameField: 'authorName',
-    extraValidate: (payload, collection, user) => {
+    extraValidate: (payload, collection, user, appData) => {
       const type = payload.type;
       const allowed = !!(
         user.perms?.admin ||
         type === 'SHARE' ||
         (type === 'NEWS' && user.perms?.internalNewsCreate) ||
-        (type === 'TRAINING' && user.perms?.internalTrainingCreate) ||
+        (type === 'TRAINING' && user.perms?.trainingManage) ||
         (type === 'REWARD' && user.perms?.internalRewardCreate)
       );
       if (!allowed) throw new CreateError(403, 'Bạn không có quyền đăng bài ở phân hệ này');
-      // Góc Chia Sẻ (SHARE) cần người có quyền internalPostApprove/admin duyệt trước khi công khai —
-      // status GÁN Ở SERVER (không tin giá trị client tự gửi). Người đăng đã có quyền duyệt thì không
-      // cần tự duyệt lại bài của chính mình. 3 type còn lại không qua bước duyệt (đã gác quyền đăng ở
-      // trên) nên luôn APPROVED.
-      payload.status = (type === 'SHARE' && !user.perms?.admin && !user.perms?.internalPostApprove)
-        ? 'PENDING' : 'APPROVED';
+
+      // postCategory ("chuyên đề") — chỉ NEWS (Nhịp Sống HCRC) và SHARE (Góc Chia Sẻ) có, dùng CHUNG
+      // tên field nhưng khác danh sách giá trị hợp lệ theo type (appData.internalNewsCategories vs
+      // appData.internalShareCategories) — xem defaults.js. 2 type còn lại (TRAINING/REWARD) không có
+      // khái niệm chuyên đề nên luôn xoá field này khỏi payload.
+      if (type === 'NEWS' || type === 'SHARE') {
+        const catList = type === 'NEWS' ? (appData.internalNewsCategories || []) : (appData.internalShareCategories || []);
+        const catKey = (payload.postCategory || '').trim();
+        if (!catKey || !catList.some(c => c.key === catKey)) {
+          throw new CreateError(400, 'Vui lòng chọn chuyên đề hợp lệ cho bài viết');
+        }
+        payload.postCategory = catKey;
+      } else {
+        delete payload.postCategory;
+      }
+
+      // Lưu Nháp (Đợt 1 Nhịp Sống HCRC/Góc Chia Sẻ) — tác giả vẫn cần đúng quyền đăng bài theo type ở
+      // trên, chỉ khác ở chỗ KHÔNG đưa vào hàng chờ duyệt/công khai ngay. submitInternalPostDraft() ở
+      // lib/recordActions.js sẽ chuyển DRAFT -> PENDING/APPROVED sau, dùng lại đúng luật gán status bên
+      // dưới (không lặp lại logic ở 2 chỗ).
+      const isDraft = payload.draft === true;
+      delete payload.draft;
+
+      // Lịch đăng bài (Nhịp Sống HCRC) — publishAt để trống = đăng ngay, có giá trị = "Chờ đăng" cho tới
+      // khi tới giờ (tính live ở canViewInternalPost/render, KHÔNG cron — giống pinExpiresAt bên dưới).
+      // Chỉ NEWS mới đặt lịch được (SHARE/TRAINING/REWARD giữ nguyên hành vi đăng ngay khi duyệt xong).
+      const publishAtRaw = payload.publishAt;
+      if (type === 'NEWS' && publishAtRaw) {
+        const ts = new Date(publishAtRaw).getTime();
+        if (!Number.isFinite(ts)) throw new CreateError(400, 'Thời gian đăng bài không hợp lệ');
+        payload.publishAt = new Date(ts).toISOString();
+      } else {
+        payload.publishAt = null;
+      }
+
+      if (isDraft) {
+        payload.status = 'DRAFT';
+      } else {
+        // Góc Chia Sẻ (SHARE) cần người có quyền internalPostApprove/admin duyệt trước khi công khai —
+        // status GÁN Ở SERVER (không tin giá trị client tự gửi). Người đăng đã có quyền duyệt thì không
+        // cần tự duyệt lại bài của chính mình. 3 type còn lại không qua bước duyệt (đã gác quyền đăng ở
+        // trên) nên luôn APPROVED.
+        payload.status = (type === 'SHARE' && !user.perms?.admin && !user.perms?.internalPostApprove)
+          ? 'PENDING' : 'APPROVED';
+      }
 
       // Ghim lên trang chủ (Đợt E) — chỉ Tin tức/Đào tạo/Khen thưởng (Góc chia sẻ còn phải qua duyệt
       // mới công khai nên không ghim được), chỉ người có quyền internalPostApprove/admin. pinExpiresAt
@@ -1034,24 +1073,63 @@ const CREATE_MODULE_CONFIGS = {
       payload.approvalComment = '';
     }
   },
-  // ===== ĐÀO TẠO (module con "Truyền Thông Nội Bộ" > Đào tạo) — tạm thời, MVP =====
-  // Dùng chung 1 cờ quyền internalTrainingCreate (đã có sẵn cho việc đăng bài "Đào tạo" kiểu cũ) cho cả
-  // 4 việc: tải tài liệu vào kho, tạo lớp học, tạo lộ trình thăng tiến, và xác nhận nhân viên hoàn thành
-  // lộ trình (routes/records.js) — không thêm cờ quyền riêng để giữ phạm vi gọn, admin luôn làm được.
+  // ===== ĐÀO TẠO (module con "Truyền Thông Nội Bộ" > Đào tạo) =====
+  // Đợt 3: cờ trainingManage (đổi tên từ internalTrainingCreate cũ, tự động migrate — xem
+  // public/index.html migrateLegacyPerms()) gác cả 4 việc TẠO MỚI: tải tài liệu vào kho, tạo lớp học,
+  // tạo bài test, tạo lộ trình thăng tiến (+ xác nhận nhân viên hoàn thành lộ trình, routes/records.js).
+  // trainingInstruct (quyền MỚI, hẹp hơn) KHÔNG tạo mới được gì ở đây — chỉ quản lý roster/kết quả của
+  // ĐÚNG lớp học họ được gán làm giảng viên (xem canManageTrainingClass(), lib/recordActions.js).
   trainingDocuments: {
     dbKey: 'trainingDocuments',
     forceOwnDept: true, // không có khái niệm phòng ban để chọn (kho dùng chung toàn công ty)
     getScope: () => ({}),
     creatorField: 'uploaderUsername', creatorNameField: 'uploaderName',
-    extraValidate: (payload, collection, user) => {
-      if (!user.perms?.admin && !user.perms?.internalTrainingCreate) {
+    extraValidate: (payload, collection, user, appData) => {
+      if (!user.perms?.admin && !user.perms?.trainingManage) {
         throw new CreateError(403, 'Bạn không có quyền tải lên tài liệu đào tạo');
       }
       if (!payload.category || !String(payload.category).trim()) throw new CreateError(400, 'Thiếu loại đào tạo');
       if (!payload.title || !String(payload.title).trim()) throw new CreateError(400, 'Thiếu tên tài liệu');
-      if (!payload.fileUrl) throw new CreateError(400, 'Vui lòng chọn tệp tài liệu cần tải lên');
       payload.category = String(payload.category).trim();
       payload.title = String(payload.title).trim();
+
+      // Đợt 4: Loại tài liệu — DOCUMENT (mặc định, giữ NGUYÊN hành vi cũ: bắt buộc fileUrl từ tải file
+      // .pdf/.docx/.xlsx), VIDEO (MỚI — nhúng Youtube qua videoUrl thay vì tải file, kiểm tra lỏng lẻo
+      // chỉ cần chứa "youtube.com" hoặc "youtu.be"), IMAGE (MỚI — vẫn dùng đúng cơ chế tải file như
+      // DOCUMENT, accept ảnh phía client, server không cần phân biệt thêm vì fileUrl đã là 1 file có
+      // thật, chỉ khác cách hiển thị ở client — thumbnail thay vì link tải).
+      const docType = (payload.docType === 'VIDEO' || payload.docType === 'IMAGE') ? payload.docType : 'DOCUMENT';
+      payload.docType = docType;
+      if (docType === 'VIDEO') {
+        const videoUrl = String(payload.videoUrl || '').trim();
+        if (!videoUrl) throw new CreateError(400, 'Vui lòng nhập link video Youtube');
+        if (!/youtube\.com|youtu\.be/i.test(videoUrl)) {
+          throw new CreateError(400, 'Link video phải là link Youtube hợp lệ (chứa youtube.com hoặc youtu.be)');
+        }
+        payload.videoUrl = videoUrl;
+        payload.fileUrl = null; payload.fileName = ''; payload.fileType = '';
+      } else {
+        if (!payload.fileUrl) {
+          throw new CreateError(400, docType === 'IMAGE' ? 'Vui lòng chọn ảnh cần tải lên' : 'Vui lòng chọn tệp tài liệu cần tải lên');
+        }
+        payload.videoUrl = '';
+      }
+
+      // Bắt Buộc Hoàn Thành (mandatory, Đợt 4) — CHỈ là cờ hiển thị (badge) ở phase này, KHÔNG có logic
+      // chặn/theo dõi hoàn thành nào đi kèm (nằm ngoài phạm vi đợt này, xem ghi chú PR).
+      payload.mandatory = payload.mandatory === true || payload.mandatory === 'true';
+
+      // Chương Trình (courseId, Đợt 4, tuỳ chọn) — gắn tài liệu vào 1 trainingCourses có thật nếu có
+      // chọn (appData.trainingCourses do CALLER đọc sẵn, xem routes/create.js); để trống vẫn hợp lệ,
+      // tài liệu cũ trước tính năng này không có field này vẫn hiển thị/hoạt động bình thường.
+      const courseId = (payload.courseId === '' || payload.courseId == null) ? null : Number(payload.courseId);
+      if (courseId != null) {
+        const courses = appData?.trainingCourses || [];
+        if (!Number.isFinite(courseId) || !courses.some(c => c.id === courseId)) {
+          throw new CreateError(400, 'Chương trình được chọn không hợp lệ');
+        }
+      }
+      payload.courseId = courseId;
     }
   },
   trainingClasses: {
@@ -1060,7 +1138,9 @@ const CREATE_MODULE_CONFIGS = {
     getScope: () => ({}),
     creatorField: 'creator', creatorNameField: 'creatorName',
     extraValidate: (payload, collection, user, appData) => {
-      if (!user.perms?.admin && !user.perms?.internalTrainingCreate) {
+      // Đợt 3: TẠO lớp mới luôn cần trainingManage (kể cả giảng viên đã có trainingInstruct từ trước
+      // cũng không tự tạo lớp được — họ chỉ quản lý lớp đã được gán làm giảng viên, xem baseline).
+      if (!user.perms?.admin && !user.perms?.trainingManage) {
         throw new CreateError(403, 'Bạn không có quyền tạo lớp học');
       }
       if (!payload.category || !String(payload.category).trim()) throw new CreateError(400, 'Thiếu loại đào tạo');
@@ -1077,6 +1157,18 @@ const CREATE_MODULE_CONFIGS = {
       // Kiểu lớp: ONLINE (mặc định, theo giáo trình đọc bắt buộc) hay OFFLINE (giáo trình chỉ là tài
       // liệu tham khảo giảng viên tự mở khi lên lớp, học viên không bắt buộc phải đọc trước).
       payload.mode = payload.mode === 'OFFLINE' ? 'OFFLINE' : 'ONLINE';
+      // Chương Trình (courseId, Đợt 4, tuỳ chọn) — gắn lớp vào 1 trainingCourses có thật nếu có chọn
+      // (appData.trainingCourses do CALLER đọc sẵn, xem routes/create.js). Hoàn toàn KHÔNG thay thế
+      // "title" (title vẫn là tên hiển thị riêng của LẦN CHẠY LỚP này, xem ghi chú đầu module) — để
+      // trống vẫn hợp lệ, lớp cũ trước tính năng này không có field này vẫn hoạt động bình thường.
+      const courseId = (payload.courseId === '' || payload.courseId == null) ? null : Number(payload.courseId);
+      if (courseId != null) {
+        const courses = appData?.trainingCourses || [];
+        if (!Number.isFinite(courseId) || !courses.some(c => c.id === courseId)) {
+          throw new CreateError(400, 'Chương trình được chọn không hợp lệ');
+        }
+      }
+      payload.courseId = courseId;
       // Gán bài test (tuỳ chọn, chọn từ Ngân Hàng Câu Hỏi) — testId phải khớp 1 bài test có thật tại
       // thời điểm tạo lớp (appData.trainingTests do routes/create.js đọc kèm, xem lib/recordStore.js).
       const testId = payload.testId === '' || payload.testId == null ? null : Number(payload.testId);
@@ -1092,6 +1184,31 @@ const CREATE_MODULE_CONFIGS = {
       const secPerQ = Number(payload.testSecondsPerQuestion);
       payload.testSecondsPerQuestion = Number.isFinite(secPerQ) && secPerQ >= 10 ? Math.floor(secPerQ) : 120;
       payload.status = 'OPEN';
+
+      // Giảng viên (Đợt 3) — instructor (tên hiển thị, chỉ để tương thích ngược với dữ liệu nhập tay
+      // trước đây) + instructorUsername (tài khoản hệ thống thật, dùng để so quyền trainingInstruct
+      // theo TỪNG lớp — xem canManageTrainingClass() ở lib/recordActions.js). Cùng khuôn
+      // carAssignedDriverUsername (lib/workflowEngine.js): server tự tra lại tên hiển thị từ
+      // appData.users thay vì tin nguyên "instructor" client tự gửi kèm, tránh lệch 2 trường. Để trống
+      // (không gán giảng viên) là hợp lệ — lớp đó chỉ trainingManage quản lý được.
+      const instructorUser = resolveTrainingInstructorUsername(payload.instructorUsername, appData?.users);
+      payload.instructorUsername = instructorUser ? instructorUser.username : null;
+      payload.instructor = instructorUser ? instructorUser.name : (payload.instructor ? String(payload.instructor).trim() : '');
+
+      // Danh Sách Được Mời (tuỳ chọn, Đợt 3) — rỗng/không set = KHÔNG giới hạn, mở tự do cho mọi người
+      // tự đăng ký (mặc định giữ nguyên hành vi mọi lớp đã có từ trước tính năng này) — xem enforce ở
+      // trainingRegistrations.extraValidate bên dưới. Bulk-add của HR (bulkRegisterTrainingClass()) HOÀN
+      // TOÀN không bị ảnh hưởng bởi danh sách này (là 1 quyền ghi đè riêng, xem baseline).
+      payload.inviteList = normalizeInviteList(payload.inviteList);
+
+      // Vòng đời trạng thái buổi học (Đợt 3) — KHÁC hẳn "status" ở trên (status = còn mở/đóng ĐĂNG KÝ,
+      // sessionState = buổi học đã bắt đầu/kết thúc chưa, 2 khái niệm trực giao, không đụng vào nhau).
+      // ONLINE tính sống theo giờ hệ thống ngay lúc hiển thị (không lưu — xem
+      // getTrainingClassSessionState() ở index.html, cùng tinh thần pinExpiresAt/publishAt có sẵn) nên
+      // để null ở đây. OFFLINE cần chuyển tay qua nút Bắt Đầu Lớp/Kết Thúc Lớp (xem
+      // startOfflineTrainingClass()/endOfflineTrainingClass() ở lib/recordActions.js) nên khởi tạo
+      // SCHEDULED.
+      payload.sessionState = payload.mode === 'OFFLINE' ? 'SCHEDULED' : null;
     }
   },
   // Ngân Hàng Câu Hỏi — bài test tạo ĐỘC LẬP với lớp học (tạo trước, gán vào lớp sau qua
@@ -1104,7 +1221,7 @@ const CREATE_MODULE_CONFIGS = {
     getScope: () => ({}),
     creatorField: 'creator', creatorNameField: 'creatorName',
     extraValidate: (payload, collection, user) => {
-      if (!user.perms?.admin && !user.perms?.internalTrainingCreate) {
+      if (!user.perms?.admin && !user.perms?.trainingManage) {
         throw new CreateError(403, 'Bạn không có quyền tạo bài test');
       }
       if (!payload.title || !String(payload.title).trim()) throw new CreateError(400, 'Thiếu tên bài test');
@@ -1136,6 +1253,122 @@ const CREATE_MODULE_CONFIGS = {
       payload.passScore = Number.isFinite(passScore) && passScore > 0 && passScore <= 100 ? passScore : 60;
     }
   },
+  // Chương Trình (trainingCourses, Đợt 4) — catalog "Chương Trình" TÁI SỬ DỤNG được cho nhiều LỚP HỌC
+  // khác nhau (trainingClasses.courseId, tuỳ chọn — xem extraValidate ở trên) và TÀI LIỆU
+  // (trainingDocuments.courseId, tuỳ chọn — xem extraValidate ở trên), tách biệt với "title" của từng
+  // lớp cụ thể (title vẫn là tên hiển thị riêng của LẦN CHẠY lớp đó, KHÔNG bị thay thế). Quản lý (tạo/
+  // xoá) CHỈ trainingManage — đây là danh mục hệ thống dùng chung (systemwide catalog config), khác
+  // trainingClasses/trainingTests (cũng trainingManage-only để TẠO nhưng trainingInstruct quản lý được
+  // roster/kết quả SAU khi tạo): trainingInstruct KHÔNG có lý do quản lý catalog này, chỉ cần ĐỌC danh
+  // sách khi tạo/sửa đúng lớp mình được gán (không gác gì thêm ở đây vì đọc dữ liệu qua GET /api/data
+  // chung, không qua route tạo/xoá này).
+  trainingCourses: {
+    dbKey: 'trainingCourses',
+    forceOwnDept: true, // không có khái niệm phòng ban riêng (danh mục dùng chung toàn công ty, giống trainingDocuments/trainingClasses)
+    getScope: () => ({}),
+    creatorField: 'creator', creatorNameField: 'creatorName',
+    extraValidate: (payload, collection, user) => {
+      if (!user.perms?.admin && !user.perms?.trainingManage) {
+        throw new CreateError(403, 'Bạn không có quyền tạo chương trình đào tạo');
+      }
+      if (!payload.name || !String(payload.name).trim()) throw new CreateError(400, 'Thiếu tên chương trình');
+      if (!payload.category || !String(payload.category).trim()) throw new CreateError(400, 'Thiếu loại đào tạo');
+      payload.name = String(payload.name).trim();
+      payload.category = String(payload.category).trim();
+      payload.description = payload.description ? String(payload.description).trim() : '';
+    }
+  },
+  // Kế Hoạch Đào Tạo (trainingPlans, Đợt 5) — hồ sơ "Tháng X dự kiến mở bao nhiêu lớp/học viên/giờ" do
+  // trainingManage lập TRƯỚC, đối chiếu với trainingClasses/trainingRegistrations THẬT phát sinh trong
+  // đúng tháng đó (tính SỐNG ở client, xem index.html renderTrainingPlanDashboard() — KHÔNG lưu số thực
+  // tế vào đây) để ra % hoàn thành. Đây là danh mục dùng chung toàn công ty do HR/Đào Tạo lập kế hoạch,
+  // KHÔNG phải hồ sơ "thay mặt phòng ban mình tạo" — forceOwnDept:true chỉ để field "dept" (ai LẬP kế
+  // hoạch) có giá trị hợp lệ theo đúng cơ chế chung (validateAndPrepareCreate() LUÔN ép dept = user.dept
+  // khi forceOwnDept, xem cuối file), giống hệt trainingCourses/trainingClasses ở trên — KHÔNG liên quan
+  // gì tới "targetDept" (đơn vị mà kế hoạch này NHẮM TỚI, người lập tự chọn) bên dưới. Cố tình đặt tên
+  // "targetDept" thay vì tái dùng "dept" cho ý nghĩa này — dùng lại "dept" sẽ bị validateAndPrepareCreate()
+  // ghi đè mất giá trị người lập chọn, ép về phòng ban CỦA NGƯỜI LẬP KẾ HOẠCH thay vì đơn vị họ chọn nhắm
+  // tới (cùng cái bẫy đã gặp ở recruitmentJobs.hiringDept — xem giải thích đầy đủ ở đó).
+  trainingPlans: {
+    dbKey: 'trainingPlans',
+    forceOwnDept: true,
+    getScope: () => ({}),
+    creatorField: 'creator', creatorNameField: 'creatorName',
+    extraValidate: (payload, collection, user, appData) => {
+      if (!user.perms?.admin && !user.perms?.trainingManage) {
+        throw new CreateError(403, 'Bạn không có quyền lập kế hoạch đào tạo');
+      }
+      normalizeTrainingPlanFields(payload, appData);
+    }
+  },
+  // Đào Tạo Tân Binh Đợt 6 — "Lộ Trình" (onboardingPaths) là 1 catalog TÁI SỬ DỤNG được cho nhiều nhân
+  // viên mới khác nhau (giống hệt trainingCourses/careerPaths ở trên: tạo 1 lần, gán lại nhiều lần qua
+  // onboardingProgress.pathId bên dưới) — KHÔNG phải hồ sơ theo từng nhân viên. Giai đoạn 1/2 có bài
+  // test bắt buộc (test1Id/test2Id — PHẢI trỏ tới 1 trainingTests có thật, khác courseId/testId tuỳ
+  // chọn ở trainingClasses vì ở đây kết quả ĐẠT/KHÔNG ĐẠT của cả giai đoạn hoàn toàn phụ thuộc bài test
+  // này, không có đường nào khác để hoàn thành giai đoạn); Giai đoạn 3 KHÔNG có bài test, chỉ là tiêu
+  // chí đánh giá dạng văn bản tự do (stage3Criteria) để quản lý trực tiếp (onboardingEvaluate) chấm.
+  // Quản lý (tạo/sửa/xoá) CHỈ trainingManage — cùng tinh thần "danh mục dùng chung toàn công ty" như
+  // trainingCourses/trainingPlans.
+  onboardingPaths: {
+    dbKey: 'onboardingPaths',
+    forceOwnDept: true, // không có khái niệm phòng ban riêng (danh mục dùng chung toàn công ty)
+    getScope: () => ({}),
+    creatorField: 'creator', creatorNameField: 'creatorName',
+    extraValidate: (payload, collection, user, appData) => {
+      if (!user.perms?.admin && !user.perms?.trainingManage) {
+        throw new CreateError(403, 'Bạn không có quyền tạo lộ trình đào tạo tân binh');
+      }
+      normalizeOnboardingPathFields(payload, appData);
+    }
+  },
+  // "Phân Công" (onboardingProgress) — 1 dòng = 1 nhân viên ĐƯỢC GÁN 1 onboardingPaths cụ thể, theo dõi
+  // tiến độ 3 giai đoạn. startDate CHỤP LẠI (snapshot) từ hồ sơ user NGAY LÚC PHÂN CÔNG — cố tình KHÔNG
+  // đọc sống lại user.startDate mỗi lần tính hạn (khác kiểu "tính sống" của trainingPlans actual ở
+  // trên): nếu admin sửa lại startDate trên hồ sơ nhân viên sau khi đã phân công (vd sửa lỗi nhập liệu
+  // của người KHÁC), 1 onboardingProgress đang chạy dở không bị dịch chuyển hạn 1/2/3 theo, tránh xáo
+  // trộn 1 lộ trình đang được nhân viên/quản lý theo dõi giữa chừng. Phân công (tạo dòng) CHỈ
+  // trainingManage — nhân viên/quản lý Giai đoạn 3 không tự tạo được, chỉ tương tác qua các action riêng
+  // (submitOnboardingStageTest/evaluateOnboardingStage3/issueOnboardingCertificate, lib/recordActions.js).
+  onboardingProgress: {
+    dbKey: 'onboardingProgress',
+    forceOwnDept: true, // không có khái niệm phòng ban riêng ở CHÍNH hồ sơ phân công này (dept của NGƯỜI PHÂN CÔNG, chỉ metadata)
+    getScope: () => ({}),
+    creatorField: 'creator', creatorNameField: 'creatorName',
+    getLockKey: (payload, user) => `onboarding_progress:${payload?.employeeUsername}:${payload?.pathId}`,
+    extraValidate: (payload, collection, user, appData) => {
+      if (!user.perms?.admin && !user.perms?.trainingManage) {
+        throw new CreateError(403, 'Bạn không có quyền phân công lộ trình đào tạo tân binh');
+      }
+      const employeeUsername = String(payload.employeeUsername || '').trim();
+      if (!employeeUsername) throw new CreateError(400, 'Thiếu nhân viên cần phân công');
+      const employee = (appData?.users || []).find(u => u.username === employeeUsername);
+      if (!employee) throw new CreateError(404, 'Không tìm thấy tài khoản nhân viên này');
+      // Tiền đề bắt buộc — không tính được hạn Giai đoạn 1/2/3 nếu thiếu mốc ngày vào làm (xem baseline:
+      // startDate không tồn tại trên hồ sơ user trước Đợt 6, thêm mới ở form Quản Lý Người Dùng).
+      if (!employee.startDate) {
+        throw new CreateError(400, `Nhân viên "${employee.name}" chưa có Ngày Vào Làm Việc — vui lòng cập nhật hồ sơ nhân viên này ở Quản Lý Người Dùng trước khi phân công lộ trình đào tạo tân binh`);
+      }
+      const pathId = Number(payload.pathId);
+      const path = Number.isFinite(pathId) ? (appData?.onboardingPaths || []).find(p => p.id === pathId) : null;
+      if (!path) throw new CreateError(400, 'Lộ trình đào tạo tân binh được chọn không hợp lệ');
+      // 1 nhân viên chỉ được phân công 1 lần cho ĐÚNG 1 lộ trình — cho phép nhiều LỘ TRÌNH KHÁC NHAU
+      // cùng lúc (không chặn), cố tình dễ dãi đúng như baseline yêu cầu ("permissive, not a hard business
+      // rule to over-engineer"). Race 2 request phân công cùng cặp (employeeUsername, pathId) cùng lúc
+      // được chặn thêm ở tầng CSDL bằng getLockKey ở trên.
+      const dup = (collection || []).some(p => p.employeeUsername === employeeUsername && p.pathId === pathId);
+      if (dup) throw new CreateError(409, `Nhân viên "${employee.name}" đã được phân công lộ trình "${path.name}" từ trước rồi`);
+      payload.employeeUsername = employeeUsername;
+      payload.employeeName = employee.name;
+      payload.pathId = pathId;
+      payload.pathName = path.name;
+      payload.startDate = employee.startDate; // snapshot — xem giải thích ở comment đầu config này
+      payload.stage1Result = null; payload.stage1Score = null; payload.stage1SubmittedAt = null;
+      payload.stage2Result = null; payload.stage2Score = null; payload.stage2SubmittedAt = null;
+      payload.stage3Evaluation = null; payload.stage3EvaluatedBy = null; payload.stage3EvaluatedByName = null; payload.stage3EvaluatedAt = null; payload.stage3Note = '';
+      payload.certificateIssued = false; payload.certificateIssuedAt = null; payload.certificateIssuedBy = null;
+    }
+  },
   // Đăng ký lớp học — khớp đúng khuôn vppRegistrations (khoá theo cặp lớp+người để chặn race 2 request
   // đăng ký cùng lúc), chỉ khác: cho phép đăng ký lại sau khi tự HUỶ (result='CANCELLED', không phải chỉ
   // REJECTED) — huỷ ở đây do chính người đăng ký chủ động (không qua quy trình duyệt nào).
@@ -1163,6 +1396,14 @@ const CREATE_MODULE_CONFIGS = {
       if (activeRegs.some(r => r.creator === user.username)) {
         throw new CreateError(409, 'Bạn đã đăng ký lớp học này rồi');
       }
+      // Danh Sách Được Mời (Đợt 3) — rỗng/không set = mở cho mọi người (mặc định, giữ hành vi cũ);
+      // có danh sách -> CHỈ người trong đó được tự đăng ký. KHÔNG áp dụng cho admin/trainingManage tự
+      // đăng ký hộ ai (trường hợp hiếm) và hoàn toàn không đụng tới bulkRegisterTrainingClass() (nhân sự
+      // luôn ghi đè trực tiếp được, xem lib/recordActions.js).
+      const inviteList = Array.isArray(cls.inviteList) ? cls.inviteList : [];
+      if (inviteList.length && !inviteList.includes(user.username) && !user.perms?.admin) {
+        throw new CreateError(403, 'Lớp học này giới hạn theo danh sách mời — bạn không có trong danh sách');
+      }
       // Chốt lại theo đúng dữ liệu lớp học tại thời điểm đăng ký (snapshot) — không tin tên/mã lớp
       // client tự gửi.
       payload.className = cls.title;
@@ -1177,22 +1418,40 @@ const CREATE_MODULE_CONFIGS = {
       payload.resultAt = null;
     }
   },
-  // Lộ trình thăng tiến — danh sách lớp học BẮT BUỘC phải PASSED hết mới đủ điều kiện được "Xác nhận"
-  // hoàn thành (xem confirmCareerPathForEmployee(), lib/recordActions.js).
+  // Lộ trình thăng tiến (Đợt 7) — GỒM NHIỀU CẤP BẬC TUẦN TỰ (payload.stages, thứ tự trong mảng CHÍNH LÀ
+  // thứ tự cấp bậc, index 0 = cấp đầu tiên), mỗi cấp có 1 danh sách CHƯƠNG TRÌNH (trainingCourses,
+  // requiredCourseIds) bắt buộc phải PASSED hết mới đủ điều kiện "Xác nhận" cấp đó (xem
+  // confirmCareerPathForEmployee(), lib/recordActions.js — có thêm gác tuần tự: chỉ xác nhận được cấp N
+  // khi cấp N-1 đã được xác nhận). ĐÃ ĐỔI từ requiredClassIds phẳng (trỏ thẳng vào 1 LẦN CHẠY lớp cụ
+  // thể) sang requiredCourseIds theo TỪNG CẤP (trỏ vào chương trình tái sử dụng được, giống
+  // trainingClasses/trainingDocuments/trainingPlans — Đạt BẤT KỲ lớp nào thuộc chương trình đó là tính,
+  // xem confirmCareerPathForEmployee()) — thay đổi phá vỡ khả năng tương thích có chủ đích, KHÔNG có bản
+  // ghi thật nào cần di trú (collection này chưa từng phát hành cho người dùng thật).
   careerPaths: {
     dbKey: 'careerPaths',
     forceOwnDept: true,
     getScope: () => ({}),
     creatorField: 'creator', creatorNameField: 'creatorName',
-    extraValidate: (payload, collection, user) => {
-      if (!user.perms?.admin && !user.perms?.internalTrainingCreate) {
+    extraValidate: (payload, collection, user, appData) => {
+      if (!user.perms?.admin && !user.perms?.trainingManage) {
         throw new CreateError(403, 'Bạn không có quyền tạo lộ trình thăng tiến');
       }
       if (!payload.name || !String(payload.name).trim()) throw new CreateError(400, 'Thiếu tên lộ trình thăng tiến');
-      const requiredClassIds = Array.isArray(payload.requiredClassIds) ? payload.requiredClassIds.map(Number).filter(Number.isFinite) : [];
-      if (!requiredClassIds.length) throw new CreateError(400, 'Vui lòng chọn ít nhất 1 lớp học bắt buộc cho lộ trình');
       payload.name = String(payload.name).trim();
-      payload.requiredClassIds = requiredClassIds;
+      const courses = appData?.trainingCourses || [];
+      const rawStages = Array.isArray(payload.stages) ? payload.stages : [];
+      if (!rawStages.length) throw new CreateError(400, 'Vui lòng thêm ít nhất 1 cấp bậc cho lộ trình thăng tiến');
+      payload.stages = rawStages.map((s, i) => {
+        const name = String(s?.name || '').trim();
+        if (!name) throw new CreateError(400, `Cấp bậc thứ ${i + 1} thiếu tên`);
+        const requiredCourseIds = Array.isArray(s?.requiredCourseIds)
+          ? [...new Set(s.requiredCourseIds.map(Number))].filter(Number.isFinite) : [];
+        if (!requiredCourseIds.length) throw new CreateError(400, `Cấp bậc "${name}" cần chọn ít nhất 1 chương trình bắt buộc`);
+        const invalid = requiredCourseIds.filter(id => !courses.some(c => c.id === id));
+        if (invalid.length) throw new CreateError(400, `Cấp bậc "${name}" có chương trình được chọn không hợp lệ`);
+        return { name, requiredCourseIds };
+      });
+      delete payload.requiredClassIds; // field cũ đã bỏ hẳn, không giữ tương thích ngược
     }
   },
   // Tuyển Dụng — thay thế mục "Khen Thưởng" cũ (chỉ là 1 loại bài đăng đơn giản trong internalPosts,
@@ -1205,19 +1464,47 @@ const CREATE_MODULE_CONFIGS = {
     forceOwnDept: true,
     getScope: () => ({}),
     creatorField: 'creator', creatorNameField: 'creatorName',
-    extraValidate: (payload, collection, user) => {
+    extraValidate: (payload, collection, user, appData) => {
       if (!user.perms?.admin && !user.perms?.internalRecruitmentCreate) {
         throw new CreateError(403, 'Bạn không có quyền đăng tin tuyển dụng');
       }
       if (!payload.title || !String(payload.title).trim()) throw new CreateError(400, 'Thiếu tên vị trí tuyển dụng');
       if (!payload.description || !String(payload.description).trim()) throw new CreateError(400, 'Thiếu mô tả công việc');
+      // contactInfo (Đợt 2: Bản Tin Tuyển Dụng) — bắt buộc, cùng khuôn description/requirements ở trên,
+      // vì tin đăng công khai luôn cần hiển thị được đầu mối liên hệ ứng viên (không tự suy ra được từ
+      // creator, vì HR có thể muốn để SĐT/email chung của bộ phận thay vì cá nhân người đăng tin).
+      if (!payload.contactInfo || !String(payload.contactInfo).trim()) throw new CreateError(400, 'Thiếu thông tin liên hệ');
       payload.title = String(payload.title).trim();
       payload.description = String(payload.description).trim();
       payload.requirements = payload.requirements ? String(payload.requirements).trim() : '';
       payload.location = payload.location ? String(payload.location).trim() : '';
+      payload.contactInfo = String(payload.contactInfo).trim();
       payload.slots = Number(payload.slots) > 0 ? Math.floor(Number(payload.slots)) : 0;
       payload.deadline = payload.deadline || '';
+      // Đợt (Tháng) — chuỗi "yyyy-mm" thẳng từ <input type=month>, không có bảng danh mục riêng (giống
+      // cách hệ thống lưu các trường ngày/tháng dạng input khác, vd trainingClasses.registerDeadline).
+      payload.month = payload.month ? String(payload.month).trim() : '';
+      // Đơn vị/Siêu thị ĐĂNG TUYỂN — cố tình đặt tên KHÁC "dept" (đối chiếu DB.depts + DB.stores gộp
+      // chung 1 danh sách, cùng cách rjDept/rjFilterDept gộp ở client): field "dept" trên MỌI collection
+      // forceOwnDept:true (kể cả recruitmentJobs) luôn bị validateAndPrepareCreate() ép về ĐÚNG phòng ban
+      // của người tạo (xem cuối file: `{ ...payload, id: Date.now(), dept }`, GHI ĐÈ payload.dept bất kể
+      // extraValidate gán gì) — nếu dùng lại "dept" cho ý nghĩa "đơn vị đăng tuyển" thì giá trị người
+      // đăng chọn sẽ luôn bị mất, thay bằng phòng ban CỦA NGƯỜI ĐĂNG TIN. KHÔNG bắt buộc nếu rỗng (một số
+      // tin có thể đăng chung cho toàn công ty, không gắn 1 đơn vị cụ thể).
+      const hiringDept = payload.hiringDept ? String(payload.hiringDept).trim() : '';
+      if (hiringDept) {
+        const validDepts = new Set([...(appData?.depts || []), ...(appData?.stores || [])]);
+        if (!validDepts.has(hiringDept)) throw new CreateError(400, `Đơn vị/Siêu thị không hợp lệ: ${hiringDept}`);
+      }
+      payload.hiringDept = hiringDept;
+      // Banner (tuỳ chọn) — client đã upload qua uploadFileToServer('internal') trước khi gửi payload
+      // (cùng khuôn cvFileUrl/cvFileName của recruitmentReferrals bên dưới), ở đây chỉ nhận lại URL/tên.
+      payload.bannerUrl = payload.bannerUrl ? String(payload.bannerUrl).trim() : '';
+      payload.bannerFileName = payload.bannerFileName ? String(payload.bannerFileName).trim() : '';
       payload.status = 'OPEN';
+      payload.filledBy = null;
+      payload.filledByName = null;
+      payload.filledAt = null;
     }
   },
   // Hồ sơ giới thiệu ứng viên — snapshot jobTitle từ tin tuyển dụng tại thời điểm giới thiệu (không tin
@@ -1617,11 +1904,114 @@ function validateAndPrepareCreate(moduleKey, payload, user, existingCollection, 
   return record;
 }
 
+// Giảng viên lớp học (Đợt 3) — resolve username client gửi lên thành 1 tài khoản hệ thống THẬT (đang
+// active), cùng khuôn workflowEngine.js xử lý carAssignedDriverUsername. Dùng chung cho CẢ tạo lớp
+// (trainingClasses.extraValidate ở trên) LẪN sửa lớp (editTrainingClass(), lib/recordActions.js) nên
+// đặt ở đây (file đã có tiền lệ export scopeAllows cho recordActions.js require lại). Trả về null nếu
+// input rỗng (không gán giảng viên — hợp lệ), throw nếu có nhập nhưng không khớp tài khoản nào.
+function resolveTrainingInstructorUsername(rawUsername, users) {
+  const username = String(rawUsername || '').trim();
+  if (!username) return null;
+  const found = (users || []).find(u => u.username === username && u.active !== false);
+  if (!found) throw new CreateError(400, 'Không tìm thấy tài khoản giảng viên này (hoặc đã bị khoá)');
+  return found;
+}
+
+// Danh Sách Được Mời (inviteList, Đợt 3) — chỉ chuẩn hoá thành mảng username duy nhất, không bắt buộc
+// từng username phải là tài khoản có thật (nhập sai chỉ khiến người đó không tự đăng ký được, không
+// gây lỗi dữ liệu gì) — dùng chung cho tạo lớp lẫn sửa lớp giống resolveTrainingInstructorUsername ở trên.
+function normalizeInviteList(rawList) {
+  if (!Array.isArray(rawList)) return [];
+  const seen = new Set();
+  const out = [];
+  for (const raw of rawList) {
+    const username = String(raw || '').trim();
+    if (!username || seen.has(username)) continue;
+    seen.add(username);
+    out.push(username);
+    if (out.length >= 500) break;
+  }
+  return out;
+}
+
+// Chuẩn hoá + kiểm tra các field của 1 dòng Kế Hoạch Đào Tạo (trainingPlans, Đợt 5) — dùng CHUNG cho cả
+// TẠO (extraValidate ở trên) LẪN SỬA (editTrainingPlan(), lib/recordActions.js), cùng lý do tách riêng
+// như resolveTrainingInstructorUsername/normalizeInviteList ở trên (2 route khác nhau cùng cần đúng 1
+// luật chuẩn hoá, không lặp lại logic). Ném lỗi ngay khi field không hợp lệ (tháng sai định dạng,
+// courseId không khớp chương trình có thật, targetDept không khớp danh mục phòng ban/siêu thị) — số
+// lượng (plannedClasses/plannedTrainees/plannedHours) KHÔNG chặn cứng (âm/chữ/để trống đều rơi về 0)
+// vì đây chỉ là số KẾ HOẠCH, sai lệch không gây hỏng dữ liệu liên kết như courseId/targetDept.
+function normalizeTrainingPlanFields(payload, appData) {
+  const month = String(payload.month || '').trim();
+  if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(month)) {
+    throw new CreateError(400, 'Tháng kế hoạch không hợp lệ (định dạng YYYY-MM, vd 2026-09)');
+  }
+  payload.month = month;
+
+  const courseId = (payload.courseId === '' || payload.courseId == null) ? null : Number(payload.courseId);
+  if (courseId != null) {
+    const courses = appData?.trainingCourses || [];
+    if (!Number.isFinite(courseId) || !courses.some(c => c.id === courseId)) {
+      throw new CreateError(400, 'Chương trình được chọn không hợp lệ');
+    }
+  }
+  payload.courseId = courseId;
+
+  const targetDept = payload.targetDept ? String(payload.targetDept).trim() : '';
+  if (targetDept) {
+    const validDepts = new Set([...(appData?.depts || []), ...(appData?.stores || [])]);
+    if (!validDepts.has(targetDept)) throw new CreateError(400, `Đơn vị không hợp lệ: ${targetDept}`);
+  }
+  payload.targetDept = targetDept;
+
+  payload.audience = payload.audience ? String(payload.audience).trim().slice(0, 300) : '';
+
+  const toNonNegInt = (v) => { const n = Number(v); return Number.isFinite(n) && n > 0 ? Math.floor(n) : 0; };
+  const toNonNegNum = (v) => { const n = Number(v); return Number.isFinite(n) && n > 0 ? n : 0; };
+  payload.plannedClasses = toNonNegInt(payload.plannedClasses);
+  payload.plannedTrainees = toNonNegInt(payload.plannedTrainees);
+  payload.plannedHours = toNonNegNum(payload.plannedHours);
+}
+
+// Chuẩn hoá + kiểm tra các field của 1 Lộ Trình Đào Tạo Tân Binh (onboardingPaths, Đợt 6) — dùng CHUNG
+// cho cả TẠO (extraValidate ở trên) LẪN SỬA (editOnboardingPath(), lib/recordActions.js), cùng lý do
+// tách riêng như normalizeTrainingPlanFields ở trên. test1Id/test2Id BẮT BUỘC phải trỏ tới 1
+// trainingTests có thật (khác courseId/testId TUỲ CHỌN ở trainingClasses — xem giải thích ở
+// CREATE_MODULE_CONFIGS.onboardingPaths phía trên: kết quả ĐẠT/KHÔNG ĐẠT của Giai đoạn 1/2 hoàn toàn
+// phụ thuộc đúng 1 bài test này). stage1DocumentIds/stage2DocumentIds chỉ lọc bỏ id không khớp
+// trainingDocuments có thật (rỗng vẫn hợp lệ — 1 lộ trình có thể chưa gắn tài liệu tham khảo nào).
+function normalizeOnboardingPathFields(payload, appData) {
+  if (!payload.name || !String(payload.name).trim()) throw new CreateError(400, 'Thiếu tên lộ trình đào tạo tân binh');
+  payload.name = String(payload.name).trim();
+
+  const tests = appData?.trainingTests || [];
+  const docs = appData?.trainingDocuments || [];
+  const toIdArray = (raw) => (Array.isArray(raw) ? [...new Set(raw.map(Number))].filter(Number.isFinite) : []);
+  const keepValidDocIds = (ids) => ids.filter(id => docs.some(d => d.id === id));
+  payload.stage1DocumentIds = keepValidDocIds(toIdArray(payload.stage1DocumentIds));
+  payload.stage2DocumentIds = keepValidDocIds(toIdArray(payload.stage2DocumentIds));
+
+  const resolveRequiredTestId = (raw, label) => {
+    const id = Number(raw);
+    if (!Number.isFinite(id) || !tests.some(t => t.id === id)) {
+      throw new CreateError(400, `Vui lòng chọn ${label} hợp lệ (bắt buộc — quyết định Đạt/Không đạt của giai đoạn)`);
+    }
+    return id;
+  };
+  payload.test1Id = resolveRequiredTestId(payload.test1Id, 'bài test Giai đoạn 1');
+  payload.test2Id = resolveRequiredTestId(payload.test2Id, 'bài test Giai đoạn 2');
+
+  payload.stage3Criteria = payload.stage3Criteria ? String(payload.stage3Criteria).trim().slice(0, 3000) : '';
+}
+
 module.exports = {
   CREATE_MODULE_CONFIGS, CreateError, validateAndPrepareCreate, scopeAllows, findMeetingConflict,
   OFFICE_SUBTYPE_TO_PERM_FLAG, normalizeReportEntryPayload,
   CONTRACT_APPROVAL_LAYERS, CONTRACT_APPROVAL_LEVELS, CONTRACT_APPROVAL_LEVEL_RULES,
   buildEffectiveContractApprovalWorkflowServer,
   sanitizeUniformItems,
-  BUDGET_TYPE_OPTIONS, BUDGET_FIELD_TYPES, sanitizeBudgetLines, getBudgetTemplateCustomFields, sanitizeBudgetCustomFields
+  BUDGET_TYPE_OPTIONS, BUDGET_FIELD_TYPES, sanitizeBudgetLines, getBudgetTemplateCustomFields, sanitizeBudgetCustomFields,
+  resolveTrainingInstructorUsername, normalizeInviteList,
+  normalizeTrainingPlanFields,
+  normalizeOnboardingPathFields
 };

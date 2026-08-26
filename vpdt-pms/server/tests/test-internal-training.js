@@ -2,6 +2,9 @@
 // Question bank (Ngân Hàng Câu Hỏi) creation, class creation (online/offline), bulk-add students via
 // picker and via Excel-upload preview, auto-grading on test submission, manual result entry, and the
 // offline-class QR check-in button.
+// Đợt 4: Chương Trình (trainingCourses) catalog + courseId link on trainingClasses/trainingDocuments,
+// docType (VIDEO/IMAGE) + mandatory flag on trainingDocuments, and Đảo câu hỏi (question/option shuffle)
+// on the test-take modal.
 //
 // Run: node server/tests/test-internal-training.js
 const { setup, teardown, makeRunner, assert, assertEqual, baseCatalogSeed, makeUser } = require('./_harness');
@@ -13,17 +16,29 @@ async function main() {
   const { run, summarize } = makeRunner();
 
   try {
-    const trainer = makeUser({ username: 'gv.linh', name: 'Trần Thị Linh', dept: 'Phòng Nhân Sự', perms: { internalTrainingCreate: true } });
+    const trainer = makeUser({ username: 'gv.linh', name: 'Trần Thị Linh', dept: 'Phòng Nhân Sự', perms: { trainingManage: true } });
     const nv1 = makeUser({ username: 'nv1', name: 'Học Viên Một', dept: 'Phòng CNTT', perms: {} });
     const nv2 = makeUser({ username: 'nv2', name: 'Học Viên Hai', dept: 'Phòng CNTT', perms: {} });
     const nv3 = makeUser({ username: 'nv3', name: 'Học Viên Ba', dept: 'Phòng Kế Toán', perms: {} });
+    const nv4 = makeUser({ username: 'nv4', name: 'Học Viên Bốn', dept: 'Phòng CNTT', perms: {} });
+    // Đợt 3: trainingInstruct (KHÔNG kèm trainingManage) — quản lý được ĐÚNG lớp mình được gán làm
+    // giảng viên (instructorUsername), không tạo lớp mới được, không đụng được lớp của giảng viên khác.
+    const instructorA = makeUser({ username: 'gv.a', name: 'Giảng Viên A', dept: 'Phòng CNTT', perms: { trainingInstruct: true } });
+    const instructorB = makeUser({ username: 'gv.b', name: 'Giảng Viên B', dept: 'Phòng Kế Toán', perms: { trainingInstruct: true } });
 
     await page.evaluate((seed) => { Object.assign(DB, seed); }, baseCatalogSeed());
-    await page.evaluate((users) => { DB.users = users; }, [trainer, nv1, nv2, nv3]);
+    await page.evaluate((users) => { DB.users = users; }, [trainer, nv1, nv2, nv3, nv4, instructorA, instructorB]);
     await page.evaluate((u) => finishLogin(u), trainer);
     await page.evaluate(() => { switchTab('internal'); setInternalSubTab('TRAINING'); setTrainingLmsTab('TESTS'); });
 
     let testId = null;
+
+    await run('migrateLegacyPerms() renames internalTrainingCreate -> trainingManage, keeping the old grant', async () => {
+      const migrated = await page.evaluate(() => migrateLegacyPerms({ internalTrainingCreate: true }));
+      assertEqual(migrated.changed, true, 'expected migration to report a change');
+      assertEqual(migrated.perms.trainingManage, true, 'internalTrainingCreate:true should become trainingManage:true');
+      assertEqual(migrated.perms.internalTrainingCreate, undefined, 'old internalTrainingCreate key should be removed');
+    });
 
     await run('trainer creates a question-bank test with 1 SINGLE + 1 MULTI question', async () => {
       await page.evaluate(() => {
@@ -239,6 +254,472 @@ async function main() {
       assert(modalVisible, 'QR modal should be visible after opening');
       const imgSrc = await page.evaluate(() => document.getElementById('trainingClassQrImg').src);
       assert(imgSrc.includes(`/api/training/class-qr/${offlineClassId}`), `QR image src should point at the class-qr endpoint, got: ${imgSrc}`);
+    });
+
+    // ===================== Đợt 3: Phân quyền + Vòng đời trạng thái Đào Tạo =====================
+
+    let instructedClassId = null;
+    await run('trainer assigns gv.a as instructor via the datalist picker when creating an OFFLINE class', async () => {
+      await page.evaluate((u) => { currentUser = u; }, trainer);
+      await page.evaluate(() => { switchTab('internal'); setInternalSubTab('TRAINING'); setTrainingLmsTab('CLASSES'); });
+      await page.evaluate(() => {
+        document.getElementById('tcCategory').value = 'Nghiệp vụ';
+        document.getElementById('tcTitle').value = 'Lớp Của Giảng Viên A';
+        document.getElementById('tcStart').value = '2026-09-05T08:00';
+        document.getElementById('tcEnd').value = '2026-09-05T10:00';
+        document.getElementById('tcMode').value = 'OFFLINE';
+        document.getElementById('tcTestId').value = '';
+        document.getElementById('tcInstructor').value = 'Giảng Viên A — Phòng CNTT (gv.a)';
+        resolveTrainingInstructorInput(document.getElementById('tcInstructor').value);
+      });
+      await page.evaluate(() => submitTrainingClass({ preventDefault() {}, target: { reset() {} } }));
+      const cls = await page.evaluate(() => DB.trainingClasses.find((c) => c.title === 'Lớp Của Giảng Viên A'));
+      assert(cls, 'expected the class to be created');
+      instructedClassId = cls.id;
+      assertEqual(cls.instructorUsername, 'gv.a', 'instructorUsername should resolve to gv.a');
+      assertEqual(cls.instructor, 'Giảng Viên A', 'instructor display name should be resolved from the account, not free text');
+      assertEqual(cls.sessionState, 'SCHEDULED', 'new OFFLINE class should start SCHEDULED');
+    });
+
+    await run('typing an instructor name that does not resolve to any account blocks submit client-side', async () => {
+      await page.evaluate(() => {
+        window.__alerts.length = 0;
+        document.getElementById('tcCategory').value = 'Nghiệp vụ';
+        document.getElementById('tcTitle').value = 'Lớp Giảng Viên Không Hợp Lệ';
+        document.getElementById('tcStart').value = '2026-09-06T08:00';
+        document.getElementById('tcMode').value = 'ONLINE';
+        document.getElementById('tcInstructor').value = 'Ai Đó Không Tồn Tại';
+        document.getElementById('tcInstructorUsername').value = ''; // chưa từng khớp gợi ý nào
+      });
+      const countBefore = await page.evaluate(() => DB.trainingClasses.length);
+      await page.evaluate(() => submitTrainingClass({ preventDefault() {}, target: { reset() {} } }));
+      const countAfter = await page.evaluate(() => DB.trainingClasses.length);
+      assertEqual(countAfter, countBefore, 'no class should be created when the instructor text does not resolve');
+      const alerts = await page.evaluate(() => window.__alerts.slice());
+      assert(alerts.some((a) => a.includes('chọn đúng giảng viên')), `expected instructor-resolution alert, got ${JSON.stringify(alerts)}`);
+    });
+
+    await run('server rejects an instructorUsername that is not a real account even if the client bypasses the picker', async () => {
+      let errMsg = null;
+      await page.evaluate(async () => {
+        try {
+          await callCreateAction('trainingClasses', {
+            code: `LOP-BYPASS-${Date.now()}`, category: 'Nghiệp vụ', title: 'Lớp Bypass', startTime: '2026-09-07T08:00',
+            mode: 'ONLINE', instructor: 'Ai Đó', instructorUsername: 'no.such.instructor'
+          });
+        } catch (err) { window.__lastCreateErr = err.message; }
+      });
+      errMsg = await page.evaluate(() => window.__lastCreateErr);
+      assert(errMsg && errMsg.includes('giảng viên'), `expected a server-side instructor-not-found error, got: ${errMsg}`);
+      const found = await page.evaluate(() => DB.trainingClasses.some((c) => c.title === 'Lớp Bypass'));
+      assert(!found, 'the bypass class should NOT have been created');
+    });
+
+    await run('gv.a (trainingInstruct) manages the roster of their own assigned class', async () => {
+      await page.evaluate((u) => { currentUser = u; }, instructorA);
+      await page.evaluate((id) => { openTrainingRosterModal(id); }, instructedClassId);
+      await page.evaluate(() => {
+        document.getElementById('trRosterPickInput').value = 'nv1';
+        addTrainingRosterPick();
+      });
+      await page.evaluate(() => confirmTrainingRosterAdd());
+      const regs = await page.evaluate((id) => DB.trainingRegistrations.filter((r) => r.classId === id && r.result !== 'CANCELLED'), instructedClassId);
+      assertEqual(regs.length, 1, 'gv.a should have successfully added nv1 to their own assigned class');
+    });
+
+    await run('gv.b (trainingInstruct, different instructor) cannot manage gv.a\'s assigned class', async () => {
+      await page.evaluate((u) => { currentUser = u; }, instructorB);
+      await page.evaluate((id) => { openTrainingRosterModal(id); }, instructedClassId);
+      await page.evaluate(() => {
+        document.getElementById('trRosterPickInput').value = 'nv2';
+        addTrainingRosterPick();
+      });
+      await page.evaluate(() => confirmTrainingRosterAdd());
+      const alerts = await page.evaluate(() => window.__alerts.slice());
+      assert(alerts.some((a) => a.includes('⛔')), `expected a permission-denied alert for gv.b, got ${JSON.stringify(alerts)}`);
+      const nv2Reg = await page.evaluate((id) => DB.trainingRegistrations.find((r) => r.classId === id && r.creator === 'nv2' && r.result !== 'CANCELLED'), instructedClassId);
+      assert(!nv2Reg, 'gv.b must NOT be able to add students to a class they are not the assigned instructor of');
+    });
+
+    await run('neither gv.a nor gv.b (trainingInstruct only) can create a new class', async () => {
+      for (const instructor of [instructorA, instructorB]) {
+        await page.evaluate((u) => { currentUser = u; }, instructor);
+        await page.evaluate(() => { window.__alerts.length = 0; });
+        const countBefore = await page.evaluate(() => DB.trainingClasses.length);
+        await page.evaluate(() => {
+          document.getElementById('tcCategory').value = 'Nghiệp vụ';
+          document.getElementById('tcTitle').value = 'Lớp Giảng Viên Tự Tạo';
+          document.getElementById('tcStart').value = '2026-09-08T08:00';
+          document.getElementById('tcInstructor').value = '';
+          document.getElementById('tcInstructorUsername').value = '';
+        });
+        await page.evaluate(() => submitTrainingClass({ preventDefault() {}, target: { reset() {} } }));
+        const countAfter = await page.evaluate(() => DB.trainingClasses.length);
+        assertEqual(countAfter, countBefore, `${instructor.username} (trainingInstruct only) must not be able to create a class`);
+        const alerts = await page.evaluate(() => window.__alerts.slice());
+        assert(alerts.some((a) => a.includes('không có quyền tạo lớp học')), `expected a no-permission alert for ${instructor.username}, got ${JSON.stringify(alerts)}`);
+      }
+    });
+
+    await run('OFFLINE session-state lifecycle: gv.b cannot start it, gv.a can start then end it', async () => {
+      await page.evaluate((u) => { currentUser = u; }, instructorB);
+      await page.evaluate((id) => startOfflineTrainingClassAction(id), instructedClassId);
+      let alerts = await page.evaluate(() => window.__alerts.slice());
+      assert(alerts.some((a) => a.includes('⛔')), 'gv.b should be denied starting a class they do not instruct');
+      let cls = await page.evaluate((id) => DB.trainingClasses.find((c) => c.id === id), instructedClassId);
+      assertEqual(cls.sessionState, 'SCHEDULED', 'sessionState must stay SCHEDULED after a denied start attempt');
+
+      await page.evaluate((u) => { currentUser = u; }, instructorA);
+      await page.evaluate(() => { window.__alerts.length = 0; });
+      await page.evaluate((id) => startOfflineTrainingClassAction(id), instructedClassId);
+      cls = await page.evaluate((id) => DB.trainingClasses.find((c) => c.id === id), instructedClassId);
+      assertEqual(cls.sessionState, 'ONGOING', 'gv.a (assigned instructor) should be able to start the class');
+
+      await page.evaluate((id) => startOfflineTrainingClassAction(id), instructedClassId);
+      alerts = await page.evaluate(() => window.__alerts.slice());
+      assert(alerts.some((a) => a.includes('⛔')), 'starting an already-ONGOING class again should be rejected');
+
+      await page.evaluate((id) => endOfflineTrainingClassAction(id), instructedClassId);
+      cls = await page.evaluate((id) => DB.trainingClasses.find((c) => c.id === id), instructedClassId);
+      assertEqual(cls.sessionState, 'ENDED', 'gv.a should be able to end the class after it started');
+    });
+
+    await run('ONLINE class sessionState is computed live from startTime/endTime, not stored', async () => {
+      const states = await page.evaluate(() => {
+        const now = Date.now();
+        const fmt = (ms) => new Date(now + ms).toISOString().slice(0, 16);
+        const upcoming = { mode: 'ONLINE', startTime: fmt(60 * 60 * 1000), endTime: fmt(2 * 60 * 60 * 1000) };
+        const ongoing = { mode: 'ONLINE', startTime: fmt(-30 * 60 * 1000), endTime: fmt(30 * 60 * 1000) };
+        const ended = { mode: 'ONLINE', startTime: fmt(-2 * 60 * 60 * 1000), endTime: fmt(-60 * 60 * 1000) };
+        return {
+          upcoming: getTrainingClassSessionState(upcoming),
+          ongoing: getTrainingClassSessionState(ongoing),
+          ended: getTrainingClassSessionState(ended)
+        };
+      });
+      assertEqual(states.upcoming, 'SCHEDULED', 'ONLINE class starting in the future should be SCHEDULED (Sắp diễn ra)');
+      assertEqual(states.ongoing, 'ONGOING', 'ONLINE class between start/end should be ONGOING (Đang diễn ra)');
+      assertEqual(states.ended, 'ENDED', 'ONLINE class past its endTime should be ENDED (Đã kết thúc)');
+    });
+
+    await run('Chờ / Đang học / Hoàn thành / Đã hủy display status is computed, not stored', async () => {
+      const statuses = await page.evaluate(() => {
+        const scheduledCls = { mode: 'OFFLINE', sessionState: 'SCHEDULED' };
+        const ongoingCls = { mode: 'OFFLINE', sessionState: 'ONGOING' };
+        return {
+          waiting: getTrainingRegDisplayStatus({ result: 'REGISTERED' }, scheduledCls).label,
+          studying: getTrainingRegDisplayStatus({ result: 'REGISTERED' }, ongoingCls).label,
+          passed: getTrainingRegDisplayStatus({ result: 'PASSED' }, ongoingCls),
+          failed: getTrainingRegDisplayStatus({ result: 'FAILED' }, ongoingCls),
+          cancelled: getTrainingRegDisplayStatus({ result: 'CANCELLED' }, ongoingCls).label
+        };
+      });
+      assertEqual(statuses.waiting, 'Chờ', 'REGISTERED + class not yet started should display "Chờ"');
+      assertEqual(statuses.studying, 'Đang học', 'REGISTERED + class started, no result yet should display "Đang học"');
+      assertEqual(statuses.passed.label, 'Hoàn thành', 'PASSED should display "Hoàn thành"');
+      assertEqual(statuses.passed.sub, 'Đạt', 'PASSED sub-badge should be "Đạt"');
+      assertEqual(statuses.failed.sub, 'Không đạt', 'FAILED sub-badge should be "Không đạt"');
+      assertEqual(statuses.cancelled, 'Đã hủy', 'CANCELLED should keep its own distinct "Đã hủy" display');
+    });
+
+    let invitedClassId = null;
+    await run('inviteList: empty by default, self-registration open to everyone (backward-compatible)', async () => {
+      const cls = await page.evaluate((id) => DB.trainingClasses.find((c) => c.id === id), onlineClassId);
+      assert(Array.isArray(cls.inviteList) && cls.inviteList.length === 0, 'a class created before/without inviting anyone should have an empty inviteList');
+    });
+
+    await run('inviteList: HR sets an invite list, only listed users may self-register', async () => {
+      await page.evaluate((u) => { currentUser = u; }, trainer);
+      await page.evaluate(() => {
+        document.getElementById('tcCategory').value = 'Nghiệp vụ';
+        document.getElementById('tcTitle').value = 'Lớp Có Danh Sách Mời';
+        document.getElementById('tcStart').value = '2026-09-09T08:00';
+        document.getElementById('tcEnd').value = '';
+        document.getElementById('tcMode').value = 'ONLINE';
+        document.getElementById('tcInstructor').value = '';
+        document.getElementById('tcInstructorUsername').value = '';
+        document.getElementById('tcInviteListPickInput').value = 'Học Viên Một — Phòng CNTT (nv1)';
+        addTrainingInviteListPick();
+      });
+      const staged = await page.evaluate(() => tcInviteListStaged.map((p) => p.username));
+      assertEqual(staged.length, 1, `expected 1 invited user staged, got ${JSON.stringify(staged)}`);
+      await page.evaluate(() => { window.__alerts.length = 0; });
+      await page.evaluate(() => submitTrainingClass({ preventDefault() {}, target: { reset() {} } }));
+      const cls = await page.evaluate(() => DB.trainingClasses.find((c) => c.title === 'Lớp Có Danh Sách Mời'));
+      const dbgAlerts = await page.evaluate(() => window.__alerts.slice());
+      assert(cls, `expected the invite-list class to be created, alerts: ${JSON.stringify(dbgAlerts)}`);
+      invitedClassId = cls.id;
+      assertEqual(cls.inviteList.length, 1, 'inviteList should contain exactly 1 username');
+      assertEqual(cls.inviteList[0], 'nv1', 'inviteList should contain nv1');
+
+      await page.evaluate((u) => { currentUser = u; }, nv2);
+      await page.evaluate((id) => registerForTrainingClass(id), invitedClassId);
+      const alerts = await page.evaluate(() => window.__alerts.slice());
+      assert(alerts.some((a) => a.includes('danh sách mời')), `expected nv2 (not invited) to be rejected, got ${JSON.stringify(alerts)}`);
+      let nv2Reg = await page.evaluate((id) => DB.trainingRegistrations.find((r) => r.classId === id && r.creator === 'nv2'), invitedClassId);
+      assert(!nv2Reg, 'nv2 (not on the invite list) must NOT be able to self-register');
+
+      await page.evaluate((u) => { currentUser = u; }, nv1);
+      await page.evaluate((id) => registerForTrainingClass(id), invitedClassId);
+      const nv1Reg = await page.evaluate((id) => DB.trainingRegistrations.find((r) => r.classId === id && r.creator === 'nv1'), invitedClassId);
+      assert(nv1Reg, 'nv1 (on the invite list) should be able to self-register');
+
+      // Roster bulk-add (HR override) is COMPLETELY unaffected by inviteList — trainer can still force-add nv2.
+      await page.evaluate((u) => { currentUser = u; }, trainer);
+      await page.evaluate((id) => { openTrainingRosterModal(id); }, invitedClassId);
+      await page.evaluate(() => {
+        document.getElementById('trRosterPickInput').value = 'nv2';
+        addTrainingRosterPick();
+      });
+      await page.evaluate(() => confirmTrainingRosterAdd());
+      nv2Reg = await page.evaluate((id) => DB.trainingRegistrations.find((r) => r.classId === id && r.creator === 'nv2' && r.result !== 'CANCELLED'), invitedClassId);
+      assert(nv2Reg, 'HR bulk-add (roster override) must still work for nv2 even though the invite list excludes them');
+    });
+
+    // ===================== Đợt 4: Chương Trình (trainingCourses) =====================
+
+    let courseId1 = null;
+    await run('trainingCourses: creating a course is gated to trainingManage (nv1 blocked, trainer succeeds)', async () => {
+      await page.evaluate(() => { switchTab('internal'); setInternalSubTab('TRAINING'); setTrainingLmsTab('COURSES'); });
+      await page.evaluate((u) => { currentUser = u; }, nv1);
+      await page.evaluate(() => {
+        window.__alerts.length = 0;
+        document.getElementById('tccCategory').value = 'Nghiệp vụ';
+        document.getElementById('tccName').value = 'Chương Trình Bị Chặn';
+      });
+      const countBefore = await page.evaluate(() => DB.trainingCourses.length);
+      await page.evaluate(() => submitTrainingCourse({ preventDefault() {}, target: { reset() {} } }));
+      const countAfter = await page.evaluate(() => DB.trainingCourses.length);
+      assertEqual(countAfter, countBefore, 'nv1 (no trainingManage) must not be able to create a trainingCourses entry');
+      let alerts = await page.evaluate(() => window.__alerts.slice());
+      assert(alerts.some((a) => a.includes('không có quyền tạo chương trình')), `expected a permission alert for nv1, got ${JSON.stringify(alerts)}`);
+
+      await page.evaluate((u) => { currentUser = u; }, trainer);
+      await page.evaluate(() => {
+        window.__alerts.length = 0;
+        document.getElementById('tccCategory').value = 'Nghiệp vụ';
+        document.getElementById('tccName').value = 'Chương Trình Quản Lý Cửa Hàng';
+        document.getElementById('tccDescription').value = 'Đào tạo quản lý cửa hàng cơ bản';
+      });
+      await page.evaluate(() => submitTrainingCourse({ preventDefault() {}, target: { reset() {} } }));
+      const course = await page.evaluate(() => DB.trainingCourses.find((c) => c.name === 'Chương Trình Quản Lý Cửa Hàng'));
+      assert(course, 'trainer (trainingManage) should be able to create a trainingCourses entry');
+      courseId1 = course.id;
+      assertEqual(course.category, 'Nghiệp vụ', 'course category mismatch');
+      alerts = await page.evaluate(() => window.__alerts.slice());
+      assert(alerts.some((a) => a.includes('Đã tạo chương trình thành công')), `expected success alert, got ${JSON.stringify(alerts)}`);
+    });
+
+    await run('server rejects trainingCourses creation from a non-trainingManage user even if the client bypasses the form', async () => {
+      await page.evaluate((u) => { currentUser = u; }, nv1);
+      await page.evaluate(async () => {
+        try {
+          await callCreateAction('trainingCourses', { code: `CT-BYPASS-${Date.now()}`, name: 'Chương Trình Bypass', category: 'Nghiệp vụ' });
+        } catch (err) { window.__lastCreateErr = err.message; }
+      });
+      const errMsg = await page.evaluate(() => window.__lastCreateErr);
+      assert(errMsg && errMsg.includes('không có quyền tạo chương trình'), `expected a server-side permission error, got: ${errMsg}`);
+      const found = await page.evaluate(() => DB.trainingCourses.some((c) => c.name === 'Chương Trình Bypass'));
+      assert(!found, 'the bypass course should NOT have been created');
+    });
+
+    let courseLinkedClassId = null;
+    await run('trainingClasses: linking a class to a trainingCourses entry via courseId surfaces "Chương trình:" in the class list, without breaking a class that has none', async () => {
+      await page.evaluate((u) => { currentUser = u; }, trainer);
+      await page.evaluate(() => { switchTab('internal'); setInternalSubTab('TRAINING'); setTrainingLmsTab('CLASSES'); });
+      await page.evaluate((cid) => {
+        document.getElementById('tcCategory').value = 'Nghiệp vụ';
+        document.getElementById('tcTitle').value = 'Lớp Có Gắn Chương Trình';
+        document.getElementById('tcStart').value = '2026-09-10T08:00';
+        document.getElementById('tcMode').value = 'ONLINE';
+        document.getElementById('tcTestId').value = '';
+        document.getElementById('tcCourseId').value = String(cid);
+      }, courseId1);
+      await page.evaluate(() => submitTrainingClass({ preventDefault() {}, target: { reset() {} } }));
+      const cls = await page.evaluate(() => DB.trainingClasses.find((c) => c.title === 'Lớp Có Gắn Chương Trình'));
+      assert(cls, 'expected the course-linked class to be created');
+      courseLinkedClassId = cls.id;
+      assertEqual(cls.courseId, courseId1, 'courseId should be stored on the class');
+
+      const tableHTML = await page.evaluate(() => { renderTrainingClasses(); return document.getElementById('trainingClassesTableBody').innerHTML; });
+      assert(tableHTML.includes('Chương trình: Chương Trình Quản Lý Cửa Hàng'), 'class list should show the linked course name as supplementary context');
+      const occurrences = (tableHTML.match(/Chương trình:/g) || []).length;
+      assertEqual(occurrences, 1, 'only the course-linked class should render a "Chương trình:" line at this point');
+
+      // Lớp tạo TRƯỚC tính năng này (không có courseId) vẫn phải hoạt động/hiển thị bình thường.
+      const oldCls = await page.evaluate((id) => DB.trainingClasses.find((c) => c.id === id), onlineClassId);
+      assert(oldCls.courseId == null, 'a class created before this feature should have no courseId (backward compatible)');
+    });
+
+    await run('server rejects an invalid courseId on trainingClasses creation even if the client bypasses the dropdown', async () => {
+      await page.evaluate(async () => {
+        try {
+          await callCreateAction('trainingClasses', {
+            code: `LOP-BADCOURSE-${Date.now()}`, category: 'Nghiệp vụ', title: 'Lớp Course Sai',
+            startTime: '2026-09-11T08:00', mode: 'ONLINE', courseId: 999999
+          });
+        } catch (err) { window.__lastCreateErr = err.message; }
+      });
+      const errMsg = await page.evaluate(() => window.__lastCreateErr);
+      assert(errMsg && errMsg.includes('Chương trình được chọn không hợp lệ'), `expected an invalid-course error, got: ${errMsg}`);
+    });
+
+    await run('editing a class can attach/clear courseId, re-validated server-side', async () => {
+      await page.evaluate((id) => { openEditTrainingClassModal(id); }, courseLinkedClassId);
+      await page.evaluate(() => { document.getElementById('teCourseId').value = ''; });
+      await page.evaluate(() => submitEditTrainingClass({ preventDefault() {} }));
+      const cls = await page.evaluate((id) => DB.trainingClasses.find((c) => c.id === id), courseLinkedClassId);
+      assert(cls.courseId == null, 'clearing the dropdown via edit should clear courseId back to null');
+      const tableHTML = await page.evaluate(() => { renderTrainingClasses(); return document.getElementById('trainingClassesTableBody').innerHTML; });
+      assertEqual((tableHTML.match(/Chương trình:/g) || []).length, 0, 'no class should show a "Chương trình:" line after the link was cleared');
+    });
+
+    // ===================== Đợt 4: Nội Dung Đào Tạo mở rộng (docType/mandatory/courseId) =====================
+
+    let videoDocId = null;
+    await run('trainingDocuments: creating a VIDEO document rejects a non-Youtube URL and accepts a Youtube one', async () => {
+      await page.evaluate(() => { switchTab('internal'); setInternalSubTab('TRAINING'); setTrainingLmsTab('DOCS'); });
+      await page.evaluate(() => {
+        window.__alerts.length = 0;
+        document.getElementById('tdCategory').value = 'Nghiệp vụ';
+        document.getElementById('tdTitle').value = 'Video Sai Link';
+        document.getElementById('tdDocType').value = 'VIDEO';
+        onTrainingDocTypeChange();
+      });
+      await page.evaluate(async () => {
+        try {
+          await callCreateAction('trainingDocuments', {
+            code: `TL-BADVID-${Date.now()}`, category: 'Nghiệp vụ', title: 'Video Sai Link', docType: 'VIDEO', videoUrl: 'https://vimeo.com/12345'
+          });
+        } catch (err) { window.__lastCreateErr = err.message; }
+      });
+      const errMsg = await page.evaluate(() => window.__lastCreateErr);
+      assert(errMsg && errMsg.includes('Youtube'), `expected a Youtube-link validation error, got: ${errMsg}`);
+      const badFound = await page.evaluate(() => DB.trainingDocuments.some((d) => d.title === 'Video Sai Link'));
+      assert(!badFound, 'a non-Youtube video URL must be rejected server-side');
+
+      await page.evaluate(() => {
+        document.getElementById('tdTitle').value = 'Video Hướng Dẫn Nội Quy';
+        document.getElementById('tdVideoUrl').value = 'https://www.youtube.com/watch?v=abc123XYZ';
+      });
+      await page.evaluate(() => submitTrainingDocument({ preventDefault() {}, target: { reset() {} } }));
+      const doc = await page.evaluate(() => DB.trainingDocuments.find((d) => d.title === 'Video Hướng Dẫn Nội Quy'));
+      assert(doc, 'expected the VIDEO document to be created with a valid Youtube URL');
+      videoDocId = doc.id;
+      assertEqual(doc.docType, 'VIDEO', 'docType should be VIDEO');
+      assertEqual(doc.videoUrl, 'https://www.youtube.com/watch?v=abc123XYZ', 'videoUrl mismatch');
+      assert(doc.fileUrl == null, 'a VIDEO document should not have a fileUrl');
+      assertEqual(doc.mandatory, false, 'mandatory should default to false when the checkbox is left unchecked');
+
+      const containerHTML = await page.evaluate(() => { renderTrainingDocuments(); return document.getElementById('trainingDocumentsContainer').innerHTML; });
+      assert(containerHTML.includes('<iframe'), 'a VIDEO document should render as an embedded iframe');
+    });
+
+    await run('trainingDocuments: creating an IMAGE document (file upload) with mandatory + courseId round-trips and renders a thumbnail', async () => {
+      await page.evaluate(() => {
+        window.__alerts.length = 0;
+        document.getElementById('tdCategory').value = 'Kỹ năng mềm';
+        document.getElementById('tdTitle').value = 'Sơ Đồ Quy Trình';
+        document.getElementById('tdDocType').value = 'IMAGE';
+        onTrainingDocTypeChange();
+        document.getElementById('tdMandatory').checked = true;
+      });
+      await page.evaluate((cid) => { document.getElementById('tdCourseId').value = String(cid); }, courseId1);
+      const fs = require('fs');
+      const os = require('os');
+      const tmpImgPath = require('path').join(os.tmpdir(), 'training-doc-image-test.png');
+      fs.writeFileSync(tmpImgPath, Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a]));
+      await page.setInputFiles('#tdFile', tmpImgPath);
+      await page.evaluate(() => submitTrainingDocument({ preventDefault() {}, target: { reset() {} } }));
+      const doc = await page.evaluate(() => DB.trainingDocuments.find((d) => d.title === 'Sơ Đồ Quy Trình'));
+      assert(doc, 'expected the IMAGE document to be created');
+      assertEqual(doc.docType, 'IMAGE', 'docType should be IMAGE');
+      assertEqual(doc.mandatory, true, 'mandatory flag should round-trip as true when the checkbox is checked');
+      assertEqual(doc.courseId, courseId1, 'courseId should round-trip on the document');
+      assert(doc.fileUrl, 'an IMAGE document should still have a real fileUrl (same upload mechanism as DOCUMENT)');
+
+      const containerHTML = await page.evaluate(() => { renderTrainingDocuments(); return document.getElementById('trainingDocumentsContainer').innerHTML; });
+      assert(containerHTML.includes('<img'), 'an IMAGE document should render as a thumbnail <img>, not a download link');
+      assert(containerHTML.includes('⚠️ Bắt buộc'), 'a mandatory document should show the "Bắt buộc" badge');
+      assert(containerHTML.includes('Chương trình:'), 'a document linked to a course should show the course name');
+    });
+
+    await run('a legacy trainingDocuments record without docType/mandatory/courseId still renders correctly (backward compatible)', async () => {
+      await page.evaluate(() => {
+        DB.trainingDocuments.push({
+          id: 999001, code: 'TL-LEGACY-1', category: 'Nghiệp vụ', title: 'Tài Liệu Cũ Trước Đợt 4',
+          description: '', fileUrl: '/uploads/mock/legacy.pdf', fileName: 'legacy.pdf', fileType: 'application/pdf',
+          uploaderUsername: 'gv.linh', uploaderName: 'Trần Thị Linh', createdAt: '01/01/2026 08:00:00'
+          // KHÔNG có docType/mandatory/courseId — đúng hình dạng dữ liệu trước Đợt 4.
+        });
+      });
+      const containerHTML = await page.evaluate(() => { renderTrainingDocuments(); return document.getElementById('trainingDocumentsContainer').innerHTML; });
+      assert(containerHTML.includes('Tài Liệu Cũ Trước Đợt 4'), 'legacy document should still render');
+      assert(containerHTML.includes('⬇️ Tải'), 'a document without docType should default to the DOCUMENT download-link rendering');
+      await page.evaluate(() => { DB.trainingDocuments = DB.trainingDocuments.filter((d) => d.id !== 999001); });
+    });
+
+    // ===================== Đợt 4: Đảo câu hỏi (question/option shuffle) =====================
+
+    await run('Đảo câu hỏi: each openTakeTestModal() call reshuffles question/option order (same ids, no mutation of stored test)', async () => {
+      await page.evaluate((u) => { currentUser = u; }, nv1);
+      const test = await page.evaluate((tid) => DB.trainingTests.find((t) => t.id === tid), testId);
+      const originalQIds = test.questions.map((q) => q.id);
+      const originalOptIdsByQ = {};
+      test.questions.forEach((q) => { originalOptIdsByQ[q.id] = q.options.map((o) => o.id); });
+
+      const trials = await page.evaluate((classId) => {
+        const out = [];
+        for (let i = 0; i < 40; i++) {
+          openTakeTestModal(classId);
+          out.push(ttTakeQuestions.map((q) => ({ id: q.id, optIds: q.options.map((o) => o.id) })));
+          clearInterval(ttTakeTimerHandle);
+          document.getElementById('trainingTakeTestModal').classList.add('hidden');
+        }
+        return out;
+      }, onlineClassId);
+
+      let anyQOrderDiffers = false;
+      let anyOptOrderDiffers = false;
+      trials.forEach((trial) => {
+        assertEqual(trial.length, originalQIds.length, 'shuffled question count mismatch');
+        const qIds = trial.map((q) => q.id);
+        assertEqual(JSON.stringify([...qIds].sort()), JSON.stringify([...originalQIds].sort()), 'shuffled question ids must be the exact same set as stored');
+        if (JSON.stringify(qIds) !== JSON.stringify(originalQIds)) anyQOrderDiffers = true;
+        trial.forEach((q) => {
+          const orig = originalOptIdsByQ[q.id];
+          assertEqual(JSON.stringify([...q.optIds].sort()), JSON.stringify([...orig].sort()), `shuffled option ids for question ${q.id} must be the exact same set as stored`);
+          if (JSON.stringify(q.optIds) !== JSON.stringify(orig)) anyOptOrderDiffers = true;
+        });
+      });
+      assert(anyQOrderDiffers, 'expected at least 1 of 40 shuffles to produce a different question order than storage order');
+      assert(anyOptOrderDiffers, 'expected at least 1 of 40 shuffles to produce a different option order than storage order for at least 1 question');
+
+      const testAfter = await page.evaluate((tid) => DB.trainingTests.find((t) => t.id === tid), testId);
+      assertEqual(JSON.stringify(testAfter.questions.map((q) => q.id)), JSON.stringify(originalQIds), 'the stored test.questions order must remain untouched after shuffling');
+      testAfter.questions.forEach((q) => {
+        assertEqual(JSON.stringify(q.options.map((o) => o.id)), JSON.stringify(originalOptIdsByQ[q.id]), `stored option order for question ${q.id} must remain untouched after shuffling`);
+      });
+    });
+
+    await run('a shuffled test-take run (via the real modal flow) still grades correctly end-to-end, order-independent', async () => {
+      await page.evaluate((u) => { currentUser = u; }, nv4);
+      await page.evaluate((id) => registerForTrainingClass(id), onlineClassId);
+      let reg = await page.evaluate((id) => DB.trainingRegistrations.find((r) => r.classId === id && r.creator === 'nv4'), onlineClassId);
+      assert(reg, 'nv4 should have registered for the class successfully');
+
+      await page.evaluate((id) => openTakeTestModal(id), onlineClassId);
+      await page.evaluate(async () => {
+        const total = ttTakeQuestions.length;
+        for (let i = 0; i < total; i++) {
+          const q = ttTakeQuestions[ttTakeIndex];
+          q.correctOptionIds.forEach((optId) => ttTakeSelectOption(optId, true));
+          await ttTakeGoNext();
+        }
+      });
+      reg = await page.evaluate((id) => DB.trainingRegistrations.find((r) => r.classId === id && r.creator === 'nv4'), onlineClassId);
+      assertEqual(reg.result, 'PASSED', `expected nv4 to PASS answering correctly regardless of shuffled order, got ${reg.result}`);
+      assertEqual(reg.score, 100, `expected 100%, got ${reg.score}`);
     });
 
     assertEqual(pageErrors.length, 0, `unexpected uncaught page errors: ${pageErrors.map((e) => e.message).join(' | ')}`);

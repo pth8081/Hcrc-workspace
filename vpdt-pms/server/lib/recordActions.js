@@ -9,7 +9,7 @@
 // họp thêm cờ minutesEdit (toàn công ty, không theo phòng ban) cho SỬA — riêng XÓA là quyền tối cao,
 // chỉ Admin; Công việc theo NGƯỜI (assignedBy/assignee), hoàn toàn không có khái niệm phòng ban.
 const { HttpError } = require('./httpErrors');
-const { scopeAllows, OFFICE_SUBTYPE_TO_PERM_FLAG, normalizeReportEntryPayload, buildEffectiveContractApprovalWorkflowServer, sanitizeUniformItems, sanitizeBudgetLines, getBudgetTemplateCustomFields, sanitizeBudgetCustomFields } = require('./createValidation');
+const { scopeAllows, OFFICE_SUBTYPE_TO_PERM_FLAG, normalizeReportEntryPayload, buildEffectiveContractApprovalWorkflowServer, sanitizeUniformItems, sanitizeBudgetLines, getBudgetTemplateCustomFields, sanitizeBudgetCustomFields, resolveTrainingInstructorUsername, normalizeInviteList, normalizeTrainingPlanFields, normalizeOnboardingPathFields } = require('./createValidation');
 const { validateRegistrationItems: validateVppRegItems, calcItemsTotal: calcVppItemsTotal } = require('./vppCatalog');
 const { sanitizePriceFileItems } = require('./priceFileParser');
 
@@ -666,6 +666,19 @@ function toggleInternalPostLike(user, post) {
   return post;
 }
 
+// Reaction cho TỪNG bình luận (khác likes cấp bài viết ở trên) — dùng để xếp hạng "3-5 bình luận nổi
+// bật" (mới nhất + nhiều reaction nhất) ở renderInternalNewsCard()/renderInternalPosts() phía client;
+// server chỉ lưu likes[], KHÔNG tự xếp hạng (thuần hiển thị, tính lại mỗi lần render, không cache).
+function toggleInternalPostCommentLike(user, post, commentId) {
+  const comment = (post.comments || []).find(c => c.id === commentId);
+  if (!comment) throw new HttpError(404, 'Không tìm thấy bình luận');
+  if (!Array.isArray(comment.likes)) comment.likes = [];
+  const idx = comment.likes.indexOf(user.username);
+  if (idx === -1) comment.likes.push(user.username);
+  else comment.likes.splice(idx, 1);
+  return post;
+}
+
 // Chuẩn hoá để so khớp từ khoá nhạy cảm — bỏ dấu tiếng Việt (kể cả "đ/Đ", không có dạng phân rã NFD)
 // + viết thường + gộp khoảng trắng, cùng khuôn normalizeHeader() ở lib/vppCatalog.js.
 function normalizeForScan(s) {
@@ -702,13 +715,18 @@ function addInternalPostComment(payload, user, post, sensitiveKeywords) {
     comment.flagged = true;
     comment.flagCategories = [...new Set(hits.map(h => h.category))];
     comment.flagTerms = [...new Set(hits.map(h => h.term))];
+    // Trước đây bình luận khớp từ khoá nhạy cảm vẫn hiển thị NGAY, chỉ gắn cờ để hậu kiểm. Đổi hành vi
+    // theo yêu cầu: đưa thẳng vào "Chờ Kiểm Duyệt" — ẩn công khai (sanitizeInternalPostCommentsForUser ở
+    // lib/recordViewScope.js lọc theo cờ này) cho tới khi người kiểm duyệt xử lý (dismiss = duyệt hiện,
+    // delete = xoá hẳn) qua dismissInternalCommentFlag()/deleteInternalPostComment() bên dưới.
+    comment.pendingModeration = true;
   }
   post.comments.push(comment);
   return post;
 }
 
 // Bỏ cờ cảnh báo (người kiểm duyệt xem xét thấy không có vấn đề gì) — không xoá bình luận, chỉ gỡ
-// đánh dấu để không còn hiện trong hàng chờ kiểm duyệt.
+// đánh dấu để hiện công khai trở lại (thoát khỏi hàng chờ kiểm duyệt).
 function dismissInternalCommentFlag(user, post, commentId) {
   if (!canApproveInternalPost(user)) throw new HttpError(403, 'Bạn không có quyền kiểm duyệt bình luận');
   const comment = (post.comments || []).find(c => c.id === commentId);
@@ -716,6 +734,7 @@ function dismissInternalCommentFlag(user, post, commentId) {
   comment.flagged = false;
   comment.flagCategories = [];
   comment.flagTerms = [];
+  comment.pendingModeration = false;
   comment.flagDismissedBy = user.username;
   comment.flagDismissedAt = nowVN();
   return post;
@@ -787,6 +806,70 @@ function rejectInternalPost(payload, user, post) {
   post.rejectedByName = user.name;
   post.rejectedAt = nowVN();
   post.rejectReason = reason;
+  return post;
+}
+
+// "Yêu cầu bổ sung" cho Góc Chia Sẻ — CÙNG khuôn requestPaymentInfo() (module Thanh Toán) ở trên: chỉ
+// chuyển PENDING -> NEED_INFO kèm lý do, người đăng phải quay lại sửa qua editInternalPost() (đưa về
+// PENDING) mới duyệt lại được — không cho duyệt thẳng từ NEED_INFO (xem approveInternalPost ở trên vẫn
+// chỉ nhận status PENDING, không cần sửa gì thêm).
+function requestInternalPostInfo(payload, user, post) {
+  if (!canApproveInternalPost(user)) throw new HttpError(403, 'Bạn không có quyền yêu cầu bổ sung');
+  if (post.type !== 'SHARE') throw new HttpError(400, 'Chỉ áp dụng cho bài đăng Góc Chia Sẻ');
+  if (post.status !== 'PENDING') throw new HttpError(409, 'Bài đăng không ở trạng thái chờ duyệt');
+  const comment = (payload?.comment || '').trim();
+  if (!comment) throw new HttpError(400, 'Vui lòng nhập nội dung cần bổ sung');
+  post.status = 'NEED_INFO';
+  post.infoRequestComment = comment;
+  return post;
+}
+
+// Ẩn/Hiện bài viết đã đăng (Nháp/Chờ duyệt/Ẩn KHÔNG dùng hành động này — chỉ APPROVED<->HIDDEN, đúng
+// "Admin chủ động ẩn khỏi trang chủ/chuyên mục" ở mô hình trạng thái đề xuất, KHÁC PENDING/REJECTED
+// vốn là kết quả của bước duyệt nội dung).
+function hideInternalPost(user, post) {
+  if (!canApproveInternalPost(user)) throw new HttpError(403, 'Bạn không có quyền ẩn bài đăng này');
+  if (post.status !== 'APPROVED') throw new HttpError(409, 'Chỉ ẩn được bài đã đăng');
+  post.status = 'HIDDEN';
+  post.hiddenBy = user.username;
+  post.hiddenAt = nowVN();
+  return post;
+}
+
+function unhideInternalPost(user, post) {
+  if (!canApproveInternalPost(user)) throw new HttpError(403, 'Bạn không có quyền hiện lại bài đăng này');
+  if (post.status !== 'HIDDEN') throw new HttpError(409, 'Bài đăng không ở trạng thái đã ẩn');
+  post.status = 'APPROVED';
+  post.hiddenBy = null;
+  post.hiddenAt = null;
+  return post;
+}
+
+// Sửa bài Nháp/bài bị "Yêu cầu bổ sung" (NEED_INFO) — chỉ tác giả (hoặc admin) sửa được, chỉ 2 trạng
+// thái này sửa được (bài đã APPROVED/PENDING/REJECTED/HIDDEN đã qua giai đoạn soạn thảo). Gửi lại y hệt
+// luật gán status lúc TẠO (xem createValidation.js internalPosts.extraValidate) — giữ isDraft để tác
+// giả có thể lưu nháp nhiều lần trước khi thật sự gửi.
+const INTERNAL_POST_EDITABLE_FIELDS = ['title', 'content', 'attachment', 'postCategory', 'publishAt', 'training'];
+function editInternalPost(payload, user, post) {
+  if (post.author !== user.username && !user.perms?.admin) throw new HttpError(403, 'Bạn không có quyền sửa bài đăng này');
+  if (post.status !== 'DRAFT' && post.status !== 'NEED_INFO') throw new HttpError(409, 'Bài đăng không còn ở trạng thái được sửa');
+  for (const field of INTERNAL_POST_EDITABLE_FIELDS) {
+    if (payload[field] !== undefined) post[field] = payload[field];
+  }
+  if (post.type === 'NEWS' && post.publishAt) {
+    const ts = new Date(post.publishAt).getTime();
+    if (!Number.isFinite(ts)) throw new HttpError(400, 'Thời gian đăng bài không hợp lệ');
+    post.publishAt = new Date(ts).toISOString();
+  } else if (post.type !== 'NEWS') {
+    post.publishAt = null;
+  }
+  if (payload.draft === true) {
+    post.status = 'DRAFT';
+  } else {
+    post.status = (post.type === 'SHARE' && !user.perms?.admin && !user.perms?.internalPostApprove)
+      ? 'PENDING' : 'APPROVED';
+    post.infoRequestComment = null;
+  }
   return post;
 }
 
@@ -1723,11 +1806,27 @@ function unpublishReportPeriod(user, period) {
   return period;
 }
 
-// ===== ĐÀO TẠO (module con "Truyền Thông Nội Bộ" > Đào tạo) — tạm thời, MVP =====
-// Dùng chung cờ internalTrainingCreate (đã có sẵn) cho quản lý đào tạo (tạo lớp/tài liệu/lộ trình +
-// xác nhận hoàn thành) — không thêm cờ quyền riêng để giữ phạm vi gọn.
+// ===== ĐÀO TẠO (module con "Truyền Thông Nội Bộ" > Đào tạo) =====
+// Đợt 3: tách cờ internalTrainingCreate cũ (đăng bài/tạo lớp/tài liệu/lộ trình) thành 2 quyền:
+// - trainingManage: TOÀN QUYỀN — tạo mới lớp/tài liệu/bài test/lộ trình, quản lý roster/kết quả của
+//   BẤT KỲ lớp nào (không còn giới hạn theo người TẠO lớp như cờ cũ), quản lý lộ trình thăng tiến.
+// - trainingInstruct: KHÔNG tạo lớp mới được, nhưng quản lý được roster/kết quả của ĐÚNG (các) lớp mà
+//   họ được gán làm giảng viên (cls.instructorUsername === username, xem canManageTrainingClass() ngay
+//   dưới) — không đụng được lớp của giảng viên khác, không quản lý lộ trình/ngân hàng câu hỏi.
 function canManageTraining(user) {
-  return !!(user.perms?.admin || user.perms?.internalTrainingCreate);
+  return !!(user.perms?.admin || user.perms?.trainingManage);
+}
+
+// Quyền quản lý MỘT lớp học cụ thể (roster/kết quả/sửa nội dung/chuyển trạng thái buổi học) — dùng
+// chung cho mọi hành động theo-từng-lớp bên dưới VÀ ở routes/trainingRoster.js (mã QR). Thay thế hẳn
+// kiểu kiểm tra "cls.creator === user.username" cũ (Đợt 3 trở về trước): trainingManage giờ quản lý
+// được MỌI lớp bất kể ai tạo, còn trainingInstruct chỉ quản lý đúng lớp mình được gán làm giảng viên —
+// lớp cũ CHƯA có instructorUsername (dữ liệu nhập tay từ trước tính năng này, xem
+// createValidation.js) thì KHÔNG ai thuộc diện trainingInstruct quản lý được, chỉ trainingManage/admin
+// (giảm nhẹ có chủ đích, tránh đoán nhầm giảng viên cho dữ liệu cũ).
+function canManageTrainingClass(user, cls) {
+  if (user?.perms?.admin || user?.perms?.trainingManage) return true;
+  return !!(user?.perms?.trainingInstruct && cls?.instructorUsername && cls.instructorUsername === user.username);
 }
 
 function cancelTrainingRegistration(payload, user, reg) {
@@ -1744,12 +1843,13 @@ function cancelTrainingRegistration(payload, user, reg) {
   return reg;
 }
 
-// Ghi nhận kết quả (Đạt/Không đạt + điểm nếu có) cho 1 đăng ký — chỉ người TẠO LỚP HỌC đó (snapshot
-// classCreator lúc đăng ký, xem lib/createValidation.js) hoặc Admin mới ghi được, không phải bất kỳ ai
-// có quyền internalTrainingCreate (tránh người quản lý lớp khác sửa kết quả lớp không phải của mình).
-function setTrainingRegistrationResult(payload, user, reg) {
-  if (reg.classCreator !== user.username && !user.perms?.admin) {
-    throw new HttpError(403, 'Chỉ người tạo lớp học hoặc Quản Trị Viên mới được ghi nhận kết quả');
+// Ghi nhận kết quả (Đạt/Không đạt + điểm nếu có) cho 1 đăng ký — Đợt 3: gác bằng canManageTrainingClass()
+// (cls đọc kèm theo reg.classId, xem routes/records.js) thay vì so trực tiếp reg.classCreator, để
+// trainingManage quản lý được MỌI lớp và giảng viên gán riêng (trainingInstruct) quản lý được đúng lớp
+// của mình dù không phải người đã tạo lớp đó.
+function setTrainingRegistrationResult(payload, user, reg, cls) {
+  if (!canManageTrainingClass(user, cls)) {
+    throw new HttpError(403, 'Bạn không có quyền ghi nhận kết quả cho lớp học này');
   }
   if (reg.result === 'CANCELLED') {
     throw new HttpError(409, 'Đăng ký này đã bị huỷ, không thể ghi nhận kết quả');
@@ -1768,14 +1868,17 @@ function setTrainingRegistrationResult(payload, user, reg) {
   return reg;
 }
 
-// Nhân sự (người tạo lớp) hoặc Admin thêm HÀNG LOẠT học viên vào 1 lớp học cùng lúc (chọn từng người ở
-// dropdown, hoặc theo danh sách đọc từ file Excel — cả 2 cách đều gửi lên đúng 1 mảng usernames, khác
-// biệt cách nhập chỉ ở phía client). Trả về bản NHÁP các đăng ký hợp lệ (route routes/records.js tự gán
-// id + insertRecord từng dòng trong lúc đang giữ khoá theo classId) + danh sách bị bỏ qua kèm lý do, để
-// người tạo lớp biết chính xác ai chưa được thêm mà không phải đoán.
+// trainingManage (bất kỳ lớp nào) hoặc giảng viên được gán riêng cho ĐÚNG lớp này (trainingInstruct) hoặc
+// Admin thêm HÀNG LOẠT học viên vào 1 lớp học cùng lúc (chọn từng người ở dropdown, hoặc theo danh sách
+// đọc từ file Excel — cả 2 cách đều gửi lên đúng 1 mảng usernames, khác biệt cách nhập chỉ ở phía
+// client). CỐ Ý không bị inviteList chặn (xem createValidation.js trainingRegistrations) — đây là 1
+// quyền ghi đè trực tiếp của HR/giảng viên, khác hẳn luồng tự đăng ký. Trả về bản NHÁP các đăng ký hợp
+// lệ (route routes/records.js tự gán id + insertRecord từng dòng trong lúc đang giữ khoá theo classId)
+// + danh sách bị bỏ qua kèm lý do, để người quản lý lớp biết chính xác ai chưa được thêm mà không phải
+// đoán.
 function bulkRegisterTrainingClass(payload, user, cls, existingRegs, users) {
-  if (cls.creator !== user.username && !user.perms?.admin) {
-    throw new HttpError(403, 'Chỉ người tạo lớp học hoặc Quản Trị Viên mới được thêm học viên vào lớp');
+  if (!canManageTrainingClass(user, cls)) {
+    throw new HttpError(403, 'Bạn không có quyền thêm học viên vào lớp học này');
   }
   if (cls.status !== 'OPEN') throw new HttpError(409, 'Lớp học này đã đóng đăng ký');
 
@@ -1812,6 +1915,100 @@ function bulkRegisterTrainingClass(payload, user, cls, existingRegs, users) {
     });
   }
   return { added, skipped };
+}
+
+// Sửa nội dung/lịch 1 lớp học đã tạo (Đợt 3 — trước đây trainingClasses hoàn toàn không có tính năng
+// sửa, chỉ tạo/xoá) — gác bằng canManageTrainingClass() giống roster/kết quả ở trên: trainingManage sửa
+// được MỌI lớp, trainingInstruct chỉ sửa được đúng lớp mình được gán làm giảng viên. Whitelist field
+// (cùng khuôn editInternalPost() ở trên) — KHÔNG cho đổi "mode" (ONLINE/OFFLINE) qua sửa vì mode quyết
+// định luôn cách tính sessionState (sống vs chuyển tay, xem createValidation.js) và "status"/"sessionState"
+// (2 field này chỉ đổi qua đúng action riêng của chúng, không phải qua /edit chung).
+const TRAINING_CLASS_EDITABLE_FIELDS = [
+  'title', 'category', 'description', 'startTime', 'endTime', 'location',
+  'registerDeadline', 'capacity', 'passScore', 'testId', 'testSecondsPerQuestion', 'documentIds', 'courseId'
+];
+function editTrainingClass(payload, user, cls, tests, users, courses) {
+  if (!canManageTrainingClass(user, cls)) {
+    throw new HttpError(403, 'Bạn không có quyền sửa lớp học này');
+  }
+  if (!payload || typeof payload !== 'object') throw new HttpError(400, 'Thiếu dữ liệu cập nhật');
+
+  for (const field of TRAINING_CLASS_EDITABLE_FIELDS) {
+    if (payload[field] !== undefined) cls[field] = payload[field];
+  }
+  if (!cls.category || !String(cls.category).trim()) throw new HttpError(400, 'Thiếu loại đào tạo');
+  if (!cls.title || !String(cls.title).trim()) throw new HttpError(400, 'Thiếu tên lớp học');
+  if (!cls.startTime) throw new HttpError(400, 'Thiếu thời gian bắt đầu lớp học');
+  if (cls.endTime && cls.startTime && cls.endTime < cls.startTime) {
+    throw new HttpError(400, 'Thời gian kết thúc phải sau thời gian bắt đầu');
+  }
+  cls.category = String(cls.category).trim();
+  cls.title = String(cls.title).trim();
+  cls.capacity = Number(cls.capacity) > 0 ? Math.floor(Number(cls.capacity)) : 0;
+  cls.passScore = (cls.passScore === '' || cls.passScore == null) ? null : Number(cls.passScore);
+  cls.documentIds = Array.isArray(cls.documentIds) ? cls.documentIds.map(Number).filter(Number.isFinite) : [];
+  const testId = cls.testId === '' || cls.testId == null ? null : Number(cls.testId);
+  if (testId != null && (!Number.isFinite(testId) || !(tests || []).some(t => t.id === testId))) {
+    throw new HttpError(400, 'Bài test được chọn không hợp lệ');
+  }
+  cls.testId = testId;
+  const secPerQ = Number(cls.testSecondsPerQuestion);
+  cls.testSecondsPerQuestion = Number.isFinite(secPerQ) && secPerQ >= 10 ? Math.floor(secPerQ) : 120;
+  // Chương Trình (courseId, Đợt 4, tuỳ chọn) — cùng luật validate với lúc TẠO lớp (xem
+  // createValidation.js trainingClasses.extraValidate).
+  const courseId = cls.courseId === '' || cls.courseId == null ? null : Number(cls.courseId);
+  if (courseId != null && (!Number.isFinite(courseId) || !(courses || []).some(c => c.id === courseId))) {
+    throw new HttpError(400, 'Chương trình được chọn không hợp lệ');
+  }
+  cls.courseId = courseId;
+
+  // Giảng viên + Danh Sách Được Mời — cùng luật resolve/chuẩn hoá với lúc TẠO lớp (xem
+  // createValidation.js), chỉ áp dụng khi client thật sự gửi field tương ứng (không ép về rỗng nếu
+  // form sửa không hiện field đó, vd modal sửa gọn không có ô Danh Sách Được Mời).
+  if (payload.instructorUsername !== undefined || payload.instructor !== undefined) {
+    const instructorUser = resolveTrainingInstructorUsername(payload.instructorUsername, users);
+    cls.instructorUsername = instructorUser ? instructorUser.username : null;
+    cls.instructor = instructorUser ? instructorUser.name : (payload.instructor ? String(payload.instructor).trim() : '');
+  }
+  if (payload.inviteList !== undefined) {
+    cls.inviteList = normalizeInviteList(payload.inviteList);
+  }
+  return cls;
+}
+
+// Sửa 1 dòng Kế Hoạch Đào Tạo đã lập (trainingPlans, Đợt 5) — cùng khuôn editTrainingClass() ở trên
+// (whitelist field rồi chạy lại ĐÚNG 1 luật chuẩn hoá/kiểm tra dùng chung với lúc TẠO, xem
+// normalizeTrainingPlanFields() ở lib/createValidation.js) nhưng gác quyền đơn giản hơn — không có khái
+// niệm "giảng viên phụ trách đúng lớp mình" ở đây, trainingManage quản lý được MỌI kế hoạch (đúng tinh
+// thần "kế hoạch đào tạo là cấu hình toàn công ty" đã nêu ở createValidation.js).
+const TRAINING_PLAN_EDITABLE_FIELDS = ['month', 'courseId', 'targetDept', 'audience', 'plannedClasses', 'plannedTrainees', 'plannedHours'];
+function editTrainingPlan(payload, user, plan, appData) {
+  if (!canManageTraining(user)) throw new HttpError(403, 'Bạn không có quyền sửa kế hoạch đào tạo');
+  if (!payload || typeof payload !== 'object') throw new HttpError(400, 'Thiếu dữ liệu cập nhật');
+  for (const field of TRAINING_PLAN_EDITABLE_FIELDS) {
+    if (payload[field] !== undefined) plan[field] = payload[field];
+  }
+  normalizeTrainingPlanFields(plan, appData);
+  return plan;
+}
+
+// Vòng đời trạng thái buổi học của lớp OFFLINE (Đợt 3) — ONLINE không có 2 action này (tính sống theo
+// giờ, xem createValidation.js/index.html), route /trainingClasses/:id/start-session chặn thẳng nếu
+// mode khác OFFLINE trước khi gọi tới đây, nhưng vẫn kiểm tra lại ở đây cho chắc (đúng nguyên tắc
+// "không tin, kiểm tra lại" của mọi mutator ghi đè state trong file này).
+function startOfflineTrainingClass(user, cls) {
+  if (!canManageTrainingClass(user, cls)) throw new HttpError(403, 'Bạn không có quyền bắt đầu lớp học này');
+  if (cls.mode !== 'OFFLINE') throw new HttpError(409, 'Chỉ lớp học Offline mới cần bắt đầu buổi học thủ công');
+  if (cls.sessionState !== 'SCHEDULED') throw new HttpError(409, 'Lớp học này không ở trạng thái chờ bắt đầu');
+  cls.sessionState = 'ONGOING';
+  return cls;
+}
+function endOfflineTrainingClass(user, cls) {
+  if (!canManageTrainingClass(user, cls)) throw new HttpError(403, 'Bạn không có quyền kết thúc lớp học này');
+  if (cls.mode !== 'OFFLINE') throw new HttpError(409, 'Chỉ lớp học Offline mới cần kết thúc buổi học thủ công');
+  if (cls.sessionState !== 'ONGOING') throw new HttpError(409, 'Lớp học này chưa ở trạng thái đang diễn ra');
+  cls.sessionState = 'ENDED';
+  return cls;
 }
 
 // Chấm điểm bài test tự động — chốt lại HOÀN TOÀN ở server theo đúng đáp án đúng đã lưu của test
@@ -1861,32 +2058,162 @@ function applyAutoGradedTestResult(reg, graded) {
   return reg;
 }
 
-// Xác nhận 1 nhân viên đã hoàn thành lộ trình thăng tiến — CHỈ cho xác nhận khi nhân viên đó đã có kết
-// quả PASSED ở TẤT CẢ lớp học bắt buộc (path.requiredClassIds), đúng yêu cầu "phải đạt yêu cầu mới được
-// xác nhận qua". Trả về bản NHÁP bản ghi xác nhận (chưa lưu) — routes/records.js insert vào collection
+// Xác nhận 1 nhân viên đã hoàn thành 1 CẤP BẬC của lộ trình thăng tiến (Đợt 7 — path.stages, thứ tự
+// mảng = thứ tự cấp bậc) — CHỈ cho xác nhận khi:
+//   1) cấp bậc TRƯỚC ĐÓ (stageIndex - 1) đã được xác nhận cho ĐÚNG người này ở ĐÚNG lộ trình này (gác
+//      TUẦN TỰ — cấp 0 không có điều kiện tiên quyết);
+//   2) cấp bậc này CHƯA từng được xác nhận cho người này (uniqueness pathId+username+stageIndex, đã đổi
+//      từ pathId+username hồi trước khi có khái niệm nhiều cấp);
+//   3) nhân viên đã có kết quả PASSED ở 1 lớp bất kỳ thuộc TỪNG chương trình bắt buộc của cấp này
+//      (stage.requiredCourseIds — đổi từ requiredClassIds phẳng trỏ thẳng 1 lớp cụ thể, xem
+//      lib/createValidation.js).
+// Trả về bản NHÁP bản ghi xác nhận (chưa lưu) — routes/records.js insert vào collection
 // careerPathConfirmations riêng (cùng khuôn startContractPayment() ở trên: mutator vừa xác thực vừa
-// "sinh" ra 1 bản ghi mới ở collection khác, không mutate path).
-function confirmCareerPathForEmployee(payload, user, path, allRegistrations, existingConfirmations, users) {
+// "sinh" ra 1 bản ghi mới ở collection khác, không mutate path). KHÔNG đụng tới user.jobTitle ở đây hay
+// bất kỳ đâu trong luồng này — đổi chức danh vẫn 100% thủ công qua Quản Lý Người Dùng theo đúng yêu cầu
+// đã chốt.
+function confirmCareerPathForEmployee(payload, user, path, allRegistrations, existingConfirmations, users, trainingClasses) {
   if (!canManageTraining(user)) throw new HttpError(403, 'Bạn không có quyền xác nhận lộ trình thăng tiến');
   const targetUsername = (payload?.username || '').trim();
   if (!targetUsername) throw new HttpError(400, 'Thiếu người cần xác nhận');
   const targetUser = (users || []).find(u => u.username === targetUsername);
   if (!targetUser) throw new HttpError(404, 'Không tìm thấy nhân viên này');
-  const already = (existingConfirmations || []).some(c => c.pathId === path.id && c.username === targetUsername);
-  if (already) throw new HttpError(409, 'Nhân viên này đã được xác nhận hoàn thành lộ trình này rồi');
 
-  const requiredClassIds = Array.isArray(path.requiredClassIds) ? path.requiredClassIds : [];
-  const missing = requiredClassIds.filter(classId =>
-    !(allRegistrations || []).some(r => r.classId === classId && r.creator === targetUsername && r.result === 'PASSED'));
+  const stages = Array.isArray(path.stages) ? path.stages : [];
+  const stageIndex = Number(payload?.stageIndex);
+  if (!Number.isInteger(stageIndex) || stageIndex < 0 || stageIndex >= stages.length) {
+    throw new HttpError(400, 'Cấp bậc cần xác nhận không hợp lệ');
+  }
+  const stage = stages[stageIndex];
+
+  const myConfirmations = (existingConfirmations || []).filter(c => c.pathId === path.id && c.username === targetUsername);
+  if (myConfirmations.some(c => c.stageIndex === stageIndex)) {
+    throw new HttpError(409, `Nhân viên này đã được xác nhận hoàn thành Cấp ${stageIndex + 1} của lộ trình này rồi`);
+  }
+  if (stageIndex > 0 && !myConfirmations.some(c => c.stageIndex === stageIndex - 1)) {
+    throw new HttpError(409, `Nhân viên chưa được xác nhận hoàn thành Cấp ${stageIndex} trước đó`);
+  }
+
+  const classes = trainingClasses || [];
+  const requiredCourseIds = Array.isArray(stage.requiredCourseIds) ? stage.requiredCourseIds : [];
+  const missing = requiredCourseIds.filter(courseId => !(allRegistrations || []).some(r =>
+    r.creator === targetUsername && r.result === 'PASSED' &&
+    classes.some(c => c.id === r.classId && c.courseId === courseId)));
   if (missing.length) {
-    throw new HttpError(409, `Nhân viên chưa đạt yêu cầu ở ${missing.length} lớp học bắt buộc của lộ trình này — chưa thể xác nhận`);
+    throw new HttpError(409, `Nhân viên chưa đạt yêu cầu ở ${missing.length} chương trình bắt buộc của Cấp ${stageIndex + 1} — chưa thể xác nhận`);
   }
 
   return {
-    pathId: path.id, pathName: path.name,
+    pathId: path.id, pathName: path.name, stageIndex, stageName: stage.name,
     username: targetUsername, name: targetUser.name, dept: targetUser.dept,
     confirmedBy: user.username, confirmedByName: user.name, confirmedAt: nowVN()
   };
+}
+
+// ===== ĐÀO TẠO TÂN BINH (Đợt 6, module con "Đào Tạo") =====
+// onboardingPaths ("Lộ Trình") quản lý (tạo/sửa/xoá) CHỈ trainingManage — dùng lại đúng canManageTraining()
+// ở trên. onboardingProgress ("Phân Công") có 3 nhóm hành động riêng biệt hoàn toàn khác gác quyền nhau:
+// - submitOnboardingStageTest(): chính người được phân công (employeeUsername) tự làm.
+// - evaluateOnboardingStage3(): quản lý CÙNG PHÒNG BAN/SIÊU THỊ với người được phân công (onboardingEvaluate
+//   + so trực tiếp dept, KHÔNG có bảng ánh xạ nào khác — mirror ĐÚNG idiom uniformStoreManage/item.dept ở
+//   canViewUniformIssuance()/canViewUniformStockAdjustment(), lib/recordViewScope.js).
+// - issueOnboardingCertificate(): trainingManage/admin, CHỈ khi cả 3 giai đoạn đã ĐẠT.
+
+// Sửa 1 Lộ Trình đã tạo (onboardingPaths, Đợt 6) — cùng khuôn editTrainingPlan() ở trên (whitelist field
+// rồi chạy lại ĐÚNG 1 luật chuẩn hoá dùng chung với lúc TẠO, xem normalizeOnboardingPathFields() ở
+// lib/createValidation.js).
+const ONBOARDING_PATH_EDITABLE_FIELDS = ['name', 'stage1DocumentIds', 'test1Id', 'stage2DocumentIds', 'test2Id', 'stage3Criteria'];
+function editOnboardingPath(payload, user, path, appData) {
+  if (!canManageTraining(user)) throw new HttpError(403, 'Bạn không có quyền sửa lộ trình đào tạo tân binh');
+  if (!payload || typeof payload !== 'object') throw new HttpError(400, 'Thiếu dữ liệu cập nhật');
+  for (const field of ONBOARDING_PATH_EDITABLE_FIELDS) {
+    if (payload[field] !== undefined) path[field] = payload[field];
+  }
+  normalizeOnboardingPathFields(path, appData);
+  return path;
+}
+
+// Nộp bài test Giai đoạn 1 hoặc 2 của 1 hồ sơ Phân Công — CHỈ chính người được phân công
+// (progress.employeeUsername) mới nộp được (khác setTrainingRegistrationResult/confirmCareerPathForEmployee
+// ở trên vốn do người QUẢN LÝ ghi nhận — ở đây là "tự làm bài, hệ thống tự chấm", cùng tinh thần
+// applyAutoGradedTestResult() cho trainingClasses). Giai đoạn 2 bị chặn nếu Giai đoạn 1 chưa ĐẠT (đúng
+// yêu cầu tuần tự "Ngày 1-7 rồi mới tới Ngày 8-21" của thiết kế) — không chặn theo THỜI GIAN ở đây (hạn
+// chỉ là mốc hiển thị "quá hạn" tính sống ở client, KHÔNG khoá cứng việc nộp bài trễ, tránh 1 nhân viên
+// nộp trễ vài giờ bị kẹt vĩnh viễn không hoàn thành nổi lộ trình). Test lấy đúng theo path.test1Id/
+// test2Id tại THỜI ĐIỂM NỘP BÀI (không snapshot — 1 lộ trình sửa lại bài test giữa chừng thì mọi người
+// CHƯA nộp bài đều làm theo bài test MỚI, giống hệt cách trainingClasses.testId hoạt động).
+function submitOnboardingStageTest(payload, user, progress, path, tests) {
+  if (user.username !== progress.employeeUsername) {
+    throw new HttpError(403, 'Bạn chỉ có thể tự làm bài test của lộ trình được phân công cho chính mình');
+  }
+  const stage = Number(payload?.stage);
+  if (stage !== 1 && stage !== 2) throw new HttpError(400, 'Giai đoạn không hợp lệ (chỉ nhận 1 hoặc 2)');
+  const resultField = `stage${stage}Result`;
+  if (progress[resultField] != null) {
+    throw new HttpError(409, `Giai đoạn ${stage} đã có kết quả (${progress[resultField]}) từ trước — mỗi giai đoạn chỉ được làm bài 1 lần duy nhất`);
+  }
+  if (stage === 2 && progress.stage1Result !== 'PASSED') {
+    throw new HttpError(409, 'Bạn cần Đạt Giai đoạn 1 trước khi làm bài test Giai đoạn 2');
+  }
+  if (!path) throw new HttpError(404, 'Không tìm thấy lộ trình đào tạo tân binh của hồ sơ này (có thể đã bị xoá)');
+  const testId = stage === 1 ? path.test1Id : path.test2Id;
+  const test = (tests || []).find(t => t.id === testId);
+  if (!test) throw new HttpError(404, 'Không tìm thấy bài test được gán cho giai đoạn này (có thể đã bị xoá)');
+
+  const graded = gradeTrainingTestSubmission(payload?.answers, test);
+  progress[resultField] = graded.passed ? 'PASSED' : 'FAILED';
+  progress[`stage${stage}Score`] = graded.percentage;
+  progress[`stage${stage}SubmittedAt`] = nowVN();
+  return progress;
+}
+
+// Quyền đánh giá Giai đoạn 3 — mirror ĐÚNG idiom uniformStoreManage/item.dept (lib/recordViewScope.js
+// canViewUniformIssuance()/canViewUniformStockAdjustment()): so trực tiếp dept của NGƯỜI ĐƯỢC PHÂN CÔNG
+// (đọc SỐNG từ hồ sơ user hiện tại qua users[], KHÔNG snapshot — khác startDate ở trên chủ đích snapshot;
+// ở đây dùng dept THẬT hiện tại để 1 nhân viên chuyển phòng ban/siêu thị giữa chừng thì quản lý MỚI của
+// họ đánh giá được, không kẹt vào quản lý CŨ) với dept của người đánh giá — không có bảng ánh xạ nào khác.
+function canEvaluateOnboardingStage3(user, traineeUser) {
+  if (user?.perms?.admin) return true;
+  return !!(user?.perms?.onboardingEvaluate && traineeUser && traineeUser.dept === user.dept);
+}
+
+function evaluateOnboardingStage3(payload, user, progress, users) {
+  const traineeUser = (users || []).find(u => u.username === progress.employeeUsername);
+  if (!canEvaluateOnboardingStage3(user, traineeUser)) {
+    throw new HttpError(403, 'Bạn không có quyền đánh giá Giai đoạn 3 cho nhân viên này (khác phòng ban/siêu thị hoặc không có quyền)');
+  }
+  if (progress.stage1Result !== 'PASSED' || progress.stage2Result !== 'PASSED') {
+    throw new HttpError(409, 'Nhân viên cần Đạt cả Giai đoạn 1 và Giai đoạn 2 trước khi đánh giá Giai đoạn 3');
+  }
+  if (progress.stage3Evaluation != null) {
+    throw new HttpError(409, 'Giai đoạn 3 của nhân viên này đã được đánh giá rồi');
+  }
+  const evaluation = payload?.evaluation === 'PASSED' || payload?.evaluation === 'FAILED' ? payload.evaluation : null;
+  if (!evaluation) throw new HttpError(400, 'Kết quả đánh giá không hợp lệ (chỉ nhận Đạt/Không đạt)');
+  progress.stage3Evaluation = evaluation;
+  progress.stage3EvaluatedBy = user.username;
+  progress.stage3EvaluatedByName = user.name;
+  progress.stage3EvaluatedAt = nowVN();
+  progress.stage3Note = (payload?.note || '').trim().slice(0, 3000);
+  return progress;
+}
+
+// Cấp Chứng Chỉ Hoàn Thành — trainingManage/admin, CHỈ khi cả 3 giai đoạn đã ĐẠT. Chỉ đánh dấu
+// certificateIssued/issuedAt/issuedBy ở đây — PDF được dựng lại HOÀN TOÀN ở client từ chính dữ liệu
+// progress này (tên nhân viên/tên lộ trình/ngày cấp — xem downloadOnboardingCertificatePdf() ở
+// index.html, kỹ thuật html2canvas+jsPDF giống exportBudgetSummaryPdf()), KHÔNG lưu file PDF nào ở
+// server — "tính toán lại thay vì lưu trữ" đúng tinh thần chung của hệ thống (giống mọi số liệu SỐNG
+// khác trong module Đào Tạo).
+function issueOnboardingCertificate(user, progress) {
+  if (!canManageTraining(user)) throw new HttpError(403, 'Bạn không có quyền cấp chứng chỉ hoàn thành đào tạo tân binh');
+  if (progress.stage1Result !== 'PASSED' || progress.stage2Result !== 'PASSED' || progress.stage3Evaluation !== 'PASSED') {
+    throw new HttpError(409, 'Nhân viên chưa Đạt cả 3 giai đoạn — chưa thể cấp chứng chỉ hoàn thành');
+  }
+  if (progress.certificateIssued) throw new HttpError(409, 'Chứng chỉ hoàn thành đã được cấp trước đó rồi');
+  progress.certificateIssued = true;
+  progress.certificateIssuedAt = nowVN();
+  progress.certificateIssuedBy = user.username;
+  return progress;
 }
 
 // ===== TUYỂN DỤNG (thay thế mục "Khen Thưởng" cũ trong Truyền Thông Nội Bộ) =====
@@ -1898,12 +2225,31 @@ function canManageRecruitment(user) {
   return !!(user.perms?.admin || user.perms?.internalRecruitmentCreate);
 }
 
+// Đợt 2: cho đóng tin từ CẢ OPEN lẫn FILLED (trước đây chỉ từ OPEN) — HR cần đóng hẳn 1 tin sau khi đã
+// xác nhận tuyển đủ (confirmRecruitmentJobFilled() bên dưới), không còn cách nào khác để chuyển FILLED
+// -> CLOSED nếu vẫn chặn như cũ. Không cho đóng lại tin ĐÃ đóng (giữ nguyên hành vi cũ).
 function closeRecruitmentJob(payload, user, job) {
   if (job.creator !== user.username && !user.perms?.admin) {
     throw new HttpError(403, 'Chỉ người đăng tin hoặc Quản Trị Viên mới được đóng tin tuyển dụng này');
   }
-  if (job.status !== 'OPEN') throw new HttpError(409, 'Tin tuyển dụng này đã đóng từ trước');
+  if (job.status === 'CLOSED') throw new HttpError(409, 'Tin tuyển dụng này đã đóng từ trước');
   job.status = 'CLOSED';
+  return job;
+}
+
+// "Đã Tuyển Đủ" (Đợt 2) — xác nhận THỦ CÔNG bởi bất kỳ ai trong đội tuyển dụng (canManageRecruitment,
+// KHÔNG giới hạn theo người đăng tin — cùng tinh thần setRecruitmentReferralStatus() bên dưới), CỐ Ý
+// không chặn/yêu cầu số referral HIRED phải đạt slots trước khi cho xác nhận: HR có thể đã tuyển được
+// người qua kênh khác ngoài hệ thống giới thiệu nội bộ này (đăng tuyển ngoài, headhunter...) mà hệ
+// thống không thấy được, nên không thể tự động hoá điều kiện này — số liệu HIRED/slots chỉ dùng để GỢI
+// Ý ở client (xem renderRecruitmentJobs() ở public/index.html), không phải điều kiện chặn ở đây.
+function confirmRecruitmentJobFilled(payload, user, job) {
+  if (!canManageRecruitment(user)) throw new HttpError(403, 'Bạn không có quyền xác nhận tin tuyển dụng đã tuyển đủ');
+  if (job.status !== 'OPEN') throw new HttpError(409, 'Chỉ có thể xác nhận đã tuyển đủ với tin đang tuyển (OPEN)');
+  job.status = 'FILLED';
+  job.filledBy = user.username;
+  job.filledByName = user.name;
+  job.filledAt = nowVN();
   return job;
 }
 
@@ -2482,10 +2828,11 @@ module.exports = {
   confirmPaymentInstallment, assertCanDeletePaymentRequest,
   canEditMinutes, canDeleteMinutes, editMinutes, assertCanDeleteMinutes,
   canCreateMinutes, createMinutes, buildTasksFromDirectives, assignMinutesTasks, buildTaskFromSubmissionComment,
-  markInternalPostRead, toggleInternalPostLike, addInternalPostComment,
+  markInternalPostRead, toggleInternalPostLike, toggleInternalPostCommentLike, addInternalPostComment,
   scanCommentForSensitiveContent, dismissInternalCommentFlag, deleteInternalPostComment,
   registerInternalPostTraining, unregisterInternalPostTraining,
   canApproveInternalPost, approveInternalPost, rejectInternalPost,
+  requestInternalPostInfo, hideInternalPost, unhideInternalPost, editInternalPost,
   canManageTasks, canDeleteTaskPerm, canAssignSpecificTask, assignTask, editTask, assertCanDeleteTask,
   createTask,
   acceptTask, confirmCollaboratorParticipation, updateTaskStatusAction, requestExtension,
@@ -2495,9 +2842,11 @@ module.exports = {
   closeReportPeriod, submitReportEntry, updateReportEntryDraft,
   mergeReportPeriod, mergeReportPeriodByTasks, updateReportCompilation, publishReportPeriod, unpublishReportPeriod,
   updateReportSlideTemplate,
-  canManageTraining, cancelTrainingRegistration, setTrainingRegistrationResult, confirmCareerPathForEmployee,
-  bulkRegisterTrainingClass, gradeTrainingTestSubmission, applyAutoGradedTestResult,
-  canManageRecruitment, closeRecruitmentJob, setRecruitmentReferralStatus,
+  canManageTraining, canManageTrainingClass, cancelTrainingRegistration, setTrainingRegistrationResult, confirmCareerPathForEmployee,
+  bulkRegisterTrainingClass, editTrainingClass, startOfflineTrainingClass, endOfflineTrainingClass, editTrainingPlan,
+  gradeTrainingTestSubmission, applyAutoGradedTestResult,
+  editOnboardingPath, submitOnboardingStageTest, canEvaluateOnboardingStage3, evaluateOnboardingStage3, issueOnboardingCertificate,
+  canManageRecruitment, closeRecruitmentJob, confirmRecruitmentJobFilled, setRecruitmentReferralStatus,
   canManageItSupport, applyPriceApproval, claimPriceApply, releasePriceApplyClaim, requestPriceInfoFromIt, submitPriceSupplementFile,
   claimItTicket, updateItTicketStatus, addItTicketComment, cancelItTicket,
   escalateItTicket, approveItTicketEscalation, denyItTicketEscalation,

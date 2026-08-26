@@ -90,6 +90,27 @@ const DEFAULTS = {
     { key: 'KHAC', label: 'Tờ trình khác' }
   ],
 
+  // "Chuyên đề" gắn cho bài viết Nhịp Sống HCRC (type NEWS trong internalPosts) — cùng khuôn
+  // submissionTypes ở trên ({key,label}, admin tự thêm/bớt). ADMIN_ONLY_KEYS (routes/data.js) vì đây là
+  // dữ liệu phân loại nội dung, tương đương submissionTypes chứ không phải danh sách nhãn thuần.
+  internalNewsCategories: [
+    { key: 'THI_DUA', label: 'Chương trình thi đua' },
+    { key: 'GAN_KET', label: 'Sự kiện & Gắn kết' },
+    { key: 'HOC_TAP', label: 'Góc học tập' },
+    { key: 'HOAT_DONG_CHUNG', label: 'Hoạt động chung' },
+    { key: 'KHAC', label: 'Khác' }
+  ],
+
+  // "Chuyên đề" gắn cho bài viết Góc Chia Sẻ (type SHARE trong internalPosts) — DÙNG CHUNG field name
+  // postCategory với internalNewsCategories ở trên nhưng bộ giá trị khác (SHARE là nội dung cá nhân
+  // CBNV tự chia sẻ, khác hẳn nội dung do Ban Truyền Thông đăng ở Nhịp Sống HCRC).
+  internalShareCategories: [
+    { key: 'CONG_VIEC', label: 'Góc công việc' },
+    { key: 'DOI_SONG', label: 'Góc đời sống' },
+    { key: 'DONG_NGHIEP', label: 'Góc đồng nghiệp' },
+    { key: 'SANG_TAO', label: 'Góc sáng tạo' }
+  ],
+
   // Danh sách "Loại Pháp Lý" (Hợp đồng) và "Đăng Ký Sử Dụng Loại Xe" — TRƯỚC ĐÂY gõ cứng thẳng
   // <option> trong HTML, giờ chuyển thành dữ liệu để admin tự thêm/bớt (nút Sửa trường mặc định
   // tương ứng ở màn Biểu Mẫu). Giữ nguyên đúng các giá trị hiện có.
@@ -213,13 +234,18 @@ const DEFAULTS = {
   // carView/Create, officeView/Create) dùng dạng { all, depts } — xem/tạo mới theo TOÀN CÔNG TY
   // (all:true) hoặc chỉ trong DANH SÁCH PHÒNG BAN chỉ định (depts:[...]); phòng ban của chính
   // người dùng luôn được phép mặc định dù không liệt kê ở đây.
+  // startDate (Đào Tạo Đợt 6, "ngày vào làm việc") — mốc DUY NHẤT để tính các hạn Giai Đoạn 1/2/3 của Đào
+  // Tạo Tân Binh (onboardingProgress, xem lib/createValidation.js/lib/recordActions.js). Rỗng mặc định
+  // ở toàn bộ user seed (4 tài khoản dưới đây đều là tài khoản quản trị/cũ, không phải "tân binh" cần
+  // theo dõi) — KHÔNG backfill, admin tự nhập lại ở form Quản Lý Người Dùng khi cần; tạo hồ sơ
+  // onboardingProgress cho 1 nhân viên chưa có startDate sẽ bị chặn ngay ở server (thông báo rõ ràng).
   users: [
     {
-      id: 1, username: 'admin', pass: '123456', name: 'Quản Trị Viên', email: 'admin@company.com', phone: '0901112223', dept: 'Phòng IT',
+      id: 1, username: 'admin', pass: '123456', name: 'Quản Trị Viên', email: 'admin@company.com', phone: '0901112223', dept: 'Phòng IT', startDate: '',
       perms: { admin: true } // admin:true bỏ qua mọi kiểm tra phạm vi khác, toàn quyền hệ thống
     },
     {
-      id: 2, username: 'nv_nhansu', pass: '123456', name: 'Nguyễn Văn A', email: 'nhansu@company.com', phone: '0902223334', dept: 'Phòng Nhân Sự',
+      id: 2, username: 'nv_nhansu', pass: '123456', name: 'Nguyễn Văn A', email: 'nhansu@company.com', phone: '0902223334', dept: 'Phòng Nhân Sự', startDate: '',
       perms: {
         admin: false,
         uploadAll: false, uploadDepts: ['Phòng Nhân Sự'],
@@ -236,7 +262,7 @@ const DEFAULTS = {
       }
     },
     {
-      id: 3, username: 'ks_kiemsoat', pass: '123456', name: 'Lê Văn KS', email: 'kiemsoat@company.com', phone: '0903334445', dept: 'Phòng IT',
+      id: 3, username: 'ks_kiemsoat', pass: '123456', name: 'Lê Văn KS', email: 'kiemsoat@company.com', phone: '0903334445', dept: 'Phòng IT', startDate: '',
       perms: {
         admin: false,
         uploadAll: false, uploadDepts: [],
@@ -255,7 +281,7 @@ const DEFAULTS = {
       }
     },
     {
-      id: 4, username: 'sep_duyet', pass: '123456', name: 'Phạm Văn BGD', email: 'giamdoc@company.com', phone: '0904445556', dept: 'Ban Giám Đốc',
+      id: 4, username: 'sep_duyet', pass: '123456', name: 'Phạm Văn BGD', email: 'giamdoc@company.com', phone: '0904445556', dept: 'Ban Giám Đốc', startDate: '',
       perms: {
         admin: false,
         uploadAll: true, uploadDepts: [],
