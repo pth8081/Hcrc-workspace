@@ -556,8 +556,11 @@ const CREATE_MODULE_CONFIGS = {
         const family = (collection || []).filter(d => d.id === rootId || d.rootDocId === rootId)
           .sort((a, b) => (a.versionNumber || 1) - (b.versionNumber || 1));
         const latest = family[family.length - 1];
-        if (!latest || latest.status !== 'APPROVED') {
-          throw new CreateError(409, 'Chỉ được cập nhật khi phiên bản mới nhất của tài liệu này đã phê duyệt xong');
+        // Chỉ chặn khi version mới nhất đang xử lý dở (PENDING: chờ duyệt, DRAFT: chờ sửa & trình lại) —
+        // REJECTED là kết quả CUỐI của lượt đó nên KHÔNG chặn, nếu không tài liệu bị từ chối sẽ vĩnh viễn
+        // không thể cập nhật được nữa (khớp isDocFamilyLatestBlocking() ở index.html).
+        if (!latest || latest.status === 'PENDING' || latest.status === 'DRAFT') {
+          throw new CreateError(409, 'Không thể cập nhật khi phiên bản mới nhất của tài liệu này đang chờ xử lý (chờ duyệt hoặc chờ sửa & trình lại)');
         }
         if (payload.dept !== root.dept) {
           throw new CreateError(400, 'Phòng ban của phiên bản mới phải khớp với tài liệu gốc');

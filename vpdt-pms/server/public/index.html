@@ -10899,11 +10899,18 @@ function getDocFamily(anyDocId) {
     .sort((a, b) => (a.versionNumber || 1) - (b.versionNumber || 1));
 }
 
-// Version MỚI NHẤT của 1 tài liệu (dùng để xét điều kiện được phép "Cập nhật" — chỉ cho phép khi
-// version mới nhất đã APPROVED, tránh vừa có version đang chờ duyệt vừa tạo thêm version khác chồng lên).
+// Version MỚI NHẤT của 1 tài liệu (dùng để xét điều kiện được phép "Cập nhật").
 function getDocFamilyLatest(anyDocId) {
   const family = getDocFamily(anyDocId);
   return family[family.length - 1];
+}
+
+// Version mới nhất đang CHẶN việc tạo thêm version khác chồng lên khi nó còn đang xử lý dở
+// (PENDING: chờ duyệt: DRAFT: đã bị yêu cầu sửa lại và đang chờ trình lại qua đúng luồng đó) —
+// REJECTED KHÔNG được coi là chặn, vì đó là kết quả CUỐI của lượt đó, không phải đang xử lý dở,
+// nếu coi REJECTED là chặn thì tài liệu bị từ chối sẽ vĩnh viễn không thể cập nhật được nữa.
+function isDocFamilyLatestBlocking(latest) {
+  return !latest || latest.status === 'PENDING' || latest.status === 'DRAFT';
 }
 
 // Đổi giữa "Nhập mới" (mã tự sinh, phiên bản luôn v1.0, chọn Phòng ban/Phân loại như cũ) và "Cập nhật"
@@ -10943,8 +10950,9 @@ function refreshDocCodePreview() {
   document.getElementById('docCode').value = (dept && cat) ? generateDocCode(cat, dept) : '';
 }
 
-// Danh sách tài liệu được phép "Cập nhật" — chỉ tài liệu GỐC mà version MỚI NHẤT đã APPROVED (không
-// cho cập nhật khi đang có version chờ duyệt), và người dùng có quyền tạo tài liệu cho đúng phòng ban đó.
+// Danh sách tài liệu được phép "Cập nhật" — chỉ tài liệu GỐC mà version MỚI NHẤT không đang xử lý dở
+// (không cho cập nhật khi đang có version chờ duyệt hoặc đang chờ sửa & trình lại), và người dùng có
+// quyền tạo tài liệu cho đúng phòng ban đó.
 function populateDocUpdateTargets() {
   const sel = document.getElementById('docUpdateTarget');
   if (!sel) return;
@@ -10954,7 +10962,7 @@ function populateDocUpdateTargets() {
   const scope = { all: !!currentUser.perms?.uploadAll, depts: currentUser.perms?.uploadDepts || [] };
   const eligible = roots.filter(root => {
     const latest = getDocFamilyLatest(root.id);
-    if (!latest || latest.status !== 'APPROVED') return false;
+    if (isDocFamilyLatestBlocking(latest)) return false;
     return currentUser.perms?.admin || scopeAllows(currentUser, scope, root.dept);
   });
 
@@ -11209,8 +11217,8 @@ async function uploadDoc(e) {
     const rootDoc = DB.docs.find(d => d.id === rootId);
     if (!rootDoc) return alert('Vui lòng chọn tài liệu cần cập nhật!');
     const latest = getDocFamilyLatest(rootId);
-    if (!latest || latest.status !== 'APPROVED') {
-      return alert('⛔ Chỉ được cập nhật khi phiên bản mới nhất của tài liệu này đã phê duyệt xong!');
+    if (isDocFamilyLatestBlocking(latest)) {
+      return alert('⛔ Không thể cập nhật khi phiên bản mới nhất của tài liệu này đang chờ xử lý (chờ duyệt hoặc chờ sửa & trình lại)!');
     }
     dept = rootDoc.dept;
     cat = rootDoc.cat;

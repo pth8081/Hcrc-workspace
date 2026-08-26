@@ -328,22 +328,60 @@ async function main() {
       );
     }
 
-    // ================= Scenario 5: versioning — update only allowed after latest version approved, =====
-    // ================= then version history expand/collapse + detail modal show all versions ===========
+    // ================= Scenario 5: versioning — update only allowed when latest version is NOT stuck ====
+    // ================= mid-flight (PENDING/DRAFT); REJECTED is a terminal outcome, not blocking, so an ===
+    // ================= addendum-family whose latest version got rejected must still accept a resubmit ===
     {
-      // 5a. Trying to "Cập nhật" before the family's latest version is approved must not be an eligible target.
+      const rejectedDocId = DB.docs.find(d => d.title === 'Biểu mẫu chấm công').id;
+
+      // 5a. A doc whose latest version was REJECTED IS offered as an update target — regression check
+      // for the bug where getDocFamilyLatest() forever returning the REJECTED record made the whole
+      // family permanently ineligible for any future version upload.
       populateDocUpdateTargets();
       const eligibleBefore = [...document.getElementById('docUpdateTarget').options].map(o => o.value).filter(Boolean);
       check(
-        'doc: a doc whose latest version is REJECTED is NOT offered as an update target',
-        !eligibleBefore.includes(String(DB.docs.find(d => d.title === 'Biểu mẫu chấm công').id)),
-        `eligible=${JSON.stringify(eligibleBefore)}`
+        'doc: a doc whose latest version is REJECTED IS offered as an update target (can be resubmitted as a new version)',
+        eligibleBefore.includes(String(rejectedDocId)),
+        `eligible=${JSON.stringify(eligibleBefore)} rejectedDocId=${rejectedDocId}`
       );
 
       check(
         'doc: the already-APPROVED doc from scenario 3 IS offered as an update target',
         eligibleBefore.includes(String(approvedDocId)),
         `eligible=${JSON.stringify(eligibleBefore)} approvedDocId=${approvedDocId}`
+      );
+
+      // 5a2. Actually perform the update against the REJECTED-latest family end-to-end (client gate in
+      // uploadDoc() must also accept it, not just the dropdown population).
+      alerts.length = 0;
+      document.getElementById('docOpMode').value = 'UPDATE';
+      onDocOpModeChange();
+      document.getElementById('docUpdateTarget').value = String(rejectedDocId);
+      onDocUpdateTargetChange();
+      document.getElementById('docSummary').value = 'Chỉnh lại tiêu đề cột theo yêu cầu, trình lại.';
+      setFileInput('docFile', 'bieu-mau-cham-cong-v2.pdf', 'noi dung v2', 'application/pdf');
+
+      const beforeCountRejected = DB.docs.length;
+      await uploadDoc({ preventDefault() {} });
+      const resubmittedVersion = DB.docs.find(d => d.rootDocId === rejectedDocId);
+
+      check(
+        'doc: resubmitting a new version against a REJECTED-latest family succeeds (version 2, status PENDING)',
+        DB.docs.length === beforeCountRejected + 1 &&
+        resubmittedVersion && resubmittedVersion.versionNumber === 2 && resubmittedVersion.status === 'PENDING' &&
+        resubmittedVersion.code.endsWith('-V2') && resubmittedVersion.rootDocId === rejectedDocId &&
+        alerts.some(a => a.includes('Tải lên và trình ký tài liệu thành công')),
+        `resubmittedVersion=${JSON.stringify(resubmittedVersion && { code: resubmittedVersion.code, versionNumber: resubmittedVersion.versionNumber, status: resubmittedVersion.status })} alerts=${JSON.stringify(alerts)}`
+      );
+
+      // 5a3. Now that the family's latest version is PENDING (an in-flight process), it must go back to
+      // being excluded — proving PENDING still correctly blocks (the fix only stopped excluding REJECTED).
+      populateDocUpdateTargets();
+      const eligibleAfterResubmit = [...document.getElementById('docUpdateTarget').options].map(o => o.value).filter(Boolean);
+      check(
+        'doc: after resubmit, the family (latest now PENDING) is excluded again from update targets',
+        !eligibleAfterResubmit.includes(String(rejectedDocId)),
+        `eligible=${JSON.stringify(eligibleAfterResubmit)} rejectedDocId=${rejectedDocId}`
       );
 
       // 5b. Perform the update (new version) against the approved root doc.
