@@ -143,6 +143,7 @@ async function main() {
       await page.evaluate(() => {
         document.getElementById('internalTitle').value = 'Cảm nhận sau 1 năm gắn bó với công ty';
         document.getElementById('internalContent').value = 'Mình rất vui khi được làm việc cùng mọi người ở đây!';
+        document.getElementById('internalPostCategoryShare').value = 'CONG_VIEC';
       });
       await page.evaluate(() => submitInternalPost({ preventDefault() {}, target: { reset() {} } }));
       const posts = await page.evaluate(() => DB.internalPosts.filter((p) => p.type === 'SHARE'));
@@ -170,6 +171,7 @@ async function main() {
       await page.evaluate(() => {
         document.getElementById('internalTitle').value = 'Bài chia sẻ thứ hai';
         document.getElementById('internalContent').value = 'Nội dung bài chia sẻ thứ hai...';
+        document.getElementById('internalPostCategoryShare').value = 'CONG_VIEC';
       });
       await page.evaluate(() => submitInternalPost({ preventDefault() {}, target: { reset() {} } }));
       const posts = await page.evaluate(() => DB.internalPosts.filter((p) => p.type === 'SHARE' && p.status === 'PENDING'));

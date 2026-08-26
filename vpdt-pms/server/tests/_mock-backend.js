@@ -35,7 +35,34 @@ function __mockValidateInternalPostCreate(payload, user) {
     (type === 'REWARD' && user.perms?.internalRewardCreate)
   );
   if (!allowed) throw __mockHttpError(403, 'Bạn không có quyền đăng bài ở phân hệ này');
-  payload.status = (type === 'SHARE' && !user.perms?.admin && !user.perms?.internalPostApprove) ? 'PENDING' : 'APPROVED';
+
+  // postCategory (Đợt 1 Nhịp Sống HCRC/Góc Chia Sẻ) — mirrors createValidation.js internalPosts.extraValidate.
+  if (type === 'NEWS' || type === 'SHARE') {
+    const catList = type === 'NEWS' ? (DB.internalNewsCategories || []) : (DB.internalShareCategories || []);
+    const catKey = (payload.postCategory || '').trim();
+    if (!catKey || !catList.some((c) => c.key === catKey)) throw __mockHttpError(400, 'Vui lòng chọn chuyên đề hợp lệ cho bài viết');
+    payload.postCategory = catKey;
+  } else {
+    delete payload.postCategory;
+  }
+
+  const isDraft = payload.draft === true;
+  delete payload.draft;
+
+  const publishAtRaw = payload.publishAt;
+  if (type === 'NEWS' && publishAtRaw) {
+    const ts = new Date(publishAtRaw).getTime();
+    if (!Number.isFinite(ts)) throw __mockHttpError(400, 'Thời gian đăng bài không hợp lệ');
+    payload.publishAt = new Date(ts).toISOString();
+  } else {
+    payload.publishAt = null;
+  }
+
+  if (isDraft) {
+    payload.status = 'DRAFT';
+  } else {
+    payload.status = (type === 'SHARE' && !user.perms?.admin && !user.perms?.internalPostApprove) ? 'PENDING' : 'APPROVED';
+  }
 
   const PIN_DAYS = [3, 7, 14, 30];
   const pinRaw = payload.pinDurationDays;
@@ -52,6 +79,67 @@ function __mockValidateInternalPostCreate(payload, user) {
   } else {
     payload.pinned = false; payload.pinExpiresAt = null; payload.pinnedBy = null;
   }
+}
+
+function __mockCanApproveInternalPost(user) {
+  return !!(user.perms?.admin || user.perms?.internalPostApprove);
+}
+
+// Ẩn/Hiện bài đã đăng — mirrors hideInternalPost()/unhideInternalPost() ở lib/recordActions.js.
+function __mockHideInternalPost(user, post) {
+  if (!__mockCanApproveInternalPost(user)) throw __mockHttpError(403, 'Bạn không có quyền ẩn bài đăng này');
+  if (post.status !== 'APPROVED') throw __mockHttpError(409, 'Chỉ ẩn được bài đã đăng');
+  post.status = 'HIDDEN'; post.hiddenBy = user.username; post.hiddenAt = new Date().toLocaleString('vi-VN');
+  return post;
+}
+function __mockUnhideInternalPost(user, post) {
+  if (!__mockCanApproveInternalPost(user)) throw __mockHttpError(403, 'Bạn không có quyền hiện lại bài đăng này');
+  if (post.status !== 'HIDDEN') throw __mockHttpError(409, 'Bài đăng không ở trạng thái đã ẩn');
+  post.status = 'APPROVED'; post.hiddenBy = null; post.hiddenAt = null;
+  return post;
+}
+
+// "Yêu cầu bổ sung" — mirrors requestInternalPostInfo() ở lib/recordActions.js.
+function __mockRequestInternalPostInfo(payload, user, post) {
+  if (!__mockCanApproveInternalPost(user)) throw __mockHttpError(403, 'Bạn không có quyền yêu cầu bổ sung');
+  if (post.type !== 'SHARE') throw __mockHttpError(400, 'Chỉ áp dụng cho bài đăng Góc Chia Sẻ');
+  if (post.status !== 'PENDING') throw __mockHttpError(409, 'Bài đăng không ở trạng thái chờ duyệt');
+  const comment = (payload?.comment || '').trim();
+  if (!comment) throw __mockHttpError(400, 'Vui lòng nhập nội dung cần bổ sung');
+  post.status = 'NEED_INFO'; post.infoRequestComment = comment;
+  return post;
+}
+
+// Sửa bài Nháp/NEED_INFO rồi gửi lại — mirrors editInternalPost() ở lib/recordActions.js.
+const __MOCK_INTERNAL_POST_EDITABLE_FIELDS = ['title', 'content', 'attachment', 'postCategory', 'publishAt', 'training'];
+function __mockEditInternalPost(payload, user, post) {
+  if (post.author !== user.username && !user.perms?.admin) throw __mockHttpError(403, 'Bạn không có quyền sửa bài đăng này');
+  if (post.status !== 'DRAFT' && post.status !== 'NEED_INFO') throw __mockHttpError(409, 'Bài đăng không còn ở trạng thái được sửa');
+  __MOCK_INTERNAL_POST_EDITABLE_FIELDS.forEach((field) => { if (payload[field] !== undefined) post[field] = payload[field]; });
+  if (post.type === 'NEWS' && post.publishAt) {
+    const ts = new Date(post.publishAt).getTime();
+    if (!Number.isFinite(ts)) throw __mockHttpError(400, 'Thời gian đăng bài không hợp lệ');
+    post.publishAt = new Date(ts).toISOString();
+  } else if (post.type !== 'NEWS') {
+    post.publishAt = null;
+  }
+  if (payload.draft === true) {
+    post.status = 'DRAFT';
+  } else {
+    post.status = (post.type === 'SHARE' && !user.perms?.admin && !user.perms?.internalPostApprove) ? 'PENDING' : 'APPROVED';
+    post.infoRequestComment = null;
+  }
+  return post;
+}
+
+// Reaction cấp bình luận — mirrors toggleInternalPostCommentLike() ở lib/recordActions.js.
+function __mockToggleCommentLike(user, post, commentId) {
+  const comment = (post.comments || []).find((c) => c.id === commentId);
+  if (!comment) throw __mockHttpError(404, 'Không tìm thấy bình luận');
+  if (!Array.isArray(comment.likes)) comment.likes = [];
+  const idx = comment.likes.indexOf(user.username);
+  if (idx === -1) comment.likes.push(user.username); else comment.likes.splice(idx, 1);
+  return post;
 }
 
 function __mockNormalizeForScan(s) {
@@ -78,6 +166,7 @@ function __mockAddComment(payload, user, post) {
     comment.flagged = true;
     comment.flagCategories = [...new Set(hits.map((h) => h.category))];
     comment.flagTerms = [...new Set(hits.map((h) => h.term))];
+    comment.pendingModeration = true;
   }
   post.comments.push(comment);
   return post;
@@ -86,7 +175,7 @@ function __mockDismissFlag(user, post, commentId) {
   if (!(user.perms?.admin || user.perms?.internalPostApprove)) throw __mockHttpError(403, 'Bạn không có quyền kiểm duyệt bình luận');
   const c = (post.comments || []).find((x) => x.id === commentId);
   if (!c) throw __mockHttpError(404, 'Không tìm thấy bình luận');
-  c.flagged = false; c.flagCategories = []; c.flagTerms = [];
+  c.flagged = false; c.flagCategories = []; c.flagTerms = []; c.pendingModeration = false;
   c.flagDismissedBy = user.username; c.flagDismissedAt = new Date().toLocaleString('vi-VN');
   return post;
 }
@@ -335,6 +424,12 @@ async function __mockHandleRecordAction(moduleKey, idStr, action, payload, user)
     if (m) return __mockDeleteComment(user, clone, Number(m[1]));
     if (action === 'approve') return __mockApprovePost(user, clone);
     if (action === 'reject') return __mockRejectPost(payload, user, clone);
+    if (action === 'hide') return __mockHideInternalPost(user, clone);
+    if (action === 'unhide') return __mockUnhideInternalPost(user, clone);
+    if (action === 'request-info') return __mockRequestInternalPostInfo(payload, user, clone);
+    if (action === 'edit') return __mockEditInternalPost(payload, user, clone);
+    m = action.match(/^comment\/(\d+)\/like$/);
+    if (m) return __mockToggleCommentLike(user, clone, Number(m[1]));
     throw __mockHttpError(400, 'Hành động không hợp lệ');
   }
   if (moduleKey === 'trainingClasses') {
