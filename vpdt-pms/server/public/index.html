@@ -1753,6 +1753,7 @@ table { display: block; overflow-x: auto; max-width: 100%; }
     <div id="internalTrainingLmsSection" class="hidden space-y-4">
       <div class="flex gap-2 flex-wrap">
         <button type="button" onclick="setTrainingLmsTab('CLASSES')" id="btnTrainingLmsClasses" class="px-3 py-1 rounded text-xs font-bold bg-emerald-700 text-white">🏫 Lớp Học</button>
+        <button type="button" onclick="setTrainingLmsTab('COURSES')" id="btnTrainingLmsCourses" class="px-3 py-1 rounded text-xs font-bold bg-gray-200 text-gray-700">🎓 Chương Trình</button>
         <button type="button" onclick="setTrainingLmsTab('MY_REGS')" id="btnTrainingLmsMyRegs" class="px-3 py-1 rounded text-xs font-bold bg-gray-200 text-gray-700">📝 Đăng Ký Của Tôi</button>
         <button type="button" onclick="setTrainingLmsTab('DOCS')" id="btnTrainingLmsDocs" class="px-3 py-1 rounded text-xs font-bold bg-gray-200 text-gray-700">📁 Kho Tài Liệu</button>
         <button type="button" onclick="setTrainingLmsTab('PATHS')" id="btnTrainingLmsPaths" class="px-3 py-1 rounded text-xs font-bold bg-gray-200 text-gray-700">🪜 Lộ Trình Thăng Tiến</button>
@@ -1776,6 +1777,10 @@ table { display: block; overflow-x: auto; max-width: 100%; }
               <label class="block font-semibold text-gray-600 mb-1">Giảng Viên / Người Phụ Trách (tuỳ chọn, phải là tài khoản hệ thống)</label>
               <input id="tcInstructor" list="systemUsersDatalist" oninput="resolveTrainingInstructorInput(this.value)" placeholder="Gõ tên hoặc tài khoản để tìm..." class="w-full border p-1.5 rounded">
               <input type="hidden" id="tcInstructorUsername">
+            </div>
+            <div>
+              <label class="block font-semibold text-gray-600 mb-1">Chương Trình (tuỳ chọn)</label>
+              <select id="tcCourseId" class="w-full border p-1.5 rounded bg-white"><option value="">-- Không thuộc chương trình nào --</option></select>
             </div>
             <div>
               <label class="block font-semibold text-gray-600 mb-1">Thời Gian Bắt Đầu</label>
@@ -1850,6 +1855,44 @@ table { display: block; overflow-x: auto; max-width: 100%; }
         </div>
       </div>
 
+      <!-- CHƯƠNG TRÌNH (Đợt 4) — catalog "Chương Trình" dùng chung, tái sử dụng được cho nhiều lớp học
+           (trainingClasses.courseId, tuỳ chọn) và tài liệu (trainingDocuments.courseId, tuỳ chọn), tách
+           biệt với "title" (tên hiển thị riêng của TỪNG lớp cụ thể, không đổi ý nghĩa). Quản lý (tạo/
+           xoá) chỉ trainingManage — trainingInstruct chỉ ĐỌC danh sách này khi tạo/sửa lớp mình phụ trách. -->
+      <div id="trainingLmsCoursesPanel" class="hidden space-y-4">
+        <form id="trainingCourseForm" onsubmit="submitTrainingCourse(event)" class="hidden bg-white p-3 rounded border text-xs space-y-3">
+          <h4 class="font-bold text-gray-700">➕ Tạo Chương Trình Mới</h4>
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+            <div>
+              <label class="block font-semibold text-gray-600 mb-1">Loại Đào Tạo</label>
+              <select id="tccCategory" class="w-full border p-1.5 rounded bg-white" required></select>
+            </div>
+            <div class="md:col-span-2">
+              <label class="block font-semibold text-gray-600 mb-1">Tên Chương Trình</label>
+              <input id="tccName" class="w-full border p-1.5 rounded" required>
+            </div>
+            <div class="md:col-span-3">
+              <label class="block font-semibold text-gray-600 mb-1">Mô Tả (tuỳ chọn)</label>
+              <textarea id="tccDescription" class="w-full border p-1.5 rounded h-16"></textarea>
+            </div>
+          </div>
+          <div class="flex justify-end"><button type="submit" class="bg-emerald-600 text-white px-5 py-2 rounded font-bold hover:bg-emerald-700">Tạo Chương Trình</button></div>
+        </form>
+        <p id="trainingCourseNoPermNote" class="hidden text-xs text-gray-500 italic bg-gray-50 border rounded p-3">⛔ Bạn không có quyền quản lý danh mục chương trình — chỉ có thể xem/chọn khi tạo lớp học hoặc tài liệu.</p>
+        <div class="space-y-3">
+          <h3 class="font-bold text-gray-800">🎓 Danh Sách Chương Trình</h3>
+          <div class="overflow-x-auto">
+            <table class="w-full border-collapse border text-xs bg-white">
+              <thead><tr class="bg-gray-100 text-left text-gray-700">
+                <th class="border p-2">Tên Chương Trình</th><th class="border p-2">Loại Đào Tạo</th><th class="border p-2">Mô Tả</th><th class="border p-2 text-center">Thao Tác</th>
+              </tr></thead>
+              <tbody id="trainingCoursesTableBody"></tbody>
+            </table>
+          </div>
+          <div id="paginationContainer_trainingCourses"></div>
+        </div>
+      </div>
+
       <!-- ĐĂNG KÝ CỦA TÔI -->
       <div id="trainingLmsMyRegsPanel" class="hidden space-y-3">
         <h3 class="font-bold text-gray-800">📝 Đăng Ký Của Tôi</h3>
@@ -1877,9 +1920,30 @@ table { display: block; overflow-x: auto; max-width: 100%; }
               <label class="block font-semibold text-gray-600 mb-1">Tên Tài Liệu</label>
               <input id="tdTitle" class="w-full border p-1.5 rounded" required>
             </div>
-            <div class="md:col-span-3">
-              <label class="block font-semibold text-gray-600 mb-1">Tệp Tài Liệu</label>
+            <div>
+              <label class="block font-semibold text-gray-600 mb-1">Loại Tài Liệu</label>
+              <select id="tdDocType" onchange="onTrainingDocTypeChange()" class="w-full border p-1.5 rounded bg-white">
+                <option value="DOCUMENT">📄 Tài Liệu (PDF/Word/Excel)</option>
+                <option value="VIDEO">🎬 Video (Youtube)</option>
+                <option value="IMAGE">🖼️ Hình Ảnh</option>
+              </select>
+            </div>
+            <div>
+              <label class="block font-semibold text-gray-600 mb-1">Chương Trình (tuỳ chọn)</label>
+              <select id="tdCourseId" class="w-full border p-1.5 rounded bg-white"><option value="">-- Không thuộc chương trình nào --</option></select>
+            </div>
+            <div class="flex items-end pb-1.5">
+              <label class="inline-flex items-center gap-2 font-semibold text-gray-600 cursor-pointer">
+                <input type="checkbox" id="tdMandatory" class="w-4 h-4"> ⚠️ Bắt Buộc Hoàn Thành
+              </label>
+            </div>
+            <div class="md:col-span-3" id="tdFileField">
+              <label id="tdFileLabel" class="block font-semibold text-gray-600 mb-1">Tệp Tài Liệu</label>
               <input id="tdFile" type="file" accept=".pdf,.docx,.xlsx" class="w-full border p-1.5 rounded bg-white" required>
+            </div>
+            <div class="md:col-span-3 hidden" id="tdVideoField">
+              <label class="block font-semibold text-gray-600 mb-1">Link Video Youtube</label>
+              <input id="tdVideoUrl" type="url" placeholder="https://www.youtube.com/watch?v=..." class="w-full border p-1.5 rounded">
             </div>
             <div class="md:col-span-3">
               <label class="block font-semibold text-gray-600 mb-1">Mô Tả (tuỳ chọn)</label>
@@ -2082,7 +2146,10 @@ table { display: block; overflow-x: auto; max-width: 100%; }
       <div class="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[85vh] overflow-y-auto">
         <div class="p-4 border-b flex justify-between items-center sticky top-0 bg-white">
           <h3 id="trainingResultsModalTitle" class="font-bold text-gray-800">Kết quả lớp học</h3>
-          <button onclick="document.getElementById('trainingResultsModal').classList.add('hidden')" class="text-gray-400 hover:text-gray-700 text-xl leading-none">&times;</button>
+          <div class="flex items-center gap-3">
+            <button onclick="exportTrainingResultsExcel()" class="bg-emerald-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-emerald-700">📊 Xuất Excel</button>
+            <button onclick="document.getElementById('trainingResultsModal').classList.add('hidden')" class="text-gray-400 hover:text-gray-700 text-xl leading-none">&times;</button>
+          </div>
         </div>
         <div class="p-4">
           <table class="w-full border-collapse border text-xs">
@@ -2162,6 +2229,10 @@ table { display: block; overflow-x: auto; max-width: 100%; }
               <label class="block font-semibold text-gray-600 mb-1">Giảng Viên / Người Phụ Trách</label>
               <input id="teInstructor" list="systemUsersDatalist" oninput="resolveTrainingEditInstructorInput(this.value)" placeholder="Gõ tên hoặc tài khoản để tìm..." class="w-full border p-1.5 rounded">
               <input type="hidden" id="teInstructorUsername">
+            </div>
+            <div>
+              <label class="block font-semibold text-gray-600 mb-1">Chương Trình (tuỳ chọn)</label>
+              <select id="teCourseId" class="w-full border p-1.5 rounded bg-white"><option value="">-- Không thuộc chương trình nào --</option></select>
             </div>
             <div>
               <label class="block font-semibold text-gray-600 mb-1">Thời Gian Bắt Đầu</label>
@@ -5643,7 +5714,7 @@ const DB = {
   internalNewsCategories: [], internalShareCategories: [],
   trainingCategories: [], trainingDocuments: [], trainingClasses: [], trainingRegistrations: [],
   careerPaths: [], careerPathConfirmations: [],
-  trainingTests: [], trainingTestSubmissions: [],
+  trainingTests: [], trainingTestSubmissions: [], trainingCourses: [],
   recruitmentJobs: [], recruitmentReferrals: [],
   sensitiveKeywords: [],
   paymentRequests: [],
@@ -7259,6 +7330,7 @@ async function initDatabase(loggingInUser) {
     DB.careerPathConfirmations = data.careerPathConfirmations || [];
     DB.trainingTests = data.trainingTests || [];
     DB.trainingTestSubmissions = data.trainingTestSubmissions || [];
+    DB.trainingCourses = data.trainingCourses || [];
     DB.recruitmentJobs = data.recruitmentJobs || [];
     DB.recruitmentReferrals = data.recruitmentReferrals || [];
     DB.sensitiveKeywords = data.sensitiveKeywords || [];
@@ -26112,14 +26184,16 @@ let activeTrainingLmsTab = 'CLASSES';
 function setTrainingLmsTab(tab) {
   activeTrainingLmsTab = tab;
   // Reset trang về 1 khi đổi tab con — mỗi tab có moduleKey phân trang riêng (trainingClasses/
-  // trainingMyRegs/trainingDocuments/careerPaths/trainingTests), tránh giữ lại trang sâu của tab trước.
-  ['trainingClasses', 'trainingMyRegs', 'trainingDocuments', 'careerPaths', 'trainingTests'].forEach(resetListPage);
-  const btnMap = { CLASSES: 'btnTrainingLmsClasses', MY_REGS: 'btnTrainingLmsMyRegs', DOCS: 'btnTrainingLmsDocs', PATHS: 'btnTrainingLmsPaths', TESTS: 'btnTrainingLmsTests' };
+  // trainingCourses/trainingMyRegs/trainingDocuments/careerPaths/trainingTests), tránh giữ lại trang sâu
+  // của tab trước.
+  ['trainingClasses', 'trainingCourses', 'trainingMyRegs', 'trainingDocuments', 'careerPaths', 'trainingTests'].forEach(resetListPage);
+  const btnMap = { CLASSES: 'btnTrainingLmsClasses', COURSES: 'btnTrainingLmsCourses', MY_REGS: 'btnTrainingLmsMyRegs', DOCS: 'btnTrainingLmsDocs', PATHS: 'btnTrainingLmsPaths', TESTS: 'btnTrainingLmsTests' };
   Object.entries(btnMap).forEach(([key, btnId]) => {
     const btn = document.getElementById(btnId);
     if (btn) btn.className = key === tab ? 'px-3 py-1 rounded text-xs font-bold bg-emerald-700 text-white' : 'px-3 py-1 rounded text-xs font-bold bg-gray-200 text-gray-700';
   });
   document.getElementById('trainingLmsClassesPanel').classList.toggle('hidden', tab !== 'CLASSES');
+  document.getElementById('trainingLmsCoursesPanel').classList.toggle('hidden', tab !== 'COURSES');
   document.getElementById('trainingLmsMyRegsPanel').classList.toggle('hidden', tab !== 'MY_REGS');
   document.getElementById('trainingLmsDocsPanel').classList.toggle('hidden', tab !== 'DOCS');
   document.getElementById('trainingLmsPathsPanel').classList.toggle('hidden', tab !== 'PATHS');
@@ -26129,7 +26203,7 @@ function setTrainingLmsTab(tab) {
 
 function populateTrainingCategorySelects() {
   const opts = (DB.trainingCategories || []).map(c => `<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`).join('');
-  ['tcCategory', 'tdCategory'].forEach(id => {
+  ['tcCategory', 'tdCategory', 'tccCategory'].forEach(id => {
     const sel = document.getElementById(id);
     if (sel) sel.innerHTML = opts || `<option value="">-- Chưa có loại đào tạo, vào Quản Trị &gt; Quản Lý Danh Mục để thêm --</option>`;
   });
@@ -26137,6 +26211,19 @@ function populateTrainingCategorySelects() {
   if (filterSel) filterSel.innerHTML = `<option value="">-- Tất cả loại đào tạo --</option>` + opts;
   const ttSel = document.getElementById('ttCategory');
   if (ttSel) ttSel.innerHTML = `<option value="">-- Không thuộc loại nào --</option>` + opts;
+}
+
+// Chương Trình (trainingCourses, Đợt 4) — populate dropdown chọn chương trình (tuỳ chọn) ở form tạo
+// lớp học (tcCourseId) và form thêm tài liệu (tdCourseId); teCourseId (modal Sửa Lớp Học) populate riêng
+// trong openEditTrainingClassModal() cùng khuôn teTestId/teDocumentIds (không qua hàm chung này vì cần
+// set lại value đang có sẵn của lớp ngay sau khi populate).
+function populateTrainingCourseSelects() {
+  const opts = DB.trainingCourses.slice().sort((a, b) => b.id - a.id)
+    .map(c => `<option value="${c.id}">${escapeHtml(c.name)} (${escapeHtml(c.category)})</option>`).join('');
+  ['tcCourseId', 'tdCourseId'].forEach(id => {
+    const sel = document.getElementById(id);
+    if (sel) sel.innerHTML = `<option value="">-- Không thuộc chương trình nào --</option>` + opts;
+  });
 }
 
 function populateTrainingClassMultiSelects() {
@@ -26157,9 +26244,15 @@ function populateTrainingClassMultiSelects() {
 function renderTrainingLms() {
   populateTrainingCategorySelects();
   populateTrainingClassMultiSelects();
+  populateTrainingCourseSelects();
   const canManage = canManageTrainingLocal(currentUser);
   document.getElementById('trainingClassForm').classList.toggle('hidden', !canManage);
   document.getElementById('trainingClassNoPermNote').classList.toggle('hidden', canManage);
+  // Chương Trình (Đợt 4) — catalog quản lý CHỈ trainingManage (kể cả giảng viên đã có trainingInstruct
+  // cũng không tạo/xoá được, chỉ ĐỌC danh sách khi tạo/sửa lớp mình phụ trách — xem ghi chú
+  // createValidation.js).
+  document.getElementById('trainingCourseForm').classList.toggle('hidden', !canManage);
+  document.getElementById('trainingCourseNoPermNote').classList.toggle('hidden', canManage);
   document.getElementById('trainingDocForm').classList.toggle('hidden', !canManage);
   document.getElementById('trainingDocNoPermNote').classList.toggle('hidden', canManage);
   document.getElementById('careerPathForm').classList.toggle('hidden', !canManage);
@@ -26169,6 +26262,7 @@ function renderTrainingLms() {
   renderTrainingInviteListStagedList();
 
   if (activeTrainingLmsTab === 'CLASSES') renderTrainingClasses();
+  else if (activeTrainingLmsTab === 'COURSES') renderTrainingCourses();
   else if (activeTrainingLmsTab === 'MY_REGS') renderTrainingMyRegs();
   else if (activeTrainingLmsTab === 'DOCS') renderTrainingDocuments();
   else if (activeTrainingLmsTab === 'PATHS') renderCareerPaths();
@@ -26256,7 +26350,8 @@ async function submitTrainingClass(e) {
     testSecondsPerQuestion: document.getElementById('tcTestSecondsPerQuestion').value,
     documentIds,
     description: document.getElementById('tcDescription').value.trim(),
-    inviteList: tcInviteListStaged.map(p => p.username)
+    inviteList: tcInviteListStaged.map(p => p.username),
+    courseId: document.getElementById('tcCourseId').value
   };
   if (!payload.category) return alert('Vui lòng chọn Loại Đào Tạo (thêm ở Quản Trị &gt; Quản Lý Danh Mục nếu chưa có)!');
   let newClass;
@@ -26324,9 +26419,12 @@ function renderTrainingClasses() {
     const delHTML = currentUser.perms?.admin ? `<button onclick="deleteTrainingClass(${c.id})" class="text-red-500 font-bold hover:underline text-xs ml-2">Xóa</button>` : '';
     const sessionState = getTrainingClassSessionState(c);
     const sessionBadgeCls = sessionState === 'ONGOING' ? 'bg-emerald-100 text-emerald-700' : sessionState === 'ENDED' ? 'bg-gray-200 text-gray-600' : 'bg-amber-100 text-amber-700';
+    // Chương Trình (courseId, Đợt 4, tuỳ chọn) — CHỈ hiển thị bổ sung, KHÔNG thay thế c.title (tên hiển
+    // thị riêng của lần chạy lớp này, xem ghi chú createValidation.js).
+    const course = c.courseId != null ? DB.trainingCourses.find(x => x.id === c.courseId) : null;
     return `
       <tr class="hover:bg-gray-50">
-        <td class="border p-2"><span class="font-bold text-emerald-800">${escapeHtml(c.code || '')}</span> <span class="text-xs px-1.5 py-0.5 rounded ${c.mode === 'OFFLINE' ? 'bg-orange-100 text-orange-700' : 'bg-sky-100 text-sky-700'}">${c.mode === 'OFFLINE' ? '🏫 Offline' : '💻 Online'}</span> <span class="text-xs px-1.5 py-0.5 rounded ${sessionBadgeCls}">${TRAINING_SESSION_STATE_LABELS[sessionState]}</span>${c.testId ? ' <span class="text-xs px-1.5 py-0.5 rounded bg-purple-100 text-purple-700">🧪 Có bài test</span>' : ''}${inviteList.length ? ' <span class="text-xs px-1.5 py-0.5 rounded bg-fuchsia-100 text-fuchsia-700">✉️ Có danh sách mời</span>' : ''}<br>${escapeHtml(c.title)}${c.instructor ? `<br><span class="text-gray-400">GV: ${escapeHtml(c.instructor)}</span>` : ''}</td>
+        <td class="border p-2"><span class="font-bold text-emerald-800">${escapeHtml(c.code || '')}</span> <span class="text-xs px-1.5 py-0.5 rounded ${c.mode === 'OFFLINE' ? 'bg-orange-100 text-orange-700' : 'bg-sky-100 text-sky-700'}">${c.mode === 'OFFLINE' ? '🏫 Offline' : '💻 Online'}</span> <span class="text-xs px-1.5 py-0.5 rounded ${sessionBadgeCls}">${TRAINING_SESSION_STATE_LABELS[sessionState]}</span>${c.testId ? ' <span class="text-xs px-1.5 py-0.5 rounded bg-purple-100 text-purple-700">🧪 Có bài test</span>' : ''}${inviteList.length ? ' <span class="text-xs px-1.5 py-0.5 rounded bg-fuchsia-100 text-fuchsia-700">✉️ Có danh sách mời</span>' : ''}<br>${escapeHtml(c.title)}${c.instructor ? `<br><span class="text-gray-400">GV: ${escapeHtml(c.instructor)}</span>` : ''}${course ? `<br><span class="text-gray-400">Chương trình: ${escapeHtml(course.name)}</span>` : ''}</td>
         <td class="border p-2">${escapeHtml(c.category)}</td>
         <td class="border p-2">${escapeHtml((c.startTime || '').replace('T', ' '))}${c.location ? `<br><span class="text-gray-400">${escapeHtml(c.location)}</span>` : ''}</td>
         <td class="border p-2">${regs.length}${c.capacity ? '/' + c.capacity : ''}</td>
@@ -26424,6 +26522,10 @@ function openEditTrainingClassModal(classId) {
   document.getElementById('teTestId').innerHTML = `<option value="">-- Không gán bài test --</option>` + testOpts;
   document.getElementById('teTestId').value = c.testId != null ? String(c.testId) : '';
   document.getElementById('teTestSecondsPerQuestion').value = c.testSecondsPerQuestion || 120;
+  const courseOpts = DB.trainingCourses.slice().sort((a, b) => b.id - a.id)
+    .map(co => `<option value="${co.id}">${escapeHtml(co.name)} (${escapeHtml(co.category)})</option>`).join('');
+  document.getElementById('teCourseId').innerHTML = `<option value="">-- Không thuộc chương trình nào --</option>` + courseOpts;
+  document.getElementById('teCourseId').value = c.courseId != null ? String(c.courseId) : '';
   const docOpts = DB.trainingDocuments.slice().sort((a, b) => b.id - a.id)
     .map(d => `<option value="${d.id}">${escapeHtml(d.category)} — ${escapeHtml(d.title)}</option>`).join('');
   const teDoc = document.getElementById('teDocumentIds');
@@ -26466,7 +26568,8 @@ async function submitEditTrainingClass(e) {
     testSecondsPerQuestion: document.getElementById('teTestSecondsPerQuestion').value,
     documentIds,
     description: document.getElementById('teDescription').value.trim(),
-    inviteList: teInviteListStaged.map(p => p.username)
+    inviteList: teInviteListStaged.map(p => p.username),
+    courseId: document.getElementById('teCourseId').value
   };
   let updated;
   try {
@@ -26506,6 +26609,61 @@ function deleteTrainingClass(id) {
     logSystemAction('INTERNAL', 'DELETE_TRAINING_CLASS', `Xóa lớp học [id ${id}]`, 'SUCCESS');
     renderTrainingClasses();
     populateTrainingClassMultiSelects();
+  }).catch(err => alert(`⛔ ${err.message}`));
+}
+
+// ---------- CHƯƠNG TRÌNH (trainingCourses, Đợt 4) ----------
+// Catalog dùng chung, quản lý (tạo/xoá) CHỈ trainingManage (xem canManageTrainingLocal() +
+// createValidation.js) — trainingClasses/trainingDocuments chỉ ĐỌC danh sách này qua
+// populateTrainingCourseSelects() khi tạo/sửa của riêng chúng.
+async function submitTrainingCourse(e) {
+  e.preventDefault();
+  if (!canManageTrainingLocal(currentUser)) return alert('⛔ Bạn không có quyền tạo chương trình đào tạo!');
+  const category = document.getElementById('tccCategory').value;
+  if (!category) return alert('Vui lòng chọn Loại Đào Tạo (thêm ở Quản Trị &gt; Quản Lý Danh Mục nếu chưa có)!');
+  const payload = {
+    code: `CT-${Date.now()}`,
+    name: document.getElementById('tccName').value.trim(),
+    category,
+    description: document.getElementById('tccDescription').value.trim()
+  };
+  let newCourse;
+  try {
+    const result = await callCreateAction('trainingCourses', payload);
+    newCourse = result.item;
+  } catch (err) { return alert(`⛔ ${err.message}`); }
+  DB.trainingCourses.unshift(newCourse);
+  logSystemAction('INTERNAL', 'CREATE_TRAINING_COURSE', `Tạo chương trình đào tạo [${newCourse.name}]`, 'SUCCESS', newCourse.code);
+  alert('✅ Đã tạo chương trình thành công!');
+  e.target.reset();
+  renderTrainingLms();
+}
+
+function renderTrainingCourses() {
+  const tbody = document.getElementById('trainingCoursesTableBody');
+  if (!tbody) return;
+  const list = DB.trainingCourses.slice().sort((a, b) => b.id - a.id);
+
+  document.getElementById('paginationContainer_trainingCourses').innerHTML = buildPaginationBoxHTML('trainingCourses', 'renderTrainingCourses');
+  const pageItems = paginateList('trainingCourses', list, 'renderTrainingCourses', 'chương trình');
+
+  if (!pageItems.length) { tbody.innerHTML = `<tr><td colspan="4" class="text-center p-4 text-gray-400 italic">Chưa có chương trình nào.</td></tr>`; return; }
+  tbody.innerHTML = pageItems.map(c => `
+    <tr class="hover:bg-gray-50">
+      <td class="border p-2 font-bold text-gray-800">${escapeHtml(c.name)}</td>
+      <td class="border p-2">${escapeHtml(c.category)}</td>
+      <td class="border p-2 text-gray-600">${escapeHtml(c.description || '')}</td>
+      <td class="border p-2 text-center">${currentUser.perms?.admin ? `<button onclick="deleteTrainingCourse(${c.id})" class="text-red-500 font-bold hover:underline text-xs">Xóa</button>` : ''}</td>
+    </tr>`).join('');
+}
+
+function deleteTrainingCourse(id) {
+  if (!confirm('Xóa chương trình này? Lớp học/tài liệu đã gắn chương trình này vẫn được giữ lại (chỉ mất dòng hiển thị "Chương trình:").')) return;
+  callRecordAction('trainingCourses', id, 'delete', {}).then(() => {
+    DB.trainingCourses = DB.trainingCourses.filter(c => c.id !== id);
+    logSystemAction('INTERNAL', 'DELETE_TRAINING_COURSE', `Xóa chương trình đào tạo [id ${id}]`, 'SUCCESS');
+    renderTrainingCourses();
+    populateTrainingCourseSelects();
   }).catch(err => alert(`⛔ ${err.message}`));
 }
 
@@ -26568,6 +26726,40 @@ async function saveTrainingResult(regId) {
   renderTrainingResultsModalBody();
   renderTrainingClasses();
   renderCareerPaths();
+}
+
+// Xuất Excel kết quả đào tạo (Đợt 4) — cùng cơ chế chung downloadXlsxFromServer() (POST /api/admin/export-xlsx)
+// đã dùng cho các màn xuất Excel khác trong app (vd exportBudgetSummaryExcel()), KHÔNG có route riêng.
+// Chỉ những ai đã mở được modal Kết Quả (canManageTrainingClassLocal() — trainingManage hoặc đúng
+// giảng viên được gán, xem renderTrainingClasses()) mới thấy được nút này, vì nó nằm trong modal đó.
+async function exportTrainingResultsExcel() {
+  const cls = DB.trainingClasses.find(c => c.id === trainingResultsModalClassId);
+  if (!cls) return;
+  const regs = DB.trainingRegistrations.filter(r => r.classId === trainingResultsModalClassId && r.result !== 'CANCELLED');
+  const rows = regs.map(r => {
+    const disp = getTrainingRegDisplayStatus(r, cls);
+    return {
+      hocVien: r.creatorName || '',
+      phongBan: r.dept || '',
+      trangThai: disp.label + (disp.sub ? ` (${disp.sub})` : ''),
+      diem: r.score != null ? r.score : '',
+      dangKyLuc: r.registeredAt || '',
+      coKetQuaLuc: r.resultAt || ''
+    };
+  });
+  await downloadXlsxFromServer(
+    `KetQuaDaoTao_${cls.code || cls.id}.xlsx`,
+    'Kết Quả Đào Tạo',
+    [
+      { header: 'Tên Học Viên', key: 'hocVien', width: 24 },
+      { header: 'Phòng Ban', key: 'phongBan', width: 20 },
+      { header: 'Trạng Thái', key: 'trangThai', width: 20 },
+      { header: 'Điểm', key: 'diem', width: 10 },
+      { header: 'Thời Gian Đăng Ký', key: 'dangKyLuc', width: 20 },
+      { header: 'Thời Gian Có Kết Quả', key: 'coKetQuaLuc', width: 20 }
+    ],
+    rows
+  );
 }
 
 // ---------- Thêm hàng loạt học viên vào lớp (Cách 1: tìm-chọn dropdown, Cách 2: mẫu Excel) ----------
@@ -26895,6 +27087,17 @@ let ttTakeSecondsPerQuestion = 120;
 let ttTakeSecondsLeft = 0;
 let ttTakeTimerHandle = null;
 
+// Đảo câu hỏi + đáp án (Đợt 4) — trả về 1 BẢN SAO đã xáo trộn thứ tự phần tử (Fisher-Yates), KHÔNG bao
+// giờ sửa mảng gốc truyền vào (test.questions/q.options vẫn nguyên vẹn thứ tự lưu ở DB.trainingTests).
+function shuffleArrayCopy(arr) {
+  const copy = arr.slice();
+  for (let i = copy.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [copy[i], copy[j]] = [copy[j], copy[i]];
+  }
+  return copy;
+}
+
 function openTakeTestModal(classId) {
   const cls = DB.trainingClasses.find(c => c.id === classId);
   if (!cls || cls.testId == null) return alert('Lớp học này chưa được gán bài test.');
@@ -26902,7 +27105,12 @@ function openTakeTestModal(classId) {
   if (!test || !Array.isArray(test.questions) || !test.questions.length) return alert('Không tìm thấy nội dung bài test.');
   clearInterval(ttTakeTimerHandle);
   ttTakeClassId = classId;
-  ttTakeQuestions = test.questions;
+  // Đảo cả thứ tự câu hỏi lẫn thứ tự đáp án trong từng câu — mỗi lượt mở modal (kể cả làm lại) xáo trộn
+  // lại từ đầu, dùng ĐÚNG bản sao (test.questions ở DB.trainingTests không bị đụng tới). Vẫn giữ nguyên
+  // id thật của câu hỏi/đáp án nên bài nộp (ttTakeSubmit() gửi theo q.id/o.id) và chấm điểm
+  // (gradeTrainingTestSubmission(), so sánh theo id dạng tập hợp, không theo thứ tự) hoàn toàn không bị
+  // ảnh hưởng.
+  ttTakeQuestions = shuffleArrayCopy(test.questions).map(q => Object.assign({}, q, { options: shuffleArrayCopy(q.options) }));
   ttTakeAnswers = {};
   ttTakeIndex = 0;
   ttTakeSecondsPerQuestion = cls.testSecondsPerQuestion > 0 ? cls.testSecondsPerQuestion : 120;
@@ -26989,25 +27197,56 @@ async function ttTakeSubmit() {
 }
 
 // ---------- KHO TÀI LIỆU ----------
+// Loại tài liệu (docType, Đợt 4) — toggle ô Tệp/Video theo lựa chọn, đổi luôn accept/nhãn ô Tệp cho
+// IMAGE (chỉ ảnh) khác DOCUMENT (pdf/docx/xlsx như cũ).
+function onTrainingDocTypeChange() {
+  const type = document.getElementById('tdDocType').value;
+  const fileField = document.getElementById('tdFileField');
+  const videoField = document.getElementById('tdVideoField');
+  const fileInput = document.getElementById('tdFile');
+  const videoInput = document.getElementById('tdVideoUrl');
+  const fileLabel = document.getElementById('tdFileLabel');
+  if (type === 'VIDEO') {
+    fileField.classList.add('hidden'); videoField.classList.remove('hidden');
+    fileInput.required = false; videoInput.required = true;
+  } else {
+    fileField.classList.remove('hidden'); videoField.classList.add('hidden');
+    fileInput.required = true; videoInput.required = false;
+    fileInput.accept = type === 'IMAGE' ? '.jpg,.jpeg,.png,.webp' : '.pdf,.docx,.xlsx';
+    fileLabel.innerText = type === 'IMAGE' ? 'Ảnh Tài Liệu' : 'Tệp Tài Liệu';
+  }
+}
+
 async function submitTrainingDocument(e) {
   e.preventDefault();
   if (!canManageTrainingLocal(currentUser)) return alert('⛔ Bạn không có quyền thêm tài liệu vào kho!');
   const category = document.getElementById('tdCategory').value;
   if (!category) return alert('Vui lòng chọn Loại Đào Tạo (thêm ở Quản Trị &gt; Quản Lý Danh Mục nếu chưa có)!');
-  const file = document.getElementById('tdFile').files[0];
-  if (!file) return alert('Vui lòng chọn tệp tài liệu!');
-  let uploaded;
-  try {
-    uploaded = await uploadFileToServer(file, 'internal');
-  } catch (err) { return alert(`⛔ Tải tệp thất bại: ${err.message}`); }
+  const docType = document.getElementById('tdDocType').value;
   const payload = {
     code: `TL-DT-${Date.now()}`,
     category,
     title: document.getElementById('tdTitle').value.trim(),
     description: document.getElementById('tdDescription').value.trim(),
-    fileUrl: uploaded.fileUrl, fileName: uploaded.fileName, fileType: uploaded.fileType,
+    docType,
+    mandatory: document.getElementById('tdMandatory').checked,
+    courseId: document.getElementById('tdCourseId').value,
     createdAt: new Date().toLocaleString('vi-VN')
   };
+  if (docType === 'VIDEO') {
+    // VIDEO (Đợt 4) — nhúng Youtube qua link thay vì tải file, không gọi /api/upload.
+    const videoUrl = document.getElementById('tdVideoUrl').value.trim();
+    if (!videoUrl) return alert('Vui lòng nhập link video Youtube!');
+    payload.videoUrl = videoUrl;
+  } else {
+    const file = document.getElementById('tdFile').files[0];
+    if (!file) return alert(docType === 'IMAGE' ? 'Vui lòng chọn ảnh cần tải lên!' : 'Vui lòng chọn tệp tài liệu!');
+    let uploaded;
+    try {
+      uploaded = await uploadFileToServer(file, 'internal');
+    } catch (err) { return alert(`⛔ Tải tệp thất bại: ${err.message}`); }
+    payload.fileUrl = uploaded.fileUrl; payload.fileName = uploaded.fileName; payload.fileType = uploaded.fileType;
+  }
   let newDoc;
   try {
     const result = await callCreateAction('trainingDocuments', payload);
@@ -27017,7 +27256,25 @@ async function submitTrainingDocument(e) {
   logSystemAction('INTERNAL', 'CREATE_TRAINING_DOC', `Thêm tài liệu đào tạo [${newDoc.title}]`, 'SUCCESS', newDoc.code);
   alert('✅ Đã thêm tài liệu vào kho thành công!');
   e.target.reset();
+  onTrainingDocTypeChange();
   renderTrainingLms();
+}
+
+// Youtube embed URL (Đợt 4) — chấp nhận cả 2 dạng phổ biến (youtube.com/watch?v=... và youtu.be/...),
+// trả về null nếu không tách được video id (client vẫn có link gốc để mở tab mới, xem renderTrainingDocuments()).
+function trainingYoutubeEmbedUrl(url) {
+  if (!url) return null;
+  try {
+    const u = new URL(url);
+    let videoId = null;
+    if (u.hostname.replace(/^www\./, '') === 'youtu.be') {
+      videoId = u.pathname.slice(1);
+    } else if (u.hostname.replace(/^www\./, '').endsWith('youtube.com')) {
+      videoId = u.searchParams.get('v');
+      if (!videoId && u.pathname.startsWith('/embed/')) videoId = u.pathname.split('/embed/')[1];
+    }
+    return videoId ? `https://www.youtube.com/embed/${videoId}` : null;
+  } catch (e) { return null; }
 }
 
 function renderTrainingDocuments() {
@@ -27030,18 +27287,37 @@ function renderTrainingDocuments() {
   const pageItems = paginateList('trainingDocuments', list, 'renderTrainingDocuments', 'tài liệu');
 
   if (!pageItems.length) { container.innerHTML = `<div class="col-span-2 text-center p-6 text-gray-400 italic bg-white rounded border">Kho tài liệu đang trống.</div>`; return; }
-  container.innerHTML = pageItems.map(d => `
+  container.innerHTML = pageItems.map(d => {
+    // Chương Trình (courseId, Đợt 4, tuỳ chọn) — hiển thị bổ sung bên cạnh "Loại Đào Tạo" (category)
+    // đã có từ trước, không thay thế.
+    const course = d.courseId != null ? DB.trainingCourses.find(c => c.id === d.courseId) : null;
+    const mandatoryBadge = d.mandatory ? ' <span class="text-xs px-1.5 py-0.5 rounded bg-red-100 text-red-700 font-bold align-middle">⚠️ Bắt buộc</span>' : '';
+    // docType (Đợt 4): DOCUMENT giữ nguyên link tải cũ; VIDEO nhúng iframe Youtube; IMAGE hiện thumbnail
+    // thay vì link tải (fileUrl vẫn là 1 file thật đã tải lên, chỉ khác cách hiển thị).
+    let actionHTML;
+    if (d.docType === 'VIDEO') {
+      const embedUrl = trainingYoutubeEmbedUrl(d.videoUrl);
+      actionHTML = embedUrl
+        ? `<iframe src="${escapeHtml(embedUrl)}" class="w-40 h-24 rounded border" frameborder="0" allowfullscreen title="${escapeHtml(d.title)}"></iframe>`
+        : `<a href="${escapeHtml(d.videoUrl || '')}" target="_blank" rel="noopener" class="text-indigo-600 underline text-xs">▶️ Xem video</a>`;
+    } else if (d.docType === 'IMAGE') {
+      actionHTML = `<a href="${escapeHtml(d.fileUrl)}" target="_blank" rel="noopener"><img src="${escapeHtml(d.fileUrl)}" class="w-24 h-24 object-cover rounded border" alt="${escapeHtml(d.title)}"></a>`;
+    } else {
+      actionHTML = `<a href="${escapeHtml(d.fileUrl)}" target="_blank" rel="noopener" class="bg-indigo-600 text-white px-2 py-1 rounded text-xs font-bold hover:bg-indigo-700 text-center">⬇️ Tải</a>`;
+    }
+    return `
     <div class="bg-white rounded border p-3 flex justify-between items-start gap-2">
-      <div>
-        <div class="font-bold text-gray-800 text-sm">${escapeHtml(d.title)}</div>
-        <div class="text-xs text-gray-500">${escapeHtml(d.category)} — ${escapeHtml(d.uploaderName || '')}</div>
+      <div class="min-w-0">
+        <div class="font-bold text-gray-800 text-sm">${escapeHtml(d.title)}${mandatoryBadge}</div>
+        <div class="text-xs text-gray-500">${escapeHtml(d.category)} — ${escapeHtml(d.uploaderName || '')}${course ? ` — Chương trình: ${escapeHtml(course.name)}` : ''}</div>
         ${d.description ? `<div class="text-xs text-gray-600 mt-1">${escapeHtml(d.description)}</div>` : ''}
       </div>
-      <div class="flex flex-col gap-1 flex-shrink-0">
-        <a href="${escapeHtml(d.fileUrl)}" target="_blank" rel="noopener" class="bg-indigo-600 text-white px-2 py-1 rounded text-xs font-bold hover:bg-indigo-700 text-center">⬇️ Tải</a>
+      <div class="flex flex-col gap-1 flex-shrink-0 items-end">
+        ${actionHTML}
         ${currentUser.perms?.admin ? `<button onclick="deleteTrainingDocument(${d.id})" class="text-red-500 font-bold hover:underline text-xs">Xóa</button>` : ''}
       </div>
-    </div>`).join('');
+    </div>`;
+  }).join('');
 }
 
 function deleteTrainingDocument(id) {

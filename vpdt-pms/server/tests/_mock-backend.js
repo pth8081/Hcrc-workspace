@@ -234,6 +234,27 @@ function __mockCanManageTrainingClass(user, cls) {
   return !!(user?.perms?.trainingInstruct && cls?.instructorUsername && cls.instructorUsername === user.username);
 }
 
+// Đợt 4: trainingCourses — mirrors CREATE_MODULE_CONFIGS.trainingCourses ở lib/createValidation.js
+// (trainingManage-only, name+category bắt buộc, description tuỳ chọn).
+function __mockValidateTrainingCourseCreate(payload, user) {
+  if (!(user.perms?.admin || user.perms?.trainingManage)) throw __mockHttpError(403, 'Bạn không có quyền tạo chương trình đào tạo');
+  if (!payload.name || !String(payload.name).trim()) throw __mockHttpError(400, 'Thiếu tên chương trình');
+  if (!payload.category || !String(payload.category).trim()) throw __mockHttpError(400, 'Thiếu loại đào tạo');
+  payload.name = String(payload.name).trim();
+  payload.category = String(payload.category).trim();
+  payload.description = payload.description ? String(payload.description).trim() : '';
+}
+
+// Đợt 4: courseId (tuỳ chọn) dùng chung cho trainingClasses/trainingDocuments — mirrors validate block
+// lặp lại ở createValidation.js (cả 2 module đều check y hệt cùng logic đối chiếu DB.trainingCourses).
+function __mockValidateCourseId(payload) {
+  const courseId = (payload.courseId === '' || payload.courseId == null) ? null : Number(payload.courseId);
+  if (courseId != null && (!Number.isFinite(courseId) || !DB.trainingCourses.some((c) => c.id === courseId))) {
+    throw __mockHttpError(400, 'Chương trình được chọn không hợp lệ');
+  }
+  payload.courseId = courseId;
+}
+
 function __mockValidateTrainingClassCreate(payload, user) {
   if (!(user.perms?.admin || user.perms?.trainingManage)) throw __mockHttpError(403, 'Bạn không có quyền tạo lớp học');
   if (!payload.category || !String(payload.category).trim()) throw __mockHttpError(400, 'Thiếu loại đào tạo');
@@ -259,13 +280,42 @@ function __mockValidateTrainingClassCreate(payload, user) {
   payload.instructor = instructorUser ? instructorUser.name : (payload.instructor ? String(payload.instructor).trim() : '');
   payload.inviteList = __mockNormalizeInviteList(payload.inviteList);
   payload.sessionState = payload.mode === 'OFFLINE' ? 'SCHEDULED' : null;
+  // Đợt 4: Chương Trình (courseId, tuỳ chọn) — mirrors trainingClasses.extraValidate ở createValidation.js.
+  __mockValidateCourseId(payload);
+}
+
+// Đợt 4: trainingDocuments — mirrors CREATE_MODULE_CONFIGS.trainingDocuments ở lib/createValidation.js
+// (trainingManage-only; docType DOCUMENT mặc định/VIDEO/IMAGE; mandatory là cờ hiển thị thuần tuý;
+// courseId tuỳ chọn, dùng chung __mockValidateCourseId ở trên).
+function __mockValidateTrainingDocumentCreate(payload, user) {
+  if (!(user.perms?.admin || user.perms?.trainingManage)) throw __mockHttpError(403, 'Bạn không có quyền tải lên tài liệu đào tạo');
+  if (!payload.category || !String(payload.category).trim()) throw __mockHttpError(400, 'Thiếu loại đào tạo');
+  if (!payload.title || !String(payload.title).trim()) throw __mockHttpError(400, 'Thiếu tên tài liệu');
+  payload.category = String(payload.category).trim();
+  payload.title = String(payload.title).trim();
+
+  const docType = (payload.docType === 'VIDEO' || payload.docType === 'IMAGE') ? payload.docType : 'DOCUMENT';
+  payload.docType = docType;
+  if (docType === 'VIDEO') {
+    const videoUrl = String(payload.videoUrl || '').trim();
+    if (!videoUrl) throw __mockHttpError(400, 'Vui lòng nhập link video Youtube');
+    if (!/youtube\.com|youtu\.be/i.test(videoUrl)) throw __mockHttpError(400, 'Link video phải là link Youtube hợp lệ (chứa youtube.com hoặc youtu.be)');
+    payload.videoUrl = videoUrl;
+    payload.fileUrl = null; payload.fileName = ''; payload.fileType = '';
+  } else {
+    if (!payload.fileUrl) throw __mockHttpError(400, docType === 'IMAGE' ? 'Vui lòng chọn ảnh cần tải lên' : 'Vui lòng chọn tệp tài liệu cần tải lên');
+    payload.videoUrl = '';
+  }
+
+  payload.mandatory = payload.mandatory === true || payload.mandatory === 'true';
+  __mockValidateCourseId(payload);
 }
 
 // Đợt 3 — sửa lớp học đã tạo (editTrainingClass() ở lib/recordActions.js). Whitelist field, cùng luật
 // chuẩn hoá với lúc tạo lớp ở trên.
 const __MOCK_TRAINING_CLASS_EDITABLE_FIELDS = [
   'title', 'category', 'description', 'startTime', 'endTime', 'location',
-  'registerDeadline', 'capacity', 'passScore', 'testId', 'testSecondsPerQuestion', 'documentIds'
+  'registerDeadline', 'capacity', 'passScore', 'testId', 'testSecondsPerQuestion', 'documentIds', 'courseId'
 ];
 function __mockEditTrainingClass(payload, user, cls) {
   if (!__mockCanManageTrainingClass(user, cls)) throw __mockHttpError(403, 'Bạn không có quyền sửa lớp học này');
@@ -286,6 +336,9 @@ function __mockEditTrainingClass(payload, user, cls) {
   cls.testId = testId;
   const secPerQ = Number(cls.testSecondsPerQuestion);
   cls.testSecondsPerQuestion = Number.isFinite(secPerQ) && secPerQ >= 10 ? Math.floor(secPerQ) : 120;
+  const courseId = cls.courseId === '' || cls.courseId == null ? null : Number(cls.courseId);
+  if (courseId != null && (!Number.isFinite(courseId) || !DB.trainingCourses.some((c) => c.id === courseId))) throw __mockHttpError(400, 'Chương trình được chọn không hợp lệ');
+  cls.courseId = courseId;
   if (payload.instructorUsername !== undefined || payload.instructor !== undefined) {
     const instructorUser = __mockResolveTrainingInstructor(payload.instructorUsername);
     cls.instructorUsername = instructorUser ? instructorUser.username : null;
@@ -507,6 +560,8 @@ async function __mockHandleCreate(moduleKey, payload, user) {
   let creatorField, creatorNameField;
   if (moduleKey === 'internalPosts') { __mockValidateInternalPostCreate(payload, user); creatorField = 'author'; creatorNameField = 'authorName'; }
   else if (moduleKey === 'trainingClasses') { __mockValidateTrainingClassCreate(payload, user); creatorField = 'creator'; creatorNameField = 'creatorName'; }
+  else if (moduleKey === 'trainingCourses') { __mockValidateTrainingCourseCreate(payload, user); creatorField = 'creator'; creatorNameField = 'creatorName'; }
+  else if (moduleKey === 'trainingDocuments') { __mockValidateTrainingDocumentCreate(payload, user); creatorField = 'uploaderUsername'; creatorNameField = 'uploaderName'; }
   else if (moduleKey === 'trainingTests') { __mockValidateTrainingTestCreate(payload, user); creatorField = 'creator'; creatorNameField = 'creatorName'; }
   else if (moduleKey === 'trainingRegistrations') { __mockValidateTrainingRegistrationCreate(payload, user); creatorField = 'creator'; creatorNameField = 'creatorName'; }
   else if (moduleKey === 'recruitmentJobs') { __mockValidateRecruitmentJobCreate(payload, user); creatorField = 'creator'; creatorNameField = 'creatorName'; }
@@ -569,6 +624,14 @@ async function __mockHandleRecordAction(moduleKey, idStr, action, payload, user)
     throw __mockHttpError(400, 'Hành động không hợp lệ');
   }
   if (moduleKey === 'trainingTests') {
+    if (action === 'delete') return { __deleted: true };
+    throw __mockHttpError(400, 'Hành động không hợp lệ');
+  }
+  if (moduleKey === 'trainingCourses') {
+    if (action === 'delete') return { __deleted: true };
+    throw __mockHttpError(400, 'Hành động không hợp lệ');
+  }
+  if (moduleKey === 'trainingDocuments') {
     if (action === 'delete') return { __deleted: true };
     throw __mockHttpError(400, 'Hành động không hợp lệ');
   }

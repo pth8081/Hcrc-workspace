@@ -43,7 +43,14 @@ router.post('/:module', async (req, res) => {
     if (moduleKey === 'trainingRegistrations') appData.trainingClasses = await getAllForCollection('trainingClasses');
     // trainingClasses cần tra cứu chéo sang collection trainingTests (kiểm tra testId client gửi lên
     // khi gán bài test có phải bài test có thật hay không) — cùng lý do trainingRegistrations ở trên.
-    if (moduleKey === 'trainingClasses') appData.trainingTests = await getAllForCollection('trainingTests');
+    // Đợt 4: cũng cần trainingCourses (kiểm tra courseId, tuỳ chọn, có phải chương trình có thật không).
+    if (moduleKey === 'trainingClasses') {
+      appData.trainingTests = await getAllForCollection('trainingTests');
+      appData.trainingCourses = await getAllForCollection('trainingCourses');
+    }
+    // trainingDocuments (Đợt 4) cần tra cứu chéo sang collection trainingCourses (kiểm tra courseId,
+    // tuỳ chọn, có phải chương trình có thật không) — cùng lý do trainingClasses ở trên.
+    if (moduleKey === 'trainingDocuments') appData.trainingCourses = await getAllForCollection('trainingCourses');
     // recruitmentReferrals cần tra cứu chéo sang collection recruitmentJobs (tin còn OPEN/snapshot
     // jobTitle) — cùng lý do trainingRegistrations ở trên.
     if (moduleKey === 'recruitmentReferrals') appData.recruitmentJobs = await getAllForCollection('recruitmentJobs');

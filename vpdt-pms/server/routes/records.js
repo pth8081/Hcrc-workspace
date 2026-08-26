@@ -648,6 +648,8 @@ router.post('/trainingDocuments/:id/delete', (req, res) => deleteAdminOnly(req, 
 router.post('/trainingClasses/:id/delete', (req, res) => deleteAdminOnly(req, res, 'trainingClasses'));
 router.post('/careerPaths/:id/delete', (req, res) => deleteAdminOnly(req, res, 'careerPaths'));
 router.post('/trainingTests/:id/delete', (req, res) => deleteAdminOnly(req, res, 'trainingTests'));
+// Đợt 4: trainingCourses — xoá cùng khuôn "xóa = quyền tối cao, chỉ Admin" của mọi collection Đào Tạo khác ở trên.
+router.post('/trainingCourses/:id/delete', (req, res) => deleteAdminOnly(req, res, 'trainingCourses'));
 
 async function withTrainingRegAction(req, res, action, mutator) {
   const itemId = Number(req.params.id);
@@ -716,15 +718,17 @@ router.post('/trainingClasses/:id/bulk-register', async (req, res) => {
 
 // POST /api/records/trainingClasses/:id/edit (Đợt 3) — sửa nội dung/lịch lớp học đã tạo. Đọc kèm
 // trainingTests (kiểm tra testId mới nếu có đổi, cùng lý do routes/create.js) + req.allUsers (resolve
-// lại instructorUsername nếu có đổi giảng viên) TRƯỚC khi khoá đúng 1 dòng trainingClasses để sửa.
+// lại instructorUsername nếu có đổi giảng viên) + trainingCourses (Đợt 4: kiểm tra courseId mới nếu có
+// đổi) TRƯỚC khi khoá đúng 1 dòng trainingClasses để sửa.
 router.post('/trainingClasses/:id/edit', async (req, res) => {
   const itemId = Number(req.params.id);
   if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
   try {
     const { freshUser, users } = await getFreshUser(req);
     const tests = await getAllForCollection('trainingTests');
+    const courses = await getAllForCollection('trainingCourses');
     const result = await withLockedRecordForCollection('trainingClasses', itemId, (item) =>
-      recordActions.editTrainingClass(req.body, freshUser, item, tests, users));
+      recordActions.editTrainingClass(req.body, freshUser, item, tests, users, courses));
     res.json({ ok: true, item: result });
   } catch (err) {
     handleError(res, `trainingClasses/${req.params.id}/edit`, err);

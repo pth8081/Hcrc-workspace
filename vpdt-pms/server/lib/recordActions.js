@@ -1925,9 +1925,9 @@ function bulkRegisterTrainingClass(payload, user, cls, existingRegs, users) {
 // (2 field này chỉ đổi qua đúng action riêng của chúng, không phải qua /edit chung).
 const TRAINING_CLASS_EDITABLE_FIELDS = [
   'title', 'category', 'description', 'startTime', 'endTime', 'location',
-  'registerDeadline', 'capacity', 'passScore', 'testId', 'testSecondsPerQuestion', 'documentIds'
+  'registerDeadline', 'capacity', 'passScore', 'testId', 'testSecondsPerQuestion', 'documentIds', 'courseId'
 ];
-function editTrainingClass(payload, user, cls, tests, users) {
+function editTrainingClass(payload, user, cls, tests, users, courses) {
   if (!canManageTrainingClass(user, cls)) {
     throw new HttpError(403, 'Bạn không có quyền sửa lớp học này');
   }
@@ -1954,6 +1954,13 @@ function editTrainingClass(payload, user, cls, tests, users) {
   cls.testId = testId;
   const secPerQ = Number(cls.testSecondsPerQuestion);
   cls.testSecondsPerQuestion = Number.isFinite(secPerQ) && secPerQ >= 10 ? Math.floor(secPerQ) : 120;
+  // Chương Trình (courseId, Đợt 4, tuỳ chọn) — cùng luật validate với lúc TẠO lớp (xem
+  // createValidation.js trainingClasses.extraValidate).
+  const courseId = cls.courseId === '' || cls.courseId == null ? null : Number(cls.courseId);
+  if (courseId != null && (!Number.isFinite(courseId) || !(courses || []).some(c => c.id === courseId))) {
+    throw new HttpError(400, 'Chương trình được chọn không hợp lệ');
+  }
+  cls.courseId = courseId;
 
   // Giảng viên + Danh Sách Được Mời — cùng luật resolve/chuẩn hoá với lúc TẠO lớp (xem
   // createValidation.js), chỉ áp dụng khi client thật sự gửi field tương ứng (không ép về rỗng nếu

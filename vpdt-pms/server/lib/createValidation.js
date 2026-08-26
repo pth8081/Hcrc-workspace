@@ -1084,15 +1084,52 @@ const CREATE_MODULE_CONFIGS = {
     forceOwnDept: true, // không có khái niệm phòng ban để chọn (kho dùng chung toàn công ty)
     getScope: () => ({}),
     creatorField: 'uploaderUsername', creatorNameField: 'uploaderName',
-    extraValidate: (payload, collection, user) => {
+    extraValidate: (payload, collection, user, appData) => {
       if (!user.perms?.admin && !user.perms?.trainingManage) {
         throw new CreateError(403, 'Bạn không có quyền tải lên tài liệu đào tạo');
       }
       if (!payload.category || !String(payload.category).trim()) throw new CreateError(400, 'Thiếu loại đào tạo');
       if (!payload.title || !String(payload.title).trim()) throw new CreateError(400, 'Thiếu tên tài liệu');
-      if (!payload.fileUrl) throw new CreateError(400, 'Vui lòng chọn tệp tài liệu cần tải lên');
       payload.category = String(payload.category).trim();
       payload.title = String(payload.title).trim();
+
+      // Đợt 4: Loại tài liệu — DOCUMENT (mặc định, giữ NGUYÊN hành vi cũ: bắt buộc fileUrl từ tải file
+      // .pdf/.docx/.xlsx), VIDEO (MỚI — nhúng Youtube qua videoUrl thay vì tải file, kiểm tra lỏng lẻo
+      // chỉ cần chứa "youtube.com" hoặc "youtu.be"), IMAGE (MỚI — vẫn dùng đúng cơ chế tải file như
+      // DOCUMENT, accept ảnh phía client, server không cần phân biệt thêm vì fileUrl đã là 1 file có
+      // thật, chỉ khác cách hiển thị ở client — thumbnail thay vì link tải).
+      const docType = (payload.docType === 'VIDEO' || payload.docType === 'IMAGE') ? payload.docType : 'DOCUMENT';
+      payload.docType = docType;
+      if (docType === 'VIDEO') {
+        const videoUrl = String(payload.videoUrl || '').trim();
+        if (!videoUrl) throw new CreateError(400, 'Vui lòng nhập link video Youtube');
+        if (!/youtube\.com|youtu\.be/i.test(videoUrl)) {
+          throw new CreateError(400, 'Link video phải là link Youtube hợp lệ (chứa youtube.com hoặc youtu.be)');
+        }
+        payload.videoUrl = videoUrl;
+        payload.fileUrl = null; payload.fileName = ''; payload.fileType = '';
+      } else {
+        if (!payload.fileUrl) {
+          throw new CreateError(400, docType === 'IMAGE' ? 'Vui lòng chọn ảnh cần tải lên' : 'Vui lòng chọn tệp tài liệu cần tải lên');
+        }
+        payload.videoUrl = '';
+      }
+
+      // Bắt Buộc Hoàn Thành (mandatory, Đợt 4) — CHỈ là cờ hiển thị (badge) ở phase này, KHÔNG có logic
+      // chặn/theo dõi hoàn thành nào đi kèm (nằm ngoài phạm vi đợt này, xem ghi chú PR).
+      payload.mandatory = payload.mandatory === true || payload.mandatory === 'true';
+
+      // Chương Trình (courseId, Đợt 4, tuỳ chọn) — gắn tài liệu vào 1 trainingCourses có thật nếu có
+      // chọn (appData.trainingCourses do CALLER đọc sẵn, xem routes/create.js); để trống vẫn hợp lệ,
+      // tài liệu cũ trước tính năng này không có field này vẫn hiển thị/hoạt động bình thường.
+      const courseId = (payload.courseId === '' || payload.courseId == null) ? null : Number(payload.courseId);
+      if (courseId != null) {
+        const courses = appData?.trainingCourses || [];
+        if (!Number.isFinite(courseId) || !courses.some(c => c.id === courseId)) {
+          throw new CreateError(400, 'Chương trình được chọn không hợp lệ');
+        }
+      }
+      payload.courseId = courseId;
     }
   },
   trainingClasses: {
@@ -1120,6 +1157,18 @@ const CREATE_MODULE_CONFIGS = {
       // Kiểu lớp: ONLINE (mặc định, theo giáo trình đọc bắt buộc) hay OFFLINE (giáo trình chỉ là tài
       // liệu tham khảo giảng viên tự mở khi lên lớp, học viên không bắt buộc phải đọc trước).
       payload.mode = payload.mode === 'OFFLINE' ? 'OFFLINE' : 'ONLINE';
+      // Chương Trình (courseId, Đợt 4, tuỳ chọn) — gắn lớp vào 1 trainingCourses có thật nếu có chọn
+      // (appData.trainingCourses do CALLER đọc sẵn, xem routes/create.js). Hoàn toàn KHÔNG thay thế
+      // "title" (title vẫn là tên hiển thị riêng của LẦN CHẠY LỚP này, xem ghi chú đầu module) — để
+      // trống vẫn hợp lệ, lớp cũ trước tính năng này không có field này vẫn hoạt động bình thường.
+      const courseId = (payload.courseId === '' || payload.courseId == null) ? null : Number(payload.courseId);
+      if (courseId != null) {
+        const courses = appData?.trainingCourses || [];
+        if (!Number.isFinite(courseId) || !courses.some(c => c.id === courseId)) {
+          throw new CreateError(400, 'Chương trình được chọn không hợp lệ');
+        }
+      }
+      payload.courseId = courseId;
       // Gán bài test (tuỳ chọn, chọn từ Ngân Hàng Câu Hỏi) — testId phải khớp 1 bài test có thật tại
       // thời điểm tạo lớp (appData.trainingTests do routes/create.js đọc kèm, xem lib/recordStore.js).
       const testId = payload.testId === '' || payload.testId == null ? null : Number(payload.testId);
@@ -1202,6 +1251,31 @@ const CREATE_MODULE_CONFIGS = {
       payload.questions = questions;
       const passScore = Number(payload.passScore);
       payload.passScore = Number.isFinite(passScore) && passScore > 0 && passScore <= 100 ? passScore : 60;
+    }
+  },
+  // Chương Trình (trainingCourses, Đợt 4) — catalog "Chương Trình" TÁI SỬ DỤNG được cho nhiều LỚP HỌC
+  // khác nhau (trainingClasses.courseId, tuỳ chọn — xem extraValidate ở trên) và TÀI LIỆU
+  // (trainingDocuments.courseId, tuỳ chọn — xem extraValidate ở trên), tách biệt với "title" của từng
+  // lớp cụ thể (title vẫn là tên hiển thị riêng của LẦN CHẠY lớp đó, KHÔNG bị thay thế). Quản lý (tạo/
+  // xoá) CHỈ trainingManage — đây là danh mục hệ thống dùng chung (systemwide catalog config), khác
+  // trainingClasses/trainingTests (cũng trainingManage-only để TẠO nhưng trainingInstruct quản lý được
+  // roster/kết quả SAU khi tạo): trainingInstruct KHÔNG có lý do quản lý catalog này, chỉ cần ĐỌC danh
+  // sách khi tạo/sửa đúng lớp mình được gán (không gác gì thêm ở đây vì đọc dữ liệu qua GET /api/data
+  // chung, không qua route tạo/xoá này).
+  trainingCourses: {
+    dbKey: 'trainingCourses',
+    forceOwnDept: true, // không có khái niệm phòng ban riêng (danh mục dùng chung toàn công ty, giống trainingDocuments/trainingClasses)
+    getScope: () => ({}),
+    creatorField: 'creator', creatorNameField: 'creatorName',
+    extraValidate: (payload, collection, user) => {
+      if (!user.perms?.admin && !user.perms?.trainingManage) {
+        throw new CreateError(403, 'Bạn không có quyền tạo chương trình đào tạo');
+      }
+      if (!payload.name || !String(payload.name).trim()) throw new CreateError(400, 'Thiếu tên chương trình');
+      if (!payload.category || !String(payload.category).trim()) throw new CreateError(400, 'Thiếu loại đào tạo');
+      payload.name = String(payload.name).trim();
+      payload.category = String(payload.category).trim();
+      payload.description = payload.description ? String(payload.description).trim() : '';
     }
   },
   // Đăng ký lớp học — khớp đúng khuôn vppRegistrations (khoá theo cặp lớp+người để chặn race 2 request
