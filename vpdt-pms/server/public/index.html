@@ -1071,21 +1071,22 @@ table { display: block; overflow-x: auto; max-width: 100%; }
           <label class="block font-semibold text-gray-600 mb-1">Loại Thao Tác</label>
           <select id="contractOpMode" onchange="onContractOpModeChange()" class="w-full md:w-64 border p-1.5 rounded bg-white font-semibold"></select>
         </div>
-        <!-- Đổi từ <select> gốc sang nút + bảng chọn tự dựng (cùng khuôn contractApprovalDropdownBtn/Panel
-             bên dưới) — 1 số trình duyệt di động lẫn desktop thỉnh thoảng không mở được popup <select>
-             gốc ngay khi phần tử vừa hiện ra (đổi từ hidden sang hiện trong cùng 1 lượt xử lý sự kiện
-             "Loại Thao Tác"), khiến người dùng bấm vào ô "Chọn Hợp Đồng..." mà không phản hồi — dựng bằng
-             div/button tự xử lý click hoàn toàn trong JS thì không còn phụ thuộc popup gốc của hệ điều
-             hành nữa. contractAddendumTarget vẫn còn (input ẩn) để giữ nguyên .value cho
-             onContractAddendumTargetChange()/submitContractReq() đọc, không phải sửa gì thêm ở 2 nơi đó. -->
-        <div id="contractAddendumTargetWrap" class="hidden relative">
+        <!-- v1.32.1 từng đổi <select> gốc sang nút + bảng chọn tự dựng (button+panel tự xử lý click
+             trong JS, absolute positioning + listener "click ra ngoài để đóng") vì native <select> đôi
+             khi không mở được popup ngay khi phần tử vừa hiện ra trong cùng 1 lượt xử lý sự kiện "Loại
+             Thao Tác" — nhưng chính bảng tự dựng đó lại tiếp tục thỉnh thoảng không mở được ở một số
+             trình duyệt/thiết bị thật ngoài production (v1.60.0 vẫn còn báo lại y hệt lỗi gốc: bấm vào ô
+             "Chọn Hợp Đồng..." mà không phản hồi). Đổi hẳn sang <input list="..."> + <datalist> — widget
+             gõ-tìm NATIVE của trình duyệt, không có logic mở/đóng/z-index nào của riêng ứng dụng để có
+             thể lệch trạng thái — cùng khuôn systemUsersDatalist/uniformTransferTargetDeptDatalist đã
+             dùng ổn định trong file này. contractAddendumTarget vẫn còn (input ẩn) để giữ nguyên .value
+             cho onContractAddendumTargetChange()/submitContractReq() đọc, không phải sửa gì thêm ở 2 nơi
+             đó — resolveContractAddendumTargetInput() ghi vào đây sau khi khớp đúng 1 hợp đồng từ ô gõ. -->
+        <div id="contractAddendumTargetWrap" class="hidden">
           <label class="block font-semibold text-gray-600 mb-1">Chọn Hợp Đồng Để Bổ Sung Phụ Lục</label>
           <input type="hidden" id="contractAddendumTarget" value="">
-          <button type="button" id="contractAddendumTargetBtn" onclick="toggleContractAddendumTargetDropdown(event)" class="w-full border p-1.5 rounded bg-white text-left flex justify-between items-center gap-1">
-            <span id="contractAddendumTargetLabel" class="text-gray-500 truncate">-- Chọn hợp đồng --</span>
-            <span class="text-gray-400 shrink-0">▾</span>
-          </button>
-          <div id="contractAddendumTargetPanel" class="hidden absolute z-20 mt-1 w-full bg-white border rounded shadow-lg max-h-72 overflow-y-auto"></div>
+          <input id="contractAddendumTargetInput" list="contractAddendumTargetDatalist" oninput="resolveContractAddendumTargetInput(this.value)" placeholder="Gõ mã hoặc tên hợp đồng để tìm..." class="w-full border p-1.5 rounded bg-white">
+          <datalist id="contractAddendumTargetDatalist"></datalist>
         </div>
         <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
           <div>
@@ -1105,19 +1106,16 @@ table { display: block; overflow-x: auto; max-width: 100%; }
             <label class="block font-semibold text-gray-600 mb-1">Loại Pháp Lý</label>
             <select id="contractType" onchange="refreshContractCodePreview()" class="w-full border p-1.5 rounded bg-white" required></select>
           </div>
-          <!-- Đổi từ <select> gốc sang nút + bảng chọn tự dựng — cùng lý do/cùng khuôn
-               contractAddendumTarget ở trên (native <select> đôi khi không mở được popup ngay khi phần
-               tử vừa hiện ra trong cùng 1 lượt xử lý sự kiện "Loại Thao Tác"). contractApprovalLevel vẫn
-               còn (input ẩn) để giữ nguyên .value cho renderContractApprovalLayerCheckboxes()/
-               submitContractReq() đọc, không phải sửa gì thêm ở 2 nơi đó. -->
-          <div id="contractApprovalLevelWrap" class="relative">
+          <!-- Cùng lý do/cùng khuôn contractAddendumTarget ở trên — đổi hẳn sang <input list>+<datalist>
+               native thay vì nút + bảng tự dựng (button+panel vẫn thỉnh thoảng không mở được ở một số
+               trình duyệt/thiết bị thật). contractApprovalLevel vẫn còn (input ẩn) để giữ nguyên .value
+               cho renderContractApprovalLayerCheckboxes()/submitContractReq() đọc, không phải sửa gì
+               thêm ở 2 nơi đó. -->
+          <div id="contractApprovalLevelWrap">
             <label class="block font-semibold text-gray-600 mb-1">Cấp Phê Duyệt Cuối Cùng</label>
             <input type="hidden" id="contractApprovalLevel" value="KHAC">
-            <button type="button" id="contractApprovalLevelBtn" onclick="toggleContractApprovalLevelDropdown(event)" class="w-full border p-1.5 rounded bg-white text-left font-semibold flex justify-between items-center gap-1">
-              <span id="contractApprovalLevelLabel" class="truncate">-- Chọn cấp phê duyệt --</span>
-              <span class="text-gray-400 shrink-0">▾</span>
-            </button>
-            <div id="contractApprovalLevelPanel" class="hidden absolute z-20 mt-1 w-full bg-white border rounded shadow-lg max-h-72 overflow-y-auto"></div>
+            <input id="contractApprovalLevelInput" list="contractApprovalLevelDatalist" value="Phê duyệt khác" oninput="resolveContractApprovalLevelInput(this.value)" class="w-full border p-1.5 rounded bg-white font-semibold">
+            <datalist id="contractApprovalLevelDatalist"></datalist>
           </div>
           <div id="contractApprovalDropdownWrap" class="relative">
             <label class="block font-semibold text-gray-600 mb-1">Phê Duyệt</label>
@@ -10722,11 +10720,11 @@ function populateDropdowns() {
   }
 
   // Cùng khuôn subApprovalLevelSel ở trên — KHAC ("Phê duyệt khác") đặt đầu danh sách làm mặc định.
-  // contractApprovalLevel giờ là input ẩn (nút + bảng chọn tự dựng) — danh sách tĩnh nên chỉ cần dựng
-  // panel 1 lần, xem populateContractApprovalLevelPanel().
-  const contractApprovalLevelPanelEl = document.getElementById('contractApprovalLevelPanel');
-  if (contractApprovalLevelPanelEl && !contractApprovalLevelPanelEl.children.length) {
-    populateContractApprovalLevelPanel();
+  // contractApprovalLevel giờ là input ẩn + <input list>/<datalist> native — danh sách tĩnh nên chỉ cần
+  // dựng datalist 1 lần, xem populateContractApprovalLevelDatalist().
+  const contractApprovalLevelDatalistEl = document.getElementById('contractApprovalLevelDatalist');
+  if (contractApprovalLevelDatalistEl && !contractApprovalLevelDatalistEl.children.length) {
+    populateContractApprovalLevelDatalist();
   }
 
   const carTypeSel = document.getElementById('carType');
@@ -14101,7 +14099,7 @@ function onContractOpModeChange() {
   if (isAddendumMode) {
     populateContractAddendumTargets();
     document.getElementById('contractAddendumTarget').value = '';
-    updateContractAddendumTargetLabel();
+    document.getElementById('contractAddendumTargetInput').value = '';
     document.getElementById('contractCode').value = '';
     document.getElementById('contractTitle').value = '';
     document.getElementById('contractDept').value = '';
@@ -14129,12 +14127,15 @@ function refreshContractCodePreview() {
 
 // Danh sách hợp đồng được phép "Bổ Sung Phụ Lục" — chỉ hợp đồng GỐC đã APPROVED, người dùng có quyền
 // tạo hồ sơ hợp đồng cho đúng phòng ban đó (contractCreate scope, khớp getScope() ở
-// CREATE_MODULE_CONFIGS.contracts).
+// CREATE_MODULE_CONFIGS.contracts). Dựng <datalist> (native, thay cho bảng button tự dựng trước đây —
+// xem ghi chú ở contractAddendumTargetWrap) — mỗi option format "<mã> — <tên>", khớp lại bởi
+// resolveContractAddendumTargetInput().
 function populateContractAddendumTargets() {
-  const input = document.getElementById('contractAddendumTarget');
-  const panel = document.getElementById('contractAddendumTargetPanel');
-  if (!input || !panel) return;
-  const prevVal = input.value;
+  const hidden = document.getElementById('contractAddendumTarget');
+  const visible = document.getElementById('contractAddendumTargetInput');
+  const datalist = document.getElementById('contractAddendumTargetDatalist');
+  if (!hidden || !visible || !datalist) return;
+  const prevVal = hidden.value;
   // Sắp theo Mã Hợp Đồng cho dễ dò tìm — trước đây để nguyên thứ tự DB.contracts (thứ tự tạo), danh
   // sách dài dần theo thời gian sẽ càng khó lướt tìm đúng hợp đồng cần bổ sung phụ lục.
   const eligible = DB.contracts.filter(c =>
@@ -14142,101 +14143,50 @@ function populateContractAddendumTargets() {
     (currentUser.perms?.admin || scopeAllows(currentUser, currentUser.perms?.contractCreate, c.dept))
   ).sort((a, b) => String(a.code).localeCompare(String(b.code)));
 
-  panel.innerHTML = eligible.map(c => `
-    <button type="button" onclick="selectContractAddendumTarget(${c.id})" class="w-full text-left px-2 py-1.5 text-xs hover:bg-cyan-50 rounded">
-      ${escapeHtml(c.code)} — ${escapeHtml(c.title)}
-    </button>
-  `).join('') || '<div class="px-2 py-1.5 text-xs text-gray-400 italic">Không có hợp đồng nào phù hợp.</div>';
+  datalist.innerHTML = eligible.map(c => `<option value="${escapeHtml(c.code)} — ${escapeHtml(c.title)}"></option>`).join('');
 
-  if (eligible.some(c => String(c.id) === prevVal)) {
-    input.value = prevVal;
+  const stillEligible = eligible.find(c => String(c.id) === prevVal);
+  if (stillEligible) {
+    hidden.value = prevVal;
+    visible.value = `${stillEligible.code} — ${stillEligible.title}`;
   } else {
-    input.value = '';
-  }
-  updateContractAddendumTargetLabel();
-}
-
-function updateContractAddendumTargetLabel() {
-  const labelEl = document.getElementById('contractAddendumTargetLabel');
-  if (!labelEl) return;
-  const id = Number(document.getElementById('contractAddendumTarget')?.value);
-  const c = DB.contracts.find(x => x.id === id);
-  if (c) {
-    labelEl.textContent = `${c.code} — ${c.title}`;
-    labelEl.classList.remove('text-gray-500');
-    labelEl.classList.add('text-gray-800');
-  } else {
-    labelEl.textContent = '-- Chọn hợp đồng --';
-    labelEl.classList.add('text-gray-500');
-    labelEl.classList.remove('text-gray-800');
+    hidden.value = '';
+    visible.value = '';
   }
 }
 
-function toggleContractAddendumTargetDropdown(e) {
-  e.stopPropagation();
-  document.getElementById('contractAddendumTargetPanel')?.classList.toggle('hidden');
-}
-
-// Chọn 1 dòng trong bảng tự dựng -> ghi vào input ẩn contractAddendumTarget (giữ nguyên .value cho
-// onContractAddendumTargetChange()/submitContractReq() đọc, không đổi gì ở 2 nơi đó), cập nhật nhãn
-// hiển thị, đóng bảng, rồi chạy tiếp đúng logic khoá Mã/Phòng ban/Loại/Đối tác như trước.
-function selectContractAddendumTarget(id) {
-  document.getElementById('contractAddendumTarget').value = String(id);
-  updateContractAddendumTargetLabel();
-  document.getElementById('contractAddendumTargetPanel')?.classList.add('hidden');
+// Gõ trong ô "Chọn Hợp Đồng Để Bổ Sung Phụ Lục" -> tách phần mã ở đầu chuỗi đã gõ (trước " — ", khớp
+// đúng format option ở populateContractAddendumTargets()), tìm đúng 1 hợp đồng gốc theo mã -> ghi id vào
+// input ẩn contractAddendumTarget (giữ nguyên .value cho onContractAddendumTargetChange()/
+// submitContractReq() đọc, không đổi gì ở 2 nơi đó), rồi chạy tiếp đúng logic khoá Mã/Phòng ban/Loại/Đối
+// tác như trước. Gõ tự do/chưa khớp đúng option nào -> để trống input ẩn, y hệt trạng thái "chưa chọn".
+function resolveContractAddendumTargetInput(rawValue) {
+  const codePart = String(rawValue || '').split(' — ')[0].trim();
+  const match = codePart ? DB.contracts.find(c => !c.isAddendum && String(c.code) === codePart) : null;
+  document.getElementById('contractAddendumTarget').value = match ? String(match.id) : '';
   onContractAddendumTargetChange();
 }
 
-document.addEventListener('click', (ev) => {
-  const panel = document.getElementById('contractAddendumTargetPanel');
-  const btn = document.getElementById('contractAddendumTargetBtn');
-  if (!panel || panel.classList.contains('hidden')) return;
-  if (!panel.contains(ev.target) && ev.target !== btn && !btn?.contains(ev.target)) panel.classList.add('hidden');
-});
-
-// Cùng khuôn contractAddendumTarget ở trên nhưng cho "Cấp Phê Duyệt Cuối Cùng" — danh sách CONTRACT_APPROVAL_LEVELS
-// tĩnh nên chỉ cần dựng 1 lần (gọi từ populateDropdowns()), KHAC đặt đầu làm mặc định.
-function populateContractApprovalLevelPanel() {
-  const panel = document.getElementById('contractApprovalLevelPanel');
-  if (!panel) return;
+// Cùng khuôn contractAddendumTarget ở trên nhưng cho "Cấp Phê Duyệt Cuối Cùng" — danh sách
+// CONTRACT_APPROVAL_LEVELS tĩnh nên chỉ cần dựng datalist 1 lần (gọi từ populateDropdowns()), KHAC đặt
+// đầu làm mặc định.
+function populateContractApprovalLevelDatalist() {
+  const datalist = document.getElementById('contractApprovalLevelDatalist');
+  if (!datalist) return;
   const orderedC = [CONTRACT_APPROVAL_LEVELS.find(l => l.key === 'KHAC'), ...CONTRACT_APPROVAL_LEVELS.filter(l => l.key !== 'KHAC')];
-  panel.innerHTML = orderedC.map(l => `
-    <button type="button" onclick="selectContractApprovalLevel('${l.key}')" class="w-full text-left px-2 py-1.5 text-xs hover:bg-cyan-50 rounded">
-      ${escapeHtml(l.label)}
-    </button>
-  `).join('');
-  updateContractApprovalLevelLabel();
+  datalist.innerHTML = orderedC.map(l => `<option value="${escapeHtml(l.label)}"></option>`).join('');
 }
 
-function updateContractApprovalLevelLabel() {
-  const labelEl = document.getElementById('contractApprovalLevelLabel');
-  if (!labelEl) return;
-  const key = document.getElementById('contractApprovalLevel')?.value;
-  const level = CONTRACT_APPROVAL_LEVELS.find(l => l.key === key);
-  labelEl.textContent = level ? level.label : '-- Chọn cấp phê duyệt --';
-}
-
-function toggleContractApprovalLevelDropdown(e) {
-  e.stopPropagation();
-  document.getElementById('contractApprovalLevelPanel')?.classList.toggle('hidden');
-}
-
-// Chọn 1 dòng -> ghi vào input ẩn contractApprovalLevel (giữ nguyên .value cho
-// renderContractApprovalLayerCheckboxes()/submitContractReq() đọc), cập nhật nhãn, đóng bảng, rồi chạy
-// tiếp đúng logic khoá lớp bắt buộc như trước (cùng onchange cũ của <select>).
-function selectContractApprovalLevel(key) {
-  document.getElementById('contractApprovalLevel').value = key;
-  updateContractApprovalLevelLabel();
-  document.getElementById('contractApprovalLevelPanel')?.classList.add('hidden');
+// Gõ/chọn nhãn cấp phê duyệt trong ô tìm -> khớp lại đúng KEY tương ứng trong CONTRACT_APPROVAL_LEVELS
+// -> ghi vào input ẩn contractApprovalLevel (giữ nguyên .value cho renderContractApprovalLayerCheckboxes()/
+// submitContractReq() đọc, không đổi gì ở 2 nơi đó), rồi chạy tiếp đúng logic khoá lớp bắt buộc như
+// trước (cùng onchange cũ của <select>/bảng chọn cũ). Gõ tự do/chưa khớp đúng nhãn nào -> để trống input
+// ẩn (submitContractReq() tự rơi về mặc định 'KHAC' khi rỗng, xem approvalLevel ở đó).
+function resolveContractApprovalLevelInput(rawValue) {
+  const level = CONTRACT_APPROVAL_LEVELS.find(l => l.label === String(rawValue || '').trim());
+  document.getElementById('contractApprovalLevel').value = level ? level.key : '';
   renderContractApprovalLayerCheckboxes();
 }
-
-document.addEventListener('click', (ev) => {
-  const panel = document.getElementById('contractApprovalLevelPanel');
-  const btn = document.getElementById('contractApprovalLevelBtn');
-  if (!panel || panel.classList.contains('hidden')) return;
-  if (!panel.contains(ev.target) && ev.target !== btn && !btn?.contains(ev.target)) panel.classList.add('hidden');
-});
 
 // Chọn xong hợp đồng cần bổ sung phụ lục -> khoá Mã/Phòng ban/Loại/Đối tác theo đúng hợp đồng gốc,
 // đề xuất sẵn mã phụ lục tiếp theo.
@@ -14511,11 +14461,12 @@ function openEditContract(contractId) {
 function cancelEditContract() {
   editingContractId = null;
   document.getElementById('contractForm').reset();
-  updateContractAddendumTargetLabel();
-  // form.reset() không đáng tin cậy trả input ẩn này về "KHAC" (cùng lý do contractOpMode ở dưới cần
-  // gán tay) — đặt lại tường minh rồi mới cập nhật nhãn.
+  // contractAddendumTargetInput/contractApprovalLevelInput là input thật trong form (không còn nút +
+  // bảng tự dựng) nên form.reset() ở trên đã tự đưa chúng về đúng giá trị mặc định trong HTML ("" và
+  // "Phê duyệt khác") — nhưng input ẩn tương ứng KHÔNG đáng tin cậy được reset kèm theo (cùng lý do
+  // contractOpMode ở dưới cần gán tay) nên vẫn đặt lại tường minh ở đây.
+  document.getElementById('contractAddendumTarget').value = '';
   document.getElementById('contractApprovalLevel').value = 'KHAC';
-  updateContractApprovalLevelLabel();
   document.getElementById('contractDept').disabled = false;
   document.getElementById('contractCustodianDept').disabled = false;
   document.getElementById('contractType').disabled = false;
@@ -27203,6 +27154,15 @@ function resetCareerPathForm() {
 }
 
 function renderTrainingLms() {
+  // Đào Tạo Đợt 3 dùng chung <datalist id="systemUsersDatalist"> cho #tcInstructor/#tcInviteListPickInput
+  // (form Tạo Lớp Mới) và #trRosterPickInput (modal Thêm Học Viên, mở từ bảng lớp học ở đây) — nhưng
+  // trước đây KHÔNG có lệnh gọi populateSystemUsersDatalist() nào trên đường vào module này, chỉ được
+  // populate "ăn theo" nếu người dùng tình cờ mở Biên Bản Họp/modal Mẫu/sửa lớp học TRƯỚC đó trong cùng
+  // phiên. Phiên mới mở thẳng Đào Tạo -> datalist rỗng -> các ô trên "không gõ tìm được" (báo lỗi thật,
+  // xem HUONG_DAN_DEPLOY_UBUNTU.md không liên quan). Gọi ngay đầu renderTrainingLms() (chạy mỗi lần vào
+  // module + mỗi lần đổi sub-tab, xem setTrainingLmsTab()) để đảm bảo luôn có dữ liệu trước khi các ô
+  // trên có thể hiện ra.
+  populateSystemUsersDatalist();
   populateTrainingCategorySelects();
   populateTrainingClassMultiSelects();
   populateTrainingCourseSelects();

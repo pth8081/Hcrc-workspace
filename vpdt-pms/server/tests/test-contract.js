@@ -39,7 +39,7 @@ async function run() {
       const c = DB.contracts.find((x) => x.title === t);
       if (!c) return null;
       return {
-        id: c.id, code: c.code, approvalStatus: c.approvalStatus, currentStep: c.currentStep,
+        id: c.id, code: c.code, title: c.title, approvalStatus: c.approvalStatus, currentStep: c.currentStep,
         custodianDept: c.custodianDept, paymentStatus: c.paymentStatus, isAddendum: c.isAddendum,
         rootContractId: c.rootContractId, effectiveStepsLen: (c.effectiveSteps || []).length,
         paymentInstallments: c.paymentInstallments
@@ -58,10 +58,11 @@ async function run() {
 
     // ============ Kịch bản 2: Tạo hồ sơ (happy path) với Cấp Phê Duyệt Cuối Cùng = TGD (4 lớp bổ
     // sung bắt buộc: GD_PGD/PTGD/TRO_LY_THU_KY/TGD) + % tự tính Đợt Thanh Toán ============
-    // contractApprovalLevel là input ẩn (nút + bảng chọn tự dựng, cùng khuôn contractAddendumTarget) —
-    // không còn là <select> nên bấm nút mở rồi chọn dòng tương ứng, không selectOption() được nữa.
-    await page.click('#contractApprovalLevelBtn');
-    await page.getByRole('button', { name: 'Tổng giám đốc phê duyệt', exact: true }).click();
+    // contractApprovalLevel là input ẩn, điều khiển bởi <input list>+<datalist> native
+    // (#contractApprovalLevelInput/#contractApprovalLevelDatalist, cùng khuôn contractAddendumTarget) —
+    // không còn là <select> nên gõ đúng nhãn rồi để oninput tự khớp lại KEY, không selectOption() được
+    // nữa. page.fill() gõ thật + tự bắn sự kiện input, đúng đường thao tác người dùng thật.
+    await page.fill('#contractApprovalLevelInput', 'Tổng giám đốc phê duyệt');
     // Cấp "TGD" chỉ BẮT BUỘC (locked, tự tick sẵn) 2 lớp cuối TRO_LY_THU_KY/TGD — GD_PGD/PTGD vẫn hiện
     // ra cho CHỌN THÊM (tuỳ ý) chứ không tự tick, phải tick tay để đưa cả 4 lớp vào quy trình. Panel
     // dropdown-checklist tự dựng (không phải <select multiple>) chỉ hiện khi bấm nút mở — bấm nút mở
@@ -206,11 +207,20 @@ async function run() {
     await loginAs('kd1');
     await goToContractApproval();
     await page.evaluate(() => { document.getElementById('contractOpMode').value = 'ADDENDUM'; onContractOpModeChange(); });
-    const addendumTargets = await page.locator('#contractAddendumTargetPanel button').allInnerTexts();
+    // #contractAddendumTargetInput/#contractAddendumTargetDatalist là <input list>+<datalist> native
+    // (thay cho button+panel tự dựng trước đây — đúng lỗi người dùng thật báo lại: ô "Chọn Hợp Đồng Để
+    // Bổ Sung Phụ Lục" thỉnh thoảng không mở được) — đọc option của datalist thay vì bảng button.
+    const addendumTargets = await page.locator('#contractAddendumTargetDatalist option').evaluateAll(
+      (opts) => opts.map((o) => o.getAttribute('value'))
+    );
     check('Danh sách "Chọn Hợp Đồng Để Bổ Sung Phụ Lục" có đúng hợp đồng đã duyệt xong', addendumTargets.some((t) => t.includes(contract1.code)), addendumTargets);
     check('Hợp đồng đang PENDING/REJECTED KHÔNG xuất hiện trong danh sách bổ sung phụ lục', !addendumTargets.some((t) => t.includes(contract2.code)), addendumTargets);
 
-    await page.evaluate((id) => selectContractAddendumTarget(id), contract1.id);
+    // Gõ thật vào ô tìm (không còn page.evaluate() gọi thẳng hàm chọn cũ) — mô phỏng đúng thao tác
+    // người dùng thật: gõ "<mã> — <tên>" khớp đúng 1 option trong datalist, oninput tự resolve.
+    await page.fill('#contractAddendumTargetInput', `${contract1.code} — ${contract1.title}`);
+    const resolvedTargetId = await page.locator('#contractAddendumTarget').inputValue();
+    check('Gõ đúng "<mã> — <tên>" trong datalist -> input ẩn contractAddendumTarget nhận đúng id hợp đồng gốc', resolvedTargetId === String(contract1.id), resolvedTargetId);
     const addendumCode = await page.locator('#contractCode').inputValue();
     check('Mã phụ lục tự sinh = <mã hợp đồng gốc>-PLHD01', addendumCode === `${contract1.code}-PLHD01`, addendumCode);
     const addendumCustodian = await page.locator('#contractCustodianDept').inputValue();
