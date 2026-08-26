@@ -384,6 +384,13 @@ router.post('/internalPosts/:id/comment/:commentId/delete-comment', (req, res) =
   withInternalPostAction(req, res, 'comment-delete', (payload, user, item) =>
     recordActions.deleteInternalPostComment(user, item, Number(req.params.commentId))));
 
+// POST /api/records/internalPosts/:id/comment/:commentId/like — reaction cấp bình luận (Đợt 1 Nhịp
+// Sống HCRC, dùng để xếp hạng "3-5 bình luận nổi bật" ở client), mở cho mọi người đã đăng nhập như
+// like cấp bài viết ở trên.
+router.post('/internalPosts/:id/comment/:commentId/like', (req, res) =>
+  withInternalPostAction(req, res, 'comment-like', (payload, user, item) =>
+    recordActions.toggleInternalPostCommentLike(user, item, Number(req.params.commentId))));
+
 // POST /api/records/internalPosts/:id/register-training
 router.post('/internalPosts/:id/register-training', (req, res) =>
   withInternalPostAction(req, res, 'register-training', (payload, user, item) => recordActions.registerInternalPostTraining(user, item)));
@@ -400,6 +407,25 @@ router.post('/internalPosts/:id/approve', (req, res) =>
 
 router.post('/internalPosts/:id/reject', (req, res) =>
   withInternalPostAction(req, res, 'reject', recordActions.rejectInternalPost));
+
+// POST /api/records/internalPosts/:id/request-info — "Yêu cầu bổ sung" cho Góc Chia Sẻ (PENDING ->
+// NEED_INFO), cùng khuôn Thanh Toán (requestPaymentInfo). Chỉ canApproveInternalPost (kiểm tra ở
+// lib/recordActions.js).
+router.post('/internalPosts/:id/request-info', (req, res) =>
+  withInternalPostAction(req, res, 'request-info', recordActions.requestInternalPostInfo));
+
+// POST /api/records/internalPosts/:id/hide|unhide — Admin chủ động ẩn/hiện lại bài đã đăng (APPROVED
+// <-> HIDDEN, khác PENDING/REJECTED vốn là kết quả duyệt nội dung).
+router.post('/internalPosts/:id/hide', (req, res) =>
+  withInternalPostAction(req, res, 'hide', (payload, user, item) => recordActions.hideInternalPost(user, item)));
+
+router.post('/internalPosts/:id/unhide', (req, res) =>
+  withInternalPostAction(req, res, 'unhide', (payload, user, item) => recordActions.unhideInternalPost(user, item)));
+
+// POST /api/records/internalPosts/:id/edit — sửa bài Nháp/bài "Yêu cầu bổ sung" (NEED_INFO) rồi tự gửi
+// lại theo đúng luật gán status lúc tạo (chỉ tác giả/admin, kiểm tra ở lib/recordActions.js).
+router.post('/internalPosts/:id/edit', (req, res) =>
+  withInternalPostAction(req, res, 'edit', recordActions.editInternalPost));
 
 // Bước 3 — Công việc có nhiều action cùng khuôn "tìm việc trong collection, khoá, gọi hàm xác minh +
 // mutate ở lib/recordActions.js, trả về bản ghi mới" — gom vào 1 helper dùng chung thay vì lặp lại

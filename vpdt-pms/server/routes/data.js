@@ -40,6 +40,10 @@ const ADMIN_ONLY_KEYS = new Set([
   // KHÔNG thêm vào đây (giữ đúng độ mở như depts/cats — thuần danh sách nhãn hiển thị, không có bước
   // tra cứu phụ thuộc nào khác dựa vào giá trị của chúng).
   'submissionTypes',
+  // internalNewsCategories/internalShareCategories: "chuyên đề" cho Nhịp Sống HCRC/Góc Chia Sẻ (module
+  // Truyền Thông Nội Bộ) — cùng lý do submissionTypes ở trên, quyết định trực tiếp giá trị postCategory
+  // hợp lệ khi tạo bài (xem createValidation.js internalPosts.extraValidate).
+  'internalNewsCategories', 'internalShareCategories',
   // Người phụ trách nhận thông báo hết hạn hợp đồng theo phòng ban (xem jobs/contractExpiryReminder.js)
   // — cùng khuôn quản trị như emailConfig ở trên, không phải danh sách hiển thị thuần.
   'contractExpiryDeptContacts',

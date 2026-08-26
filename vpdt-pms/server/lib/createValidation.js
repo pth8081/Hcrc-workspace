@@ -601,7 +601,7 @@ const CREATE_MODULE_CONFIGS = {
     forceOwnDept: true,
     getScope: () => ({}),
     creatorField: 'author', creatorNameField: 'authorName',
-    extraValidate: (payload, collection, user) => {
+    extraValidate: (payload, collection, user, appData) => {
       const type = payload.type;
       const allowed = !!(
         user.perms?.admin ||
@@ -611,12 +611,51 @@ const CREATE_MODULE_CONFIGS = {
         (type === 'REWARD' && user.perms?.internalRewardCreate)
       );
       if (!allowed) throw new CreateError(403, 'Bạn không có quyền đăng bài ở phân hệ này');
-      // Góc Chia Sẻ (SHARE) cần người có quyền internalPostApprove/admin duyệt trước khi công khai —
-      // status GÁN Ở SERVER (không tin giá trị client tự gửi). Người đăng đã có quyền duyệt thì không
-      // cần tự duyệt lại bài của chính mình. 3 type còn lại không qua bước duyệt (đã gác quyền đăng ở
-      // trên) nên luôn APPROVED.
-      payload.status = (type === 'SHARE' && !user.perms?.admin && !user.perms?.internalPostApprove)
-        ? 'PENDING' : 'APPROVED';
+
+      // postCategory ("chuyên đề") — chỉ NEWS (Nhịp Sống HCRC) và SHARE (Góc Chia Sẻ) có, dùng CHUNG
+      // tên field nhưng khác danh sách giá trị hợp lệ theo type (appData.internalNewsCategories vs
+      // appData.internalShareCategories) — xem defaults.js. 2 type còn lại (TRAINING/REWARD) không có
+      // khái niệm chuyên đề nên luôn xoá field này khỏi payload.
+      if (type === 'NEWS' || type === 'SHARE') {
+        const catList = type === 'NEWS' ? (appData.internalNewsCategories || []) : (appData.internalShareCategories || []);
+        const catKey = (payload.postCategory || '').trim();
+        if (!catKey || !catList.some(c => c.key === catKey)) {
+          throw new CreateError(400, 'Vui lòng chọn chuyên đề hợp lệ cho bài viết');
+        }
+        payload.postCategory = catKey;
+      } else {
+        delete payload.postCategory;
+      }
+
+      // Lưu Nháp (Đợt 1 Nhịp Sống HCRC/Góc Chia Sẻ) — tác giả vẫn cần đúng quyền đăng bài theo type ở
+      // trên, chỉ khác ở chỗ KHÔNG đưa vào hàng chờ duyệt/công khai ngay. submitInternalPostDraft() ở
+      // lib/recordActions.js sẽ chuyển DRAFT -> PENDING/APPROVED sau, dùng lại đúng luật gán status bên
+      // dưới (không lặp lại logic ở 2 chỗ).
+      const isDraft = payload.draft === true;
+      delete payload.draft;
+
+      // Lịch đăng bài (Nhịp Sống HCRC) — publishAt để trống = đăng ngay, có giá trị = "Chờ đăng" cho tới
+      // khi tới giờ (tính live ở canViewInternalPost/render, KHÔNG cron — giống pinExpiresAt bên dưới).
+      // Chỉ NEWS mới đặt lịch được (SHARE/TRAINING/REWARD giữ nguyên hành vi đăng ngay khi duyệt xong).
+      const publishAtRaw = payload.publishAt;
+      if (type === 'NEWS' && publishAtRaw) {
+        const ts = new Date(publishAtRaw).getTime();
+        if (!Number.isFinite(ts)) throw new CreateError(400, 'Thời gian đăng bài không hợp lệ');
+        payload.publishAt = new Date(ts).toISOString();
+      } else {
+        payload.publishAt = null;
+      }
+
+      if (isDraft) {
+        payload.status = 'DRAFT';
+      } else {
+        // Góc Chia Sẻ (SHARE) cần người có quyền internalPostApprove/admin duyệt trước khi công khai —
+        // status GÁN Ở SERVER (không tin giá trị client tự gửi). Người đăng đã có quyền duyệt thì không
+        // cần tự duyệt lại bài của chính mình. 3 type còn lại không qua bước duyệt (đã gác quyền đăng ở
+        // trên) nên luôn APPROVED.
+        payload.status = (type === 'SHARE' && !user.perms?.admin && !user.perms?.internalPostApprove)
+          ? 'PENDING' : 'APPROVED';
+      }
 
       // Ghim lên trang chủ (Đợt E) — chỉ Tin tức/Đào tạo/Khen thưởng (Góc chia sẻ còn phải qua duyệt
       // mới công khai nên không ghim được), chỉ người có quyền internalPostApprove/admin. pinExpiresAt

@@ -666,6 +666,19 @@ function toggleInternalPostLike(user, post) {
   return post;
 }
 
+// Reaction cho TỪNG bình luận (khác likes cấp bài viết ở trên) — dùng để xếp hạng "3-5 bình luận nổi
+// bật" (mới nhất + nhiều reaction nhất) ở renderInternalNewsCard()/renderInternalPosts() phía client;
+// server chỉ lưu likes[], KHÔNG tự xếp hạng (thuần hiển thị, tính lại mỗi lần render, không cache).
+function toggleInternalPostCommentLike(user, post, commentId) {
+  const comment = (post.comments || []).find(c => c.id === commentId);
+  if (!comment) throw new HttpError(404, 'Không tìm thấy bình luận');
+  if (!Array.isArray(comment.likes)) comment.likes = [];
+  const idx = comment.likes.indexOf(user.username);
+  if (idx === -1) comment.likes.push(user.username);
+  else comment.likes.splice(idx, 1);
+  return post;
+}
+
 // Chuẩn hoá để so khớp từ khoá nhạy cảm — bỏ dấu tiếng Việt (kể cả "đ/Đ", không có dạng phân rã NFD)
 // + viết thường + gộp khoảng trắng, cùng khuôn normalizeHeader() ở lib/vppCatalog.js.
 function normalizeForScan(s) {
@@ -702,13 +715,18 @@ function addInternalPostComment(payload, user, post, sensitiveKeywords) {
     comment.flagged = true;
     comment.flagCategories = [...new Set(hits.map(h => h.category))];
     comment.flagTerms = [...new Set(hits.map(h => h.term))];
+    // Trước đây bình luận khớp từ khoá nhạy cảm vẫn hiển thị NGAY, chỉ gắn cờ để hậu kiểm. Đổi hành vi
+    // theo yêu cầu: đưa thẳng vào "Chờ Kiểm Duyệt" — ẩn công khai (sanitizeInternalPostCommentsForUser ở
+    // lib/recordViewScope.js lọc theo cờ này) cho tới khi người kiểm duyệt xử lý (dismiss = duyệt hiện,
+    // delete = xoá hẳn) qua dismissInternalCommentFlag()/deleteInternalPostComment() bên dưới.
+    comment.pendingModeration = true;
   }
   post.comments.push(comment);
   return post;
 }
 
 // Bỏ cờ cảnh báo (người kiểm duyệt xem xét thấy không có vấn đề gì) — không xoá bình luận, chỉ gỡ
-// đánh dấu để không còn hiện trong hàng chờ kiểm duyệt.
+// đánh dấu để hiện công khai trở lại (thoát khỏi hàng chờ kiểm duyệt).
 function dismissInternalCommentFlag(user, post, commentId) {
   if (!canApproveInternalPost(user)) throw new HttpError(403, 'Bạn không có quyền kiểm duyệt bình luận');
   const comment = (post.comments || []).find(c => c.id === commentId);
@@ -716,6 +734,7 @@ function dismissInternalCommentFlag(user, post, commentId) {
   comment.flagged = false;
   comment.flagCategories = [];
   comment.flagTerms = [];
+  comment.pendingModeration = false;
   comment.flagDismissedBy = user.username;
   comment.flagDismissedAt = nowVN();
   return post;
@@ -787,6 +806,70 @@ function rejectInternalPost(payload, user, post) {
   post.rejectedByName = user.name;
   post.rejectedAt = nowVN();
   post.rejectReason = reason;
+  return post;
+}
+
+// "Yêu cầu bổ sung" cho Góc Chia Sẻ — CÙNG khuôn requestPaymentInfo() (module Thanh Toán) ở trên: chỉ
+// chuyển PENDING -> NEED_INFO kèm lý do, người đăng phải quay lại sửa qua editInternalPost() (đưa về
+// PENDING) mới duyệt lại được — không cho duyệt thẳng từ NEED_INFO (xem approveInternalPost ở trên vẫn
+// chỉ nhận status PENDING, không cần sửa gì thêm).
+function requestInternalPostInfo(payload, user, post) {
+  if (!canApproveInternalPost(user)) throw new HttpError(403, 'Bạn không có quyền yêu cầu bổ sung');
+  if (post.type !== 'SHARE') throw new HttpError(400, 'Chỉ áp dụng cho bài đăng Góc Chia Sẻ');
+  if (post.status !== 'PENDING') throw new HttpError(409, 'Bài đăng không ở trạng thái chờ duyệt');
+  const comment = (payload?.comment || '').trim();
+  if (!comment) throw new HttpError(400, 'Vui lòng nhập nội dung cần bổ sung');
+  post.status = 'NEED_INFO';
+  post.infoRequestComment = comment;
+  return post;
+}
+
+// Ẩn/Hiện bài viết đã đăng (Nháp/Chờ duyệt/Ẩn KHÔNG dùng hành động này — chỉ APPROVED<->HIDDEN, đúng
+// "Admin chủ động ẩn khỏi trang chủ/chuyên mục" ở mô hình trạng thái đề xuất, KHÁC PENDING/REJECTED
+// vốn là kết quả của bước duyệt nội dung).
+function hideInternalPost(user, post) {
+  if (!canApproveInternalPost(user)) throw new HttpError(403, 'Bạn không có quyền ẩn bài đăng này');
+  if (post.status !== 'APPROVED') throw new HttpError(409, 'Chỉ ẩn được bài đã đăng');
+  post.status = 'HIDDEN';
+  post.hiddenBy = user.username;
+  post.hiddenAt = nowVN();
+  return post;
+}
+
+function unhideInternalPost(user, post) {
+  if (!canApproveInternalPost(user)) throw new HttpError(403, 'Bạn không có quyền hiện lại bài đăng này');
+  if (post.status !== 'HIDDEN') throw new HttpError(409, 'Bài đăng không ở trạng thái đã ẩn');
+  post.status = 'APPROVED';
+  post.hiddenBy = null;
+  post.hiddenAt = null;
+  return post;
+}
+
+// Sửa bài Nháp/bài bị "Yêu cầu bổ sung" (NEED_INFO) — chỉ tác giả (hoặc admin) sửa được, chỉ 2 trạng
+// thái này sửa được (bài đã APPROVED/PENDING/REJECTED/HIDDEN đã qua giai đoạn soạn thảo). Gửi lại y hệt
+// luật gán status lúc TẠO (xem createValidation.js internalPosts.extraValidate) — giữ isDraft để tác
+// giả có thể lưu nháp nhiều lần trước khi thật sự gửi.
+const INTERNAL_POST_EDITABLE_FIELDS = ['title', 'content', 'attachment', 'postCategory', 'publishAt', 'training'];
+function editInternalPost(payload, user, post) {
+  if (post.author !== user.username && !user.perms?.admin) throw new HttpError(403, 'Bạn không có quyền sửa bài đăng này');
+  if (post.status !== 'DRAFT' && post.status !== 'NEED_INFO') throw new HttpError(409, 'Bài đăng không còn ở trạng thái được sửa');
+  for (const field of INTERNAL_POST_EDITABLE_FIELDS) {
+    if (payload[field] !== undefined) post[field] = payload[field];
+  }
+  if (post.type === 'NEWS' && post.publishAt) {
+    const ts = new Date(post.publishAt).getTime();
+    if (!Number.isFinite(ts)) throw new HttpError(400, 'Thời gian đăng bài không hợp lệ');
+    post.publishAt = new Date(ts).toISOString();
+  } else if (post.type !== 'NEWS') {
+    post.publishAt = null;
+  }
+  if (payload.draft === true) {
+    post.status = 'DRAFT';
+  } else {
+    post.status = (post.type === 'SHARE' && !user.perms?.admin && !user.perms?.internalPostApprove)
+      ? 'PENDING' : 'APPROVED';
+    post.infoRequestComment = null;
+  }
   return post;
 }
 
@@ -2482,10 +2565,11 @@ module.exports = {
   confirmPaymentInstallment, assertCanDeletePaymentRequest,
   canEditMinutes, canDeleteMinutes, editMinutes, assertCanDeleteMinutes,
   canCreateMinutes, createMinutes, buildTasksFromDirectives, assignMinutesTasks, buildTaskFromSubmissionComment,
-  markInternalPostRead, toggleInternalPostLike, addInternalPostComment,
+  markInternalPostRead, toggleInternalPostLike, toggleInternalPostCommentLike, addInternalPostComment,
   scanCommentForSensitiveContent, dismissInternalCommentFlag, deleteInternalPostComment,
   registerInternalPostTraining, unregisterInternalPostTraining,
   canApproveInternalPost, approveInternalPost, rejectInternalPost,
+  requestInternalPostInfo, hideInternalPost, unhideInternalPost, editInternalPost,
   canManageTasks, canDeleteTaskPerm, canAssignSpecificTask, assignTask, editTask, assertCanDeleteTask,
   createTask,
   acceptTask, confirmCollaboratorParticipation, updateTaskStatusAction, requestExtension,

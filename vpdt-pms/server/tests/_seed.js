@@ -70,6 +70,14 @@ function buildAppData() {
     trainingCategories: [],
     sensitiveKeywords: [],
     submissionTypes: [{ key: 'KHAC', label: 'Tờ trình khác' }],
+    internalNewsCategories: [
+      { key: 'THI_DUA', label: 'Chương trình thi đua' }, { key: 'GAN_KET', label: 'Sự kiện & Gắn kết' },
+      { key: 'HOC_TAP', label: 'Góc học tập' }, { key: 'HOAT_DONG_CHUNG', label: 'Hoạt động chung' }, { key: 'KHAC', label: 'Khác' }
+    ],
+    internalShareCategories: [
+      { key: 'CONG_VIEC', label: 'Góc công việc' }, { key: 'DOI_SONG', label: 'Góc đời sống' },
+      { key: 'DONG_NGHIEP', label: 'Góc đồng nghiệp' }, { key: 'SANG_TAO', label: 'Góc sáng tạo' }
+    ],
     contractTypes: ['Hợp đồng kinh tế', 'Hợp đồng dịch vụ'],
     carTypes: ['5 chỗ'],
     emailConfig: { enabled: false },

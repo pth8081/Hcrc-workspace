@@ -416,7 +416,7 @@ table { display: block; overflow-x: auto; max-width: 100%; }
         <span class="sidebar-icon">📜</span><span class="sidebar-label">Văn bản trình</span>
       </button>
       <!-- Truyền Thông — cùng khuôn Hợp Đồng (dropdown TĨNH, không cần hàm updateXNavVisibility riêng):
-           cả 4 loại bài (Tin Nội Bộ/Đào Tạo/Khen Thưởng/Góc Chia Sẻ) dùng CHUNG 1 điều kiện quyền XEM
+           cả 4 loại bài (Nhịp Sống HCRC/Đào Tạo/Khen Thưởng/Góc Chia Sẻ) dùng CHUNG 1 điều kiện quyền XEM
            (canAccessInternalModule) — chỉ quyền ĐĂNG bài mới khác nhau theo loại (canCreateInternalPost),
            không ảnh hưởng gì tới việc hiện/ẩn mục nav này. -->
       <div id="truyenThongNavWrap" class="hidden">
@@ -424,7 +424,7 @@ table { display: block; overflow-x: auto; max-width: 100%; }
           <span class="sidebar-icon">📣</span><span class="sidebar-label flex-1">Truyền thông</span><span class="sidebar-label text-[10px]">▾</span>
         </button>
         <div id="truyenThongDropdownPanel" class="hidden pl-7 space-y-0.5 sidebar-label">
-          <button onclick="closeTruyenThongDropdown(); switchTab('internal'); setInternalSubTab('NEWS')" class="sidebar-subitem">📰 Tin Nội Bộ</button>
+          <button onclick="closeTruyenThongDropdown(); switchTab('internal'); setInternalSubTab('NEWS')" class="sidebar-subitem">📰 Nhịp Sống HCRC</button>
           <button onclick="closeTruyenThongDropdown(); switchTab('internal'); setInternalSubTab('TRAINING')" class="sidebar-subitem">🎓 Đào Tạo</button>
           <button onclick="closeTruyenThongDropdown(); switchTab('internal'); setInternalSubTab('RECRUITMENT')" class="sidebar-subitem">💼 Tuyển Dụng</button>
           <button onclick="closeTruyenThongDropdown(); switchTab('internal'); setInternalSubTab('SHARE')" class="sidebar-subitem"><span id="internalShareDropdownLabel">💬 Góc Chia Sẻ</span></button>
@@ -1738,9 +1738,9 @@ table { display: block; overflow-x: auto; max-width: 100%; }
   <div id="internalSection" class="hidden space-y-6">
     <div class="bg-fuchsia-50 p-4 rounded border border-fuchsia-200 space-y-3">
       <h3 class="font-bold text-fuchsia-900 text-base flex items-center gap-2">📣 Truyền Thông Nội Bộ</h3>
-      <p class="text-xs text-fuchsia-800">Tin nội bộ, đào tạo, khen thưởng và góc chia sẻ — tương tác bằng bình luận & thả tim, hệ thống ghi nhận ai đã xem.</p>
+      <p class="text-xs text-fuchsia-800">Nhịp Sống HCRC, đào tạo, khen thưởng và góc chia sẻ — tương tác bằng bình luận & thả tim, hệ thống ghi nhận ai đã xem.</p>
       <div class="flex gap-2 flex-wrap">
-        <button type="button" onclick="setInternalSubTab('NEWS')" id="btnInternalSubNews" class="px-3 py-1 rounded text-xs font-bold bg-fuchsia-700 text-white">📰 Tin Nội Bộ</button>
+        <button type="button" onclick="setInternalSubTab('NEWS')" id="btnInternalSubNews" class="px-3 py-1 rounded text-xs font-bold bg-fuchsia-700 text-white">📰 Nhịp Sống HCRC</button>
         <button type="button" onclick="setInternalSubTab('TRAINING')" id="btnInternalSubTraining" class="px-3 py-1 rounded text-xs font-bold bg-gray-200 text-gray-700">🎓 Đào Tạo</button>
         <button type="button" onclick="setInternalSubTab('RECRUITMENT')" id="btnInternalSubRecruitment" class="px-3 py-1 rounded text-xs font-bold bg-gray-200 text-gray-700">💼 Tuyển Dụng</button>
         <button type="button" onclick="setInternalSubTab('SHARE')" id="btnInternalSubShare" class="px-3 py-1 rounded text-xs font-bold bg-gray-200 text-gray-700"><span id="internalShareSubTabLabel">💬 Góc Chia Sẻ</span></button>
@@ -2181,7 +2181,7 @@ table { display: block; overflow-x: auto; max-width: 100%; }
     </div>
 
     <form id="internalPostForm" onsubmit="submitInternalPost(event)" class="bg-white p-3 rounded border text-xs space-y-3">
-      <h4 id="internalFormTitle" class="font-bold text-gray-700">📝 Đăng Tin Nội Bộ Mới</h4>
+      <h4 id="internalFormTitle" class="font-bold text-gray-700">📝 Đăng Nhịp Sống HCRC Mới</h4>
       <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
         <div class="md:col-span-2">
           <label class="block font-semibold text-gray-600 mb-1">Tiêu Đề</label>
@@ -2206,6 +2206,31 @@ table { display: block; overflow-x: auto; max-width: 100%; }
         <div id="internalTrainingCapacityField" class="hidden">
           <label class="block font-semibold text-gray-600 mb-1">Số Lượng Học Viên Tối Đa (để trống = không giới hạn)</label>
           <input id="internalTrainingCapacity" type="number" min="0" class="w-full border p-1.5 rounded">
+        </div>
+        <!-- Chuyên đề (Đợt 1 Nhịp Sống HCRC/Góc Chia Sẻ) — 2 <select> RIÊNG (không dùng chung 1 DOM
+             element) để khớp đúng CORE_FIELD_MANIFEST.INTERNAL_POST (mỗi field id = 1 control thật, admin
+             sửa nhãn/bắt buộc/danh sách lựa chọn riêng từng cái ở màn Biểu Mẫu) — chỉ 1 trong 2 hiện tại
+             1 thời điểm theo activeInternalSubTab (xem setInternalSubTab()), populate từ
+             DB.internalNewsCategories/internalShareCategories (populateInternalPostCategorySelects()). -->
+        <div id="internalCategoryNewsField" class="hidden">
+          <label class="block font-semibold text-gray-600 mb-1">Chuyên Đề Nhịp Sống HCRC</label>
+          <select id="internalPostCategory" class="w-full border p-1.5 rounded bg-white" required>
+            <option value="">-- Chọn chuyên đề --</option>
+          </select>
+        </div>
+        <div id="internalCategoryShareField" class="hidden">
+          <label class="block font-semibold text-gray-600 mb-1">Chuyên Đề Góc Chia Sẻ</label>
+          <select id="internalPostCategoryShare" class="w-full border p-1.5 rounded bg-white" required>
+            <option value="">-- Chọn chuyên đề --</option>
+          </select>
+        </div>
+        <!-- Lịch đăng (Đợt 1 Nhịp Sống HCRC) — chỉ NEWS, để trống = đăng ngay. Gửi thẳng giá trị input
+             datetime-local (giờ địa phương), cùng cách carStartTime/meetingStartTime đã gửi — server tự
+             new Date() parse lại + tính "Chờ đăng" LIVE theo Date.now() (không cron, xem
+             canViewInternalPost() ở lib/recordViewScope.js). -->
+        <div id="internalPublishAtField" class="hidden">
+          <label class="block font-semibold text-gray-600 mb-1">Lịch Đăng (để trống = đăng ngay)</label>
+          <input id="internalPublishAt" type="datetime-local" class="w-full border p-1.5 rounded">
         </div>
       </div>
       <div>
@@ -2234,7 +2259,13 @@ table { display: block; overflow-x: auto; max-width: 100%; }
           </select>
         </div>
       </div>
-      <div class="flex justify-end">
+      <!-- Lưu Nháp / Đăng ngay-Gửi duyệt (Đợt 1) — 2 nút submit CÙNG form, phân biệt bằng
+           e.submitter.id trong submitInternalPost() (draft không qua hàng chờ duyệt/công khai ngay,
+           xem payload.draft ở extraValidate/editInternalPost() phía server). "Huỷ Sửa" chỉ hiện khi
+           đang Sửa 1 bài Nháp/Yêu cầu bổ sung có sẵn (editInternalPostUI()). -->
+      <div class="flex justify-end gap-2">
+        <button type="button" id="internalCancelEditBtn" onclick="cancelEditInternalPost()" class="hidden px-4 py-2 rounded text-xs font-bold text-gray-600 hover:bg-gray-100">Huỷ Sửa</button>
+        <button type="submit" id="internalDraftBtn" class="bg-gray-200 text-gray-700 px-4 py-2 rounded font-bold hover:bg-gray-300">📝 Lưu Nháp</button>
         <button type="submit" id="internalSubmitBtn" class="bg-fuchsia-600 text-white px-5 py-2 rounded font-bold hover:bg-fuchsia-700">Đăng Tin</button>
       </div>
     </form>
@@ -2259,7 +2290,7 @@ table { display: block; overflow-x: auto; max-width: 100%; }
     </div>
 
     <div id="internalListBlock" class="space-y-3">
-      <h3 id="internalListTitle" class="font-bold text-gray-800">📰 Danh Sách Tin Nội Bộ</h3>
+      <h3 id="internalListTitle" class="font-bold text-gray-800">📰 Danh Sách Nhịp Sống HCRC</h3>
       <div id="internalPostsContainer" class="space-y-3"></div>
       <div id="paginationContainer_internal"></div>
     </div>
@@ -3878,10 +3909,10 @@ table { display: block; overflow-x: auto; max-width: 100%; }
             <span id="permTreeBadge_internal" class="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-gray-100 text-gray-500">0/0</span>
           </summary>
           <div class="p-3 pt-0 space-y-2">
-            <p class="text-[11px] text-gray-500 italic">Mọi người dùng đều XEM và tương tác được (bình luận, thả tim) trên cả 4 phân hệ. 3 quyền dưới đây kiểm soát ai được ĐĂNG BÀI ở Tin nội bộ / Đào tạo; riêng "Góc chia sẻ" ai cũng đăng được nhưng bài chỉ công khai sau khi được người có quyền duyệt bên dưới phê duyệt. Quyền "Đăng Tuyển dụng" cũng dùng chung khối này — người có quyền được đăng tin tuyển dụng và quản lý toàn bộ ứng viên được giới thiệu (xem mục Tuyển Dụng).</p>
+            <p class="text-[11px] text-gray-500 italic">Mọi người dùng đều XEM và tương tác được (bình luận, thả tim) trên cả 4 phân hệ. 3 quyền dưới đây kiểm soát ai được ĐĂNG BÀI ở Nhịp Sống HCRC / Đào tạo; riêng "Góc chia sẻ" ai cũng đăng được nhưng bài chỉ công khai sau khi được người có quyền duyệt bên dưới phê duyệt. Quyền "Đăng Tuyển dụng" cũng dùng chung khối này — người có quyền được đăng tin tuyển dụng và quản lý toàn bộ ứng viên được giới thiệu (xem mục Tuyển Dụng).</p>
             <div class="grid grid-cols-1 md:grid-cols-3 gap-2">
               <label class="flex items-center gap-2 text-fuchsia-700 font-semibold cursor-pointer">
-                <input type="checkbox" id="pInternalNewsCreate"> 📰 Đăng Tin nội bộ
+                <input type="checkbox" id="pInternalNewsCreate"> 📰 Đăng Nhịp Sống HCRC
               </label>
               <label class="flex items-center gap-2 text-fuchsia-700 font-semibold cursor-pointer">
                 <input type="checkbox" id="pInternalTrainingCreate"> 🎓 Đăng Đào tạo
@@ -5459,6 +5490,9 @@ const DB = {
   meetingAttendeeTemplates: [],
   tasks: [],
   internalPosts: [],
+  // "Chuyên đề" cho Nhịp Sống HCRC (NEWS) / Góc Chia Sẻ (SHARE) — {key,label}[] admin tự thêm/bớt ở màn
+  // Biểu Mẫu (xem CORE_FIELD_MANIFEST.INTERNAL_POST), cùng khuôn DB.submissionTypes.
+  internalNewsCategories: [], internalShareCategories: [],
   trainingCategories: [], trainingDocuments: [], trainingClasses: [], trainingRegistrations: [],
   careerPaths: [], careerPathConfirmations: [],
   trainingTests: [], trainingTestSubmissions: [],
@@ -5585,6 +5619,15 @@ const CORE_FIELD_MANIFEST = {
     { id: 'meetingEndTime', label: 'Thời Gian Kết Thúc', required: true },
     { id: 'meetingEquipment', label: 'Thiết Bị Hỗ Trợ Yêu Cầu', required: false },
     { id: 'meetingAgenda', label: 'Nội Dung / Chương Trình Họp Chi Tiết', required: true }
+  ],
+  // Truyền Thông Nội Bộ (Đợt 1 Nhịp Sống HCRC/Góc Chia Sẻ) — 2 trường "Chuyên đề" thật sự tồn tại trong
+  // #internalPostForm (id khớp đúng <select> tương ứng, ẩn/hiện theo activeInternalSubTab — xem
+  // setInternalSubTab()), optionsKey trỏ DB.internalNewsCategories/internalShareCategories
+  // (defaults.js, ADMIN_ONLY_KEYS ở routes/data.js) — cùng khuôn subType ở trên (optionsIsKeyLabel:true
+  // để GIỮ NGUYÊN key ổn định, tránh mồ côi postCategory đã lưu trên các bài viết cũ khi admin đổi nhãn).
+  INTERNAL_POST: [
+    { id: 'internalPostCategory', label: 'Chuyên Đề Nhịp Sống HCRC', required: true, optionsKey: 'internalNewsCategories', optionsIsKeyLabel: true },
+    { id: 'internalPostCategoryShare', label: 'Chuyên Đề Góc Chia Sẻ', required: true, optionsKey: 'internalShareCategories', optionsIsKeyLabel: true }
   ]
 };
 
@@ -5607,7 +5650,8 @@ const FORM_TABS = [
   { key: 'DAU_TU', coreKey: 'OFFICE', label: 'Văn Phòng - Đầu Tư', icon: '📈', short: 'Đầu Tư' },
   { key: 'DOC', coreKey: 'DOC', label: 'Tài Liệu', icon: '📁', short: 'Tài Liệu' },
   { key: 'MEETING_MINUTES', coreKey: 'MEETING_MINUTES', label: 'Biên Bản Họp', icon: '📝', short: 'Biên Bản Họp' },
-  { key: 'MEETING_ROOM', coreKey: 'MEETING_ROOM', label: 'Đặt Phòng Họp', icon: '📅', short: 'Đặt Phòng' }
+  { key: 'MEETING_ROOM', coreKey: 'MEETING_ROOM', label: 'Đặt Phòng Họp', icon: '📅', short: 'Đặt Phòng' },
+  { key: 'INTERNAL_POST', coreKey: 'INTERNAL_POST', label: 'Truyền Thông Nội Bộ - Chuyên Đề', icon: '📣', short: 'Chuyên Đề TTNB' }
 ];
 
 // Trả về (và khởi tạo nếu chưa có) đối tượng override {fieldId: {label, required}} của các trường
@@ -6698,7 +6742,7 @@ function canAccessReportsModule(user) {
 
 // Truyền thông nội bộ: XEM và tương tác (bình luận/thả tim) mở cho MỌI người dùng đã đăng nhập —
 // đây là kênh thông tin toàn công ty, không giới hạn theo phòng ban như các module nghiệp vụ khác.
-// "Góc chia sẻ" ai cũng đăng được tự do (không cần quyền riêng); Tin nội bộ/Đào tạo/Khen thưởng chỉ
+// "Góc chia sẻ" ai cũng đăng được tự do (không cần quyền riêng); Nhịp Sống HCRC/Đào tạo/Khen thưởng chỉ
 // người được admin cấp quyền (hoặc admin) mới đăng bài được, để tránh loạn nội dung công khai.
 function canCreateInternalPost(user, type) {
   if (!user) return false;
@@ -6717,7 +6761,7 @@ function canApproveInternalPost(user) {
   return !!(user?.perms?.admin || user?.perms?.internalPostApprove);
 }
 
-const INTERNAL_TYPE_LABELS = { NEWS: 'Tin Nội Bộ', TRAINING: 'Đào Tạo', REWARD: 'Khen Thưởng', SHARE: 'Góc Chia Sẻ' };
+const INTERNAL_TYPE_LABELS = { NEWS: 'Nhịp Sống HCRC', TRAINING: 'Đào Tạo', REWARD: 'Khen Thưởng', SHARE: 'Góc Chia Sẻ' };
 const INTERNAL_TYPE_PREFIX = { NEWS: 'TN', TRAINING: 'DT', REWARD: 'KT', SHARE: 'CS' };
 
 function getOfficeWorkflowMap(subType) {
@@ -7010,6 +7054,8 @@ async function initDatabase(loggingInUser) {
     DB.meetingAttendeeTemplates = data.meetingAttendeeTemplates || [];
     DB.tasks = data.tasks || [];
     DB.internalPosts = data.internalPosts || [];
+    DB.internalNewsCategories = data.internalNewsCategories || [];
+    DB.internalShareCategories = data.internalShareCategories || [];
     DB.paymentRequests = data.paymentRequests || [];
     DB.workflows = data.workflows || [];
     DB.formTemplates = data.formTemplates || {};
@@ -9018,9 +9064,14 @@ function renderDashboardNews() {
   const section = document.getElementById('dashboardNewsSection');
   if (!canAccessInternalModule(currentUser)) { section.classList.add('hidden'); return; }
 
-  const typeLabel = { NEWS: '📰 Tin tức', TRAINING: '🎓 Đào tạo', REWARD: '🏆 Khen thưởng' };
+  const typeLabel = { NEWS: '📰 Nhịp Sống HCRC', TRAINING: '🎓 Đào tạo', REWARD: '🏆 Khen thưởng' };
   const now = Date.now();
-  const visiblePosts = (DB.internalPosts || []).filter(p => p.type !== 'SHARE' && p.status !== 'PENDING' && p.status !== 'REJECTED');
+  // Trang chủ CHỈ hiện bài THẬT SỰ đã công khai (APPROVED, không còn "Chờ đăng") — DB.internalPosts của
+  // chính tác giả/người duyệt còn có thể chứa cả bài Nháp/Yêu cầu bổ sung/Đã ẩn/Chờ đăng của riêng họ
+  // (server chỉ trả về bài họ được xem, xem canViewInternalPost() ở lib/recordViewScope.js), không được
+  // để những bài đó lọt vào khung "tin mới nhất" trang chủ như thể đã đăng công khai cho mọi người.
+  const visiblePosts = (DB.internalPosts || []).filter(p =>
+    p.type !== 'SHARE' && (!p.status || p.status === 'APPROVED') && !isInternalPostScheduled(p));
 
   // Ưu tiên bài đang GHIM (còn hạn) lên đầu — sắp theo hạn ghim còn XA NHẤT trước (Đợt E). Bài thường
   // (không ghim/đã hết hạn ghim) xếp sau, mới nhất trước — sắp theo id (Date.now() lúc tạo, xem
@@ -9356,7 +9407,7 @@ document.addEventListener('click', (ev) => {
   if (!panel.contains(ev.target) && ev.target !== btn && !btn?.contains(ev.target)) panel.classList.add('hidden');
 });
 
-// "Truyền Thông" — cùng khuôn Hợp Đồng, bọc 4 loại bài Tin Nội Bộ/Đào Tạo/Khen Thưởng/Góc Chia Sẻ
+// "Truyền Thông" — cùng khuôn Hợp Đồng, bọc 4 loại bài Nhịp Sống HCRC/Đào Tạo/Khen Thưởng/Góc Chia Sẻ
 // (module "internal", xem HTML #truyenThongNavWrap). Không có hàm updateXNavVisibility riêng vì cả 4
 // loại dùng CHUNG 1 điều kiện quyền XEM (canAccessInternalModule) — nút cha ẩn/hiện thẳng theo đúng
 // điều kiện đó ở finishLogin().
@@ -9621,6 +9672,25 @@ function setOfficeSubTab(subTab) {
   document.getElementById('offCode').value = generateOfficeCode(); // viết tắt mã đổi theo subTab (MB/SC/DT)
 }
 
+// Đổ danh sách "Chuyên đề" cho 2 <select> riêng của #internalPostForm (internalPostCategory cho NEWS,
+// internalPostCategoryShare cho SHARE — xem CORE_FIELD_MANIFEST.INTERNAL_POST) — value là KEY (khớp
+// payload.postCategory server yêu cầu, xem lib/createValidation.js), giữ lại lựa chọn hiện tại nếu còn
+// hợp lệ (cùng khuôn subTypeSel ở populateDropdowns()). Gọi lại mỗi khi DB.internalNewsCategories/
+// internalShareCategories đổi (populateDropdowns() sau initDatabase()/sau khi admin lưu danh sách ở màn
+// Biểu Mẫu) — KHÔNG phụ thuộc activeInternalSubTab, setInternalSubTab() chỉ lo ẩn/hiện wrapper.
+function populateInternalPostCategorySelects() {
+  const fillCategorySelect = (selId, list) => {
+    const sel = document.getElementById(selId);
+    if (!sel) return;
+    const current = sel.value;
+    sel.innerHTML = '<option value="">-- Chọn chuyên đề --</option>' +
+      (list || []).map(c => `<option value="${escapeHtml(c.key)}">${escapeHtml(c.label)}</option>`).join('');
+    if ((list || []).some(c => c.key === current)) sel.value = current;
+  };
+  fillCategorySelect('internalPostCategory', DB.internalNewsCategories);
+  fillCategorySelect('internalPostCategoryShare', DB.internalShareCategories);
+}
+
 function populateDropdowns() {
   const selDept = document.getElementById('selDept');
   if (selDept) {
@@ -9728,6 +9798,11 @@ function populateDropdowns() {
     subTypeSel.innerHTML = DB.submissionTypes.map(t => `<option value="${escapeHtml(t.label)}">${escapeHtml(t.label)}</option>`).join('');
     if (DB.submissionTypes.some(t => t.label === current)) subTypeSel.value = current;
   }
+
+  // Chuyên đề Nhịp Sống HCRC (NEWS) / Góc Chia Sẻ (SHARE) — cùng khuôn subType ở trên nhưng value là
+  // KEY (không phải label) vì extraValidate ở lib/createValidation.js tra theo key
+  // (catList.some(c => c.key === catKey)), khác submissionTypes lịch sử vẫn lưu payload.type = label.
+  populateInternalPostCategorySelects();
 
   // "Cấp Phê Duyệt Cuối Cùng" — KHAC ("Phê duyệt khác") đặt ĐẦU danh sách nên là option mặc định
   // (kể cả sau khi form.reset() trả select về option đầu tiên, không có thuộc tính selected riêng).
@@ -20736,7 +20811,7 @@ const PWA_SHORTCUT_CATALOG_CLIENT = {
   approvalHub: 'Phê Duyệt', doc: 'Tài Liệu', submission: 'Văn Bản Trình', task: 'Công Việc',
   'contract:APPROVAL': 'Hợp Đồng - Phê Duyệt', 'contract:MANAGE': 'Hợp Đồng - Quản Lý HĐ & Giấy Phép',
   minutes: 'Biên Bản Họp',
-  'internal:NEWS': 'Tin Nội Bộ', 'internal:TRAINING': 'Đào Tạo', 'internal:RECRUITMENT': 'Tuyển Dụng',
+  'internal:NEWS': 'Nhịp Sống HCRC', 'internal:TRAINING': 'Đào Tạo', 'internal:RECRUITMENT': 'Tuyển Dụng',
   'internal:SHARE': 'Góc Chia Sẻ',
   meeting: 'Phòng Họp', car: 'Đăng Ký Xe', vpp: 'Văn Phòng Phẩm', uniform: 'Đồng Phục',
   'office:MUA_BAN': 'Tổng Hợp - Mua Bán', 'office:SUA_CHUA': 'Tổng Hợp - Sửa Chữa',
@@ -24131,7 +24206,7 @@ function renderInternalReportExtra(records) {
       <h4 class="font-bold text-gray-800 mb-3">📣 Theo Phân Hệ & Tương Tác</h4>
       <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div class="space-y-2">
-          ${buildStatBarHTML('Tin nội bộ', byType.NEWS, max, 'bg-fuchsia-500')}
+          ${buildStatBarHTML('Nhịp Sống HCRC', byType.NEWS, max, 'bg-fuchsia-500')}
           ${buildStatBarHTML('Đào tạo', byType.TRAINING, max, 'bg-indigo-500')}
           ${buildStatBarHTML('Khen thưởng', byType.REWARD, max, 'bg-amber-500')}
           ${buildStatBarHTML('Góc chia sẻ', byType.SHARE, max, 'bg-teal-500')}
@@ -24438,17 +24513,22 @@ function exportReportsSummaryExcel() {
 }
 
 // ==========================================
-// TRUYỀN THÔNG NỘI BỘ (Tin nội bộ / Đào tạo / Khen thưởng / Góc chia sẻ)
+// TRUYỀN THÔNG NỘI BỘ (Nhịp Sống HCRC / Đào tạo / Khen thưởng / Góc chia sẻ)
 // ==========================================
 // Kênh thông tin nội bộ tương tác đầy đủ: bình luận, thả tim (like) và ghi nhận người đã xem cho
 // từng bài đăng — dùng chung 1 collection DB.internalPosts, phân biệt bằng field `type`. XEM và
 // tương tác mở cho mọi người dùng (không lọc theo phạm vi phòng ban) vì đây là kênh truyền thông
-// toàn công ty; chỉ việc ĐĂNG BÀI ở Tin nội bộ/Đào tạo/Khen thưởng mới cần quyền riêng.
+// toàn công ty; chỉ việc ĐĂNG BÀI ở Nhịp Sống HCRC/Đào tạo/Khen thưởng mới cần quyền riêng.
 
 function setInternalSubTab(subTab) {
   window.scrollTo({ top: 0, behavior: 'auto' }); // Tránh "bay xuống cuối" khi đổi tab con — xem setSystemSubTab().
   resetListPage('internal');
   activeInternalSubTab = subTab;
+
+  // Đổi tab con luôn thoát chế độ Sửa (nếu có) — form trắng, quay lại chế độ Đăng bài mới. Cùng khuôn
+  // cancelEditCustomField() ở Biểu Mẫu (đổi tab = huỷ dở dang thao tác Sửa đang mở).
+  editingInternalPostId = null;
+  document.getElementById('internalCancelEditBtn')?.classList.add('hidden');
 
   const btnMap = { NEWS: 'btnInternalSubNews', TRAINING: 'btnInternalSubTraining', RECRUITMENT: 'btnInternalSubRecruitment', SHARE: 'btnInternalSubShare' };
   Object.entries(btnMap).forEach(([type, btnId]) => {
@@ -24483,10 +24563,20 @@ function setInternalSubTab(subTab) {
   document.getElementById('internalPinCheckbox').checked = false;
   document.getElementById('internalPinDurationWrap').classList.add('hidden');
 
+  // Chuyên đề (NEWS/SHARE, xem CORE_FIELD_MANIFEST.INTERNAL_POST) + Lịch đăng (chỉ NEWS) — chỉ 2 tab
+  // này còn dùng #internalPostForm (Đào tạo/Tuyển dụng đã return sớm ở trên với form riêng).
+  document.getElementById('internalCategoryNewsField').classList.toggle('hidden', subTab !== 'NEWS');
+  document.getElementById('internalCategoryShareField').classList.toggle('hidden', subTab !== 'SHARE');
+  document.getElementById('internalPublishAtField').classList.toggle('hidden', subTab !== 'NEWS');
+  populateInternalPostCategorySelects();
+
   const icons = { NEWS: '📰', TRAINING: '🎓', SHARE: '💬' };
   document.getElementById('internalFormTitle').innerText = `📝 Đăng ${INTERNAL_TYPE_LABELS[subTab]} Mới`;
   document.getElementById('internalListTitle').innerText = `${icons[subTab]} Danh Sách ${INTERNAL_TYPE_LABELS[subTab]}`;
-  document.getElementById('internalSubmitBtn').innerText = `Đăng ${INTERNAL_TYPE_LABELS[subTab]}`;
+  // "Đăng ngay" / "Gửi duyệt" (Đợt 1) — thay nhãn nút submit chính cố định "Đăng <Loại>" cũ: Góc Chia Sẻ
+  // của người KHÔNG có quyền duyệt còn phải qua hàng chờ (PENDING) nên gọi rõ "Gửi Duyệt", các trường
+  // hợp còn lại (kể cả SHARE của chính người có quyền duyệt) công khai ngay nên gọi "Đăng Ngay".
+  document.getElementById('internalSubmitBtn').innerText = (subTab === 'SHARE' && !canApproveInternalPost(currentUser)) ? 'Gửi Duyệt' : 'Đăng Ngay';
 
   const canCreate = canCreateInternalPost(currentUser, subTab);
   document.getElementById('internalPostForm').classList.toggle('hidden', !canCreate);
@@ -24500,10 +24590,20 @@ function onInternalFilterChange() {
   renderInternalPosts();
 }
 
+// editingInternalPostId khác null khi form đang Sửa 1 bài Nháp/Yêu cầu bổ sung có sẵn (thay vì tạo mới)
+// — xem editInternalPostUI()/cancelEditInternalPost() bên dưới, cùng khuôn editingCoreField/
+// editingCustomFieldId ở Biểu Mẫu.
+let editingInternalPostId = null;
+
 async function submitInternalPost(e) {
   e.preventDefault();
   const type = activeInternalSubTab;
-  if (!canCreateInternalPost(currentUser, type)) {
+  const isEditing = !!editingInternalPostId;
+  // 2 nút submit CÙNG form ("Lưu Nháp"/"Đăng Ngay-Gửi Duyệt") — phân biệt bằng nút NÀO thực sự kích
+  // hoạt submit (event.submitter, chuẩn HTML form), không phải trạng thái ngoài form nào khác.
+  const isDraftSubmit = e.submitter?.id === 'internalDraftBtn';
+
+  if (!isEditing && !canCreateInternalPost(currentUser, type)) {
     return alert('⛔ Bạn không có quyền đăng bài ở phân hệ này!');
   }
 
@@ -24524,16 +24624,56 @@ async function submitInternalPost(e) {
     };
   }
 
+  // Chuyên đề (NEWS/SHARE, xem CORE_FIELD_MANIFEST.INTERNAL_POST) — 2 <select> riêng theo type, server
+  // tự kiểm tra lại key có hợp lệ không (extraValidate), client chỉ đọc đúng ô đang hiện.
+  let postCategory;
+  if (type === 'NEWS') postCategory = document.getElementById('internalPostCategory')?.value || '';
+  else if (type === 'SHARE') postCategory = document.getElementById('internalPostCategoryShare')?.value || '';
+
+  // Lịch đăng (chỉ NEWS) — để trống = đăng ngay. Gửi thẳng giá trị input datetime-local (giờ địa
+  // phương người dùng), server tự new Date() parse lại rồi lưu ISO (extraValidate/editInternalPost()).
+  let publishAt;
+  if (type === 'NEWS') publishAt = document.getElementById('internalPublishAt')?.value || '';
+
   const fileInput = document.getElementById('internalFile');
-  let attachment = null;
-  const file = fileInput.files[0];
-  if (file) {
+  let attachment;
+  if (fileInput?.files[0]) {
     try {
-      const uploaded = await uploadFileToServer(file, 'internal');
+      const uploaded = await uploadFileToServer(fileInput.files[0], 'internal');
       attachment = { fileName: uploaded.fileName, fileType: uploaded.fileType, fileUrl: uploaded.fileUrl };
     } catch (err) {
       return alert(`⛔ Tải tệp đính kèm thất bại: ${err.message}`);
     }
+  } else if (!isEditing) {
+    attachment = null; // Tạo mới, không chọn tệp = rõ ràng "không có đính kèm"
+  }
+  // Sửa bài mà không chọn tệp mới: KHÔNG gán attachment (giữ undefined) để bỏ hẳn field này khỏi
+  // payload gửi đi — editInternalPost() (lib/recordActions.js) chỉ ghi đè field CÓ MẶT trong payload,
+  // undefined nghĩa là "giữ nguyên đính kèm cũ", không tự ý xoá đính kèm bài đã có.
+
+  if (isEditing) {
+    const payload = { title, content, draft: isDraftSubmit };
+    if (attachment !== undefined) payload.attachment = attachment;
+    if (type === 'TRAINING') payload.training = training;
+    if (type === 'NEWS' || type === 'SHARE') payload.postCategory = postCategory;
+    if (type === 'NEWS') payload.publishAt = publishAt;
+
+    let updated;
+    try {
+      const result = await callRecordAction('internalPosts', editingInternalPostId, 'edit', payload);
+      updated = result.item;
+    } catch (err) {
+      return alert(`⛔ ${err.message}`);
+    }
+    const idx = DB.internalPosts.findIndex(x => x.id === updated.id);
+    if (idx !== -1) DB.internalPosts[idx] = updated; else DB.internalPosts.unshift(updated);
+    logSystemAction('INTERNAL', 'EDIT_INTERNAL_POST', `Sửa ${INTERNAL_TYPE_LABELS[type]} [${updated.code} - ${title}]`, 'SUCCESS', updated.code);
+    cancelEditInternalPost();
+    if (updated.status === 'DRAFT') alert('✅ Đã lưu nháp!');
+    else if (updated.status === 'PENDING') alert('✅ Đã gửi lại, bài viết sẽ hiển thị công khai sau khi được phê duyệt!');
+    else alert('✅ Đã cập nhật và đăng bài thành công!');
+    renderInternalPosts();
+    return;
   }
 
   const postPayload = {
@@ -24547,6 +24687,9 @@ async function submitInternalPost(e) {
     likes: [],
     readBy: [currentUser.username]
   };
+  if (type === 'NEWS' || type === 'SHARE') postPayload.postCategory = postCategory;
+  if (type === 'NEWS' && publishAt) postPayload.publishAt = publishAt;
+  if (isDraftSubmit) postPayload.draft = true;
   // Ghim lên trang chủ (Đợt E) — chỉ gửi kèm số ngày muốn ghim khi có tick chọn; server tự tính
   // pinExpiresAt và kiểm tra lại quyền (không tin trực tiếp bất kỳ giá trị pin nào từ client).
   if (document.getElementById('internalPinCheckbox').checked) {
@@ -24564,7 +24707,9 @@ async function submitInternalPost(e) {
   DB.internalPosts.unshift(newPost);
   logSystemAction('INTERNAL', 'CREATE_INTERNAL_POST', `Đăng ${INTERNAL_TYPE_LABELS[type]} [${newPost.code} - ${title}]`, 'SUCCESS', newPost.code);
 
-  if (newPost.status === 'PENDING') {
+  if (newPost.status === 'DRAFT') {
+    alert('✅ Đã lưu nháp — bài chưa công khai, vào bài của bạn trong danh sách để Sửa/Gửi sau!');
+  } else if (newPost.status === 'PENDING') {
     const approvers = getInternalPostApproverUsernames();
     notifyUsersByEmail('INTERNAL', 'NOTIFY_APPROVAL_NEEDED', newPost.code, approvers,
       `[VPDT] Bài đăng Góc Chia Sẻ chờ duyệt: ${title}`,
@@ -24575,6 +24720,140 @@ async function submitInternalPost(e) {
   }
   e.target.reset();
   renderInternalPosts();
+}
+
+// Sửa bài Nháp/"Yêu cầu bổ sung" (NEED_INFO) — mở lại chính #internalPostForm, điền sẵn dữ liệu cũ rồi
+// chuyển submitInternalPost() sang nhánh gọi POST .../edit thay vì tạo mới. Điều kiện hiện nút PHẢI khớp
+// Y HỆT editInternalPost() (lib/recordActions.js) để không hiện nút rồi vẫn bị server từ chối.
+function canEditInternalPostUI(p) {
+  return !!p && (p.status === 'DRAFT' || p.status === 'NEED_INFO') && (p.author === currentUser.username || currentUser.perms?.admin);
+}
+
+function editInternalPostUI(id) {
+  const p = DB.internalPosts.find(x => x.id === id);
+  if (!canEditInternalPostUI(p)) return;
+  closeInternalArticleModal();
+  switchTab('internal');
+  setInternalSubTab(p.type); // reset form trắng + đúng tab con trước, điền lại dữ liệu cũ ngay dưới đây
+  editingInternalPostId = p.id;
+
+  document.getElementById('internalTitle').value = p.title || '';
+  document.getElementById('internalContent').value = p.content || '';
+  if (p.type === 'TRAINING' && p.training) {
+    document.getElementById('internalTrainingStart').value = p.training.startTime || '';
+    document.getElementById('internalTrainingEnd').value = p.training.endTime || '';
+    document.getElementById('internalTrainingLocation').value = p.training.location || '';
+    document.getElementById('internalTrainingDeadline').value = p.training.registerDeadline || '';
+    document.getElementById('internalTrainingCapacity').value = p.training.capacity || '';
+  }
+  if (p.type === 'NEWS') {
+    const sel = document.getElementById('internalPostCategory');
+    if (sel) sel.value = p.postCategory || '';
+    const publishAtInput = document.getElementById('internalPublishAt');
+    if (publishAtInput) publishAtInput.value = p.publishAt ? toDatetimeLocalValue(new Date(p.publishAt)) : '';
+  } else if (p.type === 'SHARE') {
+    const sel = document.getElementById('internalPostCategoryShare');
+    if (sel) sel.value = p.postCategory || '';
+  }
+
+  document.getElementById('internalFormTitle').innerText = `✏️ Sửa ${INTERNAL_TYPE_LABELS[p.type]}`;
+  document.getElementById('internalSubmitBtn').innerText = p.status === 'NEED_INFO' ? 'Gửi Lại' : 'Gửi';
+  document.getElementById('internalCancelEditBtn').classList.remove('hidden');
+  document.getElementById('internalPostForm').classList.remove('hidden');
+  document.getElementById('internalNoPermNote').classList.add('hidden');
+  document.getElementById('internalPostForm').scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+function cancelEditInternalPost() {
+  editingInternalPostId = null;
+  document.getElementById('internalPostForm').reset();
+  document.getElementById('internalCancelEditBtn').classList.add('hidden');
+  setInternalSubTab(activeInternalSubTab); // khôi phục tiêu đề/nhãn nút mặc định của tab hiện tại
+}
+
+// Ẩn/Hiện lại bài đã đăng (APPROVED<->HIDDEN, mọi type) — chỉ canApproveInternalPost, khớp
+// hideInternalPost()/unhideInternalPost() ở lib/recordActions.js. Cùng khuôn approveInternalPostAction
+// ở dưới (showConfirmModal + callRecordAction), không cần lý do như Từ chối/Yêu cầu bổ sung.
+function hideInternalPostAction(id) {
+  const p = DB.internalPosts.find(x => x.id === id);
+  if (!p) return;
+  showConfirmModal({
+    title: 'Ẩn bài đăng',
+    bodyHTML: `Bạn có chắc chắn muốn ẩn bài "<b>${escapeHtml(p.title)}</b>" khỏi trang chủ/chuyên mục?`,
+    confirmLabel: 'Ẩn Bài',
+    onConfirm: async () => {
+      let updated;
+      try {
+        const result = await callRecordAction('internalPosts', id, 'hide', {});
+        updated = result.item;
+      } catch (err) {
+        return alert(`⛔ ${err.message}`);
+      }
+      const idx = DB.internalPosts.findIndex(x => x.id === id);
+      if (idx !== -1) DB.internalPosts[idx] = updated;
+      logSystemAction('INTERNAL', 'HIDE_INTERNAL_POST', `Ẩn bài [${updated.code} - ${updated.title}]`, 'SUCCESS', updated.code);
+      closeInternalArticleModal();
+      renderInternalPosts();
+    }
+  });
+}
+
+function unhideInternalPostAction(id) {
+  const p = DB.internalPosts.find(x => x.id === id);
+  if (!p) return;
+  showConfirmModal({
+    title: 'Hiện lại bài đăng',
+    bodyHTML: `Bạn có chắc chắn muốn hiện lại bài "<b>${escapeHtml(p.title)}</b>"?`,
+    confirmLabel: 'Hiện Lại',
+    onConfirm: async () => {
+      let updated;
+      try {
+        const result = await callRecordAction('internalPosts', id, 'unhide', {});
+        updated = result.item;
+      } catch (err) {
+        return alert(`⛔ ${err.message}`);
+      }
+      const idx = DB.internalPosts.findIndex(x => x.id === id);
+      if (idx !== -1) DB.internalPosts[idx] = updated;
+      logSystemAction('INTERNAL', 'UNHIDE_INTERNAL_POST', `Hiện lại bài [${updated.code} - ${updated.title}]`, 'SUCCESS', updated.code);
+      closeInternalArticleModal();
+      renderInternalPosts();
+    }
+  });
+}
+
+// "Yêu Cầu Bổ Sung" cho Góc Chia Sẻ (PENDING -> NEED_INFO) — cùng khuôn rejectInternalPostAction() bên
+// dưới (prompt lý do bắt buộc) nhưng KHÔNG kết thúc bài, tác giả còn sửa lại gửi tiếp được (khác Từ
+// chối, xem requestInternalPostInfo() ở lib/recordActions.js).
+function requestInternalPostInfoAction(id) {
+  const p = DB.internalPosts.find(x => x.id === id);
+  if (!p) return;
+  const comment = prompt('Nhập nội dung cần bổ sung/chỉnh sửa:');
+  if (comment === null) return;
+  if (!comment.trim()) return alert('⛔ Vui lòng nhập nội dung cần bổ sung!');
+  showConfirmModal({
+    title: 'Yêu cầu bổ sung',
+    bodyHTML: `Bạn có chắc chắn muốn yêu cầu tác giả bổ sung bài "<b>${escapeHtml(p.title)}</b>"?<br><span class="text-xs text-gray-500">Nội dung: ${escapeHtml(comment.trim())}</span>`,
+    confirmLabel: 'Yêu Cầu Bổ Sung',
+    onConfirm: async () => {
+      let updated;
+      try {
+        const result = await callRecordAction('internalPosts', id, 'request-info', { comment: comment.trim() });
+        updated = result.item;
+      } catch (err) {
+        return alert(`⛔ ${err.message}`);
+      }
+      const idx = DB.internalPosts.findIndex(x => x.id === id);
+      if (idx !== -1) DB.internalPosts[idx] = updated;
+      logSystemAction('INTERNAL', 'REQUEST_INFO_INTERNAL_POST', `Yêu cầu bổ sung bài Góc chia sẻ [${updated.code} - ${updated.title}] - ${comment.trim()}`, 'WARNING', updated.code);
+      notifyUsersByEmail('INTERNAL', 'NOTIFY_NEED_INFO', updated.code, [updated.author],
+        `[VPDT] Bài đăng "${updated.title}" cần bổ sung`,
+        `Bài đăng Góc chia sẻ "${updated.title}" (${updated.code}) của bạn cần bổ sung trước khi duyệt.\nNội dung: ${comment.trim()}`);
+      closeInternalArticleModal();
+      renderInternalPosts();
+      refreshApprovalSurfaces();
+    }
+  });
 }
 
 // ===== TUYỂN DỤNG (thay thế mục "Khen Thưởng" cũ) =====
@@ -24816,6 +25095,124 @@ function setInternalNewsSort(mode) {
   renderInternalPosts();
 }
 
+// ===================== Trạng thái đặc biệt (Đợt 1 Nhịp Sống HCRC/Góc Chia Sẻ) =====================
+// Pill trạng thái dùng CHUNG cho danh sách thường (renderInternalPosts — Đào tạo/Khen thưởng/Góc chia
+// sẻ), khung Nhịp Sống HCRC kiểu Facebook (renderInternalNewsFeed/Card) và modal Chi tiết
+// (viewInternalPostDetail) — PENDING/REJECTED đã có từ trước (Góc chia sẻ chờ/bị từ chối duyệt), bổ
+// sung DRAFT/NEED_INFO/HIDDEN + "Chờ đăng" (APPROVED nhưng publishAt còn ở tương lai, tính LIVE theo
+// Date.now(), KHÔNG cron — cùng cách pinExpiresAt đã tính ở renderDashboardNews()/render ở trên).
+function isInternalPostScheduled(p) {
+  return p.type === 'NEWS' && p.status === 'APPROVED' && !!p.publishAt && new Date(p.publishAt).getTime() > Date.now();
+}
+
+function internalPostStatusBadgeHTML(p) {
+  const badge = (cls, text) => `<span class="text-[10px] font-bold px-2 py-0.5 rounded-full ${cls} align-middle ml-2">${text}</span>`;
+  if (p.status === 'DRAFT') return badge('bg-gray-200 text-gray-700', '📝 Nháp');
+  if (p.status === 'NEED_INFO') return badge('bg-orange-100 text-orange-700', '✏️ Yêu Cầu Bổ Sung');
+  if (p.status === 'HIDDEN') return badge('bg-slate-200 text-slate-700', '🙈 Đã Ẩn');
+  if (p.status === 'PENDING') return badge('bg-amber-100 text-amber-700', '⏳ Chờ duyệt');
+  if (p.status === 'REJECTED') return badge('bg-red-100 text-red-700', '❌ Bị từ chối');
+  if (isInternalPostScheduled(p)) return badge('bg-sky-100 text-sky-700', '⏳ Chờ đăng');
+  return '';
+}
+
+// Nút "Sửa" cho tác giả (hoặc admin) khi bài đang ở Nháp/Yêu cầu bổ sung — điều kiện khớp Y HỆT
+// canEditInternalPostUI() (submitInternalPost() ở trên) để không lặp logic 2 nơi khác nhau.
+function internalPostEditButtonHTML(p) {
+  if (!canEditInternalPostUI(p)) return '';
+  return `<button onclick="editInternalPostUI(${p.id})" class="bg-blue-600 text-white px-3 py-1 rounded text-xs font-bold hover:bg-blue-700">✏️ Sửa</button>`;
+}
+
+// Banner hiện lý do "Yêu cầu bổ sung" của người duyệt ngay phía trên bài — giúp tác giả biết cần sửa gì
+// trước khi bấm Sửa/gửi lại (chỉ Góc chia sẻ có trạng thái NEED_INFO, xem requestInternalPostInfo() ở
+// lib/recordActions.js).
+function internalPostInfoRequestBannerHTML(p) {
+  if (p.status !== 'NEED_INFO' || !p.infoRequestComment) return '';
+  return `<div class="bg-orange-50 border border-orange-200 rounded p-2 mb-2 text-xs text-orange-800"><b>Yêu cầu bổ sung từ người duyệt:</b> ${escapeHtml(p.infoRequestComment)}</div>`;
+}
+
+// Ẩn/Hiện lại (Admin) — chỉ canApproveInternalPost, APPROVED<->HIDDEN, mọi type (khớp
+// hideInternalPost()/unhideInternalPost() ở lib/recordActions.js).
+function internalPostHideActionHTML(p) {
+  if (!canApproveInternalPost(currentUser)) return '';
+  if (p.status === 'APPROVED') return `<button onclick="hideInternalPostAction(${p.id})" class="bg-slate-500 text-white px-3 py-1 rounded text-xs font-bold hover:bg-slate-600">🙈 Ẩn</button>`;
+  if (p.status === 'HIDDEN') return `<button onclick="unhideInternalPostAction(${p.id})" class="bg-emerald-600 text-white px-3 py-1 rounded text-xs font-bold hover:bg-emerald-700">👁️ Hiện Lại</button>`;
+  return '';
+}
+
+// "Yêu Cầu Bổ Sung" (chỉ Góc chia sẻ, PENDING, canApprove) — hiện cạnh Duyệt/Từ chối hiện có.
+function internalPostRequestInfoActionHTML(p) {
+  if (p.type !== 'SHARE' || p.status !== 'PENDING' || !canApproveInternalPost(currentUser)) return '';
+  return `<button onclick="requestInternalPostInfoAction(${p.id})" class="bg-orange-500 text-white px-3 py-1 rounded text-xs font-bold hover:bg-orange-600">✏️ Yêu Cầu Bổ Sung</button>`;
+}
+
+// ===================== Reaction bình luận + xếp hạng "3-5 bình luận nổi bật" (Đợt 1) =====================
+// expandedInternalComments: id các bài đang bấm "Xem tất cả bình luận" (client-only, mất khi tải lại
+// trang — không cần nhớ lâu dài, chỉ để không phải bấm lại khi render() lại nhiều lần trong 1 phiên).
+const expandedInternalComments = new Set();
+function toggleInternalCommentsExpanded(id) {
+  if (expandedInternalComments.has(id)) expandedInternalComments.delete(id);
+  else expandedInternalComments.add(id);
+  renderInternalPosts();
+}
+
+function toggleInternalCommentLike(postId, commentId) {
+  const p = DB.internalPosts.find(x => x.id === postId);
+  const c = (p?.comments || []).find(x => x.id === commentId);
+  if (!c) return;
+  if (!Array.isArray(c.likes)) c.likes = [];
+  const idx = c.likes.indexOf(currentUser.username);
+  if (idx === -1) c.likes.push(currentUser.username); else c.likes.splice(idx, 1);
+  callRecordAction('internalPosts', postId, `comment/${commentId}/like`, {}).catch(err => console.error('Lỗi cập nhật lượt thích bình luận:', err.message));
+  renderInternalPosts();
+}
+
+function internalCommentLikeButtonHTML(postId, c) {
+  const likes = c.likes || [];
+  const liked = likes.includes(currentUser.username);
+  return `<button onclick="toggleInternalCommentLike(${postId}, ${c.id})" class="text-[11px] font-bold ${liked ? 'text-fuchsia-700' : 'text-gray-400 hover:text-gray-600'}">${liked ? '❤️' : '🤍'}${likes.length ? ' ' + likes.length : ''}</button>`;
+}
+
+// "3-5 bình luận nổi bật": tối đa 2 bình luận MỚI NHẤT (theo id, id = Date.now() lúc gửi) + tối đa 3
+// bình luận NHIỀU LƯỢT THÍCH NHẤT (likes.length) — gộp lại, khử trùng (1 bình luận vừa mới vừa nhiều
+// thích chỉ tính 1 lần, tổng tự nhiên tối đa 5), rồi giữ lại ĐÚNG THỨ TỰ THỜI GIAN gốc của mảng
+// comments[] để không xáo trộn luồng đọc. Tính THUẦN Ở CLIENT mỗi lần render (không cache) — mảng
+// comments[] đầy đủ (server đã lọc pendingModeration, xem sanitizeInternalPostCommentsForUser() ở
+// lib/recordViewScope.js) đã có sẵn, không cần gọi API riêng.
+function pickHighlightedComments(comments) {
+  if (comments.length <= 5) return comments.slice();
+  const byRecent = comments.slice().sort((a, b) => b.id - a.id).slice(0, 2);
+  const byLikes = comments.slice().sort((a, b) => (b.likes?.length || 0) - (a.likes?.length || 0)).slice(0, 3);
+  const keepIds = new Set([...byRecent, ...byLikes].map(c => c.id));
+  return comments.filter(c => keepIds.has(c.id));
+}
+
+// Hàng đợi kiểm duyệt (bình luận pendingModeration) — CHỈ approver mới nhận được các bình luận này từ
+// server (comments[] đã lọc hẳn khỏi người khác, xem sanitizeInternalPostCommentsForUser()), nên không
+// còn hiện lẫn trong khung bình luận công khai như trước (Bỏ qua/Xoá dùng lại đúng
+// dismissCommentFlagAction()/deleteFlaggedCommentAction() đã có).
+function renderInternalModerationQueueHTML(p) {
+  if (!canApproveInternalPost(currentUser)) return '';
+  const pending = (p.comments || []).filter(c => c.pendingModeration);
+  if (!pending.length) return '';
+  const isSevere = c => (c.flagCategories || []).some(cat => SENSITIVE_CATEGORY_SEVERE.has(cat));
+  return `
+    <div class="bg-amber-50 border border-amber-200 rounded p-2 mb-2 space-y-1.5">
+      <div class="text-xs font-bold text-amber-800">⚠️ ${pending.length} bình luận chờ kiểm duyệt</div>
+      ${pending.map(c => `
+        <div class="bg-white border rounded p-2 text-xs">
+          <div class="font-bold text-gray-700">${escapeHtml(c.name || '')} <span class="text-gray-400 font-normal">${escapeHtml(c.time || '')}</span></div>
+          <div class="text-gray-800 mt-0.5">${escapeHtml(c.content)}</div>
+          <div class="mt-1 flex flex-wrap items-center gap-1.5">
+            <span class="px-1.5 py-0.5 rounded-full font-bold ${isSevere(c) ? 'bg-red-100 text-red-700' : 'bg-amber-100 text-amber-700'}">${isSevere(c) ? '🚨' : '⚠️'} ${(c.flagCategories || []).map(cat => SENSITIVE_CATEGORY_LABELS[cat] || cat).join(', ')}</span>
+            <button onclick="dismissCommentFlagAction(${p.id}, ${c.id})" class="text-emerald-700 font-bold hover:underline">Bỏ qua</button>
+            <button onclick="deleteFlaggedCommentAction(${p.id}, ${c.id})" class="text-red-700 font-bold hover:underline">Xoá</button>
+          </div>
+        </div>
+      `).join('')}
+    </div>`;
+}
+
 function renderInternalPosts() {
   if (activeInternalSubTab === 'NEWS') return renderInternalNewsFeed();
   const container = document.getElementById('internalPostsContainer');
@@ -24828,10 +25225,12 @@ function renderInternalPosts() {
   const canApprove = canApproveInternalPost(currentUser);
   const visible = DB.internalPosts.filter(p => {
     if (p.type !== activeInternalSubTab) return false;
-    // Bài PENDING/REJECTED (chỉ có ở Góc chia sẻ) chỉ hiện với chính tác giả và người có quyền duyệt —
-    // status undefined (bài cũ trước khi có tính năng này) coi như đã duyệt, vẫn hiện bình thường.
-    const isPendingOrRejected = p.status === 'PENDING' || p.status === 'REJECTED';
-    if (isPendingOrRejected && p.author !== currentUser.username && !canApprove) return false;
+    // Bài KHÔNG phải APPROVED (PENDING/REJECTED/DRAFT/NEED_INFO/HIDDEN) chỉ hiện với chính tác giả và
+    // người có quyền duyệt — status undefined (bài cũ trước khi có tính năng này) coi như đã duyệt, vẫn
+    // hiện bình thường. Server đã lọc trước (chỉ trả về bài mình được xem, xem canViewInternalPost() ở
+    // lib/recordViewScope.js) — kiểm tra lại ở đây chỉ để phòng hờ, không phải nguồn xác thực chính.
+    const isRestrictedStatus = p.status && p.status !== 'APPROVED';
+    if (isRestrictedStatus && p.author !== currentUser.username && !canApprove) return false;
     if (!isInDateRange(p.createdAt, fromDate, toDate)) return false;
     if (!matchesKeywordFields([p.title, p.content, p.authorName, p.dept], keyword)) return false;
     return true;
@@ -24861,20 +25260,17 @@ function renderInternalPosts() {
     const coverThumbHTML = isInternalImageAttachment(p.attachment)
       ? `<img src="${escapeHtml(p.attachment.fileUrl)}" alt="" class="w-full sm:w-48 h-40 sm:h-auto object-cover cursor-pointer flex-shrink-0" onclick="viewInternalPostDetail(${p.id})">`
       : '';
-    const statusBadgeHTML = p.status === 'PENDING'
-      ? `<span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 align-middle ml-2">⏳ Chờ duyệt</span>`
-      : p.status === 'REJECTED'
-        ? `<span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-red-100 text-red-700 align-middle ml-2">❌ Bị từ chối</span>`
-        : '';
+    const statusBadgeHTML = internalPostStatusBadgeHTML(p);
     // Ghim lên trang chủ (Đợt E) — chỉ hiện badge khi CÒN hạn (pinExpiresAt tương lai), không hiện lại
     // cho bài đã hết hạn ghim dù field pinned vẫn còn true trong dữ liệu cũ.
     const pinBadgeHTML = (p.pinned && p.pinExpiresAt && new Date(p.pinExpiresAt).getTime() > Date.now())
       ? `<span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 align-middle ml-2">📌 Đã ghim trang chủ</span>`
       : '';
     const approveActionsHTML = (p.status === 'PENDING' && canApprove)
-      ? `<div class="flex gap-2">
+      ? `<div class="flex gap-2 flex-wrap">
            <button onclick="approveInternalPostAction(${p.id})" class="bg-emerald-600 text-white px-3 py-1 rounded text-xs font-bold hover:bg-emerald-700">✅ Duyệt</button>
            <button onclick="rejectInternalPostAction(${p.id})" class="bg-red-600 text-white px-3 py-1 rounded text-xs font-bold hover:bg-red-700">❌ Từ chối</button>
+           ${internalPostRequestInfoActionHTML(p)}
          </div>`
       : '';
     return `
@@ -24883,6 +25279,7 @@ function renderInternalPosts() {
         <div class="p-4 flex-1 flex flex-col">
           <div class="font-bold text-fuchsia-800 text-base cursor-pointer hover:underline" onclick="viewInternalPostDetail(${p.id})">${escapeHtml(p.title)}${statusBadgeHTML}${pinBadgeHTML}</div>
           <div class="text-xs text-gray-500 mt-0.5">${escapeHtml(p.authorName)} (${escapeHtml(p.dept)}) — ${escapeHtml(p.createdAt)}</div>
+          ${internalPostInfoRequestBannerHTML(p)}
           <p class="text-sm text-gray-700 mt-2 flex-1">${escapeHtml(snippet)}${(p.content || '').length > 200 ? '…' : ''}</p>
           ${extraInfo}
           <div class="flex flex-wrap justify-between items-center gap-2 mt-3">
@@ -24891,8 +25288,10 @@ function renderInternalPosts() {
               <span>💬 ${commentCount}</span>
               <span>👁️ ${readCount} đã xem</span>
             </div>
-            <div class="flex gap-2">
+            <div class="flex gap-2 flex-wrap">
               ${approveActionsHTML}
+              ${internalPostHideActionHTML(p)}
+              ${internalPostEditButtonHTML(p)}
               <button onclick="viewInternalPostDetail(${p.id})" class="bg-fuchsia-600 text-white px-3 py-1 rounded text-xs font-bold hover:bg-fuchsia-700">📄 Chi tiết</button>
             </div>
           </div>
@@ -24918,8 +25317,13 @@ function renderInternalNewsFeed() {
   const toDate = document.getElementById('filterToDateInternal')?.value || '';
   const keyword = (document.getElementById('filterKeywordInternal')?.value || '').trim();
 
+  const canApprove = canApproveInternalPost(currentUser);
   let visible = DB.internalPosts.filter(p => {
     if (p.type !== 'NEWS') return false;
+    // Bài KHÔNG phải APPROVED (Nháp/Yêu cầu bổ sung/Đã ẩn) chỉ hiện với chính tác giả/người có quyền
+    // duyệt — cùng khuôn renderInternalPosts() ở trên (server đã lọc trước, đây chỉ phòng hờ).
+    const isRestrictedStatus = p.status && p.status !== 'APPROVED';
+    if (isRestrictedStatus && p.author !== currentUser.username && !canApprove) return false;
     if (!isInDateRange(p.createdAt, fromDate, toDate)) return false;
     if (!matchesKeywordFields([p.title, p.content, p.authorName, p.dept], keyword)) return false;
     return true;
@@ -24955,45 +25359,45 @@ function renderInternalNewsFeed() {
 function renderInternalNewsCard(p) {
   const liked = (p.likes || []).includes(currentUser.username);
   const likeCount = (p.likes || []).length;
-  const comments = p.comments || [];
+  // pendingModeration đã bị server LOẠI HẲN khỏi comments[] cho người không có quyền duyệt (xem
+  // sanitizeInternalPostCommentsForUser() ở lib/recordViewScope.js) — với approver thì các bình luận
+  // này VẪN có mặt ở đây nhưng không còn hiện lẫn trong khung công khai như trước, tách riêng qua
+  // renderInternalModerationQueueHTML() bên dưới.
+  const comments = (p.comments || []).filter(c => !c.pendingModeration);
+  const expanded = expandedInternalComments.has(p.id);
+  const shownComments = expanded ? comments : pickHighlightedComments(comments);
   const coverHTML = isInternalImageAttachment(p.attachment)
     ? `<img src="${escapeHtml(p.attachment.fileUrl)}" alt="" class="w-full max-h-80 object-cover cursor-pointer" onclick="viewInternalPostDetail(${p.id})">`
     : '';
   const snippet = (p.content || '').slice(0, 300);
-  // ⚠️/🚨 chỉ hiện cho người có quyền kiểm duyệt (canApproveInternalPost) — server đã tự ẩn field
-  // flagged/flagCategories khỏi người khác (xem sanitizeInternalPostCommentsForUser() ở
-  // lib/recordViewScope.js), nên với người dùng thường c.flagged luôn undefined, khối này tự nhiên
-  // không render gì thêm, không cần kiểm tra quyền lại ở đây.
-  const canModerate = canApproveInternalPost(currentUser);
-  const commentsHTML = comments.length
-    ? comments.map(c => {
-        const isSevere = (c.flagCategories || []).some(cat => SENSITIVE_CATEGORY_SEVERE.has(cat));
-        const flagHTML = c.flagged && canModerate
-          ? `<div class="mt-1 flex flex-wrap items-center gap-1.5 text-[11px]">
-               <span class="px-1.5 py-0.5 rounded-full font-bold ${isSevere ? 'bg-red-100 text-red-700' : 'bg-amber-100 text-amber-700'}">${isSevere ? '🚨' : '⚠️'} ${(c.flagCategories || []).map(cat => SENSITIVE_CATEGORY_LABELS[cat] || cat).join(', ')}</span>
-               <button onclick="dismissCommentFlagAction(${p.id}, ${c.id})" class="text-emerald-700 font-bold hover:underline">Bỏ qua</button>
-               <button onclick="deleteFlaggedCommentAction(${p.id}, ${c.id})" class="text-red-700 font-bold hover:underline">Xoá</button>
-             </div>`
-          : '';
-        return `
+  const commentsHTML = shownComments.length
+    ? shownComments.map(c => `
         <div class="flex gap-2 text-sm">
           <div class="w-7 h-7 rounded-full bg-fuchsia-200 text-fuchsia-800 flex items-center justify-center font-bold text-xs flex-shrink-0">${escapeHtml((c.name || '?').charAt(0).toUpperCase())}</div>
           <div class="bg-gray-100 rounded-2xl px-3 py-1.5 flex-1">
             <div class="font-bold text-xs text-gray-800">${escapeHtml(c.name || '')}</div>
             <div class="text-gray-700">${escapeHtml(c.content)}</div>
-            ${flagHTML}
+            <div class="mt-0.5">${internalCommentLikeButtonHTML(p.id, c)}</div>
           </div>
-        </div>`;
-      }).join('')
+        </div>`).join('')
     : `<div class="text-xs text-gray-400 italic">Chưa có bình luận nào — hãy là người đầu tiên!</div>`;
+  const expandToggleHTML = comments.length > shownComments.length
+    ? `<button onclick="toggleInternalCommentsExpanded(${p.id})" class="text-xs text-fuchsia-700 font-bold hover:underline mb-2">Xem tất cả ${comments.length} bình luận →</button>`
+    : (expanded && comments.length > 5 ? `<button onclick="toggleInternalCommentsExpanded(${p.id})" class="text-xs text-gray-500 hover:underline mb-2">Thu gọn bình luận</button>` : '');
+  const statusBadgeHTML = internalPostStatusBadgeHTML(p);
+  const editHideActionsHTML = (internalPostEditButtonHTML(p) || internalPostHideActionHTML(p))
+    ? `<div class="flex gap-2 flex-wrap mb-2">${internalPostEditButtonHTML(p)}${internalPostHideActionHTML(p)}</div>`
+    : '';
 
   return `
     <div class="bg-white rounded border hover:shadow mb-3">
       ${coverHTML}
       <div class="p-4">
-        <div class="font-bold text-fuchsia-800 text-base cursor-pointer hover:underline" onclick="viewInternalPostDetail(${p.id})">${escapeHtml(p.title)}</div>
+        <div class="font-bold text-fuchsia-800 text-base cursor-pointer hover:underline" onclick="viewInternalPostDetail(${p.id})">${escapeHtml(p.title)}${statusBadgeHTML}</div>
         <div class="text-xs text-gray-500 mt-0.5">${escapeHtml(p.authorName)} (${escapeHtml(p.dept)}) — ${escapeHtml(p.createdAt)}</div>
+        ${internalPostInfoRequestBannerHTML(p)}
         <p class="text-sm text-gray-700 mt-2">${escapeHtml(snippet)}${(p.content || '').length > 300 ? '… ' : ' '}<span class="text-fuchsia-700 font-bold cursor-pointer hover:underline" onclick="viewInternalPostDetail(${p.id})">Xem thêm</span></p>
+        ${editHideActionsHTML}
         <div class="flex items-center justify-between border-t border-b py-1.5 my-2 text-xs text-gray-500">
           <span>❤️ ${likeCount} lượt thích</span>
           <span>💬 ${comments.length} bình luận</span>
@@ -25003,6 +25407,8 @@ function renderInternalNewsCard(p) {
           <button onclick="document.getElementById('internalCommentInput_${p.id}').focus()" class="flex-1 py-1.5 rounded font-bold text-sm bg-gray-100 text-gray-600 hover:bg-gray-200">💬 Bình luận</button>
         </div>
         <div class="space-y-2 mb-2">${commentsHTML}</div>
+        ${expandToggleHTML}
+        ${renderInternalModerationQueueHTML(p)}
         <div class="flex gap-2 items-center">
           <input id="internalCommentInput_${p.id}" type="text" placeholder="Viết bình luận..." class="flex-1 border rounded-full px-3 py-1.5 text-sm" onkeydown="if(event.key==='Enter'){event.preventDefault();addInternalCommentInline(${p.id});}">
           <button onclick="addInternalCommentInline(${p.id})" class="px-3 py-1.5 bg-fuchsia-600 text-white rounded-full text-xs font-bold hover:bg-fuchsia-700">Gửi</button>
@@ -25087,21 +25493,25 @@ function viewInternalPostDetail(id) {
   markInternalRead(id);
 
   const icons = { NEWS: '📰', TRAINING: '🎓', REWARD: '🏆', SHARE: '💬' };
-  const statusSuffix = p.status === 'PENDING' ? ' ⏳ (Chờ duyệt)' : p.status === 'REJECTED' ? ' ❌ (Bị từ chối)' : '';
-  document.getElementById('internalArticleTitle').innerText = `${icons[p.type] || '📣'} ${p.title}${statusSuffix}`;
+  document.getElementById('internalArticleTitle').innerHTML = `${icons[p.type] || '📣'} ${escapeHtml(p.title)}${internalPostStatusBadgeHTML(p)}`;
   document.getElementById('internalArticleSub').innerText = `${p.authorName} (${p.dept}) — ${p.createdAt} | Mã: ${p.code}`;
 
   const approveActionsHTML = (p.status === 'PENDING' && canApproveInternalPost(currentUser))
-    ? `<div class="bg-amber-50 border border-amber-200 rounded p-3 mb-3 flex items-center justify-between gap-2">
+    ? `<div class="bg-amber-50 border border-amber-200 rounded p-3 mb-3 flex flex-wrap items-center justify-between gap-2">
         <span class="text-xs text-amber-800">⏳ Bài đăng đang chờ phê duyệt để công khai trong Góc chia sẻ.</span>
-        <div class="flex gap-2 flex-shrink-0">
+        <div class="flex gap-2 flex-wrap flex-shrink-0">
           <button onclick="approveInternalPostAction(${p.id})" class="bg-emerald-600 text-white px-3 py-1 rounded text-xs font-bold hover:bg-emerald-700">✅ Duyệt</button>
           <button onclick="rejectInternalPostAction(${p.id})" class="bg-red-600 text-white px-3 py-1 rounded text-xs font-bold hover:bg-red-700">❌ Từ chối</button>
+          ${internalPostRequestInfoActionHTML(p)}
         </div>
       </div>`
     : '';
   const rejectReasonHTML = (p.status === 'REJECTED' && p.rejectReason)
     ? `<div class="bg-red-50 border border-red-200 rounded p-3 mb-3 text-xs text-red-800"><b>Lý do từ chối:</b> ${escapeHtml(p.rejectReason)}</div>`
+    : '';
+  const infoRequestBannerHTML = internalPostInfoRequestBannerHTML(p);
+  const editHideActionsHTML = (internalPostEditButtonHTML(p) || internalPostHideActionHTML(p))
+    ? `<div class="flex gap-2 flex-wrap mb-3">${internalPostEditButtonHTML(p)}${internalPostHideActionHTML(p)}</div>`
     : '';
 
   let typeInfoHTML = '';
@@ -25142,26 +25552,21 @@ function viewInternalPostDetail(id) {
   }
 
   const isLiked = (p.likes || []).includes(currentUser.username);
-  const canModerateDetail = canApproveInternalPost(currentUser);
-  const commentsHTML = (p.comments || []).length
-    ? p.comments.map(c => {
-        const isSevere = (c.flagCategories || []).some(cat => SENSITIVE_CATEGORY_SEVERE.has(cat));
-        const flagHTML = c.flagged && canModerateDetail
-          ? `<div class="mt-1 flex flex-wrap items-center gap-1.5">
-               <span class="px-1.5 py-0.5 rounded-full font-bold ${isSevere ? 'bg-red-100 text-red-700' : 'bg-amber-100 text-amber-700'}">${isSevere ? '🚨' : '⚠️'} ${(c.flagCategories || []).map(cat => SENSITIVE_CATEGORY_LABELS[cat] || cat).join(', ')}</span>
-               <button onclick="dismissCommentFlagAction(${p.id}, ${c.id})" class="text-emerald-700 font-bold hover:underline">Bỏ qua</button>
-               <button onclick="deleteFlaggedCommentAction(${p.id}, ${c.id})" class="text-red-700 font-bold hover:underline">Xoá</button>
-             </div>`
-          : '';
-        return `
+  const allComments = (p.comments || []).filter(c => !c.pendingModeration);
+  const expandedDetail = expandedInternalComments.has(p.id);
+  const shownComments = expandedDetail ? allComments : pickHighlightedComments(allComments);
+  const commentsHTML = shownComments.length
+    ? shownComments.map(c => `
         <div class="bg-gray-50 border rounded p-2 text-xs">
           <div class="font-bold text-gray-700">${escapeHtml(c.name)} <span class="text-gray-400 font-normal">${escapeHtml(c.time)}</span></div>
           <div class="text-gray-800 mt-0.5">${escapeHtml(c.content)}</div>
-          ${flagHTML}
+          <div class="mt-1">${internalCommentLikeButtonHTML(p.id, c)}</div>
         </div>
-      `;
-      }).join('')
+      `).join('')
     : '<div class="text-gray-400 italic text-xs">Chưa có bình luận nào.</div>';
+  const expandToggleDetailHTML = allComments.length > shownComments.length
+    ? `<button onclick="toggleInternalCommentsExpanded(${p.id}); viewInternalPostDetail(${p.id});" class="text-xs text-fuchsia-700 font-bold hover:underline">Xem tất cả ${allComments.length} bình luận →</button>`
+    : (expandedDetail && allComments.length > 5 ? `<button onclick="toggleInternalCommentsExpanded(${p.id}); viewInternalPostDetail(${p.id});" class="text-xs text-gray-500 hover:underline">Thu gọn bình luận</button>` : '');
 
   const isImg = isInternalImageAttachment(p.attachment);
   const coverHTML = isImg ? `<img src="${escapeHtml(p.attachment.fileUrl)}" alt="" class="w-full max-h-96 object-cover">` : '';
@@ -25179,6 +25584,8 @@ function viewInternalPostDetail(id) {
     <div class="w-full p-6 text-sm">
       ${approveActionsHTML}
       ${rejectReasonHTML}
+      ${infoRequestBannerHTML}
+      ${editHideActionsHTML}
       ${typeInfoHTML}
       <div class="whitespace-pre-wrap text-gray-800">${escapeHtml(p.content)}</div>
       ${attachmentLinkHTML}
@@ -25189,8 +25596,10 @@ function viewInternalPostDetail(id) {
       </div>
 
       <div class="border-t mt-3 pt-3 space-y-2">
-        <b class="text-xs">💬 Bình luận (${(p.comments || []).length})</b>
+        <b class="text-xs">💬 Bình luận (${allComments.length})</b>
         <div class="space-y-1.5 max-h-48 overflow-y-auto">${commentsHTML}</div>
+        ${expandToggleDetailHTML}
+        ${renderInternalModerationQueueHTML(p)}
         <div class="flex gap-2 pt-1">
           <input id="internalCommentInput" placeholder="Viết bình luận..." class="flex-1 border p-1.5 rounded text-xs" onkeydown="if(event.key==='Enter'){event.preventDefault(); addInternalComment(${p.id});}">
           <button onclick="addInternalComment(${p.id})" class="bg-fuchsia-600 text-white px-3 py-1 rounded text-xs font-bold hover:bg-fuchsia-700">Gửi</button>

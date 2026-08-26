@@ -90,6 +90,27 @@ const DEFAULTS = {
     { key: 'KHAC', label: 'Tờ trình khác' }
   ],
 
+  // "Chuyên đề" gắn cho bài viết Nhịp Sống HCRC (type NEWS trong internalPosts) — cùng khuôn
+  // submissionTypes ở trên ({key,label}, admin tự thêm/bớt). ADMIN_ONLY_KEYS (routes/data.js) vì đây là
+  // dữ liệu phân loại nội dung, tương đương submissionTypes chứ không phải danh sách nhãn thuần.
+  internalNewsCategories: [
+    { key: 'THI_DUA', label: 'Chương trình thi đua' },
+    { key: 'GAN_KET', label: 'Sự kiện & Gắn kết' },
+    { key: 'HOC_TAP', label: 'Góc học tập' },
+    { key: 'HOAT_DONG_CHUNG', label: 'Hoạt động chung' },
+    { key: 'KHAC', label: 'Khác' }
+  ],
+
+  // "Chuyên đề" gắn cho bài viết Góc Chia Sẻ (type SHARE trong internalPosts) — DÙNG CHUNG field name
+  // postCategory với internalNewsCategories ở trên nhưng bộ giá trị khác (SHARE là nội dung cá nhân
+  // CBNV tự chia sẻ, khác hẳn nội dung do Ban Truyền Thông đăng ở Nhịp Sống HCRC).
+  internalShareCategories: [
+    { key: 'CONG_VIEC', label: 'Góc công việc' },
+    { key: 'DOI_SONG', label: 'Góc đời sống' },
+    { key: 'DONG_NGHIEP', label: 'Góc đồng nghiệp' },
+    { key: 'SANG_TAO', label: 'Góc sáng tạo' }
+  ],
+
   // Danh sách "Loại Pháp Lý" (Hợp đồng) và "Đăng Ký Sử Dụng Loại Xe" — TRƯỚC ĐÂY gõ cứng thẳng
   // <option> trong HTML, giờ chuyển thành dữ liệu để admin tự thêm/bớt (nút Sửa trường mặc định
   // tương ứng ở màn Biểu Mẫu). Giữ nguyên đúng các giá trị hiện có.
