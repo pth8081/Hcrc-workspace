@@ -281,6 +281,16 @@ function applyWorkflowAction({ moduleKey, item, action, user, comment, extraFiel
 
   // Field phụ theo module (vd. CarReg: assignedDriver/assignedVehicleType/assignedPlate) — ghi cả
   // vào hồ sơ lẫn snapshot trong dòng lịch sử (khớp hiển thị "🚘 Phân công" theo từng bước ở client).
+  // CarReg riêng: "Phần Dành Cho Phòng Hành Chính" (assignedDriverUsername/assignedVehicleType/
+  // assignedPlate) CHỈ được ghi khi người duyệt là admin hoặc có perms.carDispatch ("Người Điều Hành
+  // Xe") — người khác trong luồng duyệt vẫn Duyệt/Từ chối bình thường (canApproveStep ở trên đã cho
+  // qua), nhưng KHÔNG được đụng tới 3 field này. Client đã tự ẩn mục này với người không có carDispatch
+  // (xem openCarProcessModal() ở index.html) — chặn lại ở đây để không tin client tự gửi kèm dù giao
+  // diện đã ẩn (vd DevTools sửa request tay): coi input carRegs.extraFields NHƯ KHÔNG CÓ, không lỗi cả
+  // lượt duyệt (người này vẫn cần duyệt được bước của mình dù không có quyền điều hành xe).
+  const isCarDispatcher = !!(user.perms?.admin || user.perms?.carDispatch);
+  if (moduleKey === 'carRegs' && !isCarDispatcher) extraFields = undefined;
+
   const extraSnapshot = {};
   if (config.extraFields) {
     const newPlate = extraFields?.assignedPlate;

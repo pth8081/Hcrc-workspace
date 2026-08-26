@@ -107,7 +107,10 @@ const server = http.createServer(async (req, res) => {
       const outcome = applyWorkflowAction({
         moduleKey: 'carRegs', item, action: rawAction === 'approve' ? 'APPROVE' : 'REJECT',
         user: activeServerUser, comment: body.comment, extraFields: body.extraFields,
-        appData: { carDeptWorkflows: {}, workflows: [] },
+        // Dùng ĐÚNG carDeptWorkflows đã seed (không hardcode {} như trước) — cần thiết để test được các
+        // approver KHÔNG PHẢI admin (canApproveStep chỉ cho qua nếu username có trong approvers[bước],
+        // admin luôn bypass nên trước đây hardcode {} vẫn "vô tình" work cho mọi test dùng adminUser).
+        appData: { carDeptWorkflows: store.carDeptWorkflows || {}, workflows: store.workflows || [] },
         existingCollection: store.carRegs, users: store.users
       });
       return sendJson(res, 200, { ok: true, item: outcome.item, transition: outcome.transition });
@@ -159,6 +162,20 @@ const driverUser2 = {
   phone: '0977777777', email: 'lx2@company.com', jobTitle: 'Lái xe',
   active: true, perms: {}
 };
+// carDispatch ("Người Điều Hành Xe", Phase 3) — 2 tài khoản đều là approver bước 1 hợp lệ ở đúng phòng
+// ban của phiếu họ sẽ duyệt (xem carDeptWorkflows trong seedDB bên dưới), CHỈ khác nhau ở carDispatch:
+// noDispatchApproverUser không có -> vẫn duyệt/từ chối được nhưng KHÔNG được đụng tới mục "Phần Dành
+// Cho Phòng Hành Chính"; dispatchApproverUser có -> vừa duyệt vừa gán được lái xe/loại xe/BKS.
+const noDispatchApproverUser = {
+  username: 'qlxe_nd', name: 'Nguyễn Không Điều Hành', dept: 'Phòng Hành Chính', role: 'STAFF',
+  phone: '0988888881', email: 'qlxe_nd@company.com', jobTitle: 'Nhân viên',
+  active: true, perms: { carDispatch: false }
+};
+const dispatchApproverUser = {
+  username: 'qlxe_dp', name: 'Trần Điều Hành Xe', dept: 'Phòng Hành Chính', role: 'STAFF',
+  phone: '0988888882', email: 'qlxe_dp@company.com', jobTitle: 'Người điều hành xe',
+  active: true, perms: { carDispatch: true }
+};
 
 const ROOM = 'Phòng Họp Lớn A (Tầng 3 - Sức chứa 50 người)';
 
@@ -168,9 +185,16 @@ const seedDB = {
   jobTitles: ['Nhân viên', 'Quản lý phòng họp', 'Admin'],
   submissionTypes: [], contractTypes: [],
   carTypes: ['Xe 4 chỗ', 'Xe 7 chỗ', 'Xe 16 chỗ'],
-  users: [bookerUser, roomManagerUser, adminUser, driverUser, driverUser2],
+  users: [bookerUser, roomManagerUser, adminUser, driverUser, driverUser2, noDispatchApproverUser, dispatchApproverUser],
   meetings: [], meetingMinutes: [], meetingAttendeeTemplates: [],
-  carRegs: [], carDeptWorkflows: {},
+  carRegs: [], workflows: [],
+  // 2 phòng ban RIÊNG cho kịch bản carDispatch bên dưới — chưa dùng bởi bất kỳ phiếu xe nào ở các test
+  // C1-C13 phía trên (đều dùng dept 'Phòng Kinh Doanh', luôn fallback approvers {} -> chỉ admin qua
+  // được canApproveStep), nên thêm 2 dept này KHÔNG ảnh hưởng gì tới các test hiện có.
+  carDeptWorkflows: {
+    'Phòng Hành Chính': { workflowId: 'WF_1STEP', approvers: { 1: ['qlxe_nd'] } },
+    'Ban Giám Đốc': { workflowId: 'WF_1STEP', approvers: { 1: ['qlxe_dp'] } }
+  },
   tasks: [], permGroups: [], vppExcludeGroups: [],
   vppPeriods: [], vppRegistrations: [], vppDeptWorkflows: {},
   budgetEntries: [], budgetDeptWorkflows: {},
@@ -178,6 +202,8 @@ const seedDB = {
   _versions: {}
 };
 store.users = seedDB.users; // mirror routes/workflow.js's req.allUsers cho applyWorkflowAction xác thực assignedDriverUsername.
+store.carDeptWorkflows = seedDB.carDeptWorkflows; // mirror appData thật cho route /api/workflow/carRegs ở trên.
+store.workflows = seedDB.workflows;
 
 async function loginAs(page, user) {
   activeServerUser = user;
@@ -621,6 +647,156 @@ async function main() {
     'Car: reassigning to a different driver resets a prior driver confirmation',
     c13Outcome.item.assignedDriverUsername === 'lx2' && c13Outcome.item.driverConfirmed === false && c13Outcome.item.driverConfirmedAt === null,
     `driver=${c13Outcome.item.assignedDriverUsername} confirmed=${c13Outcome.item.driverConfirmed} confirmedAt=${c13Outcome.item.driverConfirmedAt}`
+  );
+
+  // ===================== CAR REGISTRATION — carDispatch ("Người Điều Hành Xe", Phase 3): gates ONLY
+  // the "Phần Dành Cho Phòng Hành Chính" assignment section (driver/vehicle type/plate), separately from
+  // the step-approver check (canApproveStep) which stays untouched — an approver without carDispatch
+  // must still be able to Duyệt/Từ chối their step normally. =====================
+  const itemNoDispatch = {
+    id: 900301, code: 'HCRC-DPH-ND', dept: 'Phòng Hành Chính', status: 'PENDING', currentStep: 1,
+    history: [], type: 'Xe 4 chỗ', km: '40', passengers: '01', purpose: 'Công tác',
+    startTime: '2026-09-08T08:00', endTime: '2026-09-08T12:00', destination: 'HN', reason: 'Kiểm tra carDispatch',
+    creator: bookerUser.username, creatorName: bookerUser.name,
+    // Giá trị ĐÃ gán TRƯỚC lúc duyệt — approver không có carDispatch cố sửa lại thì giá trị này PHẢI
+    // được giữ nguyên (server lờ đi field client gửi, không ghi đè).
+    assignedVehicleType: 'Xe cũ đã gán trước khi duyệt'
+  };
+  const itemWithDispatch = {
+    id: 900302, code: 'HCRC-DPH-WD', dept: 'Ban Giám Đốc', status: 'PENDING', currentStep: 1,
+    history: [], type: 'Xe 7 chỗ', km: '60', passengers: '02', purpose: 'Công tác',
+    startTime: '2026-09-08T08:00', endTime: '2026-09-08T12:00', destination: 'HN', reason: 'Kiểm tra carDispatch',
+    creator: bookerUser.username, creatorName: bookerUser.name
+  };
+  store.carRegs.push(itemNoDispatch, itemWithDispatch);
+  await page.evaluate(({ a, b }) => { DB.carRegs.push(a, b); }, { a: itemNoDispatch, b: itemWithDispatch });
+
+  // D1 — approver KHÔNG có carDispatch: modal ẩn mục phân công. Cố tình dùng thẳng callWorkflowAction()
+  // (giả lập DevTools sửa request tay, bỏ qua guard phía client) để gửi kèm field phân công -> server
+  // phải tự lờ đi hoàn toàn, KHÔNG lỗi cả lượt duyệt, KHÔNG ghi đè giá trị cũ.
+  await loginAs(page, noDispatchApproverUser);
+  const d1 = await page.evaluate(async (carId) => {
+    window.__alerts = [];
+    switchTab('car');
+    openCarProcessModal(carId);
+    const sectionHiddenAtOpen = document.getElementById('carDispatchSection').classList.contains('hidden');
+    const hasActionButtons = document.getElementById('carModalActionBtns').innerHTML.includes('Phê Duyệt');
+    const result = await callWorkflowAction('carRegs', carId, 'approve', {
+      comment: '',
+      extraFields: { assignedDriverUsername: 'lx1', assignedVehicleType: 'Xe MỚI (không được phép gán)', assignedPlate: '51A-999.99' }
+    });
+    return {
+      sectionHiddenAtOpen, hasActionButtons,
+      status: result.item.status,
+      assignedVehicleType: result.item.assignedVehicleType,
+      assignedPlate: result.item.assignedPlate,
+      assignedDriverUsername: result.item.assignedDriverUsername
+    };
+  }, itemNoDispatch.id);
+  record(
+    'CarDispatch: approver WITHOUT carDispatch — "Phần Dành Cho Phòng Hành Chính" is hidden in the modal',
+    d1.sectionHiddenAtOpen === true,
+    `sectionHiddenAtOpen=${d1.sectionHiddenAtOpen}`
+  );
+  record(
+    'CarDispatch: approver WITHOUT carDispatch can still approve their step normally',
+    d1.hasActionButtons === true && d1.status === 'APPROVED',
+    `hasActionButtons=${d1.hasActionButtons} status=${d1.status}`
+  );
+  record(
+    'CarDispatch: server silently ignores tampered assignment fields from a non-carDispatch approver (old value kept, no driver/plate written)',
+    d1.assignedVehicleType === 'Xe cũ đã gán trước khi duyệt' && !d1.assignedPlate && !d1.assignedDriverUsername,
+    `assignedVehicleType=${d1.assignedVehicleType} assignedPlate=${d1.assignedPlate} assignedDriverUsername=${d1.assignedDriverUsername}`
+  );
+
+  // D2 — approver CÓ carDispatch: modal hiện mục phân công; Duyệt + gán lái xe/loại xe/BKS trong CÙNG 1
+  // lượt thao tác qua đúng luồng UI thật (processCarReg), không tắt qua callWorkflowAction thẳng.
+  await loginAs(page, dispatchApproverUser);
+  const d2 = await page.evaluate(async (carId) => {
+    window.__alerts = [];
+    switchTab('car');
+    openCarProcessModal(carId);
+    const sectionHiddenAtOpen = document.getElementById('carDispatchSection').classList.contains('hidden');
+    document.getElementById('carAssignedDriver').value = 'Nguyễn Văn Tài — Phòng Hành Chính (lx1)';
+    resolveCarAssignedDriverInput(document.getElementById('carAssignedDriver').value);
+    document.getElementById('carAssignedVehicleType').value = 'Ford Transit 16 chỗ';
+    document.getElementById('carAssignedPlate').value = '51A-777.77';
+    document.getElementById('txtCarComment').value = '';
+    await processCarReg('APPROVE');
+    const item = DB.carRegs.find((c) => c.id === carId);
+    return {
+      sectionHiddenAtOpen, alerts: window.__alerts.slice(), status: item.status,
+      assignedVehicleType: item.assignedVehicleType, assignedPlate: item.assignedPlate, assignedDriverUsername: item.assignedDriverUsername
+    };
+  }, itemWithDispatch.id);
+  record(
+    'CarDispatch: approver WITH carDispatch — "Phần Dành Cho Phòng Hành Chính" is visible in the modal',
+    d2.sectionHiddenAtOpen === false,
+    `sectionHiddenAtOpen=${d2.sectionHiddenAtOpen}`
+  );
+  record(
+    'CarDispatch: approver WITH carDispatch can approve AND set driver/vehicle/plate in the same action',
+    d2.status === 'APPROVED' && d2.assignedPlate === '51A-777.77' && d2.assignedVehicleType === 'Ford Transit 16 chỗ' && d2.assignedDriverUsername === 'lx1',
+    `status=${d2.status} plate=${d2.assignedPlate} type=${d2.assignedVehicleType} driver=${d2.assignedDriverUsername} alerts=${JSON.stringify(d2.alerts)}`
+  );
+
+  // D3 — Từ chối cũng phải bị lờ đi field phân công nếu người từ chối không có carDispatch.
+  // LƯU Ý: itemNoDispatch đã bị applyWorkflowAction() ở D1 MUTATE tại chỗ (status -> 'APPROVED',
+  // history đã có dòng) — không spread trực tiếp từ nó nữa, phải nêu rõ lại status/currentStep/history
+  // PENDING/1/[] cho bản ghi MỚI này, tránh dính luôn trạng thái đã bị đổi của D1.
+  const itemNoDispatchReject = {
+    ...itemNoDispatch, id: 900303, code: 'HCRC-DPH-ND-REJ',
+    status: 'PENDING', currentStep: 1, history: [], assignedVehicleType: undefined
+  };
+  store.carRegs.push(itemNoDispatchReject);
+  await page.evaluate((item) => { DB.carRegs.push(item); }, itemNoDispatchReject);
+  await loginAs(page, noDispatchApproverUser);
+  const d3 = await page.evaluate(async (carId) => {
+    window.__alerts = [];
+    const result = await callWorkflowAction('carRegs', carId, 'reject', {
+      comment: 'Không đủ điều kiện.',
+      extraFields: { assignedDriverUsername: 'lx1', assignedVehicleType: 'Không được phép', assignedPlate: '51A-000.00' }
+    });
+    return { status: result.item.status, assignedVehicleType: result.item.assignedVehicleType, assignedPlate: result.item.assignedPlate };
+  }, itemNoDispatchReject.id);
+  record(
+    'CarDispatch: non-carDispatch approver can reject their step, and tampered assignment fields are still ignored on reject',
+    d3.status === 'REJECTED' && !d3.assignedVehicleType && !d3.assignedPlate,
+    `status=${d3.status} type=${d3.assignedVehicleType} plate=${d3.assignedPlate}`
+  );
+
+  // ===================== D4/D5 — sidebar-access gap fix: a pure-driver account (no carView, not an
+  // approver in ANY carDeptWorkflows) must now reach the "🚗 Đăng ký xe" sidebar tab if they are the
+  // assigned driver on at least 1 record. NOTE: scopeHasAny() (pre-existing helper, unrelated to this
+  // phase — see git blame commit c36cf63, long before carDispatch existed) already returns true for ANY
+  // user that merely has a `dept` set, regardless of the scope's actual content — so canAccessCarModule()
+  // (like canAccessSubmissionModule/canAccessContractModule/canAccessOfficeModule, which share the same
+  // helper) was ALREADY open to every dept-having employee at the sidebar level before this phase, and
+  // isAssignedDriverSomewhere() does not change that baseline. What this phase's new OR-clause must NOT
+  // do is fabricate a false "assigned driver" match for someone with zero assigned trips — verified
+  // directly below instead of through the (pre-existing-broad) canAccessCarModule() gate. =====================
+  await loginAs(page, driverUser); // lx1 — assigned driver on c7 (đã xác nhận ở kịch bản C11 phía trên).
+  const d4 = await page.evaluate(() => {
+    window.__alerts = [];
+    const canAccessBefore = canAccessCarModule(currentUser);
+    switchTab('car'); // trước fix: bị chặn ngay với alert "⛔ ... Module Đăng ký xe!"
+    return { canAccessBefore, alertsAfterSwitch: window.__alerts.slice() };
+  });
+  record(
+    'CarDispatch gap fix: an assigned-driver-only account (no carView/approver rights) can now access the car module sidebar tab',
+    d4.canAccessBefore === true && !d4.alertsAfterSwitch.some((a) => a.includes('Module Đăng ký xe')),
+    `canAccessBefore=${d4.canAccessBefore} alerts=${JSON.stringify(d4.alertsAfterSwitch)}`
+  );
+
+  await loginAs(page, driverUser2); // lx2 — chưa từng được phân công phiếu xe nào.
+  const d5 = await page.evaluate(() => {
+    const isAssignedDriverSomewhere = (DB.carRegs || []).some((c) => c.assignedDriverUsername === currentUser.username);
+    return { isAssignedDriverSomewhere };
+  });
+  record(
+    'CarDispatch gap fix: the new isAssignedDriverSomewhere clause does not fabricate a match for an account with no assigned trips (fix is not overly broad)',
+    d5.isAssignedDriverSomewhere === false,
+    `isAssignedDriverSomewhere=${d5.isAssignedDriverSomewhere}`
   );
 
   await browser.close();

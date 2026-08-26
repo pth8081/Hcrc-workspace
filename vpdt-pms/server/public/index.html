@@ -4408,6 +4408,11 @@ table { display: block; overflow-x: auto; max-width: 100%; }
               <div id="pCarDownloadDeptContainer" class="space-y-1 pl-1 max-h-32 overflow-y-auto"></div>
             </div>
           </div>
+          <div class="px-3 pb-3">
+            <label class="flex items-center gap-1.5 text-gray-700 cursor-pointer">
+              <input type="checkbox" id="pCarDispatch"> 🚘 Người Điều Hành Xe (được nhập lái xe/loại xe/biển số ở mục "Phần Dành Cho Phòng Hành Chính" khi đến lượt phê duyệt — người khác trong luồng duyệt không có quyền này thì không thấy/không sửa được mục đó)
+            </label>
+          </div>
         </details>
 
         <details class="perm-tree-node bg-white rounded border text-xs">
@@ -5471,7 +5476,7 @@ table { display: block; overflow-x: auto; max-width: 100%; }
     <div class="p-4 overflow-y-auto flex-1 space-y-4 text-xs">
       <div id="carModalDetails" class="bg-gray-50 p-3 rounded border space-y-2 text-gray-700"></div>
 
-      <div class="bg-indigo-50 p-3 rounded border border-indigo-200 space-y-2">
+      <div id="carDispatchSection" class="bg-indigo-50 p-3 rounded border border-indigo-200 space-y-2">
         <h4 class="font-bold text-indigo-900 mb-1">🏢 Phần Dành Cho Phòng Hành Chính (phân công xe)</h4>
         <div class="grid grid-cols-1 md:grid-cols-3 gap-2">
           <div>
@@ -7201,7 +7206,14 @@ function canAccessCarModule(user) {
   if (!user) return false;
   if (user.perms?.admin) return true;
   if (!hasModuleAccess(user, 'car')) return false;
-  return scopeHasAny(user, user.perms?.carView) || isApproverInWorkflowMap(DB.carDeptWorkflows, user.username);
+  // Lái xe được phân công (assignedDriverUsername) — dù không có carView/không nằm trong bất kỳ
+  // carDeptWorkflows[dept].approvers nào — vẫn cần vào được để xem/tự xác nhận chuyến của MÌNH ở
+  // sub-tab "Lái Xe" (renderCarDriverTab(), khớp canViewCarReg() ở lib/recordViewScope.js: GET
+  // /api/data đã tự lọc DB.carRegs xuống đúng các phiếu họ được phân công làm lái xe, kể cả khi
+  // module bị ẩn khỏi sidebar trước đây). Chỉ mở đúng lối vào sidebar + sub-tab đó — không mở thêm
+  // quyền gì khác trong module (họ vẫn không thấy/không duyệt được phiếu của phòng ban khác).
+  const isAssignedDriverSomewhere = (DB.carRegs || []).some(c => c.assignedDriverUsername === user.username);
+  return scopeHasAny(user, user.perms?.carView) || isApproverInWorkflowMap(DB.carDeptWorkflows, user.username) || isAssignedDriverSomewhere;
 }
 
 // Văn phòng phẩm: KHÔNG có khái niệm quyền "Xem/Tạo" riêng theo phòng ban (khác Xe/Phòng họp) — mọi
@@ -7420,7 +7432,7 @@ function defaultNewUserPerms() {
     reportManage: false, reportAggregate: false, reportEntryCreate: false,
     meetingView: emptyScope(), meetingBookScope: emptyScope(),
     meetingApprove: false, meetingCancel: false,
-    carView: emptyScope(), carCreate: emptyScope(), carDownload: emptyScope(),
+    carView: emptyScope(), carCreate: emptyScope(), carDownload: emptyScope(), carDispatch: false,
     officeView: emptyScope(), officeCreate: emptyScope(), officeDownload: emptyScope(),
     officeBuy: true, officeFix: true, officeInvest: false,
     minutesCreate: false, minutesView: false, minutesEdit: false, minutesDownload: false,
@@ -17093,6 +17105,13 @@ function openCarProcessModal(carId) {
   document.getElementById('carAssignedPlate').value = c.assignedPlate || c.plate || '';
   document.getElementById('txtCarComment').value = '';
 
+  // "Phần Dành Cho Phòng Hành Chính" (phân công lái xe/loại xe/BKS) chỉ hiện cho "Người Điều Hành Xe"
+  // (perms.carDispatch) — người khác trong luồng duyệt vẫn Duyệt/Từ chối bình thường ở nút bên dưới,
+  // chỉ không thấy/không sửa được mục phân công này (server cũng tự bỏ qua nếu client bị can thiệp cố
+  // gửi kèm các field này, xem applyWorkflowAction() ở lib/workflowEngine.js).
+  const canDispatchCar = !!(currentUser.perms?.admin || currentUser.perms?.carDispatch);
+  document.getElementById('carDispatchSection').classList.toggle('hidden', !canDispatchCar);
+
   const historyHTML = (c.history || []).map(h => `
     <div class="bg-white p-2 rounded border text-xs space-y-1">
       <div class="flex justify-between font-bold text-gray-700">
@@ -17158,16 +17177,23 @@ async function processCarReg(actionType) {
   // thực hiện ở bước cuối) — gửi kèm cùng request duyệt/từ chối, ghi nhận ngay khi có nhập. Lái xe bắt
   // buộc là 1 tài khoản hệ thống có thật — nếu ô còn text nhưng chưa khớp được tài khoản (gõ tự do,
   // chưa chọn xong từ gợi ý) thì chặn ngay ở đây, không gửi lên server.
-  const carAssignedDriverText = document.getElementById('carAssignedDriver').value.trim();
-  const carAssignedDriverUsername = document.getElementById('carAssignedDriverUsername').value;
-  if (carAssignedDriverText && !carAssignedDriverUsername) {
-    return alert('Vui lòng chọn đúng lái xe từ danh sách gợi ý (gõ tên hoặc tài khoản để tìm)!');
+  // Chỉ "Người Điều Hành Xe" (perms.carDispatch) mới gửi kèm các field phân công này — người khác
+  // trong luồng duyệt không thấy mục này (xem toggle ẩn/hiện ở openCarProcessModal()) nên không có gì
+  // để gửi; server cũng tự bỏ qua nếu thiếu quyền dù client có bị can thiệp cố gửi kèm.
+  const canDispatchCar = !!(currentUser.perms?.admin || currentUser.perms?.carDispatch);
+  let extraFields = {};
+  if (canDispatchCar) {
+    const carAssignedDriverText = document.getElementById('carAssignedDriver').value.trim();
+    const carAssignedDriverUsername = document.getElementById('carAssignedDriverUsername').value;
+    if (carAssignedDriverText && !carAssignedDriverUsername) {
+      return alert('Vui lòng chọn đúng lái xe từ danh sách gợi ý (gõ tên hoặc tài khoản để tìm)!');
+    }
+    extraFields = {
+      assignedDriverUsername: carAssignedDriverUsername,
+      assignedVehicleType: document.getElementById('carAssignedVehicleType').value.trim(),
+      assignedPlate: document.getElementById('carAssignedPlate').value.trim()
+    };
   }
-  const extraFields = {
-    assignedDriverUsername: carAssignedDriverUsername,
-    assignedVehicleType: document.getElementById('carAssignedVehicleType').value.trim(),
-    assignedPlate: document.getElementById('carAssignedPlate').value.trim()
-  };
 
   let result;
   try {
@@ -21014,6 +21040,7 @@ function collectPermsFromForm() {
     carView: scopeFromForm('pCarViewAll', 'pCarViewDept'),
     carCreate: scopeFromForm('pCarCreateAll', 'pCarCreateDept'),
     carDownload: scopeFromForm('pCarDownloadAll', 'pCarDownloadDept'),
+    carDispatch: document.getElementById('pCarDispatch').checked,
     officeView: scopeFromForm('pOfficeViewAll', 'pOfficeViewDept'),
     officeCreate: scopeFromForm('pOfficeCreateAll', 'pOfficeCreateDept'),
     officeDownload: scopeFromForm('pOfficeDownloadAll', 'pOfficeDownloadDept'),
@@ -21103,6 +21130,7 @@ function populatePermsForm(permsInput) {
   document.getElementById('pCarViewAll').checked = !!perms.carView?.all;
   document.getElementById('pCarCreateAll').checked = !!perms.carCreate?.all;
   document.getElementById('pCarDownloadAll').checked = !!perms.carDownload?.all;
+  document.getElementById('pCarDispatch').checked = !!perms.carDispatch;
   document.getElementById('pOfficeViewAll').checked = !!perms.officeView?.all;
   document.getElementById('pOfficeCreateAll').checked = !!perms.officeCreate?.all;
   document.getElementById('pOfficeDownloadAll').checked = !!perms.officeDownload?.all;
@@ -23676,6 +23704,7 @@ function resetUserForm() {
   document.getElementById('pReportEntryCreate').checked = !!defaults.reportEntryCreate;
   document.getElementById('pMeetingApprove').checked = defaults.meetingApprove;
   document.getElementById('pMeetingCancel').checked = defaults.meetingCancel;
+  document.getElementById('pCarDispatch').checked = !!defaults.carDispatch;
   document.getElementById('pOfficeBuy').checked = defaults.officeBuy;
   document.getElementById('pOfficeFix').checked = defaults.officeFix;
   document.getElementById('pOfficeInvest').checked = defaults.officeInvest;
@@ -23827,6 +23856,7 @@ function summarizeUserPerms(perms) {
   if (perms.reportManage || perms.reportAggregate || perms.reportEntryCreate) parts.push('📅 Báo cáo định kỳ');
   if (hasScope(perms.meetingView) || hasScope(perms.meetingBookScope) || perms.meetingApprove || perms.meetingCancel) parts.push('📅 Phòng họp');
   if (hasScope(perms.carView) || hasScope(perms.carCreate)) parts.push('🚗 Xe');
+  if (perms.carDispatch) parts.push('🚘 Điều hành xe');
   if ((hasScope(perms.officeView) || hasScope(perms.officeCreate)) && (perms.officeBuy || perms.officeFix || perms.officeInvest)) parts.push('🏢 VP');
   if (perms.minutesCreate) parts.push('📝 Biên bản họp');
   if (perms.canViewReports) parts.push('📊 Báo cáo');
