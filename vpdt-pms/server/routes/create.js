@@ -55,6 +55,17 @@ router.post('/:module', async (req, res) => {
     // chọn, có phải chương trình có thật không) — cùng lý do trainingClasses/trainingDocuments ở trên.
     // depts/stores (kiểm tra targetDept) đã có sẵn trong appData (2 key AppData thường, không cần đọc thêm).
     if (moduleKey === 'trainingPlans') appData.trainingCourses = await getAllForCollection('trainingCourses');
+    // onboardingPaths (Đợt 6) cần tra cứu chéo sang trainingTests (test1Id/test2Id BẮT BUỘC phải là bài
+    // test có thật) + trainingDocuments (stage1DocumentIds/stage2DocumentIds, tuỳ chọn) — cùng lý do
+    // trainingClasses ở trên.
+    if (moduleKey === 'onboardingPaths') {
+      appData.trainingTests = await getAllForCollection('trainingTests');
+      appData.trainingDocuments = await getAllForCollection('trainingDocuments');
+    }
+    // onboardingProgress (Đợt 6) cần tra cứu chéo sang onboardingPaths (pathId có phải lộ trình có thật
+    // không, snapshot tên) — appData.users đã có sẵn trong AppData chung (không cần đọc thêm, khác
+    // trainingCourses/trainingTests vẫn ở dbo.Records riêng).
+    if (moduleKey === 'onboardingProgress') appData.onboardingPaths = await getAllForCollection('onboardingPaths');
     // recruitmentReferrals cần tra cứu chéo sang collection recruitmentJobs (tin còn OPEN/snapshot
     // jobTitle) — cùng lý do trainingRegistrations ở trên.
     if (moduleKey === 'recruitmentReferrals') appData.recruitmentJobs = await getAllForCollection('recruitmentJobs');

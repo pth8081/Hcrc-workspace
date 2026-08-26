@@ -9,7 +9,7 @@
 // họp thêm cờ minutesEdit (toàn công ty, không theo phòng ban) cho SỬA — riêng XÓA là quyền tối cao,
 // chỉ Admin; Công việc theo NGƯỜI (assignedBy/assignee), hoàn toàn không có khái niệm phòng ban.
 const { HttpError } = require('./httpErrors');
-const { scopeAllows, OFFICE_SUBTYPE_TO_PERM_FLAG, normalizeReportEntryPayload, buildEffectiveContractApprovalWorkflowServer, sanitizeUniformItems, sanitizeBudgetLines, getBudgetTemplateCustomFields, sanitizeBudgetCustomFields, resolveTrainingInstructorUsername, normalizeInviteList, normalizeTrainingPlanFields } = require('./createValidation');
+const { scopeAllows, OFFICE_SUBTYPE_TO_PERM_FLAG, normalizeReportEntryPayload, buildEffectiveContractApprovalWorkflowServer, sanitizeUniformItems, sanitizeBudgetLines, getBudgetTemplateCustomFields, sanitizeBudgetCustomFields, resolveTrainingInstructorUsername, normalizeInviteList, normalizeTrainingPlanFields, normalizeOnboardingPathFields } = require('./createValidation');
 const { validateRegistrationItems: validateVppRegItems, calcItemsTotal: calcVppItemsTotal } = require('./vppCatalog');
 const { sanitizePriceFileItems } = require('./priceFileParser');
 
@@ -2086,6 +2086,112 @@ function confirmCareerPathForEmployee(payload, user, path, allRegistrations, exi
   };
 }
 
+// ===== ĐÀO TẠO TÂN BINH (Đợt 6, module con "Đào Tạo") =====
+// onboardingPaths ("Lộ Trình") quản lý (tạo/sửa/xoá) CHỈ trainingManage — dùng lại đúng canManageTraining()
+// ở trên. onboardingProgress ("Phân Công") có 3 nhóm hành động riêng biệt hoàn toàn khác gác quyền nhau:
+// - submitOnboardingStageTest(): chính người được phân công (employeeUsername) tự làm.
+// - evaluateOnboardingStage3(): quản lý CÙNG PHÒNG BAN/SIÊU THỊ với người được phân công (onboardingEvaluate
+//   + so trực tiếp dept, KHÔNG có bảng ánh xạ nào khác — mirror ĐÚNG idiom uniformStoreManage/item.dept ở
+//   canViewUniformIssuance()/canViewUniformStockAdjustment(), lib/recordViewScope.js).
+// - issueOnboardingCertificate(): trainingManage/admin, CHỈ khi cả 3 giai đoạn đã ĐẠT.
+
+// Sửa 1 Lộ Trình đã tạo (onboardingPaths, Đợt 6) — cùng khuôn editTrainingPlan() ở trên (whitelist field
+// rồi chạy lại ĐÚNG 1 luật chuẩn hoá dùng chung với lúc TẠO, xem normalizeOnboardingPathFields() ở
+// lib/createValidation.js).
+const ONBOARDING_PATH_EDITABLE_FIELDS = ['name', 'stage1DocumentIds', 'test1Id', 'stage2DocumentIds', 'test2Id', 'stage3Criteria'];
+function editOnboardingPath(payload, user, path, appData) {
+  if (!canManageTraining(user)) throw new HttpError(403, 'Bạn không có quyền sửa lộ trình đào tạo tân binh');
+  if (!payload || typeof payload !== 'object') throw new HttpError(400, 'Thiếu dữ liệu cập nhật');
+  for (const field of ONBOARDING_PATH_EDITABLE_FIELDS) {
+    if (payload[field] !== undefined) path[field] = payload[field];
+  }
+  normalizeOnboardingPathFields(path, appData);
+  return path;
+}
+
+// Nộp bài test Giai đoạn 1 hoặc 2 của 1 hồ sơ Phân Công — CHỈ chính người được phân công
+// (progress.employeeUsername) mới nộp được (khác setTrainingRegistrationResult/confirmCareerPathForEmployee
+// ở trên vốn do người QUẢN LÝ ghi nhận — ở đây là "tự làm bài, hệ thống tự chấm", cùng tinh thần
+// applyAutoGradedTestResult() cho trainingClasses). Giai đoạn 2 bị chặn nếu Giai đoạn 1 chưa ĐẠT (đúng
+// yêu cầu tuần tự "Ngày 1-7 rồi mới tới Ngày 8-21" của thiết kế) — không chặn theo THỜI GIAN ở đây (hạn
+// chỉ là mốc hiển thị "quá hạn" tính sống ở client, KHÔNG khoá cứng việc nộp bài trễ, tránh 1 nhân viên
+// nộp trễ vài giờ bị kẹt vĩnh viễn không hoàn thành nổi lộ trình). Test lấy đúng theo path.test1Id/
+// test2Id tại THỜI ĐIỂM NỘP BÀI (không snapshot — 1 lộ trình sửa lại bài test giữa chừng thì mọi người
+// CHƯA nộp bài đều làm theo bài test MỚI, giống hệt cách trainingClasses.testId hoạt động).
+function submitOnboardingStageTest(payload, user, progress, path, tests) {
+  if (user.username !== progress.employeeUsername) {
+    throw new HttpError(403, 'Bạn chỉ có thể tự làm bài test của lộ trình được phân công cho chính mình');
+  }
+  const stage = Number(payload?.stage);
+  if (stage !== 1 && stage !== 2) throw new HttpError(400, 'Giai đoạn không hợp lệ (chỉ nhận 1 hoặc 2)');
+  const resultField = `stage${stage}Result`;
+  if (progress[resultField] != null) {
+    throw new HttpError(409, `Giai đoạn ${stage} đã có kết quả (${progress[resultField]}) từ trước — mỗi giai đoạn chỉ được làm bài 1 lần duy nhất`);
+  }
+  if (stage === 2 && progress.stage1Result !== 'PASSED') {
+    throw new HttpError(409, 'Bạn cần Đạt Giai đoạn 1 trước khi làm bài test Giai đoạn 2');
+  }
+  if (!path) throw new HttpError(404, 'Không tìm thấy lộ trình đào tạo tân binh của hồ sơ này (có thể đã bị xoá)');
+  const testId = stage === 1 ? path.test1Id : path.test2Id;
+  const test = (tests || []).find(t => t.id === testId);
+  if (!test) throw new HttpError(404, 'Không tìm thấy bài test được gán cho giai đoạn này (có thể đã bị xoá)');
+
+  const graded = gradeTrainingTestSubmission(payload?.answers, test);
+  progress[resultField] = graded.passed ? 'PASSED' : 'FAILED';
+  progress[`stage${stage}Score`] = graded.percentage;
+  progress[`stage${stage}SubmittedAt`] = nowVN();
+  return progress;
+}
+
+// Quyền đánh giá Giai đoạn 3 — mirror ĐÚNG idiom uniformStoreManage/item.dept (lib/recordViewScope.js
+// canViewUniformIssuance()/canViewUniformStockAdjustment()): so trực tiếp dept của NGƯỜI ĐƯỢC PHÂN CÔNG
+// (đọc SỐNG từ hồ sơ user hiện tại qua users[], KHÔNG snapshot — khác startDate ở trên chủ đích snapshot;
+// ở đây dùng dept THẬT hiện tại để 1 nhân viên chuyển phòng ban/siêu thị giữa chừng thì quản lý MỚI của
+// họ đánh giá được, không kẹt vào quản lý CŨ) với dept của người đánh giá — không có bảng ánh xạ nào khác.
+function canEvaluateOnboardingStage3(user, traineeUser) {
+  if (user?.perms?.admin) return true;
+  return !!(user?.perms?.onboardingEvaluate && traineeUser && traineeUser.dept === user.dept);
+}
+
+function evaluateOnboardingStage3(payload, user, progress, users) {
+  const traineeUser = (users || []).find(u => u.username === progress.employeeUsername);
+  if (!canEvaluateOnboardingStage3(user, traineeUser)) {
+    throw new HttpError(403, 'Bạn không có quyền đánh giá Giai đoạn 3 cho nhân viên này (khác phòng ban/siêu thị hoặc không có quyền)');
+  }
+  if (progress.stage1Result !== 'PASSED' || progress.stage2Result !== 'PASSED') {
+    throw new HttpError(409, 'Nhân viên cần Đạt cả Giai đoạn 1 và Giai đoạn 2 trước khi đánh giá Giai đoạn 3');
+  }
+  if (progress.stage3Evaluation != null) {
+    throw new HttpError(409, 'Giai đoạn 3 của nhân viên này đã được đánh giá rồi');
+  }
+  const evaluation = payload?.evaluation === 'PASSED' || payload?.evaluation === 'FAILED' ? payload.evaluation : null;
+  if (!evaluation) throw new HttpError(400, 'Kết quả đánh giá không hợp lệ (chỉ nhận Đạt/Không đạt)');
+  progress.stage3Evaluation = evaluation;
+  progress.stage3EvaluatedBy = user.username;
+  progress.stage3EvaluatedByName = user.name;
+  progress.stage3EvaluatedAt = nowVN();
+  progress.stage3Note = (payload?.note || '').trim().slice(0, 3000);
+  return progress;
+}
+
+// Cấp Chứng Chỉ Hoàn Thành — trainingManage/admin, CHỈ khi cả 3 giai đoạn đã ĐẠT. Chỉ đánh dấu
+// certificateIssued/issuedAt/issuedBy ở đây — PDF được dựng lại HOÀN TOÀN ở client từ chính dữ liệu
+// progress này (tên nhân viên/tên lộ trình/ngày cấp — xem downloadOnboardingCertificatePdf() ở
+// index.html, kỹ thuật html2canvas+jsPDF giống exportBudgetSummaryPdf()), KHÔNG lưu file PDF nào ở
+// server — "tính toán lại thay vì lưu trữ" đúng tinh thần chung của hệ thống (giống mọi số liệu SỐNG
+// khác trong module Đào Tạo).
+function issueOnboardingCertificate(user, progress) {
+  if (!canManageTraining(user)) throw new HttpError(403, 'Bạn không có quyền cấp chứng chỉ hoàn thành đào tạo tân binh');
+  if (progress.stage1Result !== 'PASSED' || progress.stage2Result !== 'PASSED' || progress.stage3Evaluation !== 'PASSED') {
+    throw new HttpError(409, 'Nhân viên chưa Đạt cả 3 giai đoạn — chưa thể cấp chứng chỉ hoàn thành');
+  }
+  if (progress.certificateIssued) throw new HttpError(409, 'Chứng chỉ hoàn thành đã được cấp trước đó rồi');
+  progress.certificateIssued = true;
+  progress.certificateIssuedAt = nowVN();
+  progress.certificateIssuedBy = user.username;
+  return progress;
+}
+
 // ===== TUYỂN DỤNG (thay thế mục "Khen Thưởng" cũ trong Truyền Thông Nội Bộ) =====
 // Dùng chung 1 cờ quyền internalRecruitmentCreate cho cả việc đăng/đóng tin tuyển dụng lẫn xem/xử lý hồ
 // sơ ứng viên — coi như "hộp thư chung" của cả đội tuyển dụng, KHÔNG giới hạn theo "ai đăng tin nấy xử
@@ -2715,6 +2821,7 @@ module.exports = {
   canManageTraining, canManageTrainingClass, cancelTrainingRegistration, setTrainingRegistrationResult, confirmCareerPathForEmployee,
   bulkRegisterTrainingClass, editTrainingClass, startOfflineTrainingClass, endOfflineTrainingClass, editTrainingPlan,
   gradeTrainingTestSubmission, applyAutoGradedTestResult,
+  editOnboardingPath, submitOnboardingStageTest, canEvaluateOnboardingStage3, evaluateOnboardingStage3, issueOnboardingCertificate,
   canManageRecruitment, closeRecruitmentJob, confirmRecruitmentJobFilled, setRecruitmentReferralStatus,
   canManageItSupport, applyPriceApproval, claimPriceApply, releasePriceApplyClaim, requestPriceInfoFromIt, submitPriceSupplementFile,
   claimItTicket, updateItTicketStatus, addItTicketComment, cancelItTicket,

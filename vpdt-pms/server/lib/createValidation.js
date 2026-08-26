@@ -1301,6 +1301,74 @@ const CREATE_MODULE_CONFIGS = {
       normalizeTrainingPlanFields(payload, appData);
     }
   },
+  // Đào Tạo Tân Binh Đợt 6 — "Lộ Trình" (onboardingPaths) là 1 catalog TÁI SỬ DỤNG được cho nhiều nhân
+  // viên mới khác nhau (giống hệt trainingCourses/careerPaths ở trên: tạo 1 lần, gán lại nhiều lần qua
+  // onboardingProgress.pathId bên dưới) — KHÔNG phải hồ sơ theo từng nhân viên. Giai đoạn 1/2 có bài
+  // test bắt buộc (test1Id/test2Id — PHẢI trỏ tới 1 trainingTests có thật, khác courseId/testId tuỳ
+  // chọn ở trainingClasses vì ở đây kết quả ĐẠT/KHÔNG ĐẠT của cả giai đoạn hoàn toàn phụ thuộc bài test
+  // này, không có đường nào khác để hoàn thành giai đoạn); Giai đoạn 3 KHÔNG có bài test, chỉ là tiêu
+  // chí đánh giá dạng văn bản tự do (stage3Criteria) để quản lý trực tiếp (onboardingEvaluate) chấm.
+  // Quản lý (tạo/sửa/xoá) CHỈ trainingManage — cùng tinh thần "danh mục dùng chung toàn công ty" như
+  // trainingCourses/trainingPlans.
+  onboardingPaths: {
+    dbKey: 'onboardingPaths',
+    forceOwnDept: true, // không có khái niệm phòng ban riêng (danh mục dùng chung toàn công ty)
+    getScope: () => ({}),
+    creatorField: 'creator', creatorNameField: 'creatorName',
+    extraValidate: (payload, collection, user, appData) => {
+      if (!user.perms?.admin && !user.perms?.trainingManage) {
+        throw new CreateError(403, 'Bạn không có quyền tạo lộ trình đào tạo tân binh');
+      }
+      normalizeOnboardingPathFields(payload, appData);
+    }
+  },
+  // "Phân Công" (onboardingProgress) — 1 dòng = 1 nhân viên ĐƯỢC GÁN 1 onboardingPaths cụ thể, theo dõi
+  // tiến độ 3 giai đoạn. startDate CHỤP LẠI (snapshot) từ hồ sơ user NGAY LÚC PHÂN CÔNG — cố tình KHÔNG
+  // đọc sống lại user.startDate mỗi lần tính hạn (khác kiểu "tính sống" của trainingPlans actual ở
+  // trên): nếu admin sửa lại startDate trên hồ sơ nhân viên sau khi đã phân công (vd sửa lỗi nhập liệu
+  // của người KHÁC), 1 onboardingProgress đang chạy dở không bị dịch chuyển hạn 1/2/3 theo, tránh xáo
+  // trộn 1 lộ trình đang được nhân viên/quản lý theo dõi giữa chừng. Phân công (tạo dòng) CHỈ
+  // trainingManage — nhân viên/quản lý Giai đoạn 3 không tự tạo được, chỉ tương tác qua các action riêng
+  // (submitOnboardingStageTest/evaluateOnboardingStage3/issueOnboardingCertificate, lib/recordActions.js).
+  onboardingProgress: {
+    dbKey: 'onboardingProgress',
+    forceOwnDept: true, // không có khái niệm phòng ban riêng ở CHÍNH hồ sơ phân công này (dept của NGƯỜI PHÂN CÔNG, chỉ metadata)
+    getScope: () => ({}),
+    creatorField: 'creator', creatorNameField: 'creatorName',
+    getLockKey: (payload, user) => `onboarding_progress:${payload?.employeeUsername}:${payload?.pathId}`,
+    extraValidate: (payload, collection, user, appData) => {
+      if (!user.perms?.admin && !user.perms?.trainingManage) {
+        throw new CreateError(403, 'Bạn không có quyền phân công lộ trình đào tạo tân binh');
+      }
+      const employeeUsername = String(payload.employeeUsername || '').trim();
+      if (!employeeUsername) throw new CreateError(400, 'Thiếu nhân viên cần phân công');
+      const employee = (appData?.users || []).find(u => u.username === employeeUsername);
+      if (!employee) throw new CreateError(404, 'Không tìm thấy tài khoản nhân viên này');
+      // Tiền đề bắt buộc — không tính được hạn Giai đoạn 1/2/3 nếu thiếu mốc ngày vào làm (xem baseline:
+      // startDate không tồn tại trên hồ sơ user trước Đợt 6, thêm mới ở form Quản Lý Người Dùng).
+      if (!employee.startDate) {
+        throw new CreateError(400, `Nhân viên "${employee.name}" chưa có Ngày Vào Làm Việc — vui lòng cập nhật hồ sơ nhân viên này ở Quản Lý Người Dùng trước khi phân công lộ trình đào tạo tân binh`);
+      }
+      const pathId = Number(payload.pathId);
+      const path = Number.isFinite(pathId) ? (appData?.onboardingPaths || []).find(p => p.id === pathId) : null;
+      if (!path) throw new CreateError(400, 'Lộ trình đào tạo tân binh được chọn không hợp lệ');
+      // 1 nhân viên chỉ được phân công 1 lần cho ĐÚNG 1 lộ trình — cho phép nhiều LỘ TRÌNH KHÁC NHAU
+      // cùng lúc (không chặn), cố tình dễ dãi đúng như baseline yêu cầu ("permissive, not a hard business
+      // rule to over-engineer"). Race 2 request phân công cùng cặp (employeeUsername, pathId) cùng lúc
+      // được chặn thêm ở tầng CSDL bằng getLockKey ở trên.
+      const dup = (collection || []).some(p => p.employeeUsername === employeeUsername && p.pathId === pathId);
+      if (dup) throw new CreateError(409, `Nhân viên "${employee.name}" đã được phân công lộ trình "${path.name}" từ trước rồi`);
+      payload.employeeUsername = employeeUsername;
+      payload.employeeName = employee.name;
+      payload.pathId = pathId;
+      payload.pathName = path.name;
+      payload.startDate = employee.startDate; // snapshot — xem giải thích ở comment đầu config này
+      payload.stage1Result = null; payload.stage1Score = null; payload.stage1SubmittedAt = null;
+      payload.stage2Result = null; payload.stage2Score = null; payload.stage2SubmittedAt = null;
+      payload.stage3Evaluation = null; payload.stage3EvaluatedBy = null; payload.stage3EvaluatedByName = null; payload.stage3EvaluatedAt = null; payload.stage3Note = '';
+      payload.certificateIssued = false; payload.certificateIssuedAt = null; payload.certificateIssuedBy = null;
+    }
+  },
   // Đăng ký lớp học — khớp đúng khuôn vppRegistrations (khoá theo cặp lớp+người để chặn race 2 request
   // đăng ký cùng lúc), chỉ khác: cho phép đăng ký lại sau khi tự HUỶ (result='CANCELLED', không phải chỉ
   // REJECTED) — huỷ ở đây do chính người đăng ký chủ động (không qua quy trình duyệt nào).
@@ -1887,6 +1955,37 @@ function normalizeTrainingPlanFields(payload, appData) {
   payload.plannedHours = toNonNegNum(payload.plannedHours);
 }
 
+// Chuẩn hoá + kiểm tra các field của 1 Lộ Trình Đào Tạo Tân Binh (onboardingPaths, Đợt 6) — dùng CHUNG
+// cho cả TẠO (extraValidate ở trên) LẪN SỬA (editOnboardingPath(), lib/recordActions.js), cùng lý do
+// tách riêng như normalizeTrainingPlanFields ở trên. test1Id/test2Id BẮT BUỘC phải trỏ tới 1
+// trainingTests có thật (khác courseId/testId TUỲ CHỌN ở trainingClasses — xem giải thích ở
+// CREATE_MODULE_CONFIGS.onboardingPaths phía trên: kết quả ĐẠT/KHÔNG ĐẠT của Giai đoạn 1/2 hoàn toàn
+// phụ thuộc đúng 1 bài test này). stage1DocumentIds/stage2DocumentIds chỉ lọc bỏ id không khớp
+// trainingDocuments có thật (rỗng vẫn hợp lệ — 1 lộ trình có thể chưa gắn tài liệu tham khảo nào).
+function normalizeOnboardingPathFields(payload, appData) {
+  if (!payload.name || !String(payload.name).trim()) throw new CreateError(400, 'Thiếu tên lộ trình đào tạo tân binh');
+  payload.name = String(payload.name).trim();
+
+  const tests = appData?.trainingTests || [];
+  const docs = appData?.trainingDocuments || [];
+  const toIdArray = (raw) => (Array.isArray(raw) ? [...new Set(raw.map(Number))].filter(Number.isFinite) : []);
+  const keepValidDocIds = (ids) => ids.filter(id => docs.some(d => d.id === id));
+  payload.stage1DocumentIds = keepValidDocIds(toIdArray(payload.stage1DocumentIds));
+  payload.stage2DocumentIds = keepValidDocIds(toIdArray(payload.stage2DocumentIds));
+
+  const resolveRequiredTestId = (raw, label) => {
+    const id = Number(raw);
+    if (!Number.isFinite(id) || !tests.some(t => t.id === id)) {
+      throw new CreateError(400, `Vui lòng chọn ${label} hợp lệ (bắt buộc — quyết định Đạt/Không đạt của giai đoạn)`);
+    }
+    return id;
+  };
+  payload.test1Id = resolveRequiredTestId(payload.test1Id, 'bài test Giai đoạn 1');
+  payload.test2Id = resolveRequiredTestId(payload.test2Id, 'bài test Giai đoạn 2');
+
+  payload.stage3Criteria = payload.stage3Criteria ? String(payload.stage3Criteria).trim().slice(0, 3000) : '';
+}
+
 module.exports = {
   CREATE_MODULE_CONFIGS, CreateError, validateAndPrepareCreate, scopeAllows, findMeetingConflict,
   OFFICE_SUBTYPE_TO_PERM_FLAG, normalizeReportEntryPayload,
@@ -1895,5 +1994,6 @@ module.exports = {
   sanitizeUniformItems,
   BUDGET_TYPE_OPTIONS, BUDGET_FIELD_TYPES, sanitizeBudgetLines, getBudgetTemplateCustomFields, sanitizeBudgetCustomFields,
   resolveTrainingInstructorUsername, normalizeInviteList,
-  normalizeTrainingPlanFields
+  normalizeTrainingPlanFields,
+  normalizeOnboardingPathFields
 };

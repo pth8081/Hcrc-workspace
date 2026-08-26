@@ -1758,6 +1758,7 @@ table { display: block; overflow-x: auto; max-width: 100%; }
         <button type="button" onclick="setTrainingLmsTab('MY_REGS')" id="btnTrainingLmsMyRegs" class="px-3 py-1 rounded text-xs font-bold bg-gray-200 text-gray-700">📝 Đăng Ký Của Tôi</button>
         <button type="button" onclick="setTrainingLmsTab('DOCS')" id="btnTrainingLmsDocs" class="px-3 py-1 rounded text-xs font-bold bg-gray-200 text-gray-700">📁 Kho Tài Liệu</button>
         <button type="button" onclick="setTrainingLmsTab('PATHS')" id="btnTrainingLmsPaths" class="px-3 py-1 rounded text-xs font-bold bg-gray-200 text-gray-700">🪜 Lộ Trình Thăng Tiến</button>
+        <button type="button" onclick="setTrainingLmsTab('ONBOARDING')" id="btnTrainingLmsOnboarding" class="px-3 py-1 rounded text-xs font-bold bg-gray-200 text-gray-700">🆕 Đào Tạo Tân Binh</button>
         <button type="button" onclick="setTrainingLmsTab('TESTS')" id="btnTrainingLmsTests" class="px-3 py-1 rounded text-xs font-bold bg-gray-200 text-gray-700">🧪 Ngân Hàng Câu Hỏi</button>
       </div>
 
@@ -2100,6 +2101,106 @@ table { display: block; overflow-x: auto; max-width: 100%; }
           <h3 class="font-bold text-gray-800">🪜 Danh Sách Lộ Trình Thăng Tiến</h3>
           <div id="careerPathsContainer" class="space-y-3"></div>
           <div id="paginationContainer_careerPaths"></div>
+        </div>
+      </div>
+
+      <!-- ĐÀO TẠO TÂN BINH (Đợt 6) — onboardingPaths (catalog "Lộ Trình" tái sử dụng) + onboardingProgress
+           (1 dòng/1 nhân viên được phân công, theo dõi 3 Giai đoạn). Hạn Giai đoạn 1/2/3 tính SỐNG từ
+           progress.startDate (đã snapshot lúc phân công, xem lib/createValidation.js) — KHÔNG lưu deadline,
+           cùng tinh thần trainingPlans/sessionState đã có. 4 khối hiện/ẩn ĐỘC LẬP theo quyền (xem
+           renderOnboardingTab()): Quản lý Lộ Trình + Phân Công (trainingManage/admin), Lộ Trình Của Tôi
+           (bất kỳ ai có 1 dòng onboardingProgress được gán), Đánh Giá Giai đoạn 3 (onboardingEvaluate,
+           đúng phòng ban/siêu thị — mirror uniformStoreManage/item.dept). -->
+      <div id="trainingLmsOnboardingPanel" class="hidden space-y-5">
+        <datalist id="onboardingEmployeesDatalist"></datalist>
+
+        <!-- Khối 1: Quản lý danh mục Lộ Trình (trainingManage/admin) -->
+        <div class="bg-white p-3 rounded border text-xs space-y-3">
+          <h4 class="font-bold text-gray-700">🆕 Quản Lý Lộ Trình Đào Tạo Tân Binh</h4>
+          <form id="onboardingPathForm" onsubmit="submitOnboardingPath(event)" class="hidden space-y-3">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <div class="md:col-span-2">
+                <label class="block font-semibold text-gray-600 mb-1">Tên Lộ Trình</label>
+                <input id="opName" class="w-full border p-1.5 rounded" required>
+              </div>
+              <div>
+                <label class="block font-semibold text-gray-600 mb-1">Nội Dung Giai Đoạn 1 (Ngày 1-7, giữ Ctrl/Cmd để chọn nhiều)</label>
+                <select id="opStage1DocumentIds" multiple size="5" class="w-full border p-1.5 rounded bg-white"></select>
+              </div>
+              <div>
+                <label class="block font-semibold text-gray-600 mb-1">Bài Test Giai Đoạn 1 (bắt buộc)</label>
+                <select id="opTest1Id" class="w-full border p-1.5 rounded bg-white" required></select>
+              </div>
+              <div>
+                <label class="block font-semibold text-gray-600 mb-1">Nội Dung Giai Đoạn 2 (Ngày 8-21, giữ Ctrl/Cmd để chọn nhiều)</label>
+                <select id="opStage2DocumentIds" multiple size="5" class="w-full border p-1.5 rounded bg-white"></select>
+              </div>
+              <div>
+                <label class="block font-semibold text-gray-600 mb-1">Bài Test Giai Đoạn 2 (bắt buộc)</label>
+                <select id="opTest2Id" class="w-full border p-1.5 rounded bg-white" required></select>
+              </div>
+              <div class="md:col-span-2">
+                <label class="block font-semibold text-gray-600 mb-1">Tiêu Chí Đánh Giá Giai Đoạn 3 (Ngày 59, quản lý trực tiếp đánh giá — không có bài test)</label>
+                <textarea id="opStage3Criteria" class="w-full border p-1.5 rounded h-20" placeholder="VD: Thái độ làm việc, mức độ nắm quy trình, khả năng xử lý tình huống thực tế..."></textarea>
+              </div>
+            </div>
+            <div class="flex justify-end gap-2">
+              <button type="button" id="opCancelEditBtn" onclick="cancelEditOnboardingPath()" class="hidden bg-gray-200 text-gray-700 px-4 py-2 rounded font-bold hover:bg-gray-300">Hủy Sửa</button>
+              <button type="submit" id="opSubmitBtn" class="bg-emerald-600 text-white px-5 py-2 rounded font-bold hover:bg-emerald-700">Tạo Lộ Trình</button>
+            </div>
+          </form>
+          <p id="onboardingPathNoPermNote" class="hidden text-gray-500 italic bg-gray-50 border rounded p-3">⛔ Bạn không có quyền quản lý lộ trình đào tạo tân binh — chỉ có thể xem lộ trình của chính mình (nếu được phân công).</p>
+          <div class="overflow-x-auto">
+            <table class="w-full border-collapse border text-xs bg-white">
+              <thead><tr class="bg-gray-100 text-left text-gray-700">
+                <th class="border p-2">Tên Lộ Trình</th><th class="border p-2">GĐ1: Tài Liệu/Test</th><th class="border p-2">GĐ2: Tài Liệu/Test</th>
+                <th class="border p-2">Tiêu Chí GĐ3</th><th class="border p-2 text-center min-w-[120px]">Thao Tác</th>
+              </tr></thead>
+              <tbody id="onboardingPathsTableBody"></tbody>
+            </table>
+          </div>
+          <div id="paginationContainer_onboardingPaths"></div>
+        </div>
+
+        <!-- Khối 2: Phân Công (trainingManage/admin) -->
+        <div class="bg-emerald-50 p-3 rounded border border-emerald-200 text-xs space-y-3">
+          <h4 class="font-bold text-emerald-900">📋 Phân Công Lộ Trình Cho Nhân Viên Mới</h4>
+          <div id="onboardingAssignForm" class="hidden flex flex-wrap items-end gap-2">
+            <div class="flex-1 min-w-[200px]">
+              <label class="block font-semibold text-gray-600 mb-1">Nhân Viên</label>
+              <input id="oaEmployeeInput" list="onboardingEmployeesDatalist" oninput="resolveOnboardingEmployeeInput()" placeholder="Gõ tên hoặc tài khoản để tìm..." class="w-full border p-1.5 rounded bg-white">
+              <input type="hidden" id="oaEmployeeUsername">
+            </div>
+            <div class="flex-1 min-w-[200px]">
+              <label class="block font-semibold text-gray-600 mb-1">Lộ Trình</label>
+              <select id="oaPathId" class="w-full border p-1.5 rounded bg-white"></select>
+            </div>
+            <button type="button" onclick="submitOnboardingAssignment()" class="bg-emerald-600 text-white px-4 py-1.5 rounded font-bold hover:bg-emerald-700">Phân Công</button>
+          </div>
+          <p id="onboardingAssignNoPermNote" class="hidden text-gray-500 italic bg-white border rounded p-3">⛔ Bạn không có quyền phân công lộ trình đào tạo tân binh.</p>
+          <div class="overflow-x-auto">
+            <table class="w-full border-collapse border text-xs bg-white">
+              <thead><tr class="bg-gray-100 text-left text-gray-700">
+                <th class="border p-2">Nhân Viên</th><th class="border p-2">Lộ Trình</th><th class="border p-2">Ngày Vào Làm</th>
+                <th class="border p-2 text-center">Giai Đoạn 1</th><th class="border p-2 text-center">Giai Đoạn 2</th><th class="border p-2 text-center">Giai Đoạn 3</th>
+                <th class="border p-2 text-center">Chứng Chỉ</th><th class="border p-2 text-center">Thao Tác</th>
+              </tr></thead>
+              <tbody id="onboardingProgressTableBody"></tbody>
+            </table>
+          </div>
+          <div id="paginationContainer_onboardingProgress"></div>
+        </div>
+
+        <!-- Khối 3: Lộ Trình Tân Binh Của Tôi (bất kỳ ai được phân công) -->
+        <div id="myOnboardingSection" class="hidden bg-indigo-50 p-3 rounded border border-indigo-200 space-y-3">
+          <h4 class="font-bold text-indigo-900 text-sm">🎒 Lộ Trình Tân Binh Của Tôi</h4>
+          <div id="myOnboardingContainer" class="space-y-3"></div>
+        </div>
+
+        <!-- Khối 4: Đánh Giá Giai Đoạn 3 (onboardingEvaluate, đúng phòng ban/siêu thị) -->
+        <div id="onboardingStage3Section" class="hidden bg-amber-50 p-3 rounded border border-amber-200 space-y-3">
+          <h4 class="font-bold text-amber-900 text-sm">🧑‍🏫 Đánh Giá Giai Đoạn 3 (Nhân Viên Đơn Vị Của Bạn)</h4>
+          <div id="onboardingStage3QueueContainer" class="space-y-3"></div>
         </div>
       </div>
 
@@ -3835,6 +3936,14 @@ table { display: block; overflow-x: auto; max-width: 100%; }
             <label class="block text-xs font-semibold text-gray-600 mb-1">Chức Danh</label>
             <select id="uJobTitle" class="w-full border p-1.5 rounded text-xs"></select>
           </div>
+          <div>
+            <!-- Ngày Vào Làm Việc (Đào Tạo Tân Binh Đợt 6) — mốc DUY NHẤT để tính hạn Giai đoạn 1/2/3
+                 (onboardingProgress.startDate SNAPSHOT giá trị này lúc phân công, không đọc sống lại —
+                 xem lib/createValidation.js). Để trống hợp lệ — chỉ chặn ở bước PHÂN CÔNG lộ trình tân
+                 binh cho nhân viên chưa có ngày này (server báo lỗi rõ ràng). -->
+            <label class="block text-xs font-semibold text-gray-600 mb-1">Ngày Vào Làm Việc</label>
+            <input id="uStartDate" type="date" class="w-full border p-1.5 rounded text-xs">
+          </div>
         </div>
 
         <div class="bg-white p-3 rounded border">
@@ -4445,13 +4554,16 @@ table { display: block; overflow-x: auto; max-width: 100%; }
             <span id="permTreeBadge_training" class="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-gray-100 text-gray-500">0/0</span>
           </summary>
           <div class="p-3 pt-0 space-y-2">
-            <p class="text-[11px] text-gray-500 italic">"Quản lý Đào Tạo" = toàn quyền: đăng bài Đào tạo (Truyền Thông Nội Bộ), tạo/sửa lớp học bất kỳ, quản lý Kho Tài Liệu/Ngân Hàng Câu Hỏi/Lộ Trình Thăng Tiến, quản lý danh sách học viên + kết quả của MỌI lớp. "Giảng viên (theo lớp được gán)" KHÔNG tạo lớp mới được — chỉ quản lý danh sách học viên/kết quả/nội dung của ĐÚNG (các) lớp mà họ được gán làm Giảng Viên khi tạo/sửa lớp (ô "Giảng Viên / Người Phụ Trách"), không đụng được lớp của giảng viên khác. 2 quyền độc lập, có thể bật cả hai.</p>
+            <p class="text-[11px] text-gray-500 italic">"Quản lý Đào Tạo" = toàn quyền: đăng bài Đào tạo (Truyền Thông Nội Bộ), tạo/sửa lớp học bất kỳ, quản lý Kho Tài Liệu/Ngân Hàng Câu Hỏi/Lộ Trình Thăng Tiến, quản lý danh sách học viên + kết quả của MỌI lớp — bao gồm cả Lộ Trình/Phân Công Đào Tạo Tân Binh + cấp Chứng Chỉ Hoàn Thành. "Giảng viên (theo lớp được gán)" KHÔNG tạo lớp mới được — chỉ quản lý danh sách học viên/kết quả/nội dung của ĐÚNG (các) lớp mà họ được gán làm Giảng Viên khi tạo/sửa lớp (ô "Giảng Viên / Người Phụ Trách"), không đụng được lớp của giảng viên khác. "Đánh Giá Tân Binh (Giai đoạn 3)" là quyền RIÊNG cho quản lý trực tiếp — CHỈ đánh giá được nhân viên CÙNG phòng ban/siêu thị với mình (không quản lý được toàn bộ Đào Tạo Tân Binh như trainingManage). 3 quyền độc lập, có thể bật nhiều quyền cùng lúc.</p>
             <div class="grid grid-cols-1 md:grid-cols-2 gap-2">
               <label class="flex items-center gap-2 text-emerald-700 font-semibold cursor-pointer">
                 <input type="checkbox" id="pTrainingManage"> 🎓 Quản lý Đào Tạo (toàn quyền)
               </label>
               <label class="flex items-center gap-2 text-teal-700 font-semibold cursor-pointer">
                 <input type="checkbox" id="pTrainingInstruct"> 👨‍🏫 Giảng viên (theo lớp được gán)
+              </label>
+              <label class="flex items-center gap-2 text-amber-700 font-semibold cursor-pointer">
+                <input type="checkbox" id="pOnboardingEvaluate"> 🆕 Đánh Giá Tân Binh (Giai đoạn 3, theo đơn vị)
               </label>
             </div>
           </div>
@@ -5822,6 +5934,7 @@ const DB = {
   trainingCategories: [], trainingDocuments: [], trainingClasses: [], trainingRegistrations: [],
   careerPaths: [], careerPathConfirmations: [],
   trainingTests: [], trainingTestSubmissions: [], trainingCourses: [], trainingPlans: [],
+  onboardingPaths: [], onboardingProgress: [],
   recruitmentJobs: [], recruitmentReferrals: [],
   sensitiveKeywords: [],
   paymentRequests: [],
@@ -7153,7 +7266,7 @@ function defaultNewUserPerms() {
     canBeApprover: false,
     canViewReports: false,
     internalNewsCreate: false, internalRecruitmentCreate: false,
-    trainingManage: false, trainingInstruct: false,
+    trainingManage: false, trainingInstruct: false, onboardingEvaluate: false,
     internalPostApprove: false,
     uploadAll: false, uploadDepts: [],
     viewDraftAll: false, viewDraftDepts: [],
@@ -20689,6 +20802,7 @@ function collectPermsFromForm() {
     internalRecruitmentCreate: document.getElementById('pInternalRecruitmentCreate').checked,
     trainingManage: document.getElementById('pTrainingManage').checked,
     trainingInstruct: document.getElementById('pTrainingInstruct').checked,
+    onboardingEvaluate: document.getElementById('pOnboardingEvaluate').checked,
     internalPostApprove: document.getElementById('pInternalPostApprove').checked,
     meetingApprove: document.getElementById('pMeetingApprove').checked,
     meetingCancel: document.getElementById('pMeetingCancel').checked,
@@ -20762,6 +20876,7 @@ function populatePermsForm(permsInput) {
   document.getElementById('pInternalRecruitmentCreate').checked = !!perms.internalRecruitmentCreate;
   document.getElementById('pTrainingManage').checked = !!perms.trainingManage;
   document.getElementById('pTrainingInstruct').checked = !!perms.trainingInstruct;
+  document.getElementById('pOnboardingEvaluate').checked = !!perms.onboardingEvaluate;
   document.getElementById('pInternalPostApprove').checked = !!perms.internalPostApprove;
   document.getElementById('pMeetingApprove').checked = !!perms.meetingApprove;
   document.getElementById('pMeetingCancel').checked = !!perms.meetingCancel;
@@ -23124,6 +23239,7 @@ function readUserFormState() {
   const dept = posType === 'STORE' ? document.getElementById('uStore').value : document.getElementById('uDept').value;
   if (!dept) { alert(posType === 'STORE' ? 'Vui lòng chọn Siêu Thị!' : 'Vui lòng chọn Phòng Ban!'); return null; }
   const jobTitle = document.getElementById('uJobTitle').value || null;
+  const startDate = document.getElementById('uStartDate').value || '';
   const groupIds = currentEditingUserGroupIds();
   const vppExcludeGroupIds = currentEditingUserVppExcludeGroupIds();
 
@@ -23146,20 +23262,20 @@ function readUserFormState() {
     return null;
   }
 
-  return { editId, username, pass, pin, name, email, phone, posType, dept, jobTitle, groupIds, vppExcludeGroupIds, perms, permOverrides };
+  return { editId, username, pass, pin, name, email, phone, posType, dept, jobTitle, startDate, groupIds, vppExcludeGroupIds, perms, permOverrides };
 }
 
 // Dựng 1 bản ghi người dùng MỚI từ state đã đọc — dùng chung cho lưu ngay (saveUser()) lẫn thêm vào
 // danh sách chờ (addUserToStagingList()). Kiểm tra trùng username với CẢ DB.users lẫn danh sách chờ
 // hiện tại (tránh 2 người trong cùng danh sách trùng tên đăng nhập nhau).
 function buildNewUserFromState(state) {
-  const { username, pass, pin, name, email, phone, posType, dept, jobTitle, groupIds, vppExcludeGroupIds, perms, permOverrides } = state;
+  const { username, pass, pin, name, email, phone, posType, dept, jobTitle, startDate, groupIds, vppExcludeGroupIds, perms, permOverrides } = state;
   if (!pass) { alert('Vui lòng nhập mật khẩu cho người dùng mới!'); return null; }
   if (DB.users.some(u => u.username === username)) { alert('Tên đăng nhập đã tồn tại!'); return null; }
   if (pendingNewUsers.some(u => u.username === username)) { alert('Tên đăng nhập đã có trong danh sách chờ lưu!'); return null; }
   return {
     id: Date.now() + pendingNewUsers.length,
-    username, pass, ...(pin && { pin }), name, email, phone, posType, dept, jobTitle, perms, groupIds, vppExcludeGroupIds, permOverrides
+    username, pass, ...(pin && { pin }), name, email, phone, posType, dept, jobTitle, startDate, perms, groupIds, vppExcludeGroupIds, permOverrides
   };
 }
 
@@ -23169,7 +23285,7 @@ async function saveUser(e) {
 
   const state = readUserFormState();
   if (!state) return;
-  const { editId, username, pass, pin, name, email, phone, posType, dept, jobTitle, groupIds, vppExcludeGroupIds, perms, permOverrides } = state;
+  const { editId, username, pass, pin, name, email, phone, posType, dept, jobTitle, startDate, groupIds, vppExcludeGroupIds, perms, permOverrides } = state;
 
   // Chụp lại nguyên trạng DB.users TRƯỚC khi sửa trực tiếp trong mảng bên dưới — nếu server từ chối
   // lưu (409/400), phục hồi lại đúng bằng bản chụp này rồi render lại, tránh để "user"/DB.users bị sửa
@@ -23191,6 +23307,7 @@ async function saveUser(e) {
       user.posType = posType;
       user.dept = dept;
       user.jobTitle = jobTitle;
+      user.startDate = startDate;
       // Tài khoản "admin" luôn toàn quyền, không cho sửa qua form (khối cây phân quyền đã bị khoá ở
       // editUser() khi mở form sửa đúng tài khoản này) — ép lại đây phòng trường hợp form vẫn đọc được
       // giá trị khác đi (vd DevTools bỏ qua thuộc tính disabled); server cũng ép lại lần nữa khi ghi
@@ -23295,6 +23412,7 @@ function editPendingNewUser(idx) {
   if (inferredPosType === 'STORE') document.getElementById('uStore').value = u.dept;
   else document.getElementById('uDept').value = u.dept;
   document.getElementById('uJobTitle').value = u.jobTitle || '';
+  document.getElementById('uStartDate').value = u.startDate || '';
   renderUPermGroupsChecklist(u.groupIds || []);
   populatePermsForm(u.perms);
   document.getElementById('uPin').value = u.pin || '';
@@ -23344,6 +23462,7 @@ function resetUserForm() {
   document.getElementById('uPosType').value = 'HO';
   onUserPosTypeChange();
   document.getElementById('uJobTitle').value = '';
+  document.getElementById('uStartDate').value = '';
   renderUPermGroupsChecklist([]);
   updatePermGroupNote(false);
   renderUVppExcludeGroupsChecklist([]);
@@ -23365,6 +23484,7 @@ function resetUserForm() {
   document.getElementById('pInternalRecruitmentCreate').checked = !!defaults.internalRecruitmentCreate;
   document.getElementById('pTrainingManage').checked = !!defaults.trainingManage;
   document.getElementById('pTrainingInstruct').checked = !!defaults.trainingInstruct;
+  document.getElementById('pOnboardingEvaluate').checked = !!defaults.onboardingEvaluate;
   document.getElementById('pInternalPostApprove').checked = !!defaults.internalPostApprove;
   document.getElementById('pContractApprove').checked = !!defaults.contractApprove;
   document.getElementById('pPaymentManage').checked = !!defaults.paymentManage;
@@ -23444,6 +23564,7 @@ function editUser(id) {
   if (inferredPosType === 'STORE') document.getElementById('uStore').value = user.dept;
   else document.getElementById('uDept').value = user.dept;
   document.getElementById('uJobTitle').value = user.jobTitle || '';
+  document.getElementById('uStartDate').value = user.startDate || '';
   // User cũ chưa từng có groupIds (tạo trước khi có tính năng multi-select, chỉ có groupId đơn) — quy
   // đổi tạm sang mảng 1 phần tử để form luôn hiển thị đúng (initDatabase() đã tự động di trú DB.users
   // khi tải dữ liệu, đây chỉ là lớp phòng vệ bổ sung).
@@ -23531,6 +23652,7 @@ function summarizeUserPerms(perms) {
   if (perms.internalPostApprove) parts.push('📣 Truyền thông (duyệt Góc chia sẻ)');
   if (perms.trainingManage) parts.push('🎓 Đào Tạo (quản lý toàn bộ)');
   else if (perms.trainingInstruct) parts.push('🎓 Đào Tạo (giảng viên lớp được gán)');
+  if (perms.onboardingEvaluate && !perms.trainingManage) parts.push('🆕 Đánh Giá Tân Binh (đơn vị mình)');
   return parts.length ? parts.join(', ') : '<span class="text-gray-400 italic">Chưa cấp quyền module nào</span>';
 }
 
@@ -26294,8 +26416,8 @@ function setTrainingLmsTab(tab) {
   // Reset trang về 1 khi đổi tab con — mỗi tab có moduleKey phân trang riêng (trainingClasses/
   // trainingCourses/trainingPlans/trainingMyRegs/trainingDocuments/careerPaths/trainingTests), tránh
   // giữ lại trang sâu của tab trước.
-  ['trainingClasses', 'trainingCourses', 'trainingPlans', 'trainingMyRegs', 'trainingDocuments', 'careerPaths', 'trainingTests'].forEach(resetListPage);
-  const btnMap = { CLASSES: 'btnTrainingLmsClasses', COURSES: 'btnTrainingLmsCourses', PLANS: 'btnTrainingLmsPlans', MY_REGS: 'btnTrainingLmsMyRegs', DOCS: 'btnTrainingLmsDocs', PATHS: 'btnTrainingLmsPaths', TESTS: 'btnTrainingLmsTests' };
+  ['trainingClasses', 'trainingCourses', 'trainingPlans', 'trainingMyRegs', 'trainingDocuments', 'careerPaths', 'onboardingPaths', 'onboardingProgress', 'trainingTests'].forEach(resetListPage);
+  const btnMap = { CLASSES: 'btnTrainingLmsClasses', COURSES: 'btnTrainingLmsCourses', PLANS: 'btnTrainingLmsPlans', MY_REGS: 'btnTrainingLmsMyRegs', DOCS: 'btnTrainingLmsDocs', PATHS: 'btnTrainingLmsPaths', ONBOARDING: 'btnTrainingLmsOnboarding', TESTS: 'btnTrainingLmsTests' };
   Object.entries(btnMap).forEach(([key, btnId]) => {
     const btn = document.getElementById(btnId);
     if (btn) btn.className = key === tab ? 'px-3 py-1 rounded text-xs font-bold bg-emerald-700 text-white' : 'px-3 py-1 rounded text-xs font-bold bg-gray-200 text-gray-700';
@@ -26306,6 +26428,7 @@ function setTrainingLmsTab(tab) {
   document.getElementById('trainingLmsMyRegsPanel').classList.toggle('hidden', tab !== 'MY_REGS');
   document.getElementById('trainingLmsDocsPanel').classList.toggle('hidden', tab !== 'DOCS');
   document.getElementById('trainingLmsPathsPanel').classList.toggle('hidden', tab !== 'PATHS');
+  document.getElementById('trainingLmsOnboardingPanel').classList.toggle('hidden', tab !== 'ONBOARDING');
   document.getElementById('trainingLmsTestsPanel').classList.toggle('hidden', tab !== 'TESTS');
   renderTrainingLms();
 }
@@ -26402,6 +26525,13 @@ function renderTrainingLms() {
   document.getElementById('careerPathNoPermNote').classList.toggle('hidden', canManage);
   document.getElementById('trainingTestForm').classList.toggle('hidden', !canManage);
   document.getElementById('trainingTestNoPermNote').classList.toggle('hidden', canManage);
+  // Đào Tạo Tân Binh (Đợt 6) — Khối 1/2 (quản lý danh mục Lộ Trình + Phân Công) CHỈ trainingManage/admin
+  // như mọi catalog khác ở trên; Khối 3 (Lộ Trình Của Tôi)/Khối 4 (Đánh Giá GĐ3) có điều kiện hiện riêng,
+  // không đi theo canManage — xem renderOnboardingLms().
+  document.getElementById('onboardingPathForm').classList.toggle('hidden', !canManage);
+  document.getElementById('onboardingPathNoPermNote').classList.toggle('hidden', canManage);
+  document.getElementById('onboardingAssignForm').classList.toggle('hidden', !canManage);
+  document.getElementById('onboardingAssignNoPermNote').classList.toggle('hidden', canManage);
   renderTrainingInviteListStagedList();
 
   if (activeTrainingLmsTab === 'CLASSES') renderTrainingClasses();
@@ -26410,6 +26540,7 @@ function renderTrainingLms() {
   else if (activeTrainingLmsTab === 'MY_REGS') renderTrainingMyRegs();
   else if (activeTrainingLmsTab === 'DOCS') renderTrainingDocuments();
   else if (activeTrainingLmsTab === 'PATHS') renderCareerPaths();
+  else if (activeTrainingLmsTab === 'ONBOARDING') renderOnboardingLms();
   else if (activeTrainingLmsTab === 'TESTS') renderTrainingTests();
 }
 
@@ -27629,6 +27760,13 @@ let ttTakeIndex = 0;
 let ttTakeSecondsPerQuestion = 120;
 let ttTakeSecondsLeft = 0;
 let ttTakeTimerHandle = null;
+// Đào Tạo Tân Binh (Đợt 6) — TÁI SỬ DỤNG nguyên modal/luồng làm bài (ttTakeQuestions/ttTakeAnswers/
+// ttTakeRenderQuestion/ttTakeGoNext...) thay vì dựng modal riêng, chỉ rẽ nhánh Ở BƯỚC NỘP BÀI CUỐI CÙNG
+// (ttTakeSubmit()) vì bài test ở đây KHÔNG gắn với 1 trainingClasses nào — 'CLASS' (mặc định, giữ
+// nguyên hành vi cũ) hay 'ONBOARDING' (xem openOnboardingStageTestModal()/ttTakeSubmitOnboarding() ở
+// phần "ĐÀO TẠO TÂN BINH" bên dưới).
+let ttTakeMode = 'CLASS';
+let ttTakeOnboardingCtx = null; // { progressId, stage } khi ttTakeMode === 'ONBOARDING'
 
 // Đảo câu hỏi + đáp án (Đợt 4) — trả về 1 BẢN SAO đã xáo trộn thứ tự phần tử (Fisher-Yates), KHÔNG bao
 // giờ sửa mảng gốc truyền vào (test.questions/q.options vẫn nguyên vẹn thứ tự lưu ở DB.trainingTests).
@@ -27647,6 +27785,8 @@ function openTakeTestModal(classId) {
   const test = DB.trainingTests.find(t => t.id === cls.testId);
   if (!test || !Array.isArray(test.questions) || !test.questions.length) return alert('Không tìm thấy nội dung bài test.');
   clearInterval(ttTakeTimerHandle);
+  ttTakeMode = 'CLASS';
+  ttTakeOnboardingCtx = null;
   ttTakeClassId = classId;
   // Đảo cả thứ tự câu hỏi lẫn thứ tự đáp án trong từng câu — mỗi lượt mở modal (kể cả làm lại) xáo trộn
   // lại từ đầu, dùng ĐÚNG bản sao (test.questions ở DB.trainingTests không bị đụng tới). Vẫn giữ nguyên
@@ -27721,6 +27861,9 @@ async function ttTakeGoNext() {
 
 async function ttTakeSubmit() {
   const answers = ttTakeQuestions.map(q => ({ questionId: q.id, selectedOptionIds: ttTakeAnswers[q.id] || [] }));
+  // Đào Tạo Tân Binh (Đợt 6) — rẽ nhánh SANG hẳn 1 route/luồng khác (submitOnboardingStageTest(), không
+  // gắn với trainingClasses) — xem ttTakeMode ở đầu phần LÀM BÀI TEST.
+  if (ttTakeMode === 'ONBOARDING') return ttTakeSubmitOnboarding(answers);
   let result;
   try {
     result = await callRecordAction('trainingClasses', ttTakeClassId, 'submit-test', { answers });
@@ -27967,6 +28110,473 @@ function deleteCareerPath(id) {
     logSystemAction('INTERNAL', 'DELETE_CAREER_PATH', `Xóa lộ trình thăng tiến [id ${id}]`, 'SUCCESS');
     renderCareerPaths();
   }).catch(err => alert(`⛔ ${err.message}`));
+}
+
+// ---------- ĐÀO TẠO TÂN BINH (Đợt 6) ----------
+// Hạn Giai đoạn 1 (Ngày 1-7)/2 (Ngày 8-21)/3 (mốc Ngày 59, không phải khoảng) tính SỐNG từ
+// progress.startDate (đã snapshot lúc phân công — KHÔNG đọc lại user.startDate) mỗi lần render, cùng
+// tinh thần "không lưu cái tính được" của sessionState/"Sắp hết hạn" tuyển dụng đã có sẵn trong app.
+const ONBOARDING_STAGE1_DAYS = 7, ONBOARDING_STAGE2_DAYS = 21, ONBOARDING_STAGE3_DAYS = 59;
+const ONBOARDING_DUE_SOON_DAYS = 2; // còn <= 2 ngày tới hạn -> "Sắp đến hạn"
+
+function onboardingAddDays(dateStr, days) {
+  const d = new Date(`${dateStr}T00:00:00`);
+  d.setDate(d.getDate() + days);
+  return d;
+}
+function onboardingMilestoneStatus(deadline, isDone) {
+  if (isDone) return { key: 'DONE', label: 'Hoàn thành' };
+  const daysLeft = (deadline.getTime() - Date.now()) / 86400000;
+  if (daysLeft < 0) return { key: 'OVERDUE', label: 'Quá hạn' };
+  if (daysLeft <= ONBOARDING_DUE_SOON_DAYS) return { key: 'DUE_SOON', label: 'Sắp đến hạn' };
+  return { key: 'NOT_DUE', label: 'Chưa đến hạn' };
+}
+// Trả về null nếu progress không có startDate hợp lệ (hồ sơ lẽ ra không thể tồn tại — server đã chặn
+// tạo mới khi nhân viên chưa có startDate — nhưng vẫn phòng vệ ở đây cho chắc).
+function computeOnboardingMilestones(progress) {
+  if (!progress?.startDate) return null;
+  const stage1Deadline = onboardingAddDays(progress.startDate, ONBOARDING_STAGE1_DAYS);
+  const stage2Deadline = onboardingAddDays(progress.startDate, ONBOARDING_STAGE2_DAYS);
+  const stage3Deadline = onboardingAddDays(progress.startDate, ONBOARDING_STAGE3_DAYS);
+  return {
+    stage1: { deadline: stage1Deadline, status: onboardingMilestoneStatus(stage1Deadline, progress.stage1Result != null) },
+    stage2: { deadline: stage2Deadline, status: onboardingMilestoneStatus(stage2Deadline, progress.stage2Result != null) },
+    stage3: { deadline: stage3Deadline, status: onboardingMilestoneStatus(stage3Deadline, progress.stage3Evaluation != null) }
+  };
+}
+const ONBOARDING_STATUS_BADGE_CLASS = { OVERDUE: 'bg-red-100 text-red-700', DUE_SOON: 'bg-amber-100 text-amber-700', NOT_DUE: 'bg-gray-100 text-gray-600' };
+// Badge hiển thị cho 1 giai đoạn (1/2/3) — nếu đã có kết quả thì ưu tiên hiện Đạt/Không đạt (màu rõ ràng
+// hơn hẳn nhãn "Hoàn thành" trung tính), chưa có kết quả thì hiện nhãn hạn tính sống ở trên.
+function onboardingStageBadgeHTML(stageNum, progress, milestones) {
+  const resultField = stageNum === 3 ? 'stage3Evaluation' : `stage${stageNum}Result`;
+  const result = progress[resultField];
+  const m = milestones ? milestones[`stage${stageNum}`] : null;
+  let resultHTML;
+  if (result === 'PASSED') resultHTML = `<span class="text-emerald-700 font-bold">✅ Đạt</span>`;
+  else if (result === 'FAILED') resultHTML = `<span class="text-red-600 font-bold">❌ Không đạt</span>`;
+  else {
+    const cls = m ? (ONBOARDING_STATUS_BADGE_CLASS[m.status.key] || 'bg-gray-100 text-gray-600') : 'bg-gray-100 text-gray-600';
+    resultHTML = `<span class="text-[11px] px-1.5 py-0.5 rounded font-bold ${cls}">${m ? m.status.label : ''}</span>`;
+  }
+  const dateLabel = m ? m.deadline.toLocaleDateString('vi-VN') : '';
+  return `<div>${resultHTML}</div><div class="text-[10px] text-gray-400">Hạn: ${dateLabel}</div>`;
+}
+
+// ---- Quản Lý Danh Mục Lộ Trình (Khối 1) ----
+let editingOnboardingPathId = null;
+
+function populateOnboardingPathSelects() {
+  const docOpts = DB.trainingDocuments.slice().sort((a, b) => b.id - a.id)
+    .map(d => `<option value="${d.id}">${escapeHtml(d.category)} — ${escapeHtml(d.title)}</option>`).join('');
+  const s1 = document.getElementById('opStage1DocumentIds'); if (s1) s1.innerHTML = docOpts || `<option value="" disabled>-- Kho tài liệu đang trống --</option>`;
+  const s2 = document.getElementById('opStage2DocumentIds'); if (s2) s2.innerHTML = docOpts || `<option value="" disabled>-- Kho tài liệu đang trống --</option>`;
+  const testOpts = DB.trainingTests.slice().sort((a, b) => b.id - a.id)
+    .map(t => `<option value="${t.id}">${escapeHtml(t.title)} (${t.questions.length} câu)</option>`).join('');
+  const t1 = document.getElementById('opTest1Id'); if (t1) t1.innerHTML = `<option value="">-- Chọn bài test --</option>` + testOpts;
+  const t2 = document.getElementById('opTest2Id'); if (t2) t2.innerHTML = `<option value="">-- Chọn bài test --</option>` + testOpts;
+
+  const pathOpts = DB.onboardingPaths.slice().sort((a, b) => b.id - a.id)
+    .map(p => `<option value="${p.id}">${escapeHtml(p.name)}</option>`).join('');
+  const oaSel = document.getElementById('oaPathId'); if (oaSel) oaSel.innerHTML = pathOpts || `<option value="" disabled>-- Chưa có lộ trình nào, tạo ở khối trên --</option>`;
+}
+
+async function submitOnboardingPath(e) {
+  e.preventDefault();
+  if (!canManageTrainingLocal(currentUser)) return alert('⛔ Bạn không có quyền quản lý lộ trình đào tạo tân binh!');
+  const payload = {
+    name: document.getElementById('opName').value.trim(),
+    stage1DocumentIds: [...document.getElementById('opStage1DocumentIds').selectedOptions].map(o => Number(o.value)),
+    test1Id: document.getElementById('opTest1Id').value,
+    stage2DocumentIds: [...document.getElementById('opStage2DocumentIds').selectedOptions].map(o => Number(o.value)),
+    test2Id: document.getElementById('opTest2Id').value,
+    stage3Criteria: document.getElementById('opStage3Criteria').value.trim()
+  };
+  try {
+    if (editingOnboardingPathId) {
+      const result = await callRecordAction('onboardingPaths', editingOnboardingPathId, 'edit', payload);
+      const idx = DB.onboardingPaths.findIndex(p => p.id === editingOnboardingPathId);
+      if (idx !== -1) DB.onboardingPaths[idx] = result.item;
+      logSystemAction('INTERNAL', 'EDIT_ONBOARDING_PATH', `Sửa lộ trình đào tạo tân binh [${result.item.name}]`, 'SUCCESS');
+      alert('✅ Đã cập nhật lộ trình đào tạo tân binh!');
+      cancelEditOnboardingPath();
+    } else {
+      const result = await callCreateAction('onboardingPaths', payload);
+      DB.onboardingPaths.unshift(result.item);
+      logSystemAction('INTERNAL', 'CREATE_ONBOARDING_PATH', `Tạo lộ trình đào tạo tân binh [${result.item.name}]`, 'SUCCESS');
+      alert('✅ Đã tạo lộ trình đào tạo tân binh thành công!');
+      e.target.reset();
+    }
+  } catch (err) { return alert(`⛔ ${err.message}`); }
+  renderOnboardingLms();
+}
+
+function openEditOnboardingPath(id) {
+  const path = DB.onboardingPaths.find(p => p.id === id);
+  if (!path) return;
+  editingOnboardingPathId = id;
+  populateOnboardingPathSelects();
+  document.getElementById('opName').value = path.name;
+  [...document.getElementById('opStage1DocumentIds').options].forEach(o => { o.selected = (path.stage1DocumentIds || []).includes(Number(o.value)); });
+  [...document.getElementById('opStage2DocumentIds').options].forEach(o => { o.selected = (path.stage2DocumentIds || []).includes(Number(o.value)); });
+  document.getElementById('opTest1Id').value = path.test1Id != null ? String(path.test1Id) : '';
+  document.getElementById('opTest2Id').value = path.test2Id != null ? String(path.test2Id) : '';
+  document.getElementById('opStage3Criteria').value = path.stage3Criteria || '';
+  document.getElementById('opSubmitBtn').innerText = 'Lưu Thay Đổi';
+  document.getElementById('opCancelEditBtn').classList.remove('hidden');
+  document.getElementById('onboardingPathForm').scrollIntoView({ behavior: 'smooth', block: 'center' });
+}
+function cancelEditOnboardingPath() {
+  editingOnboardingPathId = null;
+  document.getElementById('onboardingPathForm').reset();
+  document.getElementById('opSubmitBtn').innerText = 'Tạo Lộ Trình';
+  document.getElementById('opCancelEditBtn').classList.add('hidden');
+}
+function deleteOnboardingPath(id) {
+  if (!confirm('Xóa lộ trình đào tạo tân binh này? Các phân công đã có cho nhân viên vẫn giữ nguyên dữ liệu (không bị xoá theo).')) return;
+  callRecordAction('onboardingPaths', id, 'delete', {}).then(() => {
+    DB.onboardingPaths = DB.onboardingPaths.filter(p => p.id !== id);
+    logSystemAction('INTERNAL', 'DELETE_ONBOARDING_PATH', `Xóa lộ trình đào tạo tân binh [id ${id}]`, 'SUCCESS');
+    renderOnboardingLms();
+  }).catch(err => alert(`⛔ ${err.message}`));
+}
+
+function renderOnboardingPathsTable() {
+  const list = DB.onboardingPaths.slice().sort((a, b) => b.id - a.id);
+  document.getElementById('paginationContainer_onboardingPaths').innerHTML = buildPaginationBoxHTML('onboardingPaths', 'renderOnboardingPathsTable');
+  const pageItems = paginateList('onboardingPaths', list, 'renderOnboardingPathsTable', 'lộ trình');
+  const tbody = document.getElementById('onboardingPathsTableBody');
+  if (!tbody) return;
+  if (!pageItems.length) { tbody.innerHTML = `<tr><td colspan="5" class="text-center p-4 text-gray-400 italic">Chưa có lộ trình đào tạo tân binh nào.</td></tr>`; return; }
+  const canManage = canManageTrainingLocal(currentUser);
+  tbody.innerHTML = pageItems.map(p => {
+    const test1 = DB.trainingTests.find(t => t.id === p.test1Id);
+    const test2 = DB.trainingTests.find(t => t.id === p.test2Id);
+    const actions = canManage ? `
+      <button onclick="openEditOnboardingPath(${p.id})" class="text-blue-600 font-bold hover:underline mr-2">Sửa</button>
+      ${currentUser.perms?.admin ? `<button onclick="deleteOnboardingPath(${p.id})" class="text-red-500 font-bold hover:underline">Xóa</button>` : ''}` : '';
+    return `<tr class="hover:bg-gray-50">
+      <td class="border p-2 font-bold">${escapeHtml(p.name)}</td>
+      <td class="border p-2">${(p.stage1DocumentIds || []).length} tài liệu / ${test1 ? escapeHtml(test1.title) : '<span class="text-red-500 italic">(bài test đã xoá)</span>'}</td>
+      <td class="border p-2">${(p.stage2DocumentIds || []).length} tài liệu / ${test2 ? escapeHtml(test2.title) : '<span class="text-red-500 italic">(bài test đã xoá)</span>'}</td>
+      <td class="border p-2 max-w-xs truncate" title="${escapeHtml(p.stage3Criteria || '')}">${escapeHtml(p.stage3Criteria || '(chưa nhập)')}</td>
+      <td class="border p-2 text-center whitespace-nowrap">${actions}</td>
+    </tr>`;
+  }).join('');
+}
+
+// ---- Phân Công (Khối 2) ----
+let onboardingEmployeesCache = [];
+function populateOnboardingEmployeesDatalist() {
+  onboardingEmployeesCache = (DB.users || []).filter(u => u.active !== false);
+  const dl = document.getElementById('onboardingEmployeesDatalist');
+  if (dl) dl.innerHTML = onboardingEmployeesCache.map(u => `<option value="${escapeHtml(u.name)} (${escapeHtml(u.username)})"></option>`).join('');
+}
+// Cùng khuôn resolveUniformEmployeeInput() (đã có sẵn cho Đồng Phục) — khớp text "Tên (tài_khoản)" đang
+// gõ với đúng 1 tài khoản còn hiệu lực -> ghi username vào ô ẩn.
+function resolveOnboardingEmployeeInput() {
+  const raw = document.getElementById('oaEmployeeInput').value;
+  const m = raw.match(/\(([^()]+)\)\s*$/);
+  const username = m ? m[1].trim() : '';
+  const found = onboardingEmployeesCache.some(u => u.username === username);
+  document.getElementById('oaEmployeeUsername').value = found ? username : '';
+}
+
+async function submitOnboardingAssignment() {
+  if (!canManageTrainingLocal(currentUser)) return alert('⛔ Bạn không có quyền phân công lộ trình đào tạo tân binh!');
+  const employeeUsername = document.getElementById('oaEmployeeUsername').value;
+  if (!employeeUsername) return alert('Vui lòng gõ và chọn đúng 1 nhân viên từ danh sách gợi ý!');
+  const pathId = Number(document.getElementById('oaPathId').value);
+  if (!pathId) return alert('Vui lòng chọn lộ trình đào tạo tân binh!');
+  let newProgress;
+  try {
+    const result = await callCreateAction('onboardingProgress', { employeeUsername, pathId });
+    newProgress = result.item;
+  } catch (err) { return alert(`⛔ ${err.message}`); }
+  DB.onboardingProgress.unshift(newProgress);
+  logSystemAction('INTERNAL', 'ASSIGN_ONBOARDING', `Phân công lộ trình tân binh [${newProgress.pathName}] cho [${newProgress.employeeUsername}]`, 'SUCCESS');
+  alert(`✅ Đã phân công lộ trình "${newProgress.pathName}" cho ${newProgress.employeeName}!`);
+  document.getElementById('oaEmployeeInput').value = '';
+  document.getElementById('oaEmployeeUsername').value = '';
+  renderOnboardingLms();
+}
+
+function deleteOnboardingProgress(id) {
+  if (!confirm('Xóa dòng phân công đào tạo tân binh này?')) return;
+  callRecordAction('onboardingProgress', id, 'delete', {}).then(() => {
+    DB.onboardingProgress = DB.onboardingProgress.filter(p => p.id !== id);
+    logSystemAction('INTERNAL', 'DELETE_ONBOARDING_PROGRESS', `Xóa phân công đào tạo tân binh [id ${id}]`, 'SUCCESS');
+    renderOnboardingLms();
+  }).catch(err => alert(`⛔ ${err.message}`));
+}
+
+function renderOnboardingProgressTable() {
+  const list = DB.onboardingProgress.slice().sort((a, b) => b.id - a.id);
+  document.getElementById('paginationContainer_onboardingProgress').innerHTML = buildPaginationBoxHTML('onboardingProgress', 'renderOnboardingProgressTable');
+  const pageItems = paginateList('onboardingProgress', list, 'renderOnboardingProgressTable', 'phân công');
+  const tbody = document.getElementById('onboardingProgressTableBody');
+  if (!tbody) return;
+  if (!pageItems.length) { tbody.innerHTML = `<tr><td colspan="8" class="text-center p-4 text-gray-400 italic">Chưa có nhân viên nào được phân công.</td></tr>`; return; }
+  tbody.innerHTML = pageItems.map(p => {
+    const m = computeOnboardingMilestones(p);
+    const canIssue = p.stage1Result === 'PASSED' && p.stage2Result === 'PASSED' && p.stage3Evaluation === 'PASSED';
+    let certCell;
+    if (p.certificateIssued) certCell = `<button onclick="downloadOnboardingCertificatePdf(${p.id})" class="text-indigo-600 font-bold hover:underline">⬇️ Tải Lại</button>`;
+    else if (canIssue) certCell = `<button onclick="issueOnboardingCertificateAction(${p.id})" class="bg-emerald-600 text-white px-2 py-1 rounded font-bold hover:bg-emerald-700">🎓 Cấp Chứng Chỉ</button>`;
+    else certCell = `<span class="text-gray-400 italic">Chưa đủ điều kiện</span>`;
+    return `<tr class="hover:bg-gray-50">
+      <td class="border p-2">${escapeHtml(p.employeeName)}<div class="text-gray-400">(${escapeHtml(p.employeeUsername)})</div></td>
+      <td class="border p-2">${escapeHtml(p.pathName)}</td>
+      <td class="border p-2">${p.startDate ? escapeHtml(new Date(p.startDate).toLocaleDateString('vi-VN')) : ''}</td>
+      <td class="border p-2 text-center">${onboardingStageBadgeHTML(1, p, m)}</td>
+      <td class="border p-2 text-center">${onboardingStageBadgeHTML(2, p, m)}</td>
+      <td class="border p-2 text-center">${onboardingStageBadgeHTML(3, p, m)}</td>
+      <td class="border p-2 text-center">${certCell}</td>
+      <td class="border p-2 text-center">${currentUser.perms?.admin ? `<button onclick="deleteOnboardingProgress(${p.id})" class="text-red-500 font-bold hover:underline">Xóa</button>` : ''}</td>
+    </tr>`;
+  }).join('');
+}
+
+// ---- Lộ Trình Tân Binh Của Tôi (Khối 3) ----
+// Tái sử dụng cách hiển thị DOCUMENT/VIDEO/IMAGE Y HỆT renderTrainingDocuments() (Đợt 4) — không dựng
+// lại UI xem nội dung mới, chỉ đổi khuôn thẻ cho gọn trong 1 cột.
+function onboardingDocRowHTML(docId) {
+  const d = DB.trainingDocuments.find(x => x.id === docId);
+  if (!d) return `<div class="text-xs text-gray-400 italic">(tài liệu đã bị xoá)</div>`;
+  let actionHTML;
+  if (d.docType === 'VIDEO') {
+    const embedUrl = trainingYoutubeEmbedUrl(d.videoUrl);
+    actionHTML = embedUrl
+      ? `<iframe src="${escapeHtml(embedUrl)}" class="w-full h-28 rounded border" frameborder="0" allowfullscreen title="${escapeHtml(d.title)}"></iframe>`
+      : `<a href="${escapeHtml(d.videoUrl || '')}" target="_blank" rel="noopener" class="text-indigo-600 underline text-xs">▶️ Xem video</a>`;
+  } else if (d.docType === 'IMAGE') {
+    actionHTML = `<a href="${escapeHtml(d.fileUrl)}" target="_blank" rel="noopener"><img src="${escapeHtml(d.fileUrl)}" class="w-20 h-20 object-cover rounded border" alt="${escapeHtml(d.title)}"></a>`;
+  } else {
+    actionHTML = `<a href="${escapeHtml(d.fileUrl)}" target="_blank" rel="noopener" class="bg-indigo-600 text-white px-2 py-1 rounded text-xs font-bold hover:bg-indigo-700 inline-block">⬇️ Tải</a>`;
+  }
+  return `<div class="bg-gray-50 rounded border p-2 space-y-1">
+    <div class="text-xs font-semibold text-gray-700">${escapeHtml(d.title)}${d.mandatory ? ' <span class="text-red-600">⚠️</span>' : ''}</div>
+    ${actionHTML}
+  </div>`;
+}
+
+function renderMyOnboardingCardHTML(p) {
+  const path = DB.onboardingPaths.find(x => x.id === p.pathId);
+  const m = computeOnboardingMilestones(p);
+  const stage1Docs = (path?.stage1DocumentIds || []).map(onboardingDocRowHTML).join('') || '<div class="text-xs text-gray-400 italic">Chưa có nội dung.</div>';
+  const stage2Docs = (path?.stage2DocumentIds || []).map(onboardingDocRowHTML).join('') || '<div class="text-xs text-gray-400 italic">Chưa có nội dung.</div>';
+
+  const stage1TestBtn = p.stage1Result != null
+    ? `<span class="${p.stage1Result === 'PASSED' ? 'text-emerald-700' : 'text-red-600'} font-bold text-xs">${p.stage1Result === 'PASSED' ? `✅ Đạt (${p.stage1Score}%)` : `❌ Không đạt (${p.stage1Score}%)`}</span>`
+    : `<button onclick="openOnboardingStageTestModal(${p.id}, 1)" class="bg-indigo-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-indigo-700">📝 Vào Làm Bài Test Giai Đoạn 1</button>`;
+  const stage2Locked = p.stage1Result !== 'PASSED';
+  const stage2TestBtn = p.stage2Result != null
+    ? `<span class="${p.stage2Result === 'PASSED' ? 'text-emerald-700' : 'text-red-600'} font-bold text-xs">${p.stage2Result === 'PASSED' ? `✅ Đạt (${p.stage2Score}%)` : `❌ Không đạt (${p.stage2Score}%)`}</span>`
+    : stage2Locked
+      ? `<span class="text-xs text-gray-400 italic">🔒 Cần Đạt Giai đoạn 1 trước</span>`
+      : `<button onclick="openOnboardingStageTestModal(${p.id}, 2)" class="bg-indigo-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-indigo-700">📝 Vào Làm Bài Test Giai Đoạn 2</button>`;
+
+  const stage3HTML = p.stage3Evaluation != null
+    ? `<div class="${p.stage3Evaluation === 'PASSED' ? 'text-emerald-700' : 'text-red-600'} font-bold text-xs">${p.stage3Evaluation === 'PASSED' ? '✅ Đạt' : '❌ Không đạt'} — đánh giá bởi ${escapeHtml(p.stage3EvaluatedByName || '')}</div>${p.stage3Note ? `<div class="text-xs text-gray-600 italic mt-1">"${escapeHtml(p.stage3Note)}"</div>` : ''}`
+    : `<div class="text-xs text-gray-500 italic">Chờ quản lý trực tiếp đánh giá.</div>`;
+
+  const overdueWarning = (m && (m.stage1.status.key === 'OVERDUE' || m.stage2.status.key === 'OVERDUE'))
+    ? `<div class="bg-red-100 border border-red-300 text-red-700 text-xs font-bold rounded p-2">⚠️ Bạn đang trễ hạn 1 hoặc nhiều giai đoạn — vui lòng hoàn thành sớm nhất có thể!</div>` : '';
+
+  const certHTML = p.certificateIssued
+    ? `<button onclick="downloadOnboardingCertificatePdf(${p.id})" class="bg-amber-500 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-amber-600 flex-shrink-0">🏆 Tải Chứng Chỉ Hoàn Thành</button>`
+    : '';
+
+  return `<div class="bg-white rounded border p-3 space-y-3">
+    <div class="flex justify-between items-start flex-wrap gap-2">
+      <div>
+        <div class="font-bold text-indigo-900">${escapeHtml(p.pathName)}</div>
+        <div class="text-xs text-gray-500">Ngày vào làm: ${p.startDate ? escapeHtml(new Date(p.startDate).toLocaleDateString('vi-VN')) : ''}</div>
+      </div>
+      ${certHTML}
+    </div>
+    ${overdueWarning}
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+      <div class="border rounded p-2 space-y-2">
+        <div class="font-bold text-xs text-gray-700 flex justify-between items-center">Giai Đoạn 1 (Ngày 1-7) ${onboardingStageBadgeHTML(1, p, m)}</div>
+        <div class="space-y-1">${stage1Docs}</div>
+        <div>${stage1TestBtn}</div>
+      </div>
+      <div class="border rounded p-2 space-y-2">
+        <div class="font-bold text-xs text-gray-700 flex justify-between items-center">Giai Đoạn 2 (Ngày 8-21) ${onboardingStageBadgeHTML(2, p, m)}</div>
+        <div class="space-y-1">${stage2Docs}</div>
+        <div>${stage2TestBtn}</div>
+      </div>
+      <div class="border rounded p-2 space-y-2">
+        <div class="font-bold text-xs text-gray-700 flex justify-between items-center">Giai Đoạn 3 (đến Ngày 59) ${onboardingStageBadgeHTML(3, p, m)}</div>
+        <div class="text-xs text-gray-600">${escapeHtml(path?.stage3Criteria || '')}</div>
+        ${stage3HTML}
+      </div>
+    </div>
+  </div>`;
+}
+
+function renderMyOnboarding() {
+  const mine = DB.onboardingProgress.filter(p => p.employeeUsername === currentUser.username);
+  const section = document.getElementById('myOnboardingSection');
+  section.classList.toggle('hidden', mine.length === 0);
+  if (!mine.length) return;
+  document.getElementById('myOnboardingContainer').innerHTML = mine.map(renderMyOnboardingCardHTML).join('');
+}
+
+// ---- Đánh Giá Giai Đoạn 3 (Khối 4) ----
+// Mirror ĐÚNG idiom uniformStoreManage/item.dept (lib/recordViewScope.js) — chỉ dùng để LỌC hiển thị ở
+// client, chốt chặn thật sự vẫn ở server (evaluateOnboardingStage3(), lib/recordActions.js).
+function canEvaluateOnboardingStage3Local(user, traineeUser) {
+  if (user?.perms?.admin) return true;
+  return !!(user?.perms?.onboardingEvaluate && traineeUser && traineeUser.dept === user.dept);
+}
+
+function renderOnboardingStage3Queue() {
+  const canSeeSection = !!(currentUser.perms?.admin || currentUser.perms?.onboardingEvaluate);
+  const section = document.getElementById('onboardingStage3Section');
+  section.classList.toggle('hidden', !canSeeSection);
+  if (!canSeeSection) return;
+  const queue = DB.onboardingProgress.filter(p => {
+    if (p.stage3Evaluation != null) return false;
+    if (p.stage1Result !== 'PASSED' || p.stage2Result !== 'PASSED') return false;
+    const traineeUser = DB.users.find(u => u.username === p.employeeUsername);
+    return canEvaluateOnboardingStage3Local(currentUser, traineeUser);
+  });
+  const container = document.getElementById('onboardingStage3QueueContainer');
+  if (!queue.length) { container.innerHTML = `<div class="text-xs text-gray-500 italic bg-white rounded border p-3">Không có nhân viên nào đang chờ bạn đánh giá Giai đoạn 3.</div>`; return; }
+  container.innerHTML = queue.map(p => {
+    const path = DB.onboardingPaths.find(x => x.id === p.pathId);
+    return `<div class="bg-white rounded border p-3 space-y-2">
+      <div class="font-bold text-gray-800">${escapeHtml(p.employeeName)} <span class="text-gray-400 font-normal">(${escapeHtml(p.employeeUsername)})</span> — ${escapeHtml(p.pathName)}</div>
+      <div class="text-xs text-gray-600"><b>Tiêu chí đánh giá:</b> ${escapeHtml(path?.stage3Criteria || '(chưa nhập)')}</div>
+      <textarea id="os3Note_${p.id}" placeholder="Ghi chú đánh giá (tuỳ chọn)..." class="w-full border p-1.5 rounded text-xs h-16"></textarea>
+      <div class="flex gap-2">
+        <button onclick="submitOnboardingStage3Evaluation(${p.id}, 'PASSED')" class="bg-emerald-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-emerald-700">✅ Đạt</button>
+        <button onclick="submitOnboardingStage3Evaluation(${p.id}, 'FAILED')" class="bg-red-500 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-red-600">❌ Không Đạt</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+async function submitOnboardingStage3Evaluation(progressId, evaluation) {
+  const note = document.getElementById(`os3Note_${progressId}`)?.value.trim() || '';
+  if (!confirm(`Xác nhận đánh giá Giai đoạn 3: ${evaluation === 'PASSED' ? 'ĐẠT' : 'KHÔNG ĐẠT'}?`)) return;
+  let updated;
+  try {
+    const result = await callRecordAction('onboardingProgress', progressId, 'evaluate-stage3', { evaluation, note });
+    updated = result.item;
+  } catch (err) { return alert(`⛔ ${err.message}`); }
+  const idx = DB.onboardingProgress.findIndex(p => p.id === progressId);
+  if (idx !== -1) DB.onboardingProgress[idx] = updated;
+  logSystemAction('INTERNAL', 'EVALUATE_ONBOARDING_STAGE3', `Đánh giá Giai đoạn 3 đào tạo tân binh [${updated.employeeUsername}]: ${evaluation}`, 'SUCCESS');
+  alert('✅ Đã ghi nhận đánh giá Giai đoạn 3!');
+  renderOnboardingLms();
+}
+
+// ---- Cấp/Tải Chứng Chỉ Hoàn Thành ----
+async function issueOnboardingCertificateAction(progressId) {
+  if (!confirm('Cấp Chứng Chỉ Hoàn Thành Đào Tạo Tân Binh cho nhân viên này? (KHÔNG thể huỷ sau khi cấp)')) return;
+  let updated;
+  try {
+    const result = await callRecordAction('onboardingProgress', progressId, 'issue-certificate', {});
+    updated = result.item;
+  } catch (err) { return alert(`⛔ ${err.message}`); }
+  const idx = DB.onboardingProgress.findIndex(p => p.id === progressId);
+  if (idx !== -1) DB.onboardingProgress[idx] = updated;
+  logSystemAction('INTERNAL', 'ISSUE_ONBOARDING_CERT', `Cấp chứng chỉ hoàn thành đào tạo tân binh [${updated.employeeUsername}]`, 'SUCCESS');
+  renderOnboardingLms();
+  await downloadOnboardingCertificatePdf(progressId);
+}
+
+// PDF Chứng Chỉ Hoàn Thành — CÙNG kỹ thuật html2canvas+jsPDF với exportBudgetSummaryPdf() (xem baseline:
+// đây là cơ chế PDF THẬT duy nhất của hệ thống, khác các "phiếu" HTML thuần dùng để in/tải ở module
+// khác). Dựng lại HOÀN TOÀN từ dữ liệu progress hiện có mỗi lần bấm tải — KHÔNG lưu file PDF ở đâu cả,
+// nên "Tải Lại" sau này luôn ra đúng 1 file giống hệt (chỉ phụ thuộc progress/path — 2 dữ liệu này không
+// đổi sau khi đã cấp chứng chỉ vì issueOnboardingCertificate() chỉ cho cấp 1 lần).
+const ONBOARDING_CERT_PAGE_W = 794;  // A4 @ 96dpi (px)
+const ONBOARDING_CERT_PAGE_H = 1123;
+async function downloadOnboardingCertificatePdf(progressId) {
+  const p = DB.onboardingProgress.find(x => x.id === progressId);
+  if (!p || !p.certificateIssued) return alert('⛔ Chứng chỉ chưa được cấp cho hồ sơ này.');
+  try {
+    await Promise.all([
+      loadVendorScript('/vendor/html2canvas/html2canvas.min.js'),
+      loadVendorScript('/vendor/jspdf/jspdf.umd.min.js')
+    ]);
+    const issuedDate = p.certificateIssuedAt ? new Date(p.certificateIssuedAt).toLocaleDateString('vi-VN') : new Date().toLocaleDateString('vi-VN');
+    const stage = document.createElement('div');
+    stage.style.cssText = `position:fixed;left:-10000px;top:0;width:${ONBOARDING_CERT_PAGE_W}px;height:${ONBOARDING_CERT_PAGE_H}px;background:#fff;color:#111;box-sizing:border-box;font-family:Arial,'Segoe UI',sans-serif;padding:70px 60px;text-align:center;border:10px double #92400e;`;
+    stage.innerHTML = `
+      <div style="font-size:14px;letter-spacing:3px;color:#6b7280;">HCRC WORKSPACE</div>
+      <div style="font-size:26px;font-weight:bold;color:#92400e;margin-top:50px;">CHỨNG NHẬN HOÀN THÀNH ĐÀO TẠO TÂN BINH</div>
+      <div style="font-size:14px;color:#374151;margin-top:50px;">Chứng nhận nhân viên</div>
+      <div style="font-size:24px;font-weight:bold;color:#111827;margin-top:12px;">${escapeHtml(p.employeeName)}</div>
+      <div style="font-size:13px;color:#6b7280;margin-top:4px;">(${escapeHtml(p.employeeUsername)})</div>
+      <div style="font-size:14px;color:#374151;margin-top:30px;">đã hoàn thành lộ trình đào tạo tân binh</div>
+      <div style="font-size:20px;font-weight:bold;color:#111827;margin-top:10px;">${escapeHtml(p.pathName)}</div>
+      <div style="font-size:13px;color:#6b7280;margin-top:60px;">Ngày cấp: ${issuedDate}</div>
+    `;
+    document.body.appendChild(stage);
+    const canvas = await window.html2canvas(stage, { backgroundColor: '#ffffff', scale: 2, useCORS: true, logging: false });
+    stage.remove();
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF({ orientation: 'portrait', unit: 'px', format: [ONBOARDING_CERT_PAGE_W, ONBOARDING_CERT_PAGE_H], compress: true });
+    doc.addImage(canvas.toDataURL('image/jpeg', 0.95), 'JPEG', 0, 0, ONBOARDING_CERT_PAGE_W, ONBOARDING_CERT_PAGE_H);
+    const safeName = (p.employeeName || 'NhanVien').replace(/[\\/:*?"<>|]+/g, '_');
+    doc.save(`ChungChiTanBinh_${safeName}.pdf`);
+  } catch (err) {
+    alert('⛔ Không tạo được PDF: ' + err.message);
+  }
+}
+
+// ---- Làm bài test Giai đoạn 1/2 — TÁI SỬ DỤNG modal/luồng làm bài đã có (xem ttTakeMode ở phần LÀM BÀI
+// TEST phía trên: openTakeTestModal() dùng cho trainingClasses, hàm này dùng cho onboardingProgress) ----
+function openOnboardingStageTestModal(progressId, stage) {
+  const progress = DB.onboardingProgress.find(p => p.id === progressId);
+  if (!progress) return alert('Không tìm thấy hồ sơ đào tạo tân binh.');
+  const path = DB.onboardingPaths.find(x => x.id === progress.pathId);
+  const testId = stage === 1 ? path?.test1Id : path?.test2Id;
+  const test = DB.trainingTests.find(t => t.id === testId);
+  if (!test || !Array.isArray(test.questions) || !test.questions.length) return alert('Không tìm thấy nội dung bài test của giai đoạn này.');
+  clearInterval(ttTakeTimerHandle);
+  ttTakeMode = 'ONBOARDING';
+  ttTakeOnboardingCtx = { progressId, stage };
+  // Đảo câu hỏi + đáp án mỗi lượt mở modal — cùng kỹ thuật/lý do với openTakeTestModal() (Đợt 4).
+  ttTakeQuestions = shuffleArrayCopy(test.questions).map(q => Object.assign({}, q, { options: shuffleArrayCopy(q.options) }));
+  ttTakeAnswers = {};
+  ttTakeIndex = 0;
+  ttTakeSecondsPerQuestion = 120; // bài test tân binh không gắn trainingClasses nên không có testSecondsPerQuestion riêng — dùng mặc định chung 120s/câu.
+  document.getElementById('ttTakeModalTitle').innerText = `🧪 ${test.title}`;
+  document.getElementById('ttTakeModalSubtitle').innerText = `Đào Tạo Tân Binh — Giai Đoạn ${stage}: ${path?.name || ''}`;
+  document.getElementById('trainingTakeTestModal').classList.remove('hidden');
+  ttTakeRenderQuestion();
+}
+
+async function ttTakeSubmitOnboarding(answers) {
+  const { progressId, stage } = ttTakeOnboardingCtx || {};
+  let updated;
+  try {
+    updated = (await callRecordAction('onboardingProgress', progressId, 'submit-stage-test', { stage, answers })).item;
+  } catch (err) {
+    document.getElementById('trainingTakeTestModal').classList.add('hidden');
+    return alert(`⛔ ${err.message}`);
+  }
+  document.getElementById('trainingTakeTestModal').classList.add('hidden');
+  const idx = DB.onboardingProgress.findIndex(p => p.id === progressId);
+  if (idx !== -1) DB.onboardingProgress[idx] = updated;
+  const resultField = `stage${stage}Result`, scoreField = `stage${stage}Score`;
+  logSystemAction('INTERNAL', 'SUBMIT_ONBOARDING_STAGE_TEST', `Nộp bài test Giai đoạn ${stage} đào tạo tân binh [${updated.employeeUsername}]`, 'SUCCESS');
+  alert(`✅ Đã nộp bài!\n\nĐiểm: ${updated[scoreField]}%\nKết quả: ${updated[resultField] === 'PASSED' ? 'ĐẠT' : 'KHÔNG ĐẠT'}`);
+  renderOnboardingLms();
+}
+
+function renderOnboardingLms() {
+  populateOnboardingPathSelects();
+  populateOnboardingEmployeesDatalist();
+  renderOnboardingPathsTable();
+  renderOnboardingProgressTable();
+  renderMyOnboarding();
+  renderOnboardingStage3Queue();
 }
 </script>
 
