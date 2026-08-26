@@ -51,6 +51,10 @@ router.post('/:module', async (req, res) => {
     // trainingDocuments (Đợt 4) cần tra cứu chéo sang collection trainingCourses (kiểm tra courseId,
     // tuỳ chọn, có phải chương trình có thật không) — cùng lý do trainingClasses ở trên.
     if (moduleKey === 'trainingDocuments') appData.trainingCourses = await getAllForCollection('trainingCourses');
+    // trainingPlans (Đợt 5) cần tra cứu chéo sang collection trainingCourses (kiểm tra courseId, tuỳ
+    // chọn, có phải chương trình có thật không) — cùng lý do trainingClasses/trainingDocuments ở trên.
+    // depts/stores (kiểm tra targetDept) đã có sẵn trong appData (2 key AppData thường, không cần đọc thêm).
+    if (moduleKey === 'trainingPlans') appData.trainingCourses = await getAllForCollection('trainingCourses');
     // recruitmentReferrals cần tra cứu chéo sang collection recruitmentJobs (tin còn OPEN/snapshot
     // jobTitle) — cùng lý do trainingRegistrations ở trên.
     if (moduleKey === 'recruitmentReferrals') appData.recruitmentJobs = await getAllForCollection('recruitmentJobs');

@@ -22,6 +22,7 @@ const emailRoutes = require('./routes/email');
 const vppCatalogRoutes = require('./routes/vppCatalog');
 const priceFileRoutes = require('./routes/priceFile');
 const trainingRosterRoutes = require('./routes/trainingRoster');
+const trainingPlanImportRoutes = require('./routes/trainingPlanImport');
 const adminExportRoutes = require('./routes/adminExport');
 const pwaManifestRoutes = require('./routes/pwaManifest');
 const budgetTemplateImportRoutes = require('./routes/budgetTemplateImport');
@@ -128,6 +129,7 @@ app.use('/api/send-email', requireAuth, blockIfMustChangePassword, emailRoutes);
 app.use('/api/vpp', vppCatalogRoutes);
 app.use('/api/it-price', priceFileRoutes);
 app.use('/api/training', trainingRosterRoutes);
+app.use('/api/training', trainingPlanImportRoutes);
 app.use('/api/admin', adminExportRoutes);
 app.use('/api/budget', budgetTemplateImportRoutes);
 // Route TẢI file đính kèm dùng chung (khác /uploads/ tĩnh bên dưới — chỗ đó dùng để XEM trong Khung Xem

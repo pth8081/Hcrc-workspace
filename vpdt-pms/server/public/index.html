@@ -1754,6 +1754,7 @@ table { display: block; overflow-x: auto; max-width: 100%; }
       <div class="flex gap-2 flex-wrap">
         <button type="button" onclick="setTrainingLmsTab('CLASSES')" id="btnTrainingLmsClasses" class="px-3 py-1 rounded text-xs font-bold bg-emerald-700 text-white">🏫 Lớp Học</button>
         <button type="button" onclick="setTrainingLmsTab('COURSES')" id="btnTrainingLmsCourses" class="px-3 py-1 rounded text-xs font-bold bg-gray-200 text-gray-700">🎓 Chương Trình</button>
+        <button type="button" onclick="setTrainingLmsTab('PLANS')" id="btnTrainingLmsPlans" class="px-3 py-1 rounded text-xs font-bold bg-gray-200 text-gray-700">📋 Kế Hoạch Đào Tạo</button>
         <button type="button" onclick="setTrainingLmsTab('MY_REGS')" id="btnTrainingLmsMyRegs" class="px-3 py-1 rounded text-xs font-bold bg-gray-200 text-gray-700">📝 Đăng Ký Của Tôi</button>
         <button type="button" onclick="setTrainingLmsTab('DOCS')" id="btnTrainingLmsDocs" class="px-3 py-1 rounded text-xs font-bold bg-gray-200 text-gray-700">📁 Kho Tài Liệu</button>
         <button type="button" onclick="setTrainingLmsTab('PATHS')" id="btnTrainingLmsPaths" class="px-3 py-1 rounded text-xs font-bold bg-gray-200 text-gray-700">🪜 Lộ Trình Thăng Tiến</button>
@@ -1890,6 +1891,112 @@ table { display: block; overflow-x: auto; max-width: 100%; }
             </table>
           </div>
           <div id="paginationContainer_trainingCourses"></div>
+        </div>
+      </div>
+
+      <!-- KẾ HOẠCH ĐÀO TẠO (Đợt 5) — lập kế hoạch theo THÁNG (số lớp/học viên/giờ dự kiến), đối chiếu với
+           số THẬT phát sinh ở Lớp Học/Đăng Ký (tính SỐNG, không lưu số thực tế ở đây — xem
+           renderTrainingPlanDashboard()). Quản lý (tạo/sửa) CHỈ trainingManage, XOÁ chỉ Admin (cùng khuôn
+           "xóa = quyền tối cao" như mọi collection Đào Tạo khác). -->
+      <div id="trainingLmsPlansPanel" class="hidden space-y-4">
+        <form id="trainingPlanForm" onsubmit="submitTrainingPlan(event)" class="hidden bg-white p-3 rounded border text-xs space-y-3">
+          <h4 id="trainingPlanFormTitle" class="font-bold text-gray-700">➕ Lập Kế Hoạch Đào Tạo Mới</h4>
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+            <div>
+              <label class="block font-semibold text-gray-600 mb-1">Tháng</label>
+              <input id="tpMonth" type="month" class="w-full border p-1.5 rounded" required>
+            </div>
+            <div>
+              <label class="block font-semibold text-gray-600 mb-1">Chương Trình (tuỳ chọn)</label>
+              <select id="tpCourseId" class="w-full border p-1.5 rounded bg-white"><option value="">-- Không thuộc chương trình nào --</option></select>
+            </div>
+            <div>
+              <label class="block font-semibold text-gray-600 mb-1">Đơn Vị (tuỳ chọn)</label>
+              <select id="tpTargetDept" class="w-full border p-1.5 rounded bg-white"><option value="">-- Không nhắm 1 đơn vị cụ thể --</option></select>
+            </div>
+            <div>
+              <label class="block font-semibold text-gray-600 mb-1">Đối Tượng</label>
+              <input id="tpAudience" placeholder="VD: Nhân viên mới, Trưởng ca..." class="w-full border p-1.5 rounded">
+            </div>
+            <div>
+              <label class="block font-semibold text-gray-600 mb-1">Số Lớp (kế hoạch)</label>
+              <input id="tpPlannedClasses" type="number" min="0" class="w-full border p-1.5 rounded">
+            </div>
+            <div>
+              <label class="block font-semibold text-gray-600 mb-1">Số Học Viên (kế hoạch)</label>
+              <input id="tpPlannedTrainees" type="number" min="0" class="w-full border p-1.5 rounded">
+            </div>
+            <div>
+              <label class="block font-semibold text-gray-600 mb-1">Thời Lượng Đào Tạo (giờ, kế hoạch)</label>
+              <input id="tpPlannedHours" type="number" min="0" step="0.5" class="w-full border p-1.5 rounded">
+            </div>
+          </div>
+          <div class="flex justify-end gap-2">
+            <button type="button" id="tpCancelEditBtn" onclick="cancelEditTrainingPlan()" class="hidden bg-gray-200 text-gray-700 px-4 py-2 rounded font-bold hover:bg-gray-300">Hủy Sửa</button>
+            <button type="submit" id="tpSubmitBtn" class="bg-emerald-600 text-white px-5 py-2 rounded font-bold hover:bg-emerald-700">Lập Kế Hoạch</button>
+          </div>
+        </form>
+        <p id="trainingPlanNoPermNote" class="hidden text-xs text-gray-500 italic bg-gray-50 border rounded p-3">⛔ Bạn không có quyền lập kế hoạch đào tạo — chỉ có thể xem.</p>
+
+        <!-- Nhập Kế Hoạch Từ Excel (theo tháng) -->
+        <div id="trainingPlanImportSection" class="hidden bg-white p-3 rounded border text-xs space-y-2">
+          <h4 class="font-bold text-gray-700">📥 Nhập Kế Hoạch Từ Excel (theo tháng)</h4>
+          <div class="flex flex-wrap items-center gap-3">
+            <a href="/api/training/plan-template" class="text-indigo-600 font-bold text-xs hover:underline">⬇️ Tải Mẫu Excel</a>
+            <input id="tpImportFileInput" type="file" accept=".xlsx,.xls,.csv" onchange="onTrainingPlanImportFileChange(event)" class="text-xs">
+          </div>
+          <p id="tpImportStatus" class="text-xs text-gray-500"></p>
+          <div id="tpImportPreviewWrap" class="hidden border rounded max-h-56 overflow-y-auto">
+            <table class="w-full text-xs">
+              <thead class="bg-gray-100 text-left sticky top-0"><tr>
+                <th class="p-1">Tháng</th><th class="p-1">Chương Trình (file)</th><th class="p-1">Đơn Vị</th><th class="p-1">Đối Tượng</th>
+                <th class="p-1 text-center">Số Lớp</th><th class="p-1 text-center">Số HV</th><th class="p-1 text-center">Giờ</th><th class="p-1">Trạng Thái</th>
+              </tr></thead>
+              <tbody id="tpImportPreviewBody"></tbody>
+            </table>
+          </div>
+          <button type="button" id="tpImportConfirmBtn" onclick="confirmTrainingPlanImport()" class="hidden bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1.5 rounded text-xs font-bold">✅ Xác Nhận Nhập Các Dòng Hợp Lệ</button>
+        </div>
+
+        <div class="space-y-3">
+          <h3 class="font-bold text-gray-800">📋 Danh Sách Kế Hoạch Đào Tạo</h3>
+          <div class="overflow-x-auto">
+            <table class="w-full border-collapse border text-xs bg-white">
+              <thead><tr class="bg-gray-100 text-left text-gray-700">
+                <th class="border p-2">Tháng</th><th class="border p-2">Chương Trình</th><th class="border p-2">Đơn Vị</th><th class="border p-2">Đối Tượng</th>
+                <th class="border p-2 text-center">Số Lớp KH</th><th class="border p-2 text-center">Số HV KH</th><th class="border p-2 text-center">Giờ KH</th>
+                <th class="border p-2 text-center">% Hoàn Thành</th><th class="border p-2 text-center min-w-[120px]">Thao Tác</th>
+              </tr></thead>
+              <tbody id="trainingPlansTableBody"></tbody>
+            </table>
+          </div>
+          <div id="paginationContainer_trainingPlans"></div>
+        </div>
+
+        <!-- Theo Dõi Thực Hiện + Dashboard (Đợt 5) — số thực tế tính SỐNG từ trainingClasses/
+             trainingRegistrations tại thời điểm xem, KHÔNG lưu ở đâu cả (xem renderTrainingPlanDashboard()). -->
+        <div class="bg-emerald-50 border border-emerald-200 rounded p-4 space-y-3">
+          <h3 class="font-bold text-emerald-900 text-base flex items-center gap-2">🎯 Theo Dõi Thực Hiện &amp; Dashboard</h3>
+          <p class="text-xs text-emerald-700">So sánh kế hoạch với số liệu THẬT đã phát sinh ở Lớp Học/Đăng Ký — để trống Tháng để xem tổng hợp toàn bộ các tháng đã lập kế hoạch.</p>
+          <div class="flex flex-wrap items-end gap-3">
+            <div>
+              <label class="block text-xs font-semibold text-gray-600 mb-1">Tháng (để trống = tất cả)</label>
+              <input type="month" id="tpDashMonth" onchange="renderTrainingPlanDashboard()" class="border p-2 rounded text-sm bg-white">
+            </div>
+            <div>
+              <label class="block text-xs font-semibold text-gray-600 mb-1">Chương Trình</label>
+              <select id="tpDashCourseId" onchange="renderTrainingPlanDashboard()" class="border p-2 rounded text-sm bg-white"></select>
+            </div>
+            <div>
+              <label class="block text-xs font-semibold text-gray-600 mb-1">Đơn Vị</label>
+              <select id="tpDashTargetDept" onchange="renderTrainingPlanDashboard()" class="border p-2 rounded text-sm bg-white"></select>
+            </div>
+            <div>
+              <label class="block text-xs font-semibold text-gray-600 mb-1">Đối Tượng (chứa)</label>
+              <input type="text" id="tpDashAudience" oninput="renderTrainingPlanDashboard()" placeholder="VD: Nhân viên mới..." class="border p-2 rounded text-sm">
+            </div>
+          </div>
+          <div id="tpDashResultWrap"></div>
         </div>
       </div>
 
@@ -5714,7 +5821,7 @@ const DB = {
   internalNewsCategories: [], internalShareCategories: [],
   trainingCategories: [], trainingDocuments: [], trainingClasses: [], trainingRegistrations: [],
   careerPaths: [], careerPathConfirmations: [],
-  trainingTests: [], trainingTestSubmissions: [], trainingCourses: [],
+  trainingTests: [], trainingTestSubmissions: [], trainingCourses: [], trainingPlans: [],
   recruitmentJobs: [], recruitmentReferrals: [],
   sensitiveKeywords: [],
   paymentRequests: [],
@@ -7331,6 +7438,7 @@ async function initDatabase(loggingInUser) {
     DB.trainingTests = data.trainingTests || [];
     DB.trainingTestSubmissions = data.trainingTestSubmissions || [];
     DB.trainingCourses = data.trainingCourses || [];
+    DB.trainingPlans = data.trainingPlans || [];
     DB.recruitmentJobs = data.recruitmentJobs || [];
     DB.recruitmentReferrals = data.recruitmentReferrals || [];
     DB.sensitiveKeywords = data.sensitiveKeywords || [];
@@ -26184,16 +26292,17 @@ let activeTrainingLmsTab = 'CLASSES';
 function setTrainingLmsTab(tab) {
   activeTrainingLmsTab = tab;
   // Reset trang về 1 khi đổi tab con — mỗi tab có moduleKey phân trang riêng (trainingClasses/
-  // trainingCourses/trainingMyRegs/trainingDocuments/careerPaths/trainingTests), tránh giữ lại trang sâu
-  // của tab trước.
-  ['trainingClasses', 'trainingCourses', 'trainingMyRegs', 'trainingDocuments', 'careerPaths', 'trainingTests'].forEach(resetListPage);
-  const btnMap = { CLASSES: 'btnTrainingLmsClasses', COURSES: 'btnTrainingLmsCourses', MY_REGS: 'btnTrainingLmsMyRegs', DOCS: 'btnTrainingLmsDocs', PATHS: 'btnTrainingLmsPaths', TESTS: 'btnTrainingLmsTests' };
+  // trainingCourses/trainingPlans/trainingMyRegs/trainingDocuments/careerPaths/trainingTests), tránh
+  // giữ lại trang sâu của tab trước.
+  ['trainingClasses', 'trainingCourses', 'trainingPlans', 'trainingMyRegs', 'trainingDocuments', 'careerPaths', 'trainingTests'].forEach(resetListPage);
+  const btnMap = { CLASSES: 'btnTrainingLmsClasses', COURSES: 'btnTrainingLmsCourses', PLANS: 'btnTrainingLmsPlans', MY_REGS: 'btnTrainingLmsMyRegs', DOCS: 'btnTrainingLmsDocs', PATHS: 'btnTrainingLmsPaths', TESTS: 'btnTrainingLmsTests' };
   Object.entries(btnMap).forEach(([key, btnId]) => {
     const btn = document.getElementById(btnId);
     if (btn) btn.className = key === tab ? 'px-3 py-1 rounded text-xs font-bold bg-emerald-700 text-white' : 'px-3 py-1 rounded text-xs font-bold bg-gray-200 text-gray-700';
   });
   document.getElementById('trainingLmsClassesPanel').classList.toggle('hidden', tab !== 'CLASSES');
   document.getElementById('trainingLmsCoursesPanel').classList.toggle('hidden', tab !== 'COURSES');
+  document.getElementById('trainingLmsPlansPanel').classList.toggle('hidden', tab !== 'PLANS');
   document.getElementById('trainingLmsMyRegsPanel').classList.toggle('hidden', tab !== 'MY_REGS');
   document.getElementById('trainingLmsDocsPanel').classList.toggle('hidden', tab !== 'DOCS');
   document.getElementById('trainingLmsPathsPanel').classList.toggle('hidden', tab !== 'PATHS');
@@ -26214,16 +26323,45 @@ function populateTrainingCategorySelects() {
 }
 
 // Chương Trình (trainingCourses, Đợt 4) — populate dropdown chọn chương trình (tuỳ chọn) ở form tạo
-// lớp học (tcCourseId) và form thêm tài liệu (tdCourseId); teCourseId (modal Sửa Lớp Học) populate riêng
-// trong openEditTrainingClassModal() cùng khuôn teTestId/teDocumentIds (không qua hàm chung này vì cần
-// set lại value đang có sẵn của lớp ngay sau khi populate).
+// lớp học (tcCourseId), form thêm tài liệu (tdCourseId) và form lập Kế Hoạch Đào Tạo (tpCourseId, Đợt 5);
+// teCourseId (modal Sửa Lớp Học) populate riêng trong openEditTrainingClassModal() cùng khuôn
+// teTestId/teDocumentIds (không qua hàm chung này vì cần set lại value đang có sẵn của lớp ngay sau khi
+// populate).
 function populateTrainingCourseSelects() {
   const opts = DB.trainingCourses.slice().sort((a, b) => b.id - a.id)
     .map(c => `<option value="${c.id}">${escapeHtml(c.name)} (${escapeHtml(c.category)})</option>`).join('');
-  ['tcCourseId', 'tdCourseId'].forEach(id => {
+  ['tcCourseId', 'tdCourseId', 'tpCourseId'].forEach(id => {
     const sel = document.getElementById(id);
     if (sel) sel.innerHTML = `<option value="">-- Không thuộc chương trình nào --</option>` + opts;
   });
+  // Bộ lọc Dashboard (tpDashCourseId, Đợt 5) — giữ lại value đang chọn (không reset về "Tất cả" mỗi lần
+  // render lại danh mục chương trình), khác dropdown trong form tạo (luôn reset vì mỗi lần mở form là 1
+  // lượt lập kế hoạch mới).
+  const dashSel = document.getElementById('tpDashCourseId');
+  if (dashSel) {
+    const prevValue = dashSel.value;
+    dashSel.innerHTML = `<option value="">-- Tất cả chương trình --</option>` + opts;
+    if (prevValue && DB.trainingCourses.some(c => String(c.id) === prevValue)) dashSel.value = prevValue;
+  }
+}
+
+// Đơn Vị (targetDept, trainingPlans Đợt 5) — cùng khuôn rjDept/rjFilterDept (recruitmentJobs): gộp
+// DB.depts + DB.stores chung 1 danh sách, không lọc theo scope tạo (lập kế hoạch CHO đơn vị nào là lựa
+// chọn tự do của trainingManage, không phải "tạo hồ sơ thay mặt đơn vị khác").
+function populateTrainingPlanDeptSelects() {
+  const deptOpts = [...DB.depts, ...DB.stores].map(d => `<option value="${escapeHtml(d)}">${escapeHtml(d)}</option>`).join('');
+  const formSel = document.getElementById('tpTargetDept');
+  if (formSel) {
+    const prevValue = formSel.value;
+    formSel.innerHTML = `<option value="">-- Không nhắm 1 đơn vị cụ thể --</option>` + deptOpts;
+    if ([...DB.depts, ...DB.stores].includes(prevValue)) formSel.value = prevValue;
+  }
+  const dashSel = document.getElementById('tpDashTargetDept');
+  if (dashSel) {
+    const prevValue = dashSel.value;
+    dashSel.innerHTML = `<option value="">-- Tất cả đơn vị --</option>` + deptOpts;
+    if ([...DB.depts, ...DB.stores].includes(prevValue)) dashSel.value = prevValue;
+  }
 }
 
 function populateTrainingClassMultiSelects() {
@@ -26245,6 +26383,7 @@ function renderTrainingLms() {
   populateTrainingCategorySelects();
   populateTrainingClassMultiSelects();
   populateTrainingCourseSelects();
+  populateTrainingPlanDeptSelects();
   const canManage = canManageTrainingLocal(currentUser);
   document.getElementById('trainingClassForm').classList.toggle('hidden', !canManage);
   document.getElementById('trainingClassNoPermNote').classList.toggle('hidden', canManage);
@@ -26253,6 +26392,10 @@ function renderTrainingLms() {
   // createValidation.js).
   document.getElementById('trainingCourseForm').classList.toggle('hidden', !canManage);
   document.getElementById('trainingCourseNoPermNote').classList.toggle('hidden', canManage);
+  // Kế Hoạch Đào Tạo (Đợt 5) — cùng gác quyền CHỈ trainingManage như Chương Trình ở trên.
+  document.getElementById('trainingPlanForm').classList.toggle('hidden', !canManage);
+  document.getElementById('trainingPlanNoPermNote').classList.toggle('hidden', canManage);
+  document.getElementById('trainingPlanImportSection').classList.toggle('hidden', !canManage);
   document.getElementById('trainingDocForm').classList.toggle('hidden', !canManage);
   document.getElementById('trainingDocNoPermNote').classList.toggle('hidden', canManage);
   document.getElementById('careerPathForm').classList.toggle('hidden', !canManage);
@@ -26263,6 +26406,7 @@ function renderTrainingLms() {
 
   if (activeTrainingLmsTab === 'CLASSES') renderTrainingClasses();
   else if (activeTrainingLmsTab === 'COURSES') renderTrainingCourses();
+  else if (activeTrainingLmsTab === 'PLANS') { renderTrainingPlans(); renderTrainingPlanDashboard(); }
   else if (activeTrainingLmsTab === 'MY_REGS') renderTrainingMyRegs();
   else if (activeTrainingLmsTab === 'DOCS') renderTrainingDocuments();
   else if (activeTrainingLmsTab === 'PATHS') renderCareerPaths();
@@ -26665,6 +26809,405 @@ function deleteTrainingCourse(id) {
     renderTrainingCourses();
     populateTrainingCourseSelects();
   }).catch(err => alert(`⛔ ${err.message}`));
+}
+
+// ---------- KẾ HOẠCH ĐÀO TẠO (trainingPlans, Đợt 5) ----------
+// Quản lý (lập/sửa) CHỈ trainingManage (cùng gác quyền như Chương Trình ở trên) — XOÁ chỉ Admin (cùng
+// khuôn "xóa = quyền tối cao" của mọi collection Đào Tạo khác, xem deleteTrainingCourse() ở trên).
+let editingTrainingPlanId = null;
+async function submitTrainingPlan(e) {
+  e.preventDefault();
+  if (!canManageTrainingLocal(currentUser)) return alert('⛔ Bạn không có quyền lập kế hoạch đào tạo!');
+  const month = document.getElementById('tpMonth').value;
+  if (!month) return alert('Vui lòng chọn Tháng!');
+  const payload = {
+    month,
+    courseId: document.getElementById('tpCourseId').value || null,
+    targetDept: document.getElementById('tpTargetDept').value || '',
+    audience: document.getElementById('tpAudience').value.trim(),
+    plannedClasses: document.getElementById('tpPlannedClasses').value,
+    plannedTrainees: document.getElementById('tpPlannedTrainees').value,
+    plannedHours: document.getElementById('tpPlannedHours').value
+  };
+  let saved;
+  try {
+    if (editingTrainingPlanId) {
+      const result = await callRecordAction('trainingPlans', editingTrainingPlanId, 'edit', payload);
+      saved = result.item;
+    } else {
+      const result = await callCreateAction('trainingPlans', payload);
+      saved = result.item;
+    }
+  } catch (err) { return alert(`⛔ ${err.message}`); }
+  const idx = DB.trainingPlans.findIndex(p => p.id === saved.id);
+  if (idx !== -1) DB.trainingPlans[idx] = saved; else DB.trainingPlans.unshift(saved);
+  const wasEditing = !!editingTrainingPlanId;
+  logSystemAction('INTERNAL', wasEditing ? 'EDIT_TRAINING_PLAN' : 'CREATE_TRAINING_PLAN', `${wasEditing ? 'Sửa' : 'Lập'} kế hoạch đào tạo tháng [${saved.month}]`, 'SUCCESS', String(saved.id));
+  alert(wasEditing ? '✅ Đã cập nhật kế hoạch đào tạo!' : '✅ Đã lập kế hoạch đào tạo thành công!');
+  cancelEditTrainingPlan();
+  renderTrainingLms();
+}
+function cancelEditTrainingPlan() {
+  editingTrainingPlanId = null;
+  document.getElementById('tpCancelEditBtn').classList.add('hidden');
+  document.getElementById('tpSubmitBtn').innerText = 'Lập Kế Hoạch';
+  document.getElementById('trainingPlanFormTitle').innerText = '➕ Lập Kế Hoạch Đào Tạo Mới';
+  document.getElementById('trainingPlanForm').reset();
+}
+function openEditTrainingPlan(id) {
+  const plan = DB.trainingPlans.find(p => p.id === id);
+  if (!plan) return;
+  editingTrainingPlanId = id;
+  document.getElementById('tpMonth').value = plan.month || '';
+  document.getElementById('tpCourseId').value = plan.courseId != null ? String(plan.courseId) : '';
+  document.getElementById('tpTargetDept').value = plan.targetDept || '';
+  document.getElementById('tpAudience').value = plan.audience || '';
+  document.getElementById('tpPlannedClasses').value = plan.plannedClasses || 0;
+  document.getElementById('tpPlannedTrainees').value = plan.plannedTrainees || 0;
+  document.getElementById('tpPlannedHours').value = plan.plannedHours || 0;
+  document.getElementById('tpCancelEditBtn').classList.remove('hidden');
+  document.getElementById('tpSubmitBtn').innerText = 'Lưu Thay Đổi';
+  document.getElementById('trainingPlanFormTitle').innerText = `✏️ Sửa Kế Hoạch — Tháng ${plan.month}`;
+  document.getElementById('trainingPlanForm').scrollIntoView({ behavior: 'smooth', block: 'center' });
+}
+function deleteTrainingPlanAction(id) {
+  if (!confirm('Xóa kế hoạch đào tạo này?')) return;
+  callRecordAction('trainingPlans', id, 'delete', {}).then(() => {
+    DB.trainingPlans = DB.trainingPlans.filter(p => p.id !== id);
+    logSystemAction('INTERNAL', 'DELETE_TRAINING_PLAN', `Xóa kế hoạch đào tạo [id ${id}]`, 'SUCCESS');
+    renderTrainingLms();
+  }).catch(err => alert(`⛔ ${err.message}`));
+}
+
+function renderTrainingPlans() {
+  const tbody = document.getElementById('trainingPlansTableBody');
+  if (!tbody) return;
+  const list = DB.trainingPlans.slice().sort((a, b) => String(b.month || '').localeCompare(String(a.month || '')) || b.id - a.id);
+
+  document.getElementById('paginationContainer_trainingPlans').innerHTML = buildPaginationBoxHTML('trainingPlans', 'renderTrainingPlans');
+  const pageItems = paginateList('trainingPlans', list, 'renderTrainingPlans', 'kế hoạch');
+
+  if (!pageItems.length) { tbody.innerHTML = `<tr><td colspan="9" class="text-center p-4 text-gray-400 italic">Chưa có kế hoạch đào tạo nào.</td></tr>`; return; }
+  const canManage = canManageTrainingLocal(currentUser);
+  tbody.innerHTML = pageItems.map(p => {
+    const course = p.courseId != null ? DB.trainingCourses.find(c => c.id === p.courseId) : null;
+    const pct = getTrainingPlanCompletionPct(p);
+    const overdue = isTrainingPlanOverdue(p);
+    return `
+    <tr class="hover:bg-gray-50">
+      <td class="border p-2 font-bold text-gray-800">${escapeHtml(p.month)}${overdue ? ' <span class="text-red-600 text-[10px] font-bold">⚠️ Quá hạn</span>' : ''}</td>
+      <td class="border p-2">${course ? escapeHtml(course.name) : '<span class="text-gray-400 italic">—</span>'}</td>
+      <td class="border p-2">${escapeHtml(p.targetDept || '')}</td>
+      <td class="border p-2">${escapeHtml(p.audience || '')}</td>
+      <td class="border p-2 text-center">${p.plannedClasses || 0}</td>
+      <td class="border p-2 text-center">${p.plannedTrainees || 0}</td>
+      <td class="border p-2 text-center">${p.plannedHours || 0}</td>
+      <td class="border p-2 text-center">${pct == null ? '<span class="text-gray-400 italic">—</span>' : `${pct}%`}</td>
+      <td class="border p-2 text-center space-x-2">
+        ${canManage ? `<button onclick="openEditTrainingPlan(${p.id})" class="text-blue-600 font-bold hover:underline text-xs">Sửa</button>` : ''}
+        ${currentUser.perms?.admin ? `<button onclick="deleteTrainingPlanAction(${p.id})" class="text-red-500 font-bold hover:underline text-xs">Xóa</button>` : ''}
+      </td>
+    </tr>`;
+  }).join('');
+}
+
+// ---------- Kế Hoạch Đào Tạo: đối chiếu KẾ HOẠCH với số THẬT (Đợt 5) ----------
+// Số thực tế KHÔNG lưu ở đâu cả — tính SỐNG từ DB.trainingClasses/DB.trainingRegistrations mỗi lần xem,
+// cùng tinh thần "không lưu cái tính được" đã áp dụng cho sessionState/pinExpiresAt... trong app. "Đơn
+// vị" của kế hoạch (targetDept) đối chiếu với trainingRegistrations.dept (dept của NGƯỜI ĐĂNG KÝ, tự
+// động gán đúng phòng ban thật của họ lúc đăng ký — forceOwnDept, xem createValidation.js) — CỐ TÌNH
+// KHÔNG đối chiếu với trainingClasses.dept (chỉ là phòng ban của người TẠO lớp, không phải "đơn vị lớp
+// học phục vụ", xem baseline/ghi chú đầu module).
+function trainingPlanMonthRange(month) {
+  const parts = String(month || '').split('-').map(Number);
+  const y = parts[0], m = parts[1];
+  if (!y || !m) return { start: NaN, end: NaN };
+  return { start: new Date(y, m - 1, 1).getTime(), end: new Date(y, m, 1).getTime() };
+}
+function trainingClassDurationHours(cls) {
+  if (!cls.startTime || !cls.endTime) return 0;
+  const ms = new Date(cls.endTime).getTime() - new Date(cls.startTime).getTime();
+  return ms > 0 ? ms / 3600000 : 0;
+}
+// Lớp học THẬT tính vào 1 kế hoạch — cùng THÁNG bắt đầu; nếu kế hoạch có gắn Chương Trình thì lớp cũng
+// phải cùng courseId, không gắn thì tính MỌI lớp phát sinh trong tháng đó (không lọc theo đơn vị ở bước
+// này — trainingClasses không có khái niệm "đơn vị lớp phục vụ", lọc theo đơn vị chỉ áp dụng ở bước đăng
+// ký bên dưới).
+function getClassesForTrainingPlan(plan) {
+  const { start, end } = trainingPlanMonthRange(plan.month);
+  if (!Number.isFinite(start)) return [];
+  return DB.trainingClasses.filter(c => {
+    if (!c.startTime) return false;
+    const t = new Date(c.startTime).getTime();
+    if (!(t >= start && t < end)) return false;
+    if (plan.courseId != null && c.courseId !== plan.courseId) return false;
+    return true;
+  });
+}
+function getTrainingPlanActualStats(plan) {
+  const classes = getClassesForTrainingPlan(plan);
+  const classIds = new Set(classes.map(c => c.id));
+  let regs = DB.trainingRegistrations.filter(r => classIds.has(r.classId) && r.result !== 'CANCELLED');
+  if (plan.targetDept) regs = regs.filter(r => r.dept === plan.targetDept);
+  const actualClasses = classes.length;
+  const actualTrainees = new Set(regs.map(r => r.creator)).size; // distinct học viên, không đếm theo dòng đăng ký
+  const actualHours = classes.reduce((sum, c) => sum + trainingClassDurationHours(c), 0);
+  return { classes, regs, actualClasses, actualTrainees, actualHours };
+}
+// % hoàn thành = trung bình 3 chiều (số lớp/số học viên/giờ), mỗi chiều chặn trần 100% (vượt kế hoạch ở
+// 1 chiều không kéo % chung lên bất thường) — null nếu kế hoạch không đặt số nào cả (không có gì đối chiếu).
+function getTrainingPlanCompletionPct(plan) {
+  const stats = getTrainingPlanActualStats(plan);
+  const ratios = [];
+  if (plan.plannedClasses > 0) ratios.push(Math.min(stats.actualClasses / plan.plannedClasses, 1));
+  if (plan.plannedTrainees > 0) ratios.push(Math.min(stats.actualTrainees / plan.plannedTrainees, 1));
+  if (plan.plannedHours > 0) ratios.push(Math.min(stats.actualHours / plan.plannedHours, 1));
+  if (!ratios.length) return null;
+  return Math.round((ratios.reduce((a, b) => a + b, 0) / ratios.length) * 100);
+}
+// "Quá hạn/chưa thực hiện" — tính SỐNG theo giờ hệ thống: tháng kế hoạch đã trôi qua HẲN (đã sang tháng
+// sau) và số thật còn thiếu so với kế hoạch (lớp hoặc học viên).
+function isTrainingPlanOverdue(plan) {
+  const { end } = trainingPlanMonthRange(plan.month);
+  if (!Number.isFinite(end) || Date.now() < end) return false;
+  const stats = getTrainingPlanActualStats(plan);
+  return stats.actualClasses < (plan.plannedClasses || 0) || stats.actualTrainees < (plan.plannedTrainees || 0);
+}
+
+// Tổng hợp Dashboard theo bộ lọc (tháng/chương trình/đơn vị/đối tượng) — dùng CHUNG cho cả khối "Theo
+// Dõi Thực Hiện" (drill vào đúng 1 tháng) LẪN "Dashboard" tổng quan (để trống tháng = mọi tháng đã lập kế
+// hoạch), vì cả 2 chỉ khác nhau ở phạm vi lọc, không khác cách tính.
+function computeTrainingPlanDashboard(filters) {
+  let plans = DB.trainingPlans.slice();
+  if (filters.month) plans = plans.filter(p => p.month === filters.month);
+  if (filters.courseId) plans = plans.filter(p => p.courseId === filters.courseId);
+  if (filters.targetDept) plans = plans.filter(p => p.targetDept === filters.targetDept);
+  const audienceNeedle = (filters.audience || '').trim().toLowerCase();
+  if (audienceNeedle) plans = plans.filter(p => (p.audience || '').toLowerCase().includes(audienceNeedle));
+
+  let totalPlannedClasses = 0, totalPlannedTrainees = 0, totalPlannedHours = 0, totalActualClasses = 0, totalActualHours = 0;
+  const distinctTrainees = new Set();
+  const overdue = [];
+  const byMonth = new Map(), byDept = new Map(), byCourse = new Map();
+  const bump = (map, key, plan, stats) => {
+    const row = map.get(key) || { key, plannedClasses: 0, plannedTrainees: 0, plannedHours: 0, actualClasses: 0, actualHours: 0, traineeSet: new Set() };
+    row.plannedClasses += plan.plannedClasses || 0;
+    row.plannedTrainees += plan.plannedTrainees || 0;
+    row.plannedHours += plan.plannedHours || 0;
+    row.actualClasses += stats.actualClasses;
+    row.actualHours += stats.actualHours;
+    stats.regs.forEach(r => row.traineeSet.add(r.creator));
+    map.set(key, row);
+  };
+
+  plans.forEach(plan => {
+    const stats = getTrainingPlanActualStats(plan);
+    totalPlannedClasses += plan.plannedClasses || 0;
+    totalPlannedTrainees += plan.plannedTrainees || 0;
+    totalPlannedHours += plan.plannedHours || 0;
+    totalActualClasses += stats.actualClasses;
+    totalActualHours += stats.actualHours;
+    stats.regs.forEach(r => distinctTrainees.add(r.creator));
+    if (isTrainingPlanOverdue(plan)) overdue.push({ plan, stats });
+
+    bump(byMonth, plan.month, plan, stats);
+    bump(byDept, plan.targetDept || '(Chưa gán đơn vị)', plan, stats);
+    const course = plan.courseId != null ? DB.trainingCourses.find(c => c.id === plan.courseId) : null;
+    bump(byCourse, course ? course.name : '(Không gắn chương trình)', plan, stats);
+  });
+
+  const finalizeRows = (map) => [...map.values()]
+    .map(r => ({ ...r, actualTrainees: r.traineeSet.size }))
+    .sort((a, b) => String(a.key).localeCompare(String(b.key)));
+
+  const ratios = [];
+  if (totalPlannedClasses > 0) ratios.push(Math.min(totalActualClasses / totalPlannedClasses, 1));
+  if (totalPlannedTrainees > 0) ratios.push(Math.min(distinctTrainees.size / totalPlannedTrainees, 1));
+  if (totalPlannedHours > 0) ratios.push(Math.min(totalActualHours / totalPlannedHours, 1));
+  const pct = ratios.length ? Math.round((ratios.reduce((a, b) => a + b, 0) / ratios.length) * 100) : null;
+
+  return {
+    plans, totalPlannedClasses, totalPlannedTrainees, totalPlannedHours,
+    totalActualClasses, totalActualTrainees: distinctTrainees.size, totalActualHours,
+    pct, overdue,
+    byMonth: finalizeRows(byMonth), byDept: finalizeRows(byDept), byCourse: finalizeRows(byCourse)
+  };
+}
+
+let currentTrainingPlanDashboardData = null;
+function renderTrainingPlanDashboard() {
+  const wrap = document.getElementById('tpDashResultWrap');
+  if (!wrap) return;
+  const filters = {
+    month: document.getElementById('tpDashMonth')?.value || '',
+    courseId: Number(document.getElementById('tpDashCourseId')?.value) || null,
+    targetDept: document.getElementById('tpDashTargetDept')?.value || '',
+    audience: document.getElementById('tpDashAudience')?.value || ''
+  };
+  const data = computeTrainingPlanDashboard(filters);
+  currentTrainingPlanDashboardData = data;
+
+  const fmtHours = (h) => (Math.round(h * 10) / 10).toLocaleString('vi-VN');
+  const breakdownTable = (title, rows, keyLabel) => `
+    <div class="mt-3">
+      <h4 class="font-bold text-xs text-gray-700 mb-1">${escapeHtml(title)}</h4>
+      <div class="overflow-x-auto">
+        <table class="w-full border-collapse text-xs bg-white">
+          <thead><tr class="bg-gray-100 text-left">
+            <th class="border p-1.5">${escapeHtml(keyLabel)}</th>
+            <th class="border p-1.5 text-center">Số Lớp (TT/KH)</th>
+            <th class="border p-1.5 text-center">Học Viên (TT/KH)</th>
+            <th class="border p-1.5 text-center">Giờ (TT/KH)</th>
+          </tr></thead>
+          <tbody>${rows.length ? rows.map(r => `
+            <tr>
+              <td class="border p-1.5">${escapeHtml(String(r.key))}</td>
+              <td class="border p-1.5 text-center">${r.actualClasses}/${r.plannedClasses}</td>
+              <td class="border p-1.5 text-center">${r.actualTrainees}/${r.plannedTrainees}</td>
+              <td class="border p-1.5 text-center">${fmtHours(r.actualHours)}/${fmtHours(r.plannedHours)}</td>
+            </tr>`).join('') : `<tr><td colspan="4" class="text-center p-2 text-gray-400 italic">Không có dữ liệu.</td></tr>`}</tbody>
+        </table>
+      </div>
+    </div>`;
+
+  const overdueRows = data.overdue.map(({ plan, stats }) => {
+    const course = plan.courseId != null ? DB.trainingCourses.find(c => c.id === plan.courseId) : null;
+    return `<tr>
+      <td class="border p-1.5">${escapeHtml(plan.month)}</td>
+      <td class="border p-1.5">${course ? escapeHtml(course.name) : '<span class="text-gray-400 italic">—</span>'}</td>
+      <td class="border p-1.5">${escapeHtml(plan.targetDept || '')}</td>
+      <td class="border p-1.5 text-center">${stats.actualClasses}/${plan.plannedClasses || 0}</td>
+      <td class="border p-1.5 text-center">${stats.actualTrainees}/${plan.plannedTrainees || 0}</td>
+    </tr>`;
+  }).join('');
+
+  wrap.innerHTML = `
+    <div class="grid grid-cols-2 md:grid-cols-3 gap-3 text-center">
+      <div class="bg-white border border-emerald-200 rounded p-3"><div class="text-xs text-gray-600">Số Lớp (Thực Tế/Kế Hoạch)</div><div class="font-bold text-lg text-emerald-800">${data.totalActualClasses}/${data.totalPlannedClasses}</div></div>
+      <div class="bg-white border border-emerald-200 rounded p-3"><div class="text-xs text-gray-600">CBNV Được Đào Tạo (Thực Tế/Kế Hoạch)</div><div class="font-bold text-lg text-emerald-800">${data.totalActualTrainees}/${data.totalPlannedTrainees}</div></div>
+      <div class="bg-white border border-emerald-200 rounded p-3"><div class="text-xs text-gray-600">Giờ Đào Tạo (Thực Tế/Kế Hoạch)</div><div class="font-bold text-lg text-emerald-800">${fmtHours(data.totalActualHours)}/${fmtHours(data.totalPlannedHours)}</div></div>
+      <div class="bg-white border border-violet-200 rounded p-3"><div class="text-xs text-gray-600">Tỷ Lệ Hoàn Thành</div><div class="font-bold text-lg text-violet-800">${data.pct == null ? '—' : data.pct + '%'}</div></div>
+      <div class="bg-white border border-amber-200 rounded p-3"><div class="text-xs text-gray-600">Kế Hoạch Quá Hạn/Chưa Thực Hiện</div><div class="font-bold text-lg text-amber-700">${data.overdue.length}</div></div>
+      <div class="bg-white border border-gray-200 rounded p-3"><div class="text-xs text-gray-600">Số Kế Hoạch Đang Xem</div><div class="font-bold text-lg text-gray-700">${data.plans.length}</div></div>
+    </div>
+    ${breakdownTable('Theo Tháng', data.byMonth, 'Tháng')}
+    ${breakdownTable('Theo Đơn Vị', data.byDept, 'Đơn Vị')}
+    ${breakdownTable('Theo Chương Trình', data.byCourse, 'Chương Trình')}
+    <div class="mt-3">
+      <h4 class="font-bold text-xs text-gray-700 mb-1">⚠️ Quá Hạn / Chưa Thực Hiện</h4>
+      <div class="overflow-x-auto">
+        <table class="w-full border-collapse text-xs bg-white">
+          <thead><tr class="bg-amber-50 text-left"><th class="border p-1.5">Tháng</th><th class="border p-1.5">Chương Trình</th><th class="border p-1.5">Đơn Vị</th><th class="border p-1.5 text-center">Số Lớp (TT/KH)</th><th class="border p-1.5 text-center">Học Viên (TT/KH)</th></tr></thead>
+          <tbody>${overdueRows || `<tr><td colspan="5" class="text-center p-2 text-gray-400 italic">Không có kế hoạch nào quá hạn.</td></tr>`}</tbody>
+        </table>
+      </div>
+    </div>
+    <div class="flex justify-end pt-2">
+      <button onclick="exportTrainingPlanDashboardExcel()" class="bg-emerald-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-emerald-700">📊 Xuất Excel</button>
+    </div>
+  `;
+}
+function exportTrainingPlanDashboardExcel() {
+  const data = currentTrainingPlanDashboardData;
+  if (!data) return;
+  const columns = [
+    { header: 'Tháng', key: 'month', width: 12 },
+    { header: 'Chương Trình', key: 'course', width: 28 },
+    { header: 'Đơn Vị', key: 'dept', width: 20 },
+    { header: 'Đối Tượng', key: 'audience', width: 20 },
+    { header: 'Số Lớp KH', key: 'plannedClasses', width: 12 },
+    { header: 'Số Lớp TT', key: 'actualClasses', width: 12 },
+    { header: 'Học Viên KH', key: 'plannedTrainees', width: 12 },
+    { header: 'Học Viên TT', key: 'actualTrainees', width: 12 },
+    { header: 'Giờ KH', key: 'plannedHours', width: 10 },
+    { header: 'Giờ TT', key: 'actualHours', width: 10 },
+    { header: '% Hoàn Thành', key: 'pct', width: 12 }
+  ];
+  const rows = data.plans.map(plan => {
+    const course = plan.courseId != null ? DB.trainingCourses.find(c => c.id === plan.courseId) : null;
+    const stats = getTrainingPlanActualStats(plan);
+    return {
+      month: plan.month, course: course ? course.name : '', dept: plan.targetDept || '', audience: plan.audience || '',
+      plannedClasses: plan.plannedClasses || 0, actualClasses: stats.actualClasses,
+      plannedTrainees: plan.plannedTrainees || 0, actualTrainees: stats.actualTrainees,
+      plannedHours: plan.plannedHours || 0, actualHours: Math.round(stats.actualHours * 10) / 10,
+      pct: getTrainingPlanCompletionPct(plan) ?? ''
+    };
+  });
+  downloadXlsxFromServer('theo_doi_ke_hoach_dao_tao.xlsx', 'Theo Dõi Kế Hoạch Đào Tạo', columns, rows);
+}
+
+// ---------- Nhập Kế Hoạch Từ Excel (theo tháng) ----------
+// Cùng khuôn onTrainingRosterFileChange()/confirmTrainingRosterAdd() (roster) — parse-preview NGAY khi
+// chọn file (server đối chiếu tên Chương Trình với DB.trainingCourses thật), rồi CONFIRM ở bước sau mới
+// thật sự tạo — mỗi dòng đi qua ĐÚNG POST /api/create/trainingPlans (được kiểm tra lại đầy đủ), KHÔNG tin
+// nguyên dữ liệu xem trước để ghi thẳng hàng loạt.
+let trainingPlanImportPreviewItems = [];
+async function onTrainingPlanImportFileChange(event) {
+  const file = event.target.files[0];
+  trainingPlanImportPreviewItems = [];
+  document.getElementById('tpImportPreviewWrap').classList.add('hidden');
+  document.getElementById('tpImportConfirmBtn').classList.add('hidden');
+  const statusEl = document.getElementById('tpImportStatus');
+  if (!file) { statusEl.innerText = ''; return; }
+
+  statusEl.innerText = '⏳ Đang đọc file...';
+  const formData = new FormData();
+  formData.append('file', file);
+  try {
+    const res = await fetch('/api/training/parse-plan-import', { method: 'POST', body: formData });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Lỗi không xác định');
+    trainingPlanImportPreviewItems = data.items;
+    const validCount = data.items.filter(it => it.monthValid).length;
+    statusEl.innerText = `✅ Đọc file "${data.fileName}": ${validCount}/${data.items.length} dòng hợp lệ.`;
+    document.getElementById('tpImportPreviewBody').innerHTML = data.items.map(it => `<tr>
+      <td class="p-1">${escapeHtml(it.month)}</td>
+      <td class="p-1">${escapeHtml(it.courseName || '')}${it.courseName ? (it.courseMatched ? ' <span class="text-emerald-600">✅ khớp</span>' : ' <span class="text-amber-600">⚠️ không khớp</span>') : ''}</td>
+      <td class="p-1">${escapeHtml(it.targetDept || '')}</td>
+      <td class="p-1">${escapeHtml(it.audience || '')}</td>
+      <td class="p-1 text-center">${it.plannedClasses}</td>
+      <td class="p-1 text-center">${it.plannedTrainees}</td>
+      <td class="p-1 text-center">${it.plannedHours}</td>
+      <td class="p-1">${it.monthValid ? '<span class="text-emerald-600">✅ Hợp lệ</span>' : '<span class="text-red-600">⛔ Tháng không hợp lệ</span>'}</td>
+    </tr>`).join('');
+    document.getElementById('tpImportPreviewWrap').classList.remove('hidden');
+    if (validCount > 0) document.getElementById('tpImportConfirmBtn').classList.remove('hidden');
+  } catch (err) {
+    statusEl.innerText = `⛔ ${err.message}`;
+    event.target.value = '';
+  }
+}
+
+async function confirmTrainingPlanImport() {
+  const validItems = trainingPlanImportPreviewItems.filter(it => it.monthValid);
+  if (!validItems.length) return alert('Không có dòng hợp lệ nào để nhập.');
+  let successCount = 0;
+  const failed = [];
+  for (const it of validItems) {
+    try {
+      const result = await callCreateAction('trainingPlans', {
+        month: it.month, courseId: it.courseId, targetDept: it.targetDept, audience: it.audience,
+        plannedClasses: it.plannedClasses, plannedTrainees: it.plannedTrainees, plannedHours: it.plannedHours
+      });
+      DB.trainingPlans.unshift(result.item);
+      successCount++;
+    } catch (err) {
+      failed.push({ month: it.month, error: err.message });
+    }
+  }
+  logSystemAction('INTERNAL', 'IMPORT_TRAINING_PLAN', `Nhập ${successCount} dòng kế hoạch đào tạo từ Excel`, 'SUCCESS');
+  let msg = `✅ Đã nhập ${successCount}/${validItems.length} dòng kế hoạch.`;
+  if (failed.length) {
+    msg += `\n\n⛔ ${failed.length} dòng lỗi:\n` + failed.map(f => `- Tháng ${f.month}: ${f.error}`).join('\n');
+  }
+  alert(msg);
+  document.getElementById('tpImportFileInput').value = '';
+  document.getElementById('tpImportPreviewWrap').classList.add('hidden');
+  document.getElementById('tpImportConfirmBtn').classList.add('hidden');
+  document.getElementById('tpImportStatus').innerText = '';
+  trainingPlanImportPreviewItems = [];
+  renderTrainingLms();
 }
 
 function openTrainingClassQrModal(classId) {

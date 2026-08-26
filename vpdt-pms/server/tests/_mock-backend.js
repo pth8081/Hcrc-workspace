@@ -255,6 +255,38 @@ function __mockValidateCourseId(payload) {
   payload.courseId = courseId;
 }
 
+// Đợt 5: Kế Hoạch Đào Tạo (trainingPlans) — mirrors normalizeTrainingPlanFields() ở lib/createValidation.js
+// (dùng CHUNG cho cả tạo lẫn sửa, xem __mockEditTrainingPlan() bên dưới).
+function __mockNormalizeTrainingPlanFields(payload) {
+  const month = String(payload.month || '').trim();
+  if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(month)) throw __mockHttpError(400, 'Tháng kế hoạch không hợp lệ (định dạng YYYY-MM, vd 2026-09)');
+  payload.month = month;
+  __mockValidateCourseId(payload);
+  const targetDept = payload.targetDept ? String(payload.targetDept).trim() : '';
+  if (targetDept) {
+    const validDepts = new Set([...(DB.depts || []), ...(DB.stores || [])]);
+    if (!validDepts.has(targetDept)) throw __mockHttpError(400, `Đơn vị không hợp lệ: ${targetDept}`);
+  }
+  payload.targetDept = targetDept;
+  payload.audience = payload.audience ? String(payload.audience).trim().slice(0, 300) : '';
+  const toNonNegInt = (v) => { const n = Number(v); return Number.isFinite(n) && n > 0 ? Math.floor(n) : 0; };
+  const toNonNegNum = (v) => { const n = Number(v); return Number.isFinite(n) && n > 0 ? n : 0; };
+  payload.plannedClasses = toNonNegInt(payload.plannedClasses);
+  payload.plannedTrainees = toNonNegInt(payload.plannedTrainees);
+  payload.plannedHours = toNonNegNum(payload.plannedHours);
+}
+function __mockValidateTrainingPlanCreate(payload, user) {
+  if (!(user.perms?.admin || user.perms?.trainingManage)) throw __mockHttpError(403, 'Bạn không có quyền lập kế hoạch đào tạo');
+  __mockNormalizeTrainingPlanFields(payload);
+}
+function __mockEditTrainingPlan(payload, user, plan) {
+  if (!(user.perms?.admin || user.perms?.trainingManage)) throw __mockHttpError(403, 'Bạn không có quyền sửa kế hoạch đào tạo');
+  const fields = ['month', 'courseId', 'targetDept', 'audience', 'plannedClasses', 'plannedTrainees', 'plannedHours'];
+  fields.forEach((f) => { if (payload[f] !== undefined) plan[f] = payload[f]; });
+  __mockNormalizeTrainingPlanFields(plan);
+  return plan;
+}
+
 function __mockValidateTrainingClassCreate(payload, user) {
   if (!(user.perms?.admin || user.perms?.trainingManage)) throw __mockHttpError(403, 'Bạn không có quyền tạo lớp học');
   if (!payload.category || !String(payload.category).trim()) throw __mockHttpError(400, 'Thiếu loại đào tạo');
@@ -561,6 +593,7 @@ async function __mockHandleCreate(moduleKey, payload, user) {
   if (moduleKey === 'internalPosts') { __mockValidateInternalPostCreate(payload, user); creatorField = 'author'; creatorNameField = 'authorName'; }
   else if (moduleKey === 'trainingClasses') { __mockValidateTrainingClassCreate(payload, user); creatorField = 'creator'; creatorNameField = 'creatorName'; }
   else if (moduleKey === 'trainingCourses') { __mockValidateTrainingCourseCreate(payload, user); creatorField = 'creator'; creatorNameField = 'creatorName'; }
+  else if (moduleKey === 'trainingPlans') { __mockValidateTrainingPlanCreate(payload, user); creatorField = 'creator'; creatorNameField = 'creatorName'; }
   else if (moduleKey === 'trainingDocuments') { __mockValidateTrainingDocumentCreate(payload, user); creatorField = 'uploaderUsername'; creatorNameField = 'uploaderName'; }
   else if (moduleKey === 'trainingTests') { __mockValidateTrainingTestCreate(payload, user); creatorField = 'creator'; creatorNameField = 'creatorName'; }
   else if (moduleKey === 'trainingRegistrations') { __mockValidateTrainingRegistrationCreate(payload, user); creatorField = 'creator'; creatorNameField = 'creatorName'; }
@@ -631,6 +664,19 @@ async function __mockHandleRecordAction(moduleKey, idStr, action, payload, user)
     if (action === 'delete') return { __deleted: true };
     throw __mockHttpError(400, 'Hành động không hợp lệ');
   }
+  if (moduleKey === 'trainingPlans') {
+    if (action === 'delete') return { __deleted: true };
+    if (action === 'edit') {
+      const id = Number(idStr);
+      const plan = DB.trainingPlans.find((p) => p.id === id);
+      if (!plan) throw __mockHttpError(404, 'Không tìm thấy kế hoạch đào tạo');
+      const clone = JSON.parse(JSON.stringify(plan));
+      const r = __mockEditTrainingPlan(payload, user, clone);
+      Object.assign(plan, r);
+      return plan;
+    }
+    throw __mockHttpError(400, 'Hành động không hợp lệ');
+  }
   if (moduleKey === 'trainingDocuments') {
     if (action === 'delete') return { __deleted: true };
     throw __mockHttpError(400, 'Hành động không hợp lệ');
@@ -659,6 +705,7 @@ async function __mockHandleRecordAction(moduleKey, idStr, action, payload, user)
 // ===================== window.fetch stub =====================
 window.__xlsxExports = [];
 window.__rosterParsePreset = [];
+window.__planImportParsePreset = [];
 
 window.fetch = async function (url, opts) {
   opts = opts || {};
@@ -693,6 +740,10 @@ window.fetch = async function (url, opts) {
 
     if (u === '/api/training/parse-roster' && method === 'POST') {
       return __mockOkRes({ fileName: 'roster.xlsx', items: window.__rosterParsePreset || [] });
+    }
+
+    if (u === '/api/training/parse-plan-import' && method === 'POST') {
+      return __mockOkRes({ fileName: 'ke-hoach.xlsx', items: window.__planImportParsePreset || [] });
     }
 
     if (u === '/api/admin/export-xlsx' && method === 'POST') {

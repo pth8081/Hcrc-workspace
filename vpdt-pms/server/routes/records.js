@@ -651,6 +651,29 @@ router.post('/trainingTests/:id/delete', (req, res) => deleteAdminOnly(req, res,
 // Đợt 4: trainingCourses — xoá cùng khuôn "xóa = quyền tối cao, chỉ Admin" của mọi collection Đào Tạo khác ở trên.
 router.post('/trainingCourses/:id/delete', (req, res) => deleteAdminOnly(req, res, 'trainingCourses'));
 
+// POST /api/records/trainingPlans/:id/edit (Đợt 5: Kế Hoạch Đào Tạo) — sửa 1 dòng kế hoạch đã lập. Đọc
+// kèm appData (depts/stores có sẵn, dùng để kiểm tra targetDept) + trainingCourses (kiểm tra courseId
+// mới nếu có đổi) TRƯỚC khi khoá đúng 1 dòng trainingPlans để sửa — cùng khuôn trainingClasses/:id/edit
+// ở dưới xa hơn trong file này.
+router.post('/trainingPlans/:id/edit', async (req, res) => {
+  const itemId = Number(req.params.id);
+  if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
+  try {
+    const { freshUser } = await getFreshUser(req);
+    const appData = await getAllAppData();
+    appData.trainingCourses = await getAllForCollection('trainingCourses');
+    const result = await withLockedRecordForCollection('trainingPlans', itemId, (item) =>
+      recordActions.editTrainingPlan(req.body, freshUser, item, appData));
+    res.json({ ok: true, item: result });
+  } catch (err) {
+    handleError(res, `trainingPlans/${req.params.id}/edit`, err);
+  }
+});
+// Xoá kế hoạch — cùng khuôn "xóa = quyền tối cao, chỉ Admin" như trainingCourses ở trên (KHÔNG chỉ
+// trainingManage — số thực tế đối chiếu vẫn tính sống từ trainingClasses/trainingRegistrations, không
+// phụ thuộc gì vào việc kế hoạch còn tồn tại hay không, nên xoá nhầm không làm mất dữ liệu đã phát sinh).
+router.post('/trainingPlans/:id/delete', (req, res) => deleteAdminOnly(req, res, 'trainingPlans'));
+
 async function withTrainingRegAction(req, res, action, mutator) {
   const itemId = Number(req.params.id);
   if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });

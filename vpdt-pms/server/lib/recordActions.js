@@ -9,7 +9,7 @@
 // họp thêm cờ minutesEdit (toàn công ty, không theo phòng ban) cho SỬA — riêng XÓA là quyền tối cao,
 // chỉ Admin; Công việc theo NGƯỜI (assignedBy/assignee), hoàn toàn không có khái niệm phòng ban.
 const { HttpError } = require('./httpErrors');
-const { scopeAllows, OFFICE_SUBTYPE_TO_PERM_FLAG, normalizeReportEntryPayload, buildEffectiveContractApprovalWorkflowServer, sanitizeUniformItems, sanitizeBudgetLines, getBudgetTemplateCustomFields, sanitizeBudgetCustomFields, resolveTrainingInstructorUsername, normalizeInviteList } = require('./createValidation');
+const { scopeAllows, OFFICE_SUBTYPE_TO_PERM_FLAG, normalizeReportEntryPayload, buildEffectiveContractApprovalWorkflowServer, sanitizeUniformItems, sanitizeBudgetLines, getBudgetTemplateCustomFields, sanitizeBudgetCustomFields, resolveTrainingInstructorUsername, normalizeInviteList, normalizeTrainingPlanFields } = require('./createValidation');
 const { validateRegistrationItems: validateVppRegItems, calcItemsTotal: calcVppItemsTotal } = require('./vppCatalog');
 const { sanitizePriceFileItems } = require('./priceFileParser');
 
@@ -1976,6 +1976,22 @@ function editTrainingClass(payload, user, cls, tests, users, courses) {
   return cls;
 }
 
+// Sửa 1 dòng Kế Hoạch Đào Tạo đã lập (trainingPlans, Đợt 5) — cùng khuôn editTrainingClass() ở trên
+// (whitelist field rồi chạy lại ĐÚNG 1 luật chuẩn hoá/kiểm tra dùng chung với lúc TẠO, xem
+// normalizeTrainingPlanFields() ở lib/createValidation.js) nhưng gác quyền đơn giản hơn — không có khái
+// niệm "giảng viên phụ trách đúng lớp mình" ở đây, trainingManage quản lý được MỌI kế hoạch (đúng tinh
+// thần "kế hoạch đào tạo là cấu hình toàn công ty" đã nêu ở createValidation.js).
+const TRAINING_PLAN_EDITABLE_FIELDS = ['month', 'courseId', 'targetDept', 'audience', 'plannedClasses', 'plannedTrainees', 'plannedHours'];
+function editTrainingPlan(payload, user, plan, appData) {
+  if (!canManageTraining(user)) throw new HttpError(403, 'Bạn không có quyền sửa kế hoạch đào tạo');
+  if (!payload || typeof payload !== 'object') throw new HttpError(400, 'Thiếu dữ liệu cập nhật');
+  for (const field of TRAINING_PLAN_EDITABLE_FIELDS) {
+    if (payload[field] !== undefined) plan[field] = payload[field];
+  }
+  normalizeTrainingPlanFields(plan, appData);
+  return plan;
+}
+
 // Vòng đời trạng thái buổi học của lớp OFFLINE (Đợt 3) — ONLINE không có 2 action này (tính sống theo
 // giờ, xem createValidation.js/index.html), route /trainingClasses/:id/start-session chặn thẳng nếu
 // mode khác OFFLINE trước khi gọi tới đây, nhưng vẫn kiểm tra lại ở đây cho chắc (đúng nguyên tắc
@@ -2697,7 +2713,7 @@ module.exports = {
   mergeReportPeriod, mergeReportPeriodByTasks, updateReportCompilation, publishReportPeriod, unpublishReportPeriod,
   updateReportSlideTemplate,
   canManageTraining, canManageTrainingClass, cancelTrainingRegistration, setTrainingRegistrationResult, confirmCareerPathForEmployee,
-  bulkRegisterTrainingClass, editTrainingClass, startOfflineTrainingClass, endOfflineTrainingClass,
+  bulkRegisterTrainingClass, editTrainingClass, startOfflineTrainingClass, endOfflineTrainingClass, editTrainingPlan,
   gradeTrainingTestSubmission, applyAutoGradedTestResult,
   canManageRecruitment, closeRecruitmentJob, confirmRecruitmentJobFilled, setRecruitmentReferralStatus,
   canManageItSupport, applyPriceApproval, claimPriceApply, releasePriceApplyClaim, requestPriceInfoFromIt, submitPriceSupplementFile,

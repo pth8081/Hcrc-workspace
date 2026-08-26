@@ -1278,6 +1278,29 @@ const CREATE_MODULE_CONFIGS = {
       payload.description = payload.description ? String(payload.description).trim() : '';
     }
   },
+  // Kế Hoạch Đào Tạo (trainingPlans, Đợt 5) — hồ sơ "Tháng X dự kiến mở bao nhiêu lớp/học viên/giờ" do
+  // trainingManage lập TRƯỚC, đối chiếu với trainingClasses/trainingRegistrations THẬT phát sinh trong
+  // đúng tháng đó (tính SỐNG ở client, xem index.html renderTrainingPlanDashboard() — KHÔNG lưu số thực
+  // tế vào đây) để ra % hoàn thành. Đây là danh mục dùng chung toàn công ty do HR/Đào Tạo lập kế hoạch,
+  // KHÔNG phải hồ sơ "thay mặt phòng ban mình tạo" — forceOwnDept:true chỉ để field "dept" (ai LẬP kế
+  // hoạch) có giá trị hợp lệ theo đúng cơ chế chung (validateAndPrepareCreate() LUÔN ép dept = user.dept
+  // khi forceOwnDept, xem cuối file), giống hệt trainingCourses/trainingClasses ở trên — KHÔNG liên quan
+  // gì tới "targetDept" (đơn vị mà kế hoạch này NHẮM TỚI, người lập tự chọn) bên dưới. Cố tình đặt tên
+  // "targetDept" thay vì tái dùng "dept" cho ý nghĩa này — dùng lại "dept" sẽ bị validateAndPrepareCreate()
+  // ghi đè mất giá trị người lập chọn, ép về phòng ban CỦA NGƯỜI LẬP KẾ HOẠCH thay vì đơn vị họ chọn nhắm
+  // tới (cùng cái bẫy đã gặp ở recruitmentJobs.hiringDept — xem giải thích đầy đủ ở đó).
+  trainingPlans: {
+    dbKey: 'trainingPlans',
+    forceOwnDept: true,
+    getScope: () => ({}),
+    creatorField: 'creator', creatorNameField: 'creatorName',
+    extraValidate: (payload, collection, user, appData) => {
+      if (!user.perms?.admin && !user.perms?.trainingManage) {
+        throw new CreateError(403, 'Bạn không có quyền lập kế hoạch đào tạo');
+      }
+      normalizeTrainingPlanFields(payload, appData);
+    }
+  },
   // Đăng ký lớp học — khớp đúng khuôn vppRegistrations (khoá theo cặp lớp+người để chặn race 2 request
   // đăng ký cùng lúc), chỉ khác: cho phép đăng ký lại sau khi tự HUỶ (result='CANCELLED', không phải chỉ
   // REJECTED) — huỷ ở đây do chính người đăng ký chủ động (không qua quy trình duyệt nào).
@@ -1825,6 +1848,45 @@ function normalizeInviteList(rawList) {
   return out;
 }
 
+// Chuẩn hoá + kiểm tra các field của 1 dòng Kế Hoạch Đào Tạo (trainingPlans, Đợt 5) — dùng CHUNG cho cả
+// TẠO (extraValidate ở trên) LẪN SỬA (editTrainingPlan(), lib/recordActions.js), cùng lý do tách riêng
+// như resolveTrainingInstructorUsername/normalizeInviteList ở trên (2 route khác nhau cùng cần đúng 1
+// luật chuẩn hoá, không lặp lại logic). Ném lỗi ngay khi field không hợp lệ (tháng sai định dạng,
+// courseId không khớp chương trình có thật, targetDept không khớp danh mục phòng ban/siêu thị) — số
+// lượng (plannedClasses/plannedTrainees/plannedHours) KHÔNG chặn cứng (âm/chữ/để trống đều rơi về 0)
+// vì đây chỉ là số KẾ HOẠCH, sai lệch không gây hỏng dữ liệu liên kết như courseId/targetDept.
+function normalizeTrainingPlanFields(payload, appData) {
+  const month = String(payload.month || '').trim();
+  if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(month)) {
+    throw new CreateError(400, 'Tháng kế hoạch không hợp lệ (định dạng YYYY-MM, vd 2026-09)');
+  }
+  payload.month = month;
+
+  const courseId = (payload.courseId === '' || payload.courseId == null) ? null : Number(payload.courseId);
+  if (courseId != null) {
+    const courses = appData?.trainingCourses || [];
+    if (!Number.isFinite(courseId) || !courses.some(c => c.id === courseId)) {
+      throw new CreateError(400, 'Chương trình được chọn không hợp lệ');
+    }
+  }
+  payload.courseId = courseId;
+
+  const targetDept = payload.targetDept ? String(payload.targetDept).trim() : '';
+  if (targetDept) {
+    const validDepts = new Set([...(appData?.depts || []), ...(appData?.stores || [])]);
+    if (!validDepts.has(targetDept)) throw new CreateError(400, `Đơn vị không hợp lệ: ${targetDept}`);
+  }
+  payload.targetDept = targetDept;
+
+  payload.audience = payload.audience ? String(payload.audience).trim().slice(0, 300) : '';
+
+  const toNonNegInt = (v) => { const n = Number(v); return Number.isFinite(n) && n > 0 ? Math.floor(n) : 0; };
+  const toNonNegNum = (v) => { const n = Number(v); return Number.isFinite(n) && n > 0 ? n : 0; };
+  payload.plannedClasses = toNonNegInt(payload.plannedClasses);
+  payload.plannedTrainees = toNonNegInt(payload.plannedTrainees);
+  payload.plannedHours = toNonNegNum(payload.plannedHours);
+}
+
 module.exports = {
   CREATE_MODULE_CONFIGS, CreateError, validateAndPrepareCreate, scopeAllows, findMeetingConflict,
   OFFICE_SUBTYPE_TO_PERM_FLAG, normalizeReportEntryPayload,
@@ -1832,5 +1894,6 @@ module.exports = {
   buildEffectiveContractApprovalWorkflowServer,
   sanitizeUniformItems,
   BUDGET_TYPE_OPTIONS, BUDGET_FIELD_TYPES, sanitizeBudgetLines, getBudgetTemplateCustomFields, sanitizeBudgetCustomFields,
-  resolveTrainingInstructorUsername, normalizeInviteList
+  resolveTrainingInstructorUsername, normalizeInviteList,
+  normalizeTrainingPlanFields
 };
