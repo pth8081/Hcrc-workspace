@@ -8,6 +8,7 @@ const fs = require('fs');
 const path = require('path');
 const rateLimit = require('express-rate-limit');
 const { getAppDataValueCached } = require('../lib/appData');
+const { verifyFileSignature } = require('../lib/fileSignature');
 
 const router = express.Router();
 
@@ -85,6 +86,23 @@ router.post('/', uploadRateLimiter, (req, res) => {
       } catch (e) {
         // Lỗi tra cứu cấu hình không được chặn tải lên bình thường — coi như module chưa cấu hình riêng.
       }
+    }
+
+    // Kiểm tra chữ ký nhị phân thật của file — chạy 1 lần, SAU khi đuôi file đã qua cả 2 lớp lọc theo
+    // đuôi ở trên (ALLOWED_EXT toàn cục + uploadFileTypeConfig riêng theo module nếu có), đối chiếu với
+    // đúng đuôi mà file đang "sống sót" qua các lớp lọc đó (đuôi thật sự dùng để lưu file, xem `safeExt`
+    // ở multer.diskStorage phía trên).
+    try {
+      const declaredExt = path.extname(req.file.originalname).toLowerCase();
+      const buffer = await fs.promises.readFile(req.file.path);
+      const check = await verifyFileSignature(buffer, declaredExt);
+      if (!check.ok) {
+        fs.unlink(req.file.path, () => {});
+        return res.status(400).json({ error: check.reason });
+      }
+    } catch (e) {
+      fs.unlink(req.file.path, () => {});
+      return res.status(400).json({ error: 'Không thể kiểm tra nội dung tệp vừa tải lên.' });
     }
 
     res.json({

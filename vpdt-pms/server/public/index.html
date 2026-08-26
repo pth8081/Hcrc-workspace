@@ -75,6 +75,14 @@
 }
 .sidebar-item:hover, .sidebar-subitem:hover { background: #1e293b; color: #fff; }
 .sidebar-subitem { font-weight: 500; padding: 0.4rem 0.75rem; font-size: 0.75rem; }
+/* Tab đang mở ở sidebar trái — xem setActiveSidebarTab() (gọi từ trong switchTab()). Nền xanh đậm hơn
+   :hover (đổi tông, không chỉ đổi độ đậm, để không lẫn với hover) + viền trái màu sky-400 khớp màu logo
+   HCRC ở đầu sidebar (xem <svg> phía trên) — đọc rõ là "đang chọn" chứ không phải chỉ đang rê chuột qua. */
+.sidebar-item-active, .sidebar-subitem-active {
+  background: #1e3a5f; color: #fff;
+  border-left: 3px solid #38bdf8;
+  padding-left: calc(0.75rem - 3px);
+}
 .sidebar-icon { font-size: 1rem; width: 1.25rem; text-align: center; flex-shrink: 0; }
 /* Thu gọn (toggleSidebarCollapse(), lưu localStorage) — chỉ còn icon, ẩn hết nhãn chữ + khối con đang mở. */
 #userHeader.sidebar-collapsed { width: 4.5rem; }
@@ -9900,6 +9908,41 @@ document.addEventListener('click', (ev) => {
   if (!panel.contains(ev.target) && ev.target !== btn && !btn?.contains(ev.target)) panel.classList.add('hidden');
 });
 
+// setActiveSidebarTab(tabName) — tô sáng đúng (các) nút sidebar trái tương ứng module vừa chuyển tới,
+// gọi DUY NHẤT 1 chỗ ngay trong switchTab() (xem cuối hàm) nên tự động khớp với MỌI cách gọi
+// switchTab() có sẵn khắp trang, không cần sửa từng onclick="switchTab(...)". KHÔNG dò/đổi state của 17
+// hàm setXSubTab() (tab con NẰM BÊN TRONG 1 module, vd setInternalSubTab()) — các hàm đó đã tự tô sáng
+// đúng nút con của riêng chúng rồi, hàm này chỉ lo đúng 1 việc: cấp sidebar ngoài cùng (mục cấp 1 đứng
+// riêng lẻ NHƯ btnDocTab, hoặc mục con NẰM TRONG 1 nhóm dropdown NHƯ btnMinutesTab trong Điều Hành).
+//
+// Cách xác định nút nào khớp: quét toàn bộ nút `.sidebar-item`/`.sidebar-subitem` trong <nav>, so khớp
+// thẳng với chuỗi "switchTab('<tabName>')" có trong thuộc tính onclick của từng nút — KHÔNG cần thêm
+// id/data-* riêng cho từng nút (nhiều nút mục con hiện chưa có id, vd 4 nút trong "Truyền thông"), tự
+// động khớp cả những nút thêm mới sau này miễn onclick vẫn gọi switchTab(tabName) như khuôn hiện có.
+// Với 1 tabName dùng CHUNG cho nhiều nút con cùng 1 nhóm (vd 4 nút trong "Tổng Hợp" đều gọi
+// switchTab('office'), chỉ khác setOfficeSubTab() đứng sau — switchTab() không nhận được tham số đó nên
+// không thể phân biệt tiếp) thì cả nhóm cùng được tô sáng — chấp nhận được, vẫn đúng hướng "đang ở module
+// nào", không thay thế việc setOfficeSubTab() tự tô sáng đúng tab con bên TRONG module.
+function setActiveSidebarTab(tabName) {
+  const nav = document.querySelector('#userHeader nav');
+  if (!nav) return;
+
+  nav.querySelectorAll('.sidebar-item-active, .sidebar-subitem-active').forEach(el => {
+    el.classList.remove('sidebar-item-active', 'sidebar-subitem-active');
+  });
+  if (!tabName) return;
+
+  const marker = `switchTab('${tabName}')`;
+  nav.querySelectorAll('.sidebar-item, .sidebar-subitem').forEach(el => {
+    if (!(el.getAttribute('onclick') || '').includes(marker)) return;
+    el.classList.add(el.classList.contains('sidebar-subitem') ? 'sidebar-subitem-active' : 'sidebar-item-active');
+    // Mục con thuộc 1 nhóm dropdown (…NavWrap) → tô sáng LUÔN nút đầu nhóm để biết đang mở nhóm nào.
+    const navWrap = el.closest('[id$="NavWrap"]');
+    const header = navWrap ? navWrap.querySelector(':scope > .sidebar-item') : null;
+    if (header) header.classList.add('sidebar-item-active');
+  });
+}
+
 function switchTab(tabName) {
   if (!currentUser) return logout();
   closeMobileSidebar(); // Đóng sidebar off-canvas trên điện thoại mỗi khi chuyển màn hình (không ảnh hưởng desktop).
@@ -9965,6 +10008,8 @@ function switchTab(tabName) {
     alert('⛔ Bạn không có quyền truy cập Module Báo cáo!');
     return;
   }
+
+  setActiveSidebarTab(tabName); // Tô sáng đúng nút sidebar trái vừa chuyển tới — xem chú thích hàm.
 
   // Cuộn về đầu trang mỗi khi đổi MODULE — cùng lý do như setSystemSubTab()/các setXXXSubTab() khác:
   // tránh giữ nguyên vị trí cuộn cũ (đang ở giữa/cuối 1 màn dài) khi module mới ngắn hơn nhiều, trình

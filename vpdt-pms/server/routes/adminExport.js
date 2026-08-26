@@ -10,6 +10,7 @@ const express = require('express');
 const multer = require('multer');
 const { requireAuth, blockIfMustChangePassword } = require('../lib/auth');
 const { buildGenericWorkbook, parseUsersImportXlsx } = require('../lib/adminExport');
+const { verifyFileSignature } = require('../lib/fileSignature');
 
 const router = express.Router();
 router.use(requireAuth, blockIfMustChangePassword);
@@ -66,6 +67,9 @@ router.post('/users/import-xlsx', (req, res) => {
     if (!req.file) return res.status(400).json({ error: 'Thiếu tệp cần import' });
 
     try {
+      const check = await verifyFileSignature(req.file.buffer, '.xlsx');
+      if (!check.ok) return res.status(400).json({ error: check.reason });
+
       const rows = await parseUsersImportXlsx(req.file.buffer);
       res.json({ rows });
     } catch (parseErr) {
