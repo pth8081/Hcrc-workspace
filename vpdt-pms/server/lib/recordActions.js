@@ -2058,29 +2058,53 @@ function applyAutoGradedTestResult(reg, graded) {
   return reg;
 }
 
-// Xác nhận 1 nhân viên đã hoàn thành lộ trình thăng tiến — CHỈ cho xác nhận khi nhân viên đó đã có kết
-// quả PASSED ở TẤT CẢ lớp học bắt buộc (path.requiredClassIds), đúng yêu cầu "phải đạt yêu cầu mới được
-// xác nhận qua". Trả về bản NHÁP bản ghi xác nhận (chưa lưu) — routes/records.js insert vào collection
+// Xác nhận 1 nhân viên đã hoàn thành 1 CẤP BẬC của lộ trình thăng tiến (Đợt 7 — path.stages, thứ tự
+// mảng = thứ tự cấp bậc) — CHỈ cho xác nhận khi:
+//   1) cấp bậc TRƯỚC ĐÓ (stageIndex - 1) đã được xác nhận cho ĐÚNG người này ở ĐÚNG lộ trình này (gác
+//      TUẦN TỰ — cấp 0 không có điều kiện tiên quyết);
+//   2) cấp bậc này CHƯA từng được xác nhận cho người này (uniqueness pathId+username+stageIndex, đã đổi
+//      từ pathId+username hồi trước khi có khái niệm nhiều cấp);
+//   3) nhân viên đã có kết quả PASSED ở 1 lớp bất kỳ thuộc TỪNG chương trình bắt buộc của cấp này
+//      (stage.requiredCourseIds — đổi từ requiredClassIds phẳng trỏ thẳng 1 lớp cụ thể, xem
+//      lib/createValidation.js).
+// Trả về bản NHÁP bản ghi xác nhận (chưa lưu) — routes/records.js insert vào collection
 // careerPathConfirmations riêng (cùng khuôn startContractPayment() ở trên: mutator vừa xác thực vừa
-// "sinh" ra 1 bản ghi mới ở collection khác, không mutate path).
-function confirmCareerPathForEmployee(payload, user, path, allRegistrations, existingConfirmations, users) {
+// "sinh" ra 1 bản ghi mới ở collection khác, không mutate path). KHÔNG đụng tới user.jobTitle ở đây hay
+// bất kỳ đâu trong luồng này — đổi chức danh vẫn 100% thủ công qua Quản Lý Người Dùng theo đúng yêu cầu
+// đã chốt.
+function confirmCareerPathForEmployee(payload, user, path, allRegistrations, existingConfirmations, users, trainingClasses) {
   if (!canManageTraining(user)) throw new HttpError(403, 'Bạn không có quyền xác nhận lộ trình thăng tiến');
   const targetUsername = (payload?.username || '').trim();
   if (!targetUsername) throw new HttpError(400, 'Thiếu người cần xác nhận');
   const targetUser = (users || []).find(u => u.username === targetUsername);
   if (!targetUser) throw new HttpError(404, 'Không tìm thấy nhân viên này');
-  const already = (existingConfirmations || []).some(c => c.pathId === path.id && c.username === targetUsername);
-  if (already) throw new HttpError(409, 'Nhân viên này đã được xác nhận hoàn thành lộ trình này rồi');
 
-  const requiredClassIds = Array.isArray(path.requiredClassIds) ? path.requiredClassIds : [];
-  const missing = requiredClassIds.filter(classId =>
-    !(allRegistrations || []).some(r => r.classId === classId && r.creator === targetUsername && r.result === 'PASSED'));
+  const stages = Array.isArray(path.stages) ? path.stages : [];
+  const stageIndex = Number(payload?.stageIndex);
+  if (!Number.isInteger(stageIndex) || stageIndex < 0 || stageIndex >= stages.length) {
+    throw new HttpError(400, 'Cấp bậc cần xác nhận không hợp lệ');
+  }
+  const stage = stages[stageIndex];
+
+  const myConfirmations = (existingConfirmations || []).filter(c => c.pathId === path.id && c.username === targetUsername);
+  if (myConfirmations.some(c => c.stageIndex === stageIndex)) {
+    throw new HttpError(409, `Nhân viên này đã được xác nhận hoàn thành Cấp ${stageIndex + 1} của lộ trình này rồi`);
+  }
+  if (stageIndex > 0 && !myConfirmations.some(c => c.stageIndex === stageIndex - 1)) {
+    throw new HttpError(409, `Nhân viên chưa được xác nhận hoàn thành Cấp ${stageIndex} trước đó`);
+  }
+
+  const classes = trainingClasses || [];
+  const requiredCourseIds = Array.isArray(stage.requiredCourseIds) ? stage.requiredCourseIds : [];
+  const missing = requiredCourseIds.filter(courseId => !(allRegistrations || []).some(r =>
+    r.creator === targetUsername && r.result === 'PASSED' &&
+    classes.some(c => c.id === r.classId && c.courseId === courseId)));
   if (missing.length) {
-    throw new HttpError(409, `Nhân viên chưa đạt yêu cầu ở ${missing.length} lớp học bắt buộc của lộ trình này — chưa thể xác nhận`);
+    throw new HttpError(409, `Nhân viên chưa đạt yêu cầu ở ${missing.length} chương trình bắt buộc của Cấp ${stageIndex + 1} — chưa thể xác nhận`);
   }
 
   return {
-    pathId: path.id, pathName: path.name,
+    pathId: path.id, pathName: path.name, stageIndex, stageName: stage.name,
     username: targetUsername, name: targetUser.name, dept: targetUser.dept,
     confirmedBy: user.username, confirmedByName: user.name, confirmedAt: nowVN()
   };

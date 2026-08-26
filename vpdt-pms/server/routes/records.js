@@ -963,9 +963,10 @@ router.post('/recruitmentReferrals/:id/set-status', async (req, res) => {
   }
 });
 
-// "Xác nhận" 1 nhân viên hoàn thành lộ trình thăng tiến — cùng khuôn /contracts/:id/start-payment ở
-// trên (mutatorFn vừa xác thực (đủ điều kiện PASSED hết các lớp bắt buộc) vừa trả bản NHÁP, PHẢI insert
-// thêm vào collection careerPathConfirmations riêng ngay sau khi khoá careerPaths nhả ra).
+// "Xác nhận" 1 nhân viên hoàn thành 1 CẤP BẬC (stageIndex) của lộ trình thăng tiến (Đợt 7) — cùng khuôn
+// /contracts/:id/start-payment ở trên (mutatorFn vừa xác thực (đủ điều kiện PASSED hết các chương trình
+// bắt buộc của ĐÚNG cấp bậc này + cấp trước đó đã được xác nhận) vừa trả bản NHÁP, PHẢI insert thêm vào
+// collection careerPathConfirmations riêng ngay sau khi khoá careerPaths nhả ra).
 router.post('/careerPaths/:id/confirm', async (req, res) => {
   const itemId = Number(req.params.id);
   if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
@@ -973,9 +974,12 @@ router.post('/careerPaths/:id/confirm', async (req, res) => {
     const { freshUser, users } = await getFreshUser(req);
     const allRegs = await getAllForCollection('trainingRegistrations');
     const existingConfirmations = await getAllForCollection('careerPathConfirmations');
+    // Cần tra cứu chéo classId -> courseId (stage.requiredCourseIds trỏ vào chương trình, không phải
+    // lớp cụ thể — xem confirmCareerPathForEmployee()).
+    const trainingClasses = await getAllForCollection('trainingClasses');
     let draft = null;
     const result = await withLockedRecordForCollection('careerPaths', itemId, (item) => {
-      draft = recordActions.confirmCareerPathForEmployee(req.body, freshUser, item, allRegs, existingConfirmations, users);
+      draft = recordActions.confirmCareerPathForEmployee(req.body, freshUser, item, allRegs, existingConfirmations, users, trainingClasses);
       return item;
     });
     const confirmation = await createForCollection('careerPathConfirmations', () => ({ ...draft, id: Date.now() }));

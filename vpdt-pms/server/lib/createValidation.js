@@ -1418,22 +1418,40 @@ const CREATE_MODULE_CONFIGS = {
       payload.resultAt = null;
     }
   },
-  // Lộ trình thăng tiến — danh sách lớp học BẮT BUỘC phải PASSED hết mới đủ điều kiện được "Xác nhận"
-  // hoàn thành (xem confirmCareerPathForEmployee(), lib/recordActions.js).
+  // Lộ trình thăng tiến (Đợt 7) — GỒM NHIỀU CẤP BẬC TUẦN TỰ (payload.stages, thứ tự trong mảng CHÍNH LÀ
+  // thứ tự cấp bậc, index 0 = cấp đầu tiên), mỗi cấp có 1 danh sách CHƯƠNG TRÌNH (trainingCourses,
+  // requiredCourseIds) bắt buộc phải PASSED hết mới đủ điều kiện "Xác nhận" cấp đó (xem
+  // confirmCareerPathForEmployee(), lib/recordActions.js — có thêm gác tuần tự: chỉ xác nhận được cấp N
+  // khi cấp N-1 đã được xác nhận). ĐÃ ĐỔI từ requiredClassIds phẳng (trỏ thẳng vào 1 LẦN CHẠY lớp cụ
+  // thể) sang requiredCourseIds theo TỪNG CẤP (trỏ vào chương trình tái sử dụng được, giống
+  // trainingClasses/trainingDocuments/trainingPlans — Đạt BẤT KỲ lớp nào thuộc chương trình đó là tính,
+  // xem confirmCareerPathForEmployee()) — thay đổi phá vỡ khả năng tương thích có chủ đích, KHÔNG có bản
+  // ghi thật nào cần di trú (collection này chưa từng phát hành cho người dùng thật).
   careerPaths: {
     dbKey: 'careerPaths',
     forceOwnDept: true,
     getScope: () => ({}),
     creatorField: 'creator', creatorNameField: 'creatorName',
-    extraValidate: (payload, collection, user) => {
+    extraValidate: (payload, collection, user, appData) => {
       if (!user.perms?.admin && !user.perms?.trainingManage) {
         throw new CreateError(403, 'Bạn không có quyền tạo lộ trình thăng tiến');
       }
       if (!payload.name || !String(payload.name).trim()) throw new CreateError(400, 'Thiếu tên lộ trình thăng tiến');
-      const requiredClassIds = Array.isArray(payload.requiredClassIds) ? payload.requiredClassIds.map(Number).filter(Number.isFinite) : [];
-      if (!requiredClassIds.length) throw new CreateError(400, 'Vui lòng chọn ít nhất 1 lớp học bắt buộc cho lộ trình');
       payload.name = String(payload.name).trim();
-      payload.requiredClassIds = requiredClassIds;
+      const courses = appData?.trainingCourses || [];
+      const rawStages = Array.isArray(payload.stages) ? payload.stages : [];
+      if (!rawStages.length) throw new CreateError(400, 'Vui lòng thêm ít nhất 1 cấp bậc cho lộ trình thăng tiến');
+      payload.stages = rawStages.map((s, i) => {
+        const name = String(s?.name || '').trim();
+        if (!name) throw new CreateError(400, `Cấp bậc thứ ${i + 1} thiếu tên`);
+        const requiredCourseIds = Array.isArray(s?.requiredCourseIds)
+          ? [...new Set(s.requiredCourseIds.map(Number))].filter(Number.isFinite) : [];
+        if (!requiredCourseIds.length) throw new CreateError(400, `Cấp bậc "${name}" cần chọn ít nhất 1 chương trình bắt buộc`);
+        const invalid = requiredCourseIds.filter(id => !courses.some(c => c.id === id));
+        if (invalid.length) throw new CreateError(400, `Cấp bậc "${name}" có chương trình được chọn không hợp lệ`);
+        return { name, requiredCourseIds };
+      });
+      delete payload.requiredClassIds; // field cũ đã bỏ hẳn, không giữ tương thích ngược
     }
   },
   // Tuyển Dụng — thay thế mục "Khen Thưởng" cũ (chỉ là 1 loại bài đăng đơn giản trong internalPosts,

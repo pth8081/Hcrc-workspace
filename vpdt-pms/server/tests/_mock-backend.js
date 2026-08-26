@@ -704,6 +704,68 @@ function __mockIssueOnboardingCertificate(user, progress) {
   return progress;
 }
 
+// ===================== careerPaths / careerPathConfirmations (Đợt 7: Lộ Trình Thăng Tiến) =====================
+// mirrors CREATE_MODULE_CONFIGS.careerPaths.extraValidate ở lib/createValidation.js — stages[] bắt buộc,
+// mỗi cấp bậc có name + requiredCourseIds (Number, đối chiếu DB.trainingCourses có thật).
+function __mockValidateCareerPathCreate(payload, user) {
+  if (!(user.perms?.admin || user.perms?.trainingManage)) throw __mockHttpError(403, 'Bạn không có quyền tạo lộ trình thăng tiến');
+  if (!payload.name || !String(payload.name).trim()) throw __mockHttpError(400, 'Thiếu tên lộ trình thăng tiến');
+  payload.name = String(payload.name).trim();
+  const rawStages = Array.isArray(payload.stages) ? payload.stages : [];
+  if (!rawStages.length) throw __mockHttpError(400, 'Vui lòng thêm ít nhất 1 cấp bậc cho lộ trình thăng tiến');
+  payload.stages = rawStages.map((s, i) => {
+    const name = String(s?.name || '').trim();
+    if (!name) throw __mockHttpError(400, `Cấp bậc thứ ${i + 1} thiếu tên`);
+    const requiredCourseIds = Array.isArray(s?.requiredCourseIds)
+      ? [...new Set(s.requiredCourseIds.map(Number))].filter(Number.isFinite) : [];
+    if (!requiredCourseIds.length) throw __mockHttpError(400, `Cấp bậc "${name}" cần chọn ít nhất 1 chương trình bắt buộc`);
+    const invalid = requiredCourseIds.filter((id) => !DB.trainingCourses.some((c) => c.id === id));
+    if (invalid.length) throw __mockHttpError(400, `Cấp bậc "${name}" có chương trình được chọn không hợp lệ`);
+    return { name, requiredCourseIds };
+  });
+  delete payload.requiredClassIds;
+}
+
+// mirrors confirmCareerPathForEmployee() ở lib/recordActions.js — gác tuần tự (cấp N chỉ xác nhận được
+// khi cấp N-1 đã xác nhận) + chặn xác nhận trùng (pathId+username+stageIndex) + đối chiếu PASSED theo
+// courseId (không phải classId phẳng như trước Đợt 7).
+function __mockConfirmCareerPath(payload, user, path) {
+  if (!(user.perms?.admin || user.perms?.trainingManage)) throw __mockHttpError(403, 'Bạn không có quyền xác nhận lộ trình thăng tiến');
+  const targetUsername = (payload?.username || '').trim();
+  if (!targetUsername) throw __mockHttpError(400, 'Thiếu người cần xác nhận');
+  const targetUser = DB.users.find((u) => u.username === targetUsername);
+  if (!targetUser) throw __mockHttpError(404, 'Không tìm thấy nhân viên này');
+
+  const stages = Array.isArray(path.stages) ? path.stages : [];
+  const stageIndex = Number(payload?.stageIndex);
+  if (!Number.isInteger(stageIndex) || stageIndex < 0 || stageIndex >= stages.length) {
+    throw __mockHttpError(400, 'Cấp bậc cần xác nhận không hợp lệ');
+  }
+  const stage = stages[stageIndex];
+
+  const myConfirmations = DB.careerPathConfirmations.filter((c) => c.pathId === path.id && c.username === targetUsername);
+  if (myConfirmations.some((c) => c.stageIndex === stageIndex)) {
+    throw __mockHttpError(409, `Nhân viên này đã được xác nhận hoàn thành Cấp ${stageIndex + 1} của lộ trình này rồi`);
+  }
+  if (stageIndex > 0 && !myConfirmations.some((c) => c.stageIndex === stageIndex - 1)) {
+    throw __mockHttpError(409, `Nhân viên chưa được xác nhận hoàn thành Cấp ${stageIndex} trước đó`);
+  }
+
+  const requiredCourseIds = Array.isArray(stage.requiredCourseIds) ? stage.requiredCourseIds : [];
+  const missing = requiredCourseIds.filter((courseId) => !DB.trainingRegistrations.some((r) =>
+    r.creator === targetUsername && r.result === 'PASSED' &&
+    DB.trainingClasses.some((c) => c.id === r.classId && c.courseId === courseId)));
+  if (missing.length) {
+    throw __mockHttpError(409, `Nhân viên chưa đạt yêu cầu ở ${missing.length} chương trình bắt buộc của Cấp ${stageIndex + 1} — chưa thể xác nhận`);
+  }
+
+  return {
+    pathId: path.id, pathName: path.name, stageIndex, stageName: stage.name,
+    username: targetUsername, name: targetUser.name, dept: targetUser.dept,
+    confirmedBy: user.username, confirmedByName: user.name, confirmedAt: new Date().toLocaleString('vi-VN')
+  };
+}
+
 // ===================== POST /api/create/:module dispatcher =====================
 async function __mockHandleCreate(moduleKey, payload, user) {
   const dept = user.dept;
@@ -713,6 +775,7 @@ async function __mockHandleCreate(moduleKey, payload, user) {
   else if (moduleKey === 'trainingClasses') { __mockValidateTrainingClassCreate(payload, user); creatorField = 'creator'; creatorNameField = 'creatorName'; }
   else if (moduleKey === 'trainingCourses') { __mockValidateTrainingCourseCreate(payload, user); creatorField = 'creator'; creatorNameField = 'creatorName'; }
   else if (moduleKey === 'trainingPlans') { __mockValidateTrainingPlanCreate(payload, user); creatorField = 'creator'; creatorNameField = 'creatorName'; }
+  else if (moduleKey === 'careerPaths') { __mockValidateCareerPathCreate(payload, user); creatorField = 'creator'; creatorNameField = 'creatorName'; }
   else if (moduleKey === 'onboardingPaths') { __mockValidateOnboardingPathCreate(payload, user); creatorField = 'creator'; creatorNameField = 'creatorName'; }
   else if (moduleKey === 'onboardingProgress') { __mockValidateOnboardingProgressCreate(payload, user); creatorField = 'creator'; creatorNameField = 'creatorName'; }
   else if (moduleKey === 'trainingDocuments') { __mockValidateTrainingDocumentCreate(payload, user); creatorField = 'uploaderUsername'; creatorNameField = 'uploaderName'; }
@@ -802,6 +865,24 @@ async function __mockHandleRecordAction(moduleKey, idStr, action, payload, user)
     if (action === 'delete') return { __deleted: true };
     throw __mockHttpError(400, 'Hành động không hợp lệ');
   }
+  if (moduleKey === 'careerPaths') {
+    if (action === 'delete') return { __deleted: true };
+    if (action === 'confirm') {
+      const id = Number(idStr);
+      const path = DB.careerPaths.find((p) => p.id === id);
+      if (!path) throw __mockHttpError(404, 'Không tìm thấy lộ trình thăng tiến');
+      // KHÔNG tự push vào DB.careerPathConfirmations ở đây — mirrors mọi __mock* action khác (never
+      // mutates DB.* thay cho phía client): thực tế route POST /careerPaths/:id/confirm THẬT chỉ trả về
+      // bản ghi xác nhận vừa insert, CLIENT (confirmCareerPathAction() ở index.html) mới là nơi
+      // unshift vào DB.careerPathConfirmations. Vẫn cần đọc DB.careerPathConfirmations HIỆN CÓ ở
+      // __mockConfirmCareerPath() để check trùng/gác tuần tự — coi mảng này như "trạng thái server" dùng
+      // chung, do caller (client thật hoặc test) tự cập nhật sau mỗi lần confirm thành công.
+      const draft = __mockConfirmCareerPath(payload, user, path);
+      const confirmation = Object.assign({}, draft, { id: __mockGenId() });
+      return { item: path, confirmation };
+    }
+    throw __mockHttpError(400, 'Hành động không hợp lệ');
+  }
   if (moduleKey === 'onboardingPaths') {
     if (action === 'delete') return { __deleted: true };
     if (action === 'edit') {
@@ -875,6 +956,7 @@ window.fetch = async function (url, opts) {
       const result = await __mockHandleRecordAction(moduleKey, idStr, action, payload, currentUser);
       if (result && (result.added || result.skipped)) return __mockOkRes(result);
       if (result && result.registration) return __mockOkRes(result);
+      if (result && result.confirmation) return __mockOkRes(Object.assign({ ok: true }, result));
       if (result && result.__deleted) return __mockOkRes({ ok: true });
       return __mockOkRes({ ok: true, item: result });
     }

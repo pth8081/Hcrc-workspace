@@ -2072,7 +2072,9 @@ table { display: block; overflow-x: auto; max-width: 100%; }
         </div>
       </div>
 
-      <!-- LỘ TRÌNH THĂNG TIẾN -->
+      <!-- LỘ TRÌNH THĂNG TIẾN (Đợt 7 — nhiều CẤP BẬC tuần tự, mỗi cấp cần Đạt hết các CHƯƠNG TRÌNH bắt
+           buộc riêng của cấp đó, và chỉ được xác nhận cấp N sau khi cấp N-1 đã được xác nhận — xem
+           addCpStageRow()/computeCareerPathStageStatuses() bên dưới). -->
       <div id="trainingLmsPathsPanel" class="hidden space-y-4">
         <form id="careerPathForm" onsubmit="submitCareerPath(event)" class="hidden bg-white p-3 rounded border text-xs space-y-3">
           <h4 class="font-bold text-gray-700">➕ Tạo Lộ Trình Thăng Tiến Mới</h4>
@@ -2086,13 +2088,16 @@ table { display: block; overflow-x: auto; max-width: 100%; }
               <input id="cpTargetTitle" class="w-full border p-1.5 rounded">
             </div>
             <div class="md:col-span-2">
-              <label class="block font-semibold text-gray-600 mb-1">Các Lớp Học Bắt Buộc (giữ Ctrl/Cmd để chọn nhiều — phải Đạt hết mới đủ điều kiện xác nhận)</label>
-              <select id="cpRequiredClassIds" multiple size="6" class="w-full border p-1.5 rounded bg-white" required></select>
-            </div>
-            <div class="md:col-span-2">
               <label class="block font-semibold text-gray-600 mb-1">Mô Tả</label>
               <textarea id="cpDescription" class="w-full border p-1.5 rounded h-16"></textarea>
             </div>
+          </div>
+          <div>
+            <div class="flex justify-between items-center mb-2">
+              <label class="font-semibold text-gray-600">Các Cấp Bậc (đúng theo thứ tự thăng tiến — mỗi cấp cần chọn ít nhất 1 chương trình bắt buộc, giữ Ctrl/Cmd để chọn nhiều; chỉ xác nhận được cấp sau khi cấp trước đã được xác nhận)</label>
+              <button type="button" onclick="addCpStageRow()" class="text-emerald-700 font-bold text-xs hover:underline whitespace-nowrap">+ Thêm Cấp Bậc</button>
+            </div>
+            <div id="cpStageBuilderContainer" class="space-y-2"></div>
           </div>
           <div class="flex justify-end"><button type="submit" class="bg-emerald-600 text-white px-5 py-2 rounded font-bold hover:bg-emerald-700">Tạo Lộ Trình</button></div>
         </form>
@@ -26494,12 +26499,71 @@ function populateTrainingClassMultiSelects() {
     .map(d => `<option value="${d.id}">${escapeHtml(d.category)} — ${escapeHtml(d.title)}</option>`).join('');
   const tcDoc = document.getElementById('tcDocumentIds');
   if (tcDoc) tcDoc.innerHTML = docOpts || `<option value="" disabled>-- Kho tài liệu đang trống --</option>`;
-  const cpSel = document.getElementById('cpRequiredClassIds');
-  if (cpSel) cpSel.innerHTML = opts || `<option value="" disabled>-- Chưa có lớp học nào để chọn --</option>`;
   const testOpts = DB.trainingTests.slice().sort((a, b) => b.id - a.id)
     .map(t => `<option value="${t.id}">${escapeHtml(t.title)} (${t.questions.length} câu)</option>`).join('');
   const tcTest = document.getElementById('tcTestId');
   if (tcTest) tcTest.innerHTML = `<option value="">-- Không gán bài test --</option>` + testOpts;
+}
+
+// ---------- LỘ TRÌNH THĂNG TIẾN (Đợt 7) — trình dựng "Cấp Bậc" lặp lại, mirror addStepRow()/
+// reindexStepRows() của form Quy Trình (workflow) — mỗi hàng là 1 cấp bậc (tên + multi-select
+// trainingCourses bắt buộc của ĐÚNG cấp đó), thứ tự hàng trong DOM CHÍNH LÀ thứ tự cấp bậc gửi lên. ----------
+function populateCpStageCourseSelectOptions(selectEl) {
+  if (!selectEl) return;
+  const prevSelected = [...selectEl.selectedOptions].map(o => o.value);
+  const opts = DB.trainingCourses.slice().sort((a, b) => b.id - a.id)
+    .map(c => `<option value="${c.id}">${escapeHtml(c.name)} (${escapeHtml(c.category)})</option>`).join('');
+  selectEl.innerHTML = opts || `<option value="" disabled>-- Chưa có chương trình đào tạo nào để chọn --</option>`;
+  [...selectEl.options].forEach(o => { if (prevSelected.includes(o.value)) o.selected = true; });
+}
+
+function addCpStageRow(nameVal = '', courseIds = []) {
+  const container = document.getElementById('cpStageBuilderContainer');
+  if (!container) return;
+  const count = container.children.length + 1;
+  const div = document.createElement('div');
+  div.className = 'cp-stage-row border rounded p-2 bg-gray-50 space-y-1';
+  div.innerHTML = `
+    <div class="flex items-center gap-2">
+      <span class="font-bold text-xs w-16 cp-stage-label">Cấp ${count}:</span>
+      <input placeholder="Tên cấp bậc (VD: Trưởng nhóm)" value="${escapeHtml(nameVal)}" class="border p-1 rounded text-xs flex-1 cp-stage-name-input" required>
+      <button type="button" onclick="this.closest('.cp-stage-row').remove(); reindexCpStageRows();" class="text-red-500 font-bold px-2 text-xs">✕ Xóa</button>
+    </div>
+    <select multiple size="4" class="w-full border p-1 rounded bg-white text-xs cp-stage-course-select" required></select>
+  `;
+  container.appendChild(div);
+  const sel = div.querySelector('.cp-stage-course-select');
+  populateCpStageCourseSelectOptions(sel);
+  if (courseIds.length) [...sel.options].forEach(o => { if (courseIds.map(String).includes(o.value)) o.selected = true; });
+}
+
+function reindexCpStageRows() {
+  const container = document.getElementById('cpStageBuilderContainer');
+  if (!container) return;
+  Array.from(container.children).forEach((row, idx) => {
+    const lbl = row.querySelector('.cp-stage-label');
+    if (lbl) lbl.innerText = `Cấp ${idx + 1}:`;
+  });
+}
+
+// Gọi mỗi lần renderTrainingLms() — làm mới option chương trình trong các hàng cấp bậc ĐANG có (giữ lại
+// lựa chọn đã chọn, cùng tinh thần populateTrainingCourseSelects() dashSel ở trên), và đảm bảo LUÔN có ít
+// nhất 1 hàng sẵn để bắt đầu nhập (không xoá các hàng người dùng đang xây dở, khác populateTrainingClassMultiSelects()
+// ở trên vốn ghi đè hẳn nội dung select mỗi lần — form Cấp Bậc là 1 danh sách hàng do người dùng tự xây,
+// không phải 1 select đơn cần đồng bộ lại với DB mỗi lần render).
+function populateCareerPathStageBuilder() {
+  const container = document.getElementById('cpStageBuilderContainer');
+  if (!container) return;
+  container.querySelectorAll('.cp-stage-course-select').forEach(populateCpStageCourseSelectOptions);
+  if (!container.children.length) addCpStageRow();
+}
+
+function resetCareerPathForm() {
+  const form = document.getElementById('careerPathForm');
+  if (form) form.reset();
+  const container = document.getElementById('cpStageBuilderContainer');
+  if (container) container.innerHTML = '';
+  addCpStageRow();
 }
 
 function renderTrainingLms() {
@@ -26523,6 +26587,7 @@ function renderTrainingLms() {
   document.getElementById('trainingDocNoPermNote').classList.toggle('hidden', canManage);
   document.getElementById('careerPathForm').classList.toggle('hidden', !canManage);
   document.getElementById('careerPathNoPermNote').classList.toggle('hidden', canManage);
+  populateCareerPathStageBuilder();
   document.getElementById('trainingTestForm').classList.toggle('hidden', !canManage);
   document.getElementById('trainingTestNoPermNote').classList.toggle('hidden', canManage);
   // Đào Tạo Tân Binh (Đợt 6) — Khối 1/2 (quản lý danh mục Lộ Trình + Phân Công) CHỈ trainingManage/admin
@@ -28016,17 +28081,25 @@ function deleteTrainingDocument(id) {
   }).catch(err => alert(`⛔ ${err.message}`));
 }
 
-// ---------- LỘ TRÌNH THĂNG TIẾN ----------
+// ---------- LỘ TRÌNH THĂNG TIẾN (Đợt 7 — nhiều CẤP BẬC tuần tự) ----------
 async function submitCareerPath(e) {
   e.preventDefault();
   if (!canManageTrainingLocal(currentUser)) return alert('⛔ Bạn không có quyền tạo lộ trình thăng tiến!');
-  const requiredClassIds = [...document.getElementById('cpRequiredClassIds').selectedOptions].map(o => Number(o.value));
-  if (!requiredClassIds.length) return alert('Vui lòng chọn ít nhất 1 lớp học bắt buộc cho lộ trình!');
+  const stageRows = [...document.querySelectorAll('#cpStageBuilderContainer .cp-stage-row')];
+  if (!stageRows.length) return alert('Vui lòng thêm ít nhất 1 cấp bậc cho lộ trình!');
+  const stages = [];
+  for (const row of stageRows) {
+    const name = row.querySelector('.cp-stage-name-input').value.trim();
+    const requiredCourseIds = [...row.querySelector('.cp-stage-course-select').selectedOptions].map(o => Number(o.value));
+    if (!name) return alert('Vui lòng nhập tên cho tất cả các cấp bậc!');
+    if (!requiredCourseIds.length) return alert(`Cấp bậc "${name}" cần chọn ít nhất 1 chương trình bắt buộc!`);
+    stages.push({ name, requiredCourseIds });
+  }
   const payload = {
     code: `LT-${Date.now()}`,
     name: document.getElementById('cpName').value.trim(),
     targetTitle: document.getElementById('cpTargetTitle').value.trim(),
-    requiredClassIds,
+    stages,
     description: document.getElementById('cpDescription').value.trim()
   };
   let newPath;
@@ -28035,20 +28108,55 @@ async function submitCareerPath(e) {
     newPath = result.item;
   } catch (err) { return alert(`⛔ ${err.message}`); }
   DB.careerPaths.unshift(newPath);
-  logSystemAction('INTERNAL', 'CREATE_CAREER_PATH', `Tạo lộ trình thăng tiến [${newPath.name}]`, 'SUCCESS', newPath.code);
+  logSystemAction('INTERNAL', 'CREATE_CAREER_PATH', `Tạo lộ trình thăng tiến [${newPath.name}] (${newPath.stages.length} cấp bậc)`, 'SUCCESS', newPath.code);
   alert('✅ Đã tạo lộ trình thăng tiến thành công!');
-  e.target.reset();
+  resetCareerPathForm();
   renderCareerPaths();
 }
 
-// Tiến độ CỦA CHÍNH currentUser trên 1 lộ trình — tính trực tiếp từ trainingRegistrations (không cần
-// gọi API riêng, dữ liệu đã có sẵn trong DB sau lần tải /api/data).
-function getMyCareerPathProgress(path) {
-  const required = Array.isArray(path.requiredClassIds) ? path.requiredClassIds : [];
-  const passedCount = required.filter(classId =>
-    DB.trainingRegistrations.some(r => r.classId === classId && r.creator === currentUser.username && r.result === 'PASSED')).length;
-  const confirmed = DB.careerPathConfirmations.some(c => c.pathId === path.id && c.username === currentUser.username);
-  return { passedCount, total: required.length, confirmed };
+// Trạng thái TỪNG cấp bậc của 1 người (username) trên 1 lộ trình — tính SỐNG từ
+// DB.trainingRegistrations/DB.trainingClasses/DB.careerPathConfirmations (không cần gọi API riêng, dùng
+// CHUNG cho cả khối "Tiến độ của bạn" (renderCareerPaths, currentUser) lẫn khối tra cứu nhân viên khác
+// của quản lý (renderCpEmployeeStageLookup) — mirrors ĐÚNG luật gác tuần tự phía server
+// (confirmCareerPathForEmployee(), lib/recordActions.js): 1 cấp chỉ "unlocked" khi TẤT CẢ cấp trước đã
+// được xác nhận, hoàn thành % chỉ là GỢI Ý hiển thị, KHÔNG tự mở khoá nút xác nhận (server mới là nơi
+// chốt điều kiện, xem confirmCareerPathAction()).
+function computeCareerPathStageStatuses(path, username) {
+  const stages = Array.isArray(path.stages) ? path.stages : [];
+  const myConfirmations = DB.careerPathConfirmations.filter(c => c.pathId === path.id && c.username === username);
+  let unlocked = true;
+  return stages.map((stage, idx) => {
+    const confirmed = myConfirmations.some(c => c.stageIndex === idx);
+    const requiredCourseIds = Array.isArray(stage.requiredCourseIds) ? stage.requiredCourseIds : [];
+    const done = requiredCourseIds.filter(courseId => DB.trainingRegistrations.some(r =>
+      r.creator === username && r.result === 'PASSED' &&
+      DB.trainingClasses.some(c => c.id === r.classId && c.courseId === courseId))).length;
+    const status = { index: idx, name: stage.name, total: requiredCourseIds.length, done, confirmed, unlocked };
+    if (!confirmed) unlocked = false; // mọi cấp SAU cấp chưa xác nhận này đều bị khoá
+    return status;
+  });
+}
+
+// Hiển thị tuần tự từng cấp cho 1 người xem tiến độ CỦA CHÍNH HỌ (✅ Đã xác nhận / 🔓 Đang thực hiện +
+// gợi ý Đủ điều kiện / 🔒 Chưa mở) — khoá tuần tự hiển thị RÕ ở UI, không chỉ gác ngầm ở server.
+function renderCareerPathStagesHTML(path, username) {
+  const statuses = computeCareerPathStageStatuses(path, username);
+  return statuses.map(s => {
+    const stageLabel = `Cấp ${s.index + 1}: ${escapeHtml(s.name)}`;
+    if (s.confirmed) return `<div class="text-emerald-700">✅ ${stageLabel} — Đã xác nhận</div>`;
+    if (!s.unlocked) return `<div class="text-gray-400">🔒 ${stageLabel} — Chưa mở, cần hoàn thành Cấp ${s.index} trước</div>`;
+    const suggest = s.total > 0 && s.done >= s.total
+      ? ` <span class="text-emerald-600 font-semibold">✅ Đủ điều kiện — chờ xác nhận Cấp ${s.index + 1}</span>`
+      : '';
+    return `<div class="text-gray-700">🔓 ${stageLabel} — Đang thực hiện — ${s.done}/${s.total} chương trình đã hoàn thành${suggest}</div>`;
+  }).join('');
+}
+
+// Cấp bậc HIỆN TẠI của 1 nhân viên trên 1 lộ trình (cấp đầu tiên CHƯA được xác nhận — luôn "unlocked"
+// đúng theo luật tuần tự, vì mọi cấp trước nó đều đã confirmed) — dùng cho khối tra cứu của quản lý
+// (renderCpEmployeeStageLookup): null nghĩa là đã xác nhận xong TOÀN BỘ lộ trình.
+function findCareerPathCurrentStage(path, username) {
+  return computeCareerPathStageStatuses(path, username).find(s => !s.confirmed) || null;
 }
 
 function renderCareerPaths() {
@@ -28062,44 +28170,74 @@ function renderCareerPaths() {
   if (!pageItems.length) { container.innerHTML = `<div class="text-center p-6 text-gray-400 italic bg-white rounded border">Chưa có lộ trình thăng tiến nào.</div>`; return; }
   const canManage = canManageTrainingLocal(currentUser);
   container.innerHTML = pageItems.map(p => {
-    const classNames = (p.requiredClassIds || []).map(id => {
-      const c = DB.trainingClasses.find(x => x.id === id);
-      return c ? `${escapeHtml(c.title)}` : `<span class="text-gray-400 italic">(lớp đã xoá)</span>`;
-    });
-    const progress = getMyCareerPathProgress(p);
-    const myStatusHTML = progress.confirmed
-      ? `<span class="text-emerald-600 font-bold">✅ Đã xác nhận hoàn thành</span>`
-      : `<span class="text-gray-600">Tiến độ của bạn: ${progress.passedCount}/${progress.total} lớp đã Đạt</span>`;
+    const stages = Array.isArray(p.stages) ? p.stages : [];
+    const stagesSummaryHTML = stages.map((s, idx) => {
+      const courseNames = (s.requiredCourseIds || []).map(id => {
+        const c = DB.trainingCourses.find(x => x.id === id);
+        return c ? escapeHtml(c.name) : `<span class="text-gray-400 italic">(chương trình đã xoá)</span>`;
+      });
+      return `<div><b>Cấp ${idx + 1}: ${escapeHtml(s.name)}</b> — ${courseNames.join(', ')}</div>`;
+    }).join('');
+    const myStatusHTML = renderCareerPathStagesHTML(p, currentUser.username);
     const manageHTML = canManage ? `
-      <div class="mt-2 pt-2 border-t flex gap-2 items-center flex-wrap">
-        <input id="cpConfirmUsername_${p.id}" placeholder="Nhập username nhân viên cần xác nhận..." class="border rounded p-1 text-xs flex-1 min-w-[160px]">
-        <button onclick="confirmCareerPathAction(${p.id})" class="bg-emerald-600 text-white px-2 py-1 rounded text-xs font-bold hover:bg-emerald-700">Xác Nhận Hoàn Thành</button>
-        <button onclick="deleteCareerPath(${p.id})" class="text-red-500 font-bold hover:underline text-xs">Xóa Lộ Trình</button>
+      <div class="mt-2 pt-2 border-t space-y-2">
+        <div class="flex gap-2 items-center flex-wrap">
+          <input id="cpConfirmUsername_${p.id}" placeholder="Nhập username nhân viên cần xác nhận..." class="border rounded p-1 text-xs flex-1 min-w-[160px]" oninput="renderCpEmployeeStageLookup(${p.id})">
+          <button onclick="deleteCareerPath(${p.id})" class="text-red-500 font-bold hover:underline text-xs">Xóa Lộ Trình</button>
+        </div>
+        <div id="cpEmployeeStageBox_${p.id}"></div>
       </div>` : '';
     return `
       <div class="bg-white rounded border p-3">
         <div class="font-bold text-emerald-800">${escapeHtml(p.name)}${p.targetTitle ? ` <span class="text-xs text-gray-500 font-normal">(mục tiêu: ${escapeHtml(p.targetTitle)})</span>` : ''}</div>
         ${p.description ? `<div class="text-xs text-gray-600 mt-1">${escapeHtml(p.description)}</div>` : ''}
-        <div class="text-xs text-gray-500 mt-2"><b>Các lớp bắt buộc:</b> ${classNames.join(', ')}</div>
-        <div class="text-xs mt-1">${myStatusHTML}</div>
+        <div class="text-xs text-gray-500 mt-2 space-y-0.5">${stagesSummaryHTML}</div>
+        <div class="text-xs mt-2 space-y-0.5 border-t pt-2"><b>Tiến độ của bạn:</b>${myStatusHTML}</div>
         ${manageHTML}
       </div>`;
   }).join('');
 }
 
-async function confirmCareerPathAction(pathId) {
+// Khối tra cứu của quản lý (Đợt 7) — gõ username xong hiện NGAY cấp bậc hiện tại của đúng người đó kèm
+// gợi ý % hoàn thành + 1 nút "Xác Nhận" DUY NHẤT scoped đúng cấp đó (không còn nút xác nhận chung cho cả
+// lộ trình như trước) — badge % chỉ là GỢI Ý hiển thị, nút xác nhận LUÔN bấm được bất kể %, server mới
+// là nơi chốt điều kiện (xem confirmCareerPathAction()/lib/recordActions.js).
+function renderCpEmployeeStageLookup(pathId) {
+  const path = DB.careerPaths.find(p => p.id === pathId);
+  const box = document.getElementById(`cpEmployeeStageBox_${pathId}`);
+  const usernameInput = document.getElementById(`cpConfirmUsername_${pathId}`);
+  if (!path || !box || !usernameInput) return;
+  const username = usernameInput.value.trim();
+  if (!username) { box.innerHTML = ''; return; }
+  const employee = DB.users.find(u => u.username === username);
+  if (!employee) { box.innerHTML = `<div class="text-red-500 italic">Không tìm thấy nhân viên "${escapeHtml(username)}"</div>`; return; }
+  const stage = findCareerPathCurrentStage(path, username);
+  if (!stage) {
+    box.innerHTML = `<div class="text-emerald-700 font-bold">✅ ${escapeHtml(employee.name)} đã được xác nhận hoàn thành toàn bộ lộ trình này.</div>`;
+    return;
+  }
+  const suggest = stage.total > 0 && stage.done >= stage.total
+    ? `<span class="text-emerald-600 font-bold ml-1">✅ Đủ điều kiện — chờ xác nhận</span>`
+    : `<span class="text-gray-600 ml-1">${stage.done}/${stage.total} chương trình đã hoàn thành</span>`;
+  box.innerHTML = `
+    <div class="bg-emerald-50 border border-emerald-200 rounded p-2 flex items-center gap-2 flex-wrap">
+      <div class="flex-1 min-w-[160px]">${escapeHtml(employee.name)} — Cấp ${stage.index + 1}: ${escapeHtml(stage.name)}${suggest}</div>
+      <button onclick="confirmCareerPathAction(${pathId}, ${stage.index})" class="bg-emerald-600 text-white px-2 py-1 rounded text-xs font-bold hover:bg-emerald-700 whitespace-nowrap">Xác Nhận Cấp ${stage.index + 1}</button>
+    </div>`;
+}
+
+async function confirmCareerPathAction(pathId, stageIndex) {
   const usernameInput = document.getElementById(`cpConfirmUsername_${pathId}`);
   const username = (usernameInput?.value || '').trim();
   if (!username) return alert('Vui lòng nhập username nhân viên cần xác nhận!');
   let confirmation;
   try {
-    const result = await callRecordAction('careerPaths', pathId, 'confirm', { username });
+    const result = await callRecordAction('careerPaths', pathId, 'confirm', { username, stageIndex });
     confirmation = result.confirmation;
   } catch (err) { return alert(`⛔ ${err.message}`); }
   DB.careerPathConfirmations.unshift(confirmation);
-  logSystemAction('INTERNAL', 'CONFIRM_CAREER_PATH', `Xác nhận nhân viên [${username}] hoàn thành lộ trình [id ${pathId}]`, 'SUCCESS');
-  alert(`✅ Đã xác nhận ${confirmation.name} hoàn thành lộ trình!`);
-  if (usernameInput) usernameInput.value = '';
+  logSystemAction('INTERNAL', 'CONFIRM_CAREER_PATH', `Xác nhận nhân viên [${username}] hoàn thành Cấp ${stageIndex + 1} của lộ trình [id ${pathId}]`, 'SUCCESS');
+  alert(`✅ Đã xác nhận ${confirmation.name} hoàn thành Cấp ${stageIndex + 1}: ${confirmation.stageName}!`);
   renderCareerPaths();
 }
 
