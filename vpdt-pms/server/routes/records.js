@@ -7,8 +7,8 @@ const { requireAuth, blockIfMustChangePassword } = require('../lib/auth');
 const { HttpError } = require('../lib/httpErrors');
 const recordActions = require('../lib/recordActions');
 const { insertTask, withLockedTaskById, deleteTaskById, getAllTasks, migrateDirectiveTaskLinks } = require('../lib/taskStore');
-const { createForCollection, insertRecord, withLockedRecordForCollection, deleteRecordForCollection, getAllForCollection, withAppLock } = require('../lib/recordStore');
-const { getAllAppData, getAppDataValue } = require('../lib/appData');
+const { createForCollection, insertRecord, withLockedRecordForCollection, withLockedRecordById, deleteRecordForCollection, getAllForCollection, withAppLock } = require('../lib/recordStore');
+const { getAllAppData, getAppDataValue, withLockedAppDataValue } = require('../lib/appData');
 
 router.use(requireAuth, blockIfMustChangePassword);
 
@@ -1450,6 +1450,35 @@ router.post('/itSupportTickets/:id/deny-escalation', async (req, res) => {
 // ===================== ĐỒNG PHỤC =====================
 router.post('/uniformPeriods/:id/delete', (req, res) => deleteAdminOnly(req, res, 'uniformPeriods'));
 
+// Duyệt/Từ chối cả kỳ (Phase 2, uniformApprove/admin) — PHẢI chạy TRƯỚC khi Giám Đốc Siêu Thị xác nhận
+// được bất kỳ phần phân bổ nào (xem canApproveUniform()/approveUniformPeriod()/rejectUniformPeriod() ở
+// lib/recordActions.js). Khoá theo bản ghi kỳ, cùng khuôn confirm-allocation bên dưới.
+router.post('/uniformPeriods/:id/approve', async (req, res) => {
+  const itemId = Number(req.params.id);
+  if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
+  try {
+    const { freshUser } = await getFreshUser(req);
+    const result = await withLockedRecordForCollection('uniformPeriods', itemId, (item) =>
+      recordActions.approveUniformPeriod(freshUser, item));
+    res.json({ ok: true, item: result });
+  } catch (err) {
+    handleError(res, `uniformPeriods/${req.params.id}/approve`, err);
+  }
+});
+
+router.post('/uniformPeriods/:id/reject', async (req, res) => {
+  const itemId = Number(req.params.id);
+  if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
+  try {
+    const { freshUser } = await getFreshUser(req);
+    const result = await withLockedRecordForCollection('uniformPeriods', itemId, (item) =>
+      recordActions.rejectUniformPeriod(freshUser, item, req.body));
+    res.json({ ok: true, item: result });
+  } catch (err) {
+    handleError(res, `uniformPeriods/${req.params.id}/reject`, err);
+  }
+});
+
 // Giám Đốc Siêu Thị xác nhận đã nhận ĐÚNG phần phân bổ của phòng ban mình trong 1 kỳ — khoá theo bản
 // ghi kỳ (nhiều siêu thị khác nhau xác nhận gần như đồng thời trên CÙNG 1 kỳ chỉ xếp hàng chờ khoá).
 router.post('/uniformPeriods/:id/confirm-allocation', async (req, res) => {
@@ -1459,7 +1488,31 @@ router.post('/uniformPeriods/:id/confirm-allocation', async (req, res) => {
     const { freshUser } = await getFreshUser(req);
     const result = await withLockedRecordForCollection('uniformPeriods', itemId, (item) =>
       recordActions.confirmUniformAllocation(freshUser, item, req.body));
-    res.json({ ok: true, item: result });
+    // Sinh/tái sử dụng SKU (Phase 2) cho ĐÚNG phần vừa xác nhận — collection RIÊNG (uniformCatalog, còn
+    // ở AppData, không phải dbo.Records) nên khoá+lưu TÁCH RIÊNG khỏi bước khoá bản ghi kỳ ở trên (2
+    // khoá độc lập, gọi TUẦN TỰ chứ không lồng nhau — không có nguy cơ deadlock). Cố tình KHÔNG để lỗi ở
+    // đây chặn việc xác nhận đã ghi thành công — sinh SKU là best-effort, thất bại thì lần xác nhận sau
+    // (ở siêu thị khác/kỳ khác) sẽ tự backfill lại. Trả kèm catalog MỚI trong response (không chỉ ghi
+    // xuống DB) để client cập nhật NGAY DB.uniformCatalog phía trình duyệt — không có bước này, giao
+    // diện sẽ không hiện được mã SKU vừa sinh cho tới khi tải lại trang (client không tự động refetch
+    // GET /api/data sau mỗi hành động, xem confirmUniformAllocationAction() ở public/index.html).
+    let updatedCatalog = null;
+    try {
+      const allocId = Number(req.body?.allocationId);
+      const alloc = (result.allocations || []).find(a => a.id === allocId);
+      if (alloc) {
+        updatedCatalog = await withLockedAppDataValue('uniformCatalog', (catalog) => {
+          const list = Array.isArray(catalog) ? catalog : [];
+          recordActions.backfillUniformSkuCodes(alloc.items, list);
+          return list;
+        });
+      }
+    } catch (skuErr) {
+      console.error(`Lỗi sinh SKU đồng phục sau khi xác nhận kỳ ${itemId} (không chặn xác nhận):`, skuErr.message);
+    }
+    const responseBody = { ok: true, item: result };
+    if (updatedCatalog) responseBody.uniformCatalog = updatedCatalog;
+    res.json(responseBody);
   } catch (err) {
     handleError(res, `uniformPeriods/${req.params.id}/confirm-allocation`, err);
   }
@@ -1478,12 +1531,14 @@ router.post('/uniformIssuances/create', async (req, res) => {
       return res.status(403).json({ error: 'Bạn không có quyền cấp phát đồng phục' });
     }
     const result = await withAppLock(`uniform_store:${freshUser.dept}`, async () => {
-      const [allPeriods, allIssuances] = await Promise.all([
+      const [allPeriods, allIssuances, allTransfers] = await Promise.all([
         getAllForCollection('uniformPeriods'),
-        getAllForCollection('uniformIssuances')
+        getAllForCollection('uniformIssuances'),
+        getAllForCollection('uniformTransfers')
       ]);
       const storeIssuances = allIssuances.filter(x => x.dept === freshUser.dept);
-      const record = recordActions.buildUniformIssuance(freshUser, req.body, allPeriods, storeIssuances, users);
+      const approvedTransfers = allTransfers.filter(t => t.status === 'APPROVED');
+      const record = recordActions.buildUniformIssuance(freshUser, req.body, allPeriods, storeIssuances, users, approvedTransfers);
       return insertRecord('uniformIssuances', record);
     });
     res.json({ ok: true, item: result });
@@ -1504,19 +1559,110 @@ router.post('/uniformStockAdjustments/create', async (req, res) => {
       return res.status(403).json({ error: 'Bạn không có quyền thao tác này' });
     }
     const result = await withAppLock(`uniform_store:${freshUser.dept}`, async () => {
-      const [allPeriods, allIssuances, allAdjustments] = await Promise.all([
+      const [allPeriods, allIssuances, allAdjustments, allTransfers] = await Promise.all([
         getAllForCollection('uniformPeriods'),
         getAllForCollection('uniformIssuances'),
-        getAllForCollection('uniformStockAdjustments')
+        getAllForCollection('uniformStockAdjustments'),
+        getAllForCollection('uniformTransfers')
       ]);
       const storeIssuances = allIssuances.filter(x => x.dept === freshUser.dept);
       const storeAdjustments = allAdjustments.filter(x => x.dept === freshUser.dept);
-      const record = recordActions.buildUniformStockAdjustment(freshUser, req.body, allPeriods, storeIssuances, storeAdjustments, users);
+      const approvedTransfers = allTransfers.filter(t => t.status === 'APPROVED');
+      const record = recordActions.buildUniformStockAdjustment(freshUser, req.body, allPeriods, storeIssuances, storeAdjustments, users, approvedTransfers);
       return insertRecord('uniformStockAdjustments', record);
     });
     res.json({ ok: true, item: result });
   } catch (err) {
     handleError(res, 'uniformStockAdjustments/create', err);
+  }
+});
+
+router.post('/uniformTransfers/:id/delete', (req, res) => deleteAdminOnly(req, res, 'uniformTransfers'));
+
+// Giám Đốc Siêu Thị NGUỒN yêu cầu điều chuyển (Phase 2) — cùng khoá 'uniform_store:<dept nguồn>' với 3
+// route trên (đụng chung trạng thái tồn kho của ĐÚNG siêu thị nguồn lúc kiểm tra đủ hàng để chuyển).
+router.post('/uniformTransfers/create', async (req, res) => {
+  try {
+    const { freshUser } = await getFreshUser(req);
+    if (!recordActions.canManageUniformStore(freshUser)) {
+      return res.status(403).json({ error: 'Bạn không có quyền yêu cầu điều chuyển kho' });
+    }
+    const result = await withAppLock(`uniform_store:${freshUser.dept}`, async () => {
+      const [allPeriods, allIssuances, allAdjustments, allTransfers] = await Promise.all([
+        getAllForCollection('uniformPeriods'),
+        getAllForCollection('uniformIssuances'),
+        getAllForCollection('uniformStockAdjustments'),
+        getAllForCollection('uniformTransfers')
+      ]);
+      const storeIssuances = allIssuances.filter(x => x.dept === freshUser.dept);
+      const storeAdjustments = allAdjustments.filter(x => x.dept === freshUser.dept);
+      const approvedTransfers = allTransfers.filter(t => t.status === 'APPROVED');
+      const record = recordActions.buildUniformTransfer(freshUser, req.body, allPeriods, storeIssuances, storeAdjustments, approvedTransfers);
+      return insertRecord('uniformTransfers', record);
+    });
+    res.json({ ok: true, item: result });
+  } catch (err) {
+    handleError(res, 'uniformTransfers/create', err);
+  }
+});
+
+router.post('/uniformTransfers/:id/reject', async (req, res) => {
+  const itemId = Number(req.params.id);
+  if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
+  try {
+    const { freshUser } = await getFreshUser(req);
+    const result = await withLockedRecordForCollection('uniformTransfers', itemId, (item) =>
+      recordActions.rejectUniformTransfer(freshUser, item, req.body));
+    res.json({ ok: true, item: result });
+  } catch (err) {
+    handleError(res, `uniformTransfers/${req.params.id}/reject`, err);
+  }
+});
+
+// Duyệt điều chuyển (Phase 2, uniformApprove/admin) — ĐỤNG ĐỒNG THỜI 2 siêu thị (nguồn giảm/đích tăng
+// tồn kho tính động cùng lúc, xem computeUniformStock() tham số allApprovedTransfers), nên PHẢI khoá CẢ
+// 2 khoá 'uniform_store:<nguồn>' + 'uniform_store:<đích>' trong SUỐT lúc đọc-kiểm tra-duyệt — không chỉ
+// khoá đúng 1 dòng uniformTransfers như withLockedRecordForCollection() thường làm (không đủ: 1 request
+// khác đang cấp phát/báo hỏng/điều chuyển CHO ĐÚNG 1 trong 2 siêu thị này vẫn có thể đọc-ghi tồn kho
+// song song, dẫn tới đọc thấy tồn "cũ" nếu không cùng khoá 'uniform_store:<dept>'). withAppLock() ở
+// lib/recordStore.js nhận MẢNG khoá, tự sắp XẾP THEO BẢNG CHỮ CÁI trước khi giành lần lượt — 2 điều
+// chuyển ngược chiều nhau giữa CÙNG 2 siêu thị (A->B và B->A) luôn giành khoá theo ĐÚNG 1 THỨ TỰ như
+// nhau nên không bao giờ deadlock chờ chéo. Đọc bản ghi 1 lần TRƯỚC để biết chính xác 2 dept liên quan
+// (chỉ để LẤY TÊN KHOÁ — mọi kiểm tra nghiệp vụ thật chạy LẠI bên trong, dưới khoá, vì bản ghi có thể đã
+// bị xử lý bởi 1 request khác giữa 2 lần đọc).
+router.post('/uniformTransfers/:id/approve', async (req, res) => {
+  const itemId = Number(req.params.id);
+  if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
+  try {
+    const { freshUser } = await getFreshUser(req);
+    if (!recordActions.canApproveUniformTransfer(freshUser)) {
+      return res.status(403).json({ error: 'Bạn không có quyền duyệt điều chuyển kho' });
+    }
+    const peekAll = await getAllForCollection('uniformTransfers');
+    const peek = peekAll.find(t => t.id === itemId);
+    if (!peek) return res.status(404).json({ error: 'Không tìm thấy yêu cầu điều chuyển này' });
+
+    const result = await withAppLock([`uniform_store:${peek.sourceDept}`, `uniform_store:${peek.targetDept}`], () =>
+      withLockedRecordById('uniformTransfers', itemId, async (transfer) => {
+        if (transfer.status !== 'PENDING_APPROVAL') {
+          throw new HttpError(409, 'Yêu cầu điều chuyển này đã được xử lý trước đó');
+        }
+        const [allPeriods, allIssuances, allAdjustments, allTransfers] = await Promise.all([
+          getAllForCollection('uniformPeriods'),
+          getAllForCollection('uniformIssuances'),
+          getAllForCollection('uniformStockAdjustments'),
+          getAllForCollection('uniformTransfers')
+        ]);
+        const sourceIssuances = allIssuances.filter(x => x.dept === transfer.sourceDept);
+        const sourceAdjustments = allAdjustments.filter(x => x.dept === transfer.sourceDept);
+        const approvedTransfers = allTransfers.filter(t => t.status === 'APPROVED' && t.id !== transfer.id);
+        const sourceStock = recordActions.computeUniformStock(allPeriods, transfer.sourceDept, sourceIssuances, sourceAdjustments, approvedTransfers);
+        return recordActions.approveUniformTransfer(freshUser, transfer, sourceStock);
+      })
+    );
+    res.json({ ok: true, item: result });
+  } catch (err) {
+    handleError(res, `uniformTransfers/${req.params.id}/approve`, err);
   }
 });
 

@@ -2527,14 +2527,17 @@ function canManageUniformStore(user) {
 // hồi từ nhân viên (source='EMPLOYEE', outcome='HONG'/'HUY'/'MAT') — các trường hợp này đều làm mất số
 // lượng thật, không phân biệt trong công thức tồn kho. mat CHỈ phát sinh từ source='EMPLOYEE' (đồ đã
 // cấp cho nhân viên bị thất lạc — không có khái niệm "mất" cho hàng còn nằm trong kho chưa cấp, xem
-// validOutcomes ở buildUniformStockAdjustment() bên dưới). Công thức:
-// stock = allocated - (issued - recalled) - hong - huy - mat.
-function computeUniformStock(allPeriods, storeDept, allIssuances, allAdjustments) {
+// validOutcomes ở buildUniformStockAdjustment() bên dưới). "transferOut"/"transferIn" (Phase 2) = tổng
+// SL đã ĐIỀU CHUYỂN đi/nhận về qua uniformTransfers ĐÃ APPROVED (xem buildUniformTransfer()/
+// approveUniformTransfer() bên dưới) — tham số cuối `allApprovedTransfers` TUỲ CHỌN (backward-compat,
+// bỏ trống -> coi như 0, không ảnh hưởng caller nào chưa truyền). Công thức:
+// stock = allocated - (issued - recalled) - hong - huy - mat - transferOut + transferIn.
+function computeUniformStock(allPeriods, storeDept, allIssuances, allAdjustments, allApprovedTransfers) {
   const stock = new Map();
   const keyOf = (name, size) => `${name}|||${size || ''}`;
   const bump = (name, size, field, qty) => {
     const key = keyOf(name, size);
-    if (!stock.has(key)) stock.set(key, { name, size: size || '', allocated: 0, issued: 0, recalled: 0, hong: 0, huy: 0, mat: 0 });
+    if (!stock.has(key)) stock.set(key, { name, size: size || '', allocated: 0, issued: 0, recalled: 0, hong: 0, huy: 0, mat: 0, transferOut: 0, transferIn: 0 });
     stock.get(key)[field] += qty;
   };
   for (const period of allPeriods || []) {
@@ -2547,6 +2550,11 @@ function computeUniformStock(allPeriods, storeDept, allIssuances, allAdjustments
     if (issuance.dept !== storeDept) continue;
     for (const it of issuance.items || []) bump(it.name, it.size, 'issued', it.qty);
   }
+  for (const t of allApprovedTransfers || []) {
+    if (t.status !== 'APPROVED') continue; // caller nên tự lọc trước, kiểm tra lại đây cho chắc
+    if (t.sourceDept === storeDept) bump(t.itemName, t.size, 'transferOut', t.qty);
+    if (t.targetDept === storeDept) bump(t.itemName, t.size, 'transferIn', t.qty);
+  }
   for (const adj of allAdjustments || []) {
     if (adj.dept !== storeDept) continue;
     if (adj.source === 'EMPLOYEE') bump(adj.itemName, adj.size, 'recalled', adj.qty);
@@ -2554,7 +2562,7 @@ function computeUniformStock(allPeriods, storeDept, allIssuances, allAdjustments
     if (adj.outcome === 'HUY') bump(adj.itemName, adj.size, 'huy', adj.qty);
     if (adj.outcome === 'MAT') bump(adj.itemName, adj.size, 'mat', adj.qty);
   }
-  for (const row of stock.values()) row.stock = row.allocated - (row.issued - row.recalled) - row.hong - row.huy - row.mat;
+  for (const row of stock.values()) row.stock = row.allocated - (row.issued - row.recalled) - row.hong - row.huy - row.mat - row.transferOut + row.transferIn;
   return stock;
 }
 
@@ -2601,8 +2609,99 @@ function computeAllEmployeeUniformHoldings(allIssuancesOfStore, allAdjustmentsOf
   return Array.from(held.values()).filter(r => r.held > 0);
 }
 
+// ===== Duyệt kỳ cấp phát (Phase 2 — cổng duyệt Ở CẤP KỲ, TRƯỚC bước Giám Đốc Siêu Thị tự xác nhận) =====
+// uniformApprove (quyền MỚI, admin cũng qua được) — người có quyền này duyệt/từ chối CẢ KỲ 1 lần
+// (không phải luồng nhiều bước qua lib/workflowEngine.js, chỉ 1 cờ trạng thái phẳng giống hệt khuôn
+// confirmUniformAllocation() ở trên). PENDING_APPROVAL (mặc định lúc tạo, xem lib/createValidation.js)
+// -> APPROVED (Giám Đốc Siêu Thị mới bắt đầu xác nhận được, xem confirmUniformAllocation() bên dưới) |
+// REJECTED (TERMINAL — không kỳ nào quay lại xác nhận được nữa, đúng khuôn "từ chối là điểm dừng cứng"
+// đã dùng ở mọi nơi khác trong hệ thống — kiểm tra lại NGAY TRONG confirmUniformAllocation(), không chỉ
+// chặn ở đây, vì API xác nhận có thể bị gọi thẳng bỏ qua bước duyệt trên giao diện).
+// Kỳ tạo TRƯỚC Phase 2 (không có field approvalStatus) coi như đã được chấp nhận từ trước (bỏ qua cổng
+// này) — tránh chặn ngược các phân bổ PENDING_CONFIRM đã tồn tại từ trước khi tính năng này ra đời.
+function canApproveUniform(user) {
+  return !!(user?.perms?.admin || user?.perms?.uniformApprove);
+}
+
+function approveUniformPeriod(user, period) {
+  if (!canApproveUniform(user)) throw new HttpError(403, 'Bạn không có quyền duyệt kỳ cấp phát đồng phục');
+  if (period.approvalStatus && period.approvalStatus !== 'PENDING_APPROVAL') {
+    throw new HttpError(409, 'Kỳ cấp phát này đã được xử lý duyệt trước đó');
+  }
+  period.approvalStatus = 'APPROVED';
+  period.approvedBy = user.username;
+  period.approvedByName = user.name;
+  period.approvedAt = nowVN();
+  period.rejectReason = '';
+  return period;
+}
+
+function rejectUniformPeriod(user, period, payload) {
+  if (!canApproveUniform(user)) throw new HttpError(403, 'Bạn không có quyền duyệt kỳ cấp phát đồng phục');
+  if (period.approvalStatus && period.approvalStatus !== 'PENDING_APPROVAL') {
+    throw new HttpError(409, 'Kỳ cấp phát này đã được xử lý duyệt trước đó');
+  }
+  const reason = String(payload?.reason || '').trim().slice(0, 500);
+  period.approvalStatus = 'REJECTED';
+  period.approvedBy = user.username;
+  period.approvedByName = user.name;
+  period.approvedAt = nowVN();
+  period.rejectReason = reason;
+  return period;
+}
+
+// ===== SKU đồng phục (Phase 2) — sinh 1 LẦN DUY NHẤT cho mỗi (tên, size), TÁI SỬ DỤNG mãi mãi sau đó,
+// bất kể siêu thị/kỳ nào xác nhận trước. Bỏ dấu tiếng Việt cùng tinh thần generateHcrcCode()
+// (public/index.html) nhưng KHÔNG dùng ngày tạo làm tiền tố (SKU không gắn với 1 lần xác nhận cụ thể) —
+// số thứ tự đếm theo TỔNG số SKU đã sinh trong toàn bộ danh mục tới thời điểm này (giống nguyên lý đếm
+// bản ghi hiện có +1 của computeNextHcrcSeq(), không cần bảng đếm riêng). Định dạng:
+// {VIẾT-TẮT-KHÔNG-DẤU}-{SIZE}-{số thứ tự 4 số}, vd "Áo sơ mi" + size L -> "AOSOMI-L-0007".
+function stripVietnameseDiacritics(str) {
+  return String(str || '')
+    .replace(/đ/g, 'd').replace(/Đ/g, 'D')
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+}
+function abbreviateUniformItemName(name) {
+  const clean = stripVietnameseDiacritics(name).replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
+  return (clean || 'SP').slice(0, 15);
+}
+function computeNextUniformSkuSeq(catalog) {
+  let count = 0;
+  for (const entry of catalog || []) count += Object.keys(entry.codesBySize || {}).length;
+  return count + 1;
+}
+function generateUniformSkuCode(name, size, catalog) {
+  const abbr = abbreviateUniformItemName(name);
+  const seq = computeNextUniformSkuSeq(catalog);
+  return `${abbr}-${String(size || '').trim().toUpperCase() || 'X'}-${String(seq).padStart(4, '0')}`;
+}
+// Đảm bảo MỌI (name, size) trong `items` đã có SKU trong `catalog` — sinh mới nếu còn thiếu, TÁI SỬ
+// DỤNG nếu đã có (dù được sinh lúc xác nhận ở siêu thị khác/kỳ khác trước đó). Mutate THẲNG `catalog`
+// (mảng đọc dưới khoá withLockedAppDataValue('uniformCatalog', ...) ở routes/records.js) — không tự đọc
+// /ghi gì, caller chịu trách nhiệm khoá+lưu. Mặt hàng không còn trong danh mục (đã bị xoá sau khi phân
+// bổ) thì bỏ qua, không chặn việc xác nhận chỉ vì thiếu SKU.
+function backfillUniformSkuCodes(items, catalog) {
+  let changed = false;
+  for (const it of items || []) {
+    const entry = (catalog || []).find(c => c.name === it.name);
+    if (!entry) continue;
+    if (!entry.codesBySize) entry.codesBySize = {};
+    const size = it.size || '';
+    if (entry.codesBySize[size]) continue;
+    entry.codesBySize[size] = generateUniformSkuCode(it.name, size, catalog);
+    changed = true;
+  }
+  return changed;
+}
+
 function confirmUniformAllocation(user, period, payload) {
   if (!canManageUniformStore(user)) throw new HttpError(403, 'Bạn không có quyền xác nhận nhận đồng phục');
+  if (period.approvalStatus === 'REJECTED') {
+    throw new HttpError(409, 'Kỳ cấp phát này đã bị từ chối duyệt, không thể xác nhận nhận hàng');
+  }
+  if (period.approvalStatus && period.approvalStatus !== 'APPROVED') {
+    throw new HttpError(409, 'Kỳ cấp phát này chưa được duyệt, chưa thể xác nhận nhận hàng');
+  }
   const allocId = Number(payload?.allocationId);
   const alloc = (period.allocations || []).find(a => a.id === allocId);
   if (!alloc) throw new HttpError(404, 'Không tìm thấy dòng phân bổ này trong kỳ');
@@ -2619,7 +2718,7 @@ function confirmUniformAllocation(user, period, payload) {
 // uniformPeriods + uniformIssuances CỦA ĐÚNG SIÊU THỊ NÀY, bọc quanh bằng withAppLock('uniform_store:'
 // + user.dept, ...) để 2 lượt cấp phát gần như đồng thời cùng 1 siêu thị không cùng vượt tồn kho (đọc
 // xong-tính-ghi phải nguyên tử theo TỪNG siêu thị, không cần khoá toàn app vì các siêu thị độc lập nhau).
-function buildUniformIssuance(user, payload, allPeriods, allIssuancesOfStore, usersList) {
+function buildUniformIssuance(user, payload, allPeriods, allIssuancesOfStore, usersList, allApprovedTransfers) {
   if (!canManageUniformStore(user)) throw new HttpError(403, 'Bạn không có quyền cấp phát đồng phục');
   const employeeUsername = String(payload?.employeeUsername || '').trim();
   const employee = (usersList || []).find(u => u.username === employeeUsername && u.active !== false);
@@ -2627,7 +2726,7 @@ function buildUniformIssuance(user, payload, allPeriods, allIssuancesOfStore, us
   if (employee.dept !== user.dept) throw new HttpError(400, 'Chỉ cấp phát được cho nhân viên thuộc siêu thị của bạn');
 
   const items = sanitizeUniformItems(payload?.items);
-  const stock = computeUniformStock(allPeriods, user.dept, allIssuancesOfStore);
+  const stock = computeUniformStock(allPeriods, user.dept, allIssuancesOfStore, null, allApprovedTransfers);
   for (const it of items) {
     const row = stock.get(`${it.name}|||${it.size || ''}`);
     const available = row ? row.stock : 0;
@@ -2653,7 +2752,7 @@ function buildUniformIssuance(user, payload, allPeriods, allIssuancesOfStore, us
 // (canManageUniformStore) thực hiện, PHẠM VI CHÍNH SIÊU THỊ MÌNH — cùng khoá 'uniform_store:'+user.dept
 // với buildUniformIssuance() để 2 thao tác gần như đồng thời không cùng vượt tồn/vượt số đang giữ.
 // Lý do (reason) BẮT BUỘC theo yêu cầu nghiệp vụ (không cho để trống).
-function buildUniformStockAdjustment(user, payload, allPeriods, allIssuancesOfStore, allAdjustmentsOfStore, usersList) {
+function buildUniformStockAdjustment(user, payload, allPeriods, allIssuancesOfStore, allAdjustmentsOfStore, usersList, allApprovedTransfers) {
   if (!canManageUniformStore(user)) throw new HttpError(403, 'Bạn không có quyền thao tác này');
 
   const source = String(payload?.source || '').trim().toUpperCase();
@@ -2683,7 +2782,7 @@ function buildUniformStockAdjustment(user, payload, allPeriods, allIssuancesOfSt
   };
 
   if (source === 'STOCK') {
-    const stock = computeUniformStock(allPeriods, user.dept, allIssuancesOfStore, allAdjustmentsOfStore);
+    const stock = computeUniformStock(allPeriods, user.dept, allIssuancesOfStore, allAdjustmentsOfStore, allApprovedTransfers);
     const row = stock.get(`${itemName}|||${size}`);
     const available = row ? row.stock : 0;
     if (qty > available) {
@@ -2707,6 +2806,83 @@ function buildUniformStockAdjustment(user, payload, allPeriods, allIssuancesOfSt
   record.employeeUsername = employee.username;
   record.employeeName = employee.name;
   return record;
+}
+
+// ===== Điều Chuyển Kho Giữa Các Siêu Thị (uniformTransfers, Phase 2) =====
+// Giám Đốc Siêu Thị NGUỒN (canManageUniformStore) tự yêu cầu điều chuyển 1 mặt hàng+size sang 1 siêu
+// thị KHÁC — DÙNG CHUNG quyền duyệt uniformApprove với kỳ cấp phát (canApproveUniform() ở trên, đã xác
+// nhận với người dùng — KHÔNG tạo quyền riêng). PENDING_APPROVAL -> APPROVED (stock nguồn giảm/đích
+// tăng NGAY khi duyệt, xem computeUniformStock() tham số allApprovedTransfers) | REJECTED (TERMINAL,
+// cùng khuôn approveUniformPeriod()/rejectUniformPeriod() ở trên — kiểm tra lại status server-side ở
+// MỌI hành động, không chỉ chặn ở giao diện). routes/records.js chịu trách nhiệm khoá ĐỒNG THỜI 2 khoá
+// 'uniform_store:<sourceDept>' + 'uniform_store:<targetDept>' (thứ tự CỐ ĐỊNH, xem withAppLock() ở
+// lib/recordStore.js) lúc duyệt — 2 siêu thị cùng bị ảnh hưởng 1 lúc, khác các hành động khác của module
+// này (chỉ đụng 1 siêu thị/lần).
+function canApproveUniformTransfer(user) {
+  return canApproveUniform(user);
+}
+
+// allPeriods/allIssuancesOfSourceStore/allAdjustmentsOfSourceStore/allApprovedTransfers: CỦA ĐÚNG siêu
+// thị NGUỒN (= user.dept, caller tự lọc trước khi gọi, giống mọi hàm build...() khác của module này).
+function buildUniformTransfer(user, payload, allPeriods, allIssuancesOfSourceStore, allAdjustmentsOfSourceStore, allApprovedTransfers) {
+  if (!canManageUniformStore(user)) throw new HttpError(403, 'Bạn không có quyền yêu cầu điều chuyển kho');
+  const sourceDept = user.dept; // luôn = siêu thị của người yêu cầu, không cho tự chọn siêu thị khác làm nguồn
+  const targetDept = String(payload?.targetDept || '').trim();
+  if (!targetDept) throw new HttpError(400, 'Vui lòng chọn siêu thị nhận điều chuyển');
+  if (targetDept === sourceDept) throw new HttpError(400, 'Siêu thị nhận phải khác siêu thị nguồn');
+
+  const itemName = String(payload?.itemName || '').trim().slice(0, 200);
+  const size = String(payload?.size || '').trim().slice(0, 30);
+  const qty = Math.floor(Number(payload?.qty));
+  if (!itemName) throw new HttpError(400, 'Thiếu tên mặt hàng');
+  if (!Number.isFinite(qty) || qty <= 0) throw new HttpError(400, 'Số lượng phải lớn hơn 0');
+  const reason = String(payload?.reason || '').trim().slice(0, 500);
+  if (!reason) throw new HttpError(400, 'Vui lòng nhập lý do điều chuyển');
+
+  const stock = computeUniformStock(allPeriods, sourceDept, allIssuancesOfSourceStore, allAdjustmentsOfSourceStore, allApprovedTransfers);
+  const row = stock.get(`${itemName}|||${size}`);
+  const available = row ? row.stock : 0;
+  if (qty > available) {
+    throw new HttpError(409, `Không đủ tồn kho "${itemName}"${size ? ` (size ${size})` : ''} tại siêu thị nguồn: còn ${available}, cần chuyển ${qty}`);
+  }
+
+  return {
+    id: Date.now(),
+    sourceDept, targetDept, itemName, size, qty, reason,
+    status: 'PENDING_APPROVAL',
+    requestedBy: user.username, requestedByName: user.name, requestedAt: nowVN(),
+    approvedBy: null, approvedByName: null, approvedAt: null, rejectReason: ''
+  };
+}
+
+// Kiểm tra LẠI tồn kho nguồn tại thời điểm DUYỆT (không chỉ tin số liệu lúc yêu cầu — có thể đã có cấp
+// phát/báo hỏng/điều chuyển khác xen giữa) — caller (routes/records.js) truyền vào stock CỦA SIÊU THỊ
+// NGUỒN đã tính sẵn dưới khoá kép, KHÔNG loại trừ transfer đang xét (nó chưa APPROVED nên chưa được
+// tính vào allApprovedTransfers tại thời điểm gọi).
+function approveUniformTransfer(user, transfer, sourceStock) {
+  if (!canApproveUniformTransfer(user)) throw new HttpError(403, 'Bạn không có quyền duyệt điều chuyển kho');
+  if (transfer.status !== 'PENDING_APPROVAL') throw new HttpError(409, 'Yêu cầu điều chuyển này đã được xử lý trước đó');
+  const row = sourceStock ? sourceStock.get(`${transfer.itemName}|||${transfer.size}`) : null;
+  const available = row ? row.stock : 0;
+  if (transfer.qty > available) {
+    throw new HttpError(409, `Siêu thị nguồn không còn đủ tồn kho "${transfer.itemName}"${transfer.size ? ` (size ${transfer.size})` : ''}: còn ${available}, cần chuyển ${transfer.qty}`);
+  }
+  transfer.status = 'APPROVED';
+  transfer.approvedBy = user.username;
+  transfer.approvedByName = user.name;
+  transfer.approvedAt = nowVN();
+  return transfer;
+}
+
+function rejectUniformTransfer(user, transfer, payload) {
+  if (!canApproveUniformTransfer(user)) throw new HttpError(403, 'Bạn không có quyền duyệt điều chuyển kho');
+  if (transfer.status !== 'PENDING_APPROVAL') throw new HttpError(409, 'Yêu cầu điều chuyển này đã được xử lý trước đó');
+  transfer.status = 'REJECTED';
+  transfer.approvedBy = user.username;
+  transfer.approvedByName = user.name;
+  transfer.approvedAt = nowVN();
+  transfer.rejectReason = String(payload?.reason || '').trim().slice(0, 500);
+  return transfer;
 }
 
 // ===================== NGÂN SÁCH (kỳ: đóng sớm/mở lại — bản ngân sách phòng ban: nháp/gửi/duyệt) =====
@@ -2852,7 +3028,10 @@ module.exports = {
   escalateItTicket, approveItTicketEscalation, denyItTicketEscalation,
   canManageUniform, canManageUniformStore, computeUniformStock, computeEmployeeUniformHolding,
   computeAllEmployeeUniformHoldings,
+  canApproveUniform, approveUniformPeriod, rejectUniformPeriod,
+  stripVietnameseDiacritics, abbreviateUniformItemName, computeNextUniformSkuSeq, generateUniformSkuCode, backfillUniformSkuCodes,
   confirmUniformAllocation, buildUniformIssuance, buildUniformStockAdjustment,
+  canApproveUniformTransfer, buildUniformTransfer, approveUniformTransfer, rejectUniformTransfer,
   canManageBudget, canAggregateBudget, isBudgetPeriodClosed,
   closeBudgetPeriod, reopenBudgetPeriod, updateBudgetEntryDraft, submitBudgetEntry, updateBudgetTemplate,
   canConfirmCarDriverAssignment, confirmCarDriverAssignment

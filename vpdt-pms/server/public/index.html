@@ -3061,6 +3061,7 @@ table { display: block; overflow-x: auto; max-width: 100%; }
       <button type="button" onclick="setUniformSubTab('PERIODS')" id="btnUniformSubPeriods" class="hidden px-3 py-1.5 rounded text-xs font-bold bg-teal-700 text-white">📦 Kỳ Cấp Phát</button>
       <button type="button" onclick="setUniformSubTab('STORE')" id="btnUniformSubStore" class="hidden px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">✅ Xác Nhận / Cấp Phát</button>
       <button type="button" onclick="setUniformSubTab('STOCK')" id="btnUniformSubStock" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">📊 Kho Đồng Phục</button>
+      <button type="button" onclick="setUniformSubTab('DASHBOARD')" id="btnUniformSubDashboard" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">📈 Tổng Quan</button>
     </div>
 
     <!-- Sub-tab: Kỳ Cấp Phát (Hành Chính - uniformManage) -->
@@ -3068,7 +3069,7 @@ table { display: block; overflow-x: auto; max-width: 100%; }
       <div class="bg-slate-50 p-4 rounded border border-slate-200 space-y-3">
         <div class="flex items-center justify-between gap-2 flex-wrap">
           <h3 class="font-bold text-gray-800 text-base flex items-center gap-2">📋 Danh Mục Đồng Phục</h3>
-          <span class="text-xs text-gray-500">Chỉ Quản Trị Viên thêm/sửa/xoá được — dùng để chọn khi phân bổ bên dưới.</span>
+          <span class="text-xs text-gray-500">Quản Trị Viên / Hành Chính thêm/sửa/xoá được — dùng để chọn khi phân bổ bên dưới. Mỗi mặt hàng+size có 1 Mã SKU riêng, tự sinh lần đầu Giám Đốc Siêu Thị xác nhận nhận.</span>
         </div>
         <div id="uniformCatalogAdminForm" class="hidden grid grid-cols-1 md:grid-cols-3 gap-2 items-end">
           <div>
@@ -3084,7 +3085,7 @@ table { display: block; overflow-x: auto; max-width: 100%; }
         <div id="uniformCatalogListWrap" class="space-y-1.5"></div>
       </div>
 
-      <div class="bg-teal-50 p-4 rounded border border-teal-200 space-y-3">
+      <div id="uniformCreatePeriodBlock" class="bg-teal-50 p-4 rounded border border-teal-200 space-y-3">
         <h3 class="font-bold text-teal-900 text-base flex items-center gap-2">📦 Tạo Kỳ Cấp Phát Đồng Phục</h3>
         <p class="text-xs text-teal-700">Mỗi lần phân bổ đồng phục xuống các siêu thị — kể cả cấp bổ sung sau này cho siêu thị đã từng nhận — đều tạo 1 kỳ mới để theo dõi riêng biệt số lượng cấp từng đợt.</p>
         <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -3269,6 +3270,67 @@ table { display: block; overflow-x: auto; max-width: 100%; }
           </table>
         </div>
       </div>
+
+      <!-- Điều Chuyển Kho Giữa Các Siêu Thị (Phase 2) — yêu cầu: uniformStoreManage (nguồn = siêu thị
+           mình); duyệt: uniformApprove/admin (DÙNG CHUNG quyền duyệt kỳ cấp phát, không tạo quyền riêng);
+           lịch sử: hiện cho cả 2 vai trò, tự lọc theo canViewUniformTransferClient() bên dưới. -->
+      <div class="bg-cyan-50 p-4 rounded border border-cyan-200 space-y-3">
+        <h3 class="font-bold text-cyan-900 text-base flex items-center gap-2">🔁 Điều Chuyển Kho Giữa Các Siêu Thị</h3>
+        <div id="uniformTransferRequestForm" class="hidden space-y-3">
+          <p class="text-xs text-cyan-700">Yêu cầu chuyển bớt tồn kho của siêu thị bạn sang 1 siêu thị khác đang thiếu hàng — cần người có quyền duyệt (Quản Trị Viên / Duyệt Kỳ Cấp Phát) chấp nhận mới có hiệu lực.</p>
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <div>
+              <label class="block font-semibold text-gray-600 mb-1 text-xs">Siêu Thị Nhận <span class="text-red-500">*</span></label>
+              <input id="uniformTransferTargetDept" list="uniformTransferTargetDeptDatalist" placeholder="Gõ tên siêu thị nhận..." class="w-full border p-1.5 rounded text-xs bg-white">
+              <datalist id="uniformTransferTargetDeptDatalist"></datalist>
+            </div>
+            <div>
+              <label class="block font-semibold text-gray-600 mb-1 text-xs">Mặt Hàng — Size <span class="text-red-500">*</span></label>
+              <select id="uniformTransferItemSize" class="w-full border p-1.5 rounded text-xs bg-white">
+                <option value="">-- Chọn mặt hàng --</option>
+              </select>
+            </div>
+          </div>
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <div>
+              <label class="block font-semibold text-gray-600 mb-1 text-xs">Số Lượng <span class="text-red-500">*</span></label>
+              <input id="uniformTransferQty" type="number" min="1" class="w-full border p-1.5 rounded text-xs">
+            </div>
+            <div>
+              <label class="block font-semibold text-gray-600 mb-1 text-xs">Lý Do <span class="text-red-500">*</span></label>
+              <input id="uniformTransferReason" placeholder="VD: Siêu thị Đà Nẵng thiếu hàng gấp" class="w-full border p-1.5 rounded text-xs">
+            </div>
+          </div>
+          <div class="flex justify-end">
+            <button type="button" onclick="submitUniformTransfer()" class="bg-cyan-600 text-white px-5 py-2 rounded text-xs font-bold hover:bg-cyan-700">Gửi Yêu Cầu Điều Chuyển</button>
+          </div>
+        </div>
+
+        <div id="uniformTransferApprovalWrap" class="hidden space-y-2">
+          <h4 class="font-bold text-sm text-cyan-900">⏳ Chờ Duyệt</h4>
+          <div id="uniformTransferApprovalList" class="space-y-2"></div>
+          <div id="uniformTransferNoPendingNote" class="hidden text-xs text-gray-500 italic bg-white p-3 rounded border">Không có yêu cầu điều chuyển nào đang chờ duyệt.</div>
+        </div>
+
+        <div class="space-y-2">
+          <h4 class="font-bold text-sm text-gray-800">📋 Lịch Sử Điều Chuyển</h4>
+          <div class="overflow-x-auto">
+            <table class="w-full border-collapse border text-xs bg-white">
+              <thead><tr class="bg-gray-100 text-left text-gray-700">
+                <th class="border p-2">Ngày Yêu Cầu</th>
+                <th class="border p-2">Từ Siêu Thị</th>
+                <th class="border p-2">Đến Siêu Thị</th>
+                <th class="border p-2">Mặt Hàng</th>
+                <th class="border p-2 text-right">SL</th>
+                <th class="border p-2">Trạng Thái</th>
+                <th class="border p-2">Người Yêu Cầu</th>
+                <th class="border p-2">Người Duyệt</th>
+              </tr></thead>
+              <tbody id="uniformTransfersTableBody"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
     </div>
 
     <!-- Sub-tab: Kho Đồng Phục (xem — uniformManage xem tất cả siêu thị, uniformStoreManage chỉ xem siêu thị mình) -->
@@ -3295,6 +3357,68 @@ table { display: block; overflow-x: auto; max-width: 100%; }
               <th class="border p-2 text-right">Tồn Kho</th>
             </tr></thead>
             <tbody id="uniformStockTableBody"></tbody>
+          </table>
+        </div>
+        <p class="text-[11px] text-gray-500 italic">Bấm "▸ Chi tiết" ở 1 dòng để xem SL Đã Nhận đến từ (những) kỳ cấp phát nào — mirror "Chi Tiết Tài Liệu" của module Tài Liệu, tính hoàn toàn phía trình duyệt từ dữ liệu đã tải, không gọi thêm API.</p>
+      </div>
+    </div>
+
+    <!-- Sub-tab: Tổng Quan (Dashboard, Phase 2) — uniformManage/admin xem TẤT CẢ siêu thị gộp lại + bảng
+         theo từng siêu thị; uniformStoreManage CHỈ xem số của siêu thị mình (cùng quy ước scoping theo
+         dept đã dùng ở mọi nơi khác của module, xem lib/recordViewScope.js). -->
+    <div id="uniformSubDashboard" class="hidden space-y-4">
+      <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <div class="bg-white p-4 rounded border text-center">
+          <div class="text-[11px] text-gray-500 font-semibold uppercase">Tổng Tồn Kho</div>
+          <div id="uniformDashStatStock" class="text-2xl font-bold text-emerald-700">0</div>
+        </div>
+        <div class="bg-white p-4 rounded border text-center">
+          <div class="text-[11px] text-gray-500 font-semibold uppercase">Đã Cấp NV</div>
+          <div id="uniformDashStatIssued" class="text-2xl font-bold text-sky-700">0</div>
+        </div>
+        <div class="bg-white p-4 rounded border text-center">
+          <div class="text-[11px] text-gray-500 font-semibold uppercase">Hỏng / Hủy</div>
+          <div id="uniformDashStatDamaged" class="text-2xl font-bold text-rose-700">0</div>
+        </div>
+        <div class="bg-white p-4 rounded border text-center">
+          <div class="text-[11px] text-gray-500 font-semibold uppercase">Mất</div>
+          <div id="uniformDashStatLost" class="text-2xl font-bold text-orange-700">0</div>
+        </div>
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div class="bg-white p-4 rounded border space-y-2">
+          <h4 class="font-bold text-sm text-gray-800">👕 Theo Mặt Hàng</h4>
+          <div class="overflow-x-auto">
+            <table class="w-full border-collapse border text-xs">
+              <thead><tr class="bg-gray-100 text-left"><th class="border p-1.5">Mặt Hàng</th><th class="border p-1.5 text-right">Tồn Kho</th><th class="border p-1.5 text-right">Đã Cấp</th></tr></thead>
+              <tbody id="uniformDashByItemBody"></tbody>
+            </table>
+          </div>
+        </div>
+        <div class="bg-white p-4 rounded border space-y-2">
+          <h4 class="font-bold text-sm text-gray-800">📏 Theo Size</h4>
+          <div class="overflow-x-auto">
+            <table class="w-full border-collapse border text-xs">
+              <thead><tr class="bg-gray-100 text-left"><th class="border p-1.5">Size</th><th class="border p-1.5 text-right">Tồn Kho</th><th class="border p-1.5 text-right">Đã Cấp</th></tr></thead>
+              <tbody id="uniformDashBySizeBody"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <div id="uniformDashByStoreWrap" class="hidden bg-white p-4 rounded border space-y-2">
+        <h4 class="font-bold text-sm text-gray-800">🏬 Theo Siêu Thị</h4>
+        <div class="overflow-x-auto">
+          <table class="w-full border-collapse border text-xs">
+            <thead><tr class="bg-gray-100 text-left">
+              <th class="border p-1.5">Siêu Thị</th>
+              <th class="border p-1.5 text-right">Tồn Kho</th>
+              <th class="border p-1.5 text-right">Đã Cấp</th>
+              <th class="border p-1.5 text-right">Hỏng/Hủy</th>
+              <th class="border p-1.5 text-right">Mất</th>
+            </tr></thead>
+            <tbody id="uniformDashByStoreBody"></tbody>
           </table>
         </div>
       </div>
@@ -4498,10 +4622,13 @@ table { display: block; overflow-x: auto; max-width: 100%; }
             <span id="permTreeBadge_uniform" class="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-gray-100 text-gray-500">0/0</span>
           </summary>
           <div class="p-3 pt-0 space-y-2">
-            <p class="text-[11px] text-gray-500 italic">Còn quyền vào module "Đồng Phục" ở mục 0 mới thấy được các màn dưới đây — module này KHÔNG mở sẵn cho toàn bộ nhân viên. "Hành Chính" tạo kỳ cấp phát và phân bổ xuống từng siêu thị (chọn từ Danh Mục Siêu Thị ở tab Danh Mục); "Giám Đốc Siêu Thị" xác nhận đã nhận rồi cấp cho nhân viên (chỉ xác nhận/cấp phát được cho đúng siêu thị mình — theo Vị Trí đã chọn khi tạo tài khoản).</p>
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-2">
+            <p class="text-[11px] text-gray-500 italic">Còn quyền vào module "Đồng Phục" ở mục 0 mới thấy được các màn dưới đây — module này KHÔNG mở sẵn cho toàn bộ nhân viên. "Hành Chính" tạo kỳ cấp phát và phân bổ xuống từng siêu thị (chọn từ Danh Mục Siêu Thị ở tab Danh Mục); "Duyệt Kỳ Cấp Phát" duyệt/từ chối cả kỳ TRƯỚC KHI siêu thị xác nhận được (cũng dùng để duyệt Điều Chuyển Kho giữa các siêu thị); "Giám Đốc Siêu Thị" xác nhận đã nhận rồi cấp cho nhân viên (chỉ xác nhận/cấp phát được cho đúng siêu thị mình — theo Vị Trí đã chọn khi tạo tài khoản).</p>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-2">
               <label class="flex items-center gap-2 text-teal-700 font-semibold cursor-pointer">
                 <input type="checkbox" id="pUniformManage"> 📦 Hành Chính (tạo kỳ cấp phát, phân bổ xuống siêu thị)
+              </label>
+              <label class="flex items-center gap-2 text-indigo-700 font-semibold cursor-pointer">
+                <input type="checkbox" id="pUniformApprove"> ✔️ Duyệt Kỳ Cấp Phát / Điều Chuyển Kho
               </label>
               <label class="flex items-center gap-2 text-amber-700 font-semibold cursor-pointer">
                 <input type="checkbox" id="pUniformStoreManage"> ✅ Giám Đốc Siêu Thị (xác nhận nhận, cấp phát, báo Hỏng/Hủy, thu hồi từ nhân viên)
@@ -7088,12 +7215,13 @@ function canAccessVppModule(user) {
 }
 
 // Đồng Phục — KHÔNG mở sẵn cho mọi người như VPP (chỉ Hành Chính/uniformManage tạo kỳ, Giám Đốc Siêu
-// Thị/uniformStoreManage xác nhận+cấp phát — không có luồng nào cho nhân viên thường vào module này).
+// Thị/uniformStoreManage xác nhận+cấp phát, uniformApprove (Phase 2) duyệt kỳ/điều chuyển kho — không
+// có luồng nào cho nhân viên thường vào module này).
 function canAccessUniformModule(user) {
   if (!user) return false;
   if (user.perms?.admin) return true;
   if (!hasModuleAccess(user, 'uniform')) return false;
-  return !!(user.perms?.uniformManage || user.perms?.uniformStoreManage);
+  return !!(user.perms?.uniformManage || user.perms?.uniformStoreManage || user.perms?.uniformApprove);
 }
 
 // Vào được module "Báo Cáo Định Kỳ" (kỳ báo cáo tuần → nhập liệu → tổng hợp → phát hành) hay không —
@@ -7298,7 +7426,7 @@ function defaultNewUserPerms() {
     minutesCreate: false, minutesView: false, minutesEdit: false, minutesDownload: false,
     taskView: false, taskEdit: false, taskDelete: false, taskDownload: false,
     itPriceProposeCreate: false, itManage: false,
-    uniformManage: false, uniformStoreManage: false,
+    uniformManage: false, uniformApprove: false, uniformStoreManage: false,
     budgetManage: false, budgetCreate: false, budgetAggregate: false,
     approverAuthLevel: 'NONE'
   };
@@ -7573,6 +7701,7 @@ async function initDatabase(loggingInUser) {
     DB.uniformPeriods = data.uniformPeriods || [];
     DB.uniformIssuances = data.uniformIssuances || [];
     DB.uniformStockAdjustments = data.uniformStockAdjustments || [];
+    DB.uniformTransfers = data.uniformTransfers || [];
     DB.budgetDeptWorkflows = data.budgetDeptWorkflows || {};
     DB.budgetTemplates = data.budgetTemplates || [];
     DB.budgetPeriods = data.budgetPeriods || [];
@@ -20899,6 +21028,7 @@ function collectPermsFromForm() {
     itPriceProposeCreate: document.getElementById('pItPriceProposeCreate').checked,
     itManage: document.getElementById('pItManage').checked,
     uniformManage: document.getElementById('pUniformManage').checked,
+    uniformApprove: document.getElementById('pUniformApprove').checked,
     uniformStoreManage: document.getElementById('pUniformStoreManage').checked,
     budgetManage: document.getElementById('pBudgetManage').checked,
     budgetCreate: document.getElementById('pBudgetCreate').checked,
@@ -20944,6 +21074,7 @@ function populatePermsForm(permsInput) {
   document.getElementById('pItPriceProposeCreate').checked = !!perms.itPriceProposeCreate;
   document.getElementById('pItManage').checked = !!perms.itManage;
   document.getElementById('pUniformManage').checked = !!perms.uniformManage;
+  document.getElementById('pUniformApprove').checked = !!perms.uniformApprove;
   document.getElementById('pUniformStoreManage').checked = !!perms.uniformStoreManage;
   document.getElementById('pBudgetManage').checked = !!perms.budgetManage;
   document.getElementById('pBudgetCreate').checked = !!perms.budgetCreate;
@@ -23559,6 +23690,7 @@ function resetUserForm() {
   document.getElementById('pItPriceProposeCreate').checked = !!defaults.itPriceProposeCreate;
   document.getElementById('pItManage').checked = !!defaults.itManage;
   document.getElementById('pUniformManage').checked = !!defaults.uniformManage;
+  document.getElementById('pUniformApprove').checked = !!defaults.uniformApprove;
   document.getElementById('pUniformStoreManage').checked = !!defaults.uniformStoreManage;
   document.getElementById('pBudgetManage').checked = !!defaults.budgetManage;
   document.getElementById('pBudgetCreate').checked = !!defaults.budgetCreate;
@@ -24123,9 +24255,26 @@ function renderReportsSubTabBar() {
   }).join('');
 }
 
+// #reportsDeptFilter mặc định liệt kê DB.depts (khối văn phòng, xem populateDropdowns() ~dòng 10345) —
+// module Đồng Phục dùng "dept" = TÊN SIÊU THỊ (DB.stores, TÁCH RIÊNG khỏi DB.depts, xem
+// lib/createValidation.js uniformPeriods), nên đổi sang danh mục Siêu Thị khi mở tab báo cáo này (và
+// đổi LẠI DB.depts khi rời tab, không ảnh hưởng các module khác) — nếu không, dropdown không có lựa
+// chọn nào khớp được uniformIssuances.dept nên bộ lọc "theo siêu thị" coi như không dùng được dù
+// getRecords()/renderUniformReportExtra() bên dưới đã sẵn sàng lọc đúng theo giá trị chọn.
+function repopulateReportsDeptFilterOptions(key) {
+  const el = document.getElementById('reportsDeptFilter');
+  if (!el) return;
+  const prevValue = el.value;
+  const source = key === 'uniform' ? (DB.stores || []) : (DB.depts || []);
+  const label = key === 'uniform' ? '-- Tất cả siêu thị --' : '-- Tất cả phòng ban --';
+  el.innerHTML = `<option value="">${label}</option>` + source.map(d => `<option value="${escapeHtml(d)}">${escapeHtml(d)}</option>`).join('');
+  if (source.includes(prevValue)) el.value = prevValue; // giữ lựa chọn cũ nếu còn hợp lệ ở danh mục mới
+}
+
 function setReportsSubTab(key) {
   window.scrollTo({ top: 0, behavior: 'auto' }); // Tránh "bay xuống cuối" khi đổi tab con — xem setSystemSubTab().
   activeReportsSubTab = key;
+  repopulateReportsDeptFilterOptions(key);
   renderReportsSubTabBar();
   renderReports();
 }
@@ -24662,6 +24811,16 @@ function renderUniformReportExtra(records) {
   const totalAllocatedQty = stockRows.reduce((s, r) => s + r.allocated, 0);
   const totalStockQty = stockRows.reduce((s, r) => s + r.stock, 0);
 
+  // Chi tiết theo NHÂN VIÊN (Phase 2) — nhân viên nào nhận mặt hàng/size/mã SKU nào, lọc theo ĐÚNG
+  // records đã qua getRecords() (đã áp bộ lọc siêu thị + khoảng ngày ở trên) — không tính lại từ đầu.
+  const employeeRows = [];
+  for (const r of records) {
+    for (const it of (r.items || [])) {
+      employeeRows.push({ dept: r.dept, employeeName: r.employeeName, itemName: it.name, size: it.size, qty: it.qty, code: uniformSkuFor(it.name, it.size), createdAt: r.createdAt });
+    }
+  }
+  employeeRows.sort((a, b) => a.employeeName.localeCompare(b.employeeName, 'vi'));
+
   return `
     <div class="bg-white p-4 rounded border space-y-3">
       <h4 class="font-bold text-gray-800 mb-1">👕 Đồng Phục — Cấp Phát & Tồn Kho</h4>
@@ -24700,6 +24859,34 @@ function renderUniformReportExtra(records) {
                 <td class="border p-2 text-right font-bold ${r.stock <= 0 ? 'text-red-600' : 'text-green-700'}">${r.stock.toLocaleString('vi-VN')}</td>
               </tr>
             `).join('') : `<tr><td colspan="6" class="text-center p-4 text-gray-500 italic">Chưa có dữ liệu tồn kho.</td></tr>`}
+          </tbody>
+        </table>
+      </div>
+
+      <h4 class="font-bold text-gray-800 mb-1 mt-4">🧍 Chi Tiết Theo Nhân Viên (khớp bộ lọc siêu thị/ngày ở trên)</h4>
+      <div class="overflow-x-auto">
+        <table class="w-full border-collapse text-xs">
+          <thead><tr class="bg-gray-100 text-left">
+            <th class="border p-2">Nhân Viên</th>
+            <th class="border p-2">Siêu Thị</th>
+            <th class="border p-2">Mặt Hàng</th>
+            <th class="border p-2">Size</th>
+            <th class="border p-2">Mã SKU</th>
+            <th class="border p-2 text-right">SL</th>
+            <th class="border p-2">Ngày Cấp</th>
+          </tr></thead>
+          <tbody>
+            ${employeeRows.length ? employeeRows.map(r => `
+              <tr>
+                <td class="border p-2">${escapeHtml(r.employeeName || '')}</td>
+                <td class="border p-2">${escapeHtml(r.dept)}</td>
+                <td class="border p-2">${escapeHtml(r.itemName)}</td>
+                <td class="border p-2">${escapeHtml(r.size || '—')}</td>
+                <td class="border p-2 font-mono text-cyan-700">${escapeHtml(r.code || '—')}</td>
+                <td class="border p-2 text-right">${r.qty.toLocaleString('vi-VN')}</td>
+                <td class="border p-2">${escapeHtml(r.createdAt || '')}</td>
+              </tr>
+            `).join('') : `<tr><td colspan="7" class="text-center p-4 text-gray-500 italic">Chưa có dữ liệu cấp phát trong khoảng đã lọc.</td></tr>`}
           </tbody>
         </table>
       </div>
@@ -30545,41 +30732,85 @@ function canManageUniform(user) {
 function canManageUniformStore(user) {
   return !!(user?.perms?.admin || user?.perms?.uniformStoreManage);
 }
+// uniformApprove (Phase 2) — duyệt/từ chối kỳ cấp phát VÀ điều chuyển kho (DÙNG CHUNG 1 quyền, không
+// tách riêng — xem lib/recordActions.js canApproveUniform()/canApproveUniformTransfer()).
+function canApproveUniformClient(user) {
+  return !!(user?.perms?.admin || user?.perms?.uniformApprove);
+}
 
 function setUniformSubTab(subTab) {
   window.scrollTo({ top: 0, behavior: 'auto' }); // Tránh "bay xuống cuối" khi đổi tab con — xem setSystemSubTab().
   const canHc = canManageUniform(currentUser);
   const canStore = canManageUniformStore(currentUser);
-  if (subTab === 'PERIODS' && !canHc) subTab = canStore ? 'STORE' : 'STOCK';
-  if (subTab === 'STORE' && !canStore) subTab = canHc ? 'PERIODS' : 'STOCK';
+  const canApprove = canApproveUniformClient(currentUser);
+  // Phase 2: uniformApprove (không kèm uniformManage/uniformStoreManage) vẫn cần vào ĐƯỢC tab "Kỳ Cấp
+  // Phát" (duyệt/từ chối kỳ) và "Xác Nhận/Cấp Phát" (duyệt/từ chối điều chuyển kho) — nếu không, người
+  // chỉ giữ quyền duyệt sẽ không bao giờ tới được màn duyệt (2 nút bấm tab này trước đây CHỈ hiện cho
+  // canHc/canStore, xem canAccessUniformModule() đã mở quyền vào MODULE nhưng chưa mở quyền vào TAB).
+  const canSeePeriods = canHc || canApprove;
+  const canSeeStore = canStore || canApprove;
+  if (subTab === 'PERIODS' && !canSeePeriods) subTab = canSeeStore ? 'STORE' : 'STOCK';
+  if (subTab === 'STORE' && !canSeeStore) subTab = canSeePeriods ? 'PERIODS' : 'STOCK';
   activeUniformSubTab = subTab;
 
   document.getElementById('uniformSubPeriods').classList.toggle('hidden', subTab !== 'PERIODS');
   document.getElementById('uniformSubStore').classList.toggle('hidden', subTab !== 'STORE');
   document.getElementById('uniformSubStock').classList.toggle('hidden', subTab !== 'STOCK');
+  document.getElementById('uniformSubDashboard').classList.toggle('hidden', subTab !== 'DASHBOARD');
 
   const activeCls = 'px-3 py-1.5 rounded text-xs font-bold bg-teal-700 text-white';
   const inactiveCls = 'px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700';
-  document.getElementById('btnUniformSubPeriods').className = (subTab === 'PERIODS' ? activeCls : inactiveCls) + (canHc ? '' : ' hidden');
-  document.getElementById('btnUniformSubStore').className = (subTab === 'STORE' ? activeCls : inactiveCls) + (canStore ? '' : ' hidden');
+  document.getElementById('btnUniformSubPeriods').className = (subTab === 'PERIODS' ? activeCls : inactiveCls) + (canSeePeriods ? '' : ' hidden');
+  document.getElementById('btnUniformSubStore').className = (subTab === 'STORE' ? activeCls : inactiveCls) + (canSeeStore ? '' : ' hidden');
   document.getElementById('btnUniformSubStock').className = subTab === 'STOCK' ? activeCls : inactiveCls;
+  document.getElementById('btnUniformSubDashboard').className = subTab === 'DASHBOARD' ? activeCls : inactiveCls;
 
-  if (subTab === 'PERIODS') { renderUniformCatalogList(); resetUniformPeriodForm(); renderUniformPeriodsList(); }
-  if (subTab === 'STORE') { renderUniformPendingAllocations(); renderUniformIssueEmployeeOptions(); resetUniformIssueForm(); renderUniformIssuancesTable(); renderUniformHoldingsTable(); resetUniformAdjustForms(); renderUniformAdjustmentsTable(); }
+  if (subTab === 'PERIODS') {
+    renderUniformCatalogList(); resetUniformPeriodForm(); renderUniformPeriodsList();
+    // Form "Tạo Kỳ Cấp Phát" chỉ dành cho uniformManage/admin — approver-only vào tab này CHỈ để
+    // duyệt/từ chối, không tạo kỳ mới được (server cũng chặn nếu cố gọi thẳng API).
+    document.getElementById('uniformCreatePeriodBlock')?.classList.toggle('hidden', !canHc);
+  }
+  if (subTab === 'STORE') {
+    renderUniformPendingAllocations(); renderUniformIssueEmployeeOptions(); resetUniformIssueForm(); renderUniformIssuancesTable();
+    renderUniformHoldingsTable(); resetUniformAdjustForms(); renderUniformAdjustmentsTable();
+    resetUniformTransferForm(); renderUniformTransferApprovalQueue(); renderUniformTransfersTable();
+  }
   if (subTab === 'STOCK') { renderUniformStockStoreFilterOptions(); renderUniformStock(); }
+  if (subTab === 'DASHBOARD') { renderUniformDashboard(); }
+}
+
+// Mã SKU (Phase 2) — sinh 1 LẦN lúc Giám Đốc Siêu Thị xác nhận nhận LẦN ĐẦU 1 (mặt hàng,size), lưu
+// trong DB.uniformCatalog[].codesBySize[size] (mirror backfillUniformSkuCodes() ở
+// lib/recordActions.js) — TÁI SỬ DỤNG cho mọi siêu thị/kỳ khác xác nhận cùng (mặt hàng,size) sau đó.
+// Trả về '' nếu chưa từng được xác nhận ở đâu cả (chưa sinh mã).
+function uniformSkuFor(name, size) {
+  const entry = (DB.uniformCatalog || []).find(c => c.name === name);
+  return entry?.codesBySize?.[size || ''] || '';
+}
+// Định dạng hiển thị CHUẨN "loại — cỡ — mã" dùng chung mọi nơi liệt kê đồng phục (danh mục, dropdown
+// cấp phát, bảng tồn kho, bảng đang giữ) — mã bỏ qua nếu chưa sinh (kỳ chưa từng được xác nhận).
+function formatUniformLabel(name, size, code) {
+  const parts = [name, size || '—'];
+  if (code) parts.push(code);
+  return parts.map(escapeHtml).join(' — ');
 }
 
 function uniformItemsSummary(items) {
-  return (items || []).map(it => `${escapeHtml(it.name)}${it.size ? ` (${escapeHtml(it.size)})` : ''}: ${it.qty}`).join(', ') || '—';
+  return (items || []).map(it => {
+    const code = uniformSkuFor(it.name, it.size);
+    return `${formatUniformLabel(it.name, it.size, code)}: ${it.qty}`;
+  }).join(', ') || '—';
 }
 
-// ============ Danh Mục Đồng Phục (chỉ admin thêm/sửa/xoá — xem ADMIN_ONLY_KEYS ở routes/data.js) ============
+// ============ Danh Mục Đồng Phục (Quản Trị Viên / Hành Chính thêm/sửa/xoá — xem ADMIN_ONLY_KEYS +
+// isCurrentlyAdminOrUniformManage() ở routes/data.js) ============
 function renderUniformCatalogList() {
   const wrap = document.getElementById('uniformCatalogListWrap');
   const form = document.getElementById('uniformCatalogAdminForm');
   if (!wrap) return;
-  const isAdmin = !!currentUser.perms?.admin;
-  if (form) form.classList.toggle('hidden', !isAdmin);
+  const canEdit = !!currentUser.perms?.admin || canManageUniform(currentUser);
+  if (form) form.classList.toggle('hidden', !canEdit);
   const catalog = DB.uniformCatalog || [];
   if (!catalog.length) {
     wrap.innerHTML = `<div class="text-xs text-gray-500 italic bg-white p-3 rounded border">Chưa có mặt hàng nào trong danh mục.</div>`;
@@ -30589,9 +30820,11 @@ function renderUniformCatalogList() {
     <div class="bg-white p-2.5 rounded border flex items-center justify-between gap-2 flex-wrap">
       <div>
         <span class="font-bold text-slate-800 text-xs">${escapeHtml(c.name)}</span>
-        <span class="text-[11px] text-gray-500 ml-2">${(c.sizes || []).map(s => escapeHtml(s)).join(', ') || 'Không có size'}</span>
+        <div class="text-[11px] text-gray-500 mt-0.5">
+          ${(c.sizes || []).map(s => `<span class="inline-block mr-2">${escapeHtml(s)}${c.codesBySize?.[s] ? ` <span class="text-cyan-700 font-mono">(${escapeHtml(c.codesBySize[s])})</span>` : ' <span class="italic">(chưa có mã)</span>'}</span>`).join('') || 'Không có size'}
+        </div>
       </div>
-      ${isAdmin ? `<button type="button" onclick="deleteUniformCatalogItem(${c.id})" class="text-red-600 hover:text-red-800 text-xs font-bold">🗑️ Xóa</button>` : ''}
+      ${canEdit ? `<button type="button" onclick="deleteUniformCatalogItem(${c.id})" class="text-red-600 hover:text-red-800 text-xs font-bold">🗑️ Xóa</button>` : ''}
     </div>
   `).join('');
 }
@@ -30604,7 +30837,7 @@ function saveUniformCatalogItem() {
   if (!sizes.length) return alert('Vui lòng nhập ít nhất 1 size (cách nhau bằng dấu phẩy)!');
   if ((DB.uniformCatalog || []).some(c => c.name === name)) return alert('Mặt hàng này đã có trong danh mục!');
   const nextId = (Math.max(0, ...(DB.uniformCatalog || []).map(c => c.id)) || 0) + 1;
-  DB.uniformCatalog = [...(DB.uniformCatalog || []), { id: nextId, name, sizes }];
+  DB.uniformCatalog = [...(DB.uniformCatalog || []), { id: nextId, name, sizes, codesBySize: {} }];
   syncStorage('uniformCatalog');
   logSystemAction('UNIFORM', 'ADD_UNIFORM_CATALOG', `Thêm mặt hàng vào Danh Mục Đồng Phục [${name}]`, 'SUCCESS', name);
   document.getElementById('uniformCatalogName').value = '';
@@ -30768,6 +31001,15 @@ function uniformAllocStatusBadge(status) {
   return `<span class="px-2 py-0.5 bg-amber-100 text-amber-800 rounded font-bold text-[11px]">⏳ Chờ xác nhận</span>`;
 }
 
+// Cổng duyệt Ở CẤP KỲ (Phase 2) — mirror uniformAllocStatusBadge() ở trên nhưng cho field approvalStatus
+// của CẢ KỲ (không phải per-allocation). Kỳ tạo trước Phase 2 (approvalStatus rỗng) coi như đã duyệt.
+function uniformPeriodApprovalBadge(period) {
+  const status = period.approvalStatus;
+  if (!status || status === 'APPROVED') return `<span class="px-2 py-0.5 bg-green-100 text-green-800 rounded font-bold text-[11px]">✔️ Đã duyệt</span>`;
+  if (status === 'REJECTED') return `<span class="px-2 py-0.5 bg-red-100 text-red-800 rounded font-bold text-[11px]">⛔ Đã từ chối</span>`;
+  return `<span class="px-2 py-0.5 bg-indigo-100 text-indigo-800 rounded font-bold text-[11px]">⏳ Chờ duyệt</span>`;
+}
+
 function renderUniformPeriodsList() {
   const wrap = document.getElementById('uniformPeriodsListWrap');
   if (!wrap) return;
@@ -30775,14 +31017,23 @@ function renderUniformPeriodsList() {
     wrap.innerHTML = `<div class="text-center p-6 text-gray-500 italic bg-white rounded border">Chưa có kỳ cấp phát nào.</div>`;
     return;
   }
+  const canApprove = canApproveUniformClient(currentUser);
   wrap.innerHTML = DB.uniformPeriods.map(p => `
     <div class="bg-white rounded border overflow-hidden">
       <div class="flex items-center justify-between gap-2 p-3 bg-gray-50 border-b flex-wrap">
         <div>
-          <div class="font-bold text-teal-800 text-sm">${escapeHtml(p.name)}</div>
+          <div class="font-bold text-teal-800 text-sm">${escapeHtml(p.name)} ${uniformPeriodApprovalBadge(p)}</div>
           <div class="text-[11px] text-gray-500">Tạo bởi ${escapeHtml(p.creatorName || p.creator || '')} lúc ${escapeHtml(p.createdAt || '')}${p.note ? ` — ${escapeHtml(p.note)}` : ''}</div>
+          ${p.approvalStatus === 'REJECTED' && p.rejectReason ? `<div class="text-[11px] text-red-600 mt-0.5">Lý do từ chối: ${escapeHtml(p.rejectReason)}</div>` : ''}
+          ${p.approvalStatus === 'APPROVED' ? `<div class="text-[11px] text-green-700 mt-0.5">Duyệt bởi ${escapeHtml(p.approvedByName || '')} lúc ${escapeHtml(p.approvedAt || '')}</div>` : ''}
         </div>
-        ${currentUser.perms?.admin ? `<button type="button" onclick="deleteUniformPeriodAction(${p.id})" class="text-red-600 hover:text-red-800 text-xs font-bold">🗑️ Xóa</button>` : ''}
+        <div class="flex items-center gap-2 flex-wrap">
+          ${(canApprove && p.approvalStatus === 'PENDING_APPROVAL') ? `
+            <button type="button" onclick="approveUniformPeriodAction(${p.id})" class="bg-emerald-600 text-white px-3 py-1 rounded text-xs font-bold hover:bg-emerald-700">✔️ Duyệt</button>
+            <button type="button" onclick="rejectUniformPeriodAction(${p.id})" class="bg-red-600 text-white px-3 py-1 rounded text-xs font-bold hover:bg-red-700">✕ Từ Chối</button>
+          ` : ''}
+          ${currentUser.perms?.admin ? `<button type="button" onclick="deleteUniformPeriodAction(${p.id})" class="text-red-600 hover:text-red-800 text-xs font-bold">🗑️ Xóa</button>` : ''}
+        </div>
       </div>
       <div class="overflow-x-auto">
         <table class="w-full text-xs">
@@ -30808,6 +31059,53 @@ function renderUniformPeriodsList() {
   `).join('');
 }
 
+function approveUniformPeriodAction(periodId) {
+  showConfirmModal({
+    title: 'Duyệt Kỳ Cấp Phát',
+    bodyHTML: 'Duyệt kỳ cấp phát này? Sau khi duyệt, Giám Đốc các Siêu Thị liên quan mới bắt đầu xác nhận được phần phân bổ của mình.',
+    confirmLabel: 'Duyệt',
+    onConfirm: async () => {
+      let result;
+      try {
+        result = await callRecordAction('uniformPeriods', periodId, 'approve', {});
+      } catch (err) { return alert(`⛔ ${err.message}`); }
+      const idx = DB.uniformPeriods.findIndex(x => x.id === periodId);
+      if (idx !== -1) DB.uniformPeriods[idx] = result.item;
+      logSystemAction('UNIFORM', 'APPROVE_UNIFORM_PERIOD', `Duyệt kỳ cấp phát đồng phục [${result.item.name}]`, 'SUCCESS', result.item.name);
+      alert('✅ Đã duyệt kỳ cấp phát!');
+      renderUniformPeriodsList();
+    }
+  });
+}
+
+function rejectUniformPeriodAction(periodId) {
+  showConfirmModal({
+    title: 'Từ Chối Kỳ Cấp Phát',
+    bodyHTML: `
+      <div class="space-y-2">
+        <div class="text-xs text-gray-600">Từ chối là QUYẾT ĐỊNH CUỐI CÙNG — kỳ này sẽ không bao giờ xác nhận được nữa sau khi từ chối.</div>
+        <div>
+          <label class="block font-semibold text-gray-600 mb-1 text-xs">Lý Do</label>
+          <textarea id="uniformPeriodRejectReason" rows="2" class="w-full border p-1.5 rounded text-xs" placeholder="Không bắt buộc..."></textarea>
+        </div>
+      </div>
+    `,
+    confirmLabel: 'Từ Chối',
+    onConfirm: async () => {
+      const reason = document.getElementById('uniformPeriodRejectReason').value.trim();
+      let result;
+      try {
+        result = await callRecordAction('uniformPeriods', periodId, 'reject', { reason });
+      } catch (err) { return alert(`⛔ ${err.message}`); }
+      const idx = DB.uniformPeriods.findIndex(x => x.id === periodId);
+      if (idx !== -1) DB.uniformPeriods[idx] = result.item;
+      logSystemAction('UNIFORM', 'REJECT_UNIFORM_PERIOD', `Từ chối kỳ cấp phát đồng phục [${result.item.name}]`, 'SUCCESS', result.item.name);
+      alert('✅ Đã từ chối kỳ cấp phát!');
+      renderUniformPeriodsList();
+    }
+  });
+}
+
 function deleteUniformPeriodAction(id) {
   const p = DB.uniformPeriods.find(x => x.id === id);
   if (!p) return;
@@ -30826,6 +31124,10 @@ function renderUniformPendingAllocations() {
   if (!wrap) return;
   const pending = [];
   for (const p of DB.uniformPeriods) {
+    // Cổng duyệt Ở CẤP KỲ (Phase 2) — kỳ chưa/không được duyệt thì KHÔNG hiện ra để xác nhận, kể cả
+    // với admin/uniformManage (server đã lọc cho uniformStoreManage thuần, đây là phòng thủ thêm cho
+    // trường hợp 1 tài khoản vừa admin/uniformManage vừa đang đứng vai trò Giám Đốc Siêu Thị của mình).
+    if (p.approvalStatus && p.approvalStatus !== 'APPROVED') continue;
     for (const a of (p.allocations || [])) {
       if (a.dept === currentUser.dept && a.status === 'PENDING_CONFIRM') pending.push({ period: p, alloc: a });
     }
@@ -30854,6 +31156,9 @@ function confirmUniformAllocationAction(periodId, allocationId) {
       } catch (err) { return alert(`⛔ ${err.message}`); }
       const idx = DB.uniformPeriods.findIndex(x => x.id === periodId);
       if (idx !== -1) DB.uniformPeriods[idx] = result.item;
+      // Phase 2: server có thể trả kèm uniformCatalog đã cập nhật (SKU vừa sinh/tái sử dụng cho phần
+      // vừa xác nhận) — cập nhật ngay để hiện mã mới mà không cần tải lại trang, xem routes/records.js.
+      if (result.uniformCatalog) DB.uniformCatalog = result.uniformCatalog;
       logSystemAction('UNIFORM', 'CONFIRM_UNIFORM_ALLOC', `Xác nhận nhận đồng phục kỳ [${result.item.name}]`, 'SUCCESS', result.item.name);
       renderUniformPendingAllocations();
       renderUniformStock();
@@ -30940,7 +31245,8 @@ function renderUniformIssueItems() {
                 <option value="">-- Chọn mặt hàng --</option>
                 ${options.map(o => {
                   const key = `${o.name}|||${o.size}`;
-                  return `<option value="${escapeHtml(key)}" ${key === currentKey ? 'selected' : ''}>${escapeHtml(o.name)}${o.size ? ` - ${escapeHtml(o.size)}` : ''} (còn ${o.stock})</option>`;
+                  const code = uniformSkuFor(o.name, o.size);
+                  return `<option value="${escapeHtml(key)}" ${key === currentKey ? 'selected' : ''}>${formatUniformLabel(o.name, o.size, code)} (còn ${o.stock})</option>`;
                 }).join('')}
               </select>
             </td>
@@ -31053,7 +31359,7 @@ function renderUniformHoldingsTable() {
     <tr class="hover:bg-gray-50 border-b">
       <td class="border p-2">${escapeHtml(h.employeeName)}</td>
       <td class="border p-2">${escapeHtml(h.name)}</td>
-      <td class="border p-2">${escapeHtml(h.size || '—')}</td>
+      <td class="border p-2">${escapeHtml(h.size || '—')}${uniformSkuFor(h.name, h.size) ? ` <span class="text-[10px] text-cyan-700 font-mono">(${escapeHtml(uniformSkuFor(h.name, h.size))})</span>` : ''}</td>
       <td class="border p-2 text-right font-bold">${h.held.toLocaleString('vi-VN')}</td>
       <td class="border p-2 text-center space-x-1 whitespace-nowrap">
         <button type="button" onclick="openUniformHoldingActionModal(${idx}, 'TON')" class="bg-emerald-600 text-white px-2 py-1 rounded text-[11px] font-bold hover:bg-emerald-700">↩️ Thu Hồi</button>
@@ -31248,12 +31554,14 @@ function renderUniformAdjustmentsTable() {
 // Mirror computeUniformStock() ở lib/recordActions.js — chỉ tính từ allocations đã CONFIRMED trừ đi
 // uniformIssuances (đã trừ phần thu hồi) và trừ luôn hỏng/hủy, để hiển thị tức thời phía client mà
 // không cần gọi thêm API riêng cho tồn kho.
+// Mirror computeUniformStock() ở lib/recordActions.js (Phase 2 — có thêm transferOut/transferIn từ
+// DB.uniformTransfers ĐÃ APPROVED, xem giải thích công thức ở đó).
 function computeUniformStockClient(storeDept) {
   const stock = new Map();
   const keyOf = (name, size) => `${name}|||${size || ''}`;
   const bump = (name, size, field, qty) => {
     const key = keyOf(name, size);
-    if (!stock.has(key)) stock.set(key, { name, size: size || '', allocated: 0, issued: 0, recalled: 0, hong: 0, huy: 0, mat: 0 });
+    if (!stock.has(key)) stock.set(key, { name, size: size || '', allocated: 0, issued: 0, recalled: 0, hong: 0, huy: 0, mat: 0, transferOut: 0, transferIn: 0 });
     stock.get(key)[field] += qty;
   };
   for (const period of DB.uniformPeriods) {
@@ -31273,8 +31581,40 @@ function computeUniformStockClient(storeDept) {
     if (adj.outcome === 'HUY') bump(adj.itemName, adj.size, 'huy', adj.qty);
     if (adj.outcome === 'MAT') bump(adj.itemName, adj.size, 'mat', adj.qty);
   }
-  for (const row of stock.values()) row.stock = row.allocated - (row.issued - row.recalled) - row.hong - row.huy - row.mat;
+  for (const t of (DB.uniformTransfers || [])) {
+    if (t.status !== 'APPROVED') continue;
+    if (t.sourceDept === storeDept) bump(t.itemName, t.size, 'transferOut', t.qty);
+    if (t.targetDept === storeDept) bump(t.itemName, t.size, 'transferIn', t.qty);
+  }
+  for (const row of stock.values()) row.stock = row.allocated - (row.issued - row.recalled) - row.hong - row.huy - row.mat - row.transferOut + row.transferIn;
   return stock;
+}
+
+// ============ Chi Tiết Theo Kỳ (Phase 2) — mirror UX expand/collapse "Chi Tiết Tài Liệu" của module
+// Tài Liệu: bấm 1 dòng tồn kho để xem SL Đã Nhận đến từ (những) kỳ cấp phát nào — tính HOÀN TOÀN phía
+// trình duyệt từ DB.uniformPeriods đã tải sẵn, KHÔNG gọi thêm API nào. Chỉ gộp allocations ĐÃ CONFIRMED
+// (đúng khớp "allocated" trong computeUniformStockClient() ở trên).
+const uniformStockExpandedKeys = new Set();
+function uniformStockRowKey(dept, name, size) { return `${dept}|||${name}|||${size || ''}`; }
+function uniformPeriodBreakdownFor(dept, name, size) {
+  const rows = [];
+  for (const period of DB.uniformPeriods) {
+    for (const alloc of (period.allocations || [])) {
+      if (alloc.dept !== dept || alloc.status !== 'CONFIRMED') continue;
+      for (const it of (alloc.items || [])) {
+        if (it.name === name && (it.size || '') === (size || '')) {
+          rows.push({ periodName: period.name, qty: it.qty, confirmedAt: alloc.confirmedAt, confirmedByName: alloc.confirmedByName });
+        }
+      }
+    }
+  }
+  return rows;
+}
+function toggleUniformStockDetail(dept, name, size) {
+  const key = uniformStockRowKey(dept, name, size);
+  if (uniformStockExpandedKeys.has(key)) uniformStockExpandedKeys.delete(key);
+  else uniformStockExpandedKeys.add(key);
+  renderUniformStock();
 }
 
 function renderUniformStockStoreFilterOptions() {
@@ -31309,19 +31649,302 @@ function renderUniformStock() {
     tbody.innerHTML = `<tr><td colspan="9" class="text-center p-6 text-gray-500 italic">Chưa có dữ liệu tồn kho.</td></tr>`;
     return;
   }
-  tbody.innerHTML = rows.map(r => `
+  tbody.innerHTML = rows.map(r => {
+    const key = uniformStockRowKey(r.dept, r.name, r.size);
+    const expanded = uniformStockExpandedKeys.has(key);
+    const code = uniformSkuFor(r.name, r.size);
+    const breakdown = expanded ? uniformPeriodBreakdownFor(r.dept, r.name, r.size) : [];
+    const netTransfer = r.transferIn - r.transferOut;
+    return `
     <tr class="hover:bg-gray-50 border-b">
       <td class="border p-2 font-semibold">${escapeHtml(r.dept)}</td>
-      <td class="border p-2">${escapeHtml(r.name)}</td>
+      <td class="border p-2">
+        <button type="button" onclick="toggleUniformStockDetail('${escapeHtml(r.dept)}', '${escapeHtml(r.name)}', '${escapeHtml(r.size || '')}')" class="text-teal-700 hover:underline font-semibold">${expanded ? '▾' : '▸'} ${escapeHtml(r.name)}</button>
+        ${code ? `<span class="block text-[10px] text-cyan-700 font-mono">${escapeHtml(code)}</span>` : ''}
+      </td>
       <td class="border p-2">${escapeHtml(r.size || '—')}</td>
       <td class="border p-2 text-right">${r.allocated.toLocaleString('vi-VN')}</td>
       <td class="border p-2 text-right">${r.issued.toLocaleString('vi-VN')}</td>
       <td class="border p-2 text-right ${r.hong > 0 ? 'text-rose-600 font-bold' : ''}">${r.hong.toLocaleString('vi-VN')}</td>
       <td class="border p-2 text-right ${r.huy > 0 ? 'text-gray-600 font-bold' : ''}">${r.huy.toLocaleString('vi-VN')}</td>
       <td class="border p-2 text-right ${r.mat > 0 ? 'text-orange-600 font-bold' : ''}">${r.mat.toLocaleString('vi-VN')}</td>
-      <td class="border p-2 text-right font-bold ${r.stock <= 0 ? 'text-red-600' : 'text-green-700'}">${r.stock.toLocaleString('vi-VN')}</td>
+      <td class="border p-2 text-right font-bold ${r.stock <= 0 ? 'text-red-600' : 'text-green-700'}">${r.stock.toLocaleString('vi-VN')}${netTransfer !== 0 ? `<span class="block text-[10px] font-normal text-cyan-700">${netTransfer > 0 ? '+' : ''}${netTransfer} điều chuyển</span>` : ''}</td>
+    </tr>
+    ${expanded ? `
+    <tr class="bg-teal-50/40">
+      <td class="border p-2" colspan="9">
+        <div class="text-[11px] text-gray-700">
+          <div class="font-bold text-teal-800 mb-1">📋 Chi tiết theo kỳ cấp phát (đã xác nhận):</div>
+          ${breakdown.length ? `
+            <table class="w-full border-collapse text-[11px]">
+              <thead><tr class="text-left text-gray-500"><th class="p-1">Kỳ Cấp Phát</th><th class="p-1 text-right">SL</th><th class="p-1">Xác Nhận Bởi</th><th class="p-1">Lúc</th></tr></thead>
+              <tbody>
+                ${breakdown.map(b => `<tr><td class="p-1">${escapeHtml(b.periodName)}</td><td class="p-1 text-right">${b.qty}</td><td class="p-1">${escapeHtml(b.confirmedByName || '')}</td><td class="p-1">${escapeHtml(b.confirmedAt || '')}</td></tr>`).join('')}
+              </tbody>
+            </table>
+          ` : `<div class="italic text-gray-500">Không có dữ liệu.</div>`}
+        </div>
+      </td>
+    </tr>
+    ` : ''}
+    `;
+  }).join('');
+}
+
+// ============ Điều Chuyển Kho Giữa Các Siêu Thị (uniformTransfers, Phase 2) ============
+// Yêu cầu: uniformStoreManage (nguồn = siêu thị mình). Duyệt/Từ chối: uniformApprove/admin (DÙNG CHUNG
+// quyền duyệt kỳ cấp phát — canApproveUniformClient() ở trên). Lịch sử: lọc theo canViewUniformTransferClient()
+// (mirror lib/recordViewScope.js canViewUniformTransfer() — server đã lọc DB.uniformTransfers trước khi
+// gửi về, hàm này chỉ để phòng thủ thêm + tái dùng cho phần đếm/hiển thị phía client).
+function canViewUniformTransferClient(user, item) {
+  if (!user) return false;
+  if (user.perms?.admin || user.perms?.uniformManage || user.perms?.uniformApprove) return true;
+  return !!(user.perms?.uniformStoreManage && (item.sourceDept === user.dept || item.targetDept === user.dept));
+}
+
+function resetUniformTransferForm() {
+  const formWrap = document.getElementById('uniformTransferRequestForm');
+  if (!formWrap) return;
+  const canRequest = canManageUniformStore(currentUser);
+  formWrap.classList.toggle('hidden', !canRequest);
+  if (!canRequest) return;
+
+  const targetDatalist = document.getElementById('uniformTransferTargetDeptDatalist');
+  if (targetDatalist) {
+    targetDatalist.innerHTML = (DB.stores || []).filter(s => s !== currentUser.dept).map(s => `<option value="${escapeHtml(s)}"></option>`).join('');
+  }
+  document.getElementById('uniformTransferTargetDept').value = '';
+
+  const stock = computeUniformStockClient(currentUser.dept);
+  const options = Array.from(stock.values()).filter(r => r.stock > 0).sort((a, b) => a.name.localeCompare(b.name, 'vi') || a.size.localeCompare(b.size, 'vi'));
+  const sel = document.getElementById('uniformTransferItemSize');
+  if (sel) {
+    sel.innerHTML = '<option value="">-- Chọn mặt hàng --</option>' +
+      options.map(o => {
+        const code = uniformSkuFor(o.name, o.size);
+        return `<option value="${escapeHtml(o.name)}|||${escapeHtml(o.size)}">${formatUniformLabel(o.name, o.size, code)} (còn ${o.stock})</option>`;
+      }).join('');
+  }
+  document.getElementById('uniformTransferQty').value = '';
+  document.getElementById('uniformTransferReason').value = '';
+
+  const approveWrap = document.getElementById('uniformTransferApprovalWrap');
+  if (approveWrap) approveWrap.classList.toggle('hidden', !canApproveUniformClient(currentUser));
+}
+
+async function callCreateUniformTransfer(payload) {
+  const res = await fetch('/api/records/uniformTransfers/create', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload || {})
+  });
+  if (res.status === 401) {
+    handleSessionExpired();
+    throw new Error('Phiên đăng nhập đã hết hạn');
+  }
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(body.error || `Lỗi máy chủ (HTTP ${res.status})`);
+  return body; // { ok, item }
+}
+
+async function submitUniformTransfer() {
+  const targetDept = document.getElementById('uniformTransferTargetDept').value.trim();
+  const combo = document.getElementById('uniformTransferItemSize').value;
+  const sep = combo.indexOf('|||');
+  const itemName = sep === -1 ? '' : combo.slice(0, sep);
+  const size = sep === -1 ? '' : combo.slice(sep + 3);
+  const qty = parseFloat(document.getElementById('uniformTransferQty').value);
+  const reason = document.getElementById('uniformTransferReason').value.trim();
+
+  if (!targetDept || !(DB.stores || []).includes(targetDept)) return alert('Vui lòng chọn đúng 1 siêu thị nhận có trong Danh Mục Siêu Thị!');
+  if (!itemName) return alert('Vui lòng chọn mặt hàng cần điều chuyển!');
+  if (!qty || qty <= 0) return alert('Vui lòng nhập số lượng hợp lệ (> 0)!');
+  if (!reason) return alert('Vui lòng nhập lý do điều chuyển!');
+
+  let newTransfer;
+  try {
+    const result = await callCreateUniformTransfer({ targetDept, itemName, size, qty, reason });
+    newTransfer = result.item;
+  } catch (err) {
+    return alert(`⛔ ${err.message}`);
+  }
+
+  DB.uniformTransfers.unshift(newTransfer);
+  logSystemAction('UNIFORM', 'CREATE_UNIFORM_TRANSFER', `Yêu cầu điều chuyển [${newTransfer.itemName}] từ ${newTransfer.sourceDept} sang ${newTransfer.targetDept}`, 'SUCCESS', newTransfer.itemName);
+  alert('✅ Đã gửi yêu cầu điều chuyển kho, chờ duyệt!');
+  resetUniformTransferForm();
+  renderUniformTransfersTable();
+}
+
+function uniformTransferStatusBadge(status) {
+  if (status === 'APPROVED') return `<span class="px-2 py-0.5 bg-green-100 text-green-800 rounded font-bold text-[11px]">✔️ Đã duyệt</span>`;
+  if (status === 'REJECTED') return `<span class="px-2 py-0.5 bg-red-100 text-red-800 rounded font-bold text-[11px]">⛔ Đã từ chối</span>`;
+  return `<span class="px-2 py-0.5 bg-indigo-100 text-indigo-800 rounded font-bold text-[11px]">⏳ Chờ duyệt</span>`;
+}
+
+function renderUniformTransferApprovalQueue() {
+  const wrap = document.getElementById('uniformTransferApprovalList');
+  const noNote = document.getElementById('uniformTransferNoPendingNote');
+  const box = document.getElementById('uniformTransferApprovalWrap');
+  if (!wrap || !box) return;
+  const canApprove = canApproveUniformClient(currentUser);
+  box.classList.toggle('hidden', !canApprove);
+  if (!canApprove) return;
+  const pending = (DB.uniformTransfers || []).filter(t => t.status === 'PENDING_APPROVAL');
+  noNote.classList.toggle('hidden', pending.length > 0);
+  wrap.innerHTML = pending.map(t => `
+    <div class="bg-white p-3 rounded border flex items-center justify-between gap-2 flex-wrap">
+      <div class="text-xs">
+        <div class="font-bold text-cyan-900">${escapeHtml(t.sourceDept)} → ${escapeHtml(t.targetDept)}</div>
+        <div class="text-gray-600">${formatUniformLabel(t.itemName, t.size, uniformSkuFor(t.itemName, t.size))}: ${t.qty} — ${escapeHtml(t.reason)}</div>
+        <div class="text-[11px] text-gray-400">Yêu cầu bởi ${escapeHtml(t.requestedByName || '')} lúc ${escapeHtml(t.requestedAt || '')}</div>
+      </div>
+      <div class="flex gap-2">
+        <button type="button" onclick="approveUniformTransferAction(${t.id})" class="bg-emerald-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-emerald-700">✔️ Duyệt</button>
+        <button type="button" onclick="rejectUniformTransferAction(${t.id})" class="bg-red-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-red-700">✕ Từ Chối</button>
+      </div>
+    </div>
+  `).join('');
+}
+
+function approveUniformTransferAction(id) {
+  showConfirmModal({
+    title: 'Duyệt Điều Chuyển Kho',
+    bodyHTML: 'Duyệt yêu cầu điều chuyển này? Tồn kho siêu thị nguồn sẽ giảm và siêu thị đích sẽ tăng ngay lập tức.',
+    confirmLabel: 'Duyệt',
+    onConfirm: async () => {
+      let result;
+      try {
+        result = await callRecordAction('uniformTransfers', id, 'approve', {});
+      } catch (err) { return alert(`⛔ ${err.message}`); }
+      const idx = DB.uniformTransfers.findIndex(x => x.id === id);
+      if (idx !== -1) DB.uniformTransfers[idx] = result.item;
+      logSystemAction('UNIFORM', 'APPROVE_UNIFORM_TRANSFER', `Duyệt điều chuyển [${result.item.itemName}] ${result.item.sourceDept} → ${result.item.targetDept}`, 'SUCCESS', result.item.itemName);
+      alert('✅ Đã duyệt điều chuyển kho!');
+      renderUniformTransferApprovalQueue();
+      renderUniformTransfersTable();
+      renderUniformStock();
+      renderUniformIssueItems();
+    }
+  });
+}
+
+function rejectUniformTransferAction(id) {
+  showConfirmModal({
+    title: 'Từ Chối Điều Chuyển Kho',
+    bodyHTML: `
+      <div class="space-y-2">
+        <div class="text-xs text-gray-600">Từ chối là QUYẾT ĐỊNH CUỐI CÙNG cho yêu cầu này.</div>
+        <div>
+          <label class="block font-semibold text-gray-600 mb-1 text-xs">Lý Do</label>
+          <textarea id="uniformTransferRejectReason" rows="2" class="w-full border p-1.5 rounded text-xs" placeholder="Không bắt buộc..."></textarea>
+        </div>
+      </div>
+    `,
+    confirmLabel: 'Từ Chối',
+    onConfirm: async () => {
+      const reason = document.getElementById('uniformTransferRejectReason').value.trim();
+      let result;
+      try {
+        result = await callRecordAction('uniformTransfers', id, 'reject', { reason });
+      } catch (err) { return alert(`⛔ ${err.message}`); }
+      const idx = DB.uniformTransfers.findIndex(x => x.id === id);
+      if (idx !== -1) DB.uniformTransfers[idx] = result.item;
+      logSystemAction('UNIFORM', 'REJECT_UNIFORM_TRANSFER', `Từ chối điều chuyển [${result.item.itemName}] ${result.item.sourceDept} → ${result.item.targetDept}`, 'SUCCESS', result.item.itemName);
+      alert('✅ Đã từ chối điều chuyển kho!');
+      renderUniformTransferApprovalQueue();
+      renderUniformTransfersTable();
+    }
+  });
+}
+
+function renderUniformTransfersTable() {
+  const tbody = document.getElementById('uniformTransfersTableBody');
+  if (!tbody) return;
+  const rows = (DB.uniformTransfers || []).filter(t => canViewUniformTransferClient(currentUser, t));
+  if (!rows.length) {
+    tbody.innerHTML = `<tr><td colspan="8" class="text-center p-6 text-gray-500 italic">Chưa có yêu cầu điều chuyển nào.</td></tr>`;
+    return;
+  }
+  tbody.innerHTML = rows.map(t => `
+    <tr class="hover:bg-gray-50 border-b">
+      <td class="border p-2">${escapeHtml(t.requestedAt || '')}</td>
+      <td class="border p-2">${escapeHtml(t.sourceDept)}</td>
+      <td class="border p-2">${escapeHtml(t.targetDept)}</td>
+      <td class="border p-2">${formatUniformLabel(t.itemName, t.size, uniformSkuFor(t.itemName, t.size))}</td>
+      <td class="border p-2 text-right">${t.qty.toLocaleString('vi-VN')}</td>
+      <td class="border p-2">${uniformTransferStatusBadge(t.status)}${t.status === 'REJECTED' && t.rejectReason ? `<div class="text-[10px] text-red-600">${escapeHtml(t.rejectReason)}</div>` : ''}</td>
+      <td class="border p-2">${escapeHtml(t.requestedByName || '')}</td>
+      <td class="border p-2">${t.approvedByName ? `${escapeHtml(t.approvedByName)} — ${escapeHtml(t.approvedAt || '')}` : '—'}</td>
     </tr>
   `).join('');
+}
+
+// ============ Tổng Quan (Dashboard, Phase 2) ============
+// uniformManage/admin xem TẤT CẢ siêu thị gộp lại + bảng theo từng siêu thị; uniformStoreManage CHỈ
+// xem đúng siêu thị mình (cùng quy ước scoping theo dept của mọi nơi khác trong module — không phát
+// minh cơ chế mới). Tái sử dụng NGUYÊN VẸN computeUniformStockClient() — không có công thức tính mới.
+function renderUniformDashboard() {
+  const canHc = canManageUniform(currentUser);
+  const allStoreDepts = [...new Set((DB.uniformPeriods || []).flatMap(p => (p.allocations || []).map(a => a.dept)))].sort();
+  const targetDepts = canHc ? allStoreDepts : [currentUser.dept];
+
+  let totalStock = 0, totalIssued = 0, totalDamaged = 0, totalLost = 0;
+  const byItem = new Map(); // name -> { stock, issued }
+  const bySize = new Map(); // size -> { stock, issued }
+  const byStore = new Map(); // dept -> { stock, issued, damaged, lost }
+
+  for (const dept of targetDepts) {
+    const stock = computeUniformStockClient(dept);
+    let storeStock = 0, storeIssued = 0, storeDamaged = 0, storeLost = 0;
+    for (const row of stock.values()) {
+      totalStock += row.stock; totalIssued += row.issued; totalDamaged += (row.hong + row.huy); totalLost += row.mat;
+      storeStock += row.stock; storeIssued += row.issued; storeDamaged += (row.hong + row.huy); storeLost += row.mat;
+
+      if (!byItem.has(row.name)) byItem.set(row.name, { stock: 0, issued: 0 });
+      byItem.get(row.name).stock += row.stock;
+      byItem.get(row.name).issued += row.issued;
+
+      const sizeKey = row.size || '(không size)';
+      if (!bySize.has(sizeKey)) bySize.set(sizeKey, { stock: 0, issued: 0 });
+      bySize.get(sizeKey).stock += row.stock;
+      bySize.get(sizeKey).issued += row.issued;
+    }
+    byStore.set(dept, { stock: storeStock, issued: storeIssued, damaged: storeDamaged, lost: storeLost });
+  }
+
+  document.getElementById('uniformDashStatStock').textContent = totalStock.toLocaleString('vi-VN');
+  document.getElementById('uniformDashStatIssued').textContent = totalIssued.toLocaleString('vi-VN');
+  document.getElementById('uniformDashStatDamaged').textContent = totalDamaged.toLocaleString('vi-VN');
+  document.getElementById('uniformDashStatLost').textContent = totalLost.toLocaleString('vi-VN');
+
+  const itemBody = document.getElementById('uniformDashByItemBody');
+  const itemRows = [...byItem.entries()].sort((a, b) => a[0].localeCompare(b[0], 'vi'));
+  itemBody.innerHTML = itemRows.length ? itemRows.map(([name, v]) => `
+    <tr><td class="border p-1.5">${escapeHtml(name)}</td><td class="border p-1.5 text-right">${v.stock.toLocaleString('vi-VN')}</td><td class="border p-1.5 text-right">${v.issued.toLocaleString('vi-VN')}</td></tr>
+  `).join('') : `<tr><td colspan="3" class="text-center p-3 text-gray-500 italic">Chưa có dữ liệu.</td></tr>`;
+
+  const sizeBody = document.getElementById('uniformDashBySizeBody');
+  const sizeRows = [...bySize.entries()].sort((a, b) => a[0].localeCompare(b[0], 'vi'));
+  sizeBody.innerHTML = sizeRows.length ? sizeRows.map(([size, v]) => `
+    <tr><td class="border p-1.5">${escapeHtml(size)}</td><td class="border p-1.5 text-right">${v.stock.toLocaleString('vi-VN')}</td><td class="border p-1.5 text-right">${v.issued.toLocaleString('vi-VN')}</td></tr>
+  `).join('') : `<tr><td colspan="3" class="text-center p-3 text-gray-500 italic">Chưa có dữ liệu.</td></tr>`;
+
+  const storeWrap = document.getElementById('uniformDashByStoreWrap');
+  storeWrap.classList.toggle('hidden', !canHc);
+  if (canHc) {
+    const storeBody = document.getElementById('uniformDashByStoreBody');
+    const storeRows = [...byStore.entries()].sort((a, b) => a[0].localeCompare(b[0], 'vi'));
+    storeBody.innerHTML = storeRows.length ? storeRows.map(([dept, v]) => `
+      <tr>
+        <td class="border p-1.5 font-semibold">${escapeHtml(dept)}</td>
+        <td class="border p-1.5 text-right">${v.stock.toLocaleString('vi-VN')}</td>
+        <td class="border p-1.5 text-right">${v.issued.toLocaleString('vi-VN')}</td>
+        <td class="border p-1.5 text-right">${v.damaged.toLocaleString('vi-VN')}</td>
+        <td class="border p-1.5 text-right">${v.lost.toLocaleString('vi-VN')}</td>
+      </tr>
+    `).join('') : `<tr><td colspan="5" class="text-center p-3 text-gray-500 italic">Chưa có dữ liệu.</td></tr>`;
+  }
 }
 </script>
 </body>

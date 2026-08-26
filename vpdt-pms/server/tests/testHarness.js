@@ -59,7 +59,7 @@ function createMockState(seed) {
   return Object.assign({
     depts: [], stores: [], cats: [], deptAbbrs: {}, jobTitles: [], permGroups: [], users: [],
     itPriceMasterLists: [], itPriceDeptWorkflows: {}, workflows: [],
-    reportSlideTemplates: [], uniformPeriods: [], uniformIssuances: [], uniformStockAdjustments: [], uniformCatalog: [],
+    reportSlideTemplates: [], uniformPeriods: [], uniformIssuances: [], uniformStockAdjustments: [], uniformTransfers: [], uniformCatalog: [],
     itPriceApprovals: [], itSupportTickets: [], reportPeriods: [], reportEntries: [],
     tasks: [],
     budgetTemplates: [], budgetPeriods: [], budgetEntries: [], budgetDeptWorkflows: {}
@@ -86,7 +86,9 @@ function buildAppDataForCreate(moduleKey, state) {
 function buildActionHandlers(state) {
   return {
     // ===== ĐỒNG PHỤC =====
-    'uniformPeriods:confirm-allocation': (u, item, body) => recordActions.confirmUniformAllocation(u, item, body),
+    'uniformPeriods:approve': (u, item) => recordActions.approveUniformPeriod(u, item),
+    'uniformPeriods:reject': (u, item, body) => recordActions.rejectUniformPeriod(u, item, body),
+    'uniformTransfers:reject': (u, item, body) => recordActions.rejectUniformTransfer(u, item, body),
 
     // ===== HỖ TRỢ IT — Phê Duyệt Giá =====
     'itPriceApprovals:apply': (u, item) => recordActions.applyPriceApproval(u, item),
@@ -165,7 +167,8 @@ function createDispatcher(state) {
           return { status: 403, body: { error: 'Bạn không có quyền cấp phát đồng phục' } };
         }
         const storeIssuances = state.uniformIssuances.filter(x => x.dept === freshUser.dept);
-        const record = recordActions.buildUniformIssuance(freshUser, body, state.uniformPeriods, storeIssuances, state.users);
+        const approvedTransfers = state.uniformTransfers.filter(t => t.status === 'APPROVED');
+        const record = recordActions.buildUniformIssuance(freshUser, body, state.uniformPeriods, storeIssuances, state.users, approvedTransfers);
         state.uniformIssuances.push(record);
         return { status: 200, body: { ok: true, item: record } };
       }
@@ -176,9 +179,75 @@ function createDispatcher(state) {
         }
         const storeIssuances = state.uniformIssuances.filter(x => x.dept === freshUser.dept);
         const storeAdjustments = state.uniformStockAdjustments.filter(x => x.dept === freshUser.dept);
-        const record = recordActions.buildUniformStockAdjustment(freshUser, body, state.uniformPeriods, storeIssuances, storeAdjustments, state.users);
+        const approvedTransfers = state.uniformTransfers.filter(t => t.status === 'APPROVED');
+        const record = recordActions.buildUniformStockAdjustment(freshUser, body, state.uniformPeriods, storeIssuances, storeAdjustments, state.users, approvedTransfers);
         state.uniformStockAdjustments.push(record);
         return { status: 200, body: { ok: true, item: record } };
+      }
+
+      // confirm-allocation (Phase 2) — TÁCH KHỎI actionHandlers chung ở trên vì response cần kèm thêm
+      // "uniformCatalog" đã cập nhật (mirror ĐÚNG hình dạng response của routes/records.js: sinh/tái sử
+      // dụng SKU cho phần vừa xác nhận rồi trả catalog mới để client cập nhật NGAY, không cần tải lại
+      // trang — xem confirmUniformAllocationAction() ở public/index.html).
+      if ((m = pathName.match(/^\/api\/records\/uniformPeriods\/(\d+)\/confirm-allocation$/)) && method === 'POST') {
+        const id = Number(m[1]);
+        const list = state.uniformPeriods;
+        const idx = list.findIndex(x => x.id === id);
+        if (idx === -1) return { status: 404, body: { error: 'Không tìm thấy hồ sơ' } };
+        const updated = recordActions.confirmUniformAllocation(freshUser, list[idx], body);
+        list[idx] = updated;
+        let updatedCatalog = null;
+        const allocId = Number(body?.allocationId);
+        const alloc = (updated.allocations || []).find(a => a.id === allocId);
+        if (alloc) {
+          recordActions.backfillUniformSkuCodes(alloc.items, state.uniformCatalog);
+          updatedCatalog = state.uniformCatalog;
+        }
+        const respBody = { ok: true, item: updated };
+        if (updatedCatalog) respBody.uniformCatalog = updatedCatalog;
+        return { status: 200, body: respBody };
+      }
+
+      // ===== ĐIỀU CHUYỂN KHO GIỮA CÁC SIÊU THỊ (uniformTransfers, Phase 2) =====
+      if (pathName === '/api/records/uniformTransfers/create' && method === 'POST') {
+        if (!recordActions.canManageUniformStore(freshUser)) {
+          return { status: 403, body: { error: 'Bạn không có quyền yêu cầu điều chuyển kho' } };
+        }
+        const storeIssuances = state.uniformIssuances.filter(x => x.dept === freshUser.dept);
+        const storeAdjustments = state.uniformStockAdjustments.filter(x => x.dept === freshUser.dept);
+        const approvedTransfers = state.uniformTransfers.filter(t => t.status === 'APPROVED');
+        const record = recordActions.buildUniformTransfer(freshUser, body, state.uniformPeriods, storeIssuances, storeAdjustments, approvedTransfers);
+        state.uniformTransfers.push(record);
+        return { status: 200, body: { ok: true, item: record } };
+      }
+
+      // Duyệt điều chuyển — mock KHÔNG có 2 khoá SQL thật (không có SQL Server trong sandbox), nhưng vẫn
+      // tái hiện ĐÚNG bước kiểm tra lại tồn kho nguồn tại thời điểm duyệt (recordActions.approveUniformTransfer
+      // tự chặn nếu vượt), khớp routes/records.js.
+      if ((m = pathName.match(/^\/api\/records\/uniformTransfers\/(\d+)\/approve$/)) && method === 'POST') {
+        const id = Number(m[1]);
+        const transfer = state.uniformTransfers.find(t => t.id === id);
+        if (!transfer) return { status: 404, body: { error: 'Không tìm thấy yêu cầu điều chuyển này' } };
+        if (!recordActions.canApproveUniformTransfer(freshUser)) {
+          return { status: 403, body: { error: 'Bạn không có quyền duyệt điều chuyển kho' } };
+        }
+        const sourceIssuances = state.uniformIssuances.filter(x => x.dept === transfer.sourceDept);
+        const sourceAdjustments = state.uniformStockAdjustments.filter(x => x.dept === transfer.sourceDept);
+        const approvedTransfers = state.uniformTransfers.filter(t => t.status === 'APPROVED' && t.id !== transfer.id);
+        const sourceStock = recordActions.computeUniformStock(state.uniformPeriods, transfer.sourceDept, sourceIssuances, sourceAdjustments, approvedTransfers);
+        const updated = recordActions.approveUniformTransfer(freshUser, transfer, sourceStock);
+        return { status: 200, body: { ok: true, item: updated } };
+      }
+
+      // POST /api/data/uniformCatalog (Phase 2) — mirror ĐÚNG gate isCurrentlyAdminOrUniformManage() ở
+      // routes/data.js (mở rộng ADMIN_ONLY_KEYS riêng cho key này). KHÔNG mô phỏng toàn bộ generic
+      // POST /api/data/:key (If-Match/version...) — bộ test này chỉ cần đúng uniformCatalog.
+      if (pathName === '/api/data/uniformCatalog' && method === 'POST') {
+        if (!(freshUser.perms?.admin || freshUser.perms?.uniformManage)) {
+          return { status: 403, body: { error: 'Chỉ Quản Trị Viên mới có quyền sửa dữ liệu này' } };
+        }
+        state.uniformCatalog = body;
+        return { status: 200, body: {} };
       }
 
       if ((m = pathName.match(/^\/api\/records\/([^/]+)\/(\d+)\/([^/]+)$/)) && method === 'POST') {
