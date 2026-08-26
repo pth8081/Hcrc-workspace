@@ -1587,6 +1587,16 @@ const CREATE_MODULE_CONFIGS = {
       if (!allocations.length) throw new CreateError(400, 'Vui lòng phân bổ cho ít nhất 1 siêu thị với danh mục hợp lệ');
       if (allocations.length > 100) throw new CreateError(400, 'Quá nhiều siêu thị trong 1 kỳ (tối đa 100)');
       payload.allocations = allocations;
+      // Cổng duyệt Ở CẤP KỲ (Phase 2, MỚI) — người có quyền uniformApprove/admin duyệt/từ chối cả kỳ
+      // 1 lần (xem approveUniformPeriod()/rejectUniformPeriod() ở lib/recordActions.js) TRƯỚC KHI Giám
+      // Đốc Siêu Thị bắt đầu tự xác nhận từng phần phân bổ của mình (confirmUniformAllocation() vẫn giữ
+      // nguyên state machine PENDING_CONFIRM/CONFIRMED cũ, chỉ bị CHẶN THÊM nếu approvalStatus chưa
+      // APPROVED).
+      payload.approvalStatus = 'PENDING_APPROVAL';
+      payload.approvedBy = null;
+      payload.approvedByName = null;
+      payload.approvedAt = null;
+      payload.rejectReason = '';
     }
   },
   // ===== NGÂN SÁCH (module con "Tổng Hợp") =====
@@ -2009,6 +2019,10 @@ module.exports = {
   OFFICE_SUBTYPE_TO_PERM_FLAG, normalizeReportEntryPayload,
   CONTRACT_APPROVAL_LAYERS, CONTRACT_APPROVAL_LEVELS, CONTRACT_APPROVAL_LEVEL_RULES,
   buildEffectiveContractApprovalWorkflowServer,
+  // Export thêm cho lib/recordActions.js editSubmissionDraft() (nút "Bổ Sung" -> sửa lại + gửi lại tờ
+  // trình) — cần dựng lại effectiveSteps/effectiveApprovers giống hệt lúc TẠO khi người trình đổi loại/
+  // phòng ban/lớp phê duyệt bổ sung trong lúc sửa.
+  SUBMISSION_APPROVAL_LEVELS, buildEffectiveSubmissionWorkflowServer,
   sanitizeUniformItems,
   BUDGET_TYPE_OPTIONS, BUDGET_FIELD_TYPES, sanitizeBudgetLines, getBudgetTemplateCustomFields, sanitizeBudgetCustomFields,
   resolveTrainingInstructorUsername, normalizeInviteList,

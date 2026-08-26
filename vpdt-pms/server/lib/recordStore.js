@@ -40,7 +40,12 @@ const { HttpError } = require('./httpErrors');
 // (cùng khuôn trainingCourses), onboardingProgress là 1 dòng/1 nhân viên được phân công — hạn Giai đoạn
 // 1/2/3 tính SỐNG từ onboardingProgress.startDate (đã snapshot lúc phân công) tại thời điểm xem, KHÔNG
 // lưu deadline, cùng tinh thần trainingPlans ở trên.
-const MIGRATED_COLLECTIONS = new Set(['submissions', 'docs', 'carRegs', 'officeReqs', 'contracts', 'meetings', 'meetingMinutes', 'internalPosts', 'paymentRequests', 'vppPeriods', 'vppRegistrations', 'reportPeriods', 'reportEntries', 'reportSlideTemplates', 'trainingDocuments', 'trainingClasses', 'trainingRegistrations', 'careerPaths', 'careerPathConfirmations', 'trainingTests', 'trainingTestSubmissions', 'trainingCourses', 'trainingPlans', 'onboardingPaths', 'onboardingProgress', 'recruitmentJobs', 'recruitmentReferrals', 'itPriceApprovals', 'itSupportTickets', 'uniformPeriods', 'uniformIssuances', 'uniformStockAdjustments', 'budgetTemplates', 'budgetPeriods', 'budgetEntries']);
+// uniformTransfers (Phase 2, Đồng Phục — "Điều Chuyển Kho Giữa Các Siêu Thị"): cùng khuôn
+// uniformIssuances/uniformStockAdjustments (bản ghi build bởi hành động riêng ở lib/recordActions.js,
+// không qua engine tạo mới chung lib/createValidation.js — xem buildUniformTransfer()), đăng ký ở đây
+// để dùng chung getAllForCollection()/insertRecord()/withLockedRecordForCollection() thay vì tự viết
+// đường lưu riêng.
+const MIGRATED_COLLECTIONS = new Set(['submissions', 'docs', 'carRegs', 'officeReqs', 'contracts', 'meetings', 'meetingMinutes', 'internalPosts', 'paymentRequests', 'vppPeriods', 'vppRegistrations', 'reportPeriods', 'reportEntries', 'reportSlideTemplates', 'trainingDocuments', 'trainingClasses', 'trainingRegistrations', 'careerPaths', 'careerPathConfirmations', 'trainingTests', 'trainingTestSubmissions', 'trainingCourses', 'trainingPlans', 'onboardingPaths', 'onboardingProgress', 'recruitmentJobs', 'recruitmentReferrals', 'itPriceApprovals', 'itSupportTickets', 'uniformPeriods', 'uniformIssuances', 'uniformStockAdjustments', 'uniformTransfers', 'budgetTemplates', 'budgetPeriods', 'budgetEntries']);
 
 function toRecord(row) {
   return JSON.parse(row.Payload);
@@ -287,19 +292,28 @@ async function createForCollectionSerialized(collection, lockKey, builderFn) {
 // trùng khung giờ vẫn đọc được "ảnh chụp" collection của nhau TRƯỚC khi cả hai commit, cả hai đều thấy
 // "chưa ai gán trùng" rồi cùng gán trùng — phải khoá theo GIÁ TRỊ BIỂN SỐ (không phải theo Id bản ghi)
 // trong suốt lúc fn() chạy để chặn đúng race này.
-async function withAppLock(lockKey, fn) {
+// lockKeyOrKeys: 1 khoá (chuỗi, hành vi CŨ giữ nguyên) HOẶC 1 MẢNG nhiều khoá (Phase 2 — vd duyệt điều
+// chuyển kho đồng phục đụng tới ĐỒNG THỜI 2 siêu thị nguồn+đích, xem approveUniformTransfer() ở
+// routes/records.js). Nhiều khoá được sắp XẾP THEO BẢNG CHỮ CÁI (khử trùng lặp) rồi giành applock LẦN
+// LƯỢT theo đúng thứ tự đó, TRONG CÙNG 1 giao dịch (chỉ nhả hết khi commit/rollback) — đảm bảo 2 yêu cầu
+// đụng CÙNG 2 khoá nhưng theo THỨ TỰ NGƯỢC NHAU (vd điều chuyển A->B và B->A cùng lúc) luôn giành khoá
+// theo ĐÚNG 1 THỨ TỰ CỐ ĐỊNH như nhau -> không bao giờ deadlock chờ chéo nhau.
+async function withAppLock(lockKeyOrKeys, fn) {
   const pool = await getPool();
   const tx = new sql.Transaction(pool);
   await tx.begin();
   try {
-    const lockReq = new sql.Request(tx);
-    lockReq.input('Resource', sql.NVarChar(255), lockKey);
-    lockReq.input('LockMode', sql.VarChar(32), 'Exclusive');
-    lockReq.input('LockOwner', sql.VarChar(32), 'Transaction');
-    lockReq.input('LockTimeout', sql.Int, 15000);
-    const lockResult = await lockReq.execute('sp_getapplock');
-    if (lockResult.returnValue < 0) {
-      throw new HttpError(409, 'Hệ thống đang bận xử lý một yêu cầu trùng — vui lòng thử lại.');
+    const keys = Array.isArray(lockKeyOrKeys) ? [...new Set(lockKeyOrKeys)].sort() : [lockKeyOrKeys];
+    for (const key of keys) {
+      const lockReq = new sql.Request(tx);
+      lockReq.input('Resource', sql.NVarChar(255), key);
+      lockReq.input('LockMode', sql.VarChar(32), 'Exclusive');
+      lockReq.input('LockOwner', sql.VarChar(32), 'Transaction');
+      lockReq.input('LockTimeout', sql.Int, 15000);
+      const lockResult = await lockReq.execute('sp_getapplock');
+      if (lockResult.returnValue < 0) {
+        throw new HttpError(409, 'Hệ thống đang bận xử lý một yêu cầu trùng — vui lòng thử lại.');
+      }
     }
     const result = await fn();
     await tx.commit();

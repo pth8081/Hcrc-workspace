@@ -22,6 +22,10 @@ const PORT = 8981;
 const STORES = ['Siêu Thị Hội An', 'Siêu Thị Đà Nẵng'];
 
 const HC = { username: 'hc1', name: 'Nguyễn Văn Hành Chính', dept: 'Hành Chính', perms: { uniformManage: true }, active: true };
+// APPROVER (Phase 2) — quyền uniformApprove TÁCH RIÊNG khỏi uniformManage (Hành Chính TẠO kỳ không có
+// nghĩa được TỰ DUYỆT kỳ của chính mình — cùng tinh thần tách vai trò như mọi luồng duyệt khác trong hệ
+// thống), xem canApproveUniform() ở lib/recordActions.js.
+const APPROVER = { username: 'approver1', name: 'Người Duyệt Đồng Phục', dept: 'Hành Chính', perms: { uniformApprove: true }, active: true };
 const GD_HOIAN = { username: 'gd_hoian', name: 'Trần Thị Hội An', dept: 'Siêu Thị Hội An', perms: { uniformStoreManage: true }, active: true };
 const NV_HOIAN = { username: 'nv_hoian', name: 'Lê Văn Nhân Viên', dept: 'Siêu Thị Hội An', perms: {}, active: true };
 const GD_DANANG = { username: 'gd_danang', name: 'Phạm Thị Đà Nẵng', dept: 'Siêu Thị Đà Nẵng', perms: { uniformStoreManage: true }, active: true };
@@ -30,7 +34,7 @@ const EMP_NOPERM = { username: 'emp_noperm', name: 'Người Không Quyền', de
 const state = createMockState({
   depts: ['Hành Chính'],
   stores: STORES,
-  users: [HC, GD_HOIAN, NV_HOIAN, GD_DANANG, EMP_NOPERM],
+  users: [HC, APPROVER, GD_HOIAN, NV_HOIAN, GD_DANANG, EMP_NOPERM],
   // Danh Mục Đồng Phục — mới thêm (xem sanitizeUniformItems() ở lib/createValidation.js): tạo kỳ cấp
   // phát giờ bắt buộc CHỌN tên+size từ đúng danh mục này, không còn gõ tự do.
   uniformCatalog: [{ id: 1, name: 'Áo đồng phục nam', sizes: ['S', 'M', 'L', 'XL'] }]
@@ -115,6 +119,70 @@ async function main() {
       });
       assertIncludes(result.alerts, 'Bạn không có quyền tạo kỳ cấp phát đồng phục', 'Server phải trả lỗi 403 với thông báo đúng');
       assertEqual(result.count, before, 'Không được tạo kỳ cấp phát khi không có quyền');
+    });
+
+    // ===== 3b) Phase 2: kỳ mới tạo mặc định PENDING_APPROVAL, chặn xác nhận cho tới khi được duyệt =====
+    await run.run('Phase 2: kỳ chưa được duyệt (PENDING_APPROVAL) thì Giám Đốc Siêu Thị chưa xác nhận được', async () => {
+      await loginAs(page, GD_HOIAN);
+      const result = await page.evaluate(async () => {
+        window.__resetCapture();
+        const p = DB.uniformPeriods.find(x => x.name === 'Đợt hè 2026');
+        const alloc = p.allocations.find(a => a.dept === 'Siêu Thị Hội An');
+        try {
+          await callRecordAction('uniformPeriods', p.id, 'confirm-allocation', { allocationId: alloc.id });
+          return { errorMsg: null, approvalStatus: p.approvalStatus };
+        } catch (err) {
+          return { errorMsg: err.message, approvalStatus: p.approvalStatus };
+        }
+      });
+      assertEqual(result.approvalStatus, 'PENDING_APPROVAL', 'Kỳ mới tạo phải mặc định PENDING_APPROVAL');
+      assertIncludes(result.errorMsg, 'chưa được duyệt', 'Server phải chặn xác nhận khi kỳ chưa được duyệt');
+    });
+
+    // ===== 3c) Phase 2: người không có uniformApprove không duyệt được kỳ cấp phát =====
+    await run.run('Phase 2: uniformStoreManage/uniformManage không có uniformApprove thì không duyệt được kỳ', async () => {
+      await loginAs(page, HC);
+      const result = await page.evaluate(async () => {
+        window.__resetCapture();
+        const p = DB.uniformPeriods.find(x => x.name === 'Đợt hè 2026');
+        try {
+          await callRecordAction('uniformPeriods', p.id, 'approve', {});
+          return { errorMsg: null };
+        } catch (err) {
+          return { errorMsg: err.message };
+        }
+      });
+      assertIncludes(result.errorMsg, 'Bạn không có quyền duyệt', 'Server phải chặn Hành Chính (chỉ uniformManage) tự duyệt kỳ của chính mình');
+    });
+
+    // ===== 3d) Phase 2: người có uniformApprove duyệt kỳ — mở khoá cho bước xác nhận =====
+    await run.run('Phase 2: uniformApprove duyệt kỳ cấp phát (happy path)', async () => {
+      await loginAs(page, APPROVER);
+      const result = await page.evaluate(async () => {
+        window.__resetCapture();
+        const p = DB.uniformPeriods.find(x => x.name === 'Đợt hè 2026');
+        const r = await callRecordAction('uniformPeriods', p.id, 'approve', {});
+        const idx = DB.uniformPeriods.findIndex(x => x.id === p.id);
+        DB.uniformPeriods[idx] = r.item;
+        return { approvalStatus: r.item.approvalStatus, approvedByName: r.item.approvedByName };
+      });
+      assertEqual(result.approvalStatus, 'APPROVED', 'Kỳ phải chuyển APPROVED sau khi duyệt');
+      assertEqual(result.approvedByName, APPROVER.name, 'Phải ghi nhận đúng người duyệt');
+    });
+
+    // ===== 3e) Phase 2: duyệt lại 1 kỳ đã duyệt bị chặn (409, không phải luồng nhiều bước) =====
+    await run.run('Phase 2: duyệt lại kỳ đã APPROVED bị chặn', async () => {
+      const result = await page.evaluate(async () => {
+        window.__resetCapture();
+        const p = DB.uniformPeriods.find(x => x.name === 'Đợt hè 2026');
+        try {
+          await callRecordAction('uniformPeriods', p.id, 'approve', {});
+          return { errorMsg: null };
+        } catch (err) {
+          return { errorMsg: err.message };
+        }
+      });
+      assertIncludes(result.errorMsg, 'đã được xử lý duyệt', 'Không được duyệt lại 1 kỳ đã xử lý xong');
     });
 
     // ===== 4) Giám Đốc Siêu Thị Hội An xác nhận đã nhận phân bổ của mình =====

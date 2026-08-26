@@ -12,6 +12,7 @@ const rateLimit = require('express-rate-limit');
 const { requireAuth, blockIfMustChangePassword } = require('../lib/auth');
 const { buildPlanImportTemplateWorkbook, parsePlanImportFile } = require('../lib/trainingPlanImport');
 const { getAllForCollection } = require('../lib/recordStore');
+const { verifyFileSignature } = require('../lib/fileSignature');
 
 const router = express.Router();
 router.use(requireAuth, blockIfMustChangePassword);
@@ -93,6 +94,9 @@ router.post('/parse-plan-import', uploadRateLimiter, requireTrainingManage, (req
     try {
       const ext = path.extname(req.file.originalname).toLowerCase();
       const buffer = fs.readFileSync(req.file.path);
+      const check = await verifyFileSignature(buffer, ext);
+      if (!check.ok) return res.status(400).json({ error: check.reason });
+
       const courses = await getAllForCollection('trainingCourses');
       const items = await parsePlanImportFile(buffer, ext, courses);
       res.json({ items, fileName: req.file.originalname });

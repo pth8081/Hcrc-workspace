@@ -11,6 +11,7 @@ const { requireAuth, blockIfMustChangePassword } = require('../lib/auth');
 const { parseCatalogFile } = require('../lib/vppCatalog');
 const { buildSummaryWorkbook, buildByDeptWorkbook } = require('../lib/vppExport');
 const { getAllForCollection } = require('../lib/recordStore');
+const { verifyFileSignature } = require('../lib/fileSignature');
 
 const router = express.Router();
 router.use(requireAuth, blockIfMustChangePassword);
@@ -69,6 +70,11 @@ router.post('/parse-catalog', uploadRateLimiter, (req, res) => {
     try {
       const ext = path.extname(req.file.originalname).toLowerCase();
       const buffer = fs.readFileSync(req.file.path);
+      const check = await verifyFileSignature(buffer, ext);
+      if (!check.ok) {
+        fs.unlink(req.file.path, () => {});
+        return res.status(400).json({ error: check.reason });
+      }
       const items = await parseCatalogFile(buffer, ext);
       res.json({
         items,

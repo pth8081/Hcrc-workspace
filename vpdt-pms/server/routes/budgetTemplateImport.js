@@ -10,6 +10,7 @@ const path = require('path');
 const rateLimit = require('express-rate-limit');
 const { requireAuth, blockIfMustChangePassword } = require('../lib/auth');
 const { buildBudgetTemplateFieldsWorkbook, parseBudgetTemplateFieldsExcelBuffer } = require('../lib/budgetTemplateImport');
+const { verifyFileSignature } = require('../lib/fileSignature');
 
 const router = express.Router();
 router.use(requireAuth, blockIfMustChangePassword);
@@ -81,6 +82,10 @@ router.post('/parse-template-fields', requireBudgetManage, uploadRateLimiter, (r
 
     try {
       const buffer = fs.readFileSync(req.file.path);
+      const declaredExt = path.extname(req.file.originalname).toLowerCase();
+      const check = await verifyFileSignature(buffer, declaredExt);
+      if (!check.ok) return res.status(400).json({ error: check.reason });
+
       const fields = await parseBudgetTemplateFieldsExcelBuffer(buffer);
       res.json({ fields, fileName: req.file.originalname });
     } catch (parseErr) {

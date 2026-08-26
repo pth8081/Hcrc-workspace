@@ -127,14 +127,28 @@ function resolveContractManageWorkflow(item, appData) {
 // cần khai riêng (approvalStatus cho luồng gốc, "contractsSignedFile" ảo cho luồng Tài liệu ký, vì cả 2
 // đều nằm trên CÙNG 1 bản ghi contracts nên không thể dùng chung tên field currentStep/history).
 const MODULE_CONFIGS = {
+  // "Bổ Sung" (REQUEST_CHANGES) — mở rộng cho ĐỦ các module dùng chung engine này (đợt yêu cầu nghiệp
+  // vụ "mọi module có quy trình phê duyệt đều cần nút bổ sung", xem lib/recordActions.js
+  // editDocDraft()/editCarRegDraft()/editOfficeReqDraft()/editSubmissionDraft() — cùng khuôn
+  // updateVppRegistrationDraft()/updateBudgetEntryDraft() đã có sẵn ở trên): người duyệt bước hiện tại
+  // trả hồ sơ về NHÁP (status/currentStep reset, xem applyWorkflowAction() REQUEST_CHANGES ở dưới),
+  // người tạo SỬA LẠI TOÀN BỘ nội dung (kể cả tệp đính kèm, nếu có) rồi "Gửi Lại" từ bước 1 — không
+  // phải REQUEST_INFO (giữ nguyên PENDING, chỉ đính kèm 1 ghi chú, xem itPriceApprovals bên dưới — MODULE
+  // NÀY GIỮ NGUYÊN, không đổi gì).
   docs: {
     dbKey: 'docs',
-    resolveWfConfig: (item, appData) => flatWorkflowConfigToSteps(appData.deptWorkflows?.[item.dept], appData)
+    resolveWfConfig: (item, appData) => flatWorkflowConfigToSteps(appData.deptWorkflows?.[item.dept], appData),
+    supportsRequestChanges: true
   },
   submissions: {
     dbKey: 'submissions',
     resolveWfConfig: (item, appData) => resolveSubmissionWorkflow(item, appData),
-    supportsRequestInfo: true
+    // Giữ nguyên supportsRequestInfo (kênh cũ: 1 ghi chú văn bản, KHÔNG đổi status/currentStep — vẫn
+    // dùng được song song) — bổ sung thêm supportsRequestChanges (kênh mới, đầy đủ: đưa về NHÁP để
+    // người trình sửa lại toàn bộ nội dung + tệp rồi gửi lại từ bước 1, xem editSubmissionDraft() ở
+    // lib/recordActions.js) theo đúng yêu cầu nghiệp vụ nâng cấp "Yêu cầu bổ sung" của Văn Bản Trình.
+    supportsRequestInfo: true,
+    supportsRequestChanges: true
   },
   carRegs: {
     dbKey: 'carRegs',
@@ -142,14 +156,16 @@ const MODULE_CONFIGS = {
     // assignedDriver KHÔNG còn nằm trong danh sách này — lái xe giờ bắt buộc là 1 tài khoản hệ thống có
     // thật (xem xử lý riêng ở applyWorkflowAction() bên dưới), server tự tra display name từ user thay
     // vì tin bất kỳ text nào client gửi kèm.
-    extraFields: ['assignedVehicleType', 'assignedPlate']
+    extraFields: ['assignedVehicleType', 'assignedPlate'],
+    supportsRequestChanges: true
   },
   officeReqs: {
     dbKey: 'officeReqs',
     resolveWfConfig: (item, appData) => {
       const mapKey = OFFICE_SUBTYPE_TO_DBKEY[item.subType] || 'officeBuyDeptWorkflows';
       return flatWorkflowConfigToSteps(appData[mapKey]?.[item.dept], appData);
-    }
+    },
+    supportsRequestChanges: true
   },
   vppRegistrations: {
     dbKey: 'vppRegistrations',
@@ -159,14 +175,22 @@ const MODULE_CONFIGS = {
   contracts: {
     dbKey: 'contracts',
     statusField: 'approvalStatus',
-    resolveWfConfig: (item, appData) => resolveContractApprovalWorkflow(item, appData)
+    resolveWfConfig: (item, appData) => resolveContractApprovalWorkflow(item, appData),
+    // editContract() (lib/recordActions.js) ĐÃ sẵn sàng cho nhánh này từ trước (tự đưa DRAFT/REJECTED
+    // về PENDING/bước 1 khi người tạo sửa xong) — chỉ còn thiếu đúng 1 hành động REQUEST_CHANGES để
+    // người duyệt chủ động trả hồ sơ về NHÁP (khác hẳn Từ chối hẳn/REJECTED).
+    supportsRequestChanges: true
   },
   contractsSignedFile: {
     dbKey: 'contracts',
     statusField: 'signedFileStatus',
     currentStepField: 'signedFileCurrentStep',
     historyField: 'signedFileHistory',
-    resolveWfConfig: (item, appData) => resolveContractManageWorkflow(item, appData)
+    resolveWfConfig: (item, appData) => resolveContractManageWorkflow(item, appData),
+    // uploadContractSignedFile() (lib/recordActions.js) ĐÃ tự đưa signedFileStatus về PENDING/bước 1 mỗi
+    // lần tải lại tệp — chỉ còn thiếu hành động REQUEST_CHANGES để người duyệt chủ động trả về NHÁP
+    // (khác Từ chối hẳn) trước khi người phụ trách tải lại Tài liệu ký.
+    supportsRequestChanges: true
   },
   // "Phê Duyệt Giá" (Hỗ Trợ IT) — duyệt giá bán mặt hàng siêu thị theo phòng ban, cùng khuôn docs/
   // carRegs/officeReqs ở trên (không snapshot, tra cấu hình admin MỚI NHẤT mỗi lần duyệt). Bước "IT áp
@@ -281,6 +305,16 @@ function applyWorkflowAction({ moduleKey, item, action, user, comment, extraFiel
 
   // Field phụ theo module (vd. CarReg: assignedDriver/assignedVehicleType/assignedPlate) — ghi cả
   // vào hồ sơ lẫn snapshot trong dòng lịch sử (khớp hiển thị "🚘 Phân công" theo từng bước ở client).
+  // CarReg riêng: "Phần Dành Cho Phòng Hành Chính" (assignedDriverUsername/assignedVehicleType/
+  // assignedPlate) CHỈ được ghi khi người duyệt là admin hoặc có perms.carDispatch ("Người Điều Hành
+  // Xe") — người khác trong luồng duyệt vẫn Duyệt/Từ chối bình thường (canApproveStep ở trên đã cho
+  // qua), nhưng KHÔNG được đụng tới 3 field này. Client đã tự ẩn mục này với người không có carDispatch
+  // (xem openCarProcessModal() ở index.html) — chặn lại ở đây để không tin client tự gửi kèm dù giao
+  // diện đã ẩn (vd DevTools sửa request tay): coi input carRegs.extraFields NHƯ KHÔNG CÓ, không lỗi cả
+  // lượt duyệt (người này vẫn cần duyệt được bước của mình dù không có quyền điều hành xe).
+  const isCarDispatcher = !!(user.perms?.admin || user.perms?.carDispatch);
+  if (moduleKey === 'carRegs' && !isCarDispatcher) extraFields = undefined;
+
   const extraSnapshot = {};
   if (config.extraFields) {
     const newPlate = extraFields?.assignedPlate;

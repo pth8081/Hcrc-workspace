@@ -18,7 +18,7 @@ const {
   filterReportEntriesForUser, filterContractsForUser, filterCarRegsForUser, filterOfficeReqsForUser,
   filterMeetingsForUser, filterMeetingMinutesForUser, filterTasksForUser, sanitizeTrainingTestsForUser,
   filterRecruitmentReferralsForUser, filterItPriceApprovalsForUser, filterItSupportTicketsForUser,
-  filterUniformPeriodsForUser, filterUniformIssuancesForUser, filterUniformStockAdjustmentsForUser, filterBudgetEntriesForUser
+  filterUniformPeriodsForUser, filterUniformIssuancesForUser, filterUniformStockAdjustmentsForUser, filterUniformTransfersForUser, filterBudgetEntriesForUser
 } = require('../lib/recordViewScope');
 
 const VALID_KEYS = new Set(Object.keys(DEFAULTS));
@@ -67,9 +67,11 @@ const ADMIN_ONLY_KEYS = new Set([
   // nào được BỎ QUA bước duyệt phòng ban, nên chặt hơn cả các key admin-only khác ở trên (không mở cho
   // itManage như canManageItSupport() vẫn dùng ở nơi khác của module Hỗ Trợ IT) — xem defaults.js.
   'itPriceMasterLists',
-  // uniformCatalog: Danh Mục Đồng Phục (tên + size khả dụng) — quyết định trực tiếp những gì được phép
-  // phân bổ/cấp phát ở module Đồng Phục (xem sanitizeUniformItems() ở lib/createValidation.js), cùng lý
-  // do itPriceMasterLists ở trên nên không mở cho uniformManage như các hành động khác của module này.
+  // uniformCatalog: Danh Mục Đồng Phục (tên + size khả dụng, Phase 2 có thêm SKU per (tên,size) — xem
+  // backfillUniformSkuCodes() ở lib/recordActions.js) — quyết định trực tiếp những gì được phép phân
+  // bổ/cấp phát ở module Đồng Phục (xem sanitizeUniformItems() ở lib/createValidation.js). Vẫn nằm
+  // trong ADMIN_ONLY_KEYS (chặn user thường) nhưng gate GHI thực tế RỘNG HƠN các key khác ở đây — mở
+  // thêm cho uniformManage (Hành Chính), xem isCurrentlyAdminOrUniformManage() bên dưới.
   'uniformCatalog'
 ]);
 
@@ -118,6 +120,16 @@ async function isCurrentlyAdmin(username) {
   const users = await getAppDataValue('users');
   const freshUser = (users || []).find(u => u.username === username);
   return !!freshUser?.perms?.admin;
+}
+
+// Phase 2: uniformCatalog mở thêm cho uniformManage (Hành Chính) — trước đây admin-only tuyệt đối
+// (xem chú thích ADMIN_ONLY_KEYS ở trên), giờ đúng ra người quản lý module Đồng Phục cũng tự quản lý
+// được danh mục của module mình, không cần phiền admin cho từng thay đổi nhỏ. Re-fetch fresh từ DB
+// (không tin JWT cache) — cùng lý do isCurrentlyAdmin() ở trên.
+async function isCurrentlyAdminOrUniformManage(username) {
+  const users = await getAppDataValue('users');
+  const freshUser = (users || []).find(u => u.username === username);
+  return !!(freshUser?.perms?.admin || freshUser?.perms?.uniformManage);
 }
 
 // Áp phần quyền tuỳ chỉnh riêng (overrides) lên trên nền quyền của nhóm -> quyền hiệu lực thực tế —
@@ -400,6 +412,9 @@ router.get('/', async (req, res) => {
     if (data.uniformPeriods) data.uniformPeriods = filterUniformPeriodsForUser(data.uniformPeriods, req.freshUser);
     if (data.uniformIssuances) data.uniformIssuances = filterUniformIssuancesForUser(data.uniformIssuances, req.freshUser);
     if (data.uniformStockAdjustments) data.uniformStockAdjustments = filterUniformStockAdjustmentsForUser(data.uniformStockAdjustments, req.freshUser);
+    // uniformTransfers (Phase 2 — điều chuyển kho giữa các siêu thị): cùng dạng lỗ hổng như 2 collection
+    // Đồng Phục ở trên, xem lib/recordViewScope.js canViewUniformTransfer().
+    if (data.uniformTransfers) data.uniformTransfers = filterUniformTransfersForUser(data.uniformTransfers, req.freshUser);
     // budgetEntries: cùng dạng lỗ hổng như itPriceApprovals ở trên — hồ sơ ngân sách của ĐƠN VỊ (kể cả
     // bản NHÁP đang soạn dở) chỉ nên lộ cho đúng phòng ban mình + người có budgetManage/budgetAggregate/
     // admin — xem lib/recordViewScope.js canViewBudgetEntry().
@@ -446,8 +461,14 @@ router.post('/:key', async (req, res) => {
   if (value === undefined) return res.status(400).json({ error: 'Thiếu dữ liệu (body) cần lưu' });
 
   try {
-    if (ADMIN_ONLY_KEYS.has(key) && !(await isCurrentlyAdmin(req.user.username))) {
-      return res.status(403).json({ error: 'Chỉ Quản Trị Viên mới có quyền sửa dữ liệu này' });
+    if (ADMIN_ONLY_KEYS.has(key)) {
+      // uniformCatalog: gate RỘNG HƠN các key admin-only còn lại (xem isCurrentlyAdminOrUniformManage()).
+      const allowed = key === 'uniformCatalog'
+        ? await isCurrentlyAdminOrUniformManage(req.user.username)
+        : await isCurrentlyAdmin(req.user.username);
+      if (!allowed) {
+        return res.status(403).json({ error: 'Chỉ Quản Trị Viên mới có quyền sửa dữ liệu này' });
+      }
     }
 
     if (key === 'users') value = await prepareUsersForSave(value, req.user.username);

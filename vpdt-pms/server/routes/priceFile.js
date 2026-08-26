@@ -11,6 +11,7 @@ const rateLimit = require('express-rate-limit');
 const { requireAuth, blockIfMustChangePassword } = require('../lib/auth');
 const { parsePriceFile, parsePriceMasterFile, matchAgainstMaster } = require('../lib/priceFileParser');
 const { getAppDataValueCached } = require('../lib/appData');
+const { verifyFileSignature } = require('../lib/fileSignature');
 
 const router = express.Router();
 router.use(requireAuth, blockIfMustChangePassword);
@@ -72,7 +73,13 @@ router.post('/parse-file', uploadRateLimiter, (req, res) => {
     if (!req.file) return res.status(400).json({ error: 'Thiếu tệp bảng giá cần tải lên' });
 
     try {
+      const declaredExt = path.extname(req.file.originalname).toLowerCase();
       const buffer = fs.readFileSync(req.file.path);
+      const check = await verifyFileSignature(buffer, declaredExt);
+      if (!check.ok) {
+        fs.unlink(req.file.path, () => {});
+        return res.status(400).json({ error: check.reason });
+      }
       let items = await parsePriceFile(buffer);
 
       let masterListName = null;
@@ -121,7 +128,13 @@ router.post('/master-list/parse-file', uploadRateLimiter, (req, res) => {
     if (!req.file) return res.status(400).json({ error: 'Thiếu tệp giá mẫu cần tải lên' });
 
     try {
+      const declaredExt = path.extname(req.file.originalname).toLowerCase();
       const buffer = fs.readFileSync(req.file.path);
+      const check = await verifyFileSignature(buffer, declaredExt);
+      if (!check.ok) {
+        fs.unlink(req.file.path, () => {});
+        return res.status(400).json({ error: check.reason });
+      }
       const items = await parsePriceMasterFile(buffer);
       res.json({
         items,

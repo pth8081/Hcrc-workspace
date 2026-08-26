@@ -105,7 +105,38 @@ async function main() {
         const nextApprovers = approvers[rec.currentStep] || [];
         return { item: rec, transition: { type: 'ADVANCED', stepApprovers: nextApprovers, nextApprovers, nextStepName: (wf.steps[rec.currentStep - 1] || {}).name || '' } };
       }
+      // "Bổ Sung" (REQUEST_CHANGES) — mirrors lib/workflowEngine.js applyWorkflowAction()'s
+      // REQUEST_CHANGES branch (mark prior APPROVED entries invalidated, reset to DRAFT/step 0).
+      if (action === 'request-changes') {
+        if (!body.comment) throw new Error('Vui lòng nhập lý do yêu cầu bổ sung/chỉnh sửa');
+        (rec.history || []).forEach(h => { if (h.action === 'APPROVED') h.invalidated = true; });
+        rec.history = [...(rec.history || []), {
+          step: rec.currentStep, approver: currentUser.name, username: currentUser.username,
+          action: 'REQUEST_CHANGES', comment: body.comment, time: nowVN()
+        }];
+        rec.status = 'DRAFT';
+        rec.currentStep = 0;
+        return { item: rec, transition: { type: 'REQUEST_CHANGES' } };
+      }
       throw new Error('unsupported action ' + action);
+    }
+
+    // "Sửa & Gửi Lại" — mirrors lib/recordActions.js editDocDraft()/submitDocDraft() (creator-only,
+    // DRAFT-only; resubmit resets status/currentStep and marks prior APPROVED history invalidated).
+    function applyDocDraftAction(rec, action, body) {
+      if (rec.uploader !== currentUser.username) throw new Error('Chỉ người tải lên mới được sửa tài liệu này');
+      if (rec.status !== 'DRAFT') throw new Error('Tài liệu này không ở trạng thái cần bổ sung, không thể sửa');
+      if (action === 'update') {
+        ['dept', 'cat', 'title', 'ver', 'summary', 'customData'].forEach(f => { if (body[f] !== undefined) rec[f] = body[f]; });
+        if (body.fileUrl !== undefined) { rec.fileName = body.fileName; rec.fileType = body.fileType; rec.fileUrl = body.fileUrl; }
+        return { item: rec };
+      }
+      // submit
+      (rec.history || []).forEach(h => { if (h.action === 'APPROVED') h.invalidated = true; });
+      rec.history = [...(rec.history || []), { step: 0, approver: currentUser.name, username: currentUser.username, action: 'RESUBMITTED', comment: '', time: nowVN() }];
+      rec.status = 'PENDING';
+      rec.currentStep = 1;
+      return { item: rec };
     }
 
     window.fetch = async (url, opts = {}) => {
@@ -132,8 +163,24 @@ async function main() {
         const arr = DB[moduleKey] || [];
         const rec = arr.find(r => r.id === Number(idStr));
         if (!rec) return { ok: false, status: 404, json: async () => ({ error: 'Không tìm thấy' }) };
-        const result = applyDocWorkflowAction(rec, action, body);
-        return { ok: true, status: 200, json: async () => ({ ok: true, item: result.item, transition: result.transition }) };
+        try {
+          const result = applyDocWorkflowAction(rec, action, body);
+          return { ok: true, status: 200, json: async () => ({ ok: true, item: result.item, transition: result.transition }) };
+        } catch (e) {
+          return { ok: false, status: 400, json: async () => ({ error: e.message }) };
+        }
+      }
+
+      m = url.match(/^\/api\/records\/docs\/(\d+)\/(update|submit)$/);
+      if (m && method === 'POST') {
+        const rec = DB.docs.find(r => r.id === Number(m[1]));
+        if (!rec) return { ok: false, status: 404, json: async () => ({ error: 'Không tìm thấy' }) };
+        try {
+          const result = applyDocDraftAction(rec, m[2], body);
+          return { ok: true, status: 200, json: async () => ({ ok: true, item: result.item }) };
+        } catch (e) {
+          return { ok: false, status: 409, json: async () => ({ error: e.message }) };
+        }
       }
 
       // Fallback for /api/log, /api/auth/request-approval-otp, etc — fire-and-forget calls the app
@@ -351,6 +398,92 @@ async function main() {
         detailHTML.includes('v1.0') && detailHTML.includes('v2.0') &&
         document.getElementById('docDetailTitle').innerText.includes('Quy định nghỉ phép 2026'),
         `detailHTML.length=${detailHTML.length}`
+      );
+    }
+
+    // ================= Scenario 6: "Bổ Sung" (REQUEST_CHANGES) — approver trả tài liệu về NHÁP, người
+    // tải lên sửa lại toàn bộ nội dung + tệp qua modal "Sửa & Gửi Lại" rồi gửi lại từ bước 1 =================
+    {
+      alerts.length = 0;
+      document.getElementById('docOpMode').value = 'NEW';
+      onDocOpModeChange();
+      document.getElementById('selDept').value = 'Phòng Kinh Doanh';
+      document.getElementById('selCat').value = 'Biểu Mẫu';
+      refreshDocCodePreview();
+      document.getElementById('docTitle').value = 'Biểu mẫu đề nghị tạm ứng';
+      document.getElementById('docSummary').value = 'Bản nháp đầu, còn thiếu thông tin.';
+      setFileInput('docFile', 'de-nghi-tam-ung.pdf', 'noi dung', 'application/pdf');
+      await uploadDoc({ preventDefault() {} });
+      const doc = DB.docs.find(d => d.title === 'Biểu mẫu đề nghị tạm ứng');
+
+      // Thiếu lý do -> bị chặn ngay ở client, không gọi API.
+      alerts.length = 0;
+      requestWorkflowChangesAction('docs', doc.id, DB.docs, 'renderDocs', 'người tải lên');
+      const blockedAlerts1 = alerts.slice();
+      check(
+        'doc Bổ Sung: prompt() bị huỷ (trả về null) -> không đổi trạng thái',
+        DB.docs.find(d => d.id === doc.id).status === 'PENDING',
+        JSON.stringify(blockedAlerts1)
+      );
+
+      promptAnswer = '';
+      alerts.length = 0;
+      requestWorkflowChangesAction('docs', doc.id, DB.docs, 'renderDocs', 'người tải lên');
+      const blockedAlerts2 = alerts.slice();
+      check(
+        'doc Bổ Sung: nhập lý do rỗng -> bị chặn ("Vui lòng nhập lý do cần bổ sung")',
+        blockedAlerts2.some(a => a.includes('Vui lòng nhập lý do cần bổ sung')),
+        JSON.stringify(blockedAlerts2)
+      );
+
+      promptAnswer = 'Thiếu chữ ký xác nhận của kế toán trưởng.';
+      alerts.length = 0;
+      requestWorkflowChangesAction('docs', doc.id, DB.docs, 'renderDocs', 'người tải lên');
+      runConfirmedAction();
+      await new Promise(r => setTimeout(r, 0));
+      const docAfterChanges = DB.docs.find(d => d.id === doc.id);
+      check(
+        'doc Bổ Sung: yêu cầu hợp lệ -> status chuyển DRAFT, currentStep reset về 0',
+        docAfterChanges.status === 'DRAFT' && docAfterChanges.currentStep === 0,
+        `status=${docAfterChanges.status} currentStep=${docAfterChanges.currentStep}`
+      );
+      check(
+        'doc Bổ Sung: lịch sử ghi nhận đúng hành động REQUEST_CHANGES kèm lý do',
+        (docAfterChanges.history || []).some(h => h.action === 'REQUEST_CHANGES' && h.comment.includes('kế toán trưởng')),
+        JSON.stringify(docAfterChanges.history)
+      );
+
+      // Modal "Sửa & Gửi Lại" hiện đúng lý do, sửa tiêu đề + tệp rồi gửi lại.
+      openBosungEditModal('docs', doc.id);
+      const reasonNoteText = document.getElementById('bosungEditReasonNote').innerText;
+      check(
+        'doc Bổ Sung: modal "Sửa & Gửi Lại" hiện đúng lý do người duyệt vừa yêu cầu',
+        reasonNoteText.includes('kế toán trưởng'),
+        reasonNoteText
+      );
+      document.getElementById('bsTitle').value = 'Biểu mẫu đề nghị tạm ứng (đã bổ sung chữ ký)';
+      setFileInput('bsFile', 'de-nghi-tam-ung-v2.pdf', 'noi dung v2', 'application/pdf');
+      alerts.length = 0;
+      await confirmBosungResubmit();
+      const docAfterResubmit = DB.docs.find(d => d.id === doc.id);
+      check(
+        'doc Bổ Sung: "Sửa & Gửi Lại" -> quay lại PENDING bước 1, tiêu đề + tệp đã cập nhật',
+        docAfterResubmit.status === 'PENDING' && docAfterResubmit.currentStep === 1 &&
+        docAfterResubmit.title === 'Biểu mẫu đề nghị tạm ứng (đã bổ sung chữ ký)' &&
+        docAfterResubmit.fileName === 'de-nghi-tam-ung-v2.pdf' &&
+        alerts.some(a => a.includes('Đã lưu thay đổi và gửi lại')),
+        `doc=${JSON.stringify({ status: docAfterResubmit.status, currentStep: docAfterResubmit.currentStep, title: docAfterResubmit.title, fileName: docAfterResubmit.fileName })}`
+      );
+
+      // Duyệt lại bình thường sau khi bổ sung.
+      alerts.length = 0;
+      approveDoc(doc.id);
+      await new Promise(r => setTimeout(r, 0));
+      const docFinal = DB.docs.find(d => d.id === doc.id);
+      check(
+        'doc Bổ Sung: sau khi bổ sung + gửi lại, tài liệu được duyệt lại bình thường -> APPROVED',
+        docFinal.status === 'APPROVED',
+        docFinal.status
       );
     }
 

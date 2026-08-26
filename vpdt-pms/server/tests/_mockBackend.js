@@ -122,6 +122,11 @@ function createMockApi(state) {
         state.collections.paymentRequests.unshift(paymentRequest);
         return { item, paymentRequest };
       }
+      // "Bổ Sung": sửa lại NHÁP (sau REQUEST_CHANGES) + gửi lại — xem lib/recordActions.js
+      // editOfficeReqDraft()/submitOfficeReqDraft(), khớp POST /api/records/officeReqs/:id/update|submit
+      // thật ở routes/records.js.
+      if (action === 'update') return { item: recordActions.editOfficeReqDraft(payload, user, item) };
+      if (action === 'submit') return { item: recordActions.submitOfficeReqDraft(user, item) };
       throw new HttpError(400, `Hành động không hợp lệ: ${action}`);
     }
 

@@ -95,19 +95,25 @@ const server = http.createServer(async (req, res) => {
     return sendJson(res, 200, { ok: true, item });
   }
 
-  // POST /api/workflow/carRegs/:id/approve|reject — the exact engine routes/workflow.js calls.
-  const workflowMatch = url.pathname.match(/^\/api\/workflow\/carRegs\/(\d+)\/(approve|reject)$/);
+  // POST /api/workflow/carRegs/:id/approve|reject|request-changes — the exact engine routes/workflow.js
+  // calls. "request-changes" ("Bổ Sung") added alongside approve/reject (xem lib/workflowEngine.js
+  // MODULE_CONFIGS.carRegs.supportsRequestChanges).
+  const workflowMatch = url.pathname.match(/^\/api\/workflow\/carRegs\/(\d+)\/(approve|reject|request-changes)$/);
   if (req.method === 'POST' && workflowMatch) {
     const id = Number(workflowMatch[1]);
     const rawAction = workflowMatch[2];
+    const actionMap = { approve: 'APPROVE', reject: 'REJECT', 'request-changes': 'REQUEST_CHANGES' };
     const body = await readBody(req);
     const item = store.carRegs.find((c) => c.id === id);
     if (!item) return sendJson(res, 404, { error: 'Không tìm thấy hồ sơ' });
     try {
       const outcome = applyWorkflowAction({
-        moduleKey: 'carRegs', item, action: rawAction === 'approve' ? 'APPROVE' : 'REJECT',
+        moduleKey: 'carRegs', item, action: actionMap[rawAction],
         user: activeServerUser, comment: body.comment, extraFields: body.extraFields,
-        appData: { carDeptWorkflows: {}, workflows: [] },
+        // Dùng ĐÚNG carDeptWorkflows đã seed (không hardcode {} như trước) — cần thiết để test được các
+        // approver KHÔNG PHẢI admin (canApproveStep chỉ cho qua nếu username có trong approvers[bước],
+        // admin luôn bypass nên trước đây hardcode {} vẫn "vô tình" work cho mọi test dùng adminUser).
+        appData: { carDeptWorkflows: store.carDeptWorkflows || {}, workflows: store.workflows || [] },
         existingCollection: store.carRegs, users: store.users
       });
       return sendJson(res, 200, { ok: true, item: outcome.item, transition: outcome.transition });
@@ -124,6 +130,25 @@ const server = http.createServer(async (req, res) => {
     if (!item) return sendJson(res, 404, { error: 'Không tìm thấy hồ sơ' });
     try {
       const result = recordActions.confirmCarDriverAssignment(activeServerUser, item);
+      return sendJson(res, 200, { ok: true, item: result });
+    } catch (err) {
+      return sendJson(res, err.status || 500, { error: err.message });
+    }
+  }
+
+  // POST /api/records/carRegs/:id/update|submit — "Bổ Sung": sửa lại NHÁP (sau REQUEST_CHANGES) + gửi
+  // lại, xem lib/recordActions.js editCarRegDraft()/submitCarRegDraft() — mirrors routes/records.js.
+  const carDraftMatch = url.pathname.match(/^\/api\/records\/carRegs\/(\d+)\/(update|submit)$/);
+  if (req.method === 'POST' && carDraftMatch) {
+    const id = Number(carDraftMatch[1]);
+    const action = carDraftMatch[2];
+    const body = await readBody(req);
+    const item = store.carRegs.find((c) => c.id === id);
+    if (!item) return sendJson(res, 404, { error: 'Không tìm thấy hồ sơ' });
+    try {
+      const result = action === 'update'
+        ? recordActions.editCarRegDraft(body, activeServerUser, item)
+        : recordActions.submitCarRegDraft(activeServerUser, item);
       return sendJson(res, 200, { ok: true, item: result });
     } catch (err) {
       return sendJson(res, err.status || 500, { error: err.message });
@@ -159,6 +184,20 @@ const driverUser2 = {
   phone: '0977777777', email: 'lx2@company.com', jobTitle: 'Lái xe',
   active: true, perms: {}
 };
+// carDispatch ("Người Điều Hành Xe", Phase 3) — 2 tài khoản đều là approver bước 1 hợp lệ ở đúng phòng
+// ban của phiếu họ sẽ duyệt (xem carDeptWorkflows trong seedDB bên dưới), CHỈ khác nhau ở carDispatch:
+// noDispatchApproverUser không có -> vẫn duyệt/từ chối được nhưng KHÔNG được đụng tới mục "Phần Dành
+// Cho Phòng Hành Chính"; dispatchApproverUser có -> vừa duyệt vừa gán được lái xe/loại xe/BKS.
+const noDispatchApproverUser = {
+  username: 'qlxe_nd', name: 'Nguyễn Không Điều Hành', dept: 'Phòng Hành Chính', role: 'STAFF',
+  phone: '0988888881', email: 'qlxe_nd@company.com', jobTitle: 'Nhân viên',
+  active: true, perms: { carDispatch: false }
+};
+const dispatchApproverUser = {
+  username: 'qlxe_dp', name: 'Trần Điều Hành Xe', dept: 'Phòng Hành Chính', role: 'STAFF',
+  phone: '0988888882', email: 'qlxe_dp@company.com', jobTitle: 'Người điều hành xe',
+  active: true, perms: { carDispatch: true }
+};
 
 const ROOM = 'Phòng Họp Lớn A (Tầng 3 - Sức chứa 50 người)';
 
@@ -168,9 +207,16 @@ const seedDB = {
   jobTitles: ['Nhân viên', 'Quản lý phòng họp', 'Admin'],
   submissionTypes: [], contractTypes: [],
   carTypes: ['Xe 4 chỗ', 'Xe 7 chỗ', 'Xe 16 chỗ'],
-  users: [bookerUser, roomManagerUser, adminUser, driverUser, driverUser2],
+  users: [bookerUser, roomManagerUser, adminUser, driverUser, driverUser2, noDispatchApproverUser, dispatchApproverUser],
   meetings: [], meetingMinutes: [], meetingAttendeeTemplates: [],
-  carRegs: [], carDeptWorkflows: {},
+  carRegs: [], workflows: [],
+  // 2 phòng ban RIÊNG cho kịch bản carDispatch bên dưới — chưa dùng bởi bất kỳ phiếu xe nào ở các test
+  // C1-C13 phía trên (đều dùng dept 'Phòng Kinh Doanh', luôn fallback approvers {} -> chỉ admin qua
+  // được canApproveStep), nên thêm 2 dept này KHÔNG ảnh hưởng gì tới các test hiện có.
+  carDeptWorkflows: {
+    'Phòng Hành Chính': { workflowId: 'WF_1STEP', approvers: { 1: ['qlxe_nd'] } },
+    'Ban Giám Đốc': { workflowId: 'WF_1STEP', approvers: { 1: ['qlxe_dp'] } }
+  },
   tasks: [], permGroups: [], vppExcludeGroups: [],
   vppPeriods: [], vppRegistrations: [], vppDeptWorkflows: {},
   budgetEntries: [], budgetDeptWorkflows: {},
@@ -178,6 +224,8 @@ const seedDB = {
   _versions: {}
 };
 store.users = seedDB.users; // mirror routes/workflow.js's req.allUsers cho applyWorkflowAction xác thực assignedDriverUsername.
+store.carDeptWorkflows = seedDB.carDeptWorkflows; // mirror appData thật cho route /api/workflow/carRegs ở trên.
+store.workflows = seedDB.workflows;
 
 async function loginAs(page, user) {
   activeServerUser = user;
@@ -621,6 +669,263 @@ async function main() {
     'Car: reassigning to a different driver resets a prior driver confirmation',
     c13Outcome.item.assignedDriverUsername === 'lx2' && c13Outcome.item.driverConfirmed === false && c13Outcome.item.driverConfirmedAt === null,
     `driver=${c13Outcome.item.assignedDriverUsername} confirmed=${c13Outcome.item.driverConfirmed} confirmedAt=${c13Outcome.item.driverConfirmedAt}`
+  );
+
+  // ===================== CAR REGISTRATION — carDispatch ("Người Điều Hành Xe", Phase 3): gates ONLY
+  // the "Phần Dành Cho Phòng Hành Chính" assignment section (driver/vehicle type/plate), separately from
+  // the step-approver check (canApproveStep) which stays untouched — an approver without carDispatch
+  // must still be able to Duyệt/Từ chối their step normally. =====================
+  const itemNoDispatch = {
+    id: 900301, code: 'HCRC-DPH-ND', dept: 'Phòng Hành Chính', status: 'PENDING', currentStep: 1,
+    history: [], type: 'Xe 4 chỗ', km: '40', passengers: '01', purpose: 'Công tác',
+    startTime: '2026-09-08T08:00', endTime: '2026-09-08T12:00', destination: 'HN', reason: 'Kiểm tra carDispatch',
+    creator: bookerUser.username, creatorName: bookerUser.name,
+    // Giá trị ĐÃ gán TRƯỚC lúc duyệt — approver không có carDispatch cố sửa lại thì giá trị này PHẢI
+    // được giữ nguyên (server lờ đi field client gửi, không ghi đè).
+    assignedVehicleType: 'Xe cũ đã gán trước khi duyệt'
+  };
+  const itemWithDispatch = {
+    id: 900302, code: 'HCRC-DPH-WD', dept: 'Ban Giám Đốc', status: 'PENDING', currentStep: 1,
+    history: [], type: 'Xe 7 chỗ', km: '60', passengers: '02', purpose: 'Công tác',
+    startTime: '2026-09-08T08:00', endTime: '2026-09-08T12:00', destination: 'HN', reason: 'Kiểm tra carDispatch',
+    creator: bookerUser.username, creatorName: bookerUser.name
+  };
+  store.carRegs.push(itemNoDispatch, itemWithDispatch);
+  await page.evaluate(({ a, b }) => { DB.carRegs.push(a, b); }, { a: itemNoDispatch, b: itemWithDispatch });
+
+  // D1 — approver KHÔNG có carDispatch: modal ẩn mục phân công. Cố tình dùng thẳng callWorkflowAction()
+  // (giả lập DevTools sửa request tay, bỏ qua guard phía client) để gửi kèm field phân công -> server
+  // phải tự lờ đi hoàn toàn, KHÔNG lỗi cả lượt duyệt, KHÔNG ghi đè giá trị cũ.
+  await loginAs(page, noDispatchApproverUser);
+  const d1 = await page.evaluate(async (carId) => {
+    window.__alerts = [];
+    switchTab('car');
+    openCarProcessModal(carId);
+    const sectionHiddenAtOpen = document.getElementById('carDispatchSection').classList.contains('hidden');
+    const hasActionButtons = document.getElementById('carModalActionBtns').innerHTML.includes('Phê Duyệt');
+    const result = await callWorkflowAction('carRegs', carId, 'approve', {
+      comment: '',
+      extraFields: { assignedDriverUsername: 'lx1', assignedVehicleType: 'Xe MỚI (không được phép gán)', assignedPlate: '51A-999.99' }
+    });
+    return {
+      sectionHiddenAtOpen, hasActionButtons,
+      status: result.item.status,
+      assignedVehicleType: result.item.assignedVehicleType,
+      assignedPlate: result.item.assignedPlate,
+      assignedDriverUsername: result.item.assignedDriverUsername
+    };
+  }, itemNoDispatch.id);
+  record(
+    'CarDispatch: approver WITHOUT carDispatch — "Phần Dành Cho Phòng Hành Chính" is hidden in the modal',
+    d1.sectionHiddenAtOpen === true,
+    `sectionHiddenAtOpen=${d1.sectionHiddenAtOpen}`
+  );
+  record(
+    'CarDispatch: approver WITHOUT carDispatch can still approve their step normally',
+    d1.hasActionButtons === true && d1.status === 'APPROVED',
+    `hasActionButtons=${d1.hasActionButtons} status=${d1.status}`
+  );
+  record(
+    'CarDispatch: server silently ignores tampered assignment fields from a non-carDispatch approver (old value kept, no driver/plate written)',
+    d1.assignedVehicleType === 'Xe cũ đã gán trước khi duyệt' && !d1.assignedPlate && !d1.assignedDriverUsername,
+    `assignedVehicleType=${d1.assignedVehicleType} assignedPlate=${d1.assignedPlate} assignedDriverUsername=${d1.assignedDriverUsername}`
+  );
+
+  // D2 — approver CÓ carDispatch: modal hiện mục phân công; Duyệt + gán lái xe/loại xe/BKS trong CÙNG 1
+  // lượt thao tác qua đúng luồng UI thật (processCarReg), không tắt qua callWorkflowAction thẳng.
+  await loginAs(page, dispatchApproverUser);
+  const d2 = await page.evaluate(async (carId) => {
+    window.__alerts = [];
+    switchTab('car');
+    openCarProcessModal(carId);
+    const sectionHiddenAtOpen = document.getElementById('carDispatchSection').classList.contains('hidden');
+    document.getElementById('carAssignedDriver').value = 'Nguyễn Văn Tài — Phòng Hành Chính (lx1)';
+    resolveCarAssignedDriverInput(document.getElementById('carAssignedDriver').value);
+    document.getElementById('carAssignedVehicleType').value = 'Ford Transit 16 chỗ';
+    document.getElementById('carAssignedPlate').value = '51A-777.77';
+    document.getElementById('txtCarComment').value = '';
+    await processCarReg('APPROVE');
+    const item = DB.carRegs.find((c) => c.id === carId);
+    return {
+      sectionHiddenAtOpen, alerts: window.__alerts.slice(), status: item.status,
+      assignedVehicleType: item.assignedVehicleType, assignedPlate: item.assignedPlate, assignedDriverUsername: item.assignedDriverUsername
+    };
+  }, itemWithDispatch.id);
+  record(
+    'CarDispatch: approver WITH carDispatch — "Phần Dành Cho Phòng Hành Chính" is visible in the modal',
+    d2.sectionHiddenAtOpen === false,
+    `sectionHiddenAtOpen=${d2.sectionHiddenAtOpen}`
+  );
+  record(
+    'CarDispatch: approver WITH carDispatch can approve AND set driver/vehicle/plate in the same action',
+    d2.status === 'APPROVED' && d2.assignedPlate === '51A-777.77' && d2.assignedVehicleType === 'Ford Transit 16 chỗ' && d2.assignedDriverUsername === 'lx1',
+    `status=${d2.status} plate=${d2.assignedPlate} type=${d2.assignedVehicleType} driver=${d2.assignedDriverUsername} alerts=${JSON.stringify(d2.alerts)}`
+  );
+
+  // D3 — Từ chối cũng phải bị lờ đi field phân công nếu người từ chối không có carDispatch.
+  // LƯU Ý: itemNoDispatch đã bị applyWorkflowAction() ở D1 MUTATE tại chỗ (status -> 'APPROVED',
+  // history đã có dòng) — không spread trực tiếp từ nó nữa, phải nêu rõ lại status/currentStep/history
+  // PENDING/1/[] cho bản ghi MỚI này, tránh dính luôn trạng thái đã bị đổi của D1.
+  const itemNoDispatchReject = {
+    ...itemNoDispatch, id: 900303, code: 'HCRC-DPH-ND-REJ',
+    status: 'PENDING', currentStep: 1, history: [], assignedVehicleType: undefined
+  };
+  store.carRegs.push(itemNoDispatchReject);
+  await page.evaluate((item) => { DB.carRegs.push(item); }, itemNoDispatchReject);
+  await loginAs(page, noDispatchApproverUser);
+  const d3 = await page.evaluate(async (carId) => {
+    window.__alerts = [];
+    const result = await callWorkflowAction('carRegs', carId, 'reject', {
+      comment: 'Không đủ điều kiện.',
+      extraFields: { assignedDriverUsername: 'lx1', assignedVehicleType: 'Không được phép', assignedPlate: '51A-000.00' }
+    });
+    return { status: result.item.status, assignedVehicleType: result.item.assignedVehicleType, assignedPlate: result.item.assignedPlate };
+  }, itemNoDispatchReject.id);
+  record(
+    'CarDispatch: non-carDispatch approver can reject their step, and tampered assignment fields are still ignored on reject',
+    d3.status === 'REJECTED' && !d3.assignedVehicleType && !d3.assignedPlate,
+    `status=${d3.status} type=${d3.assignedVehicleType} plate=${d3.assignedPlate}`
+  );
+
+  // ===================== D4/D5 — sidebar-access gap fix: a pure-driver account (no carView, not an
+  // approver in ANY carDeptWorkflows) must now reach the "🚗 Đăng ký xe" sidebar tab if they are the
+  // assigned driver on at least 1 record. NOTE: scopeHasAny() (pre-existing helper, unrelated to this
+  // phase — see git blame commit c36cf63, long before carDispatch existed) already returns true for ANY
+  // user that merely has a `dept` set, regardless of the scope's actual content — so canAccessCarModule()
+  // (like canAccessSubmissionModule/canAccessContractModule/canAccessOfficeModule, which share the same
+  // helper) was ALREADY open to every dept-having employee at the sidebar level before this phase, and
+  // isAssignedDriverSomewhere() does not change that baseline. What this phase's new OR-clause must NOT
+  // do is fabricate a false "assigned driver" match for someone with zero assigned trips — verified
+  // directly below instead of through the (pre-existing-broad) canAccessCarModule() gate. =====================
+  await loginAs(page, driverUser); // lx1 — assigned driver on c7 (đã xác nhận ở kịch bản C11 phía trên).
+  const d4 = await page.evaluate(() => {
+    window.__alerts = [];
+    const canAccessBefore = canAccessCarModule(currentUser);
+    switchTab('car'); // trước fix: bị chặn ngay với alert "⛔ ... Module Đăng ký xe!"
+    return { canAccessBefore, alertsAfterSwitch: window.__alerts.slice() };
+  });
+  record(
+    'CarDispatch gap fix: an assigned-driver-only account (no carView/approver rights) can now access the car module sidebar tab',
+    d4.canAccessBefore === true && !d4.alertsAfterSwitch.some((a) => a.includes('Module Đăng ký xe')),
+    `canAccessBefore=${d4.canAccessBefore} alerts=${JSON.stringify(d4.alertsAfterSwitch)}`
+  );
+
+  await loginAs(page, driverUser2); // lx2 — chưa từng được phân công phiếu xe nào.
+  const d5 = await page.evaluate(() => {
+    const isAssignedDriverSomewhere = (DB.carRegs || []).some((c) => c.assignedDriverUsername === currentUser.username);
+    return { isAssignedDriverSomewhere };
+  });
+  record(
+    'CarDispatch gap fix: the new isAssignedDriverSomewhere clause does not fabricate a match for an account with no assigned trips (fix is not overly broad)',
+    d5.isAssignedDriverSomewhere === false,
+    `isAssignedDriverSomewhere=${d5.isAssignedDriverSomewhere}`
+  );
+
+  // ===================== E1-E4 — "Bổ Sung" (REQUEST_CHANGES): approver trả phiếu về NHÁP, người đăng
+  // ký SỬA LẠI TOÀN BỘ nội dung (kể cả lộ trình/thời gian) qua modal "Sửa & Gửi Lại"
+  // (openBosungEditModal()/confirmBosungResubmit() ở public/index.html, gọi THẬT
+  // lib/recordActions.js editCarRegDraft()/submitCarRegDraft()) rồi được duyệt lại bình thường từ bước 1.
+  // =====================
+  await loginAs(page, bookerUser);
+  const e1 = await page.evaluate(async () => {
+    window.__alerts = [];
+    switchTab('car');
+    document.getElementById('carDept').value = 'Phòng Kinh Doanh';
+    document.getElementById('carType').value = document.getElementById('carType').options[0].value;
+    document.getElementById('carPassengers').value = '01 - Lê Thị Kinh Doanh';
+    document.getElementById('carPurpose').value = 'Công tác';
+    document.getElementById('carKm').value = '50';
+    document.getElementById('carStartTime').value = '2026-09-10T08:00';
+    document.getElementById('carEndTime').value = '2026-09-10T12:00';
+    carRoutePoints = ['HN', 'Bắc Ninh', 'HN'];
+    renderCarRoutePoints();
+    document.getElementById('carReason').value = 'Khảo sát địa điểm cho kịch bản Bổ Sung.';
+    const form = document.querySelector('#carSection form');
+    await submitCarReq({ preventDefault() {}, target: form });
+    return { count: DB.carRegs.length, saved: DB.carRegs[0] };
+  });
+  record(
+    'Car Bổ Sung: tạo phiếu mới để kiểm thử luồng Bổ Sung -> PENDING',
+    e1.saved.status === 'PENDING' && e1.saved.dept === 'Phòng Kinh Doanh',
+    `status=${e1.saved.status} dept=${e1.saved.dept}`
+  );
+
+  // approvers['Phòng Kinh Doanh'] chưa được seed -> chỉ admin duyệt được (fallback {1:['admin']}).
+  await loginAs(page, adminUser);
+  const e2 = await page.evaluate(async (carId) => {
+    window.__alerts = [];
+    currentProcessingCarId = carId;
+    document.getElementById('txtCarComment').value = '';
+    await processCarReg('REQUEST_CHANGES'); // thiếu lý do -> bị chặn ở client, không gọi API
+    const blockedAlerts = window.__alerts.slice();
+    document.getElementById('txtCarComment').value = 'Sai lộ trình, đề nghị đăng ký lại đúng điểm đến.';
+    window.__alerts = [];
+    await processCarReg('REQUEST_CHANGES');
+    await new Promise((r) => setTimeout(r, 50));
+    const item = DB.carRegs.find((c) => c.id === carId);
+    return { blockedAlerts, alerts: window.__alerts.slice(), status: item.status, currentStep: item.currentStep, history: item.history };
+  }, e1.saved.id);
+  record(
+    'Car Bổ Sung: thiếu lý do bị chặn ngay ở client',
+    e2.blockedAlerts.some((a) => a.includes('Vui lòng nhập lý do cần bổ sung')),
+    JSON.stringify(e2.blockedAlerts)
+  );
+  record(
+    'Car Bổ Sung: "Bổ Sung" hợp lệ -> status chuyển DRAFT, currentStep reset về 0',
+    e2.status === 'DRAFT' && e2.currentStep === 0,
+    `status=${e2.status} currentStep=${e2.currentStep}`
+  );
+  record(
+    'Car Bổ Sung: lịch sử ghi nhận đúng hành động REQUEST_CHANGES kèm lý do',
+    (e2.history || []).some((h) => h.action === 'REQUEST_CHANGES' && h.comment.includes('Sai lộ trình')),
+    JSON.stringify(e2.history)
+  );
+
+  // Người KHÔNG phải người tạo (adminUser) không sửa được hồ sơ NHÁP của người khác qua editCarRegDraft().
+  let e3Error = null;
+  try {
+    const carOnServer = store.carRegs.find((c) => c.id === e1.saved.id);
+    recordActions.editCarRegDraft({ reason: 'Hack' }, adminUser, carOnServer);
+  } catch (err) { e3Error = err; }
+  record(
+    'Car Bổ Sung: người khác (không phải người tạo) không sửa được phiếu đang NHÁP này (403)',
+    !!e3Error && e3Error.status === 403,
+    `error=${e3Error && e3Error.message}`
+  );
+
+  await loginAs(page, bookerUser);
+  const e4 = await page.evaluate(async (carId) => {
+    window.__alerts = [];
+    openBosungEditModal('carRegs', carId);
+    const reasonNote = document.getElementById('bosungEditReasonNote').innerText;
+    document.getElementById('bsReason').value = 'Khảo sát địa điểm (đã sửa đúng lộ trình theo yêu cầu).';
+    await confirmBosungResubmit();
+    await new Promise((r) => setTimeout(r, 100));
+    const item = DB.carRegs.find((c) => c.id === carId);
+    return { reasonNote, alerts: window.__alerts.slice(), status: item.status, currentStep: item.currentStep, reason: item.reason };
+  }, e1.saved.id);
+  record(
+    'Car Bổ Sung: modal "Sửa & Gửi Lại" hiện đúng lý do người duyệt vừa yêu cầu',
+    e4.reasonNote.includes('Sai lộ trình'),
+    e4.reasonNote
+  );
+  record(
+    'Car Bổ Sung: "Sửa & Gửi Lại" -> quay lại PENDING bước 1, nội dung đã cập nhật',
+    e4.status === 'PENDING' && e4.currentStep === 1 && e4.reason.includes('đã sửa đúng lộ trình'),
+    JSON.stringify(e4)
+  );
+
+  await loginAs(page, adminUser);
+  const e5 = await page.evaluate(async (carId) => {
+    currentProcessingCarId = carId;
+    document.getElementById('txtCarComment').value = '';
+    await processCarReg('APPROVE');
+    return DB.carRegs.find((c) => c.id === carId).status;
+  }, e1.saved.id);
+  record(
+    'Car Bổ Sung: sau khi bổ sung + gửi lại, phiếu được duyệt lại bình thường -> APPROVED',
+    e5 === 'APPROVED',
+    e5
   );
 
   await browser.close();

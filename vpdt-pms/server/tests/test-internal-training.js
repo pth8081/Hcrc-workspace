@@ -259,9 +259,16 @@ async function main() {
     // ===================== Đợt 3: Phân quyền + Vòng đời trạng thái Đào Tạo =====================
 
     let instructedClassId = null;
-    await run('trainer assigns gv.a as instructor via the datalist picker when creating an OFFLINE class', async () => {
+    await run('#systemUsersDatalist is already populated when the CREATE-class form is shown (regression: used to be empty on a fresh session — nothing called populateSystemUsersDatalist() before opening Đào Tạo)', async () => {
       await page.evaluate((u) => { currentUser = u; }, trainer);
       await page.evaluate(() => { switchTab('internal'); setInternalSubTab('TRAINING'); setTrainingLmsTab('CLASSES'); });
+      const optionCount = await page.locator('#systemUsersDatalist option').count();
+      assert(optionCount > 0, `expected #systemUsersDatalist to have options right after entering the CLASSES tab, got ${optionCount}`);
+      const optionValues = await page.locator('#systemUsersDatalist option').evaluateAll((opts) => opts.map((o) => o.getAttribute('value')));
+      assert(optionValues.some((v) => v && v.includes('gv.a')), `expected an option for account gv.a among #systemUsersDatalist options, got: ${JSON.stringify(optionValues)}`);
+    });
+
+    await run('trainer assigns gv.a as instructor via the datalist picker when creating an OFFLINE class', async () => {
       await page.evaluate(() => {
         document.getElementById('tcCategory').value = 'Nghiệp vụ';
         document.getElementById('tcTitle').value = 'Lớp Của Giảng Viên A';

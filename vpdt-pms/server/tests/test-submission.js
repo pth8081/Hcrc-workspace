@@ -94,6 +94,22 @@ async function main() {
           return { item: rec, transition: { type: 'INFO_REQUESTED' } };
         }
 
+        // "Bổ Sung" (REQUEST_CHANGES) — nâng cấp mới, KHÁC "Yêu Cầu Bổ Sung" (request-info) ở trên:
+        // đưa hẳn hồ sơ về NHÁP để người trình sửa lại TOÀN BỘ nội dung + tệp rồi gửi lại từ bước 1,
+        // thay vì chỉ ghi 1 ghi chú và giữ nguyên PENDING. Mirrors lib/workflowEngine.js
+        // applyWorkflowAction()'s REQUEST_CHANGES branch.
+        if (action === 'request-changes') {
+          if (!body.comment) throw new Error('Vui lòng nhập lý do yêu cầu bổ sung/chỉnh sửa');
+          (rec.history || []).forEach(h => { if (h.action === 'APPROVED') h.invalidated = true; });
+          rec.history = [...(rec.history || []), {
+            step: rec.currentStep, approver: currentUser.name, username: currentUser.username,
+            action: 'REQUEST_CHANGES', comment: body.comment, time: nowVN()
+          }];
+          rec.status = 'DRAFT';
+          rec.currentStep = 0;
+          return { item: rec, transition: { type: 'REQUEST_CHANGES' } };
+        }
+
         if (action === 'approve') {
           rec.history = [...(rec.history || []), {
             step: rec.currentStep, approver: currentUser.name, username: currentUser.username,
@@ -138,8 +154,37 @@ async function main() {
           const arr = DB[moduleKey] || [];
           const rec = arr.find(r => r.id === Number(idStr));
           if (!rec) return { ok: false, status: 404, json: async () => ({ error: 'Không tìm thấy' }) };
-          const result = applySubmissionWorkflowAction(rec, action, body);
-          return { ok: true, status: 200, json: async () => ({ ok: true, item: result.item, transition: result.transition }) };
+          try {
+            const result = applySubmissionWorkflowAction(rec, action, body);
+            return { ok: true, status: 200, json: async () => ({ ok: true, item: result.item, transition: result.transition }) };
+          } catch (e) {
+            return { ok: false, status: 400, json: async () => ({ error: e.message }) };
+          }
+        }
+
+        // "Sửa & Gửi Lại" — mirrors lib/recordActions.js editSubmissionDraft()/submitSubmissionDraft()
+        // (creator-only, DRAFT-only; resubmit resets status/currentStep, marks prior APPROVED invalidated).
+        m = url.match(/^\/api\/records\/submissions\/(\d+)\/(update|submit)$/);
+        if (m && method === 'POST') {
+          const rec = DB.submissions.find(r => r.id === Number(m[1]));
+          if (!rec) return { ok: false, status: 404, json: async () => ({ error: 'Không tìm thấy' }) };
+          if (rec.creator !== currentUser.username) {
+            return { ok: false, status: 403, json: async () => ({ error: 'Chỉ người trình mới được sửa tờ trình này' }) };
+          }
+          if (rec.status !== 'DRAFT') {
+            return { ok: false, status: 409, json: async () => ({ error: 'Tờ trình này không ở trạng thái cần bổ sung' }) };
+          }
+          if (m[2] === 'update') {
+            ['dept', 'type', 'title', 'priority', 'content', 'customData'].forEach(f => { if (body[f] !== undefined) rec[f] = body[f]; });
+            if (body.fileUrl !== undefined) { rec.fileName = body.fileName; rec.fileType = body.fileType; rec.fileUrl = body.fileUrl; }
+            if (body.extraFiles !== undefined) rec.extraFiles = body.extraFiles;
+            return { ok: true, status: 200, json: async () => ({ ok: true, item: rec }) };
+          }
+          (rec.history || []).forEach(h => { if (h.action === 'APPROVED') h.invalidated = true; });
+          rec.history = [...(rec.history || []), { step: 0, approver: currentUser.name, username: currentUser.username, action: 'RESUBMITTED', comment: '', time: nowVN() }];
+          rec.status = 'PENDING';
+          rec.currentStep = 1;
+          return { ok: true, status: 200, json: async () => ({ ok: true, item: rec }) };
         }
 
         return { ok: true, status: 200, json: async () => ({ ok: true }) };
@@ -415,6 +460,77 @@ async function main() {
           'submission: level "TGD" exposes all 7 layers, with TGD and Trợ Lý/Thư Ký force-checked and locked',
           visibleKeysTgd.length === 7 && tgdToggle.checked && tgdToggle.disabled && troLyToggle.checked && troLyToggle.disabled,
           `visibleKeysTgd=${JSON.stringify(visibleKeysTgd)} tgd=${tgdToggle.checked}/${tgdToggle.disabled} troLy=${troLyToggle.checked}/${troLyToggle.disabled}`
+        );
+      }
+
+      // ================= Scenario 7: "Bổ Sung" (REQUEST_CHANGES) — KHÁC "Yêu Cầu Bổ Sung" (Scenario 5,
+      // request-info, giữ nguyên PENDING): đưa tờ trình về NHÁP để người trình sửa lại TOÀN BỘ nội dung
+      // + tệp qua modal "Sửa & Gửi Lại" rồi gửi lại từ bước 1 =================
+      {
+        alerts.length = 0;
+        fillBaseSubmissionForm({ title: 'Tờ trình cần Bổ Sung toàn bộ', content: 'Nội dung ban đầu còn sơ sài.' });
+        submitSubmissionReq(fakeFormEvent());
+        confirmGenericModal();
+        await new Promise(r => setTimeout(r, 0));
+        const sub = DB.submissions.find(s => s.title === 'Tờ trình cần Bổ Sung toàn bộ');
+
+        openProcessSubmissionModal(sub.id);
+        document.getElementById('txtSubmissionComment').value = '';
+        alerts.length = 0;
+        confirmProcessSubmission('REQUEST_CHANGES');
+        const blockedNoReason = alerts.some(a => a.includes('Vui lòng nhập lý do cần bổ sung'));
+
+        document.getElementById('txtSubmissionComment').value = 'Thiếu bảng dự trù kinh phí chi tiết, đề nghị bổ sung và trình lại.';
+        alerts.length = 0;
+        confirmProcessSubmission('REQUEST_CHANGES');
+        confirmGenericModal();
+        await new Promise(r => setTimeout(r, 0));
+        const subAfterChanges = DB.submissions.find(s => s.id === sub.id);
+
+        check(
+          'submission: "Bổ Sung" (REQUEST_CHANGES) yêu cầu lý do, khác hẳn "Yêu Cầu Bổ Sung" (request-info) -> đưa về DRAFT, currentStep reset về 0',
+          blockedNoReason &&
+          subAfterChanges.status === 'DRAFT' && subAfterChanges.currentStep === 0 &&
+          (subAfterChanges.history || []).some(h => h.action === 'REQUEST_CHANGES' && h.comment.includes('dự trù kinh phí')),
+          `blockedNoReason=${blockedNoReason} sub=${JSON.stringify({ status: subAfterChanges.status, currentStep: subAfterChanges.currentStep })}`
+        );
+
+        // Modal "Sửa & Gửi Lại" — sửa tiêu đề + nội dung + tệp chính rồi gửi lại.
+        openBosungEditModal('submissions', sub.id);
+        const reasonNoteText = document.getElementById('bosungEditReasonNote').innerText;
+        document.getElementById('bsTitle').value = 'Tờ trình cần Bổ Sung toàn bộ (đã bổ sung dự trù KP)';
+        document.getElementById('bsContent').value = 'Nội dung đầy đủ kèm bảng dự trù kinh phí chi tiết.';
+        setFileInput('bsFile', 'du-tru-kinh-phi.pdf', 'noi dung bo sung', 'application/pdf');
+        alerts.length = 0;
+        await confirmBosungResubmit();
+        const subAfterResubmit = DB.submissions.find(s => s.id === sub.id);
+
+        check(
+          'submission Bổ Sung: modal hiện đúng lý do người duyệt vừa yêu cầu',
+          reasonNoteText.includes('dự trù kinh phí'),
+          reasonNoteText
+        );
+        check(
+          'submission Bổ Sung: "Sửa & Gửi Lại" -> quay lại PENDING bước 1, tiêu đề/nội dung/tệp đã cập nhật',
+          subAfterResubmit.status === 'PENDING' && subAfterResubmit.currentStep === 1 &&
+          subAfterResubmit.title.includes('đã bổ sung dự trù KP') &&
+          subAfterResubmit.content.includes('bảng dự trù kinh phí chi tiết') &&
+          subAfterResubmit.fileName === 'du-tru-kinh-phi.pdf' &&
+          alerts.some(a => a.includes('Đã lưu thay đổi và gửi lại')),
+          `sub=${JSON.stringify({ status: subAfterResubmit.status, currentStep: subAfterResubmit.currentStep, title: subAfterResubmit.title, fileName: subAfterResubmit.fileName })}`
+        );
+
+        // Duyệt lại bình thường (1 bước, quy trình mặc định) sau khi bổ sung + gửi lại.
+        alerts.length = 0;
+        openProcessSubmissionModal(sub.id);
+        confirmProcessSubmission('APPROVE');
+        confirmGenericModal();
+        await new Promise(r => setTimeout(r, 0));
+        const subFinal = DB.submissions.find(s => s.id === sub.id);
+        check(
+          'submission Bổ Sung: sau khi bổ sung + gửi lại, tờ trình được duyệt lại bình thường -> APPROVED',
+          subFinal.status === 'APPROVED',
+          subFinal.status
         );
       }
 

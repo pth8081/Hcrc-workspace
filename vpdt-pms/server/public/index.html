@@ -75,6 +75,14 @@
 }
 .sidebar-item:hover, .sidebar-subitem:hover { background: #1e293b; color: #fff; }
 .sidebar-subitem { font-weight: 500; padding: 0.4rem 0.75rem; font-size: 0.75rem; }
+/* Tab đang mở ở sidebar trái — xem setActiveSidebarTab() (gọi từ trong switchTab()). Nền xanh đậm hơn
+   :hover (đổi tông, không chỉ đổi độ đậm, để không lẫn với hover) + viền trái màu sky-400 khớp màu logo
+   HCRC ở đầu sidebar (xem <svg> phía trên) — đọc rõ là "đang chọn" chứ không phải chỉ đang rê chuột qua. */
+.sidebar-item-active, .sidebar-subitem-active {
+  background: #1e3a5f; color: #fff;
+  border-left: 3px solid #38bdf8;
+  padding-left: calc(0.75rem - 3px);
+}
 .sidebar-icon { font-size: 1rem; width: 1.25rem; text-align: center; flex-shrink: 0; }
 /* Thu gọn (toggleSidebarCollapse(), lưu localStorage) — chỉ còn icon, ẩn hết nhãn chữ + khối con đang mở. */
 #userHeader.sidebar-collapsed { width: 4.5rem; }
@@ -1063,21 +1071,22 @@ table { display: block; overflow-x: auto; max-width: 100%; }
           <label class="block font-semibold text-gray-600 mb-1">Loại Thao Tác</label>
           <select id="contractOpMode" onchange="onContractOpModeChange()" class="w-full md:w-64 border p-1.5 rounded bg-white font-semibold"></select>
         </div>
-        <!-- Đổi từ <select> gốc sang nút + bảng chọn tự dựng (cùng khuôn contractApprovalDropdownBtn/Panel
-             bên dưới) — 1 số trình duyệt di động lẫn desktop thỉnh thoảng không mở được popup <select>
-             gốc ngay khi phần tử vừa hiện ra (đổi từ hidden sang hiện trong cùng 1 lượt xử lý sự kiện
-             "Loại Thao Tác"), khiến người dùng bấm vào ô "Chọn Hợp Đồng..." mà không phản hồi — dựng bằng
-             div/button tự xử lý click hoàn toàn trong JS thì không còn phụ thuộc popup gốc của hệ điều
-             hành nữa. contractAddendumTarget vẫn còn (input ẩn) để giữ nguyên .value cho
-             onContractAddendumTargetChange()/submitContractReq() đọc, không phải sửa gì thêm ở 2 nơi đó. -->
-        <div id="contractAddendumTargetWrap" class="hidden relative">
+        <!-- v1.32.1 từng đổi <select> gốc sang nút + bảng chọn tự dựng (button+panel tự xử lý click
+             trong JS, absolute positioning + listener "click ra ngoài để đóng") vì native <select> đôi
+             khi không mở được popup ngay khi phần tử vừa hiện ra trong cùng 1 lượt xử lý sự kiện "Loại
+             Thao Tác" — nhưng chính bảng tự dựng đó lại tiếp tục thỉnh thoảng không mở được ở một số
+             trình duyệt/thiết bị thật ngoài production (v1.60.0 vẫn còn báo lại y hệt lỗi gốc: bấm vào ô
+             "Chọn Hợp Đồng..." mà không phản hồi). Đổi hẳn sang <input list="..."> + <datalist> — widget
+             gõ-tìm NATIVE của trình duyệt, không có logic mở/đóng/z-index nào của riêng ứng dụng để có
+             thể lệch trạng thái — cùng khuôn systemUsersDatalist/uniformTransferTargetDeptDatalist đã
+             dùng ổn định trong file này. contractAddendumTarget vẫn còn (input ẩn) để giữ nguyên .value
+             cho onContractAddendumTargetChange()/submitContractReq() đọc, không phải sửa gì thêm ở 2 nơi
+             đó — resolveContractAddendumTargetInput() ghi vào đây sau khi khớp đúng 1 hợp đồng từ ô gõ. -->
+        <div id="contractAddendumTargetWrap" class="hidden">
           <label class="block font-semibold text-gray-600 mb-1">Chọn Hợp Đồng Để Bổ Sung Phụ Lục</label>
           <input type="hidden" id="contractAddendumTarget" value="">
-          <button type="button" id="contractAddendumTargetBtn" onclick="toggleContractAddendumTargetDropdown(event)" class="w-full border p-1.5 rounded bg-white text-left flex justify-between items-center gap-1">
-            <span id="contractAddendumTargetLabel" class="text-gray-500 truncate">-- Chọn hợp đồng --</span>
-            <span class="text-gray-400 shrink-0">▾</span>
-          </button>
-          <div id="contractAddendumTargetPanel" class="hidden absolute z-20 mt-1 w-full bg-white border rounded shadow-lg max-h-72 overflow-y-auto"></div>
+          <input id="contractAddendumTargetInput" list="contractAddendumTargetDatalist" oninput="resolveContractAddendumTargetInput(this.value)" placeholder="Gõ mã hoặc tên hợp đồng để tìm..." class="w-full border p-1.5 rounded bg-white">
+          <datalist id="contractAddendumTargetDatalist"></datalist>
         </div>
         <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
           <div>
@@ -1097,19 +1106,16 @@ table { display: block; overflow-x: auto; max-width: 100%; }
             <label class="block font-semibold text-gray-600 mb-1">Loại Pháp Lý</label>
             <select id="contractType" onchange="refreshContractCodePreview()" class="w-full border p-1.5 rounded bg-white" required></select>
           </div>
-          <!-- Đổi từ <select> gốc sang nút + bảng chọn tự dựng — cùng lý do/cùng khuôn
-               contractAddendumTarget ở trên (native <select> đôi khi không mở được popup ngay khi phần
-               tử vừa hiện ra trong cùng 1 lượt xử lý sự kiện "Loại Thao Tác"). contractApprovalLevel vẫn
-               còn (input ẩn) để giữ nguyên .value cho renderContractApprovalLayerCheckboxes()/
-               submitContractReq() đọc, không phải sửa gì thêm ở 2 nơi đó. -->
-          <div id="contractApprovalLevelWrap" class="relative">
+          <!-- Cùng lý do/cùng khuôn contractAddendumTarget ở trên — đổi hẳn sang <input list>+<datalist>
+               native thay vì nút + bảng tự dựng (button+panel vẫn thỉnh thoảng không mở được ở một số
+               trình duyệt/thiết bị thật). contractApprovalLevel vẫn còn (input ẩn) để giữ nguyên .value
+               cho renderContractApprovalLayerCheckboxes()/submitContractReq() đọc, không phải sửa gì
+               thêm ở 2 nơi đó. -->
+          <div id="contractApprovalLevelWrap">
             <label class="block font-semibold text-gray-600 mb-1">Cấp Phê Duyệt Cuối Cùng</label>
             <input type="hidden" id="contractApprovalLevel" value="KHAC">
-            <button type="button" id="contractApprovalLevelBtn" onclick="toggleContractApprovalLevelDropdown(event)" class="w-full border p-1.5 rounded bg-white text-left font-semibold flex justify-between items-center gap-1">
-              <span id="contractApprovalLevelLabel" class="truncate">-- Chọn cấp phê duyệt --</span>
-              <span class="text-gray-400 shrink-0">▾</span>
-            </button>
-            <div id="contractApprovalLevelPanel" class="hidden absolute z-20 mt-1 w-full bg-white border rounded shadow-lg max-h-72 overflow-y-auto"></div>
+            <input id="contractApprovalLevelInput" list="contractApprovalLevelDatalist" value="Phê duyệt khác" oninput="resolveContractApprovalLevelInput(this.value)" class="w-full border p-1.5 rounded bg-white font-semibold">
+            <datalist id="contractApprovalLevelDatalist"></datalist>
           </div>
           <div id="contractApprovalDropdownWrap" class="relative">
             <label class="block font-semibold text-gray-600 mb-1">Phê Duyệt</label>
@@ -3053,6 +3059,7 @@ table { display: block; overflow-x: auto; max-width: 100%; }
       <button type="button" onclick="setUniformSubTab('PERIODS')" id="btnUniformSubPeriods" class="hidden px-3 py-1.5 rounded text-xs font-bold bg-teal-700 text-white">📦 Kỳ Cấp Phát</button>
       <button type="button" onclick="setUniformSubTab('STORE')" id="btnUniformSubStore" class="hidden px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">✅ Xác Nhận / Cấp Phát</button>
       <button type="button" onclick="setUniformSubTab('STOCK')" id="btnUniformSubStock" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">📊 Kho Đồng Phục</button>
+      <button type="button" onclick="setUniformSubTab('DASHBOARD')" id="btnUniformSubDashboard" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">📈 Tổng Quan</button>
     </div>
 
     <!-- Sub-tab: Kỳ Cấp Phát (Hành Chính - uniformManage) -->
@@ -3060,7 +3067,7 @@ table { display: block; overflow-x: auto; max-width: 100%; }
       <div class="bg-slate-50 p-4 rounded border border-slate-200 space-y-3">
         <div class="flex items-center justify-between gap-2 flex-wrap">
           <h3 class="font-bold text-gray-800 text-base flex items-center gap-2">📋 Danh Mục Đồng Phục</h3>
-          <span class="text-xs text-gray-500">Chỉ Quản Trị Viên thêm/sửa/xoá được — dùng để chọn khi phân bổ bên dưới.</span>
+          <span class="text-xs text-gray-500">Quản Trị Viên / Hành Chính thêm/sửa/xoá được — dùng để chọn khi phân bổ bên dưới. Mỗi mặt hàng+size có 1 Mã SKU riêng, tự sinh lần đầu Giám Đốc Siêu Thị xác nhận nhận.</span>
         </div>
         <div id="uniformCatalogAdminForm" class="hidden grid grid-cols-1 md:grid-cols-3 gap-2 items-end">
           <div>
@@ -3076,7 +3083,7 @@ table { display: block; overflow-x: auto; max-width: 100%; }
         <div id="uniformCatalogListWrap" class="space-y-1.5"></div>
       </div>
 
-      <div class="bg-teal-50 p-4 rounded border border-teal-200 space-y-3">
+      <div id="uniformCreatePeriodBlock" class="bg-teal-50 p-4 rounded border border-teal-200 space-y-3">
         <h3 class="font-bold text-teal-900 text-base flex items-center gap-2">📦 Tạo Kỳ Cấp Phát Đồng Phục</h3>
         <p class="text-xs text-teal-700">Mỗi lần phân bổ đồng phục xuống các siêu thị — kể cả cấp bổ sung sau này cho siêu thị đã từng nhận — đều tạo 1 kỳ mới để theo dõi riêng biệt số lượng cấp từng đợt.</p>
         <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -3261,6 +3268,67 @@ table { display: block; overflow-x: auto; max-width: 100%; }
           </table>
         </div>
       </div>
+
+      <!-- Điều Chuyển Kho Giữa Các Siêu Thị (Phase 2) — yêu cầu: uniformStoreManage (nguồn = siêu thị
+           mình); duyệt: uniformApprove/admin (DÙNG CHUNG quyền duyệt kỳ cấp phát, không tạo quyền riêng);
+           lịch sử: hiện cho cả 2 vai trò, tự lọc theo canViewUniformTransferClient() bên dưới. -->
+      <div class="bg-cyan-50 p-4 rounded border border-cyan-200 space-y-3">
+        <h3 class="font-bold text-cyan-900 text-base flex items-center gap-2">🔁 Điều Chuyển Kho Giữa Các Siêu Thị</h3>
+        <div id="uniformTransferRequestForm" class="hidden space-y-3">
+          <p class="text-xs text-cyan-700">Yêu cầu chuyển bớt tồn kho của siêu thị bạn sang 1 siêu thị khác đang thiếu hàng — cần người có quyền duyệt (Quản Trị Viên / Duyệt Kỳ Cấp Phát) chấp nhận mới có hiệu lực.</p>
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <div>
+              <label class="block font-semibold text-gray-600 mb-1 text-xs">Siêu Thị Nhận <span class="text-red-500">*</span></label>
+              <input id="uniformTransferTargetDept" list="uniformTransferTargetDeptDatalist" placeholder="Gõ tên siêu thị nhận..." class="w-full border p-1.5 rounded text-xs bg-white">
+              <datalist id="uniformTransferTargetDeptDatalist"></datalist>
+            </div>
+            <div>
+              <label class="block font-semibold text-gray-600 mb-1 text-xs">Mặt Hàng — Size <span class="text-red-500">*</span></label>
+              <select id="uniformTransferItemSize" class="w-full border p-1.5 rounded text-xs bg-white">
+                <option value="">-- Chọn mặt hàng --</option>
+              </select>
+            </div>
+          </div>
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <div>
+              <label class="block font-semibold text-gray-600 mb-1 text-xs">Số Lượng <span class="text-red-500">*</span></label>
+              <input id="uniformTransferQty" type="number" min="1" class="w-full border p-1.5 rounded text-xs">
+            </div>
+            <div>
+              <label class="block font-semibold text-gray-600 mb-1 text-xs">Lý Do <span class="text-red-500">*</span></label>
+              <input id="uniformTransferReason" placeholder="VD: Siêu thị Đà Nẵng thiếu hàng gấp" class="w-full border p-1.5 rounded text-xs">
+            </div>
+          </div>
+          <div class="flex justify-end">
+            <button type="button" onclick="submitUniformTransfer()" class="bg-cyan-600 text-white px-5 py-2 rounded text-xs font-bold hover:bg-cyan-700">Gửi Yêu Cầu Điều Chuyển</button>
+          </div>
+        </div>
+
+        <div id="uniformTransferApprovalWrap" class="hidden space-y-2">
+          <h4 class="font-bold text-sm text-cyan-900">⏳ Chờ Duyệt</h4>
+          <div id="uniformTransferApprovalList" class="space-y-2"></div>
+          <div id="uniformTransferNoPendingNote" class="hidden text-xs text-gray-500 italic bg-white p-3 rounded border">Không có yêu cầu điều chuyển nào đang chờ duyệt.</div>
+        </div>
+
+        <div class="space-y-2">
+          <h4 class="font-bold text-sm text-gray-800">📋 Lịch Sử Điều Chuyển</h4>
+          <div class="overflow-x-auto">
+            <table class="w-full border-collapse border text-xs bg-white">
+              <thead><tr class="bg-gray-100 text-left text-gray-700">
+                <th class="border p-2">Ngày Yêu Cầu</th>
+                <th class="border p-2">Từ Siêu Thị</th>
+                <th class="border p-2">Đến Siêu Thị</th>
+                <th class="border p-2">Mặt Hàng</th>
+                <th class="border p-2 text-right">SL</th>
+                <th class="border p-2">Trạng Thái</th>
+                <th class="border p-2">Người Yêu Cầu</th>
+                <th class="border p-2">Người Duyệt</th>
+              </tr></thead>
+              <tbody id="uniformTransfersTableBody"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
     </div>
 
     <!-- Sub-tab: Kho Đồng Phục (xem — uniformManage xem tất cả siêu thị, uniformStoreManage chỉ xem siêu thị mình) -->
@@ -3287,6 +3355,68 @@ table { display: block; overflow-x: auto; max-width: 100%; }
               <th class="border p-2 text-right">Tồn Kho</th>
             </tr></thead>
             <tbody id="uniformStockTableBody"></tbody>
+          </table>
+        </div>
+        <p class="text-[11px] text-gray-500 italic">Bấm "▸ Chi tiết" ở 1 dòng để xem SL Đã Nhận đến từ (những) kỳ cấp phát nào — mirror "Chi Tiết Tài Liệu" của module Tài Liệu, tính hoàn toàn phía trình duyệt từ dữ liệu đã tải, không gọi thêm API.</p>
+      </div>
+    </div>
+
+    <!-- Sub-tab: Tổng Quan (Dashboard, Phase 2) — uniformManage/admin xem TẤT CẢ siêu thị gộp lại + bảng
+         theo từng siêu thị; uniformStoreManage CHỈ xem số của siêu thị mình (cùng quy ước scoping theo
+         dept đã dùng ở mọi nơi khác của module, xem lib/recordViewScope.js). -->
+    <div id="uniformSubDashboard" class="hidden space-y-4">
+      <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <div class="bg-white p-4 rounded border text-center">
+          <div class="text-[11px] text-gray-500 font-semibold uppercase">Tổng Tồn Kho</div>
+          <div id="uniformDashStatStock" class="text-2xl font-bold text-emerald-700">0</div>
+        </div>
+        <div class="bg-white p-4 rounded border text-center">
+          <div class="text-[11px] text-gray-500 font-semibold uppercase">Đã Cấp NV</div>
+          <div id="uniformDashStatIssued" class="text-2xl font-bold text-sky-700">0</div>
+        </div>
+        <div class="bg-white p-4 rounded border text-center">
+          <div class="text-[11px] text-gray-500 font-semibold uppercase">Hỏng / Hủy</div>
+          <div id="uniformDashStatDamaged" class="text-2xl font-bold text-rose-700">0</div>
+        </div>
+        <div class="bg-white p-4 rounded border text-center">
+          <div class="text-[11px] text-gray-500 font-semibold uppercase">Mất</div>
+          <div id="uniformDashStatLost" class="text-2xl font-bold text-orange-700">0</div>
+        </div>
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div class="bg-white p-4 rounded border space-y-2">
+          <h4 class="font-bold text-sm text-gray-800">👕 Theo Mặt Hàng</h4>
+          <div class="overflow-x-auto">
+            <table class="w-full border-collapse border text-xs">
+              <thead><tr class="bg-gray-100 text-left"><th class="border p-1.5">Mặt Hàng</th><th class="border p-1.5 text-right">Tồn Kho</th><th class="border p-1.5 text-right">Đã Cấp</th></tr></thead>
+              <tbody id="uniformDashByItemBody"></tbody>
+            </table>
+          </div>
+        </div>
+        <div class="bg-white p-4 rounded border space-y-2">
+          <h4 class="font-bold text-sm text-gray-800">📏 Theo Size</h4>
+          <div class="overflow-x-auto">
+            <table class="w-full border-collapse border text-xs">
+              <thead><tr class="bg-gray-100 text-left"><th class="border p-1.5">Size</th><th class="border p-1.5 text-right">Tồn Kho</th><th class="border p-1.5 text-right">Đã Cấp</th></tr></thead>
+              <tbody id="uniformDashBySizeBody"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <div id="uniformDashByStoreWrap" class="hidden bg-white p-4 rounded border space-y-2">
+        <h4 class="font-bold text-sm text-gray-800">🏬 Theo Siêu Thị</h4>
+        <div class="overflow-x-auto">
+          <table class="w-full border-collapse border text-xs">
+            <thead><tr class="bg-gray-100 text-left">
+              <th class="border p-1.5">Siêu Thị</th>
+              <th class="border p-1.5 text-right">Tồn Kho</th>
+              <th class="border p-1.5 text-right">Đã Cấp</th>
+              <th class="border p-1.5 text-right">Hỏng/Hủy</th>
+              <th class="border p-1.5 text-right">Mất</th>
+            </tr></thead>
+            <tbody id="uniformDashByStoreBody"></tbody>
           </table>
         </div>
       </div>
@@ -4276,6 +4406,11 @@ table { display: block; overflow-x: auto; max-width: 100%; }
               <div id="pCarDownloadDeptContainer" class="space-y-1 pl-1 max-h-32 overflow-y-auto"></div>
             </div>
           </div>
+          <div class="px-3 pb-3">
+            <label class="flex items-center gap-1.5 text-gray-700 cursor-pointer">
+              <input type="checkbox" id="pCarDispatch"> 🚘 Người Điều Hành Xe (được nhập lái xe/loại xe/biển số ở mục "Phần Dành Cho Phòng Hành Chính" khi đến lượt phê duyệt — người khác trong luồng duyệt không có quyền này thì không thấy/không sửa được mục đó)
+            </label>
+          </div>
         </details>
 
         <details class="perm-tree-node bg-white rounded border text-xs">
@@ -4490,10 +4625,13 @@ table { display: block; overflow-x: auto; max-width: 100%; }
             <span id="permTreeBadge_uniform" class="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-gray-100 text-gray-500">0/0</span>
           </summary>
           <div class="p-3 pt-0 space-y-2">
-            <p class="text-[11px] text-gray-500 italic">Còn quyền vào module "Đồng Phục" ở mục 0 mới thấy được các màn dưới đây — module này KHÔNG mở sẵn cho toàn bộ nhân viên. "Hành Chính" tạo kỳ cấp phát và phân bổ xuống từng siêu thị (chọn từ Danh Mục Siêu Thị ở tab Danh Mục); "Giám Đốc Siêu Thị" xác nhận đã nhận rồi cấp cho nhân viên (chỉ xác nhận/cấp phát được cho đúng siêu thị mình — theo Vị Trí đã chọn khi tạo tài khoản).</p>
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-2">
+            <p class="text-[11px] text-gray-500 italic">Còn quyền vào module "Đồng Phục" ở mục 0 mới thấy được các màn dưới đây — module này KHÔNG mở sẵn cho toàn bộ nhân viên. "Hành Chính" tạo kỳ cấp phát và phân bổ xuống từng siêu thị (chọn từ Danh Mục Siêu Thị ở tab Danh Mục); "Duyệt Kỳ Cấp Phát" duyệt/từ chối cả kỳ TRƯỚC KHI siêu thị xác nhận được (cũng dùng để duyệt Điều Chuyển Kho giữa các siêu thị); "Giám Đốc Siêu Thị" xác nhận đã nhận rồi cấp cho nhân viên (chỉ xác nhận/cấp phát được cho đúng siêu thị mình — theo Vị Trí đã chọn khi tạo tài khoản).</p>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-2">
               <label class="flex items-center gap-2 text-teal-700 font-semibold cursor-pointer">
                 <input type="checkbox" id="pUniformManage"> 📦 Hành Chính (tạo kỳ cấp phát, phân bổ xuống siêu thị)
+              </label>
+              <label class="flex items-center gap-2 text-indigo-700 font-semibold cursor-pointer">
+                <input type="checkbox" id="pUniformApprove"> ✔️ Duyệt Kỳ Cấp Phát / Điều Chuyển Kho
               </label>
               <label class="flex items-center gap-2 text-amber-700 font-semibold cursor-pointer">
                 <input type="checkbox" id="pUniformStoreManage"> ✅ Giám Đốc Siêu Thị (xác nhận nhận, cấp phát, báo Hỏng/Hủy, thu hồi từ nhân viên)
@@ -5336,7 +5474,7 @@ table { display: block; overflow-x: auto; max-width: 100%; }
     <div class="p-4 overflow-y-auto flex-1 space-y-4 text-xs">
       <div id="carModalDetails" class="bg-gray-50 p-3 rounded border space-y-2 text-gray-700"></div>
 
-      <div class="bg-indigo-50 p-3 rounded border border-indigo-200 space-y-2">
+      <div id="carDispatchSection" class="bg-indigo-50 p-3 rounded border border-indigo-200 space-y-2">
         <h4 class="font-bold text-indigo-900 mb-1">🏢 Phần Dành Cho Phòng Hành Chính (phân công xe)</h4>
         <div class="grid grid-cols-1 md:grid-cols-3 gap-2">
           <div>
@@ -5750,6 +5888,27 @@ table { display: block; overflow-x: auto; max-width: 100%; }
 <!-- MODAL XÁC NHẬN DÙNG CHUNG (Đồng Ý/Hủy) — xem showConfirmModal() trong index.html. Dùng cho các
      hành động cần "chắc chắn trước khi làm" (trình văn bản, phê duyệt, từ chối, yêu cầu bổ sung...) ở
      Văn bản trình/Đăng ký xe/Đề xuất văn phòng — z-[60] để luôn nổi TRÊN các modal xử lý khác (z-50). -->
+<!-- "Bổ Sung" — modal SỬA + GỬI LẠI dùng chung cho Tài Liệu/Đăng Ký Xe/Mua Bán-Sửa Chữa-Đầu Tư/Văn Bản
+     Trình khi hồ sơ bị người duyệt trả về NHÁP (nút "🔄 Bổ Sung" ở từng module gọi REQUEST_CHANGES —
+     xem lib/workflowEngine.js). VPP/Ngân Sách/Hợp Đồng đã có form/luồng sửa nháp riêng của chính module
+     đó nên KHÔNG dùng modal này. itPriceApprovals GIỮ NGUYÊN khuôn "Yêu Cầu Bổ Sung" hiện có (chỉ bổ
+     sung thêm tệp, không thay thế) — cũng KHÔNG dùng modal này. Xem openBosungEditModal()/
+     confirmBosungResubmit() ở script cuối trang. -->
+<div id="bosungEditModal" class="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center hidden z-[60] p-4">
+  <div class="bg-white rounded-lg shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+    <div class="flex justify-between items-center bg-amber-600 text-white p-4">
+      <h3 id="bosungEditTitle" class="font-bold text-base">✏️ Sửa &amp; Gửi Lại</h3>
+      <button onclick="closeBosungEditModal()" class="text-amber-100 hover:text-white font-bold text-xl px-2">✕</button>
+    </div>
+    <div id="bosungEditReasonNote" class="mx-4 mt-3 bg-orange-50 border border-orange-200 rounded p-2 text-xs text-orange-800"></div>
+    <div id="bosungEditBody" class="p-4 text-xs text-gray-700 space-y-3"></div>
+    <div class="p-3 bg-gray-100 border-t flex justify-end gap-2 text-xs">
+      <button onclick="closeBosungEditModal()" class="bg-gray-400 text-white px-4 py-1.5 rounded font-bold hover:bg-gray-500">Hủy</button>
+      <button onclick="confirmBosungResubmit()" class="bg-blue-600 text-white px-5 py-1.5 rounded font-bold hover:bg-blue-700">📤 Lưu &amp; Gửi Lại</button>
+    </div>
+  </div>
+</div>
+
 <div id="genericConfirmModal" class="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center hidden z-[60] p-4">
   <div class="bg-white rounded-lg shadow-2xl max-w-lg w-full overflow-hidden">
     <div class="flex justify-between items-center bg-slate-800 text-white p-4">
@@ -7066,7 +7225,14 @@ function canAccessCarModule(user) {
   if (!user) return false;
   if (user.perms?.admin) return true;
   if (!hasModuleAccess(user, 'car')) return false;
-  return scopeHasAny(user, user.perms?.carView) || isApproverInWorkflowMap(DB.carDeptWorkflows, user.username);
+  // Lái xe được phân công (assignedDriverUsername) — dù không có carView/không nằm trong bất kỳ
+  // carDeptWorkflows[dept].approvers nào — vẫn cần vào được để xem/tự xác nhận chuyến của MÌNH ở
+  // sub-tab "Lái Xe" (renderCarDriverTab(), khớp canViewCarReg() ở lib/recordViewScope.js: GET
+  // /api/data đã tự lọc DB.carRegs xuống đúng các phiếu họ được phân công làm lái xe, kể cả khi
+  // module bị ẩn khỏi sidebar trước đây). Chỉ mở đúng lối vào sidebar + sub-tab đó — không mở thêm
+  // quyền gì khác trong module (họ vẫn không thấy/không duyệt được phiếu của phòng ban khác).
+  const isAssignedDriverSomewhere = (DB.carRegs || []).some(c => c.assignedDriverUsername === user.username);
+  return scopeHasAny(user, user.perms?.carView) || isApproverInWorkflowMap(DB.carDeptWorkflows, user.username) || isAssignedDriverSomewhere;
 }
 
 // Văn phòng phẩm: KHÔNG có khái niệm quyền "Xem/Tạo" riêng theo phòng ban (khác Xe/Phòng họp) — mọi
@@ -7080,12 +7246,13 @@ function canAccessVppModule(user) {
 }
 
 // Đồng Phục — KHÔNG mở sẵn cho mọi người như VPP (chỉ Hành Chính/uniformManage tạo kỳ, Giám Đốc Siêu
-// Thị/uniformStoreManage xác nhận+cấp phát — không có luồng nào cho nhân viên thường vào module này).
+// Thị/uniformStoreManage xác nhận+cấp phát, uniformApprove (Phase 2) duyệt kỳ/điều chuyển kho — không
+// có luồng nào cho nhân viên thường vào module này).
 function canAccessUniformModule(user) {
   if (!user) return false;
   if (user.perms?.admin) return true;
   if (!hasModuleAccess(user, 'uniform')) return false;
-  return !!(user.perms?.uniformManage || user.perms?.uniformStoreManage);
+  return !!(user.perms?.uniformManage || user.perms?.uniformStoreManage || user.perms?.uniformApprove);
 }
 
 // Vào được module "Báo Cáo Định Kỳ" (kỳ báo cáo tuần → nhập liệu → tổng hợp → phát hành) hay không —
@@ -7284,13 +7451,13 @@ function defaultNewUserPerms() {
     reportManage: false, reportAggregate: false, reportEntryCreate: false,
     meetingView: emptyScope(), meetingBookScope: emptyScope(),
     meetingApprove: false, meetingCancel: false,
-    carView: emptyScope(), carCreate: emptyScope(), carDownload: emptyScope(),
+    carView: emptyScope(), carCreate: emptyScope(), carDownload: emptyScope(), carDispatch: false,
     officeView: emptyScope(), officeCreate: emptyScope(), officeDownload: emptyScope(),
     officeBuy: true, officeFix: true, officeInvest: false,
     minutesCreate: false, minutesView: false, minutesEdit: false, minutesDownload: false,
     taskView: false, taskEdit: false, taskDelete: false, taskDownload: false,
     itPriceProposeCreate: false, itManage: false,
-    uniformManage: false, uniformStoreManage: false,
+    uniformManage: false, uniformApprove: false, uniformStoreManage: false,
     budgetManage: false, budgetCreate: false, budgetAggregate: false,
     approverAuthLevel: 'NONE'
   };
@@ -7565,6 +7732,7 @@ async function initDatabase(loggingInUser) {
     DB.uniformPeriods = data.uniformPeriods || [];
     DB.uniformIssuances = data.uniformIssuances || [];
     DB.uniformStockAdjustments = data.uniformStockAdjustments || [];
+    DB.uniformTransfers = data.uniformTransfers || [];
     DB.budgetDeptWorkflows = data.budgetDeptWorkflows || {};
     DB.budgetTemplates = data.budgetTemplates || [];
     DB.budgetPeriods = data.budgetPeriods || [];
@@ -7952,6 +8120,226 @@ function runConfirmedAction() {
   document.getElementById('genericConfirmModal').classList.add('hidden');
   _pendingConfirmAction = null;
   if (fn) fn();
+}
+
+// ============================================================
+// "BỔ SUNG" — người duyệt bước hiện tại trả hồ sơ về NHÁP (REQUEST_CHANGES, xem lib/workflowEngine.js
+// MODULE_CONFIGS/routes/workflow.js), người trình SỬA LẠI TOÀN BỘ nội dung (kể cả tệp đính kèm, nếu
+// module có) rồi "Lưu & Gửi Lại" — vào lại hàng chờ duyệt từ bước 1 (xem lib/recordActions.js
+// editDocDraft()/submitDocDraft() và 3 cặp tương ứng cho carRegs/officeReqs/submissions).
+// requestWorkflowChangesAction(): phía NGƯỜI DUYỆT, dùng chung cho mọi module không có sẵn 1 modal xử
+// lý/comment box riêng (Tài Liệu, Hợp Đồng, Quản Lý HĐ) — cùng khuôn prompt() đã dùng cho rejectDoc()/
+// rejectContractAction() ở trên. Đăng Ký Xe/Mua Bán-Sửa Chữa-Đầu Tư/Văn Bản Trình đã có sẵn modal xử lý
+// riêng (txtCarComment/txtOfficeComment/txtSubmissionComment) nên nút "Bổ Sung" của 3 module đó gọi
+// thẳng qua confirmProcessCarReg('REQUEST_CHANGES')/... (xem từng module) thay vì hàm này.
+async function requestWorkflowChangesAction(moduleKey, id, list, renderFnName, recordLabel) {
+  const item = list.find(x => x.id === id);
+  if (!item) return;
+  const reason = prompt(`Nhập lý do cần bổ sung — hồ sơ sẽ được trả về NHÁP để ${recordLabel || 'người trình'} sửa lại toàn bộ nội dung rồi gửi lại:`);
+  if (reason === null) return;
+  if (!reason.trim()) return alert('⛔ Vui lòng nhập lý do cần bổ sung!');
+  showConfirmModal({
+    title: '🔄 Yêu Cầu Bổ Sung',
+    bodyHTML: `<p>Trả hồ sơ <b>${escapeHtml(item.code || '')}</b> về NHÁP để sửa lại toàn bộ nội dung rồi gửi lại?</p><p class="mt-2 italic text-gray-600">Lý do: "${escapeHtml(reason.trim())}"</p>`,
+    confirmLabel: 'Yêu Cầu Bổ Sung',
+    onConfirm: async () => {
+      let result;
+      try {
+        result = await callWorkflowAction(moduleKey, id, 'request-changes', { comment: reason.trim() });
+      } catch (e) { return alert('⛔ ' + e.message); }
+      const idx = list.findIndex(x => x.id === id);
+      if (idx !== -1) list[idx] = result.item;
+      logSystemAction(moduleKey.toUpperCase(), 'REQUEST_CHANGES', `Yêu cầu bổ sung hồ sơ [${result.item.code || id}]: ${reason.trim()}`, 'SUCCESS', String(result.item.code || id));
+      alert('✅ Đã yêu cầu bổ sung — hồ sơ đã chuyển về NHÁP để sửa lại!');
+      const renderFn = window[renderFnName];
+      if (typeof renderFn === 'function') renderFn();
+      refreshApprovalSurfaces();
+    }
+  });
+}
+
+// openBosungEditModal()/confirmBosungResubmit(): phía NGƯỜI TRÌNH — modal sửa-toàn-bộ-nội-dung dùng
+// chung cho 4 module (Tài Liệu/Đăng Ký Xe/Mua Bán-Sửa Chữa-Đầu Tư/Văn Bản Trình) vốn không có khái
+// niệm NHÁP trước khi có "Bổ Sung" nên không có sẵn form tạo-mới nào tái dùng được nguyên vẹn cho việc
+// sửa (dept/cat/mode-động của form Tài Liệu, vd, gắn chặt với luồng "phiên bản mới" — không hợp để tái
+// dùng cho trường hợp này). VPP/Ngân Sách/Hợp Đồng đã tự có form/luồng sửa nháp riêng, không cần modal
+// này (xem editVppRegDraft()/openEditContract() ở mỗi module).
+let bosungEditTarget = null; // { module, id }
+
+const BOSUNG_MODULE_META = {
+  docs: { list: () => DB.docs, title: '📂 Bổ Sung Tài Liệu', renderFn: 'renderDocs' },
+  carRegs: { list: () => DB.carRegs, title: '🚗 Bổ Sung Phiếu Đăng Ký Xe', renderFn: 'renderCarRegs' },
+  officeReqs: { list: () => DB.officeReqs, title: '🛒 Bổ Sung Đề Xuất Văn Phòng', renderFn: 'renderOfficeReqs' },
+  submissions: { list: () => DB.submissions, title: '📜 Bổ Sung Văn Bản Trình', renderFn: 'renderSubmissionReqs' }
+};
+
+function openBosungEditModal(moduleKey, id) {
+  const meta = BOSUNG_MODULE_META[moduleKey];
+  const item = meta.list().find(x => x.id === id);
+  if (!item) return;
+  bosungEditTarget = { module: moduleKey, id };
+  document.getElementById('bosungEditTitle').innerText = `${meta.title}: ${item.code || ''}`;
+  const lastReq = (item.history || []).slice().reverse().find(h => h.action === 'REQUEST_CHANGES');
+  document.getElementById('bosungEditReasonNote').innerHTML = lastReq
+    ? `⚠️ <b>Người duyệt yêu cầu bổ sung:</b> ${escapeHtml(lastReq.comment || '')}`
+    : '⚠️ Hồ sơ đang ở trạng thái cần bổ sung — vui lòng sửa lại nội dung rồi gửi lại.';
+
+  const deptOptionsHTML = (DB.depts || []).map(d => `<option value="${escapeHtml(d)}" ${d === item.dept ? 'selected' : ''}>${escapeHtml(d)}</option>`).join('');
+
+  let bodyHTML = '';
+  if (moduleKey === 'docs') {
+    const catOptionsHTML = (DB.cats || []).map(c => `<option value="${escapeHtml(c)}" ${c === item.cat ? 'selected' : ''}>${escapeHtml(c)}</option>`).join('');
+    bodyHTML = `
+      <div><label class="block font-semibold mb-1">Tiêu đề</label><input id="bsTitle" class="w-full border p-2 rounded" value="${escapeHtml(item.title || '')}"></div>
+      <div class="grid grid-cols-2 gap-3">
+        <div><label class="block font-semibold mb-1">Phòng ban trình</label><select id="bsDept" class="w-full border p-2 rounded bg-white">${deptOptionsHTML}</select></div>
+        <div><label class="block font-semibold mb-1">Phân loại</label><select id="bsCat" class="w-full border p-2 rounded bg-white">${catOptionsHTML}</select></div>
+      </div>
+      <div><label class="block font-semibold mb-1">Phiên bản</label><input id="bsVer" class="w-full border p-2 rounded" value="${escapeHtml(item.ver || '')}"></div>
+      <div><label class="block font-semibold mb-1">Trích lục / Tóm tắt</label><textarea id="bsSummary" class="w-full border p-2 rounded h-20">${escapeHtml(item.summary || '')}</textarea></div>
+      <div>
+        <label class="block font-semibold mb-1">Thay thế tệp đính kèm (bỏ trống = giữ tệp hiện tại: ${escapeHtml(item.fileName || 'chưa có')})</label>
+        <input type="file" id="bsFile" accept=".pdf,.docx,.xlsx" class="w-full border p-1 bg-white rounded">
+      </div>
+    `;
+  } else if (moduleKey === 'carRegs') {
+    const typeOptionsHTML = (DB.carTypes || []).map(t => `<option value="${escapeHtml(t)}" ${t === item.type ? 'selected' : ''}>${escapeHtml(t)}</option>`).join('');
+    bodyHTML = `
+      <div class="grid grid-cols-2 gap-3">
+        <div><label class="block font-semibold mb-1">Phòng ban</label><select id="bsDept" class="w-full border p-2 rounded bg-white">${deptOptionsHTML}</select></div>
+        <div><label class="block font-semibold mb-1">Loại xe</label><select id="bsType" class="w-full border p-2 rounded bg-white">${typeOptionsHTML}</select></div>
+      </div>
+      <div class="grid grid-cols-2 gap-3">
+        <div><label class="block font-semibold mb-1">Bắt đầu</label><input type="datetime-local" id="bsStartTime" class="w-full border p-2 rounded" value="${escapeHtml(item.startTime || '')}"></div>
+        <div><label class="block font-semibold mb-1">Kết thúc</label><input type="datetime-local" id="bsEndTime" class="w-full border p-2 rounded" value="${escapeHtml(item.endTime || '')}"></div>
+      </div>
+      <div><label class="block font-semibold mb-1">Số người sử dụng</label><input id="bsPassengers" class="w-full border p-2 rounded" value="${escapeHtml(item.passengers || '')}"></div>
+      <div><label class="block font-semibold mb-1">Người sử dụng trực tiếp</label><input id="bsDirectUser" class="w-full border p-2 rounded" value="${escapeHtml(item.directUser || '')}"></div>
+      <div><label class="block font-semibold mb-1">Mục đích sử dụng</label><input id="bsPurpose" class="w-full border p-2 rounded" value="${escapeHtml(item.purpose || '')}"></div>
+      <div><label class="block font-semibold mb-1">Số KM dự kiến</label><input type="number" id="bsKm" class="w-full border p-2 rounded" value="${item.km || 0}"></div>
+      <div><label class="block font-semibold mb-1">Nội dung chi tiết</label><textarea id="bsReason" class="w-full border p-2 rounded h-20">${escapeHtml(item.reason || '')}</textarea></div>
+    `;
+  } else if (moduleKey === 'officeReqs') {
+    bodyHTML = `
+      <div class="grid grid-cols-2 gap-3">
+        <div><label class="block font-semibold mb-1">Phòng ban</label><select id="bsDept" class="w-full border p-2 rounded bg-white">${deptOptionsHTML}</select></div>
+        <div><label class="block font-semibold mb-1">Tiêu đề đề xuất</label><input id="bsTitle" class="w-full border p-2 rounded" value="${escapeHtml(item.title || '')}"></div>
+      </div>
+      ${item.subType === 'MUA_BAN'
+        ? `<p class="text-gray-500 italic">Danh sách hạng mục (Mua Sắm) giữ nguyên như đã trình — chỉ sửa được tiêu đề/lý do ở đây trong bản Bổ Sung này. Cần sửa hạng mục, vui lòng liên hệ Quản Trị Viên.</p>`
+        : `<div class="grid grid-cols-2 gap-3">
+            <div><label class="block font-semibold mb-1">Số lượng</label><input id="bsQty" class="w-full border p-2 rounded" value="${escapeHtml(item.qty || '')}"></div>
+            <div><label class="block font-semibold mb-1">Dự toán / Chi phí</label><input type="number" id="bsAmount" class="w-full border p-2 rounded" value="${item.amount || 0}"></div>
+          </div>
+          <div><label class="block font-semibold mb-1">Nhà cung cấp</label><input id="bsSupplier" class="w-full border p-2 rounded" value="${escapeHtml(item.supplier || '')}"></div>`}
+      <div><label class="block font-semibold mb-1">Lý do / Nội dung</label><textarea id="bsReason" class="w-full border p-2 rounded h-20">${escapeHtml(item.reason || '')}</textarea></div>
+    `;
+  } else if (moduleKey === 'submissions') {
+    const typeOptionsHTML = (DB.submissionTypes || []).map(t => `<option value="${escapeHtml(t.label)}" ${t.label === item.type ? 'selected' : ''}>${escapeHtml(t.label)}</option>`).join('');
+    bodyHTML = `
+      <div><label class="block font-semibold mb-1">Tiêu đề</label><input id="bsTitle" class="w-full border p-2 rounded" value="${escapeHtml(item.title || '')}"></div>
+      <div class="grid grid-cols-2 gap-3">
+        <div><label class="block font-semibold mb-1">Phòng ban trình</label><select id="bsDept" class="w-full border p-2 rounded bg-white">${deptOptionsHTML}</select></div>
+        <div><label class="block font-semibold mb-1">Loại tờ trình</label><select id="bsType" class="w-full border p-2 rounded bg-white">${typeOptionsHTML}</select></div>
+      </div>
+      <div><label class="block font-semibold mb-1">Nội dung</label><textarea id="bsContent" class="w-full border p-2 rounded h-24">${escapeHtml(item.content || '')}</textarea></div>
+      <div>
+        <label class="block font-semibold mb-1">Thay thế tệp chính (bỏ trống = giữ tệp hiện tại: ${escapeHtml(item.fileName || 'chưa có')})</label>
+        <input type="file" id="bsFile" accept=".pdf,.docx,.xlsx" class="w-full border p-1 bg-white rounded">
+      </div>
+      <p class="text-gray-500 italic">Đổi loại tờ trình/phòng ban sẽ tự tính lại quy trình duyệt tương ứng. Các lớp phê duyệt bổ sung (Đồng trình/Xin ý kiến...) giữ nguyên như đã chọn lúc trình.</p>
+    `;
+  }
+  document.getElementById('bosungEditBody').innerHTML = bodyHTML;
+  document.getElementById('bosungEditModal').classList.remove('hidden');
+}
+
+function closeBosungEditModal() {
+  document.getElementById('bosungEditModal').classList.add('hidden');
+  bosungEditTarget = null;
+}
+
+async function confirmBosungResubmit() {
+  if (!bosungEditTarget) return;
+  const { module: moduleKey, id } = bosungEditTarget;
+  const meta = BOSUNG_MODULE_META[moduleKey];
+  const item = meta.list().find(x => x.id === id);
+  if (!item) return;
+
+  let payload = {};
+  try {
+    if (moduleKey === 'docs') {
+      const fileInput = document.getElementById('bsFile');
+      payload = {
+        title: document.getElementById('bsTitle').value.trim(),
+        dept: document.getElementById('bsDept').value,
+        cat: document.getElementById('bsCat').value,
+        ver: document.getElementById('bsVer').value.trim(),
+        summary: document.getElementById('bsSummary').value.trim()
+      };
+      if (fileInput.files && fileInput.files[0]) {
+        const uploaded = await uploadFileToServer(fileInput.files[0], 'doc');
+        payload.fileUrl = uploaded.fileUrl; payload.fileName = uploaded.fileName; payload.fileType = uploaded.fileType;
+      }
+    } else if (moduleKey === 'carRegs') {
+      payload = {
+        dept: document.getElementById('bsDept').value,
+        type: document.getElementById('bsType').value,
+        startTime: document.getElementById('bsStartTime').value,
+        endTime: document.getElementById('bsEndTime').value,
+        passengers: document.getElementById('bsPassengers').value.trim(),
+        directUser: document.getElementById('bsDirectUser').value.trim(),
+        purpose: document.getElementById('bsPurpose').value.trim(),
+        km: parseFloat(document.getElementById('bsKm').value) || 0,
+        reason: document.getElementById('bsReason').value.trim()
+      };
+    } else if (moduleKey === 'officeReqs') {
+      payload = {
+        dept: document.getElementById('bsDept').value,
+        title: document.getElementById('bsTitle').value.trim(),
+        reason: document.getElementById('bsReason').value.trim()
+      };
+      if (item.subType !== 'MUA_BAN') {
+        payload.qty = document.getElementById('bsQty').value.trim();
+        payload.amount = Number(document.getElementById('bsAmount').value) || 0;
+        payload.supplier = document.getElementById('bsSupplier').value.trim();
+      }
+    } else if (moduleKey === 'submissions') {
+      const fileInput = document.getElementById('bsFile');
+      payload = {
+        title: document.getElementById('bsTitle').value.trim(),
+        dept: document.getElementById('bsDept').value,
+        type: document.getElementById('bsType').value,
+        content: document.getElementById('bsContent').value.trim()
+      };
+      if (fileInput.files && fileInput.files[0]) {
+        const uploaded = await uploadFileToServer(fileInput.files[0], 'submission');
+        payload.fileUrl = uploaded.fileUrl; payload.fileName = uploaded.fileName; payload.fileType = uploaded.fileType;
+      }
+    }
+  } catch (err) {
+    return alert(`⛔ ${err.message}`);
+  }
+
+  let updated;
+  try {
+    await callRecordAction(moduleKey, id, 'update', payload);
+    const submitResult = await callRecordAction(moduleKey, id, 'submit', {});
+    updated = submitResult.item;
+  } catch (err) {
+    return alert(`⛔ ${err.message}`);
+  }
+
+  const list = meta.list();
+  const idx = list.findIndex(x => x.id === id);
+  if (idx !== -1) list[idx] = updated;
+
+  logSystemAction(moduleKey.toUpperCase(), 'RESUBMIT_AFTER_BOSUNG', `Sửa & gửi lại hồ sơ [${updated.code}] sau khi được yêu cầu bổ sung`, 'SUCCESS', updated.code);
+  alert('✅ Đã lưu thay đổi và gửi lại — hồ sơ đã vào lại hàng chờ duyệt từ bước 1!');
+  closeBosungEditModal();
+  const renderFn = window[meta.renderFn];
+  if (typeof renderFn === 'function') renderFn();
+  refreshApprovalSurfaces();
 }
 
 // ==========================================
@@ -9900,6 +10288,41 @@ document.addEventListener('click', (ev) => {
   if (!panel.contains(ev.target) && ev.target !== btn && !btn?.contains(ev.target)) panel.classList.add('hidden');
 });
 
+// setActiveSidebarTab(tabName) — tô sáng đúng (các) nút sidebar trái tương ứng module vừa chuyển tới,
+// gọi DUY NHẤT 1 chỗ ngay trong switchTab() (xem cuối hàm) nên tự động khớp với MỌI cách gọi
+// switchTab() có sẵn khắp trang, không cần sửa từng onclick="switchTab(...)". KHÔNG dò/đổi state của 17
+// hàm setXSubTab() (tab con NẰM BÊN TRONG 1 module, vd setInternalSubTab()) — các hàm đó đã tự tô sáng
+// đúng nút con của riêng chúng rồi, hàm này chỉ lo đúng 1 việc: cấp sidebar ngoài cùng (mục cấp 1 đứng
+// riêng lẻ NHƯ btnDocTab, hoặc mục con NẰM TRONG 1 nhóm dropdown NHƯ btnMinutesTab trong Điều Hành).
+//
+// Cách xác định nút nào khớp: quét toàn bộ nút `.sidebar-item`/`.sidebar-subitem` trong <nav>, so khớp
+// thẳng với chuỗi "switchTab('<tabName>')" có trong thuộc tính onclick của từng nút — KHÔNG cần thêm
+// id/data-* riêng cho từng nút (nhiều nút mục con hiện chưa có id, vd 4 nút trong "Truyền thông"), tự
+// động khớp cả những nút thêm mới sau này miễn onclick vẫn gọi switchTab(tabName) như khuôn hiện có.
+// Với 1 tabName dùng CHUNG cho nhiều nút con cùng 1 nhóm (vd 4 nút trong "Tổng Hợp" đều gọi
+// switchTab('office'), chỉ khác setOfficeSubTab() đứng sau — switchTab() không nhận được tham số đó nên
+// không thể phân biệt tiếp) thì cả nhóm cùng được tô sáng — chấp nhận được, vẫn đúng hướng "đang ở module
+// nào", không thay thế việc setOfficeSubTab() tự tô sáng đúng tab con bên TRONG module.
+function setActiveSidebarTab(tabName) {
+  const nav = document.querySelector('#userHeader nav');
+  if (!nav) return;
+
+  nav.querySelectorAll('.sidebar-item-active, .sidebar-subitem-active').forEach(el => {
+    el.classList.remove('sidebar-item-active', 'sidebar-subitem-active');
+  });
+  if (!tabName) return;
+
+  const marker = `switchTab('${tabName}')`;
+  nav.querySelectorAll('.sidebar-item, .sidebar-subitem').forEach(el => {
+    if (!(el.getAttribute('onclick') || '').includes(marker)) return;
+    el.classList.add(el.classList.contains('sidebar-subitem') ? 'sidebar-subitem-active' : 'sidebar-item-active');
+    // Mục con thuộc 1 nhóm dropdown (…NavWrap) → tô sáng LUÔN nút đầu nhóm để biết đang mở nhóm nào.
+    const navWrap = el.closest('[id$="NavWrap"]');
+    const header = navWrap ? navWrap.querySelector(':scope > .sidebar-item') : null;
+    if (header) header.classList.add('sidebar-item-active');
+  });
+}
+
 function switchTab(tabName) {
   if (!currentUser) return logout();
   closeMobileSidebar(); // Đóng sidebar off-canvas trên điện thoại mỗi khi chuyển màn hình (không ảnh hưởng desktop).
@@ -9965,6 +10388,8 @@ function switchTab(tabName) {
     alert('⛔ Bạn không có quyền truy cập Module Báo cáo!');
     return;
   }
+
+  setActiveSidebarTab(tabName); // Tô sáng đúng nút sidebar trái vừa chuyển tới — xem chú thích hàm.
 
   // Cuộn về đầu trang mỗi khi đổi MODULE — cùng lý do như setSystemSubTab()/các setXXXSubTab() khác:
   // tránh giữ nguyên vị trí cuộn cũ (đang ở giữa/cuối 1 màn dài) khi module mới ngắn hơn nhiều, trình
@@ -10295,11 +10720,11 @@ function populateDropdowns() {
   }
 
   // Cùng khuôn subApprovalLevelSel ở trên — KHAC ("Phê duyệt khác") đặt đầu danh sách làm mặc định.
-  // contractApprovalLevel giờ là input ẩn (nút + bảng chọn tự dựng) — danh sách tĩnh nên chỉ cần dựng
-  // panel 1 lần, xem populateContractApprovalLevelPanel().
-  const contractApprovalLevelPanelEl = document.getElementById('contractApprovalLevelPanel');
-  if (contractApprovalLevelPanelEl && !contractApprovalLevelPanelEl.children.length) {
-    populateContractApprovalLevelPanel();
+  // contractApprovalLevel giờ là input ẩn + <input list>/<datalist> native — danh sách tĩnh nên chỉ cần
+  // dựng datalist 1 lần, xem populateContractApprovalLevelDatalist().
+  const contractApprovalLevelDatalistEl = document.getElementById('contractApprovalLevelDatalist');
+  if (contractApprovalLevelDatalistEl && !contractApprovalLevelDatalistEl.children.length) {
+    populateContractApprovalLevelDatalist();
   }
 
   const carTypeSel = document.getElementById('carType');
@@ -10670,6 +11095,10 @@ function buildDocRowHTML(doc, { versionCount = 0, isExpanded = false, isChild = 
     progressBadge = `<span class="px-2 py-1 bg-green-100 text-green-800 rounded font-bold text-xs">✅ Đã phê duyệt hoàn tất</span>`;
   } else if (doc.status === 'REJECTED') {
     progressBadge = `<span class="px-2 py-1 bg-red-100 text-red-800 rounded font-bold text-xs">❌ Bị từ chối / Trả về</span>`;
+  } else if (doc.status === 'DRAFT') {
+    // "Bổ Sung" (REQUEST_CHANGES) — người duyệt trả hồ sơ về NHÁP để người tải lên sửa lại toàn bộ nội
+    // dung + tệp rồi gửi lại (xem openBosungEditModal()/lib/recordActions.js editDocDraft()).
+    progressBadge = `<span class="px-2 py-1 bg-orange-100 text-orange-800 rounded font-bold text-xs">✏️ Cần bổ sung — chờ sửa lại</span>`;
   } else {
     const stepName = wf.steps[doc.currentStep - 1]?.name || `Bước ${doc.currentStep}`;
     const progressText = getStepApprovalProgressText(currentStepApprovers, doc.history, doc.currentStep);
@@ -10703,9 +11132,15 @@ function buildDocRowHTML(doc, { versionCount = 0, isExpanded = false, isChild = 
           if (canApprove) {
             primaryBtnHTML = `<button onclick="runDocAction(${doc.id}, 'approve')" class="px-2 py-1 bg-emerald-600 text-white rounded text-xs hover:bg-emerald-700 font-semibold" title="Phê duyệt tài liệu">✅ Duyệt</button>`;
             secondaryOptions.push({ value: 'reject', label: '❌ Từ chối' });
+            secondaryOptions.push({ value: 'requestChanges', label: '🔄 Bổ Sung' });
             secondaryOptions.push({ value: 'view', label: '📋 Chi tiết' });
           } else {
             primaryBtnHTML = `<button onclick="runDocAction(${doc.id}, 'view')" class="px-2 py-1 bg-gray-600 text-white rounded text-xs hover:bg-gray-700 font-semibold" title="Xem chi tiết & lịch sử phiên bản">📋 Chi tiết</button>`;
+          }
+          // "Sửa & Gửi Lại" — chỉ chính người tải lên, chỉ khi hồ sơ đang cần bổ sung (NHÁP do
+          // REQUEST_CHANGES, xem openBosungEditModal()).
+          if (doc.status === 'DRAFT' && doc.uploader === currentUser.username) {
+            secondaryOptions.push({ value: 'editDraft', label: '✏️ Sửa & Gửi Lại' });
           }
           if (canDownload) secondaryOptions.push({ value: 'download', label: '⬇️ Tải' });
           if (currentUser.perms?.admin) secondaryOptions.push({ value: 'delete', label: '🗑️ Xóa' });
@@ -10725,6 +11160,8 @@ function runDocAction(id, action) {
     case 'view': viewDocDetails(id); break;
     case 'approve': approveDoc(id); break;
     case 'reject': rejectDoc(id); break;
+    case 'requestChanges': requestWorkflowChangesAction('docs', id, DB.docs, 'renderDocs', 'người tải lên'); break;
+    case 'editDraft': openBosungEditModal('docs', id); break;
     case 'download': downloadDocFile(id); break;
     case 'delete': deleteDocAction(id); break;
   }
@@ -11706,6 +12143,8 @@ function renderSubmissionReqs() {
       progressBadge = `<span class="px-2 py-1 bg-green-100 text-green-800 rounded font-bold text-xs">✅ Đã phê duyệt hoàn tất</span>`;
     } else if (sub.status === 'REJECTED') {
       progressBadge = `<span class="px-2 py-1 bg-red-100 text-red-800 rounded font-bold text-xs">❌ Bị từ chối / Trả về</span>`;
+    } else if (sub.status === 'DRAFT') {
+      progressBadge = `<span class="px-2 py-1 bg-orange-100 text-orange-800 rounded font-bold text-xs">✏️ Cần bổ sung — chờ sửa lại</span>`;
     } else {
       const stepName = wf.steps[sub.currentStep - 1]?.name || `Bước ${sub.currentStep}`;
       const progressText = getStepApprovalProgressText(currentStepApprovers, sub.history, sub.currentStep);
@@ -11753,6 +12192,11 @@ function renderSubmissionReqs() {
             if (canDL && (sub.fileUrl || (sub.extraFiles && sub.extraFiles.length))) {
               secondaryOptions.push({ value: 'downloadAll', label: '📎 Tải All' });
             }
+            // "Sửa & Gửi Lại" — chỉ chính người trình, chỉ khi đang cần bổ sung (NHÁP do
+            // confirmProcessSubmission('REQUEST_CHANGES'), xem openBosungEditModal()).
+            if (sub.status === 'DRAFT' && sub.creator === currentUser.username) {
+              secondaryOptions.push({ value: 'editDraft', label: '✏️ Sửa & Gửi Lại' });
+            }
             if (currentUser.perms?.admin) secondaryOptions.push({ value: 'delete', label: '🗑️ Xóa' });
             return buildActionCell(sub.id, primaryBtnHTML, secondaryOptions, 'runSubmissionAction');
           })()}
@@ -11770,6 +12214,7 @@ function runSubmissionAction(id, action) {
     case 'downloadSlip': downloadSubmissionApprovalSlip(id); break;
     case 'createTask': createTaskFromSubmission(id); break;
     case 'downloadAll': downloadAllSubmissionFiles(id); break;
+    case 'editDraft': openBosungEditModal('submissions', id); break;
     case 'delete': deleteSubmissionAction(id); break;
   }
 }
@@ -11913,7 +12358,8 @@ function openProcessSubmissionModal(subId) {
   if (canApprove) {
     actionBtns.innerHTML = `
       <button onclick="confirmProcessSubmission('REJECT')" class="bg-red-600 text-white px-4 py-1.5 rounded font-bold hover:bg-red-700 text-xs">❌ Từ Chối / Trả Về</button>
-      <button onclick="confirmRequestSubmissionInfo()" class="bg-blue-600 text-white px-4 py-1.5 rounded font-bold hover:bg-blue-700 text-xs">📋 Yêu Cầu Bổ Sung</button>
+      <button onclick="confirmRequestSubmissionInfo()" class="bg-blue-600 text-white px-4 py-1.5 rounded font-bold hover:bg-blue-700 text-xs" title="Giữ nguyên PENDING — chỉ ghi 1 ghi chú, người trình phản hồi qua ô riêng, KHÔNG sửa lại nội dung/tệp đã trình">📋 Yêu Cầu Bổ Sung (ghi chú)</button>
+      <button onclick="confirmProcessSubmission('REQUEST_CHANGES')" class="bg-amber-500 text-white px-4 py-1.5 rounded font-bold hover:bg-amber-600 text-xs" title="Đưa hồ sơ về NHÁP để người trình sửa lại TOÀN BỘ nội dung + tệp rồi gửi lại từ bước 1">🔄 Bổ Sung (Sửa Toàn Bộ)</button>
       <button onclick="confirmProcessSubmission('APPROVE')" class="bg-green-600 text-white px-5 py-1.5 rounded font-bold hover:bg-green-700 text-xs">✅ Phê Duyệt & Chuyển Bước</button>
     `;
   } else {
@@ -11934,17 +12380,20 @@ function closeProcessSubmissionModal() {
 // (vd. bắt buộc nhập lý do từ chối) làm lớp an toàn thứ hai.
 function confirmProcessSubmission(actionType) {
   const comment = document.getElementById('txtSubmissionComment').value.trim();
-  if (actionType === 'REJECT' && !comment) {
-    return alert('Vui lòng nhập lý do từ chối vào ô Ý kiến chỉ đạo!');
+  if ((actionType === 'REJECT' || actionType === 'REQUEST_CHANGES') && !comment) {
+    return alert(actionType === 'REJECT' ? 'Vui lòng nhập lý do từ chối vào ô Ý kiến chỉ đạo!' : 'Vui lòng nhập lý do cần bổ sung vào ô Ý kiến chỉ đạo!');
   }
   const isApprove = actionType === 'APPROVE';
+  const titleMap = { APPROVE: '✅ Xác Nhận Phê Duyệt', REJECT: '❌ Xác Nhận Từ Chối / Trả Về', REQUEST_CHANGES: '🔄 Xác Nhận Yêu Cầu Bổ Sung' };
+  const labelMap = { APPROVE: 'Phê Duyệt', REJECT: 'Từ Chối', REQUEST_CHANGES: 'Yêu Cầu Bổ Sung' };
+  const actionTextMap = { APPROVE: 'phê duyệt và chuyển bước', REJECT: 'từ chối / trả về', REQUEST_CHANGES: 'yêu cầu bổ sung (đưa tờ trình về nháp để người trình sửa lại toàn bộ nội dung + tệp rồi trình lại)' };
   showConfirmModal({
-    title: isApprove ? '✅ Xác Nhận Phê Duyệt' : '❌ Xác Nhận Từ Chối / Trả Về',
-    bodyHTML: `<p>Bạn có chắc chắn muốn <b>${isApprove ? 'phê duyệt và chuyển bước' : 'từ chối / trả về'}</b> tờ trình này?</p>${comment ? `<p class="mt-2 italic text-gray-600">Ý kiến chỉ đạo: "${escapeHtml(comment)}"</p>` : ''}`,
-    confirmLabel: isApprove ? 'Phê Duyệt' : 'Từ Chối',
+    title: titleMap[actionType],
+    bodyHTML: `<p>Bạn có chắc chắn muốn <b>${actionTextMap[actionType]}</b> tờ trình này?</p>${comment ? `<p class="mt-2 italic text-gray-600">Ý kiến chỉ đạo: "${escapeHtml(comment)}"</p>` : ''}`,
+    confirmLabel: labelMap[actionType],
     onConfirm: () => {
       if (isApprove) withApprovalAuth(() => processSubmission('APPROVE'));
-      else processSubmission('REJECT');
+      else processSubmission(actionType);
     }
   });
 }
@@ -11968,13 +12417,14 @@ async function processSubmission(actionType) {
   if (!sub) return;
 
   const comment = document.getElementById('txtSubmissionComment').value.trim();
-  if (actionType === 'REJECT' && !comment) {
-    return alert('Vui lòng nhập lý do từ chối vào ô Ý kiến chỉ đạo!');
+  if ((actionType === 'REJECT' || actionType === 'REQUEST_CHANGES') && !comment) {
+    return alert(actionType === 'REJECT' ? 'Vui lòng nhập lý do từ chối vào ô Ý kiến chỉ đạo!' : 'Vui lòng nhập lý do cần bổ sung vào ô Ý kiến chỉ đạo!');
   }
 
+  const actionUrlMap = { APPROVE: 'approve', REJECT: 'reject', REQUEST_CHANGES: 'request-changes' };
   let result;
   try {
-    result = await callWorkflowAction('submissions', sub.id, actionType === 'REJECT' ? 'reject' : 'approve', { comment });
+    result = await callWorkflowAction('submissions', sub.id, actionUrlMap[actionType], { comment });
   } catch (e) {
     return alert('⛔ ' + e.message);
   }
@@ -11986,7 +12436,12 @@ async function processSubmission(actionType) {
 
   let msg = '✅ Đã cập nhật trạng thái tờ trình!';
 
-  if (transition.type === 'REJECTED') {
+  if (transition.type === 'REQUEST_CHANGES') {
+    notifyUsersByEmail('SUBMISSION', 'NOTIFY_REQUEST_CHANGES', updatedSub.code, [updatedSub.creator],
+      `[VPDT] Tờ trình ${updatedSub.code} cần bổ sung/chỉnh sửa`,
+      `Tờ trình "${updatedSub.title}" (${updatedSub.code}) của bạn cần được sửa lại. Lý do: ${comment}. Vui lòng vào mục Văn Bản Trình để sửa và gửi lại.`);
+    msg = '✅ Đã yêu cầu bổ sung — hồ sơ đã chuyển về NHÁP để người trình sửa lại!';
+  } else if (transition.type === 'REJECTED') {
     notifyUsersByEmail('SUBMISSION', 'NOTIFY_REJECTED', updatedSub.code, [updatedSub.creator],
       `[VPDT] Tờ trình ${updatedSub.code} bị từ chối`,
       `Tờ trình "${updatedSub.title}" (${updatedSub.code}) của bạn đã bị từ chối/trả về. Lý do: ${comment}`);
@@ -13644,7 +14099,7 @@ function onContractOpModeChange() {
   if (isAddendumMode) {
     populateContractAddendumTargets();
     document.getElementById('contractAddendumTarget').value = '';
-    updateContractAddendumTargetLabel();
+    document.getElementById('contractAddendumTargetInput').value = '';
     document.getElementById('contractCode').value = '';
     document.getElementById('contractTitle').value = '';
     document.getElementById('contractDept').value = '';
@@ -13672,12 +14127,15 @@ function refreshContractCodePreview() {
 
 // Danh sách hợp đồng được phép "Bổ Sung Phụ Lục" — chỉ hợp đồng GỐC đã APPROVED, người dùng có quyền
 // tạo hồ sơ hợp đồng cho đúng phòng ban đó (contractCreate scope, khớp getScope() ở
-// CREATE_MODULE_CONFIGS.contracts).
+// CREATE_MODULE_CONFIGS.contracts). Dựng <datalist> (native, thay cho bảng button tự dựng trước đây —
+// xem ghi chú ở contractAddendumTargetWrap) — mỗi option format "<mã> — <tên>", khớp lại bởi
+// resolveContractAddendumTargetInput().
 function populateContractAddendumTargets() {
-  const input = document.getElementById('contractAddendumTarget');
-  const panel = document.getElementById('contractAddendumTargetPanel');
-  if (!input || !panel) return;
-  const prevVal = input.value;
+  const hidden = document.getElementById('contractAddendumTarget');
+  const visible = document.getElementById('contractAddendumTargetInput');
+  const datalist = document.getElementById('contractAddendumTargetDatalist');
+  if (!hidden || !visible || !datalist) return;
+  const prevVal = hidden.value;
   // Sắp theo Mã Hợp Đồng cho dễ dò tìm — trước đây để nguyên thứ tự DB.contracts (thứ tự tạo), danh
   // sách dài dần theo thời gian sẽ càng khó lướt tìm đúng hợp đồng cần bổ sung phụ lục.
   const eligible = DB.contracts.filter(c =>
@@ -13685,101 +14143,50 @@ function populateContractAddendumTargets() {
     (currentUser.perms?.admin || scopeAllows(currentUser, currentUser.perms?.contractCreate, c.dept))
   ).sort((a, b) => String(a.code).localeCompare(String(b.code)));
 
-  panel.innerHTML = eligible.map(c => `
-    <button type="button" onclick="selectContractAddendumTarget(${c.id})" class="w-full text-left px-2 py-1.5 text-xs hover:bg-cyan-50 rounded">
-      ${escapeHtml(c.code)} — ${escapeHtml(c.title)}
-    </button>
-  `).join('') || '<div class="px-2 py-1.5 text-xs text-gray-400 italic">Không có hợp đồng nào phù hợp.</div>';
+  datalist.innerHTML = eligible.map(c => `<option value="${escapeHtml(c.code)} — ${escapeHtml(c.title)}"></option>`).join('');
 
-  if (eligible.some(c => String(c.id) === prevVal)) {
-    input.value = prevVal;
+  const stillEligible = eligible.find(c => String(c.id) === prevVal);
+  if (stillEligible) {
+    hidden.value = prevVal;
+    visible.value = `${stillEligible.code} — ${stillEligible.title}`;
   } else {
-    input.value = '';
-  }
-  updateContractAddendumTargetLabel();
-}
-
-function updateContractAddendumTargetLabel() {
-  const labelEl = document.getElementById('contractAddendumTargetLabel');
-  if (!labelEl) return;
-  const id = Number(document.getElementById('contractAddendumTarget')?.value);
-  const c = DB.contracts.find(x => x.id === id);
-  if (c) {
-    labelEl.textContent = `${c.code} — ${c.title}`;
-    labelEl.classList.remove('text-gray-500');
-    labelEl.classList.add('text-gray-800');
-  } else {
-    labelEl.textContent = '-- Chọn hợp đồng --';
-    labelEl.classList.add('text-gray-500');
-    labelEl.classList.remove('text-gray-800');
+    hidden.value = '';
+    visible.value = '';
   }
 }
 
-function toggleContractAddendumTargetDropdown(e) {
-  e.stopPropagation();
-  document.getElementById('contractAddendumTargetPanel')?.classList.toggle('hidden');
-}
-
-// Chọn 1 dòng trong bảng tự dựng -> ghi vào input ẩn contractAddendumTarget (giữ nguyên .value cho
-// onContractAddendumTargetChange()/submitContractReq() đọc, không đổi gì ở 2 nơi đó), cập nhật nhãn
-// hiển thị, đóng bảng, rồi chạy tiếp đúng logic khoá Mã/Phòng ban/Loại/Đối tác như trước.
-function selectContractAddendumTarget(id) {
-  document.getElementById('contractAddendumTarget').value = String(id);
-  updateContractAddendumTargetLabel();
-  document.getElementById('contractAddendumTargetPanel')?.classList.add('hidden');
+// Gõ trong ô "Chọn Hợp Đồng Để Bổ Sung Phụ Lục" -> tách phần mã ở đầu chuỗi đã gõ (trước " — ", khớp
+// đúng format option ở populateContractAddendumTargets()), tìm đúng 1 hợp đồng gốc theo mã -> ghi id vào
+// input ẩn contractAddendumTarget (giữ nguyên .value cho onContractAddendumTargetChange()/
+// submitContractReq() đọc, không đổi gì ở 2 nơi đó), rồi chạy tiếp đúng logic khoá Mã/Phòng ban/Loại/Đối
+// tác như trước. Gõ tự do/chưa khớp đúng option nào -> để trống input ẩn, y hệt trạng thái "chưa chọn".
+function resolveContractAddendumTargetInput(rawValue) {
+  const codePart = String(rawValue || '').split(' — ')[0].trim();
+  const match = codePart ? DB.contracts.find(c => !c.isAddendum && String(c.code) === codePart) : null;
+  document.getElementById('contractAddendumTarget').value = match ? String(match.id) : '';
   onContractAddendumTargetChange();
 }
 
-document.addEventListener('click', (ev) => {
-  const panel = document.getElementById('contractAddendumTargetPanel');
-  const btn = document.getElementById('contractAddendumTargetBtn');
-  if (!panel || panel.classList.contains('hidden')) return;
-  if (!panel.contains(ev.target) && ev.target !== btn && !btn?.contains(ev.target)) panel.classList.add('hidden');
-});
-
-// Cùng khuôn contractAddendumTarget ở trên nhưng cho "Cấp Phê Duyệt Cuối Cùng" — danh sách CONTRACT_APPROVAL_LEVELS
-// tĩnh nên chỉ cần dựng 1 lần (gọi từ populateDropdowns()), KHAC đặt đầu làm mặc định.
-function populateContractApprovalLevelPanel() {
-  const panel = document.getElementById('contractApprovalLevelPanel');
-  if (!panel) return;
+// Cùng khuôn contractAddendumTarget ở trên nhưng cho "Cấp Phê Duyệt Cuối Cùng" — danh sách
+// CONTRACT_APPROVAL_LEVELS tĩnh nên chỉ cần dựng datalist 1 lần (gọi từ populateDropdowns()), KHAC đặt
+// đầu làm mặc định.
+function populateContractApprovalLevelDatalist() {
+  const datalist = document.getElementById('contractApprovalLevelDatalist');
+  if (!datalist) return;
   const orderedC = [CONTRACT_APPROVAL_LEVELS.find(l => l.key === 'KHAC'), ...CONTRACT_APPROVAL_LEVELS.filter(l => l.key !== 'KHAC')];
-  panel.innerHTML = orderedC.map(l => `
-    <button type="button" onclick="selectContractApprovalLevel('${l.key}')" class="w-full text-left px-2 py-1.5 text-xs hover:bg-cyan-50 rounded">
-      ${escapeHtml(l.label)}
-    </button>
-  `).join('');
-  updateContractApprovalLevelLabel();
+  datalist.innerHTML = orderedC.map(l => `<option value="${escapeHtml(l.label)}"></option>`).join('');
 }
 
-function updateContractApprovalLevelLabel() {
-  const labelEl = document.getElementById('contractApprovalLevelLabel');
-  if (!labelEl) return;
-  const key = document.getElementById('contractApprovalLevel')?.value;
-  const level = CONTRACT_APPROVAL_LEVELS.find(l => l.key === key);
-  labelEl.textContent = level ? level.label : '-- Chọn cấp phê duyệt --';
-}
-
-function toggleContractApprovalLevelDropdown(e) {
-  e.stopPropagation();
-  document.getElementById('contractApprovalLevelPanel')?.classList.toggle('hidden');
-}
-
-// Chọn 1 dòng -> ghi vào input ẩn contractApprovalLevel (giữ nguyên .value cho
-// renderContractApprovalLayerCheckboxes()/submitContractReq() đọc), cập nhật nhãn, đóng bảng, rồi chạy
-// tiếp đúng logic khoá lớp bắt buộc như trước (cùng onchange cũ của <select>).
-function selectContractApprovalLevel(key) {
-  document.getElementById('contractApprovalLevel').value = key;
-  updateContractApprovalLevelLabel();
-  document.getElementById('contractApprovalLevelPanel')?.classList.add('hidden');
+// Gõ/chọn nhãn cấp phê duyệt trong ô tìm -> khớp lại đúng KEY tương ứng trong CONTRACT_APPROVAL_LEVELS
+// -> ghi vào input ẩn contractApprovalLevel (giữ nguyên .value cho renderContractApprovalLayerCheckboxes()/
+// submitContractReq() đọc, không đổi gì ở 2 nơi đó), rồi chạy tiếp đúng logic khoá lớp bắt buộc như
+// trước (cùng onchange cũ của <select>/bảng chọn cũ). Gõ tự do/chưa khớp đúng nhãn nào -> để trống input
+// ẩn (submitContractReq() tự rơi về mặc định 'KHAC' khi rỗng, xem approvalLevel ở đó).
+function resolveContractApprovalLevelInput(rawValue) {
+  const level = CONTRACT_APPROVAL_LEVELS.find(l => l.label === String(rawValue || '').trim());
+  document.getElementById('contractApprovalLevel').value = level ? level.key : '';
   renderContractApprovalLayerCheckboxes();
 }
-
-document.addEventListener('click', (ev) => {
-  const panel = document.getElementById('contractApprovalLevelPanel');
-  const btn = document.getElementById('contractApprovalLevelBtn');
-  if (!panel || panel.classList.contains('hidden')) return;
-  if (!panel.contains(ev.target) && ev.target !== btn && !btn?.contains(ev.target)) panel.classList.add('hidden');
-});
 
 // Chọn xong hợp đồng cần bổ sung phụ lục -> khoá Mã/Phòng ban/Loại/Đối tác theo đúng hợp đồng gốc,
 // đề xuất sẵn mã phụ lục tiếp theo.
@@ -14054,11 +14461,12 @@ function openEditContract(contractId) {
 function cancelEditContract() {
   editingContractId = null;
   document.getElementById('contractForm').reset();
-  updateContractAddendumTargetLabel();
-  // form.reset() không đáng tin cậy trả input ẩn này về "KHAC" (cùng lý do contractOpMode ở dưới cần
-  // gán tay) — đặt lại tường minh rồi mới cập nhật nhãn.
+  // contractAddendumTargetInput/contractApprovalLevelInput là input thật trong form (không còn nút +
+  // bảng tự dựng) nên form.reset() ở trên đã tự đưa chúng về đúng giá trị mặc định trong HTML ("" và
+  // "Phê duyệt khác") — nhưng input ẩn tương ứng KHÔNG đáng tin cậy được reset kèm theo (cùng lý do
+  // contractOpMode ở dưới cần gán tay) nên vẫn đặt lại tường minh ở đây.
+  document.getElementById('contractAddendumTarget').value = '';
   document.getElementById('contractApprovalLevel').value = 'KHAC';
-  updateContractApprovalLevelLabel();
   document.getElementById('contractDept').disabled = false;
   document.getElementById('contractCustodianDept').disabled = false;
   document.getElementById('contractType').disabled = false;
@@ -14253,7 +14661,9 @@ function buildContractRowHTML(c, { addendumCount = 0, isExpanded = false, isChil
     ? `<span class="px-2 py-0.5 bg-amber-100 text-amber-800 rounded font-bold text-xs ml-1">⏳ Chờ duyệt</span>`
     : c.approvalStatus === 'REJECTED'
       ? `<span class="px-2 py-0.5 bg-red-100 text-red-800 rounded font-bold text-xs ml-1">❌ Bị từ chối</span>`
-      : '';
+      : c.approvalStatus === 'DRAFT'
+        ? `<span class="px-2 py-0.5 bg-orange-100 text-orange-800 rounded font-bold text-xs ml-1">✏️ Cần bổ sung — chờ sửa lại</span>`
+        : '';
 
   const expandToggleHTML = addendumCount > 0
     ? `<button onclick="toggleContractFamily(${c.id})" class="text-cyan-700 font-bold mr-1">${isExpanded ? '▾' : '▸'}</button><span class="text-[10px] bg-cyan-100 text-cyan-800 px-1.5 py-0.5 rounded-full">${addendumCount} phụ lục</span>`
@@ -14299,16 +14709,20 @@ function buildContractRowHTML(c, { addendumCount = 0, isExpanded = false, isChil
   if (!isChild && c.approvalStatus === 'PENDING' && canApproveContractStep(currentUser, c)) {
     secondaryOptions.push({ value: 'approve', label: '✅ Duyệt' });
     secondaryOptions.push({ value: 'reject', label: '❌ Từ chối' });
+    secondaryOptions.push({ value: 'requestChanges', label: '🔄 Bổ Sung' });
   }
   if (c.signedFileUrl && canDownloadContractFile()) {
     secondaryOptions.push({ value: 'viewSigned', label: `👁️ Xem ${signedDocNoun}` });
   }
-  if (activeContractSubTab === 'MANAGE' && (!c.signedFileUrl || c.signedFileStatus === 'REJECTED') && canManageContractPaymentClient(currentUser, c)) {
-    secondaryOptions.push({ value: 'uploadSigned', label: c.signedFileStatus === 'REJECTED' ? `📤 Tải Lại ${signedDocNoun}` : `📤 Tải ${signedDocNoun}` });
+  // "Tải Lại Tài liệu ký" cũng phải mở lại khi signedFileStatus DRAFT (do requestSignedChanges — xem
+  // lib/workflowEngine.js contractsSignedFile.supportsRequestChanges), khác REJECTED chỉ ở nhãn nút.
+  if (activeContractSubTab === 'MANAGE' && (!c.signedFileUrl || c.signedFileStatus === 'REJECTED' || c.signedFileStatus === 'DRAFT') && canManageContractPaymentClient(currentUser, c)) {
+    secondaryOptions.push({ value: 'uploadSigned', label: (c.signedFileStatus === 'REJECTED' || c.signedFileStatus === 'DRAFT') ? `📤 Tải Lại ${signedDocNoun}` : `📤 Tải ${signedDocNoun}` });
   }
   if (activeContractSubTab === 'MANAGE' && c.signedFileStatus === 'PENDING' && canManageContractPaymentClient(currentUser, c)) {
     secondaryOptions.push({ value: 'approveSigned', label: `✅ Duyệt ${signedDocNoun}` });
     secondaryOptions.push({ value: 'rejectSigned', label: `❌ Từ Chối ${signedDocNoun}` });
+    secondaryOptions.push({ value: 'requestSignedChanges', label: `🔄 Bổ Sung ${signedDocNoun}` });
   }
   if (activeContractSubTab === 'MANAGE' && c.signedFileStatus === 'APPROVED' && c.paymentStatus === 'CHUA_THANH_TOAN' && canManageContractPaymentClient(currentUser, c)) {
     secondaryOptions.push({ value: 'startPayment', label: '💰 Chuyển Sang Thanh Toán' });
@@ -14351,10 +14765,12 @@ function runContractAction(id, action) {
     case 'edit': openEditContract(id); break;
     case 'approve': approveContractAction(id); break;
     case 'reject': rejectContractAction(id); break;
+    case 'requestChanges': requestContractChangesAction(id); break;
     case 'uploadSigned': openSignedUploadModal('contracts', id); break;
     case 'viewSigned': viewContractSignedFile(id); break;
     case 'approveSigned': approveContractSignedFileAction(id); break;
     case 'rejectSigned': rejectContractSignedFileAction(id); break;
+    case 'requestSignedChanges': requestContractSignedFileChangesAction(id); break;
     case 'startPayment': startContractPaymentAction(id); break;
     case 'download': {
       const c = DB.contracts.find(x => x.id === id);
@@ -14518,6 +14934,66 @@ function rejectContractSignedFileAction(id) {
       if (idx !== -1) DB.contracts[idx] = updated;
       logSystemAction('CONTRACT', 'REJECT_CONTRACT_SIGNED_FILE', `Từ chối tài liệu ký hợp đồng [${updated.code} - ${updated.title}] - Lý do: ${reason.trim()}`, 'WARNING', updated.code);
       alert('❌ Đã từ chối tài liệu ký!');
+      renderContracts();
+      refreshApprovalSurfaces();
+    }
+  });
+}
+
+// "Bổ Sung" (REQUEST_CHANGES) — khác Từ Chối: đưa hồ sơ về NHÁP (approvalStatus='DRAFT') thay vì
+// REJECTED hẳn, người tạo SỬA LẠI (editContract() ở lib/recordActions.js đã tự đưa DRAFT/REJECTED về
+// PENDING/bước 1 khi lưu — xem "Sửa xong thì coi như nộp lại từ đầu quy trình duyệt") rồi lưu là coi
+// như gửi lại ngay, không cần thao tác "Gửi" riêng như Tài Liệu/Đăng Ký Xe/Mua Bán-Sửa Chữa-Đầu
+// Tư/Văn Bản Trình (4 module đó vốn không có sẵn 1 form "Sửa" tái dùng được).
+function requestContractChangesAction(id) {
+  const c = DB.contracts.find(x => x.id === id);
+  if (!c) return;
+  const reason = prompt('Nhập lý do cần bổ sung — hợp đồng sẽ được trả về NHÁP để người tạo sửa lại:');
+  if (reason === null) return;
+  if (!reason.trim()) return alert('⛔ Vui lòng nhập lý do cần bổ sung!');
+  showConfirmModal({
+    title: '🔄 Yêu Cầu Bổ Sung',
+    bodyHTML: `<p>Trả hợp đồng "<b>${escapeHtml(c.title)}</b>" (${escapeHtml(c.code)}) về NHÁP để người tạo sửa lại?</p><p class="mt-2 italic text-gray-600">Lý do: "${escapeHtml(reason.trim())}"</p>`,
+    confirmLabel: 'Yêu Cầu Bổ Sung',
+    onConfirm: async () => {
+      let result;
+      try {
+        result = await callWorkflowAction('contracts', id, 'request-changes', { comment: reason.trim() });
+      } catch (err) { return alert(`⛔ ${err.message}`); }
+      const updated = result.item;
+      const idx = DB.contracts.findIndex(x => x.id === id);
+      if (idx !== -1) DB.contracts[idx] = updated;
+      logSystemAction('CONTRACT', 'REQUEST_CHANGES', `Yêu cầu bổ sung hợp đồng [${updated.code} - ${updated.title}] - Lý do: ${reason.trim()}`, 'WARNING', updated.code);
+      notifyUsersByEmail('CONTRACT', 'NOTIFY_REQUEST_CHANGES', updated.code, [updated.creator],
+        `[VPDT] Hợp đồng ${updated.code} cần bổ sung/chỉnh sửa`,
+        `Hợp đồng "${updated.title}" (${updated.code}) của bạn cần được sửa lại. Lý do: ${reason.trim()}. Vui lòng vào mục Hợp Đồng để sửa (nút "✏️ Sửa") — hệ thống tự gửi lại khi lưu.`);
+      alert('✅ Đã yêu cầu bổ sung — hợp đồng đã chuyển về NHÁP để người tạo sửa lại!');
+      renderContracts();
+      refreshApprovalSurfaces();
+    }
+  });
+}
+
+function requestContractSignedFileChangesAction(id) {
+  const c = DB.contracts.find(x => x.id === id);
+  if (!c) return;
+  const reason = prompt('Nhập lý do cần bổ sung Tài liệu ký — sẽ được trả về NHÁP để tải lại:');
+  if (reason === null) return;
+  if (!reason.trim()) return alert('⛔ Vui lòng nhập lý do cần bổ sung!');
+  showConfirmModal({
+    title: '🔄 Yêu Cầu Bổ Sung Tài Liệu Ký',
+    bodyHTML: `<p>Trả Tài liệu ký của hợp đồng "<b>${escapeHtml(c.title)}</b>" về NHÁP để tải lại?</p><p class="mt-2 italic text-gray-600">Lý do: "${escapeHtml(reason.trim())}"</p>`,
+    confirmLabel: 'Yêu Cầu Bổ Sung',
+    onConfirm: async () => {
+      let result;
+      try {
+        result = await callWorkflowAction('contractsSignedFile', id, 'request-changes', { comment: reason.trim() });
+      } catch (err) { return alert(`⛔ ${err.message}`); }
+      const updated = result.item;
+      const idx = DB.contracts.findIndex(x => x.id === id);
+      if (idx !== -1) DB.contracts[idx] = updated;
+      logSystemAction('CONTRACT', 'REQUEST_CHANGES_SIGNED_FILE', `Yêu cầu bổ sung tài liệu ký hợp đồng [${updated.code}] - Lý do: ${reason.trim()}`, 'WARNING', updated.code);
+      alert('✅ Đã yêu cầu bổ sung — Tài liệu ký đã chuyển về NHÁP, có thể tải lại!');
       renderContracts();
       refreshApprovalSurfaces();
     }
@@ -16819,6 +17295,7 @@ function renderCarRegs() {
     let statusBadge = '';
     if (c.status === 'APPROVED') statusBadge = `<span class="px-2 py-0.5 bg-green-100 text-green-800 rounded font-bold text-xs">✅ Đã phê duyệt</span>`;
     else if (c.status === 'REJECTED') statusBadge = `<span class="px-2 py-0.5 bg-red-100 text-red-800 rounded font-bold text-xs">❌ Từ chối</span>`;
+    else if (c.status === 'DRAFT') statusBadge = `<span class="px-2 py-0.5 bg-orange-100 text-orange-800 rounded font-bold text-xs">✏️ Cần bổ sung — chờ sửa lại</span>`;
     else statusBadge = `<span class="px-2 py-0.5 bg-indigo-100 text-indigo-800 rounded font-bold text-xs">⏳ Bước ${c.currentStep}/${wf.steps.length}${escapeHtml(getStepApprovalProgressText(currentStepApprovers, c.history, c.currentStep))}</span>`;
 
     // assignedPlate/assignedDriver: do Phòng Hành Chính điền lúc xử lý duyệt (xem processCarReg()).
@@ -16848,6 +17325,11 @@ function renderCarRegs() {
               secondaryOptions.push({ value: 'viewSlip', label: '👁️ Xem Phiếu' });
               if (canDL) secondaryOptions.push({ value: 'downloadSlip', label: '⬇️ Tải' });
             }
+            // "Sửa & Gửi Lại" — chỉ chính người tạo phiếu, chỉ khi đang cần bổ sung (NHÁP do
+            // REQUEST_CHANGES, xem confirmProcessCarReg('REQUEST_CHANGES')/openBosungEditModal()).
+            if (c.status === 'DRAFT' && c.creator === currentUser.username) {
+              secondaryOptions.push({ value: 'editDraft', label: '✏️ Sửa & Gửi Lại' });
+            }
             if (currentUser.perms?.admin) secondaryOptions.push({ value: 'delete', label: '🗑️ Xóa' });
             return buildActionCell(c.id, primaryBtnHTML, secondaryOptions, 'runCarAction');
           })()}
@@ -16863,6 +17345,7 @@ function runCarAction(id, action) {
     case 'process': openCarProcessModal(id); break;
     case 'viewSlip': viewCarApprovalSlip(id); break;
     case 'downloadSlip': downloadCarApprovalSlip(id); break;
+    case 'editDraft': openBosungEditModal('carRegs', id); break;
     case 'delete': deleteCarRegAction(id); break;
   }
 }
@@ -16919,6 +17402,13 @@ function openCarProcessModal(carId) {
   document.getElementById('carAssignedPlate').value = c.assignedPlate || c.plate || '';
   document.getElementById('txtCarComment').value = '';
 
+  // "Phần Dành Cho Phòng Hành Chính" (phân công lái xe/loại xe/BKS) chỉ hiện cho "Người Điều Hành Xe"
+  // (perms.carDispatch) — người khác trong luồng duyệt vẫn Duyệt/Từ chối bình thường ở nút bên dưới,
+  // chỉ không thấy/không sửa được mục phân công này (server cũng tự bỏ qua nếu client bị can thiệp cố
+  // gửi kèm các field này, xem applyWorkflowAction() ở lib/workflowEngine.js).
+  const canDispatchCar = !!(currentUser.perms?.admin || currentUser.perms?.carDispatch);
+  document.getElementById('carDispatchSection').classList.toggle('hidden', !canDispatchCar);
+
   const historyHTML = (c.history || []).map(h => `
     <div class="bg-white p-2 rounded border text-xs space-y-1">
       <div class="flex justify-between font-bold text-gray-700">
@@ -16939,6 +17429,7 @@ function openCarProcessModal(carId) {
   if (canApprove) {
     actionBtns.innerHTML = `
       <button onclick="confirmProcessCarReg('REJECT')" class="bg-red-600 text-white px-4 py-1.5 rounded font-bold hover:bg-red-700 text-xs">❌ Từ Chối</button>
+      <button onclick="confirmProcessCarReg('REQUEST_CHANGES')" class="bg-amber-500 text-white px-4 py-1.5 rounded font-bold hover:bg-amber-600 text-xs">🔄 Bổ Sung</button>
       <button onclick="confirmProcessCarReg('APPROVE')" class="bg-green-600 text-white px-5 py-1.5 rounded font-bold hover:bg-green-700 text-xs">✅ Phê Duyệt & Chuyển Bước</button>
     `;
   } else {
@@ -16955,17 +17446,20 @@ function closeCarProcessModal() {
 
 function confirmProcessCarReg(actionType) {
   const comment = document.getElementById('txtCarComment').value.trim();
-  if (actionType === 'REJECT' && !comment) {
-    return alert('Vui lòng nhập lý do từ chối!');
+  if ((actionType === 'REJECT' || actionType === 'REQUEST_CHANGES') && !comment) {
+    return alert(actionType === 'REJECT' ? 'Vui lòng nhập lý do từ chối!' : 'Vui lòng nhập lý do cần bổ sung!');
   }
   const isApprove = actionType === 'APPROVE';
+  const titleMap = { APPROVE: '✅ Xác Nhận Phê Duyệt', REJECT: '❌ Xác Nhận Từ Chối', REQUEST_CHANGES: '🔄 Xác Nhận Yêu Cầu Bổ Sung' };
+  const labelMap = { APPROVE: 'Phê Duyệt', REJECT: 'Từ Chối', REQUEST_CHANGES: 'Yêu Cầu Bổ Sung' };
+  const actionTextMap = { APPROVE: 'phê duyệt và chuyển bước', REJECT: 'từ chối', REQUEST_CHANGES: 'yêu cầu bổ sung (đưa phiếu về nháp để người đăng ký sửa lại)' };
   showConfirmModal({
-    title: isApprove ? '✅ Xác Nhận Phê Duyệt' : '❌ Xác Nhận Từ Chối',
-    bodyHTML: `<p>Bạn có chắc chắn muốn <b>${isApprove ? 'phê duyệt và chuyển bước' : 'từ chối'}</b> đăng ký xe này?</p>${comment ? `<p class="mt-2 italic text-gray-600">Ý kiến: "${escapeHtml(comment)}"</p>` : ''}`,
-    confirmLabel: isApprove ? 'Phê Duyệt' : 'Từ Chối',
+    title: titleMap[actionType],
+    bodyHTML: `<p>Bạn có chắc chắn muốn <b>${actionTextMap[actionType]}</b> đăng ký xe này?</p>${comment ? `<p class="mt-2 italic text-gray-600">Ý kiến: "${escapeHtml(comment)}"</p>` : ''}`,
+    confirmLabel: labelMap[actionType],
     onConfirm: () => {
       if (isApprove) withApprovalAuth(() => processCarReg('APPROVE'));
-      else processCarReg('REJECT');
+      else processCarReg(actionType);
     }
   });
 }
@@ -16976,28 +17470,37 @@ async function processCarReg(actionType) {
   if (!c) return;
 
   const comment = document.getElementById('txtCarComment').value.trim();
-  if (actionType === 'REJECT' && !comment) {
-    return alert('Vui lòng nhập lý do từ chối!');
+  if ((actionType === 'REJECT' || actionType === 'REQUEST_CHANGES') && !comment) {
+    return alert(actionType === 'REJECT' ? 'Vui lòng nhập lý do từ chối!' : 'Vui lòng nhập lý do cần bổ sung!');
   }
 
   // Bất kỳ bước nào cũng có thể điền/điều chỉnh thông tin phân công xe (thường do Phòng Hành Chính
   // thực hiện ở bước cuối) — gửi kèm cùng request duyệt/từ chối, ghi nhận ngay khi có nhập. Lái xe bắt
   // buộc là 1 tài khoản hệ thống có thật — nếu ô còn text nhưng chưa khớp được tài khoản (gõ tự do,
-  // chưa chọn xong từ gợi ý) thì chặn ngay ở đây, không gửi lên server.
-  const carAssignedDriverText = document.getElementById('carAssignedDriver').value.trim();
-  const carAssignedDriverUsername = document.getElementById('carAssignedDriverUsername').value;
-  if (carAssignedDriverText && !carAssignedDriverUsername) {
-    return alert('Vui lòng chọn đúng lái xe từ danh sách gợi ý (gõ tên hoặc tài khoản để tìm)!');
+  // chưa chọn xong từ gợi ý) thì chặn ngay ở đây, không gửi lên server. KHÔNG áp dụng cho REQUEST_CHANGES
+  // (hồ sơ về NHÁP, chưa tới lúc phân công xe).
+  // Chỉ "Người Điều Hành Xe" (perms.carDispatch) mới gửi kèm các field phân công này — người khác
+  // trong luồng duyệt không thấy mục này (xem toggle ẩn/hiện ở openCarProcessModal()) nên không có gì
+  // để gửi; server cũng tự bỏ qua nếu thiếu quyền dù client có bị can thiệp cố gửi kèm.
+  const canDispatchCar = !!(currentUser.perms?.admin || currentUser.perms?.carDispatch);
+  let extraFields = {};
+  if (actionType !== 'REQUEST_CHANGES' && canDispatchCar) {
+    const carAssignedDriverText = document.getElementById('carAssignedDriver').value.trim();
+    const carAssignedDriverUsername = document.getElementById('carAssignedDriverUsername').value;
+    if (carAssignedDriverText && !carAssignedDriverUsername) {
+      return alert('Vui lòng chọn đúng lái xe từ danh sách gợi ý (gõ tên hoặc tài khoản để tìm)!');
+    }
+    extraFields = {
+      assignedDriverUsername: carAssignedDriverUsername,
+      assignedVehicleType: document.getElementById('carAssignedVehicleType').value.trim(),
+      assignedPlate: document.getElementById('carAssignedPlate').value.trim()
+    };
   }
-  const extraFields = {
-    assignedDriverUsername: carAssignedDriverUsername,
-    assignedVehicleType: document.getElementById('carAssignedVehicleType').value.trim(),
-    assignedPlate: document.getElementById('carAssignedPlate').value.trim()
-  };
 
+  const actionUrlMap = { APPROVE: 'approve', REJECT: 'reject', REQUEST_CHANGES: 'request-changes' };
   let result;
   try {
-    result = await callWorkflowAction('carRegs', c.id, actionType === 'REJECT' ? 'reject' : 'approve', { comment, extraFields });
+    result = await callWorkflowAction('carRegs', c.id, actionUrlMap[actionType], { comment, extraFields });
   } catch (e) {
     return alert('⛔ ' + e.message);
   }
@@ -17009,7 +17512,12 @@ async function processCarReg(actionType) {
 
   let msg = '✅ Đã cập nhật trạng thái đăng ký xe!';
 
-  if (transition.type === 'REJECTED') {
+  if (transition.type === 'REQUEST_CHANGES') {
+    notifyUsersByEmail('CAR', 'NOTIFY_REQUEST_CHANGES', updatedCar.code, [updatedCar.creator],
+      `[VPDT] Đăng ký xe ${updatedCar.code} cần bổ sung/chỉnh sửa`,
+      `Phiếu đăng ký xe "${updatedCar.destination}" (${updatedCar.code}) của bạn cần được sửa lại. Lý do: ${comment}. Vui lòng vào mục Đăng Ký Xe để sửa và gửi lại.`);
+    msg = '✅ Đã yêu cầu bổ sung — hồ sơ đã chuyển về NHÁP để người đăng ký sửa lại!';
+  } else if (transition.type === 'REJECTED') {
     notifyUsersByEmail('CAR', 'NOTIFY_REJECTED', updatedCar.code, [updatedCar.creator],
       `[VPDT] Đăng ký xe ${updatedCar.code} bị từ chối`,
       `Phiếu đăng ký xe "${updatedCar.destination}" (${updatedCar.code}) của bạn đã bị từ chối. Lý do: ${comment}`);
@@ -17418,6 +17926,7 @@ function renderOfficeReqs() {
     let statusBadge = '';
     if (o.status === 'APPROVED') statusBadge = `<span class="px-2 py-0.5 bg-green-100 text-green-800 rounded font-bold text-xs">✅ Đã phê duyệt</span>`;
     else if (o.status === 'REJECTED') statusBadge = `<span class="px-2 py-0.5 bg-red-100 text-red-800 rounded font-bold text-xs">❌ Từ chối</span>`;
+    else if (o.status === 'DRAFT') statusBadge = `<span class="px-2 py-0.5 bg-orange-100 text-orange-800 rounded font-bold text-xs">✏️ Cần bổ sung — chờ sửa lại</span>`;
     else statusBadge = `<span class="px-2 py-0.5 bg-teal-100 text-teal-800 rounded font-bold text-xs">⏳ Bước ${o.currentStep}/${wf.steps.length}${escapeHtml(getStepApprovalProgressText(currentStepApprovers, o.history, o.currentStep))}</span>`;
 
     const canDL = o.status === 'APPROVED' && canDownloadFile(currentUser, 'office', o.dept, o.creator);
@@ -17455,6 +17964,11 @@ function renderOfficeReqs() {
                 else if (o.paymentStatus === 'CHUA_THANH_TOAN') secondaryOptions.push({ value: 'startPayment', label: '💰 Chuyển Sang Thanh Toán' });
               }
             }
+            // "Sửa & Gửi Lại" — chỉ chính người tạo, chỉ khi đang cần bổ sung (NHÁP do
+            // confirmProcessOfficeReq('REQUEST_CHANGES'), xem openBosungEditModal()).
+            if (o.status === 'DRAFT' && o.creator === currentUser.username) {
+              secondaryOptions.push({ value: 'editDraft', label: '✏️ Sửa & Gửi Lại' });
+            }
             if (currentUser.perms?.admin) secondaryOptions.push({ value: 'delete', label: '🗑️ Xóa' });
             return buildActionCell(o.id, primaryBtnHTML, secondaryOptions, 'runOfficeAction');
           })()}
@@ -17470,6 +17984,7 @@ function runOfficeAction(id, action) {
     case 'process': openOfficeProcessModal(id); break;
     case 'viewSlip': viewOfficeApprovalSlip(id); break;
     case 'downloadSlip': downloadOfficeApprovalSlip(id); break;
+    case 'editDraft': openBosungEditModal('officeReqs', id); break;
     case 'uploadSigned': openSignedUploadModal('officeReqs', id); break;
     case 'viewSigned': viewOfficeSignedFile(id); break;
     case 'startPayment': startOfficePaymentAction(id); break;
@@ -17572,6 +18087,7 @@ function openOfficeProcessModal(officeId) {
   if (canApprove) {
     actionBtns.innerHTML = `
       <button onclick="confirmProcessOfficeReq('REJECT')" class="bg-red-600 text-white px-4 py-1.5 rounded font-bold hover:bg-red-700 text-xs">❌ Từ Chối</button>
+      <button onclick="confirmProcessOfficeReq('REQUEST_CHANGES')" class="bg-amber-500 text-white px-4 py-1.5 rounded font-bold hover:bg-amber-600 text-xs">🔄 Bổ Sung</button>
       <button onclick="confirmProcessOfficeReq('APPROVE')" class="bg-green-600 text-white px-5 py-1.5 rounded font-bold hover:bg-green-700 text-xs">✅ Phê Duyệt & Chuyển Bước</button>
     `;
   } else {
@@ -17588,17 +18104,20 @@ function closeOfficeProcessModal() {
 
 function confirmProcessOfficeReq(actionType) {
   const comment = document.getElementById('txtOfficeComment').value.trim();
-  if (actionType === 'REJECT' && !comment) {
-    return alert('Vui lòng nhập lý do từ chối vào ô Ý kiến chỉ đạo!');
+  if ((actionType === 'REJECT' || actionType === 'REQUEST_CHANGES') && !comment) {
+    return alert(actionType === 'REJECT' ? 'Vui lòng nhập lý do từ chối vào ô Ý kiến chỉ đạo!' : 'Vui lòng nhập lý do cần bổ sung vào ô Ý kiến chỉ đạo!');
   }
   const isApprove = actionType === 'APPROVE';
+  const titleMap = { APPROVE: '✅ Xác Nhận Phê Duyệt', REJECT: '❌ Xác Nhận Từ Chối', REQUEST_CHANGES: '🔄 Xác Nhận Yêu Cầu Bổ Sung' };
+  const labelMap = { APPROVE: 'Phê Duyệt', REJECT: 'Từ Chối', REQUEST_CHANGES: 'Yêu Cầu Bổ Sung' };
+  const actionTextMap = { APPROVE: 'phê duyệt và chuyển bước', REJECT: 'từ chối', REQUEST_CHANGES: 'yêu cầu bổ sung (đưa đề xuất về nháp để người tạo sửa lại)' };
   showConfirmModal({
-    title: isApprove ? '✅ Xác Nhận Phê Duyệt' : '❌ Xác Nhận Từ Chối',
-    bodyHTML: `<p>Bạn có chắc chắn muốn <b>${isApprove ? 'phê duyệt và chuyển bước' : 'từ chối'}</b> đề xuất này?</p>${comment ? `<p class="mt-2 italic text-gray-600">Ý kiến: "${escapeHtml(comment)}"</p>` : ''}`,
-    confirmLabel: isApprove ? 'Phê Duyệt' : 'Từ Chối',
+    title: titleMap[actionType],
+    bodyHTML: `<p>Bạn có chắc chắn muốn <b>${actionTextMap[actionType]}</b> đề xuất này?</p>${comment ? `<p class="mt-2 italic text-gray-600">Ý kiến: "${escapeHtml(comment)}"</p>` : ''}`,
+    confirmLabel: labelMap[actionType],
     onConfirm: () => {
       if (isApprove) withApprovalAuth(() => processOfficeReq('APPROVE'));
-      else processOfficeReq('REJECT');
+      else processOfficeReq(actionType);
     }
   });
 }
@@ -17609,13 +18128,14 @@ async function processOfficeReq(actionType) {
   if (!o) return;
 
   const comment = document.getElementById('txtOfficeComment').value.trim();
-  if (actionType === 'REJECT' && !comment) {
-    return alert('Vui lòng nhập lý do từ chối vào ô Ý kiến chỉ đạo!');
+  if ((actionType === 'REJECT' || actionType === 'REQUEST_CHANGES') && !comment) {
+    return alert(actionType === 'REJECT' ? 'Vui lòng nhập lý do từ chối vào ô Ý kiến chỉ đạo!' : 'Vui lòng nhập lý do cần bổ sung vào ô Ý kiến chỉ đạo!');
   }
 
+  const actionUrlMap = { APPROVE: 'approve', REJECT: 'reject', REQUEST_CHANGES: 'request-changes' };
   let result;
   try {
-    result = await callWorkflowAction('officeReqs', o.id, actionType === 'REJECT' ? 'reject' : 'approve', { comment });
+    result = await callWorkflowAction('officeReqs', o.id, actionUrlMap[actionType], { comment });
   } catch (e) {
     return alert('⛔ ' + e.message);
   }
@@ -17627,7 +18147,12 @@ async function processOfficeReq(actionType) {
 
   let msg = '✅ Đã cập nhật trạng thái đề xuất văn phòng!';
 
-  if (transition.type === 'REJECTED') {
+  if (transition.type === 'REQUEST_CHANGES') {
+    notifyUsersByEmail('OFFICE', 'NOTIFY_REQUEST_CHANGES', updatedOffice.code, [updatedOffice.creator],
+      `[VPDT] Đề xuất văn phòng ${updatedOffice.code} cần bổ sung/chỉnh sửa`,
+      `Đề xuất "${updatedOffice.title}" (${updatedOffice.code}) của bạn cần được sửa lại. Lý do: ${comment}. Vui lòng vào mục Văn Phòng Tổng Hợp để sửa và gửi lại.`);
+    msg = '✅ Đã yêu cầu bổ sung — hồ sơ đã chuyển về NHÁP để người tạo sửa lại!';
+  } else if (transition.type === 'REJECTED') {
     notifyUsersByEmail('OFFICE', 'NOTIFY_REJECTED', updatedOffice.code, [updatedOffice.creator],
       `[VPDT] Đề xuất văn phòng ${updatedOffice.code} bị từ chối`,
       `Đề xuất "${updatedOffice.title}" (${updatedOffice.code}) của bạn đã bị từ chối. Lý do: ${comment}`);
@@ -20840,6 +21365,7 @@ function collectPermsFromForm() {
     carView: scopeFromForm('pCarViewAll', 'pCarViewDept'),
     carCreate: scopeFromForm('pCarCreateAll', 'pCarCreateDept'),
     carDownload: scopeFromForm('pCarDownloadAll', 'pCarDownloadDept'),
+    carDispatch: document.getElementById('pCarDispatch').checked,
     officeView: scopeFromForm('pOfficeViewAll', 'pOfficeViewDept'),
     officeCreate: scopeFromForm('pOfficeCreateAll', 'pOfficeCreateDept'),
     officeDownload: scopeFromForm('pOfficeDownloadAll', 'pOfficeDownloadDept'),
@@ -20854,6 +21380,7 @@ function collectPermsFromForm() {
     itPriceProposeCreate: document.getElementById('pItPriceProposeCreate').checked,
     itManage: document.getElementById('pItManage').checked,
     uniformManage: document.getElementById('pUniformManage').checked,
+    uniformApprove: document.getElementById('pUniformApprove').checked,
     uniformStoreManage: document.getElementById('pUniformStoreManage').checked,
     budgetManage: document.getElementById('pBudgetManage').checked,
     budgetCreate: document.getElementById('pBudgetCreate').checked,
@@ -20899,6 +21426,7 @@ function populatePermsForm(permsInput) {
   document.getElementById('pItPriceProposeCreate').checked = !!perms.itPriceProposeCreate;
   document.getElementById('pItManage').checked = !!perms.itManage;
   document.getElementById('pUniformManage').checked = !!perms.uniformManage;
+  document.getElementById('pUniformApprove').checked = !!perms.uniformApprove;
   document.getElementById('pUniformStoreManage').checked = !!perms.uniformStoreManage;
   document.getElementById('pBudgetManage').checked = !!perms.budgetManage;
   document.getElementById('pBudgetCreate').checked = !!perms.budgetCreate;
@@ -20927,6 +21455,7 @@ function populatePermsForm(permsInput) {
   document.getElementById('pCarViewAll').checked = !!perms.carView?.all;
   document.getElementById('pCarCreateAll').checked = !!perms.carCreate?.all;
   document.getElementById('pCarDownloadAll').checked = !!perms.carDownload?.all;
+  document.getElementById('pCarDispatch').checked = !!perms.carDispatch;
   document.getElementById('pOfficeViewAll').checked = !!perms.officeView?.all;
   document.getElementById('pOfficeCreateAll').checked = !!perms.officeCreate?.all;
   document.getElementById('pOfficeDownloadAll').checked = !!perms.officeDownload?.all;
@@ -23500,6 +24029,7 @@ function resetUserForm() {
   document.getElementById('pReportEntryCreate').checked = !!defaults.reportEntryCreate;
   document.getElementById('pMeetingApprove').checked = defaults.meetingApprove;
   document.getElementById('pMeetingCancel').checked = defaults.meetingCancel;
+  document.getElementById('pCarDispatch').checked = !!defaults.carDispatch;
   document.getElementById('pOfficeBuy').checked = defaults.officeBuy;
   document.getElementById('pOfficeFix').checked = defaults.officeFix;
   document.getElementById('pOfficeInvest').checked = defaults.officeInvest;
@@ -23514,6 +24044,7 @@ function resetUserForm() {
   document.getElementById('pItPriceProposeCreate').checked = !!defaults.itPriceProposeCreate;
   document.getElementById('pItManage').checked = !!defaults.itManage;
   document.getElementById('pUniformManage').checked = !!defaults.uniformManage;
+  document.getElementById('pUniformApprove').checked = !!defaults.uniformApprove;
   document.getElementById('pUniformStoreManage').checked = !!defaults.uniformStoreManage;
   document.getElementById('pBudgetManage').checked = !!defaults.budgetManage;
   document.getElementById('pBudgetCreate').checked = !!defaults.budgetCreate;
@@ -23650,6 +24181,7 @@ function summarizeUserPerms(perms) {
   if (perms.reportManage || perms.reportAggregate || perms.reportEntryCreate) parts.push('📅 Báo cáo định kỳ');
   if (hasScope(perms.meetingView) || hasScope(perms.meetingBookScope) || perms.meetingApprove || perms.meetingCancel) parts.push('📅 Phòng họp');
   if (hasScope(perms.carView) || hasScope(perms.carCreate)) parts.push('🚗 Xe');
+  if (perms.carDispatch) parts.push('🚘 Điều hành xe');
   if ((hasScope(perms.officeView) || hasScope(perms.officeCreate)) && (perms.officeBuy || perms.officeFix || perms.officeInvest)) parts.push('🏢 VP');
   if (perms.minutesCreate) parts.push('📝 Biên bản họp');
   if (perms.canViewReports) parts.push('📊 Báo cáo');
@@ -24078,9 +24610,26 @@ function renderReportsSubTabBar() {
   }).join('');
 }
 
+// #reportsDeptFilter mặc định liệt kê DB.depts (khối văn phòng, xem populateDropdowns() ~dòng 10345) —
+// module Đồng Phục dùng "dept" = TÊN SIÊU THỊ (DB.stores, TÁCH RIÊNG khỏi DB.depts, xem
+// lib/createValidation.js uniformPeriods), nên đổi sang danh mục Siêu Thị khi mở tab báo cáo này (và
+// đổi LẠI DB.depts khi rời tab, không ảnh hưởng các module khác) — nếu không, dropdown không có lựa
+// chọn nào khớp được uniformIssuances.dept nên bộ lọc "theo siêu thị" coi như không dùng được dù
+// getRecords()/renderUniformReportExtra() bên dưới đã sẵn sàng lọc đúng theo giá trị chọn.
+function repopulateReportsDeptFilterOptions(key) {
+  const el = document.getElementById('reportsDeptFilter');
+  if (!el) return;
+  const prevValue = el.value;
+  const source = key === 'uniform' ? (DB.stores || []) : (DB.depts || []);
+  const label = key === 'uniform' ? '-- Tất cả siêu thị --' : '-- Tất cả phòng ban --';
+  el.innerHTML = `<option value="">${label}</option>` + source.map(d => `<option value="${escapeHtml(d)}">${escapeHtml(d)}</option>`).join('');
+  if (source.includes(prevValue)) el.value = prevValue; // giữ lựa chọn cũ nếu còn hợp lệ ở danh mục mới
+}
+
 function setReportsSubTab(key) {
   window.scrollTo({ top: 0, behavior: 'auto' }); // Tránh "bay xuống cuối" khi đổi tab con — xem setSystemSubTab().
   activeReportsSubTab = key;
+  repopulateReportsDeptFilterOptions(key);
   renderReportsSubTabBar();
   renderReports();
 }
@@ -24617,6 +25166,16 @@ function renderUniformReportExtra(records) {
   const totalAllocatedQty = stockRows.reduce((s, r) => s + r.allocated, 0);
   const totalStockQty = stockRows.reduce((s, r) => s + r.stock, 0);
 
+  // Chi tiết theo NHÂN VIÊN (Phase 2) — nhân viên nào nhận mặt hàng/size/mã SKU nào, lọc theo ĐÚNG
+  // records đã qua getRecords() (đã áp bộ lọc siêu thị + khoảng ngày ở trên) — không tính lại từ đầu.
+  const employeeRows = [];
+  for (const r of records) {
+    for (const it of (r.items || [])) {
+      employeeRows.push({ dept: r.dept, employeeName: r.employeeName, itemName: it.name, size: it.size, qty: it.qty, code: uniformSkuFor(it.name, it.size), createdAt: r.createdAt });
+    }
+  }
+  employeeRows.sort((a, b) => a.employeeName.localeCompare(b.employeeName, 'vi'));
+
   return `
     <div class="bg-white p-4 rounded border space-y-3">
       <h4 class="font-bold text-gray-800 mb-1">👕 Đồng Phục — Cấp Phát & Tồn Kho</h4>
@@ -24655,6 +25214,34 @@ function renderUniformReportExtra(records) {
                 <td class="border p-2 text-right font-bold ${r.stock <= 0 ? 'text-red-600' : 'text-green-700'}">${r.stock.toLocaleString('vi-VN')}</td>
               </tr>
             `).join('') : `<tr><td colspan="6" class="text-center p-4 text-gray-500 italic">Chưa có dữ liệu tồn kho.</td></tr>`}
+          </tbody>
+        </table>
+      </div>
+
+      <h4 class="font-bold text-gray-800 mb-1 mt-4">🧍 Chi Tiết Theo Nhân Viên (khớp bộ lọc siêu thị/ngày ở trên)</h4>
+      <div class="overflow-x-auto">
+        <table class="w-full border-collapse text-xs">
+          <thead><tr class="bg-gray-100 text-left">
+            <th class="border p-2">Nhân Viên</th>
+            <th class="border p-2">Siêu Thị</th>
+            <th class="border p-2">Mặt Hàng</th>
+            <th class="border p-2">Size</th>
+            <th class="border p-2">Mã SKU</th>
+            <th class="border p-2 text-right">SL</th>
+            <th class="border p-2">Ngày Cấp</th>
+          </tr></thead>
+          <tbody>
+            ${employeeRows.length ? employeeRows.map(r => `
+              <tr>
+                <td class="border p-2">${escapeHtml(r.employeeName || '')}</td>
+                <td class="border p-2">${escapeHtml(r.dept)}</td>
+                <td class="border p-2">${escapeHtml(r.itemName)}</td>
+                <td class="border p-2">${escapeHtml(r.size || '—')}</td>
+                <td class="border p-2 font-mono text-cyan-700">${escapeHtml(r.code || '—')}</td>
+                <td class="border p-2 text-right">${r.qty.toLocaleString('vi-VN')}</td>
+                <td class="border p-2">${escapeHtml(r.createdAt || '')}</td>
+              </tr>
+            `).join('') : `<tr><td colspan="7" class="text-center p-4 text-gray-500 italic">Chưa có dữ liệu cấp phát trong khoảng đã lọc.</td></tr>`}
           </tbody>
         </table>
       </div>
@@ -26567,6 +27154,15 @@ function resetCareerPathForm() {
 }
 
 function renderTrainingLms() {
+  // Đào Tạo Đợt 3 dùng chung <datalist id="systemUsersDatalist"> cho #tcInstructor/#tcInviteListPickInput
+  // (form Tạo Lớp Mới) và #trRosterPickInput (modal Thêm Học Viên, mở từ bảng lớp học ở đây) — nhưng
+  // trước đây KHÔNG có lệnh gọi populateSystemUsersDatalist() nào trên đường vào module này, chỉ được
+  // populate "ăn theo" nếu người dùng tình cờ mở Biên Bản Họp/modal Mẫu/sửa lớp học TRƯỚC đó trong cùng
+  // phiên. Phiên mới mở thẳng Đào Tạo -> datalist rỗng -> các ô trên "không gõ tìm được" (báo lỗi thật,
+  // xem HUONG_DAN_DEPLOY_UBUNTU.md không liên quan). Gọi ngay đầu renderTrainingLms() (chạy mỗi lần vào
+  // module + mỗi lần đổi sub-tab, xem setTrainingLmsTab()) để đảm bảo luôn có dữ liệu trước khi các ô
+  // trên có thể hiện ra.
+  populateSystemUsersDatalist();
   populateTrainingCategorySelects();
   populateTrainingClassMultiSelects();
   populateTrainingCourseSelects();
@@ -30500,41 +31096,85 @@ function canManageUniform(user) {
 function canManageUniformStore(user) {
   return !!(user?.perms?.admin || user?.perms?.uniformStoreManage);
 }
+// uniformApprove (Phase 2) — duyệt/từ chối kỳ cấp phát VÀ điều chuyển kho (DÙNG CHUNG 1 quyền, không
+// tách riêng — xem lib/recordActions.js canApproveUniform()/canApproveUniformTransfer()).
+function canApproveUniformClient(user) {
+  return !!(user?.perms?.admin || user?.perms?.uniformApprove);
+}
 
 function setUniformSubTab(subTab) {
   window.scrollTo({ top: 0, behavior: 'auto' }); // Tránh "bay xuống cuối" khi đổi tab con — xem setSystemSubTab().
   const canHc = canManageUniform(currentUser);
   const canStore = canManageUniformStore(currentUser);
-  if (subTab === 'PERIODS' && !canHc) subTab = canStore ? 'STORE' : 'STOCK';
-  if (subTab === 'STORE' && !canStore) subTab = canHc ? 'PERIODS' : 'STOCK';
+  const canApprove = canApproveUniformClient(currentUser);
+  // Phase 2: uniformApprove (không kèm uniformManage/uniformStoreManage) vẫn cần vào ĐƯỢC tab "Kỳ Cấp
+  // Phát" (duyệt/từ chối kỳ) và "Xác Nhận/Cấp Phát" (duyệt/từ chối điều chuyển kho) — nếu không, người
+  // chỉ giữ quyền duyệt sẽ không bao giờ tới được màn duyệt (2 nút bấm tab này trước đây CHỈ hiện cho
+  // canHc/canStore, xem canAccessUniformModule() đã mở quyền vào MODULE nhưng chưa mở quyền vào TAB).
+  const canSeePeriods = canHc || canApprove;
+  const canSeeStore = canStore || canApprove;
+  if (subTab === 'PERIODS' && !canSeePeriods) subTab = canSeeStore ? 'STORE' : 'STOCK';
+  if (subTab === 'STORE' && !canSeeStore) subTab = canSeePeriods ? 'PERIODS' : 'STOCK';
   activeUniformSubTab = subTab;
 
   document.getElementById('uniformSubPeriods').classList.toggle('hidden', subTab !== 'PERIODS');
   document.getElementById('uniformSubStore').classList.toggle('hidden', subTab !== 'STORE');
   document.getElementById('uniformSubStock').classList.toggle('hidden', subTab !== 'STOCK');
+  document.getElementById('uniformSubDashboard').classList.toggle('hidden', subTab !== 'DASHBOARD');
 
   const activeCls = 'px-3 py-1.5 rounded text-xs font-bold bg-teal-700 text-white';
   const inactiveCls = 'px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700';
-  document.getElementById('btnUniformSubPeriods').className = (subTab === 'PERIODS' ? activeCls : inactiveCls) + (canHc ? '' : ' hidden');
-  document.getElementById('btnUniformSubStore').className = (subTab === 'STORE' ? activeCls : inactiveCls) + (canStore ? '' : ' hidden');
+  document.getElementById('btnUniformSubPeriods').className = (subTab === 'PERIODS' ? activeCls : inactiveCls) + (canSeePeriods ? '' : ' hidden');
+  document.getElementById('btnUniformSubStore').className = (subTab === 'STORE' ? activeCls : inactiveCls) + (canSeeStore ? '' : ' hidden');
   document.getElementById('btnUniformSubStock').className = subTab === 'STOCK' ? activeCls : inactiveCls;
+  document.getElementById('btnUniformSubDashboard').className = subTab === 'DASHBOARD' ? activeCls : inactiveCls;
 
-  if (subTab === 'PERIODS') { renderUniformCatalogList(); resetUniformPeriodForm(); renderUniformPeriodsList(); }
-  if (subTab === 'STORE') { renderUniformPendingAllocations(); renderUniformIssueEmployeeOptions(); resetUniformIssueForm(); renderUniformIssuancesTable(); renderUniformHoldingsTable(); resetUniformAdjustForms(); renderUniformAdjustmentsTable(); }
+  if (subTab === 'PERIODS') {
+    renderUniformCatalogList(); resetUniformPeriodForm(); renderUniformPeriodsList();
+    // Form "Tạo Kỳ Cấp Phát" chỉ dành cho uniformManage/admin — approver-only vào tab này CHỈ để
+    // duyệt/từ chối, không tạo kỳ mới được (server cũng chặn nếu cố gọi thẳng API).
+    document.getElementById('uniformCreatePeriodBlock')?.classList.toggle('hidden', !canHc);
+  }
+  if (subTab === 'STORE') {
+    renderUniformPendingAllocations(); renderUniformIssueEmployeeOptions(); resetUniformIssueForm(); renderUniformIssuancesTable();
+    renderUniformHoldingsTable(); resetUniformAdjustForms(); renderUniformAdjustmentsTable();
+    resetUniformTransferForm(); renderUniformTransferApprovalQueue(); renderUniformTransfersTable();
+  }
   if (subTab === 'STOCK') { renderUniformStockStoreFilterOptions(); renderUniformStock(); }
+  if (subTab === 'DASHBOARD') { renderUniformDashboard(); }
+}
+
+// Mã SKU (Phase 2) — sinh 1 LẦN lúc Giám Đốc Siêu Thị xác nhận nhận LẦN ĐẦU 1 (mặt hàng,size), lưu
+// trong DB.uniformCatalog[].codesBySize[size] (mirror backfillUniformSkuCodes() ở
+// lib/recordActions.js) — TÁI SỬ DỤNG cho mọi siêu thị/kỳ khác xác nhận cùng (mặt hàng,size) sau đó.
+// Trả về '' nếu chưa từng được xác nhận ở đâu cả (chưa sinh mã).
+function uniformSkuFor(name, size) {
+  const entry = (DB.uniformCatalog || []).find(c => c.name === name);
+  return entry?.codesBySize?.[size || ''] || '';
+}
+// Định dạng hiển thị CHUẨN "loại — cỡ — mã" dùng chung mọi nơi liệt kê đồng phục (danh mục, dropdown
+// cấp phát, bảng tồn kho, bảng đang giữ) — mã bỏ qua nếu chưa sinh (kỳ chưa từng được xác nhận).
+function formatUniformLabel(name, size, code) {
+  const parts = [name, size || '—'];
+  if (code) parts.push(code);
+  return parts.map(escapeHtml).join(' — ');
 }
 
 function uniformItemsSummary(items) {
-  return (items || []).map(it => `${escapeHtml(it.name)}${it.size ? ` (${escapeHtml(it.size)})` : ''}: ${it.qty}`).join(', ') || '—';
+  return (items || []).map(it => {
+    const code = uniformSkuFor(it.name, it.size);
+    return `${formatUniformLabel(it.name, it.size, code)}: ${it.qty}`;
+  }).join(', ') || '—';
 }
 
-// ============ Danh Mục Đồng Phục (chỉ admin thêm/sửa/xoá — xem ADMIN_ONLY_KEYS ở routes/data.js) ============
+// ============ Danh Mục Đồng Phục (Quản Trị Viên / Hành Chính thêm/sửa/xoá — xem ADMIN_ONLY_KEYS +
+// isCurrentlyAdminOrUniformManage() ở routes/data.js) ============
 function renderUniformCatalogList() {
   const wrap = document.getElementById('uniformCatalogListWrap');
   const form = document.getElementById('uniformCatalogAdminForm');
   if (!wrap) return;
-  const isAdmin = !!currentUser.perms?.admin;
-  if (form) form.classList.toggle('hidden', !isAdmin);
+  const canEdit = !!currentUser.perms?.admin || canManageUniform(currentUser);
+  if (form) form.classList.toggle('hidden', !canEdit);
   const catalog = DB.uniformCatalog || [];
   if (!catalog.length) {
     wrap.innerHTML = `<div class="text-xs text-gray-500 italic bg-white p-3 rounded border">Chưa có mặt hàng nào trong danh mục.</div>`;
@@ -30544,9 +31184,11 @@ function renderUniformCatalogList() {
     <div class="bg-white p-2.5 rounded border flex items-center justify-between gap-2 flex-wrap">
       <div>
         <span class="font-bold text-slate-800 text-xs">${escapeHtml(c.name)}</span>
-        <span class="text-[11px] text-gray-500 ml-2">${(c.sizes || []).map(s => escapeHtml(s)).join(', ') || 'Không có size'}</span>
+        <div class="text-[11px] text-gray-500 mt-0.5">
+          ${(c.sizes || []).map(s => `<span class="inline-block mr-2">${escapeHtml(s)}${c.codesBySize?.[s] ? ` <span class="text-cyan-700 font-mono">(${escapeHtml(c.codesBySize[s])})</span>` : ' <span class="italic">(chưa có mã)</span>'}</span>`).join('') || 'Không có size'}
+        </div>
       </div>
-      ${isAdmin ? `<button type="button" onclick="deleteUniformCatalogItem(${c.id})" class="text-red-600 hover:text-red-800 text-xs font-bold">🗑️ Xóa</button>` : ''}
+      ${canEdit ? `<button type="button" onclick="deleteUniformCatalogItem(${c.id})" class="text-red-600 hover:text-red-800 text-xs font-bold">🗑️ Xóa</button>` : ''}
     </div>
   `).join('');
 }
@@ -30559,7 +31201,7 @@ function saveUniformCatalogItem() {
   if (!sizes.length) return alert('Vui lòng nhập ít nhất 1 size (cách nhau bằng dấu phẩy)!');
   if ((DB.uniformCatalog || []).some(c => c.name === name)) return alert('Mặt hàng này đã có trong danh mục!');
   const nextId = (Math.max(0, ...(DB.uniformCatalog || []).map(c => c.id)) || 0) + 1;
-  DB.uniformCatalog = [...(DB.uniformCatalog || []), { id: nextId, name, sizes }];
+  DB.uniformCatalog = [...(DB.uniformCatalog || []), { id: nextId, name, sizes, codesBySize: {} }];
   syncStorage('uniformCatalog');
   logSystemAction('UNIFORM', 'ADD_UNIFORM_CATALOG', `Thêm mặt hàng vào Danh Mục Đồng Phục [${name}]`, 'SUCCESS', name);
   document.getElementById('uniformCatalogName').value = '';
@@ -30723,6 +31365,15 @@ function uniformAllocStatusBadge(status) {
   return `<span class="px-2 py-0.5 bg-amber-100 text-amber-800 rounded font-bold text-[11px]">⏳ Chờ xác nhận</span>`;
 }
 
+// Cổng duyệt Ở CẤP KỲ (Phase 2) — mirror uniformAllocStatusBadge() ở trên nhưng cho field approvalStatus
+// của CẢ KỲ (không phải per-allocation). Kỳ tạo trước Phase 2 (approvalStatus rỗng) coi như đã duyệt.
+function uniformPeriodApprovalBadge(period) {
+  const status = period.approvalStatus;
+  if (!status || status === 'APPROVED') return `<span class="px-2 py-0.5 bg-green-100 text-green-800 rounded font-bold text-[11px]">✔️ Đã duyệt</span>`;
+  if (status === 'REJECTED') return `<span class="px-2 py-0.5 bg-red-100 text-red-800 rounded font-bold text-[11px]">⛔ Đã từ chối</span>`;
+  return `<span class="px-2 py-0.5 bg-indigo-100 text-indigo-800 rounded font-bold text-[11px]">⏳ Chờ duyệt</span>`;
+}
+
 function renderUniformPeriodsList() {
   const wrap = document.getElementById('uniformPeriodsListWrap');
   if (!wrap) return;
@@ -30730,14 +31381,23 @@ function renderUniformPeriodsList() {
     wrap.innerHTML = `<div class="text-center p-6 text-gray-500 italic bg-white rounded border">Chưa có kỳ cấp phát nào.</div>`;
     return;
   }
+  const canApprove = canApproveUniformClient(currentUser);
   wrap.innerHTML = DB.uniformPeriods.map(p => `
     <div class="bg-white rounded border overflow-hidden">
       <div class="flex items-center justify-between gap-2 p-3 bg-gray-50 border-b flex-wrap">
         <div>
-          <div class="font-bold text-teal-800 text-sm">${escapeHtml(p.name)}</div>
+          <div class="font-bold text-teal-800 text-sm">${escapeHtml(p.name)} ${uniformPeriodApprovalBadge(p)}</div>
           <div class="text-[11px] text-gray-500">Tạo bởi ${escapeHtml(p.creatorName || p.creator || '')} lúc ${escapeHtml(p.createdAt || '')}${p.note ? ` — ${escapeHtml(p.note)}` : ''}</div>
+          ${p.approvalStatus === 'REJECTED' && p.rejectReason ? `<div class="text-[11px] text-red-600 mt-0.5">Lý do từ chối: ${escapeHtml(p.rejectReason)}</div>` : ''}
+          ${p.approvalStatus === 'APPROVED' ? `<div class="text-[11px] text-green-700 mt-0.5">Duyệt bởi ${escapeHtml(p.approvedByName || '')} lúc ${escapeHtml(p.approvedAt || '')}</div>` : ''}
         </div>
-        ${currentUser.perms?.admin ? `<button type="button" onclick="deleteUniformPeriodAction(${p.id})" class="text-red-600 hover:text-red-800 text-xs font-bold">🗑️ Xóa</button>` : ''}
+        <div class="flex items-center gap-2 flex-wrap">
+          ${(canApprove && p.approvalStatus === 'PENDING_APPROVAL') ? `
+            <button type="button" onclick="approveUniformPeriodAction(${p.id})" class="bg-emerald-600 text-white px-3 py-1 rounded text-xs font-bold hover:bg-emerald-700">✔️ Duyệt</button>
+            <button type="button" onclick="rejectUniformPeriodAction(${p.id})" class="bg-red-600 text-white px-3 py-1 rounded text-xs font-bold hover:bg-red-700">✕ Từ Chối</button>
+          ` : ''}
+          ${currentUser.perms?.admin ? `<button type="button" onclick="deleteUniformPeriodAction(${p.id})" class="text-red-600 hover:text-red-800 text-xs font-bold">🗑️ Xóa</button>` : ''}
+        </div>
       </div>
       <div class="overflow-x-auto">
         <table class="w-full text-xs">
@@ -30763,6 +31423,53 @@ function renderUniformPeriodsList() {
   `).join('');
 }
 
+function approveUniformPeriodAction(periodId) {
+  showConfirmModal({
+    title: 'Duyệt Kỳ Cấp Phát',
+    bodyHTML: 'Duyệt kỳ cấp phát này? Sau khi duyệt, Giám Đốc các Siêu Thị liên quan mới bắt đầu xác nhận được phần phân bổ của mình.',
+    confirmLabel: 'Duyệt',
+    onConfirm: async () => {
+      let result;
+      try {
+        result = await callRecordAction('uniformPeriods', periodId, 'approve', {});
+      } catch (err) { return alert(`⛔ ${err.message}`); }
+      const idx = DB.uniformPeriods.findIndex(x => x.id === periodId);
+      if (idx !== -1) DB.uniformPeriods[idx] = result.item;
+      logSystemAction('UNIFORM', 'APPROVE_UNIFORM_PERIOD', `Duyệt kỳ cấp phát đồng phục [${result.item.name}]`, 'SUCCESS', result.item.name);
+      alert('✅ Đã duyệt kỳ cấp phát!');
+      renderUniformPeriodsList();
+    }
+  });
+}
+
+function rejectUniformPeriodAction(periodId) {
+  showConfirmModal({
+    title: 'Từ Chối Kỳ Cấp Phát',
+    bodyHTML: `
+      <div class="space-y-2">
+        <div class="text-xs text-gray-600">Từ chối là QUYẾT ĐỊNH CUỐI CÙNG — kỳ này sẽ không bao giờ xác nhận được nữa sau khi từ chối.</div>
+        <div>
+          <label class="block font-semibold text-gray-600 mb-1 text-xs">Lý Do</label>
+          <textarea id="uniformPeriodRejectReason" rows="2" class="w-full border p-1.5 rounded text-xs" placeholder="Không bắt buộc..."></textarea>
+        </div>
+      </div>
+    `,
+    confirmLabel: 'Từ Chối',
+    onConfirm: async () => {
+      const reason = document.getElementById('uniformPeriodRejectReason').value.trim();
+      let result;
+      try {
+        result = await callRecordAction('uniformPeriods', periodId, 'reject', { reason });
+      } catch (err) { return alert(`⛔ ${err.message}`); }
+      const idx = DB.uniformPeriods.findIndex(x => x.id === periodId);
+      if (idx !== -1) DB.uniformPeriods[idx] = result.item;
+      logSystemAction('UNIFORM', 'REJECT_UNIFORM_PERIOD', `Từ chối kỳ cấp phát đồng phục [${result.item.name}]`, 'SUCCESS', result.item.name);
+      alert('✅ Đã từ chối kỳ cấp phát!');
+      renderUniformPeriodsList();
+    }
+  });
+}
+
 function deleteUniformPeriodAction(id) {
   const p = DB.uniformPeriods.find(x => x.id === id);
   if (!p) return;
@@ -30781,6 +31488,10 @@ function renderUniformPendingAllocations() {
   if (!wrap) return;
   const pending = [];
   for (const p of DB.uniformPeriods) {
+    // Cổng duyệt Ở CẤP KỲ (Phase 2) — kỳ chưa/không được duyệt thì KHÔNG hiện ra để xác nhận, kể cả
+    // với admin/uniformManage (server đã lọc cho uniformStoreManage thuần, đây là phòng thủ thêm cho
+    // trường hợp 1 tài khoản vừa admin/uniformManage vừa đang đứng vai trò Giám Đốc Siêu Thị của mình).
+    if (p.approvalStatus && p.approvalStatus !== 'APPROVED') continue;
     for (const a of (p.allocations || [])) {
       if (a.dept === currentUser.dept && a.status === 'PENDING_CONFIRM') pending.push({ period: p, alloc: a });
     }
@@ -30809,6 +31520,9 @@ function confirmUniformAllocationAction(periodId, allocationId) {
       } catch (err) { return alert(`⛔ ${err.message}`); }
       const idx = DB.uniformPeriods.findIndex(x => x.id === periodId);
       if (idx !== -1) DB.uniformPeriods[idx] = result.item;
+      // Phase 2: server có thể trả kèm uniformCatalog đã cập nhật (SKU vừa sinh/tái sử dụng cho phần
+      // vừa xác nhận) — cập nhật ngay để hiện mã mới mà không cần tải lại trang, xem routes/records.js.
+      if (result.uniformCatalog) DB.uniformCatalog = result.uniformCatalog;
       logSystemAction('UNIFORM', 'CONFIRM_UNIFORM_ALLOC', `Xác nhận nhận đồng phục kỳ [${result.item.name}]`, 'SUCCESS', result.item.name);
       renderUniformPendingAllocations();
       renderUniformStock();
@@ -30895,7 +31609,8 @@ function renderUniformIssueItems() {
                 <option value="">-- Chọn mặt hàng --</option>
                 ${options.map(o => {
                   const key = `${o.name}|||${o.size}`;
-                  return `<option value="${escapeHtml(key)}" ${key === currentKey ? 'selected' : ''}>${escapeHtml(o.name)}${o.size ? ` - ${escapeHtml(o.size)}` : ''} (còn ${o.stock})</option>`;
+                  const code = uniformSkuFor(o.name, o.size);
+                  return `<option value="${escapeHtml(key)}" ${key === currentKey ? 'selected' : ''}>${formatUniformLabel(o.name, o.size, code)} (còn ${o.stock})</option>`;
                 }).join('')}
               </select>
             </td>
@@ -31008,7 +31723,7 @@ function renderUniformHoldingsTable() {
     <tr class="hover:bg-gray-50 border-b">
       <td class="border p-2">${escapeHtml(h.employeeName)}</td>
       <td class="border p-2">${escapeHtml(h.name)}</td>
-      <td class="border p-2">${escapeHtml(h.size || '—')}</td>
+      <td class="border p-2">${escapeHtml(h.size || '—')}${uniformSkuFor(h.name, h.size) ? ` <span class="text-[10px] text-cyan-700 font-mono">(${escapeHtml(uniformSkuFor(h.name, h.size))})</span>` : ''}</td>
       <td class="border p-2 text-right font-bold">${h.held.toLocaleString('vi-VN')}</td>
       <td class="border p-2 text-center space-x-1 whitespace-nowrap">
         <button type="button" onclick="openUniformHoldingActionModal(${idx}, 'TON')" class="bg-emerald-600 text-white px-2 py-1 rounded text-[11px] font-bold hover:bg-emerald-700">↩️ Thu Hồi</button>
@@ -31203,12 +31918,14 @@ function renderUniformAdjustmentsTable() {
 // Mirror computeUniformStock() ở lib/recordActions.js — chỉ tính từ allocations đã CONFIRMED trừ đi
 // uniformIssuances (đã trừ phần thu hồi) và trừ luôn hỏng/hủy, để hiển thị tức thời phía client mà
 // không cần gọi thêm API riêng cho tồn kho.
+// Mirror computeUniformStock() ở lib/recordActions.js (Phase 2 — có thêm transferOut/transferIn từ
+// DB.uniformTransfers ĐÃ APPROVED, xem giải thích công thức ở đó).
 function computeUniformStockClient(storeDept) {
   const stock = new Map();
   const keyOf = (name, size) => `${name}|||${size || ''}`;
   const bump = (name, size, field, qty) => {
     const key = keyOf(name, size);
-    if (!stock.has(key)) stock.set(key, { name, size: size || '', allocated: 0, issued: 0, recalled: 0, hong: 0, huy: 0, mat: 0 });
+    if (!stock.has(key)) stock.set(key, { name, size: size || '', allocated: 0, issued: 0, recalled: 0, hong: 0, huy: 0, mat: 0, transferOut: 0, transferIn: 0 });
     stock.get(key)[field] += qty;
   };
   for (const period of DB.uniformPeriods) {
@@ -31228,8 +31945,40 @@ function computeUniformStockClient(storeDept) {
     if (adj.outcome === 'HUY') bump(adj.itemName, adj.size, 'huy', adj.qty);
     if (adj.outcome === 'MAT') bump(adj.itemName, adj.size, 'mat', adj.qty);
   }
-  for (const row of stock.values()) row.stock = row.allocated - (row.issued - row.recalled) - row.hong - row.huy - row.mat;
+  for (const t of (DB.uniformTransfers || [])) {
+    if (t.status !== 'APPROVED') continue;
+    if (t.sourceDept === storeDept) bump(t.itemName, t.size, 'transferOut', t.qty);
+    if (t.targetDept === storeDept) bump(t.itemName, t.size, 'transferIn', t.qty);
+  }
+  for (const row of stock.values()) row.stock = row.allocated - (row.issued - row.recalled) - row.hong - row.huy - row.mat - row.transferOut + row.transferIn;
   return stock;
+}
+
+// ============ Chi Tiết Theo Kỳ (Phase 2) — mirror UX expand/collapse "Chi Tiết Tài Liệu" của module
+// Tài Liệu: bấm 1 dòng tồn kho để xem SL Đã Nhận đến từ (những) kỳ cấp phát nào — tính HOÀN TOÀN phía
+// trình duyệt từ DB.uniformPeriods đã tải sẵn, KHÔNG gọi thêm API nào. Chỉ gộp allocations ĐÃ CONFIRMED
+// (đúng khớp "allocated" trong computeUniformStockClient() ở trên).
+const uniformStockExpandedKeys = new Set();
+function uniformStockRowKey(dept, name, size) { return `${dept}|||${name}|||${size || ''}`; }
+function uniformPeriodBreakdownFor(dept, name, size) {
+  const rows = [];
+  for (const period of DB.uniformPeriods) {
+    for (const alloc of (period.allocations || [])) {
+      if (alloc.dept !== dept || alloc.status !== 'CONFIRMED') continue;
+      for (const it of (alloc.items || [])) {
+        if (it.name === name && (it.size || '') === (size || '')) {
+          rows.push({ periodName: period.name, qty: it.qty, confirmedAt: alloc.confirmedAt, confirmedByName: alloc.confirmedByName });
+        }
+      }
+    }
+  }
+  return rows;
+}
+function toggleUniformStockDetail(dept, name, size) {
+  const key = uniformStockRowKey(dept, name, size);
+  if (uniformStockExpandedKeys.has(key)) uniformStockExpandedKeys.delete(key);
+  else uniformStockExpandedKeys.add(key);
+  renderUniformStock();
 }
 
 function renderUniformStockStoreFilterOptions() {
@@ -31264,19 +32013,302 @@ function renderUniformStock() {
     tbody.innerHTML = `<tr><td colspan="9" class="text-center p-6 text-gray-500 italic">Chưa có dữ liệu tồn kho.</td></tr>`;
     return;
   }
-  tbody.innerHTML = rows.map(r => `
+  tbody.innerHTML = rows.map(r => {
+    const key = uniformStockRowKey(r.dept, r.name, r.size);
+    const expanded = uniformStockExpandedKeys.has(key);
+    const code = uniformSkuFor(r.name, r.size);
+    const breakdown = expanded ? uniformPeriodBreakdownFor(r.dept, r.name, r.size) : [];
+    const netTransfer = r.transferIn - r.transferOut;
+    return `
     <tr class="hover:bg-gray-50 border-b">
       <td class="border p-2 font-semibold">${escapeHtml(r.dept)}</td>
-      <td class="border p-2">${escapeHtml(r.name)}</td>
+      <td class="border p-2">
+        <button type="button" onclick="toggleUniformStockDetail('${escapeHtml(r.dept)}', '${escapeHtml(r.name)}', '${escapeHtml(r.size || '')}')" class="text-teal-700 hover:underline font-semibold">${expanded ? '▾' : '▸'} ${escapeHtml(r.name)}</button>
+        ${code ? `<span class="block text-[10px] text-cyan-700 font-mono">${escapeHtml(code)}</span>` : ''}
+      </td>
       <td class="border p-2">${escapeHtml(r.size || '—')}</td>
       <td class="border p-2 text-right">${r.allocated.toLocaleString('vi-VN')}</td>
       <td class="border p-2 text-right">${r.issued.toLocaleString('vi-VN')}</td>
       <td class="border p-2 text-right ${r.hong > 0 ? 'text-rose-600 font-bold' : ''}">${r.hong.toLocaleString('vi-VN')}</td>
       <td class="border p-2 text-right ${r.huy > 0 ? 'text-gray-600 font-bold' : ''}">${r.huy.toLocaleString('vi-VN')}</td>
       <td class="border p-2 text-right ${r.mat > 0 ? 'text-orange-600 font-bold' : ''}">${r.mat.toLocaleString('vi-VN')}</td>
-      <td class="border p-2 text-right font-bold ${r.stock <= 0 ? 'text-red-600' : 'text-green-700'}">${r.stock.toLocaleString('vi-VN')}</td>
+      <td class="border p-2 text-right font-bold ${r.stock <= 0 ? 'text-red-600' : 'text-green-700'}">${r.stock.toLocaleString('vi-VN')}${netTransfer !== 0 ? `<span class="block text-[10px] font-normal text-cyan-700">${netTransfer > 0 ? '+' : ''}${netTransfer} điều chuyển</span>` : ''}</td>
+    </tr>
+    ${expanded ? `
+    <tr class="bg-teal-50/40">
+      <td class="border p-2" colspan="9">
+        <div class="text-[11px] text-gray-700">
+          <div class="font-bold text-teal-800 mb-1">📋 Chi tiết theo kỳ cấp phát (đã xác nhận):</div>
+          ${breakdown.length ? `
+            <table class="w-full border-collapse text-[11px]">
+              <thead><tr class="text-left text-gray-500"><th class="p-1">Kỳ Cấp Phát</th><th class="p-1 text-right">SL</th><th class="p-1">Xác Nhận Bởi</th><th class="p-1">Lúc</th></tr></thead>
+              <tbody>
+                ${breakdown.map(b => `<tr><td class="p-1">${escapeHtml(b.periodName)}</td><td class="p-1 text-right">${b.qty}</td><td class="p-1">${escapeHtml(b.confirmedByName || '')}</td><td class="p-1">${escapeHtml(b.confirmedAt || '')}</td></tr>`).join('')}
+              </tbody>
+            </table>
+          ` : `<div class="italic text-gray-500">Không có dữ liệu.</div>`}
+        </div>
+      </td>
+    </tr>
+    ` : ''}
+    `;
+  }).join('');
+}
+
+// ============ Điều Chuyển Kho Giữa Các Siêu Thị (uniformTransfers, Phase 2) ============
+// Yêu cầu: uniformStoreManage (nguồn = siêu thị mình). Duyệt/Từ chối: uniformApprove/admin (DÙNG CHUNG
+// quyền duyệt kỳ cấp phát — canApproveUniformClient() ở trên). Lịch sử: lọc theo canViewUniformTransferClient()
+// (mirror lib/recordViewScope.js canViewUniformTransfer() — server đã lọc DB.uniformTransfers trước khi
+// gửi về, hàm này chỉ để phòng thủ thêm + tái dùng cho phần đếm/hiển thị phía client).
+function canViewUniformTransferClient(user, item) {
+  if (!user) return false;
+  if (user.perms?.admin || user.perms?.uniformManage || user.perms?.uniformApprove) return true;
+  return !!(user.perms?.uniformStoreManage && (item.sourceDept === user.dept || item.targetDept === user.dept));
+}
+
+function resetUniformTransferForm() {
+  const formWrap = document.getElementById('uniformTransferRequestForm');
+  if (!formWrap) return;
+  const canRequest = canManageUniformStore(currentUser);
+  formWrap.classList.toggle('hidden', !canRequest);
+  if (!canRequest) return;
+
+  const targetDatalist = document.getElementById('uniformTransferTargetDeptDatalist');
+  if (targetDatalist) {
+    targetDatalist.innerHTML = (DB.stores || []).filter(s => s !== currentUser.dept).map(s => `<option value="${escapeHtml(s)}"></option>`).join('');
+  }
+  document.getElementById('uniformTransferTargetDept').value = '';
+
+  const stock = computeUniformStockClient(currentUser.dept);
+  const options = Array.from(stock.values()).filter(r => r.stock > 0).sort((a, b) => a.name.localeCompare(b.name, 'vi') || a.size.localeCompare(b.size, 'vi'));
+  const sel = document.getElementById('uniformTransferItemSize');
+  if (sel) {
+    sel.innerHTML = '<option value="">-- Chọn mặt hàng --</option>' +
+      options.map(o => {
+        const code = uniformSkuFor(o.name, o.size);
+        return `<option value="${escapeHtml(o.name)}|||${escapeHtml(o.size)}">${formatUniformLabel(o.name, o.size, code)} (còn ${o.stock})</option>`;
+      }).join('');
+  }
+  document.getElementById('uniformTransferQty').value = '';
+  document.getElementById('uniformTransferReason').value = '';
+
+  const approveWrap = document.getElementById('uniformTransferApprovalWrap');
+  if (approveWrap) approveWrap.classList.toggle('hidden', !canApproveUniformClient(currentUser));
+}
+
+async function callCreateUniformTransfer(payload) {
+  const res = await fetch('/api/records/uniformTransfers/create', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload || {})
+  });
+  if (res.status === 401) {
+    handleSessionExpired();
+    throw new Error('Phiên đăng nhập đã hết hạn');
+  }
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(body.error || `Lỗi máy chủ (HTTP ${res.status})`);
+  return body; // { ok, item }
+}
+
+async function submitUniformTransfer() {
+  const targetDept = document.getElementById('uniformTransferTargetDept').value.trim();
+  const combo = document.getElementById('uniformTransferItemSize').value;
+  const sep = combo.indexOf('|||');
+  const itemName = sep === -1 ? '' : combo.slice(0, sep);
+  const size = sep === -1 ? '' : combo.slice(sep + 3);
+  const qty = parseFloat(document.getElementById('uniformTransferQty').value);
+  const reason = document.getElementById('uniformTransferReason').value.trim();
+
+  if (!targetDept || !(DB.stores || []).includes(targetDept)) return alert('Vui lòng chọn đúng 1 siêu thị nhận có trong Danh Mục Siêu Thị!');
+  if (!itemName) return alert('Vui lòng chọn mặt hàng cần điều chuyển!');
+  if (!qty || qty <= 0) return alert('Vui lòng nhập số lượng hợp lệ (> 0)!');
+  if (!reason) return alert('Vui lòng nhập lý do điều chuyển!');
+
+  let newTransfer;
+  try {
+    const result = await callCreateUniformTransfer({ targetDept, itemName, size, qty, reason });
+    newTransfer = result.item;
+  } catch (err) {
+    return alert(`⛔ ${err.message}`);
+  }
+
+  DB.uniformTransfers.unshift(newTransfer);
+  logSystemAction('UNIFORM', 'CREATE_UNIFORM_TRANSFER', `Yêu cầu điều chuyển [${newTransfer.itemName}] từ ${newTransfer.sourceDept} sang ${newTransfer.targetDept}`, 'SUCCESS', newTransfer.itemName);
+  alert('✅ Đã gửi yêu cầu điều chuyển kho, chờ duyệt!');
+  resetUniformTransferForm();
+  renderUniformTransfersTable();
+}
+
+function uniformTransferStatusBadge(status) {
+  if (status === 'APPROVED') return `<span class="px-2 py-0.5 bg-green-100 text-green-800 rounded font-bold text-[11px]">✔️ Đã duyệt</span>`;
+  if (status === 'REJECTED') return `<span class="px-2 py-0.5 bg-red-100 text-red-800 rounded font-bold text-[11px]">⛔ Đã từ chối</span>`;
+  return `<span class="px-2 py-0.5 bg-indigo-100 text-indigo-800 rounded font-bold text-[11px]">⏳ Chờ duyệt</span>`;
+}
+
+function renderUniformTransferApprovalQueue() {
+  const wrap = document.getElementById('uniformTransferApprovalList');
+  const noNote = document.getElementById('uniformTransferNoPendingNote');
+  const box = document.getElementById('uniformTransferApprovalWrap');
+  if (!wrap || !box) return;
+  const canApprove = canApproveUniformClient(currentUser);
+  box.classList.toggle('hidden', !canApprove);
+  if (!canApprove) return;
+  const pending = (DB.uniformTransfers || []).filter(t => t.status === 'PENDING_APPROVAL');
+  noNote.classList.toggle('hidden', pending.length > 0);
+  wrap.innerHTML = pending.map(t => `
+    <div class="bg-white p-3 rounded border flex items-center justify-between gap-2 flex-wrap">
+      <div class="text-xs">
+        <div class="font-bold text-cyan-900">${escapeHtml(t.sourceDept)} → ${escapeHtml(t.targetDept)}</div>
+        <div class="text-gray-600">${formatUniformLabel(t.itemName, t.size, uniformSkuFor(t.itemName, t.size))}: ${t.qty} — ${escapeHtml(t.reason)}</div>
+        <div class="text-[11px] text-gray-400">Yêu cầu bởi ${escapeHtml(t.requestedByName || '')} lúc ${escapeHtml(t.requestedAt || '')}</div>
+      </div>
+      <div class="flex gap-2">
+        <button type="button" onclick="approveUniformTransferAction(${t.id})" class="bg-emerald-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-emerald-700">✔️ Duyệt</button>
+        <button type="button" onclick="rejectUniformTransferAction(${t.id})" class="bg-red-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-red-700">✕ Từ Chối</button>
+      </div>
+    </div>
+  `).join('');
+}
+
+function approveUniformTransferAction(id) {
+  showConfirmModal({
+    title: 'Duyệt Điều Chuyển Kho',
+    bodyHTML: 'Duyệt yêu cầu điều chuyển này? Tồn kho siêu thị nguồn sẽ giảm và siêu thị đích sẽ tăng ngay lập tức.',
+    confirmLabel: 'Duyệt',
+    onConfirm: async () => {
+      let result;
+      try {
+        result = await callRecordAction('uniformTransfers', id, 'approve', {});
+      } catch (err) { return alert(`⛔ ${err.message}`); }
+      const idx = DB.uniformTransfers.findIndex(x => x.id === id);
+      if (idx !== -1) DB.uniformTransfers[idx] = result.item;
+      logSystemAction('UNIFORM', 'APPROVE_UNIFORM_TRANSFER', `Duyệt điều chuyển [${result.item.itemName}] ${result.item.sourceDept} → ${result.item.targetDept}`, 'SUCCESS', result.item.itemName);
+      alert('✅ Đã duyệt điều chuyển kho!');
+      renderUniformTransferApprovalQueue();
+      renderUniformTransfersTable();
+      renderUniformStock();
+      renderUniformIssueItems();
+    }
+  });
+}
+
+function rejectUniformTransferAction(id) {
+  showConfirmModal({
+    title: 'Từ Chối Điều Chuyển Kho',
+    bodyHTML: `
+      <div class="space-y-2">
+        <div class="text-xs text-gray-600">Từ chối là QUYẾT ĐỊNH CUỐI CÙNG cho yêu cầu này.</div>
+        <div>
+          <label class="block font-semibold text-gray-600 mb-1 text-xs">Lý Do</label>
+          <textarea id="uniformTransferRejectReason" rows="2" class="w-full border p-1.5 rounded text-xs" placeholder="Không bắt buộc..."></textarea>
+        </div>
+      </div>
+    `,
+    confirmLabel: 'Từ Chối',
+    onConfirm: async () => {
+      const reason = document.getElementById('uniformTransferRejectReason').value.trim();
+      let result;
+      try {
+        result = await callRecordAction('uniformTransfers', id, 'reject', { reason });
+      } catch (err) { return alert(`⛔ ${err.message}`); }
+      const idx = DB.uniformTransfers.findIndex(x => x.id === id);
+      if (idx !== -1) DB.uniformTransfers[idx] = result.item;
+      logSystemAction('UNIFORM', 'REJECT_UNIFORM_TRANSFER', `Từ chối điều chuyển [${result.item.itemName}] ${result.item.sourceDept} → ${result.item.targetDept}`, 'SUCCESS', result.item.itemName);
+      alert('✅ Đã từ chối điều chuyển kho!');
+      renderUniformTransferApprovalQueue();
+      renderUniformTransfersTable();
+    }
+  });
+}
+
+function renderUniformTransfersTable() {
+  const tbody = document.getElementById('uniformTransfersTableBody');
+  if (!tbody) return;
+  const rows = (DB.uniformTransfers || []).filter(t => canViewUniformTransferClient(currentUser, t));
+  if (!rows.length) {
+    tbody.innerHTML = `<tr><td colspan="8" class="text-center p-6 text-gray-500 italic">Chưa có yêu cầu điều chuyển nào.</td></tr>`;
+    return;
+  }
+  tbody.innerHTML = rows.map(t => `
+    <tr class="hover:bg-gray-50 border-b">
+      <td class="border p-2">${escapeHtml(t.requestedAt || '')}</td>
+      <td class="border p-2">${escapeHtml(t.sourceDept)}</td>
+      <td class="border p-2">${escapeHtml(t.targetDept)}</td>
+      <td class="border p-2">${formatUniformLabel(t.itemName, t.size, uniformSkuFor(t.itemName, t.size))}</td>
+      <td class="border p-2 text-right">${t.qty.toLocaleString('vi-VN')}</td>
+      <td class="border p-2">${uniformTransferStatusBadge(t.status)}${t.status === 'REJECTED' && t.rejectReason ? `<div class="text-[10px] text-red-600">${escapeHtml(t.rejectReason)}</div>` : ''}</td>
+      <td class="border p-2">${escapeHtml(t.requestedByName || '')}</td>
+      <td class="border p-2">${t.approvedByName ? `${escapeHtml(t.approvedByName)} — ${escapeHtml(t.approvedAt || '')}` : '—'}</td>
     </tr>
   `).join('');
+}
+
+// ============ Tổng Quan (Dashboard, Phase 2) ============
+// uniformManage/admin xem TẤT CẢ siêu thị gộp lại + bảng theo từng siêu thị; uniformStoreManage CHỈ
+// xem đúng siêu thị mình (cùng quy ước scoping theo dept của mọi nơi khác trong module — không phát
+// minh cơ chế mới). Tái sử dụng NGUYÊN VẸN computeUniformStockClient() — không có công thức tính mới.
+function renderUniformDashboard() {
+  const canHc = canManageUniform(currentUser);
+  const allStoreDepts = [...new Set((DB.uniformPeriods || []).flatMap(p => (p.allocations || []).map(a => a.dept)))].sort();
+  const targetDepts = canHc ? allStoreDepts : [currentUser.dept];
+
+  let totalStock = 0, totalIssued = 0, totalDamaged = 0, totalLost = 0;
+  const byItem = new Map(); // name -> { stock, issued }
+  const bySize = new Map(); // size -> { stock, issued }
+  const byStore = new Map(); // dept -> { stock, issued, damaged, lost }
+
+  for (const dept of targetDepts) {
+    const stock = computeUniformStockClient(dept);
+    let storeStock = 0, storeIssued = 0, storeDamaged = 0, storeLost = 0;
+    for (const row of stock.values()) {
+      totalStock += row.stock; totalIssued += row.issued; totalDamaged += (row.hong + row.huy); totalLost += row.mat;
+      storeStock += row.stock; storeIssued += row.issued; storeDamaged += (row.hong + row.huy); storeLost += row.mat;
+
+      if (!byItem.has(row.name)) byItem.set(row.name, { stock: 0, issued: 0 });
+      byItem.get(row.name).stock += row.stock;
+      byItem.get(row.name).issued += row.issued;
+
+      const sizeKey = row.size || '(không size)';
+      if (!bySize.has(sizeKey)) bySize.set(sizeKey, { stock: 0, issued: 0 });
+      bySize.get(sizeKey).stock += row.stock;
+      bySize.get(sizeKey).issued += row.issued;
+    }
+    byStore.set(dept, { stock: storeStock, issued: storeIssued, damaged: storeDamaged, lost: storeLost });
+  }
+
+  document.getElementById('uniformDashStatStock').textContent = totalStock.toLocaleString('vi-VN');
+  document.getElementById('uniformDashStatIssued').textContent = totalIssued.toLocaleString('vi-VN');
+  document.getElementById('uniformDashStatDamaged').textContent = totalDamaged.toLocaleString('vi-VN');
+  document.getElementById('uniformDashStatLost').textContent = totalLost.toLocaleString('vi-VN');
+
+  const itemBody = document.getElementById('uniformDashByItemBody');
+  const itemRows = [...byItem.entries()].sort((a, b) => a[0].localeCompare(b[0], 'vi'));
+  itemBody.innerHTML = itemRows.length ? itemRows.map(([name, v]) => `
+    <tr><td class="border p-1.5">${escapeHtml(name)}</td><td class="border p-1.5 text-right">${v.stock.toLocaleString('vi-VN')}</td><td class="border p-1.5 text-right">${v.issued.toLocaleString('vi-VN')}</td></tr>
+  `).join('') : `<tr><td colspan="3" class="text-center p-3 text-gray-500 italic">Chưa có dữ liệu.</td></tr>`;
+
+  const sizeBody = document.getElementById('uniformDashBySizeBody');
+  const sizeRows = [...bySize.entries()].sort((a, b) => a[0].localeCompare(b[0], 'vi'));
+  sizeBody.innerHTML = sizeRows.length ? sizeRows.map(([size, v]) => `
+    <tr><td class="border p-1.5">${escapeHtml(size)}</td><td class="border p-1.5 text-right">${v.stock.toLocaleString('vi-VN')}</td><td class="border p-1.5 text-right">${v.issued.toLocaleString('vi-VN')}</td></tr>
+  `).join('') : `<tr><td colspan="3" class="text-center p-3 text-gray-500 italic">Chưa có dữ liệu.</td></tr>`;
+
+  const storeWrap = document.getElementById('uniformDashByStoreWrap');
+  storeWrap.classList.toggle('hidden', !canHc);
+  if (canHc) {
+    const storeBody = document.getElementById('uniformDashByStoreBody');
+    const storeRows = [...byStore.entries()].sort((a, b) => a[0].localeCompare(b[0], 'vi'));
+    storeBody.innerHTML = storeRows.length ? storeRows.map(([dept, v]) => `
+      <tr>
+        <td class="border p-1.5 font-semibold">${escapeHtml(dept)}</td>
+        <td class="border p-1.5 text-right">${v.stock.toLocaleString('vi-VN')}</td>
+        <td class="border p-1.5 text-right">${v.issued.toLocaleString('vi-VN')}</td>
+        <td class="border p-1.5 text-right">${v.damaged.toLocaleString('vi-VN')}</td>
+        <td class="border p-1.5 text-right">${v.lost.toLocaleString('vi-VN')}</td>
+      </tr>
+    `).join('') : `<tr><td colspan="5" class="text-center p-3 text-gray-500 italic">Chưa có dữ liệu.</td></tr>`;
+  }
 }
 </script>
 </body>

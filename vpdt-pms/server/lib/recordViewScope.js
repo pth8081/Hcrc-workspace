@@ -366,11 +366,16 @@ function canViewUniformPeriod(user, item) {
   return !!(user.perms?.admin || user.perms?.uniformManage || user.perms?.uniformStoreManage);
 }
 
+// approvalStatus (Phase 2): kỳ CHƯA được duyệt (PENDING_APPROVAL) hoặc đã REJECTED thì Giám Đốc Siêu
+// Thị không cần thấy allocations của kỳ đó nữa (chưa/không thể xác nhận được gì) — ẩn hẳn, khác
+// uniformManage/admin vẫn thấy TOÀN BỘ kể cả đang chờ duyệt (họ là người tạo/theo dõi tiến độ duyệt).
+// Kỳ tạo TRƯỚC Phase 2 (không có field approvalStatus) coi như đã được chấp nhận — vẫn hiện như cũ.
 function filterUniformPeriodsForUser(items, user) {
   if (!user) return [];
   if (user.perms?.admin || user.perms?.uniformManage) return items || [];
   if (!user.perms?.uniformStoreManage) return [];
   return (items || [])
+    .filter(p => !p.approvalStatus || p.approvalStatus === 'APPROVED')
     .map(p => ({ ...p, allocations: (p.allocations || []).filter(a => a.dept === user.dept) }))
     .filter(p => p.allocations.length > 0);
 }
@@ -398,6 +403,20 @@ function filterUniformStockAdjustmentsForUser(items, user) {
   return (items || []).filter(t => canViewUniformStockAdjustment(user, t));
 }
 
+// uniformTransfers (Phase 2 — điều chuyển kho giữa các siêu thị): uniformManage/uniformApprove/admin
+// xem hết (theo dõi toàn bộ điều chuyển + hàng chờ duyệt); Giám Đốc Siêu Thị chỉ xem các yêu cầu LIÊN
+// QUAN tới siêu thị mình (là nguồn HOẶC đích) — khác uniformIssuances/uniformStockAdjustments (chỉ 1
+// dept) vì 1 điều chuyển luôn đụng tới ĐÚNG 2 siêu thị.
+function canViewUniformTransfer(user, item) {
+  if (!user) return false;
+  if (user.perms?.admin || user.perms?.uniformManage || user.perms?.uniformApprove) return true;
+  return !!(user.perms?.uniformStoreManage && (item.sourceDept === user.dept || item.targetDept === user.dept));
+}
+
+function filterUniformTransfersForUser(items, user) {
+  return (items || []).filter(t => canViewUniformTransfer(user, t));
+}
+
 module.exports = {
   canViewDoc, canViewSubmission, filterDocsForUser, filterSubmissionsForUser,
   canViewInternalPost, filterInternalPostsForUser,
@@ -415,6 +434,7 @@ module.exports = {
   canViewUniformPeriod, filterUniformPeriodsForUser,
   canViewUniformIssuance, filterUniformIssuancesForUser,
   canViewUniformStockAdjustment, filterUniformStockAdjustmentsForUser,
+  canViewUniformTransfer, filterUniformTransfersForUser,
   canViewBudgetEntry, filterBudgetEntriesForUser,
   canDownloadRecordFile
 };

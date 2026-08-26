@@ -14,6 +14,7 @@ const { requireAuth, blockIfMustChangePassword } = require('../lib/auth');
 const { buildRosterTemplateWorkbook, parseRosterFile } = require('../lib/trainingRoster');
 const { getAllForCollection } = require('../lib/recordStore');
 const { canManageTrainingClass } = require('../lib/recordActions');
+const { verifyFileSignature } = require('../lib/fileSignature');
 
 const router = express.Router();
 router.use(requireAuth, blockIfMustChangePassword);
@@ -85,6 +86,9 @@ router.post('/parse-roster', uploadRateLimiter, (req, res) => {
     try {
       const ext = path.extname(req.file.originalname).toLowerCase();
       const buffer = fs.readFileSync(req.file.path);
+      const check = await verifyFileSignature(buffer, ext);
+      if (!check.ok) return res.status(400).json({ error: check.reason });
+
       const usernames = await parseRosterFile(buffer, ext);
       const items = usernames.map(username => {
         const u = (req.allUsers || []).find(x => x.username === username);
