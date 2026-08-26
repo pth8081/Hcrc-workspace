@@ -9,7 +9,7 @@
 // họp thêm cờ minutesEdit (toàn công ty, không theo phòng ban) cho SỬA — riêng XÓA là quyền tối cao,
 // chỉ Admin; Công việc theo NGƯỜI (assignedBy/assignee), hoàn toàn không có khái niệm phòng ban.
 const { HttpError } = require('./httpErrors');
-const { scopeAllows, OFFICE_SUBTYPE_TO_PERM_FLAG, normalizeReportEntryPayload, buildEffectiveContractApprovalWorkflowServer, sanitizeUniformItems, sanitizeBudgetLines, getBudgetTemplateCustomFields, sanitizeBudgetCustomFields } = require('./createValidation');
+const { scopeAllows, OFFICE_SUBTYPE_TO_PERM_FLAG, normalizeReportEntryPayload, buildEffectiveContractApprovalWorkflowServer, sanitizeUniformItems, sanitizeBudgetLines, getBudgetTemplateCustomFields, sanitizeBudgetCustomFields, resolveTrainingInstructorUsername, normalizeInviteList } = require('./createValidation');
 const { validateRegistrationItems: validateVppRegItems, calcItemsTotal: calcVppItemsTotal } = require('./vppCatalog');
 const { sanitizePriceFileItems } = require('./priceFileParser');
 
@@ -1806,11 +1806,27 @@ function unpublishReportPeriod(user, period) {
   return period;
 }
 
-// ===== ĐÀO TẠO (module con "Truyền Thông Nội Bộ" > Đào tạo) — tạm thời, MVP =====
-// Dùng chung cờ internalTrainingCreate (đã có sẵn) cho quản lý đào tạo (tạo lớp/tài liệu/lộ trình +
-// xác nhận hoàn thành) — không thêm cờ quyền riêng để giữ phạm vi gọn.
+// ===== ĐÀO TẠO (module con "Truyền Thông Nội Bộ" > Đào tạo) =====
+// Đợt 3: tách cờ internalTrainingCreate cũ (đăng bài/tạo lớp/tài liệu/lộ trình) thành 2 quyền:
+// - trainingManage: TOÀN QUYỀN — tạo mới lớp/tài liệu/bài test/lộ trình, quản lý roster/kết quả của
+//   BẤT KỲ lớp nào (không còn giới hạn theo người TẠO lớp như cờ cũ), quản lý lộ trình thăng tiến.
+// - trainingInstruct: KHÔNG tạo lớp mới được, nhưng quản lý được roster/kết quả của ĐÚNG (các) lớp mà
+//   họ được gán làm giảng viên (cls.instructorUsername === username, xem canManageTrainingClass() ngay
+//   dưới) — không đụng được lớp của giảng viên khác, không quản lý lộ trình/ngân hàng câu hỏi.
 function canManageTraining(user) {
-  return !!(user.perms?.admin || user.perms?.internalTrainingCreate);
+  return !!(user.perms?.admin || user.perms?.trainingManage);
+}
+
+// Quyền quản lý MỘT lớp học cụ thể (roster/kết quả/sửa nội dung/chuyển trạng thái buổi học) — dùng
+// chung cho mọi hành động theo-từng-lớp bên dưới VÀ ở routes/trainingRoster.js (mã QR). Thay thế hẳn
+// kiểu kiểm tra "cls.creator === user.username" cũ (Đợt 3 trở về trước): trainingManage giờ quản lý
+// được MỌI lớp bất kể ai tạo, còn trainingInstruct chỉ quản lý đúng lớp mình được gán làm giảng viên —
+// lớp cũ CHƯA có instructorUsername (dữ liệu nhập tay từ trước tính năng này, xem
+// createValidation.js) thì KHÔNG ai thuộc diện trainingInstruct quản lý được, chỉ trainingManage/admin
+// (giảm nhẹ có chủ đích, tránh đoán nhầm giảng viên cho dữ liệu cũ).
+function canManageTrainingClass(user, cls) {
+  if (user?.perms?.admin || user?.perms?.trainingManage) return true;
+  return !!(user?.perms?.trainingInstruct && cls?.instructorUsername && cls.instructorUsername === user.username);
 }
 
 function cancelTrainingRegistration(payload, user, reg) {
@@ -1827,12 +1843,13 @@ function cancelTrainingRegistration(payload, user, reg) {
   return reg;
 }
 
-// Ghi nhận kết quả (Đạt/Không đạt + điểm nếu có) cho 1 đăng ký — chỉ người TẠO LỚP HỌC đó (snapshot
-// classCreator lúc đăng ký, xem lib/createValidation.js) hoặc Admin mới ghi được, không phải bất kỳ ai
-// có quyền internalTrainingCreate (tránh người quản lý lớp khác sửa kết quả lớp không phải của mình).
-function setTrainingRegistrationResult(payload, user, reg) {
-  if (reg.classCreator !== user.username && !user.perms?.admin) {
-    throw new HttpError(403, 'Chỉ người tạo lớp học hoặc Quản Trị Viên mới được ghi nhận kết quả');
+// Ghi nhận kết quả (Đạt/Không đạt + điểm nếu có) cho 1 đăng ký — Đợt 3: gác bằng canManageTrainingClass()
+// (cls đọc kèm theo reg.classId, xem routes/records.js) thay vì so trực tiếp reg.classCreator, để
+// trainingManage quản lý được MỌI lớp và giảng viên gán riêng (trainingInstruct) quản lý được đúng lớp
+// của mình dù không phải người đã tạo lớp đó.
+function setTrainingRegistrationResult(payload, user, reg, cls) {
+  if (!canManageTrainingClass(user, cls)) {
+    throw new HttpError(403, 'Bạn không có quyền ghi nhận kết quả cho lớp học này');
   }
   if (reg.result === 'CANCELLED') {
     throw new HttpError(409, 'Đăng ký này đã bị huỷ, không thể ghi nhận kết quả');
@@ -1851,14 +1868,17 @@ function setTrainingRegistrationResult(payload, user, reg) {
   return reg;
 }
 
-// Nhân sự (người tạo lớp) hoặc Admin thêm HÀNG LOẠT học viên vào 1 lớp học cùng lúc (chọn từng người ở
-// dropdown, hoặc theo danh sách đọc từ file Excel — cả 2 cách đều gửi lên đúng 1 mảng usernames, khác
-// biệt cách nhập chỉ ở phía client). Trả về bản NHÁP các đăng ký hợp lệ (route routes/records.js tự gán
-// id + insertRecord từng dòng trong lúc đang giữ khoá theo classId) + danh sách bị bỏ qua kèm lý do, để
-// người tạo lớp biết chính xác ai chưa được thêm mà không phải đoán.
+// trainingManage (bất kỳ lớp nào) hoặc giảng viên được gán riêng cho ĐÚNG lớp này (trainingInstruct) hoặc
+// Admin thêm HÀNG LOẠT học viên vào 1 lớp học cùng lúc (chọn từng người ở dropdown, hoặc theo danh sách
+// đọc từ file Excel — cả 2 cách đều gửi lên đúng 1 mảng usernames, khác biệt cách nhập chỉ ở phía
+// client). CỐ Ý không bị inviteList chặn (xem createValidation.js trainingRegistrations) — đây là 1
+// quyền ghi đè trực tiếp của HR/giảng viên, khác hẳn luồng tự đăng ký. Trả về bản NHÁP các đăng ký hợp
+// lệ (route routes/records.js tự gán id + insertRecord từng dòng trong lúc đang giữ khoá theo classId)
+// + danh sách bị bỏ qua kèm lý do, để người quản lý lớp biết chính xác ai chưa được thêm mà không phải
+// đoán.
 function bulkRegisterTrainingClass(payload, user, cls, existingRegs, users) {
-  if (cls.creator !== user.username && !user.perms?.admin) {
-    throw new HttpError(403, 'Chỉ người tạo lớp học hoặc Quản Trị Viên mới được thêm học viên vào lớp');
+  if (!canManageTrainingClass(user, cls)) {
+    throw new HttpError(403, 'Bạn không có quyền thêm học viên vào lớp học này');
   }
   if (cls.status !== 'OPEN') throw new HttpError(409, 'Lớp học này đã đóng đăng ký');
 
@@ -1895,6 +1915,77 @@ function bulkRegisterTrainingClass(payload, user, cls, existingRegs, users) {
     });
   }
   return { added, skipped };
+}
+
+// Sửa nội dung/lịch 1 lớp học đã tạo (Đợt 3 — trước đây trainingClasses hoàn toàn không có tính năng
+// sửa, chỉ tạo/xoá) — gác bằng canManageTrainingClass() giống roster/kết quả ở trên: trainingManage sửa
+// được MỌI lớp, trainingInstruct chỉ sửa được đúng lớp mình được gán làm giảng viên. Whitelist field
+// (cùng khuôn editInternalPost() ở trên) — KHÔNG cho đổi "mode" (ONLINE/OFFLINE) qua sửa vì mode quyết
+// định luôn cách tính sessionState (sống vs chuyển tay, xem createValidation.js) và "status"/"sessionState"
+// (2 field này chỉ đổi qua đúng action riêng của chúng, không phải qua /edit chung).
+const TRAINING_CLASS_EDITABLE_FIELDS = [
+  'title', 'category', 'description', 'startTime', 'endTime', 'location',
+  'registerDeadline', 'capacity', 'passScore', 'testId', 'testSecondsPerQuestion', 'documentIds'
+];
+function editTrainingClass(payload, user, cls, tests, users) {
+  if (!canManageTrainingClass(user, cls)) {
+    throw new HttpError(403, 'Bạn không có quyền sửa lớp học này');
+  }
+  if (!payload || typeof payload !== 'object') throw new HttpError(400, 'Thiếu dữ liệu cập nhật');
+
+  for (const field of TRAINING_CLASS_EDITABLE_FIELDS) {
+    if (payload[field] !== undefined) cls[field] = payload[field];
+  }
+  if (!cls.category || !String(cls.category).trim()) throw new HttpError(400, 'Thiếu loại đào tạo');
+  if (!cls.title || !String(cls.title).trim()) throw new HttpError(400, 'Thiếu tên lớp học');
+  if (!cls.startTime) throw new HttpError(400, 'Thiếu thời gian bắt đầu lớp học');
+  if (cls.endTime && cls.startTime && cls.endTime < cls.startTime) {
+    throw new HttpError(400, 'Thời gian kết thúc phải sau thời gian bắt đầu');
+  }
+  cls.category = String(cls.category).trim();
+  cls.title = String(cls.title).trim();
+  cls.capacity = Number(cls.capacity) > 0 ? Math.floor(Number(cls.capacity)) : 0;
+  cls.passScore = (cls.passScore === '' || cls.passScore == null) ? null : Number(cls.passScore);
+  cls.documentIds = Array.isArray(cls.documentIds) ? cls.documentIds.map(Number).filter(Number.isFinite) : [];
+  const testId = cls.testId === '' || cls.testId == null ? null : Number(cls.testId);
+  if (testId != null && (!Number.isFinite(testId) || !(tests || []).some(t => t.id === testId))) {
+    throw new HttpError(400, 'Bài test được chọn không hợp lệ');
+  }
+  cls.testId = testId;
+  const secPerQ = Number(cls.testSecondsPerQuestion);
+  cls.testSecondsPerQuestion = Number.isFinite(secPerQ) && secPerQ >= 10 ? Math.floor(secPerQ) : 120;
+
+  // Giảng viên + Danh Sách Được Mời — cùng luật resolve/chuẩn hoá với lúc TẠO lớp (xem
+  // createValidation.js), chỉ áp dụng khi client thật sự gửi field tương ứng (không ép về rỗng nếu
+  // form sửa không hiện field đó, vd modal sửa gọn không có ô Danh Sách Được Mời).
+  if (payload.instructorUsername !== undefined || payload.instructor !== undefined) {
+    const instructorUser = resolveTrainingInstructorUsername(payload.instructorUsername, users);
+    cls.instructorUsername = instructorUser ? instructorUser.username : null;
+    cls.instructor = instructorUser ? instructorUser.name : (payload.instructor ? String(payload.instructor).trim() : '');
+  }
+  if (payload.inviteList !== undefined) {
+    cls.inviteList = normalizeInviteList(payload.inviteList);
+  }
+  return cls;
+}
+
+// Vòng đời trạng thái buổi học của lớp OFFLINE (Đợt 3) — ONLINE không có 2 action này (tính sống theo
+// giờ, xem createValidation.js/index.html), route /trainingClasses/:id/start-session chặn thẳng nếu
+// mode khác OFFLINE trước khi gọi tới đây, nhưng vẫn kiểm tra lại ở đây cho chắc (đúng nguyên tắc
+// "không tin, kiểm tra lại" của mọi mutator ghi đè state trong file này).
+function startOfflineTrainingClass(user, cls) {
+  if (!canManageTrainingClass(user, cls)) throw new HttpError(403, 'Bạn không có quyền bắt đầu lớp học này');
+  if (cls.mode !== 'OFFLINE') throw new HttpError(409, 'Chỉ lớp học Offline mới cần bắt đầu buổi học thủ công');
+  if (cls.sessionState !== 'SCHEDULED') throw new HttpError(409, 'Lớp học này không ở trạng thái chờ bắt đầu');
+  cls.sessionState = 'ONGOING';
+  return cls;
+}
+function endOfflineTrainingClass(user, cls) {
+  if (!canManageTrainingClass(user, cls)) throw new HttpError(403, 'Bạn không có quyền kết thúc lớp học này');
+  if (cls.mode !== 'OFFLINE') throw new HttpError(409, 'Chỉ lớp học Offline mới cần kết thúc buổi học thủ công');
+  if (cls.sessionState !== 'ONGOING') throw new HttpError(409, 'Lớp học này chưa ở trạng thái đang diễn ra');
+  cls.sessionState = 'ENDED';
+  return cls;
 }
 
 // Chấm điểm bài test tự động — chốt lại HOÀN TOÀN ở server theo đúng đáp án đúng đã lưu của test
@@ -2598,8 +2689,9 @@ module.exports = {
   closeReportPeriod, submitReportEntry, updateReportEntryDraft,
   mergeReportPeriod, mergeReportPeriodByTasks, updateReportCompilation, publishReportPeriod, unpublishReportPeriod,
   updateReportSlideTemplate,
-  canManageTraining, cancelTrainingRegistration, setTrainingRegistrationResult, confirmCareerPathForEmployee,
-  bulkRegisterTrainingClass, gradeTrainingTestSubmission, applyAutoGradedTestResult,
+  canManageTraining, canManageTrainingClass, cancelTrainingRegistration, setTrainingRegistrationResult, confirmCareerPathForEmployee,
+  bulkRegisterTrainingClass, editTrainingClass, startOfflineTrainingClass, endOfflineTrainingClass,
+  gradeTrainingTestSubmission, applyAutoGradedTestResult,
   canManageRecruitment, closeRecruitmentJob, confirmRecruitmentJobFilled, setRecruitmentReferralStatus,
   canManageItSupport, applyPriceApproval, claimPriceApply, releasePriceApplyClaim, requestPriceInfoFromIt, submitPriceSupplementFile,
   claimItTicket, updateItTicketStatus, addItTicketComment, cancelItTicket,

@@ -13,17 +13,28 @@ async function main() {
   const { run, summarize } = makeRunner();
 
   try {
-    const trainer = makeUser({ username: 'gv.linh', name: 'Trần Thị Linh', dept: 'Phòng Nhân Sự', perms: { internalTrainingCreate: true } });
+    const trainer = makeUser({ username: 'gv.linh', name: 'Trần Thị Linh', dept: 'Phòng Nhân Sự', perms: { trainingManage: true } });
     const nv1 = makeUser({ username: 'nv1', name: 'Học Viên Một', dept: 'Phòng CNTT', perms: {} });
     const nv2 = makeUser({ username: 'nv2', name: 'Học Viên Hai', dept: 'Phòng CNTT', perms: {} });
     const nv3 = makeUser({ username: 'nv3', name: 'Học Viên Ba', dept: 'Phòng Kế Toán', perms: {} });
+    // Đợt 3: trainingInstruct (KHÔNG kèm trainingManage) — quản lý được ĐÚNG lớp mình được gán làm
+    // giảng viên (instructorUsername), không tạo lớp mới được, không đụng được lớp của giảng viên khác.
+    const instructorA = makeUser({ username: 'gv.a', name: 'Giảng Viên A', dept: 'Phòng CNTT', perms: { trainingInstruct: true } });
+    const instructorB = makeUser({ username: 'gv.b', name: 'Giảng Viên B', dept: 'Phòng Kế Toán', perms: { trainingInstruct: true } });
 
     await page.evaluate((seed) => { Object.assign(DB, seed); }, baseCatalogSeed());
-    await page.evaluate((users) => { DB.users = users; }, [trainer, nv1, nv2, nv3]);
+    await page.evaluate((users) => { DB.users = users; }, [trainer, nv1, nv2, nv3, instructorA, instructorB]);
     await page.evaluate((u) => finishLogin(u), trainer);
     await page.evaluate(() => { switchTab('internal'); setInternalSubTab('TRAINING'); setTrainingLmsTab('TESTS'); });
 
     let testId = null;
+
+    await run('migrateLegacyPerms() renames internalTrainingCreate -> trainingManage, keeping the old grant', async () => {
+      const migrated = await page.evaluate(() => migrateLegacyPerms({ internalTrainingCreate: true }));
+      assertEqual(migrated.changed, true, 'expected migration to report a change');
+      assertEqual(migrated.perms.trainingManage, true, 'internalTrainingCreate:true should become trainingManage:true');
+      assertEqual(migrated.perms.internalTrainingCreate, undefined, 'old internalTrainingCreate key should be removed');
+    });
 
     await run('trainer creates a question-bank test with 1 SINGLE + 1 MULTI question', async () => {
       await page.evaluate(() => {
@@ -239,6 +250,226 @@ async function main() {
       assert(modalVisible, 'QR modal should be visible after opening');
       const imgSrc = await page.evaluate(() => document.getElementById('trainingClassQrImg').src);
       assert(imgSrc.includes(`/api/training/class-qr/${offlineClassId}`), `QR image src should point at the class-qr endpoint, got: ${imgSrc}`);
+    });
+
+    // ===================== Đợt 3: Phân quyền + Vòng đời trạng thái Đào Tạo =====================
+
+    let instructedClassId = null;
+    await run('trainer assigns gv.a as instructor via the datalist picker when creating an OFFLINE class', async () => {
+      await page.evaluate((u) => { currentUser = u; }, trainer);
+      await page.evaluate(() => { switchTab('internal'); setInternalSubTab('TRAINING'); setTrainingLmsTab('CLASSES'); });
+      await page.evaluate(() => {
+        document.getElementById('tcCategory').value = 'Nghiệp vụ';
+        document.getElementById('tcTitle').value = 'Lớp Của Giảng Viên A';
+        document.getElementById('tcStart').value = '2026-09-05T08:00';
+        document.getElementById('tcEnd').value = '2026-09-05T10:00';
+        document.getElementById('tcMode').value = 'OFFLINE';
+        document.getElementById('tcTestId').value = '';
+        document.getElementById('tcInstructor').value = 'Giảng Viên A — Phòng CNTT (gv.a)';
+        resolveTrainingInstructorInput(document.getElementById('tcInstructor').value);
+      });
+      await page.evaluate(() => submitTrainingClass({ preventDefault() {}, target: { reset() {} } }));
+      const cls = await page.evaluate(() => DB.trainingClasses.find((c) => c.title === 'Lớp Của Giảng Viên A'));
+      assert(cls, 'expected the class to be created');
+      instructedClassId = cls.id;
+      assertEqual(cls.instructorUsername, 'gv.a', 'instructorUsername should resolve to gv.a');
+      assertEqual(cls.instructor, 'Giảng Viên A', 'instructor display name should be resolved from the account, not free text');
+      assertEqual(cls.sessionState, 'SCHEDULED', 'new OFFLINE class should start SCHEDULED');
+    });
+
+    await run('typing an instructor name that does not resolve to any account blocks submit client-side', async () => {
+      await page.evaluate(() => {
+        window.__alerts.length = 0;
+        document.getElementById('tcCategory').value = 'Nghiệp vụ';
+        document.getElementById('tcTitle').value = 'Lớp Giảng Viên Không Hợp Lệ';
+        document.getElementById('tcStart').value = '2026-09-06T08:00';
+        document.getElementById('tcMode').value = 'ONLINE';
+        document.getElementById('tcInstructor').value = 'Ai Đó Không Tồn Tại';
+        document.getElementById('tcInstructorUsername').value = ''; // chưa từng khớp gợi ý nào
+      });
+      const countBefore = await page.evaluate(() => DB.trainingClasses.length);
+      await page.evaluate(() => submitTrainingClass({ preventDefault() {}, target: { reset() {} } }));
+      const countAfter = await page.evaluate(() => DB.trainingClasses.length);
+      assertEqual(countAfter, countBefore, 'no class should be created when the instructor text does not resolve');
+      const alerts = await page.evaluate(() => window.__alerts.slice());
+      assert(alerts.some((a) => a.includes('chọn đúng giảng viên')), `expected instructor-resolution alert, got ${JSON.stringify(alerts)}`);
+    });
+
+    await run('server rejects an instructorUsername that is not a real account even if the client bypasses the picker', async () => {
+      let errMsg = null;
+      await page.evaluate(async () => {
+        try {
+          await callCreateAction('trainingClasses', {
+            code: `LOP-BYPASS-${Date.now()}`, category: 'Nghiệp vụ', title: 'Lớp Bypass', startTime: '2026-09-07T08:00',
+            mode: 'ONLINE', instructor: 'Ai Đó', instructorUsername: 'no.such.instructor'
+          });
+        } catch (err) { window.__lastCreateErr = err.message; }
+      });
+      errMsg = await page.evaluate(() => window.__lastCreateErr);
+      assert(errMsg && errMsg.includes('giảng viên'), `expected a server-side instructor-not-found error, got: ${errMsg}`);
+      const found = await page.evaluate(() => DB.trainingClasses.some((c) => c.title === 'Lớp Bypass'));
+      assert(!found, 'the bypass class should NOT have been created');
+    });
+
+    await run('gv.a (trainingInstruct) manages the roster of their own assigned class', async () => {
+      await page.evaluate((u) => { currentUser = u; }, instructorA);
+      await page.evaluate((id) => { openTrainingRosterModal(id); }, instructedClassId);
+      await page.evaluate(() => {
+        document.getElementById('trRosterPickInput').value = 'nv1';
+        addTrainingRosterPick();
+      });
+      await page.evaluate(() => confirmTrainingRosterAdd());
+      const regs = await page.evaluate((id) => DB.trainingRegistrations.filter((r) => r.classId === id && r.result !== 'CANCELLED'), instructedClassId);
+      assertEqual(regs.length, 1, 'gv.a should have successfully added nv1 to their own assigned class');
+    });
+
+    await run('gv.b (trainingInstruct, different instructor) cannot manage gv.a\'s assigned class', async () => {
+      await page.evaluate((u) => { currentUser = u; }, instructorB);
+      await page.evaluate((id) => { openTrainingRosterModal(id); }, instructedClassId);
+      await page.evaluate(() => {
+        document.getElementById('trRosterPickInput').value = 'nv2';
+        addTrainingRosterPick();
+      });
+      await page.evaluate(() => confirmTrainingRosterAdd());
+      const alerts = await page.evaluate(() => window.__alerts.slice());
+      assert(alerts.some((a) => a.includes('⛔')), `expected a permission-denied alert for gv.b, got ${JSON.stringify(alerts)}`);
+      const nv2Reg = await page.evaluate((id) => DB.trainingRegistrations.find((r) => r.classId === id && r.creator === 'nv2' && r.result !== 'CANCELLED'), instructedClassId);
+      assert(!nv2Reg, 'gv.b must NOT be able to add students to a class they are not the assigned instructor of');
+    });
+
+    await run('neither gv.a nor gv.b (trainingInstruct only) can create a new class', async () => {
+      for (const instructor of [instructorA, instructorB]) {
+        await page.evaluate((u) => { currentUser = u; }, instructor);
+        await page.evaluate(() => { window.__alerts.length = 0; });
+        const countBefore = await page.evaluate(() => DB.trainingClasses.length);
+        await page.evaluate(() => {
+          document.getElementById('tcCategory').value = 'Nghiệp vụ';
+          document.getElementById('tcTitle').value = 'Lớp Giảng Viên Tự Tạo';
+          document.getElementById('tcStart').value = '2026-09-08T08:00';
+          document.getElementById('tcInstructor').value = '';
+          document.getElementById('tcInstructorUsername').value = '';
+        });
+        await page.evaluate(() => submitTrainingClass({ preventDefault() {}, target: { reset() {} } }));
+        const countAfter = await page.evaluate(() => DB.trainingClasses.length);
+        assertEqual(countAfter, countBefore, `${instructor.username} (trainingInstruct only) must not be able to create a class`);
+        const alerts = await page.evaluate(() => window.__alerts.slice());
+        assert(alerts.some((a) => a.includes('không có quyền tạo lớp học')), `expected a no-permission alert for ${instructor.username}, got ${JSON.stringify(alerts)}`);
+      }
+    });
+
+    await run('OFFLINE session-state lifecycle: gv.b cannot start it, gv.a can start then end it', async () => {
+      await page.evaluate((u) => { currentUser = u; }, instructorB);
+      await page.evaluate((id) => startOfflineTrainingClassAction(id), instructedClassId);
+      let alerts = await page.evaluate(() => window.__alerts.slice());
+      assert(alerts.some((a) => a.includes('⛔')), 'gv.b should be denied starting a class they do not instruct');
+      let cls = await page.evaluate((id) => DB.trainingClasses.find((c) => c.id === id), instructedClassId);
+      assertEqual(cls.sessionState, 'SCHEDULED', 'sessionState must stay SCHEDULED after a denied start attempt');
+
+      await page.evaluate((u) => { currentUser = u; }, instructorA);
+      await page.evaluate(() => { window.__alerts.length = 0; });
+      await page.evaluate((id) => startOfflineTrainingClassAction(id), instructedClassId);
+      cls = await page.evaluate((id) => DB.trainingClasses.find((c) => c.id === id), instructedClassId);
+      assertEqual(cls.sessionState, 'ONGOING', 'gv.a (assigned instructor) should be able to start the class');
+
+      await page.evaluate((id) => startOfflineTrainingClassAction(id), instructedClassId);
+      alerts = await page.evaluate(() => window.__alerts.slice());
+      assert(alerts.some((a) => a.includes('⛔')), 'starting an already-ONGOING class again should be rejected');
+
+      await page.evaluate((id) => endOfflineTrainingClassAction(id), instructedClassId);
+      cls = await page.evaluate((id) => DB.trainingClasses.find((c) => c.id === id), instructedClassId);
+      assertEqual(cls.sessionState, 'ENDED', 'gv.a should be able to end the class after it started');
+    });
+
+    await run('ONLINE class sessionState is computed live from startTime/endTime, not stored', async () => {
+      const states = await page.evaluate(() => {
+        const now = Date.now();
+        const fmt = (ms) => new Date(now + ms).toISOString().slice(0, 16);
+        const upcoming = { mode: 'ONLINE', startTime: fmt(60 * 60 * 1000), endTime: fmt(2 * 60 * 60 * 1000) };
+        const ongoing = { mode: 'ONLINE', startTime: fmt(-30 * 60 * 1000), endTime: fmt(30 * 60 * 1000) };
+        const ended = { mode: 'ONLINE', startTime: fmt(-2 * 60 * 60 * 1000), endTime: fmt(-60 * 60 * 1000) };
+        return {
+          upcoming: getTrainingClassSessionState(upcoming),
+          ongoing: getTrainingClassSessionState(ongoing),
+          ended: getTrainingClassSessionState(ended)
+        };
+      });
+      assertEqual(states.upcoming, 'SCHEDULED', 'ONLINE class starting in the future should be SCHEDULED (Sắp diễn ra)');
+      assertEqual(states.ongoing, 'ONGOING', 'ONLINE class between start/end should be ONGOING (Đang diễn ra)');
+      assertEqual(states.ended, 'ENDED', 'ONLINE class past its endTime should be ENDED (Đã kết thúc)');
+    });
+
+    await run('Chờ / Đang học / Hoàn thành / Đã hủy display status is computed, not stored', async () => {
+      const statuses = await page.evaluate(() => {
+        const scheduledCls = { mode: 'OFFLINE', sessionState: 'SCHEDULED' };
+        const ongoingCls = { mode: 'OFFLINE', sessionState: 'ONGOING' };
+        return {
+          waiting: getTrainingRegDisplayStatus({ result: 'REGISTERED' }, scheduledCls).label,
+          studying: getTrainingRegDisplayStatus({ result: 'REGISTERED' }, ongoingCls).label,
+          passed: getTrainingRegDisplayStatus({ result: 'PASSED' }, ongoingCls),
+          failed: getTrainingRegDisplayStatus({ result: 'FAILED' }, ongoingCls),
+          cancelled: getTrainingRegDisplayStatus({ result: 'CANCELLED' }, ongoingCls).label
+        };
+      });
+      assertEqual(statuses.waiting, 'Chờ', 'REGISTERED + class not yet started should display "Chờ"');
+      assertEqual(statuses.studying, 'Đang học', 'REGISTERED + class started, no result yet should display "Đang học"');
+      assertEqual(statuses.passed.label, 'Hoàn thành', 'PASSED should display "Hoàn thành"');
+      assertEqual(statuses.passed.sub, 'Đạt', 'PASSED sub-badge should be "Đạt"');
+      assertEqual(statuses.failed.sub, 'Không đạt', 'FAILED sub-badge should be "Không đạt"');
+      assertEqual(statuses.cancelled, 'Đã hủy', 'CANCELLED should keep its own distinct "Đã hủy" display');
+    });
+
+    let invitedClassId = null;
+    await run('inviteList: empty by default, self-registration open to everyone (backward-compatible)', async () => {
+      const cls = await page.evaluate((id) => DB.trainingClasses.find((c) => c.id === id), onlineClassId);
+      assert(Array.isArray(cls.inviteList) && cls.inviteList.length === 0, 'a class created before/without inviting anyone should have an empty inviteList');
+    });
+
+    await run('inviteList: HR sets an invite list, only listed users may self-register', async () => {
+      await page.evaluate((u) => { currentUser = u; }, trainer);
+      await page.evaluate(() => {
+        document.getElementById('tcCategory').value = 'Nghiệp vụ';
+        document.getElementById('tcTitle').value = 'Lớp Có Danh Sách Mời';
+        document.getElementById('tcStart').value = '2026-09-09T08:00';
+        document.getElementById('tcEnd').value = '';
+        document.getElementById('tcMode').value = 'ONLINE';
+        document.getElementById('tcInstructor').value = '';
+        document.getElementById('tcInstructorUsername').value = '';
+        document.getElementById('tcInviteListPickInput').value = 'Học Viên Một — Phòng CNTT (nv1)';
+        addTrainingInviteListPick();
+      });
+      const staged = await page.evaluate(() => tcInviteListStaged.map((p) => p.username));
+      assertEqual(staged.length, 1, `expected 1 invited user staged, got ${JSON.stringify(staged)}`);
+      await page.evaluate(() => { window.__alerts.length = 0; });
+      await page.evaluate(() => submitTrainingClass({ preventDefault() {}, target: { reset() {} } }));
+      const cls = await page.evaluate(() => DB.trainingClasses.find((c) => c.title === 'Lớp Có Danh Sách Mời'));
+      const dbgAlerts = await page.evaluate(() => window.__alerts.slice());
+      assert(cls, `expected the invite-list class to be created, alerts: ${JSON.stringify(dbgAlerts)}`);
+      invitedClassId = cls.id;
+      assertEqual(cls.inviteList.length, 1, 'inviteList should contain exactly 1 username');
+      assertEqual(cls.inviteList[0], 'nv1', 'inviteList should contain nv1');
+
+      await page.evaluate((u) => { currentUser = u; }, nv2);
+      await page.evaluate((id) => registerForTrainingClass(id), invitedClassId);
+      const alerts = await page.evaluate(() => window.__alerts.slice());
+      assert(alerts.some((a) => a.includes('danh sách mời')), `expected nv2 (not invited) to be rejected, got ${JSON.stringify(alerts)}`);
+      let nv2Reg = await page.evaluate((id) => DB.trainingRegistrations.find((r) => r.classId === id && r.creator === 'nv2'), invitedClassId);
+      assert(!nv2Reg, 'nv2 (not on the invite list) must NOT be able to self-register');
+
+      await page.evaluate((u) => { currentUser = u; }, nv1);
+      await page.evaluate((id) => registerForTrainingClass(id), invitedClassId);
+      const nv1Reg = await page.evaluate((id) => DB.trainingRegistrations.find((r) => r.classId === id && r.creator === 'nv1'), invitedClassId);
+      assert(nv1Reg, 'nv1 (on the invite list) should be able to self-register');
+
+      // Roster bulk-add (HR override) is COMPLETELY unaffected by inviteList — trainer can still force-add nv2.
+      await page.evaluate((u) => { currentUser = u; }, trainer);
+      await page.evaluate((id) => { openTrainingRosterModal(id); }, invitedClassId);
+      await page.evaluate(() => {
+        document.getElementById('trRosterPickInput').value = 'nv2';
+        addTrainingRosterPick();
+      });
+      await page.evaluate(() => confirmTrainingRosterAdd());
+      nv2Reg = await page.evaluate((id) => DB.trainingRegistrations.find((r) => r.classId === id && r.creator === 'nv2' && r.result !== 'CANCELLED'), invitedClassId);
+      assert(nv2Reg, 'HR bulk-add (roster override) must still work for nv2 even though the invite list excludes them');
     });
 
     assertEqual(pageErrors.length, 0, `unexpected uncaught page errors: ${pageErrors.map((e) => e.message).join(' | ')}`);

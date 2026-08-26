@@ -31,7 +31,7 @@ function __mockValidateInternalPostCreate(payload, user) {
   const allowed = !!(
     user.perms?.admin || type === 'SHARE' ||
     (type === 'NEWS' && user.perms?.internalNewsCreate) ||
-    (type === 'TRAINING' && user.perms?.internalTrainingCreate) ||
+    (type === 'TRAINING' && user.perms?.trainingManage) ||
     (type === 'REWARD' && user.perms?.internalRewardCreate)
   );
   if (!allowed) throw __mockHttpError(403, 'Bạn không có quyền đăng bài ở phân hệ này');
@@ -208,8 +208,34 @@ function __mockRejectPost(payload, user, post) {
 }
 
 // ===================== trainingClasses / trainingTests / trainingRegistrations =====================
+// Đợt 3: mirrors resolveTrainingInstructorUsername()/normalizeInviteList() ở lib/createValidation.js.
+function __mockResolveTrainingInstructor(rawUsername) {
+  const username = String(rawUsername || '').trim();
+  if (!username) return null;
+  const found = DB.users.find((u) => u.username === username && u.active !== false);
+  if (!found) throw __mockHttpError(400, 'Không tìm thấy tài khoản giảng viên này (hoặc đã bị khoá)');
+  return found;
+}
+function __mockNormalizeInviteList(rawList) {
+  if (!Array.isArray(rawList)) return [];
+  const seen = new Set();
+  const out = [];
+  for (const raw of rawList) {
+    const username = String(raw || '').trim();
+    if (!username || seen.has(username)) continue;
+    seen.add(username);
+    out.push(username);
+  }
+  return out;
+}
+// mirrors canManageTrainingClass() ở lib/recordActions.js.
+function __mockCanManageTrainingClass(user, cls) {
+  if (user?.perms?.admin || user?.perms?.trainingManage) return true;
+  return !!(user?.perms?.trainingInstruct && cls?.instructorUsername && cls.instructorUsername === user.username);
+}
+
 function __mockValidateTrainingClassCreate(payload, user) {
-  if (!(user.perms?.admin || user.perms?.internalTrainingCreate)) throw __mockHttpError(403, 'Bạn không có quyền tạo lớp học');
+  if (!(user.perms?.admin || user.perms?.trainingManage)) throw __mockHttpError(403, 'Bạn không có quyền tạo lớp học');
   if (!payload.category || !String(payload.category).trim()) throw __mockHttpError(400, 'Thiếu loại đào tạo');
   if (!payload.title || !String(payload.title).trim()) throw __mockHttpError(400, 'Thiếu tên lớp học');
   if (!payload.startTime) throw __mockHttpError(400, 'Thiếu thời gian bắt đầu lớp học');
@@ -228,10 +254,64 @@ function __mockValidateTrainingClassCreate(payload, user) {
   const secPerQ = Number(payload.testSecondsPerQuestion);
   payload.testSecondsPerQuestion = Number.isFinite(secPerQ) && secPerQ >= 10 ? Math.floor(secPerQ) : 120;
   payload.status = 'OPEN';
+  const instructorUser = __mockResolveTrainingInstructor(payload.instructorUsername);
+  payload.instructorUsername = instructorUser ? instructorUser.username : null;
+  payload.instructor = instructorUser ? instructorUser.name : (payload.instructor ? String(payload.instructor).trim() : '');
+  payload.inviteList = __mockNormalizeInviteList(payload.inviteList);
+  payload.sessionState = payload.mode === 'OFFLINE' ? 'SCHEDULED' : null;
+}
+
+// Đợt 3 — sửa lớp học đã tạo (editTrainingClass() ở lib/recordActions.js). Whitelist field, cùng luật
+// chuẩn hoá với lúc tạo lớp ở trên.
+const __MOCK_TRAINING_CLASS_EDITABLE_FIELDS = [
+  'title', 'category', 'description', 'startTime', 'endTime', 'location',
+  'registerDeadline', 'capacity', 'passScore', 'testId', 'testSecondsPerQuestion', 'documentIds'
+];
+function __mockEditTrainingClass(payload, user, cls) {
+  if (!__mockCanManageTrainingClass(user, cls)) throw __mockHttpError(403, 'Bạn không có quyền sửa lớp học này');
+  for (const field of __MOCK_TRAINING_CLASS_EDITABLE_FIELDS) {
+    if (payload[field] !== undefined) cls[field] = payload[field];
+  }
+  if (!cls.category || !String(cls.category).trim()) throw __mockHttpError(400, 'Thiếu loại đào tạo');
+  if (!cls.title || !String(cls.title).trim()) throw __mockHttpError(400, 'Thiếu tên lớp học');
+  if (!cls.startTime) throw __mockHttpError(400, 'Thiếu thời gian bắt đầu lớp học');
+  if (cls.endTime && cls.startTime && cls.endTime < cls.startTime) throw __mockHttpError(400, 'Thời gian kết thúc phải sau thời gian bắt đầu');
+  cls.category = String(cls.category).trim();
+  cls.title = String(cls.title).trim();
+  cls.capacity = Number(cls.capacity) > 0 ? Math.floor(Number(cls.capacity)) : 0;
+  cls.passScore = (cls.passScore === '' || cls.passScore == null) ? null : Number(cls.passScore);
+  cls.documentIds = Array.isArray(cls.documentIds) ? cls.documentIds.map(Number).filter(Number.isFinite) : [];
+  const testId = cls.testId === '' || cls.testId == null ? null : Number(cls.testId);
+  if (testId != null && (!Number.isFinite(testId) || !DB.trainingTests.some((t) => t.id === testId))) throw __mockHttpError(400, 'Bài test được chọn không hợp lệ');
+  cls.testId = testId;
+  const secPerQ = Number(cls.testSecondsPerQuestion);
+  cls.testSecondsPerQuestion = Number.isFinite(secPerQ) && secPerQ >= 10 ? Math.floor(secPerQ) : 120;
+  if (payload.instructorUsername !== undefined || payload.instructor !== undefined) {
+    const instructorUser = __mockResolveTrainingInstructor(payload.instructorUsername);
+    cls.instructorUsername = instructorUser ? instructorUser.username : null;
+    cls.instructor = instructorUser ? instructorUser.name : (payload.instructor ? String(payload.instructor).trim() : '');
+  }
+  if (payload.inviteList !== undefined) cls.inviteList = __mockNormalizeInviteList(payload.inviteList);
+  return cls;
+}
+
+function __mockStartOfflineTrainingClass(user, cls) {
+  if (!__mockCanManageTrainingClass(user, cls)) throw __mockHttpError(403, 'Bạn không có quyền bắt đầu lớp học này');
+  if (cls.mode !== 'OFFLINE') throw __mockHttpError(409, 'Chỉ lớp học Offline mới cần bắt đầu buổi học thủ công');
+  if (cls.sessionState !== 'SCHEDULED') throw __mockHttpError(409, 'Lớp học này không ở trạng thái chờ bắt đầu');
+  cls.sessionState = 'ONGOING';
+  return cls;
+}
+function __mockEndOfflineTrainingClass(user, cls) {
+  if (!__mockCanManageTrainingClass(user, cls)) throw __mockHttpError(403, 'Bạn không có quyền kết thúc lớp học này');
+  if (cls.mode !== 'OFFLINE') throw __mockHttpError(409, 'Chỉ lớp học Offline mới cần kết thúc buổi học thủ công');
+  if (cls.sessionState !== 'ONGOING') throw __mockHttpError(409, 'Lớp học này chưa ở trạng thái đang diễn ra');
+  cls.sessionState = 'ENDED';
+  return cls;
 }
 
 function __mockValidateTrainingTestCreate(payload, user) {
-  if (!(user.perms?.admin || user.perms?.internalTrainingCreate)) throw __mockHttpError(403, 'Bạn không có quyền tạo bài test');
+  if (!(user.perms?.admin || user.perms?.trainingManage)) throw __mockHttpError(403, 'Bạn không có quyền tạo bài test');
   if (!payload.title || !String(payload.title).trim()) throw __mockHttpError(400, 'Thiếu tên bài test');
   const rawQuestions = Array.isArray(payload.questions) ? payload.questions : [];
   if (!rawQuestions.length) throw __mockHttpError(400, 'Bài test cần ít nhất 1 câu hỏi');
@@ -266,12 +346,18 @@ function __mockValidateTrainingRegistrationCreate(payload, user) {
   const activeRegs = DB.trainingRegistrations.filter((r) => r.classId === classId && r.result !== 'CANCELLED');
   if (cls.capacity > 0 && activeRegs.length >= cls.capacity) throw __mockHttpError(409, 'Lớp học đã đủ số lượng đăng ký');
   if (activeRegs.some((r) => r.creator === user.username)) throw __mockHttpError(409, 'Bạn đã đăng ký lớp học này rồi');
+  // Đợt 3: Danh Sách Được Mời (inviteList) — rỗng = mở cho mọi người (mặc định), có danh sách = chỉ
+  // người trong đó tự đăng ký được (mirrors trainingRegistrations.extraValidate ở createValidation.js).
+  const inviteList = Array.isArray(cls.inviteList) ? cls.inviteList : [];
+  if (inviteList.length && !inviteList.includes(user.username) && !user.perms?.admin) {
+    throw __mockHttpError(403, 'Lớp học này giới hạn theo danh sách mời — bạn không có trong danh sách');
+  }
   payload.className = cls.title; payload.classCode = cls.code; payload.category = cls.category; payload.classCreator = cls.creator;
   payload.result = 'REGISTERED'; payload.score = null; payload.resultNote = ''; payload.resultBy = null; payload.resultByName = null; payload.resultAt = null;
 }
 
 function __mockBulkRegister(payload, user, cls) {
-  if (cls.creator !== user.username && !user.perms?.admin) throw __mockHttpError(403, 'Chỉ người tạo lớp học hoặc Quản Trị Viên mới được thêm học viên vào lớp');
+  if (!__mockCanManageTrainingClass(user, cls)) throw __mockHttpError(403, 'Bạn không có quyền thêm học viên vào lớp học này');
   if (cls.status !== 'OPEN') throw __mockHttpError(409, 'Lớp học này đã đóng đăng ký');
   const requested = Array.isArray(payload?.usernames) ? payload.usernames : [];
   const seen = new Set();
@@ -330,8 +416,8 @@ function __mockSubmitTest(payload, user, cls) {
   return { registration: regClone, submission: { score: graded.score, totalPoints: graded.totalPoints, percentage: graded.percentage, passed: graded.passed } };
 }
 
-function __mockSetResult(payload, user, reg) {
-  if (reg.classCreator !== user.username && !user.perms?.admin) throw __mockHttpError(403, 'Chỉ người tạo lớp học hoặc Quản Trị Viên mới được ghi nhận kết quả');
+function __mockSetResult(payload, user, reg, cls) {
+  if (!__mockCanManageTrainingClass(user, cls)) throw __mockHttpError(403, 'Bạn không có quyền ghi nhận kết quả cho lớp học này');
   if (reg.result === 'CANCELLED') throw __mockHttpError(409, 'Đăng ký này đã bị huỷ, không thể ghi nhận kết quả');
   const result = payload?.result;
   if (result !== 'PASSED' && result !== 'FAILED') throw __mockHttpError(400, 'Kết quả không hợp lệ (chỉ nhận Đạt/Không đạt)');
@@ -462,6 +548,11 @@ async function __mockHandleRecordAction(moduleKey, idStr, action, payload, user)
     if (action === 'delete') return { __deleted: true };
     if (action === 'bulk-register') return __mockBulkRegister(payload, user, cls);
     if (action === 'submit-test') return __mockSubmitTest(payload, user, cls);
+    // edit/start-session/end-session (Đợt 3) MUTATE cls — clone trước để khớp đúng ngữ nghĩa
+    // withLockedRecordForCollection() thật (chỉ ghi lại khi mutator KHÔNG throw, xem lib/recordStore.js).
+    if (action === 'edit') { const clone = JSON.parse(JSON.stringify(cls)); const r = __mockEditTrainingClass(payload, user, clone); Object.assign(cls, r); return cls; }
+    if (action === 'start-session') { const clone = JSON.parse(JSON.stringify(cls)); const r = __mockStartOfflineTrainingClass(user, clone); Object.assign(cls, r); return cls; }
+    if (action === 'end-session') { const clone = JSON.parse(JSON.stringify(cls)); const r = __mockEndOfflineTrainingClass(user, clone); Object.assign(cls, r); return cls; }
     throw __mockHttpError(400, 'Hành động không hợp lệ');
   }
   if (moduleKey === 'trainingRegistrations') {
@@ -469,7 +560,11 @@ async function __mockHandleRecordAction(moduleKey, idStr, action, payload, user)
     const reg = DB.trainingRegistrations.find((r) => r.id === id);
     if (!reg) throw __mockHttpError(404, 'Không tìm thấy đăng ký');
     const clone = JSON.parse(JSON.stringify(reg));
-    if (action === 'set-result') return __mockSetResult(payload, user, clone);
+    if (action === 'set-result') {
+      const cls = DB.trainingClasses.find((c) => c.id === reg.classId);
+      if (!cls) throw __mockHttpError(404, 'Không tìm thấy lớp học của đăng ký này');
+      return __mockSetResult(payload, user, clone, cls);
+    }
     if (action === 'cancel') return __mockCancelReg(user, clone);
     throw __mockHttpError(400, 'Hành động không hợp lệ');
   }

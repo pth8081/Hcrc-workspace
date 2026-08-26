@@ -1773,8 +1773,9 @@ table { display: block; overflow-x: auto; max-width: 100%; }
               <input id="tcTitle" class="w-full border p-1.5 rounded" required>
             </div>
             <div>
-              <label class="block font-semibold text-gray-600 mb-1">Giảng Viên / Người Phụ Trách</label>
-              <input id="tcInstructor" class="w-full border p-1.5 rounded">
+              <label class="block font-semibold text-gray-600 mb-1">Giảng Viên / Người Phụ Trách (tuỳ chọn, phải là tài khoản hệ thống)</label>
+              <input id="tcInstructor" list="systemUsersDatalist" oninput="resolveTrainingInstructorInput(this.value)" placeholder="Gõ tên hoặc tài khoản để tìm..." class="w-full border p-1.5 rounded">
+              <input type="hidden" id="tcInstructorUsername">
             </div>
             <div>
               <label class="block font-semibold text-gray-600 mb-1">Thời Gian Bắt Đầu</label>
@@ -1822,6 +1823,14 @@ table { display: block; overflow-x: auto; max-width: 100%; }
             <div class="md:col-span-3">
               <label class="block font-semibold text-gray-600 mb-1">Mô Tả / Nội Dung</label>
               <textarea id="tcDescription" class="w-full border p-1.5 rounded h-20"></textarea>
+            </div>
+            <div class="md:col-span-3 bg-gray-50 border rounded p-2 space-y-2">
+              <label class="block font-semibold text-gray-600">Danh Sách Được Mời (tuỳ chọn — để trống = mở tự do cho mọi người tự đăng ký)</label>
+              <div class="flex gap-2">
+                <input id="tcInviteListPickInput" list="systemUsersDatalist" placeholder="Gõ tên hoặc tài khoản..." class="flex-1 border p-1.5 rounded" onkeydown="if(event.key==='Enter'){event.preventDefault();addTrainingInviteListPick();}">
+                <button type="button" onclick="addTrainingInviteListPick()" class="bg-gray-200 hover:bg-gray-300 px-3 py-1.5 rounded font-bold">Thêm</button>
+              </div>
+              <div id="tcInviteListStagedList" class="border rounded p-2 min-h-[2.5rem] flex flex-wrap gap-1.5 bg-white"></div>
             </div>
           </div>
           <div class="flex justify-end"><button type="submit" class="bg-emerald-600 text-white px-5 py-2 rounded font-bold hover:bg-emerald-700">Tạo Lớp Học</button></div>
@@ -2077,7 +2086,7 @@ table { display: block; overflow-x: auto; max-width: 100%; }
         </div>
         <div class="p-4">
           <table class="w-full border-collapse border text-xs">
-            <thead><tr class="bg-gray-100 text-left"><th class="border p-2">Học Viên</th><th class="border p-2">Đăng Ký Lúc</th><th class="border p-2">Kết Quả</th><th class="border p-2">Điểm</th><th class="border p-2 text-center">Thao Tác</th></tr></thead>
+            <thead><tr class="bg-gray-100 text-left"><th class="border p-2">Học Viên</th><th class="border p-2">Đăng Ký Lúc</th><th class="border p-2">Trạng Thái</th><th class="border p-2">Kết Quả</th><th class="border p-2">Điểm</th><th class="border p-2 text-center">Thao Tác</th></tr></thead>
             <tbody id="trainingResultsModalBody"></tbody>
           </table>
         </div>
@@ -2125,6 +2134,89 @@ table { display: block; overflow-x: auto; max-width: 100%; }
             <button type="button" onclick="confirmTrainingRosterAdd()" class="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded text-xs font-bold">✅ Xác Nhận Thêm Vào Lớp</button>
           </div>
         </div>
+      </div>
+    </div>
+
+    <!-- Modal Sửa Lớp Học (Đợt 3) — mở với trainingManage (mọi lớp) hoặc trainingInstruct đúng lớp
+         mình được gán làm giảng viên (xem canManageTrainingClassLocal(), openEditTrainingClassModal()).
+         KHÔNG cho đổi "Kiểu Lớp Học" (ONLINE/OFFLINE) — mode gắn liền cách tính sessionState, đổi qua
+         sửa dễ để lại dữ liệu vòng đời buổi học không nhất quán (xem lib/recordActions.js). -->
+    <div id="trainingEditClassModal" class="hidden fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+      <div class="bg-white rounded-lg shadow-xl max-w-3xl w-full max-h-[85vh] overflow-y-auto">
+        <div class="p-4 border-b flex justify-between items-center sticky top-0 bg-white">
+          <h3 class="font-bold text-gray-800">✏️ Sửa Lớp Học</h3>
+          <button onclick="closeEditTrainingClassModal()" class="text-gray-400 hover:text-gray-700 text-xl leading-none">&times;</button>
+        </div>
+        <form id="trainingEditClassForm" onsubmit="submitEditTrainingClass(event)" class="p-4 space-y-3 text-xs">
+          <input type="hidden" id="teClassId">
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+            <div>
+              <label class="block font-semibold text-gray-600 mb-1">Loại Đào Tạo</label>
+              <select id="teCategory" class="w-full border p-1.5 rounded bg-white" required></select>
+            </div>
+            <div class="md:col-span-2">
+              <label class="block font-semibold text-gray-600 mb-1">Tên Lớp Học</label>
+              <input id="teTitle" class="w-full border p-1.5 rounded" required>
+            </div>
+            <div>
+              <label class="block font-semibold text-gray-600 mb-1">Giảng Viên / Người Phụ Trách</label>
+              <input id="teInstructor" list="systemUsersDatalist" oninput="resolveTrainingEditInstructorInput(this.value)" placeholder="Gõ tên hoặc tài khoản để tìm..." class="w-full border p-1.5 rounded">
+              <input type="hidden" id="teInstructorUsername">
+            </div>
+            <div>
+              <label class="block font-semibold text-gray-600 mb-1">Thời Gian Bắt Đầu</label>
+              <input id="teStart" type="datetime-local" class="w-full border p-1.5 rounded" required>
+            </div>
+            <div>
+              <label class="block font-semibold text-gray-600 mb-1">Thời Gian Kết Thúc</label>
+              <input id="teEnd" type="datetime-local" class="w-full border p-1.5 rounded">
+            </div>
+            <div>
+              <label class="block font-semibold text-gray-600 mb-1">Địa Điểm / Hình Thức</label>
+              <input id="teLocation" class="w-full border p-1.5 rounded">
+            </div>
+            <div>
+              <label class="block font-semibold text-gray-600 mb-1">Hạn Đăng Ký</label>
+              <input id="teDeadline" type="date" class="w-full border p-1.5 rounded">
+            </div>
+            <div>
+              <label class="block font-semibold text-gray-600 mb-1">Số Lượng Tối Đa (để trống = không giới hạn)</label>
+              <input id="teCapacity" type="number" min="0" class="w-full border p-1.5 rounded">
+            </div>
+            <div>
+              <label class="block font-semibold text-gray-600 mb-1">Điểm Đạt Yêu Cầu (để trống nếu không thi)</label>
+              <input id="tePassScore" type="number" min="0" max="100" class="w-full border p-1.5 rounded">
+            </div>
+            <div>
+              <label class="block font-semibold text-gray-600 mb-1">Bài Test Gán Cho Lớp</label>
+              <select id="teTestId" class="w-full border p-1.5 rounded bg-white"></select>
+            </div>
+            <div>
+              <label class="block font-semibold text-gray-600 mb-1">Số Giây / Câu Hỏi</label>
+              <input id="teTestSecondsPerQuestion" type="number" min="10" class="w-full border p-1.5 rounded">
+            </div>
+            <div class="md:col-span-3">
+              <label class="block font-semibold text-gray-600 mb-1">Giáo Trình (chọn từ Kho Tài Liệu, giữ Ctrl/Cmd để chọn nhiều)</label>
+              <select id="teDocumentIds" multiple size="4" class="w-full border p-1.5 rounded bg-white"></select>
+            </div>
+            <div class="md:col-span-3">
+              <label class="block font-semibold text-gray-600 mb-1">Mô Tả / Nội Dung</label>
+              <textarea id="teDescription" class="w-full border p-1.5 rounded h-20"></textarea>
+            </div>
+            <div class="md:col-span-3 bg-gray-50 border rounded p-2 space-y-2">
+              <label class="block font-semibold text-gray-600">Danh Sách Được Mời (tuỳ chọn — để trống = mở tự do cho mọi người tự đăng ký)</label>
+              <div class="flex gap-2">
+                <input id="teInviteListPickInput" list="systemUsersDatalist" placeholder="Gõ tên hoặc tài khoản..." class="flex-1 border p-1.5 rounded" onkeydown="if(event.key==='Enter'){event.preventDefault();addTrainingEditInviteListPick();}">
+                <button type="button" onclick="addTrainingEditInviteListPick()" class="bg-gray-200 hover:bg-gray-300 px-3 py-1.5 rounded font-bold">Thêm</button>
+              </div>
+              <div id="teInviteListStagedList" class="border rounded p-2 min-h-[2.5rem] flex flex-wrap gap-1.5 bg-white"></div>
+            </div>
+          </div>
+          <div class="flex justify-end gap-2 pt-2 border-t">
+            <button type="button" onclick="closeEditTrainingClassModal()" class="px-4 py-2 rounded text-xs font-bold text-gray-600 hover:bg-gray-100">Huỷ</button>
+            <button type="submit" class="bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-2 rounded font-bold">💾 Lưu Thay Đổi</button>
+          </div>
+        </form>
       </div>
     </div>
 
@@ -3950,13 +4042,10 @@ table { display: block; overflow-x: auto; max-width: 100%; }
             <span id="permTreeBadge_internal" class="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-gray-100 text-gray-500">0/0</span>
           </summary>
           <div class="p-3 pt-0 space-y-2">
-            <p class="text-[11px] text-gray-500 italic">Mọi người dùng đều XEM và tương tác được (bình luận, thả tim) trên cả 4 phân hệ. 3 quyền dưới đây kiểm soát ai được ĐĂNG BÀI ở Nhịp Sống HCRC / Đào tạo; riêng "Góc chia sẻ" ai cũng đăng được nhưng bài chỉ công khai sau khi được người có quyền duyệt bên dưới phê duyệt. Quyền "Đăng Tuyển dụng" cũng dùng chung khối này — người có quyền được đăng tin tuyển dụng và quản lý toàn bộ ứng viên được giới thiệu (xem mục Tuyển Dụng).</p>
-            <div class="grid grid-cols-1 md:grid-cols-3 gap-2">
+            <p class="text-[11px] text-gray-500 italic">Mọi người dùng đều XEM và tương tác được (bình luận, thả tim) trên cả 4 phân hệ. 2 quyền dưới đây kiểm soát ai được ĐĂNG BÀI ở Nhịp Sống HCRC; riêng "Góc chia sẻ" ai cũng đăng được nhưng bài chỉ công khai sau khi được người có quyền duyệt bên dưới phê duyệt. Quyền "Đăng Tuyển dụng" cũng dùng chung khối này — người có quyền được đăng tin tuyển dụng và quản lý toàn bộ ứng viên được giới thiệu (xem mục Tuyển Dụng). Quyền đăng bài + quản lý mục Đào Tạo đã tách riêng ở mục 19 "Đào Tạo" bên dưới.</p>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-2">
               <label class="flex items-center gap-2 text-fuchsia-700 font-semibold cursor-pointer">
                 <input type="checkbox" id="pInternalNewsCreate"> 📰 Đăng Nhịp Sống HCRC
-              </label>
-              <label class="flex items-center gap-2 text-fuchsia-700 font-semibold cursor-pointer">
-                <input type="checkbox" id="pInternalTrainingCreate"> 🎓 Đăng Đào tạo
               </label>
               <label class="flex items-center gap-2 text-fuchsia-700 font-semibold cursor-pointer">
                 <input type="checkbox" id="pInternalRecruitmentCreate"> 💼 Đăng Tuyển dụng
@@ -4167,6 +4256,24 @@ table { display: block; overflow-x: auto; max-width: 100%; }
               </label>
               <label class="flex items-center gap-2 text-emerald-700 font-semibold cursor-pointer">
                 <input type="checkbox" id="pBudgetAggregate"> 📊 Tổng hợp (xem/xuất báo cáo mọi phòng ban)
+              </label>
+            </div>
+          </div>
+        </details>
+
+        <details class="perm-tree-node bg-white rounded border text-xs">
+          <summary class="flex items-center justify-between gap-2 px-3 py-2 hover:bg-gray-50 rounded">
+            <span class="font-bold text-gray-800 text-sm flex items-center gap-1.5"><span class="perm-tree-chevron text-gray-400">▸</span><span>🎓 19. Đào Tạo</span></span>
+            <span id="permTreeBadge_training" class="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-gray-100 text-gray-500">0/0</span>
+          </summary>
+          <div class="p-3 pt-0 space-y-2">
+            <p class="text-[11px] text-gray-500 italic">"Quản lý Đào Tạo" = toàn quyền: đăng bài Đào tạo (Truyền Thông Nội Bộ), tạo/sửa lớp học bất kỳ, quản lý Kho Tài Liệu/Ngân Hàng Câu Hỏi/Lộ Trình Thăng Tiến, quản lý danh sách học viên + kết quả của MỌI lớp. "Giảng viên (theo lớp được gán)" KHÔNG tạo lớp mới được — chỉ quản lý danh sách học viên/kết quả/nội dung của ĐÚNG (các) lớp mà họ được gán làm Giảng Viên khi tạo/sửa lớp (ô "Giảng Viên / Người Phụ Trách"), không đụng được lớp của giảng viên khác. 2 quyền độc lập, có thể bật cả hai.</p>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-2">
+              <label class="flex items-center gap-2 text-emerald-700 font-semibold cursor-pointer">
+                <input type="checkbox" id="pTrainingManage"> 🎓 Quản lý Đào Tạo (toàn quyền)
+              </label>
+              <label class="flex items-center gap-2 text-teal-700 font-semibold cursor-pointer">
+                <input type="checkbox" id="pTrainingInstruct"> 👨‍🏫 Giảng viên (theo lớp được gán)
               </label>
             </div>
           </div>
@@ -6790,7 +6897,7 @@ function canCreateInternalPost(user, type) {
   if (user.perms?.admin) return true;
   if (type === 'SHARE') return true;
   if (type === 'NEWS') return !!user.perms?.internalNewsCreate;
-  if (type === 'TRAINING') return !!user.perms?.internalTrainingCreate;
+  if (type === 'TRAINING') return !!user.perms?.trainingManage;
   return false;
 }
 
@@ -6867,7 +6974,8 @@ function defaultNewUserPerms() {
     moduleAccess: defaultModuleAccess(),
     canBeApprover: false,
     canViewReports: false,
-    internalNewsCreate: false, internalTrainingCreate: false, internalRecruitmentCreate: false,
+    internalNewsCreate: false, internalRecruitmentCreate: false,
+    trainingManage: false, trainingInstruct: false,
     internalPostApprove: false,
     uploadAll: false, uploadDepts: [],
     viewDraftAll: false, viewDraftDepts: [],
@@ -7031,6 +7139,16 @@ function migrateLegacyPerms(perms) {
   if (p.internalRecruitmentCreate === undefined && p.internalRewardCreate !== undefined) {
     p.internalRecruitmentCreate = p.internalRewardCreate;
     delete p.internalRewardCreate;
+    changed = true;
+  }
+  // Đợt 3 (Phân quyền + Vòng đời Đào Tạo): cờ internalTrainingCreate cũ (đăng bài Đào tạo + toàn bộ
+  // quản lý LMS: tạo lớp/tài liệu/bài test/lộ trình) tách thành trainingManage (giữ nguyên toàn bộ
+  // quyền cũ) + trainingInstruct (quyền MỚI, mặc định KHÔNG bật cho ai — chỉ admin cấp riêng cho giảng
+  // viên được gán theo từng lớp, xem canManageTrainingClass() ở lib/recordActions.js) — quy đổi giữ
+  // nguyên để ai đã có quyền cũ không bị mất quyền quản lý đào tạo đang có.
+  if (p.trainingManage === undefined && p.internalTrainingCreate !== undefined) {
+    p.trainingManage = p.internalTrainingCreate;
+    delete p.internalTrainingCreate;
     changed = true;
   }
 
@@ -20388,8 +20506,9 @@ function collectPermsFromForm() {
     approverAuthLevel: document.getElementById('pApproverAuthLevel').value,
     canViewReports: document.getElementById('pCanViewReports').checked,
     internalNewsCreate: document.getElementById('pInternalNewsCreate').checked,
-    internalTrainingCreate: document.getElementById('pInternalTrainingCreate').checked,
     internalRecruitmentCreate: document.getElementById('pInternalRecruitmentCreate').checked,
+    trainingManage: document.getElementById('pTrainingManage').checked,
+    trainingInstruct: document.getElementById('pTrainingInstruct').checked,
     internalPostApprove: document.getElementById('pInternalPostApprove').checked,
     meetingApprove: document.getElementById('pMeetingApprove').checked,
     meetingCancel: document.getElementById('pMeetingCancel').checked,
@@ -20460,8 +20579,9 @@ function populatePermsForm(permsInput) {
   onApproverAuthLevelChange();
   document.getElementById('pCanViewReports').checked = !!perms.canViewReports;
   document.getElementById('pInternalNewsCreate').checked = !!perms.internalNewsCreate;
-  document.getElementById('pInternalTrainingCreate').checked = !!perms.internalTrainingCreate;
   document.getElementById('pInternalRecruitmentCreate').checked = !!perms.internalRecruitmentCreate;
+  document.getElementById('pTrainingManage').checked = !!perms.trainingManage;
+  document.getElementById('pTrainingInstruct').checked = !!perms.trainingInstruct;
   document.getElementById('pInternalPostApprove').checked = !!perms.internalPostApprove;
   document.getElementById('pMeetingApprove').checked = !!perms.meetingApprove;
   document.getElementById('pMeetingCancel').checked = !!perms.meetingCancel;
@@ -23062,8 +23182,9 @@ function resetUserForm() {
   onApproverAuthLevelChange();
   document.getElementById('pCanViewReports').checked = !!defaults.canViewReports;
   document.getElementById('pInternalNewsCreate').checked = !!defaults.internalNewsCreate;
-  document.getElementById('pInternalTrainingCreate').checked = !!defaults.internalTrainingCreate;
   document.getElementById('pInternalRecruitmentCreate').checked = !!defaults.internalRecruitmentCreate;
+  document.getElementById('pTrainingManage').checked = !!defaults.trainingManage;
+  document.getElementById('pTrainingInstruct').checked = !!defaults.trainingInstruct;
   document.getElementById('pInternalPostApprove').checked = !!defaults.internalPostApprove;
   document.getElementById('pContractApprove').checked = !!defaults.contractApprove;
   document.getElementById('pPaymentManage').checked = !!defaults.paymentManage;
@@ -23226,8 +23347,10 @@ function summarizeUserPerms(perms) {
   if ((hasScope(perms.officeView) || hasScope(perms.officeCreate)) && (perms.officeBuy || perms.officeFix || perms.officeInvest)) parts.push('🏢 VP');
   if (perms.minutesCreate) parts.push('📝 Biên bản họp');
   if (perms.canViewReports) parts.push('📊 Báo cáo');
-  if (perms.internalNewsCreate || perms.internalTrainingCreate || perms.internalRecruitmentCreate) parts.push('📣 Truyền thông (đăng bài)');
+  if (perms.internalNewsCreate || perms.internalRecruitmentCreate) parts.push('📣 Truyền thông (đăng bài)');
   if (perms.internalPostApprove) parts.push('📣 Truyền thông (duyệt Góc chia sẻ)');
+  if (perms.trainingManage) parts.push('🎓 Đào Tạo (quản lý toàn bộ)');
+  else if (perms.trainingInstruct) parts.push('🎓 Đào Tạo (giảng viên lớp được gán)');
   return parts.length ? parts.join(', ') : '<span class="text-gray-400 italic">Chưa cấp quyền module nào</span>';
 }
 
@@ -25933,13 +26056,56 @@ function rejectInternalPostAction(id) {
   });
 }
 
-// ===================== ĐÀO TẠO (module con "Truyền Thông Nội Bộ" > Đào tạo) — tạm thời, MVP =====================
-// LMS thu gọn: Lớp Học (tạo/danh sách/ghi nhận kết quả) + Đăng Ký Của Tôi + Kho Tài Liệu (theo loại) +
+// ===================== ĐÀO TẠO (module con "Truyền Thông Nội Bộ" > Đào tạo) =====================
+// LMS: Lớp Học (tạo/danh sách/ghi nhận kết quả) + Đăng Ký Của Tôi + Kho Tài Liệu (theo loại) +
 // Lộ Trình Thăng Tiến (danh sách lớp bắt buộc, chỉ "Xác nhận" được khi Đạt hết — xem
-// confirmCareerPathForEmployee(), lib/recordActions.js). Dùng chung cờ quyền internalTrainingCreate cho
-// mọi thao tác quản lý (tạo lớp/tài liệu/lộ trình, ghi kết quả, xác nhận lộ trình).
+// confirmCareerPathForEmployee(), lib/recordActions.js) + Ngân Hàng Câu Hỏi.
+// Đợt 3: internalTrainingCreate cũ tách thành trainingManage (TOÀN QUYỀN — tạo mới lớp/tài liệu/bài
+// test/lộ trình, quản lý roster/kết quả BẤT KỲ lớp nào) + trainingInstruct (KHÔNG tạo lớp/quản lý lộ
+// trình/ngân hàng câu hỏi được, chỉ quản lý roster/kết quả của ĐÚNG lớp mình được gán làm giảng viên —
+// xem canManageTrainingClassLocal() ngay dưới, mirrors canManageTrainingClass() ở lib/recordActions.js).
+// canManageTrainingLocal() dùng cho các hành động KHÔNG theo từng lớp (tạo mới lớp/tài liệu/bài
+// test/lộ trình) — CHỈ trainingManage mới được, trainingInstruct KHÔNG đủ.
 function canManageTrainingLocal(user) {
-  return !!(user.perms?.admin || user.perms?.internalTrainingCreate);
+  return !!(user.perms?.admin || user.perms?.trainingManage);
+}
+
+// Quyền quản lý MỘT lớp học cụ thể (roster/kết quả/sửa nội dung/Bắt Đầu-Kết Thúc Lớp) — mirrors
+// canManageTrainingClass() ở lib/recordActions.js Y HỆT (xem "LƯU Ý BẢO TRÌ" đầu file
+// lib/createValidation.js: 2 cài đặt độc lập, client/server không import chung được).
+function canManageTrainingClassLocal(user, cls) {
+  if (user?.perms?.admin || user?.perms?.trainingManage) return true;
+  return !!(user?.perms?.trainingInstruct && cls?.instructorUsername && cls.instructorUsername === user.username);
+}
+
+// Trạng thái buổi học hiển thị (Đợt 3) — KHÁC hẳn cls.status (còn mở/đóng ĐĂNG KÝ). ONLINE tính SỐNG
+// theo giờ hệ thống ngay lúc gọi hàm (không lưu gì — cùng tinh thần pinExpiresAt/publishAt/"Sắp hết
+// hạn" tuyển dụng đã có sẵn trong app), OFFLINE đọc thẳng field cls.sessionState đã lưu (chuyển tay qua
+// nút Bắt Đầu Lớp/Kết Thúc Lớp — startOfflineTrainingClass()/endOfflineTrainingClass(),
+// lib/recordActions.js). Trả về 1 trong 3 giá trị chung: 'SCHEDULED'|'ONGOING'|'ENDED'.
+function getTrainingClassSessionState(cls) {
+  if (cls.mode === 'OFFLINE') return cls.sessionState || 'SCHEDULED';
+  const now = Date.now();
+  const start = cls.startTime ? new Date(cls.startTime).getTime() : NaN;
+  const end = cls.endTime ? new Date(cls.endTime).getTime() : NaN;
+  if (Number.isFinite(start) && now < start) return 'SCHEDULED';
+  if (Number.isFinite(end) && now > end) return 'ENDED';
+  return 'ONGOING';
+}
+const TRAINING_SESSION_STATE_LABELS = { SCHEDULED: 'Sắp diễn ra', ONGOING: 'Đang diễn ra', ENDED: 'Đã kết thúc' };
+
+// Trạng thái hiển thị của 1 đăng ký (Đợt 3) — LỚP PHỦ tính toán, KHÔNG đổi trainingRegistrations.result
+// gốc (vẫn REGISTERED/PASSED/FAILED/CANCELLED làm nguồn sự thật duy nhất, xem baseline). "Chờ" = đăng ký
+// còn REGISTERED và buổi học CHƯA bắt đầu; "Đang học" = REGISTERED và buổi học đã bắt đầu (đang diễn ra
+// hoặc đã kết thúc) nhưng chưa có kết quả; "Hoàn thành" = đã có kết quả PASSED/FAILED (kèm sub-badge);
+// "Đã hủy" = result CANCELLED, không đụng gì tới sessionState.
+function getTrainingRegDisplayStatus(reg, cls) {
+  if (reg.result === 'CANCELLED') return { key: 'CANCELLED', label: 'Đã hủy' };
+  if (reg.result === 'PASSED' || reg.result === 'FAILED') {
+    return { key: 'DONE', label: 'Hoàn thành', sub: reg.result === 'PASSED' ? 'Đạt' : 'Không đạt' };
+  }
+  const sessionState = cls ? getTrainingClassSessionState(cls) : 'SCHEDULED';
+  return sessionState === 'SCHEDULED' ? { key: 'WAITING', label: 'Chờ' } : { key: 'STUDYING', label: 'Đang học' };
 }
 
 let activeTrainingLmsTab = 'CLASSES';
@@ -26000,6 +26166,7 @@ function renderTrainingLms() {
   document.getElementById('careerPathNoPermNote').classList.toggle('hidden', canManage);
   document.getElementById('trainingTestForm').classList.toggle('hidden', !canManage);
   document.getElementById('trainingTestNoPermNote').classList.toggle('hidden', canManage);
+  renderTrainingInviteListStagedList();
 
   if (activeTrainingLmsTab === 'CLASSES') renderTrainingClasses();
   else if (activeTrainingLmsTab === 'MY_REGS') renderTrainingMyRegs();
@@ -26019,15 +26186,65 @@ function onTrainingClassModeChange() {
     : 'Giáo Trình Đọc Bắt Buộc (chọn từ Kho Tài Liệu, giữ Ctrl/Cmd để chọn nhiều)';
 }
 
+// Giảng viên (Đợt 3) — cùng khuôn resolveCarAssignedDriverInput() ở trên: khớp đúng định dạng
+// "Tên — Phòng (tài_khoản)" của <datalist id="systemUsersDatalist">, gõ tự do không khớp -> để trống,
+// submit sẽ bị chặn nếu ô còn text nhưng chưa resolve được (server cũng tự xác thực lại, xem
+// createValidation.js resolveTrainingInstructorUsername()).
+function resolveTrainingInstructorInput(rawValue) {
+  const m = rawValue.match(/^(.*) — .*\(([^()]+)\)$/);
+  document.getElementById('tcInstructorUsername').value = m ? m[2].trim() : '';
+}
+
+// Danh Sách Được Mời (tuỳ chọn, Đợt 3) — cùng khuôn trainingRosterStaged (picker thêm học viên), nhưng
+// đây chỉ GHI vào field inviteList của lớp lúc tạo/sửa, KHÔNG tự đăng ký/enroll ai cả.
+let tcInviteListStaged = []; // [{ username, name, dept }]
+function renderTrainingInviteListStagedList() {
+  const wrap = document.getElementById('tcInviteListStagedList');
+  if (!wrap) return;
+  if (!tcInviteListStaged.length) {
+    wrap.innerHTML = `<span class="text-gray-400 italic text-xs">Chưa mời ai — để trống thì mọi người đều tự đăng ký được.</span>`;
+    return;
+  }
+  wrap.innerHTML = tcInviteListStaged.map(p => `
+    <span class="inline-flex items-center gap-1 bg-indigo-50 border border-indigo-200 text-indigo-800 rounded-full pl-2 pr-1 py-0.5 text-xs">
+      ${escapeHtml(p.name)}${p.dept ? ` <span class="text-indigo-500">(${escapeHtml(p.dept)})</span>` : ''}
+      <button type="button" onclick="removeTrainingInviteListStaged('${escapeHtml(p.username)}')" class="text-indigo-500 hover:text-red-600 font-bold leading-none px-1">&times;</button>
+    </span>`).join('');
+}
+function addTrainingInviteListPick() {
+  const input = document.getElementById('tcInviteListPickInput');
+  const raw = input.value.trim();
+  if (!raw) return;
+  const m = raw.match(/^(.*) — .*\(([^()]+)\)$/);
+  const user = m ? DB.users.find(u => u.username === m[2].trim()) : DB.users.find(u => u.username === raw);
+  if (!user) return alert('Không tìm thấy tài khoản này trong danh sách gợi ý — vui lòng chọn đúng từ dropdown.');
+  if (!tcInviteListStaged.some(p => p.username === user.username)) {
+    tcInviteListStaged.push({ username: user.username, name: user.name, dept: user.dept });
+  }
+  renderTrainingInviteListStagedList();
+  input.value = '';
+  input.focus();
+}
+function removeTrainingInviteListStaged(username) {
+  tcInviteListStaged = tcInviteListStaged.filter(p => p.username !== username);
+  renderTrainingInviteListStagedList();
+}
+
 async function submitTrainingClass(e) {
   e.preventDefault();
   if (!canManageTrainingLocal(currentUser)) return alert('⛔ Bạn không có quyền tạo lớp học!');
+  const instructorText = document.getElementById('tcInstructor').value.trim();
+  const instructorUsername = document.getElementById('tcInstructorUsername').value;
+  if (instructorText && !instructorUsername) {
+    return alert('Vui lòng chọn đúng giảng viên từ danh sách gợi ý (gõ tên hoặc tài khoản để tìm), hoặc để trống nếu chưa gán!');
+  }
   const documentIds = [...document.getElementById('tcDocumentIds').selectedOptions].map(o => Number(o.value));
   const payload = {
     code: `LOP-${Date.now()}`,
     category: document.getElementById('tcCategory').value,
     title: document.getElementById('tcTitle').value.trim(),
-    instructor: document.getElementById('tcInstructor').value.trim(),
+    instructor: instructorText,
+    instructorUsername,
     startTime: document.getElementById('tcStart').value,
     endTime: document.getElementById('tcEnd').value,
     location: document.getElementById('tcLocation').value.trim(),
@@ -26038,7 +26255,8 @@ async function submitTrainingClass(e) {
     testId: document.getElementById('tcTestId').value,
     testSecondsPerQuestion: document.getElementById('tcTestSecondsPerQuestion').value,
     documentIds,
-    description: document.getElementById('tcDescription').value.trim()
+    description: document.getElementById('tcDescription').value.trim(),
+    inviteList: tcInviteListStaged.map(p => p.username)
   };
   if (!payload.category) return alert('Vui lòng chọn Loại Đào Tạo (thêm ở Quản Trị &gt; Quản Lý Danh Mục nếu chưa có)!');
   let newClass;
@@ -26050,6 +26268,9 @@ async function submitTrainingClass(e) {
   logSystemAction('INTERNAL', 'CREATE_TRAINING_CLASS', `Tạo lớp học đào tạo [${newClass.code} - ${newClass.title}]`, 'SUCCESS', newClass.code);
   alert('✅ Đã tạo lớp học thành công!');
   e.target.reset();
+  document.getElementById('tcInstructorUsername').value = '';
+  tcInviteListStaged = [];
+  renderTrainingInviteListStagedList();
   onTrainingClassModeChange();
   renderTrainingLms();
 }
@@ -26069,12 +26290,18 @@ function renderTrainingClasses() {
     const myReg = regs.find(r => r.creator === currentUser.username);
     const isFull = c.capacity > 0 && regs.length >= c.capacity;
     const isPastDeadline = !!(c.registerDeadline && todayStr > c.registerDeadline);
-    const canManageThis = currentUser.perms?.admin || c.creator === currentUser.username;
+    // Đợt 3: canManageTrainingClassLocal() thay hẳn kiểu so "c.creator === currentUser.username" cũ —
+    // trainingManage quản lý được MỌI lớp, trainingInstruct chỉ đúng lớp mình được gán làm giảng viên.
+    const canManageThis = canManageTrainingClassLocal(currentUser, c);
+    const inviteList = Array.isArray(c.inviteList) ? c.inviteList : [];
+    const isInvited = !inviteList.length || inviteList.includes(currentUser.username) || currentUser.perms?.admin;
     let actionHTML;
     if (myReg) {
-      const label = myReg.result === 'PASSED' ? '✅ Đã đạt' : myReg.result === 'FAILED' ? '❌ Không đạt' : '📌 Đã đăng ký';
-      const cls = myReg.result === 'PASSED' ? 'text-emerald-600' : myReg.result === 'FAILED' ? 'text-red-600' : 'text-indigo-600';
-      actionHTML = `<span class="text-xs font-bold ${cls}">${label}</span>`;
+      const disp = getTrainingRegDisplayStatus(myReg, c);
+      const cls = disp.key === 'DONE' ? (myReg.result === 'PASSED' ? 'text-emerald-600' : 'text-red-600') : disp.key === 'CANCELLED' ? 'text-gray-400' : 'text-indigo-600';
+      actionHTML = `<span class="text-xs font-bold ${cls}">📌 ${escapeHtml(disp.label)}${disp.sub ? ` (${escapeHtml(disp.sub)})` : ''}</span>`;
+    } else if (!isInvited) {
+      actionHTML = `<span class="text-xs text-gray-400 italic">Lớp này giới hạn theo danh sách mời.</span>`;
     } else if (c.status !== 'OPEN' || isFull || isPastDeadline) {
       actionHTML = `<span class="text-xs text-gray-400">${c.status !== 'OPEN' ? 'Đã đóng' : isFull ? 'Đã đủ số lượng' : 'Hết hạn đăng ký'}</span>`;
     } else {
@@ -26082,17 +26309,176 @@ function renderTrainingClasses() {
     }
     const qrHTML = (canManageThis && c.mode === 'OFFLINE' && c.testId != null)
       ? `<button onclick="openTrainingClassQrModal(${c.id})" class="bg-purple-600 text-white px-2 py-1 rounded text-xs font-bold hover:bg-purple-700 ml-1">📱 Mã QR</button>` : '';
-    const manageHTML = canManageThis ? `<button onclick="openTrainingResultsModal(${c.id})" class="bg-indigo-600 text-white px-2 py-1 rounded text-xs font-bold hover:bg-indigo-700 ml-1">👥 Kết Quả (${regs.length})</button><button onclick="openTrainingRosterModal(${c.id})" class="bg-teal-600 text-white px-2 py-1 rounded text-xs font-bold hover:bg-teal-700 ml-1">➕ Thêm Học Viên</button>${qrHTML}` : '';
+    // Bắt Đầu Lớp/Kết Thúc Lớp (Đợt 3) — chỉ lớp OFFLINE, vòng đời SCHEDULED -> ONGOING -> ENDED.
+    let sessionBtnHTML = '';
+    if (canManageThis && c.mode === 'OFFLINE') {
+      if (c.sessionState === 'ONGOING') {
+        sessionBtnHTML = `<button onclick="endOfflineTrainingClassAction(${c.id})" class="bg-rose-600 text-white px-2 py-1 rounded text-xs font-bold hover:bg-rose-700 ml-1">⏹️ Kết Thúc Lớp</button>`;
+      } else if (!c.sessionState || c.sessionState === 'SCHEDULED') {
+        sessionBtnHTML = `<button onclick="startOfflineTrainingClassAction(${c.id})" class="bg-amber-600 text-white px-2 py-1 rounded text-xs font-bold hover:bg-amber-700 ml-1">▶️ Bắt Đầu Lớp</button>`;
+      }
+    }
+    const editHTML = canManageThis
+      ? `<button onclick="openEditTrainingClassModal(${c.id})" class="bg-gray-500 text-white px-2 py-1 rounded text-xs font-bold hover:bg-gray-600 ml-1">✏️ Sửa</button>` : '';
+    const manageHTML = canManageThis ? `<button onclick="openTrainingResultsModal(${c.id})" class="bg-indigo-600 text-white px-2 py-1 rounded text-xs font-bold hover:bg-indigo-700 ml-1">👥 Kết Quả (${regs.length})</button><button onclick="openTrainingRosterModal(${c.id})" class="bg-teal-600 text-white px-2 py-1 rounded text-xs font-bold hover:bg-teal-700 ml-1">➕ Thêm Học Viên</button>${qrHTML}${sessionBtnHTML}${editHTML}` : '';
     const delHTML = currentUser.perms?.admin ? `<button onclick="deleteTrainingClass(${c.id})" class="text-red-500 font-bold hover:underline text-xs ml-2">Xóa</button>` : '';
+    const sessionState = getTrainingClassSessionState(c);
+    const sessionBadgeCls = sessionState === 'ONGOING' ? 'bg-emerald-100 text-emerald-700' : sessionState === 'ENDED' ? 'bg-gray-200 text-gray-600' : 'bg-amber-100 text-amber-700';
     return `
       <tr class="hover:bg-gray-50">
-        <td class="border p-2"><span class="font-bold text-emerald-800">${escapeHtml(c.code || '')}</span> <span class="text-xs px-1.5 py-0.5 rounded ${c.mode === 'OFFLINE' ? 'bg-orange-100 text-orange-700' : 'bg-sky-100 text-sky-700'}">${c.mode === 'OFFLINE' ? '🏫 Offline' : '💻 Online'}</span>${c.testId ? ' <span class="text-xs px-1.5 py-0.5 rounded bg-purple-100 text-purple-700">🧪 Có bài test</span>' : ''}<br>${escapeHtml(c.title)}${c.instructor ? `<br><span class="text-gray-400">GV: ${escapeHtml(c.instructor)}</span>` : ''}</td>
+        <td class="border p-2"><span class="font-bold text-emerald-800">${escapeHtml(c.code || '')}</span> <span class="text-xs px-1.5 py-0.5 rounded ${c.mode === 'OFFLINE' ? 'bg-orange-100 text-orange-700' : 'bg-sky-100 text-sky-700'}">${c.mode === 'OFFLINE' ? '🏫 Offline' : '💻 Online'}</span> <span class="text-xs px-1.5 py-0.5 rounded ${sessionBadgeCls}">${TRAINING_SESSION_STATE_LABELS[sessionState]}</span>${c.testId ? ' <span class="text-xs px-1.5 py-0.5 rounded bg-purple-100 text-purple-700">🧪 Có bài test</span>' : ''}${inviteList.length ? ' <span class="text-xs px-1.5 py-0.5 rounded bg-fuchsia-100 text-fuchsia-700">✉️ Có danh sách mời</span>' : ''}<br>${escapeHtml(c.title)}${c.instructor ? `<br><span class="text-gray-400">GV: ${escapeHtml(c.instructor)}</span>` : ''}</td>
         <td class="border p-2">${escapeHtml(c.category)}</td>
         <td class="border p-2">${escapeHtml((c.startTime || '').replace('T', ' '))}${c.location ? `<br><span class="text-gray-400">${escapeHtml(c.location)}</span>` : ''}</td>
         <td class="border p-2">${regs.length}${c.capacity ? '/' + c.capacity : ''}</td>
         <td class="border p-2 text-center">${actionHTML}${manageHTML}${delHTML}</td>
       </tr>`;
   }).join('');
+}
+
+async function startOfflineTrainingClassAction(classId) {
+  let updated;
+  try {
+    const res = await callRecordAction('trainingClasses', classId, 'start-session', {});
+    updated = res.item;
+  } catch (err) { return alert(`⛔ ${err.message}`); }
+  const idx = DB.trainingClasses.findIndex(x => x.id === classId);
+  if (idx !== -1) DB.trainingClasses[idx] = updated;
+  logSystemAction('INTERNAL', 'START_TRAINING_CLASS_SESSION', `Bắt đầu buổi học [${updated.code}]`, 'SUCCESS', updated.code);
+  renderTrainingClasses();
+}
+async function endOfflineTrainingClassAction(classId) {
+  let updated;
+  try {
+    const res = await callRecordAction('trainingClasses', classId, 'end-session', {});
+    updated = res.item;
+  } catch (err) { return alert(`⛔ ${err.message}`); }
+  const idx = DB.trainingClasses.findIndex(x => x.id === classId);
+  if (idx !== -1) DB.trainingClasses[idx] = updated;
+  logSystemAction('INTERNAL', 'END_TRAINING_CLASS_SESSION', `Kết thúc buổi học [${updated.code}]`, 'SUCCESS', updated.code);
+  renderTrainingClasses();
+}
+
+// ---------- SỬA LỚP HỌC (Đợt 3) ----------
+function resolveTrainingEditInstructorInput(rawValue) {
+  const m = rawValue.match(/^(.*) — .*\(([^()]+)\)$/);
+  document.getElementById('teInstructorUsername').value = m ? m[2].trim() : '';
+}
+
+let teInviteListStaged = []; // [{ username, name, dept }]
+function renderTrainingEditInviteListStagedList() {
+  const wrap = document.getElementById('teInviteListStagedList');
+  if (!wrap) return;
+  if (!teInviteListStaged.length) {
+    wrap.innerHTML = `<span class="text-gray-400 italic text-xs">Chưa mời ai — để trống thì mọi người đều tự đăng ký được.</span>`;
+    return;
+  }
+  wrap.innerHTML = teInviteListStaged.map(p => `
+    <span class="inline-flex items-center gap-1 bg-indigo-50 border border-indigo-200 text-indigo-800 rounded-full pl-2 pr-1 py-0.5 text-xs">
+      ${escapeHtml(p.name)}${p.dept ? ` <span class="text-indigo-500">(${escapeHtml(p.dept)})</span>` : ''}
+      <button type="button" onclick="removeTrainingEditInviteListStaged('${escapeHtml(p.username)}')" class="text-indigo-500 hover:text-red-600 font-bold leading-none px-1">&times;</button>
+    </span>`).join('');
+}
+function addTrainingEditInviteListPick() {
+  const input = document.getElementById('teInviteListPickInput');
+  const raw = input.value.trim();
+  if (!raw) return;
+  const m = raw.match(/^(.*) — .*\(([^()]+)\)$/);
+  const user = m ? DB.users.find(u => u.username === m[2].trim()) : DB.users.find(u => u.username === raw);
+  if (!user) return alert('Không tìm thấy tài khoản này trong danh sách gợi ý — vui lòng chọn đúng từ dropdown.');
+  if (!teInviteListStaged.some(p => p.username === user.username)) {
+    teInviteListStaged.push({ username: user.username, name: user.name, dept: user.dept });
+  }
+  renderTrainingEditInviteListStagedList();
+  input.value = '';
+  input.focus();
+}
+function removeTrainingEditInviteListStaged(username) {
+  teInviteListStaged = teInviteListStaged.filter(p => p.username !== username);
+  renderTrainingEditInviteListStagedList();
+}
+
+function openEditTrainingClassModal(classId) {
+  const c = DB.trainingClasses.find(x => x.id === classId);
+  if (!c) return;
+  if (!canManageTrainingClassLocal(currentUser, c)) return alert('⛔ Bạn không có quyền sửa lớp học này!');
+
+  document.getElementById('teClassId').value = c.id;
+  const catOpts = (DB.trainingCategories || []).map(cat => `<option value="${escapeHtml(cat)}">${escapeHtml(cat)}</option>`).join('');
+  document.getElementById('teCategory').innerHTML = catOpts;
+  document.getElementById('teCategory').value = c.category || '';
+  document.getElementById('teTitle').value = c.title || '';
+  populateSystemUsersDatalist();
+  const instructorUser = c.instructorUsername ? DB.users.find(u => u.username === c.instructorUsername) : null;
+  document.getElementById('teInstructor').value = instructorUser
+    ? `${instructorUser.name} — ${instructorUser.dept || 'Chưa rõ phòng'} (${instructorUser.username})`
+    : (c.instructor || '');
+  document.getElementById('teInstructorUsername').value = c.instructorUsername || '';
+  document.getElementById('teStart').value = c.startTime || '';
+  document.getElementById('teEnd').value = c.endTime || '';
+  document.getElementById('teLocation').value = c.location || '';
+  document.getElementById('teDeadline').value = c.registerDeadline || '';
+  document.getElementById('teCapacity').value = c.capacity || '';
+  document.getElementById('tePassScore').value = c.passScore != null ? c.passScore : '';
+  const testOpts = DB.trainingTests.slice().sort((a, b) => b.id - a.id)
+    .map(t => `<option value="${t.id}">${escapeHtml(t.title)} (${t.questions.length} câu)</option>`).join('');
+  document.getElementById('teTestId').innerHTML = `<option value="">-- Không gán bài test --</option>` + testOpts;
+  document.getElementById('teTestId').value = c.testId != null ? String(c.testId) : '';
+  document.getElementById('teTestSecondsPerQuestion').value = c.testSecondsPerQuestion || 120;
+  const docOpts = DB.trainingDocuments.slice().sort((a, b) => b.id - a.id)
+    .map(d => `<option value="${d.id}">${escapeHtml(d.category)} — ${escapeHtml(d.title)}</option>`).join('');
+  const teDoc = document.getElementById('teDocumentIds');
+  teDoc.innerHTML = docOpts;
+  const selectedDocIds = new Set(c.documentIds || []);
+  [...teDoc.options].forEach(o => { o.selected = selectedDocIds.has(Number(o.value)); });
+  document.getElementById('teDescription').value = c.description || '';
+  teInviteListStaged = (Array.isArray(c.inviteList) ? c.inviteList : []).map(username => {
+    const u = DB.users.find(x => x.username === username);
+    return { username, name: u ? u.name : username, dept: u ? u.dept : '' };
+  });
+  renderTrainingEditInviteListStagedList();
+  document.getElementById('trainingEditClassModal').classList.remove('hidden');
+}
+function closeEditTrainingClassModal() {
+  document.getElementById('trainingEditClassModal').classList.add('hidden');
+}
+
+async function submitEditTrainingClass(e) {
+  e.preventDefault();
+  const classId = Number(document.getElementById('teClassId').value);
+  const instructorText = document.getElementById('teInstructor').value.trim();
+  const instructorUsername = document.getElementById('teInstructorUsername').value;
+  if (instructorText && !instructorUsername) {
+    return alert('Vui lòng chọn đúng giảng viên từ danh sách gợi ý (gõ tên hoặc tài khoản để tìm), hoặc để trống nếu chưa gán!');
+  }
+  const documentIds = [...document.getElementById('teDocumentIds').selectedOptions].map(o => Number(o.value));
+  const payload = {
+    category: document.getElementById('teCategory').value,
+    title: document.getElementById('teTitle').value.trim(),
+    instructor: instructorText,
+    instructorUsername,
+    startTime: document.getElementById('teStart').value,
+    endTime: document.getElementById('teEnd').value,
+    location: document.getElementById('teLocation').value.trim(),
+    registerDeadline: document.getElementById('teDeadline').value,
+    capacity: document.getElementById('teCapacity').value,
+    passScore: document.getElementById('tePassScore').value,
+    testId: document.getElementById('teTestId').value,
+    testSecondsPerQuestion: document.getElementById('teTestSecondsPerQuestion').value,
+    documentIds,
+    description: document.getElementById('teDescription').value.trim(),
+    inviteList: teInviteListStaged.map(p => p.username)
+  };
+  let updated;
+  try {
+    const result = await callRecordAction('trainingClasses', classId, 'edit', payload);
+    updated = result.item;
+  } catch (err) { return alert(`⛔ ${err.message}`); }
+  const idx = DB.trainingClasses.findIndex(x => x.id === classId);
+  if (idx !== -1) DB.trainingClasses[idx] = updated;
+  logSystemAction('INTERNAL', 'EDIT_TRAINING_CLASS', `Sửa lớp học [${updated.code} - ${updated.title}]`, 'SUCCESS', updated.code);
+  alert('✅ Đã lưu thay đổi lớp học!');
+  closeEditTrainingClassModal();
+  renderTrainingLms();
 }
 
 async function registerForTrainingClass(classId) {
@@ -26144,12 +26530,16 @@ function openTrainingResultsModal(classId) {
 
 function renderTrainingResultsModalBody() {
   const regs = DB.trainingRegistrations.filter(r => r.classId === trainingResultsModalClassId && r.result !== 'CANCELLED');
+  const cls = DB.trainingClasses.find(c => c.id === trainingResultsModalClassId);
   const body = document.getElementById('trainingResultsModalBody');
-  if (!regs.length) { body.innerHTML = `<tr><td colspan="5" class="text-center p-4 text-gray-400 italic">Chưa có ai đăng ký.</td></tr>`; return; }
-  body.innerHTML = regs.map(r => `
+  if (!regs.length) { body.innerHTML = `<tr><td colspan="6" class="text-center p-4 text-gray-400 italic">Chưa có ai đăng ký.</td></tr>`; return; }
+  body.innerHTML = regs.map(r => {
+    const disp = getTrainingRegDisplayStatus(r, cls);
+    return `
     <tr>
       <td class="border p-2">${escapeHtml(r.creatorName)}<br><span class="text-gray-400">${escapeHtml(r.dept)}</span></td>
       <td class="border p-2">${escapeHtml(r.registeredAt || '')}</td>
+      <td class="border p-2"><span class="text-xs font-semibold">${escapeHtml(disp.label)}${disp.sub ? ` (${escapeHtml(disp.sub)})` : ''}</span></td>
       <td class="border p-2">
         <select id="trResult_${r.id}" class="border rounded p-1">
           <option value="REGISTERED" ${r.result === 'REGISTERED' ? 'selected' : ''}>Đang học</option>
@@ -26159,7 +26549,8 @@ function renderTrainingResultsModalBody() {
       </td>
       <td class="border p-2"><input id="trScore_${r.id}" type="number" min="0" max="100" value="${r.score != null ? r.score : ''}" class="w-16 border rounded p-1"></td>
       <td class="border p-2 text-center"><button onclick="saveTrainingResult(${r.id})" class="bg-emerald-600 text-white px-2 py-1 rounded font-bold hover:bg-emerald-700">Lưu</button></td>
-    </tr>`).join('');
+    </tr>`;
+  }).join('');
 }
 
 async function saveTrainingResult(regId) {
@@ -26451,14 +26842,17 @@ function renderTrainingMyRegs() {
   if (!pageItems.length) { tbody.innerHTML = `<tr><td colspan="5" class="text-center p-4 text-gray-400 italic">Bạn chưa đăng ký lớp học nào.</td></tr>`; return; }
   const now = new Date();
   tbody.innerHTML = pageItems.map(r => {
-    const badge = r.result === 'PASSED' ? '<span class="text-emerald-600 font-bold">✅ Đạt' + (r.score != null ? ` (${r.score} điểm)` : '') + '</span>'
-      : r.result === 'FAILED' ? '<span class="text-red-600 font-bold">❌ Không đạt' + (r.score != null ? ` (${r.score} điểm)` : '') + '</span>'
-      : '<span class="text-indigo-600 font-bold">📌 Đang học</span>';
+    const cls = DB.trainingClasses.find(c => c.id === r.classId);
+    // Đợt 3: badge dùng lớp phủ Chờ/Đang học/Hoàn thành (getTrainingRegDisplayStatus()) thay cho suy
+    // trực tiếp từ result — KHÔNG đổi ý nghĩa result gốc, chỉ đổi CÁCH HIỂN THỊ (xem baseline).
+    const disp = getTrainingRegDisplayStatus(r, cls);
+    const badgeCls = disp.key === 'DONE' ? (r.result === 'PASSED' ? 'text-emerald-600' : 'text-red-600') : 'text-indigo-600';
+    const badgeIcon = disp.key === 'DONE' ? (r.result === 'PASSED' ? '✅' : '❌') : disp.key === 'WAITING' ? '⏳' : '📌';
+    const badge = `<span class="${badgeCls} font-bold">${badgeIcon} ${escapeHtml(disp.label)}${disp.sub ? ` (${escapeHtml(disp.sub)})` : ''}${disp.key === 'DONE' && r.score != null ? ` — ${r.score} điểm` : ''}</span>`;
     const cancelHTML = r.result === 'REGISTERED' ? `<button onclick="cancelTrainingRegistrationAction(${r.id})" class="text-red-500 font-bold hover:underline text-xs">Huỷ Đăng Ký</button>` : '';
     // Bài test ONLINE tự bật đúng lúc lớp kết thúc (so sánh giờ hiện tại với endTime lúc render, không
     // cần cron/websocket gì) — OFFLINE thì học viên quét mã QR tại lớp để vào làm, không hiện nút ở đây.
     let testHTML = '';
-    const cls = DB.trainingClasses.find(c => c.id === r.classId);
     if (cls && cls.testId != null && r.result === 'REGISTERED') {
       if (cls.mode === 'OFFLINE') {
         testHTML = `<div class="text-xs text-gray-400 mt-1">🧪 Quét mã QR tại lớp để làm bài</div>`;

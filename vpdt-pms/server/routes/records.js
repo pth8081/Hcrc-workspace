@@ -662,8 +662,29 @@ async function withTrainingRegAction(req, res, action, mutator) {
 }
 router.post('/trainingRegistrations/:id/cancel', (req, res) =>
   withTrainingRegAction(req, res, 'cancel', recordActions.cancelTrainingRegistration));
-router.post('/trainingRegistrations/:id/set-result', (req, res) =>
-  withTrainingRegAction(req, res, 'set-result', recordActions.setTrainingRegistrationResult));
+
+// set-result (Đợt 3) cần đọc kèm trainingClasses — quyền ghi giờ so theo canManageTrainingClass()
+// (trainingManage quản lý MỌI lớp, trainingInstruct chỉ đúng lớp mình được gán làm giảng viên, xem
+// lib/recordActions.js), không còn so trực tiếp reg.classCreator như trước Đợt 3 nên không dùng chung
+// được withTrainingRegAction() ở trên nữa (không có cls sẵn).
+router.post('/trainingRegistrations/:id/set-result', async (req, res) => {
+  const itemId = Number(req.params.id);
+  if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
+  try {
+    const { freshUser } = await getFreshUser(req);
+    const regs = await getAllForCollection('trainingRegistrations');
+    const reg = regs.find(r => r.id === itemId);
+    if (!reg) throw new HttpError(404, 'Không tìm thấy đăng ký');
+    const classes = await getAllForCollection('trainingClasses');
+    const cls = classes.find(c => c.id === reg.classId);
+    if (!cls) throw new HttpError(404, 'Không tìm thấy lớp học của đăng ký này');
+    const result = await withLockedRecordForCollection('trainingRegistrations', itemId, (item) =>
+      recordActions.setTrainingRegistrationResult(req.body, freshUser, item, cls));
+    res.json({ ok: true, item: result });
+  } catch (err) {
+    handleError(res, `trainingRegistrations/${req.params.id}/set-result`, err);
+  }
+});
 
 // POST /api/records/trainingClasses/:id/bulk-register — nhân sự (người tạo lớp) hoặc Admin thêm HÀNG
 // LOẠT học viên vào 1 lớp cùng lúc (dropdown chọn từng người, hoặc theo danh sách đọc từ file Excel —
@@ -690,6 +711,51 @@ router.post('/trainingClasses/:id/bulk-register', async (req, res) => {
     res.json({ ok: true, ...result });
   } catch (err) {
     handleError(res, `trainingClasses/${req.params.id}/bulk-register`, err);
+  }
+});
+
+// POST /api/records/trainingClasses/:id/edit (Đợt 3) — sửa nội dung/lịch lớp học đã tạo. Đọc kèm
+// trainingTests (kiểm tra testId mới nếu có đổi, cùng lý do routes/create.js) + req.allUsers (resolve
+// lại instructorUsername nếu có đổi giảng viên) TRƯỚC khi khoá đúng 1 dòng trainingClasses để sửa.
+router.post('/trainingClasses/:id/edit', async (req, res) => {
+  const itemId = Number(req.params.id);
+  if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
+  try {
+    const { freshUser, users } = await getFreshUser(req);
+    const tests = await getAllForCollection('trainingTests');
+    const result = await withLockedRecordForCollection('trainingClasses', itemId, (item) =>
+      recordActions.editTrainingClass(req.body, freshUser, item, tests, users));
+    res.json({ ok: true, item: result });
+  } catch (err) {
+    handleError(res, `trainingClasses/${req.params.id}/edit`, err);
+  }
+});
+
+// POST /api/records/trainingClasses/:id/start-session và .../end-session (Đợt 3) — vòng đời trạng thái
+// buổi học THỦ CÔNG cho lớp OFFLINE ("Bắt Đầu Lớp"/"Kết Thúc Lớp"), KHÁC hẳn "status" (còn mở/đóng đăng
+// ký). Lớp ONLINE không có 2 action này (tính sống theo giờ, xem createValidation.js/index.html).
+router.post('/trainingClasses/:id/start-session', async (req, res) => {
+  const itemId = Number(req.params.id);
+  if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
+  try {
+    const { freshUser } = await getFreshUser(req);
+    const result = await withLockedRecordForCollection('trainingClasses', itemId, (item) =>
+      recordActions.startOfflineTrainingClass(freshUser, item));
+    res.json({ ok: true, item: result });
+  } catch (err) {
+    handleError(res, `trainingClasses/${req.params.id}/start-session`, err);
+  }
+});
+router.post('/trainingClasses/:id/end-session', async (req, res) => {
+  const itemId = Number(req.params.id);
+  if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
+  try {
+    const { freshUser } = await getFreshUser(req);
+    const result = await withLockedRecordForCollection('trainingClasses', itemId, (item) =>
+      recordActions.endOfflineTrainingClass(freshUser, item));
+    res.json({ ok: true, item: result });
+  } catch (err) {
+    handleError(res, `trainingClasses/${req.params.id}/end-session`, err);
   }
 });
 

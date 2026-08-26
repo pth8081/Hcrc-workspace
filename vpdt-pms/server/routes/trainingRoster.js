@@ -13,6 +13,7 @@ const QRCode = require('qrcode');
 const { requireAuth, blockIfMustChangePassword } = require('../lib/auth');
 const { buildRosterTemplateWorkbook, parseRosterFile } = require('../lib/trainingRoster');
 const { getAllForCollection } = require('../lib/recordStore');
+const { canManageTrainingClass } = require('../lib/recordActions');
 
 const router = express.Router();
 router.use(requireAuth, blockIfMustChangePassword);
@@ -106,8 +107,9 @@ router.post('/parse-roster', uploadRateLimiter, (req, res) => {
 // đúng modal làm bài của lớp đó sau khi học viên đăng nhập (xem onTrainingTakeTestQueryParam(),
 // index.html). Bản thân link/QR KHÔNG cấp thêm quyền gì — người quét vẫn phải đăng nhập + đã đăng ký
 // lớp + lớp đã kết thúc mới nộp bài được (POST .../submit-test tự kiểm tra lại toàn bộ), nên chỉ giới
-// hạn AI ĐƯỢC LẤY mã QN này (người tạo lớp/Admin) để tránh lộ link ra ngoài phạm vi cần thiết, không
-// phải vì bản thân link nguy hiểm.
+// hạn AI ĐƯỢC LẤY mã QR này (canManageTrainingClass() — Đợt 3: trainingManage/Admin quản lý được mọi
+// lớp, trainingInstruct chỉ đúng lớp mình được gán làm giảng viên) để tránh lộ link ra ngoài phạm vi
+// cần thiết, không phải vì bản thân link nguy hiểm.
 router.get('/class-qr/:classId', async (req, res) => {
   const classId = Number(req.params.classId);
   if (!Number.isFinite(classId)) return res.status(400).json({ error: 'classId không hợp lệ' });
@@ -115,8 +117,8 @@ router.get('/class-qr/:classId', async (req, res) => {
     const classes = await getAllForCollection('trainingClasses');
     const cls = classes.find(c => c.id === classId);
     if (!cls) return res.status(404).json({ error: 'Không tìm thấy lớp học' });
-    if (cls.creator !== req.freshUser.username && !req.freshUser.perms?.admin) {
-      return res.status(403).json({ error: 'Chỉ người tạo lớp học hoặc Quản Trị Viên mới được lấy mã QR' });
+    if (!canManageTrainingClass(req.freshUser, cls)) {
+      return res.status(403).json({ error: 'Bạn không có quyền lấy mã QR của lớp học này' });
     }
     if (cls.testId == null) return res.status(400).json({ error: 'Lớp học này chưa được gán bài test' });
 
