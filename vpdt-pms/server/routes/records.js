@@ -1004,6 +1004,91 @@ router.post('/vppPeriods/:id/close', async (req, res) => {
   }
 });
 
+// ===================== "BỔ SUNG" — sửa lại + gửi lại sau khi bị người duyệt yêu cầu bổ sung =====================
+// Sau khi người duyệt bấm "Bổ Sung" (POST /api/workflow/<module>/:id/request-changes, xem
+// lib/workflowEngine.js), hồ sơ về NHÁP — 4 cặp route dưới đây (update/submit) cùng khuôn
+// vppRegistrations/budgetEntries phía dưới, chỉ khác: KHÔNG cần đọc thêm "kỳ" nào (docs/carRegs/
+// officeReqs/submissions không có khái niệm kỳ đăng ký).
+router.post('/docs/:id/update', async (req, res) => {
+  const itemId = Number(req.params.id);
+  if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
+  try {
+    const { freshUser } = await getFreshUser(req);
+    const result = await withLockedRecordForCollection('docs', itemId, (item) => recordActions.editDocDraft(req.body, freshUser, item));
+    res.json({ ok: true, item: result });
+  } catch (err) { handleError(res, `docs/${req.params.id}/update`, err); }
+});
+router.post('/docs/:id/submit', async (req, res) => {
+  const itemId = Number(req.params.id);
+  if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
+  try {
+    const { freshUser } = await getFreshUser(req);
+    const result = await withLockedRecordForCollection('docs', itemId, (item) => recordActions.submitDocDraft(freshUser, item));
+    res.json({ ok: true, item: result });
+  } catch (err) { handleError(res, `docs/${req.params.id}/submit`, err); }
+});
+
+router.post('/carRegs/:id/update', async (req, res) => {
+  const itemId = Number(req.params.id);
+  if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
+  try {
+    const { freshUser } = await getFreshUser(req);
+    const result = await withLockedRecordForCollection('carRegs', itemId, (item) => recordActions.editCarRegDraft(req.body, freshUser, item));
+    res.json({ ok: true, item: result });
+  } catch (err) { handleError(res, `carRegs/${req.params.id}/update`, err); }
+});
+router.post('/carRegs/:id/submit', async (req, res) => {
+  const itemId = Number(req.params.id);
+  if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
+  try {
+    const { freshUser } = await getFreshUser(req);
+    const result = await withLockedRecordForCollection('carRegs', itemId, (item) => recordActions.submitCarRegDraft(freshUser, item));
+    res.json({ ok: true, item: result });
+  } catch (err) { handleError(res, `carRegs/${req.params.id}/submit`, err); }
+});
+
+router.post('/officeReqs/:id/update', async (req, res) => {
+  const itemId = Number(req.params.id);
+  if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
+  try {
+    const { freshUser } = await getFreshUser(req);
+    const result = await withLockedRecordForCollection('officeReqs', itemId, (item) => recordActions.editOfficeReqDraft(req.body, freshUser, item));
+    res.json({ ok: true, item: result });
+  } catch (err) { handleError(res, `officeReqs/${req.params.id}/update`, err); }
+});
+router.post('/officeReqs/:id/submit', async (req, res) => {
+  const itemId = Number(req.params.id);
+  if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
+  try {
+    const { freshUser } = await getFreshUser(req);
+    const result = await withLockedRecordForCollection('officeReqs', itemId, (item) => recordActions.submitOfficeReqDraft(freshUser, item));
+    res.json({ ok: true, item: result });
+  } catch (err) { handleError(res, `officeReqs/${req.params.id}/submit`, err); }
+});
+
+// submissions: editSubmissionDraft() cần appData (dựng lại effectiveSteps/effectiveApprovers nếu loại/
+// phòng ban/lớp phê duyệt bổ sung đổi khi sửa) — đọc 1 lần trước khi khoá bản ghi, cùng khuôn route
+// /contracts/:id/edit ở trên.
+router.post('/submissions/:id/update', async (req, res) => {
+  const itemId = Number(req.params.id);
+  if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
+  try {
+    const { freshUser } = await getFreshUser(req);
+    const appData = await getAllAppData();
+    const result = await withLockedRecordForCollection('submissions', itemId, (item) => recordActions.editSubmissionDraft(req.body, freshUser, item, appData));
+    res.json({ ok: true, item: result });
+  } catch (err) { handleError(res, `submissions/${req.params.id}/update`, err); }
+});
+router.post('/submissions/:id/submit', async (req, res) => {
+  const itemId = Number(req.params.id);
+  if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
+  try {
+    const { freshUser } = await getFreshUser(req);
+    const result = await withLockedRecordForCollection('submissions', itemId, (item) => recordActions.submitSubmissionDraft(freshUser, item));
+    res.json({ ok: true, item: result });
+  } catch (err) { handleError(res, `submissions/${req.params.id}/submit`, err); }
+});
+
 // POST /api/records/vppRegistrations/:id/submit — "Gửi": NHÁP -> CHỜ DUYỆT (bắt đầu bước 1). Chỉ
 // chính người tạo hồ sơ mới gửi được (xem lib/recordActions.js submitVppRegistration).
 router.post('/vppRegistrations/:id/submit', async (req, res) => {

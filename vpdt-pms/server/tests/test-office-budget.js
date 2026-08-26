@@ -235,6 +235,71 @@ async function run() {
     const summaryText = await page.locator('#budgetSummaryResultWrap').innerText();
     check('Khối kết quả Tổng Hợp hiển thị đúng số liệu OPEX trên giao diện', summaryText.includes('80.000.000') && summaryText.includes('OPEX'), summaryText.slice(0, 400));
 
+    // ============ Kịch bản 13: "Bổ Sung" (REQUEST_CHANGES) cho Mua Bán/Sửa Chữa/Đầu Tư — người duyệt
+    // trả đề xuất về NHÁP, người tạo sửa lại qua modal "Sửa & Gửi Lại" (openBosungEditModal/
+    // confirmBosungResubmit ở public/index.html, gọi lib/recordActions.js editOfficeReqDraft()/
+    // submitOfficeReqDraft() thật qua tests/_mockBackend.js) rồi được duyệt lại từ bước 1 ============
+    await loginAs('kd1');
+    await goToOffice('SUA_CHUA');
+    const offCode3 = await page.locator('#offCode').inputValue();
+    await page.fill('#offTitle', 'Sửa chữa mái tôn nhà xưởng');
+    await page.fill('#offQty', '1 hạng mục');
+    await page.fill('#offAmount', '9000000');
+    await page.fill('#offSupplier', 'Công ty Xây Dựng Test');
+    await page.fill('#offReason', 'Mái tôn bị dột, cần sửa gấp trước mùa mưa.');
+    await clearAlerts();
+    await page.evaluate(() => submitOfficeReq({ preventDefault() {}, target: document.getElementById('officeForm') }));
+    await page.waitForTimeout(200);
+    const office3 = await page.evaluate((code) => DB.officeReqs.find((x) => x.code === code), offCode3);
+    check('Tạo đề xuất Sửa Chữa (kịch bản Bổ Sung) thành công', !!office3 && office3.status === 'PENDING', office3);
+
+    await loginAs('tp_kd');
+    await goToOffice('SUA_CHUA');
+    await page.evaluate((id) => openOfficeProcessModal(id), office3.id);
+    await clearAlerts();
+    await page.evaluate(() => confirmProcessOfficeReq('REQUEST_CHANGES'));
+    const missingReasonChangesAlerts = await alerts();
+    check('"Bổ Sung" mà chưa nhập Ý kiến chỉ đạo -> bị chặn ngay ở client', missingReasonChangesAlerts.some((a) => a.includes('Vui lòng nhập lý do cần bổ sung')), missingReasonChangesAlerts);
+
+    await page.fill('#txtOfficeComment', 'Thiếu báo giá chi tiết vật tư — vui lòng bổ sung và trình lại.');
+    await page.evaluate(() => confirmProcessOfficeReq('REQUEST_CHANGES'));
+    await confirmPending();
+    const office3AfterChanges = await page.evaluate((id) => DB.officeReqs.find((x) => x.id === id), office3.id);
+    check('"Bổ Sung" -> đề xuất chuyển về DRAFT (currentStep reset)', !!office3AfterChanges && office3AfterChanges.status === 'DRAFT' && office3AfterChanges.currentStep === 0, office3AfterChanges);
+    check('"Bổ Sung" -> lịch sử ghi nhận đúng hành động REQUEST_CHANGES kèm lý do', (office3AfterChanges.history || []).some((h) => h.action === 'REQUEST_CHANGES' && h.comment.includes('báo giá chi tiết')), office3AfterChanges.history);
+
+    // Server-side: người KHÔNG PHẢI người tạo không được sửa hồ sơ đang NHÁP này. callRecordAction()
+    // ném Error khi !res.ok — bắt lại ngay trong page.evaluate() để không làm hỏng luồng test.
+    await loginAs('tp_kd');
+    const foreignEditCheck = await page.evaluate(async (id) => {
+      try { await callRecordAction('officeReqs', id, 'update', { title: 'Hack' }); return { blocked: false }; }
+      catch (e) { return { blocked: true, message: e.message }; }
+    }, office3.id);
+    check('Người khác (không phải người tạo) không sửa được đề xuất đang NHÁP này', foreignEditCheck.blocked, foreignEditCheck);
+
+    await loginAs('kd1');
+    await goToOffice('SUA_CHUA');
+    await page.evaluate((id) => openBosungEditModal('officeReqs', id), office3.id);
+    const reasonNoteText = await page.locator('#bosungEditReasonNote').innerText();
+    check('Modal "Sửa & Gửi Lại" hiện đúng lý do người duyệt vừa yêu cầu bổ sung', reasonNoteText.includes('báo giá chi tiết'), reasonNoteText);
+    await page.fill('#bsTitle', 'Sửa chữa mái tôn nhà xưởng (đã bổ sung báo giá)');
+    await page.fill('#bsAmount', '9500000');
+    await page.fill('#bsSupplier', 'Công ty Xây Dựng Test (kèm báo giá chi tiết)');
+    await clearAlerts();
+    await page.evaluate(() => confirmBosungResubmit());
+    await page.waitForTimeout(250);
+    const office3AfterResubmit = await page.evaluate((id) => DB.officeReqs.find((x) => x.id === id), office3.id);
+    check('"Sửa & Gửi Lại" -> đề xuất quay lại PENDING, bước 1, nội dung đã cập nhật (kể cả Dự toán)', !!office3AfterResubmit && office3AfterResubmit.status === 'PENDING' && office3AfterResubmit.currentStep === 1 && office3AfterResubmit.title.includes('đã bổ sung báo giá') && office3AfterResubmit.amount === 9500000, office3AfterResubmit);
+
+    await loginAs('tp_kd');
+    await goToOffice('SUA_CHUA');
+    await page.evaluate((id) => openOfficeProcessModal(id), office3.id);
+    await page.fill('#txtOfficeComment', 'Đã đủ báo giá, đồng ý.');
+    await page.evaluate(() => confirmProcessOfficeReq('APPROVE'));
+    await confirmPending();
+    const office3Final = await page.evaluate((id) => DB.officeReqs.find((x) => x.id === id).status, office3.id);
+    check('Sau khi bổ sung + gửi lại, đề xuất được duyệt lại bình thường -> APPROVED', office3Final === 'APPROVED', office3Final);
+
     check('Không có ngoại lệ JS chưa bắt (pageerror) nào phát sinh trong suốt bộ test', jsExceptions.length === 0, jsExceptions);
   } catch (err) {
     fail++;

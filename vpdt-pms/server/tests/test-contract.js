@@ -278,6 +278,89 @@ async function run() {
     check('Sinh đúng 1 đề nghị thanh toán mới, nguồn = CONTRACT đúng mã hợp đồng', afterPaymentStart.paymentRequestsLen === paymentReqCountBefore + 1 && afterPaymentStart.latest.sourceModule === 'CONTRACT' && afterPaymentStart.latest.sourceCode === contract1.code, afterPaymentStart.latest);
     check('Đề nghị thanh toán mang đúng 2 đợt đã khai lúc tạo hợp đồng (300tr + 200tr)', afterPaymentStart.latest.installments.length === 2 && afterPaymentStart.latest.installments[0].amount === 300000000 && afterPaymentStart.latest.installments[1].amount === 200000000, afterPaymentStart.latest.installments);
 
+    // ============ Kịch bản 10: "Bổ Sung" (REQUEST_CHANGES) hợp đồng — người duyệt trả về NHÁP (khác
+    // Từ Chối hẳn), người tạo SỬA (editContract() ở lib/recordActions.js đã tự đưa DRAFT về PENDING/
+    // bước 1 khi lưu — xem requestContractChangesAction()/openEditContract() ở public/index.html), rồi
+    // được duyệt lại bình thường ============
+    await loginAs('kd1');
+    await goToContractApproval();
+    await page.selectOption('#contractDept', 'Phòng Kinh Doanh');
+    await page.selectOption('#contractType', 'Hợp đồng dịch vụ');
+    await page.fill('#contractTitle', 'Hợp đồng thử Bổ Sung');
+    await page.fill('#contractPartner', 'Đối tác Bổ Sung Test');
+    await page.fill('#contractAmount', '80000000');
+    await page.fill('#contractStartDate', '2026-04-01');
+    await page.fill('#contractEndDate', '2026-10-31');
+    await page.fill('#contractContent', 'Nội dung hợp đồng dùng để kiểm thử luồng Bổ Sung.');
+    await page.setInputFiles('#contractFile', contractFile);
+    await clearAlerts();
+    await page.click('#contractSubmitBtn');
+    await page.waitForTimeout(300);
+    const contract3 = await readContractByTitle('Hợp đồng thử Bổ Sung');
+    check('Tạo hợp đồng cho kịch bản Bổ Sung thành công, PENDING', !!contract3 && contract3.approvalStatus === 'PENDING', contract3);
+
+    await loginAs('tp_kd');
+    await queuePrompt(null); // hủy (bấm "Hủy" ở prompt) -> không gọi API, hồ sơ giữ nguyên PENDING
+    await clearAlerts();
+    await page.evaluate((id) => requestContractChangesAction(id), contract3.id);
+    let contract3StillPending = await page.evaluate((id) => DB.contracts.find((c) => c.id === id).approvalStatus, contract3.id);
+    check('"Bổ Sung" hợp đồng — hủy ở hộp thoại nhập lý do -> không đổi trạng thái', contract3StillPending === 'PENDING', contract3StillPending);
+
+    await queuePrompt('Thiếu phụ lục báo giá kèm theo, đề nghị bổ sung.');
+    await page.evaluate((id) => requestContractChangesAction(id), contract3.id);
+    await confirmPending();
+    const contract3AfterChanges = await page.evaluate((id) => {
+      const c = DB.contracts.find((x) => x.id === id);
+      return { approvalStatus: c.approvalStatus, currentStep: c.currentStep, history: c.history };
+    }, contract3.id);
+    check('"Bổ Sung" hợp đồng -> approvalStatus chuyển DRAFT, currentStep reset về 0', contract3AfterChanges.approvalStatus === 'DRAFT' && contract3AfterChanges.currentStep === 0, contract3AfterChanges);
+    check('Lịch sử ghi nhận đúng hành động REQUEST_CHANGES kèm lý do', (contract3AfterChanges.history || []).some((h) => h.action === 'REQUEST_CHANGES' && h.comment.includes('phụ lục báo giá')), contract3AfterChanges.history);
+
+    await loginAs('kd1');
+    await goToContractApproval();
+    const editOptionsBeforeFix = await page.evaluate((id) => {
+      const c = DB.contracts.find((x) => x.id === id);
+      return c.approvalStatus;
+    }, contract3.id);
+    check('Hồ sơ đang DRAFT vẫn hiện được nút "✏️ Sửa" cho chính người tạo (approvalStatus !== APPROVED)', editOptionsBeforeFix === 'DRAFT', editOptionsBeforeFix);
+    await page.evaluate((id) => openEditContract(id), contract3.id);
+    await page.fill('#contractTitle', 'Hợp đồng thử Bổ Sung (đã sửa theo yêu cầu)');
+    await clearAlerts();
+    await page.evaluate(() => submitContractReq({ preventDefault() {} }));
+    await page.waitForTimeout(300);
+    const contract3AfterEdit = await page.evaluate((id) => {
+      const c = DB.contracts.find((x) => x.id === id);
+      return { title: c.title, approvalStatus: c.approvalStatus, currentStep: c.currentStep };
+    }, contract3.id);
+    check('Sửa xong hồ sơ đang DRAFT -> tự động coi như gửi lại: PENDING, bước 1, nội dung đã cập nhật', contract3AfterEdit.title.includes('đã sửa theo yêu cầu') && contract3AfterEdit.approvalStatus === 'PENDING' && contract3AfterEdit.currentStep === 1, contract3AfterEdit);
+
+    await approveAs('tp_kd', contract3.id);
+    const contract3Final = await page.evaluate((id) => DB.contracts.find((c) => c.id === id).approvalStatus, contract3.id);
+    check('Sau khi bổ sung + gửi lại, hợp đồng (1 bước) được duyệt lại bình thường -> APPROVED', contract3Final === 'APPROVED', contract3Final);
+
+    // ============ Kịch bản 11: "Bổ Sung" cho Tài liệu ký (module ảo contractsSignedFile) — trả về
+    // NHÁP để tải lại, KHÔNG xoá field vừa cập nhật của quy trình Phê Duyệt gốc ============
+    await uploadSignedAs('kd1', contract3.id, signedFile);
+    let signedState5 = await page.evaluate((id) => DB.contracts.find((c) => c.id === id).signedFileStatus, contract3.id);
+    check('Tải Tài liệu ký cho hợp đồng vừa Bổ Sung xong -> PENDING', signedState5 === 'PENDING', signedState5);
+
+    await loginAs('tp_kd');
+    await queuePrompt('Thiếu trang cuối có chữ ký, vui lòng bổ sung đầy đủ.');
+    await page.evaluate((id) => requestContractSignedFileChangesAction(id), contract3.id);
+    await confirmPending();
+    const signedState6 = await page.evaluate((id) => DB.contracts.find((c) => c.id === id).signedFileStatus, contract3.id);
+    check('"Bổ Sung" Tài liệu ký -> signedFileStatus chuyển DRAFT', signedState6 === 'DRAFT', signedState6);
+
+    await uploadSignedAs('kd1', contract3.id, signedFile);
+    const signedState7 = await page.evaluate((id) => DB.contracts.find((c) => c.id === id).signedFileStatus, contract3.id);
+    check('Tải lại Tài liệu ký sau khi được yêu cầu bổ sung -> quay lại PENDING (duyệt lại từ đầu)', signedState7 === 'PENDING', signedState7);
+
+    await loginAs('tp_kd');
+    await page.evaluate((id) => approveContractSignedFileAction(id), contract3.id);
+    await confirmPending();
+    const signedState8 = await page.evaluate((id) => DB.contracts.find((c) => c.id === id).signedFileStatus, contract3.id);
+    check('Duyệt lại Tài liệu ký sau bổ sung -> APPROVED', signedState8 === 'APPROVED', signedState8);
+
     check('Không có ngoại lệ JS chưa bắt (pageerror) nào phát sinh trong suốt bộ test', jsExceptions.length === 0, jsExceptions);
   } catch (err) {
     fail++;

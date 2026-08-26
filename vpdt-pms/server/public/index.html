@@ -5890,6 +5890,27 @@ table { display: block; overflow-x: auto; max-width: 100%; }
 <!-- MODAL XÁC NHẬN DÙNG CHUNG (Đồng Ý/Hủy) — xem showConfirmModal() trong index.html. Dùng cho các
      hành động cần "chắc chắn trước khi làm" (trình văn bản, phê duyệt, từ chối, yêu cầu bổ sung...) ở
      Văn bản trình/Đăng ký xe/Đề xuất văn phòng — z-[60] để luôn nổi TRÊN các modal xử lý khác (z-50). -->
+<!-- "Bổ Sung" — modal SỬA + GỬI LẠI dùng chung cho Tài Liệu/Đăng Ký Xe/Mua Bán-Sửa Chữa-Đầu Tư/Văn Bản
+     Trình khi hồ sơ bị người duyệt trả về NHÁP (nút "🔄 Bổ Sung" ở từng module gọi REQUEST_CHANGES —
+     xem lib/workflowEngine.js). VPP/Ngân Sách/Hợp Đồng đã có form/luồng sửa nháp riêng của chính module
+     đó nên KHÔNG dùng modal này. itPriceApprovals GIỮ NGUYÊN khuôn "Yêu Cầu Bổ Sung" hiện có (chỉ bổ
+     sung thêm tệp, không thay thế) — cũng KHÔNG dùng modal này. Xem openBosungEditModal()/
+     confirmBosungResubmit() ở script cuối trang. -->
+<div id="bosungEditModal" class="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center hidden z-[60] p-4">
+  <div class="bg-white rounded-lg shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+    <div class="flex justify-between items-center bg-amber-600 text-white p-4">
+      <h3 id="bosungEditTitle" class="font-bold text-base">✏️ Sửa &amp; Gửi Lại</h3>
+      <button onclick="closeBosungEditModal()" class="text-amber-100 hover:text-white font-bold text-xl px-2">✕</button>
+    </div>
+    <div id="bosungEditReasonNote" class="mx-4 mt-3 bg-orange-50 border border-orange-200 rounded p-2 text-xs text-orange-800"></div>
+    <div id="bosungEditBody" class="p-4 text-xs text-gray-700 space-y-3"></div>
+    <div class="p-3 bg-gray-100 border-t flex justify-end gap-2 text-xs">
+      <button onclick="closeBosungEditModal()" class="bg-gray-400 text-white px-4 py-1.5 rounded font-bold hover:bg-gray-500">Hủy</button>
+      <button onclick="confirmBosungResubmit()" class="bg-blue-600 text-white px-5 py-1.5 rounded font-bold hover:bg-blue-700">📤 Lưu &amp; Gửi Lại</button>
+    </div>
+  </div>
+</div>
+
 <div id="genericConfirmModal" class="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center hidden z-[60] p-4">
   <div class="bg-white rounded-lg shadow-2xl max-w-lg w-full overflow-hidden">
     <div class="flex justify-between items-center bg-slate-800 text-white p-4">
@@ -8101,6 +8122,226 @@ function runConfirmedAction() {
   document.getElementById('genericConfirmModal').classList.add('hidden');
   _pendingConfirmAction = null;
   if (fn) fn();
+}
+
+// ============================================================
+// "BỔ SUNG" — người duyệt bước hiện tại trả hồ sơ về NHÁP (REQUEST_CHANGES, xem lib/workflowEngine.js
+// MODULE_CONFIGS/routes/workflow.js), người trình SỬA LẠI TOÀN BỘ nội dung (kể cả tệp đính kèm, nếu
+// module có) rồi "Lưu & Gửi Lại" — vào lại hàng chờ duyệt từ bước 1 (xem lib/recordActions.js
+// editDocDraft()/submitDocDraft() và 3 cặp tương ứng cho carRegs/officeReqs/submissions).
+// requestWorkflowChangesAction(): phía NGƯỜI DUYỆT, dùng chung cho mọi module không có sẵn 1 modal xử
+// lý/comment box riêng (Tài Liệu, Hợp Đồng, Quản Lý HĐ) — cùng khuôn prompt() đã dùng cho rejectDoc()/
+// rejectContractAction() ở trên. Đăng Ký Xe/Mua Bán-Sửa Chữa-Đầu Tư/Văn Bản Trình đã có sẵn modal xử lý
+// riêng (txtCarComment/txtOfficeComment/txtSubmissionComment) nên nút "Bổ Sung" của 3 module đó gọi
+// thẳng qua confirmProcessCarReg('REQUEST_CHANGES')/... (xem từng module) thay vì hàm này.
+async function requestWorkflowChangesAction(moduleKey, id, list, renderFnName, recordLabel) {
+  const item = list.find(x => x.id === id);
+  if (!item) return;
+  const reason = prompt(`Nhập lý do cần bổ sung — hồ sơ sẽ được trả về NHÁP để ${recordLabel || 'người trình'} sửa lại toàn bộ nội dung rồi gửi lại:`);
+  if (reason === null) return;
+  if (!reason.trim()) return alert('⛔ Vui lòng nhập lý do cần bổ sung!');
+  showConfirmModal({
+    title: '🔄 Yêu Cầu Bổ Sung',
+    bodyHTML: `<p>Trả hồ sơ <b>${escapeHtml(item.code || '')}</b> về NHÁP để sửa lại toàn bộ nội dung rồi gửi lại?</p><p class="mt-2 italic text-gray-600">Lý do: "${escapeHtml(reason.trim())}"</p>`,
+    confirmLabel: 'Yêu Cầu Bổ Sung',
+    onConfirm: async () => {
+      let result;
+      try {
+        result = await callWorkflowAction(moduleKey, id, 'request-changes', { comment: reason.trim() });
+      } catch (e) { return alert('⛔ ' + e.message); }
+      const idx = list.findIndex(x => x.id === id);
+      if (idx !== -1) list[idx] = result.item;
+      logSystemAction(moduleKey.toUpperCase(), 'REQUEST_CHANGES', `Yêu cầu bổ sung hồ sơ [${result.item.code || id}]: ${reason.trim()}`, 'SUCCESS', String(result.item.code || id));
+      alert('✅ Đã yêu cầu bổ sung — hồ sơ đã chuyển về NHÁP để sửa lại!');
+      const renderFn = window[renderFnName];
+      if (typeof renderFn === 'function') renderFn();
+      refreshApprovalSurfaces();
+    }
+  });
+}
+
+// openBosungEditModal()/confirmBosungResubmit(): phía NGƯỜI TRÌNH — modal sửa-toàn-bộ-nội-dung dùng
+// chung cho 4 module (Tài Liệu/Đăng Ký Xe/Mua Bán-Sửa Chữa-Đầu Tư/Văn Bản Trình) vốn không có khái
+// niệm NHÁP trước khi có "Bổ Sung" nên không có sẵn form tạo-mới nào tái dùng được nguyên vẹn cho việc
+// sửa (dept/cat/mode-động của form Tài Liệu, vd, gắn chặt với luồng "phiên bản mới" — không hợp để tái
+// dùng cho trường hợp này). VPP/Ngân Sách/Hợp Đồng đã tự có form/luồng sửa nháp riêng, không cần modal
+// này (xem editVppRegDraft()/openEditContract() ở mỗi module).
+let bosungEditTarget = null; // { module, id }
+
+const BOSUNG_MODULE_META = {
+  docs: { list: () => DB.docs, title: '📂 Bổ Sung Tài Liệu', renderFn: 'renderDocs' },
+  carRegs: { list: () => DB.carRegs, title: '🚗 Bổ Sung Phiếu Đăng Ký Xe', renderFn: 'renderCarRegs' },
+  officeReqs: { list: () => DB.officeReqs, title: '🛒 Bổ Sung Đề Xuất Văn Phòng', renderFn: 'renderOfficeReqs' },
+  submissions: { list: () => DB.submissions, title: '📜 Bổ Sung Văn Bản Trình', renderFn: 'renderSubmissionReqs' }
+};
+
+function openBosungEditModal(moduleKey, id) {
+  const meta = BOSUNG_MODULE_META[moduleKey];
+  const item = meta.list().find(x => x.id === id);
+  if (!item) return;
+  bosungEditTarget = { module: moduleKey, id };
+  document.getElementById('bosungEditTitle').innerText = `${meta.title}: ${item.code || ''}`;
+  const lastReq = (item.history || []).slice().reverse().find(h => h.action === 'REQUEST_CHANGES');
+  document.getElementById('bosungEditReasonNote').innerHTML = lastReq
+    ? `⚠️ <b>Người duyệt yêu cầu bổ sung:</b> ${escapeHtml(lastReq.comment || '')}`
+    : '⚠️ Hồ sơ đang ở trạng thái cần bổ sung — vui lòng sửa lại nội dung rồi gửi lại.';
+
+  const deptOptionsHTML = (DB.depts || []).map(d => `<option value="${escapeHtml(d)}" ${d === item.dept ? 'selected' : ''}>${escapeHtml(d)}</option>`).join('');
+
+  let bodyHTML = '';
+  if (moduleKey === 'docs') {
+    const catOptionsHTML = (DB.cats || []).map(c => `<option value="${escapeHtml(c)}" ${c === item.cat ? 'selected' : ''}>${escapeHtml(c)}</option>`).join('');
+    bodyHTML = `
+      <div><label class="block font-semibold mb-1">Tiêu đề</label><input id="bsTitle" class="w-full border p-2 rounded" value="${escapeHtml(item.title || '')}"></div>
+      <div class="grid grid-cols-2 gap-3">
+        <div><label class="block font-semibold mb-1">Phòng ban trình</label><select id="bsDept" class="w-full border p-2 rounded bg-white">${deptOptionsHTML}</select></div>
+        <div><label class="block font-semibold mb-1">Phân loại</label><select id="bsCat" class="w-full border p-2 rounded bg-white">${catOptionsHTML}</select></div>
+      </div>
+      <div><label class="block font-semibold mb-1">Phiên bản</label><input id="bsVer" class="w-full border p-2 rounded" value="${escapeHtml(item.ver || '')}"></div>
+      <div><label class="block font-semibold mb-1">Trích lục / Tóm tắt</label><textarea id="bsSummary" class="w-full border p-2 rounded h-20">${escapeHtml(item.summary || '')}</textarea></div>
+      <div>
+        <label class="block font-semibold mb-1">Thay thế tệp đính kèm (bỏ trống = giữ tệp hiện tại: ${escapeHtml(item.fileName || 'chưa có')})</label>
+        <input type="file" id="bsFile" accept=".pdf,.docx,.xlsx" class="w-full border p-1 bg-white rounded">
+      </div>
+    `;
+  } else if (moduleKey === 'carRegs') {
+    const typeOptionsHTML = (DB.carTypes || []).map(t => `<option value="${escapeHtml(t)}" ${t === item.type ? 'selected' : ''}>${escapeHtml(t)}</option>`).join('');
+    bodyHTML = `
+      <div class="grid grid-cols-2 gap-3">
+        <div><label class="block font-semibold mb-1">Phòng ban</label><select id="bsDept" class="w-full border p-2 rounded bg-white">${deptOptionsHTML}</select></div>
+        <div><label class="block font-semibold mb-1">Loại xe</label><select id="bsType" class="w-full border p-2 rounded bg-white">${typeOptionsHTML}</select></div>
+      </div>
+      <div class="grid grid-cols-2 gap-3">
+        <div><label class="block font-semibold mb-1">Bắt đầu</label><input type="datetime-local" id="bsStartTime" class="w-full border p-2 rounded" value="${escapeHtml(item.startTime || '')}"></div>
+        <div><label class="block font-semibold mb-1">Kết thúc</label><input type="datetime-local" id="bsEndTime" class="w-full border p-2 rounded" value="${escapeHtml(item.endTime || '')}"></div>
+      </div>
+      <div><label class="block font-semibold mb-1">Số người sử dụng</label><input id="bsPassengers" class="w-full border p-2 rounded" value="${escapeHtml(item.passengers || '')}"></div>
+      <div><label class="block font-semibold mb-1">Người sử dụng trực tiếp</label><input id="bsDirectUser" class="w-full border p-2 rounded" value="${escapeHtml(item.directUser || '')}"></div>
+      <div><label class="block font-semibold mb-1">Mục đích sử dụng</label><input id="bsPurpose" class="w-full border p-2 rounded" value="${escapeHtml(item.purpose || '')}"></div>
+      <div><label class="block font-semibold mb-1">Số KM dự kiến</label><input type="number" id="bsKm" class="w-full border p-2 rounded" value="${item.km || 0}"></div>
+      <div><label class="block font-semibold mb-1">Nội dung chi tiết</label><textarea id="bsReason" class="w-full border p-2 rounded h-20">${escapeHtml(item.reason || '')}</textarea></div>
+    `;
+  } else if (moduleKey === 'officeReqs') {
+    bodyHTML = `
+      <div class="grid grid-cols-2 gap-3">
+        <div><label class="block font-semibold mb-1">Phòng ban</label><select id="bsDept" class="w-full border p-2 rounded bg-white">${deptOptionsHTML}</select></div>
+        <div><label class="block font-semibold mb-1">Tiêu đề đề xuất</label><input id="bsTitle" class="w-full border p-2 rounded" value="${escapeHtml(item.title || '')}"></div>
+      </div>
+      ${item.subType === 'MUA_BAN'
+        ? `<p class="text-gray-500 italic">Danh sách hạng mục (Mua Sắm) giữ nguyên như đã trình — chỉ sửa được tiêu đề/lý do ở đây trong bản Bổ Sung này. Cần sửa hạng mục, vui lòng liên hệ Quản Trị Viên.</p>`
+        : `<div class="grid grid-cols-2 gap-3">
+            <div><label class="block font-semibold mb-1">Số lượng</label><input id="bsQty" class="w-full border p-2 rounded" value="${escapeHtml(item.qty || '')}"></div>
+            <div><label class="block font-semibold mb-1">Dự toán / Chi phí</label><input type="number" id="bsAmount" class="w-full border p-2 rounded" value="${item.amount || 0}"></div>
+          </div>
+          <div><label class="block font-semibold mb-1">Nhà cung cấp</label><input id="bsSupplier" class="w-full border p-2 rounded" value="${escapeHtml(item.supplier || '')}"></div>`}
+      <div><label class="block font-semibold mb-1">Lý do / Nội dung</label><textarea id="bsReason" class="w-full border p-2 rounded h-20">${escapeHtml(item.reason || '')}</textarea></div>
+    `;
+  } else if (moduleKey === 'submissions') {
+    const typeOptionsHTML = (DB.submissionTypes || []).map(t => `<option value="${escapeHtml(t.label)}" ${t.label === item.type ? 'selected' : ''}>${escapeHtml(t.label)}</option>`).join('');
+    bodyHTML = `
+      <div><label class="block font-semibold mb-1">Tiêu đề</label><input id="bsTitle" class="w-full border p-2 rounded" value="${escapeHtml(item.title || '')}"></div>
+      <div class="grid grid-cols-2 gap-3">
+        <div><label class="block font-semibold mb-1">Phòng ban trình</label><select id="bsDept" class="w-full border p-2 rounded bg-white">${deptOptionsHTML}</select></div>
+        <div><label class="block font-semibold mb-1">Loại tờ trình</label><select id="bsType" class="w-full border p-2 rounded bg-white">${typeOptionsHTML}</select></div>
+      </div>
+      <div><label class="block font-semibold mb-1">Nội dung</label><textarea id="bsContent" class="w-full border p-2 rounded h-24">${escapeHtml(item.content || '')}</textarea></div>
+      <div>
+        <label class="block font-semibold mb-1">Thay thế tệp chính (bỏ trống = giữ tệp hiện tại: ${escapeHtml(item.fileName || 'chưa có')})</label>
+        <input type="file" id="bsFile" accept=".pdf,.docx,.xlsx" class="w-full border p-1 bg-white rounded">
+      </div>
+      <p class="text-gray-500 italic">Đổi loại tờ trình/phòng ban sẽ tự tính lại quy trình duyệt tương ứng. Các lớp phê duyệt bổ sung (Đồng trình/Xin ý kiến...) giữ nguyên như đã chọn lúc trình.</p>
+    `;
+  }
+  document.getElementById('bosungEditBody').innerHTML = bodyHTML;
+  document.getElementById('bosungEditModal').classList.remove('hidden');
+}
+
+function closeBosungEditModal() {
+  document.getElementById('bosungEditModal').classList.add('hidden');
+  bosungEditTarget = null;
+}
+
+async function confirmBosungResubmit() {
+  if (!bosungEditTarget) return;
+  const { module: moduleKey, id } = bosungEditTarget;
+  const meta = BOSUNG_MODULE_META[moduleKey];
+  const item = meta.list().find(x => x.id === id);
+  if (!item) return;
+
+  let payload = {};
+  try {
+    if (moduleKey === 'docs') {
+      const fileInput = document.getElementById('bsFile');
+      payload = {
+        title: document.getElementById('bsTitle').value.trim(),
+        dept: document.getElementById('bsDept').value,
+        cat: document.getElementById('bsCat').value,
+        ver: document.getElementById('bsVer').value.trim(),
+        summary: document.getElementById('bsSummary').value.trim()
+      };
+      if (fileInput.files && fileInput.files[0]) {
+        const uploaded = await uploadFileToServer(fileInput.files[0], 'doc');
+        payload.fileUrl = uploaded.fileUrl; payload.fileName = uploaded.fileName; payload.fileType = uploaded.fileType;
+      }
+    } else if (moduleKey === 'carRegs') {
+      payload = {
+        dept: document.getElementById('bsDept').value,
+        type: document.getElementById('bsType').value,
+        startTime: document.getElementById('bsStartTime').value,
+        endTime: document.getElementById('bsEndTime').value,
+        passengers: document.getElementById('bsPassengers').value.trim(),
+        directUser: document.getElementById('bsDirectUser').value.trim(),
+        purpose: document.getElementById('bsPurpose').value.trim(),
+        km: parseFloat(document.getElementById('bsKm').value) || 0,
+        reason: document.getElementById('bsReason').value.trim()
+      };
+    } else if (moduleKey === 'officeReqs') {
+      payload = {
+        dept: document.getElementById('bsDept').value,
+        title: document.getElementById('bsTitle').value.trim(),
+        reason: document.getElementById('bsReason').value.trim()
+      };
+      if (item.subType !== 'MUA_BAN') {
+        payload.qty = document.getElementById('bsQty').value.trim();
+        payload.amount = Number(document.getElementById('bsAmount').value) || 0;
+        payload.supplier = document.getElementById('bsSupplier').value.trim();
+      }
+    } else if (moduleKey === 'submissions') {
+      const fileInput = document.getElementById('bsFile');
+      payload = {
+        title: document.getElementById('bsTitle').value.trim(),
+        dept: document.getElementById('bsDept').value,
+        type: document.getElementById('bsType').value,
+        content: document.getElementById('bsContent').value.trim()
+      };
+      if (fileInput.files && fileInput.files[0]) {
+        const uploaded = await uploadFileToServer(fileInput.files[0], 'submission');
+        payload.fileUrl = uploaded.fileUrl; payload.fileName = uploaded.fileName; payload.fileType = uploaded.fileType;
+      }
+    }
+  } catch (err) {
+    return alert(`⛔ ${err.message}`);
+  }
+
+  let updated;
+  try {
+    await callRecordAction(moduleKey, id, 'update', payload);
+    const submitResult = await callRecordAction(moduleKey, id, 'submit', {});
+    updated = submitResult.item;
+  } catch (err) {
+    return alert(`⛔ ${err.message}`);
+  }
+
+  const list = meta.list();
+  const idx = list.findIndex(x => x.id === id);
+  if (idx !== -1) list[idx] = updated;
+
+  logSystemAction(moduleKey.toUpperCase(), 'RESUBMIT_AFTER_BOSUNG', `Sửa & gửi lại hồ sơ [${updated.code}] sau khi được yêu cầu bổ sung`, 'SUCCESS', updated.code);
+  alert('✅ Đã lưu thay đổi và gửi lại — hồ sơ đã vào lại hàng chờ duyệt từ bước 1!');
+  closeBosungEditModal();
+  const renderFn = window[meta.renderFn];
+  if (typeof renderFn === 'function') renderFn();
+  refreshApprovalSurfaces();
 }
 
 // ==========================================
@@ -10856,6 +11097,10 @@ function buildDocRowHTML(doc, { versionCount = 0, isExpanded = false, isChild = 
     progressBadge = `<span class="px-2 py-1 bg-green-100 text-green-800 rounded font-bold text-xs">✅ Đã phê duyệt hoàn tất</span>`;
   } else if (doc.status === 'REJECTED') {
     progressBadge = `<span class="px-2 py-1 bg-red-100 text-red-800 rounded font-bold text-xs">❌ Bị từ chối / Trả về</span>`;
+  } else if (doc.status === 'DRAFT') {
+    // "Bổ Sung" (REQUEST_CHANGES) — người duyệt trả hồ sơ về NHÁP để người tải lên sửa lại toàn bộ nội
+    // dung + tệp rồi gửi lại (xem openBosungEditModal()/lib/recordActions.js editDocDraft()).
+    progressBadge = `<span class="px-2 py-1 bg-orange-100 text-orange-800 rounded font-bold text-xs">✏️ Cần bổ sung — chờ sửa lại</span>`;
   } else {
     const stepName = wf.steps[doc.currentStep - 1]?.name || `Bước ${doc.currentStep}`;
     const progressText = getStepApprovalProgressText(currentStepApprovers, doc.history, doc.currentStep);
@@ -10889,9 +11134,15 @@ function buildDocRowHTML(doc, { versionCount = 0, isExpanded = false, isChild = 
           if (canApprove) {
             primaryBtnHTML = `<button onclick="runDocAction(${doc.id}, 'approve')" class="px-2 py-1 bg-emerald-600 text-white rounded text-xs hover:bg-emerald-700 font-semibold" title="Phê duyệt tài liệu">✅ Duyệt</button>`;
             secondaryOptions.push({ value: 'reject', label: '❌ Từ chối' });
+            secondaryOptions.push({ value: 'requestChanges', label: '🔄 Bổ Sung' });
             secondaryOptions.push({ value: 'view', label: '📋 Chi tiết' });
           } else {
             primaryBtnHTML = `<button onclick="runDocAction(${doc.id}, 'view')" class="px-2 py-1 bg-gray-600 text-white rounded text-xs hover:bg-gray-700 font-semibold" title="Xem chi tiết & lịch sử phiên bản">📋 Chi tiết</button>`;
+          }
+          // "Sửa & Gửi Lại" — chỉ chính người tải lên, chỉ khi hồ sơ đang cần bổ sung (NHÁP do
+          // REQUEST_CHANGES, xem openBosungEditModal()).
+          if (doc.status === 'DRAFT' && doc.uploader === currentUser.username) {
+            secondaryOptions.push({ value: 'editDraft', label: '✏️ Sửa & Gửi Lại' });
           }
           if (canDownload) secondaryOptions.push({ value: 'download', label: '⬇️ Tải' });
           if (currentUser.perms?.admin) secondaryOptions.push({ value: 'delete', label: '🗑️ Xóa' });
@@ -10911,6 +11162,8 @@ function runDocAction(id, action) {
     case 'view': viewDocDetails(id); break;
     case 'approve': approveDoc(id); break;
     case 'reject': rejectDoc(id); break;
+    case 'requestChanges': requestWorkflowChangesAction('docs', id, DB.docs, 'renderDocs', 'người tải lên'); break;
+    case 'editDraft': openBosungEditModal('docs', id); break;
     case 'download': downloadDocFile(id); break;
     case 'delete': deleteDocAction(id); break;
   }
@@ -11892,6 +12145,8 @@ function renderSubmissionReqs() {
       progressBadge = `<span class="px-2 py-1 bg-green-100 text-green-800 rounded font-bold text-xs">✅ Đã phê duyệt hoàn tất</span>`;
     } else if (sub.status === 'REJECTED') {
       progressBadge = `<span class="px-2 py-1 bg-red-100 text-red-800 rounded font-bold text-xs">❌ Bị từ chối / Trả về</span>`;
+    } else if (sub.status === 'DRAFT') {
+      progressBadge = `<span class="px-2 py-1 bg-orange-100 text-orange-800 rounded font-bold text-xs">✏️ Cần bổ sung — chờ sửa lại</span>`;
     } else {
       const stepName = wf.steps[sub.currentStep - 1]?.name || `Bước ${sub.currentStep}`;
       const progressText = getStepApprovalProgressText(currentStepApprovers, sub.history, sub.currentStep);
@@ -11939,6 +12194,11 @@ function renderSubmissionReqs() {
             if (canDL && (sub.fileUrl || (sub.extraFiles && sub.extraFiles.length))) {
               secondaryOptions.push({ value: 'downloadAll', label: '📎 Tải All' });
             }
+            // "Sửa & Gửi Lại" — chỉ chính người trình, chỉ khi đang cần bổ sung (NHÁP do
+            // confirmProcessSubmission('REQUEST_CHANGES'), xem openBosungEditModal()).
+            if (sub.status === 'DRAFT' && sub.creator === currentUser.username) {
+              secondaryOptions.push({ value: 'editDraft', label: '✏️ Sửa & Gửi Lại' });
+            }
             if (currentUser.perms?.admin) secondaryOptions.push({ value: 'delete', label: '🗑️ Xóa' });
             return buildActionCell(sub.id, primaryBtnHTML, secondaryOptions, 'runSubmissionAction');
           })()}
@@ -11956,6 +12216,7 @@ function runSubmissionAction(id, action) {
     case 'downloadSlip': downloadSubmissionApprovalSlip(id); break;
     case 'createTask': createTaskFromSubmission(id); break;
     case 'downloadAll': downloadAllSubmissionFiles(id); break;
+    case 'editDraft': openBosungEditModal('submissions', id); break;
     case 'delete': deleteSubmissionAction(id); break;
   }
 }
@@ -12099,7 +12360,8 @@ function openProcessSubmissionModal(subId) {
   if (canApprove) {
     actionBtns.innerHTML = `
       <button onclick="confirmProcessSubmission('REJECT')" class="bg-red-600 text-white px-4 py-1.5 rounded font-bold hover:bg-red-700 text-xs">❌ Từ Chối / Trả Về</button>
-      <button onclick="confirmRequestSubmissionInfo()" class="bg-blue-600 text-white px-4 py-1.5 rounded font-bold hover:bg-blue-700 text-xs">📋 Yêu Cầu Bổ Sung</button>
+      <button onclick="confirmRequestSubmissionInfo()" class="bg-blue-600 text-white px-4 py-1.5 rounded font-bold hover:bg-blue-700 text-xs" title="Giữ nguyên PENDING — chỉ ghi 1 ghi chú, người trình phản hồi qua ô riêng, KHÔNG sửa lại nội dung/tệp đã trình">📋 Yêu Cầu Bổ Sung (ghi chú)</button>
+      <button onclick="confirmProcessSubmission('REQUEST_CHANGES')" class="bg-amber-500 text-white px-4 py-1.5 rounded font-bold hover:bg-amber-600 text-xs" title="Đưa hồ sơ về NHÁP để người trình sửa lại TOÀN BỘ nội dung + tệp rồi gửi lại từ bước 1">🔄 Bổ Sung (Sửa Toàn Bộ)</button>
       <button onclick="confirmProcessSubmission('APPROVE')" class="bg-green-600 text-white px-5 py-1.5 rounded font-bold hover:bg-green-700 text-xs">✅ Phê Duyệt & Chuyển Bước</button>
     `;
   } else {
@@ -12120,17 +12382,20 @@ function closeProcessSubmissionModal() {
 // (vd. bắt buộc nhập lý do từ chối) làm lớp an toàn thứ hai.
 function confirmProcessSubmission(actionType) {
   const comment = document.getElementById('txtSubmissionComment').value.trim();
-  if (actionType === 'REJECT' && !comment) {
-    return alert('Vui lòng nhập lý do từ chối vào ô Ý kiến chỉ đạo!');
+  if ((actionType === 'REJECT' || actionType === 'REQUEST_CHANGES') && !comment) {
+    return alert(actionType === 'REJECT' ? 'Vui lòng nhập lý do từ chối vào ô Ý kiến chỉ đạo!' : 'Vui lòng nhập lý do cần bổ sung vào ô Ý kiến chỉ đạo!');
   }
   const isApprove = actionType === 'APPROVE';
+  const titleMap = { APPROVE: '✅ Xác Nhận Phê Duyệt', REJECT: '❌ Xác Nhận Từ Chối / Trả Về', REQUEST_CHANGES: '🔄 Xác Nhận Yêu Cầu Bổ Sung' };
+  const labelMap = { APPROVE: 'Phê Duyệt', REJECT: 'Từ Chối', REQUEST_CHANGES: 'Yêu Cầu Bổ Sung' };
+  const actionTextMap = { APPROVE: 'phê duyệt và chuyển bước', REJECT: 'từ chối / trả về', REQUEST_CHANGES: 'yêu cầu bổ sung (đưa tờ trình về nháp để người trình sửa lại toàn bộ nội dung + tệp rồi trình lại)' };
   showConfirmModal({
-    title: isApprove ? '✅ Xác Nhận Phê Duyệt' : '❌ Xác Nhận Từ Chối / Trả Về',
-    bodyHTML: `<p>Bạn có chắc chắn muốn <b>${isApprove ? 'phê duyệt và chuyển bước' : 'từ chối / trả về'}</b> tờ trình này?</p>${comment ? `<p class="mt-2 italic text-gray-600">Ý kiến chỉ đạo: "${escapeHtml(comment)}"</p>` : ''}`,
-    confirmLabel: isApprove ? 'Phê Duyệt' : 'Từ Chối',
+    title: titleMap[actionType],
+    bodyHTML: `<p>Bạn có chắc chắn muốn <b>${actionTextMap[actionType]}</b> tờ trình này?</p>${comment ? `<p class="mt-2 italic text-gray-600">Ý kiến chỉ đạo: "${escapeHtml(comment)}"</p>` : ''}`,
+    confirmLabel: labelMap[actionType],
     onConfirm: () => {
       if (isApprove) withApprovalAuth(() => processSubmission('APPROVE'));
-      else processSubmission('REJECT');
+      else processSubmission(actionType);
     }
   });
 }
@@ -12154,13 +12419,14 @@ async function processSubmission(actionType) {
   if (!sub) return;
 
   const comment = document.getElementById('txtSubmissionComment').value.trim();
-  if (actionType === 'REJECT' && !comment) {
-    return alert('Vui lòng nhập lý do từ chối vào ô Ý kiến chỉ đạo!');
+  if ((actionType === 'REJECT' || actionType === 'REQUEST_CHANGES') && !comment) {
+    return alert(actionType === 'REJECT' ? 'Vui lòng nhập lý do từ chối vào ô Ý kiến chỉ đạo!' : 'Vui lòng nhập lý do cần bổ sung vào ô Ý kiến chỉ đạo!');
   }
 
+  const actionUrlMap = { APPROVE: 'approve', REJECT: 'reject', REQUEST_CHANGES: 'request-changes' };
   let result;
   try {
-    result = await callWorkflowAction('submissions', sub.id, actionType === 'REJECT' ? 'reject' : 'approve', { comment });
+    result = await callWorkflowAction('submissions', sub.id, actionUrlMap[actionType], { comment });
   } catch (e) {
     return alert('⛔ ' + e.message);
   }
@@ -12172,7 +12438,12 @@ async function processSubmission(actionType) {
 
   let msg = '✅ Đã cập nhật trạng thái tờ trình!';
 
-  if (transition.type === 'REJECTED') {
+  if (transition.type === 'REQUEST_CHANGES') {
+    notifyUsersByEmail('SUBMISSION', 'NOTIFY_REQUEST_CHANGES', updatedSub.code, [updatedSub.creator],
+      `[VPDT] Tờ trình ${updatedSub.code} cần bổ sung/chỉnh sửa`,
+      `Tờ trình "${updatedSub.title}" (${updatedSub.code}) của bạn cần được sửa lại. Lý do: ${comment}. Vui lòng vào mục Văn Bản Trình để sửa và gửi lại.`);
+    msg = '✅ Đã yêu cầu bổ sung — hồ sơ đã chuyển về NHÁP để người trình sửa lại!';
+  } else if (transition.type === 'REJECTED') {
     notifyUsersByEmail('SUBMISSION', 'NOTIFY_REJECTED', updatedSub.code, [updatedSub.creator],
       `[VPDT] Tờ trình ${updatedSub.code} bị từ chối`,
       `Tờ trình "${updatedSub.title}" (${updatedSub.code}) của bạn đã bị từ chối/trả về. Lý do: ${comment}`);
@@ -14439,7 +14710,9 @@ function buildContractRowHTML(c, { addendumCount = 0, isExpanded = false, isChil
     ? `<span class="px-2 py-0.5 bg-amber-100 text-amber-800 rounded font-bold text-xs ml-1">⏳ Chờ duyệt</span>`
     : c.approvalStatus === 'REJECTED'
       ? `<span class="px-2 py-0.5 bg-red-100 text-red-800 rounded font-bold text-xs ml-1">❌ Bị từ chối</span>`
-      : '';
+      : c.approvalStatus === 'DRAFT'
+        ? `<span class="px-2 py-0.5 bg-orange-100 text-orange-800 rounded font-bold text-xs ml-1">✏️ Cần bổ sung — chờ sửa lại</span>`
+        : '';
 
   const expandToggleHTML = addendumCount > 0
     ? `<button onclick="toggleContractFamily(${c.id})" class="text-cyan-700 font-bold mr-1">${isExpanded ? '▾' : '▸'}</button><span class="text-[10px] bg-cyan-100 text-cyan-800 px-1.5 py-0.5 rounded-full">${addendumCount} phụ lục</span>`
@@ -14485,16 +14758,20 @@ function buildContractRowHTML(c, { addendumCount = 0, isExpanded = false, isChil
   if (!isChild && c.approvalStatus === 'PENDING' && canApproveContractStep(currentUser, c)) {
     secondaryOptions.push({ value: 'approve', label: '✅ Duyệt' });
     secondaryOptions.push({ value: 'reject', label: '❌ Từ chối' });
+    secondaryOptions.push({ value: 'requestChanges', label: '🔄 Bổ Sung' });
   }
   if (c.signedFileUrl && canDownloadContractFile()) {
     secondaryOptions.push({ value: 'viewSigned', label: `👁️ Xem ${signedDocNoun}` });
   }
-  if (activeContractSubTab === 'MANAGE' && (!c.signedFileUrl || c.signedFileStatus === 'REJECTED') && canManageContractPaymentClient(currentUser, c)) {
-    secondaryOptions.push({ value: 'uploadSigned', label: c.signedFileStatus === 'REJECTED' ? `📤 Tải Lại ${signedDocNoun}` : `📤 Tải ${signedDocNoun}` });
+  // "Tải Lại Tài liệu ký" cũng phải mở lại khi signedFileStatus DRAFT (do requestSignedChanges — xem
+  // lib/workflowEngine.js contractsSignedFile.supportsRequestChanges), khác REJECTED chỉ ở nhãn nút.
+  if (activeContractSubTab === 'MANAGE' && (!c.signedFileUrl || c.signedFileStatus === 'REJECTED' || c.signedFileStatus === 'DRAFT') && canManageContractPaymentClient(currentUser, c)) {
+    secondaryOptions.push({ value: 'uploadSigned', label: (c.signedFileStatus === 'REJECTED' || c.signedFileStatus === 'DRAFT') ? `📤 Tải Lại ${signedDocNoun}` : `📤 Tải ${signedDocNoun}` });
   }
   if (activeContractSubTab === 'MANAGE' && c.signedFileStatus === 'PENDING' && canManageContractPaymentClient(currentUser, c)) {
     secondaryOptions.push({ value: 'approveSigned', label: `✅ Duyệt ${signedDocNoun}` });
     secondaryOptions.push({ value: 'rejectSigned', label: `❌ Từ Chối ${signedDocNoun}` });
+    secondaryOptions.push({ value: 'requestSignedChanges', label: `🔄 Bổ Sung ${signedDocNoun}` });
   }
   if (activeContractSubTab === 'MANAGE' && c.signedFileStatus === 'APPROVED' && c.paymentStatus === 'CHUA_THANH_TOAN' && canManageContractPaymentClient(currentUser, c)) {
     secondaryOptions.push({ value: 'startPayment', label: '💰 Chuyển Sang Thanh Toán' });
@@ -14537,10 +14814,12 @@ function runContractAction(id, action) {
     case 'edit': openEditContract(id); break;
     case 'approve': approveContractAction(id); break;
     case 'reject': rejectContractAction(id); break;
+    case 'requestChanges': requestContractChangesAction(id); break;
     case 'uploadSigned': openSignedUploadModal('contracts', id); break;
     case 'viewSigned': viewContractSignedFile(id); break;
     case 'approveSigned': approveContractSignedFileAction(id); break;
     case 'rejectSigned': rejectContractSignedFileAction(id); break;
+    case 'requestSignedChanges': requestContractSignedFileChangesAction(id); break;
     case 'startPayment': startContractPaymentAction(id); break;
     case 'download': {
       const c = DB.contracts.find(x => x.id === id);
@@ -14704,6 +14983,66 @@ function rejectContractSignedFileAction(id) {
       if (idx !== -1) DB.contracts[idx] = updated;
       logSystemAction('CONTRACT', 'REJECT_CONTRACT_SIGNED_FILE', `Từ chối tài liệu ký hợp đồng [${updated.code} - ${updated.title}] - Lý do: ${reason.trim()}`, 'WARNING', updated.code);
       alert('❌ Đã từ chối tài liệu ký!');
+      renderContracts();
+      refreshApprovalSurfaces();
+    }
+  });
+}
+
+// "Bổ Sung" (REQUEST_CHANGES) — khác Từ Chối: đưa hồ sơ về NHÁP (approvalStatus='DRAFT') thay vì
+// REJECTED hẳn, người tạo SỬA LẠI (editContract() ở lib/recordActions.js đã tự đưa DRAFT/REJECTED về
+// PENDING/bước 1 khi lưu — xem "Sửa xong thì coi như nộp lại từ đầu quy trình duyệt") rồi lưu là coi
+// như gửi lại ngay, không cần thao tác "Gửi" riêng như Tài Liệu/Đăng Ký Xe/Mua Bán-Sửa Chữa-Đầu
+// Tư/Văn Bản Trình (4 module đó vốn không có sẵn 1 form "Sửa" tái dùng được).
+function requestContractChangesAction(id) {
+  const c = DB.contracts.find(x => x.id === id);
+  if (!c) return;
+  const reason = prompt('Nhập lý do cần bổ sung — hợp đồng sẽ được trả về NHÁP để người tạo sửa lại:');
+  if (reason === null) return;
+  if (!reason.trim()) return alert('⛔ Vui lòng nhập lý do cần bổ sung!');
+  showConfirmModal({
+    title: '🔄 Yêu Cầu Bổ Sung',
+    bodyHTML: `<p>Trả hợp đồng "<b>${escapeHtml(c.title)}</b>" (${escapeHtml(c.code)}) về NHÁP để người tạo sửa lại?</p><p class="mt-2 italic text-gray-600">Lý do: "${escapeHtml(reason.trim())}"</p>`,
+    confirmLabel: 'Yêu Cầu Bổ Sung',
+    onConfirm: async () => {
+      let result;
+      try {
+        result = await callWorkflowAction('contracts', id, 'request-changes', { comment: reason.trim() });
+      } catch (err) { return alert(`⛔ ${err.message}`); }
+      const updated = result.item;
+      const idx = DB.contracts.findIndex(x => x.id === id);
+      if (idx !== -1) DB.contracts[idx] = updated;
+      logSystemAction('CONTRACT', 'REQUEST_CHANGES', `Yêu cầu bổ sung hợp đồng [${updated.code} - ${updated.title}] - Lý do: ${reason.trim()}`, 'WARNING', updated.code);
+      notifyUsersByEmail('CONTRACT', 'NOTIFY_REQUEST_CHANGES', updated.code, [updated.creator],
+        `[VPDT] Hợp đồng ${updated.code} cần bổ sung/chỉnh sửa`,
+        `Hợp đồng "${updated.title}" (${updated.code}) của bạn cần được sửa lại. Lý do: ${reason.trim()}. Vui lòng vào mục Hợp Đồng để sửa (nút "✏️ Sửa") — hệ thống tự gửi lại khi lưu.`);
+      alert('✅ Đã yêu cầu bổ sung — hợp đồng đã chuyển về NHÁP để người tạo sửa lại!');
+      renderContracts();
+      refreshApprovalSurfaces();
+    }
+  });
+}
+
+function requestContractSignedFileChangesAction(id) {
+  const c = DB.contracts.find(x => x.id === id);
+  if (!c) return;
+  const reason = prompt('Nhập lý do cần bổ sung Tài liệu ký — sẽ được trả về NHÁP để tải lại:');
+  if (reason === null) return;
+  if (!reason.trim()) return alert('⛔ Vui lòng nhập lý do cần bổ sung!');
+  showConfirmModal({
+    title: '🔄 Yêu Cầu Bổ Sung Tài Liệu Ký',
+    bodyHTML: `<p>Trả Tài liệu ký của hợp đồng "<b>${escapeHtml(c.title)}</b>" về NHÁP để tải lại?</p><p class="mt-2 italic text-gray-600">Lý do: "${escapeHtml(reason.trim())}"</p>`,
+    confirmLabel: 'Yêu Cầu Bổ Sung',
+    onConfirm: async () => {
+      let result;
+      try {
+        result = await callWorkflowAction('contractsSignedFile', id, 'request-changes', { comment: reason.trim() });
+      } catch (err) { return alert(`⛔ ${err.message}`); }
+      const updated = result.item;
+      const idx = DB.contracts.findIndex(x => x.id === id);
+      if (idx !== -1) DB.contracts[idx] = updated;
+      logSystemAction('CONTRACT', 'REQUEST_CHANGES_SIGNED_FILE', `Yêu cầu bổ sung tài liệu ký hợp đồng [${updated.code}] - Lý do: ${reason.trim()}`, 'WARNING', updated.code);
+      alert('✅ Đã yêu cầu bổ sung — Tài liệu ký đã chuyển về NHÁP, có thể tải lại!');
       renderContracts();
       refreshApprovalSurfaces();
     }
@@ -17005,6 +17344,7 @@ function renderCarRegs() {
     let statusBadge = '';
     if (c.status === 'APPROVED') statusBadge = `<span class="px-2 py-0.5 bg-green-100 text-green-800 rounded font-bold text-xs">✅ Đã phê duyệt</span>`;
     else if (c.status === 'REJECTED') statusBadge = `<span class="px-2 py-0.5 bg-red-100 text-red-800 rounded font-bold text-xs">❌ Từ chối</span>`;
+    else if (c.status === 'DRAFT') statusBadge = `<span class="px-2 py-0.5 bg-orange-100 text-orange-800 rounded font-bold text-xs">✏️ Cần bổ sung — chờ sửa lại</span>`;
     else statusBadge = `<span class="px-2 py-0.5 bg-indigo-100 text-indigo-800 rounded font-bold text-xs">⏳ Bước ${c.currentStep}/${wf.steps.length}${escapeHtml(getStepApprovalProgressText(currentStepApprovers, c.history, c.currentStep))}</span>`;
 
     // assignedPlate/assignedDriver: do Phòng Hành Chính điền lúc xử lý duyệt (xem processCarReg()).
@@ -17034,6 +17374,11 @@ function renderCarRegs() {
               secondaryOptions.push({ value: 'viewSlip', label: '👁️ Xem Phiếu' });
               if (canDL) secondaryOptions.push({ value: 'downloadSlip', label: '⬇️ Tải' });
             }
+            // "Sửa & Gửi Lại" — chỉ chính người tạo phiếu, chỉ khi đang cần bổ sung (NHÁP do
+            // REQUEST_CHANGES, xem confirmProcessCarReg('REQUEST_CHANGES')/openBosungEditModal()).
+            if (c.status === 'DRAFT' && c.creator === currentUser.username) {
+              secondaryOptions.push({ value: 'editDraft', label: '✏️ Sửa & Gửi Lại' });
+            }
             if (currentUser.perms?.admin) secondaryOptions.push({ value: 'delete', label: '🗑️ Xóa' });
             return buildActionCell(c.id, primaryBtnHTML, secondaryOptions, 'runCarAction');
           })()}
@@ -17049,6 +17394,7 @@ function runCarAction(id, action) {
     case 'process': openCarProcessModal(id); break;
     case 'viewSlip': viewCarApprovalSlip(id); break;
     case 'downloadSlip': downloadCarApprovalSlip(id); break;
+    case 'editDraft': openBosungEditModal('carRegs', id); break;
     case 'delete': deleteCarRegAction(id); break;
   }
 }
@@ -17132,6 +17478,7 @@ function openCarProcessModal(carId) {
   if (canApprove) {
     actionBtns.innerHTML = `
       <button onclick="confirmProcessCarReg('REJECT')" class="bg-red-600 text-white px-4 py-1.5 rounded font-bold hover:bg-red-700 text-xs">❌ Từ Chối</button>
+      <button onclick="confirmProcessCarReg('REQUEST_CHANGES')" class="bg-amber-500 text-white px-4 py-1.5 rounded font-bold hover:bg-amber-600 text-xs">🔄 Bổ Sung</button>
       <button onclick="confirmProcessCarReg('APPROVE')" class="bg-green-600 text-white px-5 py-1.5 rounded font-bold hover:bg-green-700 text-xs">✅ Phê Duyệt & Chuyển Bước</button>
     `;
   } else {
@@ -17148,17 +17495,20 @@ function closeCarProcessModal() {
 
 function confirmProcessCarReg(actionType) {
   const comment = document.getElementById('txtCarComment').value.trim();
-  if (actionType === 'REJECT' && !comment) {
-    return alert('Vui lòng nhập lý do từ chối!');
+  if ((actionType === 'REJECT' || actionType === 'REQUEST_CHANGES') && !comment) {
+    return alert(actionType === 'REJECT' ? 'Vui lòng nhập lý do từ chối!' : 'Vui lòng nhập lý do cần bổ sung!');
   }
   const isApprove = actionType === 'APPROVE';
+  const titleMap = { APPROVE: '✅ Xác Nhận Phê Duyệt', REJECT: '❌ Xác Nhận Từ Chối', REQUEST_CHANGES: '🔄 Xác Nhận Yêu Cầu Bổ Sung' };
+  const labelMap = { APPROVE: 'Phê Duyệt', REJECT: 'Từ Chối', REQUEST_CHANGES: 'Yêu Cầu Bổ Sung' };
+  const actionTextMap = { APPROVE: 'phê duyệt và chuyển bước', REJECT: 'từ chối', REQUEST_CHANGES: 'yêu cầu bổ sung (đưa phiếu về nháp để người đăng ký sửa lại)' };
   showConfirmModal({
-    title: isApprove ? '✅ Xác Nhận Phê Duyệt' : '❌ Xác Nhận Từ Chối',
-    bodyHTML: `<p>Bạn có chắc chắn muốn <b>${isApprove ? 'phê duyệt và chuyển bước' : 'từ chối'}</b> đăng ký xe này?</p>${comment ? `<p class="mt-2 italic text-gray-600">Ý kiến: "${escapeHtml(comment)}"</p>` : ''}`,
-    confirmLabel: isApprove ? 'Phê Duyệt' : 'Từ Chối',
+    title: titleMap[actionType],
+    bodyHTML: `<p>Bạn có chắc chắn muốn <b>${actionTextMap[actionType]}</b> đăng ký xe này?</p>${comment ? `<p class="mt-2 italic text-gray-600">Ý kiến: "${escapeHtml(comment)}"</p>` : ''}`,
+    confirmLabel: labelMap[actionType],
     onConfirm: () => {
       if (isApprove) withApprovalAuth(() => processCarReg('APPROVE'));
-      else processCarReg('REJECT');
+      else processCarReg(actionType);
     }
   });
 }
@@ -17169,20 +17519,21 @@ async function processCarReg(actionType) {
   if (!c) return;
 
   const comment = document.getElementById('txtCarComment').value.trim();
-  if (actionType === 'REJECT' && !comment) {
-    return alert('Vui lòng nhập lý do từ chối!');
+  if ((actionType === 'REJECT' || actionType === 'REQUEST_CHANGES') && !comment) {
+    return alert(actionType === 'REJECT' ? 'Vui lòng nhập lý do từ chối!' : 'Vui lòng nhập lý do cần bổ sung!');
   }
 
   // Bất kỳ bước nào cũng có thể điền/điều chỉnh thông tin phân công xe (thường do Phòng Hành Chính
   // thực hiện ở bước cuối) — gửi kèm cùng request duyệt/từ chối, ghi nhận ngay khi có nhập. Lái xe bắt
   // buộc là 1 tài khoản hệ thống có thật — nếu ô còn text nhưng chưa khớp được tài khoản (gõ tự do,
-  // chưa chọn xong từ gợi ý) thì chặn ngay ở đây, không gửi lên server.
+  // chưa chọn xong từ gợi ý) thì chặn ngay ở đây, không gửi lên server. KHÔNG áp dụng cho REQUEST_CHANGES
+  // (hồ sơ về NHÁP, chưa tới lúc phân công xe).
   // Chỉ "Người Điều Hành Xe" (perms.carDispatch) mới gửi kèm các field phân công này — người khác
   // trong luồng duyệt không thấy mục này (xem toggle ẩn/hiện ở openCarProcessModal()) nên không có gì
   // để gửi; server cũng tự bỏ qua nếu thiếu quyền dù client có bị can thiệp cố gửi kèm.
   const canDispatchCar = !!(currentUser.perms?.admin || currentUser.perms?.carDispatch);
   let extraFields = {};
-  if (canDispatchCar) {
+  if (actionType !== 'REQUEST_CHANGES' && canDispatchCar) {
     const carAssignedDriverText = document.getElementById('carAssignedDriver').value.trim();
     const carAssignedDriverUsername = document.getElementById('carAssignedDriverUsername').value;
     if (carAssignedDriverText && !carAssignedDriverUsername) {
@@ -17195,9 +17546,10 @@ async function processCarReg(actionType) {
     };
   }
 
+  const actionUrlMap = { APPROVE: 'approve', REJECT: 'reject', REQUEST_CHANGES: 'request-changes' };
   let result;
   try {
-    result = await callWorkflowAction('carRegs', c.id, actionType === 'REJECT' ? 'reject' : 'approve', { comment, extraFields });
+    result = await callWorkflowAction('carRegs', c.id, actionUrlMap[actionType], { comment, extraFields });
   } catch (e) {
     return alert('⛔ ' + e.message);
   }
@@ -17209,7 +17561,12 @@ async function processCarReg(actionType) {
 
   let msg = '✅ Đã cập nhật trạng thái đăng ký xe!';
 
-  if (transition.type === 'REJECTED') {
+  if (transition.type === 'REQUEST_CHANGES') {
+    notifyUsersByEmail('CAR', 'NOTIFY_REQUEST_CHANGES', updatedCar.code, [updatedCar.creator],
+      `[VPDT] Đăng ký xe ${updatedCar.code} cần bổ sung/chỉnh sửa`,
+      `Phiếu đăng ký xe "${updatedCar.destination}" (${updatedCar.code}) của bạn cần được sửa lại. Lý do: ${comment}. Vui lòng vào mục Đăng Ký Xe để sửa và gửi lại.`);
+    msg = '✅ Đã yêu cầu bổ sung — hồ sơ đã chuyển về NHÁP để người đăng ký sửa lại!';
+  } else if (transition.type === 'REJECTED') {
     notifyUsersByEmail('CAR', 'NOTIFY_REJECTED', updatedCar.code, [updatedCar.creator],
       `[VPDT] Đăng ký xe ${updatedCar.code} bị từ chối`,
       `Phiếu đăng ký xe "${updatedCar.destination}" (${updatedCar.code}) của bạn đã bị từ chối. Lý do: ${comment}`);
@@ -17618,6 +17975,7 @@ function renderOfficeReqs() {
     let statusBadge = '';
     if (o.status === 'APPROVED') statusBadge = `<span class="px-2 py-0.5 bg-green-100 text-green-800 rounded font-bold text-xs">✅ Đã phê duyệt</span>`;
     else if (o.status === 'REJECTED') statusBadge = `<span class="px-2 py-0.5 bg-red-100 text-red-800 rounded font-bold text-xs">❌ Từ chối</span>`;
+    else if (o.status === 'DRAFT') statusBadge = `<span class="px-2 py-0.5 bg-orange-100 text-orange-800 rounded font-bold text-xs">✏️ Cần bổ sung — chờ sửa lại</span>`;
     else statusBadge = `<span class="px-2 py-0.5 bg-teal-100 text-teal-800 rounded font-bold text-xs">⏳ Bước ${o.currentStep}/${wf.steps.length}${escapeHtml(getStepApprovalProgressText(currentStepApprovers, o.history, o.currentStep))}</span>`;
 
     const canDL = o.status === 'APPROVED' && canDownloadFile(currentUser, 'office', o.dept, o.creator);
@@ -17655,6 +18013,11 @@ function renderOfficeReqs() {
                 else if (o.paymentStatus === 'CHUA_THANH_TOAN') secondaryOptions.push({ value: 'startPayment', label: '💰 Chuyển Sang Thanh Toán' });
               }
             }
+            // "Sửa & Gửi Lại" — chỉ chính người tạo, chỉ khi đang cần bổ sung (NHÁP do
+            // confirmProcessOfficeReq('REQUEST_CHANGES'), xem openBosungEditModal()).
+            if (o.status === 'DRAFT' && o.creator === currentUser.username) {
+              secondaryOptions.push({ value: 'editDraft', label: '✏️ Sửa & Gửi Lại' });
+            }
             if (currentUser.perms?.admin) secondaryOptions.push({ value: 'delete', label: '🗑️ Xóa' });
             return buildActionCell(o.id, primaryBtnHTML, secondaryOptions, 'runOfficeAction');
           })()}
@@ -17670,6 +18033,7 @@ function runOfficeAction(id, action) {
     case 'process': openOfficeProcessModal(id); break;
     case 'viewSlip': viewOfficeApprovalSlip(id); break;
     case 'downloadSlip': downloadOfficeApprovalSlip(id); break;
+    case 'editDraft': openBosungEditModal('officeReqs', id); break;
     case 'uploadSigned': openSignedUploadModal('officeReqs', id); break;
     case 'viewSigned': viewOfficeSignedFile(id); break;
     case 'startPayment': startOfficePaymentAction(id); break;
@@ -17772,6 +18136,7 @@ function openOfficeProcessModal(officeId) {
   if (canApprove) {
     actionBtns.innerHTML = `
       <button onclick="confirmProcessOfficeReq('REJECT')" class="bg-red-600 text-white px-4 py-1.5 rounded font-bold hover:bg-red-700 text-xs">❌ Từ Chối</button>
+      <button onclick="confirmProcessOfficeReq('REQUEST_CHANGES')" class="bg-amber-500 text-white px-4 py-1.5 rounded font-bold hover:bg-amber-600 text-xs">🔄 Bổ Sung</button>
       <button onclick="confirmProcessOfficeReq('APPROVE')" class="bg-green-600 text-white px-5 py-1.5 rounded font-bold hover:bg-green-700 text-xs">✅ Phê Duyệt & Chuyển Bước</button>
     `;
   } else {
@@ -17788,17 +18153,20 @@ function closeOfficeProcessModal() {
 
 function confirmProcessOfficeReq(actionType) {
   const comment = document.getElementById('txtOfficeComment').value.trim();
-  if (actionType === 'REJECT' && !comment) {
-    return alert('Vui lòng nhập lý do từ chối vào ô Ý kiến chỉ đạo!');
+  if ((actionType === 'REJECT' || actionType === 'REQUEST_CHANGES') && !comment) {
+    return alert(actionType === 'REJECT' ? 'Vui lòng nhập lý do từ chối vào ô Ý kiến chỉ đạo!' : 'Vui lòng nhập lý do cần bổ sung vào ô Ý kiến chỉ đạo!');
   }
   const isApprove = actionType === 'APPROVE';
+  const titleMap = { APPROVE: '✅ Xác Nhận Phê Duyệt', REJECT: '❌ Xác Nhận Từ Chối', REQUEST_CHANGES: '🔄 Xác Nhận Yêu Cầu Bổ Sung' };
+  const labelMap = { APPROVE: 'Phê Duyệt', REJECT: 'Từ Chối', REQUEST_CHANGES: 'Yêu Cầu Bổ Sung' };
+  const actionTextMap = { APPROVE: 'phê duyệt và chuyển bước', REJECT: 'từ chối', REQUEST_CHANGES: 'yêu cầu bổ sung (đưa đề xuất về nháp để người tạo sửa lại)' };
   showConfirmModal({
-    title: isApprove ? '✅ Xác Nhận Phê Duyệt' : '❌ Xác Nhận Từ Chối',
-    bodyHTML: `<p>Bạn có chắc chắn muốn <b>${isApprove ? 'phê duyệt và chuyển bước' : 'từ chối'}</b> đề xuất này?</p>${comment ? `<p class="mt-2 italic text-gray-600">Ý kiến: "${escapeHtml(comment)}"</p>` : ''}`,
-    confirmLabel: isApprove ? 'Phê Duyệt' : 'Từ Chối',
+    title: titleMap[actionType],
+    bodyHTML: `<p>Bạn có chắc chắn muốn <b>${actionTextMap[actionType]}</b> đề xuất này?</p>${comment ? `<p class="mt-2 italic text-gray-600">Ý kiến: "${escapeHtml(comment)}"</p>` : ''}`,
+    confirmLabel: labelMap[actionType],
     onConfirm: () => {
       if (isApprove) withApprovalAuth(() => processOfficeReq('APPROVE'));
-      else processOfficeReq('REJECT');
+      else processOfficeReq(actionType);
     }
   });
 }
@@ -17809,13 +18177,14 @@ async function processOfficeReq(actionType) {
   if (!o) return;
 
   const comment = document.getElementById('txtOfficeComment').value.trim();
-  if (actionType === 'REJECT' && !comment) {
-    return alert('Vui lòng nhập lý do từ chối vào ô Ý kiến chỉ đạo!');
+  if ((actionType === 'REJECT' || actionType === 'REQUEST_CHANGES') && !comment) {
+    return alert(actionType === 'REJECT' ? 'Vui lòng nhập lý do từ chối vào ô Ý kiến chỉ đạo!' : 'Vui lòng nhập lý do cần bổ sung vào ô Ý kiến chỉ đạo!');
   }
 
+  const actionUrlMap = { APPROVE: 'approve', REJECT: 'reject', REQUEST_CHANGES: 'request-changes' };
   let result;
   try {
-    result = await callWorkflowAction('officeReqs', o.id, actionType === 'REJECT' ? 'reject' : 'approve', { comment });
+    result = await callWorkflowAction('officeReqs', o.id, actionUrlMap[actionType], { comment });
   } catch (e) {
     return alert('⛔ ' + e.message);
   }
@@ -17827,7 +18196,12 @@ async function processOfficeReq(actionType) {
 
   let msg = '✅ Đã cập nhật trạng thái đề xuất văn phòng!';
 
-  if (transition.type === 'REJECTED') {
+  if (transition.type === 'REQUEST_CHANGES') {
+    notifyUsersByEmail('OFFICE', 'NOTIFY_REQUEST_CHANGES', updatedOffice.code, [updatedOffice.creator],
+      `[VPDT] Đề xuất văn phòng ${updatedOffice.code} cần bổ sung/chỉnh sửa`,
+      `Đề xuất "${updatedOffice.title}" (${updatedOffice.code}) của bạn cần được sửa lại. Lý do: ${comment}. Vui lòng vào mục Văn Phòng Tổng Hợp để sửa và gửi lại.`);
+    msg = '✅ Đã yêu cầu bổ sung — hồ sơ đã chuyển về NHÁP để người tạo sửa lại!';
+  } else if (transition.type === 'REJECTED') {
     notifyUsersByEmail('OFFICE', 'NOTIFY_REJECTED', updatedOffice.code, [updatedOffice.creator],
       `[VPDT] Đề xuất văn phòng ${updatedOffice.code} bị từ chối`,
       `Đề xuất "${updatedOffice.title}" (${updatedOffice.code}) của bạn đã bị từ chối. Lý do: ${comment}`);

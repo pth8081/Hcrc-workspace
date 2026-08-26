@@ -9,7 +9,7 @@
 // họp thêm cờ minutesEdit (toàn công ty, không theo phòng ban) cho SỬA — riêng XÓA là quyền tối cao,
 // chỉ Admin; Công việc theo NGƯỜI (assignedBy/assignee), hoàn toàn không có khái niệm phòng ban.
 const { HttpError } = require('./httpErrors');
-const { scopeAllows, OFFICE_SUBTYPE_TO_PERM_FLAG, normalizeReportEntryPayload, buildEffectiveContractApprovalWorkflowServer, sanitizeUniformItems, sanitizeBudgetLines, getBudgetTemplateCustomFields, sanitizeBudgetCustomFields, resolveTrainingInstructorUsername, normalizeInviteList, normalizeTrainingPlanFields, normalizeOnboardingPathFields } = require('./createValidation');
+const { scopeAllows, OFFICE_SUBTYPE_TO_PERM_FLAG, normalizeReportEntryPayload, buildEffectiveContractApprovalWorkflowServer, sanitizeUniformItems, sanitizeBudgetLines, getBudgetTemplateCustomFields, sanitizeBudgetCustomFields, resolveTrainingInstructorUsername, normalizeInviteList, normalizeTrainingPlanFields, normalizeOnboardingPathFields, SUBMISSION_APPROVAL_LEVELS, buildEffectiveSubmissionWorkflowServer } = require('./createValidation');
 const { validateRegistrationItems: validateVppRegItems, calcItemsTotal: calcVppItemsTotal } = require('./vppCatalog');
 const { sanitizePriceFileItems } = require('./priceFileParser');
 
@@ -161,6 +161,211 @@ function editContract(payload, user, contract, hasAddenda, rootDept, appData, ro
     contract.currentStep = 1;
   }
   return contract;
+}
+
+// ===================== "BỔ SUNG" cho Tài Liệu / Đăng Ký Xe / Mua Bán-Sửa Chữa-Đầu Tư / Văn Bản Trình =====================
+// Khi người duyệt bước hiện tại bấm "Bổ Sung" (REQUEST_CHANGES — xem lib/workflowEngine.js
+// MODULE_CONFIGS), hồ sơ bị đưa về NHÁP (status/currentStep reset về 0). 4 cặp hàm dưới đây (theo
+// đúng khuôn updateVppRegistrationDraft()/submitVppRegistration() và updateBudgetEntryDraft()/
+// submitBudgetEntry() đã có) cho phép CHÍNH NGƯỜI TẠO/TẢI LÊN (không mở rộng cho admin — khớp
+// editContract() ở trên, chỉ đúng người tạo mới sửa) sửa lại TOÀN BỘ nội dung đã trình (kể cả tệp đính
+// kèm, nếu module có) trong lúc còn NHÁP, rồi "Gửi Lại" để vào lại hàng chờ duyệt TỪ BƯỚC 1. Viết
+// riêng (không dùng chung 1 engine) vì 4 module này (khác VPP/Ngân Sách) vốn KHÔNG có khái niệm NHÁP
+// trước khi có "Bổ Sung" — tạo xong là vào PENDING ngay (xem lib/createValidation.js).
+function resetForResubmit(item, cfg) {
+  const statusField = cfg?.statusField || 'status';
+  const currentStepField = cfg?.currentStepField || 'currentStep';
+  const historyField = cfg?.historyField || 'history';
+  // Mọi lượt "APPROVED" đã ghi ở vòng nộp TRƯỚC không còn giá trị cho vòng MỚI (nội dung đã sửa) —
+  // đánh dấu invalidated giống hệt REQUEST_CHANGES (lib/workflowEngine.js)/editContract() ở trên, để
+  // getStepApprovedUsernames()/canApproveStep() không tính nhầm "đã duyệt bước này rồi" (kẹt hồ sơ
+  // vĩnh viễn) hay coi phê duyệt CŨ vẫn còn hiệu lực cho vòng MỚI.
+  (item[historyField] || []).forEach(h => { if (h.action === 'APPROVED') h.invalidated = true; });
+  item[statusField] = 'PENDING';
+  item[currentStepField] = 1;
+  if (!item[historyField]) item[historyField] = [];
+}
+
+// Đổi phòng ban lúc sửa NHÁP-bổ-sung PHẢI vẫn nằm trong đúng phạm vi được tạo hồ sơ của người này
+// (getScope() ở CREATE_MODULE_CONFIGS lúc TẠO) — không thì 1 request tự soạn có thể lợi dụng vòng "bổ
+// sung" để đổi hồ sơ sang phòng ban mình không có quyền tạo/tải lên, việc mà server đã chặn kỹ lúc TẠO
+// (validateAndPrepareCreate) nhưng 4 hàm sửa-nháp mới này lại KHÔNG tự nhiên có cùng lớp kiểm tra đó.
+function assertDeptScopeAllowed(user, scope, newDept) {
+  if (!scopeAllows(user, scope, newDept)) {
+    throw new HttpError(403, `Bạn không có quyền chuyển hồ sơ sang phòng ban "${newDept}"`);
+  }
+}
+
+// ----- Tài Liệu (docs) -----
+const DOC_DRAFT_EDITABLE_FIELDS = ['dept', 'cat', 'title', 'ver', 'summary', 'customData'];
+
+function editDocDraft(payload, user, item) {
+  if (item.uploader !== user.username) throw new HttpError(403, 'Chỉ người tải lên mới được sửa tài liệu này');
+  if (item.status !== 'DRAFT') throw new HttpError(409, 'Tài liệu này không ở trạng thái cần bổ sung, không thể sửa');
+  if (!payload || typeof payload !== 'object') throw new HttpError(400, 'Thiếu dữ liệu cập nhật');
+  if (payload.dept !== undefined && payload.dept !== item.dept) {
+    assertDeptScopeAllowed(user, { all: !!user.perms?.uploadAll, depts: user.perms?.uploadDepts || [] }, payload.dept);
+  }
+  for (const f of DOC_DRAFT_EDITABLE_FIELDS) {
+    if (payload[f] !== undefined) item[f] = payload[f];
+  }
+  if (!String(item.title || '').trim()) throw new HttpError(400, 'Thiếu tiêu đề tài liệu');
+  // Cho phép thay thế hẳn tệp đính kèm (khác itPriceApprovals — CHỈ module đó bị khoá append-only theo
+  // đúng yêu cầu nghiệp vụ, xem requestPriceInfoFromIt()/submitPriceSupplementFile() bên dưới).
+  if (payload.fileUrl !== undefined) {
+    if (!payload.fileUrl || !payload.fileName) throw new HttpError(400, 'Thiếu tệp tài liệu');
+    item.fileName = payload.fileName;
+    item.fileType = payload.fileType;
+    item.fileUrl = payload.fileUrl;
+  }
+  item.lastEditedBy = user.username;
+  item.lastEditedAt = nowVN();
+  return item;
+}
+
+function submitDocDraft(user, item) {
+  if (item.uploader !== user.username) throw new HttpError(403, 'Chỉ người tải lên mới được gửi lại tài liệu này');
+  if (item.status !== 'DRAFT') throw new HttpError(409, 'Tài liệu này không ở trạng thái cần bổ sung (có thể đã gửi lại rồi)');
+  item.history = item.history || [];
+  item.history.push({ step: 0, stepName: 'Gửi lại sau bổ sung', approver: user.name, username: user.username, action: 'RESUBMITTED', comment: '', time: nowVN() });
+  resetForResubmit(item, {});
+  return item;
+}
+
+// ----- Đăng Ký Xe (carRegs) -----
+const CAR_REG_DRAFT_EDITABLE_FIELDS = ['dept', 'type', 'passengers', 'directUser', 'directUserPhone', 'purpose', 'km', 'reason', 'customData'];
+
+function editCarRegDraft(payload, user, item) {
+  if (item.creator !== user.username) throw new HttpError(403, 'Chỉ người tạo phiếu mới được sửa phiếu đăng ký xe này');
+  if (item.status !== 'DRAFT') throw new HttpError(409, 'Phiếu đăng ký xe này không ở trạng thái cần bổ sung, không thể sửa');
+  if (!payload || typeof payload !== 'object') throw new HttpError(400, 'Thiếu dữ liệu cập nhật');
+  if (payload.dept !== undefined && payload.dept !== item.dept) {
+    assertDeptScopeAllowed(user, user.perms?.carCreate, payload.dept);
+  }
+  for (const f of CAR_REG_DRAFT_EDITABLE_FIELDS) {
+    if (payload[f] !== undefined) item[f] = payload[f];
+  }
+  if (payload.km !== undefined && Number(item.km) < 0) throw new HttpError(400, 'Số KM dự kiến không được là số âm');
+  if (payload.startTime !== undefined || payload.endTime !== undefined) {
+    if (payload.startTime !== undefined) item.startTime = payload.startTime;
+    if (payload.endTime !== undefined) item.endTime = payload.endTime;
+    const newStart = new Date(item.startTime).getTime();
+    const newEnd = new Date(item.endTime).getTime();
+    if (!Number.isFinite(newStart) || !Number.isFinite(newEnd)) throw new HttpError(400, 'Thời gian bắt đầu/kết thúc không hợp lệ');
+    if (newStart >= newEnd) throw new HttpError(400, 'Thời gian kết thúc phải sau thời gian bắt đầu');
+  }
+  if (payload.routePoints !== undefined) {
+    const points = (Array.isArray(payload.routePoints) ? payload.routePoints : []).map(p => String(p || '').trim()).filter(Boolean);
+    if (points.length < 2) throw new HttpError(400, 'Vui lòng nhập ít nhất Điểm xuất phát và 1 điểm đến');
+    item.routePoints = points;
+    item.destination = points.join(' → ');
+  }
+  return item;
+}
+
+function submitCarRegDraft(user, item) {
+  if (item.creator !== user.username) throw new HttpError(403, 'Chỉ người tạo phiếu mới được gửi lại phiếu đăng ký xe này');
+  if (item.status !== 'DRAFT') throw new HttpError(409, 'Phiếu đăng ký xe này không ở trạng thái cần bổ sung (có thể đã gửi lại rồi)');
+  item.history = item.history || [];
+  item.history.push({ step: 0, approver: user.name, username: user.username, action: 'RESUBMITTED', comment: '', time: nowVN() });
+  resetForResubmit(item, {});
+  return item;
+}
+
+// ----- Mua Bán / Sửa Chữa / Đầu Tư (officeReqs) -----
+// subType KHÔNG cho đổi lúc sửa (khác các field còn lại) — đổi subType đổi luôn cả bộ quy trình duyệt
+// tra cứu (OFFICE_SUBTYPE_TO_DBKEY ở lib/workflowEngine.js) lẫn quyền tạo (officeBuy/officeFix/
+// officeInvest), rủi ro hơn nhiều so với lợi ích, và nghiệp vụ "bổ sung" chỉ cần sửa lại NỘI DUNG đã
+// trình, không phải đổi loại đề xuất.
+const OFFICE_REQ_DRAFT_EDITABLE_FIELDS = ['dept', 'title', 'qty', 'supplier', 'usageTime', 'reason', 'customData'];
+
+function editOfficeReqDraft(payload, user, item) {
+  if (item.creator !== user.username) throw new HttpError(403, 'Chỉ người tạo mới được sửa đề xuất văn phòng này');
+  if (item.status !== 'DRAFT') throw new HttpError(409, 'Đề xuất này không ở trạng thái cần bổ sung, không thể sửa');
+  if (!payload || typeof payload !== 'object') throw new HttpError(400, 'Thiếu dữ liệu cập nhật');
+  if (payload.dept !== undefined && payload.dept !== item.dept) {
+    assertDeptScopeAllowed(user, user.perms?.officeCreate, payload.dept);
+  }
+  for (const f of OFFICE_REQ_DRAFT_EDITABLE_FIELDS) {
+    if (payload[f] !== undefined) item[f] = payload[f];
+  }
+  // Khớp đúng luật tính lại amount từ items ở createValidation.js CREATE_MODULE_CONFIGS.officeReqs
+  // (không tin amount client tự tính) — chỉ áp dụng nhánh "Mua Sắm" (có items), nhánh Sửa Chữa/Đầu Tư
+  // nhập tay 1 ô số vẫn phải chặn âm.
+  if (payload.items !== undefined) {
+    const validItems = (Array.isArray(payload.items) ? payload.items : []).map(it => {
+      const qty = Number(it?.qty) || 0;
+      const unitPrice = Number(it?.unitPrice) || 0;
+      if (qty < 0 || unitPrice < 0) throw new HttpError(400, `Hạng mục "${it?.name || ''}": Số lượng/Đơn giá không được là số âm`);
+      return { ...it, qty, unitPrice, amount: qty * unitPrice };
+    });
+    item.items = validItems;
+    item.amount = validItems.reduce((sum, it) => sum + it.amount, 0);
+  } else if (payload.amount !== undefined) {
+    item.amount = Number(payload.amount) || 0;
+  }
+  if (item.amount < 0) throw new HttpError(400, 'Dự toán/Tổng chi phí không được là số âm');
+  return item;
+}
+
+function submitOfficeReqDraft(user, item) {
+  if (item.creator !== user.username) throw new HttpError(403, 'Chỉ người tạo mới được gửi lại đề xuất văn phòng này');
+  if (item.status !== 'DRAFT') throw new HttpError(409, 'Đề xuất này không ở trạng thái cần bổ sung (có thể đã gửi lại rồi)');
+  item.history = item.history || [];
+  item.history.push({ step: 0, approver: user.name, username: user.username, action: 'RESUBMITTED', comment: '', time: nowVN() });
+  resetForResubmit(item, {});
+  return item;
+}
+
+// ----- Văn Bản Trình (submissions) -----
+// Khác 3 module trên: có thể đổi type/dept/"Cấp Phê Duyệt Cuối Cùng"/lớp phê duyệt bổ sung khi sửa —
+// PHẢI dựng lại effectiveSteps/effectiveApprovers giống hệt lúc TẠO (buildEffectiveSubmissionWorkflowServer),
+// không tin nguyên effectiveSteps/effectiveApprovers cũ nếu các lựa chọn này đổi.
+const SUBMISSION_DRAFT_EDITABLE_FIELDS = ['dept', 'type', 'title', 'priority', 'content', 'customData'];
+
+function editSubmissionDraft(payload, user, item, appData) {
+  if (item.creator !== user.username) throw new HttpError(403, 'Chỉ người trình mới được sửa tờ trình này');
+  if (item.status !== 'DRAFT') throw new HttpError(409, 'Tờ trình này không ở trạng thái cần bổ sung, không thể sửa');
+  if (!payload || typeof payload !== 'object') throw new HttpError(400, 'Thiếu dữ liệu cập nhật');
+  if (payload.dept !== undefined && payload.dept !== item.dept) {
+    assertDeptScopeAllowed(user, user.perms?.submissionCreate, payload.dept);
+  }
+  for (const f of SUBMISSION_DRAFT_EDITABLE_FIELDS) {
+    if (payload[f] !== undefined) item[f] = payload[f];
+  }
+  if (!String(item.title || '').trim()) throw new HttpError(400, 'Thiếu tiêu đề tờ trình');
+  // Tệp chính: cho phép thay thế hẳn (khác itPriceApprovals). Tài liệu bổ sung (extraFiles[]) cho phép
+  // gửi lại NGUYÊN danh sách mới (thêm/bớt tự do) — đây là tờ trình đang NHÁP để sửa lại, không phải
+  // append-only như itPriceApprovals.
+  if (payload.fileUrl !== undefined) {
+    item.fileName = payload.fileName || '';
+    item.fileType = payload.fileType || '';
+    item.fileUrl = payload.fileUrl || '';
+  }
+  if (payload.extraFiles !== undefined) {
+    item.extraFiles = Array.isArray(payload.extraFiles) ? payload.extraFiles : [];
+  }
+  const approvalLevel = payload.approvalLevel !== undefined ? payload.approvalLevel : item.approvalLevel;
+  const selectedLayerKeys = payload.selectedApprovalLayers !== undefined ? payload.selectedApprovalLayers : item.selectedApprovalLayers;
+  const selectedLayerMembers = payload.selectedLayerMembers !== undefined ? payload.selectedLayerMembers : item.selectedLayerMembers;
+  if (!SUBMISSION_APPROVAL_LEVELS.includes(approvalLevel)) throw new HttpError(400, `Cấp phê duyệt cuối cùng không hợp lệ: ${approvalLevel}`);
+  const effectiveWf = buildEffectiveSubmissionWorkflowServer(item.type, item.dept, selectedLayerKeys, selectedLayerMembers, appData || {}, approvalLevel);
+  item.approvalLevel = approvalLevel;
+  item.selectedApprovalLayers = effectiveWf.layerKeys;
+  item.selectedLayerMembers = selectedLayerMembers || {};
+  item.effectiveSteps = effectiveWf.steps;
+  item.effectiveApprovers = effectiveWf.approvers;
+  item.opinionRequestees = effectiveWf.opinionRequestees;
+  return item;
+}
+
+function submitSubmissionDraft(user, item) {
+  if (item.creator !== user.username) throw new HttpError(403, 'Chỉ người trình mới được gửi lại tờ trình này');
+  if (item.status !== 'DRAFT') throw new HttpError(409, 'Tờ trình này không ở trạng thái cần bổ sung (có thể đã gửi lại rồi)');
+  item.history = item.history || [];
+  item.history.push({ step: 0, approver: user.name, username: user.username, action: 'RESUBMITTED', comment: 'Đã sửa lại và trình lại sau khi được yêu cầu bổ sung', time: nowVN() });
+  resetForResubmit(item, {});
+  return item;
 }
 
 // Duyệt/từ chối hợp đồng GỐC hoặc phụ lục — GIỜ đi qua quy trình Phê Duyệt HĐ theo bước (xem
@@ -2998,6 +3203,10 @@ function confirmCarDriverAssignment(user, carReg) {
 
 module.exports = {
   editContract,
+  editDocDraft, submitDocDraft,
+  editCarRegDraft, submitCarRegDraft,
+  editOfficeReqDraft, submitOfficeReqDraft,
+  editSubmissionDraft, submitSubmissionDraft,
   canManageContractPayment, uploadContractSignedFile, startContractPayment,
   canManageOfficePayment, uploadOfficeSignedFile, startOfficePayment,
   canManagePaymentRequests, editPaymentRequest, requestPaymentInfo, approvePaymentRequest,

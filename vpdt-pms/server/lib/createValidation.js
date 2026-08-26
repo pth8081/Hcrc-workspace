@@ -2019,6 +2019,10 @@ module.exports = {
   OFFICE_SUBTYPE_TO_PERM_FLAG, normalizeReportEntryPayload,
   CONTRACT_APPROVAL_LAYERS, CONTRACT_APPROVAL_LEVELS, CONTRACT_APPROVAL_LEVEL_RULES,
   buildEffectiveContractApprovalWorkflowServer,
+  // Export thêm cho lib/recordActions.js editSubmissionDraft() (nút "Bổ Sung" -> sửa lại + gửi lại tờ
+  // trình) — cần dựng lại effectiveSteps/effectiveApprovers giống hệt lúc TẠO khi người trình đổi loại/
+  // phòng ban/lớp phê duyệt bổ sung trong lúc sửa.
+  SUBMISSION_APPROVAL_LEVELS, buildEffectiveSubmissionWorkflowServer,
   sanitizeUniformItems,
   BUDGET_TYPE_OPTIONS, BUDGET_FIELD_TYPES, sanitizeBudgetLines, getBudgetTemplateCustomFields, sanitizeBudgetCustomFields,
   resolveTrainingInstructorUsername, normalizeInviteList,

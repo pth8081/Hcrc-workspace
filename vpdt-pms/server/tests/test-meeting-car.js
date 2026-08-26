@@ -95,17 +95,20 @@ const server = http.createServer(async (req, res) => {
     return sendJson(res, 200, { ok: true, item });
   }
 
-  // POST /api/workflow/carRegs/:id/approve|reject — the exact engine routes/workflow.js calls.
-  const workflowMatch = url.pathname.match(/^\/api\/workflow\/carRegs\/(\d+)\/(approve|reject)$/);
+  // POST /api/workflow/carRegs/:id/approve|reject|request-changes — the exact engine routes/workflow.js
+  // calls. "request-changes" ("Bổ Sung") added alongside approve/reject (xem lib/workflowEngine.js
+  // MODULE_CONFIGS.carRegs.supportsRequestChanges).
+  const workflowMatch = url.pathname.match(/^\/api\/workflow\/carRegs\/(\d+)\/(approve|reject|request-changes)$/);
   if (req.method === 'POST' && workflowMatch) {
     const id = Number(workflowMatch[1]);
     const rawAction = workflowMatch[2];
+    const actionMap = { approve: 'APPROVE', reject: 'REJECT', 'request-changes': 'REQUEST_CHANGES' };
     const body = await readBody(req);
     const item = store.carRegs.find((c) => c.id === id);
     if (!item) return sendJson(res, 404, { error: 'Không tìm thấy hồ sơ' });
     try {
       const outcome = applyWorkflowAction({
-        moduleKey: 'carRegs', item, action: rawAction === 'approve' ? 'APPROVE' : 'REJECT',
+        moduleKey: 'carRegs', item, action: actionMap[rawAction],
         user: activeServerUser, comment: body.comment, extraFields: body.extraFields,
         // Dùng ĐÚNG carDeptWorkflows đã seed (không hardcode {} như trước) — cần thiết để test được các
         // approver KHÔNG PHẢI admin (canApproveStep chỉ cho qua nếu username có trong approvers[bước],
@@ -127,6 +130,25 @@ const server = http.createServer(async (req, res) => {
     if (!item) return sendJson(res, 404, { error: 'Không tìm thấy hồ sơ' });
     try {
       const result = recordActions.confirmCarDriverAssignment(activeServerUser, item);
+      return sendJson(res, 200, { ok: true, item: result });
+    } catch (err) {
+      return sendJson(res, err.status || 500, { error: err.message });
+    }
+  }
+
+  // POST /api/records/carRegs/:id/update|submit — "Bổ Sung": sửa lại NHÁP (sau REQUEST_CHANGES) + gửi
+  // lại, xem lib/recordActions.js editCarRegDraft()/submitCarRegDraft() — mirrors routes/records.js.
+  const carDraftMatch = url.pathname.match(/^\/api\/records\/carRegs\/(\d+)\/(update|submit)$/);
+  if (req.method === 'POST' && carDraftMatch) {
+    const id = Number(carDraftMatch[1]);
+    const action = carDraftMatch[2];
+    const body = await readBody(req);
+    const item = store.carRegs.find((c) => c.id === id);
+    if (!item) return sendJson(res, 404, { error: 'Không tìm thấy hồ sơ' });
+    try {
+      const result = action === 'update'
+        ? recordActions.editCarRegDraft(body, activeServerUser, item)
+        : recordActions.submitCarRegDraft(activeServerUser, item);
       return sendJson(res, 200, { ok: true, item: result });
     } catch (err) {
       return sendJson(res, err.status || 500, { error: err.message });
@@ -797,6 +819,113 @@ async function main() {
     'CarDispatch gap fix: the new isAssignedDriverSomewhere clause does not fabricate a match for an account with no assigned trips (fix is not overly broad)',
     d5.isAssignedDriverSomewhere === false,
     `isAssignedDriverSomewhere=${d5.isAssignedDriverSomewhere}`
+  );
+
+  // ===================== E1-E4 — "Bổ Sung" (REQUEST_CHANGES): approver trả phiếu về NHÁP, người đăng
+  // ký SỬA LẠI TOÀN BỘ nội dung (kể cả lộ trình/thời gian) qua modal "Sửa & Gửi Lại"
+  // (openBosungEditModal()/confirmBosungResubmit() ở public/index.html, gọi THẬT
+  // lib/recordActions.js editCarRegDraft()/submitCarRegDraft()) rồi được duyệt lại bình thường từ bước 1.
+  // =====================
+  await loginAs(page, bookerUser);
+  const e1 = await page.evaluate(async () => {
+    window.__alerts = [];
+    switchTab('car');
+    document.getElementById('carDept').value = 'Phòng Kinh Doanh';
+    document.getElementById('carType').value = document.getElementById('carType').options[0].value;
+    document.getElementById('carPassengers').value = '01 - Lê Thị Kinh Doanh';
+    document.getElementById('carPurpose').value = 'Công tác';
+    document.getElementById('carKm').value = '50';
+    document.getElementById('carStartTime').value = '2026-09-10T08:00';
+    document.getElementById('carEndTime').value = '2026-09-10T12:00';
+    carRoutePoints = ['HN', 'Bắc Ninh', 'HN'];
+    renderCarRoutePoints();
+    document.getElementById('carReason').value = 'Khảo sát địa điểm cho kịch bản Bổ Sung.';
+    const form = document.querySelector('#carSection form');
+    await submitCarReq({ preventDefault() {}, target: form });
+    return { count: DB.carRegs.length, saved: DB.carRegs[0] };
+  });
+  record(
+    'Car Bổ Sung: tạo phiếu mới để kiểm thử luồng Bổ Sung -> PENDING',
+    e1.saved.status === 'PENDING' && e1.saved.dept === 'Phòng Kinh Doanh',
+    `status=${e1.saved.status} dept=${e1.saved.dept}`
+  );
+
+  // approvers['Phòng Kinh Doanh'] chưa được seed -> chỉ admin duyệt được (fallback {1:['admin']}).
+  await loginAs(page, adminUser);
+  const e2 = await page.evaluate(async (carId) => {
+    window.__alerts = [];
+    currentProcessingCarId = carId;
+    document.getElementById('txtCarComment').value = '';
+    await processCarReg('REQUEST_CHANGES'); // thiếu lý do -> bị chặn ở client, không gọi API
+    const blockedAlerts = window.__alerts.slice();
+    document.getElementById('txtCarComment').value = 'Sai lộ trình, đề nghị đăng ký lại đúng điểm đến.';
+    window.__alerts = [];
+    await processCarReg('REQUEST_CHANGES');
+    await new Promise((r) => setTimeout(r, 50));
+    const item = DB.carRegs.find((c) => c.id === carId);
+    return { blockedAlerts, alerts: window.__alerts.slice(), status: item.status, currentStep: item.currentStep, history: item.history };
+  }, e1.saved.id);
+  record(
+    'Car Bổ Sung: thiếu lý do bị chặn ngay ở client',
+    e2.blockedAlerts.some((a) => a.includes('Vui lòng nhập lý do cần bổ sung')),
+    JSON.stringify(e2.blockedAlerts)
+  );
+  record(
+    'Car Bổ Sung: "Bổ Sung" hợp lệ -> status chuyển DRAFT, currentStep reset về 0',
+    e2.status === 'DRAFT' && e2.currentStep === 0,
+    `status=${e2.status} currentStep=${e2.currentStep}`
+  );
+  record(
+    'Car Bổ Sung: lịch sử ghi nhận đúng hành động REQUEST_CHANGES kèm lý do',
+    (e2.history || []).some((h) => h.action === 'REQUEST_CHANGES' && h.comment.includes('Sai lộ trình')),
+    JSON.stringify(e2.history)
+  );
+
+  // Người KHÔNG phải người tạo (adminUser) không sửa được hồ sơ NHÁP của người khác qua editCarRegDraft().
+  let e3Error = null;
+  try {
+    const carOnServer = store.carRegs.find((c) => c.id === e1.saved.id);
+    recordActions.editCarRegDraft({ reason: 'Hack' }, adminUser, carOnServer);
+  } catch (err) { e3Error = err; }
+  record(
+    'Car Bổ Sung: người khác (không phải người tạo) không sửa được phiếu đang NHÁP này (403)',
+    !!e3Error && e3Error.status === 403,
+    `error=${e3Error && e3Error.message}`
+  );
+
+  await loginAs(page, bookerUser);
+  const e4 = await page.evaluate(async (carId) => {
+    window.__alerts = [];
+    openBosungEditModal('carRegs', carId);
+    const reasonNote = document.getElementById('bosungEditReasonNote').innerText;
+    document.getElementById('bsReason').value = 'Khảo sát địa điểm (đã sửa đúng lộ trình theo yêu cầu).';
+    await confirmBosungResubmit();
+    await new Promise((r) => setTimeout(r, 100));
+    const item = DB.carRegs.find((c) => c.id === carId);
+    return { reasonNote, alerts: window.__alerts.slice(), status: item.status, currentStep: item.currentStep, reason: item.reason };
+  }, e1.saved.id);
+  record(
+    'Car Bổ Sung: modal "Sửa & Gửi Lại" hiện đúng lý do người duyệt vừa yêu cầu',
+    e4.reasonNote.includes('Sai lộ trình'),
+    e4.reasonNote
+  );
+  record(
+    'Car Bổ Sung: "Sửa & Gửi Lại" -> quay lại PENDING bước 1, nội dung đã cập nhật',
+    e4.status === 'PENDING' && e4.currentStep === 1 && e4.reason.includes('đã sửa đúng lộ trình'),
+    JSON.stringify(e4)
+  );
+
+  await loginAs(page, adminUser);
+  const e5 = await page.evaluate(async (carId) => {
+    currentProcessingCarId = carId;
+    document.getElementById('txtCarComment').value = '';
+    await processCarReg('APPROVE');
+    return DB.carRegs.find((c) => c.id === carId).status;
+  }, e1.saved.id);
+  record(
+    'Car Bổ Sung: sau khi bổ sung + gửi lại, phiếu được duyệt lại bình thường -> APPROVED',
+    e5 === 'APPROVED',
+    e5
   );
 
   await browser.close();
