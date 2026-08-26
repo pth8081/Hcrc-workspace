@@ -1981,12 +1981,31 @@ function canManageRecruitment(user) {
   return !!(user.perms?.admin || user.perms?.internalRecruitmentCreate);
 }
 
+// Đợt 2: cho đóng tin từ CẢ OPEN lẫn FILLED (trước đây chỉ từ OPEN) — HR cần đóng hẳn 1 tin sau khi đã
+// xác nhận tuyển đủ (confirmRecruitmentJobFilled() bên dưới), không còn cách nào khác để chuyển FILLED
+// -> CLOSED nếu vẫn chặn như cũ. Không cho đóng lại tin ĐÃ đóng (giữ nguyên hành vi cũ).
 function closeRecruitmentJob(payload, user, job) {
   if (job.creator !== user.username && !user.perms?.admin) {
     throw new HttpError(403, 'Chỉ người đăng tin hoặc Quản Trị Viên mới được đóng tin tuyển dụng này');
   }
-  if (job.status !== 'OPEN') throw new HttpError(409, 'Tin tuyển dụng này đã đóng từ trước');
+  if (job.status === 'CLOSED') throw new HttpError(409, 'Tin tuyển dụng này đã đóng từ trước');
   job.status = 'CLOSED';
+  return job;
+}
+
+// "Đã Tuyển Đủ" (Đợt 2) — xác nhận THỦ CÔNG bởi bất kỳ ai trong đội tuyển dụng (canManageRecruitment,
+// KHÔNG giới hạn theo người đăng tin — cùng tinh thần setRecruitmentReferralStatus() bên dưới), CỐ Ý
+// không chặn/yêu cầu số referral HIRED phải đạt slots trước khi cho xác nhận: HR có thể đã tuyển được
+// người qua kênh khác ngoài hệ thống giới thiệu nội bộ này (đăng tuyển ngoài, headhunter...) mà hệ
+// thống không thấy được, nên không thể tự động hoá điều kiện này — số liệu HIRED/slots chỉ dùng để GỢI
+// Ý ở client (xem renderRecruitmentJobs() ở public/index.html), không phải điều kiện chặn ở đây.
+function confirmRecruitmentJobFilled(payload, user, job) {
+  if (!canManageRecruitment(user)) throw new HttpError(403, 'Bạn không có quyền xác nhận tin tuyển dụng đã tuyển đủ');
+  if (job.status !== 'OPEN') throw new HttpError(409, 'Chỉ có thể xác nhận đã tuyển đủ với tin đang tuyển (OPEN)');
+  job.status = 'FILLED';
+  job.filledBy = user.username;
+  job.filledByName = user.name;
+  job.filledAt = nowVN();
   return job;
 }
 
@@ -2581,7 +2600,7 @@ module.exports = {
   updateReportSlideTemplate,
   canManageTraining, cancelTrainingRegistration, setTrainingRegistrationResult, confirmCareerPathForEmployee,
   bulkRegisterTrainingClass, gradeTrainingTestSubmission, applyAutoGradedTestResult,
-  canManageRecruitment, closeRecruitmentJob, setRecruitmentReferralStatus,
+  canManageRecruitment, closeRecruitmentJob, confirmRecruitmentJobFilled, setRecruitmentReferralStatus,
   canManageItSupport, applyPriceApproval, claimPriceApply, releasePriceApplyClaim, requestPriceInfoFromIt, submitPriceSupplementFile,
   claimItTicket, updateItTicketStatus, addItTicketComment, cancelItTicket,
   escalateItTicket, approveItTicketEscalation, denyItTicketEscalation,

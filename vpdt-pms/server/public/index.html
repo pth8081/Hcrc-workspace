@@ -1837,6 +1837,7 @@ table { display: block; overflow-x: auto; max-width: 100%; }
               <tbody id="trainingClassesTableBody"></tbody>
             </table>
           </div>
+          <div id="paginationContainer_trainingClasses"></div>
         </div>
       </div>
 
@@ -1851,6 +1852,7 @@ table { display: block; overflow-x: auto; max-width: 100%; }
             <tbody id="trainingMyRegsTableBody"></tbody>
           </table>
         </div>
+        <div id="paginationContainer_trainingMyRegs"></div>
       </div>
 
       <!-- KHO TÀI LIỆU -->
@@ -1880,11 +1882,12 @@ table { display: block; overflow-x: auto; max-width: 100%; }
         <p id="trainingDocNoPermNote" class="hidden text-xs text-gray-500 italic bg-gray-50 border rounded p-3">⛔ Bạn không có quyền thêm tài liệu vào kho — chỉ có thể xem/tải.</p>
         <div>
           <label class="block text-xs font-semibold text-gray-600 mb-1">Lọc theo Loại Đào Tạo</label>
-          <select id="trainingDocFilterCategory" onchange="renderTrainingDocuments()" class="border p-1.5 rounded bg-white text-xs"></select>
+          <select id="trainingDocFilterCategory" onchange="resetListPage('trainingDocuments'); renderTrainingDocuments()" class="border p-1.5 rounded bg-white text-xs"></select>
         </div>
         <div class="space-y-3">
           <h3 class="font-bold text-gray-800">📁 Kho Tài Liệu Đào Tạo</h3>
           <div id="trainingDocumentsContainer" class="grid grid-cols-1 md:grid-cols-2 gap-2"></div>
+          <div id="paginationContainer_trainingDocuments"></div>
         </div>
       </div>
 
@@ -1916,6 +1919,7 @@ table { display: block; overflow-x: auto; max-width: 100%; }
         <div class="space-y-3">
           <h3 class="font-bold text-gray-800">🪜 Danh Sách Lộ Trình Thăng Tiến</h3>
           <div id="careerPathsContainer" class="space-y-3"></div>
+          <div id="paginationContainer_careerPaths"></div>
         </div>
       </div>
 
@@ -1948,6 +1952,7 @@ table { display: block; overflow-x: auto; max-width: 100%; }
         <div class="space-y-3">
           <h3 class="font-bold text-gray-800">🧪 Danh Sách Bài Test</h3>
           <div id="trainingTestsContainer" class="grid grid-cols-1 md:grid-cols-2 gap-2"></div>
+          <div id="paginationContainer_trainingTests"></div>
         </div>
       </div>
     </div>
@@ -1968,7 +1973,7 @@ table { display: block; overflow-x: auto; max-width: 100%; }
       <!-- TIN TUYỂN DỤNG -->
       <div id="recruitmentJobsPanel" class="space-y-4">
         <form id="recruitmentJobForm" onsubmit="submitRecruitmentJob(event)" class="hidden bg-white p-3 rounded border text-xs space-y-3">
-          <h4 class="font-bold text-gray-700">➕ Đăng Tin Tuyển Dụng Mới</h4>
+          <h4 class="font-bold text-gray-700">➕ Đăng Tin Tuyển Dụng Mới (Đợt 2: Bản Tin Tuyển Dụng)</h4>
           <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
             <div class="md:col-span-2">
               <label class="block font-semibold text-gray-600 mb-1">Tên Vị Trí</label>
@@ -1979,12 +1984,28 @@ table { display: block; overflow-x: auto; max-width: 100%; }
               <input id="rjSlots" type="number" min="0" placeholder="Không giới hạn" class="w-full border p-1.5 rounded">
             </div>
             <div>
+              <label class="block font-semibold text-gray-600 mb-1">Đợt Tuyển (Tháng)</label>
+              <input id="rjMonth" type="month" class="w-full border p-1.5 rounded">
+            </div>
+            <div>
+              <label class="block font-semibold text-gray-600 mb-1">Đơn Vị/Siêu Thị Đăng Tuyển</label>
+              <select id="rjDept" class="w-full border p-1.5 rounded bg-white"></select>
+            </div>
+            <div>
               <label class="block font-semibold text-gray-600 mb-1">Địa Điểm Làm Việc</label>
               <input id="rjLocation" class="w-full border p-1.5 rounded">
             </div>
             <div>
               <label class="block font-semibold text-gray-600 mb-1">Hạn Nhận Hồ Sơ (tuỳ chọn)</label>
               <input id="rjDeadline" type="date" class="w-full border p-1.5 rounded">
+            </div>
+            <div class="md:col-span-2">
+              <label class="block font-semibold text-gray-600 mb-1">Thông Tin Liên Hệ (SĐT/Email phụ trách)</label>
+              <input id="rjContactInfo" class="w-full border p-1.5 rounded" required>
+            </div>
+            <div>
+              <label class="block font-semibold text-gray-600 mb-1">Ảnh/Banner Tin Tuyển Dụng (tuỳ chọn)</label>
+              <input id="rjBannerFile" type="file" accept="image/*" class="w-full border p-1.5 rounded bg-white">
             </div>
             <div class="md:col-span-3">
               <label class="block font-semibold text-gray-600 mb-1">Mô Tả Công Việc</label>
@@ -2000,7 +2021,22 @@ table { display: block; overflow-x: auto; max-width: 100%; }
         <p id="recruitmentJobNoPermNote" class="hidden text-xs text-gray-500 italic bg-gray-50 border rounded p-3">⛔ Bạn không có quyền đăng tin tuyển dụng — mọi người đều xem được tin và giới thiệu ứng viên bên dưới.</p>
         <div class="space-y-3">
           <h3 class="font-bold text-gray-800">📋 Danh Sách Tin Tuyển Dụng</h3>
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-3 bg-gray-50 p-3 rounded border">
+            <div>
+              <label class="block text-xs font-semibold text-gray-600 mb-1">Đợt (Tháng)</label>
+              <select id="rjFilterMonth" onchange="onRecruitmentJobsFilterChange()" class="w-full border p-1.5 rounded bg-white text-xs"></select>
+            </div>
+            <div>
+              <label class="block text-xs font-semibold text-gray-600 mb-1">Đơn Vị/Siêu Thị</label>
+              <select id="rjFilterDept" onchange="onRecruitmentJobsFilterChange()" class="w-full border p-1.5 rounded bg-white text-xs"></select>
+            </div>
+            <div>
+              <label class="block text-xs font-semibold text-gray-600 mb-1">Từ Khoá (vị trí/địa điểm)</label>
+              <input id="rjFilterKeyword" oninput="onRecruitmentJobsFilterChange()" placeholder="Tên vị trí, địa điểm..." class="w-full border p-1.5 rounded text-xs">
+            </div>
+          </div>
           <div id="recruitmentJobsContainer" class="grid grid-cols-1 md:grid-cols-2 gap-2"></div>
+          <div id="paginationContainer_recruitmentJobs"></div>
         </div>
       </div>
 
@@ -2008,13 +2044,14 @@ table { display: block; overflow-x: auto; max-width: 100%; }
       <div id="recruitmentMyReferralsPanel" class="hidden space-y-3">
         <h3 class="font-bold text-gray-800">🙋 Ứng Viên Tôi Đã Giới Thiệu</h3>
         <div id="recruitmentMyReferralsContainer" class="space-y-2"></div>
+        <div id="paginationContainer_recruitmentMyReferrals"></div>
       </div>
 
       <!-- QUẢN LÝ ỨNG VIÊN (HR) -->
       <div id="recruitmentManagePanel" class="hidden space-y-3">
         <div class="flex items-center gap-2 flex-wrap">
           <label class="text-xs font-semibold text-gray-600">Lọc theo tin tuyển dụng:</label>
-          <select id="recruitmentManageFilterJob" onchange="renderRecruitmentManage()" class="border p-1.5 rounded bg-white text-xs"></select>
+          <select id="recruitmentManageFilterJob" onchange="onRecruitmentManageFilterChange()" class="border p-1.5 rounded bg-white text-xs"></select>
         </div>
         <h3 class="font-bold text-gray-800">🗂 Toàn Bộ Ứng Viên Được Giới Thiệu</h3>
         <div class="overflow-x-auto">
@@ -2027,6 +2064,7 @@ table { display: block; overflow-x: auto; max-width: 100%; }
             <tbody id="recruitmentManageTableBody"></tbody>
           </table>
         </div>
+        <div id="paginationContainer_recruitmentManage"></div>
       </div>
     </div>
 
@@ -2293,6 +2331,9 @@ table { display: block; overflow-x: auto; max-width: 100%; }
       <h3 id="internalListTitle" class="font-bold text-gray-800">📰 Danh Sách Nhịp Sống HCRC</h3>
       <div id="internalPostsContainer" class="space-y-3"></div>
       <div id="paginationContainer_internal"></div>
+      <!-- Khối phân trang RIÊNG cho Nhịp Sống HCRC (renderInternalNewsFeed) — moduleKey 'internalNews'
+           khác 'internal' (renderInternalPosts) để 2 tab không tranh nhau state trang hiện tại. -->
+      <div id="paginationContainer_internalNews"></div>
     </div>
   </div>
 
@@ -9749,6 +9790,24 @@ function populateDropdowns() {
   const meetingDept = document.getElementById('meetingDept');
   if (meetingDept) {
     meetingDept.innerHTML = getScopedDepts(currentUser, currentUser.perms?.meetingBookScope).map(d => `<option value="${escapeHtml(d)}">${escapeHtml(d)}</option>`).join('');
+  }
+
+  // Đơn Vị/Siêu Thị Đăng Tuyển (recruitmentJobs.dept, Đợt 2 Bản Tin Tuyển Dụng) — cùng khuôn paymentDept/
+  // contractCustodianDept ở trên: "đăng tin CHO đơn vị nào" chứ không phải "tạo hồ sơ thay mặt đơn vị
+  // khác", nên liệt kê TOÀN BỘ DB.depts + DB.stores gộp chung 1 dropdown, không lọc theo scope tạo.
+  const rjDept = document.getElementById('rjDept');
+  if (rjDept) {
+    const currentRjDept = rjDept.value;
+    rjDept.innerHTML = '<option value="">-- Chọn đơn vị/siêu thị --</option>' +
+      [...DB.depts, ...DB.stores].map(d => `<option value="${escapeHtml(d)}">${escapeHtml(d)}</option>`).join('');
+    if ([...DB.depts, ...DB.stores].includes(currentRjDept)) rjDept.value = currentRjDept;
+  }
+  const rjFilterDept = document.getElementById('rjFilterDept');
+  if (rjFilterDept) {
+    const currentFilterDept = rjFilterDept.value;
+    rjFilterDept.innerHTML = '<option value="">-- Tất cả đơn vị/siêu thị --</option>' +
+      [...DB.depts, ...DB.stores].map(d => `<option value="${escapeHtml(d)}">${escapeHtml(d)}</option>`).join('');
+    if ([...DB.depts, ...DB.stores].includes(currentFilterDept)) rjFilterDept.value = currentFilterDept;
   }
 
   const meetingRoomSel = document.getElementById('meetingRoom');
@@ -24523,6 +24582,7 @@ function exportReportsSummaryExcel() {
 function setInternalSubTab(subTab) {
   window.scrollTo({ top: 0, behavior: 'auto' }); // Tránh "bay xuống cuối" khi đổi tab con — xem setSystemSubTab().
   resetListPage('internal');
+  resetListPage('internalNews');
   activeInternalSubTab = subTab;
 
   // Đổi tab con luôn thoát chế độ Sửa (nếu có) — form trắng, quay lại chế độ Đăng bài mới. Cùng khuôn
@@ -24587,6 +24647,7 @@ function setInternalSubTab(subTab) {
 
 function onInternalFilterChange() {
   resetListPage('internal');
+  resetListPage('internalNews');
   renderInternalPosts();
 }
 
@@ -24868,8 +24929,31 @@ function canManageRecruitmentLocal(user) {
 const RECRUITMENT_STATUS_LABELS = { NEW: 'Mới', CONTACTED: 'Đã liên hệ', HIRED: 'Đã tuyển', REJECTED: 'Từ chối' };
 const RECRUITMENT_STATUS_COLORS = { NEW: 'bg-gray-100 text-gray-700', CONTACTED: 'bg-blue-100 text-blue-700', HIRED: 'bg-emerald-100 text-emerald-700', REJECTED: 'bg-red-100 text-red-700' };
 
+// ===== Đợt 2: Bản Tin Tuyển Dụng — 4 trạng thái hiển thị của TIN (khác 4 trạng thái ỨNG VIÊN ở trên) =====
+// 3 trạng thái LƯU (OPEN/FILLED/CLOSED, xem lib/createValidation.js + closeRecruitmentJob()/
+// confirmRecruitmentJobFilled() ở lib/recordActions.js) + 1 trạng thái TÍNH LIVE "Sắp hết hạn" (OPEN và
+// deadline còn ≤7 ngày) — cùng tinh thần isInternalPostScheduled() ở trên: KHÔNG lưu field riêng, không
+// cron, chỉ so Date.now() mỗi lần render nên luôn đúng thời điểm xem, không cần job nền cập nhật lại.
+const RECRUITMENT_JOB_EXPIRING_SOON_DAYS = 7;
+function isRecruitmentJobExpiringSoon(j) {
+  if (j.status !== 'OPEN' || !j.deadline) return false;
+  const deadlineMs = new Date(j.deadline + 'T23:59:59').getTime();
+  if (isNaN(deadlineMs)) return false;
+  const msPerDay = 24 * 60 * 60 * 1000;
+  return (deadlineMs - Date.now()) <= RECRUITMENT_JOB_EXPIRING_SOON_DAYS * msPerDay;
+}
+function recruitmentJobStatusBadgeHTML(j) {
+  if (j.status === 'FILLED') return `<span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-700">Đã tuyển đủ</span>`;
+  if (j.status === 'CLOSED') return `<span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-gray-200 text-gray-600">Đã đóng tuyển dụng</span>`;
+  if (isRecruitmentJobExpiringSoon(j)) return `<span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-700">⏳ Sắp hết hạn</span>`;
+  return `<span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700">Đang tuyển</span>`;
+}
+
 function setRecruitmentTab(tab) {
   activeRecruitmentTab = tab;
+  resetListPage('recruitmentJobs');
+  resetListPage('recruitmentMyReferrals');
+  resetListPage('recruitmentManage');
   renderRecruitment();
 }
 
@@ -24899,13 +24983,32 @@ function renderRecruitment() {
 async function submitRecruitmentJob(e) {
   e.preventDefault();
   if (!canManageRecruitmentLocal(currentUser)) return alert('⛔ Bạn không có quyền đăng tin tuyển dụng!');
+  // Banner (tuỳ chọn) — đi qua đúng uploadFileToServer('internal') như CV giới thiệu ứng viên ở
+  // submitRecruitmentReferral() bên dưới, KHÔNG dựng đường upload riêng.
+  const bannerFile = document.getElementById('rjBannerFile').files[0];
+  let bannerUrl = '', bannerFileName = '';
+  if (bannerFile) {
+    try {
+      const uploadedBanner = await uploadFileToServer(bannerFile, 'internal');
+      bannerUrl = uploadedBanner.fileUrl;
+      bannerFileName = uploadedBanner.fileName;
+    } catch (err) {
+      return alert(`⛔ Tải banner thất bại: ${err.message}`);
+    }
+  }
   const payload = {
     title: document.getElementById('rjTitle').value.trim(),
     description: document.getElementById('rjDescription').value.trim(),
     requirements: document.getElementById('rjRequirements').value.trim(),
     location: document.getElementById('rjLocation').value.trim(),
     slots: document.getElementById('rjSlots').value,
-    deadline: document.getElementById('rjDeadline').value
+    deadline: document.getElementById('rjDeadline').value,
+    month: document.getElementById('rjMonth').value,
+    // Gửi lên KEY "hiringDept" (không phải "dept") — "dept" trên record này luôn bị server ép về đúng
+    // phòng ban của người tạo (forceOwnDept, xem lib/createValidation.js), không phải đơn vị đăng tuyển.
+    hiringDept: document.getElementById('rjDept').value,
+    contactInfo: document.getElementById('rjContactInfo').value.trim(),
+    bannerUrl, bannerFileName
   };
   let newJob;
   try {
@@ -24916,31 +25019,75 @@ async function submitRecruitmentJob(e) {
   logSystemAction('INTERNAL', 'CREATE_RECRUITMENT_JOB', `Đăng tin tuyển dụng [${newJob.title}]`, 'SUCCESS');
   alert('✅ Đã đăng tin tuyển dụng thành công!');
   e.target.reset();
+  resetListPage('recruitmentJobs');
+  renderRecruitmentJobs();
+}
+
+// Đợt (Tháng) không phải danh mục cố định (mỗi tin tự nhập <input type=month>, xem rjMonth) — dropdown
+// lọc lấy trực tiếp từ các giá trị month ĐÃ CÓ trong DB.recruitmentJobs, không cần bảng danh mục riêng.
+function populateRecruitmentJobsMonthFilter() {
+  const sel = document.getElementById('rjFilterMonth');
+  if (!sel) return;
+  const current = sel.value;
+  const months = [...new Set((DB.recruitmentJobs || []).map(j => j.month).filter(Boolean))].sort().reverse();
+  sel.innerHTML = '<option value="">-- Tất cả đợt --</option>' + months.map(m => `<option value="${escapeHtml(m)}">${escapeHtml(m)}</option>`).join('');
+  if (months.includes(current)) sel.value = current;
+}
+
+function onRecruitmentJobsFilterChange() {
+  resetListPage('recruitmentJobs');
   renderRecruitmentJobs();
 }
 
 function renderRecruitmentJobs() {
   const container = document.getElementById('recruitmentJobsContainer');
-  const list = (DB.recruitmentJobs || []).slice().sort((a, b) => b.id - a.id);
-  if (!list.length) { container.innerHTML = `<p class="text-gray-400 italic text-xs col-span-2">Chưa có tin tuyển dụng nào.</p>`; return; }
+  populateRecruitmentJobsMonthFilter();
+  const filterMonth = document.getElementById('rjFilterMonth')?.value || '';
+  const filterDept = document.getElementById('rjFilterDept')?.value || '';
+  const filterKeyword = (document.getElementById('rjFilterKeyword')?.value || '').trim();
+  let list = (DB.recruitmentJobs || []).slice().sort((a, b) => b.id - a.id).filter(j => {
+    if (filterMonth && j.month !== filterMonth) return false;
+    if (filterDept && j.hiringDept !== filterDept) return false;
+    if (!matchesKeywordFields([j.title, j.location], filterKeyword)) return false;
+    return true;
+  });
+
+  document.getElementById('paginationContainer_recruitmentJobs').innerHTML = buildPaginationBoxHTML('recruitmentJobs', 'renderRecruitmentJobs');
+  const pageItems = paginateList('recruitmentJobs', list, 'renderRecruitmentJobs', 'tin tuyển dụng');
+
+  if (!pageItems.length) { container.innerHTML = `<p class="text-gray-400 italic text-xs col-span-2">Chưa có tin tuyển dụng nào phù hợp.</p>`; return; }
   const canManage = canManageRecruitmentLocal(currentUser);
-  container.innerHTML = list.map(j => {
-    const referralCount = (DB.recruitmentReferrals || []).filter(r => r.jobId === j.id).length;
+  container.innerHTML = pageItems.map(j => {
+    const referrals = (DB.recruitmentReferrals || []).filter(r => r.jobId === j.id);
+    const referralCount = referrals.length;
+    const hiredCount = referrals.filter(r => r.status === 'HIRED').length;
     const isOpen = j.status === 'OPEN';
-    const statusBadge = isOpen ? `<span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700">Đang tuyển</span>` : `<span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-gray-200 text-gray-600">Đã đóng</span>`;
+    const canClose = canManage && (j.status === 'OPEN' || j.status === 'FILLED');
+    const statusBadge = recruitmentJobStatusBadgeHTML(j);
+    const bannerHTML = j.bannerUrl ? `<img src="${escapeHtml(j.bannerUrl)}" alt="" class="w-full h-32 object-cover rounded">` : '';
+    // Gợi ý "Đã tuyển đủ" khi referral HIRED đạt slots — CHỈ là banner gợi ý, nút xác nhận vẫn LUÔN bấm
+    // được bất kể số này (HR có thể đã tuyển qua kênh ngoài hệ thống này không thấy được — đã chốt với
+    // người yêu cầu tính năng, xem confirmRecruitmentJobFilled() ở lib/recordActions.js).
+    const suggestFilledHTML = (canManage && isOpen && j.slots > 0 && hiredCount >= j.slots)
+      ? `<p class="text-[11px] text-indigo-700 bg-indigo-50 border border-indigo-200 rounded px-2 py-1">💡 Đã có ${hiredCount}/${j.slots} referral được tuyển — xác nhận đã tuyển đủ?</p>`
+      : '';
     return `
       <div class="bg-white border rounded p-3 space-y-1.5">
+        ${bannerHTML}
         <div class="flex justify-between items-start gap-2">
           <h4 class="font-bold text-gray-800 text-sm">${escapeHtml(j.title)}</h4>
           ${statusBadge}
         </div>
-        <p class="text-xs text-gray-500">${j.location ? '📍 ' + escapeHtml(j.location) + ' · ' : ''}${j.slots > 0 ? 'Cần ' + j.slots + ' người' : 'Không giới hạn số lượng'}${j.deadline ? ' · Hạn: ' + escapeHtml(j.deadline) : ''}</p>
+        <p class="text-xs text-gray-500">${j.hiringDept ? '🏢 ' + escapeHtml(j.hiringDept) + ' · ' : ''}${j.location ? '📍 ' + escapeHtml(j.location) + ' · ' : ''}${j.slots > 0 ? 'Cần ' + j.slots + ' người' : 'Không giới hạn số lượng'}${j.deadline ? ' · Hạn: ' + escapeHtml(j.deadline) : ''}${j.month ? ' · Đợt: ' + escapeHtml(j.month) : ''}</p>
         <p class="text-xs text-gray-700 whitespace-pre-wrap">${escapeHtml(j.description)}</p>
         ${j.requirements ? `<p class="text-xs text-gray-500"><span class="font-semibold">Yêu cầu:</span> ${escapeHtml(j.requirements)}</p>` : ''}
+        ${j.contactInfo ? `<p class="text-xs text-gray-600"><span class="font-semibold">Liên hệ:</span> ${escapeHtml(j.contactInfo)}</p>` : ''}
         <p class="text-[11px] text-gray-400">Đăng bởi ${escapeHtml(j.creatorName || j.creator)} · ${referralCount} lượt giới thiệu</p>
+        ${suggestFilledHTML}
         <div class="flex gap-2 pt-1 flex-wrap">
           ${isOpen ? `<button onclick="openRecruitmentReferModal(${j.id})" class="bg-amber-600 hover:bg-amber-700 text-white px-3 py-1 rounded text-xs font-bold">🙋 Giới Thiệu Ứng Viên</button>` : ''}
-          ${canManage && isOpen ? `<button onclick="closeRecruitmentJobUi(${j.id})" class="bg-gray-200 hover:bg-gray-300 px-3 py-1 rounded text-xs font-bold">Đóng Tin</button>` : ''}
+          ${canManage && isOpen ? `<button onclick="confirmRecruitmentJobFilledUi(${j.id})" class="bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-1 rounded text-xs font-bold">✅ Xác Nhận Đã Tuyển Đủ</button>` : ''}
+          ${canClose ? `<button onclick="closeRecruitmentJobUi(${j.id})" class="bg-gray-200 hover:bg-gray-300 px-3 py-1 rounded text-xs font-bold">Đóng Tin</button>` : ''}
           ${currentUser.perms?.admin ? `<button onclick="deleteRecruitmentJob(${j.id})" class="bg-red-100 hover:bg-red-200 text-red-700 px-3 py-1 rounded text-xs font-bold">Xoá</button>` : ''}
         </div>
       </div>`;
@@ -24953,6 +25100,18 @@ function closeRecruitmentJobUi(id) {
     const idx = DB.recruitmentJobs.findIndex(j => j.id === id);
     if (idx >= 0) DB.recruitmentJobs[idx] = result.item;
     logSystemAction('INTERNAL', 'CLOSE_RECRUITMENT_JOB', `Đóng tin tuyển dụng [id ${id}]`, 'SUCCESS');
+    renderRecruitmentJobs();
+  }).catch(err => alert(`⛔ ${err.message}`));
+}
+
+// "Đã Tuyển Đủ" (Đợt 2) — xác nhận THỦ CÔNG, không chặn theo số referral HIRED (xem banner gợi ý ở
+// renderRecruitmentJobs() + confirmRecruitmentJobFilled() ở lib/recordActions.js).
+function confirmRecruitmentJobFilledUi(id) {
+  if (!confirm('Xác nhận tin tuyển dụng này đã tuyển đủ? Tin sẽ chuyển sang trạng thái "Đã tuyển đủ".')) return;
+  callRecordAction('recruitmentJobs', id, 'confirm-filled', {}).then(result => {
+    const idx = DB.recruitmentJobs.findIndex(j => j.id === id);
+    if (idx >= 0) DB.recruitmentJobs[idx] = result.item;
+    logSystemAction('INTERNAL', 'CONFIRM_RECRUITMENT_JOB_FILLED', `Xác nhận đã tuyển đủ tin tuyển dụng [id ${id}]`, 'SUCCESS');
     renderRecruitmentJobs();
   }).catch(err => alert(`⛔ ${err.message}`));
 }
@@ -25010,7 +25169,7 @@ async function submitRecruitmentReferral(e) {
   alert('✅ Đã gửi giới thiệu ứng viên, bộ phận nhân sự sẽ liên hệ ứng viên sớm nhất!');
   closeRecruitmentReferModal();
   renderRecruitmentJobs();
-  if (activeRecruitmentTab === 'MY_REFERRALS') renderRecruitmentMyReferrals();
+  if (activeRecruitmentTab === 'MY_REFERRALS') { resetListPage('recruitmentMyReferrals'); renderRecruitmentMyReferrals(); }
 }
 
 // Server đã tự lọc DB.recruitmentReferrals chỉ còn bản ghi của currentUser (nếu không phải HR) —
@@ -25022,8 +25181,12 @@ function renderRecruitmentMyReferrals() {
   const list = (DB.recruitmentReferrals || [])
     .filter(r => canManage ? r.referrerUsername === currentUser.username : true)
     .slice().sort((a, b) => b.id - a.id);
-  if (!list.length) { container.innerHTML = `<p class="text-gray-400 italic text-xs">Bạn chưa giới thiệu ứng viên nào.</p>`; return; }
-  container.innerHTML = list.map(r => `
+
+  document.getElementById('paginationContainer_recruitmentMyReferrals').innerHTML = buildPaginationBoxHTML('recruitmentMyReferrals', 'renderRecruitmentMyReferrals');
+  const pageItems = paginateList('recruitmentMyReferrals', list, 'renderRecruitmentMyReferrals', 'ứng viên');
+
+  if (!pageItems.length) { container.innerHTML = `<p class="text-gray-400 italic text-xs">Bạn chưa giới thiệu ứng viên nào.</p>`; return; }
+  container.innerHTML = pageItems.map(r => `
     <div class="bg-white border rounded p-3 flex justify-between items-start gap-3">
       <div>
         <p class="font-bold text-gray-800 text-sm">${escapeHtml(r.candidateName)} <span class="font-normal text-gray-500">— ${escapeHtml(r.jobTitle)}</span></p>
@@ -25045,6 +25208,11 @@ function populateRecruitmentManageFilter() {
   sel.value = current;
 }
 
+function onRecruitmentManageFilterChange() {
+  resetListPage('recruitmentManage');
+  renderRecruitmentManage();
+}
+
 function renderRecruitmentManage() {
   if (!canManageRecruitmentLocal(currentUser)) return;
   populateRecruitmentManageFilter();
@@ -25052,8 +25220,12 @@ function renderRecruitmentManage() {
   const filterJobId = document.getElementById('recruitmentManageFilterJob').value;
   let list = (DB.recruitmentReferrals || []).slice().sort((a, b) => b.id - a.id);
   if (filterJobId) list = list.filter(r => String(r.jobId) === filterJobId);
-  if (!list.length) { tbody.innerHTML = `<tr><td colspan="7" class="text-center p-4 text-gray-400 italic">Chưa có ứng viên nào được giới thiệu.</td></tr>`; return; }
-  tbody.innerHTML = list.map(r => `
+
+  document.getElementById('paginationContainer_recruitmentManage').innerHTML = buildPaginationBoxHTML('recruitmentManage', 'renderRecruitmentManage');
+  const pageItems = paginateList('recruitmentManage', list, 'renderRecruitmentManage', 'ứng viên');
+
+  if (!pageItems.length) { tbody.innerHTML = `<tr><td colspan="7" class="text-center p-4 text-gray-400 italic">Chưa có ứng viên nào được giới thiệu.</td></tr>`; return; }
+  tbody.innerHTML = pageItems.map(r => `
     <tr>
       <td class="border p-2">${escapeHtml(r.candidateName)}</td>
       <td class="border p-2">${escapeHtml(r.candidatePhone)}${r.candidateEmail ? '<br>' + escapeHtml(r.candidateEmail) : ''}</td>
@@ -25092,6 +25264,7 @@ function isInternalImageAttachment(att) {
 let internalNewsSortMode = 'recent'; // 'recent' | 'popular'
 function setInternalNewsSort(mode) {
   internalNewsSortMode = mode;
+  resetListPage('internalNews');
   renderInternalPosts();
 }
 
@@ -25217,6 +25390,10 @@ function renderInternalPosts() {
   if (activeInternalSubTab === 'NEWS') return renderInternalNewsFeed();
   const container = document.getElementById('internalPostsContainer');
   if (!container) return;
+  // Khối phân trang riêng của Nhịp Sống HCRC ('internalNews') không dùng ở đây — dọn sạch nếu còn sót
+  // lại từ lúc đang ở tab NEWS.
+  const newsPaginationEl = document.getElementById('paginationContainer_internalNews');
+  if (newsPaginationEl) newsPaginationEl.innerHTML = '';
 
   const fromDate = document.getElementById('filterFromDateInternal')?.value || '';
   const toDate = document.getElementById('filterToDateInternal')?.value || '';
@@ -25309,7 +25486,8 @@ function renderInternalPosts() {
 function renderInternalNewsFeed() {
   const container = document.getElementById('internalPostsContainer');
   if (!container) return;
-  // Khung Tin tức không phân trang (chỉ 5 bài) — dọn sạch khối phân trang cũ nếu còn sót lại từ tab khác.
+  // Khối phân trang của renderInternalPosts ('internal') không dùng ở đây — dọn sạch nếu còn sót lại
+  // từ tab khác (Đào tạo/Khen thưởng/Góc chia sẻ đều dùng chung khối đó).
   const paginationEl = document.getElementById('paginationContainer_internal');
   if (paginationEl) paginationEl.innerHTML = '';
 
@@ -25337,23 +25515,28 @@ function renderInternalNewsFeed() {
     }
     return b.id - a.id; // mới nhất trước
   });
-  const top5 = visible.slice(0, 5);
+
+  // TRƯỚC ĐÂY: cắt cứng 5 bài mới nhất (visible.slice(0, 5)), không phân trang — nay phân trang đầy đủ
+  // như mọi danh sách khác trong hệ thống (moduleKey 'internalNews' riêng, xem paginateList() dùng
+  // chung), sắp xếp (Mới nhất/Tương tác nhiều) áp dụng TRƯỚC khi cắt trang.
+  document.getElementById('paginationContainer_internalNews').innerHTML = buildPaginationBoxHTML('internalNews', 'renderInternalNewsFeed');
+  const pageItems = paginateList('internalNews', visible, 'renderInternalNewsFeed', 'bài viết');
 
   const sortBarHTML = `
     <div class="flex items-center justify-between mb-3">
-      <div class="text-xs text-gray-500">Hiển thị ${top5.length}/${visible.length} tin mới nhất</div>
+      <div class="text-xs text-gray-500">Tổng ${visible.length} tin</div>
       <div class="flex gap-1">
         <button onclick="setInternalNewsSort('recent')" class="px-2.5 py-1 rounded text-xs font-bold ${internalNewsSortMode === 'recent' ? 'bg-fuchsia-700 text-white' : 'bg-gray-200 text-gray-700'}">🕐 Mới nhất</button>
         <button onclick="setInternalNewsSort('popular')" class="px-2.5 py-1 rounded text-xs font-bold ${internalNewsSortMode === 'popular' ? 'bg-fuchsia-700 text-white' : 'bg-gray-200 text-gray-700'}">🔥 Tương tác nhiều</button>
       </div>
     </div>`;
 
-  if (top5.length === 0) {
+  if (pageItems.length === 0) {
     container.innerHTML = sortBarHTML + `<div class="text-center p-6 text-gray-500 italic bg-white rounded border">Chưa có tin tức nào phù hợp.</div>`;
     return;
   }
 
-  container.innerHTML = sortBarHTML + top5.map(p => renderInternalNewsCard(p)).join('');
+  container.innerHTML = sortBarHTML + pageItems.map(p => renderInternalNewsCard(p)).join('');
 }
 
 function renderInternalNewsCard(p) {
@@ -25762,6 +25945,9 @@ function canManageTrainingLocal(user) {
 let activeTrainingLmsTab = 'CLASSES';
 function setTrainingLmsTab(tab) {
   activeTrainingLmsTab = tab;
+  // Reset trang về 1 khi đổi tab con — mỗi tab có moduleKey phân trang riêng (trainingClasses/
+  // trainingMyRegs/trainingDocuments/careerPaths/trainingTests), tránh giữ lại trang sâu của tab trước.
+  ['trainingClasses', 'trainingMyRegs', 'trainingDocuments', 'careerPaths', 'trainingTests'].forEach(resetListPage);
   const btnMap = { CLASSES: 'btnTrainingLmsClasses', MY_REGS: 'btnTrainingLmsMyRegs', DOCS: 'btnTrainingLmsDocs', PATHS: 'btnTrainingLmsPaths', TESTS: 'btnTrainingLmsTests' };
   Object.entries(btnMap).forEach(([key, btnId]) => {
     const btn = document.getElementById(btnId);
@@ -25872,9 +26058,13 @@ function renderTrainingClasses() {
   const tbody = document.getElementById('trainingClassesTableBody');
   if (!tbody) return;
   const list = DB.trainingClasses.slice().sort((a, b) => b.id - a.id);
-  if (!list.length) { tbody.innerHTML = `<tr><td colspan="5" class="text-center p-4 text-gray-400 italic">Chưa có lớp học nào.</td></tr>`; return; }
+
+  document.getElementById('paginationContainer_trainingClasses').innerHTML = buildPaginationBoxHTML('trainingClasses', 'renderTrainingClasses');
+  const pageItems = paginateList('trainingClasses', list, 'renderTrainingClasses', 'lớp học');
+
+  if (!pageItems.length) { tbody.innerHTML = `<tr><td colspan="5" class="text-center p-4 text-gray-400 italic">Chưa có lớp học nào.</td></tr>`; return; }
   const todayStr = new Date().toISOString().slice(0, 10);
-  tbody.innerHTML = list.map(c => {
+  tbody.innerHTML = pageItems.map(c => {
     const regs = DB.trainingRegistrations.filter(r => r.classId === c.id && r.result !== 'CANCELLED');
     const myReg = regs.find(r => r.creator === currentUser.username);
     const isFull = c.capacity > 0 && regs.length >= c.capacity;
@@ -26219,8 +26409,12 @@ function renderTrainingTests() {
   const container = document.getElementById('trainingTestsContainer');
   if (!container) return;
   const list = DB.trainingTests.slice().sort((a, b) => b.id - a.id);
-  if (!list.length) { container.innerHTML = `<p class="text-gray-400 italic text-xs col-span-2">Chưa có bài test nào.</p>`; return; }
-  container.innerHTML = list.map(t => {
+
+  document.getElementById('paginationContainer_trainingTests').innerHTML = buildPaginationBoxHTML('trainingTests', 'renderTrainingTests');
+  const pageItems = paginateList('trainingTests', list, 'renderTrainingTests', 'bài test');
+
+  if (!pageItems.length) { container.innerHTML = `<p class="text-gray-400 italic text-xs col-span-2">Chưa có bài test nào.</p>`; return; }
+  container.innerHTML = pageItems.map(t => {
     const totalPoints = t.questions.reduce((s, q) => s + q.points, 0);
     const delHTML = currentUser.perms?.admin ? `<button onclick="deleteTrainingTest(${t.id})" class="text-red-500 font-bold hover:underline text-xs ml-2">Xóa</button>` : '';
     return `<div class="border rounded p-3 bg-white text-xs">
@@ -26250,9 +26444,13 @@ function renderTrainingMyRegs() {
   const tbody = document.getElementById('trainingMyRegsTableBody');
   if (!tbody) return;
   const mine = DB.trainingRegistrations.filter(r => r.creator === currentUser.username && r.result !== 'CANCELLED').sort((a, b) => b.id - a.id);
-  if (!mine.length) { tbody.innerHTML = `<tr><td colspan="5" class="text-center p-4 text-gray-400 italic">Bạn chưa đăng ký lớp học nào.</td></tr>`; return; }
+
+  document.getElementById('paginationContainer_trainingMyRegs').innerHTML = buildPaginationBoxHTML('trainingMyRegs', 'renderTrainingMyRegs');
+  const pageItems = paginateList('trainingMyRegs', mine, 'renderTrainingMyRegs', 'đăng ký');
+
+  if (!pageItems.length) { tbody.innerHTML = `<tr><td colspan="5" class="text-center p-4 text-gray-400 italic">Bạn chưa đăng ký lớp học nào.</td></tr>`; return; }
   const now = new Date();
-  tbody.innerHTML = mine.map(r => {
+  tbody.innerHTML = pageItems.map(r => {
     const badge = r.result === 'PASSED' ? '<span class="text-emerald-600 font-bold">✅ Đạt' + (r.score != null ? ` (${r.score} điểm)` : '') + '</span>'
       : r.result === 'FAILED' ? '<span class="text-red-600 font-bold">❌ Không đạt' + (r.score != null ? ` (${r.score} điểm)` : '') + '</span>'
       : '<span class="text-indigo-600 font-bold">📌 Đang học</span>';
@@ -26433,8 +26631,12 @@ function renderTrainingDocuments() {
   if (!container) return;
   const filterCat = document.getElementById('trainingDocFilterCategory')?.value || '';
   const list = DB.trainingDocuments.filter(d => !filterCat || d.category === filterCat).sort((a, b) => b.id - a.id);
-  if (!list.length) { container.innerHTML = `<div class="col-span-2 text-center p-6 text-gray-400 italic bg-white rounded border">Kho tài liệu đang trống.</div>`; return; }
-  container.innerHTML = list.map(d => `
+
+  document.getElementById('paginationContainer_trainingDocuments').innerHTML = buildPaginationBoxHTML('trainingDocuments', 'renderTrainingDocuments');
+  const pageItems = paginateList('trainingDocuments', list, 'renderTrainingDocuments', 'tài liệu');
+
+  if (!pageItems.length) { container.innerHTML = `<div class="col-span-2 text-center p-6 text-gray-400 italic bg-white rounded border">Kho tài liệu đang trống.</div>`; return; }
+  container.innerHTML = pageItems.map(d => `
     <div class="bg-white rounded border p-3 flex justify-between items-start gap-2">
       <div>
         <div class="font-bold text-gray-800 text-sm">${escapeHtml(d.title)}</div>
@@ -26497,9 +26699,13 @@ function renderCareerPaths() {
   const container = document.getElementById('careerPathsContainer');
   if (!container) return;
   const list = DB.careerPaths.slice().sort((a, b) => b.id - a.id);
-  if (!list.length) { container.innerHTML = `<div class="text-center p-6 text-gray-400 italic bg-white rounded border">Chưa có lộ trình thăng tiến nào.</div>`; return; }
+
+  document.getElementById('paginationContainer_careerPaths').innerHTML = buildPaginationBoxHTML('careerPaths', 'renderCareerPaths');
+  const pageItems = paginateList('careerPaths', list, 'renderCareerPaths', 'lộ trình');
+
+  if (!pageItems.length) { container.innerHTML = `<div class="text-center p-6 text-gray-400 italic bg-white rounded border">Chưa có lộ trình thăng tiến nào.</div>`; return; }
   const canManage = canManageTrainingLocal(currentUser);
-  container.innerHTML = list.map(p => {
+  container.innerHTML = pageItems.map(p => {
     const classNames = (p.requiredClassIds || []).map(id => {
       const c = DB.trainingClasses.find(x => x.id === id);
       return c ? `${escapeHtml(c.title)}` : `<span class="text-gray-400 italic">(lớp đã xoá)</span>`;

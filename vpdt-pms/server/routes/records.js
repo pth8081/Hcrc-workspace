@@ -761,6 +761,20 @@ router.post('/recruitmentJobs/:id/close', async (req, res) => {
   }
 });
 
+// Đợt 2: Bản Tin Tuyển Dụng — "Xác Nhận Đã Tuyển Đủ" (OPEN -> FILLED), cùng khuôn /close ở trên.
+router.post('/recruitmentJobs/:id/confirm-filled', async (req, res) => {
+  const itemId = Number(req.params.id);
+  if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
+  try {
+    const { freshUser } = await getFreshUser(req);
+    const result = await withLockedRecordForCollection('recruitmentJobs', itemId, (item) =>
+      recordActions.confirmRecruitmentJobFilled(req.body, freshUser, item));
+    res.json({ ok: true, item: result });
+  } catch (err) {
+    handleError(res, `recruitmentJobs/${req.params.id}/confirm-filled`, err);
+  }
+});
+
 router.post('/recruitmentReferrals/:id/set-status', async (req, res) => {
   const itemId = Number(req.params.id);
   if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });

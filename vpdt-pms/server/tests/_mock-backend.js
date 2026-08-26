@@ -349,17 +349,33 @@ function __mockCancelReg(user, reg) {
 }
 
 // ===================== recruitmentJobs / recruitmentReferrals =====================
+// Đợt 2: Bản Tin Tuyển Dụng — mirrors lib/createValidation.js CREATE_MODULE_CONFIGS.recruitmentJobs
+// (contactInfo bắt buộc, dept đối chiếu DB.depts/DB.stores, month/bannerUrl chỉ trim/pass-through).
 function __mockValidateRecruitmentJobCreate(payload, user) {
   if (!(user.perms?.admin || user.perms?.internalRecruitmentCreate)) throw __mockHttpError(403, 'Bạn không có quyền đăng tin tuyển dụng');
   if (!payload.title || !String(payload.title).trim()) throw __mockHttpError(400, 'Thiếu tên vị trí tuyển dụng');
   if (!payload.description || !String(payload.description).trim()) throw __mockHttpError(400, 'Thiếu mô tả công việc');
+  if (!payload.contactInfo || !String(payload.contactInfo).trim()) throw __mockHttpError(400, 'Thiếu thông tin liên hệ');
   payload.title = String(payload.title).trim();
   payload.description = String(payload.description).trim();
   payload.requirements = payload.requirements ? String(payload.requirements).trim() : '';
   payload.location = payload.location ? String(payload.location).trim() : '';
+  payload.contactInfo = String(payload.contactInfo).trim();
   payload.slots = Number(payload.slots) > 0 ? Math.floor(Number(payload.slots)) : 0;
   payload.deadline = payload.deadline || '';
+  payload.month = payload.month ? String(payload.month).trim() : '';
+  // hiringDept (KHÔNG dùng "dept" — field đó bị __mockHandleCreate ép về user.dept, xem
+  // lib/createValidation.js validateAndPrepareCreate()).
+  const hiringDept = payload.hiringDept ? String(payload.hiringDept).trim() : '';
+  if (hiringDept) {
+    const validDepts = new Set([...(DB.depts || []), ...(DB.stores || [])]);
+    if (!validDepts.has(hiringDept)) throw __mockHttpError(400, `Đơn vị/Siêu thị không hợp lệ: ${hiringDept}`);
+  }
+  payload.hiringDept = hiringDept;
+  payload.bannerUrl = payload.bannerUrl ? String(payload.bannerUrl).trim() : '';
+  payload.bannerFileName = payload.bannerFileName ? String(payload.bannerFileName).trim() : '';
   payload.status = 'OPEN';
+  payload.filledBy = null; payload.filledByName = null; payload.filledAt = null;
 }
 function __mockValidateRecruitmentReferralCreate(payload, user) {
   const jobId = Number(payload.jobId);
@@ -386,8 +402,15 @@ function __mockSetReferralStatus(payload, user, ref) {
 }
 function __mockCloseJob(user, job) {
   if (job.creator !== user.username && !user.perms?.admin) throw __mockHttpError(403, 'Chỉ người đăng tin hoặc Quản Trị Viên mới được đóng tin tuyển dụng này');
-  if (job.status !== 'OPEN') throw __mockHttpError(409, 'Tin tuyển dụng này đã đóng từ trước');
+  if (job.status === 'CLOSED') throw __mockHttpError(409, 'Tin tuyển dụng này đã đóng từ trước');
   job.status = 'CLOSED';
+  return job;
+}
+function __mockConfirmJobFilled(user, job) {
+  if (!(user.perms?.admin || user.perms?.internalRecruitmentCreate)) throw __mockHttpError(403, 'Bạn không có quyền xác nhận tin tuyển dụng đã tuyển đủ');
+  if (job.status !== 'OPEN') throw __mockHttpError(409, 'Chỉ có thể xác nhận đã tuyển đủ với tin đang tuyển (OPEN)');
+  job.status = 'FILLED';
+  job.filledBy = user.username; job.filledByName = user.name; job.filledAt = new Date().toLocaleString('vi-VN');
   return job;
 }
 
@@ -460,6 +483,7 @@ async function __mockHandleRecordAction(moduleKey, idStr, action, payload, user)
     if (!job) throw __mockHttpError(404, 'Không tìm thấy tin tuyển dụng');
     const clone = JSON.parse(JSON.stringify(job));
     if (action === 'close') return __mockCloseJob(user, clone);
+    if (action === 'confirm-filled') return __mockConfirmJobFilled(user, clone);
     if (action === 'delete') return { __deleted: true };
     throw __mockHttpError(400, 'Hành động không hợp lệ');
   }

@@ -1244,19 +1244,47 @@ const CREATE_MODULE_CONFIGS = {
     forceOwnDept: true,
     getScope: () => ({}),
     creatorField: 'creator', creatorNameField: 'creatorName',
-    extraValidate: (payload, collection, user) => {
+    extraValidate: (payload, collection, user, appData) => {
       if (!user.perms?.admin && !user.perms?.internalRecruitmentCreate) {
         throw new CreateError(403, 'Bạn không có quyền đăng tin tuyển dụng');
       }
       if (!payload.title || !String(payload.title).trim()) throw new CreateError(400, 'Thiếu tên vị trí tuyển dụng');
       if (!payload.description || !String(payload.description).trim()) throw new CreateError(400, 'Thiếu mô tả công việc');
+      // contactInfo (Đợt 2: Bản Tin Tuyển Dụng) — bắt buộc, cùng khuôn description/requirements ở trên,
+      // vì tin đăng công khai luôn cần hiển thị được đầu mối liên hệ ứng viên (không tự suy ra được từ
+      // creator, vì HR có thể muốn để SĐT/email chung của bộ phận thay vì cá nhân người đăng tin).
+      if (!payload.contactInfo || !String(payload.contactInfo).trim()) throw new CreateError(400, 'Thiếu thông tin liên hệ');
       payload.title = String(payload.title).trim();
       payload.description = String(payload.description).trim();
       payload.requirements = payload.requirements ? String(payload.requirements).trim() : '';
       payload.location = payload.location ? String(payload.location).trim() : '';
+      payload.contactInfo = String(payload.contactInfo).trim();
       payload.slots = Number(payload.slots) > 0 ? Math.floor(Number(payload.slots)) : 0;
       payload.deadline = payload.deadline || '';
+      // Đợt (Tháng) — chuỗi "yyyy-mm" thẳng từ <input type=month>, không có bảng danh mục riêng (giống
+      // cách hệ thống lưu các trường ngày/tháng dạng input khác, vd trainingClasses.registerDeadline).
+      payload.month = payload.month ? String(payload.month).trim() : '';
+      // Đơn vị/Siêu thị ĐĂNG TUYỂN — cố tình đặt tên KHÁC "dept" (đối chiếu DB.depts + DB.stores gộp
+      // chung 1 danh sách, cùng cách rjDept/rjFilterDept gộp ở client): field "dept" trên MỌI collection
+      // forceOwnDept:true (kể cả recruitmentJobs) luôn bị validateAndPrepareCreate() ép về ĐÚNG phòng ban
+      // của người tạo (xem cuối file: `{ ...payload, id: Date.now(), dept }`, GHI ĐÈ payload.dept bất kể
+      // extraValidate gán gì) — nếu dùng lại "dept" cho ý nghĩa "đơn vị đăng tuyển" thì giá trị người
+      // đăng chọn sẽ luôn bị mất, thay bằng phòng ban CỦA NGƯỜI ĐĂNG TIN. KHÔNG bắt buộc nếu rỗng (một số
+      // tin có thể đăng chung cho toàn công ty, không gắn 1 đơn vị cụ thể).
+      const hiringDept = payload.hiringDept ? String(payload.hiringDept).trim() : '';
+      if (hiringDept) {
+        const validDepts = new Set([...(appData?.depts || []), ...(appData?.stores || [])]);
+        if (!validDepts.has(hiringDept)) throw new CreateError(400, `Đơn vị/Siêu thị không hợp lệ: ${hiringDept}`);
+      }
+      payload.hiringDept = hiringDept;
+      // Banner (tuỳ chọn) — client đã upload qua uploadFileToServer('internal') trước khi gửi payload
+      // (cùng khuôn cvFileUrl/cvFileName của recruitmentReferrals bên dưới), ở đây chỉ nhận lại URL/tên.
+      payload.bannerUrl = payload.bannerUrl ? String(payload.bannerUrl).trim() : '';
+      payload.bannerFileName = payload.bannerFileName ? String(payload.bannerFileName).trim() : '';
       payload.status = 'OPEN';
+      payload.filledBy = null;
+      payload.filledByName = null;
+      payload.filledAt = null;
     }
   },
   // Hồ sơ giới thiệu ứng viên — snapshot jobTitle từ tin tuyển dụng tại thời điểm giới thiệu (không tin
