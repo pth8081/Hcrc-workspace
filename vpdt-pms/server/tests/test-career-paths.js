@@ -100,14 +100,22 @@ async function main() {
 
     // ===================== Chuẩn bị dữ liệu: 2 Chương Trình + 3 Lớp Học =====================
 
+    // Đợt 8 — mỗi lớp PHẢI gán bài test (setTrainingRegistrationResult() chặn chấm tay khi lớp có test,
+    // confirmCareerPathForEmployee() chỉ tính "Đạt" khi c.testId != null) — 3 lớp dùng CHUNG 1 bài test 1
+    // câu (đúng khuôn Ngân Hàng Câu Hỏi tái sử dụng nhiều lớp).
     let courseAId = null, courseBId = null, classA1Id = null, classA2Id = null, classBId = null;
-    await run('seed 2 trainingCourses + 3 trainingClasses (2 lớp cùng thuộc Chương Trình A) to build stages against', async () => {
+    await run('seed 1 trainingTests + 2 trainingCourses + 3 trainingClasses (2 lớp cùng thuộc Chương Trình A, đều có gán bài test) to build stages against', async () => {
       const ids = await page.evaluate(async () => {
+        const test = (await callCreateAction('trainingTests', {
+          title: 'Test Chương Trình', category: '', passScore: 60,
+          questions: [{ text: 'Câu hỏi duy nhất', type: 'SINGLE', options: [{ text: 'Đáp án đúng' }, { text: 'Đáp án sai' }], correctOptionIds: [1] }]
+        })).item;
+        DB.trainingTests.push(test);
         const courseA = (await callCreateAction('trainingCourses', { name: 'Kỹ Năng Giao Tiếp', category: 'Kỹ năng mềm' })).item;
         const courseB = (await callCreateAction('trainingCourses', { name: 'Quản Lý Đội Nhóm', category: 'Nghiệp vụ' })).item;
         DB.trainingCourses.push(courseA, courseB);
         const mkClass = (title, courseId) => callCreateAction('trainingClasses', {
-          category: 'Nghiệp vụ', title, startTime: '2026-01-10T08:00', courseId
+          category: 'Nghiệp vụ', title, startTime: '2026-01-10T08:00', courseId, testId: test.id
         });
         const a1 = (await mkClass('Giao Tiếp - Lớp 1', courseA.id)).item;
         const a2 = (await mkClass('Giao Tiếp - Lớp 2', courseA.id)).item;
@@ -117,6 +125,22 @@ async function main() {
       });
       courseAId = ids.courseA; courseBId = ids.courseB; classA1Id = ids.a1; classA2Id = ids.a2; classBId = ids.b1;
     });
+
+    // Đợt 8 — lớp CÓ gán bài test: đăng ký + tự làm bài qua ĐÚNG modal thật (openTakeTestModal/
+    // ttTakeSelectOption/ttTakeGoNext), thay vì chấm tay (set-result giờ bị chặn khi lớp có testId).
+    async function registerAndPassClass(classId) {
+      await page.evaluate((id) => registerForTrainingClass(id), classId);
+      await page.evaluate((id) => openTakeTestModal(id), classId);
+      await page.evaluate(async () => {
+        const total = ttTakeQuestions.length;
+        for (let i = 0; i < total; i++) {
+          const q = ttTakeQuestions[ttTakeIndex];
+          q.correctOptionIds.forEach((optId) => ttTakeSelectOption(optId, true));
+          await ttTakeGoNext();
+        }
+      });
+      await page.waitForFunction(() => document.getElementById('trainingTakeTestModal').classList.contains('hidden'));
+    }
 
     // ===================== Tạo lộ trình 2 cấp bậc qua ĐÚNG form thật (submitCareerPath) =====================
 
@@ -191,14 +215,12 @@ async function main() {
       await page.evaluate((u) => { currentUser = u; }, hr);
     });
 
-    await run('register staff.it into Class A1 (Chương Trình A) and mark PASSED', async () => {
+    await run('register staff.it into Class A1 (Chương Trình A) and pass its test', async () => {
       await page.evaluate((u) => { currentUser = u; }, staffIt);
-      const reg = await page.evaluate(async (classId) => (await callCreateAction('trainingRegistrations', { classId })).item, classA1Id);
-      await page.evaluate((r) => { DB.trainingRegistrations.push(r); }, reg);
+      await registerAndPassClass(classA1Id);
       await page.evaluate((u) => { currentUser = u; }, hr);
-      const updated = await page.evaluate(async (regId) => (await callRecordAction('trainingRegistrations', regId, 'set-result', { result: 'PASSED', score: 90 })).item, reg.id);
-      assertEqual(updated.result, 'PASSED', 'registration should be PASSED');
-      await page.evaluate((it) => { const idx = DB.trainingRegistrations.findIndex((r) => r.id === it.id); DB.trainingRegistrations[idx] = it; }, updated);
+      const reg = await page.evaluate((classId) => DB.trainingRegistrations.find((r) => r.classId === classId && r.creator === 'staff.it'), classA1Id);
+      assertEqual(reg.result, 'PASSED', 'registration should be PASSED');
     });
 
     await run('confirming stage 0 now succeeds ("any class in the course" — staff.it passed Class A1, not A2, and that still counts for Chương Trình A)', async () => {
@@ -232,13 +254,10 @@ async function main() {
       assert(errMsg && errMsg.includes('chưa đạt yêu cầu'), `expected a missing-course error (not a sequential-order error) for stage 1, got: ${errMsg}`);
     });
 
-    await run('register staff.it into Class B1 (Chương Trình B) and mark PASSED, then confirming stage 1 succeeds', async () => {
+    await run('register staff.it into Class B1 (Chương Trình B) and pass its test, then confirming stage 1 succeeds', async () => {
       await page.evaluate((u) => { currentUser = u; }, staffIt);
-      const reg = await page.evaluate(async (classId) => (await callCreateAction('trainingRegistrations', { classId })).item, classBId);
-      await page.evaluate((r) => { DB.trainingRegistrations.push(r); }, reg);
+      await registerAndPassClass(classBId);
       await page.evaluate((u) => { currentUser = u; }, hr);
-      const updated = await page.evaluate(async (regId) => (await callRecordAction('trainingRegistrations', regId, 'set-result', { result: 'PASSED', score: 88 })).item, reg.id);
-      await page.evaluate((it) => { const idx = DB.trainingRegistrations.findIndex((r) => r.id === it.id); DB.trainingRegistrations[idx] = it; }, updated);
 
       const result = await page.evaluate(async (pid) => callRecordAction('careerPaths', pid, 'confirm', { username: 'staff.it', stageIndex: 1 }), pathId);
       const confirmation = result.confirmation;
@@ -293,11 +312,8 @@ async function main() {
 
     await run('renderCpEmployeeStageLookup(): once peer.it passes Chương Trình A, the manager sees the "Đủ điều kiện" suggestion badge scoped to stage 1, and confirming it via the real button handler succeeds', async () => {
       await page.evaluate((u) => { currentUser = u; }, peerIt);
-      const reg = await page.evaluate(async (classId) => (await callCreateAction('trainingRegistrations', { classId })).item, classA2Id);
-      await page.evaluate((r) => { DB.trainingRegistrations.push(r); }, reg);
+      await registerAndPassClass(classA2Id);
       await page.evaluate((u) => { currentUser = u; }, hr);
-      const updated = await page.evaluate(async (regId) => (await callRecordAction('trainingRegistrations', regId, 'set-result', { result: 'PASSED', score: 95 })).item, reg.id);
-      await page.evaluate((it) => { const idx = DB.trainingRegistrations.findIndex((r) => r.id === it.id); DB.trainingRegistrations[idx] = it; }, updated);
 
       // Render lại thẻ lộ trình (đúng luồng thật: nhập username -> renderCpEmployeeStageLookup qua oninput).
       await page.evaluate((pid) => {

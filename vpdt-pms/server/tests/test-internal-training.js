@@ -215,19 +215,38 @@ async function main() {
       assertEqual(result.score, 0, `expected 0%, got ${result.score}`);
     });
 
-    await run('trainer manually records a PASSED result with a score for nv3', async () => {
+    // Đợt 8 (bắt buộc thi): lớp có gán bài test -> chấm tay bị chặn HẲN toàn hệ thống (server 409),
+    // form Kết Quả chỉ còn hiển thị 1 ghi chú, "Đạt" duy nhất đến từ tự làm bài qua đúng modal thật.
+    await run('manual grading is blocked for a class with an assigned test (UI hides the form; server rejects a bypassed call)', async () => {
       await page.evaluate((u) => { currentUser = u; }, trainer);
       const nv3RegId = await page.evaluate((id) => DB.trainingRegistrations.find((r) => r.classId === id && r.creator === 'nv3').id, onlineClassId);
-      await page.evaluate((id) => { openTrainingResultsModal(id); }, onlineClassId);
-      await page.evaluate((regId) => {
-        document.getElementById(`trResult_${regId}`).value = 'PASSED';
-        document.getElementById(`trScore_${regId}`).value = '85';
+      const modalHTML = await page.evaluate((id) => { openTrainingResultsModal(id); return document.getElementById('trainingResultsModalBody').innerHTML; }, onlineClassId);
+      assert(modalHTML.includes('Tự động qua bài test'), 'the results modal should show the auto-graded note instead of a manual grading form for a tested class');
+      assert(!modalHTML.includes(`trResult_${nv3RegId}`), 'no manual result <select> should be rendered for a tested class');
+
+      let errMsg = null;
+      await page.evaluate(async (regId) => {
+        try { await callRecordAction('trainingRegistrations', regId, 'set-result', { result: 'PASSED', score: 85 }); }
+        catch (err) { window.__lastCreateErr = err.message; }
       }, nv3RegId);
-      await page.evaluate((regId) => saveTrainingResult(regId), nv3RegId);
-      const reg = await page.evaluate((id) => DB.trainingRegistrations.find((r) => r.id === id), nv3RegId);
-      assertEqual(reg.result, 'PASSED', 'manual result should be PASSED');
-      assertEqual(reg.score, 85, 'manual score mismatch');
-      assertEqual(reg.resultByName, 'Trần Thị Linh', 'resultByName should be the trainer who recorded it');
+      errMsg = await page.evaluate(() => window.__lastCreateErr);
+      assert(errMsg && errMsg.includes('đã gán bài test'), `expected a server-side block for manual grading on a tested class, got: ${errMsg}`);
+    });
+
+    await run('auto-grading: nv3 takes the real test afterwards and PASSES (the only way to get a result now that the class has a test)', async () => {
+      await page.evaluate((u) => { currentUser = u; }, nv3);
+      const result = await page.evaluate(async ({ classId, tId }) => {
+        const test = DB.trainingTests.find((t) => t.id === tId);
+        const q1 = test.questions[0], q2 = test.questions[1];
+        ttTakeClassId = classId;
+        ttTakeQuestions = test.questions;
+        ttTakeAnswers = { [q1.id]: [...q1.correctOptionIds], [q2.id]: [...q2.correctOptionIds] };
+        await ttTakeSubmit();
+        return DB.trainingRegistrations.find((r) => r.classId === classId && r.creator === 'nv3');
+      }, { classId: onlineClassId, tId: testId });
+      assertEqual(result.result, 'PASSED', `expected PASSED, got ${result.result}`);
+      assertEqual(result.score, 100, `expected 100%, got ${result.score}`);
+      await page.evaluate((u) => { currentUser = u; }, trainer);
     });
 
     let offlineClassId = null;

@@ -59,13 +59,10 @@ router.post('/:module', async (req, res) => {
     // requiredCourseIds — phải trỏ vào chương trình có thật) — cùng lý do trainingClasses/
     // trainingDocuments/trainingPlans ở trên.
     if (moduleKey === 'careerPaths') appData.trainingCourses = await getAllForCollection('trainingCourses');
-    // onboardingPaths (Đợt 6) cần tra cứu chéo sang trainingTests (test1Id/test2Id BẮT BUỘC phải là bài
-    // test có thật) + trainingDocuments (stage1DocumentIds/stage2DocumentIds, tuỳ chọn) — cùng lý do
-    // trainingClasses ở trên.
-    if (moduleKey === 'onboardingPaths') {
-      appData.trainingTests = await getAllForCollection('trainingTests');
-      appData.trainingDocuments = await getAllForCollection('trainingDocuments');
-    }
+    // onboardingPaths cần tra cứu chéo sang trainingCourses (mỗi giai đoạn — stage{1,2}RequiredCourseIds
+    // — phải trỏ vào chương trình có thật, cùng khuôn careerPaths ở trên, xem
+    // normalizeOnboardingPathFields()).
+    if (moduleKey === 'onboardingPaths') appData.trainingCourses = await getAllForCollection('trainingCourses');
     // onboardingProgress (Đợt 6) cần tra cứu chéo sang onboardingPaths (pathId có phải lộ trình có thật
     // không, snapshot tên) — appData.users đã có sẵn trong AppData chung (không cần đọc thêm, khác
     // trainingCourses/trainingTests vẫn ở dbo.Records riêng).

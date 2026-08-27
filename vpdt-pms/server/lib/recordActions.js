@@ -2059,6 +2059,14 @@ function setTrainingRegistrationResult(payload, user, reg, cls) {
   if (reg.result === 'CANCELLED') {
     throw new HttpError(409, 'Đăng ký này đã bị huỷ, không thể ghi nhận kết quả');
   }
+  // Đợt 8 — lớp ĐÃ gán bài test bắt buộc kết quả phải đến từ tự làm bài + tự động chấm
+  // (applyAutoGradedTestResult(), qua route submit-test) — chặn hẳn đường tắt chấm tay ở đây để "Đạt"
+  // của Lộ Trình Thăng Tiến/Lộ Trình Tân Binh (đều đếm theo lớp có testId, xem
+  // confirmCareerPathForEmployee()/confirmOnboardingStage()) luôn thật sự qua thi, không bị chấm khống.
+  // Lớp KHÔNG gán bài test thì vẫn chấm tay như cũ (không thuộc diện "bắt buộc thi").
+  if (cls.testId != null) {
+    throw new HttpError(409, 'Lớp học này đã gán bài test — kết quả chỉ được ghi nhận tự động khi học viên tự làm bài test, không thể chấm tay. Gỡ bài test khỏi lớp nếu thực sự cần chấm tay.');
+  }
   const result = payload?.result;
   if (result !== 'PASSED' && result !== 'FAILED') {
     throw new HttpError(400, 'Kết quả không hợp lệ (chỉ nhận Đạt/Không đạt)');
@@ -2301,9 +2309,13 @@ function confirmCareerPathForEmployee(payload, user, path, allRegistrations, exi
 
   const classes = trainingClasses || [];
   const requiredCourseIds = Array.isArray(stage.requiredCourseIds) ? stage.requiredCourseIds : [];
+  // Đợt 8 — chỉ tính "Đạt" khi lớp đó CÓ gán bài test (c.testId != null): kết hợp với chỗ chặn chấm tay
+  // ở setTrainingRegistrationResult() (chỉ chặn khi lớp có test), 1 lớp KHÔNG có test vẫn có thể bị chấm
+  // tay "Đạt" mà chưa từng thi — filter này đảm bảo lớp như vậy không tính vào điều kiện xác nhận cấp
+  // bậc, bắt buộc phải thi thật mới đủ điều kiện.
   const missing = requiredCourseIds.filter(courseId => !(allRegistrations || []).some(r =>
     r.creator === targetUsername && r.result === 'PASSED' &&
-    classes.some(c => c.id === r.classId && c.courseId === courseId)));
+    classes.some(c => c.id === r.classId && c.courseId === courseId && c.testId != null)));
   if (missing.length) {
     throw new HttpError(409, `Nhân viên chưa đạt yêu cầu ở ${missing.length} chương trình bắt buộc của Cấp ${stageIndex + 1} — chưa thể xác nhận`);
   }
@@ -2318,7 +2330,8 @@ function confirmCareerPathForEmployee(payload, user, path, allRegistrations, exi
 // ===== ĐÀO TẠO TÂN BINH (Đợt 6, module con "Đào Tạo") =====
 // onboardingPaths ("Lộ Trình") quản lý (tạo/sửa/xoá) CHỈ trainingManage — dùng lại đúng canManageTraining()
 // ở trên. onboardingProgress ("Phân Công") có 3 nhóm hành động riêng biệt hoàn toàn khác gác quyền nhau:
-// - submitOnboardingStageTest(): chính người được phân công (employeeUsername) tự làm.
+// - confirmOnboardingStage(): Nhân Sự (trainingManage/admin) xác nhận Giai đoạn 1/2 sau khi nhân viên
+//   tự đạt đủ chương trình bắt buộc qua lớp học (Đợt 8).
 // - evaluateOnboardingStage3(): quản lý CÙNG PHÒNG BAN/SIÊU THỊ với người được phân công (onboardingEvaluate
 //   + so trực tiếp dept, KHÔNG có bảng ánh xạ nào khác — mirror ĐÚNG idiom uniformStoreManage/item.dept ở
 //   canViewUniformIssuance()/canViewUniformStockAdjustment(), lib/recordViewScope.js).
@@ -2327,7 +2340,7 @@ function confirmCareerPathForEmployee(payload, user, path, allRegistrations, exi
 // Sửa 1 Lộ Trình đã tạo (onboardingPaths, Đợt 6) — cùng khuôn editTrainingPlan() ở trên (whitelist field
 // rồi chạy lại ĐÚNG 1 luật chuẩn hoá dùng chung với lúc TẠO, xem normalizeOnboardingPathFields() ở
 // lib/createValidation.js).
-const ONBOARDING_PATH_EDITABLE_FIELDS = ['name', 'stage1DocumentIds', 'test1Id', 'stage2DocumentIds', 'test2Id', 'stage3Criteria'];
+const ONBOARDING_PATH_EDITABLE_FIELDS = ['name', 'stage1RequiredCourseIds', 'stage2RequiredCourseIds', 'stage3Criteria'];
 function editOnboardingPath(payload, user, path, appData) {
   if (!canManageTraining(user)) throw new HttpError(403, 'Bạn không có quyền sửa lộ trình đào tạo tân binh');
   if (!payload || typeof payload !== 'object') throw new HttpError(400, 'Thiếu dữ liệu cập nhật');
@@ -2338,37 +2351,36 @@ function editOnboardingPath(payload, user, path, appData) {
   return path;
 }
 
-// Nộp bài test Giai đoạn 1 hoặc 2 của 1 hồ sơ Phân Công — CHỈ chính người được phân công
-// (progress.employeeUsername) mới nộp được (khác setTrainingRegistrationResult/confirmCareerPathForEmployee
-// ở trên vốn do người QUẢN LÝ ghi nhận — ở đây là "tự làm bài, hệ thống tự chấm", cùng tinh thần
-// applyAutoGradedTestResult() cho trainingClasses). Giai đoạn 2 bị chặn nếu Giai đoạn 1 chưa ĐẠT (đúng
-// yêu cầu tuần tự "Ngày 1-7 rồi mới tới Ngày 8-21" của thiết kế) — không chặn theo THỜI GIAN ở đây (hạn
-// chỉ là mốc hiển thị "quá hạn" tính sống ở client, KHÔNG khoá cứng việc nộp bài trễ, tránh 1 nhân viên
-// nộp trễ vài giờ bị kẹt vĩnh viễn không hoàn thành nổi lộ trình). Test lấy đúng theo path.test1Id/
-// test2Id tại THỜI ĐIỂM NỘP BÀI (không snapshot — 1 lộ trình sửa lại bài test giữa chừng thì mọi người
-// CHƯA nộp bài đều làm theo bài test MỚI, giống hệt cách trainingClasses.testId hoạt động).
-function submitOnboardingStageTest(payload, user, progress, path, tests) {
-  if (user.username !== progress.employeeUsername) {
-    throw new HttpError(403, 'Bạn chỉ có thể tự làm bài test của lộ trình được phân công cho chính mình');
-  }
+// Xác nhận 1 nhân viên đã hoàn thành Giai đoạn 1 hoặc 2 của lộ trình tân binh (Đợt 8 — cùng khuôn
+// confirmCareerPathForEmployee() ở trên: NHÂN SỰ (trainingManage/admin) bấm Xác Nhận, không phải nhân
+// viên tự nộp bài nữa — nhân viên tự đăng ký + học lớp thuộc đúng chương trình yêu cầu qua module Lớp
+// Học như bình thường, "Đạt" đến từ đó). Gác tuần tự: Giai đoạn 2 chỉ xác nhận được sau khi Giai đoạn 1
+// đã CONFIRMED. Yêu cầu tất cả chương trình bắt buộc của giai đoạn đó đã PASSED ở 1 lớp CÓ gán bài test
+// (c.testId != null — xem giải thích ở confirmCareerPathForEmployee()).
+function confirmOnboardingStage(payload, user, progress, path, allRegistrations, trainingClasses) {
+  if (!canManageTraining(user)) throw new HttpError(403, 'Bạn không có quyền xác nhận giai đoạn đào tạo tân binh');
   const stage = Number(payload?.stage);
   if (stage !== 1 && stage !== 2) throw new HttpError(400, 'Giai đoạn không hợp lệ (chỉ nhận 1 hoặc 2)');
   const resultField = `stage${stage}Result`;
-  if (progress[resultField] != null) {
-    throw new HttpError(409, `Giai đoạn ${stage} đã có kết quả (${progress[resultField]}) từ trước — mỗi giai đoạn chỉ được làm bài 1 lần duy nhất`);
+  if (progress[resultField] === 'CONFIRMED') {
+    throw new HttpError(409, `Giai đoạn ${stage} đã được xác nhận hoàn thành từ trước rồi`);
   }
-  if (stage === 2 && progress.stage1Result !== 'PASSED') {
-    throw new HttpError(409, 'Bạn cần Đạt Giai đoạn 1 trước khi làm bài test Giai đoạn 2');
+  if (stage === 2 && progress.stage1Result !== 'CONFIRMED') {
+    throw new HttpError(409, 'Cần xác nhận hoàn thành Giai đoạn 1 trước khi xác nhận Giai đoạn 2');
   }
   if (!path) throw new HttpError(404, 'Không tìm thấy lộ trình đào tạo tân binh của hồ sơ này (có thể đã bị xoá)');
-  const testId = stage === 1 ? path.test1Id : path.test2Id;
-  const test = (tests || []).find(t => t.id === testId);
-  if (!test) throw new HttpError(404, 'Không tìm thấy bài test được gán cho giai đoạn này (có thể đã bị xoá)');
-
-  const graded = gradeTrainingTestSubmission(payload?.answers, test);
-  progress[resultField] = graded.passed ? 'PASSED' : 'FAILED';
-  progress[`stage${stage}Score`] = graded.percentage;
-  progress[`stage${stage}SubmittedAt`] = nowVN();
+  const requiredCourseIds = Array.isArray(path[`stage${stage}RequiredCourseIds`]) ? path[`stage${stage}RequiredCourseIds`] : [];
+  const classes = trainingClasses || [];
+  const missing = requiredCourseIds.filter(courseId => !(allRegistrations || []).some(r =>
+    r.creator === progress.employeeUsername && r.result === 'PASSED' &&
+    classes.some(c => c.id === r.classId && c.courseId === courseId && c.testId != null)));
+  if (missing.length) {
+    throw new HttpError(409, `Nhân viên chưa đạt yêu cầu ở ${missing.length} chương trình bắt buộc của Giai đoạn ${stage} — chưa thể xác nhận`);
+  }
+  progress[resultField] = 'CONFIRMED';
+  progress[`stage${stage}ConfirmedBy`] = user.username;
+  progress[`stage${stage}ConfirmedByName`] = user.name;
+  progress[`stage${stage}ConfirmedAt`] = nowVN();
   return progress;
 }
 
@@ -2387,8 +2399,8 @@ function evaluateOnboardingStage3(payload, user, progress, users) {
   if (!canEvaluateOnboardingStage3(user, traineeUser)) {
     throw new HttpError(403, 'Bạn không có quyền đánh giá Giai đoạn 3 cho nhân viên này (khác phòng ban/siêu thị hoặc không có quyền)');
   }
-  if (progress.stage1Result !== 'PASSED' || progress.stage2Result !== 'PASSED') {
-    throw new HttpError(409, 'Nhân viên cần Đạt cả Giai đoạn 1 và Giai đoạn 2 trước khi đánh giá Giai đoạn 3');
+  if (progress.stage1Result !== 'CONFIRMED' || progress.stage2Result !== 'CONFIRMED') {
+    throw new HttpError(409, 'Nhân viên cần được xác nhận hoàn thành cả Giai đoạn 1 và Giai đoạn 2 trước khi đánh giá Giai đoạn 3');
   }
   if (progress.stage3Evaluation != null) {
     throw new HttpError(409, 'Giai đoạn 3 của nhân viên này đã được đánh giá rồi');
@@ -2411,8 +2423,8 @@ function evaluateOnboardingStage3(payload, user, progress, users) {
 // khác trong module Đào Tạo).
 function issueOnboardingCertificate(user, progress) {
   if (!canManageTraining(user)) throw new HttpError(403, 'Bạn không có quyền cấp chứng chỉ hoàn thành đào tạo tân binh');
-  if (progress.stage1Result !== 'PASSED' || progress.stage2Result !== 'PASSED' || progress.stage3Evaluation !== 'PASSED') {
-    throw new HttpError(409, 'Nhân viên chưa Đạt cả 3 giai đoạn — chưa thể cấp chứng chỉ hoàn thành');
+  if (progress.stage1Result !== 'CONFIRMED' || progress.stage2Result !== 'CONFIRMED' || progress.stage3Evaluation !== 'PASSED') {
+    throw new HttpError(409, 'Nhân viên chưa hoàn thành cả 3 giai đoạn — chưa thể cấp chứng chỉ hoàn thành');
   }
   if (progress.certificateIssued) throw new HttpError(409, 'Chứng chỉ hoàn thành đã được cấp trước đó rồi');
   progress.certificateIssued = true;
@@ -3230,7 +3242,7 @@ module.exports = {
   canManageTraining, canManageTrainingClass, cancelTrainingRegistration, setTrainingRegistrationResult, confirmCareerPathForEmployee,
   bulkRegisterTrainingClass, editTrainingClass, startOfflineTrainingClass, endOfflineTrainingClass, editTrainingPlan,
   gradeTrainingTestSubmission, applyAutoGradedTestResult,
-  editOnboardingPath, submitOnboardingStageTest, canEvaluateOnboardingStage3, evaluateOnboardingStage3, issueOnboardingCertificate,
+  editOnboardingPath, confirmOnboardingStage, canEvaluateOnboardingStage3, evaluateOnboardingStage3, issueOnboardingCertificate,
   canManageRecruitment, closeRecruitmentJob, confirmRecruitmentJobFilled, setRecruitmentReferralStatus,
   canManageItSupport, applyPriceApproval, claimPriceApply, releasePriceApplyClaim, requestPriceInfoFromIt, submitPriceSupplementFile,
   claimItTicket, updateItTicketStatus, addItTicketComment, cancelItTicket,
