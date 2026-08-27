@@ -26,55 +26,14 @@ const ACTION_MAP = { approve: 'APPROVE', reject: 'REJECT', 'request-info': 'REQU
 // processSubmission/processCarReg/processOfficeReq/processVppReg).
 const APPROVAL_REAUTH_MODULES = new Set(Object.keys(MODULE_CONFIGS));
 
-// POST /api/workflow/submissions/:id/respond-info  — người TRÌNH phản hồi 1 yêu cầu bổ sung cụ thể
-// (không phải approver nên không dùng chung route bên dưới — action riêng, chỉ submissions mới có).
-// PHẢI đăng ký TRƯỚC route generic /:module/:id/:action bên dưới — route đó cũng khớp cấu trúc
-// "/submissions/<id>/respond-info" (module=submissions, id=<id>, action=respond-info), Express khớp
-// theo đúng THỨ TỰ đăng ký nên nếu để sau, route generic sẽ luôn chặn trước (action "respond-info"
-// không có trong ACTION_MAP -> luôn trả 400, route riêng bên dưới không bao giờ được gọi tới).
-router.post('/submissions/:id/respond-info', async (req, res) => {
-  const itemId = Number(req.params.id);
-  const { requestId, response } = req.body || {};
-  if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
-  if (!response) return res.status(400).json({ error: 'Vui lòng nhập nội dung bổ sung' });
-
-  try {
-    // requireAuth đã tra cứu sẵn user hiện tại (kể cả active) và gắn vào req.freshUser.
-    const freshUser = req.freshUser;
-
-    const resultItem = await withLockedRecordForCollection('submissions', itemId, (sub) => {
-      // Chỉ chính người tạo tờ trình mới được phản hồi yêu cầu bổ sung của tờ trình đó.
-      if (sub.creator !== freshUser.username) {
-        throw new WorkflowError(403, 'Chỉ người trình mới được phản hồi yêu cầu bổ sung');
-      }
-      const reqEntry = (sub.infoRequests || []).find(r => r.id === requestId);
-      if (!reqEntry) throw new WorkflowError(404, 'Không tìm thấy yêu cầu bổ sung');
-      if (reqEntry.response) throw new WorkflowError(409, 'Yêu cầu này đã được phản hồi trước đó');
-
-      reqEntry.response = response;
-      reqEntry.respondedAt = new Date().toLocaleString('vi-VN');
-      if (!sub.history) sub.history = [];
-      sub.history.push({
-        step: reqEntry.step, approver: freshUser.name, username: freshUser.username,
-        action: 'RESPOND_INFO', comment: response, time: reqEntry.respondedAt
-      });
-
-      return sub;
-    });
-
-    res.json({ ok: true, item: resultItem });
-  } catch (err) {
-    if (err instanceof WorkflowError) return res.status(err.status).json({ error: err.message });
-    console.error(`POST /api/workflow/submissions/${req.params.id}/respond-info lỗi:`, err.message);
-    res.status(500).json({ error: 'Không thể xử lý yêu cầu' });
-  }
-});
-
 // POST /api/workflow/submissions/:id/give-opinion — người được XIN Ý KIẾN (sub.opinionRequestees,
 // xem lib/createValidation.js) để lại ý kiến tham khảo. KHÔNG phải hành động Duyệt/Từ chối, KHÔNG đi
 // qua applyWorkflowAction/lib/workflowEngine.js — kênh song song, không chặn quy trình duyệt chính,
 // nên KHÔNG kiểm tra item.status/currentStep (được phép để ý kiến ở bất kỳ trạng thái/bước nào).
-// PHẢI đăng ký TRƯỚC route generic bên dưới (cùng lý do với /respond-info ở trên).
+// PHẢI đăng ký TRƯỚC route generic /:module/:id/:action bên dưới — route đó cũng khớp cấu trúc
+// "/submissions/<id>/give-opinion" (module=submissions, id=<id>, action=give-opinion), Express khớp
+// theo đúng THỨ TỰ đăng ký nên nếu để sau, route generic sẽ luôn chặn trước (action "give-opinion"
+// không có trong ACTION_MAP -> luôn trả 400, route riêng bên dưới không bao giờ được gọi tới).
 router.post('/submissions/:id/give-opinion', async (req, res) => {
   const itemId = Number(req.params.id);
   const { comment } = req.body || {};

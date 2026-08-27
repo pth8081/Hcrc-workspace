@@ -6,7 +6,7 @@
 // global + a fake `window.fetch` that emulates the server routes the Submission module actually calls
 // (/api/upload, /api/create/submissions, /api/workflow/submissions/:id/:action), then drives the exact
 // same functions the real UI wires up (submitSubmissionReq(), confirmProcessSubmission(),
-// requestSubmissionInfo(), renderSubmissionApprovalLayerCheckboxes()...).
+// renderSubmissionApprovalLayerCheckboxes()...).
 //
 // Run: node server/tests/test-submission.js
 
@@ -86,18 +86,9 @@ async function main() {
           return { item: rec, transition: { type: 'REJECTED' } };
         }
 
-        if (action === 'request-info') {
-          rec.infoRequests = [...(rec.infoRequests || []), {
-            step: rec.currentStep, requestedBy: currentUser.username, requestedByName: currentUser.name,
-            requestedAt: nowVN(), reason: body.comment, response: null
-          }];
-          return { item: rec, transition: { type: 'INFO_REQUESTED' } };
-        }
-
-        // "Bổ Sung" (REQUEST_CHANGES) — nâng cấp mới, KHÁC "Yêu Cầu Bổ Sung" (request-info) ở trên:
-        // đưa hẳn hồ sơ về NHÁP để người trình sửa lại TOÀN BỘ nội dung + tệp rồi gửi lại từ bước 1,
-        // thay vì chỉ ghi 1 ghi chú và giữ nguyên PENDING. Mirrors lib/workflowEngine.js
-        // applyWorkflowAction()'s REQUEST_CHANGES branch.
+        // "Yêu Cầu Bổ Sung" (REQUEST_CHANGES) — đưa hẳn hồ sơ về NHÁP để người trình sửa lại TOÀN BỘ
+        // nội dung + tệp rồi gửi lại từ bước 1. Mirrors lib/workflowEngine.js applyWorkflowAction()'s
+        // REQUEST_CHANGES branch (submissions không còn nhánh "request-info" ghi-chú-only nữa).
         if (action === 'request-changes') {
           if (!body.comment) throw new Error('Vui lòng nhập lý do yêu cầu bổ sung/chỉnh sửa');
           (rec.history || []).forEach(h => { if (h.action === 'APPROVED') h.invalidated = true; });
@@ -395,39 +386,6 @@ async function main() {
         );
       }
 
-      // ================= Scenario 5: "Yêu Cầu Bổ Sung" (request more info) does not change status =====
-      {
-        alerts.length = 0;
-        fillBaseSubmissionForm({ title: 'Tờ trình cần bổ sung hồ sơ', content: 'Nội dung sơ sài, thiếu phụ lục.' });
-        submitSubmissionReq(fakeFormEvent());
-        confirmGenericModal();
-        await new Promise(r => setTimeout(r, 0));
-        const sub = DB.submissions.find(s => s.title === 'Tờ trình cần bổ sung hồ sơ');
-
-        openProcessSubmissionModal(sub.id);
-        document.getElementById('txtSubmissionComment').value = '';
-        alerts.length = 0;
-        confirmRequestSubmissionInfo();
-        const blockedNoReason = alerts.some(a => a.includes('Vui lòng nhập nội dung cần bổ sung'));
-
-        document.getElementById('txtSubmissionComment').value = 'Bổ sung bảng dự toán chi tiết theo từng hạng mục.';
-        alerts.length = 0;
-        confirmRequestSubmissionInfo();
-        confirmGenericModal();
-        await new Promise(r => setTimeout(r, 0));
-        const updated = DB.submissions.find(s => s.id === sub.id);
-
-        check(
-          'submission: "Yêu Cầu Bổ Sung" requires a comment, then records an info request WITHOUT changing status',
-          blockedNoReason &&
-          updated.status === 'PENDING' &&
-          updated.infoRequests && updated.infoRequests.length === 1 &&
-          updated.infoRequests[0].reason.includes('bảng dự toán') &&
-          alerts.some(a => a.includes('Đã gửi yêu cầu bổ sung')),
-          `blockedNoReason=${blockedNoReason} updated=${JSON.stringify({ status: updated.status, infoRequests: updated.infoRequests })}`
-        );
-      }
-
       // ================= Scenario 6: "Cấp Phê Duyệt Cuối Cùng" gates which layers can be ticked =======
       {
         document.getElementById('subApprovalLevel').value = 'GD_PGD';
@@ -463,9 +421,9 @@ async function main() {
         );
       }
 
-      // ================= Scenario 7: "Bổ Sung" (REQUEST_CHANGES) — KHÁC "Yêu Cầu Bổ Sung" (Scenario 5,
-      // request-info, giữ nguyên PENDING): đưa tờ trình về NHÁP để người trình sửa lại TOÀN BỘ nội dung
-      // + tệp qua modal "Sửa & Gửi Lại" rồi gửi lại từ bước 1 =================
+      // ================= Scenario 7: "Yêu Cầu Bổ Sung" (REQUEST_CHANGES, nút duy nhất còn lại sau khi
+      // gỡ bỏ nhánh "request-info" ghi-chú-only) — đưa tờ trình về NHÁP để người trình sửa lại TOÀN BỘ
+      // nội dung + tệp qua modal "Sửa & Gửi Lại" rồi gửi lại từ bước 1 =================
       {
         alerts.length = 0;
         fillBaseSubmissionForm({ title: 'Tờ trình cần Bổ Sung toàn bộ', content: 'Nội dung ban đầu còn sơ sài.' });
@@ -488,7 +446,7 @@ async function main() {
         const subAfterChanges = DB.submissions.find(s => s.id === sub.id);
 
         check(
-          'submission: "Bổ Sung" (REQUEST_CHANGES) yêu cầu lý do, khác hẳn "Yêu Cầu Bổ Sung" (request-info) -> đưa về DRAFT, currentStep reset về 0',
+          'submission: "Yêu Cầu Bổ Sung" (REQUEST_CHANGES) yêu cầu lý do -> đưa về DRAFT, currentStep reset về 0',
           blockedNoReason &&
           subAfterChanges.status === 'DRAFT' && subAfterChanges.currentStep === 0 &&
           (subAfterChanges.history || []).some(h => h.action === 'REQUEST_CHANGES' && h.comment.includes('dự trù kinh phí')),

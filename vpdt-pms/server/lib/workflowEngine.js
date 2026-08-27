@@ -143,11 +143,11 @@ const MODULE_CONFIGS = {
   submissions: {
     dbKey: 'submissions',
     resolveWfConfig: (item, appData) => resolveSubmissionWorkflow(item, appData),
-    // Giữ nguyên supportsRequestInfo (kênh cũ: 1 ghi chú văn bản, KHÔNG đổi status/currentStep — vẫn
-    // dùng được song song) — bổ sung thêm supportsRequestChanges (kênh mới, đầy đủ: đưa về NHÁP để
-    // người trình sửa lại toàn bộ nội dung + tệp rồi gửi lại từ bước 1, xem editSubmissionDraft() ở
-    // lib/recordActions.js) theo đúng yêu cầu nghiệp vụ nâng cấp "Yêu cầu bổ sung" của Văn Bản Trình.
-    supportsRequestInfo: true,
+    // Trước đây có thêm supportsRequestInfo (kênh ghi 1 ghi chú, KHÔNG đổi status/currentStep) song
+    // song với supportsRequestChanges — đã gỡ theo yêu cầu người dùng: Văn Bản Trình chỉ còn giữ ĐÚNG 1
+    // nút "Yêu Cầu Bổ Sung" (REQUEST_CHANGES, đưa về NHÁP để người trình sửa lại toàn bộ nội dung + tệp
+    // rồi gửi lại từ bước 1, xem editSubmissionDraft() ở lib/recordActions.js). itPriceApprovals bên
+    // dưới vẫn giữ nguyên supportsRequestInfo, không đụng tới.
     supportsRequestChanges: true
   },
   carRegs: {
