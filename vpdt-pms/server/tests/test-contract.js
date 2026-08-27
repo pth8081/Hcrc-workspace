@@ -245,6 +245,50 @@ async function run() {
     const addendum = await readContractByTitle('Phụ lục điều chỉnh giá trị hợp đồng');
     check('Tạo phụ lục thành công: isAddendum=true, rootContractId đúng, chờ PENDING (không tự duyệt)', !!addendum && addendum.isAddendum === true && addendum.rootContractId === contract1.id && addendum.approvalStatus === 'PENDING', addendum);
 
+    // ============ Kịch bản 7b: Từ chối phụ lục vừa tạo -> hợp đồng GỐC không bị ảnh hưởng (vẫn
+    // APPROVED), vẫn còn trong danh sách "Bổ Sung Phụ Lục", và tạo được phụ lục MỚI (PLHD02) đè lên
+    // đúng hợp đồng gốc đó — REJECTED chỉ chấm dứt LƯỢT phụ lục đó, không khoá cả dòng hợp đồng gốc
+    // (đúng câu hỏi người dùng: phụ lục bị từ chối có bị "mất dấu", không tìm/thêm lại được nữa không). ============
+    await loginAs('tp_kd');
+    await queuePrompt('Phụ lục ghi sai điều khoản, đề nghị làm lại.');
+    await page.evaluate((id) => rejectContractAction(id), addendum.id);
+    await confirmPending();
+    const addendumAfterReject = await page.evaluate((id) => DB.contracts.find((c) => c.id === id).approvalStatus, addendum.id);
+    check('Từ chối phụ lục -> approvalStatus của PHỤ LỤC (không phải hợp đồng gốc) chuyển REJECTED', addendumAfterReject === 'REJECTED', addendumAfterReject);
+
+    const rootStillApproved = await page.evaluate((id) => DB.contracts.find((c) => c.id === id).approvalStatus, contract1.id);
+    check('Hợp đồng GỐC không bị ảnh hưởng bởi việc phụ lục của nó bị từ chối -> vẫn APPROVED', rootStillApproved === 'APPROVED', rootStillApproved);
+
+    await loginAs('kd1');
+    await goToContractApproval();
+    await page.evaluate(() => { document.getElementById('contractOpMode').value = 'ADDENDUM'; onContractOpModeChange(); });
+    const addendumTargetsAfterReject = await page.locator('#contractAddendumTargetDatalist option').evaluateAll(
+      (opts) => opts.map((o) => o.getAttribute('value'))
+    );
+    check('Hợp đồng gốc VẪN xuất hiện trong danh sách "Bổ Sung Phụ Lục" dù phụ lục trước đó đã bị từ chối', addendumTargetsAfterReject.some((t) => t.includes(contract1.code)), addendumTargetsAfterReject);
+
+    await page.fill('#contractAddendumTargetInput', `${contract1.code} — ${contract1.title}`);
+    const addendumCode2 = await page.locator('#contractCode').inputValue();
+    check('Mã phụ lục lần 2 tự sinh = <mã gốc>-PLHD02 (đánh số tiếp, không đụng tới phụ lục vừa bị từ chối)', addendumCode2 === `${contract1.code}-PLHD02`, addendumCode2);
+
+    await page.fill('#contractTitle', 'Phụ lục điều chỉnh giá trị hợp đồng (lần 2, sau khi bị từ chối)');
+    await page.fill('#contractAmount', '50000000');
+    await page.fill('#contractStartDate', '2026-03-01');
+    await page.fill('#contractEndDate', '2026-12-31');
+    await page.fill('#contractContent', 'Nội dung phụ lục bổ sung lần 2, gửi lại sau khi lần 1 bị từ chối.');
+    await page.setInputFiles('#contractFile', contractFile);
+    await page.evaluate(() => addContractInstallmentRow());
+    const addRow2 = page.locator('#contractInstallmentsList [data-installment-row]').first();
+    await addRow2.locator('.contract-installment-desc').fill('Thanh toán toàn bộ phụ lục lần 2');
+    await addRow2.locator('.contract-installment-percent').fill('100');
+    await page.evaluate(() => recalcContractInstallmentAmountsFromPercent());
+    await clearAlerts();
+    await page.click('#contractSubmitBtn');
+    await page.waitForTimeout(300);
+    const addendum2 = await readContractByTitle('Phụ lục điều chỉnh giá trị hợp đồng (lần 2, sau khi bị từ chối)');
+    check('Tạo được phụ lục MỚI đè lên đúng hợp đồng gốc dù phụ lục trước đó đã bị từ chối: isAddendum=true, đúng rootContractId, PENDING',
+      !!addendum2 && addendum2.isAddendum === true && addendum2.rootContractId === contract1.id && addendum2.approvalStatus === 'PENDING', addendum2);
+
     // ============ Kịch bản 8: Tài liệu ký — tải lên, từ chối, tải lại, duyệt ============
     async function uploadSignedAs(username, id, file) {
       await loginAs(username);
