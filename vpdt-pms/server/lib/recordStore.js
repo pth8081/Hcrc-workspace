@@ -155,6 +155,162 @@ async function deleteRecordById(collection, id, checkFn) {
   }
 }
 
+// ===== Thùng Rác (Trash Bin) — xem sql/schema.sql dbo.TrashBin + routes/trash.js. =====
+//
+// Trước đây "Xóa" ở mọi module (qua deleteRecordForCollection() bên dưới) là XÓA THẬT ngay lập tức
+// (DELETE FROM dbo.Records) — không có đường lấy lại nếu bấm nhầm, và (như đã phát hiện qua báo cáo
+// người dùng) code sinh mã tự động (generateHcrcCode() ở index.html) trước đây tính theo SỐ LƯỢNG bản
+// ghi còn lại thay vì SỐ LỚN NHẤT đã dùng — xóa 1 bản ghi giữa dãy làm bản ghi mới tạo sau đó lại sinh
+// đúng mã vừa xóa, đụng độ với chính bản ghi đã "biến mất" (đã fix riêng phần sinh mã ở phiên bản
+// trước — xem generateHcrcCode()/computeNextContractSeq()/computeNextAddendumSeq()). Thùng Rác giải
+// quyết yêu cầu rộng hơn: MỌI lượt xóa admin đều phải có đường khôi phục, và chỉ mất hẳn khi admin chủ
+// động "Xóa vĩnh viễn" từ trong Thùng Rác.
+//
+// moveRecordToTrash() thay hẳn deleteRecordById() làm bước "xóa" thật sự cho MỌI collection đã ở
+// dbo.Records (deleteRecordForCollection() bên dưới gọi hàm này thay vì deleteRecordById() — 1 điểm
+// sửa duy nhất, tự động áp dụng cho TOÀN BỘ ~30 collection + mọi route delete hiện có, KỂ CẢ các luồng
+// cascade xóa "cả họ" (docs/contracts — xem routes/records.js) vì cascade ở đó chỉ là gọi
+// deleteRecordForCollection() NHIỀU LẦN, mỗi bản ghi liên quan tự vào Thùng Rác riêng, khôi phục lại
+// được TỪNG bản ghi độc lập.
+async function moveRecordToTrash(collection, id, actor, checkFn) {
+  const pool = await getPool();
+  const tx = new sql.Transaction(pool);
+  await tx.begin();
+  try {
+    const readReq = new sql.Request(tx);
+    const readResult = await readReq
+      .input('collection', sql.NVarChar(50), collection)
+      .input('id', sql.BigInt, id)
+      .query('SELECT Payload, Code FROM dbo.Records WITH (UPDLOCK, HOLDLOCK) WHERE Collection = @collection AND Id = @id');
+    if (readResult.recordset.length === 0) {
+      throw new HttpError(404, 'Không tìm thấy hồ sơ');
+    }
+    const row = readResult.recordset[0];
+    const item = toRecord(row);
+
+    if (checkFn) await checkFn(item);
+
+    const trashReq = new sql.Request(tx);
+    await trashReq
+      .input('collection', sql.NVarChar(50), collection)
+      .input('originalId', sql.BigInt, id)
+      .input('code', sql.NVarChar(100), row.Code || null)
+      .input('payload', sql.NVarChar(sql.MAX), row.Payload)
+      .input('deletedBy', sql.NVarChar(100), actor?.username || 'unknown')
+      .input('deletedByName', sql.NVarChar(200), actor?.name || null)
+      .query(`
+        INSERT INTO dbo.TrashBin (Collection, OriginalId, Code, Payload, DeletedBy, DeletedByName)
+        VALUES (@collection, @originalId, @code, @payload, @deletedBy, @deletedByName);
+      `);
+
+    const delReq = new sql.Request(tx);
+    await delReq
+      .input('collection', sql.NVarChar(50), collection)
+      .input('id', sql.BigInt, id)
+      .query('DELETE FROM dbo.Records WHERE Collection = @collection AND Id = @id');
+
+    await tx.commit();
+    invalidateCollectionCache(collection);
+  } catch (err) {
+    await tx.rollback().catch(() => {});
+    throw err;
+  }
+}
+
+async function getTrashItems(collection) {
+  const pool = await getPool();
+  const req = pool.request();
+  let query = 'SELECT Id, Collection, OriginalId, Code, DeletedBy, DeletedByName, DeletedAt, Payload FROM dbo.TrashBin';
+  if (collection) {
+    req.input('collection', sql.NVarChar(50), collection);
+    query += ' WHERE Collection = @collection';
+  }
+  query += ' ORDER BY DeletedAt DESC, Id DESC';
+  const result = await req.query(query);
+  return result.recordset.map(r => ({
+    trashId: Number(r.Id),
+    collection: r.Collection,
+    originalId: Number(r.OriginalId),
+    code: r.Code,
+    deletedBy: r.DeletedBy,
+    deletedByName: r.DeletedByName,
+    deletedAt: r.DeletedAt,
+    item: JSON.parse(r.Payload)
+  }));
+}
+
+// Khôi phục lại ĐÚNG Id gốc (không sinh Id mới) để mọi tham chiếu chéo (rootDocId, rootContractId,
+// taskId gắn với hồ sơ này...) vẫn còn nguyên vẹn. Chặn khôi phục (409, không tự động đổi mã bên nào)
+// nếu Code đã bị 1 bản ghi ĐANG HOẠT ĐỘNG khác trong cùng collection dùng lại kể từ lúc bị xóa — theo
+// đúng lựa chọn đã thống nhất, ưu tiên an toàn dữ liệu hơn tiện lợi (không tự thêm hậu tố đổi khác mã
+// gốc, tránh gây nhầm lẫn khi đối chiếu hồ sơ cũ).
+async function restoreTrashItem(trashId) {
+  const pool = await getPool();
+  const tx = new sql.Transaction(pool);
+  await tx.begin();
+  try {
+    const readReq = new sql.Request(tx);
+    const readResult = await readReq
+      .input('trashId', sql.BigInt, trashId)
+      .query('SELECT * FROM dbo.TrashBin WITH (UPDLOCK, HOLDLOCK) WHERE Id = @trashId');
+    if (readResult.recordset.length === 0) {
+      throw new HttpError(404, 'Không tìm thấy mục này trong thùng rác');
+    }
+    const row = readResult.recordset[0];
+
+    if (row.Code) {
+      const codeCheckReq = new sql.Request(tx);
+      const codeCheck = await codeCheckReq
+        .input('collection', sql.NVarChar(50), row.Collection)
+        .input('code', sql.NVarChar(100), row.Code)
+        .query('SELECT TOP 1 Id FROM dbo.Records WHERE Collection = @collection AND Code = @code');
+      if (codeCheck.recordset.length > 0) {
+        throw new HttpError(409, `Mã "${row.Code}" đã được dùng lại cho 1 hồ sơ khác kể từ lúc bị xóa — vui lòng đổi mã hồ sơ mới đó trước khi khôi phục.`);
+      }
+    }
+    const idCheckReq = new sql.Request(tx);
+    const idCheck = await idCheckReq
+      .input('collection', sql.NVarChar(50), row.Collection)
+      .input('id', sql.BigInt, row.OriginalId)
+      .query('SELECT TOP 1 Id FROM dbo.Records WHERE Collection = @collection AND Id = @id');
+    if (idCheck.recordset.length > 0) {
+      throw new HttpError(409, 'Đã có hồ sơ khác chiếm đúng vị trí (Id) này — không thể khôi phục.');
+    }
+
+    const insReq = new sql.Request(tx);
+    await insReq
+      .input('collection', sql.NVarChar(50), row.Collection)
+      .input('id', sql.BigInt, row.OriginalId)
+      .input('code', sql.NVarChar(100), row.Code || null)
+      .input('payload', sql.NVarChar(sql.MAX), row.Payload)
+      .query('INSERT INTO dbo.Records (Collection, Id, Code, Payload) VALUES (@collection, @id, @code, @payload);');
+
+    const delReq = new sql.Request(tx);
+    await delReq.input('trashId', sql.BigInt, trashId).query('DELETE FROM dbo.TrashBin WHERE Id = @trashId');
+
+    await tx.commit();
+    invalidateCollectionCache(row.Collection);
+    return { collection: row.Collection, item: JSON.parse(row.Payload) };
+  } catch (err) {
+    await tx.rollback().catch(() => {});
+    throw err;
+  }
+}
+
+// Xóa vĩnh viễn — chỉ xóa dòng ở dbo.TrashBin (dữ liệu đã không còn ở dbo.Records từ lúc chuyển vào
+// thùng rác), không thể hoàn tác. Route gọi hàm này (routes/trash.js) bắt buộc xác thực lại
+// (withApprovalAuth/consumeApprovalGrant) trước khi tới đây, khớp mức độ nghiêm trọng của 1 hành động
+// không thể hoàn tác.
+async function permanentlyDeleteTrashItem(trashId) {
+  const pool = await getPool();
+  const result = await pool.request()
+    .input('trashId', sql.BigInt, trashId)
+    .query('DELETE FROM dbo.TrashBin OUTPUT DELETED.Id WHERE Id = @trashId');
+  if (result.recordset.length === 0) {
+    throw new HttpError(404, 'Không tìm thấy mục này trong thùng rác');
+  }
+}
+
 // Di trú dữ liệu cũ (nếu còn) từ AppData[collection] sang dbo.Records — CHỈ chạy nếu collection này
 // đang RỖNG trong bảng mới (idempotent, khớp đúng lib/systemLogStore.js/lib/taskStore.js). Xoá dòng
 // AppData cũ sau khi di trú xong.
@@ -339,9 +495,13 @@ async function withLockedRecordForCollection(collection, id, mutatorFn) {
   return result;
 }
 
-// checkFn(item) (tuỳ chọn) -> throw HttpError (vd 403) để huỷ, không xoá gì.
-async function deleteRecordForCollection(collection, id, checkFn) {
-  if (MIGRATED_COLLECTIONS.has(collection)) return deleteRecordById(collection, id, checkFn);
+// checkFn(item) (tuỳ chọn) -> throw HttpError (vd 403) để huỷ, không xoá gì. actor ({username,name}, tuỳ
+// chọn) -> người thực hiện xóa, ghi lại ở Thùng Rác (dbo.TrashBin) để hiển thị "ai xóa/lúc nào" — CHỈ
+// áp dụng cho collection đã ở dbo.Records (moveRecordToTrash() thay deleteRecordById() làm bước xóa
+// thật); các collection còn ở AppData (users, permGroups, danh mục cấu hình...) KHÔNG nằm trong phạm
+// vi Thùng Rác (đã thống nhất phạm vi), vẫn xóa thẳng như cũ.
+async function deleteRecordForCollection(collection, id, checkFn, actor) {
+  if (MIGRATED_COLLECTIONS.has(collection)) return moveRecordToTrash(collection, id, actor, checkFn);
   await withLockedAppDataValue(collection, (list) => {
     const arr = Array.isArray(list) ? list : [];
     const idx = arr.findIndex(it => it.id === id);
@@ -355,5 +515,6 @@ async function deleteRecordForCollection(collection, id, checkFn) {
 module.exports = {
   MIGRATED_COLLECTIONS,
   getAllRecords, insertRecord, withLockedRecordById, deleteRecordById, migrateLegacyCollection, migrateAllLegacyCollections,
-  getAllForCollection, getAllForCollectionCached, createForCollection, createForCollectionSerialized, withAppLock, withLockedRecordForCollection, deleteRecordForCollection
+  getAllForCollection, getAllForCollectionCached, createForCollection, createForCollectionSerialized, withAppLock, withLockedRecordForCollection, deleteRecordForCollection,
+  moveRecordToTrash, getTrashItems, restoreTrashItem, permanentlyDeleteTrashItem
 };
