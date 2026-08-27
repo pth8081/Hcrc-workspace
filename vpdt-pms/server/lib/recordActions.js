@@ -2318,9 +2318,10 @@ function gradeTrainingTestSubmission(rawAnswers, test, classPassScore) {
   });
 
   const percentage = totalPoints > 0 ? Math.round((score / totalPoints) * 100) : 0;
-  // Ngưỡng đạt/không đạt lấy từ ĐIỂM ĐẠT của LỚP HỌC (cls.passScore, lập lúc tạo lớp) — KHÔNG còn đọc
-  // từ bài test nữa (Ngân Hàng Câu Hỏi không có field passScore riêng, xem createValidation.js). Giữ
-  // fallback 60 cho dữ liệu lớp cũ trước khi có ràng buộc bắt buộc nhập Điểm Đạt khi gán test.
+  // Ngưỡng đạt/không đạt lấy từ ĐIỂM ĐẠT của LỚP HỌC (cls.passScore, lập lúc tạo lớp) — KHÔNG đọc lại
+  // trainingTests.passScore (bài test cũng có field passScore nhưng CHỈ để autofill gợi ý ở client lúc
+  // chọn test, xem createValidation.js). Giữ fallback 60 cho dữ liệu lớp cũ trước khi có ràng buộc bắt
+  // buộc nhập Điểm Đạt khi gán test.
   const threshold = Number.isFinite(Number(classPassScore)) && Number(classPassScore) > 0 ? Number(classPassScore) : 60;
   const passed = percentage >= threshold;
   return { answers, score, totalPoints, percentage, passed };

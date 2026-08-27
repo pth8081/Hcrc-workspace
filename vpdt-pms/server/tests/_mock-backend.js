@@ -429,8 +429,10 @@ function __mockValidateTrainingTestCreate(payload, user) {
   payload.title = String(payload.title).trim();
   payload.category = payload.category ? String(payload.category).trim() : '';
   payload.questions = questions;
-  // Điểm đạt không còn ở Ngân Hàng Câu Hỏi — chỉ set ở lớp học (trainingClasses.passScore).
-  delete payload.passScore;
+  // passScore ở đây CHỈ là gợi ý autofill cho ô Điểm Đạt Yêu Cầu lúc tạo/sửa lớp (client) — trainingClasses.passScore
+  // vẫn là nguồn quyết định duy nhất khi chấm điểm (mirrors createValidation.js).
+  const suggestedPassScore = Number(payload.passScore);
+  payload.passScore = Number.isFinite(suggestedPassScore) && suggestedPassScore > 0 && suggestedPassScore <= 100 ? suggestedPassScore : null;
 }
 
 function __mockValidateTrainingRegistrationCreate(payload, user) {

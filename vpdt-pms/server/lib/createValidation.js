@@ -1194,10 +1194,12 @@ const CREATE_MODULE_CONFIGS = {
       }
       payload.testId = testId;
       // Điểm Đạt (%) — NGUỒN DUY NHẤT xác định ngưỡng đạt/không đạt khi chấm tự động (xem
-      // gradeTrainingTestSubmission() ở lib/recordActions.js), lập ngay lúc TẠO LỚP — không còn field
-      // riêng ở Ngân Hàng Câu Hỏi (trainingTests) nữa, mỗi câu hỏi ở đó chỉ có điểm (points) của riêng
-      // nó, dùng làm trọng số khi tính % tổng. Lớp có gán bài test thì bắt buộc phải có Điểm Đạt hợp lệ
-      // (1-100) — không cho tạo/sửa lớp với test mà bỏ trống, tránh rơi vào mặc định ngầm không ai biết.
+      // gradeTrainingTestSubmission() ở lib/recordActions.js), lập ngay lúc TẠO LỚP. Ngân Hàng Câu Hỏi
+      // (trainingTests) có 1 field passScore riêng nhưng CHỈ mang tính gợi ý autofill cho ô này ở client
+      // (xem applyTrainingClassTestDefaultPassScore()) — không được server đọc lại lúc chấm điểm, vì 1
+      // bài test có thể tái dùng cho nhiều lớp với ngưỡng đạt khác nhau. Lớp có gán bài test thì bắt buộc
+      // phải có Điểm Đạt hợp lệ (1-100) ở CHÍNH lớp — không cho tạo/sửa lớp với test mà bỏ trống, tránh
+      // rơi vào mặc định ngầm không ai biết.
       if (payload.testId != null) {
         const passScore = Number(payload.passScore);
         if (!Number.isFinite(passScore) || passScore <= 0 || passScore > 100) {
@@ -1277,10 +1279,12 @@ const CREATE_MODULE_CONFIGS = {
       payload.title = String(payload.title).trim();
       payload.category = payload.category ? String(payload.category).trim() : '';
       payload.questions = questions;
-      // Ngân Hàng Câu Hỏi KHÔNG còn field passScore riêng — Điểm Đạt chỉ lập DUY NHẤT lúc tạo lớp học
-      // (trainingClasses.passScore, xem extraValidate ở trên), mỗi câu hỏi ở đây chỉ có điểm (points)
-      // của riêng nó, dùng làm trọng số khi chấm tổng (xem gradeTrainingTestSubmission()).
-      delete payload.passScore;
+      // passScore ở đây CHỈ là gợi ý (autofill) cho ô Điểm Đạt Yêu Cầu khi chọn bài test lúc tạo/sửa
+      // lớp học (xem applyTrainingClassTestDefaultPassScore() ở client) — KHÔNG được đọc khi chấm điểm,
+      // trainingClasses.passScore vẫn là nguồn quyết định DUY NHẤT (xem gradeTrainingTestSubmission()).
+      const suggestedPassScore = Number(payload.passScore);
+      payload.passScore = Number.isFinite(suggestedPassScore) && suggestedPassScore > 0 && suggestedPassScore <= 100
+        ? suggestedPassScore : null;
     }
   },
   // Chương Trình (trainingCourses, Đợt 4) — catalog "Chương Trình" TÁI SỬ DỤNG được cho nhiều LỚP HỌC
