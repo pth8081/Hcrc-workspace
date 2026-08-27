@@ -20538,6 +20538,17 @@ function getApproverCandidateUsers(currentApproversForStep) {
   return [...eligible, ...alreadyAssignedExtra];
 }
 
+// Ẩn/hiện khối "người phòng khác" ở 1 bước quy trình (renderWorkflowTab()) — checkbox bên trong vẫn ở
+// nguyên trong DOM lúc ẩn (chỉ thêm class "hidden"), nên collectDeptWorkflowConfig() đọc .checked vẫn
+// đúng dù khối đang ẩn hay hiện, không cần đổi gì ở luồng lưu.
+function toggleWfOtherDeptCandidates(containerId, btnId) {
+  const el = document.getElementById(containerId);
+  const btn = document.getElementById(btnId);
+  if (!el || !btn) return;
+  const nowHidden = el.classList.toggle('hidden');
+  btn.textContent = nowHidden ? btn.dataset.showLabel : btn.dataset.hideLabel;
+}
+
 function onWorkflowTemplateChange(dept) {
   // CẬP NHẬT: đổi mẫu quy trình giờ CHỈ preview lại danh sách bước/người duyệt theo mẫu mới, KHÔNG
   // lưu ngay — sửa lỗi trước đây: đổi mẫu lưu tức thì bằng các checkbox của mẫu CŨ còn sót lại trên
@@ -20577,32 +20588,49 @@ function renderWorkflowTab() {
 
     const stepsConfigHTML = selectedWf.steps.map(step => {
       const currentApprovers = effectiveApprovers[step.order] || [];
-      const candidates = getApproverCandidateUsers(currentApprovers).slice().sort((a, b) => {
-        const aSame = a.dept === dept ? 0 : 1;
-        const bSame = b.dept === dept ? 0 : 1;
-        if (aSame !== bSame) return aSame - bSame;
-        return (a.name || '').localeCompare(b.name || '', 'vi');
-      });
+      const isCheckedFn = u => Array.isArray(currentApprovers) ? currentApprovers.includes(u.username) : currentApprovers === u.username;
+      const candidates = getApproverCandidateUsers(currentApprovers).slice().sort((a, b) => (a.name || '').localeCompare(b.name || '', 'vi'));
+      // canBeApprover là cờ CHUNG toàn công ty (không theo phòng ban) nên danh sách ứng viên vốn dồn cả
+      // công ty vào 1 bước — tách người CÙNG phòng ban đang cấu hình ra hiện sẵn, người phòng KHÁC gom
+      // vào phần ẩn sau nút "Hiện thêm" để đỡ rối mắt, trừ khi đã có người phòng khác được chọn từ
+      // trước (giữ hiện sẵn, không để admin tưởng nhầm là mất lựa chọn cũ khi mở lại màn này).
+      const sameDept = candidates.filter(u => u.dept === dept);
+      const otherDept = candidates.filter(u => u.dept !== dept);
+      const anyOtherChecked = otherDept.some(isCheckedFn);
 
-      const userCheckboxes = candidates.map(u => {
-        const isChecked = Array.isArray(currentApprovers) ? currentApprovers.includes(u.username) : currentApprovers === u.username;
+      const renderCandidateCheckbox = u => {
+        const isChecked = isCheckedFn(u);
         return `
           <label class="inline-flex items-center gap-1 bg-white px-2 py-0.5 rounded border text-[11px] cursor-pointer">
             <input type="checkbox" value="${escapeHtml(u.username)}" data-dept="${escapeHtml(dept)}" data-step="${step.order}" ${isChecked ? 'checked' : ''}>
             <span>${escapeHtml(u.name)} (${escapeHtml(u.username)})${u.dept !== dept ? ` · <span class="text-gray-400">${escapeHtml(u.dept)}</span>` : ''}</span>
           </label>
         `;
-      }).join('');
+      };
+
+      const sameDeptHTML = sameDept.map(renderCandidateCheckbox).join('');
+      const stepKey = `${dept.replace(/\s+/g, '_')}_${step.order}`;
+      const otherContainerId = `wfOtherDept_${stepKey}`;
+      const otherBtnId = `wfOtherDeptBtn_${stepKey}`;
+      const showLabel = `▾ Hiện thêm (${otherDept.length} người phòng khác)`;
+      const hideLabel = `▴ Ẩn bớt (${otherDept.length} người phòng khác)`;
+      const otherDeptSection = otherDept.length ? `
+        <button type="button" id="${otherBtnId}" onclick="toggleWfOtherDeptCandidates('${otherContainerId}', '${otherBtnId}')"
+          data-show-label="${escapeHtml(showLabel)}" data-hide-label="${escapeHtml(hideLabel)}"
+          class="text-[11px] text-sky-600 font-semibold hover:underline">${escapeHtml(anyOtherChecked ? hideLabel : showLabel)}</button>
+        <div id="${otherContainerId}" class="flex flex-wrap gap-1.5 pt-1 ${anyOtherChecked ? '' : 'hidden'}">${otherDept.map(renderCandidateCheckbox).join('')}</div>
+      ` : '';
 
       const emptyHint = candidates.length === 0
         ? `<div class="text-[11px] text-gray-400 italic">Chưa có ai được cấp quyền "Người duyệt" — vào Module Quản trị (khối 12) để cấp trước.</div>`
-        : '';
+        : (sameDept.length === 0 ? `<div class="text-[11px] text-gray-400 italic">Chưa ai trong "${escapeHtml(dept)}" có quyền duyệt — chọn từ phòng khác bên dưới.</div>` : '');
 
       return `
         <div class="bg-gray-100 p-2 rounded text-xs space-y-1 border">
           <div class="font-bold text-gray-700">Bước ${step.order}: ${escapeHtml(step.name)}</div>
-          <div class="flex flex-wrap gap-1.5 pt-1">${userCheckboxes}</div>
+          <div class="flex flex-wrap gap-1.5 pt-1">${sameDeptHTML}</div>
           ${emptyHint}
+          ${otherDeptSection}
         </div>
       `;
     }).join('');
