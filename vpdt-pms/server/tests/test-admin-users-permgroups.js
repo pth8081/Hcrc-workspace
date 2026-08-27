@@ -466,7 +466,7 @@ async function scenario(name, fn) {
       workflowParticipatingDeptsDraft = [];
       renderWorkflowParticipatingDeptsChecklist();
       const picker = document.getElementById('workflowParticipatingDeptPicker');
-      const datalistBefore = [...document.querySelectorAll('#workflowParticipatingDeptDatalist option')].map(o => o.value);
+      const datalistBefore = (document.getElementById('workflowParticipatingDeptDatalist')._sddItems || []).map(o => o.value);
 
       // Chọn đúng 1 phòng ban có trong datalist gợi ý.
       picker.value = 'Kinh Doanh';
@@ -474,7 +474,7 @@ async function scenario(name, fn) {
       // textContent (không phải innerText) — khối này nằm trong <details> chưa mở (không có "open"),
       // innerText trả rỗng cho nội dung đang display:none dù DOM vẫn có; textContent đọc đúng bất kể ẩn/hiện.
       const afterAddList = document.getElementById('workflowParticipatingDeptsList').textContent;
-      const datalistAfterAdd = [...document.querySelectorAll('#workflowParticipatingDeptDatalist option')].map(o => o.value);
+      const datalistAfterAdd = (document.getElementById('workflowParticipatingDeptDatalist')._sddItems || []).map(o => o.value);
 
       // Gõ tự do 1 giá trị không tồn tại -> phải bị chặn, không thêm vào danh sách.
       window.__alerts.length = 0;
@@ -489,7 +489,7 @@ async function scenario(name, fn) {
         draftAfterInvalid: [...workflowParticipatingDeptsDraft],
       };
     });
-    record('(e) picker gõ tìm là <input list=...>+<datalist>, không phải <select> cứng',
+    record('(e) picker gõ tìm là input+dropdown tự dựng (sddSetOptions), không phải <select> cứng',
       r.datalistBefore.length === 3 && r.datalistBefore.includes('Kinh Doanh'), JSON.stringify(r.datalistBefore));
     record('(e) chọn đúng phòng ban từ gợi ý -> thêm được vào danh sách chip',
       r.addedToChipList, JSON.stringify(r));
@@ -504,7 +504,7 @@ async function scenario(name, fn) {
       switchTab('system'); setSystemSubTab('ADMIN');
       vppExcludeGroupsDraft = [];
       addVppExcludeGroupRow();
-      const datalistOptions = [...document.querySelectorAll('#vppJobTitlesDatalist option')].map(o => o.value);
+      const datalistOptions = (document.getElementById('vppJobTitlesDatalist')._sddItems || []).map(o => o.value);
 
       // addVppExcludeGroupJobTitle() gọi renderVppExcludeGroupsAdmin() thay hẳn innerHTML của wrap sau
       // mỗi lần thêm -> node <input> cũ bị thay thế, phải getElementById LẠI mỗi lần (không giữ tham
