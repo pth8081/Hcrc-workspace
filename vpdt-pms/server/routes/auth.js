@@ -14,6 +14,24 @@ const webauthn = require('../lib/webauthn');
 const { getPool, sql } = require('../db');
 const { sendMail, resolveEncryption } = require('../lib/mailer');
 const { decryptSecret } = require('../lib/emailCrypto');
+const { insertSystemLog } = require('../lib/systemLogStore');
+
+// Ghi nhật ký hệ thống cho các sự kiện đăng nhập THẤT BẠI/khoá tài khoản — trước đây hoàn toàn không
+// có dòng log nào cho các sự kiện này (chỉ LOGIN_SUCCESS được ghi, từ client sau khi đăng nhập xong,
+// xem logSystemAction() ở public/index.html), nên admin xem "Nhật ký hệ thống" không thấy DẤU VẾT gì
+// của 1 cuộc dò mật khẩu (kể cả khi đủ để kích hoạt khoá tạm 15 phút). Không thể dùng logSystemAction()
+// phía client cho các sự kiện này vì POST /api/log yêu cầu ĐÃ đăng nhập (requireAuth) — lúc đang thất
+// bại đăng nhập thì chưa có phiên hợp lệ để gọi qua đó, phải ghi thẳng ở server. username ghi lại là
+// TÊN ĐĂNG NHẬP người dùng vừa nhập (chưa xác thực được danh tính thật — khác mọi dòng log khác trong
+// hệ thống vốn luôn lấy từ req.freshUser đã xác thực), nhưng vẫn cần thiết để admin biết tài khoản nào
+// đang bị nhắm tới. Không await ở nơi gọi (fire-and-forget .catch) — lỗi ghi log không được phép làm
+// hỏng phản hồi đăng nhập thật.
+function logAuthFailure(req, { username, fullName, actionType, description }) {
+  insertSystemLog({
+    username: username || 'unknown', fullName: fullName || username || 'unknown', ipAddress: req.ip,
+    module: 'AUTH', actionType, targetObject: username || '', description, status: 'FAILURE'
+  }).catch(e => console.error('Lỗi ghi nhật ký hệ thống (đăng nhập thất bại):', e.message));
+}
 
 // Không bao giờ trả field mật khẩu/PIN (dù đã hash) hay dữ liệu khoá đăng nhập ra ngoài, dùng chung cho
 // /login, /me và /change-pin — khớp đúng stripPasswords() ở routes/data.js (trước đây route này bỏ sót
@@ -82,6 +100,7 @@ router.post('/login', loginRateLimiter, async (req, res) => {
   // tra tài khoản/khoá đăng nhập bên dưới vì đây là lớp chặn bot RẺ NHẤT (không tốn DB/bcrypt).
   if (isCaptchaEnabled()) {
     if (!verifyCaptcha(captchaId, captchaAnswer)) {
+      logAuthFailure(req, { username, actionType: 'CAPTCHA_FAILED', description: 'Nhập sai/hết hạn mã xác nhận CAPTCHA lúc đăng nhập' });
       return res.status(400).json({ error: 'Mã xác nhận không đúng hoặc đã hết hạn, vui lòng thử lại.' });
     }
   }
@@ -95,18 +114,35 @@ router.post('/login', loginRateLimiter, async (req, res) => {
     // công so bcrypt cho 1 lượt thử chắc chắn bị từ chối.
     const remainingLockMinutes = user ? getLockoutRemainingMinutes(user) : null;
     if (remainingLockMinutes !== null) {
+      logAuthFailure(req, {
+        username, fullName: user.name, actionType: 'LOGIN_BLOCKED_LOCKED',
+        description: `Thử đăng nhập khi tài khoản đang bị khoá tạm thời (còn ${remainingLockMinutes} phút)`
+      });
       return res.status(429).json({ error: `Tài khoản tạm khóa do đăng nhập sai quá nhiều lần. Vui lòng thử lại sau ${remainingLockMinutes} phút.` });
     }
 
     const ok = user && await verifyPassword(password, user.pass || user.password);
     if (!ok) {
       if (user) {
+        let justLocked = false;
         await withLockedAppDataValue('users', (collection) => {
           const list = Array.isArray(collection) ? collection : [];
           const idx = list.findIndex(u => u.username === username);
-          if (idx !== -1) recordFailedLogin(list[idx]);
+          if (idx !== -1) {
+            recordFailedLogin(list[idx]);
+            justLocked = !!list[idx].lockedUntil;
+          }
           return list;
         });
+        logAuthFailure(req, {
+          username, fullName: user.name,
+          actionType: justLocked ? 'ACCOUNT_LOCKED' : 'LOGIN_FAILED',
+          description: justLocked
+            ? 'Tài khoản bị khoá tạm thời 15 phút do đăng nhập sai quá 5 lần liên tiếp'
+            : 'Đăng nhập sai mật khẩu'
+        });
+      } else {
+        logAuthFailure(req, { username, actionType: 'LOGIN_FAILED', description: 'Đăng nhập sai tên đăng nhập hoặc mật khẩu' });
       }
       return res.status(401).json({ error: 'Tài khoản hoặc mật khẩu không chính xác' });
     }
@@ -606,6 +642,10 @@ router.post('/webauthn/login-verify', loginRateLimiter, async (req, res) => {
 
     const remainingLockMinutes = user ? getLockoutRemainingMinutes(user) : null;
     if (remainingLockMinutes !== null) {
+      logAuthFailure(req, {
+        username, fullName: user.name, actionType: 'LOGIN_BLOCKED_LOCKED',
+        description: `Thử đăng nhập bằng vân tay khi tài khoản đang bị khoá tạm thời (còn ${remainingLockMinutes} phút)`
+      });
       return res.status(429).json({ error: `Tài khoản tạm khóa do đăng nhập sai quá nhiều lần. Vui lòng thử lại sau ${remainingLockMinutes} phút.` });
     }
 
@@ -622,12 +662,25 @@ router.post('/webauthn/login-verify', loginRateLimiter, async (req, res) => {
 
     if (!verifyResult) {
       if (user) {
+        let justLocked = false;
         await withLockedAppDataValue('users', (collection) => {
           const list = Array.isArray(collection) ? collection : [];
           const idx = list.findIndex(u => u.username === username);
-          if (idx !== -1) recordFailedLogin(list[idx]);
+          if (idx !== -1) {
+            recordFailedLogin(list[idx]);
+            justLocked = !!list[idx].lockedUntil;
+          }
           return list;
         });
+        logAuthFailure(req, {
+          username, fullName: user.name,
+          actionType: justLocked ? 'ACCOUNT_LOCKED' : 'LOGIN_FAILED',
+          description: justLocked
+            ? 'Tài khoản bị khoá tạm thời 15 phút do đăng nhập sai quá 5 lần liên tiếp'
+            : 'Đăng nhập bằng vân tay thất bại'
+        });
+      } else {
+        logAuthFailure(req, { username, actionType: 'LOGIN_FAILED', description: 'Đăng nhập bằng vân tay với tài khoản không tồn tại' });
       }
       return res.status(401).json({ error: 'Không thể đăng nhập bằng vân tay, vui lòng thử lại hoặc dùng mật khẩu' });
     }

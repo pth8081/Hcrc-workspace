@@ -18,7 +18,8 @@ const {
   filterReportEntriesForUser, filterContractsForUser, filterCarRegsForUser, filterOfficeReqsForUser,
   filterMeetingsForUser, filterMeetingMinutesForUser, filterTasksForUser, sanitizeTrainingTestsForUser,
   filterRecruitmentReferralsForUser, filterItPriceApprovalsForUser, filterItSupportTicketsForUser,
-  filterUniformPeriodsForUser, filterUniformIssuancesForUser, filterUniformStockAdjustmentsForUser, filterUniformTransfersForUser, filterBudgetEntriesForUser
+  filterUniformPeriodsForUser, filterUniformIssuancesForUser, filterUniformStockAdjustmentsForUser, filterUniformTransfersForUser, filterBudgetEntriesForUser,
+  filterVppRegistrationsForUser
 } = require('../lib/recordViewScope');
 
 const VALID_KEYS = new Set(Object.keys(DEFAULTS));
@@ -413,6 +414,11 @@ router.get('/', async (req, res) => {
     // bản NHÁP đang soạn dở) chỉ nên lộ cho đúng phòng ban mình + người có budgetManage/budgetAggregate/
     // admin — xem lib/recordViewScope.js canViewBudgetEntry().
     if (data.budgetEntries) data.budgetEntries = filterBudgetEntriesForUser(data.budgetEntries, req.freshUser, data);
+    // vppRegistrations: cùng dạng lỗ hổng như itPriceApprovals/budgetEntries ở trên — collection DUY
+    // NHẤT trong nhóm dept-workflow trước đây KHÔNG được lọc lại ở server (chỉ ẩn ở
+    // renderVppRegistrations()), để lộ đăng ký/chi tiêu văn phòng phẩm (kể cả bản NHÁP) của MỌI phòng
+    // ban cho bất kỳ ai gọi thẳng GET /api/data. Xem lib/recordViewScope.js canViewVppRegistration().
+    if (data.vppRegistrations) data.vppRegistrations = filterVppRegistrationsForUser(data.vppRegistrations, req.freshUser, data);
     // tasks: cùng dạng lỗ hổng như 9 collection ở trên — trước đây hoàn toàn KHÔNG được lọc lại ở
     // server (chỉ ẩn ở renderTasks() qua canViewTaskRecord()), để lộ toàn bộ Công Việc công ty (kể cả
     // nội dung "Ý kiến chỉ đạo" nhạy cảm) cho bất kỳ ai gọi thẳng GET /api/data.

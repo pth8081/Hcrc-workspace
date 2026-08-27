@@ -149,7 +149,15 @@ function editContract(payload, user, contract, hasAddenda, rootDept, appData, ro
   // dung tuy đã sửa đúng theo góp ý nhưng chẳng ai duyệt tiếp/duyệt lại được nữa (kẹt vĩnh viễn). Sửa
   // xong thì coi như nộp lại từ đầu quy trình duyệt (currentStep=1), khớp đúng hành vi resubmit-from-
   // scratch mà REQUEST_CHANGES đã dùng cho các module khác (xem lib/workflowEngine.js).
-  if (contract.approvalStatus === 'REJECTED' || contract.approvalStatus === 'DRAFT') {
+  //
+  // Áp dụng CẢ khi đang PENDING (đã qua 1 số bước duyệt, còn dở dang): trước đây nhánh này chỉ xét
+  // REJECTED/DRAFT, nghĩa là 1 hồ sơ đang chờ duyệt bước 2+ vẫn sửa được amount/đối tác/phòng ban/ngày
+  // tháng tự do mà KHÔNG vô hiệu hoá các lượt "APPROVED" đã cấp ở bước trước — người duyệt bước sau
+  // hoàn tất chuỗi duyệt dựa trên nội dung đã đổi mà người duyệt bước trước chưa từng thấy. Reset về
+  // currentStep=1 + invalidate lịch sử APPROVED y hệt REJECTED/DRAFT buộc quy trình duyệt lại từ đầu
+  // với đúng nội dung mới; cũng tránh hồ sơ bị kẹt nếu đổi dept làm effectiveSteps mới có số bước khác
+  // (currentStep cũ có thể trỏ ra ngoài effectiveApprovers mới).
+  if (contract.approvalStatus === 'REJECTED' || contract.approvalStatus === 'DRAFT' || contract.approvalStatus === 'PENDING') {
     // Mọi lượt "APPROVED" đã ghi ở vòng nộp TRƯỚC (VD bước 1 có 2 đồng duyệt, 1 người đã duyệt trước
     // khi người kia từ chối) không còn giá trị cho vòng MỚI vì nội dung đã sửa — đánh dấu invalidated
     // giống hệt cách REQUEST_CHANGES đã làm cho vpp/submissions (xem workflowEngine.js) để

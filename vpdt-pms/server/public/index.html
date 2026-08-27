@@ -8959,6 +8959,7 @@ async function changeMyPassword(e) {
   document.getElementById('pfConfirmPass').value = '';
 
   closeProfileModal();
+  logSystemAction('USER_MGM', 'CHANGE_OWN_PASSWORD', 'Tự đổi mật khẩu đăng nhập của chính mình.', 'SUCCESS', currentUser.username);
   alert('✅ Đổi mật khẩu thành công!');
 }
 
@@ -8994,6 +8995,7 @@ async function changeMyApprovalPin() {
     document.getElementById('pfConfirmPin').value = '';
     document.getElementById('pfCurrentPinWrap').classList.remove('hidden');
     document.getElementById('pfPinHint').innerText = 'Nhập đúng mã PIN hiện tại để đổi sang mã mới.';
+    logSystemAction('USER_MGM', 'CHANGE_OWN_PIN', 'Tự đổi mã PIN phê duyệt của chính mình.', 'SUCCESS', currentUser.username);
     alert('✅ Đã cập nhật mã PIN phê duyệt!');
   } catch (err) {
     alert('⛔ Không thể kết nối tới máy chủ: ' + err.message);
@@ -11250,6 +11252,7 @@ function downloadDocFile(id) {
   document.body.appendChild(a);
   a.click();
   a.remove();
+  logSystemAction('DOC', 'DOWNLOAD_DOC', `Tải tệp tài liệu [${doc.code} - ${doc.title}]`, 'SUCCESS', doc.code);
 }
 
 async function uploadDoc(e) {
@@ -21862,6 +21865,13 @@ function renderVppExcludeGroupsAdmin() {
   const wrap = document.getElementById('vppExcludeGroupsListWrap');
   const datalist = document.getElementById('vppJobTitlesDatalist');
   if (datalist) sddSetOptions('vppJobTitlesDatalist', DB.jobTitles);
+  // Dropdown gợi ý dùng CHUNG cho mọi ô "Tìm chức danh..." (1 div nằm NGOÀI wrap, định vị lại theo
+  // đúng ô đang focus mỗi lần hiện — xem sddPositionAndShow()) — nhưng hàm này xoá/dựng lại TOÀN BỘ
+  // input bên trong wrap.innerHTML mỗi lần gọi (thêm/xoá chức danh, thêm/xoá nhóm...). Nếu dropdown
+  // đang mở lúc gọi (VD gõ xong bấm Enter thêm 1 chức danh), _sddActiveInput vẫn trỏ vào input CŨ vừa
+  // bị huỷ — bấm chọn tiếp 1 gợi ý sau đó sẽ ghi giá trị vào input đã chết, mất lựa chọn mà không báo
+  // lỗi gì. Ẩn dropdown TRƯỚC khi dựng lại wrap để buộc phải focus lại (trên input MỚI) mới mở lại được.
+  if (datalist) datalist.classList.add('hidden');
   if (!wrap) return;
   if (!vppExcludeGroupsDraft.length) {
     wrap.innerHTML = `<div class="text-[11px] text-gray-400 italic p-2 bg-gray-50 rounded border">Chưa có nhóm nào.</div>`;
@@ -22079,6 +22089,11 @@ document.addEventListener('click', (ev) => {
 function renderPeopleMultiSelect(containerId, candidates, initialSelected, checkboxClass, checkboxDataAttrs) {
   const container = document.getElementById(containerId);
   if (!container) return;
+  // Lọc bỏ phần tử null/undefined/thiếu username — cùng lớp lỗi vừa sửa ở sddSetOptions(): nếu DB.users
+  // (hoặc mảng candidates bất kỳ truyền vào từ nơi gọi) lỡ có 1 phần tử rác, label()/renderChips()/
+  // renderDropdown() bên dưới sẽ throw TypeError âm thầm ngay trong sự kiện oninput/onfocus, khiến
+  // TOÀN BỘ ô chọn nhiều người này ngừng hoạt động không 1 dòng lỗi hiện ra.
+  candidates = (candidates || []).filter(u => u && u.username);
   const dataAttrsStr = Object.entries(checkboxDataAttrs || {}).map(([k, v]) => `${k}="${escapeHtml(v)}"`).join(' ');
   const selected = new Set(initialSelected || []);
   const label = (u) => `${u.name} (${u.username}) - ${u.dept}`;
@@ -24231,7 +24246,7 @@ async function deleteUser(id) {
 // tạo/duyệt của người đó, chỉ chặn truy cập hệ thống. Có hiệu lực NGAY LẬP TỨC kể cả phiên đang mở sẵn
 // (server tự kiểm tra lại trạng thái active ở MỌI request, xem lib/auth.js requireAuth) — không cần
 // đợi họ tự đăng xuất hay JWT hết hạn (tới 8 tiếng).
-function toggleUserActive(id) {
+async function toggleUserActive(id) {
   const u = DB.users.find(item => item.id === id);
   if (!u) return;
   const willActivate = u.active === false;
@@ -24243,8 +24258,18 @@ function toggleUserActive(id) {
   const verb = willActivate ? 'mở khóa' : 'khóa';
   if (!confirm(`Bạn có chắc chắn muốn ${verb} tài khoản "${u.username}" (${u.name})?${willActivate ? '' : '\n\nSau khi khóa, người này sẽ KHÔNG đăng nhập được nữa và mọi phiên đang mở sẵn (nếu có) sẽ bị chặn ngay ở lần thao tác tiếp theo.'}`)) return;
 
+  // await + kiểm tra saved trước khi ghi log — trước đây gọi syncStorage() không await rồi ghi log
+  // 'SUCCESS' ngay lập tức, nên nếu server từ chối lưu (VD xung đột version), Nhật ký hệ thống vẫn ghi
+  // nhận đã khoá/mở khóa thành công dù trạng thái tài khoản thực tế KHÔNG đổi — khớp đúng khuôn
+  // deleteUser() ở trên (đảo lại DB.users nếu lưu thất bại, chỉ ghi log khi saved === true).
+  const prevActive = u.active;
   u.active = willActivate;
-  syncStorage('users');
+  const saved = await syncStorage('users');
+  if (!saved) {
+    u.active = prevActive;
+    renderUsers();
+    return;
+  }
   logSystemAction('USER_MGM', willActivate ? 'ACTIVATE_USER' : 'DEACTIVATE_USER',
     `${willActivate ? 'Mở khóa' : 'Khóa'} người dùng [${u.username}]`, 'SUCCESS', u.username);
   renderUsers();
