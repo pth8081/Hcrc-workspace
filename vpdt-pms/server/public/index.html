@@ -5549,8 +5549,6 @@ table { display: block; overflow-x: auto; max-width: 100%; }
     <div class="p-4 overflow-y-auto flex-1 space-y-4 text-xs">
       <div id="subModalDetails" class="bg-gray-50 p-3 rounded border space-y-2 text-gray-700"></div>
 
-      <div id="subModalInfoRequests"></div>
-
       <div id="subModalOpinions"></div>
 
       <div id="subModalOpinionWarning"></div>
@@ -12413,7 +12411,6 @@ function openProcessSubmissionModal(subId) {
   }).join('');
   document.getElementById('subModalHistory').innerHTML = historyHTML || '<div class="text-gray-400 italic">Chưa có lịch sử xử lý.</div>';
 
-  renderSubModalInfoRequests(sub);
   renderSubModalOpinions(sub);
   renderSubModalOpinionWarning(sub, wfConfig);
 
@@ -12424,8 +12421,7 @@ function openProcessSubmissionModal(subId) {
   if (canApprove) {
     actionBtns.innerHTML = `
       <button onclick="confirmProcessSubmission('REJECT')" class="bg-red-600 text-white px-4 py-1.5 rounded font-bold hover:bg-red-700 text-xs">❌ Từ Chối / Trả Về</button>
-      <button onclick="confirmRequestSubmissionInfo()" class="bg-blue-600 text-white px-4 py-1.5 rounded font-bold hover:bg-blue-700 text-xs" title="Giữ nguyên PENDING — chỉ ghi 1 ghi chú, người trình phản hồi qua ô riêng, KHÔNG sửa lại nội dung/tệp đã trình">📋 Yêu Cầu Bổ Sung (ghi chú)</button>
-      <button onclick="confirmProcessSubmission('REQUEST_CHANGES')" class="bg-amber-500 text-white px-4 py-1.5 rounded font-bold hover:bg-amber-600 text-xs" title="Đưa hồ sơ về NHÁP để người trình sửa lại TOÀN BỘ nội dung + tệp rồi gửi lại từ bước 1">🔄 Bổ Sung (Sửa Toàn Bộ)</button>
+      <button onclick="confirmProcessSubmission('REQUEST_CHANGES')" class="bg-amber-500 text-white px-4 py-1.5 rounded font-bold hover:bg-amber-600 text-xs" title="Đưa hồ sơ về NHÁP để người trình sửa lại TOÀN BỘ nội dung + tệp rồi gửi lại từ bước 1">🔄 Yêu Cầu Bổ Sung</button>
       <button onclick="confirmProcessSubmission('APPROVE')" class="bg-green-600 text-white px-5 py-1.5 rounded font-bold hover:bg-green-700 text-xs">✅ Phê Duyệt & Chuyển Bước</button>
     `;
   } else {
@@ -12442,8 +12438,8 @@ function closeProcessSubmissionModal() {
 
 // Cổng xác nhận Đồng Ý/Hủy trước khi thực hiện — xem showConfirmModal() trong index.html. Thứ tự:
 // xác nhận ý định TRƯỚC, rồi mới tới withApprovalAuth() (xác thực lại mật khẩu/OTP nếu có cấu hình)
-// SAU, rồi mới gọi API thật sự — processSubmission()/requestSubmissionInfo() vẫn tự kiểm tra lại
-// (vd. bắt buộc nhập lý do từ chối) làm lớp an toàn thứ hai.
+// SAU, rồi mới gọi API thật sự — processSubmission() vẫn tự kiểm tra lại (vd. bắt buộc nhập lý do
+// từ chối) làm lớp an toàn thứ hai.
 function confirmProcessSubmission(actionType) {
   const comment = document.getElementById('txtSubmissionComment').value.trim();
   if ((actionType === 'REJECT' || actionType === 'REQUEST_CHANGES') && !comment) {
@@ -12461,19 +12457,6 @@ function confirmProcessSubmission(actionType) {
       if (isApprove) withApprovalAuth(() => processSubmission('APPROVE'));
       else processSubmission(actionType);
     }
-  });
-}
-
-function confirmRequestSubmissionInfo() {
-  const comment = document.getElementById('txtSubmissionComment').value.trim();
-  if (!comment) {
-    return alert('Vui lòng nhập nội dung cần bổ sung vào ô Ý kiến chỉ đạo!');
-  }
-  showConfirmModal({
-    title: '📋 Xác Nhận Yêu Cầu Bổ Sung',
-    bodyHTML: `<p>Bạn có chắc chắn muốn yêu cầu bổ sung thông tin cho tờ trình này?</p><p class="mt-2 italic text-gray-600">"${escapeHtml(comment)}"</p>`,
-    confirmLabel: 'Gửi Yêu Cầu',
-    onConfirm: () => requestSubmissionInfo()
   });
 }
 
@@ -12544,75 +12527,6 @@ async function processSubmission(actionType) {
   closeProcessSubmissionModal();
   renderSubmissionReqs();
   refreshApprovalSurfaces();
-}
-
-// YÊU CẦU BỔ SUNG: theo đúng yêu cầu người dùng, chỉ nhắm tới ĐÚNG người yêu cầu (approver hiện đang
-// xử lý bước hiện tại) — KHÔNG đổi trạng thái tờ trình, KHÔNG khoá bước, KHÔNG reset các đồng phê
-// duyệt khác đã duyệt rồi. Cơ chế "ALL required" của isStepApprovalComplete() đã tự nhiên giữ bước
-// chưa hoàn tất cho đến khi chính người yêu cầu này bấm Phê Duyệt — không cần thêm logic khoá riêng.
-async function requestSubmissionInfo() {
-  if (!currentProcessingSubId) return;
-  const sub = DB.submissions.find(s => s.id === currentProcessingSubId);
-  if (!sub) return;
-
-  const comment = document.getElementById('txtSubmissionComment').value.trim();
-  if (!comment) {
-    return alert('Vui lòng nhập nội dung cần bổ sung vào ô Ý kiến chỉ đạo!');
-  }
-
-  let result;
-  try {
-    result = await callWorkflowAction('submissions', sub.id, 'request-info', { comment });
-  } catch (e) {
-    return alert('⛔ ' + e.message);
-  }
-
-  const updatedSub = result.item;
-  const idx = DB.submissions.findIndex(s => s.id === sub.id);
-  if (idx !== -1) DB.submissions[idx] = updatedSub;
-
-  logSystemAction('SUBMISSION', 'REQUEST_INFO', `Yêu cầu bổ sung cho tờ trình [${updatedSub.code}]: ${comment}`, 'SUCCESS', updatedSub.code);
-  notifyUsersByEmail('SUBMISSION', 'NOTIFY_REQUEST_INFO', updatedSub.code, [updatedSub.creator],
-    `[VPDT] Tờ trình ${updatedSub.code} cần bổ sung thông tin`,
-    `Tờ trình "${updatedSub.title}" (${updatedSub.code}) của bạn cần bổ sung: ${comment}`);
-
-  alert('✅ Đã gửi yêu cầu bổ sung tới người trình!');
-  closeProcessSubmissionModal();
-  renderSubmissionReqs();
-}
-
-function renderSubModalInfoRequests(sub) {
-  const container = document.getElementById('subModalInfoRequests');
-  if (!container) return;
-  const requests = sub.infoRequests || [];
-  if (requests.length === 0) { container.innerHTML = ''; return; }
-
-  const isCreator = currentUser.username === sub.creator;
-  container.innerHTML = `
-    <div>
-      <h4 class="font-bold text-blue-700 mb-2">📋 Yêu Cầu Bổ Sung</h4>
-      <div class="space-y-1.5">
-        ${requests.map(r => `
-          <div class="bg-blue-50 border border-blue-200 p-2 rounded text-xs space-y-1">
-            <div class="flex justify-between font-semibold text-gray-700">
-              <span>${escapeHtml(r.requestedByName)} yêu cầu (bước ${r.step})</span>
-              <span class="text-gray-400 font-normal">${escapeHtml(r.requestedAt)}</span>
-            </div>
-            <div class="text-gray-800 italic">"${escapeHtml(r.reason)}"</div>
-            ${r.response
-              ? `<div class="bg-white p-1.5 rounded border mt-1"><b>Đã bổ sung (${escapeHtml(r.respondedAt)}):</b> ${escapeHtml(r.response)}</div>`
-              : (isCreator
-                  ? `<div class="flex gap-1 mt-1">
-                      <input type="text" id="subInfoReplyInput_${r.id}" placeholder="Nhập nội dung bổ sung..." class="flex-1 border p-1 rounded text-xs">
-                      <button onclick="respondSubmissionInfo(${r.id})" class="bg-blue-600 text-white px-2 py-1 rounded text-[11px] font-bold hover:bg-blue-700">Gửi</button>
-                    </div>`
-                  : `<div class="text-amber-600 italic">⏳ Đang chờ người trình bổ sung...</div>`)
-            }
-          </div>
-        `).join('')}
-      </div>
-    </div>
-  `;
 }
 
 // "XIN Ý KIẾN" — kênh tham khảo song song (blocking:false trong SUBMISSION_APPROVAL_LAYERS), KHÔNG
@@ -12727,46 +12641,6 @@ async function giveSubmissionOpinion() {
   logSystemAction('SUBMISSION', 'GIVE_OPINION', `Cho ý kiến tham khảo tờ trình [${updatedSub.code}]: ${comment}`, 'SUCCESS', updatedSub.code);
   alert('✅ Đã gửi ý kiến tham khảo!');
   renderSubModalOpinions(updatedSub);
-}
-
-async function respondSubmissionInfo(reqId) {
-  if (!currentProcessingSubId) return;
-  const sub = DB.submissions.find(s => s.id === currentProcessingSubId);
-  if (!sub) return;
-  const reqEntry = (sub.infoRequests || []).find(r => r.id === reqId);
-  if (!reqEntry) return;
-
-  const input = document.getElementById(`subInfoReplyInput_${reqId}`);
-  const response = (input?.value || '').trim();
-  if (!response) return alert('Vui lòng nhập nội dung bổ sung!');
-
-  let result;
-  try {
-    const res = await fetch(`/api/workflow/submissions/${sub.id}/respond-info`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ requestId: reqId, response })
-    });
-    if (res.status === 401) return handleSessionExpired();
-    const body = await res.json().catch(() => ({}));
-    if (!res.ok) throw new Error(body.error || `Lỗi máy chủ (HTTP ${res.status})`);
-    result = body;
-  } catch (e) {
-    return alert('⛔ ' + e.message);
-  }
-
-  const updatedSub = result.item;
-  const idx = DB.submissions.findIndex(s => s.id === sub.id);
-  if (idx !== -1) DB.submissions[idx] = updatedSub;
-  const updatedReqEntry = (updatedSub.infoRequests || []).find(r => r.id === reqId);
-
-  logSystemAction('SUBMISSION', 'RESPOND_INFO', `Phản hồi yêu cầu bổ sung cho tờ trình [${updatedSub.code}]: ${response}`, 'SUCCESS', updatedSub.code);
-  notifyUsersByEmail('SUBMISSION', 'NOTIFY_RESPOND_INFO', updatedSub.code, [updatedReqEntry?.requestedBy],
-    `[VPDT] Tờ trình ${updatedSub.code} đã được bổ sung thông tin`,
-    `Người trình đã bổ sung thông tin bạn yêu cầu cho tờ trình "${updatedSub.title}" (${updatedSub.code}): ${response}`);
-
-  alert('✅ Đã gửi bổ sung!');
-  openProcessSubmissionModal(updatedSub.id);
 }
 
 // Dựng HTML "Phiếu Phê Duyệt Văn Bản Trình" — ghép vào khung dùng chung buildApprovalSlipShellHTML()
