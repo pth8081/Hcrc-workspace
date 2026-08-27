@@ -11,7 +11,7 @@
 const { HttpError } = require('./httpErrors');
 const { scopeAllows, OFFICE_SUBTYPE_TO_PERM_FLAG, normalizeReportEntryPayload, buildEffectiveContractApprovalWorkflowServer, sanitizeUniformItems, sanitizeBudgetLines, getBudgetTemplateCustomFields, sanitizeBudgetCustomFields, resolveTrainingInstructorUsername, normalizeInviteList, normalizeTrainingPlanFields, normalizeOnboardingPathFields, SUBMISSION_APPROVAL_LEVELS, buildEffectiveSubmissionWorkflowServer } = require('./createValidation');
 const { validateRegistrationItems: validateVppRegItems, calcItemsTotal: calcVppItemsTotal } = require('./vppCatalog');
-const { sanitizePriceFileItems } = require('./priceFileParser');
+const { sanitizePriceFileItems, sanitizeColumnLabels } = require('./priceFileParser');
 
 function nowVN() {
   return new Date().toLocaleString('vi-VN');
@@ -2667,13 +2667,14 @@ function submitPriceSupplementFile(user, item, payload) {
   const file = payload?.file;
   if (!file || !file.fileUrl) throw new HttpError(400, 'Vui lòng tải lên tệp bảng giá bổ sung (.xlsx)');
   const items = sanitizePriceFileItems(file.items);
+  const columnLabels = sanitizeColumnLabels(file.columnLabels);
   const newFile = {
     id: Date.now(),
     fileUrl: String(file.fileUrl).slice(0, 300),
     fileName: (String(file.fileName || '').trim() || 'bang-gia-bo-sung.xlsx').slice(0, 200),
     uploadedBy: user.username, uploadedByName: user.name,
     uploadedAt: nowVN(),
-    items
+    items, columnLabels
   };
   item.files = item.files || [];
   item.files.push(newFile);

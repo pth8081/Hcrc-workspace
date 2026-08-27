@@ -4912,22 +4912,23 @@ table { display: block; overflow-x: auto; max-width: 100%; }
     <!-- Sub-tab: Phê Duyệt Giá -->
     <div id="itSubPrice" class="space-y-4">
       <!-- Chỉ admin thấy được (khớp itPriceMasterLists trong ADMIN_ONLY_KEYS ở routes/data.js) — nạp
-           sẵn 1 hoặc nhiều "File Giá Mẫu" để hệ thống tự đối chiếu với bảng giá đề xuất bên dưới, xem
-           onItPriceFileChange()/submitItPriceApproval(). -->
+           sẵn 1 hoặc nhiều Mẫu Giá (KHUÔN CỘT của bảng giá bên mua hàng gửi tại từng thời điểm, không
+           còn lưu dữ liệu giá thật/không còn đối chiếu tự động) để người đề xuất chọn đúng mẫu áp dụng
+           khi nộp bảng giá bên dưới — xem onItPriceFileChange()/submitItPriceApproval(). -->
       <div id="itPriceMasterListAdminWrap" class="hidden bg-white p-4 rounded border space-y-3">
         <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
           <div>
-            <h4 class="font-bold text-sm text-gray-800">📐 File Giá Mẫu (đối chiếu tự động)</h4>
-            <p class="text-[11px] text-gray-500 italic">Nạp bảng giá chuẩn để hệ thống tự đối chiếu mỗi khi có đề xuất duyệt giá — khớp đúng mã hàng + giá cũ với file mẫu thì tự động bỏ qua bước duyệt phòng ban. Tạo được nhiều file (VD theo ngành hàng/đợt cập nhật) — người đề xuất tự chọn đúng file áp dụng lúc nộp bảng giá.</p>
+            <h4 class="font-bold text-sm text-gray-800">📐 Mẫu Giá (khuôn cột)</h4>
+            <p class="text-[11px] text-gray-500 italic">Nạp file mẫu bên mua hàng gửi tại từng thời điểm — hệ thống CHỈ đọc dòng tiêu đề để lấy đúng tên cột (Mã hàng/Tên mặt hàng/Giá cũ/Giá mới, cho phép thêm cột tuỳ ý khác), KHÔNG lưu dữ liệu giá thật. Tạo được nhiều mẫu (VD theo ngành hàng/đợt cập nhật) — người đề xuất tự chọn đúng mẫu áp dụng lúc nộp bảng giá, hệ thống sẽ kiểm tra file nộp có đúng cột theo mẫu không.</p>
           </div>
-          <button type="button" onclick="addItPriceMasterList()" class="bg-gray-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-gray-700 whitespace-nowrap">+ Thêm File Mẫu</button>
+          <button type="button" onclick="addItPriceMasterList()" class="bg-gray-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-gray-700 whitespace-nowrap">+ Thêm Mẫu Giá</button>
         </div>
         <div class="overflow-x-auto">
           <table class="w-full border-collapse border text-xs">
             <thead>
               <tr class="bg-gray-100 text-left">
-                <th class="border p-2">Tên File Mẫu</th>
-                <th class="border p-2 text-center">Số Mặt Hàng</th>
+                <th class="border p-2">Tên Mẫu Giá</th>
+                <th class="border p-2">Các Cột Trong Mẫu</th>
                 <th class="border p-2">Nạp Bởi</th>
                 <th class="border p-2 text-center">Thao Tác</th>
               </tr>
@@ -4958,20 +4959,19 @@ table { display: block; overflow-x: auto; max-width: 100%; }
             <select id="itPriceMasterListSelect" onchange="onItPriceMasterListChange()" class="w-full border p-1.5 rounded bg-white">
               <option value="">-- Chọn Mẫu Giá Phê Duyệt --</option>
             </select>
-            <p class="text-gray-400 mt-1">Bắt buộc chọn đúng mẫu giá áp dụng cho bảng giá của bạn — chọn sai mẫu (không mặt hàng nào khớp) sẽ bị chặn gửi. Nếu khớp 100% (đúng mã hàng + giá cũ), đề xuất được tự động duyệt luôn, không cần chờ ai bấm Duyệt.</p>
+            <p class="text-gray-400 mt-1">Bắt buộc chọn đúng mẫu áp dụng cho bảng giá của bạn — tệp bảng giá tải lên bên dưới phải có đúng tên cột theo mẫu đã chọn, sai/thiếu cột sẽ bị chặn gửi.</p>
           </div>
           <div>
             <label class="block font-semibold text-gray-600 mb-1">📎 Tệp Bảng Giá (.xlsx) <span class="text-red-500">*</span></label>
             <input id="itPriceFileInput" type="file" accept=".xlsx,.xls" onchange="onItPriceFileChange(event)" class="w-full border p-1.5 rounded bg-white">
             <p id="itPriceFileStatus" class="text-gray-500 mt-1"></p>
-            <p class="text-gray-400 mt-1">Tệp cần có cột "Tên mặt hàng"/"Giá mới" (khuyến khích thêm "Mã hàng"/"Giá cũ") — không phân biệt thứ tự cột.</p>
+            <p class="text-gray-400 mt-1">Tệp cần có cột "Tên mặt hàng"/"Giá mới" (khuyến khích thêm "Mã hàng"/"Giá cũ") — không phân biệt thứ tự cột. Nếu đã chọn Mẫu Giá ở trên, tên cột phải khớp đúng theo mẫu.</p>
           </div>
           <div id="itPriceFilePreviewWrap" class="hidden">
             <p class="font-semibold text-gray-600 mb-1">Xem trước nội dung tệp (<span id="itPriceFilePreviewCount">0</span> dòng)</p>
-            <div id="itPriceFilePreviewBanner" class="hidden mb-2"></div>
             <div class="overflow-x-auto max-h-48 overflow-y-auto border rounded">
               <table class="w-full border-collapse text-xs bg-white">
-                <thead><tr class="bg-gray-100 text-left text-gray-700"><th class="border p-1">Mã hàng</th><th class="border p-1">Tên mặt hàng</th><th class="border p-1 text-right">Giá cũ</th><th class="border p-1 text-right">Giá mới</th><th class="border p-1">Đối chiếu giá mẫu</th></tr></thead>
+                <thead id="itPriceFilePreviewHead" class="bg-gray-100 text-left text-gray-700"></thead>
                 <tbody id="itPriceFilePreviewBody"></tbody>
               </table>
             </div>
@@ -7710,9 +7710,8 @@ async function initDatabase(loggingInUser) {
     // vẫn chặn đúng do tự đọc thẳng DB (getAppDataValueCached), chỉ riêng client hiển thị sai.
     DB.uploadFileTypeConfig = data.uploadFileTypeConfig || {};
     DB.uploadSizeLimitConfig = data.uploadSizeLimitConfig || {};
-    // GET /api/data trả bản ĐÃ LỌC BỎ items[] (mỗi file mẫu có thể tới hàng nghìn dòng, xem
-    // stripMasterListItems() ở routes/data.js) — client chỉ hiện tên/số lượng/ngày nạp ở màn quản lý,
-    // không bao giờ tự tính đối chiếu ở trình duyệt (luôn qua server, xem parseItPriceFileForPreview()).
+    // Mẫu Giá giờ chỉ còn columns[] (khuôn cột, không còn dữ liệu giá thật) — nhẹ, trả nguyên qua
+    // GET /api/data như mọi collection khác, không cần lọc bớt như thiết kế cũ.
     DB.itPriceMasterLists = data.itPriceMasterLists || [];
     DB.emailConfig = data.emailConfig || {};
     // Nhật ký hệ thống KHÔNG còn tải kèm trong GET /api/data (trước đây trả sẵn cho MỌI người đăng
@@ -30213,40 +30212,30 @@ function setItSupportSubTab(subTab) {
 // rồi echo lại kết quả kèm request tạo (giống hệt luồng danh mục VPP ở onVppCatalogFileChange()).
 let itPricePendingFile = null; // { items, fileUrl, fileName } — kết quả đọc file gần nhất, chờ gửi
 
-// Đối chiếu File Giá Mẫu — hiện badge ✓ khớp/⚠ lệch giá/✕ không có trong mẫu NGAY LÚC XEM TRƯỚC (trước
-// cả khi bấm Gửi) để người đề xuất biết sớm mà tự sửa lại, không phải đợi người duyệt phát hiện ra rồi
-// mới quay lại sửa (server vẫn tự tính lại y hệt lúc ghi thật ở lib/createValidation.js — đây chỉ là
-// xem trước, không phải nguồn quyết định cuối cùng).
-function itPriceMatchBadgeHTML(it) {
-  if (it.matched === undefined) return ''; // chưa chọn File Giá Mẫu -> không có gì để đối chiếu
-  if (it.matched) return `<span class="px-1.5 py-0.5 bg-green-100 text-green-800 rounded text-[11px] font-bold whitespace-nowrap">✓ Khớp giá mẫu</span>`;
-  if (it.masterPrice == null) return `<span class="px-1.5 py-0.5 bg-red-100 text-red-800 rounded text-[11px] font-bold whitespace-nowrap">✕ Không có trong file mẫu</span>`;
-  return `<span class="px-1.5 py-0.5 bg-amber-100 text-amber-800 rounded text-[11px] font-bold whitespace-nowrap">⚠ Giá mẫu ghi ${Number(it.masterPrice).toLocaleString('vi-VN')}</span>`;
+// Hiển thị bảng xem trước ĐÚNG theo tên cột của Mẫu Giá đã chọn (data.columnLabels, do server trả về
+// từ POST /api/it-price/parse-file — xem lib/priceFileParser.js) — cột tuỳ ý ngoài 4 trường nghiệp vụ
+// cố định (Mã hàng/Tên mặt hàng/Giá cũ/Giá mới) hiện thêm sau cùng, đọc từ it.extra[key]. Khi chưa chọn
+// Mẫu Giá nào, columnLabels là bộ nhãn mặc định (DEFAULT_COLUMN_LABELS ở server).
+function itPriceCellHTML(it, col) {
+  if (col.key === 'code') return escapeHtml(it.code || '');
+  if (col.key === 'name') return escapeHtml(it.name);
+  if (col.key === 'oldPrice') return it.oldPrice != null ? Number(it.oldPrice).toLocaleString('vi-VN') : '';
+  if (col.key === 'newPrice') return Number(it.newPrice).toLocaleString('vi-VN');
+  return escapeHtml(it.extra?.[col.key] || '');
 }
 
 function renderItPriceFilePreview(data) {
+  const columnLabels = data.columnLabels && data.columnLabels.length ? data.columnLabels : [
+    { key: 'code', label: 'Mã hàng' }, { key: 'name', label: 'Tên mặt hàng' },
+    { key: 'oldPrice', label: 'Giá cũ' }, { key: 'newPrice', label: 'Giá mới' }
+  ];
   document.getElementById('itPriceFilePreviewCount').innerText = data.items.length;
-  document.getElementById('itPriceFilePreviewBody').innerHTML = data.items.map(it => `<tr>
-    <td class="border p-1 text-gray-500">${escapeHtml(it.code || '')}</td>
-    <td class="border p-1">${escapeHtml(it.name)}</td>
-    <td class="border p-1 text-right text-gray-500">${it.oldPrice != null ? Number(it.oldPrice).toLocaleString('vi-VN') : ''}</td>
-    <td class="border p-1 text-right font-bold text-sky-700">${Number(it.newPrice).toLocaleString('vi-VN')}</td>
-    <td class="border p-1">${itPriceMatchBadgeHTML(it)}</td>
-  </tr>`).join('');
-
-  const bannerEl = document.getElementById('itPriceFilePreviewBanner');
-  const hasMatchInfo = data.items.some(it => it.matched !== undefined);
-  if (!hasMatchInfo) {
-    bannerEl.classList.add('hidden');
-  } else {
-    const matchedCount = data.items.filter(it => it.matched).length;
-    const allMatched = matchedCount === data.items.length;
-    bannerEl.className = `mb-2 p-2 rounded border text-[11px] font-semibold ${allMatched ? 'bg-green-50 border-green-300 text-green-800' : 'bg-amber-50 border-amber-300 text-amber-800'}`;
-    bannerEl.innerText = allMatched
-      ? `✅ Khớp 100% với "${data.masterListName}" (${matchedCount}/${data.items.length} dòng) — đề xuất sẽ được tự động duyệt, không cần chờ ai bấm Duyệt.`
-      : `⚠️ Còn ${data.items.length - matchedCount}/${data.items.length} dòng lệch/không có trong "${data.masterListName}" — vẫn gửi được nhưng sẽ đi qua quy trình duyệt phòng ban như bình thường, vui lòng kiểm tra lại các dòng đánh dấu ⚠/✕ trước khi gửi.`;
-    bannerEl.classList.remove('hidden');
-  }
+  document.getElementById('itPriceFilePreviewHead').innerHTML = `<tr>${columnLabels.map(col =>
+    `<th class="border p-1${col.key === 'oldPrice' || col.key === 'newPrice' ? ' text-right' : ''}">${escapeHtml(col.label)}</th>`
+  ).join('')}</tr>`;
+  document.getElementById('itPriceFilePreviewBody').innerHTML = data.items.map(it => `<tr>${columnLabels.map(col =>
+    `<td class="border p-1${col.key === 'oldPrice' || col.key === 'newPrice' ? ' text-right' : ''}${col.key === 'newPrice' ? ' font-bold text-sky-700' : ''}${col.key === 'code' || col.key === 'oldPrice' ? ' text-gray-500' : ''}">${itPriceCellHTML(it, col)}</td>`
+  ).join('')}</tr>`).join('');
   document.getElementById('itPriceFilePreviewWrap').classList.remove('hidden');
 }
 
@@ -30279,8 +30268,8 @@ async function onItPriceFileChange(event) {
   if (!itPricePendingFile) event.target.value = '';
 }
 
-// Đổi File Giá Mẫu SAU KHI đã chọn sẵn 1 tệp bảng giá — đọc lại tệp đó (còn nguyên trong ô chọn file)
-// để tính lại đúng badge đối chiếu theo file mẫu mới chọn, không bắt người dùng phải chọn lại tệp.
+// Đổi Mẫu Giá SAU KHI đã chọn sẵn 1 tệp bảng giá — đọc lại tệp đó (còn nguyên trong ô chọn file) để dò
+// lại đúng cột theo mẫu mới chọn, không bắt người dùng phải chọn lại tệp.
 async function onItPriceMasterListChange() {
   const fileInput = document.getElementById('itPriceFileInput');
   const file = fileInput?.files?.[0];
@@ -30288,7 +30277,7 @@ async function onItPriceMasterListChange() {
   await parseItPriceFileForPreview(file);
 }
 
-// ============ File Giá Mẫu — quản lý (chỉ admin, xem itPriceMasterListAdminWrap) ============
+// ============ Mẫu Giá (khuôn cột) — quản lý (chỉ admin, xem itPriceMasterListAdminWrap) ============
 // Mỗi thao tác (thêm/thay file/xoá) LƯU NGAY sau khi xong — khác kiểu draft-rồi-bấm-Lưu-1-lần của
 // "Nhóm Không Cấp Văn Phòng Phẩm" vì mỗi thao tác ở đây vốn đã là 1 round-trip server riêng (đọc/parse
 // file), không có nhiều field rời rạc cần gộp lại thành 1 lượt lưu.
@@ -30297,25 +30286,26 @@ function renderItPriceMasterListAdmin() {
   if (!tbody) return;
   const lists = DB.itPriceMasterLists || [];
   if (!lists.length) {
-    tbody.innerHTML = `<tr><td colspan="4" class="text-center p-4 text-gray-400 italic">Chưa có File Giá Mẫu nào — bấm "+ Thêm File Mẫu" để nạp.</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="4" class="text-center p-4 text-gray-400 italic">Chưa có Mẫu Giá nào — bấm "+ Thêm Mẫu Giá" để nạp.</td></tr>`;
     return;
   }
   tbody.innerHTML = lists.map(m => `
     <tr class="hover:bg-gray-50 border-b">
       <td class="border p-2 font-semibold">${escapeHtml(m.name)}<br><span class="text-[11px] text-gray-400 font-normal">📎 ${escapeHtml(m.fileName || '')}</span></td>
-      <td class="border p-2 text-center font-mono">${Number(m.itemCount || 0).toLocaleString('vi-VN')}</td>
+      <td class="border p-2">${(m.columns || []).map(c => `<span class="inline-block px-1.5 py-0.5 bg-gray-100 rounded text-[11px] mr-1 mb-1">${escapeHtml(c.label)}</span>`).join('')}</td>
       <td class="border p-2">${escapeHtml(m.uploadedByName || '')}<br><span class="text-[11px] text-gray-400">${escapeHtml(m.uploadedAt || '')}</span></td>
       <td class="border p-2 text-center space-x-1 whitespace-nowrap">
         <button type="button" onclick="renameItPriceMasterList(${m.id})" class="px-2 py-1 bg-gray-200 text-gray-700 rounded text-[11px] font-bold hover:bg-gray-300">✏️ Đổi tên</button>
-        <button type="button" onclick="replaceItPriceMasterListFile(${m.id})" class="px-2 py-1 bg-sky-600 text-white rounded text-[11px] font-bold hover:bg-sky-700">🔄 Thay file</button>
+        <button type="button" onclick="replaceItPriceMasterListFile(${m.id})" class="px-2 py-1 bg-sky-600 text-white rounded text-[11px] font-bold hover:bg-sky-700">🔄 Thay mẫu</button>
         <button type="button" onclick="deleteItPriceMasterList(${m.id})" class="px-2 py-1 bg-red-600 text-white rounded text-[11px] font-bold hover:bg-red-700">🗑️ Xoá</button>
       </td>
     </tr>
   `).join('');
 }
 
-// Đọc + parse 1 file Excel giá mẫu qua route riêng (admin-only) — trả Promise<{items,fileUrl,fileName}>
-// hoặc null nếu người dùng bấm Hủy chọn file/có lỗi (đã tự alert).
+// Đọc + parse 1 file Excel mẫu qua route riêng (admin-only) — CHỈ trả về khuôn cột (columns), không có
+// dữ liệu — Promise<{columns,fileUrl,fileName}> hoặc null nếu người dùng bấm Hủy chọn file/có lỗi (đã
+// tự alert).
 function pickAndParseMasterListFile() {
   return new Promise((resolve) => {
     const input = document.getElementById('itPriceMasterListFileInput');
@@ -30339,18 +30329,22 @@ function pickAndParseMasterListFile() {
   });
 }
 
+function itPriceColumnListText(columns) {
+  return (columns || []).map(c => c.label).join(', ');
+}
+
 // Bắt buộc tải file lên + đọc thành công TRƯỚC rồi mới hỏi tên (không hỏi tên trước như trước đây) —
 // tránh người dùng gõ tên xong lại phải huỷ ngang vì file lỗi/huỷ chọn, đỡ mất công nhập lại từ đầu.
 async function addItPriceMasterList() {
   const parsed = await pickAndParseMasterListFile();
   if (!parsed) return;
-  const name = prompt(`✅ Đã tải lên và đọc thành công file "${parsed.fileName}" (${parsed.items.length} mặt hàng).\nNhập Tên File Giá Mẫu (VD: "Giá mẫu Q3/2026", "Giá mẫu ngành thực phẩm"):`);
+  const name = prompt(`✅ Đã tải lên và đọc thành công file "${parsed.fileName}" — nhận diện được ${parsed.columns.length} cột (${itPriceColumnListText(parsed.columns)}).\nNhập Tên Mẫu Giá (VD: "Mẫu giá Q3/2026", "Mẫu giá ngành thực phẩm"):`);
   if (name === null) return;
-  if (!name.trim()) return alert('Vui lòng nhập tên file mẫu.');
+  if (!name.trim()) return alert('Vui lòng nhập tên mẫu giá.');
 
   const entry = {
     id: Date.now(), name: name.trim(),
-    fileUrl: parsed.fileUrl, fileName: parsed.fileName, itemCount: parsed.items.length, items: parsed.items,
+    fileUrl: parsed.fileUrl, fileName: parsed.fileName, columns: parsed.columns,
     uploadedBy: currentUser.username, uploadedByName: currentUser.name,
     uploadedAt: new Date().toLocaleString('vi-VN')
   };
@@ -30358,36 +30352,36 @@ async function addItPriceMasterList() {
   DB.itPriceMasterLists = [...snapshot, entry];
   const saved = await syncStorage('itPriceMasterLists');
   if (!saved) { DB.itPriceMasterLists = snapshot; return; }
-  logSystemAction('IT_SUPPORT', 'ADD_IT_PRICE_MASTER_LIST', `Thêm File Giá Mẫu "${entry.name}" (${entry.itemCount} mặt hàng)`, 'SUCCESS');
-  alert(`✅ Đã thêm File Giá Mẫu "${entry.name}" (${entry.itemCount} mặt hàng).`);
+  logSystemAction('IT_SUPPORT', 'ADD_IT_PRICE_MASTER_LIST', `Thêm Mẫu Giá "${entry.name}" (${entry.columns.length} cột)`, 'SUCCESS');
+  alert(`✅ Đã thêm Mẫu Giá "${entry.name}" (${entry.columns.length} cột).`);
   renderItPriceMasterListAdmin();
 }
 
 async function replaceItPriceMasterListFile(id) {
   const list = (DB.itPriceMasterLists || []).find(m => m.id === id);
   if (!list) return;
-  if (!confirm(`Thay file mới cho "${list.name}"? Toàn bộ ${list.itemCount} mặt hàng hiện tại sẽ bị THAY THẾ hoàn toàn.`)) return;
+  if (!confirm(`Thay mẫu mới cho "${list.name}"? Khuôn cột hiện tại (${itPriceColumnListText(list.columns)}) sẽ bị THAY THẾ hoàn toàn.`)) return;
   const parsed = await pickAndParseMasterListFile();
   if (!parsed) return;
 
   const snapshot = [...(DB.itPriceMasterLists || [])];
   DB.itPriceMasterLists = snapshot.map(m => m.id === id ? {
-    ...m, fileUrl: parsed.fileUrl, fileName: parsed.fileName, itemCount: parsed.items.length, items: parsed.items,
+    ...m, fileUrl: parsed.fileUrl, fileName: parsed.fileName, columns: parsed.columns,
     uploadedBy: currentUser.username, uploadedByName: currentUser.name, uploadedAt: new Date().toLocaleString('vi-VN')
   } : m);
   const saved = await syncStorage('itPriceMasterLists');
   if (!saved) { DB.itPriceMasterLists = snapshot; return; }
-  logSystemAction('IT_SUPPORT', 'REPLACE_IT_PRICE_MASTER_LIST', `Thay file File Giá Mẫu "${list.name}" (${parsed.items.length} mặt hàng)`, 'SUCCESS');
-  alert(`✅ Đã cập nhật "${list.name}" (${parsed.items.length} mặt hàng).`);
+  logSystemAction('IT_SUPPORT', 'REPLACE_IT_PRICE_MASTER_LIST', `Thay mẫu Mẫu Giá "${list.name}" (${parsed.columns.length} cột)`, 'SUCCESS');
+  alert(`✅ Đã cập nhật "${list.name}" (${parsed.columns.length} cột).`);
   renderItPriceMasterListAdmin();
 }
 
 async function renameItPriceMasterList(id) {
   const list = (DB.itPriceMasterLists || []).find(m => m.id === id);
   if (!list) return;
-  const name = prompt('Tên mới cho File Giá Mẫu:', list.name);
+  const name = prompt('Tên mới cho Mẫu Giá:', list.name);
   if (name === null) return;
-  if (!name.trim()) return alert('Vui lòng nhập tên file mẫu.');
+  if (!name.trim()) return alert('Vui lòng nhập tên mẫu giá.');
   const snapshot = [...(DB.itPriceMasterLists || [])];
   DB.itPriceMasterLists = snapshot.map(m => m.id === id ? { ...m, name: name.trim() } : m);
   const saved = await syncStorage('itPriceMasterLists');
@@ -30398,18 +30392,18 @@ async function renameItPriceMasterList(id) {
 async function deleteItPriceMasterList(id) {
   const list = (DB.itPriceMasterLists || []).find(m => m.id === id);
   if (!list) return;
-  if (!confirm(`Xoá File Giá Mẫu "${list.name}"? Các đề xuất ĐÃ TỰ ĐỘNG DUYỆT dựa theo file này vẫn giữ nguyên kết quả — chỉ những đề xuất MỚI sau này không còn đối chiếu được với file này nữa.`)) return;
+  if (!confirm(`Xoá Mẫu Giá "${list.name}"? Các đề xuất đã nộp trước đây theo mẫu này vẫn giữ nguyên (đã lưu sẵn tên cột lúc nộp) — chỉ những đề xuất MỚI sau này không còn chọn được mẫu này nữa.`)) return;
   const snapshot = [...(DB.itPriceMasterLists || [])];
   DB.itPriceMasterLists = snapshot.filter(m => m.id !== id);
   const saved = await syncStorage('itPriceMasterLists');
   if (!saved) { DB.itPriceMasterLists = snapshot; return; }
-  logSystemAction('IT_SUPPORT', 'DELETE_IT_PRICE_MASTER_LIST', `Xoá File Giá Mẫu "${list.name}"`, 'SUCCESS');
+  logSystemAction('IT_SUPPORT', 'DELETE_IT_PRICE_MASTER_LIST', `Xoá Mẫu Giá "${list.name}"`, 'SUCCESS');
   renderItPriceMasterListAdmin();
   renderItPriceMasterListSelect();
 }
 
-// Dropdown "Đối Chiếu Với File Giá Mẫu" ở form tạo đề xuất — MỌI người đề xuất thấy được (không riêng
-// admin, khác itPriceMasterListAdminWrap ở trên), tự ẩn hẳn nếu chưa có file mẫu nào để đỡ rối form.
+// Dropdown "Mẫu Giá Phê Duyệt" ở form tạo đề xuất — MỌI người đề xuất thấy được (không riêng admin,
+// khác itPriceMasterListAdminWrap ở trên), tự ẩn hẳn nếu chưa có mẫu nào để đỡ rối form.
 function renderItPriceMasterListSelect() {
   const wrap = document.getElementById('itPriceMasterListSelectWrap');
   const select = document.getElementById('itPriceMasterListSelect');
@@ -30419,7 +30413,7 @@ function renderItPriceMasterListSelect() {
   if (!lists.length) return;
   const prevValue = select.value;
   select.innerHTML = `<option value="">-- Chọn Mẫu Giá Phê Duyệt --</option>` +
-    lists.map(m => `<option value="${m.id}">${escapeHtml(m.name)} (${Number(m.itemCount || 0).toLocaleString('vi-VN')} mặt hàng)</option>`).join('');
+    lists.map(m => `<option value="${m.id}">${escapeHtml(m.name)} (${(m.columns || []).length} cột)</option>`).join('');
   if (lists.some(m => String(m.id) === prevValue)) select.value = prevValue;
 }
 
@@ -30431,18 +30425,21 @@ async function submitItPriceApproval(e) {
   }
   if (!itPricePendingFile) return alert('Vui lòng chọn tệp bảng giá (.xlsx) cần duyệt!');
   const masterListId = document.getElementById('itPriceMasterListSelect')?.value || null;
-  // Đã có File Giá Mẫu nào trong hệ thống thì bắt buộc chọn đúng 1 mẫu (server tự xác minh lại y hệt ở
+  // Đã có Mẫu Giá nào trong hệ thống thì bắt buộc chọn đúng 1 mẫu (server tự xác minh lại y hệt ở
   // itPriceApprovals.extraValidate — đây chỉ là chặn sớm cho trải nghiệm mượt, không phải nguồn quyết
-  // định). KHÔNG tự kiểm tra "khớp bao nhiêu %" ở đây — verdict matched/masterPrice trong
-  // itPricePendingFile chỉ là kết quả xem trước (parseItPriceFileForPreview()), server mới là nơi tính
-  // lại thật sự và trả lỗi rõ ràng nếu chọn sai mẫu (không mặt hàng nào khớp).
+  // định). Cấu trúc cột đã được server kiểm tra + gắn columnLabels ngay lúc đọc file ở
+  // parseItPriceFileForPreview() (POST /api/it-price/parse-file), itPricePendingFile chỉ echo lại kết
+  // quả đó.
   if ((DB.itPriceMasterLists || []).length && !masterListId) {
     return alert('⛔ Vui lòng chọn Mẫu Giá Phê Duyệt trước khi gửi đề xuất.');
   }
   const payload = {
     code,
     masterListId: masterListId ? Number(masterListId) : null,
-    files: [{ fileUrl: itPricePendingFile.fileUrl, fileName: itPricePendingFile.fileName, items: itPricePendingFile.items }],
+    files: [{
+      fileUrl: itPricePendingFile.fileUrl, fileName: itPricePendingFile.fileName,
+      items: itPricePendingFile.items, columnLabels: itPricePendingFile.columnLabels
+    }],
     reason: document.getElementById('itPriceReason').value.trim(),
     createdAt: new Date().toLocaleString('vi-VN')
   };
@@ -30458,24 +30455,16 @@ async function submitItPriceApproval(e) {
   DB.itPriceApprovals.unshift(newItem);
   logSystemAction('IT_SUPPORT', 'CREATE_IT_PRICE_APPROVAL', `Tạo đề xuất duyệt giá [${code}]`, 'SUCCESS', code);
 
-  // autoApproved (server tự tính, xem itPriceApprovals.extraValidate ở lib/createValidation.js) — hồ sơ
-  // đã APPROVED ngay từ lúc tạo, KHÔNG còn ai ở "bước 1" cần duyệt nữa nên không gửi thông báo "cần bạn
-  // phê duyệt" như nhánh PENDING bình thường — báo ngay cho đội Hỗ Trợ IT biết có giá sẵn sàng để áp.
-  if (newItem.autoApproved) {
-    notifyUsersByEmail('IT_SUPPORT', 'NOTIFY_APPROVAL_NEEDED', code, [],
-      `[VPDT] Đề xuất duyệt giá ${code} đã tự động duyệt — sẵn sàng áp giá`,
-      `Đề xuất duyệt giá (${code}) do ${currentUser.name} đề xuất đã khớp 100% với File Giá Mẫu "${newItem.masterListName}" nên được tự động duyệt, không cần chờ phê duyệt thủ công. Đội Hỗ Trợ IT có thể áp giá vào hệ thống bán hàng ngay.`);
-    alert(`✅ Đã gửi đề xuất — khớp 100% với File Giá Mẫu nên được TỰ ĐỘNG DUYỆT luôn, không cần chờ phê duyệt!`);
-  } else {
-    const wfConfig = DB.itPriceDeptWorkflows[newItem.dept];
-    const firstStepApprovers = wfConfig?.approvers?.[1] || [];
-    if (firstStepApprovers.length) {
-      notifyUsersByEmail('IT_SUPPORT', 'NOTIFY_APPROVAL_NEEDED', code, firstStepApprovers,
-        `[VPDT] Đề xuất duyệt giá ${code} cần bạn phê duyệt`,
-        `Đề xuất duyệt giá (${code}) do ${currentUser.name} đề xuất đang chờ bạn phê duyệt.`);
-    }
-    alert('✅ Đã gửi đề xuất duyệt giá thành công!');
+  // Mọi đề xuất giờ LUÔN đi qua đúng quy trình duyệt phòng ban (không còn nhánh autoApproved — xem
+  // itPriceApprovals.extraValidate ở lib/createValidation.js).
+  const wfConfig = DB.itPriceDeptWorkflows[newItem.dept];
+  const firstStepApprovers = wfConfig?.approvers?.[1] || [];
+  if (firstStepApprovers.length) {
+    notifyUsersByEmail('IT_SUPPORT', 'NOTIFY_APPROVAL_NEEDED', code, firstStepApprovers,
+      `[VPDT] Đề xuất duyệt giá ${code} cần bạn phê duyệt`,
+      `Đề xuất duyệt giá (${code}) do ${currentUser.name} đề xuất đang chờ bạn phê duyệt.`);
   }
+  alert('✅ Đã gửi đề xuất duyệt giá thành công!');
 
   e.target.reset();
   itPricePendingFile = null;
@@ -30773,7 +30762,7 @@ function renderItPriceModal() {
   document.getElementById('itPriceModalDetails').innerHTML = `
     <div><b>Trạng thái:</b> ${itPriceStatusBadge(p)}</div>
     <div><b>Áp giá:</b> ${itPriceAppliedBadge(p)}</div>
-    ${p.masterListName ? `<div><b>Đối chiếu với File Giá Mẫu:</b> ${escapeHtml(p.masterListName)}</div>` : ''}
+    ${p.masterListName ? `<div><b>Mẫu Giá áp dụng:</b> ${escapeHtml(p.masterListName)}</div>` : ''}
     <div><b>Lý do điều chỉnh:</b> ${p.reason ? escapeHtml(p.reason) : '<span class="text-gray-400">—</span>'}</div>
     ${historyRows}
     ${p.applied ? `<div><b>Đã áp giá:</b> ${escapeHtml(p.appliedByName || '')} · ${escapeHtml(p.appliedAt || '')}</div>` : ''}
@@ -30802,6 +30791,12 @@ function renderItPriceModal() {
     const isLatest = idx === files.length - 1;
     const tagLatest = isLatest && files.length > 1 ? ' <span class="px-1.5 py-0.5 bg-sky-100 text-sky-800 rounded text-xs font-bold">Mới nhất</span>' : '';
     const tagOriginal = idx === 0 && files.length > 1 ? ' <span class="px-1.5 py-0.5 bg-gray-200 text-gray-700 rounded text-xs font-bold">Bản gốc</span>' : '';
+    // columnLabels snapshot NGAY LÚC NỘP tệp này (xem submitPriceSupplementFile()/itPriceApprovals ở
+    // server) — luôn hiển thị đúng tên cột đã dùng lúc đó, kể cả khi Mẫu Giá sau này bị sửa/xoá.
+    const columnLabels = f.columnLabels && f.columnLabels.length ? f.columnLabels : [
+      { key: 'code', label: 'Mã hàng' }, { key: 'name', label: 'Tên mặt hàng' },
+      { key: 'oldPrice', label: 'Giá cũ' }, { key: 'newPrice', label: 'Giá mới' }
+    ];
     return `
       <details class="border rounded bg-white" ${isLatest ? 'open' : ''}>
         <summary class="p-2 cursor-pointer font-semibold">📎 ${escapeHtml(f.fileName)}${tagLatest}${tagOriginal}
@@ -30809,8 +30804,12 @@ function renderItPriceModal() {
         </summary>
         <div class="p-2 border-t overflow-x-auto">
           <table class="w-full border-collapse text-xs">
-            <thead><tr class="bg-gray-100 text-left text-gray-700"><th class="border p-1">Mã hàng</th><th class="border p-1">Tên mặt hàng</th><th class="border p-1 text-right">Giá cũ</th><th class="border p-1 text-right">Giá mới</th>${(f.items || []).some(it => it.matched !== undefined) ? '<th class="border p-1">Đối chiếu giá mẫu</th>' : ''}</tr></thead>
-            <tbody>${(f.items || []).map(it => `<tr><td class="border p-1 text-gray-500">${escapeHtml(it.code || '')}</td><td class="border p-1">${escapeHtml(it.name)}</td><td class="border p-1 text-right text-gray-500">${it.oldPrice != null ? Number(it.oldPrice).toLocaleString('vi-VN') : ''}</td><td class="border p-1 text-right font-bold text-sky-700">${Number(it.newPrice).toLocaleString('vi-VN')}</td>${it.matched !== undefined ? `<td class="border p-1">${itPriceMatchBadgeHTML(it)}</td>` : ''}</tr>`).join('')}</tbody>
+            <thead><tr class="bg-gray-100 text-left text-gray-700">${columnLabels.map(col =>
+              `<th class="border p-1${col.key === 'oldPrice' || col.key === 'newPrice' ? ' text-right' : ''}">${escapeHtml(col.label)}</th>`
+            ).join('')}</tr></thead>
+            <tbody>${(f.items || []).map(it => `<tr>${columnLabels.map(col =>
+              `<td class="border p-1${col.key === 'oldPrice' || col.key === 'newPrice' ? ' text-right' : ''}${col.key === 'newPrice' ? ' font-bold text-sky-700' : ''}${col.key === 'code' || col.key === 'oldPrice' ? ' text-gray-500' : ''}">${itPriceCellHTML(it, col)}</td>`
+            ).join('')}</tr>`).join('')}</tbody>
           </table>
         </div>
       </details>
@@ -30893,7 +30892,7 @@ function renderItPriceModalControls(p) {
       <div class="bg-sky-50 p-3 rounded border border-sky-200 space-y-2 mt-2">
         <h4 class="font-bold text-sky-900">📤 Tải Lên Tệp Bổ Sung</h4>
         <p class="text-amber-700">${escapeHtml(openReq.requestedByName)} yêu cầu: "${escapeHtml(openReq.reason)}"</p>
-        <input id="itPriceSupplementFileInput" type="file" accept=".xlsx,.xls" onchange="onItPriceSupplementFileChange(event)" class="w-full border p-1.5 rounded bg-white">
+        <input id="itPriceSupplementFileInput" type="file" accept=".xlsx,.xls" onchange="onItPriceSupplementFileChange(event, ${p.masterListId || 'null'})" class="w-full border p-1.5 rounded bg-white">
         <p id="itPriceSupplementFileStatus" class="text-gray-500"></p>
         <p class="text-gray-400">Tệp bổ sung sẽ được thêm vào bên cạnh tệp gốc, không thay thế — người duyệt/IT sẽ xem được cả bảng so sánh.</p>
         <button type="button" id="itPriceSupplementSendBtn" onclick="submitItPriceSupplementAction(${p.id})" class="bg-sky-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-sky-700 disabled:opacity-50" disabled>Gửi Tệp Bổ Sung</button>
@@ -30960,7 +30959,10 @@ async function requestItPriceInfoIt(id) {
 
 let itPriceSupplementPendingFile = null;
 
-async function onItPriceSupplementFileChange(event) {
+// masterListId (tuỳ chọn) — dùng lại ĐÚNG Mẫu Giá đã chọn lúc nộp lần đầu (p.masterListId, echo qua
+// onclick lúc render) để tệp bổ sung được dò cột/gắn columnLabels NHẤT QUÁN với các lần nộp trước,
+// không bắt người dùng chọn lại mẫu.
+async function onItPriceSupplementFileChange(event, masterListId) {
   const file = event.target.files[0];
   itPriceSupplementPendingFile = null;
   const sendBtn = document.getElementById('itPriceSupplementSendBtn');
@@ -30971,6 +30973,7 @@ async function onItPriceSupplementFileChange(event) {
   if (statusEl) statusEl.innerText = '⏳ Đang đọc file...';
   const formData = new FormData();
   formData.append('file', file);
+  if (masterListId) formData.append('masterListId', masterListId);
   try {
     const res = await fetch('/api/it-price/parse-file', { method: 'POST', body: formData });
     const data = await res.json();
@@ -30993,7 +30996,10 @@ async function submitItPriceSupplementAction(id) {
   let result;
   try {
     result = await callRecordAction('itPriceApprovals', id, 'submit-supplement', {
-      file: { fileUrl: itPriceSupplementPendingFile.fileUrl, fileName: itPriceSupplementPendingFile.fileName, items: itPriceSupplementPendingFile.items }
+      file: {
+        fileUrl: itPriceSupplementPendingFile.fileUrl, fileName: itPriceSupplementPendingFile.fileName,
+        items: itPriceSupplementPendingFile.items, columnLabels: itPriceSupplementPendingFile.columnLabels
+      }
     });
   } catch (e) {
     return alert('⛔ ' + e.message);
