@@ -45,6 +45,11 @@ const DEFAULTS = {
     office: ['.pdf', '.docx', '.xlsx'],
     internal: ['.pdf', '.docx', '.xlsx']
   },
+  // Giới hạn dung lượng tối đa (MB) riêng cho từng module, cùng danh sách key với uploadFileTypeConfig
+  // ở trên — admin cấu hình ở Hệ Thống → "📎 Quản Lý Tệp File". Rỗng/không có key = dùng nguyên giới
+  // hạn CHUNG toàn hệ thống (env UPLOAD_MAX_MB, mặc định 20MB, xem routes/upload.js) — giá trị ở đây
+  // chỉ có thể SIẾT CHẶT thêm cho riêng module đó, không thể vượt quá giới hạn chung.
+  uploadSizeLimitConfig: {},
   // Viết tắt Loại Pháp Lý hợp đồng — dùng sinh Mã Hợp Đồng (xem generateContractCode() trong
   // index.html: HCRC-<viết tắt Phòng ban>-<viết tắt Loại Pháp Lý>-<số thứ tự>), cùng mô hình với
   // deptAbbrs/docCatAbbrs ở trên (rỗng mặc định, client tự suy ra nếu chưa cấu hình).

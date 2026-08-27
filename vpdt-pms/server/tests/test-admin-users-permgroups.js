@@ -455,6 +455,84 @@ async function scenario(name, fn) {
       JSON.stringify(r.validCall));
   });
 
+  // ==========================================================================
+  // (e) Khối 17 "Nhóm Quyền Đặc Biệt": picker phòng ban tham gia quy trình + picker chức danh loại
+  //     trừ VPP giờ là input tìm kiếm (list+datalist) thay vì <select>/lưới checkbox cứng — chọn đúng
+  //     giá trị gợi ý thì thêm được, gõ tự do sai thì báo lỗi và KHÔNG thêm.
+  // ==========================================================================
+  await scenario('(e) Đơn Vị Tham Gia Quy Trình: searchable input+datalist thêm/chặn đúng', async () => {
+    const r = await page.evaluate(() => {
+      switchTab('system'); setSystemSubTab('ADMIN');
+      workflowParticipatingDeptsDraft = [];
+      renderWorkflowParticipatingDeptsChecklist();
+      const picker = document.getElementById('workflowParticipatingDeptPicker');
+      const datalistBefore = [...document.querySelectorAll('#workflowParticipatingDeptDatalist option')].map(o => o.value);
+
+      // Chọn đúng 1 phòng ban có trong datalist gợi ý.
+      picker.value = 'Kinh Doanh';
+      addWorkflowParticipatingDept();
+      // textContent (không phải innerText) — khối này nằm trong <details> chưa mở (không có "open"),
+      // innerText trả rỗng cho nội dung đang display:none dù DOM vẫn có; textContent đọc đúng bất kể ẩn/hiện.
+      const afterAddList = document.getElementById('workflowParticipatingDeptsList').textContent;
+      const datalistAfterAdd = [...document.querySelectorAll('#workflowParticipatingDeptDatalist option')].map(o => o.value);
+
+      // Gõ tự do 1 giá trị không tồn tại -> phải bị chặn, không thêm vào danh sách.
+      window.__alerts.length = 0;
+      picker.value = 'Phòng Không Tồn Tại';
+      addWorkflowParticipatingDept();
+
+      return {
+        datalistBefore,
+        addedToChipList: /Kinh Doanh/.test(afterAddList),
+        removedFromRemainingDatalist: !datalistAfterAdd.includes('Kinh Doanh'),
+        invalidAlerts: window.__alerts.slice(),
+        draftAfterInvalid: [...workflowParticipatingDeptsDraft],
+      };
+    });
+    record('(e) picker gõ tìm là <input list=...>+<datalist>, không phải <select> cứng',
+      r.datalistBefore.length === 3 && r.datalistBefore.includes('Kinh Doanh'), JSON.stringify(r.datalistBefore));
+    record('(e) chọn đúng phòng ban từ gợi ý -> thêm được vào danh sách chip',
+      r.addedToChipList, JSON.stringify(r));
+    record('(e) phòng ban vừa thêm biến mất khỏi datalist còn lại (không gợi ý trùng)',
+      r.removedFromRemainingDatalist, JSON.stringify(r));
+    record('(e) gõ tự do giá trị không có trong danh sách phòng ban -> báo lỗi, KHÔNG thêm',
+      r.invalidAlerts.length === 1 && !r.draftAfterInvalid.includes('Phòng Không Tồn Tại'), JSON.stringify(r));
+  });
+
+  await scenario('(e) Nhóm Không Cấp Văn Phòng Phẩm: searchable input+datalist chọn chức danh', async () => {
+    const r = await page.evaluate(() => {
+      switchTab('system'); setSystemSubTab('ADMIN');
+      vppExcludeGroupsDraft = [];
+      addVppExcludeGroupRow();
+      const datalistOptions = [...document.querySelectorAll('#vppJobTitlesDatalist option')].map(o => o.value);
+
+      // addVppExcludeGroupJobTitle() gọi renderVppExcludeGroupsAdmin() thay hẳn innerHTML của wrap sau
+      // mỗi lần thêm -> node <input> cũ bị thay thế, phải getElementById LẠI mỗi lần (không giữ tham
+      // chiếu cũ) mới đúng như người dùng thật gõ vào ô đang hiển thị.
+      document.getElementById('vppExcludeGroupJobTitleInput_0').value = 'Nhân viên';
+      addVppExcludeGroupJobTitle(0);
+      const chipsAfterAdd = document.querySelector('#vppExcludeGroupsListWrap').textContent;
+
+      window.__alerts.length = 0;
+      document.getElementById('vppExcludeGroupJobTitleInput_0').value = 'Chức Danh Bịa Đặt';
+      addVppExcludeGroupJobTitle(0);
+
+      return {
+        datalistOptions,
+        addedChip: /Nhân viên/.test(chipsAfterAdd),
+        invalidAlerts: window.__alerts.slice(),
+        draftJobTitles: [...vppExcludeGroupsDraft[0].jobTitles],
+      };
+    });
+    record('(e) datalist chức danh liệt kê đúng DB.jobTitles',
+      JSON.stringify(r.datalistOptions.slice().sort()) === JSON.stringify(['Nhân viên', 'Trưởng phòng'].sort()), JSON.stringify(r.datalistOptions));
+    record('(e) chọn đúng chức danh từ gợi ý -> thêm được vào chip của đúng dòng nhóm',
+      r.addedChip, JSON.stringify(r));
+    record('(e) gõ tự do chức danh không tồn tại -> báo lỗi, KHÔNG thêm vào nhóm',
+      r.invalidAlerts.length === 1 && !r.draftJobTitles.includes('Chức Danh Bịa Đặt') && r.draftJobTitles.includes('Nhân viên'),
+      JSON.stringify(r));
+  });
+
   await browser.close();
   server.close();
 

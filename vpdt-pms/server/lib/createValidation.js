@@ -970,14 +970,26 @@ const CREATE_MODULE_CONFIGS = {
       // appData.itPriceMasterLists — KHÔNG tin matched/masterPrice client echo lại từ lúc xem trước ở
       // POST /api/it-price/parse-file, nếu không 1 request tự soạn có thể tự xưng "đã khớp 100%" để
       // được bỏ qua thẳng bước duyệt phòng ban.
+      const masterLists = appData?.itPriceMasterLists || [];
       const masterListId = payload.masterListId ? Number(payload.masterListId) : null;
-      const masterList = masterListId
-        ? (appData?.itPriceMasterLists || []).find(m => m.id === masterListId)
-        : null;
+      const masterList = masterListId ? masterLists.find(m => m.id === masterListId) : null;
+      // Đã có ít nhất 1 File Giá Mẫu trong hệ thống thì BẮT BUỘC người đề xuất phải chọn đúng 1 mẫu
+      // (không còn tuỳ chọn "Không đối chiếu") — tự soạn request bỏ qua field này hoặc trỏ tới id không
+      // tồn tại đều bị chặn ngay tại đây, không để lọt vào state máy tiếp theo.
+      if (masterLists.length > 0 && !masterList) {
+        throw new CreateError(400, 'Vui lòng chọn đúng Mẫu Giá Phê Duyệt trước khi gửi đề xuất');
+      }
       let autoApproved = false;
       if (masterList) {
         items = matchAgainstMaster(items, masterList.items);
-        autoApproved = items.length > 0 && items.every(it => it.matched);
+        const matchedCount = items.filter(it => it.matched).length;
+        // Không mặt hàng nào khớp = gần như chắc chắn chọn NHẦM mẫu giá (khác hẳn khớp 1 phần, vốn vẫn
+        // hợp lệ và đi qua quy trình duyệt phòng ban bình thường) — chặn lại để người đề xuất chọn lại
+        // đúng mẫu thay vì âm thầm cho qua rồi người duyệt mới phát hiện ra sai mẫu.
+        if (matchedCount === 0) {
+          throw new CreateError(400, `Không có mặt hàng nào khớp với mẫu giá "${masterList.name}" — vui lòng kiểm tra lại đúng Mẫu Giá Phê Duyệt trước khi gửi`);
+        }
+        autoApproved = items.every(it => it.matched);
       }
       payload.masterListId = masterList ? masterList.id : null;
       payload.masterListName = masterList ? masterList.name : null;

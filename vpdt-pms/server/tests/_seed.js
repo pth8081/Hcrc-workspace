@@ -65,6 +65,7 @@ function buildAppData() {
       car: ['.pdf', '.docx', '.xlsx'], meeting: ['.pdf', '.docx', '.xlsx'], minutes: ['.pdf', '.docx', '.xlsx'],
       office: ['.pdf', '.docx', '.xlsx'], internal: ['.pdf', '.docx', '.xlsx']
     },
+    uploadSizeLimitConfig: {},
     contractTypeAbbrs: { 'Hợp đồng kinh tế': 'KTE', 'Hợp đồng dịch vụ': 'DV' },
     jobTitles: ['Nhân viên', 'Chuyên viên', 'Trưởng phòng', 'Phó phòng', 'Giám đốc', 'Phó giám đốc', 'Tổng Giám Đốc', 'Chủ Tịch'],
     trainingCategories: [],
