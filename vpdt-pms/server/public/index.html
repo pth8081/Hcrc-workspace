@@ -514,7 +514,7 @@ table { display: block; overflow-x: auto; max-width: 100%; }
           <button onclick="closeHeThongDropdown(); switchTab('system'); setSystemSubTab('ADMIN')" class="sidebar-subitem">⚙️ Quản Trị</button>
           <button onclick="closeHeThongDropdown(); switchTab('system'); setSystemSubTab('FORM')" class="sidebar-subitem">📋 Biểu Mẫu</button>
           <button onclick="closeHeThongDropdown(); switchTab('system'); setSystemSubTab('WORKFLOW')" class="sidebar-subitem">🔄 Quy Trình & Phê Duyệt</button>
-          <button onclick="closeHeThongDropdown(); switchTab('system'); setSystemSubTab('UPLOAD')" class="sidebar-subitem">📎 Loại Tệp</button>
+          <button onclick="closeHeThongDropdown(); switchTab('system'); setSystemSubTab('UPLOAD')" class="sidebar-subitem">📎 Quản Lý Tệp File</button>
           <button onclick="closeHeThongDropdown(); switchTab('system'); setSystemSubTab('LOG')" class="sidebar-subitem">📊 Log</button>
         </div>
       </div>
@@ -3824,7 +3824,7 @@ table { display: block; overflow-x: auto; max-width: 100%; }
   <!-- Màn hình 4: Tab Quản Trị Hệ Thống & Phân Quyền -->
   <!-- Màn hình Hệ Thống — gộp Quản trị + Biểu mẫu + Quy trình & Phê duyệt đồng cấp, chỉ dành cho admin -->
   <div id="systemSection" class="hidden space-y-4">
-    <!-- Ghim thanh chuyển tab con (Quản Trị/Biểu Mẫu/Quy Trình/Loại Tệp/Log) dính ở đầu màn hình khi
+    <!-- Ghim thanh chuyển tab con (Quản Trị/Biểu Mẫu/Quy Trình/Quản Lý Tệp File/Log) dính ở đầu màn hình khi
          cuộn — trước đây thanh này nằm trong dòng chảy trang bình thường nên khi nội dung 1 tab con dài
          (đặc biệt Biểu Mẫu, Quy Trình & Phê Duyệt) cuộn xuống là mất luôn thanh chuyển tab, phải cuộn
          ngược lên mới đổi được tab khác. top-14 trên điện thoại để tránh đè lên #mobileTopBar (fixed,
@@ -3834,7 +3834,7 @@ table { display: block; overflow-x: auto; max-width: 100%; }
       <button type="button" onclick="setSystemSubTab('ADMIN')" id="btnSystemSubAdmin" class="px-3 py-1.5 rounded text-xs font-bold bg-purple-700 text-white">⚙️ Quản Trị</button>
       <button type="button" onclick="setSystemSubTab('FORM')" id="btnSystemSubForm" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">📋 Biểu Mẫu</button>
       <button type="button" onclick="setSystemSubTab('WORKFLOW')" id="btnSystemSubWorkflow" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">🔄 Quy Trình & Phê Duyệt</button>
-      <button type="button" onclick="setSystemSubTab('UPLOAD')" id="btnSystemSubUpload" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">📎 Loại Tệp</button>
+      <button type="button" onclick="setSystemSubTab('UPLOAD')" id="btnSystemSubUpload" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">📎 Quản Lý Tệp File</button>
       <button type="button" onclick="setSystemSubTab('LOG')" id="btnSystemSubLog" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">📊 Log</button>
     </div>
   </div>
@@ -4664,7 +4664,10 @@ table { display: block; overflow-x: auto; max-width: 100%; }
               <h5 class="font-bold text-gray-700 text-xs mb-1">🏢 Đơn Vị Tham Gia Quy Trình</h5>
               <p class="text-[11px] text-gray-500 italic mb-2">Chọn phòng ban từ ô bên dưới rồi bấm "Thêm" để đưa vào danh sách đơn vị tham gia — màn "Hệ Thống → Quy Trình & Phê Duyệt" sẽ CHỈ hiện đúng các đơn vị đã thêm ở đây thay vì liệt kê toàn bộ danh sách phòng ban. Không thêm đơn vị nào (để trống) thì màn đó vẫn hiện đầy đủ như trước, không ảnh hưởng gì. Thêm/bớt xong thì bấm "Lưu" 1 lần.</p>
               <div class="flex gap-2 items-center mb-2">
-                <select id="workflowParticipatingDeptPicker" class="flex-1 border p-1.5 rounded bg-white text-xs"></select>
+                <input id="workflowParticipatingDeptPicker" list="workflowParticipatingDeptDatalist" placeholder="🔍 Tìm phòng ban..." autocomplete="off"
+                  onkeydown="if(event.key==='Enter'){event.preventDefault();addWorkflowParticipatingDept();}"
+                  class="flex-1 border p-1.5 rounded bg-white text-xs">
+                <datalist id="workflowParticipatingDeptDatalist"></datalist>
                 <button type="button" onclick="addWorkflowParticipatingDept()" class="bg-gray-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-gray-700 whitespace-nowrap">➕ Thêm Đơn Vị</button>
               </div>
               <div id="workflowParticipatingDeptsList" class="flex flex-wrap gap-1.5 min-h-[2rem] border rounded p-2 bg-gray-50"></div>
@@ -4675,6 +4678,7 @@ table { display: block; overflow-x: auto; max-width: 100%; }
             <div>
               <h5 class="font-bold text-gray-700 text-xs mb-1">🚫 Nhóm Không Cấp Văn Phòng Phẩm</h5>
               <p class="text-[11px] text-gray-500 italic mb-2">Tạo các nhóm gồm 1 hoặc nhiều CHỨC DANH. Người dùng có chức danh nằm trong 1 nhóm mà tài khoản được gán vào (chọn ở màn "Người Dùng") sẽ: (1) không đăng ký được Văn Phòng Phẩm ở bất kỳ kỳ nào, kể cả đã thuộc phòng ban còn hạn đăng ký; (2) không tính vào số nhân sự gợi ý khi Hành Chính tạo kỳ (vẫn sửa tay được số này như bình thường).</p>
+              <datalist id="vppJobTitlesDatalist"></datalist>
               <div id="vppExcludeGroupsListWrap" class="space-y-2"></div>
               <button type="button" onclick="addVppExcludeGroupRow()" class="mt-2 bg-gray-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-gray-700">+ Thêm Nhóm</button>
               <div class="flex justify-end mt-2">
@@ -4849,11 +4853,11 @@ table { display: block; overflow-x: auto; max-width: 100%; }
     <div id="paginationContainer_log"></div>
   </div>
 
-  <!-- Màn hình 6: Loại Tệp Cho Phép Tải Lên (theo từng module nghiệp vụ) -->
+  <!-- Màn hình 6: Quản Lý Tệp File — loại tệp + giới hạn dung lượng cho phép tải lên (theo từng module nghiệp vụ) -->
   <div id="uploadTypeSection" class="hidden space-y-4">
     <div class="bg-teal-50 p-4 rounded border border-teal-200">
-      <h3 class="font-bold text-teal-900 text-base flex items-center gap-1">📎 Loại Tệp Cho Phép Tải Lên</h3>
-      <p class="text-xs text-teal-800 mt-1">Chọn định dạng tệp được phép tải lên cho từng module nghiệp vụ — server sẽ chặn các định dạng không được tick. Tick lại toàn bộ (giống mặc định) coi như không giới hạn riêng.</p>
+      <h3 class="font-bold text-teal-900 text-base flex items-center gap-1">📎 Quản Lý Tệp File</h3>
+      <p class="text-xs text-teal-800 mt-1">Chọn định dạng tệp được phép tải lên cho từng module nghiệp vụ — server sẽ chặn các định dạng không được tick. Tick lại toàn bộ (giống mặc định) coi như không giới hạn riêng. Có thể đặt thêm giới hạn dung lượng (MB) riêng cho từng module — để trống thì dùng đúng giới hạn chung toàn hệ thống.</p>
     </div>
     <div id="uploadTypeConfigList" class="space-y-3"></div>
   </div>
@@ -4950,11 +4954,11 @@ table { display: block; overflow-x: auto; max-width: 100%; }
             </div>
           </div>
           <div id="itPriceMasterListSelectWrap" class="hidden">
-            <label class="block font-semibold text-gray-600 mb-1">📐 Đối Chiếu Với File Giá Mẫu (tuỳ chọn)</label>
+            <label class="block font-semibold text-gray-600 mb-1">📐 Mẫu Giá Phê Duyệt <span class="text-red-500">*</span></label>
             <select id="itPriceMasterListSelect" onchange="onItPriceMasterListChange()" class="w-full border p-1.5 rounded bg-white">
-              <option value="">-- Không đối chiếu --</option>
+              <option value="">-- Chọn Mẫu Giá Phê Duyệt --</option>
             </select>
-            <p class="text-gray-400 mt-1">Chọn đúng file mẫu áp dụng cho bảng giá của bạn — nếu khớp 100% (đúng mã hàng + giá cũ), đề xuất được tự động duyệt luôn, không cần chờ ai bấm Duyệt.</p>
+            <p class="text-gray-400 mt-1">Bắt buộc chọn đúng mẫu giá áp dụng cho bảng giá của bạn — chọn sai mẫu (không mặt hàng nào khớp) sẽ bị chặn gửi. Nếu khớp 100% (đúng mã hàng + giá cũ), đề xuất được tự động duyệt luôn, không cần chờ ai bấm Duyệt.</p>
           </div>
           <div>
             <label class="block font-semibold text-gray-600 mb-1">📎 Tệp Bảng Giá (.xlsx) <span class="text-red-500">*</span></label>
@@ -6121,6 +6125,7 @@ const DB = {
   vppExcludeGroups: [], workflowParticipatingDepts: [],
   pwaShortcutModules: [],
   itPriceMasterLists: [],
+  uploadFileTypeConfig: {}, uploadSizeLimitConfig: {},
   emailConfig: {}, systemLogs: [],
   // Version (UpdatedAt) từng collection tại lần đọc gần nhất — gửi kèm header If-Match khi ghi
   // (syncStorage()) để server phát hiện xung đột nếu người khác đã ghi đè kể từ lúc đọc (Bước 1:
@@ -7699,6 +7704,12 @@ async function initDatabase(loggingInUser) {
     DB.vppExcludeGroups = data.vppExcludeGroups || [];
     DB.workflowParticipatingDepts = data.workflowParticipatingDepts || [];
     DB.pwaShortcutModules = data.pwaShortcutModules || [];
+    // Sửa lỗi cũ: 2 dòng dưới đây trước nay CHƯA từng được gán từ data (chỉ có nhánh khởi tạo lười
+    // "|| {}" ngay tại chỗ đọc — xem toggleUploadTypeExt()/renderUploadTypeConfig()), khiến màn "Quản
+    // Lý Tệp File" luôn hiện lại từ đầu như CHƯA cấu hình gì mỗi lần tải lại trang dù đã lưu — server
+    // vẫn chặn đúng do tự đọc thẳng DB (getAppDataValueCached), chỉ riêng client hiển thị sai.
+    DB.uploadFileTypeConfig = data.uploadFileTypeConfig || {};
+    DB.uploadSizeLimitConfig = data.uploadSizeLimitConfig || {};
     // GET /api/data trả bản ĐÃ LỌC BỎ items[] (mỗi file mẫu có thể tới hàng nghìn dòng, xem
     // stripMasterListItems() ở routes/data.js) — client chỉ hiện tên/số lượng/ngày nạp ở màn quản lý,
     // không bao giờ tự tính đối chiếu ở trình duyệt (luôn qua server, xem parseItPriceFileForPreview()).
@@ -11323,6 +11334,14 @@ async function uploadDoc(e) {
 // (vd 'doc', 'contract'...) cho server biết áp dụng đúng danh sách phần mở rộng cho phép của module
 // nào (xem DB.uploadFileTypeConfig / admin "Loại Tệp Cho Phép") — bỏ trống thì dùng danh sách mặc định.
 async function uploadFileToServer(file, moduleKey) {
+  // Chặn sớm ở client nếu đã cấu hình giới hạn riêng cho module này — đỡ tốn công tải cả file lên rồi
+  // mới bị server từ chối (server vẫn tự kiểm tra lại y hệt ở routes/upload.js, đây chỉ là trải nghiệm).
+  if (moduleKey) {
+    const maxMB = Number((DB.uploadSizeLimitConfig || {})[moduleKey]);
+    if (maxMB > 0 && file.size > maxMB * 1024 * 1024) {
+      throw new Error(`Tệp vượt quá dung lượng cho phép cho mục này (${maxMB}MB)`);
+    }
+  }
   const formData = new FormData();
   if (moduleKey) formData.append('module', moduleKey);
   formData.append('file', file);
@@ -11385,6 +11404,7 @@ const UPLOAD_MODULE_LIST = [
 function renderUploadTypeConfig() {
   const container = document.getElementById('uploadTypeConfigList');
   const config = DB.uploadFileTypeConfig || {};
+  const sizeConfig = DB.uploadSizeLimitConfig || {};
   container.innerHTML = UPLOAD_MODULE_LIST.map(m => {
     const allowed = Array.isArray(config[m.key]) && config[m.key].length ? config[m.key] : UPLOAD_EXT_UNIVERSE;
     const checkboxesHTML = UPLOAD_EXT_UNIVERSE.map(ext => `
@@ -11392,12 +11412,30 @@ function renderUploadTypeConfig() {
         <input type="checkbox" onchange="toggleUploadTypeExt('${m.key}', '${ext}', this.checked)" ${allowed.includes(ext) ? 'checked' : ''}>
         ${ext}
       </label>`).join('');
+    const currentSize = Number(sizeConfig[m.key]) > 0 ? Number(sizeConfig[m.key]) : '';
     return `
       <div class="bg-white p-3 rounded border">
         <div class="font-bold text-sm text-gray-800 mb-2">${m.label}</div>
-        <div class="flex flex-wrap">${checkboxesHTML}</div>
+        <div class="flex flex-wrap mb-2">${checkboxesHTML}</div>
+        <div class="flex items-center gap-2 text-xs">
+          <label class="text-gray-600">Giới hạn dung lượng riêng (MB):</label>
+          <input type="number" min="1" step="1" placeholder="Mặc định chung" value="${currentSize}"
+            onchange="updateUploadSizeLimit('${m.key}', this.value)" class="w-28 border p-1 rounded">
+        </div>
       </div>`;
   }).join('');
+}
+
+// Tự lưu ngay khi đổi ô giới hạn dung lượng (cùng khuôn toggleUploadTypeExt() ngay trên) — để trống
+// (hoặc xoá về 0/số âm) coi như KHÔNG giới hạn riêng, quay về đúng giới hạn CHUNG toàn hệ thống (env
+// UPLOAD_MAX_MB, xem routes/upload.js).
+function updateUploadSizeLimit(moduleKey, rawValue) {
+  const value = Number(rawValue);
+  if (!DB.uploadSizeLimitConfig) DB.uploadSizeLimitConfig = {};
+  if (value > 0) DB.uploadSizeLimitConfig[moduleKey] = value;
+  else delete DB.uploadSizeLimitConfig[moduleKey];
+  syncStorage('uploadSizeLimitConfig');
+  logSystemAction('ADMIN', 'UPDATE_UPLOAD_SIZE_LIMIT', `Cập nhật giới hạn dung lượng tệp [${moduleKey}]: ${value > 0 ? value + 'MB' : 'dùng mặc định chung'}`, 'SUCCESS');
 }
 
 // Tự lưu ngay khi tick/bỏ tick 1 định dạng (cùng khuôn updateDeptAbbr()/updateContractTypeAbbr() —
@@ -21783,13 +21821,14 @@ let workflowParticipatingDeptsDraft = null;
 
 function renderWorkflowParticipatingDeptsChecklist() {
   const picker = document.getElementById('workflowParticipatingDeptPicker');
+  const datalist = document.getElementById('workflowParticipatingDeptDatalist');
   const list = document.getElementById('workflowParticipatingDeptsList');
   if (!picker || !list) return;
   if (!workflowParticipatingDeptsDraft) workflowParticipatingDeptsDraft = [...(DB.workflowParticipatingDepts || [])];
   const remaining = DB.depts.filter(d => !workflowParticipatingDeptsDraft.includes(d));
-  picker.innerHTML = remaining.length
-    ? remaining.map(d => `<option value="${escapeHtml(d)}">${escapeHtml(d)}</option>`).join('')
-    : '<option value="">-- Đã thêm hết phòng ban --</option>';
+  if (datalist) datalist.innerHTML = remaining.map(d => `<option value="${escapeHtml(d)}"></option>`).join('');
+  picker.value = '';
+  picker.placeholder = remaining.length ? '🔍 Tìm phòng ban...' : 'Đã thêm hết phòng ban';
   picker.disabled = !remaining.length;
   list.innerHTML = workflowParticipatingDeptsDraft.length
     ? workflowParticipatingDeptsDraft.map(d => `
@@ -21803,8 +21842,9 @@ function renderWorkflowParticipatingDeptsChecklist() {
 
 function addWorkflowParticipatingDept() {
   const picker = document.getElementById('workflowParticipatingDeptPicker');
-  const dept = picker?.value;
+  const dept = (picker?.value || '').trim();
   if (!dept) return;
+  if (!DB.depts.includes(dept)) return alert('Không tìm thấy phòng ban này — vui lòng chọn đúng từ danh sách gợi ý.');
   if (!workflowParticipatingDeptsDraft) workflowParticipatingDeptsDraft = [...(DB.workflowParticipatingDepts || [])];
   if (!workflowParticipatingDeptsDraft.includes(dept)) workflowParticipatingDeptsDraft.push(dept);
   renderWorkflowParticipatingDeptsChecklist();
@@ -21910,6 +21950,8 @@ let vppExcludeGroupsDraft = null;
 function renderVppExcludeGroupsAdmin() {
   if (!vppExcludeGroupsDraft) vppExcludeGroupsDraft = JSON.parse(JSON.stringify(DB.vppExcludeGroups || []));
   const wrap = document.getElementById('vppExcludeGroupsListWrap');
+  const datalist = document.getElementById('vppJobTitlesDatalist');
+  if (datalist) datalist.innerHTML = DB.jobTitles.map(t => `<option value="${escapeHtml(t)}"></option>`).join('');
   if (!wrap) return;
   if (!vppExcludeGroupsDraft.length) {
     wrap.innerHTML = `<div class="text-[11px] text-gray-400 italic p-2 bg-gray-50 rounded border">Chưa có nhóm nào.</div>`;
@@ -21917,6 +21959,13 @@ function renderVppExcludeGroupsAdmin() {
   }
   wrap.innerHTML = vppExcludeGroupsDraft.map((g, idx) => {
     const memberCount = DB.users.filter(u => (u.vppExcludeGroupIds || []).includes(g.id)).length;
+    const chipsHTML = (g.jobTitles || []).length
+      ? g.jobTitles.map(t => `
+          <span class="inline-flex items-center gap-1 bg-white border rounded-full pl-2 pr-1 py-0.5 text-[11px] text-gray-700">
+            ${escapeHtml(t)}
+            <button type="button" onclick="removeVppExcludeGroupJobTitle(${idx}, '${escapeHtml(t)}')" class="text-gray-400 hover:text-red-600 font-bold px-1" title="Bỏ chức danh này">✕</button>
+          </span>`).join('')
+      : '<span class="text-[11px] text-gray-400 italic">Chưa chọn chức danh nào.</span>';
     return `
     <div class="bg-white border rounded p-2 space-y-1.5">
       <div class="flex items-center gap-2">
@@ -21924,17 +21973,34 @@ function renderVppExcludeGroupsAdmin() {
         <span class="text-[11px] text-gray-400 whitespace-nowrap">${memberCount} người</span>
         <button type="button" onclick="removeVppExcludeGroupRow(${idx})" class="text-red-600 hover:text-red-800 text-xs font-bold">✕</button>
       </div>
-      <div class="flex flex-wrap gap-1.5">
-        ${DB.jobTitles.map(t => `
-          <label class="flex items-center gap-1 bg-gray-50 px-1.5 py-0.5 rounded border text-[11px] cursor-pointer">
-            <input type="checkbox" ${g.jobTitles?.includes(t) ? 'checked' : ''} onchange="toggleVppExcludeGroupJobTitle(${idx}, '${escapeHtml(t)}', this.checked)">
-            <span>${escapeHtml(t)}</span>
-          </label>
-        `).join('')}
+      <div class="flex gap-2 items-center">
+        <input list="vppJobTitlesDatalist" id="vppExcludeGroupJobTitleInput_${idx}" placeholder="🔍 Tìm chức danh..." autocomplete="off"
+          onkeydown="if(event.key==='Enter'){event.preventDefault();addVppExcludeGroupJobTitle(${idx});}"
+          class="flex-1 border p-1 rounded text-xs">
+        <button type="button" onclick="addVppExcludeGroupJobTitle(${idx})" class="bg-gray-600 text-white px-2 py-1 rounded text-[11px] font-bold hover:bg-gray-700 whitespace-nowrap">+ Thêm</button>
       </div>
+      <div class="flex flex-wrap gap-1.5">${chipsHTML}</div>
     </div>
   `;
   }).join('');
+}
+
+function addVppExcludeGroupJobTitle(idx) {
+  const g = vppExcludeGroupsDraft?.[idx];
+  const input = document.getElementById(`vppExcludeGroupJobTitleInput_${idx}`);
+  const title = (input?.value || '').trim();
+  if (!g || !title) return;
+  if (!DB.jobTitles.includes(title)) return alert('Không tìm thấy chức danh này — vui lòng chọn đúng từ danh sách gợi ý.');
+  g.jobTitles = g.jobTitles || [];
+  if (!g.jobTitles.includes(title)) g.jobTitles.push(title);
+  renderVppExcludeGroupsAdmin();
+}
+
+function removeVppExcludeGroupJobTitle(idx, title) {
+  const g = vppExcludeGroupsDraft?.[idx];
+  if (!g) return;
+  g.jobTitles = (g.jobTitles || []).filter(t => t !== title);
+  renderVppExcludeGroupsAdmin();
 }
 
 function addVppExcludeGroupRow() {
@@ -21951,14 +22017,6 @@ function removeVppExcludeGroupRow(idx) {
 function updateVppExcludeGroupField(idx, field, value) {
   if (!vppExcludeGroupsDraft?.[idx]) return;
   vppExcludeGroupsDraft[idx][field] = value;
-}
-
-function toggleVppExcludeGroupJobTitle(idx, title, checked) {
-  const g = vppExcludeGroupsDraft?.[idx];
-  if (!g) return;
-  g.jobTitles = g.jobTitles || [];
-  if (checked) { if (!g.jobTitles.includes(title)) g.jobTitles.push(title); }
-  else { g.jobTitles = g.jobTitles.filter(t => t !== title); }
 }
 
 async function saveVppExcludeGroups() {
@@ -30251,12 +30309,14 @@ function pickAndParseMasterListFile() {
   });
 }
 
+// Bắt buộc tải file lên + đọc thành công TRƯỚC rồi mới hỏi tên (không hỏi tên trước như trước đây) —
+// tránh người dùng gõ tên xong lại phải huỷ ngang vì file lỗi/huỷ chọn, đỡ mất công nhập lại từ đầu.
 async function addItPriceMasterList() {
-  const name = prompt('Tên File Giá Mẫu (VD: "Giá mẫu Q3/2026", "Giá mẫu ngành thực phẩm"):');
-  if (name === null) return;
-  if (!name.trim()) return alert('Vui lòng nhập tên file mẫu.');
   const parsed = await pickAndParseMasterListFile();
   if (!parsed) return;
+  const name = prompt(`✅ Đã tải lên và đọc thành công file "${parsed.fileName}" (${parsed.items.length} mặt hàng).\nNhập Tên File Giá Mẫu (VD: "Giá mẫu Q3/2026", "Giá mẫu ngành thực phẩm"):`);
+  if (name === null) return;
+  if (!name.trim()) return alert('Vui lòng nhập tên file mẫu.');
 
   const entry = {
     id: Date.now(), name: name.trim(),
@@ -30328,7 +30388,7 @@ function renderItPriceMasterListSelect() {
   wrap.classList.toggle('hidden', lists.length === 0);
   if (!lists.length) return;
   const prevValue = select.value;
-  select.innerHTML = `<option value="">-- Không đối chiếu --</option>` +
+  select.innerHTML = `<option value="">-- Chọn Mẫu Giá Phê Duyệt --</option>` +
     lists.map(m => `<option value="${m.id}">${escapeHtml(m.name)} (${Number(m.itemCount || 0).toLocaleString('vi-VN')} mặt hàng)</option>`).join('');
   if (lists.some(m => String(m.id) === prevValue)) select.value = prevValue;
 }
@@ -30341,6 +30401,14 @@ async function submitItPriceApproval(e) {
   }
   if (!itPricePendingFile) return alert('Vui lòng chọn tệp bảng giá (.xlsx) cần duyệt!');
   const masterListId = document.getElementById('itPriceMasterListSelect')?.value || null;
+  // Đã có File Giá Mẫu nào trong hệ thống thì bắt buộc chọn đúng 1 mẫu (server tự xác minh lại y hệt ở
+  // itPriceApprovals.extraValidate — đây chỉ là chặn sớm cho trải nghiệm mượt, không phải nguồn quyết
+  // định). KHÔNG tự kiểm tra "khớp bao nhiêu %" ở đây — verdict matched/masterPrice trong
+  // itPricePendingFile chỉ là kết quả xem trước (parseItPriceFileForPreview()), server mới là nơi tính
+  // lại thật sự và trả lỗi rõ ràng nếu chọn sai mẫu (không mặt hàng nào khớp).
+  if ((DB.itPriceMasterLists || []).length && !masterListId) {
+    return alert('⛔ Vui lòng chọn Mẫu Giá Phê Duyệt trước khi gửi đề xuất.');
+  }
   const payload = {
     code,
     masterListId: masterListId ? Number(masterListId) : null,
