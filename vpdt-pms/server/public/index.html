@@ -21735,7 +21735,7 @@ function renderWorkflowParticipatingDeptsChecklist() {
   const list = document.getElementById('workflowParticipatingDeptsList');
   if (!picker || !list) return;
   if (!workflowParticipatingDeptsDraft) workflowParticipatingDeptsDraft = [...(DB.workflowParticipatingDepts || [])];
-  const remaining = DB.depts.filter(d => !workflowParticipatingDeptsDraft.includes(d));
+  const remaining = DB.depts.filter(d => d && !workflowParticipatingDeptsDraft.includes(d));
   if (datalist) sddSetOptions('workflowParticipatingDeptDatalist', remaining);
   picker.value = '';
   picker.placeholder = remaining.length ? '🔍 Tìm phòng ban...' : 'Đã thêm hết phòng ban';
@@ -21997,7 +21997,10 @@ function renderUVppExcludeGroupsChecklist(selectedIds) {
 function sddSetOptions(dropdownId, items) {
   const dd = document.getElementById(dropdownId);
   if (!dd) return;
-  dd._sddItems = (items || []).map(it => (typeof it === 'string') ? { value: it, label: it } : it);
+  dd._sddItems = (items || [])
+    .filter(it => it !== null && it !== undefined && it !== '')
+    .map(it => (typeof it === 'string') ? { value: it, label: it } : it)
+    .filter(it => it && typeof it.label === 'string');
 }
 
 function sddRenderRows(dd, query) {
