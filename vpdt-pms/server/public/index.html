@@ -343,6 +343,18 @@ table { display: block; overflow-x: auto; max-width: 100%; }
   position: fixed; z-index: 9999; background: #fff; border: 1px solid #d1d5db; border-radius: 6px;
   box-shadow: 0 4px 14px rgba(0,0,0,.12); font-size: 12px; max-height: 14rem; overflow-y: auto;
 }
+/* Mũi tên ▼ cố định bên phải MỌI ô input[data-sdd-list] — dấu hiệu trực quan "có danh sách để chọn"
+   mà <datalist> native trước đây tự có (trình duyệt tự vẽ), widget JS thuần ở trên không tự có nên
+   phải tự vẽ lại bằng CSS (không dùng ::after vì <input> là replaced element, trình duyệt không render
+   generated content cho nó) — !important vì Tailwind Play CDN tự tạo/chèn stylesheet lúc runtime, thứ
+   tự nạp so với <style> tĩnh này không đảm bảo, không thể chỉ dựa vào độ ưu tiên selector thông thường. */
+input[data-sdd-list] {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='%236b7280'%3E%3Cpath fill-rule='evenodd' d='M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z' clip-rule='evenodd'/%3E%3C/svg%3E") !important;
+  background-repeat: no-repeat !important;
+  background-position: right 0.5rem center !important;
+  background-size: 1rem !important;
+  padding-right: 1.75rem !important;
+}
 </style>
 </head>
 <body class="bg-gray-100 min-h-screen font-sans">
