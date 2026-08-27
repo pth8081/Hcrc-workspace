@@ -209,7 +209,7 @@ router.post('/paymentRequests/:id/delete', async (req, res) => {
     await deleteRecordForCollection('paymentRequests', itemId, (item) => {
       recordActions.assertCanDeletePaymentRequest(freshUser, item);
       deletedPr = item;
-    });
+    }, { username: freshUser.username, name: freshUser.name });
     if (deletedPr && deletedPr.sourceModule && deletedPr.sourceId != null) {
       const sourceCollection = deletedPr.sourceModule === 'CONTRACT' ? 'contracts' : 'officeReqs';
       await withLockedRecordForCollection(sourceCollection, deletedPr.sourceId, (item) => {
@@ -324,7 +324,7 @@ router.post('/minutes/:id/delete', async (req, res) => {
   if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
   try {
     const { freshUser } = await getFreshUser(req);
-    await deleteRecordForCollection('meetingMinutes', itemId, (item) => recordActions.assertCanDeleteMinutes(freshUser, item));
+    await deleteRecordForCollection('meetingMinutes', itemId, (item) => recordActions.assertCanDeleteMinutes(freshUser, item), { username: freshUser.username, name: freshUser.name });
     res.json({ ok: true });
   } catch (err) {
     handleError(res, `minutes/${req.params.id}/delete`, err);
@@ -541,7 +541,7 @@ async function deleteAdminOnly(req, res, collection) {
   if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
   try {
     const { freshUser } = await getFreshUser(req);
-    await deleteRecordForCollection(collection, itemId, () => assertAdminForDelete(freshUser));
+    await deleteRecordForCollection(collection, itemId, () => assertAdminForDelete(freshUser), { username: freshUser.username, name: freshUser.name });
     res.json({ ok: true });
   } catch (err) {
     handleError(res, `${collection}/${req.params.id}/delete`, err);
@@ -575,7 +575,7 @@ router.post('/docs/:id/delete', async (req, res) => {
         ? docs.filter(d => d.id === itemId || d.rootDocId === itemId).map(d => d.id)
         : [itemId];
       for (const id of memberIds) {
-        await deleteRecordForCollection('docs', id, () => assertAdminForDelete(freshUser));
+        await deleteRecordForCollection('docs', id, () => assertAdminForDelete(freshUser), { username: freshUser.username, name: freshUser.name });
       }
     });
     res.json({ ok: true });
@@ -608,7 +608,7 @@ router.post('/contracts/:id/delete', async (req, res) => {
         ? contracts.filter(c => c.id === itemId || c.rootContractId === itemId).map(c => c.id)
         : [itemId];
       for (const id of memberIds) {
-        await deleteRecordForCollection('contracts', id, () => assertAdminForDelete(freshUser));
+        await deleteRecordForCollection('contracts', id, () => assertAdminForDelete(freshUser), { username: freshUser.username, name: freshUser.name });
       }
     });
     res.json({ ok: true });

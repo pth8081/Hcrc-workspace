@@ -144,5 +144,27 @@ BEGIN
 END
 GO
 
+/* Thùng Rác (Trash Bin) — khi admin xoá 1 hồ sơ ở bất kỳ collection nào trong dbo.Records
+   (lib/recordStore.js deleteRecordForCollection()), bản ghi được CHUYỂN vào đây thay vì xoá thẳng —
+   giữ nguyên Payload gốc để khôi phục lại đúng vị trí (cùng Id) nếu cần, hoặc xoá vĩnh viễn (chỉ xoá
+   dòng ở bảng này, dữ liệu đã không còn ở Records từ lúc chuyển vào đây nên "xoá vĩnh viễn" không cần
+   đụng gì thêm). Mỗi Id bị xoá ở Records tương ứng ĐÚNG 1 dòng ở đây — không dùng lại Id cũ cho Id mới
+   (IDENTITY riêng của bảng này). Xem routes/trash.js. */
+IF OBJECT_ID('dbo.TrashBin', 'U') IS NULL
+BEGIN
+    CREATE TABLE dbo.TrashBin (
+        Id             BIGINT IDENTITY(1,1) NOT NULL PRIMARY KEY,
+        Collection     NVARCHAR(50)   NOT NULL,
+        OriginalId     BIGINT         NOT NULL,
+        Code           NVARCHAR(100)  NULL,
+        Payload        NVARCHAR(MAX)  NOT NULL,
+        DeletedBy      NVARCHAR(100)  NOT NULL,
+        DeletedByName  NVARCHAR(200)  NULL,
+        DeletedAt      DATETIME2(3)   NOT NULL DEFAULT SYSUTCDATETIME()
+    );
+    CREATE INDEX IX_TrashBin_Collection_DeletedAt ON dbo.TrashBin (Collection, DeletedAt DESC);
+END
+GO
+
 PRINT 'Schema VPDT_DMS đã sẵn sàng.';
 GO

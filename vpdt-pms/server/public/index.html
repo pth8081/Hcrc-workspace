@@ -3855,6 +3855,7 @@ input[data-sdd-list] {
       <button type="button" onclick="setSystemSubTab('WORKFLOW')" id="btnSystemSubWorkflow" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">🔄 Quy Trình & Phê Duyệt</button>
       <button type="button" onclick="setSystemSubTab('UPLOAD')" id="btnSystemSubUpload" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">📎 Quản Lý Tệp File</button>
       <button type="button" onclick="setSystemSubTab('LOG')" id="btnSystemSubLog" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">📊 Log</button>
+      <button type="button" onclick="setSystemSubTab('TRASH')" id="btnSystemSubTrash" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">🗑️ Thùng Rác</button>
     </div>
   </div>
 
@@ -4870,6 +4871,33 @@ input[data-sdd-list] {
       </table>
     </div>
     <div id="paginationContainer_log"></div>
+  </div>
+
+  <!-- Màn hình 5b: Thùng Rác — mọi lượt "Xóa" ở các module nghiệp vụ (Văn Bản Trình, Tài Liệu, Hợp
+       Đồng, Xe, Văn Phòng, Phòng Họp, Biên Bản Họp, VPP, Ngân Sách, Đồng Phục, Đào Tạo, Tuyển Dụng, Hỗ
+       Trợ IT, Thanh Toán...) giờ CHUYỂN vào đây thay vì mất hẳn ngay — xem lib/recordStore.js
+       moveRecordToTrash(). Khôi phục lại ĐÚNG vị trí gốc (chặn nếu mã đã bị hồ sơ khác dùng lại), hoặc
+       xóa vĩnh viễn (không thể hoàn tác, bắt buộc xác thực lại). Không bao gồm Người dùng/Nhóm phân
+       quyền/danh mục cấu hình (users, permGroups, depts...) — phạm vi khác, xóa thẳng như cũ. -->
+  <div id="trashSection" class="hidden space-y-4">
+    <div class="bg-stone-50 p-4 rounded border border-stone-300 space-y-1">
+      <h3 class="font-bold text-stone-900 text-base flex items-center gap-1">🗑️ Thùng Rác</h3>
+      <p class="text-xs text-stone-800">Hồ sơ đã bị xóa ở bất kỳ module nào — khôi phục lại được nguyên vẹn (đúng vị trí, đúng mã) hoặc xóa vĩnh viễn. Không bao gồm Người dùng/Nhóm phân quyền/danh mục cấu hình ở tab Quản Trị.</p>
+    </div>
+    <div class="overflow-x-auto bg-white rounded border">
+      <table class="w-full border-collapse text-xs">
+        <thead>
+          <tr class="bg-gray-100 text-left text-gray-700">
+            <th class="border p-2">Module</th>
+            <th class="border p-2">Mã / Tiêu Đề</th>
+            <th class="border p-2">Người Xóa</th>
+            <th class="border p-2">Thời Gian Xóa</th>
+            <th class="border p-2 text-center">Hành Động</th>
+          </tr>
+        </thead>
+        <tbody id="trashTableBody"></tbody>
+      </table>
+    </div>
   </div>
 
   <!-- Màn hình 6: Quản Lý Tệp File — loại tệp + giới hạn dung lượng cho phép tải lên (theo từng module nghiệp vụ) -->
@@ -19079,6 +19107,7 @@ function setSystemSubTab(subTab) {
   document.getElementById('workflowSection').classList.toggle('hidden', subTab !== 'WORKFLOW');
   document.getElementById('uploadTypeSection').classList.toggle('hidden', subTab !== 'UPLOAD');
   document.getElementById('logSection').classList.toggle('hidden', subTab !== 'LOG');
+  document.getElementById('trashSection').classList.toggle('hidden', subTab !== 'TRASH');
 
   const activeCls = 'px-3 py-1.5 rounded text-xs font-bold bg-purple-700 text-white';
   const inactiveCls = 'px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700';
@@ -19087,6 +19116,7 @@ function setSystemSubTab(subTab) {
   document.getElementById('btnSystemSubWorkflow').className = subTab === 'WORKFLOW' ? activeCls : inactiveCls;
   document.getElementById('btnSystemSubUpload').className = subTab === 'UPLOAD' ? activeCls : inactiveCls;
   document.getElementById('btnSystemSubLog').className = subTab === 'LOG' ? activeCls : inactiveCls;
+  document.getElementById('btnSystemSubTrash').className = subTab === 'TRASH' ? activeCls : inactiveCls;
 
   if (subTab === 'ADMIN') {
     renderDeptList(); renderCatList(); renderContractTypeAbbrList(); renderJobTitleList(); renderTrainingCategoryList(); renderSensitiveKeywordList(); renderDeptCheckboxes(); renderModuleAccessCheckboxes(); renderUsers(); loadEmailConfigToForm(); renderPermGroupsList(); renderSubmissionApprovalGroups(); renderContractApprovalGroups(); workflowParticipatingDeptsDraft = null; renderWorkflowParticipatingDeptsChecklist(); vppExcludeGroupsDraft = null; renderVppExcludeGroupsAdmin(); renderPwaShortcutCheckboxes();
@@ -19102,6 +19132,7 @@ function setSystemSubTab(subTab) {
   }
   if (subTab === 'UPLOAD') { renderUploadTypeConfig(); }
   if (subTab === 'LOG') { loadSystemLogs(); }
+  if (subTab === 'TRASH') { loadTrashItems(); }
 }
 
 // 3 module con của "⚙️ Quản Trị" (mục Hệ Thống): Cấu Hình Email / Quản Lý Danh Mục / Phân Quyền
@@ -24510,6 +24541,109 @@ function getFilteredSystemLogs() {
 // lib/systemLogStore.js) và API chưa hỗ trợ phân trang thật (không có offset/cursor để lấy dòng cũ
 // hơn), nên đây chỉ là cải thiện tăng phạm vi tra cứu/lọc/xuất Excel lên tối đa hiện có, chưa giải
 // quyết dứt điểm — cần bổ sung phân trang thật ở lib/systemLogStore.js nếu cần xem hết 5000 dòng.
+// ==========================================
+// THÙNG RÁC (Trash Bin) — xem/khôi phục/xóa vĩnh viễn hồ sơ đã bị xóa ở bất kỳ module nào đã chuyển
+// sang lưu ở dbo.Records (xem lib/recordStore.js moveRecordToTrash()/routes/trash.js). Admin-only,
+// khớp đúng phạm vi: chỉ Quản Trị Viên mới xóa được các hồ sơ này ngay từ đầu.
+// ==========================================
+const TRASH_COLLECTION_LABELS = {
+  submissions: 'Văn Bản Trình', docs: 'Tài Liệu', carRegs: 'Đăng Ký Xe', officeReqs: 'Văn Phòng Tổng Hợp',
+  contracts: 'Hợp Đồng', meetings: 'Đặt Phòng Họp', meetingMinutes: 'Biên Bản Họp', internalPosts: 'Truyền Thông Nội Bộ',
+  paymentRequests: 'Thanh Toán', vppPeriods: 'VPP - Kỳ Đăng Ký', vppRegistrations: 'VPP - Đăng Ký',
+  reportPeriods: 'Báo Cáo - Kỳ Báo Cáo', reportEntries: 'Báo Cáo - Báo Cáo Cá Nhân', reportSlideTemplates: 'Báo Cáo - Mẫu Slide',
+  trainingDocuments: 'Đào Tạo - Tài Liệu', trainingClasses: 'Đào Tạo - Lớp Học', trainingRegistrations: 'Đào Tạo - Đăng Ký Học',
+  careerPaths: 'Đào Tạo - Lộ Trình Nghề Nghiệp', careerPathConfirmations: 'Đào Tạo - Xác Nhận Lộ Trình',
+  trainingTests: 'Đào Tạo - Bài Test', trainingTestSubmissions: 'Đào Tạo - Bài Làm', trainingCourses: 'Đào Tạo - Chương Trình',
+  trainingPlans: 'Đào Tạo - Kế Hoạch', onboardingPaths: 'Đào Tạo Tân Binh - Lộ Trình', onboardingProgress: 'Đào Tạo Tân Binh - Tiến Độ',
+  recruitmentJobs: 'Tuyển Dụng - Tin Tuyển Dụng', recruitmentReferrals: 'Tuyển Dụng - Giới Thiệu Ứng Viên',
+  itPriceApprovals: 'Hỗ Trợ IT - Phê Duyệt Giá', itSupportTickets: 'Hỗ Trợ IT - Ticket',
+  uniformPeriods: 'Đồng Phục - Kỳ Cấp Phát', uniformIssuances: 'Đồng Phục - Cấp Phát',
+  uniformStockAdjustments: 'Đồng Phục - Điều Chỉnh Kho', uniformTransfers: 'Đồng Phục - Điều Chuyển Kho',
+  budgetTemplates: 'Ngân Sách - Mẫu', budgetPeriods: 'Ngân Sách - Kỳ Ngân Sách', budgetEntries: 'Ngân Sách - Hồ Sơ Ngân Sách'
+};
+function trashCollectionLabel(collection) { return TRASH_COLLECTION_LABELS[collection] || collection; }
+
+// Không có 1 field tiêu đề chung cho MỌI collection (mỗi module đặt tên field khác nhau) — thử lần
+// lượt vài field phổ biến nhất, cuối cùng rơi về "#<id gốc>" nếu không khớp field nào.
+function trashItemLabel(entry) {
+  const it = entry.item || {};
+  return entry.code || it.title || it.name || it.periodName || it.candidateName || it.jobTitle || ('#' + entry.originalId);
+}
+
+let trashItemsCache = [];
+
+async function loadTrashItems() {
+  if (!currentUser?.perms?.admin) return;
+  try {
+    const res = await fetch('/api/trash');
+    if (res.status === 401) return handleSessionExpired();
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      console.error('Không tải được thùng rác:', body.error);
+      return;
+    }
+    trashItemsCache = body.items || [];
+  } catch (err) {
+    console.error('Không tải được thùng rác:', err.message);
+  }
+  renderTrashList();
+}
+
+function renderTrashList() {
+  const tbody = document.getElementById('trashTableBody');
+  if (!tbody) return;
+  if (!trashItemsCache.length) {
+    tbody.innerHTML = `<tr><td colspan="5" class="text-center p-6 text-gray-500 italic">Thùng rác trống.</td></tr>`;
+    return;
+  }
+  tbody.innerHTML = trashItemsCache.map(entry => `
+    <tr>
+      <td class="border p-2">${escapeHtml(trashCollectionLabel(entry.collection))}</td>
+      <td class="border p-2">${escapeHtml(trashItemLabel(entry))}</td>
+      <td class="border p-2">${escapeHtml(entry.deletedByName || entry.deletedBy)}</td>
+      <td class="border p-2">${new Date(entry.deletedAt).toLocaleString('vi-VN')}</td>
+      <td class="border p-2 text-center whitespace-nowrap">
+        <button type="button" onclick="restoreTrashItem(${entry.trashId})" class="text-emerald-700 font-bold hover:underline mr-3">♻️ Khôi phục</button>
+        <button type="button" onclick="permanentlyDeleteTrashItemUI(${entry.trashId})" class="text-red-600 font-bold hover:underline">🗑️ Xóa vĩnh viễn</button>
+      </td>
+    </tr>
+  `).join('');
+}
+
+async function restoreTrashItem(trashId) {
+  if (!confirm('Khôi phục hồ sơ này về đúng vị trí ban đầu?')) return;
+  try {
+    const res = await fetch(`/api/trash/${trashId}/restore`, { method: 'POST' });
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) return alert(`⛔ ${body.error || 'Không thể khôi phục'}`);
+    logSystemAction('SYSTEM', 'RESTORE_TRASH', `Khôi phục hồ sơ [${trashCollectionLabel(body.collection)} - ${body.item?.code || body.item?.title || body.item?.name || ''}]`, 'SUCCESS', body.item?.code || '');
+    alert('✅ Đã khôi phục thành công!');
+    loadTrashItems();
+  } catch (e) {
+    alert('⛔ Không thể kết nối tới máy chủ: ' + e.message);
+  }
+}
+
+// "Xóa vĩnh viễn" không thể hoàn tác — bắt buộc xác thực lại (mật khẩu/OTP/PIN/vân tay tuỳ
+// approverAuthLevel, cùng cơ chế withApprovalAuth() dùng cho Duyệt — xem routes/trash.js).
+function permanentlyDeleteTrashItemUI(trashId) {
+  if (!confirm('⚠️ XÓA VĨNH VIỄN — hành động này KHÔNG THỂ HOÀN TÁC, không thể khôi phục lại được nữa. Bạn có chắc chắn?')) return;
+  withApprovalAuth(() => permanentlyDeleteTrashItemConfirmed(trashId));
+}
+
+async function permanentlyDeleteTrashItemConfirmed(trashId) {
+  try {
+    const res = await fetch(`/api/trash/${trashId}`, { method: 'DELETE' });
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) return alert(`⛔ ${body.error || 'Không thể xóa vĩnh viễn'}`);
+    logSystemAction('SYSTEM', 'PERMANENT_DELETE_TRASH', `Xóa vĩnh viễn 1 hồ sơ trong thùng rác (id=${trashId})`, 'SUCCESS', String(trashId));
+    alert('✅ Đã xóa vĩnh viễn.');
+    loadTrashItems();
+  } catch (e) {
+    alert('⛔ Không thể kết nối tới máy chủ: ' + e.message);
+  }
+}
+
 async function loadSystemLogs() {
   try {
     const res = await fetch('/api/log?limit=1000');

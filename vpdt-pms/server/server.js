@@ -27,6 +27,7 @@ const adminExportRoutes = require('./routes/adminExport');
 const pwaManifestRoutes = require('./routes/pwaManifest');
 const budgetTemplateImportRoutes = require('./routes/budgetTemplateImport');
 const downloadRoutes = require('./routes/download');
+const trashRoutes = require('./routes/trash');
 const { isCaptchaEnabled, generateCaptcha } = require('./lib/captcha');
 const { checkContractExpiryReminders } = require('./jobs/contractExpiryReminder');
 
@@ -135,6 +136,7 @@ app.use('/api/budget', budgetTemplateImportRoutes);
 // Route TẢI file đính kèm dùng chung (khác /uploads/ tĩnh bên dưới — chỗ đó dùng để XEM trong Khung Xem
 // Bảo Vệ): PDF được đóng dấu watermark trước khi trả về, xem chi tiết ở routes/download.js.
 app.use('/api/files/download', requireAuth, blockIfMustChangePassword, downloadRoutes);
+app.use('/api/trash', trashRoutes);
 
 // Phục vụ file đính kèm đã tải lên — PHẢI đăng nhập mới tải được (trước đây express.static phục vụ
 // thẳng, ai có đúng URL — kể cả chưa đăng nhập — đều tải được, vô hiệu hoá các quyền Xem/Tải file theo
