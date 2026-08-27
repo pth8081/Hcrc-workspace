@@ -1420,6 +1420,12 @@ const CREATE_MODULE_CONFIGS = {
       payload.resultBy = null;
       payload.resultByName = null;
       payload.resultAt = null;
+      // Đợt 9 — yêu cầu huỷ (do chính học viên gửi) phải chờ trainingManage/admin duyệt trước khi có
+      // hiệu lực (xem cancelTrainingRegistration()/approveCancelTrainingRegistration(),
+      // lib/recordActions.js); tài liệu giáo trình bắt buộc (cls.documentIds, chỉ áp dụng lớp ONLINE) học
+      // viên tự đánh dấu đã xem từng cái qua markTrainingDocumentViewed() — bắt buộc xem hết mới được thi.
+      payload.pendingCancellation = null;
+      payload.viewedDocumentIds = [];
     }
   },
   // Lộ trình thăng tiến (Đợt 7) — GỒM NHIỀU CẤP BẬC TUẦN TỰ (payload.stages, thứ tự trong mảng CHÍNH LÀ

@@ -1849,6 +1849,13 @@ table { display: block; overflow-x: auto; max-width: 100%; }
           <div class="flex justify-end"><button type="submit" class="bg-emerald-600 text-white px-5 py-2 rounded font-bold hover:bg-emerald-700">Tạo Lớp Học</button></div>
         </form>
         <p id="trainingClassNoPermNote" class="hidden text-xs text-gray-500 italic bg-gray-50 border rounded p-3">⛔ Bạn không có quyền tạo lớp học — chỉ có thể xem và đăng ký.</p>
+        <!-- Đợt 9 — yêu cầu huỷ đăng ký đang chờ duyệt (CHỈ trainingManage/admin thấy, KHÔNG mở cho
+             trainingInstruct dù giảng viên đó quản lý được lớp — xem cancelTrainingRegistration()/
+             approveCancelTrainingRegistration(), lib/recordActions.js). Ẩn hẳn khi không có yêu cầu nào. -->
+        <div id="trainingCancelRequestsWrap" class="hidden space-y-2">
+          <h3 class="font-bold text-gray-800">⏳ Yêu Cầu Huỷ Đăng Ký Đang Chờ Duyệt</h3>
+          <div id="trainingCancelRequestsContainer" class="space-y-2"></div>
+        </div>
         <div class="space-y-3">
           <h3 class="font-bold text-gray-800">🏫 Danh Sách Lớp Học</h3>
           <div class="overflow-x-auto">
@@ -2547,6 +2554,20 @@ table { display: block; overflow-x: auto; max-width: 100%; }
         <p id="trainingClassQrSubtitle" class="text-xs text-gray-500 mb-3"></p>
         <img id="trainingClassQrImg" class="mx-auto border rounded" width="280" height="280" alt="Mã QR làm bài test">
         <p class="text-xs text-gray-400 mt-3">Học viên dùng điện thoại ĐÃ ĐĂNG NHẬP tài khoản của mình quét mã này để vào làm bài ngay sau khi lớp kết thúc.</p>
+      </div>
+    </div>
+
+    <!-- Đợt 9 — "Vào Lớp Học" (lớp ONLINE có gán giáo trình bắt buộc, cls.documentIds): học viên phải tự
+         đánh dấu đã xem TỪNG tài liệu (markTrainingDocumentViewedAction()) trước khi nút "Vào Làm Bài
+         Test" mở ra — xem renderTrainingMyRegs()/gác server routes/records.js submit-test. Lớp OFFLINE
+         KHÔNG dùng modal này (giáo trình OFFLINE chỉ tham khảo, gác OFFLINE là giảng viên bấm Kết Thúc Lớp). -->
+    <div id="trainingJoinClassModal" class="hidden fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+      <div class="bg-white rounded-lg shadow-xl max-w-lg w-full max-h-[85vh] overflow-y-auto">
+        <div class="p-4 border-b flex justify-between items-center sticky top-0 bg-white">
+          <h3 id="trainingJoinClassTitle" class="font-bold text-gray-800">📚 Vào Lớp Học</h3>
+          <button onclick="closeTrainingJoinClassModal()" class="text-gray-400 hover:text-gray-700 text-xl leading-none">&times;</button>
+        </div>
+        <div id="trainingJoinClassBody" class="p-4 space-y-3"></div>
       </div>
     </div>
 
@@ -27308,6 +27329,7 @@ async function submitTrainingClass(e) {
 }
 
 function renderTrainingClasses() {
+  renderTrainingCancelRequestsQueue();
   const tbody = document.getElementById('trainingClassesTableBody');
   if (!tbody) return;
   const list = DB.trainingClasses.slice().sort((a, b) => b.id - a.id);
@@ -28044,6 +28066,22 @@ function renderTrainingResultsModalBody() {
       ? `${r.score != null ? escapeHtml(String(r.score)) + '%' : ''}`
       : `<input id="trScore_${r.id}" type="number" min="0" max="100" value="${r.score != null ? r.score : ''}" class="w-16 border rounded p-1">`;
     const actionCell = hasTest ? '' : `<button onclick="saveTrainingResult(${r.id})" class="bg-emerald-600 text-white px-2 py-1 rounded font-bold hover:bg-emerald-700">Lưu</button>`;
+    // Đợt 9 — hiện yêu cầu huỷ đang chờ NGAY trong bảng này (KHÔNG cần mở riêng đâu khác) — chỉ
+    // trainingManage/admin thấy nút Duyệt/Từ chối, trainingInstruct (nếu cũng quản lý được lớp này qua
+    // canManageTrainingClassLocal()) chỉ thấy dòng chữ trạng thái, đúng quyết định "chỉ trainingManage/
+    // admin duyệt" (xem approveCancelTrainingRegistration()/rejectCancelTrainingRegistration()).
+    const canApproveCancel = currentUser.perms?.admin || currentUser.perms?.trainingManage;
+    const cancelReqHTML = r.pendingCancellation
+      ? (canApproveCancel
+          ? `<div class="mt-1 bg-amber-50 border border-amber-200 rounded p-1.5 text-left">
+               <div class="text-amber-700 font-bold text-xs">⏳ Yêu cầu huỷ${r.pendingCancellation.reason ? `: ${escapeHtml(r.pendingCancellation.reason)}` : ''}</div>
+               <div class="flex gap-1 mt-1">
+                 <button onclick="approveCancelTrainingRegAction(${r.id})" class="bg-emerald-600 text-white px-2 py-0.5 rounded text-xs font-bold hover:bg-emerald-700">Duyệt Huỷ</button>
+                 <button onclick="rejectCancelTrainingRegAction(${r.id})" class="bg-gray-400 text-white px-2 py-0.5 rounded text-xs font-bold hover:bg-gray-500">Từ Chối</button>
+               </div>
+             </div>`
+          : `<div class="mt-1 text-amber-600 text-xs italic">⏳ Đang chờ duyệt huỷ</div>`)
+      : '';
     return `
     <tr>
       <td class="border p-2">${escapeHtml(r.creatorName)}<br><span class="text-gray-400">${escapeHtml(r.dept)}</span></td>
@@ -28051,7 +28089,7 @@ function renderTrainingResultsModalBody() {
       <td class="border p-2"><span class="text-xs font-semibold">${escapeHtml(disp.label)}${disp.sub ? ` (${escapeHtml(disp.sub)})` : ''}</span></td>
       <td class="border p-2">${resultCell}</td>
       <td class="border p-2">${scoreCell}</td>
-      <td class="border p-2 text-center">${actionCell}</td>
+      <td class="border p-2 text-center">${actionCell}${cancelReqHTML}</td>
     </tr>`;
   }).join('');
 }
@@ -28071,6 +28109,63 @@ async function saveTrainingResult(regId) {
   renderTrainingResultsModalBody();
   renderTrainingClasses();
   renderCareerPaths();
+}
+
+// Đợt 9 — Duyệt/Từ chối yêu cầu huỷ đăng ký lớp học (CHỈ trainingManage/admin, xem
+// approveCancelTrainingRegistration()/rejectCancelTrainingRegistration(), lib/recordActions.js). Gọi
+// được từ 2 nơi: bảng Kết Quả của TỪNG lớp (renderTrainingResultsModalBody()) và hộp tổng hợp mọi yêu
+// cầu đang chờ ở đầu tab Lớp Học (renderTrainingCancelRequestsQueue()) — nên refresh cả 2 nơi sau khi
+// xong, bất kể request đến từ đâu (an toàn, không tồn tại thì DOM query trả về null, không lỗi gì).
+async function approveCancelTrainingRegAction(regId) {
+  if (!confirm('Duyệt yêu cầu huỷ đăng ký này? Học viên sẽ bị huỷ khỏi lớp học.')) return;
+  let updated;
+  try {
+    const res = await callRecordAction('trainingRegistrations', regId, 'approve-cancel', {});
+    updated = res.item;
+  } catch (err) { return alert(`⛔ ${err.message}`); }
+  const idx = DB.trainingRegistrations.findIndex(x => x.id === regId);
+  if (idx !== -1) DB.trainingRegistrations[idx] = updated;
+  logSystemAction('INTERNAL', 'APPROVE_CANCEL_TRAINING_REG', `Duyệt huỷ đăng ký lớp học [${updated.classCode}] của ${updated.creatorName}`, 'SUCCESS', updated.classCode);
+  renderTrainingResultsModalBody();
+  renderTrainingCancelRequestsQueue();
+  renderTrainingClasses();
+}
+async function rejectCancelTrainingRegAction(regId) {
+  if (!confirm('Từ chối yêu cầu huỷ này? Học viên vẫn giữ nguyên đăng ký trong lớp.')) return;
+  let updated;
+  try {
+    const res = await callRecordAction('trainingRegistrations', regId, 'reject-cancel', {});
+    updated = res.item;
+  } catch (err) { return alert(`⛔ ${err.message}`); }
+  const idx = DB.trainingRegistrations.findIndex(x => x.id === regId);
+  if (idx !== -1) DB.trainingRegistrations[idx] = updated;
+  logSystemAction('INTERNAL', 'REJECT_CANCEL_TRAINING_REG', `Từ chối huỷ đăng ký lớp học [${updated.classCode}] của ${updated.creatorName}`, 'SUCCESS', updated.classCode);
+  renderTrainingResultsModalBody();
+  renderTrainingCancelRequestsQueue();
+}
+
+// Hộp tổng hợp mọi yêu cầu huỷ đang chờ, gộp từ TẤT CẢ các lớp (không cần mở từng modal Kết Quả để
+// tìm) — chỉ trainingManage/admin thấy, ẩn hẳn khi không có yêu cầu nào đang chờ. Gọi từ
+// renderTrainingClasses() nên luôn cùng nhịp với tab Lớp Học.
+function renderTrainingCancelRequestsQueue() {
+  const wrap = document.getElementById('trainingCancelRequestsWrap');
+  const container = document.getElementById('trainingCancelRequestsContainer');
+  if (!wrap || !container) return;
+  if (!currentUser.perms?.admin && !currentUser.perms?.trainingManage) { wrap.classList.add('hidden'); return; }
+  const pending = DB.trainingRegistrations.filter(r => r.pendingCancellation);
+  wrap.classList.toggle('hidden', !pending.length);
+  if (!pending.length) { container.innerHTML = ''; return; }
+  container.innerHTML = pending.map(r => `
+    <div class="bg-amber-50 border border-amber-200 rounded p-2 flex justify-between items-center gap-2 text-xs">
+      <div>
+        <b>${escapeHtml(r.creatorName)}</b> (${escapeHtml(r.dept || '')}) muốn huỷ lớp <b>${escapeHtml(r.className || '')}</b>${r.pendingCancellation.reason ? ` — Lý do: ${escapeHtml(r.pendingCancellation.reason)}` : ''}
+        <div class="text-gray-400">Gửi lúc ${escapeHtml(r.pendingCancellation.requestedAt || '')}</div>
+      </div>
+      <div class="flex gap-1 flex-shrink-0">
+        <button onclick="approveCancelTrainingRegAction(${r.id})" class="bg-emerald-600 text-white px-2 py-1 rounded text-xs font-bold hover:bg-emerald-700">Duyệt Huỷ</button>
+        <button onclick="rejectCancelTrainingRegAction(${r.id})" class="bg-gray-400 text-white px-2 py-1 rounded text-xs font-bold hover:bg-gray-500">Từ Chối</button>
+      </div>
+    </div>`).join('');
 }
 
 // Xuất Excel kết quả đào tạo (Đợt 4) — cùng cơ chế chung downloadXlsxFromServer() (POST /api/admin/export-xlsx)
@@ -28386,19 +28481,39 @@ function renderTrainingMyRegs() {
     const badgeCls = disp.key === 'DONE' ? (r.result === 'PASSED' ? 'text-emerald-600' : 'text-red-600') : 'text-indigo-600';
     const badgeIcon = disp.key === 'DONE' ? (r.result === 'PASSED' ? '✅' : '❌') : disp.key === 'WAITING' ? '⏳' : '📌';
     const badge = `<span class="${badgeCls} font-bold">${badgeIcon} ${escapeHtml(disp.label)}${disp.sub ? ` (${escapeHtml(disp.sub)})` : ''}${disp.key === 'DONE' && r.score != null ? ` — ${r.score} điểm` : ''}</span>`;
-    const cancelHTML = r.result === 'REGISTERED' ? `<button onclick="cancelTrainingRegistrationAction(${r.id})" class="text-red-500 font-bold hover:underline text-xs">Huỷ Đăng Ký</button>` : '';
+    // Đợt 9 — yêu cầu huỷ giờ phải chờ trainingManage/admin duyệt (xem cancelTrainingRegistration(),
+    // lib/recordActions.js) — học viên chỉ gửi được 1 yêu cầu, không huỷ lại được lần 2 khi đang chờ.
+    const cancelHTML = r.pendingCancellation
+      ? `<span class="text-xs text-amber-600 font-bold">⏳ Đang chờ duyệt huỷ</span>`
+      : r.result === 'REGISTERED' ? `<button onclick="cancelTrainingRegistrationAction(${r.id})" class="text-red-500 font-bold hover:underline text-xs">Huỷ Đăng Ký</button>` : '';
     // Bài test ONLINE tự bật đúng lúc lớp kết thúc (so sánh giờ hiện tại với endTime lúc render, không
-    // cần cron/websocket gì) — OFFLINE thì học viên quét mã QR tại lớp để vào làm, không hiện nút ở đây.
+    // cần cron/websocket gì) — NHƯNG Đợt 9 thêm gác "học xong mới thi": phải xem hết giáo trình bắt buộc
+    // (cls.documentIds) trước, nút "📚 Vào Lớp Học" mở modal đánh dấu đã xem từng tài liệu (xem
+    // openTrainingJoinClassModal()). OFFLINE thì học viên quét mã QR tại lớp để vào làm — CHỈ mở được khi
+    // giảng viên đã bấm "Kết Thúc Lớp" (gác thật ở server routes/records.js submit-test).
     let testHTML = '';
     if (cls && cls.testId != null && r.result === 'REGISTERED') {
       if (cls.mode === 'OFFLINE') {
-        testHTML = `<div class="text-xs text-gray-400 mt-1">🧪 Quét mã QR tại lớp để làm bài</div>`;
-      } else if (!cls.endTime) {
-        testHTML = `<div class="text-xs text-gray-400 mt-1">🧪 Lớp chưa có giờ kết thúc, chưa thể mở bài test</div>`;
-      } else if (now < new Date(cls.endTime)) {
-        testHTML = `<div class="text-xs text-gray-400 mt-1">🔒 Bài test mở lúc ${escapeHtml(cls.endTime.replace('T', ' '))}</div>`;
+        testHTML = getTrainingClassSessionState(cls) === 'ENDED'
+          ? `<div class="text-xs text-gray-400 mt-1">🧪 Quét mã QR tại lớp để làm bài</div>`
+          : `<div class="text-xs text-gray-400 mt-1">🔒 Chờ giảng viên bấm "Kết Thúc Lớp" để mở bài test</div>`;
       } else {
-        testHTML = `<button onclick="openTakeTestModal(${cls.id})" class="bg-purple-600 text-white px-2 py-1 rounded text-xs font-bold hover:bg-purple-700 mt-1">📝 Vào Làm Bài Test</button>`;
+        const requiredDocIds = Array.isArray(cls.documentIds) ? cls.documentIds : [];
+        const viewedIds = Array.isArray(r.viewedDocumentIds) ? r.viewedDocumentIds : [];
+        const viewedCount = requiredDocIds.filter(id => viewedIds.includes(id)).length;
+        const allViewed = !requiredDocIds.length || viewedCount === requiredDocIds.length;
+        if (requiredDocIds.length) {
+          testHTML += `<button onclick="openTrainingJoinClassModal(${r.id})" class="bg-sky-600 text-white px-2 py-1 rounded text-xs font-bold hover:bg-sky-700 mt-1 mr-1">📚 Vào Lớp Học (${viewedCount}/${requiredDocIds.length})</button>`;
+        }
+        if (!cls.endTime) {
+          testHTML += `<div class="text-xs text-gray-400 mt-1">🧪 Lớp chưa có giờ kết thúc, chưa thể mở bài test</div>`;
+        } else if (now < new Date(cls.endTime)) {
+          testHTML += `<div class="text-xs text-gray-400 mt-1">🔒 Bài test mở lúc ${escapeHtml(cls.endTime.replace('T', ' '))}</div>`;
+        } else if (!allViewed) {
+          testHTML += `<div class="text-xs text-amber-600 mt-1">📖 Cần xem hết tài liệu giáo trình trước khi thi</div>`;
+        } else {
+          testHTML += `<button onclick="openTakeTestModal(${cls.id})" class="bg-purple-600 text-white px-2 py-1 rounded text-xs font-bold hover:bg-purple-700 mt-1">📝 Vào Làm Bài Test</button>`;
+        }
       }
     }
     return `
@@ -28412,15 +28527,82 @@ function renderTrainingMyRegs() {
   }).join('');
 }
 
+// Đợt 9 — huỷ không còn có hiệu lực ngay: học viên (không phải admin) chỉ gửi được 1 yêu cầu, chờ
+// trainingManage/admin duyệt (xem cancelTrainingRegistration()/approveCancelTrainingRegistration(),
+// lib/recordActions.js) — server tự phân biệt admin (huỷ ngay) hay không (tạo yêu cầu chờ), thông báo
+// cho đúng theo kết quả trả về thay vì giả định trước.
 function cancelTrainingRegistrationAction(regId) {
-  if (!confirm('Huỷ đăng ký lớp học này?')) return;
-  callRecordAction('trainingRegistrations', regId, 'cancel', {}).then(result => {
+  if (!confirm('Gửi yêu cầu huỷ đăng ký lớp học này? Cần Nhân Sự phụ trách đào tạo duyệt trước khi có hiệu lực (trừ khi bạn là Admin).')) return;
+  const reason = (prompt('Lý do huỷ (không bắt buộc):') || '').trim();
+  callRecordAction('trainingRegistrations', regId, 'cancel', { reason }).then(result => {
+    const updated = result.item;
     const idx = DB.trainingRegistrations.findIndex(x => x.id === regId);
-    if (idx !== -1) DB.trainingRegistrations[idx] = result.item;
-    logSystemAction('INTERNAL', 'CANCEL_TRAINING_REG', `Huỷ đăng ký lớp học [id ${regId}]`, 'SUCCESS');
+    if (idx !== -1) DB.trainingRegistrations[idx] = updated;
+    logSystemAction('INTERNAL', 'CANCEL_TRAINING_REG', `${updated.result === 'CANCELLED' ? 'Huỷ' : 'Gửi yêu cầu huỷ'} đăng ký lớp học [id ${regId}]`, 'SUCCESS');
+    alert(updated.result === 'CANCELLED' ? '✅ Đã huỷ đăng ký thành công!' : '✅ Đã gửi yêu cầu huỷ, chờ Nhân Sự phụ trách đào tạo duyệt.');
     renderTrainingMyRegs();
     renderTrainingClasses();
   }).catch(err => alert(`⛔ ${err.message}`));
+}
+
+// ---------- VÀO LỚP HỌC (Đợt 9 — ONLINE, đánh dấu đã xem từng tài liệu giáo trình bắt buộc) ----------
+let trainingJoinClassRegId = null;
+function openTrainingJoinClassModal(regId) {
+  trainingJoinClassRegId = regId;
+  renderTrainingJoinClassModalBody();
+  document.getElementById('trainingJoinClassModal').classList.remove('hidden');
+}
+function closeTrainingJoinClassModal() {
+  document.getElementById('trainingJoinClassModal').classList.add('hidden');
+}
+function renderTrainingJoinClassModalBody() {
+  const reg = DB.trainingRegistrations.find(r => r.id === trainingJoinClassRegId);
+  const cls = reg && DB.trainingClasses.find(c => c.id === reg.classId);
+  const container = document.getElementById('trainingJoinClassBody');
+  if (!reg || !cls) { container.innerHTML = ''; return; }
+  document.getElementById('trainingJoinClassTitle').innerText = `📚 Vào Lớp Học — ${cls.title}`;
+  const docIds = Array.isArray(cls.documentIds) ? cls.documentIds : [];
+  if (!docIds.length) { container.innerHTML = `<div class="text-gray-400 italic text-sm">Lớp học này không có giáo trình bắt buộc.</div>`; return; }
+  const viewedIds = Array.isArray(reg.viewedDocumentIds) ? reg.viewedDocumentIds : [];
+  container.innerHTML = docIds.map(docId => {
+    const d = DB.trainingDocuments.find(x => x.id === docId);
+    if (!d) return '';
+    const isViewed = viewedIds.includes(docId);
+    // Cùng cách hiển thị theo docType (VIDEO nhúng Youtube/IMAGE thumbnail/DOCUMENT link tải) với
+    // renderTrainingDocuments() ở Kho Tài Liệu — xem hàm đó để biết lý do từng nhánh.
+    let openHTML;
+    if (d.docType === 'VIDEO') {
+      const embedUrl = trainingYoutubeEmbedUrl(d.videoUrl);
+      openHTML = embedUrl
+        ? `<iframe src="${escapeHtml(embedUrl)}" class="w-full h-40 rounded border" frameborder="0" allowfullscreen title="${escapeHtml(d.title)}"></iframe>`
+        : `<a href="${escapeHtml(d.videoUrl || '')}" target="_blank" rel="noopener" class="text-indigo-600 underline text-xs">▶️ Xem video</a>`;
+    } else if (d.docType === 'IMAGE') {
+      openHTML = `<a href="${escapeHtml(d.fileUrl)}" target="_blank" rel="noopener"><img src="${escapeHtml(d.fileUrl)}" class="w-full max-h-40 object-contain rounded border" alt="${escapeHtml(d.title)}"></a>`;
+    } else {
+      openHTML = `<a href="${escapeHtml(d.fileUrl)}" target="_blank" rel="noopener" class="text-indigo-600 underline text-xs">⬇️ Mở tài liệu</a>`;
+    }
+    return `
+      <div class="bg-white border rounded p-3 space-y-2">
+        <div class="flex justify-between items-start gap-2">
+          <div class="font-bold text-sm text-gray-800">${escapeHtml(d.title)}</div>
+          ${isViewed ? `<span class="text-xs px-2 py-0.5 rounded bg-emerald-100 text-emerald-700 font-bold flex-shrink-0">✅ Đã xem</span>` : ''}
+        </div>
+        ${openHTML}
+        ${isViewed ? '' : `<button onclick="markTrainingDocumentViewedAction(${docId})" class="bg-emerald-600 text-white px-2 py-1 rounded text-xs font-bold hover:bg-emerald-700">Đánh dấu đã xem</button>`}
+      </div>`;
+  }).join('');
+}
+async function markTrainingDocumentViewedAction(documentId) {
+  const regId = trainingJoinClassRegId;
+  let updated;
+  try {
+    const res = await callRecordAction('trainingRegistrations', regId, 'mark-document-viewed', { documentId });
+    updated = res.item;
+  } catch (err) { return alert(`⛔ ${err.message}`); }
+  const idx = DB.trainingRegistrations.findIndex(x => x.id === regId);
+  if (idx !== -1) DB.trainingRegistrations[idx] = updated;
+  renderTrainingJoinClassModalBody();
+  renderTrainingMyRegs();
 }
 
 // ---------- LÀM BÀI TEST (đếm ngược theo từng câu, không cho quay lại câu trước) ----------

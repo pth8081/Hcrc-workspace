@@ -439,6 +439,7 @@ function __mockValidateTrainingRegistrationCreate(payload, user) {
   }
   payload.className = cls.title; payload.classCode = cls.code; payload.category = cls.category; payload.classCreator = cls.creator;
   payload.result = 'REGISTERED'; payload.score = null; payload.resultNote = ''; payload.resultBy = null; payload.resultByName = null; payload.resultAt = null;
+  payload.pendingCancellation = null; payload.viewedDocumentIds = [];
 }
 
 function __mockBulkRegister(payload, user, cls) {
@@ -492,6 +493,17 @@ function __mockSubmitTest(payload, user, cls) {
   if (!test) throw __mockHttpError(404, 'Không tìm thấy bài test');
   const reg = DB.trainingRegistrations.find((r) => r.classId === cls.id && r.creator === user.username && r.result === 'REGISTERED');
   if (!reg) throw __mockHttpError(409, 'Bạn chưa đăng ký lớp học này hoặc đã có kết quả');
+  // Đợt 9 — mirrors gác "học xong mới thi" ở routes/records.js submit-test: OFFLINE chờ
+  // sessionState === 'ENDED', ONLINE chờ xem hết cls.documentIds (nếu có gán).
+  if (cls.mode === 'OFFLINE') {
+    if (cls.sessionState !== 'ENDED') throw __mockHttpError(409, 'Buổi học chưa kết thúc — giảng viên cần bấm "Kết Thúc Lớp" trước khi học viên làm bài test');
+  } else {
+    const requiredDocIds = Array.isArray(cls.documentIds) ? cls.documentIds : [];
+    const viewedIds = Array.isArray(reg.viewedDocumentIds) ? reg.viewedDocumentIds : [];
+    if (requiredDocIds.length && !requiredDocIds.every((id) => viewedIds.includes(id))) {
+      throw __mockHttpError(409, 'Bạn cần xem hết tài liệu giáo trình bắt buộc của lớp học trước khi làm bài test');
+    }
+  }
   const graded = __mockGradeSubmission(payload.answers, test);
   const regClone = JSON.parse(JSON.stringify(reg));
   regClone.result = graded.passed ? 'PASSED' : 'FAILED';
@@ -517,10 +529,45 @@ function __mockSetResult(payload, user, reg, cls) {
   reg.resultBy = user.username; reg.resultByName = user.name; reg.resultAt = new Date().toLocaleString('vi-VN');
   return reg;
 }
-function __mockCancelReg(user, reg) {
+// Đợt 9 — mirrors cancelTrainingRegistration(): học viên tự gửi chỉ tạo pendingCancellation (chờ
+// trainingManage/admin duyệt), admin huỷ ngay như cũ.
+function __mockCancelReg(payload, user, reg) {
   if (reg.creator !== user.username && !user.perms?.admin) throw __mockHttpError(403, 'Bạn chỉ có thể huỷ đăng ký của chính mình');
   if (reg.result !== 'REGISTERED') throw __mockHttpError(409, 'Đăng ký này không còn ở trạng thái có thể huỷ');
+  if (user.perms?.admin) {
+    reg.result = 'CANCELLED'; reg.resultBy = user.username; reg.resultByName = user.name; reg.resultAt = new Date().toLocaleString('vi-VN');
+    reg.pendingCancellation = null;
+    return reg;
+  }
+  if (reg.pendingCancellation) throw __mockHttpError(409, 'Bạn đã gửi yêu cầu huỷ đăng ký này từ trước, đang chờ duyệt');
+  reg.pendingCancellation = {
+    reason: payload?.reason ? String(payload.reason).trim() : '',
+    requestedBy: user.username, requestedByName: user.name, requestedAt: new Date().toLocaleString('vi-VN')
+  };
+  return reg;
+}
+function __mockApproveCancelReg(user, reg) {
+  if (!user.perms?.admin && !user.perms?.trainingManage) throw __mockHttpError(403, 'Bạn không có quyền duyệt yêu cầu huỷ đăng ký lớp học');
+  if (!reg.pendingCancellation) throw __mockHttpError(404, 'Không tìm thấy yêu cầu huỷ đang chờ duyệt');
   reg.result = 'CANCELLED'; reg.resultBy = user.username; reg.resultByName = user.name; reg.resultAt = new Date().toLocaleString('vi-VN');
+  reg.pendingCancellation = null;
+  return reg;
+}
+function __mockRejectCancelReg(user, reg) {
+  if (!user.perms?.admin && !user.perms?.trainingManage) throw __mockHttpError(403, 'Bạn không có quyền từ chối yêu cầu huỷ đăng ký lớp học');
+  if (!reg.pendingCancellation) throw __mockHttpError(404, 'Không tìm thấy yêu cầu huỷ đang chờ duyệt');
+  reg.pendingCancellation = null;
+  return reg;
+}
+function __mockMarkDocumentViewed(payload, user, reg, cls) {
+  if (reg.creator !== user.username) throw __mockHttpError(403, 'Bạn chỉ có thể đánh dấu đã xem cho đăng ký của chính mình');
+  if (reg.result === 'CANCELLED') throw __mockHttpError(409, 'Đăng ký này đã bị huỷ');
+  const documentId = Number(payload?.documentId);
+  if (!Number.isFinite(documentId)) throw __mockHttpError(400, 'Thiếu documentId');
+  const requiredIds = Array.isArray(cls?.documentIds) ? cls.documentIds : [];
+  if (!requiredIds.includes(documentId)) throw __mockHttpError(400, 'Tài liệu này không thuộc giáo trình bắt buộc của lớp học');
+  reg.viewedDocumentIds = Array.isArray(reg.viewedDocumentIds) ? reg.viewedDocumentIds : [];
+  if (!reg.viewedDocumentIds.includes(documentId)) reg.viewedDocumentIds.push(documentId);
   return reg;
 }
 
@@ -845,7 +892,13 @@ async function __mockHandleRecordAction(moduleKey, idStr, action, payload, user)
       if (!cls) throw __mockHttpError(404, 'Không tìm thấy lớp học của đăng ký này');
       return __mockSetResult(payload, user, clone, cls);
     }
-    if (action === 'cancel') return __mockCancelReg(user, clone);
+    if (action === 'cancel') return __mockCancelReg(payload, user, clone);
+    if (action === 'approve-cancel') return __mockApproveCancelReg(user, clone);
+    if (action === 'reject-cancel') return __mockRejectCancelReg(user, clone);
+    if (action === 'mark-document-viewed') {
+      const cls = DB.trainingClasses.find((c) => c.id === reg.classId);
+      return __mockMarkDocumentViewed(payload, user, clone, cls);
+    }
     throw __mockHttpError(400, 'Hành động không hợp lệ');
   }
   if (moduleKey === 'trainingTests') {

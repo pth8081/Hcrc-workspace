@@ -768,6 +768,34 @@ async function withTrainingRegAction(req, res, action, mutator) {
 }
 router.post('/trainingRegistrations/:id/cancel', (req, res) =>
   withTrainingRegAction(req, res, 'cancel', recordActions.cancelTrainingRegistration));
+// Đợt 9 — duyệt/từ chối yêu cầu huỷ (chỉ trainingManage/admin, gác ngay trong
+// approveCancelTrainingRegistration()/rejectCancelTrainingRegistration() — không cần đọc kèm
+// trainingClasses nên dùng chung được withTrainingRegAction() như 'cancel' ở trên).
+router.post('/trainingRegistrations/:id/approve-cancel', (req, res) =>
+  withTrainingRegAction(req, res, 'approve-cancel', recordActions.approveCancelTrainingRegistration));
+router.post('/trainingRegistrations/:id/reject-cancel', (req, res) =>
+  withTrainingRegAction(req, res, 'reject-cancel', recordActions.rejectCancelTrainingRegistration));
+
+// Đợt 9 — đánh dấu đã xem 1 tài liệu giáo trình bắt buộc (lớp ONLINE) — cần đọc kèm trainingClasses để
+// biết cls.documentIds (danh sách tài liệu bắt buộc thật sự của lớp), không dùng chung được
+// withTrainingRegAction() ở trên (không có cls sẵn), cùng lý do set-result ngay dưới đây.
+router.post('/trainingRegistrations/:id/mark-document-viewed', async (req, res) => {
+  const itemId = Number(req.params.id);
+  if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
+  try {
+    const { freshUser } = await getFreshUser(req);
+    const regs = await getAllForCollection('trainingRegistrations');
+    const reg = regs.find(r => r.id === itemId);
+    if (!reg) throw new HttpError(404, 'Không tìm thấy đăng ký');
+    const classes = await getAllForCollection('trainingClasses');
+    const cls = classes.find(c => c.id === reg.classId);
+    const result = await withLockedRecordForCollection('trainingRegistrations', itemId, (item) =>
+      recordActions.markTrainingDocumentViewed(req.body, freshUser, item, cls));
+    res.json({ ok: true, item: result });
+  } catch (err) {
+    handleError(res, `trainingRegistrations/${req.params.id}/mark-document-viewed`, err);
+  }
+});
 
 // set-result (Đợt 3) cần đọc kèm trainingClasses — quyền ghi giờ so theo canManageTrainingClass()
 // (trainingManage quản lý MỌI lớp, trainingInstruct chỉ đúng lớp mình được gán làm giảng viên, xem
@@ -895,6 +923,25 @@ router.post('/trainingClasses/:id/submit-test', async (req, res) => {
       const regs = await getAllForCollection('trainingRegistrations');
       const reg = regs.find(r => r.classId === classId && r.creator === freshUser.username && r.result !== 'CANCELLED');
       if (!reg) throw new HttpError(403, 'Bạn chưa đăng ký lớp học này nên không thể làm bài test');
+
+      // Đợt 9 — "học xong mới thi", áp dụng khác nhau theo kiểu lớp: OFFLINE phải chờ giảng viên bấm
+      // "Kết Thúc Lớp" (cls.sessionState chuyển ENDED, xem endOfflineTrainingClass()) — trước đây route
+      // này KHÔNG hề kiểm tra sessionState dù comment ở routes/trainingRoster.js (mã QR) từng khẳng định
+      // có, khiến học viên quét mã QR làm bài được ngay cả khi buổi học còn đang diễn ra. ONLINE phải xem
+      // hết giáo trình bắt buộc (cls.documentIds, đánh dấu qua markTrainingDocumentViewed()) nếu lớp có
+      // gán giáo trình — lớp không gán giáo trình nào thì không có gì để gác thêm, giữ nguyên hành vi cũ
+      // (chỉ cần qua endTime).
+      if (cls.mode === 'OFFLINE') {
+        if (cls.sessionState !== 'ENDED') {
+          throw new HttpError(409, 'Buổi học chưa kết thúc — giảng viên cần bấm "Kết Thúc Lớp" trước khi học viên làm bài test');
+        }
+      } else {
+        const requiredDocIds = Array.isArray(cls.documentIds) ? cls.documentIds : [];
+        const viewedIds = Array.isArray(reg.viewedDocumentIds) ? reg.viewedDocumentIds : [];
+        if (requiredDocIds.length && !requiredDocIds.every(id => viewedIds.includes(id))) {
+          throw new HttpError(409, 'Bạn cần xem hết tài liệu giáo trình bắt buộc của lớp học trước khi làm bài test');
+        }
+      }
 
       const graded = recordActions.gradeTrainingTestSubmission(req.body?.answers, test);
 
