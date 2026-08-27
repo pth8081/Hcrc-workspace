@@ -28486,33 +28486,39 @@ function renderTrainingMyRegs() {
     const cancelHTML = r.pendingCancellation
       ? `<span class="text-xs text-amber-600 font-bold">⏳ Đang chờ duyệt huỷ</span>`
       : r.result === 'REGISTERED' ? `<button onclick="cancelTrainingRegistrationAction(${r.id})" class="text-red-500 font-bold hover:underline text-xs">Huỷ Đăng Ký</button>` : '';
-    // Bài test ONLINE tự bật đúng lúc lớp kết thúc (so sánh giờ hiện tại với endTime lúc render, không
-    // cần cron/websocket gì) — NHƯNG Đợt 9 thêm gác "học xong mới thi": phải xem hết giáo trình bắt buộc
-    // (cls.documentIds) trước, nút "📚 Vào Lớp Học" mở modal đánh dấu đã xem từng tài liệu (xem
-    // openTrainingJoinClassModal()). OFFLINE thì học viên quét mã QR tại lớp để vào làm — CHỈ mở được khi
-    // giảng viên đã bấm "Kết Thúc Lớp" (gác thật ở server routes/records.js submit-test).
+    // Đợt 9.1 — "Vào Lớp Học" giờ LUÔN hiện cho MỌI đăng ký còn REGISTERED, cả ONLINE lẫn OFFLINE (trước
+    // đây chỉ hiện cho ONLINE có gán giáo trình bắt buộc — học viên lớp OFFLINE hoặc ONLINE không giáo
+    // trình không có chỗ nào để bấm vào, chỉ thấy 1 dòng chữ khoá). Nội dung modal khác nhau theo
+    // cls.mode (xem renderTrainingJoinClassModalBody()): ONLINE hiện danh sách tài liệu bắt buộc (nếu
+    // có) để đánh dấu đã xem; OFFLINE hiện thông tin buổi học (địa điểm/thời gian/giảng viên/trạng thái)
+    // + hướng dẫn quét mã QR khi buổi học đã kết thúc. Bài test vẫn gác đúng như Đợt 9 (xem
+    // routes/records.js submit-test): ONLINE cần xem hết giáo trình bắt buộc + qua endTime, OFFLINE cần
+    // giảng viên bấm "Kết Thúc Lớp".
     let testHTML = '';
-    if (cls && cls.testId != null && r.result === 'REGISTERED') {
+    if (cls && r.result === 'REGISTERED') {
       if (cls.mode === 'OFFLINE') {
-        testHTML = getTrainingClassSessionState(cls) === 'ENDED'
-          ? `<div class="text-xs text-gray-400 mt-1">🧪 Quét mã QR tại lớp để làm bài</div>`
-          : `<div class="text-xs text-gray-400 mt-1">🔒 Chờ giảng viên bấm "Kết Thúc Lớp" để mở bài test</div>`;
+        testHTML += `<button onclick="openTrainingJoinClassModal(${r.id})" class="bg-sky-600 text-white px-2 py-1 rounded text-xs font-bold hover:bg-sky-700 mt-1 mr-1">📍 Vào Lớp Học</button>`;
+        if (cls.testId != null) {
+          testHTML += getTrainingClassSessionState(cls) === 'ENDED'
+            ? `<div class="text-xs text-gray-400 mt-1">🧪 Quét mã QR tại lớp để làm bài</div>`
+            : `<div class="text-xs text-gray-400 mt-1">🔒 Chờ giảng viên bấm "Kết Thúc Lớp" để mở bài test</div>`;
+        }
       } else {
         const requiredDocIds = Array.isArray(cls.documentIds) ? cls.documentIds : [];
         const viewedIds = Array.isArray(r.viewedDocumentIds) ? r.viewedDocumentIds : [];
         const viewedCount = requiredDocIds.filter(id => viewedIds.includes(id)).length;
         const allViewed = !requiredDocIds.length || viewedCount === requiredDocIds.length;
-        if (requiredDocIds.length) {
-          testHTML += `<button onclick="openTrainingJoinClassModal(${r.id})" class="bg-sky-600 text-white px-2 py-1 rounded text-xs font-bold hover:bg-sky-700 mt-1 mr-1">📚 Vào Lớp Học (${viewedCount}/${requiredDocIds.length})</button>`;
-        }
-        if (!cls.endTime) {
-          testHTML += `<div class="text-xs text-gray-400 mt-1">🧪 Lớp chưa có giờ kết thúc, chưa thể mở bài test</div>`;
-        } else if (now < new Date(cls.endTime)) {
-          testHTML += `<div class="text-xs text-gray-400 mt-1">🔒 Bài test mở lúc ${escapeHtml(cls.endTime.replace('T', ' '))}</div>`;
-        } else if (!allViewed) {
-          testHTML += `<div class="text-xs text-amber-600 mt-1">📖 Cần xem hết tài liệu giáo trình trước khi thi</div>`;
-        } else {
-          testHTML += `<button onclick="openTakeTestModal(${cls.id})" class="bg-purple-600 text-white px-2 py-1 rounded text-xs font-bold hover:bg-purple-700 mt-1">📝 Vào Làm Bài Test</button>`;
+        testHTML += `<button onclick="openTrainingJoinClassModal(${r.id})" class="bg-sky-600 text-white px-2 py-1 rounded text-xs font-bold hover:bg-sky-700 mt-1 mr-1">📚 Vào Lớp Học${requiredDocIds.length ? ` (${viewedCount}/${requiredDocIds.length})` : ''}</button>`;
+        if (cls.testId != null) {
+          if (!cls.endTime) {
+            testHTML += `<div class="text-xs text-gray-400 mt-1">🧪 Lớp chưa có giờ kết thúc, chưa thể mở bài test</div>`;
+          } else if (now < new Date(cls.endTime)) {
+            testHTML += `<div class="text-xs text-gray-400 mt-1">🔒 Bài test mở lúc ${escapeHtml(cls.endTime.replace('T', ' '))}</div>`;
+          } else if (!allViewed) {
+            testHTML += `<div class="text-xs text-amber-600 mt-1">📖 Cần xem hết tài liệu giáo trình trước khi thi</div>`;
+          } else {
+            testHTML += `<button onclick="openTakeTestModal(${cls.id})" class="bg-purple-600 text-white px-2 py-1 rounded text-xs font-bold hover:bg-purple-700 mt-1">📝 Vào Làm Bài Test</button>`;
+          }
         }
       }
     }
@@ -28555,39 +28561,78 @@ function openTrainingJoinClassModal(regId) {
 function closeTrainingJoinClassModal() {
   document.getElementById('trainingJoinClassModal').classList.add('hidden');
 }
+// Cùng cách hiển thị theo docType (VIDEO nhúng Youtube/IMAGE thumbnail/DOCUMENT link tải) với
+// renderTrainingDocuments() ở Kho Tài Liệu — dùng chung cho cả 2 nhánh ONLINE/OFFLINE của
+// renderTrainingJoinClassModalBody() bên dưới.
+function trainingDocOpenLinkHTML(d) {
+  if (d.docType === 'VIDEO') {
+    const embedUrl = trainingYoutubeEmbedUrl(d.videoUrl);
+    return embedUrl
+      ? `<iframe src="${escapeHtml(embedUrl)}" class="w-full h-40 rounded border" frameborder="0" allowfullscreen title="${escapeHtml(d.title)}"></iframe>`
+      : `<a href="${escapeHtml(d.videoUrl || '')}" target="_blank" rel="noopener" class="text-indigo-600 underline text-xs">▶️ Xem video</a>`;
+  }
+  if (d.docType === 'IMAGE') {
+    return `<a href="${escapeHtml(d.fileUrl)}" target="_blank" rel="noopener"><img src="${escapeHtml(d.fileUrl)}" class="w-full max-h-40 object-contain rounded border" alt="${escapeHtml(d.title)}"></a>`;
+  }
+  return `<a href="${escapeHtml(d.fileUrl)}" target="_blank" rel="noopener" class="text-indigo-600 underline text-xs">⬇️ Mở tài liệu</a>`;
+}
+
+// Đợt 9.1 — modal "Vào Lớp Học" giờ dùng chung cho CẢ ONLINE lẫn OFFLINE (trước đây chỉ ONLINE có
+// giáo trình bắt buộc mới có màn này). ONLINE: liệt kê giáo trình bắt buộc (nếu có) kèm nút đánh dấu đã
+// xem — bắt buộc xem hết mới mở được bài test (gác ở routes/records.js submit-test). OFFLINE: hiện
+// thông tin buổi học (địa điểm/thời gian/giảng viên/trạng thái) + tài liệu tham khảo (nếu có, KHÔNG bắt
+// buộc đánh dấu đã xem vì gác OFFLINE là sessionState, không phải xem tài liệu) + hướng dẫn quét mã QR.
 function renderTrainingJoinClassModalBody() {
   const reg = DB.trainingRegistrations.find(r => r.id === trainingJoinClassRegId);
   const cls = reg && DB.trainingClasses.find(c => c.id === reg.classId);
   const container = document.getElementById('trainingJoinClassBody');
   if (!reg || !cls) { container.innerHTML = ''; return; }
-  document.getElementById('trainingJoinClassTitle').innerText = `📚 Vào Lớp Học — ${cls.title}`;
+  document.getElementById('trainingJoinClassTitle').innerText = `${cls.mode === 'OFFLINE' ? '📍' : '📚'} Vào Lớp Học — ${cls.title}`;
   const docIds = Array.isArray(cls.documentIds) ? cls.documentIds : [];
+
+  if (cls.mode === 'OFFLINE') {
+    const sessionState = getTrainingClassSessionState(cls);
+    const sessionBadgeCls = sessionState === 'ONGOING' ? 'bg-emerald-100 text-emerald-700' : sessionState === 'ENDED' ? 'bg-gray-200 text-gray-600' : 'bg-amber-100 text-amber-700';
+    const infoHTML = `
+      <div class="bg-white border rounded p-3 space-y-1 text-sm">
+        <div>📍 <b>Địa điểm:</b> ${escapeHtml(cls.location || 'Chưa cập nhật')}</div>
+        <div>🕒 <b>Thời gian:</b> ${escapeHtml((cls.startTime || '').replace('T', ' '))}${cls.endTime ? ` ➔ ${escapeHtml(cls.endTime.replace('T', ' '))}` : ''}</div>
+        ${cls.instructor ? `<div>👤 <b>Giảng viên:</b> ${escapeHtml(cls.instructor)}</div>` : ''}
+        <div><b>Trạng thái buổi học:</b> <span class="text-xs px-2 py-0.5 rounded ${sessionBadgeCls}">${TRAINING_SESSION_STATE_LABELS[sessionState]}</span></div>
+      </div>`;
+    const docsHTML = docIds.length
+      ? `<div class="space-y-2">
+          <div class="text-xs font-bold text-gray-500">📎 Tài liệu tham khảo</div>
+          ${docIds.map(docId => {
+            const d = DB.trainingDocuments.find(x => x.id === docId);
+            if (!d) return '';
+            return `<div class="bg-white border rounded p-3 space-y-2"><div class="font-bold text-sm text-gray-800">${escapeHtml(d.title)}</div>${trainingDocOpenLinkHTML(d)}</div>`;
+          }).join('')}
+        </div>`
+      : '';
+    const guideHTML = cls.testId == null
+      ? ''
+      : sessionState === 'ENDED'
+        ? `<div class="text-xs text-emerald-700 bg-emerald-50 border border-emerald-200 rounded p-2">🧪 Buổi học đã kết thúc — quét mã QR do giảng viên chiếu tại lớp để vào làm bài test.</div>`
+        : `<div class="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded p-2">🔒 Buổi học chưa kết thúc — giảng viên bấm "Kết Thúc Lớp" xong mới mở được bài test.</div>`;
+    container.innerHTML = `<div class="space-y-3">${infoHTML}${docsHTML}${guideHTML}</div>`;
+    return;
+  }
+
+  // ONLINE
   if (!docIds.length) { container.innerHTML = `<div class="text-gray-400 italic text-sm">Lớp học này không có giáo trình bắt buộc.</div>`; return; }
   const viewedIds = Array.isArray(reg.viewedDocumentIds) ? reg.viewedDocumentIds : [];
   container.innerHTML = docIds.map(docId => {
     const d = DB.trainingDocuments.find(x => x.id === docId);
     if (!d) return '';
     const isViewed = viewedIds.includes(docId);
-    // Cùng cách hiển thị theo docType (VIDEO nhúng Youtube/IMAGE thumbnail/DOCUMENT link tải) với
-    // renderTrainingDocuments() ở Kho Tài Liệu — xem hàm đó để biết lý do từng nhánh.
-    let openHTML;
-    if (d.docType === 'VIDEO') {
-      const embedUrl = trainingYoutubeEmbedUrl(d.videoUrl);
-      openHTML = embedUrl
-        ? `<iframe src="${escapeHtml(embedUrl)}" class="w-full h-40 rounded border" frameborder="0" allowfullscreen title="${escapeHtml(d.title)}"></iframe>`
-        : `<a href="${escapeHtml(d.videoUrl || '')}" target="_blank" rel="noopener" class="text-indigo-600 underline text-xs">▶️ Xem video</a>`;
-    } else if (d.docType === 'IMAGE') {
-      openHTML = `<a href="${escapeHtml(d.fileUrl)}" target="_blank" rel="noopener"><img src="${escapeHtml(d.fileUrl)}" class="w-full max-h-40 object-contain rounded border" alt="${escapeHtml(d.title)}"></a>`;
-    } else {
-      openHTML = `<a href="${escapeHtml(d.fileUrl)}" target="_blank" rel="noopener" class="text-indigo-600 underline text-xs">⬇️ Mở tài liệu</a>`;
-    }
     return `
       <div class="bg-white border rounded p-3 space-y-2">
         <div class="flex justify-between items-start gap-2">
           <div class="font-bold text-sm text-gray-800">${escapeHtml(d.title)}</div>
           ${isViewed ? `<span class="text-xs px-2 py-0.5 rounded bg-emerald-100 text-emerald-700 font-bold flex-shrink-0">✅ Đã xem</span>` : ''}
         </div>
-        ${openHTML}
+        ${trainingDocOpenLinkHTML(d)}
         ${isViewed ? '' : `<button onclick="markTrainingDocumentViewedAction(${docId})" class="bg-emerald-600 text-white px-2 py-1 rounded text-xs font-bold hover:bg-emerald-700">Đánh dấu đã xem</button>`}
       </div>`;
   }).join('');
