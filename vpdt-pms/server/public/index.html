@@ -343,6 +343,18 @@ table { display: block; overflow-x: auto; max-width: 100%; }
   position: fixed; z-index: 9999; background: #fff; border: 1px solid #d1d5db; border-radius: 6px;
   box-shadow: 0 4px 14px rgba(0,0,0,.12); font-size: 12px; max-height: 14rem; overflow-y: auto;
 }
+/* Mũi tên ▼ cố định bên phải MỌI ô input[data-sdd-list] — dấu hiệu trực quan "có danh sách để chọn"
+   mà <datalist> native trước đây tự có (trình duyệt tự vẽ), widget JS thuần ở trên không tự có nên
+   phải tự vẽ lại bằng CSS (không dùng ::after vì <input> là replaced element, trình duyệt không render
+   generated content cho nó) — !important vì Tailwind Play CDN tự tạo/chèn stylesheet lúc runtime, thứ
+   tự nạp so với <style> tĩnh này không đảm bảo, không thể chỉ dựa vào độ ưu tiên selector thông thường. */
+input[data-sdd-list] {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='%236b7280'%3E%3Cpath fill-rule='evenodd' d='M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z' clip-rule='evenodd'/%3E%3C/svg%3E") !important;
+  background-repeat: no-repeat !important;
+  background-position: right 0.5rem center !important;
+  background-size: 1rem !important;
+  padding-right: 1.75rem !important;
+}
 </style>
 </head>
 <body class="bg-gray-100 min-h-screen font-sans">
@@ -1090,7 +1102,7 @@ table { display: block; overflow-x: auto; max-width: 100%; }
              cho onContractAddendumTargetChange()/submitContractReq() đọc, không phải sửa gì thêm ở 2 nơi
              đó — resolveContractAddendumTargetInput() ghi vào đây sau khi khớp đúng 1 hợp đồng từ ô gõ. -->
         <div id="contractAddendumTargetWrap" class="hidden">
-          <label class="block font-semibold text-gray-600 mb-1">Chọn Hợp Đồng Để Bổ Sung Phụ Lục</label>
+          <label id="contractAddendumTargetLabel" class="block font-semibold text-gray-600 mb-1">Chọn Hợp Đồng Để Bổ Sung Phụ Lục</label>
           <input type="hidden" id="contractAddendumTarget" value="">
           <input id="contractAddendumTargetInput" data-sdd-list="contractAddendumTargetDatalist" autocomplete="off" oninput="resolveContractAddendumTargetInput(this.value)" placeholder="Gõ mã hoặc tên hợp đồng để tìm..." class="w-full border p-1.5 rounded bg-white">
           <div id="contractAddendumTargetDatalist" class="hidden sdd-dropdown" data-sdd-dropdown></div>
@@ -10848,11 +10860,15 @@ function getContractTypeAbbr(typeName) {
   return DB.contractTypeAbbrs[typeName] || deriveAbbr(typeName, null);
 }
 
-// Đếm số HỢP ĐỒNG GỐC (không tính phụ lục — isAddendum) đã có mã bắt đầu bằng prefix này, để sinh số
-// thứ tự tiếp theo — cùng mô hình computeNextDocSeq() ở trên.
+// Số thứ tự TIẾP THEO cho HỢP ĐỒNG GỐC (không tính phụ lục — isAddendum) — lấy số LỚN NHẤT từng xuất
+// hiện (không phải đếm số lượng còn lại), cùng nguyên lý computeNextDocSeq() ở trên — tránh sinh trùng
+// mã nếu 1 hợp đồng ở giữa dãy số đã bị xóa trước đó.
 function computeNextContractSeq(prefix) {
   const existing = DB.contracts.filter(c => !c.isAddendum && (c.code || '').startsWith(prefix));
-  return existing.length + 1;
+  return existing.reduce((max, c) => {
+    const n = parseInt(String(c.code || '').slice(prefix.length), 10);
+    return Number.isFinite(n) && n > max ? n : max;
+  }, 0) + 1;
 }
 
 // Mã Hợp Đồng tự sinh = HCRC-<viết tắt Phòng ban>-<viết tắt Loại Pháp Lý>-<số thứ tự 3 số>.
@@ -10863,30 +10879,39 @@ function generateContractCode(dept, type) {
 }
 
 // Mã Phụ Lục Hợp Đồng = <Mã hợp đồng gốc>-PLHD<số thứ tự 2 số> — đánh số RIÊNG theo từng hợp đồng
-// (không dùng chung 1 dãy số toàn hệ thống), tăng dần so với các phụ lục đã có của CHÍNH hợp đồng đó.
+// (không dùng chung 1 dãy số toàn hệ thống). Lấy số LỚN NHẤT từng xuất hiện (không phải đếm số lượng
+// còn lại), cùng nguyên lý computeNextDocSeq() ở trên — tránh sinh trùng mã nếu 1 phụ lục ở giữa dãy
+// số đã bị xóa trước đó.
 function computeNextAddendumSeq(rootContractId) {
   const existing = DB.contracts.filter(c => c.isAddendum && c.rootContractId === rootContractId);
-  return existing.length + 1;
+  return existing.reduce((max, c) => {
+    const n = parseInt(String(c.code || '').replace(/^.*-PLHD/, ''), 10);
+    return Number.isFinite(n) && n > max ? n : max;
+  }, 0) + 1;
 }
 function generateAddendumCode(rootContract) {
   const seq = computeNextAddendumSeq(rootContract.id);
   return `${rootContract.code}-PLHD${String(seq).padStart(2, '0')}`;
 }
 
-// ============ MÃ TỰ SINH cho 5 module trước đây phải gõ tay: Văn Bản Trình, Đăng Ký Xe, Mua Bán/Sửa
-// Chữa/Đầu Tư (dùng chung 1 form theo activeOfficeSubTab), Biên Bản Họp, Đặt Phòng Họp. Định dạng
-// HCRC-<viết tắt module>-<ngày tạo YYYYMMDD>-<số thứ tự 3 số>, số thứ tự đánh RIÊNG theo từng ngày+
-// module (không dùng chung 1 dãy số toàn hệ thống) — cùng nguyên lý computeNextDocSeq()/
-// computeNextContractSeq() ở trên, gộp lại 1 hàm dùng chung vì cả 5 module đếm-theo-tiền-tố giống hệt
-// nhau (khác computeNextDocSeq/computeNextContractSeq chỉ vì 2 hàm đó có thêm điều kiện lọc riêng —
-// bỏ qua version con/phụ lục — không áp dụng cho 5 module này).
+// ============ MÃ TỰ SINH cho 7 module trước đây phải gõ tay: Văn Bản Trình, Đăng Ký Xe, Mua Bán/Sửa
+// Chữa/Đầu Tư (dùng chung 1 form theo activeOfficeSubTab), Biên Bản Họp, Đặt Phòng Họp, Phê Duyệt Giá
+// IT, Ticket Hỗ Trợ IT. Định dạng HCRC-<viết tắt module>-<ngày tạo YYYYMMDD>-<số thứ tự 3 số>, số thứ
+// tự đánh RIÊNG theo từng ngày+module (không dùng chung 1 dãy số toàn hệ thống). Lấy số LỚN NHẤT từng
+// xuất hiện (không phải đếm số lượng còn lại) — cùng nguyên lý computeNextDocSeq() ở trên — tránh sinh
+// trùng mã nếu 1 bản ghi ở giữa dãy số đã bị admin xóa trước đó (trước đây đếm-theo-số-lượng nên xóa 1
+// bản ghi giữa dãy 001/002/003 sẽ khiến bản ghi mới sinh lại đúng mã 003 đang tồn tại, bị chặn "Mã đã
+// tồn tại" — đúng lỗi người dùng báo lại).
 function todayCodeDatePart() {
   const d = new Date();
   return `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}`;
 }
 function computeNextHcrcSeq(records, prefix) {
   const existing = records.filter(r => (r.code || '').startsWith(prefix));
-  return existing.length + 1;
+  return existing.reduce((max, r) => {
+    const n = parseInt(String(r.code || '').slice(prefix.length), 10);
+    return Number.isFinite(n) && n > max ? n : max;
+  }, 0) + 1;
 }
 function generateHcrcCode(records, moduleAbbr) {
   const prefix = `HCRC-${moduleAbbr}-${todayCodeDatePart()}-`;
@@ -14008,6 +14033,11 @@ function onContractOpModeChange() {
   // CONTRACT_MANAGE) — xem FORM_TABS. submitContractReq() đọc lại đúng bộ này khi thu thập dữ liệu.
   renderDynamicInputsForModule(isImportMode ? 'CONTRACT_MANAGE' : 'CONTRACT_APPROVAL', 'dynamicFieldsContainer_CONTRACT');
   document.getElementById('contractAddendumTargetWrap').classList.toggle('hidden', !isAddendumMode);
+  // Nhãn phân biệt rõ 2 luồng dùng chung ô này: tab Phê Duyệt (ADDENDUM) trình phụ lục MỚI chờ duyệt,
+  // tab Quản Lý HĐ (IMPORT_ADDENDUM) nhập thẳng phụ lục ĐÃ KÝ sẵn (không qua hàng chờ duyệt).
+  document.getElementById('contractAddendumTargetLabel').innerText = mode === 'IMPORT_ADDENDUM'
+    ? 'Chọn Hợp Đồng Để Bổ Sung Phụ Lục đã ký'
+    : 'Chọn Hợp Đồng Để Bổ Sung Phụ Lục';
   // Đợt Thanh Toán: hiện cho NEW/ADDENDUM (cả 2 đều qua Phê Duyệt, phụ lục CÓ thể phát sinh thanh toán
   // riêng — độc lập với hợp đồng gốc, xem uploadContractSignedFile()/startContractPayment() ở
   // lib/recordActions.js), ẩn cho 2 chế độ IMPORT (nhập hồ sơ đã ký sẵn, không cần khai lại đợt thanh
@@ -21705,7 +21735,7 @@ function renderWorkflowParticipatingDeptsChecklist() {
   const list = document.getElementById('workflowParticipatingDeptsList');
   if (!picker || !list) return;
   if (!workflowParticipatingDeptsDraft) workflowParticipatingDeptsDraft = [...(DB.workflowParticipatingDepts || [])];
-  const remaining = DB.depts.filter(d => !workflowParticipatingDeptsDraft.includes(d));
+  const remaining = DB.depts.filter(d => d && !workflowParticipatingDeptsDraft.includes(d));
   if (datalist) sddSetOptions('workflowParticipatingDeptDatalist', remaining);
   picker.value = '';
   picker.placeholder = remaining.length ? '🔍 Tìm phòng ban...' : 'Đã thêm hết phòng ban';
@@ -21967,7 +21997,10 @@ function renderUVppExcludeGroupsChecklist(selectedIds) {
 function sddSetOptions(dropdownId, items) {
   const dd = document.getElementById(dropdownId);
   if (!dd) return;
-  dd._sddItems = (items || []).map(it => (typeof it === 'string') ? { value: it, label: it } : it);
+  dd._sddItems = (items || [])
+    .filter(it => it !== null && it !== undefined && it !== '')
+    .map(it => (typeof it === 'string') ? { value: it, label: it } : it)
+    .filter(it => it && typeof it.label === 'string');
 }
 
 function sddRenderRows(dd, query) {
