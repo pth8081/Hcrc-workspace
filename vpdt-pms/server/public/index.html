@@ -1818,7 +1818,7 @@ table { display: block; overflow-x: auto; max-width: 100%; }
               <input id="tcCapacity" type="number" min="0" class="w-full border p-1.5 rounded">
             </div>
             <div>
-              <label class="block font-semibold text-gray-600 mb-1">Điểm Đạt Yêu Cầu (để trống nếu không thi)</label>
+              <label class="block font-semibold text-gray-600 mb-1">Điểm Đạt Yêu Cầu (%) — bắt buộc nếu có gán Bài Test</label>
               <input id="tcPassScore" type="number" min="0" max="100" class="w-full border p-1.5 rounded">
             </div>
             <div>
@@ -2228,13 +2228,9 @@ table { display: block; overflow-x: auto; max-width: 100%; }
               <label class="block font-semibold text-gray-600 mb-1">Loại Đào Tạo (tuỳ chọn)</label>
               <select id="ttCategory" class="w-full border p-1.5 rounded bg-white"></select>
             </div>
-            <div>
-              <label class="block font-semibold text-gray-600 mb-1">Điểm Đạt (%, mặc định 60)</label>
-              <input id="ttPassScore" type="number" min="1" max="100" placeholder="60" class="w-full border p-1.5 rounded">
-            </div>
           </div>
           <div>
-            <label class="block font-semibold text-gray-600 mb-1">Câu Hỏi</label>
+            <label class="block font-semibold text-gray-600 mb-1">Câu Hỏi (mỗi câu tự chọn số điểm riêng ở khung câu hỏi bên dưới)</label>
             <div id="tbQuestionsContainer" class="space-y-2"></div>
             <button type="button" onclick="tbAddQuestion()" class="mt-2 bg-gray-200 hover:bg-gray-300 px-3 py-1.5 rounded text-xs font-bold">+ Thêm Câu Hỏi</button>
           </div>
@@ -2474,7 +2470,7 @@ table { display: block; overflow-x: auto; max-width: 100%; }
               <input id="teCapacity" type="number" min="0" class="w-full border p-1.5 rounded">
             </div>
             <div>
-              <label class="block font-semibold text-gray-600 mb-1">Điểm Đạt Yêu Cầu (để trống nếu không thi)</label>
+              <label class="block font-semibold text-gray-600 mb-1">Điểm Đạt Yêu Cầu (%) — bắt buộc nếu có gán Bài Test</label>
               <input id="tePassScore" type="number" min="0" max="100" class="w-full border p-1.5 rounded">
             </div>
             <div>
@@ -27370,6 +27366,14 @@ async function submitTrainingClass(e) {
     courseId: document.getElementById('tcCourseId').value
   };
   if (!payload.category) return alert('Vui lòng chọn Loại Đào Tạo (thêm ở Quản Trị &gt; Quản Lý Danh Mục nếu chưa có)!');
+  // Lớp có gán Bài Test thì bắt buộc nhập Điểm Đạt (server tự xác minh lại y hệt ở
+  // createValidation.js trainingClasses.extraValidate — đây chỉ là chặn sớm cho trải nghiệm mượt).
+  if (payload.testId) {
+    const ps = Number(payload.passScore);
+    if (payload.passScore === '' || !Number.isFinite(ps) || ps <= 0 || ps > 100) {
+      return alert('⛔ Lớp có gán Bài Test cần nhập Điểm Đạt Yêu Cầu hợp lệ (1-100)!');
+    }
+  }
   let newClass;
   try {
     const result = await callCreateAction('trainingClasses', payload);
@@ -27588,6 +27592,12 @@ async function submitEditTrainingClass(e) {
     inviteList: teInviteListStaged.map(p => p.username),
     courseId: document.getElementById('teCourseId').value
   };
+  if (payload.testId) {
+    const ps = Number(payload.passScore);
+    if (payload.passScore === '' || !Number.isFinite(ps) || ps <= 0 || ps > 100) {
+      return alert('⛔ Lớp có gán Bài Test cần nhập Điểm Đạt Yêu Cầu hợp lệ (1-100)!');
+    }
+  }
   let updated;
   try {
     const result = await callRecordAction('trainingClasses', classId, 'edit', payload);
@@ -28459,7 +28469,6 @@ async function submitTrainingTest(e) {
   const payload = {
     title,
     category: document.getElementById('ttCategory').value,
-    passScore: document.getElementById('ttPassScore').value,
     questions: tbQuestions.map(q => {
       const filled = q.options.filter(o => o.text.trim());
       return {
@@ -28478,7 +28487,6 @@ async function submitTrainingTest(e) {
   logSystemAction('INTERNAL', 'CREATE_TRAINING_TEST', `Tạo bài test đào tạo [${newTest.title}]`, 'SUCCESS');
   alert('✅ Đã tạo bài test thành công!');
   document.getElementById('ttTitle').value = '';
-  document.getElementById('ttPassScore').value = '';
   document.getElementById('ttCategory').value = '';
   tbQuestions = [];
   renderTestBuilderQuestions();
@@ -28502,7 +28510,7 @@ function renderTrainingTests() {
       <div class="flex justify-between items-start gap-2">
         <div>
           <div class="font-bold text-gray-800">${escapeHtml(t.title)}</div>
-          <div class="text-gray-500 mt-0.5">${t.questions.length} câu hỏi · ${totalPoints} điểm · Đạt từ ${t.passScore}%${t.category ? ' · ' + escapeHtml(t.category) : ''}</div>
+          <div class="text-gray-500 mt-0.5">${t.questions.length} câu hỏi · ${totalPoints} điểm${t.category ? ' · ' + escapeHtml(t.category) : ''}</div>
         </div>
         ${delHTML}
       </div>

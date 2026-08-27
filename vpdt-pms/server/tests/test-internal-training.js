@@ -58,7 +58,6 @@ async function main() {
         ];
         document.getElementById('ttTitle').value = 'Bài Test Nội Quy Công Ty';
         document.getElementById('ttCategory').value = 'Nghiệp vụ';
-        document.getElementById('ttPassScore').value = '70';
       });
       await page.evaluate(() => submitTrainingTest({ preventDefault() {} }));
       const tests = await page.evaluate(() => DB.trainingTests);
@@ -67,7 +66,7 @@ async function main() {
       assertEqual(tests[0].questions.length, 2, 'expected 2 questions');
       assertEqual(tests[0].questions[0].correctOptionIds.length, 1, 'SINGLE question should have exactly 1 correct option id');
       assertEqual(tests[0].questions[1].correctOptionIds.length, 2, 'MULTI question should have 2 correct option ids');
-      assertEqual(tests[0].passScore, 70, 'passScore mismatch');
+      assertEqual(tests[0].passScore, undefined, 'Ngân Hàng Câu Hỏi không còn field passScore (chỉ set ở lớp học)');
       const alerts = await page.evaluate(() => window.__alerts.slice());
       assert(alerts.some((a) => a.includes('Đã tạo bài test thành công')), 'expected success alert for test creation');
     });
@@ -97,6 +96,7 @@ async function main() {
         document.getElementById('tcMode').value = 'ONLINE';
         document.getElementById('tcCapacity').value = '5';
         document.getElementById('tcTestId').value = String(tid);
+        document.getElementById('tcPassScore').value = '70';
       }, testId);
       await page.evaluate(() => submitTrainingClass({ preventDefault() {}, target: { reset() {} } }));
       const classes = await page.evaluate(() => DB.trainingClasses);
@@ -106,6 +106,7 @@ async function main() {
       assertEqual(classes[0].mode, 'ONLINE', 'mode mismatch');
       assertEqual(classes[0].testId, testId, 'assigned testId mismatch');
       assertEqual(classes[0].capacity, 5, 'capacity mismatch');
+      assertEqual(classes[0].passScore, 70, 'passScore mismatch (đọc từ lớp học, không phải bài test)');
     });
 
     await run('creating a class without a start time is rejected server-side', async () => {
@@ -265,6 +266,7 @@ async function main() {
         document.getElementById('tcEnd').value = '';
         document.getElementById('tcMode').value = 'OFFLINE';
         document.getElementById('tcTestId').value = String(tid);
+        document.getElementById('tcPassScore').value = '70';
       }, testId);
       await page.evaluate(() => submitTrainingClass({ preventDefault() {}, target: { reset() {} } }));
       const classes = await page.evaluate(() => DB.trainingClasses.filter((c) => c.mode === 'OFFLINE'));
@@ -870,6 +872,7 @@ async function main() {
         document.getElementById('tcEnd').value = '2020-01-01T10:00'; // đã qua từ lâu -> bài test tự mở NGAY nếu không còn gác nào khác
         document.getElementById('tcMode').value = 'ONLINE';
         document.getElementById('tcTestId').value = String(tid);
+        document.getElementById('tcPassScore').value = '70';
         onTrainingClassModeChange();
       }, testId);
       await page.evaluate((docId) => {

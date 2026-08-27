@@ -1167,7 +1167,6 @@ const CREATE_MODULE_CONFIGS = {
       payload.category = String(payload.category).trim();
       payload.title = String(payload.title).trim();
       payload.capacity = Number(payload.capacity) > 0 ? Math.floor(Number(payload.capacity)) : 0;
-      payload.passScore = (payload.passScore === '' || payload.passScore == null) ? null : Number(payload.passScore);
       payload.documentIds = Array.isArray(payload.documentIds) ? payload.documentIds.map(Number).filter(Number.isFinite) : [];
       // Kiểu lớp: ONLINE (mặc định, theo giáo trình đọc bắt buộc) hay OFFLINE (giáo trình chỉ là tài
       // liệu tham khảo giảng viên tự mở khi lên lớp, học viên không bắt buộc phải đọc trước).
@@ -1194,6 +1193,20 @@ const CREATE_MODULE_CONFIGS = {
         }
       }
       payload.testId = testId;
+      // Điểm Đạt (%) — NGUỒN DUY NHẤT xác định ngưỡng đạt/không đạt khi chấm tự động (xem
+      // gradeTrainingTestSubmission() ở lib/recordActions.js), lập ngay lúc TẠO LỚP — không còn field
+      // riêng ở Ngân Hàng Câu Hỏi (trainingTests) nữa, mỗi câu hỏi ở đó chỉ có điểm (points) của riêng
+      // nó, dùng làm trọng số khi tính % tổng. Lớp có gán bài test thì bắt buộc phải có Điểm Đạt hợp lệ
+      // (1-100) — không cho tạo/sửa lớp với test mà bỏ trống, tránh rơi vào mặc định ngầm không ai biết.
+      if (payload.testId != null) {
+        const passScore = Number(payload.passScore);
+        if (!Number.isFinite(passScore) || passScore <= 0 || passScore > 100) {
+          throw new CreateError(400, 'Lớp có gán Bài Test cần nhập Điểm Đạt Yêu Cầu hợp lệ (1-100)');
+        }
+        payload.passScore = passScore;
+      } else {
+        payload.passScore = null;
+      }
       // Số giây/câu khi làm bài test — mặc định 120s/câu, người tạo lớp được đổi lúc tạo lớp (xem yêu
       // cầu nghiệp vụ: đếm ngược mỗi câu, mặc định 2 phút).
       const secPerQ = Number(payload.testSecondsPerQuestion);
@@ -1264,8 +1277,10 @@ const CREATE_MODULE_CONFIGS = {
       payload.title = String(payload.title).trim();
       payload.category = payload.category ? String(payload.category).trim() : '';
       payload.questions = questions;
-      const passScore = Number(payload.passScore);
-      payload.passScore = Number.isFinite(passScore) && passScore > 0 && passScore <= 100 ? passScore : 60;
+      // Ngân Hàng Câu Hỏi KHÔNG còn field passScore riêng — Điểm Đạt chỉ lập DUY NHẤT lúc tạo lớp học
+      // (trainingClasses.passScore, xem extraValidate ở trên), mỗi câu hỏi ở đây chỉ có điểm (points)
+      // của riêng nó, dùng làm trọng số khi chấm tổng (xem gradeTrainingTestSubmission()).
+      delete payload.passScore;
     }
   },
   // Chương Trình (trainingCourses, Đợt 4) — catalog "Chương Trình" TÁI SỬ DỤNG được cho nhiều LỚP HỌC

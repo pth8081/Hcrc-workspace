@@ -943,7 +943,7 @@ router.post('/trainingClasses/:id/submit-test', async (req, res) => {
         }
       }
 
-      const graded = recordActions.gradeTrainingTestSubmission(req.body?.answers, test);
+      const graded = recordActions.gradeTrainingTestSubmission(req.body?.answers, test, cls.passScore);
 
       const submission = {
         id: Date.now(),

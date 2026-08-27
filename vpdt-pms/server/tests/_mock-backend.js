@@ -296,7 +296,6 @@ function __mockValidateTrainingClassCreate(payload, user) {
   payload.category = String(payload.category).trim();
   payload.title = String(payload.title).trim();
   payload.capacity = Number(payload.capacity) > 0 ? Math.floor(Number(payload.capacity)) : 0;
-  payload.passScore = (payload.passScore === '' || payload.passScore == null) ? null : Number(payload.passScore);
   payload.documentIds = Array.isArray(payload.documentIds) ? payload.documentIds.map(Number).filter(Number.isFinite) : [];
   payload.mode = payload.mode === 'OFFLINE' ? 'OFFLINE' : 'ONLINE';
   const testId = payload.testId === '' || payload.testId == null ? null : Number(payload.testId);
@@ -304,6 +303,13 @@ function __mockValidateTrainingClassCreate(payload, user) {
     if (!Number.isFinite(testId) || !DB.trainingTests.some((t) => t.id === testId)) throw __mockHttpError(400, 'Bài test được chọn không hợp lệ');
   }
   payload.testId = testId;
+  if (payload.testId != null) {
+    const passScore = Number(payload.passScore);
+    if (!Number.isFinite(passScore) || passScore <= 0 || passScore > 100) throw __mockHttpError(400, 'Lớp có gán Bài Test cần nhập Điểm Đạt Yêu Cầu hợp lệ (1-100)');
+    payload.passScore = passScore;
+  } else {
+    payload.passScore = null;
+  }
   const secPerQ = Number(payload.testSecondsPerQuestion);
   payload.testSecondsPerQuestion = Number.isFinite(secPerQ) && secPerQ >= 10 ? Math.floor(secPerQ) : 120;
   payload.status = 'OPEN';
@@ -361,11 +367,17 @@ function __mockEditTrainingClass(payload, user, cls) {
   cls.category = String(cls.category).trim();
   cls.title = String(cls.title).trim();
   cls.capacity = Number(cls.capacity) > 0 ? Math.floor(Number(cls.capacity)) : 0;
-  cls.passScore = (cls.passScore === '' || cls.passScore == null) ? null : Number(cls.passScore);
   cls.documentIds = Array.isArray(cls.documentIds) ? cls.documentIds.map(Number).filter(Number.isFinite) : [];
   const testId = cls.testId === '' || cls.testId == null ? null : Number(cls.testId);
   if (testId != null && (!Number.isFinite(testId) || !DB.trainingTests.some((t) => t.id === testId))) throw __mockHttpError(400, 'Bài test được chọn không hợp lệ');
   cls.testId = testId;
+  if (cls.testId != null) {
+    const passScore = Number(cls.passScore);
+    if (!Number.isFinite(passScore) || passScore <= 0 || passScore > 100) throw __mockHttpError(400, 'Lớp có gán Bài Test cần nhập Điểm Đạt Yêu Cầu hợp lệ (1-100)');
+    cls.passScore = passScore;
+  } else {
+    cls.passScore = null;
+  }
   const secPerQ = Number(cls.testSecondsPerQuestion);
   cls.testSecondsPerQuestion = Number.isFinite(secPerQ) && secPerQ >= 10 ? Math.floor(secPerQ) : 120;
   const courseId = cls.courseId === '' || cls.courseId == null ? null : Number(cls.courseId);
@@ -417,8 +429,8 @@ function __mockValidateTrainingTestCreate(payload, user) {
   payload.title = String(payload.title).trim();
   payload.category = payload.category ? String(payload.category).trim() : '';
   payload.questions = questions;
-  const passScore = Number(payload.passScore);
-  payload.passScore = Number.isFinite(passScore) && passScore > 0 && passScore <= 100 ? passScore : 60;
+  // Điểm đạt không còn ở Ngân Hàng Câu Hỏi — chỉ set ở lớp học (trainingClasses.passScore).
+  delete payload.passScore;
 }
 
 function __mockValidateTrainingRegistrationCreate(payload, user) {
@@ -469,7 +481,7 @@ function __mockBulkRegister(payload, user, cls) {
   return { added, skipped };
 }
 
-function __mockGradeSubmission(rawAnswers, test) {
+function __mockGradeSubmission(rawAnswers, test, classPassScore) {
   const answersByQ = new Map();
   (Array.isArray(rawAnswers) ? rawAnswers : []).forEach((a) => {
     const qId = Number(a?.questionId);
@@ -484,7 +496,8 @@ function __mockGradeSubmission(rawAnswers, test) {
     if (isCorrect) score += q.points;
   });
   const percentage = totalPoints > 0 ? Math.round((score / totalPoints) * 100) : 0;
-  const passed = percentage >= (test.passScore || 60);
+  const threshold = Number.isFinite(Number(classPassScore)) && Number(classPassScore) > 0 ? Number(classPassScore) : 60;
+  const passed = percentage >= threshold;
   return { score, totalPoints, percentage, passed };
 }
 function __mockSubmitTest(payload, user, cls) {
@@ -504,7 +517,7 @@ function __mockSubmitTest(payload, user, cls) {
       throw __mockHttpError(409, 'Bạn cần xem hết tài liệu giáo trình bắt buộc của lớp học trước khi làm bài test');
     }
   }
-  const graded = __mockGradeSubmission(payload.answers, test);
+  const graded = __mockGradeSubmission(payload.answers, test, cls.passScore);
   const regClone = JSON.parse(JSON.stringify(reg));
   regClone.result = graded.passed ? 'PASSED' : 'FAILED';
   regClone.score = graded.percentage;

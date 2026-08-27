@@ -107,7 +107,7 @@ async function main() {
     await run('seed 1 trainingTests + 2 trainingCourses + 3 trainingClasses (2 lớp cùng thuộc Chương Trình A, đều có gán bài test) to build stages against', async () => {
       const ids = await page.evaluate(async () => {
         const test = (await callCreateAction('trainingTests', {
-          title: 'Test Chương Trình', category: '', passScore: 60,
+          title: 'Test Chương Trình', category: '',
           questions: [{ text: 'Câu hỏi duy nhất', type: 'SINGLE', options: [{ text: 'Đáp án đúng' }, { text: 'Đáp án sai' }], correctOptionIds: [1] }]
         })).item;
         DB.trainingTests.push(test);
@@ -115,7 +115,7 @@ async function main() {
         const courseB = (await callCreateAction('trainingCourses', { name: 'Quản Lý Đội Nhóm', category: 'Nghiệp vụ' })).item;
         DB.trainingCourses.push(courseA, courseB);
         const mkClass = (title, courseId) => callCreateAction('trainingClasses', {
-          category: 'Nghiệp vụ', title, startTime: '2026-01-10T08:00', courseId, testId: test.id
+          category: 'Nghiệp vụ', title, startTime: '2026-01-10T08:00', courseId, testId: test.id, passScore: 60
         });
         const a1 = (await mkClass('Giao Tiếp - Lớp 1', courseA.id)).item;
         const a2 = (await mkClass('Giao Tiếp - Lớp 2', courseA.id)).item;
