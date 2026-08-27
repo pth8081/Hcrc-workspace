@@ -1125,16 +1125,13 @@ input[data-sdd-list] {
             <label class="block font-semibold text-gray-600 mb-1">Loại Pháp Lý</label>
             <select id="contractType" onchange="refreshContractCodePreview()" class="w-full border p-1.5 rounded bg-white" required></select>
           </div>
-          <!-- Cùng lý do/cùng khuôn contractAddendumTarget ở trên — đổi hẳn sang <input list>+<datalist>
-               native thay vì nút + bảng tự dựng (button+panel vẫn thỉnh thoảng không mở được ở một số
-               trình duyệt/thiết bị thật). contractApprovalLevel vẫn còn (input ẩn) để giữ nguyên .value
-               cho renderContractApprovalLayerCheckboxes()/submitContractReq() đọc, không phải sửa gì
-               thêm ở 2 nơi đó. -->
+          <!-- Cùng khuôn subApprovalLevel ở form Văn Bản Trình — <select> thật thay vì ô tìm-kiếm-gõ-chọn
+               (danh sách CONTRACT_APPROVAL_LEVELS tĩnh chỉ 4 lựa chọn, không cần tìm kiếm; trước đây dùng
+               widget sdd khiến việc chọn không mở ra được panel "Phê Duyệt" ổn định trên di động — chọn
+               qua onchange của <select> đảm bảo renderContractApprovalLayerCheckboxes() LUÔN chạy). -->
           <div id="contractApprovalLevelWrap">
             <label class="block font-semibold text-gray-600 mb-1">Cấp Phê Duyệt Cuối Cùng</label>
-            <input type="hidden" id="contractApprovalLevel" value="KHAC">
-            <input id="contractApprovalLevelInput" data-sdd-list="contractApprovalLevelDatalist" autocomplete="off" value="Phê duyệt khác" oninput="resolveContractApprovalLevelInput(this.value)" class="w-full border p-1.5 rounded bg-white font-semibold">
-            <div id="contractApprovalLevelDatalist" class="hidden sdd-dropdown" data-sdd-dropdown></div>
+            <select id="contractApprovalLevel" class="w-full border p-1.5 rounded bg-white font-semibold" onchange="renderContractApprovalLayerCheckboxes()"></select>
           </div>
           <div id="contractApprovalDropdownWrap" class="relative">
             <label class="block font-semibold text-gray-600 mb-1">Phê Duyệt</label>
@@ -10791,11 +10788,10 @@ function populateDropdowns() {
   }
 
   // Cùng khuôn subApprovalLevelSel ở trên — KHAC ("Phê duyệt khác") đặt đầu danh sách làm mặc định.
-  // contractApprovalLevel giờ là input ẩn + <input list>/<datalist> native — danh sách tĩnh nên chỉ cần
-  // dựng datalist 1 lần, xem populateContractApprovalLevelDatalist().
-  const contractApprovalLevelDatalistEl = document.getElementById('contractApprovalLevelDatalist');
-  if (contractApprovalLevelDatalistEl && !contractApprovalLevelDatalistEl._sddItems) {
-    populateContractApprovalLevelDatalist();
+  const contractApprovalLevelSel = document.getElementById('contractApprovalLevel');
+  if (contractApprovalLevelSel && !contractApprovalLevelSel.options.length) {
+    const orderedC = [CONTRACT_APPROVAL_LEVELS.find(l => l.key === 'KHAC'), ...CONTRACT_APPROVAL_LEVELS.filter(l => l.key !== 'KHAC')];
+    contractApprovalLevelSel.innerHTML = orderedC.map(l => `<option value="${escapeHtml(l.key)}">${escapeHtml(l.label)}</option>`).join('');
   }
 
   const carTypeSel = document.getElementById('carType');
@@ -14168,27 +14164,6 @@ function resolveContractAddendumTargetInput(rawValue) {
   onContractAddendumTargetChange();
 }
 
-// Cùng khuôn contractAddendumTarget ở trên nhưng cho "Cấp Phê Duyệt Cuối Cùng" — danh sách
-// CONTRACT_APPROVAL_LEVELS tĩnh nên chỉ cần dựng datalist 1 lần (gọi từ populateDropdowns()), KHAC đặt
-// đầu làm mặc định.
-function populateContractApprovalLevelDatalist() {
-  const datalist = document.getElementById('contractApprovalLevelDatalist');
-  if (!datalist) return;
-  const orderedC = [CONTRACT_APPROVAL_LEVELS.find(l => l.key === 'KHAC'), ...CONTRACT_APPROVAL_LEVELS.filter(l => l.key !== 'KHAC')];
-  sddSetOptions('contractApprovalLevelDatalist', orderedC.map(l => l.label));
-}
-
-// Gõ/chọn nhãn cấp phê duyệt trong ô tìm -> khớp lại đúng KEY tương ứng trong CONTRACT_APPROVAL_LEVELS
-// -> ghi vào input ẩn contractApprovalLevel (giữ nguyên .value cho renderContractApprovalLayerCheckboxes()/
-// submitContractReq() đọc, không đổi gì ở 2 nơi đó), rồi chạy tiếp đúng logic khoá lớp bắt buộc như
-// trước (cùng onchange cũ của <select>/bảng chọn cũ). Gõ tự do/chưa khớp đúng nhãn nào -> để trống input
-// ẩn (submitContractReq() tự rơi về mặc định 'KHAC' khi rỗng, xem approvalLevel ở đó).
-function resolveContractApprovalLevelInput(rawValue) {
-  const level = CONTRACT_APPROVAL_LEVELS.find(l => l.label === String(rawValue || '').trim());
-  document.getElementById('contractApprovalLevel').value = level ? level.key : '';
-  renderContractApprovalLayerCheckboxes();
-}
-
 // Chọn xong hợp đồng cần bổ sung phụ lục -> khoá Mã/Phòng ban/Loại/Đối tác theo đúng hợp đồng gốc,
 // đề xuất sẵn mã phụ lục tiếp theo.
 function onContractAddendumTargetChange() {
@@ -14439,6 +14414,11 @@ function openEditContract(contractId) {
   document.getElementById('contractCustodianDept').disabled = !!c.isAddendum;
   document.getElementById('contractType').value = c.type;
   document.getElementById('contractType').disabled = !!c.isAddendum;
+  // c.approvalLevel không được onContractOpModeChange() ở trên phục hồi (nó chỉ render lại panel theo
+  // giá trị ĐANG có sẵn trong <select>, thường vẫn là lựa chọn của lượt tạo/sửa TRƯỚC đó) — phải gán
+  // đúng giá trị đã lưu của hồ sơ này rồi render lại panel "Phê Duyệt" một lần nữa cho khớp.
+  document.getElementById('contractApprovalLevel').value = c.approvalLevel || 'KHAC';
+  renderContractApprovalLayerCheckboxes();
   document.getElementById('contractTitle').value = c.title;
   document.getElementById('contractPartner').value = c.partner;
   document.getElementById('contractAmount').value = formatMoneyDisplay(c.amount);
@@ -14462,10 +14442,8 @@ function openEditContract(contractId) {
 function cancelEditContract() {
   editingContractId = null;
   document.getElementById('contractForm').reset();
-  // contractAddendumTargetInput/contractApprovalLevelInput là input thật trong form (không còn nút +
-  // bảng tự dựng) nên form.reset() ở trên đã tự đưa chúng về đúng giá trị mặc định trong HTML ("" và
-  // "Phê duyệt khác") — nhưng input ẩn tương ứng KHÔNG đáng tin cậy được reset kèm theo (cùng lý do
-  // contractOpMode ở dưới cần gán tay) nên vẫn đặt lại tường minh ở đây.
+  // contractApprovalLevel giờ là <select> thật nên form.reset() ở trên đã tự đưa về đúng option đầu
+  // (KHAC) rồi — vẫn đặt lại tường minh ở đây cho chắc (cùng lý do contractOpMode ở dưới cần gán tay).
   document.getElementById('contractAddendumTarget').value = '';
   document.getElementById('contractApprovalLevel').value = 'KHAC';
   document.getElementById('contractDept').disabled = false;
