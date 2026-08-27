@@ -63,9 +63,9 @@ const ADMIN_ONLY_KEYS = new Set([
   // pwaShortcutModules: cấu hình "Phím Tắt PWA", chỉ admin sửa được ở màn Hệ Thống → Quản Trị — xem
   // defaults.js + routes/pwaManifest.js.
   'pwaShortcutModules',
-  // itPriceMasterLists: File Giá Mẫu dùng đối chiếu tự động khi duyệt giá — quyết định trực tiếp hồ sơ
-  // nào được BỎ QUA bước duyệt phòng ban, nên chặt hơn cả các key admin-only khác ở trên (không mở cho
-  // itManage như canManageItSupport() vẫn dùng ở nơi khác của module Hỗ Trợ IT) — xem defaults.js.
+  // itPriceMasterLists: Mẫu Giá (khuôn cột đại diện định dạng bảng giá bên mua hàng gửi tại 1 thời
+  // điểm, KHÔNG còn dữ liệu giá thật) — chỉ Admin quản lý, không mở cho itManage như
+  // canManageItSupport() vẫn dùng ở nơi khác của module Hỗ Trợ IT — xem defaults.js.
   'itPriceMasterLists',
   // uniformCatalog: Danh Mục Đồng Phục (tên + size khả dụng, Phase 2 có thêm SKU per (tên,size) — xem
   // backfillUniformSkuCodes() ở lib/recordActions.js) — quyết định trực tiếp những gì được phép phân
@@ -75,14 +75,9 @@ const ADMIN_ONLY_KEYS = new Set([
   'uniformCatalog'
 ]);
 
-// itPriceMasterLists có thể mang hàng nghìn dòng items[] — không trả nguyên cho MỌI người đăng nhập qua
-// GET /api/data (chỉ cần thấy tên/số lượng để hiển thị danh sách quản lý, xem defaults.js). Route
-// upload/đối chiếu (routes/priceFile.js) đọc thẳng qua getAppDataValueCached('itPriceMasterLists'), KHÔNG
-// đi qua đường GET này nên vẫn thấy đủ items thật.
-function stripMasterListItems(lists) {
-  if (!Array.isArray(lists)) return lists;
-  return lists.map(({ items, ...rest }) => rest);
-}
+// itPriceMasterLists giờ chỉ còn là khuôn CỘT (columns[], không còn dữ liệu giá thật — xem
+// lib/priceFileParser.js parsePriceTemplateColumns()), nhẹ và không nhạy cảm nên KHÔNG cần strip khi
+// trả về qua GET /api/data nữa (khác thiết kế cũ khi còn mang hàng nghìn dòng items[] thật).
 
 router.use(requireAuth, blockIfMustChangePassword);
 
@@ -351,7 +346,6 @@ router.get('/', async (req, res) => {
     const versions = cachedAppData.versions;
     if (data.users) data.users = stripPasswords(data.users);
     if (data.emailConfig) data.emailConfig = sanitizeEmailConfig(data.emailConfig);
-    if (data.itPriceMasterLists) data.itPriceMasterLists = stripMasterListItems(data.itPriceMasterLists);
     // tasks (Bước 6b) và mọi collection trong MIGRATED_COLLECTIONS (Bước 6c trở đi — hiện tại:
     // submissions) không còn trong dbo.AppData — nguồn riêng từ bảng của chúng. Không có
     // _versions.<key> tương ứng cho các key này (không còn khái niệm "version" AppData) — an toàn vì
@@ -441,7 +435,6 @@ router.get('/:key', async (req, res) => {
     if (value === null) return res.json(DEFAULTS[key]);
     if (key === 'users') return res.json(stripPasswords(value));
     if (key === 'emailConfig') return res.json(sanitizeEmailConfig(value));
-    if (key === 'itPriceMasterLists') return res.json(stripMasterListItems(value));
     res.json(value);
   } catch (err) {
     sendServerError(res, 500, err, `GET /api/data/${key}`, 'Không thể tải dữ liệu từ SQL Server');

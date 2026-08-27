@@ -1,10 +1,14 @@
 // server/tests/test-it-support.js
 //
 // Regression test cho module Hỗ Trợ IT (key 'itSupport'), 2 sub-tab tách biệt hoàn toàn:
-//   - Phê Duyệt Giá (itPriceApprovals): đối chiếu tự động với File Giá Mẫu (matchAgainstMaster() ở
-//     lib/priceFileParser.js) — khớp 100% thì tự động duyệt (autoApproved), bỏ qua bước duyệt phòng
-//     ban; "Yêu Cầu Bổ Sung" từ đội Hỗ Trợ IT là kênh song song, append-only (files[] chỉ được THÊM,
-//     không thay thế — xem submitPriceSupplementFile() ở lib/recordActions.js).
+//   - Phê Duyệt Giá (itPriceApprovals): Mẫu Giá (itPriceMasterLists) giờ CHỈ còn là khuôn cột
+//     (columns[]) đại diện cho định dạng file bên mua hàng gửi — dùng để BẮT BUỘC người đề xuất
+//     chọn đúng mẫu + dò/gắn columnLabels (snapshot theo TỪNG tệp) khi nộp, KHÔNG còn dữ liệu giá
+//     thật để đối chiếu/tự động duyệt (đã bỏ hẳn matchAgainstMaster()/autoApproved — xem
+//     lib/priceFileParser.js + itPriceApprovals.extraValidate ở lib/createValidation.js). Mọi đề xuất
+//     từ nay LUÔN đi qua đúng quy trình duyệt phòng ban (itPriceDeptWorkflows, dùng chung
+//     lib/workflowEngine.js). "Yêu Cầu Bổ Sung" từ đội Hỗ Trợ IT là kênh song song, append-only
+//     (files[] chỉ được THÊM, không thay thế — xem submitPriceSupplementFile() ở lib/recordActions.js).
 //   - Hỗ Trợ Yêu Cầu (itSupportTickets): ticket helpdesk nội bộ, ai cũng tạo được; đội Hỗ Trợ IT
 //     (itManage) claim/xử lý/leo thang phê duyệt (escalate) tới 1 người cụ thể trước khi tiếp tục.
 //
@@ -22,16 +26,28 @@ const IT1 = { username: 'it1', name: 'Đội Hỗ Trợ IT', dept: 'IT', perms: 
 const APPROVER1 = { username: 'approver1', name: 'Trưởng Phòng Duyệt', dept: 'Ban Giám Đốc', perms: {}, active: true };
 const PLAIN = { username: 'plain', name: 'Nhân Viên Thường', dept: 'Kinh Doanh', perms: {}, active: true };
 
+// Mẫu Giá giờ chỉ là khuôn CỘT (không còn dữ liệu items thật) — khớp đúng hình dạng
+// parsePriceTemplateColumns() trả về + addItPriceMasterList() lưu ở public/index.html.
 const MASTER_LIST = {
-  id: 1, name: 'Bảng Giá Chuẩn 2026', itemCount: 1,
-  items: [{ code: 'SP001', name: 'Mì gói Hảo Hảo', price: 5000 }]
+  id: 1, name: 'Bảng Giá Chuẩn 2026',
+  columns: [
+    { key: 'code', label: 'Mã hàng' },
+    { key: 'name', label: 'Tên mặt hàng' },
+    { key: 'oldPrice', label: 'Giá cũ' },
+    { key: 'newPrice', label: 'Giá mới' }
+  ],
+  fileUrl: '/uploads/mau-gia-chuan-2026.xlsx', fileName: 'mau-gia-chuan-2026.xlsx',
+  uploadedBy: 'admin', uploadedByName: 'Quản Trị Viên', uploadedAt: new Date().toLocaleString('vi-VN')
 };
 
 const state = createMockState({
   depts: ['Kinh Doanh', 'IT', 'Ban Giám Đốc'],
   users: [STAFF_KD, IT1, APPROVER1, PLAIN],
   itPriceMasterLists: [MASTER_LIST],
-  itPriceDeptWorkflows: {}
+  // Bỏ auto-approve -> mọi đề xuất phải qua đúng 1 bước duyệt phòng ban (dept 'Kinh Doanh', khớp
+  // forceOwnDept của itPriceApprovals) trước khi đội IT áp giá — approver1 là người duyệt bước 1.
+  itPriceDeptWorkflows: { 'Kinh Doanh': { workflowId: 'wf-kd-price', approvers: { 1: ['approver1'] } } },
+  workflows: [{ id: 'wf-kd-price', steps: [{ order: 1, name: 'Trưởng Phòng Duyệt' }] }]
 });
 
 async function loginAs(page, user) {
@@ -50,8 +66,9 @@ async function main() {
   let ticketDeniedId = null;
 
   try {
-    // ===== 1) Phê Duyệt Giá: khớp 100% File Giá Mẫu -> tự động duyệt luôn, bỏ qua bước duyệt phòng ban =====
-    await run.run('Phê Duyệt Giá: khớp 100% File Giá Mẫu tự động duyệt (autoApproved) ngay lúc tạo', async () => {
+    // ===== 1) Phê Duyệt Giá: tạo đề xuất mới phải LUÔN đi qua đúng quy trình duyệt phòng ban (không
+    // còn autoApproved), gắn đúng columnLabels snapshot theo Mẫu Giá đã chọn lúc nộp =====
+    await run.run('Phê Duyệt Giá: tạo đề xuất mới ở PENDING (không còn tự động duyệt), gắn đúng columnLabels theo Mẫu Giá đã chọn', async () => {
       await loginAs(page, STAFF_KD);
       const result = await page.evaluate(async () => {
         switchTab('itSupport');
@@ -61,18 +78,41 @@ async function main() {
         itPricePendingFile = {
           fileUrl: '/uploads/gia-de-xuat.xlsx',
           fileName: 'gia-de-xuat.xlsx',
-          items: [{ code: 'SP001', name: 'Mì gói Hảo Hảo', oldPrice: 5000, newPrice: 5500 }]
+          items: [{ code: 'SP001', name: 'Mì gói Hảo Hảo', oldPrice: 5000, newPrice: 5500 }],
+          columnLabels: [
+            { key: 'code', label: 'Mã hàng' },
+            { key: 'name', label: 'Tên mặt hàng' },
+            { key: 'oldPrice', label: 'Giá cũ' },
+            { key: 'newPrice', label: 'Giá mới' }
+          ]
         };
         await submitItPriceApproval({ preventDefault() {}, target: { reset() {} } });
         const p = DB.itPriceApprovals[0];
         return { alerts: window.__alerts, item: p };
       });
       assert(result.item, 'Đề xuất duyệt giá phải được tạo');
-      assertEqual(result.item.status, 'APPROVED', 'Khớp 100% giá mẫu phải tự động APPROVED');
-      assertEqual(result.item.autoApproved, true, 'Phải đánh dấu autoApproved=true để phân biệt với duyệt tay');
-      assert(result.item.files[0].items[0].matched === true, 'Dòng giá phải được đánh dấu matched=true (khớp giá mẫu)');
-      assertIncludes(result.alerts, 'TỰ ĐỘNG DUYỆT', 'Phải thông báo rõ đã tự động duyệt, không cần chờ phê duyệt thủ công');
+      assertEqual(result.item.status, 'PENDING', 'Đề xuất mới phải chờ đúng bước duyệt phòng ban (không còn nhánh autoApproved)');
+      assertEqual(result.item.currentStep, 1, 'Đề xuất mới phải ở bước duyệt đầu tiên');
+      assertEqual(result.item.autoApproved, false, 'autoApproved phải luôn là false với đề xuất tạo mới (chỉ còn ý nghĩa hiển thị hồ sơ cũ)');
+      assertEqual(result.item.files[0].columnLabels.length, 4, 'Phải lưu snapshot đúng khuôn cột (columnLabels) theo Mẫu Giá đã chọn lúc nộp');
+      assertEqual(result.item.files[0].columnLabels[1].label, 'Tên mặt hàng', 'columnLabels phải khớp đúng tên cột của Mẫu Giá đã chọn, không phải nhãn mặc định');
+      assertIncludes(result.alerts, 'Đã gửi đề xuất duyệt giá thành công', 'Phải thông báo gửi đề xuất thành công (không còn thông báo tự động duyệt)');
       priceApprovalId = result.item.id;
+    });
+
+    // ===== 1b) Trưởng phòng (approver1) duyệt đúng bước 1 theo itPriceDeptWorkflows['Kinh Doanh'] để
+    // đưa hồ sơ sang APPROVED — bước bắt buộc phải có thật từ nay (không còn autoApproved rút gọn),
+    // và là điều kiện tiên quyết cho toàn bộ luồng "Yêu Cầu Bổ Sung"/"Xác nhận áp giá" ở kịch bản 3.
+    await run.run('Phê Duyệt Giá: Trưởng phòng duyệt đúng bước 1 (dept-workflow thật) đưa hồ sơ sang APPROVED', async () => {
+      await loginAs(page, APPROVER1);
+      const result = await page.evaluate(async (id) => {
+        window.__resetCapture();
+        await approveItPriceConfirmed(id);
+        const item = DB.itPriceApprovals.find(x => x.id === id);
+        return { status: item.status, alerts: window.__alerts.slice() };
+      }, priceApprovalId);
+      assertEqual(result.status, 'APPROVED', 'Sau khi Trưởng phòng duyệt xong bước duy nhất, hồ sơ phải chuyển APPROVED');
+      assertIncludes(result.alerts, 'Phê duyệt đề xuất giá thành công', 'Phải thông báo phê duyệt hoàn tất, chờ đội IT áp giá');
     });
 
     // ===== 2) Validation: chưa chọn tệp bảng giá thì không gửi được =====
@@ -124,17 +164,25 @@ async function main() {
       const step2 = await page.evaluate(async (id) => {
         itPriceSupplementPendingFile = {
           fileUrl: '/uploads/gia-bo-sung.xlsx', fileName: 'gia-bo-sung.xlsx',
-          items: [{ code: 'SP001', name: 'Mì gói Hảo Hảo', oldPrice: 5000, newPrice: 5500 }]
+          items: [{ code: 'SP001', name: 'Mì gói Hảo Hảo', oldPrice: 5000, newPrice: 5500 }],
+          columnLabels: [
+            { key: 'code', label: 'Mã hàng' },
+            { key: 'name', label: 'Tên mặt hàng' },
+            { key: 'oldPrice', label: 'Giá cũ' },
+            { key: 'newPrice', label: 'Giá mới' }
+          ]
         };
         await submitItPriceSupplementAction(id);
         const item = DB.itPriceApprovals.find(x => x.id === id);
         return {
           fileCount: item.files.length,
+          supplementColumnLabelsLen: item.files[1].columnLabels.length,
           infoRequestReason: item.infoRequests[0].reason,
           infoRequestResponded: !!item.infoRequests[0].response
         };
       }, priceApprovalId);
       assertEqual(step2.fileCount, 2, 'Tệp bổ sung phải được THÊM vào cuối (append-only) — tổng 2 tệp (gốc + bổ sung)');
+      assertEqual(step2.supplementColumnLabelsLen, 4, 'Tệp bổ sung cũng phải được sanitize + gắn columnLabels riêng của nó (snapshot đúng lúc nộp)');
       assertEqual(step2.infoRequestReason, 'Cần bổ sung ảnh chụp bảng giá kệ hàng thực tế', 'Phải ghi đúng lý do yêu cầu bổ sung');
       assert(step2.infoRequestResponded, 'Yêu cầu bổ sung phải được đánh dấu đã phản hồi sau khi có tệp bổ sung');
 

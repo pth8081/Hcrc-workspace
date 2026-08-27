@@ -9,7 +9,7 @@ const fs = require('fs');
 const path = require('path');
 const rateLimit = require('express-rate-limit');
 const { requireAuth, blockIfMustChangePassword } = require('../lib/auth');
-const { parsePriceFile, parsePriceMasterFile, matchAgainstMaster } = require('../lib/priceFileParser');
+const { parsePriceFile, parsePriceTemplateColumns } = require('../lib/priceFileParser');
 const { getAppDataValueCached } = require('../lib/appData');
 const { verifyFileSignature } = require('../lib/fileSignature');
 
@@ -53,11 +53,10 @@ const upload = multer({
 
 // POST /api/it-price/parse-file — chỉ người có quyền itPriceProposeCreate (hoặc admin) mới gọi được:
 // dùng cho cả lúc tạo đề xuất mới lẫn tải lên tệp bổ sung (Yêu Cầu Bổ Sung) của chính đề xuất đang có.
-// Trường form "masterListId" (tuỳ chọn) — nếu gửi kèm, đối chiếu luôn từng dòng với đúng File Giá Mẫu
-// đó (đọc thẳng DB.itPriceMasterLists ở server, KHÔNG gửi nguyên danh sách giá mẫu ra ngoài) và gắn
-// matched/masterPrice vào mỗi item để form xem trước hiện cảnh báo ngay cho người đề xuất — xem
-// itPriceApprovals.extraValidate ở lib/createValidation.js để biết nơi tính lại y hệt lúc GHI THẬT
-// (không tin verdict client echo lại từ preview này).
+// Trường form "masterListId" (tuỳ chọn) — nếu gửi kèm, dò cột file bảng giá thật theo ĐÚNG tên cột của
+// Mẫu Giá đó (đọc thẳng DB.itPriceMasterLists ở server, KHÔNG gửi nguyên khuôn cột ra ngoài khi chưa
+// chọn) thay vì bộ từ khoá chung — báo lỗi rõ ràng nếu thiếu cột bắt buộc theo mẫu. Mẫu Giá giờ CHỈ là
+// khuôn cột (không còn dữ liệu giá thật để đối chiếu/tự động duyệt — xem lib/createValidation.js).
 router.post('/parse-file', uploadRateLimiter, (req, res) => {
   if (!req.freshUser.perms?.admin && !req.freshUser.perms?.itPriceProposeCreate) {
     return res.status(403).json({ error: 'Bạn không có quyền đề xuất duyệt giá' });
@@ -80,21 +79,19 @@ router.post('/parse-file', uploadRateLimiter, (req, res) => {
         fs.unlink(req.file.path, () => {});
         return res.status(400).json({ error: check.reason });
       }
-      let items = await parsePriceFile(buffer);
-
       let masterListName = null;
+      let template = null;
       const masterListId = req.body.masterListId ? Number(req.body.masterListId) : null;
       if (masterListId) {
         const masterLists = (await getAppDataValueCached('itPriceMasterLists')) || [];
         const master = masterLists.find(m => m.id === masterListId);
-        if (master) {
-          items = matchAgainstMaster(items, master.items);
-          masterListName = master.name;
-        }
+        if (master) { template = master; masterListName = master.name; }
       }
+      const { items, columnLabels } = await parsePriceFile(buffer, template);
 
       res.json({
         items,
+        columnLabels,
         masterListName,
         fileUrl: `/uploads/${req.file.filename}`,
         fileName: req.file.originalname,
@@ -109,13 +106,14 @@ router.post('/parse-file', uploadRateLimiter, (req, res) => {
 });
 
 // POST /api/it-price/master-list/parse-file — chỉ admin (khớp ADMIN_ONLY_KEYS cho itPriceMasterLists ở
-// routes/data.js — chặt hơn canManageItSupport() vì file này quyết định trực tiếp hồ sơ nào được bỏ qua
-// bước duyệt phòng ban). Chỉ đọc + trả về items để client xem trước rồi tự đặt tên/lưu qua
-// POST /api/data/itPriceMasterLists (khớp khuôn "Nhóm Không Cấp Văn Phòng Phẩm" — parse xong không tự
-// ghi CSDL ngay, gộp vào danh sách rồi bấm 1 nút Lưu chung).
+// routes/data.js). CHỈ đọc dòng tiêu đề để lấy khuôn cột (columns), KHÔNG đọc/lưu bất kỳ dòng dữ liệu
+// nào bên dưới — Mẫu Giá giờ thuần là khuôn cột đại diện cho định dạng bên mua hàng gửi tại 1 thời điểm,
+// không còn phải bảng giá thật để đối chiếu tự động. Client tự đặt tên/lưu qua POST /api/data/itPriceMasterLists
+// (khớp khuôn "Nhóm Không Cấp Văn Phòng Phẩm" — parse xong không tự ghi CSDL ngay, gộp vào danh sách rồi
+// bấm 1 nút Lưu chung).
 router.post('/master-list/parse-file', uploadRateLimiter, (req, res) => {
   if (!req.freshUser.perms?.admin) {
-    return res.status(403).json({ error: 'Chỉ Quản Trị Viên mới có quyền nạp File Giá Mẫu' });
+    return res.status(403).json({ error: 'Chỉ Quản Trị Viên mới có quyền nạp Mẫu Giá' });
   }
   upload.single('file')(req, res, async (err) => {
     if (err instanceof multer.MulterError) {
@@ -125,7 +123,7 @@ router.post('/master-list/parse-file', uploadRateLimiter, (req, res) => {
       return res.status(400).json({ error: err.message });
     }
     if (err) return res.status(400).json({ error: err.message });
-    if (!req.file) return res.status(400).json({ error: 'Thiếu tệp giá mẫu cần tải lên' });
+    if (!req.file) return res.status(400).json({ error: 'Thiếu tệp mẫu cần tải lên' });
 
     try {
       const declaredExt = path.extname(req.file.originalname).toLowerCase();
@@ -135,9 +133,9 @@ router.post('/master-list/parse-file', uploadRateLimiter, (req, res) => {
         fs.unlink(req.file.path, () => {});
         return res.status(400).json({ error: check.reason });
       }
-      const items = await parsePriceMasterFile(buffer);
+      const columns = await parsePriceTemplateColumns(buffer);
       res.json({
-        items,
+        columns,
         fileUrl: `/uploads/${req.file.filename}`,
         fileName: req.file.originalname,
         size: req.file.size
@@ -145,7 +143,7 @@ router.post('/master-list/parse-file', uploadRateLimiter, (req, res) => {
     } catch (parseErr) {
       fs.unlink(req.file.path, () => {});
       const status = parseErr.status || 400;
-      res.status(status).json({ error: parseErr.message || 'Không đọc được nội dung tệp giá mẫu' });
+      res.status(status).json({ error: parseErr.message || 'Không đọc được nội dung tệp mẫu' });
     }
   });
 });

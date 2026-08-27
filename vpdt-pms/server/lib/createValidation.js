@@ -10,7 +10,7 @@
 const { HttpError: CreateError } = require('./httpErrors');
 // vppCatalog.js là tiện ích THUẦN (không đọc DB, giống httpErrors.js) — an toàn require thẳng ở đây.
 const { validateRegistrationItems: validateVppRegItems } = require('./vppCatalog');
-const { sanitizePriceFileItems, matchAgainstMaster } = require('./priceFileParser');
+const { sanitizePriceFileItems, sanitizeColumnLabels } = require('./priceFileParser');
 
 function scopeAllows(user, scope, dept) {
   if (!user) return false;
@@ -962,34 +962,23 @@ const CREATE_MODULE_CONFIGS = {
       // dưới đây chặn payload giả mạo/kiểu dữ liệu lạ trước khi ghi vào DB.
       const file = payload.files && payload.files[0];
       if (!file || !file.fileUrl) throw new CreateError(400, 'Vui lòng tải lên tệp bảng giá (.xlsx) cần duyệt');
-      let items = sanitizePriceFileItems(file.items);
+      const items = sanitizePriceFileItems(file.items);
+      const columnLabels = sanitizeColumnLabels(file.columnLabels);
 
-      // File Giá Mẫu (tuỳ chọn, payload.masterListId) — người đề xuất tự chọn ĐÚNG file mẫu áp dụng cho
-      // bảng giá của mình lúc nộp (không suy luận tự động theo phòng ban, vì thực tế có thể có nhiều
-      // file mẫu khác nhau — xem defaults.js). Tính lại verdict khớp/lệch NGAY TẠI ĐÂY từ
-      // appData.itPriceMasterLists — KHÔNG tin matched/masterPrice client echo lại từ lúc xem trước ở
-      // POST /api/it-price/parse-file, nếu không 1 request tự soạn có thể tự xưng "đã khớp 100%" để
-      // được bỏ qua thẳng bước duyệt phòng ban.
+      // Mẫu Giá (tuỳ chọn, payload.masterListId) — người đề xuất tự chọn ĐÚNG mẫu áp dụng cho bảng giá
+      // của mình lúc nộp (không suy luận tự động theo phòng ban, vì thực tế có thể có nhiều mẫu khác
+      // nhau — xem defaults.js). Mẫu Giá giờ CHỈ còn là khuôn cột (columns[], không còn dữ liệu giá thật)
+      // — dùng để dò/hiển thị đúng tên cột lúc nộp (xem routes/priceFile.js), KHÔNG còn dùng để đối
+      // chiếu giá trị/tự động bỏ qua duyệt phòng ban nữa. Mọi đề xuất từ nay LUÔN đi qua đúng quy trình
+      // duyệt theo phòng ban (itPriceDeptWorkflows), không còn nhánh autoApproved.
       const masterLists = appData?.itPriceMasterLists || [];
       const masterListId = payload.masterListId ? Number(payload.masterListId) : null;
       const masterList = masterListId ? masterLists.find(m => m.id === masterListId) : null;
-      // Đã có ít nhất 1 File Giá Mẫu trong hệ thống thì BẮT BUỘC người đề xuất phải chọn đúng 1 mẫu
-      // (không còn tuỳ chọn "Không đối chiếu") — tự soạn request bỏ qua field này hoặc trỏ tới id không
-      // tồn tại đều bị chặn ngay tại đây, không để lọt vào state máy tiếp theo.
+      // Đã có ít nhất 1 Mẫu Giá trong hệ thống thì BẮT BUỘC người đề xuất phải chọn đúng 1 mẫu (không
+      // còn tuỳ chọn "Không đối chiếu") — tự soạn request bỏ qua field này hoặc trỏ tới id không tồn tại
+      // đều bị chặn ngay tại đây, không để lọt vào state máy tiếp theo.
       if (masterLists.length > 0 && !masterList) {
         throw new CreateError(400, 'Vui lòng chọn đúng Mẫu Giá Phê Duyệt trước khi gửi đề xuất');
-      }
-      let autoApproved = false;
-      if (masterList) {
-        items = matchAgainstMaster(items, masterList.items);
-        const matchedCount = items.filter(it => it.matched).length;
-        // Không mặt hàng nào khớp = gần như chắc chắn chọn NHẦM mẫu giá (khác hẳn khớp 1 phần, vốn vẫn
-        // hợp lệ và đi qua quy trình duyệt phòng ban bình thường) — chặn lại để người đề xuất chọn lại
-        // đúng mẫu thay vì âm thầm cho qua rồi người duyệt mới phát hiện ra sai mẫu.
-        if (matchedCount === 0) {
-          throw new CreateError(400, `Không có mặt hàng nào khớp với mẫu giá "${masterList.name}" — vui lòng kiểm tra lại đúng Mẫu Giá Phê Duyệt trước khi gửi`);
-        }
-        autoApproved = items.every(it => it.matched);
       }
       payload.masterListId = masterList ? masterList.id : null;
       payload.masterListName = masterList ? masterList.name : null;
@@ -1000,7 +989,7 @@ const CREATE_MODULE_CONFIGS = {
         fileName: (String(file.fileName || '').trim() || 'bang-gia.xlsx').slice(0, 200),
         uploadedBy: user.username, uploadedByName: user.name,
         uploadedAt: new Date().toLocaleString('vi-VN'),
-        items
+        items, columnLabels
       }];
       payload.reason = (payload.reason || '').trim();
       // Lịch sử "Yêu Cầu Bổ Sung" — có thể đến từ người duyệt phòng ban (trong lúc PENDING, qua hành
@@ -1020,39 +1009,15 @@ const CREATE_MODULE_CONFIGS = {
       payload.applyClaimedByName = null;
       payload.applyClaimedAt = null;
 
-      if (autoApproved) {
-        // Khớp 100% với File Giá Mẫu đã chọn -> bỏ qua toàn bộ quy trình duyệt phòng ban, status
-        // APPROVED ngay từ lúc tạo. currentStep đặt bằng bước cuối của đúng cấu hình quy trình phòng ban
-        // (không phải 0/null) để giữ hình dạng NHẤT QUÁN với 1 hồ sơ đã duyệt xong bình thường qua
-        // lib/workflowEngine.js (item[currentStepField] luôn dừng ở bước cuối khi status='APPROVED', xem
-        // applyWorkflowAction()) — dù itPriceStatusBadge() ở index.html chỉ đọc currentStep khi status
-        // KHÁC APPROVED nên field này hiện không ảnh hưởng hiển thị, giữ đúng hình dạng vẫn an toàn hơn
-        // cho bất kỳ chỗ nào sau này đọc lại currentStep của hồ sơ APPROVED.
-        // action:'APPROVED' (không phải 1 giá trị mới như 'AUTO_APPROVED') để tái dùng NGUYÊN vẹn UI
-        // lịch sử duyệt đã có ở renderItPriceModal() (chỉ lọc hiện đúng 2 action 'APPROVED'/'REJECTED')
-        // — payload.autoApproved (field riêng) mới là chỗ UI dựa vào để phân biệt badge tự động/thủ công.
-        const wfConfig = appData?.itPriceDeptWorkflows?.[user.dept];
-        const wf = (appData?.workflows || []).find(w => w.id === wfConfig?.workflowId) || { steps: [{ order: 1, name: 'Duyệt' }] };
-        const totalSteps = wf.steps.length;
-        payload.status = 'APPROVED';
-        payload.currentStep = totalSteps;
-        payload.autoApproved = true;
-        payload.history = [{
-          step: totalSteps, stepName: wf.steps[totalSteps - 1]?.name || '',
-          approver: 'Hệ thống (Tự động đối chiếu)', username: 'system', action: 'APPROVED',
-          comment: `Khớp 100% với File Giá Mẫu "${masterList.name}" (${items.length}/${items.length} dòng) — bỏ qua bước duyệt phòng ban.`,
-          time: new Date().toLocaleString('vi-VN')
-        }];
-      } else {
-        // status/currentStep/history PHẢI gán cứng ở server (khớp docs/carRegs/officeReqs) — đây là 3
-        // field mà lib/workflowEngine.js đọc để xác định hồ sơ đang ở bước nào/ai được duyệt tiếp; thiếu
-        // bước này thì applyWorkflowAction() sẽ chặn ngay ("Hồ sơ không còn ở trạng thái chờ xử lý") vì
-        // item.status không phải 'PENDING'.
-        payload.status = 'PENDING';
-        payload.currentStep = 1;
-        payload.autoApproved = false;
-        payload.history = [];
-      }
+      // status/currentStep/history PHẢI gán cứng ở server (khớp docs/carRegs/officeReqs) — đây là 3
+      // field mà lib/workflowEngine.js đọc để xác định hồ sơ đang ở bước nào/ai được duyệt tiếp; thiếu
+      // bước này thì applyWorkflowAction() sẽ chặn ngay ("Hồ sơ không còn ở trạng thái chờ xử lý") vì
+      // item.status không phải 'PENDING'. autoApproved giữ lại = false (field cũ, chỉ còn ý nghĩa với
+      // hồ sơ lịch sử tạo trước khi bỏ tính năng đối chiếu tự động — xem itPriceStatusBadge() ở index.html).
+      payload.status = 'PENDING';
+      payload.currentStep = 1;
+      payload.autoApproved = false;
+      payload.history = [];
     }
   },
   // 2) "Hỗ Trợ Yêu Cầu" (itSupportTickets): ticket helpdesk IT nội bộ — MỞ CHO TOÀN BỘ NHÂN VIÊN, không
@@ -1167,7 +1132,6 @@ const CREATE_MODULE_CONFIGS = {
       payload.category = String(payload.category).trim();
       payload.title = String(payload.title).trim();
       payload.capacity = Number(payload.capacity) > 0 ? Math.floor(Number(payload.capacity)) : 0;
-      payload.passScore = (payload.passScore === '' || payload.passScore == null) ? null : Number(payload.passScore);
       payload.documentIds = Array.isArray(payload.documentIds) ? payload.documentIds.map(Number).filter(Number.isFinite) : [];
       // Kiểu lớp: ONLINE (mặc định, theo giáo trình đọc bắt buộc) hay OFFLINE (giáo trình chỉ là tài
       // liệu tham khảo giảng viên tự mở khi lên lớp, học viên không bắt buộc phải đọc trước).
@@ -1194,6 +1158,22 @@ const CREATE_MODULE_CONFIGS = {
         }
       }
       payload.testId = testId;
+      // Điểm Đạt (%) — NGUỒN DUY NHẤT xác định ngưỡng đạt/không đạt khi chấm tự động (xem
+      // gradeTrainingTestSubmission() ở lib/recordActions.js), lập ngay lúc TẠO LỚP. Ngân Hàng Câu Hỏi
+      // (trainingTests) có 1 field passScore riêng nhưng CHỈ mang tính gợi ý autofill cho ô này ở client
+      // (xem applyTrainingClassTestDefaultPassScore()) — không được server đọc lại lúc chấm điểm, vì 1
+      // bài test có thể tái dùng cho nhiều lớp với ngưỡng đạt khác nhau. Lớp có gán bài test thì bắt buộc
+      // phải có Điểm Đạt hợp lệ (1-100) ở CHÍNH lớp — không cho tạo/sửa lớp với test mà bỏ trống, tránh
+      // rơi vào mặc định ngầm không ai biết.
+      if (payload.testId != null) {
+        const passScore = Number(payload.passScore);
+        if (!Number.isFinite(passScore) || passScore <= 0 || passScore > 100) {
+          throw new CreateError(400, 'Lớp có gán Bài Test cần nhập Điểm Đạt Yêu Cầu hợp lệ (1-100)');
+        }
+        payload.passScore = passScore;
+      } else {
+        payload.passScore = null;
+      }
       // Số giây/câu khi làm bài test — mặc định 120s/câu, người tạo lớp được đổi lúc tạo lớp (xem yêu
       // cầu nghiệp vụ: đếm ngược mỗi câu, mặc định 2 phút).
       const secPerQ = Number(payload.testSecondsPerQuestion);
@@ -1264,8 +1244,12 @@ const CREATE_MODULE_CONFIGS = {
       payload.title = String(payload.title).trim();
       payload.category = payload.category ? String(payload.category).trim() : '';
       payload.questions = questions;
-      const passScore = Number(payload.passScore);
-      payload.passScore = Number.isFinite(passScore) && passScore > 0 && passScore <= 100 ? passScore : 60;
+      // passScore ở đây CHỈ là gợi ý (autofill) cho ô Điểm Đạt Yêu Cầu khi chọn bài test lúc tạo/sửa
+      // lớp học (xem applyTrainingClassTestDefaultPassScore() ở client) — KHÔNG được đọc khi chấm điểm,
+      // trainingClasses.passScore vẫn là nguồn quyết định DUY NHẤT (xem gradeTrainingTestSubmission()).
+      const suggestedPassScore = Number(payload.passScore);
+      payload.passScore = Number.isFinite(suggestedPassScore) && suggestedPassScore > 0 && suggestedPassScore <= 100
+        ? suggestedPassScore : null;
     }
   },
   // Chương Trình (trainingCourses, Đợt 4) — catalog "Chương Trình" TÁI SỬ DỤNG được cho nhiều LỚP HỌC

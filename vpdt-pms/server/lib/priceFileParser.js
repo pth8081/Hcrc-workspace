@@ -59,14 +59,72 @@ function parsePrice(raw) {
   return Number.isFinite(n) ? n : null;
 }
 
-function rowsToPriceItems(rows) {
+const DEFAULT_COLUMN_LABELS = [
+  { key: 'code', label: 'Mã hàng' },
+  { key: 'name', label: 'Tên mặt hàng' },
+  { key: 'oldPrice', label: 'Giá cũ' },
+  { key: 'newPrice', label: 'Giá mới' }
+];
+
+// Đợt "Mẫu Giá chỉ có cột" — khi người đề xuất đã chọn 1 Mẫu Giá (itPriceMasterLists, giờ chỉ còn là
+// khuôn CỘT, không còn dữ liệu giá thật — xem lib/createValidation.js), file bảng giá thật họ tải lên
+// PHẢI có đúng cột "Tên mặt hàng"/"Giá mới" theo ĐÚNG TÊN CỘT của mẫu đó (so khớp theo tiêu đề đã chuẩn
+// hoá, không phân biệt hoa/thường/dấu) — không dùng bộ FIELD_HINTS chung nữa vì mẫu có thể đặt tên cột
+// khác hẳn (VD "Mã SP", "Đơn giá đề xuất"...). Trả lại đúng cấu trúc cột (columnLabels) để hiển thị lại
+// CHÍNH XÁC tên cột người dùng thấy trong mẫu, không phải nhãn tiếng Việt cứng của hệ thống.
+function detectColumnMapFromTemplate(headerCells, template) {
+  const normalizedHeaders = headerCells.map(normalizeHeader);
+  const findIdx = (label) => normalizedHeaders.findIndex(h => h === normalizeHeader(label));
+  const columns = Array.isArray(template?.columns) ? template.columns : [];
+  const nameCol = columns.find(c => c.key === 'name');
+  const newPriceCol = columns.find(c => c.key === 'newPrice');
+  const nameIdx = nameCol ? findIdx(nameCol.label) : -1;
+  if (nameIdx === -1) {
+    throw new HttpError(400, `File bảng giá thiếu cột "${nameCol?.label || 'Tên mặt hàng'}" theo đúng Mẫu Giá đã chọn`);
+  }
+  const newPriceIdx = newPriceCol ? findIdx(newPriceCol.label) : -1;
+  if (newPriceIdx === -1) {
+    throw new HttpError(400, `File bảng giá thiếu cột "${newPriceCol?.label || 'Giá mới'}" theo đúng Mẫu Giá đã chọn`);
+  }
+  const idx = { name: nameIdx, newPrice: newPriceIdx };
+  const codeCol = columns.find(c => c.key === 'code');
+  if (codeCol) { const i = findIdx(codeCol.label); if (i !== -1) idx.code = i; }
+  const oldPriceCol = columns.find(c => c.key === 'oldPrice');
+  if (oldPriceCol) { const i = findIdx(oldPriceCol.label); if (i !== -1) idx.oldPrice = i; }
+  // Cột tuỳ ý khác ngoài 4 trường nghiệp vụ cố định (VD Nhà cung cấp/Đơn vị tính/Ghi chú...) — chỉ mang
+  // tính hiển thị/tham khảo, KHÔNG bắt buộc phải có trong file thật (mẫu có thể có nhiều cột hơn 1 lần
+  // nộp cụ thể cần dùng tới).
+  const extraCols = [];
+  columns.filter(c => !['code', 'name', 'oldPrice', 'newPrice'].includes(c.key)).forEach(c => {
+    const i = findIdx(c.label);
+    if (i !== -1) extraCols.push({ key: c.key, label: c.label, idx: i });
+  });
+  const columnLabels = [
+    ...(idx.code !== undefined ? [{ key: 'code', label: codeCol.label }] : []),
+    { key: 'name', label: nameCol.label },
+    ...(idx.oldPrice !== undefined ? [{ key: 'oldPrice', label: oldPriceCol.label }] : []),
+    { key: 'newPrice', label: newPriceCol.label },
+    ...extraCols.map(c => ({ key: c.key, label: c.label }))
+  ];
+  return { idx, extraCols, columnLabels };
+}
+
+function rowsToPriceItems(rows, template) {
   if (!rows.length) throw new HttpError(400, 'File bảng giá trống, không có dữ liệu');
 
-  const colMap = detectColumnMap(rows[0]);
-  const dataRows = colMap ? rows.slice(1) : rows;
-  // Không dò được header theo tên cột -> coi như file mẫu đơn giản 3 cột theo VỊ TRÍ: Mã hàng, Tên mặt
-  // hàng, Giá mới (không có giá cũ) — vẫn đọc được thay vì báo lỗi trắng.
-  const idx = colMap || { code: 0, name: 1, newPrice: 2 };
+  let idx, extraCols = [], columnLabels, dataRows;
+  if (template) {
+    const detected = detectColumnMapFromTemplate(rows[0], template);
+    idx = detected.idx; extraCols = detected.extraCols; columnLabels = detected.columnLabels;
+    dataRows = rows.slice(1);
+  } else {
+    const colMap = detectColumnMap(rows[0]);
+    dataRows = colMap ? rows.slice(1) : rows;
+    // Không dò được header theo tên cột -> coi như file mẫu đơn giản 3 cột theo VỊ TRÍ: Mã hàng, Tên mặt
+    // hàng, Giá mới (không có giá cũ) — vẫn đọc được thay vì báo lỗi trắng.
+    idx = colMap || { code: 0, name: 1, newPrice: 2 };
+    columnLabels = DEFAULT_COLUMN_LABELS;
+  }
 
   const items = [];
   const seenCodes = new Set();
@@ -79,21 +137,27 @@ function rowsToPriceItems(rows) {
     seenCodes.add(dedupeKey);
     const newPrice = idx.newPrice !== undefined ? parsePrice(cells[idx.newPrice]) : null;
     if (!Number.isFinite(newPrice) || newPrice <= 0) continue; // dòng không có giá mới hợp lệ -> bỏ qua
+    const extra = {};
+    extraCols.forEach((c) => {
+      const v = String(cells[c.idx] ?? '').trim();
+      if (v) extra[c.key] = v.slice(0, 200);
+    });
     items.push({
       code,
       name,
       oldPrice: idx.oldPrice !== undefined ? parsePrice(cells[idx.oldPrice]) : null,
-      newPrice
+      newPrice,
+      ...(Object.keys(extra).length ? { extra } : {})
     });
   }
   if (!items.length) {
     throw new HttpError(400, 'Không đọc được dòng giá nào hợp lệ từ file (cần có cột Tên mặt hàng và Giá mới lớn hơn 0)');
   }
   if (items.length > 1000) throw new HttpError(400, 'File bảng giá quá nhiều dòng (tối đa 1000 mặt hàng/tệp)');
-  return items;
+  return { items, columnLabels };
 }
 
-async function parsePriceFile(buffer) {
+async function readSheetRows(buffer) {
   const workbook = new ExcelJS.Workbook();
   await workbook.xlsx.load(buffer);
   const sheet = workbook.worksheets[0];
@@ -104,7 +168,15 @@ async function parsePriceFile(buffer) {
     row.eachCell({ includeEmpty: true }, (cell) => { cells.push(cell.value == null ? '' : String(cell.value)); });
     rows.push(cells);
   });
-  return rowsToPriceItems(rows);
+  return rows;
+}
+
+// template (tuỳ chọn) — Mẫu Giá đã chọn (itPriceMasterLists), dùng ĐÚNG tên cột của mẫu để dò thay vì
+// bộ FIELD_HINTS chung. Trả về { items, columnLabels } — columnLabels đi kèm mỗi tệp lưu vào
+// item.files[].columnLabels để hiển thị lại đúng tên cột ngay cả khi mẫu sau này bị sửa/xoá.
+async function parsePriceFile(buffer, template) {
+  const rows = await readSheetRows(buffer);
+  return rowsToPriceItems(rows, template);
 }
 
 // Làm sạch lại 1 mảng items ĐÃ ĐƯỢC PARSE TỪ SERVER (client chỉ echo lại nguyên văn kết quả của
@@ -118,11 +190,21 @@ function sanitizePriceFileItems(rawItems) {
     const newPrice = Number(it?.newPrice);
     if (!name || !Number.isFinite(newPrice) || newPrice <= 0) continue;
     const oldPriceNum = Number(it?.oldPrice);
+    const rawExtra = it?.extra && typeof it.extra === 'object' ? it.extra : null;
+    const extra = {};
+    if (rawExtra) {
+      Object.keys(rawExtra).slice(0, 20).forEach((k) => {
+        const key = String(k).slice(0, 40);
+        const v = String(rawExtra[k] ?? '').trim();
+        if (v) extra[key] = v.slice(0, 200);
+      });
+    }
     cleaned.push({
       code: String(it?.code || '').trim().slice(0, 60),
       name: name.slice(0, 200),
       oldPrice: Number.isFinite(oldPriceNum) && oldPriceNum >= 0 ? oldPriceNum : null,
-      newPrice
+      newPrice,
+      ...(Object.keys(extra).length ? { extra } : {})
     });
     if (cleaned.length >= 1000) break;
   }
@@ -130,106 +212,52 @@ function sanitizePriceFileItems(rawItems) {
   return cleaned;
 }
 
-// ============ File Giá Mẫu (itPriceMasterLists) — admin nạp 1 bảng giá "đúng thực tế" để hệ thống tự
-// đối chiếu với bảng giá đề xuất (xem matchAgainstMaster() dưới). Chỉ cần 3 cột: Mã hàng/Tên mặt
-// hàng/Giá — dùng lại đúng cơ chế dò cột theo tiêu đề như trên, tách bộ hint riêng vì cột "Giá" ở đây là
-// GIÁ HIỆN HÀNH (1 cột), không phải "giá cũ/giá mới" (2 cột) như file bảng giá đề xuất.
-const MASTER_FIELD_HINTS = {
-  code: ['ma hang', 'ma vat tu', 'ma sp', 'ma san pham', 'ma'],
-  name: ['ten mat hang', 'ten hang', 'ten hang hoa', 'ten san pham', 'ten'],
-  price: ['gia', 'gia ban', 'don gia', 'gia hien tai', 'gia niem yet']
-};
+// Làm sạch lại columnLabels ĐÃ ĐƯỢC PARSE TỪ SERVER trước khi ghi vào item.files[] — cùng mức tin cậy
+// với sanitizePriceFileItems() ở trên.
+function sanitizeColumnLabels(rawColumnLabels) {
+  const list = Array.isArray(rawColumnLabels) ? rawColumnLabels : DEFAULT_COLUMN_LABELS;
+  const cleaned = list.slice(0, 50).map((c) => ({
+    key: String(c?.key || '').slice(0, 40),
+    label: String(c?.label || '').trim().slice(0, 100)
+  })).filter((c) => c.key && c.label);
+  return cleaned.length ? cleaned : DEFAULT_COLUMN_LABELS;
+}
 
-function detectMasterColumnMap(headerCells) {
-  const map = {};
-  let foundName = false;
+// ============ Mẫu Giá (itPriceMasterLists) — khuôn CỘT của bảng giá bên mua hàng gửi tại từng thời
+// điểm, KHÔNG còn lưu dữ liệu giá thật (khác thiết kế cũ dùng để đối chiếu tự động) — chỉ đọc DUY NHẤT
+// dòng tiêu đề, bỏ hết các dòng dữ liệu bên dưới. Cho phép mẫu có thêm cột tuỳ ý ngoài 4 trường nghiệp
+// vụ cố định (Mã hàng/Tên mặt hàng/Giá cũ/Giá mới) — các cột đó giữ nguyên tên gốc, đánh dấu key dạng
+// "extra_<vị trí cột>" để tra cứu lại khi đối chiếu với file bảng giá thật (xem detectColumnMapFromTemplate()).
+async function parsePriceTemplateColumns(buffer) {
+  const rows = await readSheetRows(buffer);
+  if (!rows.length || !rows[0].length) throw new HttpError(400, 'File mẫu không có dòng tiêu đề nào');
+  const headerCells = rows[0];
+  const seenKeys = new Set();
+  const columns = [];
   headerCells.forEach((raw, idx) => {
-    const h = normalizeHeader(raw);
-    if (!h) return;
-    for (const field of Object.keys(MASTER_FIELD_HINTS)) {
-      if (map[field] !== undefined) continue;
-      if (MASTER_FIELD_HINTS[field].some(hint => h === hint)) {
-        map[field] = idx;
-        if (field === 'name') foundName = true;
-      }
+    const label = String(raw || '').trim();
+    if (!label) return;
+    const h = normalizeHeader(label);
+    let key = null;
+    for (const field of Object.keys(FIELD_HINTS)) {
+      if (seenKeys.has(field)) continue;
+      if (FIELD_HINTS[field].some((hint) => h === hint)) { key = field; break; }
     }
+    if (!key) key = `extra_${idx}`;
+    seenKeys.add(key);
+    columns.push({ key, label: label.slice(0, 100) });
   });
-  return foundName ? map : null;
-}
-
-function rowsToMasterItems(rows) {
-  if (!rows.length) throw new HttpError(400, 'File giá mẫu trống, không có dữ liệu');
-  const colMap = detectMasterColumnMap(rows[0]);
-  const dataRows = colMap ? rows.slice(1) : rows;
-  const idx = colMap || { code: 0, name: 1, price: 2 };
-
-  const items = [];
-  const seenCodes = new Set();
-  for (const cells of dataRows) {
-    const name = String(cells[idx.name] ?? '').trim();
-    if (!name) continue;
-    const code = idx.code !== undefined ? String(cells[idx.code] ?? '').trim() : '';
-    const dedupeKey = code || normalizeHeader(name);
-    if (seenCodes.has(dedupeKey)) continue; // bỏ dòng trùng mã/tên trong CÙNG 1 file
-    seenCodes.add(dedupeKey);
-    const price = idx.price !== undefined ? parsePrice(cells[idx.price]) : null;
-    if (!Number.isFinite(price) || price <= 0) continue; // dòng không có giá hợp lệ -> bỏ qua
-    items.push({ code, name, price });
+  if (!columns.some((c) => c.key === 'name')) {
+    throw new HttpError(400, 'Mẫu Giá cần có ít nhất 1 cột nhận diện được là "Tên mặt hàng"');
   }
-  if (!items.length) {
-    throw new HttpError(400, 'Không đọc được dòng giá nào hợp lệ từ file mẫu (cần có cột Tên mặt hàng và Giá lớn hơn 0)');
+  if (!columns.some((c) => c.key === 'newPrice')) {
+    throw new HttpError(400, 'Mẫu Giá cần có ít nhất 1 cột nhận diện được là "Giá mới"');
   }
-  if (items.length > 20000) throw new HttpError(400, 'File giá mẫu quá nhiều dòng (tối đa 20.000 mặt hàng/tệp)');
-  return items;
-}
-
-async function parsePriceMasterFile(buffer) {
-  const workbook = new ExcelJS.Workbook();
-  await workbook.xlsx.load(buffer);
-  const sheet = workbook.worksheets[0];
-  if (!sheet) throw new HttpError(400, 'File Excel không có sheet dữ liệu nào');
-  const rows = [];
-  sheet.eachRow({ includeEmpty: false }, (row) => {
-    const cells = [];
-    row.eachCell({ includeEmpty: true }, (cell) => { cells.push(cell.value == null ? '' : String(cell.value)); });
-    rows.push(cells);
-  });
-  return rowsToMasterItems(rows);
-}
-
-// Làm sạch 1 mảng items ĐÃ ĐƯỢC PARSE TỪ SERVER cho File Giá Mẫu — cùng mức tin cậy với
-// sanitizePriceFileItems() ở trên, chặn payload giả mạo trước khi ghi vào DB.
-function sanitizeMasterItems(rawItems) {
-  const items = Array.isArray(rawItems) ? rawItems : [];
-  const cleaned = [];
-  for (const it of items) {
-    const name = String(it?.name || '').trim();
-    const price = Number(it?.price);
-    if (!name || !Number.isFinite(price) || price <= 0) continue;
-    cleaned.push({ code: String(it?.code || '').trim().slice(0, 60), name: name.slice(0, 200), price });
-    if (cleaned.length >= 20000) break;
-  }
-  if (!cleaned.length) throw new HttpError(400, 'Tệp giá mẫu không có dòng hợp lệ nào (thiếu tên mặt hàng hoặc giá)');
-  return cleaned;
-}
-
-// So khớp items (đã parse từ 1 file bảng giá ĐỀ XUẤT) với items của 1 File Giá Mẫu — key theo Mã hàng,
-// dự phòng Tên mặt hàng chuẩn hoá (khớp đúng quy tắc diffPriceFileItems() ở client dùng để so 2 lần tải
-// file bổ sung). "matched" CHỈ true khi vừa CÓ trong file mẫu vừa ĐÚNG giá cũ người đề xuất khai báo so
-// với giá mẫu hiện ghi nhận — mục đích là xác nhận "giá cũ" khai đúng thực tế trước khi bỏ qua bước
-// duyệt tay, không chỉ cần tồn tại mã hàng.
-function matchAgainstMaster(items, masterItems) {
-  const keyOf = (it) => it.code || normalizeHeader(it.name);
-  const masterMap = new Map((masterItems || []).map(m => [keyOf(m), m]));
-  return (items || []).map(it => {
-    const master = masterMap.get(keyOf(it));
-    if (!master) return { ...it, matched: false, masterPrice: null };
-    const matched = Number.isFinite(it.oldPrice) && Number(master.price) === Number(it.oldPrice);
-    return { ...it, matched, masterPrice: master.price };
-  });
+  if (columns.length > 50) throw new HttpError(400, 'Mẫu Giá quá nhiều cột (tối đa 50 cột/tệp)');
+  return columns;
 }
 
 module.exports = {
-  parsePriceFile, sanitizePriceFileItems,
-  parsePriceMasterFile, sanitizeMasterItems, matchAgainstMaster
+  parsePriceFile, sanitizePriceFileItems, sanitizeColumnLabels, DEFAULT_COLUMN_LABELS,
+  parsePriceTemplateColumns
 };

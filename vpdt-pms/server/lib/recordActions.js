@@ -11,7 +11,7 @@
 const { HttpError } = require('./httpErrors');
 const { scopeAllows, OFFICE_SUBTYPE_TO_PERM_FLAG, normalizeReportEntryPayload, buildEffectiveContractApprovalWorkflowServer, sanitizeUniformItems, sanitizeBudgetLines, getBudgetTemplateCustomFields, sanitizeBudgetCustomFields, resolveTrainingInstructorUsername, normalizeInviteList, normalizeTrainingPlanFields, normalizeOnboardingPathFields, SUBMISSION_APPROVAL_LEVELS, buildEffectiveSubmissionWorkflowServer } = require('./createValidation');
 const { validateRegistrationItems: validateVppRegItems, calcItemsTotal: calcVppItemsTotal } = require('./vppCatalog');
-const { sanitizePriceFileItems } = require('./priceFileParser');
+const { sanitizePriceFileItems, sanitizeColumnLabels } = require('./priceFileParser');
 
 function nowVN() {
   return new Date().toLocaleString('vi-VN');
@@ -2218,13 +2218,23 @@ function editTrainingClass(payload, user, cls, tests, users, courses) {
   cls.category = String(cls.category).trim();
   cls.title = String(cls.title).trim();
   cls.capacity = Number(cls.capacity) > 0 ? Math.floor(Number(cls.capacity)) : 0;
-  cls.passScore = (cls.passScore === '' || cls.passScore == null) ? null : Number(cls.passScore);
   cls.documentIds = Array.isArray(cls.documentIds) ? cls.documentIds.map(Number).filter(Number.isFinite) : [];
   const testId = cls.testId === '' || cls.testId == null ? null : Number(cls.testId);
   if (testId != null && (!Number.isFinite(testId) || !(tests || []).some(t => t.id === testId))) {
     throw new HttpError(400, 'Bài test được chọn không hợp lệ');
   }
   cls.testId = testId;
+  // Điểm Đạt (%) — cùng luật bắt buộc với lúc TẠO lớp (xem createValidation.js trainingClasses.
+  // extraValidate): lớp có gán bài test thì bắt buộc Điểm Đạt hợp lệ (1-100), không có test thì null.
+  if (cls.testId != null) {
+    const passScore = Number(cls.passScore);
+    if (!Number.isFinite(passScore) || passScore <= 0 || passScore > 100) {
+      throw new HttpError(400, 'Lớp có gán Bài Test cần nhập Điểm Đạt Yêu Cầu hợp lệ (1-100)');
+    }
+    cls.passScore = passScore;
+  } else {
+    cls.passScore = null;
+  }
   const secPerQ = Number(cls.testSecondsPerQuestion);
   cls.testSecondsPerQuestion = Number.isFinite(secPerQ) && secPerQ >= 10 ? Math.floor(secPerQ) : 120;
   // Chương Trình (courseId, Đợt 4, tuỳ chọn) — cùng luật validate với lúc TẠO lớp (xem
@@ -2289,7 +2299,7 @@ function endOfflineTrainingClass(user, cls) {
 // client tự tính gửi kèm, chỉ nhận rawAnswers (câu nào chọn đáp án nào). Đúng 1 câu hỏi = tập hợp đáp án
 // chọn khớp CHÍNH XÁC tập hợp đáp án đúng (không thừa, không thiếu) — áp dụng cho cả loại 1 đáp án lẫn
 // nhiều đáp án, chấm dứt khoát đúng/sai từng câu, không chấm điểm từng phần.
-function gradeTrainingTestSubmission(rawAnswers, test) {
+function gradeTrainingTestSubmission(rawAnswers, test, classPassScore) {
   const answersByQ = new Map();
   (Array.isArray(rawAnswers) ? rawAnswers : []).forEach(a => {
     const qId = Number(a?.questionId);
@@ -2308,7 +2318,12 @@ function gradeTrainingTestSubmission(rawAnswers, test) {
   });
 
   const percentage = totalPoints > 0 ? Math.round((score / totalPoints) * 100) : 0;
-  const passed = percentage >= (test.passScore || 60);
+  // Ngưỡng đạt/không đạt lấy từ ĐIỂM ĐẠT của LỚP HỌC (cls.passScore, lập lúc tạo lớp) — KHÔNG đọc lại
+  // trainingTests.passScore (bài test cũng có field passScore nhưng CHỈ để autofill gợi ý ở client lúc
+  // chọn test, xem createValidation.js). Giữ fallback 60 cho dữ liệu lớp cũ trước khi có ràng buộc bắt
+  // buộc nhập Điểm Đạt khi gán test.
+  const threshold = Number.isFinite(Number(classPassScore)) && Number(classPassScore) > 0 ? Number(classPassScore) : 60;
+  const passed = percentage >= threshold;
   return { answers, score, totalPoints, percentage, passed };
 }
 
@@ -2652,13 +2667,14 @@ function submitPriceSupplementFile(user, item, payload) {
   const file = payload?.file;
   if (!file || !file.fileUrl) throw new HttpError(400, 'Vui lòng tải lên tệp bảng giá bổ sung (.xlsx)');
   const items = sanitizePriceFileItems(file.items);
+  const columnLabels = sanitizeColumnLabels(file.columnLabels);
   const newFile = {
     id: Date.now(),
     fileUrl: String(file.fileUrl).slice(0, 300),
     fileName: (String(file.fileName || '').trim() || 'bang-gia-bo-sung.xlsx').slice(0, 200),
     uploadedBy: user.username, uploadedByName: user.name,
     uploadedAt: nowVN(),
-    items
+    items, columnLabels
   };
   item.files = item.files || [];
   item.files.push(newFile);

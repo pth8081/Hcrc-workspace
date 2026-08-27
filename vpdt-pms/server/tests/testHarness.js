@@ -27,6 +27,9 @@ const path = require('path');
 const { HttpError } = require('../lib/httpErrors');
 const recordActions = require('../lib/recordActions');
 const { CREATE_MODULE_CONFIGS, validateAndPrepareCreate } = require('../lib/createValidation');
+const { MODULE_CONFIGS: WF_MODULE_CONFIGS, applyWorkflowAction } = require('../lib/workflowEngine');
+
+const WF_ACTION_MAP = { approve: 'APPROVE', reject: 'REJECT', 'request-info': 'REQUEST_INFO', 'request-changes': 'REQUEST_CHANGES' };
 
 const PUBLIC_DIR = path.join(__dirname, '..', 'public');
 
@@ -248,6 +251,30 @@ function createDispatcher(state) {
         }
         state.uniformCatalog = body;
         return { status: 200, body: {} };
+      }
+
+      // POST /api/workflow/:module/:id/:action — mirror routes/workflow.js's generic dept-workflow
+      // approve/reject route (dùng chung lib/workflowEngine.js's MODULE_CONFIGS + applyWorkflowAction()
+      // thật, KHÔNG tự đoán lại logic duyệt). Cần cho các module bỏ auto-approve (vd itPriceApprovals
+      // sau khi Mẫu Giá chỉ còn là khuôn cột — xem lib/createValidation.js) mà test vẫn cần đưa hồ sơ
+      // tới APPROVED qua đúng bước duyệt phòng ban thật trước khi kiểm thử các bước tiếp theo.
+      if ((m = pathName.match(/^\/api\/workflow\/([^/]+)\/(\d+)\/([^/]+)$/)) && method === 'POST') {
+        const moduleKey = m[1];
+        const id = Number(m[2]);
+        const config = WF_MODULE_CONFIGS[moduleKey];
+        if (!config) return { status: 400, body: { error: `Module không hợp lệ: ${moduleKey}` } };
+        const action = WF_ACTION_MAP[m[3]];
+        if (!action) return { status: 400, body: { error: `Hành động không hợp lệ: ${m[3]}` } };
+        const list = state[config.dbKey] || [];
+        const idx = list.findIndex(x => x.id === id);
+        if (idx === -1) return { status: 404, body: { error: 'Không tìm thấy hồ sơ' } };
+        const appData = buildAppDataForCreate(moduleKey, state);
+        const outcome = applyWorkflowAction({
+          moduleKey, item: list[idx], action, user: freshUser,
+          comment: body.comment, extraFields: body.extraFields, appData, existingCollection: null, users: state.users
+        });
+        list[idx] = outcome.item;
+        return { status: 200, body: { ok: true, item: outcome.item, transition: outcome.transition } };
       }
 
       if ((m = pathName.match(/^\/api\/records\/([^/]+)\/(\d+)\/([^/]+)$/)) && method === 'POST') {
