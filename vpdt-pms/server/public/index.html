@@ -10848,11 +10848,15 @@ function getContractTypeAbbr(typeName) {
   return DB.contractTypeAbbrs[typeName] || deriveAbbr(typeName, null);
 }
 
-// Đếm số HỢP ĐỒNG GỐC (không tính phụ lục — isAddendum) đã có mã bắt đầu bằng prefix này, để sinh số
-// thứ tự tiếp theo — cùng mô hình computeNextDocSeq() ở trên.
+// Số thứ tự TIẾP THEO cho HỢP ĐỒNG GỐC (không tính phụ lục — isAddendum) — lấy số LỚN NHẤT từng xuất
+// hiện (không phải đếm số lượng còn lại), cùng nguyên lý computeNextDocSeq() ở trên — tránh sinh trùng
+// mã nếu 1 hợp đồng ở giữa dãy số đã bị xóa trước đó.
 function computeNextContractSeq(prefix) {
   const existing = DB.contracts.filter(c => !c.isAddendum && (c.code || '').startsWith(prefix));
-  return existing.length + 1;
+  return existing.reduce((max, c) => {
+    const n = parseInt(String(c.code || '').slice(prefix.length), 10);
+    return Number.isFinite(n) && n > max ? n : max;
+  }, 0) + 1;
 }
 
 // Mã Hợp Đồng tự sinh = HCRC-<viết tắt Phòng ban>-<viết tắt Loại Pháp Lý>-<số thứ tự 3 số>.
@@ -10863,30 +10867,39 @@ function generateContractCode(dept, type) {
 }
 
 // Mã Phụ Lục Hợp Đồng = <Mã hợp đồng gốc>-PLHD<số thứ tự 2 số> — đánh số RIÊNG theo từng hợp đồng
-// (không dùng chung 1 dãy số toàn hệ thống), tăng dần so với các phụ lục đã có của CHÍNH hợp đồng đó.
+// (không dùng chung 1 dãy số toàn hệ thống). Lấy số LỚN NHẤT từng xuất hiện (không phải đếm số lượng
+// còn lại), cùng nguyên lý computeNextDocSeq() ở trên — tránh sinh trùng mã nếu 1 phụ lục ở giữa dãy
+// số đã bị xóa trước đó.
 function computeNextAddendumSeq(rootContractId) {
   const existing = DB.contracts.filter(c => c.isAddendum && c.rootContractId === rootContractId);
-  return existing.length + 1;
+  return existing.reduce((max, c) => {
+    const n = parseInt(String(c.code || '').replace(/^.*-PLHD/, ''), 10);
+    return Number.isFinite(n) && n > max ? n : max;
+  }, 0) + 1;
 }
 function generateAddendumCode(rootContract) {
   const seq = computeNextAddendumSeq(rootContract.id);
   return `${rootContract.code}-PLHD${String(seq).padStart(2, '0')}`;
 }
 
-// ============ MÃ TỰ SINH cho 5 module trước đây phải gõ tay: Văn Bản Trình, Đăng Ký Xe, Mua Bán/Sửa
-// Chữa/Đầu Tư (dùng chung 1 form theo activeOfficeSubTab), Biên Bản Họp, Đặt Phòng Họp. Định dạng
-// HCRC-<viết tắt module>-<ngày tạo YYYYMMDD>-<số thứ tự 3 số>, số thứ tự đánh RIÊNG theo từng ngày+
-// module (không dùng chung 1 dãy số toàn hệ thống) — cùng nguyên lý computeNextDocSeq()/
-// computeNextContractSeq() ở trên, gộp lại 1 hàm dùng chung vì cả 5 module đếm-theo-tiền-tố giống hệt
-// nhau (khác computeNextDocSeq/computeNextContractSeq chỉ vì 2 hàm đó có thêm điều kiện lọc riêng —
-// bỏ qua version con/phụ lục — không áp dụng cho 5 module này).
+// ============ MÃ TỰ SINH cho 7 module trước đây phải gõ tay: Văn Bản Trình, Đăng Ký Xe, Mua Bán/Sửa
+// Chữa/Đầu Tư (dùng chung 1 form theo activeOfficeSubTab), Biên Bản Họp, Đặt Phòng Họp, Phê Duyệt Giá
+// IT, Ticket Hỗ Trợ IT. Định dạng HCRC-<viết tắt module>-<ngày tạo YYYYMMDD>-<số thứ tự 3 số>, số thứ
+// tự đánh RIÊNG theo từng ngày+module (không dùng chung 1 dãy số toàn hệ thống). Lấy số LỚN NHẤT từng
+// xuất hiện (không phải đếm số lượng còn lại) — cùng nguyên lý computeNextDocSeq() ở trên — tránh sinh
+// trùng mã nếu 1 bản ghi ở giữa dãy số đã bị admin xóa trước đó (trước đây đếm-theo-số-lượng nên xóa 1
+// bản ghi giữa dãy 001/002/003 sẽ khiến bản ghi mới sinh lại đúng mã 003 đang tồn tại, bị chặn "Mã đã
+// tồn tại" — đúng lỗi người dùng báo lại).
 function todayCodeDatePart() {
   const d = new Date();
   return `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}`;
 }
 function computeNextHcrcSeq(records, prefix) {
   const existing = records.filter(r => (r.code || '').startsWith(prefix));
-  return existing.length + 1;
+  return existing.reduce((max, r) => {
+    const n = parseInt(String(r.code || '').slice(prefix.length), 10);
+    return Number.isFinite(n) && n > max ? n : max;
+  }, 0) + 1;
 }
 function generateHcrcCode(records, moduleAbbr) {
   const prefix = `HCRC-${moduleAbbr}-${todayCodeDatePart()}-`;
