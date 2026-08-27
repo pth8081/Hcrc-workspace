@@ -6141,7 +6141,7 @@ const DB = {
   workflows: [], deptWorkflows: {},
   submissions: [], submissionDeptWorkflows: {},
   submissionTypeDeptWorkflows: {}, submissionApprovalGroups: {},
-  contracts: [],
+  contracts: [], contractApprovalGroups: {}, contractApprovalDeptWorkflows: {}, contractManageDeptWorkflows: {},
   meetings: [],
   carRegs: [], carDeptWorkflows: {},
   officeReqs: [],
@@ -7772,6 +7772,15 @@ async function initDatabase(loggingInUser) {
     DB.officeInvestDeptWorkflows = data.officeInvestDeptWorkflows || {};
     DB.vppDeptWorkflows = data.vppDeptWorkflows || {};
     DB.itPriceDeptWorkflows = data.itPriceDeptWorkflows || {};
+    // Sửa lỗi cũ tương tự uploadFileTypeConfig/uploadSizeLimitConfig ở trên: 3 dòng dưới đây trước nay
+    // CHƯA từng được gán từ data (server đã trả đúng — xem routes/data.js — nhưng client không đọc vào),
+    // khiến "Nhóm Phê Duyệt HĐ" (mục 14 Phân Quyền) không vẽ được ô chọn người (renderContractApprovalGroups()
+    // truy cập DB.contractApprovalGroups[key] trên giá trị undefined, ném lỗi và dừng cả vòng lặp render
+    // giữa chừng), và cấu hình quy trình Hợp Đồng theo phòng ban (mục 13, 2 khối "Hợp đồng - Phê duyệt"/
+    // "Hợp đồng - Quản Lý HĐ") luôn hiện lại như chưa cấu hình gì mỗi lần tải lại trang.
+    DB.contractApprovalGroups = data.contractApprovalGroups || {};
+    DB.contractApprovalDeptWorkflows = data.contractApprovalDeptWorkflows || {};
+    DB.contractManageDeptWorkflows = data.contractManageDeptWorkflows || {};
 
     DB.vppPeriods = data.vppPeriods || [];
     DB.vppRegistrations = data.vppRegistrations || [];
