@@ -26,3 +26,13 @@ Quy trình cập nhật đầy đủ đã viết sẵn ở mục 12 `HUONG_DAN_D
 (thư mục gốc, bản DUY NHẤT — đã gộp bản trùng lặp từng có trong `server/`) —
 trỏ người dùng tới đó thay vì lặp lại toàn bộ mỗi lần, chỉ nêu phần khác biệt
 cụ thể của lần cập nhật đang báo cáo.
+
+## Luôn tăng version khi merge vào main
+
+Mỗi lần merge PR vào main (bất kể tính năng lớn hay fix nhỏ), **luôn tăng
+`server/package.json` field `version`** trong CÙNG PR trước khi merge — theo
+kiểu semver không chặt (patch cho fix nhỏ, minor cho tính năng mới). Đây là
+version DUY NHẤT client đọc (badge góc màn hình + `/api/health`, xem
+`server.js` require `./package.json`), không có bản sao nào khác cần sửa.
+Nếu lỡ quên ở 1-2 lần merge trước, bump bắt kịp luôn (cộng dồn số lần đã bỏ
+lỡ) ở lần merge kế tiếp thay vì bỏ qua.
