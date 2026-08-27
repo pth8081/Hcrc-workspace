@@ -2034,6 +2034,11 @@ function canManageTrainingClass(user, cls) {
   return !!(user?.perms?.trainingInstruct && cls?.instructorUsername && cls.instructorUsername === user.username);
 }
 
+// Đợt 9 — học viên tự gửi KHÔNG còn huỷ có hiệu lực ngay nữa: chỉ tạo 1 yêu cầu đang chờ
+// (pendingCancellation), phải được trainingManage/admin duyệt mới thật sự chuyển sang CANCELLED (xem
+// approveCancelTrainingRegistration() ngay dưới) — tránh học viên tự ý bỏ lớp giữa chừng phá vỡ sĩ
+// số/kế hoạch đã chốt mà không ai hay biết. Admin tự huỷ (hộ ai đó hoặc của chính mình) vẫn có hiệu lực
+// NGAY như cũ vì admin đã LÀ cấp thẩm quyền cao nhất, không cần qua thêm 1 lớp duyệt của trainingManage.
 function cancelTrainingRegistration(payload, user, reg) {
   if (reg.creator !== user.username && !user.perms?.admin) {
     throw new HttpError(403, 'Bạn chỉ có thể huỷ đăng ký của chính mình');
@@ -2041,10 +2046,65 @@ function cancelTrainingRegistration(payload, user, reg) {
   if (reg.result !== 'REGISTERED') {
     throw new HttpError(409, 'Đăng ký này không còn ở trạng thái có thể huỷ');
   }
+  if (user.perms?.admin) {
+    reg.result = 'CANCELLED';
+    reg.resultBy = user.username;
+    reg.resultByName = user.name;
+    reg.resultAt = nowVN();
+    reg.pendingCancellation = null;
+    return reg;
+  }
+  if (reg.pendingCancellation) {
+    throw new HttpError(409, 'Bạn đã gửi yêu cầu huỷ đăng ký này từ trước, đang chờ duyệt');
+  }
+  reg.pendingCancellation = {
+    reason: payload?.reason ? String(payload.reason).trim() : '',
+    requestedBy: user.username, requestedByName: user.name, requestedAt: nowVN()
+  };
+  return reg;
+}
+
+// Duyệt/từ chối yêu cầu huỷ ở trên — CỐ Ý chỉ trainingManage/admin (KHÔNG mở cho trainingInstruct dù
+// giảng viên đó quản lý được lớp, vì đây là quyết định ảnh hưởng tới kế hoạch đào tạo chung của Nhân Sự,
+// không phải nghiệp vụ giảng dạy đơn thuần của giảng viên).
+function approveCancelTrainingRegistration(payload, user, reg) {
+  if (!user.perms?.admin && !user.perms?.trainingManage) {
+    throw new HttpError(403, 'Bạn không có quyền duyệt yêu cầu huỷ đăng ký lớp học');
+  }
+  if (!reg.pendingCancellation) throw new HttpError(404, 'Không tìm thấy yêu cầu huỷ đang chờ duyệt');
   reg.result = 'CANCELLED';
   reg.resultBy = user.username;
   reg.resultByName = user.name;
   reg.resultAt = nowVN();
+  reg.pendingCancellation = null;
+  return reg;
+}
+function rejectCancelTrainingRegistration(payload, user, reg) {
+  if (!user.perms?.admin && !user.perms?.trainingManage) {
+    throw new HttpError(403, 'Bạn không có quyền từ chối yêu cầu huỷ đăng ký lớp học');
+  }
+  if (!reg.pendingCancellation) throw new HttpError(404, 'Không tìm thấy yêu cầu huỷ đang chờ duyệt');
+  reg.pendingCancellation = null;
+  return reg;
+}
+
+// Đợt 9 — bắt buộc "học xong mới thi" cho lớp ONLINE: cls.documentIds (giáo trình bắt buộc, chọn lúc
+// tạo/sửa lớp) học viên phải tự đánh dấu đã xem TỪNG tài liệu qua đây trước khi route submit-test cho
+// làm bài (xem gác ở routes/records.js) — KHÔNG áp dụng lớp OFFLINE (giáo trình OFFLINE chỉ là tài liệu
+// tham khảo, gác OFFLINE là sessionState phải ENDED, xem endOfflineTrainingClass()).
+function markTrainingDocumentViewed(payload, user, reg, cls) {
+  if (reg.creator !== user.username) {
+    throw new HttpError(403, 'Bạn chỉ có thể đánh dấu đã xem cho đăng ký của chính mình');
+  }
+  if (reg.result === 'CANCELLED') throw new HttpError(409, 'Đăng ký này đã bị huỷ');
+  const documentId = Number(payload?.documentId);
+  if (!Number.isFinite(documentId)) throw new HttpError(400, 'Thiếu documentId');
+  const requiredIds = Array.isArray(cls?.documentIds) ? cls.documentIds : [];
+  if (!requiredIds.includes(documentId)) {
+    throw new HttpError(400, 'Tài liệu này không thuộc giáo trình bắt buộc của lớp học');
+  }
+  reg.viewedDocumentIds = Array.isArray(reg.viewedDocumentIds) ? reg.viewedDocumentIds : [];
+  if (!reg.viewedDocumentIds.includes(documentId)) reg.viewedDocumentIds.push(documentId);
   return reg;
 }
 
@@ -3239,7 +3299,8 @@ module.exports = {
   closeReportPeriod, submitReportEntry, updateReportEntryDraft,
   mergeReportPeriod, mergeReportPeriodByTasks, updateReportCompilation, publishReportPeriod, unpublishReportPeriod,
   updateReportSlideTemplate,
-  canManageTraining, canManageTrainingClass, cancelTrainingRegistration, setTrainingRegistrationResult, confirmCareerPathForEmployee,
+  canManageTraining, canManageTrainingClass, cancelTrainingRegistration, approveCancelTrainingRegistration,
+  rejectCancelTrainingRegistration, markTrainingDocumentViewed, setTrainingRegistrationResult, confirmCareerPathForEmployee,
   bulkRegisterTrainingClass, editTrainingClass, startOfflineTrainingClass, endOfflineTrainingClass, editTrainingPlan,
   gradeTrainingTestSubmission, applyAutoGradedTestResult,
   editOnboardingPath, confirmOnboardingStage, canEvaluateOnboardingStage3, evaluateOnboardingStage3, issueOnboardingCertificate,

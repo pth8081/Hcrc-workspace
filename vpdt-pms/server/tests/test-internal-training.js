@@ -25,9 +25,15 @@ async function main() {
     // giảng viên (instructorUsername), không tạo lớp mới được, không đụng được lớp của giảng viên khác.
     const instructorA = makeUser({ username: 'gv.a', name: 'Giảng Viên A', dept: 'Phòng CNTT', perms: { trainingInstruct: true } });
     const instructorB = makeUser({ username: 'gv.b', name: 'Giảng Viên B', dept: 'Phòng Kế Toán', perms: { trainingInstruct: true } });
+    // Đợt 9 — huỷ đăng ký (chờ duyệt) + gác "học xong mới thi": admin để kiểm tra huỷ có hiệu lực NGAY
+    // (bỏ qua bước duyệt), nv5 là học viên "sạch" chưa dính tới bất kỳ kịch bản nào ở trên (mọi
+    // nv1-nv4 đều đã có kết quả PASSED/FAILED trên onlineClassId vào cuối file, không còn ở trạng thái
+    // REGISTERED để thử huỷ được nữa).
+    const admin = makeUser({ username: 'admin.a', name: 'Quản Trị A', dept: 'Phòng Nhân Sự', perms: { admin: true } });
+    const nv5 = makeUser({ username: 'nv5', name: 'Học Viên Năm', dept: 'Phòng CNTT', perms: {} });
 
     await page.evaluate((seed) => { Object.assign(DB, seed); }, baseCatalogSeed());
-    await page.evaluate((users) => { DB.users = users; }, [trainer, nv1, nv2, nv3, nv4, instructorA, instructorB]);
+    await page.evaluate((users) => { DB.users = users; }, [trainer, nv1, nv2, nv3, nv4, nv5, instructorA, instructorB, admin]);
     await page.evaluate((u) => finishLogin(u), trainer);
     await page.evaluate(() => { switchTab('internal'); setInternalSubTab('TRAINING'); setTrainingLmsTab('TESTS'); });
 
@@ -746,6 +752,228 @@ async function main() {
       reg = await page.evaluate((id) => DB.trainingRegistrations.find((r) => r.classId === id && r.creator === 'nv4'), onlineClassId);
       assertEqual(reg.result, 'PASSED', `expected nv4 to PASS answering correctly regardless of shuffled order, got ${reg.result}`);
       assertEqual(reg.score, 100, `expected 100%, got ${reg.score}`);
+    });
+
+    // ===================== Đợt 9: huỷ đăng ký phải chờ trainingManage/admin duyệt =====================
+    // window.fetch ở đây là mock trong-trang (xem _harness.js) — nó KHÔNG tự cập nhật DB.trainingRegistrations
+    // của client, mọi hàm khác trong app đều tự ghi lại `DB.trainingRegistrations[idx] = result.item` sau
+    // mỗi lần gọi callRecordAction() (xem cancelTrainingRegistrationAction() ở index.html) — quên bước
+    // này khiến lần đọc lại `DB.trainingRegistrations.find(...)` kế tiếp trả về bản CŨ (chưa có
+    // pendingCancellation), làm sai lệch toàn bộ chuỗi kịch bản tiếp theo, nên mọi bước dưới đây đều tự
+    // đồng bộ lại ngay sau khi gọi, giống hệt code thật.
+    async function syncTrainingReg(updated) {
+      await page.evaluate((it) => {
+        const idx = DB.trainingRegistrations.findIndex((r) => r.id === it.id);
+        if (idx !== -1) DB.trainingRegistrations[idx] = it; else DB.trainingRegistrations.push(it);
+      }, updated);
+    }
+
+    await run('a plain student self-cancelling only creates a PENDING request, does not cancel immediately', async () => {
+      await page.evaluate((u) => { currentUser = u; }, nv5);
+      await page.evaluate((id) => registerForTrainingClass(id), onlineClassId);
+      let reg = await page.evaluate((id) => DB.trainingRegistrations.find((r) => r.classId === id && r.creator === 'nv5'), onlineClassId);
+      assert(reg, 'nv5 should have registered successfully');
+      const result = await page.evaluate(async (regId) => callRecordAction('trainingRegistrations', regId, 'cancel', { reason: 'Bận việc đột xuất' }), reg.id);
+      const updated = result.item;
+      assertEqual(updated.result, 'REGISTERED', 'result must stay REGISTERED — a non-admin cancel is only a pending request, not immediate');
+      assert(updated.pendingCancellation, 'expected pendingCancellation to be set');
+      assertEqual(updated.pendingCancellation.reason, 'Bận việc đột xuất', 'pendingCancellation.reason mismatch');
+      assertEqual(updated.pendingCancellation.requestedBy, 'nv5', 'pendingCancellation.requestedBy mismatch');
+      await syncTrainingReg(updated);
+    });
+
+    await run('sending a second cancel request while one is already pending is rejected', async () => {
+      let errMsg = null;
+      const reg = await page.evaluate((id) => DB.trainingRegistrations.find((r) => r.classId === id && r.creator === 'nv5'), onlineClassId);
+      await page.evaluate(async (regId) => {
+        window.__lastCreateErr = null;
+        try { await callRecordAction('trainingRegistrations', regId, 'cancel', {}); }
+        catch (err) { window.__lastCreateErr = err.message; }
+      }, reg.id);
+      errMsg = await page.evaluate(() => window.__lastCreateErr);
+      assert(errMsg && errMsg.includes('đang chờ duyệt'), `expected an already-pending error, got: ${errMsg}`);
+    });
+
+    await run('a trainingInstruct-only user (NOT trainingManage/admin) cannot approve or reject a cancel request', async () => {
+      const reg = await page.evaluate((id) => DB.trainingRegistrations.find((r) => r.classId === id && r.creator === 'nv5'), onlineClassId);
+      await page.evaluate((u) => { currentUser = u; }, instructorA);
+      let errMsg = null;
+      await page.evaluate(async (regId) => {
+        window.__lastCreateErr = null;
+        try { await callRecordAction('trainingRegistrations', regId, 'approve-cancel', {}); }
+        catch (err) { window.__lastCreateErr = err.message; }
+      }, reg.id);
+      errMsg = await page.evaluate(() => window.__lastCreateErr);
+      assert(errMsg && errMsg.includes('không có quyền duyệt'), `expected a permission error for approve-cancel, got: ${errMsg}`);
+      await page.evaluate(async (regId) => {
+        window.__lastCreateErr = null;
+        try { await callRecordAction('trainingRegistrations', regId, 'reject-cancel', {}); }
+        catch (err) { window.__lastCreateErr = err.message; }
+      }, reg.id);
+      errMsg = await page.evaluate(() => window.__lastCreateErr);
+      assert(errMsg && errMsg.includes('không có quyền từ chối'), `expected a permission error for reject-cancel, got: ${errMsg}`);
+    });
+
+    await run('trainingManage rejects the request — registration stays REGISTERED and can be re-requested', async () => {
+      await page.evaluate((u) => { currentUser = u; }, trainer);
+      const reg = await page.evaluate((id) => DB.trainingRegistrations.find((r) => r.classId === id && r.creator === 'nv5'), onlineClassId);
+      const result = await page.evaluate(async (regId) => callRecordAction('trainingRegistrations', regId, 'reject-cancel', {}), reg.id);
+      const updated = result.item;
+      assertEqual(updated.result, 'REGISTERED', 'result should remain REGISTERED after rejection');
+      assertEqual(updated.pendingCancellation, null, 'pendingCancellation should be cleared after rejection');
+      await syncTrainingReg(updated);
+
+      await page.evaluate((u) => { currentUser = u; }, nv5);
+      const result2 = await page.evaluate(async (regId) => callRecordAction('trainingRegistrations', regId, 'cancel', {}), reg.id);
+      assert(result2.item.pendingCancellation, 'nv5 should be able to send a new cancel request after the previous one was rejected');
+      await syncTrainingReg(result2.item);
+    });
+
+    await run('trainingManage approves the request — registration finally becomes CANCELLED', async () => {
+      await page.evaluate((u) => { currentUser = u; }, trainer);
+      const reg = await page.evaluate((id) => DB.trainingRegistrations.find((r) => r.classId === id && r.creator === 'nv5'), onlineClassId);
+      const result = await page.evaluate(async (regId) => callRecordAction('trainingRegistrations', regId, 'approve-cancel', {}), reg.id);
+      const updated = result.item;
+      assertEqual(updated.result, 'CANCELLED', 'result should become CANCELLED once trainingManage approves');
+      assertEqual(updated.resultBy, 'gv.linh', 'resultBy should be the approver');
+      assertEqual(updated.pendingCancellation, null, 'pendingCancellation should be cleared after approval');
+      await syncTrainingReg(updated);
+    });
+
+    await run('Admin cancelling directly (a re-registration after the CANCELLED one above) has IMMEDIATE effect, no pending request', async () => {
+      // nv5's earlier registration on onlineClassId is now CANCELLED (previous scenario) — CANCELLED
+      // registrations don't count as "active" (extraValidate filters result !== 'CANCELLED'), so nv5 can
+      // register again for the same class, giving us a fresh REGISTERED row to admin-cancel here.
+      await page.evaluate((u) => { currentUser = u; }, nv5);
+      await page.evaluate((id) => registerForTrainingClass(id), onlineClassId);
+      const reg = await page.evaluate((id) => DB.trainingRegistrations.find((r) => r.classId === id && r.creator === 'nv5' && r.result === 'REGISTERED'), onlineClassId);
+      assert(reg, 'nv5 should have a fresh REGISTERED registration to cancel');
+      await page.evaluate((u) => { currentUser = u; }, admin);
+      const result = await page.evaluate(async (regId) => callRecordAction('trainingRegistrations', regId, 'cancel', {}), reg.id);
+      const updated = result.item;
+      assertEqual(updated.result, 'CANCELLED', 'admin cancel must take effect immediately');
+      assertEqual(updated.pendingCancellation, null, 'admin cancel must never leave a pendingCancellation behind');
+      await syncTrainingReg(updated);
+    });
+
+    // ===================== Đợt 9: ONLINE — phải xem hết giáo trình bắt buộc trước khi thi =====================
+
+    let mandatoryDocClassId = null;
+    let mandatoryDocId = null;
+    await run('trainer creates an ONLINE class with a mandatory document (documentIds) + a test, endTime already in the past', async () => {
+      await page.evaluate((u) => { currentUser = u; }, trainer);
+      mandatoryDocId = await page.evaluate(() => DB.trainingDocuments.find((d) => d.title === 'Sơ Đồ Quy Trình').id);
+      await page.evaluate((tid) => {
+        document.getElementById('tcCategory').value = 'Nghiệp vụ';
+        document.getElementById('tcTitle').value = 'Lớp Có Giáo Trình Bắt Buộc';
+        document.getElementById('tcStart').value = '2020-01-01T08:00';
+        document.getElementById('tcEnd').value = '2020-01-01T10:00'; // đã qua từ lâu -> bài test tự mở NGAY nếu không còn gác nào khác
+        document.getElementById('tcMode').value = 'ONLINE';
+        document.getElementById('tcTestId').value = String(tid);
+        onTrainingClassModeChange();
+      }, testId);
+      await page.evaluate((docId) => {
+        [...document.getElementById('tcDocumentIds').options].forEach((o) => { o.selected = Number(o.value) === docId; });
+      }, mandatoryDocId);
+      await page.evaluate(() => submitTrainingClass({ preventDefault() {}, target: { reset() {} } }));
+      const cls = await page.evaluate(() => DB.trainingClasses.find((c) => c.title === 'Lớp Có Giáo Trình Bắt Buộc'));
+      assert(cls, 'expected the class to be created');
+      mandatoryDocClassId = cls.id;
+      assertEqual(cls.documentIds.length, 1, 'expected exactly 1 mandatory document');
+      assertEqual(cls.documentIds[0], mandatoryDocId, 'documentIds should contain the selected document id');
+    });
+
+    await run('submit-test is blocked while the mandatory document has not been marked as viewed, even though endTime has long passed', async () => {
+      await page.evaluate((u) => { currentUser = u; }, nv5);
+      await page.evaluate((id) => registerForTrainingClass(id), mandatoryDocClassId);
+      let errMsg = null;
+      await page.evaluate(async (classId) => {
+        try { await callRecordAction('trainingClasses', classId, 'submit-test', { answers: [] }); }
+        catch (err) { window.__lastCreateErr = err.message; }
+      }, mandatoryDocClassId);
+      errMsg = await page.evaluate(() => window.__lastCreateErr);
+      assert(errMsg && errMsg.includes('xem hết tài liệu giáo trình'), `expected a must-view-documents error, got: ${errMsg}`);
+    });
+
+    await run('marking an invalid documentId (not in the class\'s documentIds) is rejected', async () => {
+      const reg = await page.evaluate((id) => DB.trainingRegistrations.find((r) => r.classId === id && r.creator === 'nv5'), mandatoryDocClassId);
+      let errMsg = null;
+      await page.evaluate(async (regId) => {
+        try { await callRecordAction('trainingRegistrations', regId, 'mark-document-viewed', { documentId: 999999 }); }
+        catch (err) { window.__lastCreateErr = err.message; }
+      }, reg.id);
+      errMsg = await page.evaluate(() => window.__lastCreateErr);
+      assert(errMsg && errMsg.includes('không thuộc giáo trình bắt buộc'), `expected a not-in-syllabus error, got: ${errMsg}`);
+    });
+
+    await run('a different student cannot mark a document as viewed on someone else\'s registration', async () => {
+      const reg = await page.evaluate((id) => DB.trainingRegistrations.find((r) => r.classId === id && r.creator === 'nv5'), mandatoryDocClassId);
+      await page.evaluate((u) => { currentUser = u; }, nv1);
+      let errMsg = null;
+      await page.evaluate(async ({ regId, docId }) => {
+        try { await callRecordAction('trainingRegistrations', regId, 'mark-document-viewed', { documentId: docId }); }
+        catch (err) { window.__lastCreateErr = err.message; }
+      }, { regId: reg.id, docId: mandatoryDocId });
+      errMsg = await page.evaluate(() => window.__lastCreateErr);
+      assert(errMsg && errMsg.includes('chính mình'), `expected an own-registration-only error, got: ${errMsg}`);
+    });
+
+    await run('after nv5 marks the mandatory document as viewed via the real "Vào Lớp Học" modal, the test unlocks and can be submitted', async () => {
+      await page.evaluate((u) => { currentUser = u; }, nv5);
+      const reg = await page.evaluate((id) => DB.trainingRegistrations.find((r) => r.classId === id && r.creator === 'nv5'), mandatoryDocClassId);
+      await page.evaluate((regId) => openTrainingJoinClassModal(regId), reg.id);
+      const bodyHTML = await page.evaluate(() => document.getElementById('trainingJoinClassBody').innerHTML);
+      assert(bodyHTML.includes('Sơ Đồ Quy Trình'), 'the join-class modal should list the mandatory document by title');
+      await page.evaluate((docId) => markTrainingDocumentViewedAction(docId), mandatoryDocId);
+      const updatedReg = await page.evaluate((id) => DB.trainingRegistrations.find((r) => r.id === id), reg.id);
+      assert(updatedReg.viewedDocumentIds.includes(mandatoryDocId), 'viewedDocumentIds should now include the mandatory document');
+
+      await page.evaluate((id) => openTakeTestModal(id), mandatoryDocClassId);
+      await page.evaluate(async () => {
+        const total = ttTakeQuestions.length;
+        for (let i = 0; i < total; i++) {
+          const q = ttTakeQuestions[ttTakeIndex];
+          q.correctOptionIds.forEach((optId) => ttTakeSelectOption(optId, true));
+          await ttTakeGoNext();
+        }
+      });
+      const finalReg = await page.evaluate((id) => DB.trainingRegistrations.find((r) => r.classId === id && r.creator === 'nv5'), mandatoryDocClassId);
+      assertEqual(finalReg.result, 'PASSED', `expected nv5 to PASS once the document gate is satisfied, got ${finalReg.result}`);
+    });
+
+    // ===================== Đợt 9: OFFLINE — phải chờ giảng viên "Kết Thúc Lớp" mới được thi =====================
+
+    await run('submit-test on an OFFLINE class is blocked while the session has not been ended by the instructor', async () => {
+      await page.evaluate((u) => { currentUser = u; }, nv1);
+      await page.evaluate((id) => registerForTrainingClass(id), offlineClassId);
+      let errMsg = null;
+      await page.evaluate(async (classId) => {
+        try { await callRecordAction('trainingClasses', classId, 'submit-test', { answers: [] }); }
+        catch (err) { window.__lastCreateErr = err.message; }
+      }, offlineClassId);
+      errMsg = await page.evaluate(() => window.__lastCreateErr);
+      assert(errMsg && errMsg.includes('Buổi học chưa kết thúc'), `expected a session-not-ended error, got: ${errMsg}`);
+    });
+
+    await run('once trainingManage starts then ends the OFFLINE session, submit-test succeeds', async () => {
+      await page.evaluate((u) => { currentUser = u; }, trainer);
+      await page.evaluate((id) => startOfflineTrainingClassAction(id), offlineClassId);
+      await page.evaluate((id) => endOfflineTrainingClassAction(id), offlineClassId);
+      const cls = await page.evaluate((id) => DB.trainingClasses.find((c) => c.id === id), offlineClassId);
+      assertEqual(cls.sessionState, 'ENDED', 'expected the OFFLINE class session to be ENDED');
+
+      await page.evaluate((u) => { currentUser = u; }, nv1);
+      await page.evaluate((id) => openTakeTestModal(id), offlineClassId);
+      await page.evaluate(async () => {
+        const total = ttTakeQuestions.length;
+        for (let i = 0; i < total; i++) {
+          const q = ttTakeQuestions[ttTakeIndex];
+          q.correctOptionIds.forEach((optId) => ttTakeSelectOption(optId, true));
+          await ttTakeGoNext();
+        }
+      });
+      const reg = await page.evaluate((id) => DB.trainingRegistrations.find((r) => r.classId === id && r.creator === 'nv1'), offlineClassId);
+      assertEqual(reg.result, 'PASSED', `expected nv1 to PASS once the OFFLINE session has ended, got ${reg.result}`);
     });
 
     assertEqual(pageErrors.length, 0, `unexpected uncaught page errors: ${pageErrors.map((e) => e.message).join(' | ')}`);
