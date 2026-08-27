@@ -310,9 +310,8 @@ async function main() {
     await run('#systemUsersDatalist is already populated when the CREATE-class form is shown (regression: used to be empty on a fresh session — nothing called populateSystemUsersDatalist() before opening Đào Tạo)', async () => {
       await page.evaluate((u) => { currentUser = u; }, trainer);
       await page.evaluate(() => { switchTab('internal'); setInternalSubTab('TRAINING'); setTrainingLmsTab('CLASSES'); });
-      const optionCount = await page.locator('#systemUsersDatalist option').count();
-      assert(optionCount > 0, `expected #systemUsersDatalist to have options right after entering the CLASSES tab, got ${optionCount}`);
-      const optionValues = await page.locator('#systemUsersDatalist option').evaluateAll((opts) => opts.map((o) => o.getAttribute('value')));
+      const optionValues = await page.locator('#systemUsersDatalist').evaluate((dd) => (dd._sddItems || []).map((it) => it.value));
+      assert(optionValues.length > 0, `expected #systemUsersDatalist to have options right after entering the CLASSES tab, got ${optionValues.length}`);
       assert(optionValues.some((v) => v && v.includes('gv.a')), `expected an option for account gv.a among #systemUsersDatalist options, got: ${JSON.stringify(optionValues)}`);
     });
 

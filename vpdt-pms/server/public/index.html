@@ -336,6 +336,13 @@ table { display: block; overflow-x: auto; max-width: 100%; }
 .loginpage-captcha-refresh:active { transform: rotate(90deg); }
 
 .loginpage-card-foot { margin-top: 24px; padding-top: 16px; border-top: 1px solid #eef1f8; font-size: 12.5px; color: #4b5876; text-align: center; line-height: 1.6; }
+
+/* Ô tìm-kiếm-dùng-chung thay <input list>+<datalist> native (xem sddSetOptions() ở script chính) —
+   position:fixed, toạ độ do JS tự tính lại theo ô input đang gõ mỗi lần hiện. */
+.sdd-dropdown {
+  position: fixed; z-index: 9999; background: #fff; border: 1px solid #d1d5db; border-radius: 6px;
+  box-shadow: 0 4px 14px rgba(0,0,0,.12); font-size: 12px; max-height: 14rem; overflow-y: auto;
+}
 </style>
 </head>
 <body class="bg-gray-100 min-h-screen font-sans">
@@ -1085,8 +1092,8 @@ table { display: block; overflow-x: auto; max-width: 100%; }
         <div id="contractAddendumTargetWrap" class="hidden">
           <label class="block font-semibold text-gray-600 mb-1">Chọn Hợp Đồng Để Bổ Sung Phụ Lục</label>
           <input type="hidden" id="contractAddendumTarget" value="">
-          <input id="contractAddendumTargetInput" list="contractAddendumTargetDatalist" oninput="resolveContractAddendumTargetInput(this.value)" placeholder="Gõ mã hoặc tên hợp đồng để tìm..." class="w-full border p-1.5 rounded bg-white">
-          <datalist id="contractAddendumTargetDatalist"></datalist>
+          <input id="contractAddendumTargetInput" data-sdd-list="contractAddendumTargetDatalist" autocomplete="off" oninput="resolveContractAddendumTargetInput(this.value)" placeholder="Gõ mã hoặc tên hợp đồng để tìm..." class="w-full border p-1.5 rounded bg-white">
+          <div id="contractAddendumTargetDatalist" class="hidden sdd-dropdown" data-sdd-dropdown></div>
         </div>
         <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
           <div>
@@ -1114,8 +1121,8 @@ table { display: block; overflow-x: auto; max-width: 100%; }
           <div id="contractApprovalLevelWrap">
             <label class="block font-semibold text-gray-600 mb-1">Cấp Phê Duyệt Cuối Cùng</label>
             <input type="hidden" id="contractApprovalLevel" value="KHAC">
-            <input id="contractApprovalLevelInput" list="contractApprovalLevelDatalist" value="Phê duyệt khác" oninput="resolveContractApprovalLevelInput(this.value)" class="w-full border p-1.5 rounded bg-white font-semibold">
-            <datalist id="contractApprovalLevelDatalist"></datalist>
+            <input id="contractApprovalLevelInput" data-sdd-list="contractApprovalLevelDatalist" autocomplete="off" value="Phê duyệt khác" oninput="resolveContractApprovalLevelInput(this.value)" class="w-full border p-1.5 rounded bg-white font-semibold">
+            <div id="contractApprovalLevelDatalist" class="hidden sdd-dropdown" data-sdd-dropdown></div>
           </div>
           <div id="contractApprovalDropdownWrap" class="relative">
             <label class="block font-semibold text-gray-600 mb-1">Phê Duyệt</label>
@@ -1659,7 +1666,7 @@ table { display: block; overflow-x: auto; max-width: 100%; }
           </div>
           <button type="button" onclick="addAttendeeRow()" class="bg-rose-600 text-white px-3 py-1 rounded text-xs font-bold hover:bg-rose-700">➕ Thêm Người Tham Dự</button>
           <p class="text-[11px] text-gray-500 italic">Cột "Tài khoản" = Có: gõ Họ và tên sẽ gợi ý đúng tài khoản hệ thống (kèm phòng ban để phân biệt người trùng tên) — chọn xong tự điền Chức danh/Phòng/SĐT/Email từ hệ thống (vẫn sửa tay được). Chọn Không: nhập tự do, không tìm theo tài khoản hệ thống.</p>
-          <datalist id="systemUsersDatalist"></datalist>
+          <div id="systemUsersDatalist" class="hidden sdd-dropdown" data-sdd-dropdown></div>
         </div>
 
         <div>
@@ -1783,7 +1790,7 @@ table { display: block; overflow-x: auto; max-width: 100%; }
             </div>
             <div>
               <label class="block font-semibold text-gray-600 mb-1">Giảng Viên / Người Phụ Trách (tuỳ chọn, phải là tài khoản hệ thống)</label>
-              <input id="tcInstructor" list="systemUsersDatalist" oninput="resolveTrainingInstructorInput(this.value)" placeholder="Gõ tên hoặc tài khoản để tìm..." class="w-full border p-1.5 rounded">
+              <input id="tcInstructor" data-sdd-list="systemUsersDatalist" autocomplete="off" oninput="resolveTrainingInstructorInput(this.value)" placeholder="Gõ tên hoặc tài khoản để tìm..." class="w-full border p-1.5 rounded">
               <input type="hidden" id="tcInstructorUsername">
             </div>
             <div>
@@ -1840,7 +1847,7 @@ table { display: block; overflow-x: auto; max-width: 100%; }
             <div class="md:col-span-3 bg-gray-50 border rounded p-2 space-y-2">
               <label class="block font-semibold text-gray-600">Danh Sách Được Mời (tuỳ chọn — để trống = mở tự do cho mọi người tự đăng ký)</label>
               <div class="flex gap-2">
-                <input id="tcInviteListPickInput" list="systemUsersDatalist" placeholder="Gõ tên hoặc tài khoản..." class="flex-1 border p-1.5 rounded" onkeydown="if(event.key==='Enter'){event.preventDefault();addTrainingInviteListPick();}">
+                <input id="tcInviteListPickInput" data-sdd-list="systemUsersDatalist" autocomplete="off" placeholder="Gõ tên hoặc tài khoản..." class="flex-1 border p-1.5 rounded" onkeydown="if(event.key==='Enter'){event.preventDefault();addTrainingInviteListPick();}">
                 <button type="button" onclick="addTrainingInviteListPick()" class="bg-gray-200 hover:bg-gray-300 px-3 py-1.5 rounded font-bold">Thêm</button>
               </div>
               <div id="tcInviteListStagedList" class="border rounded p-2 min-h-[2.5rem] flex flex-wrap gap-1.5 bg-white"></div>
@@ -2130,7 +2137,7 @@ table { display: block; overflow-x: auto; max-width: 100%; }
            (bất kỳ ai có 1 dòng onboardingProgress được gán), Đánh Giá Giai đoạn 3 (onboardingEvaluate,
            đúng phòng ban/siêu thị — mirror uniformStoreManage/item.dept). -->
       <div id="trainingLmsOnboardingPanel" class="hidden space-y-5">
-        <datalist id="onboardingEmployeesDatalist"></datalist>
+        <div id="onboardingEmployeesDatalist" class="hidden sdd-dropdown" data-sdd-dropdown></div>
 
         <!-- Khối 1: Quản lý danh mục Lộ Trình (trainingManage/admin) -->
         <div class="bg-white p-3 rounded border text-xs space-y-3">
@@ -2179,7 +2186,7 @@ table { display: block; overflow-x: auto; max-width: 100%; }
           <div id="onboardingAssignForm" class="hidden flex flex-wrap items-end gap-2">
             <div class="flex-1 min-w-[200px]">
               <label class="block font-semibold text-gray-600 mb-1">Nhân Viên</label>
-              <input id="oaEmployeeInput" list="onboardingEmployeesDatalist" oninput="resolveOnboardingEmployeeInput()" placeholder="Gõ tên hoặc tài khoản để tìm..." class="w-full border p-1.5 rounded bg-white">
+              <input id="oaEmployeeInput" data-sdd-list="onboardingEmployeesDatalist" autocomplete="off" oninput="resolveOnboardingEmployeeInput()" placeholder="Gõ tên hoặc tài khoản để tìm..." class="w-full border p-1.5 rounded bg-white">
               <input type="hidden" id="oaEmployeeUsername">
             </div>
             <div class="flex-1 min-w-[200px]">
@@ -2392,7 +2399,7 @@ table { display: block; overflow-x: auto; max-width: 100%; }
           <div>
             <label class="block font-semibold text-gray-600 mb-1 text-xs">Cách 1 — Tìm và chọn từng người</label>
             <div class="flex gap-2">
-              <input id="trRosterPickInput" list="systemUsersDatalist" placeholder="Gõ tên hoặc tài khoản..." class="flex-1 border p-1.5 rounded text-xs" onkeydown="if(event.key==='Enter'){event.preventDefault();addTrainingRosterPick();}">
+              <input id="trRosterPickInput" data-sdd-list="systemUsersDatalist" autocomplete="off" placeholder="Gõ tên hoặc tài khoản..." class="flex-1 border p-1.5 rounded text-xs" onkeydown="if(event.key==='Enter'){event.preventDefault();addTrainingRosterPick();}">
               <button type="button" onclick="addTrainingRosterPick()" class="bg-gray-200 hover:bg-gray-300 px-3 py-1.5 rounded text-xs font-bold">Thêm</button>
             </div>
           </div>
@@ -2446,7 +2453,7 @@ table { display: block; overflow-x: auto; max-width: 100%; }
             </div>
             <div>
               <label class="block font-semibold text-gray-600 mb-1">Giảng Viên / Người Phụ Trách</label>
-              <input id="teInstructor" list="systemUsersDatalist" oninput="resolveTrainingEditInstructorInput(this.value)" placeholder="Gõ tên hoặc tài khoản để tìm..." class="w-full border p-1.5 rounded">
+              <input id="teInstructor" data-sdd-list="systemUsersDatalist" autocomplete="off" oninput="resolveTrainingEditInstructorInput(this.value)" placeholder="Gõ tên hoặc tài khoản để tìm..." class="w-full border p-1.5 rounded">
               <input type="hidden" id="teInstructorUsername">
             </div>
             <div>
@@ -2496,7 +2503,7 @@ table { display: block; overflow-x: auto; max-width: 100%; }
             <div class="md:col-span-3 bg-gray-50 border rounded p-2 space-y-2">
               <label class="block font-semibold text-gray-600">Danh Sách Được Mời (tuỳ chọn — để trống = mở tự do cho mọi người tự đăng ký)</label>
               <div class="flex gap-2">
-                <input id="teInviteListPickInput" list="systemUsersDatalist" placeholder="Gõ tên hoặc tài khoản..." class="flex-1 border p-1.5 rounded" onkeydown="if(event.key==='Enter'){event.preventDefault();addTrainingEditInviteListPick();}">
+                <input id="teInviteListPickInput" data-sdd-list="systemUsersDatalist" autocomplete="off" placeholder="Gõ tên hoặc tài khoản..." class="flex-1 border p-1.5 rounded" onkeydown="if(event.key==='Enter'){event.preventDefault();addTrainingEditInviteListPick();}">
                 <button type="button" onclick="addTrainingEditInviteListPick()" class="bg-gray-200 hover:bg-gray-300 px-3 py-1.5 rounded font-bold">Thêm</button>
               </div>
               <div id="teInviteListStagedList" class="border rounded p-2 min-h-[2.5rem] flex flex-wrap gap-1.5 bg-white"></div>
@@ -3132,14 +3139,14 @@ table { display: block; overflow-x: auto; max-width: 100%; }
         <div id="uniformNoPendingAllocNote" class="hidden text-xs text-gray-500 italic bg-white p-3 rounded border">Không có phần phân bổ nào đang chờ xác nhận.</div>
       </div>
 
-      <datalist id="uniformStoreEmployeesDatalist"></datalist>
+      <div id="uniformStoreEmployeesDatalist" class="hidden sdd-dropdown" data-sdd-dropdown></div>
 
       <div class="bg-emerald-50 p-4 rounded border border-emerald-200 space-y-3">
         <h3 class="font-bold text-emerald-900 text-base flex items-center gap-2">👕 Cấp Đồng Phục Cho Nhân Viên</h3>
         <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
           <div>
             <label class="block font-semibold text-gray-600 mb-1 text-xs">Nhân Viên <span class="text-red-500">*</span></label>
-            <input id="uniformIssueEmployee" list="uniformStoreEmployeesDatalist" oninput="resolveUniformEmployeeInput('uniformIssueEmployee', 'uniformIssueEmployeeUsername')" placeholder="Gõ tên hoặc tài khoản để tìm..." class="w-full border p-1.5 rounded text-xs bg-white">
+            <input id="uniformIssueEmployee" data-sdd-list="uniformStoreEmployeesDatalist" autocomplete="off" oninput="resolveUniformEmployeeInput('uniformIssueEmployee', 'uniformIssueEmployeeUsername')" placeholder="Gõ tên hoặc tài khoản để tìm..." class="w-full border p-1.5 rounded text-xs bg-white">
             <input type="hidden" id="uniformIssueEmployeeUsername">
           </div>
           <div>
@@ -3230,7 +3237,7 @@ table { display: block; overflow-x: auto; max-width: 100%; }
         <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
           <div>
             <label class="block font-semibold text-gray-600 mb-1 text-xs">Nhân Viên <span class="text-red-500">*</span></label>
-            <input id="uniformAdjEmpEmployee" list="uniformStoreEmployeesDatalist" oninput="resolveUniformEmployeeInput('uniformAdjEmpEmployee', 'uniformAdjEmpEmployeeUsername'); renderUniformAdjEmpItemOptions();" placeholder="Gõ tên hoặc tài khoản để tìm..." class="w-full border p-1.5 rounded text-xs bg-white">
+            <input id="uniformAdjEmpEmployee" data-sdd-list="uniformStoreEmployeesDatalist" autocomplete="off" oninput="resolveUniformEmployeeInput('uniformAdjEmpEmployee', 'uniformAdjEmpEmployeeUsername'); renderUniformAdjEmpItemOptions();" placeholder="Gõ tên hoặc tài khoản để tìm..." class="w-full border p-1.5 rounded text-xs bg-white">
             <input type="hidden" id="uniformAdjEmpEmployeeUsername">
           </div>
         </div>
@@ -3293,8 +3300,8 @@ table { display: block; overflow-x: auto; max-width: 100%; }
           <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
             <div>
               <label class="block font-semibold text-gray-600 mb-1 text-xs">Siêu Thị Nhận <span class="text-red-500">*</span></label>
-              <input id="uniformTransferTargetDept" list="uniformTransferTargetDeptDatalist" placeholder="Gõ tên siêu thị nhận..." class="w-full border p-1.5 rounded text-xs bg-white">
-              <datalist id="uniformTransferTargetDeptDatalist"></datalist>
+              <input id="uniformTransferTargetDept" data-sdd-list="uniformTransferTargetDeptDatalist" autocomplete="off" placeholder="Gõ tên siêu thị nhận..." class="w-full border p-1.5 rounded text-xs bg-white">
+              <div id="uniformTransferTargetDeptDatalist" class="hidden sdd-dropdown" data-sdd-dropdown></div>
             </div>
             <div>
               <label class="block font-semibold text-gray-600 mb-1 text-xs">Mặt Hàng — Size <span class="text-red-500">*</span></label>
@@ -3351,8 +3358,8 @@ table { display: block; overflow-x: auto; max-width: 100%; }
         <div class="flex items-center justify-between gap-2 flex-wrap">
           <h3 class="font-bold text-gray-800 text-sm">📊 Tồn Kho Đồng Phục</h3>
           <div id="uniformStockStoreFilterWrap" class="hidden">
-            <input id="uniformStockStoreFilter" list="uniformStoresFilterDatalist" oninput="renderUniformStock()" placeholder="Gõ tên siêu thị để tìm (để trống = tất cả)..." class="border p-1.5 rounded text-xs bg-white">
-            <datalist id="uniformStoresFilterDatalist"></datalist>
+            <input id="uniformStockStoreFilter" data-sdd-list="uniformStoresFilterDatalist" autocomplete="off" oninput="renderUniformStock()" placeholder="Gõ tên siêu thị để tìm (để trống = tất cả)..." class="border p-1.5 rounded text-xs bg-white">
+            <div id="uniformStoresFilterDatalist" class="hidden sdd-dropdown" data-sdd-dropdown></div>
           </div>
         </div>
         <div class="overflow-x-auto">
@@ -4664,10 +4671,10 @@ table { display: block; overflow-x: auto; max-width: 100%; }
               <h5 class="font-bold text-gray-700 text-xs mb-1">🏢 Đơn Vị Tham Gia Quy Trình</h5>
               <p class="text-[11px] text-gray-500 italic mb-2">Chọn phòng ban từ ô bên dưới rồi bấm "Thêm" để đưa vào danh sách đơn vị tham gia — màn "Hệ Thống → Quy Trình & Phê Duyệt" sẽ CHỈ hiện đúng các đơn vị đã thêm ở đây thay vì liệt kê toàn bộ danh sách phòng ban. Không thêm đơn vị nào (để trống) thì màn đó vẫn hiện đầy đủ như trước, không ảnh hưởng gì. Thêm/bớt xong thì bấm "Lưu" 1 lần.</p>
               <div class="flex gap-2 items-center mb-2">
-                <input id="workflowParticipatingDeptPicker" list="workflowParticipatingDeptDatalist" placeholder="🔍 Tìm phòng ban..." autocomplete="off"
+                <input id="workflowParticipatingDeptPicker" data-sdd-list="workflowParticipatingDeptDatalist" placeholder="🔍 Tìm phòng ban..." autocomplete="off"
                   onkeydown="if(event.key==='Enter'){event.preventDefault();addWorkflowParticipatingDept();}"
                   class="flex-1 border p-1.5 rounded bg-white text-xs">
-                <datalist id="workflowParticipatingDeptDatalist"></datalist>
+                <div id="workflowParticipatingDeptDatalist" class="hidden sdd-dropdown" data-sdd-dropdown></div>
                 <button type="button" onclick="addWorkflowParticipatingDept()" class="bg-gray-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-gray-700 whitespace-nowrap">➕ Thêm Đơn Vị</button>
               </div>
               <div id="workflowParticipatingDeptsList" class="flex flex-wrap gap-1.5 min-h-[2rem] border rounded p-2 bg-gray-50"></div>
@@ -4678,7 +4685,7 @@ table { display: block; overflow-x: auto; max-width: 100%; }
             <div>
               <h5 class="font-bold text-gray-700 text-xs mb-1">🚫 Nhóm Không Cấp Văn Phòng Phẩm</h5>
               <p class="text-[11px] text-gray-500 italic mb-2">Tạo các nhóm gồm 1 hoặc nhiều CHỨC DANH. Người dùng có chức danh nằm trong 1 nhóm mà tài khoản được gán vào (chọn ở màn "Người Dùng") sẽ: (1) không đăng ký được Văn Phòng Phẩm ở bất kỳ kỳ nào, kể cả đã thuộc phòng ban còn hạn đăng ký; (2) không tính vào số nhân sự gợi ý khi Hành Chính tạo kỳ (vẫn sửa tay được số này như bình thường).</p>
-              <datalist id="vppJobTitlesDatalist"></datalist>
+              <div id="vppJobTitlesDatalist" class="hidden sdd-dropdown" data-sdd-dropdown></div>
               <div id="vppExcludeGroupsListWrap" class="space-y-2"></div>
               <button type="button" onclick="addVppExcludeGroupRow()" class="mt-2 bg-gray-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-gray-700">+ Thêm Nhóm</button>
               <div class="flex justify-end mt-2">
@@ -5497,7 +5504,7 @@ table { display: block; overflow-x: auto; max-width: 100%; }
         <div class="grid grid-cols-1 md:grid-cols-3 gap-2">
           <div>
             <label class="block font-semibold text-gray-600 mb-1">Lái xe được phân công <span class="text-red-500">*</span></label>
-            <input id="carAssignedDriver" list="systemUsersDatalist" oninput="resolveCarAssignedDriverInput(this.value)" placeholder="Gõ tên hoặc tài khoản để tìm..." class="w-full border p-1.5 rounded">
+            <input id="carAssignedDriver" data-sdd-list="systemUsersDatalist" autocomplete="off" oninput="resolveCarAssignedDriverInput(this.value)" placeholder="Gõ tên hoặc tài khoản để tìm..." class="w-full border p-1.5 rounded">
             <input type="hidden" id="carAssignedDriverUsername">
           </div>
           <div>
@@ -10747,7 +10754,7 @@ function populateDropdowns() {
   // contractApprovalLevel giờ là input ẩn + <input list>/<datalist> native — danh sách tĩnh nên chỉ cần
   // dựng datalist 1 lần, xem populateContractApprovalLevelDatalist().
   const contractApprovalLevelDatalistEl = document.getElementById('contractApprovalLevelDatalist');
-  if (contractApprovalLevelDatalistEl && !contractApprovalLevelDatalistEl.children.length) {
+  if (contractApprovalLevelDatalistEl && !contractApprovalLevelDatalistEl._sddItems) {
     populateContractApprovalLevelDatalist();
   }
 
@@ -14202,7 +14209,7 @@ function populateContractAddendumTargets() {
     (currentUser.perms?.admin || scopeAllows(currentUser, currentUser.perms?.contractCreate, c.dept))
   ).sort((a, b) => String(a.code).localeCompare(String(b.code)));
 
-  datalist.innerHTML = eligible.map(c => `<option value="${escapeHtml(c.code)} — ${escapeHtml(c.title)}"></option>`).join('');
+  sddSetOptions('contractAddendumTargetDatalist', eligible.map(c => `${c.code} — ${c.title}`));
 
   const stillEligible = eligible.find(c => String(c.id) === prevVal);
   if (stillEligible) {
@@ -14233,7 +14240,7 @@ function populateContractApprovalLevelDatalist() {
   const datalist = document.getElementById('contractApprovalLevelDatalist');
   if (!datalist) return;
   const orderedC = [CONTRACT_APPROVAL_LEVELS.find(l => l.key === 'KHAC'), ...CONTRACT_APPROVAL_LEVELS.filter(l => l.key !== 'KHAC')];
-  datalist.innerHTML = orderedC.map(l => `<option value="${escapeHtml(l.label)}"></option>`).join('');
+  sddSetOptions('contractApprovalLevelDatalist', orderedC.map(l => l.label));
 }
 
 // Gõ/chọn nhãn cấp phê duyệt trong ô tìm -> khớp lại đúng KEY tương ứng trong CONTRACT_APPROVAL_LEVELS
@@ -16320,7 +16327,7 @@ function renderTplEditRowsTable() {
   tbody.innerHTML = tplEditRows.map((a, idx) => {
     const hasAccount = a.hasAccount === 'YES';
     const nameCell = hasAccount
-      ? `<input value="${escapeHtml(a.name)}" list="systemUsersDatalist" oninput="updateTplEditField(${idx}, 'name', this.value)" onchange="resolveTplRowAccountInput(${idx}, this.value)" class="w-full border-0 p-0.5 text-xs focus:outline-none" placeholder="Gõ để tìm tài khoản hệ thống...">
+      ? `<input value="${escapeHtml(a.name)}" data-sdd-list="systemUsersDatalist" autocomplete="off" oninput="updateTplEditField(${idx}, 'name', this.value)" onchange="resolveTplRowAccountInput(${idx}, this.value)" class="w-full border-0 p-0.5 text-xs focus:outline-none" placeholder="Gõ để tìm tài khoản hệ thống...">
          ${a.username ? `<div class="text-[10px] text-emerald-700 mt-0.5">✓ Đã liên kết tài khoản: ${escapeHtml(a.username)}</div>` : '<div class="text-[10px] text-amber-600 mt-0.5">Chưa liên kết — chọn từ gợi ý</div>'}`
       : `<input value="${escapeHtml(a.name)}" oninput="updateTplEditField(${idx}, 'name', this.value)" class="w-full border-0 p-0.5 text-xs focus:outline-none" placeholder="Họ và tên">`;
     return `
@@ -16468,7 +16475,7 @@ function resolveAttendeeAccountInput(idx, rawValue) {
 function populateSystemUsersDatalist() {
   const datalist = document.getElementById('systemUsersDatalist');
   if (!datalist) return;
-  datalist.innerHTML = DB.users.map(u => `<option value="${escapeHtml(u.name)} — ${escapeHtml(u.dept || 'Chưa rõ phòng')} (${escapeHtml(u.username)})"></option>`).join('');
+  sddSetOptions('systemUsersDatalist', DB.users.map(u => `${u.name} — ${u.dept || 'Chưa rõ phòng'} (${u.username})`));
 }
 
 function renderAttendeesTable() {
@@ -16480,7 +16487,7 @@ function renderAttendeesTable() {
   tbody.innerHTML = minutesAttendeesRows.map((a, idx) => {
     const hasAccount = a.hasAccount === 'YES';
     const nameCell = hasAccount
-      ? `<input value="${escapeHtml(a.name)}" list="systemUsersDatalist" oninput="updateAttendeeField(${idx}, 'name', this.value)" onchange="resolveAttendeeAccountInput(${idx}, this.value)" class="w-full border-0 p-0.5 text-xs focus:outline-none" placeholder="Gõ để tìm tài khoản hệ thống...">
+      ? `<input value="${escapeHtml(a.name)}" data-sdd-list="systemUsersDatalist" autocomplete="off" oninput="updateAttendeeField(${idx}, 'name', this.value)" onchange="resolveAttendeeAccountInput(${idx}, this.value)" class="w-full border-0 p-0.5 text-xs focus:outline-none" placeholder="Gõ để tìm tài khoản hệ thống...">
          ${a.username ? `<div class="text-[10px] text-emerald-700 mt-0.5">✓ Đã liên kết tài khoản: ${escapeHtml(a.username)}</div>` : '<div class="text-[10px] text-amber-600 mt-0.5">Chưa liên kết — chọn từ gợi ý</div>'}`
       : `<input value="${escapeHtml(a.name)}" oninput="updateAttendeeField(${idx}, 'name', this.value)" class="w-full border-0 p-0.5 text-xs focus:outline-none" placeholder="Họ và tên">`;
     return `
@@ -21825,7 +21832,7 @@ function renderWorkflowParticipatingDeptsChecklist() {
   if (!picker || !list) return;
   if (!workflowParticipatingDeptsDraft) workflowParticipatingDeptsDraft = [...(DB.workflowParticipatingDepts || [])];
   const remaining = DB.depts.filter(d => !workflowParticipatingDeptsDraft.includes(d));
-  if (datalist) datalist.innerHTML = remaining.map(d => `<option value="${escapeHtml(d)}"></option>`).join('');
+  if (datalist) sddSetOptions('workflowParticipatingDeptDatalist', remaining);
   picker.value = '';
   picker.placeholder = remaining.length ? '🔍 Tìm phòng ban...' : 'Đã thêm hết phòng ban';
   picker.disabled = !remaining.length;
@@ -21950,7 +21957,7 @@ function renderVppExcludeGroupsAdmin() {
   if (!vppExcludeGroupsDraft) vppExcludeGroupsDraft = JSON.parse(JSON.stringify(DB.vppExcludeGroups || []));
   const wrap = document.getElementById('vppExcludeGroupsListWrap');
   const datalist = document.getElementById('vppJobTitlesDatalist');
-  if (datalist) datalist.innerHTML = DB.jobTitles.map(t => `<option value="${escapeHtml(t)}"></option>`).join('');
+  if (datalist) sddSetOptions('vppJobTitlesDatalist', DB.jobTitles);
   if (!wrap) return;
   if (!vppExcludeGroupsDraft.length) {
     wrap.innerHTML = `<div class="text-[11px] text-gray-400 italic p-2 bg-gray-50 rounded border">Chưa có nhóm nào.</div>`;
@@ -21973,7 +21980,7 @@ function renderVppExcludeGroupsAdmin() {
         <button type="button" onclick="removeVppExcludeGroupRow(${idx})" class="text-red-600 hover:text-red-800 text-xs font-bold">✕</button>
       </div>
       <div class="flex gap-2 items-center">
-        <input list="vppJobTitlesDatalist" id="vppExcludeGroupJobTitleInput_${idx}" placeholder="🔍 Tìm chức danh..." autocomplete="off"
+        <input data-sdd-list="vppJobTitlesDatalist" id="vppExcludeGroupJobTitleInput_${idx}" placeholder="🔍 Tìm chức danh..." autocomplete="off"
           onkeydown="if(event.key==='Enter'){event.preventDefault();addVppExcludeGroupJobTitle(${idx});}"
           class="flex-1 border p-1 rounded text-xs">
         <button type="button" onclick="addVppExcludeGroupJobTitle(${idx})" class="bg-gray-600 text-white px-2 py-1 rounded text-[11px] font-bold hover:bg-gray-700 whitespace-nowrap">+ Thêm</button>
@@ -22057,6 +22064,99 @@ function renderUVppExcludeGroupsChecklist(selectedIds) {
     </label>
   `).join('');
 }
+
+// ==========================================
+// Ô TÌM-KIẾM-DÙNG-CHUNG (thay <input list="..."> + <datalist> NATIVE) — datalist gốc của trình duyệt
+// hoá ra KHÔNG ĐÁNG TIN CẬY trên thực tế (người dùng xác nhận: gõ không ra gợi ý dù dữ liệu đúng, lặp
+// lại y hệt trên cả Chrome/Firefox/Edge desktop lẫn Chrome Samsung/Safari iPhone — đã kiểm chứng lại
+// bằng Playwright rằng dữ liệu/logic lọc phía server hoàn toàn đúng, lỗi nằm ở chính cơ chế <datalist>
+// của trình duyệt). Mọi nơi trước đây dùng input[list=Y]/datalist[id=Y] giờ đổi sang
+// input[data-sdd-list=Y]/div[id=Y][data-sdd-dropdown] tự dựng bằng JS thuần (không thư viện ngoài,
+// không cần mạng) — định vị bằng position:fixed theo đúng toạ độ ô input đang gõ
+// (getBoundingClientRect), không phụ thuộc CSS overflow/position của khối cha (kể cả trong
+// <details>/modal) — tránh đúng lỗi z-index/mở-đóng lệch trạng thái mà bảng nút+panel tự dựng TRƯỚC
+// ĐÓ từng gặp (xem ghi chú ở contractAddendumTargetWrap, lý do đổi sang datalist native lần đầu).
+//
+// CÁCH DÙNG — KHÔNG cần sửa gì các hàm resolveXxxInput()/oninput/onchange đang có sẵn ở từng nơi:
+//   1. Đổi <input list="Y" oninput="...">  ->  <input data-sdd-list="Y" oninput="...">  (giữ NGUYÊN
+//      oninput/onchange đang có).
+//   2. Đổi <datalist id="Y">...</datalist>  ->  <div id="Y" class="hidden" data-sdd-dropdown></div>
+//      (rỗng, không cần <option> tĩnh nữa).
+//   3. Ở hàm JS trước đây ghi `datalist.innerHTML = list.map(x => '<option value="...">').join('')`,
+//      đổi thành sddSetOptions('Y', list) — list là mảng string HOẶC mảng {value,label}.
+// Khi người dùng bấm chọn 1 gợi ý: tự ghi input.value = label, tự bắn lại đúng 2 sự kiện 'input' VÀ
+// 'change' lên input đó (bubbles:true) để mọi resolveXxxInput()/renderYyy() hiện có tự chạy lại y hệt
+// như khi gõ tay xong rời khỏi ô — KHÔNG cần callback riêng cho từng nơi gọi. 1 div[id=Y] có thể
+// dùng chung cho NHIỀU input khác nhau (khớp cách 1 datalist cũ phục vụ nhiều input, vd
+// systemUsersDatalist) — tự định vị lại theo ĐÚNG ô đang có focus mỗi lần hiện.
+// ==========================================
+function sddSetOptions(dropdownId, items) {
+  const dd = document.getElementById(dropdownId);
+  if (!dd) return;
+  dd._sddItems = (items || []).map(it => (typeof it === 'string') ? { value: it, label: it } : it);
+}
+
+function sddRenderRows(dd, query) {
+  const q = String(query || '').trim().toLowerCase();
+  const items = dd._sddItems || [];
+  const matches = q ? items.filter(it => it.label.toLowerCase().includes(q)) : items;
+  const shown = matches.slice(0, 50);
+  dd._sddShown = shown;
+  dd.innerHTML = shown.length
+    ? shown.map((it, i) => `<div class="px-2 py-1 hover:bg-sky-50 cursor-pointer truncate" data-sdd-idx="${i}">${escapeHtml(it.label)}</div>`).join('')
+    : '<div class="px-2 py-1 text-gray-400 italic">Không tìm thấy.</div>';
+}
+
+function sddPositionAndShow(dd, input) {
+  const rect = input.getBoundingClientRect();
+  dd.style.left = Math.max(rect.left, 4) + 'px';
+  dd.style.top = (rect.bottom + 2) + 'px';
+  dd.style.width = Math.max(rect.width, 160) + 'px';
+  dd._sddActiveInput = input;
+  dd.classList.remove('hidden');
+}
+
+function sddHandleTrigger(ev) {
+  const input = ev.target;
+  const listId = input.getAttribute && input.getAttribute('data-sdd-list');
+  if (!listId) return;
+  const dd = document.getElementById(listId);
+  if (!dd || !dd._sddItems) return;
+  sddRenderRows(dd, input.value);
+  sddPositionAndShow(dd, input);
+}
+document.addEventListener('input', sddHandleTrigger);
+document.addEventListener('focusin', sddHandleTrigger);
+
+document.addEventListener('keydown', (ev) => {
+  if (ev.key !== 'Escape') return;
+  const listId = ev.target.getAttribute && ev.target.getAttribute('data-sdd-list');
+  if (listId) document.getElementById(listId)?.classList.add('hidden');
+});
+
+// Bấm chọn 1 gợi ý HOẶC bấm ra ngoài để đóng — gắn 1 LẦN DUY NHẤT (query lại theo [data-sdd-idx]/
+// [data-sdd-dropdown] mỗi lần click, cùng triết lý với listener đóng renderPeopleMultiSelect() bên
+// dưới — không gắn lại mỗi lần render, tránh chồng listener).
+document.addEventListener('click', (ev) => {
+  const row = ev.target.closest('[data-sdd-idx]');
+  if (row) {
+    const dd = row.closest('[data-sdd-dropdown]');
+    const idx = Number(row.getAttribute('data-sdd-idx'));
+    const item = dd && dd._sddShown && dd._sddShown[idx];
+    const input = dd && dd._sddActiveInput;
+    if (item && input) {
+      input.value = item.label;
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+      input.dispatchEvent(new Event('change', { bubbles: true }));
+      input.focus();
+    }
+    dd?.classList.add('hidden');
+    return;
+  }
+  document.querySelectorAll('[data-sdd-dropdown]:not(.hidden)').forEach(dd => {
+    if (dd._sddActiveInput !== ev.target) dd.classList.add('hidden');
+  });
+});
 
 // ==========================================
 // DROPDOWN CHỌN NHIỀU NGƯỜI (tìm kiếm + chip) — dùng chung cho "Quản Lý Nhóm Phê Duyệt Trình" (chọn
@@ -29337,8 +29437,7 @@ function onboardingStageConfirmCellHTML(p, path, stageNum, canManage) {
 let onboardingEmployeesCache = [];
 function populateOnboardingEmployeesDatalist() {
   onboardingEmployeesCache = (DB.users || []).filter(u => u.active !== false);
-  const dl = document.getElementById('onboardingEmployeesDatalist');
-  if (dl) dl.innerHTML = onboardingEmployeesCache.map(u => `<option value="${escapeHtml(u.name)} (${escapeHtml(u.username)})"></option>`).join('');
+  sddSetOptions('onboardingEmployeesDatalist', onboardingEmployeesCache.map(u => `${u.name} (${u.username})`));
 }
 // Cùng khuôn resolveUniformEmployeeInput() (đã có sẵn cho Đồng Phục) — khớp text "Tên (tài_khoản)" đang
 // gõ với đúng 1 tài khoản còn hiệu lực -> ghi username vào ô ẩn.
@@ -31605,10 +31704,8 @@ function renderUniformAllocationBlocks() {
   wrap.innerHTML = uniformAllocBlocks.map((block, bIdx) => `
     <div class="bg-white p-3 rounded border space-y-2">
       <div class="flex items-center justify-between gap-2">
-        <input value="${escapeHtml(block.dept)}" list="uniformAllocStoreDatalist_${bIdx}" onchange="resolveUniformAllocDeptInput(${bIdx}, this.value)" placeholder="Gõ tên siêu thị để tìm..." class="border p-1.5 rounded text-xs bg-white flex-1">
-        <datalist id="uniformAllocStoreDatalist_${bIdx}">
-          ${DB.stores.filter(d => d === block.dept || !chosenDepts.includes(d)).map(d => `<option value="${escapeHtml(d)}"></option>`).join('')}
-        </datalist>
+        <input value="${escapeHtml(block.dept)}" data-sdd-list="uniformAllocStoreDatalist_${bIdx}" autocomplete="off" onchange="resolveUniformAllocDeptInput(${bIdx}, this.value)" placeholder="Gõ tên siêu thị để tìm..." class="border p-1.5 rounded text-xs bg-white flex-1">
+        <div id="uniformAllocStoreDatalist_${bIdx}" class="hidden sdd-dropdown" data-sdd-dropdown></div>
         <button type="button" onclick="removeUniformAllocationBlock(${bIdx})" class="text-red-600 hover:text-red-800 text-xs font-bold whitespace-nowrap">✕ Bỏ siêu thị này</button>
       </div>
       <table class="w-full text-xs border-collapse">
@@ -31645,6 +31742,9 @@ function renderUniformAllocationBlocks() {
       <button type="button" onclick="addUniformAllocItemRow(${bIdx})" class="text-teal-700 text-xs font-bold hover:underline">+ Thêm dòng mặt hàng</button>
     </div>
   `).join('');
+  uniformAllocBlocks.forEach((block, bIdx) => {
+    sddSetOptions(`uniformAllocStoreDatalist_${bIdx}`, DB.stores.filter(d => d === block.dept || !chosenDepts.includes(d)));
+  });
 }
 
 async function submitUniformPeriod() {
@@ -31859,10 +31959,7 @@ function confirmUniformAllocationAction(periodId, allocationId) {
 // tìm được theo cả tên lẫn tài khoản (resolveUniformEmployeeInput() khớp lại nguyên cụm này).
 function renderUniformIssueEmployeeOptions() {
   const employees = (DB.users || []).filter(u => u.dept === currentUser.dept && u.active !== false);
-  const datalist = document.getElementById('uniformStoreEmployeesDatalist');
-  if (datalist) {
-    datalist.innerHTML = employees.map(u => `<option value="${escapeHtml(u.name)} (${escapeHtml(u.username)})"></option>`).join('');
-  }
+  sddSetOptions('uniformStoreEmployeesDatalist', employees.map(u => `${u.name} (${u.username})`));
   uniformStoreEmployeesCache = employees;
 }
 
@@ -32315,7 +32412,7 @@ function renderUniformStockStoreFilterOptions() {
   }
   wrap.classList.remove('hidden');
   const depts = [...new Set((DB.uniformPeriods || []).flatMap(p => (p.allocations || []).map(a => a.dept)))].sort();
-  datalist.innerHTML = depts.map(d => `<option value="${escapeHtml(d)}"></option>`).join('');
+  sddSetOptions('uniformStoresFilterDatalist', depts);
 }
 
 // Ô lọc siêu thị là ô nhập-tìm-kiếm (thay dropdown vì danh sách siêu thị có thể rất dài) — khớp
@@ -32399,7 +32496,7 @@ function resetUniformTransferForm() {
 
   const targetDatalist = document.getElementById('uniformTransferTargetDeptDatalist');
   if (targetDatalist) {
-    targetDatalist.innerHTML = (DB.stores || []).filter(s => s !== currentUser.dept).map(s => `<option value="${escapeHtml(s)}"></option>`).join('');
+    sddSetOptions('uniformTransferTargetDeptDatalist', (DB.stores || []).filter(s => s !== currentUser.dept));
   }
   document.getElementById('uniformTransferTargetDept').value = '';
 

@@ -36,3 +36,19 @@ version DUY NHẤT client đọc (badge góc màn hình + `/api/health`, xem
 `server.js` require `./package.json`), không có bản sao nào khác cần sửa.
 Nếu lỡ quên ở 1-2 lần merge trước, bump bắt kịp luôn (cộng dồn số lần đã bỏ
 lỡ) ở lần merge kế tiếp thay vì bỏ qua.
+
+## Ô tìm-kiếm-gõ-chọn (searchable picker): KHÔNG dùng `<input list>`+`<datalist>` native
+
+Cơ chế `<datalist>` gốc của trình duyệt không đáng tin cậy trên nhiều
+trình duyệt/thiết bị (đã xác nhận lỗi thực tế trên Chrome/Firefox/Edge
+desktop lẫn Chrome-Samsung/Safari-iPhone dù dữ liệu/logic lọc phía sau
+vẫn đúng — xem lịch sử ở block `sdd*` trong `public/index.html`, ngay
+trước `renderPeopleMultiSelect()`). Toàn bộ 19 điểm dùng datalist trong
+hệ thống đã được thay bằng widget JS tự dựng, không phụ thuộc thư viện
+ngoài: `sddSetOptions(dropdownId, items)` để nạp danh sách, input dùng
+`data-sdd-list="dropdownId"` (thay cho `list="..."`), dropdown là
+`<div id="dropdownId" class="hidden sdd-dropdown" data-sdd-dropdown></div>`
+(thay cho `<datalist>`). Xem chú thích 3 bước migrate ngay tại block
+`sdd*`. **Mọi ô tìm-kiếm-gõ-chọn mới từ giờ trở đi phải dùng cơ chế này**
+(hoặc `renderPeopleMultiSelect()`/dropdown tự dựng tương tự nếu cần
+multi-select thật sự) — không quay lại `<datalist>` native.

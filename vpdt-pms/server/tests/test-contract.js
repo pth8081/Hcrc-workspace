@@ -207,11 +207,12 @@ async function run() {
     await loginAs('kd1');
     await goToContractApproval();
     await page.evaluate(() => { document.getElementById('contractOpMode').value = 'ADDENDUM'; onContractOpModeChange(); });
-    // #contractAddendumTargetInput/#contractAddendumTargetDatalist là <input list>+<datalist> native
-    // (thay cho button+panel tự dựng trước đây — đúng lỗi người dùng thật báo lại: ô "Chọn Hợp Đồng Để
-    // Bổ Sung Phụ Lục" thỉnh thoảng không mở được) — đọc option của datalist thay vì bảng button.
-    const addendumTargets = await page.locator('#contractAddendumTargetDatalist option').evaluateAll(
-      (opts) => opts.map((o) => o.getAttribute('value'))
+    // #contractAddendumTargetInput/#contractAddendumTargetDatalist là input+dropdown tự dựng bằng JS
+    // thuần (sddSetOptions(), thay cho <input list>+<datalist> native trước đó — datalist gốc của trình
+    // duyệt hoá ra không đáng tin cậy, không hiện gợi ý dù dữ liệu đúng trên một số trình duyệt/thiết bị
+    // thật) — đọc danh sách item đã nạp qua _sddItems thay vì <option> (đã không còn tồn tại).
+    const addendumTargets = await page.locator('#contractAddendumTargetDatalist').evaluate(
+      (dd) => (dd._sddItems || []).map((it) => it.value)
     );
     check('Danh sách "Chọn Hợp Đồng Để Bổ Sung Phụ Lục" có đúng hợp đồng đã duyệt xong', addendumTargets.some((t) => t.includes(contract1.code)), addendumTargets);
     check('Hợp đồng đang PENDING/REJECTED KHÔNG xuất hiện trong danh sách bổ sung phụ lục', !addendumTargets.some((t) => t.includes(contract2.code)), addendumTargets);
@@ -262,8 +263,8 @@ async function run() {
     await loginAs('kd1');
     await goToContractApproval();
     await page.evaluate(() => { document.getElementById('contractOpMode').value = 'ADDENDUM'; onContractOpModeChange(); });
-    const addendumTargetsAfterReject = await page.locator('#contractAddendumTargetDatalist option').evaluateAll(
-      (opts) => opts.map((o) => o.getAttribute('value'))
+    const addendumTargetsAfterReject = await page.locator('#contractAddendumTargetDatalist').evaluate(
+      (dd) => (dd._sddItems || []).map((it) => it.value)
     );
     check('Hợp đồng gốc VẪN xuất hiện trong danh sách "Bổ Sung Phụ Lục" dù phụ lục trước đó đã bị từ chối', addendumTargetsAfterReject.some((t) => t.includes(contract1.code)), addendumTargetsAfterReject);
 
