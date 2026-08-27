@@ -674,18 +674,17 @@ router.post('/trainingPlans/:id/edit', async (req, res) => {
 // phụ thuộc gì vào việc kế hoạch còn tồn tại hay không, nên xoá nhầm không làm mất dữ liệu đã phát sinh).
 router.post('/trainingPlans/:id/delete', (req, res) => deleteAdminOnly(req, res, 'trainingPlans'));
 
-// ===================== ĐÀO TẠO TÂN BINH (Đợt 6) =====================
-// POST /api/records/onboardingPaths/:id/edit — sửa 1 Lộ Trình đã tạo. Đọc kèm trainingTests +
-// trainingDocuments (kiểm tra test1Id/test2Id/stage{1,2}DocumentIds mới nếu có đổi) TRƯỚC khi khoá đúng
-// 1 dòng onboardingPaths để sửa — cùng khuôn trainingPlans/:id/edit ở trên.
+// ===================== ĐÀO TẠO TÂN BINH =====================
+// POST /api/records/onboardingPaths/:id/edit — sửa 1 Lộ Trình đã tạo. getAllAppData() đã đọc sẵn
+// trainingCourses (dùng để kiểm tra stage{1,2}RequiredCourseIds mới nếu có đổi, xem
+// normalizeOnboardingPathFields()) TRƯỚC khi khoá đúng 1 dòng onboardingPaths để sửa — cùng khuôn
+// trainingPlans/:id/edit ở trên.
 router.post('/onboardingPaths/:id/edit', async (req, res) => {
   const itemId = Number(req.params.id);
   if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
   try {
     const { freshUser } = await getFreshUser(req);
     const appData = await getAllAppData();
-    appData.trainingTests = await getAllForCollection('trainingTests');
-    appData.trainingDocuments = await getAllForCollection('trainingDocuments');
     const result = await withLockedRecordForCollection('onboardingPaths', itemId, (item) =>
       recordActions.editOnboardingPath(req.body, freshUser, item, appData));
     res.json({ ok: true, item: result });
@@ -695,31 +694,31 @@ router.post('/onboardingPaths/:id/edit', async (req, res) => {
 });
 // Xoá Lộ Trình — cùng khuôn "xóa = quyền tối cao, chỉ Admin" như mọi catalog Đào Tạo khác ở trên (KHÔNG
 // xoá kèm theo các onboardingProgress đã phân công theo lộ trình này — những hồ sơ đó giữ nguyên
-// pathName đã snapshot, chỉ mất khả năng tra cứu lại path.test1Id/test2Id/stage3Criteria gốc; chấp nhận
-// đánh đổi này, cùng tinh thần trainingCourses/trainingPlans xoá không dọn dẹp dữ liệu đã phát sinh).
+// pathName đã snapshot, chỉ mất khả năng tra cứu lại stage{1,2}RequiredCourseIds/stage3Criteria gốc;
+// chấp nhận đánh đổi này, cùng tinh thần trainingCourses/trainingPlans xoá không dọn dẹp dữ liệu đã phát sinh).
 router.post('/onboardingPaths/:id/delete', (req, res) => deleteAdminOnly(req, res, 'onboardingPaths'));
 
-// POST /api/records/onboardingProgress/:id/submit-stage-test — chính nhân viên được phân công tự làm
-// bài test Giai đoạn 1/2 (đăng nhập bắt buộc qua requireAuth ở đầu file). Đọc onboardingPaths +
-// trainingTests TRƯỚC khi khoá đúng 1 dòng onboardingProgress để chấm+ghi — khoá theo ĐÚNG 1 dòng
-// (UPDLOCK) đã đủ chặn race 2 request nộp bài cùng lúc của CHÍNH người đó (khác submit-test của
-// trainingClasses cần khoá theo classId+username vì còn phải ghi thêm 1 collection khác
-// (trainingTestSubmissions) — ở đây kết quả ghi thẳng vào ĐÚNG 1 dòng đang khoá, không có collection phụ
-// nào khác cần đồng bộ).
-router.post('/onboardingProgress/:id/submit-stage-test', async (req, res) => {
+// POST /api/records/onboardingProgress/:id/confirm-stage — Nhân Sự (trainingManage/admin) xác nhận nhân
+// viên đã hoàn thành Giai đoạn 1/2 (Đợt 8 — cùng khuôn /careerPaths/:id/confirm ở dưới: đọc kèm
+// trainingRegistrations/trainingClasses để tra "đã Đạt đủ chương trình bắt buộc của giai đoạn chưa", chỉ
+// khác là kết quả ghi THẲNG vào đúng 1 dòng onboardingProgress đang khoá, không cần insert thêm collection
+// phụ nào khác vì onboardingProgress vốn đã LÀ hồ sơ theo từng nhân viên, không phải catalog dùng chung
+// như careerPaths).
+router.post('/onboardingProgress/:id/confirm-stage', async (req, res) => {
   const itemId = Number(req.params.id);
   if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
   try {
     const { freshUser } = await getFreshUser(req);
     const paths = await getAllForCollection('onboardingPaths');
-    const tests = await getAllForCollection('trainingTests');
+    const allRegs = await getAllForCollection('trainingRegistrations');
+    const trainingClasses = await getAllForCollection('trainingClasses');
     const result = await withLockedRecordForCollection('onboardingProgress', itemId, (item) => {
       const path = paths.find(p => p.id === item.pathId);
-      return recordActions.submitOnboardingStageTest(req.body, freshUser, item, path, tests);
+      return recordActions.confirmOnboardingStage(req.body, freshUser, item, path, allRegs, trainingClasses);
     });
     res.json({ ok: true, item: result });
   } catch (err) {
-    handleError(res, `onboardingProgress/${req.params.id}/submit-stage-test`, err);
+    handleError(res, `onboardingProgress/${req.params.id}/confirm-stage`, err);
   }
 });
 // POST /api/records/onboardingProgress/:id/evaluate-stage3 — quản lý CÙNG phòng ban/siêu thị với nhân

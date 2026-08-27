@@ -1304,15 +1304,16 @@ const CREATE_MODULE_CONFIGS = {
       normalizeTrainingPlanFields(payload, appData);
     }
   },
-  // Đào Tạo Tân Binh Đợt 6 — "Lộ Trình" (onboardingPaths) là 1 catalog TÁI SỬ DỤNG được cho nhiều nhân
-  // viên mới khác nhau (giống hệt trainingCourses/careerPaths ở trên: tạo 1 lần, gán lại nhiều lần qua
-  // onboardingProgress.pathId bên dưới) — KHÔNG phải hồ sơ theo từng nhân viên. Giai đoạn 1/2 có bài
-  // test bắt buộc (test1Id/test2Id — PHẢI trỏ tới 1 trainingTests có thật, khác courseId/testId tuỳ
-  // chọn ở trainingClasses vì ở đây kết quả ĐẠT/KHÔNG ĐẠT của cả giai đoạn hoàn toàn phụ thuộc bài test
-  // này, không có đường nào khác để hoàn thành giai đoạn); Giai đoạn 3 KHÔNG có bài test, chỉ là tiêu
-  // chí đánh giá dạng văn bản tự do (stage3Criteria) để quản lý trực tiếp (onboardingEvaluate) chấm.
-  // Quản lý (tạo/sửa/xoá) CHỈ trainingManage — cùng tinh thần "danh mục dùng chung toàn công ty" như
-  // trainingCourses/trainingPlans.
+  // Đào Tạo Tân Binh (Đợt 8 — đổi Giai đoạn 1/2 sang cùng khuôn Lộ Trình Thăng Tiến) — "Lộ Trình"
+  // (onboardingPaths) là 1 catalog TÁI SỬ DỤNG được cho nhiều nhân viên mới khác nhau (tạo 1 lần, gán lại
+  // nhiều lần qua onboardingProgress.pathId bên dưới) — KHÔNG phải hồ sơ theo từng nhân viên. Giai đoạn
+  // 1/2 mỗi giai đoạn chọn 1+ CHƯƠNG TRÌNH HỌC bắt buộc (stage1RequiredCourseIds/stage2RequiredCourseIds
+  // — trỏ vào trainingCourses, giống hệt careerPaths.stages[].requiredCourseIds): nhân viên phải tự đăng
+  // ký + học lớp thuộc đúng chương trình đó, lớp BẮT BUỘC có gán bài test (setTrainingRegistrationResult()
+  // ở lib/recordActions.js chặn chấm tay khi lớp có test) nên "Đạt" chỉ đến từ tự làm bài + tự động chấm.
+  // Giai đoạn 3 KHÔNG đổi — vẫn là tiêu chí đánh giá dạng văn bản tự do (stage3Criteria) để quản lý trực
+  // tiếp (onboardingEvaluate) chấm cảm quan, không gắn chương trình/bài test nào. Quản lý (tạo/sửa/xoá)
+  // CHỈ trainingManage — cùng tinh thần "danh mục dùng chung toàn công ty" như trainingCourses/trainingPlans.
   onboardingPaths: {
     dbKey: 'onboardingPaths',
     forceOwnDept: true, // không có khái niệm phòng ban riêng (danh mục dùng chung toàn công ty)
@@ -1332,7 +1333,7 @@ const CREATE_MODULE_CONFIGS = {
   // của người KHÁC), 1 onboardingProgress đang chạy dở không bị dịch chuyển hạn 1/2/3 theo, tránh xáo
   // trộn 1 lộ trình đang được nhân viên/quản lý theo dõi giữa chừng. Phân công (tạo dòng) CHỈ
   // trainingManage — nhân viên/quản lý Giai đoạn 3 không tự tạo được, chỉ tương tác qua các action riêng
-  // (submitOnboardingStageTest/evaluateOnboardingStage3/issueOnboardingCertificate, lib/recordActions.js).
+  // (confirmOnboardingStage/evaluateOnboardingStage3/issueOnboardingCertificate, lib/recordActions.js).
   onboardingProgress: {
     dbKey: 'onboardingProgress',
     forceOwnDept: true, // không có khái niệm phòng ban riêng ở CHÍNH hồ sơ phân công này (dept của NGƯỜI PHÂN CÔNG, chỉ metadata)
@@ -1366,8 +1367,8 @@ const CREATE_MODULE_CONFIGS = {
       payload.pathId = pathId;
       payload.pathName = path.name;
       payload.startDate = employee.startDate; // snapshot — xem giải thích ở comment đầu config này
-      payload.stage1Result = null; payload.stage1Score = null; payload.stage1SubmittedAt = null;
-      payload.stage2Result = null; payload.stage2Score = null; payload.stage2SubmittedAt = null;
+      payload.stage1Result = null; payload.stage1ConfirmedBy = null; payload.stage1ConfirmedByName = null; payload.stage1ConfirmedAt = null;
+      payload.stage2Result = null; payload.stage2ConfirmedBy = null; payload.stage2ConfirmedByName = null; payload.stage2ConfirmedAt = null;
       payload.stage3Evaluation = null; payload.stage3EvaluatedBy = null; payload.stage3EvaluatedByName = null; payload.stage3EvaluatedAt = null; payload.stage3Note = '';
       payload.certificateIssued = false; payload.certificateIssuedAt = null; payload.certificateIssuedBy = null;
     }
@@ -1986,35 +1987,32 @@ function normalizeTrainingPlanFields(payload, appData) {
   payload.plannedHours = toNonNegNum(payload.plannedHours);
 }
 
-// Chuẩn hoá + kiểm tra các field của 1 Lộ Trình Đào Tạo Tân Binh (onboardingPaths, Đợt 6) — dùng CHUNG
-// cho cả TẠO (extraValidate ở trên) LẪN SỬA (editOnboardingPath(), lib/recordActions.js), cùng lý do
-// tách riêng như normalizeTrainingPlanFields ở trên. test1Id/test2Id BẮT BUỘC phải trỏ tới 1
-// trainingTests có thật (khác courseId/testId TUỲ CHỌN ở trainingClasses — xem giải thích ở
-// CREATE_MODULE_CONFIGS.onboardingPaths phía trên: kết quả ĐẠT/KHÔNG ĐẠT của Giai đoạn 1/2 hoàn toàn
-// phụ thuộc đúng 1 bài test này). stage1DocumentIds/stage2DocumentIds chỉ lọc bỏ id không khớp
-// trainingDocuments có thật (rỗng vẫn hợp lệ — 1 lộ trình có thể chưa gắn tài liệu tham khảo nào).
+// Chuẩn hoá + kiểm tra các field của 1 Lộ Trình Đào Tạo Tân Binh (onboardingPaths) — dùng CHUNG cho cả
+// TẠO (extraValidate ở trên) LẪN SỬA (editOnboardingPath(), lib/recordActions.js), cùng lý do tách riêng
+// như normalizeTrainingPlanFields ở trên. Đợt 8 — Giai đoạn 1/2 đổi từ (tài liệu + 1 bài test rời, không
+// gắn lớp học) sang chọn CHƯƠNG TRÌNH HỌC bắt buộc (giống hệt careerPaths.stages[].requiredCourseIds) —
+// "Đạt" 1 chương trình = có 1 trainingRegistrations PASSED ở 1 lớp thuộc đúng chương trình đó (xem
+// confirmOnboardingStage(), lib/recordActions.js) — field cũ stage1DocumentIds/test1Id/stage2DocumentIds/
+// test2Id bỏ hẳn, không giữ tương thích ngược (tính năng chưa phát hành cho người dùng thật).
 function normalizeOnboardingPathFields(payload, appData) {
   if (!payload.name || !String(payload.name).trim()) throw new CreateError(400, 'Thiếu tên lộ trình đào tạo tân binh');
   payload.name = String(payload.name).trim();
 
-  const tests = appData?.trainingTests || [];
-  const docs = appData?.trainingDocuments || [];
-  const toIdArray = (raw) => (Array.isArray(raw) ? [...new Set(raw.map(Number))].filter(Number.isFinite) : []);
-  const keepValidDocIds = (ids) => ids.filter(id => docs.some(d => d.id === id));
-  payload.stage1DocumentIds = keepValidDocIds(toIdArray(payload.stage1DocumentIds));
-  payload.stage2DocumentIds = keepValidDocIds(toIdArray(payload.stage2DocumentIds));
-
-  const resolveRequiredTestId = (raw, label) => {
-    const id = Number(raw);
-    if (!Number.isFinite(id) || !tests.some(t => t.id === id)) {
-      throw new CreateError(400, `Vui lòng chọn ${label} hợp lệ (bắt buộc — quyết định Đạt/Không đạt của giai đoạn)`);
-    }
-    return id;
+  const courses = appData?.trainingCourses || [];
+  const toRequiredCourseIds = (raw, label) => {
+    const ids = Array.isArray(raw) ? [...new Set(raw.map(Number))].filter(Number.isFinite) : [];
+    if (!ids.length) throw new CreateError(400, `Vui lòng chọn ít nhất 1 chương trình học bắt buộc cho ${label}`);
+    const invalid = ids.filter(id => !courses.some(c => c.id === id));
+    if (invalid.length) throw new CreateError(400, `${label} có chương trình được chọn không hợp lệ`);
+    return ids;
   };
-  payload.test1Id = resolveRequiredTestId(payload.test1Id, 'bài test Giai đoạn 1');
-  payload.test2Id = resolveRequiredTestId(payload.test2Id, 'bài test Giai đoạn 2');
+  payload.stage1RequiredCourseIds = toRequiredCourseIds(payload.stage1RequiredCourseIds, 'Giai đoạn 1');
+  payload.stage2RequiredCourseIds = toRequiredCourseIds(payload.stage2RequiredCourseIds, 'Giai đoạn 2');
 
   payload.stage3Criteria = payload.stage3Criteria ? String(payload.stage3Criteria).trim().slice(0, 3000) : '';
+
+  delete payload.stage1DocumentIds; delete payload.test1Id;
+  delete payload.stage2DocumentIds; delete payload.test2Id;
 }
 
 module.exports = {

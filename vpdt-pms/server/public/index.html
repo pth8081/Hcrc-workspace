@@ -2135,26 +2135,19 @@ table { display: block; overflow-x: auto; max-width: 100%; }
                 <input id="opName" class="w-full border p-1.5 rounded" required>
               </div>
               <div>
-                <label class="block font-semibold text-gray-600 mb-1">Nội Dung Giai Đoạn 1 (Ngày 1-7, giữ Ctrl/Cmd để chọn nhiều)</label>
-                <select id="opStage1DocumentIds" multiple size="5" class="w-full border p-1.5 rounded bg-white"></select>
+                <label class="block font-semibold text-gray-600 mb-1">Chương Trình Học Bắt Buộc Giai Đoạn 1 (Ngày 1-7, giữ Ctrl/Cmd để chọn nhiều)</label>
+                <select id="opStage1RequiredCourseIds" multiple size="5" class="w-full border p-1.5 rounded bg-white" required></select>
               </div>
               <div>
-                <label class="block font-semibold text-gray-600 mb-1">Bài Test Giai Đoạn 1 (bắt buộc)</label>
-                <select id="opTest1Id" class="w-full border p-1.5 rounded bg-white" required></select>
-              </div>
-              <div>
-                <label class="block font-semibold text-gray-600 mb-1">Nội Dung Giai Đoạn 2 (Ngày 8-21, giữ Ctrl/Cmd để chọn nhiều)</label>
-                <select id="opStage2DocumentIds" multiple size="5" class="w-full border p-1.5 rounded bg-white"></select>
-              </div>
-              <div>
-                <label class="block font-semibold text-gray-600 mb-1">Bài Test Giai Đoạn 2 (bắt buộc)</label>
-                <select id="opTest2Id" class="w-full border p-1.5 rounded bg-white" required></select>
+                <label class="block font-semibold text-gray-600 mb-1">Chương Trình Học Bắt Buộc Giai Đoạn 2 (Ngày 8-21, giữ Ctrl/Cmd để chọn nhiều)</label>
+                <select id="opStage2RequiredCourseIds" multiple size="5" class="w-full border p-1.5 rounded bg-white" required></select>
               </div>
               <div class="md:col-span-2">
                 <label class="block font-semibold text-gray-600 mb-1">Tiêu Chí Đánh Giá Giai Đoạn 3 (Ngày 59, quản lý trực tiếp đánh giá — không có bài test)</label>
                 <textarea id="opStage3Criteria" class="w-full border p-1.5 rounded h-20" placeholder="VD: Thái độ làm việc, mức độ nắm quy trình, khả năng xử lý tình huống thực tế..."></textarea>
               </div>
             </div>
+            <p class="text-[11px] text-gray-500 italic">Nhân viên hoàn thành Giai đoạn 1/2 bằng cách tự đăng ký + học các lớp thuộc đúng chương trình được chọn ở tab "Lớp Học" (lớp PHẢI gán bài test — chỉ tính Đạt khi tự làm bài, không chấm tay được). % hoàn thành tự động cập nhật; Nhân Sự bấm "Xác Nhận" từng giai đoạn khi đã đủ.</p>
             <div class="flex justify-end gap-2">
               <button type="button" id="opCancelEditBtn" onclick="cancelEditOnboardingPath()" class="hidden bg-gray-200 text-gray-700 px-4 py-2 rounded font-bold hover:bg-gray-300">Hủy Sửa</button>
               <button type="submit" id="opSubmitBtn" class="bg-emerald-600 text-white px-5 py-2 rounded font-bold hover:bg-emerald-700">Tạo Lộ Trình</button>
@@ -2164,7 +2157,7 @@ table { display: block; overflow-x: auto; max-width: 100%; }
           <div class="overflow-x-auto">
             <table class="w-full border-collapse border text-xs bg-white">
               <thead><tr class="bg-gray-100 text-left text-gray-700">
-                <th class="border p-2">Tên Lộ Trình</th><th class="border p-2">GĐ1: Tài Liệu/Test</th><th class="border p-2">GĐ2: Tài Liệu/Test</th>
+                <th class="border p-2">Tên Lộ Trình</th><th class="border p-2">GĐ1: Chương Trình</th><th class="border p-2">GĐ2: Chương Trình</th>
                 <th class="border p-2">Tiêu Chí GĐ3</th><th class="border p-2 text-center min-w-[120px]">Thao Tác</th>
               </tr></thead>
               <tbody id="onboardingPathsTableBody"></tbody>
@@ -28034,22 +28027,31 @@ function renderTrainingResultsModalBody() {
   const cls = DB.trainingClasses.find(c => c.id === trainingResultsModalClassId);
   const body = document.getElementById('trainingResultsModalBody');
   if (!regs.length) { body.innerHTML = `<tr><td colspan="6" class="text-center p-4 text-gray-400 italic">Chưa có ai đăng ký.</td></tr>`; return; }
+  // Đợt 8 — lớp ĐÃ gán bài test không còn ô chấm tay nữa (server chặn hẳn set-result khi cls.testId !=
+  // null, xem setTrainingRegistrationResult() ở lib/recordActions.js) — kết quả CHỈ đến từ học viên tự
+  // làm bài (openTakeTestModal()/ttTakeSubmit()), hiển thị lại đúng trạng thái đã ghi nhận thay vì ô chọn.
+  const hasTest = cls && cls.testId != null;
   body.innerHTML = regs.map(r => {
     const disp = getTrainingRegDisplayStatus(r, cls);
+    const resultCell = hasTest
+      ? `<span class="text-xs italic text-gray-500">🧪 Tự động qua bài test</span>`
+      : `<select id="trResult_${r.id}" class="border rounded p-1">
+          <option value="REGISTERED" ${r.result === 'REGISTERED' ? 'selected' : ''}>Đang học</option>
+          <option value="PASSED" ${r.result === 'PASSED' ? 'selected' : ''}>✅ Đạt</option>
+          <option value="FAILED" ${r.result === 'FAILED' ? 'selected' : ''}>❌ Không đạt</option>
+        </select>`;
+    const scoreCell = hasTest
+      ? `${r.score != null ? escapeHtml(String(r.score)) + '%' : ''}`
+      : `<input id="trScore_${r.id}" type="number" min="0" max="100" value="${r.score != null ? r.score : ''}" class="w-16 border rounded p-1">`;
+    const actionCell = hasTest ? '' : `<button onclick="saveTrainingResult(${r.id})" class="bg-emerald-600 text-white px-2 py-1 rounded font-bold hover:bg-emerald-700">Lưu</button>`;
     return `
     <tr>
       <td class="border p-2">${escapeHtml(r.creatorName)}<br><span class="text-gray-400">${escapeHtml(r.dept)}</span></td>
       <td class="border p-2">${escapeHtml(r.registeredAt || '')}</td>
       <td class="border p-2"><span class="text-xs font-semibold">${escapeHtml(disp.label)}${disp.sub ? ` (${escapeHtml(disp.sub)})` : ''}</span></td>
-      <td class="border p-2">
-        <select id="trResult_${r.id}" class="border rounded p-1">
-          <option value="REGISTERED" ${r.result === 'REGISTERED' ? 'selected' : ''}>Đang học</option>
-          <option value="PASSED" ${r.result === 'PASSED' ? 'selected' : ''}>✅ Đạt</option>
-          <option value="FAILED" ${r.result === 'FAILED' ? 'selected' : ''}>❌ Không đạt</option>
-        </select>
-      </td>
-      <td class="border p-2"><input id="trScore_${r.id}" type="number" min="0" max="100" value="${r.score != null ? r.score : ''}" class="w-16 border rounded p-1"></td>
-      <td class="border p-2 text-center"><button onclick="saveTrainingResult(${r.id})" class="bg-emerald-600 text-white px-2 py-1 rounded font-bold hover:bg-emerald-700">Lưu</button></td>
+      <td class="border p-2">${resultCell}</td>
+      <td class="border p-2">${scoreCell}</td>
+      <td class="border p-2 text-center">${actionCell}</td>
     </tr>`;
   }).join('');
 }
@@ -28429,13 +28431,6 @@ let ttTakeIndex = 0;
 let ttTakeSecondsPerQuestion = 120;
 let ttTakeSecondsLeft = 0;
 let ttTakeTimerHandle = null;
-// Đào Tạo Tân Binh (Đợt 6) — TÁI SỬ DỤNG nguyên modal/luồng làm bài (ttTakeQuestions/ttTakeAnswers/
-// ttTakeRenderQuestion/ttTakeGoNext...) thay vì dựng modal riêng, chỉ rẽ nhánh Ở BƯỚC NỘP BÀI CUỐI CÙNG
-// (ttTakeSubmit()) vì bài test ở đây KHÔNG gắn với 1 trainingClasses nào — 'CLASS' (mặc định, giữ
-// nguyên hành vi cũ) hay 'ONBOARDING' (xem openOnboardingStageTestModal()/ttTakeSubmitOnboarding() ở
-// phần "ĐÀO TẠO TÂN BINH" bên dưới).
-let ttTakeMode = 'CLASS';
-let ttTakeOnboardingCtx = null; // { progressId, stage } khi ttTakeMode === 'ONBOARDING'
 
 // Đảo câu hỏi + đáp án (Đợt 4) — trả về 1 BẢN SAO đã xáo trộn thứ tự phần tử (Fisher-Yates), KHÔNG bao
 // giờ sửa mảng gốc truyền vào (test.questions/q.options vẫn nguyên vẹn thứ tự lưu ở DB.trainingTests).
@@ -28454,8 +28449,6 @@ function openTakeTestModal(classId) {
   const test = DB.trainingTests.find(t => t.id === cls.testId);
   if (!test || !Array.isArray(test.questions) || !test.questions.length) return alert('Không tìm thấy nội dung bài test.');
   clearInterval(ttTakeTimerHandle);
-  ttTakeMode = 'CLASS';
-  ttTakeOnboardingCtx = null;
   ttTakeClassId = classId;
   // Đảo cả thứ tự câu hỏi lẫn thứ tự đáp án trong từng câu — mỗi lượt mở modal (kể cả làm lại) xáo trộn
   // lại từ đầu, dùng ĐÚNG bản sao (test.questions ở DB.trainingTests không bị đụng tới). Vẫn giữ nguyên
@@ -28530,9 +28523,6 @@ async function ttTakeGoNext() {
 
 async function ttTakeSubmit() {
   const answers = ttTakeQuestions.map(q => ({ questionId: q.id, selectedOptionIds: ttTakeAnswers[q.id] || [] }));
-  // Đào Tạo Tân Binh (Đợt 6) — rẽ nhánh SANG hẳn 1 route/luồng khác (submitOnboardingStageTest(), không
-  // gắn với trainingClasses) — xem ttTakeMode ở đầu phần LÀM BÀI TEST.
-  if (ttTakeMode === 'ONBOARDING') return ttTakeSubmitOnboarding(answers);
   let result;
   try {
     result = await callRecordAction('trainingClasses', ttTakeClassId, 'submit-test', { answers });
@@ -28732,9 +28722,12 @@ function computeCareerPathStageStatuses(path, username) {
   return stages.map((stage, idx) => {
     const confirmed = myConfirmations.some(c => c.stageIndex === idx);
     const requiredCourseIds = Array.isArray(stage.requiredCourseIds) ? stage.requiredCourseIds : [];
+    // Đợt 8 — chỉ tính Đạt khi lớp CÓ gán bài test (c.testId != null, mirror ĐÚNG server xem
+    // confirmCareerPathForEmployee()) — lớp không có test vẫn có thể bị chấm tay "Đạt" nhưng KHÔNG được
+    // tính vào điều kiện xác nhận cấp bậc, bắt buộc phải thi thật.
     const done = requiredCourseIds.filter(courseId => DB.trainingRegistrations.some(r =>
       r.creator === username && r.result === 'PASSED' &&
-      DB.trainingClasses.some(c => c.id === r.classId && c.courseId === courseId))).length;
+      DB.trainingClasses.some(c => c.id === r.classId && c.courseId === courseId && c.testId != null))).length;
     const status = { index: idx, name: stage.name, total: requiredCourseIds.length, done, confirmed, unlocked };
     if (!confirmed) unlocked = false; // mọi cấp SAU cấp chưa xác nhận này đều bị khoá
     return status;
@@ -28894,8 +28887,12 @@ function onboardingStageBadgeHTML(stageNum, progress, milestones) {
   const result = progress[resultField];
   const m = milestones ? milestones[`stage${stageNum}`] : null;
   let resultHTML;
-  if (result === 'PASSED') resultHTML = `<span class="text-emerald-700 font-bold">✅ Đạt</span>`;
-  else if (result === 'FAILED') resultHTML = `<span class="text-red-600 font-bold">❌ Không đạt</span>`;
+  // Đợt 8 — Giai đoạn 1/2 không còn Đạt/Không đạt cấp-cả-giai-đoạn (đó là chuyện của từng lớp/bài thi,
+  // xem computeOnboardingStageProgress()) — chỉ còn 2 trạng thái: chưa/đã được Nhân Sự CONFIRMED. Giai
+  // đoạn 3 giữ nguyên Đạt/Không đạt (đánh giá tự do, không đổi).
+  if (stageNum !== 3 && result === 'CONFIRMED') resultHTML = `<span class="text-emerald-700 font-bold">✅ Đã xác nhận</span>`;
+  else if (stageNum === 3 && result === 'PASSED') resultHTML = `<span class="text-emerald-700 font-bold">✅ Đạt</span>`;
+  else if (stageNum === 3 && result === 'FAILED') resultHTML = `<span class="text-red-600 font-bold">❌ Không đạt</span>`;
   else {
     const cls = m ? (ONBOARDING_STATUS_BADGE_CLASS[m.status.key] || 'bg-gray-100 text-gray-600') : 'bg-gray-100 text-gray-600';
     resultHTML = `<span class="text-[11px] px-1.5 py-0.5 rounded font-bold ${cls}">${m ? m.status.label : ''}</span>`;
@@ -28908,14 +28905,8 @@ function onboardingStageBadgeHTML(stageNum, progress, milestones) {
 let editingOnboardingPathId = null;
 
 function populateOnboardingPathSelects() {
-  const docOpts = DB.trainingDocuments.slice().sort((a, b) => b.id - a.id)
-    .map(d => `<option value="${d.id}">${escapeHtml(d.category)} — ${escapeHtml(d.title)}</option>`).join('');
-  const s1 = document.getElementById('opStage1DocumentIds'); if (s1) s1.innerHTML = docOpts || `<option value="" disabled>-- Kho tài liệu đang trống --</option>`;
-  const s2 = document.getElementById('opStage2DocumentIds'); if (s2) s2.innerHTML = docOpts || `<option value="" disabled>-- Kho tài liệu đang trống --</option>`;
-  const testOpts = DB.trainingTests.slice().sort((a, b) => b.id - a.id)
-    .map(t => `<option value="${t.id}">${escapeHtml(t.title)} (${t.questions.length} câu)</option>`).join('');
-  const t1 = document.getElementById('opTest1Id'); if (t1) t1.innerHTML = `<option value="">-- Chọn bài test --</option>` + testOpts;
-  const t2 = document.getElementById('opTest2Id'); if (t2) t2.innerHTML = `<option value="">-- Chọn bài test --</option>` + testOpts;
+  const s1 = document.getElementById('opStage1RequiredCourseIds'); populateCpStageCourseSelectOptions(s1);
+  const s2 = document.getElementById('opStage2RequiredCourseIds'); populateCpStageCourseSelectOptions(s2);
 
   const pathOpts = DB.onboardingPaths.slice().sort((a, b) => b.id - a.id)
     .map(p => `<option value="${p.id}">${escapeHtml(p.name)}</option>`).join('');
@@ -28927,10 +28918,8 @@ async function submitOnboardingPath(e) {
   if (!canManageTrainingLocal(currentUser)) return alert('⛔ Bạn không có quyền quản lý lộ trình đào tạo tân binh!');
   const payload = {
     name: document.getElementById('opName').value.trim(),
-    stage1DocumentIds: [...document.getElementById('opStage1DocumentIds').selectedOptions].map(o => Number(o.value)),
-    test1Id: document.getElementById('opTest1Id').value,
-    stage2DocumentIds: [...document.getElementById('opStage2DocumentIds').selectedOptions].map(o => Number(o.value)),
-    test2Id: document.getElementById('opTest2Id').value,
+    stage1RequiredCourseIds: [...document.getElementById('opStage1RequiredCourseIds').selectedOptions].map(o => Number(o.value)),
+    stage2RequiredCourseIds: [...document.getElementById('opStage2RequiredCourseIds').selectedOptions].map(o => Number(o.value)),
     stage3Criteria: document.getElementById('opStage3Criteria').value.trim()
   };
   try {
@@ -28958,10 +28947,8 @@ function openEditOnboardingPath(id) {
   editingOnboardingPathId = id;
   populateOnboardingPathSelects();
   document.getElementById('opName').value = path.name;
-  [...document.getElementById('opStage1DocumentIds').options].forEach(o => { o.selected = (path.stage1DocumentIds || []).includes(Number(o.value)); });
-  [...document.getElementById('opStage2DocumentIds').options].forEach(o => { o.selected = (path.stage2DocumentIds || []).includes(Number(o.value)); });
-  document.getElementById('opTest1Id').value = path.test1Id != null ? String(path.test1Id) : '';
-  document.getElementById('opTest2Id').value = path.test2Id != null ? String(path.test2Id) : '';
+  [...document.getElementById('opStage1RequiredCourseIds').options].forEach(o => { o.selected = (path.stage1RequiredCourseIds || []).includes(Number(o.value)); });
+  [...document.getElementById('opStage2RequiredCourseIds').options].forEach(o => { o.selected = (path.stage2RequiredCourseIds || []).includes(Number(o.value)); });
   document.getElementById('opStage3Criteria').value = path.stage3Criteria || '';
   document.getElementById('opSubmitBtn').innerText = 'Lưu Thay Đổi';
   document.getElementById('opCancelEditBtn').classList.remove('hidden');
@@ -28990,20 +28977,46 @@ function renderOnboardingPathsTable() {
   if (!tbody) return;
   if (!pageItems.length) { tbody.innerHTML = `<tr><td colspan="5" class="text-center p-4 text-gray-400 italic">Chưa có lộ trình đào tạo tân binh nào.</td></tr>`; return; }
   const canManage = canManageTrainingLocal(currentUser);
+  const courseNamesHTML = (courseIds) => (courseIds || []).map(id => {
+    const c = DB.trainingCourses.find(x => x.id === id);
+    return c ? escapeHtml(c.name) : `<span class="text-red-500 italic">(chương trình đã xoá)</span>`;
+  }).join(', ') || `<span class="text-gray-400 italic">(chưa chọn)</span>`;
   tbody.innerHTML = pageItems.map(p => {
-    const test1 = DB.trainingTests.find(t => t.id === p.test1Id);
-    const test2 = DB.trainingTests.find(t => t.id === p.test2Id);
     const actions = canManage ? `
       <button onclick="openEditOnboardingPath(${p.id})" class="text-blue-600 font-bold hover:underline mr-2">Sửa</button>
       ${currentUser.perms?.admin ? `<button onclick="deleteOnboardingPath(${p.id})" class="text-red-500 font-bold hover:underline">Xóa</button>` : ''}` : '';
     return `<tr class="hover:bg-gray-50">
       <td class="border p-2 font-bold">${escapeHtml(p.name)}</td>
-      <td class="border p-2">${(p.stage1DocumentIds || []).length} tài liệu / ${test1 ? escapeHtml(test1.title) : '<span class="text-red-500 italic">(bài test đã xoá)</span>'}</td>
-      <td class="border p-2">${(p.stage2DocumentIds || []).length} tài liệu / ${test2 ? escapeHtml(test2.title) : '<span class="text-red-500 italic">(bài test đã xoá)</span>'}</td>
+      <td class="border p-2">${courseNamesHTML(p.stage1RequiredCourseIds)}</td>
+      <td class="border p-2">${courseNamesHTML(p.stage2RequiredCourseIds)}</td>
       <td class="border p-2 max-w-xs truncate" title="${escapeHtml(p.stage3Criteria || '')}">${escapeHtml(p.stage3Criteria || '(chưa nhập)')}</td>
       <td class="border p-2 text-center whitespace-nowrap">${actions}</td>
     </tr>`;
   }).join('');
+}
+
+// Đợt 8 — % hoàn thành chương trình bắt buộc của Giai đoạn 1/2 cho ĐÚNG 1 nhân viên (progress) trên 1
+// lộ trình — cùng công thức "Đạt = có 1 trainingRegistrations PASSED ở 1 lớp thuộc chương trình CÓ gán
+// bài test" như computeCareerPathStageStatuses() (mirror ĐÚNG luật gác ở confirmOnboardingStage(),
+// lib/recordActions.js).
+function computeOnboardingStageProgress(progress, path, stageNum) {
+  const requiredCourseIds = Array.isArray(path?.[`stage${stageNum}RequiredCourseIds`]) ? path[`stage${stageNum}RequiredCourseIds`] : [];
+  const done = requiredCourseIds.filter(courseId => DB.trainingRegistrations.some(r =>
+    r.creator === progress.employeeUsername && r.result === 'PASSED' &&
+    DB.trainingClasses.some(c => c.id === r.classId && c.courseId === courseId && c.testId != null))).length;
+  return { total: requiredCourseIds.length, done };
+}
+
+// Ô "Xác Nhận" Giai đoạn 1/2 trong bảng Phân Công (Khối 2, chỉ Nhân Sự canManage nhìn thấy) — % gợi ý +
+// 1 nút Xác Nhận LUÔN bấm được (server mới chốt điều kiện thật, xem confirmOnboardingStageAction()),
+// rỗng nếu giai đoạn đã CONFIRMED hoặc đang bị khoá tuần tự (Giai đoạn 2 cần Giai đoạn 1 xong trước).
+function onboardingStageConfirmCellHTML(p, path, stageNum, canManage) {
+  if (!canManage) return '';
+  if (p[`stage${stageNum}Result`] === 'CONFIRMED') return '';
+  if (stageNum === 2 && p.stage1Result !== 'CONFIRMED') return '';
+  const { done, total } = computeOnboardingStageProgress(p, path, stageNum);
+  const suggest = total > 0 && done >= total ? ' <span class="text-emerald-600 font-bold">✅</span>' : '';
+  return `<div class="mt-1"><span class="text-[10px] text-gray-500">${done}/${total} CT${suggest}</span><br><button onclick="confirmOnboardingStageAction(${p.id}, ${stageNum})" class="mt-0.5 bg-emerald-600 text-white px-2 py-0.5 rounded text-[10px] font-bold hover:bg-emerald-700">Xác Nhận GĐ${stageNum}</button></div>`;
 }
 
 // ---- Phân Công (Khối 2) ----
@@ -29051,6 +29064,22 @@ function deleteOnboardingProgress(id) {
   }).catch(err => alert(`⛔ ${err.message}`));
 }
 
+// Nhân Sự xác nhận hoàn thành Giai đoạn 1/2 (Đợt 8) — server chốt lại điều kiện (đủ chương trình bắt
+// buộc đã Đạt qua lớp có bài test + gác tuần tự Giai đoạn 2 cần Giai đoạn 1), client chỉ gọi action.
+async function confirmOnboardingStageAction(progressId, stage) {
+  if (!confirm(`Xác nhận nhân viên đã hoàn thành Giai đoạn ${stage}?`)) return;
+  let updated;
+  try {
+    const result = await callRecordAction('onboardingProgress', progressId, 'confirm-stage', { stage });
+    updated = result.item;
+  } catch (err) { return alert(`⛔ ${err.message}`); }
+  const idx = DB.onboardingProgress.findIndex(p => p.id === progressId);
+  if (idx !== -1) DB.onboardingProgress[idx] = updated;
+  logSystemAction('INTERNAL', 'CONFIRM_ONBOARDING_STAGE', `Xác nhận hoàn thành Giai đoạn ${stage} đào tạo tân binh [${updated.employeeUsername}]`, 'SUCCESS');
+  alert(`✅ Đã xác nhận hoàn thành Giai đoạn ${stage}!`);
+  renderOnboardingLms();
+}
+
 function renderOnboardingProgressTable() {
   const list = DB.onboardingProgress.slice().sort((a, b) => b.id - a.id);
   document.getElementById('paginationContainer_onboardingProgress').innerHTML = buildPaginationBoxHTML('onboardingProgress', 'renderOnboardingProgressTable');
@@ -29058,9 +29087,11 @@ function renderOnboardingProgressTable() {
   const tbody = document.getElementById('onboardingProgressTableBody');
   if (!tbody) return;
   if (!pageItems.length) { tbody.innerHTML = `<tr><td colspan="8" class="text-center p-4 text-gray-400 italic">Chưa có nhân viên nào được phân công.</td></tr>`; return; }
+  const canManage = canManageTrainingLocal(currentUser);
   tbody.innerHTML = pageItems.map(p => {
+    const path = DB.onboardingPaths.find(x => x.id === p.pathId);
     const m = computeOnboardingMilestones(p);
-    const canIssue = p.stage1Result === 'PASSED' && p.stage2Result === 'PASSED' && p.stage3Evaluation === 'PASSED';
+    const canIssue = p.stage1Result === 'CONFIRMED' && p.stage2Result === 'CONFIRMED' && p.stage3Evaluation === 'PASSED';
     let certCell;
     if (p.certificateIssued) certCell = `<button onclick="downloadOnboardingCertificatePdf(${p.id})" class="text-indigo-600 font-bold hover:underline">⬇️ Tải Lại</button>`;
     else if (canIssue) certCell = `<button onclick="issueOnboardingCertificateAction(${p.id})" class="bg-emerald-600 text-white px-2 py-1 rounded font-bold hover:bg-emerald-700">🎓 Cấp Chứng Chỉ</button>`;
@@ -29069,8 +29100,8 @@ function renderOnboardingProgressTable() {
       <td class="border p-2">${escapeHtml(p.employeeName)}<div class="text-gray-400">(${escapeHtml(p.employeeUsername)})</div></td>
       <td class="border p-2">${escapeHtml(p.pathName)}</td>
       <td class="border p-2">${p.startDate ? escapeHtml(new Date(p.startDate).toLocaleDateString('vi-VN')) : ''}</td>
-      <td class="border p-2 text-center">${onboardingStageBadgeHTML(1, p, m)}</td>
-      <td class="border p-2 text-center">${onboardingStageBadgeHTML(2, p, m)}</td>
+      <td class="border p-2 text-center">${onboardingStageBadgeHTML(1, p, m)}${onboardingStageConfirmCellHTML(p, path, 1, canManage)}</td>
+      <td class="border p-2 text-center">${onboardingStageBadgeHTML(2, p, m)}${onboardingStageConfirmCellHTML(p, path, 2, canManage)}</td>
       <td class="border p-2 text-center">${onboardingStageBadgeHTML(3, p, m)}</td>
       <td class="border p-2 text-center">${certCell}</td>
       <td class="border p-2 text-center">${currentUser.perms?.admin ? `<button onclick="deleteOnboardingProgress(${p.id})" class="text-red-500 font-bold hover:underline">Xóa</button>` : ''}</td>
@@ -29079,43 +29110,37 @@ function renderOnboardingProgressTable() {
 }
 
 // ---- Lộ Trình Tân Binh Của Tôi (Khối 3) ----
-// Tái sử dụng cách hiển thị DOCUMENT/VIDEO/IMAGE Y HỆT renderTrainingDocuments() (Đợt 4) — không dựng
-// lại UI xem nội dung mới, chỉ đổi khuôn thẻ cho gọn trong 1 cột.
-function onboardingDocRowHTML(docId) {
-  const d = DB.trainingDocuments.find(x => x.id === docId);
-  if (!d) return `<div class="text-xs text-gray-400 italic">(tài liệu đã bị xoá)</div>`;
-  let actionHTML;
-  if (d.docType === 'VIDEO') {
-    const embedUrl = trainingYoutubeEmbedUrl(d.videoUrl);
-    actionHTML = embedUrl
-      ? `<iframe src="${escapeHtml(embedUrl)}" class="w-full h-28 rounded border" frameborder="0" allowfullscreen title="${escapeHtml(d.title)}"></iframe>`
-      : `<a href="${escapeHtml(d.videoUrl || '')}" target="_blank" rel="noopener" class="text-indigo-600 underline text-xs">▶️ Xem video</a>`;
-  } else if (d.docType === 'IMAGE') {
-    actionHTML = `<a href="${escapeHtml(d.fileUrl)}" target="_blank" rel="noopener"><img src="${escapeHtml(d.fileUrl)}" class="w-20 h-20 object-cover rounded border" alt="${escapeHtml(d.title)}"></a>`;
-  } else {
-    actionHTML = `<a href="${escapeHtml(d.fileUrl)}" target="_blank" rel="noopener" class="bg-indigo-600 text-white px-2 py-1 rounded text-xs font-bold hover:bg-indigo-700 inline-block">⬇️ Tải</a>`;
-  }
-  return `<div class="bg-gray-50 rounded border p-2 space-y-1">
-    <div class="text-xs font-semibold text-gray-700">${escapeHtml(d.title)}${d.mandatory ? ' <span class="text-red-600">⚠️</span>' : ''}</div>
-    ${actionHTML}
-  </div>`;
+
+// Đợt 8 — hiển thị danh sách CHƯƠNG TRÌNH HỌC bắt buộc của 1 giai đoạn cho nhân viên xem, kèm dấu đã Đạt
+// hay chưa (dựa đúng công thức computeOnboardingStageProgress()) — thay hẳn khối tài liệu/nút vào làm
+// bài test cũ (đã bỏ, xem giải thích ở computeOnboardingStageProgress()).
+function onboardingStageCoursesHTML(path, stageNum) {
+  const courseIds = Array.isArray(path?.[`stage${stageNum}RequiredCourseIds`]) ? path[`stage${stageNum}RequiredCourseIds`] : [];
+  if (!courseIds.length) return '<div class="text-xs text-gray-400 italic">Chưa cấu hình chương trình.</div>';
+  return courseIds.map(courseId => {
+    const course = DB.trainingCourses.find(c => c.id === courseId);
+    const passed = DB.trainingRegistrations.some(r => r.creator === currentUser.username && r.result === 'PASSED' &&
+      DB.trainingClasses.some(c => c.id === r.classId && c.courseId === courseId && c.testId != null));
+    return `<div class="text-xs flex items-center gap-1">${passed ? '✅' : '⬜'} ${course ? escapeHtml(course.name) : '<span class="text-red-500 italic">(chương trình đã xoá)</span>'}</div>`;
+  }).join('');
 }
 
 function renderMyOnboardingCardHTML(p) {
   const path = DB.onboardingPaths.find(x => x.id === p.pathId);
   const m = computeOnboardingMilestones(p);
-  const stage1Docs = (path?.stage1DocumentIds || []).map(onboardingDocRowHTML).join('') || '<div class="text-xs text-gray-400 italic">Chưa có nội dung.</div>';
-  const stage2Docs = (path?.stage2DocumentIds || []).map(onboardingDocRowHTML).join('') || '<div class="text-xs text-gray-400 italic">Chưa có nội dung.</div>';
+  const stage1Courses = onboardingStageCoursesHTML(path, 1);
+  const stage2Courses = onboardingStageCoursesHTML(path, 2);
+  const stageHint = `<div class="text-xs text-gray-500 italic">Đăng ký + học các lớp thuộc chương trình trên ở tab "Lớp Học" (lớp có bài test) — hoàn thành hết sẽ chờ Nhân Sự xác nhận.</div>`;
 
-  const stage1TestBtn = p.stage1Result != null
-    ? `<span class="${p.stage1Result === 'PASSED' ? 'text-emerald-700' : 'text-red-600'} font-bold text-xs">${p.stage1Result === 'PASSED' ? `✅ Đạt (${p.stage1Score}%)` : `❌ Không đạt (${p.stage1Score}%)`}</span>`
-    : `<button onclick="openOnboardingStageTestModal(${p.id}, 1)" class="bg-indigo-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-indigo-700">📝 Vào Làm Bài Test Giai Đoạn 1</button>`;
-  const stage2Locked = p.stage1Result !== 'PASSED';
-  const stage2TestBtn = p.stage2Result != null
-    ? `<span class="${p.stage2Result === 'PASSED' ? 'text-emerald-700' : 'text-red-600'} font-bold text-xs">${p.stage2Result === 'PASSED' ? `✅ Đạt (${p.stage2Score}%)` : `❌ Không đạt (${p.stage2Score}%)`}</span>`
+  const stage1Note = p.stage1Result === 'CONFIRMED'
+    ? `<div class="text-xs text-emerald-700 font-bold">✅ Đã được Nhân Sự xác nhận hoàn thành</div>`
+    : stageHint;
+  const stage2Locked = p.stage1Result !== 'CONFIRMED';
+  const stage2Note = p.stage2Result === 'CONFIRMED'
+    ? `<div class="text-xs text-emerald-700 font-bold">✅ Đã được Nhân Sự xác nhận hoàn thành</div>`
     : stage2Locked
-      ? `<span class="text-xs text-gray-400 italic">🔒 Cần Đạt Giai đoạn 1 trước</span>`
-      : `<button onclick="openOnboardingStageTestModal(${p.id}, 2)" class="bg-indigo-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-indigo-700">📝 Vào Làm Bài Test Giai Đoạn 2</button>`;
+      ? `<div class="text-xs text-gray-400 italic">🔒 Cần hoàn thành Giai đoạn 1 trước</div>`
+      : stageHint;
 
   const stage3HTML = p.stage3Evaluation != null
     ? `<div class="${p.stage3Evaluation === 'PASSED' ? 'text-emerald-700' : 'text-red-600'} font-bold text-xs">${p.stage3Evaluation === 'PASSED' ? '✅ Đạt' : '❌ Không đạt'} — đánh giá bởi ${escapeHtml(p.stage3EvaluatedByName || '')}</div>${p.stage3Note ? `<div class="text-xs text-gray-600 italic mt-1">"${escapeHtml(p.stage3Note)}"</div>` : ''}`
@@ -29140,13 +29165,13 @@ function renderMyOnboardingCardHTML(p) {
     <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
       <div class="border rounded p-2 space-y-2">
         <div class="font-bold text-xs text-gray-700 flex justify-between items-center">Giai Đoạn 1 (Ngày 1-7) ${onboardingStageBadgeHTML(1, p, m)}</div>
-        <div class="space-y-1">${stage1Docs}</div>
-        <div>${stage1TestBtn}</div>
+        <div class="space-y-1">${stage1Courses}</div>
+        <div>${stage1Note}</div>
       </div>
       <div class="border rounded p-2 space-y-2">
         <div class="font-bold text-xs text-gray-700 flex justify-between items-center">Giai Đoạn 2 (Ngày 8-21) ${onboardingStageBadgeHTML(2, p, m)}</div>
-        <div class="space-y-1">${stage2Docs}</div>
-        <div>${stage2TestBtn}</div>
+        <div class="space-y-1">${stage2Courses}</div>
+        <div>${stage2Note}</div>
       </div>
       <div class="border rounded p-2 space-y-2">
         <div class="font-bold text-xs text-gray-700 flex justify-between items-center">Giai Đoạn 3 (đến Ngày 59) ${onboardingStageBadgeHTML(3, p, m)}</div>
@@ -29180,7 +29205,7 @@ function renderOnboardingStage3Queue() {
   if (!canSeeSection) return;
   const queue = DB.onboardingProgress.filter(p => {
     if (p.stage3Evaluation != null) return false;
-    if (p.stage1Result !== 'PASSED' || p.stage2Result !== 'PASSED') return false;
+    if (p.stage1Result !== 'CONFIRMED' || p.stage2Result !== 'CONFIRMED') return false;
     const traineeUser = DB.users.find(u => u.username === p.employeeUsername);
     return canEvaluateOnboardingStage3Local(currentUser, traineeUser);
   });
@@ -29271,46 +29296,6 @@ async function downloadOnboardingCertificatePdf(progressId) {
   }
 }
 
-// ---- Làm bài test Giai đoạn 1/2 — TÁI SỬ DỤNG modal/luồng làm bài đã có (xem ttTakeMode ở phần LÀM BÀI
-// TEST phía trên: openTakeTestModal() dùng cho trainingClasses, hàm này dùng cho onboardingProgress) ----
-function openOnboardingStageTestModal(progressId, stage) {
-  const progress = DB.onboardingProgress.find(p => p.id === progressId);
-  if (!progress) return alert('Không tìm thấy hồ sơ đào tạo tân binh.');
-  const path = DB.onboardingPaths.find(x => x.id === progress.pathId);
-  const testId = stage === 1 ? path?.test1Id : path?.test2Id;
-  const test = DB.trainingTests.find(t => t.id === testId);
-  if (!test || !Array.isArray(test.questions) || !test.questions.length) return alert('Không tìm thấy nội dung bài test của giai đoạn này.');
-  clearInterval(ttTakeTimerHandle);
-  ttTakeMode = 'ONBOARDING';
-  ttTakeOnboardingCtx = { progressId, stage };
-  // Đảo câu hỏi + đáp án mỗi lượt mở modal — cùng kỹ thuật/lý do với openTakeTestModal() (Đợt 4).
-  ttTakeQuestions = shuffleArrayCopy(test.questions).map(q => Object.assign({}, q, { options: shuffleArrayCopy(q.options) }));
-  ttTakeAnswers = {};
-  ttTakeIndex = 0;
-  ttTakeSecondsPerQuestion = 120; // bài test tân binh không gắn trainingClasses nên không có testSecondsPerQuestion riêng — dùng mặc định chung 120s/câu.
-  document.getElementById('ttTakeModalTitle').innerText = `🧪 ${test.title}`;
-  document.getElementById('ttTakeModalSubtitle').innerText = `Đào Tạo Tân Binh — Giai Đoạn ${stage}: ${path?.name || ''}`;
-  document.getElementById('trainingTakeTestModal').classList.remove('hidden');
-  ttTakeRenderQuestion();
-}
-
-async function ttTakeSubmitOnboarding(answers) {
-  const { progressId, stage } = ttTakeOnboardingCtx || {};
-  let updated;
-  try {
-    updated = (await callRecordAction('onboardingProgress', progressId, 'submit-stage-test', { stage, answers })).item;
-  } catch (err) {
-    document.getElementById('trainingTakeTestModal').classList.add('hidden');
-    return alert(`⛔ ${err.message}`);
-  }
-  document.getElementById('trainingTakeTestModal').classList.add('hidden');
-  const idx = DB.onboardingProgress.findIndex(p => p.id === progressId);
-  if (idx !== -1) DB.onboardingProgress[idx] = updated;
-  const resultField = `stage${stage}Result`, scoreField = `stage${stage}Score`;
-  logSystemAction('INTERNAL', 'SUBMIT_ONBOARDING_STAGE_TEST', `Nộp bài test Giai đoạn ${stage} đào tạo tân binh [${updated.employeeUsername}]`, 'SUCCESS');
-  alert(`✅ Đã nộp bài!\n\nĐiểm: ${updated[scoreField]}%\nKết quả: ${updated[resultField] === 'PASSED' ? 'ĐẠT' : 'KHÔNG ĐẠT'}`);
-  renderOnboardingLms();
-}
 
 function renderOnboardingLms() {
   populateOnboardingPathSelects();
