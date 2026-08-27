@@ -1090,7 +1090,7 @@ table { display: block; overflow-x: auto; max-width: 100%; }
              cho onContractAddendumTargetChange()/submitContractReq() đọc, không phải sửa gì thêm ở 2 nơi
              đó — resolveContractAddendumTargetInput() ghi vào đây sau khi khớp đúng 1 hợp đồng từ ô gõ. -->
         <div id="contractAddendumTargetWrap" class="hidden">
-          <label class="block font-semibold text-gray-600 mb-1">Chọn Hợp Đồng Để Bổ Sung Phụ Lục</label>
+          <label id="contractAddendumTargetLabel" class="block font-semibold text-gray-600 mb-1">Chọn Hợp Đồng Để Bổ Sung Phụ Lục</label>
           <input type="hidden" id="contractAddendumTarget" value="">
           <input id="contractAddendumTargetInput" data-sdd-list="contractAddendumTargetDatalist" autocomplete="off" oninput="resolveContractAddendumTargetInput(this.value)" placeholder="Gõ mã hoặc tên hợp đồng để tìm..." class="w-full border p-1.5 rounded bg-white">
           <div id="contractAddendumTargetDatalist" class="hidden sdd-dropdown" data-sdd-dropdown></div>
@@ -14021,6 +14021,11 @@ function onContractOpModeChange() {
   // CONTRACT_MANAGE) — xem FORM_TABS. submitContractReq() đọc lại đúng bộ này khi thu thập dữ liệu.
   renderDynamicInputsForModule(isImportMode ? 'CONTRACT_MANAGE' : 'CONTRACT_APPROVAL', 'dynamicFieldsContainer_CONTRACT');
   document.getElementById('contractAddendumTargetWrap').classList.toggle('hidden', !isAddendumMode);
+  // Nhãn phân biệt rõ 2 luồng dùng chung ô này: tab Phê Duyệt (ADDENDUM) trình phụ lục MỚI chờ duyệt,
+  // tab Quản Lý HĐ (IMPORT_ADDENDUM) nhập thẳng phụ lục ĐÃ KÝ sẵn (không qua hàng chờ duyệt).
+  document.getElementById('contractAddendumTargetLabel').innerText = mode === 'IMPORT_ADDENDUM'
+    ? 'Chọn Hợp Đồng Để Bổ Sung Phụ Lục đã ký'
+    : 'Chọn Hợp Đồng Để Bổ Sung Phụ Lục';
   // Đợt Thanh Toán: hiện cho NEW/ADDENDUM (cả 2 đều qua Phê Duyệt, phụ lục CÓ thể phát sinh thanh toán
   // riêng — độc lập với hợp đồng gốc, xem uploadContractSignedFile()/startContractPayment() ở
   // lib/recordActions.js), ẩn cho 2 chế độ IMPORT (nhập hồ sơ đã ký sẵn, không cần khai lại đợt thanh
