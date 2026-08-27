@@ -12,7 +12,11 @@ const fs = require('fs');
 const { PDFDocument, rgb } = require('pdf-lib');
 const fontkit = require('@pdf-lib/fontkit');
 const { getAllForCollection } = require('../lib/recordStore');
-const { canDownloadRecordFile, canViewInternalPost } = require('../lib/recordViewScope');
+const { getAllAppData } = require('../lib/appData');
+const {
+  canDownloadRecordFile, canViewInternalPost,
+  canViewItPriceApproval, canViewReportEntry, canSeeReportCompilation, filterRecruitmentReferralsForUser
+} = require('../lib/recordViewScope');
 
 const router = express.Router();
 
@@ -30,14 +34,27 @@ const router = express.Router();
 // đang chờ duyệt/đã bị từ chối (không hề hiện trên giao diện với người khác) vẫn tải được nếu URL bị lộ
 // ra ngoài (dán vào chat, cache trình duyệt của người đã từng thấy...) — trả riêng owning = {internal:true,
 // post} để caller gọi canViewInternalPost() thay vì canDownloadRecordFile() (2 khuôn quyền khác nhau).
+//
+// itPriceApprovals/reportEntries/reportPeriods/recruitmentReferrals: 3 module ra đời SAU route này nên
+// chưa từng được tra tới ở đây — cùng lỗ hổng như internalPosts từng gặp (file không thuộc collection
+// nào bên dưới thì rơi vào nhánh "CHO PHÉP như trước" ở router.get() bên dưới, không kiểm tra gì). File
+// bảng giá IT (chỉ proposer/approver phòng ban/itManage được xem), file đính kèm slide Báo Cáo Định Kỳ
+// (ẩn cho tới khi PUBLISHED), và CV ứng viên (chỉ người giới thiệu + tuyển dụng) đều là dữ liệu cần giới
+// hạn đúng như canView*ForUser() đã lọc ở GET /api/data — thêm vào đây để URL bị lộ (share nhầm, dán vào
+// chat...) không cho tải vượt phạm vi. Mỗi module trả owning riêng (itPrice/reportEntry/reportPeriod/
+// recruitment) để caller gọi đúng hàm kiểm quyền tương ứng (khác chữ ký/tham số nhau).
 async function findOwningRecord(fileUrl) {
-  const [docs, submissions, contracts, carRegs, officeReqs, internalPosts] = await Promise.all([
+  const [docs, submissions, contracts, carRegs, officeReqs, internalPosts, itPriceApprovals, reportEntries, reportPeriods, recruitmentReferrals] = await Promise.all([
     getAllForCollection('docs'),
     getAllForCollection('submissions'),
     getAllForCollection('contracts'),
     getAllForCollection('carRegs'),
     getAllForCollection('officeReqs'),
-    getAllForCollection('internalPosts')
+    getAllForCollection('internalPosts'),
+    getAllForCollection('itPriceApprovals'),
+    getAllForCollection('reportEntries'),
+    getAllForCollection('reportPeriods'),
+    getAllForCollection('recruitmentReferrals')
   ]);
   const doc = (docs || []).find(d => d.fileUrl === fileUrl);
   if (doc) return { moduleKey: 'doc', dept: doc.dept, ownerUsername: doc.uploader };
@@ -51,6 +68,14 @@ async function findOwningRecord(fileUrl) {
   if (officeReq) return { moduleKey: 'office', dept: officeReq.dept, ownerUsername: officeReq.creator };
   const post = (internalPosts || []).find(p => p.attachment && p.attachment.fileUrl === fileUrl);
   if (post) return { internal: true, post };
+  const priceItem = (itPriceApprovals || []).find(p => (p.files || []).some(f => f.fileUrl === fileUrl));
+  if (priceItem) return { itPrice: true, item: priceItem };
+  const entry = (reportEntries || []).find(e => e.fileUrl === fileUrl);
+  if (entry) return { reportEntry: true, entry };
+  const period = (reportPeriods || []).find(p => (p.compilation?.slides || []).some(s => s.fileUrl === fileUrl));
+  if (period) return { reportPeriod: true, period };
+  const referral = (recruitmentReferrals || []).find(r => r.cvFileUrl === fileUrl);
+  if (referral) return { recruitment: true, referral };
   return null;
 }
 const UPLOAD_DIR = path.join(__dirname, '..', 'uploads');
@@ -85,9 +110,24 @@ router.get('/', async (req, res) => {
   if (owning && owning.internal && !canViewInternalPost(req.freshUser, owning.post)) {
     return res.status(403).json({ error: 'Bạn không có quyền tải tệp này' });
   }
+  if (owning && owning.itPrice) {
+    const appData = await getAllAppData();
+    if (!canViewItPriceApproval(req.freshUser, owning.item, appData)) {
+      return res.status(403).json({ error: 'Bạn không có quyền tải tệp này' });
+    }
+  }
+  if (owning && owning.reportEntry && !canViewReportEntry(req.freshUser, owning.entry)) {
+    return res.status(403).json({ error: 'Bạn không có quyền tải tệp này' });
+  }
+  if (owning && owning.reportPeriod && !canSeeReportCompilation(req.freshUser, owning.period)) {
+    return res.status(403).json({ error: 'Bạn không có quyền tải tệp này' });
+  }
+  if (owning && owning.recruitment && !filterRecruitmentReferralsForUser([owning.referral], req.freshUser).length) {
+    return res.status(403).json({ error: 'Bạn không có quyền tải tệp này' });
+  }
   // custodianDept chỉ có mặt ở owning trả về cho hợp đồng (findOwningRecord() ở trên) — undefined cho
   // mọi module khác, nên nhánh OR dưới đây là no-op cho các module không có khái niệm custodian.
-  if (owning && !owning.internal) {
+  if (owning && !owning.internal && !owning.itPrice && !owning.reportEntry && !owning.reportPeriod && !owning.recruitment) {
     const allowedByDept = canDownloadRecordFile(req.freshUser, owning.moduleKey, owning.dept, owning.ownerUsername);
     const allowedByCustodian = owning.custodianDept && owning.custodianDept !== owning.dept &&
       canDownloadRecordFile(req.freshUser, owning.moduleKey, owning.custodianDept, owning.ownerUsername);

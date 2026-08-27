@@ -12,6 +12,11 @@ const { getAppDataValue } = require('./appData');
 const { MODULE_CONFIGS, resolveContractApprovalWorkflow, resolveContractManageWorkflow } = require('./workflowEngine');
 const { canApproveInternalPost, canManageTraining, canManageRecruitment } = require('./recordActions');
 
+// Khớp canManageVpp() ở public/index.html.
+function canManageVpp(user) {
+  return !!(user?.perms?.admin || user?.perms?.vppManage);
+}
+
 function scopeAllows(user, scope, dept) {
   if (!user) return false;
   if (user.perms?.admin) return true;
@@ -274,6 +279,24 @@ function filterItPriceApprovalsForUser(items, user, appData) {
   return (items || []).filter(p => canViewItPriceApproval(user, p, appData));
 }
 
+// Khớp khối lọc trong renderVppRegistrations() (public/index.html): canManageVpp (admin/vppManage) xem
+// hết, người tạo xem đăng ký của mình, người duyệt phòng ban (vppDeptWorkflows) xem hồ sơ nằm trong
+// đúng luồng duyệt của họ. Trước đây vppRegistrations là collection DUY NHẤT trong nhóm dept-workflow
+// (docs/submissions/contracts/carRegs/officeReqs/itPriceApprovals/budgetEntries...) KHÔNG có mặt ở GET
+// /api/data lọc lại — cùng dạng lỗ hổng đã vá cho 9+ collection khác: bất kỳ ai gọi thẳng GET /api/data
+// đều đọc được đăng ký/chi tiêu văn phòng phẩm (kể cả bản NHÁP) của MỌI phòng ban, trong khi giao diện
+// "Báo Cáo Tổng Hợp" (Kỳ Đăng Ký) chỉ hiện đúng phạm vi cho người có vppManage.
+function canViewVppRegistration(user, item, appData) {
+  if (!user) return false;
+  if (canManageVpp(user)) return true;
+  if (item.creator === user.username) return true;
+  return isApproverForApproversMap(MODULE_CONFIGS.vppRegistrations.resolveWfConfig(item, appData).approvers, user.username);
+}
+
+function filterVppRegistrationsForUser(items, user, appData) {
+  return (items || []).filter(p => canViewVppRegistration(user, p, appData));
+}
+
 // Ngân sách là hồ sơ của CẢ ĐƠN VỊ (không phải cá nhân) — mọi người CÙNG PHÒNG BAN xem được, kể cả bản
 // đang NHÁP (khác canViewReportEntry — báo cáo cá nhân, NHÁP chỉ chính người tạo xem được). admin/
 // budgetManage/budgetAggregate xem được mọi phòng ban (đúng khuôn "Quản lý"/"Tổng hợp" ở Báo Cáo Định
@@ -430,6 +453,7 @@ module.exports = {
   canViewMeetingMinutes, filterMeetingMinutesForUser,
   canViewTaskRecord, filterTasksForUser,
   canViewItPriceApproval, filterItPriceApprovalsForUser,
+  canViewVppRegistration, filterVppRegistrationsForUser,
   canViewItSupportTicket, filterItSupportTicketsForUser,
   canViewUniformPeriod, filterUniformPeriodsForUser,
   canViewUniformIssuance, filterUniformIssuancesForUser,
