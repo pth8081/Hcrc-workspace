@@ -40,8 +40,18 @@ function getRpName() {
 // Origin mong đợi PHẢI khớp CHÍNH XÁC domain trình duyệt đang gọi tới — lấy trực tiếp từ request thay
 // vì hằng số cứng, để 1 cấu hình WEBAUTHN_RP_ID vẫn hoạt động đúng dù test qua cổng khác (miễn cùng RP
 // ID/host, đúng chuẩn WebAuthn: origin so khớp đầy đủ scheme+host+port, rpID chỉ so khớp phần host).
+//
+// KHÔNG dùng req.protocol cho scheme (trừ localhost) — req.protocol chỉ đọc đúng "https" khi 'trust
+// proxy' (server.js, biến TRUST_PROXY) đã bật VÀ reverse proxy/Cloudflare Tunnel phía trước THỰC SỰ gửi
+// header X-Forwarded-Proto, dễ sai lệch (quên pm2 restart sau khi sửa .env, tunnel không forward header,
+// nhiều lớp proxy...) — đã xác nhận thực tế gặp đúng lỗi này dù đã bật TRUST_PROXY. Trình duyệt CHỈ cấp
+// API navigator.credentials (WebAuthn) trong "secure context": https thật hoặc http://localhost — nên
+// nếu request này tới được đây (đi qua browser WebAuthn call) mà host không phải localhost thì CHẮC CHẮN
+// trình duyệt đang gọi qua https, không cần đọc header nào để biết — ép cứng "https" an toàn và đúng hơn.
 function getExpectedOrigin(req) {
-  return `${req.protocol}://${req.get('host')}`;
+  const host = req.get('host') || '';
+  const isLocalhost = /^(localhost|127\.0\.0\.1)(:\d+)?$/.test(host);
+  return `${isLocalhost ? req.protocol : 'https'}://${host}`;
 }
 
 function toB64(buf) { return Buffer.from(buf).toString('base64'); }
