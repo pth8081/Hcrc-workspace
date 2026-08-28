@@ -5343,6 +5343,7 @@ input[data-sdd-list] {
               <option value="">-- Chọn Mẫu Giá Phê Duyệt --</option>
             </select>
             <p class="text-gray-400 mt-1">Bắt buộc chọn đúng mẫu áp dụng cho bảng giá của bạn — tệp bảng giá tải lên bên dưới phải có đúng tên cột theo mẫu đã chọn, sai/thiếu cột sẽ bị chặn gửi.</p>
+            <a id="itPriceMasterListDownloadLink" href="#" target="_blank" class="hidden inline-block mt-1 text-sky-600 hover:underline font-semibold">📥 Tải Mẫu Giá này về để làm theo</a>
           </div>
           <div>
             <label class="block font-semibold text-gray-600 mb-1">📎 Tệp Bảng Giá (.xlsx) <span class="text-red-500">*</span></label>
@@ -5791,10 +5792,11 @@ input[data-sdd-list] {
         <div id="itPriceModalDiffSummary" class="mb-2"></div>
         <div id="itPriceModalDiffDupWarning" class="hidden mb-2 p-2 rounded border border-red-300 bg-red-50 text-xs text-red-800"></div>
         <div class="flex flex-wrap gap-3 text-xs mb-2">
-          <span class="flex items-center gap-1"><span class="w-3 h-3 rounded-sm bg-emerald-50 border border-emerald-300 inline-block"></span> Dòng mới thêm</span>
-          <span class="flex items-center gap-1"><span class="w-3 h-3 rounded-sm bg-red-50 border border-red-300 inline-block"></span> Dòng đã bị xóa</span>
-          <span class="flex items-center gap-1"><span class="w-3 h-3 rounded-sm bg-amber-100 border border-amber-400 inline-block"></span> Ô có thông tin thay đổi</span>
+          <span class="flex items-center gap-1"><span class="w-3 h-3 rounded-sm bg-emerald-200 border border-emerald-500 inline-block"></span> Dòng mới thêm</span>
+          <span class="flex items-center gap-1"><span class="w-3 h-3 rounded-sm bg-red-200 border border-red-500 inline-block"></span> Dòng đã bị xóa</span>
+          <span class="flex items-center gap-1"><span class="w-3 h-3 rounded-sm bg-amber-200 border border-amber-500 inline-block"></span> Ô có thông tin thay đổi</span>
         </div>
+        <p class="text-[11px] text-gray-500 italic mb-2">Các dòng có thay đổi được tự động xếp lên đầu bảng để dễ rà soát — cột "Trạng Thái" luôn ở đầu mỗi dòng.</p>
         <div class="overflow-x-auto border rounded">
           <table class="w-full border-collapse text-xs bg-white">
             <thead id="itPriceModalDiffHead" class="bg-gray-100 text-left text-gray-700"></thead>
@@ -32226,10 +32228,23 @@ async function onItPriceFileChange(event) {
 // Đổi Mẫu Giá SAU KHI đã chọn sẵn 1 tệp bảng giá — đọc lại tệp đó (còn nguyên trong ô chọn file) để dò
 // lại đúng cột theo mẫu mới chọn, không bắt người dùng phải chọn lại tệp.
 async function onItPriceMasterListChange() {
+  updateItPriceMasterListDownloadLink();
   const fileInput = document.getElementById('itPriceFileInput');
   const file = fileInput?.files?.[0];
   if (!file) return;
   await parseItPriceFileForPreview(file);
+}
+
+// Cập nhật link "Tải Mẫu Giá này về" ngay dưới dropdown chọn mẫu trong form tạo đề xuất — để người đề
+// xuất tải đúng file mẫu (khuôn cột) đang chọn về làm theo trước khi nộp bảng giá của mình.
+function updateItPriceMasterListDownloadLink() {
+  const link = document.getElementById('itPriceMasterListDownloadLink');
+  if (!link) return;
+  const masterListId = document.getElementById('itPriceMasterListSelect')?.value;
+  const list = masterListId ? (DB.itPriceMasterLists || []).find(m => String(m.id) === masterListId) : null;
+  if (!list) { link.classList.add('hidden'); return; }
+  link.href = attachmentDownloadUrl(list.fileUrl, null, list.fileName);
+  link.classList.remove('hidden');
 }
 
 // ============ Modal dùng chung "Gán vai trò cột" ============
@@ -32294,7 +32309,7 @@ function renderItPriceMasterListAdmin() {
   }
   tbody.innerHTML = lists.map(m => `
     <tr class="hover:bg-gray-50 border-b">
-      <td class="border p-2 font-semibold">${escapeHtml(m.name)}<br><span class="text-[11px] text-gray-400 font-normal">📎 ${escapeHtml(m.fileName || '')}</span></td>
+      <td class="border p-2 font-semibold">${escapeHtml(m.name)}<br><a href="${attachmentDownloadUrl(m.fileUrl, null, m.fileName)}" target="_blank" class="text-[11px] text-sky-600 hover:underline font-normal">📥 ${escapeHtml(m.fileName || '')}</a></td>
       <td class="border p-2">${(m.columns || []).map(c => `<span class="inline-block px-1.5 py-0.5 rounded text-[11px] mr-1 mb-1 bg-gray-100 text-gray-700">${escapeHtml(c.label)}</span>`).join('')}</td>
       <td class="border p-2">${escapeHtml(m.uploadedByName || '')}<br><span class="text-[11px] text-gray-400">${escapeHtml(m.uploadedAt || '')}</span></td>
       <td class="border p-2 text-center space-x-1 whitespace-nowrap">
@@ -32416,6 +32431,7 @@ function renderItPriceMasterListSelect() {
   select.innerHTML = `<option value="">-- Chọn Mẫu Giá Phê Duyệt --</option>` +
     lists.map(m => `<option value="${m.id}">${escapeHtml(m.name)} (${(m.columns || []).length} cột)</option>`).join('');
   if (lists.some(m => String(m.id) === prevValue)) select.value = prevValue;
+  updateItPriceMasterListDownloadLink();
 }
 
 async function submitItPriceApproval(e) {
@@ -32774,7 +32790,21 @@ function diffPriceFileItems(newItems, oldItems, columnLabels) {
     if (newIt) return { values: newIt.values, oldValues: null, kind: 'added', changedKeys: [] };
     return { values: oldIt.values, oldValues: null, kind: 'removed', changedKeys: [] };
   });
+  // Xếp dòng có thay đổi (added/removed/changed) lên đầu để dễ rà soát, dòng "same" (không đổi) xuống
+  // cuối — giữ nguyên thứ tự tương đối bên trong mỗi nhóm (sort ổn định).
+  const KIND_ORDER = { added: 0, removed: 0, changed: 0, same: 1 };
+  rows.sort((a, b) => KIND_ORDER[a.kind] - KIND_ORDER[b.kind]);
   return { rows, newDupKeys: findDupKeys(newItems), oldDupKeys: findDupKeys(oldItems) };
+}
+
+// Link tải Mẫu Giá đã áp dụng cho 1 đề xuất — dùng ở modal chi tiết (cho IT/người duyệt đối chiếu lại
+// đúng khuôn cột đã dùng). masterListId có thể null (đề xuất cũ từ trước khi bắt buộc chọn mẫu, hoặc
+// mẫu đã bị admin xoá sau đó) — khi đó không render gì.
+function itPriceMasterListDownloadLinkHTML(masterListId) {
+  if (!masterListId) return '';
+  const list = (DB.itPriceMasterLists || []).find(m => m.id === masterListId);
+  if (!list) return '';
+  return ` <a href="${attachmentDownloadUrl(list.fileUrl, null, list.fileName)}" target="_blank" class="text-sky-600 hover:underline font-semibold">📥 Tải Mẫu</a>`;
 }
 
 let currentItPriceModalId = null;
@@ -32805,7 +32835,7 @@ function renderItPriceModal() {
   document.getElementById('itPriceModalDetails').innerHTML = `
     <div><b>Trạng thái:</b> ${itPriceStatusBadge(p)}</div>
     <div><b>Áp giá:</b> ${itPriceAppliedBadge(p)}</div>
-    ${p.masterListName ? `<div><b>Mẫu Giá áp dụng:</b> ${escapeHtml(p.masterListName)}</div>` : ''}
+    ${p.masterListName ? `<div><b>Mẫu Giá áp dụng:</b> ${escapeHtml(p.masterListName)}${itPriceMasterListDownloadLinkHTML(p.masterListId)}</div>` : ''}
     <div><b>Lý do điều chỉnh:</b> ${p.reason ? escapeHtml(p.reason) : '<span class="text-gray-400">—</span>'}</div>
     ${historyRows}
     ${p.applied ? `<div><b>Đã áp giá:</b> ${escapeHtml(p.appliedByName || '')} · ${escapeHtml(p.appliedAt || '')}</div>` : ''}
@@ -32830,17 +32860,25 @@ function renderItPriceModal() {
   }
 
   const files = p.files || [];
+  // approvedFileId chỉ có ở các đề xuất đã duyệt xong SAU khi tính năng này ra đời (chụp lại ở
+  // lib/workflowEngine.js ngay lúc duyệt xong bước cuối). Hồ sơ cũ đã APPROVED từ trước không có field
+  // này — dùng file cuối cùng tại thời điểm đó làm phương án dự phòng hợp lý (KHÔNG lấy file mới nhất
+  // hiện tại nếu sau đó IT có yêu cầu bổ sung thêm — chỉ fallback khi hoàn toàn không có snapshot).
+  const approvedFileId = p.approvedFileId || (p.status === 'APPROVED' && !p.infoRequests?.some(r => r.byRole === 'it') ? files[files.length - 1]?.id : null);
   document.getElementById('itPriceModalFiles').innerHTML = files.map((f, idx) => {
     const isLatest = idx === files.length - 1;
     const tagLatest = isLatest && files.length > 1 ? ' <span class="px-1.5 py-0.5 bg-sky-100 text-sky-800 rounded text-xs font-bold">Mới nhất</span>' : '';
     const tagOriginal = idx === 0 && files.length > 1 ? ' <span class="px-1.5 py-0.5 bg-gray-200 text-gray-700 rounded text-xs font-bold">Bản gốc</span>' : '';
+    const tagApproved = f.id === approvedFileId ? ' <span class="px-1.5 py-0.5 bg-emerald-100 text-emerald-800 rounded text-xs font-bold">✅ File Đã Được Phê Duyệt</span>' : '';
     // columnLabels snapshot NGAY LÚC NỘP tệp này (xem submitPriceSupplementFile()/itPriceApprovals ở
     // server) — luôn hiển thị đúng tên cột đã dùng lúc đó, kể cả khi Mẫu Giá sau này bị sửa/xoá.
     const columnLabels = f.columnLabels && f.columnLabels.length ? f.columnLabels : [{ key: 'c0', label: 'Dữ liệu' }];
     return `
       <details class="border rounded bg-white" ${isLatest ? 'open' : ''}>
-        <summary class="p-2 cursor-pointer font-semibold">📎 ${escapeHtml(f.fileName)}${tagLatest}${tagOriginal}
-          <span class="block text-xs font-normal text-gray-500 mt-0.5">Tải lên bởi ${escapeHtml(f.uploadedByName)} · ${escapeHtml(f.uploadedAt)} · ${(f.items || []).length} dòng</span>
+        <summary class="p-2 cursor-pointer font-semibold">📎 ${escapeHtml(f.fileName)}${tagLatest}${tagOriginal}${tagApproved}
+          <span class="block text-xs font-normal text-gray-500 mt-0.5">Tải lên bởi ${escapeHtml(f.uploadedByName)} · ${escapeHtml(f.uploadedAt)} · ${(f.items || []).length} dòng
+            · <a href="${attachmentDownloadUrl(f.fileUrl, null, f.fileName)}" target="_blank" onclick="event.stopPropagation()" class="text-sky-600 hover:underline font-semibold">⬇️ Tải file gốc</a>
+          </span>
         </summary>
         <div class="p-2 border-t overflow-x-auto">
           <table class="w-full border-collapse text-xs">
@@ -32864,25 +32902,28 @@ function renderItPriceModal() {
       ? files[files.length - 1].columnLabels : [{ key: 'c0', label: 'Dữ liệu' }];
     const { rows: diff, newDupKeys, oldDupKeys } = diffPriceFileItems(files[files.length - 1].items, files[files.length - 2].items, latestColumnLabels);
     diffWrap.classList.remove('hidden');
-    document.getElementById('itPriceModalDiffHead').innerHTML = `<tr>${latestColumnLabels.map(col =>
+    // Cột "Trạng Thái" đặt ĐẦU TIÊN (trước mọi cột dữ liệu) — bảng nhiều cột dễ kéo ngang, để cuối thì
+    // phải cuộn hết mới thấy dòng nào đổi, mất tác dụng cảnh báo ngay từ cái nhìn đầu tiên.
+    document.getElementById('itPriceModalDiffHead').innerHTML = `<tr><th class="border p-1">Trạng Thái</th>${latestColumnLabels.map(col =>
       `<th class="border p-1">${escapeHtml(col.label)}</th>`
-    ).join('')}<th class="border p-1">Trạng Thái</th></tr>`;
+    ).join('')}</tr>`;
     const KIND_LABEL = {
-      added: '<span class="text-emerald-700 font-bold">+ Mới thêm</span>',
-      removed: '<span class="text-red-600 font-bold">− Đã bỏ</span>',
-      changed: '<span class="text-amber-700 font-bold">≠ Đã đổi</span>',
+      added: '<span class="text-emerald-800 font-bold">+ Mới thêm</span>',
+      removed: '<span class="text-red-700 font-bold">− Đã bỏ</span>',
+      changed: '<span class="text-amber-800 font-bold">≠ Đã đổi</span>',
       same: '<span class="text-gray-400">Không đổi</span>'
     };
-    // Tô màu: cả dòng xanh nhạt = dòng mới thêm, cả dòng đỏ nhạt (kèm gạch ngang) = dòng đã bị xóa, riêng
-    // ô vàng = đúng ô có giá trị thay đổi trong dòng "đã đổi" (không tô cả dòng để người xem thấy ngay
-    // CHÍNH XÁC cột nào đổi, nhất là khi bảng có nhiều cột).
-    const ROW_CLASS = { added: 'bg-emerald-50', removed: 'bg-red-50 text-gray-500 line-through', changed: '', same: '' };
+    // Tô màu ĐẬM hơn bản trước (đổi từ -50/-100 sang -200 + viền màu) để không bị nhầm lẫn khi lướt nhanh:
+    // cả dòng xanh đậm = dòng mới thêm, cả dòng đỏ đậm (kèm gạch ngang) = dòng đã bị xóa, riêng ô vàng đậm
+    // = đúng ô có giá trị thay đổi trong dòng "đã đổi" (không tô cả dòng để người xem thấy ngay CHÍNH XÁC
+    // cột nào đổi, nhất là khi bảng có nhiều cột).
+    const ROW_CLASS = { added: 'bg-emerald-200', removed: 'bg-red-200 text-gray-600 line-through', changed: '', same: '' };
     document.getElementById('itPriceModalDiffBody').innerHTML = diff.map(d => {
       const rowClass = ROW_CLASS[d.kind] || '';
-      return `<tr class="${rowClass}">${latestColumnLabels.map(col => {
-        const cellClass = (d.kind === 'changed' && d.changedKeys.includes(col.key)) ? ' bg-amber-100 font-semibold text-amber-900' : '';
+      return `<tr class="${rowClass}"><td class="border p-1 whitespace-nowrap">${KIND_LABEL[d.kind] || ''}</td>${latestColumnLabels.map(col => {
+        const cellClass = (d.kind === 'changed' && d.changedKeys.includes(col.key)) ? ' bg-amber-200 border-amber-500 font-semibold text-amber-900' : '';
         return `<td class="border p-1${cellClass}">${escapeHtml(d.values?.[col.key] || '')}</td>`;
-      }).join('')}<td class="border p-1">${KIND_LABEL[d.kind] || ''}</td></tr>`;
+      }).join('')}</tr>`;
     }).join('');
 
     // Badge tổng quan: đếm nhanh số dòng theo từng loại thay đổi, hiển thị ngay đầu bảng so sánh để
