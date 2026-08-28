@@ -292,11 +292,18 @@ async function main() {
         `before=${before} after=${updated.status} alerts=${JSON.stringify(alerts)}`
       );
 
+      // Dashboard giờ là các thẻ dựng động (buildDashboardCardsHTML(), không còn #dashApproved/#dashPending
+      // cố định) — đọc số liệu từ HTML thẻ theo nhãn, khớp đúng cấu trúc renderDocs() sinh ra.
+      const dashHTML = document.getElementById('docDashboardCards').innerHTML;
+      const readCard = (label) => {
+        const m = dashHTML.match(new RegExp(label + '</div>\\s*<div class="text-lg font-bold">(\\d+)</div>'));
+        return m ? m[1] : null;
+      };
       check(
         'doc: dashboard counters reflect the approval (APPROVED count incremented, PENDING count decremented)',
-        document.getElementById('dashApproved').innerText === String(DB.docs.filter(d => d.status === 'APPROVED').length) &&
-        document.getElementById('dashPending').innerText === String(DB.docs.filter(d => d.status === 'PENDING').length),
-        `dashApproved=${document.getElementById('dashApproved').innerText} dashPending=${document.getElementById('dashPending').innerText}`
+        readCard('Đã Phê Duyệt') === String(DB.docs.filter(d => d.status === 'APPROVED').length) &&
+        readCard('Chờ Duyệt: Tài Liệu Mới') === String(DB.docs.filter(d => d.status === 'PENDING').length),
+        `dashApproved=${readCard('Đã Phê Duyệt')} dashPendingNew=${readCard('Chờ Duyệt: Tài Liệu Mới')}`
       );
     }
 
