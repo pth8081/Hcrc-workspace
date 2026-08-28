@@ -310,6 +310,25 @@ table { display: block; overflow-x: auto; max-width: 100%; }
 .loginpage-btn:disabled { opacity: .65; cursor: not-allowed; transform: none; }
 .loginpage-btn svg { width: 16px; height: 16px; }
 
+/* Dòng "đã nhớ tài khoản" thay ô gõ Tên đăng nhập trên thiết bị đã đăng ký vân tay/Face ID trước đó
+   (xem initRememberedLoginUser()/switchLoginUser() ở script cuối trang) — cùng tông màu xanh với
+   .loginpage-btn-secondary cho nhất quán, không phải input nên không dùng .loginpage-input-wrap.
+   .loginpage-remembered-user.hidden bắt buộc phải khai riêng (không trông cậy mỗi .hidden của
+   tailwind.css) — cùng lý do đã ghi ở #loginSection.hidden phía trên: 2 class cùng gắn 1 phần tử,
+   .hidden của tailwind.css KHÔNG có !important nên đứng sau .loginpage-remembered-user trong cùng
+   file là thua (display:flex đè display:none), phần tử "đã nhớ tài khoản" cứ hiện dù đang bị ẩn. */
+.loginpage-remembered-user {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  background: #f0f9ff; border: 1.5px solid #bfdbfe; border-radius: 10px;
+  padding: 11px 13px; margin-bottom: 16px;
+}
+.loginpage-remembered-user.hidden { display: none !important; }
+.loginpage-remembered-user-info { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.loginpage-remembered-user-info svg { width: 18px; height: 18px; color: #1d4ed8; flex-shrink: 0; }
+.loginpage-remembered-user-name { font-size: 14px; font-weight: 700; color: #0f1729; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.loginpage-remembered-user-switch { font-size: 12px; font-weight: 700; color: #1d4ed8; background: none; border: 0; cursor: pointer; white-space: nowrap; padding: 4px; flex-shrink: 0; }
+.loginpage-remembered-user-switch:hover { text-decoration: underline; }
+
 .loginpage-btn-secondary {
   width: 100%; font-size: 14px; font-weight: 700; color: #1d4ed8;
   background: #fff; border: 1.5px solid #bfdbfe; border-radius: 10px; padding: 11px;
@@ -640,7 +659,18 @@ input[data-sdd-list] {
         </div>
 
         <form onsubmit="event.preventDefault(); login();">
-          <div class="loginpage-field">
+          <!-- Thiết bị đã có tài khoản "được nhớ" từ lần đăng ký vân tay/Face ID trước (xem
+               initRememberedLoginUser()) — thay ô gõ Tên đăng nhập bằng dòng hiện sẵn tên + nút "Đăng nhập
+               tên khác" để đổi tài khoản khi cần (máy dùng chung). Mặc định ẩn, JS tự quyết định hiện cái
+               nào lúc tải trang. -->
+          <div id="loginRememberedUserWrap" class="loginpage-remembered-user hidden">
+            <div class="loginpage-remembered-user-info">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><circle cx="12" cy="8" r="3.5"/><path d="M4.5 20c1.4-3.6 4.4-5.5 7.5-5.5s6.1 1.9 7.5 5.5"/></svg>
+              <span id="loginRememberedUserName" class="loginpage-remembered-user-name"></span>
+            </div>
+            <button type="button" id="btnSwitchLoginUser" onclick="switchLoginUser()" class="loginpage-remembered-user-switch">Đăng nhập tên khác</button>
+          </div>
+          <div id="loginUserFieldWrap" class="loginpage-field">
             <label for="txtUser">Tên đăng nhập</label>
             <div class="loginpage-input-wrap">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><circle cx="12" cy="8" r="3.5"/><path d="M4.5 20c1.4-3.6 4.4-5.5 7.5-5.5s6.1 1.9 7.5 5.5"/></svg>
@@ -677,9 +707,9 @@ input[data-sdd-list] {
 
         <!-- Đăng nhập bằng vân tay/Face ID (WebAuthn) — CHỈ hiện khi trình duyệt có API
              navigator.credentials (xem canShowBiometricLogin() ở script cuối trang; tự ẩn trên trình
-             duyệt cũ/không phải HTTPS, không cần cờ cấu hình riêng phía client). Vẫn cần gõ Tên đăng
-             nhập ở ô phía trên trước khi bấm nút này — chỉ thay bước gõ MẬT KHẨU, không phải đăng nhập
-             không cần tên đăng nhập. -->
+             duyệt cũ/không phải HTTPS, không cần cờ cấu hình riêng phía client). Cần có Tên đăng nhập
+             trong ô #txtUser (gõ tay HOẶC tự điền sẵn từ initRememberedLoginUser() khi thiết bị đã "nhớ"
+             tài khoản) — nút này chỉ thay bước gõ MẬT KHẨU, không phải đăng nhập không cần tên đăng nhập. -->
         <button type="button" id="btnBiometricLogin" onclick="loginWithBiometric()" class="loginpage-btn-secondary hidden">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M12 2a5 5 0 0 0-5 5v1.2M12 2a5 5 0 0 1 5 5v1.2M7 8.2a5 5 0 0 0-2 4v1.3a9 9 0 0 0 3.2 6.9M17 8.2a5 5 0 0 1 2 4v1.3c0 1.6-.4 3.1-1.1 4.4M9 8.5a3 3 0 0 1 6 0v1.8M9 8.5v3.8a3 3 0 0 0 1.6 2.7M15 10.3v3a5 5 0 0 1-1.6 3.7"/></svg>
           Đăng nhập bằng vân tay / Face ID
@@ -9506,7 +9536,7 @@ async function renderWebauthnDeviceList() {
     const list = await res.json();
     if (!list.length) {
       wrap.innerHTML = '<p class="text-gray-400 italic">Chưa đăng ký thiết bị nào.</p>';
-      return;
+      return list;
     }
     wrap.innerHTML = list.map(c => `
       <div class="flex justify-between items-center bg-gray-50 border rounded p-2">
@@ -9517,6 +9547,7 @@ async function renderWebauthnDeviceList() {
         <button type="button" onclick="deleteBiometricDevice('${c.id}')" class="text-red-600 font-bold hover:underline">🗑️ Gỡ</button>
       </div>
     `).join('');
+    return list;
   } catch (err) {
     wrap.innerHTML = '<p class="text-red-600 italic">Không tải được danh sách thiết bị.</p>';
   }
@@ -9558,6 +9589,9 @@ async function registerBiometricDevice() {
 
     document.getElementById('pfWebauthnDeviceLabel').value = '';
     await renderWebauthnDeviceList();
+    // Nhớ tài khoản này cho MÁY hiện tại — lần sau mở trang đăng nhập sẽ tự ẩn ô gõ Tên đăng nhập, điền
+    // sẵn luôn (xem initRememberedLoginUser() ở khối "ĐĂNG NHẬP BẰNG VÂN TAY").
+    setRememberedWebauthnUsername(currentUser.username);
     alert('✅ Đã đăng ký thiết bị này — lần sau đăng nhập/xác thực khi Duyệt có thể dùng vân tay/Face ID.');
   } catch (err) {
     alert('⛔ Không thể kết nối tới máy chủ: ' + err.message);
@@ -9574,7 +9608,12 @@ async function deleteBiometricDevice(id) {
       const body = await res.json().catch(() => ({}));
       return alert(`⛔ ${body.error || 'Không thể gỡ thiết bị'}`);
     }
-    await renderWebauthnDeviceList();
+    const remaining = await renderWebauthnDeviceList();
+    // Gỡ hết thiết bị đăng ký -> không còn cách nào dùng vân tay được nữa, xoá luôn tài khoản "đã nhớ"
+    // trên máy này (nếu không, màn đăng nhập vẫn ẩn ô gõ Tên đăng nhập dù đăng nhập vân tay giờ chắc chắn
+    // thất bại). Chỉ xoá khi biết CHẮC danh sách rỗng (remaining=[]) — bỏ qua nếu tải lại danh sách lỗi
+    // (remaining=undefined), tránh xoá nhầm lúc mạng chập chờn.
+    if (remaining && remaining.length === 0) setRememberedWebauthnUsername(null);
   } catch (err) {
     alert('⛔ Không thể kết nối tới máy chủ: ' + err.message);
   }
@@ -9641,6 +9680,12 @@ function resetLoginWidgets(focusCaptcha = true) {
   if (btnCaptchaRefresh) btnCaptchaRefresh.disabled = false;
   if (txtCaptchaEl) txtCaptchaEl.disabled = false;
   loginInFlight = false;
+  // Mở lại nút "Đăng nhập bằng vân tay" đã bị login() khoá mờ lúc bắt đầu — trừ khi đúng lúc đó nhánh vân
+  // tay LẠI đang chạy dở (biometricLoginInFlight), thì để nguyên, tránh mở nhầm 1 nút đang thật sự bận.
+  if (!biometricLoginInFlight) {
+    const btnBio = document.getElementById('btnBiometricLogin');
+    if (btnBio) btnBio.disabled = false;
+  }
   if (captchaId) refreshCaptcha(focusCaptcha);
 }
 
@@ -9649,6 +9694,12 @@ function resetBiometricLoginWidget() {
   const btn = document.getElementById('btnBiometricLogin');
   if (btn) { btn.disabled = false; btn.innerHTML = btnBiometricLoginOriginalHTML; }
   biometricLoginInFlight = false;
+  // Mở lại nút "Đăng nhập" (mật khẩu) đã bị loginWithBiometric() khoá mờ lúc bắt đầu — cùng lý do/cách
+  // bảo vệ chéo với nhánh biometricLoginInFlight ở resetLoginWidgets() phía trên.
+  if (!loginInFlight) {
+    const btnLoginEl = document.getElementById('btnLogin');
+    if (btnLoginEl) btnLoginEl.disabled = false;
+  }
 }
 
 // ==========================================
@@ -9666,6 +9717,53 @@ if (canShowBiometricLogin()) {
 }
 
 let biometricLoginInFlight = false;
+
+// Thiết bị "nhớ" tài khoản đã đăng ký vân tay/Face ID — thuần localStorage phía trình duyệt (không phải
+// dữ liệu WebAuthn thật, chỉ là gợi ý UI: máy NÀY từng đăng ký thành công cho user NÀY). Set ở
+// registerBiometricDevice() lúc đăng ký thành công, xoá khi gỡ hết thiết bị (deleteBiometricDevice()) —
+// KHÔNG xoá lúc logout(), vì mục đích là nhớ xuyên suốt nhiều lượt đăng nhập trên cùng máy.
+const REMEMBERED_WEBAUTHN_USER_KEY = 'vpdt_webauthn_username';
+function getRememberedWebauthnUsername() {
+  try { return localStorage.getItem(REMEMBERED_WEBAUTHN_USER_KEY) || ''; } catch (e) { return ''; }
+}
+function setRememberedWebauthnUsername(username) {
+  try {
+    if (username) localStorage.setItem(REMEMBERED_WEBAUTHN_USER_KEY, username);
+    else localStorage.removeItem(REMEMBERED_WEBAUTHN_USER_KEY);
+  } catch (e) { /* Safari duyệt riêng tư/chặn localStorage — bỏ qua, không ảnh hưởng đăng nhập bằng mật khẩu */ }
+}
+
+// Ẩn ô gõ Tên đăng nhập, thay bằng dòng "Xin chào, <tên>" + nút "Đăng nhập tên khác" khi máy này đã có
+// tài khoản được nhớ — điền sẵn #txtUser để cả login() (mật khẩu) lẫn loginWithBiometric() dùng được
+// ngay, không cần gõ lại. Chỉ áp dụng khi trình duyệt còn hỗ trợ WebAuthn (nếu không, dù có tên nhớ sẵn
+// vẫn hiện ô nhập bình thường — tránh kẹt không đăng nhập được nếu đổi trình duyệt/thiết bị mất hỗ trợ).
+// Gọi lại được nhiều lần (lúc tải trang VÀ sau logout()) nên phải tự đảo ngược đúng trạng thái mỗi lần.
+function initRememberedLoginUser() {
+  const wrap = document.getElementById('loginRememberedUserWrap');
+  const fieldWrap = document.getElementById('loginUserFieldWrap');
+  const remembered = getRememberedWebauthnUsername();
+  if (remembered && canShowBiometricLogin()) {
+    document.getElementById('txtUser').value = remembered;
+    document.getElementById('loginRememberedUserName').textContent = remembered;
+    wrap.classList.remove('hidden');
+    fieldWrap.classList.add('hidden');
+  } else {
+    wrap.classList.add('hidden');
+    fieldWrap.classList.remove('hidden');
+  }
+}
+initRememberedLoginUser();
+
+// Bấm "Đăng nhập tên khác" — hiện lại ô nhập thủ công (trống, focus sẵn) để đăng nhập tài khoản khác
+// TRÊN CÙNG thiết bị này (máy dùng chung). KHÔNG xoá tên đã nhớ trong localStorage — chỉ đổi tạm hiển
+// thị cho lượt đăng nhập này, tải lại trang sau đó vẫn quay về đúng tài khoản đã nhớ như cũ.
+function switchLoginUser() {
+  document.getElementById('loginRememberedUserWrap').classList.add('hidden');
+  document.getElementById('loginUserFieldWrap').classList.remove('hidden');
+  const txtUser = document.getElementById('txtUser');
+  txtUser.value = '';
+  txtUser.focus();
+}
 
 // ================== PWA: CÀI ĐẶT ỨNG DỤNG + SERVICE WORKER ==================
 // Đăng ký sw.js — bắt buộc phải TỒN TẠI để Chrome/Android coi trang là "cài đặt được", nhưng bản thân
@@ -9760,6 +9858,12 @@ async function loginWithBiometric() {
   biometricLoginInFlight = true;
   const btn = document.getElementById('btnBiometricLogin');
   if (btn) { btn.disabled = true; btn.innerHTML = '<span class="loginpage-spinner"></span> Đang xác thực…'; }
+  // Mờ luôn nút "Đăng nhập" (mật khẩu) trong lúc chờ vân tay/Face ID — 2 nút cùng bấm được (dù không
+  // cùng lúc chạy thật, do check biometricLoginInFlight/loginInFlight ở đầu hàm) từng khiến người dùng
+  // tưởng nút "Đăng nhập" vẫn dùng được bình thường, dễ bấm nhầm/gõ lại mật khẩu trong lúc hộp thoại vân
+  // tay của hệ điều hành đang mở. Mở lại ở resetBiometricLoginWidget().
+  const btnLoginEl = document.getElementById('btnLogin');
+  if (btnLoginEl) btnLoginEl.disabled = true;
 
   try {
     await loadVendorScript('/vendor/simplewebauthn/browser.min.js');
@@ -9858,6 +9962,10 @@ async function login() {
   if (btn) { btn.disabled = true; btn.innerHTML = '<span class="loginpage-spinner"></span> Đang đăng nhập…'; }
   if (btnCaptchaRefresh) btnCaptchaRefresh.disabled = true;
   if (txtCaptchaEl) txtCaptchaEl.disabled = true;
+  // Mờ luôn nút "Đăng nhập bằng vân tay" trong lúc chờ — cùng lý do/khuôn với chiều ngược lại ở
+  // loginWithBiometric(), mở lại ở resetLoginWidgets().
+  const btnBioEl = document.getElementById('btnBiometricLogin');
+  if (btnBioEl) btnBioEl.disabled = true;
   let user;
   try {
     const res = await fetch('/api/auth/login', {
@@ -10854,6 +10962,10 @@ function logout() {
   // nhập…"/"Đang xác thực…" từ lượt đăng nhập trước, chặn luôn lượt đăng nhập kế tiếp.
   resetLoginWidgets(false);
   resetBiometricLoginWidget();
+  // Vẽ lại đúng trạng thái "tài khoản đã nhớ" (ẩn ô gõ Tên đăng nhập + hiện dòng tên/nút đổi tài khoản)
+  // cho lượt đăng nhập KẾ TIẾP — nếu lượt vừa đăng xuất từng bấm "Đăng nhập tên khác" (hiện ô gõ tay tạm
+  // thời) mà không reset lại ở đây, đăng xuất xong sẽ vẫn kẹt ở ô gõ tay dù máy vẫn còn nhớ tài khoản.
+  initRememberedLoginUser();
   document.getElementById('dashboardSection').classList.add('hidden');
   document.getElementById('approvalHubSection').classList.add('hidden');
   document.getElementById('docSection').classList.add('hidden');
