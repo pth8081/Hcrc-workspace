@@ -19,6 +19,11 @@ const DEFAULTS = {
   // (uniformPeriods) là nơi DUY NHẤT hiện đang dùng danh mục này làm nguồn chọn siêu thị.
   stores: [],
 
+  // Danh mục "Các Loại Giấy Phép" (module Giấy Phép, Hành Chính) — nguồn gợi ý cho ô "Tên giấy phép /
+  // Loại giấy phép" (widget sdd), tự học thêm khi ai đó gõ loại mới (xem uploadLicense() ở index.html),
+  // admin quản lý/dọn ở màn Quản Lý Danh Mục (saveLicenseType()/deleteLicenseType()).
+  licenseTypes: [],
+
   cats: ['Quy trình / Quy định', 'Báo cáo tài chính', 'Hợp đồng / Hồ sơ'],
 
   // Viết tắt Phòng ban/Phân loại Tài liệu — dùng để tự sinh Mã Tài Liệu (xem generateDocCode() trong
@@ -145,7 +150,8 @@ const DEFAULTS = {
     enabled: true, smtpHost: 'smtp.gmail.com', smtpPort: 587, smtpEncryption: 'STARTTLS',
     smtpAuthEnabled: false, smtpUser: '', smtpPassEnc: null,
     senderEmail: 'dms-noreply@company.com',
-    contractExpiryReminderDays: [30, 15, 7], contractExpiryCcEmails: []
+    contractExpiryReminderDays: [30, 15, 7], contractExpiryCcEmails: [],
+    licenseExpiryReminderDays: [30, 15, 7], licenseExpiryCcEmails: []
   },
 
   // Người phụ trách nhận thông báo hết hạn hợp đồng RIÊNG theo từng phòng ban — dạng { [dept]:

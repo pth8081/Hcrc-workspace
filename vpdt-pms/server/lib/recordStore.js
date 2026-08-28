@@ -45,7 +45,7 @@ const { HttpError } = require('./httpErrors');
 // không qua engine tạo mới chung lib/createValidation.js — xem buildUniformTransfer()), đăng ký ở đây
 // để dùng chung getAllForCollection()/insertRecord()/withLockedRecordForCollection() thay vì tự viết
 // đường lưu riêng.
-const MIGRATED_COLLECTIONS = new Set(['submissions', 'docs', 'carRegs', 'officeReqs', 'contracts', 'meetings', 'meetingMinutes', 'internalPosts', 'paymentRequests', 'vppPeriods', 'vppRegistrations', 'reportPeriods', 'reportEntries', 'reportSlideTemplates', 'trainingDocuments', 'trainingClasses', 'trainingRegistrations', 'careerPaths', 'careerPathConfirmations', 'trainingTests', 'trainingTestSubmissions', 'trainingCourses', 'trainingPlans', 'onboardingPaths', 'onboardingProgress', 'recruitmentJobs', 'recruitmentReferrals', 'itPriceApprovals', 'itSupportTickets', 'uniformPeriods', 'uniformIssuances', 'uniformStockAdjustments', 'uniformTransfers', 'budgetTemplates', 'budgetPeriods', 'budgetEntries']);
+const MIGRATED_COLLECTIONS = new Set(['submissions', 'docs', 'carRegs', 'officeReqs', 'contracts', 'meetings', 'meetingMinutes', 'internalPosts', 'paymentRequests', 'vppPeriods', 'vppRegistrations', 'reportPeriods', 'reportEntries', 'reportSlideTemplates', 'trainingDocuments', 'trainingClasses', 'trainingRegistrations', 'careerPaths', 'careerPathConfirmations', 'trainingTests', 'trainingTestSubmissions', 'trainingCourses', 'trainingPlans', 'onboardingPaths', 'onboardingProgress', 'recruitmentJobs', 'recruitmentReferrals', 'itPriceApprovals', 'itSupportTickets', 'uniformPeriods', 'uniformIssuances', 'uniformStockAdjustments', 'uniformTransfers', 'budgetTemplates', 'budgetPeriods', 'budgetEntries', 'licenses']);
 
 function toRecord(row) {
   return JSON.parse(row.Payload);

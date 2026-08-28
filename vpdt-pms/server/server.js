@@ -30,6 +30,7 @@ const downloadRoutes = require('./routes/download');
 const trashRoutes = require('./routes/trash');
 const { isCaptchaEnabled, generateCaptcha } = require('./lib/captcha');
 const { checkContractExpiryReminders } = require('./jobs/contractExpiryReminder');
+const { checkLicenseExpiryReminders } = require('./jobs/licenseExpiryReminder');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -250,6 +251,8 @@ async function start() {
     if (isSchedulerInstance) {
       checkContractExpiryReminders();
       setInterval(checkContractExpiryReminders, 24 * 60 * 60 * 1000);
+      checkLicenseExpiryReminders();
+      setInterval(checkLicenseExpiryReminders, 24 * 60 * 60 * 1000);
     }
   } catch (err) {
     console.error('⛔ Không thể khởi động server:', err.message);

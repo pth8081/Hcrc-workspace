@@ -3389,6 +3389,78 @@ function confirmCarDriverAssignment(user, carReg) {
   return carReg;
 }
 
+// ===================== GIẤY PHÉP (module con của Hành Chính) =====================
+// Duyệt bằng 2 quyền PHẲNG (licenseCreate/licenseApprove), KHÔNG đi qua lib/workflowEngine.js — cùng
+// khuôn approveInternalPost()/rejectInternalPost() ở trên (Góc Chia Sẻ). lifecycleStatus (RENEWING/
+// REVOKED) là trạng thái RIÊNG, độc lập với status (PENDING/APPROVED/REJECTED) — 1 giấy phép đã
+// APPROVED vẫn có thể được đánh dấu "Đang gia hạn" hoặc "Đã thu hồi" mà không đụng tới lịch sử duyệt.
+function canApproveLicense(user) {
+  return !!(user?.perms?.admin || user?.perms?.licenseApprove);
+}
+
+function approveLicense(user, item) {
+  if (!canApproveLicense(user)) throw new HttpError(403, 'Bạn không có quyền phê duyệt giấy phép');
+  if (item.status !== 'PENDING') throw new HttpError(409, 'Giấy phép không ở trạng thái chờ duyệt');
+  item.status = 'APPROVED';
+  item.history = item.history || [];
+  item.history.push({ action: 'APPROVED', by: user.username, byName: user.name, time: nowVN() });
+  return item;
+}
+
+function rejectLicense(user, item, payload) {
+  if (!canApproveLicense(user)) throw new HttpError(403, 'Bạn không có quyền từ chối giấy phép');
+  if (item.status !== 'PENDING') throw new HttpError(409, 'Giấy phép không ở trạng thái chờ duyệt');
+  const reason = (payload?.reason || '').trim();
+  if (!reason) throw new HttpError(400, 'Vui lòng nhập lý do từ chối');
+  item.status = 'REJECTED';
+  item.rejectReason = reason;
+  item.history = item.history || [];
+  item.history.push({ action: 'REJECTED', by: user.username, byName: user.name, time: nowVN(), comment: reason });
+  return item;
+}
+
+// "Đang gia hạn" — cờ tay bật/tắt (payload.renewing: true/false), CHỈ áp dụng cho giấy phép đã
+// APPROVED (đúng ý nghĩa nghiệp vụ: đã gửi hồ sơ xin gia hạn cho 1 giấy phép đang có hiệu lực, không
+// phải hồ sơ còn đang chờ duyệt lần đầu/đã bị từ chối) và CHƯA bị thu hồi.
+function setLicenseRenewing(user, item, payload) {
+  if (!canApproveLicense(user)) throw new HttpError(403, 'Bạn không có quyền cập nhật trạng thái gia hạn');
+  if (item.status !== 'APPROVED') throw new HttpError(409, 'Chỉ đánh dấu "Đang gia hạn" cho giấy phép đã được phê duyệt');
+  if (item.lifecycleStatus === 'REVOKED') throw new HttpError(409, 'Giấy phép đã bị thu hồi, không thể đánh dấu gia hạn');
+  const renewing = !!payload?.renewing;
+  item.lifecycleStatus = renewing ? 'RENEWING' : null;
+  item.history = item.history || [];
+  item.history.push({
+    action: renewing ? 'MARK_RENEWING' : 'UNMARK_RENEWING', by: user.username, byName: user.name, time: nowVN()
+  });
+  return item;
+}
+
+function revokeLicense(user, item, payload) {
+  if (!canApproveLicense(user)) throw new HttpError(403, 'Bạn không có quyền thu hồi giấy phép');
+  if (item.lifecycleStatus === 'REVOKED') throw new HttpError(409, 'Giấy phép này đã bị thu hồi trước đó');
+  const reason = (payload?.reason || '').trim();
+  if (!reason) throw new HttpError(400, 'Vui lòng nhập lý do thu hồi');
+  item.lifecycleStatus = 'REVOKED';
+  item.revokedBy = user.username;
+  item.revokedByName = user.name;
+  item.revokedAt = nowVN();
+  item.revokeReason = reason;
+  item.history = item.history || [];
+  item.history.push({ action: 'REVOKED', by: user.username, byName: user.name, time: nowVN(), comment: reason });
+  return item;
+}
+
+// Huỷ đánh dấu thu hồi (sửa lỗi thao tác nhầm) — trả lifecycleStatus về null, KHÔNG khôi phục lại
+// "Đang gia hạn" trước đó (nếu có) để tránh trạng thái mập mờ, người dùng tự đánh dấu lại nếu cần.
+function unrevokeLicense(user, item) {
+  if (!canApproveLicense(user)) throw new HttpError(403, 'Bạn không có quyền khôi phục giấy phép đã thu hồi');
+  if (item.lifecycleStatus !== 'REVOKED') throw new HttpError(409, 'Giấy phép này chưa bị thu hồi');
+  item.lifecycleStatus = null;
+  item.history = item.history || [];
+  item.history.push({ action: 'UNREVOKED', by: user.username, byName: user.name, time: nowVN() });
+  return item;
+}
+
 module.exports = {
   editContract,
   editDocDraft, submitDocDraft,
@@ -3433,5 +3505,6 @@ module.exports = {
   canApproveUniformTransfer, buildUniformTransfer, approveUniformTransfer, rejectUniformTransfer,
   canManageBudget, canAggregateBudget, isBudgetPeriodClosed,
   closeBudgetPeriod, reopenBudgetPeriod, updateBudgetEntryDraft, submitBudgetEntry, updateBudgetTemplate,
-  canConfirmCarDriverAssignment, confirmCarDriverAssignment
+  canConfirmCarDriverAssignment, confirmCarDriverAssignment,
+  canApproveLicense, approveLicense, rejectLicense, setLicenseRenewing, revokeLicense, unrevokeLicense
 };

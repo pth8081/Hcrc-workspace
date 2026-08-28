@@ -65,7 +65,8 @@ function createMockState(seed) {
     reportSlideTemplates: [], uniformPeriods: [], uniformIssuances: [], uniformStockAdjustments: [], uniformTransfers: [], uniformCatalog: [],
     itPriceApprovals: [], itSupportTickets: [], reportPeriods: [], reportEntries: [],
     tasks: [],
-    budgetTemplates: [], budgetPeriods: [], budgetEntries: [], budgetDeptWorkflows: {}
+    budgetTemplates: [], budgetPeriods: [], budgetEntries: [], budgetDeptWorkflows: {},
+    licenses: [], licenseTypes: []
   }, seed || {});
 }
 
@@ -121,7 +122,14 @@ function buildActionHandlers(state) {
     'reportPeriods:unpublish': (u, item) => recordActions.unpublishReportPeriod(u, item),
     'reportEntries:submit': (u, item) => recordActions.submitReportEntry(u, item, state.reportPeriods.find(p => p.id === item.periodId)),
     'reportEntries:update': (u, item, body) => recordActions.updateReportEntryDraft(u, item, body, state.reportPeriods.find(p => p.id === item.periodId)),
-    'reportSlideTemplates:update': (u, item, body) => recordActions.updateReportSlideTemplate(u, item, body)
+    'reportSlideTemplates:update': (u, item, body) => recordActions.updateReportSlideTemplate(u, item, body),
+
+    // ===== GIẤY PHÉP =====
+    'licenses:approve': (u, item) => recordActions.approveLicense(u, item),
+    'licenses:reject': (u, item, body) => recordActions.rejectLicense(u, item, body),
+    'licenses:set-renewing': (u, item, body) => recordActions.setLicenseRenewing(u, item, body),
+    'licenses:revoke': (u, item, body) => recordActions.revokeLicense(u, item, body),
+    'licenses:unrevoke': (u, item) => recordActions.unrevokeLicense(u, item)
   };
 }
 
@@ -288,6 +296,13 @@ function createDispatcher(state) {
         const list = state[moduleKey];
         const idx = list.findIndex(x => x.id === id);
         if (idx === -1) return { status: 404, body: { error: 'Không tìm thấy hồ sơ' } };
+        // Xóa admin-only (mirrors routes/records.js deleteAdminOnly()/assertAdminForDelete() — dùng
+        // CHUNG cho mọi collection đã ở dbo.Records, không có handler riêng trong actionHandlers).
+        if (action === 'delete') {
+          if (!freshUser.perms?.admin) return { status: 403, body: { error: 'Chỉ Quản Trị Viên mới có quyền xóa dữ liệu ở module này' } };
+          list.splice(idx, 1);
+          return { status: 200, body: { ok: true } };
+        }
         const handler = actionHandlers[`${moduleKey}:${action}`];
         if (!handler) return { status: 400, body: { error: `Mock chưa hỗ trợ hành động: ${moduleKey}/${action}` } };
         const updated = await handler(freshUser, list[idx], body);
@@ -334,8 +349,24 @@ async function launchPage(port, state) {
     window.confirm = (msg) => { window.__confirms.push(String(msg)); return true; };
     window.prompt = (msg) => { window.__prompts.push(String(msg)); return window.__promptAnswer; };
 
+    // POST /api/upload (multipart FormData) — File objects don't survive the exposeFunction() CDP
+    // boundary to the Node side, so this is faked entirely in-page (mirrors tests/test-doc.js's inline
+    // mock): returns a fake fileUrl derived from the real File's name/type/size, no Node round-trip.
+    window.__uploadIdCounter = 1;
+    async function fakeUploadResponse(opts) {
+      const file = opts && opts.body && opts.body.get ? opts.body.get('file') : null;
+      const fileName = file ? file.name : 'file.bin';
+      const fileType = file ? file.type : '';
+      const size = file ? file.size : 0;
+      return {
+        ok: true, status: 200,
+        json: async () => ({ fileName, fileType, fileUrl: `/uploads/fake_${window.__uploadIdCounter++}_${fileName}`, size })
+      };
+    }
+
     window.fetch = async (url, opts) => {
       const method = (opts && opts.method) || 'GET';
+      if (url === '/api/upload' && method === 'POST') return fakeUploadResponse(opts);
       const bodyStr = (opts && typeof opts.body === 'string') ? opts.body : null;
       const username = (typeof currentUser !== 'undefined' && currentUser) ? currentUser.username : null;
       const result = await window.__apiDispatch(method, url, bodyStr, username);

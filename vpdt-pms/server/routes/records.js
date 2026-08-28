@@ -1840,4 +1840,72 @@ router.post('/uniformTransfers/:id/approve', async (req, res) => {
   }
 });
 
+// ===================== GIẤY PHÉP (module con của Hành Chính) =====================
+router.post('/licenses/:id/delete', (req, res) => deleteAdminOnly(req, res, 'licenses'));
+
+router.post('/licenses/:id/approve', async (req, res) => {
+  const itemId = Number(req.params.id);
+  if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
+  try {
+    const { freshUser } = await getFreshUser(req);
+    const result = await withLockedRecordForCollection('licenses', itemId, (item) =>
+      recordActions.approveLicense(freshUser, item));
+    res.json({ ok: true, item: result });
+  } catch (err) {
+    handleError(res, `licenses/${req.params.id}/approve`, err);
+  }
+});
+
+router.post('/licenses/:id/reject', async (req, res) => {
+  const itemId = Number(req.params.id);
+  if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
+  try {
+    const { freshUser } = await getFreshUser(req);
+    const result = await withLockedRecordForCollection('licenses', itemId, (item) =>
+      recordActions.rejectLicense(freshUser, item, req.body));
+    res.json({ ok: true, item: result });
+  } catch (err) {
+    handleError(res, `licenses/${req.params.id}/reject`, err);
+  }
+});
+
+router.post('/licenses/:id/set-renewing', async (req, res) => {
+  const itemId = Number(req.params.id);
+  if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
+  try {
+    const { freshUser } = await getFreshUser(req);
+    const result = await withLockedRecordForCollection('licenses', itemId, (item) =>
+      recordActions.setLicenseRenewing(freshUser, item, req.body));
+    res.json({ ok: true, item: result });
+  } catch (err) {
+    handleError(res, `licenses/${req.params.id}/set-renewing`, err);
+  }
+});
+
+router.post('/licenses/:id/revoke', async (req, res) => {
+  const itemId = Number(req.params.id);
+  if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
+  try {
+    const { freshUser } = await getFreshUser(req);
+    const result = await withLockedRecordForCollection('licenses', itemId, (item) =>
+      recordActions.revokeLicense(freshUser, item, req.body));
+    res.json({ ok: true, item: result });
+  } catch (err) {
+    handleError(res, `licenses/${req.params.id}/revoke`, err);
+  }
+});
+
+router.post('/licenses/:id/unrevoke', async (req, res) => {
+  const itemId = Number(req.params.id);
+  if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
+  try {
+    const { freshUser } = await getFreshUser(req);
+    const result = await withLockedRecordForCollection('licenses', itemId, (item) =>
+      recordActions.unrevokeLicense(freshUser, item));
+    res.json({ ok: true, item: result });
+  } catch (err) {
+    handleError(res, `licenses/${req.params.id}/unrevoke`, err);
+  }
+});
+
 module.exports = router;
