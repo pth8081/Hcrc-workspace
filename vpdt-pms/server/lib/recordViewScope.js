@@ -460,6 +460,17 @@ function filterLicensesForUser(items, user) {
   return (items || []).filter(l => canViewLicense(user, l));
 }
 
+// itServiceRenewals (Hỗ Trợ IT — Gia Hạn Dịch Vụ CNTT): quyền PHẲNG itManage, KHÔNG có nhánh "chính
+// chủ luôn xem được" như licenses ở trên — đây là danh mục nội bộ đội IT dùng CHUNG cho cả đội (mọi
+// mục do bất kỳ ai trong đội tạo đều phải thấy được bởi cả đội), không phải hồ sơ cá nhân từng người.
+function canViewItServiceRenewal(user) {
+  return !!(user?.perms?.admin || user?.perms?.itManage);
+}
+
+function filterItServiceRenewalsForUser(items, user) {
+  return canViewItServiceRenewal(user) ? (items || []) : [];
+}
+
 module.exports = {
   canViewDoc, canViewSubmission, filterDocsForUser, filterSubmissionsForUser,
   canViewInternalPost, filterInternalPostsForUser,

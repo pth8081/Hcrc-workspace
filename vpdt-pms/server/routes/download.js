@@ -16,7 +16,7 @@ const { getAllAppData } = require('../lib/appData');
 const {
   canDownloadRecordFile, canViewInternalPost,
   canViewItPriceApproval, canViewReportEntry, canSeeReportCompilation, filterRecruitmentReferralsForUser,
-  canViewLicense
+  canViewLicense, canViewItServiceRenewal
 } = require('../lib/recordViewScope');
 
 const router = express.Router();
@@ -45,7 +45,7 @@ const router = express.Router();
 // chat...) không cho tải vượt phạm vi. Mỗi module trả owning riêng (itPrice/reportEntry/reportPeriod/
 // recruitment) để caller gọi đúng hàm kiểm quyền tương ứng (khác chữ ký/tham số nhau).
 async function findOwningRecord(fileUrl) {
-  const [docs, submissions, contracts, carRegs, officeReqs, internalPosts, itPriceApprovals, reportEntries, reportPeriods, recruitmentReferrals, licenses] = await Promise.all([
+  const [docs, submissions, contracts, carRegs, officeReqs, internalPosts, itPriceApprovals, reportEntries, reportPeriods, recruitmentReferrals, licenses, itServiceRenewals] = await Promise.all([
     getAllForCollection('docs'),
     getAllForCollection('submissions'),
     getAllForCollection('contracts'),
@@ -56,7 +56,8 @@ async function findOwningRecord(fileUrl) {
     getAllForCollection('reportEntries'),
     getAllForCollection('reportPeriods'),
     getAllForCollection('recruitmentReferrals'),
-    getAllForCollection('licenses')
+    getAllForCollection('licenses'),
+    getAllForCollection('itServiceRenewals')
   ]);
   const doc = (docs || []).find(d => d.fileUrl === fileUrl);
   if (doc) return { moduleKey: 'doc', dept: doc.dept, ownerUsername: doc.uploader };
@@ -82,6 +83,9 @@ async function findOwningRecord(fileUrl) {
   // canDownloadRecordFile theo phòng ban — trả owning riêng để caller gọi canViewLicense().
   const license = (licenses || []).find(l => l.fileUrl === fileUrl);
   if (license) return { license: true, item: license };
+  // itServiceRenewals (Hỗ Trợ IT — Gia Hạn Dịch Vụ CNTT): quyền phẳng itManage, cùng khuôn licenses ở trên.
+  const itRenewal = (itServiceRenewals || []).find(r => r.fileUrl === fileUrl);
+  if (itRenewal) return { itServiceRenewal: true, item: itRenewal };
   return null;
 }
 const UPLOAD_DIR = path.join(__dirname, '..', 'uploads');
@@ -134,9 +138,12 @@ router.get('/', async (req, res) => {
   if (owning && owning.license && !canViewLicense(req.freshUser, owning.item)) {
     return res.status(403).json({ error: 'Bạn không có quyền tải tệp này' });
   }
+  if (owning && owning.itServiceRenewal && !canViewItServiceRenewal(req.freshUser)) {
+    return res.status(403).json({ error: 'Bạn không có quyền tải tệp này' });
+  }
   // custodianDept chỉ có mặt ở owning trả về cho hợp đồng (findOwningRecord() ở trên) — undefined cho
   // mọi module khác, nên nhánh OR dưới đây là no-op cho các module không có khái niệm custodian.
-  if (owning && !owning.internal && !owning.itPrice && !owning.reportEntry && !owning.reportPeriod && !owning.recruitment && !owning.license) {
+  if (owning && !owning.internal && !owning.itPrice && !owning.reportEntry && !owning.reportPeriod && !owning.recruitment && !owning.license && !owning.itServiceRenewal) {
     const allowedByDept = canDownloadRecordFile(req.freshUser, owning.moduleKey, owning.dept, owning.ownerUsername);
     const allowedByCustodian = owning.custodianDept && owning.custodianDept !== owning.dept &&
       canDownloadRecordFile(req.freshUser, owning.moduleKey, owning.custodianDept, owning.ownerUsername);

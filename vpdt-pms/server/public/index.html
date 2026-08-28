@@ -547,6 +547,10 @@ input[data-sdd-list] {
         <div id="itSupportDropdownPanel" class="hidden pl-7 space-y-0.5 sidebar-label">
           <button onclick="closeItSupportDropdown(); switchTab('itSupport'); setItSupportSubTab('PRICE')" class="sidebar-subitem">🏷️ Phê Duyệt Giá</button>
           <button onclick="closeItSupportDropdown(); switchTab('itSupport'); setItSupportSubTab('TICKET')" class="sidebar-subitem">🎫 Hỗ Trợ Yêu Cầu</button>
+          <!-- "Gia Hạn Dịch Vụ CNTT" — KHÁC 2 mục trên (mở cho toàn bộ nhân viên): chỉ đội IT
+               (itManage/admin) mới thấy mục này, ẩn/hiện riêng qua canManageItSupportClient() ở
+               updateItSupportNavVisibility() (không dùng chung điều kiện canAccessItSupportModule). -->
+          <button id="btnItSupportNavRenewal" onclick="closeItSupportDropdown(); switchTab('itSupport'); setItSupportSubTab('RENEWAL')" class="hidden sidebar-subitem">🔔 Gia Hạn Dịch Vụ</button>
         </div>
       </div>
       <!-- Hệ Thống — cùng khuôn Hợp Đồng (dropdown TĨNH): cả 4 mục con đều yêu cầu admin (không có
@@ -4212,6 +4216,18 @@ input[data-sdd-list] {
         </div>
         <p class="text-[11px] text-gray-400 italic -mt-2">Người nhận mặc định = người tạo giấy phép + toàn bộ người đang có quyền "Duyệt giấy phép" trong module Giấy Phép, cộng thêm email CC cố định ở trên (không cần khai theo phòng ban như hợp đồng).</p>
 
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-3 border-t pt-2">
+          <div>
+            <label class="block font-semibold text-gray-600 mb-1">Nhắc Hết Hạn Dịch Vụ CNTT — Trước (số ngày, cách nhau dấu phẩy)</label>
+            <input id="cfgItRenewalReminderDays" placeholder="30, 15, 7" class="w-full border p-1.5 rounded" required>
+          </div>
+          <div>
+            <label class="block font-semibold text-gray-600 mb-1">Email CC Cố Định Nhận Cảnh Báo Hết Hạn Dịch Vụ CNTT (tuỳ chọn, cách nhau dấu phẩy)</label>
+            <input id="cfgItRenewalReminderCc" placeholder="it@company.com" class="w-full border p-1.5 rounded">
+          </div>
+        </div>
+        <p class="text-[11px] text-gray-400 italic -mt-2">Người nhận mặc định = người tạo mục dịch vụ + toàn bộ người đang có quyền "Quản lý Hỗ Trợ IT" (itManage), cộng thêm email CC cố định ở trên.</p>
+
         <div class="flex flex-wrap gap-2 items-center border-t pt-2">
           <input id="cfgTestEmailTo" type="email" placeholder="Email nhận thử" class="border p-1.5 rounded flex-1 min-w-[180px]">
           <button type="button" onclick="sendTestEmail()" id="cfgTestEmailBtn" class="bg-blue-600 text-white px-3 py-1.5 rounded font-bold hover:bg-blue-700">📨 Gửi Thử</button>
@@ -5268,6 +5284,7 @@ input[data-sdd-list] {
     <div class="flex flex-wrap gap-2 border-b pb-2">
       <button type="button" onclick="setItSupportSubTab('PRICE')" id="btnItSubPrice" class="px-3 py-1.5 rounded text-xs font-bold bg-sky-700 text-white">🏷️ Phê Duyệt Giá</button>
       <button type="button" onclick="setItSupportSubTab('TICKET')" id="btnItSubTicket" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">🎫 Hỗ Trợ Yêu Cầu</button>
+      <button type="button" onclick="setItSupportSubTab('RENEWAL')" id="btnItSubRenewal" class="hidden px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">🔔 Gia Hạn Dịch Vụ</button>
     </div>
 
     <!-- Sub-tab: Phê Duyệt Giá -->
@@ -5502,6 +5519,147 @@ input[data-sdd-list] {
           </table>
         </div>
         <div id="paginationContainer_itTicket"></div>
+      </div>
+    </div>
+
+    <!-- Sub-tab: Gia Hạn Dịch Vụ CNTT — CHỈ đội IT (itManage/admin) thấy được (ẩn/hiện ở
+         btnItSubRenewal/btnItSupportNavRenewal, xem finishLogin()). Danh mục nội bộ đội IT tự quản lý
+         cho chính mình, KHÔNG qua bước duyệt nào (khác Giấy Phép — hồ sơ pháp lý cần người khác duyệt),
+         xem lib/createValidation.js itServiceRenewals.extraValidate. -->
+    <div id="itSubRenewal" class="hidden space-y-4">
+      <div id="itRenewalDashboardCards"></div>
+
+      <div class="bg-sky-50 p-4 rounded border border-sky-200 space-y-3">
+        <h3 class="font-bold text-sky-900 text-base flex items-center gap-2">🔔 Thêm Dịch Vụ CNTT Cần Theo Dõi Gia Hạn</h3>
+        <p class="text-xs text-sky-700">Phần mềm/bản quyền, đường truyền Internet, tên miền, chứng chỉ SSL, hosting... — hệ thống sẽ tự gửi email nhắc trước khi hết hạn (cấu hình ở Quản Trị → Cấu Hình Email).</p>
+        <form id="itRenewalCreateForm" onsubmit="submitItServiceRenewal(event)" class="grid grid-cols-1 md:grid-cols-3 gap-3">
+          <input id="itRenewalName" placeholder="Tên dịch vụ (VD: Microsoft 365, Domain hcrc.vn...)" class="border p-2 rounded text-sm md:col-span-2" required>
+          <div class="relative">
+            <input id="itRenewalCategory" data-sdd-list="itRenewalCategoryDatalist" autocomplete="off" placeholder="Loại dịch vụ" class="w-full border p-2 rounded text-sm" required>
+            <div id="itRenewalCategoryDatalist" class="hidden" data-sdd-dropdown></div>
+          </div>
+          <input id="itRenewalVendor" placeholder="Nhà cung cấp" class="border p-2 rounded text-sm">
+          <input id="itRenewalResponsible" placeholder="Người phụ trách" class="border p-2 rounded text-sm">
+          <input id="itRenewalCost" type="text" inputmode="numeric" placeholder="Chi phí gia hạn (đ)" class="money-input border p-2 rounded text-sm">
+          <div>
+            <label class="block text-xs font-semibold text-gray-600 mb-1">Ngày bắt đầu</label>
+            <input id="itRenewalStartDate" type="date" class="w-full border p-2 rounded text-sm">
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-gray-600 mb-1">Ngày hết hạn <span class="text-red-500">*</span></label>
+            <input id="itRenewalExpiryDate" type="date" class="w-full border p-2 rounded text-sm" required>
+          </div>
+          <input id="itRenewalFile" type="file" class="border p-1 bg-white rounded text-sm md:col-span-3">
+          <textarea id="itRenewalNote" placeholder="Ghi chú thêm (nếu có)..." class="w-full border p-2 rounded text-sm h-16 md:col-span-3"></textarea>
+          <div class="md:col-span-3 flex justify-end">
+            <button type="submit" class="bg-sky-700 text-white px-5 py-2 rounded font-bold hover:bg-sky-800 transition">Thêm vào danh mục</button>
+          </div>
+        </form>
+      </div>
+
+      <details class="filter-box-details bg-gray-50 p-4 rounded-lg border">
+        <summary class="font-bold text-gray-700 text-sm flex items-center gap-1.5"><span class="filter-box-chevron text-gray-400">▸</span><span>🔍 Tìm Kiếm & Lọc</span></summary>
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-3 mt-3">
+          <div>
+            <label class="block text-xs font-semibold text-gray-600 mb-1">Tình Trạng Hiệu Lực</label>
+            <select id="filterItRenewalLifecycle" onchange="onItServiceRenewalFilterChange()" class="w-full border p-2 rounded text-sm bg-white">
+              <option value="">-- Tất cả --</option>
+              <option value="VALID">🟢 Còn hiệu lực</option>
+              <option value="EXPIRING">🟡 Sắp hết hạn (≤30 ngày)</option>
+              <option value="EXPIRED">🔴 Hết hạn</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-gray-600 mb-1">Loại Dịch Vụ</label>
+            <select id="filterItRenewalCategory" onchange="onItServiceRenewalFilterChange()" class="w-full border p-2 rounded text-sm bg-white">
+              <option value="">-- Tất cả --</option>
+            </select>
+          </div>
+          <div class="md:col-span-2">
+            <label class="block text-xs font-semibold text-gray-600 mb-1">Từ Khóa</label>
+            <input id="filterItRenewalKeyword" oninput="onItServiceRenewalFilterChange()" placeholder="Tên dịch vụ, nhà cung cấp, người phụ trách..." class="w-full border p-2 rounded text-sm">
+          </div>
+        </div>
+      </details>
+
+      <div>
+        <div class="flex justify-between items-center mb-3">
+          <h3 class="font-bold text-gray-800">📋 Danh Mục Dịch Vụ CNTT</h3>
+        </div>
+        <div class="overflow-x-auto">
+          <table class="w-full border-collapse border text-sm">
+            <thead>
+              <tr class="bg-gray-200 text-left text-gray-700">
+                <th class="border p-2">Tên Dịch Vụ</th>
+                <th class="border p-2">Loại</th>
+                <th class="border p-2">Nhà Cung Cấp / Người Phụ Trách</th>
+                <th class="border p-2">Ngày Hết Hạn</th>
+                <th class="border p-2 text-center">Hiệu Lực</th>
+                <th class="border p-2 text-right">Chi Phí Gia Hạn</th>
+                <th class="border p-2 text-center min-w-[140px]">Thao Tác</th>
+              </tr>
+            </thead>
+            <tbody id="itRenewalTableBody"></tbody>
+          </table>
+        </div>
+        <div id="paginationContainer_itRenewal"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal "Gia Hạn" — mục MODULE HỖ TRỢ IT / Gia Hạn Dịch Vụ CNTT: nhập ngày hết hạn MỚI (phải sau
+       ngày hiện tại), reset chu kỳ nhắc email (notifiedThresholds), ghi lịch sử "RENEWED" riêng — KHÁC
+       "Sửa" (chỉ sửa thông tin, không bắt buộc ngày mới lớn hơn). Xem renewItServiceRenewal() ở
+       lib/recordActions.js. -->
+  <div id="itRenewalRenewModal" class="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center hidden z-50 p-4">
+    <div class="bg-white rounded-lg shadow-xl max-w-md w-full p-5 space-y-3">
+      <h3 class="font-bold text-lg text-sky-900">🔄 Gia Hạn Dịch Vụ</h3>
+      <p id="itRenewalRenewCurrentInfo" class="text-xs text-gray-600 bg-gray-50 p-2 rounded border"></p>
+      <input type="hidden" id="itRenewalRenewId">
+      <div>
+        <label class="block text-xs font-semibold text-gray-600 mb-1">Ngày hết hạn mới <span class="text-red-500">*</span></label>
+        <input id="itRenewalRenewNewExpiryDate" type="date" class="w-full border p-2 rounded text-sm" required>
+      </div>
+      <div>
+        <label class="block text-xs font-semibold text-gray-600 mb-1">Chi phí gia hạn (đ)</label>
+        <input id="itRenewalRenewCost" type="text" inputmode="numeric" class="money-input w-full border p-2 rounded text-sm">
+      </div>
+      <div class="flex justify-end gap-2 pt-2">
+        <button type="button" onclick="closeItServiceRenewalRenewModal()" class="px-4 py-2 rounded bg-gray-200 text-gray-700 font-semibold hover:bg-gray-300">Đóng</button>
+        <button type="button" onclick="submitItServiceRenewalRenew()" class="px-4 py-2 rounded bg-sky-700 text-white font-bold hover:bg-sky-800">Xác Nhận Gia Hạn</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal "Sửa" — mục MODULE HỖ TRỢ IT / Gia Hạn Dịch Vụ CNTT: sửa thông tin chung, cho phép chỉnh
+       lại ngày hết hạn nếu nhập sai lúc tạo (không bắt buộc lớn hơn giá trị cũ, khác "Gia Hạn"). Xem
+       editItServiceRenewal() ở lib/recordActions.js. -->
+  <div id="itRenewalEditModal" class="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center hidden z-50 p-4">
+    <div class="bg-white rounded-lg shadow-xl max-w-lg w-full p-5 space-y-3 max-h-[90vh] overflow-y-auto">
+      <h3 class="font-bold text-lg text-sky-900">✏️ Sửa Dịch Vụ CNTT</h3>
+      <input type="hidden" id="itRenewalEditId">
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+        <input id="itRenewalEditName" placeholder="Tên dịch vụ" class="border p-2 rounded text-sm md:col-span-2" required>
+        <div class="relative">
+          <input id="itRenewalEditCategory" data-sdd-list="itRenewalEditCategoryDatalist" autocomplete="off" placeholder="Loại dịch vụ" class="w-full border p-2 rounded text-sm" required>
+          <div id="itRenewalEditCategoryDatalist" class="hidden" data-sdd-dropdown></div>
+        </div>
+        <input id="itRenewalEditVendor" placeholder="Nhà cung cấp" class="border p-2 rounded text-sm">
+        <input id="itRenewalEditResponsible" placeholder="Người phụ trách" class="border p-2 rounded text-sm">
+        <input id="itRenewalEditCost" type="text" inputmode="numeric" placeholder="Chi phí gia hạn (đ)" class="money-input border p-2 rounded text-sm">
+        <div>
+          <label class="block text-xs font-semibold text-gray-600 mb-1">Ngày bắt đầu</label>
+          <input id="itRenewalEditStartDate" type="date" class="w-full border p-2 rounded text-sm">
+        </div>
+        <div>
+          <label class="block text-xs font-semibold text-gray-600 mb-1">Ngày hết hạn <span class="text-red-500">*</span></label>
+          <input id="itRenewalEditExpiryDate" type="date" class="w-full border p-2 rounded text-sm" required>
+        </div>
+        <textarea id="itRenewalEditNote" placeholder="Ghi chú thêm (nếu có)..." class="w-full border p-2 rounded text-sm h-16 md:col-span-2"></textarea>
+      </div>
+      <div class="flex justify-end gap-2 pt-2">
+        <button type="button" onclick="closeItServiceRenewalEditModal()" class="px-4 py-2 rounded bg-gray-200 text-gray-700 font-semibold hover:bg-gray-300">Hủy</button>
+        <button type="button" onclick="submitItServiceRenewalEdit()" class="px-4 py-2 rounded bg-sky-700 text-white font-bold hover:bg-sky-800">Lưu Thay Đổi</button>
       </div>
     </div>
   </div>
@@ -8284,6 +8442,8 @@ async function initDatabase(loggingInUser) {
     DB.licenses = data.licenses || [];
     DB.licenseTypes = data.licenseTypes || [];
 
+    DB.itServiceRenewals = data.itServiceRenewals || [];
+
     DB._versions = data._versions || {};
 
     applyAllCoreFieldCustomizations();
@@ -9153,6 +9313,10 @@ function saveEmailConfig(e) {
   if (licenseReminderDays.length === 0) {
     return alert('⛔ Vui lòng nhập ít nhất 1 mốc số ngày nhắc hết hạn giấy phép hợp lệ (vd: 30, 15, 7)!');
   }
+  const itRenewalReminderDays = parseDaysListInput(document.getElementById('cfgItRenewalReminderDays').value);
+  if (itRenewalReminderDays.length === 0) {
+    return alert('⛔ Vui lòng nhập ít nhất 1 mốc số ngày nhắc hết hạn dịch vụ CNTT hợp lệ (vd: 30, 15, 7)!');
+  }
   const smtpAuthEnabled = document.getElementById('cfgSmtpAuthEnabled').checked;
   DB.emailConfig = {
     enabled: document.getElementById('cfgEmailEnabled').value === 'true',
@@ -9169,7 +9333,9 @@ function saveEmailConfig(e) {
     contractExpiryReminderDays: reminderDays,
     contractExpiryCcEmails: parseEmailListInput(document.getElementById('cfgContractReminderCc').value),
     licenseExpiryReminderDays: licenseReminderDays,
-    licenseExpiryCcEmails: parseEmailListInput(document.getElementById('cfgLicenseReminderCc').value)
+    licenseExpiryCcEmails: parseEmailListInput(document.getElementById('cfgLicenseReminderCc').value),
+    itRenewalReminderDays: itRenewalReminderDays,
+    itRenewalCcEmails: parseEmailListInput(document.getElementById('cfgItRenewalReminderCc').value)
   };
   syncStorage('emailConfig');
   document.getElementById('cfgSmtpPassPlain').value = ''; // không giữ mật khẩu vừa gõ hiển thị lại trên form
@@ -9207,6 +9373,9 @@ function loadEmailConfigToForm() {
   document.getElementById('cfgLicenseReminderDays').value = (DB.emailConfig.licenseExpiryReminderDays && DB.emailConfig.licenseExpiryReminderDays.length
     ? DB.emailConfig.licenseExpiryReminderDays : [30, 15, 7]).join(', ');
   document.getElementById('cfgLicenseReminderCc').value = (DB.emailConfig.licenseExpiryCcEmails || []).join(', ');
+  document.getElementById('cfgItRenewalReminderDays').value = (DB.emailConfig.itRenewalReminderDays && DB.emailConfig.itRenewalReminderDays.length
+    ? DB.emailConfig.itRenewalReminderDays : [30, 15, 7]).join(', ');
+  document.getElementById('cfgItRenewalReminderCc').value = (DB.emailConfig.itRenewalCcEmails || []).join(', ');
   document.getElementById('cfgTestEmailResult').textContent = '';
   loadSmtpAuthStatus();
   contractExpiryDeptContactsDraft = JSON.parse(JSON.stringify(DB.contractExpiryDeptContacts || {}));
@@ -10870,6 +11039,8 @@ function finishLogin(user) {
   document.getElementById('heThongNavWrap').classList.toggle('hidden', !user.perms.admin);
   document.getElementById('btnReportsTab').classList.toggle('hidden', !canAccessReportsModule(user));
   document.getElementById('itSupportNavWrap').classList.toggle('hidden', !canAccessItSupportModule(user));
+  document.getElementById('btnItSupportNavRenewal').classList.toggle('hidden', !canManageItSupportClient(user));
+  document.getElementById('btnItSubRenewal').classList.toggle('hidden', !canManageItSupportClient(user));
   document.getElementById('btnApprovalHubTab').classList.toggle('hidden', !canAccessApprovalHub(user));
   updateApprovalHubBadge();
   applyUploadAcceptAttrs();
@@ -21077,6 +21248,294 @@ const WF_MODULE_CONFIG = {
   // "Ngân Sách" — Trưởng phòng duyệt bản ngân sách theo phòng ban, cùng khuôn ITPRICE ở trên.
   BUDGET: { dbKey: 'budgetDeptWorkflows', label: 'Ngân Sách', title: '📊 Cấu Hình Quy Trình Duyệt Ngân Sách Theo Phòng Ban' }
 };
+
+// ==========================================
+// GIA HẠN DỊCH VỤ CNTT — module con của Hỗ Trợ IT, CHỈ đội IT (itManage/admin) thấy được (khác Phê
+// Duyệt Giá/Hỗ Trợ Yêu Cầu mở cho toàn bộ nhân viên). Danh mục nội bộ đội IT tự quản lý cho chính
+// mình, KHÔNG qua bước duyệt nào (khác Giấy Phép — hồ sơ pháp lý cần người khác duyệt), cùng khuôn
+// dashboard/hiệu lực/nhắc email như Giấy Phép nhưng bỏ hẳn phần status/lifecycleStatus/version (xem
+// lib/createValidation.js itServiceRenewals.extraValidate).
+// ==========================================
+const IT_RENEWAL_CATEGORY_SUGGESTIONS = ['Phần mềm/Bản quyền', 'Đường truyền Internet', 'Tên miền', 'Chứng chỉ SSL', 'Hosting', 'Khác'];
+
+// Tình trạng hiệu lực — cùng khuôn computeLicenseLifecycleState() nhưng không có RENEWING/REVOKED (module
+// này không có khái niệm thu hồi/đánh dấu đang gia hạn, chỉ có ngày hết hạn).
+function computeItRenewalLifecycleState(item) {
+  if (!item || !item.expiryDate) return null;
+  const expiry = new Date(item.expiryDate);
+  if (isNaN(expiry.getTime())) return 'VALID';
+  const now = new Date();
+  const startExpiry = new Date(expiry.getFullYear(), expiry.getMonth(), expiry.getDate());
+  const startNow = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const diffDays = Math.round((startExpiry - startNow) / 86400000);
+  if (diffDays < 0) return 'EXPIRED';
+  if (diffDays <= 30) return 'EXPIRING';
+  return 'VALID';
+}
+const IT_RENEWAL_LIFECYCLE_LABELS = {
+  VALID: { label: '🟢 Còn hiệu lực', cls: 'bg-green-100 text-green-800' },
+  EXPIRING: { label: '🟡 Sắp hết hạn', cls: 'bg-yellow-100 text-yellow-800' },
+  EXPIRED: { label: '🔴 Hết hạn', cls: 'bg-red-100 text-red-800' }
+};
+
+function filterItServiceRenewalByCard(key) {
+  const map = {
+    __ALL__: { filterItRenewalLifecycle: '' },
+    EXPIRING: { filterItRenewalLifecycle: 'EXPIRING' },
+    EXPIRED: { filterItRenewalLifecycle: 'EXPIRED' }
+  };
+  const cfg = map[key] || {};
+  Object.entries(cfg).forEach(([id, val]) => { const el = document.getElementById(id); if (el) el.value = val; });
+  const box = document.querySelector('#itSubRenewal .filter-box-details');
+  if (box) box.open = true;
+  onItServiceRenewalFilterChange();
+}
+function onItServiceRenewalFilterChange() {
+  resetListPage('itRenewal');
+  renderItServiceRenewals();
+}
+
+function renderItServiceRenewals() {
+  const tbody = document.getElementById('itRenewalTableBody');
+  if (!tbody) return;
+
+  const categories = Array.from(new Set([...IT_RENEWAL_CATEGORY_SUGGESTIONS, ...DB.itServiceRenewals.map(x => x.category).filter(Boolean)]));
+  sddSetOptions('itRenewalCategoryDatalist', categories);
+  sddSetOptions('itRenewalEditCategoryDatalist', categories);
+  const categorySelect = document.getElementById('filterItRenewalCategory');
+  if (categorySelect) {
+    const current = categorySelect.value;
+    categorySelect.innerHTML = '<option value="">-- Tất cả --</option>' + categories.map(c => `<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`).join('');
+    categorySelect.value = current;
+  }
+
+  const lifecycleFilter = document.getElementById('filterItRenewalLifecycle')?.value || '';
+  const categoryFilter = document.getElementById('filterItRenewalCategory')?.value || '';
+  const keyword = (document.getElementById('filterItRenewalKeyword')?.value || '').toLowerCase().trim();
+
+  const dashCards = [
+    { key: '__ALL__', label: 'Tổng Dịch Vụ', count: DB.itServiceRenewals.length, colorClass: 'border-l-blue-500' },
+    { key: 'EXPIRING', label: 'Sắp Hết Hạn (≤30 ngày)', count: DB.itServiceRenewals.filter(x => computeItRenewalLifecycleState(x) === 'EXPIRING').length, colorClass: 'border-l-amber-500' },
+    { key: 'EXPIRED', label: 'Đã Hết Hạn', count: DB.itServiceRenewals.filter(x => computeItRenewalLifecycleState(x) === 'EXPIRED').length, colorClass: 'border-l-red-500' }
+  ];
+  let activeCardKey = '__ALL__';
+  if (lifecycleFilter === 'EXPIRING') activeCardKey = 'EXPIRING';
+  else if (lifecycleFilter === 'EXPIRED') activeCardKey = 'EXPIRED';
+  document.getElementById('itRenewalDashboardCards').innerHTML = buildDashboardCardsHTML(dashCards, activeCardKey, 'filterItServiceRenewalByCard');
+
+  const filtered = DB.itServiceRenewals.filter(item => {
+    if (lifecycleFilter && computeItRenewalLifecycleState(item) !== lifecycleFilter) return false;
+    if (categoryFilter && item.category !== categoryFilter) return false;
+    if (!matchesKeywordFields([item.name, item.vendor, item.responsible], keyword)) return false;
+    return true;
+  });
+
+  document.getElementById('paginationContainer_itRenewal').innerHTML = buildPaginationBoxHTML('itRenewal', 'renderItServiceRenewals');
+  const pageItems = paginateList('itRenewal', filtered, 'renderItServiceRenewals', 'dịch vụ');
+
+  if (pageItems.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="7" class="text-center p-6 text-gray-500 italic">Không tìm thấy dịch vụ phù hợp.</td></tr>`;
+    return;
+  }
+  tbody.innerHTML = pageItems.map(item => buildItServiceRenewalRowHTML(item)).join('');
+}
+
+function buildItServiceRenewalRowHTML(item) {
+  const lifecycleKey = computeItRenewalLifecycleState(item);
+  const lifecycleBadge = lifecycleKey
+    ? `<span class="px-2 py-1 rounded font-bold text-xs ${IT_RENEWAL_LIFECYCLE_LABELS[lifecycleKey].cls}">${escapeHtml(IT_RENEWAL_LIFECYCLE_LABELS[lifecycleKey].label)}</span>`
+    : '<span class="text-gray-400 text-xs">—</span>';
+
+  const secondaryOptions = [];
+  if (item.fileUrl) secondaryOptions.push({ value: 'download', label: '⬇️ Tải tệp' });
+  if (currentUser.perms?.admin) secondaryOptions.push({ value: 'delete', label: '🗑️ Xóa' });
+  const primaryBtnHTML = `<button onclick="runItServiceRenewalAction(${item.id}, 'renew')" class="px-2 py-1 bg-sky-700 text-white rounded text-xs hover:bg-sky-800 font-semibold" title="Gia hạn dịch vụ">🔄 Gia Hạn</button>`;
+  secondaryOptions.unshift({ value: 'edit', label: '✏️ Sửa' });
+
+  return `
+    <tr class="hover:bg-gray-50 transition border-b">
+      <td class="border p-2">
+        <div class="font-bold text-gray-800">${escapeHtml(item.name)}</div>
+        ${item.note ? `<div class="text-xs text-gray-500">${escapeHtml(item.note)}</div>` : ''}
+      </td>
+      <td class="border p-2 text-gray-700">${escapeHtml(item.category)}</td>
+      <td class="border p-2 text-xs text-gray-600">${escapeHtml(item.vendor || '—')}<div class="text-gray-400">${escapeHtml(item.responsible || '')}</div></td>
+      <td class="border p-2 text-xs text-gray-600">${escapeHtml(item.expiryDate)}</td>
+      <td class="border p-2 text-center">${lifecycleBadge}</td>
+      <td class="border p-2 text-right text-gray-700">${item.cost ? Number(item.cost).toLocaleString('vi-VN') + ' đ' : '—'}</td>
+      <td class="border p-2 text-center space-x-1">${buildActionCell(item.id, primaryBtnHTML, secondaryOptions, 'runItServiceRenewalAction')}</td>
+    </tr>
+  `;
+}
+
+function runItServiceRenewalAction(id, action) {
+  const item = DB.itServiceRenewals.find(x => x.id === id);
+  if (!item) return;
+  switch (action) {
+    case 'renew': openItServiceRenewalRenewModal(id); break;
+    case 'edit': openItServiceRenewalEditModal(id); break;
+    case 'download': downloadItServiceRenewalFile(id); break;
+    case 'delete': deleteItServiceRenewalAction(id); break;
+  }
+}
+
+async function submitItServiceRenewal(e) {
+  e.preventDefault();
+  const name = document.getElementById('itRenewalName').value.trim();
+  const category = document.getElementById('itRenewalCategory').value.trim();
+  if (!name) return alert('Vui lòng nhập Tên dịch vụ!');
+  if (!category) return alert('Vui lòng nhập Loại dịch vụ!');
+  const expiryDate = document.getElementById('itRenewalExpiryDate').value;
+  if (!expiryDate) return alert('Vui lòng nhập Ngày hết hạn!');
+  const startDate = document.getElementById('itRenewalStartDate').value || null;
+  if (startDate && new Date(expiryDate).getTime() < new Date(startDate).getTime()) {
+    return alert('Ngày hết hạn phải sau Ngày bắt đầu!');
+  }
+
+  const fileInput = document.getElementById('itRenewalFile');
+  const file = fileInput.files[0];
+  let uploaded = null;
+  if (file) {
+    try {
+      uploaded = await uploadFileToServer(file, 'itServiceRenewal');
+    } catch (err) {
+      return alert(`⛔ Tải tệp lên thất bại: ${err.message}`);
+    }
+  }
+
+  const costInput = document.getElementById('itRenewalCost');
+  const payload = {
+    name, category,
+    vendor: document.getElementById('itRenewalVendor').value.trim(),
+    responsible: document.getElementById('itRenewalResponsible').value.trim(),
+    cost: costInput.value.trim() ? getMoneyValue(costInput) : null,
+    startDate, expiryDate,
+    note: document.getElementById('itRenewalNote').value.trim(),
+    fileUrl: uploaded ? uploaded.fileUrl : null,
+    fileName: uploaded ? uploaded.fileName : null,
+    createdAt: new Date().toLocaleString('vi-VN')
+  };
+
+  let newItem;
+  try {
+    newItem = (await callCreateAction('itServiceRenewals', payload)).item;
+  } catch (err) {
+    return alert('⛔ ' + err.message);
+  }
+
+  DB.itServiceRenewals.unshift(newItem);
+  logSystemAction('IT_SERVICE_RENEWAL', 'CREATE_IT_RENEWAL', `Thêm dịch vụ CNTT cần theo dõi gia hạn [${name}]`, 'SUCCESS', name);
+  alert('✅ Đã thêm dịch vụ vào danh mục theo dõi gia hạn!');
+  e.target.reset();
+  renderItServiceRenewals();
+}
+
+function downloadItServiceRenewalFile(id) {
+  const item = DB.itServiceRenewals.find(x => x.id === id);
+  if (!item || !item.fileUrl) return;
+  const a = document.createElement('a');
+  a.href = attachmentDownloadUrl(item.fileUrl, null, item.fileName || item.name);
+  a.download = item.fileName || item.name;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  logSystemAction('IT_SERVICE_RENEWAL', 'DOWNLOAD_IT_RENEWAL_FILE', `Tải tệp dịch vụ CNTT [${item.name}]`, 'SUCCESS', item.name);
+}
+
+function deleteItServiceRenewalAction(id) {
+  const item = DB.itServiceRenewals.find(x => x.id === id);
+  if (!item) return;
+  deleteRecordAdminOnly('itServiceRenewals', id, `dịch vụ CNTT "${item.name}"`, () => {
+    DB.itServiceRenewals = DB.itServiceRenewals.filter(x => x.id !== id);
+    logSystemAction('IT_SERVICE_RENEWAL', 'DELETE_IT_RENEWAL', `Xóa dịch vụ CNTT [${item.name}]`, 'SUCCESS', item.name);
+    renderItServiceRenewals();
+  });
+}
+
+// ----- Modal "Gia Hạn" -----
+function openItServiceRenewalRenewModal(id) {
+  const item = DB.itServiceRenewals.find(x => x.id === id);
+  if (!item) return;
+  document.getElementById('itRenewalRenewId').value = id;
+  document.getElementById('itRenewalRenewCurrentInfo').innerText = `${item.name} (${item.category}) — hiện đang hết hạn ngày ${item.expiryDate}`;
+  document.getElementById('itRenewalRenewNewExpiryDate').value = '';
+  document.getElementById('itRenewalRenewCost').value = item.cost ? Number(item.cost).toLocaleString('vi-VN') : '';
+  document.getElementById('itRenewalRenewModal').classList.remove('hidden');
+}
+function closeItServiceRenewalRenewModal() {
+  document.getElementById('itRenewalRenewModal').classList.add('hidden');
+}
+async function submitItServiceRenewalRenew() {
+  const id = Number(document.getElementById('itRenewalRenewId').value);
+  const item = DB.itServiceRenewals.find(x => x.id === id);
+  if (!item) return;
+  const newExpiryDate = document.getElementById('itRenewalRenewNewExpiryDate').value;
+  if (!newExpiryDate) return alert('Vui lòng nhập Ngày hết hạn mới!');
+  if (new Date(newExpiryDate).getTime() <= new Date(item.expiryDate).getTime()) {
+    return alert('Ngày hết hạn mới phải sau ngày hết hạn hiện tại!');
+  }
+  const costInput = document.getElementById('itRenewalRenewCost');
+  const payload = { newExpiryDate, cost: costInput.value.trim() ? getMoneyValue(costInput) : null };
+  let updated;
+  try {
+    updated = (await callRecordAction('itServiceRenewals', id, 'renew', payload)).item;
+  } catch (err) { return alert('⛔ ' + err.message); }
+  Object.assign(item, updated);
+  logSystemAction('IT_SERVICE_RENEWAL', 'RENEW_IT_RENEWAL', `Gia hạn dịch vụ CNTT [${item.name}] sang ${newExpiryDate}`, 'SUCCESS', item.name);
+  closeItServiceRenewalRenewModal();
+  renderItServiceRenewals();
+}
+
+// ----- Modal "Sửa" -----
+function openItServiceRenewalEditModal(id) {
+  const item = DB.itServiceRenewals.find(x => x.id === id);
+  if (!item) return;
+  document.getElementById('itRenewalEditId').value = id;
+  document.getElementById('itRenewalEditName').value = item.name || '';
+  document.getElementById('itRenewalEditCategory').value = item.category || '';
+  document.getElementById('itRenewalEditVendor').value = item.vendor || '';
+  document.getElementById('itRenewalEditResponsible').value = item.responsible || '';
+  document.getElementById('itRenewalEditCost').value = item.cost ? Number(item.cost).toLocaleString('vi-VN') : '';
+  document.getElementById('itRenewalEditStartDate').value = item.startDate || '';
+  document.getElementById('itRenewalEditExpiryDate').value = item.expiryDate || '';
+  document.getElementById('itRenewalEditNote').value = item.note || '';
+  document.getElementById('itRenewalEditModal').classList.remove('hidden');
+}
+function closeItServiceRenewalEditModal() {
+  document.getElementById('itRenewalEditModal').classList.add('hidden');
+}
+async function submitItServiceRenewalEdit() {
+  const id = Number(document.getElementById('itRenewalEditId').value);
+  const item = DB.itServiceRenewals.find(x => x.id === id);
+  if (!item) return;
+  const name = document.getElementById('itRenewalEditName').value.trim();
+  const category = document.getElementById('itRenewalEditCategory').value.trim();
+  if (!name) return alert('Vui lòng nhập Tên dịch vụ!');
+  if (!category) return alert('Vui lòng nhập Loại dịch vụ!');
+  const expiryDate = document.getElementById('itRenewalEditExpiryDate').value;
+  if (!expiryDate) return alert('Vui lòng nhập Ngày hết hạn!');
+  const startDate = document.getElementById('itRenewalEditStartDate').value || null;
+  if (startDate && new Date(expiryDate).getTime() < new Date(startDate).getTime()) {
+    return alert('Ngày hết hạn phải sau Ngày bắt đầu!');
+  }
+  const costInput = document.getElementById('itRenewalEditCost');
+  const payload = {
+    name, category,
+    vendor: document.getElementById('itRenewalEditVendor').value.trim(),
+    responsible: document.getElementById('itRenewalEditResponsible').value.trim(),
+    cost: costInput.value.trim() ? getMoneyValue(costInput) : null,
+    startDate, expiryDate,
+    note: document.getElementById('itRenewalEditNote').value.trim()
+  };
+  let updated;
+  try {
+    updated = (await callRecordAction('itServiceRenewals', id, 'edit', payload)).item;
+  } catch (err) { return alert('⛔ ' + err.message); }
+  Object.assign(item, updated);
+  logSystemAction('IT_SERVICE_RENEWAL', 'EDIT_IT_RENEWAL', `Sửa dịch vụ CNTT [${name}]`, 'SUCCESS', name);
+  closeItServiceRenewalEditModal();
+  renderItServiceRenewals();
+}
 
 // ==========================================
 // NGÂN SÁCH — 3 sub-tab: Lập Ngân Sách (budgetCreate) / Tạo Kỳ Ngân Sách + Mẫu (budgetManage) / Tổng
@@ -32138,10 +32597,12 @@ function setItSupportSubTab(subTab) {
   activeItSupportSubTab = subTab;
   document.getElementById('itSubPrice').classList.toggle('hidden', subTab !== 'PRICE');
   document.getElementById('itSubTicket').classList.toggle('hidden', subTab !== 'TICKET');
+  document.getElementById('itSubRenewal').classList.toggle('hidden', subTab !== 'RENEWAL');
   const activeCls = 'px-3 py-1.5 rounded text-xs font-bold bg-sky-700 text-white';
   const inactiveCls = 'px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700';
   document.getElementById('btnItSubPrice').className = subTab === 'PRICE' ? activeCls : inactiveCls;
   document.getElementById('btnItSubTicket').className = subTab === 'TICKET' ? activeCls : inactiveCls;
+  document.getElementById('btnItSubRenewal').className = (subTab === 'RENEWAL' ? activeCls : inactiveCls) + (canManageItSupportClient(currentUser) ? '' : ' hidden');
 
   if (subTab === 'PRICE') {
     const canCreate = canProposeItPrice(currentUser);
@@ -32164,6 +32625,9 @@ function setItSupportSubTab(subTab) {
   if (subTab === 'TICKET') {
     document.getElementById('itTicketCode').value = generateItTicketCode();
     renderItTickets();
+  }
+  if (subTab === 'RENEWAL') {
+    renderItServiceRenewals();
   }
 }
 
