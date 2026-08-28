@@ -3554,6 +3554,79 @@ function unrevokeLicense(user, item) {
   return item;
 }
 
+// ===================== GIA HẠN DỊCH VỤ CNTT (module con của Hỗ Trợ IT — itManage) =====================
+// Công cụ NỘI BỘ đội IT tự theo dõi ngày hết hạn dịch vụ/hợp đồng CNTT (phần mềm, đường truyền, tên
+// miền, SSL...) — KHÔNG có bước duyệt (khác Giấy Phép ở trên), chỉ 3 hành động: Sửa (sửa mọi trường,
+// không đổi lịch sử nhắc hạn trừ khi NGÀY HẾT HẠN thực sự đổi), Gia Hạn (nút riêng — LUÔN đổi ngày hết
+// hạn + reset lại chu kỳ nhắc email từ đầu, ghi rõ 1 dòng lịch sử "đã gia hạn"), Xoá (qua deleteAdminOnly
+// dùng chung ở routes/records.js, không cần hàm riêng ở đây).
+function canManageItServiceRenewal(user) {
+  return !!(user?.perms?.admin || user?.perms?.itManage);
+}
+
+function editItServiceRenewal(user, item, payload) {
+  if (!canManageItServiceRenewal(user)) throw new HttpError(403, 'Bạn không có quyền sửa mục gia hạn dịch vụ CNTT');
+  const name = String(payload?.name || '').trim();
+  const category = String(payload?.category || '').trim();
+  if (!name) throw new HttpError(400, 'Vui lòng nhập Tên dịch vụ');
+  if (!category) throw new HttpError(400, 'Vui lòng nhập Loại dịch vụ');
+  const expiryDate = payload?.expiryDate;
+  if (!expiryDate) throw new HttpError(400, 'Vui lòng nhập Ngày hết hạn');
+  const startDate = payload?.startDate || null;
+  if (startDate && new Date(expiryDate).getTime() < new Date(startDate).getTime()) {
+    throw new HttpError(400, 'Ngày hết hạn phải sau Ngày bắt đầu');
+  }
+  const cost = (payload?.cost === '' || payload?.cost === null || payload?.cost === undefined) ? null : Number(payload.cost);
+  if (cost !== null && (!Number.isFinite(cost) || cost < 0)) throw new HttpError(400, 'Chi phí gia hạn không hợp lệ');
+
+  // Sửa tay đổi ngày hết hạn (khác nút "Gia Hạn" riêng bên dưới, nhưng người dùng vẫn có thể chỉnh
+  // thẳng ở đây) -> reset lại notifiedThresholds, nếu không hệ thống sẽ KHÔNG gửi lại nhắc hạn cho mốc
+  // ngày mới vì tưởng đã nhắc rồi (thresholds cũ tính theo ngày hết hạn CŨ).
+  if (String(item.expiryDate || '') !== String(expiryDate)) item.notifiedThresholds = [];
+
+  item.name = name.slice(0, 200);
+  item.category = category.slice(0, 200);
+  item.vendor = String(payload?.vendor || '').trim().slice(0, 200);
+  item.responsible = String(payload?.responsible || '').trim().slice(0, 200);
+  item.note = String(payload?.note || '').trim().slice(0, 1000);
+  item.startDate = startDate;
+  item.expiryDate = expiryDate;
+  item.cost = cost;
+  if (payload?.fileUrl) {
+    item.fileUrl = String(payload.fileUrl).trim().slice(0, 300);
+    item.fileName = String(payload.fileName || '').trim().slice(0, 200);
+  }
+  item.history = item.history || [];
+  item.history.push({ action: 'EDITED', by: user.username, byName: user.name, time: nowVN() });
+  return item;
+}
+
+// "Gia Hạn" — hành động chính của module: chốt ngày hết hạn MỚI (bắt buộc phải sau ngày hết hạn hiện
+// tại — gia hạn nghĩa là kéo dài thêm, không phải sửa lùi), tuỳ chọn cập nhật chi phí lần gia hạn này,
+// LUÔN reset notifiedThresholds để chu kỳ nhắc email tính lại từ đầu theo mốc hạn mới, ghi rõ 1 dòng
+// lịch sử kèm ngày cũ/mới để tra cứu lại được đã gia hạn bao nhiêu lần.
+function renewItServiceRenewal(user, item, payload) {
+  if (!canManageItServiceRenewal(user)) throw new HttpError(403, 'Bạn không có quyền gia hạn mục này');
+  const newExpiryDate = payload?.newExpiryDate;
+  if (!newExpiryDate) throw new HttpError(400, 'Vui lòng nhập Ngày hết hạn mới');
+  if (new Date(newExpiryDate).getTime() <= new Date(item.expiryDate).getTime()) {
+    throw new HttpError(400, 'Ngày hết hạn mới phải sau ngày hết hạn hiện tại');
+  }
+  const cost = (payload?.cost === '' || payload?.cost === null || payload?.cost === undefined) ? item.cost ?? null : Number(payload.cost);
+  if (cost !== null && (!Number.isFinite(cost) || cost < 0)) throw new HttpError(400, 'Chi phí gia hạn không hợp lệ');
+
+  const oldExpiryDate = item.expiryDate;
+  item.expiryDate = newExpiryDate;
+  item.cost = cost;
+  item.notifiedThresholds = [];
+  item.history = item.history || [];
+  item.history.push({
+    action: 'RENEWED', by: user.username, byName: user.name, time: nowVN(),
+    comment: `Gia hạn từ ${oldExpiryDate} sang ${newExpiryDate}`
+  });
+  return item;
+}
+
 module.exports = {
   editContract,
   editDocDraft, submitDocDraft,
@@ -3599,5 +3672,6 @@ module.exports = {
   canManageBudget, canAggregateBudget, isBudgetPeriodClosed,
   closeBudgetPeriod, reopenBudgetPeriod, updateBudgetEntryDraft, submitBudgetEntry, updateBudgetTemplate,
   canConfirmCarDriverAssignment, confirmCarDriverAssignment,
-  canApproveLicense, approveLicense, rejectLicense, setLicenseRenewing, revokeLicense, unrevokeLicense
+  canApproveLicense, approveLicense, rejectLicense, setLicenseRenewing, revokeLicense, unrevokeLicense,
+  canManageItServiceRenewal, editItServiceRenewal, renewItServiceRenewal
 };

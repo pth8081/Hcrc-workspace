@@ -296,7 +296,7 @@ async function main() {
       // cố định) — đọc số liệu từ HTML thẻ theo nhãn, khớp đúng cấu trúc renderDocs() sinh ra.
       const dashHTML = document.getElementById('docDashboardCards').innerHTML;
       const readCard = (label) => {
-        const m = dashHTML.match(new RegExp(label + '</div>\\s*<div class="text-lg font-bold">(\\d+)</div>'));
+        const m = dashHTML.match(new RegExp(label + '</div>\\s*<div class="text-lg font-bold[^"]*">(\\d+)</div>'));
         return m ? m[1] : null;
       };
       check(

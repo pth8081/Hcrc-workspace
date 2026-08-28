@@ -66,7 +66,8 @@ function createMockState(seed) {
     itPriceApprovals: [], itSupportTickets: [], reportPeriods: [], reportEntries: [],
     tasks: [],
     budgetTemplates: [], budgetPeriods: [], budgetEntries: [], budgetDeptWorkflows: {},
-    licenses: [], licenseTypes: []
+    licenses: [], licenseTypes: [],
+    itServiceRenewals: []
   }, seed || {});
 }
 
@@ -129,7 +130,11 @@ function buildActionHandlers(state) {
     'licenses:reject': (u, item, body) => recordActions.rejectLicense(u, item, body),
     'licenses:set-renewing': (u, item, body) => recordActions.setLicenseRenewing(u, item, body),
     'licenses:revoke': (u, item, body) => recordActions.revokeLicense(u, item, body),
-    'licenses:unrevoke': (u, item) => recordActions.unrevokeLicense(u, item)
+    'licenses:unrevoke': (u, item) => recordActions.unrevokeLicense(u, item),
+
+    // ===== HỖ TRỢ IT — Gia Hạn Dịch Vụ CNTT =====
+    'itServiceRenewals:edit': (u, item, body) => recordActions.editItServiceRenewal(u, item, body),
+    'itServiceRenewals:renew': (u, item, body) => recordActions.renewItServiceRenewal(u, item, body)
   };
 }
 

@@ -391,6 +391,13 @@ function applyWorkflowAction({ moduleKey, item, action, user, comment, extraFiel
   // toán, không gán để tránh field thừa; hợp đồng đã tự gán paymentStatus lúc TẠO hồ sơ, xem
   // lib/createValidation.js, không cần gán lại ở đây cho cả 2 module key contracts/contractsSignedFile).
   if (moduleKey === 'officeReqs') item.paymentStatus = 'CHUA_THANH_TOAN';
+  // itPriceApprovals: chụp lại ĐÚNG tệp giá đang là mới nhất tại thời điểm duyệt xong bước cuối —
+  // KHÔNG thể suy ra "tệp đã duyệt" bằng cách lấy phần tử cuối của item.files[] về sau, vì IT vẫn có thể
+  // tiếp tục yêu cầu bổ sung SAU KHI đã duyệt (trước lúc áp giá thật, xem requestPriceInfoFromIt() ở
+  // lib/recordActions.js) khiến files[] phình thêm — phải chốt id ngay tại đây mới chính xác tuyệt đối.
+  if (moduleKey === 'itPriceApprovals' && Array.isArray(item.files) && item.files.length) {
+    item.approvedFileId = item.files[item.files.length - 1].id;
+  }
   return { item, transition: { type: 'COMPLETED' } };
 }
 

@@ -49,6 +49,13 @@
    sánh nên không chặn được trường hợp tick rồi tick lại y hệt ban đầu, nhưng đủ để admin nhận ra ngay
    khối nào mình vừa đụng vào giữa 1 cây quyền dài gần 14 khối (xem markPermTreeDirty()/clearPermTreeDirtyMarks()). */
 .perm-tree-node.perm-tree-dirty { border-left: 3px solid #f59e0b !important; background-color: #fffbeb !important; }
+/* Box "🔍 Tìm Kiếm & Lọc" thu gọn mặc định — dùng lại đúng khuôn <details>/<summary> ở trên, tách class
+   riêng để không lẫn với cây phân quyền. Class dùng chung cho MỌI module (không đặt tên riêng theo
+   module) — module nào sau này có phần lọc dài chỉ cần bọc bằng đúng class này là tự thu gọn/mở ra. */
+.filter-box-details > summary { list-style: none; cursor: pointer; }
+.filter-box-details > summary::-webkit-details-marker { display: none; }
+.filter-box-details > summary .filter-box-chevron { transition: transform 0.15s ease; display: inline-block; }
+.filter-box-details[open] > summary .filter-box-chevron { transform: rotate(90deg); }
 
 /* Sidebar điều hành (thay thanh nav ngang cũ) — #userHeader GIỮ NGUYÊN id cũ (finishLogin()/logout()
    chỉ toggle add/remove('hidden'), không sửa JS), giờ gắn vào chính khối <aside>. Tailwind ".hidden"
@@ -303,6 +310,25 @@ table { display: block; overflow-x: auto; max-width: 100%; }
 .loginpage-btn:disabled { opacity: .65; cursor: not-allowed; transform: none; }
 .loginpage-btn svg { width: 16px; height: 16px; }
 
+/* Dòng "đã nhớ tài khoản" thay ô gõ Tên đăng nhập trên thiết bị đã đăng ký vân tay/Face ID trước đó
+   (xem initRememberedLoginUser()/switchLoginUser() ở script cuối trang) — cùng tông màu xanh với
+   .loginpage-btn-secondary cho nhất quán, không phải input nên không dùng .loginpage-input-wrap.
+   .loginpage-remembered-user.hidden bắt buộc phải khai riêng (không trông cậy mỗi .hidden của
+   tailwind.css) — cùng lý do đã ghi ở #loginSection.hidden phía trên: 2 class cùng gắn 1 phần tử,
+   .hidden của tailwind.css KHÔNG có !important nên đứng sau .loginpage-remembered-user trong cùng
+   file là thua (display:flex đè display:none), phần tử "đã nhớ tài khoản" cứ hiện dù đang bị ẩn. */
+.loginpage-remembered-user {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  background: #f0f9ff; border: 1.5px solid #bfdbfe; border-radius: 10px;
+  padding: 11px 13px; margin-bottom: 16px;
+}
+.loginpage-remembered-user.hidden { display: none !important; }
+.loginpage-remembered-user-info { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.loginpage-remembered-user-info svg { width: 18px; height: 18px; color: #1d4ed8; flex-shrink: 0; }
+.loginpage-remembered-user-name { font-size: 14px; font-weight: 700; color: #0f1729; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.loginpage-remembered-user-switch { font-size: 12px; font-weight: 700; color: #1d4ed8; background: none; border: 0; cursor: pointer; white-space: nowrap; padding: 4px; flex-shrink: 0; }
+.loginpage-remembered-user-switch:hover { text-decoration: underline; }
+
 .loginpage-btn-secondary {
   width: 100%; font-size: 14px; font-weight: 700; color: #1d4ed8;
   background: #fff; border: 1.5px solid #bfdbfe; border-radius: 10px; padding: 11px;
@@ -521,6 +547,10 @@ input[data-sdd-list] {
         <div id="itSupportDropdownPanel" class="hidden pl-7 space-y-0.5 sidebar-label">
           <button onclick="closeItSupportDropdown(); switchTab('itSupport'); setItSupportSubTab('PRICE')" class="sidebar-subitem">🏷️ Phê Duyệt Giá</button>
           <button onclick="closeItSupportDropdown(); switchTab('itSupport'); setItSupportSubTab('TICKET')" class="sidebar-subitem">🎫 Hỗ Trợ Yêu Cầu</button>
+          <!-- "Gia Hạn Dịch Vụ CNTT" — KHÁC 2 mục trên (mở cho toàn bộ nhân viên): chỉ đội IT
+               (itManage/admin) mới thấy mục này, ẩn/hiện riêng qua canManageItSupportClient() ở
+               updateItSupportNavVisibility() (không dùng chung điều kiện canAccessItSupportModule). -->
+          <button id="btnItSupportNavRenewal" onclick="closeItSupportDropdown(); switchTab('itSupport'); setItSupportSubTab('RENEWAL')" class="hidden sidebar-subitem">🔔 Gia Hạn Dịch Vụ</button>
         </div>
       </div>
       <!-- Hệ Thống — cùng khuôn Hợp Đồng (dropdown TĨNH): cả 4 mục con đều yêu cầu admin (không có
@@ -633,7 +663,18 @@ input[data-sdd-list] {
         </div>
 
         <form onsubmit="event.preventDefault(); login();">
-          <div class="loginpage-field">
+          <!-- Thiết bị đã có tài khoản "được nhớ" từ lần đăng ký vân tay/Face ID trước (xem
+               initRememberedLoginUser()) — thay ô gõ Tên đăng nhập bằng dòng hiện sẵn tên + nút "Đăng nhập
+               tên khác" để đổi tài khoản khi cần (máy dùng chung). Mặc định ẩn, JS tự quyết định hiện cái
+               nào lúc tải trang. -->
+          <div id="loginRememberedUserWrap" class="loginpage-remembered-user hidden">
+            <div class="loginpage-remembered-user-info">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><circle cx="12" cy="8" r="3.5"/><path d="M4.5 20c1.4-3.6 4.4-5.5 7.5-5.5s6.1 1.9 7.5 5.5"/></svg>
+              <span id="loginRememberedUserName" class="loginpage-remembered-user-name"></span>
+            </div>
+            <button type="button" id="btnSwitchLoginUser" onclick="switchLoginUser()" class="loginpage-remembered-user-switch">Đăng nhập tên khác</button>
+          </div>
+          <div id="loginUserFieldWrap" class="loginpage-field">
             <label for="txtUser">Tên đăng nhập</label>
             <div class="loginpage-input-wrap">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><circle cx="12" cy="8" r="3.5"/><path d="M4.5 20c1.4-3.6 4.4-5.5 7.5-5.5s6.1 1.9 7.5 5.5"/></svg>
@@ -670,9 +711,9 @@ input[data-sdd-list] {
 
         <!-- Đăng nhập bằng vân tay/Face ID (WebAuthn) — CHỈ hiện khi trình duyệt có API
              navigator.credentials (xem canShowBiometricLogin() ở script cuối trang; tự ẩn trên trình
-             duyệt cũ/không phải HTTPS, không cần cờ cấu hình riêng phía client). Vẫn cần gõ Tên đăng
-             nhập ở ô phía trên trước khi bấm nút này — chỉ thay bước gõ MẬT KHẨU, không phải đăng nhập
-             không cần tên đăng nhập. -->
+             duyệt cũ/không phải HTTPS, không cần cờ cấu hình riêng phía client). Cần có Tên đăng nhập
+             trong ô #txtUser (gõ tay HOẶC tự điền sẵn từ initRememberedLoginUser() khi thiết bị đã "nhớ"
+             tài khoản) — nút này chỉ thay bước gõ MẬT KHẨU, không phải đăng nhập không cần tên đăng nhập. -->
         <button type="button" id="btnBiometricLogin" onclick="loginWithBiometric()" class="loginpage-btn-secondary hidden">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M12 2a5 5 0 0 0-5 5v1.2M12 2a5 5 0 0 1 5 5v1.2M7 8.2a5 5 0 0 0-2 4v1.3a9 9 0 0 0 3.2 6.9M17 8.2a5 5 0 0 1 2 4v1.3c0 1.6-.4 3.1-1.1 4.4M9 8.5a3 3 0 0 1 6 0v1.8M9 8.5v3.8a3 3 0 0 0 1.6 2.7M15 10.3v3a5 5 0 0 1-1.6 3.7"/></svg>
           Đăng nhập bằng vân tay / Face ID
@@ -757,6 +798,7 @@ input[data-sdd-list] {
             <th class="p-2">Trích Yếu</th>
             <th class="p-2">Phòng Ban</th>
             <th class="p-2">Bước Hiện Tại</th>
+            <th class="p-2">Trạng Thái</th>
             <th class="p-2" id="approvalHubDateColLabel">Ngày Tạo</th>
             <th class="p-2">Thao Tác</th>
           </tr>
@@ -810,9 +852,9 @@ input[data-sdd-list] {
       </form>
     </div>
 
-    <div class="bg-gray-50 p-4 rounded-lg border space-y-3">
-      <h4 class="font-bold text-gray-700 text-sm">🔍 Tìm Kiếm & Lọc Tài Liệu</h4>
-      <div class="grid grid-cols-1 md:grid-cols-6 gap-3">
+    <details class="filter-box-details bg-gray-50 p-4 rounded-lg border">
+      <summary class="font-bold text-gray-700 text-sm flex items-center gap-1.5"><span class="filter-box-chevron text-gray-400">▸</span><span>🔍 Tìm Kiếm & Lọc Tài Liệu</span></summary>
+      <div class="grid grid-cols-1 md:grid-cols-6 gap-3 mt-3">
         <div>
           <label class="block text-xs font-semibold text-gray-600 mb-1">Lọc Theo Phòng Ban</label>
           <select id="filterDept" onchange="onFilterChange()" class="w-full border p-2 rounded text-sm bg-white">
@@ -826,6 +868,7 @@ input[data-sdd-list] {
             <option value="APPROVED">Đã Phê Duyệt</option>
             <option value="PENDING">Đang Chờ Duyệt</option>
             <option value="REJECTED">Bị Từ Chối / Trả Về</option>
+            <option value="DRAFT">✏️ Chờ Chỉnh Sửa</option>
           </select>
         </div>
         <div>
@@ -849,7 +892,7 @@ input[data-sdd-list] {
           <input id="filterKeyword" oninput="onFilterChange()" placeholder="Tiêu đề, Mã, Nội dung..." class="w-full border p-2 rounded text-sm">
         </div>
       </div>
-    </div>
+    </details>
 
     <div>
       <div class="flex justify-between items-center mb-3">
@@ -877,6 +920,8 @@ input[data-sdd-list] {
 
   <!-- Màn hình MODULE XỦ LÝ VĂN BẢN TRÌNH / TỜ TRÌNH -->
   <div id="submissionSection" class="hidden space-y-6">
+    <div id="subDashboardCards"></div>
+
     <div class="bg-amber-50 p-4 rounded border border-amber-200 space-y-3">
       <h3 class="font-bold text-amber-900 text-base flex items-center gap-2">📜 Trình Văn Bản / Tờ Trình Đề Xuất Phê Duyệt</h3>
       <p class="text-xs text-amber-800">Soạn thảo tờ trình đề xuất chủ trương, kinh phí hoặc quy chế. Luồng chuyển duyệt tích hợp phê duyệt đồng cấp đa cấp.</p>
@@ -947,8 +992,6 @@ input[data-sdd-list] {
         </div>
       </form>
     </div>
-
-    <div id="subDashboardCards"></div>
 
     <div class="bg-gray-50 p-4 rounded-lg border space-y-3">
       <h4 class="font-bold text-gray-700 text-sm">🔍 Tìm Kiếm & Lọc Văn Bản Trình</h4>
@@ -1074,6 +1117,8 @@ input[data-sdd-list] {
       <button onclick="setContractSubTab('MANAGE')" id="btnContractSubManage" class="px-3 py-1 rounded text-xs font-bold bg-gray-200 text-gray-700">📄 Quản Lý Hợp Đồng & Giấy Phép</button>
     </div>
 
+    <div id="contractDashboardCards"></div>
+
     <div id="contractManageFormWrap" class="hidden bg-cyan-50 p-4 rounded border border-cyan-200 space-y-3">
       <h3 id="contractManageFormTitle" class="font-bold text-cyan-900 text-base flex items-center gap-2">➕ Tạo Mới Hợp Đồng / Giấy Phép</h3>
       <p id="contractManageFormHint" class="text-xs text-cyan-800">Hồ sơ mới sẽ chờ phê duyệt (trừ khi bạn có quyền tự duyệt) rồi mới chuyển sang "Quản Lý Hợp Đồng & Giấy Phép" để theo dõi.</p>
@@ -1190,11 +1235,9 @@ input[data-sdd-list] {
       </form>
     </div>
 
-    <div id="contractDashboardCards"></div>
-
-    <div class="bg-gray-50 p-4 rounded-lg border space-y-3">
-      <h4 class="font-bold text-gray-700 text-sm">🔍 Tìm Kiếm & Lọc Hợp Đồng</h4>
-      <div class="grid grid-cols-1 md:grid-cols-7 gap-3">
+    <details class="filter-box-details bg-gray-50 p-4 rounded-lg border">
+      <summary class="font-bold text-gray-700 text-sm flex items-center gap-1.5"><span class="filter-box-chevron text-gray-400">▸</span><span>🔍 Tìm Kiếm & Lọc Hợp Đồng</span></summary>
+      <div class="grid grid-cols-1 md:grid-cols-7 gap-3 mt-3">
         <div>
           <label class="block text-xs font-semibold text-gray-600 mb-1">Lọc Theo Phòng Ban</label>
           <select id="filterDeptContract" onchange="onContractFilterChange()" class="w-full border p-2 rounded text-sm bg-white">
@@ -1240,7 +1283,7 @@ input[data-sdd-list] {
           <input id="filterKeywordContract" oninput="onContractFilterChange()" placeholder="Mã, tên, đối tác..." class="w-full border p-2 rounded text-sm">
         </div>
       </div>
-    </div>
+    </details>
 
     <div class="space-y-3">
       <h3 id="contractListTitle" class="font-bold text-gray-800">📋 Danh Sách Hợp Đồng Chờ Duyệt</h3>
@@ -1268,6 +1311,7 @@ input[data-sdd-list] {
   <!-- Màn hình MODULE QUẢN LÝ PHÒNG HỌP -->
   <div id="meetingSection" class="hidden space-y-6">
     <div id="hanhChinhTabBar_meeting" class="hidden flex gap-2 flex-wrap"></div>
+    <div id="meetingDashboardCards"></div>
     <div class="bg-emerald-50 p-4 rounded border border-emerald-200 space-y-3">
       <h3 class="font-bold text-emerald-900 text-base flex items-center gap-2">📅 Quản Lý & Đặt Lịch Phòng Họp</h3>
       <p class="text-xs text-emerald-800">Đăng ký lịch sử dụng phòng họp. Phiếu đặt chỉ được xác nhận sau khi được phê duyệt. Hệ thống tự động kiểm tra trùng giờ trong cùng 1 phòng.</p>
@@ -1322,8 +1366,6 @@ input[data-sdd-list] {
           <button type="submit" class="bg-emerald-600 text-white px-5 py-2 rounded font-bold hover:bg-emerald-700">Gửi phê duyệt</button>
         </div>
       </form>
-
-      <div id="meetingDashboardCards"></div>
 
       <div class="bg-gray-50 p-4 rounded-lg border space-y-3">
         <h4 class="font-bold text-gray-700 text-sm">🔍 Tìm Kiếm & Lọc Lịch Phòng Họp</h4>
@@ -2809,6 +2851,7 @@ input[data-sdd-list] {
     </div>
 
     <div id="carSubReg" class="space-y-6">
+      <div id="carDashboardCards"></div>
     <div class="bg-indigo-50 p-4 rounded border border-indigo-200 space-y-3">
       <h3 class="font-bold text-indigo-900 text-base flex items-center gap-2">🚗 Mẫu Biểu Đăng Ký Xe Ô Tô / Phương Tiện</h3>
       <p class="text-xs text-indigo-700">Tạo phiếu đăng ký lịch trình xe. Luồng duyệt tích hợp phê duyệt đồng cấp.</p>
@@ -2880,8 +2923,6 @@ input[data-sdd-list] {
         </div>
       </form>
     </div>
-
-    <div id="carDashboardCards"></div>
 
     <div class="bg-gray-50 p-4 rounded-lg border space-y-3">
       <h4 class="font-bold text-gray-700 text-sm">🔍 Tìm Kiếm & Lọc Đăng Ký Xe</h4>
@@ -2960,6 +3001,7 @@ input[data-sdd-list] {
 
     <!-- Sub-tab: Đăng Ký (ai cũng vào được) -->
     <div id="vppSubRegister" class="space-y-4">
+      <div id="vppDashboardCards"></div>
       <div class="bg-orange-50 p-4 rounded border border-orange-200 space-y-3">
         <h3 class="font-bold text-orange-900 text-sm flex items-center gap-1">📝 Đăng Ký Văn Phòng Phẩm</h3>
         <div>
@@ -2998,7 +3040,6 @@ input[data-sdd-list] {
         </div>
       </div>
 
-      <div id="vppDashboardCards"></div>
       <div class="bg-gray-50 p-3 rounded-lg border flex items-center gap-2">
         <label class="text-xs font-semibold text-gray-600">Lọc Theo Trạng Thái</label>
         <select id="filterStatusVpp" onchange="onVppFilterChange()" class="border p-2 rounded text-sm bg-white">
@@ -3159,6 +3200,7 @@ input[data-sdd-list] {
 
     <!-- Sub-tab: Kỳ Cấp Phát (Hành Chính - uniformManage) -->
     <div id="uniformSubPeriods" class="hidden space-y-4">
+      <div id="uniformPeriodDashboardCards"></div>
       <div class="bg-slate-50 p-4 rounded border border-slate-200 space-y-3">
         <div class="flex items-center justify-between gap-2 flex-wrap">
           <h3 class="font-bold text-gray-800 text-base flex items-center gap-2">📋 Danh Mục Đồng Phục</h3>
@@ -3200,7 +3242,6 @@ input[data-sdd-list] {
 
       <div class="space-y-3">
         <h3 class="font-bold text-gray-800 text-sm">📋 Danh Sách Kỳ Cấp Phát</h3>
-        <div id="uniformPeriodDashboardCards"></div>
         <div class="bg-gray-50 p-3 rounded-lg border flex items-center gap-2">
           <label class="text-xs font-semibold text-gray-600">Lọc Theo Trạng Thái</label>
           <select id="filterStatusUniformPeriod" onchange="renderUniformPeriodsList()" class="border p-2 rounded text-sm bg-white">
@@ -3285,14 +3326,12 @@ input[data-sdd-list] {
       <div class="bg-rose-50 p-4 rounded border border-rose-200 space-y-3">
         <h3 class="font-bold text-rose-900 text-base flex items-center gap-2">🗑️ Báo Hỏng / Hủy (Từ Kho)</h3>
         <p class="text-xs text-rose-700">Dùng khi đồng phục còn NẰM TRONG KHO (chưa cấp cho nhân viên) bị hỏng hoặc cần loại bỏ không sử dụng.</p>
-        <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
           <div>
-            <label class="block font-semibold text-gray-600 mb-1 text-xs">Tên Đồng Phục <span class="text-red-500">*</span></label>
-            <input id="uniformAdjStockItemName" placeholder="VD: Áo đồng phục nam" class="w-full border p-1.5 rounded text-xs">
-          </div>
-          <div>
-            <label class="block font-semibold text-gray-600 mb-1 text-xs">Size</label>
-            <input id="uniformAdjStockSize" placeholder="VD: L" class="w-full border p-1.5 rounded text-xs">
+            <label class="block font-semibold text-gray-600 mb-1 text-xs">Đồng Phục — Size <span class="text-red-500">*</span></label>
+            <select id="uniformAdjStockItemSize" class="w-full border p-1.5 rounded text-xs bg-white">
+              <option value="">-- Chọn mặt hàng --</option>
+            </select>
           </div>
           <div>
             <label class="block font-semibold text-gray-600 mb-1 text-xs">Số Lượng <span class="text-red-500">*</span></label>
@@ -3379,6 +3418,7 @@ input[data-sdd-list] {
            lịch sử: hiện cho cả 2 vai trò, tự lọc theo canViewUniformTransferClient() bên dưới. -->
       <div class="bg-cyan-50 p-4 rounded border border-cyan-200 space-y-3">
         <h3 class="font-bold text-cyan-900 text-base flex items-center gap-2">🔁 Điều Chuyển Kho Giữa Các Siêu Thị</h3>
+        <div id="uniformTransferDashboardCards"></div>
         <div id="uniformTransferRequestForm" class="hidden space-y-3">
           <p class="text-xs text-cyan-700">Yêu cầu chuyển bớt tồn kho của siêu thị bạn sang 1 siêu thị khác đang thiếu hàng — cần người có quyền duyệt (Quản Trị Viên / Duyệt Kỳ Cấp Phát) chấp nhận mới có hiệu lực.</p>
           <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -3417,7 +3457,6 @@ input[data-sdd-list] {
 
         <div class="space-y-2">
           <h4 class="font-bold text-sm text-gray-800">📋 Lịch Sử Điều Chuyển</h4>
-          <div id="uniformTransferDashboardCards"></div>
           <div class="bg-gray-50 p-3 rounded-lg border flex items-center gap-2">
             <label class="text-xs font-semibold text-gray-600">Lọc Theo Trạng Thái</label>
             <select id="filterStatusUniformTransfer" onchange="renderUniformTransfersTable()" class="border p-2 rounded text-sm bg-white">
@@ -3604,9 +3643,9 @@ input[data-sdd-list] {
       </form>
     </div>
 
-    <div class="bg-gray-50 p-4 rounded-lg border space-y-3">
-      <h4 class="font-bold text-gray-700 text-sm">🔍 Tìm Kiếm & Lọc Giấy Phép</h4>
-      <div class="grid grid-cols-1 md:grid-cols-6 gap-3">
+    <details class="filter-box-details bg-gray-50 p-4 rounded-lg border">
+      <summary class="font-bold text-gray-700 text-sm flex items-center gap-1.5"><span class="filter-box-chevron text-gray-400">▸</span><span>🔍 Tìm Kiếm & Lọc Giấy Phép</span></summary>
+      <div class="grid grid-cols-1 md:grid-cols-6 gap-3 mt-3">
         <div>
           <label class="block text-xs font-semibold text-gray-600 mb-1">Lọc Theo Trạng Thái Duyệt</label>
           <select id="filterLicenseStatus" onchange="onLicenseFilterChange()" class="w-full border p-2 rounded text-sm bg-white">
@@ -3648,7 +3687,7 @@ input[data-sdd-list] {
           <input id="filterLicenseKeyword" oninput="onLicenseFilterChange()" placeholder="Mã, Công ty, Địa điểm, Loại GP, Số GP..." class="w-full border p-2 rounded text-sm">
         </div>
       </div>
-    </div>
+    </details>
 
     <div>
       <div class="flex justify-between items-center mb-3">
@@ -3677,6 +3716,7 @@ input[data-sdd-list] {
 
   <!-- Màn hình MODULE TỔNG HỢP (Mua Bán / Sửa Chữa / Đầu Tư / Thanh Toán) -->
   <div id="officeSection" class="hidden space-y-6">
+    <div id="officeDashboardCards"></div>
     <div class="bg-teal-50 p-4 rounded border border-teal-200 space-y-3">
       <div class="flex justify-between items-center flex-wrap gap-2">
         <h3 class="font-bold text-teal-900 text-base flex items-center gap-2">🗂️ Tổng Hợp (Mua Bán - Sửa Chữa - Đầu Tư - Thanh Toán)</h3>
@@ -3764,8 +3804,6 @@ input[data-sdd-list] {
         </div>
       </form>
     </div>
-
-    <div id="officeDashboardCards"></div>
 
     <div class="bg-gray-50 p-4 rounded-lg border space-y-3">
       <h4 class="font-bold text-gray-700 text-sm">🔍 Tìm Kiếm & Lọc Đề Xuất Văn Phòng</h4>
@@ -4177,6 +4215,18 @@ input[data-sdd-list] {
           </div>
         </div>
         <p class="text-[11px] text-gray-400 italic -mt-2">Người nhận mặc định = người tạo giấy phép + toàn bộ người đang có quyền "Duyệt giấy phép" trong module Giấy Phép, cộng thêm email CC cố định ở trên (không cần khai theo phòng ban như hợp đồng).</p>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-3 border-t pt-2">
+          <div>
+            <label class="block font-semibold text-gray-600 mb-1">Nhắc Hết Hạn Dịch Vụ CNTT — Trước (số ngày, cách nhau dấu phẩy)</label>
+            <input id="cfgItRenewalReminderDays" placeholder="30, 15, 7" class="w-full border p-1.5 rounded" required>
+          </div>
+          <div>
+            <label class="block font-semibold text-gray-600 mb-1">Email CC Cố Định Nhận Cảnh Báo Hết Hạn Dịch Vụ CNTT (tuỳ chọn, cách nhau dấu phẩy)</label>
+            <input id="cfgItRenewalReminderCc" placeholder="it@company.com" class="w-full border p-1.5 rounded">
+          </div>
+        </div>
+        <p class="text-[11px] text-gray-400 italic -mt-2">Người nhận mặc định = người tạo mục dịch vụ + toàn bộ người đang có quyền "Quản lý Hỗ Trợ IT" (itManage), cộng thêm email CC cố định ở trên.</p>
 
         <div class="flex flex-wrap gap-2 items-center border-t pt-2">
           <input id="cfgTestEmailTo" type="email" placeholder="Email nhận thử" class="border p-1.5 rounded flex-1 min-w-[180px]">
@@ -5234,10 +5284,12 @@ input[data-sdd-list] {
     <div class="flex flex-wrap gap-2 border-b pb-2">
       <button type="button" onclick="setItSupportSubTab('PRICE')" id="btnItSubPrice" class="px-3 py-1.5 rounded text-xs font-bold bg-sky-700 text-white">🏷️ Phê Duyệt Giá</button>
       <button type="button" onclick="setItSupportSubTab('TICKET')" id="btnItSubTicket" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">🎫 Hỗ Trợ Yêu Cầu</button>
+      <button type="button" onclick="setItSupportSubTab('RENEWAL')" id="btnItSubRenewal" class="hidden px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">🔔 Gia Hạn Dịch Vụ</button>
     </div>
 
     <!-- Sub-tab: Phê Duyệt Giá -->
     <div id="itSubPrice" class="space-y-4">
+      <div id="itPriceDashboardCards"></div>
       <!-- Chỉ admin thấy được (khớp itPriceMasterLists trong ADMIN_ONLY_KEYS ở routes/data.js) — nạp
            sẵn 1 hoặc nhiều Mẫu Giá (KHUÔN CỘT của bảng giá bên mua hàng gửi tại từng thời điểm, không
            còn lưu dữ liệu giá thật/không còn đối chiếu tự động) để người đề xuất chọn đúng mẫu áp dụng
@@ -5306,6 +5358,7 @@ input[data-sdd-list] {
               <option value="">-- Chọn Mẫu Giá Phê Duyệt --</option>
             </select>
             <p class="text-gray-400 mt-1">Bắt buộc chọn đúng mẫu áp dụng cho bảng giá của bạn — tệp bảng giá tải lên bên dưới phải có đúng tên cột theo mẫu đã chọn, sai/thiếu cột sẽ bị chặn gửi.</p>
+            <a id="itPriceMasterListDownloadLink" href="#" target="_blank" class="hidden inline-block mt-1 text-sky-600 hover:underline font-semibold">📥 Tải Mẫu Giá này về để làm theo</a>
           </div>
           <div>
             <label class="block font-semibold text-gray-600 mb-1">📎 Tệp Bảng Giá (.xlsx) <span class="text-red-500">*</span></label>
@@ -5331,8 +5384,6 @@ input[data-sdd-list] {
           </div>
         </form>
       </div>
-
-      <div id="itPriceDashboardCards"></div>
 
       <div class="bg-gray-50 p-4 rounded-lg border space-y-3">
         <h4 class="font-bold text-gray-700 text-sm">🔍 Tìm Kiếm & Lọc Đề Xuất Duyệt Giá</h4>
@@ -5470,6 +5521,147 @@ input[data-sdd-list] {
         <div id="paginationContainer_itTicket"></div>
       </div>
     </div>
+
+    <!-- Sub-tab: Gia Hạn Dịch Vụ CNTT — CHỈ đội IT (itManage/admin) thấy được (ẩn/hiện ở
+         btnItSubRenewal/btnItSupportNavRenewal, xem finishLogin()). Danh mục nội bộ đội IT tự quản lý
+         cho chính mình, KHÔNG qua bước duyệt nào (khác Giấy Phép — hồ sơ pháp lý cần người khác duyệt),
+         xem lib/createValidation.js itServiceRenewals.extraValidate. -->
+    <div id="itSubRenewal" class="hidden space-y-4">
+      <div id="itRenewalDashboardCards"></div>
+
+      <div class="bg-sky-50 p-4 rounded border border-sky-200 space-y-3">
+        <h3 class="font-bold text-sky-900 text-base flex items-center gap-2">🔔 Thêm Dịch Vụ CNTT Cần Theo Dõi Gia Hạn</h3>
+        <p class="text-xs text-sky-700">Phần mềm/bản quyền, đường truyền Internet, tên miền, chứng chỉ SSL, hosting... — hệ thống sẽ tự gửi email nhắc trước khi hết hạn (cấu hình ở Quản Trị → Cấu Hình Email).</p>
+        <form id="itRenewalCreateForm" onsubmit="submitItServiceRenewal(event)" class="grid grid-cols-1 md:grid-cols-3 gap-3">
+          <input id="itRenewalName" placeholder="Tên dịch vụ (VD: Microsoft 365, Domain hcrc.vn...)" class="border p-2 rounded text-sm md:col-span-2" required>
+          <div class="relative">
+            <input id="itRenewalCategory" data-sdd-list="itRenewalCategoryDatalist" autocomplete="off" placeholder="Loại dịch vụ" class="w-full border p-2 rounded text-sm" required>
+            <div id="itRenewalCategoryDatalist" class="hidden" data-sdd-dropdown></div>
+          </div>
+          <input id="itRenewalVendor" placeholder="Nhà cung cấp" class="border p-2 rounded text-sm">
+          <input id="itRenewalResponsible" placeholder="Người phụ trách" class="border p-2 rounded text-sm">
+          <input id="itRenewalCost" type="text" inputmode="numeric" placeholder="Chi phí gia hạn (đ)" class="money-input border p-2 rounded text-sm">
+          <div>
+            <label class="block text-xs font-semibold text-gray-600 mb-1">Ngày bắt đầu</label>
+            <input id="itRenewalStartDate" type="date" class="w-full border p-2 rounded text-sm">
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-gray-600 mb-1">Ngày hết hạn <span class="text-red-500">*</span></label>
+            <input id="itRenewalExpiryDate" type="date" class="w-full border p-2 rounded text-sm" required>
+          </div>
+          <input id="itRenewalFile" type="file" class="border p-1 bg-white rounded text-sm md:col-span-3">
+          <textarea id="itRenewalNote" placeholder="Ghi chú thêm (nếu có)..." class="w-full border p-2 rounded text-sm h-16 md:col-span-3"></textarea>
+          <div class="md:col-span-3 flex justify-end">
+            <button type="submit" class="bg-sky-700 text-white px-5 py-2 rounded font-bold hover:bg-sky-800 transition">Thêm vào danh mục</button>
+          </div>
+        </form>
+      </div>
+
+      <details class="filter-box-details bg-gray-50 p-4 rounded-lg border">
+        <summary class="font-bold text-gray-700 text-sm flex items-center gap-1.5"><span class="filter-box-chevron text-gray-400">▸</span><span>🔍 Tìm Kiếm & Lọc</span></summary>
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-3 mt-3">
+          <div>
+            <label class="block text-xs font-semibold text-gray-600 mb-1">Tình Trạng Hiệu Lực</label>
+            <select id="filterItRenewalLifecycle" onchange="onItServiceRenewalFilterChange()" class="w-full border p-2 rounded text-sm bg-white">
+              <option value="">-- Tất cả --</option>
+              <option value="VALID">🟢 Còn hiệu lực</option>
+              <option value="EXPIRING">🟡 Sắp hết hạn (≤30 ngày)</option>
+              <option value="EXPIRED">🔴 Hết hạn</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-gray-600 mb-1">Loại Dịch Vụ</label>
+            <select id="filterItRenewalCategory" onchange="onItServiceRenewalFilterChange()" class="w-full border p-2 rounded text-sm bg-white">
+              <option value="">-- Tất cả --</option>
+            </select>
+          </div>
+          <div class="md:col-span-2">
+            <label class="block text-xs font-semibold text-gray-600 mb-1">Từ Khóa</label>
+            <input id="filterItRenewalKeyword" oninput="onItServiceRenewalFilterChange()" placeholder="Tên dịch vụ, nhà cung cấp, người phụ trách..." class="w-full border p-2 rounded text-sm">
+          </div>
+        </div>
+      </details>
+
+      <div>
+        <div class="flex justify-between items-center mb-3">
+          <h3 class="font-bold text-gray-800">📋 Danh Mục Dịch Vụ CNTT</h3>
+        </div>
+        <div class="overflow-x-auto">
+          <table class="w-full border-collapse border text-sm">
+            <thead>
+              <tr class="bg-gray-200 text-left text-gray-700">
+                <th class="border p-2">Tên Dịch Vụ</th>
+                <th class="border p-2">Loại</th>
+                <th class="border p-2">Nhà Cung Cấp / Người Phụ Trách</th>
+                <th class="border p-2">Ngày Hết Hạn</th>
+                <th class="border p-2 text-center">Hiệu Lực</th>
+                <th class="border p-2 text-right">Chi Phí Gia Hạn</th>
+                <th class="border p-2 text-center min-w-[140px]">Thao Tác</th>
+              </tr>
+            </thead>
+            <tbody id="itRenewalTableBody"></tbody>
+          </table>
+        </div>
+        <div id="paginationContainer_itRenewal"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal "Gia Hạn" — mục MODULE HỖ TRỢ IT / Gia Hạn Dịch Vụ CNTT: nhập ngày hết hạn MỚI (phải sau
+       ngày hiện tại), reset chu kỳ nhắc email (notifiedThresholds), ghi lịch sử "RENEWED" riêng — KHÁC
+       "Sửa" (chỉ sửa thông tin, không bắt buộc ngày mới lớn hơn). Xem renewItServiceRenewal() ở
+       lib/recordActions.js. -->
+  <div id="itRenewalRenewModal" class="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center hidden z-50 p-4">
+    <div class="bg-white rounded-lg shadow-xl max-w-md w-full p-5 space-y-3">
+      <h3 class="font-bold text-lg text-sky-900">🔄 Gia Hạn Dịch Vụ</h3>
+      <p id="itRenewalRenewCurrentInfo" class="text-xs text-gray-600 bg-gray-50 p-2 rounded border"></p>
+      <input type="hidden" id="itRenewalRenewId">
+      <div>
+        <label class="block text-xs font-semibold text-gray-600 mb-1">Ngày hết hạn mới <span class="text-red-500">*</span></label>
+        <input id="itRenewalRenewNewExpiryDate" type="date" class="w-full border p-2 rounded text-sm" required>
+      </div>
+      <div>
+        <label class="block text-xs font-semibold text-gray-600 mb-1">Chi phí gia hạn (đ)</label>
+        <input id="itRenewalRenewCost" type="text" inputmode="numeric" class="money-input w-full border p-2 rounded text-sm">
+      </div>
+      <div class="flex justify-end gap-2 pt-2">
+        <button type="button" onclick="closeItServiceRenewalRenewModal()" class="px-4 py-2 rounded bg-gray-200 text-gray-700 font-semibold hover:bg-gray-300">Đóng</button>
+        <button type="button" onclick="submitItServiceRenewalRenew()" class="px-4 py-2 rounded bg-sky-700 text-white font-bold hover:bg-sky-800">Xác Nhận Gia Hạn</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal "Sửa" — mục MODULE HỖ TRỢ IT / Gia Hạn Dịch Vụ CNTT: sửa thông tin chung, cho phép chỉnh
+       lại ngày hết hạn nếu nhập sai lúc tạo (không bắt buộc lớn hơn giá trị cũ, khác "Gia Hạn"). Xem
+       editItServiceRenewal() ở lib/recordActions.js. -->
+  <div id="itRenewalEditModal" class="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center hidden z-50 p-4">
+    <div class="bg-white rounded-lg shadow-xl max-w-lg w-full p-5 space-y-3 max-h-[90vh] overflow-y-auto">
+      <h3 class="font-bold text-lg text-sky-900">✏️ Sửa Dịch Vụ CNTT</h3>
+      <input type="hidden" id="itRenewalEditId">
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+        <input id="itRenewalEditName" placeholder="Tên dịch vụ" class="border p-2 rounded text-sm md:col-span-2" required>
+        <div class="relative">
+          <input id="itRenewalEditCategory" data-sdd-list="itRenewalEditCategoryDatalist" autocomplete="off" placeholder="Loại dịch vụ" class="w-full border p-2 rounded text-sm" required>
+          <div id="itRenewalEditCategoryDatalist" class="hidden" data-sdd-dropdown></div>
+        </div>
+        <input id="itRenewalEditVendor" placeholder="Nhà cung cấp" class="border p-2 rounded text-sm">
+        <input id="itRenewalEditResponsible" placeholder="Người phụ trách" class="border p-2 rounded text-sm">
+        <input id="itRenewalEditCost" type="text" inputmode="numeric" placeholder="Chi phí gia hạn (đ)" class="money-input border p-2 rounded text-sm">
+        <div>
+          <label class="block text-xs font-semibold text-gray-600 mb-1">Ngày bắt đầu</label>
+          <input id="itRenewalEditStartDate" type="date" class="w-full border p-2 rounded text-sm">
+        </div>
+        <div>
+          <label class="block text-xs font-semibold text-gray-600 mb-1">Ngày hết hạn <span class="text-red-500">*</span></label>
+          <input id="itRenewalEditExpiryDate" type="date" class="w-full border p-2 rounded text-sm" required>
+        </div>
+        <textarea id="itRenewalEditNote" placeholder="Ghi chú thêm (nếu có)..." class="w-full border p-2 rounded text-sm h-16 md:col-span-2"></textarea>
+      </div>
+      <div class="flex justify-end gap-2 pt-2">
+        <button type="button" onclick="closeItServiceRenewalEditModal()" class="px-4 py-2 rounded bg-gray-200 text-gray-700 font-semibold hover:bg-gray-300">Hủy</button>
+        <button type="button" onclick="submitItServiceRenewalEdit()" class="px-4 py-2 rounded bg-sky-700 text-white font-bold hover:bg-sky-800">Lưu Thay Đổi</button>
+      </div>
+    </div>
   </div>
 
   <!-- Màn hình MODULE NGÂN SÁCH — module con của "Tổng Hợp" (BUSINESS_MODULES parent:'office'), 3
@@ -5484,6 +5676,7 @@ input[data-sdd-list] {
 
     <!-- Sub-tab: Lập Ngân Sách (mọi user có budgetCreate, lập cho ĐÚNG phòng ban mình) -->
     <div id="budgetSubEntry" class="space-y-4">
+      <div id="budgetDashboardCards"></div>
       <div class="bg-violet-50 p-4 rounded border border-violet-200 space-y-3">
         <h3 class="font-bold text-violet-900 text-base flex items-center gap-2">📝 Lập Ngân Sách Đơn Vị</h3>
         <p class="text-xs text-violet-700">Chọn 1 kỳ ngân sách đang mở thuộc phạm vi phòng ban bạn — nhiều người cùng phòng có quyền lập đều sửa chung được 1 bản nháp của đơn vị. Gửi rồi sẽ chuyển cho Trưởng phòng duyệt.</p>
@@ -5523,7 +5716,6 @@ input[data-sdd-list] {
         </div>
       </div>
 
-      <div id="budgetDashboardCards"></div>
       <div class="bg-gray-50 p-3 rounded-lg border flex items-center gap-2">
         <label class="text-xs font-semibold text-gray-600">Lọc Theo Trạng Thái</label>
         <select id="filterStatusBudget" onchange="renderBudgetEntryList()" class="border p-2 rounded text-sm bg-white">
@@ -5756,10 +5948,11 @@ input[data-sdd-list] {
         <div id="itPriceModalDiffSummary" class="mb-2"></div>
         <div id="itPriceModalDiffDupWarning" class="hidden mb-2 p-2 rounded border border-red-300 bg-red-50 text-xs text-red-800"></div>
         <div class="flex flex-wrap gap-3 text-xs mb-2">
-          <span class="flex items-center gap-1"><span class="w-3 h-3 rounded-sm bg-emerald-50 border border-emerald-300 inline-block"></span> Dòng mới thêm</span>
-          <span class="flex items-center gap-1"><span class="w-3 h-3 rounded-sm bg-red-50 border border-red-300 inline-block"></span> Dòng đã bị xóa</span>
-          <span class="flex items-center gap-1"><span class="w-3 h-3 rounded-sm bg-amber-100 border border-amber-400 inline-block"></span> Ô có thông tin thay đổi</span>
+          <span class="flex items-center gap-1"><span class="w-3 h-3 rounded-sm bg-emerald-200 border border-emerald-500 inline-block"></span> Dòng mới thêm</span>
+          <span class="flex items-center gap-1"><span class="w-3 h-3 rounded-sm bg-red-200 border border-red-500 inline-block"></span> Dòng đã bị xóa</span>
+          <span class="flex items-center gap-1"><span class="w-3 h-3 rounded-sm bg-amber-200 border border-amber-500 inline-block"></span> Ô có thông tin thay đổi</span>
         </div>
+        <p class="text-[11px] text-gray-500 italic mb-2">Các dòng có thay đổi được tự động xếp lên đầu bảng để dễ rà soát — cột "Trạng Thái" luôn ở đầu mỗi dòng.</p>
         <div class="overflow-x-auto border rounded">
           <table class="w-full border-collapse text-xs bg-white">
             <thead id="itPriceModalDiffHead" class="bg-gray-100 text-left text-gray-700"></thead>
@@ -6890,15 +7083,36 @@ function isInDateRange(dateStr, fromDate, toDate) {
 // cards: [{ key, label, count, colorClass }] — colorClass là 1 class border-l-* (vd 'border-l-amber-500').
 // activeKey: giá trị filter đang được chọn (để tô viền nhấn thẻ tương ứng). onClickFnName: tên hàm
 // global (chuỗi) sẽ được gọi với đúng 1 tham số là card.key khi bấm thẻ.
+// Map tên màu (suy ra từ colorClass sẵn có kiểu 'border-l-{color}-500' của từng module) sang bộ class
+// nền/viền/chữ đầy đủ — viết literal từng class ở đây (không nội suy chuỗi động) vì Tailwind chỉ grep
+// text tìm chuỗi giống tên class trong file, không thực thi JS (xem tailwind.config.js).
+const DASHBOARD_CARD_COLOR_MAP = {
+  blue:   { bg: 'bg-blue-50',   border: 'border-blue-300',   text: 'text-blue-700',   activeBg: 'bg-blue-100' },
+  yellow: { bg: 'bg-yellow-50', border: 'border-yellow-300', text: 'text-yellow-700', activeBg: 'bg-yellow-100' },
+  orange: { bg: 'bg-orange-50', border: 'border-orange-300', text: 'text-orange-700', activeBg: 'bg-orange-100' },
+  green:  { bg: 'bg-green-50',  border: 'border-green-300',  text: 'text-green-700',  activeBg: 'bg-green-100' },
+  red:    { bg: 'bg-red-50',    border: 'border-red-300',    text: 'text-red-700',    activeBg: 'bg-red-100' },
+  indigo: { bg: 'bg-indigo-50', border: 'border-indigo-300', text: 'text-indigo-700', activeBg: 'bg-indigo-100' },
+  sky:    { bg: 'bg-sky-50',    border: 'border-sky-300',    text: 'text-sky-700',    activeBg: 'bg-sky-100' },
+  amber:  { bg: 'bg-amber-50',  border: 'border-amber-300',  text: 'text-amber-700',  activeBg: 'bg-amber-100' },
+  purple: { bg: 'bg-purple-50', border: 'border-purple-300', text: 'text-purple-700', activeBg: 'bg-purple-100' },
+  gray:   { bg: 'bg-gray-50',   border: 'border-gray-300',   text: 'text-gray-700',   activeBg: 'bg-gray-100' }
+};
+
 function buildDashboardCardsHTML(cards, activeKey, onClickFnName) {
   const colsCls = cards.length >= 5 ? 'md:grid-cols-5' : (cards.length === 4 ? 'md:grid-cols-4' : 'md:grid-cols-3');
   return `<div class="grid grid-cols-2 ${colsCls} gap-2 mb-3">` +
-    cards.map(c => `
-      <div class="cursor-pointer bg-white border rounded p-2 text-center border-l-4 ${c.colorClass} hover:shadow transition ${activeKey === c.key ? 'ring-2 ring-offset-1 ring-sky-400' : ''}"
+    cards.map(c => {
+      const colorName = (c.colorClass.match(/border-l-(\w+)-500/) || [])[1] || 'gray';
+      const colors = DASHBOARD_CARD_COLOR_MAP[colorName] || DASHBOARD_CARD_COLOR_MAP.gray;
+      const isActive = activeKey === c.key;
+      return `
+      <div class="cursor-pointer border rounded-lg p-2 text-center transition hover:shadow ${colors.border} ${isActive ? colors.activeBg + ' ring-2 ring-offset-1 ring-sky-400' : colors.bg}"
            onclick="${onClickFnName}('${c.key}')">
-        <div class="text-[11px] text-gray-500">${escapeHtml(c.label)}</div>
-        <div class="text-lg font-bold">${c.count}</div>
-      </div>`).join('') +
+        <div class="text-[11px] ${colors.text} font-semibold">${escapeHtml(c.label)}</div>
+        <div class="text-lg font-bold ${colors.text}">${c.count}</div>
+      </div>`;
+    }).join('') +
     `</div>`;
 }
 
@@ -8228,6 +8442,8 @@ async function initDatabase(loggingInUser) {
     DB.licenses = data.licenses || [];
     DB.licenseTypes = data.licenseTypes || [];
 
+    DB.itServiceRenewals = data.itServiceRenewals || [];
+
     DB._versions = data._versions || {};
 
     applyAllCoreFieldCustomizations();
@@ -9097,6 +9313,10 @@ function saveEmailConfig(e) {
   if (licenseReminderDays.length === 0) {
     return alert('⛔ Vui lòng nhập ít nhất 1 mốc số ngày nhắc hết hạn giấy phép hợp lệ (vd: 30, 15, 7)!');
   }
+  const itRenewalReminderDays = parseDaysListInput(document.getElementById('cfgItRenewalReminderDays').value);
+  if (itRenewalReminderDays.length === 0) {
+    return alert('⛔ Vui lòng nhập ít nhất 1 mốc số ngày nhắc hết hạn dịch vụ CNTT hợp lệ (vd: 30, 15, 7)!');
+  }
   const smtpAuthEnabled = document.getElementById('cfgSmtpAuthEnabled').checked;
   DB.emailConfig = {
     enabled: document.getElementById('cfgEmailEnabled').value === 'true',
@@ -9113,7 +9333,9 @@ function saveEmailConfig(e) {
     contractExpiryReminderDays: reminderDays,
     contractExpiryCcEmails: parseEmailListInput(document.getElementById('cfgContractReminderCc').value),
     licenseExpiryReminderDays: licenseReminderDays,
-    licenseExpiryCcEmails: parseEmailListInput(document.getElementById('cfgLicenseReminderCc').value)
+    licenseExpiryCcEmails: parseEmailListInput(document.getElementById('cfgLicenseReminderCc').value),
+    itRenewalReminderDays: itRenewalReminderDays,
+    itRenewalCcEmails: parseEmailListInput(document.getElementById('cfgItRenewalReminderCc').value)
   };
   syncStorage('emailConfig');
   document.getElementById('cfgSmtpPassPlain').value = ''; // không giữ mật khẩu vừa gõ hiển thị lại trên form
@@ -9151,6 +9373,9 @@ function loadEmailConfigToForm() {
   document.getElementById('cfgLicenseReminderDays').value = (DB.emailConfig.licenseExpiryReminderDays && DB.emailConfig.licenseExpiryReminderDays.length
     ? DB.emailConfig.licenseExpiryReminderDays : [30, 15, 7]).join(', ');
   document.getElementById('cfgLicenseReminderCc').value = (DB.emailConfig.licenseExpiryCcEmails || []).join(', ');
+  document.getElementById('cfgItRenewalReminderDays').value = (DB.emailConfig.itRenewalReminderDays && DB.emailConfig.itRenewalReminderDays.length
+    ? DB.emailConfig.itRenewalReminderDays : [30, 15, 7]).join(', ');
+  document.getElementById('cfgItRenewalReminderCc').value = (DB.emailConfig.itRenewalCcEmails || []).join(', ');
   document.getElementById('cfgTestEmailResult').textContent = '';
   loadSmtpAuthStatus();
   contractExpiryDeptContactsDraft = JSON.parse(JSON.stringify(DB.contractExpiryDeptContacts || {}));
@@ -9480,7 +9705,7 @@ async function renderWebauthnDeviceList() {
     const list = await res.json();
     if (!list.length) {
       wrap.innerHTML = '<p class="text-gray-400 italic">Chưa đăng ký thiết bị nào.</p>';
-      return;
+      return list;
     }
     wrap.innerHTML = list.map(c => `
       <div class="flex justify-between items-center bg-gray-50 border rounded p-2">
@@ -9491,6 +9716,7 @@ async function renderWebauthnDeviceList() {
         <button type="button" onclick="deleteBiometricDevice('${c.id}')" class="text-red-600 font-bold hover:underline">🗑️ Gỡ</button>
       </div>
     `).join('');
+    return list;
   } catch (err) {
     wrap.innerHTML = '<p class="text-red-600 italic">Không tải được danh sách thiết bị.</p>';
   }
@@ -9532,6 +9758,9 @@ async function registerBiometricDevice() {
 
     document.getElementById('pfWebauthnDeviceLabel').value = '';
     await renderWebauthnDeviceList();
+    // Nhớ tài khoản này cho MÁY hiện tại — lần sau mở trang đăng nhập sẽ tự ẩn ô gõ Tên đăng nhập, điền
+    // sẵn luôn (xem initRememberedLoginUser() ở khối "ĐĂNG NHẬP BẰNG VÂN TAY").
+    setRememberedWebauthnUsername(currentUser.username);
     alert('✅ Đã đăng ký thiết bị này — lần sau đăng nhập/xác thực khi Duyệt có thể dùng vân tay/Face ID.');
   } catch (err) {
     alert('⛔ Không thể kết nối tới máy chủ: ' + err.message);
@@ -9548,7 +9777,12 @@ async function deleteBiometricDevice(id) {
       const body = await res.json().catch(() => ({}));
       return alert(`⛔ ${body.error || 'Không thể gỡ thiết bị'}`);
     }
-    await renderWebauthnDeviceList();
+    const remaining = await renderWebauthnDeviceList();
+    // Gỡ hết thiết bị đăng ký -> không còn cách nào dùng vân tay được nữa, xoá luôn tài khoản "đã nhớ"
+    // trên máy này (nếu không, màn đăng nhập vẫn ẩn ô gõ Tên đăng nhập dù đăng nhập vân tay giờ chắc chắn
+    // thất bại). Chỉ xoá khi biết CHẮC danh sách rỗng (remaining=[]) — bỏ qua nếu tải lại danh sách lỗi
+    // (remaining=undefined), tránh xoá nhầm lúc mạng chập chờn.
+    if (remaining && remaining.length === 0) setRememberedWebauthnUsername(null);
   } catch (err) {
     alert('⛔ Không thể kết nối tới máy chủ: ' + err.message);
   }
@@ -9615,6 +9849,12 @@ function resetLoginWidgets(focusCaptcha = true) {
   if (btnCaptchaRefresh) btnCaptchaRefresh.disabled = false;
   if (txtCaptchaEl) txtCaptchaEl.disabled = false;
   loginInFlight = false;
+  // Mở lại nút "Đăng nhập bằng vân tay" đã bị login() khoá mờ lúc bắt đầu — trừ khi đúng lúc đó nhánh vân
+  // tay LẠI đang chạy dở (biometricLoginInFlight), thì để nguyên, tránh mở nhầm 1 nút đang thật sự bận.
+  if (!biometricLoginInFlight) {
+    const btnBio = document.getElementById('btnBiometricLogin');
+    if (btnBio) btnBio.disabled = false;
+  }
   if (captchaId) refreshCaptcha(focusCaptcha);
 }
 
@@ -9623,6 +9863,12 @@ function resetBiometricLoginWidget() {
   const btn = document.getElementById('btnBiometricLogin');
   if (btn) { btn.disabled = false; btn.innerHTML = btnBiometricLoginOriginalHTML; }
   biometricLoginInFlight = false;
+  // Mở lại nút "Đăng nhập" (mật khẩu) đã bị loginWithBiometric() khoá mờ lúc bắt đầu — cùng lý do/cách
+  // bảo vệ chéo với nhánh biometricLoginInFlight ở resetLoginWidgets() phía trên.
+  if (!loginInFlight) {
+    const btnLoginEl = document.getElementById('btnLogin');
+    if (btnLoginEl) btnLoginEl.disabled = false;
+  }
 }
 
 // ==========================================
@@ -9640,6 +9886,53 @@ if (canShowBiometricLogin()) {
 }
 
 let biometricLoginInFlight = false;
+
+// Thiết bị "nhớ" tài khoản đã đăng ký vân tay/Face ID — thuần localStorage phía trình duyệt (không phải
+// dữ liệu WebAuthn thật, chỉ là gợi ý UI: máy NÀY từng đăng ký thành công cho user NÀY). Set ở
+// registerBiometricDevice() lúc đăng ký thành công, xoá khi gỡ hết thiết bị (deleteBiometricDevice()) —
+// KHÔNG xoá lúc logout(), vì mục đích là nhớ xuyên suốt nhiều lượt đăng nhập trên cùng máy.
+const REMEMBERED_WEBAUTHN_USER_KEY = 'vpdt_webauthn_username';
+function getRememberedWebauthnUsername() {
+  try { return localStorage.getItem(REMEMBERED_WEBAUTHN_USER_KEY) || ''; } catch (e) { return ''; }
+}
+function setRememberedWebauthnUsername(username) {
+  try {
+    if (username) localStorage.setItem(REMEMBERED_WEBAUTHN_USER_KEY, username);
+    else localStorage.removeItem(REMEMBERED_WEBAUTHN_USER_KEY);
+  } catch (e) { /* Safari duyệt riêng tư/chặn localStorage — bỏ qua, không ảnh hưởng đăng nhập bằng mật khẩu */ }
+}
+
+// Ẩn ô gõ Tên đăng nhập, thay bằng dòng "Xin chào, <tên>" + nút "Đăng nhập tên khác" khi máy này đã có
+// tài khoản được nhớ — điền sẵn #txtUser để cả login() (mật khẩu) lẫn loginWithBiometric() dùng được
+// ngay, không cần gõ lại. Chỉ áp dụng khi trình duyệt còn hỗ trợ WebAuthn (nếu không, dù có tên nhớ sẵn
+// vẫn hiện ô nhập bình thường — tránh kẹt không đăng nhập được nếu đổi trình duyệt/thiết bị mất hỗ trợ).
+// Gọi lại được nhiều lần (lúc tải trang VÀ sau logout()) nên phải tự đảo ngược đúng trạng thái mỗi lần.
+function initRememberedLoginUser() {
+  const wrap = document.getElementById('loginRememberedUserWrap');
+  const fieldWrap = document.getElementById('loginUserFieldWrap');
+  const remembered = getRememberedWebauthnUsername();
+  if (remembered && canShowBiometricLogin()) {
+    document.getElementById('txtUser').value = remembered;
+    document.getElementById('loginRememberedUserName').textContent = remembered;
+    wrap.classList.remove('hidden');
+    fieldWrap.classList.add('hidden');
+  } else {
+    wrap.classList.add('hidden');
+    fieldWrap.classList.remove('hidden');
+  }
+}
+initRememberedLoginUser();
+
+// Bấm "Đăng nhập tên khác" — hiện lại ô nhập thủ công (trống, focus sẵn) để đăng nhập tài khoản khác
+// TRÊN CÙNG thiết bị này (máy dùng chung). KHÔNG xoá tên đã nhớ trong localStorage — chỉ đổi tạm hiển
+// thị cho lượt đăng nhập này, tải lại trang sau đó vẫn quay về đúng tài khoản đã nhớ như cũ.
+function switchLoginUser() {
+  document.getElementById('loginRememberedUserWrap').classList.add('hidden');
+  document.getElementById('loginUserFieldWrap').classList.remove('hidden');
+  const txtUser = document.getElementById('txtUser');
+  txtUser.value = '';
+  txtUser.focus();
+}
 
 // ================== PWA: CÀI ĐẶT ỨNG DỤNG + SERVICE WORKER ==================
 // Đăng ký sw.js — bắt buộc phải TỒN TẠI để Chrome/Android coi trang là "cài đặt được", nhưng bản thân
@@ -9734,6 +10027,12 @@ async function loginWithBiometric() {
   biometricLoginInFlight = true;
   const btn = document.getElementById('btnBiometricLogin');
   if (btn) { btn.disabled = true; btn.innerHTML = '<span class="loginpage-spinner"></span> Đang xác thực…'; }
+  // Mờ luôn nút "Đăng nhập" (mật khẩu) trong lúc chờ vân tay/Face ID — 2 nút cùng bấm được (dù không
+  // cùng lúc chạy thật, do check biometricLoginInFlight/loginInFlight ở đầu hàm) từng khiến người dùng
+  // tưởng nút "Đăng nhập" vẫn dùng được bình thường, dễ bấm nhầm/gõ lại mật khẩu trong lúc hộp thoại vân
+  // tay của hệ điều hành đang mở. Mở lại ở resetBiometricLoginWidget().
+  const btnLoginEl = document.getElementById('btnLogin');
+  if (btnLoginEl) btnLoginEl.disabled = true;
 
   try {
     await loadVendorScript('/vendor/simplewebauthn/browser.min.js');
@@ -9832,6 +10131,10 @@ async function login() {
   if (btn) { btn.disabled = true; btn.innerHTML = '<span class="loginpage-spinner"></span> Đang đăng nhập…'; }
   if (btnCaptchaRefresh) btnCaptchaRefresh.disabled = true;
   if (txtCaptchaEl) txtCaptchaEl.disabled = true;
+  // Mờ luôn nút "Đăng nhập bằng vân tay" trong lúc chờ — cùng lý do/khuôn với chiều ngược lại ở
+  // loginWithBiometric(), mở lại ở resetLoginWidgets().
+  const btnBioEl = document.getElementById('btnBiometricLogin');
+  if (btnBioEl) btnBioEl.disabled = true;
   let user;
   try {
     const res = await fetch('/api/auth/login', {
@@ -10137,6 +10440,18 @@ function buildStepLabelForHub(wfConfig, currentStep) {
 // module theo BƯỚC quy trình phòng ban dùng canApproveStep + 4 module theo 1 QUYỀN PHẲNG không có
 // khái niệm bước). Không có DB collection riêng — thuần đọc lại DB.* đã tải sẵn, cùng nguồn dữ liệu
 // countDeptWorkflowPending()/buildDashboardCards() đang dùng cho các thẻ Dashboard.
+// Badge trạng thái dùng chung cho cột "Trạng Thái" ở Approval Hub — cùng khuôn
+// `<span class="px-2 py-0.5 bg-X-100 text-X-800 rounded font-bold text-xs">` đã dùng ở 10+ module khác
+// (vd itPriceStatusBadge()). Đa số hồ sơ trong Approval Hub đang ở đúng 1 trạng thái "đang chờ duyệt",
+// nhưng vài module đã có sẵn cờ trạng thái con hữu ích hơn (đang chờ bổ sung thông tin) nên tận dụng
+// luôn thay vì hiện chung 1 nhãn vô nghĩa.
+function approvalHubPendingBadge() {
+  return `<span class="px-2 py-0.5 bg-indigo-100 text-indigo-800 rounded font-bold text-xs">⏳ Đang Chờ Duyệt</span>`;
+}
+function approvalHubNeedInfoBadge() {
+  return `<span class="px-2 py-0.5 bg-amber-100 text-amber-800 rounded font-bold text-xs">🟠 Chờ Bổ Sung</span>`;
+}
+
 function getMyPendingApprovals(user) {
   if (!user) return [];
   const items = [];
@@ -10158,6 +10473,7 @@ function getMyPendingApprovals(user) {
         code: cfg.codeOf(rec), title: cfg.titleOf(rec), dept: rec.dept,
         stepLabel: buildStepLabelForHub(wfConfig, step),
         createdAt: rec.createdAt,
+        statusBadge: cfg.statusBadgeOf ? cfg.statusBadgeOf(rec) : approvalHubPendingBadge(),
         actions: cfg.actionsOf(rec)
       });
     });
@@ -10206,6 +10522,7 @@ function getMyPendingApprovals(user) {
   addDeptWorkflowItems(DB.itPriceApprovals, p => DB.itPriceDeptWorkflows[p.dept], {
     type: 'itPrice', typeLabel: '🏷️ Hỗ Trợ IT - Duyệt giá',
     codeOf: r => r.code, titleOf: r => r.productName,
+    statusBadgeOf: r => itPriceHasUnresolvedInfoRequest(r) ? approvalHubNeedInfoBadge() : approvalHubPendingBadge(),
     actionsOf: r => [
       { label: '✅ Duyệt', onclick: `runItPriceAction(${r.id}, 'approve')`, primary: true },
       { label: '❌ Từ chối', onclick: `runItPriceAction(${r.id}, 'reject')` }
@@ -10254,6 +10571,7 @@ function getMyPendingApprovals(user) {
       items.push({
         type: 'meeting', typeLabel: '📅 Phòng họp', code: m.code, title: m.title, dept: m.dept,
         stepLabel: '', createdAt: m.createdAt,
+        statusBadge: approvalHubPendingBadge(),
         actions: [{ label: '✅ Duyệt', onclick: `approveMeeting(${m.id})`, primary: true }]
       });
     });
@@ -10264,6 +10582,7 @@ function getMyPendingApprovals(user) {
       items.push({
         type: 'internalShare', typeLabel: '💬 Góc chia sẻ', code: p.code, title: p.title, dept: p.dept,
         stepLabel: '', createdAt: p.createdAt,
+        statusBadge: approvalHubPendingBadge(),
         actions: [
           { label: '✅ Duyệt', onclick: `approveInternalPostAction(${p.id})`, primary: true },
           { label: '❌ Từ chối', onclick: `rejectInternalPostAction(${p.id})` }
@@ -10283,6 +10602,7 @@ function getMyPendingApprovals(user) {
           type: 'flaggedComment', typeLabel: `${isSevere ? '🚨' : '⚠️'} Bình luận nhạy cảm (${catLabels})`,
           code: '', title: `"${c.content}" — trong bài "${p.title}" (${c.name})`, dept: p.dept,
           stepLabel: '', createdAt: c.time,
+          statusBadge: approvalHubPendingBadge(),
           actions: [
             { label: '🗑️ Xoá bình luận', onclick: `deleteFlaggedCommentAction(${p.id}, ${c.id})`, primary: true },
             { label: '✅ Bỏ qua (không vấn đề)', onclick: `dismissCommentFlagAction(${p.id}, ${c.id})` }
@@ -10299,6 +10619,7 @@ function getMyPendingApprovals(user) {
       items.push({
         type: 'license', typeLabel: '📜 Giấy phép', code: l.displayCode || l.code, title: l.licenseType, dept: l.dept,
         stepLabel: '', createdAt: l.createdAt,
+        statusBadge: approvalHubPendingBadge(),
         actions: [
           { label: '✅ Duyệt', onclick: `runLicenseAction(${l.id}, 'approve')`, primary: true },
           { label: '❌ Từ chối', onclick: `runLicenseAction(${l.id}, 'reject')` }
@@ -10312,6 +10633,7 @@ function getMyPendingApprovals(user) {
       items.push({
         type: 'payment', typeLabel: '💰 Thanh toán', code: pr.sourceCode || String(pr.id), title: pr.title,
         dept: pr.dept, stepLabel: '', createdAt: pr.createdAt,
+        statusBadge: pr.status === 'NEED_INFO' ? approvalHubNeedInfoBadge() : approvalHubPendingBadge(),
         actions: [{ label: '✅ Xác nhận', onclick: `approvePaymentRequestAction(${pr.id})`, primary: true }]
       });
     });
@@ -10326,6 +10648,7 @@ function getMyPendingApprovals(user) {
         type: 'itPriceEmergencyReject', typeLabel: '🚨 Hỗ Trợ IT - Từ chối khẩn',
         code: p.code, title: p.productName, dept: p.dept, stepLabel: '',
         createdAt: p.emergencyRejectRequestedAt,
+        statusBadge: approvalHubPendingBadge(),
         actions: [
           { label: '✅ Duyệt huỷ', onclick: `approveItPriceEmergencyRejectAction(${p.id})`, primary: true },
           { label: '❌ Từ chối yêu cầu', onclick: `denyItPriceEmergencyRejectAction(${p.id})` }
@@ -10346,6 +10669,9 @@ function getMyPendingApprovals(user) {
 function getMyProcessedApprovals(user, status, sinceMs) {
   if (!user || (status !== 'APPROVED' && status !== 'REJECTED')) return [];
   const items = [];
+  const statusBadge = status === 'APPROVED'
+    ? `<span class="px-2 py-0.5 bg-green-100 text-green-800 rounded font-bold text-xs">✅ Đã Duyệt</span>`
+    : `<span class="px-2 py-0.5 bg-red-100 text-red-800 rounded font-bold text-xs">❌ Đã Từ Chối</span>`;
 
   // sinceMs = 0/falsy -> "Tất cả thời gian" (không lọc). parseVNDateTime() không parse được (thiếu mốc
   // thời gian ở vài module cũ, xem internalShare REJECTED bên dưới) -> vẫn giữ lại, an toàn hơn ẩn nhầm.
@@ -10373,6 +10699,7 @@ function getMyProcessedApprovals(user, status, sinceMs) {
         code: cfg.codeOf(rec), title: cfg.titleOf(rec), dept: rec.dept,
         stepLabel: status === 'APPROVED' ? '✅ Bạn đã duyệt' : '❌ Bạn đã từ chối',
         createdAt: lastMine.time,
+        statusBadge,
         actions: [{ label: '🔍 Xem', onclick: `gotoApprovalHubOrigin('${cfg.type}')`, primary: true }]
       });
     });
@@ -10414,6 +10741,7 @@ function getMyProcessedApprovals(user, status, sinceMs) {
       items.push({
         type: 'meeting', typeLabel: '📅 Phòng họp', code: m.code, title: m.title, dept: m.dept,
         stepLabel: '✅ Bạn đã duyệt', createdAt: m.approvedAt,
+        statusBadge,
         actions: [{ label: '🔍 Xem', onclick: `gotoApprovalHubOrigin('meeting')`, primary: true }]
       });
     });
@@ -10426,6 +10754,7 @@ function getMyProcessedApprovals(user, status, sinceMs) {
       items.push({
         type: 'internalShare', typeLabel: '💬 Góc chia sẻ', code: p.code, title: p.title, dept: p.dept,
         stepLabel: status === 'APPROVED' ? '✅ Bạn đã duyệt' : '❌ Bạn đã từ chối', createdAt: p[dateField],
+        statusBadge,
         actions: [{ label: '🔍 Xem', onclick: `gotoApprovalHubOrigin('internalShare')`, primary: true }]
       });
     });
@@ -10443,6 +10772,7 @@ function getMyProcessedApprovals(user, status, sinceMs) {
       items.push({
         type: 'license', typeLabel: '📜 Giấy phép', code: l.displayCode || l.code, title: l.licenseType, dept: l.dept,
         stepLabel: status === 'APPROVED' ? '✅ Bạn đã duyệt' : '❌ Bạn đã từ chối', createdAt: lastMine.time,
+        statusBadge,
         actions: [{ label: '🔍 Xem', onclick: `gotoApprovalHubOrigin('license')`, primary: true }]
       });
     });
@@ -10453,6 +10783,7 @@ function getMyProcessedApprovals(user, status, sinceMs) {
       items.push({
         type: 'payment', typeLabel: '💰 Thanh toán', code: pr.sourceCode || String(pr.id), title: pr.title, dept: pr.dept,
         stepLabel: '✅ Bạn đã duyệt', createdAt: pr.approvedAt,
+        statusBadge,
         actions: [{ label: '🔍 Xem', onclick: `gotoApprovalHubOrigin('payment')`, primary: true }]
       });
     });
@@ -10591,6 +10922,7 @@ function renderApprovalHub() {
       <td class="p-2 font-semibold text-gray-800">${escapeHtml(it.title || '')}</td>
       <td class="p-2 text-gray-600">${escapeHtml(it.dept || '')}</td>
       <td class="p-2 text-xs text-gray-600">${escapeHtml(it.stepLabel || '')}</td>
+      <td class="p-2 whitespace-nowrap">${it.statusBadge || ''}</td>
       <td class="p-2 text-xs text-gray-500 whitespace-nowrap">${escapeHtml(it.createdAt || '')}</td>
       <td class="p-2 text-center space-x-1 whitespace-nowrap">
         ${it.actions.map(a => `<button onclick="${a.onclick}" class="px-2 py-1 rounded text-xs font-bold ${a.label.startsWith('🔍') ? 'bg-sky-600 text-white hover:bg-sky-700' : (a.primary ? 'bg-emerald-600 text-white hover:bg-emerald-700' : 'bg-red-600 text-white hover:bg-red-700')}">${a.label}</button>`).join(' ')}
@@ -10707,6 +11039,8 @@ function finishLogin(user) {
   document.getElementById('heThongNavWrap').classList.toggle('hidden', !user.perms.admin);
   document.getElementById('btnReportsTab').classList.toggle('hidden', !canAccessReportsModule(user));
   document.getElementById('itSupportNavWrap').classList.toggle('hidden', !canAccessItSupportModule(user));
+  document.getElementById('btnItSupportNavRenewal').classList.toggle('hidden', !canManageItSupportClient(user));
+  document.getElementById('btnItSubRenewal').classList.toggle('hidden', !canManageItSupportClient(user));
   document.getElementById('btnApprovalHubTab').classList.toggle('hidden', !canAccessApprovalHub(user));
   updateApprovalHubBadge();
   applyUploadAcceptAttrs();
@@ -10799,6 +11133,10 @@ function logout() {
   // nhập…"/"Đang xác thực…" từ lượt đăng nhập trước, chặn luôn lượt đăng nhập kế tiếp.
   resetLoginWidgets(false);
   resetBiometricLoginWidget();
+  // Vẽ lại đúng trạng thái "tài khoản đã nhớ" (ẩn ô gõ Tên đăng nhập + hiện dòng tên/nút đổi tài khoản)
+  // cho lượt đăng nhập KẾ TIẾP — nếu lượt vừa đăng xuất từng bấm "Đăng nhập tên khác" (hiện ô gõ tay tạm
+  // thời) mà không reset lại ở đây, đăng xuất xong sẽ vẫn kẹt ở ô gõ tay dù máy vẫn còn nhớ tài khoản.
+  initRememberedLoginUser();
   document.getElementById('dashboardSection').classList.add('hidden');
   document.getElementById('approvalHubSection').classList.add('hidden');
   document.getElementById('docSection').classList.add('hidden');
@@ -11481,8 +11819,11 @@ function filterDocByCard(key) {
     PENDING_NEW: { filterStatus: 'PENDING', filterDocType: 'NEW' },
     PENDING_VERSION: { filterStatus: 'PENDING', filterDocType: 'VERSION' },
     APPROVED: { filterStatus: 'APPROVED', filterDocType: '' },
-    REJECTED: { filterStatus: 'REJECTED', filterDocType: '' }
+    REJECTED: { filterStatus: 'REJECTED', filterDocType: '' },
+    DRAFT: { filterStatus: 'DRAFT', filterDocType: '' }
   };
+  const box = document.querySelector('#docSection .filter-box-details');
+  if (box) box.open = true;
   applyDashboardCardFilter(map[key] || {}, 'doc', renderDocs);
 }
 
@@ -11770,12 +12111,14 @@ function renderDocs() {
     { key: 'PENDING_NEW', label: 'Chờ Duyệt: Tài Liệu Mới', count: rootDocsAll.filter(d => d.status === 'PENDING').length, colorClass: 'border-l-yellow-500' },
     { key: 'PENDING_VERSION', label: 'Chờ Duyệt: Cập Nhật Phiên Bản', count: versionDocsAll.filter(d => d.status === 'PENDING').length, colorClass: 'border-l-orange-500' },
     { key: 'APPROVED', label: 'Đã Phê Duyệt', count: rootDocsAll.filter(d => d.status === 'APPROVED').length, colorClass: 'border-l-green-500' },
-    { key: 'REJECTED', label: 'Từ Chối / Trả Về', count: rootDocsAll.filter(d => d.status === 'REJECTED').length, colorClass: 'border-l-red-500' }
+    { key: 'REJECTED', label: 'Từ Chối / Trả Về', count: rootDocsAll.filter(d => d.status === 'REJECTED').length, colorClass: 'border-l-red-500' },
+    { key: 'DRAFT', label: 'Chờ Chỉnh Sửa (Cần Bổ Sung)', count: rootDocsAll.filter(d => d.status === 'DRAFT').length, colorClass: 'border-l-purple-500' }
   ];
   let activeCardKey = '__ALL__';
   if (statusFilter === 'PENDING') activeCardKey = docTypeFilter === 'VERSION' ? 'PENDING_VERSION' : 'PENDING_NEW';
   else if (statusFilter === 'APPROVED') activeCardKey = 'APPROVED';
   else if (statusFilter === 'REJECTED') activeCardKey = 'REJECTED';
+  else if (statusFilter === 'DRAFT') activeCardKey = 'DRAFT';
   document.getElementById('docDashboardCards').innerHTML = buildDashboardCardsHTML(dashCards, activeCardKey, 'filterDocByCard');
 
   // Lọc tài liệu theo quyền truy cập phòng ban & bộ lọc. Mặc định (docTypeFilter rỗng/'NEW') chỉ hiện
@@ -12165,6 +12508,8 @@ function filterLicenseByCard(key) {
     EXPIRING: { filterLicenseStatus: '', filterLicenseType: '', filterLicenseLifecycle: 'EXPIRING' },
     EXPIRED: { filterLicenseStatus: '', filterLicenseType: '', filterLicenseLifecycle: 'EXPIRED' }
   };
+  const box = document.querySelector('#licenseSection .filter-box-details');
+  if (box) box.open = true;
   applyDashboardCardFilter(map[key] || {}, 'license', renderLicenses);
 }
 function onLicenseFilterChange() {
@@ -15852,6 +16197,8 @@ function filterContractByCard(key) {
     SIGNED_PENDING: { filterContractType: '', filterSignedStatusContract: 'PENDING' },
     SIGNED_APPROVED: { filterContractType: '', filterSignedStatusContract: 'APPROVED' }
   };
+  const box = document.querySelector('#contractSection .filter-box-details');
+  if (box) box.open = true;
   applyDashboardCardFilter(map[key] || {}, 'contract', renderContracts);
 }
 
@@ -20901,6 +21248,294 @@ const WF_MODULE_CONFIG = {
   // "Ngân Sách" — Trưởng phòng duyệt bản ngân sách theo phòng ban, cùng khuôn ITPRICE ở trên.
   BUDGET: { dbKey: 'budgetDeptWorkflows', label: 'Ngân Sách', title: '📊 Cấu Hình Quy Trình Duyệt Ngân Sách Theo Phòng Ban' }
 };
+
+// ==========================================
+// GIA HẠN DỊCH VỤ CNTT — module con của Hỗ Trợ IT, CHỈ đội IT (itManage/admin) thấy được (khác Phê
+// Duyệt Giá/Hỗ Trợ Yêu Cầu mở cho toàn bộ nhân viên). Danh mục nội bộ đội IT tự quản lý cho chính
+// mình, KHÔNG qua bước duyệt nào (khác Giấy Phép — hồ sơ pháp lý cần người khác duyệt), cùng khuôn
+// dashboard/hiệu lực/nhắc email như Giấy Phép nhưng bỏ hẳn phần status/lifecycleStatus/version (xem
+// lib/createValidation.js itServiceRenewals.extraValidate).
+// ==========================================
+const IT_RENEWAL_CATEGORY_SUGGESTIONS = ['Phần mềm/Bản quyền', 'Đường truyền Internet', 'Tên miền', 'Chứng chỉ SSL', 'Hosting', 'Khác'];
+
+// Tình trạng hiệu lực — cùng khuôn computeLicenseLifecycleState() nhưng không có RENEWING/REVOKED (module
+// này không có khái niệm thu hồi/đánh dấu đang gia hạn, chỉ có ngày hết hạn).
+function computeItRenewalLifecycleState(item) {
+  if (!item || !item.expiryDate) return null;
+  const expiry = new Date(item.expiryDate);
+  if (isNaN(expiry.getTime())) return 'VALID';
+  const now = new Date();
+  const startExpiry = new Date(expiry.getFullYear(), expiry.getMonth(), expiry.getDate());
+  const startNow = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const diffDays = Math.round((startExpiry - startNow) / 86400000);
+  if (diffDays < 0) return 'EXPIRED';
+  if (diffDays <= 30) return 'EXPIRING';
+  return 'VALID';
+}
+const IT_RENEWAL_LIFECYCLE_LABELS = {
+  VALID: { label: '🟢 Còn hiệu lực', cls: 'bg-green-100 text-green-800' },
+  EXPIRING: { label: '🟡 Sắp hết hạn', cls: 'bg-yellow-100 text-yellow-800' },
+  EXPIRED: { label: '🔴 Hết hạn', cls: 'bg-red-100 text-red-800' }
+};
+
+function filterItServiceRenewalByCard(key) {
+  const map = {
+    __ALL__: { filterItRenewalLifecycle: '' },
+    EXPIRING: { filterItRenewalLifecycle: 'EXPIRING' },
+    EXPIRED: { filterItRenewalLifecycle: 'EXPIRED' }
+  };
+  const cfg = map[key] || {};
+  Object.entries(cfg).forEach(([id, val]) => { const el = document.getElementById(id); if (el) el.value = val; });
+  const box = document.querySelector('#itSubRenewal .filter-box-details');
+  if (box) box.open = true;
+  onItServiceRenewalFilterChange();
+}
+function onItServiceRenewalFilterChange() {
+  resetListPage('itRenewal');
+  renderItServiceRenewals();
+}
+
+function renderItServiceRenewals() {
+  const tbody = document.getElementById('itRenewalTableBody');
+  if (!tbody) return;
+
+  const categories = Array.from(new Set([...IT_RENEWAL_CATEGORY_SUGGESTIONS, ...DB.itServiceRenewals.map(x => x.category).filter(Boolean)]));
+  sddSetOptions('itRenewalCategoryDatalist', categories);
+  sddSetOptions('itRenewalEditCategoryDatalist', categories);
+  const categorySelect = document.getElementById('filterItRenewalCategory');
+  if (categorySelect) {
+    const current = categorySelect.value;
+    categorySelect.innerHTML = '<option value="">-- Tất cả --</option>' + categories.map(c => `<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`).join('');
+    categorySelect.value = current;
+  }
+
+  const lifecycleFilter = document.getElementById('filterItRenewalLifecycle')?.value || '';
+  const categoryFilter = document.getElementById('filterItRenewalCategory')?.value || '';
+  const keyword = (document.getElementById('filterItRenewalKeyword')?.value || '').toLowerCase().trim();
+
+  const dashCards = [
+    { key: '__ALL__', label: 'Tổng Dịch Vụ', count: DB.itServiceRenewals.length, colorClass: 'border-l-blue-500' },
+    { key: 'EXPIRING', label: 'Sắp Hết Hạn (≤30 ngày)', count: DB.itServiceRenewals.filter(x => computeItRenewalLifecycleState(x) === 'EXPIRING').length, colorClass: 'border-l-amber-500' },
+    { key: 'EXPIRED', label: 'Đã Hết Hạn', count: DB.itServiceRenewals.filter(x => computeItRenewalLifecycleState(x) === 'EXPIRED').length, colorClass: 'border-l-red-500' }
+  ];
+  let activeCardKey = '__ALL__';
+  if (lifecycleFilter === 'EXPIRING') activeCardKey = 'EXPIRING';
+  else if (lifecycleFilter === 'EXPIRED') activeCardKey = 'EXPIRED';
+  document.getElementById('itRenewalDashboardCards').innerHTML = buildDashboardCardsHTML(dashCards, activeCardKey, 'filterItServiceRenewalByCard');
+
+  const filtered = DB.itServiceRenewals.filter(item => {
+    if (lifecycleFilter && computeItRenewalLifecycleState(item) !== lifecycleFilter) return false;
+    if (categoryFilter && item.category !== categoryFilter) return false;
+    if (!matchesKeywordFields([item.name, item.vendor, item.responsible], keyword)) return false;
+    return true;
+  });
+
+  document.getElementById('paginationContainer_itRenewal').innerHTML = buildPaginationBoxHTML('itRenewal', 'renderItServiceRenewals');
+  const pageItems = paginateList('itRenewal', filtered, 'renderItServiceRenewals', 'dịch vụ');
+
+  if (pageItems.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="7" class="text-center p-6 text-gray-500 italic">Không tìm thấy dịch vụ phù hợp.</td></tr>`;
+    return;
+  }
+  tbody.innerHTML = pageItems.map(item => buildItServiceRenewalRowHTML(item)).join('');
+}
+
+function buildItServiceRenewalRowHTML(item) {
+  const lifecycleKey = computeItRenewalLifecycleState(item);
+  const lifecycleBadge = lifecycleKey
+    ? `<span class="px-2 py-1 rounded font-bold text-xs ${IT_RENEWAL_LIFECYCLE_LABELS[lifecycleKey].cls}">${escapeHtml(IT_RENEWAL_LIFECYCLE_LABELS[lifecycleKey].label)}</span>`
+    : '<span class="text-gray-400 text-xs">—</span>';
+
+  const secondaryOptions = [];
+  if (item.fileUrl) secondaryOptions.push({ value: 'download', label: '⬇️ Tải tệp' });
+  if (currentUser.perms?.admin) secondaryOptions.push({ value: 'delete', label: '🗑️ Xóa' });
+  const primaryBtnHTML = `<button onclick="runItServiceRenewalAction(${item.id}, 'renew')" class="px-2 py-1 bg-sky-700 text-white rounded text-xs hover:bg-sky-800 font-semibold" title="Gia hạn dịch vụ">🔄 Gia Hạn</button>`;
+  secondaryOptions.unshift({ value: 'edit', label: '✏️ Sửa' });
+
+  return `
+    <tr class="hover:bg-gray-50 transition border-b">
+      <td class="border p-2">
+        <div class="font-bold text-gray-800">${escapeHtml(item.name)}</div>
+        ${item.note ? `<div class="text-xs text-gray-500">${escapeHtml(item.note)}</div>` : ''}
+      </td>
+      <td class="border p-2 text-gray-700">${escapeHtml(item.category)}</td>
+      <td class="border p-2 text-xs text-gray-600">${escapeHtml(item.vendor || '—')}<div class="text-gray-400">${escapeHtml(item.responsible || '')}</div></td>
+      <td class="border p-2 text-xs text-gray-600">${escapeHtml(item.expiryDate)}</td>
+      <td class="border p-2 text-center">${lifecycleBadge}</td>
+      <td class="border p-2 text-right text-gray-700">${item.cost ? Number(item.cost).toLocaleString('vi-VN') + ' đ' : '—'}</td>
+      <td class="border p-2 text-center space-x-1">${buildActionCell(item.id, primaryBtnHTML, secondaryOptions, 'runItServiceRenewalAction')}</td>
+    </tr>
+  `;
+}
+
+function runItServiceRenewalAction(id, action) {
+  const item = DB.itServiceRenewals.find(x => x.id === id);
+  if (!item) return;
+  switch (action) {
+    case 'renew': openItServiceRenewalRenewModal(id); break;
+    case 'edit': openItServiceRenewalEditModal(id); break;
+    case 'download': downloadItServiceRenewalFile(id); break;
+    case 'delete': deleteItServiceRenewalAction(id); break;
+  }
+}
+
+async function submitItServiceRenewal(e) {
+  e.preventDefault();
+  const name = document.getElementById('itRenewalName').value.trim();
+  const category = document.getElementById('itRenewalCategory').value.trim();
+  if (!name) return alert('Vui lòng nhập Tên dịch vụ!');
+  if (!category) return alert('Vui lòng nhập Loại dịch vụ!');
+  const expiryDate = document.getElementById('itRenewalExpiryDate').value;
+  if (!expiryDate) return alert('Vui lòng nhập Ngày hết hạn!');
+  const startDate = document.getElementById('itRenewalStartDate').value || null;
+  if (startDate && new Date(expiryDate).getTime() < new Date(startDate).getTime()) {
+    return alert('Ngày hết hạn phải sau Ngày bắt đầu!');
+  }
+
+  const fileInput = document.getElementById('itRenewalFile');
+  const file = fileInput.files[0];
+  let uploaded = null;
+  if (file) {
+    try {
+      uploaded = await uploadFileToServer(file, 'itServiceRenewal');
+    } catch (err) {
+      return alert(`⛔ Tải tệp lên thất bại: ${err.message}`);
+    }
+  }
+
+  const costInput = document.getElementById('itRenewalCost');
+  const payload = {
+    name, category,
+    vendor: document.getElementById('itRenewalVendor').value.trim(),
+    responsible: document.getElementById('itRenewalResponsible').value.trim(),
+    cost: costInput.value.trim() ? getMoneyValue(costInput) : null,
+    startDate, expiryDate,
+    note: document.getElementById('itRenewalNote').value.trim(),
+    fileUrl: uploaded ? uploaded.fileUrl : null,
+    fileName: uploaded ? uploaded.fileName : null,
+    createdAt: new Date().toLocaleString('vi-VN')
+  };
+
+  let newItem;
+  try {
+    newItem = (await callCreateAction('itServiceRenewals', payload)).item;
+  } catch (err) {
+    return alert('⛔ ' + err.message);
+  }
+
+  DB.itServiceRenewals.unshift(newItem);
+  logSystemAction('IT_SERVICE_RENEWAL', 'CREATE_IT_RENEWAL', `Thêm dịch vụ CNTT cần theo dõi gia hạn [${name}]`, 'SUCCESS', name);
+  alert('✅ Đã thêm dịch vụ vào danh mục theo dõi gia hạn!');
+  e.target.reset();
+  renderItServiceRenewals();
+}
+
+function downloadItServiceRenewalFile(id) {
+  const item = DB.itServiceRenewals.find(x => x.id === id);
+  if (!item || !item.fileUrl) return;
+  const a = document.createElement('a');
+  a.href = attachmentDownloadUrl(item.fileUrl, null, item.fileName || item.name);
+  a.download = item.fileName || item.name;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  logSystemAction('IT_SERVICE_RENEWAL', 'DOWNLOAD_IT_RENEWAL_FILE', `Tải tệp dịch vụ CNTT [${item.name}]`, 'SUCCESS', item.name);
+}
+
+function deleteItServiceRenewalAction(id) {
+  const item = DB.itServiceRenewals.find(x => x.id === id);
+  if (!item) return;
+  deleteRecordAdminOnly('itServiceRenewals', id, `dịch vụ CNTT "${item.name}"`, () => {
+    DB.itServiceRenewals = DB.itServiceRenewals.filter(x => x.id !== id);
+    logSystemAction('IT_SERVICE_RENEWAL', 'DELETE_IT_RENEWAL', `Xóa dịch vụ CNTT [${item.name}]`, 'SUCCESS', item.name);
+    renderItServiceRenewals();
+  });
+}
+
+// ----- Modal "Gia Hạn" -----
+function openItServiceRenewalRenewModal(id) {
+  const item = DB.itServiceRenewals.find(x => x.id === id);
+  if (!item) return;
+  document.getElementById('itRenewalRenewId').value = id;
+  document.getElementById('itRenewalRenewCurrentInfo').innerText = `${item.name} (${item.category}) — hiện đang hết hạn ngày ${item.expiryDate}`;
+  document.getElementById('itRenewalRenewNewExpiryDate').value = '';
+  document.getElementById('itRenewalRenewCost').value = item.cost ? Number(item.cost).toLocaleString('vi-VN') : '';
+  document.getElementById('itRenewalRenewModal').classList.remove('hidden');
+}
+function closeItServiceRenewalRenewModal() {
+  document.getElementById('itRenewalRenewModal').classList.add('hidden');
+}
+async function submitItServiceRenewalRenew() {
+  const id = Number(document.getElementById('itRenewalRenewId').value);
+  const item = DB.itServiceRenewals.find(x => x.id === id);
+  if (!item) return;
+  const newExpiryDate = document.getElementById('itRenewalRenewNewExpiryDate').value;
+  if (!newExpiryDate) return alert('Vui lòng nhập Ngày hết hạn mới!');
+  if (new Date(newExpiryDate).getTime() <= new Date(item.expiryDate).getTime()) {
+    return alert('Ngày hết hạn mới phải sau ngày hết hạn hiện tại!');
+  }
+  const costInput = document.getElementById('itRenewalRenewCost');
+  const payload = { newExpiryDate, cost: costInput.value.trim() ? getMoneyValue(costInput) : null };
+  let updated;
+  try {
+    updated = (await callRecordAction('itServiceRenewals', id, 'renew', payload)).item;
+  } catch (err) { return alert('⛔ ' + err.message); }
+  Object.assign(item, updated);
+  logSystemAction('IT_SERVICE_RENEWAL', 'RENEW_IT_RENEWAL', `Gia hạn dịch vụ CNTT [${item.name}] sang ${newExpiryDate}`, 'SUCCESS', item.name);
+  closeItServiceRenewalRenewModal();
+  renderItServiceRenewals();
+}
+
+// ----- Modal "Sửa" -----
+function openItServiceRenewalEditModal(id) {
+  const item = DB.itServiceRenewals.find(x => x.id === id);
+  if (!item) return;
+  document.getElementById('itRenewalEditId').value = id;
+  document.getElementById('itRenewalEditName').value = item.name || '';
+  document.getElementById('itRenewalEditCategory').value = item.category || '';
+  document.getElementById('itRenewalEditVendor').value = item.vendor || '';
+  document.getElementById('itRenewalEditResponsible').value = item.responsible || '';
+  document.getElementById('itRenewalEditCost').value = item.cost ? Number(item.cost).toLocaleString('vi-VN') : '';
+  document.getElementById('itRenewalEditStartDate').value = item.startDate || '';
+  document.getElementById('itRenewalEditExpiryDate').value = item.expiryDate || '';
+  document.getElementById('itRenewalEditNote').value = item.note || '';
+  document.getElementById('itRenewalEditModal').classList.remove('hidden');
+}
+function closeItServiceRenewalEditModal() {
+  document.getElementById('itRenewalEditModal').classList.add('hidden');
+}
+async function submitItServiceRenewalEdit() {
+  const id = Number(document.getElementById('itRenewalEditId').value);
+  const item = DB.itServiceRenewals.find(x => x.id === id);
+  if (!item) return;
+  const name = document.getElementById('itRenewalEditName').value.trim();
+  const category = document.getElementById('itRenewalEditCategory').value.trim();
+  if (!name) return alert('Vui lòng nhập Tên dịch vụ!');
+  if (!category) return alert('Vui lòng nhập Loại dịch vụ!');
+  const expiryDate = document.getElementById('itRenewalEditExpiryDate').value;
+  if (!expiryDate) return alert('Vui lòng nhập Ngày hết hạn!');
+  const startDate = document.getElementById('itRenewalEditStartDate').value || null;
+  if (startDate && new Date(expiryDate).getTime() < new Date(startDate).getTime()) {
+    return alert('Ngày hết hạn phải sau Ngày bắt đầu!');
+  }
+  const costInput = document.getElementById('itRenewalEditCost');
+  const payload = {
+    name, category,
+    vendor: document.getElementById('itRenewalEditVendor').value.trim(),
+    responsible: document.getElementById('itRenewalEditResponsible').value.trim(),
+    cost: costInput.value.trim() ? getMoneyValue(costInput) : null,
+    startDate, expiryDate,
+    note: document.getElementById('itRenewalEditNote').value.trim()
+  };
+  let updated;
+  try {
+    updated = (await callRecordAction('itServiceRenewals', id, 'edit', payload)).item;
+  } catch (err) { return alert('⛔ ' + err.message); }
+  Object.assign(item, updated);
+  logSystemAction('IT_SERVICE_RENEWAL', 'EDIT_IT_RENEWAL', `Sửa dịch vụ CNTT [${name}]`, 'SUCCESS', name);
+  closeItServiceRenewalEditModal();
+  renderItServiceRenewals();
+}
 
 // ==========================================
 // NGÂN SÁCH — 3 sub-tab: Lập Ngân Sách (budgetCreate) / Tạo Kỳ Ngân Sách + Mẫu (budgetManage) / Tổng
@@ -31962,10 +32597,12 @@ function setItSupportSubTab(subTab) {
   activeItSupportSubTab = subTab;
   document.getElementById('itSubPrice').classList.toggle('hidden', subTab !== 'PRICE');
   document.getElementById('itSubTicket').classList.toggle('hidden', subTab !== 'TICKET');
+  document.getElementById('itSubRenewal').classList.toggle('hidden', subTab !== 'RENEWAL');
   const activeCls = 'px-3 py-1.5 rounded text-xs font-bold bg-sky-700 text-white';
   const inactiveCls = 'px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700';
   document.getElementById('btnItSubPrice').className = subTab === 'PRICE' ? activeCls : inactiveCls;
   document.getElementById('btnItSubTicket').className = subTab === 'TICKET' ? activeCls : inactiveCls;
+  document.getElementById('btnItSubRenewal').className = (subTab === 'RENEWAL' ? activeCls : inactiveCls) + (canManageItSupportClient(currentUser) ? '' : ' hidden');
 
   if (subTab === 'PRICE') {
     const canCreate = canProposeItPrice(currentUser);
@@ -31988,6 +32625,9 @@ function setItSupportSubTab(subTab) {
   if (subTab === 'TICKET') {
     document.getElementById('itTicketCode').value = generateItTicketCode();
     renderItTickets();
+  }
+  if (subTab === 'RENEWAL') {
+    renderItServiceRenewals();
   }
 }
 
@@ -32050,10 +32690,23 @@ async function onItPriceFileChange(event) {
 // Đổi Mẫu Giá SAU KHI đã chọn sẵn 1 tệp bảng giá — đọc lại tệp đó (còn nguyên trong ô chọn file) để dò
 // lại đúng cột theo mẫu mới chọn, không bắt người dùng phải chọn lại tệp.
 async function onItPriceMasterListChange() {
+  updateItPriceMasterListDownloadLink();
   const fileInput = document.getElementById('itPriceFileInput');
   const file = fileInput?.files?.[0];
   if (!file) return;
   await parseItPriceFileForPreview(file);
+}
+
+// Cập nhật link "Tải Mẫu Giá này về" ngay dưới dropdown chọn mẫu trong form tạo đề xuất — để người đề
+// xuất tải đúng file mẫu (khuôn cột) đang chọn về làm theo trước khi nộp bảng giá của mình.
+function updateItPriceMasterListDownloadLink() {
+  const link = document.getElementById('itPriceMasterListDownloadLink');
+  if (!link) return;
+  const masterListId = document.getElementById('itPriceMasterListSelect')?.value;
+  const list = masterListId ? (DB.itPriceMasterLists || []).find(m => String(m.id) === masterListId) : null;
+  if (!list) { link.classList.add('hidden'); return; }
+  link.href = attachmentDownloadUrl(list.fileUrl, null, list.fileName);
+  link.classList.remove('hidden');
 }
 
 // ============ Modal dùng chung "Gán vai trò cột" ============
@@ -32118,7 +32771,7 @@ function renderItPriceMasterListAdmin() {
   }
   tbody.innerHTML = lists.map(m => `
     <tr class="hover:bg-gray-50 border-b">
-      <td class="border p-2 font-semibold">${escapeHtml(m.name)}<br><span class="text-[11px] text-gray-400 font-normal">📎 ${escapeHtml(m.fileName || '')}</span></td>
+      <td class="border p-2 font-semibold">${escapeHtml(m.name)}<br><a href="${attachmentDownloadUrl(m.fileUrl, null, m.fileName)}" target="_blank" class="text-[11px] text-sky-600 hover:underline font-normal">📥 ${escapeHtml(m.fileName || '')}</a></td>
       <td class="border p-2">${(m.columns || []).map(c => `<span class="inline-block px-1.5 py-0.5 rounded text-[11px] mr-1 mb-1 bg-gray-100 text-gray-700">${escapeHtml(c.label)}</span>`).join('')}</td>
       <td class="border p-2">${escapeHtml(m.uploadedByName || '')}<br><span class="text-[11px] text-gray-400">${escapeHtml(m.uploadedAt || '')}</span></td>
       <td class="border p-2 text-center space-x-1 whitespace-nowrap">
@@ -32240,6 +32893,7 @@ function renderItPriceMasterListSelect() {
   select.innerHTML = `<option value="">-- Chọn Mẫu Giá Phê Duyệt --</option>` +
     lists.map(m => `<option value="${m.id}">${escapeHtml(m.name)} (${(m.columns || []).length} cột)</option>`).join('');
   if (lists.some(m => String(m.id) === prevValue)) select.value = prevValue;
+  updateItPriceMasterListDownloadLink();
 }
 
 async function submitItPriceApproval(e) {
@@ -32598,7 +33252,21 @@ function diffPriceFileItems(newItems, oldItems, columnLabels) {
     if (newIt) return { values: newIt.values, oldValues: null, kind: 'added', changedKeys: [] };
     return { values: oldIt.values, oldValues: null, kind: 'removed', changedKeys: [] };
   });
+  // Xếp dòng có thay đổi (added/removed/changed) lên đầu để dễ rà soát, dòng "same" (không đổi) xuống
+  // cuối — giữ nguyên thứ tự tương đối bên trong mỗi nhóm (sort ổn định).
+  const KIND_ORDER = { added: 0, removed: 0, changed: 0, same: 1 };
+  rows.sort((a, b) => KIND_ORDER[a.kind] - KIND_ORDER[b.kind]);
   return { rows, newDupKeys: findDupKeys(newItems), oldDupKeys: findDupKeys(oldItems) };
+}
+
+// Link tải Mẫu Giá đã áp dụng cho 1 đề xuất — dùng ở modal chi tiết (cho IT/người duyệt đối chiếu lại
+// đúng khuôn cột đã dùng). masterListId có thể null (đề xuất cũ từ trước khi bắt buộc chọn mẫu, hoặc
+// mẫu đã bị admin xoá sau đó) — khi đó không render gì.
+function itPriceMasterListDownloadLinkHTML(masterListId) {
+  if (!masterListId) return '';
+  const list = (DB.itPriceMasterLists || []).find(m => m.id === masterListId);
+  if (!list) return '';
+  return ` <a href="${attachmentDownloadUrl(list.fileUrl, null, list.fileName)}" target="_blank" class="text-sky-600 hover:underline font-semibold">📥 Tải Mẫu</a>`;
 }
 
 let currentItPriceModalId = null;
@@ -32629,7 +33297,7 @@ function renderItPriceModal() {
   document.getElementById('itPriceModalDetails').innerHTML = `
     <div><b>Trạng thái:</b> ${itPriceStatusBadge(p)}</div>
     <div><b>Áp giá:</b> ${itPriceAppliedBadge(p)}</div>
-    ${p.masterListName ? `<div><b>Mẫu Giá áp dụng:</b> ${escapeHtml(p.masterListName)}</div>` : ''}
+    ${p.masterListName ? `<div><b>Mẫu Giá áp dụng:</b> ${escapeHtml(p.masterListName)}${itPriceMasterListDownloadLinkHTML(p.masterListId)}</div>` : ''}
     <div><b>Lý do điều chỉnh:</b> ${p.reason ? escapeHtml(p.reason) : '<span class="text-gray-400">—</span>'}</div>
     ${historyRows}
     ${p.applied ? `<div><b>Đã áp giá:</b> ${escapeHtml(p.appliedByName || '')} · ${escapeHtml(p.appliedAt || '')}</div>` : ''}
@@ -32654,17 +33322,25 @@ function renderItPriceModal() {
   }
 
   const files = p.files || [];
+  // approvedFileId chỉ có ở các đề xuất đã duyệt xong SAU khi tính năng này ra đời (chụp lại ở
+  // lib/workflowEngine.js ngay lúc duyệt xong bước cuối). Hồ sơ cũ đã APPROVED từ trước không có field
+  // này — dùng file cuối cùng tại thời điểm đó làm phương án dự phòng hợp lý (KHÔNG lấy file mới nhất
+  // hiện tại nếu sau đó IT có yêu cầu bổ sung thêm — chỉ fallback khi hoàn toàn không có snapshot).
+  const approvedFileId = p.approvedFileId || (p.status === 'APPROVED' && !p.infoRequests?.some(r => r.byRole === 'it') ? files[files.length - 1]?.id : null);
   document.getElementById('itPriceModalFiles').innerHTML = files.map((f, idx) => {
     const isLatest = idx === files.length - 1;
     const tagLatest = isLatest && files.length > 1 ? ' <span class="px-1.5 py-0.5 bg-sky-100 text-sky-800 rounded text-xs font-bold">Mới nhất</span>' : '';
     const tagOriginal = idx === 0 && files.length > 1 ? ' <span class="px-1.5 py-0.5 bg-gray-200 text-gray-700 rounded text-xs font-bold">Bản gốc</span>' : '';
+    const tagApproved = f.id === approvedFileId ? ' <span class="px-1.5 py-0.5 bg-emerald-100 text-emerald-800 rounded text-xs font-bold">✅ File Đã Được Phê Duyệt</span>' : '';
     // columnLabels snapshot NGAY LÚC NỘP tệp này (xem submitPriceSupplementFile()/itPriceApprovals ở
     // server) — luôn hiển thị đúng tên cột đã dùng lúc đó, kể cả khi Mẫu Giá sau này bị sửa/xoá.
     const columnLabels = f.columnLabels && f.columnLabels.length ? f.columnLabels : [{ key: 'c0', label: 'Dữ liệu' }];
     return `
       <details class="border rounded bg-white" ${isLatest ? 'open' : ''}>
-        <summary class="p-2 cursor-pointer font-semibold">📎 ${escapeHtml(f.fileName)}${tagLatest}${tagOriginal}
-          <span class="block text-xs font-normal text-gray-500 mt-0.5">Tải lên bởi ${escapeHtml(f.uploadedByName)} · ${escapeHtml(f.uploadedAt)} · ${(f.items || []).length} dòng</span>
+        <summary class="p-2 cursor-pointer font-semibold">📎 ${escapeHtml(f.fileName)}${tagLatest}${tagOriginal}${tagApproved}
+          <span class="block text-xs font-normal text-gray-500 mt-0.5">Tải lên bởi ${escapeHtml(f.uploadedByName)} · ${escapeHtml(f.uploadedAt)} · ${(f.items || []).length} dòng
+            · <a href="${attachmentDownloadUrl(f.fileUrl, null, f.fileName)}" target="_blank" onclick="event.stopPropagation()" class="text-sky-600 hover:underline font-semibold">⬇️ Tải file gốc</a>
+          </span>
         </summary>
         <div class="p-2 border-t overflow-x-auto">
           <table class="w-full border-collapse text-xs">
@@ -32688,25 +33364,28 @@ function renderItPriceModal() {
       ? files[files.length - 1].columnLabels : [{ key: 'c0', label: 'Dữ liệu' }];
     const { rows: diff, newDupKeys, oldDupKeys } = diffPriceFileItems(files[files.length - 1].items, files[files.length - 2].items, latestColumnLabels);
     diffWrap.classList.remove('hidden');
-    document.getElementById('itPriceModalDiffHead').innerHTML = `<tr>${latestColumnLabels.map(col =>
+    // Cột "Trạng Thái" đặt ĐẦU TIÊN (trước mọi cột dữ liệu) — bảng nhiều cột dễ kéo ngang, để cuối thì
+    // phải cuộn hết mới thấy dòng nào đổi, mất tác dụng cảnh báo ngay từ cái nhìn đầu tiên.
+    document.getElementById('itPriceModalDiffHead').innerHTML = `<tr><th class="border p-1">Trạng Thái</th>${latestColumnLabels.map(col =>
       `<th class="border p-1">${escapeHtml(col.label)}</th>`
-    ).join('')}<th class="border p-1">Trạng Thái</th></tr>`;
+    ).join('')}</tr>`;
     const KIND_LABEL = {
-      added: '<span class="text-emerald-700 font-bold">+ Mới thêm</span>',
-      removed: '<span class="text-red-600 font-bold">− Đã bỏ</span>',
-      changed: '<span class="text-amber-700 font-bold">≠ Đã đổi</span>',
+      added: '<span class="text-emerald-800 font-bold">+ Mới thêm</span>',
+      removed: '<span class="text-red-700 font-bold">− Đã bỏ</span>',
+      changed: '<span class="text-amber-800 font-bold">≠ Đã đổi</span>',
       same: '<span class="text-gray-400">Không đổi</span>'
     };
-    // Tô màu: cả dòng xanh nhạt = dòng mới thêm, cả dòng đỏ nhạt (kèm gạch ngang) = dòng đã bị xóa, riêng
-    // ô vàng = đúng ô có giá trị thay đổi trong dòng "đã đổi" (không tô cả dòng để người xem thấy ngay
-    // CHÍNH XÁC cột nào đổi, nhất là khi bảng có nhiều cột).
-    const ROW_CLASS = { added: 'bg-emerald-50', removed: 'bg-red-50 text-gray-500 line-through', changed: '', same: '' };
+    // Tô màu ĐẬM hơn bản trước (đổi từ -50/-100 sang -200 + viền màu) để không bị nhầm lẫn khi lướt nhanh:
+    // cả dòng xanh đậm = dòng mới thêm, cả dòng đỏ đậm (kèm gạch ngang) = dòng đã bị xóa, riêng ô vàng đậm
+    // = đúng ô có giá trị thay đổi trong dòng "đã đổi" (không tô cả dòng để người xem thấy ngay CHÍNH XÁC
+    // cột nào đổi, nhất là khi bảng có nhiều cột).
+    const ROW_CLASS = { added: 'bg-emerald-200', removed: 'bg-red-200 text-gray-600 line-through', changed: '', same: '' };
     document.getElementById('itPriceModalDiffBody').innerHTML = diff.map(d => {
       const rowClass = ROW_CLASS[d.kind] || '';
-      return `<tr class="${rowClass}">${latestColumnLabels.map(col => {
-        const cellClass = (d.kind === 'changed' && d.changedKeys.includes(col.key)) ? ' bg-amber-100 font-semibold text-amber-900' : '';
+      return `<tr class="${rowClass}"><td class="border p-1 whitespace-nowrap">${KIND_LABEL[d.kind] || ''}</td>${latestColumnLabels.map(col => {
+        const cellClass = (d.kind === 'changed' && d.changedKeys.includes(col.key)) ? ' bg-amber-200 border-amber-500 font-semibold text-amber-900' : '';
         return `<td class="border p-1${cellClass}">${escapeHtml(d.values?.[col.key] || '')}</td>`;
-      }).join('')}<td class="border p-1">${KIND_LABEL[d.kind] || ''}</td></tr>`;
+      }).join('')}</tr>`;
     }).join('');
 
     // Badge tổng quan: đếm nhanh số dòng theo từng loại thay đổi, hiển thị ngay đầu bảng so sánh để
@@ -34022,6 +34701,11 @@ async function submitUniformIssuance() {
   alert('✅ Đã cấp đồng phục cho nhân viên!');
   resetUniformIssueForm();
   renderUniformIssuancesTable();
+  // Cấp phát xong -> nhân viên vừa nhận phải hiện NGAY trong bảng "Đang Giữ" và dropdown "Đồng Phục —
+  // Size" của "Báo Hỏng/Hủy (Từ Kho)" phải cập nhật lại đúng tồn kho còn lại (trước đây thiếu 2 dòng
+  // này, phải chuyển tab qua lại mới thấy đúng dữ liệu).
+  renderUniformHoldingsTable();
+  renderUniformAdjStockItemOptions();
   renderUniformStock();
 }
 
@@ -34128,15 +34812,35 @@ function openUniformHoldingActionModal(idx, outcome) {
       alert('✅ Đã ghi nhận thao tác!');
       renderUniformHoldingsTable();
       renderUniformAdjustmentsTable();
+      renderUniformAdjStockItemOptions();
       renderUniformStock();
     }
   });
 }
 
 // ============ Hỏng / Hủy / Thu Hồi (Giám Đốc Siêu Thị — uniformStoreManage) ============
+// Dropdown "Đồng Phục — Size" cho "Báo Hỏng/Hủy (Từ Kho)" — giới hạn CHÍNH XÁC những gì siêu thị đang
+// có tồn kho > 0 (đã được Hành Chính phân bổ VÀ Giám Đốc Siêu Thị xác nhận), cùng khuôn dữ liệu
+// (computeUniformStockClient()) + cùng định dạng nhãn (formatUniformLabel()) với dropdown "Cấp Đồng
+// Phục Cho Nhân Viên" ở renderUniformIssueItems() — KHÔNG còn 2 ô tên/size gõ tự do (không đối chiếu
+// được với Danh Mục Đồng Phục, dễ gõ sai lệch với đúng dữ liệu đã phân bổ).
+function renderUniformAdjStockItemOptions() {
+  const sel = document.getElementById('uniformAdjStockItemSize');
+  if (!sel) return;
+  const prevValue = sel.value;
+  const stock = computeUniformStockClient(currentUser.dept);
+  const options = Array.from(stock.values()).filter(r => r.stock > 0).sort((a, b) => a.name.localeCompare(b.name, 'vi') || a.size.localeCompare(b.size, 'vi'));
+  sel.innerHTML = '<option value="">-- Chọn mặt hàng --</option>' +
+    options.map(o => {
+      const key = `${o.name}|||${o.size}`;
+      const code = uniformSkuFor(o.name, o.size);
+      return `<option value="${escapeHtml(key)}">${formatUniformLabel(o.name, o.size, code)} (còn ${o.stock})</option>`;
+    }).join('');
+  if (options.some(o => `${o.name}|||${o.size}` === prevValue)) sel.value = prevValue;
+}
+
 function resetUniformAdjustForms() {
-  document.getElementById('uniformAdjStockItemName').value = '';
-  document.getElementById('uniformAdjStockSize').value = '';
+  renderUniformAdjStockItemOptions();
   document.getElementById('uniformAdjStockQty').value = '';
   document.getElementById('uniformAdjStockReason').value = '';
   const stockOutcomeDefault = document.querySelector('input[name="uniformAdjStockOutcome"][value="HONG"]');
@@ -34201,21 +34905,18 @@ async function callCreateUniformStockAdjustment(payload) {
 
 async function submitUniformStockAdjustment(source) {
   const prefix = source === 'EMPLOYEE' ? 'uniformAdjEmp' : 'uniformAdjStock';
-  let itemName, size;
-  if (source === 'EMPLOYEE') {
-    const combo = document.getElementById('uniformAdjEmpItemSize').value;
-    const sep = combo.indexOf('|||');
-    itemName = sep === -1 ? '' : combo.slice(0, sep);
-    size = sep === -1 ? '' : combo.slice(sep + 3);
-  } else {
-    itemName = document.getElementById(`${prefix}ItemName`).value.trim();
-    size = document.getElementById(`${prefix}Size`).value.trim();
-  }
+  // Cả 2 nguồn giờ ĐỀU chọn "Mặt Hàng — Size" từ dropdown (không còn gõ tự do) — cùng khuôn giá trị
+  // "tên|||size" với dropdown "Cấp Đồng Phục Cho Nhân Viên", đồng nhất tên gọi/cách chọn xuyên suốt
+  // module Đồng Phục.
+  const combo = document.getElementById(`${prefix}ItemSize`).value;
+  const sep = combo.indexOf('|||');
+  const itemName = sep === -1 ? '' : combo.slice(0, sep);
+  const size = sep === -1 ? '' : combo.slice(sep + 3);
   const qty = parseFloat(document.getElementById(`${prefix}Qty`).value);
   const reason = document.getElementById(`${prefix}Reason`).value.trim();
   const outcome = document.querySelector(`input[name="${prefix}Outcome"]:checked`)?.value || '';
 
-  if (!itemName) return alert('Vui lòng nhập tên đồng phục!');
+  if (!itemName) return alert('Vui lòng chọn đồng phục — size!');
   if (!qty || qty <= 0) return alert('Vui lòng nhập số lượng hợp lệ (> 0)!');
   if (!reason) return alert('Vui lòng nhập lý do (bắt buộc)!');
 
@@ -34239,6 +34940,10 @@ async function submitUniformStockAdjustment(source) {
   alert('✅ Đã ghi nhận thao tác!');
   resetUniformAdjustForms();
   renderUniformAdjustmentsTable();
+  // Thao tác EMPLOYEE đổi số đang giữ của nhân viên -> phải làm mới lại bảng "Đang Giữ" ngay (trước đây
+  // thiếu dòng này khiến bảng hiện "Không có nhân viên nào đang giữ đồng phục" dù dữ liệu đã đổi, phải
+  // đợi chuyển tab qua lại mới thấy đúng).
+  renderUniformHoldingsTable();
   renderUniformStock();
 }
 

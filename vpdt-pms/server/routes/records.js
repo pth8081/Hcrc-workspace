@@ -1908,4 +1908,33 @@ router.post('/licenses/:id/unrevoke', async (req, res) => {
   }
 });
 
+// ===================== GIA HẠN DỊCH VỤ CNTT (module con của Hỗ Trợ IT — itManage) =====================
+router.post('/itServiceRenewals/:id/delete', (req, res) => deleteAdminOnly(req, res, 'itServiceRenewals'));
+
+router.post('/itServiceRenewals/:id/edit', async (req, res) => {
+  const itemId = Number(req.params.id);
+  if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
+  try {
+    const { freshUser } = await getFreshUser(req);
+    const result = await withLockedRecordForCollection('itServiceRenewals', itemId, (item) =>
+      recordActions.editItServiceRenewal(freshUser, item, req.body));
+    res.json({ ok: true, item: result });
+  } catch (err) {
+    handleError(res, `itServiceRenewals/${req.params.id}/edit`, err);
+  }
+});
+
+router.post('/itServiceRenewals/:id/renew', async (req, res) => {
+  const itemId = Number(req.params.id);
+  if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
+  try {
+    const { freshUser } = await getFreshUser(req);
+    const result = await withLockedRecordForCollection('itServiceRenewals', itemId, (item) =>
+      recordActions.renewItServiceRenewal(freshUser, item, req.body));
+    res.json({ ok: true, item: result });
+  } catch (err) {
+    handleError(res, `itServiceRenewals/${req.params.id}/renew`, err);
+  }
+});
+
 module.exports = router;

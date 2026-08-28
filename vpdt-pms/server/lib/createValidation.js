@@ -1765,6 +1765,53 @@ const CREATE_MODULE_CONFIGS = {
         action: 'UPLOADED', by: user.username, byName: user.name, time: new Date().toLocaleString('vi-VN')
       }];
     }
+  },
+  // "Gia Hạn Dịch Vụ CNTT" (module con của Hỗ Trợ IT, itManage) — danh mục dịch vụ/hợp đồng CNTT cần
+  // theo dõi ngày hết hạn để gia hạn (phần mềm/bản quyền, đường truyền Internet, tên miền, chứng chỉ
+  // SSL...) — công cụ NỘI BỘ đội IT tự quản lý cho chính mình, KHÔNG qua bước duyệt nào (khác Giấy Phép
+  // ở trên vốn là hồ sơ pháp lý cần người khác duyệt) — tạo xong hiệu lực ngay, sửa/gia hạn/xoá qua route
+  // riêng (xem lib/recordActions.js + routes/records.js). forceOwnDept + getScope rỗng (cùng khuôn
+  // licenses/internalPosts ở trên) vì field "dept" chỉ mang tính hiển thị, quyền thật là itManage phẳng,
+  // không theo phòng ban. KHÔNG bắt buộc "code" (khác mọi module khác) — đây là danh mục nội bộ nhỏ,
+  // không cần mã tra cứu chính thức, chỉ cần tên dịch vụ là đủ nhận diện.
+  itServiceRenewals: {
+    dbKey: 'itServiceRenewals',
+    forceOwnDept: true,
+    getScope: () => ({}),
+    creatorField: 'creator', creatorNameField: 'creatorName',
+    extraValidate: (payload, collection, user) => {
+      if (!user.perms?.admin && !user.perms?.itManage) {
+        throw new CreateError(403, 'Bạn không có quyền quản lý danh mục gia hạn dịch vụ CNTT');
+      }
+      const requiredStringFields = [['name', 'Tên dịch vụ'], ['category', 'Loại dịch vụ']];
+      for (const [field, label] of requiredStringFields) {
+        if (!payload[field] || !String(payload[field]).trim()) throw new CreateError(400, `Vui lòng nhập ${label}`);
+        payload[field] = String(payload[field]).trim().slice(0, 200);
+      }
+      payload.vendor = String(payload.vendor || '').trim().slice(0, 200);
+      payload.responsible = String(payload.responsible || '').trim().slice(0, 200);
+      payload.note = String(payload.note || '').trim().slice(0, 1000);
+      payload.fileUrl = payload.fileUrl ? String(payload.fileUrl).trim().slice(0, 300) : null;
+      payload.fileName = payload.fileUrl ? String(payload.fileName || '').trim().slice(0, 200) : null;
+
+      const cost = (payload.cost === '' || payload.cost === null || payload.cost === undefined) ? null : Number(payload.cost);
+      if (cost !== null && (!Number.isFinite(cost) || cost < 0)) throw new CreateError(400, 'Chi phí gia hạn không hợp lệ');
+      payload.cost = cost;
+
+      if (!payload.expiryDate) throw new CreateError(400, 'Vui lòng nhập Ngày hết hạn');
+      payload.startDate = payload.startDate || null;
+      if (payload.startDate && new Date(payload.expiryDate).getTime() < new Date(payload.startDate).getTime()) {
+        throw new CreateError(400, 'Ngày hết hạn phải sau Ngày bắt đầu');
+      }
+
+      // notifiedThresholds/history PHẢI gán cứng ở server — jobs/itServiceRenewalReminder.js đọc
+      // notifiedThresholds để không gửi email nhắc trùng lặp cho cùng 1 mốc ngày (khớp đúng khuôn
+      // licenses/contracts ở trên).
+      payload.notifiedThresholds = [];
+      payload.history = [{
+        action: 'CREATED', by: user.username, byName: user.name, time: new Date().toLocaleString('vi-VN')
+      }];
+    }
   }
 };
 
