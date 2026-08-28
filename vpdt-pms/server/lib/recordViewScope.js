@@ -272,6 +272,13 @@ function canViewItPriceApproval(user, item, appData) {
   if (!user) return false;
   if (user.perms?.admin || user.perms?.itManage) return true;
   if (item.creator === user.username) return true;
+  // Người có quyền itPriceEmergencyRejectApprove nhưng KHÔNG phải người duyệt phòng ban của đề xuất
+  // này vẫn cần xem được ĐÚNG hồ sơ đang có yêu cầu "Từ chối khẩn cấp" chờ họ xét (hoặc đã tự mình
+  // quyết định trước đó, để tra cứu lại) — không mở rộng ra xem TOÀN BỘ đề xuất giá, cùng nguyên tắc
+  // phạm vi hẹp đã áp dụng cho approvalApprover ở canViewItSupportTicket() bên dưới.
+  if (user.perms?.itPriceEmergencyRejectApprove && (item.emergencyRejectStatus === 'PENDING' || item.emergencyRejectDecidedBy === user.username)) {
+    return true;
+  }
   return isApproverForApproversMap(MODULE_CONFIGS.itPriceApprovals.resolveWfConfig(item, appData).approvers, user.username);
 }
 

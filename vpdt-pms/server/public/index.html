@@ -4735,13 +4735,16 @@ input[data-sdd-list] {
             <span id="permTreeBadge_itSupport" class="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-gray-100 text-gray-500">0/0</span>
           </summary>
           <div class="p-3 pt-0 space-y-2">
-            <p class="text-[11px] text-gray-500 italic">Còn quyền vào module "Hỗ Trợ IT" ở mục 0 mới thấy được các màn dưới đây. "🎫 Hỗ Trợ Yêu Cầu" mở sẵn cho TOÀN BỘ nhân viên tạo ticket, không cần quyền riêng. 2 quyền dưới đây chỉ kiểm soát: ai được ĐỀ XUẤT duyệt giá bán (siêu thị), và ai thuộc đội Hỗ Trợ IT được nhận xử lý ticket/xác nhận đã áp giá sau khi duyệt xong.</p>
+            <p class="text-[11px] text-gray-500 italic">Còn quyền vào module "Hỗ Trợ IT" ở mục 0 mới thấy được các màn dưới đây. "🎫 Hỗ Trợ Yêu Cầu" mở sẵn cho TOÀN BỘ nhân viên tạo ticket, không cần quyền riêng. 2 quyền đầu chỉ kiểm soát: ai được ĐỀ XUẤT duyệt giá bán (siêu thị), và ai thuộc đội Hỗ Trợ IT được nhận xử lý ticket/xác nhận đã áp giá sau khi duyệt xong. Quyền thứ 3 xét duyệt riêng nút "🚨 Từ chối khẩn" — khi người đã duyệt bước cuối cùng đổi ý SAU khi duyệt (trước khi IT áp giá thật), người có quyền này quyết định có huỷ hồ sơ hay không.</p>
             <div class="grid grid-cols-1 md:grid-cols-2 gap-2">
               <label class="flex items-center gap-2 text-sky-700 font-semibold cursor-pointer">
                 <input type="checkbox" id="pItPriceProposeCreate"> 🏷️ Đề xuất duyệt giá bán
               </label>
               <label class="flex items-center gap-2 text-emerald-700 font-semibold cursor-pointer">
                 <input type="checkbox" id="pItManage"> 🛠️ Đội Hỗ Trợ IT (nhận xử lý ticket, xác nhận đã áp giá)
+              </label>
+              <label class="flex items-center gap-2 text-red-700 font-semibold cursor-pointer">
+                <input type="checkbox" id="pItPriceEmergencyRejectApprove"> 🚨 Phê duyệt từ chối khẩn cấp
               </label>
             </div>
           </div>
@@ -7354,6 +7357,16 @@ function canProposeItPrice(user) {
 function canManageItSupportClient(user) {
   return !!(user?.perms?.admin || user?.perms?.itManage);
 }
+function canApproveItPriceEmergencyRejectClient(user) {
+  return !!(user?.perms?.admin || user?.perms?.itPriceEmergencyRejectApprove);
+}
+// Đúng người đã bấm Duyệt ở bước cuối cùng (item.currentStep khi status đã APPROVED, engine không tăng
+// currentStep nữa sau bước cuối) — chỉ họ (hoặc admin) mới thấy nút "🚨 Từ chối khẩn", khớp lib/recordActions.js::isFinalStepApproverOfItPrice().
+function isFinalStepApproverOfItPriceClient(user, p) {
+  if (!user) return false;
+  if (user.perms?.admin) return true;
+  return (p.history || []).some(h => h.step === p.currentStep && h.action === 'APPROVED' && !h.invalidated && h.username === user.username);
+}
 
 // "Quản trị" Công việc: gộp quyền Tạo mới + Sửa (đổi tiêu đề/nội dung/hạn/người nhận) — người có
 // quyền này xử lý được TOÀN BỘ công việc, không chỉ việc của mình.
@@ -7687,7 +7700,7 @@ function defaultNewUserPerms() {
     officeBuy: true, officeFix: true, officeInvest: false,
     minutesCreate: false, minutesView: false, minutesEdit: false, minutesDownload: false,
     taskView: false, taskEdit: false, taskDelete: false, taskDownload: false,
-    itPriceProposeCreate: false, itManage: false,
+    itPriceProposeCreate: false, itManage: false, itPriceEmergencyRejectApprove: false,
     uniformManage: false, uniformApprove: false, uniformStoreManage: false,
     budgetManage: false, budgetCreate: false, budgetAggregate: false,
     approverAuthLevel: 'NONE'
@@ -8782,6 +8795,12 @@ function getMeetingApproverUsernames() {
 // định người nhận thông báo email khi có bài mới chờ duyệt.
 function getInternalPostApproverUsernames() {
   return DB.users.filter(u => u.perms?.admin || u.perms?.internalPostApprove).map(u => u.username);
+}
+
+// Toàn bộ user có quyền xét duyệt "Từ chối khẩn cấp" (Phê Duyệt Giá) — dùng để xác định người nhận
+// thông báo email khi có yêu cầu mới chờ xử lý, cùng khuôn getInternalPostApproverUsernames() ở trên.
+function getItPriceEmergencyRejectApproverUsernames() {
+  return DB.users.filter(u => u.perms?.admin || u.perms?.itPriceEmergencyRejectApprove).map(u => u.username);
 }
 
 // Parse "30, 15, 7" -> [30, 15, 7] (số nguyên không âm, loại trùng, sắp giảm dần)
@@ -10038,6 +10057,23 @@ function getMyPendingApprovals(user) {
         type: 'payment', typeLabel: '💰 Thanh toán', code: pr.sourceCode || String(pr.id), title: pr.title,
         dept: pr.dept, stepLabel: '', createdAt: pr.createdAt,
         actions: [{ label: '✅ Xác nhận', onclick: `approvePaymentRequestAction(${pr.id})`, primary: true }]
+      });
+    });
+  }
+
+  // "Từ chối khẩn cấp" (Phê Duyệt Giá) — quyền phẳng itPriceEmergencyRejectApprove, không phải bước
+  // duyệt theo phòng ban nên không đi qua addDeptWorkflowItems() ở trên, xem
+  // requestItPriceEmergencyReject() ở lib/recordActions.js.
+  if (canApproveItPriceEmergencyRejectClient(user)) {
+    (DB.itPriceApprovals || []).filter(p => p.emergencyRejectStatus === 'PENDING').forEach(p => {
+      items.push({
+        type: 'itPriceEmergencyReject', typeLabel: '🚨 Hỗ Trợ IT - Từ chối khẩn',
+        code: p.code, title: p.productName, dept: p.dept, stepLabel: '',
+        createdAt: p.emergencyRejectRequestedAt,
+        actions: [
+          { label: '✅ Duyệt huỷ', onclick: `approveItPriceEmergencyRejectAction(${p.id})`, primary: true },
+          { label: '❌ Từ chối yêu cầu', onclick: `denyItPriceEmergencyRejectAction(${p.id})` }
+        ]
       });
     });
   }
@@ -21944,6 +21980,7 @@ function collectPermsFromForm() {
     taskDownload: document.getElementById('pTaskDownload').checked,
     itPriceProposeCreate: document.getElementById('pItPriceProposeCreate').checked,
     itManage: document.getElementById('pItManage').checked,
+    itPriceEmergencyRejectApprove: document.getElementById('pItPriceEmergencyRejectApprove').checked,
     uniformManage: document.getElementById('pUniformManage').checked,
     uniformApprove: document.getElementById('pUniformApprove').checked,
     uniformStoreManage: document.getElementById('pUniformStoreManage').checked,
@@ -21990,6 +22027,7 @@ function populatePermsForm(permsInput) {
   document.getElementById('pTaskDownload').checked = !!perms.taskDownload;
   document.getElementById('pItPriceProposeCreate').checked = !!perms.itPriceProposeCreate;
   document.getElementById('pItManage').checked = !!perms.itManage;
+  document.getElementById('pItPriceEmergencyRejectApprove').checked = !!perms.itPriceEmergencyRejectApprove;
   document.getElementById('pUniformManage').checked = !!perms.uniformManage;
   document.getElementById('pUniformApprove').checked = !!perms.uniformApprove;
   document.getElementById('pUniformStoreManage').checked = !!perms.uniformStoreManage;
@@ -24736,6 +24774,7 @@ function resetUserForm() {
   document.getElementById('pTaskDownload').checked = !!defaults.taskDownload;
   document.getElementById('pItPriceProposeCreate').checked = !!defaults.itPriceProposeCreate;
   document.getElementById('pItManage').checked = !!defaults.itManage;
+  document.getElementById('pItPriceEmergencyRejectApprove').checked = !!defaults.itPriceEmergencyRejectApprove;
   document.getElementById('pUniformManage').checked = !!defaults.uniformManage;
   document.getElementById('pUniformApprove').checked = !!defaults.uniformApprove;
   document.getElementById('pUniformStoreManage').checked = !!defaults.uniformStoreManage;
@@ -31359,6 +31398,12 @@ function filterItPriceByCard(status) {
 function canViewItPriceApproval(user, p) {
   if (user.perms?.admin || user.perms?.itManage) return true;
   if (p.creator === user.username) return true;
+  // Người có quyền itPriceEmergencyRejectApprove nhưng không phải người duyệt phòng ban vẫn cần xem
+  // được hồ sơ đang có yêu cầu "Từ chối khẩn cấp" chờ họ xét (hoặc đã tự mình quyết định trước đó) —
+  // khớp canViewItPriceApproval() ở lib/recordViewScope.js.
+  if (user.perms?.itPriceEmergencyRejectApprove && (p.emergencyRejectStatus === 'PENDING' || p.emergencyRejectDecidedBy === user.username)) {
+    return true;
+  }
   return isApproverForDeptWorkflow(DB.itPriceDeptWorkflows[p.dept], user.username);
 }
 
@@ -31786,8 +31831,40 @@ function renderItPriceModalControls(p) {
   const wfConfig = DB.itPriceDeptWorkflows[p.dept] || { workflowId: 'WF_1STEP', approvers: { 1: ['admin'] } };
   const currentStepApprovers = wfConfig.approvers ? (wfConfig.approvers[p.currentStep] || []) : [];
   const canApprove = p.status === 'PENDING' && canApproveStep(currentUser, currentStepApprovers, p.history, p.currentStep);
+  const emergencyPending = p.emergencyRejectStatus === 'PENDING';
   const canApply = p.status === 'APPROVED' && !p.applied && canManageItSupportClient(currentUser);
   let html = '';
+
+  // Băng thông báo hiển thị cho MỌI người xem hồ sơ (người đề xuất, người duyệt, đội IT) khi đang có 1
+  // yêu cầu "Từ chối khẩn cấp" chờ xử lý — đúng yêu cầu nghiệp vụ minh bạch, không chỉ riêng người có
+  // quyền quyết định mới thấy.
+  if (emergencyPending) {
+    html += `<div class="bg-red-50 text-red-800 p-2 rounded border border-red-200">
+      🚨 <b>${escapeHtml(p.emergencyRejectRequestedByName)}</b> đã gửi yêu cầu <b>Từ chối khẩn cấp</b> lúc ${escapeHtml(p.emergencyRejectRequestedAt)} — đang chờ người có quyền xét duyệt.
+      <br><span class="text-xs">Lý do: "${escapeHtml(p.emergencyRejectReason)}"</span>
+    </div>`;
+  } else if (p.emergencyRejectStatus === 'DENIED') {
+    html += `<div class="bg-gray-50 text-gray-600 p-2 rounded border border-gray-200 text-xs">
+      Yêu cầu Từ chối khẩn cấp trước đó (bởi ${escapeHtml(p.emergencyRejectRequestedByName)}) đã bị ${escapeHtml(p.emergencyRejectDecidedByName)} từ chối${p.emergencyRejectDecisionComment ? `: "${escapeHtml(p.emergencyRejectDecisionComment)}"` : '.'}
+    </div>`;
+  }
+
+  // Người có quyền itPriceEmergencyRejectApprove xét duyệt trực tiếp ngay tại đây.
+  if (emergencyPending && canApproveItPriceEmergencyRejectClient(currentUser)) {
+    html += `<div class="flex gap-2 flex-wrap mt-2">
+      <button type="button" onclick="approveItPriceEmergencyRejectAction(${p.id})" class="bg-red-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-red-700">✅ Duyệt Huỷ Hồ Sơ</button>
+      <button type="button" onclick="denyItPriceEmergencyRejectAction(${p.id})" class="bg-gray-500 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-gray-600">❌ Từ Chối Yêu Cầu Này</button>
+    </div>`;
+  }
+
+  // Nút "Từ chối khẩn" — CHỈ đúng người đã bấm Duyệt ở bước cuối cùng (hoặc admin), khi hồ sơ đã
+  // APPROVED nhưng CHƯA áp giá thật, và chưa có yêu cầu nào khác đang chờ xử lý.
+  if (p.status === 'APPROVED' && !p.applied && !emergencyPending && isFinalStepApproverOfItPriceClient(currentUser, p)) {
+    html += `<div class="mt-2">
+      <button type="button" onclick="requestItPriceEmergencyRejectAction(${p.id})" class="bg-red-700 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-red-800">🚨 Từ Chối Khẩn</button>
+      <p class="text-[11px] text-gray-500 mt-1">Bạn đã duyệt hồ sơ này ở bước cuối cùng nhưng muốn dừng lại trước khi Hỗ Trợ IT áp giá thật — gửi yêu cầu cho người có quyền xét duyệt để huỷ hồ sơ.</p>
+    </div>`;
+  }
 
   if (canApprove) {
     if (blocked) {
@@ -31802,7 +31879,9 @@ function renderItPriceModalControls(p) {
   }
 
   if (canApply) {
-    if (blocked) {
+    if (emergencyPending) {
+      html += `<div class="bg-red-50 text-red-800 p-2 rounded border border-red-200 mt-2">🚨 Đang chờ xét duyệt yêu cầu Từ chối khẩn cấp — tạm khoá nhận xử lý/xác nhận áp giá.</div>`;
+    } else if (blocked) {
       html += `<div class="bg-amber-50 text-amber-800 p-2 rounded border border-amber-200 mt-2">⏳ Đang chờ người đề xuất tải lên tệp bổ sung trước khi có thể xác nhận áp giá.</div>`;
     } else {
       const isAdmin = !!currentUser.perms?.admin;
@@ -31873,6 +31952,82 @@ async function requestItPriceInfoApprover(id) {
     `[VPDT] Đề xuất duyệt giá ${updated.code} cần bổ sung`,
     `Đề xuất duyệt giá (${updated.code}) của bạn cần bổ sung: ${reason.trim()}`);
   alert('✅ Đã gửi yêu cầu bổ sung tới người đề xuất.');
+  renderItPriceApprovals();
+  if (currentItPriceModalId === id) renderItPriceModal();
+}
+
+// "Từ chối khẩn cấp" — chỉ đúng người đã duyệt bước cuối cùng (isFinalStepApproverOfItPriceClient()) mới
+// thấy nút này (xem renderItPriceModalControls()), gửi yêu cầu cho người có quyền
+// itPriceEmergencyRejectApprove xét duyệt, xem requestItPriceEmergencyReject() ở lib/recordActions.js.
+async function requestItPriceEmergencyRejectAction(id) {
+  const reason = prompt('Nhập lý do từ chối khẩn cấp (sẽ hiển thị cho người xét duyệt và trong lịch sử hồ sơ nếu được đồng ý):');
+  if (reason === null) return;
+  if (!reason.trim()) return alert('Vui lòng nhập lý do từ chối khẩn cấp.');
+
+  let result;
+  try {
+    result = await callRecordAction('itPriceApprovals', id, 'request-emergency-reject', { reason: reason.trim() });
+  } catch (e) {
+    return alert('⛔ ' + e.message);
+  }
+  const updated = result.item;
+  const idx = DB.itPriceApprovals.findIndex(x => x.id === id);
+  if (idx !== -1) DB.itPriceApprovals[idx] = updated;
+  logSystemAction('IT_SUPPORT', 'REQUEST_IT_PRICE_EMERGENCY_REJECT', `Gửi yêu cầu Từ chối khẩn cấp đề xuất giá [${updated.code}]`, 'SUCCESS', updated.code);
+  const approverUsernames = getItPriceEmergencyRejectApproverUsernames();
+  if (approverUsernames.length) {
+    notifyUsersByEmail('IT_SUPPORT', 'NOTIFY_IT_PRICE_EMERGENCY_REJECT_REQUEST', updated.code, approverUsernames,
+      `[VPDT] Yêu cầu Từ chối khẩn cấp cho ${updated.code} cần xét duyệt`,
+      `${currentUser.name} đã gửi yêu cầu Từ chối khẩn cấp cho đề xuất duyệt giá "${updated.productName}" (${updated.code}). Lý do: ${reason.trim()}`);
+  }
+  alert('✅ Đã gửi yêu cầu Từ chối khẩn cấp — chờ người có quyền xét duyệt.');
+  refreshApprovalSurfaces();
+  renderItPriceApprovals();
+  if (currentItPriceModalId === id) renderItPriceModal();
+}
+
+async function approveItPriceEmergencyRejectAction(id) {
+  let result;
+  try {
+    result = await callRecordAction('itPriceApprovals', id, 'approve-emergency-reject', {});
+  } catch (e) {
+    return alert('⛔ ' + e.message);
+  }
+  const updated = result.item;
+  const idx = DB.itPriceApprovals.findIndex(x => x.id === id);
+  if (idx !== -1) DB.itPriceApprovals[idx] = updated;
+  logSystemAction('IT_SUPPORT', 'APPROVE_IT_PRICE_EMERGENCY_REJECT', `Duyệt Từ chối khẩn cấp đề xuất giá [${updated.code}] — hồ sơ chuyển Từ chối`, 'SUCCESS', updated.code);
+  notifyUsersByEmail('IT_SUPPORT', 'NOTIFY_IT_PRICE_EMERGENCY_REJECT_APPROVED', updated.code, [updated.creator],
+    `[VPDT] Đề xuất duyệt giá ${updated.code} đã bị từ chối khẩn cấp`,
+    `${currentUser.name} đã duyệt yêu cầu Từ chối khẩn cấp — đề xuất duyệt giá "${updated.productName}" (${updated.code}) của bạn đã chuyển sang Từ chối.`);
+  alert('✅ Đã duyệt — hồ sơ chuyển sang Từ chối.');
+  refreshApprovalSurfaces();
+  renderItPriceApprovals();
+  if (currentItPriceModalId === id) renderItPriceModal();
+}
+
+async function denyItPriceEmergencyRejectAction(id) {
+  const comment = prompt('Nhập lý do từ chối yêu cầu Từ chối khẩn cấp này:');
+  if (comment === null) return;
+  if (!comment.trim()) return alert('Vui lòng nhập lý do.');
+
+  let result;
+  try {
+    result = await callRecordAction('itPriceApprovals', id, 'deny-emergency-reject', { comment: comment.trim() });
+  } catch (e) {
+    return alert('⛔ ' + e.message);
+  }
+  const updated = result.item;
+  const idx = DB.itPriceApprovals.findIndex(x => x.id === id);
+  if (idx !== -1) DB.itPriceApprovals[idx] = updated;
+  logSystemAction('IT_SUPPORT', 'DENY_IT_PRICE_EMERGENCY_REJECT', `Từ chối yêu cầu Từ chối khẩn cấp đề xuất giá [${updated.code}]`, 'SUCCESS', updated.code);
+  if (updated.emergencyRejectRequestedBy) {
+    notifyUsersByEmail('IT_SUPPORT', 'NOTIFY_IT_PRICE_EMERGENCY_REJECT_DENIED', updated.code, [updated.emergencyRejectRequestedBy],
+      `[VPDT] Yêu cầu Từ chối khẩn cấp cho ${updated.code} bị từ chối`,
+      `${currentUser.name} đã từ chối yêu cầu Từ chối khẩn cấp của bạn cho đề xuất "${updated.productName}" (${updated.code}). Lý do: ${comment.trim()}`);
+  }
+  alert('❌ Đã từ chối yêu cầu Từ chối khẩn cấp.');
+  refreshApprovalSurfaces();
   renderItPriceApprovals();
   if (currentItPriceModalId === id) renderItPriceModal();
 }
