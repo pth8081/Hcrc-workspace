@@ -9,6 +9,8 @@
 //     từ nay LUÔN đi qua đúng quy trình duyệt phòng ban (itPriceDeptWorkflows, dùng chung
 //     lib/workflowEngine.js). "Yêu Cầu Bổ Sung" từ đội Hỗ Trợ IT là kênh song song, append-only
 //     (files[] chỉ được THÊM, không thay thế — xem submitPriceSupplementFile() ở lib/recordActions.js).
+//     Đợt 2: bỏ hẳn khái niệm giá cũ/giá mới — mỗi dòng chỉ còn 1 object `values` generic (key = key
+//     cột trong Mẫu Giá), không còn field name/newPrice/oldPrice/code cố định nào.
 //   - Hỗ Trợ Yêu Cầu (itSupportTickets): ticket helpdesk nội bộ, ai cũng tạo được; đội Hỗ Trợ IT
 //     (itManage) claim/xử lý/leo thang phê duyệt (escalate) tới 1 người cụ thể trước khi tiếp tục.
 //
@@ -78,7 +80,7 @@ async function main() {
         itPricePendingFile = {
           fileUrl: '/uploads/gia-de-xuat.xlsx',
           fileName: 'gia-de-xuat.xlsx',
-          items: [{ code: 'SP001', name: 'Mì gói Hảo Hảo', oldPrice: 5000, newPrice: 5500 }],
+          items: [{ values: { code: 'SP001', name: 'Mì gói Hảo Hảo', oldPrice: '5000', newPrice: '5500' } }],
           columnLabels: [
             { key: 'code', label: 'Mã hàng' },
             { key: 'name', label: 'Tên mặt hàng' },
@@ -164,7 +166,7 @@ async function main() {
       const step2 = await page.evaluate(async (id) => {
         itPriceSupplementPendingFile = {
           fileUrl: '/uploads/gia-bo-sung.xlsx', fileName: 'gia-bo-sung.xlsx',
-          items: [{ code: 'SP001', name: 'Mì gói Hảo Hảo', oldPrice: 5000, newPrice: 5500 }],
+          items: [{ values: { code: 'SP001', name: 'Mì gói Hảo Hảo', oldPrice: '5000', newPrice: '5500' } }],
           columnLabels: [
             { key: 'code', label: 'Mã hàng' },
             { key: 'name', label: 'Tên mặt hàng' },
