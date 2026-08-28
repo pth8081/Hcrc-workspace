@@ -56,6 +56,15 @@
 .filter-box-details > summary::-webkit-details-marker { display: none; }
 .filter-box-details > summary .filter-box-chevron { transition: transform 0.15s ease; display: inline-block; }
 .filter-box-details[open] > summary .filter-box-chevron { transform: rotate(90deg); }
+/* Mục "0. Quyền Truy Cập Module" — mỗi tab con của module/module con (VD "Kỳ Đăng Ký" trong Văn Phòng
+   Phẩm) hiện 1 dòng chú thích trỏ tới đúng khối 1-18 đang giữ checkbox quyền thật quyết định tab đó
+   (KHÔNG nhân bản checkbox — chỉ đọc + nút "Đi tới", xem jumpToPermField()). Bấm "Đi tới" mở khối đích
+   + cuộn tới + chớp sáng 1.8s để admin nhận ra ngay, không cần dò cả cây dài. */
+.perm-tree-jump-highlight { animation: permTreeJumpFlash 1.8s ease-out; }
+@keyframes permTreeJumpFlash {
+  0%, 20% { background-color: #fef9c3; border-color: #facc15 !important; }
+  100% { background-color: transparent; }
+}
 
 /* Sidebar điều hành (thay thanh nav ngang cũ) — #userHeader GIỮ NGUYÊN id cũ (finishLogin()/logout()
    chỉ toggle add/remove('hidden'), không sửa JS), giờ gắn vào chính khối <aside>. Tailwind ".hidden"
@@ -4499,7 +4508,7 @@ input[data-sdd-list] {
             <span id="permTreeBadge_module" class="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-gray-100 text-gray-500">0/0</span>
           </summary>
           <div class="p-3 pt-0 space-y-2">
-            <p class="text-[11px] text-gray-500 italic">Công tắc BẬT/TẮT quyền vào từng module, độc lập với quyền Admin. Tắt module nào thì người dùng không vào được module đó, dù có quyền chi tiết bên dưới. Quyền Admin luôn vào được mọi module. Quyền chi tiết làm được gì bên trong từng module (vd Mua Bán/Sửa Chữa/Đầu Tư, Thanh Toán, Văn Phòng Phẩm, Báo Cáo Định Kỳ...) cấu hình riêng ở các khối 1-16 bên dưới.</p>
+            <p class="text-[11px] text-gray-500 italic">Công tắc BẬT/TẮT quyền vào từng module, độc lập với quyền Admin. Tắt module nào thì người dùng không vào được module đó, dù có quyền chi tiết bên dưới. Quyền Admin luôn vào được mọi module. Module nào có tab con (VD Văn Phòng Phẩm, Đồng Phục, Tổng Hợp, Ngân Sách, Báo Cáo Định Kỳ) sẽ hiện thêm dòng tím bên dưới cho biết tab đó ẩn/hiện theo quyền nào — bấm "Đi tới →" để nhảy thẳng xuống đúng khối tick quyền, không phải dò cả cây.</p>
             <div id="moduleAccessCheckboxes" class="grid grid-cols-2 md:grid-cols-5 gap-2"></div>
           </div>
         </details>
@@ -7321,6 +7330,59 @@ const BUSINESS_MODULES = [
   // "Báo Cáo Định Kỳ" — quyền pReportManage/pReportAggregate/pReportEntryCreate nằm ở khối 13.
   { key: 'periodicReport', label: 'Báo Cáo Định Kỳ' }
 ];
+
+// "Bản đồ tab" cho mục "0. Quyền Truy Cập Module" — CHỈ liệt kê những module/module con có tab con mà
+// việc HIỆN/ẨN tab đó do đúng 1 (hoặc vài, ghép OR) quyền phẳng cố định quyết định (đọc trong
+// setXSubTab() ở public/index.html, vd setUniformSubTab()/setVppSubTab()/setOfficeSubTab()/
+// setBudgetSubTab()/setPeriodicReportSubTab()) — KHÔNG liệt kê tab nào không có khái niệm "quyền vào
+// tab" tách biệt (vd 2 tab gốc của Hỗ Trợ IT/Hợp Đồng vốn CHỦ ĐÍCH mở cho mọi người có quyền vào module,
+// chỉ khác nhau ở BỘ LỌC hiển thị cùng 1 danh sách — ép thành checkbox riêng ở đây sẽ SAI với hành vi
+// thật, xem chú thích canAccessContractModule()/"Hỗ Trợ Yêu Cầu... không cần quyền riêng" ở khối 15).
+//
+// KHÔNG tạo thêm quyền/nơi lưu nào mới — mỗi field bên dưới trỏ THẲNG tới đúng id checkbox đang nằm
+// trong khối 1-18 (đã được đợt dọn cây quyền trước gom theo tên module, xem git log "Mục 3: move...").
+// Mỗi module/module con dưới đây (khoá theo đúng key trong BUSINESS_MODULES) chỉ HIỂN THỊ (đọc), có nút
+// "Đi tới" nhảy sang đúng khối thật để tick — xem renderModuleAccessCheckboxes()/jumpToPermField().
+const MODULE_TAB_MAP = {
+  vpp: [
+    { label: 'Kỳ Đăng Ký + Báo Cáo Tổng Hợp', badgeKey: 'vpp', fields: [{ id: 'pVppManage', label: 'Quản lý' }] }
+  ],
+  // uniformApprove (Phase 2) mở được CẢ 2 tab (duyệt kỳ cấp phát lẫn điều chuyển kho) — any:true nghĩa là
+  // hiện tab nếu có ÍT NHẤT 1 trong các quyền liệt kê (khớp canSeePeriods/canSeeStore ở setUniformSubTab()).
+  uniform: [
+    { label: 'Kỳ Cấp Phát', badgeKey: 'uniform', any: true, fields: [{ id: 'pUniformManage', label: 'Hành Chính' }, { id: 'pUniformApprove', label: 'Duyệt Kỳ Cấp Phát/Điều Chuyển Kho' }] },
+    { label: 'Xác Nhận/Cấp Phát Kho', badgeKey: 'uniform', any: true, fields: [{ id: 'pUniformStoreManage', label: 'Giám Đốc Siêu Thị' }, { id: 'pUniformApprove', label: 'Duyệt Kỳ Cấp Phát/Điều Chuyển Kho' }] }
+  ],
+  // "Thanh Toán" là tab của "Tổng Hợp" (office) nhưng checkbox thật nằm ở khối 10 (badgeKey riêng
+  // "payment") — khác 3 tab kia (checkbox nằm ngay trong khối "office" của chính module này).
+  office: [
+    { label: 'Mua Bán', badgeKey: 'office', fields: [{ id: 'pOfficeBuy', label: 'Mua Bán' }] },
+    { label: 'Sửa Chữa', badgeKey: 'office', fields: [{ id: 'pOfficeFix', label: 'Sửa Chữa' }] },
+    { label: 'Đầu Tư', badgeKey: 'office', fields: [{ id: 'pOfficeInvest', label: 'Đầu Tư' }] },
+    { label: 'Thanh Toán', badgeKey: 'payment', fields: [{ id: 'pPaymentManage', label: 'Quản lý Thanh Toán' }] }
+  ],
+  budget: [
+    { label: 'Tạo Kỳ Ngân Sách + Mẫu', badgeKey: 'budget', fields: [{ id: 'pBudgetManage', label: 'Quản lý' }] },
+    { label: 'Tổng Hợp Ngân Sách', badgeKey: 'budget', fields: [{ id: 'pBudgetAggregate', label: 'Tổng hợp' }] }
+  ],
+  periodicReport: [
+    { label: 'Tạo Kỳ Báo Cáo + Mẫu Trình Chiếu', badgeKey: 'periodicReport', fields: [{ id: 'pReportManage', label: 'Quản lý kỳ báo cáo' }] },
+    { label: 'Tổng Hợp Báo Cáo', badgeKey: 'periodicReport', fields: [{ id: 'pReportAggregate', label: 'Tổng hợp báo cáo' }] }
+  ]
+};
+
+// Mở khối 1-18 chứa đúng quyền quyết định 1 tab (từ MODULE_TAB_MAP), cuộn tới + chớp sáng 1.8s để admin
+// nhận ra ngay giữa cây quyền dài — KHÔNG tick/sửa gì cả, chỉ điều hướng (xem .perm-tree-jump-highlight).
+function jumpToPermField(badgeKey) {
+  const badge = document.getElementById('permTreeBadge_' + badgeKey);
+  const detailsEl = badge ? badge.closest('details.perm-tree-node') : null;
+  if (!detailsEl) return;
+  detailsEl.open = true;
+  detailsEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  detailsEl.classList.remove('perm-tree-jump-highlight');
+  void detailsEl.offsetWidth; // ép reflow để restart animation nếu bấm "Đi tới" liên tiếp cùng 1 khối
+  detailsEl.classList.add('perm-tree-jump-highlight');
+}
 
 // Các loại Văn bản trình / Tờ trình cố định (khớp đúng option value ở #subType) — dùng làm khoá để
 // cấu hình quy trình phê duyệt RIÊNG cho từng loại (xem DB.submissionTypeDeptWorkflows,
@@ -23272,6 +23334,27 @@ function renderContractTypeAbbrList() {
 
 // Vẽ danh sách checkbox "Quyền Truy Cập Module" (khối 0.) theo BUSINESS_MODULES — dùng lại cho cả
 // form Người dùng (prefix 'p') lẫn form Nhóm phân quyền (prefix 'g') qua tham số containerId/prefix.
+// Với module/module con có trong MODULE_TAB_MAP, in thêm các dòng ĐỌC (không phải checkbox mới) liệt
+// kê tab con + quyền quyết định + nút "Đi tới" nhảy sang đúng khối 1-18 đang giữ checkbox thật — xem
+// MODULE_TAB_MAP/jumpToPermField() phía trên. Trả về '' (không in gì) nếu module không có tab nào cần
+// khai — đa số module chỉ cần đúng 1 checkbox "vào được module" là đủ, không phải module nào cũng có tab.
+function buildModuleTabNotesHTML(moduleKey) {
+  const tabs = MODULE_TAB_MAP[moduleKey];
+  if (!tabs || !tabs.length) return '';
+  return `
+    <div class="mt-1 pl-3 space-y-1 border-l-2 border-violet-200">
+      ${tabs.map(t => `
+        <div class="flex items-center justify-between gap-2 bg-violet-50 rounded px-2 py-1">
+          <span class="text-[10.5px] text-violet-800 leading-snug">
+            🏷️ <b>${escapeHtml(t.label)}</b> — hiện ${t.any ? 'nếu có 1 trong' : 'theo quyền'}: ${t.fields.map(f => escapeHtml(f.label)).join(t.any ? ' hoặc ' : ', ')}
+          </span>
+          <button type="button" onclick="jumpToPermField('${t.badgeKey}')" class="text-[10px] font-bold text-violet-700 hover:underline whitespace-nowrap shrink-0">Đi tới →</button>
+        </div>
+      `).join('')}
+    </div>
+  `;
+}
+
 function renderModuleAccessCheckboxes(containerId = 'moduleAccessCheckboxes', prefix = 'pModuleAccess') {
   const el = document.getElementById(containerId);
   if (!el) return;
@@ -23288,6 +23371,7 @@ function renderModuleAccessCheckboxes(containerId = 'moduleAccessCheckboxes', pr
         <input type="checkbox" id="${prefix}_${m.key}" checked>
         <span>${escapeHtml(m.label)}</span>
       </label>
+      ${buildModuleTabNotesHTML(m.key)}
       ${childModules.length ? `
         <div class="pl-4 mt-1 space-y-0.5 border-l-2 border-slate-200">
           ${childModules.map(c => `
@@ -23295,6 +23379,7 @@ function renderModuleAccessCheckboxes(containerId = 'moduleAccessCheckboxes', pr
               <input type="checkbox" id="${prefix}_${c.key}" checked>
               <span>${escapeHtml(c.label)}</span>
             </label>
+            ${buildModuleTabNotesHTML(c.key)}
           `).join('')}
         </div>
       ` : ''}
