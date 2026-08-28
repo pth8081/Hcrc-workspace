@@ -447,6 +447,19 @@ function filterUniformTransfersForUser(items, user) {
   return (items || []).filter(t => canViewUniformTransfer(user, t));
 }
 
+// licenses (Hành Chính — Giấy Phép): quyền PHẲNG riêng module (không theo phòng ban) — admin/
+// licenseApprove/licenseView xem hết, người tạo luôn xem được hồ sơ của chính mình (cùng nguyên tắc
+// "chính chủ luôn xem được" áp dụng xuyên suốt hệ thống), không ai khác truy cập được.
+function canViewLicense(user, item) {
+  if (!user) return false;
+  if (user.perms?.admin || user.perms?.licenseApprove || user.perms?.licenseView) return true;
+  return item.creator === user.username;
+}
+
+function filterLicensesForUser(items, user) {
+  return (items || []).filter(l => canViewLicense(user, l));
+}
+
 module.exports = {
   canViewDoc, canViewSubmission, filterDocsForUser, filterSubmissionsForUser,
   canViewInternalPost, filterInternalPostsForUser,
@@ -467,5 +480,6 @@ module.exports = {
   canViewUniformStockAdjustment, filterUniformStockAdjustmentsForUser,
   canViewUniformTransfer, filterUniformTransfersForUser,
   canViewBudgetEntry, filterBudgetEntriesForUser,
+  canViewLicense, filterLicensesForUser,
   canDownloadRecordFile
 };

@@ -15,7 +15,8 @@ const { getAllForCollection } = require('../lib/recordStore');
 const { getAllAppData } = require('../lib/appData');
 const {
   canDownloadRecordFile, canViewInternalPost,
-  canViewItPriceApproval, canViewReportEntry, canSeeReportCompilation, filterRecruitmentReferralsForUser
+  canViewItPriceApproval, canViewReportEntry, canSeeReportCompilation, filterRecruitmentReferralsForUser,
+  canViewLicense
 } = require('../lib/recordViewScope');
 
 const router = express.Router();
@@ -44,7 +45,7 @@ const router = express.Router();
 // chat...) không cho tải vượt phạm vi. Mỗi module trả owning riêng (itPrice/reportEntry/reportPeriod/
 // recruitment) để caller gọi đúng hàm kiểm quyền tương ứng (khác chữ ký/tham số nhau).
 async function findOwningRecord(fileUrl) {
-  const [docs, submissions, contracts, carRegs, officeReqs, internalPosts, itPriceApprovals, reportEntries, reportPeriods, recruitmentReferrals] = await Promise.all([
+  const [docs, submissions, contracts, carRegs, officeReqs, internalPosts, itPriceApprovals, reportEntries, reportPeriods, recruitmentReferrals, licenses] = await Promise.all([
     getAllForCollection('docs'),
     getAllForCollection('submissions'),
     getAllForCollection('contracts'),
@@ -54,7 +55,8 @@ async function findOwningRecord(fileUrl) {
     getAllForCollection('itPriceApprovals'),
     getAllForCollection('reportEntries'),
     getAllForCollection('reportPeriods'),
-    getAllForCollection('recruitmentReferrals')
+    getAllForCollection('recruitmentReferrals'),
+    getAllForCollection('licenses')
   ]);
   const doc = (docs || []).find(d => d.fileUrl === fileUrl);
   if (doc) return { moduleKey: 'doc', dept: doc.dept, ownerUsername: doc.uploader };
@@ -76,6 +78,10 @@ async function findOwningRecord(fileUrl) {
   if (period) return { reportPeriod: true, period };
   const referral = (recruitmentReferrals || []).find(r => r.cvFileUrl === fileUrl);
   if (referral) return { recruitment: true, referral };
+  // licenses (Giấy Phép): quyền phẳng riêng module (licenseCreate/licenseApprove/licenseView), khác hẳn
+  // canDownloadRecordFile theo phòng ban — trả owning riêng để caller gọi canViewLicense().
+  const license = (licenses || []).find(l => l.fileUrl === fileUrl);
+  if (license) return { license: true, item: license };
   return null;
 }
 const UPLOAD_DIR = path.join(__dirname, '..', 'uploads');
@@ -125,9 +131,12 @@ router.get('/', async (req, res) => {
   if (owning && owning.recruitment && !filterRecruitmentReferralsForUser([owning.referral], req.freshUser).length) {
     return res.status(403).json({ error: 'Bạn không có quyền tải tệp này' });
   }
+  if (owning && owning.license && !canViewLicense(req.freshUser, owning.item)) {
+    return res.status(403).json({ error: 'Bạn không có quyền tải tệp này' });
+  }
   // custodianDept chỉ có mặt ở owning trả về cho hợp đồng (findOwningRecord() ở trên) — undefined cho
   // mọi module khác, nên nhánh OR dưới đây là no-op cho các module không có khái niệm custodian.
-  if (owning && !owning.internal && !owning.itPrice && !owning.reportEntry && !owning.reportPeriod && !owning.recruitment) {
+  if (owning && !owning.internal && !owning.itPrice && !owning.reportEntry && !owning.reportPeriod && !owning.recruitment && !owning.license) {
     const allowedByDept = canDownloadRecordFile(req.freshUser, owning.moduleKey, owning.dept, owning.ownerUsername);
     const allowedByCustodian = owning.custodianDept && owning.custodianDept !== owning.dept &&
       canDownloadRecordFile(req.freshUser, owning.moduleKey, owning.custodianDept, owning.ownerUsername);

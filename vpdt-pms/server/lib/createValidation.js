@@ -1696,6 +1696,75 @@ const CREATE_MODULE_CONFIGS = {
       payload.currentStep = 1;
       payload.history = [];
     }
+  },
+  // "Giấy Phép" (Hành Chính) — quản lý giấy phép kinh doanh/con của công ty theo địa điểm, có versioning
+  // giống hệt "Tài Liệu" (docs) NHƯNG duyệt bằng 2 quyền PHẲNG (licenseCreate/licenseApprove), KHÔNG đi
+  // qua engine duyệt theo phòng ban (lib/workflowEngine.js) — đúng yêu cầu nghiệp vụ "phân quyền ngay
+  // trong module, không dùng quy trình phòng ban, phòng ban khác không truy cập được". forceOwnDept +
+  // getScope rỗng (cùng khuôn internalPosts/itPriceApprovals ở trên) để field "dept" chỉ mang tính
+  // hiển thị (phòng ban của người tạo), quyền thật nằm ở extraValidate.
+  licenses: {
+    dbKey: 'licenses',
+    forceOwnDept: true,
+    getScope: () => ({}),
+    creatorField: 'creator', creatorNameField: 'creatorName',
+    extraValidate: (payload, collection, user) => {
+      if (!user.perms?.admin && !user.perms?.licenseCreate) {
+        throw new CreateError(403, 'Bạn không có quyền tạo/tải lên giấy phép');
+      }
+      const requiredStringFields = [
+        ['companyName', 'Tên công ty chủ quản'], ['locationName', 'Tên địa điểm'],
+        ['licenseType', 'Loại giấy phép'], ['licenseNumber', 'Số giấy phép'],
+        ['issuingAuthority', 'Cơ quan cấp phép']
+      ];
+      for (const [field, label] of requiredStringFields) {
+        if (!payload[field] || !String(payload[field]).trim()) throw new CreateError(400, `Vui lòng nhập ${label}`);
+        payload[field] = String(payload[field]).trim().slice(0, 300);
+      }
+      if (!['ACTIVE', 'CLOSED'].includes(payload.operatingStatus)) {
+        throw new CreateError(400, 'Tình trạng hoạt động không hợp lệ');
+      }
+      if (!payload.issueDate) throw new CreateError(400, 'Vui lòng nhập Ngày cấp');
+      if (!payload.expiryDate) throw new CreateError(400, 'Vui lòng nhập Ngày hết hạn');
+      if (new Date(payload.expiryDate).getTime() < new Date(payload.issueDate).getTime()) {
+        throw new CreateError(400, 'Ngày hết hạn phải sau Ngày cấp');
+      }
+      if (!payload.fileUrl) throw new CreateError(400, 'Vui lòng tải lên tệp giấy phép');
+
+      // Version — nhân bản đúng cơ chế docs.extraValidate ở trên: rootLicenseId null = bản gốc, khác
+      // null = version mới cộng thêm vào 1 giấy phép đã có, chặn khi bản mới nhất còn PENDING (chờ
+      // duyệt) — REJECTED không chặn (là kết quả cuối, không phải đang xử lý dở).
+      if (payload.rootLicenseId != null) {
+        const rootId = Number(payload.rootLicenseId);
+        const root = (collection || []).find(l => l.id === rootId && l.rootLicenseId == null);
+        if (!root) throw new CreateError(400, 'Giấy phép gốc không tồn tại');
+        const family = (collection || []).filter(l => l.id === rootId || l.rootLicenseId === rootId)
+          .sort((a, b) => (a.versionNumber || 1) - (b.versionNumber || 1));
+        const latest = family[family.length - 1];
+        if (!latest || latest.status === 'PENDING') {
+          throw new CreateError(409, 'Không thể cập nhật khi phiên bản mới nhất của giấy phép này đang chờ duyệt');
+        }
+        payload.rootLicenseId = rootId;
+        payload.displayCode = root.displayCode || root.code;
+        payload.versionNumber = (latest.versionNumber || family.length) + 1;
+        payload.code = `${payload.displayCode}-V${payload.versionNumber}`;
+        if ((collection || []).some(l => l.code === payload.code)) {
+          throw new CreateError(409, `Mã "${payload.code}" đã tồn tại`);
+        }
+      } else {
+        payload.versionNumber = 1;
+        payload.rootLicenseId = null;
+        payload.displayCode = payload.code;
+      }
+
+      // status/lifecycleStatus/history/notifiedThresholds PHẢI gán cứng ở server, không tin client.
+      payload.status = 'PENDING';
+      payload.lifecycleStatus = null;
+      payload.notifiedThresholds = [];
+      payload.history = [{
+        action: 'UPLOADED', by: user.username, byName: user.name, time: new Date().toLocaleString('vi-VN')
+      }];
+    }
   }
 };
 

@@ -19,7 +19,7 @@ const {
   filterMeetingsForUser, filterMeetingMinutesForUser, filterTasksForUser, sanitizeTrainingTestsForUser,
   filterRecruitmentReferralsForUser, filterItPriceApprovalsForUser, filterItSupportTicketsForUser,
   filterUniformPeriodsForUser, filterUniformIssuancesForUser, filterUniformStockAdjustmentsForUser, filterUniformTransfersForUser, filterBudgetEntriesForUser,
-  filterVppRegistrationsForUser
+  filterVppRegistrationsForUser, filterLicensesForUser
 } = require('../lib/recordViewScope');
 
 const VALID_KEYS = new Set(Object.keys(DEFAULTS));
@@ -419,6 +419,9 @@ router.get('/', async (req, res) => {
     // renderVppRegistrations()), để lộ đăng ký/chi tiêu văn phòng phẩm (kể cả bản NHÁP) của MỌI phòng
     // ban cho bất kỳ ai gọi thẳng GET /api/data. Xem lib/recordViewScope.js canViewVppRegistration().
     if (data.vppRegistrations) data.vppRegistrations = filterVppRegistrationsForUser(data.vppRegistrations, req.freshUser, data);
+    // licenses (Hành Chính — Giấy Phép): quyền phẳng riêng module (licenseCreate/licenseApprove/
+    // licenseView), KHÔNG theo phòng ban — xem lib/recordViewScope.js canViewLicense().
+    if (data.licenses) data.licenses = filterLicensesForUser(data.licenses, req.freshUser);
     // tasks: cùng dạng lỗ hổng như 9 collection ở trên — trước đây hoàn toàn KHÔNG được lọc lại ở
     // server (chỉ ẩn ở renderTasks() qua canViewTaskRecord()), để lộ toàn bộ Công Việc công ty (kể cả
     // nội dung "Ý kiến chỉ đạo" nhạy cảm) cho bất kỳ ai gọi thẳng GET /api/data.

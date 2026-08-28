@@ -491,6 +491,7 @@ input[data-sdd-list] {
           <button id="btnCarTab" onclick="closeHanhChinhDropdown(); switchTab('car')" class="hidden sidebar-subitem">🚗 Đăng ký xe</button>
           <button id="btnVppTab" onclick="closeHanhChinhDropdown(); switchTab('vpp')" class="hidden sidebar-subitem">🖇️ Văn phòng phẩm</button>
           <button id="btnUniformTab" onclick="closeHanhChinhDropdown(); switchTab('uniform')" class="hidden sidebar-subitem">👕 Đồng phục</button>
+          <button id="btnLicenseTab" onclick="closeHanhChinhDropdown(); switchTab('license')" class="hidden sidebar-subitem">📜 Giấy phép</button>
         </div>
       </div>
 
@@ -3466,6 +3467,8 @@ input[data-sdd-list] {
               <th class="border p-2 text-right">Hỏng</th>
               <th class="border p-2 text-right">Hủy</th>
               <th class="border p-2 text-right">Mất</th>
+              <th class="border p-2 text-right">Mới</th>
+              <th class="border p-2 text-right">Đã Sử Dụng</th>
               <th class="border p-2 text-right">Tồn Kho</th>
             </tr></thead>
             <tbody id="uniformStockTableBody"></tbody>
@@ -3520,12 +3523,17 @@ input[data-sdd-list] {
       </div>
 
       <div id="uniformDashByStoreWrap" class="hidden bg-white p-4 rounded border space-y-2">
-        <h4 class="font-bold text-sm text-gray-800">🏬 Theo Siêu Thị</h4>
+        <div class="flex items-center justify-between gap-2 flex-wrap">
+          <h4 class="font-bold text-sm text-gray-800">🏬 Theo Siêu Thị</h4>
+          <button type="button" onclick="exportUniformDashByStoreExcel()" class="bg-emerald-600 text-white text-xs font-semibold px-3 py-1.5 rounded hover:bg-emerald-700">📥 Xuất Excel</button>
+        </div>
         <div class="overflow-x-auto">
           <table class="w-full border-collapse border text-xs">
             <thead><tr class="bg-gray-100 text-left">
               <th class="border p-1.5">Siêu Thị</th>
-              <th class="border p-1.5 text-right">Tồn Kho</th>
+              <th class="border p-1.5 text-right">Mới</th>
+              <th class="border p-1.5 text-right">Đã Sử Dụng</th>
+              <th class="border p-1.5 text-right">Tổng Tồn Kho</th>
               <th class="border p-1.5 text-right">Đã Cấp</th>
               <th class="border p-1.5 text-right">Hỏng/Hủy</th>
               <th class="border p-1.5 text-right">Mất</th>
@@ -3534,6 +3542,136 @@ input[data-sdd-list] {
           </table>
         </div>
       </div>
+    </div>
+  </div>
+
+  <!-- Màn hình MODULE GIẤY PHÉP (Hành Chính) — phân quyền hoàn toàn NGAY TRONG module (licenseCreate/
+       licenseApprove/licenseView, không đi qua quy trình phòng ban), versioning "cộng thêm phiên bản mới"
+       giống hệt Tài Liệu (rootLicenseId/expand-collapse/nút hành động), cộng thêm trạng thái vòng đời
+       (lifecycleStatus) riêng cho giấy phép đã duyệt: Đang gia hạn (bấm tay)/Đã thu hồi. -->
+  <div id="licenseSection" class="hidden space-y-6">
+    <div id="licenseDashboardCards"></div>
+
+    <div id="licenseUploadBox" class="bg-blue-50 p-4 rounded border border-blue-200 hidden">
+      <h3 class="font-bold mb-1 text-blue-900 flex items-center gap-2">📜 Tải Lên Giấy Phép</h3>
+      <p class="text-xs text-amber-700 mb-3 font-semibold">⚠️ Chỉ những người có quyền "Tạo/Tải lên giấy phép" mới thấy khung này — phòng ban khác không truy cập được module này.</p>
+
+      <form id="licenseForm" onsubmit="uploadLicense(event)" class="grid grid-cols-1 md:grid-cols-3 gap-3">
+        <div class="md:col-span-3 flex items-center gap-2">
+          <label class="font-semibold text-sm text-gray-700 shrink-0">Loại thao tác:</label>
+          <select id="licenseOpMode" onchange="onLicenseOpModeChange()" class="border p-1.5 rounded text-sm bg-white">
+            <option value="NEW">➕ Nhập mới</option>
+            <option value="UPDATE">🔄 Cập nhật (thêm phiên bản cho giấy phép đã có)</option>
+          </select>
+        </div>
+        <div id="licenseUpdateTargetWrap" class="hidden md:col-span-3">
+          <label class="block text-xs font-semibold text-gray-600 mb-1">Chọn Giấy Phép Cần Cập Nhật</label>
+          <select id="licenseUpdateTarget" onchange="onLicenseUpdateTargetChange()" class="w-full border p-2 rounded text-sm bg-white">
+            <option value="">-- Chọn giấy phép --</option>
+          </select>
+          <p class="text-[11px] text-gray-500 italic mt-1">Chỉ hiện giấy phép mà phiên bản mới nhất không đang chờ duyệt.</p>
+        </div>
+
+        <input id="licenseCode" readonly placeholder="Mã giấy phép (tự sinh)" class="border p-2 rounded text-sm bg-gray-100 cursor-not-allowed" required>
+        <input id="licenseCompanyName" placeholder="Tên công ty chủ quản" class="border p-2 rounded text-sm" required>
+        <input id="licenseLocationName" placeholder="Tên địa điểm" class="border p-2 rounded text-sm" required>
+
+        <select id="licenseOperatingStatus" class="border p-2 rounded text-sm bg-white" required>
+          <option value="ACTIVE">Đang hoạt động</option>
+          <option value="CLOSED">Đã đóng cửa</option>
+        </select>
+        <div class="relative">
+          <input id="licenseType" data-sdd-list="licenseTypeDatalist" autocomplete="off" placeholder="Tên giấy phép / Loại giấy phép" class="w-full border p-2 rounded text-sm" required>
+          <div id="licenseTypeDatalist" class="hidden" data-sdd-dropdown></div>
+        </div>
+        <input id="licenseNumber" placeholder="Số giấy phép" class="border p-2 rounded text-sm" required>
+
+        <div>
+          <label class="block text-xs font-semibold text-gray-600 mb-1">Ngày cấp</label>
+          <input id="licenseIssueDate" type="date" class="w-full border p-2 rounded text-sm" required>
+        </div>
+        <div>
+          <label class="block text-xs font-semibold text-gray-600 mb-1">Ngày hết hạn</label>
+          <input id="licenseExpiryDate" type="date" class="w-full border p-2 rounded text-sm" required>
+        </div>
+        <input id="licenseIssuingAuthority" placeholder="Cơ quan cấp phép" class="border p-2 rounded text-sm" required>
+
+        <input id="licenseFile" type="file" accept=".pdf,.docx,.xlsx" class="md:col-span-3 border p-1 bg-white rounded text-sm" required>
+
+        <div class="md:col-span-3 flex justify-end">
+          <button type="submit" class="bg-green-600 text-white px-5 py-2 rounded font-bold hover:bg-green-700 transition">Gửi phê duyệt</button>
+        </div>
+      </form>
+    </div>
+
+    <div class="bg-gray-50 p-4 rounded-lg border space-y-3">
+      <h4 class="font-bold text-gray-700 text-sm">🔍 Tìm Kiếm & Lọc Giấy Phép</h4>
+      <div class="grid grid-cols-1 md:grid-cols-6 gap-3">
+        <div>
+          <label class="block text-xs font-semibold text-gray-600 mb-1">Lọc Theo Trạng Thái Duyệt</label>
+          <select id="filterLicenseStatus" onchange="onLicenseFilterChange()" class="w-full border p-2 rounded text-sm bg-white">
+            <option value="">-- Tất cả trạng thái duyệt --</option>
+            <option value="APPROVED">Đã Phê Duyệt</option>
+            <option value="PENDING">Đang Chờ Duyệt</option>
+            <option value="REJECTED">Bị Từ Chối</option>
+          </select>
+        </div>
+        <div>
+          <label class="block text-xs font-semibold text-gray-600 mb-1">Loại Phê Duyệt</label>
+          <select id="filterLicenseType" onchange="onLicenseFilterChange()" class="w-full border p-2 rounded text-sm bg-white">
+            <option value="">-- Tất cả --</option>
+            <option value="NEW">📄 Giấy phép mới</option>
+            <option value="VERSION">🔄 Cập nhật phiên bản</option>
+          </select>
+        </div>
+        <div>
+          <label class="block text-xs font-semibold text-gray-600 mb-1">Tình Trạng Hiệu Lực</label>
+          <select id="filterLicenseLifecycle" onchange="onLicenseFilterChange()" class="w-full border p-2 rounded text-sm bg-white">
+            <option value="">-- Tất cả --</option>
+            <option value="VALID">🟢 Còn hiệu lực</option>
+            <option value="EXPIRING">🟡 Sắp hết hạn (≤30 ngày)</option>
+            <option value="EXPIRED">🔴 Hết hạn</option>
+            <option value="RENEWING">🔵 Đang gia hạn</option>
+            <option value="REVOKED">⚫ Đã thu hồi</option>
+          </select>
+        </div>
+        <div>
+          <label class="block text-xs font-semibold text-gray-600 mb-1">Từ Ngày (ngày tạo)</label>
+          <input id="filterLicenseFromDate" type="date" onchange="onLicenseFilterChange()" class="w-full border p-2 rounded text-sm bg-white">
+        </div>
+        <div>
+          <label class="block text-xs font-semibold text-gray-600 mb-1">Đến Ngày (ngày tạo)</label>
+          <input id="filterLicenseToDate" type="date" onchange="onLicenseFilterChange()" class="w-full border p-2 rounded text-sm bg-white">
+        </div>
+        <div>
+          <label class="block text-xs font-semibold text-gray-600 mb-1">Từ Khóa</label>
+          <input id="filterLicenseKeyword" oninput="onLicenseFilterChange()" placeholder="Mã, Công ty, Địa điểm, Loại GP, Số GP..." class="w-full border p-2 rounded text-sm">
+        </div>
+      </div>
+    </div>
+
+    <div>
+      <div class="flex justify-between items-center mb-3">
+        <h3 class="font-bold text-gray-800">Danh Sách Giấy Phép</h3>
+      </div>
+      <div class="overflow-x-auto">
+        <table class="w-full border-collapse border text-sm">
+          <thead>
+            <tr class="bg-gray-200 text-left text-gray-700">
+              <th class="border p-2">Mã GP</th>
+              <th class="border p-2">Công Ty / Địa Điểm</th>
+              <th class="border p-2">Loại Giấy Phép</th>
+              <th class="border p-2">Số GP</th>
+              <th class="border p-2">Ngày Cấp / Hết Hạn</th>
+              <th class="border p-2 text-center">Trạng Thái Duyệt</th>
+              <th class="border p-2 text-center">Hiệu Lực</th>
+              <th class="border p-2 text-center min-w-[140px]">Thao Tác</th>
+            </tr>
+          </thead>
+          <tbody id="licenseTableBody"></tbody>
+        </table>
+      </div>
+      <div id="paginationContainer_license"></div>
     </div>
   </div>
 
@@ -4028,6 +4166,18 @@ input[data-sdd-list] {
           </div>
         </div>
 
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-3 border-t pt-2">
+          <div>
+            <label class="block font-semibold text-gray-600 mb-1">Nhắc Hết Hạn Giấy Phép — Trước (số ngày, cách nhau dấu phẩy)</label>
+            <input id="cfgLicenseReminderDays" placeholder="30, 15, 7" class="w-full border p-1.5 rounded" required>
+          </div>
+          <div>
+            <label class="block font-semibold text-gray-600 mb-1">Email CC Cố Định Nhận Cảnh Báo Hết Hạn Giấy Phép (tuỳ chọn, cách nhau dấu phẩy)</label>
+            <input id="cfgLicenseReminderCc" placeholder="hanhchinh@company.com" class="w-full border p-1.5 rounded">
+          </div>
+        </div>
+        <p class="text-[11px] text-gray-400 italic -mt-2">Người nhận mặc định = người tạo giấy phép + toàn bộ người đang có quyền "Duyệt giấy phép" trong module Giấy Phép, cộng thêm email CC cố định ở trên (không cần khai theo phòng ban như hợp đồng).</p>
+
         <div class="flex flex-wrap gap-2 items-center border-t pt-2">
           <input id="cfgTestEmailTo" type="email" placeholder="Email nhận thử" class="border p-1.5 rounded flex-1 min-w-[180px]">
           <button type="button" onclick="sendTestEmail()" id="cfgTestEmailBtn" class="bg-blue-600 text-white px-3 py-1.5 rounded font-bold hover:bg-blue-700">📨 Gửi Thử</button>
@@ -4072,6 +4222,18 @@ input[data-sdd-list] {
         </form>
         <div class="max-h-32 overflow-y-auto bg-white rounded border">
           <ul id="storeList" class="divide-y text-xs"></ul>
+        </div>
+      </div>
+
+      <div class="bg-sky-50 p-4 rounded border border-sky-200 space-y-3">
+        <h3 class="font-bold text-sky-900 text-sm flex items-center gap-1">📜 Quản Lý Danh Mục Các Loại Giấy Phép</h3>
+        <p class="text-[11px] text-gray-500 italic">Nguồn gợi ý cho ô "Tên giấy phép / Loại giấy phép" ở màn Giấy Phép — tự học thêm khi ai gõ loại mới, ở đây chỉ để dọn/xoá bớt.</p>
+        <form onsubmit="saveLicenseType(event)" class="flex gap-2">
+          <input id="txtLicenseTypeName" placeholder="Tên loại giấy phép mới..." class="border p-1.5 rounded text-xs flex-1" required>
+          <button type="submit" class="bg-sky-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-sky-700">Thêm</button>
+        </form>
+        <div class="max-h-32 overflow-y-auto bg-white rounded border">
+          <ul id="licenseTypeList" class="divide-y text-xs"></ul>
         </div>
       </div>
 
@@ -4842,6 +5004,27 @@ input[data-sdd-list] {
               </label>
               <label class="flex items-center gap-2 text-amber-700 font-semibold cursor-pointer">
                 <input type="checkbox" id="pOnboardingEvaluate"> 🆕 Đánh Giá Tân Binh (Giai đoạn 3, theo đơn vị)
+              </label>
+            </div>
+          </div>
+        </details>
+
+        <details class="perm-tree-node bg-white rounded border text-xs">
+          <summary class="flex items-center justify-between gap-2 px-3 py-2 hover:bg-gray-50 rounded">
+            <span class="font-bold text-gray-800 text-sm flex items-center gap-1.5"><span class="perm-tree-chevron text-gray-400">▸</span><span>📜 20. Giấy Phép</span></span>
+            <span id="permTreeBadge_license" class="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-gray-100 text-gray-500">0/0</span>
+          </summary>
+          <div class="p-3 pt-0 space-y-2">
+            <p class="text-[11px] text-gray-500 italic">Phân quyền hoàn toàn NGAY TRONG module (không đi qua quy trình phòng ban) — phòng ban khác không có bất kỳ quyền nào trong 3 quyền dưới đây thì không thấy/vào được module Giấy Phép. "Tạo/Tải lên" và "Duyệt" là 2 vai trò tách biệt (1 người có thể có cả 2, hoặc chỉ 1); "Xem/Tải" dành cho người chỉ cần tra cứu, không tạo cũng không duyệt.</p>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-2">
+              <label class="flex items-center gap-2 text-teal-700 font-semibold cursor-pointer">
+                <input type="checkbox" id="pLicenseCreate"> 📤 Tạo / Tải Lên Giấy Phép
+              </label>
+              <label class="flex items-center gap-2 text-indigo-700 font-semibold cursor-pointer">
+                <input type="checkbox" id="pLicenseApprove"> ✔️ Duyệt Giấy Phép (kể cả Gia Hạn/Thu Hồi)
+              </label>
+              <label class="flex items-center gap-2 text-amber-700 font-semibold cursor-pointer">
+                <input type="checkbox" id="pLicenseView"> 👁️ Xem / Tải Giấy Phép
               </label>
             </div>
           </div>
@@ -5647,6 +5830,21 @@ input[data-sdd-list] {
     <div id="docDetailBody" class="p-4 overflow-y-auto flex-1 text-xs"></div>
     <div class="p-3 bg-gray-50 border-t flex justify-end text-xs">
       <button onclick="closeDocDetailModal()" class="bg-gray-600 text-white px-5 py-1.5 rounded font-bold hover:bg-gray-700">Đóng</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL "CHI TIẾT GIẤY PHÉP" — cùng khuôn docDetailModal (lịch sử phiên bản), có thêm khối thông tin
+     hiệu lực/thu hồi riêng cho Giấy Phép. -->
+<div id="licenseDetailModal" class="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center hidden z-50 p-4">
+  <div class="bg-white rounded-lg shadow-2xl max-w-4xl w-full flex flex-col max-h-[90vh] overflow-hidden">
+    <div class="flex justify-between items-center bg-blue-800 text-white p-4">
+      <h3 id="licenseDetailTitle" class="font-bold text-base flex items-center gap-2">📜 Chi Tiết Giấy Phép</h3>
+      <button onclick="closeLicenseDetailModal()" class="text-blue-200 hover:text-white font-bold text-xl px-2">✕</button>
+    </div>
+    <div id="licenseDetailBody" class="p-4 overflow-y-auto flex-1 text-xs"></div>
+    <div class="p-3 bg-gray-50 border-t flex justify-end text-xs">
+      <button onclick="closeLicenseDetailModal()" class="bg-gray-600 text-white px-5 py-1.5 rounded font-bold hover:bg-gray-700">Đóng</button>
     </div>
   </div>
 </div>
@@ -6540,6 +6738,7 @@ function saveCoreFieldOptionsList(fieldDef, newLabels) {
 // Tài liệu GỐC đang mở rộng (hiện các version con) trong "Danh Sách Tài Liệu Trong Hệ Thống" — id của
 // tài liệu gốc, xem toggleDocFamily()/renderDocs().
 let expandedDocFamilies = new Set();
+let expandedLicenseFamilies = new Set();
 let activeContractSubTab = 'APPROVAL';
 let activePaymentSubTab = 'APPROVE';
 let expandedContractFamilies = new Set();
@@ -6888,6 +7087,10 @@ const BUSINESS_MODULES = [
   // vừa quyết định ĐƯỢC LÀM GÌ vừa quyết định VÀO ĐƯỢC MÀN NÀO (ai không có cả 2 quyền thì vào module
   // cũng không thấy nội dung nào).
   { key: 'uniform', label: 'Đồng Phục', parent: 'hanhchinh' },
+  // "Giấy Phép" — quyền thật nằm ở licenseCreate/licenseApprove/licenseView (khối phân quyền riêng),
+  // đúng khuôn "Đồng Phục" ở trên: module không mở sẵn cho ai, phân quyền hoàn toàn NGAY TRONG module
+  // (không đi qua quy trình phòng ban), phòng ban khác không có 3 quyền này thì không thấy gì.
+  { key: 'license', label: 'Giấy Phép', parent: 'hanhchinh' },
   // "Tổng Hợp" — quyền officeBuy/officeFix/officeInvest/paymentManage nằm ở khối 7/10 cây phân quyền.
   { key: 'office', label: 'Tổng Hợp' },
   // "Ngân Sách" — module con của "Tổng Hợp" (menu điều hướng gộp chung dropdown "Tổng Hợp", xem
@@ -7499,6 +7702,16 @@ function canAccessUniformModule(user) {
   return !!(user.perms?.uniformManage || user.perms?.uniformStoreManage || user.perms?.uniformApprove);
 }
 
+// Giấy Phép — cùng khuôn Đồng Phục: KHÔNG mở sẵn cho ai, chỉ người có 1 trong 3 quyền phẳng riêng của
+// module (licenseCreate/licenseApprove/licenseView, xem lib/recordActions.js + lib/recordViewScope.js)
+// mới vào được — phòng ban khác không có quyền nào trong 3 quyền này thì không thấy module.
+function canAccessLicenseModule(user) {
+  if (!user) return false;
+  if (user.perms?.admin) return true;
+  if (!hasModuleAccess(user, 'license')) return false;
+  return !!(user.perms?.licenseCreate || user.perms?.licenseApprove || user.perms?.licenseView);
+}
+
 // Vào được module "Báo Cáo Định Kỳ" (kỳ báo cáo tuần → nhập liệu → tổng hợp → phát hành) hay không —
 // cổng chung, không phải "được làm gì trong đó" (tạo kỳ = reportManage, tổng hợp/phát hành =
 // reportAggregate, nộp báo cáo = reportEntryCreate — xét riêng ở từng màn con, xem
@@ -7531,7 +7744,7 @@ function canCreateMeetingMinutes(user) {
 function canAccessApprovalHub(user) {
   if (!user) return false;
   if (user.perms?.admin) return true;
-  if (user.perms?.contractApprove || user.perms?.meetingApprove || user.perms?.internalPostApprove || user.perms?.paymentManage) return true;
+  if (user.perms?.contractApprove || user.perms?.meetingApprove || user.perms?.internalPostApprove || user.perms?.paymentManage || user.perms?.licenseApprove) return true;
   if (isApproverInWorkflowMap(DB.deptWorkflows, user.username)) return true;
   if (isApproverInWorkflowMap(DB.submissionDeptWorkflows, user.username)) return true;
   if (Object.values(DB.submissionTypeDeptWorkflows || {}).some(typeMap => isApproverInWorkflowMap(typeMap, user.username))) return true;
@@ -7707,14 +7920,30 @@ function defaultNewUserPerms() {
   };
 }
 
+// "Rỗng/không có quyền" theo TỪNG KIỂU dữ liệu perms hiện có trong hệ thống — dùng để coi
+// basePerms[key]===undefined (nhóm được lưu TỪ TRƯỚC KHI có quyền này, vd nhóm cũ trước khi thêm
+// module Giấy Phép) là TƯƠNG ĐƯƠNG "chưa cấp" với formPerms[key] rỗng, thay vì lệch nhau giả tạo.
+function isEmptyPermValue(v) {
+  if (v === undefined || v === null || v === false || v === '' || v === 'NONE') return true;
+  if (Array.isArray(v)) return v.length === 0;
+  if (typeof v === 'object' && ('all' in v || 'depts' in v)) return !v.all && (!v.depts || v.depts.length === 0);
+  return false;
+}
+
 // So sánh perms trên form với perms NỀN của 1 nhóm phân quyền -> trả về CHỈ những trường khác nhau
 // (giá trị đầy đủ tại trường đó, so sánh ở cấp 1, không so sánh sâu hơn bên trong từng trường) — dùng
 // làm "quyền tuỳ chỉnh riêng" (permOverrides) của người dùng, tách biệt khỏi phần thừa hưởng từ nhóm,
 // để khi nhóm đổi quyền sau này vẫn tự động cập nhật đúng cho người này mà không mất phần tuỳ chỉnh.
+// basePerms[key]===undefined + formPerms[key] rỗng KHÔNG được ghi vào overrides (xem isEmptyPermValue())
+// — nếu không, thêm 1 quyền MỚI vào hệ thống (collectPermsFromForm() luôn trả field đó, kể cả false) sẽ
+// tự động ghi đè "false" thành override RIÊNG cho MỌI người dùng có nhóm được lưu trước đó, khiến người
+// đó VĨNH VIỄN không thừa hưởng được quyền mới dù sau này nhóm được bật quyền đó lên.
 function diffPerms(formPerms, basePerms) {
   const overrides = {};
   Object.keys(formPerms || {}).forEach(key => {
-    if (JSON.stringify(formPerms[key]) !== JSON.stringify(basePerms ? basePerms[key] : undefined)) {
+    const baseVal = basePerms ? basePerms[key] : undefined;
+    if (baseVal === undefined && isEmptyPermValue(formPerms[key])) return;
+    if (JSON.stringify(formPerms[key]) !== JSON.stringify(baseVal)) {
       overrides[key] = formPerms[key];
     }
   });
@@ -7995,6 +8224,9 @@ async function initDatabase(loggingInUser) {
     DB.budgetTemplates = data.budgetTemplates || [];
     DB.budgetPeriods = data.budgetPeriods || [];
     DB.budgetEntries = data.budgetEntries || [];
+
+    DB.licenses = data.licenses || [];
+    DB.licenseTypes = data.licenseTypes || [];
 
     DB._versions = data._versions || {};
 
@@ -8861,6 +9093,10 @@ function saveEmailConfig(e) {
   if (reminderDays.length === 0) {
     return alert('⛔ Vui lòng nhập ít nhất 1 mốc số ngày nhắc hết hạn hợp lệ (vd: 30, 15, 7)!');
   }
+  const licenseReminderDays = parseDaysListInput(document.getElementById('cfgLicenseReminderDays').value);
+  if (licenseReminderDays.length === 0) {
+    return alert('⛔ Vui lòng nhập ít nhất 1 mốc số ngày nhắc hết hạn giấy phép hợp lệ (vd: 30, 15, 7)!');
+  }
   const smtpAuthEnabled = document.getElementById('cfgSmtpAuthEnabled').checked;
   DB.emailConfig = {
     enabled: document.getElementById('cfgEmailEnabled').value === 'true',
@@ -8875,7 +9111,9 @@ function saveEmailConfig(e) {
     smtpPassPlain: smtpAuthEnabled ? document.getElementById('cfgSmtpPassPlain').value : '',
     senderEmail: document.getElementById('cfgSenderEmail').value.trim(),
     contractExpiryReminderDays: reminderDays,
-    contractExpiryCcEmails: parseEmailListInput(document.getElementById('cfgContractReminderCc').value)
+    contractExpiryCcEmails: parseEmailListInput(document.getElementById('cfgContractReminderCc').value),
+    licenseExpiryReminderDays: licenseReminderDays,
+    licenseExpiryCcEmails: parseEmailListInput(document.getElementById('cfgLicenseReminderCc').value)
   };
   syncStorage('emailConfig');
   document.getElementById('cfgSmtpPassPlain').value = ''; // không giữ mật khẩu vừa gõ hiển thị lại trên form
@@ -8910,6 +9148,9 @@ function loadEmailConfigToForm() {
   document.getElementById('cfgContractReminderDays').value = (DB.emailConfig.contractExpiryReminderDays && DB.emailConfig.contractExpiryReminderDays.length
     ? DB.emailConfig.contractExpiryReminderDays : [30, 15, 7]).join(', ');
   document.getElementById('cfgContractReminderCc').value = (DB.emailConfig.contractExpiryCcEmails || []).join(', ');
+  document.getElementById('cfgLicenseReminderDays').value = (DB.emailConfig.licenseExpiryReminderDays && DB.emailConfig.licenseExpiryReminderDays.length
+    ? DB.emailConfig.licenseExpiryReminderDays : [30, 15, 7]).join(', ');
+  document.getElementById('cfgLicenseReminderCc').value = (DB.emailConfig.licenseExpiryCcEmails || []).join(', ');
   document.getElementById('cfgTestEmailResult').textContent = '';
   loadSmtpAuthStatus();
   contractExpiryDeptContactsDraft = JSON.parse(JSON.stringify(DB.contractExpiryDeptContacts || {}));
@@ -10051,6 +10292,21 @@ function getMyPendingApprovals(user) {
     });
   }
 
+  // Giấy Phép — quyền phẳng licenseApprove/admin, KHÔNG đi qua quy trình phòng ban (khớp
+  // canApproveLicense() ở lib/recordActions.js) — cùng khuôn Góc chia sẻ (internalPosts) ở trên.
+  if (user.perms?.admin || user.perms?.licenseApprove) {
+    (DB.licenses || []).filter(l => l.status === 'PENDING').forEach(l => {
+      items.push({
+        type: 'license', typeLabel: '📜 Giấy phép', code: l.displayCode || l.code, title: l.licenseType, dept: l.dept,
+        stepLabel: '', createdAt: l.createdAt,
+        actions: [
+          { label: '✅ Duyệt', onclick: `runLicenseAction(${l.id}, 'approve')`, primary: true },
+          { label: '❌ Từ chối', onclick: `runLicenseAction(${l.id}, 'reject')` }
+        ]
+      });
+    });
+  }
+
   if (canManagePaymentRequestsClient(user)) {
     (DB.paymentRequests || []).filter(pr => pr.status === 'PENDING' || pr.status === 'NEED_INFO').forEach(pr => {
       items.push({
@@ -10175,6 +10431,23 @@ function getMyProcessedApprovals(user, status, sinceMs) {
     });
   }
 
+  // Giấy Phép — quyền phẳng, không có approvedBy/rejectedBy riêng như Góc chia sẻ mà ghi trực tiếp vào
+  // history (khớp lib/recordActions.js approveLicense()/rejectLicense(), field "by"/"action" thay vì
+  // "username"/status như addProcessedItems() ở trên).
+  if (user.perms?.admin || user.perms?.licenseApprove) {
+    (DB.licenses || []).filter(l => l.status === status).forEach(l => {
+      const mine = (l.history || []).filter(h => h.by === user.username && h.action === status);
+      if (!mine.length) return;
+      const lastMine = mine[mine.length - 1];
+      if (!inWindow(lastMine.time)) return;
+      items.push({
+        type: 'license', typeLabel: '📜 Giấy phép', code: l.displayCode || l.code, title: l.licenseType, dept: l.dept,
+        stepLabel: status === 'APPROVED' ? '✅ Bạn đã duyệt' : '❌ Bạn đã từ chối', createdAt: lastMine.time,
+        actions: [{ label: '🔍 Xem', onclick: `gotoApprovalHubOrigin('license')`, primary: true }]
+      });
+    });
+  }
+
   if (status === 'APPROVED' && canManagePaymentRequestsClient(user)) {
     (DB.paymentRequests || []).filter(pr => (pr.status === 'APPROVED' || pr.status === 'PAID') && pr.approvedBy === user.username && inWindow(pr.approvedAt)).forEach(pr => {
       items.push({
@@ -10214,6 +10487,7 @@ function gotoApprovalHubOrigin(type) {
     case 'meeting': switchTab('meeting'); setStatus('filterStatusMeeting', onMeetingFilterChange); break;
     case 'internalShare': switchTab('internal'); setInternalSubTab('SHARE'); break;
     case 'payment': switchTab('office'); setOfficeSubTab('PAYMENT'); break;
+    case 'license': switchTab('license'); setStatus('filterLicenseStatus', onLicenseFilterChange); break;
     default: switchTab('approvalHub');
   }
 }
@@ -10449,6 +10723,7 @@ function finishLogin(user) {
   document.getElementById('btnCarTab').classList.toggle('hidden', !canAccessCarModule(user));
   document.getElementById('btnVppTab').classList.toggle('hidden', !canAccessVppModule(user));
   document.getElementById('btnUniformTab').classList.toggle('hidden', !canAccessUniformModule(user));
+  document.getElementById('btnLicenseTab').classList.toggle('hidden', !canAccessLicenseModule(user));
   updateHanhChinhNavVisibility();
   document.getElementById('btnOfficeSubBuyNav').classList.toggle('hidden', !canAccessOfficeSubTab(user, 'MUA_BAN'));
   document.getElementById('btnOfficeSubFixNav').classList.toggle('hidden', !canAccessOfficeSubTab(user, 'SUA_CHUA'));
@@ -10581,7 +10856,8 @@ function updateHanhChinhNavVisibility() {
   const carVisible = !document.getElementById('btnCarTab').classList.contains('hidden');
   const vppVisible = !document.getElementById('btnVppTab').classList.contains('hidden');
   const uniformVisible = !document.getElementById('btnUniformTab').classList.contains('hidden');
-  document.getElementById('hanhChinhNavWrap').classList.toggle('hidden', !meetingVisible && !carVisible && !vppVisible && !uniformVisible);
+  const licenseVisible = !document.getElementById('btnLicenseTab').classList.contains('hidden');
+  document.getElementById('hanhChinhNavWrap').classList.toggle('hidden', !meetingVisible && !carVisible && !vppVisible && !uniformVisible && !licenseVisible);
 }
 function toggleHanhChinhDropdown(e) {
   e.stopPropagation();
@@ -10816,6 +11092,10 @@ function switchTab(tabName) {
     alert('⛔ Bạn không có quyền truy cập Module Đồng phục!');
     return;
   }
+  if (tabName === 'license' && !canAccessLicenseModule(currentUser)) {
+    alert('⛔ Bạn không có quyền truy cập Module Giấy phép!');
+    return;
+  }
   if (tabName === 'periodicReport' && !canAccessPeriodicReportModule(currentUser)) {
     alert('⛔ Bạn không có quyền truy cập Module Báo Cáo Định Kỳ!');
     return;
@@ -10853,6 +11133,7 @@ function switchTab(tabName) {
   document.getElementById('carSection').classList.toggle('hidden', tabName !== 'car');
   document.getElementById('vppSection').classList.toggle('hidden', tabName !== 'vpp');
   document.getElementById('uniformSection').classList.toggle('hidden', tabName !== 'uniform');
+  document.getElementById('licenseSection').classList.toggle('hidden', tabName !== 'license');
   document.getElementById('periodicReportSection').classList.toggle('hidden', tabName !== 'periodicReport');
   document.getElementById('officeSection').classList.toggle('hidden', tabName !== 'office');
   document.getElementById('systemSection').classList.toggle('hidden', tabName !== 'system');
@@ -10867,7 +11148,7 @@ function switchTab(tabName) {
   populateDropdowns();
   updateApprovalHubBadge();
   if (['minutes', 'task', 'periodicReport'].includes(tabName)) renderCrossTabBar('dieuHanh', tabName);
-  if (['meeting', 'car', 'vpp', 'uniform'].includes(tabName)) renderCrossTabBar('hanhChinh', tabName);
+  if (['meeting', 'car', 'vpp', 'uniform', 'license'].includes(tabName)) renderCrossTabBar('hanhChinh', tabName);
 
   if (tabName === 'dashboard') { renderDashboard(); }
   if (tabName === 'approvalHub') { renderApprovalHub(); }
@@ -10897,6 +11178,7 @@ function switchTab(tabName) {
   if (tabName === 'car') { setCarSubTab(activeCarSubTab); }
   if (tabName === 'vpp') { setVppSubTab(activeVppSubTab); }
   if (tabName === 'uniform') { setUniformSubTab(activeUniformSubTab); }
+  if (tabName === 'license') { renderLicenses(); document.getElementById('licenseOpMode').value = 'NEW'; onLicenseOpModeChange(); }
   if (tabName === 'periodicReport') { setPeriodicReportSubTab(activePeriodicReportSubTab); }
   if (tabName === 'office') {
     let targetSub = activeOfficeSubTab;
@@ -11763,6 +12045,632 @@ async function uploadDoc(e) {
   document.getElementById('docOpMode').value = 'NEW';
   onDocOpModeChange();
   renderDocs();
+}
+
+// ============ GIẤY PHÉP (Hành Chính) — phân quyền phẳng licenseCreate/licenseApprove/licenseView (KHÔNG
+// đi qua quy trình phòng ban), versioning "cộng thêm phiên bản" y hệt Tài Liệu (rootLicenseId/expand-
+// collapse/nút hành động), cộng thêm lifecycleStatus riêng (RENEWING/REVOKED, bấm tay) chỉ có ý nghĩa khi
+// đã APPROVED. Xem lib/createValidation.js licenses.extraValidate + lib/recordActions.js khối "GIẤY PHÉP"
+// + lib/recordViewScope.js canViewLicense()/filterLicensesForUser(). ============
+
+function onLicenseOpModeChange() {
+  const mode = document.getElementById('licenseOpMode').value;
+  const isUpdate = mode === 'UPDATE';
+  document.getElementById('licenseUpdateTargetWrap').classList.toggle('hidden', !isUpdate);
+  ['licenseCompanyName', 'licenseLocationName', 'licenseType'].forEach(id => {
+    document.getElementById(id).disabled = isUpdate;
+  });
+  if (isUpdate) {
+    populateLicenseUpdateTargets();
+    document.getElementById('licenseUpdateTarget').value = '';
+    onLicenseUpdateTargetChange();
+  } else {
+    document.getElementById('licenseCode').value = generateHcrcCode(DB.licenses, 'GP');
+    document.getElementById('licenseCompanyName').value = '';
+    document.getElementById('licenseLocationName').value = '';
+    document.getElementById('licenseOperatingStatus').value = 'ACTIVE';
+    document.getElementById('licenseType').value = '';
+    document.getElementById('licenseNumber').value = '';
+    document.getElementById('licenseIssueDate').value = '';
+    document.getElementById('licenseExpiryDate').value = '';
+    document.getElementById('licenseIssuingAuthority').value = '';
+  }
+}
+
+function getLicenseFamily(anyId) {
+  const item = DB.licenses.find(l => l.id === anyId);
+  if (!item) return [];
+  const rootId = item.rootLicenseId == null ? item.id : item.rootLicenseId;
+  return DB.licenses.filter(l => l.id === rootId || l.rootLicenseId === rootId)
+    .sort((a, b) => (a.versionNumber || 1) - (b.versionNumber || 1));
+}
+function getLicenseFamilyLatest(anyId) {
+  const family = getLicenseFamily(anyId);
+  return family[family.length - 1];
+}
+// REJECTED KHÔNG chặn (là kết quả cuối, không phải đang xử lý dở) — khớp đúng nguyên tắc
+// isDocFamilyLatestBlocking() ở Tài Liệu.
+function isLicenseFamilyLatestBlocking(latest) {
+  return !latest || latest.status === 'PENDING';
+}
+
+// Chỉ chính người tạo (hoặc admin) mới được cập nhật — quyền phẳng, không theo scope phòng ban như
+// Tài Liệu (uploadDepts/uploadAll).
+function populateLicenseUpdateTargets() {
+  const sel = document.getElementById('licenseUpdateTarget');
+  if (!sel) return;
+  const prevVal = sel.value;
+  const roots = DB.licenses.filter(l => l.rootLicenseId == null);
+  const eligible = roots.filter(root => {
+    if (!(currentUser.perms?.admin || root.creator === currentUser.username)) return false;
+    const latest = getLicenseFamilyLatest(root.id);
+    return !isLicenseFamilyLatestBlocking(latest);
+  });
+  sel.innerHTML = '<option value="">-- Chọn giấy phép --</option>' + eligible.map(root => {
+    const latest = getLicenseFamilyLatest(root.id);
+    return `<option value="${root.id}">${escapeHtml(root.displayCode || root.code)} — ${escapeHtml(root.licenseType)} (${escapeHtml(root.locationName)}, hiện tại v${latest.versionNumber || 1})</option>`;
+  }).join('');
+  if (eligible.some(r => String(r.id) === prevVal)) sel.value = prevVal;
+}
+
+function onLicenseUpdateTargetChange() {
+  const rootId = Number(document.getElementById('licenseUpdateTarget').value);
+  const root = DB.licenses.find(l => l.id === rootId);
+  if (!root) {
+    document.getElementById('licenseCode').value = '';
+    return;
+  }
+  const latest = getLicenseFamilyLatest(rootId);
+  document.getElementById('licenseCode').value = root.displayCode || root.code;
+  document.getElementById('licenseCompanyName').value = root.companyName;
+  document.getElementById('licenseLocationName').value = root.locationName;
+  document.getElementById('licenseOperatingStatus').value = latest.operatingStatus || root.operatingStatus;
+  document.getElementById('licenseType').value = root.licenseType;
+  document.getElementById('licenseNumber').value = latest.licenseNumber || '';
+  document.getElementById('licenseIssueDate').value = '';
+  document.getElementById('licenseExpiryDate').value = '';
+  document.getElementById('licenseIssuingAuthority').value = latest.issuingAuthority || '';
+}
+
+// Tình trạng hiệu lực — CHỈ có ý nghĩa khi status==='APPROVED' (khớp lib/recordActions.js
+// setLicenseRenewing()/revokeLicense()); "Sắp hết hạn" cố định ngưỡng 30 ngày cho MÀU HIỂN THỊ/lọc
+// nhanh trên list (KHÁC hệ ngưỡng nhắc email tuỳ chỉnh licenseExpiryReminderDays — 2 khái niệm độc lập).
+function computeLicenseLifecycleState(item) {
+  if (!item || item.status !== 'APPROVED') return null;
+  if (item.lifecycleStatus === 'REVOKED') return 'REVOKED';
+  if (item.lifecycleStatus === 'RENEWING') return 'RENEWING';
+  const expiry = new Date(item.expiryDate);
+  if (isNaN(expiry.getTime())) return 'VALID';
+  const now = new Date();
+  const startExpiry = new Date(expiry.getFullYear(), expiry.getMonth(), expiry.getDate());
+  const startNow = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const diffDays = Math.round((startExpiry - startNow) / 86400000);
+  if (diffDays < 0) return 'EXPIRED';
+  if (diffDays <= 30) return 'EXPIRING';
+  return 'VALID';
+}
+const LICENSE_LIFECYCLE_LABELS = {
+  VALID: { label: '🟢 Còn hiệu lực', cls: 'bg-green-100 text-green-800' },
+  EXPIRING: { label: '🟡 Sắp hết hạn', cls: 'bg-yellow-100 text-yellow-800' },
+  EXPIRED: { label: '🔴 Hết hạn', cls: 'bg-red-100 text-red-800' },
+  RENEWING: { label: '🔵 Đang gia hạn', cls: 'bg-sky-100 text-sky-800' },
+  REVOKED: { label: '⚫ Đã thu hồi', cls: 'bg-gray-300 text-gray-700' }
+};
+
+function filterLicenseByCard(key) {
+  const map = {
+    __ALL__: { filterLicenseStatus: '', filterLicenseType: '', filterLicenseLifecycle: '' },
+    PENDING_NEW: { filterLicenseStatus: 'PENDING', filterLicenseType: 'NEW', filterLicenseLifecycle: '' },
+    PENDING_VERSION: { filterLicenseStatus: 'PENDING', filterLicenseType: 'VERSION', filterLicenseLifecycle: '' },
+    EXPIRING: { filterLicenseStatus: '', filterLicenseType: '', filterLicenseLifecycle: 'EXPIRING' },
+    EXPIRED: { filterLicenseStatus: '', filterLicenseType: '', filterLicenseLifecycle: 'EXPIRED' }
+  };
+  applyDashboardCardFilter(map[key] || {}, 'license', renderLicenses);
+}
+function onLicenseFilterChange() {
+  resetListPage('license');
+  renderLicenses();
+}
+
+function renderLicenses() {
+  const tbody = document.getElementById('licenseTableBody');
+  if (!tbody) return;
+
+  document.getElementById('licenseUploadBox').classList.toggle('hidden', !(currentUser.perms?.admin || currentUser.perms?.licenseCreate));
+  sddSetOptions('licenseTypeDatalist', DB.licenseTypes || []);
+
+  const keyword = (document.getElementById('filterLicenseKeyword')?.value || '').toLowerCase().trim();
+  const statusFilter = document.getElementById('filterLicenseStatus')?.value || '';
+  const typeFilter = document.getElementById('filterLicenseType')?.value || '';
+  const lifecycleFilter = document.getElementById('filterLicenseLifecycle')?.value || '';
+  const fromDate = document.getElementById('filterLicenseFromDate')?.value || '';
+  const toDate = document.getElementById('filterLicenseToDate')?.value || '';
+
+  // Quyền xem — khớp canViewLicense() ở lib/recordViewScope.js: admin/licenseApprove/licenseView thấy
+  // hết, licenseCreate (không có 2 quyền kia) chỉ thấy hồ sơ của chính mình. Server ĐÃ lọc sẵn ở GET
+  // /api/data (routes/data.js filterLicensesForUser) — đây chỉ double-check phía client.
+  const canViewThisLicense = item => currentUser.perms?.admin || currentUser.perms?.licenseApprove || currentUser.perms?.licenseView || item.creator === currentUser.username;
+  const canApprove = !!(currentUser.perms?.admin || currentUser.perms?.licenseApprove);
+
+  const viewableLicenses = DB.licenses.filter(canViewThisLicense);
+  const rootAll = viewableLicenses.filter(l => l.rootLicenseId == null);
+  const versionAll = viewableLicenses.filter(l => l.rootLicenseId != null);
+  const dashCards = [
+    { key: '__ALL__', label: 'Tổng Giấy Phép', count: rootAll.length, colorClass: 'border-l-blue-500' },
+    { key: 'PENDING_NEW', label: 'Chờ Duyệt: Giấy Phép Mới', count: rootAll.filter(l => l.status === 'PENDING').length, colorClass: 'border-l-yellow-500' },
+    { key: 'PENDING_VERSION', label: 'Chờ Duyệt: Cập Nhật', count: versionAll.filter(l => l.status === 'PENDING').length, colorClass: 'border-l-orange-500' },
+    { key: 'EXPIRING', label: 'Sắp Hết Hạn (≤30 ngày)', count: rootAll.filter(l => computeLicenseLifecycleState(getLicenseFamilyLatest(l.id)) === 'EXPIRING').length, colorClass: 'border-l-amber-500' },
+    { key: 'EXPIRED', label: 'Đã Hết Hạn', count: rootAll.filter(l => computeLicenseLifecycleState(getLicenseFamilyLatest(l.id)) === 'EXPIRED').length, colorClass: 'border-l-red-500' }
+  ];
+  let activeCardKey = '__ALL__';
+  if (statusFilter === 'PENDING') activeCardKey = typeFilter === 'VERSION' ? 'PENDING_VERSION' : 'PENDING_NEW';
+  else if (lifecycleFilter === 'EXPIRING') activeCardKey = 'EXPIRING';
+  else if (lifecycleFilter === 'EXPIRED') activeCardKey = 'EXPIRED';
+  document.getElementById('licenseDashboardCards').innerHTML = buildDashboardCardsHTML(dashCards, activeCardKey, 'filterLicenseByCard');
+
+  let filtered = DB.licenses.filter(item => {
+    if (typeFilter === 'VERSION') { if (item.rootLicenseId == null) return false; }
+    else { if (item.rootLicenseId != null) return false; }
+
+    if (!canViewThisLicense(item)) return false;
+    if (statusFilter && item.status !== statusFilter) return false;
+    if (lifecycleFilter && computeLicenseLifecycleState(getLicenseFamilyLatest(item.id)) !== lifecycleFilter) return false;
+
+    if (keyword) {
+      const hay = [item.code, item.displayCode, item.companyName, item.locationName, item.licenseType, item.licenseNumber]
+        .map(v => (v || '').toLowerCase());
+      if (!hay.some(v => v.includes(keyword))) return false;
+    }
+
+    if (!isInDateRange(item.createdAt, fromDate, toDate)) return false;
+    return true;
+  });
+
+  document.getElementById('paginationContainer_license').innerHTML = buildPaginationBoxHTML('license', 'renderLicenses');
+  const pageItems = paginateList('license', filtered, 'renderLicenses', 'giấy phép');
+
+  if (pageItems.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="8" class="text-center p-6 text-gray-500 italic">Không tìm thấy giấy phép phù hợp.</td></tr>`;
+    return;
+  }
+
+  tbody.innerHTML = pageItems.map(item => {
+    const versions = getLicenseFamily(item.id).filter(l => l.id !== item.id);
+    const isExpanded = expandedLicenseFamilies.has(item.id);
+    const rootRowHTML = buildLicenseRowHTML(item, { versionCount: versions.length, isExpanded, canApprove });
+    const childRowsHTML = isExpanded ? versions.map(v => buildLicenseRowHTML(v, { isChild: true, canApprove })).join('') : '';
+    return rootRowHTML + childRowsHTML;
+  }).join('');
+}
+
+function toggleLicenseFamily(rootId) {
+  if (expandedLicenseFamilies.has(rootId)) expandedLicenseFamilies.delete(rootId);
+  else expandedLicenseFamilies.add(rootId);
+  renderLicenses();
+}
+
+function buildLicenseRowHTML(item, { versionCount = 0, isExpanded = false, isChild = false, canApprove = false } = {}) {
+  const approvalBadge = item.status === 'APPROVED'
+    ? `<span class="px-2 py-1 bg-green-100 text-green-800 rounded font-bold text-xs">✅ Đã duyệt</span>`
+    : item.status === 'REJECTED'
+      ? `<span class="px-2 py-1 bg-red-100 text-red-800 rounded font-bold text-xs">❌ Từ chối</span>`
+      : `<span class="px-2 py-1 bg-yellow-100 text-yellow-800 rounded font-semibold text-xs">⏳ Chờ duyệt</span>`;
+
+  const lifecycleKey = computeLicenseLifecycleState(item);
+  const lifecycleBadge = lifecycleKey
+    ? `<span class="px-2 py-1 rounded font-bold text-xs ${LICENSE_LIFECYCLE_LABELS[lifecycleKey].cls}">${escapeHtml(LICENSE_LIFECYCLE_LABELS[lifecycleKey].label)}</span>`
+    : '<span class="text-gray-400 text-xs">—</span>';
+
+  const codeText = escapeHtml(item.displayCode || item.code);
+  const codeCellHTML = isChild
+    ? `<span class="pl-4 text-gray-500">↳ ${codeText}</span>`
+    : (versionCount > 0
+        ? `<button type="button" onclick="toggleLicenseFamily(${item.id})" class="font-bold hover:underline" title="${isExpanded ? 'Thu gọn' : 'Xem các phiên bản'}">${isExpanded ? '▾' : '▸'} ${codeText}</button>
+           <span class="ml-1 px-1.5 py-0.5 bg-purple-100 text-purple-700 rounded-full text-[10px] font-bold align-middle" title="Có ${versionCount} phiên bản khác">🗂️ ${versionCount + 1} phiên bản</span>`
+        : codeText);
+
+  return `
+    <tr class="hover:bg-gray-50 transition border-b ${isChild ? 'bg-purple-50/40' : ''}">
+      <td class="border p-2 font-mono font-bold text-blue-700">${codeCellHTML}</td>
+      <td class="border p-2">
+        <div class="font-bold text-gray-800">${escapeHtml(item.companyName)}</div>
+        <div class="text-xs text-gray-500">${escapeHtml(item.locationName)}</div>
+      </td>
+      <td class="border p-2 text-gray-700">${escapeHtml(item.licenseType)}</td>
+      <td class="border p-2 text-gray-700">${escapeHtml(item.licenseNumber)}</td>
+      <td class="border p-2 text-xs text-gray-600">${escapeHtml(item.issueDate)} → ${escapeHtml(item.expiryDate)}</td>
+      <td class="border p-2 text-center">${approvalBadge}</td>
+      <td class="border p-2 text-center">${lifecycleBadge}</td>
+      <td class="border p-2 text-center space-x-1">
+        ${(() => {
+          const canDownload = !!item.fileUrl && (currentUser.perms?.admin || currentUser.perms?.licenseApprove || currentUser.perms?.licenseView || item.creator === currentUser.username);
+          const secondaryOptions = [];
+          let primaryBtnHTML;
+          if (canApprove && item.status === 'PENDING') {
+            primaryBtnHTML = `<button onclick="runLicenseAction(${item.id}, 'approve')" class="px-2 py-1 bg-emerald-600 text-white rounded text-xs hover:bg-emerald-700 font-semibold" title="Phê duyệt giấy phép">✅ Duyệt</button>`;
+            secondaryOptions.push({ value: 'reject', label: '❌ Từ chối' });
+            secondaryOptions.push({ value: 'view', label: '📋 Chi tiết' });
+          } else {
+            primaryBtnHTML = `<button onclick="runLicenseAction(${item.id}, 'view')" class="px-2 py-1 bg-gray-600 text-white rounded text-xs hover:bg-gray-700 font-semibold" title="Xem chi tiết & lịch sử phiên bản">📋 Chi tiết</button>`;
+          }
+          if (canApprove && item.status === 'APPROVED') {
+            if (item.lifecycleStatus !== 'REVOKED') {
+              secondaryOptions.push(item.lifecycleStatus === 'RENEWING'
+                ? { value: 'unsetRenewing', label: '🔵 Bỏ Đang Gia Hạn' }
+                : { value: 'setRenewing', label: '🔄 Đánh Dấu Đang Gia Hạn' });
+              secondaryOptions.push({ value: 'revoke', label: '⛔ Thu Hồi' });
+            } else {
+              secondaryOptions.push({ value: 'unrevoke', label: '↩️ Bỏ Thu Hồi' });
+            }
+          }
+          if (canDownload) secondaryOptions.push({ value: 'download', label: '⬇️ Tải' });
+          if (currentUser.perms?.admin) secondaryOptions.push({ value: 'delete', label: '🗑️ Xóa' });
+          return buildActionCell(item.id, primaryBtnHTML, secondaryOptions, 'runLicenseAction');
+        })()}
+      </td>
+    </tr>
+  `;
+}
+
+function runLicenseAction(id, action) {
+  const item = DB.licenses.find(l => l.id === id);
+  if (!item) return;
+  switch (action) {
+    case 'view': viewLicenseDetails(id); break;
+    case 'approve': approveLicenseAction(id); break;
+    case 'reject': rejectLicenseAction(id); break;
+    case 'setRenewing': setLicenseRenewingAction(id, true); break;
+    case 'unsetRenewing': setLicenseRenewingAction(id, false); break;
+    case 'revoke': revokeLicenseAction(id); break;
+    case 'unrevoke': unrevokeLicenseAction(id); break;
+    case 'download': downloadLicenseFile(id); break;
+    case 'delete': deleteLicenseAction(id); break;
+  }
+}
+
+function approveLicenseAction(id) {
+  const item = DB.licenses.find(l => l.id === id);
+  if (!item) return;
+  showConfirmModal({
+    title: 'Phê duyệt giấy phép',
+    bodyHTML: `Bạn có chắc chắn muốn phê duyệt giấy phép "<b>${escapeHtml(item.licenseType)}</b>" (${escapeHtml(item.displayCode || item.code)})?`,
+    confirmLabel: 'Phê Duyệt',
+    onConfirm: async () => {
+      let updated;
+      try {
+        updated = (await callRecordAction('licenses', id, 'approve', {})).item;
+      } catch (err) {
+        return alert(`⛔ ${err.message}`);
+      }
+      const idx = DB.licenses.findIndex(x => x.id === id);
+      if (idx !== -1) DB.licenses[idx] = updated;
+      logSystemAction('LICENSE', 'APPROVE_LICENSE', `Phê duyệt giấy phép [${updated.code} - ${updated.licenseType}]`, 'SUCCESS', updated.code);
+      renderLicenses();
+      refreshApprovalSurfaces();
+    }
+  });
+}
+
+function rejectLicenseAction(id) {
+  const item = DB.licenses.find(l => l.id === id);
+  if (!item) return;
+  const reason = prompt('Nhập lý do từ chối giấy phép:');
+  if (reason === null) return;
+  if (!reason.trim()) return alert('⛔ Vui lòng nhập lý do từ chối!');
+  showConfirmModal({
+    title: 'Từ chối giấy phép',
+    bodyHTML: `Bạn có chắc chắn muốn từ chối giấy phép "<b>${escapeHtml(item.licenseType)}</b>" (${escapeHtml(item.displayCode || item.code)})?<br><span class="text-xs text-gray-500">Lý do: ${escapeHtml(reason.trim())}</span>`,
+    confirmLabel: 'Từ Chối',
+    onConfirm: async () => {
+      let updated;
+      try {
+        updated = (await callRecordAction('licenses', id, 'reject', { reason: reason.trim() })).item;
+      } catch (err) {
+        return alert(`⛔ ${err.message}`);
+      }
+      const idx = DB.licenses.findIndex(x => x.id === id);
+      if (idx !== -1) DB.licenses[idx] = updated;
+      logSystemAction('LICENSE', 'REJECT_LICENSE', `Từ chối giấy phép [${updated.code}] - Lý do: ${reason.trim()}`, 'WARNING', updated.code);
+      renderLicenses();
+      refreshApprovalSurfaces();
+    }
+  });
+}
+
+function setLicenseRenewingAction(id, renewing) {
+  const item = DB.licenses.find(l => l.id === id);
+  if (!item) return;
+  showConfirmModal({
+    title: renewing ? 'Đánh dấu Đang gia hạn' : 'Bỏ đánh dấu Đang gia hạn',
+    bodyHTML: renewing
+      ? `Đánh dấu giấy phép "<b>${escapeHtml(item.licenseType)}</b>" (${escapeHtml(item.displayCode || item.code)}) đang trong quá trình gia hạn?`
+      : `Bỏ đánh dấu "Đang gia hạn" cho giấy phép "<b>${escapeHtml(item.licenseType)}</b>"?`,
+    confirmLabel: renewing ? 'Đánh Dấu' : 'Bỏ Đánh Dấu',
+    onConfirm: async () => {
+      let updated;
+      try {
+        updated = (await callRecordAction('licenses', id, 'set-renewing', { renewing })).item;
+      } catch (err) {
+        return alert(`⛔ ${err.message}`);
+      }
+      const idx = DB.licenses.findIndex(x => x.id === id);
+      if (idx !== -1) DB.licenses[idx] = updated;
+      logSystemAction('LICENSE', 'SET_LICENSE_RENEWING', `${renewing ? 'Đánh dấu' : 'Bỏ đánh dấu'} Đang gia hạn giấy phép [${updated.code}]`, 'SUCCESS', updated.code);
+      renderLicenses();
+    }
+  });
+}
+
+function revokeLicenseAction(id) {
+  const item = DB.licenses.find(l => l.id === id);
+  if (!item) return;
+  const reason = prompt('Nhập lý do thu hồi giấy phép:');
+  if (reason === null) return;
+  if (!reason.trim()) return alert('⛔ Vui lòng nhập lý do thu hồi!');
+  showConfirmModal({
+    title: 'Thu hồi giấy phép',
+    bodyHTML: `Bạn có chắc chắn muốn THU HỒI giấy phép "<b>${escapeHtml(item.licenseType)}</b>" (${escapeHtml(item.displayCode || item.code)})?<br><span class="text-xs text-gray-500">Lý do: ${escapeHtml(reason.trim())}</span>`,
+    confirmLabel: 'Thu Hồi',
+    onConfirm: async () => {
+      let updated;
+      try {
+        updated = (await callRecordAction('licenses', id, 'revoke', { reason: reason.trim() })).item;
+      } catch (err) {
+        return alert(`⛔ ${err.message}`);
+      }
+      const idx = DB.licenses.findIndex(x => x.id === id);
+      if (idx !== -1) DB.licenses[idx] = updated;
+      logSystemAction('LICENSE', 'REVOKE_LICENSE', `Thu hồi giấy phép [${updated.code}] - Lý do: ${reason.trim()}`, 'WARNING', updated.code);
+      renderLicenses();
+    }
+  });
+}
+
+function unrevokeLicenseAction(id) {
+  const item = DB.licenses.find(l => l.id === id);
+  if (!item) return;
+  showConfirmModal({
+    title: 'Bỏ thu hồi giấy phép',
+    bodyHTML: `Bỏ trạng thái thu hồi cho giấy phép "<b>${escapeHtml(item.licenseType)}</b>" (${escapeHtml(item.displayCode || item.code)})?`,
+    confirmLabel: 'Bỏ Thu Hồi',
+    onConfirm: async () => {
+      let updated;
+      try {
+        updated = (await callRecordAction('licenses', id, 'unrevoke', {})).item;
+      } catch (err) {
+        return alert(`⛔ ${err.message}`);
+      }
+      const idx = DB.licenses.findIndex(x => x.id === id);
+      if (idx !== -1) DB.licenses[idx] = updated;
+      logSystemAction('LICENSE', 'UNREVOKE_LICENSE', `Bỏ thu hồi giấy phép [${updated.code}]`, 'SUCCESS', updated.code);
+      renderLicenses();
+    }
+  });
+}
+
+function deleteLicenseAction(id) {
+  const item = DB.licenses.find(l => l.id === id);
+  if (!item) return;
+  deleteRecordAdminOnly('licenses', id, `giấy phép ${item.displayCode || item.code}`, () => {
+    DB.licenses = DB.licenses.filter(x => x.id !== id);
+    logSystemAction('LICENSE', 'DELETE_LICENSE', `Xóa giấy phép [${item.code}]`, 'SUCCESS', item.code);
+    renderLicenses();
+  });
+}
+
+function downloadLicenseFile(id) {
+  const item = DB.licenses.find(l => l.id === id);
+  if (!item) return;
+  const a = document.createElement('a');
+  a.href = attachmentDownloadUrl(item.fileUrl, item.fileData, item.fileName || item.code);
+  a.download = item.fileName || item.code;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  logSystemAction('LICENSE', 'DOWNLOAD_LICENSE', `Tải tệp giấy phép [${item.code}]`, 'SUCCESS', item.code);
+}
+
+function viewLicenseFile(id) {
+  const item = DB.licenses.find(l => l.id === id);
+  if (!item) return;
+  openFileProtectedView({
+    title: `📜 ${item.licenseType} (${item.displayCode || item.code})`,
+    sub: `Công ty: ${item.companyName} | Địa điểm: ${item.locationName} | Số GP: ${item.licenseNumber}`,
+    footerInfo: `Ngày cấp: ${item.issueDate} | Ngày hết hạn: ${item.expiryDate} | Cơ quan cấp: ${item.issuingAuthority}`,
+    fileSrc: item.fileUrl, fileType: item.fileType, fileName: item.fileName
+  });
+}
+
+function viewLicenseDetails(anyId) {
+  const item = DB.licenses.find(l => l.id === anyId);
+  if (!item) return;
+  const family = getLicenseFamily(anyId);
+  const root = family[0];
+
+  const rowsHTML = family.map(v => {
+    const finalApproval = [...(v.history || [])].reverse().find(h => h.action === 'APPROVED');
+    let approverHTML;
+    if (finalApproval) {
+      approverHTML = `${escapeHtml(finalApproval.byName || finalApproval.by)}<div class="text-[10px] text-gray-400">${escapeHtml(finalApproval.time)}</div>`;
+    } else if (v.status === 'REJECTED') {
+      approverHTML = `<span class="text-red-600 font-semibold">Đã từ chối</span>`;
+    } else {
+      approverHTML = `<span class="text-gray-400 italic">Chưa duyệt</span>`;
+    }
+    const canDL = !!v.fileUrl && (currentUser.perms?.admin || currentUser.perms?.licenseApprove || currentUser.perms?.licenseView || v.creator === currentUser.username);
+    return `
+      <tr class="border-b hover:bg-gray-50">
+        <td class="border p-2 text-center font-bold text-purple-700">v${v.versionNumber || 1}</td>
+        <td class="border p-2">
+          <div class="font-semibold text-gray-800">${escapeHtml(v.creatorName || v.creator)}</div>
+          <div class="text-[10px] text-gray-400">${escapeHtml(v.createdAt || '')}</div>
+        </td>
+        <td class="border p-2">${approverHTML}</td>
+        <td class="border p-2 text-gray-700">Số: ${escapeHtml(v.licenseNumber)}<br>${escapeHtml(v.issueDate)} → ${escapeHtml(v.expiryDate)}</td>
+        <td class="border p-2 text-center whitespace-nowrap">
+          <button type="button" onclick="viewLicenseFile(${v.id})" class="px-2 py-1 bg-blue-600 text-white rounded text-[11px] font-bold hover:bg-blue-700">👁️ Xem</button>
+          ${canDL ? `<button type="button" onclick="downloadLicenseFile(${v.id})" class="px-2 py-1 bg-slate-600 text-white rounded text-[11px] font-bold hover:bg-slate-700 ml-1">⬇️ Tải</button>` : ''}
+        </td>
+      </tr>
+    `;
+  }).join('');
+
+  const historyHTML = (item.history || []).slice().reverse().map(h => `
+    <div class="border-b py-1">
+      <span class="font-semibold">${escapeHtml(h.action)}</span> bởi ${escapeHtml(h.byName || h.by)} — ${escapeHtml(h.time)}
+      ${h.comment ? `<div class="text-gray-500 italic">${escapeHtml(h.comment)}</div>` : ''}
+    </div>
+  `).join('') || '<div class="text-gray-400 italic">Chưa có lịch sử.</div>';
+
+  document.getElementById('licenseDetailTitle').innerText = `📜 Chi Tiết Giấy Phép: ${root.licenseType} (${root.displayCode || root.code})`;
+  document.getElementById('licenseDetailBody').innerHTML = `
+    <div class="grid grid-cols-2 gap-2 text-xs mb-3 bg-gray-50 p-2 rounded border">
+      <div><b>Tên công ty chủ quản:</b> ${escapeHtml(root.companyName)}</div>
+      <div><b>Tên địa điểm:</b> ${escapeHtml(root.locationName)}</div>
+      <div><b>Tình trạng hoạt động:</b> ${item.operatingStatus === 'ACTIVE' ? 'Đang hoạt động' : 'Đã đóng cửa'}</div>
+      <div><b>Cơ quan cấp phép:</b> ${escapeHtml(item.issuingAuthority)}</div>
+    </div>
+    <table class="w-full border-collapse border text-xs mb-3">
+      <thead>
+        <tr class="bg-gray-100 text-left">
+          <th class="border p-2 text-center">Phiên Bản</th>
+          <th class="border p-2">Người Tạo</th>
+          <th class="border p-2">Người Phê Duyệt</th>
+          <th class="border p-2">Số GP / Hạn</th>
+          <th class="border p-2 text-center">Thao Tác</th>
+        </tr>
+      </thead>
+      <tbody>${rowsHTML}</tbody>
+    </table>
+    <h4 class="font-bold text-gray-700 text-xs mb-1">📜 Lịch Sử Xử Lý (phiên bản đang xem: v${item.versionNumber || 1})</h4>
+    <div class="bg-gray-50 p-2 rounded border text-[11px]">${historyHTML}</div>
+  `;
+  document.getElementById('licenseDetailModal').classList.remove('hidden');
+}
+function closeLicenseDetailModal() {
+  document.getElementById('licenseDetailModal').classList.add('hidden');
+}
+
+async function uploadLicense(e) {
+  e.preventDefault();
+  const mode = document.getElementById('licenseOpMode').value;
+  const companyName = document.getElementById('licenseCompanyName').value.trim();
+  const locationName = document.getElementById('licenseLocationName').value.trim();
+  const operatingStatus = document.getElementById('licenseOperatingStatus').value;
+  const licenseType = document.getElementById('licenseType').value.trim();
+  const licenseNumber = document.getElementById('licenseNumber').value.trim();
+  const issueDate = document.getElementById('licenseIssueDate').value;
+  const expiryDate = document.getElementById('licenseExpiryDate').value;
+  const issuingAuthority = document.getElementById('licenseIssuingAuthority').value.trim();
+  const fileInput = document.getElementById('licenseFile');
+
+  let code, displayCode, versionNumber, rootLicenseId;
+  if (mode === 'UPDATE') {
+    const rootId = Number(document.getElementById('licenseUpdateTarget').value);
+    const root = DB.licenses.find(l => l.id === rootId);
+    if (!root) return alert('Vui lòng chọn giấy phép cần cập nhật!');
+    const latest = getLicenseFamilyLatest(rootId);
+    if (isLicenseFamilyLatestBlocking(latest)) {
+      return alert('⛔ Không thể cập nhật khi phiên bản mới nhất của giấy phép này đang chờ duyệt!');
+    }
+    displayCode = root.displayCode || root.code;
+    versionNumber = (latest.versionNumber || getLicenseFamily(rootId).length) + 1;
+    code = `${displayCode}-V${versionNumber}`;
+    rootLicenseId = rootId;
+  } else {
+    code = generateHcrcCode(DB.licenses, 'GP');
+    displayCode = code;
+    versionNumber = 1;
+    rootLicenseId = null;
+  }
+
+  if (!companyName || !locationName || !licenseType || !licenseNumber || !issuingAuthority) {
+    return alert('Vui lòng nhập đầy đủ thông tin!');
+  }
+  if (!issueDate || !expiryDate) return alert('Vui lòng nhập Ngày cấp và Ngày hết hạn!');
+  if (new Date(expiryDate).getTime() < new Date(issueDate).getTime()) {
+    return alert('Ngày hết hạn phải sau Ngày cấp!');
+  }
+
+  const file = fileInput.files[0];
+  if (!file) return alert('Vui lòng chọn tệp giấy phép!');
+
+  let uploaded;
+  try {
+    uploaded = await uploadFileToServer(file, 'license');
+  } catch (err) {
+    return alert(`⛔ Tải tệp lên thất bại: ${err.message}`);
+  }
+
+  // Tự học thêm vào Danh Mục "Các Loại Giấy Phép" (DB.licenseTypes) nếu là loại chưa từng gõ trước đây —
+  // admin vẫn quản lý/dọn danh mục này riêng ở màn Quản Lý Danh Mục (xem saveLicenseType()/deleteLicenseType()).
+  if (licenseType && !(DB.licenseTypes || []).includes(licenseType)) {
+    DB.licenseTypes = [...(DB.licenseTypes || []), licenseType];
+    syncStorage('licenseTypes');
+  }
+
+  const payload = {
+    code, displayCode, versionNumber, rootLicenseId,
+    companyName, locationName, operatingStatus, licenseType, licenseNumber,
+    issueDate, expiryDate, issuingAuthority,
+    fileName: uploaded.fileName, fileType: uploaded.fileType, fileUrl: uploaded.fileUrl,
+    createdAt: new Date().toLocaleString('vi-VN')
+  };
+
+  let newItem;
+  try {
+    newItem = (await callCreateAction('licenses', payload)).item;
+  } catch (err) {
+    return alert('⛔ ' + err.message);
+  }
+
+  DB.licenses.unshift(newItem);
+  logSystemAction('LICENSE', 'UPLOAD_LICENSE', `Tải lên giấy phép ${mode === 'UPDATE' ? 'phiên bản mới' : 'mới'} [${code} - ${licenseType}]`, 'SUCCESS', code);
+
+  const approverUsernames = DB.users.filter(u => u.perms?.admin || u.perms?.licenseApprove).map(u => u.username);
+  if (approverUsernames.length) {
+    notifyUsersByEmail('LICENSE', 'NOTIFY_APPROVAL_NEEDED', code, approverUsernames,
+      `[VPDT] Giấy phép ${code} cần bạn phê duyệt`,
+      `Giấy phép "${licenseType}" (${code}) do ${currentUser.name} tải lên đang chờ bạn phê duyệt.`);
+  }
+
+  alert('✅ Tải lên và trình duyệt giấy phép thành công!');
+  document.getElementById('licenseForm').reset();
+  document.getElementById('licenseOpMode').value = 'NEW';
+  onLicenseOpModeChange();
+  renderLicenses();
+}
+
+// ============ Danh Mục "Các Loại Giấy Phép" (DB.licenseTypes) — cùng khuôn CRUD phẳng đơn giản với
+// Danh Mục Siêu Thị (DB.stores) ở trên (không kiểm tra usage trước khi xóa) — nguồn gợi ý cho ô "Tên
+// giấy phép / Loại giấy phép" (widget sdd, xem uploadLicense() tự học thêm giá trị mới gõ). ============
+function saveLicenseType(e) {
+  e.preventDefault();
+  const name = document.getElementById('txtLicenseTypeName').value.trim();
+  if (!name) return;
+  if ((DB.licenseTypes || []).includes(name)) return alert('Loại giấy phép đã tồn tại!');
+  DB.licenseTypes = [...(DB.licenseTypes || []), name];
+  syncStorage('licenseTypes');
+  logSystemAction('LICENSE', 'ADD_LICENSE_TYPE', `Thêm loại giấy phép mới [${name}]`, 'SUCCESS', name);
+  document.getElementById('txtLicenseTypeName').value = '';
+  renderLicenseTypeList();
+}
+function deleteLicenseType(name) {
+  if (!confirm(`Xóa loại giấy phép "${name}" khỏi danh mục?`)) return;
+  DB.licenseTypes = (DB.licenseTypes || []).filter(t => t !== name);
+  syncStorage('licenseTypes');
+  logSystemAction('LICENSE', 'DELETE_LICENSE_TYPE', `Xóa loại giấy phép [${name}]`, 'SUCCESS', name);
+  renderLicenseTypeList();
+}
+function renderLicenseTypeList() {
+  const ul = document.getElementById('licenseTypeList');
+  if (!ul) return;
+  ul.innerHTML = (DB.licenseTypes || []).map(t => `
+    <li class="p-2 flex justify-between items-center gap-2 hover:bg-gray-50">
+      <span class="flex-1">${escapeHtml(t)}</span>
+      <button onclick="deleteLicenseType('${escapeHtml(t)}')" class="text-red-500 font-bold hover:underline">Xóa</button>
+    </li>
+  `).join('');
 }
 
 // Tải 1 file lên server (POST /api/upload) — trả về { fileUrl, fileName, fileType, size }. moduleKey
@@ -19626,7 +20534,7 @@ function setSystemSubTab(subTab) {
   document.getElementById('btnSystemSubTrash').className = subTab === 'TRASH' ? activeCls : inactiveCls;
 
   if (subTab === 'ADMIN') {
-    renderDeptList(); renderCatList(); renderContractTypeAbbrList(); renderJobTitleList(); renderTrainingCategoryList(); renderSensitiveKeywordList(); renderDeptCheckboxes(); renderModuleAccessCheckboxes(); renderUsers(); loadEmailConfigToForm(); renderPermGroupsList(); renderSubmissionApprovalGroups(); renderContractApprovalGroups(); workflowParticipatingDeptsDraft = null; renderWorkflowParticipatingDeptsChecklist(); vppExcludeGroupsDraft = null; renderVppExcludeGroupsAdmin(); renderPwaShortcutCheckboxes();
+    renderDeptList(); renderCatList(); renderContractTypeAbbrList(); renderJobTitleList(); renderTrainingCategoryList(); renderSensitiveKeywordList(); renderDeptCheckboxes(); renderModuleAccessCheckboxes(); renderUsers(); loadEmailConfigToForm(); renderPermGroupsList(); renderSubmissionApprovalGroups(); renderContractApprovalGroups(); workflowParticipatingDeptsDraft = null; renderWorkflowParticipatingDeptsChecklist(); vppExcludeGroupsDraft = null; renderVppExcludeGroupsAdmin(); renderPwaShortcutCheckboxes(); renderStoreList(); renderLicenseTypeList();
     setAdminSubTab(activeAdminSubTab);
   }
   if (subTab === 'FORM') { switchFormTab(activeFormTab); }
@@ -21986,7 +22894,10 @@ function collectPermsFromForm() {
     uniformStoreManage: document.getElementById('pUniformStoreManage').checked,
     budgetManage: document.getElementById('pBudgetManage').checked,
     budgetCreate: document.getElementById('pBudgetCreate').checked,
-    budgetAggregate: document.getElementById('pBudgetAggregate').checked
+    budgetAggregate: document.getElementById('pBudgetAggregate').checked,
+    licenseCreate: document.getElementById('pLicenseCreate').checked,
+    licenseApprove: document.getElementById('pLicenseApprove').checked,
+    licenseView: document.getElementById('pLicenseView').checked
   };
 }
 
@@ -22034,6 +22945,9 @@ function populatePermsForm(permsInput) {
   document.getElementById('pBudgetManage').checked = !!perms.budgetManage;
   document.getElementById('pBudgetCreate').checked = !!perms.budgetCreate;
   document.getElementById('pBudgetAggregate').checked = !!perms.budgetAggregate;
+  document.getElementById('pLicenseCreate').checked = !!perms.licenseCreate;
+  document.getElementById('pLicenseApprove').checked = !!perms.licenseApprove;
+  document.getElementById('pLicenseView').checked = !!perms.licenseView;
 
   document.getElementById('pUploadAll').checked = !!perms.uploadAll;
   document.getElementById('pViewDraftAll').checked = !!perms.viewDraftAll;
@@ -22426,7 +23340,7 @@ const PWA_SHORTCUT_CATALOG_CLIENT = {
   minutes: 'Biên Bản Họp',
   'internal:NEWS': 'Nhịp Sống HCRC', 'internal:TRAINING': 'Đào Tạo', 'internal:RECRUITMENT': 'Tuyển Dụng',
   'internal:SHARE': 'Góc Chia Sẻ',
-  meeting: 'Phòng Họp', car: 'Đăng Ký Xe', vpp: 'Văn Phòng Phẩm', uniform: 'Đồng Phục',
+  meeting: 'Phòng Họp', car: 'Đăng Ký Xe', vpp: 'Văn Phòng Phẩm', uniform: 'Đồng Phục', license: 'Giấy Phép',
   'office:MUA_BAN': 'Tổng Hợp - Mua Bán', 'office:SUA_CHUA': 'Tổng Hợp - Sửa Chữa',
   'office:DAU_TU': 'Tổng Hợp - Đầu Tư', 'office:PAYMENT': 'Thanh Toán',
   budget: 'Ngân Sách',
@@ -24781,6 +25695,9 @@ function resetUserForm() {
   document.getElementById('pBudgetManage').checked = !!defaults.budgetManage;
   document.getElementById('pBudgetCreate').checked = !!defaults.budgetCreate;
   document.getElementById('pBudgetAggregate').checked = !!defaults.budgetAggregate;
+  document.getElementById('pLicenseCreate').checked = !!defaults.licenseCreate;
+  document.getElementById('pLicenseApprove').checked = !!defaults.licenseApprove;
+  document.getElementById('pLicenseView').checked = !!defaults.licenseView;
 
   [
     'pUploadAll', 'pViewDraftAll', 'pViewApprovedAll', 'pDocDownloadAll',
@@ -25159,7 +26076,8 @@ const TRASH_COLLECTION_LABELS = {
   itPriceApprovals: 'Hỗ Trợ IT - Phê Duyệt Giá', itSupportTickets: 'Hỗ Trợ IT - Ticket',
   uniformPeriods: 'Đồng Phục - Kỳ Cấp Phát', uniformIssuances: 'Đồng Phục - Cấp Phát',
   uniformStockAdjustments: 'Đồng Phục - Điều Chỉnh Kho', uniformTransfers: 'Đồng Phục - Điều Chuyển Kho',
-  budgetTemplates: 'Ngân Sách - Mẫu', budgetPeriods: 'Ngân Sách - Kỳ Ngân Sách', budgetEntries: 'Ngân Sách - Hồ Sơ Ngân Sách'
+  budgetTemplates: 'Ngân Sách - Mẫu', budgetPeriods: 'Ngân Sách - Kỳ Ngân Sách', budgetEntries: 'Ngân Sách - Hồ Sơ Ngân Sách',
+  licenses: 'Giấy Phép'
 };
 function trashCollectionLabel(collection) { return TRASH_COLLECTION_LABELS[collection] || collection; }
 
@@ -32522,8 +33440,10 @@ function canManageUniformStore(user) {
 }
 // uniformApprove (Phase 2) — duyệt/từ chối kỳ cấp phát VÀ điều chuyển kho (DÙNG CHUNG 1 quyền, không
 // tách riêng — xem lib/recordActions.js canApproveUniform()/canApproveUniformTransfer()).
+// uniformManage được GỘP thêm năng lực này (khớp canApproveUniform() server) — người tạo kỳ tự duyệt
+// được kỳ mình tạo, không cần cấp thêm quyền uniformApprove riêng.
 function canApproveUniformClient(user) {
-  return !!(user?.perms?.admin || user?.perms?.uniformApprove);
+  return !!(user?.perms?.admin || user?.perms?.uniformApprove || user?.perms?.uniformManage);
 }
 
 function setUniformSubTab(subTab) {
@@ -33391,6 +34311,73 @@ function computeUniformStockClient(storeDept) {
   return stock;
 }
 
+// Mirror computeUniformStockBreakdown() ở lib/recordActions.js — tách "tồn kho" thành "mới" (chưa từng
+// cấp cho ai) / "đã sử dụng" (đã cấp rồi được thu hồi TỐT về kho, outcome TON) để hiển thị ở Kho/Tổng
+// Quan, đồng thời PHẢN ÁNH chính sách "ưu tiên xài hàng đã sử dụng trước" (xem giải thích đầy đủ ở bản
+// server). newStock + usedStock LUÔN = row.stock của computeUniformStockClient() ở trên.
+function computeUniformStockBreakdownClient(storeDept) {
+  const pools = new Map();
+  const events = [];
+  const keyOf = (name, size) => `${name}|||${size || ''}`;
+  const getPool = (name, size) => {
+    const key = keyOf(name, size);
+    if (!pools.has(key)) pools.set(key, { name, size: size || '', newStock: 0, usedStock: 0 });
+    return pools.get(key);
+  };
+  const timeOf = (str) => { const d = parseVNDateTime(str); return d ? d.getTime() : 0; };
+
+  for (const period of (DB.uniformPeriods || [])) {
+    for (const alloc of (period.allocations || [])) {
+      if (alloc.dept !== storeDept || alloc.status !== 'CONFIRMED') continue;
+      // Dùng alloc.id (Date.now() lúc TẠO kỳ, mili-giây) thay vì parse alloc.confirmedAt (nowVN(), chỉ
+      // chính xác tới GIÂY) — xem giải thích đầy đủ ở bản server computeUniformStockBreakdown().
+      const t = alloc.id;
+      for (const it of (alloc.items || [])) events.push({ t, type: 'ALLOC', name: it.name, size: it.size, qty: it.qty });
+    }
+  }
+  for (const issuance of (DB.uniformIssuances || [])) {
+    if (issuance.dept !== storeDept) continue;
+    const t = issuance.id;
+    for (const it of (issuance.items || [])) events.push({ t, type: 'ISSUE', name: it.name, size: it.size, qty: it.qty });
+  }
+  for (const adj of (DB.uniformStockAdjustments || [])) {
+    if (adj.dept !== storeDept) continue;
+    const t = adj.id;
+    if (adj.source === 'EMPLOYEE' && adj.outcome === 'TON') {
+      events.push({ t, type: 'RETURN_GOOD', name: adj.itemName, size: adj.size, qty: adj.qty });
+    } else if (adj.source === 'STOCK') {
+      events.push({ t, type: 'STOCK_LOSS', name: adj.itemName, size: adj.size, qty: adj.qty });
+    }
+  }
+  for (const tr of (DB.uniformTransfers || [])) {
+    if (tr.status !== 'APPROVED') continue;
+    const t = timeOf(tr.approvedAt);
+    if (tr.sourceDept === storeDept) events.push({ t, type: 'TRANSFER_OUT', name: tr.itemName, size: tr.size, qty: tr.qty });
+    if (tr.targetDept === storeDept) events.push({ t, type: 'TRANSFER_IN', name: tr.itemName, size: tr.size, qty: tr.qty });
+  }
+
+  events.sort((a, b) => a.t - b.t);
+  for (const ev of events) {
+    const pool = getPool(ev.name, ev.size);
+    if (ev.type === 'ALLOC' || ev.type === 'TRANSFER_IN') {
+      pool.newStock += ev.qty;
+    } else if (ev.type === 'TRANSFER_OUT') {
+      pool.newStock -= ev.qty;
+    } else if (ev.type === 'RETURN_GOOD') {
+      pool.usedStock += ev.qty;
+    } else if (ev.type === 'ISSUE') {
+      const fromUsed = Math.min(ev.qty, pool.usedStock);
+      pool.usedStock -= fromUsed;
+      pool.newStock -= (ev.qty - fromUsed);
+    } else if (ev.type === 'STOCK_LOSS') {
+      const fromNew = Math.min(ev.qty, pool.newStock);
+      pool.newStock -= fromNew;
+      pool.usedStock -= (ev.qty - fromNew);
+    }
+  }
+  return pools;
+}
+
 // ============ Chi Tiết Theo Kỳ (Phase 2) — mirror UX expand/collapse "Chi Tiết Tài Liệu" của module
 // Tài Liệu: bấm 1 dòng tồn kho để xem SL Đã Nhận đến từ (những) kỳ cấp phát nào — tính HOÀN TOÀN phía
 // trình duyệt từ DB.uniformPeriods đã tải sẵn, KHÔNG gọi thêm API nào. Chỉ gộp allocations ĐÃ CONFIRMED
@@ -33444,17 +34431,21 @@ function renderUniformStock() {
   const rows = [];
   for (const dept of targetDepts) {
     const stock = computeUniformStockClient(dept);
-    for (const row of stock.values()) rows.push({ dept, ...row });
+    const breakdown = computeUniformStockBreakdownClient(dept);
+    for (const row of stock.values()) {
+      const pool = breakdown.get(`${row.name}|||${row.size || ''}`);
+      rows.push({ dept, ...row, newStock: pool ? pool.newStock : 0, usedStock: pool ? pool.usedStock : 0 });
+    }
   }
   if (!rows.length) {
-    tbody.innerHTML = `<tr><td colspan="9" class="text-center p-6 text-gray-500 italic">Chưa có dữ liệu tồn kho.</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="11" class="text-center p-6 text-gray-500 italic">Chưa có dữ liệu tồn kho.</td></tr>`;
     return;
   }
   tbody.innerHTML = rows.map(r => {
     const key = uniformStockRowKey(r.dept, r.name, r.size);
     const expanded = uniformStockExpandedKeys.has(key);
     const code = uniformSkuFor(r.name, r.size);
-    const breakdown = expanded ? uniformPeriodBreakdownFor(r.dept, r.name, r.size) : [];
+    const periodBreakdown = expanded ? uniformPeriodBreakdownFor(r.dept, r.name, r.size) : [];
     const netTransfer = r.transferIn - r.transferOut;
     return `
     <tr class="hover:bg-gray-50 border-b">
@@ -33469,18 +34460,20 @@ function renderUniformStock() {
       <td class="border p-2 text-right ${r.hong > 0 ? 'text-rose-600 font-bold' : ''}">${r.hong.toLocaleString('vi-VN')}</td>
       <td class="border p-2 text-right ${r.huy > 0 ? 'text-gray-600 font-bold' : ''}">${r.huy.toLocaleString('vi-VN')}</td>
       <td class="border p-2 text-right ${r.mat > 0 ? 'text-orange-600 font-bold' : ''}">${r.mat.toLocaleString('vi-VN')}</td>
+      <td class="border p-2 text-right text-emerald-700">${r.newStock.toLocaleString('vi-VN')}</td>
+      <td class="border p-2 text-right text-amber-700">${r.usedStock.toLocaleString('vi-VN')}</td>
       <td class="border p-2 text-right font-bold ${r.stock <= 0 ? 'text-red-600' : 'text-green-700'}">${r.stock.toLocaleString('vi-VN')}${netTransfer !== 0 ? `<span class="block text-[10px] font-normal text-cyan-700">${netTransfer > 0 ? '+' : ''}${netTransfer} điều chuyển</span>` : ''}</td>
     </tr>
     ${expanded ? `
     <tr class="bg-teal-50/40">
-      <td class="border p-2" colspan="9">
+      <td class="border p-2" colspan="11">
         <div class="text-[11px] text-gray-700">
           <div class="font-bold text-teal-800 mb-1">📋 Chi tiết theo kỳ cấp phát (đã xác nhận):</div>
-          ${breakdown.length ? `
+          ${periodBreakdown.length ? `
             <table class="w-full border-collapse text-[11px]">
               <thead><tr class="text-left text-gray-500"><th class="p-1">Kỳ Cấp Phát</th><th class="p-1 text-right">SL</th><th class="p-1">Xác Nhận Bởi</th><th class="p-1">Lúc</th></tr></thead>
               <tbody>
-                ${breakdown.map(b => `<tr><td class="p-1">${escapeHtml(b.periodName)}</td><td class="p-1 text-right">${b.qty}</td><td class="p-1">${escapeHtml(b.confirmedByName || '')}</td><td class="p-1">${escapeHtml(b.confirmedAt || '')}</td></tr>`).join('')}
+                ${periodBreakdown.map(b => `<tr><td class="p-1">${escapeHtml(b.periodName)}</td><td class="p-1 text-right">${b.qty}</td><td class="p-1">${escapeHtml(b.confirmedByName || '')}</td><td class="p-1">${escapeHtml(b.confirmedAt || '')}</td></tr>`).join('')}
               </tbody>
             </table>
           ` : `<div class="italic text-gray-500">Không có dữ liệu.</div>`}
@@ -33709,14 +34702,18 @@ function renderUniformDashboard() {
   let totalStock = 0, totalIssued = 0, totalDamaged = 0, totalLost = 0;
   const byItem = new Map(); // name -> { stock, issued }
   const bySize = new Map(); // size -> { stock, issued }
-  const byStore = new Map(); // dept -> { stock, issued, damaged, lost }
+  const byStore = new Map(); // dept -> { stock, issued, damaged, lost, newStock, usedStock }
 
   for (const dept of targetDepts) {
     const stock = computeUniformStockClient(dept);
-    let storeStock = 0, storeIssued = 0, storeDamaged = 0, storeLost = 0;
+    const breakdown = computeUniformStockBreakdownClient(dept);
+    let storeStock = 0, storeIssued = 0, storeDamaged = 0, storeLost = 0, storeNew = 0, storeUsed = 0;
     for (const row of stock.values()) {
       totalStock += row.stock; totalIssued += row.issued; totalDamaged += (row.hong + row.huy); totalLost += row.mat;
       storeStock += row.stock; storeIssued += row.issued; storeDamaged += (row.hong + row.huy); storeLost += row.mat;
+      const pool = breakdown.get(`${row.name}|||${row.size || ''}`);
+      storeNew += pool ? pool.newStock : 0;
+      storeUsed += pool ? pool.usedStock : 0;
 
       if (!byItem.has(row.name)) byItem.set(row.name, { stock: 0, issued: 0 });
       byItem.get(row.name).stock += row.stock;
@@ -33727,7 +34724,7 @@ function renderUniformDashboard() {
       bySize.get(sizeKey).stock += row.stock;
       bySize.get(sizeKey).issued += row.issued;
     }
-    byStore.set(dept, { stock: storeStock, issued: storeIssued, damaged: storeDamaged, lost: storeLost });
+    byStore.set(dept, { stock: storeStock, issued: storeIssued, damaged: storeDamaged, lost: storeLost, newStock: storeNew, usedStock: storeUsed });
   }
 
   document.getElementById('uniformDashStatStock').textContent = totalStock.toLocaleString('vi-VN');
@@ -33755,13 +34752,42 @@ function renderUniformDashboard() {
     storeBody.innerHTML = storeRows.length ? storeRows.map(([dept, v]) => `
       <tr>
         <td class="border p-1.5 font-semibold">${escapeHtml(dept)}</td>
-        <td class="border p-1.5 text-right">${v.stock.toLocaleString('vi-VN')}</td>
+        <td class="border p-1.5 text-right text-emerald-700">${v.newStock.toLocaleString('vi-VN')}</td>
+        <td class="border p-1.5 text-right text-amber-700">${v.usedStock.toLocaleString('vi-VN')}</td>
+        <td class="border p-1.5 text-right font-semibold">${v.stock.toLocaleString('vi-VN')}</td>
         <td class="border p-1.5 text-right">${v.issued.toLocaleString('vi-VN')}</td>
         <td class="border p-1.5 text-right">${v.damaged.toLocaleString('vi-VN')}</td>
         <td class="border p-1.5 text-right">${v.lost.toLocaleString('vi-VN')}</td>
       </tr>
-    `).join('') : `<tr><td colspan="5" class="text-center p-3 text-gray-500 italic">Chưa có dữ liệu.</td></tr>`;
+    `).join('') : `<tr><td colspan="7" class="text-center p-3 text-gray-500 italic">Chưa có dữ liệu.</td></tr>`;
+    uniformDashByStoreCache = storeRows;
   }
+}
+
+// Xuất Excel bảng "Theo Siêu Thị" ở Tổng Quan — cùng cơ chế chung downloadXlsxFromServer() đã dùng cho
+// mọi màn xuất Excel khác trong app (vd exportTrainingResultsExcel()), KHÔNG có route riêng. Dùng lại
+// cache đã tính sẵn lúc renderUniformDashboard() thay vì tính lại (bảng chỉ hiện cho canManageUniform
+// nên cache luôn khớp đúng những gì đang hiển thị trên màn hình khi bấm nút).
+let uniformDashByStoreCache = [];
+async function exportUniformDashByStoreExcel() {
+  if (!uniformDashByStoreCache.length) return alert('Chưa có dữ liệu để xuất.');
+  const rows = uniformDashByStoreCache.map(([dept, v]) => ({
+    sieuThi: dept, moi: v.newStock, daSuDung: v.usedStock, tongTonKho: v.stock, daCap: v.issued, hongHuy: v.damaged, mat: v.lost
+  }));
+  await downloadXlsxFromServer(
+    `DongPhuc_TheoSieuThi_${nowVN().split(' ')[1].replace(/\//g, '-')}.xlsx`,
+    'Đồng Phục Theo Siêu Thị',
+    [
+      { header: 'Siêu Thị', key: 'sieuThi', width: 24 },
+      { header: 'Mới', key: 'moi', width: 12 },
+      { header: 'Đã Sử Dụng', key: 'daSuDung', width: 14 },
+      { header: 'Tổng Tồn Kho', key: 'tongTonKho', width: 14 },
+      { header: 'Đã Cấp', key: 'daCap', width: 12 },
+      { header: 'Hỏng/Hủy', key: 'hongHuy', width: 12 },
+      { header: 'Mất', key: 'mat', width: 10 }
+    ],
+    rows
+  );
 }
 </script>
 </body>
