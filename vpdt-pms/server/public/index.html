@@ -49,6 +49,13 @@
    sánh nên không chặn được trường hợp tick rồi tick lại y hệt ban đầu, nhưng đủ để admin nhận ra ngay
    khối nào mình vừa đụng vào giữa 1 cây quyền dài gần 14 khối (xem markPermTreeDirty()/clearPermTreeDirtyMarks()). */
 .perm-tree-node.perm-tree-dirty { border-left: 3px solid #f59e0b !important; background-color: #fffbeb !important; }
+/* Box "🔍 Tìm Kiếm & Lọc" thu gọn mặc định — dùng lại đúng khuôn <details>/<summary> ở trên, tách class
+   riêng để không lẫn với cây phân quyền. Class dùng chung cho MỌI module (không đặt tên riêng theo
+   module) — module nào sau này có phần lọc dài chỉ cần bọc bằng đúng class này là tự thu gọn/mở ra. */
+.filter-box-details > summary { list-style: none; cursor: pointer; }
+.filter-box-details > summary::-webkit-details-marker { display: none; }
+.filter-box-details > summary .filter-box-chevron { transition: transform 0.15s ease; display: inline-block; }
+.filter-box-details[open] > summary .filter-box-chevron { transform: rotate(90deg); }
 
 /* Sidebar điều hành (thay thanh nav ngang cũ) — #userHeader GIỮ NGUYÊN id cũ (finishLogin()/logout()
    chỉ toggle add/remove('hidden'), không sửa JS), giờ gắn vào chính khối <aside>. Tailwind ".hidden"
@@ -757,6 +764,7 @@ input[data-sdd-list] {
             <th class="p-2">Trích Yếu</th>
             <th class="p-2">Phòng Ban</th>
             <th class="p-2">Bước Hiện Tại</th>
+            <th class="p-2">Trạng Thái</th>
             <th class="p-2" id="approvalHubDateColLabel">Ngày Tạo</th>
             <th class="p-2">Thao Tác</th>
           </tr>
@@ -810,9 +818,9 @@ input[data-sdd-list] {
       </form>
     </div>
 
-    <div class="bg-gray-50 p-4 rounded-lg border space-y-3">
-      <h4 class="font-bold text-gray-700 text-sm">🔍 Tìm Kiếm & Lọc Tài Liệu</h4>
-      <div class="grid grid-cols-1 md:grid-cols-6 gap-3">
+    <details class="filter-box-details bg-gray-50 p-4 rounded-lg border">
+      <summary class="font-bold text-gray-700 text-sm flex items-center gap-1.5"><span class="filter-box-chevron text-gray-400">▸</span><span>🔍 Tìm Kiếm & Lọc Tài Liệu</span></summary>
+      <div class="grid grid-cols-1 md:grid-cols-6 gap-3 mt-3">
         <div>
           <label class="block text-xs font-semibold text-gray-600 mb-1">Lọc Theo Phòng Ban</label>
           <select id="filterDept" onchange="onFilterChange()" class="w-full border p-2 rounded text-sm bg-white">
@@ -826,6 +834,7 @@ input[data-sdd-list] {
             <option value="APPROVED">Đã Phê Duyệt</option>
             <option value="PENDING">Đang Chờ Duyệt</option>
             <option value="REJECTED">Bị Từ Chối / Trả Về</option>
+            <option value="DRAFT">✏️ Chờ Chỉnh Sửa</option>
           </select>
         </div>
         <div>
@@ -849,7 +858,7 @@ input[data-sdd-list] {
           <input id="filterKeyword" oninput="onFilterChange()" placeholder="Tiêu đề, Mã, Nội dung..." class="w-full border p-2 rounded text-sm">
         </div>
       </div>
-    </div>
+    </details>
 
     <div>
       <div class="flex justify-between items-center mb-3">
@@ -877,6 +886,8 @@ input[data-sdd-list] {
 
   <!-- Màn hình MODULE XỦ LÝ VĂN BẢN TRÌNH / TỜ TRÌNH -->
   <div id="submissionSection" class="hidden space-y-6">
+    <div id="subDashboardCards"></div>
+
     <div class="bg-amber-50 p-4 rounded border border-amber-200 space-y-3">
       <h3 class="font-bold text-amber-900 text-base flex items-center gap-2">📜 Trình Văn Bản / Tờ Trình Đề Xuất Phê Duyệt</h3>
       <p class="text-xs text-amber-800">Soạn thảo tờ trình đề xuất chủ trương, kinh phí hoặc quy chế. Luồng chuyển duyệt tích hợp phê duyệt đồng cấp đa cấp.</p>
@@ -947,8 +958,6 @@ input[data-sdd-list] {
         </div>
       </form>
     </div>
-
-    <div id="subDashboardCards"></div>
 
     <div class="bg-gray-50 p-4 rounded-lg border space-y-3">
       <h4 class="font-bold text-gray-700 text-sm">🔍 Tìm Kiếm & Lọc Văn Bản Trình</h4>
@@ -1074,6 +1083,8 @@ input[data-sdd-list] {
       <button onclick="setContractSubTab('MANAGE')" id="btnContractSubManage" class="px-3 py-1 rounded text-xs font-bold bg-gray-200 text-gray-700">📄 Quản Lý Hợp Đồng & Giấy Phép</button>
     </div>
 
+    <div id="contractDashboardCards"></div>
+
     <div id="contractManageFormWrap" class="hidden bg-cyan-50 p-4 rounded border border-cyan-200 space-y-3">
       <h3 id="contractManageFormTitle" class="font-bold text-cyan-900 text-base flex items-center gap-2">➕ Tạo Mới Hợp Đồng / Giấy Phép</h3>
       <p id="contractManageFormHint" class="text-xs text-cyan-800">Hồ sơ mới sẽ chờ phê duyệt (trừ khi bạn có quyền tự duyệt) rồi mới chuyển sang "Quản Lý Hợp Đồng & Giấy Phép" để theo dõi.</p>
@@ -1190,11 +1201,9 @@ input[data-sdd-list] {
       </form>
     </div>
 
-    <div id="contractDashboardCards"></div>
-
-    <div class="bg-gray-50 p-4 rounded-lg border space-y-3">
-      <h4 class="font-bold text-gray-700 text-sm">🔍 Tìm Kiếm & Lọc Hợp Đồng</h4>
-      <div class="grid grid-cols-1 md:grid-cols-7 gap-3">
+    <details class="filter-box-details bg-gray-50 p-4 rounded-lg border">
+      <summary class="font-bold text-gray-700 text-sm flex items-center gap-1.5"><span class="filter-box-chevron text-gray-400">▸</span><span>🔍 Tìm Kiếm & Lọc Hợp Đồng</span></summary>
+      <div class="grid grid-cols-1 md:grid-cols-7 gap-3 mt-3">
         <div>
           <label class="block text-xs font-semibold text-gray-600 mb-1">Lọc Theo Phòng Ban</label>
           <select id="filterDeptContract" onchange="onContractFilterChange()" class="w-full border p-2 rounded text-sm bg-white">
@@ -1240,7 +1249,7 @@ input[data-sdd-list] {
           <input id="filterKeywordContract" oninput="onContractFilterChange()" placeholder="Mã, tên, đối tác..." class="w-full border p-2 rounded text-sm">
         </div>
       </div>
-    </div>
+    </details>
 
     <div class="space-y-3">
       <h3 id="contractListTitle" class="font-bold text-gray-800">📋 Danh Sách Hợp Đồng Chờ Duyệt</h3>
@@ -1268,6 +1277,7 @@ input[data-sdd-list] {
   <!-- Màn hình MODULE QUẢN LÝ PHÒNG HỌP -->
   <div id="meetingSection" class="hidden space-y-6">
     <div id="hanhChinhTabBar_meeting" class="hidden flex gap-2 flex-wrap"></div>
+    <div id="meetingDashboardCards"></div>
     <div class="bg-emerald-50 p-4 rounded border border-emerald-200 space-y-3">
       <h3 class="font-bold text-emerald-900 text-base flex items-center gap-2">📅 Quản Lý & Đặt Lịch Phòng Họp</h3>
       <p class="text-xs text-emerald-800">Đăng ký lịch sử dụng phòng họp. Phiếu đặt chỉ được xác nhận sau khi được phê duyệt. Hệ thống tự động kiểm tra trùng giờ trong cùng 1 phòng.</p>
@@ -1322,8 +1332,6 @@ input[data-sdd-list] {
           <button type="submit" class="bg-emerald-600 text-white px-5 py-2 rounded font-bold hover:bg-emerald-700">Gửi phê duyệt</button>
         </div>
       </form>
-
-      <div id="meetingDashboardCards"></div>
 
       <div class="bg-gray-50 p-4 rounded-lg border space-y-3">
         <h4 class="font-bold text-gray-700 text-sm">🔍 Tìm Kiếm & Lọc Lịch Phòng Họp</h4>
@@ -2809,6 +2817,7 @@ input[data-sdd-list] {
     </div>
 
     <div id="carSubReg" class="space-y-6">
+      <div id="carDashboardCards"></div>
     <div class="bg-indigo-50 p-4 rounded border border-indigo-200 space-y-3">
       <h3 class="font-bold text-indigo-900 text-base flex items-center gap-2">🚗 Mẫu Biểu Đăng Ký Xe Ô Tô / Phương Tiện</h3>
       <p class="text-xs text-indigo-700">Tạo phiếu đăng ký lịch trình xe. Luồng duyệt tích hợp phê duyệt đồng cấp.</p>
@@ -2880,8 +2889,6 @@ input[data-sdd-list] {
         </div>
       </form>
     </div>
-
-    <div id="carDashboardCards"></div>
 
     <div class="bg-gray-50 p-4 rounded-lg border space-y-3">
       <h4 class="font-bold text-gray-700 text-sm">🔍 Tìm Kiếm & Lọc Đăng Ký Xe</h4>
@@ -2960,6 +2967,7 @@ input[data-sdd-list] {
 
     <!-- Sub-tab: Đăng Ký (ai cũng vào được) -->
     <div id="vppSubRegister" class="space-y-4">
+      <div id="vppDashboardCards"></div>
       <div class="bg-orange-50 p-4 rounded border border-orange-200 space-y-3">
         <h3 class="font-bold text-orange-900 text-sm flex items-center gap-1">📝 Đăng Ký Văn Phòng Phẩm</h3>
         <div>
@@ -2998,7 +3006,6 @@ input[data-sdd-list] {
         </div>
       </div>
 
-      <div id="vppDashboardCards"></div>
       <div class="bg-gray-50 p-3 rounded-lg border flex items-center gap-2">
         <label class="text-xs font-semibold text-gray-600">Lọc Theo Trạng Thái</label>
         <select id="filterStatusVpp" onchange="onVppFilterChange()" class="border p-2 rounded text-sm bg-white">
@@ -3159,6 +3166,7 @@ input[data-sdd-list] {
 
     <!-- Sub-tab: Kỳ Cấp Phát (Hành Chính - uniformManage) -->
     <div id="uniformSubPeriods" class="hidden space-y-4">
+      <div id="uniformPeriodDashboardCards"></div>
       <div class="bg-slate-50 p-4 rounded border border-slate-200 space-y-3">
         <div class="flex items-center justify-between gap-2 flex-wrap">
           <h3 class="font-bold text-gray-800 text-base flex items-center gap-2">📋 Danh Mục Đồng Phục</h3>
@@ -3200,7 +3208,6 @@ input[data-sdd-list] {
 
       <div class="space-y-3">
         <h3 class="font-bold text-gray-800 text-sm">📋 Danh Sách Kỳ Cấp Phát</h3>
-        <div id="uniformPeriodDashboardCards"></div>
         <div class="bg-gray-50 p-3 rounded-lg border flex items-center gap-2">
           <label class="text-xs font-semibold text-gray-600">Lọc Theo Trạng Thái</label>
           <select id="filterStatusUniformPeriod" onchange="renderUniformPeriodsList()" class="border p-2 rounded text-sm bg-white">
@@ -3379,6 +3386,7 @@ input[data-sdd-list] {
            lịch sử: hiện cho cả 2 vai trò, tự lọc theo canViewUniformTransferClient() bên dưới. -->
       <div class="bg-cyan-50 p-4 rounded border border-cyan-200 space-y-3">
         <h3 class="font-bold text-cyan-900 text-base flex items-center gap-2">🔁 Điều Chuyển Kho Giữa Các Siêu Thị</h3>
+        <div id="uniformTransferDashboardCards"></div>
         <div id="uniformTransferRequestForm" class="hidden space-y-3">
           <p class="text-xs text-cyan-700">Yêu cầu chuyển bớt tồn kho của siêu thị bạn sang 1 siêu thị khác đang thiếu hàng — cần người có quyền duyệt (Quản Trị Viên / Duyệt Kỳ Cấp Phát) chấp nhận mới có hiệu lực.</p>
           <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -3417,7 +3425,6 @@ input[data-sdd-list] {
 
         <div class="space-y-2">
           <h4 class="font-bold text-sm text-gray-800">📋 Lịch Sử Điều Chuyển</h4>
-          <div id="uniformTransferDashboardCards"></div>
           <div class="bg-gray-50 p-3 rounded-lg border flex items-center gap-2">
             <label class="text-xs font-semibold text-gray-600">Lọc Theo Trạng Thái</label>
             <select id="filterStatusUniformTransfer" onchange="renderUniformTransfersTable()" class="border p-2 rounded text-sm bg-white">
@@ -3604,9 +3611,9 @@ input[data-sdd-list] {
       </form>
     </div>
 
-    <div class="bg-gray-50 p-4 rounded-lg border space-y-3">
-      <h4 class="font-bold text-gray-700 text-sm">🔍 Tìm Kiếm & Lọc Giấy Phép</h4>
-      <div class="grid grid-cols-1 md:grid-cols-6 gap-3">
+    <details class="filter-box-details bg-gray-50 p-4 rounded-lg border">
+      <summary class="font-bold text-gray-700 text-sm flex items-center gap-1.5"><span class="filter-box-chevron text-gray-400">▸</span><span>🔍 Tìm Kiếm & Lọc Giấy Phép</span></summary>
+      <div class="grid grid-cols-1 md:grid-cols-6 gap-3 mt-3">
         <div>
           <label class="block text-xs font-semibold text-gray-600 mb-1">Lọc Theo Trạng Thái Duyệt</label>
           <select id="filterLicenseStatus" onchange="onLicenseFilterChange()" class="w-full border p-2 rounded text-sm bg-white">
@@ -3648,7 +3655,7 @@ input[data-sdd-list] {
           <input id="filterLicenseKeyword" oninput="onLicenseFilterChange()" placeholder="Mã, Công ty, Địa điểm, Loại GP, Số GP..." class="w-full border p-2 rounded text-sm">
         </div>
       </div>
-    </div>
+    </details>
 
     <div>
       <div class="flex justify-between items-center mb-3">
@@ -3677,6 +3684,7 @@ input[data-sdd-list] {
 
   <!-- Màn hình MODULE TỔNG HỢP (Mua Bán / Sửa Chữa / Đầu Tư / Thanh Toán) -->
   <div id="officeSection" class="hidden space-y-6">
+    <div id="officeDashboardCards"></div>
     <div class="bg-teal-50 p-4 rounded border border-teal-200 space-y-3">
       <div class="flex justify-between items-center flex-wrap gap-2">
         <h3 class="font-bold text-teal-900 text-base flex items-center gap-2">🗂️ Tổng Hợp (Mua Bán - Sửa Chữa - Đầu Tư - Thanh Toán)</h3>
@@ -3764,8 +3772,6 @@ input[data-sdd-list] {
         </div>
       </form>
     </div>
-
-    <div id="officeDashboardCards"></div>
 
     <div class="bg-gray-50 p-4 rounded-lg border space-y-3">
       <h4 class="font-bold text-gray-700 text-sm">🔍 Tìm Kiếm & Lọc Đề Xuất Văn Phòng</h4>
@@ -5238,6 +5244,7 @@ input[data-sdd-list] {
 
     <!-- Sub-tab: Phê Duyệt Giá -->
     <div id="itSubPrice" class="space-y-4">
+      <div id="itPriceDashboardCards"></div>
       <!-- Chỉ admin thấy được (khớp itPriceMasterLists trong ADMIN_ONLY_KEYS ở routes/data.js) — nạp
            sẵn 1 hoặc nhiều Mẫu Giá (KHUÔN CỘT của bảng giá bên mua hàng gửi tại từng thời điểm, không
            còn lưu dữ liệu giá thật/không còn đối chiếu tự động) để người đề xuất chọn đúng mẫu áp dụng
@@ -5331,8 +5338,6 @@ input[data-sdd-list] {
           </div>
         </form>
       </div>
-
-      <div id="itPriceDashboardCards"></div>
 
       <div class="bg-gray-50 p-4 rounded-lg border space-y-3">
         <h4 class="font-bold text-gray-700 text-sm">🔍 Tìm Kiếm & Lọc Đề Xuất Duyệt Giá</h4>
@@ -5484,6 +5489,7 @@ input[data-sdd-list] {
 
     <!-- Sub-tab: Lập Ngân Sách (mọi user có budgetCreate, lập cho ĐÚNG phòng ban mình) -->
     <div id="budgetSubEntry" class="space-y-4">
+      <div id="budgetDashboardCards"></div>
       <div class="bg-violet-50 p-4 rounded border border-violet-200 space-y-3">
         <h3 class="font-bold text-violet-900 text-base flex items-center gap-2">📝 Lập Ngân Sách Đơn Vị</h3>
         <p class="text-xs text-violet-700">Chọn 1 kỳ ngân sách đang mở thuộc phạm vi phòng ban bạn — nhiều người cùng phòng có quyền lập đều sửa chung được 1 bản nháp của đơn vị. Gửi rồi sẽ chuyển cho Trưởng phòng duyệt.</p>
@@ -5523,7 +5529,6 @@ input[data-sdd-list] {
         </div>
       </div>
 
-      <div id="budgetDashboardCards"></div>
       <div class="bg-gray-50 p-3 rounded-lg border flex items-center gap-2">
         <label class="text-xs font-semibold text-gray-600">Lọc Theo Trạng Thái</label>
         <select id="filterStatusBudget" onchange="renderBudgetEntryList()" class="border p-2 rounded text-sm bg-white">
@@ -6890,15 +6895,36 @@ function isInDateRange(dateStr, fromDate, toDate) {
 // cards: [{ key, label, count, colorClass }] — colorClass là 1 class border-l-* (vd 'border-l-amber-500').
 // activeKey: giá trị filter đang được chọn (để tô viền nhấn thẻ tương ứng). onClickFnName: tên hàm
 // global (chuỗi) sẽ được gọi với đúng 1 tham số là card.key khi bấm thẻ.
+// Map tên màu (suy ra từ colorClass sẵn có kiểu 'border-l-{color}-500' của từng module) sang bộ class
+// nền/viền/chữ đầy đủ — viết literal từng class ở đây (không nội suy chuỗi động) vì Tailwind chỉ grep
+// text tìm chuỗi giống tên class trong file, không thực thi JS (xem tailwind.config.js).
+const DASHBOARD_CARD_COLOR_MAP = {
+  blue:   { bg: 'bg-blue-50',   border: 'border-blue-300',   text: 'text-blue-700',   activeBg: 'bg-blue-100' },
+  yellow: { bg: 'bg-yellow-50', border: 'border-yellow-300', text: 'text-yellow-700', activeBg: 'bg-yellow-100' },
+  orange: { bg: 'bg-orange-50', border: 'border-orange-300', text: 'text-orange-700', activeBg: 'bg-orange-100' },
+  green:  { bg: 'bg-green-50',  border: 'border-green-300',  text: 'text-green-700',  activeBg: 'bg-green-100' },
+  red:    { bg: 'bg-red-50',    border: 'border-red-300',    text: 'text-red-700',    activeBg: 'bg-red-100' },
+  indigo: { bg: 'bg-indigo-50', border: 'border-indigo-300', text: 'text-indigo-700', activeBg: 'bg-indigo-100' },
+  sky:    { bg: 'bg-sky-50',    border: 'border-sky-300',    text: 'text-sky-700',    activeBg: 'bg-sky-100' },
+  amber:  { bg: 'bg-amber-50',  border: 'border-amber-300',  text: 'text-amber-700',  activeBg: 'bg-amber-100' },
+  purple: { bg: 'bg-purple-50', border: 'border-purple-300', text: 'text-purple-700', activeBg: 'bg-purple-100' },
+  gray:   { bg: 'bg-gray-50',   border: 'border-gray-300',   text: 'text-gray-700',   activeBg: 'bg-gray-100' }
+};
+
 function buildDashboardCardsHTML(cards, activeKey, onClickFnName) {
   const colsCls = cards.length >= 5 ? 'md:grid-cols-5' : (cards.length === 4 ? 'md:grid-cols-4' : 'md:grid-cols-3');
   return `<div class="grid grid-cols-2 ${colsCls} gap-2 mb-3">` +
-    cards.map(c => `
-      <div class="cursor-pointer bg-white border rounded p-2 text-center border-l-4 ${c.colorClass} hover:shadow transition ${activeKey === c.key ? 'ring-2 ring-offset-1 ring-sky-400' : ''}"
+    cards.map(c => {
+      const colorName = (c.colorClass.match(/border-l-(\w+)-500/) || [])[1] || 'gray';
+      const colors = DASHBOARD_CARD_COLOR_MAP[colorName] || DASHBOARD_CARD_COLOR_MAP.gray;
+      const isActive = activeKey === c.key;
+      return `
+      <div class="cursor-pointer border rounded-lg p-2 text-center transition hover:shadow ${colors.border} ${isActive ? colors.activeBg + ' ring-2 ring-offset-1 ring-sky-400' : colors.bg}"
            onclick="${onClickFnName}('${c.key}')">
-        <div class="text-[11px] text-gray-500">${escapeHtml(c.label)}</div>
-        <div class="text-lg font-bold">${c.count}</div>
-      </div>`).join('') +
+        <div class="text-[11px] ${colors.text} font-semibold">${escapeHtml(c.label)}</div>
+        <div class="text-lg font-bold ${colors.text}">${c.count}</div>
+      </div>`;
+    }).join('') +
     `</div>`;
 }
 
@@ -10137,6 +10163,18 @@ function buildStepLabelForHub(wfConfig, currentStep) {
 // module theo BƯỚC quy trình phòng ban dùng canApproveStep + 4 module theo 1 QUYỀN PHẲNG không có
 // khái niệm bước). Không có DB collection riêng — thuần đọc lại DB.* đã tải sẵn, cùng nguồn dữ liệu
 // countDeptWorkflowPending()/buildDashboardCards() đang dùng cho các thẻ Dashboard.
+// Badge trạng thái dùng chung cho cột "Trạng Thái" ở Approval Hub — cùng khuôn
+// `<span class="px-2 py-0.5 bg-X-100 text-X-800 rounded font-bold text-xs">` đã dùng ở 10+ module khác
+// (vd itPriceStatusBadge()). Đa số hồ sơ trong Approval Hub đang ở đúng 1 trạng thái "đang chờ duyệt",
+// nhưng vài module đã có sẵn cờ trạng thái con hữu ích hơn (đang chờ bổ sung thông tin) nên tận dụng
+// luôn thay vì hiện chung 1 nhãn vô nghĩa.
+function approvalHubPendingBadge() {
+  return `<span class="px-2 py-0.5 bg-indigo-100 text-indigo-800 rounded font-bold text-xs">⏳ Đang Chờ Duyệt</span>`;
+}
+function approvalHubNeedInfoBadge() {
+  return `<span class="px-2 py-0.5 bg-amber-100 text-amber-800 rounded font-bold text-xs">🟠 Chờ Bổ Sung</span>`;
+}
+
 function getMyPendingApprovals(user) {
   if (!user) return [];
   const items = [];
@@ -10158,6 +10196,7 @@ function getMyPendingApprovals(user) {
         code: cfg.codeOf(rec), title: cfg.titleOf(rec), dept: rec.dept,
         stepLabel: buildStepLabelForHub(wfConfig, step),
         createdAt: rec.createdAt,
+        statusBadge: cfg.statusBadgeOf ? cfg.statusBadgeOf(rec) : approvalHubPendingBadge(),
         actions: cfg.actionsOf(rec)
       });
     });
@@ -10206,6 +10245,7 @@ function getMyPendingApprovals(user) {
   addDeptWorkflowItems(DB.itPriceApprovals, p => DB.itPriceDeptWorkflows[p.dept], {
     type: 'itPrice', typeLabel: '🏷️ Hỗ Trợ IT - Duyệt giá',
     codeOf: r => r.code, titleOf: r => r.productName,
+    statusBadgeOf: r => itPriceHasUnresolvedInfoRequest(r) ? approvalHubNeedInfoBadge() : approvalHubPendingBadge(),
     actionsOf: r => [
       { label: '✅ Duyệt', onclick: `runItPriceAction(${r.id}, 'approve')`, primary: true },
       { label: '❌ Từ chối', onclick: `runItPriceAction(${r.id}, 'reject')` }
@@ -10254,6 +10294,7 @@ function getMyPendingApprovals(user) {
       items.push({
         type: 'meeting', typeLabel: '📅 Phòng họp', code: m.code, title: m.title, dept: m.dept,
         stepLabel: '', createdAt: m.createdAt,
+        statusBadge: approvalHubPendingBadge(),
         actions: [{ label: '✅ Duyệt', onclick: `approveMeeting(${m.id})`, primary: true }]
       });
     });
@@ -10264,6 +10305,7 @@ function getMyPendingApprovals(user) {
       items.push({
         type: 'internalShare', typeLabel: '💬 Góc chia sẻ', code: p.code, title: p.title, dept: p.dept,
         stepLabel: '', createdAt: p.createdAt,
+        statusBadge: approvalHubPendingBadge(),
         actions: [
           { label: '✅ Duyệt', onclick: `approveInternalPostAction(${p.id})`, primary: true },
           { label: '❌ Từ chối', onclick: `rejectInternalPostAction(${p.id})` }
@@ -10283,6 +10325,7 @@ function getMyPendingApprovals(user) {
           type: 'flaggedComment', typeLabel: `${isSevere ? '🚨' : '⚠️'} Bình luận nhạy cảm (${catLabels})`,
           code: '', title: `"${c.content}" — trong bài "${p.title}" (${c.name})`, dept: p.dept,
           stepLabel: '', createdAt: c.time,
+          statusBadge: approvalHubPendingBadge(),
           actions: [
             { label: '🗑️ Xoá bình luận', onclick: `deleteFlaggedCommentAction(${p.id}, ${c.id})`, primary: true },
             { label: '✅ Bỏ qua (không vấn đề)', onclick: `dismissCommentFlagAction(${p.id}, ${c.id})` }
@@ -10299,6 +10342,7 @@ function getMyPendingApprovals(user) {
       items.push({
         type: 'license', typeLabel: '📜 Giấy phép', code: l.displayCode || l.code, title: l.licenseType, dept: l.dept,
         stepLabel: '', createdAt: l.createdAt,
+        statusBadge: approvalHubPendingBadge(),
         actions: [
           { label: '✅ Duyệt', onclick: `runLicenseAction(${l.id}, 'approve')`, primary: true },
           { label: '❌ Từ chối', onclick: `runLicenseAction(${l.id}, 'reject')` }
@@ -10312,6 +10356,7 @@ function getMyPendingApprovals(user) {
       items.push({
         type: 'payment', typeLabel: '💰 Thanh toán', code: pr.sourceCode || String(pr.id), title: pr.title,
         dept: pr.dept, stepLabel: '', createdAt: pr.createdAt,
+        statusBadge: pr.status === 'NEED_INFO' ? approvalHubNeedInfoBadge() : approvalHubPendingBadge(),
         actions: [{ label: '✅ Xác nhận', onclick: `approvePaymentRequestAction(${pr.id})`, primary: true }]
       });
     });
@@ -10326,6 +10371,7 @@ function getMyPendingApprovals(user) {
         type: 'itPriceEmergencyReject', typeLabel: '🚨 Hỗ Trợ IT - Từ chối khẩn',
         code: p.code, title: p.productName, dept: p.dept, stepLabel: '',
         createdAt: p.emergencyRejectRequestedAt,
+        statusBadge: approvalHubPendingBadge(),
         actions: [
           { label: '✅ Duyệt huỷ', onclick: `approveItPriceEmergencyRejectAction(${p.id})`, primary: true },
           { label: '❌ Từ chối yêu cầu', onclick: `denyItPriceEmergencyRejectAction(${p.id})` }
@@ -10346,6 +10392,9 @@ function getMyPendingApprovals(user) {
 function getMyProcessedApprovals(user, status, sinceMs) {
   if (!user || (status !== 'APPROVED' && status !== 'REJECTED')) return [];
   const items = [];
+  const statusBadge = status === 'APPROVED'
+    ? `<span class="px-2 py-0.5 bg-green-100 text-green-800 rounded font-bold text-xs">✅ Đã Duyệt</span>`
+    : `<span class="px-2 py-0.5 bg-red-100 text-red-800 rounded font-bold text-xs">❌ Đã Từ Chối</span>`;
 
   // sinceMs = 0/falsy -> "Tất cả thời gian" (không lọc). parseVNDateTime() không parse được (thiếu mốc
   // thời gian ở vài module cũ, xem internalShare REJECTED bên dưới) -> vẫn giữ lại, an toàn hơn ẩn nhầm.
@@ -10373,6 +10422,7 @@ function getMyProcessedApprovals(user, status, sinceMs) {
         code: cfg.codeOf(rec), title: cfg.titleOf(rec), dept: rec.dept,
         stepLabel: status === 'APPROVED' ? '✅ Bạn đã duyệt' : '❌ Bạn đã từ chối',
         createdAt: lastMine.time,
+        statusBadge,
         actions: [{ label: '🔍 Xem', onclick: `gotoApprovalHubOrigin('${cfg.type}')`, primary: true }]
       });
     });
@@ -10414,6 +10464,7 @@ function getMyProcessedApprovals(user, status, sinceMs) {
       items.push({
         type: 'meeting', typeLabel: '📅 Phòng họp', code: m.code, title: m.title, dept: m.dept,
         stepLabel: '✅ Bạn đã duyệt', createdAt: m.approvedAt,
+        statusBadge,
         actions: [{ label: '🔍 Xem', onclick: `gotoApprovalHubOrigin('meeting')`, primary: true }]
       });
     });
@@ -10426,6 +10477,7 @@ function getMyProcessedApprovals(user, status, sinceMs) {
       items.push({
         type: 'internalShare', typeLabel: '💬 Góc chia sẻ', code: p.code, title: p.title, dept: p.dept,
         stepLabel: status === 'APPROVED' ? '✅ Bạn đã duyệt' : '❌ Bạn đã từ chối', createdAt: p[dateField],
+        statusBadge,
         actions: [{ label: '🔍 Xem', onclick: `gotoApprovalHubOrigin('internalShare')`, primary: true }]
       });
     });
@@ -10443,6 +10495,7 @@ function getMyProcessedApprovals(user, status, sinceMs) {
       items.push({
         type: 'license', typeLabel: '📜 Giấy phép', code: l.displayCode || l.code, title: l.licenseType, dept: l.dept,
         stepLabel: status === 'APPROVED' ? '✅ Bạn đã duyệt' : '❌ Bạn đã từ chối', createdAt: lastMine.time,
+        statusBadge,
         actions: [{ label: '🔍 Xem', onclick: `gotoApprovalHubOrigin('license')`, primary: true }]
       });
     });
@@ -10453,6 +10506,7 @@ function getMyProcessedApprovals(user, status, sinceMs) {
       items.push({
         type: 'payment', typeLabel: '💰 Thanh toán', code: pr.sourceCode || String(pr.id), title: pr.title, dept: pr.dept,
         stepLabel: '✅ Bạn đã duyệt', createdAt: pr.approvedAt,
+        statusBadge,
         actions: [{ label: '🔍 Xem', onclick: `gotoApprovalHubOrigin('payment')`, primary: true }]
       });
     });
@@ -10591,6 +10645,7 @@ function renderApprovalHub() {
       <td class="p-2 font-semibold text-gray-800">${escapeHtml(it.title || '')}</td>
       <td class="p-2 text-gray-600">${escapeHtml(it.dept || '')}</td>
       <td class="p-2 text-xs text-gray-600">${escapeHtml(it.stepLabel || '')}</td>
+      <td class="p-2 whitespace-nowrap">${it.statusBadge || ''}</td>
       <td class="p-2 text-xs text-gray-500 whitespace-nowrap">${escapeHtml(it.createdAt || '')}</td>
       <td class="p-2 text-center space-x-1 whitespace-nowrap">
         ${it.actions.map(a => `<button onclick="${a.onclick}" class="px-2 py-1 rounded text-xs font-bold ${a.label.startsWith('🔍') ? 'bg-sky-600 text-white hover:bg-sky-700' : (a.primary ? 'bg-emerald-600 text-white hover:bg-emerald-700' : 'bg-red-600 text-white hover:bg-red-700')}">${a.label}</button>`).join(' ')}
@@ -11481,8 +11536,11 @@ function filterDocByCard(key) {
     PENDING_NEW: { filterStatus: 'PENDING', filterDocType: 'NEW' },
     PENDING_VERSION: { filterStatus: 'PENDING', filterDocType: 'VERSION' },
     APPROVED: { filterStatus: 'APPROVED', filterDocType: '' },
-    REJECTED: { filterStatus: 'REJECTED', filterDocType: '' }
+    REJECTED: { filterStatus: 'REJECTED', filterDocType: '' },
+    DRAFT: { filterStatus: 'DRAFT', filterDocType: '' }
   };
+  const box = document.querySelector('#docSection .filter-box-details');
+  if (box) box.open = true;
   applyDashboardCardFilter(map[key] || {}, 'doc', renderDocs);
 }
 
@@ -11770,12 +11828,14 @@ function renderDocs() {
     { key: 'PENDING_NEW', label: 'Chờ Duyệt: Tài Liệu Mới', count: rootDocsAll.filter(d => d.status === 'PENDING').length, colorClass: 'border-l-yellow-500' },
     { key: 'PENDING_VERSION', label: 'Chờ Duyệt: Cập Nhật Phiên Bản', count: versionDocsAll.filter(d => d.status === 'PENDING').length, colorClass: 'border-l-orange-500' },
     { key: 'APPROVED', label: 'Đã Phê Duyệt', count: rootDocsAll.filter(d => d.status === 'APPROVED').length, colorClass: 'border-l-green-500' },
-    { key: 'REJECTED', label: 'Từ Chối / Trả Về', count: rootDocsAll.filter(d => d.status === 'REJECTED').length, colorClass: 'border-l-red-500' }
+    { key: 'REJECTED', label: 'Từ Chối / Trả Về', count: rootDocsAll.filter(d => d.status === 'REJECTED').length, colorClass: 'border-l-red-500' },
+    { key: 'DRAFT', label: 'Chờ Chỉnh Sửa (Cần Bổ Sung)', count: rootDocsAll.filter(d => d.status === 'DRAFT').length, colorClass: 'border-l-purple-500' }
   ];
   let activeCardKey = '__ALL__';
   if (statusFilter === 'PENDING') activeCardKey = docTypeFilter === 'VERSION' ? 'PENDING_VERSION' : 'PENDING_NEW';
   else if (statusFilter === 'APPROVED') activeCardKey = 'APPROVED';
   else if (statusFilter === 'REJECTED') activeCardKey = 'REJECTED';
+  else if (statusFilter === 'DRAFT') activeCardKey = 'DRAFT';
   document.getElementById('docDashboardCards').innerHTML = buildDashboardCardsHTML(dashCards, activeCardKey, 'filterDocByCard');
 
   // Lọc tài liệu theo quyền truy cập phòng ban & bộ lọc. Mặc định (docTypeFilter rỗng/'NEW') chỉ hiện
@@ -12165,6 +12225,8 @@ function filterLicenseByCard(key) {
     EXPIRING: { filterLicenseStatus: '', filterLicenseType: '', filterLicenseLifecycle: 'EXPIRING' },
     EXPIRED: { filterLicenseStatus: '', filterLicenseType: '', filterLicenseLifecycle: 'EXPIRED' }
   };
+  const box = document.querySelector('#licenseSection .filter-box-details');
+  if (box) box.open = true;
   applyDashboardCardFilter(map[key] || {}, 'license', renderLicenses);
 }
 function onLicenseFilterChange() {
@@ -15852,6 +15914,8 @@ function filterContractByCard(key) {
     SIGNED_PENDING: { filterContractType: '', filterSignedStatusContract: 'PENDING' },
     SIGNED_APPROVED: { filterContractType: '', filterSignedStatusContract: 'APPROVED' }
   };
+  const box = document.querySelector('#contractSection .filter-box-details');
+  if (box) box.open = true;
   applyDashboardCardFilter(map[key] || {}, 'contract', renderContracts);
 }
 
