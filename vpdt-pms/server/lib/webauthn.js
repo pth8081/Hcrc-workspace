@@ -55,6 +55,30 @@ function ensureEnabled() {
   }
 }
 
+// verifyRegistrationResponse()/verifyAuthenticationResponse() ném Error thường (không phải HttpError) với
+// message mô tả rõ nguyên nhân — trước đây bị nuốt thành 1 câu chung chung "Không xác minh được thiết bị
+// vân tay" ở routes/auth.js, khiến 2 lỗi cấu hình PHỔ BIẾN NHẤT (origin không khớp — thường do server
+// đứng sau reverse proxy/Cloudflare Tunnel mà thiếu TRUST_PROXY khiến req.protocol báo sai "http" dù
+// trình duyệt gọi qua "https"; hoặc WEBAUTHN_RP_ID không đúng domain thật) không có cách nào chẩn đoán
+// được nếu không SSH vào xem log server. Nhận diện 2 message đặc trưng của thư viện (xem
+// node_modules/@simplewebauthn/server/esm/{registration,authentication}/verify*Response.js và
+// helpers/matchExpectedRPID.js) để trả lỗi rõ nguyên nhân + hướng khắc phục ngay trên UI — an toàn để
+// hiện thẳng cho người dùng vì route luôn đứng sau requireAuth (không lộ gì cho người chưa đăng nhập) và
+// đây chỉ là gợi ý cấu hình, không phải chi tiết exception nội bộ.
+function classifyWebauthnVerifyError(err, req) {
+  const msg = String(err?.message || '');
+  if (/Unexpected (registration|authentication) response origin/.test(msg)) {
+    return new HttpError(400,
+      `Không khớp domain (origin): trình duyệt gọi tới "${getExpectedOrigin(req)}" nhưng máy chủ đang mong đợi origin khác. ` +
+      `Nếu server chạy sau reverse proxy/Cloudflare Tunnel, kiểm tra lại biến TRUST_PROXY trong .env (server.js) và WEBAUTHN_RP_ID phải đúng domain thật (vd "vpdt.hcrc.vn").`);
+  }
+  if (msg === 'Unexpected RP ID hash' || err?.name === 'UnexpectedRPIDHash') {
+    return new HttpError(400,
+      `RP ID không khớp: biến WEBAUTHN_RP_ID trong .env (đang là "${getRpID()}") phải đúng domain thật người dùng truy cập, không kèm "https://" hay đường dẫn.`);
+  }
+  return null;
+}
+
 // Bước 1 (đăng ký thiết bị mới) — CHỈ gọi được từ 1 phiên đã đăng nhập bằng mật khẩu trước đó (route
 // gọi hàm này luôn đặt sau requireAuth), không có đường "đăng ký vân tay" cho tài khoản chưa xác minh.
 async function buildRegistrationOptions(req, user) {
@@ -88,12 +112,17 @@ async function verifyRegistration(req, user, response) {
     throw new HttpError(400, 'Yêu cầu đăng ký đã hết hạn, vui lòng thử lại');
   }
 
-  const result = await verifyRegistrationResponse({
-    response,
-    expectedChallenge: entry.challenge,
-    expectedOrigin: getExpectedOrigin(req),
-    expectedRPID: getRpID()
-  });
+  let result;
+  try {
+    result = await verifyRegistrationResponse({
+      response,
+      expectedChallenge: entry.challenge,
+      expectedOrigin: getExpectedOrigin(req),
+      expectedRPID: getRpID()
+    });
+  } catch (err) {
+    throw classifyWebauthnVerifyError(err, req) || err;
+  }
   if (!result.verified || !result.registrationInfo) {
     throw new HttpError(400, 'Không xác minh được thiết bị vân tay, vui lòng thử lại');
   }
@@ -142,18 +171,23 @@ async function verifyAuthentication(req, user, response) {
     throw new HttpError(401, 'Không tìm thấy thiết bị vân tay này trên tài khoản');
   }
 
-  const result = await verifyAuthenticationResponse({
-    response,
-    expectedChallenge: entry.challenge,
-    expectedOrigin: getExpectedOrigin(req),
-    expectedRPID: getRpID(),
-    credential: {
-      id: stored.id,
-      publicKey: fromB64(stored.publicKey),
-      counter: stored.counter,
-      transports: stored.transports
-    }
-  });
+  let result;
+  try {
+    result = await verifyAuthenticationResponse({
+      response,
+      expectedChallenge: entry.challenge,
+      expectedOrigin: getExpectedOrigin(req),
+      expectedRPID: getRpID(),
+      credential: {
+        id: stored.id,
+        publicKey: fromB64(stored.publicKey),
+        counter: stored.counter,
+        transports: stored.transports
+      }
+    });
+  } catch (err) {
+    throw classifyWebauthnVerifyError(err, req) || err;
+  }
   if (!result.verified) {
     throw new HttpError(401, 'Xác thực vân tay không hợp lệ');
   }

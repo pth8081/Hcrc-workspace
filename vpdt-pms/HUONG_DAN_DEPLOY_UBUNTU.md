@@ -701,6 +701,15 @@ trình duyệt.
 Không cấu hình (để trống `WEBAUTHN_RP_ID`, mặc định) thì hệ thống hoạt động y
 như trước — không bắt buộc.
 
+**Lỗi "Không thể đăng ký thiết bị vân tay"/"Không thể xác thực vân tay"** dù
+đã cấu hình đúng `WEBAUTHN_RP_ID`: nếu server đứng sau 1 lớp reverse proxy
+(Nginx, hoặc Cloudflare Tunnel — xem mục 9b) mà **thiếu `TRUST_PROXY`** trong
+`.env`, Node sẽ đọc nhầm giao thức request là `http` dù trình duyệt gọi thật
+qua `https`, khiến bước xác minh vân tay so khớp origin bị lệch và luôn báo
+lỗi. Từ bản cập nhật này, lỗi sẽ hiện rõ nguyên nhân ngay trên màn hình
+(khớp/lệch origin hay RP ID) thay vì 1 câu chung chung — làm theo đúng gợi ý
+hiện ra: thường chỉ cần thêm `TRUST_PROXY=1` vào `.env` rồi `pm2 restart vpdt`.
+
 ---
 
 ### 10.7. Cài đặt ứng dụng lên màn hình chính (PWA)
