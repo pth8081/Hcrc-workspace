@@ -712,11 +712,27 @@ input[data-sdd-list] {
     <div class="flex justify-between items-center flex-wrap gap-2">
       <div>
         <h2 class="text-xl font-bold text-gray-800">✅ Phê Duyệt</h2>
-        <p class="text-sm text-gray-500">Toàn bộ hồ sơ đang chờ ĐÚNG bạn duyệt, gộp từ mọi module — bấm Duyệt/Từ chối ngay tại đây không cần vào từng module.</p>
+        <p class="text-sm text-gray-500">Toàn bộ hồ sơ đang chờ ĐÚNG bạn duyệt, gộp từ mọi module — bấm Duyệt/Từ chối ngay tại đây không cần vào từng module. Đổi "Trạng thái" bên dưới để xem lại hồ sơ bạn đã duyệt/từ chối trước đây.</p>
       </div>
     </div>
 
     <div class="bg-white p-3 rounded border flex flex-wrap gap-3 items-end">
+      <div>
+        <label class="block text-xs font-bold text-gray-600 mb-1">Trạng Thái</label>
+        <select id="approvalHubFilterStatus" onchange="renderApprovalHub()" class="border rounded px-2 py-1.5 text-sm bg-white">
+          <option value="PENDING">⏳ Đang chờ duyệt</option>
+          <option value="APPROVED">✅ Đã duyệt</option>
+          <option value="REJECTED">❌ Đã từ chối</option>
+        </select>
+      </div>
+      <div id="approvalHubRangeWrap" class="hidden">
+        <label class="block text-xs font-bold text-gray-600 mb-1">Khoảng Thời Gian</label>
+        <select id="approvalHubFilterRange" onchange="renderApprovalHub()" class="border rounded px-2 py-1.5 text-sm bg-white">
+          <option value="30">30 ngày gần đây</option>
+          <option value="90" selected>90 ngày gần đây</option>
+          <option value="0">Tất cả thời gian</option>
+        </select>
+      </div>
       <div>
         <label class="block text-xs font-bold text-gray-600 mb-1">Lọc Theo Loại</label>
         <select id="approvalHubFilterType" onchange="renderApprovalHub()" class="border rounded px-2 py-1.5 text-sm">
@@ -740,7 +756,7 @@ input[data-sdd-list] {
             <th class="p-2">Trích Yếu</th>
             <th class="p-2">Phòng Ban</th>
             <th class="p-2">Bước Hiện Tại</th>
-            <th class="p-2">Ngày Tạo</th>
+            <th class="p-2" id="approvalHubDateColLabel">Ngày Tạo</th>
             <th class="p-2">Thao Tác</th>
           </tr>
         </thead>
@@ -9893,6 +9909,143 @@ function getMyPendingApprovals(user) {
   return items;
 }
 
+// Gộp hồ sơ ĐÃ XỬ LÝ (status khác PENDING) mà ĐÚNG `user` từng duyệt/từ chối — dùng khi bộ lọc "Trạng
+// thái" ở màn Phê Duyệt chọn khác "Đang chờ duyệt", để người duyệt xem lại/theo dõi những gì mình đã xử
+// lý mà KHÔNG cần vào từng module riêng. Cùng nguyên tắc thuần đọc DB.* như getMyPendingApprovals() ở
+// trên — không tạo/sửa dữ liệu gì, không có nút Duyệt/Từ chối (đã xử lý xong rồi), chỉ có 1 nút "🔍 Xem"
+// đưa thẳng sang đúng module gốc (xem gotoApprovalHubOrigin()) — hồ sơ gốc vẫn luôn nằm nguyên ở module
+// gốc, hàm này không đụng gì tới đó.
+function getMyProcessedApprovals(user, status, sinceMs) {
+  if (!user || (status !== 'APPROVED' && status !== 'REJECTED')) return [];
+  const items = [];
+
+  // sinceMs = 0/falsy -> "Tất cả thời gian" (không lọc). parseVNDateTime() không parse được (thiếu mốc
+  // thời gian ở vài module cũ, xem internalShare REJECTED bên dưới) -> vẫn giữ lại, an toàn hơn ẩn nhầm.
+  function inWindow(dateStr) {
+    if (!sinceMs) return true;
+    const d = parseVNDateTime(dateStr);
+    return !d || d.getTime() >= sinceMs;
+  }
+
+  // records: mảng bản ghi gốc; cfg: {type, typeLabel, codeOf, titleOf}; fields: {status, history} (mặc
+  // định 'status'/'history', Hợp đồng Tài liệu ký khai riêng — khớp addDeptWorkflowItems() ở
+  // getMyPendingApprovals()). Chỉ nhận hồ sơ hiện ĐANG ở đúng status đang lọc VÀ có ít nhất 1 dòng lịch
+  // sử do CHÍNH user này thực hiện đúng hành động đó — lấy mốc thời gian ở lần gần nhất user duyệt/từ
+  // chối để sắp xếp + lọc khoảng thời gian.
+  function addProcessedItems(records, cfg, fields) {
+    const f = { status: 'status', history: 'history', ...(fields || {}) };
+    (records || []).forEach(rec => {
+      if (rec[f.status] !== status) return;
+      const mine = (rec[f.history] || []).filter(h => h.username === user.username && h.action === status);
+      if (!mine.length) return;
+      const lastMine = mine[mine.length - 1];
+      if (!inWindow(lastMine.time)) return;
+      items.push({
+        type: cfg.type, typeLabel: cfg.typeLabel,
+        code: cfg.codeOf(rec), title: cfg.titleOf(rec), dept: rec.dept,
+        stepLabel: status === 'APPROVED' ? '✅ Bạn đã duyệt' : '❌ Bạn đã từ chối',
+        createdAt: lastMine.time,
+        actions: [{ label: '🔍 Xem', onclick: `gotoApprovalHubOrigin('${cfg.type}')`, primary: true }]
+      });
+    });
+  }
+
+  addProcessedItems(DB.docs, { type: 'doc', typeLabel: '📂 Tài liệu', codeOf: r => r.displayCode || r.code, titleOf: r => r.title });
+  addProcessedItems(DB.submissions, { type: 'submission', typeLabel: '📜 Văn bản trình', codeOf: r => r.code, titleOf: r => r.title });
+  addProcessedItems(DB.carRegs, { type: 'car', typeLabel: '🚗 Đăng ký xe', codeOf: r => r.code, titleOf: r => r.destination });
+
+  [
+    { subType: 'MUA_BAN', type: 'officeBuy', typeLabel: '🛒 Mua Bán' },
+    { subType: 'SUA_CHUA', type: 'officeFix', typeLabel: '🔧 Sửa Chữa' },
+    { subType: 'DAU_TU', type: 'officeInvest', typeLabel: '📈 Đầu Tư' }
+  ].forEach(({ subType, type, typeLabel }) => {
+    addProcessedItems((DB.officeReqs || []).filter(o => o.subType === subType), { type, typeLabel, codeOf: r => r.code, titleOf: r => r.title });
+  });
+
+  addProcessedItems(DB.vppRegistrations, { type: 'vpp', typeLabel: '🖇️ Văn phòng phẩm', codeOf: r => r.code, titleOf: r => r.periodName || r.code });
+  addProcessedItems(DB.itPriceApprovals, { type: 'itPrice', typeLabel: '🏷️ Hỗ Trợ IT - Duyệt giá', codeOf: r => r.code, titleOf: r => r.productName });
+  addProcessedItems(DB.budgetEntries, { type: 'budget', typeLabel: '📊 Ngân Sách', codeOf: r => r.code, titleOf: r => r.periodName || r.code });
+
+  addProcessedItems(
+    (DB.contracts || []).filter(c => !c.isAddendum),
+    { type: 'contract', typeLabel: '📄 Hợp đồng', codeOf: r => r.code, titleOf: r => r.title },
+    { status: 'approvalStatus' }
+  );
+  addProcessedItems(
+    (DB.contracts || []).filter(c => !c.isAddendum),
+    { type: 'contractSigned', typeLabel: '📝 Tài liệu ký HĐ', codeOf: r => r.code, titleOf: r => r.title },
+    { status: 'signedFileStatus', history: 'signedFileHistory' }
+  );
+
+  // 3 module quyền phẳng (không có lịch sử theo bước, chỉ 1 lần duyệt/từ chối) — dùng thẳng
+  // approvedBy/rejectedBy + mốc thời gian riêng của từng bản ghi, cùng điều kiện quyền với nhánh PENDING
+  // ở getMyPendingApprovals(). Phòng họp KHÔNG có khái niệm "từ chối" (chỉ Duyệt/Huỷ) nên bỏ qua khi
+  // status === 'REJECTED'. Thanh toán tương tự — không có hành động từ chối.
+  if (status === 'APPROVED' && canApproveMeeting(user)) {
+    (DB.meetings || []).filter(m => m.status === 'APPROVED' && m.approvedBy === user.username && inWindow(m.approvedAt)).forEach(m => {
+      items.push({
+        type: 'meeting', typeLabel: '📅 Phòng họp', code: m.code, title: m.title, dept: m.dept,
+        stepLabel: '✅ Bạn đã duyệt', createdAt: m.approvedAt,
+        actions: [{ label: '🔍 Xem', onclick: `gotoApprovalHubOrigin('meeting')`, primary: true }]
+      });
+    });
+  }
+
+  if (canApproveInternalPost(user)) {
+    const actorField = status === 'APPROVED' ? 'approvedBy' : 'rejectedBy';
+    const dateField = status === 'APPROVED' ? 'approvedAt' : 'rejectedAt';
+    (DB.internalPosts || []).filter(p => p.type === 'SHARE' && p.status === status && p[actorField] === user.username && inWindow(p[dateField])).forEach(p => {
+      items.push({
+        type: 'internalShare', typeLabel: '💬 Góc chia sẻ', code: p.code, title: p.title, dept: p.dept,
+        stepLabel: status === 'APPROVED' ? '✅ Bạn đã duyệt' : '❌ Bạn đã từ chối', createdAt: p[dateField],
+        actions: [{ label: '🔍 Xem', onclick: `gotoApprovalHubOrigin('internalShare')`, primary: true }]
+      });
+    });
+  }
+
+  if (status === 'APPROVED' && canManagePaymentRequestsClient(user)) {
+    (DB.paymentRequests || []).filter(pr => (pr.status === 'APPROVED' || pr.status === 'PAID') && pr.approvedBy === user.username && inWindow(pr.approvedAt)).forEach(pr => {
+      items.push({
+        type: 'payment', typeLabel: '💰 Thanh toán', code: pr.sourceCode || String(pr.id), title: pr.title, dept: pr.dept,
+        stepLabel: '✅ Bạn đã duyệt', createdAt: pr.approvedAt,
+        actions: [{ label: '🔍 Xem', onclick: `gotoApprovalHubOrigin('payment')`, primary: true }]
+      });
+    });
+  }
+
+  items.sort((a, b) => (parseVNDateTime(b.createdAt)?.getTime() || 0) - (parseVNDateTime(a.createdAt)?.getTime() || 0));
+  return items;
+}
+
+// Điều hướng từ 1 dòng ĐÃ XỬ LÝ trong màn Phê Duyệt sang đúng module gốc — tự set (nếu module đó có sẵn
+// ô lọc trạng thái riêng) đúng bộ lọc khớp trạng thái đang xem ở Hub, để thấy ngay đúng hồ sơ mà không
+// cần tự lọc lại thủ công. CHỈ điều hướng UI, không đọc/ghi gì thêm — hồ sơ luôn nằm nguyên ở module gốc
+// (đúng nguyên tắc Hub thuần lớp UI tổng hợp, xem đầu khối PHÊ DUYỆT).
+function gotoApprovalHubOrigin(type) {
+  const status = document.getElementById('approvalHubFilterStatus').value || 'APPROVED';
+  const setStatus = (selectId, onChangeFn) => {
+    const el = document.getElementById(selectId);
+    if (el) { el.value = status; onChangeFn(); }
+  };
+  switch (type) {
+    case 'doc': switchTab('doc'); setStatus('filterStatus', onFilterChange); break;
+    case 'submission': switchTab('submission'); setStatus('filterStatusSub', onSubFilterChange); break;
+    case 'car': switchTab('car'); setStatus('filterStatusCar', onCarFilterChange); break;
+    case 'officeBuy': switchTab('office'); setOfficeSubTab('MUA_BAN'); setStatus('filterStatusOffice', onOfficeFilterChange); break;
+    case 'officeFix': switchTab('office'); setOfficeSubTab('SUA_CHUA'); setStatus('filterStatusOffice', onOfficeFilterChange); break;
+    case 'officeInvest': switchTab('office'); setOfficeSubTab('DAU_TU'); setStatus('filterStatusOffice', onOfficeFilterChange); break;
+    case 'vpp': switchTab('vpp'); setVppSubTab('REGISTER'); break;
+    case 'itPrice': switchTab('itSupport'); setItSupportSubTab('PRICE'); setStatus('filterStatusItPrice', onItPriceFilterChange); break;
+    case 'budget': switchTab('budget'); break;
+    case 'contract': switchTab('contract'); setContractSubTab('APPROVAL'); break;
+    case 'contractSigned': switchTab('contract'); setContractSubTab('MANAGE'); break;
+    case 'meeting': switchTab('meeting'); setStatus('filterStatusMeeting', onMeetingFilterChange); break;
+    case 'internalShare': switchTab('internal'); setInternalSubTab('SHARE'); break;
+    case 'payment': switchTab('office'); setOfficeSubTab('PAYMENT'); break;
+    default: switchTab('approvalHub');
+  }
+}
+
 // Nhãn nút nav hiện thẳng số hồ sơ chờ (không cần mở hộp thư mới thấy — đúng mục đích "phê duyệt
 // nhanh") — gọi lại ở finishLogin() và mỗi lần switchTab() để số luôn khớp thực tế.
 function updateApprovalHubBadge() {
@@ -9935,9 +10088,21 @@ function refreshApprovalSurfaces() {
 }
 
 function renderApprovalHub() {
-  const items = getMyPendingApprovals(currentUser);
+  const statusFilter = document.getElementById('approvalHubFilterStatus').value || 'PENDING';
+  document.getElementById('approvalHubRangeWrap').classList.toggle('hidden', statusFilter === 'PENDING');
+  document.getElementById('approvalHubDateColLabel').innerText = statusFilter === 'PENDING' ? 'Ngày Tạo' : 'Ngày Xử Lý';
 
-  // Đổ danh sách Loại vào bộ lọc — chỉ liệt kê loại THỰC SỰ đang có hồ sơ chờ, không hiện loại rỗng.
+  let items;
+  if (statusFilter === 'PENDING') {
+    items = getMyPendingApprovals(currentUser);
+  } else {
+    const rangeDays = Number(document.getElementById('approvalHubFilterRange').value || 90);
+    const sinceMs = rangeDays > 0 ? Date.now() - rangeDays * 24 * 60 * 60 * 1000 : 0;
+    items = getMyProcessedApprovals(currentUser, statusFilter, sinceMs);
+  }
+
+  // Đổ danh sách Loại vào bộ lọc — chỉ liệt kê loại THỰC SỰ đang có hồ sơ (theo đúng trạng thái đang
+  // xem), không hiện loại rỗng.
   const typeSelect = document.getElementById('approvalHubFilterType');
   const typesPresent = [...new Map(items.map(it => [it.type, it.typeLabel])).entries()];
   const prevTypeValue = typeSelect.value;
@@ -9955,9 +10120,15 @@ function renderApprovalHub() {
       (it.code || '').toLowerCase().includes(keyword) || (it.title || '').toLowerCase().includes(keyword)
     );
   }
-  filtered.sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
+  // PENDING sắp cũ nhất trước (xử lý hồ sơ tồn lâu nhất trước) — ĐÃ xử lý (getMyProcessedApprovals() đã
+  // tự sắp mới nhất trước) giữ nguyên thứ tự đó, không sắp lại theo new Date() (không parse đúng chuỗi
+  // "HH:MM:SS D/M/YYYY" của vi-VN, xem parseVNDateTime()).
+  if (statusFilter === 'PENDING') filtered.sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
 
   document.getElementById('approvalHubEmptyNote').classList.toggle('hidden', items.length > 0);
+  document.getElementById('approvalHubEmptyNote').innerText = statusFilter === 'PENDING'
+    ? '🎉 Hiện không có hồ sơ nào chờ bạn duyệt.'
+    : 'Không có hồ sơ nào khớp bộ lọc hiện tại.';
   document.getElementById('approvalHubListWrap').classList.toggle('hidden', filtered.length === 0);
 
   document.getElementById('approvalHubTableBody').innerHTML = filtered.map(it => `
@@ -9969,7 +10140,7 @@ function renderApprovalHub() {
       <td class="p-2 text-xs text-gray-600">${escapeHtml(it.stepLabel || '')}</td>
       <td class="p-2 text-xs text-gray-500 whitespace-nowrap">${escapeHtml(it.createdAt || '')}</td>
       <td class="p-2 text-center space-x-1 whitespace-nowrap">
-        ${it.actions.map(a => `<button onclick="${a.onclick}" class="px-2 py-1 rounded text-xs font-bold ${a.primary ? 'bg-emerald-600 text-white hover:bg-emerald-700' : 'bg-red-600 text-white hover:bg-red-700'}">${a.label}</button>`).join(' ')}
+        ${it.actions.map(a => `<button onclick="${a.onclick}" class="px-2 py-1 rounded text-xs font-bold ${a.label.startsWith('🔍') ? 'bg-sky-600 text-white hover:bg-sky-700' : (a.primary ? 'bg-emerald-600 text-white hover:bg-emerald-700' : 'bg-red-600 text-white hover:bg-red-700')}">${a.label}</button>`).join(' ')}
       </td>
     </tr>
   `).join('');
