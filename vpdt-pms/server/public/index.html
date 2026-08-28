@@ -1125,16 +1125,13 @@ input[data-sdd-list] {
             <label class="block font-semibold text-gray-600 mb-1">Loại Pháp Lý</label>
             <select id="contractType" onchange="refreshContractCodePreview()" class="w-full border p-1.5 rounded bg-white" required></select>
           </div>
-          <!-- Cùng lý do/cùng khuôn contractAddendumTarget ở trên — đổi hẳn sang <input list>+<datalist>
-               native thay vì nút + bảng tự dựng (button+panel vẫn thỉnh thoảng không mở được ở một số
-               trình duyệt/thiết bị thật). contractApprovalLevel vẫn còn (input ẩn) để giữ nguyên .value
-               cho renderContractApprovalLayerCheckboxes()/submitContractReq() đọc, không phải sửa gì
-               thêm ở 2 nơi đó. -->
+          <!-- Cùng khuôn subApprovalLevel ở form Văn Bản Trình — <select> thật thay vì ô tìm-kiếm-gõ-chọn
+               (danh sách CONTRACT_APPROVAL_LEVELS tĩnh chỉ 4 lựa chọn, không cần tìm kiếm; trước đây dùng
+               widget sdd khiến việc chọn không mở ra được panel "Phê Duyệt" ổn định trên di động — chọn
+               qua onchange của <select> đảm bảo renderContractApprovalLayerCheckboxes() LUÔN chạy). -->
           <div id="contractApprovalLevelWrap">
             <label class="block font-semibold text-gray-600 mb-1">Cấp Phê Duyệt Cuối Cùng</label>
-            <input type="hidden" id="contractApprovalLevel" value="KHAC">
-            <input id="contractApprovalLevelInput" data-sdd-list="contractApprovalLevelDatalist" autocomplete="off" value="Phê duyệt khác" oninput="resolveContractApprovalLevelInput(this.value)" class="w-full border p-1.5 rounded bg-white font-semibold">
-            <div id="contractApprovalLevelDatalist" class="hidden sdd-dropdown" data-sdd-dropdown></div>
+            <select id="contractApprovalLevel" class="w-full border p-1.5 rounded bg-white font-semibold" onchange="renderContractApprovalLayerCheckboxes()"></select>
           </div>
           <div id="contractApprovalDropdownWrap" class="relative">
             <label class="block font-semibold text-gray-600 mb-1">Phê Duyệt</label>
@@ -4986,6 +4983,21 @@ input[data-sdd-list] {
         <input id="itPriceMasterListFileInput" type="file" accept=".xlsx,.xls" class="hidden">
       </div>
 
+      <!-- Modal dùng chung "Gán vai trò cột" — sau khi đọc 1 file Excel BẤT KỲ (Mẫu Giá ở đây, hoặc Mẫu
+           Ngân Sách ở màn Hệ Thống → Ngân Sách), người dùng tự chỉ ra cột nào trong file đóng vai trò
+           nghiệp vụ nào thay vì hệ thống đoán theo từ khoá — xem openColumnRoleMappingModal(). -->
+      <div id="colRoleModal" class="hidden fixed inset-0 bg-black/50 z-[60] flex items-center justify-center p-4">
+        <div class="bg-white rounded-lg p-4 max-w-md w-full space-y-3 text-xs max-h-[90vh] overflow-y-auto">
+          <h3 id="colRoleModalTitle" class="font-bold text-sm text-gray-800"></h3>
+          <p id="colRoleModalHint" class="text-gray-500 italic"></p>
+          <div id="colRoleModalFields" class="space-y-2"></div>
+          <div class="flex justify-end gap-2 pt-2 border-t">
+            <button type="button" onclick="closeColRoleModal(null)" class="bg-gray-200 text-gray-700 px-3 py-1.5 rounded font-bold hover:bg-gray-300">Hủy</button>
+            <button type="button" onclick="confirmColRoleModal()" class="bg-sky-600 text-white px-3 py-1.5 rounded font-bold hover:bg-sky-700">Xác nhận</button>
+          </div>
+        </div>
+      </div>
+
       <div class="bg-sky-50 p-4 rounded border border-sky-200 space-y-3">
         <h3 class="font-bold text-sky-900 text-base flex items-center gap-2">🏷️ Đề Xuất Duyệt Giá Bán (Siêu Thị)</h3>
         <p class="text-xs text-sky-700">Đề xuất giá bán mới cho 1 mặt hàng tại siêu thị công ty đang vận hành — KHÔNG phải mua sắm/chi phí, không sinh đề nghị thanh toán. Sau khi được duyệt, đội Hỗ Trợ IT sẽ áp giá vào hệ thống bán hàng rồi xác nhận hoàn thành ngay tại đây.</p>
@@ -5287,9 +5299,12 @@ input[data-sdd-list] {
       </div>
 
       <div class="bg-violet-50 p-4 rounded border border-violet-200 space-y-3">
-        <div class="flex justify-between items-center">
+        <div class="flex justify-between items-center flex-wrap gap-2">
           <h3 class="font-bold text-violet-900 text-sm flex items-center gap-1">🧩 Mẫu Ngân Sách</h3>
-          <button type="button" onclick="startNewBudgetTemplate()" class="text-violet-700 font-bold hover:underline text-xs">➕ Thêm Mẫu</button>
+          <div class="flex items-center gap-3">
+            <label class="text-violet-700 font-bold hover:underline cursor-pointer text-xs whitespace-nowrap">📎 Từ File Dữ Liệu Thật<input type="file" accept=".xlsx,.xls" class="hidden" onchange="createBudgetTemplateFromRealFile(event)"></label>
+            <button type="button" onclick="startNewBudgetTemplate()" class="text-violet-700 font-bold hover:underline text-xs whitespace-nowrap">➕ Thêm Mẫu</button>
+          </div>
         </div>
         <div class="bg-white rounded border overflow-x-auto">
           <table class="w-full border-collapse text-xs">
@@ -6144,7 +6159,7 @@ const DB = {
   workflows: [], deptWorkflows: {},
   submissions: [], submissionDeptWorkflows: {},
   submissionTypeDeptWorkflows: {}, submissionApprovalGroups: {},
-  contracts: [],
+  contracts: [], contractApprovalGroups: {}, contractApprovalDeptWorkflows: {}, contractManageDeptWorkflows: {},
   meetings: [],
   carRegs: [], carDeptWorkflows: {},
   officeReqs: [],
@@ -7775,6 +7790,15 @@ async function initDatabase(loggingInUser) {
     DB.officeInvestDeptWorkflows = data.officeInvestDeptWorkflows || {};
     DB.vppDeptWorkflows = data.vppDeptWorkflows || {};
     DB.itPriceDeptWorkflows = data.itPriceDeptWorkflows || {};
+    // Sửa lỗi cũ tương tự uploadFileTypeConfig/uploadSizeLimitConfig ở trên: 3 dòng dưới đây trước nay
+    // CHƯA từng được gán từ data (server đã trả đúng — xem routes/data.js — nhưng client không đọc vào),
+    // khiến "Nhóm Phê Duyệt HĐ" (mục 14 Phân Quyền) không vẽ được ô chọn người (renderContractApprovalGroups()
+    // truy cập DB.contractApprovalGroups[key] trên giá trị undefined, ném lỗi và dừng cả vòng lặp render
+    // giữa chừng), và cấu hình quy trình Hợp Đồng theo phòng ban (mục 13, 2 khối "Hợp đồng - Phê duyệt"/
+    // "Hợp đồng - Quản Lý HĐ") luôn hiện lại như chưa cấu hình gì mỗi lần tải lại trang.
+    DB.contractApprovalGroups = data.contractApprovalGroups || {};
+    DB.contractApprovalDeptWorkflows = data.contractApprovalDeptWorkflows || {};
+    DB.contractManageDeptWorkflows = data.contractManageDeptWorkflows || {};
 
     DB.vppPeriods = data.vppPeriods || [];
     DB.vppRegistrations = data.vppRegistrations || [];
@@ -10791,11 +10815,10 @@ function populateDropdowns() {
   }
 
   // Cùng khuôn subApprovalLevelSel ở trên — KHAC ("Phê duyệt khác") đặt đầu danh sách làm mặc định.
-  // contractApprovalLevel giờ là input ẩn + <input list>/<datalist> native — danh sách tĩnh nên chỉ cần
-  // dựng datalist 1 lần, xem populateContractApprovalLevelDatalist().
-  const contractApprovalLevelDatalistEl = document.getElementById('contractApprovalLevelDatalist');
-  if (contractApprovalLevelDatalistEl && !contractApprovalLevelDatalistEl._sddItems) {
-    populateContractApprovalLevelDatalist();
+  const contractApprovalLevelSel = document.getElementById('contractApprovalLevel');
+  if (contractApprovalLevelSel && !contractApprovalLevelSel.options.length) {
+    const orderedC = [CONTRACT_APPROVAL_LEVELS.find(l => l.key === 'KHAC'), ...CONTRACT_APPROVAL_LEVELS.filter(l => l.key !== 'KHAC')];
+    contractApprovalLevelSel.innerHTML = orderedC.map(l => `<option value="${escapeHtml(l.key)}">${escapeHtml(l.label)}</option>`).join('');
   }
 
   const carTypeSel = document.getElementById('carType');
@@ -14168,27 +14191,6 @@ function resolveContractAddendumTargetInput(rawValue) {
   onContractAddendumTargetChange();
 }
 
-// Cùng khuôn contractAddendumTarget ở trên nhưng cho "Cấp Phê Duyệt Cuối Cùng" — danh sách
-// CONTRACT_APPROVAL_LEVELS tĩnh nên chỉ cần dựng datalist 1 lần (gọi từ populateDropdowns()), KHAC đặt
-// đầu làm mặc định.
-function populateContractApprovalLevelDatalist() {
-  const datalist = document.getElementById('contractApprovalLevelDatalist');
-  if (!datalist) return;
-  const orderedC = [CONTRACT_APPROVAL_LEVELS.find(l => l.key === 'KHAC'), ...CONTRACT_APPROVAL_LEVELS.filter(l => l.key !== 'KHAC')];
-  sddSetOptions('contractApprovalLevelDatalist', orderedC.map(l => l.label));
-}
-
-// Gõ/chọn nhãn cấp phê duyệt trong ô tìm -> khớp lại đúng KEY tương ứng trong CONTRACT_APPROVAL_LEVELS
-// -> ghi vào input ẩn contractApprovalLevel (giữ nguyên .value cho renderContractApprovalLayerCheckboxes()/
-// submitContractReq() đọc, không đổi gì ở 2 nơi đó), rồi chạy tiếp đúng logic khoá lớp bắt buộc như
-// trước (cùng onchange cũ của <select>/bảng chọn cũ). Gõ tự do/chưa khớp đúng nhãn nào -> để trống input
-// ẩn (submitContractReq() tự rơi về mặc định 'KHAC' khi rỗng, xem approvalLevel ở đó).
-function resolveContractApprovalLevelInput(rawValue) {
-  const level = CONTRACT_APPROVAL_LEVELS.find(l => l.label === String(rawValue || '').trim());
-  document.getElementById('contractApprovalLevel').value = level ? level.key : '';
-  renderContractApprovalLayerCheckboxes();
-}
-
 // Chọn xong hợp đồng cần bổ sung phụ lục -> khoá Mã/Phòng ban/Loại/Đối tác theo đúng hợp đồng gốc,
 // đề xuất sẵn mã phụ lục tiếp theo.
 function onContractAddendumTargetChange() {
@@ -14439,6 +14441,11 @@ function openEditContract(contractId) {
   document.getElementById('contractCustodianDept').disabled = !!c.isAddendum;
   document.getElementById('contractType').value = c.type;
   document.getElementById('contractType').disabled = !!c.isAddendum;
+  // c.approvalLevel không được onContractOpModeChange() ở trên phục hồi (nó chỉ render lại panel theo
+  // giá trị ĐANG có sẵn trong <select>, thường vẫn là lựa chọn của lượt tạo/sửa TRƯỚC đó) — phải gán
+  // đúng giá trị đã lưu của hồ sơ này rồi render lại panel "Phê Duyệt" một lần nữa cho khớp.
+  document.getElementById('contractApprovalLevel').value = c.approvalLevel || 'KHAC';
+  renderContractApprovalLayerCheckboxes();
   document.getElementById('contractTitle').value = c.title;
   document.getElementById('contractPartner').value = c.partner;
   document.getElementById('contractAmount').value = formatMoneyDisplay(c.amount);
@@ -14462,10 +14469,8 @@ function openEditContract(contractId) {
 function cancelEditContract() {
   editingContractId = null;
   document.getElementById('contractForm').reset();
-  // contractAddendumTargetInput/contractApprovalLevelInput là input thật trong form (không còn nút +
-  // bảng tự dựng) nên form.reset() ở trên đã tự đưa chúng về đúng giá trị mặc định trong HTML ("" và
-  // "Phê duyệt khác") — nhưng input ẩn tương ứng KHÔNG đáng tin cậy được reset kèm theo (cùng lý do
-  // contractOpMode ở dưới cần gán tay) nên vẫn đặt lại tường minh ở đây.
+  // contractApprovalLevel giờ là <select> thật nên form.reset() ở trên đã tự đưa về đúng option đầu
+  // (KHAC) rồi — vẫn đặt lại tường minh ở đây cho chắc (cùng lý do contractOpMode ở dưới cần gán tay).
   document.getElementById('contractAddendumTarget').value = '';
   document.getElementById('contractApprovalLevel').value = 'KHAC';
   document.getElementById('contractDept').disabled = false;
@@ -20157,6 +20162,52 @@ async function uploadBudgetTemplateFieldsXlsx(event) {
   renderBudgetTemplateFieldsBuilder();
   alert(`✅ Đã thêm ${added.length} cột từ file "${data.fileName}" — kiểm tra lại danh sách rồi bấm Lưu.`);
 }
+
+// Đọc 1 file Excel BẤT KỲ (dữ liệu ngân sách thật, VD Kế Toán gửi) rồi lấy NGUYÊN VĂN tên cột trong file
+// đó làm cột của mẫu — khác hẳn uploadBudgetTemplateFieldsXlsx() ở trên (đọc theo khuôn định nghĩa cột
+// riêng). Admin tự gán vai trò Tên Hạng Mục/Số Tiền/Loại NS/Mô Tả Chi Tiết qua modal dùng chung với Mẫu
+// Giá (Hỗ Trợ IT, xem openColumnRoleMappingModal()) — cột không gán vai trò nào trở thành cột tuỳ biến
+// kiểu text, admin xem lại/đổi kiểu trong bảng như bình thường trước khi bấm "Tạo Mẫu".
+async function createBudgetTemplateFromRealFile(event) {
+  const file = event.target.files?.[0];
+  event.target.value = '';
+  if (!file) return;
+  const fd = new FormData();
+  fd.append('file', file);
+  let data;
+  try {
+    const res = await fetch('/api/budget/parse-arbitrary-columns', { method: 'POST', body: fd });
+    data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Không đọc được file');
+  } catch (err) { return alert(`⛔ ${err.message}`); }
+
+  const mapped = await openColumnRoleMappingModal(data.columns, {
+    title: '📎 Gán vai trò cột — Mẫu Ngân Sách',
+    hint: `File "${data.fileName}" có ${data.columns.length} cột: ${data.columns.join(', ')}. Chọn đúng cột đóng vai trò Tên Hạng Mục/Số Tiền/Loại NS (bắt buộc) — cột còn lại trở thành cột tuỳ biến, có thể sửa kiểu/đổi tên sau.`,
+    roles: [
+      { key: 'name', label: 'Tên Hạng Mục', required: true },
+      { key: 'amount', label: 'Số Tiền', required: true },
+      { key: 'budgetType', label: 'Loại NS (OPEX/CAPEX)', required: true },
+      { key: 'description', label: 'Mô Tả Chi Tiết', required: false }
+    ]
+  });
+  if (!mapped) return;
+
+  editingBudgetTemplateId = null;
+  budgetTemplateFormFields = [
+    { id: 'name', coreKey: 'name', label: data.columns[mapped.picked.name], type: 'text', required: true, removable: false },
+    { id: 'description', coreKey: 'description', label: mapped.picked.description !== undefined ? data.columns[mapped.picked.description] : 'Mô Tả Chi Tiết', type: 'text', required: false, removable: true },
+    { id: 'amount', coreKey: 'amount', label: data.columns[mapped.picked.amount], type: 'money', required: true, removable: false },
+    { id: 'budgetType', coreKey: 'budgetType', label: data.columns[mapped.picked.budgetType], type: 'select', options: BUDGET_CORE_FIELD_DEFS.budgetType.options, required: true, removable: false },
+    ...mapped.extraIdx.map(i => ({ label: data.columns[i], type: 'text', options: [], required: false, removable: true }))
+  ];
+  document.getElementById('budgetTemplateName').value = '';
+  renderBudgetTemplateFieldsBuilder();
+  document.getElementById('btnBudgetTemplateSubmit').innerText = '➕ Tạo Mẫu';
+  document.getElementById('budgetTemplateForm').classList.remove('hidden');
+  document.getElementById('budgetTemplateForm').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  alert(`✅ Đã lấy ${data.columns.length} cột từ file "${data.fileName}" — kiểm tra lại tên/kiểu cột, đặt Tên Mẫu rồi bấm "Tạo Mẫu".`);
+}
 async function saveBudgetTemplate(e) {
   e.preventDefault();
   const name = document.getElementById('budgetTemplateName').value.trim();
@@ -20551,6 +20602,17 @@ function getApproverCandidateUsers(currentApproversForStep) {
   return [...eligible, ...alreadyAssignedExtra];
 }
 
+// Ẩn/hiện khối "người phòng khác" ở 1 bước quy trình (renderWorkflowTab()) — checkbox bên trong vẫn ở
+// nguyên trong DOM lúc ẩn (chỉ thêm class "hidden"), nên collectDeptWorkflowConfig() đọc .checked vẫn
+// đúng dù khối đang ẩn hay hiện, không cần đổi gì ở luồng lưu.
+function toggleWfOtherDeptCandidates(containerId, btnId) {
+  const el = document.getElementById(containerId);
+  const btn = document.getElementById(btnId);
+  if (!el || !btn) return;
+  const nowHidden = el.classList.toggle('hidden');
+  btn.textContent = nowHidden ? btn.dataset.showLabel : btn.dataset.hideLabel;
+}
+
 function onWorkflowTemplateChange(dept) {
   // CẬP NHẬT: đổi mẫu quy trình giờ CHỈ preview lại danh sách bước/người duyệt theo mẫu mới, KHÔNG
   // lưu ngay — sửa lỗi trước đây: đổi mẫu lưu tức thì bằng các checkbox của mẫu CŨ còn sót lại trên
@@ -20590,32 +20652,49 @@ function renderWorkflowTab() {
 
     const stepsConfigHTML = selectedWf.steps.map(step => {
       const currentApprovers = effectiveApprovers[step.order] || [];
-      const candidates = getApproverCandidateUsers(currentApprovers).slice().sort((a, b) => {
-        const aSame = a.dept === dept ? 0 : 1;
-        const bSame = b.dept === dept ? 0 : 1;
-        if (aSame !== bSame) return aSame - bSame;
-        return (a.name || '').localeCompare(b.name || '', 'vi');
-      });
+      const isCheckedFn = u => Array.isArray(currentApprovers) ? currentApprovers.includes(u.username) : currentApprovers === u.username;
+      const candidates = getApproverCandidateUsers(currentApprovers).slice().sort((a, b) => (a.name || '').localeCompare(b.name || '', 'vi'));
+      // canBeApprover là cờ CHUNG toàn công ty (không theo phòng ban) nên danh sách ứng viên vốn dồn cả
+      // công ty vào 1 bước — tách người CÙNG phòng ban đang cấu hình ra hiện sẵn, người phòng KHÁC gom
+      // vào phần ẩn sau nút "Hiện thêm" để đỡ rối mắt, trừ khi đã có người phòng khác được chọn từ
+      // trước (giữ hiện sẵn, không để admin tưởng nhầm là mất lựa chọn cũ khi mở lại màn này).
+      const sameDept = candidates.filter(u => u.dept === dept);
+      const otherDept = candidates.filter(u => u.dept !== dept);
+      const anyOtherChecked = otherDept.some(isCheckedFn);
 
-      const userCheckboxes = candidates.map(u => {
-        const isChecked = Array.isArray(currentApprovers) ? currentApprovers.includes(u.username) : currentApprovers === u.username;
+      const renderCandidateCheckbox = u => {
+        const isChecked = isCheckedFn(u);
         return `
           <label class="inline-flex items-center gap-1 bg-white px-2 py-0.5 rounded border text-[11px] cursor-pointer">
             <input type="checkbox" value="${escapeHtml(u.username)}" data-dept="${escapeHtml(dept)}" data-step="${step.order}" ${isChecked ? 'checked' : ''}>
             <span>${escapeHtml(u.name)} (${escapeHtml(u.username)})${u.dept !== dept ? ` · <span class="text-gray-400">${escapeHtml(u.dept)}</span>` : ''}</span>
           </label>
         `;
-      }).join('');
+      };
+
+      const sameDeptHTML = sameDept.map(renderCandidateCheckbox).join('');
+      const stepKey = `${dept.replace(/\s+/g, '_')}_${step.order}`;
+      const otherContainerId = `wfOtherDept_${stepKey}`;
+      const otherBtnId = `wfOtherDeptBtn_${stepKey}`;
+      const showLabel = `▾ Hiện thêm (${otherDept.length} người phòng khác)`;
+      const hideLabel = `▴ Ẩn bớt (${otherDept.length} người phòng khác)`;
+      const otherDeptSection = otherDept.length ? `
+        <button type="button" id="${otherBtnId}" onclick="toggleWfOtherDeptCandidates('${otherContainerId}', '${otherBtnId}')"
+          data-show-label="${escapeHtml(showLabel)}" data-hide-label="${escapeHtml(hideLabel)}"
+          class="text-[11px] text-sky-600 font-semibold hover:underline">${escapeHtml(anyOtherChecked ? hideLabel : showLabel)}</button>
+        <div id="${otherContainerId}" class="flex flex-wrap gap-1.5 pt-1 ${anyOtherChecked ? '' : 'hidden'}">${otherDept.map(renderCandidateCheckbox).join('')}</div>
+      ` : '';
 
       const emptyHint = candidates.length === 0
         ? `<div class="text-[11px] text-gray-400 italic">Chưa có ai được cấp quyền "Người duyệt" — vào Module Quản trị (khối 12) để cấp trước.</div>`
-        : '';
+        : (sameDept.length === 0 ? `<div class="text-[11px] text-gray-400 italic">Chưa ai trong "${escapeHtml(dept)}" có quyền duyệt — chọn từ phòng khác bên dưới.</div>` : '');
 
       return `
         <div class="bg-gray-100 p-2 rounded text-xs space-y-1 border">
           <div class="font-bold text-gray-700">Bước ${step.order}: ${escapeHtml(step.name)}</div>
-          <div class="flex flex-wrap gap-1.5 pt-1">${userCheckboxes}</div>
+          <div class="flex flex-wrap gap-1.5 pt-1">${sameDeptHTML}</div>
           ${emptyHint}
+          ${otherDeptSection}
         </div>
       `;
     }).join('');
@@ -30442,10 +30521,63 @@ async function onItPriceMasterListChange() {
   await parseItPriceFileForPreview(file);
 }
 
+// ============ Modal dùng chung "Gán vai trò cột" ============
+// Dùng khi đọc xong 1 file Excel BẤT KỲ (không "nhận diện" cột theo từ khoá nữa) — hiện danh sách cột
+// đọc được, người dùng tự chọn cột nào ứng với từng vai trò nghiệp vụ bắt buộc/tuỳ chọn. Trả về Promise
+// resolve {picked: {roleKey: colIdx}, extraIdx: [colIdx chưa gán vai trò nào]} hoặc null nếu bấm Hủy.
+// columns: mảng string (nhãn cột, đúng thứ tự trong file) — roles: [{key,label,required}].
+let colRoleModalState = null;
+function openColumnRoleMappingModal(columns, { title, hint, roles }) {
+  return new Promise((resolve) => {
+    colRoleModalState = { columns, roles, resolve };
+    document.getElementById('colRoleModalTitle').innerText = title || 'Gán vai trò cột';
+    document.getElementById('colRoleModalHint').innerText = hint || `File có ${columns.length} cột: ${columns.join(', ')}.`;
+    const optionsHTML = `<option value="">-- Không có --</option>` + columns.map((c, i) => `<option value="${i}">${escapeHtml(c)}</option>`).join('');
+    document.getElementById('colRoleModalFields').innerHTML = roles.map(r => `
+      <div>
+        <label class="block font-semibold text-gray-600 mb-1">${escapeHtml(r.label)}${r.required ? ' <span class="text-red-500">*</span>' : ''}</label>
+        <select id="colRoleSel_${r.key}" class="w-full border p-1.5 rounded bg-white"></select>
+      </div>
+    `).join('');
+    roles.forEach(r => { document.getElementById(`colRoleSel_${r.key}`).innerHTML = optionsHTML; });
+    document.getElementById('colRoleModal').classList.remove('hidden');
+  });
+}
+function closeColRoleModal(result) {
+  document.getElementById('colRoleModal').classList.add('hidden');
+  const resolve = colRoleModalState?.resolve;
+  colRoleModalState = null;
+  if (resolve) resolve(result);
+}
+function confirmColRoleModal() {
+  const { columns, roles } = colRoleModalState;
+  const picked = {};
+  const usedIdx = new Set();
+  for (const r of roles) {
+    const val = document.getElementById(`colRoleSel_${r.key}`).value;
+    if (val === '') {
+      if (r.required) return alert(`Vui lòng chọn cột cho "${r.label}".`);
+      continue;
+    }
+    const idx = Number(val);
+    if (usedIdx.has(idx)) return alert(`Cột "${columns[idx]}" đã được gán cho vai trò khác — mỗi cột chỉ gán được 1 vai trò.`);
+    usedIdx.add(idx);
+    picked[r.key] = idx;
+  }
+  const extraIdx = columns.map((_, i) => i).filter(i => !usedIdx.has(i));
+  closeColRoleModal({ picked, extraIdx });
+}
+
 // ============ Mẫu Giá (khuôn cột) — quản lý (chỉ admin, xem itPriceMasterListAdminWrap) ============
 // Mỗi thao tác (thêm/thay file/xoá) LƯU NGAY sau khi xong — khác kiểu draft-rồi-bấm-Lưu-1-lần của
 // "Nhóm Không Cấp Văn Phòng Phẩm" vì mỗi thao tác ở đây vốn đã là 1 round-trip server riêng (đọc/parse
 // file), không có nhiều field rời rạc cần gộp lại thành 1 lượt lưu.
+const IT_PRICE_COLUMN_ROLES = [
+  { key: 'name', label: 'Tên mặt hàng', required: true },
+  { key: 'newPrice', label: 'Giá mới', required: true },
+  { key: 'code', label: 'Mã hàng', required: false },
+  { key: 'oldPrice', label: 'Giá cũ', required: false }
+];
 function renderItPriceMasterListAdmin() {
   const tbody = document.getElementById('itPriceMasterListTableBody');
   if (!tbody) return;
@@ -30454,10 +30586,19 @@ function renderItPriceMasterListAdmin() {
     tbody.innerHTML = `<tr><td colspan="4" class="text-center p-4 text-gray-400 italic">Chưa có Mẫu Giá nào — bấm "+ Thêm Mẫu Giá" để nạp.</td></tr>`;
     return;
   }
+  // Đánh dấu màu cột nào đang giữ vai trò gì (m.roles, do admin tự gán ở addItPriceMasterList()) để dễ
+  // nhìn lại — cột không thuộc vai trò nào là cột phụ (nền xám nhạt).
+  const roleBadgeClass = (m, colKey) => {
+    const roles = m.roles || {};
+    if (roles.name === colKey) return 'bg-sky-100 text-sky-800 font-bold';
+    if (roles.newPrice === colKey) return 'bg-emerald-100 text-emerald-800 font-bold';
+    if (roles.code === colKey || roles.oldPrice === colKey) return 'bg-amber-100 text-amber-800';
+    return 'bg-gray-100 text-gray-600';
+  };
   tbody.innerHTML = lists.map(m => `
     <tr class="hover:bg-gray-50 border-b">
       <td class="border p-2 font-semibold">${escapeHtml(m.name)}<br><span class="text-[11px] text-gray-400 font-normal">📎 ${escapeHtml(m.fileName || '')}</span></td>
-      <td class="border p-2">${(m.columns || []).map(c => `<span class="inline-block px-1.5 py-0.5 bg-gray-100 rounded text-[11px] mr-1 mb-1">${escapeHtml(c.label)}</span>`).join('')}</td>
+      <td class="border p-2">${(m.columns || []).map(c => `<span class="inline-block px-1.5 py-0.5 rounded text-[11px] mr-1 mb-1 ${roleBadgeClass(m, c.key)}">${escapeHtml(c.label)}</span>`).join('')}<div class="text-[10px] text-gray-400 mt-1">🔵 Tên mặt hàng · 🟢 Giá mới · 🟡 Mã hàng/Giá cũ · cột xám = cột phụ</div></td>
       <td class="border p-2">${escapeHtml(m.uploadedByName || '')}<br><span class="text-[11px] text-gray-400">${escapeHtml(m.uploadedAt || '')}</span></td>
       <td class="border p-2 text-center space-x-1 whitespace-nowrap">
         <button type="button" onclick="renameItPriceMasterList(${m.id})" class="px-2 py-1 bg-gray-200 text-gray-700 rounded text-[11px] font-bold hover:bg-gray-300">✏️ Đổi tên</button>
@@ -30498,18 +30639,34 @@ function itPriceColumnListText(columns) {
   return (columns || []).map(c => c.label).join(', ');
 }
 
-// Bắt buộc tải file lên + đọc thành công TRƯỚC rồi mới hỏi tên (không hỏi tên trước như trước đây) —
-// tránh người dùng gõ tên xong lại phải huỷ ngang vì file lỗi/huỷ chọn, đỡ mất công nhập lại từ đầu.
+// Sau khi đọc file thành công, gán vai trò cột (không còn "nhận diện" tự động) rồi mới hỏi tên — tránh
+// người dùng gõ tên xong lại phải huỷ ngang vì file lỗi/huỷ chọn, đỡ mất công nhập lại từ đầu.
+async function pickMasterListRoles(parsed) {
+  const mapped = await openColumnRoleMappingModal(parsed.columns.map(c => c.label), {
+    title: '📐 Gán vai trò cột — Mẫu Giá',
+    hint: `File "${parsed.fileName}" có ${parsed.columns.length} cột: ${itPriceColumnListText(parsed.columns)}. Chọn đúng cột đóng vai trò "Tên mặt hàng" và "Giá mới" (bắt buộc) — các cột còn lại giữ nguyên làm cột phụ.`,
+    roles: IT_PRICE_COLUMN_ROLES
+  });
+  if (!mapped) return null;
+  const roles = {};
+  ['name', 'newPrice', 'code', 'oldPrice'].forEach((k) => {
+    if (mapped.picked[k] !== undefined) roles[k] = parsed.columns[mapped.picked[k]].key;
+  });
+  return roles;
+}
+
 async function addItPriceMasterList() {
   const parsed = await pickAndParseMasterListFile();
   if (!parsed) return;
-  const name = prompt(`✅ Đã tải lên và đọc thành công file "${parsed.fileName}" — nhận diện được ${parsed.columns.length} cột (${itPriceColumnListText(parsed.columns)}).\nNhập Tên Mẫu Giá (VD: "Mẫu giá Q3/2026", "Mẫu giá ngành thực phẩm"):`);
+  const roles = await pickMasterListRoles(parsed);
+  if (!roles) return;
+  const name = prompt(`Nhập Tên Mẫu Giá (VD: "Mẫu giá Q3/2026", "Mẫu giá ngành thực phẩm"):`);
   if (name === null) return;
   if (!name.trim()) return alert('Vui lòng nhập tên mẫu giá.');
 
   const entry = {
     id: Date.now(), name: name.trim(),
-    fileUrl: parsed.fileUrl, fileName: parsed.fileName, columns: parsed.columns,
+    fileUrl: parsed.fileUrl, fileName: parsed.fileName, columns: parsed.columns, roles,
     uploadedBy: currentUser.username, uploadedByName: currentUser.name,
     uploadedAt: new Date().toLocaleString('vi-VN')
   };
@@ -30525,13 +30682,15 @@ async function addItPriceMasterList() {
 async function replaceItPriceMasterListFile(id) {
   const list = (DB.itPriceMasterLists || []).find(m => m.id === id);
   if (!list) return;
-  if (!confirm(`Thay mẫu mới cho "${list.name}"? Khuôn cột hiện tại (${itPriceColumnListText(list.columns)}) sẽ bị THAY THẾ hoàn toàn.`)) return;
+  if (!confirm(`Thay mẫu mới cho "${list.name}"? Khuôn cột hiện tại (${itPriceColumnListText(list.columns)}) sẽ bị THAY THẾ hoàn toàn, phải gán lại vai trò cột.`)) return;
   const parsed = await pickAndParseMasterListFile();
   if (!parsed) return;
+  const roles = await pickMasterListRoles(parsed);
+  if (!roles) return;
 
   const snapshot = [...(DB.itPriceMasterLists || [])];
   DB.itPriceMasterLists = snapshot.map(m => m.id === id ? {
-    ...m, fileUrl: parsed.fileUrl, fileName: parsed.fileName, columns: parsed.columns,
+    ...m, fileUrl: parsed.fileUrl, fileName: parsed.fileName, columns: parsed.columns, roles,
     uploadedBy: currentUser.username, uploadedByName: currentUser.name, uploadedAt: new Date().toLocaleString('vi-VN')
   } : m);
   const saved = await syncStorage('itPriceMasterLists');

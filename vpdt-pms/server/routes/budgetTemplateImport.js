@@ -9,7 +9,7 @@ const fs = require('fs');
 const path = require('path');
 const rateLimit = require('express-rate-limit');
 const { requireAuth, blockIfMustChangePassword } = require('../lib/auth');
-const { buildBudgetTemplateFieldsWorkbook, parseBudgetTemplateFieldsExcelBuffer } = require('../lib/budgetTemplateImport');
+const { buildBudgetTemplateFieldsWorkbook, parseBudgetTemplateFieldsExcelBuffer, parseArbitraryColumnLabels } = require('../lib/budgetTemplateImport');
 const { verifyFileSignature } = require('../lib/fileSignature');
 
 const router = express.Router();
@@ -88,6 +88,37 @@ router.post('/parse-template-fields', requireBudgetManage, uploadRateLimiter, (r
 
       const fields = await parseBudgetTemplateFieldsExcelBuffer(buffer);
       res.json({ fields, fileName: req.file.originalname });
+    } catch (parseErr) {
+      const status = parseErr.status || 400;
+      res.status(status).json({ error: parseErr.message || 'Không đọc được nội dung file' });
+    } finally {
+      fs.unlink(req.file.path, () => {});
+    }
+  });
+});
+
+// POST /api/budget/parse-arbitrary-columns — đọc CHỈ dòng tiêu đề của 1 file Excel BẤT KỲ (không theo
+// khuôn "Tên Cột/Kiểu/Bắt Buộc" của /parse-template-fields ở trên) — dùng cho nút "📎 Từ File Dữ Liệu
+// Thật" (public/index.html::createBudgetTemplateFromRealFile()): admin có sẵn 1 file ngân sách thật,
+// muốn lấy nguyên tên cột trong file đó làm cột của mẫu. Trả về mảng nhãn cột thô, client tự gán vai trò
+// (Tên Hạng Mục/Số Tiền/Loại NS/Mô Tả Chi Tiết) qua modal dùng chung với Mẫu Giá (Hỗ Trợ IT).
+router.post('/parse-arbitrary-columns', requireBudgetManage, uploadRateLimiter, (req, res) => {
+  upload.single('file')(req, res, async (err) => {
+    if (err instanceof multer.MulterError) {
+      if (err.code === 'LIMIT_FILE_SIZE') return res.status(400).json({ error: `Tệp vượt quá dung lượng cho phép (${MAX_MB}MB)` });
+      return res.status(400).json({ error: err.message });
+    }
+    if (err) return res.status(400).json({ error: err.message });
+    if (!req.file) return res.status(400).json({ error: 'Thiếu tệp cần tải lên' });
+
+    try {
+      const buffer = fs.readFileSync(req.file.path);
+      const declaredExt = path.extname(req.file.originalname).toLowerCase();
+      const check = await verifyFileSignature(buffer, declaredExt);
+      if (!check.ok) return res.status(400).json({ error: check.reason });
+
+      const columns = await parseArbitraryColumnLabels(buffer);
+      res.json({ columns, fileName: req.file.originalname });
     } catch (parseErr) {
       const status = parseErr.status || 400;
       res.status(status).json({ error: parseErr.message || 'Không đọc được nội dung file' });
