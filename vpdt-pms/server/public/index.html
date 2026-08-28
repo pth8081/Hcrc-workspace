@@ -4983,6 +4983,21 @@ input[data-sdd-list] {
         <input id="itPriceMasterListFileInput" type="file" accept=".xlsx,.xls" class="hidden">
       </div>
 
+      <!-- Modal dùng chung "Gán vai trò cột" — sau khi đọc 1 file Excel BẤT KỲ (Mẫu Giá ở đây, hoặc Mẫu
+           Ngân Sách ở màn Hệ Thống → Ngân Sách), người dùng tự chỉ ra cột nào trong file đóng vai trò
+           nghiệp vụ nào thay vì hệ thống đoán theo từ khoá — xem openColumnRoleMappingModal(). -->
+      <div id="colRoleModal" class="hidden fixed inset-0 bg-black/50 z-[60] flex items-center justify-center p-4">
+        <div class="bg-white rounded-lg p-4 max-w-md w-full space-y-3 text-xs max-h-[90vh] overflow-y-auto">
+          <h3 id="colRoleModalTitle" class="font-bold text-sm text-gray-800"></h3>
+          <p id="colRoleModalHint" class="text-gray-500 italic"></p>
+          <div id="colRoleModalFields" class="space-y-2"></div>
+          <div class="flex justify-end gap-2 pt-2 border-t">
+            <button type="button" onclick="closeColRoleModal(null)" class="bg-gray-200 text-gray-700 px-3 py-1.5 rounded font-bold hover:bg-gray-300">Hủy</button>
+            <button type="button" onclick="confirmColRoleModal()" class="bg-sky-600 text-white px-3 py-1.5 rounded font-bold hover:bg-sky-700">Xác nhận</button>
+          </div>
+        </div>
+      </div>
+
       <div class="bg-sky-50 p-4 rounded border border-sky-200 space-y-3">
         <h3 class="font-bold text-sky-900 text-base flex items-center gap-2">🏷️ Đề Xuất Duyệt Giá Bán (Siêu Thị)</h3>
         <p class="text-xs text-sky-700">Đề xuất giá bán mới cho 1 mặt hàng tại siêu thị công ty đang vận hành — KHÔNG phải mua sắm/chi phí, không sinh đề nghị thanh toán. Sau khi được duyệt, đội Hỗ Trợ IT sẽ áp giá vào hệ thống bán hàng rồi xác nhận hoàn thành ngay tại đây.</p>
@@ -5284,9 +5299,12 @@ input[data-sdd-list] {
       </div>
 
       <div class="bg-violet-50 p-4 rounded border border-violet-200 space-y-3">
-        <div class="flex justify-between items-center">
+        <div class="flex justify-between items-center flex-wrap gap-2">
           <h3 class="font-bold text-violet-900 text-sm flex items-center gap-1">🧩 Mẫu Ngân Sách</h3>
-          <button type="button" onclick="startNewBudgetTemplate()" class="text-violet-700 font-bold hover:underline text-xs">➕ Thêm Mẫu</button>
+          <div class="flex items-center gap-3">
+            <label class="text-violet-700 font-bold hover:underline cursor-pointer text-xs whitespace-nowrap">📎 Từ File Dữ Liệu Thật<input type="file" accept=".xlsx,.xls" class="hidden" onchange="createBudgetTemplateFromRealFile(event)"></label>
+            <button type="button" onclick="startNewBudgetTemplate()" class="text-violet-700 font-bold hover:underline text-xs whitespace-nowrap">➕ Thêm Mẫu</button>
+          </div>
         </div>
         <div class="bg-white rounded border overflow-x-auto">
           <table class="w-full border-collapse text-xs">
@@ -20144,6 +20162,52 @@ async function uploadBudgetTemplateFieldsXlsx(event) {
   renderBudgetTemplateFieldsBuilder();
   alert(`✅ Đã thêm ${added.length} cột từ file "${data.fileName}" — kiểm tra lại danh sách rồi bấm Lưu.`);
 }
+
+// Đọc 1 file Excel BẤT KỲ (dữ liệu ngân sách thật, VD Kế Toán gửi) rồi lấy NGUYÊN VĂN tên cột trong file
+// đó làm cột của mẫu — khác hẳn uploadBudgetTemplateFieldsXlsx() ở trên (đọc theo khuôn định nghĩa cột
+// riêng). Admin tự gán vai trò Tên Hạng Mục/Số Tiền/Loại NS/Mô Tả Chi Tiết qua modal dùng chung với Mẫu
+// Giá (Hỗ Trợ IT, xem openColumnRoleMappingModal()) — cột không gán vai trò nào trở thành cột tuỳ biến
+// kiểu text, admin xem lại/đổi kiểu trong bảng như bình thường trước khi bấm "Tạo Mẫu".
+async function createBudgetTemplateFromRealFile(event) {
+  const file = event.target.files?.[0];
+  event.target.value = '';
+  if (!file) return;
+  const fd = new FormData();
+  fd.append('file', file);
+  let data;
+  try {
+    const res = await fetch('/api/budget/parse-arbitrary-columns', { method: 'POST', body: fd });
+    data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Không đọc được file');
+  } catch (err) { return alert(`⛔ ${err.message}`); }
+
+  const mapped = await openColumnRoleMappingModal(data.columns, {
+    title: '📎 Gán vai trò cột — Mẫu Ngân Sách',
+    hint: `File "${data.fileName}" có ${data.columns.length} cột: ${data.columns.join(', ')}. Chọn đúng cột đóng vai trò Tên Hạng Mục/Số Tiền/Loại NS (bắt buộc) — cột còn lại trở thành cột tuỳ biến, có thể sửa kiểu/đổi tên sau.`,
+    roles: [
+      { key: 'name', label: 'Tên Hạng Mục', required: true },
+      { key: 'amount', label: 'Số Tiền', required: true },
+      { key: 'budgetType', label: 'Loại NS (OPEX/CAPEX)', required: true },
+      { key: 'description', label: 'Mô Tả Chi Tiết', required: false }
+    ]
+  });
+  if (!mapped) return;
+
+  editingBudgetTemplateId = null;
+  budgetTemplateFormFields = [
+    { id: 'name', coreKey: 'name', label: data.columns[mapped.picked.name], type: 'text', required: true, removable: false },
+    { id: 'description', coreKey: 'description', label: mapped.picked.description !== undefined ? data.columns[mapped.picked.description] : 'Mô Tả Chi Tiết', type: 'text', required: false, removable: true },
+    { id: 'amount', coreKey: 'amount', label: data.columns[mapped.picked.amount], type: 'money', required: true, removable: false },
+    { id: 'budgetType', coreKey: 'budgetType', label: data.columns[mapped.picked.budgetType], type: 'select', options: BUDGET_CORE_FIELD_DEFS.budgetType.options, required: true, removable: false },
+    ...mapped.extraIdx.map(i => ({ label: data.columns[i], type: 'text', options: [], required: false, removable: true }))
+  ];
+  document.getElementById('budgetTemplateName').value = '';
+  renderBudgetTemplateFieldsBuilder();
+  document.getElementById('btnBudgetTemplateSubmit').innerText = '➕ Tạo Mẫu';
+  document.getElementById('budgetTemplateForm').classList.remove('hidden');
+  document.getElementById('budgetTemplateForm').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  alert(`✅ Đã lấy ${data.columns.length} cột từ file "${data.fileName}" — kiểm tra lại tên/kiểu cột, đặt Tên Mẫu rồi bấm "Tạo Mẫu".`);
+}
 async function saveBudgetTemplate(e) {
   e.preventDefault();
   const name = document.getElementById('budgetTemplateName').value.trim();
@@ -30457,10 +30521,63 @@ async function onItPriceMasterListChange() {
   await parseItPriceFileForPreview(file);
 }
 
+// ============ Modal dùng chung "Gán vai trò cột" ============
+// Dùng khi đọc xong 1 file Excel BẤT KỲ (không "nhận diện" cột theo từ khoá nữa) — hiện danh sách cột
+// đọc được, người dùng tự chọn cột nào ứng với từng vai trò nghiệp vụ bắt buộc/tuỳ chọn. Trả về Promise
+// resolve {picked: {roleKey: colIdx}, extraIdx: [colIdx chưa gán vai trò nào]} hoặc null nếu bấm Hủy.
+// columns: mảng string (nhãn cột, đúng thứ tự trong file) — roles: [{key,label,required}].
+let colRoleModalState = null;
+function openColumnRoleMappingModal(columns, { title, hint, roles }) {
+  return new Promise((resolve) => {
+    colRoleModalState = { columns, roles, resolve };
+    document.getElementById('colRoleModalTitle').innerText = title || 'Gán vai trò cột';
+    document.getElementById('colRoleModalHint').innerText = hint || `File có ${columns.length} cột: ${columns.join(', ')}.`;
+    const optionsHTML = `<option value="">-- Không có --</option>` + columns.map((c, i) => `<option value="${i}">${escapeHtml(c)}</option>`).join('');
+    document.getElementById('colRoleModalFields').innerHTML = roles.map(r => `
+      <div>
+        <label class="block font-semibold text-gray-600 mb-1">${escapeHtml(r.label)}${r.required ? ' <span class="text-red-500">*</span>' : ''}</label>
+        <select id="colRoleSel_${r.key}" class="w-full border p-1.5 rounded bg-white"></select>
+      </div>
+    `).join('');
+    roles.forEach(r => { document.getElementById(`colRoleSel_${r.key}`).innerHTML = optionsHTML; });
+    document.getElementById('colRoleModal').classList.remove('hidden');
+  });
+}
+function closeColRoleModal(result) {
+  document.getElementById('colRoleModal').classList.add('hidden');
+  const resolve = colRoleModalState?.resolve;
+  colRoleModalState = null;
+  if (resolve) resolve(result);
+}
+function confirmColRoleModal() {
+  const { columns, roles } = colRoleModalState;
+  const picked = {};
+  const usedIdx = new Set();
+  for (const r of roles) {
+    const val = document.getElementById(`colRoleSel_${r.key}`).value;
+    if (val === '') {
+      if (r.required) return alert(`Vui lòng chọn cột cho "${r.label}".`);
+      continue;
+    }
+    const idx = Number(val);
+    if (usedIdx.has(idx)) return alert(`Cột "${columns[idx]}" đã được gán cho vai trò khác — mỗi cột chỉ gán được 1 vai trò.`);
+    usedIdx.add(idx);
+    picked[r.key] = idx;
+  }
+  const extraIdx = columns.map((_, i) => i).filter(i => !usedIdx.has(i));
+  closeColRoleModal({ picked, extraIdx });
+}
+
 // ============ Mẫu Giá (khuôn cột) — quản lý (chỉ admin, xem itPriceMasterListAdminWrap) ============
 // Mỗi thao tác (thêm/thay file/xoá) LƯU NGAY sau khi xong — khác kiểu draft-rồi-bấm-Lưu-1-lần của
 // "Nhóm Không Cấp Văn Phòng Phẩm" vì mỗi thao tác ở đây vốn đã là 1 round-trip server riêng (đọc/parse
 // file), không có nhiều field rời rạc cần gộp lại thành 1 lượt lưu.
+const IT_PRICE_COLUMN_ROLES = [
+  { key: 'name', label: 'Tên mặt hàng', required: true },
+  { key: 'newPrice', label: 'Giá mới', required: true },
+  { key: 'code', label: 'Mã hàng', required: false },
+  { key: 'oldPrice', label: 'Giá cũ', required: false }
+];
 function renderItPriceMasterListAdmin() {
   const tbody = document.getElementById('itPriceMasterListTableBody');
   if (!tbody) return;
@@ -30469,10 +30586,19 @@ function renderItPriceMasterListAdmin() {
     tbody.innerHTML = `<tr><td colspan="4" class="text-center p-4 text-gray-400 italic">Chưa có Mẫu Giá nào — bấm "+ Thêm Mẫu Giá" để nạp.</td></tr>`;
     return;
   }
+  // Đánh dấu màu cột nào đang giữ vai trò gì (m.roles, do admin tự gán ở addItPriceMasterList()) để dễ
+  // nhìn lại — cột không thuộc vai trò nào là cột phụ (nền xám nhạt).
+  const roleBadgeClass = (m, colKey) => {
+    const roles = m.roles || {};
+    if (roles.name === colKey) return 'bg-sky-100 text-sky-800 font-bold';
+    if (roles.newPrice === colKey) return 'bg-emerald-100 text-emerald-800 font-bold';
+    if (roles.code === colKey || roles.oldPrice === colKey) return 'bg-amber-100 text-amber-800';
+    return 'bg-gray-100 text-gray-600';
+  };
   tbody.innerHTML = lists.map(m => `
     <tr class="hover:bg-gray-50 border-b">
       <td class="border p-2 font-semibold">${escapeHtml(m.name)}<br><span class="text-[11px] text-gray-400 font-normal">📎 ${escapeHtml(m.fileName || '')}</span></td>
-      <td class="border p-2">${(m.columns || []).map(c => `<span class="inline-block px-1.5 py-0.5 bg-gray-100 rounded text-[11px] mr-1 mb-1">${escapeHtml(c.label)}</span>`).join('')}</td>
+      <td class="border p-2">${(m.columns || []).map(c => `<span class="inline-block px-1.5 py-0.5 rounded text-[11px] mr-1 mb-1 ${roleBadgeClass(m, c.key)}">${escapeHtml(c.label)}</span>`).join('')}<div class="text-[10px] text-gray-400 mt-1">🔵 Tên mặt hàng · 🟢 Giá mới · 🟡 Mã hàng/Giá cũ · cột xám = cột phụ</div></td>
       <td class="border p-2">${escapeHtml(m.uploadedByName || '')}<br><span class="text-[11px] text-gray-400">${escapeHtml(m.uploadedAt || '')}</span></td>
       <td class="border p-2 text-center space-x-1 whitespace-nowrap">
         <button type="button" onclick="renameItPriceMasterList(${m.id})" class="px-2 py-1 bg-gray-200 text-gray-700 rounded text-[11px] font-bold hover:bg-gray-300">✏️ Đổi tên</button>
@@ -30513,18 +30639,34 @@ function itPriceColumnListText(columns) {
   return (columns || []).map(c => c.label).join(', ');
 }
 
-// Bắt buộc tải file lên + đọc thành công TRƯỚC rồi mới hỏi tên (không hỏi tên trước như trước đây) —
-// tránh người dùng gõ tên xong lại phải huỷ ngang vì file lỗi/huỷ chọn, đỡ mất công nhập lại từ đầu.
+// Sau khi đọc file thành công, gán vai trò cột (không còn "nhận diện" tự động) rồi mới hỏi tên — tránh
+// người dùng gõ tên xong lại phải huỷ ngang vì file lỗi/huỷ chọn, đỡ mất công nhập lại từ đầu.
+async function pickMasterListRoles(parsed) {
+  const mapped = await openColumnRoleMappingModal(parsed.columns.map(c => c.label), {
+    title: '📐 Gán vai trò cột — Mẫu Giá',
+    hint: `File "${parsed.fileName}" có ${parsed.columns.length} cột: ${itPriceColumnListText(parsed.columns)}. Chọn đúng cột đóng vai trò "Tên mặt hàng" và "Giá mới" (bắt buộc) — các cột còn lại giữ nguyên làm cột phụ.`,
+    roles: IT_PRICE_COLUMN_ROLES
+  });
+  if (!mapped) return null;
+  const roles = {};
+  ['name', 'newPrice', 'code', 'oldPrice'].forEach((k) => {
+    if (mapped.picked[k] !== undefined) roles[k] = parsed.columns[mapped.picked[k]].key;
+  });
+  return roles;
+}
+
 async function addItPriceMasterList() {
   const parsed = await pickAndParseMasterListFile();
   if (!parsed) return;
-  const name = prompt(`✅ Đã tải lên và đọc thành công file "${parsed.fileName}" — nhận diện được ${parsed.columns.length} cột (${itPriceColumnListText(parsed.columns)}).\nNhập Tên Mẫu Giá (VD: "Mẫu giá Q3/2026", "Mẫu giá ngành thực phẩm"):`);
+  const roles = await pickMasterListRoles(parsed);
+  if (!roles) return;
+  const name = prompt(`Nhập Tên Mẫu Giá (VD: "Mẫu giá Q3/2026", "Mẫu giá ngành thực phẩm"):`);
   if (name === null) return;
   if (!name.trim()) return alert('Vui lòng nhập tên mẫu giá.');
 
   const entry = {
     id: Date.now(), name: name.trim(),
-    fileUrl: parsed.fileUrl, fileName: parsed.fileName, columns: parsed.columns,
+    fileUrl: parsed.fileUrl, fileName: parsed.fileName, columns: parsed.columns, roles,
     uploadedBy: currentUser.username, uploadedByName: currentUser.name,
     uploadedAt: new Date().toLocaleString('vi-VN')
   };
@@ -30540,13 +30682,15 @@ async function addItPriceMasterList() {
 async function replaceItPriceMasterListFile(id) {
   const list = (DB.itPriceMasterLists || []).find(m => m.id === id);
   if (!list) return;
-  if (!confirm(`Thay mẫu mới cho "${list.name}"? Khuôn cột hiện tại (${itPriceColumnListText(list.columns)}) sẽ bị THAY THẾ hoàn toàn.`)) return;
+  if (!confirm(`Thay mẫu mới cho "${list.name}"? Khuôn cột hiện tại (${itPriceColumnListText(list.columns)}) sẽ bị THAY THẾ hoàn toàn, phải gán lại vai trò cột.`)) return;
   const parsed = await pickAndParseMasterListFile();
   if (!parsed) return;
+  const roles = await pickMasterListRoles(parsed);
+  if (!roles) return;
 
   const snapshot = [...(DB.itPriceMasterLists || [])];
   DB.itPriceMasterLists = snapshot.map(m => m.id === id ? {
-    ...m, fileUrl: parsed.fileUrl, fileName: parsed.fileName, columns: parsed.columns,
+    ...m, fileUrl: parsed.fileUrl, fileName: parsed.fileName, columns: parsed.columns, roles,
     uploadedBy: currentUser.username, uploadedByName: currentUser.name, uploadedAt: new Date().toLocaleString('vi-VN')
   } : m);
   const saved = await syncStorage('itPriceMasterLists');

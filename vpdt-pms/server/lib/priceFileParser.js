@@ -1,8 +1,16 @@
 // lib/priceFileParser.js — Đọc file Excel (.xlsx/.xls, qua exceljs) bảng giá đề xuất duyệt của module
 // "Phê Duyệt Giá" (Hỗ Trợ IT) thành danh sách mặt hàng có cấu trúc [{code, name, oldPrice, newPrice}].
-// Dùng lại đúng cách dò cột theo TIÊU ĐỀ (không phụ thuộc thứ tự) như lib/vppCatalog.js — nhưng tách
-// file riêng vì bộ cột và ý nghĩa nghiệp vụ khác hẳn (đây là giá BÁN mặt hàng siêu thị, không phải danh
-// mục Văn phòng phẩm). KHÔNG dùng gói "xlsx" (SheetJS) — lý do bảo mật giống hệt lib/vppCatalog.js.
+// KHÔNG dùng gói "xlsx" (SheetJS) — lý do bảo mật giống hệt lib/vppCatalog.js.
+//
+// Cột KHÔNG còn được "nhận diện" theo từ khoá cố định (bỏ hẳn cách cũ) — Mẫu Giá (itPriceMasterLists)
+// giờ lấy NGUYÊN VĂN mọi cột đọc được từ dòng tiêu đề file admin nạp (xem parsePriceTemplateColumns()),
+// admin tự gán vai trò "Tên mặt hàng"/"Giá mới"/"Mã hàng"/"Giá cũ" cho ĐÚNG cột nào ngay tại client
+// (public/index.html::addItPriceMasterList(), lưu vào master.roles = {name,newPrice,code?,oldPrice?}
+// trỏ tới key của 1 cột trong master.columns). Khi người đề xuất nộp bảng giá thật theo 1 Mẫu Giá, việc
+// còn lại chỉ là SO KHỚP bộ tên cột file họ nộp với bộ tên cột của Mẫu Giá (detectColumnMapFromTemplate())
+// — khớp đúng tên/số lượng thì tự thừa hưởng lại đúng vai trò đã gán trên Mẫu Giá, không đoán lại lần nào
+// nữa. Trường hợp hệ thống CHƯA có Mẫu Giá nào cả (mới cài đặt, chưa cấu hình) vẫn cần 1 lối thoát để
+// không chặn cứng — giữ lại bộ từ khoá cũ CHỈ cho nhánh này (xem rowsToPriceItems()).
 const ExcelJS = require('exceljs');
 const { HttpError } = require('./httpErrors');
 
@@ -11,6 +19,8 @@ function normalizeHeader(s) {
     .normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/\s+/g, ' ').trim();
 }
 
+// Bộ từ khoá cũ — CHỈ còn dùng cho nhánh "chưa có Mẫu Giá nào trong hệ thống" (xem rowsToPriceItems()),
+// không còn dùng để "nhận diện" cột của Mẫu Giá hay đối chiếu file nộp với Mẫu Giá nữa.
 const FIELD_HINTS = {
   code: ['ma hang', 'ma vat tu', 'ma sp', 'ma san pham', 'ma'],
   name: ['ten mat hang', 'ten hang', 'ten hang hoa', 'ten san pham', 'ten'],
@@ -66,46 +76,62 @@ const DEFAULT_COLUMN_LABELS = [
   { key: 'newPrice', label: 'Giá mới' }
 ];
 
-// Đợt "Mẫu Giá chỉ có cột" — khi người đề xuất đã chọn 1 Mẫu Giá (itPriceMasterLists, giờ chỉ còn là
-// khuôn CỘT, không còn dữ liệu giá thật — xem lib/createValidation.js), file bảng giá thật họ tải lên
-// PHẢI có đúng cột "Tên mặt hàng"/"Giá mới" theo ĐÚNG TÊN CỘT của mẫu đó (so khớp theo tiêu đề đã chuẩn
-// hoá, không phân biệt hoa/thường/dấu) — không dùng bộ FIELD_HINTS chung nữa vì mẫu có thể đặt tên cột
-// khác hẳn (VD "Mã SP", "Đơn giá đề xuất"...). Trả lại đúng cấu trúc cột (columnLabels) để hiển thị lại
-// CHÍNH XÁC tên cột người dùng thấy trong mẫu, không phải nhãn tiếng Việt cứng của hệ thống.
+// Đợt "khớp cột thay vì nhận diện" — Mẫu Giá (itPriceMasterLists) giờ lưu NGUYÊN VĂN mọi cột đọc được
+// từ file admin nạp (template.columns = [{key,label}], key ổn định theo VỊ TRÍ lúc nạp mẫu — xem
+// parsePriceTemplateColumns()) cộng theo `template.roles = {name, newPrice, code?, oldPrice?}` trỏ tới
+// ĐÚNG key nào trong columns đóng vai trò gì — do ADMIN tự gán tay ở client (public/index.html), KHÔNG
+// còn suy luận theo từ khoá. Việc còn lại ở đây chỉ là: bộ tên cột (đã chuẩn hoá hoa/thường/dấu) của file
+// bảng giá thật người đề xuất nộp phải KHỚP ĐÚNG (cùng số lượng, cùng tên, không thiếu không thừa) với bộ
+// tên cột của Mẫu Giá — khớp thì tự thừa hưởng lại đúng vai trò đã gán trên Mẫu Giá.
 function detectColumnMapFromTemplate(headerCells, template) {
-  const normalizedHeaders = headerCells.map(normalizeHeader);
-  const findIdx = (label) => normalizedHeaders.findIndex(h => h === normalizeHeader(label));
   const columns = Array.isArray(template?.columns) ? template.columns : [];
-  const nameCol = columns.find(c => c.key === 'name');
-  const newPriceCol = columns.find(c => c.key === 'newPrice');
-  const nameIdx = nameCol ? findIdx(nameCol.label) : -1;
-  if (nameIdx === -1) {
-    throw new HttpError(400, `File bảng giá thiếu cột "${nameCol?.label || 'Tên mặt hàng'}" theo đúng Mẫu Giá đã chọn`);
+  if (!columns.length) throw new HttpError(400, 'Mẫu Giá đã chọn không có cột nào, vui lòng liên hệ Quản trị viên');
+  let roles = template?.roles && typeof template.roles === 'object' ? template.roles : null;
+  // Tương thích ngược: Mẫu Giá tạo TRƯỚC khi có bước "gán vai trò cột" tường minh (parsePriceTemplateColumns()
+  // cũ tự nhận diện theo từ khoá, đặt thẳng key = 'name'/'newPrice'/'code'/'oldPrice') không có field
+  // `roles` — suy ra roles từ chính key của cột trong trường hợp này, tránh chặn cứng hồ sơ Mẫu Giá cũ
+  // đã tạo trước khi cập nhật (admin dùng "Thay mẫu" để gán lại vai trò tường minh khi cần).
+  if (!roles) {
+    roles = {};
+    columns.forEach((c) => { if (['name', 'newPrice', 'code', 'oldPrice'].includes(c.key)) roles[c.key] = c.key; });
   }
-  const newPriceIdx = newPriceCol ? findIdx(newPriceCol.label) : -1;
-  if (newPriceIdx === -1) {
-    throw new HttpError(400, `File bảng giá thiếu cột "${newPriceCol?.label || 'Giá mới'}" theo đúng Mẫu Giá đã chọn`);
+
+  const templateLabelsNorm = columns.map(c => normalizeHeader(c.label));
+  const fileLabelsNorm = headerCells.map(normalizeHeader).filter(h => h);
+  const missing = columns.filter(c => !fileLabelsNorm.includes(normalizeHeader(c.label))).map(c => c.label);
+  const templateLabelSet = new Set(templateLabelsNorm);
+  const extra = headerCells.map((raw, i) => ({ raw: String(raw || '').trim(), norm: normalizeHeader(raw) }))
+    .filter(h => h.norm && !templateLabelSet.has(h.norm)).map(h => h.raw);
+  if (missing.length || extra.length) {
+    const parts = [];
+    if (missing.length) parts.push(`thiếu cột: ${missing.join(', ')}`);
+    if (extra.length) parts.push(`có cột thừa không thuộc mẫu: ${extra.join(', ')}`);
+    throw new HttpError(400, `File bảng giá chưa khớp đúng cột theo Mẫu Giá đã chọn (${parts.join('; ')})`);
   }
-  const idx = { name: nameIdx, newPrice: newPriceIdx };
-  const codeCol = columns.find(c => c.key === 'code');
-  if (codeCol) { const i = findIdx(codeCol.label); if (i !== -1) idx.code = i; }
-  const oldPriceCol = columns.find(c => c.key === 'oldPrice');
-  if (oldPriceCol) { const i = findIdx(oldPriceCol.label); if (i !== -1) idx.oldPrice = i; }
-  // Cột tuỳ ý khác ngoài 4 trường nghiệp vụ cố định (VD Nhà cung cấp/Đơn vị tính/Ghi chú...) — chỉ mang
-  // tính hiển thị/tham khảo, KHÔNG bắt buộc phải có trong file thật (mẫu có thể có nhiều cột hơn 1 lần
-  // nộp cụ thể cần dùng tới).
-  const extraCols = [];
-  columns.filter(c => !['code', 'name', 'oldPrice', 'newPrice'].includes(c.key)).forEach(c => {
-    const i = findIdx(c.label);
-    if (i !== -1) extraCols.push({ key: c.key, label: c.label, idx: i });
+
+  const findIdx = (label) => headerCells.findIndex(h => normalizeHeader(h) === normalizeHeader(label));
+  const colByKey = new Map(columns.map(c => [c.key, c]));
+  const idx = {};
+  ['name', 'newPrice', 'code', 'oldPrice'].forEach((role) => {
+    const col = roles[role] ? colByKey.get(roles[role]) : null;
+    if (col) idx[role] = findIdx(col.label);
   });
-  const columnLabels = [
-    ...(idx.code !== undefined ? [{ key: 'code', label: codeCol.label }] : []),
-    { key: 'name', label: nameCol.label },
-    ...(idx.oldPrice !== undefined ? [{ key: 'oldPrice', label: oldPriceCol.label }] : []),
-    { key: 'newPrice', label: newPriceCol.label },
-    ...extraCols.map(c => ({ key: c.key, label: c.label }))
-  ];
+  if (idx.name === undefined || idx.name === -1) {
+    throw new HttpError(400, 'Mẫu Giá đã chọn chưa gán cột "Tên mặt hàng", vui lòng liên hệ Quản trị viên');
+  }
+  if (idx.newPrice === undefined || idx.newPrice === -1) {
+    throw new HttpError(400, 'Mẫu Giá đã chọn chưa gán cột "Giá mới", vui lòng liên hệ Quản trị viên');
+  }
+
+  const roleKeys = new Set(['name', 'newPrice', 'code', 'oldPrice'].map(r => roles[r]).filter(Boolean));
+  const extraCols = columns.filter(c => !roleKeys.has(c.key)).map(c => ({ key: c.key, label: c.label, idx: findIdx(c.label) }));
+
+  // columnLabels đi theo ĐÚNG thứ tự cột của Mẫu Giá (không phải thứ tự cột trong file thật) — cột đóng
+  // vai trò được đổi sang key NGHIỆP VỤ cố định (name/newPrice/code/oldPrice) để itPriceCellHTML() ở
+  // client hiển thị đúng định dạng số/căn phải như trước, cột phụ giữ nguyên key gốc (đọc qua it.extra[key]).
+  const roleKeyOfCol = (colKey) => ['name', 'newPrice', 'code', 'oldPrice'].find(r => roles[r] === colKey) || null;
+  const columnLabels = columns.map(c => ({ key: roleKeyOfCol(c.key) || c.key, label: c.label }));
+
   return { idx, extraCols, columnLabels };
 }
 
@@ -224,35 +250,22 @@ function sanitizeColumnLabels(rawColumnLabels) {
 }
 
 // ============ Mẫu Giá (itPriceMasterLists) — khuôn CỘT của bảng giá bên mua hàng gửi tại từng thời
-// điểm, KHÔNG còn lưu dữ liệu giá thật (khác thiết kế cũ dùng để đối chiếu tự động) — chỉ đọc DUY NHẤT
-// dòng tiêu đề, bỏ hết các dòng dữ liệu bên dưới. Cho phép mẫu có thêm cột tuỳ ý ngoài 4 trường nghiệp
-// vụ cố định (Mã hàng/Tên mặt hàng/Giá cũ/Giá mới) — các cột đó giữ nguyên tên gốc, đánh dấu key dạng
-// "extra_<vị trí cột>" để tra cứu lại khi đối chiếu với file bảng giá thật (xem detectColumnMapFromTemplate()).
+// điểm, KHÔNG còn lưu dữ liệu giá thật — chỉ đọc DUY NHẤT dòng tiêu đề, bỏ hết các dòng dữ liệu bên
+// dưới. KHÔNG còn tự "nhận diện" cột nào đóng vai trò gì nữa (bỏ hẳn FIELD_HINTS ở bước này) — lấy
+// NGUYÊN VĂN mọi cột đọc được, key sinh theo VỊ TRÍ cột (ổn định, không đổi dù đổi tên cột sau này) để
+// client tự gán vai trò "Tên mặt hàng"/"Giá mới"/"Mã hàng"/"Giá cũ" cho đúng cột nào (lưu vào
+// master.roles, xem detectColumnMapFromTemplate() ở trên) — xem addItPriceMasterList() ở public/index.html.
 async function parsePriceTemplateColumns(buffer) {
   const rows = await readSheetRows(buffer);
   if (!rows.length || !rows[0].length) throw new HttpError(400, 'File mẫu không có dòng tiêu đề nào');
   const headerCells = rows[0];
-  const seenKeys = new Set();
   const columns = [];
   headerCells.forEach((raw, idx) => {
     const label = String(raw || '').trim();
     if (!label) return;
-    const h = normalizeHeader(label);
-    let key = null;
-    for (const field of Object.keys(FIELD_HINTS)) {
-      if (seenKeys.has(field)) continue;
-      if (FIELD_HINTS[field].some((hint) => h === hint)) { key = field; break; }
-    }
-    if (!key) key = `extra_${idx}`;
-    seenKeys.add(key);
-    columns.push({ key, label: label.slice(0, 100) });
+    columns.push({ key: `c${idx}`, label: label.slice(0, 100) });
   });
-  if (!columns.some((c) => c.key === 'name')) {
-    throw new HttpError(400, 'Mẫu Giá cần có ít nhất 1 cột nhận diện được là "Tên mặt hàng"');
-  }
-  if (!columns.some((c) => c.key === 'newPrice')) {
-    throw new HttpError(400, 'Mẫu Giá cần có ít nhất 1 cột nhận diện được là "Giá mới"');
-  }
+  if (!columns.length) throw new HttpError(400, 'File mẫu không đọc được cột nào từ dòng tiêu đề');
   if (columns.length > 50) throw new HttpError(400, 'Mẫu Giá quá nhiều cột (tối đa 50 cột/tệp)');
   return columns;
 }

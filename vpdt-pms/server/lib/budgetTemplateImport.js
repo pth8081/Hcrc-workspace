@@ -108,4 +108,29 @@ async function parseBudgetTemplateFieldsExcelBuffer(buffer) {
   return rowsToBudgetFields(rows);
 }
 
-module.exports = { buildBudgetTemplateFieldsWorkbook, parseBudgetTemplateFieldsExcelBuffer, TYPE_LABEL_VN };
+// Đọc CHỈ dòng tiêu đề của 1 file Excel BẤT KỲ (không theo khuôn định nghĩa cột Tên Cột/Kiểu/Bắt Buộc ở
+// trên) — dùng cho nút "📎 Từ File Dữ Liệu Thật": admin có sẵn 1 file ngân sách thật (VD Kế Toán gửi),
+// muốn lấy nguyên tên cột trong file đó làm cột của mẫu thay vì gõ tay/điền theo khuôn riêng — cùng cơ
+// chế với Mẫu Giá ở module Hỗ Trợ IT (xem lib/priceFileParser.js::parsePriceTemplateColumns()). CHỈ trả
+// về tên cột, KHÔNG đọc dữ liệu dòng bên dưới — client tự gán vai trò (Tên Hạng Mục/Số Tiền/Loại NS/Mô Tả
+// Chi Tiết) rồi đưa vào bảng cột đang sửa như bình thường (không lưu trực tiếp ở đây).
+async function parseArbitraryColumnLabels(buffer) {
+  const workbook = new ExcelJS.Workbook();
+  await workbook.xlsx.load(buffer);
+  const sheet = workbook.worksheets[0];
+  if (!sheet) throw new HttpError(400, 'File Excel không có sheet dữ liệu nào');
+  const headerRow = sheet.getRow(1);
+  const labels = [];
+  headerRow.eachCell({ includeEmpty: false }, (cell) => {
+    const label = String(cell.value == null ? '' : cell.value).trim();
+    if (label) labels.push(label.slice(0, 100));
+  });
+  if (!labels.length) throw new HttpError(400, 'File không có dòng tiêu đề nào (dòng 1 trống)');
+  if (labels.length > 50) throw new HttpError(400, 'File có quá nhiều cột (tối đa 50 cột)');
+  return labels;
+}
+
+module.exports = {
+  buildBudgetTemplateFieldsWorkbook, parseBudgetTemplateFieldsExcelBuffer, TYPE_LABEL_VN,
+  parseArbitraryColumnLabels
+};
