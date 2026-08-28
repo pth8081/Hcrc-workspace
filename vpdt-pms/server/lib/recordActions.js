@@ -2589,10 +2589,18 @@ function hasUnresolvedPriceInfoRequest(item) {
 // cũng cập nhật trạng thái được, không riêng người nhận) — ở đây bắt buộc khoá chặt vì hành động sau đó
 // (Xác nhận áp giá) ghi nhận là ĐÃ THỰC SỰ áp giá thật vào hệ thống bán hàng ngoài app, không phải chỉ
 // cập nhật trạng thái nội bộ.
+// Đang có 1 yêu cầu "Từ chối khẩn cấp" chờ xử lý (xem requestItPriceEmergencyReject() bên dưới) — khoá
+// mọi thao tác "chốt" IT thực hiện thật (nhận xử lý/xác nhận áp giá) tới khi người có quyền
+// itPriceEmergencyRejectApprove quyết định, tránh IT áp giá thật trong lúc đang chờ xét huỷ hồ sơ.
+function hasPendingItPriceEmergencyReject(item) {
+  return item.emergencyRejectStatus === 'PENDING';
+}
+
 function claimPriceApply(user, item) {
   if (!canManageItSupport(user)) throw new HttpError(403, 'Bạn không có quyền nhận xử lý áp giá');
   if (item.status !== 'APPROVED') throw new HttpError(409, 'Đề xuất này chưa được phê duyệt xong');
   if (item.applied) throw new HttpError(409, 'Đề xuất này đã được áp giá rồi');
+  if (hasPendingItPriceEmergencyReject(item)) throw new HttpError(409, 'Đang có yêu cầu từ chối khẩn cấp chờ xử lý, chưa thể nhận xử lý áp giá');
   if (item.applyClaimedBy) {
     throw new HttpError(409, `Đề xuất này đã có người nhận xử lý (${item.applyClaimedByName || item.applyClaimedBy})`);
   }
@@ -2637,6 +2645,9 @@ function applyPriceApproval(user, item) {
   if (hasUnresolvedPriceInfoRequest(item)) {
     throw new HttpError(409, 'Đề xuất đang có yêu cầu bổ sung chưa được người đề xuất phản hồi (tải tệp bổ sung), chưa thể xác nhận áp giá');
   }
+  if (hasPendingItPriceEmergencyReject(item)) {
+    throw new HttpError(409, 'Đang có yêu cầu từ chối khẩn cấp chờ xử lý, chưa thể xác nhận áp giá');
+  }
   item.applied = true;
   item.appliedBy = user.username;
   item.appliedByName = user.name;
@@ -2652,6 +2663,7 @@ function requestPriceInfoFromIt(user, item, payload) {
   if (item.status !== 'APPROVED') throw new HttpError(409, 'Đề xuất này chưa được phê duyệt xong');
   if (item.applied) throw new HttpError(409, 'Đề xuất này đã được áp giá rồi, không thể yêu cầu bổ sung thêm');
   if (hasUnresolvedPriceInfoRequest(item)) throw new HttpError(409, 'Đã có 1 yêu cầu bổ sung đang chờ xử lý');
+  if (hasPendingItPriceEmergencyReject(item)) throw new HttpError(409, 'Đang có yêu cầu từ chối khẩn cấp chờ xử lý, chưa thể yêu cầu bổ sung');
   const reason = (payload?.reason || '').trim();
   if (!reason) throw new HttpError(400, 'Vui lòng nhập nội dung cần bổ sung');
   item.infoRequests = item.infoRequests || [];
@@ -2660,6 +2672,86 @@ function requestPriceInfoFromIt(user, item, payload) {
     requestedBy: user.username, requestedByName: user.name,
     reason, requestedAt: nowVN(), response: null, respondedAt: null,
     byRole: 'it' // phân biệt với 'approver' (yêu cầu bổ sung từ người duyệt phòng ban, xem workflowEngine.js)
+  });
+  return item;
+}
+
+// "Từ chối khẩn cấp" — người ĐÃ duyệt bước cuối cùng (item.currentStep khi status đã APPROVED, engine
+// không tăng currentStep nữa sau bước cuối, xem applyWorkflowAction() ở lib/workflowEngine.js) đổi ý SAU
+// khi đã duyệt, TRƯỚC khi IT thực sự áp giá vào hệ thống bán hàng ngoài app — không tự huỷ trực tiếp
+// được nữa (đã duyệt xong, không còn đứng ở vai "người duyệt bước hiện tại" để REJECT bình thường qua
+// lib/workflowEngine.js) mà gửi 1 yêu cầu cho người có quyền itPriceEmergencyRejectApprove xét duyệt —
+// nếu được đồng ý, hồ sơ chuyển REJECTED giống hệt bị từ chối ở bước duyệt bình thường (đẩy thêm 1 dòng
+// history action REJECTED, hiển thị lại đúng chỗ "Đã từ chối bởi" trong renderItPriceModal()).
+function isFinalStepApproverOfItPrice(user, item) {
+  if (!user) return false;
+  if (user.perms?.admin) return true;
+  return (item.history || []).some(h =>
+    h.step === item.currentStep && h.action === 'APPROVED' && !h.invalidated && h.username === user.username
+  );
+}
+
+function canApproveItPriceEmergencyReject(user) {
+  return !!(user?.perms?.admin || user?.perms?.itPriceEmergencyRejectApprove);
+}
+
+function requestItPriceEmergencyReject(user, item, payload) {
+  if (item.status !== 'APPROVED') throw new HttpError(409, 'Chỉ gửi được yêu cầu từ chối khẩn cấp khi đề xuất đã được phê duyệt xong');
+  if (item.applied) throw new HttpError(409, 'Đề xuất này đã được áp giá xong, không thể từ chối khẩn cấp nữa');
+  if (!isFinalStepApproverOfItPrice(user, item)) {
+    throw new HttpError(403, 'Chỉ người đã duyệt bước cuối cùng (hoặc Quản Trị Viên) mới gửi được yêu cầu từ chối khẩn cấp');
+  }
+  if (item.emergencyRejectStatus === 'PENDING') throw new HttpError(409, 'Đã có 1 yêu cầu từ chối khẩn cấp đang chờ xử lý');
+  const reason = (payload?.reason || '').trim();
+  if (!reason) throw new HttpError(400, 'Vui lòng nhập lý do từ chối khẩn cấp');
+  item.emergencyRejectStatus = 'PENDING';
+  item.emergencyRejectReason = reason;
+  item.emergencyRejectRequestedBy = user.username;
+  item.emergencyRejectRequestedByName = user.name;
+  item.emergencyRejectRequestedAt = nowVN();
+  item.emergencyRejectDecidedBy = null;
+  item.emergencyRejectDecidedByName = null;
+  item.emergencyRejectDecidedAt = null;
+  item.emergencyRejectDecisionComment = null;
+  item.history = item.history || [];
+  item.history.push({
+    step: item.currentStep, approver: user.name, username: user.username,
+    action: 'EMERGENCY_REJECT_REQUEST', comment: reason, time: item.emergencyRejectRequestedAt
+  });
+  return item;
+}
+
+function approveItPriceEmergencyReject(user, item) {
+  if (!canApproveItPriceEmergencyReject(user)) throw new HttpError(403, 'Bạn không có quyền phê duyệt từ chối khẩn cấp');
+  if (item.emergencyRejectStatus !== 'PENDING') throw new HttpError(409, 'Không có yêu cầu từ chối khẩn cấp nào đang chờ xử lý');
+  item.emergencyRejectStatus = 'APPROVED';
+  item.emergencyRejectDecidedBy = user.username;
+  item.emergencyRejectDecidedByName = user.name;
+  item.emergencyRejectDecidedAt = nowVN();
+  item.status = 'REJECTED';
+  item.history = item.history || [];
+  item.history.push({
+    step: item.currentStep, approver: user.name, username: user.username, action: 'REJECTED',
+    comment: `Từ chối khẩn cấp (theo yêu cầu của ${item.emergencyRejectRequestedByName}): ${item.emergencyRejectReason}`,
+    time: item.emergencyRejectDecidedAt
+  });
+  return item;
+}
+
+function denyItPriceEmergencyReject(user, item, payload) {
+  if (!canApproveItPriceEmergencyReject(user)) throw new HttpError(403, 'Bạn không có quyền phê duyệt từ chối khẩn cấp');
+  if (item.emergencyRejectStatus !== 'PENDING') throw new HttpError(409, 'Không có yêu cầu từ chối khẩn cấp nào đang chờ xử lý');
+  const comment = (payload?.comment || '').trim();
+  if (!comment) throw new HttpError(400, 'Vui lòng nhập lý do từ chối yêu cầu này');
+  item.emergencyRejectStatus = 'DENIED';
+  item.emergencyRejectDecidedBy = user.username;
+  item.emergencyRejectDecidedByName = user.name;
+  item.emergencyRejectDecidedAt = nowVN();
+  item.emergencyRejectDecisionComment = comment;
+  item.history = item.history || [];
+  item.history.push({
+    step: item.currentStep, approver: user.name, username: user.username,
+    action: 'EMERGENCY_REJECT_DENIED', comment, time: item.emergencyRejectDecidedAt
   });
   return item;
 }
@@ -3330,6 +3422,7 @@ module.exports = {
   editOnboardingPath, confirmOnboardingStage, canEvaluateOnboardingStage3, evaluateOnboardingStage3, issueOnboardingCertificate,
   canManageRecruitment, closeRecruitmentJob, confirmRecruitmentJobFilled, setRecruitmentReferralStatus,
   canManageItSupport, applyPriceApproval, claimPriceApply, releasePriceApplyClaim, requestPriceInfoFromIt, submitPriceSupplementFile,
+  canApproveItPriceEmergencyReject, requestItPriceEmergencyReject, approveItPriceEmergencyReject, denyItPriceEmergencyReject,
   claimItTicket, updateItTicketStatus, addItTicketComment, cancelItTicket,
   escalateItTicket, approveItTicketEscalation, denyItTicketEscalation,
   canManageUniform, canManageUniformStore, computeUniformStock, computeEmployeeUniformHolding,

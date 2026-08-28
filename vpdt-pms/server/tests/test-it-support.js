@@ -27,6 +27,7 @@ const STAFF_KD = { username: 'staff_kd', name: 'Ngô Văn Kinh Doanh', dept: 'Ki
 const IT1 = { username: 'it1', name: 'Đội Hỗ Trợ IT', dept: 'IT', perms: { itManage: true }, active: true };
 const APPROVER1 = { username: 'approver1', name: 'Trưởng Phòng Duyệt', dept: 'Ban Giám Đốc', perms: {}, active: true };
 const PLAIN = { username: 'plain', name: 'Nhân Viên Thường', dept: 'Kinh Doanh', perms: {}, active: true };
+const EMERGENCY_APPROVER = { username: 'emg1', name: 'Người Xét Từ Chối Khẩn', dept: 'Ban Giám Đốc', perms: { itPriceEmergencyRejectApprove: true }, active: true };
 
 // Mẫu Giá giờ chỉ là khuôn CỘT (không còn dữ liệu items thật) — khớp đúng hình dạng
 // parsePriceTemplateColumns() trả về + addItPriceMasterList() lưu ở public/index.html.
@@ -44,7 +45,7 @@ const MASTER_LIST = {
 
 const state = createMockState({
   depts: ['Kinh Doanh', 'IT', 'Ban Giám Đốc'],
-  users: [STAFF_KD, IT1, APPROVER1, PLAIN],
+  users: [STAFF_KD, IT1, APPROVER1, PLAIN, EMERGENCY_APPROVER],
   itPriceMasterLists: [MASTER_LIST],
   // Bỏ auto-approve -> mọi đề xuất phải qua đúng 1 bước duyệt phòng ban (dept 'Kinh Doanh', khớp
   // forceOwnDept của itPriceApprovals) trước khi đội IT áp giá — approver1 là người duyệt bước 1.
@@ -66,6 +67,7 @@ async function main() {
   let priceApprovalId = null;
   let ticketDoneId = null;
   let ticketDeniedId = null;
+  let emergencyPriceApprovalId = null;
 
   try {
     // ===== 1) Phê Duyệt Giá: tạo đề xuất mới phải LUÔN đi qua đúng quy trình duyệt phòng ban (không
@@ -342,6 +344,128 @@ async function main() {
         }
       }, ticketDeniedId);
       assertIncludes(blockedResult.threw, 'Đang chờ hoặc chưa được phê duyệt', 'Server phải tiếp tục chặn cập nhật trạng thái khi phê duyệt bị từ chối');
+    });
+
+    // ===== 9) "Từ chối khẩn cấp" — người đã duyệt bước cuối cùng đổi ý SAU khi duyệt, TRƯỚC khi IT áp
+    // giá thật, gửi yêu cầu cho người có quyền itPriceEmergencyRejectApprove xét duyệt (xem
+    // requestItPriceEmergencyReject()/approveItPriceEmergencyReject()/denyItPriceEmergencyReject() ở
+    // lib/recordActions.js). Dùng 1 đề xuất RIÊNG (không phải priceApprovalId đã bị áp giá ở kịch bản 3).
+    await run.run('Từ chối khẩn cấp: chỉ đúng người đã duyệt bước cuối mới gửi được yêu cầu, người khác bị chặn', async () => {
+      await loginAs(page, STAFF_KD);
+      const created = await page.evaluate(async () => {
+        window.__resetCapture();
+        switchTab('itSupport');
+        setItSupportSubTab('PRICE');
+        document.getElementById('itPriceCode').value = generateItPriceCode();
+        document.getElementById('itPriceMasterListSelect').value = String(1);
+        document.getElementById('itPriceReason').value = 'Điều chỉnh giá đợt 2';
+        itPricePendingFile = {
+          fileUrl: '/uploads/gia-de-xuat-2.xlsx', fileName: 'gia-de-xuat-2.xlsx',
+          items: [{ values: { code: 'SP002', name: 'Bánh Chocopie', oldPrice: '10000', newPrice: '11000' } }],
+          columnLabels: [
+            { key: 'code', label: 'Mã hàng' }, { key: 'name', label: 'Tên mặt hàng' },
+            { key: 'oldPrice', label: 'Giá cũ' }, { key: 'newPrice', label: 'Giá mới' }
+          ]
+        };
+        await submitItPriceApproval({ preventDefault() {}, target: { reset() {} } });
+        return DB.itPriceApprovals[0].id;
+      });
+      emergencyPriceApprovalId = created;
+
+      await loginAs(page, APPROVER1);
+      await page.evaluate(async (id) => { await approveItPriceConfirmed(id); }, emergencyPriceApprovalId);
+
+      // Người KHÔNG phải người duyệt bước cuối (IT1) không thấy nút, và server phải chặn nếu cố gọi thẳng.
+      await loginAs(page, IT1);
+      const blockedNonApprover = await page.evaluate(async (id) => {
+        openItPriceModal(id);
+        const hasButton = document.getElementById('itPriceModalControls').innerHTML.includes('requestItPriceEmergencyRejectAction');
+        try {
+          await callRecordAction('itPriceApprovals', id, 'request-emergency-reject', { reason: 'thử trái phép' });
+          return { hasButton, threw: null };
+        } catch (e) {
+          return { hasButton, threw: e.message };
+        }
+      }, emergencyPriceApprovalId);
+      assertEqual(blockedNonApprover.hasButton, false, 'Người KHÔNG duyệt bước cuối không được thấy nút Từ Chối Khẩn');
+      assertIncludes(blockedNonApprover.threw, 'Chỉ người đã duyệt bước cuối cùng', 'Server phải chặn người không phải người duyệt bước cuối gửi yêu cầu từ chối khẩn cấp');
+
+      // Đúng người đã duyệt bước cuối (approver1) gửi yêu cầu -> PENDING, khoá claim-apply của IT.
+      await loginAs(page, APPROVER1);
+      const requested = await page.evaluate(async (id) => {
+        openItPriceModal(id);
+        window.__promptAnswer = 'Phát hiện giá mới tính sai, cần dừng lại trước khi áp dụng';
+        await requestItPriceEmergencyRejectAction(id);
+        const item = DB.itPriceApprovals.find(x => x.id === id);
+        return { status: item.emergencyRejectStatus, reason: item.emergencyRejectReason, requestedByName: item.emergencyRejectRequestedByName };
+      }, emergencyPriceApprovalId);
+      assertEqual(requested.status, 'PENDING', 'Yêu cầu Từ chối khẩn cấp phải chuyển emergencyRejectStatus sang PENDING');
+      assertEqual(requested.reason, 'Phát hiện giá mới tính sai, cần dừng lại trước khi áp dụng', 'Phải lưu đúng lý do từ chối khẩn cấp');
+      assertEqual(requested.requestedByName, APPROVER1.name, 'Phải ghi đúng người gửi yêu cầu');
+
+      await loginAs(page, IT1);
+      const blockedApply = await page.evaluate(async (id) => {
+        try {
+          await callRecordAction('itPriceApprovals', id, 'claim-apply', {});
+          return { threw: null };
+        } catch (e) {
+          return { threw: e.message };
+        }
+      }, emergencyPriceApprovalId);
+      assertIncludes(blockedApply.threw, 'Đang có yêu cầu từ chối khẩn cấp', 'Server phải khoá nhận xử lý áp giá trong lúc chờ xét duyệt Từ chối khẩn cấp');
+    });
+
+    await run.run('Từ chối khẩn cấp: người có quyền TỪ CHỐI yêu cầu -> hồ sơ trở lại bình thường, gửi lại được', async () => {
+      await loginAs(page, EMERGENCY_APPROVER);
+      const denied = await page.evaluate(async (id) => {
+        openItPriceModal(id);
+        window.__promptAnswer = 'Lý do chưa đủ thuyết phục, giữ nguyên giá đã duyệt';
+        await denyItPriceEmergencyRejectAction(id);
+        const item = DB.itPriceApprovals.find(x => x.id === id);
+        return { status: item.status, emergencyStatus: item.emergencyRejectStatus, decidedByName: item.emergencyRejectDecidedByName };
+      }, emergencyPriceApprovalId);
+      assertEqual(denied.status, 'APPROVED', 'Bị từ chối yêu cầu Từ chối khẩn cấp thì hồ sơ chính vẫn giữ nguyên APPROVED');
+      assertEqual(denied.emergencyStatus, 'DENIED', 'emergencyRejectStatus phải chuyển sang DENIED');
+      assertEqual(denied.decidedByName, EMERGENCY_APPROVER.name, 'Phải ghi đúng người từ chối yêu cầu');
+
+      // Gửi lại yêu cầu lần 2 vẫn được (không bị khoá vĩnh viễn sau khi bị từ chối 1 lần).
+      await loginAs(page, APPROVER1);
+      const requestedAgain = await page.evaluate(async (id) => {
+        openItPriceModal(id);
+        window.__promptAnswer = 'Vẫn muốn dừng lại, đã xác minh lại số liệu';
+        await requestItPriceEmergencyRejectAction(id);
+        return DB.itPriceApprovals.find(x => x.id === id).emergencyRejectStatus;
+      }, emergencyPriceApprovalId);
+      assertEqual(requestedAgain, 'PENDING', 'Phải gửi lại được yêu cầu Từ chối khẩn cấp sau khi lần trước bị từ chối');
+    });
+
+    await run.run('Từ chối khẩn cấp: người có quyền DUYỆT -> hồ sơ chuyển REJECTED giống từ chối bước thường', async () => {
+      await loginAs(page, EMERGENCY_APPROVER);
+      const approved = await page.evaluate(async (id) => {
+        openItPriceModal(id);
+        await approveItPriceEmergencyRejectAction(id);
+        const item = DB.itPriceApprovals.find(x => x.id === id);
+        return {
+          status: item.status,
+          emergencyStatus: item.emergencyRejectStatus,
+          lastHistory: item.history[item.history.length - 1]
+        };
+      }, emergencyPriceApprovalId);
+      assertEqual(approved.status, 'REJECTED', 'Duyệt yêu cầu Từ chối khẩn cấp phải chuyển hồ sơ chính sang REJECTED');
+      assertEqual(approved.emergencyStatus, 'APPROVED', 'emergencyRejectStatus phải chuyển sang APPROVED');
+      assertEqual(approved.lastHistory.action, 'REJECTED', 'Dòng lịch sử cuối phải là REJECTED — hiển thị giống hệt bị từ chối ở bước duyệt bình thường');
+
+      // Không thể nhận xử lý áp giá / gửi thêm yêu cầu từ chối khẩn nữa vì hồ sơ đã không còn APPROVED.
+      await loginAs(page, IT1);
+      const blockedAfterReject = await page.evaluate(async (id) => {
+        try {
+          await callRecordAction('itPriceApprovals', id, 'claim-apply', {});
+          return { threw: null };
+        } catch (e) {
+          return { threw: e.message };
+        }
+      }, emergencyPriceApprovalId);
+      assertIncludes(blockedAfterReject.threw, 'chưa được phê duyệt xong', 'Sau khi đã REJECTED, không thể nhận xử lý áp giá nữa');
     });
   } finally {
     await browser.close();

@@ -99,6 +99,9 @@ function buildActionHandlers(state) {
     'itPriceApprovals:release-apply-claim': (u, item) => recordActions.releasePriceApplyClaim(u, item),
     'itPriceApprovals:request-info': (u, item, body) => recordActions.requestPriceInfoFromIt(u, item, body),
     'itPriceApprovals:submit-supplement': (u, item, body) => recordActions.submitPriceSupplementFile(u, item, body),
+    'itPriceApprovals:request-emergency-reject': (u, item, body) => recordActions.requestItPriceEmergencyReject(u, item, body),
+    'itPriceApprovals:approve-emergency-reject': (u, item) => recordActions.approveItPriceEmergencyReject(u, item),
+    'itPriceApprovals:deny-emergency-reject': (u, item, body) => recordActions.denyItPriceEmergencyReject(u, item, body),
 
     // ===== HỖ TRỢ IT — Hỗ Trợ Yêu Cầu =====
     'itSupportTickets:claim': (u, item) => recordActions.claimItTicket(u, item),

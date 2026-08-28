@@ -1483,6 +1483,49 @@ router.post('/itPriceApprovals/:id/submit-supplement', async (req, res) => {
   }
 });
 
+// "Từ chối khẩn cấp" — người đã duyệt bước cuối cùng đổi ý SAU khi đã duyệt (APPROVED), TRƯỚC khi IT
+// áp giá thật — gửi yêu cầu cho người có quyền itPriceEmergencyRejectApprove xét duyệt (xem
+// requestItPriceEmergencyReject()/approveItPriceEmergencyReject()/denyItPriceEmergencyReject() ở
+// lib/recordActions.js). Được duyệt -> hồ sơ REJECTED giống hệt bị từ chối bước thường.
+router.post('/itPriceApprovals/:id/request-emergency-reject', async (req, res) => {
+  const itemId = Number(req.params.id);
+  if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
+  try {
+    const { freshUser } = await getFreshUser(req);
+    const result = await withLockedRecordForCollection('itPriceApprovals', itemId, (item) =>
+      recordActions.requestItPriceEmergencyReject(freshUser, item, req.body));
+    res.json({ ok: true, item: result });
+  } catch (err) {
+    handleError(res, `itPriceApprovals/${req.params.id}/request-emergency-reject`, err);
+  }
+});
+
+router.post('/itPriceApprovals/:id/approve-emergency-reject', async (req, res) => {
+  const itemId = Number(req.params.id);
+  if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
+  try {
+    const { freshUser } = await getFreshUser(req);
+    const result = await withLockedRecordForCollection('itPriceApprovals', itemId, (item) =>
+      recordActions.approveItPriceEmergencyReject(freshUser, item));
+    res.json({ ok: true, item: result });
+  } catch (err) {
+    handleError(res, `itPriceApprovals/${req.params.id}/approve-emergency-reject`, err);
+  }
+});
+
+router.post('/itPriceApprovals/:id/deny-emergency-reject', async (req, res) => {
+  const itemId = Number(req.params.id);
+  if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
+  try {
+    const { freshUser } = await getFreshUser(req);
+    const result = await withLockedRecordForCollection('itPriceApprovals', itemId, (item) =>
+      recordActions.denyItPriceEmergencyReject(freshUser, item, req.body));
+    res.json({ ok: true, item: result });
+  } catch (err) {
+    handleError(res, `itPriceApprovals/${req.params.id}/deny-emergency-reject`, err);
+  }
+});
+
 router.post('/itSupportTickets/:id/delete', (req, res) => deleteAdminOnly(req, res, 'itSupportTickets'));
 
 router.post('/itSupportTickets/:id/claim', async (req, res) => {
