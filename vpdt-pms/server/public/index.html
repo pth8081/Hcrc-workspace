@@ -4974,12 +4974,15 @@ input[data-sdd-list] {
       <!-- Chỉ admin thấy được (khớp itPriceMasterLists trong ADMIN_ONLY_KEYS ở routes/data.js) — nạp
            sẵn 1 hoặc nhiều Mẫu Giá (KHUÔN CỘT của bảng giá bên mua hàng gửi tại từng thời điểm, không
            còn lưu dữ liệu giá thật/không còn đối chiếu tự động) để người đề xuất chọn đúng mẫu áp dụng
-           khi nộp bảng giá bên dưới — xem onItPriceFileChange()/submitItPriceApproval(). -->
+           khi nộp bảng giá bên dưới — xem onItPriceFileChange()/submitItPriceApproval(). KHÔNG còn bước
+           "gán vai trò cột" — cột nào đọc được từ dòng tiêu đề file mẫu được LẤY NGUYÊN VĂN, việc kiểm
+           tra hợp lệ CHỈ còn là so khớp tên cột file người đề xuất nộp với tên cột của Mẫu Giá đã chọn
+           (xem rowsToPriceItems() ở lib/priceFileParser.js). -->
       <div id="itPriceMasterListAdminWrap" class="hidden bg-white p-4 rounded border space-y-3">
         <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
           <div>
             <h4 class="font-bold text-sm text-gray-800">📐 Mẫu Giá (khuôn cột)</h4>
-            <p class="text-[11px] text-gray-500 italic">Nạp file mẫu bên mua hàng gửi tại từng thời điểm — hệ thống CHỈ đọc dòng tiêu đề để lấy đúng tên cột (Mã hàng/Tên mặt hàng/Giá cũ/Giá mới, cho phép thêm cột tuỳ ý khác), KHÔNG lưu dữ liệu giá thật. Tạo được nhiều mẫu (VD theo ngành hàng/đợt cập nhật) — người đề xuất tự chọn đúng mẫu áp dụng lúc nộp bảng giá, hệ thống sẽ kiểm tra file nộp có đúng cột theo mẫu không.</p>
+            <p class="text-[11px] text-gray-500 italic">Nạp file mẫu bên mua hàng gửi tại từng thời điểm — hệ thống CHỈ đọc dòng tiêu đề để lấy NGUYÊN VĂN tên cột (không giới hạn số cột/tên cột), KHÔNG lưu dữ liệu giá thật. Tạo được nhiều mẫu (VD theo ngành hàng/đợt cập nhật) — người đề xuất tự chọn đúng mẫu áp dụng lúc nộp bảng giá, hệ thống chỉ kiểm tra tên cột file nộp có khớp đúng với mẫu không (không phân biệt hoa/thường/dấu).</p>
           </div>
           <button type="button" onclick="addItPriceMasterList()" class="bg-gray-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-gray-700 whitespace-nowrap">+ Thêm Mẫu Giá</button>
         </div>
@@ -4999,9 +5002,10 @@ input[data-sdd-list] {
         <input id="itPriceMasterListFileInput" type="file" accept=".xlsx,.xls" class="hidden">
       </div>
 
-      <!-- Modal dùng chung "Gán vai trò cột" — sau khi đọc 1 file Excel BẤT KỲ (Mẫu Giá ở đây, hoặc Mẫu
-           Ngân Sách ở màn Hệ Thống → Ngân Sách), người dùng tự chỉ ra cột nào trong file đóng vai trò
-           nghiệp vụ nào thay vì hệ thống đoán theo từ khoá — xem openColumnRoleMappingModal(). -->
+      <!-- Modal dùng chung "Gán vai trò cột" — dùng cho Mẫu Ngân Sách (Hệ Thống → Ngân Sách) khi cần biết
+           cột nào đóng vai trò nghiệp vụ nào (Tên Hạng Mục/Số Tiền...). Mẫu Giá ở TRÊN KHÔNG còn dùng modal
+           này nữa (bỏ hẳn khái niệm "vai trò cột" cho giá — xem ghi chú ở itPriceMasterListAdminWrap) —
+           xem openColumnRoleMappingModal(). -->
       <div id="colRoleModal" class="hidden fixed inset-0 bg-black/50 z-[60] flex items-center justify-center p-4">
         <div class="bg-white rounded-lg p-4 max-w-md w-full space-y-3 text-xs max-h-[90vh] overflow-y-auto">
           <h3 id="colRoleModalTitle" class="font-bold text-sm text-gray-800"></h3>
@@ -5040,7 +5044,7 @@ input[data-sdd-list] {
             <label class="block font-semibold text-gray-600 mb-1">📎 Tệp Bảng Giá (.xlsx) <span class="text-red-500">*</span></label>
             <input id="itPriceFileInput" type="file" accept=".xlsx,.xls" onchange="onItPriceFileChange(event)" class="w-full border p-1.5 rounded bg-white">
             <p id="itPriceFileStatus" class="text-gray-500 mt-1"></p>
-            <p class="text-gray-400 mt-1">Tệp cần có cột "Tên mặt hàng"/"Giá mới" (khuyến khích thêm "Mã hàng"/"Giá cũ") — không phân biệt thứ tự cột. Nếu đã chọn Mẫu Giá ở trên, tên cột phải khớp đúng theo mẫu.</p>
+            <p class="text-gray-400 mt-1">Tệp phải có ĐÚNG các cột (tên, không phân biệt hoa/thường/dấu) theo Mẫu Giá đã chọn ở trên — không thiếu, không thừa cột nào (thứ tự cột không quan trọng).</p>
           </div>
           <div id="itPriceFilePreviewWrap" class="hidden">
             <p class="font-semibold text-gray-600 mb-1">Xem trước nội dung tệp (<span id="itPriceFilePreviewCount">0</span> dòng)</p>
@@ -5470,7 +5474,7 @@ input[data-sdd-list] {
         <h4 class="font-bold text-gray-800 mb-2">🔍 So Sánh Thay Đổi (tệp mới nhất so với tệp trước đó)</h4>
         <div class="overflow-x-auto border rounded">
           <table class="w-full border-collapse text-xs bg-white">
-            <thead><tr class="bg-gray-100 text-left text-gray-700"><th class="border p-1">Mã hàng</th><th class="border p-1">Tên mặt hàng</th><th class="border p-1">Thay đổi</th></tr></thead>
+            <thead id="itPriceModalDiffHead" class="bg-gray-100 text-left text-gray-700"></thead>
             <tbody id="itPriceModalDiffBody"></tbody>
           </table>
         </div>
@@ -30627,29 +30631,23 @@ function setItSupportSubTab(subTab) {
 // rồi echo lại kết quả kèm request tạo (giống hệt luồng danh mục VPP ở onVppCatalogFileChange()).
 let itPricePendingFile = null; // { items, fileUrl, fileName } — kết quả đọc file gần nhất, chờ gửi
 
-// Hiển thị bảng xem trước ĐÚNG theo tên cột của Mẫu Giá đã chọn (data.columnLabels, do server trả về
-// từ POST /api/it-price/parse-file — xem lib/priceFileParser.js) — cột tuỳ ý ngoài 4 trường nghiệp vụ
-// cố định (Mã hàng/Tên mặt hàng/Giá cũ/Giá mới) hiện thêm sau cùng, đọc từ it.extra[key]. Khi chưa chọn
-// Mẫu Giá nào, columnLabels là bộ nhãn mặc định (DEFAULT_COLUMN_LABELS ở server).
+// Hiển thị bảng xem trước ĐÚNG theo tên cột của Mẫu Giá đã chọn (data.columnLabels, do server trả về từ
+// POST /api/it-price/parse-file — xem lib/priceFileParser.js) — mỗi dòng chỉ còn 1 object `it.values`
+// generic (key = key cột, value = nội dung ô nguyên văn dạng chuỗi), KHÔNG còn khái niệm cột nào là
+// "tên"/"giá" (đã bỏ hẳn — xem ghi chú đầu lib/priceFileParser.js). Khi chưa chọn Mẫu Giá nào, columnLabels
+// là bộ nhãn mặc định (DEFAULT_COLUMN_LABELS ở server).
 function itPriceCellHTML(it, col) {
-  if (col.key === 'code') return escapeHtml(it.code || '');
-  if (col.key === 'name') return escapeHtml(it.name);
-  if (col.key === 'oldPrice') return it.oldPrice != null ? Number(it.oldPrice).toLocaleString('vi-VN') : '';
-  if (col.key === 'newPrice') return Number(it.newPrice).toLocaleString('vi-VN');
-  return escapeHtml(it.extra?.[col.key] || '');
+  return escapeHtml(it.values?.[col.key] || '');
 }
 
 function renderItPriceFilePreview(data) {
-  const columnLabels = data.columnLabels && data.columnLabels.length ? data.columnLabels : [
-    { key: 'code', label: 'Mã hàng' }, { key: 'name', label: 'Tên mặt hàng' },
-    { key: 'oldPrice', label: 'Giá cũ' }, { key: 'newPrice', label: 'Giá mới' }
-  ];
+  const columnLabels = data.columnLabels && data.columnLabels.length ? data.columnLabels : [{ key: 'c0', label: 'Dữ liệu' }];
   document.getElementById('itPriceFilePreviewCount').innerText = data.items.length;
   document.getElementById('itPriceFilePreviewHead').innerHTML = `<tr>${columnLabels.map(col =>
-    `<th class="border p-1${col.key === 'oldPrice' || col.key === 'newPrice' ? ' text-right' : ''}">${escapeHtml(col.label)}</th>`
+    `<th class="border p-1">${escapeHtml(col.label)}</th>`
   ).join('')}</tr>`;
   document.getElementById('itPriceFilePreviewBody').innerHTML = data.items.map(it => `<tr>${columnLabels.map(col =>
-    `<td class="border p-1${col.key === 'oldPrice' || col.key === 'newPrice' ? ' text-right' : ''}${col.key === 'newPrice' ? ' font-bold text-sky-700' : ''}${col.key === 'code' || col.key === 'oldPrice' ? ' text-gray-500' : ''}">${itPriceCellHTML(it, col)}</td>`
+    `<td class="border p-1">${itPriceCellHTML(it, col)}</td>`
   ).join('')}</tr>`).join('');
   document.getElementById('itPriceFilePreviewWrap').classList.remove('hidden');
 }
@@ -30742,13 +30740,8 @@ function confirmColRoleModal() {
 // ============ Mẫu Giá (khuôn cột) — quản lý (chỉ admin, xem itPriceMasterListAdminWrap) ============
 // Mỗi thao tác (thêm/thay file/xoá) LƯU NGAY sau khi xong — khác kiểu draft-rồi-bấm-Lưu-1-lần của
 // "Nhóm Không Cấp Văn Phòng Phẩm" vì mỗi thao tác ở đây vốn đã là 1 round-trip server riêng (đọc/parse
-// file), không có nhiều field rời rạc cần gộp lại thành 1 lượt lưu.
-const IT_PRICE_COLUMN_ROLES = [
-  { key: 'name', label: 'Tên mặt hàng', required: true },
-  { key: 'newPrice', label: 'Giá mới', required: true },
-  { key: 'code', label: 'Mã hàng', required: false },
-  { key: 'oldPrice', label: 'Giá cũ', required: false }
-];
+// file), không có nhiều field rời rạc cần gộp lại thành 1 lượt lưu. KHÔNG còn bước "Gán vai trò cột"
+// (đã bỏ hẳn khái niệm giá cũ/giá mới cho Mẫu Giá) — cột đọc được từ file mẫu LẤY NGUYÊN VĂN, lưu thẳng.
 function renderItPriceMasterListAdmin() {
   const tbody = document.getElementById('itPriceMasterListTableBody');
   if (!tbody) return;
@@ -30757,19 +30750,10 @@ function renderItPriceMasterListAdmin() {
     tbody.innerHTML = `<tr><td colspan="4" class="text-center p-4 text-gray-400 italic">Chưa có Mẫu Giá nào — bấm "+ Thêm Mẫu Giá" để nạp.</td></tr>`;
     return;
   }
-  // Đánh dấu màu cột nào đang giữ vai trò gì (m.roles, do admin tự gán ở addItPriceMasterList()) để dễ
-  // nhìn lại — cột không thuộc vai trò nào là cột phụ (nền xám nhạt).
-  const roleBadgeClass = (m, colKey) => {
-    const roles = m.roles || {};
-    if (roles.name === colKey) return 'bg-sky-100 text-sky-800 font-bold';
-    if (roles.newPrice === colKey) return 'bg-emerald-100 text-emerald-800 font-bold';
-    if (roles.code === colKey || roles.oldPrice === colKey) return 'bg-amber-100 text-amber-800';
-    return 'bg-gray-100 text-gray-600';
-  };
   tbody.innerHTML = lists.map(m => `
     <tr class="hover:bg-gray-50 border-b">
       <td class="border p-2 font-semibold">${escapeHtml(m.name)}<br><span class="text-[11px] text-gray-400 font-normal">📎 ${escapeHtml(m.fileName || '')}</span></td>
-      <td class="border p-2">${(m.columns || []).map(c => `<span class="inline-block px-1.5 py-0.5 rounded text-[11px] mr-1 mb-1 ${roleBadgeClass(m, c.key)}">${escapeHtml(c.label)}</span>`).join('')}<div class="text-[10px] text-gray-400 mt-1">🔵 Tên mặt hàng · 🟢 Giá mới · 🟡 Mã hàng/Giá cũ · cột xám = cột phụ</div></td>
+      <td class="border p-2">${(m.columns || []).map(c => `<span class="inline-block px-1.5 py-0.5 rounded text-[11px] mr-1 mb-1 bg-gray-100 text-gray-700">${escapeHtml(c.label)}</span>`).join('')}</td>
       <td class="border p-2">${escapeHtml(m.uploadedByName || '')}<br><span class="text-[11px] text-gray-400">${escapeHtml(m.uploadedAt || '')}</span></td>
       <td class="border p-2 text-center space-x-1 whitespace-nowrap">
         <button type="button" onclick="renameItPriceMasterList(${m.id})" class="px-2 py-1 bg-gray-200 text-gray-700 rounded text-[11px] font-bold hover:bg-gray-300">✏️ Đổi tên</button>
@@ -30810,34 +30794,16 @@ function itPriceColumnListText(columns) {
   return (columns || []).map(c => c.label).join(', ');
 }
 
-// Sau khi đọc file thành công, gán vai trò cột (không còn "nhận diện" tự động) rồi mới hỏi tên — tránh
-// người dùng gõ tên xong lại phải huỷ ngang vì file lỗi/huỷ chọn, đỡ mất công nhập lại từ đầu.
-async function pickMasterListRoles(parsed) {
-  const mapped = await openColumnRoleMappingModal(parsed.columns.map(c => c.label), {
-    title: '📐 Gán vai trò cột — Mẫu Giá',
-    hint: `File "${parsed.fileName}" có ${parsed.columns.length} cột: ${itPriceColumnListText(parsed.columns)}. Chọn đúng cột đóng vai trò "Tên mặt hàng" và "Giá mới" (bắt buộc) — các cột còn lại giữ nguyên làm cột phụ.`,
-    roles: IT_PRICE_COLUMN_ROLES
-  });
-  if (!mapped) return null;
-  const roles = {};
-  ['name', 'newPrice', 'code', 'oldPrice'].forEach((k) => {
-    if (mapped.picked[k] !== undefined) roles[k] = parsed.columns[mapped.picked[k]].key;
-  });
-  return roles;
-}
-
 async function addItPriceMasterList() {
   const parsed = await pickAndParseMasterListFile();
   if (!parsed) return;
-  const roles = await pickMasterListRoles(parsed);
-  if (!roles) return;
   const name = prompt(`Nhập Tên Mẫu Giá (VD: "Mẫu giá Q3/2026", "Mẫu giá ngành thực phẩm"):`);
   if (name === null) return;
   if (!name.trim()) return alert('Vui lòng nhập tên mẫu giá.');
 
   const entry = {
     id: Date.now(), name: name.trim(),
-    fileUrl: parsed.fileUrl, fileName: parsed.fileName, columns: parsed.columns, roles,
+    fileUrl: parsed.fileUrl, fileName: parsed.fileName, columns: parsed.columns,
     uploadedBy: currentUser.username, uploadedByName: currentUser.name,
     uploadedAt: new Date().toLocaleString('vi-VN')
   };
@@ -30853,15 +30819,13 @@ async function addItPriceMasterList() {
 async function replaceItPriceMasterListFile(id) {
   const list = (DB.itPriceMasterLists || []).find(m => m.id === id);
   if (!list) return;
-  if (!confirm(`Thay mẫu mới cho "${list.name}"? Khuôn cột hiện tại (${itPriceColumnListText(list.columns)}) sẽ bị THAY THẾ hoàn toàn, phải gán lại vai trò cột.`)) return;
+  if (!confirm(`Thay mẫu mới cho "${list.name}"? Khuôn cột hiện tại (${itPriceColumnListText(list.columns)}) sẽ bị THAY THẾ hoàn toàn.`)) return;
   const parsed = await pickAndParseMasterListFile();
   if (!parsed) return;
-  const roles = await pickMasterListRoles(parsed);
-  if (!roles) return;
 
   const snapshot = [...(DB.itPriceMasterLists || [])];
   DB.itPriceMasterLists = snapshot.map(m => m.id === id ? {
-    ...m, fileUrl: parsed.fileUrl, fileName: parsed.fileName, columns: parsed.columns, roles,
+    ...m, fileUrl: parsed.fileUrl, fileName: parsed.fileName, columns: parsed.columns,
     uploadedBy: currentUser.username, uploadedByName: currentUser.name, uploadedAt: new Date().toLocaleString('vi-VN')
   } : m);
   const saved = await syncStorage('itPriceMasterLists');
@@ -31211,21 +31175,25 @@ function deleteItPriceAction(id) {
   });
 }
 
-// So sánh nội dung tệp mới nhất với tệp liền trước — ghép theo Mã hàng (dự phòng Tên mặt hàng), dùng
-// để hiển thị bảng "So Sánh Thay Đổi" trong modal chi tiết (bằng chứng tham chiếu khi có tệp bổ sung).
-function diffPriceFileItems(newItems, oldItems) {
-  const keyOf = (it) => it.code || it.name;
-  const oldMap = new Map((oldItems || []).map(it => [keyOf(it), it]));
-  const newMap = new Map((newItems || []).map(it => [keyOf(it), it]));
+// So sánh nội dung tệp mới nhất với tệp liền trước — ghép dòng theo giá trị CỘT ĐẦU TIÊN của Mẫu Giá
+// (columnLabels[0], vai trò định danh dòng tự nhiên nhất — thường là "Tên mặt hàng"/"Mã hàng" tuỳ mẫu,
+// nhưng hệ thống không còn ép buộc ý nghĩa cột nào cả), dùng để hiển thị bảng "So Sánh Thay Đổi" trong
+// modal chi tiết (bằng chứng tham chiếu khi có tệp bổ sung). Không khớp được theo cột đầu (trống/trùng)
+// thì rơi về so khớp theo vị trí dòng.
+function diffPriceFileItems(newItems, oldItems, columnLabels) {
+  const idKey = (columnLabels && columnLabels[0]) ? columnLabels[0].key : null;
+  const keyOf = (it, idx) => (idKey && it.values?.[idKey]) ? it.values[idKey] : `#${idx}`;
+  const oldMap = new Map((oldItems || []).map((it, idx) => [keyOf(it, idx), it]));
+  const newMap = new Map((newItems || []).map((it, idx) => [keyOf(it, idx), it]));
   const keys = Array.from(new Set([...oldMap.keys(), ...newMap.keys()]));
   return keys.map(key => {
     const oldIt = oldMap.get(key), newIt = newMap.get(key);
     if (oldIt && newIt) {
-      const changed = oldIt.oldPrice !== newIt.oldPrice || oldIt.newPrice !== newIt.newPrice;
-      return { code: newIt.code, name: newIt.name, kind: changed ? 'changed' : 'same', oldPrice: oldIt.newPrice, newPrice: newIt.newPrice };
+      const changed = JSON.stringify(oldIt.values) !== JSON.stringify(newIt.values);
+      return { values: newIt.values, kind: changed ? 'changed' : 'same' };
     }
-    if (newIt) return { code: newIt.code, name: newIt.name, kind: 'added', newPrice: newIt.newPrice };
-    return { code: oldIt.code, name: oldIt.name, kind: 'removed', oldPrice: oldIt.newPrice };
+    if (newIt) return { values: newIt.values, kind: 'added' };
+    return { values: oldIt.values, kind: 'removed' };
   });
 }
 
@@ -31288,10 +31256,7 @@ function renderItPriceModal() {
     const tagOriginal = idx === 0 && files.length > 1 ? ' <span class="px-1.5 py-0.5 bg-gray-200 text-gray-700 rounded text-xs font-bold">Bản gốc</span>' : '';
     // columnLabels snapshot NGAY LÚC NỘP tệp này (xem submitPriceSupplementFile()/itPriceApprovals ở
     // server) — luôn hiển thị đúng tên cột đã dùng lúc đó, kể cả khi Mẫu Giá sau này bị sửa/xoá.
-    const columnLabels = f.columnLabels && f.columnLabels.length ? f.columnLabels : [
-      { key: 'code', label: 'Mã hàng' }, { key: 'name', label: 'Tên mặt hàng' },
-      { key: 'oldPrice', label: 'Giá cũ' }, { key: 'newPrice', label: 'Giá mới' }
-    ];
+    const columnLabels = f.columnLabels && f.columnLabels.length ? f.columnLabels : [{ key: 'c0', label: 'Dữ liệu' }];
     return `
       <details class="border rounded bg-white" ${isLatest ? 'open' : ''}>
         <summary class="p-2 cursor-pointer font-semibold">📎 ${escapeHtml(f.fileName)}${tagLatest}${tagOriginal}
@@ -31300,10 +31265,10 @@ function renderItPriceModal() {
         <div class="p-2 border-t overflow-x-auto">
           <table class="w-full border-collapse text-xs">
             <thead><tr class="bg-gray-100 text-left text-gray-700">${columnLabels.map(col =>
-              `<th class="border p-1${col.key === 'oldPrice' || col.key === 'newPrice' ? ' text-right' : ''}">${escapeHtml(col.label)}</th>`
+              `<th class="border p-1">${escapeHtml(col.label)}</th>`
             ).join('')}</tr></thead>
             <tbody>${(f.items || []).map(it => `<tr>${columnLabels.map(col =>
-              `<td class="border p-1${col.key === 'oldPrice' || col.key === 'newPrice' ? ' text-right' : ''}${col.key === 'newPrice' ? ' font-bold text-sky-700' : ''}${col.key === 'code' || col.key === 'oldPrice' ? ' text-gray-500' : ''}">${itPriceCellHTML(it, col)}</td>`
+              `<td class="border p-1">${itPriceCellHTML(it, col)}</td>`
             ).join('')}</tr>`).join('')}</tbody>
           </table>
         </div>
@@ -31311,17 +31276,28 @@ function renderItPriceModal() {
     `;
   }).join('');
 
+  // Bảng "So Sánh Thay Đổi" — cột động theo ĐÚNG columnLabels của tệp mới nhất (không còn 3 cột cố định
+  // Mã hàng/Tên mặt hàng/Thay đổi) + 1 cột "Trạng Thái" phụ ở cuối (Mới thêm/Đã bỏ/Đã đổi/Không đổi).
   const diffWrap = document.getElementById('itPriceModalDiffWrap');
   if (files.length > 1) {
-    const diff = diffPriceFileItems(files[files.length - 1].items, files[files.length - 2].items);
+    const latestColumnLabels = files[files.length - 1].columnLabels && files[files.length - 1].columnLabels.length
+      ? files[files.length - 1].columnLabels : [{ key: 'c0', label: 'Dữ liệu' }];
+    const diff = diffPriceFileItems(files[files.length - 1].items, files[files.length - 2].items, latestColumnLabels);
     diffWrap.classList.remove('hidden');
+    document.getElementById('itPriceModalDiffHead').innerHTML = `<tr>${latestColumnLabels.map(col =>
+      `<th class="border p-1">${escapeHtml(col.label)}</th>`
+    ).join('')}<th class="border p-1">Trạng Thái</th></tr>`;
+    const KIND_LABEL = {
+      added: '<span class="text-emerald-700 font-bold">+ Mới thêm</span>',
+      removed: '<span class="text-red-600 font-bold">− Đã bỏ</span>',
+      changed: '<span class="text-amber-700 font-bold">≠ Đã đổi</span>',
+      same: '<span class="text-gray-400">Không đổi</span>'
+    };
     document.getElementById('itPriceModalDiffBody').innerHTML = diff.map(d => {
-      let label;
-      if (d.kind === 'added') label = `<span class="text-emerald-700 font-bold">+ Mới thêm · ${Number(d.newPrice).toLocaleString('vi-VN')} đ</span>`;
-      else if (d.kind === 'removed') label = `<span class="text-red-600 font-bold line-through">− Đã bỏ · ${Number(d.oldPrice).toLocaleString('vi-VN')} đ</span>`;
-      else if (d.kind === 'changed') label = `<span class="text-amber-700 font-bold">≠ ${d.oldPrice != null ? Number(d.oldPrice).toLocaleString('vi-VN') : '—'} → ${Number(d.newPrice).toLocaleString('vi-VN')} đ</span>`;
-      else label = `<span class="text-gray-400">Không đổi</span>`;
-      return `<tr><td class="border p-1">${escapeHtml(d.code || '')}</td><td class="border p-1">${escapeHtml(d.name)}</td><td class="border p-1">${label}</td></tr>`;
+      const rowClass = d.kind === 'removed' ? ' class="text-gray-400 line-through"' : '';
+      return `<tr${rowClass}>${latestColumnLabels.map(col =>
+        `<td class="border p-1">${escapeHtml(d.values?.[col.key] || '')}</td>`
+      ).join('')}<td class="border p-1">${KIND_LABEL[d.kind] || ''}</td></tr>`;
     }).join('');
   } else {
     diffWrap.classList.add('hidden');
