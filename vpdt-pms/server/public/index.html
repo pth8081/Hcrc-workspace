@@ -3467,6 +3467,8 @@ input[data-sdd-list] {
               <th class="border p-2 text-right">Hỏng</th>
               <th class="border p-2 text-right">Hủy</th>
               <th class="border p-2 text-right">Mất</th>
+              <th class="border p-2 text-right">Mới</th>
+              <th class="border p-2 text-right">Đã Sử Dụng</th>
               <th class="border p-2 text-right">Tồn Kho</th>
             </tr></thead>
             <tbody id="uniformStockTableBody"></tbody>
@@ -3521,12 +3523,17 @@ input[data-sdd-list] {
       </div>
 
       <div id="uniformDashByStoreWrap" class="hidden bg-white p-4 rounded border space-y-2">
-        <h4 class="font-bold text-sm text-gray-800">🏬 Theo Siêu Thị</h4>
+        <div class="flex items-center justify-between gap-2 flex-wrap">
+          <h4 class="font-bold text-sm text-gray-800">🏬 Theo Siêu Thị</h4>
+          <button type="button" onclick="exportUniformDashByStoreExcel()" class="bg-emerald-600 text-white text-xs font-semibold px-3 py-1.5 rounded hover:bg-emerald-700">📥 Xuất Excel</button>
+        </div>
         <div class="overflow-x-auto">
           <table class="w-full border-collapse border text-xs">
             <thead><tr class="bg-gray-100 text-left">
               <th class="border p-1.5">Siêu Thị</th>
-              <th class="border p-1.5 text-right">Tồn Kho</th>
+              <th class="border p-1.5 text-right">Mới</th>
+              <th class="border p-1.5 text-right">Đã Sử Dụng</th>
+              <th class="border p-1.5 text-right">Tổng Tồn Kho</th>
               <th class="border p-1.5 text-right">Đã Cấp</th>
               <th class="border p-1.5 text-right">Hỏng/Hủy</th>
               <th class="border p-1.5 text-right">Mất</th>
@@ -33433,8 +33440,10 @@ function canManageUniformStore(user) {
 }
 // uniformApprove (Phase 2) — duyệt/từ chối kỳ cấp phát VÀ điều chuyển kho (DÙNG CHUNG 1 quyền, không
 // tách riêng — xem lib/recordActions.js canApproveUniform()/canApproveUniformTransfer()).
+// uniformManage được GỘP thêm năng lực này (khớp canApproveUniform() server) — người tạo kỳ tự duyệt
+// được kỳ mình tạo, không cần cấp thêm quyền uniformApprove riêng.
 function canApproveUniformClient(user) {
-  return !!(user?.perms?.admin || user?.perms?.uniformApprove);
+  return !!(user?.perms?.admin || user?.perms?.uniformApprove || user?.perms?.uniformManage);
 }
 
 function setUniformSubTab(subTab) {
@@ -34302,6 +34311,73 @@ function computeUniformStockClient(storeDept) {
   return stock;
 }
 
+// Mirror computeUniformStockBreakdown() ở lib/recordActions.js — tách "tồn kho" thành "mới" (chưa từng
+// cấp cho ai) / "đã sử dụng" (đã cấp rồi được thu hồi TỐT về kho, outcome TON) để hiển thị ở Kho/Tổng
+// Quan, đồng thời PHẢN ÁNH chính sách "ưu tiên xài hàng đã sử dụng trước" (xem giải thích đầy đủ ở bản
+// server). newStock + usedStock LUÔN = row.stock của computeUniformStockClient() ở trên.
+function computeUniformStockBreakdownClient(storeDept) {
+  const pools = new Map();
+  const events = [];
+  const keyOf = (name, size) => `${name}|||${size || ''}`;
+  const getPool = (name, size) => {
+    const key = keyOf(name, size);
+    if (!pools.has(key)) pools.set(key, { name, size: size || '', newStock: 0, usedStock: 0 });
+    return pools.get(key);
+  };
+  const timeOf = (str) => { const d = parseVNDateTime(str); return d ? d.getTime() : 0; };
+
+  for (const period of (DB.uniformPeriods || [])) {
+    for (const alloc of (period.allocations || [])) {
+      if (alloc.dept !== storeDept || alloc.status !== 'CONFIRMED') continue;
+      // Dùng alloc.id (Date.now() lúc TẠO kỳ, mili-giây) thay vì parse alloc.confirmedAt (nowVN(), chỉ
+      // chính xác tới GIÂY) — xem giải thích đầy đủ ở bản server computeUniformStockBreakdown().
+      const t = alloc.id;
+      for (const it of (alloc.items || [])) events.push({ t, type: 'ALLOC', name: it.name, size: it.size, qty: it.qty });
+    }
+  }
+  for (const issuance of (DB.uniformIssuances || [])) {
+    if (issuance.dept !== storeDept) continue;
+    const t = issuance.id;
+    for (const it of (issuance.items || [])) events.push({ t, type: 'ISSUE', name: it.name, size: it.size, qty: it.qty });
+  }
+  for (const adj of (DB.uniformStockAdjustments || [])) {
+    if (adj.dept !== storeDept) continue;
+    const t = adj.id;
+    if (adj.source === 'EMPLOYEE' && adj.outcome === 'TON') {
+      events.push({ t, type: 'RETURN_GOOD', name: adj.itemName, size: adj.size, qty: adj.qty });
+    } else if (adj.source === 'STOCK') {
+      events.push({ t, type: 'STOCK_LOSS', name: adj.itemName, size: adj.size, qty: adj.qty });
+    }
+  }
+  for (const tr of (DB.uniformTransfers || [])) {
+    if (tr.status !== 'APPROVED') continue;
+    const t = timeOf(tr.approvedAt);
+    if (tr.sourceDept === storeDept) events.push({ t, type: 'TRANSFER_OUT', name: tr.itemName, size: tr.size, qty: tr.qty });
+    if (tr.targetDept === storeDept) events.push({ t, type: 'TRANSFER_IN', name: tr.itemName, size: tr.size, qty: tr.qty });
+  }
+
+  events.sort((a, b) => a.t - b.t);
+  for (const ev of events) {
+    const pool = getPool(ev.name, ev.size);
+    if (ev.type === 'ALLOC' || ev.type === 'TRANSFER_IN') {
+      pool.newStock += ev.qty;
+    } else if (ev.type === 'TRANSFER_OUT') {
+      pool.newStock -= ev.qty;
+    } else if (ev.type === 'RETURN_GOOD') {
+      pool.usedStock += ev.qty;
+    } else if (ev.type === 'ISSUE') {
+      const fromUsed = Math.min(ev.qty, pool.usedStock);
+      pool.usedStock -= fromUsed;
+      pool.newStock -= (ev.qty - fromUsed);
+    } else if (ev.type === 'STOCK_LOSS') {
+      const fromNew = Math.min(ev.qty, pool.newStock);
+      pool.newStock -= fromNew;
+      pool.usedStock -= (ev.qty - fromNew);
+    }
+  }
+  return pools;
+}
+
 // ============ Chi Tiết Theo Kỳ (Phase 2) — mirror UX expand/collapse "Chi Tiết Tài Liệu" của module
 // Tài Liệu: bấm 1 dòng tồn kho để xem SL Đã Nhận đến từ (những) kỳ cấp phát nào — tính HOÀN TOÀN phía
 // trình duyệt từ DB.uniformPeriods đã tải sẵn, KHÔNG gọi thêm API nào. Chỉ gộp allocations ĐÃ CONFIRMED
@@ -34355,17 +34431,21 @@ function renderUniformStock() {
   const rows = [];
   for (const dept of targetDepts) {
     const stock = computeUniformStockClient(dept);
-    for (const row of stock.values()) rows.push({ dept, ...row });
+    const breakdown = computeUniformStockBreakdownClient(dept);
+    for (const row of stock.values()) {
+      const pool = breakdown.get(`${row.name}|||${row.size || ''}`);
+      rows.push({ dept, ...row, newStock: pool ? pool.newStock : 0, usedStock: pool ? pool.usedStock : 0 });
+    }
   }
   if (!rows.length) {
-    tbody.innerHTML = `<tr><td colspan="9" class="text-center p-6 text-gray-500 italic">Chưa có dữ liệu tồn kho.</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="11" class="text-center p-6 text-gray-500 italic">Chưa có dữ liệu tồn kho.</td></tr>`;
     return;
   }
   tbody.innerHTML = rows.map(r => {
     const key = uniformStockRowKey(r.dept, r.name, r.size);
     const expanded = uniformStockExpandedKeys.has(key);
     const code = uniformSkuFor(r.name, r.size);
-    const breakdown = expanded ? uniformPeriodBreakdownFor(r.dept, r.name, r.size) : [];
+    const periodBreakdown = expanded ? uniformPeriodBreakdownFor(r.dept, r.name, r.size) : [];
     const netTransfer = r.transferIn - r.transferOut;
     return `
     <tr class="hover:bg-gray-50 border-b">
@@ -34380,18 +34460,20 @@ function renderUniformStock() {
       <td class="border p-2 text-right ${r.hong > 0 ? 'text-rose-600 font-bold' : ''}">${r.hong.toLocaleString('vi-VN')}</td>
       <td class="border p-2 text-right ${r.huy > 0 ? 'text-gray-600 font-bold' : ''}">${r.huy.toLocaleString('vi-VN')}</td>
       <td class="border p-2 text-right ${r.mat > 0 ? 'text-orange-600 font-bold' : ''}">${r.mat.toLocaleString('vi-VN')}</td>
+      <td class="border p-2 text-right text-emerald-700">${r.newStock.toLocaleString('vi-VN')}</td>
+      <td class="border p-2 text-right text-amber-700">${r.usedStock.toLocaleString('vi-VN')}</td>
       <td class="border p-2 text-right font-bold ${r.stock <= 0 ? 'text-red-600' : 'text-green-700'}">${r.stock.toLocaleString('vi-VN')}${netTransfer !== 0 ? `<span class="block text-[10px] font-normal text-cyan-700">${netTransfer > 0 ? '+' : ''}${netTransfer} điều chuyển</span>` : ''}</td>
     </tr>
     ${expanded ? `
     <tr class="bg-teal-50/40">
-      <td class="border p-2" colspan="9">
+      <td class="border p-2" colspan="11">
         <div class="text-[11px] text-gray-700">
           <div class="font-bold text-teal-800 mb-1">📋 Chi tiết theo kỳ cấp phát (đã xác nhận):</div>
-          ${breakdown.length ? `
+          ${periodBreakdown.length ? `
             <table class="w-full border-collapse text-[11px]">
               <thead><tr class="text-left text-gray-500"><th class="p-1">Kỳ Cấp Phát</th><th class="p-1 text-right">SL</th><th class="p-1">Xác Nhận Bởi</th><th class="p-1">Lúc</th></tr></thead>
               <tbody>
-                ${breakdown.map(b => `<tr><td class="p-1">${escapeHtml(b.periodName)}</td><td class="p-1 text-right">${b.qty}</td><td class="p-1">${escapeHtml(b.confirmedByName || '')}</td><td class="p-1">${escapeHtml(b.confirmedAt || '')}</td></tr>`).join('')}
+                ${periodBreakdown.map(b => `<tr><td class="p-1">${escapeHtml(b.periodName)}</td><td class="p-1 text-right">${b.qty}</td><td class="p-1">${escapeHtml(b.confirmedByName || '')}</td><td class="p-1">${escapeHtml(b.confirmedAt || '')}</td></tr>`).join('')}
               </tbody>
             </table>
           ` : `<div class="italic text-gray-500">Không có dữ liệu.</div>`}
@@ -34620,14 +34702,18 @@ function renderUniformDashboard() {
   let totalStock = 0, totalIssued = 0, totalDamaged = 0, totalLost = 0;
   const byItem = new Map(); // name -> { stock, issued }
   const bySize = new Map(); // size -> { stock, issued }
-  const byStore = new Map(); // dept -> { stock, issued, damaged, lost }
+  const byStore = new Map(); // dept -> { stock, issued, damaged, lost, newStock, usedStock }
 
   for (const dept of targetDepts) {
     const stock = computeUniformStockClient(dept);
-    let storeStock = 0, storeIssued = 0, storeDamaged = 0, storeLost = 0;
+    const breakdown = computeUniformStockBreakdownClient(dept);
+    let storeStock = 0, storeIssued = 0, storeDamaged = 0, storeLost = 0, storeNew = 0, storeUsed = 0;
     for (const row of stock.values()) {
       totalStock += row.stock; totalIssued += row.issued; totalDamaged += (row.hong + row.huy); totalLost += row.mat;
       storeStock += row.stock; storeIssued += row.issued; storeDamaged += (row.hong + row.huy); storeLost += row.mat;
+      const pool = breakdown.get(`${row.name}|||${row.size || ''}`);
+      storeNew += pool ? pool.newStock : 0;
+      storeUsed += pool ? pool.usedStock : 0;
 
       if (!byItem.has(row.name)) byItem.set(row.name, { stock: 0, issued: 0 });
       byItem.get(row.name).stock += row.stock;
@@ -34638,7 +34724,7 @@ function renderUniformDashboard() {
       bySize.get(sizeKey).stock += row.stock;
       bySize.get(sizeKey).issued += row.issued;
     }
-    byStore.set(dept, { stock: storeStock, issued: storeIssued, damaged: storeDamaged, lost: storeLost });
+    byStore.set(dept, { stock: storeStock, issued: storeIssued, damaged: storeDamaged, lost: storeLost, newStock: storeNew, usedStock: storeUsed });
   }
 
   document.getElementById('uniformDashStatStock').textContent = totalStock.toLocaleString('vi-VN');
@@ -34666,13 +34752,42 @@ function renderUniformDashboard() {
     storeBody.innerHTML = storeRows.length ? storeRows.map(([dept, v]) => `
       <tr>
         <td class="border p-1.5 font-semibold">${escapeHtml(dept)}</td>
-        <td class="border p-1.5 text-right">${v.stock.toLocaleString('vi-VN')}</td>
+        <td class="border p-1.5 text-right text-emerald-700">${v.newStock.toLocaleString('vi-VN')}</td>
+        <td class="border p-1.5 text-right text-amber-700">${v.usedStock.toLocaleString('vi-VN')}</td>
+        <td class="border p-1.5 text-right font-semibold">${v.stock.toLocaleString('vi-VN')}</td>
         <td class="border p-1.5 text-right">${v.issued.toLocaleString('vi-VN')}</td>
         <td class="border p-1.5 text-right">${v.damaged.toLocaleString('vi-VN')}</td>
         <td class="border p-1.5 text-right">${v.lost.toLocaleString('vi-VN')}</td>
       </tr>
-    `).join('') : `<tr><td colspan="5" class="text-center p-3 text-gray-500 italic">Chưa có dữ liệu.</td></tr>`;
+    `).join('') : `<tr><td colspan="7" class="text-center p-3 text-gray-500 italic">Chưa có dữ liệu.</td></tr>`;
+    uniformDashByStoreCache = storeRows;
   }
+}
+
+// Xuất Excel bảng "Theo Siêu Thị" ở Tổng Quan — cùng cơ chế chung downloadXlsxFromServer() đã dùng cho
+// mọi màn xuất Excel khác trong app (vd exportTrainingResultsExcel()), KHÔNG có route riêng. Dùng lại
+// cache đã tính sẵn lúc renderUniformDashboard() thay vì tính lại (bảng chỉ hiện cho canManageUniform
+// nên cache luôn khớp đúng những gì đang hiển thị trên màn hình khi bấm nút).
+let uniformDashByStoreCache = [];
+async function exportUniformDashByStoreExcel() {
+  if (!uniformDashByStoreCache.length) return alert('Chưa có dữ liệu để xuất.');
+  const rows = uniformDashByStoreCache.map(([dept, v]) => ({
+    sieuThi: dept, moi: v.newStock, daSuDung: v.usedStock, tongTonKho: v.stock, daCap: v.issued, hongHuy: v.damaged, mat: v.lost
+  }));
+  await downloadXlsxFromServer(
+    `DongPhuc_TheoSieuThi_${nowVN().split(' ')[1].replace(/\//g, '-')}.xlsx`,
+    'Đồng Phục Theo Siêu Thị',
+    [
+      { header: 'Siêu Thị', key: 'sieuThi', width: 24 },
+      { header: 'Mới', key: 'moi', width: 12 },
+      { header: 'Đã Sử Dụng', key: 'daSuDung', width: 14 },
+      { header: 'Tổng Tồn Kho', key: 'tongTonKho', width: 14 },
+      { header: 'Đã Cấp', key: 'daCap', width: 12 },
+      { header: 'Hỏng/Hủy', key: 'hongHuy', width: 12 },
+      { header: 'Mất', key: 'mat', width: 10 }
+    ],
+    rows
+  );
 }
 </script>
 </body>

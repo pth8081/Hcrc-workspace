@@ -2959,6 +2959,94 @@ function computeUniformStock(allPeriods, storeDept, allIssuances, allAdjustments
   return stock;
 }
 
+// Tách "tồn kho" (computeUniformStock() ở trên) thành 2 nhóm: "mới" (newStock, chưa từng cấp cho ai)
+// và "đã sử dụng" (usedStock, đã từng cấp rồi được thu hồi TỐT về kho — outcome TON) — CHỈ phục vụ
+// hiển thị (Kho/Tổng Quan) + quyết định thứ tự ưu tiên khi cấp phát (quyết định người dùng thực tế: ưu
+// tiên xài hàng "đã sử dụng" trước để không mở lố hàng mới khi còn đồ cũ tốt — vì đồng phục không có mã
+// từng cái riêng để theo dõi vật lý, "ưu tiên" ở đây nghĩa là hàm này LUÔN trừ usedStock trước khi trừ
+// newStock lúc có 1 lượt cấp phát, chứ không có thao tác chọn tay). newStock + usedStock LUÔN bằng đúng
+// row.stock của computeUniformStock() (cùng công thức, chỉ tách nguồn) — KHÔNG thể suy ra bằng cách
+// cộng dồn tổng như computeUniformStock(), vì phần "ai lấy từ pool nào" phụ thuộc trình tự trước-sau
+// thực tế, nên phải gộp mọi sự kiện liên quan (alloc CONFIRMED/issuance/adjustment/transfer APPROVED)
+// của ĐÚNG siêu thị, sắp theo mốc thời gian (confirmedAt/createdAt/approvedAt, parse bằng
+// parseVNDateTime() — nowVN() không sort được bằng so sánh chuỗi), rồi phát lại tuần tự:
+//   - Alloc CONFIRMED, Transfer APPROVED (đến)   -> cộng newStock (hàng mới nhận, chưa ai đụng tới)
+//   - Transfer APPROVED (đi)                     -> trừ newStock (giả định điều chuyển luôn là hàng
+//                                                    mới, không điều chuyển hàng đã cấp-thu hồi)
+//   - Issuance                                   -> trừ usedStock TRƯỚC, hết mới trừ newStock
+//   - Adjustment EMPLOYEE/TON (thu hồi tốt)      -> cộng usedStock
+//   - Adjustment EMPLOYEE/HONG|HUY|MAT           -> không phát sự kiện (hàng thu hồi hỏng/mất, không
+//                                                    hoàn lại pool nào — khớp computeUniformStock(),
+//                                                    net 0 trên tổng "stock")
+//   - Adjustment STOCK (báo Hỏng/Hủy trực tiếp)  -> trừ newStock TRƯỚC (giả định phát hiện lỗi ở hàng
+//                                                    mới nhận dễ hơn), tràn thì trừ tiếp usedStock
+function computeUniformStockBreakdown(allPeriods, storeDept, allIssuances, allAdjustments, allApprovedTransfers) {
+  const pools = new Map();
+  const events = [];
+  const keyOf = (name, size) => `${name}|||${size || ''}`;
+  const getPool = (name, size) => {
+    const key = keyOf(name, size);
+    if (!pools.has(key)) pools.set(key, { name, size: size || '', newStock: 0, usedStock: 0 });
+    return pools.get(key);
+  };
+  const timeOf = (str) => { const d = parseVNDateTime(str); return d ? d.getTime() : 0; };
+
+  for (const period of allPeriods || []) {
+    for (const alloc of period.allocations || []) {
+      if (alloc.dept !== storeDept || alloc.status !== 'CONFIRMED') continue;
+      // Dùng alloc.id (Date.now() lúc TẠO kỳ, đơn vị mili-giây) thay vì parse alloc.confirmedAt
+      // (nowVN(), chỉ CHÍNH XÁC TỚI GIÂY) — 2 sự kiện trong cùng 1 giây (rất dễ xảy ra khi cấp phát/
+      // thu hồi liên tiếp nhanh) sẽ không phân biệt được trước-sau nếu chỉ dựa vào chuỗi nowVN(), làm
+      // sai lệch thứ tự "ai lấy từ pool nào". alloc.id luôn được tạo TRƯỚC bất kỳ issuance/adjustment
+      // nào tham chiếu tới nó (không thể cấp/thu hồi trước khi phân bổ được xác nhận), nên dùng làm mốc
+      // vẫn đúng thứ tự tương đối dù không phản ánh chính xác THỜI ĐIỂM xác nhận.
+      const t = alloc.id;
+      for (const it of alloc.items || []) events.push({ t, type: 'ALLOC', name: it.name, size: it.size, qty: it.qty });
+    }
+  }
+  for (const issuance of allIssuances || []) {
+    if (issuance.dept !== storeDept) continue;
+    const t = issuance.id; // id = Date.now() (mili-giây) — xem giải thích ở nhánh ALLOC bên trên
+    for (const it of issuance.items || []) events.push({ t, type: 'ISSUE', name: it.name, size: it.size, qty: it.qty });
+  }
+  for (const adj of allAdjustments || []) {
+    if (adj.dept !== storeDept) continue;
+    const t = adj.id; // id = Date.now() (mili-giây) — xem giải thích ở nhánh ALLOC bên trên
+    if (adj.source === 'EMPLOYEE' && adj.outcome === 'TON') {
+      events.push({ t, type: 'RETURN_GOOD', name: adj.itemName, size: adj.size, qty: adj.qty });
+    } else if (adj.source === 'STOCK') {
+      events.push({ t, type: 'STOCK_LOSS', name: adj.itemName, size: adj.size, qty: adj.qty });
+    }
+  }
+  for (const tr of allApprovedTransfers || []) {
+    if (tr.status !== 'APPROVED') continue;
+    const t = timeOf(tr.approvedAt);
+    if (tr.sourceDept === storeDept) events.push({ t, type: 'TRANSFER_OUT', name: tr.itemName, size: tr.size, qty: tr.qty });
+    if (tr.targetDept === storeDept) events.push({ t, type: 'TRANSFER_IN', name: tr.itemName, size: tr.size, qty: tr.qty });
+  }
+
+  events.sort((a, b) => a.t - b.t);
+  for (const ev of events) {
+    const pool = getPool(ev.name, ev.size);
+    if (ev.type === 'ALLOC' || ev.type === 'TRANSFER_IN') {
+      pool.newStock += ev.qty;
+    } else if (ev.type === 'TRANSFER_OUT') {
+      pool.newStock -= ev.qty;
+    } else if (ev.type === 'RETURN_GOOD') {
+      pool.usedStock += ev.qty;
+    } else if (ev.type === 'ISSUE') {
+      const fromUsed = Math.min(ev.qty, pool.usedStock);
+      pool.usedStock -= fromUsed;
+      pool.newStock -= (ev.qty - fromUsed);
+    } else if (ev.type === 'STOCK_LOSS') {
+      const fromNew = Math.min(ev.qty, pool.newStock);
+      pool.newStock -= fromNew;
+      pool.usedStock -= (ev.qty - fromNew);
+    }
+  }
+  return pools;
+}
+
 // Số lượng 1 nhân viên ĐANG THỰC SỰ GIỮ (đã cấp trừ đi phần đã thu hồi lại của riêng người đó) — dùng để
 // chặn thu hồi vượt quá số đang giữ. allIssuancesOfStore/allAdjustmentsOfStore: đã lọc theo dept (giống
 // tham số computeUniformStock() ở trên). Trả về Map `${name}|||${size}` -> qty đang giữ.
@@ -3012,8 +3100,13 @@ function computeAllEmployeeUniformHoldings(allIssuancesOfStore, allAdjustmentsOf
 // chặn ở đây, vì API xác nhận có thể bị gọi thẳng bỏ qua bước duyệt trên giao diện).
 // Kỳ tạo TRƯỚC Phase 2 (không có field approvalStatus) coi như đã được chấp nhận từ trước (bỏ qua cổng
 // này) — tránh chặn ngược các phân bổ PENDING_CONFIRM đã tồn tại từ trước khi tính năng này ra đời.
+// uniformManage được GỘP thêm năng lực uniformApprove (quyết định người dùng thực tế: quy trình tách
+// vai trò tạo/duyệt ban đầu gây kẹt kỳ cấp phát khi không ai được cấp riêng uniformApprove sau khi
+// tính năng ra mắt — Hành Chính có uniformManage giờ tự duyệt được kỳ mình tạo luôn, không cần cấp
+// thêm quyền uniformApprove riêng nữa, nhưng quyền uniformApprove ĐỘC LẬP vẫn còn tác dụng cho người
+// chỉ cần duyệt mà không cần tạo/quản lý kỳ).
 function canApproveUniform(user) {
-  return !!(user?.perms?.admin || user?.perms?.uniformApprove);
+  return !!(user?.perms?.admin || user?.perms?.uniformApprove || user?.perms?.uniformManage);
 }
 
 function approveUniformPeriod(user, period) {
@@ -3497,7 +3590,7 @@ module.exports = {
   canApproveItPriceEmergencyReject, requestItPriceEmergencyReject, approveItPriceEmergencyReject, denyItPriceEmergencyReject,
   claimItTicket, updateItTicketStatus, addItTicketComment, cancelItTicket,
   escalateItTicket, approveItTicketEscalation, denyItTicketEscalation,
-  canManageUniform, canManageUniformStore, computeUniformStock, computeEmployeeUniformHolding,
+  canManageUniform, canManageUniformStore, computeUniformStock, computeUniformStockBreakdown, computeEmployeeUniformHolding,
   computeAllEmployeeUniformHoldings,
   canApproveUniform, approveUniformPeriod, rejectUniformPeriod,
   stripVietnameseDiacritics, abbreviateUniformItemName, computeNextUniformSkuSeq, generateUniformSkuCode, backfillUniformSkuCodes,
