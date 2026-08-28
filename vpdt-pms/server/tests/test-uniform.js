@@ -338,8 +338,7 @@ async function main() {
       const result = await page.evaluate(async () => {
         switchTab('uniform');
         setUniformSubTab('STORE');
-        document.getElementById('uniformAdjStockItemName').value = 'Áo đồng phục nam';
-        document.getElementById('uniformAdjStockSize').value = 'L';
+        document.getElementById('uniformAdjStockItemSize').value = 'Áo đồng phục nam|||L';
         document.getElementById('uniformAdjStockQty').value = '2';
         document.querySelector('input[name="uniformAdjStockOutcome"][value="HONG"]').checked = true;
         document.getElementById('uniformAdjStockReason').value = 'Ố vàng, rách chỉ';
@@ -359,8 +358,7 @@ async function main() {
     await run.run('Giám Đốc Siêu Thị báo Hủy không sử dụng từ kho — trừ đúng vào tồn', async () => {
       const result = await page.evaluate(async () => {
         window.__resetCapture();
-        document.getElementById('uniformAdjStockItemName').value = 'Áo đồng phục nam';
-        document.getElementById('uniformAdjStockSize').value = 'L';
+        document.getElementById('uniformAdjStockItemSize').value = 'Áo đồng phục nam|||L';
         document.getElementById('uniformAdjStockQty').value = '1';
         document.querySelector('input[name="uniformAdjStockOutcome"][value="HUY"]').checked = true;
         document.getElementById('uniformAdjStockReason').value = 'Lỗi sản xuất, không dùng được';
@@ -395,8 +393,7 @@ async function main() {
     await run.run('Validation: báo Hỏng vượt quá tồn kho hiện có bị chặn (409)', async () => {
       const result = await page.evaluate(async () => {
         window.__resetCapture();
-        document.getElementById('uniformAdjStockItemName').value = 'Áo đồng phục nam';
-        document.getElementById('uniformAdjStockSize').value = 'L';
+        document.getElementById('uniformAdjStockItemSize').value = 'Áo đồng phục nam|||L';
         document.getElementById('uniformAdjStockQty').value = '999';
         document.querySelector('input[name="uniformAdjStockOutcome"][value="HONG"]').checked = true;
         document.getElementById('uniformAdjStockReason').value = 'Test vượt tồn';

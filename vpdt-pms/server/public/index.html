@@ -3322,14 +3322,12 @@ input[data-sdd-list] {
       <div class="bg-rose-50 p-4 rounded border border-rose-200 space-y-3">
         <h3 class="font-bold text-rose-900 text-base flex items-center gap-2">🗑️ Báo Hỏng / Hủy (Từ Kho)</h3>
         <p class="text-xs text-rose-700">Dùng khi đồng phục còn NẰM TRONG KHO (chưa cấp cho nhân viên) bị hỏng hoặc cần loại bỏ không sử dụng.</p>
-        <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
           <div>
-            <label class="block font-semibold text-gray-600 mb-1 text-xs">Tên Đồng Phục <span class="text-red-500">*</span></label>
-            <input id="uniformAdjStockItemName" placeholder="VD: Áo đồng phục nam" class="w-full border p-1.5 rounded text-xs">
-          </div>
-          <div>
-            <label class="block font-semibold text-gray-600 mb-1 text-xs">Size</label>
-            <input id="uniformAdjStockSize" placeholder="VD: L" class="w-full border p-1.5 rounded text-xs">
+            <label class="block font-semibold text-gray-600 mb-1 text-xs">Đồng Phục — Size <span class="text-red-500">*</span></label>
+            <select id="uniformAdjStockItemSize" class="w-full border p-1.5 rounded text-xs bg-white">
+              <option value="">-- Chọn mặt hàng --</option>
+            </select>
           </div>
           <div>
             <label class="block font-semibold text-gray-600 mb-1 text-xs">Số Lượng <span class="text-red-500">*</span></label>
@@ -34239,6 +34237,11 @@ async function submitUniformIssuance() {
   alert('✅ Đã cấp đồng phục cho nhân viên!');
   resetUniformIssueForm();
   renderUniformIssuancesTable();
+  // Cấp phát xong -> nhân viên vừa nhận phải hiện NGAY trong bảng "Đang Giữ" và dropdown "Đồng Phục —
+  // Size" của "Báo Hỏng/Hủy (Từ Kho)" phải cập nhật lại đúng tồn kho còn lại (trước đây thiếu 2 dòng
+  // này, phải chuyển tab qua lại mới thấy đúng dữ liệu).
+  renderUniformHoldingsTable();
+  renderUniformAdjStockItemOptions();
   renderUniformStock();
 }
 
@@ -34345,15 +34348,35 @@ function openUniformHoldingActionModal(idx, outcome) {
       alert('✅ Đã ghi nhận thao tác!');
       renderUniformHoldingsTable();
       renderUniformAdjustmentsTable();
+      renderUniformAdjStockItemOptions();
       renderUniformStock();
     }
   });
 }
 
 // ============ Hỏng / Hủy / Thu Hồi (Giám Đốc Siêu Thị — uniformStoreManage) ============
+// Dropdown "Đồng Phục — Size" cho "Báo Hỏng/Hủy (Từ Kho)" — giới hạn CHÍNH XÁC những gì siêu thị đang
+// có tồn kho > 0 (đã được Hành Chính phân bổ VÀ Giám Đốc Siêu Thị xác nhận), cùng khuôn dữ liệu
+// (computeUniformStockClient()) + cùng định dạng nhãn (formatUniformLabel()) với dropdown "Cấp Đồng
+// Phục Cho Nhân Viên" ở renderUniformIssueItems() — KHÔNG còn 2 ô tên/size gõ tự do (không đối chiếu
+// được với Danh Mục Đồng Phục, dễ gõ sai lệch với đúng dữ liệu đã phân bổ).
+function renderUniformAdjStockItemOptions() {
+  const sel = document.getElementById('uniformAdjStockItemSize');
+  if (!sel) return;
+  const prevValue = sel.value;
+  const stock = computeUniformStockClient(currentUser.dept);
+  const options = Array.from(stock.values()).filter(r => r.stock > 0).sort((a, b) => a.name.localeCompare(b.name, 'vi') || a.size.localeCompare(b.size, 'vi'));
+  sel.innerHTML = '<option value="">-- Chọn mặt hàng --</option>' +
+    options.map(o => {
+      const key = `${o.name}|||${o.size}`;
+      const code = uniformSkuFor(o.name, o.size);
+      return `<option value="${escapeHtml(key)}">${formatUniformLabel(o.name, o.size, code)} (còn ${o.stock})</option>`;
+    }).join('');
+  if (options.some(o => `${o.name}|||${o.size}` === prevValue)) sel.value = prevValue;
+}
+
 function resetUniformAdjustForms() {
-  document.getElementById('uniformAdjStockItemName').value = '';
-  document.getElementById('uniformAdjStockSize').value = '';
+  renderUniformAdjStockItemOptions();
   document.getElementById('uniformAdjStockQty').value = '';
   document.getElementById('uniformAdjStockReason').value = '';
   const stockOutcomeDefault = document.querySelector('input[name="uniformAdjStockOutcome"][value="HONG"]');
@@ -34418,21 +34441,18 @@ async function callCreateUniformStockAdjustment(payload) {
 
 async function submitUniformStockAdjustment(source) {
   const prefix = source === 'EMPLOYEE' ? 'uniformAdjEmp' : 'uniformAdjStock';
-  let itemName, size;
-  if (source === 'EMPLOYEE') {
-    const combo = document.getElementById('uniformAdjEmpItemSize').value;
-    const sep = combo.indexOf('|||');
-    itemName = sep === -1 ? '' : combo.slice(0, sep);
-    size = sep === -1 ? '' : combo.slice(sep + 3);
-  } else {
-    itemName = document.getElementById(`${prefix}ItemName`).value.trim();
-    size = document.getElementById(`${prefix}Size`).value.trim();
-  }
+  // Cả 2 nguồn giờ ĐỀU chọn "Mặt Hàng — Size" từ dropdown (không còn gõ tự do) — cùng khuôn giá trị
+  // "tên|||size" với dropdown "Cấp Đồng Phục Cho Nhân Viên", đồng nhất tên gọi/cách chọn xuyên suốt
+  // module Đồng Phục.
+  const combo = document.getElementById(`${prefix}ItemSize`).value;
+  const sep = combo.indexOf('|||');
+  const itemName = sep === -1 ? '' : combo.slice(0, sep);
+  const size = sep === -1 ? '' : combo.slice(sep + 3);
   const qty = parseFloat(document.getElementById(`${prefix}Qty`).value);
   const reason = document.getElementById(`${prefix}Reason`).value.trim();
   const outcome = document.querySelector(`input[name="${prefix}Outcome"]:checked`)?.value || '';
 
-  if (!itemName) return alert('Vui lòng nhập tên đồng phục!');
+  if (!itemName) return alert('Vui lòng chọn đồng phục — size!');
   if (!qty || qty <= 0) return alert('Vui lòng nhập số lượng hợp lệ (> 0)!');
   if (!reason) return alert('Vui lòng nhập lý do (bắt buộc)!');
 
@@ -34456,6 +34476,10 @@ async function submitUniformStockAdjustment(source) {
   alert('✅ Đã ghi nhận thao tác!');
   resetUniformAdjustForms();
   renderUniformAdjustmentsTable();
+  // Thao tác EMPLOYEE đổi số đang giữ của nhân viên -> phải làm mới lại bảng "Đang Giữ" ngay (trước đây
+  // thiếu dòng này khiến bảng hiện "Không có nhân viên nào đang giữ đồng phục" dù dữ liệu đã đổi, phải
+  // đợi chuyển tab qua lại mới thấy đúng).
+  renderUniformHoldingsTable();
   renderUniformStock();
 }
 
