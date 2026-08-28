@@ -66,6 +66,14 @@ router.post('/:id/:action', async (req, res) => {
         throw new HttpError(409, 'Lịch này đã bị huỷ trước đó');
       }
       item.status = config.status;
+      // approvedBy/approvedByName/approvedAt — chỉ để MÀN "✅ Phê Duyệt" (getMyProcessedApprovals() ở
+      // index.html) biết chính người này đã duyệt lịch nào khi lọc "Đã duyệt", KHÔNG dùng để kiểm tra
+      // quyền (vẫn 1 cờ meetingApprove toàn công ty như cũ).
+      if (action === 'approve') {
+        item.approvedBy = freshUser.username;
+        item.approvedByName = freshUser.name;
+        item.approvedAt = new Date().toLocaleString('vi-VN');
+      }
       return item;
     });
 
