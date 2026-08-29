@@ -1,9 +1,24 @@
 # Phiên bản hiện tại
 
-**1.87.1** — đã merge vào `main` (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở
+**1.88.0** — đã merge vào `main` (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở
 badge góc màn hình + `/api/health`).
 
-## Cập nhật gần nhất (PR #187, nhánh `claude/chao-ban-oo5ijl`)
+## Cập nhật gần nhất (PR #189, nhánh `claude/chao-ban-oo5ijl`)
+
+Tính năng: **Trường Nhóm Quyền cho form tạo Nhân Viên Siêu Thị (Đồng Phục)**
+
+Thêm field `scope: 'STORE'` cho Nhóm Phân Quyền (checkbox "Chỉ dùng cho Siêu Thị" + badge 🏪), seed 1
+nhóm mặc định (kèm migration cho DB thật đang chạy). Form rút gọn "Quản Lý Nhân Viên Siêu Thị" thêm
+dropdown bắt buộc "Nhóm Quyền", chỉ lọc đúng nhóm scope STORE, tự chọn sẵn nhóm mặc định. Server
+re-validate lại groupId + scope trước khi tính perms — không tin field perms nào từ client.
+
+**Deploy impact:** có 1 migration tự động chạy khi server khởi động (idempotent, không cần thao tác
+thủ công) — chỉ cần copy code + `pm2 restart` như bình thường.
+
+Đã kiểm thử: 27 file `tests/test-*.js` (543 kịch bản) pass, cộng demo trực quan Playwright trên giao
+diện thật.
+
+## Trước đó (PR #187, nhánh `claude/chao-ban-oo5ijl`)
 
 Fix nhỏ: `renderUniformIssueEmployeeOptions()` (ô "Cấp Đồng Phục Cho Nhân Viên") thêm điều kiện
 `posType !== 'HO'` để chắc chắn loại tài khoản HO khỏi danh sách, phòng trường hợp `dept` trùng tên với
