@@ -24,6 +24,9 @@ const priceFileRoutes = require('./routes/priceFile');
 const trainingRosterRoutes = require('./routes/trainingRoster');
 const trainingPlanImportRoutes = require('./routes/trainingPlanImport');
 const adminExportRoutes = require('./routes/adminExport');
+const adminCatalogRoutes = require('./routes/adminCatalog');
+const storeCatalogImportRoutes = require('./routes/storeCatalogImport');
+const uniformEmployeesRoutes = require('./routes/uniformEmployees');
 const pwaManifestRoutes = require('./routes/pwaManifest');
 const budgetTemplateImportRoutes = require('./routes/budgetTemplateImport');
 const downloadRoutes = require('./routes/download');
@@ -134,6 +137,9 @@ app.use('/api/it-price', priceFileRoutes);
 app.use('/api/training', trainingRosterRoutes);
 app.use('/api/training', trainingPlanImportRoutes);
 app.use('/api/admin', adminExportRoutes);
+app.use('/api/admin', adminCatalogRoutes);
+app.use('/api/stores', storeCatalogImportRoutes);
+app.use('/api/uniform', uniformEmployeesRoutes);
 app.use('/api/budget', budgetTemplateImportRoutes);
 // Route TẢI file đính kèm dùng chung (khác /uploads/ tĩnh bên dưới — chỗ đó dùng để XEM trong Khung Xem
 // Bảo Vệ): PDF được đóng dấu watermark trước khi trả về, xem chi tiết ở routes/download.js.

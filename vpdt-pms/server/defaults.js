@@ -64,6 +64,12 @@ const DEFAULTS = {
   // phê duyệt). Chỉ 1 danh sách dùng chung toàn hệ thống, admin thêm/xoá tại màn Quản trị (giống hệt
   // mô hình depts/cats ở trên).
   jobTitles: ['Nhân viên', 'Chuyên viên', 'Trưởng phòng', 'Phó phòng', 'Giám đốc', 'Phó giám đốc', 'Tổng Giám Đốc', 'Chủ Tịch'],
+  // Danh sách chức danh RIÊNG cho nhân viên SIÊU THỊ (posType==='STORE') — TÁCH khỏi jobTitles ở trên
+  // (khối Văn Phòng/HO) vì cần thêm cờ restrictedFromSelfService (VD "Giám Đốc Siêu Thị" — không được
+  // phép tự tạo qua form rút gọn "Quản Lý Nhân Viên Siêu Thị" ở module Đồng Phục, chỉ Admin gán qua màn
+  // Người Dùng đầy đủ). Dạng {label, restrictedFromSelfService}[] (khác jobTitles là mảng chuỗi phẳng)
+  // để admin tự đánh dấu, không hardcode so khớp chuỗi — cùng tinh thần vppExcludeGroups ở dưới.
+  storeJobTitles: [],
   // Loại đào tạo (module con "Truyền Thông Nội Bộ" > Đào tạo, tạm thời) — phân loại Kho Tài Liệu và Lớp
   // Học, cùng cơ chế mở như jobTitles ở trên (danh sách nhãn hiển thị thuần, không có tra cứu phụ thuộc).
   trainingCategories: [],

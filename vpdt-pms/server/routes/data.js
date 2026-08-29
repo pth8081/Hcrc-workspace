@@ -10,6 +10,7 @@ const { requireAuth, blockIfMustChangePassword, hashPassword, isBcryptHash, vali
 const { encryptSecret } = require('../lib/emailCrypto');
 const { validatePasswordStrength } = require('../lib/passwordPolicy');
 const { HttpError } = require('../lib/httpErrors');
+const { isCurrentlyAdmin, isCurrentlyAdminOrUniformManage } = require('../lib/adminAuth');
 const { getAllTasksCached } = require('../lib/taskStore');
 const { getAllForCollectionCached, MIGRATED_COLLECTIONS } = require('../lib/recordStore');
 const { sendServerError } = require('../lib/errorResponse');
@@ -77,7 +78,14 @@ const ADMIN_ONLY_KEYS = new Set([
   // bổ/cấp phát ở module Đồng Phục (xem sanitizeUniformItems() ở lib/createValidation.js). Vẫn nằm
   // trong ADMIN_ONLY_KEYS (chặn user thường) nhưng gate GHI thực tế RỘNG HƠN các key khác ở đây — mở
   // thêm cho uniformManage (Hành Chính), xem isCurrentlyAdminOrUniformManage() bên dưới.
-  'uniformCatalog'
+  'uniformCatalog',
+  // stores/jobTitles: cùng lỗ hổng đã vá trước đây cho contractTypes/carTypes ở trên — trước đây BỊ BỎ
+  // SÓT khỏi ADMIN_ONLY_KEYS dù màn quản lý 2 danh mục này (renderStoreList()/renderJobTitleList(), tab
+  // "🗂️ Quản Lý Danh Mục") chỉ hiện cho admin, khiến bất kỳ tài khoản đã đăng nhập nào cũng ghi trực
+  // tiếp được qua POST /api/data/stores|jobTitles. Đổi tên (rename, có cascade) đi qua route riêng
+  // POST /api/admin/renameCatalogEntry (routes/adminCatalog.js), cũng gate isCurrentlyAdmin() y hệt.
+  // storeJobTitles: danh mục MỚI (mục 4a, Chức Danh Siêu Thị) — cùng lý do, panel CRUD chỉ hiện cho admin.
+  'stores', 'jobTitles', 'storeJobTitles'
 ]);
 
 // itPriceMasterLists giờ chỉ còn là khuôn CỘT (columns[], không còn dữ liệu giá thật — xem
@@ -110,27 +118,10 @@ function sanitizeEmailConfig(emailConfig) {
   return { ...rest, hasSmtpAuth: !!(emailConfig.smtpAuthEnabled && emailConfig.smtpUser && smtpPassEnc) };
 }
 
-// Xác nhận LẠI quyền admin từ CSDL tại thời điểm ghi, không tin cờ "admin" cache sẵn trong JWT lúc
-// đăng nhập (req.user.admin, hiệu lực tới 8h) — nếu không re-fetch, một admin vừa bị THU HỒI quyền sẽ
-// vẫn ghi được vào các collection nhạy cảm (users/permGroups/deptWorkflows...) cho tới khi JWT hết
-// hạn hoặc họ tự đăng xuất. Khớp đúng cách routes/workflow.js, routes/create.js, routes/records.js đã
-// làm (re-fetch freshUser từ DB thay vì tin token) — trước đây route này (viết từ trước, ở Bước 0) là
-// nơi DUY NHẤT còn sót lại kiểu tin token cũ.
-async function isCurrentlyAdmin(username) {
-  const users = await getAppDataValue('users');
-  const freshUser = (users || []).find(u => u.username === username);
-  return !!freshUser?.perms?.admin;
-}
-
-// Phase 2: uniformCatalog mở thêm cho uniformManage (Hành Chính) — trước đây admin-only tuyệt đối
-// (xem chú thích ADMIN_ONLY_KEYS ở trên), giờ đúng ra người quản lý module Đồng Phục cũng tự quản lý
-// được danh mục của module mình, không cần phiền admin cho từng thay đổi nhỏ. Re-fetch fresh từ DB
-// (không tin JWT cache) — cùng lý do isCurrentlyAdmin() ở trên.
-async function isCurrentlyAdminOrUniformManage(username) {
-  const users = await getAppDataValue('users');
-  const freshUser = (users || []).find(u => u.username === username);
-  return !!(freshUser?.perms?.admin || freshUser?.perms?.uniformManage);
-}
+// isCurrentlyAdmin()/isCurrentlyAdminOrUniformManage(): chuyển sang lib/adminAuth.js (dùng chung với
+// routes/adminCatalog.js, routes/storeCatalogImport.js, routes/uniformEmployees.js) — xem chú thích đầy
+// đủ ở đó. Re-fetch fresh từ DB (không tin JWT cache), khớp đúng cách routes/workflow.js,
+// routes/create.js, routes/records.js đã làm.
 
 // Áp phần quyền tuỳ chỉnh riêng (overrides) lên trên nền quyền của nhóm -> quyền hiệu lực thực tế —
 // khớp Y HỆT mergePerms() ở public/index.html (2 cài đặt độc lập, client không import chung được với
