@@ -14387,6 +14387,10 @@ function openTroLyThuKyBoSungChoice(subId) {
 }
 
 function openTroLyThuKyProposeFileForm(subId) {
+  // Nút gửi đặt NGAY TRONG bodyHTML (giống openResolveFileProposalModal() bên dưới) thay vì dùng
+  // confirmLabel/onConfirm — nút OK mặc định của genericConfirmModal (runConfirmedAction()) LUÔN ẩn
+  // modal TRƯỚC khi gọi callback, nên nếu confirmTroLyThuKyProposeFile() tự chặn thiếu tệp, modal đã
+  // biến mất trước khi người dùng kịp thấy lỗi và chọn lại tệp — phát hiện qua kiểm thử giao diện thật.
   showConfirmModal({
     title: '📤 Thay Thế Toàn Bộ Tờ Trình',
     bodyHTML: `
@@ -14400,10 +14404,10 @@ function openTroLyThuKyProposeFileForm(subId) {
           <textarea id="tltkProposeNote" class="w-full border p-2 rounded h-16" placeholder="Ghi chú cho người trình về nội dung đã thay đổi..."></textarea>
         </div>
         <p class="text-gray-500 italic">Tệp này sẽ thay thế HOÀN TOÀN tệp tờ trình hiện tại, chỉ có hiệu lực sau khi người trình xác nhận đồng ý.</p>
+        <button type="button" onclick="confirmTroLyThuKyProposeFile(${subId})" class="w-full bg-blue-600 text-white rounded p-2 font-bold hover:bg-blue-700">📤 Gửi Đề Xuất Cho Người Trình</button>
       </div>
     `,
-    confirmLabel: '📤 Gửi Đề Xuất Cho Người Trình',
-    onConfirm: () => confirmTroLyThuKyProposeFile(subId)
+    confirmLabel: 'Đóng'
   });
 }
 
