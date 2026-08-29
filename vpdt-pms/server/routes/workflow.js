@@ -14,7 +14,13 @@ const { consumeApprovalGrant } = require('../lib/approvalAuth');
 
 router.use(requireAuth, blockIfMustChangePassword);
 
-const ACTION_MAP = { approve: 'APPROVE', reject: 'REJECT', 'request-info': 'REQUEST_INFO', 'request-changes': 'REQUEST_CHANGES' };
+// 'propose-file-replacement'/'resolve-file-proposal' — CHỈ Văn Bản Trình, lớp Bộ phận Trợ Lý/Thư Ký
+// (TRO_LY_THU_KY, luôn ngay trước TGD) đề xuất thay thế toàn bộ tệp tờ trình thay vì REQUEST_CHANGES
+// thường, người trình xác nhận đồng ý/không đồng ý — xem applyWorkflowAction() ở lib/workflowEngine.js.
+const ACTION_MAP = {
+  approve: 'APPROVE', reject: 'REJECT', 'request-info': 'REQUEST_INFO', 'request-changes': 'REQUEST_CHANGES',
+  'propose-file-replacement': 'PROPOSE_FILE_REPLACEMENT', 'resolve-file-proposal': 'RESOLVE_FILE_PROPOSAL'
+};
 
 // Xác thực bổ sung khi Duyệt (mật khẩu/OTP/PIN, perms.approverAuthLevel) — áp dụng cho MỌI module dùng
 // chung engine phê duyệt này (MODULE_CONFIGS). Trước đây chỉ khai đúng 3/7 module (submissions/carRegs/

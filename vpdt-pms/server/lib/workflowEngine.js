@@ -257,6 +257,16 @@ function applyWorkflowAction({ moduleKey, item, action, user, comment, extraFiel
 
   if (!item[historyField]) item[historyField] = [];
 
+  // Bộ phận Trợ Lý/Thư Ký (lớp TRO_LY_THU_KY, chỉ Văn Bản Trình, luôn ngay TRƯỚC TGD — xem
+  // SUBMISSION_APPROVAL_LAYERS/SUBMISSION_APPROVAL_LEVEL_RULES ở public/index.html) có thể đề xuất
+  // THAY THẾ TOÀN BỘ tệp tờ trình thay vì chỉ ghi bình luận bổ sung (PROPOSE_FILE_REPLACEMENT bên
+  // dưới) — trong lúc đề xuất đó CHƯA được người trình xác nhận (RESOLVE_FILE_PROPOSAL), hồ sơ vẫn
+  // PENDING nhưng "treo" — chặn mọi hành động Duyệt/Từ chối/Yêu cầu bổ sung/đề xuất mới khác để tránh
+  // 2 luồng xử lý cùng lúc trên 1 nội dung chưa chốt.
+  if (item.pendingFileProposal && ['APPROVE', 'REJECT', 'REQUEST_CHANGES', 'PROPOSE_FILE_REPLACEMENT'].includes(action)) {
+    throw new WorkflowError(409, 'Tờ trình đang chờ người trình xác nhận đề xuất thay thế nội dung, chưa thể xử lý.');
+  }
+
   if (action === 'REQUEST_INFO') {
     if (!config.supportsRequestInfo) throw new WorkflowError(400, 'Module này không hỗ trợ yêu cầu bổ sung');
     if (!comment) throw new WorkflowError(400, 'Vui lòng nhập nội dung cần bổ sung');
@@ -295,6 +305,60 @@ function applyWorkflowAction({ moduleKey, item, action, user, comment, extraFiel
     item[statusField] = 'DRAFT';
     item[currentStepField] = 0;
     return { item, transition: { type: 'REQUEST_CHANGES' } };
+  }
+
+  // PROPOSE_FILE_REPLACEMENT — chỉ Văn Bản Trình, chỉ người duyệt ở ĐÚNG bước lớp TRO_LY_THU_KY (luôn
+  // ngay trước TGD): thay vì đưa thẳng về NHÁP như REQUEST_CHANGES, đề xuất 1 tệp thay thế hoàn toàn
+  // nội dung tờ trình cũ và CHỜ người trình xác nhận (RESOLVE_FILE_PROPOSAL bên dưới) — hồ sơ vẫn
+  // PENDING ở bước hiện tại, KHÔNG đổi status/currentStep ngay (khác REQUEST_CHANGES) — đúng yêu cầu
+  // nghiệp vụ: nút "Yêu Cầu Bổ Sung" ở lớp Trợ Lý/Thư Ký có thêm lựa chọn thay vì luôn là REQUEST_CHANGES.
+  if (action === 'PROPOSE_FILE_REPLACEMENT') {
+    if (moduleKey !== 'submissions') throw new WorkflowError(400, 'Chỉ áp dụng cho Văn Bản Trình');
+    const layerKey = steps[currentStep - 1]?.layerKey;
+    if (layerKey !== 'TRO_LY_THU_KY') {
+      throw new WorkflowError(403, 'Chỉ bước Bộ phận Trợ Lý/Thư Ký mới có thể đề xuất thay thế tệp tờ trình');
+    }
+    if (!canApproveStep(user, currentStepApprovers, item[historyField], currentStep)) {
+      throw new WorkflowError(403, 'Bạn không có quyền xử lý ở bước hiện tại, hoặc đã xử lý bước này rồi');
+    }
+    const { fileUrl, fileName, fileType } = extraFields || {};
+    if (!fileUrl || !fileName) throw new WorkflowError(400, 'Thiếu tệp thay thế tờ trình');
+    item.pendingFileProposal = {
+      fileUrl, fileName, fileType: fileType || '',
+      note: comment || '',
+      proposedBy: user.username, proposedByName: user.name,
+      proposedAt: nowVN(), step: currentStep
+    };
+    item[historyField].push({ step: currentStep, approver: user.name, username: user.username, action: 'PROPOSE_FILE_REPLACEMENT', comment: comment || '', time: nowVN() });
+    return { item, transition: { type: 'PROPOSE_FILE_REPLACEMENT' } };
+  }
+
+  // RESOLVE_FILE_PROPOSAL — người trình (item.creator) xác nhận đề xuất thay thế tệp ở trên: Đồng ý
+  // (bắt buộc nêu lý do) -> áp tệp mới, GỬI LẠI TỪ BƯỚC 1 (giữ PENDING, không cần qua NHÁP vì người
+  // trình không tự sửa gì thêm); Không đồng ý -> xử lý giống hệt REQUEST_CHANGES thường (về NHÁP để
+  // người trình tự tải tệp thay thế khác qua openBosungEditModal() hiện có).
+  if (action === 'RESOLVE_FILE_PROPOSAL') {
+    if (moduleKey !== 'submissions') throw new WorkflowError(400, 'Chỉ áp dụng cho Văn Bản Trình');
+    if (item.creator !== user.username) throw new WorkflowError(403, 'Chỉ người trình mới được xác nhận đề xuất thay thế tờ trình này');
+    const proposal = item.pendingFileProposal;
+    if (!proposal) throw new WorkflowError(409, 'Tờ trình này không có đề xuất thay thế nào đang chờ xác nhận');
+    const agree = !!(extraFields || {}).agree;
+    item[historyField].forEach(h => { if (h.action === 'APPROVED') h.invalidated = true; });
+    if (agree) {
+      if (!comment) throw new WorkflowError(400, 'Vui lòng nhập lý do đồng ý thay thế tờ trình');
+      item.fileUrl = proposal.fileUrl;
+      item.fileName = proposal.fileName;
+      item.fileType = proposal.fileType || '';
+      item[historyField].push({ step: proposal.step, approver: user.name, username: user.username, action: 'FILE_PROPOSAL_ACCEPTED', comment, time: nowVN() });
+      item[statusField] = 'PENDING';
+      item[currentStepField] = 1;
+    } else {
+      item[historyField].push({ step: proposal.step, approver: user.name, username: user.username, action: 'FILE_PROPOSAL_DECLINED', comment: comment || '', time: nowVN() });
+      item[statusField] = 'DRAFT';
+      item[currentStepField] = 0;
+    }
+    item.pendingFileProposal = null;
+    return { item, transition: { type: 'RESOLVE_FILE_PROPOSAL', agree } };
   }
 
   if (action !== 'APPROVE' && action !== 'REJECT') throw new WorkflowError(400, `Hành động không hợp lệ: ${action}`);

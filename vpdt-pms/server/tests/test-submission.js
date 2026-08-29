@@ -77,6 +77,43 @@ async function main() {
         const approvers = rec.effectiveApprovers || { 1: ['admin'] };
         const totalSteps = steps.length;
 
+        // Trợ Lý/Thư Ký — đề xuất thay thế toàn bộ tệp tờ trình đang "treo" (rec.pendingFileProposal),
+        // chặn mọi hành động khác cho tới khi người trình xác nhận. Mirrors lib/workflowEngine.js.
+        if (rec.pendingFileProposal && ['reject', 'request-changes', 'approve', 'propose-file-replacement'].includes(action)) {
+          throw new Error('Tờ trình đang chờ người trình xác nhận đề xuất thay thế nội dung, chưa thể xử lý.');
+        }
+
+        if (action === 'propose-file-replacement') {
+          const layerKey = (steps[rec.currentStep - 1] || {}).layerKey;
+          if (layerKey !== 'TRO_LY_THU_KY') throw new Error('Chỉ bước Bộ phận Trợ Lý/Thư Ký mới có thể đề xuất thay thế tệp tờ trình');
+          const { fileUrl, fileName, fileType } = body.extraFields || {};
+          if (!fileUrl || !fileName) throw new Error('Thiếu tệp thay thế tờ trình');
+          rec.pendingFileProposal = {
+            fileUrl, fileName, fileType: fileType || '', note: body.comment || '',
+            proposedBy: currentUser.username, proposedByName: currentUser.name, proposedAt: nowVN(), step: rec.currentStep
+          };
+          rec.history = [...(rec.history || []), { step: rec.currentStep, approver: currentUser.name, username: currentUser.username, action: 'PROPOSE_FILE_REPLACEMENT', comment: body.comment || '', time: nowVN() }];
+          return { item: rec, transition: { type: 'PROPOSE_FILE_REPLACEMENT' } };
+        }
+
+        if (action === 'resolve-file-proposal') {
+          const proposal = rec.pendingFileProposal;
+          if (!proposal) throw new Error('Tờ trình này không có đề xuất thay thế nào đang chờ xác nhận');
+          const agree = !!(body.extraFields || {}).agree;
+          (rec.history || []).forEach(h => { if (h.action === 'APPROVED') h.invalidated = true; });
+          if (agree) {
+            if (!body.comment) throw new Error('Vui lòng nhập lý do đồng ý thay thế tờ trình');
+            rec.fileUrl = proposal.fileUrl; rec.fileName = proposal.fileName; rec.fileType = proposal.fileType || '';
+            rec.history = [...(rec.history || []), { step: proposal.step, approver: currentUser.name, username: currentUser.username, action: 'FILE_PROPOSAL_ACCEPTED', comment: body.comment, time: nowVN() }];
+            rec.status = 'PENDING'; rec.currentStep = 1;
+          } else {
+            rec.history = [...(rec.history || []), { step: proposal.step, approver: currentUser.name, username: currentUser.username, action: 'FILE_PROPOSAL_DECLINED', comment: body.comment || '', time: nowVN() }];
+            rec.status = 'DRAFT'; rec.currentStep = 0;
+          }
+          rec.pendingFileProposal = null;
+          return { item: rec, transition: { type: 'RESOLVE_FILE_PROPOSAL', agree } };
+        }
+
         if (action === 'reject') {
           rec.status = 'REJECTED';
           rec.history = [...(rec.history || []), {
@@ -490,6 +527,110 @@ async function main() {
           subFinal.status === 'APPROVED',
           subFinal.status
         );
+      }
+
+      // ================= Scenario 8: Bộ phận Trợ Lý/Thư Ký — đề xuất thay thế toàn bộ tệp tờ trình =====
+      // (thay vì chỉ REQUEST_CHANGES thường) — người trình xác nhận Đồng ý (gửi lại từ bước 1, bắt buộc
+      // lý do) hoặc Không đồng ý (về NHÁP, tự tải tệp khác qua openBosungEditModal() có sẵn).
+      {
+        const troLySub = {
+          id: 9001, code: 'TT-TEST-TROLY', title: 'Tờ trình có lớp Trợ Lý/Thư Ký', content: 'Nội dung gốc',
+          dept: 'Phòng Kinh Doanh', type: 'Hành chính', priority: 'Bình thường',
+          creator: 'alice', creatorName: 'Nguyễn Thị Alice',
+          status: 'PENDING', currentStep: 2,
+          fileName: 'to-trinh-goc.pdf', fileUrl: '/uploads/to-trinh-goc.pdf', fileType: 'application/pdf',
+          effectiveSteps: [
+            { order: 1, name: 'Trưởng phòng duyệt' },
+            { order: 2, name: 'Bộ phận Trợ Lý/Thư Ký', layerKey: 'TRO_LY_THU_KY' },
+            { order: 3, name: 'Tổng Giám Đốc', layerKey: 'TGD' }
+          ],
+          effectiveApprovers: { 1: ['admin'], 2: ['admin'], 3: ['admin'] },
+          history: [{ step: 1, approver: 'Quản Trị Viên', username: 'admin', action: 'APPROVED', comment: '', time: nowVN() }]
+        };
+        DB.submissions.push(troLySub);
+
+        // admin đang ở đúng bước Trợ Lý/Thư Ký -> nút "Yêu Cầu Bổ Sung" phải trỏ tới hộp lựa chọn mới.
+        openProcessSubmissionModal(troLySub.id);
+        const actionBtnsHTML = document.getElementById('subModalActionBtns').innerHTML;
+        check(
+          'submission TRO_LY_THU_KY: ở bước Trợ Lý/Thư Ký, nút "Yêu Cầu Bổ Sung" mở hộp lựa chọn openTroLyThuKyBoSungChoice() thay vì REQUEST_CHANGES trực tiếp',
+          actionBtnsHTML.includes('openTroLyThuKyBoSungChoice(9001)') && !actionBtnsHTML.includes("confirmProcessSubmission('REQUEST_CHANGES')"),
+          actionBtnsHTML
+        );
+
+        // Đồng ý -> bắt buộc chọn tệp thay thế.
+        openTroLyThuKyBoSungChoice(troLySub.id);
+        openTroLyThuKyProposeFileForm(troLySub.id);
+        alerts.length = 0;
+        await confirmTroLyThuKyProposeFile(troLySub.id);
+        const noFileBlocked = alerts.some(a => a.includes('Vui lòng chọn tệp thay thế'));
+
+        setFileInput('tltkProposeFile', 'to-trinh-thay-the.pdf', 'noi dung thay the', 'application/pdf');
+        document.getElementById('tltkProposeNote').value = 'Đã chỉnh sửa lại điều khoản thanh toán.';
+        alerts.length = 0;
+        await confirmTroLyThuKyProposeFile(troLySub.id);
+        const subAfterPropose = DB.submissions.find(s => s.id === troLySub.id);
+
+        check(
+          'submission TRO_LY_THU_KY: đề xuất thay thế tệp -> hồ sơ vẫn PENDING/bước 2 (không đổi ngay), pendingFileProposal được ghi lại đúng',
+          noFileBlocked &&
+          subAfterPropose.status === 'PENDING' && subAfterPropose.currentStep === 2 &&
+          subAfterPropose.pendingFileProposal && subAfterPropose.pendingFileProposal.fileName === 'to-trinh-thay-the.pdf' &&
+          (subAfterPropose.history || []).some(h => h.action === 'PROPOSE_FILE_REPLACEMENT'),
+          `noFileBlocked=${noFileBlocked} sub=${JSON.stringify({ status: subAfterPropose.status, currentStep: subAfterPropose.currentStep, proposal: subAfterPropose.pendingFileProposal })}`
+        );
+
+        // Trong lúc "treo" chờ xác nhận, không ai được Duyệt/Từ chối/Yêu cầu bổ sung thêm.
+        let blockedWhilePending = false;
+        try { await callWorkflowAction('submissions', troLySub.id, 'approve', { comment: '' }); }
+        catch (e) { blockedWhilePending = e.message.includes('đang chờ người trình xác nhận'); }
+        check('submission TRO_LY_THU_KY: khi đang có đề xuất treo, Duyệt/Từ chối/Bổ sung khác đều bị chặn', blockedWhilePending, blockedWhilePending);
+
+        // Người trình (alice) xác nhận KHÔNG đồng ý trước -> về NHÁP, mở luôn modal tự sửa.
+        finishLogin(aliceUser);
+        openResolveFileProposalModal(troLySub.id);
+        alerts.length = 0;
+        await confirmResolveFileProposal(troLySub.id, false);
+        const subAfterDecline = DB.submissions.find(s => s.id === troLySub.id);
+        check(
+          'submission TRO_LY_THU_KY: người trình "Không Đồng Ý" -> hồ sơ về NHÁP/bước 0, xoá pendingFileProposal, tệp GIỮ NGUYÊN tệp gốc',
+          subAfterDecline.status === 'DRAFT' && subAfterDecline.currentStep === 0 && !subAfterDecline.pendingFileProposal &&
+          subAfterDecline.fileName === 'to-trinh-goc.pdf' &&
+          (subAfterDecline.history || []).some(h => h.action === 'FILE_PROPOSAL_DECLINED'),
+          JSON.stringify({ status: subAfterDecline.status, currentStep: subAfterDecline.currentStep, fileName: subAfterDecline.fileName })
+        );
+
+        // Dựng lại tình huống treo lần 2 để test nhánh "Đồng Ý" (server thật cũng cho phép Trợ Lý/Thư Ký
+        // đề xuất lại sau khi vòng trước đã bị từ chối, vì hồ sơ đã hết pendingFileProposal).
+        finishLogin(adminUser);
+        subAfterDecline.status = 'PENDING'; subAfterDecline.currentStep = 2;
+        openTroLyThuKyBoSungChoice(troLySub.id);
+        openTroLyThuKyProposeFileForm(troLySub.id);
+        setFileInput('tltkProposeFile', 'to-trinh-thay-the-2.pdf', 'noi dung thay the lan 2', 'application/pdf');
+        document.getElementById('tltkProposeNote').value = '';
+        await confirmTroLyThuKyProposeFile(troLySub.id);
+
+        finishLogin(aliceUser);
+        openResolveFileProposalModal(troLySub.id);
+        alerts.length = 0;
+        await confirmResolveFileProposal(troLySub.id, true); // chưa nhập lý do -> phải bị chặn
+        const agreeBlockedNoComment = alerts.some(a => a.includes('Vui lòng nhập lý do đồng ý'));
+
+        document.getElementById('resolveFileProposalComment').value = 'Đồng ý nội dung thay thế, điều khoản thanh toán hợp lý hơn.';
+        alerts.length = 0;
+        await confirmResolveFileProposal(troLySub.id, true);
+        const subAfterAgree = DB.submissions.find(s => s.id === troLySub.id);
+
+        check(
+          'submission TRO_LY_THU_KY: người trình "Đồng Ý" -> bắt buộc lý do, tệp được thay thế, hồ sơ gửi lại PENDING từ bước 1',
+          agreeBlockedNoComment &&
+          subAfterAgree.status === 'PENDING' && subAfterAgree.currentStep === 1 && !subAfterAgree.pendingFileProposal &&
+          subAfterAgree.fileName === 'to-trinh-thay-the-2.pdf' &&
+          (subAfterAgree.history || []).some(h => h.action === 'FILE_PROPOSAL_ACCEPTED' && h.comment.includes('điều khoản thanh toán')),
+          `agreeBlockedNoComment=${agreeBlockedNoComment} sub=${JSON.stringify({ status: subAfterAgree.status, currentStep: subAfterAgree.currentStep, fileName: subAfterAgree.fileName })}`
+        );
+
+        finishLogin(adminUser);
       }
 
       return results;
