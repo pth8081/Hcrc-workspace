@@ -7368,6 +7368,22 @@ const MODULE_TAB_MAP = {
   periodicReport: [
     { label: 'Tạo Kỳ Báo Cáo + Mẫu Trình Chiếu', badgeKey: 'periodicReport', fields: [{ id: 'pReportManage', label: 'Quản lý kỳ báo cáo' }] },
     { label: 'Tổng Hợp Báo Cáo', badgeKey: 'periodicReport', fields: [{ id: 'pReportAggregate', label: 'Tổng hợp báo cáo' }] }
+  ],
+  // itSupport CHỈ liệt kê tab "Gia Hạn Dịch Vụ" — 2 tab còn lại (🎫 Hỗ Trợ Yêu Cầu, 🏷️ Phê Duyệt Giá)
+  // KHÔNG có ở đây: tab Yêu Cầu mở sẵn cho toàn bộ nhân viên (tự phục vụ, không quyền riêng — xem chú
+  // thích khối 15), còn tab Phê Duyệt Giá hiện luôn cho mọi người vào được module (chỉ nút "Tạo yêu cầu"
+  // bên trong đó mới cần itPriceProposeCreate — không phải quyền ẩn/hiện CẢ TAB). Xem setItSupportSubTab().
+  itSupport: [
+    { label: 'Gia Hạn Dịch Vụ', badgeKey: 'itSupport', fields: [{ id: 'pItManage', label: 'Đội Hỗ Trợ IT' }] }
+  ],
+  // "Báo Cáo" là module TỔNG HỢP số liệu của 11 module khác — không có quyền riêng nào cho từng tab
+  // con cả, mỗi tab (Tài Liệu/Văn Bản Trình/Công Việc/Hợp Đồng/Biên Bản Họp/Phòng Họp/Xe/VPP/Văn Phòng
+  // Tổng Hợp/Truyền Thông/Đồng Phục) CHỈ hiện nếu module tương ứng đang BẬT ở chính mục 0 này (xem
+  // renderReportsSubTabBar()) — không cần "Đi tới" đâu cả vì công tắc quyết định đã hiển thị NGAY TRÊN
+  // cùng màn hình này rồi. Tab "Tổng Hợp" (tổng quan/tài chính/vận hành...) cũng tự ẩn từng phần theo
+  // đúng module đang bật (xem renderReportsSummary()), không lộ số liệu của module đã tắt.
+  reports: [
+    { label: '11 tab con', note: 'tự ẩn/hiện theo đúng công tắc module tương ứng ở TRÊN (Tài Liệu, Văn Bản Trình, Công Việc, Hợp Đồng, Biên Bản Họp, Phòng Họp, Xe, Văn Phòng Phẩm, Tổng Hợp, Truyền Thông, Đồng Phục) — không có quyền riêng, không cần "Đi tới"' }
   ]
 };
 
@@ -23346,9 +23362,9 @@ function buildModuleTabNotesHTML(moduleKey) {
       ${tabs.map(t => `
         <div class="flex items-center justify-between gap-2 bg-violet-50 rounded px-2 py-1">
           <span class="text-[10.5px] text-violet-800 leading-snug">
-            🏷️ <b>${escapeHtml(t.label)}</b> — hiện ${t.any ? 'nếu có 1 trong' : 'theo quyền'}: ${t.fields.map(f => escapeHtml(f.label)).join(t.any ? ' hoặc ' : ', ')}
+            🏷️ <b>${escapeHtml(t.label)}</b> — ${t.note ? t.note : `hiện ${t.any ? 'nếu có 1 trong' : 'theo quyền'}: ${t.fields.map(f => escapeHtml(f.label)).join(t.any ? ' hoặc ' : ', ')}`}
           </span>
-          <button type="button" onclick="jumpToPermField('${t.badgeKey}')" class="text-[10px] font-bold text-violet-700 hover:underline whitespace-nowrap shrink-0">Đi tới →</button>
+          ${t.badgeKey ? `<button type="button" onclick="jumpToPermField('${t.badgeKey}')" class="text-[10px] font-bold text-violet-700 hover:underline whitespace-nowrap shrink-0">Đi tới →</button>` : ''}
         </div>
       `).join('')}
     </div>
@@ -27082,10 +27098,14 @@ const REPORTS_SUB_TABS = [
   { key: 'uniform', label: '👕 Đồng Phục' }
 ];
 
+// Mỗi tab con Báo Cáo (trừ "Tổng Hợp") ứng với đúng 1 module nghiệp vụ (key khớp BUSINESS_MODULES,
+// xem REPORTS_SUB_TABS) — ẩn tab nào mà người dùng đang TẮT module đó ở mục "0. Quyền Truy Cập Module"
+// (không cần quyền báo cáo riêng, tái dùng thẳng công tắc module đã có sẵn). "Tổng Hợp" luôn hiện vì
+// đã tự lọc từng chỉ số bên trong theo đúng module được bật (xem renderReportsSummary()).
 function renderReportsSubTabBar() {
   const bar = document.getElementById('reportsSubTabBar');
   if (!bar) return;
-  bar.innerHTML = REPORTS_SUB_TABS.map(t => {
+  bar.innerHTML = REPORTS_SUB_TABS.filter(t => t.key === 'SUMMARY' || hasModuleAccess(currentUser, t.key)).map(t => {
     const cls = t.key === activeReportsSubTab
       ? 'px-3 py-1.5 rounded text-xs font-bold bg-sky-700 text-white'
       : 'px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700';
@@ -27820,12 +27840,18 @@ function renderReportsSummary(container) {
   const fromDate = document.getElementById('reportsFromDate')?.value || '';
   const toDate = document.getElementById('reportsToDate')?.value || '';
   const deptFilter = document.getElementById('reportsDeptFilter')?.value || '';
+  // "Tổng Hợp" gộp số liệu của NHIỀU module cùng lúc trong 1 màn — không tự ẩn/hiện được cả tab như các
+  // tab con khác (xem renderReportsSubTabBar()), nên phải lọc riêng TỪNG khối bên dưới theo đúng module
+  // đang bật ở mục 0, tái dùng thẳng hasModuleAccess() — nếu không, người tắt module ở mục 0 (vd không
+  // được vào Hợp Đồng) vẫn thấy được số lượng/giá trị Hợp Đồng lộ ra qua tab Tổng Hợp này.
+  const canSee = (key) => hasModuleAccess(currentUser, key);
 
   const docStats = computeApprovalStats(DB.docs, deptFilter, fromDate, toDate);
   const subStats = computeApprovalStats(DB.submissions, deptFilter, fromDate, toDate);
   const carStats = computeApprovalStats(DB.carRegs, deptFilter, fromDate, toDate);
   const offStats = computeApprovalStats(DB.officeReqs, deptFilter, fromDate, toDate);
-  const approvalModules = [['Tài liệu', docStats], ['Văn bản trình', subStats], ['Đăng ký xe', carStats], ['Văn phòng', offStats]];
+  const approvalModules = [['doc', 'Tài liệu', docStats], ['submission', 'Văn bản trình', subStats], ['car', 'Đăng ký xe', carStats], ['office', 'Văn phòng', offStats]]
+    .filter(([key]) => canSee(key));
 
   const inScope = (r) => (!deptFilter || r.dept === deptFilter) && isInDateRange(r.createdAt, fromDate, toDate);
   const visibleContracts = DB.contracts.filter(inScope);
@@ -27837,16 +27863,16 @@ function renderReportsSummary(container) {
 
   // --- Tổng quan ---
   const overviewItems = [
-    ['📂 Tài liệu', docStats.total], ['📜 Văn bản trình', subStats.total],
-    ['🚗 Đăng ký xe', carStats.total], ['🏢 Văn phòng', offStats.total],
-    ['📄 Hợp đồng', visibleContracts.length], ['📅 Phòng họp', visibleMeetings.length],
-    ['📝 Biên bản họp', visibleMinutes.length], ['✅ Công việc', visibleTasks.length]
-  ];
+    ['doc', '📂 Tài liệu', docStats.total], ['submission', '📜 Văn bản trình', subStats.total],
+    ['car', '🚗 Đăng ký xe', carStats.total], ['office', '🏢 Văn phòng', offStats.total],
+    ['contract', '📄 Hợp đồng', visibleContracts.length], ['meeting', '📅 Phòng họp', visibleMeetings.length],
+    ['minutes', '📝 Biên bản họp', visibleMinutes.length], ['task', '✅ Công việc', visibleTasks.length]
+  ].filter(([key]) => canSee(key));
   const overviewHTML = `
     <div class="bg-white p-4 rounded border">
       <h4 class="font-bold text-gray-800 mb-3">📈 Tổng Quan Số Lượng Hồ Sơ</h4>
       <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
-        ${overviewItems.map(([label, val]) => `
+        ${overviewItems.map(([, label, val]) => `
           <div class="bg-gray-50 border rounded p-3 text-center">
             <div class="text-2xl font-bold text-sky-700">${val.toLocaleString('vi-VN')}</div>
             <div class="text-xs text-gray-600 mt-1">${label}</div>
@@ -27857,11 +27883,11 @@ function renderReportsSummary(container) {
   `;
 
   // --- Tình trạng phê duyệt ---
-  const approvalHTML = `
+  const approvalHTML = approvalModules.length ? `
     <div class="bg-white p-4 rounded border">
       <h4 class="font-bold text-gray-800 mb-3">⏳ Tình Trạng Phê Duyệt Theo Module</h4>
       <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-        ${approvalModules.map(([name, s]) => `
+        ${approvalModules.map(([, name, s]) => `
           <div class="border rounded p-3 space-y-2">
             <div class="font-semibold text-gray-700 text-sm mb-1">${escapeHtml(name)} (${s.total})</div>
             ${buildStatBarHTML('Đang chờ duyệt', s.pending, s.total, 'bg-yellow-500')}
@@ -27871,11 +27897,11 @@ function renderReportsSummary(container) {
         `).join('')}
       </div>
     </div>
-  `;
+  ` : '';
 
   // --- Khối lượng theo phòng ban ---
   const deptTotals = {};
-  [docStats, subStats, carStats, offStats].forEach(s => {
+  approvalModules.forEach(([, , s]) => {
     Object.entries(s.byDept).forEach(([d, c]) => { deptTotals[d] = (deptTotals[d] || 0) + c; });
   });
   const deptEntries = Object.entries(deptTotals).sort((a, b) => b[1] - a[1]);
@@ -27908,10 +27934,10 @@ function renderReportsSummary(container) {
   visibleOffice.filter(o => o.status === 'APPROVED').forEach(o => { officeBySubType[o.subType] = (officeBySubType[o.subType] || 0) + (o.amount || 0); });
   const maxOfficeAmount = Math.max(1, ...Object.values(officeBySubType));
 
-  const financeHTML = `
-    <div class="bg-white p-4 rounded border">
-      <h4 class="font-bold text-gray-800 mb-3">💰 Tài Chính</h4>
-      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+  // 2 nửa độc lập (Hợp Đồng / Văn Phòng) — ẩn riêng từng nửa theo đúng module đang bật, đổi lưới về 1
+  // cột nếu chỉ còn 1 nửa, ẩn hẳn cả khối nếu tắt cả 2.
+  const canSeeContract = canSee('contract'), canSeeOffice = canSee('office');
+  const financeContractHTML = canSeeContract ? `
         <div>
           <div class="text-xs font-semibold text-gray-600 mb-2">Giá trị Hợp đồng (${visibleContracts.length} hợp đồng)</div>
           <div class="grid grid-cols-2 gap-2 text-center">
@@ -27925,6 +27951,8 @@ function renderReportsSummary(container) {
             </div>
           </div>
         </div>
+  ` : '';
+  const financeOfficeHTML = canSeeOffice ? `
         <div>
           <div class="text-xs font-semibold text-gray-600 mb-2">Dự toán Văn phòng theo phân hệ (VNĐ)</div>
           <div class="space-y-2">
@@ -27933,9 +27961,15 @@ function renderReportsSummary(container) {
             ${buildStatBarHTML('Đầu tư', officeBySubType.DAU_TU, maxOfficeAmount, 'bg-purple-500')}
           </div>
         </div>
+  ` : '';
+  const financeHTML = (canSeeContract || canSeeOffice) ? `
+    <div class="bg-white p-4 rounded border">
+      <h4 class="font-bold text-gray-800 mb-3">💰 Tài Chính</h4>
+      <div class="grid grid-cols-1 ${(canSeeContract && canSeeOffice) ? 'md:grid-cols-2' : ''} gap-4">
+        ${financeContractHTML}${financeOfficeHTML}
       </div>
     </div>
-  `;
+  ` : '';
 
   // --- Vận hành ---
   // Chỉ cộng dồn km của chuyến ĐÃ DUYỆT — trước đây cộng cả PENDING/REJECTED, khiến 1 chuyến bị từ
@@ -27946,42 +27980,48 @@ function renderReportsSummary(container) {
   const meetingPending = visibleMeetings.filter(m => m.status === 'PENDING').length;
   const meetingCancelled = visibleMeetings.filter(m => m.status === 'CANCELLED').length;
 
-  const operationsHTML = `
-    <div class="bg-white p-4 rounded border">
-      <h4 class="font-bold text-gray-800 mb-3">🚗 Vận Hành</h4>
-      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+  const canSeeCar = canSee('car'), canSeeMeeting = canSee('meeting');
+  const opsCarHTML = canSeeCar ? `
         <div class="bg-gray-50 border rounded p-3 text-center">
           <div class="text-2xl font-bold text-indigo-700">${totalKm.toLocaleString('vi-VN')} km</div>
           <div class="text-xs text-gray-600 mt-1">Tổng số km đăng ký xe (${approvedCars.length} chuyến đã duyệt)</div>
         </div>
+  ` : '';
+  const opsMeetingHTML = canSeeMeeting ? `
         <div class="space-y-2">
           <div class="text-xs font-semibold text-gray-600 mb-1">Lịch phòng họp (${visibleMeetings.length})</div>
           ${buildStatBarHTML('Đã duyệt', meetingApproved, visibleMeetings.length, 'bg-green-500')}
           ${buildStatBarHTML('Đang chờ', meetingPending, visibleMeetings.length, 'bg-yellow-500')}
           ${buildStatBarHTML('Đã huỷ', meetingCancelled, visibleMeetings.length, 'bg-red-500')}
         </div>
+  ` : '';
+  const operationsHTML = (canSeeCar || canSeeMeeting) ? `
+    <div class="bg-white p-4 rounded border">
+      <h4 class="font-bold text-gray-800 mb-3">🚗 Vận Hành</h4>
+      <div class="grid grid-cols-1 ${(canSeeCar && canSeeMeeting) ? 'md:grid-cols-2' : ''} gap-4">
+        ${opsCarHTML}${opsMeetingHTML}
       </div>
     </div>
-  `;
+  ` : '';
 
-  // --- Hiệu suất xử lý ---
-  const perfHTML = `
+  // --- Hiệu suất xử lý --- (đã lọc sẵn theo approvalModules ở trên, tự động khớp module đang bật)
+  const perfHTML = approvalModules.length ? `
     <div class="bg-white p-4 rounded border">
       <h4 class="font-bold text-gray-800 mb-3">⚡ Hiệu Suất Xử Lý (trung bình)</h4>
       <div class="overflow-x-auto">
         <table class="w-full border-collapse border text-xs">
           <thead><tr class="bg-gray-100"><th class="border p-2 text-left">Module</th><th class="border p-2">Thời gian / bước duyệt</th><th class="border p-2">Thời gian hoàn tất hồ sơ</th></tr></thead>
           <tbody>
-            ${approvalModules.map(([name, s]) => `
+            ${approvalModules.map(([, name, s]) => `
               <tr><td class="border p-2 font-semibold">${escapeHtml(name)}</td><td class="border p-2 text-center">${formatHoursLabel(s.avgStepHours)}</td><td class="border p-2 text-center">${formatHoursLabel(s.avgCompletionHours)}</td></tr>
             `).join('')}
           </tbody>
         </table>
       </div>
     </div>
-  `;
+  ` : '';
 
-  // --- Công việc & chỉ đạo ---
+  // --- Công việc & chỉ đạo --- (cả khối gắn liền module "task" — ẩn hẳn nếu tắt module Công Việc)
   const taskByStatus = { TODO: 0, DOING: 0, DONE: 0, CANCELLED: 0 };
   const taskBySource = { SUBMISSION: 0, MEETING_MINUTES: 0, MANUAL: 0 };
   let overdueTasks = 0;
@@ -27992,7 +28032,7 @@ function renderReportsSummary(container) {
     if (t.deadline && t.deadline < todayStr && t.status !== 'DONE' && t.status !== 'CANCELLED') overdueTasks++;
   });
 
-  const tasksHTML = `
+  const tasksHTML = canSee('task') ? `
     <div class="bg-white p-4 rounded border">
       <h4 class="font-bold text-gray-800 mb-3">✅ Công Việc & Chỉ Đạo</h4>
       <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -28011,7 +28051,7 @@ function renderReportsSummary(container) {
         </div>
       </div>
     </div>
-  `;
+  ` : '';
 
   container.innerHTML = overviewHTML + approvalHTML + deptHTML + financeHTML + operationsHTML + perfHTML + tasksHTML;
 }
@@ -28053,14 +28093,17 @@ function exportReportsSummaryExcel() {
   visibleOffice.filter(o => o.status === 'APPROVED').forEach(o => { officeBySubType[o.subType] = (officeBySubType[o.subType] || 0) + (o.amount || 0); });
   const totalKm = visibleCars.filter(c => c.status === 'APPROVED').reduce((sum, c) => sum + (c.km || 0), 0);
 
+  // Khớp đúng bản vá module-access ở renderReportsSummary() (cùng số liệu, cùng màn hình) — mỗi nhóm
+  // dòng chỉ xuất nếu module tương ứng đang bật ở mục 0, không thì file Excel lộ số liệu màn hình đã ẩn.
+  const canSee = (key) => hasModuleAccess(currentUser, key);
   const rows = [
-    ['Tổng Tài liệu', docStats.total], ['Tài liệu - Đang chờ', docStats.pending], ['Tài liệu - Đã duyệt', docStats.approved], ['Tài liệu - Từ chối', docStats.rejected],
-    ['Tổng Văn bản trình', subStats.total], ['Văn bản trình - Đang chờ', subStats.pending], ['Văn bản trình - Đã duyệt', subStats.approved], ['Văn bản trình - Từ chối', subStats.rejected],
-    ['Tổng Đăng ký xe', carStats.total], ['Đăng ký xe - Đang chờ', carStats.pending], ['Đăng ký xe - Đã duyệt', carStats.approved], ['Đăng ký xe - Từ chối', carStats.rejected],
-    ['Tổng Văn phòng', offStats.total], ['Văn phòng - Đang chờ', offStats.pending], ['Văn phòng - Đã duyệt', offStats.approved], ['Văn phòng - Từ chối', offStats.rejected],
-    ['Tổng Hợp đồng', visibleContracts.length], ['Giá trị Hợp đồng còn hiệu lực (VNĐ)', activeContractValue], ['Giá trị Hợp đồng đã hết hạn (VNĐ)', expiredContractValue],
-    ['Dự toán Văn phòng - Mua sắm (VNĐ)', officeBySubType.MUA_BAN], ['Dự toán Văn phòng - Sửa chữa (VNĐ)', officeBySubType.SUA_CHUA], ['Dự toán Văn phòng - Đầu tư (VNĐ)', officeBySubType.DAU_TU],
-    ['Tổng số km đăng ký xe (đã duyệt)', totalKm]
+    ...(canSee('doc') ? [['Tổng Tài liệu', docStats.total], ['Tài liệu - Đang chờ', docStats.pending], ['Tài liệu - Đã duyệt', docStats.approved], ['Tài liệu - Từ chối', docStats.rejected]] : []),
+    ...(canSee('submission') ? [['Tổng Văn bản trình', subStats.total], ['Văn bản trình - Đang chờ', subStats.pending], ['Văn bản trình - Đã duyệt', subStats.approved], ['Văn bản trình - Từ chối', subStats.rejected]] : []),
+    ...(canSee('car') ? [['Tổng Đăng ký xe', carStats.total], ['Đăng ký xe - Đang chờ', carStats.pending], ['Đăng ký xe - Đã duyệt', carStats.approved], ['Đăng ký xe - Từ chối', carStats.rejected]] : []),
+    ...(canSee('office') ? [['Tổng Văn phòng', offStats.total], ['Văn phòng - Đang chờ', offStats.pending], ['Văn phòng - Đã duyệt', offStats.approved], ['Văn phòng - Từ chối', offStats.rejected]] : []),
+    ...(canSee('contract') ? [['Tổng Hợp đồng', visibleContracts.length], ['Giá trị Hợp đồng còn hiệu lực (VNĐ)', activeContractValue], ['Giá trị Hợp đồng đã hết hạn (VNĐ)', expiredContractValue]] : []),
+    ...(canSee('office') ? [['Dự toán Văn phòng - Mua sắm (VNĐ)', officeBySubType.MUA_BAN], ['Dự toán Văn phòng - Sửa chữa (VNĐ)', officeBySubType.SUA_CHUA], ['Dự toán Văn phòng - Đầu tư (VNĐ)', officeBySubType.DAU_TU]] : []),
+    ...(canSee('car') ? [['Tổng số km đăng ký xe (đã duyệt)', totalKm]] : [])
   ];
 
   const columns = [
