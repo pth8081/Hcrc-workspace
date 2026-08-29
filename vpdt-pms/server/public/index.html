@@ -3259,6 +3259,7 @@ input[data-sdd-list] {
       <button type="button" onclick="setUniformSubTab('STORE')" id="btnUniformSubStore" class="hidden px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">✅ Xác Nhận / Cấp Phát</button>
       <button type="button" onclick="setUniformSubTab('STOCK')" id="btnUniformSubStock" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">📊 Kho Đồng Phục</button>
       <button type="button" onclick="setUniformSubTab('DASHBOARD')" id="btnUniformSubDashboard" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">📈 Tổng Quan</button>
+      <button type="button" onclick="setUniformSubTab('EMPLOYEES')" id="btnUniformSubEmployees" class="hidden px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">🧑‍💼 Quản Lý Nhân Viên Siêu Thị</button>
     </div>
 
     <!-- Sub-tab: Kỳ Cấp Phát (Hành Chính - uniformManage) -->
@@ -3641,6 +3642,58 @@ input[data-sdd-list] {
               <th class="border p-1.5 text-right">Mất</th>
             </tr></thead>
             <tbody id="uniformDashByStoreBody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- Sub-tab: Quản Lý Nhân Viên Siêu Thị (mục 4b kế hoạch) — CHỈ dành cho HO (uniformManage/admin,
+         canManageUniform()) dùng để tạo/khoá tài khoản nhân viên CHO các siêu thị. Form rút gọn KHÔNG có
+         ô chọn quyền nào + server tự ép posType='STORE', perms:{} rỗng (xem routes/uniformEmployees.js)
+         — không tài khoản nào tạo qua đây có quyền uniformStoreManage. Khoá 1 CHIỀU (không có nút Mở
+         Khoá) — mở lại phải qua màn Người Dùng đầy đủ của Admin. -->
+    <div id="uniformSubEmployees" class="hidden space-y-4">
+      <div class="bg-white p-4 rounded border space-y-3">
+        <h4 class="font-bold text-sm text-gray-800">➕ Tạo Tài Khoản Nhân Viên Siêu Thị</h4>
+        <form onsubmit="submitUniformEmployeeCreate(event)" class="grid grid-cols-1 md:grid-cols-3 gap-3">
+          <input id="ueUsername" placeholder="Tên đăng nhập" class="border p-1.5 rounded text-xs" required>
+          <input id="uePassword" type="password" placeholder="Mật khẩu" class="border p-1.5 rounded text-xs" required>
+          <input id="ueFullName" placeholder="Họ và Tên" class="border p-1.5 rounded text-xs" required>
+          <input id="ueEmail" type="email" placeholder="Email" class="border p-1.5 rounded text-xs" required>
+          <input id="uePhone" type="tel" placeholder="Số điện thoại" class="border p-1.5 rounded text-xs" required>
+          <select id="ueStore" class="border p-1.5 rounded text-xs bg-white" required>
+            <option value="">-- Chọn Siêu Thị --</option>
+          </select>
+          <select id="ueJobTitle" class="border p-1.5 rounded text-xs bg-white">
+            <option value="">-- Chưa gán chức danh --</option>
+          </select>
+          <div class="md:col-span-3">
+            <button type="submit" class="bg-teal-600 text-white px-4 py-1.5 rounded text-xs font-bold hover:bg-teal-700">💾 Tạo Tài Khoản</button>
+          </div>
+        </form>
+      </div>
+
+      <div class="bg-white p-4 rounded border space-y-3">
+        <div class="flex items-center justify-between gap-2 flex-wrap">
+          <h4 class="font-bold text-sm text-gray-800">📋 Danh Sách Nhân Viên Siêu Thị</h4>
+          <div class="flex items-center gap-3 flex-wrap">
+            <input id="ueSearchInput" oninput="renderUniformEmployeesList()" placeholder="Tìm theo tên/username/siêu thị..." class="border p-1.5 rounded text-xs">
+            <label class="flex items-center gap-1 text-xs text-gray-600">
+              <input type="checkbox" id="ueShowInactive" onchange="renderUniformEmployeesList()"> Hiện cả tài khoản đã khoá
+            </label>
+          </div>
+        </div>
+        <div class="overflow-x-auto">
+          <table class="w-full border-collapse text-xs">
+            <thead><tr class="bg-gray-100 text-left">
+              <th class="border p-1.5">Tên đăng nhập</th>
+              <th class="border p-1.5">Họ và Tên</th>
+              <th class="border p-1.5">Siêu Thị</th>
+              <th class="border p-1.5">Chức Danh</th>
+              <th class="border p-1.5">Trạng Thái</th>
+              <th class="border p-1.5 w-20">Thao Tác</th>
+            </tr></thead>
+            <tbody id="ueEmployeesTableBody"></tbody>
           </table>
         </div>
       </div>
@@ -4335,6 +4388,19 @@ input[data-sdd-list] {
         <div class="max-h-32 overflow-y-auto bg-white rounded border">
           <ul id="storeList" class="divide-y text-xs"></ul>
         </div>
+        <div class="border-t pt-2 space-y-1.5">
+          <div class="flex items-center gap-2 flex-wrap text-[11px]">
+            <a href="/api/stores/import-template" class="text-orange-700 font-bold hover:underline">⬇️ Tải Mẫu Excel</a>
+            <input id="storeImportFileInput" type="file" accept=".xlsx,.xls,.csv" onchange="onStoreImportFileChange(event)" class="text-[11px]">
+          </div>
+          <p id="storeImportStatus" class="text-[11px] text-gray-500"></p>
+          <div id="storeImportPreviewWrap" class="hidden border rounded max-h-32 overflow-y-auto">
+            <table class="w-full text-[11px]">
+              <tbody id="storeImportPreviewBody"></tbody>
+            </table>
+          </div>
+          <button type="button" id="storeImportConfirmBtn" onclick="confirmStoreImport()" class="hidden w-full bg-orange-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-orange-700">✅ Xác Nhận Thêm Siêu Thị Mới</button>
+        </div>
       </div>
 
       <div class="bg-sky-50 p-4 rounded border border-sky-200 space-y-3">
@@ -4369,14 +4435,29 @@ input[data-sdd-list] {
       </div>
 
       <div class="bg-fuchsia-50 p-4 rounded border border-fuchsia-200 space-y-3">
-        <h3 class="font-bold text-fuchsia-900 text-sm flex items-center gap-1">🎖️ Quản Lý Danh Sách Chức Danh</h3>
-        <p class="text-[11px] text-fuchsia-700">Chức danh gán cho người dùng (mục Cấu hình Quyền Hạn bên dưới) sẽ hiện kèm tên trên các chân ký phê duyệt.</p>
+        <h3 class="font-bold text-fuchsia-900 text-sm flex items-center gap-1">🎖️ Quản Lý Danh Sách Chức Danh (Khối Văn Phòng/HO)</h3>
+        <p class="text-[11px] text-fuchsia-700">Chức danh gán cho người dùng (mục Cấu hình Quyền Hạn bên dưới) sẽ hiện kèm tên trên các chân ký phê duyệt. Chỉ dùng cho nhân sự Khối Văn Phòng/HO — nhân viên Siêu Thị dùng danh sách riêng bên dưới.</p>
         <form onsubmit="saveJobTitle(event)" class="flex gap-2">
           <input id="txtJobTitleName" placeholder="Tên chức danh mới..." class="border p-1.5 rounded text-xs flex-1" required>
           <button type="submit" class="bg-fuchsia-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-fuchsia-700">Thêm</button>
         </form>
         <div class="max-h-32 overflow-y-auto bg-white rounded border">
           <ul id="jobTitleList" class="divide-y text-xs"></ul>
+        </div>
+      </div>
+
+      <div class="bg-fuchsia-50 p-4 rounded border border-fuchsia-300 space-y-3">
+        <h3 class="font-bold text-fuchsia-900 text-sm flex items-center gap-1">🏪 Danh Sách Chức Danh (Siêu Thị)</h3>
+        <p class="text-[11px] text-fuchsia-700">Chức danh riêng cho nhân viên Siêu Thị (posType = Siêu Thị) — dùng ở form Người Dùng đầy đủ VÀ form rút gọn "Quản Lý Nhân Viên Siêu Thị" (Đồng Phục). Tick "Khoá tự tạo" cho chức danh nào KHÔNG được phép tự tạo qua form rút gọn (VD "Giám Đốc Siêu Thị" — chỉ Admin gán qua màn Người Dùng đầy đủ).</p>
+        <form onsubmit="saveStoreJobTitle(event)" class="flex gap-2 items-center flex-wrap">
+          <input id="txtStoreJobTitleName" placeholder="Tên chức danh mới..." class="border p-1.5 rounded text-xs flex-1" required>
+          <label class="flex items-center gap-1 text-[11px] text-gray-600 whitespace-nowrap">
+            <input type="checkbox" id="chkStoreJobTitleRestricted"> Khoá tự tạo
+          </label>
+          <button type="submit" class="bg-fuchsia-700 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-fuchsia-800">Thêm</button>
+        </form>
+        <div class="max-h-32 overflow-y-auto bg-white rounded border">
+          <ul id="storeJobTitleList" class="divide-y text-xs"></ul>
         </div>
       </div>
 
@@ -8532,6 +8613,7 @@ async function initDatabase(loggingInUser) {
     DB.docCatAbbrs = data.docCatAbbrs || {};
     DB.contractTypeAbbrs = data.contractTypeAbbrs || {};
     DB.jobTitles = data.jobTitles || [];
+    DB.storeJobTitles = data.storeJobTitles || [];
     DB.submissionTypes = data.submissionTypes || [];
     DB.contractTypes = data.contractTypes || [];
     DB.carTypes = data.carTypes || [];
@@ -10872,6 +10954,90 @@ function getMyPendingApprovals(user) {
   return items;
 }
 
+// Yêu cầu 2 (khoá tài khoản): tìm mọi hồ sơ ĐANG CHỜ mà `username` được CHỈ ĐỊNH TÊN ở bước duyệt hiện
+// tại — dùng để cảnh báo admin TRƯỚC khi khoá 1 tài khoản đang là người duyệt, tránh hồ sơ kẹt lại mà
+// không ai hay biết. CỐ TÌNH KHÔNG dùng canApproveStep() (hàm đó tự động cho phép perms.admin duyệt MỌI
+// hồ sơ — dùng ở đây sẽ báo sai "mọi hồ sơ đang chờ" mỗi khi khoá 1 admin, trong khi ý nghĩa cần kiểm
+// tra là "có tên TRỰC TIẾP trong danh sách approver của bước" không liên quan gì tới cờ admin). Chỉ quét
+// đúng 9 module có bước phê duyệt theo TÊN cụ thể đã chốt phạm vi (Văn Bản Trình, Hợp Đồng x2 luồng, Tài
+// Liệu, Đăng Ký Xe, Văn Phòng Tổng Hợp x3 subType, VPP, Ngân Sách, Hỗ Trợ IT-Duyệt Giá) — KHÔNG tính các
+// quyền phẳng (Phòng Họp/Giấy Phép/Góc Chia Sẻ/Thanh Toán...) vì khoá tài khoản đã tự động chặn các
+// quyền đó ngay lập tức rồi (chỉ chặn được ĐĂNG NHẬP, không "gỡ" họ khỏi 1 bước quy trình đã chỉ định
+// tên sẵn — đó mới là vấn đề cần cảnh báo ở đây).
+function findPendingApprovalsForUsername(username) {
+  if (!username) return [];
+  const results = [];
+
+  // records: mảng bản ghi gốc; wfConfigFor(rec) -> {steps, approvers} (đã resolve đúng quy trình hiệu
+  // lực của bản ghi đó); cfg: {typeLabel, codeOf, titleOf}; fields: {status, currentStep} (mặc định
+  // 'status'/'currentStep', Hợp đồng Tài liệu ký khai riêng — cùng khuôn addDeptWorkflowItems() ở
+  // getMyPendingApprovals()).
+  function scan(records, wfConfigFor, cfg, fields) {
+    const f = { status: 'status', currentStep: 'currentStep', ...(fields || {}) };
+    (records || []).forEach(rec => {
+      if (rec[f.status] !== 'PENDING') return;
+      const wfConfig = wfConfigFor(rec) || {};
+      const step = rec[f.currentStep];
+      const currentStepApprovers = normalizeApproversList(wfConfig.approvers ? wfConfig.approvers[step] : null);
+      if (!currentStepApprovers.includes(username)) return;
+      results.push({
+        typeLabel: cfg.typeLabel, code: cfg.codeOf(rec), title: cfg.titleOf(rec),
+        stepLabel: buildStepLabelForHub(wfConfig, step)
+      });
+    });
+  }
+
+  scan(DB.docs, doc => DB.deptWorkflows[doc.dept], {
+    typeLabel: '📂 Tài liệu', codeOf: r => r.displayCode || r.code, titleOf: r => r.title
+  });
+
+  scan(DB.submissions, sub => resolveSubmissionWorkflow(sub), {
+    typeLabel: '📜 Văn bản trình', codeOf: r => r.code, titleOf: r => r.title
+  });
+
+  scan(DB.carRegs, c => DB.carDeptWorkflows[c.dept], {
+    typeLabel: '🚗 Đăng ký xe', codeOf: r => r.code, titleOf: r => r.destination
+  });
+
+  [
+    { subType: 'MUA_BAN', typeLabel: '🛒 Văn Phòng Tổng Hợp - Mua Bán' },
+    { subType: 'SUA_CHUA', typeLabel: '🔧 Văn Phòng Tổng Hợp - Sửa Chữa' },
+    { subType: 'DAU_TU', typeLabel: '📈 Văn Phòng Tổng Hợp - Đầu Tư' }
+  ].forEach(({ subType, typeLabel }) => {
+    const wfMap = getOfficeWorkflowMap(subType);
+    const subTypeReqs = (DB.officeReqs || []).filter(o => o.subType === subType);
+    scan(subTypeReqs, o => wfMap[o.dept], { typeLabel, codeOf: r => r.code, titleOf: r => r.title });
+  });
+
+  scan(DB.vppRegistrations, r => DB.vppDeptWorkflows[r.dept], {
+    typeLabel: '🖇️ Văn phòng phẩm', codeOf: r => r.code, titleOf: r => r.periodName || r.code
+  });
+
+  scan(DB.itPriceApprovals, p => DB.itPriceDeptWorkflows[p.dept], {
+    typeLabel: '🏷️ Hỗ Trợ IT - Duyệt giá', codeOf: r => r.code, titleOf: r => r.productName
+  });
+
+  scan(DB.budgetEntries, b => DB.budgetDeptWorkflows[b.dept], {
+    typeLabel: '📊 Ngân Sách', codeOf: r => r.code, titleOf: r => r.periodName || r.code
+  });
+
+  scan(
+    (DB.contracts || []).filter(c => !c.isAddendum),
+    c => resolveContractApprovalWorkflow(c),
+    { typeLabel: '📄 Hợp đồng (Phê Duyệt)', codeOf: r => r.code, titleOf: r => r.title },
+    { status: 'approvalStatus' }
+  );
+
+  scan(
+    (DB.contracts || []).filter(c => !c.isAddendum),
+    c => resolveContractManageWorkflow(c),
+    { typeLabel: '📝 Hợp đồng (Tài liệu ký)', codeOf: r => r.code, titleOf: r => r.title },
+    { status: 'signedFileStatus', currentStep: 'signedFileCurrentStep' }
+  );
+
+  return results;
+}
+
 // Gộp hồ sơ ĐÃ XỬ LÝ (status khác PENDING) mà ĐÚNG `user` từng duyệt/từ chối — dùng khi bộ lọc "Trạng
 // thái" ở màn Phê Duyệt chọn khác "Đang chờ duyệt", để người duyệt xem lại/theo dõi những gì mình đã xử
 // lý mà KHÔNG cần vào từng module riêng. Cùng nguyên tắc thuần đọc DB.* như getMyPendingApprovals() ở
@@ -11960,12 +12126,8 @@ function populateDropdowns() {
     uStore.innerHTML = DB.stores.map(s => `<option value="${escapeHtml(s)}">${escapeHtml(s)}</option>`).join('');
   }
 
-  const uJobTitle = document.getElementById('uJobTitle');
-  if (uJobTitle) {
-    const current = uJobTitle.value;
-    uJobTitle.innerHTML = '<option value="">-- Chưa gán --</option>' + DB.jobTitles.map(t => `<option value="${escapeHtml(t)}">${escapeHtml(t)}</option>`).join('');
-    if (!current || DB.jobTitles.includes(current)) uJobTitle.value = current;
-  }
+  // uJobTitle phụ thuộc uPosType (mục 4a) — xem populateUserJobTitleOptions()/onUserPosTypeChange().
+  populateUserJobTitleOptions(document.getElementById('uPosType')?.value || 'HO');
 
   // Loại Tờ Trình / Loại Pháp Lý (Hợp đồng) / Loại Xe — TRƯỚC ĐÂY <option> gõ cứng, giờ đổ động từ
   // DB.submissionTypes/contractTypes/carTypes (admin tự thêm/bớt ở màn Biểu Mẫu, xem CORE_FIELD_MANIFEST).
@@ -13921,9 +14083,12 @@ function onSubApprovalLayerToggle(layerKey) {
   const section = document.getElementById('subApprovalLayersSection');
 
   if (checked) {
+    // Tài khoản đã khoá không hiện trong nguồn tìm-để-thêm-mới nữa (Yêu cầu 1) — không ảnh hưởng người
+    // đã được gán từ trước (DB.submissionApprovalGroups vẫn giữ nguyên username cũ, chỉ ẩn ở đây).
     const groupUsers = (DB.submissionApprovalGroups[layerKey] || [])
       .map(un => DB.users.find(u => u.username === un))
-      .filter(Boolean);
+      .filter(Boolean)
+      .filter(u => u.active !== false);
     const card = document.createElement('div');
     card.id = `subLayerCard_${layerKey}`;
     card.className = 'border rounded p-2 bg-amber-50/60 min-w-[220px]';
@@ -14016,9 +14181,12 @@ function onContractApprovalLayerToggle(layerKey) {
   const section = document.getElementById('contractApprovalLayersSection');
 
   if (checked) {
+    // Tài khoản đã khoá không hiện trong nguồn tìm-để-thêm-mới nữa (Yêu cầu 1) — không ảnh hưởng người
+    // đã được gán từ trước (DB.contractApprovalGroups vẫn giữ nguyên username cũ, chỉ ẩn ở đây).
     const groupUsers = (DB.contractApprovalGroups[layerKey] || [])
       .map(un => DB.users.find(u => u.username === un))
-      .filter(Boolean);
+      .filter(Boolean)
+      .filter(u => u.active !== false);
     const card = document.createElement('div');
     card.id = `contractLayerCard_${layerKey}`;
     card.className = 'border rounded p-2 bg-cyan-50/60 min-w-[220px]';
@@ -18540,7 +18708,9 @@ function resolveAttendeeAccountInput(idx, rawValue) {
 function populateSystemUsersDatalist() {
   const datalist = document.getElementById('systemUsersDatalist');
   if (!datalist) return;
-  sddSetOptions('systemUsersDatalist', DB.users.map(u => `${u.name} — ${u.dept || 'Chưa rõ phòng'} (${u.username})`));
+  // Tài khoản đã khoá (active === false) không còn chọn MỚI được nữa — chỉ ẩn khỏi nguồn gợi ý tìm-để-
+  // thêm-mới này, KHÔNG đụng gì tới dữ liệu đã lưu trước đó (xem chú thích đầu file phần "Yêu cầu 1").
+  sddSetOptions('systemUsersDatalist', DB.users.filter(u => u.active !== false).map(u => `${u.name} — ${u.dept || 'Chưa rõ phòng'} (${u.username})`));
 }
 
 function renderAttendeesTable() {
@@ -21314,7 +21484,7 @@ function setSystemSubTab(subTab) {
   document.getElementById('btnSystemSubTrash').className = subTab === 'TRASH' ? activeCls : inactiveCls;
 
   if (subTab === 'ADMIN') {
-    renderDeptList(); renderCatList(); renderContractTypeAbbrList(); renderJobTitleList(); renderTrainingCategoryList(); renderSensitiveKeywordList(); renderDeptCheckboxes(); renderModuleAccessCheckboxes(); renderUsers(); loadEmailConfigToForm(); renderPermGroupsList(); renderSubmissionApprovalGroups(); renderContractApprovalGroups(); workflowParticipatingDeptsDraft = null; renderWorkflowParticipatingDeptsChecklist(); vppExcludeGroupsDraft = null; renderVppExcludeGroupsAdmin(); renderPwaShortcutCheckboxes(); renderStoreList(); renderLicenseTypeList();
+    renderDeptList(); renderCatList(); renderContractTypeAbbrList(); renderJobTitleList(); renderStoreJobTitleList(); renderTrainingCategoryList(); renderSensitiveKeywordList(); renderDeptCheckboxes(); renderModuleAccessCheckboxes(); renderUsers(); loadEmailConfigToForm(); renderPermGroupsList(); renderSubmissionApprovalGroups(); renderContractApprovalGroups(); workflowParticipatingDeptsDraft = null; renderWorkflowParticipatingDeptsChecklist(); vppExcludeGroupsDraft = null; renderVppExcludeGroupsAdmin(); renderPwaShortcutCheckboxes(); renderStoreList(); renderLicenseTypeList();
     setAdminSubTab(activeAdminSubTab);
   }
   if (subTab === 'FORM') { switchFormTab(activeFormTab); }
@@ -23128,7 +23298,9 @@ function switchWfSubmissionType(typeKey) {
 // "biến mất" một approver đã cấu hình từ trước chỉ vì họ chưa được cấp cờ mới.
 function getApproverCandidateUsers(currentApproversForStep) {
   const list = Array.isArray(currentApproversForStep) ? currentApproversForStep : (currentApproversForStep ? [currentApproversForStep] : []);
-  const eligible = DB.users.filter(u => u.perms?.canBeApprover || u.perms?.admin);
+  // Tài khoản đã khoá (active === false) không còn chọn MỚI được làm người duyệt (Yêu cầu 1) — người đã
+  // được gán từ trước vẫn hiện đúng nhờ nhánh alreadyAssignedExtra bên dưới (không lọc active ở đó).
+  const eligible = DB.users.filter(u => (u.perms?.canBeApprover || u.perms?.admin) && u.active !== false);
   const eligibleUsernames = new Set(eligible.map(u => u.username));
   const alreadyAssignedExtra = DB.users.filter(u => !eligibleUsernames.has(u.username) && list.includes(u.username));
   return [...eligible, ...alreadyAssignedExtra];
@@ -23544,9 +23716,100 @@ function renderStoreList() {
   ul.innerHTML = DB.stores.map(s => `
     <li class="p-2 flex justify-between items-center gap-2 hover:bg-gray-50">
       <span class="flex-1">${escapeHtml(s)}</span>
+      <button onclick="renameStore('${escapeHtml(s)}')" class="text-blue-600 font-bold hover:underline whitespace-nowrap">✏️ Sửa</button>
       <button onclick="deleteStore('${escapeHtml(s)}')" class="text-red-500 font-bold hover:underline">Xóa</button>
     </li>
   `).join('');
+}
+
+// Sửa (rename, CÓ CASCADE) 1 giá trị trong danh mục "stores"/"jobTitles"/"storeJobTitles" — gọi route
+// server riêng POST /api/admin/renameCatalogEntry (routes/adminCatalog.js), KHÔNG dùng syncStorage()
+// thường: route đó tự ghi danh mục + cascade cập nhật MỌI nơi khác đang lưu nguyên chuỗi cũ (xem
+// lib/catalogRename.js — user.dept/jobTitle, docs/submissions/carRegs/officeReqs/vppRegistrations/
+// itPriceApprovals/budgetEntries/uniformIssuances/uniformStockAdjustments/uniformTransfers.dept,
+// contracts.dept+custodianDept, uniformPeriods[].allocations[].dept, vppExcludeGroups[].jobTitles[]...).
+// DB.<catalogKey> phía trình duyệt được cập nhật NGAY từ giá trị server trả về, nhưng các collection
+// KHÁC (DB.docs, DB.users, DB.contracts...) đang có sẵn trong bộ nhớ vẫn giữ TÊN CŨ cho tới khi tải lại
+// trang (server đã ghi đúng tên mới) — nhắc admin tải lại trang để thấy tên mới ở TOÀN BỘ màn hình.
+async function renameCatalogEntryClient(catalogKey, oldValue, catalogLabel) {
+  const newValue = prompt(`Nhập tên mới cho "${oldValue}" (${catalogLabel}):`, oldValue);
+  if (newValue === null) return false;
+  const trimmed = newValue.trim();
+  if (!trimmed || trimmed === oldValue) return false;
+  try {
+    const res = await fetch('/api/admin/renameCatalogEntry', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ catalogKey, oldValue, newValue: trimmed })
+    });
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(body.error || ('HTTP ' + res.status));
+    DB[catalogKey] = body.catalog;
+    logSystemAction('USER_MGM', 'RENAME_CATALOG_ENTRY', `Đổi tên ${catalogLabel} [${oldValue}] → [${trimmed}]`, 'SUCCESS', trimmed);
+    alert(`✅ Đã đổi tên "${oldValue}" thành "${trimmed}" (đã cập nhật mọi hồ sơ/tài khoản liên quan ở máy chủ).\n\nVui lòng TẢI LẠI TRANG để thấy tên mới hiển thị ở toàn bộ màn hình (các hồ sơ đang mở sẵn trong phiên này vẫn tạm hiện tên cũ cho tới khi tải lại).`);
+    return true;
+  } catch (err) {
+    alert(`⛔ Lỗi đổi tên: ${err.message}`);
+    return false;
+  }
+}
+
+async function renameStore(name) {
+  const ok = await renameCatalogEntryClient('stores', name, 'Danh Mục Siêu Thị');
+  if (ok) { renderStoreList(); populateDropdowns(); }
+}
+
+// ---------- Import Excel Danh Mục Siêu Thị (mục 3b) — copy khuôn 2 bước của training-roster
+// (onTrainingRosterFileChange()/addTrainingRosterFileFound()): đọc + xem trước (mới/trùng) NGAY khi
+// chọn file (server đối chiếu với DB.stores hiện có, xem routes/storeCatalogImport.js), client tự merge
+// phần "mới" vào DB.stores rồi gọi syncStorage('stores') có sẵn khi bấm Xác Nhận — KHÔNG có route
+// "confirm add" riêng vì stores là mảng phẳng đơn giản. ----------
+let storeImportPreviewItems = []; // kết quả gần nhất từ /api/stores/parse-import
+
+async function onStoreImportFileChange(event) {
+  const file = event.target.files[0];
+  storeImportPreviewItems = [];
+  document.getElementById('storeImportPreviewWrap').classList.add('hidden');
+  document.getElementById('storeImportConfirmBtn').classList.add('hidden');
+  const statusEl = document.getElementById('storeImportStatus');
+  if (!file) { statusEl.innerText = ''; return; }
+
+  statusEl.innerText = '⏳ Đang đọc file...';
+  const formData = new FormData();
+  formData.append('file', file);
+  try {
+    const res = await fetch('/api/stores/parse-import', { method: 'POST', body: formData });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Lỗi không xác định');
+    storeImportPreviewItems = data.items;
+    const newCount = data.items.filter(it => it.isNew).length;
+    statusEl.innerText = `✅ Đọc file "${data.fileName}": ${newCount}/${data.items.length} siêu thị MỚI (còn lại đã có sẵn trong danh mục).`;
+    document.getElementById('storeImportPreviewBody').innerHTML = data.items.map(it => `<tr>
+      <td class="p-1">${escapeHtml(it.name)}</td>
+      <td class="p-1">${it.isNew ? '<span class="text-emerald-600">✅ Mới</span>' : '<span class="text-gray-400">— Đã có</span>'}</td>
+    </tr>`).join('');
+    document.getElementById('storeImportPreviewWrap').classList.remove('hidden');
+    if (newCount > 0) document.getElementById('storeImportConfirmBtn').classList.remove('hidden');
+  } catch (err) {
+    statusEl.innerText = `⛔ ${err.message}`;
+    event.target.value = '';
+  }
+}
+
+async function confirmStoreImport() {
+  const newNames = storeImportPreviewItems.filter(it => it.isNew).map(it => it.name);
+  if (!newNames.length) return;
+  DB.stores = [...DB.stores, ...newNames];
+  const saved = await syncStorage('stores');
+  if (!saved) { DB.stores = DB.stores.filter(s => !newNames.includes(s)); return; }
+  logSystemAction('USER_MGM', 'IMPORT_STORES', `Import Excel: thêm ${newNames.length} siêu thị mới`, 'SUCCESS', String(newNames.length));
+  alert(`✅ Đã thêm ${newNames.length} siêu thị mới vào Danh Mục Siêu Thị.`);
+  storeImportPreviewItems = [];
+  document.getElementById('storeImportFileInput').value = '';
+  document.getElementById('storeImportStatus').innerText = '';
+  document.getElementById('storeImportPreviewWrap').classList.add('hidden');
+  document.getElementById('storeImportConfirmBtn').classList.add('hidden');
+  renderStoreList();
+  populateDropdowns();
 }
 
 // Chuyển 1 tên đang nằm trong Danh Mục Phòng Ban sang Danh Mục Siêu Thị — CHỈ đổi danh mục sở hữu cái
@@ -23595,9 +23858,71 @@ function renderJobTitleList() {
   const ul = document.getElementById('jobTitleList');
   if (!ul) return;
   ul.innerHTML = DB.jobTitles.map(t => `
-    <li class="p-2 flex justify-between items-center hover:bg-gray-50">
-      <span>${escapeHtml(t)}</span>
+    <li class="p-2 flex justify-between items-center gap-2 hover:bg-gray-50">
+      <span class="flex-1">${escapeHtml(t)}</span>
+      <button onclick="renameJobTitle('${escapeHtml(t)}')" class="text-blue-600 font-bold hover:underline whitespace-nowrap">✏️ Sửa</button>
       <button onclick="deleteJobTitle('${escapeHtml(t)}')" class="text-red-500 font-bold hover:underline">Xóa</button>
+    </li>
+  `).join('');
+}
+
+async function renameJobTitle(name) {
+  const ok = await renameCatalogEntryClient('jobTitles', name, 'Danh Sách Chức Danh');
+  if (ok) { renderJobTitleList(); populateDropdowns(); }
+}
+
+// ===== Danh Sách Chức Danh (Siêu Thị) — DB.storeJobTitles, {label, restrictedFromSelfService}[] (mục
+// 4a) — TÁCH khỏi DB.jobTitles (Khối Văn Phòng/HO) vì cần thêm cờ "Không dùng được cho tự tạo tài
+// khoản" (VD "Giám Đốc Siêu Thị"), dùng cho form rút gọn "Quản Lý Nhân Viên Siêu Thị" (Đồng Phục). =====
+function saveStoreJobTitle(e) {
+  e.preventDefault();
+  const label = document.getElementById('txtStoreJobTitleName').value.trim();
+  if (!label) return;
+  if (DB.storeJobTitles.some(t => t.label === label)) return alert('Chức danh đã tồn tại!');
+  const restricted = document.getElementById('chkStoreJobTitleRestricted').checked;
+  DB.storeJobTitles.push({ label, restrictedFromSelfService: restricted });
+  syncStorage('storeJobTitles');
+  logSystemAction('USER_MGM', 'ADD_STORE_JOB_TITLE', `Thêm chức danh siêu thị mới [${label}]`, 'SUCCESS', label);
+  document.getElementById('txtStoreJobTitleName').value = '';
+  document.getElementById('chkStoreJobTitleRestricted').checked = false;
+  renderStoreJobTitleList();
+  populateDropdowns();
+}
+
+function deleteStoreJobTitle(label) {
+  if (!confirm(`Xóa chức danh siêu thị "${label}"?`)) return;
+  DB.storeJobTitles = DB.storeJobTitles.filter(t => t.label !== label);
+  syncStorage('storeJobTitles');
+  logSystemAction('USER_MGM', 'DELETE_STORE_JOB_TITLE', `Xóa chức danh siêu thị [${label}]`, 'SUCCESS', label);
+  renderStoreJobTitleList();
+  populateDropdowns();
+}
+
+function toggleStoreJobTitleRestricted(label, checked) {
+  const entry = DB.storeJobTitles.find(t => t.label === label);
+  if (!entry) return;
+  entry.restrictedFromSelfService = checked;
+  syncStorage('storeJobTitles');
+  logSystemAction('USER_MGM', 'UPDATE_STORE_JOB_TITLE', `Đổi cờ "Không dùng được cho tự tạo tài khoản" của chức danh siêu thị [${label}] = ${checked}`, 'SUCCESS', label);
+}
+
+async function renameStoreJobTitle(label) {
+  const ok = await renameCatalogEntryClient('storeJobTitles', label, 'Danh Sách Chức Danh (Siêu Thị)');
+  if (ok) { renderStoreJobTitleList(); populateDropdowns(); }
+}
+
+function renderStoreJobTitleList() {
+  const ul = document.getElementById('storeJobTitleList');
+  if (!ul) return;
+  ul.innerHTML = (DB.storeJobTitles || []).map(t => `
+    <li class="p-2 flex justify-between items-center gap-2 hover:bg-gray-50">
+      <span class="flex-1">${escapeHtml(t.label)}</span>
+      <label class="flex items-center gap-1 text-[10px] text-gray-500 whitespace-nowrap" title="Chức danh này sẽ KHÔNG hiện trong form tự tạo tài khoản ở sub-tab Quản Lý Nhân Viên Siêu Thị (Đồng Phục)">
+        <input type="checkbox" ${t.restrictedFromSelfService ? 'checked' : ''} onchange="toggleStoreJobTitleRestricted('${escapeHtml(t.label)}', this.checked)">
+        Khoá tự tạo
+      </label>
+      <button onclick="renameStoreJobTitle('${escapeHtml(t.label)}')" class="text-blue-600 font-bold hover:underline whitespace-nowrap">✏️ Sửa</button>
+      <button onclick="deleteStoreJobTitle('${escapeHtml(t.label)}')" class="text-red-500 font-bold hover:underline">Xóa</button>
     </li>
   `).join('');
 }
@@ -24249,7 +24574,9 @@ function renderGroupMembersPicker(initialSelected) {
   // Loại tài khoản "admin" khỏi danh sách ứng viên — gán vào nhóm phân quyền cũng là 1 cách gián tiếp
   // đổi quyền của tài khoản này (savePermGroup() sẽ ghi đè u.perms theo quyền nhóm), trong khi tài
   // khoản "admin" phải luôn toàn quyền, không ai sửa được (xem setAdminAccountPermsLocked()).
-  const candidates = DB.users.filter(u => u.username !== 'admin').map(u => ({ username: u.username, name: u.name, dept: u.dept }));
+  // Tài khoản đã khoá không hiện trong nguồn tìm-để-thêm-mới nữa (Yêu cầu 1) — thành viên đã gán từ
+  // trước (initialSelected) không bị ảnh hưởng, vẫn hiện đúng qua renderPeopleMultiSelect()/renderChips().
+  const candidates = DB.users.filter(u => u.username !== 'admin' && u.active !== false).map(u => ({ username: u.username, name: u.name, dept: u.dept }));
   renderPeopleMultiSelect('groupMembersPicker', candidates, initialSelected || [], 'group-member-toggle', {});
 }
 
@@ -24775,7 +25102,9 @@ function renderPeopleMultiSelect(containerId, candidates, initialSelected, check
     const chipsEl = container.querySelector('[data-pms-chips]');
     const hiddenEl = container.querySelector('[data-pms-hidden]');
     chipsEl.innerHTML = [...selected].map(username => {
-      const u = candidates.find(x => x.username === username);
+      // Người đã chọn từ trước có thể không còn nằm trong "candidates" đã lọc (VD tài khoản vừa bị khoá,
+      // xem Yêu cầu 1) — vẫn tra thêm ở DB.users để hiện tên đẹp thay vì chỉ hiện username thô.
+      const u = candidates.find(x => x.username === username) || (DB.users || []).find(x => x.username === username);
       return `
         <span class="inline-flex items-center gap-1 bg-rose-100 text-rose-700 rounded-full px-2 py-0.5 text-[11px]">
           ${escapeHtml(u ? label(u) : username)}
@@ -26459,7 +26788,9 @@ function renderSubmissionApprovalGroups() {
 
   SUBMISSION_APPROVAL_LAYERS.forEach(layer => {
     const members = DB.submissionApprovalGroups[layer.key] || [];
-    renderPeopleMultiSelect(`submissionApprovalGroupPicker_${layer.key}`, DB.users, members, '', { 'data-layer': layer.key });
+    // Tài khoản đã khoá không hiện trong nguồn tìm-để-thêm-mới nữa (Yêu cầu 1) — thành viên đã gán từ
+    // trước (members) không bị ảnh hưởng, vẫn hiện đúng qua renderChips().
+    renderPeopleMultiSelect(`submissionApprovalGroupPicker_${layer.key}`, DB.users.filter(u => u.active !== false), members, '', { 'data-layer': layer.key });
   });
 }
 
@@ -26497,7 +26828,9 @@ function renderContractApprovalGroups() {
 
   CONTRACT_APPROVAL_LAYERS.forEach(layer => {
     const members = DB.contractApprovalGroups[layer.key] || [];
-    renderPeopleMultiSelect(`contractApprovalGroupPicker_${layer.key}`, DB.users, members, '', { 'data-layer': layer.key });
+    // Tài khoản đã khoá không hiện trong nguồn tìm-để-thêm-mới nữa (Yêu cầu 1) — thành viên đã gán từ
+    // trước (members) không bị ảnh hưởng, vẫn hiện đúng qua renderChips().
+    renderPeopleMultiSelect(`contractApprovalGroupPicker_${layer.key}`, DB.users.filter(u => u.active !== false), members, '', { 'data-layer': layer.key });
   });
 }
 
@@ -26533,6 +26866,22 @@ function onUserPosTypeChange() {
   const posType = document.getElementById('uPosType').value;
   document.getElementById('uDeptFieldWrap').classList.toggle('hidden', posType !== 'HO');
   document.getElementById('uStoreFieldWrap').classList.toggle('hidden', posType !== 'STORE');
+  populateUserJobTitleOptions(posType);
+}
+
+// Chức Danh (uJobTitle) phụ thuộc Vị Trí (uPosType, mục 4a) — HO dùng DB.jobTitles (Khối Văn Phòng),
+// Siêu Thị dùng DB.storeJobTitles (mảng {label, restrictedFromSelfService}). KHÔNG lọc
+// restrictedFromSelfService ở đây — hạn chế đó chỉ áp dụng cho form RÚT GỌN "Quản Lý Nhân Viên Siêu
+// Thị" (mục 4b); form Người Dùng đầy đủ này do Admin/uniformManage thao tác nên vẫn chọn được mọi chức
+// danh siêu thị, kể cả chức danh đã bị khoá tự tạo. Tách khỏi populateDropdowns() (logic tĩnh cũ) để
+// gọi lại được riêng mỗi khi đổi Vị Trí, không cần render lại toàn bộ dropdown khác của trang.
+function populateUserJobTitleOptions(posType) {
+  const uJobTitle = document.getElementById('uJobTitle');
+  if (!uJobTitle) return;
+  const current = uJobTitle.value;
+  const options = posType === 'STORE' ? (DB.storeJobTitles || []).map(t => t.label) : (DB.jobTitles || []);
+  uJobTitle.innerHTML = '<option value="">-- Chưa gán --</option>' + options.map(t => `<option value="${escapeHtml(t)}">${escapeHtml(t)}</option>`).join('');
+  if (options.includes(current)) uJobTitle.value = current;
 }
 
 function readUserFormState() {
@@ -26934,6 +27283,18 @@ async function toggleUserActive(id) {
 
   const verb = willActivate ? 'mở khóa' : 'khóa';
   if (!confirm(`Bạn có chắc chắn muốn ${verb} tài khoản "${u.username}" (${u.name})?${willActivate ? '' : '\n\nSau khi khóa, người này sẽ KHÔNG đăng nhập được nữa và mọi phiên đang mở sẵn (nếu có) sẽ bị chặn ngay ở lần thao tác tiếp theo.'}`)) return;
+
+  // Yêu cầu 2: cảnh báo (không chặn cứng) nếu tài khoản sắp khoá đang là NGƯỜI DUYỆT được chỉ định tên
+  // ở bước hiện tại của 1+ hồ sơ đang chờ — chặn cứng sẽ khiến admin không khoá được 1 tài khoản nghỉ
+  // việc chỉ vì 1 quy trình cấu hình lỏng lẻo, hậu quả tệ hơn cảnh báo bị bỏ qua (xem findPendingApprovalsForUsername()).
+  if (!willActivate) {
+    const pendingApprovals = findPendingApprovalsForUsername(u.username);
+    if (pendingApprovals.length) {
+      const lines = pendingApprovals.slice(0, 10).map(p => `• ${p.typeLabel} ${p.code || ''} — ${p.title} (${p.stepLabel})`).join('\n');
+      const more = pendingApprovals.length > 10 ? `\n...và ${pendingApprovals.length - 10} hồ sơ khác.` : '';
+      if (!confirm(`⚠️ Tài khoản "${u.username}" hiện đang là NGƯỜI DUYỆT của ${pendingApprovals.length} hồ sơ đang chờ xử lý:\n\n${lines}${more}\n\nSau khi khoá, các hồ sơ này sẽ KẸT LẠI (không ai duyệt được đến khi admin đổi người duyệt trong Quy Trình & Phê Duyệt). Vẫn muốn khoá?`)) return;
+    }
+  }
 
   // await + kiểm tra saved trước khi ghi log — trước đây gọi syncStorage() không await rồi ghi log
   // 'SUCCESS' ngay lập tức, nên nếu server từ chối lưu (VD xung đột version), Nhật ký hệ thống vẫn ghi
@@ -34945,12 +35306,17 @@ function setUniformSubTab(subTab) {
   const canSeeStore = canStore || canApprove;
   if (subTab === 'PERIODS' && !canSeePeriods) subTab = canSeeStore ? 'STORE' : 'STOCK';
   if (subTab === 'STORE' && !canSeeStore) subTab = canSeePeriods ? 'PERIODS' : 'STOCK';
+  // EMPLOYEES (mục 4b) — CHỈ dành cho HO (canHc), không có nhánh dự phòng nào khác (khác PERIODS/STORE
+  // ở trên vốn còn approver-only truy cập được) — không đủ quyền thì rơi về STOCK (mở cho mọi người
+  // trong module, xem canAccessUniformModule()).
+  if (subTab === 'EMPLOYEES' && !canHc) subTab = 'STOCK';
   activeUniformSubTab = subTab;
 
   document.getElementById('uniformSubPeriods').classList.toggle('hidden', subTab !== 'PERIODS');
   document.getElementById('uniformSubStore').classList.toggle('hidden', subTab !== 'STORE');
   document.getElementById('uniformSubStock').classList.toggle('hidden', subTab !== 'STOCK');
   document.getElementById('uniformSubDashboard').classList.toggle('hidden', subTab !== 'DASHBOARD');
+  document.getElementById('uniformSubEmployees').classList.toggle('hidden', subTab !== 'EMPLOYEES');
 
   const activeCls = 'px-3 py-1.5 rounded text-xs font-bold bg-teal-700 text-white';
   const inactiveCls = 'px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700';
@@ -34958,6 +35324,10 @@ function setUniformSubTab(subTab) {
   document.getElementById('btnUniformSubStore').className = (subTab === 'STORE' ? activeCls : inactiveCls) + (canSeeStore ? '' : ' hidden');
   document.getElementById('btnUniformSubStock').className = subTab === 'STOCK' ? activeCls : inactiveCls;
   document.getElementById('btnUniformSubDashboard').className = subTab === 'DASHBOARD' ? activeCls : inactiveCls;
+  // "Quản Lý Nhân Viên Siêu Thị" (mục 4b) — CHỈ dành cho HO (canHc, gate y hệt sub-tab PERIODS hiện
+  // tại) — KHÔNG mở thêm cho uniformStoreManage/canApprove (họ tự có màn "Xác Nhận/Cấp Phát" riêng đúng
+  // phạm vi siêu thị mình, không cần/không nên tạo tài khoản cho siêu thị khác).
+  document.getElementById('btnUniformSubEmployees').className = (subTab === 'EMPLOYEES' ? activeCls : inactiveCls) + (canHc ? '' : ' hidden');
 
   if (subTab === 'PERIODS') {
     renderUniformCatalogList(); resetUniformPeriodForm(); renderUniformPeriodsList();
@@ -34972,6 +35342,110 @@ function setUniformSubTab(subTab) {
   }
   if (subTab === 'STOCK') { renderUniformStockStoreFilterOptions(); renderUniformStock(); }
   if (subTab === 'DASHBOARD') { renderUniformDashboard(); }
+  if (subTab === 'EMPLOYEES') { resetUniformEmployeeCreateForm(); renderUniformEmployeesList(); }
+}
+
+// ============ Quản Lý Nhân Viên Siêu Thị (mục 4b) — HO (uniformManage/admin) tạo/khoá tài khoản nhân
+// viên CHO các siêu thị, đi qua route riêng POST/PATCH /api/uniform/employees (routes/uniformEmployees.js
+// — KHÔNG qua POST /api/data/users vì route đó khoá cứng isCurrentlyAdmin() thật, uniformManage không đủ
+// quyền). Form rút gọn KHÔNG có ô chọn Vị Trí (ngầm định STORE) và KHÔNG có bất kỳ checkbox quyền nào —
+// server tự ép posType:'STORE'/perms:{} rỗng, đây chính là cơ chế đảm bảo an toàn. ============
+function resetUniformEmployeeCreateForm() {
+  const form = document.querySelector('#uniformSubEmployees form');
+  if (form) form.reset();
+  const storeSel = document.getElementById('ueStore');
+  if (storeSel) {
+    storeSel.innerHTML = '<option value="">-- Chọn Siêu Thị --</option>' +
+      (DB.stores || []).map(s => `<option value="${escapeHtml(s)}">${escapeHtml(s)}</option>`).join('');
+  }
+  const jobTitleSel = document.getElementById('ueJobTitle');
+  if (jobTitleSel) {
+    // Chức danh bị đánh dấu "Khoá tự tạo" (restrictedFromSelfService) KHÔNG hiện ở đây — hạn chế đó chỉ
+    // áp dụng cho đúng form rút gọn này (form Người Dùng đầy đủ của Admin vẫn chọn được mọi chức danh).
+    const options = (DB.storeJobTitles || []).filter(t => !t.restrictedFromSelfService);
+    jobTitleSel.innerHTML = '<option value="">-- Chưa gán chức danh --</option>' +
+      options.map(t => `<option value="${escapeHtml(t.label)}">${escapeHtml(t.label)}</option>`).join('');
+  }
+}
+
+async function submitUniformEmployeeCreate(e) {
+  e.preventDefault();
+  const payload = {
+    username: document.getElementById('ueUsername').value.trim(),
+    password: document.getElementById('uePassword').value,
+    fullName: document.getElementById('ueFullName').value.trim(),
+    email: document.getElementById('ueEmail').value.trim(),
+    phone: document.getElementById('uePhone').value.trim(),
+    dept: document.getElementById('ueStore').value,
+    jobTitle: document.getElementById('ueJobTitle').value
+  };
+  try {
+    const res = await fetch('/api/uniform/employees', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload)
+    });
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(body.error || ('HTTP ' + res.status));
+    DB.users.push(body.user);
+    logSystemAction('USER_MGM', 'CREATE_UNIFORM_EMPLOYEE', `Tạo tài khoản nhân viên siêu thị [${body.user.username}] (${body.user.dept})`, 'SUCCESS', body.user.username);
+    alert(`✅ Đã tạo tài khoản "${body.user.username}" cho siêu thị "${body.user.dept}"!`);
+    resetUniformEmployeeCreateForm();
+    renderUniformEmployeesList();
+  } catch (err) {
+    alert(`⛔ Lỗi tạo tài khoản: ${err.message}`);
+  }
+}
+
+function renderUniformEmployeesList() {
+  const tbody = document.getElementById('ueEmployeesTableBody');
+  if (!tbody) return;
+  const showInactive = !!document.getElementById('ueShowInactive')?.checked;
+  const query = (document.getElementById('ueSearchInput')?.value || '').trim().toLowerCase();
+  let rows = (DB.users || []).filter(u => u.posType === 'STORE');
+  if (!showInactive) rows = rows.filter(u => u.active !== false);
+  if (query) {
+    rows = rows.filter(u =>
+      (u.name || '').toLowerCase().includes(query) ||
+      (u.username || '').toLowerCase().includes(query) ||
+      (u.dept || '').toLowerCase().includes(query)
+    );
+  }
+  if (!rows.length) {
+    tbody.innerHTML = `<tr><td colspan="6" class="text-center text-gray-400 italic p-3">Không có nhân viên siêu thị nào khớp.</td></tr>`;
+    return;
+  }
+  tbody.innerHTML = rows.map(u => `
+    <tr class="${u.active === false ? 'opacity-50' : ''}">
+      <td class="border p-1.5">${escapeHtml(u.username)}</td>
+      <td class="border p-1.5">${escapeHtml(u.name || '')}</td>
+      <td class="border p-1.5">${escapeHtml(u.dept || '')}</td>
+      <td class="border p-1.5">${escapeHtml(u.jobTitle || '—')}</td>
+      <td class="border p-1.5">${u.active === false ? '<span class="text-red-600 font-semibold">🔒 Đã khoá</span>' : '<span class="text-emerald-600 font-semibold">✅ Hoạt động</span>'}</td>
+      <td class="border p-1.5 text-center">
+        ${u.active === false ? '' : `<button type="button" onclick="lockUniformEmployeeAction(${u.id})" class="text-red-500 font-bold hover:underline">🔒 Khoá</button>`}
+      </td>
+    </tr>
+  `).join('');
+}
+
+// Khoá 1 CHIỀU (route server chỉ nhận active:false, xem PATCH /api/uniform/employees/:id/active) — mở
+// khoá lại phải qua màn Người Dùng đầy đủ của Admin (toggleUserActive()), đúng xác nhận của người dùng.
+async function lockUniformEmployeeAction(id) {
+  const u = DB.users.find(x => x.id === id);
+  if (!u) return;
+  if (!confirm(`Khoá tài khoản "${u.username}" (${u.name})?\n\nSau khi khoá, người này sẽ KHÔNG đăng nhập được nữa. Muốn mở khoá lại phải nhờ Admin thực hiện ở màn Người Dùng (Hệ Thống → Quản Trị).`)) return;
+  try {
+    const res = await fetch(`/api/uniform/employees/${id}/active`, {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ active: false })
+    });
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(body.error || ('HTTP ' + res.status));
+    const idx = DB.users.findIndex(x => x.id === id);
+    if (idx !== -1) DB.users[idx] = body.user;
+    logSystemAction('USER_MGM', 'DEACTIVATE_UNIFORM_EMPLOYEE', `Khoá nhân viên siêu thị [${u.username}]`, 'SUCCESS', u.username);
+    renderUniformEmployeesList();
+  } catch (err) {
+    alert(`⛔ Lỗi khoá tài khoản: ${err.message}`);
+  }
 }
 
 // Mã SKU (Phase 2) — sinh 1 LẦN lúc Giám Đốc Siêu Thị xác nhận nhận LẦN ĐẦU 1 (mặt hàng,size), lưu

@@ -349,6 +349,58 @@ async function getAllForCollection(collection) {
   return (await getAppDataValue(collection)) || [];
 }
 
+// Sửa hàng loạt bản ghi trong 1 collection theo mutateFn(item) -> item KHÔNG đổi (trả lại ĐÚNG cùng
+// reference "item" nếu không cần sửa gì) hoặc 1 object MỚI (đã sửa) — dùng cho cascade đổi tên 1 giá trị
+// danh mục (VD Danh Mục Siêu Thị/Chức Danh, xem lib/catalogRename.js) lan toả ra MỌI bản ghi đang lưu
+// nguyên chuỗi cũ, không giới hạn ở 1 bản ghi theo Id như withLockedRecordForCollection(). Khoá NGUYÊN
+// CẢ collection trong suốt giao dịch (UPDLOCK/HOLDLOCK theo Collection, không theo từng Id) — chấp nhận
+// được vì đây là thao tác ADMIN, không thường xuyên, không cần tối ưu tương tranh cao như các route
+// nghiệp vụ hàng ngày khác.
+async function renameFieldValueInCollection(collection, mutateFn) {
+  if (MIGRATED_COLLECTIONS.has(collection)) {
+    const pool = await getPool();
+    const tx = new sql.Transaction(pool);
+    await tx.begin();
+    try {
+      const readReq = new sql.Request(tx);
+      const readResult = await readReq
+        .input('collection', sql.NVarChar(50), collection)
+        .query('SELECT Id, Payload, Code FROM dbo.Records WITH (UPDLOCK, HOLDLOCK) WHERE Collection = @collection');
+      let changedCount = 0;
+      for (const row of readResult.recordset) {
+        const item = toRecord(row);
+        const updated = mutateFn(item);
+        if (updated === item) continue; // mutateFn báo KHÔNG có gì đổi (cùng reference) -> bỏ qua, không ghi
+        changedCount++;
+        const writeReq = new sql.Request(tx);
+        await writeReq
+          .input('collection', sql.NVarChar(50), collection)
+          .input('id', sql.BigInt, row.Id)
+          .input('code', sql.NVarChar(100), updated.code || row.Code || null)
+          .input('payload', sql.NVarChar(sql.MAX), JSON.stringify(updated))
+          .query('UPDATE dbo.Records SET Code = @code, Payload = @payload WHERE Collection = @collection AND Id = @id');
+      }
+      await tx.commit();
+      if (changedCount) invalidateCollectionCache(collection);
+      return changedCount;
+    } catch (err) {
+      await tx.rollback().catch(() => {});
+      throw err;
+    }
+  }
+  // Collection còn ở AppData (chưa migrate, VD "users"/"vppExcludeGroups") — dùng withLockedAppDataValue
+  // sẵn có, ghi lại cả mảng (đơn giản hơn — các collection dạng này thường nhỏ, không cần chỉ ghi phần đổi).
+  let changedCount = 0;
+  await withLockedAppDataValue(collection, (list) => {
+    return (Array.isArray(list) ? list : []).map(item => {
+      const updated = mutateFn(item);
+      if (updated !== item) changedCount++;
+      return updated;
+    });
+  });
+  return changedCount;
+}
+
 // Cache ngắn hạn TRONG BỘ NHỚ theo TỪNG collection, chỉ dùng cho GET /api/data (routes/data.js) — cùng
 // khuôn getAppDataValueCached()/getAllTasksCached(): nhiều người dùng khác nhau gọi gần như cùng lúc
 // đều cần y hệt danh sách RAW của 1 collection trước khi lọc theo quyền xem riêng (lib/recordViewScope.js,
@@ -516,5 +568,6 @@ module.exports = {
   MIGRATED_COLLECTIONS,
   getAllRecords, insertRecord, withLockedRecordById, deleteRecordById, migrateLegacyCollection, migrateAllLegacyCollections,
   getAllForCollection, getAllForCollectionCached, createForCollection, createForCollectionSerialized, withAppLock, withLockedRecordForCollection, deleteRecordForCollection,
+  renameFieldValueInCollection,
   moveRecordToTrash, getTrashItems, restoreTrashItem, permanentlyDeleteTrashItem
 };
