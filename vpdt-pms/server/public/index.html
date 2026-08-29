@@ -843,17 +843,39 @@ input[data-sdd-list] {
           <p class="text-[11px] text-gray-500 italic mt-1">Chỉ hiện tài liệu đã phê duyệt xong (version mới nhất) và thuộc phạm vi bạn được phép cập nhật.</p>
         </div>
 
-        <input id="docCode" readonly placeholder="Mã tài liệu (tự sinh)" class="border p-2 rounded text-sm bg-gray-100 cursor-not-allowed" required>
-        <input id="docTitle" placeholder="Tên / Tiêu đề tài liệu" class="border p-2 rounded text-sm" required>
-        <input id="docVer" placeholder="Phiên bản (VD: v1.0)" value="v1.0" readonly class="border p-2 rounded text-sm bg-gray-100" required>
+        <div>
+          <label class="block text-xs font-semibold text-gray-600 mb-1">Mã Tài Liệu</label>
+          <input id="docCode" readonly placeholder="Mã tài liệu (tự sinh)" class="w-full border p-2 rounded text-sm bg-gray-100 cursor-not-allowed" required>
+        </div>
+        <div>
+          <label class="block text-xs font-semibold text-gray-600 mb-1">Tên / Tiêu Đề Tài Liệu</label>
+          <input id="docTitle" placeholder="Tên / Tiêu đề tài liệu" class="w-full border p-2 rounded text-sm" required>
+        </div>
+        <div>
+          <label class="block text-xs font-semibold text-gray-600 mb-1">Phiên Bản</label>
+          <input id="docVer" placeholder="Phiên bản (VD: v1.0)" value="v1.0" readonly class="w-full border p-2 rounded text-sm bg-gray-100" required>
+        </div>
 
-        <select id="selDept" onchange="refreshDocCodePreview()" class="border p-2 rounded text-sm" required><option value="">-- Chọn Phòng Ban Trình --</option></select>
-        <select id="selCat" onchange="refreshDocCodePreview()" class="border p-2 rounded text-sm" required><option value="">-- Chọn Phân Loại --</option></select>
-        <input id="docFile" type="file" accept=".pdf,.docx,.xlsx" class="border p-1 bg-white rounded text-sm" required>
+        <div>
+          <label class="block text-xs font-semibold text-gray-600 mb-1">Phòng Ban Trình</label>
+          <select id="selDept" onchange="refreshDocCodePreview()" class="w-full border p-2 rounded text-sm" required><option value="">-- Chọn Phòng Ban Trình --</option></select>
+        </div>
+        <div>
+          <label class="block text-xs font-semibold text-gray-600 mb-1">Phân Loại</label>
+          <select id="selCat" onchange="refreshDocCodePreview()" class="w-full border p-2 rounded text-sm" required><option value="">-- Chọn Phân Loại --</option></select>
+        </div>
+        <div>
+          <label class="block text-xs font-semibold text-gray-600 mb-1">Tệp Tài Liệu</label>
+          <input id="docFile" type="file" accept=".pdf,.docx,.xlsx" class="w-full border p-1 bg-white rounded text-sm" required>
+        </div>
 
-        <textarea id="docSummary" placeholder="Trích lục / Tóm tắt nội dung tài liệu..." class="md:col-span-3 border p-2 rounded text-sm h-16" required></textarea>
+        <div class="md:col-span-3">
+          <label class="block text-xs font-semibold text-gray-600 mb-1">Trích Lục / Tóm Tắt Nội Dung</label>
+          <textarea id="docSummary" placeholder="Trích lục / Tóm tắt nội dung tài liệu..." class="w-full border p-2 rounded text-sm h-16" required></textarea>
+        </div>
 
-        <div id="dynamicFieldsContainer_DOC" class="md:col-span-3 grid grid-cols-1 md:grid-cols-3 gap-3 border-t pt-3"></div>
+        <!-- class "contents" — cùng khuôn dynamicFieldsContainer_SUBMISSION, xem chú thích ở đó. -->
+        <div id="dynamicFieldsContainer_DOC" class="contents"></div>
 
         <div class="md:col-span-3 flex justify-end">
           <button type="submit" class="bg-green-600 text-white px-5 py-2 rounded font-bold hover:bg-green-700 transition">Gửi phê duyệt</button>
@@ -981,9 +1003,17 @@ input[data-sdd-list] {
             <label class="block font-semibold text-gray-600 mb-1">Tài Liệu Bổ Sung Theo Tờ Trình</label>
             <input id="subExtraFiles" type="file" multiple accept=".pdf,.docx,.xlsx" class="w-full border p-1 bg-white rounded">
           </div>
+          <!-- Trường bổ sung (Biểu Mẫu) render TRỰC TIẾP vào đây (class "contents" — bản thân div này
+               "biến mất" khỏi cây bố cục, chỉ các <div> con của nó mới là ô lưới thật) để cùng chia sẻ 1
+               lưới grid-cols-4 duy nhất với các trường mặc định phía trên — CSS `order` (applyFieldOrder())
+               nhờ vậy sắp xếp được TRỘN LẪN cả trường mặc định lẫn bổ sung, không còn cố định "mặc định
+               luôn trước, bổ sung luôn sau" như trước đây. -->
+          <div id="dynamicFieldsContainer_SUBMISSION" class="contents"></div>
+          <div class="md:col-span-4">
+            <label class="block font-semibold text-gray-600 mb-1">Nội Dung Trình Chi Tiết & Đề Xuất Cụ Thể</label>
+            <textarea id="subContent" placeholder="Kính trình Lãnh đạo xem xét và phê duyệt nội dung..." class="w-full border p-1.5 rounded h-20" required></textarea>
+          </div>
         </div>
-
-        <div id="dynamicFieldsContainer_SUBMISSION" class="grid grid-cols-1 md:grid-cols-3 gap-3 border-t pt-3"></div>
 
         <div id="subApprovalLayersSection" class="hidden border-t pt-3">
           <label class="block font-semibold text-gray-600 mb-1">Cấp Phê Duyệt Bổ Sung & Xin Ý Kiến</label>
@@ -991,10 +1021,6 @@ input[data-sdd-list] {
           <div id="subApprovalLayersContainer" class="flex flex-wrap gap-3"></div>
         </div>
 
-        <div>
-          <label class="block font-semibold text-gray-600 mb-1">Nội Dung Trình Chi Tiết & Đề Xuất Cụ Thể</label>
-          <textarea id="subContent" placeholder="Kính trình Lãnh đạo xem xét và phê duyệt nội dung..." class="w-full border p-1.5 rounded h-20" required></textarea>
-        </div>
         <div class="flex justify-end gap-2">
           <button type="button" onclick="previewSubmissionWorkflow()" class="bg-gray-200 text-gray-700 px-4 py-2 rounded font-bold hover:bg-gray-300">🔍 Xem Quy Trình</button>
           <button type="submit" class="bg-amber-600 text-white px-5 py-2 rounded font-bold hover:bg-amber-700">Gửi phê duyệt</button>
@@ -1218,12 +1244,13 @@ input[data-sdd-list] {
             <input id="contractFile" type="file" accept=".pdf,.docx,.xlsx" class="w-full border p-1 bg-white rounded" required>
             <p id="contractFileEditHint" class="hidden text-[11px] text-gray-500 italic mt-1">Để trống nếu không muốn thay tệp đính kèm hiện tại.</p>
           </div>
+          <div class="md:col-span-3">
+            <label class="block font-semibold text-gray-600 mb-1">Nội Dung Tóm Tắt & Điều Khoản Chính</label>
+            <textarea id="contractContent" placeholder="Ghi chú các điều khoản thanh toán, nghĩa vụ..." class="w-full border p-1.5 rounded h-16" required></textarea>
+          </div>
+          <!-- class "contents" — cùng khuôn dynamicFieldsContainer_SUBMISSION, xem chú thích ở đó. -->
+          <div id="dynamicFieldsContainer_CONTRACT" class="contents"></div>
         </div>
-        <div>
-          <label class="block font-semibold text-gray-600 mb-1">Nội Dung Tóm Tắt & Điều Khoản Chính</label>
-          <textarea id="contractContent" placeholder="Ghi chú các điều khoản thanh toán, nghĩa vụ..." class="w-full border p-1.5 rounded h-16" required></textarea>
-        </div>
-        <div id="dynamicFieldsContainer_CONTRACT" class="grid grid-cols-1 md:grid-cols-3 gap-3 border-t pt-3"></div>
         <div id="contractApprovalLayersSection" class="hidden border-t pt-3">
           <label class="block font-semibold text-gray-600 mb-1">Cấp Phê Duyệt Bổ Sung</label>
           <p class="text-[11px] text-gray-500 italic mb-1.5">Chọn CỤ THỂ những ai (trong số người admin đã gán vào nhóm đó, mục "Nhóm Phê Duyệt HĐ") cho từng lớp đã tick ở "Phê duyệt" — mỗi lớp cộng thêm 1 bước duyệt vào cuối quy trình gốc theo phòng ban. Các lớp đánh dấu "bắt buộc" do "Cấp Phê Duyệt Cuối Cùng" quyết định, không thể bỏ tick.</p>
@@ -1365,12 +1392,13 @@ input[data-sdd-list] {
             <label class="block font-semibold text-gray-600 mb-1">Thiết Bị Hỗ Trợ Yêu Cầu</label>
             <input id="meetingEquipment" placeholder="Máy chiếu, Micro không dây, Zoom online..." class="w-full border p-1.5 rounded">
           </div>
+          <div class="md:col-span-3">
+            <label class="block font-semibold text-gray-600 mb-1">Nội Dung / Chương Trình Họp Chi Tiết (Agenda)</label>
+            <textarea id="meetingAgenda" placeholder="1. Đánh giá tuần qua... 2. Kế hoạch tuần tới..." class="w-full border p-1.5 rounded h-16" required></textarea>
+          </div>
+          <!-- class "contents" — cùng khuôn dynamicFieldsContainer_SUBMISSION, xem chú thích ở đó. -->
+          <div id="dynamicFieldsContainer_MEETING_ROOM" class="contents"></div>
         </div>
-        <div>
-          <label class="block font-semibold text-gray-600 mb-1">Nội Dung / Chương Trình Họp Chi Tiết (Agenda)</label>
-          <textarea id="meetingAgenda" placeholder="1. Đánh giá tuần qua... 2. Kế hoạch tuần tới..." class="w-full border p-1.5 rounded h-16" required></textarea>
-        </div>
-        <div id="dynamicFieldsContainer_MEETING_ROOM" class="grid grid-cols-1 md:grid-cols-3 gap-3 border-t pt-3"></div>
         <div class="flex justify-end">
           <button type="submit" class="bg-emerald-600 text-white px-5 py-2 rounded font-bold hover:bg-emerald-700">Gửi phê duyệt</button>
         </div>
@@ -1709,6 +1737,12 @@ input[data-sdd-list] {
             <label class="block font-semibold text-gray-600 mb-1">Thư Ký</label>
             <input id="minutesSecretary" placeholder="Họ tên người ghi biên bản" class="w-full border p-1.5 rounded" required>
           </div>
+          <div class="md:col-span-3">
+            <label class="block font-semibold text-gray-600 mb-1">Nội Dung Biên Bản</label>
+            <textarea id="minutesContent" placeholder="Ghi nội dung trao đổi, kết luận từng phần trong cuộc họp..." class="w-full border p-1.5 rounded h-28" required></textarea>
+          </div>
+          <!-- class "contents" — cùng khuôn dynamicFieldsContainer_SUBMISSION, xem chú thích ở đó. -->
+          <div id="dynamicFieldsContainer_MEETING_MINUTES" class="contents"></div>
         </div>
 
         <div class="border-t pt-3 space-y-2">
@@ -1748,11 +1782,6 @@ input[data-sdd-list] {
           <div id="systemUsersDatalist" class="hidden sdd-dropdown" data-sdd-dropdown></div>
         </div>
 
-        <div>
-          <label class="block font-semibold text-gray-600 mb-1">Nội Dung Biên Bản</label>
-          <textarea id="minutesContent" placeholder="Ghi nội dung trao đổi, kết luận từng phần trong cuộc họp..." class="w-full border p-1.5 rounded h-28" required></textarea>
-        </div>
-
         <div class="border-t pt-3 space-y-2">
           <label class="block font-semibold text-gray-600">Ý Kiến Chỉ Đạo (gán trực tiếp cho người thực hiện)</label>
           <p class="text-[11px] text-gray-500 italic">Dòng nào có gán sẵn Người thực hiện sẽ TỰ ĐỘNG được tạo thành Công việc ngay khi lưu biên bản.</p>
@@ -1773,8 +1802,6 @@ input[data-sdd-list] {
           </div>
           <button type="button" onclick="addMinutesDirectiveRow()" class="bg-rose-600 text-white px-3 py-1 rounded text-xs font-bold hover:bg-rose-700">➕ Thêm Ý Kiến Chỉ Đạo</button>
         </div>
-
-        <div id="dynamicFieldsContainer_MEETING_MINUTES" class="grid grid-cols-1 md:grid-cols-3 gap-3 border-t pt-3"></div>
 
         <div class="flex justify-end gap-2">
           <button type="button" id="minutesCancelEditBtn" onclick="cancelEditMeetingMinutes()" class="hidden bg-gray-200 text-gray-700 px-5 py-2 rounded font-bold hover:bg-gray-300">Huỷ Sửa</button>
@@ -2799,6 +2826,8 @@ input[data-sdd-list] {
           <label class="block font-semibold text-gray-600 mb-1">Lịch Đăng (để trống = đăng ngay)</label>
           <input id="internalPublishAt" type="datetime-local" class="w-full border p-1.5 rounded">
         </div>
+        <!-- class "contents" — cùng khuôn dynamicFieldsContainer_SUBMISSION, xem chú thích ở đó. -->
+        <div id="dynamicFieldsContainer_INTERNAL_POST" class="contents"></div>
       </div>
       <div>
         <label class="block font-semibold text-gray-600 mb-1">Nội Dung</label>
@@ -2944,13 +2973,12 @@ input[data-sdd-list] {
             <button type="button" onclick="addCarRoutePoint()" class="mt-1.5 bg-gray-600 text-white px-3 py-1 rounded text-xs font-bold hover:bg-gray-700">+ Thêm Điểm</button>
             <input id="carDestination" type="hidden" required>
           </div>
-        </div>
-
-        <div id="dynamicFieldsContainer_CAR" class="grid grid-cols-1 md:grid-cols-3 gap-3 border-t pt-3"></div>
-
-        <div>
-          <label class="block font-semibold text-gray-600 mb-1">Nội Dung Chi Tiết</label>
-          <textarea id="carReason" placeholder="Diễn giải chi tiết mục đích, công việc cần dùng xe..." class="w-full border p-1.5 rounded h-16" required></textarea>
+          <div class="md:col-span-3">
+            <label class="block font-semibold text-gray-600 mb-1">Nội Dung Chi Tiết</label>
+            <textarea id="carReason" placeholder="Diễn giải chi tiết mục đích, công việc cần dùng xe..." class="w-full border p-1.5 rounded h-16" required></textarea>
+          </div>
+          <!-- class "contents" — cùng khuôn dynamicFieldsContainer_SUBMISSION, xem chú thích ở đó. -->
+          <div id="dynamicFieldsContainer_CAR" class="contents"></div>
         </div>
         <p class="text-[11px] text-gray-500 italic">💡 Loại xe cụ thể, biển kiểm soát và lái xe được phân công sẽ do Phòng Hành Chính điền khi xử lý duyệt — không cần nhập ở bước đăng ký.</p>
         <div class="flex justify-end">
@@ -3797,6 +3825,12 @@ input[data-sdd-list] {
             <label class="block font-semibold text-gray-600 mb-1">Thời Gian Cần Sử Dụng</label>
             <input id="offUsageTime" placeholder="VD: Cần luôn / Trong tháng 9..." class="w-full border p-1.5 rounded">
           </div>
+          <div class="md:col-span-3">
+            <label class="block font-semibold text-gray-600 mb-1">Lý Do Trình & Diễn Giải Chi Tiết / Mục Đích Mua Sắm</label>
+            <textarea id="offReason" placeholder="Cần thiết mua mới / lý do hỏng hóc / hiệu quả đầu tư..." class="w-full border p-1.5 rounded h-16" required></textarea>
+          </div>
+          <!-- class "contents" — cùng khuôn dynamicFieldsContainer_SUBMISSION, xem chú thích ở đó. -->
+          <div id="dynamicFieldsContainer_OFFICE" class="contents"></div>
         </div>
 
         <!-- Bảng nhiều hạng mục — chỉ dùng cho phân hệ Mua Sắm, theo đúng Mẫu BM-TS01 (Phiếu Đề Nghị
@@ -3826,13 +3860,6 @@ input[data-sdd-list] {
             <button type="button" onclick="addOfficeItemRow()" class="bg-teal-600 text-white px-3 py-1 rounded text-xs font-bold hover:bg-teal-700">➕ Thêm Hạng Mục</button>
             <div class="font-bold text-rose-600">Tổng Dự Toán (chưa VAT): <span id="officeItemsTotalDisplay">0</span> VNĐ</div>
           </div>
-        </div>
-
-        <div id="dynamicFieldsContainer_OFFICE" class="grid grid-cols-1 md:grid-cols-3 gap-3 border-t pt-3"></div>
-
-        <div>
-          <label class="block font-semibold text-gray-600 mb-1">Lý Do Trình & Diễn Giải Chi Tiết / Mục Đích Mua Sắm</label>
-          <textarea id="offReason" placeholder="Cần thiết mua mới / lý do hỏng hóc / hiệu quả đầu tư..." class="w-full border p-1.5 rounded h-16" required></textarea>
         </div>
         <div class="flex justify-end">
           <button type="submit" class="bg-teal-600 text-white px-5 py-2 rounded font-bold hover:bg-teal-700">Gửi phê duyệt</button>
@@ -6852,7 +6879,7 @@ const CORE_FIELD_MANIFEST = {
     { id: 'docTitle', label: 'Tên / Tiêu Đề Tài Liệu', required: true },
     { id: 'docVer', label: 'Phiên Bản', required: true },
     { id: 'selDept', label: 'Phòng Ban Trình', required: true },
-    { id: 'selCat', label: 'Phân Loại', required: true },
+    { id: 'selCat', label: 'Phân Loại', required: true, optionsKey: 'cats' },
     { id: 'docFile', label: 'Tệp Tài Liệu', required: true },
     { id: 'docSummary', label: 'Trích Lục / Tóm Tắt Nội Dung', required: true }
   ],
@@ -6984,6 +7011,62 @@ function saveCoreFieldOptionsList(fieldDef, newLabels) {
   }
   syncStorage(fieldDef.optionsKey);
   populateDropdowns();
+}
+
+// ==========================================
+// THỨ TỰ HIỂN THỊ THỐNG NHẤT (mặc định + bổ sung TRỘN LẪN, sắp xếp tự do) — mảng id, lưu ở
+// DB.formTemplates['__order__'+tabKey]. Trước đây trường mặc định LUÔN đứng trước (đúng thứ tự khai ở
+// CORE_FIELD_MANIFEST), trường bổ sung LUÔN đứng sau (chỉ tự sắp xếp được với nhau) — giờ gộp 1 danh
+// sách duy nhất, admin kéo bất kỳ trường nào (kể cả mặc định) tới vị trí bất kỳ. Cách áp dụng: CHỈ set
+// CSS `order` lên khối bọc (div) của từng trường trên form nghiệp vụ thật — KHÔNG di chuyển gì trong cây
+// DOM — nên không đụng bất kỳ logic đọc/ghi nào đang tra theo id (querySelector/closest/required...),
+// xem applyFieldOrder() ngay dưới.
+function getUnifiedFieldOrder(tabKey) {
+  const tab = FORM_TABS.find(t => t.key === tabKey);
+  const coreIds = tab && CORE_FIELD_MANIFEST[tab.coreKey] ? CORE_FIELD_MANIFEST[tab.coreKey].map(f => f.id) : [];
+  const customIds = (DB.formTemplates[tabKey] || []).map(f => f.id);
+  const defaultOrder = [...coreIds, ...customIds];
+  const saved = DB.formTemplates['__order__' + tabKey];
+  if (!Array.isArray(saved)) return defaultOrder;
+  // Trường nào có mặt THẬT trong core/custom hiện tại nhưng chưa có trong mảng đã lưu (mới thêm sau lúc
+  // admin từng sắp xếp) -> vẫn phải hiện, đưa xuống cuối theo đúng thứ tự mặc định — không bao giờ để
+  // "rơi mất" 1 trường khỏi form thật chỉ vì nó chưa có mặt trong mảng thứ tự đã lưu. Ngược lại, id đã lưu
+  // nhưng không còn tồn tại (trường bổ sung đã bị xóa) tự động bị lọc bỏ luôn ở đây.
+  const validIds = new Set(defaultOrder);
+  const validSaved = saved.filter(id => validIds.has(id));
+  const savedSet = new Set(validSaved);
+  const missing = defaultOrder.filter(id => !savedSet.has(id));
+  return [...validSaved, ...missing];
+}
+
+function setUnifiedFieldOrder(tabKey, orderArr) {
+  DB.formTemplates['__order__' + tabKey] = orderArr;
+  syncStorage('formTemplates');
+}
+
+function moveUnifiedField(tabKey, fieldId, direction) {
+  const arr = getUnifiedFieldOrder(tabKey);
+  const idx = arr.indexOf(fieldId);
+  const swapWith = idx + direction;
+  if (idx < 0 || swapWith < 0 || swapWith >= arr.length) return;
+  [arr[idx], arr[swapWith]] = [arr[swapWith], arr[idx]];
+  setUnifiedFieldOrder(tabKey, arr);
+  logSystemAction('CONFIG', 'REORDER_FIELD', `Đổi vị trí trường [${fieldId}] trong biểu mẫu ${tabKey}`, 'SUCCESS', fieldId);
+  renderFormFieldsTable();
+}
+
+// Áp thứ tự đã lưu lên form nghiệp vụ THẬT — gọi lại mỗi khi form hiện ra/đổi tab con VÀ ngay sau mỗi lần
+// renderDynamicInputsForModule(tabKey,...) (trường bổ sung vừa được vẽ lại thì phải áp order lại luôn).
+// Trường mặc định: tìm khối bọc qua document.getElementById(id).closest('div') — ĐÚNG khuôn
+// applyCoreFieldCustomizations() đang dùng, đảm bảo luôn trỏ cùng 1 khối. Trường bổ sung: tìm qua
+// [data-field-order-id="id"] (gắn ở renderDynamicInputsForModule()).
+function applyFieldOrder(tabKey) {
+  const order = getUnifiedFieldOrder(tabKey);
+  order.forEach((id, idx) => {
+    const core = document.getElementById(id);
+    const wrap = core ? core.closest('div') : document.querySelector(`[data-field-order-id="${CSS.escape(id)}"]`);
+    if (wrap) wrap.style.order = idx;
+  });
 }
 // Tài liệu GỐC đang mở rộng (hiện các version con) trong "Danh Sách Tài Liệu Trong Hệ Thống" — id của
 // tài liệu gốc, xem toggleDocFamily()/renderDocs().
@@ -13172,7 +13255,7 @@ async function uploadFileToServer(file, moduleKey) {
 const UPLOAD_MODULE_KEY_MAP = {
   DOC: 'doc', SUBMISSION: 'submission', CONTRACT_APPROVAL: 'contract', CONTRACT_MANAGE: 'contract',
   MEETING_ROOM: 'meeting', MEETING_MINUTES: 'minutes', CAR: 'car',
-  MUA_BAN: 'office', SUA_CHUA: 'office', DAU_TU: 'office'
+  MUA_BAN: 'office', SUA_CHUA: 'office', DAU_TU: 'office', INTERNAL_POST: 'internal'
 };
 function mapFormModKeyToUploadModule(modKey) {
   return UPLOAD_MODULE_KEY_MAP[modKey] || String(modKey || '').toLowerCase();
@@ -21208,6 +21291,9 @@ const FIELD_TYPE_LABELS = {
   file: 'Tải 1 tệp', multifile: 'Tải nhiều tệp'
 };
 
+// Bảng liệt kê MỌI trường (mặc định + bổ sung) theo ĐÚNG 1 thứ tự thống nhất (getUnifiedFieldOrder()) —
+// trước đây tách 2 khối cố định (coreRows luôn trước, customRows luôn sau, chỉ customRows có ▲▼), giờ
+// gộp thành 1 danh sách duy nhất, ▲▼ (moveUnifiedField) áp dụng đồng nhất cho MỌI dòng.
 function renderFormFieldsTable() {
   const tbody = document.getElementById('formFieldsTableBody');
   if (!tbody) return;
@@ -21217,13 +21303,22 @@ function renderFormFieldsTable() {
   const coreManifest = coreKey ? (CORE_FIELD_MANIFEST[coreKey] || []) : [];
   const coreOverrides = coreKey ? getCoreFieldOverrides(coreKey) : {};
   const customFields = DB.formTemplates[activeFormTab] || [];
+  const coreById = new Map(coreManifest.map(f => [f.id, f]));
+  const customById = new Map(customFields.map(f => [f.id, f]));
+  const order = getUnifiedFieldOrder(activeFormTab);
 
-  const coreRows = coreManifest.map(f => {
-    const override = coreOverrides[f.id] || {};
-    const label = (typeof override.label === 'string' && override.label.trim()) ? override.label.trim() : f.label;
-    const required = ('required' in override) ? !!override.required : f.required;
-    const optionsDisplay = f.optionsKey ? escapeHtml(getCoreFieldOptionsList(f).join(', ')) : '-';
-    return `
+  const rows = order.map((id, idx) => {
+    const moveButtons = `
+        <button onclick="moveUnifiedField('${activeFormTab}', '${id}', -1)" ${idx === 0 ? 'disabled class="opacity-30 cursor-not-allowed"' : 'class="hover:text-gray-800"'} title="Đưa lên trên">▲</button>
+        <button onclick="moveUnifiedField('${activeFormTab}', '${id}', 1)" ${idx === order.length - 1 ? 'disabled class="opacity-30 cursor-not-allowed"' : 'class="hover:text-gray-800"'} title="Đưa xuống dưới">▼</button>`;
+
+    const f = coreById.get(id);
+    if (f) {
+      const override = coreOverrides[f.id] || {};
+      const label = (typeof override.label === 'string' && override.label.trim()) ? override.label.trim() : f.label;
+      const required = ('required' in override) ? !!override.required : f.required;
+      const optionsDisplay = f.optionsKey ? escapeHtml(getCoreFieldOptionsList(f).join(', ')) : '-';
+      return `
     <tr class="border-b hover:bg-gray-50 bg-gray-50/50">
       <td class="p-2 border font-mono font-bold text-gray-700">${escapeHtml(f.id)}</td>
       <td class="p-2 border">
@@ -21235,31 +21330,30 @@ function renderFormFieldsTable() {
         <input type="checkbox" ${required ? 'checked' : ''} onchange="updateCoreFieldOverride('${coreKey}', '${f.id}', 'required', this.checked)" class="w-4 h-4">
       </td>
       <td class="p-2 border text-center"><span class="text-gray-400">Mặc định</span></td>
-      <td class="p-2 border text-center whitespace-nowrap">
-        <button type="button" onclick="editCoreField('${coreKey}', '${f.id}')" class="text-blue-600 font-bold hover:underline">✏️ Sửa</button>
+      <td class="p-2 border text-center whitespace-nowrap">${moveButtons}
+        <button type="button" onclick="editCoreField('${coreKey}', '${f.id}')" class="text-blue-600 font-bold hover:underline ml-1">✏️ Sửa</button>
+      </td>
+    </tr>`;
+    }
+
+    const cf = customById.get(id);
+    if (!cf) return ''; // id mồ côi (đã xóa) — getUnifiedFieldOrder() tự lọc, không nên xảy ra, phòng hờ.
+    return `
+    <tr class="border-b hover:bg-gray-50">
+      <td class="p-2 border font-mono font-bold text-gray-700">${escapeHtml(cf.id)}</td>
+      <td class="p-2 border font-bold text-gray-800">${escapeHtml(cf.label)}</td>
+      <td class="p-2 border">${escapeHtml(FIELD_TYPE_LABELS[cf.type] || cf.type)}</td>
+      <td class="p-2 border">${cf.options && cf.options.length ? escapeHtml(cf.options.join(', ')) : '-'}</td>
+      <td class="p-2 border text-center font-bold">${cf.required ? '✅ Có' : 'Không'}</td>
+      <td class="p-2 border text-center"><span class="text-rose-600 font-bold">Bổ Sung</span></td>
+      <td class="p-2 border text-center whitespace-nowrap">${moveButtons}
+        <button onclick="editCustomField('${cf.id}')" class="text-blue-600 font-bold hover:underline ml-1">Sửa</button>
+        <button onclick="deleteCustomField('${cf.id}')" class="text-red-600 font-bold hover:underline ml-1">Xóa</button>
       </td>
     </tr>`;
   }).join('');
 
-  const customRows = customFields.length === 0 ? '' : customFields.map((f, idx) => `
-    <tr class="border-b hover:bg-gray-50">
-      <td class="p-2 border font-mono font-bold text-gray-700">${escapeHtml(f.id)}</td>
-      <td class="p-2 border font-bold text-gray-800">${escapeHtml(f.label)}</td>
-      <td class="p-2 border">${escapeHtml(FIELD_TYPE_LABELS[f.type] || f.type)}</td>
-      <td class="p-2 border">${f.options && f.options.length ? escapeHtml(f.options.join(', ')) : '-'}</td>
-      <td class="p-2 border text-center font-bold">${f.required ? '✅ Có' : 'Không'}</td>
-      <td class="p-2 border text-center"><span class="text-rose-600 font-bold">Bổ Sung</span></td>
-      <td class="p-2 border text-center whitespace-nowrap">
-        <button onclick="moveCustomField('${f.id}', -1)" ${idx === 0 ? 'disabled class="opacity-30 cursor-not-allowed"' : 'class="hover:text-gray-800"'} title="Đưa lên trên">▲</button>
-        <button onclick="moveCustomField('${f.id}', 1)" ${idx === customFields.length - 1 ? 'disabled class="opacity-30 cursor-not-allowed"' : 'class="hover:text-gray-800"'} title="Đưa xuống dưới">▼</button>
-        <button onclick="editCustomField('${f.id}')" class="text-blue-600 font-bold hover:underline ml-1">Sửa</button>
-        <button onclick="deleteCustomField('${f.id}')" class="text-red-600 font-bold hover:underline ml-1">Xóa</button>
-      </td>
-    </tr>
-  `).join('');
-
-  const emptyRow = (coreRows === '' && customRows === '') ? `<tr><td colspan="7" class="text-center p-4 text-gray-500 italic">Chưa có trường nào.</td></tr>` : '';
-  tbody.innerHTML = coreRows + customRows + emptyRow;
+  tbody.innerHTML = rows || `<tr><td colspan="7" class="text-center p-4 text-gray-500 italic">Chưa có trường nào.</td></tr>`;
 }
 
 function getDynamicContainerId(modKey) {
@@ -21274,6 +21368,7 @@ function renderDynamicInputsForModule(modKey, containerId) {
   const fields = DB.formTemplates[modKey] || [];
   if (fields.length === 0) {
     container.innerHTML = '';
+    applyFieldOrder(modKey); // vẫn cần áp lại thứ tự cho riêng các trường MẶC ĐỊNH dù không có trường bổ sung nào.
     return;
   }
 
@@ -21298,12 +21393,13 @@ function renderDynamicInputsForModule(modKey, containerId) {
     }
 
     return `
-      <div>
+      <div data-field-order-id="${escapeHtml(f.id)}">
         <label class="block font-semibold text-gray-600 mb-1">${escapeHtml(f.label)} ${f.required ? '<span class="text-red-500">*</span>' : ''}</label>
         ${inputHTML}
       </div>
     `;
   }).join('');
+  applyFieldOrder(modKey);
 }
 
 // Thu thập dữ liệu các trường bổ sung đã nhập trong form nghiệp vụ. Bất đồng bộ vì trường kiểu
@@ -21340,6 +21436,31 @@ async function collectDynamicFieldsData(modKey, containerId) {
     }
   }
   return result;
+}
+
+// Điền lại giá trị cũ vào các trường bổ sung khi mở form Sửa (hiện chỉ Truyền Thông Nội Bộ - Chuyên Đề
+// có luồng "Sửa" thật sự mở lại chính form Tạo — các module còn lại chỉ tạo mới/bổ sung phiên bản, xem
+// editInternalPostUI()). Khoá theo data-dyn-label — cùng khoá collectDynamicFieldsData() dùng để đọc
+// lại, khớp đúng customData đã lưu (key theo NHÃN hiển thị, không phải field.id). Bỏ qua trường kiểu
+// Tải tệp/Tải nhiều tệp — trình duyệt không cho gán lại giá trị input[type=file] bằng JS, không chọn
+// lại tệp mới nghĩa là giữ nguyên tệp cũ (submitInternalPost() gộp customData mới vào customData cũ).
+function prefillDynamicFieldsData(containerId, data) {
+  if (!data) return;
+  const container = document.getElementById(containerId);
+  if (!container) return;
+  container.querySelectorAll('[data-dyn-id]').forEach(input => {
+    const label = input.getAttribute('data-dyn-label');
+    if (!(label in data)) return;
+    const val = data[label];
+    const type = input.getAttribute('data-dyn-type');
+    if (type === 'file' || type === 'multifile') return;
+    if (type === 'multiselect') {
+      const arr = Array.isArray(val) ? val.map(String) : [];
+      Array.from(input.options).forEach(o => { o.selected = arr.includes(o.value); });
+    } else {
+      input.value = val;
+    }
+  });
 }
 
 // ==========================================
@@ -28394,6 +28515,7 @@ function setInternalSubTab(subTab) {
   document.getElementById('internalCategoryShareField').classList.toggle('hidden', subTab !== 'SHARE');
   document.getElementById('internalPublishAtField').classList.toggle('hidden', subTab !== 'NEWS');
   populateInternalPostCategorySelects();
+  renderDynamicInputsForModule('INTERNAL_POST', 'dynamicFieldsContainer_INTERNAL_POST');
 
   const icons = { NEWS: '📰', TRAINING: '🎓', SHARE: '💬' };
   document.getElementById('internalFormTitle').innerText = `📝 Đăng ${INTERNAL_TYPE_LABELS[subTab]} Mới`;
@@ -28481,8 +28603,24 @@ async function submitInternalPost(e) {
   // payload gửi đi — editInternalPost() (lib/recordActions.js) chỉ ghi đè field CÓ MẶT trong payload,
   // undefined nghĩa là "giữ nguyên đính kèm cũ", không tự ý xoá đính kèm bài đã có.
 
+  // Trường bổ sung (Biểu Mẫu > Truyền Thông Nội Bộ - Chuyên Đề) — chỉ NEWS/SHARE còn hiện
+  // #dynamicFieldsContainer_INTERNAL_POST (TRAINING/RECRUITMENT return sớm ở trên với form riêng).
+  let customData;
+  try {
+    customData = await collectDynamicFieldsData('INTERNAL_POST');
+  } catch (err) {
+    return alert(`⛔ ${err.message}`);
+  }
+  // Sửa bài: gộp với customData cũ của bài (thay vì ghi đè toàn bộ) — cùng lý do với attachment ở
+  // trên, tránh mất giá trị trường kiểu Tải tệp không được chọn lại (collectDynamicFieldsData() bỏ
+  // hẳn field đó khỏi kết quả khi không có tệp mới, xem hàm này ở phần Biểu Mẫu).
   if (isEditing) {
-    const payload = { title, content, draft: isDraftSubmit };
+    const existingPost = DB.internalPosts.find(x => x.id === editingInternalPostId);
+    customData = { ...(existingPost?.customData || {}), ...customData };
+  }
+
+  if (isEditing) {
+    const payload = { title, content, draft: isDraftSubmit, customData };
     if (attachment !== undefined) payload.attachment = attachment;
     if (type === 'TRAINING') payload.training = training;
     if (type === 'NEWS' || type === 'SHARE') payload.postCategory = postCategory;
@@ -28512,6 +28650,7 @@ async function submitInternalPost(e) {
     title, content,
     attachment,
     training,
+    customData,
     createdAt: new Date().toLocaleString('vi-VN'),
     comments: [],
     likes: [],
@@ -28585,6 +28724,7 @@ function editInternalPostUI(id) {
     const sel = document.getElementById('internalPostCategoryShare');
     if (sel) sel.value = p.postCategory || '';
   }
+  prefillDynamicFieldsData('dynamicFieldsContainer_INTERNAL_POST', p.customData);
 
   document.getElementById('internalFormTitle').innerText = `✏️ Sửa ${INTERNAL_TYPE_LABELS[p.type]}`;
   document.getElementById('internalSubmitBtn').innerText = p.status === 'NEED_INFO' ? 'Gửi Lại' : 'Gửi';

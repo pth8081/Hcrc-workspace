@@ -37,10 +37,14 @@ const ADMIN_ONLY_KEYS = new Set([
   // cùng khuôn carDeptWorkflows/vppDeptWorkflows ở trên, chỉ sửa được ở màn Quy Trình & Phê Duyệt (admin).
   'budgetDeptWorkflows',
   // submissionTypes: chi phối tra cứu quy trình theo loại (submissionTypeDeptWorkflows) — không để
-  // user thường tự đổi/xoá key đang được cấu hình quy trình riêng. contractTypes/carTypes/jobTitles
-  // KHÔNG thêm vào đây (giữ đúng độ mở như depts/cats — thuần danh sách nhãn hiển thị, không có bước
-  // tra cứu phụ thuộc nào khác dựa vào giá trị của chúng).
+  // user thường tự đổi/xoá key đang được cấu hình quy trình riêng.
   'submissionTypes',
+  // contractType/carType (CORE_FIELD_MANIFEST.CONTRACT/CAR, optionsKey) — cùng khuôn submissionTypes ở
+  // trên: từ khi cho phép sửa danh sách lựa chọn của các trường mặc định này qua màn Biểu Mẫu (chỉ
+  // Admin, xem CLAUDE.md/saveCoreFieldOptionsList() ở index.html), ghi trực tiếp POST /api/data/<key>
+  // PHẢI khoá lại đúng độ mở của màn đó — trước đây bị bỏ sót (coi nhầm là danh sách nhãn hiển thị
+  // thuần như depts/cats), cho phép bất kỳ tài khoản nào đã đăng nhập tự đổi 2 danh sách này.
+  'contractTypes', 'carTypes',
   // internalNewsCategories/internalShareCategories: "chuyên đề" cho Nhịp Sống HCRC/Góc Chia Sẻ (module
   // Truyền Thông Nội Bộ) — cùng lý do submissionTypes ở trên, quyết định trực tiếp giá trị postCategory
   // hợp lệ khi tạo bài (xem createValidation.js internalPosts.extraValidate).
