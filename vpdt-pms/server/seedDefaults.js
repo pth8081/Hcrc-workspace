@@ -35,6 +35,7 @@ async function seedDefaults() {
   await migrateLegacySystemLogs();
   await migrateLegacyTasks();
   await migrateAllLegacyCollections();
+  await migrateDefaultStorePermGroup();
 }
 
 // Trước đây mật khẩu lưu plaintext (cả trong seed mặc định lẫn dữ liệu do admin tạo trước khi có
@@ -88,6 +89,26 @@ async function flagKnownDefaultPasswords() {
     await setAppDataValue('users', flagged);
     console.log('   ↳ Đã đánh dấu bắt buộc đổi mật khẩu cho các tài khoản còn dùng mật khẩu mặc định.');
   }
+}
+
+// Seed 1 Nhóm Phân Quyền mặc định scope STORE ("Nhân Viên Siêu Thị") cho DB đã tồn tại từ trước — riêng
+// bằng vòng lặp DEFAULTS[key] ở trên KHÔNG đủ, vì nó chỉ ghi khi key "permGroups" CHƯA TỪNG tồn tại
+// trong AppData; DB thật đang chạy production gần như chắc chắn ĐÃ có row "permGroups" (kể cả khi giá
+// trị đang là mảng rỗng []) nên thay đổi permGroups mặc định trong defaults.js không tự động chạm tới
+// DB đó — cần migration idempotent riêng này để chạy đúng 1 lần trên mọi DB hiện có.
+async function migrateDefaultStorePermGroup() {
+  const groups = await getAppDataValue('permGroups');
+  if (!Array.isArray(groups)) return;
+  if (groups.some(g => g.scope === 'STORE')) return; // đã có rồi (kể cả do admin tự tạo/tag) -> không seed thêm
+  const seeded = {
+    id: 'grp_store_default',
+    name: 'Nhân Viên Siêu Thị (Mặc Định)',
+    description: 'Nhóm quyền mặc định cho tài khoản nhân viên siêu thị tạo qua sub-tab "Quản Lý Nhân Viên Siêu Thị" (Đồng Phục) — không có quyền đặc biệt nào, chỉ dùng để phân loại/gán mặc định.',
+    perms: {},
+    scope: 'STORE'
+  };
+  await setAppDataValue('permGroups', [...groups, seeded]);
+  console.log('   ↳ Đã thêm Nhóm Phân Quyền mặc định "Nhân Viên Siêu Thị" (scope STORE).');
 }
 
 module.exports = { seedDefaults };
