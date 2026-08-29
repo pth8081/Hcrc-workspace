@@ -140,6 +140,12 @@ function editContract(payload, user, contract, hasAddenda, rootDept, appData, ro
     contract.fileType = payload.fileType;
     contract.fileUrl = payload.fileUrl;
   }
+  // Trường bổ sung (Biểu Mẫu) — form Sửa (openEditContract()/updateContractReq() ở index.html) gộp sẵn
+  // customData mới với customData cũ trước khi gửi lên (giữ giá trị trường kiểu Tải tệp không được chọn
+  // lại), nên ở đây chỉ cần ghi đè thẳng khi payload có mặt field này.
+  if (payload.customData !== undefined) {
+    contract.customData = payload.customData;
+  }
   contract.lastEditedBy = user.username;
   contract.lastEditedAt = nowVN();
   // Đổi ngày hết hạn thì tính lại từ đầu các mốc đã nhắc, tránh bỏ sót/lặp mốc mới (khớp logic cũ).
@@ -639,7 +645,7 @@ function canDeleteMinutes(user) {
   return !!user.perms?.admin;
 }
 
-const MINUTES_EDITABLE_FIELDS = ['linkedMeetingId', 'title', 'time', 'location', 'chair', 'secretary', 'attendees', 'content', 'directives'];
+const MINUTES_EDITABLE_FIELDS = ['linkedMeetingId', 'title', 'time', 'location', 'chair', 'secretary', 'attendees', 'content', 'directives', 'customData'];
 
 function editMinutes(payload, user, minutes) {
   if (!canEditMinutes(user, minutes)) {

@@ -16263,6 +16263,9 @@ function openEditContract(contractId) {
   document.getElementById('contractManageFormWrap').classList.remove('hidden');
   document.getElementById('contractOpMode').value = 'NEW';
   onContractOpModeChange();
+  // onContractOpModeChange() ở trên đã render lại (trống) đúng bộ trường bổ sung CONTRACT_APPROVAL (chế
+  // độ Sửa luôn ép về NEW) — điền lại giá trị cũ ngay sau đó, cùng khuôn editInternalPostUI().
+  prefillDynamicFieldsData('dynamicFieldsContainer_CONTRACT', c.customData);
 
   document.getElementById('contractCode').value = c.code;
   document.getElementById('contractDept').value = c.dept;
@@ -16358,6 +16361,17 @@ async function updateContractReq(e) {
   // đợt thanh toán trên form BỊ ÂM THẦM BỎ QUA (server vẫn giữ nguyên paymentInstallments cũ), người
   // dùng tưởng đã lưu đợt mới nhưng thực ra không.
   editPayload.paymentInstallments = collectContractInstallments();
+  // Trường bổ sung (Biểu Mẫu) — trước đây form Sửa không đọc lại container này (KHÔNG hề gửi customData
+  // lên server), nên mọi chỉnh sửa/nhập mới ở trường bổ sung khi Sửa hợp đồng bị ÂM THẦM BỎ QUA, cùng
+  // lỗi paymentInstallments đã vá ở trên. Gộp với customData cũ (c.customData) để giữ nguyên giá trị
+  // trường kiểu Tải tệp không được chọn lại — cùng khuôn submitInternalPost().
+  let customData;
+  try {
+    customData = { ...(c.customData || {}), ...(await collectDynamicFieldsData('CONTRACT_APPROVAL', 'dynamicFieldsContainer_CONTRACT')) };
+  } catch (err) {
+    return alert(`⛔ ${err.message}`);
+  }
+  editPayload.customData = customData;
   if (newFile) {
     let uploaded;
     try {
@@ -18612,6 +18626,10 @@ function openEditMeetingMinutes(id) {
   minutesDirectives = (m.directives || []).map(d => ({ ...d, id: d.id || genMinutesDirectiveId(), collaboratorAttendeeIds: Array.isArray(d.collaboratorAttendeeIds) ? [...d.collaboratorAttendeeIds] : [] }));
   renderMinutesDirectivesTable();
 
+  // Trường bổ sung (Biểu Mẫu) — render lại (trống) rồi điền lại giá trị cũ, cùng khuôn openEditContract().
+  renderDynamicInputsForModule('MEETING_MINUTES', 'dynamicFieldsContainer_MEETING_MINUTES');
+  prefillDynamicFieldsData('dynamicFieldsContainer_MEETING_MINUTES', m.customData);
+
   document.getElementById('minutesSubmitBtn').innerText = '💾 Cập Nhật Biên Bản';
   document.getElementById('minutesCancelEditBtn').classList.remove('hidden');
   document.getElementById('minutesForm').scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -18625,6 +18643,7 @@ function cancelEditMeetingMinutes() {
   minutesAttendeesRows = [];
   renderMinutesDirectivesTable();
   renderAttendeesTable();
+  renderDynamicInputsForModule('MEETING_MINUTES', 'dynamicFieldsContainer_MEETING_MINUTES');
   document.getElementById('minutesSubmitBtn').innerText = 'Lưu Biên Bản Họp';
   document.getElementById('minutesCancelEditBtn').classList.add('hidden');
 }
@@ -18639,6 +18658,16 @@ async function updateMeetingMinutes(e) {
 
   const linkedMeetingRaw = document.getElementById('minutesLinkedMeeting').value;
   const attendees = minutesAttendeesRows.filter(a => a.name.trim()).map(a => ({ ...a }));
+
+  // Trường bổ sung (Biểu Mẫu) — trước đây form Sửa không đọc lại container này, mọi chỉnh sửa/nhập mới
+  // ở trường bổ sung khi Sửa biên bản họp bị ÂM THẦM BỎ QUA. Gộp với customData cũ (m.customData) để
+  // giữ nguyên giá trị trường kiểu Tải tệp không được chọn lại — cùng khuôn updateContractReq().
+  let customData;
+  try {
+    customData = { ...(m.customData || {}), ...(await collectDynamicFieldsData('MEETING_MINUTES')) };
+  } catch (err) {
+    return alert(`⛔ ${err.message}`);
+  }
 
   // Giữ lại cờ taskCreated của các dòng chỉ đạo CŨ theo id ổn định — để nếu sau này biên bản được
   // "Giao việc" (assignMinutesTasks(), nút thủ công ở danh sách) thì không tạo trùng Công việc cho
@@ -18662,7 +18691,7 @@ async function updateMeetingMinutes(e) {
     chair: document.getElementById('minutesChair').value.trim(),
     secretary: document.getElementById('minutesSecretary').value.trim(),
     attendees, content: document.getElementById('minutesContent').value.trim(),
-    directives
+    directives, customData
   };
 
   let updated;
