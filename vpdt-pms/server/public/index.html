@@ -1889,6 +1889,13 @@ input[data-sdd-list] {
               <input id="tcTitle" class="w-full border p-1.5 rounded" required>
             </div>
             <div>
+              <label class="block font-semibold text-gray-600 mb-1">Kiểu Lớp Học</label>
+              <select id="tcMode" onchange="onTrainingClassModeChange()" class="w-full border p-1.5 rounded bg-white">
+                <option value="ONLINE">💻 Online</option>
+                <option value="OFFLINE">🏫 Offline</option>
+              </select>
+            </div>
+            <div id="tcInstructorFieldWrap">
               <label class="block font-semibold text-gray-600 mb-1">Giảng Viên / Người Phụ Trách (tuỳ chọn, phải là tài khoản hệ thống)</label>
               <input id="tcInstructor" data-sdd-list="systemUsersDatalist" autocomplete="off" oninput="resolveTrainingInstructorInput(this.value)" placeholder="Gõ tên hoặc tài khoản để tìm..." class="w-full border p-1.5 rounded">
               <input type="hidden" id="tcInstructorUsername">
@@ -1905,16 +1912,9 @@ input[data-sdd-list] {
               <label class="block font-semibold text-gray-600 mb-1">Thời Gian Kết Thúc</label>
               <input id="tcEnd" type="datetime-local" class="w-full border p-1.5 rounded">
             </div>
-            <div>
+            <div id="tcLocationFieldWrap">
               <label class="block font-semibold text-gray-600 mb-1">Địa Điểm / Hình Thức</label>
-              <input id="tcLocation" placeholder="Phòng đào tạo A / Trực tuyến..." class="w-full border p-1.5 rounded">
-            </div>
-            <div>
-              <label class="block font-semibold text-gray-600 mb-1">Kiểu Lớp Học</label>
-              <select id="tcMode" onchange="onTrainingClassModeChange()" class="w-full border p-1.5 rounded bg-white">
-                <option value="ONLINE">💻 Online</option>
-                <option value="OFFLINE">🏫 Offline</option>
-              </select>
+              <input id="tcLocation" placeholder="Phòng đào tạo A..." class="w-full border p-1.5 rounded">
             </div>
             <div>
               <label class="block font-semibold text-gray-600 mb-1">Hạn Đăng Ký</label>
@@ -1950,6 +1950,19 @@ input[data-sdd-list] {
                 <input id="tcInviteListPickInput" data-sdd-list="systemUsersDatalist" autocomplete="off" placeholder="Gõ tên hoặc tài khoản..." class="flex-1 border p-1.5 rounded" onkeydown="if(event.key==='Enter'){event.preventDefault();addTrainingInviteListPick();}">
                 <button type="button" onclick="addTrainingInviteListPick()" class="bg-gray-200 hover:bg-gray-300 px-3 py-1.5 rounded font-bold">Thêm</button>
               </div>
+              <div class="flex items-center gap-3 flex-wrap text-xs pt-2 border-t">
+                <a href="/api/training/roster-template" class="text-indigo-600 font-bold hover:underline">⬇️ Tải Mẫu Excel</a>
+                <input id="tcInviteFileInput" type="file" accept=".xlsx,.xls,.csv" onchange="onTrainingInviteFileChange(event, 'tc')">
+                <button type="button" onclick="exportTrainingInviteList('tc')" class="text-emerald-700 font-bold hover:underline">📥 Xuất Excel Danh Sách Này</button>
+              </div>
+              <p id="tcInviteFileStatus" class="text-xs text-gray-500"></p>
+              <div id="tcInviteFilePreviewWrap" class="hidden border rounded max-h-40 overflow-y-auto">
+                <table class="w-full text-xs">
+                  <thead><tr class="bg-gray-100 text-left sticky top-0"><th class="p-1">Tài Khoản</th><th class="p-1">Họ Tên</th><th class="p-1">Trạng Thái</th></tr></thead>
+                  <tbody id="tcInviteFilePreviewBody"></tbody>
+                </table>
+              </div>
+              <button type="button" id="tcInviteFileAddBtn" onclick="addTrainingInviteFileFound('tc')" class="hidden bg-gray-200 hover:bg-gray-300 px-3 py-1.5 rounded text-xs font-bold">Thêm những người hợp lệ vào danh sách</button>
               <div id="tcInviteListStagedList" class="border rounded p-2 min-h-[2.5rem] flex flex-wrap gap-1.5 bg-white"></div>
             </div>
           </div>
@@ -2551,7 +2564,7 @@ input[data-sdd-list] {
               <label class="block font-semibold text-gray-600 mb-1">Tên Lớp Học</label>
               <input id="teTitle" class="w-full border p-1.5 rounded" required>
             </div>
-            <div>
+            <div id="teInstructorFieldWrap">
               <label class="block font-semibold text-gray-600 mb-1">Giảng Viên / Người Phụ Trách</label>
               <input id="teInstructor" data-sdd-list="systemUsersDatalist" autocomplete="off" oninput="resolveTrainingEditInstructorInput(this.value)" placeholder="Gõ tên hoặc tài khoản để tìm..." class="w-full border p-1.5 rounded">
               <input type="hidden" id="teInstructorUsername">
@@ -2568,7 +2581,7 @@ input[data-sdd-list] {
               <label class="block font-semibold text-gray-600 mb-1">Thời Gian Kết Thúc</label>
               <input id="teEnd" type="datetime-local" class="w-full border p-1.5 rounded">
             </div>
-            <div>
+            <div id="teLocationFieldWrap">
               <label class="block font-semibold text-gray-600 mb-1">Địa Điểm / Hình Thức</label>
               <input id="teLocation" class="w-full border p-1.5 rounded">
             </div>
@@ -2606,6 +2619,19 @@ input[data-sdd-list] {
                 <input id="teInviteListPickInput" data-sdd-list="systemUsersDatalist" autocomplete="off" placeholder="Gõ tên hoặc tài khoản..." class="flex-1 border p-1.5 rounded" onkeydown="if(event.key==='Enter'){event.preventDefault();addTrainingEditInviteListPick();}">
                 <button type="button" onclick="addTrainingEditInviteListPick()" class="bg-gray-200 hover:bg-gray-300 px-3 py-1.5 rounded font-bold">Thêm</button>
               </div>
+              <div class="flex items-center gap-3 flex-wrap text-xs pt-2 border-t">
+                <a href="/api/training/roster-template" class="text-indigo-600 font-bold hover:underline">⬇️ Tải Mẫu Excel</a>
+                <input id="teInviteFileInput" type="file" accept=".xlsx,.xls,.csv" onchange="onTrainingInviteFileChange(event, 'te')">
+                <button type="button" onclick="exportTrainingInviteList('te')" class="text-emerald-700 font-bold hover:underline">📥 Xuất Excel Danh Sách Này</button>
+              </div>
+              <p id="teInviteFileStatus" class="text-xs text-gray-500"></p>
+              <div id="teInviteFilePreviewWrap" class="hidden border rounded max-h-40 overflow-y-auto">
+                <table class="w-full text-xs">
+                  <thead><tr class="bg-gray-100 text-left sticky top-0"><th class="p-1">Tài Khoản</th><th class="p-1">Họ Tên</th><th class="p-1">Trạng Thái</th></tr></thead>
+                  <tbody id="teInviteFilePreviewBody"></tbody>
+                </table>
+              </div>
+              <button type="button" id="teInviteFileAddBtn" onclick="addTrainingInviteFileFound('te')" class="hidden bg-gray-200 hover:bg-gray-300 px-3 py-1.5 rounded text-xs font-bold">Thêm những người hợp lệ vào danh sách</button>
               <div id="teInviteListStagedList" class="border rounded p-2 min-h-[2.5rem] flex flex-wrap gap-1.5 bg-white"></div>
             </div>
           </div>
@@ -29918,6 +29944,7 @@ function renderTrainingLms() {
   populateTrainingClassMultiSelects();
   populateTrainingCourseSelects();
   populateTrainingPlanDeptSelects();
+  onTrainingClassModeChange(); // đồng bộ lại ẩn/hiện Giảng Viên+Địa Điểm theo đúng #tcMode hiện tại (mặc định Online)
   const canManage = canManageTrainingLocal(currentUser);
   document.getElementById('trainingClassForm').classList.toggle('hidden', !canManage);
   document.getElementById('trainingClassNoPermNote').classList.toggle('hidden', canManage);
@@ -29966,6 +29993,17 @@ function onTrainingClassModeChange() {
   document.getElementById('tcDocumentIdsLabel').innerText = mode === 'OFFLINE'
     ? 'Giáo Trình Tham Khảo Cho Giảng Viên (không bắt buộc học viên đọc trước, chọn từ Kho Tài Liệu)'
     : 'Giáo Trình Đọc Bắt Buộc (chọn từ Kho Tài Liệu, giữ Ctrl/Cmd để chọn nhiều)';
+  // Lớp Online không cần giảng viên đứng lớp/phòng học vật lý — ẩn 2 ô này khi chọn Online, xoá luôn
+  // giá trị đang gõ dở (nếu người dùng vừa nhập rồi mới đổi qua Online) để không gửi lên nhầm dữ liệu
+  // không còn ý nghĩa. Chuyển lại Offline thì hiện lại, để trống cho tự nhập lại (không cố nhớ giá trị cũ).
+  const isOnline = mode === 'ONLINE';
+  document.getElementById('tcInstructorFieldWrap').classList.toggle('hidden', isOnline);
+  document.getElementById('tcLocationFieldWrap').classList.toggle('hidden', isOnline);
+  if (isOnline) {
+    document.getElementById('tcInstructor').value = '';
+    document.getElementById('tcInstructorUsername').value = '';
+    document.getElementById('tcLocation').value = '';
+  }
 }
 
 // Autofill tiện lợi khi chọn Bài Test lúc tạo/sửa lớp — người quản lý thường không nhớ nổi từng bài
@@ -30280,6 +30318,77 @@ function removeTrainingEditInviteListStaged(username) {
   renderTrainingEditInviteListStagedList();
 }
 
+// Import Từ Excel + Xuất Excel cho "Danh Sách Được Mời" (cả form Tạo tc*/Sửa te*) — tái dùng NGUYÊN 2
+// route đã có sẵn cho modal "Thêm Học Viên" (/api/training/roster-template + /api/training/parse-roster,
+// xem routes/trainingRoster.js): file mẫu chỉ có cột "Tài Khoản Đăng Nhập" chung, không có gì riêng cho
+// khái niệm "học viên" cả nên dùng lại được thẳng, không cần route mới. Dùng 1 cặp hàm parameterized theo
+// prefix ('tc'|'te') thay vì chép đôi như các hàm addTrainingInviteListPick/addTrainingEditInviteListPick
+// ở trên (giữ đúng khuôn cũ vì đã có sẵn trước đợt này) — vì khối import/export không có state riêng gắn
+// theo prefix (chỉ đọc/ghi đúng đúng mảng staged theo prefix), tách hàm chung an toàn hơn chép nguyên khối.
+let tcInviteFilePreviewItems = [];
+let teInviteFilePreviewItems = [];
+
+async function onTrainingInviteFileChange(event, prefix) {
+  const file = event.target.files[0];
+  const statusEl = document.getElementById(`${prefix}InviteFileStatus`);
+  const previewWrap = document.getElementById(`${prefix}InviteFilePreviewWrap`);
+  const previewBody = document.getElementById(`${prefix}InviteFilePreviewBody`);
+  const addBtn = document.getElementById(`${prefix}InviteFileAddBtn`);
+  previewWrap.classList.add('hidden');
+  addBtn.classList.add('hidden');
+  if (prefix === 'tc') tcInviteFilePreviewItems = []; else teInviteFilePreviewItems = [];
+  if (!file) { statusEl.innerText = ''; return; }
+
+  statusEl.innerText = '⏳ Đang đọc file...';
+  const formData = new FormData();
+  formData.append('file', file);
+  try {
+    const res = await fetch('/api/training/parse-roster', { method: 'POST', body: formData });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Lỗi không xác định');
+    if (prefix === 'tc') tcInviteFilePreviewItems = data.items; else teInviteFilePreviewItems = data.items;
+    const foundCount = data.items.filter(it => it.found).length;
+    statusEl.innerText = `✅ Đọc file "${data.fileName}": ${foundCount}/${data.items.length} tài khoản hợp lệ.`;
+    previewBody.innerHTML = data.items.map(it => `<tr>
+      <td class="p-1">${escapeHtml(it.username)}</td>
+      <td class="p-1">${escapeHtml(it.name || '')}</td>
+      <td class="p-1">${it.found ? (it.active === false ? '<span class="text-amber-600">⚠️ Tài khoản đã khoá</span>' : '<span class="text-emerald-600">✅ Hợp lệ</span>') : '<span class="text-red-600">⛔ Không tìm thấy</span>'}</td>
+    </tr>`).join('');
+    previewWrap.classList.remove('hidden');
+    if (foundCount > 0) addBtn.classList.remove('hidden');
+  } catch (err) {
+    statusEl.innerText = `⛔ ${err.message}`;
+    event.target.value = '';
+  }
+}
+
+function addTrainingInviteFileFound(prefix) {
+  const items = prefix === 'tc' ? tcInviteFilePreviewItems : teInviteFilePreviewItems;
+  const staged = prefix === 'tc' ? tcInviteListStaged : teInviteListStaged;
+  items.filter(it => it.found && it.active !== false).forEach(it => {
+    if (!staged.some(p => p.username === it.username)) staged.push({ username: it.username, name: it.name || it.username, dept: it.dept || '' });
+  });
+  if (prefix === 'tc') renderTrainingInviteListStagedList(); else renderTrainingEditInviteListStagedList();
+  document.getElementById(`${prefix}InviteFileInput`).value = '';
+  document.getElementById(`${prefix}InviteFilePreviewWrap`).classList.add('hidden');
+  document.getElementById(`${prefix}InviteFileAddBtn`).classList.add('hidden');
+  document.getElementById(`${prefix}InviteFileStatus`).innerText = '';
+}
+
+// Xuất Excel — tái dùng downloadXlsxFromServer()/POST /api/admin/export-xlsx đã có sẵn (không phân
+// biệt module gọi, chỉ nhận {fileName, sheetName, columns, rows} rồi trả file .xlsx), dữ liệu lấy thẳng
+// từ danh sách tạm đang có trên form — không cần route riêng nào cho việc xuất này.
+function exportTrainingInviteList(prefix) {
+  const staged = prefix === 'tc' ? tcInviteListStaged : teInviteListStaged;
+  if (!staged.length) return alert('Danh sách được mời đang trống — chưa có gì để xuất.');
+  const columns = [
+    { header: 'Tài Khoản Đăng Nhập', key: 'username', width: 20 },
+    { header: 'Họ Tên', key: 'name', width: 26 },
+    { header: 'Phòng Ban', key: 'dept', width: 22 }
+  ];
+  downloadXlsxFromServer('DanhSachDuocMoi.xlsx', 'Danh Sách Được Mời', columns, staged);
+}
+
 function openEditTrainingClassModal(classId) {
   const c = DB.trainingClasses.find(x => x.id === classId);
   if (!c) return;
@@ -30290,6 +30399,11 @@ function openEditTrainingClassModal(classId) {
   document.getElementById('teCategory').innerHTML = catOpts;
   document.getElementById('teCategory').value = c.category || '';
   document.getElementById('teTitle').value = c.title || '';
+  // Kiểu Lớp Học đã CỐ ĐỊNH từ lúc tạo (không có ô đổi ở đây, xem chú thích đầu modal) — chỉ cần ẩn/hiện
+  // theo đúng c.mode hiện có, không cần onchange nào cả (khác form Tạo Mới có #tcMode sống).
+  const teIsOnline = c.mode === 'ONLINE';
+  document.getElementById('teInstructorFieldWrap').classList.toggle('hidden', teIsOnline);
+  document.getElementById('teLocationFieldWrap').classList.toggle('hidden', teIsOnline);
   populateSystemUsersDatalist();
   const instructorUser = c.instructorUsername ? DB.users.find(u => u.username === c.instructorUsername) : null;
   document.getElementById('teInstructor').value = instructorUser
@@ -30323,6 +30437,11 @@ function openEditTrainingClassModal(classId) {
     return { username, name: u ? u.name : username, dept: u ? u.dept : '' };
   });
   renderTrainingEditInviteListStagedList();
+  teInviteFilePreviewItems = [];
+  document.getElementById('teInviteFileInput').value = '';
+  document.getElementById('teInviteFileStatus').innerText = '';
+  document.getElementById('teInviteFilePreviewWrap').classList.add('hidden');
+  document.getElementById('teInviteFileAddBtn').classList.add('hidden');
   document.getElementById('trainingEditClassModal').classList.remove('hidden');
 }
 function closeEditTrainingClassModal() {
