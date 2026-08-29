@@ -123,13 +123,13 @@ async function main() {
     });
 
     await run('Hợp Đồng report tab shows correct APPROVED/PENDING status breakdown', async () => {
-      await page.evaluate(() => setReportsSubTab('contract'));
+      await page.evaluate(() => selectReportsNavL1('contract'));
       const html = await page.evaluate(() => document.getElementById('reportsContent').innerHTML);
       assert(html.includes('100.000.000 VNĐ') && html.includes('50.000.000 VNĐ'), 'contract tab should show the same active/expired value breakdown as Tổng Hợp');
     });
 
     await run('Văn Phòng Tổng Hợp report tab computes dự toán by subtype (Mua sắm/Sửa chữa/Đầu tư), PENDING excluded', async () => {
-      await page.evaluate(() => setReportsSubTab('office'));
+      await page.evaluate(() => selectReportsNavL1('office'));
       // Scope the assertion to the "dự toán" extra-metrics snippet specifically (not the raw records
       // table further down, which legitimately lists VP-003's own amount as a regular row value).
       const extraHTML = await page.evaluate(() => {
@@ -142,7 +142,7 @@ async function main() {
     });
 
     await run('Công Việc report tab computes the on-time completion rate from DONE tasks with a deadline', async () => {
-      await page.evaluate(() => setReportsSubTab('task'));
+      await page.evaluate(() => selectReportsNavL1('task'));
       const extraHTML = await page.evaluate(() => {
         const records = REPORT_MODULE_CONFIGS.task.getRecords('', document.getElementById('reportsFromDate').value, document.getElementById('reportsToDate').value);
         return renderTaskReportExtra(records);
@@ -153,7 +153,7 @@ async function main() {
     });
 
     await run('Tra Cứu Chi Tiết (contract tab): column picker + text filter narrow the results table', async () => {
-      await page.evaluate(() => setReportsSubTab('contract'));
+      await page.evaluate(() => selectReportsNavL1('contract'));
       const columnKeys = await page.evaluate(() => reportDetailContext.columns.map((c) => c.key));
       assert(columnKeys.includes('code'), 'expected a "code" column to be inferred for contracts');
       assert(columnKeys.includes('__status'), 'expected a "__status" column for the approval status');
@@ -184,7 +184,7 @@ async function main() {
     });
 
     await run('Excel export (Tổng Hợp summary) sends the full administrative metrics sheet', async () => {
-      await page.evaluate(() => { setReportsSubTab('SUMMARY'); window.__xlsxExports.length = 0; });
+      await page.evaluate(() => { selectReportsNavL1('SUMMARY'); window.__xlsxExports.length = 0; });
       await page.evaluate(() => exportReportsSummaryExcel());
       await page.waitForFunction(() => window.__xlsxExports.length > 0);
       const body = await page.evaluate(() => window.__xlsxExports[0]);

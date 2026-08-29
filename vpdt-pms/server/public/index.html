@@ -5259,7 +5259,11 @@ input[data-sdd-list] {
         <button onclick="exportReportsExcel()" class="text-xs bg-emerald-600 text-white px-3 py-1.5 rounded font-bold hover:bg-emerald-700">📥 Xuất Báo Cáo Excel</button>
       </div>
 
-      <div id="reportsSubTabBar" class="flex gap-2 flex-wrap border-b pb-2"></div>
+      <div id="reportsNavL1Bar" class="flex gap-2 flex-wrap border-b pb-2"></div>
+      <div id="reportsNavL2Wrap" class="hidden">
+        <div class="text-[11px] font-semibold text-sky-700 mb-1">Chọn màn báo cáo:</div>
+        <div id="reportsNavL2Bar" class="flex gap-1.5 flex-wrap"></div>
+      </div>
 
       <div class="grid grid-cols-1 md:grid-cols-4 gap-3 bg-white p-3 rounded border text-xs">
         <div>
@@ -5986,6 +5990,24 @@ input[data-sdd-list] {
     <div id="dashboardCustomizeList" class="space-y-1.5 max-h-80 overflow-y-auto"></div>
     <div class="flex justify-end gap-2 pt-2">
       <button type="button" onclick="closeDashboardCustomizeModal()" class="bg-blue-600 text-white px-5 py-2 rounded font-bold hover:bg-blue-700">Đóng</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL "Xem Trước" báo cáo theo yêu cầu (mục "1. Tạo Báo Cáo Theo Yêu Cầu" trong Báo Cáo) — xem
+     showReportPreview()/buildReportPreviewDocumentHTML(). z-[55] khớp viewDocModal ngay dưới vì cùng
+     lớp "modal xem trước nội dung", không có nhu cầu mở lồng trong modal khác nên không cần cao hơn. -->
+<div id="reportPreviewModal" class="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center hidden z-[55] p-4">
+  <div class="bg-white rounded-lg shadow-2xl max-w-4xl w-full flex flex-col max-h-[90vh] overflow-hidden">
+    <div class="flex justify-between items-center bg-indigo-700 text-white p-4">
+      <h3 class="font-bold text-base flex items-center gap-2">👁️ Xem Trước Báo Cáo</h3>
+      <button onclick="closeReportPreviewModal()" class="text-indigo-100 hover:text-white font-bold text-xl px-2">✕</button>
+    </div>
+    <div class="p-4 overflow-y-auto flex-1 bg-white" id="reportPreviewModalBody"></div>
+    <div class="p-3 bg-gray-50 border-t flex justify-end items-center gap-2 text-xs">
+      <button onclick="closeReportPreviewModal()" class="bg-gray-200 text-gray-700 px-4 py-1.5 rounded font-bold hover:bg-gray-300">Đóng</button>
+      <button onclick="printReportPreview()" class="bg-blue-600 text-white px-4 py-1.5 rounded font-bold hover:bg-blue-700">🖨️ In</button>
+      <button onclick="exportReportPreviewExcel()" class="bg-emerald-600 text-white px-4 py-1.5 rounded font-bold hover:bg-emerald-700">📥 Xuất Excel</button>
     </div>
   </div>
 </div>
@@ -7379,11 +7401,11 @@ const MODULE_TAB_MAP = {
   // "Báo Cáo" là module TỔNG HỢP số liệu của 11 module khác — không có quyền riêng nào cho từng tab
   // con cả, mỗi tab (Tài Liệu/Văn Bản Trình/Công Việc/Hợp Đồng/Biên Bản Họp/Phòng Họp/Xe/VPP/Văn Phòng
   // Tổng Hợp/Truyền Thông/Đồng Phục) CHỈ hiện nếu module tương ứng đang BẬT ở chính mục 0 này (xem
-  // renderReportsSubTabBar()) — không cần "Đi tới" đâu cả vì công tắc quyết định đã hiển thị NGAY TRÊN
+  // renderReportsNavPicker()) — không cần "Đi tới" đâu cả vì công tắc quyết định đã hiển thị NGAY TRÊN
   // cùng màn hình này rồi. Tab "Tổng Hợp" (tổng quan/tài chính/vận hành...) cũng tự ẩn từng phần theo
   // đúng module đang bật (xem renderReportsSummary()), không lộ số liệu của module đã tắt.
   reports: [
-    { label: '11 tab con', note: 'tự ẩn/hiện theo đúng công tắc module tương ứng ở TRÊN (Tài Liệu, Văn Bản Trình, Công Việc, Hợp Đồng, Biên Bản Họp, Phòng Họp, Xe, Văn Phòng Phẩm, Tổng Hợp, Truyền Thông, Đồng Phục) — không có quyền riêng, không cần "Đi tới"' }
+    { label: '16 màn báo cáo', note: 'tự ẩn/hiện theo đúng công tắc module tương ứng ở TRÊN (Tài Liệu, Văn Bản Trình, Công Việc, Hợp Đồng, Biên Bản Họp, Hỗ Trợ IT, Báo Cáo Định Kỳ, Truyền Thông, Phòng Họp, Xe, Văn Phòng Phẩm, Đồng Phục, Giấy Phép, Mua Bán/Sửa Chữa/Đầu Tư, Thanh Toán, Ngân Sách; cộng tab Tổng Hợp tự ẩn từng phần) — không có quyền riêng, không cần "Đi tới"' }
   ]
 };
 
@@ -27076,41 +27098,108 @@ function resetReportsFilters() {
   renderReports();
 }
 
-// Báo Cáo — Tổng Hợp (đa chiều, xếp đầu) + 1 tab con cho mỗi module nghiệp vụ đã có, dùng CHUNG bộ
-// lọc ngày/phòng ban phía trên (#reportsFromDate/#reportsToDate/#reportsDeptFilter). "Tổng Hợp" giữ
-// nguyên toàn bộ nội dung đa chiều đã có từ trước (renderReportsSummary() bên dưới — trước đây là
-// thân của renderReports()); các tab module dùng chung 1 khuôn renderModuleReport() (tổng số + tình
-// trạng phê duyệt + khối lượng theo phòng ban), cộng thêm vài chỉ số riêng cho Hợp Đồng/Văn Phòng
-// Tổng Hợp/Công Việc (xem REPORT_MODULE_CONFIGS.renderExtra).
-let activeReportsSubTab = 'SUMMARY';
-const REPORTS_SUB_TABS = [
+// Báo Cáo — 1 module ngoài duy nhất, bên trong đào dần theo đúng cấu trúc thật của BUSINESS_MODULES:
+// chọn "Tổng Hợp" (đa chiều, xếp đầu) hoặc 1 module lớn → module lớn nào có "children" (module con
+// thật, vd Hành Chính/Tổng Hợp) thì hiện thêm 1 hàng chọn cấp 2 để vào đúng màn báo cáo module con đó.
+// Module không có children vào thẳng màn báo cáo, không qua bước thừa (khớp yêu cầu: module 1 màn thì
+// không cần "chọn tab" giả). Đợt này đào tới đúng cấp "module con" — CHƯA đào tiếp xuống từng tab/sub-
+// tab bên trong 1 module con (vd Đồng Phục Kỳ Cấp Phát/Điều Chuyển Kho vẫn gộp 1 báo cáo như cũ) vì cần
+// kiểm chứng thêm field dữ liệu riêng từng tab trước khi tách an toàn — làm tiếp ở đợt sau nếu cần.
+let reportsNavL1 = 'SUMMARY';
+let reportsNavL2 = null;
+const REPORT_NAV_TREE = [
   { key: 'SUMMARY', label: '📊 Tổng Hợp' },
   { key: 'doc', label: '📂 Tài Liệu' },
   { key: 'submission', label: '📜 Văn Bản Trình' },
   { key: 'task', label: '✅ Công Việc' },
   { key: 'contract', label: '📄 Hợp Đồng' },
   { key: 'minutes', label: '📝 Biên Bản Họp' },
-  { key: 'meeting', label: '🏢 Phòng Họp' },
-  { key: 'car', label: '🚗 Đăng Ký Xe' },
-  { key: 'vpp', label: '🖇️ Văn Phòng Phẩm' },
-  { key: 'office', label: '🛒 Văn Phòng Tổng Hợp' },
+  { key: 'itSupport', label: '🖥️ Hỗ Trợ IT' },
+  { key: 'periodicReport', label: '📅 Báo Cáo Định Kỳ' },
   { key: 'internal', label: '📣 Truyền Thông Nội Bộ' },
-  { key: 'uniform', label: '👕 Đồng Phục' }
+  {
+    key: 'hanhchinh', label: '🏢 Hành Chính', children: [
+      { key: 'meeting', label: '📅 Phòng Họp' },
+      { key: 'car', label: '🚗 Đăng Ký Xe' },
+      { key: 'vpp', label: '🖇️ Văn Phòng Phẩm' },
+      { key: 'uniform', label: '👕 Đồng Phục' },
+      { key: 'license', label: '🪪 Giấy Phép' }
+    ]
+  },
+  {
+    key: 'office', label: '🛒 Tổng Hợp', children: [
+      { key: 'office', label: '🛒 Mua Bán/Sửa Chữa/Đầu Tư' },
+      { key: 'payment', label: '💰 Thanh Toán' },
+      { key: 'budget', label: '📊 Ngân Sách' }
+    ]
+  }
 ];
 
-// Mỗi tab con Báo Cáo (trừ "Tổng Hợp") ứng với đúng 1 module nghiệp vụ (key khớp BUSINESS_MODULES,
-// xem REPORTS_SUB_TABS) — ẩn tab nào mà người dùng đang TẮT module đó ở mục "0. Quyền Truy Cập Module"
-// (không cần quyền báo cáo riêng, tái dùng thẳng công tắc module đã có sẵn). "Tổng Hợp" luôn hiện vì
-// đã tự lọc từng chỉ số bên trong theo đúng module được bật (xem renderReportsSummary()).
-function renderReportsSubTabBar() {
-  const bar = document.getElementById('reportsSubTabBar');
-  if (!bar) return;
-  bar.innerHTML = REPORTS_SUB_TABS.filter(t => t.key === 'SUMMARY' || hasModuleAccess(currentUser, t.key)).map(t => {
-    const cls = t.key === activeReportsSubTab
+// Node cấp 1 hiện được nếu là "Tổng Hợp", hoặc còn quyền vào module đó, hoặc (với node có children)
+// còn ÍT NHẤT 1 module con bên trong còn quyền — ẩn hẳn node cha nếu tắt sạch mọi module con của nó.
+function isReportNavNodeVisible(node) {
+  if (node.key === 'SUMMARY') return true;
+  if (node.children) return node.children.some(c => hasModuleAccess(currentUser, c.key));
+  return hasModuleAccess(currentUser, node.key);
+}
+
+function findReportNavNode(key) {
+  return REPORT_NAV_TREE.find(n => n.key === key);
+}
+
+// Trả về key module đang thật sự hiển thị báo cáo — node cấp 1 có children thì LUÔN cần node cấp 2
+// (không có báo cáo riêng cho chính node cha, khớp BUSINESS_MODULES "hanhchinh"/"office" vốn không có
+// màn hình riêng, chỉ là điểm gộp nav).
+function getActiveReportLeafKey() {
+  const node = findReportNavNode(reportsNavL1);
+  if (node && node.children) return reportsNavL2;
+  return reportsNavL1;
+}
+
+function renderReportsNavPicker() {
+  const l1Bar = document.getElementById('reportsNavL1Bar');
+  const l2Wrap = document.getElementById('reportsNavL2Wrap');
+  const l2Bar = document.getElementById('reportsNavL2Bar');
+  if (!l1Bar || !l2Wrap || !l2Bar) return;
+
+  l1Bar.innerHTML = REPORT_NAV_TREE.filter(isReportNavNodeVisible).map(n => {
+    const cls = n.key === reportsNavL1
       ? 'px-3 py-1.5 rounded text-xs font-bold bg-sky-700 text-white'
       : 'px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700';
-    return `<button type="button" onclick="setReportsSubTab('${t.key}')" class="${cls}">${t.label}</button>`;
+    return `<button type="button" onclick="selectReportsNavL1('${n.key}')" class="${cls}">${n.label}</button>`;
   }).join('');
+
+  const activeNode = findReportNavNode(reportsNavL1);
+  if (activeNode && activeNode.children) {
+    l2Wrap.classList.remove('hidden');
+    l2Bar.innerHTML = activeNode.children.filter(c => hasModuleAccess(currentUser, c.key)).map(c => {
+      const cls = c.key === reportsNavL2
+        ? 'px-3 py-1 rounded text-xs font-bold bg-indigo-600 text-white'
+        : 'px-3 py-1 rounded text-xs font-bold bg-gray-100 text-gray-700';
+      return `<button type="button" onclick="selectReportsNavL2('${c.key}')" class="${cls}">${c.label}</button>`;
+    }).join('');
+  } else {
+    l2Wrap.classList.add('hidden');
+    l2Bar.innerHTML = '';
+  }
+}
+
+function selectReportsNavL1(key) {
+  window.scrollTo({ top: 0, behavior: 'auto' }); // Tránh "bay xuống cuối" khi đổi lựa chọn — xem setSystemSubTab().
+  reportsNavL1 = key;
+  const node = findReportNavNode(key);
+  // Vào 1 module có children luôn cần chọn sẵn 1 module con để có báo cáo để xem ngay (không bắt
+  // người dùng phải tự bấm thêm 1 lần nữa mới thấy nội dung) — ưu tiên module con đầu tiên còn quyền.
+  reportsNavL2 = (node && node.children) ? (node.children.find(c => hasModuleAccess(currentUser, c.key))?.key || null) : null;
+  repopulateReportsDeptFilterOptions(getActiveReportLeafKey());
+  renderReports();
+}
+
+function selectReportsNavL2(key) {
+  window.scrollTo({ top: 0, behavior: 'auto' });
+  reportsNavL2 = key;
+  repopulateReportsDeptFilterOptions(getActiveReportLeafKey());
+  renderReports();
 }
 
 // #reportsDeptFilter mặc định liệt kê DB.depts (khối văn phòng, xem populateDropdowns() ~dòng 10345) —
@@ -27129,20 +27218,13 @@ function repopulateReportsDeptFilterOptions(key) {
   if (source.includes(prevValue)) el.value = prevValue; // giữ lựa chọn cũ nếu còn hợp lệ ở danh mục mới
 }
 
-function setReportsSubTab(key) {
-  window.scrollTo({ top: 0, behavior: 'auto' }); // Tránh "bay xuống cuối" khi đổi tab con — xem setSystemSubTab().
-  activeReportsSubTab = key;
-  repopulateReportsDeptFilterOptions(key);
-  renderReportsSubTabBar();
-  renderReports();
-}
-
 function renderReports() {
   const container = document.getElementById('reportsContent');
   if (!container) return;
-  renderReportsSubTabBar();
-  if (activeReportsSubTab !== 'SUMMARY') { renderModuleReport(activeReportsSubTab, container); return; }
-  renderReportsSummary(container);
+  renderReportsNavPicker();
+  const leafKey = getActiveReportLeafKey();
+  if (!leafKey || leafKey === 'SUMMARY') { renderReportsSummary(container); return; }
+  renderModuleReport(leafKey, container);
 }
 
 // Thống kê dùng chung cho mọi tab module con (trừ "Tổng Hợp") — tổng số hồ sơ trong khoảng lọc, tình
@@ -27235,6 +27317,37 @@ const REPORT_MODULE_CONFIGS = {
     statusOf: t => t.status,
     statusBuckets: [['TODO', 'Chưa bắt đầu', 'bg-gray-500'], ['DOING', 'Đang thực hiện', 'bg-blue-500'], ['DONE', 'Hoàn thành', 'bg-green-500'], ['CANCELLED', 'Đã huỷ', 'bg-red-500']],
     renderExtra: renderTaskReportExtra
+  },
+  // 5 module dưới đây (license/payment/budget/itSupport/periodicReport) TRƯỚC ĐỢT NÀY chưa hề có báo
+  // cáo nào cả — bổ sung theo đúng khuôn getRecords(dept,from,to) chung, mỗi cái ở đúng 1 cấp (module
+  // con thật, không tách sâu thêm xuống từng tab con bên trong — vd Đồng Phục Kỳ Cấp Phát/Điều Chuyển
+  // Kho vẫn gộp qua "uniform" như cũ) để tránh đoán sai tên field khi chưa kiểm chứng kỹ từng tab con.
+  license: {
+    title: '🪪 Báo Cáo Giấy Phép',
+    // rootLicenseId == null: chỉ tính hồ sơ GỐC, không tính từng bản gia hạn/sửa đổi con (khớp cách
+    // renderLicenseDashboard() đếm "Tổng" — xem getLicenseFamilyLatest()).
+    getRecords: (dept, from, to) => DB.licenses.filter(r => r.rootLicenseId == null && (!dept || r.dept === dept) && isInDateRange(r.createdAt, from, to)),
+    statusOf: r => r.status
+  },
+  payment: {
+    title: '💰 Báo Cáo Thanh Toán',
+    getRecords: (dept, from, to) => DB.paymentRequests.filter(r => (!dept || r.dept === dept) && isInDateRange(r.createdAt, from, to)),
+    statusOf: r => r.status,
+    statusBuckets: [['PENDING', 'Đang chờ duyệt', 'bg-yellow-500'], ['NEED_INFO', 'Chờ bổ sung', 'bg-orange-500'], ['APPROVED', 'Đã duyệt', 'bg-cyan-500'], ['PAID', 'Đã thanh toán', 'bg-green-500'], ['REJECTED', 'Từ chối', 'bg-red-500']]
+  },
+  budget: {
+    title: '📊 Báo Cáo Ngân Sách',
+    getRecords: (dept, from, to) => DB.budgetPeriods.filter(r => (!dept || r.dept === dept) && isInDateRange(r.createdAt, from, to))
+  },
+  itSupport: {
+    title: '🖥️ Báo Cáo Hỗ Trợ IT',
+    getRecords: (dept, from, to) => DB.itSupportTickets.filter(r => (!dept || r.dept === dept) && isInDateRange(r.createdAt, from, to)),
+    statusOf: r => r.status,
+    statusBuckets: [['TODO', 'Chưa xử lý', 'bg-gray-500'], ['DOING', 'Đang xử lý', 'bg-blue-500'], ['DONE', 'Hoàn thành', 'bg-green-500'], ['CANCELLED', 'Đã huỷ', 'bg-red-500']]
+  },
+  periodicReport: {
+    title: '📅 Báo Cáo Định Kỳ (Kỳ Báo Cáo)',
+    getRecords: (dept, from, to) => DB.reportPeriods.filter(r => (!dept || r.dept === dept) && isInDateRange(r.createdAt, from, to))
   }
 };
 
@@ -27284,7 +27397,12 @@ function renderModuleReport(moduleKey, container) {
   }
 
   const extraHTML = config.renderExtra ? config.renderExtra(records) : '';
+  // detailHTML PHẢI render trước previewLauncherHTML — renderReportDetailSection() là nơi gán
+  // reportDetailContext/reportDetailSelectedCols[moduleKey] mà buildReportPreviewLauncherHTML() (qua
+  // nút "Xem Trước") sẽ đọc lại khi bấm; thứ tự HIỂN THỊ trên trang (Mục 1 trước Mục 2, xem dưới) không
+  // liên quan gì tới thứ tự GỌI HÀM ở đây.
   const detailHTML = renderReportDetailSection(moduleKey, records, config);
+  const previewLauncherHTML = buildReportPreviewLauncherHTML(moduleKey);
 
   container.innerHTML = `
     <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -27293,6 +27411,7 @@ function renderModuleReport(moduleKey, container) {
       ${deptHTML}
     </div>
     ${extraHTML}
+    ${previewLauncherHTML}
     ${detailHTML}
   `;
 }
@@ -27529,6 +27648,82 @@ function exportReportDetailExcel(moduleKey) {
   downloadXlsxFromServer(`BaoCaoChiTiet_${moduleKey}_${new Date().toISOString().slice(0, 10)}.xlsx`, ('ChiTiet_' + moduleKey).slice(0, 31), columns, dataRows);
 }
 
+// ==========================================
+// "1. Tạo Báo Cáo Theo Yêu Cầu" — xem trước dạng văn bản trước khi xuất Excel/in. TÁI DÙNG NGUYÊN dữ
+// liệu đã lọc + đã chọn cột ở khối "🔍 Tra Cứu Chi Tiết" ngay bên dưới (reportDetailContext/
+// reportDetailFilterValues/reportDetailSelectedCols) — không tính lại/không tạo nguồn dữ liệu thứ 2,
+// đảm bảo bản xem trước LUÔN khớp đúng file Excel/bản in cuối cùng (dùng lại thẳng
+// exportReportDetailExcel() có sẵn để xuất, không viết logic xuất riêng).
+// ==========================================
+let currentReportPreviewModuleKey = null;
+
+function buildReportPreviewLauncherHTML(moduleKey) {
+  return `
+    <div class="bg-indigo-50 border border-indigo-200 rounded p-3 text-xs flex items-center justify-between gap-2 flex-wrap">
+      <div>
+        <div class="font-bold text-indigo-900 text-sm">🖨️ 1. Tạo Báo Cáo Theo Yêu Cầu</div>
+        <div class="text-indigo-700 text-[11px] mt-0.5">Xem trước dạng văn bản (đúng cột/điều kiện đang chọn ở khối "🔍 2. Tra Cứu Chi Tiết" bên dưới) trước khi xuất Excel hoặc in.</div>
+      </div>
+      <button type="button" onclick="showReportPreview('${moduleKey}')" class="bg-indigo-600 text-white px-3 py-1.5 rounded font-bold text-xs hover:bg-indigo-700 whitespace-nowrap shrink-0">👁️ Xem Trước & Xuất</button>
+    </div>
+  `;
+}
+
+function buildReportPreviewDocumentHTML(moduleKey) {
+  const ctx = reportDetailContext;
+  if (!ctx || ctx.moduleKey !== moduleKey) return { error: 'Chưa có dữ liệu — vui lòng thử lại.' };
+  const config = ctx.config;
+  const selectedKeys = reportDetailSelectedCols[moduleKey] || [];
+  const cols = selectedKeys.map(k => ctx.columns.find(c => c.key === k)).filter(Boolean);
+  if (!cols.length) return { error: 'Vui lòng chọn ít nhất 1 trường ở khối "🔍 Tra Cứu Chi Tiết" bên dưới trước khi xem trước.' };
+  const filtered = applyReportDetailFilters(ctx.records, ctx.columns, reportDetailFilterValues[moduleKey]);
+
+  const fromDate = document.getElementById('reportsFromDate')?.value || '';
+  const toDate = document.getElementById('reportsToDate')?.value || '';
+  const deptFilter = document.getElementById('reportsDeptFilter')?.value || '';
+  const rangeLabel = (fromDate || toDate) ? `Từ ${fromDate ? formatDateVN(fromDate) : '...'} đến ${toDate ? formatDateVN(toDate) : '...'}` : 'Toàn bộ thời gian';
+  const deptLabel = deptFilter ? `Phòng ban/Siêu thị: ${deptFilter}` : 'Tất cả phòng ban/siêu thị';
+
+  const html = `
+    <div style="font-family: Arial, Helvetica, sans-serif; color:#111;">
+      <h2 style="margin:0 0 4px;">${escapeHtml(config.title || 'Báo Cáo')}</h2>
+      <div style="font-size:12px;color:#555;margin-bottom:2px;">${escapeHtml(rangeLabel)} — ${escapeHtml(deptLabel)}</div>
+      <div style="font-size:12px;color:#555;margin-bottom:12px;">Xuất lúc: ${new Date().toLocaleString('vi-VN')} — Tổng số dòng: ${filtered.length.toLocaleString('vi-VN')}</div>
+      <table style="width:100%;border-collapse:collapse;font-size:12px;">
+        <thead><tr>${cols.map(c => `<th style="border:1px solid #999;padding:4px 6px;background:#eef2ff;text-align:left;">${escapeHtml(c.label)}</th>`).join('')}</tr></thead>
+        <tbody>${filtered.length ? filtered.map(r => `<tr>${cols.map(c => `<td style="border:1px solid #ccc;padding:4px 6px;">${escapeHtml(formatReportDetailValue(c, c.getValue(r)))}</td>`).join('')}</tr>`).join('') : `<tr><td colspan="${cols.length}" style="text-align:center;padding:16px;color:#888;font-style:italic;">Không có hồ sơ nào khớp bộ lọc.</td></tr>`}</tbody>
+      </table>
+    </div>
+  `;
+  return { html };
+}
+
+function showReportPreview(moduleKey) {
+  const built = buildReportPreviewDocumentHTML(moduleKey);
+  if (built.error) { alert(built.error); return; }
+  currentReportPreviewModuleKey = moduleKey;
+  document.getElementById('reportPreviewModalBody').innerHTML = built.html;
+  document.getElementById('reportPreviewModal').classList.remove('hidden');
+}
+
+function closeReportPreviewModal() {
+  document.getElementById('reportPreviewModal').classList.add('hidden');
+  currentReportPreviewModuleKey = null;
+}
+
+function printReportPreview() {
+  const bodyHTML = document.getElementById('reportPreviewModalBody')?.innerHTML || '';
+  const fullHTML = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>In báo cáo</title></head><body>${bodyHTML}</body></html>`;
+  printHtmlViaHiddenIframe(fullHTML);
+}
+
+// Xuất Excel từ màn xem trước — dùng thẳng exportReportDetailExcel() có sẵn (cùng module/cùng bộ lọc/
+// cùng cột đã chọn — đảm bảo file tải về khớp đúng những gì vừa xem trước, không viết logic xuất riêng).
+function exportReportPreviewExcel() {
+  if (!currentReportPreviewModuleKey) return;
+  exportReportDetailExcel(currentReportPreviewModuleKey);
+}
+
 function renderReportDetailSection(moduleKey, records, config) {
   const columns = buildReportDetailColumns(moduleKey, records, config);
   reportDetailContext = { moduleKey, records, columns, config };
@@ -27546,7 +27741,7 @@ function renderReportDetailSection(moduleKey, records, config) {
   return `
     <details class="bg-white rounded border text-xs">
       <summary class="flex items-center justify-between gap-2 px-3 py-2 cursor-pointer hover:bg-gray-50 rounded">
-        <span class="font-bold text-gray-800 text-sm">🔍 Tra Cứu Chi Tiết</span>
+        <span class="font-bold text-gray-800 text-sm">🔍 2. Tra Cứu Chi Tiết</span>
         <span class="text-[11px] text-gray-500">Lọc theo nhiều điều kiện + tự chọn cột hiển thị</span>
       </summary>
       <div class="p-3 pt-0 space-y-3">
@@ -27841,7 +28036,7 @@ function renderReportsSummary(container) {
   const toDate = document.getElementById('reportsToDate')?.value || '';
   const deptFilter = document.getElementById('reportsDeptFilter')?.value || '';
   // "Tổng Hợp" gộp số liệu của NHIỀU module cùng lúc trong 1 màn — không tự ẩn/hiện được cả tab như các
-  // tab con khác (xem renderReportsSubTabBar()), nên phải lọc riêng TỪNG khối bên dưới theo đúng module
+  // tab con khác (xem renderReportsNavPicker()), nên phải lọc riêng TỪNG khối bên dưới theo đúng module
   // đang bật ở mục 0, tái dùng thẳng hasModuleAccess() — nếu không, người tắt module ở mục 0 (vd không
   // được vào Hợp Đồng) vẫn thấy được số lượng/giá trị Hợp Đồng lộ ra qua tab Tổng Hợp này.
   const canSee = (key) => hasModuleAccess(currentUser, key);
@@ -28060,7 +28255,8 @@ function renderReportsSummary(container) {
 // (exportReportsSummaryExcel giữ nguyên logic cũ), các tab module xuất đúng phạm vi module đó
 // (exportModuleReportExcel(), xem REPORT_MODULE_CONFIGS phía trên).
 function exportReportsExcel() {
-  if (activeReportsSubTab !== 'SUMMARY') { exportModuleReportExcel(activeReportsSubTab); return; }
+  const leafKey = getActiveReportLeafKey();
+  if (leafKey && leafKey !== 'SUMMARY') { exportModuleReportExcel(leafKey); return; }
   exportReportsSummaryExcel();
 }
 
