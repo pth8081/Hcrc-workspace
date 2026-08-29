@@ -3648,10 +3648,16 @@ input[data-sdd-list] {
     </div>
 
     <!-- Sub-tab: Quản Lý Nhân Viên Siêu Thị (mục 4b kế hoạch) — CHỈ dành cho HO (uniformManage/admin,
-         canManageUniform()) dùng để tạo/khoá tài khoản nhân viên CHO các siêu thị. Form rút gọn KHÔNG có
-         ô chọn quyền nào + server tự ép posType='STORE', perms:{} rỗng (xem routes/uniformEmployees.js)
-         — không tài khoản nào tạo qua đây có quyền uniformStoreManage. Khoá 1 CHIỀU (không có nút Mở
-         Khoá) — mở lại phải qua màn Người Dùng đầy đủ của Admin. -->
+         canManageUniform()) dùng để tạo/khoá tài khoản nhân viên CHO các siêu thị. Form rút gọn có ĐÚNG 1
+         ô chọn quyền — dropdown "Nhóm Quyền" bắt buộc chọn 1 nhóm phân quyền có scope==='STORE' (xem
+         populateUniformEmployeeGroupOptions()); server luôn tự ép posType='STORE' và re-validate lại
+         group.scope==='STORE' trước khi gán (xem routes/uniformEmployees.js), không tin bất kỳ field
+         perms nào từ client (form này không gửi field đó). Nhóm loại scope STORE chỉ có thể được tạo/gắn
+         cờ bởi 1 Admin thật (cả mục "Hệ Thống" > "Nhóm Phân Quyền" đều yêu cầu perms.admin — xem comment
+         "cả 4 mục con đều yêu cầu admin" gần dòng ~565 và `if (tabName === 'system' && currentUser.perms.admin)`
+         ở switchTab()), nên đây là ranh giới tin cậy ở cấp Admin tự chịu trách nhiệm gắn cờ đúng, không
+         phải lỗ hổng cho người chỉ có uniformManage. Khoá 1 CHIỀU (không có nút Mở Khoá) — mở lại phải
+         qua màn Người Dùng đầy đủ của Admin. -->
     <div id="uniformSubEmployees" class="hidden space-y-4">
       <div class="bg-white p-4 rounded border space-y-3">
         <h4 class="font-bold text-sm text-gray-800">➕ Tạo Tài Khoản Nhân Viên Siêu Thị</h4>
@@ -3666,6 +3672,9 @@ input[data-sdd-list] {
           </select>
           <select id="ueJobTitle" class="border p-1.5 rounded text-xs bg-white">
             <option value="">-- Chưa gán chức danh --</option>
+          </select>
+          <select id="ueGroupId" class="border p-1.5 rounded text-xs bg-white" required>
+            <option value="">-- Chọn Nhóm Quyền --</option>
           </select>
           <div class="md:col-span-3">
             <button type="submit" class="bg-teal-600 text-white px-4 py-1.5 rounded text-xs font-bold hover:bg-teal-700">💾 Tạo Tài Khoản</button>
@@ -3690,6 +3699,7 @@ input[data-sdd-list] {
               <th class="border p-1.5">Họ và Tên</th>
               <th class="border p-1.5">Siêu Thị</th>
               <th class="border p-1.5">Chức Danh</th>
+              <th class="border p-1.5">Nhóm Quyền</th>
               <th class="border p-1.5">Trạng Thái</th>
               <th class="border p-1.5 w-20">Thao Tác</th>
             </tr></thead>
@@ -4601,6 +4611,11 @@ input[data-sdd-list] {
           <div>
             <label class="block text-xs font-semibold text-gray-600 mb-1">Mô Tả</label>
             <input id="gGroupDesc" placeholder="Mô tả ngắn về nhóm quyền này..." class="w-full border p-1.5 rounded text-xs">
+          </div>
+          <div class="md:col-span-2">
+            <label class="flex items-center gap-1 text-xs text-gray-600">
+              <input type="checkbox" id="gGroupStoreScope"> 🏪 Chỉ dùng cho Siêu Thị (hiện trong form "Quản Lý Nhân Viên Siêu Thị" ở Đồng Phục)
+            </label>
           </div>
           <div class="md:col-span-2">
             <label class="block text-xs font-semibold text-gray-600 mb-1">👥 Thành Viên Nhóm (thêm/bớt nhiều người cùng lúc, giống quản lý nhóm AD)</label>
@@ -24556,7 +24571,7 @@ function renderPermGroupsList() {
     const memberCount = DB.users.filter(u => (u.groupIds || []).includes(g.id)).length;
     return `
     <tr class="border-b hover:bg-gray-50">
-      <td class="border p-2 font-bold text-gray-800">${escapeHtml(g.name)}</td>
+      <td class="border p-2 font-bold text-gray-800">${escapeHtml(g.name)}${g.scope === 'STORE' ? '<span class="inline-block bg-teal-100 text-teal-700 text-[10px] font-bold px-1.5 py-0.5 rounded ml-1">🏪 Siêu Thị</span>' : ''}</td>
       <td class="border p-2 text-gray-600">${escapeHtml(g.description || '-')}</td>
       <td class="border p-2 text-center">${memberCount}</td>
       <td class="border p-2 text-center">
@@ -24586,6 +24601,7 @@ function startCreateGroup() {
   toggleUserPermFormMode('GROUP');
   document.getElementById('gGroupName').value = '';
   document.getElementById('gGroupDesc').value = '';
+  document.getElementById('gGroupStoreScope').checked = false;
   renderGroupMembersPicker([]);
   document.getElementById('gGroupName').scrollIntoView({ behavior: 'smooth', block: 'center' });
 }
@@ -24597,6 +24613,7 @@ function editPermGroup(id) {
   toggleUserPermFormMode('GROUP');
   document.getElementById('gGroupName').value = group.name;
   document.getElementById('gGroupDesc').value = group.description || '';
+  document.getElementById('gGroupStoreScope').checked = group.scope === 'STORE';
   populatePermsForm(group.perms);
   const currentMembers = DB.users.filter(u => (u.groupIds || []).includes(id)).map(u => u.username);
   renderGroupMembersPicker(currentMembers);
@@ -24613,6 +24630,7 @@ async function savePermGroup(e) {
   const name = document.getElementById('gGroupName').value.trim();
   if (!name) return alert('Vui lòng nhập Tên Nhóm Phân Quyền!');
   const perms = collectPermsFromForm();
+  const storeScope = document.getElementById('gGroupStoreScope').checked;
   const selectedMembers = new Set([...document.querySelectorAll('input.group-member-toggle:checked')].map(cb => cb.value));
   const permGroupsSnapshot = JSON.parse(JSON.stringify(DB.permGroups));
   const usersSnapshot = JSON.parse(JSON.stringify(DB.users));
@@ -24624,12 +24642,14 @@ async function savePermGroup(e) {
     group.name = name;
     group.description = document.getElementById('gGroupDesc').value.trim();
     group.perms = perms;
+    group.scope = storeScope ? 'STORE' : undefined;
   } else {
     group = {
       id: 'grp_' + Date.now(),
       name,
       description: document.getElementById('gGroupDesc').value.trim(),
-      perms
+      perms,
+      scope: storeScope ? 'STORE' : undefined
     };
     DB.permGroups.push(group);
   }
@@ -26853,6 +26873,7 @@ function cancelPermFormEdit() {
   editingGroupId = null;
   toggleUserPermFormMode('USER');
   resetUserForm();
+  document.getElementById('gGroupStoreScope').checked = false;
 }
 
 // Đọc + xác thực phần DỮ LIỆU CHUNG của form Người dùng (dùng cho cả sửa người có sẵn, lưu ngay 1
@@ -35348,8 +35369,21 @@ function setUniformSubTab(subTab) {
 // ============ Quản Lý Nhân Viên Siêu Thị (mục 4b) — HO (uniformManage/admin) tạo/khoá tài khoản nhân
 // viên CHO các siêu thị, đi qua route riêng POST/PATCH /api/uniform/employees (routes/uniformEmployees.js
 // — KHÔNG qua POST /api/data/users vì route đó khoá cứng isCurrentlyAdmin() thật, uniformManage không đủ
-// quyền). Form rút gọn KHÔNG có ô chọn Vị Trí (ngầm định STORE) và KHÔNG có bất kỳ checkbox quyền nào —
-// server tự ép posType:'STORE'/perms:{} rỗng, đây chính là cơ chế đảm bảo an toàn. ============
+// quyền). Form rút gọn KHÔNG có ô chọn Vị Trí (ngầm định STORE) — nhưng có ĐÚNG 1 ô chọn quyền: dropdown
+// "Nhóm Quyền" (ueGroupId), bắt buộc chọn 1 trong các nhóm phân quyền scope==='STORE' (xem
+// populateUniformEmployeeGroupOptions()). Server luôn ép posType:'STORE' và re-validate lại group.scope
+// trước khi gán perms — client không gửi field perms nào cả. ============
+function populateUniformEmployeeGroupOptions() {
+  const sel = document.getElementById('ueGroupId');
+  if (!sel) return;
+  const storeGroups = (DB.permGroups || []).filter(g => g.scope === 'STORE');
+  sel.innerHTML = '<option value="">-- Chọn Nhóm Quyền --</option>' +
+    storeGroups.map(g => `<option value="${escapeHtml(g.id)}">${escapeHtml(g.name)}</option>`).join('');
+  // Pre-chọn nhóm mặc định (nếu có) hoặc nhóm đầu tiên, để giảm thao tác — admin vẫn đổi được.
+  if (storeGroups.some(g => g.id === 'grp_store_default')) sel.value = 'grp_store_default';
+  else if (storeGroups.length) sel.value = storeGroups[0].id;
+}
+
 function resetUniformEmployeeCreateForm() {
   const form = document.querySelector('#uniformSubEmployees form');
   if (form) form.reset();
@@ -35366,10 +35400,13 @@ function resetUniformEmployeeCreateForm() {
     jobTitleSel.innerHTML = '<option value="">-- Chưa gán chức danh --</option>' +
       options.map(t => `<option value="${escapeHtml(t.label)}">${escapeHtml(t.label)}</option>`).join('');
   }
+  populateUniformEmployeeGroupOptions();
 }
 
 async function submitUniformEmployeeCreate(e) {
   e.preventDefault();
+  const groupId = document.getElementById('ueGroupId').value;
+  if (!groupId) return alert('Vui lòng chọn Nhóm Quyền!');
   const payload = {
     username: document.getElementById('ueUsername').value.trim(),
     password: document.getElementById('uePassword').value,
@@ -35377,7 +35414,8 @@ async function submitUniformEmployeeCreate(e) {
     email: document.getElementById('ueEmail').value.trim(),
     phone: document.getElementById('uePhone').value.trim(),
     dept: document.getElementById('ueStore').value,
-    jobTitle: document.getElementById('ueJobTitle').value
+    jobTitle: document.getElementById('ueJobTitle').value,
+    groupId
   };
   try {
     const res = await fetch('/api/uniform/employees', {
@@ -35410,21 +35448,25 @@ function renderUniformEmployeesList() {
     );
   }
   if (!rows.length) {
-    tbody.innerHTML = `<tr><td colspan="6" class="text-center text-gray-400 italic p-3">Không có nhân viên siêu thị nào khớp.</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="7" class="text-center text-gray-400 italic p-3">Không có nhân viên siêu thị nào khớp.</td></tr>`;
     return;
   }
-  tbody.innerHTML = rows.map(u => `
+  tbody.innerHTML = rows.map(u => {
+    const group = (DB.permGroups || []).find(g => g.id === (u.groupIds || [])[0]);
+    return `
     <tr class="${u.active === false ? 'opacity-50' : ''}">
       <td class="border p-1.5">${escapeHtml(u.username)}</td>
       <td class="border p-1.5">${escapeHtml(u.name || '')}</td>
       <td class="border p-1.5">${escapeHtml(u.dept || '')}</td>
       <td class="border p-1.5">${escapeHtml(u.jobTitle || '—')}</td>
+      <td class="border p-1.5">${escapeHtml(group ? group.name : '—')}</td>
       <td class="border p-1.5">${u.active === false ? '<span class="text-red-600 font-semibold">🔒 Đã khoá</span>' : '<span class="text-emerald-600 font-semibold">✅ Hoạt động</span>'}</td>
       <td class="border p-1.5 text-center">
         ${u.active === false ? '' : `<button type="button" onclick="lockUniformEmployeeAction(${u.id})" class="text-red-500 font-bold hover:underline">🔒 Khoá</button>`}
       </td>
     </tr>
-  `).join('');
+  `;
+  }).join('');
 }
 
 // Khoá 1 CHIỀU (route server chỉ nhận active:false, xem PATCH /api/uniform/employees/:id/active) — mở

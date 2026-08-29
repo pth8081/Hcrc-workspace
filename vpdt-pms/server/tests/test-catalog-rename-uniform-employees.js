@@ -125,7 +125,13 @@ async function scenario(name, fn) {
       { label: 'Giám Đốc Siêu Thị', restrictedFromSelfService: true }
     ];
     DB.submissionTypes = []; DB.contractTypes = []; DB.carTypes = [];
-    DB.permGroups = []; DB.vppExcludeGroups = [];
+    // permGroups: 1 nhóm scope STORE hợp lệ (giống grp_store_default seed thật) + 1 nhóm KHÔNG có scope
+    // (dùng để test reject "group tồn tại nhưng sai scope") — phục vụ nhóm scenario (4d)-(4g) mới thêm.
+    DB.permGroups = [
+      { id: 'grp_store_default', name: 'Nhân Viên Siêu Thị (Mặc Định)', description: '', perms: {}, scope: 'STORE' },
+      { id: 'grp_ho_only', name: 'Chỉ Dành Cho HO', description: '', perms: { canBeApprover: true } }
+    ];
+    DB.vppExcludeGroups = [];
     DB.workflows = [{ id: 'WF_1STEP', name: '1 bước', steps: [{ order: 1, name: 'Phê duyệt 1' }] }];
     DB.deptWorkflows = { 'Phòng IT': { workflowId: 'WF_1STEP', approvers: { 1: ['locked_approver'] } } };
     DB.submissionDeptWorkflows = {}; DB.submissionTypeDeptWorkflows = {}; DB.submissionApprovalGroups = {};
@@ -314,8 +320,40 @@ async function scenario(name, fn) {
 
   // ==========================================================================
   // (4) "Quản Lý Nhân Viên Siêu Thị" sub-tab.
+  //
+  // The mocked POST /api/uniform/employees handler below re-implements (in the test, not by requiring
+  // the real server file — this suite's style stubs window.fetch directly, see tests/README.md) the same
+  // validation routes/uniformEmployees.js performs server-side: groupId required, must reference a real
+  // DB.permGroups entry with scope==='STORE', and the created record's perms/groupIds are computed from
+  // that group — not trusted from whatever the client happened to send.
   // ==========================================================================
-  await scenario('(4a) submitUniformEmployeeCreate() posts to POST /api/uniform/employees and appends the returned record', async () => {
+  await scenario('(4a-pre) submitUniformEmployeeCreate() with no Nhóm Quyền selected is rejected client-side (no fetch call)', async () => {
+    const r = await page.evaluate(async () => {
+      document.getElementById('ueUsername').value = 'store_new0';
+      document.getElementById('uePassword').value = 'Passw0rd!23';
+      document.getElementById('ueFullName').value = 'Chưa Chọn Nhóm';
+      document.getElementById('ueEmail').value = 'new0@hcrc.local';
+      document.getElementById('uePhone').value = '0966666600';
+      document.getElementById('ueStore').innerHTML = '<option value="Siêu Thị Quận 3">Siêu Thị Quận 3</option>';
+      document.getElementById('ueStore').value = 'Siêu Thị Quận 3';
+      document.getElementById('ueGroupId').innerHTML = '<option value="">-- Chọn Nhóm Quyền --</option><option value="grp_store_default">Nhân Viên Siêu Thị (Mặc Định)</option>';
+      document.getElementById('ueGroupId').value = ''; // deliberately not chosen
+      window.__alerts.length = 0;
+      window.__fetchCalls.length = 0;
+      const usersBefore = DB.users.length;
+      await submitUniformEmployeeCreate({ preventDefault() {} });
+      return {
+        alerts: window.__alerts.slice(),
+        fetchCalls: window.__fetchCalls.filter(c => c.url === '/api/uniform/employees').length,
+        usersGrew: DB.users.length !== usersBefore
+      };
+    });
+    record('(4a-pre) shows "Vui lòng chọn Nhóm Quyền!" alert', r.alerts.some(a => a.includes('Vui lòng chọn Nhóm Quyền')), JSON.stringify(r));
+    record('(4a-pre) no fetch call was made', r.fetchCalls === 0, JSON.stringify(r));
+    record('(4a-pre) DB.users unchanged', !r.usersGrew, JSON.stringify(r));
+  });
+
+  await scenario('(4a) submitUniformEmployeeCreate() posts groupId to POST /api/uniform/employees and appends the returned record (perms/groupIds computed from the STORE-scoped group)', async () => {
     const r = await page.evaluate(async () => {
       document.getElementById('ueUsername').value = 'store_new1';
       document.getElementById('uePassword').value = 'Passw0rd!23';
@@ -326,11 +364,17 @@ async function scenario(name, fn) {
       document.getElementById('ueStore').value = 'Siêu Thị Quận 3';
       document.getElementById('ueJobTitle').innerHTML = '<option value="">--</option><option value="Nhân viên bán hàng">Nhân viên bán hàng</option>';
       document.getElementById('ueJobTitle').value = 'Nhân viên bán hàng';
+      document.getElementById('ueGroupId').innerHTML = '<option value="grp_store_default">Nhân Viên Siêu Thị (Mặc Định)</option>';
+      document.getElementById('ueGroupId').value = 'grp_store_default';
 
-      window.__fetchHandlers['POST /api/uniform/employees'] = (call) => ({
-        status: 200,
-        body: { ok: true, user: { id: 999, username: call.body.username, name: call.body.fullName, email: call.body.email, phone: call.body.phone, dept: call.body.dept, jobTitle: call.body.jobTitle, posType: 'STORE', active: true, perms: {} } }
-      });
+      window.__fetchHandlers['POST /api/uniform/employees'] = (call) => {
+        const group = DB.permGroups.find(g => g.id === call.body.groupId);
+        if (!group || group.scope !== 'STORE') return { status: 400, body: { error: 'Nhóm quyền không hợp lệ hoặc không dành cho Siêu Thị' } };
+        return {
+          status: 200,
+          body: { ok: true, user: { id: 999, username: call.body.username, name: call.body.fullName, email: call.body.email, phone: call.body.phone, dept: call.body.dept, jobTitle: call.body.jobTitle, posType: 'STORE', active: true, groupIds: [group.id], perms: { ...group.perms } } }
+        };
+      };
       const usersBefore = DB.users.length;
       await submitUniformEmployeeCreate({ preventDefault() {} });
       const call = window.__fetchCalls.find(c => c.url === '/api/uniform/employees' && c.method === 'POST');
@@ -338,8 +382,65 @@ async function scenario(name, fn) {
       return { usersGrew: DB.users.length === usersBefore + 1, callBody: call ? call.body : null, created };
     });
     record('(4a) request body contains no perms/posType field (server decides those)', r.callBody && r.callBody.perms === undefined && r.callBody.posType === undefined, JSON.stringify(r));
+    record('(4a) request body carries groupId "grp_store_default"', r.callBody && r.callBody.groupId === 'grp_store_default', JSON.stringify(r));
     record('(4a) DB.users grew by 1 with the server-returned record', r.usersGrew && !!r.created, JSON.stringify(r));
-    record('(4a) created record has posType STORE and perms:{} (empty) exactly as the server would enforce', r.created && r.created.posType === 'STORE' && Object.keys(r.created.perms || {}).length === 0, JSON.stringify(r));
+    record('(4a) created record has posType STORE, groupIds [grp_store_default], and perms matching that group\'s perms',
+      r.created && r.created.posType === 'STORE' && JSON.stringify(r.created.groupIds) === JSON.stringify(['grp_store_default']) && JSON.stringify(r.created.perms) === '{}',
+      JSON.stringify(r));
+  });
+
+  await scenario('(4a-scope) submitUniformEmployeeCreate() with a groupId pointing to a group that exists but has no scope STORE is rejected (400)', async () => {
+    const r = await page.evaluate(async () => {
+      document.getElementById('ueUsername').value = 'store_new2';
+      document.getElementById('uePassword').value = 'Passw0rd!23';
+      document.getElementById('ueFullName').value = 'Sai Nhóm Quyền';
+      document.getElementById('ueEmail').value = 'new2@hcrc.local';
+      document.getElementById('uePhone').value = '0966666602';
+      document.getElementById('ueStore').innerHTML = '<option value="Siêu Thị Quận 3">Siêu Thị Quận 3</option>';
+      document.getElementById('ueStore').value = 'Siêu Thị Quận 3';
+      // grp_ho_only exists in DB.permGroups but has no scope:'STORE' — simulates a crafted request since
+      // the real dropdown (populateUniformEmployeeGroupOptions()) would never offer it as an option.
+      document.getElementById('ueGroupId').innerHTML = '<option value="grp_ho_only">Chỉ Dành Cho HO</option>';
+      document.getElementById('ueGroupId').value = 'grp_ho_only';
+
+      window.__fetchHandlers['POST /api/uniform/employees'] = (call) => {
+        const group = DB.permGroups.find(g => g.id === call.body.groupId);
+        if (!group || group.scope !== 'STORE') return { status: 400, body: { error: 'Nhóm quyền không hợp lệ hoặc không dành cho Siêu Thị' } };
+        return { status: 200, body: { ok: true, user: {} } };
+      };
+      window.__alerts.length = 0;
+      const usersBefore = DB.users.length;
+      await submitUniformEmployeeCreate({ preventDefault() {} });
+      return { alerts: window.__alerts.slice(), usersGrew: DB.users.length !== usersBefore };
+    });
+    record('(4a-scope) shows the "không dành cho Siêu Thị" error alert', r.alerts.some(a => a.includes('không dành cho Siêu Thị')), JSON.stringify(r));
+    record('(4a-scope) DB.users unchanged (nothing was appended)', !r.usersGrew, JSON.stringify(r));
+  });
+
+  await scenario('(4a-missing) submitUniformEmployeeCreate() with a groupId pointing to a nonexistent group id is rejected (400)', async () => {
+    const r = await page.evaluate(async () => {
+      document.getElementById('ueUsername').value = 'store_new3';
+      document.getElementById('uePassword').value = 'Passw0rd!23';
+      document.getElementById('ueFullName').value = 'Nhóm Không Tồn Tại';
+      document.getElementById('ueEmail').value = 'new3@hcrc.local';
+      document.getElementById('uePhone').value = '0966666603';
+      document.getElementById('ueStore').innerHTML = '<option value="Siêu Thị Quận 3">Siêu Thị Quận 3</option>';
+      document.getElementById('ueStore').value = 'Siêu Thị Quận 3';
+      document.getElementById('ueGroupId').innerHTML = '<option value="grp_does_not_exist">???</option>';
+      document.getElementById('ueGroupId').value = 'grp_does_not_exist';
+
+      window.__fetchHandlers['POST /api/uniform/employees'] = (call) => {
+        const group = DB.permGroups.find(g => g.id === call.body.groupId);
+        if (!group || group.scope !== 'STORE') return { status: 400, body: { error: 'Nhóm quyền không hợp lệ hoặc không dành cho Siêu Thị' } };
+        return { status: 200, body: { ok: true, user: {} } };
+      };
+      window.__alerts.length = 0;
+      const usersBefore = DB.users.length;
+      await submitUniformEmployeeCreate({ preventDefault() {} });
+      return { alerts: window.__alerts.slice(), usersGrew: DB.users.length !== usersBefore };
+    });
+    record('(4a-missing) shows the "không hợp lệ" error alert', r.alerts.some(a => a.includes('Nhóm quyền không hợp lệ')), JSON.stringify(r));
+    record('(4a-missing) DB.users unchanged (nothing was appended)', !r.usersGrew, JSON.stringify(r));
   });
 
   await scenario('(4b) lockUniformEmployeeAction() PATCHes active:false and removes the unlock option from the list', async () => {

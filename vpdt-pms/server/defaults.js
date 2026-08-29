@@ -185,7 +185,15 @@ const DEFAULTS = {
     ]
   },
 
-  permGroups: [],
+  permGroups: [
+    {
+      id: 'grp_store_default',
+      name: 'Nhân Viên Siêu Thị (Mặc Định)',
+      description: 'Nhóm quyền mặc định cho tài khoản nhân viên siêu thị tạo qua sub-tab "Quản Lý Nhân Viên Siêu Thị" (Đồng Phục) — không có quyền đặc biệt nào ngoài quyền truy cập cơ bản mặc định của mọi tài khoản, chỉ dùng để phân loại/gán mặc định.',
+      perms: {},
+      scope: 'STORE'
+    }
+  ],
 
   // "Nhóm Quyền Đặc Biệt" (khối 17 cây phân quyền, tách riêng khỏi permGroups ở trên — 1 user chọn
   // được NHIỀU nhóm loại này cùng lúc, khác permGroups chỉ 1 nhóm/user): mỗi nhóm mang 1 danh sách
