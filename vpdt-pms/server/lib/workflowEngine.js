@@ -329,7 +329,11 @@ function applyWorkflowAction({ moduleKey, item, action, user, comment, extraFiel
       proposedBy: user.username, proposedByName: user.name,
       proposedAt: nowVN(), step: currentStep
     };
-    item[historyField].push({ step: currentStep, approver: user.name, username: user.username, action: 'PROPOSE_FILE_REPLACEMENT', comment: comment || '', time: nowVN() });
+    // fileName/fileUrl ghi CẢ vào dòng lịch sử (không chỉ pendingFileProposal — trường này sẽ bị xoá
+    // ngay khi người trình xác nhận xong) để tra cứu lại sau này vẫn biết ĐÚNG tệp nào đã được đề xuất
+    // tại mốc này, khớp quy ước "field phụ ghi kèm dòng lịch sử" đã dùng cho CarReg (assignedDriver/
+    // assignedPlate) ở applyWorkflowAction() bên dưới.
+    item[historyField].push({ step: currentStep, approver: user.name, username: user.username, action: 'PROPOSE_FILE_REPLACEMENT', comment: comment || '', time: nowVN(), fileName, fileUrl });
     return { item, transition: { type: 'PROPOSE_FILE_REPLACEMENT' } };
   }
 
@@ -349,11 +353,11 @@ function applyWorkflowAction({ moduleKey, item, action, user, comment, extraFiel
       item.fileUrl = proposal.fileUrl;
       item.fileName = proposal.fileName;
       item.fileType = proposal.fileType || '';
-      item[historyField].push({ step: proposal.step, approver: user.name, username: user.username, action: 'FILE_PROPOSAL_ACCEPTED', comment, time: nowVN() });
+      item[historyField].push({ step: proposal.step, approver: user.name, username: user.username, action: 'FILE_PROPOSAL_ACCEPTED', comment, time: nowVN(), fileName: proposal.fileName, fileUrl: proposal.fileUrl });
       item[statusField] = 'PENDING';
       item[currentStepField] = 1;
     } else {
-      item[historyField].push({ step: proposal.step, approver: user.name, username: user.username, action: 'FILE_PROPOSAL_DECLINED', comment: comment || '', time: nowVN() });
+      item[historyField].push({ step: proposal.step, approver: user.name, username: user.username, action: 'FILE_PROPOSAL_DECLINED', comment: comment || '', time: nowVN(), fileName: proposal.fileName, fileUrl: proposal.fileUrl });
       item[statusField] = 'DRAFT';
       item[currentStepField] = 0;
     }

@@ -92,7 +92,7 @@ async function main() {
             fileUrl, fileName, fileType: fileType || '', note: body.comment || '',
             proposedBy: currentUser.username, proposedByName: currentUser.name, proposedAt: nowVN(), step: rec.currentStep
           };
-          rec.history = [...(rec.history || []), { step: rec.currentStep, approver: currentUser.name, username: currentUser.username, action: 'PROPOSE_FILE_REPLACEMENT', comment: body.comment || '', time: nowVN() }];
+          rec.history = [...(rec.history || []), { step: rec.currentStep, approver: currentUser.name, username: currentUser.username, action: 'PROPOSE_FILE_REPLACEMENT', comment: body.comment || '', time: nowVN(), fileName, fileUrl }];
           return { item: rec, transition: { type: 'PROPOSE_FILE_REPLACEMENT' } };
         }
 
@@ -104,10 +104,10 @@ async function main() {
           if (agree) {
             if (!body.comment) throw new Error('Vui lòng nhập lý do đồng ý thay thế tờ trình');
             rec.fileUrl = proposal.fileUrl; rec.fileName = proposal.fileName; rec.fileType = proposal.fileType || '';
-            rec.history = [...(rec.history || []), { step: proposal.step, approver: currentUser.name, username: currentUser.username, action: 'FILE_PROPOSAL_ACCEPTED', comment: body.comment, time: nowVN() }];
+            rec.history = [...(rec.history || []), { step: proposal.step, approver: currentUser.name, username: currentUser.username, action: 'FILE_PROPOSAL_ACCEPTED', comment: body.comment, time: nowVN(), fileName: proposal.fileName, fileUrl: proposal.fileUrl }];
             rec.status = 'PENDING'; rec.currentStep = 1;
           } else {
-            rec.history = [...(rec.history || []), { step: proposal.step, approver: currentUser.name, username: currentUser.username, action: 'FILE_PROPOSAL_DECLINED', comment: body.comment || '', time: nowVN() }];
+            rec.history = [...(rec.history || []), { step: proposal.step, approver: currentUser.name, username: currentUser.username, action: 'FILE_PROPOSAL_DECLINED', comment: body.comment || '', time: nowVN(), fileName: proposal.fileName, fileUrl: proposal.fileUrl }];
             rec.status = 'DRAFT'; rec.currentStep = 0;
           }
           rec.pendingFileProposal = null;
@@ -576,7 +576,7 @@ async function main() {
           noFileBlocked &&
           subAfterPropose.status === 'PENDING' && subAfterPropose.currentStep === 2 &&
           subAfterPropose.pendingFileProposal && subAfterPropose.pendingFileProposal.fileName === 'to-trinh-thay-the.pdf' &&
-          (subAfterPropose.history || []).some(h => h.action === 'PROPOSE_FILE_REPLACEMENT'),
+          (subAfterPropose.history || []).some(h => h.action === 'PROPOSE_FILE_REPLACEMENT' && h.fileName === 'to-trinh-thay-the.pdf'),
           `noFileBlocked=${noFileBlocked} sub=${JSON.stringify({ status: subAfterPropose.status, currentStep: subAfterPropose.currentStep, proposal: subAfterPropose.pendingFileProposal })}`
         );
 
@@ -626,7 +626,7 @@ async function main() {
           agreeBlockedNoComment &&
           subAfterAgree.status === 'PENDING' && subAfterAgree.currentStep === 1 && !subAfterAgree.pendingFileProposal &&
           subAfterAgree.fileName === 'to-trinh-thay-the-2.pdf' &&
-          (subAfterAgree.history || []).some(h => h.action === 'FILE_PROPOSAL_ACCEPTED' && h.comment.includes('điều khoản thanh toán')),
+          (subAfterAgree.history || []).some(h => h.action === 'FILE_PROPOSAL_ACCEPTED' && h.comment.includes('điều khoản thanh toán') && h.fileName === 'to-trinh-thay-the-2.pdf'),
           `agreeBlockedNoComment=${agreeBlockedNoComment} sub=${JSON.stringify({ status: subAfterAgree.status, currentStep: subAfterAgree.currentStep, fileName: subAfterAgree.fileName })}`
         );
 
