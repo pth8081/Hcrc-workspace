@@ -1622,6 +1622,37 @@ router.post('/itSupportTickets/:id/deny-escalation', async (req, res) => {
   }
 });
 
+// ===================== NHÂN SỰ ("HCRC Đồng Hành" — hỏi & đáp) =====================
+// Câu hỏi được TẠO qua engine chung (POST /api/create/hrFeedback, xem lib/createValidation.js) — ở đây
+// chỉ còn 2 hành động sau khi đã tồn tại: Nhân Sự trả lời, và nhân viên đánh dấu đã đọc phản hồi.
+router.post('/hrFeedback/:id/delete', (req, res) => deleteAdminOnly(req, res, 'hrFeedback'));
+
+router.post('/hrFeedback/:id/respond', async (req, res) => {
+  const itemId = Number(req.params.id);
+  if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
+  try {
+    const { freshUser } = await getFreshUser(req);
+    const result = await withLockedRecordForCollection('hrFeedback', itemId, (item) =>
+      recordActions.respondToHrFeedback(freshUser, item, req.body));
+    res.json({ ok: true, item: result });
+  } catch (err) {
+    handleError(res, `hrFeedback/${req.params.id}/respond`, err);
+  }
+});
+
+router.post('/hrFeedback/:id/mark-read', async (req, res) => {
+  const itemId = Number(req.params.id);
+  if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
+  try {
+    const { freshUser } = await getFreshUser(req);
+    const result = await withLockedRecordForCollection('hrFeedback', itemId, (item) =>
+      recordActions.markHrFeedbackRead(freshUser, item));
+    res.json({ ok: true, item: result });
+  } catch (err) {
+    handleError(res, `hrFeedback/${req.params.id}/mark-read`, err);
+  }
+});
+
 // ===================== ĐỒNG PHỤC =====================
 router.post('/uniformPeriods/:id/delete', (req, res) => deleteAdminOnly(req, res, 'uniformPeriods'));
 

@@ -45,7 +45,11 @@ const { HttpError } = require('./httpErrors');
 // không qua engine tạo mới chung lib/createValidation.js — xem buildUniformTransfer()), đăng ký ở đây
 // để dùng chung getAllForCollection()/insertRecord()/withLockedRecordForCollection() thay vì tự viết
 // đường lưu riêng.
-const MIGRATED_COLLECTIONS = new Set(['submissions', 'docs', 'carRegs', 'officeReqs', 'contracts', 'meetings', 'meetingMinutes', 'internalPosts', 'paymentRequests', 'vppPeriods', 'vppRegistrations', 'reportPeriods', 'reportEntries', 'reportSlideTemplates', 'trainingDocuments', 'trainingClasses', 'trainingRegistrations', 'careerPaths', 'careerPathConfirmations', 'trainingTests', 'trainingTestSubmissions', 'trainingCourses', 'trainingPlans', 'onboardingPaths', 'onboardingProgress', 'recruitmentJobs', 'recruitmentReferrals', 'itPriceApprovals', 'itSupportTickets', 'uniformPeriods', 'uniformIssuances', 'uniformStockAdjustments', 'uniformTransfers', 'budgetTemplates', 'budgetPeriods', 'budgetEntries', 'licenses', 'itServiceRenewals']);
+// hrFeedback (Nhân Sự — "HCRC Đồng Hành"): câu hỏi RIÊNG TƯ của từng nhân viên gửi lên bộ phận Nhân
+// Sự (mô hình 1 hỏi – 1 đáp), tạo qua engine chung lib/createValidation.js (mở cho mọi nhân viên,
+// không cần quyền riêng — cùng khuôn itSupportTickets), trả lời/đánh dấu đã đọc qua 2 route riêng ở
+// routes/records.js (respondToHrFeedback()/markHrFeedbackRead() ở lib/recordActions.js).
+const MIGRATED_COLLECTIONS = new Set(['submissions', 'docs', 'carRegs', 'officeReqs', 'contracts', 'meetings', 'meetingMinutes', 'internalPosts', 'paymentRequests', 'vppPeriods', 'vppRegistrations', 'reportPeriods', 'reportEntries', 'reportSlideTemplates', 'trainingDocuments', 'trainingClasses', 'trainingRegistrations', 'careerPaths', 'careerPathConfirmations', 'trainingTests', 'trainingTestSubmissions', 'trainingCourses', 'trainingPlans', 'onboardingPaths', 'onboardingProgress', 'recruitmentJobs', 'recruitmentReferrals', 'itPriceApprovals', 'itSupportTickets', 'uniformPeriods', 'uniformIssuances', 'uniformStockAdjustments', 'uniformTransfers', 'budgetTemplates', 'budgetPeriods', 'budgetEntries', 'licenses', 'itServiceRenewals', 'hrFeedback']);
 
 function toRecord(row) {
   return JSON.parse(row.Payload);

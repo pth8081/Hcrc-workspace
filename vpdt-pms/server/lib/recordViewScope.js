@@ -460,6 +460,20 @@ function filterLicensesForUser(items, user) {
   return (items || []).filter(l => canViewLicense(user, l));
 }
 
+// hrFeedback (Nhân Sự — "HCRC Đồng Hành"): RIÊNG TƯ theo đúng nghĩa hẹp nhất trong toàn hệ thống —
+// chỉ CHÍNH người hỏi và bộ phận Nhân Sự (nhanSuManage/admin) đọc được; KHÔNG có nhánh phòng ban nào
+// (đồng nghiệp/trưởng phòng cùng đơn vị cũng không thấy). Đây là lý do câu hỏi HCRC Đồng Hành phải
+// nằm ở collection riêng chứ không tái dùng internalPosts (bảng tin CÔNG KHAI).
+function canViewHrFeedback(user, item) {
+  if (!user) return false;
+  if (user.perms?.admin || user.perms?.nhanSuManage) return true;
+  return item.creator === user.username;
+}
+
+function filterHrFeedbackForUser(items, user) {
+  return (items || []).filter(q => canViewHrFeedback(user, q));
+}
+
 // itServiceRenewals (Hỗ Trợ IT — Gia Hạn Dịch Vụ CNTT): quyền PHẲNG itManage, KHÔNG có nhánh "chính
 // chủ luôn xem được" như licenses ở trên — đây là danh mục nội bộ đội IT dùng CHUNG cho cả đội (mọi
 // mục do bất kỳ ai trong đội tạo đều phải thấy được bởi cả đội), không phải hồ sơ cá nhân từng người.
@@ -492,5 +506,6 @@ module.exports = {
   canViewUniformTransfer, filterUniformTransfersForUser,
   canViewBudgetEntry, filterBudgetEntriesForUser,
   canViewLicense, filterLicensesForUser,
+  canViewHrFeedback, filterHrFeedbackForUser,
   canDownloadRecordFile
 };

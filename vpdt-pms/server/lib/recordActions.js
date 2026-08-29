@@ -2902,6 +2902,46 @@ function cancelItTicket(user, ticket) {
   return ticket;
 }
 
+// ===================== NHÂN SỰ ("HCRC Đồng Hành" — hỏi & đáp) =====================
+// nhanSuManage là quyền PHẲNG DUY NHẤT của module Nhân Sự — vừa là quyền VÀO module, vừa là quyền TRẢ
+// LỜI mọi câu hỏi HCRC Đồng Hành (chưa tách theo tab con vì module hiện chỉ có đúng 1 tab "Quản Lý &
+// Phản Hồi Ý Kiến"). Cùng hình dạng canManageItSupport() ở trên — KHÁC Đồng Phục/Ngân Sách (3 quyền
+// phẳng tạo/duyệt/tổng hợp tách biệt).
+function canManageHrFeedback(user) {
+  return !!(user?.perms?.admin || user?.perms?.nhanSuManage);
+}
+
+// Nhân Sự trả lời 1 câu hỏi — mô hình 1 hỏi – 1 đáp, kết thúc: PENDING -> ANSWERED, KHÔNG trao đổi qua
+// lại nhiều lượt (trả lời rồi thì không sửa/trả lời lại qua route này nữa). employeeUnread bật lên ở
+// ĐÂY là nơi DUY NHẤT — khái niệm cờ "chưa đọc" BỀN VỮNG đầu tiên của hệ thống (mọi badge khác đều
+// chiếu trực tiếp từ trạng thái hiện tại của bản ghi, không có bit đã-đọc/chưa-đọc lưu riêng), cần
+// thiết vì người dùng đã chốt KHÔNG gửi email khi Nhân Sự phản hồi — chỉ còn badge/inbox trong app
+// báo cho nhân viên biết câu hỏi của họ đã có trả lời.
+function respondToHrFeedback(user, item, payload) {
+  if (!canManageHrFeedback(user)) throw new HttpError(403, 'Bạn không có quyền phản hồi ý kiến ở đây');
+  if (item.status === 'ANSWERED') throw new HttpError(409, 'Câu hỏi này đã được phản hồi');
+  const response = (payload?.response || '').trim();
+  if (!response) throw new HttpError(400, 'Vui lòng nhập nội dung phản hồi');
+  item.response = response.slice(0, 5000);
+  item.respondedBy = user.username;
+  item.respondedByName = user.name;
+  item.respondedAt = nowVN();
+  item.status = 'ANSWERED';
+  item.employeeUnread = true;
+  return item;
+}
+
+// Nhân viên mở xem phản hồi -> tắt cờ chưa đọc (badge về 0). Cho phép CẢ Nhân Sự gọi (mở xem trong màn
+// Quản Lý & Phản Hồi cũng coi là đã xử lý xong) — không có tác dụng phụ nào ngoài việc tắt 1 cờ hiển
+// thị, nên không cần chặt chẽ hơn. Không đổi status/response, không ghi nhật ký gì thêm.
+function markHrFeedbackRead(user, item) {
+  if (item.creator !== user.username && !canManageHrFeedback(user)) {
+    throw new HttpError(403, 'Bạn không có quyền xem câu hỏi này');
+  }
+  item.employeeUnread = false;
+  return item;
+}
+
 // ===================== ĐỒNG PHỤC (module con của Hành Chính) =====================
 // Hành Chính (uniformManage) tạo "Kỳ Cấp Phát" (uniformPeriods, đi qua engine chung ở
 // lib/createValidation.js) phân bổ đồng phục xuống 1 hoặc nhiều siêu thị. Mỗi siêu thị có 1 Giám Đốc
@@ -3673,6 +3713,7 @@ module.exports = {
   canApproveItPriceEmergencyReject, requestItPriceEmergencyReject, approveItPriceEmergencyReject, denyItPriceEmergencyReject,
   claimItTicket, updateItTicketStatus, addItTicketComment, cancelItTicket,
   escalateItTicket, approveItTicketEscalation, denyItTicketEscalation,
+  canManageHrFeedback, respondToHrFeedback, markHrFeedbackRead,
   canManageUniform, canManageUniformStore, computeUniformStock, computeUniformStockBreakdown, computeEmployeeUniformHolding,
   computeAllEmployeeUniformHoldings,
   canApproveUniform, approveUniformPeriod, rejectUniformPeriod,
