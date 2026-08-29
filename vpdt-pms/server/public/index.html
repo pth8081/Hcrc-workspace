@@ -35854,7 +35854,7 @@ function confirmUniformAllocationAction(periodId, allocationId) {
 // thay dropdown vì 1 siêu thị có thể có rất nhiều nhân viên. Option hiển thị "Tên (tài_khoản)" để gõ
 // tìm được theo cả tên lẫn tài khoản (resolveUniformEmployeeInput() khớp lại nguyên cụm này).
 function renderUniformIssueEmployeeOptions() {
-  const employees = (DB.users || []).filter(u => u.dept === currentUser.dept && u.active !== false);
+  const employees = (DB.users || []).filter(u => u.dept === currentUser.dept && u.posType !== 'HO' && u.active !== false);
   sddSetOptions('uniformStoreEmployeesDatalist', employees.map(u => `${u.name} (${u.username})`));
   uniformStoreEmployeesCache = employees;
 }
