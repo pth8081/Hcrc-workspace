@@ -14324,6 +14324,7 @@ function openProcessSubmissionModal(subId) {
         <span class="text-gray-400 font-normal">${escapeHtml(h.time)}</span>
       </div>
       <div class="text-gray-600">Hành động: <span class="font-bold text-blue-600">${escapeHtml(h.action)}</span></div>
+      ${h.fileName ? `<div class="text-gray-700">📎 Tệp thay thế đề xuất: ${escapeHtml(h.fileName)}</div>` : ''}
       ${h.comment ? `<div class="text-gray-800 bg-amber-50 p-1.5 rounded border italic">"${escapeHtml(h.comment)}"</div>` : ''}
     </div>
   `;
