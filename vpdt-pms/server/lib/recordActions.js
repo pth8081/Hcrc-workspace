@@ -9,7 +9,7 @@
 // họp thêm cờ minutesEdit (toàn công ty, không theo phòng ban) cho SỬA — riêng XÓA là quyền tối cao,
 // chỉ Admin; Công việc theo NGƯỜI (assignedBy/assignee), hoàn toàn không có khái niệm phòng ban.
 const { HttpError } = require('./httpErrors');
-const { scopeAllows, OFFICE_SUBTYPE_TO_PERM_FLAG, normalizeReportEntryPayload, buildEffectiveContractApprovalWorkflowServer, sanitizeUniformItems, sanitizeBudgetLines, getBudgetTemplateCustomFields, sanitizeBudgetCustomFields, resolveTrainingInstructorUsername, normalizeInviteList, normalizeTrainingPlanFields, normalizeOnboardingPathFields, SUBMISSION_APPROVAL_LEVELS, buildEffectiveSubmissionWorkflowServer } = require('./createValidation');
+const { scopeAllows, OFFICE_SUBTYPE_TO_PERM_FLAG, normalizeReportEntryPayload, buildEffectiveContractApprovalWorkflowServer, sanitizeUniformItems, sanitizeBudgetLines, getBudgetTemplateCustomFields, sanitizeBudgetCustomFields, resolveTrainingInstructorUsername, normalizeInviteList, normalizeTrainingPlanFields, normalizeOnboardingPathFields, SUBMISSION_APPROVAL_LEVELS, buildEffectiveSubmissionWorkflowServer, validateRequiredCustomData } = require('./createValidation');
 const { validateRegistrationItems: validateVppRegItems, calcItemsTotal: calcVppItemsTotal } = require('./vppCatalog');
 const { sanitizePriceFileItems, sanitizeColumnLabels } = require('./priceFileParser');
 
@@ -725,11 +725,15 @@ function canCreateMinutes(user) {
   return !!(user.perms?.admin || user.perms?.minutesCreate);
 }
 
-function createMinutes(payload, user, existingCollection) {
+function createMinutes(payload, user, existingCollection, formTemplates) {
   if (!canCreateMinutes(user)) {
     throw new HttpError(403, 'Bạn không có quyền lập biên bản họp');
   }
   if (!payload || typeof payload !== 'object') throw new HttpError(400, 'Thiếu dữ liệu biên bản họp');
+  // Trường bổ sung (Biểu Mẫu > Biên Bản Họp) — createMinutes() KHÔNG đi qua CREATE_MODULE_CONFIGS/
+  // validateAndPrepareCreate() chung (route riêng, xem POST /api/records/minutes ở routes/records.js)
+  // nên phải tự gọi validateRequiredCustomData() ở đây thay vì thừa hưởng như submissions/docs.
+  validateRequiredCustomData(payload.customData, formTemplates, 'MEETING_MINUTES');
   if (payload.code) {
     const dup = (existingCollection || []).some(m => m.code === payload.code);
     if (dup) throw new HttpError(409, `Mã "${payload.code}" đã tồn tại`);
@@ -1062,7 +1066,7 @@ function unhideInternalPost(user, post) {
 // thái này sửa được (bài đã APPROVED/PENDING/REJECTED/HIDDEN đã qua giai đoạn soạn thảo). Gửi lại y hệt
 // luật gán status lúc TẠO (xem createValidation.js internalPosts.extraValidate) — giữ isDraft để tác
 // giả có thể lưu nháp nhiều lần trước khi thật sự gửi.
-const INTERNAL_POST_EDITABLE_FIELDS = ['title', 'content', 'attachment', 'postCategory', 'publishAt', 'training'];
+const INTERNAL_POST_EDITABLE_FIELDS = ['title', 'content', 'attachment', 'postCategory', 'publishAt', 'training', 'customData'];
 function editInternalPost(payload, user, post) {
   if (post.author !== user.username && !user.perms?.admin) throw new HttpError(403, 'Bạn không có quyền sửa bài đăng này');
   if (post.status !== 'DRAFT' && post.status !== 'NEED_INFO') throw new HttpError(409, 'Bài đăng không còn ở trạng thái được sửa');

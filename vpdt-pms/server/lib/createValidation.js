@@ -346,6 +346,11 @@ const CREATE_MODULE_CONFIGS = {
       const isSignedImport = !!payload.isSignedImport;
       delete payload.isSignedImport; // chỉ là cờ tạm quyết định nhánh xử lý bên dưới, không lưu vào hồ sơ
 
+      // Trường bổ sung (Biểu Mẫu) — 2 tab CONTRACT_APPROVAL/CONTRACT_MANAGE chung coreKey 'CONTRACT'
+      // nhưng RIÊNG danh sách trường bổ sung (xem FORM_TABS ở index.html), khớp đúng modKey client
+      // dùng khi gọi collectDynamicFieldsData() theo isSignedImport.
+      validateRequiredCustomData(payload.customData, appData?.formTemplates, isSignedImport ? 'CONTRACT_MANAGE' : 'CONTRACT_APPROVAL');
+
       // Khớp đúng 2 kiểm tra editContract() (lib/recordActions.js) đã có cho nhánh SỬA — trước đây
       // nhánh TẠO MỚI (áp dụng cho cả hợp đồng gốc lẫn phụ lục, cả 2 luồng isSignedImport) không có
       // ràng buộc nào, cho phép tạo hợp đồng "0 đồng"/âm hoặc hết hạn trước khi có hiệu lực đi hết cả
@@ -445,7 +450,8 @@ const CREATE_MODULE_CONFIGS = {
     // sai định dạng hoặc kết thúc trước bắt đầu vẫn qua được, và tệ hơn: new Date(...).getTime() trả về
     // NaN cho giờ sai định dạng, mọi phép so sánh với NaN đều false nên findMeetingConflict() (dưới)
     // kết luận "không trùng" cho MỌI trường hợp giờ lỗi định dạng — vượt qua luôn cơ chế khoá-theo-phòng.
-    extraValidate: (payload, collection) => {
+    extraValidate: (payload, collection, user, appData) => {
+      validateRequiredCustomData(payload.customData, appData?.formTemplates, 'MEETING_ROOM');
       const newStart = new Date(payload.startTime).getTime();
       const newEnd = new Date(payload.endTime).getTime();
       if (!Number.isFinite(newStart) || !Number.isFinite(newEnd)) {
@@ -470,7 +476,8 @@ const CREATE_MODULE_CONFIGS = {
     // được phiếu đăng ký xe, và biển số gán sau đó ở bước duyệt (findCarPlateConflict()) dùng chính
     // startTime/endTime này để so trùng khung giờ — new Date(...).getTime() trả NaN cho giờ sai định
     // dạng khiến MỌI so sánh thời gian đều false, "chưa từng trùng" với bất kỳ phiếu nào khác.
-    extraValidate: (payload) => {
+    extraValidate: (payload, collection, user, appData) => {
+      validateRequiredCustomData(payload.customData, appData?.formTemplates, 'CAR');
       const newStart = new Date(payload.startTime).getTime();
       const newEnd = new Date(payload.endTime).getTime();
       if (!Number.isFinite(newStart) || !Number.isFinite(newEnd)) {
@@ -501,12 +508,16 @@ const CREATE_MODULE_CONFIGS = {
     dbKey: 'officeReqs',
     getScope: (user) => user.perms?.officeCreate,
     creatorField: 'creator', creatorNameField: 'creatorName',
-    extraValidate: (payload, collection, user) => {
+    extraValidate: (payload, collection, user, appData) => {
       const flag = OFFICE_SUBTYPE_TO_PERM_FLAG[payload.subType];
       if (!flag) throw new CreateError(400, `Loại đề xuất văn phòng không hợp lệ: ${payload.subType}`);
       if (!user.perms?.admin && !user.perms?.[flag]) {
         throw new CreateError(403, 'Bạn không có quyền tạo đề xuất văn phòng loại này');
       }
+      // Trường bổ sung (Biểu Mẫu) — cả 3 sub-tab (MUA_BAN/SUA_CHUA/DAU_TU) chung coreKey 'OFFICE' nhưng
+      // RIÊNG danh sách trường bổ sung theo đúng subType, khớp modKey client dùng khi gọi
+      // collectDynamicFieldsData(activeOfficeSubTab) (xem FORM_TABS ở index.html).
+      validateRequiredCustomData(payload.customData, appData?.formTemplates, payload.subType);
       // "Mua Sắm" tự tính amount = tổng (Số lượng × Đơn giá) của từng hạng mục ở CLIENT (xem
       // recalcOfficeItemsTotal() ở index.html) rồi gửi kèm cả amount lẫn items — trước đây server tin
       // nguyên payload.amount, không tính lại từ items: request tự soạn gửi items thật (số nhỏ) kèm
@@ -614,6 +625,12 @@ const CREATE_MODULE_CONFIGS = {
         (type === 'REWARD' && user.perms?.internalRewardCreate)
       );
       if (!allowed) throw new CreateError(403, 'Bạn không có quyền đăng bài ở phân hệ này');
+
+      // Trường bổ sung (Biểu Mẫu > Truyền Thông Nội Bộ - Chuyên Đề) — chỉ NEWS/SHARE còn hiện
+      // #dynamicFieldsContainer_INTERNAL_POST ở client (xem CORE_FIELD_MANIFEST.INTERNAL_POST).
+      if (type === 'NEWS' || type === 'SHARE') {
+        validateRequiredCustomData(payload.customData, appData?.formTemplates, 'INTERNAL_POST');
+      }
 
       // postCategory ("chuyên đề") — chỉ NEWS (Nhịp Sống HCRC) và SHARE (Góc Chia Sẻ) có, dùng CHUNG
       // tên field nhưng khác danh sách giá trị hợp lệ theo type (appData.internalNewsCategories vs
@@ -2135,6 +2152,7 @@ function normalizeOnboardingPathFields(payload, appData) {
 
 module.exports = {
   CREATE_MODULE_CONFIGS, CreateError, validateAndPrepareCreate, scopeAllows, findMeetingConflict,
+  validateRequiredCustomData,
   OFFICE_SUBTYPE_TO_PERM_FLAG, normalizeReportEntryPayload,
   CONTRACT_APPROVAL_LAYERS, CONTRACT_APPROVAL_LEVELS, CONTRACT_APPROVAL_LEVEL_RULES,
   buildEffectiveContractApprovalWorkflowServer,

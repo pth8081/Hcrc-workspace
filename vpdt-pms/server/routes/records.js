@@ -265,8 +265,9 @@ async function insertMinutesTasks(createdTasks) {
 router.post('/minutes', async (req, res) => {
   try {
     const { freshUser } = await getFreshUser(req);
+    const { formTemplates } = await getAllAppData();
     const minutesItem = await createForCollection('meetingMinutes', (list) =>
-      recordActions.createMinutes(req.body, freshUser, list)
+      recordActions.createMinutes(req.body, freshUser, list, formTemplates)
     );
     res.json({ ok: true, item: minutesItem });
   } catch (err) {
