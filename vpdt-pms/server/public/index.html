@@ -9094,7 +9094,10 @@ function openBosungEditModal(moduleKey, id) {
   if (!item) return;
   bosungEditTarget = { module: moduleKey, id };
   document.getElementById('bosungEditTitle').innerText = `${meta.title}: ${item.code || ''}`;
-  const lastReq = (item.history || []).slice().reverse().find(h => h.action === 'REQUEST_CHANGES');
+  // FILE_PROPOSAL_DECLINED: người trình từ chối đề xuất thay thế tệp của Trợ Lý/Thư Ký (xem
+  // openTroLyThuKyBoSungChoice()/resolveFileProposal() bên dưới) — cũng đưa hồ sơ về NHÁP y hệt
+  // REQUEST_CHANGES nên gộp chung tìm lý do gần nhất để hiển thị ở đây.
+  const lastReq = (item.history || []).slice().reverse().find(h => h.action === 'REQUEST_CHANGES' || h.action === 'FILE_PROPOSAL_DECLINED');
   document.getElementById('bosungEditReasonNote').innerHTML = lastReq
     ? `⚠️ <b>Người duyệt yêu cầu bổ sung:</b> ${escapeHtml(lastReq.comment || '')}`
     : '⚠️ Hồ sơ đang ở trạng thái cần bổ sung — vui lòng sửa lại nội dung rồi gửi lại.';
@@ -14118,6 +14121,8 @@ function renderSubmissionReqs() {
       progressBadge = `<span class="px-2 py-1 bg-red-100 text-red-800 rounded font-bold text-xs">❌ Bị từ chối / Trả về</span>`;
     } else if (sub.status === 'DRAFT') {
       progressBadge = `<span class="px-2 py-1 bg-orange-100 text-orange-800 rounded font-bold text-xs">✏️ Cần bổ sung — chờ sửa lại</span>`;
+    } else if (sub.pendingFileProposal) {
+      progressBadge = `<span class="px-2 py-1 bg-purple-100 text-purple-800 rounded font-bold text-xs">📄 Chờ người trình xác nhận thay thế tờ trình</span>`;
     } else {
       const stepName = wf.steps[sub.currentStep - 1]?.name || `Bước ${sub.currentStep}`;
       const progressText = getStepApprovalProgressText(currentStepApprovers, sub.history, sub.currentStep);
@@ -14148,9 +14153,14 @@ function renderSubmissionReqs() {
         <td class="border p-2 text-center">${taskStatusBadge}</td>
         <td class="border p-2 text-center space-x-1">
           ${(() => {
-            const primaryBtnHTML = canApprove
-              ? `<button onclick="openProcessSubmissionModal(${sub.id})" class="px-2.5 py-1 bg-emerald-600 text-white rounded text-xs hover:opacity-90 font-bold">✍️ Bút phê / Duyệt</button>`
-              : `<button onclick="runSubmissionAction(${sub.id}, 'process')" class="px-2.5 py-1 bg-gray-600 text-white rounded text-xs hover:opacity-90 font-bold">👁️ Chi tiết</button>`;
+            // Đang có đề xuất thay thế tệp CHỜ chính người trình xác nhận (xem
+            // openTroLyThuKyProposeFileForm()/openResolveFileProposalModal() bên dưới) — ưu tiên hiện
+            // nút này thay cho Bút phê/Duyệt hay Chi tiết.
+            const primaryBtnHTML = (sub.pendingFileProposal && sub.creator === currentUser.username)
+              ? `<button onclick="openResolveFileProposalModal(${sub.id})" class="px-2.5 py-1 bg-purple-600 text-white rounded text-xs hover:opacity-90 font-bold">📄 Xác Nhận Thay Thế</button>`
+              : canApprove
+                ? `<button onclick="openProcessSubmissionModal(${sub.id})" class="px-2.5 py-1 bg-emerald-600 text-white rounded text-xs hover:opacity-90 font-bold">✍️ Bút phê / Duyệt</button>`
+                : `<button onclick="runSubmissionAction(${sub.id}, 'process')" class="px-2.5 py-1 bg-gray-600 text-white rounded text-xs hover:opacity-90 font-bold">👁️ Chi tiết</button>`;
             const secondaryOptions = [];
             const canDL = canDownloadFile(currentUser, 'submission', sub.dept, sub.creator);
             if (sub.status === 'APPROVED') {
@@ -14325,12 +14335,22 @@ function openProcessSubmissionModal(subId) {
 
   const currentStepApprovers = wfConfig.approvers ? (wfConfig.approvers[sub.currentStep] || []) : [];
   const canApprove = (sub.status === 'PENDING') && canApproveStep(currentUser, currentStepApprovers, sub.history, sub.currentStep);
+  // Lớp Bộ phận Trợ Lý/Thư Ký (luôn ngay TRƯỚC TGD) có thêm lựa chọn "Thay thế toàn bộ tờ trình" khi
+  // ấn Yêu Cầu Bổ Sung — xem openTroLyThuKyBoSungChoice()/lib/workflowEngine.js PROPOSE_FILE_REPLACEMENT.
+  const currentLayerKey = wfConfig.steps?.[sub.currentStep - 1]?.layerKey;
 
   const actionBtns = document.getElementById('subModalActionBtns');
-  if (canApprove) {
+  if (sub.pendingFileProposal) {
+    // Đang có đề xuất thay thế tệp CHỜ người trình xác nhận (RESOLVE_FILE_PROPOSAL) — hồ sơ "treo",
+    // không ai được Duyệt/Từ chối/Yêu cầu bổ sung thêm lúc này (khớp guard ở server).
+    actionBtns.innerHTML = `<span class="text-amber-600 italic text-xs font-semibold">⏳ Đang chờ người trình (${escapeHtml(sub.creatorName)}) xác nhận đề xuất thay thế tờ trình của ${escapeHtml(sub.pendingFileProposal.proposedByName)} (${escapeHtml(sub.pendingFileProposal.proposedAt)}).</span>`;
+  } else if (canApprove) {
+    const boSungBtnHTML = currentLayerKey === 'TRO_LY_THU_KY'
+      ? `<button onclick="openTroLyThuKyBoSungChoice(${sub.id})" class="bg-amber-500 text-white px-4 py-1.5 rounded font-bold hover:bg-amber-600 text-xs" title="Bộ phận Trợ Lý/Thư Ký: có thể gửi bình luận bổ sung như cũ, hoặc đề xuất thay thế toàn bộ tệp tờ trình">🔄 Yêu Cầu Bổ Sung</button>`
+      : `<button onclick="confirmProcessSubmission('REQUEST_CHANGES')" class="bg-amber-500 text-white px-4 py-1.5 rounded font-bold hover:bg-amber-600 text-xs" title="Đưa hồ sơ về NHÁP để người trình sửa lại TOÀN BỘ nội dung + tệp rồi gửi lại từ bước 1">🔄 Yêu Cầu Bổ Sung</button>`;
     actionBtns.innerHTML = `
       <button onclick="confirmProcessSubmission('REJECT')" class="bg-red-600 text-white px-4 py-1.5 rounded font-bold hover:bg-red-700 text-xs">❌ Từ Chối / Trả Về</button>
-      <button onclick="confirmProcessSubmission('REQUEST_CHANGES')" class="bg-amber-500 text-white px-4 py-1.5 rounded font-bold hover:bg-amber-600 text-xs" title="Đưa hồ sơ về NHÁP để người trình sửa lại TOÀN BỘ nội dung + tệp rồi gửi lại từ bước 1">🔄 Yêu Cầu Bổ Sung</button>
+      ${boSungBtnHTML}
       <button onclick="confirmProcessSubmission('APPROVE')" class="bg-green-600 text-white px-5 py-1.5 rounded font-bold hover:bg-green-700 text-xs">✅ Phê Duyệt & Chuyển Bước</button>
     `;
   } else {
@@ -14338,6 +14358,176 @@ function openProcessSubmissionModal(subId) {
   }
 
   document.getElementById('submissionProcessModal').classList.remove('hidden');
+}
+
+// ===== Trợ Lý/Thư Ký — đề xuất thay thế toàn bộ tệp tờ trình (thay vì chỉ bình luận bổ sung) =====
+// Chỉ hiện ở lớp TRO_LY_THU_KY (xem openProcessSubmissionModal() ở trên). Dùng chung khung
+// showConfirmModal() nhưng đặt 2 nút lựa chọn NGAY TRONG bodyHTML (thay vì nút Đồng Ý/Hủy mặc định
+// của modal) — vì "Hủy" ở đây phải TỰ THỰC HIỆN luồng REQUEST_CHANGES cũ (đóng modal này rồi gọi
+// confirmProcessSubmission('REQUEST_CHANGES'), dùng lại ô Ý kiến chỉ đạo có sẵn ở modal Bút Phê phía
+// sau) chứ không đơn thuần đóng modal như nút "Hủy" mặc định.
+function openTroLyThuKyBoSungChoice(subId) {
+  showConfirmModal({
+    title: '🔄 Yêu Cầu Bổ Sung — Bộ Phận Trợ Lý/Thư Ký',
+    bodyHTML: `
+      <p class="mb-3">Bộ phận Trợ Lý/Thư Ký có thể xử lý theo 1 trong 2 cách:</p>
+      <div class="flex flex-col gap-2">
+        <button type="button" onclick="closeGenericConfirmModal(); openTroLyThuKyProposeFileForm(${subId})" class="w-full text-left border border-blue-300 bg-blue-50 hover:bg-blue-100 rounded p-2">
+          <div class="font-bold text-blue-800">📤 Đồng Ý — Thay Thế Toàn Bộ Tờ Trình</div>
+          <div class="text-gray-600 font-normal mt-0.5">Tải lên 1 tệp thay thế hoàn toàn tờ trình cũ, gửi cho người trình xác nhận trước khi tiếp tục quy trình.</div>
+        </button>
+        <button type="button" onclick="closeGenericConfirmModal(); confirmProcessSubmission('REQUEST_CHANGES')" class="w-full text-left border border-gray-300 bg-gray-50 hover:bg-gray-100 rounded p-2">
+          <div class="font-bold text-gray-700">💬 Hủy — Gửi Bình Luận Bổ Sung (Theo Luồng Cũ)</div>
+          <div class="text-gray-600 font-normal mt-0.5">Đưa tờ trình về NHÁP theo đúng ô Ý kiến chỉ đạo đã nhập, để người trình tự sửa lại toàn bộ nội dung + tệp rồi gửi lại từ bước 1.</div>
+        </button>
+      </div>
+    `,
+    confirmLabel: 'Đóng'
+  });
+}
+
+function openTroLyThuKyProposeFileForm(subId) {
+  showConfirmModal({
+    title: '📤 Thay Thế Toàn Bộ Tờ Trình',
+    bodyHTML: `
+      <div class="space-y-3 text-xs">
+        <div>
+          <label class="block font-semibold mb-1">Tệp thay thế (bắt buộc)</label>
+          <input type="file" id="tltkProposeFile" accept=".pdf,.docx,.xlsx" class="w-full border p-1 bg-white rounded">
+        </div>
+        <div>
+          <label class="block font-semibold mb-1">Ghi chú (không bắt buộc)</label>
+          <textarea id="tltkProposeNote" class="w-full border p-2 rounded h-16" placeholder="Ghi chú cho người trình về nội dung đã thay đổi..."></textarea>
+        </div>
+        <p class="text-gray-500 italic">Tệp này sẽ thay thế HOÀN TOÀN tệp tờ trình hiện tại, chỉ có hiệu lực sau khi người trình xác nhận đồng ý.</p>
+      </div>
+    `,
+    confirmLabel: '📤 Gửi Đề Xuất Cho Người Trình',
+    onConfirm: () => confirmTroLyThuKyProposeFile(subId)
+  });
+}
+
+async function confirmTroLyThuKyProposeFile(subId) {
+  const fileInput = document.getElementById('tltkProposeFile');
+  const note = document.getElementById('tltkProposeNote').value.trim();
+  if (!fileInput.files || !fileInput.files[0]) return alert('Vui lòng chọn tệp thay thế tờ trình!');
+
+  let uploaded;
+  try {
+    uploaded = await uploadFileToServer(fileInput.files[0], 'submission');
+  } catch (err) {
+    return alert(`⛔ ${err.message}`);
+  }
+
+  let result;
+  try {
+    result = await callWorkflowAction('submissions', subId, 'propose-file-replacement', {
+      comment: note,
+      extraFields: { fileUrl: uploaded.fileUrl, fileName: uploaded.fileName, fileType: uploaded.fileType }
+    });
+  } catch (err) {
+    return alert(`⛔ ${err.message}`);
+  }
+
+  const updatedSub = result.item;
+  const idx = DB.submissions.findIndex(s => s.id === subId);
+  if (idx !== -1) DB.submissions[idx] = updatedSub;
+
+  notifyUsersByEmail('SUBMISSION', 'NOTIFY_FILE_PROPOSAL', updatedSub.code, [updatedSub.creator],
+    `[VPDT] Tờ trình ${updatedSub.code} có đề xuất thay thế tệp cần bạn xác nhận`,
+    `Bộ phận Trợ Lý/Thư Ký đã đề xuất thay thế toàn bộ tệp tờ trình "${updatedSub.title}" (${updatedSub.code}). Vui lòng vào mục Văn Bản Trình để xem và xác nhận.`);
+
+  logSystemAction('SUBMISSION', 'PROPOSE_FILE_REPLACEMENT', `Đề xuất thay thế tệp tờ trình [${updatedSub.code}]`, 'SUCCESS', updatedSub.code);
+  alert('✅ Đã gửi đề xuất thay thế tờ trình cho người trình xác nhận!');
+  closeGenericConfirmModal();
+  closeProcessSubmissionModal();
+  renderSubmissionReqs();
+  refreshApprovalSurfaces();
+}
+
+// Phía NGƯỜI TRÌNH — xác nhận đề xuất thay thế tệp của Trợ Lý/Thư Ký (sub.pendingFileProposal).
+// "Tôi Đồng Ý" (bắt buộc nêu lý do): áp tệp mới, gửi lại từ bước 1 (RESOLVE_FILE_PROPOSAL agree=true).
+// "Tôi Không Đồng Ý": hồ sơ về NHÁP y hệt REQUEST_CHANGES, mở luôn openBosungEditModal() sẵn có để
+// người trình tự tải tệp thay thế khác.
+function openResolveFileProposalModal(subId) {
+  const sub = DB.submissions.find(s => s.id === subId);
+  if (!sub || !sub.pendingFileProposal) return;
+  const p = sub.pendingFileProposal;
+  showConfirmModal({
+    title: '📄 Xác Nhận Thay Thế Tờ Trình',
+    bodyHTML: `
+      <div class="space-y-3 text-xs">
+        <p>Bộ phận <b>${escapeHtml(p.proposedByName)}</b> đề xuất thay thế toàn bộ tệp tờ trình <b>${escapeHtml(sub.code)}</b> (${escapeHtml(p.proposedAt)}).</p>
+        ${p.note ? `<div class="bg-amber-50 border border-amber-200 rounded p-2 italic">"${escapeHtml(p.note)}"</div>` : ''}
+        <div class="flex items-center justify-between gap-2 border rounded p-2 bg-gray-50">
+          <span>📎 ${escapeHtml(p.fileName)}</span>
+          <button type="button" onclick="viewFileProposalAttachment(${subId})" class="px-2 py-1 bg-blue-600 text-white rounded text-[11px] font-bold hover:bg-blue-700">👁️ Xem</button>
+        </div>
+        <div>
+          <label class="block font-semibold mb-1">Lý do đồng ý (bắt buộc nếu chọn "Tôi Đồng Ý")</label>
+          <textarea id="resolveFileProposalComment" class="w-full border p-2 rounded h-16" placeholder="Nhập lý do đồng ý thay thế nội dung tờ trình..."></textarea>
+        </div>
+        <div class="flex gap-2">
+          <button type="button" onclick="confirmResolveFileProposal(${subId}, true)" class="flex-1 bg-green-600 text-white rounded p-2 font-bold hover:bg-green-700">✅ Tôi Đồng Ý</button>
+          <button type="button" onclick="confirmResolveFileProposal(${subId}, false)" class="flex-1 bg-gray-500 text-white rounded p-2 font-bold hover:bg-gray-600">✖️ Tôi Không Đồng Ý — Tự Tải Tệp Khác</button>
+        </div>
+      </div>
+    `,
+    confirmLabel: 'Đóng'
+  });
+}
+
+function viewFileProposalAttachment(subId) {
+  const sub = DB.submissions.find(s => s.id === subId);
+  const p = sub?.pendingFileProposal;
+  if (!p) return;
+  openFileProtectedView({
+    title: `📎 ${p.fileName} (Đề xuất thay thế — ${sub.code})`,
+    sub: `Đề xuất bởi: ${p.proposedByName}`,
+    footerInfo: `Đề xuất thay thế tờ trình: ${sub.title}`,
+    fileSrc: p.fileUrl, fileType: p.fileType, fileName: p.fileName
+  });
+}
+
+async function confirmResolveFileProposal(subId, agree) {
+  const comment = document.getElementById('resolveFileProposalComment').value.trim();
+  if (agree && !comment) return alert('Vui lòng nhập lý do đồng ý thay thế tờ trình!');
+
+  let result;
+  try {
+    result = await callWorkflowAction('submissions', subId, 'resolve-file-proposal', { comment, extraFields: { agree } });
+  } catch (err) {
+    return alert(`⛔ ${err.message}`);
+  }
+
+  const updatedSub = result.item;
+  const idx = DB.submissions.findIndex(s => s.id === subId);
+  if (idx !== -1) DB.submissions[idx] = updatedSub;
+
+  closeGenericConfirmModal();
+  logSystemAction('SUBMISSION', agree ? 'FILE_PROPOSAL_ACCEPTED' : 'FILE_PROPOSAL_DECLINED',
+    `${agree ? 'Đồng ý' : 'Không đồng ý'} đề xuất thay thế tệp tờ trình [${updatedSub.code}]`, 'SUCCESS', updatedSub.code);
+
+  if (agree) {
+    notifyUsersByEmail('SUBMISSION', 'NOTIFY_FILE_PROPOSAL_ACCEPTED', updatedSub.code,
+      (currentStepApproversFor(updatedSub) || []),
+      `[VPDT] Tờ trình ${updatedSub.code} đã được thay thế nội dung và gửi lại`,
+      `Tờ trình "${updatedSub.title}" (${updatedSub.code}) đã được thay thế nội dung theo đề xuất của Trợ Lý/Thư Ký và gửi lại phê duyệt từ bước 1.`);
+    alert('✅ Đã đồng ý thay thế — tờ trình đã gửi lại từ bước 1!');
+    renderSubmissionReqs();
+    refreshApprovalSurfaces();
+  } else {
+    alert('Tờ trình đã chuyển về NHÁP — vui lòng tự tải lên tệp trình thay thế.');
+    renderSubmissionReqs();
+    openBosungEditModal('submissions', subId);
+  }
+}
+
+// Danh sách approver bước 1 của tờ trình (dùng để báo lại khi tờ trình gửi lại từ đầu sau khi đồng ý
+// thay thế tệp) — cùng khuôn transition ADVANCED trong processSubmission() ở trên.
+function currentStepApproversFor(sub) {
+  const wf = resolveSubmissionWorkflow(sub);
+  return wf.approvers ? (wf.approvers[1] || []) : [];
 }
 
 function closeProcessSubmissionModal() {
