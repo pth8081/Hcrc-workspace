@@ -51,16 +51,66 @@ const OFFICE_SUBTYPE_TO_PERM_FLAG = { MUA_BAN: 'officeBuy', SUA_CHUA: 'officeFix
 // (stored XSS). Nguy hiểm nhất đúng với người kiểm duyệt bài Truyền Thông Nội Bộ và bộ phận tuyển
 // dụng — họ chính là những người BẮT BUỘC phải mở các tệp này để xét duyệt. Chặn ở SERVER (không chỉ
 // ẩn/lọc ở giao diện) bằng cách chỉ chấp nhận đúng khuôn URL mà endpoint tải lên của app sinh ra.
+//
+// ĐỢT 2 (rà soát 8/2026) — mở rộng cho MỌI field URL tệp còn lại của docs/submissions/contracts/
+// carRegs/officeReqs/itPriceApprovals (cả TẠO lẫn SỬA, xem lib/recordActions.js). Ngoài stored XSS ở
+// trên, việc lưu fileUrl nguyên văn còn phá đúng lớp phân quyền theo TỪNG HỒ SƠ mà lib/fileAuthz.js
+// (PR #193) vừa dựng: findOwningRecord() tra ngược "/uploads/<tên-file>" -> hồ sơ bằng cách so KHỚP
+// CHUỖI fileUrl, nên ai cũng có thể tạo/sửa 1 hồ sơ của CHÍNH MÌNH rồi tự gán fileUrl = đường dẫn tệp
+// của hồ sơ phòng ban khác (đoán/nghe lỏm được) — hồ sơ giả trở thành "hồ sơ sở hữu" tệp đó và mở
+// toang quyền xem/tải theo quyền của chính kẻ tấn công. Khuôn URL không ngăn được việc TRỎ tới tệp có
+// thật của người khác, nhưng đây là điều kiện cần để 2 lớp còn lại (quyền theo hồ sơ + quyền theo
+// module) làm việc đúng, và chặn hẳn nhánh javascript:/http:// ngoài hệ thống.
 const UPLOADED_FILE_URL_RE = /^\/uploads\/[A-Za-z0-9._-]+$/;
+// Tên tệp do routes/upload.js sinh ra chỉ ~30 ký tự; 500 là mức trần rộng rãi vẫn đủ chặn payload
+// khổng lồ nhồi vào cột dữ liệu (regex ở trên không giới hạn độ dài phần tên tệp).
+const UPLOADED_FILE_URL_MAX_LEN = 500;
 
 // TỪ CHỐI hẳn (không âm thầm xoá field) để client trung thực thấy được lỗi thay vì mất tệp không rõ lý
-// do. Giá trị rỗng/null/undefined vẫn hợp lệ — cả 3 field đều là TUỲ CHỌN ở tầng này (riêng cvFileUrl
-// có kiểm tra "bắt buộc" riêng ngay trước đó trong recruitmentReferrals.extraValidate).
+// do. Giá trị rỗng/null/undefined vẫn hợp lệ — phần lớn field gọi hàm này là TUỲ CHỌN ở tầng này (nơi
+// nào BẮT BUỘC phải có tệp thì đã có kiểm tra "thiếu tệp" riêng ngay trước đó, VD cvFileUrl trong
+// recruitmentReferrals.extraValidate hay fileUrl trong editDocDraft()).
 function assertUploadedFileUrl(value, fieldLabel) {
   if (value === undefined || value === null || value === '') return;
-  if (!UPLOADED_FILE_URL_RE.test(String(value))) {
+  const str = String(value);
+  if (str.length > UPLOADED_FILE_URL_MAX_LEN || !UPLOADED_FILE_URL_RE.test(str)) {
     throw new CreateError(400, `${fieldLabel} không hợp lệ — chỉ chấp nhận tệp đã tải lên hệ thống`);
   }
+}
+
+// Danh sách tệp đính kèm dạng mảng ({fileUrl,...}[]) — submissions.extraFiles và itPriceApprovals.files
+// dùng chung đúng 1 luật với field đơn ở trên. Bỏ qua phần tử không phải object (mảng lỗi định dạng đã
+// bị các nhánh gọi tự chuẩn hoá riêng).
+function assertUploadedFileUrlList(list, fieldLabel) {
+  if (!Array.isArray(list)) return;
+  list.forEach((entry, idx) => {
+    if (!entry || typeof entry !== 'object') return;
+    assertUploadedFileUrl(entry.fileUrl, `${fieldLabel} #${idx + 1}`);
+  });
+}
+
+// trainingDocuments.videoUrl (docType === 'VIDEO') — CÙNG lỗ hổng stored XSS scheme "javascript:" với
+// assertUploadedFileUrl() ở trên, nhưng trước đây kiểm tra bằng /youtube\.com|youtu\.be/i, tức là chỉ
+// dò CHUỖI CON ở bất kỳ đâu trong giá trị, không hề kiểm tra scheme/tên miền. Vì vậy
+// "javascript:alert(document.cookie)//youtube.com" LỌT qua: phía hiển thị (trainingYoutubeEmbedUrl()
+// ở public/index.html) không tách được videoId từ chuỗi này nên rơi về nhánh dự phòng
+// `<a href="${escapeHtml(d.videoUrl)}">` — escapeHtml() KHÔNG vô hiệu hoá scheme "javascript:", thành
+// 1 liên kết bấm được chạy JS trong phiên của mọi người xem kho tài liệu đào tạo.
+//
+// Kiểm tra chặt: PHẢI phân giải được thành URL thật, scheme ĐÚNG BẰNG "https:" (không nhận http:,
+// javascript:, data:, vbscript:...), và hostname ĐÚNG BẰNG 1 trong 4 tên miền Youtube hợp lệ (so
+// khớp toàn phần, không phải "kết thúc bằng" — chặn luôn "youtube.com.kevin.evil.tld").
+const YOUTUBE_HOSTNAMES = new Set(['youtube.com', 'www.youtube.com', 'm.youtube.com', 'youtu.be']);
+
+function isValidYoutubeUrl(value) {
+  let parsed;
+  try {
+    parsed = new URL(String(value));
+  } catch (e) {
+    return false;
+  }
+  if (parsed.protocol !== 'https:') return false;
+  return YOUTUBE_HOSTNAMES.has(parsed.hostname.toLowerCase());
 }
 
 // Khớp đúng SUBMISSION_APPROVAL_LAYERS trong index.html — xem "LƯU Ý BẢO TRÌ" ở đầu file, 2 cài đặt
@@ -321,6 +371,10 @@ const CREATE_MODULE_CONFIGS = {
     // để routes/create.js thật VÀ stub test (dùng data in-memory) đều gọi chung được hàm này.
     extraValidate: (payload, collection, user, appData) => {
       validateRequiredCustomData(payload.customData, appData?.formTemplates, 'SUBMISSION');
+      // Tệp tờ trình + Tài Liệu Bổ Sung Theo Tờ Trình (#subFile/#subExtraFiles ở index.html) —
+      // xem assertUploadedFileUrl().
+      assertUploadedFileUrl(payload.fileUrl, 'Tệp tờ trình');
+      assertUploadedFileUrlList(payload.extraFiles, 'Tài liệu bổ sung theo tờ trình');
       const effectiveWf = buildEffectiveSubmissionWorkflowServer(
         payload.type, payload.dept, payload.selectedApprovalLayers, payload.selectedLayerMembers, appData || {}, payload.approvalLevel
       );
@@ -368,6 +422,12 @@ const CREATE_MODULE_CONFIGS = {
     extraValidate: (payload, collection, user, appData) => {
       const isSignedImport = !!payload.isSignedImport;
       delete payload.isSignedImport; // chỉ là cờ tạm quyết định nhánh xử lý bên dưới, không lưu vào hồ sơ
+
+      // Tệp hợp đồng + Tài liệu ký — kiểm TRƯỚC nhánh isSignedImport bên dưới (nhánh đó gán
+      // signedFileUrl = fileUrl nên phải chắc chắn cả 2 đều hợp lệ trước khi sao chép), xem
+      // assertUploadedFileUrl().
+      assertUploadedFileUrl(payload.fileUrl, 'Tệp hợp đồng');
+      assertUploadedFileUrl(payload.signedFileUrl, 'Tài liệu ký');
 
       // Trường bổ sung (Biểu Mẫu) — 2 tab CONTRACT_APPROVAL/CONTRACT_MANAGE chung coreKey 'CONTRACT'
       // nhưng RIÊNG danh sách trường bổ sung (xem FORM_TABS ở index.html), khớp đúng modKey client
@@ -501,6 +561,9 @@ const CREATE_MODULE_CONFIGS = {
     // dạng khiến MỌI so sánh thời gian đều false, "chưa từng trùng" với bất kỳ phiếu nào khác.
     extraValidate: (payload, collection, user, appData) => {
       validateRequiredCustomData(payload.customData, appData?.formTemplates, 'CAR');
+      // Phiếu đăng ký xe có field fileUrl trong mô hình dữ liệu (lib/fileAuthz.js tra ngược
+      // carRegs theo fileUrl) — xem assertUploadedFileUrl().
+      assertUploadedFileUrl(payload.fileUrl, 'Tệp đính kèm phiếu đăng ký xe');
       const newStart = new Date(payload.startTime).getTime();
       const newEnd = new Date(payload.endTime).getTime();
       if (!Number.isFinite(newStart) || !Number.isFinite(newEnd)) {
@@ -548,6 +611,10 @@ const CREATE_MODULE_CONFIGS = {
       // RIÊNG danh sách trường bổ sung theo đúng subType, khớp modKey client dùng khi gọi
       // collectDynamicFieldsData(activeOfficeSubTab) (xem FORM_TABS ở index.html).
       validateRequiredCustomData(payload.customData, appData?.formTemplates, payload.subType);
+      // Tệp đề xuất + Tài liệu ký (uploadOfficeSignedFile() ở lib/recordActions.js ghi vào cùng bản
+      // ghi này, lib/fileAuthz.js tra ngược officeReqs theo CẢ 2 field) — xem assertUploadedFileUrl().
+      assertUploadedFileUrl(payload.fileUrl, 'Tệp đính kèm đề xuất');
+      assertUploadedFileUrl(payload.signedFileUrl, 'Tài liệu ký');
       // "Mua Sắm" tự tính amount = tổng (Số lượng × Đơn giá) của từng hạng mục ở CLIENT (xem
       // recalcOfficeItemsTotal() ở index.html) rồi gửi kèm cả amount lẫn items — trước đây server tin
       // nguyên payload.amount, không tính lại từ items: request tự soạn gửi items thật (số nhỏ) kèm
@@ -597,6 +664,8 @@ const CREATE_MODULE_CONFIGS = {
     // ra 2 version trùng số hoặc "nhảy cóc"), hoặc bổ sung version cho tài liệu gốc CHƯA duyệt xong.
     extraValidate: (payload, collection, user, appData) => {
       validateRequiredCustomData(payload.customData, appData?.formTemplates, 'DOC');
+      // Tệp tài liệu (#docFile ở index.html) — xem assertUploadedFileUrl().
+      assertUploadedFileUrl(payload.fileUrl, 'Tệp tài liệu');
       if (payload.rootDocId != null) {
         const rootId = Number(payload.rootDocId);
         const root = (collection || []).find(d => d.id === rootId && d.rootDocId == null);
@@ -1019,6 +1088,9 @@ const CREATE_MODULE_CONFIGS = {
       // dưới đây chặn payload giả mạo/kiểu dữ liệu lạ trước khi ghi vào DB.
       const file = payload.files && payload.files[0];
       if (!file || !file.fileUrl) throw new CreateError(400, 'Vui lòng tải lên tệp bảng giá (.xlsx) cần duyệt');
+      // TRƯỚC ĐÂY chỉ cắt còn 300 ký tự (slice bên dưới) — không hề kiểm khuôn, nên "javascript:..."
+      // hay đường dẫn tệp của hồ sơ phòng ban khác vẫn lưu được nguyên vẹn. Xem assertUploadedFileUrl().
+      assertUploadedFileUrl(file.fileUrl, 'Tệp bảng giá');
       const items = sanitizePriceFileItems(file.items);
       const columnLabels = sanitizeColumnLabels(file.columnLabels);
 
@@ -1042,7 +1114,7 @@ const CREATE_MODULE_CONFIGS = {
 
       payload.files = [{
         id: Date.now(),
-        fileUrl: String(file.fileUrl).slice(0, 300),
+        fileUrl: String(file.fileUrl), // đã qua assertUploadedFileUrl() ở trên (khuôn + trần độ dài)
         fileName: (String(file.fileName || '').trim() || 'bang-gia.xlsx').slice(0, 200),
         uploadedBy: user.username, uploadedByName: user.name,
         uploadedAt: new Date().toLocaleString('vi-VN'),
@@ -1162,8 +1234,8 @@ const CREATE_MODULE_CONFIGS = {
       payload.title = String(payload.title).trim();
 
       // Đợt 4: Loại tài liệu — DOCUMENT (mặc định, giữ NGUYÊN hành vi cũ: bắt buộc fileUrl từ tải file
-      // .pdf/.docx/.xlsx), VIDEO (MỚI — nhúng Youtube qua videoUrl thay vì tải file, kiểm tra lỏng lẻo
-      // chỉ cần chứa "youtube.com" hoặc "youtu.be"), IMAGE (MỚI — vẫn dùng đúng cơ chế tải file như
+      // .pdf/.docx/.xlsx), VIDEO (MỚI — nhúng Youtube qua videoUrl thay vì tải file, kiểm tra chặt
+      // scheme + tên miền qua isValidYoutubeUrl(), xem chú thích ở đầu file), IMAGE (MỚI — vẫn dùng đúng cơ chế tải file như
       // DOCUMENT, accept ảnh phía client, server không cần phân biệt thêm vì fileUrl đã là 1 file có
       // thật, chỉ khác cách hiển thị ở client — thumbnail thay vì link tải).
       const docType = (payload.docType === 'VIDEO' || payload.docType === 'IMAGE') ? payload.docType : 'DOCUMENT';
@@ -1171,8 +1243,8 @@ const CREATE_MODULE_CONFIGS = {
       if (docType === 'VIDEO') {
         const videoUrl = String(payload.videoUrl || '').trim();
         if (!videoUrl) throw new CreateError(400, 'Vui lòng nhập link video Youtube');
-        if (!/youtube\.com|youtu\.be/i.test(videoUrl)) {
-          throw new CreateError(400, 'Link video phải là link Youtube hợp lệ (chứa youtube.com hoặc youtu.be)');
+        if (!isValidYoutubeUrl(videoUrl)) {
+          throw new CreateError(400, 'Link video phải là link Youtube hợp lệ (bắt đầu bằng https:// và thuộc youtube.com hoặc youtu.be)');
         }
         payload.videoUrl = videoUrl;
         payload.fileUrl = null; payload.fileName = ''; payload.fileType = '';
@@ -1757,6 +1829,15 @@ const CREATE_MODULE_CONFIGS = {
     forceOwnDept: true,
     getScope: () => ({}),
     creatorField: 'creator', creatorNameField: 'creatorName',
+    // "1 bản ngân sách/PHÒNG BAN/kỳ" (kiểm tra "duplicate" ở extraValidate bên dưới) là điều kiện trùng
+    // lặp GIỮA NHIỀU bản ghi — không diễn đạt được bằng UNIQUE INDEX (Collection, Code) như trùng mã,
+    // giống hệt lý do vppRegistrations/meetings/trainingRegistrations cần getLockKey ở trên: quét trong
+    // bộ nhớ ở extraValidate KHÔNG chặn được 2 request tạo ngân sách CÙNG LÚC cho CÙNG 1 phòng ban ở
+    // CÙNG 1 kỳ (cả hai đọc collection lúc "chưa có bản nào" trước khi request nào kịp ghi) -> 2 bản
+    // ngân sách trùng phòng/kỳ, cả hai cùng đi tiếp vào quy trình duyệt. Khoá theo cặp kỳ+phòng ban
+    // (KHÔNG theo người tạo — nhiều người cùng phòng đều có quyền budgetCreate, xem chú thích ở
+    // updateBudgetEntryDraft() trong lib/recordActions.js), khớp đúng cặp cột mà duplicate check dùng.
+    getLockKey: (payload, user) => `budget_entry:${payload.periodId}:${user.dept}`,
     extraValidate: (payload, collection, user, appData) => {
       if (!user.perms?.admin && !user.perms?.budgetCreate) {
         throw new CreateError(403, 'Bạn không có quyền lập ngân sách');
@@ -2232,7 +2313,7 @@ module.exports = {
   validateRequiredCustomData,
   // Export cho lib/recordActions.js editInternalPost() — sửa bài cũng nhận lại attachment từ client nên
   // phải kiểm tra ĐÚNG luật như lúc tạo, nếu không lỗ hổng scheme "javascript:" chỉ bị vá 1 nửa.
-  UPLOADED_FILE_URL_RE, assertUploadedFileUrl,
+  UPLOADED_FILE_URL_RE, UPLOADED_FILE_URL_MAX_LEN, assertUploadedFileUrl, assertUploadedFileUrlList,
   OFFICE_SUBTYPE_TO_PERM_FLAG, normalizeReportEntryPayload,
   CONTRACT_APPROVAL_LAYERS, CONTRACT_APPROVAL_LEVELS, CONTRACT_APPROVAL_LEVEL_RULES,
   buildEffectiveContractApprovalWorkflowServer,

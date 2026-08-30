@@ -90,6 +90,21 @@ const loginRateLimiter = rateLimit({
   message: { error: 'Bạn đã thử đăng nhập quá nhiều lần từ thiết bị này. Vui lòng thử lại sau ít phút.' }
 });
 
+// Giới hạn riêng cho 2 route ĐĂNG KÝ thiết bị vân tay/Face ID — trước đây 2 route này là 2 route
+// auth-adjacent DUY NHẤT chỉ dựa vào giới hạn chung toàn /api (server.js), trong khi mọi route xác
+// thực khác (login/verify-password/verify-pin/request-approval-otp/webauthn login+approval) đều có
+// loginRateLimiter. register-options sinh challenge + GHI vào bản ghi user (webauthnUserId) còn
+// register-verify chạy xác minh attestation tốn CPU, nên gọi dồn dập là một điểm bào tài nguyên rẻ
+// tiền. Ngưỡng thấp hơn hẳn loginRateLimiter vì đây là thao tác hiếm (mỗi người vài lần trong đời
+// tài khoản), không phải thao tác cả công ty làm cùng lúc mỗi sáng như đăng nhập.
+const webauthnRegisterRateLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: parseInt(process.env.WEBAUTHN_REGISTER_RATE_LIMIT_MAX || '30', 10),
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Bạn đã thử đăng ký thiết bị vân tay quá nhiều lần. Vui lòng thử lại sau ít phút.' }
+});
+
 router.post('/login', loginRateLimiter, async (req, res) => {
   const { username, password, captchaId, captchaAnswer } = req.body || {};
   if (!username || !password) {
@@ -537,7 +552,7 @@ router.post('/verify-approval-otp', loginRateLimiter, requireAuth, async (req, r
 // POST /api/auth/webauthn/register-options — Bước 1 đăng ký thiết bị mới của CHÍNH người đang đăng
 // nhập. Lần đầu đăng ký thiết bị nào đó, sinh sẵn webauthnUserId dùng chung cho MỌI thiết bị của tài
 // khoản này về sau (không sinh lại mỗi lần).
-router.post('/webauthn/register-options', requireAuth, async (req, res) => {
+router.post('/webauthn/register-options', webauthnRegisterRateLimiter, requireAuth, async (req, res) => {
   try {
     const { options, webauthnUserId } = await webauthn.buildRegistrationOptions(req, req.freshUser);
     if (webauthnUserId !== req.freshUser.webauthnUserId) {
@@ -559,7 +574,7 @@ router.post('/webauthn/register-options', requireAuth, async (req, res) => {
 // POST /api/auth/webauthn/register-verify — Bước 2, xác minh attestation trình duyệt gửi lên rồi lưu
 // credential mới vào user.webauthnCredentials. deviceLabel: tên gợi nhớ người dùng tự đặt (không bắt
 // buộc), hiển thị lại ở màn quản lý thiết bị.
-router.post('/webauthn/register-verify', requireAuth, async (req, res) => {
+router.post('/webauthn/register-verify', webauthnRegisterRateLimiter, requireAuth, async (req, res) => {
   const { response, deviceLabel } = req.body || {};
   if (!response) return res.status(400).json({ error: 'Thiếu dữ liệu xác minh từ trình duyệt' });
 
@@ -592,16 +607,30 @@ router.get('/webauthn/credentials', requireAuth, (req, res) => {
 });
 
 // DELETE /api/auth/webauthn/credentials/:id — gỡ 1 thiết bị vân tay CỦA CHÍNH mình.
+//
+// Gỡ thiết bị = "thiết bị này không còn được tin nữa" (điện thoại bị mất/máy cũ thanh lý). Trước đây chỉ
+// xoá credential khỏi bản ghi user: đăng nhập LẦN SAU bằng thiết bị đó bị chặn, nhưng MỌI PHIÊN đang mở
+// sẵn từ chính thiết bị đó vẫn chạy tiếp bình thường tới khi token hết hạn — tức là kẻ đang cầm máy vẫn
+// thao tác được sau khi chủ tài khoản tưởng đã "cắt" xong. Tăng sessionVersion đúng như khi đổi mật
+// khẩu/PIN (xem lib/auth.js signToken/requireAuth) để mọi token cũ mất hiệu lực NGAY, rồi cấp lại token
+// mới cho PHIÊN HIỆN TẠI để không tự đăng xuất chính người vừa bấm gỡ.
 router.delete('/webauthn/credentials/:id', requireAuth, async (req, res) => {
   try {
+    let updated;
     await withLockedAppDataValue('users', (collection) => {
       const list = Array.isArray(collection) ? collection : [];
       const idx = list.findIndex(u => u.username === req.freshUser.username);
       if (idx === -1) throw new HttpError(401, 'Tài khoản không còn tồn tại');
       const existing = Array.isArray(list[idx].webauthnCredentials) ? list[idx].webauthnCredentials : [];
-      list[idx] = { ...list[idx], webauthnCredentials: existing.filter(c => c.id !== req.params.id) };
+      updated = {
+        ...list[idx],
+        webauthnCredentials: existing.filter(c => c.id !== req.params.id),
+        sessionVersion: (list[idx].sessionVersion || 0) + 1
+      };
+      list[idx] = updated;
       return list;
     });
+    if (updated) setAuthCookie(res, signToken(updated));
     res.json({ ok: true });
   } catch (err) {
     if (err instanceof HttpError) return res.status(err.status).json({ error: err.message });

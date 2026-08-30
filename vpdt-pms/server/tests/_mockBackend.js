@@ -88,7 +88,7 @@ function createMockApi(state) {
         const all = state.collections.contracts;
         const hasAddenda = all.some(c => c.isAddendum && c.rootContractId === id);
         const root = item.isAddendum ? all.find(c => c.id === item.rootContractId) : undefined;
-        const appDataForEdit = item.isAddendum ? null : state.appData;
+        const appDataForEdit = state.appData; // khớp route thật: luôn đọc AppData (formTemplates cần cho CẢ phụ lục)
         const result = recordActions.editContract(payload, user, item, hasAddenda, root && root.dept, appDataForEdit, root && root.custodianDept);
         return { item: result };
       }
@@ -125,7 +125,7 @@ function createMockApi(state) {
       // "Bổ Sung": sửa lại NHÁP (sau REQUEST_CHANGES) + gửi lại — xem lib/recordActions.js
       // editOfficeReqDraft()/submitOfficeReqDraft(), khớp POST /api/records/officeReqs/:id/update|submit
       // thật ở routes/records.js.
-      if (action === 'update') return { item: recordActions.editOfficeReqDraft(payload, user, item) };
+      if (action === 'update') return { item: recordActions.editOfficeReqDraft(payload, user, item, state.appData) };
       if (action === 'submit') return { item: recordActions.submitOfficeReqDraft(user, item) };
       throw new HttpError(400, `Hành động không hợp lệ: ${action}`);
     }

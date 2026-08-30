@@ -3,12 +3,41 @@
 // dept/creator client tự gửi, chỉ dựa vào dropdown ĐÃ LỌC SẴN ở giao diện.
 const express = require('express');
 const router = express.Router();
-const { getAllAppData } = require('../lib/appData');
+const { getAllAppData, withLockedAppDataValue } = require('../lib/appData');
 const { requireAuth, blockIfMustChangePassword } = require('../lib/auth');
 const { CREATE_MODULE_CONFIGS, CreateError, validateAndPrepareCreate } = require('../lib/createValidation');
 const { createForCollection, createForCollectionSerialized, getAllForCollection, withAppLock } = require('../lib/recordStore');
 
 router.use(requireAuth, blockIfMustChangePassword);
+
+// Danh mục "Các Loại Giấy Phép" (appData.licenseTypes) TỰ HỌC giá trị mới người dùng vừa gõ khi tải
+// giấy phép — trước đây do CLIENT làm (uploadLicense() ở public/index.html: push vào DB.licenseTypes
+// rồi syncStorage('licenseTypes') = POST /api/data/licenseTypes ghi đè NGUYÊN mảng). Từ khi
+// "licenseTypes" vào ADMIN_ONLY_KEYS (routes/data.js — danh mục này thuộc tab Quản Lý Danh Mục chỉ
+// admin thấy, trước đây bất kỳ ai đã đăng nhập cũng ghi đè/xoá trắng được), đường đó đóng với người
+// dùng thường, nên bước tự học chuyển hẳn về SERVER ở đây.
+//
+// Khác biệt cốt lõi so với đường cũ: CHỈ THÊM (append) đúng 1 giá trị đã được extraValidate của
+// licenses làm sạch (trim + cắt 300 ký tự) vào cuối danh mục — KHÔNG bao giờ sửa/xoá phần tử đang có,
+// nên không dựng lại được lỗ hổng "ghi đè/xoá trắng cả danh mục" mà bản vá vừa đóng. Chỉ chạy khi
+// giấy phép đã tạo THÀNH CÔNG (người gọi chắc chắn có quyền licenseCreate/admin).
+const LICENSE_TYPES_MAX = 500; // trần an toàn: danh mục là nguồn GỢI Ý, không để phình vô hạn.
+
+async function learnLicenseType(rawType) {
+  const licenseType = String(rawType || '').trim();
+  if (!licenseType) return;
+  try {
+    await withLockedAppDataValue('licenseTypes', (current) => {
+      const list = Array.isArray(current) ? current : [];
+      if (list.includes(licenseType) || list.length >= LICENSE_TYPES_MAX) return list;
+      return [...list, licenseType];
+    });
+  } catch (err) {
+    // Không bao giờ để việc cập nhật danh mục GỢI Ý làm hỏng lượt tạo giấy phép đã thành công —
+    // bản ghi giấy phép mới là thứ người dùng thật sự cần, danh mục chỉ là tiện ích nhập liệu.
+    console.error('Không thể bổ sung loại giấy phép vào danh mục licenseTypes:', err.message);
+  }
+}
 
 // POST /api/create/:module  (module: submissions|contracts|meetings|carRegs|officeReqs|docs)
 router.post('/:module', async (req, res) => {
@@ -101,6 +130,9 @@ router.post('/:module', async (req, res) => {
       : familyLockKey
       ? await withAppLock(familyLockKey, () => createForCollection(config.dbKey, builderFn))
       : await createForCollection(config.dbKey, builderFn);
+
+    // Tự học loại giấy phép mới vào danh mục gợi ý — xem learnLicenseType() ở đầu file.
+    if (moduleKey === 'licenses') await learnLicenseType(record.licenseType);
 
     res.json({ ok: true, item: record });
   } catch (err) {

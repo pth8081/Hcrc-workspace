@@ -8370,12 +8370,20 @@ function canAccessApprovalHub(user) {
   return false;
 }
 
-// Có tên trong Thành phần tham dự của 1 biên bản cụ thể hay không (khớp theo Họ và Tên).
+// Có mặt trong Thành phần tham dự của 1 biên bản cụ thể hay không. Dòng tham dự viên ĐÃ CHỈ ĐÍCH DANH
+// tài khoản (hasAccount === 'YES' + username) khớp CHÍNH XÁC theo username; chỉ dòng khách mời/người
+// ngoài (không có tài khoản) mới khớp theo Họ và Tên như trước. Trước đây khớp theo tên cho MỌI dòng,
+// nên 2 nhân viên trùng tên hiển thị cùng xem được biên bản chỉ mời 1 người — giữ ĐỒNG BỘ với
+// isMeetingMinutesAttendeeServer() ở lib/recordViewScope.js (bộ lọc thật của GET /api/data).
 function isMeetingMinutesAttendee(user, m) {
   if (!user) return false;
   const uname = (user.name || '').trim().toLowerCase();
-  if (!uname) return false;
-  return (m.attendees || []).some(a => (a.name || '').trim().toLowerCase() === uname);
+  const uUsername = (user.username || '').trim();
+  return (m.attendees || []).some(a => {
+    const aUsername = (a.username || '').trim();
+    if (a.hasAccount === 'YES' && aUsername) return !!uUsername && aUsername === uUsername;
+    return !!uname && (a.name || '').trim().toLowerCase() === uname;
+  });
 }
 
 // XEM: admin, người có quyền minutesView (xem toàn bộ), người tạo, hoặc người có tên trong thành
@@ -13451,9 +13459,16 @@ async function uploadLicense(e) {
 
   // Tự học thêm vào Danh Mục "Các Loại Giấy Phép" (DB.licenseTypes) nếu là loại chưa từng gõ trước đây —
   // admin vẫn quản lý/dọn danh mục này riêng ở màn Quản Lý Danh Mục (xem saveLicenseType()/deleteLicenseType()).
+  //
+  // KHÔNG còn syncStorage('licenseTypes') ở đây: từ khi "licenseTypes" nằm trong ADMIN_ONLY_KEYS
+  // (routes/data.js — danh mục này thuộc tab Quản Lý Danh Mục chỉ admin thấy, trước đây bất kỳ tài
+  // khoản đã đăng nhập nào cũng GHI ĐÈ/XOÁ TRẮNG được cả danh mục qua POST /api/data/licenseTypes),
+  // lượt ghi đè nguyên mảng đó đã đóng với người dùng thường. Việc LƯU chuyển hẳn về server, ở đúng
+  // luồng tạo giấy phép và chỉ THÊM 1 giá trị (không sửa/xoá gì) — xem learnLicenseType() ở
+  // routes/create.js. Dòng dưới chỉ cập nhật bản chụp TRONG BỘ NHỚ của tab hiện tại để ô gợi ý thấy
+  // ngay giá trị vừa gõ mà không phải tải lại trang.
   if (licenseType && !(DB.licenseTypes || []).includes(licenseType)) {
     DB.licenseTypes = [...(DB.licenseTypes || []), licenseType];
-    syncStorage('licenseTypes');
   }
 
   const payload = {
@@ -17781,6 +17796,11 @@ function renderPaymentRequests() {
   }).join('');
 }
 
+// Xác nhận ý định TRƯỚC (showConfirmModal), rồi mới tới withApprovalAuth() (xác thực lại mật khẩu/OTP/
+// PIN/vân tay nếu tài khoản có cấu hình approverAuthLevel) — đúng thứ tự đã dùng ở 9 module duyệt còn
+// lại. Trước đây riêng Duyệt đề nghị thanh toán không gọi withApprovalAuth() nên không hề xin phiếu xác
+// thực, trong khi server (routes/records.js) nay bắt buộc phải có -> phải thêm ở đây thì luồng mới chạy
+// thông, không phải chỉ chặn lại bằng thông báo lỗi khó hiểu.
 function approvePaymentRequestAction(id) {
   const pr = DB.paymentRequests.find(x => x.id === id);
   if (!pr) return;
@@ -17788,7 +17808,7 @@ function approvePaymentRequestAction(id) {
     title: 'Xác nhận đề nghị thanh toán',
     bodyHTML: `Xác nhận đề nghị thanh toán "<b>${escapeHtml(pr.title)}</b>"?`,
     confirmLabel: 'Xác Nhận',
-    onConfirm: async () => {
+    onConfirm: () => withApprovalAuth(async () => {
       let updated;
       try {
         const result = await callRecordAction('paymentRequests', id, 'approve', {});
@@ -17799,7 +17819,7 @@ function approvePaymentRequestAction(id) {
       logSystemAction('OFFICE', 'APPROVE_PAYMENT_REQUEST', `Xác nhận đề nghị thanh toán [${updated.title}]`, 'SUCCESS', String(updated.id));
       renderPaymentRequests();
       refreshApprovalSurfaces();
-    }
+    })
   });
 }
 
@@ -32499,6 +32519,17 @@ function openTakeTestModal(classId) {
   if (!cls || cls.testId == null) return alert('Lớp học này chưa được gán bài test.');
   const test = DB.trainingTests.find(t => t.id === cls.testId);
   if (!test || !Array.isArray(test.questions) || !test.questions.length) return alert('Không tìm thấy nội dung bài test.');
+  // Báo server mốc BẮT ĐẦU làm bài (POST .../start-test, server chỉ ghi LẦN ĐẦU) để lúc nộp còn đối
+  // chiếu được thời gian làm thật — đồng hồ đếm ngược bên dưới thuần client, tự nó không chứng minh
+  // được gì (xem evaluateTrainingTestTiming() ở lib/recordActions.js). CỐ Ý không await: hàm này vẫn
+  // phải là hàm ĐỒNG BỘ (mở đề ra ngay, không bắt học viên chờ 1 lượt mạng) và lỗi ở đây KHÔNG được
+  // chặn người đang làm bài — mất dấu thời gian còn hơn chặn oan.
+  callRecordAction('trainingClasses', classId, 'start-test', {})
+    .then(started => {
+      const rIdx = DB.trainingRegistrations.findIndex(r => r.id === started.item?.id);
+      if (rIdx !== -1) DB.trainingRegistrations[rIdx] = started.item;
+    })
+    .catch(err => console.warn('Không ghi được mốc bắt đầu bài test:', err.message));
   clearInterval(ttTakeTimerHandle);
   ttTakeClassId = classId;
   // Đảo cả thứ tự câu hỏi lẫn thứ tự đáp án trong từng câu — mỗi lượt mở modal (kể cả làm lại) xáo trộn

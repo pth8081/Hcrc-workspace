@@ -9,6 +9,7 @@ const { getPool, sql } = require('../db');
 const { sendMail, hasAuthConfigured, resolveEncryption } = require('../lib/mailer');
 const { decryptSecret } = require('../lib/emailCrypto');
 const { sendServerError } = require('../lib/errorResponse');
+const { getAllForCollection } = require('../lib/recordStore');
 
 // Giới hạn riêng cho gửi email (đụng tới máy chủ SMTP thật, có thể bị lợi dụng làm relay spam) — chặt
 // hơn giới hạn chung toàn /api (xem server.js).
@@ -62,9 +63,77 @@ router.get('/status', async (req, res) => {
   res.json({ hasAuth: hasAuthConfigured(user, pass) });
 });
 
+// ===== Giới hạn NGƯỜI NHẬN =====
+//
+// LỖ HỔNG ĐƯỢC VÁ: route này chỉ gác bằng requireAuth (server.js) rồi nhận NGUYÊN {to, subject, text,
+// html} do client gửi và chuyển tiếp qua danh tính SMTP THẬT của công ty — nghĩa là bất kỳ nhân viên
+// nào đã đăng nhập cũng biến hệ thống thành relay gửi thư tới ĐỊA CHỈ BẤT KỲ ngoài Internet, mạo danh
+// tên miền công ty (spam/lừa đảo, và làm tên miền công ty bị đưa vào danh sách đen).
+//
+// Chỉ chặn phần "gửi ra ngoài", KHÔNG đụng tới các luồng thông báo nội bộ đang có. Đã rà toàn bộ lời
+// gọi thật ở public/index.html (dispatchRealEmail <- notifyUsersByEmail/notifyRecipientsByEmail/
+// sendNotificationEmail) và có ĐÚNG 2 nguồn người nhận hợp lệ:
+//   1) Email của tài khoản người dùng CÒN HOẠT ĐỘNG (notifyUsersByEmail tra thẳng DB.users theo
+//      username) — phủ gần hết các thông báo duyệt/giao việc.
+//   2) Email nhập tay ở "Thành phần tham dự" của BIÊN BẢN HỌP (minutes.attendees[].email) — có thật và
+//      CÓ THỂ LÀ ĐỊA CHỈ NGOÀI: người dự họp không có tài khoản hệ thống vẫn nhận biên bản và nhận
+//      công việc được giao từ chỉ đạo trong biên bản (xem applyAutoCreatedTasks()/
+//      confirmSendMinutesEmail() ở index.html, externalAssignee ở lib/recordActions.js). Đây là danh
+//      sách cho phép DỰA TRÊN DỮ LIỆU ĐÃ LƯU của hệ thống, không phải địa chỉ tuỳ ý trong request.
+// Địa chỉ nào không thuộc 2 nguồn trên -> từ chối cả yêu cầu (403), không gửi phần nào.
+function normalizeEmail(value) {
+  return String(value || '').trim().toLowerCase();
+}
+
+function activeUserEmails(users) {
+  const set = new Set();
+  for (const u of users || []) {
+    if (u?.active === false) continue;
+    const e = normalizeEmail(u?.email);
+    if (e) set.add(e);
+  }
+  return set;
+}
+
+// Chỉ đọc collection biên bản họp khi THỰC SỰ cần (còn địa chỉ chưa khớp tài khoản nào) — đại đa số
+// email của hệ thống gửi cho người dùng nội bộ, không nên bắt mỗi lượt gửi phải quét thêm 1 collection.
+async function minutesAttendeeEmails() {
+  const set = new Set();
+  const minutes = (await getAllForCollection('meetingMinutes')) || [];
+  for (const m of minutes) {
+    for (const a of m?.attendees || []) {
+      const e = normalizeEmail(a?.email);
+      if (e) set.add(e);
+    }
+  }
+  return set;
+}
+
+async function findDisallowedRecipients(recipients, users) {
+  const allowed = activeUserEmails(users);
+  let unknown = recipients.filter(r => !allowed.has(normalizeEmail(r)));
+  if (unknown.length === 0) return [];
+  const fromMinutes = await minutesAttendeeEmails();
+  unknown = unknown.filter(r => !fromMinutes.has(normalizeEmail(r)));
+  return unknown;
+}
+
 router.post('/', sendEmailRateLimiter, async (req, res) => {
   const { to, subject, text, html } = req.body || {};
   if (!to || !subject) return res.status(400).json({ error: 'Thiếu "to" hoặc "subject"' });
+
+  const recipients = (Array.isArray(to) ? to : [to]).map(a => String(a || '').trim()).filter(Boolean);
+  if (recipients.length === 0) return res.status(400).json({ error: 'Thiếu "to" hoặc "subject"' });
+  try {
+    const disallowed = await findDisallowedRecipients(recipients, req.allUsers);
+    if (disallowed.length) {
+      return res.status(403).json({
+        error: `Chỉ được gửi email tới người dùng đang hoạt động của hệ thống (hoặc thành phần tham dự đã ghi trong biên bản họp). Địa chỉ không hợp lệ: ${disallowed.join(', ')}`
+      });
+    }
+  } catch (err) {
+    return sendServerError(res, 500, err, 'POST /api/send-email', 'Không thể kiểm tra danh sách người nhận');
+  }
 
   const emailConfig = await getEmailConfig();
   if (emailConfig.enabled === false) {
@@ -74,7 +143,7 @@ router.post('/', sendEmailRateLimiter, async (req, res) => {
   try {
     const { user, pass } = resolveSmtpAccount(emailConfig);
     const result = await sendMail({
-      to, subject, text, html,
+      to: recipients, subject, text, html,
       host: emailConfig.smtpHost,
       port: emailConfig.smtpPort,
       encryption: resolveEncryption(emailConfig),

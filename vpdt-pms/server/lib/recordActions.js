@@ -9,7 +9,7 @@
 // họp thêm cờ minutesEdit (toàn công ty, không theo phòng ban) cho SỬA — riêng XÓA là quyền tối cao,
 // chỉ Admin; Công việc theo NGƯỜI (assignedBy/assignee), hoàn toàn không có khái niệm phòng ban.
 const { HttpError } = require('./httpErrors');
-const { scopeAllows, OFFICE_SUBTYPE_TO_PERM_FLAG, normalizeReportEntryPayload, buildEffectiveContractApprovalWorkflowServer, sanitizeUniformItems, sanitizeBudgetLines, getBudgetTemplateCustomFields, sanitizeBudgetCustomFields, resolveTrainingInstructorUsername, normalizeInviteList, normalizeTrainingPlanFields, normalizeOnboardingPathFields, SUBMISSION_APPROVAL_LEVELS, buildEffectiveSubmissionWorkflowServer, validateRequiredCustomData, assertUploadedFileUrl } = require('./createValidation');
+const { scopeAllows, OFFICE_SUBTYPE_TO_PERM_FLAG, normalizeReportEntryPayload, buildEffectiveContractApprovalWorkflowServer, sanitizeUniformItems, sanitizeBudgetLines, getBudgetTemplateCustomFields, sanitizeBudgetCustomFields, resolveTrainingInstructorUsername, normalizeInviteList, normalizeTrainingPlanFields, normalizeOnboardingPathFields, SUBMISSION_APPROVAL_LEVELS, buildEffectiveSubmissionWorkflowServer, validateRequiredCustomData, assertUploadedFileUrl, assertUploadedFileUrlList } = require('./createValidation');
 const { validateRegistrationItems: validateVppRegItems, calcItemsTotal: calcVppItemsTotal } = require('./vppCatalog');
 const { sanitizePriceFileItems, sanitizeColumnLabels } = require('./priceFileParser');
 
@@ -39,6 +39,20 @@ function editContract(payload, user, contract, hasAddenda, rootDept, appData, ro
     throw new HttpError(409, 'Hợp đồng đã được phê duyệt xong, không thể sửa nữa');
   }
   if (!payload || typeof payload !== 'object') throw new HttpError(400, 'Thiếu dữ liệu cập nhật');
+
+  // Cùng 3 lớp kiểm tra mà nhánh TẠO (createValidation.js contracts.extraValidate) đã có nhưng nhánh
+  // SỬA trước đây bỏ trống hoàn toàn (rà soát 8/2026):
+  //  - Khuôn URL tệp: xem assertUploadedFileUrl() ở lib/createValidation.js (stored XSS + giả mạo
+  //    fileUrl để phá lớp phân quyền theo hồ sơ của lib/fileAuthz.js).
+  //  - Trường bắt buộc của Biểu Mẫu: form Sửa gửi lại nguyên customData, gửi {} là XOÁ SẠCH dữ liệu
+  //    bắt buộc đã khai lúc tạo mà không ai kiểm lại. Dùng modKey 'CONTRACT_APPROVAL' (KHÔNG phải
+  //    CONTRACT_MANAGE) vì hồ sơ "Nhập Hợp Đồng Đã Ký" luôn APPROVED ngay lúc tạo nên đã bị chặn sửa
+  //    bởi khối kiểm tra approvalStatus === 'APPROVED' ở trên — chỉ hồ sơ đi luồng Phê Duyệt tới được đây.
+  assertUploadedFileUrl(payload.fileUrl, 'Tệp hợp đồng');
+  assertUploadedFileUrl(payload.signedFileUrl, 'Tài liệu ký');
+  if (payload.customData !== undefined) {
+    validateRequiredCustomData(payload.customData, appData?.formTemplates, 'CONTRACT_APPROVAL');
+  }
 
   // Phụ lục kế thừa dept của hợp đồng gốc lúc tạo (xem createValidation.js contracts.extraValidate) —
   // đổi dept của hợp đồng gốc sau khi đã có phụ lục sẽ phá vỡ ràng buộc "phụ lục cùng phòng ban với
@@ -213,10 +227,15 @@ function assertDeptScopeAllowed(user, scope, newDept) {
 // ----- Tài Liệu (docs) -----
 const DOC_DRAFT_EDITABLE_FIELDS = ['dept', 'cat', 'title', 'ver', 'summary', 'customData'];
 
-function editDocDraft(payload, user, item) {
+// appData (tuỳ chọn, caller tự đọc sẵn — xem routes/records.js POST /docs/:id/update): CHỈ dùng để đối
+// chiếu lại trường bắt buộc của Biểu Mẫu như lúc TẠO. Xem ghi chú chung ở editContract().
+function editDocDraft(payload, user, item, appData) {
   if (item.uploader !== user.username) throw new HttpError(403, 'Chỉ người tải lên mới được sửa tài liệu này');
   if (item.status !== 'DRAFT') throw new HttpError(409, 'Tài liệu này không ở trạng thái cần bổ sung, không thể sửa');
   if (!payload || typeof payload !== 'object') throw new HttpError(400, 'Thiếu dữ liệu cập nhật');
+  if (payload.customData !== undefined) {
+    validateRequiredCustomData(payload.customData, appData?.formTemplates, 'DOC');
+  }
   if (payload.dept !== undefined && payload.dept !== item.dept) {
     assertDeptScopeAllowed(user, { all: !!user.perms?.uploadAll, depts: user.perms?.uploadDepts || [] }, payload.dept);
   }
@@ -228,6 +247,7 @@ function editDocDraft(payload, user, item) {
   // đúng yêu cầu nghiệp vụ, xem requestPriceInfoFromIt()/submitPriceSupplementFile() bên dưới).
   if (payload.fileUrl !== undefined) {
     if (!payload.fileUrl || !payload.fileName) throw new HttpError(400, 'Thiếu tệp tài liệu');
+    assertUploadedFileUrl(payload.fileUrl, 'Tệp tài liệu');
     item.fileName = payload.fileName;
     item.fileType = payload.fileType;
     item.fileUrl = payload.fileUrl;
@@ -249,10 +269,19 @@ function submitDocDraft(user, item) {
 // ----- Đăng Ký Xe (carRegs) -----
 const CAR_REG_DRAFT_EDITABLE_FIELDS = ['dept', 'type', 'passengers', 'directUser', 'directUserPhone', 'purpose', 'km', 'reason', 'customData'];
 
-function editCarRegDraft(payload, user, item) {
+// appData (tuỳ chọn) — xem ghi chú ở editDocDraft().
+function editCarRegDraft(payload, user, item, appData) {
   if (item.creator !== user.username) throw new HttpError(403, 'Chỉ người tạo phiếu mới được sửa phiếu đăng ký xe này');
   if (item.status !== 'DRAFT') throw new HttpError(409, 'Phiếu đăng ký xe này không ở trạng thái cần bổ sung, không thể sửa');
   if (!payload || typeof payload !== 'object') throw new HttpError(400, 'Thiếu dữ liệu cập nhật');
+  if (payload.customData !== undefined) {
+    validateRequiredCustomData(payload.customData, appData?.formTemplates, 'CAR');
+  }
+  // fileUrl KHÔNG nằm trong CAR_REG_DRAFT_EDITABLE_FIELDS (form "Bổ Sung" của phiếu xe không đính kèm
+  // tệp) nên giá trị gửi lên hiện bị bỏ qua — vẫn TỪ CHỐI hẳn payload chứa fileUrl sai khuôn thay vì
+  // im lặng bỏ qua: nếu sau này field này được đưa vào danh sách sửa được, lớp chặn đã sẵn ở đây
+  // (không phải nhớ thêm 1 lần nữa). Xem assertUploadedFileUrl().
+  assertUploadedFileUrl(payload.fileUrl, 'Tệp đính kèm phiếu đăng ký xe');
   if (payload.dept !== undefined && payload.dept !== item.dept) {
     assertDeptScopeAllowed(user, user.perms?.carCreate, payload.dept);
   }
@@ -293,10 +322,19 @@ function submitCarRegDraft(user, item) {
 // trình, không phải đổi loại đề xuất.
 const OFFICE_REQ_DRAFT_EDITABLE_FIELDS = ['dept', 'title', 'qty', 'supplier', 'usageTime', 'reason', 'customData'];
 
-function editOfficeReqDraft(payload, user, item) {
+// appData (tuỳ chọn) — xem ghi chú ở editDocDraft(). modKey là ĐÚNG subType của hồ sơ (MUA_BAN/
+// SUA_CHUA/DAU_TU, khớp lúc TẠO) — subType không đổi được khi sửa (xem danh sách field ở trên).
+function editOfficeReqDraft(payload, user, item, appData) {
   if (item.creator !== user.username) throw new HttpError(403, 'Chỉ người tạo mới được sửa đề xuất văn phòng này');
   if (item.status !== 'DRAFT') throw new HttpError(409, 'Đề xuất này không ở trạng thái cần bổ sung, không thể sửa');
   if (!payload || typeof payload !== 'object') throw new HttpError(400, 'Thiếu dữ liệu cập nhật');
+  if (payload.customData !== undefined) {
+    validateRequiredCustomData(payload.customData, appData?.formTemplates, item.subType);
+  }
+  // Cùng lý do "chặn sẵn dù field chưa sửa được" như editCarRegDraft() — riêng signedFileUrl còn có
+  // đường ghi THẬT qua uploadOfficeSignedFile() bên dưới (đã kiểm khuôn ở đó).
+  assertUploadedFileUrl(payload.fileUrl, 'Tệp đính kèm đề xuất');
+  assertUploadedFileUrl(payload.signedFileUrl, 'Tài liệu ký');
   if (payload.dept !== undefined && payload.dept !== item.dept) {
     assertDeptScopeAllowed(user, user.perms?.officeCreate, payload.dept);
   }
@@ -341,6 +379,12 @@ function editSubmissionDraft(payload, user, item, appData) {
   if (item.creator !== user.username) throw new HttpError(403, 'Chỉ người trình mới được sửa tờ trình này');
   if (item.status !== 'DRAFT') throw new HttpError(409, 'Tờ trình này không ở trạng thái cần bổ sung, không thể sửa');
   if (!payload || typeof payload !== 'object') throw new HttpError(400, 'Thiếu dữ liệu cập nhật');
+  if (payload.customData !== undefined) {
+    validateRequiredCustomData(payload.customData, appData?.formTemplates, 'SUBMISSION');
+  }
+  // Tệp tờ trình + từng tài liệu bổ sung — xem ghi chú chung ở editContract()/assertUploadedFileUrl().
+  assertUploadedFileUrl(payload.fileUrl, 'Tệp tờ trình');
+  assertUploadedFileUrlList(payload.extraFiles, 'Tài liệu bổ sung theo tờ trình');
   if (payload.dept !== undefined && payload.dept !== item.dept) {
     assertDeptScopeAllowed(user, user.perms?.submissionCreate, payload.dept);
   }
@@ -407,8 +451,17 @@ function uploadContractSignedFile(payload, user, contract) {
   if (!canManageContractPayment(user, contract)) throw new HttpError(403, 'Bạn không có quyền tải lên tài liệu ký cho hợp đồng này');
   if (contract.approvalStatus !== 'APPROVED') throw new HttpError(409, 'Hợp đồng chưa được phê duyệt');
   if (contract.signedFileStatus === 'APPROVED') throw new HttpError(409, 'Tài liệu ký đã được phê duyệt, không thể tải lên lại');
+  // Khoá cứng khi đã bắt đầu/hoàn tất thanh toán — SAO Y uploadOfficeSignedFile() bên dưới (cùng điều
+  // kiện, cùng kiểu lỗi). Trước đây Hợp Đồng KHÔNG có lớp này: tuy signedFileStatus === 'APPROVED' đã
+  // chặn được đa số trường hợp, hồ sơ có Tài liệu ký đang PENDING/REJECTED vẫn "Chuyển Sang Thanh Toán"
+  // được ở dữ liệu cũ (trước khi có bước duyệt tài liệu ký) — khi đó tệp căn cứ thanh toán vẫn bị thay
+  // sau khi tiền đã đi, đúng lỗ hổng mà officeReqs đã vá.
+  if (contract.signedFileUrl && contract.paymentStatus !== 'CHUA_THANH_TOAN') {
+    throw new HttpError(409, 'Đã chuyển sang thanh toán — không thể thay đổi Tài liệu ký nữa');
+  }
   const { fileName, fileType, fileUrl, customData } = payload || {};
   if (!fileName || !fileUrl) throw new HttpError(400, 'Thiếu tệp tài liệu ký');
+  assertUploadedFileUrl(fileUrl, 'Tài liệu ký');
   contract.signedFileName = fileName;
   contract.signedFileType = fileType;
   contract.signedFileUrl = fileUrl;
@@ -514,6 +567,7 @@ function uploadOfficeSignedFile(payload, user, item) {
   }
   const { fileName, fileType, fileUrl } = payload || {};
   if (!fileName || !fileUrl) throw new HttpError(400, 'Thiếu tệp tài liệu ký');
+  assertUploadedFileUrl(fileUrl, 'Tài liệu ký');
   item.signedFileName = fileName;
   item.signedFileType = fileType;
   item.signedFileUrl = fileUrl;
@@ -546,7 +600,11 @@ function startOfficePayment(user, item, overrides) {
 // (khoá cứng, không sửa/xoá/huỷ được — đúng yêu cầu nghiệp vụ). PAID ghi ngược paymentStatus =
 // DA_THANH_TOAN về đúng bản ghi nguồn (Hợp đồng/officeReqs) nếu có sourceModule/sourceId — xem
 // routes/records.js (2 lần khoá bản ghi tuần tự: paymentRequests rồi tới bản ghi nguồn).
-const PAYMENT_EDITABLE_FIELDS = ['title', 'dept', 'amount', 'installments'];
+// 'amount' KHÔNG nằm trong danh sách này: editPaymentRequest() LUÔN tính lại pr.amount = Σ số tiền các
+// đợt ngay sau vòng gán bên dưới, nên giá trị "amount" client gửi lên chắc chắn bị ghi đè — liệt kê nó ở
+// đây chỉ gây hiểu nhầm là "sửa được số tiền tổng độc lập với các đợt". Bỏ đi là dọn dẹp, KHÔNG đổi hành
+// vi (kết quả pr.amount trước/sau y hệt).
+const PAYMENT_EDITABLE_FIELDS = ['title', 'dept', 'installments'];
 
 function canManagePaymentRequests(user) {
   return !!(user.perms?.admin || user.perms?.paymentManage);
@@ -762,11 +820,27 @@ function createMinutes(payload, user, existingCollection, formTemplates) {
 
 // Sao y resolveDirectiveAttendee() ở index.html — dò 1 người trong "Thành phần tham dự" của CHÍNH bản
 // ghi biên bản đã lưu theo attendeeId.
-function resolveDirectiveAttendeeServer(attendeesList, attendeeId) {
+// Người tham dự khai "Tài khoản = Có" (hasAccount === 'YES') PHẢI trỏ tới 1 tài khoản hệ thống ĐANG
+// HOẠT ĐỘNG có thật — trước đây a.username được tin hoàn toàn (chỉ là 1 ô text người lập biên bản tự
+// gõ/tự sửa, xem resolveAttendeeAccountInput() ở index.html), nên "Giao việc" từ biên bản có thể sinh
+// ra Công Việc gán cho:
+//   - 1 username KHÔNG TỒN TẠI / đã bị khoá -> không ai đăng nhập được để Nhận Việc/Cập Nhật Tiến Độ,
+//     việc mồ côi vĩnh viễn (chỉ admin đóng/xoá được);
+//   - hoặc username của 1 nhân viên CÓ THẬT nhưng không hề dự họp — người chỉ có quyền minutesCreate tự
+//     giao được việc thật cho bất kỳ ai trong công ty mà không cần quyền quản lý Công Việc nào.
+// Trả null = bỏ qua người này (buildTasksFromDirectives() không tạo việc cho chỉ đạo đó). Người tham dự
+// KHÔNG có tài khoản (hasAccount !== 'YES', khách mời/đối tác ngoài) vẫn giữ nguyên hành vi cũ:
+// username = null, việc được tạo dưới dạng externalAssignee — KHÔNG bị ràng buộc này đụng tới.
+function resolveDirectiveAttendeeServer(attendeesList, attendeeId, usersList) {
   if (!attendeeId) return null;
   const a = (attendeesList || []).find(x => String(x.id) === String(attendeeId));
   if (!a || !(a.name || '').trim()) return null;
-  return { name: a.name.trim(), email: (a.email || '').trim(), username: a.hasAccount === 'YES' ? (a.username || null) : null };
+  if (a.hasAccount === 'YES') {
+    const account = findActiveUser(usersList, a.username);
+    if (!account) return null;
+    return { name: a.name.trim(), email: (a.email || '').trim(), username: account.username };
+  }
+  return { name: a.name.trim(), email: (a.email || '').trim(), username: null };
 }
 
 // Chuyển các dòng "chỉ đạo" đã gán người thực hiện thành Công việc mới — SERVER TỰ SUY LẠI từ chính
@@ -783,15 +857,17 @@ function resolveDirectiveAttendeeServer(attendeesList, attendeeId) {
 // sourceDirectiveId: gắn lại ĐÚNG dòng chỉ đạo đã sinh ra Công việc này (d.id, hoặc chỉ số mảng cho
 // biên bản cũ chưa có id) — để phía Xem chi tiết biên bản tra được đúng 1-1 trạng thái/lịch sử Công
 // việc ứng với từng dòng chỉ đạo khi biên bản có nhiều hơn 1 chỉ đạo.
-function buildTasksFromDirectives(minutes, user) {
+function buildTasksFromDirectives(minutes, user, usersList) {
   const created = [];
   (minutes.directives || []).forEach((d, i) => {
     if (!d.assignedToAttendeeId || d.taskCreated) return;
-    const resolved = resolveDirectiveAttendeeServer(minutes.attendees, d.assignedToAttendeeId);
+    // usersList = danh sách user THẬT (route truyền xuống) — dùng để xác minh username của người tham dự
+    // trước khi biến họ thành người nhận việc, xem resolveDirectiveAttendeeServer() ở trên.
+    const resolved = resolveDirectiveAttendeeServer(minutes.attendees, d.assignedToAttendeeId, usersList);
     if (!resolved) return;
 
     const collaboratorsResolved = (Array.isArray(d.collaboratorAttendeeIds) ? d.collaboratorAttendeeIds : [])
-      .map(id => resolveDirectiveAttendeeServer(minutes.attendees, id))
+      .map(id => resolveDirectiveAttendeeServer(minutes.attendees, id, usersList))
       .filter(Boolean);
 
     // Công việc giao từ Biên bản họp được TÍNH TIẾN ĐỘ NGAY (status DOING, startedAt = lúc giao việc)
@@ -834,15 +910,26 @@ function buildTasksFromDirectives(minutes, user) {
 // họp) — thay cho cơ chế tự động cũ. Sau khi giao việc, biên bản chuyển sang tasksAssigned=true, bị
 // editMinutes() ở trên khoá sửa (trừ admin khẩn cấp). Dùng lại đúng quyền sửa biên bản (canEditMinutes)
 // làm điều kiện, không đòi canManageTasks — khớp lý do đã nêu ở buildTasksFromDirectives().
-function assignMinutesTasks(user, minutes) {
+function assignMinutesTasks(user, minutes, usersList) {
   if (!canEditMinutes(user, minutes)) {
     throw new HttpError(403, 'Bạn không có quyền giao việc cho biên bản họp này');
   }
   if (minutes.tasksAssigned) {
     throw new HttpError(409, 'Biên bản này đã được giao việc rồi');
   }
-  const created = buildTasksFromDirectives(minutes, user);
+  const created = buildTasksFromDirectives(minutes, user, usersList);
   if (created.length === 0) {
+    // Phân biệt "chưa gán ai" với "đã gán nhưng tài khoản khai trong Thành phần tham dự không có
+    // thật/đã bị khoá" — nếu không, người lập biên bản chỉ thấy 1 thông báo sai ("chưa gán người thực
+    // hiện") trong khi họ đã gán, và không có manh mối nào để sửa cho đúng.
+    const invalidNames = [...new Set((minutes.directives || [])
+      .filter(d => d.assignedToAttendeeId && !d.taskCreated)
+      .map(d => (minutes.attendees || []).find(a => String(a.id) === String(d.assignedToAttendeeId)))
+      .filter(a => a && a.hasAccount === 'YES' && !findActiveUser(usersList, a.username))
+      .map(a => `${(a.name || '').trim()} (${a.username || 'chưa chọn tài khoản'})`))];
+    if (invalidNames.length) {
+      throw new HttpError(400, `Không thể giao việc: người thực hiện ${invalidNames.join(', ')} không phải tài khoản hệ thống đang hoạt động. Vui lòng chọn lại tài khoản trong Thành phần tham dự.`);
+    }
     throw new HttpError(400, 'Không có chỉ đạo nào đã gán người thực hiện để giao việc');
   }
   minutes.tasksAssigned = true;
@@ -1131,6 +1218,28 @@ function resolveAssigneeName(usersList, username) {
   return u ? u.name : username;
 }
 
+// Tra 1 username về ĐÚNG tài khoản đang HOẠT ĐỘNG — khuôn giống hệt bước tra lái xe khi duyệt phiếu xe
+// (lib/workflowEngine.js: `users.find(u => u.username === ... && u.active !== false)`), dùng chung cho
+// mọi chỗ gán "người thực hiện" của Công Việc.
+//
+// Trước đây các đường gán người nhận việc chỉ kiểm tra "assignedTo là chuỗi khác rỗng": 1 request tự
+// soạn (hoặc 1 dòng chỉ đạo trong biên bản họp khai username bịa) tạo ra Công Việc gán cho tài khoản
+// KHÔNG TỒN TẠI / ĐÃ BỊ KHOÁ — không ai đăng nhập được để Nhận Việc/Cập Nhật Tiến Độ, việc treo vĩnh
+// viễn (chỉ admin mới đóng/xoá được), đồng thời làm sai lệch mọi thống kê theo người thực hiện.
+function findActiveUser(usersList, username) {
+  const name = typeof username === 'string' ? username.trim() : '';
+  if (!name) return null;
+  return (usersList || []).find(u => u.username === name && u.active !== false) || null;
+}
+
+function assertActiveAssignee(usersList, username) {
+  const found = findActiveUser(usersList, username);
+  if (!found) {
+    throw new HttpError(400, `Không tìm thấy tài khoản người nhận việc "${username}" (hoặc tài khoản đã bị khoá)`);
+  }
+  return found;
+}
+
 // Công việc tới từ Biên bản họp/Văn bản trình bỏ qua bước "Nhận Việc" — tính tiến độ ngay lúc
 // giao/gán, khớp yêu cầu nghiệp vụ (chỉ đạo chính thức coi như đã được giao xong, không cần người
 // nhận xác nhận lại). Việc giao trực tiếp (MANUAL) không đi qua assignTask() (đã có assignedTo ngay
@@ -1169,6 +1278,10 @@ function assignTask(payload, user, task, usersList) {
   if (assignees.length === 0) {
     throw new HttpError(400, 'Thiếu người nhận việc');
   }
+  // Mọi người nhận PHẢI là tài khoản hệ thống đang hoạt động — xem findActiveUser() ở trên. Kiểm TRƯỚC
+  // khi mutate bất cứ thứ gì (kể cả người đầu tiên) để 1 username sai trong danh sách nhiều người không
+  // để lại trạng thái gán dở dang trên bản ghi gốc.
+  assignees.forEach(u => assertActiveAssignee(usersList, u));
   const deadline = payload.deadline || '';
   const collaborators = Array.isArray(payload.collaborators) ? payload.collaborators : [];
   const skipAccept = shouldSkipAcceptStep(task);
@@ -1229,10 +1342,28 @@ function editTask(payload, user, task, usersList) {
     throw new HttpError(400, 'Thiếu tiêu đề công việc');
   }
   if (!payload.assignedTo) throw new HttpError(400, 'Thiếu người nhận việc');
+  // Người nhận việc mới PHẢI là tài khoản hệ thống đang hoạt động (xem findActiveUser()) — trước đây chỉ
+  // cần là chuỗi khác rỗng, sửa việc sang 1 username bịa/đã khoá là cách âm thầm "vứt" 1 công việc đang
+  // dở khỏi tầm với của mọi người mà vẫn hiện Đang thực hiện trong báo cáo.
+  assertActiveAssignee(usersList, payload.assignedTo);
+
+  // Hạn hoàn thành mới không được SỚM HƠN hạn của bất kỳ công việc nhỏ (subtask) nào đang có — cùng ràng
+  // buộc addSubtask() đang kiểm ("hạn công việc nhỏ không vượt quá hạn việc chính"), nhưng trước đây CHỈ
+  // kiểm tại thời điểm TẠO subtask: rút ngắn deadline việc chính sau đó không có gì chặn, để lại các
+  // subtask có hạn muộn hơn cả việc chính (mâu thuẫn ngay trong 1 bản ghi, không đường nào sửa lại cho
+  // hợp lệ vì chính người nhận việc cũng không sửa được deadline).
+  const newDeadline = payload.deadline || '';
+  if (newDeadline && newDeadline !== task.deadline) {
+    const violating = (task.subtasks || []).filter(s => s.dueDate && s.dueDate > newDeadline);
+    if (violating.length) {
+      const detail = violating.map(s => `"${s.title}" (hạn ${s.dueDate})`).join(', ');
+      throw new HttpError(400, `Không thể đặt hạn hoàn thành ${newDeadline}: công việc nhỏ ${detail} có hạn muộn hơn. Vui lòng sửa/xoá công việc nhỏ trước.`);
+    }
+  }
 
   task.title = payload.title;
   task.description = payload.description || '';
-  task.deadline = payload.deadline || '';
+  task.deadline = newDeadline;
   task.assignedTo = payload.assignedTo;
   task.assignedToName = resolveAssigneeName(usersList, payload.assignedTo);
   task.collaborators = Array.isArray(payload.collaborators) ? payload.collaborators : [];
@@ -1263,6 +1394,24 @@ function createTask(payload, user, usersList) {
   record.assignedToName = resolveAssigneeName(usersList, payload.assignedTo);
   record.assignedBy = user.username;
   record.assignedByName = user.name;
+  // Các field TRẠNG THÁI/NGUỒN GỐC phải do SERVER gán cứng SAU khi trải payload — cùng khuôn đã vá cho
+  // carRegs/officeReqs ở lib/createValidation.js (payload.status/currentStep/history). Trước đây hàm này
+  // chỉ trải nguyên payload rồi ghi đè vài field danh tính, nên 1 request tự soạn của người có taskEdit
+  // có thể:
+  //   - status:'DONE' ngay lúc tạo -> việc "hoàn thành" mà chưa từng qua Nhận Việc/Cập Nhật Tiến Độ,
+  //     không có dòng lịch sử nào tương ứng (số liệu hoàn thành khống);
+  //   - sourceType/sourceCode trỏ tới 1 Biên Bản Họp/Văn Bản Trình CÓ THẬT mà việc này không hề sinh ra
+  //     từ đó -> việc giả mạo hiện lẫn vào phần "Công việc theo chỉ đạo" của hồ sơ nguồn, đồng thời
+  //     shouldSkipAcceptStep() coi đây là việc từ chỉ đạo chính thức và bỏ luôn bước Nhận Việc;
+  //   - extensionCount/pendingExtension/pendingCancellation tự đặt sẵn (đếm gia hạn khống, hoặc treo sẵn
+  //     1 yêu cầu chờ duyệt chưa ai gửi).
+  // Giao việc THỦ CÔNG luôn là nguồn MANUAL, luôn bắt đầu ở TODO (chờ người nhận bấm Nhận Việc).
+  record.status = 'TODO';
+  record.sourceType = 'MANUAL';
+  record.sourceCode = '';
+  record.extensionCount = 0;
+  record.pendingExtension = null;
+  record.pendingCancellation = null;
   record.history = [{ action: 'CREATED', by: user.username, byName: user.name, time: nowVN() }];
   return record;
 }
@@ -1456,6 +1605,15 @@ function requestExtension(payload, user, task) {
   }
   if (task.pendingCancellation) {
     throw new HttpError(409, 'Công việc đang có 1 yêu cầu huỷ chờ duyệt — không thể xin gia hạn lúc này');
+  }
+  // Đã có 1 yêu cầu gia hạn ĐANG CHỜ DUYỆT thì không gửi thêm được yêu cầu mới — đối xứng với nhánh
+  // "người xin huỷ" ở cancelOrRequestCancelTask() (đã chặn khi có pendingExtension). Trước đây thiếu:
+  // lượt xin gia hạn thứ 2 ÂM THẦM ghi đè nguyên object pendingExtension cũ, xoá mất hạn/lý do mà người
+  // giao việc đang xem để quyết định (đường dây lịch sử vẫn ghi 2 dòng EXTENSION_REQUESTED nhưng lượt
+  // duyệt sau đó chỉ áp dụng hạn của yêu cầu MỚI NHẤT) — người nhận việc có thể "đổi hạn xin" ngay
+  // trước khi người giao việc bấm Đồng ý, khiến họ duyệt phải 1 hạn khác với hạn mình đã đọc.
+  if (task.pendingExtension) {
+    throw new HttpError(409, 'Công việc đang có 1 yêu cầu gia hạn chờ duyệt — vui lòng đợi người giao việc Đồng ý/Từ chối trước khi xin gia hạn tiếp');
   }
   const newDeadline = payload?.newDeadline;
   const reason = payload?.reason;
@@ -2361,6 +2519,60 @@ function gradeTrainingTestSubmission(rawAnswers, test, classPassScore) {
   return { answers, score, totalPoints, percentage, passed };
 }
 
+// ===== GIỚI HẠN THỜI GIAN LÀM BÀI TEST (cls.testSecondsPerQuestion) =====
+// Trước đây giới hạn này CHỈ tồn tại ở client: đồng hồ đếm ngược từng câu trong ttTakeRenderQuestion()
+// (public/index.html) tự chuyển câu khi hết giờ. Server không hề ghi mốc bắt đầu nên ai gọi thẳng
+// POST /api/records/trainingClasses/:id/submit-test (curl/DevTools) là bỏ qua sạch đồng hồ, ngồi tra
+// đáp án bao lâu tuỳ ý rồi mới nộp.
+//
+// startTrainingTestAttempt(): ghi mốc bắt đầu Ở SERVER, gọi từ route .../start-test khi học viên MỞ đề
+// (client gọi ngay trong openTakeTestModal()). CHỈ ghi LẦN ĐẦU — mở lại lần 2 không được làm mới mốc,
+// nếu không thì chính người muốn gian lận chỉ cần gọi lại start-test ngay trước khi nộp là xoá sạch dấu
+// vết. testStartedAt lưu dạng ISO (parse được chính xác để trừ ra số giây), kèm testStartedAtVN chỉ để
+// hiển thị cho đồng bộ với các mốc thời gian khác của module (nowVN()).
+function startTrainingTestAttempt(user, reg) {
+  // Route đã tìm reg theo classId + creator, kiểm lại ngay tại mutator theo đúng nguyên tắc "không tin,
+  // kiểm tra lại" của mọi hàm ghi state ở file này.
+  if (reg.creator !== user.username) throw new HttpError(403, 'Bạn chỉ có thể bắt đầu bài test của chính mình');
+  if (reg.result === 'CANCELLED') throw new HttpError(409, 'Đăng ký lớp học này đã bị huỷ');
+  if (!reg.testStartedAt) {
+    reg.testStartedAt = new Date().toISOString();
+    reg.testStartedAtVN = nowVN();
+  }
+  return reg;
+}
+
+// Đối chiếu thời gian làm bài lúc NỘP. Ngân sách = testSecondsPerQuestion × số câu hỏi của bài test
+// (client cấp đúng ngần đó: mỗi câu 1 lượt đếm ngược riêng), cộng biên 15s cho độ trễ mạng/khởi tạo.
+// Trả về null khi không đủ dữ liệu để kết luận (bản ghi cũ chưa có testStartedAt, hoặc lớp/bài test
+// thiếu tham số) — KHÔNG suy đoán bừa.
+//
+// CỐ Ý KHÔNG CHẶN nộp bài khi quá giờ, chỉ gắn cờ + ghi log (xem route submit-test). Lý do: luồng hợp
+// lệ hiện tại CHO PHÉP học viên thoát giữa chừng rồi vào làm lại TỪ ĐẦU (ttTakeExit() ở
+// public/index.html nói rõ điều này), trong khi mốc bắt đầu chỉ ghi 1 lần duy nhất — chặn cứng sẽ khoá
+// vĩnh viễn đúng những học viên làm thật (mở đề xem trước, thoát ra, hôm sau vào làm) mà họ không có
+// cách nào tự gỡ. Muốn chặn cứng thì phải thiết kế lại vòng đời "lượt làm bài" (cho phép/không cho phép
+// mở lại đề, ai được reset) — việc đó cần chốt nghiệp vụ, không nên tự quyết trong 1 bản vá bảo mật.
+const TRAINING_TEST_GRACE_SECONDS = 15;
+function evaluateTrainingTestTiming(reg, cls, test) {
+  if (!reg?.testStartedAt) return null;
+  const startedMs = new Date(reg.testStartedAt).getTime();
+  if (!Number.isFinite(startedMs)) return null;
+  const questionCount = Array.isArray(test?.questions) ? test.questions.length : 0;
+  const secPerQ = Number(cls?.testSecondsPerQuestion);
+  const perQuestion = Number.isFinite(secPerQ) && secPerQ >= 10 ? Math.floor(secPerQ) : 120;
+  if (!questionCount) return null;
+  const limitSeconds = perQuestion * questionCount;
+  const elapsedSeconds = Math.max(0, Math.round((Date.now() - startedMs) / 1000));
+  return {
+    startedAt: reg.testStartedAt,
+    elapsedSeconds,
+    limitSeconds,
+    graceSeconds: TRAINING_TEST_GRACE_SECONDS,
+    overTimeLimit: elapsedSeconds > limitSeconds + TRAINING_TEST_GRACE_SECONDS
+  };
+}
+
 // Ghi kết quả chấm tự động vào bản ghi Đăng Ký tương ứng — cùng khuôn setTrainingRegistrationResult()
 // (resultBy/resultByName/resultAt) nhưng resultBy=null + resultByName cố định để phân biệt rõ đây là
 // chấm tự động, không phải người tạo lớp tự tay ghi nhận. Chỉ ghi khi đăng ký còn ở trạng thái
@@ -2554,9 +2766,13 @@ function canManageRecruitment(user) {
 // Đợt 2: cho đóng tin từ CẢ OPEN lẫn FILLED (trước đây chỉ từ OPEN) — HR cần đóng hẳn 1 tin sau khi đã
 // xác nhận tuyển đủ (confirmRecruitmentJobFilled() bên dưới), không còn cách nào khác để chuyển FILLED
 // -> CLOSED nếu vẫn chặn như cũ. Không cho đóng lại tin ĐÃ đóng (giữ nguyên hành vi cũ).
+// Phạm vi quyền: canManageRecruitment (cả đội tuyển dụng) — KHÔNG còn giới hạn "chỉ người đăng tin",
+// khớp confirmRecruitmentJobFilled()/setRecruitmentReferralStatus() ngay dưới và đúng tinh thần "hộp
+// thư chung của đội tuyển dụng" đã nêu ở canManageRecruitment(): trước đây HR khác vẫn xác nhận được
+// "đã tuyển đủ" cho tin của đồng nghiệp nhưng lại không đóng nổi chính tin đó — mâu thuẫn vô lý.
 function closeRecruitmentJob(payload, user, job) {
-  if (job.creator !== user.username && !user.perms?.admin) {
-    throw new HttpError(403, 'Chỉ người đăng tin hoặc Quản Trị Viên mới được đóng tin tuyển dụng này');
+  if (!canManageRecruitment(user)) {
+    throw new HttpError(403, 'Bạn không có quyền đóng tin tuyển dụng');
   }
   if (job.status === 'CLOSED') throw new HttpError(409, 'Tin tuyển dụng này đã đóng từ trước');
   job.status = 'CLOSED';
@@ -2724,6 +2940,13 @@ function canApproveItPriceEmergencyReject(user) {
 function requestItPriceEmergencyReject(user, item, payload) {
   if (item.status !== 'APPROVED') throw new HttpError(409, 'Chỉ gửi được yêu cầu từ chối khẩn cấp khi đề xuất đã được phê duyệt xong');
   if (item.applied) throw new HttpError(409, 'Đề xuất này đã được áp giá xong, không thể từ chối khẩn cấp nữa');
+  // Cùng lý do applyPriceApproval()/requestPriceInfoFromIt() chặn khi còn yêu cầu bổ sung chưa phản hồi:
+  // hồ sơ đang chờ người đề xuất tải tệp bảng giá bổ sung (nội dung giá CHƯA chốt), quyết ngay "từ chối
+  // khẩn cấp" lúc này là quyết trên dữ liệu sắp bị thay thế. Phải để người đề xuất phản hồi xong (hoặc
+  // đội IT tự đóng yêu cầu bổ sung) rồi mới gửi được yêu cầu từ chối khẩn cấp.
+  if (hasUnresolvedPriceInfoRequest(item)) {
+    throw new HttpError(409, 'Đề xuất đang có yêu cầu bổ sung chưa được người đề xuất phản hồi (tải tệp bổ sung), chưa thể gửi yêu cầu từ chối khẩn cấp');
+  }
   if (!isFinalStepApproverOfItPrice(user, item)) {
     throw new HttpError(403, 'Chỉ người đã duyệt bước cuối cùng (hoặc Quản Trị Viên) mới gửi được yêu cầu từ chối khẩn cấp');
   }
@@ -2788,15 +3011,27 @@ function denyItPriceEmergencyReject(user, item, payload) {
 // tệp + bảng so sánh sai lệch giữa tệp mới nhất và tệp liền trước (dựng ở client từ item.files).
 function submitPriceSupplementFile(user, item, payload) {
   if (item.creator !== user.username) throw new HttpError(403, 'Chỉ người đề xuất mới được tải lên tệp bổ sung');
+  // Hồ sơ đã bị TỪ CHỐI (kể cả qua "từ chối khẩn cấp" sau khi đã duyệt xong — xem
+  // approveItPriceEmergencyReject() ở trên) thì đã đóng vòng đời: yêu cầu bổ sung còn treo lại từ trước
+  // KHÔNG còn là việc phải làm nữa. Thiếu kiểm tra này, người đề xuất vẫn đẩy thêm được tệp mới + dòng
+  // history SUBMIT_SUPPLEMENT vào 1 hồ sơ đã từ chối (làm nhiễu bằng chứng, và "gỡ" mất dấu hiệu còn
+  // yêu cầu bổ sung chưa xử lý). Cùng tinh thần các gate trạng thái ở applyPriceApproval()/
+  // requestPriceInfoFromIt().
+  if (item.status === 'REJECTED') {
+    throw new HttpError(409, 'Đề xuất này đã bị từ chối, không thể tải lên tệp bổ sung nữa');
+  }
   const openReq = (item.infoRequests || []).find(r => !r.response);
   if (!openReq) throw new HttpError(409, 'Đề xuất này hiện không có yêu cầu bổ sung nào đang chờ xử lý');
   const file = payload?.file;
   if (!file || !file.fileUrl) throw new HttpError(400, 'Vui lòng tải lên tệp bảng giá bổ sung (.xlsx)');
+  // Cùng luật với nhánh TẠO (createValidation.js itPriceApprovals.extraValidate) — trước đây cả 2 nhánh
+  // chỉ cắt độ dài, không kiểm khuôn. Xem assertUploadedFileUrl().
+  assertUploadedFileUrl(file.fileUrl, 'Tệp bảng giá bổ sung');
   const items = sanitizePriceFileItems(file.items);
   const columnLabels = sanitizeColumnLabels(file.columnLabels);
   const newFile = {
     id: Date.now(),
-    fileUrl: String(file.fileUrl).slice(0, 300),
+    fileUrl: String(file.fileUrl),
     fileName: (String(file.fileName || '').trim() || 'bang-gia-bo-sung.xlsx').slice(0, 200),
     uploadedBy: user.username, uploadedByName: user.name,
     uploadedAt: nowVN(),
@@ -2885,8 +3120,13 @@ function escalateItTicket(user, ticket, payload, usersList) {
   return ticket;
 }
 
+// Quản Trị Viên luôn duyệt/từ chối thay được — cùng quy ước "admin override mọi bước duyệt" áp dụng
+// xuyên suốt hệ thống (canApproveStep() ở lib/workflowEngine.js: `if (user.perms?.admin) return true;`,
+// applyPriceApproval()/releasePriceApplyClaim() ở trên). Không có lối thoát này, 1 ticket leo thang cho
+// người sau đó nghỉ việc/bị khoá tài khoản sẽ kẹt vĩnh viễn ở approvalStatus='PENDING' (updateItTicketStatus()
+// chặn mọi chuyển trạng thái khi còn PENDING) mà không ai gỡ được.
 function approveItTicketEscalation(user, ticket) {
-  if (ticket.approvalApprover !== user.username) throw new HttpError(403, 'Bạn không phải người được yêu cầu phê duyệt ở đây');
+  if (!user.perms?.admin && ticket.approvalApprover !== user.username) throw new HttpError(403, 'Bạn không phải người được yêu cầu phê duyệt ở đây');
   if (ticket.approvalStatus !== 'PENDING') throw new HttpError(409, 'Yêu cầu phê duyệt này không còn ở trạng thái chờ xử lý');
   ticket.approvalStatus = 'APPROVED';
   ticket.approvalComment = '';
@@ -2896,7 +3136,7 @@ function approveItTicketEscalation(user, ticket) {
 }
 
 function denyItTicketEscalation(user, ticket, payload) {
-  if (ticket.approvalApprover !== user.username) throw new HttpError(403, 'Bạn không phải người được yêu cầu phê duyệt ở đây');
+  if (!user.perms?.admin && ticket.approvalApprover !== user.username) throw new HttpError(403, 'Bạn không phải người được yêu cầu phê duyệt ở đây');
   if (ticket.approvalStatus !== 'PENDING') throw new HttpError(409, 'Yêu cầu phê duyệt này không còn ở trạng thái chờ xử lý');
   const comment = (payload?.comment || '').trim();
   if (!comment) throw new HttpError(400, 'Vui lòng nhập lý do từ chối');
@@ -3270,7 +3510,12 @@ function confirmUniformAllocation(user, period, payload) {
 // uniformPeriods + uniformIssuances CỦA ĐÚNG SIÊU THỊ NÀY, bọc quanh bằng withAppLock('uniform_store:'
 // + user.dept, ...) để 2 lượt cấp phát gần như đồng thời cùng 1 siêu thị không cùng vượt tồn kho (đọc
 // xong-tính-ghi phải nguyên tử theo TỪNG siêu thị, không cần khoá toàn app vì các siêu thị độc lập nhau).
-function buildUniformIssuance(user, payload, allPeriods, allIssuancesOfStore, usersList, allApprovedTransfers) {
+// allAdjustmentsOfStore: BẮT BUỘC truyền (cùng khuôn buildUniformStockAdjustment() bên dưới) — trước
+// đây chỗ này truyền cứng `null` cho computeUniformStock(), nghĩa là tồn kho lúc cấp phát BỎ QUA toàn
+// bộ hàng đã báo hỏng/hủy/mất và phần đã thu hồi từ nhân viên: giám đốc siêu thị vẫn cấp được món đã
+// không còn trong kho, số liệu server lệch hẳn với màn hình Kho ở client (public/index.html đã trừ
+// adjustments từ đầu). Tính đúng = cùng 1 công thức với mọi nơi khác đọc tồn kho.
+function buildUniformIssuance(user, payload, allPeriods, allIssuancesOfStore, allAdjustmentsOfStore, usersList, allApprovedTransfers) {
   if (!canManageUniformStore(user)) throw new HttpError(403, 'Bạn không có quyền cấp phát đồng phục');
   const employeeUsername = String(payload?.employeeUsername || '').trim();
   const employee = (usersList || []).find(u => u.username === employeeUsername && u.active !== false);
@@ -3278,7 +3523,7 @@ function buildUniformIssuance(user, payload, allPeriods, allIssuancesOfStore, us
   if (employee.dept !== user.dept) throw new HttpError(400, 'Chỉ cấp phát được cho nhân viên thuộc siêu thị của bạn');
 
   const items = sanitizeUniformItems(payload?.items);
-  const stock = computeUniformStock(allPeriods, user.dept, allIssuancesOfStore, null, allApprovedTransfers);
+  const stock = computeUniformStock(allPeriods, user.dept, allIssuancesOfStore, allAdjustmentsOfStore, allApprovedTransfers);
   for (const it of items) {
     const row = stock.get(`${it.name}|||${it.size || ''}`);
     const available = row ? row.stock : 0;
@@ -3487,11 +3732,27 @@ function reopenBudgetPeriod(user, period, newEndTime) {
 // Sửa 1 bản ngân sách còn NHÁP (kể cả vừa bị trả về từ "Yêu cầu bổ sung") — khoá theo PHÒNG BAN, khác
 // hẳn updateReportEntryDraft()/updateVppRegistrationDraft() (khoá creator) vì đây là "ngân sách của đơn
 // vị", không phải hồ sơ cá nhân.
+//
+// isDeptInBudgetPeriodScope(): sao y luật kiểm tra phạm vi phòng ban của kỳ ở lib/createValidation.js
+// (budgetEntries.extraValidate). deptScope là dữ liệu của KỲ, ĐỘC LẬP với bản nháp và trước đây chỉ
+// được kiểm tra ĐÚNG 1 LẦN lúc TẠO — mọi thay đổi phạm vi sau đó (sửa lại kỳ ở tầng quản trị/CSDL,
+// phòng ban bị đổi tên/gỡ khỏi danh sách áp dụng) KHÔNG chạm tới các bản nháp đã tạo, nên bản nháp cũ
+// vẫn sửa và GỬI tiếp vào quy trình duyệt được dù phòng ban đã ngoài phạm vi. Kiểm tra LẠI ở cả 2 mốc
+// sửa/gửi — cùng khuôn "kiểm tra lại điều kiện của kỳ ở thời điểm thao tác" mà isBudgetPeriodClosed()
+// đã làm sẵn cho hạn chót/trạng thái kỳ.
+function isDeptInBudgetPeriodScope(period, dept) {
+  const scope = period?.deptScope || {};
+  return !!scope.all || (Array.isArray(scope.depts) && scope.depts.includes(dept));
+}
+
 function updateBudgetEntryDraft(user, item, payload, period, templates) {
   if (!user.perms?.admin && !user.perms?.budgetCreate) throw new HttpError(403, 'Bạn không có quyền lập ngân sách');
   if (item.dept !== user.dept) throw new HttpError(403, 'Bạn chỉ sửa được ngân sách của phòng ban mình');
   if (item.status !== 'DRAFT') throw new HttpError(409, 'Ngân sách này không còn ở trạng thái nháp, không thể sửa');
   if (!period) throw new HttpError(404, 'Không tìm thấy kỳ ngân sách');
+  if (!isDeptInBudgetPeriodScope(period, item.dept)) {
+    throw new HttpError(403, 'Phòng ban của bạn không thuộc phạm vi kỳ ngân sách này');
+  }
   if (isBudgetPeriodClosed(period)) throw new HttpError(409, 'Kỳ ngân sách này đã kết thúc, không thể sửa nữa');
   const customFields = getBudgetTemplateCustomFields(period.templateId, templates);
   item.lines = sanitizeBudgetLines(payload?.lines, customFields);
@@ -3506,6 +3767,9 @@ function submitBudgetEntry(user, item, period) {
   if (item.dept !== user.dept) throw new HttpError(403, 'Bạn chỉ gửi được ngân sách của phòng ban mình');
   if (item.status !== 'DRAFT') throw new HttpError(409, 'Ngân sách này không còn ở trạng thái nháp (có thể đã gửi rồi)');
   if (!period) throw new HttpError(404, 'Không tìm thấy kỳ ngân sách');
+  if (!isDeptInBudgetPeriodScope(period, item.dept)) {
+    throw new HttpError(403, 'Phòng ban của bạn không thuộc phạm vi kỳ ngân sách này');
+  }
   if (isBudgetPeriodClosed(period)) throw new HttpError(409, 'Kỳ ngân sách này đã kết thúc, không thể gửi nữa');
   if (!item.lines || !item.lines.length) throw new HttpError(400, 'Vui lòng nhập ít nhất 1 dòng ngân sách trước khi gửi');
   if (!item.history) item.history = [];
@@ -3594,8 +3858,13 @@ function setLicenseRenewing(user, item, payload) {
   return item;
 }
 
+// Cùng điều kiện nghiệp vụ với setLicenseRenewing() ở trên: chỉ THU HỒI được giấy phép đã APPROVED —
+// hồ sơ còn đang chờ duyệt/đã bị từ chối thì chưa từng có hiệu lực nên không có gì để thu hồi (trước
+// đây chỉ chặn theo lifecycleStatus, nên đánh dấu "đã thu hồi" được cả hồ sơ PENDING/REJECTED, tạo
+// trạng thái vô nghĩa và làm sai thống kê giấy phép).
 function revokeLicense(user, item, payload) {
   if (!canApproveLicense(user)) throw new HttpError(403, 'Bạn không có quyền thu hồi giấy phép');
+  if (item.status !== 'APPROVED') throw new HttpError(409, 'Chỉ thu hồi được giấy phép đã được phê duyệt');
   if (item.lifecycleStatus === 'REVOKED') throw new HttpError(409, 'Giấy phép này đã bị thu hồi trước đó');
   const reason = (payload?.reason || '').trim();
   if (!reason) throw new HttpError(400, 'Vui lòng nhập lý do thu hồi');
@@ -3723,6 +3992,7 @@ module.exports = {
   rejectCancelTrainingRegistration, markTrainingDocumentViewed, setTrainingRegistrationResult, confirmCareerPathForEmployee,
   bulkRegisterTrainingClass, editTrainingClass, startOfflineTrainingClass, endOfflineTrainingClass, editTrainingPlan,
   gradeTrainingTestSubmission, applyAutoGradedTestResult,
+  startTrainingTestAttempt, evaluateTrainingTestTiming,
   editOnboardingPath, confirmOnboardingStage, canEvaluateOnboardingStage3, evaluateOnboardingStage3, issueOnboardingCertificate,
   canManageRecruitment, closeRecruitmentJob, confirmRecruitmentJobFilled, setRecruitmentReferralStatus,
   canManageItSupport, applyPriceApproval, claimPriceApply, releasePriceApplyClaim, requestPriceInfoFromIt, submitPriceSupplementFile,
