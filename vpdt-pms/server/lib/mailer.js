@@ -58,6 +58,13 @@ function buildTransporter({ host, port, encryption, user, pass }) {
   const config = {
     host,
     port: resolvedPort,
+    // Trần thời gian cho từng giai đoạn nói chuyện với máy chủ SMTP. Không đặt gì thì nodemailer để mặc
+    // socket treo theo mặc định của hệ điều hành (có thể hàng phút): 1 máy chủ SMTP sai địa chỉ/bị chặn
+    // cổng làm request "Gửi thử" của admin treo lâu, còn các lượt gửi thông báo tự động thì giữ kết nối
+    // + tiến trình Node bận vô ích. 10 giây dư sức cho 1 relay nội bộ hoặc SMTP công cộng lành mạnh.
+    connectionTimeout: 10000, // bắt tay TCP
+    greetingTimeout: 10000,   // chờ banner 220 của máy chủ
+    socketTimeout: 10000,     // im lặng giữa chừng khi đã kết nối
     ...encryptionToTransportOptions(encryption)
   };
   // Chỉ thêm xác thực nếu có khai báo đủ tài khoản + mật khẩu (DB.emailConfig, đã giải mã sẵn ở nơi

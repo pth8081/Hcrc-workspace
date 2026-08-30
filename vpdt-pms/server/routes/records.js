@@ -12,7 +12,10 @@ const { getAllAppData, getAppDataValue, withLockedAppDataValue } = require('../l
 // sanitizeInternalPostCommentsForUser: cùng hàm mà routes/data.js dùng để lọc GET /api/data (qua
 // filterInternalPostsForUser) — MỌI response trả về bản ghi internalPosts đã mutate ở file này cũng
 // PHẢI đi qua nó, xem chú thích ở withInternalPostAction() bên dưới.
-const { sanitizeInternalPostCommentsForUser } = require('../lib/recordViewScope');
+const { sanitizeInternalPostCommentsForUser, canViewInternalPost } = require('../lib/recordViewScope');
+// "Phiếu xác thực lại trước khi Duyệt" (approverAuthLevel) — cùng cơ chế routes/workflow.js và
+// routes/trash.js dùng, xem assertApprovalReauth() bên dưới.
+const { consumeApprovalGrant } = require('../lib/approvalAuth');
 
 router.use(requireAuth, blockIfMustChangePassword);
 
@@ -43,9 +46,10 @@ router.post('/contracts/:id/edit', async (req, res) => {
       : undefined;
     const rootDept = rootRecord?.dept;
     const rootCustodianDept = rootRecord?.custodianDept;
-    // Chỉ cần đọc AppData khi thực sự có khả năng đổi dept (hợp đồng gốc, không phải phụ lục) — dùng để
-    // dựng lại effectiveSteps/effectiveApprovers nếu dept đổi (xem lib/recordActions.js editContract()).
-    const appData = (thisRecord && !thisRecord.isAddendum) ? await getAllAppData() : null;
+    // AppData dùng cho 2 việc trong editContract(): dựng lại effectiveSteps/effectiveApprovers khi đổi
+    // dept (chỉ hợp đồng gốc mới đổi được) VÀ đối chiếu trường bắt buộc của Biểu Mẫu (formTemplates) —
+    // việc thứ 2 áp dụng cho CẢ phụ lục nên KHÔNG còn bỏ qua lượt đọc này khi isAddendum như trước.
+    const appData = await getAllAppData();
     const result = await withLockedRecordForCollection('contracts', itemId, (item) =>
       recordActions.editContract(req.body, freshUser, item, hasAddenda, rootDept, appData, rootCustodianDept)
     );
@@ -196,8 +200,28 @@ router.post('/paymentRequests/:id/edit', (req, res) =>
 router.post('/paymentRequests/:id/request-info', (req, res) =>
   withPaymentAction(req, res, 'request-info', recordActions.requestPaymentInfo));
 
-router.post('/paymentRequests/:id/approve', (req, res) =>
-  withPaymentAction(req, res, 'approve', (payload, user, item) => recordActions.approvePaymentRequest(user, item)));
+// Xác thực lại (mật khẩu/OTP/PIN/vân tay theo perms.approverAuthLevel) TRƯỚC KHI duyệt đề nghị thanh
+// toán — sao y nguyên khuôn routes/workflow.js (~APPROVAL_REAUTH_MODULES/consumeApprovalGrant): cùng
+// điều kiện (level !== 'NONE'), cùng mã lỗi 403, cùng thông báo.
+//
+// LỖ HỔNG ĐƯỢC VÁ: cả 9 module duyệt khác (Tài Liệu/Văn Bản Trình/Xe/Văn Phòng/VPP/Hợp Đồng/Tài liệu ký/
+// bảng giá IT/Ngân Sách) đều đi qua routes/workflow.js nên được lớp này bảo vệ, riêng Duyệt đề nghị
+// thanh toán — hành động ĐỘNG TỚI TIỀN trực tiếp nhất trong hệ thống — lại có route riêng ở đây và chỉ
+// kiểm canManagePaymentRequests(), tức là người dùng cấu hình "phải xác thực lại khi duyệt" vẫn bị bỏ
+// qua đúng ở chỗ cần nhất. Trả về true nếu đã gửi response lỗi (caller dừng lại).
+function rejectIfMissingApprovalGrant(req, res) {
+  const level = req.freshUser?.perms?.approverAuthLevel || 'NONE';
+  if (level !== 'NONE' && !consumeApprovalGrant(req.freshUser.username)) {
+    res.status(403).json({ error: 'Cần xác thực lại (mật khẩu/OTP/PIN) trước khi duyệt' });
+    return true;
+  }
+  return false;
+}
+
+router.post('/paymentRequests/:id/approve', (req, res) => {
+  if (rejectIfMissingApprovalGrant(req, res)) return;
+  return withPaymentAction(req, res, 'approve', (payload, user, item) => recordActions.approvePaymentRequest(user, item));
+});
 
 // Đề nghị thanh toán tới APPROVED thì bản ghi nguồn (Hợp đồng/officeReqs) đã bị startContractPayment()/
 // tương đương chuyển sang paymentStatus=CHO_THANH_TOAN (xem confirm-installment ở dưới, ghi ngược
@@ -310,10 +334,14 @@ router.post('/minutes/:id/assign-tasks', async (req, res) => {
   const itemId = Number(req.params.id);
   if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
   try {
-    const { freshUser } = await getFreshUser(req);
+    // users: cần cho assignMinutesTasks() xác minh username khai ở "Thành phần tham dự" là tài khoản
+    // hệ thống đang hoạt động TRƯỚC khi biến người đó thành người nhận việc (xem
+    // resolveDirectiveAttendeeServer() ở lib/recordActions.js) — cùng khuôn danh sách user mà
+    // routes/workflow.js truyền vào applyWorkflowAction() để tra lái xe khi duyệt phiếu xe.
+    const { freshUser, users } = await getFreshUser(req);
     let createdTasks = [];
     const result = await withLockedRecordForCollection('meetingMinutes', itemId, (item) => {
-      createdTasks = recordActions.assignMinutesTasks(freshUser, item);
+      createdTasks = recordActions.assignMinutesTasks(freshUser, item, users);
       return item;
     });
     await insertMinutesTasks(createdTasks);
@@ -340,12 +368,25 @@ router.post('/minutes/:id/delete', async (req, res) => {
 // MỌI người dùng đã đăng nhập (khớp canCreateInternalPost() ở index.html — chỉ ĐĂNG bài mới cần quyền
 // riêng theo type, xem/tương tác với bài đã đăng thì không) — cùng khuôn "khoá đúng 1 bài, gọi hàm xác
 // minh + mutate ở lib/recordActions.js" như withTaskAction() bên dưới.
+// assertCanViewInternalPost: CÙNG hàm canViewInternalPost() mà GET /api/data dùng để lọc danh sách bài
+// (filterInternalPostsForUser) — mọi action ở dưới đều nạp bài THEO ID rồi trả NGUYÊN VĂN bài đó về
+// client, nên nếu không kiểm tra quyền XEM trước khi mutate thì bất kỳ ai đã đăng nhập chỉ cần đoán id
+// và gọi mark-read/like/comment/register-training là đọc trọn nội dung bài đang PENDING/REJECTED/
+// NEED_INFO/HIDDEN (hoặc bài NEWS chưa tới publishAt) — vô hiệu hoá toàn bộ hàng rào ở phía GET.
+// sanitizeInternalPostCommentsForUser() KHÔNG che được việc này (nó chỉ lọc metadata cờ bình luận).
+function assertCanViewInternalPost(user, post) {
+  if (!canViewInternalPost(user, post)) throw new HttpError(403, 'Bạn không có quyền xem bài viết này');
+}
+
 async function withInternalPostAction(req, res, action, mutator) {
   const itemId = Number(req.params.id);
   if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
   try {
     const { freshUser } = await getFreshUser(req);
-    const result = await withLockedRecordForCollection('internalPosts', itemId, (item) => mutator(req.body, freshUser, item));
+    const result = await withLockedRecordForCollection('internalPosts', itemId, (item) => {
+      assertCanViewInternalPost(freshUser, item);
+      return mutator(req.body, freshUser, item);
+    });
     // Bản ghi vừa mutate được trả NGUYÊN VĂN về client (client tự thay vào DB.internalPosts, không tải
     // lại GET /api/data) — trước đây bỏ qua hoàn toàn bước lọc kiểm duyệt bình luận mà GET /api/data đã
     // làm rất kỹ: các action ở đây MỞ CHO MỌI NGƯỜI đã đăng nhập (mark-read/like/comment-like/đăng ký
@@ -377,8 +418,12 @@ router.post('/internalPosts/:id/comment', async (req, res) => {
   try {
     const { freshUser } = await getFreshUser(req);
     const sensitiveKeywords = (await getAppDataValue('sensitiveKeywords')) || [];
-    const result = await withLockedRecordForCollection('internalPosts', itemId, (item) =>
-      recordActions.addInternalPostComment(req.body, freshUser, item, sensitiveKeywords));
+    const result = await withLockedRecordForCollection('internalPosts', itemId, (item) => {
+      // Cùng lý do như assertCanViewInternalPost() ở withInternalPostAction() — route này tự khoá bản
+      // ghi nên phải tự chặn người không có quyền xem bài (bình luận vào bài đang chờ duyệt = đọc bài).
+      assertCanViewInternalPost(freshUser, item);
+      return recordActions.addInternalPostComment(req.body, freshUser, item, sensitiveKeywords);
+    });
     // Cùng lý do như withInternalPostAction() ở trên — route này không dùng helper chung nên phải lọc
     // riêng tại đây. Bình luận CỦA CHÍNH người vừa gửi vẫn được giữ lại kể cả khi bị đưa vào hàng chờ
     // kiểm duyệt (xem sanitizeInternalPostCommentsForUser), nên client vẫn hiển thị đúng bình luận họ
@@ -911,6 +956,32 @@ router.post('/trainingClasses/:id/end-session', async (req, res) => {
   }
 });
 
+// POST /api/records/trainingClasses/:id/start-test — học viên MỞ đề (client gọi ngay trong
+// openTakeTestModal(), public/index.html): ghi mốc bắt đầu Ở SERVER lên đúng dòng đăng ký của người đó
+// để submit-test bên dưới đối chiếu được thời gian làm bài thật, thay vì chỉ tin đồng hồ đếm ngược ở
+// client (xem startTrainingTestAttempt() ở lib/recordActions.js). Chỉ ghi LẦN ĐẦU, mở lại không làm mới.
+router.post('/trainingClasses/:id/start-test', async (req, res) => {
+  const classId = Number(req.params.id);
+  if (!Number.isFinite(classId)) return res.status(400).json({ error: 'id không hợp lệ' });
+  try {
+    const { freshUser } = await getFreshUser(req);
+    const classes = await getAllForCollection('trainingClasses');
+    const cls = classes.find(c => c.id === classId);
+    if (!cls) throw new HttpError(404, 'Không tìm thấy lớp học');
+    if (cls.testId == null) throw new HttpError(400, 'Lớp học này chưa được gán bài test');
+
+    const regs = await getAllForCollection('trainingRegistrations');
+    const reg = regs.find(r => r.classId === classId && r.creator === freshUser.username && r.result !== 'CANCELLED');
+    if (!reg) throw new HttpError(403, 'Bạn chưa đăng ký lớp học này nên không thể làm bài test');
+
+    const result = await withLockedRecordForCollection('trainingRegistrations', reg.id, (item) =>
+      recordActions.startTrainingTestAttempt(freshUser, item));
+    res.json({ ok: true, item: result });
+  } catch (err) {
+    handleError(res, `trainingClasses/${req.params.id}/start-test`, err);
+  }
+});
+
 // POST /api/records/trainingClasses/:id/submit-test — nộp bài test của lớp học (đăng nhập bắt buộc qua
 // requireAuth ở đầu file, đúng yêu cầu "cần đăng nhập để tránh làm hộ"). Khoá theo classId+username
 // TRONG SUỐT lúc đọc-kiểm tra-chấm-ghi (đọc trainingTestSubmissions để chặn nộp lần 2, đọc/khoá riêng
@@ -961,6 +1032,17 @@ router.post('/trainingClasses/:id/submit-test', async (req, res) => {
 
       const graded = recordActions.gradeTrainingTestSubmission(req.body?.answers, test, cls.passScore);
 
+      // Giới hạn thời gian (cls.testSecondsPerQuestion) — đối chiếu với mốc reg.testStartedAt do route
+      // .../start-test ghi lại. CỐ Ý chỉ GẮN CỜ + ghi log, KHÔNG chặn nộp bài: xem giải thích đầy đủ ở
+      // evaluateTrainingTestTiming() (lib/recordActions.js) — luồng hợp lệ hiện tại cho phép thoát giữa
+      // chừng rồi vào làm lại từ đầu nên chặn cứng sẽ khoá oan học viên làm thật. Bản ghi nộp bài từ nay
+      // luôn kèm số giây thực tế để người quản lý đào tạo tự rà.
+      const timing = recordActions.evaluateTrainingTestTiming(reg, cls, test);
+      if (timing?.overTimeLimit) {
+        console.warn(`[training-test] Nộp bài QUÁ GIỜ: lớp ${cls.code || cls.id}, người nộp ${freshUser.username}, ` +
+          `làm ${timing.elapsedSeconds}s / giới hạn ${timing.limitSeconds}s (+${timing.graceSeconds}s biên)`);
+      }
+
       const submission = {
         id: Date.now(),
         testId: test.id, testTitle: test.title,
@@ -968,6 +1050,10 @@ router.post('/trainingClasses/:id/submit-test', async (req, res) => {
         username: freshUser.username, name: freshUser.name, dept: freshUser.dept,
         answers: graded.answers, score: graded.score, totalPoints: graded.totalPoints,
         percentage: graded.percentage, passed: graded.passed,
+        startedAt: timing?.startedAt || null,
+        elapsedSeconds: timing ? timing.elapsedSeconds : null,
+        timeLimitSeconds: timing ? timing.limitSeconds : null,
+        overTimeLimit: timing ? timing.overTimeLimit : null,
         submittedAt: new Date().toLocaleString('vi-VN')
       };
       const insertedSubmission = await insertRecord('trainingTestSubmissions', submission);
@@ -1076,7 +1162,11 @@ router.post('/docs/:id/update', async (req, res) => {
   if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
   try {
     const { freshUser } = await getFreshUser(req);
-    const result = await withLockedRecordForCollection('docs', itemId, (item) => recordActions.editDocDraft(req.body, freshUser, item));
+    // appData: chỉ để đối chiếu lại trường bắt buộc của Biểu Mẫu (formTemplates) đúng như lúc TẠO —
+    // xem lib/recordActions.js editDocDraft(). Đọc TRƯỚC khi khoá bản ghi (cùng khuôn route
+    // /submissions/:id/update bên dưới, không giữ khoá trong lúc chờ I/O khác).
+    const appData = await getAllAppData();
+    const result = await withLockedRecordForCollection('docs', itemId, (item) => recordActions.editDocDraft(req.body, freshUser, item, appData));
     res.json({ ok: true, item: result });
   } catch (err) { handleError(res, `docs/${req.params.id}/update`, err); }
 });
@@ -1095,7 +1185,8 @@ router.post('/carRegs/:id/update', async (req, res) => {
   if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
   try {
     const { freshUser } = await getFreshUser(req);
-    const result = await withLockedRecordForCollection('carRegs', itemId, (item) => recordActions.editCarRegDraft(req.body, freshUser, item));
+    const appData = await getAllAppData(); // formTemplates — xem route /docs/:id/update ở trên
+    const result = await withLockedRecordForCollection('carRegs', itemId, (item) => recordActions.editCarRegDraft(req.body, freshUser, item, appData));
     res.json({ ok: true, item: result });
   } catch (err) { handleError(res, `carRegs/${req.params.id}/update`, err); }
 });
@@ -1114,7 +1205,8 @@ router.post('/officeReqs/:id/update', async (req, res) => {
   if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
   try {
     const { freshUser } = await getFreshUser(req);
-    const result = await withLockedRecordForCollection('officeReqs', itemId, (item) => recordActions.editOfficeReqDraft(req.body, freshUser, item));
+    const appData = await getAllAppData(); // formTemplates — xem route /docs/:id/update ở trên
+    const result = await withLockedRecordForCollection('officeReqs', itemId, (item) => recordActions.editOfficeReqDraft(req.body, freshUser, item, appData));
     res.json({ ok: true, item: result });
   } catch (err) { handleError(res, `officeReqs/${req.params.id}/update`, err); }
 });
@@ -1752,14 +1844,18 @@ router.post('/uniformIssuances/create', async (req, res) => {
       return res.status(403).json({ error: 'Bạn không có quyền cấp phát đồng phục' });
     }
     const result = await withAppLock(`uniform_store:${freshUser.dept}`, async () => {
-      const [allPeriods, allIssuances, allTransfers] = await Promise.all([
+      // uniformStockAdjustments PHẢI đọc cùng lượt (giống uniformStockAdjustments/create bên dưới):
+      // tồn kho lúc cấp phát trừ cả hàng hỏng/hủy/mất và cộng lại phần đã thu hồi từ nhân viên.
+      const [allPeriods, allIssuances, allAdjustments, allTransfers] = await Promise.all([
         getAllForCollection('uniformPeriods'),
         getAllForCollection('uniformIssuances'),
+        getAllForCollection('uniformStockAdjustments'),
         getAllForCollection('uniformTransfers')
       ]);
       const storeIssuances = allIssuances.filter(x => x.dept === freshUser.dept);
+      const storeAdjustments = allAdjustments.filter(x => x.dept === freshUser.dept);
       const approvedTransfers = allTransfers.filter(t => t.status === 'APPROVED');
-      const record = recordActions.buildUniformIssuance(freshUser, req.body, allPeriods, storeIssuances, users, approvedTransfers);
+      const record = recordActions.buildUniformIssuance(freshUser, req.body, allPeriods, storeIssuances, storeAdjustments, users, approvedTransfers);
       return insertRecord('uniformIssuances', record);
     });
     res.json({ ok: true, item: result });

@@ -4,7 +4,8 @@
 // định dạng (không in đậm dòng tiêu đề, không set độ rộng cột...). Dùng lại đúng thư viện đã có sẵn
 // trong app (exceljs, xem lib/vppExport.js) thay vì tự viết CSV — sinh file .xlsx thật nên không còn
 // khái niệm mã hoá ký tự phải lo nữa.
-const ExcelJS = require('exceljs');
+const ExcelJS = require('exceljs'); // chỉ còn dùng để SINH file .xlsx xuất ra; đọc file upload đi qua lib/xlsxSafeRead.js
+const { streamFirstSheetRows } = require('./xlsxSafeRead');
 
 function styleHeaderRow(row) {
   row.font = { bold: true };
@@ -34,47 +35,72 @@ function buildGenericWorkbook(sheetName, columns, rows) {
 // thường) là đủ, không cần bộ dò linh hoạt như danh mục VPP.
 const USER_IMPORT_COLUMNS = ['username', 'pass', 'name', 'email', 'phone', 'dept', 'jobtitle'];
 
+// Trần số dòng người dùng đọc trong 1 lần import — cùng tinh thần giới hạn 500/1000/2000 dòng của 6
+// luồng import Excel còn lại, và nay chặn NGAY TRONG LÚC đọc (xem streamFirstSheetRows) chứ không phải
+// sau khi đã nạp cả sheet vào RAM.
+const MAX_USER_IMPORT_ROWS = 2000;
+
+// Đọc theo DÒNG (lib/xlsxSafeRead.js) thay vì nạp cả sheet vào RAM bằng workbook.xlsx.load().
+//
+// LỖ HỔNG ĐƯỢC VÁ: đây là luồng import Excel THỨ 7, nhưng lại là luồng DUY NHẤT còn gọi thẳng
+// wb.xlsx.load(buffer) — bỏ qua toàn bộ lớp chống "zip bomb" mà lib/xlsxSafeRead.js đã dựng cho 6 luồng
+// kia (priceFileParser/trainingRoster/budgetTemplateImport/trainingPlanImport/storeCatalogImport/
+// vppCatalog). Một file .xlsx vài trăm KB (lọt giới hạn 20MB của multer, lại là file .xlsx THẬT nên qua
+// luôn lib/fileSignature.js) bung ra hàng GB XML là đủ làm hết RAM và PM2 restart worker.
+//
+// Logic dò cột/vị trí/bỏ dòng thiếu username giữ Y NGUYÊN, chỉ đổi chỉ số cột từ 1-based (quy ước
+// row.getCell của exceljs) sang 0-based (mảng `cells` mà streamFirstSheetRows trả về).
 async function parseUsersImportXlsx(buffer) {
-  const wb = new ExcelJS.Workbook();
-  await wb.xlsx.load(buffer);
-  const sheet = wb.worksheets[0];
-  if (!sheet) throw new Error('File Excel không có sheet dữ liệu nào');
-
-  const headerRow = sheet.getRow(1);
-  const colIndex = {}; // tên cột (thường hoá) -> số thứ tự cột (1-based, đúng quy ước exceljs)
-  headerRow.eachCell((cell, colNumber) => {
-    const h = String(cell.value ?? '').trim().toLowerCase();
-    if (USER_IMPORT_COLUMNS.includes(h)) colIndex[h] = colNumber;
-  });
-  // Không nhận diện được tiêu đề nào khớp -> rơi về vị trí cột mặc định của file mẫu (username, pass,
-  // name, email, phone, dept, jobTitle theo đúng thứ tự 1-7), phòng trường hợp người dùng lỡ xoá dòng
-  // tiêu đề khi chỉnh sửa file.
-  const usePositional = Object.keys(colIndex).length === 0;
-  if (usePositional) {
-    USER_IMPORT_COLUMNS.forEach((name, i) => { colIndex[name] = i + 1; });
-  }
-
+  const colIndex = {}; // tên cột (thường hoá) -> chỉ số trong mảng cells (0-based)
+  let headerSeen = false;
+  let usePositional = false;
+  let overLimit = false;
   const rows = [];
-  sheet.eachRow((row, rowNumber) => {
-    if (rowNumber === 1 && !usePositional) return; // dòng 1 là tiêu đề, bỏ qua (trừ khi đang đọc theo vị trí thì dòng 1 có thể là dữ liệu thật)
-    const get = (name) => {
-      const idx = colIndex[name];
-      if (!idx) return '';
-      const v = row.getCell(idx).value;
-      return v == null ? '' : String(v).trim();
-    };
-    const username = get('username');
+
+  const get = (cells, name) => {
+    const idx = colIndex[name];
+    if (idx === undefined) return '';
+    const v = cells[idx];
+    return v == null ? '' : String(v).trim();
+  };
+
+  const take = (cells) => {
+    const username = get(cells, 'username');
     if (!username) return; // dòng trống hoặc thiếu username -> bỏ qua, không tạo user rỗng
     rows.push({
       username,
-      pass: get('pass'),
-      name: get('name'),
-      email: get('email'),
-      phone: get('phone'),
-      dept: get('dept'),
-      jobTitle: get('jobtitle') || null
+      pass: get(cells, 'pass'),
+      name: get(cells, 'name'),
+      email: get(cells, 'email'),
+      phone: get(cells, 'phone'),
+      dept: get(cells, 'dept'),
+      jobTitle: get(cells, 'jobtitle') || null
     });
+  };
+
+  await streamFirstSheetRows(buffer, (cells) => {
+    if (!headerSeen) {
+      headerSeen = true;
+      cells.forEach((cell, i) => {
+        const h = String(cell ?? '').trim().toLowerCase();
+        if (USER_IMPORT_COLUMNS.includes(h)) colIndex[h] = i;
+      });
+      // Không nhận diện được tiêu đề nào khớp -> rơi về vị trí cột mặc định của file mẫu (username,
+      // pass, name, email, phone, dept, jobTitle theo đúng thứ tự 1-7), phòng trường hợp người dùng lỡ
+      // xoá dòng tiêu đề khi chỉnh sửa file — khi đó dòng 1 cũng là DỮ LIỆU THẬT, phải đọc luôn.
+      usePositional = Object.keys(colIndex).length === 0;
+      if (usePositional) {
+        USER_IMPORT_COLUMNS.forEach((name, i) => { colIndex[name] = i; });
+        take(cells);
+      }
+    } else {
+      take(cells);
+    }
+    if (rows.length > MAX_USER_IMPORT_ROWS) { overLimit = true; return false; }
+    return true;
   });
+
+  if (overLimit) throw new Error(`File quá nhiều dòng (tối đa ${MAX_USER_IMPORT_ROWS} người dùng/lần)`);
   return rows;
 }
 

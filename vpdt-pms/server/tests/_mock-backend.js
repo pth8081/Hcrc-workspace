@@ -85,6 +85,18 @@ function __mockCanApproveInternalPost(user) {
   return !!(user.perms?.admin || user.perms?.internalPostApprove);
 }
 
+// mirrors canViewInternalPost() ở lib/recordViewScope.js + hàng rào assertCanViewInternalPost() mà
+// withInternalPostAction()/route /comment ở routes/records.js áp cho MỌI hành động trên 1 bài: không
+// được xem bài thì cũng không được mark-read/like/bình luận/đăng ký đào tạo trên bài đó (nếu không,
+// chỉ cần đoán id là đọc trọn nội dung bài chờ duyệt qua response trả về).
+function __mockCanViewInternalPost(user, post) {
+  if (!user) return false;
+  const isAuthorOrApprover = post.author === user.username || __mockCanApproveInternalPost(user);
+  if (post.status !== 'APPROVED') return isAuthorOrApprover;
+  if (post.publishAt && new Date(post.publishAt).getTime() > Date.now()) return isAuthorOrApprover;
+  return true;
+}
+
 // Ẩn/Hiện bài đã đăng — mirrors hideInternalPost()/unhideInternalPost() ở lib/recordActions.js.
 function __mockHideInternalPost(user, post) {
   if (!__mockCanApproveInternalPost(user)) throw __mockHttpError(403, 'Bạn không có quyền ẩn bài đăng này');
@@ -502,6 +514,18 @@ function __mockGradeSubmission(rawAnswers, test, classPassScore) {
   const passed = percentage >= threshold;
   return { score, totalPoints, percentage, passed };
 }
+// mirrors startTrainingTestAttempt() ở lib/recordActions.js (qua route .../start-test).
+function __mockStartTest(user, cls) {
+  if (cls.testId == null) throw __mockHttpError(400, 'Lớp học này chưa được gán bài test');
+  const reg = DB.trainingRegistrations.find((r) => r.classId === cls.id && r.creator === user.username && r.result !== 'CANCELLED');
+  if (!reg) throw __mockHttpError(403, 'Bạn chưa đăng ký lớp học này nên không thể làm bài test');
+  if (!reg.testStartedAt) {
+    reg.testStartedAt = new Date().toISOString();
+    reg.testStartedAtVN = new Date().toLocaleString('vi-VN');
+  }
+  return reg;
+}
+
 function __mockSubmitTest(payload, user, cls) {
   if (cls.testId == null) throw __mockHttpError(400, 'Lớp học chưa được gán bài test');
   const test = DB.trainingTests.find((t) => t.id === cls.testId);
@@ -866,6 +890,7 @@ async function __mockHandleRecordAction(moduleKey, idStr, action, payload, user)
     const id = Number(idStr);
     const post = DB.internalPosts.find((p) => p.id === id);
     if (!post) throw __mockHttpError(404, 'Không tìm thấy bài đăng');
+    if (!__mockCanViewInternalPost(user, post)) throw __mockHttpError(403, 'Bạn không có quyền xem bài viết này');
     const clone = JSON.parse(JSON.stringify(post));
     if (action === 'like') return __mockToggleLike(user, clone);
     if (action === 'comment') return __mockAddComment(payload, user, clone);
@@ -890,6 +915,9 @@ async function __mockHandleRecordAction(moduleKey, idStr, action, payload, user)
     if (action === 'delete') return { __deleted: true };
     if (action === 'bulk-register') return __mockBulkRegister(payload, user, cls);
     if (action === 'submit-test') return __mockSubmitTest(payload, user, cls);
+    // mirrors route .../start-test ở routes/records.js: ghi mốc bắt đầu làm bài lên đúng dòng đăng ký
+    // của người đang làm, CHỈ ghi lần đầu (mở lại đề không làm mới mốc).
+    if (action === 'start-test') return __mockStartTest(user, cls);
     // edit/start-session/end-session (Đợt 3) MUTATE cls — clone trước để khớp đúng ngữ nghĩa
     // withLockedRecordForCollection() thật (chỉ ghi lại khi mutator KHÔNG throw, xem lib/recordStore.js).
     if (action === 'edit') { const clone = JSON.parse(JSON.stringify(cls)); const r = __mockEditTrainingClass(payload, user, clone); Object.assign(cls, r); return cls; }
@@ -1041,7 +1069,10 @@ window.fetch = async function (url, opts) {
       const file = opts.body && typeof opts.body.get === 'function' ? opts.body.get('file') : null;
       const name = file ? file.name : 'file.bin';
       const type = file ? file.type : 'application/octet-stream';
-      return __mockOkRes({ fileUrl: '/uploads/mock/' + encodeURIComponent(name), fileName: name, fileType: type });
+      // Khuôn URL phải khớp routes/upload.js ("/uploads/<tên-phẳng>", chỉ [A-Za-z0-9._-]) — server nay
+      // từ chối fileUrl lệch khuôn ở mọi đường ghi (xem assertUploadedFileUrl() ở lib/createValidation.js).
+      const safeName = String(name).replace(/[^A-Za-z0-9._-]/g, '_');
+      return __mockOkRes({ fileUrl: `/uploads/${Date.now()}-mock-${safeName}`, fileName: name, fileType: type });
     }
 
     if (u === '/api/training/parse-roster' && method === 'POST') {

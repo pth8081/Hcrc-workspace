@@ -73,8 +73,13 @@ function stubModule(relPath, exportsObj) {
     id: resolved, filename: resolved, loaded: true, children: [], paths: [], exports: exportsObj
   };
 }
+// getAllTrashItemsCached: lib/fileAuthz.js nay còn tra thêm Thùng Rác trước khi rơi vào nhánh FAIL-OPEN (hồ sơ
+// đã xoá không được để file của nó lộ rộng hơn lúc chưa xoá — xem findOwningTrashItem()). Ở bộ test này
+// thùng rác luôn rỗng, để mọi kịch bản bên dưới giữ nguyên ý nghĩa cũ; kịch bản Thùng Rác được kiểm
+// riêng ở tests/test-audit-round2-cluster6.js.
 stubModule('../lib/recordStore', {
-  getAllForCollection: async (name) => COLLECTIONS[name] || []
+  getAllForCollection: async (name) => COLLECTIONS[name] || [],
+  getAllTrashItemsCached: async () => []
 });
 // deptWorkflows rỗng -> resolveDocApproversServer() trả {} -> nhánh "đang là người duyệt" của
 // canViewDoc() không cho ai qua, để test chỉ xét đúng nhánh phạm vi phòng ban đang cần khoá.

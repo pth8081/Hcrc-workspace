@@ -226,6 +226,12 @@ const MODULE_CONFIGS = {
 // Giữ tên "WorkflowError" (export riêng, dùng ở routes/workflow.js + stub test) nhưng dùng chung 1
 // class lỗi HTTP với lib/createValidation.js — xem lib/httpErrors.js.
 const { HttpError: WorkflowError } = require('./httpErrors');
+// Chỉ lấy DUY NHẤT hàm kiểm khuôn URL tệp tải lên (hàm thuần, không đọc DB) — 1 nguồn sự thật chung
+// với lib/createValidation.js/lib/recordActions.js, tránh chép lại regex ở đây (xem
+// PROPOSE_FILE_REPLACEMENT bên dưới). Lưu ý: đây KHÔNG mâu thuẫn với "LƯU Ý BẢO TRÌ" ở đầu file — ghi
+// chú đó nói về việc không import chung được với public/index.html (trình duyệt), không phải giữa 2
+// module server với nhau; không có phụ thuộc vòng vì createValidation.js không require file này.
+const { assertUploadedFileUrl } = require('./createValidation');
 
 const nowVN = () => new Date().toLocaleString('vi-VN');
 
@@ -304,6 +310,26 @@ function applyWorkflowAction({ moduleKey, item, action, user, comment, extraFiel
     item[historyField].push({ step: currentStep, approver: user.name, username: user.username, action: 'REQUEST_CHANGES', comment, time: nowVN() });
     item[statusField] = 'DRAFT';
     item[currentStepField] = 0;
+    // carRegs RIÊNG: "Phần Dành Cho Phòng Hành Chính" (xe/biển số/lái xe) chỉ được gán trong lúc DUYỆT
+    // (xem extraFields ở applyWorkflowAction bên dưới). Đưa phiếu về NHÁP mà GIỮ NGUYÊN phần phân công
+    // này để lại 2 hậu quả thật:
+    //   1. findCarPlateConflict() (ở đầu file) bỏ qua phiếu REJECTED/CANCELLED nhưng KHÔNG bỏ qua DRAFT,
+    //      nên chiếc xe vẫn bị coi là "đã bận" đúng khung giờ cũ của 1 phiếu đang chờ người tạo sửa lại
+    //      (có thể sửa luôn cả giờ đi) — phiếu khác xin đúng xe/khung giờ đó bị chặn oan cho tới khi
+    //      phiếu nháp này được gửi lại và duyệt xong, hoặc mãi mãi nếu người tạo bỏ luôn;
+    //   2. phần phân công cũ (biển số + lái xe + đã xác nhận chuyến) vẫn hiển thị trên phiếu NHÁP như
+    //      thể đã được duyệt, trong khi vòng duyệt đã bị huỷ và người điều hành xe sẽ phân công lại từ
+    //      đầu ở vòng sau.
+    // Trả về đúng trạng thái "chưa phân công" của 1 phiếu mới tạo (createValidation.js không hề gán các
+    // field này) — dùng '' cho các field text để findCarPlateConflict() không bao giờ khớp nhầm.
+    if (moduleKey === 'carRegs') {
+      item.assignedPlate = '';
+      item.assignedVehicleType = '';
+      item.assignedDriverUsername = '';
+      item.assignedDriver = '';
+      item.driverConfirmed = false;
+      item.driverConfirmedAt = null;
+    }
     return { item, transition: { type: 'REQUEST_CHANGES' } };
   }
 
@@ -323,6 +349,10 @@ function applyWorkflowAction({ moduleKey, item, action, user, comment, extraFiel
     }
     const { fileUrl, fileName, fileType } = extraFields || {};
     if (!fileUrl || !fileName) throw new WorkflowError(400, 'Thiếu tệp thay thế tờ trình');
+    // Tệp thay thế đi thẳng vào item.fileUrl khi người trình đồng ý (RESOLVE_FILE_PROPOSAL bên dưới),
+    // nên phải qua ĐÚNG lớp kiểm khuôn như mọi đường ghi fileUrl khác — xem assertUploadedFileUrl()
+    // ở lib/createValidation.js (dùng lại nguyên hàm đó, không chép lại regex).
+    assertUploadedFileUrl(fileUrl, 'Tệp thay thế tờ trình');
     item.pendingFileProposal = {
       fileUrl, fileName, fileType: fileType || '',
       note: comment || '',
