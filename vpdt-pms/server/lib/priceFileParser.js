@@ -11,7 +11,7 @@
 // tương ứng, giữ NGUYÊN VĂN dạng chuỗi, không phân biệt cột nào là "giá"/"tên"). Hiển thị/so sánh ở client
 // (public/index.html::itPriceCellHTML()/diffPriceFileItems()) cũng render generic theo columnLabels, không
 // còn định dạng số/căn phải đặc biệt cho cột nào.
-const ExcelJS = require('exceljs');
+const { streamFirstSheetRows } = require('./xlsxSafeRead');
 const { HttpError } = require('./httpErrors');
 
 function normalizeHeader(s) {
@@ -44,66 +44,68 @@ function matchColumnsToTemplate(headerCells, template) {
   return { columnLabels: columns.map(c => ({ key: c.key, label: c.label })), idxByKey };
 }
 
-function rowsToPriceItems(rows, template) {
-  if (!rows.length) throw new HttpError(400, 'File bảng giá trống, không có dữ liệu');
-
-  let columnLabels, idxByKey, dataRows;
+// Dòng tiêu đề -> bộ cột sẽ đọc (giữ nguyên logic cũ, chỉ tách ra để dùng được khi đọc theo dòng).
+function resolveColumns(headerCells, template) {
   if (template) {
-    const matched = matchColumnsToTemplate(rows[0], template);
-    columnLabels = matched.columnLabels; idxByKey = matched.idxByKey; dataRows = rows.slice(1);
-  } else {
-    // Chưa có Mẫu Giá nào trong hệ thống (mới cài đặt/chưa cấu hình) — vẫn cần 1 lối thoát để không chặn
-    // cứng: lấy NGUYÊN VĂN cột của CHÍNH file này (giống hệt parsePriceTemplateColumns() ở dưới).
-    const headerCells = rows[0];
-    columnLabels = [];
-    headerCells.forEach((raw, idx) => {
-      const label = String(raw || '').trim();
-      if (label) columnLabels.push({ key: `c${idx}`, label });
-    });
-    if (!columnLabels.length) throw new HttpError(400, 'File bảng giá không đọc được cột nào từ dòng tiêu đề');
-    idxByKey = {};
-    columnLabels.forEach((c) => { idxByKey[c.key] = Number(c.key.slice(1)); });
-    dataRows = rows.slice(1);
+    const matched = matchColumnsToTemplate(headerCells, template);
+    return { columnLabels: matched.columnLabels, idxByKey: matched.idxByKey };
   }
-
-  const items = [];
-  for (const cells of dataRows) {
-    const values = {};
-    let hasData = false;
-    columnLabels.forEach((c) => {
-      const idx = idxByKey[c.key];
-      const v = (idx !== undefined && idx !== -1) ? String(cells[idx] ?? '').trim() : '';
-      if (v) hasData = true;
-      values[c.key] = v.slice(0, 500);
-    });
-    if (!hasData) continue; // bỏ dòng trắng hoàn toàn
-    items.push({ values });
-  }
-  if (!items.length) throw new HttpError(400, 'Không đọc được dòng dữ liệu nào hợp lệ từ file (mọi dòng đều trống)');
-  if (items.length > 1000) throw new HttpError(400, 'File bảng giá quá nhiều dòng (tối đa 1000 dòng/tệp)');
-  return { items, columnLabels };
+  // Chưa có Mẫu Giá nào trong hệ thống (mới cài đặt/chưa cấu hình) — vẫn cần 1 lối thoát để không chặn
+  // cứng: lấy NGUYÊN VĂN cột của CHÍNH file này (giống hệt parsePriceTemplateColumns() ở dưới).
+  const columnLabels = [];
+  headerCells.forEach((raw, idx) => {
+    const label = String(raw || '').trim();
+    if (label) columnLabels.push({ key: `c${idx}`, label });
+  });
+  if (!columnLabels.length) throw new HttpError(400, 'File bảng giá không đọc được cột nào từ dòng tiêu đề');
+  const idxByKey = {};
+  columnLabels.forEach((c) => { idxByKey[c.key] = Number(c.key.slice(1)); });
+  return { columnLabels, idxByKey };
 }
 
-async function readSheetRows(buffer) {
-  const workbook = new ExcelJS.Workbook();
-  await workbook.xlsx.load(buffer);
-  const sheet = workbook.worksheets[0];
-  if (!sheet) throw new HttpError(400, 'File Excel không có sheet dữ liệu nào');
-  const rows = [];
-  sheet.eachRow({ includeEmpty: false }, (row) => {
-    const cells = [];
-    row.eachCell({ includeEmpty: true }, (cell) => { cells.push(cell.value == null ? '' : String(cell.value)); });
-    rows.push(cells);
+// 1 dòng dữ liệu -> 1 item, hoặc null nếu dòng trắng hoàn toàn (bỏ qua như trước).
+function rowToPriceItem(cells, columnLabels, idxByKey) {
+  const values = {};
+  let hasData = false;
+  columnLabels.forEach((c) => {
+    const idx = idxByKey[c.key];
+    const v = (idx !== undefined && idx !== -1) ? String(cells[idx] ?? '').trim() : '';
+    if (v) hasData = true;
+    values[c.key] = v.slice(0, 500);
   });
-  return rows;
+  return hasData ? { values } : null;
 }
 
 // template (tuỳ chọn) — Mẫu Giá đã chọn (itPriceMasterLists), dùng ĐÚNG tên cột của mẫu để so khớp thay
 // vì bộ từ khoá chung. Trả về { items, columnLabels } — columnLabels đi kèm mỗi tệp lưu vào item.files[]
 // để hiển thị lại đúng tên cột ngay cả khi mẫu sau này bị sửa/xoá.
+//
+// Đọc theo DÒNG (lib/xlsxSafeRead.js) chứ không nạp cả sheet vào RAM: giới hạn 1000 dòng bên dưới nay
+// chặn NGAY trong lúc đọc, không để file nén độc hại bung hết vào bộ nhớ rồi mới bị từ chối.
 async function parsePriceFile(buffer, template) {
-  const rows = await readSheetRows(buffer);
-  return rowsToPriceItems(rows, template);
+  let columnLabels = null;
+  let idxByKey = null;
+  let sawAnyRow = false;
+  let overLimit = false;
+  const items = [];
+
+  await streamFirstSheetRows(buffer, (cells) => {
+    if (!sawAnyRow) { // dòng đầu tiên đọc được là dòng tiêu đề
+      sawAnyRow = true;
+      ({ columnLabels, idxByKey } = resolveColumns(cells, template));
+      return true;
+    }
+    const item = rowToPriceItem(cells, columnLabels, idxByKey);
+    if (item) items.push(item);
+    if (items.length > 1000) { overLimit = true; return false; }
+    return true;
+  });
+
+  if (!sawAnyRow) throw new HttpError(400, 'File bảng giá trống, không có dữ liệu');
+  // Vượt trần thì items chắc chắn không rỗng, nên thứ tự 2 lỗi dưới đây cho ra đúng thông báo như cũ.
+  if (overLimit) throw new HttpError(400, 'File bảng giá quá nhiều dòng (tối đa 1000 dòng/tệp)');
+  if (!items.length) throw new HttpError(400, 'Không đọc được dòng dữ liệu nào hợp lệ từ file (mọi dòng đều trống)');
+  return { items, columnLabels };
 }
 
 // Làm sạch lại 1 mảng items ĐÃ ĐƯỢC PARSE TỪ SERVER (client chỉ echo lại nguyên văn kết quả của
@@ -151,9 +153,10 @@ function sanitizeColumnLabels(rawColumnLabels) {
 // KHÔNG còn bước "gán vai trò cột" nào ở client sau khi đọc xong — xem addItPriceMasterList() ở
 // public/index.html.
 async function parsePriceTemplateColumns(buffer) {
-  const rows = await readSheetRows(buffer);
-  if (!rows.length || !rows[0].length) throw new HttpError(400, 'File mẫu không có dòng tiêu đề nào');
-  const headerCells = rows[0];
+  let headerCells = null;
+  // Chỉ cần ĐÚNG dòng đầu -> trả về false ngay để dừng đọc, không đụng tới phần còn lại của file.
+  await streamFirstSheetRows(buffer, (cells) => { headerCells = cells; return false; });
+  if (!headerCells || !headerCells.length) throw new HttpError(400, 'File mẫu không có dòng tiêu đề nào');
   const columns = [];
   headerCells.forEach((raw, idx) => {
     const label = String(raw || '').trim();

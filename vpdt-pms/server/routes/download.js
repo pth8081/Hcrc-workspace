@@ -1,93 +1,25 @@
 // routes/download.js — Route TẢI file đính kèm dùng chung cho TOÀN hệ thống (khác /uploads/ tĩnh ở
-// server.js — chỗ đó dùng để XEM file trong Khung Xem Bảo Vệ qua PDF.js/mammoth/exceljs, giữ nguyên
-// không đổi). Route này CHỈ phục vụ khi người dùng bấm "Tải" thật sự: nếu file là PDF thì đóng dấu
-// watermark "Hệ thống văn phòng số Công ty HCRC" vào góc dưới-trái MỖI TRANG trước khi trả về — CHỈ vẽ
-// thêm 1 dòng chữ đè lên (dùng pdf-lib), không dựng lại/không đổi nội dung gốc của trang nào, nên tài
-// liệu (kể cả hợp đồng) vẫn giữ nguyên giá trị nội dung, chỉ thêm watermark nhận diện ở góc không đụng
-// tới phần thân/nơi ký. Các loại file khác (Word/Excel/ảnh...) được trả về NGUYÊN VẸN, không qua bước
-// đóng dấu — theo đúng phạm vi khách hàng xác nhận (chỉ PDF luôn có watermark khi tải).
+// server.js — chỗ đó dùng để XEM file trong Khung Xem Bảo Vệ qua PDF.js/mammoth/exceljs). Route này
+// CHỈ phục vụ khi người dùng bấm "Tải" thật sự: nếu file là PDF thì đóng dấu watermark "Hệ thống văn
+// phòng số Công ty HCRC" vào góc dưới-trái MỖI TRANG trước khi trả về — CHỈ vẽ thêm 1 dòng chữ đè lên
+// (dùng pdf-lib), không dựng lại/không đổi nội dung gốc của trang nào, nên tài liệu (kể cả hợp đồng)
+// vẫn giữ nguyên giá trị nội dung, chỉ thêm watermark nhận diện ở góc không đụng tới phần thân/nơi ký.
+// Các loại file khác (Word/Excel/ảnh...) được trả về NGUYÊN VẸN, không qua bước đóng dấu — theo đúng
+// phạm vi khách hàng xác nhận (chỉ PDF luôn có watermark khi tải).
+//
+// Phần TRA NGƯỢC file -> hồ sơ sở hữu + KIỂM QUYỀN đã được tách sang lib/fileAuthz.js để dùng CHUNG với
+// middleware chặn /uploads ở server.js (trước đây /uploads chỉ có requireAuth, ai đăng nhập cũng đọc
+// được mọi file nếu biết URL — xem ghi chú đầu lib/fileAuthz.js). Ở đây gọi với mode 'download' để giữ
+// NGUYÊN khuôn quyền cũ theo cờ "<moduleKey>Download"; /uploads gọi với mode 'view'.
 const express = require('express');
 const path = require('path');
 const fs = require('fs');
 const { PDFDocument, rgb } = require('pdf-lib');
 const fontkit = require('@pdf-lib/fontkit');
-const { getAllForCollection } = require('../lib/recordStore');
-const { getAllAppData } = require('../lib/appData');
-const {
-  canDownloadRecordFile, canViewInternalPost,
-  canViewItPriceApproval, canViewReportEntry, canSeeReportCompilation, filterRecruitmentReferralsForUser,
-  canViewLicense, canViewItServiceRenewal
-} = require('../lib/recordViewScope');
+const { parseUploadsFileUrl, authorizeFileAccess } = require('../lib/fileAuthz');
 
 const router = express.Router();
 
-// Tra ngược fileUrl -> bản ghi sở hữu nó — Tài Liệu, Văn Bản Trình, Hợp Đồng, Đăng Ký Xe, Văn Phòng
-// Tổng Hợp đều dùng chung 1 khuôn quyền tải theo phòng ban ({all,depts}, cờ "<moduleKey>Download" +
-// luôn cho phép chính chủ, xem canDownloadFile()/canDownloadRecordFile()). Biên bản họp KHÔNG có mặt ở
-// đây — "Tải" của module đó xuất ra 1 phiếu dựng TỪ DỮ LIỆU bản ghi ngay ở trình duyệt (canvas/PDF),
-// không có fileUrl nào đi qua /uploads/ để cần tra cứu ở route này (khớp đúng cơ chế "Tải phiếu" của
-// Công Việc, không phải file người dùng tự tải lên). Nếu file không thuộc các collection dưới đây (VD
-// bài truyền thông nội bộ) thì CHO PHÉP như trước (chưa rà logic canView riêng của module đó).
-//
-// internalPosts (Góc Chia Sẻ): KHÔNG dùng chung khuôn quyền tải theo phòng ban ở trên — bài PENDING/
-// REJECTED chỉ tác giả/admin/internalPostApprove được XEM (canViewInternalPost(), lib/recordViewScope.js,
-// dùng để lọc GET /api/data). Trước đây route này không tra tới internalPosts nên fileUrl của 1 bài
-// đang chờ duyệt/đã bị từ chối (không hề hiện trên giao diện với người khác) vẫn tải được nếu URL bị lộ
-// ra ngoài (dán vào chat, cache trình duyệt của người đã từng thấy...) — trả riêng owning = {internal:true,
-// post} để caller gọi canViewInternalPost() thay vì canDownloadRecordFile() (2 khuôn quyền khác nhau).
-//
-// itPriceApprovals/reportEntries/reportPeriods/recruitmentReferrals: 3 module ra đời SAU route này nên
-// chưa từng được tra tới ở đây — cùng lỗ hổng như internalPosts từng gặp (file không thuộc collection
-// nào bên dưới thì rơi vào nhánh "CHO PHÉP như trước" ở router.get() bên dưới, không kiểm tra gì). File
-// bảng giá IT (chỉ proposer/approver phòng ban/itManage được xem), file đính kèm slide Báo Cáo Định Kỳ
-// (ẩn cho tới khi PUBLISHED), và CV ứng viên (chỉ người giới thiệu + tuyển dụng) đều là dữ liệu cần giới
-// hạn đúng như canView*ForUser() đã lọc ở GET /api/data — thêm vào đây để URL bị lộ (share nhầm, dán vào
-// chat...) không cho tải vượt phạm vi. Mỗi module trả owning riêng (itPrice/reportEntry/reportPeriod/
-// recruitment) để caller gọi đúng hàm kiểm quyền tương ứng (khác chữ ký/tham số nhau).
-async function findOwningRecord(fileUrl) {
-  const [docs, submissions, contracts, carRegs, officeReqs, internalPosts, itPriceApprovals, reportEntries, reportPeriods, recruitmentReferrals, licenses, itServiceRenewals] = await Promise.all([
-    getAllForCollection('docs'),
-    getAllForCollection('submissions'),
-    getAllForCollection('contracts'),
-    getAllForCollection('carRegs'),
-    getAllForCollection('officeReqs'),
-    getAllForCollection('internalPosts'),
-    getAllForCollection('itPriceApprovals'),
-    getAllForCollection('reportEntries'),
-    getAllForCollection('reportPeriods'),
-    getAllForCollection('recruitmentReferrals'),
-    getAllForCollection('licenses'),
-    getAllForCollection('itServiceRenewals')
-  ]);
-  const doc = (docs || []).find(d => d.fileUrl === fileUrl);
-  if (doc) return { moduleKey: 'doc', dept: doc.dept, ownerUsername: doc.uploader };
-  const sub = (submissions || []).find(s => s.fileUrl === fileUrl || (s.extraFiles || []).some(ef => ef.fileUrl === fileUrl));
-  if (sub) return { moduleKey: 'submission', dept: sub.dept, ownerUsername: sub.creator };
-  const contract = (contracts || []).find(c => c.fileUrl === fileUrl || c.signedFileUrl === fileUrl);
-  if (contract) return { moduleKey: 'contract', dept: contract.dept, custodianDept: contract.custodianDept, ownerUsername: contract.creator };
-  const carReg = (carRegs || []).find(c => c.fileUrl === fileUrl);
-  if (carReg) return { moduleKey: 'car', dept: carReg.dept, ownerUsername: carReg.creator };
-  const officeReq = (officeReqs || []).find(o => o.fileUrl === fileUrl || o.signedFileUrl === fileUrl);
-  if (officeReq) return { moduleKey: 'office', dept: officeReq.dept, ownerUsername: officeReq.creator };
-  const post = (internalPosts || []).find(p => p.attachment && p.attachment.fileUrl === fileUrl);
-  if (post) return { internal: true, post };
-  const priceItem = (itPriceApprovals || []).find(p => (p.files || []).some(f => f.fileUrl === fileUrl));
-  if (priceItem) return { itPrice: true, item: priceItem };
-  const entry = (reportEntries || []).find(e => e.fileUrl === fileUrl);
-  if (entry) return { reportEntry: true, entry };
-  const period = (reportPeriods || []).find(p => (p.compilation?.slides || []).some(s => s.fileUrl === fileUrl));
-  if (period) return { reportPeriod: true, period };
-  const referral = (recruitmentReferrals || []).find(r => r.cvFileUrl === fileUrl);
-  if (referral) return { recruitment: true, referral };
-  // licenses (Giấy Phép): quyền phẳng riêng module (licenseCreate/licenseApprove/licenseView), khác hẳn
-  // canDownloadRecordFile theo phòng ban — trả owning riêng để caller gọi canViewLicense().
-  const license = (licenses || []).find(l => l.fileUrl === fileUrl);
-  if (license) return { license: true, item: license };
-  // itServiceRenewals (Hỗ Trợ IT — Gia Hạn Dịch Vụ CNTT): quyền phẳng itManage, cùng khuôn licenses ở trên.
-  const itRenewal = (itServiceRenewals || []).find(r => r.fileUrl === fileUrl);
-  if (itRenewal) return { itServiceRenewal: true, item: itRenewal };
-  return null;
-}
 const UPLOAD_DIR = path.join(__dirname, '..', 'uploads');
 const FONT_PATH = path.join(__dirname, '..', 'assets', 'fonts', 'DejaVuSans.ttf');
 
@@ -102,62 +34,48 @@ function getFontBytes() {
   return embeddedFontBytes;
 }
 
-router.get('/', async (req, res) => {
+// LƯU Ý BẢO TRÌ: toàn bộ thân handler được bọc try/catch (xem downloadHandler() bên dưới) — lưới an
+// toàn cho ĐÚNG lớp lỗi đã thực sự xảy ra ở route này trước đây: 1 hàm canView* import từ
+// lib/recordViewScope.js (hoặc gián tiếp qua lib/fileAuthz.js) bị BỎ SÓT khỏi khối module.exports của
+// nguồn, nên biến import về `undefined` và lời gọi ném TypeError. Handler là `async` trong Express 4
+// (KHÔNG tự bắt promise rejection) và tiến trình không cài `unhandledRejection` handler nào, nên 1 lượt
+// tải file bất kỳ đủ để hạ cả tiến trình Node. Bọc lại để lỗi lập trình kiểu này thành 500 cho ĐÚNG
+// request đó thay vì sập server cho tất cả mọi người — KHÔNG thay thế cho việc export/kiểm tra đúng ở
+// nguồn (đã vá riêng, xem lib/recordViewScope.js).
+router.get('/', (req, res) => {
+  downloadHandler(req, res).catch((err) => {
+    console.error('⛔ GET /api/files/download: lỗi không mong đợi:', err && err.stack || err);
+    if (!res.headersSent) res.status(500).json({ error: 'Không thể tải tệp — lỗi máy chủ' });
+  });
+});
+
+async function downloadHandler(req, res) {
   const fileUrl = String(req.query.fileUrl || '');
   // fileUrl luôn có dạng "/uploads/<tên-file-do-server-sinh-ra>" (xem routes/upload.js — tên file luôn
   // là <timestamp>-<16 hex>.<ext>, không chứa ký tự do người dùng nhập) — chặn path traversal bằng cách
-  // chỉ nhận đúng 1 thành phần tên file (không có "/" hay "..") rồi resolve lại để chắc chắn vẫn nằm
-  // trong đúng thư mục uploads/.
-  const m = /^\/uploads\/([^/\\]+)$/.exec(fileUrl);
-  if (!m) return res.status(400).json({ error: 'Đường dẫn tệp không hợp lệ' });
+  // chỉ nhận đúng 1 thành phần tên file (không có "/" hay ".."), rồi resolve lại để chắc chắn vẫn nằm
+  // trong đúng thư mục uploads/ (parseUploadsFileUrl() ở lib/fileAuthz.js, dùng chung với /uploads).
+  const fileName = parseUploadsFileUrl(fileUrl);
+  if (!fileName) return res.status(400).json({ error: 'Đường dẫn tệp không hợp lệ' });
 
-  const filePath = path.join(UPLOAD_DIR, m[1]);
+  const filePath = path.join(UPLOAD_DIR, fileName);
   if (path.dirname(filePath) !== UPLOAD_DIR || !fs.existsSync(filePath)) {
     return res.status(404).json({ error: 'Không tìm thấy tệp' });
   }
 
-  const owning = await findOwningRecord(fileUrl);
-  if (owning && owning.internal && !canViewInternalPost(req.freshUser, owning.post)) {
+  // mode 'download': giữ NGUYÊN khuôn quyền cũ theo cờ "<moduleKey>Download" (canDownloadRecordFile) —
+  // ĐÚNG bộ luật mà middleware /uploads/ ở server.js dùng khi gọi mode 'view', chỉ khác mode. 1 nguồn
+  // sự thật duy nhất (lib/fileAuthz.js) cho câu hỏi "người này có được lấy tệp này không".
+  if (!(await authorizeFileAccess(req.freshUser, fileUrl, 'download'))) {
     return res.status(403).json({ error: 'Bạn không có quyền tải tệp này' });
-  }
-  if (owning && owning.itPrice) {
-    const appData = await getAllAppData();
-    if (!canViewItPriceApproval(req.freshUser, owning.item, appData)) {
-      return res.status(403).json({ error: 'Bạn không có quyền tải tệp này' });
-    }
-  }
-  if (owning && owning.reportEntry && !canViewReportEntry(req.freshUser, owning.entry)) {
-    return res.status(403).json({ error: 'Bạn không có quyền tải tệp này' });
-  }
-  if (owning && owning.reportPeriod && !canSeeReportCompilation(req.freshUser, owning.period)) {
-    return res.status(403).json({ error: 'Bạn không có quyền tải tệp này' });
-  }
-  if (owning && owning.recruitment && !filterRecruitmentReferralsForUser([owning.referral], req.freshUser).length) {
-    return res.status(403).json({ error: 'Bạn không có quyền tải tệp này' });
-  }
-  if (owning && owning.license && !canViewLicense(req.freshUser, owning.item)) {
-    return res.status(403).json({ error: 'Bạn không có quyền tải tệp này' });
-  }
-  if (owning && owning.itServiceRenewal && !canViewItServiceRenewal(req.freshUser)) {
-    return res.status(403).json({ error: 'Bạn không có quyền tải tệp này' });
-  }
-  // custodianDept chỉ có mặt ở owning trả về cho hợp đồng (findOwningRecord() ở trên) — undefined cho
-  // mọi module khác, nên nhánh OR dưới đây là no-op cho các module không có khái niệm custodian.
-  if (owning && !owning.internal && !owning.itPrice && !owning.reportEntry && !owning.reportPeriod && !owning.recruitment && !owning.license && !owning.itServiceRenewal) {
-    const allowedByDept = canDownloadRecordFile(req.freshUser, owning.moduleKey, owning.dept, owning.ownerUsername);
-    const allowedByCustodian = owning.custodianDept && owning.custodianDept !== owning.dept &&
-      canDownloadRecordFile(req.freshUser, owning.moduleKey, owning.custodianDept, owning.ownerUsername);
-    if (!allowedByDept && !allowedByCustodian) {
-      return res.status(403).json({ error: 'Bạn không có quyền tải tệp này' });
-    }
   }
 
-  const downloadName = String(req.query.name || m[1]).replace(/[\r\n"]/g, '');
+  const downloadName = String(req.query.name || fileName).replace(/[\r\n"]/g, '');
   const asciiFallback = downloadName.replace(/[^\x20-\x7E]/g, '_');
   res.setHeader('Content-Disposition',
     `attachment; filename="${asciiFallback}"; filename*=UTF-8''${encodeURIComponent(downloadName)}`);
 
-  const ext = path.extname(m[1]).toLowerCase();
+  const ext = path.extname(fileName).toLowerCase();
   if (ext !== '.pdf') {
     return res.sendFile(filePath);
   }
@@ -187,6 +105,6 @@ router.get('/', async (req, res) => {
     res.setHeader('Content-Type', 'application/pdf');
     return res.sendFile(filePath);
   }
-});
+}
 
 module.exports = router;

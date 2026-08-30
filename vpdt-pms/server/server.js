@@ -10,6 +10,8 @@ const { version: APP_VERSION } = require('./package.json');
 const { getPool } = require('./db');
 const { seedDefaults } = require('./seedDefaults');
 const { requireAuth, blockIfMustChangePassword, verifyToken, COOKIE_NAME } = require('./lib/auth');
+// Kiểm quyền truy cập file đính kèm — dùng CHUNG với routes/download.js, xem chú thích ở /uploads bên dưới.
+const { uploadsAuthz } = require('./lib/fileAuthz');
 const authRoutes = require('./routes/auth');
 const dataRoutes = require('./routes/data');
 const workflowRoutes = require('./routes/workflow');
@@ -146,12 +148,22 @@ app.use('/api/budget', budgetTemplateImportRoutes);
 app.use('/api/files/download', requireAuth, blockIfMustChangePassword, downloadRoutes);
 app.use('/api/trash', trashRoutes);
 
-// Phục vụ file đính kèm đã tải lên — PHẢI đăng nhập mới tải được (trước đây express.static phục vụ
-// thẳng, ai có đúng URL — kể cả chưa đăng nhập — đều tải được, vô hiệu hoá các quyền Xem/Tải file theo
-// module đã cấp). Chưa phân biệt được quyền theo TỪNG hồ sơ cụ thể (vd nhân viên phòng khác vẫn tải
-// được nếu đoán/có sẵn đúng URL) — chỉ chặn được người hoàn toàn CHƯA đăng nhập; phân quyền chi tiết
-// hơn theo hồ sơ sẽ cần thiết kế riêng (route tải có kiểm tra ngược lại hồ sơ chứa fileUrl đó).
-app.use('/uploads', requireAuth, blockIfMustChangePassword, express.static(path.join(__dirname, 'uploads')));
+// Phục vụ file đính kèm đã tải lên — PHẢI đăng nhập VÀ phải có quyền XEM đúng hồ sơ chứa file đó.
+// Trước đây chỉ có requireAuth: BẤT KỲ ai đã đăng nhập (kể cả nhân viên phòng khác hoàn toàn không
+// được cấp quyền xem module đó) chỉ cần biết/đoán đúng URL /uploads/<tên-file> là đọc trọn vẹn nội
+// dung file, vô hiệu hoá toàn bộ phân quyền theo hồ sơ mà GET /api/files/download đã dựng. URL rất dễ
+// lộ (dán vào chat, lịch sử duyệt web, cache trình duyệt của người từng xem hợp lệ, log proxy...).
+//
+// uploadsAuthz dùng CHUNG lib/fileAuthz.js với routes/download.js, nhưng gọi ở mode 'view' — kiểm theo
+// khuôn canView* của từng module, KHÔNG theo cờ "<moduleKey>Download". Đây là điểm mấu chốt: nếu bê
+// nguyên phép kiểm của route tải sang đây thì mọi người CHỈ có quyền XEM (không được cấp quyền Tải) sẽ
+// bị chặn luôn cả Khung Xem Bảo Vệ — tức là hỏng chức năng xem tài liệu của gần hết người dùng thường.
+// Watermark KHÔNG áp dụng ở đây (chỉ route "Tải" mới đóng dấu): Khung Xem Bảo Vệ vẫn nhận file gốc để
+// PDF.js/mammoth/exceljs dựng hình như cũ, hành vi hiển thị không đổi.
+//
+// File không tra ra hồ sơ nào (ảnh đại diện, logo, đính kèm của module chưa rà quyền riêng) vẫn được
+// CHO PHÉP — fail-open có chủ ý, giữ đúng hành vi cũ, xem ghi chú ở lib/fileAuthz.js.
+app.use('/uploads', requireAuth, blockIfMustChangePassword, uploadsAuthz, express.static(path.join(__dirname, 'uploads')));
 
 // Thư viện vendor lấy thẳng từ node_modules theo đúng bản đã `npm install` — nội dung chỉ đổi khi
 // đổi phiên bản package (đi kèm redeploy), nên cache dài hạn được an toàn ở trình duyệt thay vì tải

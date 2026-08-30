@@ -9,7 +9,7 @@
 // họp thêm cờ minutesEdit (toàn công ty, không theo phòng ban) cho SỬA — riêng XÓA là quyền tối cao,
 // chỉ Admin; Công việc theo NGƯỜI (assignedBy/assignee), hoàn toàn không có khái niệm phòng ban.
 const { HttpError } = require('./httpErrors');
-const { scopeAllows, OFFICE_SUBTYPE_TO_PERM_FLAG, normalizeReportEntryPayload, buildEffectiveContractApprovalWorkflowServer, sanitizeUniformItems, sanitizeBudgetLines, getBudgetTemplateCustomFields, sanitizeBudgetCustomFields, resolveTrainingInstructorUsername, normalizeInviteList, normalizeTrainingPlanFields, normalizeOnboardingPathFields, SUBMISSION_APPROVAL_LEVELS, buildEffectiveSubmissionWorkflowServer, validateRequiredCustomData } = require('./createValidation');
+const { scopeAllows, OFFICE_SUBTYPE_TO_PERM_FLAG, normalizeReportEntryPayload, buildEffectiveContractApprovalWorkflowServer, sanitizeUniformItems, sanitizeBudgetLines, getBudgetTemplateCustomFields, sanitizeBudgetCustomFields, resolveTrainingInstructorUsername, normalizeInviteList, normalizeTrainingPlanFields, normalizeOnboardingPathFields, SUBMISSION_APPROVAL_LEVELS, buildEffectiveSubmissionWorkflowServer, validateRequiredCustomData, assertUploadedFileUrl } = require('./createValidation');
 const { validateRegistrationItems: validateVppRegItems, calcItemsTotal: calcVppItemsTotal } = require('./vppCatalog');
 const { sanitizePriceFileItems, sanitizeColumnLabels } = require('./priceFileParser');
 
@@ -631,6 +631,15 @@ function confirmPaymentInstallment(payload, user, pr) {
 function assertCanDeletePaymentRequest(user, pr) {
   if (!user.perms?.admin) throw new HttpError(403, 'Chỉ Quản Trị Viên mới có quyền xoá đề nghị thanh toán');
   if (pr.status === 'PAID') throw new HttpError(409, 'Đề nghị thanh toán đã hoàn tất — không thể xoá');
+  // status === 'PAID' CHỈ xuất hiện khi ĐỦ HẾT các đợt đã được xác nhận (xem confirmPaymentInstallment()
+  // ở trên) — đề nghị mới thanh toán MỘT PHẦN vẫn ở APPROVED, và trước đây xoá được bình thường. Hậu quả
+  // là THANH TOÁN 2 LẦN có thật: xoá xong, route delete trả bản ghi nguồn (Hợp đồng/officeReqs) về
+  // paymentStatus 'CHUA_THANH_TOAN' (xem routes/records.js), người dùng bấm lại "Chuyển Sang Thanh Toán"
+  // thì startContractPayment()/startOfficePayment() dựng đề nghị MỚI tính lại từ ĐẦU theo amount/
+  // paymentInstallments của nguồn — không hề nhớ (các) đợt đã được kế toán xác nhận chi trước đó.
+  if ((pr.installments || []).some(it => it.confirmed === true)) {
+    throw new HttpError(409, 'Đề nghị thanh toán đã có đợt được xác nhận chi — không thể xoá (xoá rồi tạo lại sẽ tính lại từ đầu, dẫn tới thanh toán trùng)');
+  }
 }
 
 // ===================== BIÊN BẢN HỌP (sửa/xóa) =====================
@@ -1076,6 +1085,13 @@ const INTERNAL_POST_EDITABLE_FIELDS = ['title', 'content', 'attachment', 'postCa
 function editInternalPost(payload, user, post) {
   if (post.author !== user.username && !user.perms?.admin) throw new HttpError(403, 'Bạn không có quyền sửa bài đăng này');
   if (post.status !== 'DRAFT' && post.status !== 'NEED_INFO') throw new HttpError(409, 'Bài đăng không còn ở trạng thái được sửa');
+  // "attachment" nằm trong INTERNAL_POST_EDITABLE_FIELDS nên đi thẳng từ payload client vào bản ghi —
+  // phải kiểm tra ĐÚNG luật URL như lúc TẠO (createValidation.js internalPosts.extraValidate), nếu
+  // không thì lỗ hổng stored XSS qua scheme "javascript:" chỉ bị chặn ở đường tạo mới, còn đường SỬA
+  // (bài Nháp/bài bị Yêu cầu bổ sung, chính tác giả tự sửa) vẫn mở nguyên.
+  if (payload && payload.attachment !== undefined) {
+    assertUploadedFileUrl(payload.attachment?.fileUrl, 'Tệp đính kèm');
+  }
   for (const field of INTERNAL_POST_EDITABLE_FIELDS) {
     if (payload[field] !== undefined) post[field] = payload[field];
   }

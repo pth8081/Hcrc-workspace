@@ -20,7 +20,8 @@ const {
   filterMeetingsForUser, filterMeetingMinutesForUser, filterTasksForUser, sanitizeTrainingTestsForUser,
   filterRecruitmentReferralsForUser, filterItPriceApprovalsForUser, filterItSupportTicketsForUser,
   filterUniformPeriodsForUser, filterUniformIssuancesForUser, filterUniformStockAdjustmentsForUser, filterUniformTransfersForUser, filterBudgetEntriesForUser,
-  filterVppRegistrationsForUser, filterLicensesForUser, filterHrFeedbackForUser
+  filterVppRegistrationsForUser, filterLicensesForUser, filterHrFeedbackForUser,
+  filterItServiceRenewalsForUser, filterPaymentRequestsForUser
 } = require('../lib/recordViewScope');
 
 const VALID_KEYS = new Set(Object.keys(DEFAULTS));
@@ -33,6 +34,11 @@ const ADMIN_ONLY_KEYS = new Set([
   'users', 'permGroups', 'emailConfig', 'workflows',
   'deptWorkflows', 'submissionDeptWorkflows', 'submissionTypeDeptWorkflows', 'submissionApprovalGroups',
   'carDeptWorkflows', 'officeBuyDeptWorkflows', 'officeFixDeptWorkflows', 'officeInvestDeptWorkflows', 'vppDeptWorkflows',
+  // itPriceDeptWorkflows: cấu hình người duyệt Phê Duyệt Giá (module Hỗ Trợ IT) theo phòng ban — cùng
+  // khuôn carDeptWorkflows/vppDeptWorkflows/budgetDeptWorkflows, chỉ sửa được ở màn Quy Trình & Phê
+  // Duyệt (admin), nhưng trước đây BỊ BỎ SÓT khỏi danh sách này: bất kỳ tài khoản đã đăng nhập nào cũng
+  // ghi trực tiếp được qua POST /api/data/itPriceDeptWorkflows và tự đặt mình làm người duyệt giá.
+  'itPriceDeptWorkflows',
   'contractApprovalDeptWorkflows', 'contractApprovalGroups', 'contractManageDeptWorkflows',
   // budgetDeptWorkflows: cấu hình Trưởng phòng duyệt ngân sách theo phòng ban (module Ngân Sách) —
   // cùng khuôn carDeptWorkflows/vppDeptWorkflows ở trên, chỉ sửa được ở màn Quy Trình & Phê Duyệt (admin).
@@ -417,6 +423,14 @@ router.get('/', async (req, res) => {
     // licenses (Hành Chính — Giấy Phép): quyền phẳng riêng module (licenseCreate/licenseApprove/
     // licenseView), KHÔNG theo phòng ban — xem lib/recordViewScope.js canViewLicense().
     if (data.licenses) data.licenses = filterLicensesForUser(data.licenses, req.freshUser);
+    // itServiceRenewals (Hỗ Trợ IT — Gia Hạn Dịch Vụ CNTT): quyền PHẲNG itManage, cùng khuôn licenses ở
+    // trên — hàm lọc đã có sẵn ở lib/recordViewScope.js từ đầu nhưng CHƯA TỪNG được gọi ở đây (cũng chưa
+    // được export, xem chú thích ở khối module.exports của file đó), nên toàn bộ danh mục dịch vụ CNTT
+    // (nhà cung cấp, chi phí, ngày hết hạn) vẫn lộ nguyên cho mọi tài khoản đã đăng nhập.
+    if (data.itServiceRenewals) data.itServiceRenewals = filterItServiceRenewalsForUser(data.itServiceRenewals, req.freshUser);
+    // paymentRequests (Tổng Hợp — Thanh Toán): collection TÀI CHÍNH duy nhất còn lại chưa lọc lại ở
+    // server — xem lib/recordViewScope.js canViewPaymentRequest().
+    if (data.paymentRequests) data.paymentRequests = filterPaymentRequestsForUser(data.paymentRequests, req.freshUser);
     // hrFeedback (Nhân Sự — "HCRC Đồng Hành"): RIÊNG TƯ hơn MỌI collection ở trên — chỉ chính người
     // hỏi + bộ phận Nhân Sự đọc được, không có nhánh phòng ban nào. Lọc ngay tại đây là chỗ DUY NHẤT
     // đảm bảo yêu cầu riêng tư cốt lõi này (giao diện chỉ lọc thêm 1 lần nữa cho đúng inbox cá nhân)

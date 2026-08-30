@@ -485,6 +485,25 @@ function filterItServiceRenewalsForUser(items, user) {
   return canViewItServiceRenewal(user) ? (items || []) : [];
 }
 
+// paymentRequests (Tổng Hợp — Thanh Toán): hồ sơ TÀI CHÍNH (số tiền, các đợt thanh toán, đơn vị chịu
+// trách nhiệm, tham chiếu hợp đồng/nhà cung cấp qua sourceCode) — trước đây là collection nhạy cảm DUY
+// NHẤT còn lại KHÔNG được lọc lại ở GET /api/data (xem routes/data.js): bất kỳ ai đã đăng nhập gọi
+// thẳng API đều đọc được TOÀN BỘ đề nghị thanh toán của MỌI phòng ban, dù giao diện (renderPaymentRequests()
+// ở public/index.html) chỉ mở nút thao tác cho canManagePaymentRequestsClient(). Kế toán (paymentManage)
+// /admin xem hết (họ duyệt & xác nhận thanh toán cho toàn công ty); còn lại chỉ thấy đề nghị của ĐÚNG
+// phòng ban mình — cùng khuôn so sánh dept như canViewBudgetEntry() ở trên (hồ sơ của cả ĐƠN VỊ, không
+// phải cá nhân, nên không có nhánh "chính người tạo"). dept của đề nghị luôn là đơn vị custodian/đơn vị
+// đề xuất nguồn, xem startContractPayment()/startOfficePayment() ở lib/recordActions.js.
+function canViewPaymentRequest(user, item) {
+  if (!user) return false;
+  if (user.perms?.admin || user.perms?.paymentManage) return true;
+  return !!(item.dept && item.dept === user.dept);
+}
+
+function filterPaymentRequestsForUser(items, user) {
+  return (items || []).filter(pr => canViewPaymentRequest(user, pr));
+}
+
 module.exports = {
   canViewDoc, canViewSubmission, filterDocsForUser, filterSubmissionsForUser,
   canViewInternalPost, filterInternalPostsForUser,
@@ -507,5 +526,12 @@ module.exports = {
   canViewBudgetEntry, filterBudgetEntriesForUser,
   canViewLicense, filterLicensesForUser,
   canViewHrFeedback, filterHrFeedbackForUser,
+  // itServiceRenewals: 2 hàm này ĐÃ được định nghĩa ở trên nhưng trước đây BỊ BỎ SÓT khỏi khối export
+  // này — hậu quả kép: (1) routes/data.js không lọc được collection này ở GET /api/data (lộ toàn bộ
+  // danh mục Gia Hạn Dịch Vụ CNTT cho mọi người đã đăng nhập), (2) routes/download.js import
+  // canViewItServiceRenewal nhận về `undefined` nên MỌI lượt tải file đều ném TypeError.
+  canViewItServiceRenewal, filterItServiceRenewalsForUser,
+  canViewPaymentRequest, filterPaymentRequestsForUser,
+  sanitizeInternalPostCommentsForUser,
   canDownloadRecordFile
 };
