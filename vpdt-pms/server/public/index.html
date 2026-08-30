@@ -4743,6 +4743,11 @@ input[data-sdd-list] {
                   <label class="block font-semibold text-gray-700 mb-1">Mã PIN duyệt (tối thiểu 4 số)</label>
                   <input id="uPin" type="text" inputmode="numeric" pattern="[0-9]*" placeholder="Để trống = giữ nguyên mã PIN hiện tại" class="w-full border p-1.5 rounded text-xs">
                 </div>
+                <div id="uWebauthnWrap" class="hidden mt-2">
+                  <label class="block font-semibold text-gray-700 mb-1">🖐️ Thiết bị vân tay/Face ID đã đăng ký</label>
+                  <div id="uWebauthnListWrap" class="space-y-1"></div>
+                  <p class="text-[11px] text-gray-500 italic mt-1">Chỉ Quản Trị Viên gỡ được thiết bị của người khác — dùng khi người đó mất thiết bị (hoặc quên mật khẩu luôn) nên không tự đăng nhập lại để tự gỡ. Gỡ xong họ cần đăng ký lại thiết bị mới nếu muốn tiếp tục dùng vân tay/Face ID.</p>
+                </div>
               </div>
             </div>
             <div class="space-y-2">
@@ -10194,6 +10199,52 @@ async function deleteBiometricDevice(id) {
     // thất bại). Chỉ xoá khi biết CHẮC danh sách rỗng (remaining=[]) — bỏ qua nếu tải lại danh sách lỗi
     // (remaining=undefined), tránh xoá nhầm lúc mạng chập chờn.
     if (remaining && remaining.length === 0) setRememberedWebauthnUsername(null);
+  } catch (err) {
+    alert('⛔ Không thể kết nối tới máy chủ: ' + err.message);
+  }
+}
+
+// ==========================================
+// ADMIN XEM/GỠ HỘ THIẾT BỊ VÂN TAY CỦA NGƯỜI KHÁC (#uWebauthnWrap trong màn Sửa Người Dùng) — khác khối
+// "CỦA CHÍNH MÌNH" ở trên (Hồ Sơ Cá Nhân). Dùng khi 1 tài khoản mất thiết bị (hoặc quên cả mật khẩu) nên
+// không tự đăng nhập lại để tự gỡ — chỉ Quản Trị Viên gọi được (server tự chặn lại, xem GET/DELETE
+// /api/auth/webauthn/credentials/:username ở routes/auth.js).
+// ==========================================
+async function renderAdminWebauthnDeviceList(username) {
+  const wrap = document.getElementById('uWebauthnListWrap');
+  wrap.innerHTML = '<p class="text-gray-400 italic">Đang tải...</p>';
+  try {
+    const res = await fetch(`/api/auth/webauthn/credentials/${encodeURIComponent(username)}`);
+    if (!res.ok) { wrap.innerHTML = '<p class="text-red-600 italic">Không tải được danh sách thiết bị.</p>'; return; }
+    const list = await res.json();
+    if (!list.length) {
+      wrap.innerHTML = '<p class="text-gray-400 italic">Chưa đăng ký thiết bị nào.</p>';
+      return;
+    }
+    wrap.innerHTML = list.map(c => `
+      <div class="flex justify-between items-center bg-gray-50 border rounded p-2">
+        <div>
+          <div class="font-semibold text-gray-700">${escapeHtml(c.deviceLabel || 'Thiết bị chưa đặt tên')}</div>
+          <div class="text-[10px] text-gray-400">Đăng ký lúc: ${escapeHtml(c.createdAt || '')}</div>
+        </div>
+        <button type="button" onclick="deleteAdminBiometricDevice('${escapeHtml(username)}', '${c.id}')" class="text-red-600 font-bold hover:underline">🗑️ Gỡ</button>
+      </div>
+    `).join('');
+  } catch (err) {
+    wrap.innerHTML = '<p class="text-red-600 italic">Không tải được danh sách thiết bị.</p>';
+  }
+}
+
+async function deleteAdminBiometricDevice(username, id) {
+  if (!confirm(`Gỡ thiết bị vân tay này của "${username}"? Người đó sẽ không đăng nhập/xác thực bằng vân tay từ thiết bị này được nữa (mọi phiên đang mở của họ cũng bị đăng xuất ngay).`)) return;
+  try {
+    const res = await fetch(`/api/auth/webauthn/credentials/${encodeURIComponent(username)}/${encodeURIComponent(id)}`, { method: 'DELETE' });
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      return alert(`⛔ ${body.error || 'Không thể gỡ thiết bị'}`);
+    }
+    await renderAdminWebauthnDeviceList(username);
+    logSystemAction('USER_MGM', 'REMOVE_WEBAUTHN_DEVICE', `Gỡ hộ thiết bị vân tay/Face ID của người dùng [${username}]`, 'SUCCESS', username);
   } catch (err) {
     alert('⛔ Không thể kết nối tới máy chủ: ' + err.message);
   }
@@ -27229,6 +27280,10 @@ function editPendingNewUser(idx) {
   renderUPermGroupsChecklist(u.groupIds || []);
   populatePermsForm(u.perms);
   document.getElementById('uPin').value = u.pin || '';
+  // Hàng chờ (chưa lưu lên server) chưa có tài khoản thật nào để tra thiết bị vân tay — ẩn khối này
+  // (khớp resetUserForm(), đối lập editUser() vốn hiện lại khi sửa user ĐÃ có tài khoản thật).
+  document.getElementById('uWebauthnWrap').classList.add('hidden');
+  document.getElementById('uWebauthnListWrap').innerHTML = '';
   updatePermGroupNote((u.groupIds || []).length > 0);
   document.getElementById('uUsername').scrollIntoView({ behavior: 'smooth', block: 'center' });
 }
@@ -27292,6 +27347,8 @@ function resetUserForm() {
   document.getElementById('pApproverAuthLevel').value = defaults.approverAuthLevel || 'NONE';
   document.getElementById('uPin').value = '';
   onApproverAuthLevelChange();
+  document.getElementById('uWebauthnWrap').classList.add('hidden');
+  document.getElementById('uWebauthnListWrap').innerHTML = '';
   document.getElementById('pCanViewReports').checked = !!defaults.canViewReports;
   document.getElementById('pInternalNewsCreate').checked = !!defaults.internalNewsCreate;
   document.getElementById('pInternalRecruitmentCreate').checked = !!defaults.internalRecruitmentCreate;
@@ -27398,6 +27455,11 @@ function editUser(id) {
   populatePermsForm(user.perms);
   updatePermGroupNote(userGroupIds.length > 0);
   setAdminAccountPermsLocked(user.username === 'admin');
+
+  // Chỉ hiện khi SỬA user đã tồn tại (có tài khoản thật để tra thiết bị) — resetUserForm()/
+  // editPendingNewUser() (tạo mới/sửa hàng chờ) ẩn lại khối này vì chưa có tài khoản nào cả.
+  document.getElementById('uWebauthnWrap').classList.remove('hidden');
+  renderAdminWebauthnDeviceList(user.username);
 }
 
 async function deleteUser(id) {
