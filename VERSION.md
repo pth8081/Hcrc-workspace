@@ -1,9 +1,37 @@
 # Phiên bản hiện tại
 
-**1.90.0** — đã merge vào `main` (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở
+**1.90.1** — đã merge vào `main` (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở
 badge góc màn hình + `/api/health`).
 
-## Cập nhật gần nhất (PR #196 → #197, nhánh `claude/chao-ban-oo5ijl`)
+## Cập nhật gần nhất (PR #199 → #200, nhánh `claude/chao-ban-oo5ijl`)
+
+Xử lý nốt 4 mục "Thấp" bị bỏ qua ở đợt rà soát trước (PR #196/#197) — không phải bug rõ ràng, cần quyết
+định nghiệp vụ, nay xử lý theo hướng an toàn/hợp lý nhất:
+
+1. `lib/workflowEngine.js` — gắn cờ `adminOverride:true` vào đúng dòng lịch sử duyệt khi admin dùng đặc
+   quyền bỏ qua điều kiện "đủ approver" để Duyệt hộ 1 bước — trước đây không có dấu vết nào phân biệt lượt
+   này với 1 lượt duyệt bình thường (khó truy vết khi có tranh chấp/audit sau này).
+2. `lib/createValidation.js` + `routes/create.js` — kiểm trùng mã (code) quét thêm cả Thùng Rác, chặn hồ
+   sơ mới dùng lại mã của 1 hồ sơ đã xoá (cả nhánh kiểm trùng chung lẫn nhánh tự tính mã phiên bản tài
+   liệu docs). Thêm tham số `trashedItems` TUỲ CHỌN (mặc định rỗng) — không đổi hành vi bất kỳ lời gọi cũ
+   nào, chỉ `routes/create.js` (đường thật) mới truyền dữ liệu thật vào.
+3. `lib/recordStore.js` + `routes/trash.js` — khôi phục 1 phiên bản tài liệu/phụ lục hợp đồng từ Thùng Rác
+   giờ tự động cố khôi phục luôn các thành viên còn lại cùng "họ" (đối xứng với việc xoá đã cascade cả họ
+   vào Thùng Rác cùng lúc) — trước đây phải tự khôi phục từng phiên bản 1, dễ bỏ sót, để tài liệu hiện ra
+   với lịch sử phiên bản bị đứt quãng. Best-effort: 1 thành viên phụ lỗi không làm hỏng lượt khôi phục
+   chính.
+4. `lib/recordActions.js` + `routes/records.js` — `mergeReportPeriodByTasks()` trả thêm cảnh báo (KHÔNG
+   lưu vào dữ liệu kỳ) khi kỳ liền trước theo thời gian chưa đóng nhưng vẫn phải dùng 1 kỳ CLOSED xa hơn
+   làm mốc tính phạm vi — trước đây âm thầm dùng mốc thay thế, không ai biết có khoảng trống/chồng lấn ở
+   ranh giới 2 kỳ.
+
+**Deploy impact:** không đổi `server/sql/schema.sql`, không thêm biến môi trường, không thêm dependency
+mới — chỉ copy code + `pm2 restart`.
+
+Đã kiểm thử: 37 file `tests/test-*.js` pass (36 file cũ + 1 file mới `test-audit-round3-lowfixes.js`, 18
+kịch bản riêng đợt này).
+
+## Trước đó (PR #196 → #197, nhánh `claude/chao-ban-oo5ijl`)
 
 Tiếp tục rà soát bảo mật chuyên sâu (đợt 2) sau PR #193/#194 — 6 agent audit song song rà lại toàn bộ
 ứng dụng tìm phát hiện Medium/Low còn sót. Trong quá trình rà, phát hiện thêm **7 lỗ hổng thực chất
