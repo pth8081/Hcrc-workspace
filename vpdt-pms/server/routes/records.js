@@ -1325,10 +1325,13 @@ router.post('/reportPeriods/:id/mergeByTasks', async (req, res) => {
     const { freshUser, users } = await getFreshUser(req);
     const tasks = await getAllTasks();
     const allPeriods = await getAllForCollection('reportPeriods');
-    const result = await withLockedRecordForCollection('reportPeriods', itemId, (item) =>
-      recordActions.mergeReportPeriodByTasks(freshUser, item, tasks, users, allPeriods)
-    );
-    res.json({ ok: true, item: result });
+    let boundaryGapWarning = null;
+    const result = await withLockedRecordForCollection('reportPeriods', itemId, (item) => {
+      const { period, warning } = recordActions.mergeReportPeriodByTasks(freshUser, item, tasks, users, allPeriods);
+      boundaryGapWarning = warning;
+      return period;
+    });
+    res.json({ ok: true, item: result, warning: boundaryGapWarning });
   } catch (err) {
     handleError(res, `reportPeriods/${req.params.id}/mergeByTasks`, err);
   }

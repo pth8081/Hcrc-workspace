@@ -662,7 +662,7 @@ const CREATE_MODULE_CONFIGS = {
     // TRƯỚC ĐÂY (module docs không có extraValidate nào) không xác minh lại gì cả: 1 request tự soạn có
     // thể tự xưng rootDocId của tài liệu bất kỳ (kể cả phòng ban khác), tự đặt versionNumber tuỳ ý (đâm
     // ra 2 version trùng số hoặc "nhảy cóc"), hoặc bổ sung version cho tài liệu gốc CHƯA duyệt xong.
-    extraValidate: (payload, collection, user, appData) => {
+    extraValidate: (payload, collection, user, appData, trashedItems) => {
       validateRequiredCustomData(payload.customData, appData?.formTemplates, 'DOC');
       // Tệp tài liệu (#docFile ở index.html) — xem assertUploadedFileUrl().
       assertUploadedFileUrl(payload.fileUrl, 'Tệp tài liệu');
@@ -690,6 +690,12 @@ const CREATE_MODULE_CONFIGS = {
         payload.code = `${payload.displayCode}-V${payload.versionNumber}`;
         if ((collection || []).some(d => d.code === payload.code)) {
           throw new CreateError(409, `Mã "${payload.code}" đã tồn tại`);
+        }
+        // Quét thêm Thùng Rác (trashedItems do routes/create.js đọc trước rồi truyền vào — xem chú
+        // thích tham số trashedItems của validateAndPrepareCreate() ở trên): version code tính tự
+        // động ở đây cũng phải tránh trùng với version đã bị xoá trước đó của CHÍNH tài liệu gốc này.
+        if ((trashedItems || []).some(t => t.code === payload.code)) {
+          throw new CreateError(409, `Mã "${payload.code}" đã từng được dùng cho 1 phiên bản đã xoá — vui lòng thử lại`);
         }
       } else {
         payload.versionNumber = 1;
@@ -2187,7 +2193,16 @@ function normalizeReportEntryPayload(payload) {
 // bị SERVER ghi đè bằng giá trị xác thực từ phiên đăng nhập, không tin bất kỳ giá trị nào client tự
 // gửi cho các field này. appData (tuỳ chọn): snapshot toàn bộ AppData do CALLER đọc sẵn (getAllAppData())
 // — chỉ module submissions cần dùng (dựng lại quy trình hiệu lực), các module khác bỏ qua tham số này.
-function validateAndPrepareCreate(moduleKey, payload, user, existingCollection, appData) {
+// trashedItems (đợt rà soát audit vòng 3, mặc định [] — KHÔNG đổi hành vi cho mọi lời gọi cũ chưa
+// biết tham số này, kể cả toàn bộ tests/test-*.js đang gọi hàm này trực tiếp/đồng bộ): dup-check
+// "code" TRƯỚC ĐÂY chỉ so khớp với collection ĐANG SỐNG — code của 1 hồ sơ đã xoá (nằm trong
+// dbo.TrashBin, index UNIQUE ở dbo.Records không với tới) coi như "còn trống", 1 hồ sơ HOÀN TOÀN
+// không liên quan tạo sau đó có thể vô tình trùng đúng code cũ, khiến lịch sử/tham chiếu chéo (những
+// chỗ hiển thị lại code thay vì tra theo id) đọc nhầm sang hồ sơ mới. Cố ý KHÔNG tự đọc Thùng Rác ở
+// đây (sẽ phải đổi cả hàm này lẫn extraValidate của docs thành async — đụng tới rất nhiều nơi trong
+// tests/*.js đang gọi hàm này ĐỒNG BỘ, kỳ vọng throw/return ngay) — CALLER (routes/create.js) tự đọc
+// bất đồng bộ rồi TRUYỀN VÀO đây, hàm vẫn giữ nguyên chữ ký đồng bộ.
+function validateAndPrepareCreate(moduleKey, payload, user, existingCollection, appData, trashedItems) {
   const config = CREATE_MODULE_CONFIGS[moduleKey];
   if (!config) throw new CreateError(400, `Module không hợp lệ: ${moduleKey}`);
   if (!payload || typeof payload !== 'object') throw new CreateError(400, 'Thiếu dữ liệu hồ sơ');
@@ -2201,9 +2216,12 @@ function validateAndPrepareCreate(moduleKey, payload, user, existingCollection, 
   if (payload.code) {
     const dup = (existingCollection || []).some(item => item.code === payload.code);
     if (dup) throw new CreateError(409, `Mã "${payload.code}" đã tồn tại`);
+    if ((trashedItems || []).some(t => t.code === payload.code)) {
+      throw new CreateError(409, `Mã "${payload.code}" đã từng được dùng cho 1 hồ sơ đã xoá — vui lòng chọn mã khác`);
+    }
   }
 
-  if (config.extraValidate) config.extraValidate(payload, existingCollection, user, appData);
+  if (config.extraValidate) config.extraValidate(payload, existingCollection, user, appData, trashedItems);
 
   const record = { ...payload, id: Date.now(), dept };
   record[config.creatorField] = user.username;
