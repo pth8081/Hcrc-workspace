@@ -1,9 +1,35 @@
 # Phiên bản hiện tại
 
-**1.89.1** — đã merge vào `main` (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở
+**1.90.0** — đã merge vào `main` (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở
 badge góc màn hình + `/api/health`).
 
-## Cập nhật gần nhất (PR #193 → #194, nhánh `claude/chao-ban-oo5ijl`)
+## Cập nhật gần nhất (PR #196 → #197, nhánh `claude/chao-ban-oo5ijl`)
+
+Tiếp tục rà soát bảo mật chuyên sâu (đợt 2) sau PR #193/#194 — 6 agent audit song song rà lại toàn bộ
+ứng dụng tìm phát hiện Medium/Low còn sót. Trong quá trình rà, phát hiện thêm **7 lỗ hổng thực chất
+nghiêm trọng hơn mức Medium** (đánh giá lại thành High vì là biến thể/mở rộng trực tiếp của các lỗ hổng
+Critical/High đã vá ở PR #193) — vá toàn bộ cùng ~20 phát hiện Medium/Low xác nhận:
+
+**Đánh giá lại thành High (đã vá):** (1) `fileUrl` không được validate ở hầu hết module (docs/submissions/
+contracts/carRegs/officeReqs/itPriceApprovals, cả tạo lẫn sửa — PR #193 chỉ vá 3 field) — mở lại cả stored
+XSS lẫn giả mạo fileUrl để vượt kiểm quyền theo hồ sơ. (2) Custom field kiểu file/multifile (Biểu Mẫu tuỳ
+chỉnh) không được `lib/fileAuthz.js` kiểm tra — fail-open, ai đăng nhập cũng đọc được. (3) Hồ sơ trong
+Thùng Rác lộ file NHIỀU hơn trước khi xoá, và xoá vĩnh viễn chưa từng xoá file vật lý trên đĩa. (4) Duyệt
+Đề Nghị Thanh Toán bỏ qua khung xác thực lại `approverAuthLevel` mà 9 module khác đều bắt buộc. (5)
+`ADMIN_ONLY_KEYS` thiếu 5 danh mục quản trị. (6) Stored XSS qua `javascript:` URI trong link video đào
+tạo. (7) Route mutation Góc Chia Sẻ bỏ qua kiểm quyền xem — lộ nội dung bài đang ẩn/chờ duyệt.
+
+**~20 phát hiện Medium/Low:** race điều kiện tạo trùng ngân sách theo kỳ, thiếu kiểm trạng thái luồng giá
+IT, thiếu validate assignedTo/deadline/username ở Công Việc và Biên Bản Họp, tồn kho Đồng Phục bỏ qua
+điều chỉnh HONG/HUY/MAT, chống zip-bomb thiếu ở luồng import Excel người dùng, email quan hệ mở gửi được
+tới địa chỉ bất kỳ, mã OTP dùng `Math.random()` thay vì CSPRNG, và nhiều mục khác.
+
+**Deploy impact:** không đổi `server/sql/schema.sql`, không thêm biến môi trường, không thêm dependency
+mới — chỉ copy code + `pm2 restart`.
+
+Đã kiểm thử: 36 file `tests/test-*.js` pass (30 file cũ + 6 file mới riêng đợt này, ~190 kịch bản).
+
+## Trước đó (PR #193 → #194, nhánh `claude/chao-ban-oo5ijl`)
 
 Rà soát bảo mật chuyên sâu (6 agent song song rà toàn bộ nghiệp vụ/chức năng/an toàn thông tin), vá **9
 lỗ hổng mức Critical/High** (Medium/Low để lại cho đợt sau):
