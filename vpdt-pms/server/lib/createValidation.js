@@ -40,6 +40,29 @@ function findMeetingConflict(meetings, room, startTime, endTime) {
 
 const OFFICE_SUBTYPE_TO_PERM_FLAG = { MUA_BAN: 'officeBuy', SUA_CHUA: 'officeFix', DAU_TU: 'officeInvest' };
 
+// URL tệp/ảnh do CHÍNH hệ thống này sinh ra luôn có dạng "/uploads/<timestamp>-<16 hex>.<ext>" (xem
+// routes/upload.js — tên file do server tự đặt, không chứa ký tự nào người dùng nhập). Các field URL
+// "tuỳ chọn, client tự upload trước rồi gửi lại URL" (internalPosts.attachment.fileUrl,
+// recruitmentJobs.bannerUrl, recruitmentReferrals.cvFileUrl) TRƯỚC ĐÂY được lưu NGUYÊN VĂN giá trị
+// client gửi, rồi render ra `<a href="${escapeHtml(fileUrl)}">` / `<img src="${escapeHtml(url)}">` ở
+// public/index.html. escapeHtml() chỉ vô hiệu hoá < > & " ' — KHÔNG hề vô hiệu hoá scheme
+// "javascript:" (scheme này không cần bất kỳ ký tự nào trong số đó), nên 1 request tự soạn gửi
+// fileUrl:"javascript:..." tạo ra 1 liên kết BẤM ĐƯỢC chạy JS trong phiên đã đăng nhập của người xem
+// (stored XSS). Nguy hiểm nhất đúng với người kiểm duyệt bài Truyền Thông Nội Bộ và bộ phận tuyển
+// dụng — họ chính là những người BẮT BUỘC phải mở các tệp này để xét duyệt. Chặn ở SERVER (không chỉ
+// ẩn/lọc ở giao diện) bằng cách chỉ chấp nhận đúng khuôn URL mà endpoint tải lên của app sinh ra.
+const UPLOADED_FILE_URL_RE = /^\/uploads\/[A-Za-z0-9._-]+$/;
+
+// TỪ CHỐI hẳn (không âm thầm xoá field) để client trung thực thấy được lỗi thay vì mất tệp không rõ lý
+// do. Giá trị rỗng/null/undefined vẫn hợp lệ — cả 3 field đều là TUỲ CHỌN ở tầng này (riêng cvFileUrl
+// có kiểm tra "bắt buộc" riêng ngay trước đó trong recruitmentReferrals.extraValidate).
+function assertUploadedFileUrl(value, fieldLabel) {
+  if (value === undefined || value === null || value === '') return;
+  if (!UPLOADED_FILE_URL_RE.test(String(value))) {
+    throw new CreateError(400, `${fieldLabel} không hợp lệ — chỉ chấp nhận tệp đã tải lên hệ thống`);
+  }
+}
+
 // Khớp đúng SUBMISSION_APPROVAL_LAYERS trong index.html — xem "LƯU Ý BẢO TRÌ" ở đầu file, 2 cài đặt
 // độc lập vì client (trình duyệt) không import chung được với server (Node).
 // "Loại Tờ Trình" giờ là dữ liệu (appData.submissionTypes, admin tự thêm/bớt ở màn Biểu Mẫu) thay vì
@@ -502,6 +525,13 @@ const CREATE_MODULE_CONFIGS = {
       }
       payload.routePoints = points;
       payload.destination = points.join(' → ');
+      // status/currentStep/history PHẢI gán cứng ở server (cùng khuôn docs/submissions/itPriceApprovals/
+      // contracts ở trên) — trước đây module này KHÔNG đụng tới 3 field trạng thái này dù client vẫn gửi
+      // kèm (xem confirmCreateCarReg() ở index.html), nên 1 request tự soạn (bỏ qua UI) có thể tự đặt
+      // sẵn status:"APPROVED" cùng history giả để bỏ qua TOÀN BỘ quy trình duyệt xe của phòng ban.
+      payload.status = 'PENDING';
+      payload.currentStep = 1;
+      payload.history = [];
     }
   },
   officeReqs: {
@@ -544,6 +574,13 @@ const CREATE_MODULE_CONFIGS = {
       if (payload.amount < 0) {
         throw new CreateError(400, 'Dự toán/Tổng chi phí không được là số âm');
       }
+      // status/currentStep/history PHẢI gán cứng ở server — cùng lỗ hổng vừa vá cho carRegs ở trên
+      // (client vẫn gửi kèm 3 field này trong confirmCreateOfficeReq(), nhưng server chưa từng xác minh
+      // lại): request tự soạn đặt sẵn status:"APPROVED" + history giả bỏ qua được toàn bộ quy trình duyệt
+      // Mua Bán/Sửa Chữa/Đầu Tư của phòng ban.
+      payload.status = 'PENDING';
+      payload.currentStep = 1;
+      payload.history = [];
     }
   },
   // Tài liệu dùng cặp field cũ uploadAll(bool)+uploadDepts(mảng) chứ không phải {all,depts} object
@@ -625,6 +662,9 @@ const CREATE_MODULE_CONFIGS = {
         (type === 'REWARD' && user.perms?.internalRewardCreate)
       );
       if (!allowed) throw new CreateError(403, 'Bạn không có quyền đăng bài ở phân hệ này');
+
+      // Tệp đính kèm (tuỳ chọn) — chặn scheme "javascript:" trước khi lưu, xem assertUploadedFileUrl().
+      assertUploadedFileUrl(payload.attachment?.fileUrl, 'Tệp đính kèm');
 
       // Trường bổ sung (Biểu Mẫu > Truyền Thông Nội Bộ - Chuyên Đề) — chỉ NEWS/SHARE còn hiện
       // #dynamicFieldsContainer_INTERNAL_POST ở client (xem CORE_FIELD_MANIFEST.INTERNAL_POST).
@@ -1554,6 +1594,9 @@ const CREATE_MODULE_CONFIGS = {
       // Banner (tuỳ chọn) — client đã upload qua uploadFileToServer('internal') trước khi gửi payload
       // (cùng khuôn cvFileUrl/cvFileName của recruitmentReferrals bên dưới), ở đây chỉ nhận lại URL/tên.
       payload.bannerUrl = payload.bannerUrl ? String(payload.bannerUrl).trim() : '';
+      // Banner được render ra `<img src="${escapeHtml(bannerUrl)}">` ở tin đăng công khai — cùng lỗ hổng
+      // scheme "javascript:" như attachment của internalPosts, xem assertUploadedFileUrl().
+      assertUploadedFileUrl(payload.bannerUrl, 'Ảnh banner tin tuyển dụng');
       payload.bannerFileName = payload.bannerFileName ? String(payload.bannerFileName).trim() : '';
       payload.status = 'OPEN';
       payload.filledBy = null;
@@ -1584,6 +1627,9 @@ const CREATE_MODULE_CONFIGS = {
       if (!candidateName) throw new CreateError(400, 'Thiếu tên ứng viên');
       if (!candidatePhone) throw new CreateError(400, 'Thiếu số điện thoại ứng viên');
       if (!payload.cvFileUrl) throw new CreateError(400, 'Vui lòng tải lên CV của ứng viên');
+      // CV là tệp mà bộ phận tuyển dụng BẮT BUỘC phải bấm mở để xét — cùng lỗ hổng scheme "javascript:"
+      // như attachment/bannerUrl ở trên, xem assertUploadedFileUrl().
+      assertUploadedFileUrl(payload.cvFileUrl, 'Tệp CV ứng viên');
 
       payload.jobId = jobId;
       payload.jobTitle = job.title;
@@ -2184,6 +2230,9 @@ function normalizeOnboardingPathFields(payload, appData) {
 module.exports = {
   CREATE_MODULE_CONFIGS, CreateError, validateAndPrepareCreate, scopeAllows, findMeetingConflict,
   validateRequiredCustomData,
+  // Export cho lib/recordActions.js editInternalPost() — sửa bài cũng nhận lại attachment từ client nên
+  // phải kiểm tra ĐÚNG luật như lúc tạo, nếu không lỗ hổng scheme "javascript:" chỉ bị vá 1 nửa.
+  UPLOADED_FILE_URL_RE, assertUploadedFileUrl,
   OFFICE_SUBTYPE_TO_PERM_FLAG, normalizeReportEntryPayload,
   CONTRACT_APPROVAL_LAYERS, CONTRACT_APPROVAL_LEVELS, CONTRACT_APPROVAL_LEVEL_RULES,
   buildEffectiveContractApprovalWorkflowServer,

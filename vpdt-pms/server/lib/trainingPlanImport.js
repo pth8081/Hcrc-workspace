@@ -4,8 +4,9 @@
 // liệu "đã xem trước" ở bước này, cùng nguyên tắc routes/trainingRoster.js). Cùng khuôn
 // lib/trainingRoster.js (buildXxxTemplateWorkbook/parseXxxFile qua ExcelJS + csv-parse, dò cột theo tiêu
 // đề không phân biệt hoa-thường/dấu) — KHÔNG dùng gói "xlsx" (SheetJS), lý do xem đầu file lib/vppCatalog.js.
-const ExcelJS = require('exceljs');
+const ExcelJS = require('exceljs'); // chỉ còn dùng để SINH file mẫu tải xuống; đọc file upload đi qua lib/xlsxSafeRead.js
 const { parse: parseCsv } = require('csv-parse/sync');
+const { streamFirstSheetRows } = require('./xlsxSafeRead');
 const { HttpError } = require('./httpErrors');
 
 function styleHeaderRow(row) {
@@ -117,57 +118,81 @@ function matchCourseByName(name, courses) {
   return (courses || []).find(c => normalizeForMatch(c.name) === norm) || null;
 }
 
+// 1 dòng dữ liệu -> 1 dòng kế hoạch, hoặc null nếu coi như dòng trống (không có tháng).
+function rowToPlanItem(cells, cols, courses) {
+  const get = (field) => (cols[field] !== undefined ? cells[cols[field]] : '');
+  const toNum = (v) => { const n = Number(v); return Number.isFinite(n) && n > 0 ? n : 0; };
+
+  const rawMonth = get('month');
+  // Dòng hoàn toàn không có tháng coi như dòng trống (bỏ qua, không báo lỗi) — khớp cách
+  // lib/trainingRoster.js bỏ qua username rỗng.
+  if (rawMonth === '' || rawMonth == null) return null;
+  const month = parseMonthCell(rawMonth);
+  const courseName = String(get('courseName') || '').trim();
+  const matchedCourse = courseName ? matchCourseByName(courseName, courses) : null;
+  return {
+    month,
+    monthValid: MONTH_RE.test(month),
+    courseName,
+    courseId: matchedCourse ? matchedCourse.id : null,
+    courseMatched: !!matchedCourse,
+    targetDept: String(get('targetDept') || '').trim(),
+    audience: String(get('audience') || '').trim(),
+    plannedClasses: Math.floor(toNum(get('plannedClasses'))),
+    plannedTrainees: Math.floor(toNum(get('plannedTrainees'))),
+    plannedHours: toNum(get('plannedHours'))
+  };
+}
+
+// Chỉ còn nhánh CSV dùng hàm này (CSV không nén nên không có nguy cơ "zip bomb"); nhánh Excel đọc theo
+// dòng ở parsePlanImportExcelBuffer() bên dưới với ĐÚNG các bước xử lý này.
 function rowsToPlanItems(rows, courses) {
   if (!rows.length) throw new HttpError(400, 'File kế hoạch đào tạo trống, không có dữ liệu');
   const cols = detectColumns(rows[0]);
   if (cols.month === undefined) {
     throw new HttpError(400, 'Không tìm thấy cột "Tháng" trong file — vui lòng dùng đúng mẫu tải xuống');
   }
-  const dataRows = rows.slice(1);
-  const get = (cells, field) => (cols[field] !== undefined ? cells[cols[field]] : '');
-  const toNum = (v) => { const n = Number(v); return Number.isFinite(n) && n > 0 ? n : 0; };
 
   const items = [];
-  for (const cells of dataRows) {
-    const rawMonth = get(cells, 'month');
-    // Dòng hoàn toàn không có tháng coi như dòng trống (bỏ qua, không báo lỗi) — khớp cách
-    // lib/trainingRoster.js bỏ qua username rỗng.
-    if (rawMonth === '' || rawMonth == null) continue;
-    const month = parseMonthCell(rawMonth);
-    const courseName = String(get(cells, 'courseName') || '').trim();
-    const matchedCourse = courseName ? matchCourseByName(courseName, courses) : null;
-    items.push({
-      month,
-      monthValid: MONTH_RE.test(month),
-      courseName,
-      courseId: matchedCourse ? matchedCourse.id : null,
-      courseMatched: !!matchedCourse,
-      targetDept: String(get(cells, 'targetDept') || '').trim(),
-      audience: String(get(cells, 'audience') || '').trim(),
-      plannedClasses: Math.floor(toNum(get(cells, 'plannedClasses'))),
-      plannedTrainees: Math.floor(toNum(get(cells, 'plannedTrainees'))),
-      plannedHours: toNum(get(cells, 'plannedHours'))
-    });
+  for (const cells of rows.slice(1)) {
+    const item = rowToPlanItem(cells, cols, courses);
+    if (!item) continue;
+    items.push(item);
     if (items.length > 500) throw new HttpError(400, 'File quá nhiều dòng (tối đa 500 dòng kế hoạch/lần)');
   }
   if (!items.length) throw new HttpError(400, 'Không đọc được dòng kế hoạch nào hợp lệ từ file (thiếu cột Tháng ở mọi dòng?)');
   return items;
 }
 
+// Đọc theo DÒNG (lib/xlsxSafeRead.js) thay vì nạp cả sheet vào RAM bằng workbook.xlsx.load() — giới hạn
+// 500 dòng nay chặn NGAY trong lúc đọc, file .xlsx nén độc hại không kịp bung hết vào bộ nhớ.
+// raw: true — giữ nguyên giá trị GỐC của ô (không ép về chuỗi như lib/trainingRoster.js) vì cần phân
+// biệt được ô kiểu Date thật (Excel tự đổi khi người dùng gõ dạng ngày) với chuỗi text ở parseMonthCell().
 async function parsePlanImportExcelBuffer(buffer, courses) {
-  const workbook = new ExcelJS.Workbook();
-  await workbook.xlsx.load(buffer);
-  const sheet = workbook.worksheets[0];
-  if (!sheet) throw new HttpError(400, 'File Excel không có sheet dữ liệu nào');
-  const rows = [];
-  sheet.eachRow({ includeEmpty: false }, (row) => {
-    const cells = [];
-    // Giữ nguyên giá trị GỐC (không ép về chuỗi ngay như lib/trainingRoster.js) — cần phân biệt được ô
-    // kiểu Date thật (Excel tự đổi khi người dùng gõ dạng ngày) với chuỗi text thường ở parseMonthCell().
-    row.eachCell({ includeEmpty: true }, (cell) => { cells.push(cell.value == null ? '' : cell.value); });
-    rows.push(cells);
-  });
-  return rowsToPlanItems(rows, courses);
+  let cols = null;
+  let sawAnyRow = false;
+  let overLimit = false;
+  const items = [];
+
+  await streamFirstSheetRows(buffer, (cells) => {
+    if (!sawAnyRow) { // dòng đầu tiên đọc được là dòng tiêu đề
+      sawAnyRow = true;
+      cols = detectColumns(cells);
+      if (cols.month === undefined) {
+        throw new HttpError(400, 'Không tìm thấy cột "Tháng" trong file — vui lòng dùng đúng mẫu tải xuống');
+      }
+      return true;
+    }
+    const item = rowToPlanItem(cells, cols, courses);
+    if (item) items.push(item);
+    if (items.length > 500) { overLimit = true; return false; }
+    return true;
+  }, { raw: true });
+
+  if (!sawAnyRow) throw new HttpError(400, 'File kế hoạch đào tạo trống, không có dữ liệu');
+  if (overLimit) throw new HttpError(400, 'File quá nhiều dòng (tối đa 500 dòng kế hoạch/lần)');
+  if (!items.length) throw new HttpError(400, 'Không đọc được dòng kế hoạch nào hợp lệ từ file (thiếu cột Tháng ở mọi dòng?)');
+  return items;
 }
 
 function parsePlanImportCsvBuffer(buffer, courses) {

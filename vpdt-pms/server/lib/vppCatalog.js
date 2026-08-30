@@ -4,8 +4,8 @@
 // file tổng hợp/tổng quát theo phòng ban (báo cáo). KHÔNG dùng gói "xlsx" (SheetJS) — có lỗ hổng bảo
 // mật cao (Prototype Pollution/ReDoS) chưa có bản vá trên npm, đúng vào con đường xử lý file KHÔNG TIN
 // CẬY (upload từ người dùng) nên chọn exceljs/csv-parse thay thế.
-const ExcelJS = require('exceljs');
 const { parse: parseCsv } = require('csv-parse/sync');
+const { streamFirstSheetRows } = require('./xlsxSafeRead');
 const { HttpError } = require('./httpErrors');
 
 // Nhận diện tiêu đề cột không phân biệt hoa-thường/dấu/xuống dòng trong ô (VD "ĐƠN GIÁ\nCHƯA VAT") —
@@ -80,7 +80,26 @@ function parsePrice(raw) {
   return Number.isFinite(n) ? n : null;
 }
 
+// 1 dòng dữ liệu -> 1 mặt hàng, hoặc null nếu bỏ qua (thiếu tên/trùng tên đã gặp).
+function rowToCatalogItem(cells, idx, seenNames) {
+  const name = String(cells[idx.name] ?? '').trim();
+  if (!name) return null; // bỏ qua dòng trống/thiếu tên (VD dòng cuối file chỉ còn mã hàng, không có tên)
+  const key = normalizeHeader(name);
+  if (seenNames.has(key)) return null; // bỏ trùng tên (không phân biệt hoa-thường/dấu) ngay từ khi đọc file
+  seenNames.add(key);
+  return {
+    code: idx.code !== undefined ? String(cells[idx.code] ?? '').trim() : '',
+    name,
+    unit: idx.unit !== undefined ? String(cells[idx.unit] ?? '').trim() : '',
+    origin: idx.origin !== undefined ? String(cells[idx.origin] ?? '').trim() : '',
+    spec: idx.spec !== undefined ? String(cells[idx.spec] ?? '').trim() : '',
+    price: idx.price !== undefined ? parsePrice(cells[idx.price]) : null
+  };
+}
+
 // rows: mảng các mảng ô (mỗi hàng là 1 mảng giá trị cột) — đã tách khỏi định dạng file gốc (Excel/CSV).
+// Chỉ còn nhánh CSV dùng hàm này (CSV không nén nên không có nguy cơ "zip bomb"); nhánh Excel đọc theo
+// dòng ở parseExcelBuffer() bên dưới với ĐÚNG các bước xử lý này.
 function rowsToCatalogItems(rows) {
   if (!rows.length) throw new HttpError(400, 'File danh mục trống, không có dữ liệu');
 
@@ -91,37 +110,46 @@ function rowsToCatalogItems(rows) {
   const items = [];
   const seenNames = new Set();
   for (const cells of dataRows) {
-    const name = String(cells[idx.name] ?? '').trim();
-    if (!name) continue; // bỏ qua dòng trống/thiếu tên (VD dòng cuối file chỉ còn mã hàng, không có tên)
-    const key = normalizeHeader(name);
-    if (seenNames.has(key)) continue; // bỏ trùng tên (không phân biệt hoa-thường/dấu) ngay từ khi đọc file
-    seenNames.add(key);
-    items.push({
-      code: idx.code !== undefined ? String(cells[idx.code] ?? '').trim() : '',
-      name,
-      unit: idx.unit !== undefined ? String(cells[idx.unit] ?? '').trim() : '',
-      origin: idx.origin !== undefined ? String(cells[idx.origin] ?? '').trim() : '',
-      spec: idx.spec !== undefined ? String(cells[idx.spec] ?? '').trim() : '',
-      price: idx.price !== undefined ? parsePrice(cells[idx.price]) : null
-    });
+    const item = rowToCatalogItem(cells, idx, seenNames);
+    if (item) items.push(item);
   }
   if (!items.length) throw new HttpError(400, 'Không đọc được mặt hàng nào hợp lệ từ file (cần có cột Tên mặt hàng/Tên hàng)');
   if (items.length > 2000) throw new HttpError(400, 'File danh mục quá nhiều dòng (tối đa 2000 mặt hàng)');
   return items;
 }
 
+// Đọc theo DÒNG (lib/xlsxSafeRead.js) thay vì nạp cả sheet vào RAM bằng workbook.xlsx.load() — giới hạn
+// 2000 mặt hàng nay chặn NGAY trong lúc đọc, file .xlsx nén độc hại không kịp bung hết vào bộ nhớ.
 async function parseExcelBuffer(buffer) {
-  const workbook = new ExcelJS.Workbook();
-  await workbook.xlsx.load(buffer);
-  const sheet = workbook.worksheets[0];
-  if (!sheet) throw new HttpError(400, 'File Excel không có sheet dữ liệu nào');
-  const rows = [];
-  sheet.eachRow({ includeEmpty: false }, (row) => {
-    const cells = [];
-    row.eachCell({ includeEmpty: true }, (cell) => { cells.push(cell.value == null ? '' : String(cell.value)); });
-    rows.push(cells);
+  let headerSeen = false;
+  let idx = null;
+  let sawAnyRow = false;
+  let overLimit = false;
+  const items = [];
+  const seenNames = new Set();
+
+  await streamFirstSheetRows(buffer, (cells) => {
+    if (!headerSeen) {
+      headerSeen = true;
+      sawAnyRow = true;
+      const colMap = detectColumnMap(cells);
+      if (colMap) { idx = colMap; return true; } // dòng đầu là tiêu đề -> bỏ qua
+      idx = { name: 0, unit: 1 }; // không dò được tiêu đề -> dòng đầu cũng là dữ liệu, đọc theo VỊ TRÍ cột
+      const first = rowToCatalogItem(cells, idx, seenNames);
+      if (first) items.push(first);
+    } else {
+      const item = rowToCatalogItem(cells, idx, seenNames);
+      if (item) items.push(item);
+    }
+    if (items.length > 2000) { overLimit = true; return false; }
+    return true;
   });
-  return rowsToCatalogItems(rows);
+
+  if (!sawAnyRow) throw new HttpError(400, 'File danh mục trống, không có dữ liệu');
+  // Vượt trần thì items chắc chắn không rỗng, nên thứ tự 2 lỗi dưới đây cho ra đúng thông báo như cũ.
+  if (overLimit) throw new HttpError(400, 'File danh mục quá nhiều dòng (tối đa 2000 mặt hàng)');
+  if (!items.length) throw new HttpError(400, 'Không đọc được mặt hàng nào hợp lệ từ file (cần có cột Tên mặt hàng/Tên hàng)');
+  return items;
 }
 
 function parseCsvBuffer(buffer) {

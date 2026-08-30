@@ -2,8 +2,9 @@
 // Danh Mục Siêu Thị" (import hàng loạt thay vì thêm từng dòng). Cùng khuôn lib/trainingRoster.js (đơn
 // giản nhất, đúng hình dạng "1 cột danh sách phẳng") — KHÔNG dùng gói "xlsx" (SheetJS), lý do xem đầu
 // file lib/vppCatalog.js.
-const ExcelJS = require('exceljs');
+const ExcelJS = require('exceljs'); // chỉ còn dùng để SINH file mẫu tải xuống; đọc file upload đi qua lib/xlsxSafeRead.js
 const { parse: parseCsv } = require('csv-parse/sync');
+const { streamFirstSheetRows } = require('./xlsxSafeRead');
 const { HttpError } = require('./httpErrors');
 
 function styleHeaderRow(row) {
@@ -62,18 +63,44 @@ function rowsToStoreNames(rows) {
   return names;
 }
 
+// Đọc theo DÒNG (lib/xlsxSafeRead.js) thay vì nạp cả sheet vào RAM bằng workbook.xlsx.load() — giới hạn
+// 500 siêu thị nay chặn NGAY trong lúc đọc, file .xlsx nén độc hại không kịp bung hết vào bộ nhớ. Logic
+// dò cột/bỏ trùng/bỏ trống giữ y hệt rowsToStoreNames() (vẫn dùng nguyên cho nhánh CSV bên dưới).
 async function parseStoreExcelBuffer(buffer) {
-  const workbook = new ExcelJS.Workbook();
-  await workbook.xlsx.load(buffer);
-  const sheet = workbook.worksheets[0];
-  if (!sheet) throw new HttpError(400, 'File Excel không có sheet dữ liệu nào');
-  const rows = [];
-  sheet.eachRow({ includeEmpty: false }, (row) => {
-    const cells = [];
-    row.eachCell({ includeEmpty: true }, (cell) => { cells.push(cell.value == null ? '' : String(cell.value)); });
-    rows.push(cells);
+  let headerSeen = false;
+  let col = 0;
+  let sawAnyRow = false;
+  let overLimit = false;
+  const names = [];
+  const seen = new Set();
+
+  const take = (cells) => {
+    const name = String(cells[col] ?? '').trim();
+    if (!name || seen.has(name)) return;
+    seen.add(name);
+    names.push(name);
+  };
+
+  await streamFirstSheetRows(buffer, (cells) => {
+    if (!headerSeen) {
+      headerSeen = true;
+      sawAnyRow = true;
+      const detectedCol = detectNameCol(cells);
+      if (detectedCol !== null) { col = detectedCol; return true; } // dòng đầu là tiêu đề -> bỏ qua
+      col = 0; // không dò được tiêu đề -> dòng đầu cũng là dữ liệu (cột 1 = tên siêu thị)
+      take(cells);
+    } else {
+      take(cells);
+    }
+    if (names.length > 500) { overLimit = true; return false; }
+    return true;
   });
-  return rowsToStoreNames(rows);
+
+  if (!sawAnyRow) throw new HttpError(400, 'File danh sách siêu thị trống, không có dữ liệu');
+  // Vượt trần thì danh sách chắc chắn không rỗng, nên thứ tự 2 lỗi dưới đây cho ra đúng thông báo như cũ.
+  if (overLimit) throw new HttpError(400, 'File quá nhiều dòng (tối đa 500 siêu thị/lần)');
+  if (!names.length) throw new HttpError(400, 'Không đọc được tên siêu thị nào hợp lệ từ file');
+  return names;
 }
 
 function parseStoreCsvBuffer(buffer) {

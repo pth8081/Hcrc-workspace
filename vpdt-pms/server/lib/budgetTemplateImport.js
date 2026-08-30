@@ -3,7 +3,8 @@
 // (buildXxxTemplateWorkbook/parseXxxFile qua ExcelJS, dò cột theo tiêu đề không phân biệt hoa-thường/
 // dấu) — KHÔNG đụng tới 4 cột LÕI (Tên Hạng Mục/Mô Tả Chi Tiết/Số Tiền/Loại NS), những cột đó LUÔN được
 // server tự thêm vào (xem BUDGET_CORE_FIELD_DEFS ở lib/createValidation.js) bất kể file upload có gì.
-const ExcelJS = require('exceljs');
+const ExcelJS = require('exceljs'); // chỉ còn dùng để SINH file mẫu tải xuống; đọc file upload đi qua lib/xlsxSafeRead.js
+const { streamFirstSheetRows } = require('./xlsxSafeRead');
 const { HttpError } = require('./httpErrors');
 const { BUDGET_FIELD_TYPES } = require('./createValidation');
 
@@ -63,49 +64,51 @@ function normalizeRequired(raw) {
   return ['co', 'x', 'yes', 'true', 'bat buoc'].includes(key);
 }
 
-function rowsToBudgetFields(rows) {
-  if (!rows.length) throw new HttpError(400, 'File trống, không có dữ liệu cột nào');
-  // Dòng đầu là header (Tên Cột/Kiểu Dữ Liệu/...) — luôn bỏ qua, mẫu tải về cũng theo đúng thứ tự này.
-  const dataRows = rows.slice(1);
-
-  const fields = [];
-  for (const cells of dataRows) {
-    const label = String(cells[0] ?? '').trim();
-    // Gặp dòng trống là DỪNG hẳn (không đọc tiếp) — mẫu tải về có 1 dòng trống ngăn cách trước dòng ghi
-    // chú cuối file, dừng ở đây để không lỡ đọc nhầm dòng ghi chú thành 1 cột.
-    if (!label) break;
-    const type = normalizeType(cells[1]);
-    if (!type || !BUDGET_FIELD_TYPES.has(type)) {
-      throw new HttpError(400, `Kiểu dữ liệu không hợp lệ ở cột "${label}" — chỉ chấp nhận text/number/money/select/date`);
-    }
-    const required = normalizeRequired(cells[2]);
-    const options = type === 'select'
-      ? String(cells[3] ?? '').split(',').map(o => o.trim()).filter(Boolean)
-      : [];
-    if (type === 'select' && !options.length) {
-      throw new HttpError(400, `Cột "${label}" kiểu Danh sách chọn nhưng chưa khai Danh Sách Chọn`);
-    }
-    fields.push({ label: label.slice(0, 100), type, required, options: options.slice(0, 50) });
-    if (fields.length >= 30) break; // khớp giới hạn tối đa cột tuỳ biến ở sanitizeBudgetCustomFields()
+// 1 dòng dữ liệu -> 1 cột tuỳ biến, hoặc null nếu đây là dòng trống (dấu hiệu DỪNG đọc, xem dưới).
+function rowToBudgetField(cells) {
+  const label = String(cells[0] ?? '').trim();
+  if (!label) return null;
+  const type = normalizeType(cells[1]);
+  if (!type || !BUDGET_FIELD_TYPES.has(type)) {
+    throw new HttpError(400, `Kiểu dữ liệu không hợp lệ ở cột "${label}" — chỉ chấp nhận text/number/money/select/date`);
   }
-  if (!fields.length) throw new HttpError(400, 'Không đọc được cột hợp lệ nào từ file');
-  return fields;
+  const required = normalizeRequired(cells[2]);
+  const options = type === 'select'
+    ? String(cells[3] ?? '').split(',').map(o => o.trim()).filter(Boolean)
+    : [];
+  if (type === 'select' && !options.length) {
+    throw new HttpError(400, `Cột "${label}" kiểu Danh sách chọn nhưng chưa khai Danh Sách Chọn`);
+  }
+  return { label: label.slice(0, 100), type, required, options: options.slice(0, 50) };
 }
 
+// Đọc theo DÒNG (lib/xlsxSafeRead.js) thay vì nạp cả sheet vào RAM bằng workbook.xlsx.load() — trần 30
+// cột tuỳ biến (và cả điểm dừng "gặp dòng trống") nay chặn NGAY trong lúc đọc, file .xlsx nén độc hại
+// không kịp bung hết vào bộ nhớ.
+// includeEmpty: true — PHẢI giữ lại dòng trống thật (không bỏ qua) để nhận biết đúng ranh giới "hết dữ
+// liệu cột, phần còn lại là ghi chú" (xem mẫu tải về ở buildBudgetTemplateFieldsWorkbook()).
 async function parseBudgetTemplateFieldsExcelBuffer(buffer) {
-  const workbook = new ExcelJS.Workbook();
-  await workbook.xlsx.load(buffer);
-  const sheet = workbook.worksheets[0];
-  if (!sheet) throw new HttpError(400, 'File Excel không có sheet dữ liệu nào');
-  const rows = [];
-  // includeEmpty: true — PHẢI giữ lại dòng trống thật (không bỏ qua) để rowsToBudgetFields() nhận biết
-  // đúng ranh giới "hết dữ liệu cột, phần còn lại là ghi chú" (xem mẫu tải về ở buildBudgetTemplateFieldsWorkbook()).
-  sheet.eachRow({ includeEmpty: true }, (row) => {
-    const cells = [];
-    row.eachCell({ includeEmpty: true }, (cell) => { cells.push(cell.value == null ? '' : String(cell.value)); });
-    rows.push(cells);
-  });
-  return rowsToBudgetFields(rows);
+  let headerSeen = false;
+  let sawAnyRow = false;
+  const fields = [];
+
+  await streamFirstSheetRows(buffer, (cells) => {
+    if (!headerSeen) { // Dòng đầu là header (Tên Cột/Kiểu Dữ Liệu/...) — luôn bỏ qua, mẫu tải về cũng theo đúng thứ tự này.
+      headerSeen = true;
+      sawAnyRow = true;
+      return true;
+    }
+    // Gặp dòng trống là DỪNG hẳn (không đọc tiếp) — mẫu tải về có 1 dòng trống ngăn cách trước dòng ghi
+    // chú cuối file, dừng ở đây để không lỡ đọc nhầm dòng ghi chú thành 1 cột.
+    const field = rowToBudgetField(cells);
+    if (!field) return false;
+    fields.push(field);
+    return fields.length < 30; // khớp giới hạn tối đa cột tuỳ biến ở sanitizeBudgetCustomFields()
+  }, { includeEmpty: true });
+
+  if (!sawAnyRow) throw new HttpError(400, 'File trống, không có dữ liệu cột nào');
+  if (!fields.length) throw new HttpError(400, 'Không đọc được cột hợp lệ nào từ file');
+  return fields;
 }
 
 // Đọc CHỈ dòng tiêu đề của 1 file Excel BẤT KỲ (không theo khuôn định nghĩa cột Tên Cột/Kiểu/Bắt Buộc ở
@@ -115,14 +118,14 @@ async function parseBudgetTemplateFieldsExcelBuffer(buffer) {
 // về tên cột, KHÔNG đọc dữ liệu dòng bên dưới — client tự gán vai trò (Tên Hạng Mục/Số Tiền/Loại NS/Mô Tả
 // Chi Tiết) rồi đưa vào bảng cột đang sửa như bình thường (không lưu trực tiếp ở đây).
 async function parseArbitraryColumnLabels(buffer) {
-  const workbook = new ExcelJS.Workbook();
-  await workbook.xlsx.load(buffer);
-  const sheet = workbook.worksheets[0];
-  if (!sheet) throw new HttpError(400, 'File Excel không có sheet dữ liệu nào');
-  const headerRow = sheet.getRow(1);
+  let headerCells = null;
+  // includeEmpty: true + dừng ngay sau dòng đầu tiên — giữ đúng ngữ nghĩa cũ "đọc CHÍNH XÁC dòng 1"
+  // (sheet.getRow(1)), kể cả khi dòng 1 trống mà dữ liệu bắt đầu từ dòng dưới; đồng thời không đọc quá
+  // 1 dòng của file.
+  await streamFirstSheetRows(buffer, (cells) => { headerCells = cells; return false; }, { includeEmpty: true });
   const labels = [];
-  headerRow.eachCell({ includeEmpty: false }, (cell) => {
-    const label = String(cell.value == null ? '' : cell.value).trim();
+  (headerCells || []).forEach((raw) => {
+    const label = String(raw == null ? '' : raw).trim();
     if (label) labels.push(label.slice(0, 100));
   });
   if (!labels.length) throw new HttpError(400, 'File không có dòng tiêu đề nào (dòng 1 trống)');

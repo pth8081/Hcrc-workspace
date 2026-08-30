@@ -9,6 +9,10 @@ const recordActions = require('../lib/recordActions');
 const { insertTask, withLockedTaskById, deleteTaskById, getAllTasks, migrateDirectiveTaskLinks } = require('../lib/taskStore');
 const { createForCollection, insertRecord, withLockedRecordForCollection, withLockedRecordById, deleteRecordForCollection, getAllForCollection, withAppLock } = require('../lib/recordStore');
 const { getAllAppData, getAppDataValue, withLockedAppDataValue } = require('../lib/appData');
+// sanitizeInternalPostCommentsForUser: cùng hàm mà routes/data.js dùng để lọc GET /api/data (qua
+// filterInternalPostsForUser) — MỌI response trả về bản ghi internalPosts đã mutate ở file này cũng
+// PHẢI đi qua nó, xem chú thích ở withInternalPostAction() bên dưới.
+const { sanitizeInternalPostCommentsForUser } = require('../lib/recordViewScope');
 
 router.use(requireAuth, blockIfMustChangePassword);
 
@@ -342,7 +346,14 @@ async function withInternalPostAction(req, res, action, mutator) {
   try {
     const { freshUser } = await getFreshUser(req);
     const result = await withLockedRecordForCollection('internalPosts', itemId, (item) => mutator(req.body, freshUser, item));
-    res.json({ ok: true, item: result });
+    // Bản ghi vừa mutate được trả NGUYÊN VĂN về client (client tự thay vào DB.internalPosts, không tải
+    // lại GET /api/data) — trước đây bỏ qua hoàn toàn bước lọc kiểm duyệt bình luận mà GET /api/data đã
+    // làm rất kỹ: các action ở đây MỞ CHO MỌI NGƯỜI đã đăng nhập (mark-read/like/comment-like/đăng ký
+    // đào tạo), nên bất kỳ ai chỉ cần bấm "Thích" 1 bài đang có bình luận bị gắn cờ/đang chờ kiểm duyệt
+    // là đọc được nguyên nội dung bình luận đó cùng toàn bộ metadata cờ (flagged/flagCategories/
+    // flagTerms/flagDismissedBy) — đúng loại dữ liệu chỉ người kiểm duyệt được thấy. Lọc lại bằng CHÍNH
+    // hàm GET /api/data dùng, không tự đoán lại luật (người có quyền duyệt vẫn nhận đủ như trước).
+    res.json({ ok: true, item: sanitizeInternalPostCommentsForUser(result, freshUser) });
   } catch (err) {
     handleError(res, `internalPosts/${req.params.id}/${action}`, err);
   }
@@ -368,7 +379,11 @@ router.post('/internalPosts/:id/comment', async (req, res) => {
     const sensitiveKeywords = (await getAppDataValue('sensitiveKeywords')) || [];
     const result = await withLockedRecordForCollection('internalPosts', itemId, (item) =>
       recordActions.addInternalPostComment(req.body, freshUser, item, sensitiveKeywords));
-    res.json({ ok: true, item: result });
+    // Cùng lý do như withInternalPostAction() ở trên — route này không dùng helper chung nên phải lọc
+    // riêng tại đây. Bình luận CỦA CHÍNH người vừa gửi vẫn được giữ lại kể cả khi bị đưa vào hàng chờ
+    // kiểm duyệt (xem sanitizeInternalPostCommentsForUser), nên client vẫn hiển thị đúng bình luận họ
+    // vừa viết + trạng thái "chờ kiểm duyệt" của nó.
+    res.json({ ok: true, item: sanitizeInternalPostCommentsForUser(result, freshUser) });
   } catch (err) {
     handleError(res, `internalPosts/${req.params.id}/comment`, err);
   }

@@ -3,8 +3,9 @@
 // /api/records/trainingClasses/:id/bulk-register (thêm hàng loạt học viên vào lớp). Cùng khuôn
 // lib/vppExport.js (sinh file) + lib/vppCatalog.js (đọc file, dò cột theo tiêu đề không phân biệt
 // hoa-thường/dấu) — KHÔNG dùng gói "xlsx" (SheetJS), lý do xem đầu file lib/vppCatalog.js.
-const ExcelJS = require('exceljs');
+const ExcelJS = require('exceljs'); // chỉ còn dùng để SINH file mẫu tải xuống; đọc file upload đi qua lib/xlsxSafeRead.js
 const { parse: parseCsv } = require('csv-parse/sync');
+const { streamFirstSheetRows } = require('./xlsxSafeRead');
 const { HttpError } = require('./httpErrors');
 
 function styleHeaderRow(row) {
@@ -65,18 +66,44 @@ function rowsToUsernames(rows) {
   return usernames;
 }
 
+// Đọc theo DÒNG (lib/xlsxSafeRead.js) thay vì nạp cả sheet vào RAM bằng workbook.xlsx.load() — giới hạn
+// 500 học viên nay chặn NGAY trong lúc đọc, file .xlsx nén độc hại không kịp bung hết vào bộ nhớ. Logic
+// dò cột/bỏ trùng/bỏ trống giữ y hệt rowsToUsernames() (vẫn dùng nguyên cho nhánh CSV bên dưới).
 async function parseRosterExcelBuffer(buffer) {
-  const workbook = new ExcelJS.Workbook();
-  await workbook.xlsx.load(buffer);
-  const sheet = workbook.worksheets[0];
-  if (!sheet) throw new HttpError(400, 'File Excel không có sheet dữ liệu nào');
-  const rows = [];
-  sheet.eachRow({ includeEmpty: false }, (row) => {
-    const cells = [];
-    row.eachCell({ includeEmpty: true }, (cell) => { cells.push(cell.value == null ? '' : String(cell.value)); });
-    rows.push(cells);
+  let headerSeen = false;
+  let col = 0;
+  let sawAnyRow = false;
+  let overLimit = false;
+  const usernames = [];
+  const seen = new Set();
+
+  const take = (cells) => {
+    const username = String(cells[col] ?? '').trim();
+    if (!username || seen.has(username)) return;
+    seen.add(username);
+    usernames.push(username);
+  };
+
+  await streamFirstSheetRows(buffer, (cells) => {
+    if (!headerSeen) {
+      headerSeen = true;
+      sawAnyRow = true;
+      const detectedCol = detectUsernameCol(cells);
+      if (detectedCol !== null) { col = detectedCol; return true; } // dòng đầu là tiêu đề -> bỏ qua
+      col = 0; // không dò được tiêu đề -> dòng đầu cũng là dữ liệu (cột 1 = tài khoản)
+      take(cells);
+    } else {
+      take(cells);
+    }
+    if (usernames.length > 500) { overLimit = true; return false; }
+    return true;
   });
-  return rowsToUsernames(rows);
+
+  if (!sawAnyRow) throw new HttpError(400, 'File danh sách học viên trống, không có dữ liệu');
+  // Vượt trần thì danh sách chắc chắn không rỗng, nên thứ tự 2 lỗi dưới đây cho ra đúng thông báo như cũ.
+  if (overLimit) throw new HttpError(400, 'File quá nhiều dòng (tối đa 500 học viên/lần)');
+  if (!usernames.length) throw new HttpError(400, 'Không đọc được tài khoản nào hợp lệ từ file');
+  return usernames;
 }
 
 function parseRosterCsvBuffer(buffer) {
