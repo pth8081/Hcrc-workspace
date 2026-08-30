@@ -116,6 +116,9 @@ stubModule('lib/recordStore', {
   MIGRATED_COLLECTIONS: new Set(Object.keys(RECORDS)),
   getAllForCollectionCached: async (c) => RECORDS[c] || [],
   getAllForCollection: async (c) => RECORDS[c] || [],
+  // routes/create.js đọc trash trước khi tạo (kiểm trùng mã với hồ sơ đã xoá, xem
+  // lib/createValidation.js) — bài test này không có kịch bản nào liên quan Thùng Rác, luôn trả rỗng.
+  getTrashItems: async () => [],
   withLockedRecordForCollection: async (c, id, mutator) => {
     const list = RECORDS[c] || [];
     const idx = list.findIndex(x => x.id === id);

@@ -326,6 +326,50 @@ async function restoreTrashItem(trashId) {
   }
 }
 
+// Nhóm "họ" (family) của 1 hồ sơ đã trong Thùng Rác — CHỈ docs (rootDocId) và contracts
+// (isAddendum/rootContractId) có khái niệm này (xoá 1 phiên bản/phụ lục sẽ cascade xoá cả họ vào
+// Thùng Rác cùng lúc, xem routes/records.js docs/:id/delete và contracts/:id/delete). id gốc của họ:
+// bản thân item nếu nó chính là gốc (rootDocId == null / !isAddendum), ngược lại là rootDocId/
+// rootContractId nó trỏ tới.
+function familyRootId(collection, item) {
+  if (collection === 'docs') return item.rootDocId == null ? item.id : item.rootDocId;
+  if (collection === 'contracts') return item.isAddendum ? item.rootContractId : item.id;
+  return null;
+}
+
+// Khôi phục 1 hồ sơ TỪ Thùng Rác, rồi CỐ GẮNG khôi phục luôn mọi thành viên còn lại cùng "họ" (các
+// phiên bản/phụ lục khác của cùng tài liệu/hợp đồng) đang còn trong Thùng Rác — đối xứng với việc XOÁ
+// đã cascade cả họ vào Thùng Rác cùng lúc (routes/records.js). Trước đây restoreTrashItem() chỉ khôi
+// phục ĐÚNG 1 mục — khôi phục 1 phiên bản giữa chừng để lại các phiên bản khác kẹt trong Thùng Rác,
+// tài liệu/hợp đồng hiện ra với lịch sử phiên bản bị đứt quãng cho tới khi admin tự phát hiện và khôi
+// phục nốt (Thùng Rác không có khái niệm "họ" để nhóm lại khi hiển thị).
+//
+// Hồ sơ được YÊU CẦU khôi phục (trashId) PHẢI thành công — lỗi ở mục này (404/409 mã trùng/vị trí
+// trùng) vẫn ném ra như restoreTrashItem() cũ, giữ nguyên hành vi cho mọi caller hiện có. Các thành
+// viên còn lại trong họ là BEST-EFFORT: 1 thành viên có thể đã bị khôi phục riêng trước đó, hoặc đã bị
+// xoá vĩnh viễn, hoặc dính đúng lỗi mã trùng/vị trí trùng — không được để 1 thành viên lỗi làm hỏng cả
+// lượt (mục chính đã khôi phục xong không nên bị rollback vì 1 thành viên phụ không khôi phục được).
+async function restoreTrashItemWithFamily(trashId) {
+  const primary = await restoreTrashItem(trashId);
+  const rootId = familyRootId(primary.collection, primary.item);
+  if (rootId == null) return { ...primary, restoredFamilyMembers: [], familyRestoreErrors: [] };
+
+  const siblings = (await getTrashItems(primary.collection))
+    .filter(t => t.trashId !== trashId && familyRootId(primary.collection, t.item) === rootId);
+
+  const restoredFamilyMembers = [];
+  const familyRestoreErrors = [];
+  for (const sibling of siblings) {
+    try {
+      const restored = await restoreTrashItem(sibling.trashId);
+      restoredFamilyMembers.push(restored.item);
+    } catch (err) {
+      familyRestoreErrors.push({ originalId: sibling.originalId, code: sibling.code, reason: err.message });
+    }
+  }
+  return { ...primary, restoredFamilyMembers, familyRestoreErrors };
+}
+
 // ===== Dọn FILE VẬT LÝ khi xoá vĩnh viễn =====
 //
 // Thư mục lưu file người dùng tải lên — cùng đường dẫn routes/upload.js dùng (UPLOAD_DIR ở đó) và
@@ -702,6 +746,6 @@ module.exports = {
   getAllRecords, insertRecord, withLockedRecordById, deleteRecordById, migrateLegacyCollection, migrateAllLegacyCollections,
   getAllForCollection, getAllForCollectionCached, createForCollection, createForCollectionSerialized, withAppLock, withLockedRecordForCollection, deleteRecordForCollection,
   renameFieldValueInCollection,
-  moveRecordToTrash, getTrashItems, getAllTrashItemsCached, restoreTrashItem, permanentlyDeleteTrashItem,
+  moveRecordToTrash, getTrashItems, getAllTrashItemsCached, restoreTrashItem, restoreTrashItemWithFamily, familyRootId, permanentlyDeleteTrashItem,
   collectRecordFileUrls, unlinkUnreferencedUploads
 };

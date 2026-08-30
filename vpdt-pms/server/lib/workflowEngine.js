@@ -459,9 +459,24 @@ function applyWorkflowAction({ moduleKey, item, action, user, comment, extraFiel
   }
 
   // APPROVE
+  // canApproveStep()/isStepApprovalComplete() (đầu file, PHẢI giữ y hệt bản index.html nên không sửa
+  // trực tiếp) cho admin bấm Duyệt bỏ qua điều kiện "đủ hết các approver được đặt tên ở bước" — cố ý,
+  // dùng làm lối thoát khi 1 approver bị khoá tài khoản giữa chừng. Nhưng history entry ghi ra trước
+  // đây KHÔNG phân biệt được "admin chính là approver hợp lệ cuối cùng của bước" (duyệt bình thường)
+  // với "admin bỏ qua vì các approver khác CHƯA duyệt đủ" (ghi đè quy trình nhiều người ký) — 2 lượt
+  // duyệt trông giống hệt nhau trên lịch sử, không có dấu hiệu nào cho biết bước 2-3 người ký đã bị bỏ
+  // qua. Tính lại NGAY TRƯỚC KHI push entry mới (approvedBeforeThis chưa gồm lượt duyệt này) để biết
+  // đây có phải override hay không, gắn cờ adminOverride:true vào đúng entry đó nếu có.
+  const approversListForOverrideCheck = normalizeApproversList(currentStepApprovers);
+  const approvedBeforeThis = getStepApprovedUsernames(item[historyField], currentStep);
+  const isAdminOverride = !!user.perms?.admin
+    && approversListForOverrideCheck.length > 0
+    && !approversListForOverrideCheck.every(u => approvedBeforeThis.has(u));
+
   item[historyField].push({
     step: currentStep, stepName, approver: user.name, username: user.username,
-    action: 'APPROVED', comment, time: nowVN(), ...extraSnapshot
+    action: 'APPROVED', comment, time: nowVN(), ...extraSnapshot,
+    ...(isAdminOverride ? { adminOverride: true } : {})
   });
 
   if (!isStepApprovalComplete(user, currentStepApprovers, item[historyField], currentStep)) {
