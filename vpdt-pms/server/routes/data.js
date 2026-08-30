@@ -20,7 +20,7 @@ const {
   filterMeetingsForUser, filterMeetingMinutesForUser, filterTasksForUser, sanitizeTrainingTestsForUser,
   filterRecruitmentReferralsForUser, filterItPriceApprovalsForUser, filterItSupportTicketsForUser,
   filterUniformPeriodsForUser, filterUniformIssuancesForUser, filterUniformStockAdjustmentsForUser, filterUniformTransfersForUser, filterBudgetEntriesForUser,
-  filterVppRegistrationsForUser, filterLicensesForUser
+  filterVppRegistrationsForUser, filterLicensesForUser, filterHrFeedbackForUser
 } = require('../lib/recordViewScope');
 
 const VALID_KEYS = new Set(Object.keys(DEFAULTS));
@@ -417,6 +417,11 @@ router.get('/', async (req, res) => {
     // licenses (Hành Chính — Giấy Phép): quyền phẳng riêng module (licenseCreate/licenseApprove/
     // licenseView), KHÔNG theo phòng ban — xem lib/recordViewScope.js canViewLicense().
     if (data.licenses) data.licenses = filterLicensesForUser(data.licenses, req.freshUser);
+    // hrFeedback (Nhân Sự — "HCRC Đồng Hành"): RIÊNG TƯ hơn MỌI collection ở trên — chỉ chính người
+    // hỏi + bộ phận Nhân Sự đọc được, không có nhánh phòng ban nào. Lọc ngay tại đây là chỗ DUY NHẤT
+    // đảm bảo yêu cầu riêng tư cốt lõi này (giao diện chỉ lọc thêm 1 lần nữa cho đúng inbox cá nhân)
+    // — xem lib/recordViewScope.js canViewHrFeedback().
+    if (data.hrFeedback) data.hrFeedback = filterHrFeedbackForUser(data.hrFeedback, req.freshUser);
     // tasks: cùng dạng lỗ hổng như 9 collection ở trên — trước đây hoàn toàn KHÔNG được lọc lại ở
     // server (chỉ ẩn ở renderTasks() qua canViewTaskRecord()), để lộ toàn bộ Công Việc công ty (kể cả
     // nội dung "Ý kiến chỉ đạo" nhạy cảm) cho bất kỳ ai gọi thẳng GET /api/data.
