@@ -1985,12 +1985,21 @@ function mergeReportPeriodByTasks(user, period, tasks, users, allPeriods) {
   if (isNaN(endBoundary.getTime())) throw new HttpError(400, 'Kỳ báo cáo thiếu hạn chót hợp lệ');
 
   let startBoundary = null;
+  // immediatePrior: kỳ gần nhất kết thúc TRƯỚC kỳ này, KHÔNG lọc theo status (khác startBoundary ở
+  // trên chỉ xét kỳ CLOSED) — dùng để phát hiện khoảng trống ranh giới khi kỳ liền trước còn dang dở
+  // (chưa đóng) nhưng có 1 kỳ CLOSED xa hơn được dùng làm mốc thay thế, dễ bỏ sót/trùng việc quanh mốc.
+  let immediatePrior = null;
   (allPeriods || []).forEach((p) => {
-    if (p.id === period.id || p.status !== 'CLOSED' || !p.endTime) return;
+    if (p.id === period.id || !p.endTime) return;
     const t = new Date(p.endTime);
     if (isNaN(t.getTime()) || t >= endBoundary) return;
+    if (!immediatePrior || t > immediatePrior.time) immediatePrior = { period: p, time: t };
+    if (p.status !== 'CLOSED') return;
     if (!startBoundary || t > startBoundary) startBoundary = t;
   });
+  const boundaryGapWarning = (immediatePrior && (!startBoundary || immediatePrior.time.getTime() !== startBoundary.getTime()))
+    ? `Kỳ báo cáo liền trước ("${immediatePrior.period.name || immediatePrior.period.id}") chưa ở trạng thái Đã đóng — phạm vi tổng hợp có thể bỏ sót hoặc trùng công việc quanh ranh giới 2 kỳ.`
+    : null;
 
   const usersByUsername = new Map((users || []).map(u => [u.username, u]));
   const inScope = (dept) => !!(period.deptScope?.all || (period.deptScope?.depts || []).includes(dept));
@@ -2076,7 +2085,7 @@ function mergeReportPeriodByTasks(user, period, tasks, users, allPeriods) {
     updatedBy: null, updatedByName: null, updatedAt: null,
     publishedBy: null, publishedByName: null, publishedAt: null
   };
-  return period;
+  return { period, warning: boundaryGapWarning };
 }
 
 // Gom + dọn danh sách dòng bảng Công Việc/Kế Hoạch — dùng chung cho cả TASKS (progressField='progress')

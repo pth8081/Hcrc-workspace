@@ -6,7 +6,7 @@ const router = express.Router();
 const { getAllAppData, withLockedAppDataValue } = require('../lib/appData');
 const { requireAuth, blockIfMustChangePassword } = require('../lib/auth');
 const { CREATE_MODULE_CONFIGS, CreateError, validateAndPrepareCreate } = require('../lib/createValidation');
-const { createForCollection, createForCollectionSerialized, getAllForCollection, withAppLock } = require('../lib/recordStore');
+const { createForCollection, createForCollectionSerialized, getAllForCollection, withAppLock, getTrashItems } = require('../lib/recordStore');
 
 router.use(requireAuth, blockIfMustChangePassword);
 
@@ -110,7 +110,13 @@ router.post('/:module', async (req, res) => {
     if (moduleKey === 'budgetPeriods') appData.budgetTemplates = await getAllForCollection('budgetTemplates');
 
     const config = CREATE_MODULE_CONFIGS[moduleKey];
-    const builderFn = (list) => validateAndPrepareCreate(moduleKey, req.body, freshUser, list, appData);
+    // Đọc Thùng Rác của ĐÚNG collection này trước khi tạo — validateAndPrepareCreate() dùng để chặn
+    // "code" trùng với 1 hồ sơ đã bị xoá trước đó (xem chú thích tham số trashedItems ở hàm đó). Đọc ở
+    // đây (ngoài lock chính) vì đây chỉ là lớp phòng vệ bổ sung cho 1 kịch bản hiếm (cố ý dùng lại code
+    // cũ sau khi xoá) — không phải điều kiện đua chính mà createForCollection(Serialized) đã khoá chặt
+    // cho trường hợp phổ biến (2 người tạo cùng code cùng lúc trong collection ĐANG SỐNG).
+    const trashedItems = await getTrashItems(config.dbKey);
+    const builderFn = (list) => validateAndPrepareCreate(moduleKey, req.body, freshUser, list, appData, trashedItems);
     // docs (version mới)/contracts (phụ lục mới): khoá theo ID GỐC của cả "họ" — cùng khoá mà
     // routes/records.js dùng khi XOÁ family này (doc_family:<rootDocId>/contract_family:<rootContractId>)
     // — trước đây tạo version/phụ lục mới chỉ tự kiểm tra root còn tồn tại tại thời điểm đọc mà không

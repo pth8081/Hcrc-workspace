@@ -10,7 +10,7 @@ const express = require('express');
 const router = express.Router();
 const { requireAuth, blockIfMustChangePassword } = require('../lib/auth');
 const { HttpError } = require('../lib/httpErrors');
-const { getTrashItems, restoreTrashItem, permanentlyDeleteTrashItem } = require('../lib/recordStore');
+const { getTrashItems, restoreTrashItemWithFamily, permanentlyDeleteTrashItem } = require('../lib/recordStore');
 const { consumeApprovalGrant } = require('../lib/approvalAuth');
 
 router.use(requireAuth, blockIfMustChangePassword);
@@ -39,13 +39,24 @@ router.get('/', async (req, res) => {
 // POST /api/trash/:id/restore — khôi phục lại ĐÚNG Id/Collection gốc. Chặn (409) nếu Code đã bị 1 hồ
 // sơ ĐANG HOẠT ĐỘNG khác dùng lại kể từ lúc xóa (xem restoreTrashItem() ở lib/recordStore.js) — không
 // tự động đổi mã bên nào, để admin tự xử lý.
+//
+// docs/contracts: khi mục được khôi phục thuộc 1 "họ" (phiên bản/phụ lục), TỰ ĐỘNG cố khôi phục luôn
+// mọi thành viên còn lại của họ đó đang còn trong Thùng Rác (đối xứng với việc XOÁ đã cascade cả họ
+// vào Thùng Rác cùng lúc) — trước đây phải tự khôi phục từng phiên bản 1, dễ bỏ sót và để tài liệu
+// hiện ra với lịch sử phiên bản bị đứt quãng. restoredFamilyMembers/familyRestoreErrors: best-effort,
+// không làm hỏng lượt khôi phục mục CHÍNH nếu 1 thành viên phụ không khôi phục được (xem
+// restoreTrashItemWithFamily() ở lib/recordStore.js).
 router.post('/:id/restore', async (req, res) => {
   const trashId = Number(req.params.id);
   if (!Number.isFinite(trashId)) return res.status(400).json({ error: 'id không hợp lệ' });
   try {
     assertAdmin(req.freshUser);
-    const result = await restoreTrashItem(trashId);
-    res.json({ ok: true, collection: result.collection, item: result.item });
+    const result = await restoreTrashItemWithFamily(trashId);
+    res.json({
+      ok: true, collection: result.collection, item: result.item,
+      restoredFamilyMembers: result.restoredFamilyMembers,
+      familyRestoreErrors: result.familyRestoreErrors
+    });
   } catch (err) {
     handleError(res, `${trashId}/restore`, err);
   }

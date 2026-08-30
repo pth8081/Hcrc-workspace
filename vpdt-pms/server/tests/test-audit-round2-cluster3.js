@@ -153,6 +153,9 @@ stubModule('lib/recordStore', {
   MIGRATED_COLLECTIONS: new Set(Object.keys(RECORDS)),
   getAllForCollectionCached: async (c) => RECORDS[c] || [],
   getAllForCollection: async (c) => RECORDS[c] || [],
+  // routes/create.js đọc trash trước khi tạo (kiểm trùng mã với hồ sơ đã xoá, xem
+  // lib/createValidation.js) — bài test này không có kịch bản nào liên quan Thùng Rác, luôn trả rỗng.
+  getTrashItems: async () => [],
   createForCollection: async (c, builderFn) => rawCreate(c, builderFn),
   createForCollectionSerialized: async (c, lockKey, builderFn) => withFakeAppLock(lockKey, () => rawCreate(c, builderFn)),
   withAppLock: async (key, fn) => withFakeAppLock(key, fn),

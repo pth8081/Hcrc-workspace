@@ -119,7 +119,7 @@ function buildActionHandlers(state) {
     // ===== BÁO CÁO ĐỊNH KỲ =====
     'reportPeriods:close': (u, item) => recordActions.closeReportPeriod(u, item),
     'reportPeriods:merge': (u, item, body) => recordActions.mergeReportPeriod(u, item, body && body.entryIds, state.reportEntries),
-    'reportPeriods:mergeByTasks': (u, item) => recordActions.mergeReportPeriodByTasks(u, item, state.tasks, state.users, state.reportPeriods),
+    'reportPeriods:mergeByTasks': (u, item) => recordActions.mergeReportPeriodByTasks(u, item, state.tasks, state.users, state.reportPeriods).period,
     'reportPeriods:compilation': (u, item, body) => recordActions.updateReportCompilation(u, item, body && body.slides),
     'reportPeriods:publish': (u, item) => recordActions.publishReportPeriod(u, item),
     'reportPeriods:unpublish': (u, item) => recordActions.unpublishReportPeriod(u, item),
