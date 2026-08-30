@@ -199,8 +199,9 @@ function createDispatcher(state) {
           return { status: 403, body: { error: 'Bạn không có quyền cấp phát đồng phục' } };
         }
         const storeIssuances = state.uniformIssuances.filter(x => x.dept === freshUser.dept);
+        const storeAdjustments = (state.uniformStockAdjustments || []).filter(x => x.dept === freshUser.dept);
         const approvedTransfers = state.uniformTransfers.filter(t => t.status === 'APPROVED');
-        const record = recordActions.buildUniformIssuance(freshUser, body, state.uniformPeriods, storeIssuances, state.users, approvedTransfers);
+        const record = recordActions.buildUniformIssuance(freshUser, body, state.uniformPeriods, storeIssuances, storeAdjustments, state.users, approvedTransfers);
         state.uniformIssuances.push(record);
         return { status: 200, body: { ok: true, item: record } };
       }

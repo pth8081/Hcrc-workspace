@@ -25,7 +25,7 @@
 // Các module có khuôn quyền PHẲNG/riêng (Góc Chia Sẻ, bảng giá IT, Báo Cáo Định Kỳ, CV ứng viên, Giấy
 // Phép, Gia Hạn Dịch Vụ CNTT) dùng CHUNG một phép kiểm canView* cho cả 2 mode — vì bản thân các module
 // đó không có khái niệm quyền "tải riêng", ai xem được thì tải được.
-const { getAllForCollection } = require('./recordStore');
+const { getAllForCollection, getAllTrashItemsCached } = require('./recordStore');
 const { getAllAppData } = require('./appData');
 const {
   canDownloadRecordFile, canViewInternalPost,
@@ -57,6 +57,34 @@ const {
 // `record` được trả kèm ở nhóm 5 module "theo phòng ban" (doc/submission/contract/car/office) — CẦN cho
 // mode 'view' vì canViewDoc()/canViewSubmission()/... nhận nguyên bản ghi (phải tra deptWorkflows để xét
 // nhánh "đang là người duyệt"), khác canDownloadRecordFile() chỉ cần (moduleKey, dept, ownerUsername).
+// ——— Trường bổ sung (Biểu Mẫu) kiểu "Tải tệp"/"Tải nhiều tệp" ———
+// Admin tự cấu hình thêm trường cho từng module ở Quản Trị > Biểu Mẫu; trường kiểu file/multifile được
+// collectDynamicFieldsData() (public/index.html) tải lên qua ĐÚNG /api/upload như mọi file khác rồi cất
+// NGUYÊN object trả về của route đó ({fileUrl, fileName, fileType, size}) vào record.customData[<NHÃN
+// trường>] — hoặc MẢNG các object đó cho kiểu multifile. Hợp đồng còn có customData thứ 2 cho bước nộp
+// Tài liệu ký (signedCustomData, xem uploadContractSignedFile() ở lib/recordActions.js).
+//
+// Trước đây findOwningRecord() chỉ soi các field đính kèm CỐ ĐỊNH ở cấp cao nhất của mỗi bản ghi
+// (fileUrl/signedFileUrl/extraFiles/attachment...), KHÔNG hề nhìn vào customData — nên MỌI file tải lên
+// qua trường bổ sung đều tra không ra bản ghi sở hữu và rơi thẳng vào nhánh FAIL-OPEN ở
+// authorizeFileAccess(): bất kỳ ai đã đăng nhập cũng đọc được, dù hồ sơ chứa nó bị giới hạn theo phòng
+// ban. Đây là đúng lỗ hổng mà lib/fileAuthz.js sinh ra để vá, chỉ khác đường vào.
+function valueRefsFileUrl(value, fileUrl) {
+  if (!value || typeof value !== 'object') return false;
+  if (Array.isArray(value)) return value.some(v => valueRefsFileUrl(v, fileUrl));
+  return value.fileUrl === fileUrl;
+}
+
+function customDataHasFileUrl(record, fileUrl) {
+  for (const bag of [record?.customData, record?.signedCustomData]) {
+    if (!bag || typeof bag !== 'object' || Array.isArray(bag)) continue;
+    for (const value of Object.values(bag)) {
+      if (valueRefsFileUrl(value, fileUrl)) return true;
+    }
+  }
+  return false;
+}
+
 async function findOwningRecord(fileUrl) {
   const [docs, submissions, contracts, carRegs, officeReqs, internalPosts, itPriceApprovals, reportEntries, reportPeriods, recruitmentReferrals, licenses, itServiceRenewals] = await Promise.all([
     getAllForCollection('docs'),
@@ -72,17 +100,21 @@ async function findOwningRecord(fileUrl) {
     getAllForCollection('licenses'),
     getAllForCollection('itServiceRenewals')
   ]);
-  const doc = (docs || []).find(d => d.fileUrl === fileUrl);
+  // customDataHasFileUrl() phủ thêm file của TRƯỜNG BỔ SUNG kiểu Tải tệp/Tải nhiều tệp cho đúng 6 module
+  // có hỗ trợ Biểu Mẫu ở đây (xem validateRequiredCustomData() ở lib/createValidation.js) — trả về ĐÚNG
+  // owning-info như khi khớp field đính kèm cố định, để toàn bộ dispatch theo module ở
+  // authorizeFileAccess() (cả 2 mode view/download) chạy y nguyên, không cần biết file tới từ đường nào.
+  const doc = (docs || []).find(d => d.fileUrl === fileUrl || customDataHasFileUrl(d, fileUrl));
   if (doc) return { moduleKey: 'doc', dept: doc.dept, ownerUsername: doc.uploader, record: doc };
-  const sub = (submissions || []).find(s => s.fileUrl === fileUrl || (s.extraFiles || []).some(ef => ef.fileUrl === fileUrl));
+  const sub = (submissions || []).find(s => s.fileUrl === fileUrl || (s.extraFiles || []).some(ef => ef.fileUrl === fileUrl) || customDataHasFileUrl(s, fileUrl));
   if (sub) return { moduleKey: 'submission', dept: sub.dept, ownerUsername: sub.creator, record: sub };
-  const contract = (contracts || []).find(c => c.fileUrl === fileUrl || c.signedFileUrl === fileUrl);
+  const contract = (contracts || []).find(c => c.fileUrl === fileUrl || c.signedFileUrl === fileUrl || customDataHasFileUrl(c, fileUrl));
   if (contract) return { moduleKey: 'contract', dept: contract.dept, custodianDept: contract.custodianDept, ownerUsername: contract.creator, record: contract };
-  const carReg = (carRegs || []).find(c => c.fileUrl === fileUrl);
+  const carReg = (carRegs || []).find(c => c.fileUrl === fileUrl || customDataHasFileUrl(c, fileUrl));
   if (carReg) return { moduleKey: 'car', dept: carReg.dept, ownerUsername: carReg.creator, record: carReg };
-  const officeReq = (officeReqs || []).find(o => o.fileUrl === fileUrl || o.signedFileUrl === fileUrl);
+  const officeReq = (officeReqs || []).find(o => o.fileUrl === fileUrl || o.signedFileUrl === fileUrl || customDataHasFileUrl(o, fileUrl));
   if (officeReq) return { moduleKey: 'office', dept: officeReq.dept, ownerUsername: officeReq.creator, record: officeReq };
-  const post = (internalPosts || []).find(p => p.attachment && p.attachment.fileUrl === fileUrl);
+  const post = (internalPosts || []).find(p => (p.attachment && p.attachment.fileUrl === fileUrl) || customDataHasFileUrl(p, fileUrl));
   if (post) return { internal: true, post };
   const priceItem = (itPriceApprovals || []).find(p => (p.files || []).some(f => f.fileUrl === fileUrl));
   if (priceItem) return { itPrice: true, item: priceItem };
@@ -100,6 +132,36 @@ async function findOwningRecord(fileUrl) {
   const itRenewal = (itServiceRenewals || []).find(r => r.fileUrl === fileUrl);
   if (itRenewal) return { itServiceRenewal: true, item: itRenewal };
   return null;
+}
+
+// Tra ngược fileUrl -> bản ghi ĐÃ BỊ XOÁ đang nằm trong Thùng Rác (dbo.TrashBin, xem
+// moveRecordToTrash() ở lib/recordStore.js).
+//
+// LỖ HỔNG ĐƯỢC VÁ Ở ĐÂY: moveRecordToTrash() XOÁ HẲN dòng khỏi dbo.Records, mà findOwningRecord() chỉ
+// đọc dữ liệu ĐANG SỐNG qua getAllForCollection() — nên ngay khi 1 hồ sơ bị xoá, file đính kèm của nó
+// tra không ra chủ sở hữu nữa và rơi vào nhánh FAIL-OPEN: file vốn bị giới hạn theo phòng ban BỖNG
+// THÀNH đọc được với BẤT KỲ ai đã đăng nhập, tức là xoá hồ sơ làm file của nó LỘ RA RỘNG HƠN trước khi
+// xoá. Nghịch lý hơn nữa vì chính Thùng Rác lại là khu vực admin-only (assertAdmin ở routes/trash.js).
+//
+// Bản vá dùng ĐÚNG mức quyền của Thùng Rác: file của hồ sơ đã xoá chỉ Quản Trị Viên đọc được, và tuyệt
+// đối KHÔNG rơi tiếp xuống FAIL-OPEN. Quét mọi kiểu tham chiếu file mà các collection đang dùng
+// (fileUrl/signedFileUrl/cvFileUrl/attachment/extraFiles/files/compilation.slides/customData...) bằng
+// một phép duyệt sâu chung — Thùng Rác chứa bản ghi của MỌI collection nên không thể liệt kê từng khuôn
+// riêng như findOwningRecord().
+function deepRefsFileUrl(value, fileUrl, depth = 0) {
+  if (!value || typeof value !== 'object' || depth > 6) return false;
+  if (Array.isArray(value)) return value.some(v => deepRefsFileUrl(v, fileUrl, depth + 1));
+  if (value.fileUrl === fileUrl || value.signedFileUrl === fileUrl || value.cvFileUrl === fileUrl) return true;
+  return Object.values(value).some(v => deepRefsFileUrl(v, fileUrl, depth + 1));
+}
+
+// Dùng bản CÓ CACHE ngắn hạn (vài giây, tự xoá ngay khi Thùng Rác thay đổi — xem
+// getAllTrashItemsCached() ở lib/recordStore.js): hàm này chạy ở MỌI request /uploads không khớp bản
+// ghi sống nào, mà đó chính là trường hợp thường gặp nhất (ảnh đại diện, logo), nên đọc thẳng CSDL ở
+// đây sẽ biến mỗi ảnh avatar thành 1 lượt quét cả bảng TrashBin.
+async function findOwningTrashItem(fileUrl) {
+  const items = (await getAllTrashItemsCached()) || [];
+  return items.find(t => deepRefsFileUrl(t.item, fileUrl)) || null;
 }
 
 // Chỉ nhận đúng dạng "/uploads/<tên-file>" với tên file là MỘT thành phần duy nhất (không "/", không
@@ -126,7 +188,14 @@ function parseUploadsFileUrl(fileUrl) {
 // (mỗi module một khuôn canView* khác nhau) và nên làm ở một lần sửa riêng, có test riêng cho từng cái.
 async function authorizeFileAccess(user, fileUrl, mode) {
   const owning = await findOwningRecord(fileUrl);
-  if (!owning) return true; // FAIL-OPEN có chủ ý — xem ghi chú ở trên.
+  if (!owning) {
+    // Không khớp bản ghi ĐANG SỐNG nào -> trước khi cho qua theo FAIL-OPEN, phải xét tiếp Thùng Rác:
+    // hồ sơ đã bị xoá vẫn còn nguyên payload (kèm fileUrl) ở dbo.TrashBin, và khu vực đó là admin-only.
+    // Xem findOwningTrashItem() ở trên để biết vì sao thiếu bước này là "xoá xong thì file lộ rộng hơn".
+    const trashed = await findOwningTrashItem(fileUrl);
+    if (trashed) return !!user?.perms?.admin;
+    return true; // FAIL-OPEN có chủ ý — xem ghi chú ở trên.
+  }
 
   // ——— Nhóm module có khuôn quyền riêng: dùng CHUNG canView* cho cả 'view' lẫn 'download' ———
   if (owning.internal) return canViewInternalPost(user, owning.post);
@@ -187,4 +256,4 @@ async function uploadsAuthz(req, res, next) {
   }
 }
 
-module.exports = { findOwningRecord, parseUploadsFileUrl, authorizeFileAccess, uploadsAuthz };
+module.exports = { findOwningRecord, findOwningTrashItem, parseUploadsFileUrl, authorizeFileAccess, uploadsAuthz };

@@ -353,10 +353,25 @@ function filterMeetingsForUser(meetings, user) {
 // Khớp isMeetingMinutesAttendee()/canViewMeetingMinutesRecord() (public/index.html): admin, quyền
 // minutesView (xem toàn bộ), người tạo, hoặc có tên khớp (không phân biệt hoa/thường, đã trim) trong
 // thành phần tham dự của chính biên bản đó — Biên Bản Họp KHÔNG có khái niệm phòng ban để scopeAllows.
+// Dòng tham dự viên có hasAccount === 'YES' + username thì so khớp CHÍNH XÁC theo username, KHÔNG
+// dùng tên hiển thị nữa: trước đây hàm này chỉ so tên (đã trim, không phân biệt hoa/thường) cho MỌI
+// dòng, nên 2 nhân viên TRÙNG TÊN HIỂN THỊ (rất thường gặp ở công ty đông người — "Nguyễn Văn A") đều
+// xem được biên bản họp chỉ mời 1 trong 2. Người lập biên bản đã chỉ đích danh tài khoản ở đúng những
+// dòng này (xem applyAttendeeSystemUser()/resolveAttendeeAccountInput() ở public/index.html — ô tên
+// biến thành dropdown chọn tài khoản khi bật "Có tài khoản"), nên username là danh tính chuẩn xác duy
+// nhất, không có lý do gì phải suy đoán lại từ tên.
+//
+// Dòng KHÔNG có tài khoản (khách mời/đối tác bên ngoài, hasAccount !== 'YES' hoặc chưa gán username)
+// vẫn so theo tên như cũ — đó là tất cả những gì biên bản biết về họ, đổi đi sẽ làm mất quyền xem của
+// các biên bản cũ/tham dự viên nhập tay.
 function isMeetingMinutesAttendeeServer(user, m) {
   const uname = (user.name || '').trim().toLowerCase();
-  if (!uname) return false;
-  return (m.attendees || []).some(a => (a.name || '').trim().toLowerCase() === uname);
+  const uUsername = (user.username || '').trim();
+  return (m.attendees || []).some(a => {
+    const aUsername = (a.username || '').trim();
+    if (a.hasAccount === 'YES' && aUsername) return !!uUsername && aUsername === uUsername;
+    return !!uname && (a.name || '').trim().toLowerCase() === uname;
+  });
 }
 
 function canViewMeetingMinutes(user, m) {

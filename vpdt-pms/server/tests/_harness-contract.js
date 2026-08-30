@@ -94,7 +94,12 @@ async function startHarness({ port } = {}) {
           const f = opts && opts.body && typeof opts.body.get === 'function' ? opts.body.get('file') : null;
           if (f) { fileName = f.name || fileName; fileType = f.type || fileType; }
         } catch (e) { /* ignore */ }
-        return { ok: true, status: 200, json: async () => ({ fileUrl: '/uploads/test/' + fileName, fileName, fileType }) };
+        // fileUrl PHẢI đúng khuôn tệp do routes/upload.js sinh ra ("/uploads/<tên-phẳng>", không thư
+        // mục con, chỉ [A-Za-z0-9._-]) — server nay từ chối mọi fileUrl lệch khuôn ở cả nhánh tạo lẫn
+        // sửa (xem assertUploadedFileUrl() ở lib/createValidation.js). Bản giả cũ trả
+        // "/uploads/test/<tên>" (có thư mục con) — không giống bất kỳ URL thật nào app từng sinh ra.
+        const safeName = String(fileName).replace(/[^A-Za-z0-9._-]/g, '_');
+        return { ok: true, status: 200, json: async () => ({ fileUrl: `/uploads/${Date.now()}-test-${safeName}`, fileName, fileType }) };
       }
       const bodyStr = typeof (opts && opts.body) === 'string' ? opts.body : null;
       const username = (typeof currentUser !== 'undefined' && currentUser) ? currentUser.username : null;

@@ -12,6 +12,8 @@
 // phải xác thực lại). Chạy PM2 cluster nhiều tiến trình: "cấp phiếu"/OTP ở tiến trình A, "dùng" rơi vào
 // tiến trình B khác sẽ bị từ chối nhầm — chấp nhận được (chỉ False Negative có đường thoát thử lại,
 // không phải lỗ hổng bảo mật kiểu False Positive).
+const crypto = require('crypto');
+
 const GRANT_TTL_MS = 5 * 60 * 1000;
 const OTP_TTL_MS = 5 * 60 * 1000;
 
@@ -29,8 +31,14 @@ function consumeApprovalGrant(username) {
   return !!expiresAt && expiresAt > Date.now();
 }
 
+// Sinh từng chữ số bằng crypto.randomInt() — ĐÚNG khuôn lib/captcha.js đã dùng. Math.random() trước đây
+// là bộ sinh giả ngẫu nhiên KHÔNG dành cho mật mã: trạng thái nội bộ của nó suy ngược được từ vài giá
+// trị đã biết, nên mã OTP 6 số dùng để "xác thực lại trước khi Duyệt" có thể bị đoán trước thay vì phải
+// mò 1/1.000.000. crypto.randomInt() lấy entropy từ hệ điều hành và không lệch phân phối (rejection
+// sampling), khác kiểu nhân-rồi-làm-tròn của Math.random().
 function issueApprovalOtp(username) {
-  const code = String(Math.floor(100000 + Math.random() * 900000));
+  let code = '';
+  for (let i = 0; i < 6; i++) code += crypto.randomInt(0, 10);
   otps.set(username, { code, expiresAt: Date.now() + OTP_TTL_MS });
   return code;
 }

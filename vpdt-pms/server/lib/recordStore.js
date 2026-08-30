@@ -11,6 +11,8 @@
 // (withLockedAppDataValue) — code gọi không cần biết/quan tâm collection đó đã migrate hay chưa. Mỗi
 // bước 6c/6d/... tiếp theo chỉ cần thêm 1 dòng vào MIGRATED_COLLECTIONS + chạy di trú, không cần sửa
 // gì ở routes/create.js hay routes/workflow.js.
+const fs = require('fs');
+const path = require('path');
 const { getPool, sql } = require('../db');
 const { getAppDataValue, withLockedAppDataValue } = require('./appData');
 const { HttpError } = require('./httpErrors');
@@ -215,10 +217,32 @@ async function moveRecordToTrash(collection, id, actor, checkFn) {
 
     await tx.commit();
     invalidateCollectionCache(collection);
+    invalidateTrashCache();
   } catch (err) {
     await tx.rollback().catch(() => {});
     throw err;
   }
+}
+
+// Cache ngắn hạn cho TOÀN BỘ Thùng Rác — cùng khuôn/cùng TTL với getAllForCollectionCached() bên dưới.
+// CẦN vì lib/fileAuthz.js tra Thùng Rác ở MỌI request /uploads không khớp bản ghi sống nào, mà đó lại
+// là trường hợp THƯỜNG GẶP NHẤT (ảnh đại diện, logo — mỗi lần mở màn hình có thể vài chục lượt): không
+// cache thì mỗi ảnh avatar là 1 lượt quét cả bảng TrashBin. Bị xoá ngay khi có thay đổi ở Thùng Rác
+// (chuyển vào/khôi phục/xoá vĩnh viễn) nên độ trễ tối đa chỉ là TTL vài giây, và lệch theo hướng vô
+// hại: file vừa bị xoá còn "dễ đọc" thêm vài giây (đúng như trước khi xoá), không phải ngược lại.
+const trashCache = { value: null, expiresAt: 0 };
+
+function invalidateTrashCache() {
+  trashCache.value = null;
+  trashCache.expiresAt = 0;
+}
+
+async function getAllTrashItemsCached() {
+  if (trashCache.value && trashCache.expiresAt > Date.now()) return trashCache.value;
+  const value = await getTrashItems(null);
+  trashCache.value = value;
+  trashCache.expiresAt = Date.now() + RECORDS_CACHE_TTL_MS;
+  return value;
 }
 
 async function getTrashItems(collection) {
@@ -294,6 +318,7 @@ async function restoreTrashItem(trashId) {
 
     await tx.commit();
     invalidateCollectionCache(row.Collection);
+    invalidateTrashCache();
     return { collection: row.Collection, item: JSON.parse(row.Payload) };
   } catch (err) {
     await tx.rollback().catch(() => {});
@@ -301,18 +326,122 @@ async function restoreTrashItem(trashId) {
   }
 }
 
-// Xóa vĩnh viễn — chỉ xóa dòng ở dbo.TrashBin (dữ liệu đã không còn ở dbo.Records từ lúc chuyển vào
-// thùng rác), không thể hoàn tác. Route gọi hàm này (routes/trash.js) bắt buộc xác thực lại
-// (withApprovalAuth/consumeApprovalGrant) trước khi tới đây, khớp mức độ nghiêm trọng của 1 hành động
-// không thể hoàn tác.
+// ===== Dọn FILE VẬT LÝ khi xoá vĩnh viễn =====
+//
+// Thư mục lưu file người dùng tải lên — cùng đường dẫn routes/upload.js dùng (UPLOAD_DIR ở đó) và
+// server.js phục vụ tĩnh qua /uploads.
+const UPLOAD_DIR = path.join(__dirname, '..', 'uploads');
+
+// Sao y parseUploadsFileUrl() ở lib/fileAuthz.js (chỉ nhận "/uploads/<tên-file>" với tên file là MỘT
+// thành phần, không "/", "\" hay ".."). Chép lại 4 dòng ở đây thay vì require chéo vì lib/fileAuthz.js
+// đã require chính file này -> require vòng, mà đây lại đúng là chỗ CHỐNG path traversal cho lệnh
+// fs.unlink bên dưới nên không thể bỏ.
+function parseUploadsFileName(fileUrl) {
+  const m = /^\/uploads\/([^/\\]+)$/.exec(String(fileUrl || ''));
+  if (!m) return null;
+  if (m[1] === '.' || m[1] === '..') return null;
+  return m[1];
+}
+
+// Gom MỌI đường dẫn "/uploads/..." xuất hiện ở bất kỳ đâu trong payload 1 bản ghi — fileUrl/
+// signedFileUrl/cvFileUrl ở cấp cao nhất, extraFiles[]/files[]/attachment/compilation.slides[], và cả
+// trường bổ sung kiểu Tải tệp/Tải nhiều tệp trong customData/signedCustomData (xem
+// collectDynamicFieldsData() ở public/index.html). Duyệt sâu chung thay vì liệt kê từng khuôn: Thùng
+// Rác chứa bản ghi của MỌI collection nên không có 1 khuôn cố định nào để dựa vào.
+function collectRecordFileUrls(value, out = new Set(), depth = 0) {
+  if (!value || typeof value !== 'object' || depth > 8) return out;
+  if (Array.isArray(value)) {
+    value.forEach(v => collectRecordFileUrls(v, out, depth + 1));
+    return out;
+  }
+  for (const v of Object.values(value)) {
+    if (typeof v === 'string' && parseUploadsFileName(v)) out.add(v);
+    else collectRecordFileUrls(v, out, depth + 1);
+  }
+  return out;
+}
+
+// CÒN AI DÙNG file này nữa không? Quét cả 3 nơi dữ liệu có thể tham chiếu tới nó: dbo.Records (hồ sơ
+// đang sống của mọi collection), dbo.TrashBin (hồ sơ khác cũng đang nằm trong thùng rác) và dbo.AppData
+// (các collection chưa di trú + cấu hình/ảnh đại diện/logo). Dùng LIKE trên nguyên chuỗi JSON thay vì
+// tự hiểu khuôn của từng collection — tên file do routes/upload.js sinh ra là
+// "<timestamp>-<16 hex>.<ext>", đủ duy nhất để so khớp chuỗi không bị dương tính giả có ý nghĩa; và
+// nếu có nhầm thì nhầm về phía AN TOÀN (giữ lại file, không xoá).
+async function isFileUrlStillReferenced(pool, fileUrl) {
+  const pattern = `%${fileUrl}%`;
+  const queries = [
+    'SELECT TOP 1 1 AS c FROM dbo.Records WHERE Payload LIKE @pat',
+    'SELECT TOP 1 1 AS c FROM dbo.TrashBin WHERE Payload LIKE @pat',
+    'SELECT TOP 1 1 AS c FROM dbo.AppData WHERE DataValue LIKE @pat'
+  ];
+  for (const q of queries) {
+    const r = await pool.request().input('pat', sql.NVarChar(sql.MAX), pattern).query(q);
+    if (r.recordset.length > 0) return true;
+  }
+  return false;
+}
+
+// Xoá thật các file trên đĩa mà KHÔNG còn bản ghi nào (sống hay trong thùng rác) tham chiếu tới. Mọi
+// lỗi đều chỉ ghi log: file đã bị xoá tay/đã mất/không đủ quyền không được phép làm hỏng thao tác "Xoá
+// vĩnh viễn" vốn đã hoàn tất ở CSDL.
+async function unlinkUnreferencedUploads(fileUrls) {
+  if (!fileUrls || fileUrls.size === 0) return { removed: [], kept: [] };
+  const removed = [];
+  const kept = [];
+  let pool;
+  try {
+    pool = await getPool();
+  } catch (err) {
+    console.error('⛔ Không kiểm tra được tham chiếu file khi xoá vĩnh viễn, giữ nguyên file:', err.message);
+    return { removed, kept: [...fileUrls] };
+  }
+  for (const fileUrl of fileUrls) {
+    const fileName = parseUploadsFileName(fileUrl);
+    if (!fileName) continue;
+    try {
+      if (await isFileUrlStillReferenced(pool, fileUrl)) { kept.push(fileUrl); continue; }
+      await fs.promises.unlink(path.join(UPLOAD_DIR, fileName));
+      removed.push(fileUrl);
+    } catch (err) {
+      // ENOENT = file đã không còn trên đĩa -> coi như đã dọn xong, không phải lỗi.
+      if (err && err.code === 'ENOENT') { removed.push(fileUrl); continue; }
+      console.error(`⛔ Không xoá được file "${fileUrl}" khi xoá vĩnh viễn:`, err.message);
+      kept.push(fileUrl);
+    }
+  }
+  return { removed, kept };
+}
+
+// Xóa vĩnh viễn — xoá dòng ở dbo.TrashBin (dữ liệu đã không còn ở dbo.Records từ lúc chuyển vào thùng
+// rác) VÀ dọn luôn file vật lý trong uploads/, không thể hoàn tác. Route gọi hàm này (routes/trash.js)
+// bắt buộc xác thực lại (withApprovalAuth/consumeApprovalGrant) trước khi tới đây, khớp mức độ nghiêm
+// trọng của 1 hành động không có đường lùi.
+//
+// TRƯỚC ĐÂY chỉ xoá dòng CSDL: file đính kèm của hồ sơ "đã xoá vĩnh viễn" vẫn nằm nguyên trên đĩa mãi
+// mãi, và vì không còn bản ghi nào tra ngược ra nó nữa nên authorizeFileAccess() coi như file lạ ->
+// FAIL-OPEN: ai còn giữ URL cũ (lịch sử duyệt web, chat, log proxy) vẫn tải lại được nguyên vẹn nội
+// dung "đã bị xoá vĩnh viễn". Lấy luôn Payload qua OUTPUT DELETED (cùng 1 câu lệnh, không có khe hở
+// giữa đọc và xoá) để biết chính xác file nào thuộc bản ghi vừa mất.
 async function permanentlyDeleteTrashItem(trashId) {
   const pool = await getPool();
   const result = await pool.request()
     .input('trashId', sql.BigInt, trashId)
-    .query('DELETE FROM dbo.TrashBin OUTPUT DELETED.Id WHERE Id = @trashId');
+    .query('DELETE FROM dbo.TrashBin OUTPUT DELETED.Id, DELETED.Payload WHERE Id = @trashId');
   if (result.recordset.length === 0) {
     throw new HttpError(404, 'Không tìm thấy mục này trong thùng rác');
   }
+  invalidateTrashCache();
+
+  let payload = null;
+  try {
+    payload = JSON.parse(result.recordset[0].Payload);
+  } catch (err) {
+    console.error('⛔ Payload thùng rác hỏng, bỏ qua bước dọn file:', err.message);
+    return;
+  }
+  // Chỉ xoá file KHÔNG còn ai tham chiếu tới (xem isFileUrlStillReferenced) — bản ghi khác cùng trỏ tới
+  // đúng file đó (dây chuyền phiên bản, hồ sơ chép lại...) vẫn phải đọc được file của mình.
+  await unlinkUnreferencedUploads(collectRecordFileUrls(payload));
 }
 
 // Di trú dữ liệu cũ (nếu còn) từ AppData[collection] sang dbo.Records — CHỈ chạy nếu collection này
@@ -573,5 +702,6 @@ module.exports = {
   getAllRecords, insertRecord, withLockedRecordById, deleteRecordById, migrateLegacyCollection, migrateAllLegacyCollections,
   getAllForCollection, getAllForCollectionCached, createForCollection, createForCollectionSerialized, withAppLock, withLockedRecordForCollection, deleteRecordForCollection,
   renameFieldValueInCollection,
-  moveRecordToTrash, getTrashItems, restoreTrashItem, permanentlyDeleteTrashItem
+  moveRecordToTrash, getTrashItems, getAllTrashItemsCached, restoreTrashItem, permanentlyDeleteTrashItem,
+  collectRecordFileUrls, unlinkUnreferencedUploads
 };

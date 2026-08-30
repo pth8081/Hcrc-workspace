@@ -99,7 +99,10 @@ const server = http.createServer(async (req, res) => {
     if (idx === -1) return sendJson(res, 404, { error: 'Không tìm thấy hồ sơ' });
     try {
       const item = store.meetingMinutes[idx];
-      const createdTasks = recordActions.assignMinutesTasks(activeServerUser, item);
+      // Tham số thứ 3 (danh sách user) là BẮT BUỘC từ bản vá "người tham dự có hasAccount:'YES' phải
+      // là tài khoản đang hoạt động có thật" — route thật truyền req.allUsers xuống, mock backend này
+      // truyền đúng danh sách user đã seed vào DB trình duyệt (xem seedDB.users bên dưới).
+      const createdTasks = recordActions.assignMinutesTasks(activeServerUser, item, seedDB.users);
       createdTasks.forEach((c) => store.tasks.push(c.item));
       return sendJson(res, 200, { ok: true, item, createdTasks });
     } catch (err) {

@@ -91,7 +91,43 @@ const ADMIN_ONLY_KEYS = new Set([
   // tiếp được qua POST /api/data/stores|jobTitles. Đổi tên (rename, có cascade) đi qua route riêng
   // POST /api/admin/renameCatalogEntry (routes/adminCatalog.js), cũng gate isCurrentlyAdmin() y hệt.
   // storeJobTitles: danh mục MỚI (mục 4a, Chức Danh Siêu Thị) — cùng lý do, panel CRUD chỉ hiện cho admin.
-  'stores', 'jobTitles', 'storeJobTitles'
+  'stores', 'jobTitles', 'storeJobTitles',
+  // depts/cats/licenseTypes/trainingCategories/contractTypeAbbrs: NỐT 5 danh mục còn lại của tab
+  // "🗂️ Quản Lý Danh Mục" (chỉ hiện cho admin — cùng panel với stores/jobTitles/storeJobTitles vừa
+  // khoá ở trên) nhưng vẫn BỊ BỎ SÓT khỏi danh sách này, nên bất kỳ tài khoản đã đăng nhập nào cũng
+  // ghi đè/xoá trắng được qua POST /api/data/<key>. Không phải "danh sách nhãn hiển thị thuần" như
+  // tưởng: depts là XƯƠNG SỐNG phạm vi phòng ban của TOÀN BỘ app (dropdown chọn phòng ban, kiểm tra
+  // scopeAllows, cấu hình quy trình theo phòng ban, sinh mã tài liệu qua deptAbbrs) — xoá trắng depts
+  // là làm hỏng mọi module cùng lúc; cats chi phối sinh Mã Tài Liệu (docCatAbbrs) + phân loại tài
+  // liệu; contractTypeAbbrs chi phối sinh Mã Hợp Đồng (generateContractCode()); trainingCategories/
+  // licenseTypes là danh mục nguồn của module Đào Tạo/Giấy Phép.
+  //
+  // LƯU Ý licenseTypes: uploadLicense() ở public/index.html trước đây TỰ HỌC loại giấy phép mới gõ
+  // bằng chính đường này (append vào DB.licenseTypes + syncStorage('licenseTypes') = ghi đè NGUYÊN
+  // mảng), tức là 1 người dùng thường vẫn cần ghi được key này. Tính năng đó KHÔNG mất: bước lưu
+  // chuyển hẳn về server, ở đúng luồng tạo giấy phép và CHỈ THÊM 1 giá trị đã làm sạch vào cuối danh
+  // mục (learnLicenseType(), routes/create.js) — không dựng lại được khả năng ghi đè/xoá trắng cả
+  // danh mục. Admin vẫn thêm/bớt/dọn danh mục ở màn Quản Lý Danh Mục qua đúng route này như trước.
+  'depts', 'cats', 'licenseTypes', 'trainingCategories', 'contractTypeAbbrs'
+]);
+
+// Các collection KHÔNG phải admin-only nhưng cũng KHÔNG mở cho mọi tài khoản đã đăng nhập — mỗi key ở
+// đây kèm 1 hàm kiểm tra quyền RIÊNG, hẹp đúng bằng độ mở của màn hình quản lý nó ở giao diện.
+//
+// meetingAttendeeTemplates ("Mẫu Danh Sách Tham Dự" dùng chung cho module Biên Bản Họp — xem
+// saveMeetingAttendeeTemplate()/deleteMeetingAttendeeTemplate()/modal Quản Lý Mẫu ở public/index.html):
+// trước đây key này KHÔNG nằm trong ADMIN_ONLY_KEYS và cũng không có gate nào khác, nên BẤT KỲ tài
+// khoản đã đăng nhập nào (kể cả người không hề dùng module Biên Bản Họp) cũng ghi đè/xoá sạch được
+// TOÀN BỘ mẫu dùng chung của cả công ty qua 1 lượt POST /api/data/meetingAttendeeTemplates tự soạn.
+// KHÔNG đưa vào ADMIN_ONLY_KEYS được: đây là dữ liệu dùng chung do CHÍNH những người lập/sửa biên bản
+// tự soạn và chia sẻ cho nhau (tính năng cố ý mở cho người dùng thường), khoá lại chỉ-admin sẽ phá
+// đúng tính năng đó. Gate đúng bằng quyền của module: minutesCreate (lập biên bản, xem
+// canCreateMinutes()) hoặc minutesEdit (sửa biên bản, xem canEditMinutes() ở lib/recordActions.js).
+const NON_ADMIN_GATED_KEYS = new Map([
+  ['meetingAttendeeTemplates', {
+    allow: (perms) => !!(perms?.admin || perms?.minutesCreate || perms?.minutesEdit),
+    error: 'Chỉ người có quyền Lập/Sửa Biên Bản Họp mới được sửa mẫu danh sách tham dự dùng chung'
+  }]
 ]);
 
 // itPriceMasterLists giờ chỉ còn là khuôn CỘT (columns[], không còn dữ liệu giá thật — xem
@@ -484,6 +520,15 @@ router.post('/:key', async (req, res) => {
         : await isCurrentlyAdmin(req.user.username);
       if (!allowed) {
         return res.status(403).json({ error: 'Chỉ Quản Trị Viên mới có quyền sửa dữ liệu này' });
+      }
+    } else if (NON_ADMIN_GATED_KEYS.has(key)) {
+      // Gate HẸP RIÊNG theo từng key (xem NON_ADMIN_GATED_KEYS ở đầu file) — không phải admin-only,
+      // nhưng cũng không mở cho mọi tài khoản đã đăng nhập như các key danh mục hiển thị thuần.
+      // req.freshUser = bản ghi user vừa đọc lại từ CSDL ở requireAuth (không tin quyền cache trong
+      // JWT), cùng nguồn dữ liệu với isCurrentlyAdmin() ở nhánh trên.
+      const gate = NON_ADMIN_GATED_KEYS.get(key);
+      if (!gate.allow(req.freshUser?.perms)) {
+        return res.status(403).json({ error: gate.error });
       }
     }
 
