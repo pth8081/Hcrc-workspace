@@ -639,6 +639,51 @@ router.delete('/webauthn/credentials/:id', requireAuth, async (req, res) => {
   }
 });
 
+// GET /api/auth/webauthn/credentials/:username — admin xem thiết bị vân tay của NGƯỜI KHÁC (khác GET
+// /webauthn/credentials ở trên, vốn chỉ trả về thiết bị của CHÍNH người gọi). Dùng khi 1 tài khoản mất
+// thiết bị (hoặc quên cả mật khẩu) nên không tự đăng nhập được để tự gỡ — admin cần xem trước danh sách
+// để chọn đúng thiết bị cần gỡ hộ. Cùng khuôn an toàn: chỉ trả id/tên/ngày tạo, không có publicKey/counter.
+router.get('/webauthn/credentials/:username', requireAuth, (req, res) => {
+  if (!req.freshUser.perms?.admin) {
+    return res.status(403).json({ error: 'Chỉ Quản Trị Viên mới có quyền xem thiết bị vân tay của người khác' });
+  }
+  const target = (req.allUsers || []).find(u => u.username === req.params.username);
+  if (!target) return res.status(404).json({ error: 'Không tìm thấy tài khoản' });
+  const list = (target.webauthnCredentials || []).map(c => ({ id: c.id, deviceLabel: c.deviceLabel, createdAt: c.createdAt }));
+  res.json(list);
+});
+
+// DELETE /api/auth/webauthn/credentials/:username/:id — admin gỡ HỘ 1 thiết bị vân tay của NGƯỜI KHÁC —
+// khắc phục tình huống mất thiết bị (hoặc đổi máy) mà chính chủ không còn cách nào tự đăng nhập lại để tự
+// gỡ (vd vân tay là phương thức duy nhất họ dùng, hoặc quên luôn cả mật khẩu). Khác DELETE
+// /webauthn/credentials/:id ở trên (gỡ hộ CHÍNH MÌNH, cấp lại cookie cho phiên đang gọi) — route này tăng
+// sessionVersion của NGƯỜI ĐÓ (không phải của admin đang gọi) để mọi phiên cũ của họ (có thể đang ở tay
+// người nhặt được thiết bị) mất hiệu lực ngay, và KHÔNG đụng gì tới cookie/phiên của admin đang thao tác.
+router.delete('/webauthn/credentials/:username/:id', requireAuth, async (req, res) => {
+  if (!req.freshUser.perms?.admin) {
+    return res.status(403).json({ error: 'Chỉ Quản Trị Viên mới có quyền gỡ thiết bị vân tay của người khác' });
+  }
+  try {
+    await withLockedAppDataValue('users', (collection) => {
+      const list = Array.isArray(collection) ? collection : [];
+      const idx = list.findIndex(u => u.username === req.params.username);
+      if (idx === -1) throw new HttpError(404, 'Không tìm thấy tài khoản');
+      const existing = Array.isArray(list[idx].webauthnCredentials) ? list[idx].webauthnCredentials : [];
+      list[idx] = {
+        ...list[idx],
+        webauthnCredentials: existing.filter(c => c.id !== req.params.id),
+        sessionVersion: (list[idx].sessionVersion || 0) + 1
+      };
+      return list;
+    });
+    res.json({ ok: true });
+  } catch (err) {
+    if (err instanceof HttpError) return res.status(err.status).json({ error: err.message });
+    console.error('DELETE /api/auth/webauthn/credentials/:username lỗi:', err.message);
+    res.status(500).json({ error: 'Không thể gỡ thiết bị vân tay' });
+  }
+});
+
 // POST /api/auth/webauthn/login-options — Bước 1 đăng nhập bằng vân tay (public, thay /login). Luôn
 // trả về 1 bộ challenge hợp lệ dù username có tồn tại/có đăng ký vân tay hay không — KHÔNG lộ thông
 // tin tài khoản qua sự khác biệt của response (khớp cách /login xử lý sai tài khoản/mật khẩu).

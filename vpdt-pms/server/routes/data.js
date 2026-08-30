@@ -143,9 +143,13 @@ router.use(requireAuth, blockIfMustChangePassword);
 // bất kỳ nhân viên nào biết đồng nghiệp nào đang bị khoá tài khoản/bị dò mật khẩu — front-end không hề
 // đọc dùng 2 field này ở đâu cả nên bỏ hẳn, không ảnh hưởng tính năng. mustChangePassword GIỮ LẠI vì
 // màn quản lý người dùng (admin) có hiện badge "Chưa đổi mật khẩu tạm" dựa trên đúng field này.
+// webauthnCredentials/webauthnUserId cùng lý do — cũng lộ cho MỌI người đã đăng nhập (dù publicKey/
+// counter tự thân không phải bí mật, đây vẫn là nhiều dữ liệu hơn mức cần cho 1 trang danh sách người
+// dùng), trong khi front-end không đọc dùng ở đâu ngoài 2 route riêng (GET/DELETE
+// /api/auth/webauthn/credentials[/:username]) đã tự tra DB, không phụ thuộc field này trong DB.users.
 function stripPasswords(users) {
   if (!Array.isArray(users)) return users;
-  return users.map(({ pass, password, pinHash, failedLoginAttempts, lockedUntil, ...rest }) => rest);
+  return users.map(({ pass, password, pinHash, failedLoginAttempts, lockedUntil, webauthnCredentials, webauthnUserId, ...rest }) => rest);
 }
 
 // Không bao giờ trả mật khẩu SMTP đã mã hoá (smtpPassEnc, xem lib/emailCrypto.js) ra ngoài — kể cả
