@@ -1,9 +1,31 @@
 # Phiên bản hiện tại
 
-**1.90.1** — đã merge vào `main` (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở
+**1.91.0** — đã merge vào `main` (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở
 badge góc màn hình + `/api/health`).
 
-## Cập nhật gần nhất (PR #199 → #200, nhánh `claude/chao-ban-oo5ijl`)
+## Cập nhật gần nhất (PR #202, nhánh `claude/chao-ban-oo5ijl`)
+
+Bước đầu trên đường tới yêu cầu "tài khoản admin bắt buộc xác thực 2 yếu tố" (đang trao đổi thêm phương
+án cho phần còn lại — chọn WebAuthn hay OTP email làm lớp bắt buộc, cách xử lý khi bật tính năng cho admin
+chưa từng thiết lập gì). Làm trước phần hạ tầng cần có ngay: trước đây mỗi người chỉ tự gỡ được thiết bị
+vân tay của chính mình — nếu mất thiết bị (hoặc quên luôn mật khẩu) thì không còn cách nào đăng nhập lại
+để tự gỡ, kẹt vĩnh viễn.
+
+- `routes/auth.js`: `GET`/`DELETE /api/auth/webauthn/credentials/:username` (admin-only) — admin xem
+  danh sách thiết bị an toàn (không lộ publicKey/counter) và gỡ hộ 1 thiết bị của người khác. Tăng
+  `sessionVersion` của người bị gỡ (không phải của admin) để mọi phiên cũ của họ mất hiệu lực ngay.
+- `routes/data.js`: strip thêm `webauthnCredentials`/`webauthnUserId` khỏi `GET /api/data` chung (trước
+  đây lộ cho mọi người đã đăng nhập, không riêng admin — front-end không đọc dùng field này ở đâu ngoài
+  2 route riêng đã tự tra DB).
+- `public/index.html`: màn Sửa Người Dùng thêm khối liệt kê + nút Gỡ cho từng thiết bị của user đang sửa.
+
+**Deploy impact:** không đổi `server/sql/schema.sql`, không thêm biến môi trường, không thêm dependency
+mới — chỉ copy code + `pm2 restart`.
+
+Đã kiểm thử: 38 file `tests/test-*.js` pass (37 file cũ + 1 file mới `test-admin-webauthn-reset.js`, 8
+kịch bản riêng đợt này).
+
+## Trước đó (PR #199 → #200, nhánh `claude/chao-ban-oo5ijl`)
 
 Xử lý nốt 4 mục "Thấp" bị bỏ qua ở đợt rà soát trước (PR #196/#197) — không phải bug rõ ràng, cần quyết
 định nghiệp vụ, nay xử lý theo hướng an toàn/hợp lý nhất:
