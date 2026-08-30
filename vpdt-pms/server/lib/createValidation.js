@@ -1070,6 +1070,37 @@ const CREATE_MODULE_CONFIGS = {
       payload.approvalComment = '';
     }
   },
+  // ===== NHÂN SỰ ("HCRC Đồng Hành" — hỏi & đáp chế độ/quy định công ty) =====
+  // hrFeedback: câu hỏi nhân viên gửi bộ phận Nhân Sự — MỞ CHO TOÀN BỘ NHÂN VIÊN, không cần quyền
+  // riêng để gửi (đúng khuôn itSupportTickets ở trên: ai cũng có thể có thắc mắc về chế độ/quy định);
+  // chỉ người có nhanSuManage/admin mới trả lời được (xem respondToHrFeedback() ở lib/recordActions.js).
+  // Mô hình 1 hỏi – 1 đáp, kết thúc: PENDING -> ANSWERED, không trao đổi qua lại nhiều lượt.
+  // KHÁC internalPosts (bảng tin CÔNG KHAI có duyệt bài/kiểm duyệt bình luận): câu hỏi ở đây RIÊNG TƯ,
+  // chỉ chính người hỏi + Nhân Sự đọc được (xem canViewHrFeedback() ở lib/recordViewScope.js).
+  hrFeedback: {
+    dbKey: 'hrFeedback',
+    forceOwnDept: true, // không có khái niệm chọn phòng ban (luôn là phòng ban của chính người hỏi)
+    getScope: () => ({}),
+    creatorField: 'creator', creatorNameField: 'creatorName',
+    extraValidate: (payload) => {
+      if (!payload.question || !String(payload.question).trim()) throw new CreateError(400, 'Vui lòng nhập nội dung câu hỏi');
+      payload.question = String(payload.question).trim().slice(0, 5000);
+      const allowedCategories = new Set(['BENEFITS', 'POLICY', 'SALARY', 'OTHER']);
+      payload.category = allowedCategories.has(payload.category) ? payload.category : 'OTHER';
+      // Thời điểm gửi do SERVER gán (không tin client) — khác itSupportTickets ở trên vốn nhận
+      // createdAt từ payload; đây là bản ghi 2 phía (nhân viên hỏi/Nhân Sự đáp) nên mốc thời gian
+      // phải là mốc server ghi nhận thật.
+      payload.createdAt = new Date().toLocaleString('vi-VN');
+      // Trạng thái/phản hồi/cờ chưa đọc LUÔN khởi tạo rỗng ở server — request tự soạn không thể tự
+      // xưng đã được Nhân Sự trả lời ngay lúc tạo, cũng không thể tự bật cờ chưa đọc của chính mình.
+      payload.status = 'PENDING';
+      payload.response = '';
+      payload.respondedBy = null;
+      payload.respondedByName = null;
+      payload.respondedAt = null;
+      payload.employeeUnread = false;
+    }
+  },
   // ===== ĐÀO TẠO (module con "Truyền Thông Nội Bộ" > Đào tạo) =====
   // Đợt 3: cờ trainingManage (đổi tên từ internalTrainingCreate cũ, tự động migrate — xem
   // public/index.html migrateLegacyPerms()) gác cả 4 việc TẠO MỚI: tải tài liệu vào kho, tạo lớp học,

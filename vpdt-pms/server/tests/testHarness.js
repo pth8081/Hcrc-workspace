@@ -28,6 +28,7 @@ const { HttpError } = require('../lib/httpErrors');
 const recordActions = require('../lib/recordActions');
 const { CREATE_MODULE_CONFIGS, validateAndPrepareCreate } = require('../lib/createValidation');
 const { MODULE_CONFIGS: WF_MODULE_CONFIGS, applyWorkflowAction } = require('../lib/workflowEngine');
+const { filterHrFeedbackForUser } = require('../lib/recordViewScope');
 
 const WF_ACTION_MAP = { approve: 'APPROVE', reject: 'REJECT', 'request-info': 'REQUEST_INFO', 'request-changes': 'REQUEST_CHANGES' };
 
@@ -67,7 +68,8 @@ function createMockState(seed) {
     tasks: [],
     budgetTemplates: [], budgetPeriods: [], budgetEntries: [], budgetDeptWorkflows: {},
     licenses: [], licenseTypes: [],
-    itServiceRenewals: []
+    itServiceRenewals: [],
+    hrFeedback: []
   }, seed || {});
 }
 
@@ -134,7 +136,11 @@ function buildActionHandlers(state) {
 
     // ===== HỖ TRỢ IT — Gia Hạn Dịch Vụ CNTT =====
     'itServiceRenewals:edit': (u, item, body) => recordActions.editItServiceRenewal(u, item, body),
-    'itServiceRenewals:renew': (u, item, body) => recordActions.renewItServiceRenewal(u, item, body)
+    'itServiceRenewals:renew': (u, item, body) => recordActions.renewItServiceRenewal(u, item, body),
+
+    // ===== NHÂN SỰ — HCRC Đồng Hành (hỏi & đáp) =====
+    'hrFeedback:respond': (u, item, body) => recordActions.respondToHrFeedback(u, item, body),
+    'hrFeedback:mark-read': (u, item) => recordActions.markHrFeedbackRead(u, item)
   };
 }
 
@@ -143,10 +149,17 @@ function buildActionHandlers(state) {
 function createDispatcher(state) {
   const actionHandlers = buildActionHandlers(state);
 
-  function buildDataPayload() {
+  function buildDataPayload(username) {
     // Khớp đúng field mà initDatabase() (public/index.html) gán từ GET /api/data — chỉ liệt kê những
     // field 3 module test này thực sự đọc, phần còn lại initDatabase() tự "|| []"/"|| {}" nên an toàn.
-    return { ...state };
+    const data = { ...state };
+    // hrFeedback (Nhân Sự — HCRC Đồng Hành): collection DUY NHẤT trong mock này phải tái hiện đúng
+    // bước LỌC QUYỀN XEM phía server (routes/data.js) — tính riêng tư "chỉ chính người hỏi + Nhân Sự
+    // đọc được" là yêu cầu nghiệp vụ CỐT LÕI, không thể chỉ dựa vào bộ lọc ở giao diện. Dùng chính hàm
+    // thật lib/recordViewScope.js filterHrFeedbackForUser(), không tự đoán lại luật.
+    const viewer = (state.users || []).find(u => u.username === username);
+    if (viewer) data.hrFeedback = filterHrFeedbackForUser(state.hrFeedback, viewer);
+    return data;
   }
 
   return async function dispatch(method, url, bodyStr, username) {
@@ -156,7 +169,7 @@ function createDispatcher(state) {
 
     try {
       if (method === 'GET' && pathName === '/api/data') {
-        return { status: 200, body: buildDataPayload() };
+        return { status: 200, body: buildDataPayload(username) };
       }
       if (method === 'GET' && pathName === '/api/auth/me') {
         return { status: 200, body: { ok: true } };
