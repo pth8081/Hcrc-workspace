@@ -6997,7 +6997,27 @@ input[data-sdd-list] {
          "tắt hẳn" vì luôn bắt buộc phải có, không có ngoại lệ. -->
     <div id="pfTotpSection" class="hidden space-y-2 text-xs">
       <p class="text-[11px] text-gray-500">Tài khoản Quản Trị Viên bắt buộc bật xác thực 2 lớp (TOTP) — hiện đang <b class="text-emerald-700">✅ đã bật</b>.</p>
-      <p class="text-[11px] text-gray-500">Đổi điện thoại hoặc cần thiết lập lại? Gỡ bên dưới rồi đăng nhập lại — hệ thống sẽ tự đưa bạn tới màn thiết lập TOTP mới ngay lập tức.</p>
+
+      <!-- Thêm thiết bị Authenticator khác mà KHÔNG cần gỡ + thiết lập lại từ đầu — hiện lại ĐÚNG mã QR
+           đang dùng (không sinh bí mật mới), nên quét thêm ở máy thứ 2 không làm mất hiệu lực máy thứ
+           nhất. Xem lib/totp.js POST /totp/reveal-secret. -->
+      <div class="border rounded p-2 space-y-2 bg-gray-50">
+        <label class="block font-semibold text-gray-700">➕ Thêm Thiết Bị Authenticator Khác</label>
+        <p class="text-[11px] text-gray-500">Hiện lại đúng mã QR đang dùng để quét thêm trên điện thoại thứ 2 — không ảnh hưởng thiết bị hiện tại.</p>
+        <div id="pfTotpRevealWrap" class="hidden space-y-2">
+          <div class="flex justify-center"><img id="pfTotpRevealQrImg" class="border rounded w-32 h-32" alt="Mã QR TOTP hiện tại"></div>
+          <div class="flex gap-2">
+            <input id="pfTotpRevealManualKey" type="text" readonly class="w-full border p-1.5 rounded bg-white font-mono text-[11px]">
+            <button type="button" onclick="copyPfTotpRevealKey()" class="bg-gray-200 px-2 rounded text-xs font-bold hover:bg-gray-300 shrink-0">Chép</button>
+          </div>
+        </div>
+        <div class="flex gap-2">
+          <input id="pfTotpRevealPassword" type="password" autocomplete="current-password" placeholder="Nhập mật khẩu để xác nhận" class="flex-1 border p-1.5 rounded text-xs">
+          <button type="button" onclick="revealTotpSecretForNewDevice()" class="bg-blue-600 text-white px-3 py-1.5 rounded font-bold hover:bg-blue-700 text-xs whitespace-nowrap">Hiện Mã QR</button>
+        </div>
+      </div>
+
+      <p class="text-[11px] text-gray-500">Đổi điện thoại hoặc cần thiết lập lại từ đầu? Gỡ bên dưới rồi đăng nhập lại — hệ thống sẽ tự đưa bạn tới màn thiết lập TOTP mới ngay lập tức.</p>
       <div>
         <label class="block font-semibold text-gray-600 mb-1">Nhập mật khẩu để xác nhận gỡ</label>
         <input id="pfTotpRemovePassword" type="password" autocomplete="current-password" class="w-full border p-2 rounded">
@@ -10083,6 +10103,8 @@ function openProfileModal() {
   // thường. Tới được màn này đã chắc chắn totpEnabled=true (xem chú thích #pfTotpSection).
   document.getElementById('btnProfileSubTotp').classList.toggle('hidden', !currentUser.perms?.admin);
   document.getElementById('pfTotpRemovePassword').value = '';
+  document.getElementById('pfTotpRevealPassword').value = '';
+  document.getElementById('pfTotpRevealWrap').classList.add('hidden');
 
   initPwaInstallUI();
 
@@ -11046,6 +11068,39 @@ async function removeMyTotp() {
   } catch (e) {
     alert('⛔ Không thể kết nối tới máy chủ: ' + e.message);
   }
+}
+
+// Thêm thiết bị Authenticator KHÁC mà không cần gỡ TOTP hiện tại — hiện lại ĐÚNG mã QR đang dùng (xem
+// POST /api/auth/totp/reveal-secret ở routes/auth.js), quét thêm trên máy thứ 2 không ảnh hưởng máy thứ
+// nhất vì cả 2 cùng giữ chung 1 bí mật TOTP.
+async function revealTotpSecretForNewDevice() {
+  const password = document.getElementById('pfTotpRevealPassword').value;
+  if (!password) return alert('Vui lòng nhập mật khẩu để xác nhận.');
+  try {
+    const res = await fetch('/api/auth/totp/reveal-secret', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ password })
+    });
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      return alert(body.error || '⛔ Không thể hiện lại mã QR');
+    }
+    const data = await res.json();
+    document.getElementById('pfTotpRevealQrImg').src = data.qrDataUrl;
+    document.getElementById('pfTotpRevealManualKey').value = data.secret;
+    document.getElementById('pfTotpRevealWrap').classList.remove('hidden');
+    document.getElementById('pfTotpRevealPassword').value = '';
+    logSystemAction('USER_MGM', 'TOTP_REVEAL_SECRET', 'Xem lại mã QR TOTP hiện tại để thêm thiết bị Authenticator khác.', 'SUCCESS', currentUser?.username);
+  } catch (e) {
+    alert('⛔ Không thể kết nối tới máy chủ: ' + e.message);
+  }
+}
+
+function copyPfTotpRevealKey() {
+  const el = document.getElementById('pfTotpRevealManualKey');
+  el.select();
+  navigator.clipboard?.writeText(el.value).catch(() => { try { document.execCommand('copy'); } catch (e) {} });
 }
 
 // Phần UI sau khi đã có phiên đăng nhập hợp lệ — dùng chung cho đăng nhập thật (login()) và khôi
