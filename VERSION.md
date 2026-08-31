@@ -1,9 +1,35 @@
 # Phiên bản hiện tại
 
-**1.92.0** — đã merge vào `main` (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở
+**1.93.0** — đã merge vào `main` (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở
 badge góc màn hình + `/api/health`).
 
-## Cập nhật gần nhất (PR #204, nhánh `claude/chao-ban-oo5ijl`)
+## Cập nhật gần nhất (PR #206, nhánh `claude/chao-ban-oo5ijl`)
+
+Bổ sung cho tính năng TOTP bắt buộc admin ở PR #204: trước đây, muốn thêm 1 thiết bị Authenticator khác
+(vd điện thoại thứ 2) bắt buộc phải gỡ TOTP rồi thiết lập lại từ đầu, vì mã QR/bí mật chỉ hiện đúng 1 lần
+lúc thiết lập ban đầu. Người dùng phản ánh muốn đăng ký Authenticator trên 2 thiết bị — PR này thêm khả
+năng tự hiện lại đúng mã QR/bí mật ĐANG DÙNG (không sinh bí mật mới) để quét thêm ở thiết bị thứ 2, không
+ảnh hưởng thiết bị thứ nhất (TOTP vốn là 1 bí mật dùng chung — nhiều app cùng giữ đúng 1 bí mật đều sinh
+ra cùng mã hợp lệ ở mỗi thời điểm, không có khái niệm "thiết bị chính/phụ").
+
+- `routes/auth.js`: route mới `POST /totp/reveal-secret` — giải mã `totpSecretEnc` đã lưu (bằng
+  `decryptSecret()` có sẵn từ trước) và trả lại đúng secret/otpauth URI/QR hiện tại. Bắt buộc xác nhận lại
+  mật khẩu hiện tại (cùng cơ chế lockout/rate-limit như `DELETE /totp`), gửi email báo mỗi lần dùng vì đây
+  là hành động lộ ra 1 bí mật còn hiệu lực. **Không** tăng `sessionVersion` — giống `/setup-verify`, đây là
+  hành động "thêm" chứ không phải "thu hồi lòng tin" (khác `DELETE /totp` và `DELETE /totp/:username`).
+- `public/index.html`: thêm khối "➕ Thêm Thiết Bị Authenticator Khác" trong Hồ Sơ Cá Nhân → tab Xác Thực 2
+  Lớp — nhập mật khẩu → hiện QR + mã thủ công để quét thêm trên máy thứ 2.
+
+**Deploy impact:** không đổi `server/sql/schema.sql`, không thêm biến môi trường mới (tái dùng
+`EMAIL_ENCRYPTION_KEY` đã có), **không** thêm dependency mới (tái dùng nguyên `otplib`/`qrcode` đã cài từ
+PR #204) — chỉ copy code + `pm2 restart`, không cần `npm install` lại.
+
+Đã kiểm thử: 39 file `tests/test-*.js` pass, trong đó `test-admin-totp.js` có thêm 5 kịch bản mới cho
+`reveal-secret` (thiếu mật khẩu, chưa bật TOTP, sai mật khẩu, đúng mật khẩu trả đúng bí mật đang dùng — xác
+minh bằng cách đăng nhập thật lại bằng mã sinh từ bí mật trả về, không tăng sessionVersion) — tổng 26/26
+kịch bản trong file này pass.
+
+## Trước đó (PR #204, nhánh `claude/chao-ban-oo5ijl`)
 
 Hoàn tất yêu cầu "tài khoản admin bắt buộc xác thực hai yếu tố" — bước tiếp theo sau PR #202 (đã làm
 trước phần admin gỡ hộ vân tay khi mất thiết bị). Chọn TOTP (Google/Microsoft Authenticator...) làm
