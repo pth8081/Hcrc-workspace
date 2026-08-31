@@ -147,15 +147,29 @@ async function requireAuth(req, res, next) {
 // Dùng SAU requireAuth (cần req.freshUser đã gắn sẵn) — chặn mọi route NGHIỆP VỤ khi tài khoản đang
 // bị đánh dấu bắt buộc đổi mật khẩu (mustChangePassword: admin vừa đặt/reset mật khẩu tạm cho user,
 // hoặc tài khoản vẫn đang dùng đúng mật khẩu mặc định "123456" từ lúc khởi tạo hệ thống — xem
-// seedDefaults.js flagKnownDefaultPasswords()). KHÔNG mount ở routes/auth.js (GET/PATCH /me, /logout)
-// — đó chính là lối thoát duy nhất để đổi mật khẩu và gỡ cờ này, chặn luôn ở đó sẽ tự khoá người dùng
-// không lối ra. Cũng KHÔNG mount ở routes/systemLog.js — ghi nhật ký (kể cả lúc đang bị buộc đổi mật
-// khẩu) không rủi ro gì và có giá trị lưu vết, không cần chặn.
+// seedDefaults.js flagKnownDefaultPasswords()), HOẶC khi tài khoản có quyền admin nhưng CHƯA thiết lập
+// xác thực 2 lớp (TOTP) — bắt buộc theo yêu cầu "account có quyền admin bắt buộc phải xác thực hai yếu
+// tố" (xem lib/totp.js). 2 điều kiện khác nhau nhưng dùng CHUNG 1 middleware (thay vì thêm middleware
+// riêng) để không phải rà soát/thêm mount ở toàn bộ ~17 route file đã mount blockIfMustChangePassword —
+// chỉ cần sửa ĐÚNG 1 chỗ này là áp dụng ngay cho mọi route nghiệp vụ hiện có. Không cần cờ lưu trữ riêng
+// "cần thiết lập TOTP" — điều kiện được SUY RA ngay tại đây (perms.admin && !totpEnabled), tự động đúng
+// ngay khi 1 tài khoản vừa được cấp quyền admin (routes/data.js prepareUsersForSave) mà chưa từng thiết
+// lập, không cần bất kỳ bước ghi cờ thêm nào ở nơi cấp quyền.
+// KHÔNG mount ở routes/auth.js (GET/PATCH /me, /logout, các route /totp/*) — đó chính là lối thoát duy
+// nhất để đổi mật khẩu/thiết lập TOTP và gỡ các cờ này, chặn luôn ở đó sẽ tự khoá người dùng không lối
+// ra. Cũng KHÔNG mount ở routes/systemLog.js — ghi nhật ký (kể cả lúc đang bị chặn) không rủi ro gì và
+// có giá trị lưu vết, không cần chặn.
 function blockIfMustChangePassword(req, res, next) {
   if (req.freshUser?.mustChangePassword) {
     return res.status(403).json({
       error: 'Bạn cần đổi mật khẩu trước khi tiếp tục sử dụng hệ thống.',
       mustChangePassword: true
+    });
+  }
+  if (req.freshUser?.perms?.admin && !req.freshUser?.totpEnabled) {
+    return res.status(403).json({
+      error: 'Tài khoản Quản Trị Viên bắt buộc phải thiết lập xác thực 2 lớp (TOTP) trước khi tiếp tục sử dụng hệ thống.',
+      totpSetupRequired: true
     });
   }
   next();

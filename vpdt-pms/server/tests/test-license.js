@@ -26,7 +26,9 @@ const CREATOR2 = { username: 'hc2', name: 'Trần Thị Hành Chính', dept: 'H�
 const APPROVER = { username: 'approver1', name: 'Người Duyệt Giấy Phép', dept: 'Ban Giám Đốc', perms: { licenseApprove: true }, active: true };
 const VIEWER = { username: 'viewer1', name: 'Người Xem Giấy Phép', dept: 'Kế Toán', perms: { licenseView: true }, active: true };
 const EMP_NOPERM = { username: 'emp_noperm', name: 'Người Không Quyền', dept: 'Hành Chính', perms: {}, active: true };
-const ADMIN = { username: 'admin', name: 'Quản Trị Viên', dept: 'Hành Chính', perms: { admin: true }, active: true };
+// totpEnabled:true — admin bắt buộc xác thực 2 lớp (xem lib/totp.js/proceedAfterAuth() ở index.html);
+// thiếu field này khiến loginAs() (gọi thẳng proceedAfterAuth()) bị chặn ở màn bắt buộc thiết lập TOTP.
+const ADMIN = { username: 'admin', name: 'Quản Trị Viên', dept: 'Hành Chính', perms: { admin: true }, active: true, totpEnabled: true };
 
 const state = createMockState({
   depts: ['Hành Chính', 'Ban Giám Đốc', 'Kế Toán'],

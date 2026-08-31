@@ -702,12 +702,26 @@ input[data-sdd-list] {
               <input id="txtUser" type="text" autocomplete="username" placeholder="Tên đăng nhập">
             </div>
           </div>
-          <div class="loginpage-field">
+          <div id="loginPassFieldWrap" class="loginpage-field">
             <label for="txtPass">Mật khẩu</label>
             <div class="loginpage-input-wrap">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><rect x="5" y="10.5" width="14" height="9.5" rx="2"/><path d="M8 10.5V8a4 4 0 0 1 8 0v2.5"/></svg>
               <input id="txtPass" type="password" autocomplete="current-password" placeholder="••••••••">
             </div>
+          </div>
+
+          <!-- Bước 2 của đăng nhập cho admin đã bật TOTP (xem lib/totp.js/login()/submitTotpLoginStep()
+               ở script cuối trang) — mặc định ẩn, chỉ hiện SAU KHI mật khẩu ở trên đã đúng và server trả
+               totpRequired:true (KHÔNG cấp cookie phiên ở bước đó). Nhận cả mã 6 số hiện tại lẫn 1 trong
+               các mã khôi phục (8 số) trong CÙNG 1 ô, tự phân biệt theo độ dài ở phía client. -->
+          <div id="loginTotpStepWrap" class="loginpage-field hidden">
+            <label for="txtTotpCode">Mã xác thực 2 lớp (TOTP)</label>
+            <div class="loginpage-input-wrap">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><rect x="4" y="4" width="16" height="16" rx="3"/><path d="M9 9h.01M15 9h.01M9 15h.01M15 15h.01"/></svg>
+              <input id="txtTotpCode" type="text" inputmode="numeric" autocomplete="one-time-code" placeholder="Mã 6 số hoặc mã khôi phục">
+            </div>
+            <p class="text-xs text-gray-400 mt-1.5">Tài khoản <b id="loginTotpUsernameLabel"></b> yêu cầu xác thực 2 lớp. Mất điện thoại? Dùng 1 trong các mã khôi phục đã lưu lúc thiết lập, hoặc nhờ quản trị viên khác gỡ hộ.</p>
+            <button type="button" onclick="cancelTotpLoginStep()" class="text-xs text-gray-500 hover:underline mt-1.5">← Quay lại đăng nhập bằng mật khẩu</button>
           </div>
 
           <!-- CAPTCHA số tự vẽ trên server — chỉ hiện khi server bật CAPTCHA_ENABLED=true (xem
@@ -4748,6 +4762,13 @@ input[data-sdd-list] {
                   <div id="uWebauthnListWrap" class="space-y-1"></div>
                   <p class="text-[11px] text-gray-500 italic mt-1">Chỉ Quản Trị Viên gỡ được thiết bị của người khác — dùng khi người đó mất thiết bị (hoặc quên mật khẩu luôn) nên không tự đăng nhập lại để tự gỡ. Gỡ xong họ cần đăng ký lại thiết bị mới nếu muốn tiếp tục dùng vân tay/Face ID.</p>
                 </div>
+                <!-- CHỈ hiện khi target user đang có perms.admin (xem editUser()) — TOTP bắt buộc riêng
+                     cho admin, khác khối vân tay ở trên vốn áp dụng chung mọi tài khoản. -->
+                <div id="uTotpWrap" class="hidden mt-2">
+                  <label class="block font-semibold text-gray-700 mb-1">🔐 Xác thực 2 lớp (TOTP) — bắt buộc cho Quản Trị Viên</label>
+                  <div id="uTotpStatusWrap" class="text-xs"></div>
+                  <p class="text-[11px] text-gray-500 italic mt-1">Chỉ Quản Trị Viên gỡ được TOTP của người khác — dùng khi người đó mất điện thoại (cài Authenticator) nên không tự đăng nhập lại để tự gỡ. Gỡ xong họ sẽ bị bắt thiết lập lại NGAY ở lần đăng nhập kế tiếp, không có ngoại lệ.</p>
+                </div>
               </div>
             </div>
             <div class="space-y-2">
@@ -6813,6 +6834,62 @@ input[data-sdd-list] {
   </div>
 </div>
 
+<!-- MODAL BẮT BUỘC THIẾT LẬP TOTP — hiện khi tài khoản có perms.admin nhưng chưa totpEnabled (xem
+     lib/auth.js blockIfMustChangePassword — chặn mọi API nghiệp vụ khác cho tới khi thiết lập xong,
+     đây không chỉ là rào chắn ở giao diện). Cùng khuôn KHÔNG có nút đóng/bấm ra ngoài như
+     mustChangePasswordModal — chỉ thoát bằng thiết lập xong hoặc Đăng Xuất. 2 bước: (1) quét QR + xác
+     nhận mã, (2) hiện 10 mã khôi phục DUY NHẤT 1 LẦN, bắt xác nhận đã lưu trước khi vào hệ thống. -->
+<div id="totpSetupWallModal" class="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center hidden z-[60] p-4">
+  <div class="bg-white p-6 rounded-lg shadow-xl max-w-md w-full space-y-4 max-h-[90vh] overflow-y-auto">
+    <div class="border-b pb-3">
+      <h3 class="font-bold text-gray-800 text-base flex items-center gap-2">🔐 Bắt Buộc Thiết Lập Xác Thực 2 Lớp</h3>
+      <p class="text-xs text-gray-500 mt-1">Tài khoản có quyền Quản Trị Viên bắt buộc phải bật xác thực 2 lớp (TOTP) trước khi tiếp tục sử dụng hệ thống.</p>
+    </div>
+
+    <div id="totpSetupQrStep" class="space-y-3 text-xs">
+      <ol class="list-decimal list-inside space-y-1 text-gray-600">
+        <li>Mở app Authenticator (Google Authenticator, Microsoft Authenticator...) trên điện thoại.</li>
+        <li>Quét mã QR dưới đây bằng camera của app. Nếu đang xem màn hình NÀY trên chính điện thoại, chọn "Nhập mã thiết lập thủ công" trong app thay vì quét.</li>
+        <li>Nhập mã 6 số app vừa hiện ra vào ô bên dưới để xác nhận đã thiết lập đúng.</li>
+      </ol>
+      <div class="flex justify-center">
+        <img id="totpSetupQrImg" class="border rounded w-40 h-40" alt="Mã QR thiết lập xác thực 2 lớp">
+      </div>
+      <div>
+        <label class="block font-semibold text-gray-600 mb-1">Mã thiết lập thủ công</label>
+        <div class="flex gap-2">
+          <input id="totpSetupManualKey" type="text" readonly class="w-full border p-2 rounded bg-gray-100 font-mono text-[11px]">
+          <button type="button" onclick="copyTotpManualKey()" class="bg-gray-200 px-2 rounded font-bold hover:bg-gray-300 shrink-0">Chép</button>
+        </div>
+      </div>
+      <a id="totpSetupOtpauthLink" href="#" class="block text-center text-blue-600 font-semibold hover:underline">📱 Mở trực tiếp trong app Authenticator (nếu đang xem trên cùng điện thoại)</a>
+      <form onsubmit="submitTotpSetupVerify(event)" class="space-y-2 pt-1">
+        <div>
+          <label class="block font-semibold text-gray-600 mb-1">Mã 6 số từ app Authenticator</label>
+          <input id="totpSetupCode" type="text" inputmode="numeric" autocomplete="one-time-code" class="w-full border p-2 rounded text-center tracking-widest font-bold" maxlength="6" required>
+        </div>
+        <div class="flex justify-between items-center pt-1">
+          <button type="button" onclick="logout()" class="text-gray-500 font-semibold hover:underline">Đăng Xuất</button>
+          <button type="submit" class="bg-blue-600 text-white px-5 py-2 rounded font-bold hover:bg-blue-700">Xác Nhận</button>
+        </div>
+      </form>
+    </div>
+
+    <div id="totpSetupBackupStep" class="space-y-3 text-xs hidden">
+      <p class="font-bold text-emerald-700">✅ Đã bật xác thực 2 lớp thành công!</p>
+      <p class="text-gray-600">Lưu lại 10 mã khôi phục dưới đây ở nơi an toàn — mỗi mã dùng được ĐÚNG 1 LẦN khi bị mất điện thoại/không mở được app Authenticator. Các mã này sẽ KHÔNG hiển thị lại sau khi đóng màn này.</p>
+      <div id="totpSetupBackupCodes" class="grid grid-cols-2 gap-1.5 font-mono bg-gray-50 border rounded p-3 text-[11px]"></div>
+      <label class="flex items-center gap-2 font-semibold text-gray-700">
+        <input type="checkbox" id="totpSetupBackupConfirm" onchange="document.getElementById('totpSetupContinueBtn').disabled = !this.checked">
+        Tôi đã lưu lại các mã khôi phục này
+      </label>
+      <div class="flex justify-end pt-1">
+        <button id="totpSetupContinueBtn" type="button" disabled onclick="completeTotpSetupWall()" class="bg-blue-600 text-white px-5 py-2 rounded font-bold hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed">Tiếp Tục Vào Hệ Thống</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <!-- MODAL CÁ NHÂN HÓA -->
 <div id="profileModal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center hidden z-50 p-4">
   <div class="bg-white p-6 rounded-lg shadow-xl max-w-md w-full space-y-4">
@@ -6829,6 +6906,7 @@ input[data-sdd-list] {
       <button type="button" id="btnProfileSubPassword" onclick="setProfileSubTab('PASSWORD')" class="px-3 py-1.5 rounded font-bold">🔒 Đổi Mật Khẩu</button>
       <button type="button" id="btnProfileSubPin" onclick="setProfileSubTab('PIN')" class="hidden px-3 py-1.5 rounded font-bold">🔑 Đổi Mã PIN</button>
       <button type="button" id="btnProfileSubWebauthn" onclick="setProfileSubTab('WEBAUTHN')" class="hidden px-3 py-1.5 rounded font-bold">🖐️ Vân Tay/Face ID</button>
+      <button type="button" id="btnProfileSubTotp" onclick="setProfileSubTab('TOTP')" class="hidden px-3 py-1.5 rounded font-bold">🔐 Xác Thực 2 Lớp</button>
     </div>
 
     <div id="profileSubInfo" class="text-xs">
@@ -6909,6 +6987,23 @@ input[data-sdd-list] {
       <div class="flex gap-2">
         <input id="pfWebauthnDeviceLabel" type="text" placeholder="Tên thiết bị (VD: iPhone của tôi)" class="flex-1 border p-2 rounded text-xs">
         <button type="button" id="btnRegisterBiometricDevice" onclick="registerBiometricDevice()" class="bg-emerald-600 text-white px-3 py-2 rounded font-bold hover:bg-emerald-700 text-xs whitespace-nowrap">➕ Đăng Ký Thiết Bị Này</button>
+      </div>
+    </div>
+
+    <!-- Xác thực 2 lớp (TOTP) — nút tab CHỈ hiện cho tài khoản có perms.admin (bắt buộc theo yêu cầu, xem
+         lib/totp.js). Đăng nhập vào được tới tận màn Hồ Sơ Cá Nhân này đã đồng nghĩa totpEnabled=true
+         (blockIfMustChangePassword chặn admin CHƯA bật ở MỌI route nghiệp vụ khác trước khi tới được
+         đây) — tab chỉ có 1 hành động: gỡ để thiết lập lại (mất điện thoại, đổi máy...), KHÔNG có nút
+         "tắt hẳn" vì luôn bắt buộc phải có, không có ngoại lệ. -->
+    <div id="pfTotpSection" class="hidden space-y-2 text-xs">
+      <p class="text-[11px] text-gray-500">Tài khoản Quản Trị Viên bắt buộc bật xác thực 2 lớp (TOTP) — hiện đang <b class="text-emerald-700">✅ đã bật</b>.</p>
+      <p class="text-[11px] text-gray-500">Đổi điện thoại hoặc cần thiết lập lại? Gỡ bên dưới rồi đăng nhập lại — hệ thống sẽ tự đưa bạn tới màn thiết lập TOTP mới ngay lập tức.</p>
+      <div>
+        <label class="block font-semibold text-gray-600 mb-1">Nhập mật khẩu để xác nhận gỡ</label>
+        <input id="pfTotpRemovePassword" type="password" autocomplete="current-password" class="w-full border p-2 rounded">
+      </div>
+      <div class="flex justify-end">
+        <button type="button" onclick="removeMyTotp()" class="bg-red-600 text-white px-4 py-2 rounded font-bold hover:bg-red-700">🗑️ Gỡ Xác Thực 2 Lớp</button>
       </div>
     </div>
 
@@ -9934,11 +10029,11 @@ function saveContractExpiryDeptContacts() {
 // Tab đang hiện trong #profileModal — 4 tab tách riêng (xem setProfileSubTab()), nút Mã PIN/Vân Tay chỉ
 // hiện khi áp dụng cho tài khoản đang đăng nhập (openProfileModal() bật/tắt).
 function setProfileSubTab(tab) {
-  const panels = { INFO: 'profileSubInfo', PASSWORD: 'profileSubPassword', PIN: 'pfPinSection', WEBAUTHN: 'pfWebauthnSection' };
+  const panels = { INFO: 'profileSubInfo', PASSWORD: 'profileSubPassword', PIN: 'pfPinSection', WEBAUTHN: 'pfWebauthnSection', TOTP: 'pfTotpSection' };
   Object.entries(panels).forEach(([key, id]) => {
     document.getElementById(id)?.classList.toggle('hidden', key !== tab);
   });
-  const buttons = { INFO: 'btnProfileSubInfo', PASSWORD: 'btnProfileSubPassword', PIN: 'btnProfileSubPin', WEBAUTHN: 'btnProfileSubWebauthn' };
+  const buttons = { INFO: 'btnProfileSubInfo', PASSWORD: 'btnProfileSubPassword', PIN: 'btnProfileSubPin', WEBAUTHN: 'btnProfileSubWebauthn', TOTP: 'btnProfileSubTotp' };
   Object.entries(buttons).forEach(([key, id]) => {
     const btn = document.getElementById(id);
     if (!btn) return;
@@ -9983,6 +10078,11 @@ function openProfileModal() {
     document.getElementById('pfWebauthnDeviceLabel').value = '';
     renderWebauthnDeviceList();
   }
+
+  // Chỉ admin mới bắt buộc TOTP (xem lib/totp.js) — tab này chỉ hiện cho họ, không áp dụng tài khoản
+  // thường. Tới được màn này đã chắc chắn totpEnabled=true (xem chú thích #pfTotpSection).
+  document.getElementById('btnProfileSubTotp').classList.toggle('hidden', !currentUser.perms?.admin);
+  document.getElementById('pfTotpRemovePassword').value = '';
 
   initPwaInstallUI();
 
@@ -10245,6 +10345,48 @@ async function deleteAdminBiometricDevice(username, id) {
     }
     await renderAdminWebauthnDeviceList(username);
     logSystemAction('USER_MGM', 'REMOVE_WEBAUTHN_DEVICE', `Gỡ hộ thiết bị vân tay/Face ID của người dùng [${username}]`, 'SUCCESS', username);
+  } catch (err) {
+    alert('⛔ Không thể kết nối tới máy chủ: ' + err.message);
+  }
+}
+
+// ==========================================
+// ADMIN XEM/GỠ HỘ TOTP CỦA NGƯỜI KHÁC (#uTotpWrap trong màn Sửa Người Dùng) — cùng lý do/khuôn với khối
+// vân tay ở trên, riêng cho TOTP (bắt buộc với admin, xem lib/totp.js). Dùng khi 1 admin mất điện thoại
+// (cài Authenticator) nên không tự đăng nhập lại để tự gỡ — chỉ Quản Trị Viên khác gọi được (server tự
+// chặn lại, xem GET/DELETE /api/auth/totp/:username ở routes/auth.js).
+// ==========================================
+async function renderAdminTotpStatus(username) {
+  const wrap = document.getElementById('uTotpStatusWrap');
+  wrap.innerHTML = '<p class="text-gray-400 italic">Đang tải...</p>';
+  try {
+    const res = await fetch(`/api/auth/totp/status/${encodeURIComponent(username)}`);
+    if (!res.ok) { wrap.innerHTML = '<p class="text-red-600 italic">Không tải được trạng thái.</p>'; return; }
+    const data = await res.json();
+    if (data.totpEnabled) {
+      wrap.innerHTML = `
+        <div class="flex justify-between items-center bg-gray-50 border rounded p-2">
+          <span class="text-emerald-700 font-semibold">✅ Đã bật</span>
+          <button type="button" onclick="deleteAdminTotp('${escapeHtml(username)}')" class="text-red-600 font-bold hover:underline">🗑️ Gỡ Hộ</button>
+        </div>`;
+    } else {
+      wrap.innerHTML = '<p class="text-amber-700 font-semibold">⚠️ Chưa thiết lập — tài khoản sẽ bị chặn mọi thao tác nghiệp vụ cho tới khi tự thiết lập ở lần đăng nhập kế tiếp.</p>';
+    }
+  } catch (err) {
+    wrap.innerHTML = '<p class="text-red-600 italic">Không tải được trạng thái.</p>';
+  }
+}
+
+async function deleteAdminTotp(username) {
+  if (!confirm(`Gỡ xác thực 2 lớp (TOTP) của "${username}"? Người đó sẽ bị bắt thiết lập lại NGAY ở lần đăng nhập kế tiếp (mọi phiên đang mở của họ cũng bị đăng xuất ngay).`)) return;
+  try {
+    const res = await fetch(`/api/auth/totp/${encodeURIComponent(username)}`, { method: 'DELETE' });
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      return alert(`⛔ ${body.error || 'Không thể gỡ xác thực 2 lớp'}`);
+    }
+    await renderAdminTotpStatus(username);
+    logSystemAction('USER_MGM', 'REMOVE_TOTP', `Gỡ hộ xác thực 2 lớp (TOTP) của người dùng [${username}]`, 'SUCCESS', username);
   } catch (err) {
     alert('⛔ Không thể kết nối tới máy chủ: ' + err.message);
   }
@@ -10570,8 +10712,15 @@ async function loginWithBiometric() {
 // (dù do double-click/Enter dồn dập hay do tự bấm refresh) — xem thêm phần khoá cả captcha widget dưới.
 let loginInFlight = false;
 
+// Username đang chờ bước 2 (nhập mã TOTP) — null khi đang ở bước 1 (mật khẩu) bình thường. Đặt sau khi
+// POST /login trả totpRequired:true (mật khẩu đúng nhưng admin đã bật TOTP — CHƯA có cookie phiên nào ở
+// bước đó); login() (được form submit gọi lại khi bấm nút lần 2) tự rẽ nhánh sang submitTotpLoginStep()
+// thay vì gửi lại mật khẩu, vì cùng 1 nút/form được dùng chung cho cả 2 bước.
+let pendingTotpLoginUsername = null;
+
 async function login() {
   if (loginInFlight) return;
+  if (pendingTotpLoginUsername) return submitTotpLoginStep();
   const u = document.getElementById('txtUser').value.trim();
   const p = document.getElementById('txtPass').value.trim();
   if (!u || !p) return alert('Vui lòng nhập tên đăng nhập và mật khẩu!');
@@ -10615,6 +10764,13 @@ async function login() {
     return alert('⛔ Không thể kết nối tới máy chủ: ' + e.message);
   }
 
+  // Admin đã bật TOTP -> mật khẩu đúng nhưng CHƯA đăng nhập xong (KHÔNG có cookie phiên nào được cấp ở
+  // response này) — chuyển sang bước 2 nhập mã 2 lớp thay vì coi như đăng nhập thành công.
+  if (user.totpRequired) {
+    enterTotpLoginStep(user.username, btn, btnCaptchaRefresh, txtCaptchaEl, btnBioEl);
+    return;
+  }
+
   // ĐĂNG NHẬP THÀNH CÔNG — cố tình KHÔNG gọi resetLoginWidgets() ở đây (khác bản trước): trước đây khối
   // finally luôn chạy dù thành công hay thất bại, bật lại nút "Đăng Nhập" + lấy ngay 1 mã CAPTCHA MỚI
   // TRẮNG TRƠN ngay khi POST /login vừa trả lời xong — nhưng đăng nhập thành công thì CHƯA vào giao diện
@@ -10643,17 +10799,113 @@ async function login() {
   }
 }
 
+// Chuyển màn đăng nhập sang bước 2 (nhập mã TOTP) — gọi khi POST /login trả totpRequired:true. Ẩn các
+// trường bước 1 (tên đăng nhập/mật khẩu/CAPTCHA/nút vân tay), hiện ô nhập mã, và mở lại nút "Đăng nhập"
+// (đang bị login() khoá tạm) để dùng cho lượt bấm kế tiếp — login() sẽ tự rẽ sang submitTotpLoginStep()
+// vì pendingTotpLoginUsername đã được đặt.
+function enterTotpLoginStep(username, btn, btnCaptchaRefresh, txtCaptchaEl, btnBioEl) {
+  loginInFlight = false;
+  pendingTotpLoginUsername = username;
+  if (btn) { btn.disabled = false; btn.innerHTML = btnLoginOriginalHTML; }
+  if (btnCaptchaRefresh) btnCaptchaRefresh.disabled = false;
+  if (txtCaptchaEl) txtCaptchaEl.disabled = false;
+  if (btnBioEl) { btnBioEl.disabled = false; btnBioEl.classList.add('hidden'); }
+  document.getElementById('loginUserFieldWrap').classList.add('hidden');
+  document.getElementById('loginPassFieldWrap').classList.add('hidden');
+  document.getElementById('captchaField').classList.add('hidden');
+  document.getElementById('loginTotpUsernameLabel').textContent = username;
+  document.getElementById('loginTotpStepWrap').classList.remove('hidden');
+  const codeEl = document.getElementById('txtTotpCode');
+  if (codeEl) { codeEl.value = ''; setTimeout(() => codeEl.focus(), 50); }
+}
+
+// Bấm "← Quay lại đăng nhập bằng mật khẩu" ở bước 2 — quay về nguyên trạng bước 1, không giữ lại mật
+// khẩu cũ đã gõ (bắt gõ lại, tránh hiểu lầm mật khẩu vẫn còn "hợp lệ" trong khi phiên chờ TOTP đã bỏ).
+function cancelTotpLoginStep() {
+  pendingTotpLoginUsername = null;
+  document.getElementById('loginTotpStepWrap').classList.add('hidden');
+  document.getElementById('loginUserFieldWrap').classList.remove('hidden');
+  document.getElementById('loginPassFieldWrap').classList.remove('hidden');
+  if (captchaId) document.getElementById('captchaField').classList.remove('hidden');
+  const bioBtn = document.getElementById('btnBiometricLogin');
+  if (bioBtn && canShowBiometricLogin()) bioBtn.classList.remove('hidden');
+  const passEl = document.getElementById('txtPass');
+  if (passEl) passEl.value = '';
+}
+
+// Bước 2 của đăng nhập — gửi mã 6 số HOẶC mã khôi phục (POST /api/auth/verify-totp-login), tự phân
+// biệt theo độ dài sau khi lọc bỏ ký tự không phải số (mã TOTP luôn 6 số, mã khôi phục luôn 8 số dù
+// hiển thị có gạch ngang XXXX-XXXX — xem lib/totp.js generateBackupCodes()/normalizeBackupCode()).
+async function submitTotpLoginStep() {
+  const username = pendingTotpLoginUsername;
+  const raw = (document.getElementById('txtTotpCode').value || '').trim();
+  const digitsOnly = raw.replace(/[^0-9]/g, '');
+  if (!digitsOnly) return alert('Vui lòng nhập mã xác thực.');
+  const payload = { username };
+  if (digitsOnly.length === 6) payload.code = digitsOnly; else payload.backupCode = digitsOnly;
+
+  loginInFlight = true;
+  const btn = document.getElementById('btnLogin');
+  if (btn) { btn.disabled = true; btn.innerHTML = '<span class="loginpage-spinner"></span> Đang xác thực…'; }
+
+  let user;
+  try {
+    const res = await fetch('/api/auth/verify-totp-login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      loginInFlight = false;
+      if (btn) { btn.disabled = false; btn.innerHTML = btnLoginOriginalHTML; }
+      return alert(body.error || 'Mã xác thực không đúng');
+    }
+    user = await res.json();
+  } catch (e) {
+    loginInFlight = false;
+    if (btn) { btn.disabled = false; btn.innerHTML = btnLoginOriginalHTML; }
+    return alert('⛔ Không thể kết nối tới máy chủ: ' + e.message);
+  }
+
+  pendingTotpLoginUsername = null;
+  const sessionCheck = await fetch('/api/auth/me').catch(() => null);
+  if (!sessionCheck || !sessionCheck.ok) {
+    loginInFlight = false;
+    if (btn) { btn.disabled = false; btn.innerHTML = btnLoginOriginalHTML; }
+    return alert('⚠️ Đăng nhập đúng nhưng trình duyệt KHÔNG lưu được phiên đăng nhập. Vui lòng thử lại bằng địa chỉ https://, hoặc liên hệ quản trị viên hệ thống để kiểm tra cấu hình.');
+  }
+
+  logSystemAction('USER_MGM', 'LOGIN_SUCCESS', 'Đăng nhập thành công (đã qua xác thực 2 lớp).', 'SUCCESS', user.username);
+  try {
+    await proceedAfterAuth(user);
+  } catch (e) {
+    console.error('Lỗi khi vào giao diện chính sau đăng nhập:', e);
+    loginInFlight = false;
+    if (btn) { btn.disabled = false; btn.innerHTML = btnLoginOriginalHTML; }
+    alert('⛔ Đăng nhập thành công nhưng có lỗi khi tải giao diện chính. Vui lòng tải lại trang (F5).');
+  }
+}
+
 // Sau khi có phiên đăng nhập hợp lệ (đăng nhập mới HOẶC khôi phục phiên cũ lúc tải lại trang) — nếu
 // tài khoản đang bị đánh dấu bắt buộc đổi mật khẩu (mật khẩu tạm do admin đặt, hoặc còn đang dùng
 // đúng mật khẩu mặc định lúc khởi tạo hệ thống), CHỈ hiện modal bắt buộc đổi, KHÔNG tải dữ liệu nghiệp
 // vụ hay vào giao diện chính — server cũng chặn mọi API khác cho tới khi đổi xong (xem lib/auth.js
-// blockIfMustChangePassword), gọi initDatabase() lúc này sẽ chỉ nhận toàn lỗi 403 vô ích.
+// blockIfMustChangePassword), gọi initDatabase() lúc này sẽ chỉ nhận toàn lỗi 403 vô ích. Admin có
+// quyền admin nhưng CHƯA bật TOTP cùng khuôn — hiện modal bắt buộc thiết lập 2 lớp thay vì vào thẳng
+// (xem lib/totp.js/lib/auth.js blockIfMustChangePassword — bắt buộc, không có ngoại lệ).
 async function proceedAfterAuth(user) {
   currentUser = user;
   if (user.mustChangePassword) {
     hideBootSplash();
     document.getElementById('loginSection').classList.add('hidden');
     document.getElementById('mustChangePasswordModal').classList.remove('hidden');
+    return;
+  }
+  if (user.perms?.admin && !user.totpEnabled) {
+    hideBootSplash();
+    document.getElementById('loginSection').classList.add('hidden');
+    openTotpSetupWall(user);
     return;
   }
   // #bootSplash (hoặc form Đăng Nhập, nếu là lượt đăng nhập thủ công) vẫn hiện NGUYÊN suốt lúc
@@ -10693,6 +10945,106 @@ async function submitMustChangePassword(e) {
     await proceedAfterAuth(updated);
   } catch (err) {
     alert('⛔ Không thể kết nối tới máy chủ: ' + err.message);
+  }
+}
+
+// ==========================================
+// MÀN BẮT BUỘC THIẾT LẬP TOTP CHO ADMIN (xem #totpSetupWallModal + lib/totp.js) — gọi từ
+// proceedAfterAuth() khi user.perms.admin && !user.totpEnabled. Cùng khuôn 2 bước với thiết lập TOTP tự
+// chọn ở Hồ Sơ Cá Nhân (setProfileSubTab('TOTP')) nhưng KHÔNG có nút đóng ngang — bắt buộc hoàn tất.
+// ==========================================
+async function openTotpSetupWall(user) {
+  document.getElementById('totpSetupBackupStep').classList.add('hidden');
+  document.getElementById('totpSetupQrStep').classList.remove('hidden');
+  const codeEl = document.getElementById('totpSetupCode');
+  if (codeEl) codeEl.value = '';
+  document.getElementById('totpSetupWallModal').classList.remove('hidden');
+  try {
+    const res = await fetch('/api/auth/totp/setup-options', { method: 'POST' });
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      return alert(body.error || '⛔ Không thể khởi tạo thiết lập xác thực 2 lớp');
+    }
+    const data = await res.json();
+    document.getElementById('totpSetupQrImg').src = data.qrDataUrl;
+    document.getElementById('totpSetupManualKey').value = data.secret;
+    document.getElementById('totpSetupOtpauthLink').href = data.otpauthUri;
+  } catch (e) {
+    alert('⛔ Không thể kết nối tới máy chủ: ' + e.message);
+  }
+}
+
+function copyTotpManualKey() {
+  const el = document.getElementById('totpSetupManualKey');
+  el.select();
+  navigator.clipboard?.writeText(el.value).catch(() => { try { document.execCommand('copy'); } catch (e) {} });
+}
+
+async function submitTotpSetupVerify(e) {
+  e.preventDefault();
+  const code = document.getElementById('totpSetupCode').value.trim();
+  if (!code) return;
+  try {
+    const res = await fetch('/api/auth/totp/setup-verify', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ code })
+    });
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      return alert(body.error || '⛔ Không thể xác thực mã');
+    }
+    const data = await res.json();
+    if (!data.ok) return alert('❌ Mã không đúng, vui lòng thử lại.');
+
+    const wrap = document.getElementById('totpSetupBackupCodes');
+    wrap.innerHTML = (data.backupCodes || []).map(c => `<div class="text-center py-1 bg-white border rounded">${c}</div>`).join('');
+    document.getElementById('totpSetupQrStep').classList.add('hidden');
+    document.getElementById('totpSetupBackupStep').classList.remove('hidden');
+    logSystemAction('USER_MGM', 'TOTP_SETUP', 'Thiết lập xác thực 2 lớp (TOTP) thành công.', 'SUCCESS', currentUser?.username);
+  } catch (err) {
+    alert('⛔ Không thể kết nối tới máy chủ: ' + err.message);
+  }
+}
+
+async function completeTotpSetupWall() {
+  document.getElementById('totpSetupWallModal').classList.add('hidden');
+  const res = await fetch('/api/auth/me').catch(() => null);
+  if (!res || !res.ok) {
+    return alert('⛔ Không thể tải lại thông tin tài khoản, vui lòng tải lại trang (F5).');
+  }
+  const updatedUser = await res.json();
+  try {
+    await proceedAfterAuth(updatedUser);
+  } catch (e) {
+    console.error('Lỗi khi vào giao diện chính sau khi thiết lập TOTP:', e);
+    alert('⛔ Thiết lập thành công nhưng có lỗi khi tải giao diện chính. Vui lòng tải lại trang (F5).');
+  }
+}
+
+// Tự gỡ TOTP của CHÍNH mình (Hồ Sơ Cá Nhân, xem #pfTotpSection) — đơn giản nhất là tải lại trang sau
+// khi gỡ thành công: tryRestoreSession() (đầu script) sẽ tự gọi lại proceedAfterAuth() với user mới
+// (totpEnabled=false), và nhánh admin-chưa-bật-TOTP ở đó tự đưa thẳng vào màn thiết lập lại — không cần
+// viết lại luồng đó lần 2 ở đây.
+async function removeMyTotp() {
+  const password = document.getElementById('pfTotpRemovePassword').value;
+  if (!password) return alert('Vui lòng nhập mật khẩu để xác nhận.');
+  if (!confirm('Gỡ xác thực 2 lớp? Bạn sẽ phải thiết lập lại ngay ở lần đăng nhập/tải trang kế tiếp.')) return;
+  try {
+    const res = await fetch('/api/auth/totp', {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ password })
+    });
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      return alert(body.error || '⛔ Không thể gỡ xác thực 2 lớp');
+    }
+    logSystemAction('USER_MGM', 'TOTP_SELF_REMOVE', 'Tự gỡ xác thực 2 lớp (TOTP) của chính mình.', 'SUCCESS', currentUser?.username);
+    alert('✅ Đã gỡ xác thực 2 lớp. Trang sẽ tải lại để bạn thiết lập lại ngay.');
+    location.reload();
+  } catch (e) {
+    alert('⛔ Không thể kết nối tới máy chủ: ' + e.message);
   }
 }
 
@@ -27284,6 +27636,8 @@ function editPendingNewUser(idx) {
   // (khớp resetUserForm(), đối lập editUser() vốn hiện lại khi sửa user ĐÃ có tài khoản thật).
   document.getElementById('uWebauthnWrap').classList.add('hidden');
   document.getElementById('uWebauthnListWrap').innerHTML = '';
+  document.getElementById('uTotpWrap').classList.add('hidden');
+  document.getElementById('uTotpStatusWrap').innerHTML = '';
   updatePermGroupNote((u.groupIds || []).length > 0);
   document.getElementById('uUsername').scrollIntoView({ behavior: 'smooth', block: 'center' });
 }
@@ -27349,6 +27703,8 @@ function resetUserForm() {
   onApproverAuthLevelChange();
   document.getElementById('uWebauthnWrap').classList.add('hidden');
   document.getElementById('uWebauthnListWrap').innerHTML = '';
+  document.getElementById('uTotpWrap').classList.add('hidden');
+  document.getElementById('uTotpStatusWrap').innerHTML = '';
   document.getElementById('pCanViewReports').checked = !!defaults.canViewReports;
   document.getElementById('pInternalNewsCreate').checked = !!defaults.internalNewsCreate;
   document.getElementById('pInternalRecruitmentCreate').checked = !!defaults.internalRecruitmentCreate;
@@ -27460,6 +27816,13 @@ function editUser(id) {
   // editPendingNewUser() (tạo mới/sửa hàng chờ) ẩn lại khối này vì chưa có tài khoản nào cả.
   document.getElementById('uWebauthnWrap').classList.remove('hidden');
   renderAdminWebauthnDeviceList(user.username);
+
+  // TOTP chỉ áp dụng cho tài khoản ĐANG có quyền admin (xem lib/totp.js) — khác khối vân tay ở trên,
+  // không hiện cho user thường dù cũng là "sửa user đã tồn tại".
+  const isTargetAdmin = !!user.perms?.admin;
+  document.getElementById('uTotpWrap').classList.toggle('hidden', !isTargetAdmin);
+  if (isTargetAdmin) renderAdminTotpStatus(user.username);
+  else document.getElementById('uTotpStatusWrap').innerHTML = '';
 }
 
 async function deleteUser(id) {

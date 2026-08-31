@@ -22,7 +22,9 @@ const PORT = 8984;
 const IT_STAFF = { username: 'it1', name: 'Nguyễn Văn IT', dept: 'Hỗ Trợ IT', perms: { itManage: true }, active: true };
 const IT_STAFF2 = { username: 'it2', name: 'Trần Thị IT', dept: 'Hỗ Trợ IT', perms: { itManage: true }, active: true };
 const EMP_NOPERM = { username: 'emp_noperm', name: 'Người Không Quyền', dept: 'Kinh Doanh', perms: {}, active: true };
-const ADMIN = { username: 'admin', name: 'Quản Trị Viên', dept: 'Hỗ Trợ IT', perms: { admin: true }, active: true };
+// totpEnabled:true — admin bắt buộc xác thực 2 lớp (xem lib/totp.js/proceedAfterAuth() ở index.html);
+// thiếu field này khiến loginAs() (gọi thẳng proceedAfterAuth()) bị chặn ở màn bắt buộc thiết lập TOTP.
+const ADMIN = { username: 'admin', name: 'Quản Trị Viên', dept: 'Hỗ Trợ IT', perms: { admin: true }, active: true, totpEnabled: true };
 
 const state = createMockState({
   depts: ['Hỗ Trợ IT', 'Kinh Doanh'],
