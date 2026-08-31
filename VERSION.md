@@ -1,9 +1,39 @@
 # Phiên bản hiện tại
 
-**1.91.0** — đã merge vào `main` (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở
+**1.92.0** — đã merge vào `main` (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở
 badge góc màn hình + `/api/health`).
 
-## Cập nhật gần nhất (PR #202, nhánh `claude/chao-ban-oo5ijl`)
+## Cập nhật gần nhất (PR #204, nhánh `claude/chao-ban-oo5ijl`)
+
+Hoàn tất yêu cầu "tài khoản admin bắt buộc xác thực hai yếu tố" — bước tiếp theo sau PR #202 (đã làm
+trước phần admin gỡ hộ vân tay khi mất thiết bị). Chọn TOTP (Google/Microsoft Authenticator...) làm
+phương thức bắt buộc DUY NHẤT cho admin, theo đúng thiết kế đã trao đổi và xác nhận với người dùng.
+
+- `lib/totp.js` (mới) — sinh bí mật/QR/otpauth URI (`otplib`), xác minh mã, sinh + hash 10 mã khôi phục
+  dùng 1 lần (bcrypt, cùng khuôn PIN), 2 Map bộ nhớ tạm cho luồng đăng nhập 2 bước và luồng thiết lập.
+- `lib/auth.js`: mở rộng `blockIfMustChangePassword` để cũng chặn admin chưa bật TOTP ở mọi route nghiệp
+  vụ — dùng lại đúng middleware đã mount sẵn ở ~17 route file, không cần sửa lại từng nơi.
+- `routes/auth.js`: đăng nhập 2 bước THẬT cho admin đã bật TOTP — `POST /login` không cấp cookie ngay
+  (mật khẩu đúng chỉ là bước 1/2), phải qua `POST /verify-totp-login` (mã 6 số hoặc 1 mã khôi phục) mới
+  cấp phiên — tránh 1 mật khẩu bị lộ vẫn đủ để có phiên hoạt động. Thêm route tự thiết lập/tự gỡ
+  (`/totp/setup-options`, `/totp/setup-verify`, `DELETE /totp`, đòi xác nhận mật khẩu) và admin gỡ hộ
+  người khác mất điện thoại (`GET /totp/status/:username`, `DELETE /totp/:username`, tăng
+  `sessionVersion` của NGƯỜI ĐÓ) — kèm email báo mỗi lần thiết lập/gỡ để phát hiện sớm nếu bị chiếm phiên.
+- `routes/data.js`: strip thêm `totpSecretEnc`/`totpBackupCodeHashes` khỏi `GET /api/data` chung.
+- `public/index.html`: màn đăng nhập bước 2 (nhập mã/mã khôi phục), modal bắt buộc thiết lập TOTP (QR +
+  mã thủ công + xác nhận + hiển thị mã khôi phục đúng 1 lần), mục "Xác Thực 2 Lớp" trong Hồ Sơ Cá Nhân,
+  và khối gỡ hộ trong màn Sửa Người Dùng (chỉ hiện khi target đang có quyền admin).
+
+**Deploy impact:** không đổi `server/sql/schema.sql`, không thêm biến môi trường mới (tái dùng
+`EMAIL_ENCRYPTION_KEY` đã có để mã hoá bí mật TOTP) — **CÓ** thêm dependency mới `otplib@^12`, cần chạy
+lại `npm install` trên server thật trước khi `pm2 restart`.
+
+Đã kiểm thử: 39 file `tests/test-*.js` pass (38 file cũ + 1 file mới `test-admin-totp.js`, 21 kịch bản
+riêng đợt này — thiết lập, đăng nhập 2 bước, tự gỡ, admin gỡ hộ, data-minimization). 4 file test cũ cần
+thêm `totpEnabled:true` vào fixture admin dùng để đăng nhập trực tiếp qua `proceedAfterAuth()` (không
+liên quan nội dung các bài test đó, chỉ là hệ quả tất yếu của cổng TOTP mới).
+
+## Trước đó (PR #202, nhánh `claude/chao-ban-oo5ijl`)
 
 Bước đầu trên đường tới yêu cầu "tài khoản admin bắt buộc xác thực 2 yếu tố" (đang trao đổi thêm phương
 án cho phần còn lại — chọn WebAuthn hay OTP email làm lớp bắt buộc, cách xử lý khi bật tính năng cho admin
