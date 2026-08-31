@@ -147,9 +147,12 @@ router.use(requireAuth, blockIfMustChangePassword);
 // counter tự thân không phải bí mật, đây vẫn là nhiều dữ liệu hơn mức cần cho 1 trang danh sách người
 // dùng), trong khi front-end không đọc dùng ở đâu ngoài 2 route riêng (GET/DELETE
 // /api/auth/webauthn/credentials[/:username]) đã tự tra DB, không phụ thuộc field này trong DB.users.
+// totpSecretEnc/totpBackupCodeHashes (lib/totp.js) cùng khuôn — bí mật TOTP (dù đã mã hoá) và hash mã
+// khôi phục không có lý do gì để lộ cho MỌI người đã đăng nhập; totpEnabled (boolean, cần hiện badge
+// "Chưa thiết lập 2FA" ở màn quản lý người dùng) vẫn GIỮ LẠI vì không destructure field này ra.
 function stripPasswords(users) {
   if (!Array.isArray(users)) return users;
-  return users.map(({ pass, password, pinHash, failedLoginAttempts, lockedUntil, webauthnCredentials, webauthnUserId, ...rest }) => rest);
+  return users.map(({ pass, password, pinHash, failedLoginAttempts, lockedUntil, webauthnCredentials, webauthnUserId, totpSecretEnc, totpBackupCodeHashes, ...rest }) => rest);
 }
 
 // Không bao giờ trả mật khẩu SMTP đã mã hoá (smtpPassEnc, xem lib/emailCrypto.js) ra ngoài — kể cả

@@ -32,7 +32,10 @@ const STAFF_B = { username: 'staff_b', name: 'Trần Thị B', dept: 'Kinh Doanh
 const HR1 = { username: 'hr1', name: 'Chuyên Viên Nhân Sự', dept: 'Nhân Sự', perms: { nhanSuManage: true }, active: true };
 // Admin CỐ Ý không có nhanSuManage — kiểm tra nhánh perms.admin của canManageHrFeedback()/
 // canAccessHrModule() thực sự hoạt động độc lập với cờ quyền riêng của module.
-const ADMIN = { username: 'admin', name: 'Quản Trị Viên', dept: 'Ban Giám Đốc', perms: { admin: true }, active: true };
+// totpEnabled:true — admin bắt buộc xác thực 2 lớp (xem lib/totp.js/proceedAfterAuth() ở index.html);
+// thiếu field này khiến loginAs() (gọi thẳng proceedAfterAuth()) bị chặn lại ở màn bắt buộc thiết lập
+// TOTP thay vì vào được giao diện chính, không liên quan gì tới nội dung bài test này.
+const ADMIN = { username: 'admin', name: 'Quản Trị Viên', dept: 'Ban Giám Đốc', perms: { admin: true }, active: true, totpEnabled: true };
 
 const state = createMockState({
   depts: ['Kinh Doanh', 'Nhân Sự', 'Ban Giám Đốc'],

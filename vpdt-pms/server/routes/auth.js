@@ -11,9 +11,11 @@ const { HttpError } = require('../lib/httpErrors');
 const { issueApprovalGrant, issueApprovalOtp, verifyApprovalOtp } = require('../lib/approvalAuth');
 const { isCaptchaEnabled, verifyCaptcha } = require('../lib/captcha');
 const webauthn = require('../lib/webauthn');
+const totp = require('../lib/totp');
+const QRCode = require('qrcode');
 const { getPool, sql } = require('../db');
 const { sendMail, resolveEncryption } = require('../lib/mailer');
-const { decryptSecret } = require('../lib/emailCrypto');
+const { encryptSecret, decryptSecret } = require('../lib/emailCrypto');
 const { insertSystemLog } = require('../lib/systemLogStore');
 
 // Ghi nhật ký hệ thống cho các sự kiện đăng nhập THẤT BẠI/khoá tài khoản — trước đây hoàn toàn không
@@ -41,9 +43,12 @@ function logAuthFailure(req, { username, fullName, actionType, description }) {
 // webauthnCredentials (publicKey/counter) và webauthnUserId cũng không cần lộ ra ngoài — thay bằng
 // webauthnDeviceCount (chỉ 1 số) để client biết đã đăng ký vân tay hay chưa; danh sách chi tiết thiết
 // bị (id/tên/ngày tạo, KHÔNG kèm publicKey/counter) lấy riêng qua GET /webauthn/credentials bên dưới.
+// totpSecretEnc/totpBackupCodeHashes cũng không cần lộ ra ngoài (bí mật TOTP + hash mã khôi phục) —
+// totpEnabled (boolean, đã có sẵn trong "safe" vì không bị destructure ra) đủ để client biết đã thiết
+// lập xác thực 2 lớp hay chưa mà không cần thấy gì nhạy cảm.
 function toSafeUser(user) {
-  const { pass, password, pinHash, failedLoginAttempts, lockedUntil, webauthnCredentials, webauthnUserId, ...safe } = user;
-  return { ...safe, hasPin: !!pinHash, webauthnDeviceCount: (webauthnCredentials || []).length };
+  const { pass, password, pinHash, failedLoginAttempts, lockedUntil, webauthnCredentials, webauthnUserId, totpSecretEnc, totpBackupCodeHashes, ...safe } = user;
+  return { ...safe, hasPin: !!pinHash, webauthnDeviceCount: (webauthnCredentials || []).length, totpEnabled: !!user.totpEnabled };
 }
 
 // Cảnh báo 1 LẦN/tiến trình (không log lại mỗi lượt đăng nhập, tránh rác log) khi phát hiện dấu hiệu
@@ -177,6 +182,19 @@ router.post('/login', loginRateLimiter, async (req, res) => {
       });
     }
 
+    // Admin ĐÃ bật TOTP -> CHƯA cấp cookie phiên ở đây — mật khẩu đúng chỉ là bước 1/2. Cấp "phiếu chờ
+    // xác thực 2 lớp" ngắn hạn (lib/totp.js) rồi trả totpRequired để client hiện màn nhập mã 6 số/mã
+    // khôi phục; phiên thật chỉ được cấp ở POST /verify-totp-login bên dưới sau khi qua bước 2. Nếu cấp
+    // cookie ngay tại đây rồi mới chặn ở route nghiệp vụ (như mustChangePassword) thì 1 mật khẩu bị lộ
+    // vẫn đủ để có phiên hoạt động trên mọi route CHƯA bị chặn — mất hết ý nghĩa "bắt buộc 2 yếu tố".
+    // Admin CHƯA bật TOTP (lần đầu, hoặc vừa được cấp quyền admin) và tài khoản thường: đăng nhập bình
+    // thường như trước — blockIfMustChangePassword (lib/auth.js) sẽ tự chặn admin chưa bật TOTP ở mọi
+    // route nghiệp vụ ngay sau khi vào được, bắt thiết lập trước khi dùng tiếp.
+    if (user.perms?.admin && user.totpEnabled) {
+      totp.issuePendingTotpLogin(user.username);
+      return res.json({ totpRequired: true, username: user.username });
+    }
+
     const token = signToken(user);
     setAuthCookie(res, token);
     warnIfCookieLikelyNotPersisted(req);
@@ -184,6 +202,88 @@ router.post('/login', loginRateLimiter, async (req, res) => {
   } catch (err) {
     console.error('POST /api/auth/login lỗi:', err.message);
     res.status(500).json({ error: 'Không thể đăng nhập, vui lòng thử lại' });
+  }
+});
+
+// POST /api/auth/verify-totp-login — bước 2 của luồng đăng nhập cho admin đã bật TOTP (xem totpRequired
+// ở /login trên). Chấp nhận HOẶC mã 6 số hiện tại (code) HOẶC 1 mã khôi phục (backupCode, dùng khi mất
+// điện thoại) — không chấp nhận cả 2 cùng lúc, ưu tiên code nếu client lỡ gửi cả 2. Cùng bộ đếm khoá tài
+// khoản (lib/loginAttempts.js) với /login — sai mã ở bước 2 cũng tính là 1 lần đăng nhập sai, cùng mục
+// đích chống dò như mật khẩu (đã qua được mật khẩu không có nghĩa được thử mã TOTP vô hạn lần).
+router.post('/verify-totp-login', loginRateLimiter, async (req, res) => {
+  const { username, code, backupCode } = req.body || {};
+  if (!username || (!code && !backupCode)) {
+    return res.status(400).json({ error: 'Thiếu mã xác thực' });
+  }
+
+  try {
+    if (!totp.hasPendingTotpLogin(username)) {
+      return res.status(401).json({ error: 'Phiên đăng nhập đã hết hạn, vui lòng đăng nhập lại' });
+    }
+
+    const users = (await getAppDataValue('users')) || [];
+    const user = users.find(u => u.username === username);
+    if (!user || !user.totpEnabled) {
+      return res.status(401).json({ error: 'Phiên đăng nhập không hợp lệ, vui lòng đăng nhập lại' });
+    }
+
+    const remainingLockMinutes = getLockoutRemainingMinutes(user);
+    if (remainingLockMinutes !== null) {
+      return res.status(429).json({ error: `Tài khoản tạm khóa do nhập sai quá nhiều lần. Vui lòng thử lại sau ${remainingLockMinutes} phút.` });
+    }
+
+    let ok = false;
+    let usedBackupIndex = -1;
+    if (code) {
+      let secret = null;
+      try { secret = decryptSecret(user.totpSecretEnc); } catch (err) { secret = null; }
+      ok = totp.verifyCode(code, secret);
+    } else {
+      usedBackupIndex = await totp.verifyBackupCode(backupCode, user.totpBackupCodeHashes || []);
+      ok = usedBackupIndex !== -1;
+    }
+
+    if (!ok) {
+      await withLockedAppDataValue('users', (collection) => {
+        const list = Array.isArray(collection) ? collection : [];
+        const idx = list.findIndex(u => u.username === username);
+        if (idx !== -1) recordFailedLogin(list[idx]);
+        return list;
+      });
+      logAuthFailure(req, {
+        username, fullName: user.name, actionType: 'LOGIN_FAILED',
+        description: 'Sai mã xác thực 2 lớp (TOTP) khi đăng nhập'
+      });
+      return res.status(401).json({ error: code ? 'Mã xác thực không đúng' : 'Mã khôi phục không đúng hoặc đã được dùng' });
+    }
+
+    totp.consumePendingTotpLogin(username);
+
+    let updatedUser = user;
+    await withLockedAppDataValue('users', (collection) => {
+      const list = Array.isArray(collection) ? collection : [];
+      const idx = list.findIndex(u => u.username === username);
+      if (idx === -1) throw new HttpError(401, 'Tài khoản không còn tồn tại');
+      updatedUser = { ...list[idx] };
+      // Mã khôi phục dùng 1 lần — xoá khỏi danh sách ngay khi vừa dùng để không dùng lại được lần 2.
+      if (usedBackupIndex !== -1) {
+        const hashes = Array.isArray(updatedUser.totpBackupCodeHashes) ? [...updatedUser.totpBackupCodeHashes] : [];
+        hashes.splice(usedBackupIndex, 1);
+        updatedUser.totpBackupCodeHashes = hashes;
+      }
+      resetLoginAttempts(updatedUser);
+      list[idx] = updatedUser;
+      return list;
+    });
+
+    const token = signToken(updatedUser);
+    setAuthCookie(res, token);
+    warnIfCookieLikelyNotPersisted(req);
+    res.json(toSafeUser(updatedUser));
+  } catch (err) {
+    if (err instanceof HttpError) return res.status(err.status).json({ error: err.message });
+    console.error('POST /api/auth/verify-totp-login lỗi:', err.message);
+    res.status(500).json({ error: 'Không thể xác thực' });
   }
 });
 
@@ -457,6 +557,35 @@ async function getEmailConfig() {
   }
 }
 
+// Gửi email báo thay đổi trạng thái TOTP (thiết lập mới/gỡ bỏ, kể cả admin gỡ hộ người khác) — mitigation
+// cho tình huống mật khẩu bị lộ: nếu có ai đó (biết mật khẩu) âm thầm thiết lập lại TOTP bằng thiết bị
+// của họ, chủ tài khoản thật vẫn nhận được cảnh báo qua email dù không còn đăng nhập được để tự phát
+// hiện qua giao diện. Cùng khuôn getEmailConfig()/sendMail() đã dùng ở request-approval-otp bên dưới.
+// Best-effort — lỗi gửi email KHÔNG được phép làm hỏng phản hồi thao tác TOTP thật (luôn gọi kèm .catch
+// ở nơi gọi), và bỏ qua im lặng nếu tài khoản chưa có email hoặc email đang tắt qua cấu hình admin.
+async function notifyTotpChange(user, message) {
+  if (!user.email) return;
+  const emailConfig = await getEmailConfig();
+  if (emailConfig.enabled === false) return;
+  let smtpUser = null, smtpPass = null;
+  if (emailConfig.smtpAuthEnabled && emailConfig.smtpUser && emailConfig.smtpPassEnc) {
+    try {
+      smtpUser = emailConfig.smtpUser;
+      smtpPass = decryptSecret(emailConfig.smtpPassEnc);
+    } catch (err) {
+      console.error('⛔ Không giải mã được mật khẩu SMTP đã lưu, dùng đường lùi .env nếu có:', err.message);
+    }
+  }
+  await sendMail({
+    to: [user.email],
+    subject: '[VPDT] Thông báo thay đổi xác thực 2 lớp (TOTP)',
+    text: message,
+    host: emailConfig.smtpHost, port: emailConfig.smtpPort, encryption: resolveEncryption(emailConfig),
+    user: smtpUser, pass: smtpPass,
+    from: emailConfig.senderEmail
+  });
+}
+
 // POST /api/auth/request-approval-otp — sinh mã OTP 6 số MỚI ở SERVER (không phải JS trình duyệt như
 // trước) và gửi qua email thật của CHÍNH người đang cần xác thực (approverAuthLevel=OTP_EMAIL), dùng
 // chung rate-limit chống dò với /verify-password|/verify-pin.
@@ -538,6 +667,177 @@ router.post('/verify-approval-otp', loginRateLimiter, requireAuth, async (req, r
   } catch (err) {
     console.error('POST /api/auth/verify-approval-otp lỗi:', err.message);
     res.status(500).json({ error: 'Không thể xác thực mã OTP' });
+  }
+});
+
+// ==========================================
+// XÁC THỰC 2 LỚP (TOTP) BẮT BUỘC CHO ADMIN — xem lib/totp.js. 3 nhóm route: (1) tự thiết lập [requireAuth
+// — CHỈ làm được từ phiên đã đăng nhập mật khẩu (và đã qua TOTP cũ nếu có) trước đó]; (2) tự gỡ [requireAuth,
+// đòi xác nhận lại mật khẩu]; (3) admin xem trạng thái/gỡ HỘ người khác (khắc phục mất điện thoại — cùng
+// khuôn webauthn/credentials/:username bên dưới). KHÔNG có route "tắt vĩnh viễn" cho admin — gỡ chỉ là
+// bước "thiết lập lại", blockIfMustChangePassword (lib/auth.js) sẽ chặn ngay lại cho tới khi thiết lập
+// xong (đúng ý "bắt buộc", không có ngoại lệ).
+// ==========================================
+
+// POST /api/auth/totp/setup-options — Bước 1 tự thiết lập TOTP của CHÍNH người đang đăng nhập. Sinh 1 bí
+// mật MỚI, CHƯA lưu vào bản ghi user (chỉ lưu thật ở /setup-verify sau khi xác minh đúng 1 mã) — giữ
+// tạm trong bộ nhớ (lib/totp.js pendingSetups). Trả kèm cả QR (ảnh, quét bằng thiết bị KHÁC) lẫn URI
+// otpauth:// dạng text (nhập tay vào app Authenticator qua "Thiết lập thủ công", hoặc bấm mở trực tiếp
+// nếu app đã cài sẵn CÙNG thiết bị đang xem màn hình này) — không phụ thuộc duy nhất vào việc quét ảnh.
+router.post('/totp/setup-options', requireAuth, async (req, res) => {
+  try {
+    const secret = totp.generateSecret();
+    totp.issuePendingTotpSetup(req.freshUser.username, secret);
+    const otpauthUri = totp.buildOtpauthUri(req.freshUser.username, secret);
+    const qrDataUrl = await QRCode.toDataURL(otpauthUri);
+    res.json({ secret, otpauthUri, qrDataUrl });
+  } catch (err) {
+    console.error('POST /api/auth/totp/setup-options lỗi:', err.message);
+    res.status(500).json({ error: 'Không thể khởi tạo thiết lập xác thực 2 lớp' });
+  }
+});
+
+// POST /api/auth/totp/setup-verify — Bước 2, xác minh đúng 1 mã hiện tại từ app Authenticator rồi mới
+// LƯU THẬT bí mật (mã hoá bằng lib/emailCrypto.js) + bật totpEnabled + sinh 10 mã khôi phục (hiển thị
+// DUY NHẤT 1 LẦN trong response này, không thể xem lại — client PHẢI bắt người dùng xác nhận đã lưu
+// trước khi đóng màn). KHÔNG tăng sessionVersion (khác lúc GỠ TOTP bên dưới) — khớp đúng tiền lệ đăng ký
+// thiết bị vân tay mới (webauthn/register-verify) cũng không tăng: THÊM 1 lớp bảo vệ không phải sự kiện
+// cần đăng xuất các phiên khác, chỉ GỠ (thu hồi lòng tin) mới cần.
+router.post('/totp/setup-verify', loginRateLimiter, requireAuth, async (req, res) => {
+  const { code } = req.body || {};
+  if (!code) return res.status(400).json({ error: 'Thiếu mã xác thực' });
+
+  try {
+    const username = req.freshUser.username;
+    const secret = totp.getPendingTotpSetupSecret(username);
+    if (!secret) {
+      return res.status(400).json({ error: 'Phiên thiết lập đã hết hạn, vui lòng lấy mã QR mới' });
+    }
+
+    const ok = totp.verifyCode(code, secret);
+    if (!ok) return res.json({ ok: false });
+
+    const backupCodes = totp.generateBackupCodes();
+    const backupHashes = await totp.hashBackupCodes(backupCodes);
+    const totpSecretEnc = encryptSecret(secret);
+
+    let updated;
+    await withLockedAppDataValue('users', (collection) => {
+      const list = Array.isArray(collection) ? collection : [];
+      const idx = list.findIndex(u => u.username === username);
+      if (idx === -1) throw new HttpError(401, 'Tài khoản không còn tồn tại');
+      updated = { ...list[idx], totpEnabled: true, totpSecretEnc, totpBackupCodeHashes: backupHashes };
+      list[idx] = updated;
+      return list;
+    });
+
+    totp.consumePendingTotpSetup(username);
+    notifyTotpChange(updated, `Bạn (${updated.name || username}) vừa thiết lập xác thực 2 lớp (TOTP) cho tài khoản của mình trên hệ thống VPDT. Nếu không phải bạn thực hiện, vui lòng liên hệ ngay quản trị viên.`).catch(e => console.error('Lỗi gửi email báo thiết lập TOTP:', e.message));
+
+    res.json({ ok: true, backupCodes });
+  } catch (err) {
+    if (err instanceof HttpError) return res.status(err.status).json({ error: err.message });
+    console.error('POST /api/auth/totp/setup-verify lỗi:', err.message);
+    res.status(500).json({ error: 'Không thể xác thực mã' });
+  }
+});
+
+// DELETE /api/auth/totp — người dùng TỰ gỡ TOTP của CHÍNH mình (đổi điện thoại, muốn thiết lập lại...).
+// Bắt buộc xác nhận đúng mật khẩu hiện tại — cùng lý do currentPassword ở PATCH /me/change-pin (tránh ai
+// đó lợi dụng phiên trình duyệt đang mở sẵn tự gỡ TOTP mà không biết mật khẩu). Tăng sessionVersion (thu
+// hồi lòng tin — khớp đúng khuôn DELETE /webauthn/credentials/:id) rồi cấp lại token mới khớp cho PHIÊN
+// HIỆN TẠI. Với admin: gỡ xong sẽ LẬP TỨC bị blockIfMustChangePassword (lib/auth.js) chặn lại toàn bộ
+// API nghiệp vụ ở request kế tiếp cho tới khi thiết lập lại — gỡ chỉ là "thiết lập lại", không phải "tắt
+// vĩnh viễn" (đúng yêu cầu bắt buộc, không có ngoại lệ).
+router.delete('/totp', loginRateLimiter, requireAuth, async (req, res) => {
+  const { password } = req.body || {};
+  if (!password) return res.status(400).json({ error: 'Vui lòng nhập mật khẩu hiện tại để xác nhận' });
+
+  try {
+    const username = req.freshUser.username;
+    const remainingLockMinutes = getLockoutRemainingMinutes(req.freshUser);
+    if (remainingLockMinutes !== null) {
+      return res.status(429).json({ error: `Tài khoản tạm khóa do nhập sai quá nhiều lần. Vui lòng thử lại sau ${remainingLockMinutes} phút.` });
+    }
+
+    const ok = await verifyPassword(password, req.freshUser.pass || req.freshUser.password);
+    if (!ok) {
+      await withLockedAppDataValue('users', (collection) => {
+        const list = Array.isArray(collection) ? collection : [];
+        const idx = list.findIndex(u => u.username === username);
+        if (idx !== -1) recordFailedLogin(list[idx]);
+        return list;
+      });
+      return res.status(401).json({ error: 'Mật khẩu không chính xác' });
+    }
+
+    let updated;
+    await withLockedAppDataValue('users', (collection) => {
+      const list = Array.isArray(collection) ? collection : [];
+      const idx = list.findIndex(u => u.username === username);
+      if (idx === -1) throw new HttpError(401, 'Tài khoản không còn tồn tại');
+      updated = { ...list[idx] };
+      delete updated.totpEnabled;
+      delete updated.totpSecretEnc;
+      delete updated.totpBackupCodeHashes;
+      resetLoginAttempts(updated);
+      updated.sessionVersion = (updated.sessionVersion || 0) + 1;
+      list[idx] = updated;
+      return list;
+    });
+
+    setAuthCookie(res, signToken(updated));
+    notifyTotpChange(updated, `Xác thực 2 lớp (TOTP) trên tài khoản của bạn (${username}) VỪA BỊ GỠ BỎ trên hệ thống VPDT. Nếu không phải bạn thực hiện, vui lòng liên hệ ngay quản trị viên.`).catch(e => console.error('Lỗi gửi email báo gỡ TOTP:', e.message));
+    res.json(toSafeUser(updated));
+  } catch (err) {
+    if (err instanceof HttpError) return res.status(err.status).json({ error: err.message });
+    console.error('DELETE /api/auth/totp lỗi:', err.message);
+    res.status(500).json({ error: 'Không thể gỡ xác thực 2 lớp' });
+  }
+});
+
+// GET /api/auth/totp/status/:username — admin xem trạng thái TOTP của NGƯỜI KHÁC (mất thiết bị, không tự
+// đăng nhập được để tự xem) — chỉ trả đúng 1 boolean, không có gì nhạy cảm để cần lọc thêm.
+router.get('/totp/status/:username', requireAuth, (req, res) => {
+  if (!req.freshUser.perms?.admin) {
+    return res.status(403).json({ error: 'Chỉ Quản Trị Viên mới có quyền xem trạng thái xác thực 2 lớp của người khác' });
+  }
+  const target = (req.allUsers || []).find(u => u.username === req.params.username);
+  if (!target) return res.status(404).json({ error: 'Không tìm thấy tài khoản' });
+  res.json({ totpEnabled: !!target.totpEnabled });
+});
+
+// DELETE /api/auth/totp/:username — admin gỡ HỘ TOTP của NGƯỜI KHÁC — khắc phục tình huống mất điện
+// thoại (thiết bị cài Authenticator) mà chính chủ không còn cách nào tự đăng nhập lại để tự gỡ. Khác
+// DELETE /totp ở trên (gỡ hộ CHÍNH MÌNH, cấp lại cookie cho phiên đang gọi) — route này tăng
+// sessionVersion của NGƯỜI ĐÓ (không phải của admin đang gọi) để mọi phiên cũ của họ mất hiệu lực ngay,
+// và KHÔNG đụng gì tới cookie/phiên của admin đang thao tác. Người bị gỡ sẽ đăng nhập lại bình thường
+// (không cần TOTP nữa cho tới khi thiết lập lại) rồi bị blockIfMustChangePassword bắt thiết lập lại NGAY
+// — không có khoảng trống nào để đăng nhập mà bỏ qua luôn 2 lớp.
+router.delete('/totp/:username', requireAuth, async (req, res) => {
+  if (!req.freshUser.perms?.admin) {
+    return res.status(403).json({ error: 'Chỉ Quản Trị Viên mới có quyền gỡ xác thực 2 lớp của người khác' });
+  }
+  try {
+    let updated;
+    await withLockedAppDataValue('users', (collection) => {
+      const list = Array.isArray(collection) ? collection : [];
+      const idx = list.findIndex(u => u.username === req.params.username);
+      if (idx === -1) throw new HttpError(404, 'Không tìm thấy tài khoản');
+      updated = { ...list[idx] };
+      delete updated.totpEnabled;
+      delete updated.totpSecretEnc;
+      delete updated.totpBackupCodeHashes;
+      updated.sessionVersion = (updated.sessionVersion || 0) + 1;
+      list[idx] = updated;
+      return list;
+    });
+    notifyTotpChange(updated, `Xác thực 2 lớp (TOTP) trên tài khoản của bạn (${req.params.username}) VỪA BỊ QUẢN TRỊ VIÊN (${req.freshUser.username}) GỠ BỎ để hỗ trợ khắc phục mất thiết bị trên hệ thống VPDT. Vui lòng thiết lập lại ngay ở lần đăng nhập tiếp theo.`).catch(e => console.error('Lỗi gửi email báo admin gỡ TOTP hộ:', e.message));
+    res.json({ ok: true });
+  } catch (err) {
+    if (err instanceof HttpError) return res.status(err.status).json({ error: err.message });
+    console.error('DELETE /api/auth/totp/:username lỗi:', err.message);
+    res.status(500).json({ error: 'Không thể gỡ xác thực 2 lớp' });
   }
 });
 

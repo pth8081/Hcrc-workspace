@@ -172,7 +172,9 @@ const roomManagerUser = {
 const adminUser = {
   username: 'admin', name: 'Quản Trị Viên', dept: 'Ban Giám Đốc', role: 'ADMIN',
   phone: '0955555555', email: 'admin@company.com', jobTitle: 'Admin',
-  active: true, perms: { admin: true }
+  // totpEnabled:true — admin bắt buộc xác thực 2 lớp (xem lib/totp.js/proceedAfterAuth() ở index.html);
+  // thiếu field này khiến loginAs() (gọi thẳng proceedAfterAuth()) bị chặn ở màn bắt buộc thiết lập TOTP.
+  active: true, perms: { admin: true }, totpEnabled: true
 };
 const driverUser = {
   username: 'lx1', name: 'Nguyễn Văn Tài', dept: 'Phòng Hành Chính', role: 'STAFF',
