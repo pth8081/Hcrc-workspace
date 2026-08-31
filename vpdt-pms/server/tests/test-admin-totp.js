@@ -408,6 +408,57 @@ const assert = require('assert');
     assert.ok(!('totpBackupCodeHashes' in res.body));
   });
 
+  // ===== Thêm thiết bị khác (reveal-secret) — không cần gỡ + thiết lập lại từ đầu =====
+  await run('reveal-secret: thiếu mật khẩu -> 400', async () => {
+    resetAppData();
+    await enableTotpFor(ADMIN1);
+    const res = await api('POST', '/api/auth/totp/reveal-secret', {}, ADMIN1);
+    assert.strictEqual(res.status, 400);
+  });
+
+  await run('reveal-secret: chưa bật TOTP -> 400', async () => {
+    resetAppData();
+    const res = await api('POST', '/api/auth/totp/reveal-secret', { password: '123456' }, ADMIN2);
+    assert.strictEqual(res.status, 400);
+  });
+
+  await run('reveal-secret: sai mật khẩu -> 401, KHÔNG đổi gì', async () => {
+    resetAppData();
+    await enableTotpFor(ADMIN1);
+    const before = APP_DATA.users.find(u => u.username === ADMIN1.username).totpSecretEnc;
+    const res = await api('POST', '/api/auth/totp/reveal-secret', { password: 'saimatkhau' }, ADMIN1);
+    assert.strictEqual(res.status, 401);
+    const after = APP_DATA.users.find(u => u.username === ADMIN1.username).totpSecretEnc;
+    assert.strictEqual(after, before, 'Bí mật TOTP không bị đổi khi sai mật khẩu');
+  });
+
+  await run('reveal-secret: đúng mật khẩu -> trả ĐÚNG bí mật ĐANG DÙNG (không sinh mới), gửi email báo', async () => {
+    resetAppData();
+    const { secret: originalSecret } = await enableTotpFor(ADMIN1);
+    sentMailCount = 0;
+    const res = await api('POST', '/api/auth/totp/reveal-secret', { password: '123456' }, ADMIN1);
+    assert.strictEqual(res.status, 200);
+    assert.strictEqual(res.body.secret, originalSecret, 'Phải trả ĐÚNG bí mật đang dùng, không sinh bí mật mới');
+    assert.ok(res.body.qrDataUrl.startsWith('data:image/'));
+    assert.strictEqual(sentMailCount, 1, 'Phải gửi email báo khi xem lại bí mật TOTP');
+
+    // Mã sinh ra từ bí mật vừa trả về vẫn xác thực được ở vòng đăng nhập 2 bước thật — chứng minh nó
+    // ĐÚNG LÀ bí mật hệ thống đang lưu, không phải giá trị giả lập nào khác.
+    const code = authenticator.generate(res.body.secret);
+    await api('POST', '/api/auth/login', { username: ADMIN1.username, password: '123456' });
+    const loginRes = await api('POST', '/api/auth/verify-totp-login', { username: ADMIN1.username, code });
+    assert.strictEqual(loginRes.status, 200);
+  });
+
+  await run('reveal-secret: KHÔNG tăng sessionVersion (hành động "thêm", không phải "thu hồi lòng tin")', async () => {
+    resetAppData();
+    await enableTotpFor(ADMIN1);
+    const before = APP_DATA.users.find(u => u.username === ADMIN1.username).sessionVersion || 0;
+    await api('POST', '/api/auth/totp/reveal-secret', { password: '123456' }, ADMIN1);
+    const after = APP_DATA.users.find(u => u.username === ADMIN1.username).sessionVersion || 0;
+    assert.strictEqual(after, before);
+  });
+
   server.close();
   console.log('');
   console.log(`==== ${passed}/${passed + failed} scenario(s) passed${failed ? `, ${failed} FAILED` : ''} ====`);

@@ -742,6 +742,65 @@ router.post('/totp/setup-verify', loginRateLimiter, requireAuth, async (req, res
   }
 });
 
+// POST /api/auth/totp/reveal-secret — hiện LẠI mã QR/mã thủ công của bí mật TOTP HIỆN TẠI (đã bật từ
+// trước), để thêm 1 thiết bị Authenticator KHÁC mà KHÔNG cần gỡ rồi thiết lập lại từ đầu. Khác hẳn
+// /setup-options (luôn sinh bí mật MỚI, dùng khi CHƯA bật hoặc muốn đổi hẳn sang bí mật khác) — route
+// này lấy đúng bí mật ĐANG DÙNG (giải mã totpSecretEnc), nên quét/nhập mã QR này trên máy thứ 2 không
+// làm mất hiệu lực máy thứ nhất (TOTP vốn là 1 bí mật dùng chung — nhiều app cùng giữ đúng 1 bí mật đó
+// đều sinh ra cùng 1 dãy mã hợp lệ ở mỗi thời điểm, không có khái niệm "thiết bị chính/phụ"). Bắt buộc
+// xác nhận đúng mật khẩu hiện tại (cùng lý do DELETE /totp bên dưới — tránh ai đó lợi dụng phiên trình
+// duyệt đang mở sẵn tự lấy bí mật TOTP của người khác) và gửi email báo mỗi lần gọi, vì đây là hành động
+// lộ ra 1 bí mật còn hiệu lực — người thật sự chủ tài khoản cần biết ngay nếu không phải họ vừa làm
+// việc này. KHÔNG tăng sessionVersion (giống /setup-verify — đây là hành động "thêm", không phải "thu
+// hồi lòng tin").
+router.post('/totp/reveal-secret', loginRateLimiter, requireAuth, async (req, res) => {
+  const { password } = req.body || {};
+  if (!password) return res.status(400).json({ error: 'Vui lòng nhập mật khẩu hiện tại để xác nhận' });
+
+  try {
+    const username = req.freshUser.username;
+    if (!req.freshUser.totpEnabled || !req.freshUser.totpSecretEnc) {
+      return res.status(400).json({ error: 'Tài khoản chưa thiết lập xác thực 2 lớp' });
+    }
+
+    const remainingLockMinutes = getLockoutRemainingMinutes(req.freshUser);
+    if (remainingLockMinutes !== null) {
+      return res.status(429).json({ error: `Tài khoản tạm khóa do nhập sai quá nhiều lần. Vui lòng thử lại sau ${remainingLockMinutes} phút.` });
+    }
+
+    const ok = await verifyPassword(password, req.freshUser.pass || req.freshUser.password);
+    if (!ok) {
+      await withLockedAppDataValue('users', (collection) => {
+        const list = Array.isArray(collection) ? collection : [];
+        const idx = list.findIndex(u => u.username === username);
+        if (idx !== -1) recordFailedLogin(list[idx]);
+        return list;
+      });
+      return res.status(401).json({ error: 'Mật khẩu không chính xác' });
+    }
+
+    if (req.freshUser.failedLoginAttempts) {
+      await withLockedAppDataValue('users', (collection) => {
+        const list = Array.isArray(collection) ? collection : [];
+        const idx = list.findIndex(u => u.username === username);
+        if (idx !== -1) resetLoginAttempts(list[idx]);
+        return list;
+      });
+    }
+
+    const secret = decryptSecret(req.freshUser.totpSecretEnc);
+    const otpauthUri = totp.buildOtpauthUri(username, secret);
+    const qrDataUrl = await QRCode.toDataURL(otpauthUri);
+
+    notifyTotpChange(req.freshUser, `Bạn (${req.freshUser.name || username}) vừa xem lại mã QR xác thực 2 lớp (TOTP) hiện tại của tài khoản của mình trên hệ thống VPDT (để thêm thiết bị Authenticator khác). Nếu không phải bạn thực hiện, vui lòng đổi mật khẩu và liên hệ ngay quản trị viên.`).catch(e => console.error('Lỗi gửi email báo xem lại mã QR TOTP:', e.message));
+
+    res.json({ secret, otpauthUri, qrDataUrl });
+  } catch (err) {
+    console.error('POST /api/auth/totp/reveal-secret lỗi:', err.message);
+    res.status(500).json({ error: 'Không thể hiện lại mã QR' });
+  }
+});
+
 // DELETE /api/auth/totp — người dùng TỰ gỡ TOTP của CHÍNH mình (đổi điện thoại, muốn thiết lập lại...).
 // Bắt buộc xác nhận đúng mật khẩu hiện tại — cùng lý do currentPassword ở PATCH /me/change-pin (tránh ai
 // đó lợi dụng phiên trình duyệt đang mở sẵn tự gỡ TOTP mà không biết mật khẩu). Tăng sessionVersion (thu
