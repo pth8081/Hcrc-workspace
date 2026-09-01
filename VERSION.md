@@ -1,9 +1,41 @@
 # Phiên bản hiện tại
 
-**1.99.1** — đã merge vào `main` (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở
+**1.100.0** — đã merge vào `main` (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở
 badge góc màn hình + `/api/health`).
 
-## Cập nhật gần nhất (PR #224, nhánh `claude/chao-ban-oo5ijl`)
+## Cập nhật gần nhất (PR #226, nhánh `claude/chao-ban-oo5ijl`)
+
+Theo yêu cầu: tạo module top-level mới **"Vận Hành"** gồm 3 tab độc lập, và **xoá hoàn toàn "Đầu Tư"**
+khỏi module "Tổng Hợp" (kể cả dữ liệu trong DB thật, không chỉ ẩn giao diện):
+
+1. **Vận Hành — 3 luồng nghiệp vụ MỚI, hoàn toàn tách biệt** (không phải di dời từ Tổng Hợp): "Phê Duyệt
+   Đơn Hàng" (kèm bảng chi tiết hàng hoá), "Mở Mới Siêu Thị", "Sửa Chữa Siêu Thị" — mỗi luồng 1 collection
+   riêng (`operationOrders`/`operationStoreOpenings`/`operationRepairs`), tạo hồ sơ luôn ép về đúng phòng
+   ban người tạo (không tạo hộ phòng khác), duyệt theo quy trình phòng ban cấu hình được ở Hệ Thống →
+   Quy Trình & Phê Duyệt (đã bổ sung 3 mục mới ở đó — **cần admin vào cấu hình người duyệt sau khi
+   deploy**, nếu chưa cấu hình sẽ tự rơi về chỉ admin duyệt được theo cơ chế mặc định có sẵn của engine).
+   3 quyền tạo mới (`pOperationOrderCreate`/`pOperationStoreOpenCreate`/`pOperationRepairCreate`) trong
+   khối phân quyền admin mới "🚚 Vận Hành".
+2. **Xoá "Đầu Tư" khỏi Tổng Hợp**: gỡ toàn bộ khỏi giao diện (nav/tab con/dropdown/nhãn/báo cáo/quyền
+   `officeInvest`) và khỏi validate server (`OFFICE_SUBTYPE_TO_PERM_FLAG` không còn nhận `DAU_TU` — tự
+   động chặn tạo mới, không cần thêm code chặn riêng). Script một-lần `server/scripts/purge-dau-tu.js`
+   (dry-run mặc định, `--confirm` để xoá thật) xoá THẲNG khỏi `dbo.Records` toàn bộ hồ sơ Đầu Tư còn lại
+   cùng đề nghị thanh toán phát sinh từ đó — **KHÔNG qua Thùng Rác** (đúng yêu cầu "không giữ lại gì"),
+   kèm dọn file đính kèm không còn ai tham chiếu.
+
+**Deploy impact:** không đổi `server/sql/schema.sql`, không thêm biến môi trường mới, không thêm
+dependency mới — chỉ copy code + `pm2 restart`. **CẦN THAO TÁC THỦ CÔNG 1 LẦN sau khi deploy:**
+(1) chạy `node scripts/purge-dau-tu.js` (từ thư mục `server/`) để xem trước, rồi `node
+scripts/purge-dau-tu.js --confirm` để xoá vĩnh viễn dữ liệu Đầu Tư còn lại trên DB thật; (2) admin vào
+Hệ Thống → Quy Trình & Phê Duyệt cấu hình người duyệt cho 3 luồng Vận Hành mới (nếu không cấu hình, mặc
+định chỉ admin duyệt được).
+
+Đã kiểm thử: phát hiện + fix 1 lỗi nghiêm trọng qua chạy test thật (không phải chỉ đọc code) —
+`updateTongHopNavVisibility()` còn tham chiếu phần tử đã xoá gây crash toàn bộ nav Tổng Hợp cho mọi
+người dùng, đã fix. `tests/test-office-budget.js` chạy lại 54/54 pass sau fix, xác nhận không regression
+ở Office/Budget. `node -c` + kiểm tra trùng id HTML/cân bằng div toàn bộ `public/index.html`.
+
+## Trước đó (PR #224, nhánh `claude/chao-ban-oo5ijl`)
 
 Sửa lại mô hình phân quyền Ngân Sách vừa thêm ở PR #222 theo yêu cầu làm rõ lại — **bỏ hẳn tầng "xem miễn
 phí"**, `budgetCreate` trở thành quyền NỀN TẢNG bắt buộc:
