@@ -16,6 +16,10 @@
 //   3. Đồng bộ danh bạ (routes/externalAuthVerify.js): GET /api/external/users — cùng API key, trả toàn
 //      bộ hoặc 1 hồ sơ (?account=) gồm username/tên/điện thoại/email/phòng/chức danh/active, KHÔNG BAO
 //      GIỜ kèm mật khẩu; API key thiếu/sai/đã thu hồi -> 401; account không tồn tại -> 404.
+//   4. Lớp bảo mật thứ 2 — chặn IP theo từng key (lib/externalAuth.js isIpAllowed/parseAllowedIpsInput):
+//      hàm thuần (khớp IPv4/CIDR, từ chối rule sai định dạng); key có allowedIps -> chặn IP lạ (403), cho
+//      qua IP đúng; key KHÔNG cấu hình allowedIps (mặc định) -> không hạn chế; sửa allowedIps của key đang
+//      hoạt động qua route riêng, không sửa được key đã thu hồi.
 //
 // Cùng khuôn tests/test-admin-totp.js: gọi thẳng 2 router THẬT (routes/externalAuthAdmin.js +
 // routes/externalAuthVerify.js) trong tiến trình Node qua http.createServer thật, chỉ giả lập tầng lưu
@@ -90,6 +94,7 @@ stubModule('lib/auth', {
 const express = require('express');
 const adminRoutes = require('../routes/externalAuthAdmin');
 const verifyRoutes = require('../routes/externalAuthVerify');
+const { isIpAllowed, parseAllowedIpsInput } = require('../lib/externalAuth');
 
 let PORT = 0;
 function startApp() {
@@ -350,6 +355,69 @@ const sleep = (ms) => new Promise(r => setTimeout(r, ms));
     await api('POST', `/api/admin/external-api-keys/${created.body.id}/revoke`, undefined, ADMIN);
     const res = await directoryApi(created.body.apiKey);
     assert.strictEqual(res.status, 401);
+  });
+
+  // ===== Lớp bảo mật thứ 2: chặn IP theo từng API key (lib/externalAuth.js) =====
+  await run('isIpAllowed/parseAllowedIpsInput: hàm thuần — IPv4, CIDR, rule sai định dạng', () => {
+    assert.strictEqual(isIpAllowed('1.2.3.4', []), true, 'Mảng rỗng = không hạn chế');
+    assert.strictEqual(isIpAllowed('1.2.3.4', ['1.2.3.4']), true);
+    assert.strictEqual(isIpAllowed('1.2.3.5', ['1.2.3.4']), false);
+    assert.strictEqual(isIpAllowed('203.0.113.99', ['203.0.113.0/24']), true, 'Khớp dải CIDR');
+    assert.strictEqual(isIpAllowed('203.0.114.1', ['203.0.113.0/24']), false, 'Ngoài dải CIDR');
+    assert.strictEqual(isIpAllowed('::ffff:1.2.3.4', ['1.2.3.4']), true, 'Chuẩn hoá dạng IPv4-mapped IPv6');
+
+    assert.deepStrictEqual(parseAllowedIpsInput('1.2.3.4, 5.6.7.0/24\n8.8.8.8'), ['1.2.3.4', '5.6.7.0/24', '8.8.8.8']);
+    assert.deepStrictEqual(parseAllowedIpsInput(''), [], 'Chuỗi rỗng -> mảng rỗng, không lỗi');
+    assert.deepStrictEqual(parseAllowedIpsInput(undefined), []);
+    assert.deepStrictEqual(parseAllowedIpsInput('1.2.3.4, 1.2.3.4'), ['1.2.3.4'], 'Loại trùng');
+    assert.throws(() => parseAllowedIpsInput('khong-phai-ip'), /không phải địa chỉ/);
+    assert.throws(() => parseAllowedIpsInput('1.2.3.4/99'), /CIDR hợp lệ/);
+  });
+
+  await run('Tạo key với allowedIps sai định dạng -> 400, không tạo key', async () => {
+    resetAppData();
+    const res = await api('POST', '/api/admin/external-api-keys', { name: 'App Sai IP', allowedIps: 'khong-phai-ip' }, ADMIN);
+    assert.strictEqual(res.status, 400);
+    assert.strictEqual(APP_DATA.externalApiKeys.length, 0);
+  });
+
+  await run('Key có allowedIps khác IP thật -> 403; thêm đúng IP thật (127.0.0.1) vào -> cho qua', async () => {
+    resetAppData();
+    const created = await api('POST', '/api/admin/external-api-keys', { name: 'App Giới Hạn IP', allowedIps: '203.0.113.5' }, ADMIN);
+    assert.deepStrictEqual(created.body.allowedIps, ['203.0.113.5']);
+
+    const blocked = await verifyApi(created.body.apiKey, { account: EMP.username, password: 'NhanVien123!' });
+    assert.strictEqual(blocked.status, 403);
+    const blockedDir = await directoryApi(created.body.apiKey);
+    assert.strictEqual(blockedDir.status, 403, 'Chặn IP áp dụng cho CẢ verify-credentials LẪN /users (dùng chung middleware)');
+
+    const updated = await api('POST', `/api/admin/external-api-keys/${created.body.id}/allowed-ips`, { allowedIps: '203.0.113.5, 127.0.0.1/8' }, ADMIN);
+    assert.strictEqual(updated.status, 200);
+    const allowed = await verifyApi(created.body.apiKey, { account: EMP.username, password: 'NhanVien123!' });
+    assert.strictEqual(allowed.status, 200);
+    assert.strictEqual(allowed.body.success, true);
+  });
+
+  await run('Key KHÔNG cấu hình allowedIps (mặc định) -> không bị hạn chế IP', async () => {
+    resetAppData();
+    const created = await createKeyAsAdmin('App Không Giới Hạn');
+    assert.deepStrictEqual(created.body.allowedIps, []);
+    const res = await verifyApi(created.body.apiKey, { account: EMP.username, password: 'NhanVien123!' });
+    assert.strictEqual(res.status, 200);
+  });
+
+  await run('POST .../:id/allowed-ips: người không phải admin bị chặn 403; key đã thu hồi -> 409; id sai -> 404', async () => {
+    resetAppData();
+    const created = await createKeyAsAdmin('App Test Sửa IP');
+    const forbidden = await api('POST', `/api/admin/external-api-keys/${created.body.id}/allowed-ips`, { allowedIps: '1.2.3.4' }, EMP);
+    assert.strictEqual(forbidden.status, 403);
+
+    await api('POST', `/api/admin/external-api-keys/${created.body.id}/revoke`, undefined, ADMIN);
+    const onRevoked = await api('POST', `/api/admin/external-api-keys/${created.body.id}/allowed-ips`, { allowedIps: '1.2.3.4' }, ADMIN);
+    assert.strictEqual(onRevoked.status, 409);
+
+    const notFound = await api('POST', '/api/admin/external-api-keys/999999/allowed-ips', { allowedIps: '1.2.3.4' }, ADMIN);
+    assert.strictEqual(notFound.status, 404);
   });
 
   server.close();

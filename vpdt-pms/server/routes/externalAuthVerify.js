@@ -7,6 +7,10 @@
 //
 // KHÔNG mount sau requireAuth (server.js) — caller là hệ thống ngoài, không có phiên đăng nhập HCRC, tự
 // xác thực bằng API key trong header Authorization thay cho cookie phiên (xem requireExternalApiKey()).
+// LỚP BẢO MẬT THỨ 2 (tuỳ chọn, cấu hình theo TỪNG key): nếu admin đã khai báo allowedIps[] cho key đó
+// (xem routes/externalAuthAdmin.js), request phải tới từ đúng IP/dải CIDR trong danh sách mới được đi
+// tiếp — key ĐÚNG nhưng gọi từ IP lạ vẫn bị chặn (403). Key chưa cấu hình allowedIps (mảng rỗng, kể cả
+// key tạo trước khi có tính năng này) không bị ảnh hưởng — cho phép mọi IP như trước.
 // POST /verify-credentials dùng CHUNG bộ đếm khoá tài khoản (lib/loginAttempts.js) với
 // POST /api/auth/login — 1 kênh xác thực mật khẩu bị lộ vẫn tính chung vào đúng 5-lần-sai-thì-khoá,
 // không mở thêm đường dò mật khẩu không giới hạn số lần thử.
@@ -16,7 +20,7 @@ const router = express.Router();
 const { getAppDataValue, withLockedAppDataValue } = require('../lib/appData');
 const { verifyPassword } = require('../lib/auth');
 const { recordFailedLogin, resetLoginAttempts, getLockoutRemainingMinutes } = require('../lib/loginAttempts');
-const { extractBearerToken, verifyApiKey } = require('../lib/externalAuth');
+const { extractBearerToken, verifyApiKey, isIpAllowed } = require('../lib/externalAuth');
 const { insertSystemLog } = require('../lib/systemLogStore');
 const { sendServerError } = require('../lib/errorResponse');
 
@@ -73,6 +77,10 @@ async function requireExternalApiKey(req, res, next) {
     if (!apiKey) {
       logExternalAuth(req, { actionType: 'API_KEY_INVALID', description: `Gọi ${req.method} ${req.path} với API key thiếu/sai/đã bị thu hồi`, status: 'FAILURE' });
       return res.status(401).json({ error: 'API key không hợp lệ' });
+    }
+    if (!isIpAllowed(req.ip, apiKey.allowedIps)) {
+      logExternalAuth(req, { apiKeyName: apiKey.name, actionType: 'API_KEY_IP_BLOCKED', description: `Gọi ${req.method} ${req.path} từ IP không nằm trong danh sách cho phép của key (IP thực: ${req.ip})`, status: 'FAILURE' });
+      return res.status(403).json({ error: 'IP gọi không nằm trong danh sách được phép sử dụng API key này' });
     }
     touchApiKeyLastUsed(apiKey.id);
     req.externalApiKey = apiKey;
