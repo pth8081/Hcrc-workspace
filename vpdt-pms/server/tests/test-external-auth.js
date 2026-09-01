@@ -14,8 +14,11 @@
 //      sai liên tiếp -> khoá tạm, mật khẩu đúng lúc đang khoá vẫn báo success:false); không cấp cookie
 //      phiên (không phải "đăng nhập hộ"); cập nhật lastUsedAt trên API key sau khi dùng.
 //   3. Đồng bộ danh bạ (routes/externalAuthVerify.js): GET /api/external/users — cùng API key, trả toàn
-//      bộ hoặc 1 hồ sơ (?account=) gồm username/tên/điện thoại/email/phòng/chức danh/active, KHÔNG BAO
-//      GIỜ kèm mật khẩu; API key thiếu/sai/đã thu hồi -> 401; account không tồn tại -> 404.
+//      bộ hoặc 1 hồ sơ (?account=) ĐÚNG 6 field đối tác yêu cầu: vị trí (position, "Văn phòng"/"Siêu
+//      Thị" suy từ posType — kể cả user cũ chưa có posType tường minh), mã nhân viên (username), tên
+//      nhân viên (name), điện thoại (phone), phòng (dept), chức danh (jobTitle) — KHÔNG BAO GIỜ kèm mật
+//      khẩu (và không kèm email/active vì không nằm trong yêu cầu); API key thiếu/sai/đã thu hồi -> 401;
+//      account không tồn tại -> 404.
 //   4. Lớp bảo mật thứ 2 — chặn IP theo từng key (lib/externalAuth.js isIpAllowed/parseAllowedIpsInput):
 //      hàm thuần (khớp IPv4/CIDR, từ chối rule sai định dạng); key có allowedIps -> chặn IP lạ (403), cho
 //      qua IP đúng; key KHÔNG cấu hình allowedIps (mặc định) -> không hạn chế; sửa allowedIps của key đang
@@ -43,14 +46,18 @@ function stubModule(relPath, exportsObj) {
 
 // ===================== Seed =====================
 const ADMIN = { username: 'admin1', name: 'Quản Trị Viên', dept: 'Ban Giám Đốc', perms: { admin: true }, active: true, pass: 'hashed:AdminPass123!' };
-const EMP = { username: 'nv1', name: 'Nhân Viên Kinh Doanh', dept: 'Kinh Doanh', jobTitle: 'Chuyên viên', phone: '0901234567', email: 'nv1@company.com', perms: {}, active: true, pass: 'hashed:NhanVien123!' };
-const INACTIVE_EMP = { username: 'nv2', name: 'Nhân Viên Đã Nghỉ', dept: 'Kinh Doanh', perms: {}, active: false, pass: 'hashed:NgheViec123!' };
+const EMP = { username: 'nv1', name: 'Nhân Viên Kinh Doanh', dept: 'Kinh Doanh', jobTitle: 'Chuyên viên', phone: '0901234567', email: 'nv1@company.com', posType: 'HO', perms: {}, active: true, pass: 'hashed:NhanVien123!' };
+const INACTIVE_EMP = { username: 'nv2', name: 'Nhân Viên Đã Nghỉ', dept: 'Kinh Doanh', posType: 'HO', perms: {}, active: false, pass: 'hashed:NgheViec123!' };
+// nv3: nhân viên Siêu Thị, KHÔNG có posType tường minh (giả lập user cũ tạo trước khi có field này) —
+// dept trùng tên 1 siêu thị trong danh mục "stores" -> phải tự suy luận ra posType='STORE' (khớp đúng
+// logic client renderUserForm()/editUser() ở public/index.html).
+const STORE_EMP = { username: 'nv3', name: 'Nhân Viên Siêu Thị A', dept: 'Siêu Thị Quận 1', jobTitle: 'Nhân viên bán hàng', phone: '0909998888', perms: {}, active: true, pass: 'hashed:SieuThi123!' };
 
 function seedUsers() {
-  return [JSON.parse(JSON.stringify(ADMIN)), JSON.parse(JSON.stringify(EMP)), JSON.parse(JSON.stringify(INACTIVE_EMP))];
+  return [JSON.parse(JSON.stringify(ADMIN)), JSON.parse(JSON.stringify(EMP)), JSON.parse(JSON.stringify(INACTIVE_EMP)), JSON.parse(JSON.stringify(STORE_EMP))];
 }
-let APP_DATA = { users: seedUsers(), externalApiKeys: [] };
-function resetAppData() { APP_DATA = { users: seedUsers(), externalApiKeys: [] }; }
+let APP_DATA = { users: seedUsers(), externalApiKeys: [], stores: ['Siêu Thị Quận 1', 'Siêu Thị Quận 2'] };
+function resetAppData() { APP_DATA = { users: seedUsers(), externalApiKeys: [], stores: ['Siêu Thị Quận 1', 'Siêu Thị Quận 2'] }; }
 
 let systemLogEntries = [];
 stubModule('lib/systemLogStore', {
@@ -320,23 +327,33 @@ const sleep = (ms) => new Promise(r => setTimeout(r, ms));
     assert.strictEqual(wrong.status, 401);
   });
 
-  await run('GET /api/external/users: key đúng -> trả TOÀN BỘ danh bạ, đúng field, KHÔNG có mật khẩu', async () => {
+  await run('GET /api/external/users: key đúng -> trả ĐÚNG 6 field yêu cầu (vị trí/mã NV/tên/sđt/phòng/chức danh), KHÔNG có mật khẩu', async () => {
     resetAppData();
     const created = await createKeyAsAdmin('App Đồng Bộ Danh Bạ');
     const res = await directoryApi(created.body.apiKey);
     assert.strictEqual(res.status, 200);
-    assert.strictEqual(res.body.length, 3);
+    assert.strictEqual(res.body.length, 4);
     const nv1 = res.body.find(u => u.username === EMP.username);
     assert.deepStrictEqual(nv1, {
-      username: 'nv1', name: 'Nhân Viên Kinh Doanh', dept: 'Kinh Doanh', jobTitle: 'Chuyên viên',
-      phone: '0901234567', email: 'nv1@company.com', active: true
-    });
+      position: 'Văn phòng', username: 'nv1', name: 'Nhân Viên Kinh Doanh', phone: '0901234567',
+      dept: 'Kinh Doanh', jobTitle: 'Chuyên viên'
+    }, 'Đúng 6 field: position/username(mã NV)/name/phone/dept/jobTitle — không có email/active/mật khẩu');
     res.body.forEach(u => {
       assert.strictEqual(u.pass, undefined);
       assert.strictEqual(u.password, undefined);
+      assert.strictEqual(u.email, undefined, 'Không nằm trong 6 field yêu cầu, không trả kèm');
+      assert.strictEqual(u.active, undefined, 'Không nằm trong 6 field yêu cầu, không trả kèm');
     });
-    const nv2 = res.body.find(u => u.username === INACTIVE_EMP.username);
-    assert.strictEqual(nv2.active, false, 'Tài khoản vô hiệu hóa vẫn trả active:false để ứng dụng ngoài tự đồng bộ');
+  });
+
+  await run('GET /api/external/users: "position" (Vị Trí) suy luận đúng — user cũ không có posType nhưng dept trùng tên siêu thị -> "Siêu Thị"', async () => {
+    resetAppData();
+    const created = await createKeyAsAdmin('App Kiểm Tra Vị Trí');
+    const res = await directoryApi(created.body.apiKey);
+    const nv3 = res.body.find(u => u.username === STORE_EMP.username);
+    assert.strictEqual(nv3.position, 'Siêu Thị', 'dept "Siêu Thị Quận 1" khớp DB.stores -> suy luận STORE dù không có posType tường minh');
+    const nv1 = res.body.find(u => u.username === EMP.username);
+    assert.strictEqual(nv1.position, 'Văn phòng', 'posType="HO" tường minh');
   });
 
   await run('GET /api/external/users?account=...: tra đúng 1 hồ sơ; không tồn tại -> 404', async () => {
