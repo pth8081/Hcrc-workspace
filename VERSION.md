@@ -1,9 +1,35 @@
 # Phiên bản hiện tại
 
-**1.97.0** — đã merge vào `main` (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở
+**1.97.1** — đã merge vào `main` (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở
 badge góc màn hình + `/api/health`).
 
-## Cập nhật gần nhất (PR #214, nhánh `claude/chao-ban-oo5ijl`)
+## Cập nhật gần nhất (PR #216, nhánh `claude/chao-ban-oo5ijl`)
+
+Theo yêu cầu rà soát lại đúng 2 phần của API xác thực ngoài trước khi giao cho đối tác cấu hình:
+
+- **`POST /api/external/verify-credentials`**: đã khớp đúng yêu cầu sẵn — dùng API key để xác thực, trả
+  `{success:false}` khi sai username/password, `{success:true}` khi đúng. Không cần sửa gì.
+- **`GET /api/external/users`**: sửa lại response cho ĐÚNG 6 field đối tác yêu cầu — **vị trí, mã nhân
+  viên, tên nhân viên, điện thoại, phòng, chức danh** — thay vì 7 field cũ (`username/name/dept/
+  jobTitle/phone/email/active`).
+  - `position` (vị trí): suy từ field `posType` sẵn có trong hệ thống ("Văn phòng" khi HO, "Siêu Thị" khi
+    STORE — đúng khái niệm "Vị Trí" ở màn Người Dùng). User cũ tạo trước khi có field `posType` được suy
+    luận lại y hệt logic phía client hiện có (dựa vào `dept` có trùng tên 1 siêu thị trong danh mục
+    `stores` hay không).
+  - `username`: đóng vai trò "mã nhân viên" — hệ thống không có field mã nhân viên riêng, `username` là
+    định danh duy nhất/không đổi của mỗi nhân sự dùng để đăng nhập.
+  - Bỏ hẳn `email` và `active` khỏi response vì không nằm trong 6 field đối tác yêu cầu.
+- **Lưu ý cho người dùng**: chưa cấp API key thật nào cho đối tác — việc tạo key phải làm trực tiếp trên
+  màn Admin (Hệ Thống → Quản Trị → API Xác Thực Ngoài → "Tạo Key Mới") vì key thật chỉ hiển thị đúng 1 lần
+  lúc tạo và không thể sinh hộ được từ môi trường phát triển.
+
+**Deploy impact:** không đổi `server/sql/schema.sql`, không thêm biến môi trường mới, không thêm
+dependency mới — chỉ copy code + `pm2 restart`.
+
+Đã kiểm thử: `tests/test-external-auth.js` cập nhật/thêm 2 kịch bản (đúng 6 field, suy luận vị trí cho
+user cũ chưa có `posType` tường minh) — 26/26 pass. Toàn bộ `tests/test-*.js` — 0 lỗi, không regression.
+
+## Trước đó (PR #214, nhánh `claude/chao-ban-oo5ijl`)
 
 Theo yêu cầu: thêm lớp bảo mật thứ 2 cho API xác thực ngoài (PR #212) — cấu hình theo TỪNG API key danh
 sách IP được phép gọi.
