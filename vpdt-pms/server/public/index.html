@@ -4177,6 +4177,29 @@ input[data-sdd-list] {
     </div>
   </div>
 
+  <!-- Màn hình 4: Tab Quản Trị Hệ Thống & Phân Quyền -->
+  <!-- Màn hình Hệ Thống — gộp Quản trị + Biểu mẫu + Quy trình & Phê duyệt đồng cấp, chỉ dành cho admin -->
+  <div id="systemSection" class="hidden space-y-4">
+    <!-- Ghim thanh chuyển tab con (Quản Trị/Biểu Mẫu/Quy Trình/Quản Lý Tệp File/Log) dính ở đầu màn hình khi
+         cuộn. QUAN TRỌNG: sticky chỉ "dính" được trong phạm vi CHIỀU CAO CỦA CHÍNH THẺ CHA trực tiếp của
+         nó — trước đây #systemSection chỉ bọc mỗi thanh này (cao ~41px) trong khi 6 màn nội dung con
+         (formSection/adminSection/workflowSection/uploadTypeSection/logSection/trashSection) lại là ANH
+         EM đứng ngoài, không phải con của #systemSection, nên thanh chỉ "dính" được đúng ~41px rồi cuộn
+         mất hẳn — TRÔNG NHƯ sticky không hoạt động dù có đủ class. Đã sửa: chuyển toàn bộ 6 màn nội dung
+         con đó vào LÀM CON của #systemSection (ngay bên dưới, thẻ đóng của #systemSection giờ nằm sau
+         cùng, sau #uploadTypeSection) — nhờ vậy #systemSection luôn cao bằng đúng nội dung tab con đang
+         hiện, thanh mới thật sự dính suốt quá trình cuộn. top-14 trên điện thoại để tránh đè lên
+         #mobileTopBar (fixed, cao ~56px = pt-14 mà nội dung chính đang chừa sẵn); z-20 thấp hơn
+         #mobileTopBar (z-30) và mọi modal (z-40/z-50) để không che các lớp đó. -->
+    <div id="systemSubTabBar" class="sticky top-14 md:top-0 z-20 bg-white flex gap-2 flex-wrap border-b pb-2 pt-1">
+      <button type="button" onclick="setSystemSubTab('ADMIN')" id="btnSystemSubAdmin" class="px-3 py-1.5 rounded text-xs font-bold bg-purple-700 text-white">⚙️ Quản Trị</button>
+      <button type="button" onclick="setSystemSubTab('FORM')" id="btnSystemSubForm" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">📋 Biểu Mẫu</button>
+      <button type="button" onclick="setSystemSubTab('WORKFLOW')" id="btnSystemSubWorkflow" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">🔄 Quy Trình & Phê Duyệt</button>
+      <button type="button" onclick="setSystemSubTab('UPLOAD')" id="btnSystemSubUpload" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">📎 Quản Lý Tệp File</button>
+      <button type="button" onclick="setSystemSubTab('LOG')" id="btnSystemSubLog" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">📊 Log</button>
+      <button type="button" onclick="setSystemSubTab('TRASH')" id="btnSystemSubTrash" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">🗑️ Thùng Rác</button>
+    </div>
+
   <!-- Màn hình MODULE QUẢN LÝ BIỂU MẪU (FORM BUILDER) -->
   <div id="formSection" class="hidden space-y-6">
     <div class="bg-rose-50 p-4 rounded border border-rose-200 space-y-4">
@@ -4285,10 +4308,10 @@ input[data-sdd-list] {
     <!-- ĐỊNH NGHĨA CÁC MẪU QUY TRÌNH (WORKFLOW TEMPLATES) -->
     <div class="bg-slate-50 p-4 rounded border space-y-4">
       <h3 class="font-bold text-slate-800 text-base">🛠️ Định Nghĩa Các Mẫu Bước Phê Duyệt</h3>
-      
+
       <form onsubmit="saveWorkflowTemplate(event)" class="bg-white p-3 rounded border space-y-3">
         <input id="editingWfCode" type="hidden">
-        
+
         <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
           <div>
             <label class="block text-xs font-semibold text-gray-600 mb-1">Mã Quy Trình (tự sinh)</label>
@@ -4329,27 +4352,17 @@ input[data-sdd-list] {
     </div>
   </div>
 
-  <!-- Màn hình 4: Tab Quản Trị Hệ Thống & Phân Quyền -->
-  <!-- Màn hình Hệ Thống — gộp Quản trị + Biểu mẫu + Quy trình & Phê duyệt đồng cấp, chỉ dành cho admin -->
-  <div id="systemSection" class="hidden space-y-4">
-    <!-- Ghim thanh chuyển tab con (Quản Trị/Biểu Mẫu/Quy Trình/Quản Lý Tệp File/Log) dính ở đầu màn hình khi
-         cuộn — trước đây thanh này nằm trong dòng chảy trang bình thường nên khi nội dung 1 tab con dài
-         (đặc biệt Biểu Mẫu, Quy Trình & Phê Duyệt) cuộn xuống là mất luôn thanh chuyển tab, phải cuộn
-         ngược lên mới đổi được tab khác. top-14 trên điện thoại để tránh đè lên #mobileTopBar (fixed,
-         cao ~56px = pt-14 mà nội dung chính đang chừa sẵn); z-20 thấp hơn #mobileTopBar (z-30) và mọi
-         modal (z-40/z-50) để không che các lớp đó. -->
-    <div class="sticky top-14 md:top-0 z-20 bg-white flex gap-2 flex-wrap border-b pb-2 pt-1">
-      <button type="button" onclick="setSystemSubTab('ADMIN')" id="btnSystemSubAdmin" class="px-3 py-1.5 rounded text-xs font-bold bg-purple-700 text-white">⚙️ Quản Trị</button>
-      <button type="button" onclick="setSystemSubTab('FORM')" id="btnSystemSubForm" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">📋 Biểu Mẫu</button>
-      <button type="button" onclick="setSystemSubTab('WORKFLOW')" id="btnSystemSubWorkflow" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">🔄 Quy Trình & Phê Duyệt</button>
-      <button type="button" onclick="setSystemSubTab('UPLOAD')" id="btnSystemSubUpload" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">📎 Quản Lý Tệp File</button>
-      <button type="button" onclick="setSystemSubTab('LOG')" id="btnSystemSubLog" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">📊 Log</button>
-      <button type="button" onclick="setSystemSubTab('TRASH')" id="btnSystemSubTrash" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">🗑️ Thùng Rác</button>
-    </div>
-  </div>
-
   <div id="adminSection" class="hidden space-y-6">
-    <div class="flex flex-wrap gap-2 border-b pb-2">
+    <!-- Ghim thanh chuyển tab con (Cấu Hình Email/Quản Lý Danh Mục/Phân Quyền/API Xác Thực Ngoài) dính
+         NGAY DƯỚI thanh Hệ Thống ở trên (#systemSubTabBar) khi cuộn — cùng lý do/khuôn với chú thích ở
+         #systemSubTabBar (trước đây thanh này nằm trong dòng chảy trang bình thường nên nội dung cây
+         phân quyền rất dài của tab "Phân Quyền" cuộn xuống là mất luôn thanh chuyển tab con này, phải
+         cuộn ngược lên đầu trang mới đổi được tab khác). `top` được tính động bằng JS
+         (positionAdminSubTabBar(), gọi từ setSystemSubTab() + window resize) vì chiều cao thật của
+         #systemSubTabBar thay đổi theo bề rộng màn hình (6 nút tự xuống dòng khác nhau trên điện
+         thoại/tablet/desktop) — không thể gán cứng 1 giá trị top theo class Tailwind như thanh trên. z-10
+         thấp hơn #systemSubTabBar (z-20) để không đè lên khi cả 2 cùng dính ở đầu. -->
+    <div id="adminSubTabBar" class="sticky z-10 bg-white flex flex-wrap gap-2 border-b pb-2 pt-1">
       <button type="button" onclick="setAdminSubTab('EMAIL')" id="btnAdminSubEmail" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">📧 Cấu Hình Email</button>
       <button type="button" onclick="setAdminSubTab('CATALOG')" id="btnAdminSubCatalog" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">🗂️ Quản Lý Danh Mục</button>
       <button type="button" onclick="setAdminSubTab('PERMS')" id="btnAdminSubPerms" class="px-3 py-1.5 rounded text-xs font-bold bg-amber-700 text-white">🔐 Phân Quyền</button>
@@ -5557,6 +5570,9 @@ input[data-sdd-list] {
       <p class="text-xs text-teal-800 mt-1">Chọn định dạng tệp được phép tải lên cho từng module nghiệp vụ — server sẽ chặn các định dạng không được tick. Tick lại toàn bộ (giống mặc định) coi như không giới hạn riêng. Có thể đặt thêm giới hạn dung lượng (MB) riêng cho từng module — để trống thì dùng đúng giới hạn chung toàn hệ thống.</p>
     </div>
     <div id="uploadTypeConfigList" class="space-y-3"></div>
+  </div>
+  <!-- /#systemSection — thẻ đóng đặt Ở ĐÂY (không phải ngay sau #systemSubTabBar) chính là fix cho lỗi
+       "thanh chuyển tab con Hệ Thống mất khi cuộn": xem chú thích đầy đủ ở đầu #systemSubTabBar. -->
   </div>
 
   <!-- Màn hình MODULE BÁO CÁO QUẢN TRỊ -->
@@ -22144,6 +22160,26 @@ function downloadOfficeApprovalSlip(officeId) {
 // ==========================================
 // 7b. MÀN HÌNH HỆ THỐNG (gộp Quản trị + Biểu mẫu + Quy trình & Phê duyệt đồng cấp, chỉ admin)
 // ==========================================
+// Đặt lại vị trí dính (top) của #adminSubTabBar NGAY DƯỚI mép dưới thực tế của #systemSubTabBar —
+// không gán cứng 1 giá trị (khác #systemSubTabBar dùng class Tailwind top-14/top-0 vì đó là thanh NGOÀI
+// CÙNG, mép trên luôn cố định) vì chiều cao #systemSubTabBar thay đổi theo bề rộng màn hình (6 nút tự
+// xuống dòng khác nhau trên điện thoại/tablet/desktop). getBoundingClientRect().bottom của 1 phần tử
+// ĐANG DÍNH (position:sticky) luôn bằng đúng offset `top` CSS của nó cộng chiều cao đã render — dùng
+// trực tiếp giá trị này làm `top` cho thanh dưới, không cần tự tính lại top-14/md:top-0 hay đo
+// #mobileTopBar. Gọi lại khi vào tab "Quản Trị" (setSystemSubTab) và khi resize/xoay màn hình (chiều cao
+// #systemSubTabBar có thể đổi số dòng xuống).
+function positionAdminSubTabBar() {
+  const outer = document.getElementById('systemSubTabBar');
+  const inner = document.getElementById('adminSubTabBar');
+  if (!outer || !inner || outer.classList.contains('hidden') || inner.classList.contains('hidden')) return;
+  inner.style.top = outer.getBoundingClientRect().bottom + 'px';
+}
+window.addEventListener('resize', () => {
+  if (activeSystemSubTab === 'ADMIN' && !document.getElementById('systemSection').classList.contains('hidden')) {
+    positionAdminSubTabBar();
+  }
+});
+
 function setSystemSubTab(subTab) {
   if (!currentUser?.perms?.admin) return;
   activeSystemSubTab = subTab;
@@ -22173,6 +22209,7 @@ function setSystemSubTab(subTab) {
   if (subTab === 'ADMIN') {
     renderDeptList(); renderCatList(); renderContractTypeAbbrList(); renderJobTitleList(); renderStoreJobTitleList(); renderTrainingCategoryList(); renderSensitiveKeywordList(); renderDeptCheckboxes(); renderModuleAccessCheckboxes(); renderUsers(); loadEmailConfigToForm(); renderPermGroupsList(); renderSubmissionApprovalGroups(); renderContractApprovalGroups(); workflowParticipatingDeptsDraft = null; renderWorkflowParticipatingDeptsChecklist(); vppExcludeGroupsDraft = null; renderVppExcludeGroupsAdmin(); renderPwaShortcutCheckboxes(); renderStoreList(); renderLicenseTypeList();
     setAdminSubTab(activeAdminSubTab);
+    positionAdminSubTabBar();
   }
   if (subTab === 'FORM') { switchFormTab(activeFormTab); }
   if (subTab === 'WORKFLOW') {
