@@ -22,6 +22,9 @@ async function run() {
   async function goToBudget(subTab) {
     await page.evaluate((st) => { switchTab('budget'); setBudgetSubTab(st); }, subTab);
   }
+  async function openBudgetManageModal() {
+    await page.evaluate(() => { switchTab('budget'); openBudgetPeriodTemplateModal(); });
+  }
 
   try {
     // ============ Kịch bản 1: Validation — "Mua Sắm" (bảng nhiều hạng mục) không có dòng hợp lệ nào
@@ -97,9 +100,12 @@ async function run() {
     const office2AfterReject = await page.evaluate((id) => DB.officeReqs.find((x) => x.id === id).status, office2.id);
     check('Từ chối đề xuất Sửa Chữa -> status chuyển REJECTED', office2AfterReject === 'REJECTED', office2AfterReject);
 
-    // ============ Kịch bản 6: Ngân Sách — tạo Mẫu Ngân Sách (4 cột lõi bắt buộc + 1 cột tuỳ biến) ====
+    // ============ Kịch bản 6: Ngân Sách — tạo Mẫu Ngân Sách (4 cột lõi bắt buộc + 1 cột tuỳ biến), qua
+    // modal "⚙️ Quản Lý Kỳ & Mẫu" (trước đây là sub-tab PERIOD riêng, nay gộp vào modal) ============
     await loginAs('budgetmgr1');
-    await goToBudget('PERIOD');
+    await openBudgetManageModal();
+    const manageModalVisible = await page.evaluate(() => !document.getElementById('budgetPeriodTemplateModal').classList.contains('hidden'));
+    check('Nút "⚙️ Quản Lý Kỳ & Mẫu" mở đúng modal quản lý kỳ/mẫu ngân sách', manageModalVisible, manageModalVisible);
     await page.evaluate(() => { startNewBudgetTemplate(); addBudgetTemplateField(); });
     const newFieldIdx = await page.evaluate(() => budgetTemplateFormFields.length - 1);
     await page.evaluate((idx) => updateBudgetTemplateField(idx, 'label', 'Nhà cung cấp'), newFieldIdx);
@@ -140,28 +146,28 @@ async function run() {
     const period1 = await page.evaluate(() => DB.budgetPeriods.find((p) => p.name === 'Ngân sách Quý 4/2026'));
     check('Tạo kỳ ngân sách thành công -> OPEN, đúng phạm vi phòng ban + mẫu đã chọn', !!period1 && period1.status === 'OPEN' && period1.deptScope.depts.includes('Phòng Kinh Doanh') && period1.templateId === template1.id, period1);
 
-    // ============ Kịch bản 9: Lập Ngân Sách (kd1, phòng ban Kinh Doanh) theo đúng mẫu đã gắn ============
+    // ============ Kịch bản 9: Ngân Sách Phê Duyệt (kd1, phòng ban Kinh Doanh) theo đúng mẫu đã gắn ====
     await loginAs('kd1');
-    await goToBudget('ENTRY');
-    await page.selectOption('#budgetEntryPeriodSelect', String(period1.id));
-    await page.evaluate(() => saveBudgetEntryDraft()); // chưa nhập dòng nào -> phải bị chặn
+    await goToBudget('APPROVED');
+    await page.selectOption('#budgetEntryPeriodSelect_PLAN', String(period1.id));
+    await page.evaluate(() => saveBudgetEntryDraft('PLAN')); // chưa nhập dòng nào -> phải bị chặn
     // (không cần chờ vì đây là kiểm tra client thuần, đồng bộ)
     const emptyLinesAlerts = await alerts();
     check('Lưu nháp ngân sách khi CHƯA nhập dòng nào -> bị chặn ở client', emptyLinesAlerts.some((a) => a.includes('ít nhất 1 dòng ngân sách')), emptyLinesAlerts);
 
     const customFieldId = customField.id;
     await page.evaluate((fid) => {
-      const row = document.querySelector('#budgetEntryLinesBody tr[data-budget-line-idx="0"]');
+      const row = document.querySelector('#budgetEntryLinesBody_PLAN tr[data-budget-line-idx="0"]');
       row.querySelector('.budget-line-core[data-core-key="name"]').value = 'Chi phí quảng cáo Quý 4';
       row.querySelector('.budget-line-core[data-core-key="amount"]').value = '80000000';
       row.querySelector('.budget-line-core[data-core-key="budgetType"]').value = 'OPEX';
       row.querySelector(`.budget-line-extra[data-field-id="${fid}"]`).value = 'Công ty Quảng Cáo ABC';
     }, customFieldId);
     await clearAlerts();
-    await page.evaluate(() => saveBudgetEntryDraft());
+    await page.evaluate(() => saveBudgetEntryDraft('PLAN'));
     await page.waitForTimeout(200);
-    const entry1 = await page.evaluate(() => DB.budgetEntries.find((e) => e.dept === 'Phòng Kinh Doanh' && e.periodId));
-    check('Lưu nháp ngân sách thành công -> trạng thái DRAFT, đúng 1 dòng, đúng tên/số tiền/loại NS', !!entry1 && entry1.status === 'DRAFT' && entry1.lines.length === 1 && entry1.lines[0].name === 'Chi phí quảng cáo Quý 4' && entry1.lines[0].amount === 80000000 && entry1.lines[0].budgetType === 'OPEX', entry1);
+    const entry1 = await page.evaluate(() => DB.budgetEntries.find((e) => e.dept === 'Phòng Kinh Doanh' && e.periodId && e.entryKind !== 'ACTUAL'));
+    check('Lưu nháp ngân sách Phê Duyệt thành công -> trạng thái DRAFT, entryKind=PLAN, đúng 1 dòng, đúng tên/số tiền/loại NS', !!entry1 && entry1.status === 'DRAFT' && entry1.entryKind === 'PLAN' && entry1.lines.length === 1 && entry1.lines[0].name === 'Chi phí quảng cáo Quý 4' && entry1.lines[0].amount === 80000000 && entry1.lines[0].budgetType === 'OPEX', entry1);
     // Đã vá: lib/createValidation.js sanitizeBudgetCustomFields() trước đây sinh id CỘT TUỲ BIẾN mới
     // bằng Date.now() ở MỌI lượt gọi (kể cả chỉ ĐỌC lại mẫu, không phải lúc LƯU), khiến id client dùng
     // để đặt tên key `extra` không khớp id server tính lại lúc validate -> mất giá trị cột tuỳ biến. Nay
@@ -170,36 +176,73 @@ async function run() {
     const savedExtra = entry1 && entry1.lines[0].extra;
     check('id cột tuỳ biến ổn định giữa client và server -> giá trị "Nhà cung cấp" được lưu đúng, không bị mất', !!savedExtra && savedExtra[customFieldId] === 'Công ty Quảng Cáo ABC', { customFieldId, savedExtra });
 
-    // Mỗi phòng ban CHỈ 1 bản/kỳ — tạo thêm 1 bản khác (không qua "Sửa Nháp") cho CÙNG kỳ+phòng ban
-    // phải bị server từ chối.
+    // Mỗi phòng ban CHỈ 1 bản/kỳ/LOẠI (entryKind) — tạo thêm 1 bản PLAN khác (không qua "Sửa Nháp") cho
+    // CÙNG kỳ+phòng ban+loại phải bị server từ chối.
     await clearAlerts();
     await page.evaluate(() => {
-      const payload = { code: generateBudgetEntryCode(), periodId: Number(document.getElementById('budgetEntryPeriodSelect').value), lines: [{ name: 'Dòng khác', description: '', amount: 1000000, budgetType: 'OPEX', extra: {} }], createdAt: new Date().toLocaleString('vi-VN') };
+      const payload = { code: generateBudgetEntryCode(), periodId: Number(document.getElementById('budgetEntryPeriodSelect_PLAN').value), entryKind: 'PLAN', lines: [{ name: 'Dòng khác', description: '', amount: 1000000, budgetType: 'OPEX', extra: {} }], createdAt: new Date().toLocaleString('vi-VN') };
       return callCreateAction('budgetEntries', payload).catch((e) => { window.__alerts.push(e.message); });
     });
     await page.waitForTimeout(150);
     const dupBudgetAlerts = await alerts();
-    check('Phòng ban đã có ngân sách ở kỳ này -> tạo thêm bản mới bị chặn ("vui lòng sửa bản nháp hiện có")', dupBudgetAlerts.some((a) => a.includes('đã có ngân sách ở kỳ này')), dupBudgetAlerts);
+    check('Phòng ban đã có ngân sách PHÊ DUYỆT ở kỳ này -> tạo thêm bản PLAN mới bị chặn ("vui lòng sửa bản nháp hiện có")', dupBudgetAlerts.some((a) => a.includes('đã có ngân sách phê duyệt ở kỳ này')), dupBudgetAlerts);
 
-    // ============ Kịch bản 10: Gửi Duyệt (DRAFT -> PENDING) rồi Trưởng phòng KD duyệt -> APPROVED ====
-    await page.evaluate(() => submitCurrentBudgetEntry());
+    // ============ Kịch bản 9b: Ngân Sách Thực Hiện (kd1, CÙNG kỳ + CÙNG phòng ban) — entryKind=ACTUAL
+    // KHÔNG bị chặn trùng với bản PLAN đã có ở kịch bản 9 (khoá theo bộ kỳ+phòng ban+entryKind) ========
+    await goToBudget('ACTUAL');
+    await page.selectOption('#budgetEntryPeriodSelect_ACTUAL', String(period1.id));
+    await page.evaluate((fid) => {
+      const row = document.querySelector('#budgetEntryLinesBody_ACTUAL tr[data-budget-line-idx="0"]');
+      row.querySelector('.budget-line-core[data-core-key="name"]').value = 'Chi phí quảng cáo Quý 4';
+      row.querySelector('.budget-line-core[data-core-key="amount"]').value = '72000000';
+      row.querySelector('.budget-line-core[data-core-key="budgetType"]').value = 'OPEX';
+      row.querySelector(`.budget-line-extra[data-field-id="${fid}"]`).value = 'Công ty Quảng Cáo ABC';
+    }, customFieldId);
+    await clearAlerts();
+    await page.evaluate(() => saveBudgetEntryDraft('ACTUAL'));
+    await page.waitForTimeout(200);
+    const actualEntry1 = await page.evaluate(() => DB.budgetEntries.find((e) => e.dept === 'Phòng Kinh Doanh' && e.entryKind === 'ACTUAL'));
+    check('Lưu nháp ngân sách Thực Hiện thành công cho CÙNG kỳ+phòng ban đã có bản Phê Duyệt -> KHÔNG bị chặn trùng (khoá riêng theo entryKind)', !!actualEntry1 && actualEntry1.status === 'DRAFT' && actualEntry1.entryKind === 'ACTUAL' && actualEntry1.lines[0].amount === 72000000, actualEntry1);
+    const budgetEntriesForDeptPeriod = await page.evaluate(() => DB.budgetEntries.filter((e) => e.dept === 'Phòng Kinh Doanh' && e.periodId));
+    check('Phòng Kinh Doanh có ĐÚNG 2 bản ngân sách ở kỳ này (1 PLAN + 1 ACTUAL), không đè lên nhau', budgetEntriesForDeptPeriod.length === 2, budgetEntriesForDeptPeriod.map((e) => ({ id: e.id, entryKind: e.entryKind })));
+
+    // ============ Kịch bản 10: Gửi Duyệt cả 2 bản (DRAFT -> PENDING) rồi Trưởng phòng KD duyệt cả 2 =>
+    // APPROVED (dùng CHUNG 1 cấu hình duyệt theo phòng ban budgetDeptWorkflows cho cả PLAN lẫn ACTUAL) ==
+    await page.evaluate(() => submitCurrentBudgetEntry('ACTUAL'));
+    await confirmPending();
+    const actualEntry1AfterSubmit = await page.evaluate((id) => DB.budgetEntries.find((e) => e.id === id), actualEntry1.id);
+    check('"Gửi Duyệt" bản Thực Hiện -> chuyển PENDING, bắt đầu chờ Trưởng phòng duyệt', actualEntry1AfterSubmit.status === 'PENDING', actualEntry1AfterSubmit.status);
+
+    await goToBudget('APPROVED');
+    await page.evaluate(() => submitCurrentBudgetEntry('PLAN'));
     await confirmPending();
     const entry1AfterSubmit = await page.evaluate((id) => DB.budgetEntries.find((e) => e.id === id), entry1.id);
-    check('"Gửi Duyệt" -> chuyển PENDING, bắt đầu chờ Trưởng phòng duyệt', entry1AfterSubmit.status === 'PENDING', entry1AfterSubmit.status);
+    check('"Gửi Duyệt" bản Phê Duyệt -> chuyển PENDING, bắt đầu chờ Trưởng phòng duyệt', entry1AfterSubmit.status === 'PENDING', entry1AfterSubmit.status);
 
     await loginAs('tp_kd');
-    await goToBudget('ENTRY');
+    await goToBudget('APPROVED');
     await page.evaluate((id) => openBudgetProcessModal(id), entry1.id);
+    const processModalTitlePlan = await page.locator('#budgetProcessModalTitle').innerText();
+    check('Modal xử lý hiện đúng nhãn "Ngân Sách Phê Duyệt" cho bản PLAN', processModalTitlePlan.includes('Phê Duyệt'), processModalTitlePlan);
     await page.fill('#txtBudgetProcessComment', 'Đồng ý — khớp kế hoạch quảng cáo đã thống nhất.');
     await page.evaluate(() => confirmProcessBudgetEntry('APPROVE'));
     await confirmPending();
     const entry1AfterApprove = await page.evaluate((id) => DB.budgetEntries.find((e) => e.id === id).status, entry1.id);
-    check('Trưởng phòng duyệt bản ngân sách -> chuyển APPROVED', entry1AfterApprove === 'APPROVED', entry1AfterApprove);
+    check('Trưởng phòng duyệt bản ngân sách Phê Duyệt -> chuyển APPROVED', entry1AfterApprove === 'APPROVED', entry1AfterApprove);
+
+    await page.evaluate((id) => openBudgetProcessModal(id), actualEntry1.id);
+    const processModalTitleActual = await page.locator('#budgetProcessModalTitle').innerText();
+    check('Modal xử lý hiện đúng nhãn "Ngân Sách Thực Hiện" cho bản ACTUAL', processModalTitleActual.includes('Thực Hiện'), processModalTitleActual);
+    await page.fill('#txtBudgetProcessComment', 'Đồng ý — khớp số liệu chi tiêu thực tế.');
+    await page.evaluate(() => confirmProcessBudgetEntry('APPROVE'));
+    await confirmPending();
+    const actualEntry1AfterApprove = await page.evaluate((id) => DB.budgetEntries.find((e) => e.id === id).status, actualEntry1.id);
+    check('Trưởng phòng duyệt bản ngân sách Thực Hiện -> chuyển APPROVED', actualEntry1AfterApprove === 'APPROVED', actualEntry1AfterApprove);
 
     // ============ Kịch bản 11: Kỳ ngân sách đã ĐÓNG -> chặn lập ngân sách mới (kể cả phòng ban thuộc
-    // phạm vi và đang trong hạn) ============
+    // phạm vi và đang trong hạn), qua modal Quản Lý Kỳ & Mẫu ============
     await loginAs('budgetmgr1');
-    await goToBudget('PERIOD');
+    await openBudgetManageModal();
     await page.fill('#budgetPeriodName', 'Ngân sách Quý 4/2026 - Đóng Sớm');
     await page.fill('#budgetPeriodEndTime', '2027-06-01T00:00');
     await page.check('#budgetPeriodDeptAll'); // áp dụng toàn bộ phòng ban
@@ -210,30 +253,33 @@ async function run() {
     await confirmPending();
     const period2Closed = await page.evaluate((id) => DB.budgetPeriods.find((p) => p.id === id).status, period2.id);
     check('Đóng sớm kỳ ngân sách -> status chuyển CLOSED', period2Closed === 'CLOSED', period2Closed);
+    await page.evaluate(() => closeBudgetPeriodTemplateModal());
 
-    await loginAs('tp_kd'); // Trưởng Phòng KD cũng có budgetCreate? không — dùng kd1 (có budgetCreate) nhưng khác kỳ đã dùng
     await loginAs('kd1');
-    await goToBudget('ENTRY');
+    await goToBudget('APPROVED');
     await clearAlerts();
-    await page.evaluate((pid) => callCreateAction('budgetEntries', { code: 'NS-TEST-CLOSED', periodId: pid, lines: [{ name: 'X', description: '', amount: 1, budgetType: 'OPEX', extra: {} }], createdAt: '' }).catch((e) => { window.__alerts.push(e.message); }), period2.id);
+    await page.evaluate((pid) => callCreateAction('budgetEntries', { code: 'NS-TEST-CLOSED', periodId: pid, entryKind: 'PLAN', lines: [{ name: 'X', description: '', amount: 1, budgetType: 'OPEX', extra: {} }], createdAt: '' }).catch((e) => { window.__alerts.push(e.message); }), period2.id);
     await page.waitForTimeout(150);
     const closedPeriodAlerts = await alerts();
     check('Kỳ ngân sách đã đóng -> lập ngân sách mới bị chặn ("đã kết thúc")', closedPeriodAlerts.some((a) => a.includes('đã kết thúc')), closedPeriodAlerts);
 
-    // ============ Kịch bản 12: Tổng Hợp Ngân Sách — CHỈ cộng dồn các bản ĐÃ DUYỆT, tách đúng
-    // OPEX/CAPEX ============
+    // ============ Kịch bản 12: Tổng Hợp Ngân Sách — so sánh Phê Duyệt (80.000.000) vs Thực Hiện
+    // (72.000.000), CHỈ cộng dồn các bản ĐÃ DUYỆT của mỗi loại, tính đúng Chênh Lệch ============
     await loginAs('budgetmgr1');
     await goToBudget('SUMMARY');
     await page.selectOption('#budgetSummaryPeriodSelect', String(period1.id));
     await page.evaluate(() => buildBudgetSummary());
     const summary = await page.evaluate(() => currentBudgetSummaryData && {
-      entriesCount: currentBudgetSummaryData.entries.length,
-      grandTotal: currentBudgetSummaryData.entries.reduce((s, e) => s + (e.lines || []).reduce((s2, l) => s2 + (Number(l.amount) || 0), 0), 0)
+      planCount: currentBudgetSummaryData.planEntries.length,
+      actualCount: currentBudgetSummaryData.actualEntries.length,
+      planTotal: currentBudgetSummaryData.planEntries.reduce((s, e) => s + (e.lines || []).reduce((s2, l) => s2 + (Number(l.amount) || 0), 0), 0),
+      actualTotal: currentBudgetSummaryData.actualEntries.reduce((s, e) => s + (e.lines || []).reduce((s2, l) => s2 + (Number(l.amount) || 0), 0), 0)
     });
-    check('Tổng Hợp Ngân Sách chỉ lấy đúng 1 bản ĐÃ DUYỆT của kỳ (bỏ qua bản DRAFT/PENDING khác)', !!summary && summary.entriesCount === 1, summary);
-    check('Tổng Hợp Ngân Sách cộng đúng tổng tiền = 80.000.000 (toàn bộ OPEX)', !!summary && summary.grandTotal === 80000000, summary);
+    check('Tổng Hợp Ngân Sách chỉ lấy đúng 1 bản PLAN + 1 bản ACTUAL đã DUYỆT của kỳ', !!summary && summary.planCount === 1 && summary.actualCount === 1, summary);
+    check('Tổng Hợp Ngân Sách cộng đúng Tổng Phê Duyệt = 80.000.000, Tổng Thực Hiện = 72.000.000', !!summary && summary.planTotal === 80000000 && summary.actualTotal === 72000000, summary);
     const summaryText = await page.locator('#budgetSummaryResultWrap').innerText();
-    check('Khối kết quả Tổng Hợp hiển thị đúng số liệu OPEX trên giao diện', summaryText.includes('80.000.000') && summaryText.includes('OPEX'), summaryText.slice(0, 400));
+    check('Khối kết quả Tổng Hợp hiển thị đúng nhãn Phê Duyệt/Thực Hiện/Chênh Lệch trên giao diện', summaryText.includes('Phê Duyệt') && summaryText.includes('Thực Hiện') && summaryText.includes('Chênh Lệch') && summaryText.includes('80.000.000') && summaryText.includes('72.000.000'), summaryText.slice(0, 600));
+    check('Khối kết quả Tổng Hợp hiển thị đúng chênh lệch = -8.000.000 (thực hiện thấp hơn phê duyệt)', summaryText.includes('-8.000.000'), summaryText.slice(0, 600));
 
     // ============ Kịch bản 13: "Bổ Sung" (REQUEST_CHANGES) cho Mua Bán/Sửa Chữa/Đầu Tư — người duyệt
     // trả đề xuất về NHÁP, người tạo sửa lại qua modal "Sửa & Gửi Lại" (openBosungEditModal/
