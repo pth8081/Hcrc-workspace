@@ -5343,7 +5343,7 @@ input[data-sdd-list] {
             <span id="permTreeBadge_budget" class="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-gray-100 text-gray-500">0/0</span>
           </summary>
           <div class="p-3 pt-0 space-y-2">
-            <p class="text-[11px] text-gray-500 italic">Còn quyền vào module "Ngân Sách" ở mục 0 mới thấy được các màn dưới đây — module này KHÔNG mở sẵn cho toàn bộ nhân viên. "Quản lý" tạo/đóng/mở lại kỳ ngân sách và quản lý mẫu ngân sách. "Lập ngân sách" lập được cho ĐÚNG phòng ban mình (nhiều người cùng phòng cùng sửa chung 1 bản nháp). "Tổng hợp" xem/xuất báo cáo tổng hợp MỌI phòng ban ở kỳ đã chọn. Bước duyệt (Trưởng phòng) cấu hình riêng ở "Hệ Thống → Quy Trình & Phê Duyệt → QT Ngân Sách" — không phải checkbox ở đây.</p>
+            <p class="text-[11px] text-gray-500 italic">Còn quyền vào module "Ngân Sách" ở mục 0 mới thấy được các màn dưới đây — module này KHÔNG mở sẵn cho toàn bộ nhân viên. Module có 3 tab: "Ngân Sách Phê Duyệt" và "Ngân Sách Thực Hiện" (cùng cần quyền "Lập ngân sách" — lập được cho ĐÚNG phòng ban mình, nhiều người cùng phòng cùng sửa chung 1 bản nháp, cả 2 loại đều qua Trưởng phòng duyệt) và "Tổng Hợp" (cần quyền "Tổng hợp" — so sánh Phê Duyệt vs Thực Hiện của MỌI phòng ban ở kỳ đã chọn). "Quản lý" mở nút "⚙️ Quản Lý Kỳ & Mẫu" để tạo/đóng/mở lại kỳ ngân sách và quản lý mẫu ngân sách (dùng chung cho cả 2 loại). Bước duyệt (Trưởng phòng) cấu hình riêng ở "Hệ Thống → Quy Trình & Phê Duyệt → QT Ngân Sách" — không phải checkbox ở đây.</p>
             <div class="grid grid-cols-1 md:grid-cols-3 gap-2">
               <label class="flex items-center gap-2 text-teal-700 font-semibold cursor-pointer">
                 <input type="checkbox" id="pBudgetManage"> 📅 Quản lý (tạo/đóng/mở lại kỳ, quản lý mẫu)
@@ -6005,60 +6005,68 @@ input[data-sdd-list] {
   </div>
 
   <!-- Màn hình MODULE NGÂN SÁCH — module con của "Tổng Hợp" (BUSINESS_MODULES parent:'office'), 3
-       sub-tab: Lập Ngân Sách (đơn vị), Tạo Kỳ Ngân Sách + Mẫu Ngân Sách (budgetManage), Tổng Hợp Ngân
-       Sách (budgetAggregate). Xem setBudgetSubTab(). -->
+       sub-tab: Ngân Sách Phê Duyệt (entryKind=PLAN, budgetCreate), Ngân Sách Thực Hiện (entryKind=ACTUAL,
+       budgetCreate — cùng cấu trúc/quyền với tab Phê Duyệt), Tổng Hợp (budgetAggregate — so sánh Phê
+       Duyệt vs Thực Hiện). "Tạo Kỳ Ngân Sách + Mẫu Ngân Sách" (budgetManage) không còn là sub-tab — đã
+       chuyển vào modal #budgetPeriodTemplateModal, mở qua nút "⚙️ Quản Lý Kỳ & Mẫu". Xem setBudgetSubTab(). -->
   <div id="budgetSection" class="hidden space-y-6">
-    <div class="flex flex-wrap gap-2 border-b pb-2">
-      <button type="button" onclick="setBudgetSubTab('ENTRY')" id="btnBudgetSubEntry" class="px-3 py-1.5 rounded text-xs font-bold bg-violet-700 text-white">📝 Lập Ngân Sách</button>
-      <button type="button" onclick="setBudgetSubTab('PERIOD')" id="btnBudgetSubPeriod" class="hidden px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">📅 Tạo Kỳ Ngân Sách</button>
-      <button type="button" onclick="setBudgetSubTab('SUMMARY')" id="btnBudgetSubSummary" class="hidden px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">📊 Tổng Hợp Ngân Sách</button>
+    <!-- 3 tab con: Ngân Sách Phê Duyệt (entryKind=PLAN, dept lập/gửi/Trưởng phòng duyệt) / Ngân Sách
+         Thực Hiện (entryKind=ACTUAL, cùng khuôn — dept ghi nhận chi tiêu thực tế, cũng qua Trưởng phòng
+         duyệt để số liệu đối chiếu ở Tổng Hợp đáng tin) / Tổng Hợp (so sánh 2 chiều). "Tạo Kỳ Ngân Sách +
+         Mẫu" trước đây là 1 sub-tab riêng — nay gộp vào modal "⚙️ Quản Lý Kỳ & Mẫu" (chỉ budgetManage)
+         để đúng 3 tab, xem openBudgetPeriodTemplateModal(). -->
+    <div class="flex flex-wrap gap-2 border-b pb-2 items-center">
+      <button type="button" onclick="setBudgetSubTab('APPROVED')" id="btnBudgetSubApproved" class="px-3 py-1.5 rounded text-xs font-bold bg-violet-700 text-white">✅ Ngân Sách Phê Duyệt</button>
+      <button type="button" onclick="setBudgetSubTab('ACTUAL')" id="btnBudgetSubActual" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">💳 Ngân Sách Thực Hiện</button>
+      <button type="button" onclick="setBudgetSubTab('SUMMARY')" id="btnBudgetSubSummary" class="hidden px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">📊 Tổng Hợp</button>
+      <button type="button" onclick="openBudgetPeriodTemplateModal()" id="btnBudgetManageKinds" class="hidden ml-auto px-3 py-1.5 rounded text-xs font-bold bg-gray-600 text-white hover:bg-gray-700">⚙️ Quản Lý Kỳ &amp; Mẫu</button>
     </div>
 
-    <!-- Sub-tab: Lập Ngân Sách (mọi user có budgetCreate, lập cho ĐÚNG phòng ban mình) -->
-    <div id="budgetSubEntry" class="space-y-4">
-      <div id="budgetDashboardCards"></div>
+    <!-- Sub-tab: Ngân Sách Phê Duyệt (entryKind=PLAN — mọi user có budgetCreate, lập cho ĐÚNG phòng ban mình) -->
+    <div id="budgetSubApproved" class="space-y-4">
+      <div id="budgetDashboardCards_PLAN"></div>
       <div class="bg-violet-50 p-4 rounded border border-violet-200 space-y-3">
-        <h3 class="font-bold text-violet-900 text-base flex items-center gap-2">📝 Lập Ngân Sách Đơn Vị</h3>
-        <p class="text-xs text-violet-700">Chọn 1 kỳ ngân sách đang mở thuộc phạm vi phòng ban bạn — nhiều người cùng phòng có quyền lập đều sửa chung được 1 bản nháp của đơn vị. Gửi rồi sẽ chuyển cho Trưởng phòng duyệt.</p>
-        <div id="budgetNoCreatePermNote" class="hidden text-xs text-gray-500 italic bg-gray-50 p-3 rounded border">⛔ Bạn không có quyền lập ngân sách — chỉ xem được danh sách bên dưới.</div>
-        <div id="budgetEntryFormWrap" class="hidden bg-white p-3 rounded border text-xs space-y-3">
+        <h3 class="font-bold text-violet-900 text-base flex items-center gap-2">✅ Ngân Sách Phê Duyệt Đơn Vị</h3>
+        <p class="text-xs text-violet-700">Chọn 1 kỳ ngân sách đang mở thuộc phạm vi phòng ban bạn — nhiều người cùng phòng có quyền lập đều sửa chung được 1 bản nháp của đơn vị. Gửi rồi sẽ chuyển cho Trưởng phòng duyệt, khi APPROVED sẽ là số liệu "Phê Duyệt" ở tab Tổng Hợp.</p>
+        <div id="budgetNoCreatePermNote_PLAN" class="hidden text-xs text-gray-500 italic bg-gray-50 p-3 rounded border">⛔ Bạn không có quyền lập ngân sách — chỉ xem được danh sách bên dưới.</div>
+        <div id="budgetEntryFormWrap_PLAN" class="hidden bg-white p-3 rounded border text-xs space-y-3">
           <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
             <div>
               <label class="block font-semibold text-gray-600 mb-1">Kỳ Ngân Sách</label>
-              <select id="budgetEntryPeriodSelect" onchange="onBudgetEntryPeriodChange()" class="w-full border p-1.5 rounded bg-white"></select>
+              <select id="budgetEntryPeriodSelect_PLAN" onchange="onBudgetEntryPeriodChange('PLAN')" class="w-full border p-1.5 rounded bg-white"></select>
             </div>
             <div>
               <label class="block font-semibold text-gray-600 mb-1">Phòng Ban</label>
-              <input id="budgetEntryDeptDisplay" readonly class="w-full border p-1.5 rounded bg-gray-100 cursor-not-allowed">
+              <input id="budgetEntryDeptDisplay_PLAN" readonly class="w-full border p-1.5 rounded bg-gray-100 cursor-not-allowed">
             </div>
           </div>
-          <div id="budgetEntryLinesWrap" class="hidden space-y-2">
-            <div id="budgetEntryReadonlyNote" class="hidden text-[11px] text-amber-700 italic bg-amber-50 p-2 rounded border border-amber-200"></div>
+          <div id="budgetEntryLinesWrap_PLAN" class="hidden space-y-2">
+            <div id="budgetEntryReadonlyNote_PLAN" class="hidden text-[11px] text-amber-700 italic bg-amber-50 p-2 rounded border border-amber-200"></div>
             <div class="flex justify-between items-center">
               <label class="font-semibold text-gray-600">Danh Sách Hạng Mục</label>
-              <button type="button" id="budgetEntryAddRowBtn" onclick="addBudgetEntryLine()" class="text-violet-700 font-bold hover:underline">➕ Thêm dòng</button>
+              <button type="button" id="budgetEntryAddRowBtn_PLAN" onclick="addBudgetEntryLine('PLAN')" class="text-violet-700 font-bold hover:underline">➕ Thêm dòng</button>
             </div>
             <div class="overflow-x-auto">
               <table class="w-full border-collapse border text-xs bg-white">
-                <thead id="budgetEntryLinesHead" class="bg-gray-100 text-left text-gray-700"></thead>
-                <tbody id="budgetEntryLinesBody"></tbody>
+                <thead id="budgetEntryLinesHead_PLAN" class="bg-gray-100 text-left text-gray-700"></thead>
+                <tbody id="budgetEntryLinesBody_PLAN"></tbody>
               </table>
             </div>
             <div class="flex justify-between items-center pt-2 border-t">
-              <div class="font-bold text-gray-700">Tổng cộng: <span id="budgetEntryTotalDisplay" class="text-violet-700">0 đ</span></div>
-              <div id="budgetEntrySaveActions" class="flex gap-2">
-                <button type="button" onclick="saveBudgetEntryDraft()" class="bg-gray-600 text-white px-3 py-1.5 rounded font-bold hover:bg-gray-700">💾 Lưu Nháp</button>
-                <button type="button" onclick="submitCurrentBudgetEntry()" class="bg-violet-600 text-white px-3 py-1.5 rounded font-bold hover:bg-violet-700">📤 Gửi Duyệt</button>
+              <div class="font-bold text-gray-700">Tổng cộng: <span id="budgetEntryTotalDisplay_PLAN" class="text-violet-700">0 đ</span></div>
+              <div id="budgetEntrySaveActions_PLAN" class="flex gap-2">
+                <button type="button" onclick="saveBudgetEntryDraft('PLAN')" class="bg-gray-600 text-white px-3 py-1.5 rounded font-bold hover:bg-gray-700">💾 Lưu Nháp</button>
+                <button type="button" onclick="submitCurrentBudgetEntry('PLAN')" class="bg-violet-600 text-white px-3 py-1.5 rounded font-bold hover:bg-violet-700">📤 Gửi Duyệt</button>
               </div>
             </div>
           </div>
-          <p id="budgetEntryNoPeriodNote" class="text-gray-500 italic">Chưa có kỳ ngân sách nào đang mở cho phòng ban bạn.</p>
+          <p id="budgetEntryNoPeriodNote_PLAN" class="text-gray-500 italic">Chưa có kỳ ngân sách nào đang mở cho phòng ban bạn.</p>
         </div>
       </div>
 
       <div class="bg-gray-50 p-3 rounded-lg border flex items-center gap-2">
         <label class="text-xs font-semibold text-gray-600">Lọc Theo Trạng Thái</label>
-        <select id="filterStatusBudget" onchange="renderBudgetEntryList()" class="border p-2 rounded text-sm bg-white">
+        <select id="filterStatusBudget_PLAN" onchange="renderBudgetEntryList('PLAN')" class="border p-2 rounded text-sm bg-white">
           <option value="">-- Tất cả trạng thái --</option>
           <option value="DRAFT">📝 Nháp</option>
           <option value="PENDING">⏳ Chờ duyệt</option>
@@ -6079,115 +6087,87 @@ input[data-sdd-list] {
               <th class="border p-2 text-center">Thao Tác</th>
             </tr>
           </thead>
-          <tbody id="budgetEntryListBody"></tbody>
+          <tbody id="budgetEntryListBody_PLAN"></tbody>
         </table>
       </div>
     </div>
 
-    <!-- Sub-tab: Tạo Kỳ Ngân Sách + Mẫu Ngân Sách (chỉ budgetManage/admin) -->
-    <div id="budgetSubPeriod" class="hidden space-y-4">
-      <form onsubmit="createBudgetPeriod(event)" class="bg-violet-50 p-4 rounded border border-violet-200 space-y-3">
-        <h3 class="font-bold text-violet-900 text-sm flex items-center gap-1">📅 Tạo Kỳ Ngân Sách Mới</h3>
-        <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
-          <div class="md:col-span-2">
-            <label class="block text-xs font-semibold text-gray-600 mb-1">Tên Kỳ Ngân Sách</label>
-            <input id="budgetPeriodName" placeholder="VD: Ngân sách Quý 1/2026" class="w-full border p-2 rounded text-sm" required>
+    <!-- Sub-tab: Ngân Sách Thực Hiện (entryKind=ACTUAL — cùng cấu trúc/quyền budgetCreate + duyệt Trưởng
+         phòng như tab Phê Duyệt, chỉ khác mục đích: ghi nhận chi tiêu THỰC TẾ để đối chiếu ở Tổng Hợp) -->
+    <div id="budgetSubActual" class="hidden space-y-4">
+      <div id="budgetDashboardCards_ACTUAL"></div>
+      <div class="bg-violet-50 p-4 rounded border border-violet-200 space-y-3">
+        <h3 class="font-bold text-violet-900 text-base flex items-center gap-2">💳 Ngân Sách Thực Hiện Đơn Vị</h3>
+        <p class="text-xs text-violet-700">Ghi nhận chi tiêu THỰC TẾ theo cùng kỳ ngân sách — nhiều người cùng phòng có quyền lập đều sửa chung được 1 bản nháp của đơn vị. Gửi rồi sẽ chuyển cho Trưởng phòng duyệt, khi APPROVED sẽ là số liệu "Thực Hiện" ở tab Tổng Hợp.</p>
+        <div id="budgetNoCreatePermNote_ACTUAL" class="hidden text-xs text-gray-500 italic bg-gray-50 p-3 rounded border">⛔ Bạn không có quyền lập ngân sách — chỉ xem được danh sách bên dưới.</div>
+        <div id="budgetEntryFormWrap_ACTUAL" class="hidden bg-white p-3 rounded border text-xs space-y-3">
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <div>
+              <label class="block font-semibold text-gray-600 mb-1">Kỳ Ngân Sách</label>
+              <select id="budgetEntryPeriodSelect_ACTUAL" onchange="onBudgetEntryPeriodChange('ACTUAL')" class="w-full border p-1.5 rounded bg-white"></select>
+            </div>
+            <div>
+              <label class="block font-semibold text-gray-600 mb-1">Phòng Ban</label>
+              <input id="budgetEntryDeptDisplay_ACTUAL" readonly class="w-full border p-1.5 rounded bg-gray-100 cursor-not-allowed">
+            </div>
           </div>
-          <div>
-            <label class="block text-xs font-semibold text-gray-600 mb-1">Hạn Chót Lập</label>
-            <input id="budgetPeriodEndTime" type="datetime-local" class="w-full border p-2 rounded text-sm" required>
+          <div id="budgetEntryLinesWrap_ACTUAL" class="hidden space-y-2">
+            <div id="budgetEntryReadonlyNote_ACTUAL" class="hidden text-[11px] text-amber-700 italic bg-amber-50 p-2 rounded border border-amber-200"></div>
+            <div class="flex justify-between items-center">
+              <label class="font-semibold text-gray-600">Danh Sách Hạng Mục</label>
+              <button type="button" id="budgetEntryAddRowBtn_ACTUAL" onclick="addBudgetEntryLine('ACTUAL')" class="text-violet-700 font-bold hover:underline">➕ Thêm dòng</button>
+            </div>
+            <div class="overflow-x-auto">
+              <table class="w-full border-collapse border text-xs bg-white">
+                <thead id="budgetEntryLinesHead_ACTUAL" class="bg-gray-100 text-left text-gray-700"></thead>
+                <tbody id="budgetEntryLinesBody_ACTUAL"></tbody>
+              </table>
+            </div>
+            <div class="flex justify-between items-center pt-2 border-t">
+              <div class="font-bold text-gray-700">Tổng cộng: <span id="budgetEntryTotalDisplay_ACTUAL" class="text-violet-700">0 đ</span></div>
+              <div id="budgetEntrySaveActions_ACTUAL" class="flex gap-2">
+                <button type="button" onclick="saveBudgetEntryDraft('ACTUAL')" class="bg-gray-600 text-white px-3 py-1.5 rounded font-bold hover:bg-gray-700">💾 Lưu Nháp</button>
+                <button type="button" onclick="submitCurrentBudgetEntry('ACTUAL')" class="bg-violet-600 text-white px-3 py-1.5 rounded font-bold hover:bg-violet-700">📤 Gửi Duyệt</button>
+              </div>
+            </div>
           </div>
+          <p id="budgetEntryNoPeriodNote_ACTUAL" class="text-gray-500 italic">Chưa có kỳ ngân sách nào đang mở cho phòng ban bạn.</p>
         </div>
-        <div>
-          <label class="flex items-center gap-2 text-xs font-semibold text-gray-600 mb-1">
-            <input type="checkbox" id="budgetPeriodDeptAll" onchange="toggleScopeGroup('budgetPeriodDeptAll', 'budgetPeriodDept')"> Áp dụng cho TẤT CẢ phòng ban
-          </label>
-          <div id="budgetPeriodDeptContainer" class="grid grid-cols-2 md:grid-cols-4 gap-1 pl-1 max-h-32 overflow-y-auto"></div>
-        </div>
-        <div>
-          <label class="block text-xs font-semibold text-gray-600 mb-1">Mẫu Ngân Sách (tuỳ chọn — không chọn thì dùng 5 cột mặc định: STT/Tên hạng mục/Mô tả chi tiết/Số tiền/Loại ngân sách)</label>
-          <select id="budgetPeriodTemplateSelect" class="w-full md:w-96 border p-2 rounded text-sm bg-white">
-            <option value="">-- Không chọn mẫu (dùng cột mặc định) --</option>
-          </select>
-        </div>
-        <div class="flex justify-end">
-          <button type="submit" class="bg-violet-600 text-white px-4 py-1.5 rounded text-xs font-bold hover:bg-violet-700">➕ Tạo Kỳ Ngân Sách</button>
-        </div>
-      </form>
+      </div>
+
+      <div class="bg-gray-50 p-3 rounded-lg border flex items-center gap-2">
+        <label class="text-xs font-semibold text-gray-600">Lọc Theo Trạng Thái</label>
+        <select id="filterStatusBudget_ACTUAL" onchange="renderBudgetEntryList('ACTUAL')" class="border p-2 rounded text-sm bg-white">
+          <option value="">-- Tất cả trạng thái --</option>
+          <option value="DRAFT">📝 Nháp</option>
+          <option value="PENDING">⏳ Chờ duyệt</option>
+          <option value="APPROVED">✅ Đã duyệt</option>
+          <option value="REJECTED">❌ Từ chối</option>
+        </select>
+      </div>
 
       <div class="bg-white rounded border overflow-x-auto">
         <table class="w-full border-collapse text-xs">
           <thead>
             <tr class="bg-gray-100 text-left">
-              <th class="border p-2">Tên Kỳ</th>
-              <th class="border p-2">Phạm Vi</th>
-              <th class="border p-2">Mẫu</th>
-              <th class="border p-2">Hạn Chót</th>
+              <th class="border p-2">Mã</th>
+              <th class="border p-2">Kỳ Ngân Sách</th>
+              <th class="border p-2">Phòng Ban</th>
+              <th class="border p-2 text-right">Tổng Tiền</th>
               <th class="border p-2">Trạng Thái</th>
               <th class="border p-2 text-center">Thao Tác</th>
             </tr>
           </thead>
-          <tbody id="budgetPeriodListBody"></tbody>
+          <tbody id="budgetEntryListBody_ACTUAL"></tbody>
         </table>
-      </div>
-
-      <div class="bg-violet-50 p-4 rounded border border-violet-200 space-y-3">
-        <div class="flex justify-between items-center flex-wrap gap-2">
-          <h3 class="font-bold text-violet-900 text-sm flex items-center gap-1">🧩 Mẫu Ngân Sách</h3>
-          <div class="flex items-center gap-3">
-            <label class="text-violet-700 font-bold hover:underline cursor-pointer text-xs whitespace-nowrap">📎 Từ File Dữ Liệu Thật<input type="file" accept=".xlsx,.xls" class="hidden" onchange="createBudgetTemplateFromRealFile(event)"></label>
-            <button type="button" onclick="startNewBudgetTemplate()" class="text-violet-700 font-bold hover:underline text-xs whitespace-nowrap">➕ Thêm Mẫu</button>
-          </div>
-        </div>
-        <div class="bg-white rounded border overflow-x-auto">
-          <table class="w-full border-collapse text-xs">
-            <thead>
-              <tr class="bg-gray-100 text-left">
-                <th class="border p-2">Tên Mẫu</th>
-                <th class="border p-2">Số Cột Bổ Sung</th>
-                <th class="border p-2 text-center">Thao Tác</th>
-              </tr>
-            </thead>
-            <tbody id="budgetTemplateListBody"></tbody>
-          </table>
-        </div>
-
-        <form id="budgetTemplateForm" onsubmit="saveBudgetTemplate(event)" class="hidden bg-white p-3 rounded border text-xs space-y-3">
-          <div>
-            <label class="block font-semibold text-gray-600 mb-1">Tên Mẫu</label>
-            <input id="budgetTemplateName" placeholder="VD: Ngân sách Marketing" class="w-full border p-1.5 rounded" required>
-          </div>
-          <div>
-            <div class="flex justify-between items-center mb-1 flex-wrap gap-2">
-              <label class="font-semibold text-gray-600">Danh Sách Cột (đầy đủ — Tên Hạng Mục/Số Tiền/Loại NS bắt buộc có mặt, dùng nút ▲▼ để tự sắp thứ tự)</label>
-              <div class="flex gap-2 items-center text-[11px]">
-                <a href="/api/budget/template-fields-template" class="text-gray-600 font-bold hover:underline whitespace-nowrap">📥 Tải Mẫu Excel</a>
-                <label class="text-violet-700 font-bold hover:underline cursor-pointer whitespace-nowrap">📤 Tải Lên Từ Excel<input type="file" accept=".xlsx,.xls" class="hidden" onchange="uploadBudgetTemplateFieldsXlsx(event)"></label>
-                <button type="button" onclick="addBudgetTemplateField()" class="text-violet-700 font-bold hover:underline whitespace-nowrap">➕ Thêm cột</button>
-              </div>
-            </div>
-            <div class="overflow-x-auto">
-              <table class="w-full border-collapse border text-xs">
-                <thead class="bg-gray-100 text-left">
-                  <tr><th class="border p-1.5 w-14">Thứ Tự</th><th class="border p-1.5">Tên Cột</th><th class="border p-1.5">Kiểu</th><th class="border p-1.5">Tuỳ chọn (kiểu Chọn)</th><th class="border p-1.5 text-center">Bắt buộc</th><th class="border p-1.5"></th></tr>
-                </thead>
-                <tbody id="budgetTemplateFieldsBody"></tbody>
-              </table>
-            </div>
-          </div>
-          <div class="flex justify-end gap-2">
-            <button type="button" onclick="cancelBudgetTemplateForm()" class="bg-gray-200 text-gray-700 px-3 py-1.5 rounded font-bold hover:bg-gray-300">Hủy</button>
-            <button type="submit" class="bg-violet-600 text-white px-3 py-1.5 rounded font-bold hover:bg-violet-700" id="btnBudgetTemplateSubmit">➕ Tạo Mẫu</button>
-          </div>
-        </form>
       </div>
     </div>
 
-    <!-- Sub-tab: Tổng Hợp Ngân Sách (chỉ budgetAggregate/admin) -->
+    <!-- Sub-tab: Tổng Hợp (chỉ budgetAggregate/admin) — so sánh Ngân Sách Phê Duyệt vs Ngân Sách Thực Hiện -->
     <div id="budgetSubSummary" class="hidden space-y-4">
       <div class="bg-violet-50 p-4 rounded border border-violet-200 space-y-3">
         <h3 class="font-bold text-violet-900 text-base flex items-center gap-2">📊 Tổng Hợp Ngân Sách</h3>
-        <p class="text-xs text-violet-700">Chỉ tính các bản ngân sách đã <b>ĐƯỢC DUYỆT</b> của kỳ đã chọn.</p>
+        <p class="text-xs text-violet-700">Đối chiếu Ngân Sách <b>Phê Duyệt</b> với Ngân Sách <b>Thực Hiện</b> của kỳ đã chọn — chỉ tính các bản đã <b>ĐƯỢC DUYỆT</b> của mỗi loại.</p>
         <div class="flex flex-wrap items-end gap-3">
           <div>
             <label class="block text-xs font-semibold text-gray-600 mb-1">Chọn Kỳ Ngân Sách</label>
@@ -6198,6 +6178,120 @@ input[data-sdd-list] {
       </div>
 
       <div id="budgetSummaryResultWrap" class="hidden bg-white p-4 rounded border space-y-4"></div>
+    </div>
+  </div>
+
+  <!-- MODAL "⚙️ Quản Lý Kỳ & Mẫu Ngân Sách" (budgetManage/admin) — nguyên nội dung sub-tab "Tạo Kỳ Ngân
+       Sách + Mẫu" trước đây, chuyển vào modal để module chỉ còn đúng 3 tab con theo yêu cầu. Toàn bộ hàm
+       JS xử lý (renderBudgetPeriodSubTab/createBudgetPeriod/renderBudgetTemplateList/...) GIỮ NGUYÊN tên
+       + id các phần tử bên trong, chỉ đổi cách mở/đóng (modal thay vì sub-tab) — xem
+       openBudgetPeriodTemplateModal()/closeBudgetPeriodTemplateModal(). -->
+  <div id="budgetPeriodTemplateModal" class="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center hidden z-50 p-4">
+    <div class="bg-white rounded-lg shadow-2xl max-w-4xl w-full flex flex-col max-h-[90vh] overflow-hidden">
+      <div class="flex justify-between items-center bg-violet-800 text-white p-4">
+        <h3 class="font-bold text-base flex items-center gap-2">⚙️ Quản Lý Kỳ &amp; Mẫu Ngân Sách</h3>
+        <button onclick="closeBudgetPeriodTemplateModal()" class="text-violet-200 hover:text-white font-bold text-xl px-2">✕</button>
+      </div>
+      <div class="p-4 overflow-y-auto flex-1 space-y-4 text-xs">
+        <form onsubmit="createBudgetPeriod(event)" class="bg-violet-50 p-4 rounded border border-violet-200 space-y-3">
+          <h3 class="font-bold text-violet-900 text-sm flex items-center gap-1">📅 Tạo Kỳ Ngân Sách Mới</h3>
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+            <div class="md:col-span-2">
+              <label class="block text-xs font-semibold text-gray-600 mb-1">Tên Kỳ Ngân Sách</label>
+              <input id="budgetPeriodName" placeholder="VD: Ngân sách Quý 1/2026" class="w-full border p-2 rounded text-sm" required>
+            </div>
+            <div>
+              <label class="block text-xs font-semibold text-gray-600 mb-1">Hạn Chót Lập</label>
+              <input id="budgetPeriodEndTime" type="datetime-local" class="w-full border p-2 rounded text-sm" required>
+            </div>
+          </div>
+          <div>
+            <label class="flex items-center gap-2 text-xs font-semibold text-gray-600 mb-1">
+              <input type="checkbox" id="budgetPeriodDeptAll" onchange="toggleScopeGroup('budgetPeriodDeptAll', 'budgetPeriodDept')"> Áp dụng cho TẤT CẢ phòng ban
+            </label>
+            <div id="budgetPeriodDeptContainer" class="grid grid-cols-2 md:grid-cols-4 gap-1 pl-1 max-h-32 overflow-y-auto"></div>
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-gray-600 mb-1">Mẫu Ngân Sách (tuỳ chọn — không chọn thì dùng 5 cột mặc định: STT/Tên hạng mục/Mô tả chi tiết/Số tiền/Loại ngân sách)</label>
+            <select id="budgetPeriodTemplateSelect" class="w-full md:w-96 border p-2 rounded text-sm bg-white">
+              <option value="">-- Không chọn mẫu (dùng cột mặc định) --</option>
+            </select>
+          </div>
+          <div class="flex justify-end">
+            <button type="submit" class="bg-violet-600 text-white px-4 py-1.5 rounded text-xs font-bold hover:bg-violet-700">➕ Tạo Kỳ Ngân Sách</button>
+          </div>
+        </form>
+
+        <div class="bg-white rounded border overflow-x-auto">
+          <table class="w-full border-collapse text-xs">
+            <thead>
+              <tr class="bg-gray-100 text-left">
+                <th class="border p-2">Tên Kỳ</th>
+                <th class="border p-2">Phạm Vi</th>
+                <th class="border p-2">Mẫu</th>
+                <th class="border p-2">Hạn Chót</th>
+                <th class="border p-2">Trạng Thái</th>
+                <th class="border p-2 text-center">Thao Tác</th>
+              </tr>
+            </thead>
+            <tbody id="budgetPeriodListBody"></tbody>
+          </table>
+        </div>
+
+        <div class="bg-violet-50 p-4 rounded border border-violet-200 space-y-3">
+          <div class="flex justify-between items-center flex-wrap gap-2">
+            <h3 class="font-bold text-violet-900 text-sm flex items-center gap-1">🧩 Mẫu Ngân Sách</h3>
+            <div class="flex items-center gap-3">
+              <label class="text-violet-700 font-bold hover:underline cursor-pointer text-xs whitespace-nowrap">📎 Từ File Dữ Liệu Thật<input type="file" accept=".xlsx,.xls" class="hidden" onchange="createBudgetTemplateFromRealFile(event)"></label>
+              <button type="button" onclick="startNewBudgetTemplate()" class="text-violet-700 font-bold hover:underline text-xs whitespace-nowrap">➕ Thêm Mẫu</button>
+            </div>
+          </div>
+          <div class="bg-white rounded border overflow-x-auto">
+            <table class="w-full border-collapse text-xs">
+              <thead>
+                <tr class="bg-gray-100 text-left">
+                  <th class="border p-2">Tên Mẫu</th>
+                  <th class="border p-2">Số Cột Bổ Sung</th>
+                  <th class="border p-2 text-center">Thao Tác</th>
+                </tr>
+              </thead>
+              <tbody id="budgetTemplateListBody"></tbody>
+            </table>
+          </div>
+
+          <form id="budgetTemplateForm" onsubmit="saveBudgetTemplate(event)" class="hidden bg-white p-3 rounded border text-xs space-y-3">
+            <div>
+              <label class="block font-semibold text-gray-600 mb-1">Tên Mẫu</label>
+              <input id="budgetTemplateName" placeholder="VD: Ngân sách Marketing" class="w-full border p-1.5 rounded" required>
+            </div>
+            <div>
+              <div class="flex justify-between items-center mb-1 flex-wrap gap-2">
+                <label class="font-semibold text-gray-600">Danh Sách Cột (đầy đủ — Tên Hạng Mục/Số Tiền/Loại NS bắt buộc có mặt, dùng nút ▲▼ để tự sắp thứ tự)</label>
+                <div class="flex gap-2 items-center text-[11px]">
+                  <a href="/api/budget/template-fields-template" class="text-gray-600 font-bold hover:underline whitespace-nowrap">📥 Tải Mẫu Excel</a>
+                  <label class="text-violet-700 font-bold hover:underline cursor-pointer whitespace-nowrap">📤 Tải Lên Từ Excel<input type="file" accept=".xlsx,.xls" class="hidden" onchange="uploadBudgetTemplateFieldsXlsx(event)"></label>
+                  <button type="button" onclick="addBudgetTemplateField()" class="text-violet-700 font-bold hover:underline whitespace-nowrap">➕ Thêm cột</button>
+                </div>
+              </div>
+              <div class="overflow-x-auto">
+                <table class="w-full border-collapse border text-xs">
+                  <thead class="bg-gray-100 text-left">
+                    <tr><th class="border p-1.5 w-14">Thứ Tự</th><th class="border p-1.5">Tên Cột</th><th class="border p-1.5">Kiểu</th><th class="border p-1.5">Tuỳ chọn (kiểu Chọn)</th><th class="border p-1.5 text-center">Bắt buộc</th><th class="border p-1.5"></th></tr>
+                  </thead>
+                  <tbody id="budgetTemplateFieldsBody"></tbody>
+                </table>
+              </div>
+            </div>
+            <div class="flex justify-end gap-2">
+              <button type="button" onclick="cancelBudgetTemplateForm()" class="bg-gray-200 text-gray-700 px-3 py-1.5 rounded font-bold hover:bg-gray-300">Hủy</button>
+              <button type="submit" class="bg-violet-600 text-white px-3 py-1.5 rounded font-bold hover:bg-violet-700" id="btnBudgetTemplateSubmit">➕ Tạo Mẫu</button>
+            </div>
+          </form>
+        </div>
+      </div>
+      <div class="p-3 bg-gray-100 border-t flex justify-end text-xs">
+        <button onclick="closeBudgetPeriodTemplateModal()" class="bg-gray-500 text-white px-4 py-1.5 rounded font-bold hover:bg-gray-600">Đóng</button>
+      </div>
     </div>
   </div>
 
@@ -7894,7 +7988,8 @@ const MODULE_TAB_MAP = {
     { label: 'Thanh Toán', badgeKey: 'payment', fields: [{ id: 'pPaymentManage', label: 'Quản lý Thanh Toán' }] }
   ],
   budget: [
-    { label: 'Tạo Kỳ Ngân Sách + Mẫu', badgeKey: 'budget', fields: [{ id: 'pBudgetManage', label: 'Quản lý' }] },
+    { label: 'Ngân Sách Phê Duyệt / Thực Hiện', badgeKey: 'budget', fields: [{ id: 'pBudgetCreate', label: 'Lập ngân sách' }] },
+    { label: 'Quản Lý Kỳ &amp; Mẫu Ngân Sách', badgeKey: 'budget', fields: [{ id: 'pBudgetManage', label: 'Quản lý' }] },
     { label: 'Tổng Hợp Ngân Sách', badgeKey: 'budget', fields: [{ id: 'pBudgetAggregate', label: 'Tổng hợp' }] }
   ],
   periodicReport: [
@@ -23012,18 +23107,29 @@ async function submitItServiceRenewalEdit() {
 }
 
 // ==========================================
-// NGÂN SÁCH — 3 sub-tab: Lập Ngân Sách (budgetCreate) / Tạo Kỳ Ngân Sách + Mẫu (budgetManage) / Tổng
-// Hợp Ngân Sách (budgetAggregate). budgetEntries khoá theo PHÒNG BAN (không phải người tạo) — nhiều
-// người cùng phòng có budgetCreate cùng sửa chung 1 bản NHÁP của đơn vị (xem lib/recordActions.js
-// updateBudgetEntryDraft/submitBudgetEntry). Duyệt qua dept-workflow engine chung (Trưởng phòng), có
-// thêm "Yêu cầu bổ sung" dùng REQUEST_CHANGES (đưa về NHÁP để đơn vị sửa lại), cùng khuôn VPP/Hỗ Trợ IT.
-// 5 cột lõi (STT tự tính/Tên hạng mục/Mô tả chi tiết/Số tiền/Loại NS) luôn có ở MỌI dòng bất kể mẫu nào
-// — mẫu chỉ CỘNG THÊM cột tuỳ biến (extra), đảm bảo Tổng Hợp luôn cộng dồn được dù các phòng dùng mẫu
+// NGÂN SÁCH — 3 sub-tab: Ngân Sách Phê Duyệt (entryKind=PLAN, budgetCreate) / Ngân Sách Thực Hiện
+// (entryKind=ACTUAL, budgetCreate) / Tổng Hợp (budgetAggregate, so sánh Phê Duyệt vs Thực Hiện). 2 tab
+// đầu dùng CHUNG 1 collection budgetEntries + CHUNG toàn bộ hàm bên dưới (tham số hoá theo `kind`:
+// 'PLAN'|'ACTUAL') — chỉ khác nhau ở entryKind lưu trên bản ghi, KHÔNG nhân đôi logic. "Tạo Kỳ Ngân
+// Sách + Mẫu" không còn là sub-tab riêng — đã gộp vào modal "⚙️ Quản Lý Kỳ & Mẫu"
+// (openBudgetPeriodTemplateModal(), chỉ budgetManage) để module đúng 3 tab. budgetEntries khoá theo
+// PHÒNG BAN (không phải người tạo) — nhiều người cùng phòng có budgetCreate cùng sửa chung 1 bản NHÁP
+// của đơn vị, RIÊNG theo từng entryKind (1 phòng có thể có cả bản PLAN lẫn bản ACTUAL cùng lúc trong 1
+// kỳ — xem lib/recordActions.js updateBudgetEntryDraft/submitBudgetEntry). Duyệt qua dept-workflow
+// engine chung (Trưởng phòng, CÙNG 1 cấu hình DB.budgetDeptWorkflows cho cả 2 entryKind), có thêm "Yêu
+// cầu bổ sung" dùng REQUEST_CHANGES (đưa về NHÁP để đơn vị sửa lại), cùng khuôn VPP/Hỗ Trợ IT. 4 cột lõi
+// (STT tự tính/Tên hạng mục/Mô tả chi tiết/Số tiền/Loại NS) luôn có ở MỌI dòng bất kể mẫu nào — mẫu chỉ
+// CỘNG THÊM cột tuỳ biến (extra), đảm bảo Tổng Hợp luôn cộng dồn/đối chiếu được dù các phòng dùng mẫu
 // khác nhau (xem sanitizeBudgetLines() ở lib/createValidation.js).
 // ==========================================
-let activeBudgetSubTab = 'ENTRY';
-let budgetEntryFormDraftId = null; // id bản NHÁP đang sửa trong form Lập Ngân Sách (null nếu chưa lưu lần nào)
-let budgetEntryFormLines = []; // các dòng đang sửa trong form (đồng bộ 2 chiều với DOM mỗi khi thêm/xoá dòng)
+let activeBudgetSubTab = 'APPROVED'; // APPROVED | ACTUAL | SUMMARY
+// bId()/bEl(): mọi id phần tử DOM lặp lại giữa 2 tab Phê Duyệt/Thực Hiện đều mang hậu tố "_PLAN"/
+// "_ACTUAL" (xem HTML #budgetSubApproved/#budgetSubActual) — 2 helper này dựng/tra đúng id theo kind
+// thay vì phải viết `document.getElementById(base + '_' + kind)` lặp lại khắp nơi bên dưới.
+function bId(kind, base) { return `${base}_${kind}`; }
+function bEl(kind, base) { return document.getElementById(bId(kind, base)); }
+let budgetEntryFormDraftId = { PLAN: null, ACTUAL: null }; // id bản NHÁP đang sửa trong từng tab (null nếu chưa lưu lần nào)
+let budgetEntryFormLines = { PLAN: [], ACTUAL: [] }; // các dòng đang sửa trong từng form (đồng bộ 2 chiều với DOM mỗi khi thêm/xoá dòng)
 let editingBudgetTemplateId = null; // id mẫu ngân sách đang sửa (null = đang tạo mới)
 let budgetTemplateFormFields = []; // cột bổ sung đang sửa trong form Mẫu Ngân Sách
 let currentProcessingBudgetEntryId = null; // id bản ngân sách đang mở trong budgetProcessModal
@@ -23060,48 +23166,51 @@ function setBudgetSubTab(subTab) {
   window.scrollTo({ top: 0, behavior: 'auto' }); // Tránh "bay xuống cuối" khi đổi tab con — xem setSystemSubTab().
   const canManage = canManageBudgetClient(currentUser);
   const canAggregate = canAggregateBudgetClient(currentUser);
-  if (subTab === 'PERIOD' && !canManage) subTab = 'ENTRY';
-  if (subTab === 'SUMMARY' && !canAggregate) subTab = 'ENTRY';
+  if (subTab === 'SUMMARY' && !canAggregate) subTab = 'APPROVED';
   activeBudgetSubTab = subTab;
 
-  document.getElementById('budgetSubEntry').classList.toggle('hidden', subTab !== 'ENTRY');
-  document.getElementById('budgetSubPeriod').classList.toggle('hidden', subTab !== 'PERIOD');
+  document.getElementById('budgetSubApproved').classList.toggle('hidden', subTab !== 'APPROVED');
+  document.getElementById('budgetSubActual').classList.toggle('hidden', subTab !== 'ACTUAL');
   document.getElementById('budgetSubSummary').classList.toggle('hidden', subTab !== 'SUMMARY');
 
   const activeCls = 'px-3 py-1.5 rounded text-xs font-bold bg-violet-700 text-white';
   const inactiveCls = 'px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700';
-  document.getElementById('btnBudgetSubEntry').className = subTab === 'ENTRY' ? activeCls : inactiveCls;
-  document.getElementById('btnBudgetSubPeriod').className = (subTab === 'PERIOD' ? activeCls : inactiveCls) + (canManage ? '' : ' hidden');
+  document.getElementById('btnBudgetSubApproved').className = subTab === 'APPROVED' ? activeCls : inactiveCls;
+  document.getElementById('btnBudgetSubActual').className = subTab === 'ACTUAL' ? activeCls : inactiveCls;
   document.getElementById('btnBudgetSubSummary').className = (subTab === 'SUMMARY' ? activeCls : inactiveCls) + (canAggregate ? '' : ' hidden');
+  document.getElementById('btnBudgetManageKinds').classList.toggle('hidden', !canManage);
 
-  if (subTab === 'ENTRY') renderBudgetEntrySubTab();
-  else if (subTab === 'PERIOD') renderBudgetPeriodSubTab();
+  if (subTab === 'APPROVED') renderBudgetEntrySubTab('PLAN');
+  else if (subTab === 'ACTUAL') renderBudgetEntrySubTab('ACTUAL');
   else if (subTab === 'SUMMARY') renderBudgetSummarySubTab();
 }
 
-// ============ LẬP NGÂN SÁCH (budgetCreate — đúng phòng ban mình) ============
-function renderBudgetEntrySubTab() {
+// ============ NGÂN SÁCH PHÊ DUYỆT / NGÂN SÁCH THỰC HIỆN (budgetCreate — đúng phòng ban mình) ============
+// Mọi hàm trong khối này nhận tham số đầu `kind` ('PLAN' cho tab Phê Duyệt, 'ACTUAL' cho tab Thực Hiện)
+// và thao tác trên đúng bộ phần tử DOM (hậu tố _PLAN/_ACTUAL) + đúng state (budgetEntryFormDraftId[kind]/
+// budgetEntryFormLines[kind]) của tab đó — 2 tab hoàn toàn độc lập với nhau dù dùng chung code.
+function renderBudgetEntrySubTab(kind) {
   const canCreate = canCreateBudgetEntryClient(currentUser);
-  document.getElementById('budgetNoCreatePermNote').classList.toggle('hidden', canCreate);
-  document.getElementById('budgetEntryFormWrap').classList.toggle('hidden', !canCreate);
-  if (canCreate) renderBudgetEntryPeriodOptions();
-  renderBudgetEntryList();
+  bEl(kind, 'budgetNoCreatePermNote').classList.toggle('hidden', canCreate);
+  bEl(kind, 'budgetEntryFormWrap').classList.toggle('hidden', !canCreate);
+  if (canCreate) renderBudgetEntryPeriodOptions(kind);
+  renderBudgetEntryList(kind);
 }
 
 function getOpenBudgetPeriodsForDept(dept) {
   return DB.budgetPeriods.filter(p => budgetPeriodIsOpen(p) && budgetPeriodDeptAllowed(p, dept));
 }
 
-function renderBudgetEntryPeriodOptions() {
-  const sel = document.getElementById('budgetEntryPeriodSelect');
+function renderBudgetEntryPeriodOptions(kind) {
+  const sel = bEl(kind, 'budgetEntryPeriodSelect');
   if (!sel) return;
   const prevValue = sel.value;
   const periods = getOpenBudgetPeriodsForDept(currentUser.dept);
   sel.innerHTML = `<option value="">-- Chọn kỳ ngân sách --</option>` +
     periods.map(p => `<option value="${p.id}">${escapeHtml(p.name)} (hạn ${formatDateTimeVN(p.endTime)})</option>`).join('');
-  document.getElementById('budgetEntryNoPeriodNote').classList.toggle('hidden', periods.length > 0);
+  bEl(kind, 'budgetEntryNoPeriodNote').classList.toggle('hidden', periods.length > 0);
   if (prevValue && periods.some(p => String(p.id) === prevValue)) sel.value = prevValue;
-  onBudgetEntryPeriodChange();
+  onBudgetEntryPeriodChange(kind);
 }
 
 // Mẫu tạo TRƯỚC khi có tính năng "cột lõi hiển thị tường minh" (fields hoàn toàn không có coreKey nào)
@@ -23124,27 +23233,27 @@ function getBudgetLineFieldValue(line, f) { return f.coreKey ? line[f.coreKey] :
 
 function blankBudgetLine() { return { name: '', description: '', amount: null, budgetType: 'OPEX', extra: {} }; }
 
-function onBudgetEntryPeriodChange() {
-  const periodId = Number(document.getElementById('budgetEntryPeriodSelect').value);
-  const wrap = document.getElementById('budgetEntryLinesWrap');
-  budgetEntryFormDraftId = null;
-  budgetEntryFormLines = [];
-  document.getElementById('budgetEntryDeptDisplay').value = currentUser.dept || '';
+function onBudgetEntryPeriodChange(kind) {
+  const periodId = Number(bEl(kind, 'budgetEntryPeriodSelect').value);
+  const wrap = bEl(kind, 'budgetEntryLinesWrap');
+  budgetEntryFormDraftId[kind] = null;
+  budgetEntryFormLines[kind] = [];
+  bEl(kind, 'budgetEntryDeptDisplay').value = currentUser.dept || '';
   if (!periodId) { wrap.classList.add('hidden'); return; }
   const period = DB.budgetPeriods.find(p => p.id === periodId);
   if (!period) { wrap.classList.add('hidden'); return; }
 
-  const existing = DB.budgetEntries.find(e => e.periodId === periodId && e.dept === currentUser.dept);
+  const existing = DB.budgetEntries.find(e => e.periodId === periodId && e.dept === currentUser.dept && (e.entryKind === 'ACTUAL' ? 'ACTUAL' : 'PLAN') === kind);
   const readonly = !!(existing && existing.status !== 'DRAFT');
   const customFields = getBudgetPeriodTemplateFields(period);
 
-  budgetEntryFormDraftId = existing ? existing.id : null;
-  budgetEntryFormLines = existing ? existing.lines.map(l => ({ ...l, extra: { ...(l.extra || {}) } })) : [];
-  if (!budgetEntryFormLines.length && !readonly) budgetEntryFormLines.push(blankBudgetLine());
+  budgetEntryFormDraftId[kind] = existing ? existing.id : null;
+  budgetEntryFormLines[kind] = existing ? existing.lines.map(l => ({ ...l, extra: { ...(l.extra || {}) } })) : [];
+  if (!budgetEntryFormLines[kind].length && !readonly) budgetEntryFormLines[kind].push(blankBudgetLine());
 
-  renderBudgetEntryLinesTable(customFields, readonly);
+  renderBudgetEntryLinesTable(kind, customFields, readonly);
 
-  const noteEl = document.getElementById('budgetEntryReadonlyNote');
+  const noteEl = bEl(kind, 'budgetEntryReadonlyNote');
   noteEl.classList.toggle('hidden', !readonly);
   if (readonly) {
     noteEl.innerText = existing.status === 'PENDING'
@@ -23153,8 +23262,8 @@ function onBudgetEntryPeriodChange() {
         ? '✅ Bản ngân sách này đã được duyệt.'
         : '❌ Bản ngân sách này đã bị từ chối.';
   }
-  document.getElementById('budgetEntryAddRowBtn').classList.toggle('hidden', readonly);
-  document.getElementById('budgetEntrySaveActions').classList.toggle('hidden', readonly);
+  bEl(kind, 'budgetEntryAddRowBtn').classList.toggle('hidden', readonly);
+  bEl(kind, 'budgetEntrySaveActions').classList.toggle('hidden', readonly);
   wrap.classList.remove('hidden');
 }
 
@@ -23196,7 +23305,7 @@ function buildBudgetFieldInputHTML(f, value) {
   return `<td class="border p-1.5"><input type="text" class="${cls} w-full border p-1 rounded" ${dataAttr} value="${escapeHtml(value || '')}"></td>`;
 }
 
-function buildBudgetLineRowHTML(line, idx, fields, readonly) {
+function buildBudgetLineRowHTML(line, idx, fields, readonly, kind) {
   if (readonly) {
     return `<tr>
       <td class="border p-1.5 text-center">${idx + 1}</td>
@@ -23206,20 +23315,21 @@ function buildBudgetLineRowHTML(line, idx, fields, readonly) {
   return `<tr data-budget-line-idx="${idx}">
     <td class="border p-1.5 text-center">${idx + 1}</td>
     ${fields.map(f => buildBudgetFieldInputHTML(f, getBudgetLineFieldValue(line, f))).join('')}
-    <td class="border p-1.5 text-center"><button type="button" onclick="removeBudgetEntryLine(${idx})" class="text-red-600 font-bold hover:underline">✕</button></td>
+    <td class="border p-1.5 text-center"><button type="button" onclick="removeBudgetEntryLine('${kind}', ${idx})" class="text-red-600 font-bold hover:underline">✕</button></td>
   </tr>`;
 }
 
-function renderBudgetEntryLinesTable(fields, readonly) {
-  document.getElementById('budgetEntryLinesHead').innerHTML = buildBudgetLinesTableHead(fields, readonly);
-  document.getElementById('budgetEntryLinesBody').innerHTML = budgetEntryFormLines.length
-    ? budgetEntryFormLines.map((line, idx) => buildBudgetLineRowHTML(line, idx, fields, readonly)).join('')
+function renderBudgetEntryLinesTable(kind, fields, readonly) {
+  bEl(kind, 'budgetEntryLinesHead').innerHTML = buildBudgetLinesTableHead(fields, readonly);
+  const lines = budgetEntryFormLines[kind];
+  bEl(kind, 'budgetEntryLinesBody').innerHTML = lines.length
+    ? lines.map((line, idx) => buildBudgetLineRowHTML(line, idx, fields, readonly, kind)).join('')
     : `<tr><td colspan="${(readonly ? 1 : 2) + fields.length}" class="text-center p-3 text-gray-400 italic">Chưa có dòng nào.</td></tr>`;
-  updateBudgetEntryTotalDisplay();
+  updateBudgetEntryTotalDisplay(kind);
 }
 
-function collectBudgetEntryLinesFromForm() {
-  return Array.from(document.querySelectorAll('#budgetEntryLinesBody tr[data-budget-line-idx]')).map(row => {
+function collectBudgetEntryLinesFromForm(kind) {
+  return Array.from(document.querySelectorAll('#' + bId(kind, 'budgetEntryLinesBody') + ' tr[data-budget-line-idx]')).map(row => {
     const line = { name: '', description: '', amount: null, budgetType: 'OPEX', extra: {} };
     row.querySelectorAll('.budget-line-core').forEach(el => {
       const key = el.dataset.coreKey;
@@ -23234,44 +23344,47 @@ function collectBudgetEntryLinesFromForm() {
   });
 }
 
-function addBudgetEntryLine() {
-  budgetEntryFormLines = collectBudgetEntryLinesFromForm();
-  budgetEntryFormLines.push(blankBudgetLine());
-  const period = DB.budgetPeriods.find(p => p.id === Number(document.getElementById('budgetEntryPeriodSelect').value));
-  renderBudgetEntryLinesTable(getBudgetPeriodTemplateFields(period), false);
+function addBudgetEntryLine(kind) {
+  budgetEntryFormLines[kind] = collectBudgetEntryLinesFromForm(kind);
+  budgetEntryFormLines[kind].push(blankBudgetLine());
+  const period = DB.budgetPeriods.find(p => p.id === Number(bEl(kind, 'budgetEntryPeriodSelect').value));
+  renderBudgetEntryLinesTable(kind, getBudgetPeriodTemplateFields(period), false);
 }
-function removeBudgetEntryLine(idx) {
-  budgetEntryFormLines = collectBudgetEntryLinesFromForm();
-  budgetEntryFormLines.splice(idx, 1);
-  const period = DB.budgetPeriods.find(p => p.id === Number(document.getElementById('budgetEntryPeriodSelect').value));
-  renderBudgetEntryLinesTable(getBudgetPeriodTemplateFields(period), false);
+function removeBudgetEntryLine(kind, idx) {
+  budgetEntryFormLines[kind] = collectBudgetEntryLinesFromForm(kind);
+  budgetEntryFormLines[kind].splice(idx, 1);
+  const period = DB.budgetPeriods.find(p => p.id === Number(bEl(kind, 'budgetEntryPeriodSelect').value));
+  renderBudgetEntryLinesTable(kind, getBudgetPeriodTemplateFields(period), false);
 }
 
 document.addEventListener('input', (e) => {
-  if (e.target?.dataset?.coreKey === 'amount') updateBudgetEntryTotalDisplay();
+  if (e.target?.dataset?.coreKey !== 'amount') return;
+  const tbody = e.target.closest('tbody[id^="budgetEntryLinesBody_"]');
+  if (!tbody) return;
+  updateBudgetEntryTotalDisplay(tbody.id.replace('budgetEntryLinesBody_', ''));
 });
 
-function updateBudgetEntryTotalDisplay() {
-  const el = document.getElementById('budgetEntryTotalDisplay');
+function updateBudgetEntryTotalDisplay(kind) {
+  const el = bEl(kind, 'budgetEntryTotalDisplay');
   if (!el) return;
-  const total = Array.from(document.querySelectorAll('#budgetEntryLinesBody .budget-line-core[data-core-key="amount"]'))
+  const total = Array.from(document.querySelectorAll('#' + bId(kind, 'budgetEntryLinesBody') + ' .budget-line-core[data-core-key="amount"]'))
     .reduce((sum, input) => sum + getMoneyValue(input), 0);
   el.innerText = total.toLocaleString('vi-VN') + ' đ';
 }
 
-async function saveBudgetEntryDraft() {
-  const periodId = Number(document.getElementById('budgetEntryPeriodSelect').value);
+async function saveBudgetEntryDraft(kind) {
+  const periodId = Number(bEl(kind, 'budgetEntryPeriodSelect').value);
   if (!periodId) return alert('Vui lòng chọn kỳ ngân sách!');
-  const lines = collectBudgetEntryLinesFromForm().filter(l => l.name || l.amount || l.description);
+  const lines = collectBudgetEntryLinesFromForm(kind).filter(l => l.name || l.amount || l.description);
   if (!lines.length) return alert('Vui lòng nhập ít nhất 1 dòng ngân sách!');
 
   let saved;
   try {
-    if (budgetEntryFormDraftId) {
-      const result = await callRecordAction('budgetEntries', budgetEntryFormDraftId, 'update', { lines });
+    if (budgetEntryFormDraftId[kind]) {
+      const result = await callRecordAction('budgetEntries', budgetEntryFormDraftId[kind], 'update', { lines });
       saved = result.item;
     } else {
-      const payload = { code: generateBudgetEntryCode(), periodId, lines, createdAt: new Date().toLocaleString('vi-VN') };
+      const payload = { code: generateBudgetEntryCode(), periodId, entryKind: kind, lines, createdAt: new Date().toLocaleString('vi-VN') };
       const result = await callCreateAction('budgetEntries', payload);
       saved = result.item;
     }
@@ -23279,15 +23392,15 @@ async function saveBudgetEntryDraft() {
 
   const idx = DB.budgetEntries.findIndex(e => e.id === saved.id);
   if (idx !== -1) DB.budgetEntries[idx] = saved; else DB.budgetEntries.unshift(saved);
-  budgetEntryFormDraftId = saved.id;
-  logSystemAction('BUDGET', 'SAVE_BUDGET_ENTRY_DRAFT', `Lưu nháp ngân sách [${saved.code}] kỳ [${saved.periodName}]`, 'SUCCESS', saved.code);
+  budgetEntryFormDraftId[kind] = saved.id;
+  logSystemAction('BUDGET', 'SAVE_BUDGET_ENTRY_DRAFT', `Lưu nháp ngân sách [${saved.code}] kỳ [${saved.periodName}] (${kind === 'ACTUAL' ? 'Thực hiện' : 'Phê duyệt'})`, 'SUCCESS', saved.code);
   alert('✅ Đã lưu nháp — bạn có thể sửa tiếp hoặc bấm "Gửi Duyệt" khi đã hoàn tất.');
-  renderBudgetEntryList();
+  renderBudgetEntryList(kind);
 }
 
-async function submitCurrentBudgetEntry() {
-  if (!budgetEntryFormDraftId) return alert('Vui lòng bấm "Lưu Nháp" trước khi gửi duyệt!');
-  const entry = DB.budgetEntries.find(e => e.id === budgetEntryFormDraftId);
+async function submitCurrentBudgetEntry(kind) {
+  if (!budgetEntryFormDraftId[kind]) return alert('Vui lòng bấm "Lưu Nháp" trước khi gửi duyệt!');
+  const entry = DB.budgetEntries.find(e => e.id === budgetEntryFormDraftId[kind]);
   if (!entry) return;
   showConfirmModal({
     title: '📤 Xác Nhận Gửi Duyệt',
@@ -23296,22 +23409,22 @@ async function submitCurrentBudgetEntry() {
     onConfirm: async () => {
       let result;
       try {
-        result = await callRecordAction('budgetEntries', budgetEntryFormDraftId, 'submit', {});
+        result = await callRecordAction('budgetEntries', budgetEntryFormDraftId[kind], 'submit', {});
       } catch (err) { return alert(`⛔ ${err.message}`); }
       const updated = result.item;
       const idx = DB.budgetEntries.findIndex(e => e.id === updated.id);
       if (idx !== -1) DB.budgetEntries[idx] = updated;
       logSystemAction('BUDGET', 'SUBMIT_BUDGET_ENTRY', `Gửi duyệt ngân sách [${updated.code}]`, 'SUCCESS', updated.code);
       alert('✅ Đã gửi, đang chờ Trưởng phòng duyệt!');
-      onBudgetEntryPeriodChange();
-      renderBudgetEntryList();
+      onBudgetEntryPeriodChange(kind);
+      renderBudgetEntryList(kind);
 
       const wfConfig = DB.budgetDeptWorkflows[updated.dept] || { workflowId: 'WF_1STEP', approvers: { 1: ['admin'] } };
       const approvers = wfConfig.approvers?.[1] || [];
       if (approvers.length) {
         notifyUsersByEmail('BUDGET', 'NOTIFY_APPROVAL_NEEDED', updated.code, approvers,
           `[VPDT] Ngân sách ${updated.code} cần bạn phê duyệt`,
-          `Bản ngân sách phòng ${updated.dept} kỳ "${updated.periodName}" đang chờ bạn phê duyệt.`);
+          `Bản ngân sách phòng ${updated.dept} kỳ "${updated.periodName}" (${kind === 'ACTUAL' ? 'Thực hiện' : 'Phê duyệt'}) đang chờ bạn phê duyệt.`);
       }
     }
   });
@@ -23328,18 +23441,21 @@ function budgetEntryStatusBadge(e) {
 
 function budgetEntryTotal(e) { return (e.lines || []).reduce((sum, l) => sum + (Number(l.amount) || 0), 0); }
 
-function filterBudgetByCard(status) {
-  applyDashboardCardFilter({ filterStatusBudget: status }, null, renderBudgetEntryList);
+function filterBudgetByCard(kind, status) {
+  applyDashboardCardFilter({ [bId(kind, 'filterStatusBudget')]: status }, null, () => renderBudgetEntryList(kind));
 }
+function filterBudgetByCardPLAN(status) { filterBudgetByCard('PLAN', status); }
+function filterBudgetByCardACTUAL(status) { filterBudgetByCard('ACTUAL', status); }
 
-function renderBudgetEntryList() {
-  const tbody = document.getElementById('budgetEntryListBody');
+function renderBudgetEntryList(kind) {
+  const tbody = bEl(kind, 'budgetEntryListBody');
   if (!tbody) return;
   const canManage = canManageBudgetClient(currentUser);
   const canAggregate = canAggregateBudgetClient(currentUser);
-  const statusFilter = document.getElementById('filterStatusBudget')?.value || '';
+  const statusFilter = bEl(kind, 'filterStatusBudget')?.value || '';
   const scopedEntries = DB.budgetEntries.filter(e =>
-    canManage || canAggregate || e.dept === currentUser.dept || isApproverForDeptWorkflow(DB.budgetDeptWorkflows[e.dept], currentUser.username));
+    (e.entryKind === 'ACTUAL' ? 'ACTUAL' : 'PLAN') === kind &&
+    (canManage || canAggregate || e.dept === currentUser.dept || isApproverForDeptWorkflow(DB.budgetDeptWorkflows[e.dept], currentUser.username)));
 
   const budgetDashCards = [
     { key: '', label: 'Tổng Bản Ngân Sách', count: scopedEntries.length, colorClass: 'border-l-blue-500' },
@@ -23347,8 +23463,8 @@ function renderBudgetEntryList() {
     { key: 'APPROVED', label: 'Đã Duyệt', count: scopedEntries.filter(e => e.status === 'APPROVED').length, colorClass: 'border-l-green-500' },
     { key: 'REJECTED', label: 'Từ Chối', count: scopedEntries.filter(e => e.status === 'REJECTED').length, colorClass: 'border-l-red-500' }
   ];
-  const dashEl = document.getElementById('budgetDashboardCards');
-  if (dashEl) dashEl.innerHTML = buildDashboardCardsHTML(budgetDashCards, statusFilter, 'filterBudgetByCard');
+  const dashEl = bEl(kind, 'budgetDashboardCards');
+  if (dashEl) dashEl.innerHTML = buildDashboardCardsHTML(budgetDashCards, statusFilter, kind === 'ACTUAL' ? 'filterBudgetByCardACTUAL' : 'filterBudgetByCardPLAN');
 
   const visible = scopedEntries.filter(e => !statusFilter || e.status === statusFilter);
 
@@ -23366,7 +23482,7 @@ function renderBudgetEntryList() {
     let primaryBtnHTML;
     const secondaryOptions = [];
     if (isOwnDeptDraft) {
-      primaryBtnHTML = `<button onclick="editBudgetEntryDraft(${e.id})" class="px-2.5 py-1 bg-gray-600 text-white rounded text-xs hover:opacity-90 font-bold">✏️ Sửa Nháp</button>`;
+      primaryBtnHTML = `<button onclick="editBudgetEntryDraft('${kind}', ${e.id})" class="px-2.5 py-1 bg-gray-600 text-white rounded text-xs hover:opacity-90 font-bold">✏️ Sửa Nháp</button>`;
     } else {
       primaryBtnHTML = canApprove
         ? `<button onclick="openBudgetProcessModal(${e.id})" class="px-2.5 py-1 bg-emerald-600 text-white rounded text-xs hover:opacity-90 font-bold">✍️ Xử lý / Duyệt</button>`
@@ -23393,21 +23509,38 @@ function runBudgetEntryListAction(id, action) {
 function deleteBudgetEntryAction(id) {
   const e = DB.budgetEntries.find(x => x.id === id);
   if (!e) return;
+  const kind = e.entryKind === 'ACTUAL' ? 'ACTUAL' : 'PLAN';
   deleteRecordAdminOnly('budgetEntries', id, `bản ngân sách ${e.code}`, () => {
     DB.budgetEntries = DB.budgetEntries.filter(x => x.id !== id);
     logSystemAction('BUDGET', 'DELETE_BUDGET_ENTRY', `Xóa bản ngân sách [${e.code}]`, 'SUCCESS', e.code);
-    renderBudgetEntryList();
+    renderBudgetEntryList(kind);
   });
 }
-function editBudgetEntryDraft(id) {
+function editBudgetEntryDraft(kind, id) {
   const e = DB.budgetEntries.find(x => x.id === id);
   if (!e) return;
-  document.getElementById('budgetEntryPeriodSelect').value = String(e.periodId);
-  onBudgetEntryPeriodChange();
-  document.getElementById('budgetEntryFormWrap').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  bEl(kind, 'budgetEntryPeriodSelect').value = String(e.periodId);
+  onBudgetEntryPeriodChange(kind);
+  bEl(kind, 'budgetEntryFormWrap').scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
-// ============ TẠO KỲ NGÂN SÁCH + MẪU NGÂN SÁCH (budgetManage/admin) ============
+// ============ MODAL "QUẢN LÝ KỲ & MẪU NGÂN SÁCH" (budgetManage/admin) ============
+// Nội dung bên trong modal (renderBudgetPeriodSubTab() trở xuống) GIỮ NGUYÊN 100% — chỉ đổi cách mở/
+// đóng từ sub-tab sang modal. Vì 2 tab Ngân Sách Phê Duyệt/Thực Hiện đọc DB.budgetPeriods/budgetTemplates
+// trực tiếp lúc mở tab (không tự refresh khi modal đang mở phía trên), đóng modal xong phải chủ động vẽ
+// lại đúng tab con đang hiện để dropdown chọn kỳ không bị cũ nếu vừa tạo/đóng/mở lại kỳ trong lúc đó.
+function openBudgetPeriodTemplateModal() {
+  if (!canManageBudgetClient(currentUser)) return;
+  document.getElementById('budgetPeriodTemplateModal').classList.remove('hidden');
+  renderBudgetPeriodSubTab();
+}
+function closeBudgetPeriodTemplateModal() {
+  document.getElementById('budgetPeriodTemplateModal').classList.add('hidden');
+  if (activeBudgetSubTab === 'APPROVED') renderBudgetEntryPeriodOptions('PLAN');
+  else if (activeBudgetSubTab === 'ACTUAL') renderBudgetEntryPeriodOptions('ACTUAL');
+  else if (activeBudgetSubTab === 'SUMMARY') renderBudgetSummaryPeriodOptions();
+}
+
 function renderBudgetPeriodSubTab() {
   renderBudgetPeriodDeptChecklist();
   renderBudgetPeriodTemplateOptions();
@@ -23803,58 +23936,115 @@ function buildBudgetSummary() {
   if (!periodId) return alert('Vui lòng chọn kỳ ngân sách!');
   const period = DB.budgetPeriods.find(p => p.id === periodId);
   if (!period) return alert('Không tìm thấy kỳ ngân sách!');
-  const approvedEntries = DB.budgetEntries.filter(e => e.periodId === periodId && e.status === 'APPROVED');
+  const planEntries = DB.budgetEntries.filter(e => e.periodId === periodId && e.status === 'APPROVED' && e.entryKind !== 'ACTUAL');
+  const actualEntries = DB.budgetEntries.filter(e => e.periodId === periodId && e.status === 'APPROVED' && e.entryKind === 'ACTUAL');
   const fields = getBudgetPeriodTemplateFields(period);
-  currentBudgetSummaryData = { period, entries: approvedEntries, fields };
-  renderBudgetSummaryResult(period, approvedEntries, fields);
-  logSystemAction('BUDGET', 'BUILD_BUDGET_SUMMARY', `Tổng hợp ngân sách kỳ [${period.name}]: ${approvedEntries.length} phòng ban`, 'SUCCESS', String(period.id));
+  currentBudgetSummaryData = { period, planEntries, actualEntries, fields };
+  renderBudgetSummaryResult(period, planEntries, actualEntries, fields);
+  logSystemAction('BUDGET', 'BUILD_BUDGET_SUMMARY', `Tổng hợp ngân sách kỳ [${period.name}]: ${planEntries.length} phòng ban phê duyệt, ${actualEntries.length} phòng ban thực hiện`, 'SUCCESS', String(period.id));
 }
-function renderBudgetSummaryResult(period, entries, fields) {
+function budgetTypeTotal(entries, type) {
+  return entries.reduce((sum, e) => sum + (e.lines || []).filter(l => l.budgetType === type).reduce((s, l) => s + (Number(l.amount) || 0), 0), 0);
+}
+function sumEntriesByDept(entries) {
+  const map = {};
+  entries.forEach(e => { map[e.dept] = (map[e.dept] || 0) + budgetEntryTotal(e); });
+  return map;
+}
+// So sánh 2 chiều Phê Duyệt (planEntries) vs Thực Hiện (actualEntries) — cùng kỳ, cùng đã APPROVED.
+// "Chi Tiết Theo Hạng Mục" đối chiếu theo TÊN hạng mục trong CÙNG phòng ban (trim + không phân biệt
+// hoa/thường) vì đây là cách khớp thực tế duy nhất có thể làm được (2 bản Phê Duyệt/Thực Hiện là 2 bản
+// ghi độc lập, không có liên kết id giữa từng dòng) — hạng mục chỉ có ở 1 bên hiển thị "—" ở cột còn lại.
+function renderBudgetSummaryResult(period, planEntries, actualEntries, fields) {
   const wrap = document.getElementById('budgetSummaryResultWrap');
-  const grandTotal = entries.reduce((sum, e) => sum + budgetEntryTotal(e), 0);
-  const opexTotal = entries.reduce((sum, e) => sum + (e.lines || []).filter(l => l.budgetType === 'OPEX').reduce((s, l) => s + (Number(l.amount) || 0), 0), 0);
-  const capexTotal = grandTotal - opexTotal;
+  const planTotal = planEntries.reduce((sum, e) => sum + budgetEntryTotal(e), 0);
+  const actualTotal = actualEntries.reduce((sum, e) => sum + budgetEntryTotal(e), 0);
+  const diffTotal = actualTotal - planTotal;
+  const usagePct = planTotal > 0 ? (actualTotal / planTotal * 100) : null;
 
-  const byDeptRows = entries.map(e => `
-    <tr>
-      <td class="border p-2">${escapeHtml(e.dept)}</td>
-      <td class="border p-2 text-center">${(e.lines || []).length}</td>
-      <td class="border p-2 text-right">${budgetEntryTotal(e).toLocaleString('vi-VN')} đ</td>
-    </tr>
-  `).join('') || `<tr><td colspan="3" class="text-center p-3 text-gray-400 italic">Chưa có phòng ban nào được duyệt ở kỳ này.</td></tr>`;
+  const planOpex = budgetTypeTotal(planEntries, 'OPEX'), planCapex = budgetTypeTotal(planEntries, 'CAPEX');
+  const actualOpex = budgetTypeTotal(actualEntries, 'OPEX'), actualCapex = budgetTypeTotal(actualEntries, 'CAPEX');
 
-  const allLines = entries.flatMap(e => (e.lines || []).map(l => ({ ...l, dept: e.dept })));
-  const allLinesRows = allLines.map((l, idx) => `
-      <tr>
+  const planByDept = sumEntriesByDept(planEntries);
+  const actualByDept = sumEntriesByDept(actualEntries);
+  const allDepts = Array.from(new Set([...Object.keys(planByDept), ...Object.keys(actualByDept)])).sort((a, b) => a.localeCompare(b, 'vi'));
+
+  const fmtDiff = (v) => (v > 0 ? '+' : '') + v.toLocaleString('vi-VN') + ' đ';
+  const diffColorCls = (v) => v > 0 ? 'text-red-600' : (v < 0 ? 'text-emerald-600' : 'text-gray-500');
+  const fmtPct = (v) => v === null ? '—' : v.toFixed(1) + '%';
+
+  const byDeptRows = allDepts.map(d => {
+    const plan = planByDept[d] || 0, actual = actualByDept[d] || 0, diff = actual - plan;
+    const pct = plan > 0 ? (actual / plan * 100) : null;
+    return `<tr>
+      <td class="border p-2">${escapeHtml(d)}</td>
+      <td class="border p-2 text-right">${plan.toLocaleString('vi-VN')} đ</td>
+      <td class="border p-2 text-right">${actual.toLocaleString('vi-VN')} đ</td>
+      <td class="border p-2 text-right font-semibold ${diffColorCls(diff)}">${fmtDiff(diff)}</td>
+      <td class="border p-2 text-right">${fmtPct(pct)}</td>
+    </tr>`;
+  }).join('') || `<tr><td colspan="5" class="text-center p-3 text-gray-400 italic">Chưa có phòng ban nào được duyệt ở kỳ này.</td></tr>`;
+
+  const itemMap = new Map(); // key: dept|||nameLower -> { dept, name, plan, actual }
+  const addLines = (entries, side) => {
+    entries.forEach(e => {
+      (e.lines || []).forEach(l => {
+        const key = `${e.dept}|||${(l.name || '').trim().toLowerCase()}`;
+        if (!itemMap.has(key)) itemMap.set(key, { dept: e.dept, name: l.name, plan: 0, actual: 0 });
+        itemMap.get(key)[side] += Number(l.amount) || 0;
+      });
+    });
+  };
+  addLines(planEntries, 'plan');
+  addLines(actualEntries, 'actual');
+  const itemRows = Array.from(itemMap.values())
+    .sort((a, b) => a.dept.localeCompare(b.dept, 'vi') || a.name.localeCompare(b.name, 'vi'))
+    .map((it, idx) => {
+      const diff = it.actual - it.plan;
+      return `<tr>
         <td class="border p-1.5 text-center">${idx + 1}</td>
-        <td class="border p-1.5">${escapeHtml(l.dept)}</td>
-        ${fields.map(f => `<td class="border p-1.5 ${f.type === 'money' ? 'text-right' : ''}">${escapeHtml(formatBudgetFieldDisplayValue(getBudgetLineFieldValue(l, f), f))}</td>`).join('')}
-      </tr>
-    `).join('');
+        <td class="border p-1.5">${escapeHtml(it.dept)}</td>
+        <td class="border p-1.5">${escapeHtml(it.name)}</td>
+        <td class="border p-1.5 text-right">${it.plan ? it.plan.toLocaleString('vi-VN') + ' đ' : '—'}</td>
+        <td class="border p-1.5 text-right">${it.actual ? it.actual.toLocaleString('vi-VN') + ' đ' : '—'}</td>
+        <td class="border p-1.5 text-right font-semibold ${diffColorCls(diff)}">${fmtDiff(diff)}</td>
+      </tr>`;
+    }).join('');
 
   wrap.innerHTML = `
     <div id="budgetSummaryProtectedContent" class="relative select-none" oncontextmenu="return false">
       <div class="text-center mb-2">
-        <h3 class="font-bold text-lg text-violet-900">TỔNG HỢP NGÂN SÁCH</h3>
-        <p class="text-sm text-gray-600">Kỳ: ${escapeHtml(period.name)} — chỉ tính các bản đã được duyệt</p>
+        <h3 class="font-bold text-lg text-violet-900">TỔNG HỢP NGÂN SÁCH — PHÊ DUYỆT vs THỰC HIỆN</h3>
+        <p class="text-sm text-gray-600">Kỳ: ${escapeHtml(period.name)} — chỉ tính các bản đã được duyệt của mỗi loại</p>
       </div>
-      <div class="grid grid-cols-3 gap-3 text-center">
-        <div class="bg-violet-50 border border-violet-200 rounded p-3"><div class="text-xs text-gray-600">Tổng Ngân Sách</div><div class="font-bold text-lg text-violet-800">${grandTotal.toLocaleString('vi-VN')} đ</div></div>
-        <div class="bg-sky-50 border border-sky-200 rounded p-3"><div class="text-xs text-gray-600">OPEX</div><div class="font-bold text-lg text-sky-800">${opexTotal.toLocaleString('vi-VN')} đ</div></div>
-        <div class="bg-amber-50 border border-amber-200 rounded p-3"><div class="text-xs text-gray-600">CAPEX</div><div class="font-bold text-lg text-amber-800">${capexTotal.toLocaleString('vi-VN')} đ</div></div>
+      <div class="grid grid-cols-2 md:grid-cols-4 gap-3 text-center">
+        <div class="bg-violet-50 border border-violet-200 rounded p-3"><div class="text-xs text-gray-600">Tổng Phê Duyệt</div><div class="font-bold text-lg text-violet-800">${planTotal.toLocaleString('vi-VN')} đ</div></div>
+        <div class="bg-sky-50 border border-sky-200 rounded p-3"><div class="text-xs text-gray-600">Tổng Thực Hiện</div><div class="font-bold text-lg text-sky-800">${actualTotal.toLocaleString('vi-VN')} đ</div></div>
+        <div class="bg-gray-50 border rounded p-3"><div class="text-xs text-gray-600">Chênh Lệch</div><div class="font-bold text-lg ${diffColorCls(diffTotal)}">${fmtDiff(diffTotal)}</div></div>
+        <div class="bg-amber-50 border border-amber-200 rounded p-3"><div class="text-xs text-gray-600">% Sử Dụng</div><div class="font-bold text-lg text-amber-800">${fmtPct(usagePct)}</div></div>
+      </div>
+      <div class="grid grid-cols-2 gap-3 text-center mt-3">
+        <div class="bg-white border rounded p-2 text-xs">
+          <div class="font-bold text-gray-700 mb-1">OPEX</div>
+          <div>Phê duyệt: <b>${planOpex.toLocaleString('vi-VN')} đ</b> &nbsp;|&nbsp; Thực hiện: <b>${actualOpex.toLocaleString('vi-VN')} đ</b></div>
+        </div>
+        <div class="bg-white border rounded p-2 text-xs">
+          <div class="font-bold text-gray-700 mb-1">CAPEX</div>
+          <div>Phê duyệt: <b>${planCapex.toLocaleString('vi-VN')} đ</b> &nbsp;|&nbsp; Thực hiện: <b>${actualCapex.toLocaleString('vi-VN')} đ</b></div>
+        </div>
       </div>
       <div class="mt-4">
         <h4 class="font-bold text-sm text-gray-700 mb-1">Theo Phòng Ban</h4>
-        <table class="w-full border-collapse text-xs bg-white"><thead><tr class="bg-gray-100 text-left"><th class="border p-2">Phòng Ban</th><th class="border p-2 text-center">Số Hạng Mục</th><th class="border p-2 text-right">Tổng Tiền</th></tr></thead><tbody>${byDeptRows}</tbody></table>
+        <table class="w-full border-collapse text-xs bg-white"><thead><tr class="bg-gray-100 text-left"><th class="border p-2">Phòng Ban</th><th class="border p-2 text-right">Phê Duyệt</th><th class="border p-2 text-right">Thực Hiện</th><th class="border p-2 text-right">Chênh Lệch</th><th class="border p-2 text-right">% Sử Dụng</th></tr></thead><tbody>${byDeptRows}</tbody></table>
       </div>
       <div class="mt-4 overflow-x-auto">
-        <h4 class="font-bold text-sm text-gray-700 mb-1">Chi Tiết Hạng Mục</h4>
+        <h4 class="font-bold text-sm text-gray-700 mb-1">Chi Tiết Theo Hạng Mục (đối chiếu theo tên hạng mục trong cùng phòng ban)</h4>
         <table class="w-full border-collapse text-xs bg-white">
           <thead><tr class="bg-gray-100 text-left">
-            <th class="border p-1.5 w-10">STT</th><th class="border p-1.5">Phòng Ban</th>
-            ${fields.map(f => `<th class="border p-1.5 ${f.type === 'money' ? 'text-right' : ''}">${escapeHtml(f.label)}</th>`).join('')}
+            <th class="border p-1.5 w-10">STT</th><th class="border p-1.5">Phòng Ban</th><th class="border p-1.5">Hạng Mục</th>
+            <th class="border p-1.5 text-right">Phê Duyệt</th><th class="border p-1.5 text-right">Thực Hiện</th><th class="border p-1.5 text-right">Chênh Lệch</th>
           </tr></thead>
-          <tbody>${allLinesRows || `<tr><td colspan="${2 + fields.length}" class="text-center p-3 text-gray-400 italic">Không có hạng mục nào.</td></tr>`}</tbody>
+          <tbody>${itemRows || `<tr><td colspan="6" class="text-center p-3 text-gray-400 italic">Không có hạng mục nào.</td></tr>`}</tbody>
         </table>
       </div>
     </div>
@@ -23869,13 +24059,14 @@ function renderBudgetSummaryResult(period, entries, fields) {
 }
 async function exportBudgetSummaryExcel() {
   if (!currentBudgetSummaryData) return;
-  const { period, entries, fields } = currentBudgetSummaryData;
+  const { period, planEntries, actualEntries, fields } = currentBudgetSummaryData;
   const columns = [
+    { header: 'Loại', key: 'kind', width: 14 },
     { header: 'Phòng Ban', key: 'dept', width: 20 },
     ...fields.map(f => ({ header: f.label, key: f.coreKey ? 'core_' + f.coreKey : 'extra_' + f.id, width: f.type === 'text' ? 28 : 18 }))
   ];
-  const rows = entries.flatMap(e => (e.lines || []).map(l => {
-    const row = { dept: e.dept };
+  const buildRows = (entries, kindLabel) => entries.flatMap(e => (e.lines || []).map(l => {
+    const row = { kind: kindLabel, dept: e.dept };
     fields.forEach(f => {
       const key = f.coreKey ? 'core_' + f.coreKey : 'extra_' + f.id;
       const v = getBudgetLineFieldValue(l, f);
@@ -23883,6 +24074,7 @@ async function exportBudgetSummaryExcel() {
     });
     return row;
   }));
+  const rows = [...buildRows(planEntries, 'Phê Duyệt'), ...buildRows(actualEntries, 'Thực Hiện')];
   const safeName = period.name.replace(/[^\p{L}\p{N}]+/gu, '_');
   await downloadXlsxFromServer(`TongHopNganSach_${safeName}.xlsx`, 'Tổng Hợp Ngân Sách', columns, rows);
 }
@@ -23960,7 +24152,7 @@ function openBudgetProcessModal(entryId) {
   const customFields = getBudgetPeriodTemplateFields(period || {});
   const wfConfig = DB.budgetDeptWorkflows[item.dept] || { workflowId: 'WF_1STEP', approvers: { 1: ['admin'] } };
 
-  document.getElementById('budgetProcessModalTitle').innerText = `📝 Ngân Sách: ${item.code}`;
+  document.getElementById('budgetProcessModalTitle').innerText = `📝 Ngân Sách ${item.entryKind === 'ACTUAL' ? 'Thực Hiện' : 'Phê Duyệt'}: ${item.code}`;
   document.getElementById('budgetProcessModalSub').innerText = `Kỳ: ${item.periodName} | Phòng ban: ${item.dept} | Tổng tiền: ${budgetEntryTotal(item).toLocaleString('vi-VN')} đ`;
   document.getElementById('budgetProcessModalDetails').innerHTML = `
     <div>Trạng thái: ${budgetEntryStatusBadge(item)}</div>

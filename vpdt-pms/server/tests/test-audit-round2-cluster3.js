@@ -302,8 +302,8 @@ async function main() {
       const cfg = CREATE_MODULE_CONFIGS.budgetEntries;
       assert(typeof cfg.getLockKey === 'function',
         'budgetEntries PHẢI có getLockKey — nếu không, routes/create.js đi đường createForCollection() không khoá và luật "1 bản/phòng/kỳ" chỉ còn là 1 lượt quét trong bộ nhớ (race TOCTOU)');
-      assertEqual(cfg.getLockKey({ periodId: 5001 }, BUDGET_KD_1), 'budget_entry:5001:Kinh Doanh',
-        'Khoá phải gồm ĐÚNG kỳ + phòng ban của người tạo');
+      assertEqual(cfg.getLockKey({ periodId: 5001 }, BUDGET_KD_1), 'budget_entry:PLAN:5001:Kinh Doanh',
+        'Khoá phải gồm ĐÚNG loại (entryKind, mặc định PLAN khi không truyền) + kỳ + phòng ban của người tạo');
       // Hai NGƯỜI KHÁC NHAU cùng phòng phải cho ra CÙNG 1 khoá — điều kiện trùng lặp là theo PHÒNG BAN,
       // khoá theo người tạo (như vppRegistrations) sẽ không chặn được gì ở module này.
       assertEqual(cfg.getLockKey({ periodId: 5001 }, BUDGET_KD_2), cfg.getLockKey({ periodId: 5001 }, BUDGET_KD_1),
@@ -324,12 +324,12 @@ async function main() {
       assertEqual(JSON.stringify(statuses), JSON.stringify([200, 409]),
         `Phải có ĐÚNG 1 request thành công và 1 request bị chặn 409 (nhận được ${r1.status} + ${r2.status})`);
       const rejected = r1.status === 409 ? r1 : r2;
-      assertIncludes(rejected.body.error, 'đã có ngân sách ở kỳ này',
-        'Request thua cuộc phải nhận đúng thông báo "phòng ban đã có ngân sách ở kỳ này"');
+      assertIncludes(rejected.body.error, 'đã có ngân sách phê duyệt ở kỳ này',
+        'Request thua cuộc phải nhận đúng thông báo "phòng ban đã có ngân sách phê duyệt ở kỳ này" (mặc định entryKind=PLAN khi không truyền)');
       assertEqual(RECORDS.budgetEntries.length, 1,
-        'CHỈ được ghi ĐÚNG 1 bản ngân sách cho cặp phòng+kỳ này (2 bản = race TOCTOU chưa được vá)');
-      assertIncludes(LOCK_KEYS_USED, 'budget_entry:5001:Kinh Doanh',
-        'Cả 2 request phải đi qua đường createForCollectionSerialized() với khoá kỳ+phòng ban');
+        'CHỈ được ghi ĐÚNG 1 bản ngân sách cho cặp phòng+kỳ+loại này (2 bản = race TOCTOU chưa được vá)');
+      assertIncludes(LOCK_KEYS_USED, 'budget_entry:PLAN:5001:Kinh Doanh',
+        'Cả 2 request phải đi qua đường createForCollectionSerialized() với khoá loại+kỳ+phòng ban');
       assertEqual(LOCK_KEYS_USED.length, 2, 'Cả 2 request đều phải giành khoá (không request nào lọt qua đường không khoá)');
     });
 

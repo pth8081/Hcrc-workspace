@@ -1806,19 +1806,29 @@ const CREATE_MODULE_CONFIGS = {
     forceOwnDept: true,
     getScope: () => ({}),
     creatorField: 'creator', creatorNameField: 'creatorName',
-    // "1 bản ngân sách/PHÒNG BAN/kỳ" (kiểm tra "duplicate" ở extraValidate bên dưới) là điều kiện trùng
-    // lặp GIỮA NHIỀU bản ghi — không diễn đạt được bằng UNIQUE INDEX (Collection, Code) như trùng mã,
-    // giống hệt lý do vppRegistrations/meetings/trainingRegistrations cần getLockKey ở trên: quét trong
-    // bộ nhớ ở extraValidate KHÔNG chặn được 2 request tạo ngân sách CÙNG LÚC cho CÙNG 1 phòng ban ở
-    // CÙNG 1 kỳ (cả hai đọc collection lúc "chưa có bản nào" trước khi request nào kịp ghi) -> 2 bản
-    // ngân sách trùng phòng/kỳ, cả hai cùng đi tiếp vào quy trình duyệt. Khoá theo cặp kỳ+phòng ban
-    // (KHÔNG theo người tạo — nhiều người cùng phòng đều có quyền budgetCreate, xem chú thích ở
-    // updateBudgetEntryDraft() trong lib/recordActions.js), khớp đúng cặp cột mà duplicate check dùng.
-    getLockKey: (payload, user) => `budget_entry:${payload.periodId}:${user.dept}`,
+    // "1 bản ngân sách/PHÒNG BAN/kỳ/LOẠI" (kiểm tra "duplicate" ở extraValidate bên dưới) là điều kiện
+    // trùng lặp GIỮA NHIỀU bản ghi — không diễn đạt được bằng UNIQUE INDEX (Collection, Code) như trùng
+    // mã, giống hệt lý do vppRegistrations/meetings/trainingRegistrations cần getLockKey ở trên: quét
+    // trong bộ nhớ ở extraValidate KHÔNG chặn được 2 request tạo ngân sách CÙNG LÚC cho CÙNG 1 phòng ban
+    // ở CÙNG 1 kỳ + CÙNG 1 loại (cả hai đọc collection lúc "chưa có bản nào" trước khi request nào kịp
+    // ghi) -> 2 bản ngân sách trùng phòng/kỳ/loại, cả hai cùng đi tiếp vào quy trình duyệt. Khoá theo bộ
+    // ba kỳ+phòng ban+entryKind (KHÔNG theo người tạo — nhiều người cùng phòng đều có quyền budgetCreate,
+    // xem chú thích ở updateBudgetEntryDraft() trong lib/recordActions.js), khớp đúng bộ cột mà duplicate
+    // check dùng — entryKind trong khoá để 1 phòng ban lập được CẢ bản "Ngân Sách Phê Duyệt" (PLAN) LẪN
+    // bản "Ngân Sách Thực Hiện" (ACTUAL) trong cùng 1 kỳ mà không đụng khoá của nhau.
+    getLockKey: (payload, user) => `budget_entry:${payload.entryKind === 'ACTUAL' ? 'ACTUAL' : 'PLAN'}:${payload.periodId}:${user.dept}`,
     extraValidate: (payload, collection, user, appData) => {
       if (!user.perms?.admin && !user.perms?.budgetCreate) {
         throw new CreateError(403, 'Bạn không có quyền lập ngân sách');
       }
+      // entryKind phân biệt 2 luồng dữ liệu độc lập trên CÙNG 1 collection (tái dùng nguyên state machine
+      // DRAFT/PENDING/APPROVED/REJECTED + workflowEngine.js duyệt theo phòng ban cho cả 2, xem
+      // lib/recordActions.js/lib/workflowEngine.js) — 'PLAN' = "Ngân Sách Phê Duyệt" (đơn vị lập ngân
+      // sách trình duyệt), 'ACTUAL' = "Ngân Sách Thực Hiện" (đơn vị ghi nhận chi tiêu thực tế, cũng trình
+      // duyệt Trưởng phòng để đảm bảo số liệu đối chiếu ở Tổng Hợp đáng tin). Tab "Tổng Hợp" chỉ cộng dồn
+      // bản APPROVED của từng loại — xem renderBudgetSummaryResult() ở public/index.html.
+      const entryKind = payload.entryKind === 'ACTUAL' ? 'ACTUAL' : 'PLAN';
+      payload.entryKind = entryKind;
       const periodId = Number(payload.periodId);
       if (!Number.isFinite(periodId)) throw new CreateError(400, 'Thiếu kỳ ngân sách');
       const periods = appData?.budgetPeriods || [];
@@ -1831,11 +1841,15 @@ const CREATE_MODULE_CONFIGS = {
       if (period.status !== 'OPEN' || pastDeadline) {
         throw new CreateError(409, 'Kỳ ngân sách này đã kết thúc, không thể lập ngân sách nữa');
       }
-      // Mỗi phòng ban CHỈ 1 bản ngân sách / kỳ (khoá theo PHÒNG BAN chứ không theo người tạo — nhiều
-      // người cùng phòng có quyền budgetCreate cùng sửa chung 1 bản nháp của đơn vị, xem
+      // Mỗi phòng ban CHỈ 1 bản ngân sách / kỳ / loại (khoá theo PHÒNG BAN chứ không theo người tạo —
+      // nhiều người cùng phòng có quyền budgetCreate cùng sửa chung 1 bản nháp của đơn vị, xem
       // updateBudgetEntryDraft() ở lib/recordActions.js).
-      const duplicate = (collection || []).some(r => r.periodId === periodId && r.dept === user.dept);
-      if (duplicate) throw new CreateError(409, 'Phòng ban bạn đã có ngân sách ở kỳ này rồi — vui lòng sửa bản nháp hiện có');
+      const duplicate = (collection || []).some(r => r.periodId === periodId && r.dept === user.dept && (r.entryKind === 'ACTUAL' ? 'ACTUAL' : 'PLAN') === entryKind);
+      if (duplicate) {
+        throw new CreateError(409, entryKind === 'ACTUAL'
+          ? 'Phòng ban bạn đã có ngân sách thực hiện ở kỳ này rồi — vui lòng sửa bản nháp hiện có'
+          : 'Phòng ban bạn đã có ngân sách phê duyệt ở kỳ này rồi — vui lòng sửa bản nháp hiện có');
+      }
       const templates = appData?.budgetTemplates || [];
       const customFields = getBudgetTemplateCustomFields(period.templateId, templates);
       payload.lines = sanitizeBudgetLines(payload.lines, customFields);
@@ -1843,7 +1857,8 @@ const CREATE_MODULE_CONFIGS = {
       payload.periodEndTime = period.endTime;
       // status/currentStep/history gán cứng ở server — dòng ngân sách bắt đầu ở NHÁP, người lập tự Gửi
       // (submitBudgetEntry ở lib/recordActions.js) mới chuyển PENDING để lib/workflowEngine.js xử lý
-      // bước duyệt Trưởng phòng theo appData.budgetDeptWorkflows[dept] (giống itPriceApprovals).
+      // bước duyệt Trưởng phòng theo appData.budgetDeptWorkflows[dept] (giống itPriceApprovals) — dùng
+      // CHUNG 1 cấu hình duyệt theo phòng ban cho cả 2 entryKind.
       payload.status = 'DRAFT';
       payload.currentStep = 1;
       payload.history = [];
