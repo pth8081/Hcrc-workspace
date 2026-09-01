@@ -999,6 +999,10 @@ const CREATE_MODULE_CONFIGS = {
       // (bản tổng hợp CHÍNH THỨC từ báo cáo người dùng nộp) để 2 bên không đè lên nhau, xem
       // mergeReportPeriodByTasks() ở lib/recordActions.js.
       payload.taskCompilation = null;
+      // pdfCompilation: bản tổng hợp ghép file PDF THẬT (song song compilation ở trên, vốn ghép từ
+      // parsedSlides .pptx) — dành cho reportEntries.entryType==='PDF', xem mergeReportPeriodPdf()/
+      // publishReportPeriodPdf() ở lib/recordActions.js.
+      payload.pdfCompilation = null;
     }
   },
   reportEntries: {
@@ -2138,9 +2142,19 @@ function sanitizeBudgetLines(rawLines, fields) {
 // (extraValidate ở trên) lẫn sửa nháp (updateReportEntryDraft ở lib/recordActions.js) để 2 luồng luôn
 // validate giống hệt nhau.
 function normalizeReportEntryPayload(payload) {
-  if (!payload.fileUrl) throw new CreateError(400, 'Vui lòng chọn tệp báo cáo (.pptx) cần tải lên');
+  // entryType 'PDF': nhân viên đã tự ghép nhiều file PDF thành 1 blob DUY NHẤT ngay trên trình duyệt
+  // (pdf-lib) rồi mới tải lên — ở đây chỉ cần xác thực đường dẫn tệp, KHÔNG parse nội dung slide nào cả
+  // (khác hẳn nhánh .pptx bên dưới). assertUploadedFileUrl() định nghĩa ở đầu file này.
+  payload.entryType = payload.entryType === 'PDF' ? 'PDF' : 'PPTX';
   payload.fileName = String(payload.fileName || '').trim();
   payload.fileType = String(payload.fileType || '');
+  if (payload.entryType === 'PDF') {
+    if (!payload.fileUrl) throw new CreateError(400, 'Vui lòng chọn tệp báo cáo PDF (đã gộp) cần tải lên');
+    assertUploadedFileUrl(payload.fileUrl, 'Tệp báo cáo PDF');
+    payload.parsedSlides = [];
+    return;
+  }
+  if (!payload.fileUrl) throw new CreateError(400, 'Vui lòng chọn tệp báo cáo (.pptx) cần tải lên');
   const rawSlides = Array.isArray(payload.parsedSlides) ? payload.parsedSlides : [];
   const IMAGE_KINDS = ['embedded', 'table', 'chart'];
   payload.parsedSlides = rawSlides.map((s, idx) => ({

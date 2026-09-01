@@ -30,6 +30,7 @@ const ASSETS = [
   { from: 'exceljs/dist/exceljs.min.js', to: 'exceljs/exceljs.min.js' },
   { from: 'jspdf/dist/jspdf.umd.min.js', to: 'jspdf/jspdf.umd.min.js' },
   { from: 'html2canvas/dist/html2canvas.min.js', to: 'html2canvas/html2canvas.min.js' },
+  { from: 'pdf-lib/dist/pdf-lib.min.js', to: 'pdf-lib/pdf-lib.min.js' },
   { from: 'dompurify/dist/purify.min.js', to: 'dompurify/purify.min.js' },
   { from: '@simplewebauthn/browser/dist/bundle/index.umd.min.js', to: 'simplewebauthn/browser.min.js' }
 ];

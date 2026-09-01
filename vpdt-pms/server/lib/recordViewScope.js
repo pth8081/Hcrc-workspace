@@ -158,6 +158,15 @@ function canSeeReportCompilation(user, period) {
   return period?.compilation?.status === 'PUBLISHED';
 }
 
+// pdfCompilation (ghép file PDF THẬT) — MÔ PHỎNG ĐÚNG canSeeReportCompilation() ở trên (khác hẳn
+// taskCompilation bên dưới): 1 bản tổng hợp PDF đã phát hành là báo cáo CHÍNH THỨC công khai toàn công
+// ty, cùng bản chất với compilation.slides đã phát hành — không phải bản xem nội bộ để đối chiếu.
+function canSeeReportPdfCompilation(user, period) {
+  if (!user) return false;
+  if (user.perms?.admin || user.perms?.reportManage || user.perms?.reportAggregate) return true;
+  return period?.pdfCompilation?.status === 'PUBLISHED';
+}
+
 // taskCompilation ("Đối Chiếu Theo Công Việc") KHÔNG có khái niệm "phát hành" như compilation ở trên —
 // đây là bản xem nội bộ để đối chiếu (lộ chi tiết trạng thái công việc của cả phòng ban), nên luôn ẩn
 // khỏi người không có quyền quản lý/tổng hợp, không có ngoại lệ nào để hiện ra (khác compilation, vốn
@@ -166,9 +175,10 @@ function sanitizeReportPeriodsForUser(periods, user) {
   const canManage = !!(user?.perms?.admin || user?.perms?.reportManage || user?.perms?.reportAggregate);
   return (periods || []).map(p => {
     const compilation = canSeeReportCompilation(user, p) ? p.compilation : null;
+    const pdfCompilation = canSeeReportPdfCompilation(user, p) ? p.pdfCompilation : null;
     const taskCompilation = canManage ? p.taskCompilation : null;
-    if (compilation === p.compilation && taskCompilation === p.taskCompilation) return p;
-    return { ...p, compilation, taskCompilation };
+    if (compilation === p.compilation && pdfCompilation === p.pdfCompilation && taskCompilation === p.taskCompilation) return p;
+    return { ...p, compilation, pdfCompilation, taskCompilation };
   });
 }
 
@@ -532,7 +542,7 @@ function filterPaymentRequestsForUser(items, user) {
 module.exports = {
   canViewDoc, canViewSubmission, filterDocsForUser, filterSubmissionsForUser,
   canViewInternalPost, filterInternalPostsForUser,
-  canSeeReportCompilation, sanitizeReportPeriodsForUser,
+  canSeeReportCompilation, canSeeReportPdfCompilation, sanitizeReportPeriodsForUser,
   sanitizeTrainingTestsForUser, filterRecruitmentReferralsForUser,
   canViewReportEntry, filterReportEntriesForUser,
   canViewContract, filterContractsForUser,

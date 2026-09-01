@@ -390,6 +390,28 @@ input[data-sdd-list] {
   background-size: 1rem !important;
   padding-right: 1.75rem !important;
 }
+
+/* Lưới trang PDF khi Tổng Hợp (Báo Cáo Định Kỳ, entryType 'PDF') — kéo-thả sắp lại/xoá TỪNG TRANG
+   trước khi ghép, xem renderPrAggPdfGrid() ở script chính. */
+.pr-pdf-page-card {
+  position: relative; border: 1px solid #d1d5db; border-radius: 6px; background: #f9fafb;
+  padding: 6px; cursor: grab; user-select: none; transition: box-shadow .12s, border-color .12s;
+}
+.pr-pdf-page-card.dragging { opacity: .4; }
+.pr-pdf-page-card.dragover { border-color: #0284c7; box-shadow: 0 0 0 2px #e0f2fe; }
+.pr-pdf-page-card canvas, .pr-pdf-page-card img { width: 100%; display: block; border-radius: 4px; border: 1px solid #e5e7eb; background: #fff; min-height: 40px; }
+.pr-pdf-page-card .pr-pdf-idx {
+  position: absolute; top: 3px; left: 3px; background: #111827; color: #fff; font-size: 10px;
+  font-weight: 600; border-radius: 4px; padding: 1px 5px; opacity: .85;
+}
+.pr-pdf-page-card .pr-pdf-rm {
+  position: absolute; top: 3px; right: 3px; all: unset; cursor: pointer; background: #dc2626; color: #fff;
+  width: 17px; height: 17px; border-radius: 50%; display: flex; align-items: center; justify-content: center;
+  font-size: 10px; line-height: 1; opacity: .9;
+}
+.pr-pdf-page-card .pr-pdf-src {
+  font-size: 9px; color: #6b7280; margin-top: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
 </style>
 </head>
 <body class="bg-gray-100 min-h-screen font-sans">
@@ -1529,6 +1551,18 @@ input[data-sdd-list] {
             <label class="block text-xs font-semibold text-gray-600 mb-1">Tiêu đề báo cáo (chỉ để nhận diện trong danh sách, không hiện trên slide)</label>
             <input id="prEntryTitle" placeholder="VD: Báo cáo công việc tuần 12 - Phòng Kinh Doanh" class="w-full border p-2 rounded text-sm">
           </div>
+          <div class="bg-white p-3 rounded border">
+            <label class="text-xs font-bold text-gray-700 block mb-2">Hình thức nộp báo cáo</label>
+            <div class="flex gap-4 text-xs">
+              <label class="flex items-center gap-1.5 cursor-pointer">
+                <input type="radio" name="prEntryMode" value="PPTX" checked onchange="onPrEntryModeChange()"> PowerPoint (.pptx)
+              </label>
+              <label class="flex items-center gap-1.5 cursor-pointer">
+                <input type="radio" name="prEntryMode" value="PDF" onchange="onPrEntryModeChange()"> Ghép nhiều file PDF
+              </label>
+            </div>
+          </div>
+
           <!-- CHỈ nhận file .pptx — trình duyệt tự đọc nội dung (văn bản + bảng/biểu đồ/ảnh) NGAY LÚC
                chọn tệp qua parsePptxToSlideContents() (JSZip + DOMParser gốc, KHÔNG qua server, xem
                script cuối trang) rồi hiện xem trước số slide/nội dung bên dưới — nội dung đọc được sẽ
@@ -1537,12 +1571,24 @@ input[data-sdd-list] {
                thành ảnh (không sửa được nội dung, chỉ hiển thị nguyên trạng). KHÔNG đọc được .ppt nhị
                phân đời cũ (giống hệt giới hạn Word .doc/.docx trước đây) — chỉ đọc được .pptx. Mẫu NỀN
                (màu sắc) do người tạo Kỳ Báo Cáo chọn sẵn, người nộp không cần chọn gì ở đây. -->
-          <div class="bg-white p-3 rounded border">
+          <div id="prEntryPptxBox" class="bg-white p-3 rounded border">
             <label class="text-xs font-bold text-gray-700 block mb-2">📎 Tệp Báo Cáo (.pptx)</label>
             <input type="file" id="prEntryPptxFile" onchange="onPrEntryPptxFileChange(event)" class="w-full text-xs" accept=".pptx,application/vnd.openxmlformats-officedocument.presentationml.presentation">
             <p class="text-[11px] text-gray-500 mt-1">Chỉ nhận file PowerPoint <b>.pptx</b> — không nhận được <b>.ppt</b> đời cũ, vui lòng lưu lại bằng .pptx rồi tải lên lại nếu gặp lỗi.</p>
             <div id="prEntryPptxStatus" class="hidden text-xs mt-2 p-2 rounded border"></div>
             <div id="prEntryWholeFileExisting" class="hidden text-[11px] text-gray-500 mt-1"></div>
+          </div>
+
+          <!-- Ghép nhiều file PDF thành 1 file DUY NHẤT NGAY TRONG trình duyệt (pdf-lib) lúc chọn tệp,
+               giữ nguyên vẹn định dạng/font/vector từng trang gốc — khác hẳn .pptx ở trên (đọc rồi làm
+               phẳng thành slide). Bản ghép này chính là tệp báo cáo của cả kỳ, gộp cùng các phòng khác
+               ở bước Tổng Hợp (xem #prAggPdfBox). -->
+          <div id="prEntryPdfBox" class="hidden bg-white p-3 rounded border">
+            <label class="text-xs font-bold text-gray-700 block mb-2">📎 Tệp Báo Cáo PDF (chọn 1 hoặc nhiều file, hệ thống tự ghép lại)</label>
+            <input type="file" id="prEntryPdfFiles" multiple onchange="onPrEntryPdfFilesChange(event)" class="w-full text-xs" accept=".pdf,application/pdf">
+            <p class="text-[11px] text-gray-500 mt-1">Chọn nhiều file PDF cùng lúc để ghép thành đúng 1 tệp duy nhất — giữ nguyên định dạng gốc từng trang, không bị vỡ layout.</p>
+            <div id="prEntryPdfStatus" class="hidden text-xs mt-2 p-2 rounded border"></div>
+            <div id="prEntryPdfExisting" class="hidden text-[11px] text-gray-500 mt-1"></div>
           </div>
 
           <div class="flex justify-end gap-2">
@@ -1636,6 +1682,31 @@ input[data-sdd-list] {
             <button type="button" id="btnPrPublish" onclick="publishPrCompilation()" class="hidden bg-emerald-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-emerald-700">🚀 Phát Hành</button>
             <button type="button" id="btnPrUnpublish" onclick="unpublishPrCompilation()" class="hidden bg-amber-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-amber-700">↩️ Hủy Phát Hành</button>
           </div>
+        </div>
+
+        <!-- Tổng Hợp bằng GHÉP FILE PDF THẬT (entryType==='PDF') — TÁCH RIÊNG hoàn toàn khỏi bản tổng
+             hợp PPTX ở trên (period.pdfCompilation, không phải period.compilation) — giữ nguyên vẹn định
+             dạng/font/vector từng trang gốc, không "làm phẳng" như .pptx. Xem mergeReportPeriodPdf()/
+             publishReportPeriodPdf() ở lib/recordActions.js. Chỉ hiện khi kỳ có ít nhất 1 báo cáo PDF đã
+             gửi — xem renderPrAggPdfSection(). -->
+        <div id="prAggPdfSection" class="hidden bg-white rounded border p-3 space-y-3">
+          <div class="font-semibold text-xs text-gray-600">📎 Tổng Hợp bằng Ghép File PDF (giữ nguyên định dạng gốc, theo thứ tự phòng ban)</div>
+          <div>
+            <div class="text-[11px] text-gray-500 mb-1">Báo cáo PDF đã gửi trong kỳ (tick để chọn vào bản ghép)</div>
+            <div id="prAggPdfEntriesList" class="space-y-1"></div>
+          </div>
+          <div id="prAggPdfGridWrap" class="hidden">
+            <div class="flex justify-between items-center mb-2 flex-wrap gap-2">
+              <span class="text-[11px] text-gray-500">Kéo-thả để sắp lại trang, bấm ✕ để bỏ trang không cần — sau đó bấm "Tổng Hợp PDF" để lưu lại</span>
+              <button type="button" onclick="mergeReportPeriodPdfAction()" class="bg-sky-600 text-white px-3 py-1 rounded text-xs font-bold hover:bg-sky-700">🧩 Tổng Hợp PDF</button>
+            </div>
+            <div id="prAggPdfGrid" class="grid gap-2" style="grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));"></div>
+          </div>
+          <div id="prAggPdfActionsWrap" class="hidden flex justify-end gap-2 pt-3 border-t">
+            <button type="button" id="btnPrPdfPublish" onclick="publishPrPdfCompilation()" class="hidden bg-emerald-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-emerald-700">🚀 Phát Hành PDF</button>
+            <button type="button" id="btnPrPdfUnpublish" onclick="unpublishPrPdfCompilation()" class="hidden bg-amber-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-amber-700">↩️ Hủy Phát Hành PDF</button>
+          </div>
+          <div id="prAggPdfStatusLine" class="text-xs"></div>
         </div>
 
         <!-- Đối Chiếu Theo Công Việc — TÁCH RIÊNG hoàn toàn khỏi bản tổng hợp chính thức ở trên (khác
@@ -25768,9 +25839,25 @@ let prEntryExistingFile = null; // { fileUrl, fileName, fileType, parsedSlides }
 // ngay lúc chọn, chỉ thực sự tải file gốc lên server lúc bấm Lưu Nháp/Gửi (tránh tải lên nhiều lần nếu
 // người dùng đổi ý chọn lại tệp khác trước khi lưu).
 let prEntryPendingFile = null; // { file, parsedSlides } | null
+// Hình thức nộp báo cáo đang chọn ở form — 'PPTX' (mặc định, gõ/đọc nội dung thành slide) hoặc 'PDF'
+// (ghép nhiều file PDF thành 1 tệp DUY NHẤT ngay trong trình duyệt, giữ nguyên định dạng gốc — xem
+// onPrEntryPdfFilesChange()). CẢ 2 chế độ đều dùng chung biến prEntryPendingFile ở trên (chế độ PDF chỉ
+// gán { file: <blob đã ghép>, parsedSlides: [] } vào đó) để savePrEntryDraft() không cần rẽ nhánh riêng.
+let prEntryMode = 'PPTX';
 let prAggCurrentPeriodId = null;
 let prAggSelectedIds = [];
 let prAggPendingSlides = null;
+// Tổng Hợp bằng Ghép File PDF (entryType 'PDF') — TÁCH RIÊNG hoàn toàn khỏi 3 biến trên (dựng
+// period.pdfCompilation, không phải period.compilation). prAggPdfPages là mảng TRANG thật (không phải
+// mảng entry) — mỗi phần tử { sourceEntryId, sourceDept, sourceCreatorName, sourceFileName,
+// sourcePageIndex, dataUrl } — dataUrl là ảnh thumbnail render bằng pdf.js NGAY TRONG trình duyệt, chỉ
+// dùng để hiển thị (server không nhận/lưu dataUrl này). prAggPdfEntryPagesCache cache lại danh sách
+// dataUrl từng trang theo entryId (Promise trong lúc đang tải) để không phải render lại khi tick/bỏ tick
+// qua lại nhiều lần.
+let prAggPdfSelectedIds = [];
+let prAggPdfPages = [];
+let prAggPdfDragFromIndex = null;
+let prAggPdfEntryPagesCache = new Map();
 let prSlideshowSlides = [];
 let prSlideshowIndex = 0;
 let prSlideshowTemplate = 'DEFAULT';
@@ -25959,6 +26046,65 @@ async function onPrEntryPptxFileChange(event) {
   }
 }
 
+// Đổi hình thức nộp (PPTX <-> PDF) — ẩn/hiện đúng khối tương ứng, bỏ tệp đang chọn dở của chế độ VỪA
+// RỜI ĐI (tránh gửi nhầm tệp .pptx khi đang ở chế độ PDF hoặc ngược lại). Nếu tệp cũ của báo cáo đang
+// sửa (prEntryExistingFile) thuộc chế độ KHÁC chế độ vừa chọn thì cũng bỏ luôn — không giữ lại tham
+// chiếu tệp sai loại, bắt buộc chọn tệp mới đúng chế độ.
+function onPrEntryModeChange() {
+  prEntryMode = document.querySelector('input[name="prEntryMode"]:checked')?.value === 'PDF' ? 'PDF' : 'PPTX';
+  document.getElementById('prEntryPptxBox').classList.toggle('hidden', prEntryMode !== 'PPTX');
+  document.getElementById('prEntryPdfBox').classList.toggle('hidden', prEntryMode !== 'PDF');
+  prEntryPendingFile = null;
+  document.getElementById('prEntryPptxFile').value = '';
+  document.getElementById('prEntryPptxStatus').classList.add('hidden');
+  document.getElementById('prEntryPdfFiles').value = '';
+  document.getElementById('prEntryPdfStatus').classList.add('hidden');
+  if (prEntryExistingFile && prEntryExistingFile.entryType !== prEntryMode) {
+    prEntryExistingFile = null;
+    document.getElementById('prEntryWholeFileExisting').classList.add('hidden');
+    document.getElementById('prEntryPdfExisting').classList.add('hidden');
+  }
+}
+
+// Chọn nhiều file PDF ở form Nhập Báo Cáo (chế độ PDF) — ghép TẤT CẢ file đã chọn thành 1 blob PDF DUY
+// NHẤT ngay trong trình duyệt bằng pdf-lib (PDFDocument.create() + copyPages() từng nguồn + save()) —
+// đúng kỹ thuật đã kiểm chứng ở bản demo ghép PDF trước đó, giữ nguyên vẹn từng trang gốc (không đọc/
+// làm phẳng nội dung như .pptx ở trên). Lưu tạm vào prEntryPendingFile (dùng CHUNG shape với chế độ
+// PPTX: { file, parsedSlides: [] }) — chỉ thực sự tải lên server lúc bấm Lưu Nháp/Gửi.
+async function onPrEntryPdfFilesChange(event) {
+  const files = Array.from(event.target.files || []);
+  const statusEl = document.getElementById('prEntryPdfStatus');
+  prEntryPendingFile = null;
+  if (!files.length) { statusEl.classList.add('hidden'); return; }
+
+  statusEl.className = 'text-xs mt-2 p-2 rounded border bg-gray-50 text-gray-600 border-gray-200';
+  statusEl.innerText = `⏳ Đang ghép ${files.length} tệp PDF...`;
+  statusEl.classList.remove('hidden');
+  try {
+    await loadVendorScript('/vendor/pdf-lib/pdf-lib.min.js');
+    const PDFLib = window.PDFLib;
+    const merged = await PDFLib.PDFDocument.create();
+    let pageCount = 0;
+    for (const f of files) {
+      const bytes = await f.arrayBuffer();
+      const srcDoc = await PDFLib.PDFDocument.load(bytes);
+      const copiedPages = await merged.copyPages(srcDoc, srcDoc.getPageIndices());
+      copiedPages.forEach((p) => merged.addPage(p));
+      pageCount += srcDoc.getPageCount();
+    }
+    if (!pageCount) throw new Error('Không đọc được trang nào từ các tệp đã chọn');
+    const mergedBytes = await merged.save();
+    const mergedFile = new File([mergedBytes], `bao-cao-ghep-${Date.now()}.pdf`, { type: 'application/pdf' });
+    prEntryPendingFile = { file: mergedFile, parsedSlides: [] };
+    statusEl.className = 'text-xs mt-2 p-2 rounded border bg-emerald-50 text-emerald-800 border-emerald-200';
+    statusEl.innerText = `✅ Đã ghép ${files.length} tệp (${pageCount} trang) thành 1 tệp PDF duy nhất.`;
+  } catch (err) {
+    statusEl.className = 'text-xs mt-2 p-2 rounded border bg-red-50 text-red-700 border-red-200';
+    statusEl.innerText = `⛔ Không ghép được: ${err.message}`;
+    event.target.value = '';
+  }
+}
+
 // Hiện gợi ý "đã có tệp X" cho 1 ô file input khi sửa tiếp báo cáo nháp — không chọn tệp mới thì giữ
 // nguyên tệp cũ (existingMeta), giống openEditContract() không bắt buộc chọn lại file khi sửa.
 function showPrExistingFileHint(hintId, meta) {
@@ -25997,11 +26143,21 @@ function onPrEntryPeriodChange() {
   document.getElementById('prEntryTitle').value = existing?.title || '';
   document.getElementById('prEntryPptxFile').value = '';
   document.getElementById('prEntryPptxStatus').classList.add('hidden');
+  document.getElementById('prEntryPdfFiles').value = '';
+  document.getElementById('prEntryPdfStatus').classList.add('hidden');
 
   prEntryExistingFile = existing?.fileUrl
-    ? { fileUrl: existing.fileUrl, fileName: existing.fileName, fileType: existing.fileType, parsedSlides: existing.parsedSlides || [] }
+    ? { fileUrl: existing.fileUrl, fileName: existing.fileName, fileType: existing.fileType, parsedSlides: existing.parsedSlides || [], entryType: existing.entryType === 'PDF' ? 'PDF' : 'PPTX' }
     : null;
   showPrExistingFileHint('prEntryWholeFileExisting', prEntryExistingFile);
+  showPrExistingFileHint('prEntryPdfExisting', prEntryExistingFile);
+
+  // Mở lại đúng chế độ của báo cáo nháp đang sửa (mặc định PPTX khi tạo mới) — khớp entryType đã lưu.
+  prEntryMode = prEntryExistingFile?.entryType === 'PDF' ? 'PDF' : 'PPTX';
+  const modeRadio = document.querySelector(`input[name="prEntryMode"][value="${prEntryMode}"]`);
+  if (modeRadio) modeRadio.checked = true;
+  document.getElementById('prEntryPptxBox').classList.toggle('hidden', prEntryMode !== 'PPTX');
+  document.getElementById('prEntryPdfBox').classList.toggle('hidden', prEntryMode !== 'PDF');
 
   wrap.classList.remove('hidden');
 
@@ -26030,17 +26186,17 @@ async function savePrEntryDraft() {
   const title = document.getElementById('prEntryTitle').value.trim();
   if (!title) return alert('Vui lòng nhập tiêu đề báo cáo!');
 
-  const payload = { periodId, title };
+  const payload = { periodId, title, entryType: prEntryMode };
   try {
     if (prEntryPendingFile) {
       const uploaded = await uploadFileToServer(prEntryPendingFile.file, 'periodicReport');
       payload.fileUrl = uploaded.fileUrl; payload.fileName = uploaded.fileName; payload.fileType = uploaded.fileType;
       payload.parsedSlides = prEntryPendingFile.parsedSlides;
-    } else if (prEntryExistingFile) {
+    } else if (prEntryExistingFile && prEntryExistingFile.entryType === prEntryMode) {
       payload.fileUrl = prEntryExistingFile.fileUrl; payload.fileName = prEntryExistingFile.fileName; payload.fileType = prEntryExistingFile.fileType;
       payload.parsedSlides = prEntryExistingFile.parsedSlides;
     } else {
-      return alert('Vui lòng chọn tệp báo cáo (.pptx) cần tải lên!');
+      return alert(prEntryMode === 'PDF' ? 'Vui lòng chọn ít nhất 1 tệp báo cáo PDF cần tải lên!' : 'Vui lòng chọn tệp báo cáo (.pptx) cần tải lên!');
     }
   } catch (err) {
     return alert(`⛔ Tải tệp lên thất bại: ${err.message}`);
@@ -26136,7 +26292,7 @@ function renderPrEntryTable() {
       <tr class="hover:bg-gray-50 border-b">
         <td class="border p-2">${escapeHtml(e.periodName || '')}</td>
         <td class="border p-2 text-xs">${formatDateTimeVN(e.periodEndTime)}</td>
-        <td class="border p-2">${escapeHtml(e.title)}</td>
+        <td class="border p-2">${escapeHtml(e.title)}${e.entryType === 'PDF' ? ' <span class="text-[10px] font-bold text-rose-700 bg-rose-50 border border-rose-200 rounded px-1.5 py-0.5 align-middle">PDF</span>' : ''}</td>
         <td class="border p-2">${prEntryStatusBadge(e)}</td>
         <td class="border p-2 text-center space-x-1">${buildActionCell(e.id, primaryBtnHTML, secondaryOptions, 'runPrEntryAction')}</td>
       </tr>
@@ -26311,11 +26467,19 @@ function onPrAggPeriodChange() {
   renderPrAggEntriesList();
   renderPrAggOrderList();
   renderPrAggCompilation();
+  renderPrAggPdfSection();
   renderPrTaskCompilation();
 }
 
+// entryType==='PDF' tổng hợp RIÊNG qua getPrAggPdfPeriodEntries()/renderPrAggPdfSection() bên dưới (dựng
+// period.pdfCompilation, tách hẳn khỏi period.compilation) — loại khỏi checklist PPTX ở đây để không sinh
+// slide DEPT trống (mirror fix ở mergeReportPeriod(), lib/recordActions.js).
 function getPrAggPeriodEntries() {
-  return DB.reportEntries.filter(e => e.periodId === prAggCurrentPeriodId && e.status === 'SUBMITTED');
+  return DB.reportEntries.filter(e => e.periodId === prAggCurrentPeriodId && e.status === 'SUBMITTED' && e.entryType !== 'PDF');
+}
+
+function getPrAggPdfPeriodEntries() {
+  return DB.reportEntries.filter(e => e.periodId === prAggCurrentPeriodId && e.status === 'SUBMITTED' && e.entryType === 'PDF');
 }
 
 function renderPrAggEntriesList() {
@@ -26393,6 +26557,240 @@ async function mergeReportPeriodAction() {
   alert('✅ Đã tổng hợp — bạn có thể sửa lại từng phần trước khi phát hành.');
   renderPrAggCompilation();
   renderPrPeriodsTable();
+}
+
+// ============ TỔNG HỢP BẰNG GHÉP FILE PDF THẬT (entryType==='PDF') — song song khối PPTX ở trên,
+// dựng period.pdfCompilation (TÁCH RIÊNG khỏi period.compilation), xem mergeReportPeriodPdf()/
+// publishReportPeriodPdf() ở lib/recordActions.js. ============
+
+// Render lại toàn bộ N trang của 1 entry PDF (pdf.js, ngay trong trình duyệt) — cache theo entryId để
+// tick/bỏ tick qua lại nhiều lần không phải tải/vẽ lại. pdfjsLib đã sẵn toàn cục (nạp sẵn lúc mở trang,
+// xem window.renderPdfProtected/type="module" script cuối trang), không cần loadVendorScript() riêng.
+function ensureEntryPagesCached(entryId) {
+  if (prAggPdfEntryPagesCache.has(entryId)) return prAggPdfEntryPagesCache.get(entryId);
+  const entry = DB.reportEntries.find(e => e.id === entryId);
+  const promise = (async () => {
+    if (!entry || !entry.fileUrl) return [];
+    const pdf = await window.pdfjsLib.getDocument(entry.fileUrl).promise;
+    const urls = [];
+    for (let p = 1; p <= pdf.numPages; p++) {
+      const page = await pdf.getPage(p);
+      const viewport = page.getViewport({ scale: 0.35 });
+      const canvas = document.createElement('canvas');
+      canvas.width = viewport.width; canvas.height = viewport.height;
+      await page.render({ canvasContext: canvas.getContext('2d'), viewport }).promise;
+      urls.push(canvas.toDataURL('image/png'));
+    }
+    return urls;
+  })();
+  prAggPdfEntryPagesCache.set(entryId, promise);
+  return promise;
+}
+
+// Gọi khi mở lại 1 kỳ đã từng tổng hợp PDF từ trước — pdfCompilation.pages chỉ lưu {sourceEntryId,
+// sourcePageIndex,...}, KHÔNG lưu ảnh thumbnail (server không nhận/giữ dataUrl), nên phải render lại từ
+// chính file gốc mỗi lần mở lại màn Tổng Hợp.
+async function loadPrAggPdfThumbnails() {
+  const distinctEntryIds = [...new Set(prAggPdfPages.map(p => p.sourceEntryId))];
+  for (const entryId of distinctEntryIds) {
+    try {
+      const dataUrls = await ensureEntryPagesCached(entryId);
+      prAggPdfPages.forEach((p) => { if (p.sourceEntryId === entryId && !p.dataUrl) p.dataUrl = dataUrls[p.sourcePageIndex] || ''; });
+    } catch (err) { /* để trống ảnh, thẻ vẫn hiện được tên trang/phòng ban */ }
+  }
+  renderPrAggPdfGrid();
+}
+
+function renderPrAggPdfEntriesList() {
+  const el = document.getElementById('prAggPdfEntriesList');
+  const entries = getPrAggPdfPeriodEntries();
+  if (!entries.length) {
+    el.innerHTML = `<div class="text-xs text-gray-400 italic">Chưa có báo cáo PDF nào được gửi trong kỳ này.</div>`;
+    return;
+  }
+  el.innerHTML = entries.map(e => `
+    <label class="flex items-center gap-2 text-xs p-1.5 rounded hover:bg-sky-50 cursor-pointer">
+      <input type="checkbox" onchange="togglePrAggPdfEntry(${e.id}, this.checked)" ${prAggPdfSelectedIds.includes(e.id) ? 'checked' : ''}>
+      <span class="font-semibold text-gray-700">${escapeHtml(e.title)}</span>
+      <span class="text-gray-400">— ${escapeHtml(e.creatorName)} (${escapeHtml(e.dept)})</span>
+    </label>
+  `).join('');
+}
+
+// Tick 1 báo cáo PDF -> render TOÀN BỘ trang của nó rồi thêm vào cuối prAggPdfPages (ĐÚNG thứ tự trang
+// gốc); bỏ tick -> gỡ hết trang thuộc entry đó khỏi prAggPdfPages (không đụng thứ tự các trang còn lại).
+async function togglePrAggPdfEntry(entryId, checked) {
+  const entry = DB.reportEntries.find(e => e.id === entryId);
+  if (!entry) return;
+  const statusEl = document.getElementById('prAggPdfStatusLine');
+  if (checked) {
+    if (!prAggPdfSelectedIds.includes(entryId)) prAggPdfSelectedIds.push(entryId);
+    statusEl.className = 'text-xs text-gray-500';
+    statusEl.innerText = `⏳ Đang đọc trang của "${entry.title}"...`;
+    try {
+      const dataUrls = await ensureEntryPagesCached(entryId);
+      dataUrls.forEach((dataUrl, pageIndex) => {
+        prAggPdfPages.push({ sourceEntryId: entryId, sourceDept: entry.dept, sourceCreatorName: entry.creatorName, sourceFileName: entry.fileName, sourcePageIndex: pageIndex, dataUrl });
+      });
+      statusEl.innerText = '';
+    } catch (err) {
+      statusEl.className = 'text-xs text-rose-600';
+      statusEl.innerText = `⛔ Không đọc được file của "${entry.title}": ${err.message}`;
+      prAggPdfSelectedIds = prAggPdfSelectedIds.filter(id => id !== entryId);
+    }
+  } else {
+    prAggPdfSelectedIds = prAggPdfSelectedIds.filter(id => id !== entryId);
+    prAggPdfPages = prAggPdfPages.filter(p => p.sourceEntryId !== entryId);
+  }
+  renderPrAggPdfEntriesList();
+  renderPrAggPdfGrid();
+}
+
+function renderPrAggPdfGrid() {
+  const grid = document.getElementById('prAggPdfGrid');
+  document.getElementById('prAggPdfGridWrap').classList.toggle('hidden', prAggPdfPages.length === 0);
+  grid.innerHTML = '';
+  prAggPdfPages.forEach((pg, idx) => {
+    const card = document.createElement('div');
+    card.className = 'pr-pdf-page-card';
+    card.draggable = true;
+    card.addEventListener('dragstart', () => { prAggPdfDragFromIndex = idx; card.classList.add('dragging'); });
+    card.addEventListener('dragend', () => card.classList.remove('dragging'));
+    card.addEventListener('dragover', (e) => { e.preventDefault(); card.classList.add('dragover'); });
+    card.addEventListener('dragleave', () => card.classList.remove('dragover'));
+    card.addEventListener('drop', (e) => {
+      e.preventDefault();
+      card.classList.remove('dragover');
+      if (prAggPdfDragFromIndex === null || prAggPdfDragFromIndex === idx) return;
+      const moved = prAggPdfPages.splice(prAggPdfDragFromIndex, 1)[0];
+      prAggPdfPages.splice(idx, 0, moved);
+      prAggPdfDragFromIndex = null;
+      renderPrAggPdfGrid();
+    });
+
+    const idxBadge = document.createElement('div');
+    idxBadge.className = 'pr-pdf-idx';
+    idxBadge.textContent = String(idx + 1);
+    card.appendChild(idxBadge);
+
+    const rmBtn = document.createElement('button');
+    rmBtn.type = 'button';
+    rmBtn.className = 'pr-pdf-rm';
+    rmBtn.textContent = '✕';
+    rmBtn.title = 'Bỏ trang này khỏi bản ghép';
+    rmBtn.onclick = () => { prAggPdfPages.splice(idx, 1); renderPrAggPdfGrid(); };
+    card.appendChild(rmBtn);
+
+    const img = document.createElement('img');
+    img.src = pg.dataUrl || '';
+    img.alt = `Trang ${pg.sourcePageIndex + 1} — ${escapeHtml(pg.sourceFileName || '')}`;
+    card.appendChild(img);
+
+    const src = document.createElement('div');
+    src.className = 'pr-pdf-src';
+    src.textContent = `${pg.sourceDept} · tr.${pg.sourcePageIndex + 1}`;
+    src.title = `${pg.sourceCreatorName || ''} — ${pg.sourceFileName || ''} — trang ${pg.sourcePageIndex + 1}`;
+    card.appendChild(src);
+
+    grid.appendChild(card);
+  });
+}
+
+function updatePrAggPdfActionsWrap(period) {
+  const wrap = document.getElementById('prAggPdfActionsWrap');
+  const hasCompilation = !!period?.pdfCompilation;
+  wrap.classList.toggle('hidden', !hasCompilation);
+  const isPublished = period?.pdfCompilation?.status === 'PUBLISHED';
+  document.getElementById('btnPrPdfPublish').classList.toggle('hidden', !hasCompilation || isPublished);
+  document.getElementById('btnPrPdfUnpublish').classList.toggle('hidden', !isPublished);
+  // Đã phát hành thì khoá toàn bộ khu chọn/sắp trang — không sửa được nữa, phải "Hủy Phát Hành" trước.
+  document.querySelectorAll('#prAggPdfEntriesList input[type=checkbox]').forEach((cb) => { cb.disabled = isPublished; });
+  const gridWrap = document.getElementById('prAggPdfGridWrap');
+  gridWrap.classList.toggle('opacity-50', isPublished);
+  gridWrap.classList.toggle('pointer-events-none', isPublished);
+}
+
+// Chỉ hiện khối Ghép PDF khi kỳ CÓ báo cáo PDF đã gửi, hoặc đã từng tổng hợp/phát hành PDF trước đó (để
+// vẫn xem/"Hủy Phát Hành" được dù không còn entry PDF hợp lệ nào — hiếm nhưng không nên chặn thao tác).
+function renderPrAggPdfSection() {
+  const period = DB.reportPeriods.find(p => p.id === prAggCurrentPeriodId);
+  const pdfEntries = getPrAggPdfPeriodEntries();
+  const section = document.getElementById('prAggPdfSection');
+  const shouldShow = pdfEntries.length > 0 || !!period?.pdfCompilation;
+  section.classList.toggle('hidden', !shouldShow);
+  if (!shouldShow) return;
+
+  const validIds = new Set(pdfEntries.map(e => e.id));
+  const savedPages = (period.pdfCompilation?.pages || []).filter(p => validIds.has(p.sourceEntryId));
+  prAggPdfSelectedIds = [...new Set(savedPages.map(p => p.sourceEntryId))];
+  prAggPdfPages = savedPages.map(p => ({ ...p, dataUrl: null }));
+
+  renderPrAggPdfEntriesList();
+  renderPrAggPdfGrid();
+  updatePrAggPdfActionsWrap(period);
+  if (prAggPdfPages.length) loadPrAggPdfThumbnails();
+}
+
+async function mergeReportPeriodPdfAction() {
+  if (!prAggCurrentPeriodId) return;
+  if (!prAggPdfPages.length) return alert('Vui lòng chọn ít nhất 1 báo cáo PDF và giữ lại ít nhất 1 trang để tổng hợp!');
+  const period = DB.reportPeriods.find(p => p.id === prAggCurrentPeriodId);
+  if (!period) return;
+  if (period.pdfCompilation?.status === 'PUBLISHED') {
+    return alert('⛔ Bản tổng hợp PDF đã phát hành — vui lòng "Hủy phát hành" trước khi tổng hợp lại.');
+  }
+  const pages = prAggPdfPages.map(p => ({ sourceEntryId: p.sourceEntryId, sourcePageIndex: p.sourcePageIndex }));
+  let result;
+  try {
+    result = await callRecordAction('reportPeriods', prAggCurrentPeriodId, 'mergePdf', { entryIds: prAggPdfSelectedIds, pages });
+  } catch (err) { return alert(`⛔ ${err.message}`); }
+  const updated = result.item;
+  const idx = DB.reportPeriods.findIndex(p => p.id === updated.id);
+  if (idx !== -1) DB.reportPeriods[idx] = updated;
+  logSystemAction('PERIODIC_REPORT', 'MERGE_REPORT_PERIOD_PDF', `Tổng hợp PDF kỳ báo cáo [${updated.name}]: ${pages.length} trang`, 'SUCCESS', String(updated.id));
+  alert('✅ Đã tổng hợp bản ghép PDF — có thể tiếp tục chọn/sắp/xoá trang rồi tổng hợp lại, hoặc bấm "Phát Hành PDF" khi đã ưng ý.');
+  updatePrAggPdfActionsWrap(updated);
+  renderPrPeriodsTable();
+}
+
+async function publishPrPdfCompilation() {
+  if (!prAggCurrentPeriodId) return;
+  const statusEl = document.getElementById('prAggPdfStatusLine');
+  statusEl.className = 'text-xs text-gray-500';
+  statusEl.innerText = '⏳ Đang ghép + đóng dấu file PDF cuối cùng (có thể mất vài giây)...';
+  let result;
+  try {
+    result = await callRecordAction('reportPeriods', prAggCurrentPeriodId, 'publishPdf', {});
+  } catch (err) {
+    statusEl.className = 'text-xs text-rose-600';
+    statusEl.innerText = `⛔ ${err.message}`;
+    return;
+  }
+  const updated = result.item;
+  const idx = DB.reportPeriods.findIndex(p => p.id === updated.id);
+  if (idx !== -1) DB.reportPeriods[idx] = updated;
+  logSystemAction('PERIODIC_REPORT', 'PUBLISH_REPORT_PERIOD_PDF', `Phát hành bản ghép PDF kỳ báo cáo [${updated.name}]`, 'SUCCESS', String(updated.id));
+  statusEl.className = 'text-xs text-emerald-700';
+  statusEl.innerText = '✅ Đã phát hành bản ghép PDF!';
+  updatePrAggPdfActionsWrap(updated);
+  renderPrPeriodsTable();
+  renderPrPublishedTable();
+}
+
+async function unpublishPrPdfCompilation() {
+  if (!prAggCurrentPeriodId) return;
+  let result;
+  try {
+    result = await callRecordAction('reportPeriods', prAggCurrentPeriodId, 'unpublishPdf', {});
+  } catch (err) { return alert(`⛔ ${err.message}`); }
+  const updated = result.item;
+  const idx = DB.reportPeriods.findIndex(p => p.id === updated.id);
+  if (idx !== -1) DB.reportPeriods[idx] = updated;
+  logSystemAction('PERIODIC_REPORT', 'UNPUBLISH_REPORT_PERIOD_PDF', `Hủy phát hành bản ghép PDF kỳ báo cáo [${updated.name}]`, 'SUCCESS', String(updated.id));
+  alert('✅ Đã hủy phát hành bản ghép PDF — có thể tổng hợp lại.');
+  updatePrAggPdfActionsWrap(updated);
+  renderPrPeriodsTable();
+  renderPrPublishedTable();
 }
 
 // Đối Chiếu Theo Công Việc — dựng period.taskCompilation (xem mergeReportPeriodByTasks() ở
@@ -26668,37 +27066,107 @@ async function unpublishPrCompilation() {
 }
 
 // ============ ĐÃ PHÁT HÀNH (ai còn quyền vào module đều xem được) ============
+// Kỳ có thể phát hành ĐỘC LẬP compilation (slide) và pdfCompilation (ghép PDF) — 1 dòng/kỳ, hiện đúng
+// nhóm nút của (các) bản đã phát hành, không phải 2 dòng riêng.
 function renderPrPublishedTable() {
   const tbody = document.getElementById('prPublishedTableBody');
   if (!tbody) return;
-  const published = DB.reportPeriods.filter(p => p.compilation?.status === 'PUBLISHED');
+  const published = DB.reportPeriods.filter(p => p.compilation?.status === 'PUBLISHED' || p.pdfCompilation?.status === 'PUBLISHED');
   if (!published.length) {
     tbody.innerHTML = `<tr><td colspan="4" class="text-center p-6 text-gray-500 italic">Chưa có báo cáo nào được phát hành.</td></tr>`;
     return;
   }
-  tbody.innerHTML = published.map(p => `
+  tbody.innerHTML = published.map(p => {
+    const slideDone = p.compilation?.status === 'PUBLISHED';
+    const pdfDone = p.pdfCompilation?.status === 'PUBLISHED';
+    const publishedAt = slideDone ? p.compilation.publishedAt : p.pdfCompilation.publishedAt;
+    const publishedByName = slideDone ? p.compilation.publishedByName : p.pdfCompilation.publishedByName;
+    const countParts = [];
+    if (slideDone) countParts.push(`${p.compilation.slides.length} slide`);
+    if (pdfDone) countParts.push(`${p.pdfCompilation.pages.length} trang PDF`);
+    return `
     <tr class="hover:bg-gray-50 border-b">
       <td class="border p-2 font-bold text-sky-800">${escapeHtml(p.name)}</td>
-      <td class="border p-2 text-xs">${formatDateTimeVN(p.compilation.publishedAt)} — ${escapeHtml(p.compilation.publishedByName || '')}</td>
-      <td class="border p-2 text-center">${p.compilation.slides.length}</td>
+      <td class="border p-2 text-xs">${formatDateTimeVN(publishedAt)} — ${escapeHtml(publishedByName || '')}</td>
+      <td class="border p-2 text-center text-xs">${escapeHtml(countParts.join(' · ') || '—')}</td>
       <td class="border p-2 text-center space-x-1">
-        <button onclick="openPrSlideshow(${p.id})" class="px-2.5 py-1 bg-sky-600 text-white rounded text-xs hover:opacity-90 font-bold">🎬 Trình Chiếu</button>
-        <button onclick="downloadPrPdf(${p.id}, this)" class="px-2.5 py-1 bg-gray-600 text-white rounded text-xs hover:opacity-90 font-bold">📄 Tải PDF</button>
+        ${slideDone ? `<button onclick="openPrSlideshow(${p.id})" class="px-2.5 py-1 bg-sky-600 text-white rounded text-xs hover:opacity-90 font-bold">🎬 Trình Chiếu</button>
+        <button onclick="downloadPrPdf(${p.id}, this)" class="px-2.5 py-1 bg-gray-600 text-white rounded text-xs hover:opacity-90 font-bold">📄 Tải PDF</button>` : ''}
+        ${pdfDone ? `<button onclick="openPrPdfFullscreen(${p.id})" class="px-2.5 py-1 bg-indigo-600 text-white rounded text-xs hover:opacity-90 font-bold">🖥️ Xem PDF Toàn Màn Hình</button>
+        <a href="/api/files/download?fileUrl=${encodeURIComponent(p.pdfCompilation.publishedFileUrl)}&name=${encodeURIComponent(p.pdfCompilation.publishedFileName || '')}" class="inline-block px-2.5 py-1 bg-gray-600 text-white rounded text-xs hover:opacity-90 font-bold">📄 Tải PDF Ghép</a>` : ''}
       </td>
-    </tr>
-  `).join('');
+    </tr>`;
+  }).join('');
 }
 
 // ============ TRÌNH CHIẾU TOÀN MÀN HÌNH ============
+// prSlideshowMode phân biệt 2 kiểu nội dung dùng CHUNG #prSlideshowModal: 'SLIDES' (compilation.slides,
+// dựng bằng buildPrSlideScreenHTML — cách cũ) và 'PDF' (pdfCompilation, render TRỰC TIẾP từng trang PDF
+// thật bằng pdf.js — xem openPrPdfFullscreen()/renderPrPdfFsPage() bên dưới) — prSlideshowNav()/
+// closePrSlideshow() branch theo biến này, không cần modal/bàn phím riêng.
+let prSlideshowMode = 'SLIDES';
 function openPrSlideshow(periodId) {
   const period = DB.reportPeriods.find(p => p.id === periodId);
   if (!period || period.compilation?.status !== 'PUBLISHED') return;
+  prSlideshowMode = 'SLIDES';
   prSlideshowSlides = period.compilation.slides;
   prSlideshowIndex = 0;
   prSlideshowTemplate = period.slideTemplate === 'ORANGE_GOLD' ? 'ORANGE_GOLD' : 'DEFAULT';
   document.getElementById('prSlideshowTitle').innerText = period.name;
-  document.getElementById('prSlideshowModal').classList.remove('hidden');
+  const modal = document.getElementById('prSlideshowModal');
+  modal.classList.remove('hidden');
+  modal.requestFullscreen?.().catch(() => {});
   renderPrSlideshowSlide();
+}
+
+// Trình chiếu PDF THẬT toàn màn hình — render TRỰC TIẾP từng trang bằng pdf.js (window.pdfjsLib đã sẵn
+// toàn cục) vào <canvas>, KHÔNG rasterize/làm phẳng qua html2canvas như downloadPrPdf() — giữ nguyên vẹn
+// định dạng/font/vector gốc của file đã ghép, đúng yêu cầu "không vỡ cấu trúc file". Dùng chung modal
+// #prSlideshowModal (đã là khung tối toàn màn hình sẵn) + nút điều hướng/phím tắt có sẵn.
+let prPdfFsDoc = null;
+async function openPrPdfFullscreen(periodId) {
+  const period = DB.reportPeriods.find(p => p.id === periodId);
+  if (!period || period.pdfCompilation?.status !== 'PUBLISHED') return;
+  prSlideshowMode = 'PDF';
+  prSlideshowIndex = 0;
+  prPdfFsDoc = null;
+  document.getElementById('prSlideshowTitle').innerText = period.name;
+  document.getElementById('prSlideshowCounter').innerText = '';
+  const modal = document.getElementById('prSlideshowModal');
+  modal.style.backgroundColor = '#000';
+  modal.style.backgroundImage = 'none';
+  modal.classList.remove('hidden');
+  modal.requestFullscreen?.().catch(() => {});
+  const bodyEl = document.getElementById('prSlideshowBody');
+  bodyEl.innerHTML = `<div class="text-white text-center text-sm mt-20">⏳ Đang tải file PDF...</div>`;
+  try {
+    prPdfFsDoc = await window.pdfjsLib.getDocument(period.pdfCompilation.publishedFileUrl).promise;
+    renderPrPdfFsPage();
+  } catch (err) {
+    bodyEl.innerHTML = `<div class="text-rose-300 text-center text-sm mt-20">⛔ Không mở được file PDF: ${escapeHtml(err.message)}</div>`;
+  }
+}
+
+async function renderPrPdfFsPage() {
+  if (!prPdfFsDoc) return;
+  const bodyEl = document.getElementById('prSlideshowBody');
+  document.getElementById('prSlideshowCounter').innerText = `${prSlideshowIndex + 1} / ${prPdfFsDoc.numPages}`;
+  const page = await prPdfFsDoc.getPage(prSlideshowIndex + 1);
+  const containerW = Math.max(bodyEl.clientWidth, 320);
+  const containerH = Math.max(bodyEl.clientHeight, 320);
+  const baseViewport = page.getViewport({ scale: 1 });
+  const scale = Math.max(0.3, Math.min(containerW / baseViewport.width, containerH / baseViewport.height));
+  const viewport = page.getViewport({ scale });
+  const canvas = document.createElement('canvas');
+  canvas.width = viewport.width;
+  canvas.height = viewport.height;
+  canvas.style.display = 'block';
+  canvas.style.margin = '0 auto';
+  canvas.style.background = '#fff';
+  canvas.oncontextmenu = () => false;
+  await page.render({ canvasContext: canvas.getContext('2d'), viewport }).promise;
+  bodyEl.innerHTML = '';
+  bodyEl.appendChild(canvas);
 }
 
 // Số La Mã cho khối "Mục lớn" trong bảng Công Việc/Kế Hoạch — đủ dùng tới vài chục mục lớn/kỳ báo cáo.
@@ -26898,6 +27366,14 @@ function renderPrSlideshowSlide() {
 }
 
 function prSlideshowNav(dir) {
+  if (prSlideshowMode === 'PDF') {
+    const total = prPdfFsDoc?.numPages || 0;
+    const target = prSlideshowIndex + dir;
+    if (target < 0 || target >= total) return;
+    prSlideshowIndex = target;
+    renderPrPdfFsPage();
+    return;
+  }
   const target = prSlideshowIndex + dir;
   if (target < 0 || target >= prSlideshowSlides.length) return;
   prSlideshowIndex = target;
@@ -26907,6 +27383,9 @@ function prSlideshowNav(dir) {
 function closePrSlideshow() {
   document.getElementById('prSlideshowModal').classList.add('hidden');
   prSlideshowSlides = [];
+  prPdfFsDoc = null;
+  prSlideshowMode = 'SLIDES';
+  if (document.fullscreenElement) document.exitFullscreen?.().catch(() => {});
 }
 
 document.addEventListener('keydown', (ev) => {

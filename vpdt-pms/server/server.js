@@ -183,6 +183,14 @@ app.use('/vendor/pdfjs', express.static(path.join(__dirname, 'node_modules', 'pd
 app.use('/vendor/jspdf', express.static(path.join(__dirname, 'node_modules', 'jspdf', 'dist'), VENDOR_STATIC_OPTS));
 app.use('/vendor/html2canvas', express.static(path.join(__dirname, 'node_modules', 'html2canvas', 'dist'), VENDOR_STATIC_OPTS));
 
+// Phục vụ pdf-lib (tự lưu trên server, không qua CDN — cùng lý do với jspdf/html2canvas ở trên) — dùng
+// để GHÉP NHIỀU FILE PDF THẬT thành 1 file duy nhất NGAY TRONG trình duyệt người nộp báo cáo (Báo Cáo
+// Định Kỳ, entryType 'PDF') trước khi tải lên — giữ nguyên vẹn định dạng/font/vector gốc, khác hẳn cách
+// jsPDF+html2canvas ở trên "chụp ảnh" từng slide. pdf-lib đã sẵn là server dependency (đóng dấu watermark
+// hợp đồng/tải file, ghép file Báo Cáo Định Kỳ dạng PDF — xem routes/download.js, lib/reportPdfMerge.js)
+// nên dùng lại đúng bản đã cài, không cần thêm gì.
+app.use('/vendor/pdf-lib', express.static(path.join(__dirname, 'node_modules', 'pdf-lib', 'dist'), VENDOR_STATIC_OPTS));
+
 // Phục vụ exceljs + mammoth (tự lưu trên server, không qua CDN — cùng lý do với pdfjs/jspdf ở trên) —
 // dùng để xem trực tiếp file Excel/Word đính kèm NGAY TRONG trình duyệt người xem (Khung Xem Bảo Vệ),
 // thay vì chỉ "Tải về" như trước — xử lý HOÀN TOÀN phía trình duyệt, không có bước xử lý nào chạy trên
