@@ -1,9 +1,42 @@
 # Phiên bản hiện tại
 
-**1.95.0** — đã merge vào `main` (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở
+**1.96.0** — đã merge vào `main` (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở
 badge góc màn hình + `/api/health`).
 
-## Cập nhật gần nhất (PR #210, nhánh `claude/chao-ban-oo5ijl`)
+## Cập nhật gần nhất (PR #212, nhánh `claude/chao-ban-oo5ijl`)
+
+Theo yêu cầu: viết API cho phép ứng dụng NGOÀI hệ thống xác thực tài khoản HCRC Workspace (cấp API key,
+trả về thành công/thất bại), sau đó bổ sung thêm API đồng bộ thông tin danh bạ (username/tên/số điện
+thoại/phòng/chức danh) sang ứng dụng đó.
+
+- **Quản lý API key** (`routes/externalAuthAdmin.js`, admin-only, `/api/admin/external-api-keys`): tạo/
+  liệt kê/thu hồi. Key thật (`hcrc_` + 64 ký tự hex ngẫu nhiên) chỉ hiển thị **đúng 1 lần** lúc tạo — từ
+  đó DB chỉ lưu bcrypt hash (10 rounds, cùng chuẩn `lib/auth.js` dùng cho mật khẩu người dùng), không có
+  cách nào lấy lại được key thật kể cả có toàn quyền truy cập DB.
+- **Xác thực tài khoản** (`POST /api/external/verify-credentials`): body `{account,password}` kèm header
+  `Authorization: Bearer <API key>`, trả `{success:true|false}`. KHÔNG cấp phiên/cookie (không phải đăng
+  nhập hộ) — chỉ trả lời đúng/sai. Dùng CHUNG bộ đếm khoá tài khoản (`lib/loginAttempts.js`) với
+  `POST /api/auth/login` — 5 lần sai liên tiếp thì khoá tạm 15 phút, không mở thêm đường dò mật khẩu
+  không giới hạn số lần thử qua kênh mới này.
+- **Đồng bộ danh bạ** (`GET /api/external/users`): cùng API key, trả username/tên/điện thoại/email/
+  phòng ban/chức danh/trạng thái hoạt động của toàn bộ tài khoản, hoặc 1 hồ sơ qua `?account=<username>`
+  — KHÔNG BAO GIỜ kèm mật khẩu/PIN dù đã hash.
+- **Admin UI**: sub-tab mới "🔑 API Xác Thực Ngoài" trong Hệ Thống → Quản Trị.
+- **Bảo mật đọc**: collection `externalApiKeys` ẩn HOÀN TOÀN khỏi `GET /api/data` cho người không phải
+  admin (không chỉ lọc field bí mật như các collection khác) — nhân viên thường không có lý do gì cần
+  biết danh sách key tích hợp ngoài tồn tại; kể cả admin cũng không bao giờ thấy `keyHash` qua bất kỳ
+  response nào.
+
+**Deploy impact:** không đổi `server/sql/schema.sql`, không thêm dependency mới (dùng lại `bcryptjs`/
+`express-rate-limit` đã có) — chỉ copy code + `pm2 restart`. Thêm biến môi trường TUỲ CHỌN
+`EXTERNAL_AUTH_RATE_LIMIT_MAX` (giới hạn số lần gọi `/api/external/*` từ 1 IP/15 phút, mặc định 300, có
+đường lùi nếu không đặt).
+
+Đã kiểm thử: `tests/test-external-auth.js` (mới, 20 kịch bản: quản lý key, xác thực đúng/sai/khoá tài
+khoản/tài khoản vô hiệu hoá/không cấp cookie, đồng bộ danh bạ toàn bộ/tra cứu lẻ/404/401) — 20/20 pass.
+Toàn bộ 42 file `tests/test-*.js` — 0 lỗi, không regression.
+
+## Trước đó (PR #210, nhánh `claude/chao-ban-oo5ijl`)
 
 Theo yêu cầu: hiện thực hoá hướng ghép file PDF thật (đã phân tích/demo ở PR #208) cho Báo Cáo Định Kỳ —
 áp dụng ở CẢ bước nhân viên nộp báo cáo lẫn bước người tổng hợp ghép báo cáo cuối, chạy song song hoàn
