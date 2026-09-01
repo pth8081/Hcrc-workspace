@@ -10,10 +10,10 @@
 //    navigator.credentials khi không phải secure context, phía client tự ẩn nút liên quan mà không cần
 //    cờ riêng (xem canAccessBiometricAuth() ở index.html).
 //
-// Challenge lưu trong bộ nhớ tiến trình (không cần bền — hết hạn rất nhanh), cùng khuôn với
-// lib/approvalAuth.js: chạy PM2 cluster nhiều tiến trình, "dựng challenge" rơi vào tiến trình A rồi
-// "xác minh" rơi vào tiến trình B khác sẽ bị từ chối nhầm — chấp nhận được (chỉ cần bấm lại), không
-// phải lỗ hổng bảo mật.
+// Challenge lưu qua lib/ephemeralStore.js (bảng dbo.EphemeralAuthTokens dùng chung, cluster-safe) —
+// TRƯỚC ĐÂY dùng Map trong bộ nhớ tiến trình, chỉ đúng khi chạy đúng 1 tiến trình Node: chạy PM2
+// cluster nhiều tiến trình mà Nginx không bật sticky session, "dựng challenge" rơi vào tiến trình A rồi
+// "xác minh" rơi vào tiến trình B khác sẽ bị từ chối NHẦM dù người dùng thao tác đúng.
 const {
   generateRegistrationOptions,
   verifyRegistrationResponse,
@@ -22,10 +22,11 @@ const {
 } = require('@simplewebauthn/server');
 const crypto = require('crypto');
 const { HttpError } = require('./httpErrors');
+const { setToken, consumeToken } = require('./ephemeralStore');
 
 const CHALLENGE_TTL_MS = 5 * 60 * 1000;
-const regChallenges = new Map(); // username -> { challenge, expiresAt }
-const authChallenges = new Map(); // username -> { challenge, expiresAt }
+const regChallengeKey = (username) => `webauthn:reg:${username}`;
+const authChallengeKey = (username) => `webauthn:auth:${username}`;
 
 function isWebauthnEnabled() {
   return !!process.env.WEBAUTHN_RP_ID;
@@ -108,7 +109,7 @@ async function buildRegistrationOptions(req, user) {
     // đăng ký khoá bảo mật rời (YubiKey...), đúng phạm vi yêu cầu "vân tay khi dùng mobile".
     authenticatorSelection: { residentKey: 'discouraged', userVerification: 'required', authenticatorAttachment: 'platform' }
   });
-  regChallenges.set(user.username, { challenge: options.challenge, expiresAt: Date.now() + CHALLENGE_TTL_MS });
+  await setToken(regChallengeKey(user.username), { challenge: options.challenge }, CHALLENGE_TTL_MS);
   return { options, webauthnUserId };
 }
 
@@ -116,9 +117,8 @@ async function buildRegistrationOptions(req, user) {
 // đã sẵn sàng lưu vào user.webauthnCredentials (route chịu trách nhiệm ghi qua withLockedAppDataValue).
 async function verifyRegistration(req, user, response) {
   ensureEnabled();
-  const entry = regChallenges.get(user.username);
-  regChallenges.delete(user.username);
-  if (!entry || entry.expiresAt < Date.now()) {
+  const entry = await consumeToken(regChallengeKey(user.username));
+  if (!entry) {
     throw new HttpError(400, 'Yêu cầu đăng ký đã hết hạn, vui lòng thử lại');
   }
 
@@ -161,7 +161,7 @@ async function buildAuthenticationOptions(req, user) {
     allowCredentials,
     userVerification: 'required'
   });
-  if (user) authChallenges.set(user.username, { challenge: options.challenge, expiresAt: Date.now() + CHALLENGE_TTL_MS });
+  if (user) await setToken(authChallengeKey(user.username), { challenge: options.challenge }, CHALLENGE_TTL_MS);
   return options;
 }
 
@@ -171,9 +171,8 @@ async function buildAuthenticationOptions(req, user) {
 // hiện và từ chối nếu counter không lớn hơn giá trị đã lưu).
 async function verifyAuthentication(req, user, response) {
   ensureEnabled();
-  const entry = authChallenges.get(user.username);
-  authChallenges.delete(user.username);
-  if (!entry || entry.expiresAt < Date.now()) {
+  const entry = await consumeToken(authChallengeKey(user.username));
+  if (!entry) {
     throw new HttpError(400, 'Yêu cầu xác thực đã hết hạn, vui lòng thử lại');
   }
   const stored = (user.webauthnCredentials || []).find(c => c.id === response.id);

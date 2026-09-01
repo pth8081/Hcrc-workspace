@@ -1325,6 +1325,10 @@ const CREATE_MODULE_CONFIGS = {
         if (!payload.fileUrl) {
           throw new CreateError(400, docType === 'IMAGE' ? 'Vui lòng chọn ảnh cần tải lên' : 'Vui lòng chọn tệp tài liệu cần tải lên');
         }
+        // Cùng lỗ hổng stored-XSS scheme "javascript:" đã vá ở các module khác (fileUrl chưa từng được
+        // xác minh chỉ trỏ về /uploads/... đã tải lên thật) — trainingManage tự soạn payload gọi thẳng
+        // route tạo có thể gài fileUrl bất kỳ, hiển thị lại thành link/nút tải ở màn Tài Liệu đào tạo.
+        assertUploadedFileUrl(payload.fileUrl, 'Tệp tài liệu đào tạo');
         payload.videoUrl = '';
       }
 
@@ -1993,6 +1997,9 @@ const CREATE_MODULE_CONFIGS = {
         throw new CreateError(400, 'Ngày hết hạn phải sau Ngày cấp');
       }
       if (!payload.fileUrl) throw new CreateError(400, 'Vui lòng tải lên tệp giấy phép');
+      // Cùng lỗ hổng stored-XSS scheme "javascript:" đã vá ở các module khác — fileUrl chưa từng được
+      // xác minh chỉ trỏ về /uploads/... đã tải lên thật.
+      assertUploadedFileUrl(payload.fileUrl, 'Tệp giấy phép');
 
       // Version — nhân bản đúng cơ chế docs.extraValidate ở trên: rootLicenseId null = bản gốc, khác
       // null = version mới cộng thêm vào 1 giấy phép đã có, chặn khi bản mới nhất còn PENDING (chờ

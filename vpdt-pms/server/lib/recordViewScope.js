@@ -10,7 +10,7 @@
 // khác, xem các hàm riêng bên dưới).
 const { getAppDataValue } = require('./appData');
 const { MODULE_CONFIGS, resolveContractApprovalWorkflow, resolveContractManageWorkflow } = require('./workflowEngine');
-const { canApproveInternalPost, canManageTraining, canManageRecruitment } = require('./recordActions');
+const { canApproveInternalPost, canManageTraining, canManageRecruitment, canEvaluateOnboardingStage3 } = require('./recordActions');
 
 // Khớp canManageVpp() ở public/index.html.
 function canManageVpp(user) {
@@ -513,6 +513,26 @@ function filterUniformTransfersForUser(items, user) {
   return (items || []).filter(t => canViewUniformTransfer(user, t));
 }
 
+// onboardingProgress (Đào Tạo Tân Binh — "Phân Công"): trước đây KHÔNG có lớp lọc nào ở đây — lộ trọn
+// vẹn qua GET /api/data cho BẤT KỲ ai đã đăng nhập, kể cả stage3Note (nhận xét đánh giá tự do của quản
+// lý về nhân viên, dữ liệu riêng tư cùng bản chất với hrFeedback). 3 nhóm được xem: (1) trainingManage/
+// admin — quản lý toàn bộ module; (2) chính nhân viên được phân công — xem tiến độ của mình; (3) quản
+// lý CÙNG PHÒNG BAN/SIÊU THỊ với nhân viên đó (tái dùng ĐÚNG canEvaluateOnboardingStage3() ở
+// lib/recordActions.js — so dept THẬT hiện tại của nhân viên, không snapshot, cùng lý do đã giải thích
+// ở đó: nhân viên chuyển phòng ban giữa chừng thì quản lý MỚI xem/đánh giá được, không kẹt vào quản lý
+// CŨ).
+function canViewOnboardingProgress(user, item, appData) {
+  if (!user) return false;
+  if (canManageTraining(user)) return true;
+  if (item.employeeUsername === user.username) return true;
+  const traineeUser = (appData?.users || []).find(u => u.username === item.employeeUsername);
+  return canEvaluateOnboardingStage3(user, traineeUser);
+}
+
+function filterOnboardingProgressForUser(items, user, appData) {
+  return (items || []).filter(p => canViewOnboardingProgress(user, p, appData));
+}
+
 // licenses (Hành Chính — Giấy Phép): quyền PHẲNG riêng module (không theo phòng ban) — admin/
 // licenseApprove/licenseView xem hết, người tạo luôn xem được hồ sơ của chính mình (cùng nguyên tắc
 // "chính chủ luôn xem được" áp dụng xuyên suốt hệ thống), không ai khác truy cập được.
@@ -593,6 +613,7 @@ module.exports = {
   canViewOperationOrder, filterOperationOrdersForUser,
   canViewOperationStoreOpening, filterOperationStoreOpeningsForUser,
   canViewOperationRepair, filterOperationRepairsForUser,
+  canViewOnboardingProgress, filterOnboardingProgressForUser,
   canViewLicense, filterLicensesForUser,
   canViewHrFeedback, filterHrFeedbackForUser,
   // itServiceRenewals: 2 hàm này ĐÃ được định nghĩa ở trên nhưng trước đây BỊ BỎ SÓT khỏi khối export

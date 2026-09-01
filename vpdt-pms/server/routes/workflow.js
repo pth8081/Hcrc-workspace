@@ -112,7 +112,7 @@ router.post('/:module/:id/:action', async (req, res) => {
     // Duyệt này rồi mất — không áp dụng cho Từ chối/Yêu cầu bổ sung (khớp đúng phạm vi UI cũ).
     if (action === 'APPROVE' && APPROVAL_REAUTH_MODULES.has(moduleKey)) {
       const level = freshUser.perms?.approverAuthLevel || 'NONE';
-      if (level !== 'NONE' && !consumeApprovalGrant(freshUser.username)) {
+      if (level !== 'NONE' && !(await consumeApprovalGrant(freshUser.username))) {
         return res.status(403).json({ error: 'Cần xác thực lại (mật khẩu/OTP/PIN) trước khi duyệt' });
       }
     }

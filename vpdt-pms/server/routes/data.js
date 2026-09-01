@@ -22,7 +22,7 @@ const {
   filterUniformPeriodsForUser, filterUniformIssuancesForUser, filterUniformStockAdjustmentsForUser, filterUniformTransfersForUser, filterBudgetEntriesForUser,
   filterOperationOrdersForUser, filterOperationStoreOpeningsForUser, filterOperationRepairsForUser,
   filterVppRegistrationsForUser, filterLicensesForUser, filterHrFeedbackForUser,
-  filterItServiceRenewalsForUser, filterPaymentRequestsForUser
+  filterItServiceRenewalsForUser, filterPaymentRequestsForUser, filterOnboardingProgressForUser
 } = require('../lib/recordViewScope');
 
 const VALID_KEYS = new Set(Object.keys(DEFAULTS));
@@ -35,6 +35,12 @@ const ADMIN_ONLY_KEYS = new Set([
   'users', 'permGroups', 'emailConfig', 'workflows',
   'deptWorkflows', 'submissionDeptWorkflows', 'submissionTypeDeptWorkflows', 'submissionApprovalGroups',
   'carDeptWorkflows', 'officeBuyDeptWorkflows', 'officeFixDeptWorkflows', 'officeInvestDeptWorkflows', 'vppDeptWorkflows',
+  // operationOrderDeptWorkflows/operationStoreOpenDeptWorkflows/operationRepairDeptWorkflows: cấu hình
+  // người duyệt theo phòng ban cho 3 luồng module Vận Hành — cùng khuôn carDeptWorkflows/vppDeptWorkflows
+  // ở trên nhưng BỊ BỎ SÓT khỏi danh sách này khi thêm module Vận Hành, khiến bất kỳ tài khoản đã đăng
+  // nhập nào (kể cả người chỉ có quyền tạo hồ sơ operationOrderCreate) cũng ghi trực tiếp được qua
+  // POST /api/data/operationOrderDeptWorkflows và tự đặt mình làm người duyệt bước 1 phòng ban mình.
+  'operationOrderDeptWorkflows', 'operationStoreOpenDeptWorkflows', 'operationRepairDeptWorkflows',
   // itPriceDeptWorkflows: cấu hình người duyệt Phê Duyệt Giá (module Hỗ Trợ IT) theo phòng ban — cùng
   // khuôn carDeptWorkflows/vppDeptWorkflows/budgetDeptWorkflows, chỉ sửa được ở màn Quy Trình & Phê
   // Duyệt (admin), nhưng trước đây BỊ BỎ SÓT khỏi danh sách này: bất kỳ tài khoản đã đăng nhập nào cũng
@@ -507,6 +513,11 @@ router.get('/', async (req, res) => {
     // server (chỉ ẩn ở renderTasks() qua canViewTaskRecord()), để lộ toàn bộ Công Việc công ty (kể cả
     // nội dung "Ý kiến chỉ đạo" nhạy cảm) cho bất kỳ ai gọi thẳng GET /api/data.
     if (data.tasks) data.tasks = filterTasksForUser(data.tasks, req.freshUser);
+    // onboardingProgress (Đào Tạo — Hội Nhập Nhân Viên Mới): trước đây hoàn toàn KHÔNG được lọc lại ở
+    // server (chỉ ẩn ở giao diện), để lộ nội dung "stage3Note" (nhận xét đánh giá thử việc, mang tính
+    // chất như đánh giá hiệu suất) của MỌI nhân viên cho bất kỳ ai gọi thẳng GET /api/data — xem
+    // lib/recordViewScope.js canViewOnboardingProgress().
+    if (data.onboardingProgress) data.onboardingProgress = filterOnboardingProgressForUser(data.onboardingProgress, req.freshUser, data);
 
     data._versions = versions;
     res.json(data);

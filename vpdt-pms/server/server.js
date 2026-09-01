@@ -250,9 +250,9 @@ const captchaRateLimiter = rateLimit({
   legacyHeaders: false,
   message: { error: 'Yêu cầu CAPTCHA quá nhiều lần, vui lòng thử lại sau ít phút.' }
 });
-app.get('/api/captcha', captchaRateLimiter, (req, res) => {
+app.get('/api/captcha', captchaRateLimiter, async (req, res) => {
   if (!isCaptchaEnabled()) return res.status(404).json({ error: 'CAPTCHA chưa được bật' });
-  res.json(generateCaptcha());
+  res.json(await generateCaptcha());
 });
 
 // manifest.json cho PWA (KHÔNG cần xác thực, xem routes/pwaManifest.js — phải sinh động vì có phần

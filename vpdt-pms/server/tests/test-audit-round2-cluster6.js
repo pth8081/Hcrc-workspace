@@ -161,18 +161,51 @@ const RECORD_STORE_PATH = stubModule('../lib/recordStore', recordStoreStub);
 
 // ../db: getPool() trả về 1 "pool" giả, mọi câu lệnh SQL đi qua DB_HANDLER (đổi được theo từng kịch bản).
 let DB_HANDLER = async () => ({ recordset: [] });
+
+// dbo.EphemeralAuthTokens (lib/ephemeralStore.js, dùng bởi lib/approvalAuth.js/totp.js/webauthn.js/
+// captcha.js) được mô phỏng THẬT bằng 1 Map trong bộ nhớ test — LUÔN chặn TRƯỚC khi giao cho
+// DB_HANDLER theo từng kịch bản, vì các test [3] và [6] ở dưới cần trạng thái ghi/đọc/xoá thật (không
+// thể trả về {recordset:[]} cố định như DB_HANDLER mặc định — sẽ khiến issueApprovalGrant/
+// consumeApprovalGrant không bao giờ khớp nhau được).
+const ephemeralTokens = new Map(); // TokenKey -> { Payload, ExpiresAt }
+function handleEphemeralTokensQuery(q, inputs) {
+  if (/^\s*MERGE dbo\.EphemeralAuthTokens/.test(q)) {
+    ephemeralTokens.set(inputs.key, { Payload: inputs.payload, ExpiresAt: inputs.expiresAt });
+    return { recordset: [] };
+  }
+  if (/^\s*DELETE FROM dbo\.EphemeralAuthTokens OUTPUT/.test(q)) {
+    const row = ephemeralTokens.get(inputs.key);
+    ephemeralTokens.delete(inputs.key);
+    return { recordset: row ? [{ Payload: row.Payload, ExpiresAt: row.ExpiresAt }] : [] };
+  }
+  if (/^\s*SELECT Payload FROM dbo\.EphemeralAuthTokens/.test(q)) {
+    const row = ephemeralTokens.get(inputs.key);
+    if (row && new Date(row.ExpiresAt).getTime() > Date.now()) return { recordset: [{ Payload: row.Payload }] };
+    return { recordset: [] };
+  }
+  if (/^\s*DELETE FROM dbo\.EphemeralAuthTokens WHERE ExpiresAt/.test(q)) {
+    const now = Date.now();
+    for (const [k, v] of ephemeralTokens) if (new Date(v.ExpiresAt).getTime() <= now) ephemeralTokens.delete(k);
+    return { recordset: [] };
+  }
+  return null;
+}
+
 stubModule('../db', {
   sql: {
     // Chỉ cần các "kiểu" mà code gọi tới — giá trị thật không quan trọng với bản giả.
     NVarChar: (n) => ({ type: 'nvarchar', n }), BigInt: { type: 'bigint' }, Int: { type: 'int' },
-    MAX: 'max', Transaction: class {}, Request: class {}
+    MAX: 'max', DateTime2: { type: 'datetime2' }, Transaction: class {}, Request: class {}
   },
   getPool: async () => ({
     request() {
       const inputs = {};
       const req = {
         input(name, _type, value) { inputs[name] = value; return req; },
-        query: (q) => DB_HANDLER(q, inputs)
+        query: (q) => {
+          const eph = handleEphemeralTokensQuery(q, inputs);
+          return eph !== null ? Promise.resolve(eph) : DB_HANDLER(q, inputs);
+        }
       };
       return req;
     }
@@ -358,7 +391,7 @@ async function main() {
   await run('[3] Có phiếu xác thực lại (issueApprovalGrant) -> duyệt được, đề nghị chuyển APPROVED', async () => {
     seedPaymentRequest();
     CURRENT_USER = ACCOUNTANT_REAUTH;
-    approvalAuth.issueApprovalGrant(ACCOUNTANT_REAUTH.username);
+    await approvalAuth.issueApprovalGrant(ACCOUNTANT_REAUTH.username);
     await withServer(paymentApp, async (base) => {
       const res = await fetch(`${base}/api/records/paymentRequests/77/approve`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}'
@@ -397,7 +430,7 @@ async function main() {
 
   await run('[3] Phiếu xác thực gắn theo TỪNG NGƯỜI: phiếu của người khác không dùng thay được', async () => {
     seedPaymentRequest();
-    approvalAuth.issueApprovalGrant('nguoi_khac');
+    await approvalAuth.issueApprovalGrant('nguoi_khac');
     CURRENT_USER = ACCOUNTANT_REAUTH;
     await withServer(paymentApp, async (base) => {
       const res = await fetch(`${base}/api/records/paymentRequests/77/approve`, {
@@ -571,23 +604,23 @@ async function main() {
     assert.ok(!code.includes('Math.random'), 'không được còn Math.random trong code (ngoài chú thích)');
   });
 
-  await run('[6] Không hề gọi Math.random khi sinh OTP (chặn đường quay lại bộ sinh giả ngẫu nhiên)', () => {
+  await run('[6] Không hề gọi Math.random khi sinh OTP (chặn đường quay lại bộ sinh giả ngẫu nhiên)', async () => {
     const original = Math.random;
     let called = 0;
     Math.random = () => { called++; return original(); };
     try {
-      for (let i = 0; i < 50; i++) approvalAuth.issueApprovalOtp(`u${i}`);
+      for (let i = 0; i < 50; i++) await approvalAuth.issueApprovalOtp(`u${i}`);
     } finally {
       Math.random = original;
     }
     assert.strictEqual(called, 0, 'issueApprovalOtp() không được chạm tới Math.random');
   });
 
-  await run('[6] OTP vẫn đúng khuôn 6 chữ số và phân bố đều trên mọi vị trí', () => {
+  await run('[6] OTP vẫn đúng khuôn 6 chữ số và phân bố đều trên mọi vị trí', async () => {
     const seenPerPos = Array.from({ length: 6 }, () => new Set());
     const all = new Set();
     for (let i = 0; i < 3000; i++) {
-      const code = approvalAuth.issueApprovalOtp(`user${i}`);
+      const code = await approvalAuth.issueApprovalOtp(`user${i}`);
       assert.ok(/^\d{6}$/.test(code), `OTP sai khuôn: ${code}`);
       all.add(code);
       for (let p = 0; p < 6; p++) seenPerPos[p].add(code[p]);
@@ -596,13 +629,13 @@ async function main() {
     assert.ok(all.size > 2900, `3000 mã mà chỉ có ${all.size} giá trị khác nhau — nghi vấn bộ sinh yếu`);
   });
 
-  await run('[6] OTP vẫn xác minh được đúng 1 lần (không phá lib/approvalAuth.js)', () => {
-    const code = approvalAuth.issueApprovalOtp('otp_user');
-    assert.strictEqual(approvalAuth.verifyApprovalOtp('otp_user', 'khong-dung'), false);
-    const code2 = approvalAuth.issueApprovalOtp('otp_user');
-    assert.strictEqual(approvalAuth.verifyApprovalOtp('otp_user', code2), true, 'mã đúng phải xác minh được');
-    assert.strictEqual(approvalAuth.verifyApprovalOtp('otp_user', code2), false, 'mã đã dùng không được dùng lại');
-    assert.strictEqual(approvalAuth.consumeApprovalGrant('otp_user'), true, 'xác minh OTP đúng phải cấp phiếu Duyệt');
+  await run('[6] OTP vẫn xác minh được đúng 1 lần (không phá lib/approvalAuth.js)', async () => {
+    const code = await approvalAuth.issueApprovalOtp('otp_user');
+    assert.strictEqual(await approvalAuth.verifyApprovalOtp('otp_user', 'khong-dung'), false);
+    const code2 = await approvalAuth.issueApprovalOtp('otp_user');
+    assert.strictEqual(await approvalAuth.verifyApprovalOtp('otp_user', code2), true, 'mã đúng phải xác minh được');
+    assert.strictEqual(await approvalAuth.verifyApprovalOtp('otp_user', code2), false, 'mã đã dùng không được dùng lại');
+    assert.strictEqual(await approvalAuth.consumeApprovalGrant('otp_user'), true, 'xác minh OTP đúng phải cấp phiếu Duyệt');
     assert.notStrictEqual(code, code2);
   });
 

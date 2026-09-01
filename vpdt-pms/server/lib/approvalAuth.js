@@ -8,27 +8,26 @@
 // hình approverAuthLevel khác NONE. Mã OTP trước đây cũng chỉ sinh/so sánh ở JS trình duyệt (biến cục
 // bộ pendingApprovalOtpCode) — không có giá trị bảo mật thật.
 //
-// Lưu trong bộ nhớ tiến trình (không cần bền — hết hạn rất nhanh, mất khi restart chỉ khiến người dùng
-// phải xác thực lại). Chạy PM2 cluster nhiều tiến trình: "cấp phiếu"/OTP ở tiến trình A, "dùng" rơi vào
-// tiến trình B khác sẽ bị từ chối nhầm — chấp nhận được (chỉ False Negative có đường thoát thử lại,
-// không phải lỗ hổng bảo mật kiểu False Positive).
+// Lưu qua lib/ephemeralStore.js (bảng dbo.EphemeralAuthTokens dùng chung, cluster-safe) — TRƯỚC ĐÂY
+// dùng Map trong bộ nhớ tiến trình, chỉ đúng khi chạy đúng 1 tiến trình Node: chạy PM2 cluster nhiều
+// tiến trình mà Nginx không bật sticky session, "cấp phiếu"/OTP ở tiến trình A rồi "dùng" rơi vào tiến
+// trình B khác sẽ bị từ chối NHẦM dù người dùng vừa xác thực đúng.
 const crypto = require('crypto');
+const { setToken, consumeToken } = require('./ephemeralStore');
 
 const GRANT_TTL_MS = 5 * 60 * 1000;
 const OTP_TTL_MS = 5 * 60 * 1000;
 
-const grants = new Map(); // username -> expiresAt (ms)
-const otps = new Map(); // username -> { code, expiresAt }
+const grantKey = (username) => `approval:grant:${username}`;
+const otpKey = (username) => `approval:otp:${username}`;
 
-function issueApprovalGrant(username) {
-  grants.set(username, Date.now() + GRANT_TTL_MS);
+async function issueApprovalGrant(username) {
+  await setToken(grantKey(username), true, GRANT_TTL_MS);
 }
 
 // Dùng 1 lần: kiểm tra còn hạn rồi XOÁ NGAY, không cho dùng lại phiếu cũ cho lượt Duyệt kế tiếp.
-function consumeApprovalGrant(username) {
-  const expiresAt = grants.get(username);
-  grants.delete(username);
-  return !!expiresAt && expiresAt > Date.now();
+async function consumeApprovalGrant(username) {
+  return (await consumeToken(grantKey(username))) !== null;
 }
 
 // Sinh từng chữ số bằng crypto.randomInt() — ĐÚNG khuôn lib/captcha.js đã dùng. Math.random() trước đây
@@ -36,20 +35,19 @@ function consumeApprovalGrant(username) {
 // trị đã biết, nên mã OTP 6 số dùng để "xác thực lại trước khi Duyệt" có thể bị đoán trước thay vì phải
 // mò 1/1.000.000. crypto.randomInt() lấy entropy từ hệ điều hành và không lệch phân phối (rejection
 // sampling), khác kiểu nhân-rồi-làm-tròn của Math.random().
-function issueApprovalOtp(username) {
+async function issueApprovalOtp(username) {
   let code = '';
   for (let i = 0; i < 6; i++) code += crypto.randomInt(0, 10);
-  otps.set(username, { code, expiresAt: Date.now() + OTP_TTL_MS });
+  await setToken(otpKey(username), { code }, OTP_TTL_MS);
   return code;
 }
 
 // Dùng 1 lần dù đúng hay sai — xác thực thành công thì cấp luôn phiếu Duyệt (đỡ phải gọi thêm 1 vòng
 // verify-password/verify-pin nữa, khớp đúng luồng OTP vốn không có bước xác thực thứ 2 nào khác).
-function verifyApprovalOtp(username, code) {
-  const entry = otps.get(username);
-  otps.delete(username);
-  const ok = !!entry && entry.expiresAt > Date.now() && !!code && entry.code === String(code);
-  if (ok) issueApprovalGrant(username);
+async function verifyApprovalOtp(username, code) {
+  const entry = await consumeToken(otpKey(username));
+  const ok = !!entry && !!code && entry.code === String(code);
+  if (ok) await issueApprovalGrant(username);
   return ok;
 }
 

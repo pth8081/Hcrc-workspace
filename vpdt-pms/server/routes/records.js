@@ -209,17 +209,17 @@ router.post('/paymentRequests/:id/request-info', (req, res) =>
 // thanh toán — hành động ĐỘNG TỚI TIỀN trực tiếp nhất trong hệ thống — lại có route riêng ở đây và chỉ
 // kiểm canManagePaymentRequests(), tức là người dùng cấu hình "phải xác thực lại khi duyệt" vẫn bị bỏ
 // qua đúng ở chỗ cần nhất. Trả về true nếu đã gửi response lỗi (caller dừng lại).
-function rejectIfMissingApprovalGrant(req, res) {
+async function rejectIfMissingApprovalGrant(req, res) {
   const level = req.freshUser?.perms?.approverAuthLevel || 'NONE';
-  if (level !== 'NONE' && !consumeApprovalGrant(req.freshUser.username)) {
+  if (level !== 'NONE' && !(await consumeApprovalGrant(req.freshUser.username))) {
     res.status(403).json({ error: 'Cần xác thực lại (mật khẩu/OTP/PIN) trước khi duyệt' });
     return true;
   }
   return false;
 }
 
-router.post('/paymentRequests/:id/approve', (req, res) => {
-  if (rejectIfMissingApprovalGrant(req, res)) return;
+router.post('/paymentRequests/:id/approve', async (req, res) => {
+  if (await rejectIfMissingApprovalGrant(req, res)) return;
   return withPaymentAction(req, res, 'approve', (payload, user, item) => recordActions.approvePaymentRequest(user, item));
 });
 

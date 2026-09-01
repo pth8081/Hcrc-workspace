@@ -166,5 +166,26 @@ BEGIN
 END
 GO
 
+/* Kho lưu tạm dùng chung cho MỌI trạng thái xác thực nhiều bước ngắn hạn (TOTP đăng nhập/thiết lập,
+   challenge WebAuthn đăng ký/đăng nhập, mã CAPTCHA, phiếu/OTP xác thực lại trước khi Duyệt — xem
+   lib/ephemeralStore.js). TRƯỚC ĐÂY 4 module này lưu bằng Map trong bộ nhớ RIÊNG của từng tiến trình
+   Node — hoạt động sai khi chạy PM2 cluster nhiều tiến trình mà Nginx không bật sticky session (bước
+   "cấp" rơi vào tiến trình A, bước "xác minh" rơi vào tiến trình B không thấy gì, báo lỗi nhầm dù người
+   dùng nhập đúng). Chuyển sang 1 bảng dùng chung ở đây để đúng bất kỳ tiến trình nào xử lý request cũng
+   đọc/ghi cùng 1 nguồn — TokenKey tự đặt tiền tố theo từng module (vd "totp:login:<username>",
+   "captcha:<id>") để không đụng nhau giữa các module dù chung 1 bảng. Dữ liệu ở đây CHỦ ĐÍCH không cần
+   bền — hết hạn rất nhanh (vài phút), mất khi restart chỉ khiến người dùng phải thử lại, không phải
+   mất dữ liệu nghiệp vụ thật. */
+IF OBJECT_ID('dbo.EphemeralAuthTokens', 'U') IS NULL
+BEGIN
+    CREATE TABLE dbo.EphemeralAuthTokens (
+        TokenKey   NVARCHAR(200)  NOT NULL PRIMARY KEY,
+        Payload    NVARCHAR(MAX)  NOT NULL,
+        ExpiresAt  DATETIME2(3)   NOT NULL
+    );
+    CREATE INDEX IX_EphemeralAuthTokens_ExpiresAt ON dbo.EphemeralAuthTokens (ExpiresAt);
+END
+GO
+
 PRINT 'Schema VPDT_DMS đã sẵn sàng.';
 GO
