@@ -1,9 +1,43 @@
 # Phiên bản hiện tại
 
-**1.94.0** — đã merge vào `main` (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở
+**1.95.0** — đã merge vào `main` (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở
 badge góc màn hình + `/api/health`).
 
-## Cập nhật gần nhất (PR #208, nhánh `claude/chao-ban-oo5ijl`)
+## Cập nhật gần nhất (PR #210, nhánh `claude/chao-ban-oo5ijl`)
+
+Theo yêu cầu: hiện thực hoá hướng ghép file PDF thật (đã phân tích/demo ở PR #208) cho Báo Cáo Định Kỳ —
+áp dụng ở CẢ bước nhân viên nộp báo cáo lẫn bước người tổng hợp ghép báo cáo cuối, chạy song song hoàn
+toàn với luồng `.pptx` hiện có (không thay thế).
+
+- **`reportEntries.entryType` ('PDF' | 'PPTX', mặc định 'PPTX')**: nhân viên có thể chọn nộp nhiều file PDF
+  — trình duyệt tự ghép (bằng `pdf-lib`, ghép byte thật, không rasterize) thành 1 file duy nhất trước khi
+  tải lên, thay cho luồng `.pptx`+`parsedSlides` cũ (vẫn giữ nguyên 100% khi không chọn chế độ PDF).
+- **`reportPeriods.pdfCompilation`** (tách riêng hoàn toàn khỏi `compilation`/`taskCompilation`, không đụng
+  lẫn nhau): người tổng hợp chọn các báo cáo PDF đã nộp, hệ thống tự gom theo THỨ TỰ PHÒNG BAN (tái dùng
+  đúng thuật toán đã có ở tổng hợp PPTX), cho sửa/xoá/sắp lại TỪNG TRANG bằng lưới kéo-thả trước khi ghép,
+  ghép lại bao nhiêu lần tuỳ ý (`/mergePdf`). "Phát hành" (`/publishPdf`) mới thật sự mở từng file nguồn,
+  ghép byte thật + đóng dấu watermark (tái dùng đúng kỹ thuật ở `routes/download.js`) thành 1 file PDF cuối
+  cùng, sau đó khoá không sửa được nữa — phải "Hủy phát hành" (`/unpublishPdf`) mới tổng hợp lại được.
+- **Trình chiếu PDF thật, toàn màn hình**: xem trực tiếp file PDF đã phát hành ngay trên giao diện (dùng
+  `pdf.js` render từng trang, KHÔNG rasterize/vỡ định dạng gốc), dùng luôn `Fullscreen API` thật của trình
+  duyệt (`requestFullscreen()`, lần đầu áp dụng trong hệ thống) — tái dùng chung 1 modal trình chiếu với
+  chế độ slide PPTX cũ.
+- **Bảo mật**: mọi trang trong `pdfCompilation.pages[]` client gửi lên chỉ có `{sourceEntryId,
+  sourcePageIndex}` — server luôn tự tra lại `entry` thật rồi tự dựng lại phòng ban/người nộp/đường dẫn
+  file, không tin bất kỳ field nào khác client có thể gửi kèm.
+
+**Deploy impact:** không đổi `server/sql/schema.sql`, không thêm biến môi trường mới, không thêm
+dependency mới (`pdf-lib`/`@pdf-lib/fontkit` đã có sẵn trong `package.json` từ trước) — chỉ copy code +
+`pm2 restart`. File `public/vendor/pdf-lib/pdf-lib.min.js` (vendor mới cho phía trình duyệt) đã được commit
+sẵn trong repo, không cần chạy `npm install`/bước thủ công nào thêm.
+
+Đã kiểm thử: `tests/test-periodic-report-pdf.js` (mới, 10 kịch bản: nộp/validate/regression/quyền/tổng hợp
+theo phòng ban/ghép lại thay thế hoàn toàn/phát hành ra đúng số trang đã chọn+watermark/trang tham chiếu
+lỗi thời bị chặn/hủy phát hành/quyền xem `pdfCompilation`) — 10/10 pass. Toàn bộ 44 file `tests/test-*.js`
+— 0 lỗi, không regression (kể cả `tests/test-periodic-report.js` cũ, xác nhận luồng `.pptx` không đổi hành
+vi).
+
+## Trước đó (PR #208, nhánh `claude/chao-ban-oo5ijl`)
 
 Theo yêu cầu: kiểm tra module Điều Hành, gỡ tính năng "Mẫu Trình Chiếu" khỏi Báo Cáo Định Kỳ, và tách phần
 "Tổng Hợp Theo Công Việc" ra khỏi "Tổng Hợp Theo Báo Cáo" để dùng làm đối chiếu.
