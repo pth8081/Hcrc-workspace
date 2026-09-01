@@ -26,7 +26,11 @@ const USERS = [
       admin: false,
       contractView: { all: false, depts: ['Phòng Kinh Doanh'] }, contractCreate: { all: false, depts: ['Phòng Kinh Doanh'] },
       officeView: { all: false, depts: ['Phòng Kinh Doanh'] }, officeCreate: { all: false, depts: ['Phòng Kinh Doanh'] },
-      officeBuy: true, officeFix: true, officeInvest: true
+      officeBuy: true, officeFix: true, officeInvest: true,
+      // budgetCreate: cần để vào được module Ngân Sách và xử lý (duyệt) các bản Phê Duyệt/Thực Hiện đang
+      // chờ của phòng mình (canAccessBudgetModule() nay đòi 1 trong 3 quyền budget — không còn "xem miễn
+      // phí" chỉ nhờ mục 0) — đúng thực tế Trưởng phòng cũng có quyền tự lập/sửa ngân sách phòng mình.
+      budgetCreate: true
     }
   },
   { id: 4, username: 'gd1', pass: '123456', name: 'Lê Văn Giám Đốc', email: 'gd1@company.com', phone: '0900000004', dept: 'Ban Giám Đốc', jobTitle: 'Giám đốc', perms: { admin: false, contractView: { all: true, depts: [] } } },
