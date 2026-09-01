@@ -4478,7 +4478,7 @@ input[data-sdd-list] {
         <p class="text-[11px] text-gray-500 italic mt-1">Cấp API key cho 1 ứng dụng/hệ thống KHÁC, dùng chung 1 key cho 2 việc — mọi lệnh gọi đều kèm header <code class="bg-white px-1 rounded border">Authorization: Bearer &lt;API key&gt;</code>:</p>
         <ul class="text-[11px] text-gray-500 list-disc pl-5 space-y-1">
           <li><b>Xác thực tài khoản/mật khẩu:</b> <code class="bg-white px-1 rounded border">POST /api/external/verify-credentials</code>, body <code class="bg-white px-1 rounded border">{"account","password"}</code>, trả về <code class="bg-white px-1 rounded border">{"success": true|false}</code>. Đây KHÔNG phải đăng nhập hộ (không cấp phiên/cookie) — chỉ trả lời đúng/sai.</li>
-          <li><b>Đồng bộ danh bạ nhân sự:</b> <code class="bg-white px-1 rounded border">GET /api/external/users</code> — trả username/tên/điện thoại/email/phòng ban/chức danh/trạng thái hoạt động của TOÀN BỘ tài khoản; thêm <code class="bg-white px-1 rounded border">?account=&lt;username&gt;</code> để tra cứu đúng 1 hồ sơ. Không bao giờ kèm mật khẩu.</li>
+          <li><b>Đồng bộ danh bạ nhân sự:</b> <code class="bg-white px-1 rounded border">GET /api/external/users</code> — trả vị trí (Văn phòng/Siêu Thị)/mã nhân viên (username)/tên nhân viên/điện thoại/phòng/chức danh của TOÀN BỘ tài khoản; thêm <code class="bg-white px-1 rounded border">?account=&lt;username&gt;</code> để tra cứu đúng 1 hồ sơ. Không bao giờ kèm mật khẩu.</li>
         </ul>
       </div>
 

@@ -144,36 +144,53 @@ router.post('/verify-credentials', async (req, res) => {
   }
 });
 
-// Field công khai nội bộ duy nhất trả ra ngoài cho mục đích đồng bộ danh bạ — TUYỆT ĐỐI không có
-// pass/password/pinHash/failedLoginAttempts/lockedUntil hay bất kỳ field bí mật nào khác của users.
-function toDirectoryProfile(u) {
+// "Vị Trí" — ĐÚNG khái niệm/nhãn đã dùng ở màn Người Dùng đầy đủ (uPosType, public/index.html: "HO (Văn
+// phòng)" / "Siêu Thị") — KHÔNG phải "chức danh" (jobTitle, khác field, khác ý nghĩa). User cũ tạo trước
+// khi có field posType không có giá trị này — suy luận lại y hệt logic client (renderUserForm()/
+// editUser()): dept trùng tên 1 siêu thị trong danh mục stores thì coi là 'STORE', còn lại là 'HO'.
+function posTypeLabel(posType) {
+  return posType === 'STORE' ? 'Siêu Thị' : 'Văn phòng';
+}
+function resolvePosType(u, storeNames) {
+  return u.posType || (storeNames.has(u.dept) ? 'STORE' : 'HO');
+}
+
+// Field công khai nội bộ duy nhất trả ra ngoài cho mục đích đồng bộ danh bạ — ĐÚNG 6 field đối tác yêu
+// cầu (vị trí/mã nhân viên/tên nhân viên/điện thoại/phòng/chức danh), TUYỆT ĐỐI không có pass/password/
+// pinHash/failedLoginAttempts/lockedUntil hay bất kỳ field bí mật nào khác của users. "username" đóng
+// vai trò "mã nhân viên" (không có field mã nhân viên riêng trong hệ thống — username LÀ định danh duy
+// nhất/không đổi của mỗi nhân sự, dùng để đăng nhập).
+function toDirectoryProfile(u, storeNames) {
   return {
-    username: u.username, name: u.name || '', dept: u.dept || '', jobTitle: u.jobTitle || '',
-    phone: u.phone || '', email: u.email || '', active: u.active !== false
+    position: posTypeLabel(resolvePosType(u, storeNames)),
+    username: u.username, name: u.name || '', phone: u.phone || '',
+    dept: u.dept || '', jobTitle: u.jobTitle || ''
   };
 }
 
 // GET /api/external/users — đồng bộ danh bạ nhân sự sang ứng dụng ngoài. Không kèm query "account" ->
 // trả TOÀN BỘ danh sách (đồng bộ hàng loạt định kỳ); kèm "?account=<username>" -> trả đúng 1 hồ sơ
 // (404 nếu không có) — tiện cho ứng dụng ngoài tra cứu lẻ 1 tài khoản khi cần mà không phải tải cả danh
-// bạ. `active` LUÔN trả kèm (kể cả tài khoản đã vô hiệu hóa) để ứng dụng đồng bộ biết mà tự khoá/xoá
-// phía họ — khác POST /verify-credentials (không tiết lộ trạng thái active cho người CHƯA chứng minh
-// đúng mật khẩu), ở đây caller đã tự chứng minh danh tính qua API key nên không cần giấu.
+// bạ.
 router.get('/users', async (req, res) => {
   try {
     const apiKey = req.externalApiKey;
-    const users = (await getAppDataValue('users')) || [];
+    const [users, stores] = await Promise.all([
+      getAppDataValue('users').then(v => v || []),
+      getAppDataValue('stores').then(v => v || [])
+    ]);
+    const storeNames = new Set(stores);
     const account = String(req.query?.account || '').trim();
 
     if (account) {
       const user = users.find(u => u.username === account);
       if (!user) return res.status(404).json({ error: 'Không tìm thấy tài khoản' });
       logExternalAuth(req, { apiKeyName: apiKey.name, username: account, actionType: 'DIRECTORY_LOOKUP', description: 'Tra cứu 1 hồ sơ danh bạ qua API ngoài', status: 'SUCCESS' });
-      return res.json(toDirectoryProfile(user));
+      return res.json(toDirectoryProfile(user, storeNames));
     }
 
     logExternalAuth(req, { apiKeyName: apiKey.name, actionType: 'DIRECTORY_SYNC', description: `Đồng bộ toàn bộ danh bạ qua API ngoài (${users.length} tài khoản)`, status: 'SUCCESS' });
-    res.json(users.map(toDirectoryProfile));
+    res.json(users.map(u => toDirectoryProfile(u, storeNames)));
   } catch (err) {
     sendServerError(res, 500, err, 'GET /api/external/users', 'Không thể tải danh bạ');
   }
