@@ -1,9 +1,40 @@
 # Phiên bản hiện tại
 
-**1.98.0** — đã merge vào `main` (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở
+**1.99.0** — đã merge vào `main` (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở
 badge góc màn hình + `/api/health`).
 
-## Cập nhật gần nhất (PR #220, nhánh `claude/chao-ban-oo5ijl`)
+## Cập nhật gần nhất (PR #222, nhánh `claude/chao-ban-oo5ijl`)
+
+Theo yêu cầu: module "Ngân Sách" áp dụng mô hình phân quyền **3 tầng** thay vì bắt buộc 1 trong 3 quyền
+phẳng (`budgetCreate`/`budgetAggregate`/`budgetManage`) mới vào được module:
+
+1. **Tầng mặc định (không cần bật quyền nào)** — bất kỳ nhân viên nào còn quyền vào module "Ngân Sách"
+   (mục 0) đều xem được (chỉ đọc) ngân sách **của chính phòng ban mình** ở tab Phê Duyệt/Thực Hiện.
+2. **`budgetAggregate` (Tổng hợp)** — thêm tab "📊 Tổng Hợp", nhưng chỉ thấy khối "Theo Phòng Ban" (mọi
+   phòng ban) + "Chi Tiết Theo Hạng Mục" — KHÔNG thấy con số gộp toàn công ty.
+3. **`budgetManage` (Quản lý — cấp cao nhất)** — thấy mọi thứ tầng 2 thấy, CỘNG thêm khối "📌 Toàn Công
+   Ty" (4 thẻ tổng Phê Duyệt/Thực Hiện/Chênh Lệch/% Sử Dụng + OPEX/CAPEX gộp cả công ty) trong tab Tổng
+   Hợp, cùng quyền tạo/đóng/mở kỳ và quản lý mẫu ngân sách như trước.
+
+- **Nguyên nhân đổi được mà không cần sửa server**: `lib/recordViewScope.js` (`canViewBudgetEntry`) từ
+  trước đã cho phép xem bản ghi cùng phòng ban (`item.dept === user.dept`) mà không đòi `budgetCreate` —
+  chỉ riêng cổng vào module ở client (`canAccessBudgetModule()`) đang chặn nhầm người không có 1 trong 3
+  quyền phẳng. Nới cổng này ra là đủ để có tầng mặc định, không đụng gì tới server.
+- **Client** (`public/index.html`): `canAccessBudgetModule()` chỉ còn yêu cầu còn quyền vào module (mục
+  0); `setBudgetSubTab()` cho `budgetManage` vào tab Tổng Hợp luôn (superset của `budgetAggregate`);
+  `renderBudgetSummaryResult()` tách khối "Toàn Công Ty" ra khỏi phần luôn hiển thị, chỉ render khi
+  `canManageBudgetClient()` đúng. Cập nhật lại ghi chú + nhãn 3 checkbox trong cây phân quyền admin (khối
+  18 — Ngân Sách) giải thích rõ mô hình 3 tầng.
+
+**Deploy impact:** không đổi `server/sql/schema.sql`, không thêm biến môi trường mới, không thêm
+dependency mới — chỉ copy code + `pm2 restart`.
+
+Đã kiểm thử: thêm user `budgetagg1` (chỉ `budgetAggregate`, không `budgetManage`) vào `tests/_seed.js` để
+cô lập đúng ranh giới tầng 2/tầng 3, viết 3 kịch bản mới trong `tests/test-office-budget.js` (dùng
+`tp_kd`/`budgetagg1`/`budgetmgr1`) xác nhận đúng biên giới 3 tầng — 51/51 pass. Toàn bộ `tests/test-*.js`
+— 0 lỗi. `node -c` + kiểm tra trùng id HTML/cân bằng div trong `public/index.html`.
+
+## Trước đó (PR #220, nhánh `claude/chao-ban-oo5ijl`)
 
 Theo yêu cầu: module "Ngân Sách" (con của "Tổng Hợp") xoá hết cấu trúc tab con cũ, thay bằng đúng 3 tab:
 
