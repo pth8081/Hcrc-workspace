@@ -1,9 +1,36 @@
 # Phiên bản hiện tại
 
-**1.96.0** — đã merge vào `main` (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở
+**1.97.0** — đã merge vào `main` (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở
 badge góc màn hình + `/api/health`).
 
-## Cập nhật gần nhất (PR #212, nhánh `claude/chao-ban-oo5ijl`)
+## Cập nhật gần nhất (PR #214, nhánh `claude/chao-ban-oo5ijl`)
+
+Theo yêu cầu: thêm lớp bảo mật thứ 2 cho API xác thực ngoài (PR #212) — cấu hình theo TỪNG API key danh
+sách IP được phép gọi.
+
+- `lib/externalAuth.js`: `isIpAllowed()`/`parseAllowedIpsInput()` — so khớp IPv4 chính xác hoặc dải CIDR
+  (`x.x.x.x/y`), IPv6 so khớp chính xác; validate định dạng ngay khi admin nhập, từ chối rule sai để
+  tránh admin tưởng đã giới hạn IP nhưng rule thực chất vô nghĩa.
+- `routes/externalAuthAdmin.js`: `POST /api/admin/external-api-keys` nhận thêm `allowedIps` khi tạo key;
+  route mới `POST /api/admin/external-api-keys/:id/allowed-ips` để sửa lại sau (chỉ sửa được key đang
+  hoạt động, không sửa được key đã thu hồi).
+- `routes/externalAuthVerify.js`: middleware `requireExternalApiKey` (dùng chung cho cả
+  `POST /verify-credentials` lẫn `GET /users`) trả `403` nếu IP gọi thật không nằm trong `allowedIps` của
+  key — key đúng nhưng gọi từ IP lạ vẫn bị chặn.
+- Admin UI (Hệ Thống → Quản Trị → API Xác Thực Ngoài): ô nhập IP cho phép khi tạo key, nút "Sửa IP" cho
+  từng dòng, cột hiển thị danh sách hoặc "Mọi IP".
+- **Tương thích ngược**: `allowedIps` rỗng (mặc định, gồm mọi key tạo TRƯỚC PR này) = không hạn chế IP,
+  hành vi y hệt trước đây — không cần thao tác gì thêm cho các key đã cấp.
+
+**Deploy impact:** không đổi `server/sql/schema.sql`, không thêm biến môi trường mới, không thêm
+dependency mới — chỉ copy code + `pm2 restart`.
+
+Đã kiểm thử: `tests/test-external-auth.js` thêm 5 kịch bản (hàm thuần isIpAllowed/parseAllowedIpsInput,
+tạo key với IP sai định dạng, key giới hạn IP chặn/cho qua đúng IP, key không cấu hình không bị ảnh
+hưởng, sửa IP: chặn non-admin/key đã thu hồi/id sai) — 25/25 pass. Toàn bộ 41 file `tests/test-*.js` — 0
+lỗi, không regression.
+
+## Trước đó (PR #212, nhánh `claude/chao-ban-oo5ijl`)
 
 Theo yêu cầu: viết API cho phép ứng dụng NGOÀI hệ thống xác thực tài khoản HCRC Workspace (cấp API key,
 trả về thành công/thất bại), sau đó bổ sung thêm API đồng bộ thông tin danh bạ (username/tên/số điện
