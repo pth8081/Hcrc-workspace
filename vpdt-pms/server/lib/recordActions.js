@@ -12,6 +12,7 @@ const { HttpError } = require('./httpErrors');
 const { scopeAllows, OFFICE_SUBTYPE_TO_PERM_FLAG, normalizeReportEntryPayload, buildEffectiveContractApprovalWorkflowServer, sanitizeUniformItems, sanitizeBudgetLines, getBudgetTemplateCustomFields, sanitizeBudgetCustomFields, resolveTrainingInstructorUsername, normalizeInviteList, normalizeTrainingPlanFields, normalizeOnboardingPathFields, SUBMISSION_APPROVAL_LEVELS, buildEffectiveSubmissionWorkflowServer, validateRequiredCustomData, assertUploadedFileUrl, assertUploadedFileUrlList } = require('./createValidation');
 const { validateRegistrationItems: validateVppRegItems, calcItemsTotal: calcVppItemsTotal } = require('./vppCatalog');
 const { sanitizePriceFileItems, sanitizeColumnLabels } = require('./priceFileParser');
+const { materializeReportPeriodPdf, writeMergedPdfFile } = require('./reportPdfMerge');
 
 function nowVN() {
   return new Date().toLocaleString('vi-VN');
@@ -1886,12 +1887,14 @@ function mergeReportPeriod(user, period, orderedEntryIds, entries) {
   }
   const ids = Array.isArray(orderedEntryIds) ? [...new Set(orderedEntryIds)] : [];
   if (!ids.length) throw new HttpError(400, 'Vui lòng chọn ít nhất 1 báo cáo để tổng hợp');
-  const periodEntries = (entries || []).filter(e => e.periodId === period.id && e.status === 'SUBMITTED');
+  // entryType==='PDF' KHÔNG có parsedSlides (bị loại ở đây, tổng hợp riêng qua mergeReportPeriodPdf() ở
+  // dưới, dựng ra period.pdfCompilation TÁCH HẲN khỏi period.compilation) — nếu lọt qua đây sẽ sinh ra 1
+  // slide DEPT không có nội dung nào theo sau (parsedSlides=[]), vô nghĩa.
+  const periodEntries = (entries || []).filter(e => e.periodId === period.id && e.status === 'SUBMITTED' && e.entryType !== 'PDF');
   // Mỗi báo cáo (1 người/1 kỳ) giờ dựng ra NHIỀU slide theo đúng khuôn mẫu PowerPoint công ty cung cấp
   // (Phòng ban -> Bảng Công Việc Tuần Này -> Bảng Kế Hoạch Tiếp Theo -> Số Liệu -> tối đa 2 slide Khác)
   // thay vì 1 người = 1 slide như trước — slide nào không có nội dung thì bỏ qua, không sinh trang trống.
-  // Báo cáo mode FILE_UPLOAD (đính nguyên 1 tệp đã làm sẵn, không gõ lại) chỉ sinh đúng 1 slide tham
-  // chiếu tới tệp đó. Trang bìa "BÁO CÁO TUẦN" chỉ sinh 1 lần duy nhất cho cả bản tổng hợp.
+  // Trang bìa "BÁO CÁO TUẦN" chỉ sinh 1 lần duy nhất cho cả bản tổng hợp.
   //
   // Gom TRƯỚC theo phòng ban (không sinh slide xen kẽ theo đúng thứ tự orderedEntryIds như trước) — mỗi
   // phòng chỉ ra ĐÚNG 1 slide chia (kind DEPT, tên phòng thuần, không kèm tên người) đứng trước TOÀN BỘ
@@ -1937,6 +1940,127 @@ function mergeReportPeriod(user, period, orderedEntryIds, entries) {
     updatedBy: null, updatedByName: null, updatedAt: null,
     publishedBy: null, publishedByName: null, publishedAt: null
   };
+  return period;
+}
+
+// ===== Tổng hợp/phát hành bằng GHÉP FILE PDF THẬT (entryType==='PDF') — TÁCH RIÊNG hoàn toàn khỏi
+// compilation ở trên (dựng từ parsedSlides .pptx), y hệt tinh thần taskCompilation: 2 bên không đè lên
+// nhau. Khác compilation, pdfCompilation ghép NGUYÊN VẸN từng trang PDF gốc (không "làm phẳng" qua
+// html2canvas như downloadPrPdf() ở client) — giữ đúng định dạng/font/vector gốc. =====
+//
+// Bước 1 — mergeReportPeriodPdf(): ĐỒNG BỘ, không đụng ổ đĩa — chỉ ghi lại "kế hoạch trang" (thứ tự
+// cuối cùng người tổng hợp đã chọn/sắp/xoá) dạng JSON thuần vào period.pdfCompilation.pages. Gọi lại hàm
+// này nhiều lần (đổi entries chọn, kéo-thả sắp lại trang, xoá bớt trang) CHÍNH LÀ cách "sửa" duy nhất —
+// không có route "update" riêng như updateReportCompilation(), vì bước này không có I/O tốn kém nào cần
+// tránh gọi lại. Việc ép buộc sourcePageIndex khớp số trang THẬT của file chỉ xảy ra ở bước 2 (publish)
+// bên dưới, vì ở đây server chưa có lý do gì phải mở file — chỉ client (qua pdf.js) mới biết số trang
+// lúc này.
+//
+// entries: TOÀN BỘ reportEntries hiện có — CALLER tự đọc rồi truyền vào, giữ đúng nguyên tắc chung.
+function mergeReportPeriodPdf(user, period, orderedEntryIds, pages, entries) {
+  if (!canAggregateReports(user)) {
+    throw new HttpError(403, 'Bạn không có quyền tổng hợp Báo Cáo Định Kỳ');
+  }
+  if (!isReportPeriodClosed(period)) {
+    throw new HttpError(409, 'Kỳ báo cáo chưa kết thúc — chưa thể tổng hợp');
+  }
+  if (period.pdfCompilation?.status === 'PUBLISHED') {
+    throw new HttpError(409, 'Bản tổng hợp PDF đã phát hành — vui lòng "Hủy phát hành" trước khi tổng hợp lại');
+  }
+  const ids = Array.isArray(orderedEntryIds) ? [...new Set(orderedEntryIds)] : [];
+  if (!ids.length) throw new HttpError(400, 'Vui lòng chọn ít nhất 1 báo cáo PDF để tổng hợp');
+  const periodEntries = (entries || []).filter(e => e.periodId === period.id && e.status === 'SUBMITTED' && e.entryType === 'PDF');
+  const entriesById = new Map(periodEntries.map(e => [e.id, e]));
+
+  // Thứ tự phòng ban: ĐÚNG thuật toán gom-theo-phòng đã dùng ở mergeReportPeriod() bên trên (thứ tự
+  // phòng = lần đầu xuất hiện trong danh sách entry đã chọn).
+  const deptOrder = [];
+  const seenDept = new Set();
+  ids.forEach((id) => {
+    const entry = entriesById.get(id);
+    if (!entry) throw new HttpError(400, `Báo cáo PDF #${id} không hợp lệ (không thuộc kỳ này/chưa gửi/không phải dạng PDF)`);
+    if (!seenDept.has(entry.dept)) { seenDept.add(entry.dept); deptOrder.push(entry.dept); }
+  });
+
+  const list = Array.isArray(pages) ? pages : [];
+  if (!list.length) throw new HttpError(400, 'Bản tổng hợp PDF cần có ít nhất 1 trang');
+  // Điểm bảo mật bắt buộc: client chỉ gửi lên {sourceEntryId, sourcePageIndex} — sourceDept/
+  // sourceCreatorName/sourceFileUrl/sourceFileName LUÔN dựng lại từ entry đã xác thực ở trên, TUYỆT ĐỐI
+  // không tin trực tiếp field nào từ client cho các giá trị này (nếu không, 1 phiên tổng hợp bị lộ có
+  // thể trỏ sourceFileUrl sang bất kỳ tệp nào server đọc được khi publish).
+  const cleanedPages = list.map((p, idx) => {
+    const entry = entriesById.get(p?.sourceEntryId);
+    if (!entry) throw new HttpError(400, `Trang thứ ${idx + 1} tham chiếu tới báo cáo không hợp lệ`);
+    const pageIndex = Number(p?.sourcePageIndex);
+    if (!Number.isInteger(pageIndex) || pageIndex < 0) {
+      throw new HttpError(400, `Trang thứ ${idx + 1} có số trang nguồn không hợp lệ`);
+    }
+    return {
+      order: idx + 1,
+      sourceEntryId: entry.id,
+      sourceDept: entry.dept,
+      sourceCreatorName: entry.creatorName,
+      sourceFileUrl: entry.fileUrl,
+      sourceFileName: entry.fileName,
+      sourcePageIndex: pageIndex
+    };
+  });
+
+  period.pdfCompilation = {
+    status: 'MERGED',
+    deptOrder,
+    pages: cleanedPages,
+    compiledBy: user.username, compiledByName: user.name, compiledAt: nowVN(),
+    publishedBy: null, publishedByName: null, publishedAt: null,
+    publishedFileUrl: null, publishedFileName: null
+  };
+  return period;
+}
+
+// Bước 2 — publishReportPeriodPdf(): ASYNC — chạy đọc/ghép/đóng dấu file PDF THẬT (lib/reportPdfMerge.js)
+// NGAY TRONG transaction khoá của withLockedRecordForCollection('reportPeriods', id, ...): collection
+// này nằm trong MIGRATED_COLLECTIONS (lib/recordStore.js) nên caller thực chất chạy qua
+// withLockedRecordById() — hàm đó `await mutatorFn(item)` trong 1 transaction SQL thật (UPDLOCK,
+// HOLDLOCK), nên mutator async ở đây AN TOÀN: bản thân khoá dòng đã chặn hoàn toàn race giữa 2 lượt
+// merge/publish chồng nhau trên CÙNG 1 kỳ báo cáo, không cần cơ chế khoá lạc quan (kiểu so sánh
+// compiledAt) nào thêm. entries: CALLER đọc trước khi vào khoá (đúng nguyên tắc chung — 1 độ trễ nhỏ
+// giữa lúc đọc entries và lúc khoá reportPeriods là chấp nhận được, đối xứng với cách mergeReportPeriod()
+// ở trên cũng đọc entries trước khi vào khoá).
+async function publishReportPeriodPdf(user, period, entries) {
+  if (!canAggregateReports(user)) {
+    throw new HttpError(403, 'Bạn không có quyền tổng hợp Báo Cáo Định Kỳ');
+  }
+  if (!period.pdfCompilation || period.pdfCompilation.status !== 'MERGED') {
+    throw new HttpError(409, 'Chưa có bản tổng hợp PDF ở trạng thái sẵn sàng phát hành');
+  }
+  const { bytes } = await materializeReportPeriodPdf(period.pdfCompilation.pages, entries);
+  const { fileUrl, fileName } = writeMergedPdfFile(bytes, period.name);
+  period.pdfCompilation.status = 'PUBLISHED';
+  period.pdfCompilation.publishedBy = user.username;
+  period.pdfCompilation.publishedByName = user.name;
+  period.pdfCompilation.publishedAt = nowVN();
+  period.pdfCompilation.publishedFileUrl = fileUrl;
+  period.pdfCompilation.publishedFileName = fileName;
+  return period;
+}
+
+function unpublishReportPeriodPdf(user, period) {
+  if (!canAggregateReports(user)) {
+    throw new HttpError(403, 'Bạn không có quyền tổng hợp Báo Cáo Định Kỳ');
+  }
+  if (!period.pdfCompilation || period.pdfCompilation.status !== 'PUBLISHED') {
+    throw new HttpError(409, 'Bản tổng hợp PDF này chưa phát hành');
+  }
+  period.pdfCompilation.status = 'MERGED';
+  period.pdfCompilation.publishedBy = null;
+  period.pdfCompilation.publishedByName = null;
+  period.pdfCompilation.publishedAt = null;
+  // File vật lý cũ CỐ Ý để lại mồ côi trên đĩa — đúng quy ước hiện có toàn hệ thống (không có action nào
+  // proactively unlink file khi bản ghi chỉ ĐỔI TRẠNG THÁI, chỉ dọn thật khi kỳ báo cáo bị đưa vào Thùng
+  // Rác rồi xoá vĩnh viễn — xem unlinkUnreferencedUploads()/collectRecordFileUrls() ở lib/recordStore.js,
+  // quét theo regex chuỗi bất kỳ khớp "/uploads/..." nên đã tự phủ luôn publishedFileUrl, không cần sửa).
+  period.pdfCompilation.publishedFileUrl = null;
+  period.pdfCompilation.publishedFileName = null;
   return period;
 }
 
@@ -3968,6 +4092,7 @@ module.exports = {
   closeVppPeriod, submitVppRegistration, updateVppRegistrationDraft,
   closeReportPeriod, submitReportEntry, updateReportEntryDraft,
   mergeReportPeriod, mergeReportPeriodByTasks, updateReportCompilation, publishReportPeriod, unpublishReportPeriod,
+  mergeReportPeriodPdf, publishReportPeriodPdf, unpublishReportPeriodPdf,
   canManageTraining, canManageTrainingClass, cancelTrainingRegistration, approveCancelTrainingRegistration,
   rejectCancelTrainingRegistration, markTrainingDocumentViewed, setTrainingRegistrationResult, confirmCareerPathForEmployee,
   bulkRegisterTrainingClass, editTrainingClass, startOfflineTrainingClass, endOfflineTrainingClass, editTrainingPlan,

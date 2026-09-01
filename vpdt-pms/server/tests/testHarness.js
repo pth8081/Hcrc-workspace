@@ -124,6 +124,13 @@ function buildActionHandlers(state) {
     'reportPeriods:unpublish': (u, item) => recordActions.unpublishReportPeriod(u, item),
     'reportEntries:submit': (u, item) => recordActions.submitReportEntry(u, item, state.reportPeriods.find(p => p.id === item.periodId)),
     'reportEntries:update': (u, item, body) => recordActions.updateReportEntryDraft(u, item, body, state.reportPeriods.find(p => p.id === item.periodId)),
+    // Ghép file PDF thật (entryType==='PDF') — publishPdf THẬT SỰ đọc/ghi file dưới server/uploads/ (xem
+    // lib/reportPdfMerge.js), hoạt động bình thường qua mock này vì đó là I/O đĩa trực tiếp (fs/path),
+    // không phụ thuộc SQL Server — test-periodic-report-pdf.js tự chuẩn bị file PDF thật trong
+    // server/uploads/ trước khi gọi các action này.
+    'reportPeriods:mergePdf': (u, item, body) => recordActions.mergeReportPeriodPdf(u, item, body && body.entryIds, body && body.pages, state.reportEntries),
+    'reportPeriods:publishPdf': (u, item) => recordActions.publishReportPeriodPdf(u, item, state.reportEntries),
+    'reportPeriods:unpublishPdf': (u, item) => recordActions.unpublishReportPeriodPdf(u, item),
 
     // ===== GIẤY PHÉP =====
     'licenses:approve': (u, item) => recordActions.approveLicense(u, item),

@@ -1381,6 +1381,57 @@ router.post('/reportPeriods/:id/unpublish', async (req, res) => {
   }
 });
 
+// ===== Tổng hợp/phát hành bằng GHÉP FILE PDF THẬT (reportEntries.entryType==='PDF') — 3 route SONG
+// SONG với merge/compilation/publish/unpublish ở trên (dựng từ .pptx), xem chú thích đầu
+// mergeReportPeriodPdf() ở lib/recordActions.js. =====
+router.post('/reportPeriods/:id/mergePdf', async (req, res) => {
+  const itemId = Number(req.params.id);
+  if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
+  try {
+    const { freshUser } = await getFreshUser(req);
+    const entries = await getAllForCollection('reportEntries');
+    const result = await withLockedRecordForCollection('reportPeriods', itemId, (item) =>
+      recordActions.mergeReportPeriodPdf(freshUser, item, req.body?.entryIds, req.body?.pages, entries)
+    );
+    res.json({ ok: true, item: result });
+  } catch (err) {
+    handleError(res, `reportPeriods/${req.params.id}/mergePdf`, err);
+  }
+});
+
+// publish thật sự ghép byte PDF (đọc file/pdf-lib/đóng dấu) NGAY TRONG transaction khoá của
+// withLockedRecordForCollection — collection này nằm trong MIGRATED_COLLECTIONS nên mutator chạy qua
+// withLockedRecordById() (lib/recordStore.js), có `await mutatorFn(item)` trong 1 transaction SQL thật
+// (UPDLOCK, HOLDLOCK) — mutator async ở đây an toàn, tự chặn race giữa 2 lượt merge/publish chồng nhau.
+router.post('/reportPeriods/:id/publishPdf', async (req, res) => {
+  const itemId = Number(req.params.id);
+  if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
+  try {
+    const { freshUser } = await getFreshUser(req);
+    const entries = await getAllForCollection('reportEntries');
+    const result = await withLockedRecordForCollection('reportPeriods', itemId, (item) =>
+      recordActions.publishReportPeriodPdf(freshUser, item, entries)
+    );
+    res.json({ ok: true, item: result });
+  } catch (err) {
+    handleError(res, `reportPeriods/${req.params.id}/publishPdf`, err);
+  }
+});
+
+router.post('/reportPeriods/:id/unpublishPdf', async (req, res) => {
+  const itemId = Number(req.params.id);
+  if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
+  try {
+    const { freshUser } = await getFreshUser(req);
+    const result = await withLockedRecordForCollection('reportPeriods', itemId, (item) =>
+      recordActions.unpublishReportPeriodPdf(freshUser, item)
+    );
+    res.json({ ok: true, item: result });
+  } catch (err) {
+    handleError(res, `reportPeriods/${req.params.id}/unpublishPdf`, err);
+  }
+});
+
 // POST /api/records/reportEntries/:id/submit — "Gửi": NHÁP -> SUBMITTED, chốt hẳn.
 router.post('/reportEntries/:id/submit', async (req, res) => {
   const itemId = Number(req.params.id);

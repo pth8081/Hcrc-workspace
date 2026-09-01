@@ -29,7 +29,7 @@ const { getAllForCollection, getAllTrashItemsCached } = require('./recordStore')
 const { getAllAppData } = require('./appData');
 const {
   canDownloadRecordFile, canViewInternalPost,
-  canViewItPriceApproval, canViewReportEntry, canSeeReportCompilation, filterRecruitmentReferralsForUser,
+  canViewItPriceApproval, canViewReportEntry, canSeeReportCompilation, canSeeReportPdfCompilation, filterRecruitmentReferralsForUser,
   canViewLicense, canViewItServiceRenewal,
   canViewDoc, canViewSubmission, canViewContract, canViewCarReg, canViewOfficeReq
 } = require('./recordViewScope');
@@ -120,7 +120,10 @@ async function findOwningRecord(fileUrl) {
   if (priceItem) return { itPrice: true, item: priceItem };
   const entry = (reportEntries || []).find(e => e.fileUrl === fileUrl);
   if (entry) return { reportEntry: true, entry };
-  const period = (reportPeriods || []).find(p => (p.compilation?.slides || []).some(s => s.fileUrl === fileUrl));
+  const period = (reportPeriods || []).find(p =>
+    (p.compilation?.slides || []).some(s => s.fileUrl === fileUrl) ||
+    p.pdfCompilation?.publishedFileUrl === fileUrl
+  );
   if (period) return { reportPeriod: true, period };
   const referral = (recruitmentReferrals || []).find(r => r.cvFileUrl === fileUrl);
   if (referral) return { recruitment: true, referral };
@@ -204,7 +207,7 @@ async function authorizeFileAccess(user, fileUrl, mode) {
     return canViewItPriceApproval(user, owning.item, appData);
   }
   if (owning.reportEntry) return canViewReportEntry(user, owning.entry);
-  if (owning.reportPeriod) return canSeeReportCompilation(user, owning.period);
+  if (owning.reportPeriod) return canSeeReportCompilation(user, owning.period) || canSeeReportPdfCompilation(user, owning.period);
   if (owning.recruitment) return filterRecruitmentReferralsForUser([owning.referral], user).length > 0;
   if (owning.license) return canViewLicense(user, owning.item);
   if (owning.itServiceRenewal) return canViewItServiceRenewal(user);
