@@ -35,8 +35,29 @@ async function getAllTasks() {
 const TASKS_CACHE_TTL_MS = parseInt(process.env.APPDATA_CACHE_TTL_MS || '3000', 10);
 let tasksCache = null; // { value, expiresAt }
 
+// PM2 cluster mode: mỗi tiến trình giữ 1 bản tasksCache TRONG BỘ NHỚ riêng — cùng lý do/khuôn đã vá cho
+// lib/appData.js (xem giải thích đầy đủ ở đó): ghi ở tiến trình A chỉ tự xoá cache của CHÍNH tiến trình
+// A, các tiến trình B/C/D... vẫn phục vụ danh sách Công việc cũ tới hết TTL. Dùng lại đúng kênh IPC
+// process:msg có sẵn của PM2 để phát tín hiệu xoá cache ngay khi có 1 tiến trình ghi.
+const TASKS_CACHE_INVALIDATE_CHANNEL = 'tasksCacheInvalidate';
+
+if (typeof process.on === 'function') {
+  process.on('message', (packet) => {
+    if (packet && packet.type === 'process:msg' && packet.data && packet.data.channel === TASKS_CACHE_INVALIDATE_CHANNEL) {
+      tasksCache = null;
+    }
+  });
+}
+
 function invalidateTasksCache() {
   tasksCache = null;
+  if (typeof process.send === 'function') {
+    try {
+      process.send({ type: 'process:msg', data: { channel: TASKS_CACHE_INVALIDATE_CHANNEL } });
+    } catch (err) {
+      console.error('⛔ Không phát được tín hiệu xoá tasksCache liên tiến trình:', err.message);
+    }
+  }
 }
 
 async function getAllTasksCached() {

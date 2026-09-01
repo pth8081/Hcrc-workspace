@@ -85,12 +85,16 @@ async function checkLicenseExpiryReminders() {
       if (diffDays === null) continue;
       if (!Array.isArray(l.notifiedThresholds)) l.notifiedThresholds = [];
 
+      // Cô lập lỗi theo TỪNG bản ghi — cùng lý do đã vá ở jobs/contractExpiryReminder.js.
+      try {
+
       let licenseChanged = false;
 
-      for (const threshold of thresholds) {
-        if (diffDays > threshold) continue;
-        if (l.notifiedThresholds.includes(threshold)) continue;
-
+      // Chỉ gửi ĐÚNG 1 email/lượt chạy cho ngưỡng gần nhất — cùng lý do đã vá ở
+      // jobs/contractExpiryReminder.js.
+      const newlyCrossedThresholds = thresholds.filter(t => diffDays <= t && !l.notifiedThresholds.includes(t));
+      if (newlyCrossedThresholds.length) {
+        const threshold = Math.min(...newlyCrossedThresholds);
         const creator = users.find(u => u.username === l.creator);
         const label = threshold === 0
           ? (diffDays < 0 ? `đã hết hạn ${Math.abs(diffDays)} ngày` : 'hết hạn hôm nay')
@@ -156,7 +160,7 @@ async function checkLicenseExpiryReminders() {
         });
 
         if (!totalSendFailure) {
-          l.notifiedThresholds.push(threshold);
+          l.notifiedThresholds.push(...newlyCrossedThresholds);
           licenseChanged = true;
         }
       }
@@ -166,6 +170,9 @@ async function checkLicenseExpiryReminders() {
           item.notifiedThresholds = l.notifiedThresholds;
           return item;
         });
+      }
+      } catch (err) {
+        console.error(`⛔ [Nhắc hạn giấy phép] Lỗi khi xử lý giấy phép ${l.code || l.id}, bỏ qua và tiếp tục:`, err.message);
       }
     }
   } catch (err) {

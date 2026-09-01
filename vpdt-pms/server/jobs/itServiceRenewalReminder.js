@@ -80,12 +80,17 @@ async function checkItServiceRenewalReminders() {
       if (diffDays === null) continue;
       if (!Array.isArray(item.notifiedThresholds)) item.notifiedThresholds = [];
 
+      // Cô lập lỗi theo TỪNG bản ghi — 1 lỗi bất kỳ không được làm dừng cả vòng lặp, bỏ sót các bản ghi
+      // còn lại (cùng lý do đã vá ở jobs/contractExpiryReminder.js).
+      try {
+
       let itemChanged = false;
 
-      for (const threshold of thresholds) {
-        if (diffDays > threshold) continue;
-        if (item.notifiedThresholds.includes(threshold)) continue;
-
+      // Chỉ gửi ĐÚNG 1 email/lượt chạy cho ngưỡng gần nhất (cùng lý do đã vá ở
+      // jobs/contractExpiryReminder.js — tránh gửi trùng nhiều email khi "nhảy cóc" qua nhiều ngưỡng).
+      const newlyCrossedThresholds = thresholds.filter(t => diffDays <= t && !item.notifiedThresholds.includes(t));
+      if (newlyCrossedThresholds.length) {
+        const threshold = Math.min(...newlyCrossedThresholds);
         const creator = users.find(u => u.username === item.creator);
         const label = threshold === 0
           ? (diffDays < 0 ? `đã hết hạn ${Math.abs(diffDays)} ngày` : 'hết hạn hôm nay')
@@ -151,7 +156,7 @@ async function checkItServiceRenewalReminders() {
         });
 
         if (!totalSendFailure) {
-          item.notifiedThresholds.push(threshold);
+          item.notifiedThresholds.push(...newlyCrossedThresholds);
           itemChanged = true;
         }
       }
@@ -161,6 +166,9 @@ async function checkItServiceRenewalReminders() {
           record.notifiedThresholds = item.notifiedThresholds;
           return record;
         });
+      }
+      } catch (err) {
+        console.error(`⛔ [Nhắc hạn dịch vụ CNTT] Lỗi khi xử lý bản ghi ${item.name || item.id}, bỏ qua và tiếp tục:`, err.message);
       }
     }
   } catch (err) {

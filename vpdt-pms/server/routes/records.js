@@ -597,6 +597,18 @@ router.post('/tasks/:id/delete', async (req, res) => {
 function assertAdminForDelete(user) {
   if (!user.perms?.admin) throw new HttpError(403, 'Chỉ Quản Trị Viên mới có quyền xóa dữ liệu ở module này');
 }
+// Chặn xoá Hợp đồng/Mua Bán-Sửa Chữa-Đầu Tư nếu còn Đề nghị thanh toán tham chiếu tới hồ sơ này (xem
+// startContractPayment()/startOfficePayment() ở lib/recordActions.js, gắn sourceModule/sourceId khi
+// tạo) — trước đây không kiểm tra: xoá xong, đề nghị thanh toán vẫn còn nguyên nhưng sourceId không
+// còn trỏ tới bản ghi sống nào, liên kết "xem hồ sơ nguồn" treo tới khi khôi phục từ Thùng Rác. Khớp
+// đúng tinh thần assertCanDeleteMinutes() (chặn xoá Biên bản họp khi còn Công việc tham chiếu).
+async function assertNoReferencingPaymentRequests(sourceModule, itemId, label) {
+  const paymentRequests = await getAllForCollection('paymentRequests');
+  const referencing = paymentRequests.filter(pr => pr.sourceModule === sourceModule && pr.sourceId === itemId);
+  if (referencing.length) {
+    throw new HttpError(409, `Không thể xóa ${label} này vì còn ${referencing.length} đề nghị thanh toán đang tham chiếu tới. Vui lòng xử lý/xóa các đề nghị thanh toán liên quan trước.`);
+  }
+}
 async function deleteAdminOnly(req, res, collection) {
   const itemId = Number(req.params.id);
   if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
@@ -669,6 +681,9 @@ router.post('/contracts/:id/delete', async (req, res) => {
         ? contracts.filter(c => c.id === itemId || c.rootContractId === itemId).map(c => c.id)
         : [itemId];
       for (const id of memberIds) {
+        await assertNoReferencingPaymentRequests('CONTRACT', id, 'hợp đồng/phụ lục');
+      }
+      for (const id of memberIds) {
         await deleteRecordForCollection('contracts', id, () => assertAdminForDelete(freshUser), { username: freshUser.username, name: freshUser.name });
       }
     });
@@ -677,7 +692,25 @@ router.post('/contracts/:id/delete', async (req, res) => {
     handleError(res, `contracts/${req.params.id}/delete`, err);
   }
 });
-router.post('/officeReqs/:id/delete', (req, res) => deleteAdminOnly(req, res, 'officeReqs'));
+// Không dùng deleteAdminOnly() chung — cần đọc lại hồ sơ TRƯỚC để biết subType (Mua Bán/Sửa Chữa/Đầu
+// Tư — đây chính là sourceModule startOfficePayment() ghi vào paymentRequests khi tạo) rồi mới kiểm
+// tra tham chiếu, cùng lý do/cơ chế với contracts/:id/delete ở trên.
+router.post('/officeReqs/:id/delete', async (req, res) => {
+  const itemId = Number(req.params.id);
+  if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
+  try {
+    const { freshUser } = await getFreshUser(req);
+    assertAdminForDelete(freshUser);
+    const officeReqs = await getAllForCollection('officeReqs');
+    const target = officeReqs.find(r => r.id === itemId);
+    if (!target) throw new HttpError(404, 'Không tìm thấy hồ sơ');
+    await assertNoReferencingPaymentRequests(target.subType, itemId, 'đề xuất');
+    await deleteRecordForCollection('officeReqs', itemId, () => assertAdminForDelete(freshUser), { username: freshUser.username, name: freshUser.name });
+    res.json({ ok: true });
+  } catch (err) {
+    handleError(res, `officeReqs/${req.params.id}/delete`, err);
+  }
+});
 router.post('/carRegs/:id/delete', (req, res) => deleteAdminOnly(req, res, 'carRegs'));
 
 // Lái xe được phân công (assignedDriverUsername, gán lúc duyệt — xem routes/workflow.js) tự xác nhận
@@ -701,7 +734,28 @@ router.post('/reportPeriods/:id/delete', (req, res) => deleteAdminOnly(req, res,
 router.post('/reportEntries/:id/delete', (req, res) => deleteAdminOnly(req, res, 'reportEntries'));
 router.post('/budgetPeriods/:id/delete', (req, res) => deleteAdminOnly(req, res, 'budgetPeriods'));
 router.post('/budgetEntries/:id/delete', (req, res) => deleteAdminOnly(req, res, 'budgetEntries'));
-router.post('/budgetTemplates/:id/delete', (req, res) => deleteAdminOnly(req, res, 'budgetTemplates'));
+// Không dùng deleteAdminOnly() chung — chặn xoá mẫu ngân sách còn đang được 1 kỳ ngân sách tham chiếu
+// (budgetPeriod.templateId). Trước đây xoá được vô điều kiện: getBudgetTemplateCustomFields() (xem
+// lib/createValidation.js) không tìm thấy template sẽ âm thầm fallback về 4 cột lõi mặc định — lần
+// sửa/lưu NHÁP tiếp theo (sanitizeBudgetLines) tính lại "extra" theo bộ cột rỗng đó, xoá sạch dữ liệu
+// cột tuỳ biến phòng ban đã nhập mà không có cảnh báo nào.
+router.post('/budgetTemplates/:id/delete', async (req, res) => {
+  const itemId = Number(req.params.id);
+  if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
+  try {
+    const { freshUser } = await getFreshUser(req);
+    assertAdminForDelete(freshUser);
+    const periods = await getAllForCollection('budgetPeriods');
+    const referencing = periods.filter(p => p.templateId === itemId);
+    if (referencing.length) {
+      throw new HttpError(409, `Không thể xóa mẫu ngân sách này vì còn ${referencing.length} kỳ ngân sách đang sử dụng. Vui lòng đổi mẫu cho các kỳ đó trước.`);
+    }
+    await deleteRecordForCollection('budgetTemplates', itemId, () => assertAdminForDelete(freshUser), { username: freshUser.username, name: freshUser.name });
+    res.json({ ok: true });
+  } catch (err) {
+    handleError(res, `budgetTemplates/${req.params.id}/delete`, err);
+  }
+});
 
 // ===================== VẬN HÀNH (operationOrders / operationStoreOpenings / operationRepairs) =====================
 router.post('/operationOrders/:id/delete', (req, res) => deleteAdminOnly(req, res, 'operationOrders'));

@@ -175,7 +175,9 @@ function validateRegistrationItems(rawItems, catalogItems) {
   const cleaned = [];
   for (const it of items) {
     const name = String(it?.name || '').trim();
-    const qty = Number(it?.qty);
+    // Vật phẩm VPP là vật lý (hộp giấy, bút...) — số lượng lẻ (VD 2.5) vô nghĩa, làm sai lệch báo cáo
+    // tổng hợp theo phòng ban. Ép về số nguyên, cùng cách sanitizeUniformItems() đang làm cho Đồng Phục.
+    const qty = Math.floor(Number(it?.qty));
     if (!name || !Number.isFinite(qty) || qty <= 0) continue;
     const cat = catalogByName.get(name);
     if (!cat) throw new HttpError(400, `Mặt hàng "${name}" không có trong danh mục kỳ này`);
