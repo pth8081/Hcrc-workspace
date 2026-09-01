@@ -1,9 +1,48 @@
 # Phiên bản hiện tại
 
-**1.97.2** — đã merge vào `main` (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở
+**1.98.0** — đã merge vào `main` (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở
 badge góc màn hình + `/api/health`).
 
-## Cập nhật gần nhất (PR #218, nhánh `claude/chao-ban-oo5ijl`)
+## Cập nhật gần nhất (PR #220, nhánh `claude/chao-ban-oo5ijl`)
+
+Theo yêu cầu: module "Ngân Sách" (con của "Tổng Hợp") xoá hết cấu trúc tab con cũ, thay bằng đúng 3 tab:
+
+1. **✅ Ngân Sách Phê Duyệt** — phòng ban lập ngân sách, gửi Trưởng phòng duyệt (cột: STT/Hạng mục/Mô tả/
+   Tổng tiền/Loại ngân sách OPEX-CAPEX).
+2. **💳 Ngân Sách Thực Hiện** — phòng ban ghi nhận chi tiêu THỰC TẾ cùng kỳ, cùng cấu trúc cột, cũng qua
+   Trưởng phòng duyệt (đảm bảo số liệu đối chiếu đáng tin).
+3. **📊 Tổng Hợp** — so sánh Phê Duyệt vs Thực Hiện: tổng theo phòng ban, theo OPEX/CAPEX, chi tiết theo
+   từng hạng mục (đối chiếu theo tên trong cùng phòng ban), có Chênh Lệch + % Sử Dụng.
+
+"Tạo Kỳ Ngân Sách + Mẫu Ngân Sách" (trước đây là 1 sub-tab riêng) chuyển vào modal **"⚙️ Quản Lý Kỳ &
+Mẫu"** (chỉ hiện với người có quyền `budgetManage`) để module đúng 3 tab con.
+
+- **Thiết kế**: 2 tab Phê Duyệt/Thực Hiện dùng CHUNG 1 collection `budgetEntries`, chung state machine
+  DRAFT→PENDING→APPROVED/REJECTED, chung engine duyệt theo phòng ban (`budgetDeptWorkflows`), chung
+  Approval Hub — chỉ thêm 1 field phân loại `entryKind: 'PLAN' | 'ACTUAL'` (mặc định `'PLAN'`, tương
+  thích ngược 100% với dữ liệu cũ).
+- **Server** (`lib/createValidation.js`): ràng buộc "1 bản/phòng ban/kỳ" (`getLockKey` + kiểm tra trùng
+  lặp của `budgetEntries`) mở rộng thêm `entryKind` vào khoá — 1 phòng ban giờ lập được CẢ bản Phê Duyệt
+  LẪN bản Thực Hiện trong cùng 1 kỳ mà không đụng khoá của nhau, vẫn chặn đúng trùng lặp trong cùng loại.
+- **Client** (`public/index.html`): các hàm dùng chung cho 2 tab (`renderBudgetEntrySubTab`,
+  `saveBudgetEntryDraft`, `submitCurrentBudgetEntry`, `renderBudgetEntryList`, ...) tham số hoá theo
+  `kind` thay vì nhân đôi code — mọi id DOM lặp lại giữa 2 tab dùng hậu tố `_PLAN`/`_ACTUAL`.
+  `lib/recordActions.js`/`lib/recordViewScope.js`/`lib/workflowEngine.js` không cần sửa — đã generic
+  theo record, hoạt động đúng cho cả 2 `entryKind`.
+
+**Deploy impact:** không đổi `server/sql/schema.sql` (`entryKind` là field JSON tự do trong payload đã
+lưu, không cần cột/index mới), không thêm biến môi trường mới, không thêm dependency mới — chỉ copy code
++ `pm2 restart`.
+
+Đã kiểm thử: cập nhật `tests/test-office-budget.js` (thêm kịch bản lập/gửi/duyệt bản Thực Hiện cho cùng
+kỳ+phòng ban — xác nhận KHÔNG bị chặn trùng với bản Phê Duyệt, + kịch bản Tổng Hợp so sánh 2 chiều) và
+`tests/test-audit-round2-cluster3.js` (khoá/thông báo lỗi mới do đổi `getLockKey`) — 42/42 + 21/21 pass.
+Toàn bộ `tests/test-*.js` (40 file) — 0 lỗi. `node -c` mọi file server đã sửa + kiểm tra trùng id HTML/
+cân bằng div trong `public/index.html`. Demo Playwright thủ công end-to-end (đăng nhập → tạo kỳ qua modal
+→ lập+duyệt bản Phê Duyệt → lập+duyệt bản Thực Hiện cùng kỳ → xem Tổng Hợp) — xác nhận đúng số liệu và
+giao diện.
+
+## Trước đó (PR #218, nhánh `claude/chao-ban-oo5ijl`)
 
 Theo phản ánh: mở màn "Hệ Thống" (đặc biệt tab con "Phân Quyền" — cây quyền rất dài), thanh chuyển tab
 con bị đẩy mất khỏi màn hình ngay khi cuộn xuống, phải cuộn ngược lên đầu trang mới đổi được tab khác —
