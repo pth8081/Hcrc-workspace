@@ -991,47 +991,14 @@ const CREATE_MODULE_CONFIGS = {
         throw new CreateError(400, 'Vui lòng chọn ít nhất 1 phòng ban áp dụng, hoặc chọn "Tất cả phòng ban"');
       }
       payload.deptScope = { all: !!deptScope.all, depts: deptScope.all ? [] : cleanedDepts };
-      // Mẫu trình chiếu áp dụng cho CẢ kỳ (không đổi được sau khi tạo, tránh 1 kỳ đã phát hành đổi giao
-      // diện giữa chừng) — người nhập báo cáo KHÔNG tự chọn, kỳ dùng mẫu nào thì mọi slide của kỳ đó vẽ
-      // theo đúng mẫu đó (xem DB.reportSlideTemplates, quản lý ở lib/createValidation.js.reportSlideTemplates
-      // bên dưới). Phải là 1 mẫu có thật, tồn tại lúc tạo kỳ.
-      const templates = appData?.reportSlideTemplates || [];
-      const templateId = Number(payload.slideTemplateId);
-      if (!Number.isFinite(templateId) || !templates.some(t => t.id === templateId)) {
-        throw new CreateError(400, 'Vui lòng chọn 1 mẫu trình chiếu hợp lệ (tạo mẫu ở tab "Mẫu Trình Chiếu" nếu chưa có)');
-      }
-      payload.slideTemplateId = templateId;
       payload.status = 'OPEN';
       payload.closedAt = null;
       payload.closedBy = null;
       payload.compilation = null;
-    }
-  },
-  // Mẫu trình chiếu (ảnh nền dùng khi phát hành) — admin/reportManage tạo trước, chọn lúc tạo kỳ báo cáo
-  // (reportPeriods.slideTemplateId ở trên). Người dùng chỉ tải lên 1 tệp mẫu (ảnh/PDF/PowerPoint) —
-  // trình duyệt tự trích ra 1 ảnh nền DUY NHẤT (bgImageUrl, xem extractSlideTemplateBackgroundFromFile()
-  // ở index.html) + tự tính isDark (độ sáng ảnh) để suy ra màu chữ trắng/đen phù hợp
-  // (derivePrTemplateStyle()) — không còn chọn tay bộ 12 màu như trước (PR_TPL_COLOR_FIELDS cũ, xem mẫu
-  // cứng DEFAULT/ORANGE_GOLD ở PR_SLIDE_TEMPLATES, index.html, vẫn giữ nguyên cho các kỳ báo cáo tạo
-  // TRƯỚC tính năng mẫu tự tạo). Mẫu 12-màu (colors) đã tạo trước bản nâng cấp này vẫn ĐỌC được nguyên
-  // vẹn qua getPrSlideTemplateColors() — không ép migrate.
-  reportSlideTemplates: {
-    dbKey: 'reportSlideTemplates',
-    // KHÔNG có khái niệm phòng ban để chọn (dùng chung toàn công ty, giống reportPeriods/vppPeriods/
-    // internalPosts ngay cạnh) — thiếu forceOwnDept:true trước đây khiến validateAndPrepareCreate()
-    // luôn đòi payload.dept trong khi client (submitSlideTemplateForm()) không hề gửi field này, nên
-    // MỌI lần tạo mẫu trình chiếu mới đều bị chặn ngay ở bước đầu với lỗi "Thiếu phòng ban".
-    forceOwnDept: true,
-    getScope: () => ({ all: true }),
-    creatorField: 'creator', creatorNameField: 'creatorName',
-    extraValidate: (payload) => {
-      if (!payload.name || !String(payload.name).trim()) throw new CreateError(400, 'Thiếu tên mẫu trình chiếu');
-      payload.name = String(payload.name).trim();
-      if (!payload.bgImageUrl || typeof payload.bgImageUrl !== 'string' || !payload.bgImageUrl.trim()) {
-        throw new CreateError(400, 'Vui lòng tải lên tệp mẫu (ảnh/PDF/PowerPoint) trước khi tạo');
-      }
-      payload.bgImageUrl = payload.bgImageUrl.trim();
-      payload.isDark = !!payload.isDark;
+      // taskCompilation: bản "Tổng Hợp Theo Công Việc" (đối chiếu) — TÁCH RIÊNG khỏi compilation ở trên
+      // (bản tổng hợp CHÍNH THỨC từ báo cáo người dùng nộp) để 2 bên không đè lên nhau, xem
+      // mergeReportPeriodByTasks() ở lib/recordActions.js.
+      payload.taskCompilation = null;
     }
   },
   reportEntries: {
@@ -1785,7 +1752,7 @@ const CREATE_MODULE_CONFIGS = {
   // sanitizeBudgetCustomFields()/BUDGET_CORE_FIELD_DEFS bên dưới.
   budgetTemplates: {
     dbKey: 'budgetTemplates',
-    forceOwnDept: true, // không có khái niệm phòng ban (dùng chung toàn công ty) — giữ đúng lý do như reportSlideTemplates
+    forceOwnDept: true, // không có khái niệm phòng ban (dùng chung toàn công ty)
     getScope: () => ({ all: true }),
     creatorField: 'creator', creatorNameField: 'creatorName',
     extraValidate: (payload, collection, user) => {

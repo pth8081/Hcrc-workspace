@@ -28,7 +28,7 @@ const { HttpError } = require('../lib/httpErrors');
 const recordActions = require('../lib/recordActions');
 const { CREATE_MODULE_CONFIGS, validateAndPrepareCreate } = require('../lib/createValidation');
 const { MODULE_CONFIGS: WF_MODULE_CONFIGS, applyWorkflowAction } = require('../lib/workflowEngine');
-const { filterHrFeedbackForUser } = require('../lib/recordViewScope');
+const { filterHrFeedbackForUser, sanitizeReportPeriodsForUser } = require('../lib/recordViewScope');
 
 const WF_ACTION_MAP = { approve: 'APPROVE', reject: 'REJECT', 'request-info': 'REQUEST_INFO', 'request-changes': 'REQUEST_CHANGES' };
 
@@ -63,7 +63,7 @@ function createMockState(seed) {
   return Object.assign({
     depts: [], stores: [], cats: [], deptAbbrs: {}, jobTitles: [], permGroups: [], users: [],
     itPriceMasterLists: [], itPriceDeptWorkflows: {}, workflows: [],
-    reportSlideTemplates: [], uniformPeriods: [], uniformIssuances: [], uniformStockAdjustments: [], uniformTransfers: [], uniformCatalog: [],
+    uniformPeriods: [], uniformIssuances: [], uniformStockAdjustments: [], uniformTransfers: [], uniformCatalog: [],
     itPriceApprovals: [], itSupportTickets: [], reportPeriods: [], reportEntries: [],
     tasks: [],
     budgetTemplates: [], budgetPeriods: [], budgetEntries: [], budgetDeptWorkflows: {},
@@ -84,7 +84,6 @@ function buildAppDataForCreate(moduleKey, state) {
     uniformCatalog: state.uniformCatalog
   };
   if (moduleKey === 'reportEntries') base.reportPeriods = state.reportPeriods;
-  if (moduleKey === 'reportPeriods') base.reportSlideTemplates = state.reportSlideTemplates;
   return base;
 }
 
@@ -125,7 +124,6 @@ function buildActionHandlers(state) {
     'reportPeriods:unpublish': (u, item) => recordActions.unpublishReportPeriod(u, item),
     'reportEntries:submit': (u, item) => recordActions.submitReportEntry(u, item, state.reportPeriods.find(p => p.id === item.periodId)),
     'reportEntries:update': (u, item, body) => recordActions.updateReportEntryDraft(u, item, body, state.reportPeriods.find(p => p.id === item.periodId)),
-    'reportSlideTemplates:update': (u, item, body) => recordActions.updateReportSlideTemplate(u, item, body),
 
     // ===== GIẤY PHÉP =====
     'licenses:approve': (u, item) => recordActions.approveLicense(u, item),
@@ -158,7 +156,12 @@ function createDispatcher(state) {
     // đọc được" là yêu cầu nghiệp vụ CỐT LÕI, không thể chỉ dựa vào bộ lọc ở giao diện. Dùng chính hàm
     // thật lib/recordViewScope.js filterHrFeedbackForUser(), không tự đoán lại luật.
     const viewer = (state.users || []).find(u => u.username === username);
-    if (viewer) data.hrFeedback = filterHrFeedbackForUser(state.hrFeedback, viewer);
+    if (viewer) {
+      data.hrFeedback = filterHrFeedbackForUser(state.hrFeedback, viewer);
+      // reportPeriods: ẩn compilation/taskCompilation khỏi người không đủ quyền — cùng lý do hrFeedback ở
+      // trên, tái hiện đúng bước lọc thật của server (routes/data.js) thay vì tự đoán lại luật.
+      data.reportPeriods = sanitizeReportPeriodsForUser(state.reportPeriods, viewer);
+    }
     return data;
   }
 

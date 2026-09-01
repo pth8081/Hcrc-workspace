@@ -1959,12 +1959,12 @@ function parseVNDateTime(str) {
 
 const TASK_STATUS_LABELS = { TODO: 'Chưa bắt đầu', DOING: 'Đang thực hiện', DONE: 'Đã hoàn thành', CANCELLED: 'Đã hủy' };
 
-// Tổng Hợp Theo Công Việc — CÁCH THỨ 2 để dựng compilation.slides của 1 kỳ (cùng khuôn dữ liệu, cùng
-// dùng chung updateReportCompilation()/publishReportPeriod()/unpublishReportPeriod() phía sau với
-// mergeReportPeriod() ở trên), nhưng nguồn là DB.tasks — TỰ ĐỘNG lấy công việc thật của từng người,
-// không cần ai gõ tay báo cáo. Hai nút "Tổng Hợp Theo Báo Cáo"/"Tổng Hợp Theo Công Việc" ở client là 2
-// LỰA CHỌN NGUỒN khác nhau cho CÙNG 1 compilation — bấm cái nào sau cùng thì compilation theo cách đó
-// (y hệt hành vi "tổng hợp lại" đã có của mergeReportPeriod(), không cộng dồn 2 nguồn).
+// Tổng Hợp Theo Công Việc — dựng period.taskCompilation.slides từ DB.tasks, TÁCH RIÊNG hoàn toàn khỏi
+// period.compilation (bản tổng hợp CHÍNH THỨC dựng từ báo cáo người dùng nộp, mergeReportPeriod() ở
+// trên) — mục đích là để 2 bên KHÔNG đè lên nhau, dùng làm căn cứ ĐỐI CHIẾU: so công việc thật ghi
+// nhận trong hệ thống với nội dung nhân viên tự báo cáo. Vì vậy taskCompilation KHÔNG có publish/
+// slideshow/xuất PDF riêng như compilation — chỉ là bản xem lại (chỉ xem), sinh lại từ đầu mỗi lần
+// bấm nút (ghi đè bản taskCompilation cũ, không ảnh hưởng gì tới compilation "chính thức" đang có).
 //
 // Phạm vi thời gian tính vào kỳ = (mốc hạn chót của kỳ ĐÃ ĐÓNG gần nhất kết thúc TRƯỚC kỳ này, nếu có]
 // -> hạn chót kỳ này; kỳ đầu tiên (không có kỳ nào đóng trước đó) thì không giới hạn mốc bắt đầu. Việc
@@ -1977,9 +1977,6 @@ function mergeReportPeriodByTasks(user, period, tasks, users, allPeriods) {
   }
   if (!isReportPeriodClosed(period)) {
     throw new HttpError(409, 'Kỳ báo cáo chưa kết thúc — chưa thể tổng hợp');
-  }
-  if (period.compilation?.status === 'PUBLISHED') {
-    throw new HttpError(409, 'Bản tổng hợp đã phát hành — vui lòng "Hủy phát hành" trước khi tổng hợp lại');
   }
   const endBoundary = new Date(period.endTime);
   if (isNaN(endBoundary.getTime())) throw new HttpError(400, 'Kỳ báo cáo thiếu hạn chót hợp lệ');
@@ -2078,12 +2075,9 @@ function mergeReportPeriodByTasks(user, period, tasks, users, allPeriods) {
   });
   slides.forEach((s, idx) => { s.order = idx + 1; });
 
-  period.compilation = {
+  period.taskCompilation = {
     slides,
-    status: 'MERGED',
-    compiledBy: user.username, compiledByName: user.name, compiledAt: nowVN(),
-    updatedBy: null, updatedByName: null, updatedAt: null,
-    publishedBy: null, publishedByName: null, publishedAt: null
+    compiledBy: user.username, compiledByName: user.name, compiledAt: nowVN()
   };
   return { period, warning: boundaryGapWarning };
 }
@@ -2159,28 +2153,6 @@ function updateReportCompilation(user, period, slides) {
   period.compilation.updatedByName = user.name;
   period.compilation.updatedAt = nowVN();
   return period;
-}
-
-// Sửa mẫu trình chiếu đã tạo (tên/màu sắc) — cùng quyền reportManage với tạo/đóng kỳ báo cáo, vì mẫu
-// chỉ dùng lúc TẠO KỲ (xem CREATE_MODULE_CONFIGS.reportPeriods ở lib/createValidation.js), không ảnh
-// hưởng tới kỳ đã tạo trước đó (mỗi kỳ đã "chốt cứng" slideTemplateId của mình lúc tạo).
-function updateReportSlideTemplate(user, item, payload) {
-  if (!canManageReportPeriods(user)) {
-    throw new HttpError(403, 'Chỉ người có quyền quản lý Báo Cáo Định Kỳ mới được sửa mẫu trình chiếu');
-  }
-  const name = String(payload?.name || '').trim();
-  if (!name) throw new HttpError(400, 'Thiếu tên mẫu trình chiếu');
-  item.name = name;
-  // Có chọn tệp mới (bgImageUrl) → chuyển hẳn sang dạng ảnh nền mới, xoá bộ 12 màu cũ nếu có (kể cả khi
-  // sửa 1 mẫu 12-màu đời cũ — chuyển thẳng sang dạng mới, không giữ cả 2 dữ liệu song song). Không chọn
-  // tệp mới → chỉ đổi tên, giữ NGUYÊN dữ liệu nền hiện có (dù {colors} cũ hay {bgImageUrl,isDark} mới) —
-  // không ép migrate mẫu cũ khi admin chỉ muốn đổi tên.
-  if (payload && typeof payload.bgImageUrl === 'string' && payload.bgImageUrl.trim()) {
-    item.bgImageUrl = payload.bgImageUrl.trim();
-    item.isDark = !!payload.isDark;
-    delete item.colors;
-  }
-  return item;
 }
 
 function publishReportPeriod(user, period) {
@@ -3788,7 +3760,7 @@ function submitBudgetEntry(user, item, period) {
   return item;
 }
 
-// Sửa tên/cột bổ sung của 1 mẫu ngân sách đã tạo — cùng khuôn updateReportSlideTemplate() ở trên.
+// Sửa tên/cột bổ sung của 1 mẫu ngân sách đã tạo.
 function updateBudgetTemplate(user, item, payload) {
   if (!canManageBudget(user)) throw new HttpError(403, 'Chỉ người có quyền quản lý Ngân Sách mới được sửa mẫu ngân sách');
   const name = String(payload?.name || '').trim();
@@ -3996,7 +3968,6 @@ module.exports = {
   closeVppPeriod, submitVppRegistration, updateVppRegistrationDraft,
   closeReportPeriod, submitReportEntry, updateReportEntryDraft,
   mergeReportPeriod, mergeReportPeriodByTasks, updateReportCompilation, publishReportPeriod, unpublishReportPeriod,
-  updateReportSlideTemplate,
   canManageTraining, canManageTrainingClass, cancelTrainingRegistration, approveCancelTrainingRegistration,
   rejectCancelTrainingRegistration, markTrainingDocumentViewed, setTrainingRegistrationResult, confirmCareerPathForEmployee,
   bulkRegisterTrainingClass, editTrainingClass, startOfflineTrainingClass, endOfflineTrainingClass, editTrainingPlan,

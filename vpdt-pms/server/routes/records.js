@@ -699,7 +699,6 @@ router.post('/vppPeriods/:id/delete', (req, res) => deleteAdminOnly(req, res, 'v
 router.post('/vppRegistrations/:id/delete', (req, res) => deleteAdminOnly(req, res, 'vppRegistrations'));
 router.post('/reportPeriods/:id/delete', (req, res) => deleteAdminOnly(req, res, 'reportPeriods'));
 router.post('/reportEntries/:id/delete', (req, res) => deleteAdminOnly(req, res, 'reportEntries'));
-router.post('/reportSlideTemplates/:id/delete', (req, res) => deleteAdminOnly(req, res, 'reportSlideTemplates'));
 router.post('/budgetPeriods/:id/delete', (req, res) => deleteAdminOnly(req, res, 'budgetPeriods'));
 router.post('/budgetEntries/:id/delete', (req, res) => deleteAdminOnly(req, res, 'budgetEntries'));
 router.post('/budgetTemplates/:id/delete', (req, res) => deleteAdminOnly(req, res, 'budgetTemplates'));
@@ -1413,22 +1412,6 @@ router.post('/reportEntries/:id/update', async (req, res) => {
     res.json({ ok: true, item: result });
   } catch (err) {
     handleError(res, `reportEntries/${req.params.id}/update`, err);
-  }
-});
-
-// POST /api/records/reportSlideTemplates/:id/update — sửa tên/màu sắc 1 mẫu trình chiếu đã tạo (xem
-// CREATE_MODULE_CONFIGS.reportSlideTemplates ở lib/createValidation.js cho đường TẠO MỚI).
-router.post('/reportSlideTemplates/:id/update', async (req, res) => {
-  const itemId = Number(req.params.id);
-  if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
-  try {
-    const { freshUser } = await getFreshUser(req);
-    const result = await withLockedRecordForCollection('reportSlideTemplates', itemId, (item) =>
-      recordActions.updateReportSlideTemplate(freshUser, item, req.body)
-    );
-    res.json({ ok: true, item: result });
-  } catch (err) {
-    handleError(res, `reportSlideTemplates/${req.params.id}/update`, err);
   }
 });
 

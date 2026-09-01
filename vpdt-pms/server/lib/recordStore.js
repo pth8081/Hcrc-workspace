@@ -33,8 +33,8 @@ const { HttpError } = require('./httpErrors');
 // 5 hành động này trong routes/records.js TRƯỚC KHI migrate storage ở bước này (xem
 // lib/recordActions.js phần "TRUYỀN THÔNG NỘI BỘ").
 // trainingCourses (Đợt 4): catalog "Chương Trình" — id+name+category+description, TÁI SỬ DỤNG được cho
-// nhiều trainingClasses/trainingDocuments (courseId, tuỳ chọn) — cùng khuôn budgetTemplates/
-// reportSlideTemplates ở trên (catalog nhỏ, quản lý qua create/delete chung, không cần bảng riêng).
+// nhiều trainingClasses/trainingDocuments (courseId, tuỳ chọn) — cùng khuôn budgetTemplates ở trên
+// (catalog nhỏ, quản lý qua create/delete chung, không cần bảng riêng).
 // trainingPlans (Đợt 5): "Kế Hoạch Đào Tạo" theo tháng — cùng khuôn trainingCourses ở trên (catalog nhỏ,
 // quản lý qua create/edit/delete chung), số thực tế (actual) hoàn toàn KHÔNG lưu ở đây — tính SỐNG từ
 // trainingClasses/trainingRegistrations tại thời điểm xem (xem index.html renderTrainingPlanDashboard()).
@@ -51,7 +51,7 @@ const { HttpError } = require('./httpErrors');
 // Sự (mô hình 1 hỏi – 1 đáp), tạo qua engine chung lib/createValidation.js (mở cho mọi nhân viên,
 // không cần quyền riêng — cùng khuôn itSupportTickets), trả lời/đánh dấu đã đọc qua 2 route riêng ở
 // routes/records.js (respondToHrFeedback()/markHrFeedbackRead() ở lib/recordActions.js).
-const MIGRATED_COLLECTIONS = new Set(['submissions', 'docs', 'carRegs', 'officeReqs', 'contracts', 'meetings', 'meetingMinutes', 'internalPosts', 'paymentRequests', 'vppPeriods', 'vppRegistrations', 'reportPeriods', 'reportEntries', 'reportSlideTemplates', 'trainingDocuments', 'trainingClasses', 'trainingRegistrations', 'careerPaths', 'careerPathConfirmations', 'trainingTests', 'trainingTestSubmissions', 'trainingCourses', 'trainingPlans', 'onboardingPaths', 'onboardingProgress', 'recruitmentJobs', 'recruitmentReferrals', 'itPriceApprovals', 'itSupportTickets', 'uniformPeriods', 'uniformIssuances', 'uniformStockAdjustments', 'uniformTransfers', 'budgetTemplates', 'budgetPeriods', 'budgetEntries', 'licenses', 'itServiceRenewals', 'hrFeedback']);
+const MIGRATED_COLLECTIONS = new Set(['submissions', 'docs', 'carRegs', 'officeReqs', 'contracts', 'meetings', 'meetingMinutes', 'internalPosts', 'paymentRequests', 'vppPeriods', 'vppRegistrations', 'reportPeriods', 'reportEntries', 'trainingDocuments', 'trainingClasses', 'trainingRegistrations', 'careerPaths', 'careerPathConfirmations', 'trainingTests', 'trainingTestSubmissions', 'trainingCourses', 'trainingPlans', 'onboardingPaths', 'onboardingProgress', 'recruitmentJobs', 'recruitmentReferrals', 'itPriceApprovals', 'itSupportTickets', 'uniformPeriods', 'uniformIssuances', 'uniformStockAdjustments', 'uniformTransfers', 'budgetTemplates', 'budgetPeriods', 'budgetEntries', 'licenses', 'itServiceRenewals', 'hrFeedback']);
 
 function toRecord(row) {
   return JSON.parse(row.Payload);
