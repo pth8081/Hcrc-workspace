@@ -282,23 +282,36 @@ async function run() {
     check('Khối kết quả Tổng Hợp hiển thị đúng chênh lệch = -8.000.000 (thực hiện thấp hơn phê duyệt)', summaryText.includes('-8.000.000'), summaryText.slice(0, 600));
     check('budgetManage (budgetmgr1, tầng 2 — cao nhất) thấy khối "Toàn Công Ty" trong Tổng Hợp', summaryText.includes('📌 Toàn Công Ty') && summaryText.includes('Tổng Phê Duyệt') && summaryText.includes('Tổng Thực Hiện'), summaryText.slice(0, 600));
 
-    // ============ Kịch bản 12b: Phân quyền 3 tầng Ngân Sách — tầng MẶC ĐỊNH (tp_kd, KHÔNG có bất kỳ
-    // quyền ngân sách nào — budgetCreate/budgetAggregate/budgetManage đều false). Chỉ cần còn quyền vào
-    // module (mục 0) là được xem (chỉ đọc) ngân sách CỦA CHÍNH PHÒNG MÌNH (Phòng Kinh Doanh, cùng phòng
-    // kd1) ở tab Phê Duyệt/Thực Hiện, KHÔNG được lập/sửa, KHÔNG thấy tab Tổng Hợp ============
-    await loginAs('tp_kd');
+    // ============ Kịch bản 12b: Phân quyền 3 tầng Ngân Sách (SỬA LẠI theo yêu cầu) — người KHÔNG có bất
+    // kỳ quyền ngân sách nào (budgetCreate/budgetAggregate/budgetManage đều false, dù còn quyền vào
+    // module ở mục 0) giờ bị KHOÁ HOÀN TOÀN, không còn tầng "xem miễn phí" nào nữa — đúng khuôn
+    // canAccessOfficeModule() (đòi 1 trong 3 quyền officeBuy/Fix/Invest) ============
+    await loginAs('gd1'); // chỉ có contractView — không có bất kỳ quyền ngân sách nào
+    const gd1BudgetNavHidden = await page.evaluate(() => document.getElementById('btnBudgetNav').classList.contains('hidden'));
+    check('gd1 (không có budgetCreate/budgetAggregate/budgetManage) -> nút điều hướng "Ngân Sách" bị ẩn', gd1BudgetNavHidden, gd1BudgetNavHidden);
+    await clearAlerts();
+    await page.evaluate(() => switchTab('budget'));
+    await page.waitForTimeout(150);
+    const gd1BlockedAlerts = await alerts();
+    check('gd1 cố gọi thẳng switchTab("budget") -> bị chặn ngay bằng alert "không có quyền truy cập Module Ngân Sách"', gd1BlockedAlerts.some((a) => a.includes('Ngân Sách')), gd1BlockedAlerts);
+    const gd1BudgetSectionHidden = await page.evaluate(() => document.getElementById('budgetSection').classList.contains('hidden'));
+    check('gd1 bị chặn -> #budgetSection vẫn ẩn, không lộ bất kỳ dữ liệu ngân sách nào', gd1BudgetSectionHidden, gd1BudgetSectionHidden);
+
+    // ============ Kịch bản 12b-2: budgetCreate (kd1, KHÔNG có budgetAggregate/budgetManage) — "phải có
+    // quyền xem, tạo ngân sách mới xem/nhập/sửa được ngân sách Phê Duyệt & Thực Hiện của phòng mình, [và
+    // xem được] ngân sách tổng hợp của phòng" -> kd1 giờ vào được tab Tổng Hợp, thấy ĐÚNG số liệu PHÒNG
+    // MÌNH (Phòng Kinh Doanh), nhưng KHÔNG thấy khối "Toàn Công Ty" (chỉ budgetManage mới thấy) ============
+    await loginAs('kd1');
     await goToBudget('APPROVED');
-    const tpKdNoCreateVisible = await page.evaluate(() => !document.getElementById('budgetNoCreatePermNote_PLAN').classList.contains('hidden'));
-    const tpKdFormHidden = await page.evaluate(() => document.getElementById('budgetEntryFormWrap_PLAN').classList.contains('hidden'));
-    check('tp_kd (không có budgetCreate) -> KHÔNG thấy form lập ngân sách, chỉ thấy ghi chú "không có quyền lập"', tpKdNoCreateVisible && tpKdFormHidden, { tpKdNoCreateVisible, tpKdFormHidden });
-    const tpKdListText = await page.locator('#budgetEntryListBody_PLAN').innerText();
-    check('tp_kd vẫn XEM ĐƯỢC (chỉ đọc, quyền mặc định) bản ngân sách Phê Duyệt của CHÍNH PHÒNG MÌNH (kd1, Phòng Kinh Doanh) dù không có quyền lập/tổng hợp', tpKdListText.includes(entry1.code) && tpKdListText.includes('Phòng Kinh Doanh'), tpKdListText.slice(0, 400));
-    const tpKdSummaryBtnHidden = await page.evaluate(() => document.getElementById('btnBudgetSubSummary').classList.contains('hidden'));
-    check('tp_kd (không có budgetAggregate/budgetManage) -> nút tab Tổng Hợp bị ẩn hoàn toàn', tpKdSummaryBtnHidden, tpKdSummaryBtnHidden);
-    await goToBudget('SUMMARY'); // cố tình gọi thẳng — phải bị chặn/điều hướng về lại APPROVED
-    const tpKdActiveSubTabAfterForcedSummary = await page.evaluate(() => activeBudgetSubTab);
-    const tpKdSummaryPaneHidden = await page.evaluate(() => document.getElementById('budgetSubSummary').classList.contains('hidden'));
-    check('tp_kd cố vào thẳng tab Tổng Hợp (setBudgetSubTab("SUMMARY")) -> bị chặn, tự động quay về tab Phê Duyệt', tpKdActiveSubTabAfterForcedSummary === 'APPROVED' && tpKdSummaryPaneHidden, { tpKdActiveSubTabAfterForcedSummary, tpKdSummaryPaneHidden });
+    const kd1SummaryBtnVisible = await page.evaluate(() => !document.getElementById('btnBudgetSubSummary').classList.contains('hidden'));
+    check('kd1 (chỉ có budgetCreate) -> ĐÃ thấy nút tab Tổng Hợp (trước đây chỉ budgetAggregate/budgetManage mới thấy)', kd1SummaryBtnVisible, kd1SummaryBtnVisible);
+    await goToBudget('SUMMARY');
+    await page.selectOption('#budgetSummaryPeriodSelect', String(period1.id));
+    await page.evaluate(() => buildBudgetSummary());
+    const kd1SummaryText = await page.locator('#budgetSummaryResultWrap').innerText();
+    check('kd1 thấy đúng "ngân sách tổng hợp của phòng" mình (Phòng Kinh Doanh, 80.000.000/72.000.000) ở tab Tổng Hợp', kd1SummaryText.includes('Phòng Kinh Doanh') && kd1SummaryText.includes('80.000.000') && kd1SummaryText.includes('72.000.000'), kd1SummaryText.slice(0, 700));
+    check('kd1 (không có budgetManage) -> KHÔNG thấy khối "📌 Toàn Công Ty" / thẻ tổng gộp', !kd1SummaryText.includes('📌 Toàn Công Ty') && !kd1SummaryText.includes('Tổng Phê Duyệt') && !kd1SummaryText.includes('Tổng Thực Hiện'), kd1SummaryText.slice(0, 700));
+    check('kd1 thấy dòng ghi chú "chỉ hiển thị đúng phòng ban của bạn"', kd1SummaryText.includes('chỉ hiển thị đúng phòng ban của bạn'), kd1SummaryText.slice(0, 700));
 
     // ============ Kịch bản 12c: Phân quyền 3 tầng Ngân Sách — tầng budgetAggregate (budgetagg1, KHÔNG có
     // budgetManage). Phải thấy tab Tổng Hợp + khối "Theo Phòng Ban"/"Chi Tiết Theo Hạng Mục" (MỌI phòng
