@@ -33,6 +33,8 @@ const pwaManifestRoutes = require('./routes/pwaManifest');
 const budgetTemplateImportRoutes = require('./routes/budgetTemplateImport');
 const downloadRoutes = require('./routes/download');
 const trashRoutes = require('./routes/trash');
+const externalAuthAdminRoutes = require('./routes/externalAuthAdmin');
+const externalAuthVerifyRoutes = require('./routes/externalAuthVerify');
 const { isCaptchaEnabled, generateCaptcha } = require('./lib/captcha');
 const { checkContractExpiryReminders } = require('./jobs/contractExpiryReminder');
 const { checkLicenseExpiryReminders } = require('./jobs/licenseExpiryReminder');
@@ -143,6 +145,12 @@ app.use('/api/admin', adminCatalogRoutes);
 app.use('/api/stores', storeCatalogImportRoutes);
 app.use('/api/uniform', uniformEmployeesRoutes);
 app.use('/api/budget', budgetTemplateImportRoutes);
+// /api/admin/external-api-keys: router tự áp requireAuth + kiểm admin bên trong (khớp routes/adminCatalog.js).
+app.use('/api/admin/external-api-keys', externalAuthAdminRoutes);
+// /api/external: KHÔNG mount requireAuth — caller là hệ thống ngoài, tự xác thực bằng API key riêng
+// (header Authorization), xem routes/externalAuthVerify.js. Vẫn nằm dưới globalApiRateLimiter (mount ở
+// '/api' phía trên) + có rate-limit + khoá tài khoản riêng của chính route đó.
+app.use('/api/external', externalAuthVerifyRoutes);
 // Route TẢI file đính kèm dùng chung (khác /uploads/ tĩnh bên dưới — chỗ đó dùng để XEM trong Khung Xem
 // Bảo Vệ): PDF được đóng dấu watermark trước khi trả về, xem chi tiết ở routes/download.js.
 app.use('/api/files/download', requireAuth, blockIfMustChangePassword, downloadRoutes);

@@ -226,6 +226,16 @@ const DEFAULTS = {
   // tới hàng nghìn dòng — client chỉ thấy id/name/itemCount/ngày nạp để hiển thị danh sách quản lý.
   itPriceMasterLists: [],
 
+  // externalApiKeys — API key cấp cho ứng dụng NGOÀI hệ thống để xác thực (verify) tài khoản/mật khẩu
+  // người dùng HCRC Workspace qua POST /api/external/verify-credentials (xem lib/externalAuth.js +
+  // routes/externalAuthAdmin.js + routes/externalAuthVerify.js) — KHÔNG cấp phiên đăng nhập, chỉ trả
+  // đúng/sai. Mỗi phần tử: { id, name, keyPrefix, keyHash (bcrypt, KHÔNG BAO GIỜ trả ra ngoài — kể cả
+  // cho admin, xem sanitizeExternalApiKeys() ở routes/data.js), active, createdBy, createdByName,
+  // createdAt, revokedBy, revokedByName, revokedAt, lastUsedAt }. Khác itPriceMasterLists/emailConfig ở
+  // trên (broad-read, chỉ ẩn riêng field bí mật), collection này ẩn HOÀN TOÀN với người không phải admin
+  // qua GET /api/data — nhân viên thường không có lý do gì cần biết danh sách key tích hợp ngoài tồn tại.
+  externalApiKeys: [],
+
   workflows: [
     { id: 'WF_1STEP', name: 'Quy trình 1 bước (Sếp duyệt)', steps: [{ order: 1, name: 'Phê duyệt 1' }] },
     { id: 'WF_2STEP', name: 'Quy trình 2 bước (Trưởng phòng -> BGD)', steps: [{ order: 1, name: 'Trưởng Phòng' }, { order: 2, name: 'Ban Giám Đốc' }] },

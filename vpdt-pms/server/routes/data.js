@@ -108,7 +108,13 @@ const ADMIN_ONLY_KEYS = new Set([
   // chuyển hẳn về server, ở đúng luồng tạo giấy phép và CHỈ THÊM 1 giá trị đã làm sạch vào cuối danh
   // mục (learnLicenseType(), routes/create.js) — không dựng lại được khả năng ghi đè/xoá trắng cả
   // danh mục. Admin vẫn thêm/bớt/dọn danh mục ở màn Quản Lý Danh Mục qua đúng route này như trước.
-  'depts', 'cats', 'licenseTypes', 'trainingCategories', 'contractTypeAbbrs'
+  'depts', 'cats', 'licenseTypes', 'trainingCategories', 'contractTypeAbbrs',
+  // externalApiKeys: API key cấp cho ứng dụng ngoài xác thực tài khoản HCRC (xem lib/externalAuth.js) —
+  // quản lý qua routes/externalAuthAdmin.js (tạo/thu hồi có audit, sinh key/hash server-side), route
+  // này chỉ còn là đường lùi ghi thô admin-only (khớp tiền lệ itPriceMasterLists/emailConfig). READ qua
+  // GET /api/data bị ẩn HOÀN TOÀN với non-admin (không riêng lọc field bí mật) — xem
+  // sanitizeExternalApiKeys() bên dưới.
+  'externalApiKeys'
 ]);
 
 // Các collection KHÔNG phải admin-only nhưng cũng KHÔNG mở cho mọi tài khoản đã đăng nhập — mỗi key ở
@@ -165,6 +171,16 @@ function sanitizeEmailConfig(emailConfig) {
   if (!emailConfig || typeof emailConfig !== 'object') return emailConfig;
   const { smtpPassEnc, ...rest } = emailConfig;
   return { ...rest, hasSmtpAuth: !!(emailConfig.smtpAuthEnabled && emailConfig.smtpUser && smtpPassEnc) };
+}
+
+// externalApiKeys: ẨN HOÀN TOÀN với người không phải admin (mảng rỗng, không riêng lọc field bí mật
+// như emailConfig/users ở trên) — nhân viên thường không có lý do gì cần biết danh sách key tích hợp
+// ngoài tồn tại. Với admin, vẫn không bao giờ trả keyHash (bcrypt) ra ngoài — màn quản lý (xem
+// routes/externalAuthAdmin.js) chỉ cần keyPrefix để nhận diện, không cần giá trị hash cho bất kỳ mục
+// đích hiển thị nào.
+function sanitizeExternalApiKeys(list, isAdmin) {
+  if (!isAdmin || !Array.isArray(list)) return [];
+  return list.map(({ keyHash, ...rest }) => rest);
 }
 
 // isCurrentlyAdmin()/isCurrentlyAdminOrUniformManage(): chuyển sang lib/adminAuth.js (dùng chung với
@@ -391,6 +407,7 @@ router.get('/', async (req, res) => {
     const versions = cachedAppData.versions;
     if (data.users) data.users = stripPasswords(data.users);
     if (data.emailConfig) data.emailConfig = sanitizeEmailConfig(data.emailConfig);
+    if (data.externalApiKeys) data.externalApiKeys = sanitizeExternalApiKeys(data.externalApiKeys, !!req.freshUser?.perms?.admin);
     // tasks (Bước 6b) và mọi collection trong MIGRATED_COLLECTIONS (Bước 6c trở đi — hiện tại:
     // submissions) không còn trong dbo.AppData — nguồn riêng từ bảng của chúng. Không có
     // _versions.<key> tương ứng cho các key này (không còn khái niệm "version" AppData) — an toàn vì
@@ -501,6 +518,7 @@ router.get('/:key', async (req, res) => {
     if (value === null) return res.json(DEFAULTS[key]);
     if (key === 'users') return res.json(stripPasswords(value));
     if (key === 'emailConfig') return res.json(sanitizeEmailConfig(value));
+    if (key === 'externalApiKeys') return res.json(sanitizeExternalApiKeys(value, !!req.freshUser?.perms?.admin));
     res.json(value);
   } catch (err) {
     sendServerError(res, 500, err, `GET /api/data/${key}`, 'Không thể tải dữ liệu từ SQL Server');
