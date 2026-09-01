@@ -158,8 +158,18 @@ function canSeeReportCompilation(user, period) {
   return period?.compilation?.status === 'PUBLISHED';
 }
 
+// taskCompilation ("Đối Chiếu Theo Công Việc") KHÔNG có khái niệm "phát hành" như compilation ở trên —
+// đây là bản xem nội bộ để đối chiếu (lộ chi tiết trạng thái công việc của cả phòng ban), nên luôn ẩn
+// khỏi người không có quyền quản lý/tổng hợp, không có ngoại lệ nào để hiện ra (khác compilation, vốn
+// hiện công khai sau khi phát hành).
 function sanitizeReportPeriodsForUser(periods, user) {
-  return (periods || []).map(p => canSeeReportCompilation(user, p) ? p : { ...p, compilation: null });
+  const canManage = !!(user?.perms?.admin || user?.perms?.reportManage || user?.perms?.reportAggregate);
+  return (periods || []).map(p => {
+    const compilation = canSeeReportCompilation(user, p) ? p.compilation : null;
+    const taskCompilation = canManage ? p.taskCompilation : null;
+    if (compilation === p.compilation && taskCompilation === p.taskCompilation) return p;
+    return { ...p, compilation, taskCompilation };
+  });
 }
 
 // Bài test đào tạo (trainingTests): correctOptionIds của từng câu hỏi là ĐÁP ÁN ĐÚNG — trước đây GET

@@ -138,7 +138,7 @@ function buildBrowserDB(state) {
     users: state.users,
     docs: [], submissions: [], carRegs: [], meetings: [], meetingMinutes: [], internalPosts: [], tasks: [],
     systemLogs: [], itPriceApprovals: [], itSupportTickets: [], vppPeriods: [], vppRegistrations: [],
-    reportPeriods: [], reportEntries: [], reportSlideTemplates: [], trainingClasses: [], trainingDocuments: [],
+    reportPeriods: [], reportEntries: [], trainingClasses: [], trainingDocuments: [],
     trainingTests: [], trainingRegistrations: [], trainingTestSubmissions: [], careerPaths: [],
     careerPathConfirmations: [], recruitmentJobs: [], recruitmentReferrals: [], uniformPeriods: [], uniformIssuances: [], uniformStockAdjustments: [],
     _versions: {}

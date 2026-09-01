@@ -1,12 +1,12 @@
 // server/tests/test-periodic-report.js
 //
 // Regression test cho module Báo Cáo Định Kỳ (key 'periodicReport'):
-//   - Mẫu Trình Chiếu (reportSlideTemplates) — reportManage tạo trước, chọn lúc "Tạo Kỳ".
-//   - Tạo Kỳ (reportPeriods) — reportManage, phạm vi phòng ban + hạn chót + mẫu trình chiếu bắt buộc.
+//   - Tạo Kỳ (reportPeriods) — reportManage, phạm vi phòng ban + hạn chót.
 //   - Nhập Liệu (reportEntries) — reportEntryCreate, 1 người/1 kỳ (Lưu Nháp -> Gửi, chốt hẳn).
-//   - Tổng Hợp (reportAggregate) — chọn+sắp thứ tự báo cáo (mergeReportPeriodAction) HOẶC tự động theo
-//     Công Việc (mergeReportPeriodByTasksAction, dựng slide TASK_STATS/TASKS từ DB.tasks) -> sửa slide
-//     -> Phát hành/Hủy phát hành.
+//   - Tổng Hợp (reportAggregate) — chọn+sắp thứ tự báo cáo (mergeReportPeriodAction) -> sửa slide ->
+//     Phát hành/Hủy phát hành.
+//   - Đối Chiếu Theo Công Việc (mergeReportPeriodByTasksAction, dựng period.taskCompilation từ DB.tasks)
+//     — TÁCH RIÊNG khỏi period.compilation ở trên, không publish/slideshow, chỉ xem.
 //
 // Chạy: node server/tests/test-periodic-report.js
 const {
@@ -22,7 +22,7 @@ const AGG1 = { username: 'agg1', name: 'Trần Tổng Hợp Viên', dept: 'Ban G
 const EMP_KD = { username: 'emp_kd', name: 'Lê Văn Kinh Doanh', dept: 'Kinh Doanh', perms: { reportEntryCreate: true }, active: true };
 const EMP_NOAGG = { username: 'emp_noagg', name: 'Phạm Không Quyền Tổng Hợp', dept: 'Kinh Doanh', perms: { reportEntryCreate: true }, active: true };
 
-// 2 công việc thật của emp_kd — dùng cho kịch bản "Tổng Hợp Theo Công Việc" (mergeReportPeriodByTasks()
+// 2 công việc thật của emp_kd — dùng cho kịch bản "Đối Chiếu Theo Công Việc" (mergeReportPeriodByTasks()
 // ở lib/recordActions.js): 1 việc ĐÃ hoàn thành (đếm theo thời điểm STATUS_DONE trong history) + 1
 // việc CÒN MỞ (đếm theo deadline nằm trong phạm vi kỳ).
 const TASKS = [
@@ -53,33 +53,15 @@ async function main() {
   const server = await startStaticServer(PORT);
   const { browser, page } = await launchPage(PORT, state);
   const run = createRunner();
-  let templateId = null;
   let periodId = null;
   let entryId = null;
 
   try {
-    // ===== 1) reportManage tạo Mẫu Trình Chiếu (happy path) =====
-    await run.run('reportManage tạo Mẫu Trình Chiếu mới (happy path)', async () => {
+    // ===== 1) reportManage tạo Kỳ Báo Cáo, phạm vi 1 phòng ban (happy path) =====
+    await run.run('reportManage tạo Kỳ Báo Cáo với phạm vi phòng ban (happy path)', async () => {
       await loginAs(page, HC_PR);
       const result = await page.evaluate(async () => {
         switchTab('periodicReport');
-        setPeriodicReportSubTab('TEMPLATES');
-        document.getElementById('prTplName').value = 'Mẫu Cam Vàng 2026';
-        // Bỏ qua bước đọc tệp thật (ảnh/PDF/PowerPoint) — set thẳng kết quả xử lý như
-        // processSlideTemplateFile() sẽ trả về, đúng field {bgImageUrl, isDark} mà submitSlideTemplateForm() đọc.
-        pendingSlideTemplateBg = { bgImageUrl: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=', isDark: false };
-        await submitSlideTemplateForm({ preventDefault() {} });
-        return { alerts: window.__alerts, tpl: DB.reportSlideTemplates[0] };
-      });
-      assert(result.tpl, 'Mẫu trình chiếu phải được tạo');
-      assertEqual(result.tpl.name, 'Mẫu Cam Vàng 2026', 'Phải lưu đúng tên mẫu');
-      assertIncludes(result.alerts, 'Đã tạo mẫu trình chiếu mới', 'Phải có thông báo tạo mẫu thành công');
-      templateId = result.tpl.id;
-    });
-
-    // ===== 2) reportManage tạo Kỳ Báo Cáo, phạm vi 1 phòng ban + mẫu vừa tạo (happy path) =====
-    await run.run('reportManage tạo Kỳ Báo Cáo với phạm vi phòng ban + mẫu trình chiếu (happy path)', async () => {
-      const result = await page.evaluate(async (tplId) => {
         setPeriodicReportSubTab('PERIODS');
         document.getElementById('prPeriodName').value = 'Báo Cáo Tuần 35/2026';
         const local = new Date(Date.now() + 60 * 24 * 3600 * 1000);
@@ -88,42 +70,19 @@ async function main() {
         document.getElementById('prPeriodEndTime').value = `${local.getFullYear()}-${pad(local.getMonth() + 1)}-${pad(local.getDate())}T09:00`;
         const kdIdx = DB.depts.indexOf('Kinh Doanh');
         document.getElementById(`prPeriodDept_${kdIdx}`).checked = true;
-        document.getElementById('prPeriodSlideTemplate').value = String(tplId);
         await createReportPeriod({ preventDefault() {} });
         const p = DB.reportPeriods[0];
         return { alerts: window.__alerts, period: p };
-      }, templateId);
+      });
       assert(result.period, 'Kỳ báo cáo phải được tạo');
       assertEqual(result.period.status, 'OPEN', 'Kỳ mới tạo phải ở trạng thái OPEN');
       assertEqual(result.period.deptScope.all, false, 'Phạm vi không phải "tất cả phòng ban"');
       assert(result.period.deptScope.depts.includes('Kinh Doanh'), 'Phạm vi phải gồm đúng phòng ban đã chọn (Kinh Doanh)');
-      assertEqual(result.period.slideTemplateId, templateId, 'Phải gắn đúng mẫu trình chiếu đã chọn');
       assertIncludes(result.alerts, 'Đã tạo kỳ báo cáo mới', 'Phải có thông báo tạo kỳ thành công');
       periodId = result.period.id;
     });
 
-    // ===== 3) Validation: tạo kỳ báo cáo mà chưa chọn Mẫu Trình Chiếu (server tự chặn) =====
-    await run.run('Validation: tạo Kỳ Báo Cáo khi chưa có Mẫu Trình Chiếu hợp lệ bị chặn', async () => {
-      const before = await page.evaluate(() => DB.reportPeriods.length);
-      const result = await page.evaluate(async () => {
-        window.__resetCapture();
-        document.getElementById('prPeriodName').value = 'Kỳ thiếu mẫu';
-        const local = new Date(Date.now() + 60 * 24 * 3600 * 1000);
-        const pad = (n) => String(n).padStart(2, '0');
-        document.getElementById('prPeriodEndTime').value = `${local.getFullYear()}-${pad(local.getMonth() + 1)}-${pad(local.getDate())}T09:00`;
-        document.getElementById('prPeriodDeptAll').checked = true;
-        // Ép gửi thẳng slideTemplateId không tồn tại — bỏ qua chặn client (dropdown luôn có ít nhất mẫu
-        // vừa tạo) để kiểm tra ĐÚNG server tự xác minh lại (extraValidate ở lib/createValidation.js).
-        document.getElementById('prPeriodSlideTemplate').innerHTML = '<option value="999999">Mẫu không tồn tại</option>';
-        document.getElementById('prPeriodSlideTemplate').value = '999999';
-        await createReportPeriod({ preventDefault() {} });
-        return { alerts: window.__alerts, count: DB.reportPeriods.length };
-      });
-      assertIncludes(result.alerts, 'mẫu trình chiếu hợp lệ', 'Phải báo lỗi thiếu/sai mẫu trình chiếu hợp lệ');
-      assertEqual(result.count, before, 'Không được tạo thêm kỳ báo cáo nào khi mẫu trình chiếu không hợp lệ');
-    });
-
-    // ===== 4) Nhân viên nộp báo cáo: Lưu Nháp rồi Gửi (happy path Nhập Liệu) =====
+    // ===== 2) Nhân viên nộp báo cáo: Lưu Nháp rồi Gửi (happy path Nhập Liệu) =====
     await run.run('Nhân viên nhập liệu: Lưu Nháp rồi Gửi Báo Cáo (happy path)', async () => {
       await loginAs(page, EMP_KD);
       // Bỏ qua đọc thật tệp .pptx (JSZip) — set thẳng kết quả như onPrEntryPptxFileChange() sẽ tạo ra,
@@ -153,7 +112,7 @@ async function main() {
       entryId = result.entry.id;
     });
 
-    // ===== 5) Validation: mỗi người chỉ được 1 báo cáo / kỳ (server tự chặn tạo báo cáo thứ 2) =====
+    // ===== 3) Validation: mỗi người chỉ được 1 báo cáo / kỳ (server tự chặn tạo báo cáo thứ 2) =====
     await run.run('Validation: không được tạo báo cáo thứ 2 cho cùng 1 kỳ (server tự chặn)', async () => {
       const before = await page.evaluate(() => DB.reportEntries.length);
       const result = await page.evaluate(async (pId) => {
@@ -172,7 +131,7 @@ async function main() {
       assertEqual(result.count, before, 'Không được tạo thêm báo cáo nào khi đã có báo cáo cho kỳ này');
     });
 
-    // ===== 6) Permission: người không có reportAggregate không tổng hợp được (server tự chặn) =====
+    // ===== 4) Permission: người không có reportAggregate không tổng hợp được (server tự chặn) =====
     await run.run('Permission: người không có quyền reportAggregate bị chặn khi tổng hợp kỳ báo cáo', async () => {
       await loginAs(page, EMP_NOAGG);
       const result = await page.evaluate(async ({ pId, eId }) => {
@@ -187,7 +146,7 @@ async function main() {
       assertIncludes(result.alerts, 'Bạn không có quyền tổng hợp Báo Cáo Định Kỳ', 'Server phải chặn người không có quyền reportAggregate');
     });
 
-    // ===== 7) reportManage đóng kỳ sớm (điều kiện bắt buộc trước khi tổng hợp) =====
+    // ===== 5) reportManage đóng kỳ sớm (điều kiện bắt buộc trước khi tổng hợp) =====
     await run.run('reportManage đóng kỳ báo cáo sớm (OPEN -> CLOSED)', async () => {
       await loginAs(page, HC_PR);
       const result = await page.evaluate(async (pId) => {
@@ -202,7 +161,7 @@ async function main() {
       assertIncludes(result.alerts, 'Đã đóng kỳ báo cáo', 'Phải có thông báo đóng kỳ thành công');
     });
 
-    // ===== 8) reportAggregate tổng hợp theo Báo Cáo đã chọn, sửa 1 slide, rồi Phát Hành/Hủy Phát Hành =====
+    // ===== 6) reportAggregate tổng hợp theo Báo Cáo đã chọn, sửa 1 slide, rồi Phát Hành/Hủy Phát Hành =====
     await run.run('Tổng Hợp Theo Báo Cáo: chọn+sắp thứ tự, sửa slide, Phát Hành rồi Hủy Phát Hành', async () => {
       await loginAs(page, AGG1);
       const mergeResult = await page.evaluate(async ({ pId, eId }) => {
@@ -261,29 +220,47 @@ async function main() {
       assertIncludes(unpublishResult.alerts, 'Đã hủy phát hành', 'Phải có thông báo hủy phát hành thành công');
     });
 
-    // ===== 9) Tổng Hợp Theo Công Việc — dựng lại compilation từ DB.tasks (view thống kê TASK_STATS) =====
-    await run.run('Tổng Hợp Theo Công Việc: tự động dựng slide thống kê + danh sách công việc từ DB.tasks', async () => {
+    // ===== 7) Đối Chiếu Theo Công Việc — dựng period.taskCompilation từ DB.tasks, TÁCH RIÊNG khỏi
+    // period.compilation (bản tổng hợp CHÍNH THỨC đã phát hành/hủy phát hành ở bước 6 trên) — bấm nút
+    // này KHÔNG được đụng gì tới compilation đang có, chỉ ghi vào field taskCompilation riêng. =====
+    await run.run('Đối Chiếu Theo Công Việc: dựng period.taskCompilation từ DB.tasks, KHÔNG đụng compilation chính thức', async () => {
+      const beforeCompilation = await page.evaluate((pId) => {
+        const p = DB.reportPeriods.find(x => x.id === pId);
+        return JSON.parse(JSON.stringify(p.compilation));
+      }, periodId);
+
       const result = await page.evaluate(async (pId) => {
         window.__resetCapture();
         prAggCurrentPeriodId = pId;
-        await mergeReportPeriodByTasksAction(); // đã có bản MERGED trước đó (theo Báo Cáo) -> hàm tự confirm() thay thế, confirm() đã stub luôn trả true
+        await mergeReportPeriodByTasksAction();
         const p = DB.reportPeriods.find(x => x.id === pId);
-        const statsSlide = p.compilation.slides.find(s => s.kind === 'TASK_STATS');
-        const tasksSlide = p.compilation.slides.find(s => s.kind === 'TASKS');
+        const statsSlide = p.taskCompilation.slides.find(s => s.kind === 'TASK_STATS');
+        const tasksSlide = p.taskCompilation.slides.find(s => s.kind === 'TASKS');
         return {
           alerts: window.__alerts,
-          compilationStatus: p.compilation.status,
+          compilation: p.compilation,
           statsText: statsSlide ? statsSlide.text : null,
           taskItems: tasksSlide ? tasksSlide.items : null
         };
       }, periodId);
-      assertEqual(result.compilationStatus, 'MERGED', 'Tổng hợp theo Công Việc cũng phải đưa bản tổng hợp về trạng thái MERGED');
-      assert(result.statsText, 'Phải có slide thống kê công việc (TASK_STATS)');
+      assert(result.statsText, 'Phải có slide thống kê công việc (TASK_STATS) trong taskCompilation');
       assertIncludes(result.statsText, 'Tổng số công việc: 2', 'Phải đếm đúng tổng 2 công việc trong phạm vi kỳ');
       assertIncludes(result.statsText, 'Đã hoàn thành: 1', 'Phải đếm đúng 1 việc đã hoàn thành');
       assertIncludes(result.statsText, 'Đang thực hiện: 1', 'Phải đếm đúng 1 việc đang thực hiện');
       assert(result.taskItems && result.taskItems.length === 2, 'Slide danh sách công việc phải liệt kê đủ 2 việc của nhân viên trong phạm vi kỳ');
-      assertIncludes(result.alerts, 'Đã tổng hợp theo Công Việc', 'Phải có thông báo tổng hợp theo Công Việc thành công');
+      // Hành động này chỉ làm mới khối xem-riêng (im lặng, không alert) — khác các hành động thay đổi
+      // bản tổng hợp chính thức (merge/save/publish) vốn đều alert kết quả. Không có warning gì thì
+      // window.__alerts phải rỗng.
+      assertEqual(result.alerts.length, 0, 'Không alert gì khi đối chiếu thành công (không có cảnh báo ranh giới kỳ)');
+      assertEqual(JSON.stringify(result.compilation), JSON.stringify(beforeCompilation), 'compilation (bản tổng hợp chính thức, đã phát hành/hủy phát hành) không được thay đổi gì');
+    });
+
+    // ===== 8) Đối Chiếu Theo Công Việc KHÔNG hiện cho người không có quyền quản lý/tổng hợp báo cáo =====
+    await run.run('Riêng tư: taskCompilation KHÔNG lộ cho người không có reportManage/reportAggregate', async () => {
+      await loginAs(page, EMP_NOAGG);
+      const period = await page.evaluate((pId) => DB.reportPeriods.find(x => x.id === pId), periodId);
+      assert(!period.taskCompilation, 'Người không có quyền quản lý/tổng hợp không được thấy taskCompilation qua GET /api/data');
+      await loginAs(page, AGG1);
     });
   } finally {
     await browser.close();
