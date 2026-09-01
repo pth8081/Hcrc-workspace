@@ -4353,6 +4353,7 @@ input[data-sdd-list] {
       <button type="button" onclick="setAdminSubTab('EMAIL')" id="btnAdminSubEmail" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">📧 Cấu Hình Email</button>
       <button type="button" onclick="setAdminSubTab('CATALOG')" id="btnAdminSubCatalog" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">🗂️ Quản Lý Danh Mục</button>
       <button type="button" onclick="setAdminSubTab('PERMS')" id="btnAdminSubPerms" class="px-3 py-1.5 rounded text-xs font-bold bg-amber-700 text-white">🔐 Phân Quyền</button>
+      <button type="button" onclick="setAdminSubTab('EXTAUTH')" id="btnAdminSubExtAuth" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">🔑 API Xác Thực Ngoài</button>
     </div>
 
     <!-- CẤU HÌNH HỆ THỐNG EMAIL -->
@@ -4468,6 +4469,44 @@ input[data-sdd-list] {
         </table>
         <button type="button" onclick="saveContractExpiryDeptContacts()" class="bg-amber-600 text-white px-4 py-1.5 rounded font-bold hover:bg-amber-700">Lưu Người Phụ Trách</button>
       </div>
+    </div>
+
+    <!-- API XÁC THỰC NGOÀI (verify-credentials cho ứng dụng khác) -->
+    <div id="adminSubExtAuth" class="hidden bg-cyan-50 p-4 rounded border border-cyan-300 space-y-4">
+      <div>
+        <h3 class="font-bold text-cyan-900 text-sm flex items-center gap-1">🔑 API Xác Thực Tài Khoản Cho Ứng Dụng Ngoài</h3>
+        <p class="text-[11px] text-gray-500 italic mt-1">Cấp API key cho 1 ứng dụng/hệ thống KHÁC, dùng chung 1 key cho 2 việc — mọi lệnh gọi đều kèm header <code class="bg-white px-1 rounded border">Authorization: Bearer &lt;API key&gt;</code>:</p>
+        <ul class="text-[11px] text-gray-500 list-disc pl-5 space-y-1">
+          <li><b>Xác thực tài khoản/mật khẩu:</b> <code class="bg-white px-1 rounded border">POST /api/external/verify-credentials</code>, body <code class="bg-white px-1 rounded border">{"account","password"}</code>, trả về <code class="bg-white px-1 rounded border">{"success": true|false}</code>. Đây KHÔNG phải đăng nhập hộ (không cấp phiên/cookie) — chỉ trả lời đúng/sai.</li>
+          <li><b>Đồng bộ danh bạ nhân sự:</b> <code class="bg-white px-1 rounded border">GET /api/external/users</code> — trả username/tên/điện thoại/email/phòng ban/chức danh/trạng thái hoạt động của TOÀN BỘ tài khoản; thêm <code class="bg-white px-1 rounded border">?account=&lt;username&gt;</code> để tra cứu đúng 1 hồ sơ. Không bao giờ kèm mật khẩu.</li>
+        </ul>
+      </div>
+
+      <form onsubmit="createExternalApiKeyAction(event)" class="flex flex-wrap items-end gap-2 bg-white p-3 rounded border text-xs">
+        <div class="flex-1 min-w-[220px]">
+          <label class="block font-semibold text-gray-600 mb-1">Tên / Mô tả ứng dụng dùng key này</label>
+          <input id="extApiKeyName" placeholder="VD: Ứng dụng chấm công XYZ" class="w-full border p-1.5 rounded" required>
+        </div>
+        <button type="submit" class="bg-cyan-700 text-white px-4 py-1.5 rounded font-bold hover:bg-cyan-800">➕ Tạo API Key</button>
+      </form>
+
+      <!-- Hộp hiện key THẬT đúng 1 lần ngay sau khi tạo — ẩn mặc định, KHÔNG có cách nào xem lại sau khi đóng -->
+      <div id="extApiKeyRevealBox" class="hidden bg-amber-50 border-2 border-amber-400 rounded p-3 space-y-2">
+        <p class="text-xs font-bold text-amber-900">⚠️ Đây là API key THẬT — chỉ hiển thị ĐÚNG 1 LẦN DUY NHẤT ngay bây giờ. Hãy sao chép và lưu lại an toàn ngay, đóng hộp này lại sẽ KHÔNG xem lại được nữa (chỉ có thể thu hồi và tạo key mới).</p>
+        <div class="flex items-center gap-2">
+          <code id="extApiKeyRevealValue" class="flex-1 bg-white border rounded px-2 py-1.5 text-xs break-all select-all"></code>
+          <button type="button" onclick="copyExternalApiKeyReveal()" class="bg-amber-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-amber-700 whitespace-nowrap">📋 Sao chép</button>
+        </div>
+        <button type="button" onclick="document.getElementById('extApiKeyRevealBox').classList.add('hidden')" class="text-xs text-gray-600 underline">Tôi đã lưu lại, đóng hộp này</button>
+      </div>
+
+      <table class="w-full border-collapse text-xs bg-white rounded border">
+        <thead><tr class="border-b text-left text-gray-500">
+          <th class="py-1.5 px-2">Tên / Mô tả</th><th class="py-1.5 px-2">Key (tiền tố)</th><th class="py-1.5 px-2">Trạng thái</th>
+          <th class="py-1.5 px-2">Người tạo</th><th class="py-1.5 px-2">Ngày tạo</th><th class="py-1.5 px-2">Dùng lần cuối</th><th class="py-1.5 px-2">Hành động</th>
+        </tr></thead>
+        <tbody id="extApiKeysTableBody"></tbody>
+      </table>
     </div>
 
     <div id="adminSubCatalog" class="hidden grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
@@ -7123,6 +7162,7 @@ const DB = {
   itPriceMasterLists: [],
   uploadFileTypeConfig: {}, uploadSizeLimitConfig: {},
   emailConfig: {}, systemLogs: [],
+  externalApiKeys: [],
   // Version (UpdatedAt) từng collection tại lần đọc gần nhất — gửi kèm header If-Match khi ghi
   // (syncStorage()) để server phát hiện xung đột nếu người khác đã ghi đè kể từ lúc đọc (Bước 1:
   // optimistic concurrency, xem routes/data.js). KHÔNG phải 1 collection thật, không sync lên server.
@@ -8941,6 +8981,9 @@ async function initDatabase(loggingInUser) {
     // GET /api/data như mọi collection khác, không cần lọc bớt như thiết kế cũ.
     DB.itPriceMasterLists = data.itPriceMasterLists || [];
     DB.emailConfig = data.emailConfig || {};
+    // externalApiKeys: server tự trả mảng RỖNG cho non-admin (ẩn hoàn toàn, xem
+    // sanitizeExternalApiKeys() ở routes/data.js) — không cần lọc gì thêm ở client.
+    DB.externalApiKeys = data.externalApiKeys || [];
     // Nhật ký hệ thống KHÔNG còn tải kèm trong GET /api/data (trước đây trả sẵn cho MỌI người đăng
     // nhập dù chỉ admin mới thấy được màn Nhật ký — lộ dữ liệu qua API dù giao diện đã ẩn) — giờ tải
     // riêng qua GET /api/log (chỉ admin gọi được) đúng lúc mở tab Nhật ký, xem loadSystemLogs().
@@ -22147,12 +22190,91 @@ function setAdminSubTab(subTab) {
   document.getElementById('adminSubEmail').classList.toggle('hidden', subTab !== 'EMAIL');
   document.getElementById('adminSubCatalog').classList.toggle('hidden', subTab !== 'CATALOG');
   document.getElementById('adminSubPerms').classList.toggle('hidden', subTab !== 'PERMS');
+  document.getElementById('adminSubExtAuth').classList.toggle('hidden', subTab !== 'EXTAUTH');
 
   const activeCls = 'px-3 py-1.5 rounded text-xs font-bold bg-amber-700 text-white';
   const inactiveCls = 'px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700';
   document.getElementById('btnAdminSubEmail').className = subTab === 'EMAIL' ? activeCls : inactiveCls;
   document.getElementById('btnAdminSubCatalog').className = subTab === 'CATALOG' ? activeCls : inactiveCls;
   document.getElementById('btnAdminSubPerms').className = subTab === 'PERMS' ? activeCls : inactiveCls;
+  document.getElementById('btnAdminSubExtAuth').className = subTab === 'EXTAUTH' ? activeCls : inactiveCls;
+  if (subTab === 'EXTAUTH') renderExternalApiKeysTable();
+}
+
+// ---------- API Xác Thực Ngoài (routes/externalAuthAdmin.js + routes/externalAuthVerify.js) ----------
+// DB.externalApiKeys đã có sẵn từ GET /api/data (server tự strip keyHash + ẩn hoàn toàn với non-admin,
+// xem sanitizeExternalApiKeys() ở routes/data.js) — chỉ 2 thao tác tạo/thu hồi mới cần gọi route riêng
+// (server phải tự sinh key/hash, client không tự tạo được).
+function renderExternalApiKeysTable() {
+  const tbody = document.getElementById('extApiKeysTableBody');
+  if (!tbody) return;
+  const list = [...(DB.externalApiKeys || [])].sort((a, b) => (b.id || 0) - (a.id || 0));
+  if (list.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="7" class="py-3 text-center text-gray-400 italic">Chưa có API key nào</td></tr>`;
+    return;
+  }
+  tbody.innerHTML = list.map(k => `
+    <tr class="border-b hover:bg-gray-50">
+      <td class="py-1.5 px-2 font-semibold">${escapeHtml(k.name)}</td>
+      <td class="py-1.5 px-2 font-mono text-gray-500">${escapeHtml(k.keyPrefix)}…</td>
+      <td class="py-1.5 px-2">${k.active === false
+        ? `<span class="text-red-600 font-bold">Đã thu hồi</span>`
+        : `<span class="text-green-700 font-bold">Đang hoạt động</span>`}</td>
+      <td class="py-1.5 px-2">${escapeHtml(k.createdByName || k.createdBy || '')}</td>
+      <td class="py-1.5 px-2">${k.createdAt ? new Date(k.createdAt).toLocaleString('vi-VN') : ''}</td>
+      <td class="py-1.5 px-2">${k.lastUsedAt ? new Date(k.lastUsedAt).toLocaleString('vi-VN') : '<span class="text-gray-400 italic">Chưa dùng</span>'}</td>
+      <td class="py-1.5 px-2">${k.active === false ? '' : `<button type="button" onclick="revokeExternalApiKeyAction(${k.id}, '${escapeHtml(k.name).replace(/'/g, "\\'")}')" class="bg-red-600 text-white px-2 py-1 rounded text-[11px] font-bold hover:bg-red-700">Thu hồi</button>`}</td>
+    </tr>
+  `).join('');
+}
+
+async function createExternalApiKeyAction(e) {
+  e.preventDefault();
+  const nameInput = document.getElementById('extApiKeyName');
+  const name = nameInput.value.trim();
+  if (!name) return;
+  try {
+    const res = await fetch('/api/admin/external-api-keys', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name })
+    });
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(body.error || ('HTTP ' + res.status));
+    const { apiKey, ...record } = body;
+    DB.externalApiKeys = [...(DB.externalApiKeys || []), record];
+    nameInput.value = '';
+    renderExternalApiKeysTable();
+    document.getElementById('extApiKeyRevealValue').textContent = apiKey;
+    document.getElementById('extApiKeyRevealBox').classList.remove('hidden');
+    // KHÔNG gọi logSystemAction() ở đây — server (routes/externalAuthAdmin.js) đã tự ghi Nhật ký hệ
+    // thống trực tiếp (đảm bảo có log dù client mất mạng ngay sau response), gọi thêm ở đây sẽ trùng lặp.
+  } catch (err) {
+    alert(`⛔ Lỗi tạo API key: ${err.message}`);
+  }
+}
+
+async function copyExternalApiKeyReveal() {
+  const value = document.getElementById('extApiKeyRevealValue').textContent;
+  try {
+    await navigator.clipboard.writeText(value);
+    alert('✅ Đã sao chép API key vào bộ nhớ tạm.');
+  } catch (err) {
+    alert('⛔ Không tự sao chép được — vui lòng bôi đen và sao chép thủ công.');
+  }
+}
+
+async function revokeExternalApiKeyAction(id, name) {
+  if (!confirm(`Thu hồi API key "${name}"? Ứng dụng đang dùng key này sẽ KHÔNG thể gọi xác thực được nữa (không thể hoàn tác, phải tạo key mới nếu cần dùng lại).`)) return;
+  try {
+    const res = await fetch(`/api/admin/external-api-keys/${id}/revoke`, { method: 'POST' });
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(body.error || ('HTTP ' + res.status));
+    DB.externalApiKeys = (DB.externalApiKeys || []).map(k => k.id === id ? { ...k, active: false } : k);
+    renderExternalApiKeysTable();
+    // Cùng lý do ở createExternalApiKeyAction() — server đã tự ghi log, không gọi logSystemAction() ở đây.
+  } catch (err) {
+    alert(`⛔ Lỗi thu hồi API key: ${err.message}`);
+  }
 }
 
 // ==========================================
