@@ -1,9 +1,41 @@
 # Phiên bản hiện tại
 
-**1.93.0** — đã merge vào `main` (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở
+**1.94.0** — đã merge vào `main` (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở
 badge góc màn hình + `/api/health`).
 
-## Cập nhật gần nhất (PR #206, nhánh `claude/chao-ban-oo5ijl`)
+## Cập nhật gần nhất (PR #208, nhánh `claude/chao-ban-oo5ijl`)
+
+Theo yêu cầu: kiểm tra module Điều Hành, gỡ tính năng "Mẫu Trình Chiếu" khỏi Báo Cáo Định Kỳ, và tách phần
+"Tổng Hợp Theo Công Việc" ra khỏi "Tổng Hợp Theo Báo Cáo" để dùng làm đối chiếu.
+
+- **Gỡ "Mẫu Trình Chiếu":** xác nhận "Điều Hành" chỉ là dropdown nav gộp 3 module con (Biên bản họp/Công
+  việc/Báo Cáo Định Kỳ) — tính năng Mẫu Trình Chiếu thực chất nằm trong module con "Báo Cáo Định Kỳ". Gỡ
+  toàn bộ: collection `reportSlideTemplates` (server + client), sub-tab "🎨 Mẫu Trình Chiếu", pipeline
+  trích ảnh nền từ ảnh/PDF/PowerPoint (~15 hàm client), route CRUD. Bỏ luôn yêu cầu bắt buộc chọn mẫu khi
+  tạo Kỳ Báo Cáo — mọi kỳ mới dùng chung 1 giao diện mặc định cố định (giữ nguyên đọc được cho các kỳ cũ
+  đã chọn mẫu 'ORANGE_GOLD'/'DEFAULT' đời trước, không ép migrate).
+- **Tách "Đối Chiếu Theo Công Việc" khỏi "Tổng Hợp Theo Báo Cáo":** trước đây 2 nút "Tổng Hợp Theo Báo
+  Cáo"/"Tổng Hợp Theo Công Việc" cùng ghi vào field `period.compilation` — bấm nút nào sau thì nội dung
+  của nút kia bị ghi đè mất hoàn toàn. Nay `period.compilation` (từ báo cáo người dùng nộp) giữ nguyên
+  hành vi cũ 100%; thêm field mới `period.taskCompilation` (từ `DB.tasks`) — hoàn toàn tách biệt, chỉ xem
+  (không sửa/publish/trình chiếu), sinh lại từ đầu mỗi lần bấm nút "Đối Chiếu Theo Công Việc" — cho phép so
+  công việc thật ghi nhận trong hệ thống với nội dung nhân viên tự báo cáo mà không mất dữ liệu bên nào.
+  `taskCompilation` chỉ hiện qua `GET /api/data` cho `reportManage`/`reportAggregate`/`admin`.
+- **Phân tích + demo (không có thay đổi code):** đã nghiên cứu kỹ thuật và làm demo tương tác thật (chạy
+  `pdf-lib` + `pdf.js` ngay trong trình duyệt) so sánh ghép nhiều file bằng PPTX vs PDF cho phần báo cáo
+  nộp — gửi riêng cho người dùng qua Artifact, không nằm trong PR này.
+
+**Deploy impact:** không đổi `server/sql/schema.sql`, không thêm biến môi trường mới, không thêm
+dependency mới — chỉ copy code + `pm2 restart`. Lưu ý dữ liệu cũ: các kỳ báo cáo đã từng dùng "Tổng Hợp
+Theo Công Việc" TRƯỚC bản này vẫn hiển thị nguyên vẹn trong khu vực "Tổng Hợp Theo Báo Cáo" — không tự
+động tách ra `taskCompilation`; chỉ những lần bấm "Đối Chiếu Theo Công Việc" SAU khi deploy mới ghi vào
+field mới.
+
+Đã kiểm thử: `tests/test-periodic-report.js` viết lại/mở rộng (8 kịch bản, gồm kịch bản xác nhận
+`taskCompilation` tách biệt hoàn toàn khỏi `compilation` + kịch bản xác nhận không lộ cho người không có
+quyền quản lý/tổng hợp) — 8/8 pass. Toàn bộ 39 file `tests/test-*.js` — 0 lỗi, không regression.
+
+## Trước đó (PR #206, nhánh `claude/chao-ban-oo5ijl`)
 
 Bổ sung cho tính năng TOTP bắt buộc admin ở PR #204: trước đây, muốn thêm 1 thiết bị Authenticator khác
 (vd điện thoại thứ 2) bắt buộc phải gỡ TOTP rồi thiết lập lại từ đầu, vì mã QR/bí mật chỉ hiện đúng 1 lần
