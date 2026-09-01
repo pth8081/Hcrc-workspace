@@ -72,7 +72,7 @@ router.delete('/:id', async (req, res) => {
   try {
     assertAdmin(req.freshUser);
     const level = req.freshUser.perms?.approverAuthLevel || 'NONE';
-    if (level !== 'NONE' && !consumeApprovalGrant(req.freshUser.username)) {
+    if (level !== 'NONE' && !(await consumeApprovalGrant(req.freshUser.username))) {
       return res.status(403).json({ error: 'Cần xác thực lại (mật khẩu/OTP/PIN/vân tay) trước khi xóa vĩnh viễn' });
     }
     await permanentlyDeleteTrashItem(trashId);

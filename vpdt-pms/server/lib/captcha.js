@@ -4,26 +4,22 @@
 // không viết riêng logic đọc CAPTCHA cho từng site — đúng mức "đơn giản" người dùng yêu cầu.
 //
 // Sinh 1 mã số ngẫu nhiên, vẽ ra SVG có nhiễu (đường kẻ, chấm, xoay/lệch từng chữ số) để không thể đọc
-// thẳng bằng cách trích text thô, gắn với 1 captchaId dùng MỘT LẦN (cùng mô hình Map hết hạn với
-// lib/approvalAuth.js — mất khi restart server chỉ khiến người dùng phải lấy mã mới, không phải lỗ hổng).
+// thẳng bằng cách trích text thô, gắn với 1 captchaId dùng MỘT LẦN — lưu qua lib/ephemeralStore.js
+// (bảng dbo.EphemeralAuthTokens dùng chung, cluster-safe) thay vì Map trong bộ nhớ tiến trình như
+// trước (chỉ đúng khi chạy đúng 1 tiến trình Node, sai khi PM2 cluster nhiều tiến trình không sticky
+// session: sinh mã ở tiến trình A, xác minh rơi vào tiến trình B không thấy gì, báo sai mã dù người
+// dùng gõ đúng).
 const crypto = require('crypto');
+const { setToken, consumeToken } = require('./ephemeralStore');
 
 const CODE_LENGTH = 4;
 const TTL_MS = 5 * 60 * 1000;
-const MAX_ACTIVE = 5000; // chặn Map phình vô hạn nếu bị spam GET /api/captcha dồn dập
-
-const challenges = new Map(); // captchaId -> { code, expiresAt }
 
 function isCaptchaEnabled() {
   return process.env.CAPTCHA_ENABLED === 'true';
 }
 
-function pruneExpired() {
-  const now = Date.now();
-  for (const [id, entry] of challenges) {
-    if (entry.expiresAt <= now) challenges.delete(id);
-  }
-}
+const captchaKey = (id) => `captcha:${id}`;
 
 function randomDigits(len) {
   let s = '';
@@ -69,28 +65,19 @@ function renderCaptchaSvg(code) {
   return svg;
 }
 
-function generateCaptcha() {
-  pruneExpired();
-  if (challenges.size >= MAX_ACTIVE) {
-    // Bị spam vượt ngưỡng — xoá bớt các mã cũ nhất thay vì từ chối thẳng, vẫn phục vụ được người dùng
-    // thật, chỉ ưu tiên giữ mã mới hơn.
-    const oldest = [...challenges.keys()].slice(0, challenges.size - MAX_ACTIVE + 1);
-    for (const id of oldest) challenges.delete(id);
-  }
-
+async function generateCaptcha() {
   const code = randomDigits(CODE_LENGTH);
   const captchaId = crypto.randomBytes(16).toString('hex');
-  challenges.set(captchaId, { code, expiresAt: Date.now() + TTL_MS });
+  await setToken(captchaKey(captchaId), { code }, TTL_MS);
   return { captchaId, svg: renderCaptchaSvg(code) };
 }
 
 // Dùng 1 lần dù đúng hay sai — không cho thử lại nhiều lần trên cùng 1 captchaId (mỗi lượt thử sai phải
 // lấy mã mới, đúng tinh thần CAPTCHA thay vì cho dò không giới hạn).
-function verifyCaptcha(captchaId, answer) {
+async function verifyCaptcha(captchaId, answer) {
   if (!captchaId) return false;
-  const entry = challenges.get(captchaId);
-  challenges.delete(captchaId);
-  return !!entry && entry.expiresAt > Date.now() && String(answer || '').trim() === entry.code;
+  const entry = await consumeToken(captchaKey(captchaId));
+  return !!entry && String(answer || '').trim() === entry.code;
 }
 
 module.exports = { isCaptchaEnabled, generateCaptcha, verifyCaptcha };

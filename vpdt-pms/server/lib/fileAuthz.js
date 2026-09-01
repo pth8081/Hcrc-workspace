@@ -31,6 +31,7 @@ const {
   canDownloadRecordFile, canViewInternalPost,
   canViewItPriceApproval, canViewReportEntry, canSeeReportCompilation, canSeeReportPdfCompilation, filterRecruitmentReferralsForUser,
   canViewLicense, canViewItServiceRenewal,
+  canViewOperationOrder, canViewOperationStoreOpening, canViewOperationRepair,
   canViewDoc, canViewSubmission, canViewContract, canViewCarReg, canViewOfficeReq
 } = require('./recordViewScope');
 
@@ -86,7 +87,7 @@ function customDataHasFileUrl(record, fileUrl) {
 }
 
 async function findOwningRecord(fileUrl) {
-  const [docs, submissions, contracts, carRegs, officeReqs, internalPosts, itPriceApprovals, reportEntries, reportPeriods, recruitmentReferrals, licenses, itServiceRenewals] = await Promise.all([
+  const [docs, submissions, contracts, carRegs, officeReqs, internalPosts, itPriceApprovals, reportEntries, reportPeriods, recruitmentReferrals, licenses, itServiceRenewals, operationOrders, operationStoreOpenings, operationRepairs] = await Promise.all([
     getAllForCollection('docs'),
     getAllForCollection('submissions'),
     getAllForCollection('contracts'),
@@ -98,7 +99,10 @@ async function findOwningRecord(fileUrl) {
     getAllForCollection('reportPeriods'),
     getAllForCollection('recruitmentReferrals'),
     getAllForCollection('licenses'),
-    getAllForCollection('itServiceRenewals')
+    getAllForCollection('itServiceRenewals'),
+    getAllForCollection('operationOrders'),
+    getAllForCollection('operationStoreOpenings'),
+    getAllForCollection('operationRepairs')
   ]);
   // customDataHasFileUrl() phủ thêm file của TRƯỜNG BỔ SUNG kiểu Tải tệp/Tải nhiều tệp cho đúng 6 module
   // có hỗ trợ Biểu Mẫu ở đây (xem validateRequiredCustomData() ở lib/createValidation.js) — trả về ĐÚNG
@@ -134,6 +138,18 @@ async function findOwningRecord(fileUrl) {
   // itServiceRenewals (Hỗ Trợ IT — Gia Hạn Dịch Vụ CNTT): quyền phẳng itManage, cùng khuôn licenses ở trên.
   const itRenewal = (itServiceRenewals || []).find(r => r.fileUrl === fileUrl);
   if (itRenewal) return { itServiceRenewal: true, item: itRenewal };
+  // Vận Hành (operationOrders/operationStoreOpenings/operationRepairs): trước đây HOÀN TOÀN vắng mặt ở
+  // findOwningRecord() — file đính kèm của cả 3 luồng (đơn hàng/đề xuất mở mới/đề xuất sửa chữa siêu thị)
+  // luôn rơi vào nhánh FAIL-OPEN bên dưới, đọc được bởi BẤT KỲ ai đã đăng nhập dù bản ghi bị giới hạn
+  // theo phòng ban — cùng dạng lỗ hổng đã vá cho 5 module "theo phòng ban" khác. Trả owning riêng vì 3
+  // luồng này không dùng khuôn quyền tải "<moduleKey>Download" mà dùng canView* trực tiếp cho cả 2 mode
+  // (xem canViewOperationOrder()/canViewOperationStoreOpening()/canViewOperationRepair(), lib/recordViewScope.js).
+  const opOrder = (operationOrders || []).find(o => o.fileUrl === fileUrl);
+  if (opOrder) return { operationOrder: true, item: opOrder };
+  const opStoreOpening = (operationStoreOpenings || []).find(o => o.fileUrl === fileUrl);
+  if (opStoreOpening) return { operationStoreOpening: true, item: opStoreOpening };
+  const opRepair = (operationRepairs || []).find(o => o.fileUrl === fileUrl);
+  if (opRepair) return { operationRepair: true, item: opRepair };
   return null;
 }
 
@@ -211,6 +227,9 @@ async function authorizeFileAccess(user, fileUrl, mode) {
   if (owning.recruitment) return filterRecruitmentReferralsForUser([owning.referral], user).length > 0;
   if (owning.license) return canViewLicense(user, owning.item);
   if (owning.itServiceRenewal) return canViewItServiceRenewal(user);
+  if (owning.operationOrder) return canViewOperationOrder(user, owning.item, await getAllAppData());
+  if (owning.operationStoreOpening) return canViewOperationStoreOpening(user, owning.item, await getAllAppData());
+  if (owning.operationRepair) return canViewOperationRepair(user, owning.item, await getAllAppData());
 
   // ——— Nhóm 5 module "theo phòng ban" (doc/submission/contract/car/office) ———
   if (mode === 'download') {

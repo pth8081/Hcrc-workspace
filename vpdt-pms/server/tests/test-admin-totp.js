@@ -21,11 +21,14 @@
 // gửi mail thật, chỉ đếm số lần gọi) + db (getPool/sql — chỉ để getEmailConfig()/insertSystemLog() không
 // crash, không kiểm tra nội dung SQL thật ở đây).
 //
-// LƯU Ý QUAN TRỌNG: 2 Map trong lib/totp.js (pendingLogins/pendingSetups) sống ở CẤP MODULE — không bị
-// resetAppData() xoá (hàm đó chỉ reset APP_DATA giả lập, không đụng gì tới lib/totp.js thật). Vì vậy MỌI
-// kịch bản dưới đây tự đi qua ĐÚNG luồng thật (gọi /login rồi /verify-totp-login, hoặc /setup-options rồi
-// /setup-verify) trong CHÍNH kịch bản đó thay vì giả định sẵn 1 trạng thái "đã bật TOTP" trong seed —
-// vừa test đúng luồng thật đầu-cuối, vừa tránh trạng thái rò rỉ giữa các kịch bản.
+// LƯU Ý QUAN TRỌNG: trạng thái pendingLogins/pendingSetups (lib/totp.js) nay lưu qua bảng dùng chung
+// dbo.EphemeralAuthTokens (lib/ephemeralStore.js — thay cho 2 Map cấp module trước đây, đổi để cluster
+// PM2 nhiều tiến trình đọc/ghi đúng cùng 1 nguồn, xem lib/ephemeralStore.js) — Map giả lập ở khối
+// `ephemeralTokens` phía dưới SỐNG Ở CẤP TEST FILE, không bị resetAppData() xoá (hàm đó chỉ reset
+// APP_DATA giả lập, không đụng gì tới bảng ephemeral giả lập). Vì vậy MỌI kịch bản dưới đây tự đi qua
+// ĐÚNG luồng thật (gọi /login rồi /verify-totp-login, hoặc /setup-options rồi /setup-verify) trong
+// CHÍNH kịch bản đó thay vì giả định sẵn 1 trạng thái "đã bật TOTP" trong seed — vừa test đúng luồng
+// thật đầu-cuối, vừa tránh trạng thái rò rỉ giữa các kịch bản.
 //
 // Chạy: node server/tests/test-admin-totp.js
 const http = require('http');
@@ -90,10 +93,48 @@ stubModule('lib/appData', {
 // tượng "chainable" chấp nhận bao nhiêu lượt .input(...) cũng được rồi mới .query(...), và `sql.*` chấp
 // nhận gọi bất kỳ tên kiểu dữ liệu nào (Proxy trả về hàm rỗng cho mọi thuộc tính) — không kiểm tra nội
 // dung SQL thật ở bài test này (đã có test riêng cho lib/systemLogStore.js/emailConfig ở nơi khác).
+//
+// dbo.EphemeralAuthTokens (lib/ephemeralStore.js — nay lib/totp.js dùng để lưu pendingLogins/
+// pendingSetups thay cho Map cấp module cũ, xem chú thích "LƯU Ý QUAN TRỌNG" đầu file — Map đó KHÔNG
+// còn tồn tại, mọi trạng thái đăng nhập 2 bước/thiết lập giờ đi qua đây) PHẢI được mô phỏng THẬT bằng 1
+// Map trong bộ nhớ test — nếu không, mọi request "cấp"/"đọc"/"xoá" trạng thái TOTP tạm thời đều rơi vào
+// nhánh mặc định {recordset:[]} bên dưới, khiến hasPendingTotpLogin()/getPendingTotpSetupSecret() không
+// bao giờ thấy được dữ liệu đã cấp trước đó.
+const ephemeralTokens = new Map(); // TokenKey -> { Payload, ExpiresAt }
+function handleEphemeralTokensQuery(q, inputs) {
+  if (/^\s*MERGE dbo\.EphemeralAuthTokens/.test(q)) {
+    ephemeralTokens.set(inputs.key, { Payload: inputs.payload, ExpiresAt: inputs.expiresAt });
+    return { recordset: [] };
+  }
+  if (/^\s*DELETE FROM dbo\.EphemeralAuthTokens OUTPUT/.test(q)) {
+    const row = ephemeralTokens.get(inputs.key);
+    ephemeralTokens.delete(inputs.key);
+    return { recordset: row ? [{ Payload: row.Payload, ExpiresAt: row.ExpiresAt }] : [] };
+  }
+  if (/^\s*SELECT Payload FROM dbo\.EphemeralAuthTokens/.test(q)) {
+    const row = ephemeralTokens.get(inputs.key);
+    if (row && new Date(row.ExpiresAt).getTime() > Date.now()) return { recordset: [{ Payload: row.Payload }] };
+    return { recordset: [] };
+  }
+  if (/^\s*DELETE FROM dbo\.EphemeralAuthTokens WHERE ExpiresAt/.test(q)) {
+    const now = Date.now();
+    for (const [k, v] of ephemeralTokens) if (new Date(v.ExpiresAt).getTime() <= now) ephemeralTokens.delete(k);
+    return { recordset: [] };
+  }
+  return null;
+}
+
 stubModule('db', {
   getPool: async () => ({
     request: () => {
-      const req = { input: () => req, query: async () => ({ recordset: [] }) };
+      const inputs = {};
+      const req = {
+        input: (name, _type, value) => { inputs[name] = value; return req; },
+        query: async (q) => {
+          const eph = handleEphemeralTokensQuery(q, inputs);
+          return eph !== null ? eph : { recordset: [] };
+        }
+      };
       return req;
     }
   }),

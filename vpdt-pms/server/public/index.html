@@ -4133,7 +4133,8 @@ input[data-sdd-list] {
               <label class="font-semibold text-gray-600">Các Đợt Thanh Toán</label>
               <button type="button" onclick="addPaymentCreateInstallmentRow()" class="text-amber-600 font-bold hover:underline">+ Thêm Đợt</button>
             </div>
-            <div id="paymentCreateInstallmentsList" class="space-y-2"></div>
+            <div id="paymentCreateInstallmentsList" class="space-y-2" oninput="updatePaymentCreateInstallmentsSummary()"></div>
+            <div id="paymentCreateInstallmentsSummary" class="mt-2 text-[11px]"></div>
           </div>
           <div class="flex justify-end">
             <button type="submit" class="bg-amber-600 text-white px-5 py-2 rounded font-bold hover:bg-amber-700">Gửi phê duyệt</button>
@@ -18612,6 +18613,7 @@ function renderPaymentCreateInstallmentsList(installments) {
       <button type="button" onclick="removePaymentCreateInstallmentRow(${idx})" class="text-red-500 font-bold hover:underline px-1">✕</button>
     </div>
   `).join('') || '<p class="text-gray-400 italic text-[11px]">Chưa có đợt thanh toán nào — bấm "+ Thêm Đợt".</p>';
+  updatePaymentCreateInstallmentsSummary();
 }
 function addPaymentCreateInstallmentRow() {
   const current = collectPaymentCreateInstallments();
@@ -18629,6 +18631,28 @@ function collectPaymentCreateInstallments() {
     amount: getMoneyValue(row.querySelector('.payment-installment-amount')),
     dueDate: row.querySelector('.payment-installment-due').value
   }));
+}
+
+// Cảnh báo LIVE khi tổng các đợt đang khai lệch giá trị hồ sơ nguồn (Hợp đồng/Mua Bán/Sửa Chữa) — server
+// (startContractPayment()/startOfficePayment(), lib/recordActions.js) CỐ Ý không chặn việc khai khác giá
+// trị tham khảo (kế toán có thể cần thanh toán từng phần/khác giá trị gốc), nhưng phải cảnh báo rõ ràng
+// để người tạo/duyệt biết mình đang lệch bao nhiêu trước khi gửi — không chặn submit, chỉ hiển thị.
+function updatePaymentCreateInstallmentsSummary() {
+  const box = document.getElementById('paymentCreateInstallmentsSummary');
+  if (!box) return;
+  const sourceType = document.getElementById('paymentSourceType')?.value;
+  if (!sourceType || sourceType === 'MANUAL') { box.innerHTML = ''; return; }
+  const sourceId = Number(document.getElementById('paymentSourceRecord')?.value);
+  if (!sourceId) { box.innerHTML = ''; return; }
+  const record = (sourceType === 'CONTRACT' ? DB.contracts : DB.officeReqs).find(r => r.id === sourceId);
+  if (!record) { box.innerHTML = ''; return; }
+  const total = collectPaymentCreateInstallments().reduce((s, it) => s + (Number(it.amount) || 0), 0);
+  const reference = record.amount || 0;
+  if (Math.abs(total - reference) <= 1) {
+    box.innerHTML = `<span class="text-gray-500">Tổng các đợt: ${total.toLocaleString('vi-VN')} VNĐ — khớp giá trị hồ sơ nguồn.</span>`;
+  } else {
+    box.innerHTML = `<span class="text-red-600 font-bold">⚠️ Tổng các đợt (${total.toLocaleString('vi-VN')} VNĐ) lệch giá trị hồ sơ nguồn (${reference.toLocaleString('vi-VN')} VNĐ) — vẫn gửi được, nhưng người duyệt sẽ thấy cảnh báo này.</span>`;
+  }
 }
 
 // "Loại Đề Nghị" (sourceType) — chọn Hợp Đồng/Mua Sắm/Sửa Chữa/Đầu Tư thì đổi sang tạo đề nghị thanh
@@ -18824,6 +18848,7 @@ function renderPaymentRequests() {
         <td class="border p-2">${escapeHtml(pr.dept)}<br><span class="text-xs text-gray-500">${escapeHtml(pr.title)}</span></td>
         <td class="border p-2">
           <div class="font-bold text-purple-700">${(pr.amount || 0).toLocaleString('vi-VN')} VNĐ</div>
+          ${pr.amountMismatchesSource ? `<div class="mt-0.5 text-[11px] font-bold text-red-600">⚠️ Lệch giá trị nguồn (${(pr.referenceAmount || 0).toLocaleString('vi-VN')} VNĐ)</div>` : ''}
           <div class="mt-1 space-y-0.5">${installmentsHTML}</div>
         </td>
         <td class="border p-2"><span class="px-2 py-0.5 rounded font-bold text-xs ${PAYMENT_STATUS_BADGE_CLS[pr.status] || ''}">${PAYMENT_STATUS_LABELS[pr.status] || pr.status}</span></td>

@@ -119,7 +119,7 @@ router.post('/login', loginRateLimiter, async (req, res) => {
   // Chỉ áp dụng khi đã bật CAPTCHA_ENABLED=true (.env) — xem lib/captcha.js. Kiểm tra trước cả bước
   // tra tài khoản/khoá đăng nhập bên dưới vì đây là lớp chặn bot RẺ NHẤT (không tốn DB/bcrypt).
   if (isCaptchaEnabled()) {
-    if (!verifyCaptcha(captchaId, captchaAnswer)) {
+    if (!(await verifyCaptcha(captchaId, captchaAnswer))) {
       logAuthFailure(req, { username, actionType: 'CAPTCHA_FAILED', description: 'Nhập sai/hết hạn mã xác nhận CAPTCHA lúc đăng nhập' });
       return res.status(400).json({ error: 'Mã xác nhận không đúng hoặc đã hết hạn, vui lòng thử lại.' });
     }
@@ -191,7 +191,7 @@ router.post('/login', loginRateLimiter, async (req, res) => {
     // thường như trước — blockIfMustChangePassword (lib/auth.js) sẽ tự chặn admin chưa bật TOTP ở mọi
     // route nghiệp vụ ngay sau khi vào được, bắt thiết lập trước khi dùng tiếp.
     if (user.perms?.admin && user.totpEnabled) {
-      totp.issuePendingTotpLogin(user.username);
+      await totp.issuePendingTotpLogin(user.username);
       return res.json({ totpRequired: true, username: user.username });
     }
 
@@ -217,7 +217,7 @@ router.post('/verify-totp-login', loginRateLimiter, async (req, res) => {
   }
 
   try {
-    if (!totp.hasPendingTotpLogin(username)) {
+    if (!(await totp.hasPendingTotpLogin(username))) {
       return res.status(401).json({ error: 'Phiên đăng nhập đã hết hạn, vui lòng đăng nhập lại' });
     }
 
@@ -257,7 +257,7 @@ router.post('/verify-totp-login', loginRateLimiter, async (req, res) => {
       return res.status(401).json({ error: code ? 'Mã xác thực không đúng' : 'Mã khôi phục không đúng hoặc đã được dùng' });
     }
 
-    totp.consumePendingTotpLogin(username);
+    await totp.consumePendingTotpLogin(username);
 
     let updatedUser = user;
     await withLockedAppDataValue('users', (collection) => {
@@ -337,7 +337,7 @@ router.post('/verify-password', loginRateLimiter, requireAuth, async (req, res) 
 
     // Cấp phiếu xác thực phê duyệt ngắn hạn (5 phút) — routes/workflow.js đòi phiếu này trước khi
     // chấp nhận Duyệt cho tài khoản có approverAuthLevel=PASSWORD, xem lib/approvalAuth.js.
-    issueApprovalGrant(username);
+    await issueApprovalGrant(username);
     res.json({ ok: true });
   } catch (err) {
     console.error('POST /api/auth/verify-password lỗi:', err.message);
@@ -381,7 +381,7 @@ router.post('/verify-pin', loginRateLimiter, requireAuth, async (req, res) => {
     }
 
     // Cấp phiếu xác thực phê duyệt ngắn hạn — cùng cơ chế với /verify-password ở trên (approverAuthLevel=PIN).
-    issueApprovalGrant(username);
+    await issueApprovalGrant(username);
     res.json({ ok: true });
   } catch (err) {
     console.error('POST /api/auth/verify-pin lỗi:', err.message);
@@ -594,7 +594,7 @@ router.post('/request-approval-otp', loginRateLimiter, requireAuth, async (req, 
     if (!req.freshUser.email) {
       return res.status(400).json({ error: 'Tài khoản chưa có email, không thể gửi mã OTP' });
     }
-    const code = issueApprovalOtp(req.freshUser.username);
+    const code = await issueApprovalOtp(req.freshUser.username);
     const emailConfig = await getEmailConfig();
     if (emailConfig.enabled === false) {
       return res.json({ ok: true, simulated: true });
@@ -643,7 +643,7 @@ router.post('/verify-approval-otp', loginRateLimiter, requireAuth, async (req, r
       return res.status(429).json({ error: `Tài khoản tạm khóa do nhập sai quá nhiều lần. Vui lòng thử lại sau ${remainingLockMinutes} phút.` });
     }
 
-    const ok = verifyApprovalOtp(username, code);
+    const ok = await verifyApprovalOtp(username, code);
     if (!ok) {
       await withLockedAppDataValue('users', (collection) => {
         const list = Array.isArray(collection) ? collection : [];
@@ -687,7 +687,7 @@ router.post('/verify-approval-otp', loginRateLimiter, requireAuth, async (req, r
 router.post('/totp/setup-options', requireAuth, async (req, res) => {
   try {
     const secret = totp.generateSecret();
-    totp.issuePendingTotpSetup(req.freshUser.username, secret);
+    await totp.issuePendingTotpSetup(req.freshUser.username, secret);
     const otpauthUri = totp.buildOtpauthUri(req.freshUser.username, secret);
     const qrDataUrl = await QRCode.toDataURL(otpauthUri);
     res.json({ secret, otpauthUri, qrDataUrl });
@@ -709,7 +709,7 @@ router.post('/totp/setup-verify', loginRateLimiter, requireAuth, async (req, res
 
   try {
     const username = req.freshUser.username;
-    const secret = totp.getPendingTotpSetupSecret(username);
+    const secret = await totp.getPendingTotpSetupSecret(username);
     if (!secret) {
       return res.status(400).json({ error: 'Phiên thiết lập đã hết hạn, vui lòng lấy mã QR mới' });
     }
@@ -731,7 +731,7 @@ router.post('/totp/setup-verify', loginRateLimiter, requireAuth, async (req, res
       return list;
     });
 
-    totp.consumePendingTotpSetup(username);
+    await totp.consumePendingTotpSetup(username);
     notifyTotpChange(updated, `Bạn (${updated.name || username}) vừa thiết lập xác thực 2 lớp (TOTP) cho tài khoản của mình trên hệ thống VPDT. Nếu không phải bạn thực hiện, vui lòng liên hệ ngay quản trị viên.`).catch(e => console.error('Lỗi gửi email báo thiết lập TOTP:', e.message));
 
     res.json({ ok: true, backupCodes });
@@ -1200,7 +1200,7 @@ router.post('/webauthn/approval-verify', loginRateLimiter, requireAuth, async (r
       return list;
     });
 
-    issueApprovalGrant(username);
+    await issueApprovalGrant(username);
     res.json({ ok: true });
   } catch (err) {
     console.error('POST /api/auth/webauthn/approval-verify lỗi:', err.message);

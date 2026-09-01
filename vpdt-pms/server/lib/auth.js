@@ -166,9 +166,14 @@ function blockIfMustChangePassword(req, res, next) {
       mustChangePassword: true
     });
   }
-  if (req.freshUser?.perms?.admin && !req.freshUser?.totpEnabled) {
+  // Vân tay (WebAuthn) được phép thay thế TOTP khi đăng nhập (chủ đích thiết kế — tiện dùng trên mobile,
+  // xem routes/auth.js POST /webauthn/login-verify không đòi thêm bước TOTP sau khi xác thực vân tay
+  // thành công) — nên cổng bắt buộc thiết lập 2FA này cũng chấp nhận ĐÃ có ít nhất 1 thiết bị vân tay
+  // đăng ký (req.freshUser.webauthnCredentials) làm đủ điều kiện, không chỉ riêng totpEnabled.
+  const has2FA = !!req.freshUser?.totpEnabled || (req.freshUser?.webauthnCredentials || []).length > 0;
+  if (req.freshUser?.perms?.admin && !has2FA) {
     return res.status(403).json({
-      error: 'Tài khoản Quản Trị Viên bắt buộc phải thiết lập xác thực 2 lớp (TOTP) trước khi tiếp tục sử dụng hệ thống.',
+      error: 'Tài khoản Quản Trị Viên bắt buộc phải thiết lập ít nhất 1 trong 2 lớp xác thực (TOTP hoặc vân tay/Face ID) trước khi tiếp tục sử dụng hệ thống.',
       totpSetupRequired: true
     });
   }

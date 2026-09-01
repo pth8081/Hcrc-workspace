@@ -34,17 +34,36 @@ async function main() {
   const pool = await getPool();
 
   const officeReqs = await loadCollectionRows(pool, 'officeReqs');
-  const dauTuOfficeReqs = officeReqs.filter(r => r.payload?.subType === 'DAU_TU');
+  let dauTuOfficeReqs = officeReqs.filter(r => r.payload?.subType === 'DAU_TU');
 
   const paymentRequests = await loadCollectionRows(pool, 'paymentRequests');
-  const dauTuPayments = paymentRequests.filter(r => r.payload?.sourceModule === 'DAU_TU');
+  const allDauTuPayments = paymentRequests.filter(r => r.payload?.sourceModule === 'DAU_TU');
+
+  // assertCanDeletePaymentRequest() (lib/recordActions.js) chặn CỨNG việc xoá qua UI/API bất kỳ
+  // paymentRequests nào đã status='PAID' (đã xác nhận đủ hết các đợt, tiền đã thực sự chi ra) — đây là
+  // chứng từ tài chính, xoá đi là mất dấu vết kiểm toán vĩnh viễn. Script này XOÁ THẲNG BẰNG SQL, trước
+  // đây hoàn toàn bỏ qua bất biến đó: xoá luôn cả các đề nghị Đầu Tư ĐÃ THANH TOÁN XONG mà không hề cảnh
+  // báo. Loại các payment PAID (và officeReqs nguồn của chúng, để không mồ côi bản ghi thanh toán còn
+  // giữ lại) ra khỏi diện xoá — giữ nguyên làm chứng từ, khớp đúng bất biến app đã có.
+  const paidDauTuPayments = allDauTuPayments.filter(r => r.payload?.status === 'PAID');
+  const dauTuPayments = allDauTuPayments.filter(r => r.payload?.status !== 'PAID');
+  const protectedOfficeReqIds = new Set(paidDauTuPayments.map(r => r.payload?.sourceId).filter(id => id != null));
+  const protectedOfficeReqs = dauTuOfficeReqs.filter(r => protectedOfficeReqIds.has(r.id));
+  dauTuOfficeReqs = dauTuOfficeReqs.filter(r => !protectedOfficeReqIds.has(r.id));
+
+  if (paidDauTuPayments.length > 0) {
+    console.log(`\n⚠️  Bỏ qua ${paidDauTuPayments.length} đề nghị thanh toán ĐÃ HOÀN TẤT (status=PAID) + ${protectedOfficeReqs.length} hồ sơ Đầu Tư nguồn của chúng — KHÔNG xoá, giữ lại làm chứng từ (khớp bất biến assertCanDeletePaymentRequest()):`);
+    paidDauTuPayments.forEach(r => console.log(`  - paymentRequests #${r.id} [${r.code}] (PAID) nguồn officeReqs #${r.payload?.sourceId}`));
+  }
 
   console.log(`\n📈 Tìm thấy ${dauTuOfficeReqs.length} hồ sơ Đầu Tư (officeReqs) và ${dauTuPayments.length} đề nghị thanh toán liên quan (paymentRequests) sẽ bị xoá vĩnh viễn:\n`);
   dauTuOfficeReqs.forEach(r => console.log(`  - officeReqs #${r.id} [${r.code}] "${r.payload?.title || ''}"`));
   dauTuPayments.forEach(r => console.log(`  - paymentRequests #${r.id} [${r.code}] nguồn officeReqs #${r.payload?.sourceId}`));
 
   if (dauTuOfficeReqs.length === 0 && dauTuPayments.length === 0) {
-    console.log('\n✅ Không còn hồ sơ Đầu Tư nào cần xoá.\n');
+    console.log(paidDauTuPayments.length > 0
+      ? '\n✅ Không còn hồ sơ Đầu Tư nào cần xoá (chỉ còn các bản ghi ĐÃ THANH TOÁN được giữ lại ở trên).\n'
+      : '\n✅ Không còn hồ sơ Đầu Tư nào cần xoá.\n');
     await pool.close();
     return;
   }

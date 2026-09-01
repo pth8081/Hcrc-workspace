@@ -10,8 +10,9 @@
 // hashPassword/verifyPassword ở lib/auth.js, khớp cách PIN được lưu), KHÔNG lưu plaintext, KHÔNG thể
 // hiển thị lại sau khi đã tạo (đúng khuôn GitHub/Google/AWS).
 //
-// 2 Map trong bộ nhớ tiến trình (không cần bền, khớp khuôn lib/approvalAuth.js — hết hạn nhanh, mất khi
-// restart chỉ khiến người dùng phải thử lại, không phải lỗ hổng bảo mật):
+// pendingLogins/pendingSetups lưu qua lib/ephemeralStore.js (bảng dbo.EphemeralAuthTokens dùng chung,
+// cluster-safe — xem chú thích ở file đó), KHÔNG còn dùng Map trong bộ nhớ tiến trình như trước (chỉ
+// đúng khi chạy đúng 1 tiến trình Node, sai khi PM2 cluster nhiều tiến trình không sticky session):
 //   - pendingLogins: "đã xác minh đúng mật khẩu, đang chờ nhập mã TOTP" — bước 1 của luồng đăng nhập 2
 //     bước cho admin ĐÃ bật TOTP. Đây là khác biệt cốt lõi so với mustChangePassword (vốn cấp cookie
 //     phiên NGAY rồi mới chặn ở các route nghiệp vụ phía sau): nếu cấp cookie ngay sau khi chỉ đúng mật
@@ -22,14 +23,15 @@
 //     chứng minh họ đã quét/nhập đúng mã bí mật vào app trước khi hệ thống khoá cứng yêu cầu 2 lớp.
 const { authenticator } = require('otplib');
 const crypto = require('crypto');
+const { setToken, peekToken, consumeToken, deleteToken } = require('./ephemeralStore');
 
 const ISSUER = 'HCRC Workspace';
 
 const PENDING_LOGIN_TTL_MS = 5 * 60 * 1000;
 const PENDING_SETUP_TTL_MS = 10 * 60 * 1000; // dài hơn login: cần thời gian mở app, quét QR, gõ mã
 
-const pendingLogins = new Map(); // username -> expiresAt (ms)
-const pendingSetups = new Map(); // username -> { secret, expiresAt }
+const loginKey = (username) => `totp:login:${username}`;
+const setupKey = (username) => `totp:setup:${username}`;
 
 function generateSecret() {
   return authenticator.generateSecret();
@@ -82,36 +84,31 @@ async function verifyBackupCode(code, hashedCodes) {
   return -1;
 }
 
-function issuePendingTotpLogin(username) {
-  pendingLogins.set(username, Date.now() + PENDING_LOGIN_TTL_MS);
+async function issuePendingTotpLogin(username) {
+  await setToken(loginKey(username), true, PENDING_LOGIN_TTL_MS);
 }
 
-function hasPendingTotpLogin(username) {
-  const expiresAt = pendingLogins.get(username);
-  return !!expiresAt && expiresAt > Date.now();
+async function hasPendingTotpLogin(username) {
+  return (await peekToken(loginKey(username))) !== null;
 }
 
-function consumePendingTotpLogin(username) {
-  pendingLogins.delete(username);
+async function consumePendingTotpLogin(username) {
+  await deleteToken(loginKey(username));
 }
 
-function issuePendingTotpSetup(username, secret) {
-  pendingSetups.set(username, { secret, expiresAt: Date.now() + PENDING_SETUP_TTL_MS });
+async function issuePendingTotpSetup(username, secret) {
+  await setToken(setupKey(username), { secret }, PENDING_SETUP_TTL_MS);
 }
 
 // Không xoá khi gọi (khác consumePendingTotpLogin) — người dùng có thể gõ sai mã vài lần trong lúc thiết
 // lập (không phải chuyện quá 1 lần thử như đăng nhập) mà không cần lấy lại mã QR mới mỗi lần gõ sai.
-function getPendingTotpSetupSecret(username) {
-  const entry = pendingSetups.get(username);
-  if (!entry || entry.expiresAt <= Date.now()) {
-    pendingSetups.delete(username);
-    return null;
-  }
-  return entry.secret;
+async function getPendingTotpSetupSecret(username) {
+  const entry = await peekToken(setupKey(username));
+  return entry ? entry.secret : null;
 }
 
-function consumePendingTotpSetup(username) {
-  pendingSetups.delete(username);
+async function consumePendingTotpSetup(username) {
+  await deleteToken(setupKey(username));
 }
 
 module.exports = {

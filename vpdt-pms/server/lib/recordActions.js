@@ -649,7 +649,13 @@ function startContractPayment(user, contract, overrides) {
     title: (overrides?.title && String(overrides.title).trim()) || contract.title,
     // amount đi theo TỔNG các đợt thực tế gửi lên khi có override (khớp luật tạo thủ công) — không
     // còn khoá cứng contract.amount, vì override cho phép kế toán khai lại khác giá trị tham khảo gốc.
+    // Vẫn CHO PHÉP lệch (không chặn) nhưng phải cảnh báo rõ cho người duyệt — xem amountMismatchesSource
+    // bên dưới, giữ nguyên referenceAmount (giá trị hợp đồng gốc) để client tự so sánh/hiển thị.
     amount: overrideInstallments ? installments.reduce((s, it) => s + it.amount, 0) : contract.amount,
+    referenceAmount: contract.amount,
+    amountMismatchesSource: overrideInstallments
+      ? Math.abs(installments.reduce((s, it) => s + it.amount, 0) - contract.amount) > 1
+      : false,
     installments,
     status: 'PENDING',
     createdBy: user.username, createdByName: user.name, createdAt: nowVN()
@@ -700,6 +706,10 @@ function startOfficePayment(user, item, overrides) {
     dept: item.dept,
     title: (overrides?.title && String(overrides.title).trim()) || item.title,
     amount: overrideInstallments ? installments.reduce((s, it) => s + it.amount, 0) : item.amount,
+    referenceAmount: item.amount,
+    amountMismatchesSource: overrideInstallments
+      ? Math.abs(installments.reduce((s, it) => s + it.amount, 0) - item.amount) > 1
+      : false,
     installments,
     status: 'PENDING',
     createdBy: user.username, createdByName: user.name, createdAt: nowVN()
@@ -746,6 +756,13 @@ function editPaymentRequest(payload, user, pr) {
       confirmed: false, confirmedAt: null, confirmedBy: null
     }));
     pr.amount = pr.installments.reduce((sum, it) => sum + it.amount, 0);
+    // Đề nghị có nguồn (từ Hợp đồng/Mua Bán/Sửa Chữa) mang sẵn referenceAmount — sửa lại đợt ở đây cũng
+    // phải tính lại cờ cảnh báo lệch giá trị nguồn, không chỉ lúc tạo (startContractPayment()/
+    // startOfficePayment() ở trên) — nếu không, sửa xong tổng lệch xa hơn mà cờ cũ (đúng lúc tạo) vẫn
+    // hiện "khớp", đánh lừa người duyệt.
+    if (pr.referenceAmount != null) {
+      pr.amountMismatchesSource = Math.abs(pr.amount - pr.referenceAmount) > 1;
+    }
   }
   pr.status = 'PENDING';
   return pr;
