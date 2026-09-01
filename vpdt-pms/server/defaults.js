@@ -179,10 +179,8 @@ const DEFAULTS = {
     ],
     'SUA_CHUA': [
       { id: 'f_sc_asset_code', label: 'Mã Tài Sản / Thiết Bị Hỏng', type: 'text', required: true, isDefault: false }
-    ],
-    'DAU_TU': [
-      { id: 'f_dt_roi', label: 'Thời Gian Hoàn Vốn Dự Kiến (Tháng)', type: 'number', required: false, isDefault: false }
     ]
+    // "DAU_TU" đã bị xoá hoàn toàn khỏi module Tổng Hợp — không còn subType này nữa.
   },
 
   permGroups: [
@@ -249,7 +247,8 @@ const DEFAULTS = {
   carDeptWorkflows: DEFAULT_MAP,
   officeBuyDeptWorkflows: {},
   officeFixDeptWorkflows: {},
-  officeInvestDeptWorkflows: {},
+  // "officeInvestDeptWorkflows" (Đầu Tư) đã bị xoá hoàn toàn — luồng duyệt đơn hàng tương đương giờ
+  // nằm ở module Vận Hành (operationOrderDeptWorkflows bên dưới).
   vppDeptWorkflows: {},
   // Hỗ Trợ IT > Phê Duyệt Giá — quy trình duyệt theo phòng ban, cùng khuôn vppDeptWorkflows (không có
   // lớp bổ sung). Admin cấu hình ở tab "Quy Trình & Phê Duyệt".
@@ -257,6 +256,12 @@ const DEFAULTS = {
   // Ngân Sách — Trưởng phòng duyệt bản ngân sách theo phòng ban, cùng khuôn vppDeptWorkflows/
   // itPriceDeptWorkflows ở trên. Admin cấu hình ở tab "Quy Trình & Phê Duyệt".
   budgetDeptWorkflows: {},
+  // Vận Hành — 3 luồng độc lập (Phê Duyệt Đơn Hàng/Mở Mới Siêu Thị/Sửa Chữa Siêu Thị), mỗi luồng 1 map
+  // riêng, cùng khuôn officeBuyDeptWorkflows/budgetDeptWorkflows ở trên. Admin cấu hình ở tab "Quy Trình
+  // & Phê Duyệt".
+  operationOrderDeptWorkflows: {},
+  operationStoreOpenDeptWorkflows: {},
+  operationRepairDeptWorkflows: {},
   // Hợp đồng — 2 quy trình TÁCH RIÊNG (xem lib/workflowEngine.js/lib/createValidation.js): "Phê Duyệt"
   // (contractApprovalDeptWorkflows, cùng khuôn deptWorkflows/carDeptWorkflows) + tối đa 4 lớp bổ sung
   // tuỳ chọn (contractApprovalGroups, cùng khuôn submissionApprovalGroups nhưng RIÊNG, không dùng
@@ -293,7 +298,7 @@ const DEFAULTS = {
         meetingApprove: false, meetingCancel: true,
         carView: { all: false, depts: ['Phòng Nhân Sự'] }, carCreate: { all: false, depts: ['Phòng Nhân Sự'] }, carDownload: { all: false, depts: ['Phòng Nhân Sự'] },
         officeView: { all: false, depts: ['Phòng Nhân Sự'] }, officeCreate: { all: false, depts: ['Phòng Nhân Sự'] }, officeDownload: { all: false, depts: ['Phòng Nhân Sự'] },
-        officeBuy: true, officeFix: true, officeInvest: false
+        officeBuy: true, officeFix: true
       }
     },
     {
@@ -312,7 +317,7 @@ const DEFAULTS = {
         internalPostApprove: true, contractApprove: true,
         carView: { all: true, depts: [] }, carCreate: { all: false, depts: ['Phòng IT'] }, carDownload: { all: false, depts: [] },
         officeView: { all: true, depts: [] }, officeCreate: { all: false, depts: ['Phòng IT'] }, officeDownload: { all: false, depts: [] },
-        officeBuy: true, officeFix: true, officeInvest: true
+        officeBuy: true, officeFix: true
       }
     },
     {
@@ -331,7 +336,7 @@ const DEFAULTS = {
         internalPostApprove: true, contractApprove: true, paymentManage: true,
         carView: { all: true, depts: [] }, carCreate: { all: true, depts: [] }, carDownload: { all: true, depts: [] },
         officeView: { all: true, depts: [] }, officeCreate: { all: true, depts: [] }, officeDownload: { all: true, depts: [] },
-        officeBuy: true, officeFix: true, officeInvest: true
+        officeBuy: true, officeFix: true
       }
     }
   ],

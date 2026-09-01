@@ -340,6 +340,37 @@ function filterBudgetEntriesForUser(entries, user, appData) {
   return (entries || []).filter(e => canViewBudgetEntry(user, e, appData));
 }
 
+// Vận Hành — 3 luồng độc lập, cùng khuôn canViewBudgetEntry() ở trên (hồ sơ của ĐƠN VỊ, cùng phòng ban
+// xem được kể cả bản NHÁP, admin/approver-ngoài-phòng xem được) — KHÔNG có quyền "xem mọi phòng ban"
+// riêng (không cần thiết cho module mới, giữ đơn giản).
+function canViewOperationOrder(user, item, appData) {
+  if (!user) return false;
+  if (user.perms?.admin) return true;
+  if (item.dept === user.dept) return true;
+  return isApproverForApproversMap(MODULE_CONFIGS.operationOrders.resolveWfConfig(item, appData).approvers, user.username);
+}
+function filterOperationOrdersForUser(items, user, appData) {
+  return (items || []).filter(o => canViewOperationOrder(user, o, appData));
+}
+function canViewOperationStoreOpening(user, item, appData) {
+  if (!user) return false;
+  if (user.perms?.admin) return true;
+  if (item.dept === user.dept) return true;
+  return isApproverForApproversMap(MODULE_CONFIGS.operationStoreOpenings.resolveWfConfig(item, appData).approvers, user.username);
+}
+function filterOperationStoreOpeningsForUser(items, user, appData) {
+  return (items || []).filter(o => canViewOperationStoreOpening(user, o, appData));
+}
+function canViewOperationRepair(user, item, appData) {
+  if (!user) return false;
+  if (user.perms?.admin) return true;
+  if (item.dept === user.dept) return true;
+  return isApproverForApproversMap(MODULE_CONFIGS.operationRepairs.resolveWfConfig(item, appData).approvers, user.username);
+}
+function filterOperationRepairsForUser(items, user, appData) {
+  return (items || []).filter(o => canViewOperationRepair(user, o, appData));
+}
+
 // Ticket helpdesk IT nội bộ có thể chứa thông tin tài khoản/sự cố cá nhân — chỉ đội Hỗ Trợ IT
 // (itManage/admin) và chính người tạo được xem, KHÔNG mở rộng theo phòng ban (khớp canViewItTicket()
 // ở public/index.html — phạm vi hẹp hơn hẳn các module dept-workflow khác ở trên). Ngoại lệ DUY NHẤT:
@@ -559,6 +590,9 @@ module.exports = {
   canViewUniformStockAdjustment, filterUniformStockAdjustmentsForUser,
   canViewUniformTransfer, filterUniformTransfersForUser,
   canViewBudgetEntry, filterBudgetEntriesForUser,
+  canViewOperationOrder, filterOperationOrdersForUser,
+  canViewOperationStoreOpening, filterOperationStoreOpeningsForUser,
+  canViewOperationRepair, filterOperationRepairsForUser,
   canViewLicense, filterLicensesForUser,
   canViewHrFeedback, filterHrFeedbackForUser,
   // itServiceRenewals: 2 hàm này ĐÃ được định nghĩa ở trên nhưng trước đây BỊ BỎ SÓT khỏi khối export

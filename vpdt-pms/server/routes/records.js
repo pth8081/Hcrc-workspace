@@ -166,7 +166,7 @@ router.post('/paymentRequests/from-source', async (req, res) => {
         draft = recordActions.startContractPayment(freshUser, item, overrides);
         return item;
       });
-    } else if (['MUA_BAN', 'SUA_CHUA', 'DAU_TU'].includes(sourceModule)) {
+    } else if (['MUA_BAN', 'SUA_CHUA'].includes(sourceModule)) {
       result = await withLockedRecordForCollection('officeReqs', sourceId, (item) => {
         draft = recordActions.startOfficePayment(freshUser, item, overrides);
         return item;
@@ -702,6 +702,11 @@ router.post('/reportEntries/:id/delete', (req, res) => deleteAdminOnly(req, res,
 router.post('/budgetPeriods/:id/delete', (req, res) => deleteAdminOnly(req, res, 'budgetPeriods'));
 router.post('/budgetEntries/:id/delete', (req, res) => deleteAdminOnly(req, res, 'budgetEntries'));
 router.post('/budgetTemplates/:id/delete', (req, res) => deleteAdminOnly(req, res, 'budgetTemplates'));
+
+// ===================== VẬN HÀNH (operationOrders / operationStoreOpenings / operationRepairs) =====================
+router.post('/operationOrders/:id/delete', (req, res) => deleteAdminOnly(req, res, 'operationOrders'));
+router.post('/operationStoreOpenings/:id/delete', (req, res) => deleteAdminOnly(req, res, 'operationStoreOpenings'));
+router.post('/operationRepairs/:id/delete', (req, res) => deleteAdminOnly(req, res, 'operationRepairs'));
 
 // ===================== ĐÀO TẠO (module con "Truyền Thông Nội Bộ" > Đào tạo) — tạm thời, MVP =====================
 router.post('/trainingDocuments/:id/delete', (req, res) => deleteAdminOnly(req, res, 'trainingDocuments'));
@@ -1531,6 +1536,63 @@ router.post('/budgetEntries/:id/update', async (req, res) => {
   } catch (err) {
     handleError(res, `budgetEntries/${req.params.id}/update`, err);
   }
+});
+
+// Vận Hành — cùng khuôn officeReqs/carRegs update+submit ở trên (chỉ người tạo sửa được lúc còn NHÁP,
+// "Gửi" đẩy về PENDING bước 1).
+router.post('/operationOrders/:id/update', async (req, res) => {
+  const itemId = Number(req.params.id);
+  if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
+  try {
+    const { freshUser } = await getFreshUser(req);
+    const result = await withLockedRecordForCollection('operationOrders', itemId, (item) => recordActions.editOperationOrderDraft(freshUser, item, req.body));
+    res.json({ ok: true, item: result });
+  } catch (err) { handleError(res, `operationOrders/${req.params.id}/update`, err); }
+});
+router.post('/operationOrders/:id/submit', async (req, res) => {
+  const itemId = Number(req.params.id);
+  if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
+  try {
+    const { freshUser } = await getFreshUser(req);
+    const result = await withLockedRecordForCollection('operationOrders', itemId, (item) => recordActions.submitOperationOrderDraft(freshUser, item));
+    res.json({ ok: true, item: result });
+  } catch (err) { handleError(res, `operationOrders/${req.params.id}/submit`, err); }
+});
+router.post('/operationStoreOpenings/:id/update', async (req, res) => {
+  const itemId = Number(req.params.id);
+  if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
+  try {
+    const { freshUser } = await getFreshUser(req);
+    const result = await withLockedRecordForCollection('operationStoreOpenings', itemId, (item) => recordActions.editOperationStoreOpeningDraft(freshUser, item, req.body));
+    res.json({ ok: true, item: result });
+  } catch (err) { handleError(res, `operationStoreOpenings/${req.params.id}/update`, err); }
+});
+router.post('/operationStoreOpenings/:id/submit', async (req, res) => {
+  const itemId = Number(req.params.id);
+  if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
+  try {
+    const { freshUser } = await getFreshUser(req);
+    const result = await withLockedRecordForCollection('operationStoreOpenings', itemId, (item) => recordActions.submitOperationStoreOpeningDraft(freshUser, item));
+    res.json({ ok: true, item: result });
+  } catch (err) { handleError(res, `operationStoreOpenings/${req.params.id}/submit`, err); }
+});
+router.post('/operationRepairs/:id/update', async (req, res) => {
+  const itemId = Number(req.params.id);
+  if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
+  try {
+    const { freshUser } = await getFreshUser(req);
+    const result = await withLockedRecordForCollection('operationRepairs', itemId, (item) => recordActions.editOperationRepairDraft(freshUser, item, req.body));
+    res.json({ ok: true, item: result });
+  } catch (err) { handleError(res, `operationRepairs/${req.params.id}/update`, err); }
+});
+router.post('/operationRepairs/:id/submit', async (req, res) => {
+  const itemId = Number(req.params.id);
+  if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
+  try {
+    const { freshUser } = await getFreshUser(req);
+    const result = await withLockedRecordForCollection('operationRepairs', itemId, (item) => recordActions.submitOperationRepairDraft(freshUser, item));
+    res.json({ ok: true, item: result });
+  } catch (err) { handleError(res, `operationRepairs/${req.params.id}/submit`, err); }
 });
 
 // POST /api/records/budgetTemplates/:id/update — sửa tên/cột bổ sung 1 mẫu ngân sách đã tạo.
