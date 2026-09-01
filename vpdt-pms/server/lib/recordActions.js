@@ -370,6 +370,116 @@ function submitOfficeReqDraft(user, item) {
   return item;
 }
 
+// ----- Vận Hành (operationOrders / operationStoreOpenings / operationRepairs) -----
+// 3 luồng ĐỘC LẬP, mỗi luồng 1 collection riêng — không dùng chung khuôn subType như officeReqs. Cùng
+// mẫu editOfficeReqDraft()/submitOfficeReqDraft() ở trên: chỉ người tạo sửa được lúc còn NHÁP, "Gửi"
+// đẩy về PENDING bước 1.
+function editOperationOrderDraft(user, item, payload) {
+  if (item.creator !== user.username) throw new HttpError(403, 'Chỉ người tạo mới được sửa đơn hàng này');
+  if (item.status !== 'DRAFT') throw new HttpError(409, 'Đơn hàng này không ở trạng thái cần bổ sung, không thể sửa');
+  if (!payload || typeof payload !== 'object') throw new HttpError(400, 'Thiếu dữ liệu cập nhật');
+  if (payload.title !== undefined) item.title = String(payload.title || '').trim();
+  if (payload.supplier !== undefined) item.supplier = String(payload.supplier || '').trim();
+  if (payload.note !== undefined) item.note = String(payload.note || '').trim();
+  assertUploadedFileUrl(payload.fileUrl, 'Tệp đính kèm đơn hàng');
+  if (payload.fileUrl !== undefined) item.fileUrl = payload.fileUrl;
+  if (payload.items !== undefined) {
+    const validItems = (Array.isArray(payload.items) ? payload.items : []).map((it) => {
+      const name = String(it?.name || '').trim();
+      const qty = Number(it?.qty) || 0;
+      const unitPrice = Number(it?.unitPrice) || 0;
+      if (qty < 0 || unitPrice < 0) throw new HttpError(400, `Hạng mục "${name}": Số lượng/Đơn giá không được là số âm`);
+      return { name, unit: String(it?.unit || '').trim(), qty, unitPrice, amount: qty * unitPrice, note: String(it?.note || '').trim() };
+    }).filter((it) => it.name && it.qty > 0);
+    if (!validItems.length) throw new HttpError(400, 'Vui lòng nhập ít nhất 1 hạng mục hợp lệ (Tên hàng + Số lượng > 0)');
+    item.items = validItems;
+    item.amount = validItems.reduce((sum, it) => sum + it.amount, 0);
+  }
+  return item;
+}
+function submitOperationOrderDraft(user, item) {
+  if (item.creator !== user.username) throw new HttpError(403, 'Chỉ người tạo mới được gửi lại đơn hàng này');
+  if (item.status !== 'DRAFT') throw new HttpError(409, 'Đơn hàng này không ở trạng thái cần bổ sung (có thể đã gửi lại rồi)');
+  item.history = item.history || [];
+  item.history.push({ step: 0, approver: user.name, username: user.username, action: 'RESUBMITTED', comment: '', time: nowVN() });
+  resetForResubmit(item, {});
+  return item;
+}
+
+function editOperationStoreOpeningDraft(user, item, payload) {
+  if (item.creator !== user.username) throw new HttpError(403, 'Chỉ người tạo mới được sửa đề xuất mở mới siêu thị này');
+  if (item.status !== 'DRAFT') throw new HttpError(409, 'Đề xuất này không ở trạng thái cần bổ sung, không thể sửa');
+  if (!payload || typeof payload !== 'object') throw new HttpError(400, 'Thiếu dữ liệu cập nhật');
+  if (payload.storeName !== undefined) {
+    const storeName = String(payload.storeName || '').trim();
+    if (!storeName) throw new HttpError(400, 'Vui lòng nhập tên siêu thị dự kiến');
+    item.storeName = storeName;
+  }
+  if (payload.address !== undefined) {
+    const address = String(payload.address || '').trim();
+    if (!address) throw new HttpError(400, 'Vui lòng nhập địa điểm dự kiến');
+    item.address = address;
+  }
+  if (payload.area !== undefined) item.area = Math.max(0, Number(payload.area) || 0);
+  if (payload.estimatedBudget !== undefined) item.estimatedBudget = Math.max(0, Number(payload.estimatedBudget) || 0);
+  if (payload.personInCharge !== undefined) item.personInCharge = String(payload.personInCharge || '').trim();
+  if (payload.note !== undefined) item.note = String(payload.note || '').trim();
+  if (payload.expectedOpenDate !== undefined) {
+    if (payload.expectedOpenDate) {
+      const d = new Date(payload.expectedOpenDate);
+      if (Number.isNaN(d.getTime())) throw new HttpError(400, 'Ngày dự kiến khai trương không hợp lệ');
+      item.expectedOpenDate = d.toISOString();
+    } else {
+      item.expectedOpenDate = '';
+    }
+  }
+  assertUploadedFileUrl(payload.fileUrl, 'Tài liệu đính kèm');
+  if (payload.fileUrl !== undefined) item.fileUrl = payload.fileUrl;
+  return item;
+}
+function submitOperationStoreOpeningDraft(user, item) {
+  if (item.creator !== user.username) throw new HttpError(403, 'Chỉ người tạo mới được gửi lại đề xuất mở mới siêu thị này');
+  if (item.status !== 'DRAFT') throw new HttpError(409, 'Đề xuất này không ở trạng thái cần bổ sung (có thể đã gửi lại rồi)');
+  item.history = item.history || [];
+  item.history.push({ step: 0, approver: user.name, username: user.username, action: 'RESUBMITTED', comment: '', time: nowVN() });
+  resetForResubmit(item, {});
+  return item;
+}
+
+function editOperationRepairDraft(user, item, payload) {
+  if (item.creator !== user.username) throw new HttpError(403, 'Chỉ người tạo mới được sửa đề xuất sửa chữa siêu thị này');
+  if (item.status !== 'DRAFT') throw new HttpError(409, 'Đề xuất này không ở trạng thái cần bổ sung, không thể sửa');
+  if (!payload || typeof payload !== 'object') throw new HttpError(400, 'Thiếu dữ liệu cập nhật');
+  if (payload.storeName !== undefined) {
+    const storeName = String(payload.storeName || '').trim();
+    if (!storeName) throw new HttpError(400, 'Vui lòng nhập tên/địa điểm siêu thị cần sửa chữa');
+    item.storeName = storeName;
+  }
+  if (payload.title !== undefined) {
+    const title = String(payload.title || '').trim();
+    if (!title) throw new HttpError(400, 'Vui lòng nhập nội dung sửa chữa');
+    item.title = title;
+  }
+  if (payload.description !== undefined) item.description = String(payload.description || '').trim();
+  if (payload.supplier !== undefined) item.supplier = String(payload.supplier || '').trim();
+  if (payload.amount !== undefined) {
+    const amount = Number(payload.amount) || 0;
+    if (amount < 0) throw new HttpError(400, 'Số tiền không được là số âm');
+    item.amount = amount;
+  }
+  assertUploadedFileUrl(payload.fileUrl, 'Tệp đính kèm');
+  if (payload.fileUrl !== undefined) item.fileUrl = payload.fileUrl;
+  return item;
+}
+function submitOperationRepairDraft(user, item) {
+  if (item.creator !== user.username) throw new HttpError(403, 'Chỉ người tạo mới được gửi lại đề xuất sửa chữa siêu thị này');
+  if (item.status !== 'DRAFT') throw new HttpError(409, 'Đề xuất này không ở trạng thái cần bổ sung (có thể đã gửi lại rồi)');
+  item.history = item.history || [];
+  item.history.push({ step: 0, approver: user.name, username: user.username, action: 'RESUBMITTED', comment: '', time: nowVN() });
+  resetForResubmit(item, {});
+  return item;
+}
+
 // ----- Văn Bản Trình (submissions) -----
 // Khác 3 module trên: có thể đổi type/dept/"Cấp Phê Duyệt Cuối Cùng"/lớp phê duyệt bổ sung khi sửa —
 // PHẢI dựng lại effectiveSteps/effectiveApprovers giống hệt lúc TẠO (buildEffectiveSubmissionWorkflowServer),

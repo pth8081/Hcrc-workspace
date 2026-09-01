@@ -92,10 +92,11 @@ function flatWorkflowConfigToSteps(wfConfig, appData) {
   return { steps: wf.steps, approvers: wfConfig?.approvers || {} };
 }
 
+// Đầu Tư (DAU_TU) đã bị xoá hoàn toàn khỏi module Tổng Hợp — xem lib/createValidation.js
+// OFFICE_SUBTYPE_TO_PERM_FLAG (đã bỏ DAU_TU ở đó nên không còn tạo mới được nữa).
 const OFFICE_SUBTYPE_TO_DBKEY = {
   MUA_BAN: 'officeBuyDeptWorkflows',
-  SUA_CHUA: 'officeFixDeptWorkflows',
-  DAU_TU: 'officeInvestDeptWorkflows'
+  SUA_CHUA: 'officeFixDeptWorkflows'
 };
 
 // ===== Hợp đồng — 2 quy trình TÁCH RIÊNG trên CÙNG 1 bản ghi contracts (khớp index.html) =====
@@ -219,6 +220,23 @@ const MODULE_CONFIGS = {
   budgetEntries: {
     dbKey: 'budgetEntries',
     resolveWfConfig: (item, appData) => flatWorkflowConfigToSteps(appData.budgetDeptWorkflows?.[item.dept], appData),
+    supportsRequestChanges: true
+  },
+  // Vận Hành — 3 luồng độc lập, mỗi luồng 1 dept-workflow map riêng (khác officeReqs dùng chung 1
+  // OFFICE_SUBTYPE_TO_DBKEY tra theo subType — ở đây mỗi collection đã tách sẵn nên trỏ thẳng luôn).
+  operationOrders: {
+    dbKey: 'operationOrders',
+    resolveWfConfig: (item, appData) => flatWorkflowConfigToSteps(appData.operationOrderDeptWorkflows?.[item.dept], appData),
+    supportsRequestChanges: true
+  },
+  operationStoreOpenings: {
+    dbKey: 'operationStoreOpenings',
+    resolveWfConfig: (item, appData) => flatWorkflowConfigToSteps(appData.operationStoreOpenDeptWorkflows?.[item.dept], appData),
+    supportsRequestChanges: true
+  },
+  operationRepairs: {
+    dbKey: 'operationRepairs',
+    resolveWfConfig: (item, appData) => flatWorkflowConfigToSteps(appData.operationRepairDeptWorkflows?.[item.dept], appData),
     supportsRequestChanges: true
   }
 };

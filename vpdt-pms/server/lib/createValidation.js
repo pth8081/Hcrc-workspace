@@ -38,7 +38,10 @@ function findMeetingConflict(meetings, room, startTime, endTime) {
   });
 }
 
-const OFFICE_SUBTYPE_TO_PERM_FLAG = { MUA_BAN: 'officeBuy', SUA_CHUA: 'officeFix', DAU_TU: 'officeInvest' };
+// Đầu Tư (DAU_TU) đã bị xoá hoàn toàn khỏi module Tổng Hợp (tách thành luồng "Phê Duyệt Đơn Hàng" độc
+// lập ở module Vận Hành) — bỏ khỏi map này khiến subType='DAU_TU' tự bị chặn ngay tại dòng
+// "if (!flag) throw..." bên dưới, không cần thêm điều kiện chặn riêng nào khác.
+const OFFICE_SUBTYPE_TO_PERM_FLAG = { MUA_BAN: 'officeBuy', SUA_CHUA: 'officeFix' };
 
 // URL tệp/ảnh do CHÍNH hệ thống này sinh ra luôn có dạng "/uploads/<timestamp>-<16 hex>.<ext>" (xem
 // routes/upload.js — tên file do server tự đặt, không chứa ký tự nào người dùng nhập). Các field URL
@@ -607,7 +610,7 @@ const CREATE_MODULE_CONFIGS = {
       if (!user.perms?.admin && !user.perms?.[flag]) {
         throw new CreateError(403, 'Bạn không có quyền tạo đề xuất văn phòng loại này');
       }
-      // Trường bổ sung (Biểu Mẫu) — cả 3 sub-tab (MUA_BAN/SUA_CHUA/DAU_TU) chung coreKey 'OFFICE' nhưng
+      // Trường bổ sung (Biểu Mẫu) — cả 2 sub-tab còn lại (MUA_BAN/SUA_CHUA) chung coreKey 'OFFICE' nhưng
       // RIÊNG danh sách trường bổ sung theo đúng subType, khớp modKey client dùng khi gọi
       // collectDynamicFieldsData(activeOfficeSubTab) (xem FORM_TABS ở index.html).
       validateRequiredCustomData(payload.customData, appData?.formTemplates, payload.subType);
@@ -644,7 +647,100 @@ const CREATE_MODULE_CONFIGS = {
       // status/currentStep/history PHẢI gán cứng ở server — cùng lỗ hổng vừa vá cho carRegs ở trên
       // (client vẫn gửi kèm 3 field này trong confirmCreateOfficeReq(), nhưng server chưa từng xác minh
       // lại): request tự soạn đặt sẵn status:"APPROVED" + history giả bỏ qua được toàn bộ quy trình duyệt
-      // Mua Bán/Sửa Chữa/Đầu Tư của phòng ban.
+      // Mua Bán/Sửa Chữa của phòng ban.
+      payload.status = 'PENDING';
+      payload.currentStep = 1;
+      payload.history = [];
+    }
+  },
+  // ===== VẬN HÀNH — 3 luồng ĐỘC LẬP (khác officeReqs: không dùng chung 1 collection theo subType, mỗi
+  // luồng có quyền tạo riêng + dept-workflow riêng, xem lib/workflowEngine.js). Cùng khuôn budgetEntries/
+  // vppRegistrations: forceOwnDept + getScope rỗng (không có khái niệm "tạo hộ phòng ban khác").
+  operationOrders: {
+    dbKey: 'operationOrders',
+    getScope: () => ({}),
+    forceOwnDept: true,
+    creatorField: 'creator', creatorNameField: 'creatorName',
+    extraValidate: (payload, collection, user) => {
+      if (!user.perms?.admin && !user.perms?.operationOrderCreate) {
+        throw new CreateError(403, 'Bạn không có quyền tạo đơn hàng');
+      }
+      const title = String(payload.title || '').trim();
+      if (!title) throw new CreateError(400, 'Vui lòng nhập tiêu đề đơn hàng');
+      payload.title = title;
+      payload.supplier = String(payload.supplier || '').trim();
+      payload.note = String(payload.note || '').trim();
+      assertUploadedFileUrl(payload.fileUrl, 'Tệp đính kèm đơn hàng');
+      // Tự tính lại amount = tổng (Số lượng × Đơn giá) từng hạng mục — không tin số client gửi (cùng lý
+      // do đã vá cho officeReqs.items ở trên).
+      const items = Array.isArray(payload.items) ? payload.items : [];
+      const validItems = items.map(it => {
+        const name = String(it?.name || '').trim();
+        const qty = Number(it?.qty) || 0;
+        const unitPrice = Number(it?.unitPrice) || 0;
+        if (qty < 0 || unitPrice < 0) throw new CreateError(400, `Hạng mục "${name}": Số lượng/Đơn giá không được là số âm`);
+        return { name, unit: String(it?.unit || '').trim(), qty, unitPrice, amount: qty * unitPrice, note: String(it?.note || '').trim() };
+      }).filter((it) => it.name && it.qty > 0);
+      if (!validItems.length) throw new CreateError(400, 'Vui lòng nhập ít nhất 1 hạng mục hợp lệ (Tên hàng + Số lượng > 0)');
+      payload.items = validItems;
+      payload.amount = validItems.reduce((sum, it) => sum + it.amount, 0);
+      payload.status = 'PENDING';
+      payload.currentStep = 1;
+      payload.history = [];
+    }
+  },
+  operationStoreOpenings: {
+    dbKey: 'operationStoreOpenings',
+    getScope: () => ({}),
+    forceOwnDept: true,
+    creatorField: 'creator', creatorNameField: 'creatorName',
+    extraValidate: (payload, collection, user) => {
+      if (!user.perms?.admin && !user.perms?.operationStoreOpenCreate) {
+        throw new CreateError(403, 'Bạn không có quyền tạo đề xuất mở mới siêu thị');
+      }
+      const storeName = String(payload.storeName || '').trim();
+      if (!storeName) throw new CreateError(400, 'Vui lòng nhập tên siêu thị dự kiến');
+      payload.storeName = storeName;
+      const address = String(payload.address || '').trim();
+      if (!address) throw new CreateError(400, 'Vui lòng nhập địa điểm dự kiến');
+      payload.address = address;
+      payload.area = Math.max(0, Number(payload.area) || 0);
+      payload.estimatedBudget = Math.max(0, Number(payload.estimatedBudget) || 0);
+      payload.personInCharge = String(payload.personInCharge || '').trim();
+      payload.note = String(payload.note || '').trim();
+      if (payload.expectedOpenDate) {
+        const d = new Date(payload.expectedOpenDate);
+        if (Number.isNaN(d.getTime())) throw new CreateError(400, 'Ngày dự kiến khai trương không hợp lệ');
+        payload.expectedOpenDate = d.toISOString();
+      } else {
+        payload.expectedOpenDate = '';
+      }
+      assertUploadedFileUrl(payload.fileUrl, 'Tài liệu đính kèm');
+      payload.status = 'PENDING';
+      payload.currentStep = 1;
+      payload.history = [];
+    }
+  },
+  operationRepairs: {
+    dbKey: 'operationRepairs',
+    getScope: () => ({}),
+    forceOwnDept: true,
+    creatorField: 'creator', creatorNameField: 'creatorName',
+    extraValidate: (payload, collection, user) => {
+      if (!user.perms?.admin && !user.perms?.operationRepairCreate) {
+        throw new CreateError(403, 'Bạn không có quyền tạo đề xuất sửa chữa siêu thị');
+      }
+      const storeName = String(payload.storeName || '').trim();
+      if (!storeName) throw new CreateError(400, 'Vui lòng nhập tên/địa điểm siêu thị cần sửa chữa');
+      payload.storeName = storeName;
+      const title = String(payload.title || '').trim();
+      if (!title) throw new CreateError(400, 'Vui lòng nhập nội dung sửa chữa');
+      payload.title = title;
+      payload.description = String(payload.description || '').trim();
+      payload.supplier = String(payload.supplier || '').trim();
+      payload.amount = Number(payload.amount) || 0;
+      if (payload.amount < 0) throw new CreateError(400, 'Số tiền không được là số âm');
+      assertUploadedFileUrl(payload.fileUrl, 'Tệp đính kèm');
       payload.status = 'PENDING';
       payload.currentStep = 1;
       payload.history = [];
