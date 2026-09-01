@@ -30,12 +30,20 @@ cụ thể của lần cập nhật đang báo cáo.
 ## Luôn tăng version khi merge vào main
 
 Mỗi lần merge PR vào main (bất kể tính năng lớn hay fix nhỏ), **luôn tăng
-`server/package.json` field `version`** trong CÙNG PR trước khi merge — theo
-kiểu semver không chặt (patch cho fix nhỏ, minor cho tính năng mới). Đây là
+`server/package.json` field `version`** trong CÙNG PR trước khi merge. Đây là
 version DUY NHẤT client đọc (badge góc màn hình + `/api/health`, xem
 `server.js` require `./package.json`), không có bản sao nào khác cần sửa.
 Nếu lỡ quên ở 1-2 lần merge trước, bump bắt kịp luôn (cộng dồn số lần đã bỏ
 lỡ) ở lần merge kế tiếp thay vì bỏ qua.
+
+**Định dạng version (từ v2.0 trở đi, KHÔNG còn semver 3 phần):** chỉ 2 số
+`MAJOR.MINOR` (VD `"2.0"`, `"2.1"`... không có số thứ 3 kiểu `.0` ở cuối).
+MINOR chỉ chạy từ 0 đến 9 — mỗi lần merge tăng MINOR lên 1 (`2.0`→`2.1`→...→
+`2.9`), và lần merge NGAY SAU khi đang ở `X.9` thì tăng MAJOR lên 1 và reset
+MINOR về 0 (`2.9`→`3.0`→`3.1`...). Không phân biệt patch/minor theo mức độ
+thay đổi nữa — mọi lần merge (dù fix nhỏ hay tính năng lớn) đều tăng đúng 1
+bậc theo quy tắc này. Version trước v2.0 (`1.75.0`...`1.102.0`, kiểu semver 3
+phần cũ) đã ngừng dùng — không lùi lại đổi các bản ghi lịch sử cũ.
 
 ## Ô tìm-kiếm-gõ-chọn (searchable picker): KHÔNG dùng `<input list>`+`<datalist>` native
 
