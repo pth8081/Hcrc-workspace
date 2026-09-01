@@ -71,26 +71,44 @@ async function getAllRecords(collection) {
   return result.recordset.map(toRecord);
 }
 
+// dbo.Records có 2 ràng buộc UNIQUE khác nhau (xem sql/schema.sql): PK_Records (Collection, Id) và
+// UX_Records_Collection_Code (Collection, Code, khi Code khác NULL). record.id ở khắp lib/recordActions.js/
+// createValidation.js/routes/records.js đều là `Date.now()` (đôi khi `+ i` cho tạo hàng loạt) — CHỈ đúng
+// khi 2 request tạo record CÙNG collection không rơi đúng cùng mili-giây. Dưới tải cao (nhiều người bấm
+// gần như cùng lúc, hoặc vòng lặp tạo hàng loạt) 2 record hoàn toàn khác nhau (Code khác nhau, thậm chí
+// không có Code) vẫn có thể trùng Id — trước đây isUniqueConstraintViolation() gộp chung CẢ 2 loại đụng
+// độ, báo nhầm "Mã ... đã tồn tại" cho lỗi thực ra chỉ là trùng Id (không phải lỗi của người dùng, họ
+// không đổi được gì để tránh). Phân biệt bằng tên ràng buộc trong err.message (chuẩn SQL Server luôn kèm
+// theo, VD "Violation of PRIMARY KEY constraint 'PK_Records'"): đụng PK_Records -> tự sinh Id khác rồi
+// thử lại ngay (không cần người dùng biết); đụng UX_Records_Collection_Code -> đúng là lỗi nghiệp vụ, giữ
+// nguyên thông báo cũ.
+const INSERT_RECORD_MAX_ATTEMPTS = 5;
 async function insertRecord(collection, record) {
   const pool = await getPool();
-  try {
-    await pool.request()
-      .input('collection', sql.NVarChar(50), collection)
-      .input('id', sql.BigInt, record.id)
-      .input('code', sql.NVarChar(100), record.code || null)
-      .input('payload', sql.NVarChar(sql.MAX), JSON.stringify(record))
-      .query(`
-        INSERT INTO dbo.Records (Collection, Id, Code, Payload)
-        VALUES (@collection, @id, @code, @payload);
-      `);
-  } catch (err) {
-    if (isUniqueConstraintViolation(err)) {
-      throw new HttpError(409, `Mã "${record.code}" đã tồn tại`);
+  for (let attempt = 1; attempt <= INSERT_RECORD_MAX_ATTEMPTS; attempt++) {
+    try {
+      await pool.request()
+        .input('collection', sql.NVarChar(50), collection)
+        .input('id', sql.BigInt, record.id)
+        .input('code', sql.NVarChar(100), record.code || null)
+        .input('payload', sql.NVarChar(sql.MAX), JSON.stringify(record))
+        .query(`
+          INSERT INTO dbo.Records (Collection, Id, Code, Payload)
+          VALUES (@collection, @id, @code, @payload);
+        `);
+      invalidateCollectionCache(collection);
+      return record;
+    } catch (err) {
+      if (!isUniqueConstraintViolation(err)) throw err;
+      const isIdCollision = String(err.message || '').includes('PK_Records');
+      if (!isIdCollision || attempt === INSERT_RECORD_MAX_ATTEMPTS) {
+        throw isIdCollision
+          ? new HttpError(409, 'Hệ thống đang bận, vui lòng thử tạo lại.')
+          : new HttpError(409, `Mã "${record.code}" đã tồn tại`);
+      }
+      record.id = Date.now() + Math.floor(Math.random() * 1000);
     }
-    throw err;
   }
-  invalidateCollectionCache(collection);
-  return record;
 }
 
 async function withLockedRecordById(collection, id, mutatorFn) {

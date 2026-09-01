@@ -50,23 +50,42 @@ async function getAllTasksCached() {
 // IDENTITY của bảng. Dùng cho cả tạo thủ công (createTask) lẫn tự động sinh từ chỉ đạo biên bản họp/
 // tờ trình (buildTasksFromDirectives/buildTaskFromSubmissionComment) — record đã được validate/build
 // đầy đủ ở lib/recordActions.js trước khi gọi hàm này, ở đây chỉ lo việc lưu trữ.
+//
+// dbo.Tasks.Id là PRIMARY KEY đơn (không có cột nào khác để lẫn lộn như dbo.Records với Code) — Id =
+// Date.now() (đôi khi +i/+i+1 khi 1 lượt thao tác sinh nhiều Công việc cùng lúc, xem lib/recordActions.js)
+// CHỈ đúng khi không có 2 Công việc nào của TOÀN HỆ THỐNG được tạo trùng đúng mili-giây. Dưới tải cao
+// (nhiều người giao việc gần như cùng lúc, hoặc 1 chỉ đạo sinh nhiều Công việc trong 1 request) trước
+// đây việc này ném thẳng lỗi SQL thô (không try/catch) lên tận route — người dùng thấy lỗi 500 khó hiểu
+// dù thao tác của họ hoàn toàn hợp lệ. Tự sinh lại Id khác rồi thử lại ngay, không cần người dùng biết.
+const INSERT_TASK_MAX_ATTEMPTS = 5;
 async function insertTask(task) {
   const pool = await getPool();
-  const cols = extractColumns(task);
-  await pool.request()
-    .input('id', sql.BigInt, task.id)
-    .input('status', sql.NVarChar(20), cols.status)
-    .input('assignedTo', sql.NVarChar(100), cols.assignedTo)
-    .input('assignedBy', sql.NVarChar(100), cols.assignedBy)
-    .input('sourceType', sql.NVarChar(30), cols.sourceType)
-    .input('sourceCode', sql.NVarChar(100), cols.sourceCode)
-    .input('payload', sql.NVarChar(sql.MAX), JSON.stringify(task))
-    .query(`
-      INSERT INTO dbo.Tasks (Id, Status, AssignedTo, AssignedBy, SourceType, SourceCode, Payload)
-      VALUES (@id, @status, @assignedTo, @assignedBy, @sourceType, @sourceCode, @payload);
-    `);
-  invalidateTasksCache();
-  return task;
+  for (let attempt = 1; attempt <= INSERT_TASK_MAX_ATTEMPTS; attempt++) {
+    const cols = extractColumns(task);
+    try {
+      await pool.request()
+        .input('id', sql.BigInt, task.id)
+        .input('status', sql.NVarChar(20), cols.status)
+        .input('assignedTo', sql.NVarChar(100), cols.assignedTo)
+        .input('assignedBy', sql.NVarChar(100), cols.assignedBy)
+        .input('sourceType', sql.NVarChar(30), cols.sourceType)
+        .input('sourceCode', sql.NVarChar(100), cols.sourceCode)
+        .input('payload', sql.NVarChar(sql.MAX), JSON.stringify(task))
+        .query(`
+          INSERT INTO dbo.Tasks (Id, Status, AssignedTo, AssignedBy, SourceType, SourceCode, Payload)
+          VALUES (@id, @status, @assignedTo, @assignedBy, @sourceType, @sourceCode, @payload);
+        `);
+      invalidateTasksCache();
+      return task;
+    } catch (err) {
+      const isIdCollision = err && (err.number === 2601 || err.number === 2627);
+      if (!isIdCollision || attempt === INSERT_TASK_MAX_ATTEMPTS) {
+        if (isIdCollision) throw new HttpError(409, 'Hệ thống đang bận, vui lòng thử tạo lại.');
+        throw err;
+      }
+      task.id = Date.now() + Math.floor(Math.random() * 1000);
+    }
+  }
 }
 
 // Đọc-khoá-sửa-ghi ĐÚNG 1 Công việc theo id, trong 1 giao dịch có khoá dòng (khớp đúng

@@ -1112,6 +1112,11 @@ const CREATE_MODULE_CONFIGS = {
     // chỗ chặn "không ai được tạo cả" một cách rõ ràng).
     getScope: () => ({}),
     creatorField: 'creator', creatorNameField: 'creatorName',
+    // Race y hệt lý do vppRegistrations/meetings/trainingRegistrations/budgetEntries cần getLockKey ở
+    // trên: kiểm tra "duplicate" bên dưới chỉ đọc `collection` trong bộ nhớ tại lúc validate — 2 request
+    // nộp báo cáo CÙNG LÚC của CÙNG 1 người cho CÙNG 1 kỳ đều có thể đọc thấy "chưa có báo cáo nào" rồi
+    // cùng tạo thành công, phá vỡ luật "1 báo cáo/kỳ/người". Khoá theo đúng cặp (kỳ, người nộp).
+    getLockKey: (payload, user) => `report_entry:${payload.periodId}:${user.username}`,
     extraValidate: (payload, collection, user, appData) => {
       if (!user.perms?.admin && !user.perms?.reportEntryCreate) {
         throw new CreateError(403, 'Bạn không có quyền nộp Báo Cáo Định Kỳ');
@@ -2062,6 +2067,9 @@ const CREATE_MODULE_CONFIGS = {
       payload.responsible = String(payload.responsible || '').trim().slice(0, 200);
       payload.note = String(payload.note || '').trim().slice(0, 1000);
       payload.fileUrl = payload.fileUrl ? String(payload.fileUrl).trim().slice(0, 300) : null;
+      // Cùng lỗ hổng stored-XSS scheme "javascript:" đã vá ở trainingDocuments/licenses — chỉ cắt độ
+      // dài (slice) chưa từng xác minh fileUrl chỉ trỏ về /uploads/... đã tải lên thật.
+      assertUploadedFileUrl(payload.fileUrl, 'Tệp đính kèm gia hạn dịch vụ');
       payload.fileName = payload.fileUrl ? String(payload.fileName || '').trim().slice(0, 200) : null;
 
       const cost = (payload.cost === '' || payload.cost === null || payload.cost === undefined) ? null : Number(payload.cost);

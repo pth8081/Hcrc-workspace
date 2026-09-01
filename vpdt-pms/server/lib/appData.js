@@ -22,9 +22,42 @@ const cache = new Map(); // DataKey -> { value, expiresAt }
 // dõi key nào ảnh hưởng gì (bảng AppData có ~28 key, ghi 1 key bất kỳ đều nên coi ảnh hưởng "toàn bộ").
 let allDataCache = null; // { data, versions, expiresAt }
 
+// PM2 cluster mode chạy nhiều tiến trình Node độc lập, MỖI tiến trình giữ 1 bản cache TRONG BỘ NHỚ
+// riêng (biến `cache`/`allDataCache` ở trên) — ghi ở tiến trình A chỉ tự xoá cache của CHÍNH tiến trình
+// A, các tiến trình B/C/D... vẫn phục vụ dữ liệu cũ tới hết TTL (mặc định 3s). Với đa số collection đây
+// chỉ là dữ liệu hiển thị trễ vài giây, nhưng "users" lại là ngoại lệ ĐÁNG KỂ: requireAuth() (lib/auth.js)
+// đọc cache này ở MỌI request đã đăng nhập để kiểm tra tài khoản còn active/còn đúng quyền hay không —
+// admin khoá 1 tài khoản ở tiến trình A, nhưng request của tài khoản đó rơi vào tiến trình B vẫn coi là
+// active tới 3s sau. PM2 cluster mode tự động chuyển tiếp message process.send({type:'process:msg',...})
+// tới MỌI tiến trình khác của cùng app (tính năng IPC có sẵn, không cần thêm gói/hạ tầng như Redis) —
+// dùng kênh đó để phát tín hiệu xoá cache ngay khi có 1 tiến trình ghi, thay vì đợi hết TTL ở nơi khác.
+// applyRemoteCacheInvalidate() (nghe message tới) KHÔNG được gọi lại cacheInvalidate() ở dưới — nếu
+// không sẽ phát lại vô hạn giữa các tiến trình.
+const APPDATA_CACHE_INVALIDATE_CHANNEL = 'appDataCacheInvalidate';
+
+function applyRemoteCacheInvalidate(key) {
+  cache.delete(key);
+  allDataCache = null;
+}
+
+if (typeof process.on === 'function') {
+  process.on('message', (packet) => {
+    if (packet && packet.type === 'process:msg' && packet.data && packet.data.channel === APPDATA_CACHE_INVALIDATE_CHANNEL) {
+      applyRemoteCacheInvalidate(packet.data.key);
+    }
+  });
+}
+
 function cacheInvalidate(key) {
   cache.delete(key);
   allDataCache = null;
+  if (typeof process.send === 'function') {
+    try {
+      process.send({ type: 'process:msg', data: { channel: APPDATA_CACHE_INVALIDATE_CHANNEL, key } });
+    } catch (err) {
+      console.error('⛔ Không phát được tín hiệu xoá cache appData sang tiến trình khác:', err.message);
+    }
+  }
 }
 
 async function getAppDataValueCached(key) {
