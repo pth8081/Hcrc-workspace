@@ -180,9 +180,15 @@ router.post('/test', sendEmailRateLimiter, async (req, res) => {
     let testUser = smtpAuthEnabled ? smtpUser : null;
     let testPass = smtpAuthEnabled ? smtpPass : null;
     if (smtpAuthEnabled && smtpUser && !smtpPass) {
-      const saved = resolveSmtpAccount(await getEmailConfig());
+      const savedConfig = await getEmailConfig();
+      const saved = resolveSmtpAccount(savedConfig);
       if (saved.user && saved.user !== smtpUser) {
         return res.status(400).json({ error: `Tài khoản SMTP "${smtpUser}" chưa có mật khẩu — vui lòng nhập mật khẩu để gửi thử (mật khẩu đã lưu thuộc về tài khoản khác: "${saved.user}").` });
+      }
+      // Mật khẩu đã lưu cũng gắn với ĐÚNG 1 host đã lưu — đổi sang host khác nhưng để trống ô mật khẩu
+      // (tưởng vẫn "giữ nguyên") trước đây vẫn lấy mật khẩu cũ ghép với host MỚI, sai cặp host/mật khẩu.
+      if (saved.user && savedConfig.host && savedConfig.host !== host) {
+        return res.status(400).json({ error: `SMTP Server "${host}" chưa có mật khẩu — vui lòng nhập mật khẩu để gửi thử (mật khẩu đã lưu thuộc về host khác: "${savedConfig.host}").` });
       }
       testPass = saved.pass;
     }

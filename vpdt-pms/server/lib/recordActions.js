@@ -525,6 +525,10 @@ function editSubmissionDraft(payload, user, item, appData) {
   item.effectiveSteps = effectiveWf.steps;
   item.effectiveApprovers = effectiveWf.approvers;
   item.opinionRequestees = effectiveWf.opinionRequestees;
+  // Ý kiến đã góp cho nội dung CŨ (trước khi bổ sung/sửa lại) không còn phản ánh đúng nội dung MỚI —
+  // cùng tinh thần "vô hiệu hoá dữ liệu vòng cũ" mà lịch sử phê duyệt đã áp dụng (invalidated), nhưng
+  // trước đây opinionResponses bị bỏ sót khỏi cơ chế đó, hiển thị lẫn như ý kiến hợp lệ cho vòng mới.
+  item.opinionResponses = [];
   return item;
 }
 
@@ -749,6 +753,12 @@ function editPaymentRequest(payload, user, pr) {
   }
   for (const field of PAYMENT_EDITABLE_FIELDS) {
     if (payload[field] !== undefined) pr[field] = payload[field];
+  }
+  // Khớp đúng ràng buộc lúc TẠO (createValidation.js paymentRequests.extraValidate) — sửa xoá trắng
+  // tiêu đề trước đây không bị chặn, để lại hồ sơ khó nhận diện trong danh sách chờ duyệt.
+  if (payload.title !== undefined) {
+    pr.title = String(pr.title || '').trim();
+    if (!pr.title) throw new HttpError(400, 'Vui lòng nhập tiêu đề đề nghị thanh toán');
   }
   if (Array.isArray(pr.installments)) {
     pr.installments = pr.installments.map(it => ({
@@ -1411,7 +1421,13 @@ function assignTask(payload, user, task, usersList) {
   // để lại trạng thái gán dở dang trên bản ghi gốc.
   assignees.forEach(u => assertActiveAssignee(usersList, u));
   const deadline = payload.deadline || '';
-  const collaborators = Array.isArray(payload.collaborators) ? payload.collaborators : [];
+  // Người phối hợp cũng PHẢI là tài khoản hệ thống đang hoạt động — cùng lý do assignees ở trên và
+  // buildTasksFromDirectives() (sinh việc từ biên bản họp, xác minh rất kỹ qua resolveDirectiveAttendeeServer()).
+  // Trước đây collaborators được gán thẳng không qua kiểm tra nào — 1 username bịa/đã khoá lặng lẽ
+  // "mất" khỏi công việc, không bao giờ xác nhận tham gia được.
+  const rawCollaborators = Array.isArray(payload.collaborators) ? payload.collaborators : [];
+  rawCollaborators.forEach(u => assertActiveAssignee(usersList, u));
+  const collaborators = [...new Set(rawCollaborators)];
   const skipAccept = shouldSkipAcceptStep(task);
   const startedAt = skipAccept ? nowVN() : null;
 
@@ -1494,7 +1510,10 @@ function editTask(payload, user, task, usersList) {
   task.deadline = newDeadline;
   task.assignedTo = payload.assignedTo;
   task.assignedToName = resolveAssigneeName(usersList, payload.assignedTo);
-  task.collaborators = Array.isArray(payload.collaborators) ? payload.collaborators : [];
+  // Cùng kiểm tra như assignTask() — collaborators cũng phải là tài khoản hệ thống đang hoạt động.
+  const editCollaborators = Array.isArray(payload.collaborators) ? payload.collaborators : [];
+  editCollaborators.forEach(u => assertActiveAssignee(usersList, u));
+  task.collaborators = [...new Set(editCollaborators)];
   task.history = Array.isArray(task.history) ? task.history : [];
   task.history.push({ action: 'EDITED', by: user.username, byName: user.name, time: nowVN() });
   return task;
@@ -1747,6 +1766,17 @@ function requestExtension(payload, user, task) {
   const reason = payload?.reason;
   if (!newDeadline) throw new HttpError(400, 'Vui lòng chọn hạn hoàn thành mới!');
   if (!reason) throw new HttpError(400, 'Vui lòng nhập lý do xin gia hạn!');
+  // "Gia hạn" nghĩa là hạn MỚI phải trễ hơn hạn hiện tại — không có gì chặn trước đây, người nhận việc
+  // có thể "xin gia hạn" tới 1 ngày SỚM hơn. Cùng ràng buộc subtask editTask() đang giữ (hạn việc chính
+  // không được sớm hơn hạn bất kỳ subtask nào) cũng áp dụng ở đây vì applyApprove() ghi thẳng deadline.
+  if (task.deadline && newDeadline <= task.deadline) {
+    throw new HttpError(400, `Hạn hoàn thành mới phải trễ hơn hạn hiện tại (${task.deadline})`);
+  }
+  const violatingSubtasks = (task.subtasks || []).filter(s => s.dueDate && s.dueDate > newDeadline);
+  if (violatingSubtasks.length) {
+    const detail = violatingSubtasks.map(s => `"${s.title}" (hạn ${s.dueDate})`).join(', ');
+    throw new HttpError(400, `Không thể xin gia hạn tới ${newDeadline}: công việc nhỏ ${detail} có hạn muộn hơn.`);
+  }
 
   task.pendingExtension = { newDeadline, reason, requestedBy: user.username, requestedByName: user.name, requestedAt: nowVN() };
   task.history = Array.isArray(task.history) ? task.history : [];
@@ -4159,9 +4189,11 @@ function editItServiceRenewal(user, item, payload) {
   item.startDate = startDate;
   item.expiryDate = expiryDate;
   item.cost = cost;
-  if (payload?.fileUrl) {
-    item.fileUrl = String(payload.fileUrl).trim().slice(0, 300);
-    item.fileName = String(payload.fileName || '').trim().slice(0, 200);
+  // Cho phép gỡ hẳn tệp đính kèm (payload.fileUrl gửi rỗng tường minh) — trước đây chỉ cập nhật khi
+  // fileUrl truthy nên không có đường nào xoá tệp đã đính kèm nhầm, chỉ đè được bằng tệp khác.
+  if (payload?.fileUrl !== undefined) {
+    item.fileUrl = payload.fileUrl ? String(payload.fileUrl).trim().slice(0, 300) : '';
+    item.fileName = payload.fileUrl ? String(payload.fileName || '').trim().slice(0, 200) : '';
   }
   item.history = item.history || [];
   item.history.push({ action: 'EDITED', by: user.username, byName: user.name, time: nowVN() });

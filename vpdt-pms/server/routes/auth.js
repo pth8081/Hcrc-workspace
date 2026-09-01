@@ -229,6 +229,12 @@ router.post('/verify-totp-login', loginRateLimiter, async (req, res) => {
 
     const remainingLockMinutes = getLockoutRemainingMinutes(user);
     if (remainingLockMinutes !== null) {
+      // Ghi log audit khi bị chặn do khoá — khớp đúng /login và /webauthn/login-verify (đều ghi
+      // LOGIN_BLOCKED_LOCKED khi chặn cùng lý do), trước đây bước 2 của luồng TOTP bỏ sót dòng log này.
+      logAuthFailure(req, {
+        username, fullName: user.name, actionType: 'LOGIN_BLOCKED_LOCKED',
+        description: `Tài khoản tạm khóa, còn ${remainingLockMinutes} phút (chặn ở bước xác thực TOTP)`
+      });
       return res.status(429).json({ error: `Tài khoản tạm khóa do nhập sai quá nhiều lần. Vui lòng thử lại sau ${remainingLockMinutes} phút.` });
     }
 
@@ -502,7 +508,17 @@ router.patch('/me', requireAuth, async (req, res) => {
 
       updated = { ...list[idx] };
       if (typeof name === 'string') updated.name = name;
-      if (typeof email === 'string') updated.email = email;
+      // Email này còn là kênh nhận cảnh báo bảo mật quan trọng (bật/gỡ TOTP, mã OTP duyệt — xem
+      // notifyTotpChange()/request-approval-otp bên dưới) — gõ sai định dạng âm thầm "tắt" kênh đó mà
+      // không ai biết (gửi thất bại chỉ log phía server). Không bắt buộc phải có email, chỉ chặn khi
+      // đã gõ nhưng sai định dạng.
+      if (typeof email === 'string') {
+        const trimmedEmail = email.trim();
+        if (trimmedEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmedEmail)) {
+          throw new HttpError(400, 'Địa chỉ email không đúng định dạng');
+        }
+        updated.email = trimmedEmail;
+      }
       if (typeof phone === 'string') updated.phone = phone;
       // Danh sách key thẻ Dashboard người dùng đã tự ẩn (Đợt D — chuyển từ localStorage sang lưu
       // server để đồng bộ giữa các thiết bị). Chỉ là 1 mảng string tuỳ ý lưu riêng cho từng người, KHÔNG

@@ -924,6 +924,10 @@ const CREATE_MODULE_CONFIGS = {
       if (!user.perms?.admin && !user.perms?.paymentManage) {
         throw new CreateError(403, 'Bạn không có quyền tạo đề nghị thanh toán');
       }
+      // Đề nghị tạo thủ công (không có nguồn Hợp đồng/Mua Bán/Sửa Chữa để suy ra tên) — thiếu tiêu đề
+      // để lại 1 hồ sơ trống trong danh sách chờ duyệt, khó nhận diện.
+      payload.title = String(payload.title || '').trim();
+      if (!payload.title) throw new CreateError(400, 'Vui lòng nhập tiêu đề đề nghị thanh toán');
       payload.sourceModule = 'MANUAL';
       payload.sourceId = null;
       payload.sourceCode = null;
@@ -1619,7 +1623,11 @@ const CREATE_MODULE_CONFIGS = {
     forceOwnDept: true,
     getScope: () => ({}),
     creatorField: 'creator', creatorNameField: 'creatorName',
-    getLockKey: (payload, user) => `training_registration:${payload.classId}:${user.username}`,
+    // Khoá theo LỚP (không phải lớp+người) — tuần tự hoá TOÀN BỘ lượt đăng ký cùng 1 lớp, không chỉ
+    // chặn 1 người tự gửi trùng. Trước đây khoá theo cặp lớp+người: 2 người KHÁC NHAU cùng bấm đăng ký
+    // vào chỗ trống cuối cùng gần như đồng thời đều đọc activeRegs.length < capacity trước khi bên nào
+    // kịp ghi, cả 2 đều tạo thành công, lớp vượt sĩ số.
+    getLockKey: (payload) => `training_registration:${payload.classId}`,
     extraValidate: (payload, collection, user, appData) => {
       const classId = Number(payload.classId);
       if (!Number.isFinite(classId)) throw new CreateError(400, 'Thiếu lớp học');
@@ -1775,6 +1783,12 @@ const CREATE_MODULE_CONFIGS = {
       const job = jobs.find(j => j.id === jobId);
       if (!job) throw new CreateError(404, 'Không tìm thấy tin tuyển dụng');
       if (job.status !== 'OPEN') throw new CreateError(409, 'Tin tuyển dụng này đã đóng, không nhận thêm giới thiệu');
+      // Tin có ghi "Hạn nộp" hiển thị cho nhân viên (public/index.html) nhưng trước đây không có gì tự
+      // đóng tin theo hạn đó — quá hạn tin vẫn OPEN, giới thiệu vẫn được nhận dù hiển thị "đã hết hạn".
+      const todayStr = new Date().toISOString().slice(0, 10);
+      if (job.deadline && todayStr > job.deadline) {
+        throw new CreateError(409, 'Tin tuyển dụng này đã hết hạn giới thiệu');
+      }
 
       const candidateName = String(payload.candidateName || '').trim();
       const candidatePhone = String(payload.candidatePhone || '').trim();

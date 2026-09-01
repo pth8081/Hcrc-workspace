@@ -107,12 +107,22 @@ async function checkContractExpiryReminders() {
       if (diffDays === null) continue;
       if (!Array.isArray(c.notifiedThresholds)) c.notifiedThresholds = [];
 
+      // Cô lập lỗi theo TỪNG hợp đồng — trước đây 1 lỗi bất kỳ (VD lock timeout thoáng qua, bản ghi bị
+      // xoá giữa lúc liệt kê và lúc ghi lại) ném ra khỏi toàn bộ khối try bên ngoài, làm dừng NGAY vòng
+      // lặp — các hợp đồng còn lại (đứng sau trong mảng) bị bỏ sót nhắc hạn hoàn toàn ở lượt chạy này.
+      try {
+
       let contractChanged = false;
 
-      for (const threshold of thresholds) {
-        if (diffDays > threshold) continue; // chưa tới ngưỡng này
-        if (c.notifiedThresholds.includes(threshold)) continue; // đã nhắc rồi, không gửi trùng
-
+      // Chỉ gửi ĐÚNG 1 email/lượt chạy, cho ngưỡng GẦN NHẤT (nhỏ nhất) trong số các ngưỡng vừa bị vượt
+      // qua mà chưa từng nhắc — trước đây duyệt hết TẤT CẢ ngưỡng đã vượt qua chưa nhắc, nếu 1 hồ sơ
+      // "nhảy cóc" qua nhiều ngưỡng cùng lúc (mới tạo với hạn ngắn, hoặc job gián đoạn dài ngày) sẽ gửi
+      // liền nhiều email trong 1 lượt, và các ngưỡng XA hơn ("còn khoảng 30 ngày") vẫn còn hiệu lực nội
+      // dung sai lệch dù thực tế hạn gần hơn nhiều. Đánh dấu đã nhắc TẤT CẢ ngưỡng đã vượt qua (không
+      // chỉ ngưỡng gần nhất) để tránh lượt chạy kế tiếp lại "nhắc lùi" 1 ngưỡng xa đã lỗi thời.
+      const newlyCrossedThresholds = thresholds.filter(t => diffDays <= t && !c.notifiedThresholds.includes(t));
+      if (newlyCrossedThresholds.length) {
+        const threshold = Math.min(...newlyCrossedThresholds);
         const creator = users.find(u => u.username === c.creator);
         const label = threshold === 0
           ? (diffDays < 0 ? `đã hết hạn ${Math.abs(diffDays)} ngày` : 'hết hạn hôm nay')
@@ -195,7 +205,7 @@ async function checkContractExpiryReminders() {
         });
 
         if (!totalSendFailure) {
-          c.notifiedThresholds.push(threshold);
+          c.notifiedThresholds.push(...newlyCrossedThresholds);
           contractChanged = true;
         }
       }
@@ -205,6 +215,9 @@ async function checkContractExpiryReminders() {
           item.notifiedThresholds = c.notifiedThresholds;
           return item;
         });
+      }
+      } catch (err) {
+        console.error(`⛔ [Nhắc hạn hợp đồng] Lỗi khi xử lý hợp đồng ${c.code || c.id}, bỏ qua và tiếp tục các hồ sơ còn lại:`, err.message);
       }
     }
   } catch (err) {
