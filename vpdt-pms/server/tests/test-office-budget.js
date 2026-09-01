@@ -280,6 +280,41 @@ async function run() {
     const summaryText = await page.locator('#budgetSummaryResultWrap').innerText();
     check('Khối kết quả Tổng Hợp hiển thị đúng nhãn Phê Duyệt/Thực Hiện/Chênh Lệch trên giao diện', summaryText.includes('Phê Duyệt') && summaryText.includes('Thực Hiện') && summaryText.includes('Chênh Lệch') && summaryText.includes('80.000.000') && summaryText.includes('72.000.000'), summaryText.slice(0, 600));
     check('Khối kết quả Tổng Hợp hiển thị đúng chênh lệch = -8.000.000 (thực hiện thấp hơn phê duyệt)', summaryText.includes('-8.000.000'), summaryText.slice(0, 600));
+    check('budgetManage (budgetmgr1, tầng 2 — cao nhất) thấy khối "Toàn Công Ty" trong Tổng Hợp', summaryText.includes('📌 Toàn Công Ty') && summaryText.includes('Tổng Phê Duyệt') && summaryText.includes('Tổng Thực Hiện'), summaryText.slice(0, 600));
+
+    // ============ Kịch bản 12b: Phân quyền 3 tầng Ngân Sách — tầng MẶC ĐỊNH (tp_kd, KHÔNG có bất kỳ
+    // quyền ngân sách nào — budgetCreate/budgetAggregate/budgetManage đều false). Chỉ cần còn quyền vào
+    // module (mục 0) là được xem (chỉ đọc) ngân sách CỦA CHÍNH PHÒNG MÌNH (Phòng Kinh Doanh, cùng phòng
+    // kd1) ở tab Phê Duyệt/Thực Hiện, KHÔNG được lập/sửa, KHÔNG thấy tab Tổng Hợp ============
+    await loginAs('tp_kd');
+    await goToBudget('APPROVED');
+    const tpKdNoCreateVisible = await page.evaluate(() => !document.getElementById('budgetNoCreatePermNote_PLAN').classList.contains('hidden'));
+    const tpKdFormHidden = await page.evaluate(() => document.getElementById('budgetEntryFormWrap_PLAN').classList.contains('hidden'));
+    check('tp_kd (không có budgetCreate) -> KHÔNG thấy form lập ngân sách, chỉ thấy ghi chú "không có quyền lập"', tpKdNoCreateVisible && tpKdFormHidden, { tpKdNoCreateVisible, tpKdFormHidden });
+    const tpKdListText = await page.locator('#budgetEntryListBody_PLAN').innerText();
+    check('tp_kd vẫn XEM ĐƯỢC (chỉ đọc, quyền mặc định) bản ngân sách Phê Duyệt của CHÍNH PHÒNG MÌNH (kd1, Phòng Kinh Doanh) dù không có quyền lập/tổng hợp', tpKdListText.includes(entry1.code) && tpKdListText.includes('Phòng Kinh Doanh'), tpKdListText.slice(0, 400));
+    const tpKdSummaryBtnHidden = await page.evaluate(() => document.getElementById('btnBudgetSubSummary').classList.contains('hidden'));
+    check('tp_kd (không có budgetAggregate/budgetManage) -> nút tab Tổng Hợp bị ẩn hoàn toàn', tpKdSummaryBtnHidden, tpKdSummaryBtnHidden);
+    await goToBudget('SUMMARY'); // cố tình gọi thẳng — phải bị chặn/điều hướng về lại APPROVED
+    const tpKdActiveSubTabAfterForcedSummary = await page.evaluate(() => activeBudgetSubTab);
+    const tpKdSummaryPaneHidden = await page.evaluate(() => document.getElementById('budgetSubSummary').classList.contains('hidden'));
+    check('tp_kd cố vào thẳng tab Tổng Hợp (setBudgetSubTab("SUMMARY")) -> bị chặn, tự động quay về tab Phê Duyệt', tpKdActiveSubTabAfterForcedSummary === 'APPROVED' && tpKdSummaryPaneHidden, { tpKdActiveSubTabAfterForcedSummary, tpKdSummaryPaneHidden });
+
+    // ============ Kịch bản 12c: Phân quyền 3 tầng Ngân Sách — tầng budgetAggregate (budgetagg1, KHÔNG có
+    // budgetManage). Phải thấy tab Tổng Hợp + khối "Theo Phòng Ban"/"Chi Tiết Theo Hạng Mục" (MỌI phòng
+    // ban, không chỉ phòng mình), nhưng TUYỆT ĐỐI KHÔNG được thấy khối "📌 Toàn Công Ty" (chỉ budgetManage
+    // mới thấy con số gộp toàn công ty) ============
+    await loginAs('budgetagg1');
+    await goToBudget('APPROVED'); // vào module trước để nav tab render lại đúng theo quyền của budgetagg1
+    const aggSummaryBtnVisible = await page.evaluate(() => !document.getElementById('btnBudgetSubSummary').classList.contains('hidden'));
+    check('budgetagg1 (có budgetAggregate) -> thấy nút tab Tổng Hợp', aggSummaryBtnVisible, aggSummaryBtnVisible);
+    await goToBudget('SUMMARY');
+    await page.selectOption('#budgetSummaryPeriodSelect', String(period1.id));
+    await page.evaluate(() => buildBudgetSummary());
+    const aggSummaryText = await page.locator('#budgetSummaryResultWrap').innerText();
+    check('budgetagg1 thấy khối "Theo Phòng Ban" với đúng số liệu của Phòng Kinh Doanh (mọi phòng ban, không chỉ phòng mình — Kế Toán)', aggSummaryText.includes('Theo Phòng Ban') && aggSummaryText.includes('Phòng Kinh Doanh') && aggSummaryText.includes('80.000.000') && aggSummaryText.includes('72.000.000'), aggSummaryText.slice(0, 700));
+    check('budgetagg1 KHÔNG thấy khối "📌 Toàn Công Ty" / các thẻ tổng gộp (chỉ budgetManage mới xem được)', !aggSummaryText.includes('📌 Toàn Công Ty') && !aggSummaryText.includes('Tổng Phê Duyệt') && !aggSummaryText.includes('Tổng Thực Hiện'), aggSummaryText.slice(0, 700));
+    check('budgetagg1 thấy dòng ghi chú giải thích vì sao không xem được số liệu toàn công ty', aggSummaryText.includes('chỉ người có quyền Quản Lý Ngân Sách mới xem được'), aggSummaryText.slice(0, 700));
 
     // ============ Kịch bản 13: "Bổ Sung" (REQUEST_CHANGES) cho Mua Bán/Sửa Chữa/Đầu Tư — người duyệt
     // trả đề xuất về NHÁP, người tạo sửa lại qua modal "Sửa & Gửi Lại" (openBosungEditModal/

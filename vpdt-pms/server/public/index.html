@@ -5343,16 +5343,16 @@ input[data-sdd-list] {
             <span id="permTreeBadge_budget" class="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-gray-100 text-gray-500">0/0</span>
           </summary>
           <div class="p-3 pt-0 space-y-2">
-            <p class="text-[11px] text-gray-500 italic">Còn quyền vào module "Ngân Sách" ở mục 0 mới thấy được các màn dưới đây — module này KHÔNG mở sẵn cho toàn bộ nhân viên. Module có 3 tab: "Ngân Sách Phê Duyệt" và "Ngân Sách Thực Hiện" (cùng cần quyền "Lập ngân sách" — lập được cho ĐÚNG phòng ban mình, nhiều người cùng phòng cùng sửa chung 1 bản nháp, cả 2 loại đều qua Trưởng phòng duyệt) và "Tổng Hợp" (cần quyền "Tổng hợp" — so sánh Phê Duyệt vs Thực Hiện của MỌI phòng ban ở kỳ đã chọn). "Quản lý" mở nút "⚙️ Quản Lý Kỳ & Mẫu" để tạo/đóng/mở lại kỳ ngân sách và quản lý mẫu ngân sách (dùng chung cho cả 2 loại). Bước duyệt (Trưởng phòng) cấu hình riêng ở "Hệ Thống → Quy Trình & Phê Duyệt → QT Ngân Sách" — không phải checkbox ở đây.</p>
+            <p class="text-[11px] text-gray-500 italic">Còn quyền vào module "Ngân Sách" ở mục 0 là vào được — module này KHÔNG mở sẵn cho toàn bộ nhân viên, nhưng KHÔNG cần bật thêm checkbox nào bên dưới: mọi nhân viên có quyền vào module đã <b>MẶC ĐỊNH xem được (chỉ đọc)</b> ngân sách của ĐÚNG phòng ban mình ở 2 tab "Ngân Sách Phê Duyệt"/"Ngân Sách Thực Hiện" (lọc theo đúng phòng ban, xem renderBudgetEntryList()). 3 quyền dưới đây chỉ MỞ RỘNG thêm trên nền mặc định đó — xếp theo 3 tầng: (1) "Lập ngân sách" — được TỰ LẬP/SỬA/GỬI ngân sách phòng mình (không chỉ xem), nhiều người cùng phòng cùng sửa chung 1 bản nháp, qua Trưởng phòng duyệt; (2) "Tổng hợp" — thêm tab "Tổng Hợp", nhưng CHỈ thấy khối "Theo Phòng Ban"/"Chi Tiết Hạng Mục" (so sánh Phê Duyệt vs Thực Hiện của MỌI phòng ban, tách riêng từng phòng) — KHÔNG thấy khối "📌 Toàn Công Ty" (4 thẻ tổng gộp + OPEX/CAPEX gộp); (3) "Quản lý" — cấp cao nhất: toàn quyền tạo/đóng/mở lại kỳ + quản lý mẫu (nút "⚙️ Quản Lý Kỳ & Mẫu"), VÀ thấy thêm khối "Toàn Công Ty" trong tab Tổng Hợp mà quyền "Tổng hợp" không thấy được. Bước duyệt (Trưởng phòng) cấu hình riêng ở "Hệ Thống → Quy Trình & Phê Duyệt → QT Ngân Sách" — không phải checkbox ở đây.</p>
             <div class="grid grid-cols-1 md:grid-cols-3 gap-2">
               <label class="flex items-center gap-2 text-teal-700 font-semibold cursor-pointer">
-                <input type="checkbox" id="pBudgetManage"> 📅 Quản lý (tạo/đóng/mở lại kỳ, quản lý mẫu)
+                <input type="checkbox" id="pBudgetManage"> 📅 Quản lý (tạo/đóng/mở kỳ, quản lý mẫu + xem Tổng Hợp Toàn Công Ty)
               </label>
               <label class="flex items-center gap-2 text-sky-700 font-semibold cursor-pointer">
-                <input type="checkbox" id="pBudgetCreate"> 📝 Lập ngân sách (đúng phòng ban mình)
+                <input type="checkbox" id="pBudgetCreate"> 📝 Lập ngân sách (tự lập/sửa/gửi — đúng phòng ban mình)
               </label>
               <label class="flex items-center gap-2 text-emerald-700 font-semibold cursor-pointer">
-                <input type="checkbox" id="pBudgetAggregate"> 📊 Tổng hợp (xem/xuất báo cáo mọi phòng ban)
+                <input type="checkbox" id="pBudgetAggregate"> 📊 Tổng hợp (xem Tổng Hợp Theo Phòng, mọi phòng ban)
               </label>
             </div>
           </div>
@@ -12692,14 +12692,18 @@ function canAccessPaymentModule(user) {
   return !!(user?.perms?.admin || user?.perms?.paymentManage);
 }
 
-// Ngân Sách — module con của "Tổng Hợp" (BUSINESS_MODULES parent:'office'), chỉ vào được nếu còn quyền
-// vào module cha + có ít nhất 1 trong 3 quyền chi tiết (xem/lập/tạo kỳ/tổng hợp — "xem" mặc định ai
-// cũng có với đúng phòng ban mình MIỄN có ít nhất 1 quyền chi tiết khác, giống khuôn canAccessUniformModule()).
+// Ngân Sách — module con của "Tổng Hợp" (BUSINESS_MODULES parent:'office'). CHỈ cần còn quyền vào module
+// (mục 0, hasModuleAccess) là vào được — KHÔNG bắt buộc phải có budgetManage/budgetCreate/budgetAggregate
+// nữa: "xem ngân sách phòng mình" (chỉ đọc, tab Phê Duyệt/Thực Hiện lọc theo e.dept === user.dept, xem
+// renderBudgetEntryList()) là quyền MẶC ĐỊNH của mọi nhân viên đã có quyền vào module, không cần bật
+// checkbox nào. 3 quyền chi tiết chỉ MỞ RỘNG thêm trên nền mặc định đó: budgetCreate (lập/sửa/gửi ngân
+// sách phòng mình), budgetAggregate (thêm tab Tổng Hợp — phần "Theo Phòng", mọi phòng ban), budgetManage
+// (toàn quyền quản trị kỳ/mẫu + thêm phần "Toàn Công Ty" trong tab Tổng Hợp) — xem
+// canManageBudgetClient()/canCreateBudgetEntryClient()/canAggregateBudgetClient() bên dưới.
 function canAccessBudgetModule(user) {
   if (!user) return false;
   if (user.perms?.admin) return true;
-  if (!hasModuleAccess(user, 'budget')) return false;
-  return !!(user.perms?.budgetManage || user.perms?.budgetCreate || user.perms?.budgetAggregate);
+  return hasModuleAccess(user, 'budget');
 }
 
 // Nhân Sự — module TOP-LEVEL (không có module cha), cùng khuôn canAccessBudgetModule() ở trên nhưng
@@ -23166,7 +23170,8 @@ function setBudgetSubTab(subTab) {
   window.scrollTo({ top: 0, behavior: 'auto' }); // Tránh "bay xuống cuối" khi đổi tab con — xem setSystemSubTab().
   const canManage = canManageBudgetClient(currentUser);
   const canAggregate = canAggregateBudgetClient(currentUser);
-  if (subTab === 'SUMMARY' && !canAggregate) subTab = 'APPROVED';
+  const canSeeSummaryTab = canAggregate || canManage; // budgetManage là cấp cao hơn (superset) — cũng phải vào được tab Tổng Hợp
+  if (subTab === 'SUMMARY' && !canSeeSummaryTab) subTab = 'APPROVED';
   activeBudgetSubTab = subTab;
 
   document.getElementById('budgetSubApproved').classList.toggle('hidden', subTab !== 'APPROVED');
@@ -23177,7 +23182,7 @@ function setBudgetSubTab(subTab) {
   const inactiveCls = 'px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700';
   document.getElementById('btnBudgetSubApproved').className = subTab === 'APPROVED' ? activeCls : inactiveCls;
   document.getElementById('btnBudgetSubActual').className = subTab === 'ACTUAL' ? activeCls : inactiveCls;
-  document.getElementById('btnBudgetSubSummary').className = (subTab === 'SUMMARY' ? activeCls : inactiveCls) + (canAggregate ? '' : ' hidden');
+  document.getElementById('btnBudgetSubSummary').className = (subTab === 'SUMMARY' ? activeCls : inactiveCls) + (canSeeSummaryTab ? '' : ' hidden');
   document.getElementById('btnBudgetManageKinds').classList.toggle('hidden', !canManage);
 
   if (subTab === 'APPROVED') renderBudgetEntrySubTab('PLAN');
@@ -24011,12 +24016,11 @@ function renderBudgetSummaryResult(period, planEntries, actualEntries, fields) {
       </tr>`;
     }).join('');
 
-  wrap.innerHTML = `
-    <div id="budgetSummaryProtectedContent" class="relative select-none" oncontextmenu="return false">
-      <div class="text-center mb-2">
-        <h3 class="font-bold text-lg text-violet-900">TỔNG HỢP NGÂN SÁCH — PHÊ DUYỆT vs THỰC HIỆN</h3>
-        <p class="text-sm text-gray-600">Kỳ: ${escapeHtml(period.name)} — chỉ tính các bản đã được duyệt của mỗi loại</p>
-      </div>
+  // Khối "Toàn Công Ty" (4 thẻ tổng + OPEX/CAPEX gộp) CHỈ dành cho budgetManage — budgetAggregate chỉ
+  // thấy khối "Theo Phòng Ban"/"Chi Tiết Hạng Mục" bên dưới (đã tổng hợp mọi phòng ban nhưng KHÔNG lộ ra
+  // 1 con số duy nhất gộp cả công ty). Xem canManageBudgetClient()/canAggregateBudgetClient().
+  const canSeeCompanyWide = canManageBudgetClient(currentUser);
+  const companyWideHTML = !canSeeCompanyWide ? '' : `
       <div class="grid grid-cols-2 md:grid-cols-4 gap-3 text-center">
         <div class="bg-violet-50 border border-violet-200 rounded p-3"><div class="text-xs text-gray-600">Tổng Phê Duyệt</div><div class="font-bold text-lg text-violet-800">${planTotal.toLocaleString('vi-VN')} đ</div></div>
         <div class="bg-sky-50 border border-sky-200 rounded p-3"><div class="text-xs text-gray-600">Tổng Thực Hiện</div><div class="font-bold text-lg text-sky-800">${actualTotal.toLocaleString('vi-VN')} đ</div></div>
@@ -24032,9 +24036,20 @@ function renderBudgetSummaryResult(period, planEntries, actualEntries, fields) {
           <div class="font-bold text-gray-700 mb-1">CAPEX</div>
           <div>Phê duyệt: <b>${planCapex.toLocaleString('vi-VN')} đ</b> &nbsp;|&nbsp; Thực hiện: <b>${actualCapex.toLocaleString('vi-VN')} đ</b></div>
         </div>
-      </div>
+      </div>`;
+
+  wrap.innerHTML = `
+    <div id="budgetSummaryProtectedContent" class="relative select-none" oncontextmenu="return false">
+      <div class="text-center mb-2">
+        <h3 class="font-bold text-lg text-violet-900">TỔNG HỢP NGÂN SÁCH — PHÊ DUYỆT vs THỰC HIỆN</h3>
+        <p class="text-sm text-gray-600">Kỳ: ${escapeHtml(period.name)} — chỉ tính các bản đã được duyệt của mỗi loại</p>
+      </div>${canSeeCompanyWide ? `
+      <div class="text-center"><span class="inline-block px-2 py-0.5 rounded bg-violet-100 text-violet-700 text-[11px] font-bold">📌 Toàn Công Ty</span></div>${companyWideHTML}` : ''}
       <div class="mt-4">
-        <h4 class="font-bold text-sm text-gray-700 mb-1">Theo Phòng Ban</h4>
+        <div class="flex items-center gap-2 mb-1">
+          <h4 class="font-bold text-sm text-gray-700">Theo Phòng Ban</h4>
+          ${!canSeeCompanyWide ? '<span class="text-[11px] text-gray-400 italic">(số liệu toàn công ty gộp chung chỉ người có quyền Quản Lý Ngân Sách mới xem được)</span>' : ''}
+        </div>
         <table class="w-full border-collapse text-xs bg-white"><thead><tr class="bg-gray-100 text-left"><th class="border p-2">Phòng Ban</th><th class="border p-2 text-right">Phê Duyệt</th><th class="border p-2 text-right">Thực Hiện</th><th class="border p-2 text-right">Chênh Lệch</th><th class="border p-2 text-right">% Sử Dụng</th></tr></thead><tbody>${byDeptRows}</tbody></table>
       </div>
       <div class="mt-4 overflow-x-auto">

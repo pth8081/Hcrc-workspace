@@ -48,6 +48,13 @@ const USERS = [
   {
     id: 9, username: 'budgetmgr1', pass: '123456', name: 'Ngô Văn Quản Lý NS', email: 'budgetmgr1@company.com', phone: '0900000009', dept: 'Ban Giám Đốc', jobTitle: 'Phó giám đốc',
     perms: { admin: false, budgetManage: true, budgetAggregate: true }
+  },
+  {
+    // CHỈ budgetAggregate (KHÔNG có budgetManage) — dùng để kiểm tra đúng ranh giới 3 tầng phân quyền
+    // Ngân Sách: người này phải thấy tab Tổng Hợp + khối "Theo Phòng Ban" (mọi phòng ban) nhưng KHÔNG
+    // được thấy khối "Toàn Công Ty" (chỉ budgetManage mới thấy) — xem renderBudgetSummaryResult().
+    id: 10, username: 'budgetagg1', pass: '123456', name: 'Bùi Thị Tổng Hợp NS', email: 'budgetagg1@company.com', phone: '0900000010', dept: 'Phòng Kế Toán', jobTitle: 'Chuyên viên',
+    perms: { admin: false, budgetAggregate: true }
   }
 ];
 
