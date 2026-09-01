@@ -1,9 +1,40 @@
 # Phiên bản hiện tại
 
-**1.97.1** — đã merge vào `main` (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở
+**1.97.2** — đã merge vào `main` (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở
 badge góc màn hình + `/api/health`).
 
-## Cập nhật gần nhất (PR #216, nhánh `claude/chao-ban-oo5ijl`)
+## Cập nhật gần nhất (PR #218, nhánh `claude/chao-ban-oo5ijl`)
+
+Theo phản ánh: mở màn "Hệ Thống" (đặc biệt tab con "Phân Quyền" — cây quyền rất dài), thanh chuyển tab
+con bị đẩy mất khỏi màn hình ngay khi cuộn xuống, phải cuộn ngược lên đầu trang mới đổi được tab khác —
+dù code ĐÃ có class `sticky` từ trước.
+
+- **Nguyên nhân**: `#systemSubTabBar` (Quản Trị/Biểu Mẫu/Quy Trình & Phê Duyệt/Quản Lý Tệp File/Log/Thùng
+  Rác) chỉ được bọc bởi `#systemSection` — một `<div>` trước đây CHỈ chứa mỗi thanh đó (cao ~41px) — còn
+  6 màn nội dung con (`formSection`/`adminSection`/`workflowSection`/`uploadTypeSection`/`logSection`/
+  `trashSection`) lại là ANH EM đứng ngoài, không phải con của `#systemSection`. `position: sticky` chỉ
+  "dính" được trong đúng phạm vi chiều cao thẻ cha trực tiếp, nên thanh mất hẳn ngay khi cuộn qua khỏi
+  41px đó — sticky trông như "không hoạt động" dù đủ class.
+- **Cách sửa** (`public/index.html`): chuyển toàn bộ 6 màn nội dung con nói trên vào làm CON thật sự của
+  `#systemSection` (thẻ đóng của `#systemSection` dời xuống sau `#uploadTypeSection`) — chỉ đổi vị trí
+  thẻ trong DOM, không đổi nội dung/id/onclick nào. Nhờ vậy `#systemSection` luôn cao bằng đúng nội dung
+  tab con đang hiện, thanh dính suốt quá trình cuộn.
+- Thanh tab con của Quản Trị (Cấu Hình Email/Quản Lý Danh Mục/Phân Quyền/API Xác Thực Ngoài) cũng đổi
+  sang `sticky`, dính ngay dưới thanh Hệ Thống ở trên — `top` tính động bằng JS
+  (`positionAdminSubTabBar()`, gọi khi vào tab Quản Trị + khi resize/xoay màn hình) vì chiều cao thật của
+  thanh trên thay đổi theo bề rộng màn hình (6 nút tự xuống dòng khác nhau trên điện thoại/tablet/
+  desktop).
+
+**Deploy impact:** không đổi `server/sql/schema.sql`, không thêm biến môi trường mới, không thêm
+dependency mới — chỉ copy code + `pm2 restart`.
+
+Đã kiểm thử bằng Playwright thật (đăng nhập bcrypt + TOTP 2FA thật qua route thật, không mock): cuộn sâu
+vào tab "Phân Quyền" trên cả viewport mobile lẫn desktop — xác nhận cả 2 thanh giờ dính đúng ngay dưới
+header, không còn bị đẩy mất; xác nhận cả 6 tab con Hệ Thống vẫn chuyển đổi hiển thị đúng sau khi tái cấu
+trúc. `node -c` script + kiểm tra div-balance toàn file (không đổi so với trước — xác nhận việc di chuyển
+khối HTML không làm lệch cân bằng thẻ). Toàn bộ `tests/test-*.js` — 0 lỗi, không regression.
+
+## Trước đó (PR #216, nhánh `claude/chao-ban-oo5ijl`)
 
 Theo yêu cầu rà soát lại đúng 2 phần của API xác thực ngoài trước khi giao cho đối tác cấu hình:
 
