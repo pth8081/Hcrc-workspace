@@ -1,9 +1,38 @@
 # Phiên bản hiện tại
 
-**1.99.0** — đã merge vào `main` (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở
+**1.99.1** — đã merge vào `main` (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở
 badge góc màn hình + `/api/health`).
 
-## Cập nhật gần nhất (PR #222, nhánh `claude/chao-ban-oo5ijl`)
+## Cập nhật gần nhất (PR #224, nhánh `claude/chao-ban-oo5ijl`)
+
+Sửa lại mô hình phân quyền Ngân Sách vừa thêm ở PR #222 theo yêu cầu làm rõ lại — **bỏ hẳn tầng "xem miễn
+phí"**, `budgetCreate` trở thành quyền NỀN TẢNG bắt buộc:
+
+1. **`budgetCreate` ("Xem, tạo ngân sách")** — quyền nền tảng, PHẢI có mới vào được module: xem/nhập/sửa
+   ngân sách Phê Duyệt & Thực Hiện của ĐÚNG phòng ban mình, và giờ ĐÃ xem được tab "Tổng Hợp" — nhưng chỉ
+   thấy đúng phòng mình (dữ liệu đồng bộ về máy vốn đã lọc theo `canViewBudgetEntry()` phía server).
+2. **`budgetAggregate` (Tổng hợp)** — không đổi hành vi: thêm khối "Theo Phòng Ban" MỌI phòng ban +
+   "Chi Tiết Theo Hạng Mục" trong tab Tổng Hợp, KHÔNG thấy khối "📌 Toàn Công Ty".
+3. **`budgetManage` (Quản lý — cao nhất)** — không đổi hành vi: xem hết mọi phòng ban + khối "Toàn Công
+   Ty", toàn quyền tạo/đóng/mở kỳ + quản lý mẫu — xác nhận lại KHÔNG sửa được ngân sách của phòng ban khác
+   (server đã chặn cứng ở `updateBudgetEntryDraft()`/`submitBudgetEntry()` từ trước, không cần sửa gì).
+
+- **`canAccessBudgetModule()`** (`public/index.html`): trở lại đòi ÍT NHẤT 1 trong 3 quyền
+  budgetCreate/budgetAggregate/budgetManage — đúng khuôn `canAccessOfficeModule()` (đòi officeBuy/Fix/
+  Invest). Cũng bổ sung guard `alert`-chặn `switchTab('budget')` còn thiếu từ trước (mọi module khác đều
+  có sẵn, riêng budget trước đây chỉ ẩn nút điều hướng chứ chưa chặn gọi thẳng hàm).
+- Cập nhật lại ghi chú + nhãn 3 checkbox trong cây phân quyền admin (khối 18 — Ngân Sách).
+- `tests/_seed.js`: `tp_kd` (Trưởng phòng, approver) thêm `budgetCreate` để còn vào module xử lý duyệt
+  được — đúng thực tế Trưởng phòng cũng cần quyền lập/sửa ngân sách phòng mình.
+
+**Deploy impact:** không đổi `server/sql/schema.sql`, không thêm biến môi trường mới, không thêm
+dependency mới — chỉ copy code + `pm2 restart`.
+
+Đã kiểm thử: viết lại kịch bản test-office-budget.js — người không có quyền nào bị khoá hoàn toàn (nav ẩn
++ switchTab bị chặn); người chỉ có budgetCreate thấy Tổng Hợp đúng phòng mình, không thấy Toàn Công Ty —
+54/54 pass. Toàn bộ `tests/test-*.js` — 0 lỗi.
+
+## Trước đó (PR #222, nhánh `claude/chao-ban-oo5ijl`)
 
 Theo yêu cầu: module "Ngân Sách" áp dụng mô hình phân quyền **3 tầng** thay vì bắt buộc 1 trong 3 quyền
 phẳng (`budgetCreate`/`budgetAggregate`/`budgetManage`) mới vào được module:
