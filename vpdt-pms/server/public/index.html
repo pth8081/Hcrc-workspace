@@ -3020,8 +3020,8 @@ input[data-sdd-list] {
   <div id="carSection" class="hidden space-y-6">
     <div id="hanhChinhTabBar_car" class="hidden flex gap-2 flex-wrap"></div>
     <div class="flex flex-wrap gap-2 border-b pb-2">
-      <button type="button" onclick="setCarSubTab('REG')" id="btnCarSubReg" class="px-3 py-1.5 rounded text-xs font-bold bg-indigo-700 text-white">🚗 Đăng Ký Xe</button>
-      <button type="button" onclick="setCarSubTab('DRIVER')" id="btnCarSubDriver" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">🧑‍✈️ Lái Xe</button>
+      <button type="button" data-op="setCarSubTab" data-arg0="REG" id="btnCarSubReg" class="px-3 py-1.5 rounded text-xs font-bold bg-indigo-700 text-white">🚗 Đăng Ký Xe</button>
+      <button type="button" data-op="setCarSubTab" data-arg0="DRIVER" id="btnCarSubDriver" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">🧑‍✈️ Lái Xe</button>
     </div>
 
     <div id="carSubReg" class="space-y-6">
@@ -3030,7 +3030,7 @@ input[data-sdd-list] {
       <h3 class="font-bold text-indigo-900 text-base flex items-center gap-2">🚗 Mẫu Biểu Đăng Ký Xe Ô Tô / Phương Tiện</h3>
       <p class="text-xs text-indigo-700">Tạo phiếu đăng ký lịch trình xe. Luồng duyệt tích hợp phê duyệt đồng cấp.</p>
       
-      <form onsubmit="submitCarReq(event)" class="bg-white p-3 rounded border text-xs space-y-3">
+      <form data-op-submit="submitCarReq" class="bg-white p-3 rounded border text-xs space-y-3">
         <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
           <div>
             <label class="block font-semibold text-gray-600 mb-1">Mã Phiếu Đăng Ký</label>
@@ -3080,7 +3080,7 @@ input[data-sdd-list] {
           <div class="md:col-span-3">
             <label class="block font-semibold text-gray-600 mb-1">Lộ Trình Di Chuyển <span class="text-red-500">*</span></label>
             <div id="carRoutePointsWrap" class="space-y-1.5"></div>
-            <button type="button" onclick="addCarRoutePoint()" class="mt-1.5 bg-gray-600 text-white px-3 py-1 rounded text-xs font-bold hover:bg-gray-700">+ Thêm Điểm</button>
+            <button type="button" data-op="addCarRoutePoint" class="mt-1.5 bg-gray-600 text-white px-3 py-1 rounded text-xs font-bold hover:bg-gray-700">+ Thêm Điểm</button>
             <input id="carDestination" type="hidden" required>
           </div>
           <div class="md:col-span-3">
@@ -3102,13 +3102,13 @@ input[data-sdd-list] {
       <div class="grid grid-cols-1 md:grid-cols-5 gap-3">
         <div>
           <label class="block text-xs font-semibold text-gray-600 mb-1">Lọc Theo Phòng Ban</label>
-          <select id="filterDeptCar" onchange="onCarFilterChange()" class="w-full border p-2 rounded text-sm bg-white">
+          <select id="filterDeptCar" data-op-change="onCarFilterChange" class="w-full border p-2 rounded text-sm bg-white">
             <option value="">-- Tất cả phòng ban --</option>
           </select>
         </div>
         <div>
           <label class="block text-xs font-semibold text-gray-600 mb-1">Lọc Theo Trạng Thái</label>
-          <select id="filterStatusCar" onchange="onCarFilterChange()" class="w-full border p-2 rounded text-sm bg-white">
+          <select id="filterStatusCar" data-op-change="onCarFilterChange" class="w-full border p-2 rounded text-sm bg-white">
             <option value="">-- Tất cả trạng thái --</option>
             <option value="APPROVED">Đã Phê Duyệt</option>
             <option value="PENDING">Đang Chờ Duyệt</option>
@@ -3117,15 +3117,15 @@ input[data-sdd-list] {
         </div>
         <div>
           <label class="block text-xs font-semibold text-gray-600 mb-1">Từ Ngày</label>
-          <input id="filterFromDateCar" type="date" onchange="onCarFilterChange()" class="w-full border p-2 rounded text-sm bg-white">
+          <input id="filterFromDateCar" type="date" data-op-change="onCarFilterChange" class="w-full border p-2 rounded text-sm bg-white">
         </div>
         <div>
           <label class="block text-xs font-semibold text-gray-600 mb-1">Đến Ngày</label>
-          <input id="filterToDateCar" type="date" onchange="onCarFilterChange()" class="w-full border p-2 rounded text-sm bg-white">
+          <input id="filterToDateCar" type="date" data-op-change="onCarFilterChange" class="w-full border p-2 rounded text-sm bg-white">
         </div>
         <div>
           <label class="block text-xs font-semibold text-gray-600 mb-1">Từ Khóa</label>
-          <input id="filterKeywordCar" oninput="onCarFilterChange()" placeholder="Mã, điểm đến, người đăng ký..." class="w-full border p-2 rounded text-sm">
+          <input id="filterKeywordCar" data-op-input="onCarFilterChange" placeholder="Mã, điểm đến, người đăng ký..." class="w-full border p-2 rounded text-sm">
         </div>
       </div>
     </div>
@@ -7132,7 +7132,7 @@ input[data-sdd-list] {
         <h3 id="carModalTitle" class="font-bold text-base flex items-center gap-2">🚗 Xử Lý Đăng Ký Xe</h3>
         <p id="carModalSub" class="text-xs text-indigo-200"></p>
       </div>
-      <button onclick="closeCarProcessModal()" class="text-indigo-200 hover:text-white font-bold text-xl px-2">✕</button>
+      <button data-op="closeCarProcessModal" class="text-indigo-200 hover:text-white font-bold text-xl px-2">✕</button>
     </div>
     <div class="p-4 overflow-y-auto flex-1 space-y-4 text-xs">
       <div id="carModalDetails" class="bg-gray-50 p-3 rounded border space-y-2 text-gray-700"></div>
@@ -7142,7 +7142,7 @@ input[data-sdd-list] {
         <div class="grid grid-cols-1 md:grid-cols-3 gap-2">
           <div>
             <label class="block font-semibold text-gray-600 mb-1">Lái xe được phân công <span class="text-red-500">*</span></label>
-            <input id="carAssignedDriver" data-sdd-list="carDriversDatalist" autocomplete="off" oninput="resolveCarAssignedDriverInput(this.value)" placeholder="Gõ tên hoặc tài khoản tài xế để tìm..." class="w-full border p-1.5 rounded">
+            <input id="carAssignedDriver" data-sdd-list="carDriversDatalist" autocomplete="off" data-op-input="resolveCarAssignedDriverInput" data-arg-value="0" placeholder="Gõ tên hoặc tài khoản tài xế để tìm..." class="w-full border p-1.5 rounded">
             <input type="hidden" id="carAssignedDriverUsername">
           </div>
           <div>
@@ -7168,7 +7168,7 @@ input[data-sdd-list] {
       </div>
     </div>
     <div class="p-3 bg-gray-100 border-t flex justify-between items-center text-xs">
-      <button onclick="closeCarProcessModal()" class="bg-gray-500 text-white px-4 py-1.5 rounded font-bold hover:bg-gray-600">Đóng</button>
+      <button data-op="closeCarProcessModal" class="bg-gray-500 text-white px-4 py-1.5 rounded font-bold hover:bg-gray-600">Đóng</button>
       <div id="carModalActionBtns" class="flex gap-2"></div>
     </div>
   </div>
@@ -21170,8 +21170,8 @@ function renderCarRoutePoints() {
   wrap.innerHTML = carRoutePoints.map((p, idx) => `
     <div class="flex items-center gap-2">
       <span class="text-xs text-gray-500 w-24 shrink-0">${idx === 0 ? 'Điểm xuất phát' : `Điểm ${idx}`}</span>
-      <input value="${escapeHtml(p)}" oninput="updateCarRoutePoint(${idx}, this.value)" placeholder="${idx === 0 ? 'VD: Hội An' : 'VD: Đà Nẵng'}" class="flex-1 border p-1.5 rounded text-xs">
-      ${carRoutePoints.length > 2 ? `<button type="button" onclick="removeCarRoutePoint(${idx})" class="text-red-500 hover:text-red-700 text-xs font-bold">✕</button>` : ''}
+      <input value="${escapeHtml(p)}" data-op-input="updateCarRoutePoint" data-arg0="${idx}" data-arg-value="1" placeholder="${idx === 0 ? 'VD: Hội An' : 'VD: Đà Nẵng'}" class="flex-1 border p-1.5 rounded text-xs">
+      ${carRoutePoints.length > 2 ? `<button type="button" data-op="removeCarRoutePoint" data-arg0="${idx}" class="text-red-500 hover:text-red-700 text-xs font-bold">✕</button>` : ''}
     </div>
   `).join('');
   document.getElementById('carDestination').value = carRoutePoints.map(p => p.trim()).filter(Boolean).join(' → ');
@@ -21212,7 +21212,7 @@ function renderCarDriverTab() {
         </div>
         ${c.driverConfirmed
           ? `<span class="px-2 py-0.5 bg-green-100 text-green-800 rounded font-bold text-[11px]">✅ Đã xác nhận lúc ${escapeHtml(c.driverConfirmedAt || '')}</span>`
-          : `<button type="button" onclick="confirmCarDriverAssignmentAction(${c.id})" class="bg-indigo-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-indigo-700">✅ Xác Nhận Đăng Ký</button>`
+          : `<button type="button" data-op="confirmCarDriverAssignmentAction" data-arg0="${c.id}" class="bg-indigo-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-indigo-700">✅ Xác Nhận Đăng Ký</button>`
         }
       </div>
     </div>
@@ -21322,8 +21322,8 @@ function renderCarRegs() {
         <td class="border p-2 text-center space-x-1">
           ${(() => {
             const primaryBtnHTML = canApprove
-              ? `<button onclick="runCarAction(${c.id}, 'process')" class="px-2.5 py-1 bg-emerald-600 text-white rounded text-xs hover:opacity-90 font-bold">✍️ Xử lý / Duyệt</button>`
-              : `<button onclick="runCarAction(${c.id}, 'process')" class="px-2.5 py-1 bg-gray-600 text-white rounded text-xs hover:opacity-90 font-bold">👁️ Xem chi tiết</button>`;
+              ? `<button data-op="runCarAction" data-arg0="${c.id}" data-arg1="process" class="px-2.5 py-1 bg-emerald-600 text-white rounded text-xs hover:opacity-90 font-bold">✍️ Xử lý / Duyệt</button>`
+              : `<button data-op="runCarAction" data-arg0="${c.id}" data-arg1="process" class="px-2.5 py-1 bg-gray-600 text-white rounded text-xs hover:opacity-90 font-bold">👁️ Xem chi tiết</button>`;
             const secondaryOptions = [];
             if (c.status === 'APPROVED') {
               secondaryOptions.push({ value: 'viewSlip', label: '👁️ Xem Phiếu' });
@@ -21432,9 +21432,9 @@ function openCarProcessModal(carId) {
   const actionBtns = document.getElementById('carModalActionBtns');
   if (canApprove) {
     actionBtns.innerHTML = `
-      <button onclick="confirmProcessCarReg('REJECT')" class="bg-red-600 text-white px-4 py-1.5 rounded font-bold hover:bg-red-700 text-xs">❌ Từ Chối</button>
-      <button onclick="confirmProcessCarReg('REQUEST_CHANGES')" class="bg-amber-500 text-white px-4 py-1.5 rounded font-bold hover:bg-amber-600 text-xs">🔄 Bổ Sung</button>
-      <button onclick="confirmProcessCarReg('APPROVE')" class="bg-green-600 text-white px-5 py-1.5 rounded font-bold hover:bg-green-700 text-xs">✅ Phê Duyệt & Chuyển Bước</button>
+      <button data-op="confirmProcessCarReg" data-arg0="REJECT" class="bg-red-600 text-white px-4 py-1.5 rounded font-bold hover:bg-red-700 text-xs">❌ Từ Chối</button>
+      <button data-op="confirmProcessCarReg" data-arg0="REQUEST_CHANGES" class="bg-amber-500 text-white px-4 py-1.5 rounded font-bold hover:bg-amber-600 text-xs">🔄 Bổ Sung</button>
+      <button data-op="confirmProcessCarReg" data-arg0="APPROVE" class="bg-green-600 text-white px-5 py-1.5 rounded font-bold hover:bg-green-700 text-xs">✅ Phê Duyệt & Chuyển Bước</button>
     `;
   } else {
     actionBtns.innerHTML = `<span class="text-gray-500 italic text-xs">Bạn chỉ có quyền xem thông tin đăng ký này.</span>`;
@@ -23779,6 +23779,12 @@ bindCspDelegation('contractSection');
 // thanh toán (#paymentCreateInstallmentsList) đều render vào bên trong #paymentSection (openEditPaymentRequest()
 // chỉ chuyển sub-tab + đổ dữ liệu vào ĐÚNG form đã có trong section, không mở modal riêng) — 1 gốc là đủ.
 bindCspDelegation('paymentSection');
+// Xe — danh sách đăng ký (#carTableBody), form đăng ký + điểm lộ trình (#carRoutePointsWrap), tab
+// Lái Xe (#carDriverListWrap) đều render trong #carSection — nhưng modal Xử Lý Đăng Ký Xe
+// (#carProcessModal, nút Duyệt/Từ chối/Bổ sung trong #carModalActionBtns) sống NGOÀI section (giống
+// Vận Hành) nên cần thêm 1 gốc riêng cho modal.
+bindCspDelegation('carSection');
+bindCspDelegation('carProcessModal');
 
 // ==========================================
 // VĂN PHÒNG PHẨM — kỳ đăng ký (vppPeriods) + đăng ký của nhân viên (vppRegistrations). 3 sub-tab:
