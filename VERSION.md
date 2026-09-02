@@ -1,10 +1,42 @@
 # Phiên bản hiện tại
 
-**2.8** — đã merge vào `main` (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge
+**2.9** — đã merge vào `main` (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge
 góc màn hình + `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần
 kiểu `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
 
-## Cập nhật gần nhất — Audit Đợt 5 Giai đoạn 4: hoàn thiện (Thấp) (nhánh `claude/chao-ban-oo5ijl`)
+## Cập nhật gần nhất — Audit Đợt 5 Giai đoạn 4 (tiếp): 3 mục còn lại theo lựa chọn người dùng (nhánh `claude/chao-ban-oo5ijl`)
+
+Tiếp theo phần Giai đoạn 4 đầu tiên (bên dưới) — người dùng được hỏi cụ thể về 4 mục Thấp còn lại cần
+quyết định nghiệp vụ, chốt 3/4 mục nên làm:
+
+- **Vận Hành > Dự toán**: thêm nút "🔁 Lập Lại Dự Toán" khi hồ sơ đang ở trạng thái "Đã từ chối" — trước
+  đây REJECTED là ngõ cụt, không có đường quay lại DRAFT để sửa/gửi lại (khác REQUEST_CHANGES ở nơi
+  khác trong hệ thống). `resetOperationEstimateToDraft()` (lib/recordActions.js) + 2 route mới
+  `POST .../estimate/reset` cho `operationStoreOpenings`/`operationRepairs`.
+- **Đăng Ký Xe > Xử lý duyệt**: thêm khái niệm "tài xế" — field `user.isDriver` (checkbox "🚗 Là tài xế"
+  trong form Quản Lý Người Dùng). Picker "Lái xe được phân công" (`#carAssignedDriver`) trước đây dùng
+  chung `systemUsersDatalist` (toàn bộ nhân viên công ty), giờ tách riêng `carDriversDatalist` chỉ gợi ý
+  đúng nhóm đã đánh dấu là tài xế.
+- **`lib/workflowEngine.js`**: đồng bộ lại `findCarPlateConflict()` — bản ghi lỗi định dạng ngày (NaN)
+  giờ coi là CÓ trùng lịch (chặn an toàn), khớp đúng `findMeetingConflict()` ở `createValidation.js`
+  (trước đây bất đối xứng giữa Xe/Phòng họp — chưa từng khai thác được vì mọi đường ghi hiện tại đã
+  validate ngày hợp lệ trước khi tới đây, nhưng đáng đồng bộ cho nhất quán).
+- **Hợp đồng**: validate `custodianDept` (Đơn vị tiếp nhận theo dõi & thanh toán) khớp danh mục phòng
+  ban/siêu thị thật — CHỈ khi người tạo/sửa chủ động chọn khác `payload.dept` (giá trị mặc định khi
+  không chọn vẫn giữ nguyên mức tin cậy cũ, tránh validate 2 lần theo 2 tiêu chuẩn khác nhau cho cùng 1
+  giá trị — phát hiện + tự sửa 1 regression trong lúc chạy lại bộ test hồi quy).
+
+3 mục còn lại của đợt rà soát Thấp — tách bạch trách nhiệm Vận Hành (người làm ≠ người nghiệm thu), bắt
+buộc `If-Match` khi ghi `users`, và ngõ cụt REJECTED của Dự toán (mục thứ 3 ĐÃ xử lý ở trên qua nút Lập
+Lại — 2 mục segregation/If-Match người dùng chọn giữ nguyên, không đổi hành vi).
+
+**Deploy-impact:** KHÔNG đổi `sql/schema.sql`, không thêm biến môi trường, không thêm dependency. Chỉ
+cần copy code + `pm2 restart`.
+
+Test: toàn bộ `tests/test-*.js` chạy lại, không có regression mới (2 kịch bản thất bại sẵn có do sandbox
+không kết nối được SQL Server thật, không liên quan thay đổi).
+
+## Trước đó — Audit Đợt 5 Giai đoạn 4: hoàn thiện (Thấp)
 
 Giai đoạn cuối cùng trong lộ trình 4 giai đoạn của Audit Đợt 5 — các phát hiện mức Thấp, không chặn triển
 khai, chỉ chọn xử lý những mục cơ giới/rủi ro hành vi bằng 0 (không đụng luồng nghiệp vụ nào):
