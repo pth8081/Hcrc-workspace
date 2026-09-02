@@ -3167,9 +3167,9 @@ input[data-sdd-list] {
   <div id="vppSection" class="hidden space-y-6">
     <div id="hanhChinhTabBar_vpp" class="hidden flex gap-2 flex-wrap"></div>
     <div class="flex flex-wrap gap-2 border-b pb-2">
-      <button type="button" onclick="setVppSubTab('REGISTER')" id="btnVppSubRegister" class="px-3 py-1.5 rounded text-xs font-bold bg-orange-700 text-white">📝 Đăng Ký</button>
-      <button type="button" onclick="setVppSubTab('PERIODS')" id="btnVppSubPeriods" class="hidden px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">📅 Kỳ Đăng Ký</button>
-      <button type="button" onclick="setVppSubTab('REPORTS')" id="btnVppSubReports" class="hidden px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">📊 Báo Cáo Tổng Hợp</button>
+      <button type="button" data-op="setVppSubTab" data-arg0="REGISTER" id="btnVppSubRegister" class="px-3 py-1.5 rounded text-xs font-bold bg-orange-700 text-white">📝 Đăng Ký</button>
+      <button type="button" data-op="setVppSubTab" data-arg0="PERIODS" id="btnVppSubPeriods" class="hidden px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">📅 Kỳ Đăng Ký</button>
+      <button type="button" data-op="setVppSubTab" data-arg0="REPORTS" id="btnVppSubReports" class="hidden px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">📊 Báo Cáo Tổng Hợp</button>
     </div>
 
     <!-- Sub-tab: Đăng Ký (ai cũng vào được) -->
@@ -3179,7 +3179,7 @@ input[data-sdd-list] {
         <h3 class="font-bold text-orange-900 text-sm flex items-center gap-1">📝 Đăng Ký Văn Phòng Phẩm</h3>
         <div>
           <label class="block text-xs font-semibold text-gray-600 mb-1">Chọn kỳ đăng ký (đang mở)</label>
-          <select id="vppRegPeriodSelect" onchange="onVppRegPeriodChange()" class="w-full border p-2 rounded text-sm bg-white"></select>
+          <select id="vppRegPeriodSelect" data-op-change="onVppRegPeriodChange" class="w-full border p-2 rounded text-sm bg-white"></select>
         </div>
         <div id="vppRegNoPermNote" class="hidden text-xs text-red-700 italic bg-red-50 p-3 rounded border border-red-200">⛔ Bạn không có quyền đăng ký Văn phòng phẩm — chỉ người được uỷ quyền đăng ký của phòng mới đăng ký được. Liên hệ người phụ trách đăng ký của phòng mình.</div>
         <div id="vppRegExcludedNote" class="hidden text-xs text-red-700 italic bg-red-50 p-3 rounded border border-red-200">⛔ Bạn không thuộc diện được cấp Văn phòng phẩm.</div>
@@ -3188,7 +3188,7 @@ input[data-sdd-list] {
         <div id="vppRegItemsWrap" class="hidden space-y-2">
           <div class="flex items-center justify-between gap-2 flex-wrap">
             <label class="block text-xs font-semibold text-gray-600">Chọn mặt hàng & số lượng (chỉ mặt hàng nhập Số lượng &gt; 0 mới tính là đã chọn)</label>
-            <input id="vppRegItemSearch" type="text" oninput="filterVppRegItemsTable()" placeholder="🔍 Tìm theo tên mặt hàng..." class="border p-1.5 rounded text-xs w-56">
+            <input id="vppRegItemSearch" type="text" data-op-input="filterVppRegItemsTable" placeholder="🔍 Tìm theo tên mặt hàng..." class="border p-1.5 rounded text-xs w-56">
           </div>
           <div class="max-h-80 overflow-y-auto border rounded bg-white">
             <table class="w-full text-xs">
@@ -3207,7 +3207,7 @@ input[data-sdd-list] {
           <div id="vppRegItemsNoMatch" class="hidden text-xs text-gray-400 italic text-center p-3">Không tìm thấy mặt hàng khớp từ khoá tìm kiếm.</div>
           <div id="vppRegTotalWrap" class="text-sm font-bold text-right p-2 bg-white rounded border"></div>
           <div class="flex justify-end gap-2">
-            <button type="button" onclick="saveVppRegDraft()" class="bg-gray-600 text-white px-4 py-1.5 rounded text-xs font-bold hover:bg-gray-700">💾 Kết Thúc Chọn (Lưu Nháp)</button>
+            <button type="button" data-op="saveVppRegDraft" class="bg-gray-600 text-white px-4 py-1.5 rounded text-xs font-bold hover:bg-gray-700">💾 Kết Thúc Chọn (Lưu Nháp)</button>
             <button type="button" id="btnVppRegSubmitDraft" class="hidden bg-orange-600 text-white px-4 py-1.5 rounded text-xs font-bold hover:bg-orange-700">Gửi phê duyệt</button>
           </div>
         </div>
@@ -3215,7 +3215,7 @@ input[data-sdd-list] {
 
       <div class="bg-gray-50 p-3 rounded-lg border flex items-center gap-2">
         <label class="text-xs font-semibold text-gray-600">Lọc Theo Trạng Thái</label>
-        <select id="filterStatusVpp" onchange="onVppFilterChange()" class="border p-2 rounded text-sm bg-white">
+        <select id="filterStatusVpp" data-op-change="onVppFilterChange" class="border p-2 rounded text-sm bg-white">
           <option value="">-- Tất cả trạng thái --</option>
           <option value="DRAFT">📝 Nháp</option>
           <option value="PENDING">⏳ Chờ duyệt</option>
@@ -3261,7 +3261,7 @@ input[data-sdd-list] {
         </div>
         <div class="bg-white p-3 rounded border space-y-2">
           <label class="block text-xs font-semibold text-gray-600 mb-1">Ngân sách Văn phòng phẩm / người (VNĐ) — tuỳ chọn, để trống = không giới hạn</label>
-          <input id="vppNewPeriodBudget" type="text" inputmode="numeric" placeholder="500.000" value="100.000" oninput="onVppBudgetInput()" class="w-full md:w-64 border p-1.5 rounded money-input">
+          <input id="vppNewPeriodBudget" type="text" inputmode="numeric" placeholder="500.000" value="100.000" data-op-input="onVppBudgetInput" class="w-full md:w-64 border p-1.5 rounded money-input">
           <p class="text-[11px] text-gray-500 italic">Đây là mức trần áp cho TỪNG NGƯỜI khi đăng ký (tổng tiền các mặt hàng đã chọn không được vượt quá số này). Bảng nhân sự bên dưới chỉ dùng để tính "Ngân sách phòng ban" tham khảo ở Báo Cáo Tổng Hợp, KHÔNG dùng để chặn đăng ký.</p>
           <div class="overflow-x-auto">
             <table class="w-full border-collapse text-xs">
@@ -3277,7 +3277,7 @@ input[data-sdd-list] {
         </div>
         <div class="bg-white p-3 rounded border space-y-2">
           <label class="block text-xs font-semibold text-gray-600">File danh mục mặt hàng (Excel .xlsx/.xls hoặc CSV — tự nhận diện cột theo tiêu đề: Tên mặt hàng, ĐVT, Mã hàng, Xuất xứ, Quy cách, Đơn giá; nếu không có tiêu đề thì cột 1 = tên, cột 2 = đơn vị)</label>
-          <input id="vppCatalogFileInput" type="file" accept=".xlsx,.xls,.csv" onchange="onVppCatalogFileChange(event)" class="text-xs">
+          <input id="vppCatalogFileInput" type="file" accept=".xlsx,.xls,.csv" data-op-change="onVppCatalogFileChange" data-arg-event="0" class="text-xs">
           <p id="vppCatalogStatus" class="text-[11px] text-gray-500 italic"></p>
           <div id="vppCatalogPreviewWrap" class="hidden">
             <p class="text-[11px] font-semibold text-gray-600 mb-1">Xem trước danh mục (<span id="vppCatalogPreviewCount">0</span> mặt hàng):</p>
@@ -3294,7 +3294,7 @@ input[data-sdd-list] {
           </div>
         </div>
         <div class="flex justify-end">
-          <button type="button" onclick="createVppPeriod()" class="bg-orange-600 text-white px-4 py-1.5 rounded text-xs font-bold hover:bg-orange-700">Tạo Kỳ Đăng Ký</button>
+          <button type="button" data-op="createVppPeriod" class="bg-orange-600 text-white px-4 py-1.5 rounded text-xs font-bold hover:bg-orange-700">Tạo Kỳ Đăng Ký</button>
         </div>
       </div>
 
@@ -3320,10 +3320,10 @@ input[data-sdd-list] {
       <div class="flex flex-wrap items-end gap-2">
         <div class="flex-1 min-w-[220px]">
           <label class="block text-xs font-semibold text-gray-600 mb-1">Chọn kỳ để xem báo cáo tổng hợp</label>
-          <select id="vppReportPeriodSelect" onchange="renderVppReports()" class="w-full md:w-96 border p-2 rounded text-sm bg-white"></select>
+          <select id="vppReportPeriodSelect" data-op-change="renderVppReports" class="w-full md:w-96 border p-2 rounded text-sm bg-white"></select>
         </div>
-        <button type="button" onclick="downloadVppExport('summary')" class="bg-emerald-600 text-white px-3 py-2 rounded text-xs font-bold hover:bg-emerald-700">⬇️ Tải File Tổng Hợp</button>
-        <button type="button" onclick="downloadVppExport('by-dept')" class="bg-emerald-700 text-white px-3 py-2 rounded text-xs font-bold hover:bg-emerald-800">⬇️ Tải File Tổng Quát Theo Phòng Ban</button>
+        <button type="button" data-op="downloadVppExport" data-arg0="summary" class="bg-emerald-600 text-white px-3 py-2 rounded text-xs font-bold hover:bg-emerald-700">⬇️ Tải File Tổng Hợp</button>
+        <button type="button" data-op="downloadVppExport" data-arg0="by-dept" class="bg-emerald-700 text-white px-3 py-2 rounded text-xs font-bold hover:bg-emerald-800">⬇️ Tải File Tổng Quát Theo Phòng Ban</button>
       </div>
       <div class="bg-white p-4 rounded border space-y-2">
         <h4 class="font-bold text-sm text-gray-800">🏢 Tổng Hợp Theo Phòng Ban</h4>
@@ -7246,7 +7246,7 @@ input[data-sdd-list] {
         <h3 id="vppRegModalTitle" class="font-bold text-base flex items-center gap-2">🖇️ Xử Lý Đăng Ký Văn Phòng Phẩm</h3>
         <p id="vppRegModalSub" class="text-xs text-orange-200"></p>
       </div>
-      <button onclick="closeVppRegModal()" class="text-orange-200 hover:text-white font-bold text-xl px-2">✕</button>
+      <button data-op="closeVppRegModal" class="text-orange-200 hover:text-white font-bold text-xl px-2">✕</button>
     </div>
     <div class="p-4 overflow-y-auto flex-1 space-y-4 text-xs">
       <div id="vppRegModalItems" class="bg-gray-50 p-3 rounded border"></div>
@@ -7260,7 +7260,7 @@ input[data-sdd-list] {
       </div>
     </div>
     <div class="p-3 bg-gray-100 border-t flex justify-between items-center text-xs">
-      <button onclick="closeVppRegModal()" class="bg-gray-500 text-white px-4 py-1.5 rounded font-bold hover:bg-gray-600">Đóng</button>
+      <button data-op="closeVppRegModal" class="bg-gray-500 text-white px-4 py-1.5 rounded font-bold hover:bg-gray-600">Đóng</button>
       <div id="vppRegModalActionBtns" class="flex gap-2"></div>
     </div>
   </div>
@@ -23790,6 +23790,12 @@ bindCspDelegation('carProcessModal');
 // modal xử lý riêng bên ngoài (approveMeeting()/cancelMeeting() gọi thẳng API, không mở modal) — 1 gốc
 // là đủ, khác Xe/Vận Hành.
 bindCspDelegation('meetingSection');
+// Văn Phòng Phẩm — danh sách đăng ký (#vppRegTableBody qua renderVppRegistrations()), kỳ đăng ký
+// (renderVppPeriods(), dùng buildActionCell() dùng chung — không đụng) và báo cáo đều render trong
+// #vppSection — nhưng modal Xử Lý Đăng Ký (#vppRegModal, nút Duyệt/Từ chối/Bổ sung trong
+// #vppRegModalActionBtns) sống NGOÀI section (giống Xe/Vận Hành) nên cần thêm 1 gốc riêng cho modal.
+bindCspDelegation('vppSection');
+bindCspDelegation('vppRegModal');
 
 // ==========================================
 // VĂN PHÒNG PHẨM — kỳ đăng ký (vppPeriods) + đăng ký của nhân viên (vppRegistrations). 3 sub-tab:
@@ -23968,7 +23974,7 @@ function onVppRegPeriodChange() {
       <td class="border p-2 text-gray-500">${escapeHtml(it.unit || '')}</td>
       <td class="border p-2 text-gray-500">${escapeHtml(it.spec || '')}</td>
       <td class="border p-2 text-right text-gray-500">${it.price != null ? Number(it.price).toLocaleString('vi-VN') : ''}</td>
-      <td class="border p-1"><input type="number" min="0" step="1" id="vppItemQty_${idx}" value="${savedQtyByName.get(it.name) || ''}" oninput="updateVppRegTotalDisplay()" class="w-full border p-1 rounded text-xs" placeholder="0"></td>
+      <td class="border p-1"><input type="number" min="0" step="1" id="vppItemQty_${idx}" value="${savedQtyByName.get(it.name) || ''}" data-op-input="updateVppRegTotalDisplay" class="w-full border p-1 rounded text-xs" placeholder="0"></td>
     </tr>
   `).join('');
   document.getElementById('vppRegItemSearch').value = '';
@@ -24157,12 +24163,12 @@ function renderVppRegistrations() {
     let primaryBtnHTML;
     const secondaryOptions = [];
     if (isOwnDraft) {
-      primaryBtnHTML = `<button onclick="editVppRegDraft(${r.id})" class="px-2.5 py-1 bg-gray-600 text-white rounded text-xs hover:opacity-90 font-bold">✏️ Sửa Nháp</button>`;
+      primaryBtnHTML = `<button data-op="editVppRegDraft" data-arg0="${r.id}" class="px-2.5 py-1 bg-gray-600 text-white rounded text-xs hover:opacity-90 font-bold">✏️ Sửa Nháp</button>`;
       secondaryOptions.push({ value: 'submit', label: 'Gửi phê duyệt' });
     } else {
       primaryBtnHTML = canApprove
-        ? `<button onclick="openVppRegModal(${r.id})" class="px-2.5 py-1 bg-emerald-600 text-white rounded text-xs hover:opacity-90 font-bold">✍️ Xử lý / Duyệt</button>`
-        : `<button onclick="openVppRegModal(${r.id})" class="px-2.5 py-1 bg-gray-600 text-white rounded text-xs hover:opacity-90 font-bold">👁️ Xem chi tiết</button>`;
+        ? `<button data-op="openVppRegModal" data-arg0="${r.id}" class="px-2.5 py-1 bg-emerald-600 text-white rounded text-xs hover:opacity-90 font-bold">✍️ Xử lý / Duyệt</button>`
+        : `<button data-op="openVppRegModal" data-arg0="${r.id}" class="px-2.5 py-1 bg-gray-600 text-white rounded text-xs hover:opacity-90 font-bold">👁️ Xem chi tiết</button>`;
     }
     if (currentUser.perms?.admin) secondaryOptions.push({ value: 'delete', label: '🗑️ Xóa' });
     return `
@@ -24256,9 +24262,9 @@ function openVppRegModal(regId) {
   const actionBtns = document.getElementById('vppRegModalActionBtns');
   if (canApprove) {
     actionBtns.innerHTML = `
-      <button onclick="confirmProcessVppReg('REJECT')" class="bg-red-600 text-white px-4 py-1.5 rounded font-bold hover:bg-red-700 text-xs">❌ Từ Chối</button>
-      <button onclick="confirmProcessVppReg('REQUEST_CHANGES')" class="bg-amber-500 text-white px-4 py-1.5 rounded font-bold hover:bg-amber-600 text-xs">🔄 Yêu Cầu Bổ Sung</button>
-      <button onclick="confirmProcessVppReg('APPROVE')" class="bg-green-600 text-white px-5 py-1.5 rounded font-bold hover:bg-green-700 text-xs">✅ Phê Duyệt & Chuyển Bước</button>
+      <button data-op="confirmProcessVppReg" data-arg0="REJECT" class="bg-red-600 text-white px-4 py-1.5 rounded font-bold hover:bg-red-700 text-xs">❌ Từ Chối</button>
+      <button data-op="confirmProcessVppReg" data-arg0="REQUEST_CHANGES" class="bg-amber-500 text-white px-4 py-1.5 rounded font-bold hover:bg-amber-600 text-xs">🔄 Yêu Cầu Bổ Sung</button>
+      <button data-op="confirmProcessVppReg" data-arg0="APPROVE" class="bg-green-600 text-white px-5 py-1.5 rounded font-bold hover:bg-green-700 text-xs">✅ Phê Duyệt & Chuyển Bước</button>
     `;
   } else {
     actionBtns.innerHTML = `<span class="text-gray-500 italic text-xs">Bạn chỉ có quyền xem thông tin đăng ký này.</span>`;
