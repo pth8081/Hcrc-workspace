@@ -1,10 +1,62 @@
 # Phiên bản hiện tại
 
-**4.0** — đã merge vào `main` (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge
+**4.1** — đã merge vào `main` (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge
 góc màn hình + `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần
 kiểu `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
 
-## Cập nhật gần nhất — CSP unsafe-inline: đợt 9/N — module Ngân Sách
+## Cập nhật gần nhất — CSP unsafe-inline: đợt 10/N — module Cơ Cấu Tổ Chức
+
+Tiếp tục đợt 9 (Ngân Sách, xem mục "Trước đó" ngay bên dưới) — đợt này chuyển module **Cơ Cấu Tổ Chức**
+(sub-tab "🌳 Cơ Cấu Tổ Chức" trong Nhân Sự — cây quản lý trực tiếp toàn công ty, modal "Đổi Quản Lý Trực
+Tiếp") — module nhỏ nhất chuyển đổi từ trước tới nay, nhưng phát hiện kèm sửa 1 lỗi thật đáng kể trong
+lúc demo:
+
+- **10 điểm** `onclick`/`onchange` chuyển sang `data-op*`:
+  - **2 điểm** nút chuyển sub-tab dùng chung cho cả `#hrSubFeedback`/`#hrSubOrgChart` (`setHrSubTab`) —
+    chuyển luôn vì cùng gốc `#hrSection` sẽ dùng lại khi tới lượt module Nhân Sự, không tính thêm gốc mới.
+  - **3 điểm** trong `#hrSubOrgChart` (Tải Mẫu Excel, Xuất Excel, Nhập Từ Excel).
+  - **4 điểm** trong modal `#orgChartManagerModal` (Đóng ×2, Bỏ quản lý trực tiếp, Lưu).
+  - **1 điểm** trong hàm render động `buildOrgChartNode()` (nút "✏️ Đổi quản lý" từng dòng cây).
+  - Cần **2 gốc** `bindCspDelegation('hrSection')` + `bindCspDelegation('orgChartManagerModal')` — gốc
+    `hrSection` bọc cả 2 sub-tab (kể cả `#hrSubFeedback` chưa chuyển, để dành đợt Nhân Sự sau).
+- **Không phát hiện dạng cú pháp mới nào ngoài 5 loại đã biết** — cả 10 điểm đều convert máy móc thẳng,
+  không cần helper mới.
+
+**1 lỗi thật phát hiện + sửa trong lúc demo (không liên quan trực tiếp CSP, nhưng CHẶN demo module này)**:
+nút "Đổi quản lý" mở modal, gõ tên tìm kiếm, dropdown gợi ý hiện đúng nội dung nhưng **KHÔNG BẤM CHỌN
+ĐƯỢC** — dropdown gợi ý dùng chung `#systemUsersDatalist` (referenced qua `data-sdd-list=` từ RẤT NHIỀU
+module khác: Đào Tạo, Vận Hành, Cơ Cấu Tổ Chức, mẫu Biên Bản Họp...) hoá ra được định nghĩa (duy nhất 1
+lần) **NẰM BÊN TRONG `#minutesSection`** (module Biên Bản Họp) — `position:fixed` vẫn bị coi là
+`display:none` khi ancestor `display:none` (đúng theo spec CSS, không phải bug trình duyệt), nên
+`getBoundingClientRect()` trả về toàn 0 và không nhận click ở BẤT KỲ module nào khác ngoài lúc Biên Bản
+Họp đang là tab mở — nội dung dropdown vẫn set đúng qua JS (`innerHTML`) nên trông như hoạt động, chỉ lộ
+ra khi thực sự bấm chọn. `#carDriversDatalist` (dropdown lái xe, Đăng Ký Xe) nằm ngay cạnh, dính lỗi y
+hệt. Sửa bằng cách di chuyển CẢ 2 div này ra ngay dưới `<body>` (luôn nằm trong cây render, không phụ
+thuộc module nào đang mở) — đã xác nhận qua regression `test-meeting-car.js`/`test-minutes.js`/
+`test-internal-training.js`/`test-org-chart-manager-visibility.js`/`test-orgchart-excel-import.js` đều
+pass, không ảnh hưởng chức năng gốc của module Biên Bản Họp/Xe. Đây là lỗi có sẵn từ trước, phát hiện lần
+đầu ở đợt này vì trước giờ demo các module khác tình cờ chưa test kỹ tương tác "gõ + bấm chọn gợi ý" khi
+Biên Bản Họp KHÔNG phải tab đang mở.
+
+**Xác nhận không ảnh hưởng** — 2 lớp kiểm tra độc lập trước khi merge:
+- Demo Playwright thật (SQL Server + server local + đăng nhập UI thật qua tài khoản demo tạm 2FA thật,
+  xoá lại ngay sau demo): mở Nhân Sự > Cơ Cấu Tổ Chức, đổi quản lý trực tiếp 1 nhân viên qua modal (gõ +
+  chọn đúng gợi ý — xác nhận lỗi trên đã hết), tải Mẫu Excel, Xuất Excel, chuyển qua lại 2 sub-tab — toàn
+  bộ đúng, không có lỗi JS console mới.
+- Chạy lại toàn bộ 46 file test hồi quy (`tests/test-*.js`) — 44/46 OK, đúng 2 file known-flaky quen
+  thuộc (`test-audit-fixes-batch1.js`/`test-audit-round2-cluster1.js`, timeout hạ tầng test không liên
+  quan thay đổi lần này).
+
+**Deploy-impact:** KHÔNG đổi `sql/schema.sql`, KHÔNG thêm biến môi trường mới, KHÔNG thêm `dependencies`
+mới — toàn bộ thay đổi nằm trong `public/index.html` (thuần client JS/HTML), deploy an toàn chỉ với copy
+code + `pm2 restart`, không cần thao tác 1 lần nào khác.
+
+**Còn lại:** Báo Cáo, Nhân Sự, Quản Trị/Hệ Thống, Hỗ Trợ IT, Đồng Phục, Giấy Phép, Gia Hạn CNTT, Tuyển
+Dụng, Tin Tức/Truyền Thông, Biên Bản Họp, Công Việc, Văn Bản Trình, Tài Liệu... — dùng hạ tầng
+`data-op*`/`bindCspDelegation()` đã xây, làm tiếp tuần tự mỗi module 1 commit + demo + regression trước
+khi merge, tới khi hết toàn bộ điểm mới gỡ `unsafe-inline`.
+
+## Trước đó — CSP unsafe-inline: đợt 9/N — module Ngân Sách
 
 Tiếp tục đợt 8 (Đào Tạo/LMS, xem mục "Trước đó" ngay bên dưới) — đợt này chuyển module **Ngân Sách**
 (3 sub-tab Ngân Sách Phê Duyệt/Ngân Sách Thực Hiện/Tổng Hợp, cộng modal "⚙️ Quản Lý Kỳ &amp; Mẫu" và modal
