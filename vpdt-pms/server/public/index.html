@@ -6853,7 +6853,13 @@ input[data-sdd-list] {
     <div id="hrSubOrgChart" class="hidden space-y-4">
       <div class="bg-teal-50 p-4 rounded border border-teal-200 space-y-2">
         <h3 class="font-bold text-teal-900 text-base flex items-center gap-2">🌳 Cơ Cấu Tổ Chức</h3>
-        <p class="text-xs text-teal-800">Cây quản lý trực tiếp của toàn bộ nhân viên — dùng làm căn cứ để trưởng phòng xem được việc của nhân viên mình quản lý (Vận Hành, Công Việc). Có thể có nhiều gốc cây (nhân viên không có quản lý trực tiếp).</p>
+        <p class="text-xs text-teal-800">Cây quản lý trực tiếp của <b>toàn bộ nhân viên công ty</b> (mọi phòng ban) — dùng làm căn cứ để trưởng phòng xem được việc của nhân viên mình quản lý (Vận Hành, Công Việc). Có thể có nhiều gốc cây (nhân viên không có quản lý trực tiếp).</p>
+        <div class="flex flex-wrap items-center gap-2 pt-1">
+          <button type="button" onclick="downloadOrgChartTemplate()" class="bg-gray-600 text-white px-2.5 py-1.5 rounded text-xs font-semibold hover:bg-gray-700 transition">📄 Tải Mẫu / Xuất Excel (danh sách hiện tại)</button>
+          <label id="btnOrgChartImportExcel" class="hidden bg-teal-700 text-white px-2.5 py-1.5 rounded text-xs font-semibold hover:bg-teal-800 transition cursor-pointer">
+            📥 Nhập Từ Excel<input type="file" accept=".xlsx" onchange="importOrgChartExcel(event)" class="hidden">
+          </label>
+        </div>
       </div>
       <div id="orgChartContainer" class="bg-white border rounded p-4 space-y-1 text-sm"></div>
     </div>
@@ -40345,6 +40351,7 @@ function renderOrgChart() {
   const container = document.getElementById('orgChartContainer');
   if (!container) return;
   const canEdit = !!(currentUser.perms?.admin || currentUser.perms?.orgChartManage);
+  document.getElementById('btnOrgChartImportExcel')?.classList.toggle('hidden', !canEdit);
   const activeUsers = (DB.users || []).filter(u => u.active !== false);
   const roots = activeUsers.filter(u => !u.managerUsername || !activeUsers.some(m => m.username === u.managerUsername));
   if (!roots.length) {
@@ -40408,6 +40415,90 @@ function submitOrgChartManager() {
 }
 function clearOrgChartManager() {
   saveOrgChartManagerChange(null);
+}
+
+// "Tải Mẫu / Xuất Excel" gộp làm 1: mẫu HỮU ÍCH NHẤT cho việc sửa cơ cấu cả công ty là chính danh sách
+// hiện tại (username thật sẵn có, tránh gõ sai/không khớp tài khoản) kèm cột managerUsername đã điền sẵn
+// giá trị đang có (trống nếu chưa có quản lý) để người dùng chỉnh sửa/bổ sung rồi nhập lại. Route
+// /api/admin/export-xlsx chỉ SINH FILE từ dữ liệu client tự có sẵn (đã tải qua API phân quyền từ trước),
+// không đọc/ghi gì thêm — dùng lại đúng route/hàm downloadXlsxFromServer() của màn Người Dùng.
+function downloadOrgChartTemplate() {
+  const columns = [
+    { header: 'username', key: 'username', width: 16 },
+    { header: 'name', key: 'name', width: 22 },
+    { header: 'dept', key: 'dept', width: 20 },
+    { header: 'jobTitle', key: 'jobTitle', width: 20 },
+    { header: 'managerUsername', key: 'managerUsername', width: 20 },
+    { header: 'managerName', key: 'managerName', width: 22 }
+  ];
+  const rows = (DB.users || [])
+    .filter(u => u.active !== false)
+    .sort((a, b) => (a.name || '').localeCompare(b.name || ''))
+    .map(u => ({
+      username: u.username,
+      name: u.name || '',
+      dept: u.dept || '',
+      jobTitle: u.jobTitle || '',
+      managerUsername: u.managerUsername || '',
+      managerName: getUserManagerName(u.username)
+    }));
+  downloadXlsxFromServer('co_cau_to_chuc.xlsx', 'Cơ Cấu Tổ Chức', columns, rows);
+}
+
+// Nhập Excel: server (routes/adminExport.js + lib/orgChartImport.js) CHỈ đọc file, trả về mảng
+// {username, managerUsername} thô — mọi đối chiếu/chặn vòng lặp làm Ở ĐÂY, giống hệt logic
+// saveOrgChartManagerChange() dùng cho picker, để 2 đường (sửa từng người / import hàng loạt) luôn nhất
+// quán. Máy chủ vẫn chốt lại lần cuối (tồn tại/vòng lặp) khi syncStorage('users') gọi
+// prepareUsersForSave() -> assertNoManagerCycle().
+async function importOrgChartExcel(evt) {
+  const file = evt.target.files[0];
+  if (!file) return;
+  evt.target.value = '';
+
+  const formData = new FormData();
+  formData.append('file', file);
+  let rows;
+  try {
+    const res = await fetch('/api/admin/org-chart/import-xlsx', { method: 'POST', body: formData });
+    if (res.status === 401) return handleSessionExpired();
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) return alert(body.error || 'Không đọc được nội dung file Excel');
+    rows = body.rows;
+  } catch (e) {
+    return alert('⛔ Không thể kết nối tới máy chủ: ' + e.message);
+  }
+
+  const snapshot = JSON.parse(JSON.stringify(DB.users));
+  let updated = 0;
+  const skippedUnknown = [];
+  const skippedBadManager = [];
+  rows.forEach(({ username, managerUsername }) => {
+    const u = DB.users.find(x => x.username === username);
+    if (!u) { skippedUnknown.push(username); return; }
+    if (managerUsername) {
+      if (managerUsername === username) { skippedBadManager.push(`${username} (chọn chính mình)`); return; }
+      if (!DB.users.some(x => x.username === managerUsername)) { skippedBadManager.push(`${username} (không tìm thấy tài khoản quản lý "${managerUsername}")`); return; }
+      if (isManagerOf(username, managerUsername, DB.users)) { skippedBadManager.push(`${username} (sẽ tạo vòng lặp quản lý)`); return; }
+    }
+    u.managerUsername = managerUsername || null;
+    updated++;
+  });
+
+  if (!updated) {
+    let msg = 'Không có dòng nào hợp lệ để cập nhật.';
+    if (skippedUnknown.length) msg += `\n⚠️ Không khớp tài khoản: ${skippedUnknown.slice(0, 15).join(', ')}${skippedUnknown.length > 15 ? '...' : ''}`;
+    if (skippedBadManager.length) msg += `\n⚠️ Quản lý không hợp lệ: ${skippedBadManager.slice(0, 15).join(', ')}${skippedBadManager.length > 15 ? '...' : ''}`;
+    return alert(msg);
+  }
+
+  const saved = await syncStorage('users');
+  if (!saved) { DB.users = snapshot; return alert('⛔ Lưu thất bại, đã hoàn tác.'); }
+
+  let msg = `✅ Đã cập nhật quản lý trực tiếp cho ${updated} người.`;
+  if (skippedUnknown.length) msg += `\n⚠️ Bỏ qua ${skippedUnknown.length} dòng không khớp tài khoản: ${skippedUnknown.slice(0, 15).join(', ')}${skippedUnknown.length > 15 ? '...' : ''}`;
+  if (skippedBadManager.length) msg += `\n⚠️ Bỏ qua ${skippedBadManager.length} dòng quản lý không hợp lệ: ${skippedBadManager.slice(0, 15).join(', ')}${skippedBadManager.length > 15 ? '...' : ''}`;
+  alert(msg);
+  renderOrgChart();
 }
 
 // TOÀN BỘ câu hỏi công ty (không lọc creator) — canAccessHrModule()/canManageHrFeedback() đã gác cả
