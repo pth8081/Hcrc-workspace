@@ -6867,7 +6867,7 @@ input[data-sdd-list] {
         <p class="text-xs text-teal-800">Toàn bộ câu hỏi nhân viên gửi lên qua tab "HCRC Đồng Hành" (Truyền Thông). Mỗi câu hỏi trả lời ĐÚNG 1 lần — trả lời xong là kết thúc, nhân viên nhận thông báo ngay trong app.</p>
         <div class="flex flex-wrap items-center gap-2">
           <label class="text-xs font-semibold text-gray-600">Trạng thái:</label>
-          <select id="hrFeedbackManageStatusFilter" onchange="renderHrFeedbackManage()" class="border p-1.5 rounded text-xs bg-white">
+          <select id="hrFeedbackManageStatusFilter" data-op-change="renderHrFeedbackManage" class="border p-1.5 rounded text-xs bg-white">
             <option value="">-- Tất cả --</option>
             <option value="PENDING">🕒 Chờ phản hồi</option>
             <option value="ANSWERED">✅ Đã phản hồi</option>
@@ -40961,7 +40961,7 @@ function renderHrFeedbackManage() {
       <div class="mt-2 pt-2 border-t space-y-2">
         <textarea id="hrFeedbackResponseInput_${q.id}" class="w-full border p-1.5 rounded text-xs h-20" placeholder="Nhập nội dung phản hồi..."></textarea>
         <div class="flex justify-end">
-          <button type="button" onclick="submitHrFeedbackResponse(${q.id})" class="bg-teal-700 text-white px-4 py-1.5 rounded text-xs font-bold hover:bg-teal-800">Gửi Phản Hồi</button>
+          <button type="button" data-op="submitHrFeedbackResponse" data-arg0="${q.id}" class="bg-teal-700 text-white px-4 py-1.5 rounded text-xs font-bold hover:bg-teal-800">Gửi Phản Hồi</button>
         </div>
       </div>`;
     return `
