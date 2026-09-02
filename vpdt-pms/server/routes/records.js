@@ -7,6 +7,7 @@ const { requireAuth, blockIfMustChangePassword } = require('../lib/auth');
 const { HttpError } = require('../lib/httpErrors');
 const recordActions = require('../lib/recordActions');
 const { insertTask, withLockedTaskById, deleteTaskById, getAllTasks, migrateDirectiveTaskLinks } = require('../lib/taskStore');
+const { getAllWorkItems, getWorkItemsBySource, insertWorkItem, withLockedWorkItemById, deleteWorkItemById } = require('../lib/operationWorkItemStore');
 const { createForCollection, insertRecord, withLockedRecordForCollection, withLockedRecordById, deleteRecordForCollection, getAllForCollection, withAppLock } = require('../lib/recordStore');
 const { getAllAppData, getAppDataValue, withLockedAppDataValue } = require('../lib/appData');
 // sanitizeInternalPostCommentsForUser: cùng hàm mà routes/data.js dùng để lọc GET /api/data (qua
@@ -1647,6 +1648,139 @@ router.post('/operationRepairs/:id/submit', async (req, res) => {
     const result = await withLockedRecordForCollection('operationRepairs', itemId, (item) => recordActions.submitOperationRepairDraft(freshUser, item));
     res.json({ ok: true, item: result });
   } catch (err) { handleError(res, `operationRepairs/${req.params.id}/submit`, err); }
+});
+
+// Vận Hành > "Siêu Thị" > Giai đoạn Dự toán — gửi/gửi lại bảng hạng mục để duyệt (workflow Duyệt/Từ
+// chối/Bổ sung sau đó đi qua route generic POST /api/workflow/operationStoreOpeningEstimate|
+// operationRepairEstimate/:id/:action, xem lib/workflowEngine.js). recordActions.submitOperationEstimate
+// dùng CHUNG cho cả 2 collection.
+router.post('/operationStoreOpenings/:id/estimate/submit', async (req, res) => {
+  const itemId = Number(req.params.id);
+  if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
+  try {
+    const { freshUser } = await getFreshUser(req);
+    const result = await withLockedRecordForCollection('operationStoreOpenings', itemId, (item) => recordActions.submitOperationEstimate(freshUser, item, req.body));
+    res.json({ ok: true, item: result });
+  } catch (err) { handleError(res, `operationStoreOpenings/${req.params.id}/estimate/submit`, err); }
+});
+router.post('/operationRepairs/:id/estimate/submit', async (req, res) => {
+  const itemId = Number(req.params.id);
+  if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
+  try {
+    const { freshUser } = await getFreshUser(req);
+    const result = await withLockedRecordForCollection('operationRepairs', itemId, (item) => recordActions.submitOperationEstimate(freshUser, item, req.body));
+    res.json({ ok: true, item: result });
+  } catch (err) { handleError(res, `operationRepairs/${req.params.id}/estimate/submit`, err); }
+});
+
+// Vận Hành > "Siêu Thị" > Giai đoạn Thực hiện + Nghiệm thu — cây công việc đa cấp, bảng SQL RIÊNG
+// (dbo.OperationWorkItems, xem lib/operationWorkItemStore.js) — KHÔNG đi qua createForCollection/
+// withLockedRecordForCollection (đó là engine cho dbo.Records, dùng cho hồ sơ có quy trình duyệt).
+const operationWorkItemSourceTypes = new Set(['OPERATION_STORE_OPENING', 'OPERATION_REPAIR']);
+
+// Đệ quy tính lại trạng thái từng CẤP CHA lên tới gốc, ngay sau khi 1 công việc lá đổi trạng thái —
+// mỗi cấp tự tính lại theo ĐÚNG con trực tiếp của mình (recordActions.computeParentWorkItemStatus),
+// rồi tiếp tục lên cấp trên nếu trạng thái vừa tính có thay đổi. Dừng khi tới gốc (parentWorkItemId
+// null) hoặc hết cha để tra.
+async function syncOperationWorkItemAncestors(parentWorkItemId, sourceType, sourceId) {
+  let currentParentId = parentWorkItemId;
+  while (currentParentId != null) {
+    const all = await getWorkItemsBySource(sourceType, sourceId);
+    const parent = all.find(w => w.id === currentParentId);
+    if (!parent) break;
+    const children = all.filter(w => w.parentWorkItemId === currentParentId);
+    const newStatus = recordActions.computeParentWorkItemStatus(children);
+    if (newStatus === parent.status) break; // không đổi -> các cấp trên cũng không cần tính lại
+    await withLockedWorkItemById(currentParentId, (item) => {
+      item.status = newStatus;
+      item.history = item.history || [];
+      item.history.push({ action: `STATUS_${newStatus}`, by: 'system', byName: 'Hệ thống (tự động)', time: new Date().toLocaleString('vi-VN') });
+      return item;
+    });
+    currentParentId = parent.parentWorkItemId;
+  }
+}
+
+function collectOperationWorkItemDescendantIds(all, rootId) {
+  const result = [];
+  const queue = all.filter(w => w.parentWorkItemId === rootId).map(w => w.id);
+  while (queue.length) {
+    const id = queue.shift();
+    result.push(id);
+    all.filter(w => w.parentWorkItemId === id).forEach(w => queue.push(w.id));
+  }
+  return result;
+}
+
+router.post('/operationWorkItems', async (req, res) => {
+  try {
+    const { freshUser } = await getFreshUser(req);
+    const { sourceType, sourceId } = req.body || {};
+    if (!operationWorkItemSourceTypes.has(sourceType)) return res.status(400).json({ error: 'sourceType không hợp lệ' });
+    const srcId = Number(sourceId);
+    if (!Number.isFinite(srcId)) return res.status(400).json({ error: 'sourceId không hợp lệ' });
+    const sourceCollection = sourceType === 'OPERATION_STORE_OPENING' ? 'operationStoreOpenings' : 'operationRepairs';
+    const sourceRecords = await getAllForCollection(sourceCollection);
+    const sourceRecord = sourceRecords.find(r => r.id === srcId);
+    if (!sourceRecord) return res.status(404).json({ error: 'Không tìm thấy hồ sơ nguồn' });
+    sourceRecord.__workItemSourceType = sourceType;
+
+    const siblings = await getWorkItemsBySource(sourceType, srcId);
+    const newItem = recordActions.createOperationWorkItem(freshUser, req.body, sourceRecord, siblings);
+    newItem.sourceType = sourceType;
+    newItem.sourceId = srcId;
+    await insertWorkItem(newItem);
+    res.json({ ok: true, item: newItem });
+  } catch (err) { handleError(res, 'operationWorkItems', err); }
+});
+
+router.post('/operationWorkItems/:id/progress', async (req, res) => {
+  const itemId = Number(req.params.id);
+  if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
+  try {
+    const { freshUser } = await getFreshUser(req);
+    const { status: newStatus } = req.body || {};
+    let sourceType, sourceId;
+    const result = await withLockedWorkItemById(itemId, async (item) => {
+      sourceType = item.sourceType; sourceId = item.sourceId;
+      const all = await getWorkItemsBySource(item.sourceType, item.sourceId);
+      const children = all.filter(w => w.parentWorkItemId === item.id);
+      return recordActions.updateOperationWorkItemProgress(freshUser, item, children, newStatus);
+    });
+    await syncOperationWorkItemAncestors(result.parentWorkItemId, sourceType, sourceId);
+    res.json({ ok: true, item: result });
+  } catch (err) { handleError(res, `operationWorkItems/${req.params.id}/progress`, err); }
+});
+
+router.post('/operationWorkItems/:id/accept', async (req, res) => {
+  const itemId = Number(req.params.id);
+  if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
+  try {
+    const { freshUser } = await getFreshUser(req);
+    let sourceType, sourceId, parentWorkItemId;
+    const result = await withLockedWorkItemById(itemId, (item) => {
+      sourceType = item.sourceType; sourceId = item.sourceId; parentWorkItemId = item.parentWorkItemId;
+      return recordActions.acceptOperationWorkItem(freshUser, item, req.body || {});
+    });
+    await syncOperationWorkItemAncestors(parentWorkItemId, sourceType, sourceId);
+    res.json({ ok: true, item: result });
+  } catch (err) { handleError(res, `operationWorkItems/${req.params.id}/accept`, err); }
+});
+
+router.post('/operationWorkItems/:id/delete', async (req, res) => {
+  const itemId = Number(req.params.id);
+  if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
+  try {
+    const { freshUser } = await getFreshUser(req);
+    const all = await getAllWorkItems();
+    const item = all.find(w => w.id === itemId);
+    if (!item) return res.status(404).json({ error: 'Không tìm thấy công việc' });
+    const descendantIds = collectOperationWorkItemDescendantIds(all, itemId);
+    const idsToDelete = recordActions.deleteOperationWorkItem(freshUser, item, descendantIds);
+    for (const id of idsToDelete) await deleteWorkItemById(id);
+    await syncOperationWorkItemAncestors(item.parentWorkItemId, item.sourceType, item.sourceId);
+    res.json({ ok: true });
+  } catch (err) { handleError(res, `operationWorkItems/${req.params.id}/delete`, err); }
 });
 
 // POST /api/records/budgetTemplates/:id/update — sửa tên/cột bổ sung 1 mẫu ngân sách đã tạo.

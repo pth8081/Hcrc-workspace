@@ -480,6 +480,155 @@ function submitOperationRepairDraft(user, item) {
   return item;
 }
 
+// ----- Vận Hành > "Siêu Thị" > Giai đoạn Dự toán -----
+// Bảng hạng mục + chi phí cho hồ sơ Mở Mới/Sửa Chữa — workflow ĐỘC LẬP song song với duyệt hồ sơ chính
+// (xem lib/workflowEngine.js module ảo operationStoreOpeningEstimate/operationRepairEstimate, field
+// FLAT estimateStatus/estimateCurrentStep/estimateHistory/estimateItems/estimateTotalAmount khởi tạo
+// sẵn ở lib/createValidation.js). Dùng CHUNG 1 hàm cho cả 2 collection (chỉ khác thông điệp lỗi/quyền
+// kiểm ở route gọi) vì cấu trúc estimateItems giống hệt operationOrders.items — tự tính lại amount
+// từng dòng + tổng, không tin số client gửi (cùng lý do operationOrders.extraValidate).
+function submitOperationEstimate(user, item, payload) {
+  if (!user.perms?.admin && !user.perms?.operationEstimateCreate) {
+    throw new HttpError(403, 'Bạn không có quyền lập dự toán');
+  }
+  if (item.estimateStatus !== 'DRAFT') {
+    throw new HttpError(409, 'Dự toán của hồ sơ này không ở trạng thái cần lập/bổ sung (có thể đã gửi duyệt rồi)');
+  }
+  const rawItems = Array.isArray(payload?.items) ? payload.items : [];
+  const validItems = rawItems.map((it) => {
+    const name = String(it?.name || '').trim();
+    const qty = Number(it?.qty) || 0;
+    const unitPrice = Number(it?.unitPrice) || 0;
+    if (qty < 0 || unitPrice < 0) throw new HttpError(400, `Hạng mục "${name}": Số lượng/Đơn giá không được là số âm`);
+    return { name, unit: String(it?.unit || '').trim(), qty, unitPrice, amount: qty * unitPrice, note: String(it?.note || '').trim() };
+  }).filter((it) => it.name && it.qty > 0);
+  if (!validItems.length) throw new HttpError(400, 'Vui lòng nhập ít nhất 1 hạng mục dự toán hợp lệ (Tên hạng mục + Số lượng > 0)');
+
+  item.estimateItems = validItems;
+  item.estimateTotalAmount = validItems.reduce((sum, it) => sum + it.amount, 0);
+  item.estimateHistory = item.estimateHistory || [];
+  item.estimateHistory.push({ step: 0, approver: user.name, username: user.username, action: 'SUBMITTED', comment: '', time: nowVN() });
+  item.estimateStatus = 'PENDING';
+  item.estimateCurrentStep = 1;
+  return item;
+}
+
+// ----- Vận Hành > "Siêu Thị" > Giai đoạn Thực hiện + Nghiệm thu (cây công việc đa cấp) -----
+// KHÔNG dùng chung module Công Việc công ty (dbo.Tasks) — xem giải thích đầy đủ ở sql/schema.sql +
+// lib/operationWorkItemStore.js. sourceType chỉ nhận 2 giá trị dưới đây, sourceId = id của hồ sơ
+// operationStoreOpenings/operationRepairs tương ứng.
+const OPERATION_WORK_ITEM_SOURCE_TYPES = new Set(['OPERATION_STORE_OPENING', 'OPERATION_REPAIR']);
+const OPERATION_WORK_ITEM_STATUSES = ['CHUA_BAT_DAU', 'DANG_THUC_HIEN', 'DANG_NGHIEM_THU', 'DA_NGHIEM_THU'];
+
+function assertCanManageOperationExecution(user) {
+  if (!user.perms?.admin && !user.perms?.operationExecutionManage) {
+    throw new HttpError(403, 'Bạn không có quyền quản lý công việc Thực hiện');
+  }
+}
+function assertCanManageOperationAcceptance(user) {
+  if (!user.perms?.admin && !user.perms?.operationAcceptanceManage) {
+    throw new HttpError(403, 'Bạn không có quyền nghiệm thu công việc');
+  }
+}
+
+// sourceRecord = hồ sơ operationStoreOpenings/operationRepairs đã đọc sẵn (route tự tra trước khi gọi)
+// — dự toán PHẢI đã duyệt xong mới cho tạo cây Thực hiện, khớp đúng yêu cầu nghiệp vụ "sau khi giai
+// đoạn lập dự toán hoàn thành thì giai đoạn thực hiện mới mở khoá".
+function createOperationWorkItem(user, payload, sourceRecord, siblingsAndDescendants) {
+  assertCanManageOperationExecution(user);
+  if (sourceRecord.estimateStatus !== 'APPROVED') {
+    throw new HttpError(409, 'Dự toán của hồ sơ này chưa được phê duyệt xong, chưa thể tạo công việc Thực hiện');
+  }
+  const title = String(payload?.title || '').trim();
+  if (!title) throw new HttpError(400, 'Vui lòng nhập tên công việc');
+  let parentWorkItemId = null;
+  if (payload?.parentWorkItemId != null && payload.parentWorkItemId !== '') {
+    parentWorkItemId = Number(payload.parentWorkItemId);
+    const parent = (siblingsAndDescendants || []).find(w => w.id === parentWorkItemId);
+    if (!parent) throw new HttpError(400, 'Không tìm thấy công việc cha trong hồ sơ này');
+    if (parent.status === 'DA_NGHIEM_THU') {
+      throw new HttpError(409, 'Công việc cha đã nghiệm thu xong, không thể thêm việc con mới');
+    }
+  }
+  return {
+    id: Date.now(),
+    parentWorkItemId,
+    title,
+    description: String(payload?.description || '').trim(),
+    assignedTo: payload?.assignedTo ? String(payload.assignedTo) : null,
+    assignedToName: payload?.assignedToName ? String(payload.assignedToName) : null,
+    deadline: payload?.deadline || '',
+    status: 'CHUA_BAT_DAU',
+    acceptedBy: null, acceptedByName: null, acceptanceNote: null,
+    history: [{ action: 'CREATED', by: user.username, byName: user.name, time: nowVN() }],
+    createdBy: user.username, createdByName: user.name, createdAt: nowVN(),
+    sourceType: sourceRecord.__workItemSourceType, sourceCode: sourceRecord.code
+  };
+}
+
+// children = TOÀN BỘ work item khác thuộc cùng hồ sơ (đã lọc parentWorkItemId === item.id ở route).
+// Chỉ công việc LÁ (không có con) mới cho cập nhật trực tiếp — công việc có con phải hoàn thành hết
+// con mới tự cập nhật (xem syncParentWorkItemStatus), đúng yêu cầu nghiệp vụ.
+function updateOperationWorkItemProgress(user, item, children, newStatus) {
+  assertCanManageOperationExecution(user);
+  if (children.length) {
+    throw new HttpError(409, 'Công việc này có việc con — chỉ cập nhật được ở các việc con, việc cha tự cập nhật theo');
+  }
+  if (item.status === 'DA_NGHIEM_THU') {
+    throw new HttpError(409, 'Công việc đã nghiệm thu xong, không thể sửa lại');
+  }
+  const allowedNext = {
+    CHUA_BAT_DAU: ['DANG_THUC_HIEN'],
+    DANG_THUC_HIEN: ['DANG_NGHIEM_THU']
+  };
+  if (!(allowedNext[item.status] || []).includes(newStatus)) {
+    throw new HttpError(409, `Không thể chuyển trạng thái từ "${item.status}" sang "${newStatus}"`);
+  }
+  item.status = newStatus;
+  item.history = item.history || [];
+  item.history.push({ action: `STATUS_${newStatus}`, by: user.username, byName: user.name, time: nowVN() });
+  return item;
+}
+
+// action: 'ACCEPT' (Nghiệm thu — đổi trạng thái) | 'REQUEST_INFO' (Bổ sung — chỉ ghi lý do, KHÔNG đổi
+// trạng thái, đúng yêu cầu "ấn bổ sung thì công việc vẫn ở trạng thái đang nghiệm thu").
+function acceptOperationWorkItem(user, item, { action, reason }) {
+  assertCanManageOperationAcceptance(user);
+  if (item.status !== 'DANG_NGHIEM_THU') {
+    throw new HttpError(409, 'Chỉ nghiệm thu/bổ sung được công việc đang ở trạng thái "Đang nghiệm thu"');
+  }
+  if (!reason) throw new HttpError(400, 'Vui lòng nhập lý do');
+  item.history = item.history || [];
+  if (action === 'ACCEPT') {
+    item.status = 'DA_NGHIEM_THU';
+    item.acceptedBy = user.username;
+    item.acceptedByName = user.name;
+    item.acceptanceNote = reason;
+    item.history.push({ action: 'ACCEPTED', by: user.username, byName: user.name, time: nowVN(), note: reason });
+  } else if (action === 'REQUEST_INFO') {
+    item.history.push({ action: 'REQUEST_INFO', by: user.username, byName: user.name, time: nowVN(), note: reason });
+  } else {
+    throw new HttpError(400, `Hành động không hợp lệ: ${action}`);
+  }
+  return item;
+}
+
+// Tính lại trạng thái 1 công việc CHA dựa trên các con TRỰC TIẾP (children đã đọc sẵn) — không tự đệ
+// quy lên tiếp ở đây, route gọi lặp lại hàm này cho từng cấp cha lên tới gốc (xem routes/records.js).
+// Tất cả con đã DA_NGHIEM_THU -> cha DA_NGHIEM_THU luôn (bỏ qua bước nghiệm thu riêng cho cha, vì đã
+// nghiệm thu xong ở cấp lá); có ít nhất 1 con đã bắt đầu -> cha DANG_THUC_HIEN; ngược lại CHUA_BAT_DAU.
+function computeParentWorkItemStatus(children) {
+  if (!children.length) return 'CHUA_BAT_DAU';
+  if (children.every(c => c.status === 'DA_NGHIEM_THU')) return 'DA_NGHIEM_THU';
+  if (children.some(c => c.status !== 'CHUA_BAT_DAU')) return 'DANG_THUC_HIEN';
+  return 'CHUA_BAT_DAU';
+}
+
+function deleteOperationWorkItem(user, item, descendantIds) {
+  assertCanManageOperationExecution(user);
+  return [item.id, ...descendantIds];
+}
+
 // ----- Văn Bản Trình (submissions) -----
 // Khác 3 module trên: có thể đổi type/dept/"Cấp Phê Duyệt Cuối Cùng"/lớp phê duyệt bổ sung khi sửa —
 // PHẢI dựng lại effectiveSteps/effectiveApprovers giống hệt lúc TẠO (buildEffectiveSubmissionWorkflowServer),
@@ -4274,5 +4423,14 @@ module.exports = {
   closeBudgetPeriod, reopenBudgetPeriod, updateBudgetEntryDraft, submitBudgetEntry, updateBudgetTemplate,
   canConfirmCarDriverAssignment, confirmCarDriverAssignment,
   canApproveLicense, approveLicense, rejectLicense, setLicenseRenewing, revokeLicense, unrevokeLicense,
-  canManageItServiceRenewal, editItServiceRenewal, renewItServiceRenewal
+  canManageItServiceRenewal, editItServiceRenewal, renewItServiceRenewal,
+  // Vận Hành — 6 hàm sau vốn đã tồn tại từ trước (routes/records.js gọi tới) nhưng bị BỎ SÓT khỏi
+  // exports (bug tiềm ẩn: gọi update/submit "Bổ sung" cho 3 luồng này sẽ ném lỗi "not a function"),
+  // tiện sửa cùng lúc khi thêm exports cho tính năng "Siêu Thị" mới bên dưới.
+  editOperationOrderDraft, submitOperationOrderDraft,
+  editOperationStoreOpeningDraft, submitOperationStoreOpeningDraft,
+  editOperationRepairDraft, submitOperationRepairDraft,
+  submitOperationEstimate,
+  createOperationWorkItem, updateOperationWorkItemProgress, acceptOperationWorkItem,
+  computeParentWorkItemStatus, deleteOperationWorkItem
 };

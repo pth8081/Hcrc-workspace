@@ -115,6 +115,29 @@ BEGIN
 END
 GO
 
+/* Vận Hành — cây công việc "Thực hiện" cho Mở Mới/Sửa Chữa Siêu Thị (lib/operationWorkItemStore.js).
+   Bảng RIÊNG, KHÔNG dùng chung dbo.Tasks: subtasks của Công việc công ty chỉ 1 cấp phẳng và gắn chặt
+   semantics "Nhận Việc/gia hạn/huỷ việc" của 1 người — ở đây cần cây ĐA CẤP thật (ParentWorkItemId) +
+   bộ trạng thái riêng có bước "Nghiệm thu" (CHUA_BAT_DAU/DANG_THUC_HIEN/DANG_NGHIEM_THU/DA_NGHIEM_THU),
+   tách hẳn để không đụng state machine Task dùng chung toàn công ty. Payload giữ NGUYÊN VẸN object công
+   việc (cùng khuôn dbo.Tasks) — SourceType/SourceId/ParentWorkItemId chỉ là cột trích xuất để lọc/tra
+   cứu nhanh theo hồ sơ nguồn hoặc theo cây, xem lib/operationWorkItemStore.js. */
+IF OBJECT_ID('dbo.OperationWorkItems', 'U') IS NULL
+BEGIN
+    CREATE TABLE dbo.OperationWorkItems (
+        Id               BIGINT         NOT NULL PRIMARY KEY,
+        CreatedAt        DATETIME2(3)   NOT NULL DEFAULT SYSUTCDATETIME(),
+        Status           NVARCHAR(20)   NOT NULL,
+        ParentWorkItemId BIGINT         NULL,
+        SourceType       NVARCHAR(30)   NOT NULL,
+        SourceId         INT            NOT NULL,
+        Payload          NVARCHAR(MAX)  NOT NULL
+    );
+    CREATE INDEX IX_OperationWorkItems_Source ON dbo.OperationWorkItems (SourceType, SourceId);
+    CREATE INDEX IX_OperationWorkItems_Parent ON dbo.OperationWorkItems (ParentWorkItemId);
+END
+GO
+
 /* CẬP NHẬT (Bước 6c trở đi — hồ sơ nghiệp vụ dùng chung 2 engine generic lib/createValidation.js +
    lib/workflowEngine.js: submissions/docs/carRegs/officeReqs, cùng lib/recordActions.js cho
    contracts/meetingMinutes): thay vì viết 1 bảng riêng cho mỗi collection như SystemLogs/Tasks (không

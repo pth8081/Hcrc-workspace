@@ -12,6 +12,7 @@ const { validatePasswordStrength } = require('../lib/passwordPolicy');
 const { HttpError } = require('../lib/httpErrors');
 const { isCurrentlyAdmin, isCurrentlyAdminOrUniformManage } = require('../lib/adminAuth');
 const { getAllTasksCached } = require('../lib/taskStore');
+const { getAllWorkItemsCached } = require('../lib/operationWorkItemStore');
 const { getAllForCollectionCached, MIGRATED_COLLECTIONS } = require('../lib/recordStore');
 const { sendServerError } = require('../lib/errorResponse');
 const {
@@ -41,6 +42,9 @@ const ADMIN_ONLY_KEYS = new Set([
   // nhập nào (kể cả người chỉ có quyền tạo hồ sơ operationOrderCreate) cũng ghi trực tiếp được qua
   // POST /api/data/operationOrderDeptWorkflows và tự đặt mình làm người duyệt bước 1 phòng ban mình.
   'operationOrderDeptWorkflows', 'operationStoreOpenDeptWorkflows', 'operationRepairDeptWorkflows',
+  // Cùng lý do — quy trình duyệt RIÊNG cho giai đoạn Dự toán (Vận Hành > Siêu Thị), độc lập với 2 map
+  // duyệt hồ sơ chính ở trên.
+  'operationStoreOpenEstimateDeptWorkflows', 'operationRepairEstimateDeptWorkflows',
   // itPriceDeptWorkflows: cấu hình người duyệt Phê Duyệt Giá (module Hỗ Trợ IT) theo phòng ban — cùng
   // khuôn carDeptWorkflows/vppDeptWorkflows/budgetDeptWorkflows, chỉ sửa được ở màn Quy Trình & Phê
   // Duyệt (admin), nhưng trước đây BỊ BỎ SÓT khỏi danh sách này: bất kỳ tài khoản đã đăng nhập nào cũng
@@ -428,11 +432,16 @@ router.get('/', async (req, res) => {
     // liệu đầu tiên sau khi đăng nhập mất nhiều giây) — các collection này độc lập nhau, pool kết nối
     // (db.js, mặc định 20) thừa sức phục vụ song song, không có lý do gì phải chờ tuần tự.
     const migratedList = [...MIGRATED_COLLECTIONS];
-    const [tasksResult, ...collectionResults] = await Promise.all([
+    const [tasksResult, workItemsResult, ...collectionResults] = await Promise.all([
       getAllTasksCached(),
+      getAllWorkItemsCached(),
       ...migratedList.map(collection => getAllForCollectionCached(collection))
     ]);
     data.tasks = tasksResult;
+    // operationWorkItems: cây công việc Thực hiện/Nghiệm thu của Vận Hành — nguồn riêng
+    // dbo.OperationWorkItems (lib/operationWorkItemStore.js), cùng khuôn tasks ở trên (không nằm trong
+    // dbo.AppData, không có _versions.operationWorkItems tương ứng).
+    data.operationWorkItems = workItemsResult;
     migratedList.forEach((collection, i) => { data[collection] = collectionResults[i]; });
 
     // Lọc lại quyền XEM phía server cho các collection trước đây chỉ ẩn ở giao diện (xem
@@ -488,6 +497,19 @@ router.get('/', async (req, res) => {
     if (data.operationOrders) data.operationOrders = filterOperationOrdersForUser(data.operationOrders, req.freshUser, data);
     if (data.operationStoreOpenings) data.operationStoreOpenings = filterOperationStoreOpeningsForUser(data.operationStoreOpenings, req.freshUser, data);
     if (data.operationRepairs) data.operationRepairs = filterOperationRepairsForUser(data.operationRepairs, req.freshUser, data);
+    // operationWorkItems: cây công việc Thực hiện/Nghiệm thu — không phải collection dept-workflow độc
+    // lập, mà LỒNG theo hồ sơ Mở mới/Sửa chữa (sourceType/sourceId) — lọc theo đúng phạm vi xem của hồ
+    // sơ nguồn (đã lọc ở 2 dòng trên), tránh lộ tên/mô tả/người phụ trách công việc nội bộ siêu thị khác
+    // phòng ban cho bất kỳ ai gọi thẳng GET /api/data.
+    if (data.operationWorkItems) {
+      const visibleStoreOpeningIds = new Set((data.operationStoreOpenings || []).map(o => o.id));
+      const visibleRepairIds = new Set((data.operationRepairs || []).map(o => o.id));
+      data.operationWorkItems = data.operationWorkItems.filter(w => {
+        if (w.sourceType === 'OPERATION_STORE_OPENING') return visibleStoreOpeningIds.has(w.sourceId);
+        if (w.sourceType === 'OPERATION_REPAIR') return visibleRepairIds.has(w.sourceId);
+        return false;
+      });
+    }
     // vppRegistrations: cùng dạng lỗ hổng như itPriceApprovals/budgetEntries ở trên — collection DUY
     // NHẤT trong nhóm dept-workflow trước đây KHÔNG được lọc lại ở server (chỉ ẩn ở
     // renderVppRegistrations()), để lộ đăng ký/chi tiêu văn phòng phẩm (kể cả bản NHÁP) của MỌI phòng

@@ -719,6 +719,15 @@ const CREATE_MODULE_CONFIGS = {
       payload.status = 'PENDING';
       payload.currentStep = 1;
       payload.history = [];
+      // Giai đoạn "Dự toán" — workflow ĐỘC LẬP, chạy song song với duyệt hồ sơ chính (không chờ status
+      // ở trên APPROVED mới cho lập dự toán, xem lib/workflowEngine.js module ảo
+      // operationStoreOpeningEstimate). Field FLAT có tiền tố estimate*, cùng kỹ thuật signedFileStatus*
+      // của contracts — không lồng object để applyWorkflowAction() truy cập được bằng bracket-access.
+      payload.estimateStatus = 'DRAFT';
+      payload.estimateCurrentStep = 0;
+      payload.estimateHistory = [];
+      payload.estimateItems = [];
+      payload.estimateTotalAmount = 0;
     }
   },
   operationRepairs: {
@@ -744,6 +753,12 @@ const CREATE_MODULE_CONFIGS = {
       payload.status = 'PENDING';
       payload.currentStep = 1;
       payload.history = [];
+      // Giai đoạn "Dự toán" — cùng lý do/kỹ thuật đã thêm ở operationStoreOpenings ngay trên.
+      payload.estimateStatus = 'DRAFT';
+      payload.estimateCurrentStep = 0;
+      payload.estimateHistory = [];
+      payload.estimateItems = [];
+      payload.estimateTotalAmount = 0;
     }
   },
   // Tài liệu dùng cặp field cũ uploadAll(bool)+uploadDepts(mảng) chứ không phải {all,depts} object
