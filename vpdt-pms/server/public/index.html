@@ -6855,7 +6855,8 @@ input[data-sdd-list] {
         <h3 class="font-bold text-teal-900 text-base flex items-center gap-2">🌳 Cơ Cấu Tổ Chức</h3>
         <p class="text-xs text-teal-800">Cây quản lý trực tiếp của <b>toàn bộ nhân viên công ty</b> (mọi phòng ban) — dùng làm căn cứ để trưởng phòng xem được việc của nhân viên mình quản lý (Vận Hành, Công Việc). Có thể có nhiều gốc cây (nhân viên không có quản lý trực tiếp).</p>
         <div class="flex flex-wrap items-center gap-2 pt-1">
-          <button type="button" onclick="downloadOrgChartTemplate()" class="bg-gray-600 text-white px-2.5 py-1.5 rounded text-xs font-semibold hover:bg-gray-700 transition">📄 Tải Mẫu / Xuất Excel (danh sách hiện tại)</button>
+          <button type="button" onclick="downloadOrgChartTemplate()" class="bg-gray-600 text-white px-2.5 py-1.5 rounded text-xs font-semibold hover:bg-gray-700 transition">📄 Tải Mẫu (.xlsx) — chuẩn bị dữ liệu để nhập</button>
+          <button type="button" onclick="exportOrgChartExcel()" class="bg-emerald-700 text-white px-2.5 py-1.5 rounded text-xs font-semibold hover:bg-emerald-800 transition">📊 Xuất Excel — lưu hồ sơ cơ cấu hiện tại</button>
           <label id="btnOrgChartImportExcel" class="hidden bg-teal-700 text-white px-2.5 py-1.5 rounded text-xs font-semibold hover:bg-teal-800 transition cursor-pointer">
             📥 Nhập Từ Excel<input type="file" accept=".xlsx" onchange="importOrgChartExcel(event)" class="hidden">
           </label>
@@ -40417,11 +40418,11 @@ function clearOrgChartManager() {
   saveOrgChartManagerChange(null);
 }
 
-// "Tải Mẫu / Xuất Excel" gộp làm 1: mẫu HỮU ÍCH NHẤT cho việc sửa cơ cấu cả công ty là chính danh sách
-// hiện tại (username thật sẵn có, tránh gõ sai/không khớp tài khoản) kèm cột managerUsername đã điền sẵn
-// giá trị đang có (trống nếu chưa có quản lý) để người dùng chỉnh sửa/bổ sung rồi nhập lại. Route
-// /api/admin/export-xlsx chỉ SINH FILE từ dữ liệu client tự có sẵn (đã tải qua API phân quyền từ trước),
-// không đọc/ghi gì thêm — dùng lại đúng route/hàm downloadXlsxFromServer() của màn Người Dùng.
+// "Tải Mẫu" — CHUẨN BỊ DỮ LIỆU ĐỂ NHẬP (import): username thật sẵn có (tránh gõ sai/không khớp tài
+// khoản) + cột managerUsername điền sẵn giá trị đang có (trống nếu chưa có quản lý), sắp theo A-Z để dễ
+// dò/sửa hàng loạt trong Excel — ĐÚNG khuôn cột mà importOrgChartExcel() bên dưới đọc vào (username +
+// managerUsername theo tiêu đề, các cột còn lại chỉ để tham khảo). Khác "Xuất Excel" bên dưới (dùng để
+// LƯU HỒ SƠ, sắp theo cây tổ chức, không nhằm nhập lại).
 function downloadOrgChartTemplate() {
   const columns = [
     { header: 'username', key: 'username', width: 16 },
@@ -40442,7 +40443,42 @@ function downloadOrgChartTemplate() {
       managerUsername: u.managerUsername || '',
       managerName: getUserManagerName(u.username)
     }));
-  downloadXlsxFromServer('co_cau_to_chuc.xlsx', 'Cơ Cấu Tổ Chức', columns, rows);
+  downloadXlsxFromServer('co_cau_to_chuc_mau_nhap.xlsx', 'Mẫu Nhập Cơ Cấu', columns, rows);
+}
+
+// "Xuất Excel" — LƯU HỒ SƠ cơ cấu tổ chức hiện tại: đi theo ĐÚNG thứ tự cây trên màn hình (đệ quy như
+// buildOrgChartNode(), không phải liệt kê A-Z phẳng như mẫu nhập ở trên) kèm cột "Cấp" (độ sâu trong
+// cây) để đọc/in ra vẫn giữ được hình dạng phân cấp — phù hợp mục đích lưu trữ/báo cáo, KHÔNG nhằm nhập
+// lại (không có cột managerUsername thô, chỉ tên quản lý cho dễ đọc).
+function buildOrgChartExportRows(u, allUsers, depth, out) {
+  out.push({
+    cap: depth + 1,
+    hoTen: u.name || '',
+    chucDanh: u.jobTitle || '',
+    phongBan: u.dept || '',
+    quanLyTrucTiep: getUserManagerName(u.username) || '(Không có)',
+    username: u.username
+  });
+  getDirectReports(u.username, allUsers)
+    .sort((a, b) => (a.name || '').localeCompare(b.name || ''))
+    .forEach(r => buildOrgChartExportRows(r, allUsers, depth + 1, out));
+}
+function exportOrgChartExcel() {
+  const activeUsers = (DB.users || []).filter(u => u.active !== false);
+  const roots = activeUsers.filter(u => !u.managerUsername || !activeUsers.some(m => m.username === u.managerUsername));
+  const rows = [];
+  roots
+    .sort((a, b) => (a.name || '').localeCompare(b.name || ''))
+    .forEach(u => buildOrgChartExportRows(u, activeUsers, 0, rows));
+  const columns = [
+    { header: 'Cấp', key: 'cap', width: 8 },
+    { header: 'Họ Tên', key: 'hoTen', width: 26 },
+    { header: 'Chức Danh', key: 'chucDanh', width: 24 },
+    { header: 'Phòng Ban', key: 'phongBan', width: 22 },
+    { header: 'Quản Lý Trực Tiếp', key: 'quanLyTrucTiep', width: 26 },
+    { header: 'Username', key: 'username', width: 16 }
+  ];
+  downloadXlsxFromServer('co_cau_to_chuc_ho_so.xlsx', 'Cơ Cấu Tổ Chức', columns, rows);
 }
 
 // Nhập Excel: server (routes/adminExport.js + lib/orgChartImport.js) CHỈ đọc file, trả về mảng
