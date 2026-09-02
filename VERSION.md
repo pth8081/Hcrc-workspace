@@ -1,10 +1,67 @@
 # Phiên bản hiện tại
 
-**3.0** — đã merge vào `main` (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge
+**3.1** — đã merge vào `main` (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge
 góc màn hình + `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần
 kiểu `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
 
-## Cập nhật gần nhất — Rà soát bảo mật theo yêu cầu team security (trước khi public ra Internet)
+## Cập nhật gần nhất — Rà soát bảo mật vòng 2 (team security tìm thêm 3 lỗ hổng sau đợt v3.0)
+
+Sau khi merge v3.0 (9 mục P0-P3 ở phần bên dưới), team security khách hàng gửi thêm 3 phát hiện: (1) CSP
+`unsafe-inline` "quá mềm", (2) chưa rõ SQL injection có tồn tại không — yêu cầu audit chi tiết, (3) error
+disclosure khi ở dev mode. Đã rà kỹ cả 3, xử lý 1 (fix code), xác nhận sạch 1 (audit không đổi code), và
+lập phương án cho mục còn lại (đề xuất, chưa thực hiện — chờ quyết định người dùng):
+
+- 🔴 **Error disclosure khi dev mode — ĐÃ VÁ.** Toàn hệ thống vốn đã có cơ chế ẩn chi tiết lỗi khi
+  `NODE_ENV=production` (`sendServerError()`, `lib/errorResponse.js`) — xác nhận PM2 (`ecosystem.config.js`)
+  đã đặt `NODE_ENV: 'production'` sẵn nên production KHÔNG lộ. Nhưng phát hiện ~15 điểm route đọc/parse
+  file tải lên (bảng giá, danh mục VPP, kế hoạch đào tạo, danh sách học viên, import Excel Nhân Sự/Cơ Cấu
+  Tổ Chức...) trả thẳng `err.message` ra JSON, KHÔNG qua cơ chế NODE_ENV-aware này — lỗi thư viện đọc
+  Excel/CSV nội bộ hoặc lỗi ghi đĩa (ENOSPC/EACCES) có thể lộ chi tiết dù ở môi trường nào. Vá bằng hàm
+  mới `sendCatchError()` (`lib/errorResponse.js`) — phân biệt lỗi NGHIỆP VỤ chủ đích (`HttpError`, message
+  đã viết sẵn an toàn để hiển thị, VD "File thiếu cột bắt buộc: Tên mặt hàng") với lỗi KHÔNG LƯỜNG TRƯỚC
+  (phải ẩn chi tiết khi production) — áp dụng cho `routes/upload.js`, `priceFile.js`,
+  `budgetTemplateImport.js`, `storeCatalogImport.js`, `trainingPlanImport.js`, `trainingRoster.js`,
+  `vppCatalog.js`, `adminExport.js` (2 route import Nhân Sự/Cơ Cấu Tổ Chức). Trong lúc vá phát hiện thêm 1
+  chỗ dùng `throw new Error()` thường cho lỗi validate hợp lệ (`lib/adminExport.js`,
+  `parseUsersImportXlsx()`) — nếu không sửa cùng lúc sẽ bị `sendCatchError()` ẩn nhầm thành lỗi chung
+  chung, đã đổi sang `HttpError` để giữ đúng message rõ ràng cho người dùng.
+- 🔴 **SQL Injection — ĐÃ AUDIT, KHÔNG PHÁT HIỆN LỖ HỔNG.** Rà toàn bộ ~70 điểm gọi `.query()` trong
+  `server/routes/` + `server/lib/` (liệt kê đầy đủ qua grep, không lấy mẫu) — 100% dùng tham số hoá đúng
+  chuẩn `mssql` (`.input(tên, kiểu, giá_trị)` + `@tên` trong câu lệnh), không có điểm nào nối chuỗi giá
+  trị người dùng trực tiếp vào SQL. 2-3 điểm có dựng động phần TEXT câu lệnh (`lib/operationWorkItemStore.js`,
+  `lib/recordStore.js`) đã soát riêng — chỉ nối tên tham số (`@p0, @p1...`) hoặc mệnh đề tĩnh cố định, giá
+  trị thật luôn qua `.input()`. Không cần sửa code — ghi nhận vào đây để trả lời chính thức cho team
+  security: đã audit chi tiết theo yêu cầu, kết quả sạch.
+- 🔴 **CSP `unsafe-inline` — ĐÃ LƯỢNG HOÁ PHẠM VI, CHƯA SỬA (giữ nguyên quyết định hoãn lại ở v3.0).**
+  Đây là refactor lớn đã được người dùng chủ động hoãn ở đợt trước (ước tính 2-3 ngày, đụng gần hết
+  `index.html`). Đo lại chính xác cho phương án xử lý: file `public/index.html` hiện có **1017 thuộc
+  tính inline event-handler** (`onclick=`, `onchange=`...) + **5 khối `<script>` inline**, tổng
+  40.726 dòng / 2.537.187 byte. Đề xuất 2 phương án khi người dùng sẵn sàng làm:
+  1. **Nonce-based (nhanh, ít rủi ro hơn)** — sinh 1 nonce ngẫu nhiên mỗi request, thêm vào CSP header
+     (`script-src 'self' 'nonce-xxx'`) và gắn `nonce="xxx"` vào 5 khối `<script>` inline hiện có — bỏ
+     được `'unsafe-inline'` cho khối script, nhưng KHÔNG xử lý được 1017 thuộc tính `onXxx=` (CSP không
+     hỗ trợ nonce cho inline event-handler attribute) — vẫn phải giữ `script-src-attr: 'unsafe-inline'`
+     riêng, chỉ giảm 1 phần bề mặt, không loại bỏ hoàn toàn XSS-execution-if-injected.
+  2. **Chuyển hết sang `addEventListener` (triệt để, đúng như đề xuất security)** — xoá toàn bộ 1017
+     `onXxx=` sang gắn listener bằng JS + `data-*`/id chọn phần tử, bỏ được `'unsafe-inline'` ở CẢ
+     `script-src` lẫn `script-src-attr`. Đây là refactor thật sự diện rộng, rủi ro regression cao vì
+     đụng gần như mọi màn hình — nên làm theo từng module (VD Vận Hành trước, rồi Nhân Sự...) kèm demo
+     Playwright từng phần thay vì 1 lượt duy nhất.
+  **Lưu ý quan trọng cho team security**: bản thân `unsafe-inline` KHÔNG PHẢI lỗ hổng độc lập — nó chỉ
+  tăng mức thiệt hại NẾU đã tồn tại 1 lỗ hổng XSS khác (chèn được input không escape vào DOM). Đã audit
+  riêng và chưa phát hiện điểm XSS injectable nào trong hệ thống. Khuyến nghị: có thể public trước với
+  rủi ro này đã được lượng hoá + chấp nhận có kiểm soát, làm phương án 2 ở 1 đợt riêng sau.
+
+**Deploy-impact:** KHÔNG đổi `sql/schema.sql`, KHÔNG thêm biến môi trường mới, KHÔNG thêm `dependencies`
+mới trong `package.json` — thuần hardening logic ứng dụng, deploy an toàn chỉ với copy code +
+`pm2 restart`.
+
+Test: `node -c` toàn bộ 11 file server sửa/mới; `git stash`/`git stash pop` xác nhận số lượng test fail
+trong `tests/test-*.js` giống hệt trước/sau thay đổi (môi trường sandbox này không có SQL Server thật nên
+bộ test đầy đủ không chạy hết được) — 2 file liên quan trực tiếp chạy riêng pass đầy đủ, không regression
+(`tests/test-audit-dot5-phase1.js` 13/13, `tests/test-admin-totp.js` 26/26).
+
+## Trước đó — Rà soát bảo mật theo yêu cầu team security (trước khi public ra Internet)
 
 Team security của khách hàng đưa 1 danh sách 9 mục ưu tiên P0-P3 yêu cầu xử lý trước khi public. Rà kỹ
 từng mục đối chiếu code thật (không giả định) thì **5/9 mục đã được vá sẵn từ các đợt audit trước, không
