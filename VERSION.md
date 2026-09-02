@@ -1,10 +1,61 @@
 # Phiên bản hiện tại
 
-**2.9** — đã merge vào `main` (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge
+**3.0** — đã merge vào `main` (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge
 góc màn hình + `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần
 kiểu `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
 
-## Cập nhật gần nhất — Audit Đợt 5 Giai đoạn 4 (tiếp): 3 mục còn lại theo lựa chọn người dùng (nhánh `claude/chao-ban-oo5ijl`)
+## Cập nhật gần nhất — Rà soát bảo mật theo yêu cầu team security (trước khi public ra Internet)
+
+Team security của khách hàng đưa 1 danh sách 9 mục ưu tiên P0-P3 yêu cầu xử lý trước khi public. Rà kỹ
+từng mục đối chiếu code thật (không giả định) thì **5/9 mục đã được vá sẵn từ các đợt audit trước, không
+cần sửa thêm**:
+
+- 🔴 **Path Traversal uploads**: cả 7 route upload (`routes/upload.js` + 6 route phụ) đều dùng tên file
+  server tự sinh (không lấy từ input người dùng) + allowlist đuôi file + kiểm chữ ký nhị phân thật; 2
+  đường đọc file (`/uploads`, `/api/files/download`) đều qua `parseUploadsFileUrl()` (chỉ nhận đúng 1
+  thành phần tên file, chặn `/`, `\`, `..`) + verify lại `path.dirname()` khớp đúng thư mục uploads/.
+- 🔴 **Default Password 123456**: `seedDefaults.js` dò MỌI tài khoản (không riêng seed) còn dùng mật
+  khẩu mặc định đã biết mỗi lần khởi động, tự bắt buộc đổi mật khẩu (`mustChangePassword`) trước khi
+  dùng tiếp; mật khẩu mới bắt buộc ≥8 ký tự + chữ+số+ký tự đặc biệt + chặn danh sách mật khẩu yếu.
+- 🟠 **File Upload Rate Limit**: cả 7 route upload đã có `express-rate-limit` giống nhau (10 phút/30 lượt).
+- 🟠 **Perms Sanitization Verify**: đã đọc kỹ `sanitizeUsersPermsForViewer()` — logic đúng, không có lỗ
+  hổng, đã có test riêng (`tests/test-audit-dot5-phase1.js`, 13/13 pass).
+- 🟡 **Email Rate Limiting**: `routes/email.js` đã có `sendEmailRateLimiter` áp cho cả gửi thật lẫn gửi thử.
+
+**4 mục còn lại** xử lý theo lựa chọn người dùng (đã hỏi qua 3 câu về phạm vi trước khi làm):
+
+- 🟡 **Disk Space Monitoring**: `jobs/diskSpaceMonitor.js` mới — job chạy mỗi giờ, cảnh báo email admin
+  khi ổ đĩa chứa `uploads/` vượt ngưỡng (mặc định 85%, chỉnh được ở Quản trị > Cấu Hình Email), cooldown
+  24h tránh dội email. **Chỉ cảnh báo, KHÔNG tự xoá file nào** (người dùng chọn phương án an toàn nhất —
+  hệ thống fail-open cho nhiều loại file chưa rà quyền sở hữu riêng, không có cách chắc chắn 1 file là
+  rác an toàn để xoá tự động).
+- 🟡 **Audit Log Encryption**: `lib/logCrypto.js` mới — mã hoá AES-256-GCM cột `IpAddress` trong
+  `dbo.SystemLogs` (khoá `LOG_ENCRYPTION_KEY` riêng, **tuỳ chọn** — không đặt vẫn ghi log bình thường ở
+  dạng plaintext như trước, chỉ cảnh báo khởi động nhắc bật). Chỉ mã hoá IpAddress, giữ FullName/
+  Description dạng thường để còn tìm kiếm được khi admin tra cứu log.
+- 🔵 **CSP Refactoring** (bỏ `unsafe-inline`) và 🔵 **Frontend Code-Splitting**: người dùng chọn **hoãn
+  lại** — đây là 2 refactor lớn (ước tính 2-3 và 3-5 ngày), rủi ro regression cao vì đụng gần như mọi
+  màn hình trong `index.html` (40.709 dòng), không phải lỗ hổng khai thác trực tiếp được (CSP
+  unsafe-inline chỉ tăng rủi ro NẾU đã có XSS khác; bundle size là hiệu năng, không phải bảo mật) — làm
+  ở 1 đợt riêng sau khi public.
+
+**Deploy-impact:**
+- `sql/schema.sql` **CÓ đổi** — cột `IpAddress` trong `dbo.SystemLogs` mở rộng từ `NVARCHAR(100)` lên
+  `NVARCHAR(300)` (đủ chứa giá trị đã mã hoá). An toàn chạy lại nhiều lần, chỉ MỞ RỘNG không mất dữ liệu.
+- `.env.example` thêm 1 biến môi trường **tuỳ chọn** `LOG_ENCRYPTION_KEY` — không đặt thì log vẫn ghi
+  bình thường (plaintext như trước), server in cảnh báo khởi động nhắc bật. Nên đặt trước khi public.
+- Không thêm `dependencies` mới trong `package.json`.
+- Thao tác 1 lần: sau khi chạy lại `schema.sql`, nếu muốn bật mã hoá log thì thêm `LOG_ENCRYPTION_KEY`
+  vào `.env` rồi `pm2 restart` — KHÔNG bắt buộc để deploy thành công.
+
+Test: syntax check toàn bộ file server sửa/mới (`node -c`) + script inline trong `index.html`, không
+duplicate DOM id mới, unit test round-trip mã hoá/giải mã (bao gồm khoá sai/thiếu khoá — không throw),
+sanity check `fs.statfs`. Bộ test DB-thật (`tests/test-*.js`) không chạy được đầy đủ trong sandbox này
+(không có SQL Server thật) — 2 file test có liên quan trực tiếp (`test-admin-totp.js` exercising
+`insertSystemLog()` qua mock SQL request, `test-audit-dot5-phase1.js` cho `sanitizeUsersPermsForViewer()`)
+đã chạy riêng và pass đầy đủ, không có regression so với trước khi sửa.
+
+## Trước đó — Audit Đợt 5 Giai đoạn 4 (tiếp): 3 mục còn lại theo lựa chọn người dùng (nhánh `claude/chao-ban-oo5ijl`)
 
 Tiếp theo phần Giai đoạn 4 đầu tiên (bên dưới) — người dùng được hỏi cụ thể về 4 mục Thấp còn lại cần
 quyết định nghiệp vụ, chốt 3/4 mục nên làm:
