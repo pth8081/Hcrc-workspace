@@ -1,10 +1,63 @@
 # Phiên bản hiện tại
 
-**3.4** — đã merge vào `main` (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge
+**3.5** — đã merge vào `main` (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge
 góc màn hình + `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần
 kiểu `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
 
-## Cập nhật gần nhất — CSP unsafe-inline: đợt 3/N — module Hợp Đồng + fix lỗi mất TOTP/vân tay khi lưu user
+## Cập nhật gần nhất — CSP unsafe-inline: đợt 4/N — module Thanh Toán + fix lỗi ẩn chặn âm thầm form thủ công
+
+Tiếp tục đợt 3 (Hợp Đồng, xem mục "Trước đó" ngay bên dưới) — đợt này chuyển module **Thanh Toán** (form
+tạo đề nghị thủ công, các đợt thanh toán, danh sách/lọc, sửa/xác nhận/yêu cầu bổ sung/xoá):
+
+- **14 điểm** `onclick`/`onchange`/`oninput`/`onsubmit` trong `#paymentSection` (dropdown Loại/Xác Nhận,
+  form tạo `#paymentCreateForm`, chọn Loại Nguồn/Nguồn cụ thể, thêm/xoá đợt thanh toán, lọc trạng thái) +
+  `renderPaymentCreateInstallmentsList()` (nút xoá từng đợt) + `renderPaymentRequests()` (5 nút hành động
+  trên mỗi dòng: xác nhận đợt, sửa, phê duyệt, yêu cầu bổ sung, xoá) chuyển sang `data-op*`, dùng lại
+  đúng hạ tầng dùng chung (`cspDispatchOp`/`bindCspDelegation`) — không cần code hạ tầng mới. Chỉ cần
+  **1 gốc** `bindCspDelegation('paymentSection')`: `openEditPaymentRequest()` (nút Sửa) đổ dữ liệu ngược
+  vào ĐÚNG `#paymentCreateForm` đã có sẵn trong section (chuyển sub-tab, không mở modal riêng) — giống
+  kiểu "sửa tại chỗ" của Hợp Đồng ở đợt 3.
+- **2 điểm CHỦ ĐỘNG KHÔNG chuyển** — `startContractPaymentAction`/`startOfficePaymentAction` là lệnh gọi
+  JS thuần bên trong `switch` của `runContractAction()` (Hợp Đồng), KHÔNG phải thuộc tính `onclick=` nhúng
+  trong HTML — đã nằm trong phạm vi `data-op="runContractAction"` chuyển ở đợt 3 rồi, không phải điểm mới
+  của Thanh Toán.
+- **`buildActionCell()`/`buildDashboardCardsHTML()`/`buildPaginationBoxHTML()`/`renderPeopleMultiSelect()`**
+  tiếp tục KHÔNG đụng — vẫn dành cho 1 đợt riêng cuối cùng sau khi hết mọi module đơn lẻ.
+
+**Fix phụ phát hiện trong lúc demo (không liên quan CSP, đã xác nhận là lỗi có thật, không phải lỗi riêng
+của kịch bản demo):** ô chọn "Nguồn" (`#paymentSourceRecord`) trong form tạo đề nghị thủ công có hardcode
+`required` ngay trong HTML gốc, nhưng field này chỉ thực sự bắt buộc khi Loại Nguồn là Hợp Đồng/Mua
+Bán/Sửa Chữa — khi chọn "Thủ công" (mặc định), cả khối chứa nó bị ẩn qua `.hidden` (display:none) ở phần
+tử CHA, nhưng bản thân `<select>` vẫn còn `required=true`. Chrome KHÔNG focus được vào ô ẩn để hiển thị
+lời nhắc lỗi validate, nên **chặn âm thầm toàn bộ submit** của form — chỉ có 1 dòng cảnh báo console
+(`"An invalid form control with name='' is not focusable."`), không có lỗi nào hiển thị cho người dùng —
+khiến luồng tạo đề nghị thanh toán Thủ công không bao giờ gửi được. Phát hiện được nhờ kịch bản demo
+Playwright thực sự bấm nút gửi thật (không mock). Đã sửa: chuyển `required` sang gán động theo
+`sourceType !== 'MANUAL'` trong `onPaymentSourceTypeChange()`, và gán `false` trong `openEditPaymentRequest()`
+(hàm này ẩn khối trực tiếp, không đi qua `onPaymentSourceTypeChange()` nên cần fix riêng để tránh trạng
+thái `required` cũ còn sót lại ở chế độ sửa).
+
+**Xác nhận không ảnh hưởng** — 2 lớp kiểm tra độc lập trước khi merge:
+- Demo Playwright thật (SQL Server + server local + đăng nhập UI thật qua tài khoản demo tạm 2FA thật,
+  xoá lại ngay sau demo): điều hướng Sidebar → Tổng Hợp → Thanh Toán, chuyển sub-tab Tạo Mới/Xác Nhận Đề
+  Nghị, điền form (phòng ban, tiêu đề), thêm 2 đợt thanh toán rồi xoá 1 đợt (đúng số dòng còn lại), gửi
+  form thành công (dialog "✅ Đã tạo đề nghị thanh toán!"), lọc theo trạng thái "Chờ duyệt", mở chế độ Sửa
+  trên dòng vừa tạo (nút đổi thành "Cập Nhật"), mở modal xác nhận phê duyệt rồi đóng lại — toàn bộ đều
+  đúng, không có lỗi JS console mới.
+- Chạy lại toàn bộ 46 file test hồi quy hiện có (`tests/test-*.js`) — pass 100% (2 file
+  `test-audit-fixes-batch1.js`/`test-audit-round2-cluster1.js` treo lúc dọn dẹp sau khi đã chạy hết kịch
+  bản — bug có sẵn từ trước, đã ghi nhận từ đợt 2, không liên quan gì tới thay đổi lần này).
+
+**Deploy-impact:** KHÔNG đổi `sql/schema.sql`, KHÔNG thêm biến môi trường mới, KHÔNG thêm `dependencies`
+mới — cả phần chuyển CSP lẫn phần fix `required` (đều nằm trong `public/index.html`, thuần client
+JS/HTML) đều deploy an toàn chỉ với copy code + `pm2 restart`, không cần thao tác 1 lần nào khác.
+
+**Còn lại:** Xe, Phòng Họp, VPP, Đào Tạo, Ngân Sách, Cơ Cấu Tổ Chức, Báo Cáo, Nhân Sự, Quản Trị/Hệ Thống,
+Hỗ Trợ IT, Đồng Phục, Giấy Phép, Gia Hạn CNTT, Tuyển Dụng, Tin Tức/Truyền Thông, Biên Bản Họp, Công Việc,
+Văn Bản Trình, Tài Liệu... — dùng hạ tầng `data-op*`/`bindCspDelegation()` đã xây, làm tiếp tuần tự mỗi
+module 1 commit + demo + regression trước khi merge, tới khi hết toàn bộ điểm mới gỡ `unsafe-inline`.
+
+## Trước đó — CSP unsafe-inline: đợt 3/N — module Hợp Đồng + fix lỗi mất TOTP/vân tay khi lưu user
 
 Tiếp tục đợt 2 (Điều hướng Sidebar + hạ tầng `data-op*` dùng chung, xem mục "Trước đó" ngay bên dưới) —
 đợt này chuyển module **Hợp Đồng** (form tạo hợp đồng/phụ lục, danh sách, lọc, đợt thanh toán, dropdown

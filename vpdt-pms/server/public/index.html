@@ -4099,17 +4099,17 @@ input[data-sdd-list] {
          Hợp đồng/Mua Bán/Sửa Chữa/Đầu Tư lẫn đề nghị tạo thủ công. -->
     <div id="paymentSection" class="hidden space-y-6">
       <div class="flex gap-2">
-        <button onclick="setPaymentSubTab('CREATE')" id="btnPaymentSubCreate" class="px-3 py-1 rounded text-xs font-bold bg-gray-200 text-gray-700">➕ Tạo Mới</button>
-        <button onclick="setPaymentSubTab('APPROVE')" id="btnPaymentSubApprove" class="px-3 py-1 rounded text-xs font-bold bg-amber-700 text-white">✅ Xác Nhận Đề Nghị Thanh Toán</button>
+        <button data-op="setPaymentSubTab" data-arg0="CREATE" id="btnPaymentSubCreate" class="px-3 py-1 rounded text-xs font-bold bg-gray-200 text-gray-700">➕ Tạo Mới</button>
+        <button data-op="setPaymentSubTab" data-arg0="APPROVE" id="btnPaymentSubApprove" class="px-3 py-1 rounded text-xs font-bold bg-amber-700 text-white">✅ Xác Nhận Đề Nghị Thanh Toán</button>
       </div>
 
       <div id="paymentCreateWrap" class="hidden bg-amber-50 p-4 rounded border border-amber-200 space-y-3">
         <h3 class="font-bold text-amber-900 text-base flex items-center gap-2">➕ Tạo Đề Nghị Thanh Toán Thủ Công</h3>
-        <form id="paymentCreateForm" onsubmit="submitManualPaymentRequest(event)" class="bg-white p-3 rounded border text-xs space-y-3">
+        <form id="paymentCreateForm" data-op-submit="submitManualPaymentRequest" class="bg-white p-3 rounded border text-xs space-y-3">
           <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
             <div id="paymentSourceTypeWrap">
               <label class="block font-semibold text-gray-600 mb-1">Loại Đề Nghị</label>
-              <select id="paymentSourceType" onchange="onPaymentSourceTypeChange()" class="w-full border p-1.5 rounded bg-white font-semibold">
+              <select id="paymentSourceType" data-op-change="onPaymentSourceTypeChange" class="w-full border p-1.5 rounded bg-white font-semibold">
                 <option value="MANUAL">✍️ Thủ công (không gắn nguồn)</option>
                 <option value="CONTRACT">📄 Hợp đồng</option>
                 <option value="MUA_BAN">🛒 Mua Bán</option>
@@ -4118,7 +4118,7 @@ input[data-sdd-list] {
             </div>
             <div id="paymentSourceRecordWrap" class="hidden">
               <label class="block font-semibold text-gray-600 mb-1">Chọn Hồ Sơ Nguồn</label>
-              <select id="paymentSourceRecord" onchange="onPaymentSourceRecordChange()" class="w-full border p-1.5 rounded bg-white" required></select>
+              <select id="paymentSourceRecord" data-op-change="onPaymentSourceRecordChange" class="w-full border p-1.5 rounded bg-white" required></select>
               <p class="text-[11px] text-gray-500 italic mt-1">Chỉ liệt kê hồ sơ CHƯA thanh toán và ĐÃ tải Tài liệu ký (hợp đồng còn cần Tài liệu ký đã được DUYỆT XONG) — hồ sơ chưa đủ điều kiện hiện dạng mờ, không chọn được, ngay bên dưới.</p>
             </div>
           </div>
@@ -4135,9 +4135,9 @@ input[data-sdd-list] {
           <div class="border-t pt-3">
             <div class="flex justify-between items-center mb-2">
               <label class="font-semibold text-gray-600">Các Đợt Thanh Toán</label>
-              <button type="button" onclick="addPaymentCreateInstallmentRow()" class="text-amber-600 font-bold hover:underline">+ Thêm Đợt</button>
+              <button type="button" data-op="addPaymentCreateInstallmentRow" class="text-amber-600 font-bold hover:underline">+ Thêm Đợt</button>
             </div>
-            <div id="paymentCreateInstallmentsList" class="space-y-2" oninput="updatePaymentCreateInstallmentsSummary()"></div>
+            <div id="paymentCreateInstallmentsList" class="space-y-2" data-op-input="updatePaymentCreateInstallmentsSummary"></div>
             <div id="paymentCreateInstallmentsSummary" class="mt-2 text-[11px]"></div>
           </div>
           <div class="flex justify-end">
@@ -4151,7 +4151,7 @@ input[data-sdd-list] {
         <div id="paymentDashboardCards"></div>
         <div class="bg-gray-50 p-3 rounded-lg border flex items-center gap-2">
           <label class="text-xs font-semibold text-gray-600">Lọc Theo Trạng Thái</label>
-          <select id="filterStatusPayment" onchange="onPaymentFilterChange()" class="border p-2 rounded text-sm bg-white">
+          <select id="filterStatusPayment" data-op-change="onPaymentFilterChange" class="border p-2 rounded text-sm bg-white">
             <option value="">-- Tất cả trạng thái --</option>
             <option value="PENDING">⏳ Chờ duyệt</option>
             <option value="NEED_INFO">📝 Cần bổ sung</option>
@@ -19053,7 +19053,7 @@ function renderPaymentCreateInstallmentsList(installments) {
       <input placeholder="Mô tả đợt (VD: Đợt 1)" value="${escapeHtml(it.description || '')}" class="flex-1 border p-1.5 rounded payment-installment-desc">
       <input type="text" inputmode="numeric" placeholder="Số tiền (VNĐ)" value="${formatMoneyDisplay(it.amount)}" class="w-40 border p-1.5 rounded payment-installment-amount money-input">
       <input type="date" value="${it.dueDate || ''}" class="w-40 border p-1.5 rounded payment-installment-due">
-      <button type="button" onclick="removePaymentCreateInstallmentRow(${idx})" class="text-red-500 font-bold hover:underline px-1">✕</button>
+      <button type="button" data-op="removePaymentCreateInstallmentRow" data-arg0="${idx}" class="text-red-500 font-bold hover:underline px-1">✕</button>
     </div>
   `).join('') || '<p class="text-gray-400 italic text-[11px]">Chưa có đợt thanh toán nào — bấm "+ Thêm Đợt".</p>';
   updatePaymentCreateInstallmentsSummary();
@@ -19145,6 +19145,11 @@ function onPaymentSourceTypeChange() {
   // startOfficePayment() ở lib/recordActions.js) — ẩn hẳn ô Phòng Ban để không gây hiểu nhầm là chọn
   // được, chỉ hiện lại đúng lúc Thủ công (server dùng nguyên giá trị người dùng chọn).
   document.getElementById('paymentDeptWrap').classList.toggle('hidden', sourceType !== 'MANUAL');
+  // required chỉ đúng khi có nguồn (CONTRACT/MUA_BAN/SUA_CHUA) — hardcode required trong HTML gốc bỏ
+  // sót trường hợp Thủ công: select bị ẩn (display:none qua wrap ở trên) NHƯNG vẫn còn required=true
+  // khiến Chrome chặn ÂM THẦM toàn bộ submit (không focus được ô ẩn để báo lỗi, không log gì ngoài 1
+  // dòng console warning) — bug có thật, chặn đứng cả luồng tạo đề nghị Thủ công, không liên quan CSP.
+  document.getElementById('paymentSourceRecord').required = sourceType !== 'MANUAL';
   populatePaymentSourceRecordOptions();
   document.getElementById('paymentSourceRecord').value = '';
   document.getElementById('paymentTitle').value = '';
@@ -19236,6 +19241,7 @@ function openEditPaymentRequest(id) {
   // chọn Loại Đề Nghị/Hồ Sơ Nguồn khi đang sửa, tránh gây hiểu nhầm là đổi được nguồn.
   document.getElementById('paymentSourceTypeWrap').classList.add('hidden');
   document.getElementById('paymentSourceRecordWrap').classList.add('hidden');
+  document.getElementById('paymentSourceRecord').required = false; // ẩn hẳn ở chế độ sửa — xem chú thích required trong onPaymentSourceTypeChange()
   document.getElementById('paymentDeptWrap').classList.remove('hidden');
   document.getElementById('paymentDept').value = pr.dept;
   document.getElementById('paymentTitle').value = pr.title;
@@ -19282,7 +19288,7 @@ function renderPaymentRequests() {
     const installmentsHTML = (pr.installments || []).map((it, idx) => `
       <div class="flex items-center justify-between gap-2 text-[11px] ${it.confirmed ? 'text-green-700' : 'text-gray-600'}">
         <span>${it.confirmed ? '✅' : '⬜'} ${escapeHtml(it.description || '')} — ${(it.amount || 0).toLocaleString('vi-VN')} VNĐ</span>
-        ${(!it.confirmed && pr.status === 'APPROVED' && canManage) ? `<button onclick="confirmPaymentInstallmentAction(${pr.id}, ${idx})" class="text-cyan-600 font-bold hover:underline">Xác nhận</button>` : ''}
+        ${(!it.confirmed && pr.status === 'APPROVED' && canManage) ? `<button data-op="confirmPaymentInstallmentAction" data-arg0="${pr.id}" data-arg1="${idx}" class="text-cyan-600 font-bold hover:underline">Xác nhận</button>` : ''}
       </div>
     `).join('');
     return `
@@ -19296,10 +19302,10 @@ function renderPaymentRequests() {
         </td>
         <td class="border p-2"><span class="px-2 py-0.5 rounded font-bold text-xs ${PAYMENT_STATUS_BADGE_CLS[pr.status] || ''}">${PAYMENT_STATUS_LABELS[pr.status] || pr.status}</span></td>
         <td class="border p-2 text-center space-y-1">
-          ${canManage && (pr.status === 'PENDING' || pr.status === 'NEED_INFO') ? `<button onclick="openEditPaymentRequest(${pr.id})" class="block w-full bg-gray-500 text-white px-2 py-1 rounded text-xs font-bold hover:bg-gray-600">✏️ Sửa</button>` : ''}
-          ${canManage && pr.status === 'PENDING' ? `<button onclick="approvePaymentRequestAction(${pr.id})" class="block w-full bg-emerald-600 text-white px-2 py-1 rounded text-xs font-bold hover:bg-emerald-700">✅ Xác nhận</button>` : ''}
-          ${canManage && pr.status === 'PENDING' ? `<button onclick="requestPaymentInfoAction(${pr.id})" class="block w-full bg-orange-500 text-white px-2 py-1 rounded text-xs font-bold hover:bg-orange-600">📝 Yêu Cầu Bổ Sung</button>` : ''}
-          ${currentUser.perms?.admin && pr.status !== 'PAID' ? `<button onclick="deletePaymentRequestAction(${pr.id})" class="block w-full bg-red-500 text-white px-2 py-1 rounded text-xs font-bold hover:bg-red-600">🗑️ Xoá</button>` : ''}
+          ${canManage && (pr.status === 'PENDING' || pr.status === 'NEED_INFO') ? `<button data-op="openEditPaymentRequest" data-arg0="${pr.id}" class="block w-full bg-gray-500 text-white px-2 py-1 rounded text-xs font-bold hover:bg-gray-600">✏️ Sửa</button>` : ''}
+          ${canManage && pr.status === 'PENDING' ? `<button data-op="approvePaymentRequestAction" data-arg0="${pr.id}" class="block w-full bg-emerald-600 text-white px-2 py-1 rounded text-xs font-bold hover:bg-emerald-700">✅ Xác nhận</button>` : ''}
+          ${canManage && pr.status === 'PENDING' ? `<button data-op="requestPaymentInfoAction" data-arg0="${pr.id}" class="block w-full bg-orange-500 text-white px-2 py-1 rounded text-xs font-bold hover:bg-orange-600">📝 Yêu Cầu Bổ Sung</button>` : ''}
+          ${currentUser.perms?.admin && pr.status !== 'PAID' ? `<button data-op="deletePaymentRequestAction" data-arg0="${pr.id}" class="block w-full bg-red-500 text-white px-2 py-1 rounded text-xs font-bold hover:bg-red-600">🗑️ Xoá</button>` : ''}
         </td>
       </tr>
     `;
@@ -23769,6 +23775,10 @@ bindCspDelegation('userHeader');
 // #contractInstallmentsList, dropdown Phê Duyệt #contractApprovalDropdownPanel) đều render VÀO BÊN
 // TRONG #contractSection, không có modal nào sống ngoài section như Vận Hành — nên chỉ cần đúng 1 gốc.
 bindCspDelegation('contractSection');
+// Thanh Toán — danh sách đề nghị (#paymentTableBody), form tạo/sửa (#paymentCreateForm) và các đợt
+// thanh toán (#paymentCreateInstallmentsList) đều render vào bên trong #paymentSection (openEditPaymentRequest()
+// chỉ chuyển sub-tab + đổ dữ liệu vào ĐÚNG form đã có trong section, không mở modal riêng) — 1 gốc là đủ.
+bindCspDelegation('paymentSection');
 
 // ==========================================
 // VĂN PHÒNG PHẨM — kỳ đăng ký (vppPeriods) + đăng ký của nhân viên (vppRegistrations). 3 sub-tab:
