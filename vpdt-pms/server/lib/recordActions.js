@@ -80,6 +80,17 @@ function editContract(payload, user, contract, hasAddenda, rootDept, appData, ro
   if (payload.custodianDept !== undefined) {
     const newDept = payload.dept !== undefined ? payload.dept : contract.dept;
     payload.custodianDept = (payload.custodianDept && String(payload.custodianDept).trim()) || newDept;
+    // Cùng validate khớp danh mục phòng ban/siêu thị thật như nhánh TẠO MỚI (createValidation.js) —
+    // trước đây SỬA không kiểm tra lại, chỉ là rủi ro nhập liệu chứ không leo thang quyền, nhưng đáng
+    // chặn cho sạch dữ liệu. CHỈ validate khi khác newDept — trường hợp mặc định (giữ nguyên newDept)
+    // tin theo ĐÚNG mức đã tin payload.dept/contract.dept (không qua danh mục) — audit Đợt 5, Giai
+    // đoạn 4.
+    if (payload.custodianDept !== newDept) {
+      const validCustodianDepts = new Set([...(appData?.depts || []), ...(appData?.stores || [])]);
+      if (!validCustodianDepts.has(payload.custodianDept)) {
+        throw new HttpError(400, `Đơn vị tiếp nhận theo dõi & thanh toán không hợp lệ: ${payload.custodianDept}`);
+      }
+    }
   }
   if (!contract.isAddendum && hasAddenda && payload.custodianDept !== undefined && payload.custodianDept !== contract.custodianDept) {
     throw new HttpError(409, 'Hợp đồng gốc đã có phụ lục — không thể đổi đơn vị tiếp nhận theo dõi & thanh toán');
@@ -510,6 +521,26 @@ function submitOperationEstimate(user, item, payload) {
   item.estimateHistory.push({ step: 0, approver: user.name, username: user.username, action: 'SUBMITTED', comment: '', time: nowVN() });
   item.estimateStatus = 'PENDING';
   item.estimateCurrentStep = 1;
+  return item;
+}
+
+// Lập lại dự toán sau khi bị Từ chối (REJECTED) — trước đây REJECTED là ngõ cụt, không có đường quay
+// lại DRAFT để sửa/gửi lại (khác REQUEST_CHANGES ở nơi khác trong hệ thống, vốn CÓ đường quay lại) —
+// audit Đợt 5, Giai đoạn 4, đã xác nhận với người dùng đây đúng là hành vi mong muốn. Cùng quyền với
+// submitOperationEstimate() (người lập dự toán, không phải người duyệt). Giữ nguyên estimateItems cũ
+// làm điểm bắt đầu chỉnh sửa (submitOperationEstimate() sau đó GHI ĐÈ toàn bộ items theo payload mới
+// nên giữ hay xoá không ảnh hưởng kết quả cuối, chỉ tiện cho người dùng không phải nhập lại từ đầu).
+function resetOperationEstimateToDraft(user, item) {
+  if (!user.perms?.admin && !user.perms?.operationEstimateCreate) {
+    throw new HttpError(403, 'Bạn không có quyền lập dự toán');
+  }
+  if (item.estimateStatus !== 'REJECTED') {
+    throw new HttpError(409, 'Chỉ lập lại được dự toán đang ở trạng thái "Đã từ chối"');
+  }
+  item.estimateHistory = item.estimateHistory || [];
+  item.estimateHistory.push({ step: 0, approver: user.name, username: user.username, action: 'RESET_TO_DRAFT', comment: '', time: nowVN() });
+  item.estimateStatus = 'DRAFT';
+  item.estimateCurrentStep = 0;
   return item;
 }
 
@@ -4534,7 +4565,7 @@ module.exports = {
   editOperationOrderDraft, submitOperationOrderDraft,
   editOperationStoreOpeningDraft, submitOperationStoreOpeningDraft,
   editOperationRepairDraft, submitOperationRepairDraft,
-  submitOperationEstimate,
+  submitOperationEstimate, resetOperationEstimateToDraft,
   createOperationWorkItem, updateOperationWorkItemProgress, acceptOperationWorkItem,
   computeParentWorkItemStatus, deleteOperationWorkItem, editOperationWorkItem,
   startOperationExecutionPeriod, confirmOperationUse

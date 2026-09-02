@@ -1704,6 +1704,27 @@ router.post('/operationRepairs/:id/estimate/submit', async (req, res) => {
   } catch (err) { handleError(res, `operationRepairs/${req.params.id}/estimate/submit`, err); }
 });
 
+// Vận Hành > "Siêu Thị" > Giai đoạn Dự toán — "Lập lại" sau khi bị Từ chối (REJECTED -> DRAFT), xem
+// lib/recordActions.js resetOperationEstimateToDraft() (audit Đợt 5, Giai đoạn 4).
+router.post('/operationStoreOpenings/:id/estimate/reset', async (req, res) => {
+  const itemId = Number(req.params.id);
+  if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
+  try {
+    const { freshUser } = await getFreshUser(req);
+    const result = await withLockedRecordForCollection('operationStoreOpenings', itemId, (item) => recordActions.resetOperationEstimateToDraft(freshUser, item));
+    res.json({ ok: true, item: result });
+  } catch (err) { handleError(res, `operationStoreOpenings/${req.params.id}/estimate/reset`, err); }
+});
+router.post('/operationRepairs/:id/estimate/reset', async (req, res) => {
+  const itemId = Number(req.params.id);
+  if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
+  try {
+    const { freshUser } = await getFreshUser(req);
+    const result = await withLockedRecordForCollection('operationRepairs', itemId, (item) => recordActions.resetOperationEstimateToDraft(freshUser, item));
+    res.json({ ok: true, item: result });
+  } catch (err) { handleError(res, `operationRepairs/${req.params.id}/estimate/reset`, err); }
+});
+
 // Vận Hành > "Siêu Thị" > Giai đoạn Thực hiện + Nghiệm thu — cây công việc đa cấp, bảng SQL RIÊNG
 // (dbo.OperationWorkItems, xem lib/operationWorkItemStore.js) — KHÔNG đi qua createForCollection/
 // withLockedRecordForCollection (đó là engine cho dbo.Records, dùng cho hồ sơ có quy trình duyệt).

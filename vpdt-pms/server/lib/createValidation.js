@@ -455,6 +455,19 @@ const CREATE_MODULE_CONFIGS = {
       // nghiệp vụ "không chọn đơn vị thì mặc định đơn vị mình sẽ theo dõi và thanh toán" — không bao giờ
       // để trống, tránh phải xử lý null rải rác ở mọi nơi đọc lại field này sau này.
       payload.custodianDept = (payload.custodianDept && String(payload.custodianDept).trim()) || payload.dept;
+      // Trước đây KHÔNG validate custodianDept khi người tạo CHỦ ĐỘNG chọn 1 đơn vị KHÁC payload.dept —
+      // chỉ là rủi ro nhập liệu (client tự do gõ/gửi thẳng), không leo thang quyền, nhưng đáng chặn cho
+      // sạch dữ liệu. CHỈ validate khi khác payload.dept — trường hợp mặc định (không chọn, giữ nguyên
+      // payload.dept) tin theo ĐÚNG mức đã tin payload.dept (bị ép về phòng ban người tạo ở
+      // validateAndPrepareCreate(), không qua danh mục) để không validate 2 lần cùng 1 giá trị theo 2
+      // tiêu chuẩn khác nhau. Cùng khuôn validDepts ở recruitmentJobs.hiringDept/trainingClasses.targetDept
+      // trong file này — audit Đợt 5, Giai đoạn 4.
+      if (payload.custodianDept !== payload.dept) {
+        const validCustodianDepts = new Set([...(appData?.depts || []), ...(appData?.stores || [])]);
+        if (!validCustodianDepts.has(payload.custodianDept)) {
+          throw new CreateError(400, `Đơn vị tiếp nhận theo dõi & thanh toán không hợp lệ: ${payload.custodianDept}`);
+        }
+      }
 
       if (payload.isAddendum) {
         const root = (collection || []).find(c => c.id === payload.rootContractId && !c.isAddendum);

@@ -50,7 +50,12 @@ function findCarPlateConflict(existingCarRegs, itemId, plate, startTime, endTime
     if (c.status === 'REJECTED' || c.status === 'CANCELLED') return false;
     const cStart = new Date(c.startTime).getTime();
     const cEnd = new Date(c.endTime).getTime();
-    if (!Number.isFinite(cStart) || !Number.isFinite(cEnd)) return false;
+    // Bản ghi lỗi định dạng (NaN) coi là CÓ trùng (an toàn hơn: chặn gán trùng biển số cho tới khi bản
+    // ghi lỗi được xử lý) thay vì bỏ qua như trước — khớp đúng lý luận findMeetingConflict() ở
+    // lib/createValidation.js (trước đây 2 hàm xử lý bất đối xứng: Phòng Họp coi NaN là "có trùng" còn
+    // Xe coi NaN là "không trùng" — audit Đợt 5, Giai đoạn 4. Chưa từng khai thác được vì mọi đường ghi
+    // hiện tại đã validate ngày hợp lệ trước khi tới đây, nhưng đáng đồng bộ lại cho nhất quán/an toàn.
+    if (!Number.isFinite(cStart) || !Number.isFinite(cEnd)) return true;
     return newStart < cEnd && cStart < newEnd;
   });
 }
