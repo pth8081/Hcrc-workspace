@@ -415,6 +415,16 @@ input[data-sdd-list] {
 </style>
 </head>
 <body class="bg-gray-100 min-h-screen font-sans">
+<!-- systemUsersDatalist/carDriversDatalist: 2 dropdown gợi ý tài khoản DÙNG CHUNG cho RẤT NHIỀU module
+     (Biên Bản Họp, Đào Tạo, Vận Hành, Cơ Cấu Tổ Chức, Xe...) qua data-sdd-list="..." — đặt NGAY DƯỚI
+     <body>, KHÔNG được đặt bên trong bất kỳ section module nào (kể cả section trước đây là #minutesSection)
+     vì mỗi section module có class "hidden" khi không phải tab đang mở — dropdown position:fixed lồng
+     trong 1 ancestor display:none thì CHÍNH NÓ cũng bị coi là display:none theo, getBoundingClientRect()
+     trả về toàn 0 dù đã gỡ class "hidden" của riêng nó, khiến widget hiện đúng nội dung nhưng KHÔNG BẤM
+     CHỌN ĐƯỢC ở bất kỳ module nào khác module đang chứa nó lúc đó là tab đang mở (bug phát hiện khi demo
+     Cơ Cấu Tổ Chức — đợt 10 CSP). -->
+<div id="systemUsersDatalist" class="hidden sdd-dropdown" data-sdd-dropdown></div>
+<div id="carDriversDatalist" class="hidden sdd-dropdown" data-sdd-dropdown></div>
 <!-- Màn chờ NGẮN hiện NGAY LẬP TỨC bằng HTML thuần (không đợi JS chạy) mỗi khi mở/tải lại trang — tránh
      "chớp" ra hẳn màn hình Đăng Nhập (ô tên đăng nhập/mật khẩu trống trơn) trong lúc tryRestoreSession()
      còn đang xác nhận phiên đăng nhập cũ (nếu có) rồi tải dữ liệu (initDatabase(), có thể mất vài giây ở
@@ -1851,13 +1861,7 @@ input[data-sdd-list] {
           </div>
           <button type="button" onclick="addAttendeeRow()" class="bg-rose-600 text-white px-3 py-1 rounded text-xs font-bold hover:bg-rose-700">➕ Thêm Người Tham Dự</button>
           <p class="text-[11px] text-gray-500 italic">Cột "Tài khoản" = Có: gõ Họ và tên sẽ gợi ý đúng tài khoản hệ thống (kèm phòng ban để phân biệt người trùng tên) — chọn xong tự điền Chức danh/Phòng/SĐT/Email từ hệ thống (vẫn sửa tay được). Chọn Không: nhập tự do, không tìm theo tài khoản hệ thống.</p>
-          <div id="systemUsersDatalist" class="hidden sdd-dropdown" data-sdd-dropdown></div>
         </div>
-
-        <!-- carDriversDatalist: RIÊNG cho picker "Lái xe được phân công" (#carAssignedDriver, xem
-        openCarProcessModal()) — chỉ gợi ý tài khoản đã đánh dấu "Là tài xế" (user.isDriver), KHÔNG dùng
-        chung systemUsersDatalist (toàn bộ nhân viên công ty) như trước — audit Đợt 5, Giai đoạn 4. -->
-        <div id="carDriversDatalist" class="hidden sdd-dropdown" data-sdd-dropdown></div>
 
         <div class="border-t pt-3 space-y-2">
           <label class="block font-semibold text-gray-600">Ý Kiến Chỉ Đạo (gán trực tiếp cho người thực hiện)</label>
@@ -6853,8 +6857,8 @@ input[data-sdd-list] {
        mỗi tab gác quyền riêng qua canAccessHrSubTab(), dispatch qua setHrSubTab(). -->
   <div id="hrSection" class="hidden space-y-6">
     <div class="flex flex-wrap gap-2 border-b pb-2">
-      <button type="button" onclick="setHrSubTab('FEEDBACK')" id="btnHrSubFeedback" class="px-3 py-1.5 rounded text-xs font-bold bg-teal-700 text-white">🤝 Quản Lý &amp; Phản Hồi Ý Kiến</button>
-      <button type="button" onclick="setHrSubTab('ORGCHART')" id="btnHrSubOrgChart" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">🌳 Cơ Cấu Tổ Chức</button>
+      <button type="button" data-op="setHrSubTab" data-arg0="FEEDBACK" id="btnHrSubFeedback" class="px-3 py-1.5 rounded text-xs font-bold bg-teal-700 text-white">🤝 Quản Lý &amp; Phản Hồi Ý Kiến</button>
+      <button type="button" data-op="setHrSubTab" data-arg0="ORGCHART" id="btnHrSubOrgChart" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">🌳 Cơ Cấu Tổ Chức</button>
     </div>
 
     <div id="hrSubFeedback" class="space-y-4">
@@ -6882,10 +6886,10 @@ input[data-sdd-list] {
         <h3 class="font-bold text-teal-900 text-base flex items-center gap-2">🌳 Cơ Cấu Tổ Chức</h3>
         <p class="text-xs text-teal-800">Cây quản lý trực tiếp của <b>toàn bộ nhân viên công ty</b> (mọi phòng ban) — dùng làm căn cứ để trưởng phòng xem được việc của nhân viên mình quản lý (Vận Hành, Công Việc). Có thể có nhiều gốc cây (nhân viên không có quản lý trực tiếp).</p>
         <div class="flex flex-wrap items-center gap-2 pt-1">
-          <button type="button" onclick="downloadOrgChartTemplate()" class="bg-gray-600 text-white px-2.5 py-1.5 rounded text-xs font-semibold hover:bg-gray-700 transition">📄 Tải Mẫu (.xlsx) — chuẩn bị dữ liệu để nhập</button>
-          <button type="button" onclick="exportOrgChartExcel()" class="bg-emerald-700 text-white px-2.5 py-1.5 rounded text-xs font-semibold hover:bg-emerald-800 transition">📊 Xuất Excel — lưu hồ sơ cơ cấu hiện tại</button>
+          <button type="button" data-op="downloadOrgChartTemplate" class="bg-gray-600 text-white px-2.5 py-1.5 rounded text-xs font-semibold hover:bg-gray-700 transition">📄 Tải Mẫu (.xlsx) — chuẩn bị dữ liệu để nhập</button>
+          <button type="button" data-op="exportOrgChartExcel" class="bg-emerald-700 text-white px-2.5 py-1.5 rounded text-xs font-semibold hover:bg-emerald-800 transition">📊 Xuất Excel — lưu hồ sơ cơ cấu hiện tại</button>
           <label id="btnOrgChartImportExcel" class="hidden bg-teal-700 text-white px-2.5 py-1.5 rounded text-xs font-semibold hover:bg-teal-800 transition cursor-pointer">
-            📥 Nhập Từ Excel<input type="file" accept=".xlsx" onchange="importOrgChartExcel(event)" class="hidden">
+            📥 Nhập Từ Excel<input type="file" accept=".xlsx" data-op-change="importOrgChartExcel" data-arg-event="0" class="hidden">
           </label>
         </div>
       </div>
@@ -6898,18 +6902,18 @@ input[data-sdd-list] {
     <div class="bg-white rounded-lg shadow-xl max-w-md w-full">
       <div class="p-4 border-b flex justify-between items-center">
         <h3 class="font-bold text-base text-gray-800">✏️ Đổi Quản Lý Trực Tiếp</h3>
-        <button onclick="closeOrgChartManagerPicker()" class="text-gray-400 hover:text-gray-600 text-2xl leading-none">&times;</button>
+        <button data-op="closeOrgChartManagerPicker" class="text-gray-400 hover:text-gray-600 text-2xl leading-none">&times;</button>
       </div>
       <div class="p-4 space-y-3">
         <p id="orgChartManagerModalSub" class="text-xs text-gray-500"></p>
         <div class="relative">
           <input id="orgChartManagerInput" data-sdd-list="systemUsersDatalist" autocomplete="off" placeholder="Gõ tên/tài khoản để tìm..." class="w-full border p-2 rounded text-sm">
         </div>
-        <button type="button" onclick="clearOrgChartManager()" class="text-xs text-red-600 hover:underline">Bỏ quản lý trực tiếp (đưa lên gốc cây)</button>
+        <button type="button" data-op="clearOrgChartManager" class="text-xs text-red-600 hover:underline">Bỏ quản lý trực tiếp (đưa lên gốc cây)</button>
       </div>
       <div class="p-4 border-t flex justify-end gap-2">
-        <button onclick="closeOrgChartManagerPicker()" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 hover:bg-gray-300">Hủy</button>
-        <button onclick="submitOrgChartManager()" class="px-3 py-1.5 rounded text-xs font-bold bg-emerald-600 text-white hover:bg-emerald-700">Lưu</button>
+        <button data-op="closeOrgChartManagerPicker" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 hover:bg-gray-300">Hủy</button>
+        <button data-op="submitOrgChartManager" class="px-3 py-1.5 rounded text-xs font-bold bg-emerald-600 text-white hover:bg-emerald-700">Lưu</button>
       </div>
     </div>
   </div>
@@ -23815,6 +23819,13 @@ bindCspDelegation('budgetSection');
 bindCspDelegation('budgetPeriodTemplateModal');
 bindCspDelegation('budgetProcessModal');
 
+// Cơ Cấu Tổ Chức — sub-tab "🌳 Cơ Cấu Tổ Chức" (#hrSubOrgChart) render TRONG #hrSection (module Nhân
+// Sự dùng chung 1 gốc cho mọi sub-tab, kể cả #hrSubFeedback sau này khi chuyển tới lượt) — modal "Đổi
+// Quản Lý Trực Tiếp" (#orgChartManagerModal) sống NGOÀI section (giống các modal khác) nên cần thêm 1
+// gốc riêng — 2 gốc tổng cộng.
+bindCspDelegation('hrSection');
+bindCspDelegation('orgChartManagerModal');
+
 // ==========================================
 // VĂN PHÒNG PHẨM — kỳ đăng ký (vppPeriods) + đăng ký của nhân viên (vppRegistrations). 3 sub-tab:
 // Đăng Ký (ai cũng vào được) / Kỳ Đăng Ký + Báo Cáo Tổng Hợp (chỉ vppManage/admin).
@@ -40719,7 +40730,7 @@ function buildOrgChartNode(u, allUsers, depth, canEdit) {
   const indent = '&nbsp;'.repeat(depth * 4) + (depth > 0 ? '↳ ' : '');
   const reports = getDirectReports(u.username, allUsers).sort((a, b) => (a.name || '').localeCompare(b.name || ''));
   const jobTitle = u.jobTitle ? ` — ${escapeHtml(u.jobTitle)}` : '';
-  const editBtn = canEdit ? `<button type="button" onclick="openOrgChartManagerPicker('${u.username}')" class="text-xs px-2 py-0.5 bg-gray-200 rounded font-bold hover:bg-gray-300 ml-2">✏️ Đổi quản lý</button>` : '';
+  const editBtn = canEdit ? `<button type="button" data-op="openOrgChartManagerPicker" data-arg0="${u.username}" class="text-xs px-2 py-0.5 bg-gray-200 rounded font-bold hover:bg-gray-300 ml-2">✏️ Đổi quản lý</button>` : '';
   let html = `<div class="py-1 border-b border-gray-100 flex items-center flex-wrap gap-1">
     <span>${indent}<strong>${escapeHtml(u.name)}</strong>${jobTitle} <span class="text-gray-400">(${escapeHtml(u.dept || 'Chưa rõ phòng')})</span>${reports.length ? ` <span class="text-[10px] text-gray-400">— ${reports.length} cấp dưới trực tiếp</span>` : ''}</span>
     ${editBtn}
