@@ -1,10 +1,84 @@
 # Phiên bản hiện tại
 
-**3.8** — đã merge vào `main` (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge
+**3.9** — đã merge vào `main` (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge
 góc màn hình + `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần
 kiểu `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
 
-## Cập nhật gần nhất — CSP unsafe-inline: đợt 7/N — module VPP (Văn Phòng Phẩm)
+## Cập nhật gần nhất — CSP unsafe-inline: đợt 8/N — module Đào Tạo (LMS)
+
+Tiếp tục đợt 7 (VPP, xem mục "Trước đó" ngay bên dưới) — đợt này chuyển module **Đào Tạo** (Truyền Thông
+Nội Bộ > Đào tạo — 9 sub-tab: Dashboard/Lớp Học/Chương Trình/Kế Hoạch Đào Tạo/Đăng Ký Của Tôi/Kho Tài
+Liệu/Lộ Trình Thăng Tiến/Đào Tạo Tân Binh/Ngân Hàng Câu Hỏi, cộng 6 modal xử lý riêng) — module lớn và
+phức tạp nhất chuyển đổi từ trước tới nay:
+
+- **104 điểm** `onclick`/`onchange`/`oninput`/`onsubmit` chuyển sang `data-op*`, dùng lại đúng hạ tầng
+  dùng chung (`cspDispatchOp`/`bindCspDelegation`):
+  - **33 điểm** trong HTML tĩnh `#internalTrainingLmsSection` (9 nút chuyển sub-tab, form tạo/sửa lớp
+    học, form tạo bài test/khóa học/kế hoạch/tài liệu/lộ trình thăng tiến/đào tạo tân binh, các ô lọc
+    dashboard, picker mời danh sách).
+  - **21 điểm** trong 6 modal sống **NGOÀI** section (giống Xe/Vận Hành/VPP): `#trainingResultsModal`,
+    `#trainingRosterModal`, `#trainingEditClassModal`, `#trainingTakeTestModal`, `#trainingClassQrModal`,
+    `#trainingJoinClassModal`.
+  - **~50 điểm** trong các hàm render động (`renderTrainingClasses`, `renderTestBuilderQuestions`,
+    `renderTrainingMyRegs`, `renderTrainingDocuments`, `renderCareerPaths`, `renderOnboardingPaths`...).
+  - Cần **7 gốc** `bindCspDelegation` — nhiều nhất từ trước tới nay (1 gốc section chính + 6 gốc modal),
+    phản ánh đúng quy mô module (9 sub-tab, 6 modal riêng biệt).
+  - **Loại khỏi phạm vi**: thanh tab cha "Truyền Thông" (đã chuyển ở đợt hạ tầng sidebar #704), màn cấu
+    hình admin/Hệ Thống (Quản Lý Loại Đào Tạo...), module Tin Tức (sibling sub-tab dùng chung 1 số hàm
+    tương tự nhưng thuộc phạm vi module khác).
+- **5 dạng cú pháp nguồn** mà script chuyển đổi chung không xử lý tự động được, mỗi dạng xử lý bằng cách
+  thêm hàm helper nhỏ trong nguồn (không sửa script chuyển đổi):
+  1. Chuỗi gọi phương thức DOM nhiều bước (`document.getElementById(...).classList.add(...)`) — thêm
+     `closeTrainingClassQrModal()`/`closeTrainingResultsModal()`.
+  2. `oninput` sửa trực tiếp phần tử mảng/object (`tbQuestions[qi].text=this.value`) VÀ tái sử dụng hàm
+     render có sẵn sẽ làm mất focus khi gõ (re-render mỗi phím) — thêm 3 hàm mới
+     `tbSetQuestionText`/`tbSetQuestionPoints`/`tbSetOptionText` **cố tình KHÔNG** gọi lại
+     `renderTestBuilderQuestions()`.
+  3. `this.closest(...)` duyệt cây DOM + nhiều câu lệnh trong 1 `onclick` — thêm `removeCpStageRow(el)`.
+  4. `onchange`/`oninput` nhiều câu lệnh (converter chỉ hỗ trợ chuỗi lệnh cho `onclick`) — thêm
+     `onTrainingDocFilterCategoryChange()`.
+  5. **Phát hiện giới hạn kiến trúc thật của hạ tầng CSP dùng chung**: `this.checked` KHÔNG phải 1 trong 3
+     slot tham số đặc biệt được hỗ trợ (chỉ `data-arg-value`/`data-arg-el`/`data-arg-event` — xem chú
+     thích trong `cspReadArgSlot`). Phát hiện qua đọc trực tiếp mã nguồn hạ tầng (không phải qua test
+     fail) — nếu chuyển máy móc sẽ truyền chuỗi ký tự `"this.checked"` làm tham số, gây lỗi âm thầm. Xử
+     lý bằng cách đổi 2 hàm checkbox `onchange` (`tbToggleCorrect`, `ttTakeSelectOption`) sang nhận phần
+     tử qua `data-arg-el` rồi tự đọc `.checked` bên trong.
+- **1 lỗi thật phát hiện qua chạy lại bộ test hồi quy** (không phải qua demo Playwright thủ công — demo
+  chỉ đi qua các luồng admin/quản lý, không luyện qua bước làm bài test dạng chọn đáp án): đổi chữ ký
+  `ttTakeSelectOption(optId, checkboxEl)` ở mục 5 phía trên làm vỡ 3 kịch bản trong
+  `tests/test-internal-training.js` gọi thẳng `ttTakeSelectOption(optId, true)` (đúng chữ ký cũ nhận
+  boolean, không qua checkbox DOM) — 3 bài test "làm bài test" bị chấm sai (FAILED thay vì PASSED). Sửa
+  bằng cách tách lại thành 2 hàm: `ttTakeSelectOption(optId, checked)` giữ nguyên chữ ký cũ nhận boolean
+  (test gọi thẳng hàm này), và thêm hàm mỏng `ttTakeToggleOptionFromCheckbox(optId, checkboxEl)` đọc
+  `.checked` rồi gọi hàm trên — checkbox trong HTML đổi sang gọi hàm mỏng này qua `data-arg-el`. Chạy lại
+  `tests/test-internal-training.js` xác nhận 49/49 kịch bản pass, chạy lại toàn bộ 46 file thấy lại đúng
+  44/46 OK như kỳ vọng (2 file known-flaky bên dưới) trước khi merge.
+- **`buildActionCell()`/`buildDashboardCardsHTML()`/`buildPaginationBoxHTML()`/`renderPeopleMultiSelect()`**
+  tiếp tục KHÔNG đụng — vẫn dành cho 1 đợt riêng cuối cùng sau khi hết mọi module đơn lẻ.
+
+**Xác nhận không ảnh hưởng** — 2 lớp kiểm tra độc lập trước khi merge:
+- Demo Playwright thật (SQL Server + server local + đăng nhập UI thật qua tài khoản demo tạm 2FA thật,
+  xoá lại ngay sau demo — cũng seed tạm 1 "Loại Đào Tạo" cấu hình admin trống sẵn trong sandbox rồi xoá
+  lại, KHÔNG phải bug code): tạo 1 bài test trong Ngân Hàng Câu Hỏi (thêm/xoá đáp án, tick đáp án đúng),
+  tạo 1 lớp Online + 1 lớp Offline có gán bài test vừa tạo, mở đủ 6 modal từ dòng lớp Offline (Sửa/Kết
+  Quả/Thêm Học Viên qua picker + Excel/Mã QR/Bắt Đầu Lớp), thêm rồi xoá 1 dòng cấp bậc trong Lộ Trình
+  Thăng Tiến, đổi bộ lọc danh mục Kho Tài Liệu, duyệt đủ cả 9 sub-tab, xoá sạch dữ liệu demo — toàn bộ
+  đúng, không có lỗi JS console mới (401/404/ERR_CONNECTION_RESET còn lại là nhiễu môi trường sandbox có
+  sẵn từ trước, không liên quan thay đổi lần này).
+- Chạy lại toàn bộ 46 file test hồi quy (`tests/test-*.js`) — 44/46 OK, đúng 2 file known-flaky quen
+  thuộc từ đợt 7 (`test-audit-fixes-batch1.js`/`test-audit-round2-cluster1.js`, timeout do đua tranh
+  kết nối SQL Server ở hạ tầng test, không liên quan thay đổi lần này).
+
+**Deploy-impact:** KHÔNG đổi `sql/schema.sql`, KHÔNG thêm biến môi trường mới, KHÔNG thêm `dependencies`
+mới — toàn bộ thay đổi nằm trong `public/index.html` (thuần client JS/HTML), deploy an toàn chỉ với copy
+code + `pm2 restart`, không cần thao tác 1 lần nào khác.
+
+**Còn lại:** Ngân Sách, Cơ Cấu Tổ Chức, Báo Cáo, Nhân Sự, Quản Trị/Hệ Thống, Hỗ Trợ IT, Đồng Phục, Giấy
+Phép, Gia Hạn CNTT, Tuyển Dụng, Tin Tức/Truyền Thông, Biên Bản Họp, Công Việc, Văn Bản Trình, Tài Liệu... —
+dùng hạ tầng `data-op*`/`bindCspDelegation()` đã xây, làm tiếp tuần tự mỗi module 1 commit + demo +
+regression trước khi merge, tới khi hết toàn bộ điểm mới gỡ `unsafe-inline`.
+
+## Trước đó — CSP unsafe-inline: đợt 7/N — module VPP (Văn Phòng Phẩm)
 
 Tiếp tục đợt 6 (Phòng Họp, xem mục "Trước đó" ngay bên dưới) — đợt này chuyển module **VPP** (đăng ký
 Văn phòng phẩm, kỳ đăng ký, báo cáo tổng hợp — 3 sub-tab Đăng Ký/Kỳ Đăng Ký/Báo Cáo Tổng Hợp):
