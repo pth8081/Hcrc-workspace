@@ -1207,8 +1207,8 @@ input[data-sdd-list] {
   <!-- Màn hình MODULE HỢP ĐỒNG & GIẤY PHÉP -->
   <div id="contractSection" class="hidden space-y-6">
     <div class="flex gap-2">
-      <button onclick="setContractSubTab('APPROVAL')" id="btnContractSubApproval" class="px-3 py-1 rounded text-xs font-bold bg-cyan-700 text-white">⏳ Phê Duyệt</button>
-      <button onclick="setContractSubTab('MANAGE')" id="btnContractSubManage" class="px-3 py-1 rounded text-xs font-bold bg-gray-200 text-gray-700">📄 Quản Lý Hợp Đồng & Giấy Phép</button>
+      <button data-op="setContractSubTab" data-arg0="APPROVAL" id="btnContractSubApproval" class="px-3 py-1 rounded text-xs font-bold bg-cyan-700 text-white">⏳ Phê Duyệt</button>
+      <button data-op="setContractSubTab" data-arg0="MANAGE" id="btnContractSubManage" class="px-3 py-1 rounded text-xs font-bold bg-gray-200 text-gray-700">📄 Quản Lý Hợp Đồng & Giấy Phép</button>
     </div>
 
     <div id="contractDashboardCards"></div>
@@ -1217,7 +1217,7 @@ input[data-sdd-list] {
       <h3 id="contractManageFormTitle" class="font-bold text-cyan-900 text-base flex items-center gap-2">➕ Tạo Mới Hợp Đồng / Giấy Phép</h3>
       <p id="contractManageFormHint" class="text-xs text-cyan-800">Hồ sơ mới sẽ chờ phê duyệt (trừ khi bạn có quyền tự duyệt) rồi mới chuyển sang "Quản Lý Hợp Đồng & Giấy Phép" để theo dõi.</p>
 
-      <form id="contractForm" onsubmit="submitContractReq(event)" class="bg-white p-3 rounded border text-xs space-y-3">
+      <form id="contractForm" data-op-submit="submitContractReq" class="bg-white p-3 rounded border text-xs space-y-3">
         <!-- "Loại Thao Tác" — danh sách option đổi theo đúng sub-tab đang đứng (xem setContractSubTab()):
              tab Phê Duyệt = Tạo Mới/Bổ Sung Phụ Lục (CẦN duyệt, có Đợt Thanh Toán); tab Quản Lý HĐ =
              Nhập Hợp Đồng/Phụ Lục ĐÃ KÝ (tự động APPROVED ngay, không qua hàng chờ — chỉ hồ sơ được
@@ -1225,7 +1225,7 @@ input[data-sdd-list] {
              là nhập tay hồ sơ đã có chữ ký sẵn ngoài hệ thống, không có bước "chờ duyệt"). -->
         <div id="contractOpModeWrap">
           <label class="block font-semibold text-gray-600 mb-1">Loại Thao Tác</label>
-          <select id="contractOpMode" onchange="onContractOpModeChange()" class="w-full md:w-64 border p-1.5 rounded bg-white font-semibold"></select>
+          <select id="contractOpMode" data-op-change="onContractOpModeChange" class="w-full md:w-64 border p-1.5 rounded bg-white font-semibold"></select>
         </div>
         <!-- v1.32.1 từng đổi <select> gốc sang nút + bảng chọn tự dựng (button+panel tự xử lý click
              trong JS, absolute positioning + listener "click ra ngoài để đóng") vì native <select> đôi
@@ -1241,7 +1241,7 @@ input[data-sdd-list] {
         <div id="contractAddendumTargetWrap" class="hidden">
           <label id="contractAddendumTargetLabel" class="block font-semibold text-gray-600 mb-1">Chọn Hợp Đồng Để Bổ Sung Phụ Lục</label>
           <input type="hidden" id="contractAddendumTarget" value="">
-          <input id="contractAddendumTargetInput" data-sdd-list="contractAddendumTargetDatalist" autocomplete="off" oninput="resolveContractAddendumTargetInput(this.value)" placeholder="Gõ mã hoặc tên hợp đồng để tìm..." class="w-full border p-1.5 rounded bg-white">
+          <input id="contractAddendumTargetInput" data-sdd-list="contractAddendumTargetDatalist" autocomplete="off" data-op-input="resolveContractAddendumTargetInput" data-arg-value="0" placeholder="Gõ mã hoặc tên hợp đồng để tìm..." class="w-full border p-1.5 rounded bg-white">
           <div id="contractAddendumTargetDatalist" class="hidden sdd-dropdown" data-sdd-dropdown></div>
         </div>
         <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
@@ -1251,7 +1251,7 @@ input[data-sdd-list] {
           </div>
           <div>
             <label class="block font-semibold text-gray-600 mb-1">Phòng Ban Quản Lý</label>
-            <select id="contractDept" onchange="refreshContractCodePreview()" class="w-full border p-1.5 rounded bg-white font-semibold" required></select>
+            <select id="contractDept" data-op-change="refreshContractCodePreview" class="w-full border p-1.5 rounded bg-white font-semibold" required></select>
           </div>
           <div>
             <label class="block font-semibold text-gray-600 mb-1">Đơn Vị Tiếp Nhận Theo Dõi &amp; Thanh Toán</label>
@@ -1260,7 +1260,7 @@ input[data-sdd-list] {
           </div>
           <div>
             <label class="block font-semibold text-gray-600 mb-1">Loại Pháp Lý</label>
-            <select id="contractType" onchange="refreshContractCodePreview()" class="w-full border p-1.5 rounded bg-white" required></select>
+            <select id="contractType" data-op-change="refreshContractCodePreview" class="w-full border p-1.5 rounded bg-white" required></select>
           </div>
           <!-- Cùng khuôn subApprovalLevel ở form Văn Bản Trình — <select> thật thay vì ô tìm-kiếm-gõ-chọn
                (danh sách CONTRACT_APPROVAL_LEVELS tĩnh chỉ 4 lựa chọn, không cần tìm kiếm; trước đây dùng
@@ -1268,11 +1268,11 @@ input[data-sdd-list] {
                qua onchange của <select> đảm bảo renderContractApprovalLayerCheckboxes() LUÔN chạy). -->
           <div id="contractApprovalLevelWrap">
             <label class="block font-semibold text-gray-600 mb-1">Cấp Phê Duyệt Cuối Cùng</label>
-            <select id="contractApprovalLevel" class="w-full border p-1.5 rounded bg-white font-semibold" onchange="renderContractApprovalLayerCheckboxes()"></select>
+            <select id="contractApprovalLevel" class="w-full border p-1.5 rounded bg-white font-semibold" data-op-change="renderContractApprovalLayerCheckboxes"></select>
           </div>
           <div id="contractApprovalDropdownWrap" class="relative">
             <label class="block font-semibold text-gray-600 mb-1">Phê Duyệt</label>
-            <button type="button" id="contractApprovalDropdownBtn" onclick="toggleContractApprovalDropdown(event)" class="w-full border p-1.5 rounded bg-white text-left flex justify-between items-center gap-1">
+            <button type="button" id="contractApprovalDropdownBtn" data-op="toggleContractApprovalDropdown" data-arg-event="0" class="w-full border p-1.5 rounded bg-white text-left flex justify-between items-center gap-1">
               <span id="contractApprovalDropdownLabel" class="text-gray-500 truncate">-- Chọn cấp phê duyệt --</span>
               <span class="text-gray-400 shrink-0">▾</span>
             </button>
@@ -1288,7 +1288,7 @@ input[data-sdd-list] {
           </div>
           <div>
             <label class="block font-semibold text-gray-600 mb-1">Giá Trị Hợp Đồng (VNĐ)</label>
-            <input id="contractAmount" type="text" inputmode="numeric" placeholder="100.000.000" oninput="recalcContractInstallmentAmountsFromPercent()" class="w-full border p-1.5 rounded money-input" required>
+            <input id="contractAmount" type="text" inputmode="numeric" placeholder="100.000.000" data-op-input="recalcContractInstallmentAmountsFromPercent" class="w-full border p-1.5 rounded money-input" required>
           </div>
           <div>
             <label class="block font-semibold text-gray-600 mb-1">Ngày Hiệu Lực</label>
@@ -1318,13 +1318,13 @@ input[data-sdd-list] {
         <div id="contractInstallmentsWrap" class="border-t pt-3">
           <div class="flex justify-between items-center mb-2">
             <label class="font-semibold text-gray-600">Các Đợt Thanh Toán</label>
-            <button type="button" onclick="addContractInstallmentRow()" class="text-cyan-600 font-bold hover:underline">+ Thêm Đợt</button>
+            <button type="button" data-op="addContractInstallmentRow" class="text-cyan-600 font-bold hover:underline">+ Thêm Đợt</button>
           </div>
           <div id="contractInstallmentsList" class="space-y-2"></div>
         </div>
         <div class="flex justify-end gap-2">
-          <button type="button" id="contractCancelEditBtn" onclick="cancelEditContract()" class="hidden bg-gray-200 text-gray-700 px-5 py-2 rounded font-bold hover:bg-gray-300">Huỷ Sửa</button>
-          <button type="button" id="contractPreviewWfBtn" onclick="previewContractApprovalWorkflow()" class="bg-gray-200 text-gray-700 px-4 py-2 rounded font-bold hover:bg-gray-300">🔍 Xem Quy Trình</button>
+          <button type="button" id="contractCancelEditBtn" data-op="cancelEditContract" class="hidden bg-gray-200 text-gray-700 px-5 py-2 rounded font-bold hover:bg-gray-300">Huỷ Sửa</button>
+          <button type="button" id="contractPreviewWfBtn" data-op="previewContractApprovalWorkflow" class="bg-gray-200 text-gray-700 px-4 py-2 rounded font-bold hover:bg-gray-300">🔍 Xem Quy Trình</button>
           <button type="submit" id="contractSubmitBtn" class="bg-cyan-600 text-white px-5 py-2 rounded font-bold hover:bg-cyan-700">Gửi phê duyệt</button>
         </div>
       </form>
@@ -1335,13 +1335,13 @@ input[data-sdd-list] {
       <div class="grid grid-cols-1 md:grid-cols-7 gap-3 mt-3">
         <div>
           <label class="block text-xs font-semibold text-gray-600 mb-1">Lọc Theo Phòng Ban</label>
-          <select id="filterDeptContract" onchange="onContractFilterChange()" class="w-full border p-2 rounded text-sm bg-white">
+          <select id="filterDeptContract" data-op-change="onContractFilterChange" class="w-full border p-2 rounded text-sm bg-white">
             <option value="">-- Tất cả phòng ban --</option>
           </select>
         </div>
         <div>
           <label class="block text-xs font-semibold text-gray-600 mb-1">Loại Hồ Sơ</label>
-          <select id="filterContractType" onchange="onContractFilterChange()" class="w-full border p-2 rounded text-sm bg-white">
+          <select id="filterContractType" data-op-change="onContractFilterChange" class="w-full border p-2 rounded text-sm bg-white">
             <option value="">-- Tất cả --</option>
             <option value="NEW">📄 Hợp đồng gốc</option>
             <option value="ADDENDUM">📎 Bổ sung phụ lục</option>
@@ -1349,7 +1349,7 @@ input[data-sdd-list] {
         </div>
         <div>
           <label class="block text-xs font-semibold text-gray-600 mb-1">Tài Liệu Ký (Quản Lý HĐ)</label>
-          <select id="filterSignedStatusContract" onchange="onContractFilterChange()" class="w-full border p-2 rounded text-sm bg-white">
+          <select id="filterSignedStatusContract" data-op-change="onContractFilterChange" class="w-full border p-2 rounded text-sm bg-white">
             <option value="">-- Tất cả --</option>
             <option value="PENDING">⏳ Chờ duyệt</option>
             <option value="APPROVED">✅ Đã duyệt</option>
@@ -1358,7 +1358,7 @@ input[data-sdd-list] {
         </div>
         <div>
           <label class="block text-xs font-semibold text-gray-600 mb-1">Lọc Theo Hiệu Lực</label>
-          <select id="filterExpiryContract" onchange="onContractFilterChange()" class="w-full border p-2 rounded text-sm bg-white">
+          <select id="filterExpiryContract" data-op-change="onContractFilterChange" class="w-full border p-2 rounded text-sm bg-white">
             <option value="">-- Tất cả --</option>
             <option value="ACTIVE">✅ Còn hiệu lực</option>
             <option value="SOON">⏰ Sắp hết hạn (≤ 30 ngày)</option>
@@ -1367,15 +1367,15 @@ input[data-sdd-list] {
         </div>
         <div>
           <label class="block text-xs font-semibold text-gray-600 mb-1">Tạo Từ Ngày</label>
-          <input id="filterFromDateContract" type="date" onchange="onContractFilterChange()" class="w-full border p-2 rounded text-sm bg-white">
+          <input id="filterFromDateContract" type="date" data-op-change="onContractFilterChange" class="w-full border p-2 rounded text-sm bg-white">
         </div>
         <div>
           <label class="block text-xs font-semibold text-gray-600 mb-1">Đến Ngày</label>
-          <input id="filterToDateContract" type="date" onchange="onContractFilterChange()" class="w-full border p-2 rounded text-sm bg-white">
+          <input id="filterToDateContract" type="date" data-op-change="onContractFilterChange" class="w-full border p-2 rounded text-sm bg-white">
         </div>
         <div>
           <label class="block text-xs font-semibold text-gray-600 mb-1">Từ Khóa</label>
-          <input id="filterKeywordContract" oninput="onContractFilterChange()" placeholder="Mã, tên, đối tác..." class="w-full border p-2 rounded text-sm">
+          <input id="filterKeywordContract" data-op-input="onContractFilterChange" placeholder="Mã, tên, đối tác..." class="w-full border p-2 rounded text-sm">
         </div>
       </div>
     </details>
@@ -15751,7 +15751,7 @@ function renderContractApprovalLayerCheckboxes() {
 
     return `
       <label class="flex items-start gap-1.5 text-xs p-1 rounded ${disabled ? 'opacity-50' : 'cursor-pointer hover:bg-cyan-50'}">
-        <input type="checkbox" class="contract-layer-toggle mt-0.5" value="${layer.key}" ${locked ? 'checked' : ''} ${disabled ? 'disabled' : ''} onchange="onContractApprovalLayerToggle('${layer.key}')">
+        <input type="checkbox" class="contract-layer-toggle mt-0.5" value="${layer.key}" ${locked ? 'checked' : ''} ${disabled ? 'disabled' : ''} data-op-change="onContractApprovalLayerToggle" data-arg0="${layer.key}">
         <span>
           <span class="font-semibold text-gray-700">${escapeHtml(layer.label)}</span>
           ${locked ? `<span class="block text-[10px] text-amber-600 italic">Bắt buộc theo cấp phê duyệt đã chọn.</span>`
@@ -18059,12 +18059,12 @@ function renderContractInstallmentsList(installments) {
     <div class="flex gap-2 items-center" data-installment-row="${idx}">
       <input placeholder="Mô tả đợt (VD: Đợt 1 - tạm ứng 30%)" value="${escapeHtml(it.description || '')}" class="flex-1 border p-1.5 rounded contract-installment-desc">
       <div class="flex items-center gap-0.5">
-        <input type="text" inputmode="decimal" placeholder="%" value="${percentDisplay}" oninput="onContractInstallmentPercentInput(this)" title="Nhập % để tự tính Số tiền theo Giá Trị Hợp Đồng" class="w-16 border p-1.5 rounded text-right contract-installment-percent">
+        <input type="text" inputmode="decimal" placeholder="%" value="${percentDisplay}" data-op-input="onContractInstallmentPercentInput" data-arg-el="0" title="Nhập % để tự tính Số tiền theo Giá Trị Hợp Đồng" class="w-16 border p-1.5 rounded text-right contract-installment-percent">
         <span class="text-gray-500 text-xs">%</span>
       </div>
-      <input type="text" inputmode="numeric" placeholder="Số tiền (VNĐ)" value="${formatMoneyDisplay(amt)}" oninput="onContractInstallmentAmountInput(this)" class="w-40 border p-1.5 rounded contract-installment-amount money-input">
+      <input type="text" inputmode="numeric" placeholder="Số tiền (VNĐ)" value="${formatMoneyDisplay(amt)}" data-op-input="onContractInstallmentAmountInput" data-arg-el="0" class="w-40 border p-1.5 rounded contract-installment-amount money-input">
       <input type="date" value="${it.dueDate || ''}" class="w-40 border p-1.5 rounded contract-installment-due">
-      <button type="button" onclick="removeContractInstallmentRow(${idx})" class="text-red-500 font-bold hover:underline px-1">✕</button>
+      <button type="button" data-op="removeContractInstallmentRow" data-arg0="${idx}" class="text-red-500 font-bold hover:underline px-1">✕</button>
     </div>
   `;
   }).join('') || '<p class="text-gray-400 italic text-[11px]">Chưa có đợt thanh toán nào — bấm "+ Thêm Đợt" nếu cần.</p>';
@@ -18559,7 +18559,7 @@ function buildContractRowHTML(c, { addendumCount = 0, isExpanded = false, isChil
         : '';
 
   const expandToggleHTML = addendumCount > 0
-    ? `<button onclick="toggleContractFamily(${c.id})" class="text-cyan-700 font-bold mr-1">${isExpanded ? '▾' : '▸'}</button><span class="text-[10px] bg-cyan-100 text-cyan-800 px-1.5 py-0.5 rounded-full">${addendumCount} phụ lục</span>`
+    ? `<button data-op="toggleContractFamily" data-arg0="${c.id}" class="text-cyan-700 font-bold mr-1">${isExpanded ? '▾' : '▸'}</button><span class="text-[10px] bg-cyan-100 text-cyan-800 px-1.5 py-0.5 rounded-full">${addendumCount} phụ lục</span>`
     : '';
 
   const codeCell = isChild
@@ -18589,7 +18589,7 @@ function buildContractRowHTML(c, { addendumCount = 0, isExpanded = false, isChil
   const canDownloadContractFile = () => canDownloadFile(currentUser, 'contract', c.dept, c.creator) ||
     (!!c.custodianDept && c.custodianDept !== c.dept && canDownloadFile(currentUser, 'contract', c.custodianDept, c.creator));
 
-  const primaryBtnHTML = `<button onclick="runContractAction(${c.id}, 'detail')" class="bg-teal-600 text-white px-2 py-1 rounded text-xs hover:bg-teal-700 font-bold" title="Xem đầy đủ thông tin đã nhập">🔍 Xem chi tiết</button>`;
+  const primaryBtnHTML = `<button data-op="runContractAction" data-arg0="${c.id}" data-arg1="detail" class="bg-teal-600 text-white px-2 py-1 rounded text-xs hover:bg-teal-700 font-bold" title="Xem đầy đủ thông tin đã nhập">🔍 Xem chi tiết</button>`;
   const secondaryOptions = [{ value: 'view', label: '👁️ Xem' }];
   if ((c.fileUrl || c.fileData) && canDownloadContractFile()) {
     secondaryOptions.push({ value: 'download', label: '⬇️ Tải' });
@@ -23765,6 +23765,10 @@ function bindCspDelegation(rootId) {
   });
 }
 bindCspDelegation('userHeader');
+// Hợp Đồng — mọi phần tử động (danh sách hợp đồng #contractTableBody, đợt thanh toán
+// #contractInstallmentsList, dropdown Phê Duyệt #contractApprovalDropdownPanel) đều render VÀO BÊN
+// TRONG #contractSection, không có modal nào sống ngoài section như Vận Hành — nên chỉ cần đúng 1 gốc.
+bindCspDelegation('contractSection');
 
 // ==========================================
 // VĂN PHÒNG PHẨM — kỳ đăng ký (vppPeriods) + đăng ký của nhân viên (vppRegistrations). 3 sub-tab:

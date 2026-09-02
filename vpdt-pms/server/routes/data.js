@@ -302,7 +302,16 @@ async function prepareUsersForSave(incomingUsers, currentUsername) {
       ...(u.lockedUntil === undefined && { lockedUntil: prior.lockedUntil }),
       // pinHash CHỈ được server tự ghi (từ u.pin plaintext bên dưới) — nếu client không gửi u.pin (để
       // trống ô = giữ nguyên PIN cũ), giữ lại pinHash cũ, KHÔNG để mất chỉ vì admin sửa field khác.
-      ...(u.pin === undefined && { pinHash: prior.pinHash })
+      ...(u.pin === undefined && { pinHash: prior.pinHash }),
+      // webauthnCredentials/webauthnUserId/totpSecretEnc/totpBackupCodeHashes cùng lý do như pinHash ở
+      // trên — 4 field này bị stripPasswords() lọc khỏi MỌI response GET /api/data nên client KHÔNG BAO
+      // GIỜ có trong tay để gửi lại "u" (object client soạn) — nếu không khôi phục ở đây, BẤT KỲ lượt lưu
+      // "users" nào (VD admin sửa email 1 người khác) sẽ ÂM THẦM xoá vân tay/2FA đã đăng ký của TẤT CẢ
+      // user trong mảng, buộc thiết lập lại từ đầu dù không ai có ý định đó.
+      ...(u.webauthnCredentials === undefined && { webauthnCredentials: prior.webauthnCredentials }),
+      ...(u.webauthnUserId === undefined && { webauthnUserId: prior.webauthnUserId }),
+      ...(u.totpSecretEnc === undefined && { totpSecretEnc: prior.totpSecretEnc }),
+      ...(u.totpBackupCodeHashes === undefined && { totpBackupCodeHashes: prior.totpBackupCodeHashes })
     } : {};
 
     let record = { ...u, ...preserved };
