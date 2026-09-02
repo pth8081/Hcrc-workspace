@@ -238,6 +238,27 @@ const MODULE_CONFIGS = {
     dbKey: 'operationRepairs',
     resolveWfConfig: (item, appData) => flatWorkflowConfigToSteps(appData.operationRepairDeptWorkflows?.[item.dept], appData),
     supportsRequestChanges: true
+  },
+  // Vận Hành — giai đoạn "Dự toán", 2 module ẢO cùng dbKey với hồ sơ gốc nhưng field trạng thái RIÊNG
+  // (đúng kỹ thuật contractsSignedFile ở trên) — chạy ĐỘC LẬP song song với workflow duyệt hồ sơ chính
+  // (operationStoreOpenings/operationRepairs), không chờ hồ sơ chính APPROVED mới cho lập dự toán.
+  // submitOperationEstimate() (lib/recordActions.js) tự đưa estimateStatus về PENDING/bước 1 mỗi lần
+  // gửi (lần đầu từ DRAFT, hoặc gửi lại sau REQUEST_CHANGES) — engine chỉ còn lo Duyệt/Từ chối/Bổ sung.
+  operationStoreOpeningEstimate: {
+    dbKey: 'operationStoreOpenings',
+    statusField: 'estimateStatus',
+    currentStepField: 'estimateCurrentStep',
+    historyField: 'estimateHistory',
+    resolveWfConfig: (item, appData) => flatWorkflowConfigToSteps(appData.operationStoreOpenEstimateDeptWorkflows?.[item.dept], appData),
+    supportsRequestChanges: true
+  },
+  operationRepairEstimate: {
+    dbKey: 'operationRepairs',
+    statusField: 'estimateStatus',
+    currentStepField: 'estimateCurrentStep',
+    historyField: 'estimateHistory',
+    resolveWfConfig: (item, appData) => flatWorkflowConfigToSteps(appData.operationRepairEstimateDeptWorkflows?.[item.dept], appData),
+    supportsRequestChanges: true
   }
 };
 

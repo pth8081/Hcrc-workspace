@@ -69,7 +69,11 @@ function createMockState(seed) {
     budgetTemplates: [], budgetPeriods: [], budgetEntries: [], budgetDeptWorkflows: {},
     licenses: [], licenseTypes: [],
     itServiceRenewals: [],
-    hrFeedback: []
+    hrFeedback: [],
+    operationOrders: [], operationOrderDeptWorkflows: {},
+    operationStoreOpenings: [], operationStoreOpenDeptWorkflows: {}, operationStoreOpenEstimateDeptWorkflows: {},
+    operationRepairs: [], operationRepairDeptWorkflows: {}, operationRepairEstimateDeptWorkflows: {},
+    operationWorkItems: [], operationExecutionPeriods: []
   }, seed || {});
 }
 
@@ -81,9 +85,20 @@ function buildAppDataForCreate(moduleKey, state) {
     itPriceMasterLists: state.itPriceMasterLists,
     itPriceDeptWorkflows: state.itPriceDeptWorkflows,
     workflows: state.workflows,
-    uniformCatalog: state.uniformCatalog
+    uniformCatalog: state.uniformCatalog,
+    // Vận Hành > Siêu Thị > Dự toán — resolveWfConfig() (lib/workflowEngine.js) đọc thẳng 2 map này
+    // qua appData khi xử lý /api/workflow/operationStoreOpeningEstimate|operationRepairEstimate/:id/:action.
+    operationStoreOpenEstimateDeptWorkflows: state.operationStoreOpenEstimateDeptWorkflows,
+    operationRepairEstimateDeptWorkflows: state.operationRepairEstimateDeptWorkflows
   };
   if (moduleKey === 'reportEntries') base.reportPeriods = state.reportPeriods;
+  // operationExecutionPeriods — extraValidate() cần tra cứu chéo hồ sơ nguồn (operationStoreOpenings/
+  // operationRepairs) để kiểm tra estimateStatus đã APPROVED chưa, cùng lý do reportEntries ở trên —
+  // mirror routes/create.js nhánh moduleKey === 'operationExecutionPeriods'.
+  if (moduleKey === 'operationExecutionPeriods') {
+    base.operationStoreOpenings = state.operationStoreOpenings;
+    base.operationRepairs = state.operationRepairs;
+  }
   return base;
 }
 
@@ -149,10 +164,47 @@ function buildActionHandlers(state) {
   };
 }
 
+// Mirror ĐÚNG syncOperationWorkItemAncestors() (routes/records.js) — đệ quy tính lại trạng thái từng
+// cấp cha lên tới gốc ngay trong state.operationWorkItems (mock không có SQL Server thật để lock/đọc
+// lại như route thật, nhưng cùng logic recordActions.computeParentWorkItemStatus()).
+function syncOperationWorkItemAncestorsInState(state, parentWorkItemId) {
+  let currentParentId = parentWorkItemId;
+  while (currentParentId != null) {
+    const parent = state.operationWorkItems.find(w => w.id === currentParentId);
+    if (!parent) break;
+    const children = state.operationWorkItems.filter(w => w.parentWorkItemId === currentParentId);
+    const newStatus = recordActions.computeParentWorkItemStatus(children);
+    if (newStatus === parent.status) break;
+    parent.status = newStatus;
+    currentParentId = parent.parentWorkItemId;
+  }
+}
+
 // dispatch(method, url, bodyStr, username) -> { status, body } — khớp hình dạng { ok, item?, error? }
 // mà index.html thật sự đọc lại (callCreateAction()/callRecordAction() ở public/index.html).
 function createDispatcher(state) {
   const actionHandlers = buildActionHandlers(state);
+  actionHandlers['operationWorkItems:progress'] = (u, item, body) => {
+    const children = state.operationWorkItems.filter(w => w.parentWorkItemId === item.id);
+    const updated = recordActions.updateOperationWorkItemProgress(u, item, children, body && body.status);
+    syncOperationWorkItemAncestorsInState(state, updated.parentWorkItemId);
+    return updated;
+  };
+  actionHandlers['operationWorkItems:accept'] = (u, item, body) => {
+    const updated = recordActions.acceptOperationWorkItem(u, item, body || {});
+    if (updated.status === 'DA_NGHIEM_THU') syncOperationWorkItemAncestorsInState(state, updated.parentWorkItemId);
+    return updated;
+  };
+  actionHandlers['operationExecutionPeriods:start'] = (u, item) => recordActions.startOperationExecutionPeriod(u, item);
+  actionHandlers['operationWorkItems:edit'] = (u, item, body) => recordActions.editOperationWorkItem(u, item, body || {});
+  actionHandlers['operationStoreOpenings:confirm-use'] = (u, item) => {
+    const items = state.operationWorkItems.filter(w => w.sourceType === 'OPERATION_STORE_OPENING' && w.sourceId === item.id);
+    return recordActions.confirmOperationUse(u, item, items);
+  };
+  actionHandlers['operationRepairs:confirm-use'] = (u, item) => {
+    const items = state.operationWorkItems.filter(w => w.sourceType === 'OPERATION_REPAIR' && w.sourceId === item.id);
+    return recordActions.confirmOperationUse(u, item, items);
+  };
 
   function buildDataPayload(username) {
     // Khớp đúng field mà initDatabase() (public/index.html) gán từ GET /api/data — chỉ liệt kê những
@@ -315,6 +367,37 @@ function createDispatcher(state) {
         });
         list[idx] = outcome.item;
         return { status: 200, body: { ok: true, item: outcome.item, transition: outcome.transition } };
+      }
+
+      // Vận Hành > Siêu Thị > Dự toán — 2 segment action (estimate/submit), không khớp regex generic
+      // 1-action bên dưới. Mirror ĐÚNG routes/records.js '/operationStoreOpenings|operationRepairs/:id/estimate/submit'.
+      if ((m = pathName.match(/^\/api\/records\/(operationStoreOpenings|operationRepairs)\/(\d+)\/estimate\/submit$/)) && method === 'POST') {
+        const moduleKey = m[1];
+        const id = Number(m[2]);
+        const list = state[moduleKey] || [];
+        const idx = list.findIndex(x => x.id === id);
+        if (idx === -1) return { status: 404, body: { error: 'Không tìm thấy hồ sơ' } };
+        const updated = recordActions.submitOperationEstimate(freshUser, list[idx], body);
+        list[idx] = updated;
+        return { status: 200, body: { ok: true, item: updated } };
+      }
+
+      // Vận Hành > Siêu Thị > Thực hiện — POST /api/records/operationWorkItems (tạo mới, không có id/
+      // action nên không khớp regex generic bên dưới). Mirror ĐÚNG routes/records.js.
+      if (pathName === '/api/records/operationWorkItems' && method === 'POST') {
+        const { sourceType, sourceId } = body || {};
+        const sourceCollection = sourceType === 'OPERATION_STORE_OPENING' ? 'operationStoreOpenings' : 'operationRepairs';
+        const srcId = Number(sourceId);
+        const sourceRecord = (state[sourceCollection] || []).find(r => r.id === srcId);
+        if (!sourceRecord) return { status: 404, body: { error: 'Không tìm thấy hồ sơ nguồn' } };
+        sourceRecord.__workItemSourceType = sourceType;
+        const siblings = state.operationWorkItems.filter(w => w.sourceType === sourceType && w.sourceId === srcId);
+        const periodsForSource = (state.operationExecutionPeriods || []).filter(p => p.sourceType === sourceType && p.sourceId === srcId);
+        const newItem = recordActions.createOperationWorkItem(freshUser, body, sourceRecord, siblings, periodsForSource);
+        newItem.sourceType = sourceType;
+        newItem.sourceId = srcId;
+        state.operationWorkItems.push(newItem);
+        return { status: 200, body: { ok: true, item: newItem } };
       }
 
       if ((m = pathName.match(/^\/api\/records\/([^/]+)\/(\d+)\/([^/]+)$/)) && method === 'POST') {

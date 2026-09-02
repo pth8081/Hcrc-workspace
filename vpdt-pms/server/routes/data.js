@@ -12,6 +12,7 @@ const { validatePasswordStrength } = require('../lib/passwordPolicy');
 const { HttpError } = require('../lib/httpErrors');
 const { isCurrentlyAdmin, isCurrentlyAdminOrUniformManage } = require('../lib/adminAuth');
 const { getAllTasksCached } = require('../lib/taskStore');
+const { getAllWorkItemsCached } = require('../lib/operationWorkItemStore');
 const { getAllForCollectionCached, MIGRATED_COLLECTIONS } = require('../lib/recordStore');
 const { sendServerError } = require('../lib/errorResponse');
 const {
@@ -21,6 +22,7 @@ const {
   filterRecruitmentReferralsForUser, filterItPriceApprovalsForUser, filterItSupportTicketsForUser,
   filterUniformPeriodsForUser, filterUniformIssuancesForUser, filterUniformStockAdjustmentsForUser, filterUniformTransfersForUser, filterBudgetEntriesForUser,
   filterOperationOrdersForUser, filterOperationStoreOpeningsForUser, filterOperationRepairsForUser,
+  filterOperationExecutionPeriodsForUser,
   filterVppRegistrationsForUser, filterLicensesForUser, filterHrFeedbackForUser,
   filterItServiceRenewalsForUser, filterPaymentRequestsForUser, filterOnboardingProgressForUser
 } = require('../lib/recordViewScope');
@@ -41,6 +43,9 @@ const ADMIN_ONLY_KEYS = new Set([
   // nhập nào (kể cả người chỉ có quyền tạo hồ sơ operationOrderCreate) cũng ghi trực tiếp được qua
   // POST /api/data/operationOrderDeptWorkflows và tự đặt mình làm người duyệt bước 1 phòng ban mình.
   'operationOrderDeptWorkflows', 'operationStoreOpenDeptWorkflows', 'operationRepairDeptWorkflows',
+  // Cùng lý do — quy trình duyệt RIÊNG cho giai đoạn Dự toán (Vận Hành > Siêu Thị), độc lập với 2 map
+  // duyệt hồ sơ chính ở trên.
+  'operationStoreOpenEstimateDeptWorkflows', 'operationRepairEstimateDeptWorkflows',
   // itPriceDeptWorkflows: cấu hình người duyệt Phê Duyệt Giá (module Hỗ Trợ IT) theo phòng ban — cùng
   // khuôn carDeptWorkflows/vppDeptWorkflows/budgetDeptWorkflows, chỉ sửa được ở màn Quy Trình & Phê
   // Duyệt (admin), nhưng trước đây BỊ BỎ SÓT khỏi danh sách này: bất kỳ tài khoản đã đăng nhập nào cũng
@@ -257,6 +262,33 @@ function assertAtLeastOneAdmin(users) {
 //   lại bằng bcrypt, và đánh dấu mustChangePassword=true — mật khẩu admin gõ tạm chỉ có giá trị cho
 //   LẦN ĐĂNG NHẬP ĐẦU, buộc chính user đó phải tự đổi lại ngay (xem lib/auth.js blockIfMustChangePassword),
 //   giảm nguy cơ mật khẩu tạm/yếu tồn tại lâu dài không ai để ý.
+// Cơ Cấu Tổ Chức: user.managerUsername (field phẳng, lưu như "Chức danh"/jobTitle — không có bảng/
+// collection riêng) — CHƯA từng có khái niệm quản lý/cấp trên trong hệ thống trước đây nên KHÔNG có gì
+// chặn vòng lặp sẵn; phải tự viết validate ở ĐÂY (điểm ghi CSDL duy nhất cho collection "users"), không
+// tin riêng validate phía client (picker Cơ Cấu Tổ Chức tự ẩn cấp dưới, nhưng vẫn có thể lách qua gọi
+// thẳng API). Giới hạn 50 bước đi ngược chỉ để phòng vệ vòng lặp cực dài, không phải giới hạn nghiệp vụ.
+function assertNoManagerCycle(users) {
+  const byUsername = new Map(users.map(u => [u.username, u]));
+  for (const u of users) {
+    if (!u.managerUsername) continue;
+    if (u.managerUsername === u.username) {
+      throw new HttpError(400, `"${u.name || u.username}" không thể chọn chính mình làm quản lý trực tiếp`);
+    }
+    if (!byUsername.has(u.managerUsername)) {
+      throw new HttpError(400, `Quản lý trực tiếp của "${u.name || u.username}" không tồn tại trong danh sách người dùng`);
+    }
+    let cur = byUsername.get(u.managerUsername);
+    let steps = 0;
+    while (cur && steps < 50) {
+      if (cur.username === u.username) {
+        throw new HttpError(400, `Cơ cấu tổ chức tạo vòng lặp quản lý liên quan tới "${u.name || u.username}" — vui lòng kiểm tra lại`);
+      }
+      cur = cur.managerUsername ? byUsername.get(cur.managerUsername) : null;
+      steps++;
+    }
+  }
+}
+
 async function prepareUsersForSave(incomingUsers, currentUsername) {
   // Chặn NGAY tại server việc tự khoá chính tài khoản đang gọi request — trước đây chỉ chặn ở JS
   // trình duyệt (toggleUserActive()), 1 request tự soạn gọi thẳng POST /api/data/users vẫn đặt được
@@ -342,6 +374,7 @@ async function prepareUsersForSave(incomingUsers, currentUsername) {
   }));
 
   assertAtLeastOneAdmin(prepared);
+  assertNoManagerCycle(prepared);
   return prepared;
 }
 
@@ -428,11 +461,16 @@ router.get('/', async (req, res) => {
     // liệu đầu tiên sau khi đăng nhập mất nhiều giây) — các collection này độc lập nhau, pool kết nối
     // (db.js, mặc định 20) thừa sức phục vụ song song, không có lý do gì phải chờ tuần tự.
     const migratedList = [...MIGRATED_COLLECTIONS];
-    const [tasksResult, ...collectionResults] = await Promise.all([
+    const [tasksResult, workItemsResult, ...collectionResults] = await Promise.all([
       getAllTasksCached(),
+      getAllWorkItemsCached(),
       ...migratedList.map(collection => getAllForCollectionCached(collection))
     ]);
     data.tasks = tasksResult;
+    // operationWorkItems: cây công việc Thực hiện/Nghiệm thu của Vận Hành — nguồn riêng
+    // dbo.OperationWorkItems (lib/operationWorkItemStore.js), cùng khuôn tasks ở trên (không nằm trong
+    // dbo.AppData, không có _versions.operationWorkItems tương ứng).
+    data.operationWorkItems = workItemsResult;
     migratedList.forEach((collection, i) => { data[collection] = collectionResults[i]; });
 
     // Lọc lại quyền XEM phía server cho các collection trước đây chỉ ẩn ở giao diện (xem
@@ -488,6 +526,22 @@ router.get('/', async (req, res) => {
     if (data.operationOrders) data.operationOrders = filterOperationOrdersForUser(data.operationOrders, req.freshUser, data);
     if (data.operationStoreOpenings) data.operationStoreOpenings = filterOperationStoreOpeningsForUser(data.operationStoreOpenings, req.freshUser, data);
     if (data.operationRepairs) data.operationRepairs = filterOperationRepairsForUser(data.operationRepairs, req.freshUser, data);
+    // operationExecutionPeriods: mirror phạm vi xem của hồ sơ nguồn (đã lọc ở 2 dòng trên) — xem
+    // lib/recordViewScope.js canViewOperationExecutionPeriod().
+    if (data.operationExecutionPeriods) data.operationExecutionPeriods = filterOperationExecutionPeriodsForUser(data.operationExecutionPeriods, req.freshUser, data);
+    // operationWorkItems: cây công việc Thực hiện/Nghiệm thu — không phải collection dept-workflow độc
+    // lập, mà LỒNG theo hồ sơ Mở mới/Sửa chữa (sourceType/sourceId) — lọc theo đúng phạm vi xem của hồ
+    // sơ nguồn (đã lọc ở 2 dòng trên), tránh lộ tên/mô tả/người phụ trách công việc nội bộ siêu thị khác
+    // phòng ban cho bất kỳ ai gọi thẳng GET /api/data.
+    if (data.operationWorkItems) {
+      const visibleStoreOpeningIds = new Set((data.operationStoreOpenings || []).map(o => o.id));
+      const visibleRepairIds = new Set((data.operationRepairs || []).map(o => o.id));
+      data.operationWorkItems = data.operationWorkItems.filter(w => {
+        if (w.sourceType === 'OPERATION_STORE_OPENING') return visibleStoreOpeningIds.has(w.sourceId);
+        if (w.sourceType === 'OPERATION_REPAIR') return visibleRepairIds.has(w.sourceId);
+        return false;
+      });
+    }
     // vppRegistrations: cùng dạng lỗ hổng như itPriceApprovals/budgetEntries ở trên — collection DUY
     // NHẤT trong nhóm dept-workflow trước đây KHÔNG được lọc lại ở server (chỉ ẩn ở
     // renderVppRegistrations()), để lộ đăng ký/chi tiêu văn phòng phẩm (kể cả bản NHÁP) của MỌI phòng
@@ -512,7 +566,7 @@ router.get('/', async (req, res) => {
     // tasks: cùng dạng lỗ hổng như 9 collection ở trên — trước đây hoàn toàn KHÔNG được lọc lại ở
     // server (chỉ ẩn ở renderTasks() qua canViewTaskRecord()), để lộ toàn bộ Công Việc công ty (kể cả
     // nội dung "Ý kiến chỉ đạo" nhạy cảm) cho bất kỳ ai gọi thẳng GET /api/data.
-    if (data.tasks) data.tasks = filterTasksForUser(data.tasks, req.freshUser);
+    if (data.tasks) data.tasks = filterTasksForUser(data.tasks, req.freshUser, data);
     // onboardingProgress (Đào Tạo — Hội Nhập Nhân Viên Mới): trước đây hoàn toàn KHÔNG được lọc lại ở
     // server (chỉ ẩn ở giao diện), để lộ nội dung "stage3Note" (nhận xét đánh giá thử việc, mang tính
     // chất như đánh giá hiệu suất) của MỌI nhân viên cho bất kỳ ai gọi thẳng GET /api/data — xem
