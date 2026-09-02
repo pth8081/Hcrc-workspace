@@ -6093,10 +6093,10 @@ input[data-sdd-list] {
          Mẫu" trước đây là 1 sub-tab riêng — nay gộp vào modal "⚙️ Quản Lý Kỳ & Mẫu" (chỉ budgetManage)
          để đúng 3 tab, xem openBudgetPeriodTemplateModal(). -->
     <div class="flex flex-wrap gap-2 border-b pb-2 items-center">
-      <button type="button" onclick="setBudgetSubTab('APPROVED')" id="btnBudgetSubApproved" class="px-3 py-1.5 rounded text-xs font-bold bg-violet-700 text-white">✅ Ngân Sách Phê Duyệt</button>
-      <button type="button" onclick="setBudgetSubTab('ACTUAL')" id="btnBudgetSubActual" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">💳 Ngân Sách Thực Hiện</button>
-      <button type="button" onclick="setBudgetSubTab('SUMMARY')" id="btnBudgetSubSummary" class="hidden px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">📊 Tổng Hợp</button>
-      <button type="button" onclick="openBudgetPeriodTemplateModal()" id="btnBudgetManageKinds" class="hidden ml-auto px-3 py-1.5 rounded text-xs font-bold bg-gray-600 text-white hover:bg-gray-700">⚙️ Quản Lý Kỳ &amp; Mẫu</button>
+      <button type="button" data-op="setBudgetSubTab" data-arg0="APPROVED" id="btnBudgetSubApproved" class="px-3 py-1.5 rounded text-xs font-bold bg-violet-700 text-white">✅ Ngân Sách Phê Duyệt</button>
+      <button type="button" data-op="setBudgetSubTab" data-arg0="ACTUAL" id="btnBudgetSubActual" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">💳 Ngân Sách Thực Hiện</button>
+      <button type="button" data-op="setBudgetSubTab" data-arg0="SUMMARY" id="btnBudgetSubSummary" class="hidden px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">📊 Tổng Hợp</button>
+      <button type="button" data-op="openBudgetPeriodTemplateModal" id="btnBudgetManageKinds" class="hidden ml-auto px-3 py-1.5 rounded text-xs font-bold bg-gray-600 text-white hover:bg-gray-700">⚙️ Quản Lý Kỳ &amp; Mẫu</button>
     </div>
 
     <!-- Sub-tab: Ngân Sách Phê Duyệt (entryKind=PLAN — mọi user có budgetCreate, lập cho ĐÚNG phòng ban mình) -->
@@ -6110,7 +6110,7 @@ input[data-sdd-list] {
           <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
             <div>
               <label class="block font-semibold text-gray-600 mb-1">Kỳ Ngân Sách</label>
-              <select id="budgetEntryPeriodSelect_PLAN" onchange="onBudgetEntryPeriodChange('PLAN')" class="w-full border p-1.5 rounded bg-white"></select>
+              <select id="budgetEntryPeriodSelect_PLAN" data-op-change="onBudgetEntryPeriodChange" data-arg0="PLAN" class="w-full border p-1.5 rounded bg-white"></select>
             </div>
             <div>
               <label class="block font-semibold text-gray-600 mb-1">Phòng Ban</label>
@@ -6121,7 +6121,7 @@ input[data-sdd-list] {
             <div id="budgetEntryReadonlyNote_PLAN" class="hidden text-[11px] text-amber-700 italic bg-amber-50 p-2 rounded border border-amber-200"></div>
             <div class="flex justify-between items-center">
               <label class="font-semibold text-gray-600">Danh Sách Hạng Mục</label>
-              <button type="button" id="budgetEntryAddRowBtn_PLAN" onclick="addBudgetEntryLine('PLAN')" class="text-violet-700 font-bold hover:underline">➕ Thêm dòng</button>
+              <button type="button" id="budgetEntryAddRowBtn_PLAN" data-op="addBudgetEntryLine" data-arg0="PLAN" class="text-violet-700 font-bold hover:underline">➕ Thêm dòng</button>
             </div>
             <div class="overflow-x-auto">
               <table class="w-full border-collapse border text-xs bg-white">
@@ -6132,8 +6132,8 @@ input[data-sdd-list] {
             <div class="flex justify-between items-center pt-2 border-t">
               <div class="font-bold text-gray-700">Tổng cộng: <span id="budgetEntryTotalDisplay_PLAN" class="text-violet-700">0 đ</span></div>
               <div id="budgetEntrySaveActions_PLAN" class="flex gap-2">
-                <button type="button" onclick="saveBudgetEntryDraft('PLAN')" class="bg-gray-600 text-white px-3 py-1.5 rounded font-bold hover:bg-gray-700">💾 Lưu Nháp</button>
-                <button type="button" onclick="submitCurrentBudgetEntry('PLAN')" class="bg-violet-600 text-white px-3 py-1.5 rounded font-bold hover:bg-violet-700">📤 Gửi Duyệt</button>
+                <button type="button" data-op="saveBudgetEntryDraft" data-arg0="PLAN" class="bg-gray-600 text-white px-3 py-1.5 rounded font-bold hover:bg-gray-700">💾 Lưu Nháp</button>
+                <button type="button" data-op="submitCurrentBudgetEntry" data-arg0="PLAN" class="bg-violet-600 text-white px-3 py-1.5 rounded font-bold hover:bg-violet-700">📤 Gửi Duyệt</button>
               </div>
             </div>
           </div>
@@ -6143,7 +6143,7 @@ input[data-sdd-list] {
 
       <div class="bg-gray-50 p-3 rounded-lg border flex items-center gap-2">
         <label class="text-xs font-semibold text-gray-600">Lọc Theo Trạng Thái</label>
-        <select id="filterStatusBudget_PLAN" onchange="renderBudgetEntryList('PLAN')" class="border p-2 rounded text-sm bg-white">
+        <select id="filterStatusBudget_PLAN" data-op-change="renderBudgetEntryList" data-arg0="PLAN" class="border p-2 rounded text-sm bg-white">
           <option value="">-- Tất cả trạng thái --</option>
           <option value="DRAFT">📝 Nháp</option>
           <option value="PENDING">⏳ Chờ duyệt</option>
@@ -6181,7 +6181,7 @@ input[data-sdd-list] {
           <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
             <div>
               <label class="block font-semibold text-gray-600 mb-1">Kỳ Ngân Sách</label>
-              <select id="budgetEntryPeriodSelect_ACTUAL" onchange="onBudgetEntryPeriodChange('ACTUAL')" class="w-full border p-1.5 rounded bg-white"></select>
+              <select id="budgetEntryPeriodSelect_ACTUAL" data-op-change="onBudgetEntryPeriodChange" data-arg0="ACTUAL" class="w-full border p-1.5 rounded bg-white"></select>
             </div>
             <div>
               <label class="block font-semibold text-gray-600 mb-1">Phòng Ban</label>
@@ -6192,7 +6192,7 @@ input[data-sdd-list] {
             <div id="budgetEntryReadonlyNote_ACTUAL" class="hidden text-[11px] text-amber-700 italic bg-amber-50 p-2 rounded border border-amber-200"></div>
             <div class="flex justify-between items-center">
               <label class="font-semibold text-gray-600">Danh Sách Hạng Mục</label>
-              <button type="button" id="budgetEntryAddRowBtn_ACTUAL" onclick="addBudgetEntryLine('ACTUAL')" class="text-violet-700 font-bold hover:underline">➕ Thêm dòng</button>
+              <button type="button" id="budgetEntryAddRowBtn_ACTUAL" data-op="addBudgetEntryLine" data-arg0="ACTUAL" class="text-violet-700 font-bold hover:underline">➕ Thêm dòng</button>
             </div>
             <div class="overflow-x-auto">
               <table class="w-full border-collapse border text-xs bg-white">
@@ -6203,8 +6203,8 @@ input[data-sdd-list] {
             <div class="flex justify-between items-center pt-2 border-t">
               <div class="font-bold text-gray-700">Tổng cộng: <span id="budgetEntryTotalDisplay_ACTUAL" class="text-violet-700">0 đ</span></div>
               <div id="budgetEntrySaveActions_ACTUAL" class="flex gap-2">
-                <button type="button" onclick="saveBudgetEntryDraft('ACTUAL')" class="bg-gray-600 text-white px-3 py-1.5 rounded font-bold hover:bg-gray-700">💾 Lưu Nháp</button>
-                <button type="button" onclick="submitCurrentBudgetEntry('ACTUAL')" class="bg-violet-600 text-white px-3 py-1.5 rounded font-bold hover:bg-violet-700">📤 Gửi Duyệt</button>
+                <button type="button" data-op="saveBudgetEntryDraft" data-arg0="ACTUAL" class="bg-gray-600 text-white px-3 py-1.5 rounded font-bold hover:bg-gray-700">💾 Lưu Nháp</button>
+                <button type="button" data-op="submitCurrentBudgetEntry" data-arg0="ACTUAL" class="bg-violet-600 text-white px-3 py-1.5 rounded font-bold hover:bg-violet-700">📤 Gửi Duyệt</button>
               </div>
             </div>
           </div>
@@ -6214,7 +6214,7 @@ input[data-sdd-list] {
 
       <div class="bg-gray-50 p-3 rounded-lg border flex items-center gap-2">
         <label class="text-xs font-semibold text-gray-600">Lọc Theo Trạng Thái</label>
-        <select id="filterStatusBudget_ACTUAL" onchange="renderBudgetEntryList('ACTUAL')" class="border p-2 rounded text-sm bg-white">
+        <select id="filterStatusBudget_ACTUAL" data-op-change="renderBudgetEntryList" data-arg0="ACTUAL" class="border p-2 rounded text-sm bg-white">
           <option value="">-- Tất cả trạng thái --</option>
           <option value="DRAFT">📝 Nháp</option>
           <option value="PENDING">⏳ Chờ duyệt</option>
@@ -6250,7 +6250,7 @@ input[data-sdd-list] {
             <label class="block text-xs font-semibold text-gray-600 mb-1">Chọn Kỳ Ngân Sách</label>
             <select id="budgetSummaryPeriodSelect" class="w-full md:w-80 border p-2 rounded text-sm bg-white"></select>
           </div>
-          <button type="button" onclick="buildBudgetSummary()" class="bg-violet-600 text-white px-4 py-2 rounded text-xs font-bold hover:bg-violet-700">🔍 Tổng Hợp</button>
+          <button type="button" data-op="buildBudgetSummary" class="bg-violet-600 text-white px-4 py-2 rounded text-xs font-bold hover:bg-violet-700">🔍 Tổng Hợp</button>
         </div>
       </div>
 
@@ -6267,10 +6267,10 @@ input[data-sdd-list] {
     <div class="bg-white rounded-lg shadow-2xl max-w-4xl w-full flex flex-col max-h-[90vh] overflow-hidden">
       <div class="flex justify-between items-center bg-violet-800 text-white p-4">
         <h3 class="font-bold text-base flex items-center gap-2">⚙️ Quản Lý Kỳ &amp; Mẫu Ngân Sách</h3>
-        <button onclick="closeBudgetPeriodTemplateModal()" class="text-violet-200 hover:text-white font-bold text-xl px-2">✕</button>
+        <button data-op="closeBudgetPeriodTemplateModal" class="text-violet-200 hover:text-white font-bold text-xl px-2">✕</button>
       </div>
       <div class="p-4 overflow-y-auto flex-1 space-y-4 text-xs">
-        <form onsubmit="createBudgetPeriod(event)" class="bg-violet-50 p-4 rounded border border-violet-200 space-y-3">
+        <form data-op-submit="createBudgetPeriod" class="bg-violet-50 p-4 rounded border border-violet-200 space-y-3">
           <h3 class="font-bold text-violet-900 text-sm flex items-center gap-1">📅 Tạo Kỳ Ngân Sách Mới</h3>
           <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
             <div class="md:col-span-2">
@@ -6284,7 +6284,7 @@ input[data-sdd-list] {
           </div>
           <div>
             <label class="flex items-center gap-2 text-xs font-semibold text-gray-600 mb-1">
-              <input type="checkbox" id="budgetPeriodDeptAll" onchange="toggleScopeGroup('budgetPeriodDeptAll', 'budgetPeriodDept')"> Áp dụng cho TẤT CẢ phòng ban
+              <input type="checkbox" id="budgetPeriodDeptAll" data-op-change="toggleScopeGroup" data-arg0="budgetPeriodDeptAll" data-arg1="budgetPeriodDept"> Áp dụng cho TẤT CẢ phòng ban
             </label>
             <div id="budgetPeriodDeptContainer" class="grid grid-cols-2 md:grid-cols-4 gap-1 pl-1 max-h-32 overflow-y-auto"></div>
           </div>
@@ -6319,8 +6319,8 @@ input[data-sdd-list] {
           <div class="flex justify-between items-center flex-wrap gap-2">
             <h3 class="font-bold text-violet-900 text-sm flex items-center gap-1">🧩 Mẫu Ngân Sách</h3>
             <div class="flex items-center gap-3">
-              <label class="text-violet-700 font-bold hover:underline cursor-pointer text-xs whitespace-nowrap">📎 Từ File Dữ Liệu Thật<input type="file" accept=".xlsx,.xls" class="hidden" onchange="createBudgetTemplateFromRealFile(event)"></label>
-              <button type="button" onclick="startNewBudgetTemplate()" class="text-violet-700 font-bold hover:underline text-xs whitespace-nowrap">➕ Thêm Mẫu</button>
+              <label class="text-violet-700 font-bold hover:underline cursor-pointer text-xs whitespace-nowrap">📎 Từ File Dữ Liệu Thật<input type="file" accept=".xlsx,.xls" class="hidden" data-op-change="createBudgetTemplateFromRealFile" data-arg-event="0"></label>
+              <button type="button" data-op="startNewBudgetTemplate" class="text-violet-700 font-bold hover:underline text-xs whitespace-nowrap">➕ Thêm Mẫu</button>
             </div>
           </div>
           <div class="bg-white rounded border overflow-x-auto">
@@ -6336,7 +6336,7 @@ input[data-sdd-list] {
             </table>
           </div>
 
-          <form id="budgetTemplateForm" onsubmit="saveBudgetTemplate(event)" class="hidden bg-white p-3 rounded border text-xs space-y-3">
+          <form id="budgetTemplateForm" data-op-submit="saveBudgetTemplate" class="hidden bg-white p-3 rounded border text-xs space-y-3">
             <div>
               <label class="block font-semibold text-gray-600 mb-1">Tên Mẫu</label>
               <input id="budgetTemplateName" placeholder="VD: Ngân sách Marketing" class="w-full border p-1.5 rounded" required>
@@ -6346,8 +6346,8 @@ input[data-sdd-list] {
                 <label class="font-semibold text-gray-600">Danh Sách Cột (đầy đủ — Tên Hạng Mục/Số Tiền/Loại NS bắt buộc có mặt, dùng nút ▲▼ để tự sắp thứ tự)</label>
                 <div class="flex gap-2 items-center text-[11px]">
                   <a href="/api/budget/template-fields-template" class="text-gray-600 font-bold hover:underline whitespace-nowrap">📥 Tải Mẫu Excel</a>
-                  <label class="text-violet-700 font-bold hover:underline cursor-pointer whitespace-nowrap">📤 Tải Lên Từ Excel<input type="file" accept=".xlsx,.xls" class="hidden" onchange="uploadBudgetTemplateFieldsXlsx(event)"></label>
-                  <button type="button" onclick="addBudgetTemplateField()" class="text-violet-700 font-bold hover:underline whitespace-nowrap">➕ Thêm cột</button>
+                  <label class="text-violet-700 font-bold hover:underline cursor-pointer whitespace-nowrap">📤 Tải Lên Từ Excel<input type="file" accept=".xlsx,.xls" class="hidden" data-op-change="uploadBudgetTemplateFieldsXlsx" data-arg-event="0"></label>
+                  <button type="button" data-op="addBudgetTemplateField" class="text-violet-700 font-bold hover:underline whitespace-nowrap">➕ Thêm cột</button>
                 </div>
               </div>
               <div class="overflow-x-auto">
@@ -6360,14 +6360,14 @@ input[data-sdd-list] {
               </div>
             </div>
             <div class="flex justify-end gap-2">
-              <button type="button" onclick="cancelBudgetTemplateForm()" class="bg-gray-200 text-gray-700 px-3 py-1.5 rounded font-bold hover:bg-gray-300">Hủy</button>
+              <button type="button" data-op="cancelBudgetTemplateForm" class="bg-gray-200 text-gray-700 px-3 py-1.5 rounded font-bold hover:bg-gray-300">Hủy</button>
               <button type="submit" class="bg-violet-600 text-white px-3 py-1.5 rounded font-bold hover:bg-violet-700" id="btnBudgetTemplateSubmit">➕ Tạo Mẫu</button>
             </div>
           </form>
         </div>
       </div>
       <div class="p-3 bg-gray-100 border-t flex justify-end text-xs">
-        <button onclick="closeBudgetPeriodTemplateModal()" class="bg-gray-500 text-white px-4 py-1.5 rounded font-bold hover:bg-gray-600">Đóng</button>
+        <button data-op="closeBudgetPeriodTemplateModal" class="bg-gray-500 text-white px-4 py-1.5 rounded font-bold hover:bg-gray-600">Đóng</button>
       </div>
     </div>
   </div>
@@ -6923,7 +6923,7 @@ input[data-sdd-list] {
           <h3 id="budgetProcessModalTitle" class="font-bold text-base flex items-center gap-2">📝 Ngân Sách</h3>
           <p id="budgetProcessModalSub" class="text-xs text-violet-200"></p>
         </div>
-        <button onclick="closeBudgetProcessModal()" class="text-violet-200 hover:text-white font-bold text-xl px-2">✕</button>
+        <button data-op="closeBudgetProcessModal" class="text-violet-200 hover:text-white font-bold text-xl px-2">✕</button>
       </div>
       <div class="p-4 overflow-y-auto flex-1 space-y-4 text-xs">
         <div id="budgetProcessModalDetails" class="bg-gray-50 p-3 rounded border space-y-2 text-gray-700"></div>
@@ -6937,7 +6937,7 @@ input[data-sdd-list] {
         <div id="budgetProcessModalControls"></div>
       </div>
       <div class="p-3 bg-gray-100 border-t flex justify-end text-xs">
-        <button onclick="closeBudgetProcessModal()" class="bg-gray-500 text-white px-4 py-1.5 rounded font-bold hover:bg-gray-600">Đóng</button>
+        <button data-op="closeBudgetProcessModal" class="bg-gray-500 text-white px-4 py-1.5 rounded font-bold hover:bg-gray-600">Đóng</button>
       </div>
     </div>
   </div>
@@ -23807,6 +23807,13 @@ bindCspDelegation('trainingEditClassModal');
 bindCspDelegation('trainingTakeTestModal');
 bindCspDelegation('trainingClassQrModal');
 bindCspDelegation('trainingJoinClassModal');
+// Ngân Sách — 3 sub-tab (Phê Duyệt/Thực Hiện/Tổng Hợp) + danh sách bản ngân sách đều render trong
+// #budgetSection — nhưng modal "⚙️ Quản Lý Kỳ & Mẫu" (#budgetPeriodTemplateModal, CRUD kỳ ngân sách +
+// mẫu cột) và modal Xử Lý/Xem Chi Tiết (#budgetProcessModal, nút Duyệt/Từ Chối/Yêu Cầu Bổ Sung) đều
+// sống NGOÀI section (giống Xe/Vận Hành/Đào Tạo) nên mỗi modal cần thêm 1 gốc riêng — 3 gốc tổng cộng.
+bindCspDelegation('budgetSection');
+bindCspDelegation('budgetPeriodTemplateModal');
+bindCspDelegation('budgetProcessModal');
 
 // ==========================================
 // VĂN PHÒNG PHẨM — kỳ đăng ký (vppPeriods) + đăng ký của nhân viên (vppRegistrations). 3 sub-tab:
@@ -25815,7 +25822,7 @@ function buildBudgetLineRowHTML(line, idx, fields, readonly, kind) {
   return `<tr data-budget-line-idx="${idx}">
     <td class="border p-1.5 text-center">${idx + 1}</td>
     ${fields.map(f => buildBudgetFieldInputHTML(f, getBudgetLineFieldValue(line, f))).join('')}
-    <td class="border p-1.5 text-center"><button type="button" onclick="removeBudgetEntryLine('${kind}', ${idx})" class="text-red-600 font-bold hover:underline">✕</button></td>
+    <td class="border p-1.5 text-center"><button type="button" data-op="removeBudgetEntryLine" data-arg0="${kind}" data-arg1="${idx}" class="text-red-600 font-bold hover:underline">✕</button></td>
   </tr>`;
 }
 
@@ -25982,11 +25989,11 @@ function renderBudgetEntryList(kind) {
     let primaryBtnHTML;
     const secondaryOptions = [];
     if (isOwnDeptDraft) {
-      primaryBtnHTML = `<button onclick="editBudgetEntryDraft('${kind}', ${e.id})" class="px-2.5 py-1 bg-gray-600 text-white rounded text-xs hover:opacity-90 font-bold">✏️ Sửa Nháp</button>`;
+      primaryBtnHTML = `<button data-op="editBudgetEntryDraft" data-arg0="${kind}" data-arg1="${e.id}" class="px-2.5 py-1 bg-gray-600 text-white rounded text-xs hover:opacity-90 font-bold">✏️ Sửa Nháp</button>`;
     } else {
       primaryBtnHTML = canApprove
-        ? `<button onclick="openBudgetProcessModal(${e.id})" class="px-2.5 py-1 bg-emerald-600 text-white rounded text-xs hover:opacity-90 font-bold">✍️ Xử lý / Duyệt</button>`
-        : `<button onclick="openBudgetProcessModal(${e.id})" class="px-2.5 py-1 bg-gray-600 text-white rounded text-xs hover:opacity-90 font-bold">👁️ Xem chi tiết</button>`;
+        ? `<button data-op="openBudgetProcessModal" data-arg0="${e.id}" class="px-2.5 py-1 bg-emerald-600 text-white rounded text-xs hover:opacity-90 font-bold">✍️ Xử lý / Duyệt</button>`
+        : `<button data-op="openBudgetProcessModal" data-arg0="${e.id}" class="px-2.5 py-1 bg-gray-600 text-white rounded text-xs hover:opacity-90 font-bold">👁️ Xem chi tiết</button>`;
     }
     if (currentUser.perms?.admin) secondaryOptions.push({ value: 'delete', label: '🗑️ Xóa' });
     return `
@@ -26265,24 +26272,24 @@ function renderBudgetTemplateFieldsBuilder() {
   tbody.innerHTML = budgetTemplateFormFields.map((f, idx) => `
     <tr>
       <td class="border p-1 text-center whitespace-nowrap">
-        <button type="button" onclick="moveBudgetTemplateField(${idx}, -1)" ${idx === 0 ? 'disabled' : ''} class="px-1 font-bold text-gray-600 disabled:text-gray-300 hover:text-violet-700">▲</button>
-        <button type="button" onclick="moveBudgetTemplateField(${idx}, 1)" ${idx === lastIdx ? 'disabled' : ''} class="px-1 font-bold text-gray-600 disabled:text-gray-300 hover:text-violet-700">▼</button>
+        <button type="button" data-op="moveBudgetTemplateField" data-arg0="${idx}" data-arg1="-1" ${idx === 0 ? 'disabled' : ''} class="px-1 font-bold text-gray-600 disabled:text-gray-300 hover:text-violet-700">▲</button>
+        <button type="button" data-op="moveBudgetTemplateField" data-arg0="${idx}" data-arg1="1" ${idx === lastIdx ? 'disabled' : ''} class="px-1 font-bold text-gray-600 disabled:text-gray-300 hover:text-violet-700">▼</button>
       </td>
-      <td class="border p-1"><input type="text" value="${escapeHtml(f.label || '')}" oninput="updateBudgetTemplateField(${idx}, 'label', this.value)" class="w-full border p-1 rounded" placeholder="VD: Nhà cung cấp"></td>
+      <td class="border p-1"><input type="text" value="${escapeHtml(f.label || '')}" data-op-input="updateBudgetTemplateField" data-arg0="${idx}" data-arg1="label" data-arg-value="2" class="w-full border p-1 rounded" placeholder="VD: Nhà cung cấp"></td>
       <td class="border p-1">
         ${f.coreKey
           ? `<span class="inline-block px-2 py-0.5 rounded bg-gray-100 text-gray-500 font-semibold whitespace-nowrap">${BUDGET_FIELD_TYPE_LABELS[f.type] || f.type} <span class="italic font-normal">(cột lõi)</span></span>`
-          : `<select onchange="updateBudgetTemplateField(${idx}, 'type', this.value)" class="w-full border p-1 rounded">${Object.entries(BUDGET_FIELD_TYPE_LABELS).map(([v, label]) => `<option value="${v}" ${f.type === v ? 'selected' : ''}>${label}</option>`).join('')}</select>`}
+          : `<select data-op-change="updateBudgetTemplateField" data-arg0="${idx}" data-arg1="type" data-arg-value="2" class="w-full border p-1 rounded">${Object.entries(BUDGET_FIELD_TYPE_LABELS).map(([v, label]) => `<option value="${v}" ${f.type === v ? 'selected' : ''}>${label}</option>`).join('')}</select>`}
       </td>
       <td class="border p-1">
         ${f.type === 'select'
           ? (f.coreKey
               ? `<span class="text-gray-500 italic">${escapeHtml((f.options || []).join(', '))}</span>`
-              : `<input type="text" value="${escapeHtml((f.options || []).join(', '))}" oninput="updateBudgetTemplateField(${idx}, 'options', this.value)" class="w-full border p-1 rounded" placeholder="Cách nhau bởi dấu phẩy">`)
+              : `<input type="text" value="${escapeHtml((f.options || []).join(', '))}" data-op-input="updateBudgetTemplateField" data-arg0="${idx}" data-arg1="options" data-arg-value="2" class="w-full border p-1 rounded" placeholder="Cách nhau bởi dấu phẩy">`)
           : `<span class="text-gray-400 italic">—</span>`}
       </td>
-      <td class="border p-1 text-center"><input type="checkbox" ${f.required ? 'checked' : ''} ${f.removable === false ? 'disabled' : ''} onchange="updateBudgetTemplateField(${idx}, 'required', this.checked)"></td>
-      <td class="border p-1 text-center">${f.removable === false ? '' : `<button type="button" onclick="removeBudgetTemplateField(${idx})" class="text-red-600 font-bold hover:underline">✕</button>`}</td>
+      <td class="border p-1 text-center"><input type="checkbox" ${f.required ? 'checked' : ''} ${f.removable === false ? 'disabled' : ''} data-op-change="updateBudgetTemplateFieldRequiredFromCheckbox" data-arg0="${idx}" data-arg-el="1"></td>
+      <td class="border p-1 text-center">${f.removable === false ? '' : `<button type="button" data-op="removeBudgetTemplateField" data-arg0="${idx}" class="text-red-600 font-bold hover:underline">✕</button>`}</td>
     </tr>
   `).join('');
 }
@@ -26309,6 +26316,13 @@ function updateBudgetTemplateField(idx, key, value) {
   else if (key === 'required') f.required = !!value;
   else f[key] = value;
   if (key === 'type') renderBudgetTemplateFieldsBuilder();
+}
+// CSP: onchange checkbox chỉ truyền được phần tử qua data-arg-el (không có slot "this.checked" — xem
+// cspReadArgSlot), nên tách riêng wrapper đọc .checked từ phần tử rồi mới gọi hàm lõi ở trên (hàm lõi
+// giữ nguyên chữ ký cũ nhận thẳng key/value — test-office-budget.js gọi trực tiếp hàm lõi này với
+// key='label', không đụng tới).
+function updateBudgetTemplateFieldRequiredFromCheckbox(idx, checkboxEl) {
+  updateBudgetTemplateField(idx, 'required', checkboxEl.checked);
 }
 // Đọc file Excel đã điền cột tuỳ biến (mẫu tải ở nút "📥 Tải Mẫu Excel"), thêm thẳng vào cuối danh sách
 // đang sửa — KHÔNG tự lưu, admin vẫn phải xem lại + bấm "Tạo Mẫu"/"Lưu Thay Đổi" như bình thường.
@@ -26564,9 +26578,9 @@ function renderBudgetSummaryResult(period, planEntries, actualEntries, fields) {
       </div>
     </div>
     <div class="flex flex-wrap gap-2 justify-end pt-2 border-t">
-      <button onclick="printBudgetSummary()" class="bg-gray-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-gray-700">🖨️ In</button>
-      <button onclick="exportBudgetSummaryExcel()" class="bg-emerald-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-emerald-700">📊 Xuất Excel</button>
-      <button onclick="exportBudgetSummaryPdf()" class="bg-red-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-red-700">📄 Xuất PDF</button>
+      <button data-op="printBudgetSummary" class="bg-gray-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-gray-700">🖨️ In</button>
+      <button data-op="exportBudgetSummaryExcel" class="bg-emerald-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-emerald-700">📊 Xuất Excel</button>
+      <button data-op="exportBudgetSummaryPdf" class="bg-red-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-red-700">📄 Xuất PDF</button>
     </div>
   `;
   document.getElementById('budgetSummaryProtectedContent').appendChild(buildOfficeWatermarkOverlayEl());
@@ -26698,9 +26712,9 @@ function openBudgetProcessModal(entryId) {
       <div class="space-y-2">
         <textarea id="txtBudgetProcessComment" rows="2" class="w-full border p-2 rounded text-xs" placeholder="Ghi chú (bắt buộc khi Từ chối/Yêu cầu bổ sung)"></textarea>
         <div class="flex justify-end gap-2">
-          <button onclick="confirmProcessBudgetEntry('REJECT')" class="bg-red-600 text-white px-4 py-1.5 rounded font-bold hover:bg-red-700 text-xs">❌ Từ Chối</button>
-          <button onclick="confirmProcessBudgetEntry('REQUEST_CHANGES')" class="bg-amber-500 text-white px-4 py-1.5 rounded font-bold hover:bg-amber-600 text-xs">🔄 Yêu Cầu Bổ Sung</button>
-          <button onclick="confirmProcessBudgetEntry('APPROVE')" class="bg-green-600 text-white px-5 py-1.5 rounded font-bold hover:bg-green-700 text-xs">✅ Phê Duyệt</button>
+          <button data-op="confirmProcessBudgetEntry" data-arg0="REJECT" class="bg-red-600 text-white px-4 py-1.5 rounded font-bold hover:bg-red-700 text-xs">❌ Từ Chối</button>
+          <button data-op="confirmProcessBudgetEntry" data-arg0="REQUEST_CHANGES" class="bg-amber-500 text-white px-4 py-1.5 rounded font-bold hover:bg-amber-600 text-xs">🔄 Yêu Cầu Bổ Sung</button>
+          <button data-op="confirmProcessBudgetEntry" data-arg0="APPROVE" class="bg-green-600 text-white px-5 py-1.5 rounded font-bold hover:bg-green-700 text-xs">✅ Phê Duyệt</button>
         </div>
       </div>
     `;
