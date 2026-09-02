@@ -1,10 +1,71 @@
 # Phiên bản hiện tại
 
-**3.7** — đã merge vào `main` (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge
+**3.8** — đã merge vào `main` (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge
 góc màn hình + `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần
 kiểu `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
 
-## Cập nhật gần nhất — CSP unsafe-inline: đợt 6/N — module Phòng Họp
+## Cập nhật gần nhất — CSP unsafe-inline: đợt 7/N — module VPP (Văn Phòng Phẩm)
+
+Tiếp tục đợt 6 (Phòng Họp, xem mục "Trước đó" ngay bên dưới) — đợt này chuyển module **VPP** (đăng ký
+Văn phòng phẩm, kỳ đăng ký, báo cáo tổng hợp — 3 sub-tab Đăng Ký/Kỳ Đăng Ký/Báo Cáo Tổng Hợp):
+
+- **22 điểm** `onclick`/`onchange`/`oninput`/`onsubmit` chuyển sang `data-op*`, dùng lại đúng hạ tầng dùng
+  chung (`cspDispatchOp`/`bindCspDelegation`) — không cần code hạ tầng mới:
+  - **13 điểm** trong HTML tĩnh `#vppSection` (3 nút chuyển sub-tab, chọn kỳ đăng ký `onchange`, tìm mặt
+    hàng `oninput`, nút Lưu Nháp, ô lọc trạng thái `onchange`, ô Ngân sách/người `oninput`, ô chọn file
+    danh mục `onchange` có tham số `event`, nút Tạo Kỳ Đăng Ký, chọn kỳ xem báo cáo `onchange`, 2 nút tải
+    file Tổng Hợp/Tổng Quát Theo Phòng Ban).
+  - **6 điểm** trong 2 hàm render động trong section: ô Số Lượng từng mặt hàng
+    (`updateVppRegTotalDisplay` — `onVppRegPeriodChange()`), nút "✏️ Sửa Nháp"/"👁️ Xem chi tiết"/"✍️ Xử
+    lý / Duyệt" (`editVppRegDraft`/`openVppRegModal` — `renderVppRegistrations()`); `renderVppPeriods()`
+    xác nhận chỉ dùng `buildActionCell()` dùng chung, không đụng.
+  - **3 điểm** trong modal Xử Lý Đăng Ký (`#vppRegModal`) — modal này sống **NGOÀI** `#vppSection` (giống
+    Xe/Vận Hành): 2 nút Đóng (HTML tĩnh) + 3 nút Duyệt/Từ Chối/Bổ Sung do `openVppRegModal()` render động.
+  - Cần **2 gốc** `bindCspDelegation('vppSection')` + `bindCspDelegation('vppRegModal')` — cùng mẫu Xe.
+  - Phát hiện thêm 1 điểm **KHÔNG cần chuyển**: `submitBtn.onclick = () => submitVppRegDraftAction(...)`
+    trong `onVppRegPeriodChange()` là gán trực tiếp property JS (`element.onclick = fn`), không phải
+    thuộc tính HTML `onclick="..."` — vốn đã an toàn với CSP `unsafe-inline` bị gỡ, không phải sửa gì.
+  - **Loại khỏi phạm vi (dành cho đợt Hệ Thống sau này)**: các hàm quản lý "Nhóm Quyền Đặc Biệt"
+    (`renderVppExcludeGroupsAdmin`, `addVppExcludeGroupJobTitle`, `removeVppExcludeGroupJobTitle`,
+    `addVppExcludeGroupRow`, `removeVppExcludeGroupRow`, `updateVppExcludeGroupField`,
+    `renderUVppExcludeGroupsChecklist`) — thuộc màn hình cấu hình admin/Hệ Thống, không thuộc `#vppSection`.
+- **`buildActionCell()`/`buildDashboardCardsHTML()`/`buildPaginationBoxHTML()`/`renderPeopleMultiSelect()`**
+  tiếp tục KHÔNG đụng — vẫn dành cho 1 đợt riêng cuối cùng sau khi hết mọi module đơn lẻ.
+
+**Không phát hiện lỗi phụ nào trong đợt này.**
+
+**Xác nhận không ảnh hưởng** — 2 lớp kiểm tra độc lập trước khi merge:
+- Demo Playwright thật (SQL Server + server local + đăng nhập UI thật qua tài khoản demo tạm 2FA thật,
+  xoá lại ngay sau demo): điều hướng Sidebar → Hành Chính → Văn phòng phẩm, tạo kỳ đăng ký mới (đặt Ngân
+  sách/người, upload file danh mục CSV — đọc đúng 3 mặt hàng), quay lại tab Đăng Ký, chọn kỳ vừa tạo, tìm
+  mặt hàng theo từ khoá (lọc đúng), nhập số lượng cho 2 mặt hàng (tổng tiền cập nhật realtime đúng, so
+  đúng với ngân sách/người), Lưu Nháp thành công, Gửi phê duyệt thành công (qua modal xác nhận chung), lọc
+  danh sách theo trạng thái "Chờ duyệt", mở modal Xử Lý Đăng Ký từ danh sách, bấm Phê Duyệt (qua modal xác
+  nhận chung, `withApprovalAuth` mức NONE nên chạy thẳng — không cần xác thực lại), chuyển tab Báo Cáo
+  Tổng Hợp, chọn kỳ xem báo cáo, tải cả 2 file Excel (Tổng Hợp + Tổng Quát Theo Phòng Ban) — toàn bộ đều
+  đúng, không có lỗi JS console mới (3 lỗi console xuất hiện trong log — Google Fonts CDN bị chặn trong
+  sandbox, `401` trên `/api/auth/me` lúc chưa đăng nhập, `404` trên `/api/captcha` — đều là nhiễu môi
+  trường sandbox có sẵn từ trước, xác nhận lại bằng 1 lượt tải trang trống độc lập không liên quan gì tới
+  thay đổi lần này).
+- Chạy lại toàn bộ 46 file test hồi quy hiện có (`tests/test-*.js`) — 44/46 OK. 2 file
+  `test-audit-fixes-batch1.js`/`test-audit-round2-cluster1.js` lần này KHÔNG treo như các đợt trước mà báo
+  FAIL ở đúng những kịch bản gọi `GET /api/data` thật tới SQL Server (lỗi "Login failed for user ''") —
+  đã chạy lại độc lập từng file (không chung batch với 44 file kia) và tái hiện được y hệt cùng đúng 2
+  kịch bản đó, xác nhận đây là bug hạ tầng test có sẵn từ trước (đua tranh kết nối/pool SQL Server khi
+  test tự dựng thêm 1 server phụ), **không liên quan tới thay đổi lần này** — 2 file đã sửa
+  (`public/index.html`, `server/package.json`) không đụng gì tới tầng kết nối SQL Server. Cùng 2 file này
+  đã được ghi nhận có vấn đề hạ tầng từ đợt 2 (khi đó biểu hiện là treo lúc dọn dẹp thay vì FAIL).
+
+**Deploy-impact:** KHÔNG đổi `sql/schema.sql`, KHÔNG thêm biến môi trường mới, KHÔNG thêm `dependencies`
+mới — toàn bộ thay đổi nằm trong `public/index.html` (thuần client JS/HTML), deploy an toàn chỉ với copy
+code + `pm2 restart`, không cần thao tác 1 lần nào khác.
+
+**Còn lại:** Đào Tạo, Ngân Sách, Cơ Cấu Tổ Chức, Báo Cáo, Nhân Sự, Quản Trị/Hệ Thống, Hỗ Trợ IT, Đồng Phục,
+Giấy Phép, Gia Hạn CNTT, Tuyển Dụng, Tin Tức/Truyền Thông, Biên Bản Họp, Công Việc, Văn Bản Trình, Tài
+Liệu... — dùng hạ tầng `data-op*`/`bindCspDelegation()` đã xây, làm tiếp tuần tự mỗi module 1 commit + demo
++ regression trước khi merge, tới khi hết toàn bộ điểm mới gỡ `unsafe-inline`.
+
+## Trước đó — CSP unsafe-inline: đợt 6/N — module Phòng Họp
 
 Tiếp tục đợt 5 (Xe, xem mục "Trước đó" ngay bên dưới) — đợt này chuyển module **Phòng Họp** (form đặt
 lịch, lịch phòng dạng lưới, danh sách/lọc, nút Duyệt/Hủy):
