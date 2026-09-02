@@ -1,10 +1,45 @@
 # Phiên bản hiện tại
 
-**3.1** — đã merge vào `main` (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge
+**3.2** — đã merge vào `main` (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge
 góc màn hình + `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần
 kiểu `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
 
-## Cập nhật gần nhất — Rà soát bảo mật vòng 2 (team security tìm thêm 3 lỗ hổng sau đợt v3.0)
+## Cập nhật gần nhất — CSP unsafe-inline: đợt 1/N — module Vận Hành
+
+Bắt đầu thực hiện phương án 2 đã đề xuất ở đợt rà soát bảo mật vòng 2 (chuyển toàn bộ 1017 điểm inline
+event-handler sang `addEventListener` để có thể gỡ `unsafe-inline` khỏi CSP). Làm **theo từng module**,
+demo + xác nhận không ảnh hưởng trước khi merge từng đợt — bắt đầu với **Vận Hành** (Đơn Hàng + Siêu Thị:
+Mở mới/Sửa chữa/Dự toán/Thực hiện/Nghiệm thu/Báo cáo), module có nhiều điểm nhất sau khi soát riêng.
+
+- Chuyển **80 điểm** `onclick`/`onchange`/`oninput`/`onsubmit` inline sang **event delegation** — gắn
+  đúng 1 lần lúc tải trang lên 6 "gốc ổn định" (`#vanHanhSection` + 5 modal của module, các modal nằm
+  ngoài `#vanHanhSection` nên cần gốc riêng). Nội dung bên trong các gốc này bị `innerHTML` lại liên tục
+  (render lại danh sách/cây công việc) nhưng bản thân gốc không bao giờ bị thay thế nên listener gắn 1
+  lần vẫn bắt đúng phần tử sinh ra sau — tránh 2 lỗi thường gặp khi chuyển đổi ở quy mô lớn: quên gắn lại
+  listener sau mỗi lần render (nút im lặng) và gắn lại nhiều lần (1 cú bấm chạy hành động nhiều lần).
+- **KHÔNG đổi** `buildActionCell()`/`buildDashboardCardsHTML()`/`buildPaginationBoxHTML()` (3 hàm dùng
+  chung ~15+ module khác, kể cả trong chính module Vận Hành) — để lại cho 1 đợt CSP riêng của phần dùng
+  chung, tránh mở rộng phạm vi rủi ro ngoài module đang làm.
+- CSP header **CHƯA đổi** — `unsafe-inline` vẫn giữ nguyên tới khi xong hết mọi module còn lại, vì CSP là
+  1 policy áp cho toàn trang, không tách theo module — gỡ sớm sẽ làm im lặng mọi nút chưa kịp chuyển đổi
+  ở các module khác.
+
+**Xác nhận không ảnh hưởng** — 2 lớp kiểm tra độc lập trước khi merge:
+- Demo Playwright thật (SQL Server + server local + đăng nhập UI thật, không phải mock): tạo hồ sơ Mở
+  mới Siêu Thị qua form thật, mở modal Xử lý/Duyệt và modal Dự toán từ nút trong bảng, thêm/xoá dòng hạng
+  mục, gõ ô lọc — tất cả hoạt động y hệt trước khi sửa, không có lỗi console mới.
+- Chạy lại toàn bộ 46 file test hồi quy hiện có (`tests/test-*.js`) — pass 100%, gồm
+  `test-operation-store-lifecycle.js` (31/31 kịch bản riêng của module Vận Hành).
+
+**Deploy-impact:** KHÔNG đổi `sql/schema.sql`, KHÔNG thêm biến môi trường mới, KHÔNG thêm `dependencies`
+mới — chỉ đổi cách gắn sự kiện JS phía client trong `public/index.html`, deploy an toàn chỉ với copy code
+(không cần `pm2 restart` vì không đụng code server, nhưng restart cũng không hại gì nếu tiện làm cùng lúc).
+
+**Còn lại:** các module khác (Hợp Đồng, Thanh Toán, Xe, Phòng Họp, VPP, Đào Tạo, Ngân Sách, Cơ Cấu Tổ
+Chức, Báo Cáo, Nhân Sự, Quản Trị...) — làm tiếp tuần tự theo cùng khuôn, mỗi module 1 commit + demo +
+regression trước khi merge, tới khi hết toàn bộ 1017 điểm mới gỡ `unsafe-inline` ở CSP header.
+
+## Trước đó — Rà soát bảo mật vòng 2 (team security tìm thêm 3 lỗ hổng sau đợt v3.0)
 
 Sau khi merge v3.0 (9 mục P0-P3 ở phần bên dưới), team security khách hàng gửi thêm 3 phát hiện: (1) CSP
 `unsafe-inline` "quá mềm", (2) chưa rõ SQL injection có tồn tại không — yêu cầu audit chi tiết, (3) error
