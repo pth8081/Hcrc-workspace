@@ -157,13 +157,21 @@ const DEFAULTS = {
     smtpAuthEnabled: false, smtpUser: '', smtpPassEnc: null,
     senderEmail: 'dms-noreply@company.com',
     contractExpiryReminderDays: [30, 15, 7], contractExpiryCcEmails: [],
-    licenseExpiryReminderDays: [30, 15, 7], licenseExpiryCcEmails: []
+    licenseExpiryReminderDays: [30, 15, 7], licenseExpiryCcEmails: [],
+    // Giám sát ổ đĩa (jobs/diskSpaceMonitor.js) — cảnh báo qua email khi phân vùng chứa uploads/ đã
+    // dùng vượt ngưỡng này (%). diskSpaceAlertCcEmails bổ sung cho danh sách mặc định (mọi tài khoản
+    // đang có quyền admin), không thay thế.
+    diskSpaceAlertThresholdPercent: 85, diskSpaceAlertCcEmails: []
   },
 
   // Người phụ trách nhận thông báo hết hạn hợp đồng RIÊNG theo từng phòng ban — dạng { [dept]:
   // [{name, email}, ...] }, bổ sung cho "contractExpiryCcEmails" ở trên (CC chung, nhận thông báo bất
   // kỳ hợp đồng phòng nào) chứ không thay thế. Xem jobs/contractExpiryReminder.js.
   contractExpiryDeptContacts: {},
+
+  // Trạng thái đã cảnh báo ổ đĩa gần nhất ({lastAlertAt, lastAlertPercent}) — dùng để tránh dội email
+  // liên tục khi ổ đĩa vẫn còn đầy giữa các lượt kiểm tra hàng giờ, xem jobs/diskSpaceMonitor.js.
+  diskSpaceMonitorState: {},
 
   formTemplates: {
     'SUBMISSION': [

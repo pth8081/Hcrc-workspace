@@ -4,6 +4,7 @@
 // với nhiều request ghi đồng thời mà không cần khoá gì cả (mỗi request tự thêm đúng 1 dòng của mình).
 const { getPool, sql } = require('../db');
 const { getAppDataValue } = require('./appData');
+const { encryptLogField, decryptLogField } = require('./logCrypto');
 
 // Số dòng log tối đa GIỮ LẠI trong bảng (khác với BULK_LOAD_LIMIT — số dòng trả về cho lần tải đầu
 // của trang, xem routes/data.js). Cao hơn nhiều so với giới hạn 200 cũ (khi còn là JSON blob) vì giờ
@@ -25,7 +26,7 @@ function toEntry(row) {
     timestamp: new Date(row.CreatedAt).toLocaleString('vi-VN'),
     username: row.Username,
     fullName: row.FullName,
-    ipAddress: row.IpAddress,
+    ipAddress: decryptLogField(row.IpAddress),
     module: row.Module,
     actionType: row.ActionType,
     targetObject: row.TargetObject || '',
@@ -36,10 +37,14 @@ function toEntry(row) {
 
 async function insertSystemLog({ username, fullName, ipAddress, module, actionType, targetObject, description, status }) {
   const pool = await getPool();
+  // Cắt về 100 ký tự TRƯỚC KHI mã hoá (giữ đúng giới hạn phòng thủ cũ chống X-Forwarded-For dài bất
+  // thường — xem clip() ở trên) rồi mới mã hoá — cột đã mở rộng NVARCHAR(300) đủ chứa chuỗi đã mã hoá
+  // của giá trị 100 ký tự (xem lib/logCrypto.js + sql/schema.sql).
+  const encryptedIp = encryptLogField(clip(ipAddress, 100));
   const result = await pool.request()
     .input('username', sql.NVarChar(100), clip(username, 100))
     .input('fullName', sql.NVarChar(200), clip(fullName, 200) || null)
-    .input('ipAddress', sql.NVarChar(100), clip(ipAddress, 100) || null)
+    .input('ipAddress', sql.NVarChar(300), clip(encryptedIp, 300) || null)
     .input('module', sql.NVarChar(50), clip(module, 50))
     .input('actionType', sql.NVarChar(100), clip(actionType, 100))
     .input('targetObject', sql.NVarChar(200), clip(targetObject, 200) || null)
@@ -105,10 +110,11 @@ async function migrateLegacySystemLogs() {
   // Id tự tăng của bảng mới để giữ lại đúng thứ tự đó khi ORDER BY Id DESC.
   for (let i = legacy.length - 1; i >= 0; i--) {
     const l = legacy[i];
+    const encryptedIp = encryptLogField(clip(l.ipAddress, 100));
     await pool.request()
       .input('username', sql.NVarChar(100), clip(l.username, 100) || 'unknown')
       .input('fullName', sql.NVarChar(200), clip(l.fullName, 200) || null)
-      .input('ipAddress', sql.NVarChar(100), clip(l.ipAddress, 100) || null)
+      .input('ipAddress', sql.NVarChar(300), clip(encryptedIp, 300) || null)
       .input('module', sql.NVarChar(50), clip(l.module, 50) || 'UNKNOWN')
       .input('actionType', sql.NVarChar(100), clip(l.actionType, 100) || 'UNKNOWN')
       .input('targetObject', sql.NVarChar(200), clip(l.targetObject, 200) || null)

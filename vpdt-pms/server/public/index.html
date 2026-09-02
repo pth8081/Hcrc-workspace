@@ -4480,6 +4480,18 @@ input[data-sdd-list] {
         </div>
         <p class="text-[11px] text-gray-400 italic -mt-2">Người nhận mặc định = người tạo mục dịch vụ + toàn bộ người đang có quyền "Quản lý Hỗ Trợ IT" (itManage), cộng thêm email CC cố định ở trên.</p>
 
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-3 border-t pt-2">
+          <div>
+            <label class="block font-semibold text-gray-600 mb-1">Cảnh Báo Ổ Đĩa Máy Chủ — Ngưỡng (% đã dùng)</label>
+            <input id="cfgDiskAlertThreshold" type="number" min="1" max="99" placeholder="85" class="w-full border p-1.5 rounded">
+          </div>
+          <div>
+            <label class="block font-semibold text-gray-600 mb-1">Email CC Cố Định Nhận Cảnh Báo Ổ Đĩa (tuỳ chọn, cách nhau dấu phẩy)</label>
+            <input id="cfgDiskAlertCc" placeholder="it@company.com" class="w-full border p-1.5 rounded">
+          </div>
+        </div>
+        <p class="text-[11px] text-gray-400 italic -mt-2">Người nhận mặc định = toàn bộ tài khoản đang có quyền Quản Trị Viên (có email), cộng thêm email CC cố định ở trên. Chỉ CẢNH BÁO qua email khi ổ đĩa chứa thư mục tải file lên vượt ngưỡng — hệ thống KHÔNG tự xoá bất kỳ file nào.</p>
+
         <div class="flex flex-wrap gap-2 items-center border-t pt-2">
           <input id="cfgTestEmailTo" type="email" placeholder="Email nhận thử" class="border p-1.5 rounded flex-1 min-w-[180px]">
           <button type="button" onclick="sendTestEmail()" id="cfgTestEmailBtn" class="bg-blue-600 text-white px-3 py-1.5 rounded font-bold hover:bg-blue-700">📨 Gửi Thử</button>
@@ -10726,7 +10738,9 @@ function saveEmailConfig(e) {
     licenseExpiryReminderDays: licenseReminderDays,
     licenseExpiryCcEmails: parseEmailListInput(document.getElementById('cfgLicenseReminderCc').value),
     itRenewalReminderDays: itRenewalReminderDays,
-    itRenewalCcEmails: parseEmailListInput(document.getElementById('cfgItRenewalReminderCc').value)
+    itRenewalCcEmails: parseEmailListInput(document.getElementById('cfgItRenewalReminderCc').value),
+    diskSpaceAlertThresholdPercent: parseInt(document.getElementById('cfgDiskAlertThreshold').value, 10) || 85,
+    diskSpaceAlertCcEmails: parseEmailListInput(document.getElementById('cfgDiskAlertCc').value)
   };
   syncStorage('emailConfig');
   document.getElementById('cfgSmtpPassPlain').value = ''; // không giữ mật khẩu vừa gõ hiển thị lại trên form
@@ -10767,6 +10781,8 @@ function loadEmailConfigToForm() {
   document.getElementById('cfgItRenewalReminderDays').value = (DB.emailConfig.itRenewalReminderDays && DB.emailConfig.itRenewalReminderDays.length
     ? DB.emailConfig.itRenewalReminderDays : [30, 15, 7]).join(', ');
   document.getElementById('cfgItRenewalReminderCc').value = (DB.emailConfig.itRenewalCcEmails || []).join(', ');
+  document.getElementById('cfgDiskAlertThreshold').value = DB.emailConfig.diskSpaceAlertThresholdPercent || 85;
+  document.getElementById('cfgDiskAlertCc').value = (DB.emailConfig.diskSpaceAlertCcEmails || []).join(', ');
   document.getElementById('cfgTestEmailResult').textContent = '';
   loadSmtpAuthStatus();
   contractExpiryDeptContactsDraft = JSON.parse(JSON.stringify(DB.contractExpiryDeptContacts || {}));

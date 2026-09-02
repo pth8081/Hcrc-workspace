@@ -41,6 +41,13 @@ if (!config.options.encrypt) {
   console.warn('⚠️  DB_ENCRYPT chưa bật (kết nối SQL Server hiện KHÔNG mã hoá) — chỉ chấp nhận được nếu SQL Server & ứng dụng cùng nằm trong mạng nội bộ tin cậy. Bật DB_ENCRYPT=true trong .env ngay khi SQL Server đã có chứng chỉ TLS (xem .env.example).');
 }
 
+// Cảnh báo khởi động nếu chưa bật mã hoá cột IpAddress trong Nhật ký hệ thống (xem lib/logCrypto.js) —
+// KHÔNG chặn khởi động (log vẫn ghi được, chỉ ở dạng plaintext như trước) vì đây là lớp phòng thủ bổ
+// sung (defense-in-depth), không phải điều kiện để hệ thống hoạt động đúng.
+if (!process.env.LOG_ENCRYPTION_KEY) {
+  console.warn('⚠️  LOG_ENCRYPTION_KEY chưa đặt (địa chỉ IP trong Nhật ký hệ thống hiện lưu dạng plaintext) — nên bật trước khi hệ thống public ra Internet để bảo vệ dữ liệu cá nhân (PII). Xem .env.example.');
+}
+
 let poolPromise = null;
 
 function getPool() {

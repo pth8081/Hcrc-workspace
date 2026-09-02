@@ -87,7 +87,9 @@ BEGIN
         CreatedAt     DATETIME2(3)   NOT NULL DEFAULT SYSUTCDATETIME(),
         Username      NVARCHAR(100)  NOT NULL,
         FullName      NVARCHAR(200)  NULL,
-        IpAddress     NVARCHAR(100)  NULL,
+        -- 300 (không phải 100): đủ chứa giá trị đã MÃ HOÁ AES-256-GCM khi bật LOG_ENCRYPTION_KEY (xem
+        -- lib/logCrypto.js) — chuỗi mã hoá dài hơn IP gốc đáng kể (tiền tố "enc:" + base64(iv+tag+cipher)).
+        IpAddress     NVARCHAR(300)  NULL,
         Module        NVARCHAR(50)   NOT NULL,
         ActionType    NVARCHAR(100)  NOT NULL,
         TargetObject  NVARCHAR(200)  NULL,
@@ -95,6 +97,21 @@ BEGIN
         Status        NVARCHAR(20)   NOT NULL DEFAULT 'SUCCESS'
     );
     CREATE INDEX IX_SystemLogs_CreatedAt ON dbo.SystemLogs (CreatedAt DESC, Id DESC);
+END
+ELSE
+BEGIN
+    -- Database đã tồn tại từ trước khi có mã hoá IpAddress (xem lib/logCrypto.js) — mở rộng cột nếu vẫn
+    -- còn 100 ký tự cũ, đủ chứa giá trị đã mã hoá. Chỉ ALTER khi cột CHƯA đúng độ rộng (tra
+    -- INFORMATION_SCHEMA trước, cùng khuôn đã dùng cho AppData.UpdatedAt ở trên) — an toàn chạy lại
+    -- nhiều lần, KHÔNG mất dữ liệu (chỉ mở rộng, không thu hẹp).
+    IF EXISTS (
+        SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS
+        WHERE TABLE_SCHEMA = 'dbo' AND TABLE_NAME = 'SystemLogs' AND COLUMN_NAME = 'IpAddress'
+          AND CHARACTER_MAXIMUM_LENGTH < 300
+    )
+    BEGIN
+        ALTER TABLE dbo.SystemLogs ALTER COLUMN IpAddress NVARCHAR(300) NULL;
+    END
 END
 GO
 
