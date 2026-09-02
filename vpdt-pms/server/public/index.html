@@ -2486,14 +2486,14 @@ input[data-sdd-list] {
          — internalRecruitmentCreate/admin — thấy toàn bộ, xử lý trạng thái từng ứng viên). -->
     <div id="internalRecruitmentSection" class="hidden space-y-4">
       <div class="flex gap-2 flex-wrap">
-        <button type="button" onclick="setRecruitmentTab('JOBS')" id="btnRecruitmentJobs" class="px-3 py-1 rounded text-xs font-bold bg-amber-700 text-white">📋 Tin Tuyển Dụng</button>
-        <button type="button" onclick="setRecruitmentTab('MY_REFERRALS')" id="btnRecruitmentMyReferrals" class="px-3 py-1 rounded text-xs font-bold bg-gray-200 text-gray-700">🙋 Ứng Viên Tôi Giới Thiệu</button>
-        <button type="button" onclick="setRecruitmentTab('MANAGE')" id="btnRecruitmentManage" class="hidden px-3 py-1 rounded text-xs font-bold bg-gray-200 text-gray-700">🗂 Quản Lý Ứng Viên</button>
+        <button type="button" data-op="setRecruitmentTab" data-arg0="JOBS" id="btnRecruitmentJobs" class="px-3 py-1 rounded text-xs font-bold bg-amber-700 text-white">📋 Tin Tuyển Dụng</button>
+        <button type="button" data-op="setRecruitmentTab" data-arg0="MY_REFERRALS" id="btnRecruitmentMyReferrals" class="px-3 py-1 rounded text-xs font-bold bg-gray-200 text-gray-700">🙋 Ứng Viên Tôi Giới Thiệu</button>
+        <button type="button" data-op="setRecruitmentTab" data-arg0="MANAGE" id="btnRecruitmentManage" class="hidden px-3 py-1 rounded text-xs font-bold bg-gray-200 text-gray-700">🗂 Quản Lý Ứng Viên</button>
       </div>
 
       <!-- TIN TUYỂN DỤNG -->
       <div id="recruitmentJobsPanel" class="space-y-4">
-        <form id="recruitmentJobForm" onsubmit="submitRecruitmentJob(event)" class="hidden bg-white p-3 rounded border text-xs space-y-3">
+        <form id="recruitmentJobForm" data-op-submit="submitRecruitmentJob" class="hidden bg-white p-3 rounded border text-xs space-y-3">
           <h4 class="font-bold text-gray-700">➕ Đăng Tin Tuyển Dụng Mới (Đợt 2: Bản Tin Tuyển Dụng)</h4>
           <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
             <div class="md:col-span-2">
@@ -2545,15 +2545,15 @@ input[data-sdd-list] {
           <div class="grid grid-cols-1 md:grid-cols-3 gap-3 bg-gray-50 p-3 rounded border">
             <div>
               <label class="block text-xs font-semibold text-gray-600 mb-1">Đợt (Tháng)</label>
-              <select id="rjFilterMonth" onchange="onRecruitmentJobsFilterChange()" class="w-full border p-1.5 rounded bg-white text-xs"></select>
+              <select id="rjFilterMonth" data-op-change="onRecruitmentJobsFilterChange" class="w-full border p-1.5 rounded bg-white text-xs"></select>
             </div>
             <div>
               <label class="block text-xs font-semibold text-gray-600 mb-1">Đơn Vị/Siêu Thị</label>
-              <select id="rjFilterDept" onchange="onRecruitmentJobsFilterChange()" class="w-full border p-1.5 rounded bg-white text-xs"></select>
+              <select id="rjFilterDept" data-op-change="onRecruitmentJobsFilterChange" class="w-full border p-1.5 rounded bg-white text-xs"></select>
             </div>
             <div>
               <label class="block text-xs font-semibold text-gray-600 mb-1">Từ Khoá (vị trí/địa điểm)</label>
-              <input id="rjFilterKeyword" oninput="onRecruitmentJobsFilterChange()" placeholder="Tên vị trí, địa điểm..." class="w-full border p-1.5 rounded text-xs">
+              <input id="rjFilterKeyword" data-op-input="onRecruitmentJobsFilterChange" placeholder="Tên vị trí, địa điểm..." class="w-full border p-1.5 rounded text-xs">
             </div>
           </div>
           <div id="recruitmentJobsContainer" class="grid grid-cols-1 md:grid-cols-2 gap-2"></div>
@@ -2572,7 +2572,7 @@ input[data-sdd-list] {
       <div id="recruitmentManagePanel" class="hidden space-y-3">
         <div class="flex items-center gap-2 flex-wrap">
           <label class="text-xs font-semibold text-gray-600">Lọc theo tin tuyển dụng:</label>
-          <select id="recruitmentManageFilterJob" onchange="onRecruitmentManageFilterChange()" class="border p-1.5 rounded bg-white text-xs"></select>
+          <select id="recruitmentManageFilterJob" data-op-change="onRecruitmentManageFilterChange" class="border p-1.5 rounded bg-white text-xs"></select>
         </div>
         <h3 class="font-bold text-gray-800">🗂 Toàn Bộ Ứng Viên Được Giới Thiệu</h3>
         <div class="overflow-x-auto">
@@ -2820,9 +2820,9 @@ input[data-sdd-list] {
       <div class="bg-white rounded-lg shadow-xl max-w-lg w-full max-h-[85vh] overflow-y-auto">
         <div class="p-4 border-b flex justify-between items-center sticky top-0 bg-white">
           <h3 class="font-bold text-gray-800">🙋 Giới Thiệu Ứng Viên</h3>
-          <button onclick="closeRecruitmentReferModal()" class="text-gray-400 hover:text-gray-700 text-xl leading-none">&times;</button>
+          <button data-op="closeRecruitmentReferModal" class="text-gray-400 hover:text-gray-700 text-xl leading-none">&times;</button>
         </div>
-        <form id="recruitmentReferForm" onsubmit="submitRecruitmentReferral(event)" class="p-4 space-y-3 text-xs">
+        <form id="recruitmentReferForm" data-op-submit="submitRecruitmentReferral" class="p-4 space-y-3 text-xs">
           <input type="hidden" id="rrJobId">
           <p class="text-gray-600">Vị trí: <span id="rrJobTitleLabel" class="font-bold text-gray-800"></span></p>
           <p class="text-gray-500 italic">Người giới thiệu: <span id="rrReferrerLabel" class="font-semibold"></span> (tự động ghi nhận, không thể đổi)</p>
@@ -2849,7 +2849,7 @@ input[data-sdd-list] {
             <textarea id="rrCandidateNote" class="w-full border p-1.5 rounded h-16"></textarea>
           </div>
           <div class="flex justify-end gap-2 pt-2 border-t">
-            <button type="button" onclick="closeRecruitmentReferModal()" class="px-4 py-2 rounded text-xs font-bold text-gray-600 hover:bg-gray-100">Huỷ</button>
+            <button type="button" data-op="closeRecruitmentReferModal" class="px-4 py-2 rounded text-xs font-bold text-gray-600 hover:bg-gray-100">Huỷ</button>
             <button type="submit" class="bg-amber-600 text-white px-5 py-2 rounded font-bold hover:bg-amber-700">Gửi Giới Thiệu</button>
           </div>
         </form>
@@ -23898,6 +23898,13 @@ bindCspDelegation('uniformSection');
 bindCspDelegation('licenseSection');
 bindCspDelegation('licenseDetailModal');
 
+// Tuyển Dụng — 3 sub-tab (Tin Tuyển Dụng/Ứng Viên Tôi Giới Thiệu/Quản Lý Ứng Viên) đều render trong
+// #internalRecruitmentSection nên chỉ cần 1 gốc. Modal "Giới Thiệu Ứng Viên" (#recruitmentReferModal,
+// openRecruitmentReferModal()/submitRecruitmentReferral()) sống NGOÀI section (giống Xe/Vận Hành/Đào
+// Tạo/Đồng Phục/Giấy Phép) nên cần thêm 1 gốc riêng — 2 gốc tổng cộng.
+bindCspDelegation('internalRecruitmentSection');
+bindCspDelegation('recruitmentReferModal');
+
 // ==========================================
 // VĂN PHÒNG PHẨM — kỳ đăng ký (vppPeriods) + đăng ký của nhân viên (vppRegistrations). 3 sub-tab:
 // Đăng Ký (ai cũng vào được) / Kỳ Đăng Ký + Báo Cáo Tổng Hợp (chỉ vppManage/admin).
@@ -33360,10 +33367,10 @@ function renderRecruitmentJobs() {
         <p class="text-[11px] text-gray-400">Đăng bởi ${escapeHtml(j.creatorName || j.creator)} · ${referralCount} lượt giới thiệu</p>
         ${suggestFilledHTML}
         <div class="flex gap-2 pt-1 flex-wrap">
-          ${isOpen ? `<button onclick="openRecruitmentReferModal(${j.id})" class="bg-amber-600 hover:bg-amber-700 text-white px-3 py-1 rounded text-xs font-bold">🙋 Giới Thiệu Ứng Viên</button>` : ''}
-          ${canManage && isOpen ? `<button onclick="confirmRecruitmentJobFilledUi(${j.id})" class="bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-1 rounded text-xs font-bold">✅ Xác Nhận Đã Tuyển Đủ</button>` : ''}
-          ${canClose ? `<button onclick="closeRecruitmentJobUi(${j.id})" class="bg-gray-200 hover:bg-gray-300 px-3 py-1 rounded text-xs font-bold">Đóng Tin</button>` : ''}
-          ${currentUser.perms?.admin ? `<button onclick="deleteRecruitmentJob(${j.id})" class="bg-red-100 hover:bg-red-200 text-red-700 px-3 py-1 rounded text-xs font-bold">Xoá</button>` : ''}
+          ${isOpen ? `<button data-op="openRecruitmentReferModal" data-arg0="${j.id}" class="bg-amber-600 hover:bg-amber-700 text-white px-3 py-1 rounded text-xs font-bold">🙋 Giới Thiệu Ứng Viên</button>` : ''}
+          ${canManage && isOpen ? `<button data-op="confirmRecruitmentJobFilledUi" data-arg0="${j.id}" class="bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-1 rounded text-xs font-bold">✅ Xác Nhận Đã Tuyển Đủ</button>` : ''}
+          ${canClose ? `<button data-op="closeRecruitmentJobUi" data-arg0="${j.id}" class="bg-gray-200 hover:bg-gray-300 px-3 py-1 rounded text-xs font-bold">Đóng Tin</button>` : ''}
+          ${currentUser.perms?.admin ? `<button data-op="deleteRecruitmentJob" data-arg0="${j.id}" class="bg-red-100 hover:bg-red-200 text-red-700 px-3 py-1 rounded text-xs font-bold">Xoá</button>` : ''}
         </div>
       </div>`;
   }).join('');
@@ -33509,7 +33516,7 @@ function renderRecruitmentManage() {
       <td class="border p-2">${r.cvFileUrl ? `<a href="${escapeHtml(r.cvFileUrl)}" target="_blank" class="text-indigo-600 font-bold hover:underline">📄 Xem CV</a>` : '-'}</td>
       <td class="border p-2"><span class="text-[10px] font-bold px-2 py-0.5 rounded-full ${RECRUITMENT_STATUS_COLORS[r.status] || ''}">${RECRUITMENT_STATUS_LABELS[r.status] || r.status}</span></td>
       <td class="border p-2 text-center">
-        <select onchange="setRecruitmentReferralStatusUi(${r.id}, this.value)" class="border p-1 rounded bg-white text-xs">
+        <select data-op-change="setRecruitmentReferralStatusUi" data-arg0="${r.id}" data-arg-value="1" class="border p-1 rounded bg-white text-xs">
           ${Object.keys(RECRUITMENT_STATUS_LABELS).map(s => `<option value="${s}" ${s === r.status ? 'selected' : ''}>${RECRUITMENT_STATUS_LABELS[s]}</option>`).join('')}
         </select>
       </td>

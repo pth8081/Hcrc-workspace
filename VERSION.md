@@ -1,10 +1,65 @@
 # Phiên bản hiện tại
 
-**4.7** — đã merge vào `main` (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge
+**4.8** — đã merge vào `main` (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge
 góc màn hình + `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần
 kiểu `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
 
-## Cập nhật gần nhất — CSP unsafe-inline: đợt 16/N — module Giấy Phép
+## Cập nhật gần nhất — CSP unsafe-inline: đợt 17/N — module Tuyển Dụng
+
+Tiếp tục đợt 16 (Giấy Phép, xem mục "Trước đó" ngay bên dưới) — đợt này chuyển toàn bộ module **Tuyển
+Dụng** (`#internalRecruitmentSection` — 3 sub-tab Tin Tuyển Dụng/Ứng Viên Tôi Giới Thiệu/Quản Lý Ứng Viên
+trong 1 section, cộng modal Giới Thiệu Ứng Viên sống ngoài section):
+
+- **16 điểm** `onclick`/`onchange`/`oninput`/`onsubmit` chuyển sang `data-op*`:
+  - **3 nút chuyển sub-tab** (`setRecruitmentTab`, tham số `'JOBS'`/`'MY_REFERRALS'`/`'MANAGE'`).
+  - **Form "Đăng Tin Tuyển Dụng"** (`#recruitmentJobForm`): `onsubmit` (`submitRecruitmentJob`).
+  - **Bộ lọc Tin Tuyển Dụng**: 2 ô chọn (đợt/phòng ban) + 1 ô gõ từ khoá, đều gọi lại
+    `onRecruitmentJobsFilterChange`.
+  - **Bộ lọc Quản Lý Ứng Viên**: 1 ô chọn theo tin tuyển dụng (`onRecruitmentManageFilterChange`).
+  - **`renderRecruitmentJobs()`** (dựng từng thẻ tin tuyển dụng): 4 điểm — "🙋 Giới Thiệu Ứng Viên"
+    (`openRecruitmentReferModal`), "✅ Xác Nhận Đã Tuyển Đủ" (`confirmRecruitmentJobFilledUi`), "Đóng
+    Tin" (`closeRecruitmentJobUi`), "Xoá" admin-only (`deleteRecruitmentJob`) — cả 4 đều nhận `j.id` làm
+    tham số.
+  - **`renderRecruitmentManage()`** (dựng từng dòng ứng viên): 1 điểm — dropdown đổi trạng thái ứng viên
+    (`setRecruitmentReferralStatusUi(${r.id}, this.value)`), map thẳng vào `data-arg-value` (slot
+    `this.value` có sẵn, không cần wrapper).
+  - **`#recruitmentReferModal`** (modal Giới Thiệu Ứng Viên, sống NGOÀI section): 3 điểm — nút X đóng
+    modal, `onsubmit` form (`submitRecruitmentReferral`), nút "Huỷ" (cả 2 nút đóng đều gọi
+    `closeRecruitmentReferModal`).
+- **Không có wrapper mới nào cần thiết** — toàn bộ 16 điểm map thẳng vào `data-op`/`data-op-change`/
+  `data-op-input`/`data-op-submit` với tham số positional hoặc slot `this.value` có sẵn.
+- **2 gốc `bindCspDelegation`**: `internalRecruitmentSection` (3 sub-tab) và `recruitmentReferModal`
+  (modal ngoài section, xác nhận là sibling DOM, giống mẫu Xe/Vận Hành/Đào Tạo/Đồng Phục/Giấy Phép các
+  đợt trước).
+- **Không phát hiện lỗi thật nào trong lúc demo module này.**
+
+**Xác nhận không ảnh hưởng** — 2 lớp kiểm tra độc lập trước khi merge:
+- Demo Playwright thật (SQL Server + server local + đăng nhập UI thật qua tài khoản demo tạm 2FA thật,
+  xoá lại ngay sau demo cùng toàn bộ dữ liệu demo tạo ra trong lúc test — `recruitmentJobs`/
+  `recruitmentReferrals` đều nằm trong `MIGRATED_COLLECTIONS`, xoá bằng `deleteRecordById()`, tài khoản
+  demo xoá bằng `withLockedAppDataValue('users', ...)`): đăng nhập, mở Truyền Thông Nội Bộ > Tuyển Dụng;
+  đăng 1 tin tuyển dụng mới (điền đủ tên vị trí/số lượng/địa điểm/hạn nộp/phòng ban tuyển/liên hệ); bấm
+  "🙋 Giới Thiệu Ứng Viên" trên tin vừa đăng — mở đúng `#recruitmentReferModal`, điền tên/SĐT/email ứng
+  viên + upload CV (PDF), gửi giới thiệu thành công; chuyển sang sub-tab "Quản Lý Ứng Viên" — đổi trạng
+  thái ứng viên vừa giới thiệu qua dropdown (`this.value` → `data-arg-value`) thành công; quay lại "Tin
+  Tuyển Dụng" — bấm "Đóng Tin" rồi "Xoá" tin vừa tạo, cả 2 đều thành công. Toàn bộ đúng, không có lỗi JS
+  console mới liên quan tới thay đổi (chỉ 3 lỗi mạng nền quen thuộc trước lúc đăng nhập: chặn Google
+  Fonts, `/api/auth/me` 401 lúc chưa đăng nhập, `/api/captcha` 404 do CAPTCHA chưa bật ở môi trường demo
+  — cùng 3 lỗi y hệt các đợt trước, không liên quan tới module này).
+- Chạy lại toàn bộ 46 file test hồi quy (`tests/test-*.js`) — 44/46 OK, đúng 2 file known-flaky quen
+  thuộc (`test-audit-fixes-batch1.js`/`test-audit-round2-cluster1.js`, timeout hạ tầng test không liên
+  quan thay đổi lần này).
+
+**Deploy-impact:** KHÔNG đổi `sql/schema.sql`, KHÔNG thêm biến môi trường mới, KHÔNG thêm `dependencies`
+mới — toàn bộ thay đổi nằm trong `public/index.html` (thuần client JS/HTML), deploy an toàn chỉ với copy
+code + `pm2 restart`, không cần thao tác 1 lần nào khác.
+
+**Còn lại:** Tin Tức/Truyền Thông (bao gồm cả form "HCRC Đồng Hành" phía nhân viên — `#hrFeedbackForm`),
+Biên Bản Họp, Công Việc, Văn Bản Trình, Tài Liệu, Báo Cáo Định Kỳ... — dùng hạ tầng
+`data-op*`/`bindCspDelegation()` đã xây, làm tiếp tuần tự mỗi module 1 commit + demo + regression trước
+khi merge, tới khi hết toàn bộ điểm mới gỡ `unsafe-inline`.
+
+## Trước đó — CSP unsafe-inline: đợt 16/N — module Giấy Phép
 
 Tiếp tục đợt 15 (Đồng Phục, xem mục "Trước đó" ngay bên dưới) — đợt này chuyển toàn bộ module **Giấy
 Phép** (`#licenseSection` — form Tải Lên/bộ lọc + danh sách trong 1 section, cộng modal chi tiết sống
