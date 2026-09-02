@@ -4211,12 +4211,12 @@ input[data-sdd-list] {
          #mobileTopBar (fixed, cao ~56px = pt-14 mà nội dung chính đang chừa sẵn); z-20 thấp hơn
          #mobileTopBar (z-30) và mọi modal (z-40/z-50) để không che các lớp đó. -->
     <div id="systemSubTabBar" class="sticky top-14 md:top-0 z-20 bg-white flex gap-2 flex-wrap border-b pb-2 pt-1">
-      <button type="button" onclick="setSystemSubTab('ADMIN')" id="btnSystemSubAdmin" class="px-3 py-1.5 rounded text-xs font-bold bg-purple-700 text-white">⚙️ Quản Trị</button>
-      <button type="button" onclick="setSystemSubTab('FORM')" id="btnSystemSubForm" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">📋 Biểu Mẫu</button>
-      <button type="button" onclick="setSystemSubTab('WORKFLOW')" id="btnSystemSubWorkflow" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">🔄 Quy Trình & Phê Duyệt</button>
-      <button type="button" onclick="setSystemSubTab('UPLOAD')" id="btnSystemSubUpload" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">📎 Quản Lý Tệp File</button>
-      <button type="button" onclick="setSystemSubTab('LOG')" id="btnSystemSubLog" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">📊 Log</button>
-      <button type="button" onclick="setSystemSubTab('TRASH')" id="btnSystemSubTrash" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">🗑️ Thùng Rác</button>
+      <button type="button" data-op="setSystemSubTab" data-arg0="ADMIN" id="btnSystemSubAdmin" class="px-3 py-1.5 rounded text-xs font-bold bg-purple-700 text-white">⚙️ Quản Trị</button>
+      <button type="button" data-op="setSystemSubTab" data-arg0="FORM" id="btnSystemSubForm" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">📋 Biểu Mẫu</button>
+      <button type="button" data-op="setSystemSubTab" data-arg0="WORKFLOW" id="btnSystemSubWorkflow" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">🔄 Quy Trình & Phê Duyệt</button>
+      <button type="button" data-op="setSystemSubTab" data-arg0="UPLOAD" id="btnSystemSubUpload" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">📎 Quản Lý Tệp File</button>
+      <button type="button" data-op="setSystemSubTab" data-arg0="LOG" id="btnSystemSubLog" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">📊 Log</button>
+      <button type="button" data-op="setSystemSubTab" data-arg0="TRASH" id="btnSystemSubTrash" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">🗑️ Thùng Rác</button>
     </div>
 
   <!-- Màn hình MODULE QUẢN LÝ BIỂU MẪU (FORM BUILDER) -->
@@ -4230,7 +4230,7 @@ input[data-sdd-list] {
         <div id="formTabsBar" class="flex gap-2 flex-wrap"></div>
       </div>
 
-      <form onsubmit="addCustomField(event)" class="bg-white p-4 rounded border space-y-3 text-xs">
+      <form data-op-submit="addCustomField" class="bg-white p-4 rounded border space-y-3 text-xs">
         <h4 class="font-bold text-gray-800 text-sm flex items-center gap-1"><span id="lblFormFieldFormMode">➕ Thêm Trường Dữ Liệu Bổ Sung Cho:</span> <span id="lblActiveFormName" class="text-rose-600 font-extrabold">Văn Bản Trình / Tờ Trình</span></h4>
 
         <div class="grid grid-cols-1 md:grid-cols-4 gap-3">
@@ -4240,7 +4240,7 @@ input[data-sdd-list] {
           </div>
           <div id="fldTypeGroup">
             <label class="block font-semibold text-gray-600 mb-1">Kiểu Dữ Liệu</label>
-            <select id="fldType" onchange="toggleOptionsInput()" class="w-full border p-1.5 rounded bg-white font-semibold">
+            <select id="fldType" data-op-change="toggleOptionsInput" class="w-full border p-1.5 rounded bg-white font-semibold">
               <option value="text">Văn bản ngắn (Text)</option>
               <option value="number">Số (Number)</option>
               <option value="date">Ngày (Date)</option>
@@ -4265,7 +4265,7 @@ input[data-sdd-list] {
         </div>
 
         <div class="flex justify-end gap-2">
-          <button type="button" id="btnCancelEditField" onclick="cancelEditCustomField()" class="hidden bg-gray-200 text-gray-700 px-4 py-1.5 rounded font-bold hover:bg-gray-300 transition">Hủy Sửa</button>
+          <button type="button" id="btnCancelEditField" data-op="cancelEditCustomField" class="hidden bg-gray-200 text-gray-700 px-4 py-1.5 rounded font-bold hover:bg-gray-300 transition">Hủy Sửa</button>
           <button type="submit" id="btnSubmitCustomField" class="bg-rose-600 text-white px-4 py-1.5 rounded font-bold hover:bg-rose-700 transition">Thêm Trường Vào Biểu Mẫu</button>
         </div>
       </form>
@@ -4298,20 +4298,20 @@ input[data-sdd-list] {
   <!-- Màn hình 3: Tab Quản Lý Quy Trình & Phê Duyệt Đồng Cấp -->
   <div id="workflowSection" class="hidden space-y-6">
     <div class="flex gap-2 border-b pb-2 flex-wrap">
-      <button onclick="switchWfModule('DOC')" id="btnWfModDoc" class="px-3 py-1.5 rounded text-xs font-bold bg-blue-600 text-white">📂 QT Tài Liệu</button>
-      <button onclick="switchWfModule('SUBMISSION')" id="btnWfModSubmission" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">📜 QT Văn Bản Trình</button>
-      <button onclick="switchWfModule('CAR')" id="btnWfModCar" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">🚗 QT Đăng Ký Xe</button>
-      <button onclick="switchWfModule('OFFICE_BUY')" id="btnWfModOfficeBuy" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">🛒 QT Mua Bán</button>
-      <button onclick="switchWfModule('OFFICE_FIX')" id="btnWfModOfficeFix" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">🔧 QT Sửa Chữa</button>
-      <button onclick="switchWfModule('VPP')" id="btnWfModVpp" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">🖇️ QT Văn Phòng Phẩm</button>
-      <button onclick="switchWfModule('OPERATION_ORDER')" id="btnWfModOperationOrder" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">📦 QT Vận Hành - Đơn Hàng</button>
-      <button onclick="switchWfModule('OPERATION_STORE_OPEN')" id="btnWfModOperationStoreOpen" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">🏬 QT Vận Hành - Mở Mới Siêu Thị</button>
-      <button onclick="switchWfModule('OPERATION_REPAIR')" id="btnWfModOperationRepair" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">🔧 QT Vận Hành - Sửa Chữa Siêu Thị</button>
-      <button onclick="switchWfModule('OPERATION_STORE_OPEN_ESTIMATE')" id="btnWfModOperationStoreOpenEstimate" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">📊 QT Dự Toán - Mở Mới Siêu Thị</button>
-      <button onclick="switchWfModule('OPERATION_REPAIR_ESTIMATE')" id="btnWfModOperationRepairEstimate" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">📊 QT Dự Toán - Sửa Chữa Siêu Thị</button>
-      <button onclick="switchWfModule('CONTRACT_APPROVAL')" id="btnWfModContractApproval" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">📄 QT Hợp Đồng - Phê Duyệt</button>
-      <button onclick="switchWfModule('CONTRACT_MANAGE')" id="btnWfModContractManage" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">📋 QT Hợp Đồng - Quản Lý HĐ</button>
-      <button onclick="switchWfModule('ITPRICE')" id="btnWfModITPRICE" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">🏷️ QT Hỗ Trợ IT - Duyệt Giá</button>
+      <button data-op="switchWfModule" data-arg0="DOC" id="btnWfModDoc" class="px-3 py-1.5 rounded text-xs font-bold bg-blue-600 text-white">📂 QT Tài Liệu</button>
+      <button data-op="switchWfModule" data-arg0="SUBMISSION" id="btnWfModSubmission" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">📜 QT Văn Bản Trình</button>
+      <button data-op="switchWfModule" data-arg0="CAR" id="btnWfModCar" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">🚗 QT Đăng Ký Xe</button>
+      <button data-op="switchWfModule" data-arg0="OFFICE_BUY" id="btnWfModOfficeBuy" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">🛒 QT Mua Bán</button>
+      <button data-op="switchWfModule" data-arg0="OFFICE_FIX" id="btnWfModOfficeFix" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">🔧 QT Sửa Chữa</button>
+      <button data-op="switchWfModule" data-arg0="VPP" id="btnWfModVpp" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">🖇️ QT Văn Phòng Phẩm</button>
+      <button data-op="switchWfModule" data-arg0="OPERATION_ORDER" id="btnWfModOperationOrder" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">📦 QT Vận Hành - Đơn Hàng</button>
+      <button data-op="switchWfModule" data-arg0="OPERATION_STORE_OPEN" id="btnWfModOperationStoreOpen" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">🏬 QT Vận Hành - Mở Mới Siêu Thị</button>
+      <button data-op="switchWfModule" data-arg0="OPERATION_REPAIR" id="btnWfModOperationRepair" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">🔧 QT Vận Hành - Sửa Chữa Siêu Thị</button>
+      <button data-op="switchWfModule" data-arg0="OPERATION_STORE_OPEN_ESTIMATE" id="btnWfModOperationStoreOpenEstimate" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">📊 QT Dự Toán - Mở Mới Siêu Thị</button>
+      <button data-op="switchWfModule" data-arg0="OPERATION_REPAIR_ESTIMATE" id="btnWfModOperationRepairEstimate" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">📊 QT Dự Toán - Sửa Chữa Siêu Thị</button>
+      <button data-op="switchWfModule" data-arg0="CONTRACT_APPROVAL" id="btnWfModContractApproval" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">📄 QT Hợp Đồng - Phê Duyệt</button>
+      <button data-op="switchWfModule" data-arg0="CONTRACT_MANAGE" id="btnWfModContractManage" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">📋 QT Hợp Đồng - Quản Lý HĐ</button>
+      <button data-op="switchWfModule" data-arg0="ITPRICE" id="btnWfModITPRICE" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">🏷️ QT Hỗ Trợ IT - Duyệt Giá</button>
     </div>
 
     <div id="wfSubmissionTypeTabs" class="hidden gap-2 flex-wrap"></div>
@@ -4322,7 +4322,7 @@ input[data-sdd-list] {
       </h3>
       <div class="flex items-center justify-between gap-2 flex-wrap">
         <p class="text-xs text-emerald-800">💡 Cấu hình luồng duyệt chuyển tiếp theo các cấp thẩm quyền phòng ban. Có thể sửa nhiều phòng ban rồi bấm "Lưu Cấu Hình Tất Cả" 1 lần, hoặc lưu riêng từng phòng ban ở mỗi thẻ bên dưới.</p>
-        <button onclick="saveAllDeptWorkflowConfigs()" class="shrink-0 bg-emerald-700 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-emerald-800">💾 Lưu Cấu Hình Tất Cả</button>
+        <button data-op="saveAllDeptWorkflowConfigs" class="shrink-0 bg-emerald-700 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-emerald-800">💾 Lưu Cấu Hình Tất Cả</button>
       </div>
 
       <div id="deptWorkflowConfigContainer" class="space-y-4"></div>
@@ -4332,7 +4332,7 @@ input[data-sdd-list] {
     <div class="bg-slate-50 p-4 rounded border space-y-4">
       <h3 class="font-bold text-slate-800 text-base">🛠️ Định Nghĩa Các Mẫu Bước Phê Duyệt</h3>
 
-      <form onsubmit="saveWorkflowTemplate(event)" class="bg-white p-3 rounded border space-y-3">
+      <form data-op-submit="saveWorkflowTemplate" class="bg-white p-3 rounded border space-y-3">
         <input id="editingWfCode" type="hidden">
 
         <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -4349,11 +4349,11 @@ input[data-sdd-list] {
         <div>
           <label class="block text-xs font-bold text-gray-700 mb-2">Thêm / Sửa / Xóa Các Bước Theo Thứ Tự:</label>
           <div id="stepBuilderContainer" class="space-y-2"></div>
-          <button type="button" onclick="addStepRow()" class="mt-2 text-xs bg-gray-200 text-gray-800 px-2 py-1 rounded font-semibold hover:bg-gray-300">+ Thêm Bước Duyệt</button>
+          <button type="button" data-op="addStepRow" class="mt-2 text-xs bg-gray-200 text-gray-800 px-2 py-1 rounded font-semibold hover:bg-gray-300">+ Thêm Bước Duyệt</button>
         </div>
 
         <div class="flex justify-end gap-2">
-          <button id="btnCancelWf" type="button" onclick="resetWorkflowForm()" class="hidden bg-gray-400 text-white text-xs px-3 py-1.5 rounded font-bold">Hủy</button>
+          <button id="btnCancelWf" type="button" data-op="resetWorkflowForm" class="hidden bg-gray-400 text-white text-xs px-3 py-1.5 rounded font-bold">Hủy</button>
           <button id="btnSaveWf" type="submit" class="bg-emerald-600 text-white text-xs px-4 py-1.5 rounded font-bold hover:bg-emerald-700">Lưu Mẫu Quy Trình</button>
         </div>
       </form>
@@ -4386,10 +4386,10 @@ input[data-sdd-list] {
          thoại/tablet/desktop) — không thể gán cứng 1 giá trị top theo class Tailwind như thanh trên. z-10
          thấp hơn #systemSubTabBar (z-20) để không đè lên khi cả 2 cùng dính ở đầu. -->
     <div id="adminSubTabBar" class="sticky z-10 bg-white flex flex-wrap gap-2 border-b pb-2 pt-1">
-      <button type="button" onclick="setAdminSubTab('EMAIL')" id="btnAdminSubEmail" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">📧 Cấu Hình Email</button>
-      <button type="button" onclick="setAdminSubTab('CATALOG')" id="btnAdminSubCatalog" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">🗂️ Quản Lý Danh Mục</button>
-      <button type="button" onclick="setAdminSubTab('PERMS')" id="btnAdminSubPerms" class="px-3 py-1.5 rounded text-xs font-bold bg-amber-700 text-white">🔐 Phân Quyền</button>
-      <button type="button" onclick="setAdminSubTab('EXTAUTH')" id="btnAdminSubExtAuth" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">🔑 API Xác Thực Ngoài</button>
+      <button type="button" data-op="setAdminSubTab" data-arg0="EMAIL" id="btnAdminSubEmail" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">📧 Cấu Hình Email</button>
+      <button type="button" data-op="setAdminSubTab" data-arg0="CATALOG" id="btnAdminSubCatalog" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">🗂️ Quản Lý Danh Mục</button>
+      <button type="button" data-op="setAdminSubTab" data-arg0="PERMS" id="btnAdminSubPerms" class="px-3 py-1.5 rounded text-xs font-bold bg-amber-700 text-white">🔐 Phân Quyền</button>
+      <button type="button" data-op="setAdminSubTab" data-arg0="EXTAUTH" id="btnAdminSubExtAuth" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">🔑 API Xác Thực Ngoài</button>
     </div>
 
     <!-- CẤU HÌNH HỆ THỐNG EMAIL -->
@@ -4398,7 +4398,7 @@ input[data-sdd-list] {
       <p class="text-[11px] text-gray-500 italic">Cấu hình đầy đủ ngay tại đây — kể cả tài khoản/mật khẩu đăng nhập SMTP (nếu máy chủ yêu cầu xác thực), không cần đụng tới server/file .env nữa. Chưa nhập SMTP Server bên dưới thì hệ thống tự chuyển sang chế độ mô phỏng (ghi Nhật ký hệ thống, không gửi hộp thư thật).</p>
       <p id="cfgSmtpAuthStatus" class="text-[11px] font-semibold rounded px-2 py-1 bg-white border"></p>
 
-      <form onsubmit="saveEmailConfig(event)" class="space-y-3 bg-white p-3 rounded border text-xs">
+      <form data-op-submit="saveEmailConfig" class="space-y-3 bg-white p-3 rounded border text-xs">
         <div class="grid grid-cols-1 md:grid-cols-4 gap-3">
           <div>
             <label class="block font-semibold text-gray-600 mb-1">Trạng thái gửi mail</label>
@@ -4424,9 +4424,9 @@ input[data-sdd-list] {
         <div>
           <label class="block font-semibold text-gray-600 mb-1">Mã Hoá Kết Nối</label>
           <div class="flex gap-1.5 flex-wrap">
-            <button type="button" onclick="setSmtpEncryption('NONE')" id="encBtn_NONE" class="px-3 py-1.5 rounded border font-semibold">Không mã hoá <span class="font-normal text-gray-400">(port 25)</span></button>
-            <button type="button" onclick="setSmtpEncryption('STARTTLS')" id="encBtn_STARTTLS" class="px-3 py-1.5 rounded border font-semibold">TLS <span class="font-normal text-gray-400">(port 587)</span></button>
-            <button type="button" onclick="setSmtpEncryption('SSL')" id="encBtn_SSL" class="px-3 py-1.5 rounded border font-semibold">SSL <span class="font-normal text-gray-400">(port 465)</span></button>
+            <button type="button" data-op="setSmtpEncryption" data-arg0="NONE" id="encBtn_NONE" class="px-3 py-1.5 rounded border font-semibold">Không mã hoá <span class="font-normal text-gray-400">(port 25)</span></button>
+            <button type="button" data-op="setSmtpEncryption" data-arg0="STARTTLS" id="encBtn_STARTTLS" class="px-3 py-1.5 rounded border font-semibold">TLS <span class="font-normal text-gray-400">(port 587)</span></button>
+            <button type="button" data-op="setSmtpEncryption" data-arg0="SSL" id="encBtn_SSL" class="px-3 py-1.5 rounded border font-semibold">SSL <span class="font-normal text-gray-400">(port 465)</span></button>
           </div>
           <input type="hidden" id="cfgSmtpEncryption" value="STARTTLS">
           <p class="text-[11px] text-gray-400 italic mt-1">Chọn "TLS" hoặc "SSL" sẽ tự chuyển Port sang giá trị chuẩn ở trên — trừ khi Port hiện tại đã là 1 giá trị tuỳ chỉnh khác (sẽ giữ nguyên, sửa tay được như bình thường).</p>
@@ -4434,7 +4434,7 @@ input[data-sdd-list] {
 
         <div class="border-t pt-2">
           <label class="flex items-center gap-2 font-semibold text-gray-600 mb-2">
-            <input type="checkbox" id="cfgSmtpAuthEnabled" onchange="toggleSmtpAuthFields()">
+            <input type="checkbox" id="cfgSmtpAuthEnabled" data-op-change="toggleSmtpAuthFields">
             Máy chủ SMTP yêu cầu xác thực (tài khoản/mật khẩu đăng nhập)
           </label>
           <div id="cfgSmtpAuthFields" class="hidden grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -4498,7 +4498,7 @@ input[data-sdd-list] {
 
         <div class="flex flex-wrap gap-2 items-center border-t pt-2">
           <input id="cfgTestEmailTo" type="email" placeholder="Email nhận thử" class="border p-1.5 rounded flex-1 min-w-[180px]">
-          <button type="button" onclick="sendTestEmail()" id="cfgTestEmailBtn" class="bg-blue-600 text-white px-3 py-1.5 rounded font-bold hover:bg-blue-700">📨 Gửi Thử</button>
+          <button type="button" data-op="sendTestEmail" id="cfgTestEmailBtn" class="bg-blue-600 text-white px-3 py-1.5 rounded font-bold hover:bg-blue-700">📨 Gửi Thử</button>
           <span id="cfgTestEmailResult" class="text-[11px] font-semibold"></span>
         </div>
 
@@ -4515,7 +4515,7 @@ input[data-sdd-list] {
           <thead><tr class="border-b text-left text-gray-500"><th class="py-1 pr-2 w-40">Phòng Ban</th><th class="py-1">Người Phụ Trách</th></tr></thead>
           <tbody id="deptContactsTableBody"></tbody>
         </table>
-        <button type="button" onclick="saveContractExpiryDeptContacts()" class="bg-amber-600 text-white px-4 py-1.5 rounded font-bold hover:bg-amber-700">Lưu Người Phụ Trách</button>
+        <button type="button" data-op="saveContractExpiryDeptContacts" class="bg-amber-600 text-white px-4 py-1.5 rounded font-bold hover:bg-amber-700">Lưu Người Phụ Trách</button>
       </div>
     </div>
 
@@ -4530,7 +4530,7 @@ input[data-sdd-list] {
         </ul>
       </div>
 
-      <form onsubmit="createExternalApiKeyAction(event)" class="flex flex-wrap items-end gap-2 bg-white p-3 rounded border text-xs">
+      <form data-op-submit="createExternalApiKeyAction" class="flex flex-wrap items-end gap-2 bg-white p-3 rounded border text-xs">
         <div class="flex-1 min-w-[220px]">
           <label class="block font-semibold text-gray-600 mb-1">Tên / Mô tả ứng dụng dùng key này</label>
           <input id="extApiKeyName" placeholder="VD: Ứng dụng chấm công XYZ" class="w-full border p-1.5 rounded" required>
@@ -4547,9 +4547,9 @@ input[data-sdd-list] {
         <p class="text-xs font-bold text-amber-900">⚠️ Đây là API key THẬT — chỉ hiển thị ĐÚNG 1 LẦN DUY NHẤT ngay bây giờ. Hãy sao chép và lưu lại an toàn ngay, đóng hộp này lại sẽ KHÔNG xem lại được nữa (chỉ có thể thu hồi và tạo key mới).</p>
         <div class="flex items-center gap-2">
           <code id="extApiKeyRevealValue" class="flex-1 bg-white border rounded px-2 py-1.5 text-xs break-all select-all"></code>
-          <button type="button" onclick="copyExternalApiKeyReveal()" class="bg-amber-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-amber-700 whitespace-nowrap">📋 Sao chép</button>
+          <button type="button" data-op="copyExternalApiKeyReveal" class="bg-amber-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-amber-700 whitespace-nowrap">📋 Sao chép</button>
         </div>
-        <button type="button" onclick="document.getElementById('extApiKeyRevealBox').classList.add('hidden')" class="text-xs text-gray-600 underline">Tôi đã lưu lại, đóng hộp này</button>
+        <button type="button" data-op="closeExtApiKeyRevealBox" class="text-xs text-gray-600 underline">Tôi đã lưu lại, đóng hộp này</button>
       </div>
 
       <table class="w-full border-collapse text-xs bg-white rounded border">
@@ -4564,7 +4564,7 @@ input[data-sdd-list] {
     <div id="adminSubCatalog" class="hidden grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
       <div class="bg-indigo-50 p-4 rounded border border-indigo-200 space-y-3">
         <h3 class="font-bold text-indigo-900 text-sm flex items-center gap-1">🏢 Quản Lý Danh Mục Phòng Ban</h3>
-        <form onsubmit="saveDept(event)" class="flex gap-2">
+        <form data-op-submit="saveDept" class="flex gap-2">
           <input id="txtDeptName" placeholder="Tên phòng ban mới..." class="border p-1.5 rounded text-xs flex-1" required>
           <button type="submit" class="bg-indigo-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-indigo-700">Thêm</button>
         </form>
@@ -4576,7 +4576,7 @@ input[data-sdd-list] {
       <div class="bg-orange-50 p-4 rounded border border-orange-200 space-y-3">
         <h3 class="font-bold text-orange-900 text-sm flex items-center gap-1">🏬 Quản Lý Danh Mục Siêu Thị</h3>
         <p class="text-[11px] text-gray-500 italic">Danh mục RIÊNG cho siêu thị — dùng khi tạo/sửa Người Dùng (chọn Vị Trí = "Siêu Thị") và module Đồng Phục. Nếu tên siêu thị đang nằm sẵn trong Danh Mục Phòng Ban ở trên, bấm "Chuyển" ở dòng đó thay vì gõ lại từ đầu.</p>
-        <form onsubmit="saveStore(event)" class="flex gap-2">
+        <form data-op-submit="saveStore" class="flex gap-2">
           <input id="txtStoreName" placeholder="Tên siêu thị mới..." class="border p-1.5 rounded text-xs flex-1" required>
           <button type="submit" class="bg-orange-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-orange-700">Thêm</button>
         </form>
@@ -4586,7 +4586,7 @@ input[data-sdd-list] {
         <div class="border-t pt-2 space-y-1.5">
           <div class="flex items-center gap-2 flex-wrap text-[11px]">
             <a href="/api/stores/import-template" class="text-orange-700 font-bold hover:underline">⬇️ Tải Mẫu Excel</a>
-            <input id="storeImportFileInput" type="file" accept=".xlsx,.xls,.csv" onchange="onStoreImportFileChange(event)" class="text-[11px]">
+            <input id="storeImportFileInput" type="file" accept=".xlsx,.xls,.csv" data-op-change="onStoreImportFileChange" data-arg-event="0" class="text-[11px]">
           </div>
           <p id="storeImportStatus" class="text-[11px] text-gray-500"></p>
           <div id="storeImportPreviewWrap" class="hidden border rounded max-h-32 overflow-y-auto">
@@ -4594,14 +4594,14 @@ input[data-sdd-list] {
               <tbody id="storeImportPreviewBody"></tbody>
             </table>
           </div>
-          <button type="button" id="storeImportConfirmBtn" onclick="confirmStoreImport()" class="hidden w-full bg-orange-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-orange-700">✅ Xác Nhận Thêm Siêu Thị Mới</button>
+          <button type="button" id="storeImportConfirmBtn" data-op="confirmStoreImport" class="hidden w-full bg-orange-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-orange-700">✅ Xác Nhận Thêm Siêu Thị Mới</button>
         </div>
       </div>
 
       <div class="bg-sky-50 p-4 rounded border border-sky-200 space-y-3">
         <h3 class="font-bold text-sky-900 text-sm flex items-center gap-1">📜 Quản Lý Danh Mục Các Loại Giấy Phép</h3>
         <p class="text-[11px] text-gray-500 italic">Nguồn gợi ý cho ô "Tên giấy phép / Loại giấy phép" ở màn Giấy Phép — tự học thêm khi ai gõ loại mới, ở đây chỉ để dọn/xoá bớt.</p>
-        <form onsubmit="saveLicenseType(event)" class="flex gap-2">
+        <form data-op-submit="saveLicenseType" class="flex gap-2">
           <input id="txtLicenseTypeName" placeholder="Tên loại giấy phép mới..." class="border p-1.5 rounded text-xs flex-1" required>
           <button type="submit" class="bg-sky-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-sky-700">Thêm</button>
         </form>
@@ -4612,7 +4612,7 @@ input[data-sdd-list] {
 
       <div class="bg-emerald-50 p-4 rounded border border-emerald-200 space-y-3">
         <h3 class="font-bold text-emerald-900 text-sm flex items-center gap-1">🏷️ Quản Lý Phân Loại Tài Liệu</h3>
-        <form onsubmit="saveCat(event)" class="flex gap-2">
+        <form data-op-submit="saveCat" class="flex gap-2">
           <input id="txtCatName" placeholder="Tên loại tài liệu mới..." class="border p-1.5 rounded text-xs flex-1" required>
           <button type="submit" class="bg-emerald-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-emerald-700">Thêm</button>
         </form>
@@ -4632,7 +4632,7 @@ input[data-sdd-list] {
       <div class="bg-fuchsia-50 p-4 rounded border border-fuchsia-200 space-y-3">
         <h3 class="font-bold text-fuchsia-900 text-sm flex items-center gap-1">🎖️ Quản Lý Danh Sách Chức Danh (Khối Văn Phòng/HO)</h3>
         <p class="text-[11px] text-fuchsia-700">Chức danh gán cho người dùng (mục Cấu hình Quyền Hạn bên dưới) sẽ hiện kèm tên trên các chân ký phê duyệt. Chỉ dùng cho nhân sự Khối Văn Phòng/HO — nhân viên Siêu Thị dùng danh sách riêng bên dưới.</p>
-        <form onsubmit="saveJobTitle(event)" class="flex gap-2">
+        <form data-op-submit="saveJobTitle" class="flex gap-2">
           <input id="txtJobTitleName" placeholder="Tên chức danh mới..." class="border p-1.5 rounded text-xs flex-1" required>
           <button type="submit" class="bg-fuchsia-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-fuchsia-700">Thêm</button>
         </form>
@@ -4644,7 +4644,7 @@ input[data-sdd-list] {
       <div class="bg-fuchsia-50 p-4 rounded border border-fuchsia-300 space-y-3">
         <h3 class="font-bold text-fuchsia-900 text-sm flex items-center gap-1">🏪 Danh Sách Chức Danh (Siêu Thị)</h3>
         <p class="text-[11px] text-fuchsia-700">Chức danh riêng cho nhân viên Siêu Thị (posType = Siêu Thị) — dùng ở form Người Dùng đầy đủ VÀ form rút gọn "Quản Lý Nhân Viên Siêu Thị" (Đồng Phục). Tick "Khoá tự tạo" cho chức danh nào KHÔNG được phép tự tạo qua form rút gọn (VD "Giám Đốc Siêu Thị" — chỉ Admin gán qua màn Người Dùng đầy đủ).</p>
-        <form onsubmit="saveStoreJobTitle(event)" class="flex gap-2 items-center flex-wrap">
+        <form data-op-submit="saveStoreJobTitle" class="flex gap-2 items-center flex-wrap">
           <input id="txtStoreJobTitleName" placeholder="Tên chức danh mới..." class="border p-1.5 rounded text-xs flex-1" required>
           <label class="flex items-center gap-1 text-[11px] text-gray-600 whitespace-nowrap">
             <input type="checkbox" id="chkStoreJobTitleRestricted"> Khoá tự tạo
@@ -4659,7 +4659,7 @@ input[data-sdd-list] {
       <div class="bg-emerald-50 p-4 rounded border border-emerald-200 space-y-3">
         <h3 class="font-bold text-emerald-900 text-sm flex items-center gap-1">🎓 Quản Lý Loại Đào Tạo</h3>
         <p class="text-[11px] text-emerald-700">Dùng để phân loại Kho Tài Liệu và Lớp Học ở màn Truyền Thông Nội Bộ &gt; Đào tạo.</p>
-        <form onsubmit="saveTrainingCategory(event)" class="flex gap-2">
+        <form data-op-submit="saveTrainingCategory" class="flex gap-2">
           <input id="txtTrainingCategoryName" placeholder="Tên loại đào tạo mới..." class="border p-1.5 rounded text-xs flex-1" required>
           <button type="submit" class="bg-emerald-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-emerald-700">Thêm</button>
         </form>
@@ -4671,7 +4671,7 @@ input[data-sdd-list] {
       <div class="bg-red-50 p-4 rounded border border-red-200 space-y-3">
         <h3 class="font-bold text-red-900 text-sm flex items-center gap-1">🚨 Từ Khoá Nhạy Cảm (kiểm duyệt bình luận)</h3>
         <p class="text-[11px] text-red-700">Dùng để QUÉT (không chặn đăng) bình luận ở Truyền Thông Nội Bộ — khớp thì chỉ gắn cờ cảnh báo cho người có quyền Duyệt Bài Đăng xem xét ở màn Phê Duyệt, không tự động xoá gì.</p>
-        <form onsubmit="saveSensitiveKeyword(event)" class="flex gap-2">
+        <form data-op-submit="saveSensitiveKeyword" class="flex gap-2">
           <input id="txtSensitiveKeywordTerm" placeholder="Từ/cụm từ..." class="border p-1.5 rounded text-xs flex-1" required>
           <select id="selSensitiveKeywordCategory" class="border p-1.5 rounded text-xs bg-white">
             <option value="TUC_TIU">Tục tĩu</option>
@@ -4695,7 +4695,7 @@ input[data-sdd-list] {
         <p class="text-[11px] text-blue-700">Chọn tối đa 4 module hiện ra khi người dùng nhấn giữ icon ứng dụng đã cài trên màn hình chính điện thoại/máy tính Android/Chrome — bấm thẳng vào đúng module đó thay vì phải mở app rồi tự điều hướng. Không hỗ trợ trên iPhone/iPad (Apple chưa cho phép trình duyệt làm việc này).</p>
         <div id="pwaShortcutChecklist" class="grid grid-cols-1 sm:grid-cols-2 gap-1 max-h-48 overflow-y-auto border rounded p-2 bg-white text-xs"></div>
         <div class="flex justify-end">
-          <button type="button" onclick="savePwaShortcutModules()" class="bg-blue-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-blue-700">💾 Lưu Phím Tắt PWA</button>
+          <button type="button" data-op="savePwaShortcutModules" class="bg-blue-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-blue-700">💾 Lưu Phím Tắt PWA</button>
         </div>
       </div>
     </div>
@@ -4706,13 +4706,13 @@ input[data-sdd-list] {
         <h3 class="font-bold text-base text-gray-800">Cấu hình Quyền Hạn, Email, Số Điện Thoại & Phạm Vi Truy Cập Theo Phòng Ban</h3>
       </div>
       
-      <form onsubmit="saveUser(event)" class="space-y-4">
+      <form data-op-submit="saveUser" class="space-y-4">
         <input id="editUserId" type="hidden">
 
         <div id="userIdentityFields" class="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-9 gap-3 bg-white p-3 rounded border">
           <div>
             <label class="block text-xs font-semibold text-gray-600 mb-1">Vị Trí</label>
-            <select id="uPosType" onchange="onUserPosTypeChange()" class="w-full border p-1.5 rounded text-xs bg-white">
+            <select id="uPosType" data-op-change="onUserPosTypeChange" class="w-full border p-1.5 rounded text-xs bg-white">
               <option value="HO">HO (Văn phòng)</option>
               <option value="STORE">Siêu Thị</option>
             </select>
@@ -4782,7 +4782,7 @@ input[data-sdd-list] {
         <div id="pendingNewUsersSection" class="hidden bg-white p-3 rounded border border-amber-300">
           <div class="flex items-center justify-between mb-2 flex-wrap gap-2">
             <h4 class="font-bold text-sm text-amber-800">📋 Danh Sách Người Dùng Chờ Lưu (<span id="pendingNewUsersCount">0</span>)</h4>
-            <button type="button" onclick="commitPendingNewUsers()" class="bg-emerald-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-emerald-700">💾 Lưu Tất Cả Danh Sách</button>
+            <button type="button" data-op="commitPendingNewUsers" class="bg-emerald-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-emerald-700">💾 Lưu Tất Cả Danh Sách</button>
           </div>
           <div class="overflow-x-auto">
             <table class="w-full text-xs border-collapse">
@@ -4820,8 +4820,8 @@ input[data-sdd-list] {
         </div>
 
         <div class="flex justify-end gap-2 pt-1">
-          <button type="button" onclick="cancelPermFormEdit()" class="bg-gray-400 text-white px-4 py-1.5 rounded text-xs font-bold">Hủy</button>
-          <button type="button" id="btnAddToStagingList" onclick="addUserToStagingList()" class="bg-amber-500 text-white px-4 py-1.5 rounded text-xs font-bold hover:bg-amber-600">➕ Thêm Vào Danh Sách</button>
+          <button type="button" data-op="cancelPermFormEdit" class="bg-gray-400 text-white px-4 py-1.5 rounded text-xs font-bold">Hủy</button>
+          <button type="button" id="btnAddToStagingList" data-op="addUserToStagingList" class="bg-amber-500 text-white px-4 py-1.5 rounded text-xs font-bold hover:bg-amber-600">➕ Thêm Vào Danh Sách</button>
           <button type="submit" id="btnSavePermForm" class="bg-purple-600 text-white px-6 py-1.5 rounded text-xs font-bold hover:bg-purple-700">Lưu Người Dùng & Phân Quyền</button>
         </div>
 
@@ -4835,13 +4835,13 @@ input[data-sdd-list] {
 
         <div class="flex items-center justify-between gap-2 flex-wrap">
           <div class="flex items-center gap-2">
-            <input type="text" id="permTreeSearch" oninput="filterPermTree()" placeholder="🔍 Tìm quyền theo tên (vd: duyệt, xóa, xem)..." class="border rounded px-2 py-1.5 text-xs w-64">
+            <input type="text" id="permTreeSearch" data-op-input="filterPermTree" placeholder="🔍 Tìm quyền theo tên (vd: duyệt, xóa, xem)..." class="border rounded px-2 py-1.5 text-xs w-64">
             <span class="text-[11px] text-gray-500">🟠 Viền cam = khối vừa sửa, chưa lưu</span>
           </div>
           <div class="flex gap-2 text-[11px]">
-            <button type="button" onclick="setAllPermTreeNodes(true)" class="text-purple-700 font-semibold hover:underline">Mở rộng tất cả</button>
+            <button type="button" data-op="setAllPermTreeNodes" data-arg0="true" class="text-purple-700 font-semibold hover:underline">Mở rộng tất cả</button>
             <span class="text-gray-300">|</span>
-            <button type="button" onclick="setAllPermTreeNodes(false)" class="text-purple-700 font-semibold hover:underline">Thu gọn tất cả</button>
+            <button type="button" data-op="setAllPermTreeNodes" data-arg0="false" class="text-purple-700 font-semibold hover:underline">Thu gọn tất cả</button>
           </div>
         </div>
 
@@ -4881,7 +4881,7 @@ input[data-sdd-list] {
               <p class="text-[11px] text-gray-500 italic">Chỉ để LỌC danh sách ứng viên ở màn "Quy trình & Đồng cấp" cho gọn — không tự cấp quyền duyệt. Quyền duyệt thật vẫn do admin tick chọn đích danh ở từng bước.</p>
               <div>
                 <label class="block font-semibold text-gray-700 mb-1">🔐 Xác thực bổ sung khi bấm Duyệt</label>
-                <select id="pApproverAuthLevel" onchange="onApproverAuthLevelChange()" class="w-full border p-1.5 rounded bg-white text-xs">
+                <select id="pApproverAuthLevel" data-op-change="onApproverAuthLevelChange" class="w-full border p-1.5 rounded bg-white text-xs">
                   <option value="NONE">Không yêu cầu thêm (mặc định)</option>
                   <option value="PASSWORD">Yêu cầu nhập lại mật khẩu</option>
                   <option value="OTP_EMAIL">Yêu cầu mã OTP gửi qua email</option>
@@ -4927,7 +4927,7 @@ input[data-sdd-list] {
               <div class="flex justify-between items-center mb-1">
                 <span class="font-semibold text-gray-600 text-[11px]">Tải lên</span>
                 <label class="flex items-center gap-1 font-bold text-blue-700 cursor-pointer text-[11px]">
-                  <input type="checkbox" id="pUploadAll" onchange="toggleScopeGroup('pUploadAll', 'pUploadDept')"><span>ALL</span>
+                  <input type="checkbox" id="pUploadAll" data-op-change="toggleScopeGroup" data-arg0="pUploadAll" data-arg1="pUploadDept"><span>ALL</span>
                 </label>
               </div>
               <div id="pUploadDeptContainer" class="space-y-1 pl-1 max-h-32 overflow-y-auto"></div>
@@ -4936,7 +4936,7 @@ input[data-sdd-list] {
               <div class="flex justify-between items-center mb-1">
                 <span class="font-semibold text-gray-600 text-[11px]">Xem Bản Nháp</span>
                 <label class="flex items-center gap-1 font-bold text-amber-700 cursor-pointer text-[11px]">
-                  <input type="checkbox" id="pViewDraftAll" onchange="toggleScopeGroup('pViewDraftAll', 'pViewDraftDept')"><span>ALL</span>
+                  <input type="checkbox" id="pViewDraftAll" data-op-change="toggleScopeGroup" data-arg0="pViewDraftAll" data-arg1="pViewDraftDept"><span>ALL</span>
                 </label>
               </div>
               <div id="pViewDraftDeptContainer" class="space-y-1 pl-1 max-h-32 overflow-y-auto"></div>
@@ -4945,7 +4945,7 @@ input[data-sdd-list] {
               <div class="flex justify-between items-center mb-1">
                 <span class="font-semibold text-gray-600 text-[11px]">Xem Đã Duyệt</span>
                 <label class="flex items-center gap-1 font-bold text-emerald-700 cursor-pointer text-[11px]">
-                  <input type="checkbox" id="pViewApprovedAll" onchange="toggleScopeGroup('pViewApprovedAll', 'pViewApprovedDept')"><span>ALL</span>
+                  <input type="checkbox" id="pViewApprovedAll" data-op-change="toggleScopeGroup" data-arg0="pViewApprovedAll" data-arg1="pViewApprovedDept"><span>ALL</span>
                 </label>
               </div>
               <div id="pViewApprovedDeptContainer" class="space-y-1 pl-1 max-h-32 overflow-y-auto"></div>
@@ -4954,7 +4954,7 @@ input[data-sdd-list] {
               <div class="flex justify-between items-center mb-1">
                 <span class="font-semibold text-gray-600 text-[11px]">Tải Xuống</span>
                 <label class="flex items-center gap-1 font-bold text-rose-700 cursor-pointer text-[11px]">
-                  <input type="checkbox" id="pDocDownloadAll" onchange="toggleScopeGroup('pDocDownloadAll', 'pDocDownloadDept')"><span>ALL</span>
+                  <input type="checkbox" id="pDocDownloadAll" data-op-change="toggleScopeGroup" data-arg0="pDocDownloadAll" data-arg1="pDocDownloadDept"><span>ALL</span>
                 </label>
               </div>
               <div id="pDocDownloadDeptContainer" class="space-y-1 pl-1 max-h-32 overflow-y-auto"></div>
@@ -4972,7 +4972,7 @@ input[data-sdd-list] {
               <div class="flex justify-between items-center mb-1">
                 <span class="font-semibold text-gray-600 text-[11px]">Xem</span>
                 <label class="flex items-center gap-1 font-bold text-amber-700 cursor-pointer text-[11px]">
-                  <input type="checkbox" id="pSubViewAll" onchange="toggleScopeGroup('pSubViewAll', 'pSubViewDept')"><span>ALL</span>
+                  <input type="checkbox" id="pSubViewAll" data-op-change="toggleScopeGroup" data-arg0="pSubViewAll" data-arg1="pSubViewDept"><span>ALL</span>
                 </label>
               </div>
               <div id="pSubViewDeptContainer" class="space-y-1 pl-1 max-h-32 overflow-y-auto"></div>
@@ -4981,7 +4981,7 @@ input[data-sdd-list] {
               <div class="flex justify-between items-center mb-1">
                 <span class="font-semibold text-gray-600 text-[11px]">Tạo mới</span>
                 <label class="flex items-center gap-1 font-bold text-amber-700 cursor-pointer text-[11px]">
-                  <input type="checkbox" id="pSubCreateAll" onchange="toggleScopeGroup('pSubCreateAll', 'pSubCreateDept')"><span>ALL</span>
+                  <input type="checkbox" id="pSubCreateAll" data-op-change="toggleScopeGroup" data-arg0="pSubCreateAll" data-arg1="pSubCreateDept"><span>ALL</span>
                 </label>
               </div>
               <div id="pSubCreateDeptContainer" class="space-y-1 pl-1 max-h-32 overflow-y-auto"></div>
@@ -4990,7 +4990,7 @@ input[data-sdd-list] {
               <div class="flex justify-between items-center mb-1">
                 <span class="font-semibold text-gray-600 text-[11px]">Tải xuống</span>
                 <label class="flex items-center gap-1 font-bold text-amber-700 cursor-pointer text-[11px]">
-                  <input type="checkbox" id="pSubDownloadAll" onchange="toggleScopeGroup('pSubDownloadAll', 'pSubDownloadDept')"><span>ALL</span>
+                  <input type="checkbox" id="pSubDownloadAll" data-op-change="toggleScopeGroup" data-arg0="pSubDownloadAll" data-arg1="pSubDownloadDept"><span>ALL</span>
                 </label>
               </div>
               <div id="pSubDownloadDeptContainer" class="space-y-1 pl-1 max-h-32 overflow-y-auto"></div>
@@ -5008,7 +5008,7 @@ input[data-sdd-list] {
               <div class="flex justify-between items-center mb-1">
                 <span class="font-semibold text-gray-600 text-[11px]">Xem</span>
                 <label class="flex items-center gap-1 font-bold text-cyan-700 cursor-pointer text-[11px]">
-                  <input type="checkbox" id="pContractViewAll" onchange="toggleScopeGroup('pContractViewAll', 'pContractViewDept')"><span>ALL</span>
+                  <input type="checkbox" id="pContractViewAll" data-op-change="toggleScopeGroup" data-arg0="pContractViewAll" data-arg1="pContractViewDept"><span>ALL</span>
                 </label>
               </div>
               <div id="pContractViewDeptContainer" class="space-y-1 pl-1 max-h-32 overflow-y-auto"></div>
@@ -5017,7 +5017,7 @@ input[data-sdd-list] {
               <div class="flex justify-between items-center mb-1">
                 <span class="font-semibold text-gray-600 text-[11px]">Tạo mới</span>
                 <label class="flex items-center gap-1 font-bold text-cyan-700 cursor-pointer text-[11px]">
-                  <input type="checkbox" id="pContractCreateAll" onchange="toggleScopeGroup('pContractCreateAll', 'pContractCreateDept')"><span>ALL</span>
+                  <input type="checkbox" id="pContractCreateAll" data-op-change="toggleScopeGroup" data-arg0="pContractCreateAll" data-arg1="pContractCreateDept"><span>ALL</span>
                 </label>
               </div>
               <div id="pContractCreateDeptContainer" class="space-y-1 pl-1 max-h-32 overflow-y-auto"></div>
@@ -5026,7 +5026,7 @@ input[data-sdd-list] {
               <div class="flex justify-between items-center mb-1">
                 <span class="font-semibold text-gray-600 text-[11px]">Tải xuống</span>
                 <label class="flex items-center gap-1 font-bold text-cyan-700 cursor-pointer text-[11px]">
-                  <input type="checkbox" id="pContractDownloadAll" onchange="toggleScopeGroup('pContractDownloadAll', 'pContractDownloadDept')"><span>ALL</span>
+                  <input type="checkbox" id="pContractDownloadAll" data-op-change="toggleScopeGroup" data-arg0="pContractDownloadAll" data-arg1="pContractDownloadDept"><span>ALL</span>
                 </label>
               </div>
               <div id="pContractDownloadDeptContainer" class="space-y-1 pl-1 max-h-32 overflow-y-auto"></div>
@@ -5059,7 +5059,7 @@ input[data-sdd-list] {
                 <div class="flex justify-between items-center mb-1">
                   <span class="font-semibold text-gray-600 text-[11px]">Xem</span>
                   <label class="flex items-center gap-1 font-bold text-emerald-700 cursor-pointer text-[11px]">
-                    <input type="checkbox" id="pMeetingViewAll" onchange="toggleScopeGroup('pMeetingViewAll', 'pMeetingViewDept')"><span>ALL</span>
+                    <input type="checkbox" id="pMeetingViewAll" data-op-change="toggleScopeGroup" data-arg0="pMeetingViewAll" data-arg1="pMeetingViewDept"><span>ALL</span>
                   </label>
                 </div>
                 <div id="pMeetingViewDeptContainer" class="space-y-1 pl-1 max-h-32 overflow-y-auto"></div>
@@ -5068,7 +5068,7 @@ input[data-sdd-list] {
                 <div class="flex justify-between items-center mb-1">
                   <span class="font-semibold text-gray-600 text-[11px]">Đăng ký (book)</span>
                   <label class="flex items-center gap-1 font-bold text-emerald-700 cursor-pointer text-[11px]">
-                    <input type="checkbox" id="pMeetingBookAll" onchange="toggleScopeGroup('pMeetingBookAll', 'pMeetingBookDept')"><span>ALL</span>
+                    <input type="checkbox" id="pMeetingBookAll" data-op-change="toggleScopeGroup" data-arg0="pMeetingBookAll" data-arg1="pMeetingBookDept"><span>ALL</span>
                   </label>
                 </div>
                 <div id="pMeetingBookDeptContainer" class="space-y-1 pl-1 max-h-32 overflow-y-auto"></div>
@@ -5087,7 +5087,7 @@ input[data-sdd-list] {
               <div class="flex justify-between items-center mb-1">
                 <span class="font-semibold text-gray-600 text-[11px]">Xem</span>
                 <label class="flex items-center gap-1 font-bold text-indigo-700 cursor-pointer text-[11px]">
-                  <input type="checkbox" id="pCarViewAll" onchange="toggleScopeGroup('pCarViewAll', 'pCarViewDept')"><span>ALL</span>
+                  <input type="checkbox" id="pCarViewAll" data-op-change="toggleScopeGroup" data-arg0="pCarViewAll" data-arg1="pCarViewDept"><span>ALL</span>
                 </label>
               </div>
               <div id="pCarViewDeptContainer" class="space-y-1 pl-1 max-h-32 overflow-y-auto"></div>
@@ -5096,7 +5096,7 @@ input[data-sdd-list] {
               <div class="flex justify-between items-center mb-1">
                 <span class="font-semibold text-gray-600 text-[11px]">Tạo mới</span>
                 <label class="flex items-center gap-1 font-bold text-indigo-700 cursor-pointer text-[11px]">
-                  <input type="checkbox" id="pCarCreateAll" onchange="toggleScopeGroup('pCarCreateAll', 'pCarCreateDept')"><span>ALL</span>
+                  <input type="checkbox" id="pCarCreateAll" data-op-change="toggleScopeGroup" data-arg0="pCarCreateAll" data-arg1="pCarCreateDept"><span>ALL</span>
                 </label>
               </div>
               <div id="pCarCreateDeptContainer" class="space-y-1 pl-1 max-h-32 overflow-y-auto"></div>
@@ -5105,7 +5105,7 @@ input[data-sdd-list] {
               <div class="flex justify-between items-center mb-1">
                 <span class="font-semibold text-gray-600 text-[11px]">Tải xuống</span>
                 <label class="flex items-center gap-1 font-bold text-indigo-700 cursor-pointer text-[11px]">
-                  <input type="checkbox" id="pCarDownloadAll" onchange="toggleScopeGroup('pCarDownloadAll', 'pCarDownloadDept')"><span>ALL</span>
+                  <input type="checkbox" id="pCarDownloadAll" data-op-change="toggleScopeGroup" data-arg0="pCarDownloadAll" data-arg1="pCarDownloadDept"><span>ALL</span>
                 </label>
               </div>
               <div id="pCarDownloadDeptContainer" class="space-y-1 pl-1 max-h-32 overflow-y-auto"></div>
@@ -5138,7 +5138,7 @@ input[data-sdd-list] {
                 <div class="flex justify-between items-center mb-1">
                   <span class="font-semibold text-gray-600 text-[11px]">Xem</span>
                   <label class="flex items-center gap-1 font-bold text-teal-700 cursor-pointer text-[11px]">
-                    <input type="checkbox" id="pOfficeViewAll" onchange="toggleScopeGroup('pOfficeViewAll', 'pOfficeViewDept')"><span>ALL</span>
+                    <input type="checkbox" id="pOfficeViewAll" data-op-change="toggleScopeGroup" data-arg0="pOfficeViewAll" data-arg1="pOfficeViewDept"><span>ALL</span>
                   </label>
                 </div>
                 <div id="pOfficeViewDeptContainer" class="space-y-1 pl-1 max-h-32 overflow-y-auto"></div>
@@ -5147,7 +5147,7 @@ input[data-sdd-list] {
                 <div class="flex justify-between items-center mb-1">
                   <span class="font-semibold text-gray-600 text-[11px]">Tạo mới</span>
                   <label class="flex items-center gap-1 font-bold text-teal-700 cursor-pointer text-[11px]">
-                    <input type="checkbox" id="pOfficeCreateAll" onchange="toggleScopeGroup('pOfficeCreateAll', 'pOfficeCreateDept')"><span>ALL</span>
+                    <input type="checkbox" id="pOfficeCreateAll" data-op-change="toggleScopeGroup" data-arg0="pOfficeCreateAll" data-arg1="pOfficeCreateDept"><span>ALL</span>
                   </label>
                 </div>
                 <div id="pOfficeCreateDeptContainer" class="space-y-1 pl-1 max-h-32 overflow-y-auto"></div>
@@ -5156,7 +5156,7 @@ input[data-sdd-list] {
                 <div class="flex justify-between items-center mb-1">
                   <span class="font-semibold text-gray-600 text-[11px]">Tải xuống</span>
                   <label class="flex items-center gap-1 font-bold text-teal-700 cursor-pointer text-[11px]">
-                    <input type="checkbox" id="pOfficeDownloadAll" onchange="toggleScopeGroup('pOfficeDownloadAll', 'pOfficeDownloadDept')"><span>ALL</span>
+                    <input type="checkbox" id="pOfficeDownloadAll" data-op-change="toggleScopeGroup" data-arg0="pOfficeDownloadAll" data-arg1="pOfficeDownloadDept"><span>ALL</span>
                   </label>
                 </div>
                 <div id="pOfficeDownloadDeptContainer" class="space-y-1 pl-1 max-h-32 overflow-y-auto"></div>
@@ -5359,11 +5359,11 @@ input[data-sdd-list] {
                   onkeydown="if(event.key==='Enter'){event.preventDefault();addWorkflowParticipatingDept();}"
                   class="flex-1 border p-1.5 rounded bg-white text-xs">
                 <div id="workflowParticipatingDeptDatalist" class="hidden sdd-dropdown" data-sdd-dropdown></div>
-                <button type="button" onclick="addWorkflowParticipatingDept()" class="bg-gray-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-gray-700 whitespace-nowrap">➕ Thêm Đơn Vị</button>
+                <button type="button" data-op="addWorkflowParticipatingDept" class="bg-gray-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-gray-700 whitespace-nowrap">➕ Thêm Đơn Vị</button>
               </div>
               <div id="workflowParticipatingDeptsList" class="flex flex-wrap gap-1.5 min-h-[2rem] border rounded p-2 bg-gray-50"></div>
               <div class="flex justify-end mt-2">
-                <button type="button" onclick="saveWorkflowParticipatingDepts()" class="bg-emerald-600 text-white px-4 py-1.5 rounded text-xs font-bold hover:bg-emerald-700">💾 Lưu Đơn Vị Tham Gia Quy Trình</button>
+                <button type="button" data-op="saveWorkflowParticipatingDepts" class="bg-emerald-600 text-white px-4 py-1.5 rounded text-xs font-bold hover:bg-emerald-700">💾 Lưu Đơn Vị Tham Gia Quy Trình</button>
               </div>
             </div>
             <div>
@@ -5371,9 +5371,9 @@ input[data-sdd-list] {
               <p class="text-[11px] text-gray-500 italic mb-2">Tạo các nhóm gồm 1 hoặc nhiều CHỨC DANH. Người dùng có chức danh nằm trong 1 nhóm mà tài khoản được gán vào (chọn ở màn "Người Dùng") sẽ: (1) không đăng ký được Văn Phòng Phẩm ở bất kỳ kỳ nào, kể cả đã thuộc phòng ban còn hạn đăng ký; (2) không tính vào số nhân sự gợi ý khi Hành Chính tạo kỳ (vẫn sửa tay được số này như bình thường).</p>
               <div id="vppJobTitlesDatalist" class="hidden sdd-dropdown" data-sdd-dropdown></div>
               <div id="vppExcludeGroupsListWrap" class="space-y-2"></div>
-              <button type="button" onclick="addVppExcludeGroupRow()" class="mt-2 bg-gray-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-gray-700">+ Thêm Nhóm</button>
+              <button type="button" data-op="addVppExcludeGroupRow" class="mt-2 bg-gray-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-gray-700">+ Thêm Nhóm</button>
               <div class="flex justify-end mt-2">
-                <button type="button" onclick="saveVppExcludeGroups()" class="bg-emerald-600 text-white px-4 py-1.5 rounded text-xs font-bold hover:bg-emerald-700">💾 Lưu Danh Sách Nhóm</button>
+                <button type="button" data-op="saveVppExcludeGroups" class="bg-emerald-600 text-white px-4 py-1.5 rounded text-xs font-bold hover:bg-emerald-700">💾 Lưu Danh Sách Nhóm</button>
               </div>
             </div>
           </div>
@@ -5503,7 +5503,7 @@ input[data-sdd-list] {
             <h4 class="font-bold text-sm text-gray-800">🗂️ Nhóm Phân Quyền</h4>
             <p class="text-[11px] text-gray-500 italic">Gán người dùng vào 1 nhóm để họ tự động dùng đúng quyền của nhóm. Sửa quyền của nhóm sẽ cập nhật ngay cho mọi thành viên.</p>
           </div>
-          <button type="button" onclick="startCreateGroup()" class="bg-purple-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-purple-700">➕ Tạo Nhóm Mới</button>
+          <button type="button" data-op="startCreateGroup" class="bg-purple-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-purple-700">➕ Tạo Nhóm Mới</button>
         </div>
         <div class="overflow-x-auto">
           <table class="w-full border-collapse border text-xs">
@@ -5523,15 +5523,15 @@ input[data-sdd-list] {
       <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 my-3 border-t pt-3">
         <h4 class="font-bold text-sm text-gray-800">Danh Sách Người Dùng & Quyền Hạn</h4>
         <div class="flex flex-wrap gap-2 text-xs">
-          <button type="button" onclick="downloadUserTemplate()" class="bg-gray-600 text-white px-2.5 py-1.5 rounded font-semibold hover:bg-gray-700 transition">📄 Tải File Mẫu (.xlsx)</button>
-          <button type="button" onclick="exportUsersExcel()" class="bg-emerald-600 text-white px-2.5 py-1.5 rounded font-semibold hover:bg-emerald-700 transition">📤 Export Excel</button>
+          <button type="button" data-op="downloadUserTemplate" class="bg-gray-600 text-white px-2.5 py-1.5 rounded font-semibold hover:bg-gray-700 transition">📄 Tải File Mẫu (.xlsx)</button>
+          <button type="button" data-op="exportUsersExcel" class="bg-emerald-600 text-white px-2.5 py-1.5 rounded font-semibold hover:bg-emerald-700 transition">📤 Export Excel</button>
           <label class="bg-blue-600 text-white px-2.5 py-1.5 rounded font-semibold hover:bg-blue-700 cursor-pointer transition">
-            📥 Import Excel <input type="file" accept=".xlsx" onchange="importUsersExcel(event)" class="hidden">
+            📥 Import Excel <input type="file" accept=".xlsx" data-op-change="importUsersExcel" data-arg-event="0" class="hidden">
           </label>
         </div>
       </div>
 
-      <input id="filterUserKeyword" oninput="onUserFilterChange()" placeholder="🔍 Tìm theo Username, Họ tên, hoặc Phòng ban..." class="w-full border p-2 rounded text-xs mb-2">
+      <input id="filterUserKeyword" data-op-input="onUserFilterChange" placeholder="🔍 Tìm theo Username, Họ tên, hoặc Phòng ban..." class="w-full border p-2 rounded text-xs mb-2">
 
       <div class="overflow-x-auto">
         <table class="w-full border-collapse border bg-white text-xs">
@@ -5561,27 +5561,27 @@ input[data-sdd-list] {
           <p class="text-xs text-stone-800">Theo dõi toàn bộ nhật ký hệ thống: Email, cấu hình, thay đổi phân quyền và hành vi.</p>
         </div>
         <div class="flex gap-2">
-          <button onclick="clearSystemLogs()" class="text-xs bg-red-600 text-white px-3 py-1.5 rounded font-bold hover:bg-red-700">🗑️ Xóa Log</button>
-          <button onclick="exportSystemLogsExcel()" class="text-xs bg-emerald-600 text-white px-3 py-1.5 rounded font-bold hover:bg-emerald-700">📥 Xuất Log Excel</button>
+          <button data-op="clearSystemLogs" class="text-xs bg-red-600 text-white px-3 py-1.5 rounded font-bold hover:bg-red-700">🗑️ Xóa Log</button>
+          <button data-op="exportSystemLogsExcel" class="text-xs bg-emerald-600 text-white px-3 py-1.5 rounded font-bold hover:bg-emerald-700">📥 Xuất Log Excel</button>
         </div>
       </div>
 
       <div class="grid grid-cols-1 md:grid-cols-5 gap-3 bg-white p-3 rounded border text-xs">
         <div>
           <label class="block font-semibold text-gray-600 mb-1">Lọc Theo Phân Hệ</label>
-          <select id="filterLogModule" onchange="onLogFilterChange()" class="w-full border p-1.5 rounded bg-white font-semibold">
+          <select id="filterLogModule" data-op-change="onLogFilterChange" class="w-full border p-1.5 rounded bg-white font-semibold">
             <option value="">-- Tất cả --</option>
           </select>
         </div>
         <div>
           <label class="block font-semibold text-gray-600 mb-1">Lọc Theo Sự Kiện</label>
-          <select id="filterLogAction" onchange="onLogFilterChange()" class="w-full border p-1.5 rounded bg-white font-semibold">
+          <select id="filterLogAction" data-op-change="onLogFilterChange" class="w-full border p-1.5 rounded bg-white font-semibold">
             <option value="">-- Tất cả --</option>
           </select>
         </div>
         <div>
           <label class="block font-semibold text-gray-600 mb-1">Lọc Theo Trạng Thái</label>
-          <select id="filterLogStatus" onchange="onLogFilterChange()" class="w-full border p-1.5 rounded bg-white font-semibold">
+          <select id="filterLogStatus" data-op-change="onLogFilterChange" class="w-full border p-1.5 rounded bg-white font-semibold">
             <option value="">-- Tất cả --</option>
             <option value="SUCCESS">Thành công (SUCCESS)</option>
             <option value="WARNING">Cảnh báo (WARNING)</option>
@@ -5590,10 +5590,10 @@ input[data-sdd-list] {
         </div>
         <div>
           <label class="block font-semibold text-gray-600 mb-1">Tìm Kiếm</label>
-          <input id="filterLogKeyword" oninput="onLogFilterChange()" placeholder="Username, IP, hành động..." class="w-full border p-1.5 rounded">
+          <input id="filterLogKeyword" data-op-input="onLogFilterChange" placeholder="Username, IP, hành động..." class="w-full border p-1.5 rounded">
         </div>
         <div class="flex items-end">
-          <button onclick="resetLogFilters()" class="w-full bg-gray-200 text-gray-700 p-1.5 rounded font-bold hover:bg-gray-300">Đặt Lại</button>
+          <button data-op="resetLogFilters" class="w-full bg-gray-200 text-gray-700 p-1.5 rounded font-bold hover:bg-gray-300">Đặt Lại</button>
         </div>
       </div>
     </div>
@@ -8060,6 +8060,19 @@ function updateCoreFieldOverride(coreKey, fieldId, prop, value) {
   syncStorage('formTemplates');
   applyCoreFieldCustomizations(coreKey);
   logSystemAction('CONFIG', 'UPDATE_CORE_FIELD', `Cập nhật thuộc tính "${prop}" của trường mặc định [${fieldId}] (${coreKey})`, 'SUCCESS', fieldId);
+}
+// CSP: onchange checkbox chỉ truyền được phần tử qua data-arg-el (không có slot "this.checked" — xem
+// cspReadArgSlot), nên tách riêng wrapper đọc .checked từ phần tử rồi mới gọi hàm lõi ở trên (hàm lõi
+// giữ nguyên chữ ký cũ nhận thẳng prop/value).
+function updateCoreFieldOverrideFromCheckbox(coreKey, fieldId, prop, checkboxEl) {
+  updateCoreFieldOverride(coreKey, fieldId, prop, checkboxEl.checked);
+}
+// CSP: ô sửa nhãn field mặc định trước đây tính fallback ngay trong oninput
+// (this.value.trim() || '<nhãn gốc>') — biểu thức JS không phải lệnh gọi hàm đơn nên data-arg-value
+// không thay thế được, tách riêng wrapper nhận defaultLabel qua data-arg2 rồi tự tính fallback từ
+// phần tử input qua data-arg-el.
+function updateCoreFieldOverrideLabelFromInput(coreKey, fieldId, defaultLabel, inputEl) {
+  updateCoreFieldOverride(coreKey, fieldId, 'label', inputEl.value.trim() || defaultLabel);
 }
 
 // Lấy danh sách nhãn hiển thị hiện tại của 1 trường mặc định kiểu dropdown "danh sách lựa chọn cố
@@ -11229,7 +11242,7 @@ async function renderAdminWebauthnDeviceList(username) {
           <div class="font-semibold text-gray-700">${escapeHtml(c.deviceLabel || 'Thiết bị chưa đặt tên')}</div>
           <div class="text-[10px] text-gray-400">Đăng ký lúc: ${escapeHtml(c.createdAt || '')}</div>
         </div>
-        <button type="button" onclick="deleteAdminBiometricDevice('${escapeHtml(username)}', '${c.id}')" class="text-red-600 font-bold hover:underline">🗑️ Gỡ</button>
+        <button type="button" data-op="deleteAdminBiometricDevice" data-arg0="${escapeHtml(username)}" data-arg1="${c.id}" class="text-red-600 font-bold hover:underline">🗑️ Gỡ</button>
       </div>
     `).join('');
   } catch (err) {
@@ -11269,7 +11282,7 @@ async function renderAdminTotpStatus(username) {
       wrap.innerHTML = `
         <div class="flex justify-between items-center bg-gray-50 border rounded p-2">
           <span class="text-emerald-700 font-semibold">✅ Đã bật</span>
-          <button type="button" onclick="deleteAdminTotp('${escapeHtml(username)}')" class="text-red-600 font-bold hover:underline">🗑️ Gỡ Hộ</button>
+          <button type="button" data-op="deleteAdminTotp" data-arg0="${escapeHtml(username)}" class="text-red-600 font-bold hover:underline">🗑️ Gỡ Hộ</button>
         </div>`;
     } else {
       wrap.innerHTML = '<p class="text-amber-700 font-semibold">⚠️ Chưa thiết lập — tài khoản sẽ bị chặn mọi thao tác nghiệp vụ cho tới khi tự thiết lập ở lần đăng nhập kế tiếp.</p>';
@@ -15015,7 +15028,7 @@ function renderLicenseTypeList() {
   ul.innerHTML = (DB.licenseTypes || []).map(t => `
     <li class="p-2 flex justify-between items-center gap-2 hover:bg-gray-50">
       <span class="flex-1">${escapeHtml(t)}</span>
-      <button onclick="deleteLicenseType('${escapeHtml(t)}')" class="text-red-500 font-bold hover:underline">Xóa</button>
+      <button data-op="deleteLicenseType" data-arg0="${escapeHtml(t)}" class="text-red-500 font-bold hover:underline">Xóa</button>
     </li>
   `).join('');
 }
@@ -15099,7 +15112,7 @@ function renderUploadTypeConfig() {
     const allowed = Array.isArray(config[m.key]) && config[m.key].length ? config[m.key] : UPLOAD_EXT_UNIVERSE;
     const checkboxesHTML = UPLOAD_EXT_UNIVERSE.map(ext => `
       <label class="inline-flex items-center gap-1 mr-4 mb-1 text-xs">
-        <input type="checkbox" onchange="toggleUploadTypeExt('${m.key}', '${ext}', this.checked)" ${allowed.includes(ext) ? 'checked' : ''}>
+        <input type="checkbox" data-op-change="toggleUploadTypeExtFromCheckbox" data-arg0="${m.key}" data-arg1="${ext}" data-arg-el="2" ${allowed.includes(ext) ? 'checked' : ''}>
         ${ext}
       </label>`).join('');
     const currentSize = Number(sizeConfig[m.key]) > 0 ? Number(sizeConfig[m.key]) : '';
@@ -15110,7 +15123,7 @@ function renderUploadTypeConfig() {
         <div class="flex items-center gap-2 text-xs">
           <label class="text-gray-600">Giới hạn dung lượng riêng (MB):</label>
           <input type="number" min="1" step="1" placeholder="Mặc định chung" value="${currentSize}"
-            onchange="updateUploadSizeLimit('${m.key}', this.value)" class="w-28 border p-1 rounded">
+            data-op-change="updateUploadSizeLimit" data-arg0="${m.key}" data-arg-value="1" class="w-28 border p-1 rounded">
         </div>
       </div>`;
   }).join('');
@@ -15139,6 +15152,11 @@ function toggleUploadTypeExt(moduleKey, ext, checked) {
   syncStorage('uploadFileTypeConfig');
   applyUploadAcceptAttrs();
   logSystemAction('ADMIN', 'UPDATE_UPLOAD_TYPE_CONFIG', `Cập nhật loại tệp cho phép [${moduleKey}]: ${checked ? 'thêm' : 'bỏ'} ${ext}`, 'SUCCESS');
+}
+// CSP: onchange checkbox chỉ truyền được phần tử qua data-arg-el (không có slot "this.checked" — xem
+// cspReadArgSlot), nên tách riêng wrapper đọc .checked từ phần tử rồi mới gọi hàm lõi ở trên.
+function toggleUploadTypeExtFromCheckbox(moduleKey, ext, checkboxEl) {
+  toggleUploadTypeExt(moduleKey, ext, checkboxEl.checked);
 }
 
 // CẬP NHẬT: Phê duyệt cấp đơn đơn giản hóa (Sequential Step Approval)
@@ -23833,6 +23851,17 @@ bindCspDelegation('orgChartManagerModal');
 bindCspDelegation('reportsSection');
 bindCspDelegation('reportPreviewModal');
 
+// Quản Trị / Hệ Thống — cụm 6 màn con của tab "Hệ Thống" (Quản Trị #adminSection, Biểu Mẫu #formSection,
+// Quy Trình & Phê Duyệt #workflowSection, Quản Lý Tệp File #uploadTypeSection, Log #logSection, Thùng
+// Rác #trashSection) đều đã được chuyển thành CON TRỰC TIẾP của #systemSection (xem chú thích ở đầu
+// #systemSection trong HTML — sửa hồi trước để thanh tab con sticky hoạt động đúng), nên chỉ cần ĐÚNG 1
+// gốc duy nhất là bọc được toàn bộ, không cần 6 gốc riêng như dự kiến ban đầu. Không có modal nào của
+// cụm này sống ngoài section: modal dùng chung "Gán vai trò cột" (#colRoleModal, openColumnRoleMappingModal())
+// tuy được gọi từ Mẫu Ngân Sách/Biểu Mẫu nhưng lại nằm VẬT LÝ trong #itSupportSection (module Hỗ Trợ IT,
+// chưa tới lượt CSP) nên KHÔNG đụng ở đợt này; #genericConfirmModal dùng chung toàn hệ thống (nhiều module
+// khác cũng gọi), không riêng cụm này, để lại cho 1 đợt dọn hạ tầng dùng chung riêng sau này.
+bindCspDelegation('systemSection');
+
 // ==========================================
 // VĂN PHÒNG PHẨM — kỳ đăng ký (vppPeriods) + đăng ký của nhân viên (vppRegistrations). 3 sub-tab:
 // Đăng Ký (ai cũng vào được) / Kỳ Đăng Ký + Báo Cáo Tổng Hợp (chỉ vppManage/admin).
@@ -24874,8 +24903,8 @@ function renderExternalApiKeysTable() {
       <td class="py-1.5 px-2">${k.createdAt ? new Date(k.createdAt).toLocaleString('vi-VN') : ''}</td>
       <td class="py-1.5 px-2">${k.lastUsedAt ? new Date(k.lastUsedAt).toLocaleString('vi-VN') : '<span class="text-gray-400 italic">Chưa dùng</span>'}</td>
       <td class="py-1.5 px-2 space-x-1">${k.active === false ? '' : `
-        <button type="button" onclick="editExternalApiKeyAllowedIpsAction(${k.id})" class="bg-slate-600 text-white px-2 py-1 rounded text-[11px] font-bold hover:bg-slate-700">Sửa IP</button>
-        <button type="button" onclick="revokeExternalApiKeyAction(${k.id}, '${escapeHtml(k.name).replace(/'/g, "\\'")}')" class="bg-red-600 text-white px-2 py-1 rounded text-[11px] font-bold hover:bg-red-700">Thu hồi</button>
+        <button type="button" data-op="editExternalApiKeyAllowedIpsAction" data-arg0="${k.id}" class="bg-slate-600 text-white px-2 py-1 rounded text-[11px] font-bold hover:bg-slate-700">Sửa IP</button>
+        <button type="button" data-op="revokeExternalApiKeyAction" data-arg0="${k.id}" class="bg-red-600 text-white px-2 py-1 rounded text-[11px] font-bold hover:bg-red-700">Thu hồi</button>
       `}</td>
     </tr>
   `).join('');
@@ -24930,6 +24959,12 @@ async function editExternalApiKeyAllowedIpsAction(id) {
   }
 }
 
+// CSP: nút "Tôi đã lưu lại, đóng hộp này" trước đây gọi thẳng document.getElementById(...) trong
+// onclick — không phải lệnh gọi hàm đơn nên converter data-op không nhận diện được, tách ra hàm riêng.
+function closeExtApiKeyRevealBox() {
+  document.getElementById('extApiKeyRevealBox').classList.add('hidden');
+}
+
 async function copyExternalApiKeyReveal() {
   const value = document.getElementById('extApiKeyRevealValue').textContent;
   try {
@@ -24940,7 +24975,13 @@ async function copyExternalApiKeyReveal() {
   }
 }
 
-async function revokeExternalApiKeyAction(id, name) {
+async function revokeExternalApiKeyAction(id) {
+  // CSP: đổi chữ ký từ (id, name) sang chỉ nhận id — tự tra tên từ DB.externalApiKeys thay vì nhận qua
+  // tham số, vì tên key là chuỗi tự do (có thể chứa dấu nháy đơn/kép) không escape an toàn được cho
+  // data-arg khi truyền nguyên văn qua thuộc tính HTML (khác các data-argN khác trong hệ thống chỉ chứa
+  // id/key dạng enum/số).
+  const target = (DB.externalApiKeys || []).find(k => k.id === id);
+  const name = target ? target.name : '';
   if (!confirm(`Thu hồi API key "${name}"? Ứng dụng đang dùng key này sẽ KHÔNG thể gọi xác thực được nữa (không thể hoàn tác, phải tạo key mới nếu cần dùng lại).`)) return;
   try {
     const res = await fetch(`/api/admin/external-api-keys/${id}/revoke`, { method: 'POST' });
@@ -24961,7 +25002,7 @@ function renderFormTabsBar() {
   const bar = document.getElementById('formTabsBar');
   if (!bar) return;
   bar.innerHTML = FORM_TABS.map(t => `
-    <button onclick="switchFormTab('${t.key}')" id="btnFormTab_${t.key}" class="px-3 py-1.5 rounded text-xs font-bold ${t.key === activeFormTab ? 'bg-rose-700 text-white' : 'bg-gray-200 text-gray-700'}">${t.icon} ${escapeHtml(t.short)}</button>
+    <button data-op="switchFormTab" data-arg0="${t.key}" id="btnFormTab_${t.key}" class="px-3 py-1.5 rounded text-xs font-bold ${t.key === activeFormTab ? 'bg-rose-700 text-white' : 'bg-gray-200 text-gray-700'}">${t.icon} ${escapeHtml(t.short)}</button>
   `).join('');
 }
 
@@ -25142,8 +25183,8 @@ function renderFormFieldsTable() {
 
   const rows = order.map((id, idx) => {
     const moveButtons = `
-        <button onclick="moveUnifiedField('${activeFormTab}', '${id}', -1)" ${idx === 0 ? 'disabled class="opacity-30 cursor-not-allowed"' : 'class="hover:text-gray-800"'} title="Đưa lên trên">▲</button>
-        <button onclick="moveUnifiedField('${activeFormTab}', '${id}', 1)" ${idx === order.length - 1 ? 'disabled class="opacity-30 cursor-not-allowed"' : 'class="hover:text-gray-800"'} title="Đưa xuống dưới">▼</button>`;
+        <button data-op="moveUnifiedField" data-arg0="${activeFormTab}" data-arg1="${id}" data-arg2="-1" ${idx === 0 ? 'disabled class="opacity-30 cursor-not-allowed"' : 'class="hover:text-gray-800"'} title="Đưa lên trên">▲</button>
+        <button data-op="moveUnifiedField" data-arg0="${activeFormTab}" data-arg1="${id}" data-arg2="1" ${idx === order.length - 1 ? 'disabled class="opacity-30 cursor-not-allowed"' : 'class="hover:text-gray-800"'} title="Đưa xuống dưới">▼</button>`;
 
     const f = coreById.get(id);
     if (f) {
@@ -25155,16 +25196,16 @@ function renderFormFieldsTable() {
     <tr class="border-b hover:bg-gray-50 bg-gray-50/50">
       <td class="p-2 border font-mono font-bold text-gray-700">${escapeHtml(f.id)}</td>
       <td class="p-2 border">
-        <input value="${escapeHtml(label)}" oninput="updateCoreFieldOverride('${coreKey}', '${f.id}', 'label', this.value.trim() || '${escapeHtml(f.label).replace(/'/g, "\\'")}')" class="w-full border-0 bg-transparent p-0.5 font-bold text-gray-800 focus:outline-none focus:bg-white rounded">
+        <input value="${escapeHtml(label)}" data-op-input="updateCoreFieldOverrideLabelFromInput" data-arg0="${coreKey}" data-arg1="${f.id}" data-arg2="${escapeHtml(f.label)}" data-arg-el="3" class="w-full border-0 bg-transparent p-0.5 font-bold text-gray-800 focus:outline-none focus:bg-white rounded">
       </td>
       <td class="p-2 border text-gray-500">Trường Hệ Thống</td>
       <td class="p-2 border">${optionsDisplay}</td>
       <td class="p-2 border text-center">
-        <input type="checkbox" ${required ? 'checked' : ''} onchange="updateCoreFieldOverride('${coreKey}', '${f.id}', 'required', this.checked)" class="w-4 h-4">
+        <input type="checkbox" ${required ? 'checked' : ''} data-op-change="updateCoreFieldOverrideFromCheckbox" data-arg0="${coreKey}" data-arg1="${f.id}" data-arg2="required" data-arg-el="3" class="w-4 h-4">
       </td>
       <td class="p-2 border text-center"><span class="text-gray-400">Mặc định</span></td>
       <td class="p-2 border text-center whitespace-nowrap">${moveButtons}
-        <button type="button" onclick="editCoreField('${coreKey}', '${f.id}')" class="text-blue-600 font-bold hover:underline ml-1">✏️ Sửa</button>
+        <button type="button" data-op="editCoreField" data-arg0="${coreKey}" data-arg1="${f.id}" class="text-blue-600 font-bold hover:underline ml-1">✏️ Sửa</button>
       </td>
     </tr>`;
     }
@@ -25180,8 +25221,8 @@ function renderFormFieldsTable() {
       <td class="p-2 border text-center font-bold">${cf.required ? '✅ Có' : 'Không'}</td>
       <td class="p-2 border text-center"><span class="text-rose-600 font-bold">Bổ Sung</span></td>
       <td class="p-2 border text-center whitespace-nowrap">${moveButtons}
-        <button onclick="editCustomField('${cf.id}')" class="text-blue-600 font-bold hover:underline ml-1">Sửa</button>
-        <button onclick="deleteCustomField('${cf.id}')" class="text-red-600 font-bold hover:underline ml-1">Xóa</button>
+        <button data-op="editCustomField" data-arg0="${cf.id}" class="text-blue-600 font-bold hover:underline ml-1">Sửa</button>
+        <button data-op="deleteCustomField" data-arg0="${cf.id}" class="text-red-600 font-bold hover:underline ml-1">Xóa</button>
       </td>
     </tr>`;
   }).join('');
@@ -26955,7 +26996,7 @@ function renderWorkflowTab() {
       const showLabel = `▾ Hiện thêm (${otherDept.length} người phòng khác)`;
       const hideLabel = `▴ Ẩn bớt (${otherDept.length} người phòng khác)`;
       const otherDeptSection = otherDept.length ? `
-        <button type="button" id="${otherBtnId}" onclick="toggleWfOtherDeptCandidates('${otherContainerId}', '${otherBtnId}')"
+        <button type="button" id="${otherBtnId}" data-op="toggleWfOtherDeptCandidates" data-arg0="${otherContainerId}" data-arg1="${otherBtnId}"
           data-show-label="${escapeHtml(showLabel)}" data-hide-label="${escapeHtml(hideLabel)}"
           class="text-[11px] text-sky-600 font-semibold hover:underline">${escapeHtml(anyOtherChecked ? hideLabel : showLabel)}</button>
         <div id="${otherContainerId}" class="flex flex-wrap gap-1.5 pt-1 ${anyOtherChecked ? '' : 'hidden'}">${otherDept.map(renderCandidateCheckbox).join('')}</div>
@@ -26983,7 +27024,7 @@ function renderWorkflowTab() {
           <h4 class="font-bold text-sm text-gray-800">🏢 ${escapeHtml(dept)}</h4>
           <div class="flex items-center gap-2">
             <span class="text-xs font-semibold text-gray-600">Chọn mẫu quy trình:</span>
-            <select id="wfSelect_${dept.replace(/\s+/g, '_')}" onchange="onWorkflowTemplateChange('${escapeHtml(dept)}')" class="border p-1 rounded text-xs bg-white font-bold text-emerald-700">
+            <select id="wfSelect_${dept.replace(/\s+/g, '_')}" data-op-change="onWorkflowTemplateChange" data-arg0="${escapeHtml(dept)}" class="border p-1 rounded text-xs bg-white font-bold text-emerald-700">
               ${wfOptions}
             </select>
           </div>
@@ -26991,7 +27032,7 @@ function renderWorkflowTab() {
         ${isPending ? `<div class="text-[11px] text-amber-800 bg-amber-50 border border-amber-200 rounded px-2 py-1">⚠️ Mẫu quy trình vừa đổi — <b>chưa lưu</b>. Gán người duyệt cho từng bước rồi bấm "Lưu Cấu Hình" để áp dụng.</div>` : ''}
         <div class="space-y-2">${stepsConfigHTML}</div>
         <div class="flex justify-end pt-1">
-          <button onclick="saveDeptWorkflowConfig('${escapeHtml(dept)}')" class="bg-emerald-600 text-white px-3 py-1 rounded text-xs font-bold hover:bg-emerald-700">Lưu Cấu Hình [${escapeHtml(dept)}]</button>
+          <button data-op="saveDeptWorkflowConfig" data-arg0="${escapeHtml(dept)}" class="bg-emerald-600 text-white px-3 py-1 rounded text-xs font-bold hover:bg-emerald-700">Lưu Cấu Hình [${escapeHtml(dept)}]</button>
         </div>
       </div>
     `;
@@ -27096,8 +27137,8 @@ function renderWorkflowTemplatesTable() {
       <td class="p-2 border text-center font-bold">${wf.steps.length} bước</td>
       <td class="p-2 border text-xs">${wf.steps.map(s => `${s.order}. ${escapeHtml(s.name)}`).join(' ➔ ')}</td>
       <td class="p-2 border text-center space-x-1">
-        <button onclick="editWorkflowTemplate('${wf.id}')" class="text-blue-600 font-bold hover:underline">Sửa</button>
-        <button onclick="deleteWorkflowTemplate('${wf.id}')" class="text-red-600 font-bold hover:underline">Xóa</button>
+        <button data-op="editWorkflowTemplate" data-arg0="${wf.id}" class="text-blue-600 font-bold hover:underline">Sửa</button>
+        <button data-op="deleteWorkflowTemplate" data-arg0="${wf.id}" class="text-red-600 font-bold hover:underline">Xóa</button>
       </td>
     </tr>
   `).join('');
@@ -27250,9 +27291,9 @@ function renderDeptList() {
   ul.innerHTML = DB.depts.map(d => `
     <li class="p-2 flex justify-between items-center gap-2 hover:bg-gray-50">
       <span class="flex-1">${escapeHtml(d)}</span>
-      <input value="${escapeHtml(getDeptAbbr(d))}" onchange="updateDeptAbbr('${escapeHtml(d)}', this.value)" title="Viết tắt (dùng sinh Mã Tài Liệu)" class="w-16 border rounded px-1 py-0.5 text-center text-[11px] font-mono uppercase">
-      <button onclick="moveDeptToStore('${escapeHtml(d)}')" title="Chuyển sang Danh Mục Siêu Thị" class="text-orange-600 font-bold hover:underline whitespace-nowrap">Chuyển</button>
-      <button onclick="deleteDept('${escapeHtml(d)}')" class="text-red-500 font-bold hover:underline">Xóa</button>
+      <input value="${escapeHtml(getDeptAbbr(d))}" data-op-change="updateDeptAbbr" data-arg0="${escapeHtml(d)}" data-arg-value="1" title="Viết tắt (dùng sinh Mã Tài Liệu)" class="w-16 border rounded px-1 py-0.5 text-center text-[11px] font-mono uppercase">
+      <button data-op="moveDeptToStore" data-arg0="${escapeHtml(d)}" title="Chuyển sang Danh Mục Siêu Thị" class="text-orange-600 font-bold hover:underline whitespace-nowrap">Chuyển</button>
+      <button data-op="deleteDept" data-arg0="${escapeHtml(d)}" class="text-red-500 font-bold hover:underline">Xóa</button>
     </li>
   `).join('');
 }
@@ -27288,8 +27329,8 @@ function renderStoreList() {
   ul.innerHTML = DB.stores.map(s => `
     <li class="p-2 flex justify-between items-center gap-2 hover:bg-gray-50">
       <span class="flex-1">${escapeHtml(s)}</span>
-      <button onclick="renameStore('${escapeHtml(s)}')" class="text-blue-600 font-bold hover:underline whitespace-nowrap">✏️ Sửa</button>
-      <button onclick="deleteStore('${escapeHtml(s)}')" class="text-red-500 font-bold hover:underline">Xóa</button>
+      <button data-op="renameStore" data-arg0="${escapeHtml(s)}" class="text-blue-600 font-bold hover:underline whitespace-nowrap">✏️ Sửa</button>
+      <button data-op="deleteStore" data-arg0="${escapeHtml(s)}" class="text-red-500 font-bold hover:underline">Xóa</button>
     </li>
   `).join('');
 }
@@ -27432,8 +27473,8 @@ function renderJobTitleList() {
   ul.innerHTML = DB.jobTitles.map(t => `
     <li class="p-2 flex justify-between items-center gap-2 hover:bg-gray-50">
       <span class="flex-1">${escapeHtml(t)}</span>
-      <button onclick="renameJobTitle('${escapeHtml(t)}')" class="text-blue-600 font-bold hover:underline whitespace-nowrap">✏️ Sửa</button>
-      <button onclick="deleteJobTitle('${escapeHtml(t)}')" class="text-red-500 font-bold hover:underline">Xóa</button>
+      <button data-op="renameJobTitle" data-arg0="${escapeHtml(t)}" class="text-blue-600 font-bold hover:underline whitespace-nowrap">✏️ Sửa</button>
+      <button data-op="deleteJobTitle" data-arg0="${escapeHtml(t)}" class="text-red-500 font-bold hover:underline">Xóa</button>
     </li>
   `).join('');
 }
@@ -27477,6 +27518,11 @@ function toggleStoreJobTitleRestricted(label, checked) {
   syncStorage('storeJobTitles');
   logSystemAction('USER_MGM', 'UPDATE_STORE_JOB_TITLE', `Đổi cờ "Không dùng được cho tự tạo tài khoản" của chức danh siêu thị [${label}] = ${checked}`, 'SUCCESS', label);
 }
+// CSP: onchange checkbox chỉ truyền được phần tử qua data-arg-el (không có slot "this.checked" — xem
+// cspReadArgSlot), nên tách riêng wrapper đọc .checked từ phần tử rồi mới gọi hàm lõi ở trên.
+function toggleStoreJobTitleRestrictedFromCheckbox(label, checkboxEl) {
+  toggleStoreJobTitleRestricted(label, checkboxEl.checked);
+}
 
 async function renameStoreJobTitle(label) {
   const ok = await renameCatalogEntryClient('storeJobTitles', label, 'Danh Sách Chức Danh (Siêu Thị)');
@@ -27490,11 +27536,11 @@ function renderStoreJobTitleList() {
     <li class="p-2 flex justify-between items-center gap-2 hover:bg-gray-50">
       <span class="flex-1">${escapeHtml(t.label)}</span>
       <label class="flex items-center gap-1 text-[10px] text-gray-500 whitespace-nowrap" title="Chức danh này sẽ KHÔNG hiện trong form tự tạo tài khoản ở sub-tab Quản Lý Nhân Viên Siêu Thị (Đồng Phục)">
-        <input type="checkbox" ${t.restrictedFromSelfService ? 'checked' : ''} onchange="toggleStoreJobTitleRestricted('${escapeHtml(t.label)}', this.checked)">
+        <input type="checkbox" ${t.restrictedFromSelfService ? 'checked' : ''} data-op-change="toggleStoreJobTitleRestrictedFromCheckbox" data-arg0="${escapeHtml(t.label)}" data-arg-el="1">
         Khoá tự tạo
       </label>
-      <button onclick="renameStoreJobTitle('${escapeHtml(t.label)}')" class="text-blue-600 font-bold hover:underline whitespace-nowrap">✏️ Sửa</button>
-      <button onclick="deleteStoreJobTitle('${escapeHtml(t.label)}')" class="text-red-500 font-bold hover:underline">Xóa</button>
+      <button data-op="renameStoreJobTitle" data-arg0="${escapeHtml(t.label)}" class="text-blue-600 font-bold hover:underline whitespace-nowrap">✏️ Sửa</button>
+      <button data-op="deleteStoreJobTitle" data-arg0="${escapeHtml(t.label)}" class="text-red-500 font-bold hover:underline">Xóa</button>
     </li>
   `).join('');
 }
@@ -27526,7 +27572,7 @@ function renderTrainingCategoryList() {
   ul.innerHTML = DB.trainingCategories.map(t => `
     <li class="p-2 flex justify-between items-center hover:bg-gray-50">
       <span>${escapeHtml(t)}</span>
-      <button onclick="deleteTrainingCategory('${escapeHtml(t)}')" class="text-red-500 font-bold hover:underline">Xóa</button>
+      <button data-op="deleteTrainingCategory" data-arg0="${escapeHtml(t)}" class="text-red-500 font-bold hover:underline">Xóa</button>
     </li>
   `).join('');
 }
@@ -27566,7 +27612,7 @@ function renderSensitiveKeywordList() {
   ul.innerHTML = DB.sensitiveKeywords.map(k => `
     <li class="p-2 flex justify-between items-center hover:bg-gray-50">
       <span>${escapeHtml(k.term)} <span class="text-[10px] px-1.5 py-0.5 rounded-full ${SENSITIVE_CATEGORY_SEVERE.has(k.category) ? 'bg-red-100 text-red-700' : 'bg-amber-100 text-amber-700'}">${SENSITIVE_CATEGORY_LABELS[k.category] || k.category}</span></span>
-      <button onclick="deleteSensitiveKeyword(${k.id})" class="text-red-500 font-bold hover:underline">Xóa</button>
+      <button data-op="deleteSensitiveKeyword" data-arg0="${k.id}" class="text-red-500 font-bold hover:underline">Xóa</button>
     </li>
   `).join('');
 }
@@ -27610,8 +27656,8 @@ function renderCatList() {
   ul.innerHTML = DB.cats.map(c => `
     <li class="p-2 flex justify-between items-center gap-2 hover:bg-gray-50">
       <span class="flex-1">${escapeHtml(c)}</span>
-      <input value="${escapeHtml(getDocCatAbbr(c))}" onchange="updateCatAbbr('${escapeHtml(c)}', this.value)" title="Viết tắt (dùng sinh Mã Tài Liệu)" class="w-16 border rounded px-1 py-0.5 text-center text-[11px] font-mono uppercase">
-      <button onclick="deleteCat('${escapeHtml(c)}')" class="text-red-500 font-bold hover:underline">Xóa</button>
+      <input value="${escapeHtml(getDocCatAbbr(c))}" data-op-change="updateCatAbbr" data-arg0="${escapeHtml(c)}" data-arg-value="1" title="Viết tắt (dùng sinh Mã Tài Liệu)" class="w-16 border rounded px-1 py-0.5 text-center text-[11px] font-mono uppercase">
+      <button data-op="deleteCat" data-arg0="${escapeHtml(c)}" class="text-red-500 font-bold hover:underline">Xóa</button>
     </li>
   `).join('');
 }
@@ -27633,7 +27679,7 @@ function renderContractTypeAbbrList() {
   ul.innerHTML = DB.contractTypes.map(t => `
     <li class="p-2 flex justify-between items-center gap-2 hover:bg-gray-50">
       <span class="flex-1">${escapeHtml(t)}</span>
-      <input value="${escapeHtml(getContractTypeAbbr(t))}" onchange="updateContractTypeAbbr('${escapeHtml(t)}', this.value)" title="Viết tắt (dùng sinh Mã Hợp Đồng)" class="w-16 border rounded px-1 py-0.5 text-center text-[11px] font-mono uppercase">
+      <input value="${escapeHtml(getContractTypeAbbr(t))}" data-op-change="updateContractTypeAbbr" data-arg0="${escapeHtml(t)}" data-arg-value="1" title="Viết tắt (dùng sinh Mã Hợp Đồng)" class="w-16 border rounded px-1 py-0.5 text-center text-[11px] font-mono uppercase">
     </li>
   `).join('');
 }
@@ -28126,7 +28172,7 @@ function renderUPermGroupsChecklist(selectedIds) {
   }
   wrap.innerHTML = DB.permGroups.map(g => `
     <label class="flex items-center gap-1.5 text-gray-700 cursor-pointer">
-      <input type="checkbox" class="u-perm-group-cb" value="${escapeHtml(g.id)}" onchange="onUserPermGroupsChange()" ${selected.has(g.id) ? 'checked' : ''}>
+      <input type="checkbox" class="u-perm-group-cb" value="${escapeHtml(g.id)}" data-op-change="onUserPermGroupsChange" ${selected.has(g.id) ? 'checked' : ''}>
       <span>${escapeHtml(g.name)}</span>
     </label>
   `).join('');
@@ -28148,8 +28194,8 @@ function renderPermGroupsList() {
       <td class="border p-2 text-gray-600">${escapeHtml(g.description || '-')}</td>
       <td class="border p-2 text-center">${memberCount}</td>
       <td class="border p-2 text-center">
-        <button onclick="editPermGroup('${g.id}')" class="text-blue-600 font-bold hover:underline mr-2">Sửa</button>
-        <button onclick="deletePermGroup('${g.id}')" class="text-red-600 font-bold hover:underline">Xóa</button>
+        <button data-op="editPermGroup" data-arg0="${g.id}" class="text-blue-600 font-bold hover:underline mr-2">Sửa</button>
+        <button data-op="deletePermGroup" data-arg0="${g.id}" class="text-red-600 font-bold hover:underline">Xóa</button>
       </td>
     </tr>`;
   }).join('');
@@ -28340,7 +28386,7 @@ function renderWorkflowParticipatingDeptsChecklist() {
     ? workflowParticipatingDeptsDraft.map(d => `
       <span class="inline-flex items-center gap-1 bg-white border rounded-full pl-2.5 pr-1 py-1 text-xs text-gray-700">
         ${escapeHtml(d)}
-        <button type="button" onclick="removeWorkflowParticipatingDept('${escapeHtml(d)}')" class="text-gray-400 hover:text-red-600 font-bold px-1" title="Bỏ đơn vị này">✕</button>
+        <button type="button" data-op="removeWorkflowParticipatingDept" data-arg0="${escapeHtml(d)}" class="text-gray-400 hover:text-red-600 font-bold px-1" title="Bỏ đơn vị này">✕</button>
       </span>
     `).join('')
     : '<span class="text-[11px] text-gray-400 italic">Chưa thêm đơn vị nào — để trống thì màn Quy Trình & Phê Duyệt hiện đầy đủ mọi phòng ban.</span>';
@@ -28406,7 +28452,7 @@ function renderPwaShortcutCheckboxes() {
   const selected = new Set(DB.pwaShortcutModules || []);
   wrap.innerHTML = Object.entries(PWA_SHORTCUT_CATALOG_CLIENT).map(([key, label]) => `
     <label class="flex items-center gap-1.5 text-gray-700 cursor-pointer">
-      <input type="checkbox" class="pwa-shortcut-cb" value="${escapeHtml(key)}" ${selected.has(key) ? 'checked' : ''} onchange="enforcePwaShortcutMax(this)">
+      <input type="checkbox" class="pwa-shortcut-cb" value="${escapeHtml(key)}" ${selected.has(key) ? 'checked' : ''} data-op-change="enforcePwaShortcutMax" data-arg-el="0">
       <span>${escapeHtml(label)}</span>
     </label>
   `).join('');
@@ -28478,21 +28524,21 @@ function renderVppExcludeGroupsAdmin() {
       ? g.jobTitles.map(t => `
           <span class="inline-flex items-center gap-1 bg-white border rounded-full pl-2 pr-1 py-0.5 text-[11px] text-gray-700">
             ${escapeHtml(t)}
-            <button type="button" onclick="removeVppExcludeGroupJobTitle(${idx}, '${escapeHtml(t)}')" class="text-gray-400 hover:text-red-600 font-bold px-1" title="Bỏ chức danh này">✕</button>
+            <button type="button" data-op="removeVppExcludeGroupJobTitle" data-arg0="${idx}" data-arg1="${escapeHtml(t)}" class="text-gray-400 hover:text-red-600 font-bold px-1" title="Bỏ chức danh này">✕</button>
           </span>`).join('')
       : '<span class="text-[11px] text-gray-400 italic">Chưa chọn chức danh nào.</span>';
     return `
     <div class="bg-white border rounded p-2 space-y-1.5">
       <div class="flex items-center gap-2">
-        <input value="${escapeHtml(g.name)}" oninput="updateVppExcludeGroupField(${idx}, 'name', this.value)" placeholder="Tên nhóm (VD: Bảo vệ/Tạp vụ)" class="flex-1 border p-1 rounded text-xs font-semibold">
+        <input value="${escapeHtml(g.name)}" data-op-input="updateVppExcludeGroupField" data-arg0="${idx}" data-arg1="name" data-arg-value="2" placeholder="Tên nhóm (VD: Bảo vệ/Tạp vụ)" class="flex-1 border p-1 rounded text-xs font-semibold">
         <span class="text-[11px] text-gray-400 whitespace-nowrap">${memberCount} người</span>
-        <button type="button" onclick="removeVppExcludeGroupRow(${idx})" class="text-red-600 hover:text-red-800 text-xs font-bold">✕</button>
+        <button type="button" data-op="removeVppExcludeGroupRow" data-arg0="${idx}" class="text-red-600 hover:text-red-800 text-xs font-bold">✕</button>
       </div>
       <div class="flex gap-2 items-center">
         <input data-sdd-list="vppJobTitlesDatalist" id="vppExcludeGroupJobTitleInput_${idx}" placeholder="🔍 Tìm chức danh..." autocomplete="off"
           onkeydown="if(event.key==='Enter'){event.preventDefault();addVppExcludeGroupJobTitle(${idx});}"
           class="flex-1 border p-1 rounded text-xs">
-        <button type="button" onclick="addVppExcludeGroupJobTitle(${idx})" class="bg-gray-600 text-white px-2 py-1 rounded text-[11px] font-bold hover:bg-gray-700 whitespace-nowrap">+ Thêm</button>
+        <button type="button" data-op="addVppExcludeGroupJobTitle" data-arg0="${idx}" class="bg-gray-600 text-white px-2 py-1 rounded text-[11px] font-bold hover:bg-gray-700 whitespace-nowrap">+ Thêm</button>
       </div>
       <div class="flex flex-wrap gap-1.5">${chipsHTML}</div>
     </div>
@@ -30433,7 +30479,7 @@ function renderSubmissionApprovalGroups() {
     <div class="bg-slate-50 p-3 rounded border space-y-2">
       <div class="font-bold text-gray-800 text-xs">${escapeHtml(layer.label)}</div>
       <div id="submissionApprovalGroupPicker_${layer.key}"></div>
-      <button type="button" onclick="saveSubmissionApprovalGroup('${layer.key}')" class="w-full bg-rose-600 text-white px-2 py-1 rounded text-[11px] font-bold hover:bg-rose-700">Lưu Thành Viên</button>
+      <button type="button" data-op="saveSubmissionApprovalGroup" data-arg0="${layer.key}" class="w-full bg-rose-600 text-white px-2 py-1 rounded text-[11px] font-bold hover:bg-rose-700">Lưu Thành Viên</button>
     </div>
   `).join('');
 
@@ -30473,7 +30519,7 @@ function renderContractApprovalGroups() {
     <div class="bg-slate-50 p-3 rounded border space-y-2">
       <div class="font-bold text-gray-800 text-xs">${escapeHtml(layer.label)}</div>
       <div id="contractApprovalGroupPicker_${layer.key}"></div>
-      <button type="button" onclick="saveContractApprovalGroup('${layer.key}')" class="w-full bg-rose-600 text-white px-2 py-1 rounded text-[11px] font-bold hover:bg-rose-700">Lưu Thành Viên</button>
+      <button type="button" data-op="saveContractApprovalGroup" data-arg0="${layer.key}" class="w-full bg-rose-600 text-white px-2 py-1 rounded text-[11px] font-bold hover:bg-rose-700">Lưu Thành Viên</button>
     </div>
   `).join('');
 
@@ -30689,8 +30735,8 @@ function renderPendingNewUsersList() {
       <td class="border p-1.5">${escapeHtml(u.dept)}</td>
       <td class="border p-1.5">${groups.length ? groups.map(g => escapeHtml(g.name)).join(', ') : '(quyền riêng)'}</td>
       <td class="border p-1.5 text-center">
-        <button type="button" onclick="editPendingNewUser(${idx})" class="text-blue-600 font-bold hover:underline mr-2">Sửa</button>
-        <button type="button" onclick="removePendingNewUser(${idx})" class="text-red-600 font-bold hover:underline">Xóa</button>
+        <button type="button" data-op="editPendingNewUser" data-arg0="${idx}" class="text-blue-600 font-bold hover:underline mr-2">Sửa</button>
+        <button type="button" data-op="removePendingNewUser" data-arg0="${idx}" class="text-red-600 font-bold hover:underline">Xóa</button>
       </td>
     </tr>`;
   }).join('');
@@ -31071,9 +31117,9 @@ function renderUsers() {
         ${summarizeUserPerms(u.perms)}
       </td>
       <td class="border p-2 text-center space-x-1">
-        <button onclick="editUser(${u.id})" class="text-blue-600 font-bold hover:underline">Sửa</button>
-        <button onclick="deleteUser(${u.id})" class="text-red-600 font-bold hover:underline">Xóa</button>
-        <button onclick="toggleUserActive(${u.id})" class="${isInactive ? 'text-emerald-600' : 'text-amber-600'} font-bold hover:underline">${isInactive ? 'Mở' : 'Khóa'}</button>
+        <button data-op="editUser" data-arg0="${u.id}" class="text-blue-600 font-bold hover:underline">Sửa</button>
+        <button data-op="deleteUser" data-arg0="${u.id}" class="text-red-600 font-bold hover:underline">Xóa</button>
+        <button data-op="toggleUserActive" data-arg0="${u.id}" class="${isInactive ? 'text-emerald-600' : 'text-amber-600'} font-bold hover:underline">${isInactive ? 'Mở' : 'Khóa'}</button>
       </td>
     </tr>
   `;
@@ -31298,8 +31344,8 @@ function renderTrashList() {
       <td class="border p-2">${escapeHtml(entry.deletedByName || entry.deletedBy)}</td>
       <td class="border p-2">${new Date(entry.deletedAt).toLocaleString('vi-VN')}</td>
       <td class="border p-2 text-center whitespace-nowrap">
-        <button type="button" onclick="restoreTrashItem(${entry.trashId})" class="text-emerald-700 font-bold hover:underline mr-3">♻️ Khôi phục</button>
-        <button type="button" onclick="permanentlyDeleteTrashItemUI(${entry.trashId})" class="text-red-600 font-bold hover:underline">🗑️ Xóa vĩnh viễn</button>
+        <button type="button" data-op="restoreTrashItem" data-arg0="${entry.trashId}" class="text-emerald-700 font-bold hover:underline mr-3">♻️ Khôi phục</button>
+        <button type="button" data-op="permanentlyDeleteTrashItemUI" data-arg0="${entry.trashId}" class="text-red-600 font-bold hover:underline">🗑️ Xóa vĩnh viễn</button>
       </td>
     </tr>
   `).join('');
