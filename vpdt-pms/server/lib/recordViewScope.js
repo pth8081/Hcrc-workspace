@@ -710,6 +710,22 @@ function filterHrFeedbackForUser(items, user) {
   return (items || []).filter(q => canViewHrFeedback(user, q));
 }
 
+// careerPathConfirmations (Đào Tạo — mốc "Xác nhận hoàn thành cấp bậc" của Lộ Trình Thăng Tiến): trước
+// đây KHÔNG được lọc lại ở server (chỉ ẩn ở client), để lộ toàn bộ mốc thăng tiến của MỌI nhân viên
+// (username/dept/thời điểm xác nhận từng cấp) cho bất kỳ ai gọi thẳng GET /api/data — audit Đợt 5, Giai
+// đoạn 4 (Thấp, vì bản thân dữ liệu không có điểm số/câu trả lời, chỉ là mốc tiến trình). Cùng khuôn
+// canViewHrFeedback() ở trên: admin/trainingManage xem hết, còn lại chỉ chính chủ (username) xem được
+// mốc của mình.
+function canViewCareerPathConfirmation(user, item) {
+  if (!user) return false;
+  if (canManageTraining(user)) return true;
+  return item.username === user.username;
+}
+
+function filterCareerPathConfirmationsForUser(items, user) {
+  return (items || []).filter(c => canViewCareerPathConfirmation(user, c));
+}
+
 // itServiceRenewals (Hỗ Trợ IT — Gia Hạn Dịch Vụ CNTT): quyền PHẲNG itManage, KHÔNG có nhánh "chính
 // chủ luôn xem được" như licenses ở trên — đây là danh mục nội bộ đội IT dùng CHUNG cho cả đội (mọi
 // mục do bất kỳ ai trong đội tạo đều phải thấy được bởi cả đội), không phải hồ sơ cá nhân từng người.
@@ -770,6 +786,7 @@ module.exports = {
   canViewOnboardingProgress, filterOnboardingProgressForUser,
   canViewLicense, filterLicensesForUser,
   canViewHrFeedback, filterHrFeedbackForUser,
+  canViewCareerPathConfirmation, filterCareerPathConfirmationsForUser,
   // itServiceRenewals: 2 hàm này ĐÃ được định nghĩa ở trên nhưng trước đây BỊ BỎ SÓT khỏi khối export
   // này — hậu quả kép: (1) routes/data.js không lọc được collection này ở GET /api/data (lộ toàn bộ
   // danh mục Gia Hạn Dịch Vụ CNTT cho mọi người đã đăng nhập), (2) routes/download.js import

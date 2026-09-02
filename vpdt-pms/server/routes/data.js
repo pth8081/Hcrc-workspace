@@ -24,7 +24,7 @@ const {
   filterUniformPeriodsForUser, filterUniformIssuancesForUser, filterUniformStockAdjustmentsForUser, filterUniformTransfersForUser, filterBudgetEntriesForUser,
   filterOperationOrdersForUser, filterOperationStoreOpeningsForUser, filterOperationRepairsForUser,
   filterOperationExecutionPeriodsForUser,
-  filterVppRegistrationsForUser, filterLicensesForUser, filterHrFeedbackForUser,
+  filterVppRegistrationsForUser, filterLicensesForUser, filterHrFeedbackForUser, filterCareerPathConfirmationsForUser,
   filterItServiceRenewalsForUser, filterPaymentRequestsForUser, filterOnboardingProgressForUser,
   computeModuleApproverUsernames, sanitizeUsersPermsForViewer, assertNoManagerCycle
 } = require('../lib/recordViewScope');
@@ -553,6 +553,10 @@ router.get('/', async (req, res) => {
     // đảm bảo yêu cầu riêng tư cốt lõi này (giao diện chỉ lọc thêm 1 lần nữa cho đúng inbox cá nhân)
     // — xem lib/recordViewScope.js canViewHrFeedback().
     if (data.hrFeedback) data.hrFeedback = filterHrFeedbackForUser(data.hrFeedback, req.freshUser);
+    // careerPathConfirmations (Đào Tạo — mốc "Xác nhận hoàn thành cấp bậc" Lộ Trình Thăng Tiến): trước
+    // đây KHÔNG lọc lại ở server, lộ mốc thăng tiến (username/dept/thời điểm) của MỌI nhân viên cho bất
+    // kỳ ai gọi thẳng GET /api/data — audit Đợt 5, Giai đoạn 4 (Thấp, không có điểm số/câu trả lời).
+    if (data.careerPathConfirmations) data.careerPathConfirmations = filterCareerPathConfirmationsForUser(data.careerPathConfirmations, req.freshUser);
     // tasks: cùng dạng lỗ hổng như 9 collection ở trên — trước đây hoàn toàn KHÔNG được lọc lại ở
     // server (chỉ ẩn ở renderTasks() qua canViewTaskRecord()), để lộ toàn bộ Công Việc công ty (kể cả
     // nội dung "Ý kiến chỉ đạo" nhạy cảm) cho bất kỳ ai gọi thẳng GET /api/data.

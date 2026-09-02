@@ -53,9 +53,19 @@ END
 ELSE
 BEGIN
     -- Database đã tồn tại từ trước khi có optimistic concurrency (Bước 1) — hạ đúng độ chính xác cột
-    -- UpdatedAt xuống mili-giây để hợp lệ dùng làm version token. An toàn chạy lại nhiều lần (no-op
-    -- nếu cột đã đúng kiểu), không mất dữ liệu (chỉ cắt bớt phần dưới mili-giây vốn chưa được dùng).
-    ALTER TABLE dbo.AppData ALTER COLUMN UpdatedAt DATETIME2(3) NOT NULL;
+    -- UpdatedAt xuống mili-giây để hợp lệ dùng làm version token. Chỉ ALTER khi cột CHƯA đúng kiểu (tra
+    -- INFORMATION_SCHEMA trước) — trước đây chạy ALTER COLUMN vô điều kiện ở MỌI lần deploy dù không có
+    -- gì thay đổi, tốn 1 khoá schema không cần thiết trên bảng đọc ở gần như mọi request (audit Đợt 5,
+    -- Giai đoạn 4). Vẫn an toàn chạy lại nhiều lần, không mất dữ liệu (chỉ cắt bớt phần dưới mili-giây
+    -- vốn chưa được dùng) khi thực sự cần ALTER.
+    IF EXISTS (
+        SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS
+        WHERE TABLE_SCHEMA = 'dbo' AND TABLE_NAME = 'AppData' AND COLUMN_NAME = 'UpdatedAt'
+          AND (DATA_TYPE <> 'datetime2' OR DATETIME_PRECISION <> 3 OR IS_NULLABLE <> 'NO')
+    )
+    BEGIN
+        ALTER TABLE dbo.AppData ALTER COLUMN UpdatedAt DATETIME2(3) NOT NULL;
+    END
 END
 GO
 

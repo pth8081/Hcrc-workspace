@@ -10,6 +10,15 @@ const { getAppDataValue } = require('./appData');
 // đây là bảng có index, chi phí lưu trữ/dọn dẹp không còn phụ thuộc vào việc đọc/ghi cả khối.
 const RETENTION_KEEP = 5000;
 
+// Cắt chuỗi về đúng độ rộng cột SQL (NVARCHAR cố định) trước khi ghi — trước đây ghi thẳng không cắt,
+// nếu 1 trường vượt giới hạn (VD IpAddress lấy từ header X-Forwarded-For có thể dài bất thường nếu bị
+// client cố tình gửi chuỗi dài, hoặc TargetObject ghép từ nhiều phần) sẽ ném lỗi SQL thô "String or
+// binary data would be truncated" thay vì ghi được log (mất luôn cả log của thao tác đang audit) — audit
+// Đợt 5, Giai đoạn 4. Description (NVARCHAR(MAX)) không cần cắt.
+function clip(str, maxLen) {
+  return typeof str === 'string' && str.length > maxLen ? str.slice(0, maxLen) : str;
+}
+
 function toEntry(row) {
   return {
     id: row.Id,
@@ -28,14 +37,14 @@ function toEntry(row) {
 async function insertSystemLog({ username, fullName, ipAddress, module, actionType, targetObject, description, status }) {
   const pool = await getPool();
   const result = await pool.request()
-    .input('username', sql.NVarChar(100), username)
-    .input('fullName', sql.NVarChar(200), fullName || null)
-    .input('ipAddress', sql.NVarChar(100), ipAddress || null)
-    .input('module', sql.NVarChar(50), module)
-    .input('actionType', sql.NVarChar(100), actionType)
-    .input('targetObject', sql.NVarChar(200), targetObject || null)
+    .input('username', sql.NVarChar(100), clip(username, 100))
+    .input('fullName', sql.NVarChar(200), clip(fullName, 200) || null)
+    .input('ipAddress', sql.NVarChar(100), clip(ipAddress, 100) || null)
+    .input('module', sql.NVarChar(50), clip(module, 50))
+    .input('actionType', sql.NVarChar(100), clip(actionType, 100))
+    .input('targetObject', sql.NVarChar(200), clip(targetObject, 200) || null)
     .input('description', sql.NVarChar(sql.MAX), description)
-    .input('status', sql.NVarChar(20), status || 'SUCCESS')
+    .input('status', sql.NVarChar(20), clip(status, 20) || 'SUCCESS')
     .query(`
       INSERT INTO dbo.SystemLogs (Username, FullName, IpAddress, Module, ActionType, TargetObject, Description, Status)
       OUTPUT INSERTED.*
@@ -97,14 +106,14 @@ async function migrateLegacySystemLogs() {
   for (let i = legacy.length - 1; i >= 0; i--) {
     const l = legacy[i];
     await pool.request()
-      .input('username', sql.NVarChar(100), l.username || 'unknown')
-      .input('fullName', sql.NVarChar(200), l.fullName || null)
-      .input('ipAddress', sql.NVarChar(100), l.ipAddress || null)
-      .input('module', sql.NVarChar(50), l.module || 'UNKNOWN')
-      .input('actionType', sql.NVarChar(100), l.actionType || 'UNKNOWN')
-      .input('targetObject', sql.NVarChar(200), l.targetObject || null)
+      .input('username', sql.NVarChar(100), clip(l.username, 100) || 'unknown')
+      .input('fullName', sql.NVarChar(200), clip(l.fullName, 200) || null)
+      .input('ipAddress', sql.NVarChar(100), clip(l.ipAddress, 100) || null)
+      .input('module', sql.NVarChar(50), clip(l.module, 50) || 'UNKNOWN')
+      .input('actionType', sql.NVarChar(100), clip(l.actionType, 100) || 'UNKNOWN')
+      .input('targetObject', sql.NVarChar(200), clip(l.targetObject, 200) || null)
       .input('description', sql.NVarChar(sql.MAX), l.description || '')
-      .input('status', sql.NVarChar(20), l.status || 'SUCCESS')
+      .input('status', sql.NVarChar(20), clip(l.status, 20) || 'SUCCESS')
       .query(`
         INSERT INTO dbo.SystemLogs (Username, FullName, IpAddress, Module, ActionType, TargetObject, Description, Status)
         VALUES (@username, @fullName, @ipAddress, @module, @actionType, @targetObject, @description, @status);

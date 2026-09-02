@@ -11,13 +11,22 @@ function toTask(row) {
   return JSON.parse(row.Payload);
 }
 
+function clip(str, maxLen) {
+  return typeof str === 'string' && str.length > maxLen ? str.slice(0, maxLen) : str;
+}
+
+// Cắt các cột trích xuất về đúng độ rộng cột SQL (NVARCHAR cố định) trước khi ghi — trước đây nếu
+// Payload có sourceCode/status... dài bất thường (VD lỗi nhập liệu ở luồng sinh Công việc tự động từ
+// chỉ đạo/tờ trình), INSERT/UPDATE ném thẳng lỗi SQL thô "String or binary data would be truncated"
+// lên tận route thay vì lưu được bản ghi (audit Đợt 5, Giai đoạn 4). Payload (NVARCHAR(MAX), nguồn dữ
+// liệu chính) KHÔNG bị cắt — chỉ các cột trích xuất phụ để lọc/tra cứu mới cần khớp đúng độ rộng cột.
 function extractColumns(task) {
   return {
-    status: task.status || 'TODO',
-    assignedTo: task.assignedTo || null,
-    assignedBy: task.assignedBy || null,
-    sourceType: task.sourceType || null,
-    sourceCode: task.sourceCode || null
+    status: clip(task.status, 20) || 'TODO',
+    assignedTo: clip(task.assignedTo, 100) || null,
+    assignedBy: clip(task.assignedBy, 100) || null,
+    sourceType: clip(task.sourceType, 30) || null,
+    sourceCode: clip(task.sourceCode, 100) || null
   };
 }
 
