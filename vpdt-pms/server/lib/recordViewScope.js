@@ -10,7 +10,7 @@
 // khác, xem các hàm riêng bên dưới).
 const { getAppDataValue } = require('./appData');
 const { MODULE_CONFIGS, resolveContractApprovalWorkflow, resolveContractManageWorkflow } = require('./workflowEngine');
-const { canApproveInternalPost, canManageTraining, canManageRecruitment, canEvaluateOnboardingStage3 } = require('./recordActions');
+const { canApproveInternalPost, canManageTraining, canManageTrainingClass, canManageRecruitment, canEvaluateOnboardingStage3 } = require('./recordActions');
 
 // Khớp canManageVpp() ở public/index.html.
 function canManageVpp(user) {
@@ -209,6 +209,66 @@ function sanitizeTrainingTestsForUser(tests, user) {
     ...t,
     questions: (t.questions || []).map(({ correctOptionIds, ...rest }) => rest)
   }));
+}
+
+// Bài làm đã nộp (trainingTestSubmissions): mỗi bản ghi chứa CÂU TRẢ LỜI THẬT + điểm số/đạt-không đạt
+// của TỪNG học viên cho TỪNG bài test — trước đây GET /api/data trả nguyên mảng này cho MỌI người đã
+// đăng nhập (khác sanitizeTrainingTestsForUser() ở trên chỉ ẩn đáp án ĐÚNG của đề — ở đây là lộ chính
+// bài làm/kết quả của người khác), để lộ toàn bộ đáp án đã chọn + điểm/đạt-rớt của mọi đồng nghiệp cho
+// bất kỳ ai gọi thẳng API. Chỉ chính người làm bài, giảng viên được gán cho đúng lớp đó
+// (canManageTrainingClass), hoặc trainingManage/admin mới xem được.
+function filterTrainingTestSubmissionsForUser(submissions, user, appData) {
+  if (canManageTraining(user)) return submissions || [];
+  const classes = appData?.trainingClasses || [];
+  return (submissions || []).filter(s => s.username === user.username
+    || canManageTrainingClass(user, classes.find(c => c.id === s.classId)));
+}
+
+// Đăng ký lớp học (trainingRegistrations): trainingClasses (danh mục lớp) cố ý công khai toàn công ty
+// để ai cũng tự đăng ký được, nhưng BẢN GHI ĐĂNG KÝ (kết quả Đạt/Không đạt, điểm, ghi chú kết quả) là
+// dữ liệu cá nhân của TỪNG học viên — trước đây GET /api/data trả nguyên mảng cho MỌI người đã đăng
+// nhập. Chỉ chính người đăng ký (creator), giảng viên được gán cho đúng lớp đó
+// (canManageTrainingClass), hoặc trainingManage/admin mới xem được.
+function filterTrainingRegistrationsForUser(registrations, user, appData) {
+  if (canManageTraining(user)) return registrations || [];
+  const classes = appData?.trainingClasses || [];
+  return (registrations || []).filter(r => r.creator === user.username
+    || canManageTrainingClass(user, classes.find(c => c.id === r.classId)));
+}
+
+// Danh sách username đang giữ 1 cờ quyền phê duyệt CỤ THỂ (không phải toàn bộ perms) — client cần cái
+// này để tự dựng danh sách người nhận email khi tạo hồ sơ (VD getMeetingApproverUsernames() ở
+// public/index.html, dùng cho Đặt Phòng Họp/Góc Chia Sẻ/Phê Duyệt Giá IT/Giấy Phép). Tính SẴN ở đây từ
+// dữ liệu perms ĐẦY ĐỦ (trước khi bị ẩn bớt ở sanitizeUsersPermsForViewer() ngay dưới) rồi đính vào
+// data.moduleApproverUsernames (routes/data.js) — an toàn để lộ cho MỌI người (chỉ là danh sách
+// username đang giữ 1 cờ đã biết trước tên, không phải toàn bộ ma trận quyền), thay thế hẳn việc client
+// tự quét DB.users[].perms của người khác (đường duy nhất trước đây khiến "users" không thể ẩn bớt
+// perms cho non-admin — xem sanitizeUsersPermsForViewer()).
+const APPROVER_FLAG_KEYS = ['meetingApprove', 'internalPostApprove', 'itPriceEmergencyRejectApprove', 'licenseApprove'];
+function computeModuleApproverUsernames(users) {
+  const result = {};
+  APPROVER_FLAG_KEYS.forEach(flag => {
+    result[flag] = (users || []).filter(u => u.perms?.admin || u.perms?.[flag]).map(u => u.username);
+  });
+  return result;
+}
+
+// perms/permOverrides/groupIds: ma trận quyền chi tiết + nhóm phân quyền của TỪNG người — trước đây
+// GET /api/data trả nguyên các field này cho MỌI người đã đăng nhập (không riêng admin) kèm trong mỗi
+// bản ghi "users", để lộ chính xác ai là admin, ai giữ approverAuthLevel yếu (PASSWORD/NONE, dễ nhắm
+// tới khi giả mạo phê duyệt), và toàn bộ phạm vi xem/duyệt/sửa theo từng module+phòng ban của mọi nhân
+// viên — bản đồ hoàn chỉnh cho kẻ tấn công social-engineering nhắm đúng tài khoản quyền cao nhất. Đã rà
+// toàn bộ public/index.html trước khi vá: chỉ admin (quản lý mọi người) và chính người gọi (xem/sửa
+// quyền của mình) thật sự cần 3 field này — 4 chỗ DUY NHẤT từng đọc perms của người KHÁC (approver-
+// lookup dựng danh sách nhận email) đã chuyển sang đọc data.moduleApproverUsernames ở trên thay vì tự
+// quét DB.users, nên ẩn 3 field này với người khác không làm hỏng tính năng nào.
+function sanitizeUsersPermsForViewer(users, viewerUsername, isAdmin) {
+  if (isAdmin || !Array.isArray(users)) return users;
+  return users.map(u => {
+    if (u.username === viewerUsername) return u;
+    const { perms, permOverrides, groupIds, ...rest } = u;
+    return rest;
+  });
 }
 
 // Hồ sơ giới thiệu ứng viên (recruitmentReferrals) chứa thông tin cá nhân của người NGOÀI công ty (tên/
@@ -647,7 +707,9 @@ module.exports = {
   canViewDoc, canViewSubmission, filterDocsForUser, filterSubmissionsForUser,
   canViewInternalPost, filterInternalPostsForUser,
   canSeeReportCompilation, canSeeReportPdfCompilation, sanitizeReportPeriodsForUser,
-  sanitizeTrainingTestsForUser, filterRecruitmentReferralsForUser,
+  sanitizeTrainingTestsForUser, filterTrainingTestSubmissionsForUser, filterTrainingRegistrationsForUser,
+  computeModuleApproverUsernames, sanitizeUsersPermsForViewer,
+  filterRecruitmentReferralsForUser,
   canViewReportEntry, filterReportEntriesForUser,
   canViewContract, filterContractsForUser,
   canViewCarReg, filterCarRegsForUser,

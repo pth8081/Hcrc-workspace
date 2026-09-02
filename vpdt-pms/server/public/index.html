@@ -9619,6 +9619,13 @@ async function initDatabase(loggingInUser) {
     // trang — nhưng chỉ khi người vừa đăng nhập là Admin, vì ghi "users" giờ yêu cầu quyền Admin ở
     // server (trước đây API không có xác thực nên ai load trang cũng lưu được).
     let permsMigrated = false;
+    // moduleApproverUsernames (routes/data.js computeModuleApproverUsernames()): danh sách username
+    // đang giữ 1 cờ quyền phê duyệt cụ thể (meetingApprove/internalPostApprove/
+    // itPriceEmergencyRejectApprove/licenseApprove), server tính sẵn từ perms ĐẦY ĐỦ trước khi ẩn bớt —
+    // vì "perms" của người KHÁC không còn được trả nguyên cho tài khoản thường nữa (chỉ admin + chính
+    // mình mới thấy đủ, xem routes/data.js sanitizeUsersPermsForViewer()), 4 hàm getXApproverUsernames()
+    // bên dưới đọc từ đây thay vì tự quét DB.users[].perms như trước.
+    DB.moduleApproverUsernames = data.moduleApproverUsernames || {};
     // groupId (1 nhóm duy nhất) -> groupIds (chọn được nhiều nhóm cùng lúc) — user cũ tạo trước tính
     // năng multi-select chỉ có field "groupId" đơn, quy đổi 1 LẦN ở đây thành mảng 1 phần tử để mọi nơi
     // khác trong code chỉ cần đọc "groupIds" là đủ (không phải rải fallback groupId||groupIds khắp nơi).
@@ -10605,19 +10612,19 @@ async function confirmApprovalAuth() {
 // Toàn bộ user có quyền phê duyệt/hủy lịch phòng họp (cờ toàn cục meetingApprove/meetingCancel,
 // không gắn theo bước quy trình như 4 module kia) — dùng để xác định người nhận thông báo email.
 function getMeetingApproverUsernames() {
-  return DB.users.filter(u => u.perms?.admin || u.perms?.meetingApprove).map(u => u.username);
+  return DB.moduleApproverUsernames?.meetingApprove || [];
 }
 
 // Toàn bộ user có quyền duyệt bài "Góc chia sẻ" (cờ toàn công ty internalPostApprove) — dùng để xác
 // định người nhận thông báo email khi có bài mới chờ duyệt.
 function getInternalPostApproverUsernames() {
-  return DB.users.filter(u => u.perms?.admin || u.perms?.internalPostApprove).map(u => u.username);
+  return DB.moduleApproverUsernames?.internalPostApprove || [];
 }
 
 // Toàn bộ user có quyền xét duyệt "Từ chối khẩn cấp" (Phê Duyệt Giá) — dùng để xác định người nhận
 // thông báo email khi có yêu cầu mới chờ xử lý, cùng khuôn getInternalPostApproverUsernames() ở trên.
 function getItPriceEmergencyRejectApproverUsernames() {
-  return DB.users.filter(u => u.perms?.admin || u.perms?.itPriceEmergencyRejectApprove).map(u => u.username);
+  return DB.moduleApproverUsernames?.itPriceEmergencyRejectApprove || [];
 }
 
 // Parse "30, 15, 7" -> [30, 15, 7] (số nguyên không âm, loại trùng, sắp giảm dần)
@@ -14932,7 +14939,7 @@ async function uploadLicense(e) {
   DB.licenses.unshift(newItem);
   logSystemAction('LICENSE', 'UPLOAD_LICENSE', `Tải lên giấy phép ${mode === 'UPDATE' ? 'phiên bản mới' : 'mới'} [${code} - ${licenseType}]`, 'SUCCESS', code);
 
-  const approverUsernames = DB.users.filter(u => u.perms?.admin || u.perms?.licenseApprove).map(u => u.username);
+  const approverUsernames = DB.moduleApproverUsernames?.licenseApprove || [];
   if (approverUsernames.length) {
     notifyUsersByEmail('LICENSE', 'NOTIFY_APPROVAL_NEEDED', code, approverUsernames,
       `[VPDT] Giấy phép ${code} cần bạn phê duyệt`,
@@ -34028,6 +34035,18 @@ function renderTrainingLms() {
   populateTrainingPlanDeptSelects();
   onTrainingClassModeChange(); // đồng bộ lại ẩn/hiện Giảng Viên+Địa Điểm theo đúng #tcMode hiện tại (mặc định Online)
   const canManage = canManageTrainingLocal(currentUser);
+  // Dashboard (thẻ tổng hợp + bảng "Top Điểm Cao Nhất"): trước đây hiện cho MỌI người vào được module,
+  // khác mọi khối quản lý còn lại trên màn hình này (đều gác canManage) — cả 2 nguồn dữ liệu thẻ tổng
+  // hợp dùng (trainingRegistrations) lẫn bảng xếp hạng (trainingTestSubmissions) giờ đã bị lọc quyền ở
+  // server (chỉ trainingManage/giảng viên đúng lớp/chính chủ mới thấy đủ, xem
+  // lib/recordViewScope.js) — nhân viên thường sẽ chỉ thấy đúng 1 dòng của mình, số liệu tổng hợp sai
+  // lệch/gây hiểu nhầm nếu vẫn hiện tab này cho họ. Gác lại đúng canManage cho nhất quán.
+  document.getElementById('btnTrainingLmsDashboard').classList.toggle('hidden', !canManage);
+  // Không gọi setTrainingLmsTab() ở đây (sẽ đệ quy vô hạn — chính hàm đó gọi lại renderTrainingLms() ở
+  // cuối) — chỉ cần ẩn nút+panel, tab mặc định khi mở module (activeTrainingLmsTab = 'CLASSES') đã
+  // không phải DASHBOARD nên trường hợp còn kẹt ở tab này chỉ xảy ra nếu quyền bị thu hồi NGAY khi đang
+  // mở đúng tab đó (hiếm), không đáng để thêm phức tạp xử lý.
+  if (!canManage && activeTrainingLmsTab === 'DASHBOARD') activeTrainingLmsTab = 'CLASSES';
   document.getElementById('trainingClassForm').classList.toggle('hidden', !canManage);
   document.getElementById('trainingClassNoPermNote').classList.toggle('hidden', canManage);
   // Chương Trình (Đợt 4) — catalog quản lý CHỈ trainingManage (kể cả giảng viên đã có trainingInstruct

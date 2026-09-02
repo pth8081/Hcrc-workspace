@@ -19,12 +19,14 @@ const {
   filterDocsForUser, filterSubmissionsForUser, filterInternalPostsForUser, sanitizeReportPeriodsForUser,
   filterReportEntriesForUser, filterContractsForUser, filterCarRegsForUser, filterOfficeReqsForUser,
   filterMeetingsForUser, filterMeetingMinutesForUser, filterTasksForUser, sanitizeTrainingTestsForUser,
+  filterTrainingTestSubmissionsForUser, filterTrainingRegistrationsForUser,
   filterRecruitmentReferralsForUser, filterItPriceApprovalsForUser, filterItSupportTicketsForUser,
   filterUniformPeriodsForUser, filterUniformIssuancesForUser, filterUniformStockAdjustmentsForUser, filterUniformTransfersForUser, filterBudgetEntriesForUser,
   filterOperationOrdersForUser, filterOperationStoreOpeningsForUser, filterOperationRepairsForUser,
   filterOperationExecutionPeriodsForUser,
   filterVppRegistrationsForUser, filterLicensesForUser, filterHrFeedbackForUser,
-  filterItServiceRenewalsForUser, filterPaymentRequestsForUser, filterOnboardingProgressForUser
+  filterItServiceRenewalsForUser, filterPaymentRequestsForUser, filterOnboardingProgressForUser,
+  computeModuleApproverUsernames, sanitizeUsersPermsForViewer
 } = require('../lib/recordViewScope');
 
 const VALID_KEYS = new Set(Object.keys(DEFAULTS));
@@ -445,7 +447,10 @@ router.get('/', async (req, res) => {
     const cachedAppData = await getAllAppDataWithVersionsCached();
     const data = { ...cachedAppData.data };
     const versions = cachedAppData.versions;
-    if (data.users) data.users = stripPasswords(data.users);
+    if (data.users) {
+      data.moduleApproverUsernames = computeModuleApproverUsernames(data.users);
+      data.users = sanitizeUsersPermsForViewer(stripPasswords(data.users), req.freshUser?.username, !!req.freshUser?.perms?.admin);
+    }
     if (data.emailConfig) data.emailConfig = sanitizeEmailConfig(data.emailConfig);
     if (data.externalApiKeys) data.externalApiKeys = sanitizeExternalApiKeys(data.externalApiKeys, !!req.freshUser?.perms?.admin);
     // tasks (Bước 6b) và mọi collection trong MIGRATED_COLLECTIONS (Bước 6c trở đi — hiện tại:
@@ -483,6 +488,13 @@ router.get('/', async (req, res) => {
     // trainingTests: đáp án đúng (correctOptionIds) chỉ để người quản lý đào tạo thấy — xem lý do đầy
     // đủ ở lib/recordViewScope.js sanitizeTrainingTestsForUser().
     if (data.trainingTests) data.trainingTests = sanitizeTrainingTestsForUser(data.trainingTests, req.freshUser);
+    // trainingTestSubmissions/trainingRegistrations: khác trainingTests ở trên (chỉ ẩn đáp án ĐÚNG của
+    // đề) — đây là chính BÀI LÀM/kết quả của TỪNG học viên, trước đây lộ nguyên cho MỌI người đã đăng
+    // nhập — xem lib/recordViewScope.js filterTrainingTestSubmissionsForUser()/
+    // filterTrainingRegistrationsForUser(). trainingClasses/trainingCourses/trainingDocuments vẫn CỐ Ý
+    // công khai toàn công ty như trước (danh mục, không phải bài làm cá nhân), không đụng tới.
+    if (data.trainingTestSubmissions) data.trainingTestSubmissions = filterTrainingTestSubmissionsForUser(data.trainingTestSubmissions, req.freshUser, data);
+    if (data.trainingRegistrations) data.trainingRegistrations = filterTrainingRegistrationsForUser(data.trainingRegistrations, req.freshUser, data);
     // recruitmentReferrals: thông tin liên hệ ứng viên chỉ lộ cho người giới thiệu + bộ phận tuyển dụng
     // — xem lý do đầy đủ ở lib/recordViewScope.js filterRecruitmentReferralsForUser().
     if (data.recruitmentReferrals) data.recruitmentReferrals = filterRecruitmentReferralsForUser(data.recruitmentReferrals, req.freshUser);
@@ -588,7 +600,7 @@ router.get('/:key', async (req, res) => {
   try {
     const value = await getAppDataValue(key);
     if (value === null) return res.json(DEFAULTS[key]);
-    if (key === 'users') return res.json(stripPasswords(value));
+    if (key === 'users') return res.json(sanitizeUsersPermsForViewer(stripPasswords(value), req.freshUser?.username, !!req.freshUser?.perms?.admin));
     if (key === 'emailConfig') return res.json(sanitizeEmailConfig(value));
     if (key === 'externalApiKeys') return res.json(sanitizeExternalApiKeys(value, !!req.freshUser?.perms?.admin));
     res.json(value);
