@@ -1,10 +1,69 @@
 # Phiên bản hiện tại
 
-**3.3** — đã merge vào `main` (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge
+**3.4** — đã merge vào `main` (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge
 góc màn hình + `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần
 kiểu `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
 
-## Cập nhật gần nhất — CSP unsafe-inline: đợt 2/N — Điều hướng Sidebar + hạ tầng dùng chung mới
+## Cập nhật gần nhất — CSP unsafe-inline: đợt 3/N — module Hợp Đồng + fix lỗi mất TOTP/vân tay khi lưu user
+
+Tiếp tục đợt 2 (Điều hướng Sidebar + hạ tầng `data-op*` dùng chung, xem mục "Trước đó" ngay bên dưới) —
+đợt này chuyển module **Hợp Đồng** (form tạo hợp đồng/phụ lục, danh sách, lọc, đợt thanh toán, dropdown
+Cấp Phê Duyệt, xem trước quy trình):
+
+- **26 điểm** `onclick`/`onchange`/`oninput`/`onsubmit` trong `#contractSection` (form + bảng + lọc),
+  `renderContractApprovalLayerCheckboxes()` (checkbox lớp phê duyệt tuỳ chọn — populate
+  `#contractApprovalDropdownPanel`, lồng trong `#contractSection` nên vẫn thuộc phạm vi module này dù tên
+  hàm không có chữ "Contract"), `renderContractInstallmentsList()` (thêm/xoá đợt thanh toán + % tự tính ra
+  tiền) và `buildContractRowHTML()` (mở rộng phụ lục + nút hành động chính) chuyển sang `data-op*`, dùng
+  LẠI đúng hạ tầng dùng chung xây ở đợt 2 (`cspDispatchOp`/`bindCspDelegation`) — không cần code hạ tầng
+  mới. Chỉ cần **1 gốc** `bindCspDelegation('contractSection')` (khác Vận Hành cần 6 gốc): mọi phần tử
+  động của Hợp Đồng (danh sách, đợt thanh toán, dropdown Cấp Phê Duyệt) đều render vào bên trong
+  `#contractSection`, không có modal nào sống ngoài section, và màn "chi tiết"/"xem trước quy trình" dùng
+  chung modal toàn cục `#viewDocModal` (chỉ text đã escape, không có onclick nhúng bên trong).
+- **6 điểm CHỦ ĐỘNG KHÔNG chuyển** — thuộc màn cấu hình Hệ Thống/Admin (`saveContractExpiryDeptContacts()`,
+  3 điểm `toggleScopeGroup('pContractView...')` trong cây phân quyền, `updateContractTypeAbbr(...)`,
+  `saveContractApprovalGroup('${layer.key}')`) — tuy tên hàm có chữ "Contract" nhưng HTML chứa chúng nằm
+  trong màn Quản Trị/Hệ Thống, không thuộc `#contractSection` — dành cho đợt chuyển đổi Hệ Thống sau này,
+  đúng nguyên tắc "chỉ chuyển đúng phạm vi 1 module/đợt" đã áp dụng từ đầu.
+- **`buildActionCell()`/`renderPeopleMultiSelect()`** (dùng ở nút "Khác" trên mỗi dòng và picker chọn
+  người ở nhiều module khác) tiếp tục **KHÔNG đụng** — vẫn là helper dùng chung ~15+ module, dành cho 1
+  đợt riêng cuối cùng sau khi hết mọi module đơn lẻ.
+
+**Fix phụ phát hiện trong lúc demo (không liên quan CSP, đã xác nhận là lỗi có thật, không phải lỗi riêng
+của kịch bản demo):** `prepareUsersForSave()` (`routes/data.js`) khi ghi lại collection `users` chỉ khôi
+phục `mustChangePassword`/`failedLoginAttempts`/`lockedUntil`/`pinHash` từ bản ghi cũ nếu client không gửi
+kèm — nhưng **thiếu** `totpSecretEnc`/`totpBackupCodeHashes`/`webauthnCredentials`/`webauthnUserId`, 4
+field vốn LUÔN bị `stripPasswords()` lọc khỏi mọi response `GET /api/data` (đúng chủ đích bảo mật — không
+lộ bí mật 2FA cho client) nên client **không bao giờ** có trong tay để gửi lại. Hệ quả: **bất kỳ lượt lưu
+`users` nào** (VD admin chỉ sửa email 1 người khác) sẽ âm thầm xoá vân tay (WebAuthn) và bí mật TOTP đã
+đăng ký của **mọi** người dùng trong mảng, buộc thiết lập lại 2FA/vân tay từ đầu dù không ai có ý định đó
+— phát hiện được nhờ tài khoản demo Playwright bị đăng xuất bất ngờ giữa lượt demo (mã TOTP đúng nhưng
+server báo sai vì bí mật đã bị xoá). Đã bổ sung khôi phục đúng 4 field này theo cùng khuôn `pinHash`.
+
+**Xác nhận không ảnh hưởng** — 2 lớp kiểm tra độc lập trước khi merge:
+- Demo Playwright thật (SQL Server + server local + đăng nhập UI thật qua tài khoản demo tạm 2FA thật,
+  xoá lại ngay sau demo): mở tab Phê Duyệt, điền form tạo hợp đồng, mở/đóng dropdown Cấp Phê Duyệt, thêm 2
+  đợt thanh toán rồi xoá 1 đợt (đúng số dòng còn lại), nhập % vào 1 đợt và xác nhận tự tính đúng ra tiền
+  (50% × 100.000.000 = 50.000.000), mở khung "Tìm Kiếm & Lọc" (`<details>` đóng mặc định) rồi gõ từ khoá
+  lọc, bấm "Xem Quy Trình" và xác nhận modal xem trước quy trình phê duyệt hiện đúng nội dung thật (3
+  bước: Kiểm soát viên → Trưởng Phòng → Ban Giám Đốc) — toàn bộ đều đúng, không có lỗi JS console mới
+  (2 lỗi console còn lại — 401 `/api/auth/me` lúc chưa đăng nhập và 404 `/api/captcha` — đều là hành vi
+  bình thường đã thấy ở các đợt demo trước, không liên quan thay đổi lần này).
+- Chạy lại toàn bộ 46 file test hồi quy hiện có (`tests/test-*.js`) — pass 100% (cùng 1 file
+  `test-audit-fixes-batch1.js` có bug dọn dẹp có sẵn từ trước như đã ghi nhận ở đợt 2, không liên quan gì
+  tới thay đổi lần này).
+
+**Deploy-impact:** KHÔNG đổi `sql/schema.sql`, KHÔNG thêm biến môi trường mới, KHÔNG thêm `dependencies`
+mới — cả phần chuyển CSP (client JS/HTML) lẫn phần fix `prepareUsersForSave()` (server, 1 hàm trong
+`routes/data.js`) đều deploy an toàn chỉ với copy code + `pm2 restart`, không cần thao tác 1 lần nào khác.
+
+**Còn lại:** Thanh Toán, Xe, Phòng Họp, VPP, Đào Tạo, Ngân Sách, Cơ Cấu Tổ Chức, Báo Cáo, Nhân Sự, Quản
+Trị/Hệ Thống, Hỗ Trợ IT, Đồng Phục, Giấy Phép, Gia Hạn CNTT, Tuyển Dụng, Tin Tức/Truyền Thông, Biên Bản
+Họp, Công Việc, Văn Bản Trình, Tài Liệu... — dùng hạ tầng `data-op*`/`bindCspDelegation()` đã xây, làm
+tiếp tuần tự mỗi module 1 commit + demo + regression trước khi merge, tới khi hết toàn bộ điểm mới gỡ
+`unsafe-inline`.
+
+## Trước đó — CSP unsafe-inline: đợt 2/N — Điều hướng Sidebar + hạ tầng dùng chung mới
 
 Tiếp tục phương án chuyển đổi CSP theo từng module (đợt 1 là Vận Hành, xem mục ngay bên dưới). Đợt này
 chuyển **thanh điều hướng bên trái** (`<aside id="userHeader">`) — dropdown Truyền Thông/Hợp Đồng/Điều
