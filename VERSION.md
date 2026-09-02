@@ -1,10 +1,54 @@
 # Phiên bản hiện tại
 
-**3.5** — đã merge vào `main` (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge
+**3.6** — đã merge vào `main` (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge
 góc màn hình + `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần
 kiểu `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
 
-## Cập nhật gần nhất — CSP unsafe-inline: đợt 4/N — module Thanh Toán + fix lỗi ẩn chặn âm thầm form thủ công
+## Cập nhật gần nhất — CSP unsafe-inline: đợt 5/N — module Xe (Đăng Ký Xe)
+
+Tiếp tục đợt 4 (Thanh Toán, xem mục "Trước đó" ngay bên dưới) — đợt này chuyển module **Xe** (form đăng
+ký xe, lộ trình di chuyển, tab Lái Xe, danh sách/lọc, modal Xử Lý Đăng Ký Xe):
+
+- **20 điểm** `onclick`/`onchange`/`oninput`/`onsubmit` chuyển sang `data-op*`, dùng lại đúng hạ tầng dùng
+  chung (`cspDispatchOp`/`bindCspDelegation`) — không cần code hạ tầng mới:
+  - **9 điểm** trong HTML tĩnh `#carSection` (2 nút chuyển sub-tab Đăng Ký/Lái Xe, `onsubmit` form đăng
+    ký, nút "+ Thêm Điểm" lộ trình, 5 ô lọc danh sách).
+  - **5 điểm** trong 3 hàm render động: `renderCarRoutePoints()` (nhập/xoá từng điểm lộ trình),
+    `renderCarDriverTab()` (nút "Xác Nhận Đăng Ký" của lái xe được phân công), `renderCarRegs()` (nút
+    chính "Xử lý/Duyệt" hoặc "Xem chi tiết" — 2 nhánh cùng 1 hàm `runCarAction`).
+  - **6 điểm** trong modal Xử Lý Đăng Ký Xe (`#carProcessModal`) — modal này sống **NGOÀI** `#carSection`
+    (giống Vận Hành ở đợt 1), gồm 2 nút Đóng + ô nhập lái xe (HTML tĩnh) và 3 nút Duyệt/Từ Chối/Bổ Sung
+    do `openCarProcessModal()` render động vào `#carModalActionBtns`.
+  - Cần **2 gốc** `bindCspDelegation('carSection')` + `bindCspDelegation('carProcessModal')` — khác Hợp
+    Đồng/Thanh Toán (chỉ 1 gốc) vì modal xử lý không nằm trong section, đúng mẫu đã dùng cho Vận Hành.
+- **`buildActionCell()`/`buildDashboardCardsHTML()`/`buildPaginationBoxHTML()`/`renderPeopleMultiSelect()`**
+  tiếp tục KHÔNG đụng — vẫn dành cho 1 đợt riêng cuối cùng sau khi hết mọi module đơn lẻ.
+
+**Không phát hiện lỗi phụ nào trong đợt này** — khác các đợt trước (Hợp Đồng, Thanh Toán), demo lần này
+không phát hiện thêm bug nghiệp vụ nào ngoài phạm vi CSP.
+
+**Xác nhận không ảnh hưởng** — 2 lớp kiểm tra độc lập trước khi merge:
+- Demo Playwright thật (SQL Server + server local + đăng nhập UI thật qua tài khoản demo tạm 2FA thật,
+  xoá lại ngay sau demo): điều hướng Sidebar → Hành Chính → Đăng Ký Xe, chuyển qua tab Lái Xe rồi quay
+  lại, điền đầy đủ form đăng ký (đơn vị, loại xe, số người, mục đích, số KM, thời gian, mức độ ưu tiên),
+  thêm 2 điểm lộ trình rồi xoá 1 điểm trống ở giữa (còn lại 3 điểm hợp lệ), gửi phê duyệt thành công
+  (dialog "✅ Đã gửi phiếu đăng ký xe thành công!"), mở modal Xử Lý Đăng Ký Xe từ danh sách (hiện đúng
+  thông tin phiếu + lộ trình + nút Duyệt/Từ Chối/Bổ Sung), điền thử ô Lái Xe, đóng modal — toàn bộ đều
+  đúng, không có lỗi JS console mới.
+- Chạy lại toàn bộ 46 file test hồi quy hiện có (`tests/test-*.js`) — pass 100% (2 file
+  `test-audit-fixes-batch1.js`/`test-audit-round2-cluster1.js` treo lúc dọn dẹp sau khi đã chạy hết kịch
+  bản — bug có sẵn từ trước, đã ghi nhận từ đợt 2, không liên quan gì tới thay đổi lần này).
+
+**Deploy-impact:** KHÔNG đổi `sql/schema.sql`, KHÔNG thêm biến môi trường mới, KHÔNG thêm `dependencies`
+mới — toàn bộ thay đổi nằm trong `public/index.html` (thuần client JS/HTML), deploy an toàn chỉ với copy
+code + `pm2 restart`, không cần thao tác 1 lần nào khác.
+
+**Còn lại:** Phòng Họp, VPP, Đào Tạo, Ngân Sách, Cơ Cấu Tổ Chức, Báo Cáo, Nhân Sự, Quản Trị/Hệ Thống, Hỗ
+Trợ IT, Đồng Phục, Giấy Phép, Gia Hạn CNTT, Tuyển Dụng, Tin Tức/Truyền Thông, Biên Bản Họp, Công Việc, Văn
+Bản Trình, Tài Liệu... — dùng hạ tầng `data-op*`/`bindCspDelegation()` đã xây, làm tiếp tuần tự mỗi module
+1 commit + demo + regression trước khi merge, tới khi hết toàn bộ điểm mới gỡ `unsafe-inline`.
+
+## Trước đó — CSP unsafe-inline: đợt 4/N — module Thanh Toán + fix lỗi ẩn chặn âm thầm form thủ công
 
 Tiếp tục đợt 3 (Hợp Đồng, xem mục "Trước đó" ngay bên dưới) — đợt này chuyển module **Thanh Toán** (form
 tạo đề nghị thủ công, các đợt thanh toán, danh sách/lọc, sửa/xác nhận/yêu cầu bổ sung/xoá):
