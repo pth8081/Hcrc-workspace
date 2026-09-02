@@ -1,10 +1,65 @@
 # Phiên bản hiện tại
 
-**4.6** — đã merge vào `main` (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge
+**4.7** — đã merge vào `main` (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge
 góc màn hình + `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần
 kiểu `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
 
-## Cập nhật gần nhất — CSP unsafe-inline: đợt 15/N — module Đồng Phục
+## Cập nhật gần nhất — CSP unsafe-inline: đợt 16/N — module Giấy Phép
+
+Tiếp tục đợt 15 (Đồng Phục, xem mục "Trước đó" ngay bên dưới) — đợt này chuyển toàn bộ module **Giấy
+Phép** (`#licenseSection` — form Tải Lên/bộ lọc + danh sách trong 1 section, cộng modal chi tiết sống
+ngoài section):
+
+- **16 điểm** `onclick`/`onchange`/`oninput`/`onsubmit` chuyển sang `data-op*`:
+  - **Form "Tải Lên Giấy Phép" + bộ lọc** (trong `#licenseSection`): **9 điểm** — `onsubmit` form
+    `#licenseForm` (`uploadLicense`), đổi Loại thao tác Nhập mới/Cập nhật (`onLicenseOpModeChange`), chọn
+    giấy phép cần cập nhật (`onLicenseUpdateTargetChange`), 6 ô lọc (trạng thái duyệt/loại GP/vòng đời/từ
+    ngày/đến ngày/từ khoá, đều gọi lại `onLicenseFilterChange`).
+  - **`buildLicenseRowHTML()`** (dựng từng dòng danh sách): **3 điểm** — nút mở/thu gọn các phiên bản
+    cùng 1 giấy phép (`toggleLicenseFamily`), nút "✅ Duyệt"/"📋 Chi tiết" (`runLicenseAction`, tham số
+    `'approve'`/`'view'`).
+  - **`viewLicenseDetails()`** (đổ nội dung vào `#licenseDetailBody` của modal chi tiết): **2 điểm** — nút
+    "👁️ Xem"/"⬇️ Tải" từng phiên bản file (`viewLicenseFile`/`downloadLicenseFile`).
+  - **`#licenseDetailModal`** (modal chi tiết & lịch sử phiên bản, sống NGOÀI `#licenseSection`): **2
+    điểm** — nút X ở header + nút "Đóng" ở footer (đều `closeLicenseDetailModal`).
+- **Không có wrapper mới nào cần thiết** — toàn bộ 16 điểm map thẳng vào `data-op`/`data-op-change`/
+  `data-op-submit` với tham số positional đơn giản, không có `this.checked`/multi-statement/expression
+  không map được vào slot có sẵn.
+- **Không đụng danh mục "Loại Giấy Phép"** (`saveLicenseType`/`deleteLicenseType`/`renderLicenseTypeList`,
+  render vào `#licenseTypeList`) — khu vực này nằm vật lý trong cụm Quản Trị/Hệ Thống (`#systemSection`)
+  và đã được chuyển sang `data-op` từ đợt 13, xác nhận lại lúc scoping đợt này (0 handler raw còn sót),
+  không thuộc phạm vi module Giấy Phép.
+- **2 gốc `bindCspDelegation`**: `licenseSection` (form + danh sách) và `licenseDetailModal` (modal chi
+  tiết, xác nhận là sibling DOM sống ngoài section, giống mẫu Xe/Vận Hành/Đào Tạo/Đồng Phục các đợt trước).
+- **Không phát hiện lỗi thật nào trong lúc demo module này.**
+
+**Xác nhận không ảnh hưởng** — 2 lớp kiểm tra độc lập trước khi merge:
+- Demo Playwright thật (SQL Server + server local + đăng nhập UI thật qua tài khoản demo tạm 2FA thật,
+  xoá lại ngay sau demo cùng toàn bộ dữ liệu demo tạo ra trong lúc test — `licenses` nằm trong
+  `MIGRATED_COLLECTIONS`, xoá bằng `deleteRecordById()`, tài khoản demo xoá bằng
+  `withLockedAppDataValue('users', ...)`): đăng nhập, mở Giấy Phép; tải lên 1 giấy phép mới (điền đủ công
+  ty/địa điểm/loại/số GP/ngày cấp-hết hạn/cơ quan cấp + file PDF); bấm "✅ Duyệt" trên dòng vừa tạo — mở
+  đúng `#genericConfirmModal` dùng chung, xác nhận, giấy phép chuyển "Đã duyệt"; bấm "📋 Chi tiết" — mở
+  đúng `#licenseDetailModal`, hiện đúng lịch sử UPLOADED/APPROVED; bấm "👁️ Xem" file — mở đúng
+  `#viewDocModal` (protected viewer dùng chung); đóng viewer, đóng modal chi tiết qua nút X — cả 2 modal
+  đóng đúng, không còn hiện. Toàn bộ đúng, không có lỗi JS console mới liên quan tới thay đổi (chỉ 3 lỗi
+  mạng nền quen thuộc trước lúc đăng nhập: chặn Google Fonts, `/api/auth/me` 401 lúc chưa đăng nhập,
+  `/api/captcha` 404 do CAPTCHA chưa bật ở môi trường demo — cùng 3 lỗi y hệt các đợt trước, không liên
+  quan tới module này).
+- Chạy lại toàn bộ 46 file test hồi quy (`tests/test-*.js`), gồm cả `tests/test-license.js` (riêng cho
+  module này) — 44/46 OK, đúng 2 file known-flaky quen thuộc (`test-audit-fixes-batch1.js`/
+  `test-audit-round2-cluster1.js`, timeout hạ tầng test không liên quan thay đổi lần này).
+
+**Deploy-impact:** KHÔNG đổi `sql/schema.sql`, KHÔNG thêm biến môi trường mới, KHÔNG thêm `dependencies`
+mới — toàn bộ thay đổi nằm trong `public/index.html` (thuần client JS/HTML), deploy an toàn chỉ với copy
+code + `pm2 restart`, không cần thao tác 1 lần nào khác.
+
+**Còn lại:** Tuyển Dụng, Tin Tức/Truyền Thông (bao gồm cả form "HCRC Đồng Hành" phía nhân viên —
+`#hrFeedbackForm`), Biên Bản Họp, Công Việc, Văn Bản Trình, Tài Liệu, Báo Cáo Định Kỳ... — dùng hạ tầng
+`data-op*`/`bindCspDelegation()` đã xây, làm tiếp tuần tự mỗi module 1 commit + demo + regression trước
+khi merge, tới khi hết toàn bộ điểm mới gỡ `unsafe-inline`.
+
+## Trước đó — CSP unsafe-inline: đợt 15/N — module Đồng Phục
 
 Tiếp tục đợt 14 (Hỗ Trợ IT, xem mục "Trước đó" ngay bên dưới) — đợt này chuyển toàn bộ module **Đồng
 Phục** (`#uniformSection` — 5 sub-tab Kỳ Cấp Phát/Xác Nhận-Cấp Phát/Kho Đồng Phục/Tổng Quan/Quản Lý Nhân

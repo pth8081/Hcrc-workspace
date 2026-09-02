@@ -3835,17 +3835,17 @@ input[data-sdd-list] {
       <h3 class="font-bold mb-1 text-blue-900 flex items-center gap-2">📜 Tải Lên Giấy Phép</h3>
       <p class="text-xs text-amber-700 mb-3 font-semibold">⚠️ Chỉ những người có quyền "Tạo/Tải lên giấy phép" mới thấy khung này — phòng ban khác không truy cập được module này.</p>
 
-      <form id="licenseForm" onsubmit="uploadLicense(event)" class="grid grid-cols-1 md:grid-cols-3 gap-3">
+      <form id="licenseForm" data-op-submit="uploadLicense" class="grid grid-cols-1 md:grid-cols-3 gap-3">
         <div class="md:col-span-3 flex items-center gap-2">
           <label class="font-semibold text-sm text-gray-700 shrink-0">Loại thao tác:</label>
-          <select id="licenseOpMode" onchange="onLicenseOpModeChange()" class="border p-1.5 rounded text-sm bg-white">
+          <select id="licenseOpMode" data-op-change="onLicenseOpModeChange" class="border p-1.5 rounded text-sm bg-white">
             <option value="NEW">➕ Nhập mới</option>
             <option value="UPDATE">🔄 Cập nhật (thêm phiên bản cho giấy phép đã có)</option>
           </select>
         </div>
         <div id="licenseUpdateTargetWrap" class="hidden md:col-span-3">
           <label class="block text-xs font-semibold text-gray-600 mb-1">Chọn Giấy Phép Cần Cập Nhật</label>
-          <select id="licenseUpdateTarget" onchange="onLicenseUpdateTargetChange()" class="w-full border p-2 rounded text-sm bg-white">
+          <select id="licenseUpdateTarget" data-op-change="onLicenseUpdateTargetChange" class="w-full border p-2 rounded text-sm bg-white">
             <option value="">-- Chọn giấy phép --</option>
           </select>
           <p class="text-[11px] text-gray-500 italic mt-1">Chỉ hiện giấy phép mà phiên bản mới nhất không đang chờ duyệt.</p>
@@ -3888,7 +3888,7 @@ input[data-sdd-list] {
       <div class="grid grid-cols-1 md:grid-cols-6 gap-3 mt-3">
         <div>
           <label class="block text-xs font-semibold text-gray-600 mb-1">Lọc Theo Trạng Thái Duyệt</label>
-          <select id="filterLicenseStatus" onchange="onLicenseFilterChange()" class="w-full border p-2 rounded text-sm bg-white">
+          <select id="filterLicenseStatus" data-op-change="onLicenseFilterChange" class="w-full border p-2 rounded text-sm bg-white">
             <option value="">-- Tất cả trạng thái duyệt --</option>
             <option value="APPROVED">Đã Phê Duyệt</option>
             <option value="PENDING">Đang Chờ Duyệt</option>
@@ -3897,7 +3897,7 @@ input[data-sdd-list] {
         </div>
         <div>
           <label class="block text-xs font-semibold text-gray-600 mb-1">Loại Phê Duyệt</label>
-          <select id="filterLicenseType" onchange="onLicenseFilterChange()" class="w-full border p-2 rounded text-sm bg-white">
+          <select id="filterLicenseType" data-op-change="onLicenseFilterChange" class="w-full border p-2 rounded text-sm bg-white">
             <option value="">-- Tất cả --</option>
             <option value="NEW">📄 Giấy phép mới</option>
             <option value="VERSION">🔄 Cập nhật phiên bản</option>
@@ -3905,7 +3905,7 @@ input[data-sdd-list] {
         </div>
         <div>
           <label class="block text-xs font-semibold text-gray-600 mb-1">Tình Trạng Hiệu Lực</label>
-          <select id="filterLicenseLifecycle" onchange="onLicenseFilterChange()" class="w-full border p-2 rounded text-sm bg-white">
+          <select id="filterLicenseLifecycle" data-op-change="onLicenseFilterChange" class="w-full border p-2 rounded text-sm bg-white">
             <option value="">-- Tất cả --</option>
             <option value="VALID">🟢 Còn hiệu lực</option>
             <option value="EXPIRING">🟡 Sắp hết hạn (≤30 ngày)</option>
@@ -3916,15 +3916,15 @@ input[data-sdd-list] {
         </div>
         <div>
           <label class="block text-xs font-semibold text-gray-600 mb-1">Từ Ngày (ngày tạo)</label>
-          <input id="filterLicenseFromDate" type="date" onchange="onLicenseFilterChange()" class="w-full border p-2 rounded text-sm bg-white">
+          <input id="filterLicenseFromDate" type="date" data-op-change="onLicenseFilterChange" class="w-full border p-2 rounded text-sm bg-white">
         </div>
         <div>
           <label class="block text-xs font-semibold text-gray-600 mb-1">Đến Ngày (ngày tạo)</label>
-          <input id="filterLicenseToDate" type="date" onchange="onLicenseFilterChange()" class="w-full border p-2 rounded text-sm bg-white">
+          <input id="filterLicenseToDate" type="date" data-op-change="onLicenseFilterChange" class="w-full border p-2 rounded text-sm bg-white">
         </div>
         <div>
           <label class="block text-xs font-semibold text-gray-600 mb-1">Từ Khóa</label>
-          <input id="filterLicenseKeyword" oninput="onLicenseFilterChange()" placeholder="Mã, Công ty, Địa điểm, Loại GP, Số GP..." class="w-full border p-2 rounded text-sm">
+          <input id="filterLicenseKeyword" data-op-input="onLicenseFilterChange" placeholder="Mã, Công ty, Địa điểm, Loại GP, Số GP..." class="w-full border p-2 rounded text-sm">
         </div>
       </div>
     </details>
@@ -7104,11 +7104,11 @@ input[data-sdd-list] {
   <div class="bg-white rounded-lg shadow-2xl max-w-4xl w-full flex flex-col max-h-[90vh] overflow-hidden">
     <div class="flex justify-between items-center bg-blue-800 text-white p-4">
       <h3 id="licenseDetailTitle" class="font-bold text-base flex items-center gap-2">📜 Chi Tiết Giấy Phép</h3>
-      <button onclick="closeLicenseDetailModal()" class="text-blue-200 hover:text-white font-bold text-xl px-2">✕</button>
+      <button data-op="closeLicenseDetailModal" class="text-blue-200 hover:text-white font-bold text-xl px-2">✕</button>
     </div>
     <div id="licenseDetailBody" class="p-4 overflow-y-auto flex-1 text-xs"></div>
     <div class="p-3 bg-gray-50 border-t flex justify-end text-xs">
-      <button onclick="closeLicenseDetailModal()" class="bg-gray-600 text-white px-5 py-1.5 rounded font-bold hover:bg-gray-700">Đóng</button>
+      <button data-op="closeLicenseDetailModal" class="bg-gray-600 text-white px-5 py-1.5 rounded font-bold hover:bg-gray-700">Đóng</button>
     </div>
   </div>
 </div>
@@ -14618,7 +14618,7 @@ function buildLicenseRowHTML(item, { versionCount = 0, isExpanded = false, isChi
   const codeCellHTML = isChild
     ? `<span class="pl-4 text-gray-500">↳ ${codeText}</span>`
     : (versionCount > 0
-        ? `<button type="button" onclick="toggleLicenseFamily(${item.id})" class="font-bold hover:underline" title="${isExpanded ? 'Thu gọn' : 'Xem các phiên bản'}">${isExpanded ? '▾' : '▸'} ${codeText}</button>
+        ? `<button type="button" data-op="toggleLicenseFamily" data-arg0="${item.id}" class="font-bold hover:underline" title="${isExpanded ? 'Thu gọn' : 'Xem các phiên bản'}">${isExpanded ? '▾' : '▸'} ${codeText}</button>
            <span class="ml-1 px-1.5 py-0.5 bg-purple-100 text-purple-700 rounded-full text-[10px] font-bold align-middle" title="Có ${versionCount} phiên bản khác">🗂️ ${versionCount + 1} phiên bản</span>`
         : codeText);
 
@@ -14640,11 +14640,11 @@ function buildLicenseRowHTML(item, { versionCount = 0, isExpanded = false, isChi
           const secondaryOptions = [];
           let primaryBtnHTML;
           if (canApprove && item.status === 'PENDING') {
-            primaryBtnHTML = `<button onclick="runLicenseAction(${item.id}, 'approve')" class="px-2 py-1 bg-emerald-600 text-white rounded text-xs hover:bg-emerald-700 font-semibold" title="Phê duyệt giấy phép">✅ Duyệt</button>`;
+            primaryBtnHTML = `<button data-op="runLicenseAction" data-arg0="${item.id}" data-arg1="approve" class="px-2 py-1 bg-emerald-600 text-white rounded text-xs hover:bg-emerald-700 font-semibold" title="Phê duyệt giấy phép">✅ Duyệt</button>`;
             secondaryOptions.push({ value: 'reject', label: '❌ Từ chối' });
             secondaryOptions.push({ value: 'view', label: '📋 Chi tiết' });
           } else {
-            primaryBtnHTML = `<button onclick="runLicenseAction(${item.id}, 'view')" class="px-2 py-1 bg-gray-600 text-white rounded text-xs hover:bg-gray-700 font-semibold" title="Xem chi tiết & lịch sử phiên bản">📋 Chi tiết</button>`;
+            primaryBtnHTML = `<button data-op="runLicenseAction" data-arg0="${item.id}" data-arg1="view" class="px-2 py-1 bg-gray-600 text-white rounded text-xs hover:bg-gray-700 font-semibold" title="Xem chi tiết & lịch sử phiên bản">📋 Chi tiết</button>`;
           }
           if (canApprove && item.status === 'APPROVED') {
             if (item.lifecycleStatus !== 'REVOKED') {
@@ -14861,8 +14861,8 @@ function viewLicenseDetails(anyId) {
         <td class="border p-2">${approverHTML}</td>
         <td class="border p-2 text-gray-700">Số: ${escapeHtml(v.licenseNumber)}<br>${escapeHtml(v.issueDate)} → ${escapeHtml(v.expiryDate)}</td>
         <td class="border p-2 text-center whitespace-nowrap">
-          <button type="button" onclick="viewLicenseFile(${v.id})" class="px-2 py-1 bg-blue-600 text-white rounded text-[11px] font-bold hover:bg-blue-700">👁️ Xem</button>
-          ${canDL ? `<button type="button" onclick="downloadLicenseFile(${v.id})" class="px-2 py-1 bg-slate-600 text-white rounded text-[11px] font-bold hover:bg-slate-700 ml-1">⬇️ Tải</button>` : ''}
+          <button type="button" data-op="viewLicenseFile" data-arg0="${v.id}" class="px-2 py-1 bg-blue-600 text-white rounded text-[11px] font-bold hover:bg-blue-700">👁️ Xem</button>
+          ${canDL ? `<button type="button" data-op="downloadLicenseFile" data-arg0="${v.id}" class="px-2 py-1 bg-slate-600 text-white rounded text-[11px] font-bold hover:bg-slate-700 ml-1">⬇️ Tải</button>` : ''}
         </td>
       </tr>
     `;
@@ -23886,6 +23886,17 @@ bindCspDelegation('itRenewalEditModal');
 // module — dùng chung showConfirmModal()/#genericConfirmModal (đã bọc sẵn ở cụm Quản Trị/Hệ Thống phía
 // trên, dùng chung toàn hệ thống) nên không cần thêm gốc thứ 2.
 bindCspDelegation('uniformSection');
+
+// Giấy Phép — thanh bộ lọc/form Cấp Mới-Cập Nhật (#licenseForm) và bảng danh sách
+// (buildLicenseRowHTML(), nút Duyệt/Chi Tiết/toggleLicenseFamily) đều render trong
+// #licenseSection nên chỉ cần 1 gốc. Modal "Chi Tiết & Lịch Sử Phiên Bản" (#licenseDetailModal,
+// viewLicenseDetails() đổ nội dung vào #licenseDetailBody, nút Xem/Tải từng phiên bản file) sống
+// NGOÀI section (giống Xe/Vận Hành/Đào Tạo) nên cần thêm 1 gốc riêng — 2 gốc tổng cộng. Danh mục
+// Loại Giấy Phép (saveLicenseType/deleteLicenseType/renderLicenseTypeList) đã được chuyển sang
+// data-op ở cụm Quản Trị/Hệ Thống phía trên (nằm vật lý trong #systemSection), không thuộc phạm vi
+// module này.
+bindCspDelegation('licenseSection');
+bindCspDelegation('licenseDetailModal');
 
 // ==========================================
 // VĂN PHÒNG PHẨM — kỳ đăng ký (vppPeriods) + đăng ký của nhân viên (vppRegistrations). 3 sub-tab:
