@@ -1411,13 +1411,13 @@ input[data-sdd-list] {
       <h3 class="font-bold text-emerald-900 text-base flex items-center gap-2">📅 Quản Lý & Đặt Lịch Phòng Họp</h3>
       <p class="text-xs text-emerald-800">Đăng ký lịch sử dụng phòng họp. Phiếu đặt chỉ được xác nhận sau khi được phê duyệt. Hệ thống tự động kiểm tra trùng giờ trong cùng 1 phòng.</p>
       <div class="flex gap-2 flex-wrap">
-        <button type="button" onclick="setMeetingSubTab('REGISTER')" id="btnMeetingSubRegister" class="px-3 py-1 rounded text-xs font-bold bg-emerald-700 text-white">📝 Đăng Ký</button>
-        <button type="button" onclick="setMeetingSubTab('CALENDAR')" id="btnMeetingSubCalendar" class="px-3 py-1 rounded text-xs font-bold bg-gray-200 text-gray-700">🗓️ Lịch Họp</button>
+        <button type="button" data-op="setMeetingSubTab" data-arg0="REGISTER" id="btnMeetingSubRegister" class="px-3 py-1 rounded text-xs font-bold bg-emerald-700 text-white">📝 Đăng Ký</button>
+        <button type="button" data-op="setMeetingSubTab" data-arg0="CALENDAR" id="btnMeetingSubCalendar" class="px-3 py-1 rounded text-xs font-bold bg-gray-200 text-gray-700">🗓️ Lịch Họp</button>
       </div>
     </div>
 
     <div id="meetingRegisterTabContent" class="space-y-6">
-      <form onsubmit="submitMeetingReq(event)" class="bg-white p-3 rounded border text-xs space-y-3">
+      <form data-op-submit="submitMeetingReq" class="bg-white p-3 rounded border text-xs space-y-3">
         <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
           <div>
             <label class="block font-semibold text-gray-600 mb-1">Mã Phiếu Đặt Phòng</label>
@@ -1468,13 +1468,13 @@ input[data-sdd-list] {
         <div class="grid grid-cols-1 md:grid-cols-5 gap-3">
           <div>
             <label class="block text-xs font-semibold text-gray-600 mb-1">Lọc Theo Phòng Ban</label>
-            <select id="filterDeptMeeting" onchange="onMeetingFilterChange()" class="w-full border p-2 rounded text-sm bg-white">
+            <select id="filterDeptMeeting" data-op-change="onMeetingFilterChange" class="w-full border p-2 rounded text-sm bg-white">
               <option value="">-- Tất cả phòng ban --</option>
             </select>
           </div>
           <div>
             <label class="block text-xs font-semibold text-gray-600 mb-1">Lọc Theo Trạng Thái</label>
-            <select id="filterStatusMeeting" onchange="onMeetingFilterChange()" class="w-full border p-2 rounded text-sm bg-white">
+            <select id="filterStatusMeeting" data-op-change="onMeetingFilterChange" class="w-full border p-2 rounded text-sm bg-white">
               <option value="">-- Tất cả trạng thái --</option>
               <option value="APPROVED">Đã Duyệt Lịch</option>
               <option value="PENDING">Đang Chờ Duyệt</option>
@@ -1483,15 +1483,15 @@ input[data-sdd-list] {
           </div>
           <div>
             <label class="block text-xs font-semibold text-gray-600 mb-1">Từ Ngày</label>
-            <input id="filterFromDateMeeting" type="date" onchange="onMeetingFilterChange()" class="w-full border p-2 rounded text-sm bg-white">
+            <input id="filterFromDateMeeting" type="date" data-op-change="onMeetingFilterChange" class="w-full border p-2 rounded text-sm bg-white">
           </div>
           <div>
             <label class="block text-xs font-semibold text-gray-600 mb-1">Đến Ngày</label>
-            <input id="filterToDateMeeting" type="date" onchange="onMeetingFilterChange()" class="w-full border p-2 rounded text-sm bg-white">
+            <input id="filterToDateMeeting" type="date" data-op-change="onMeetingFilterChange" class="w-full border p-2 rounded text-sm bg-white">
           </div>
           <div>
             <label class="block text-xs font-semibold text-gray-600 mb-1">Từ Khóa</label>
-            <input id="filterKeywordMeeting" oninput="onMeetingFilterChange()" placeholder="Mã, chủ đề, người đặt..." class="w-full border p-2 rounded text-sm">
+            <input id="filterKeywordMeeting" data-op-input="onMeetingFilterChange" placeholder="Mã, chủ đề, người đặt..." class="w-full border p-2 rounded text-sm">
           </div>
         </div>
       </div>
@@ -1520,7 +1520,7 @@ input[data-sdd-list] {
     <div id="meetingCalendarTabContent" class="hidden space-y-3">
       <div class="bg-white p-3 rounded border text-xs flex flex-wrap items-center gap-3">
         <label class="font-semibold text-gray-600">Xem lịch ngày:</label>
-        <input id="meetingCalDate" type="date" onchange="renderMeetingCalendar()" class="border p-1.5 rounded">
+        <input id="meetingCalDate" type="date" data-op-change="renderMeetingCalendar" class="border p-1.5 rounded">
         <span class="text-gray-500 italic">Kéo chuột hoặc giữ Shift rồi bấm ô thứ 2 (cùng cột phòng) để chọn nhiều khung giờ liên tiếp</span>
         <div class="flex items-center gap-1.5 ml-auto">
           <span class="inline-block w-4 h-4 bg-white border border-gray-300"></span><span class="text-gray-600">Còn trống (bấm để đặt)</span>
@@ -19909,11 +19909,11 @@ function renderMeetings() {
             const canApprove = canApproveMeeting(currentUser) && m.status === 'PENDING';
             const canCancel = canCancelMeeting(currentUser, m) && m.status !== 'CANCELLED';
             if (canApprove) {
-              const primaryBtnHTML = `<button onclick="approveMeeting(${m.id})" class="bg-emerald-600 text-white px-2 py-1 rounded text-xs hover:bg-emerald-700 font-bold">Duyệt</button>`;
+              const primaryBtnHTML = `<button data-op="approveMeeting" data-arg0="${m.id}" class="bg-emerald-600 text-white px-2 py-1 rounded text-xs hover:bg-emerald-700 font-bold">Duyệt</button>`;
               return buildActionCell(m.id, primaryBtnHTML, canCancel ? [{ value: 'cancel', label: 'Hủy' }] : [], 'runMeetingAction');
             }
             if (canCancel) {
-              return `<button onclick="runMeetingAction(${m.id}, 'cancel')" class="bg-red-600 text-white px-2 py-1 rounded text-xs hover:bg-red-700 font-bold">Hủy</button>`;
+              return `<button data-op="runMeetingAction" data-arg0="${m.id}" data-arg1="cancel" class="bg-red-600 text-white px-2 py-1 rounded text-xs hover:bg-red-700 font-bold">Hủy</button>`;
             }
             return '';
           })()}
@@ -23785,6 +23785,11 @@ bindCspDelegation('paymentSection');
 // Vận Hành) nên cần thêm 1 gốc riêng cho modal.
 bindCspDelegation('carSection');
 bindCspDelegation('carProcessModal');
+// Phòng Họp — danh sách lịch (#meetingTableBody, nút Duyệt/Hủy qua runMeetingAction/approveMeeting) và
+// lịch dạng lưới (#meetingCalDate + renderMeetingCalendar()) đều render trong #meetingSection, không có
+// modal xử lý riêng bên ngoài (approveMeeting()/cancelMeeting() gọi thẳng API, không mở modal) — 1 gốc
+// là đủ, khác Xe/Vận Hành.
+bindCspDelegation('meetingSection');
 
 // ==========================================
 // VĂN PHÒNG PHẨM — kỳ đăng ký (vppPeriods) + đăng ký của nhân viên (vppRegistrations). 3 sub-tab:
