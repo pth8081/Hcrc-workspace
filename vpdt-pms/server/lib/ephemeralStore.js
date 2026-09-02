@@ -21,6 +21,10 @@ async function pruneExpired() {
 }
 
 // Ghi/ghi đè 1 token, hết hạn sau ttlMs kể từ lúc gọi.
+// WITH (HOLDLOCK) trên target — lỗi đã biết của SQL Server: MERGE không tự khoá đủ chặt, 2 request
+// cùng tạo 1 TokenKey MỚI (chưa tồn tại) gần như đồng thời có thể cùng đọc thấy "chưa khớp" rồi cùng
+// chạy nhánh INSERT, gây lỗi 500 vi phạm khoá chính thay vì upsert êm — phát hiện ở audit Đợt 5, Giai
+// đoạn 3. HOLDLOCK ép SQL Server giữ khoá tới hết statement, request thứ 2 phải chờ thay vì đọc trùng.
 async function setToken(key, value, ttlMs) {
   const pool = await getPool();
   const expiresAt = new Date(Date.now() + ttlMs);
@@ -29,7 +33,7 @@ async function setToken(key, value, ttlMs) {
     .input('payload', sql.NVarChar(sql.MAX), JSON.stringify(value))
     .input('expiresAt', sql.DateTime2, expiresAt)
     .query(`
-      MERGE dbo.EphemeralAuthTokens AS target
+      MERGE dbo.EphemeralAuthTokens WITH (HOLDLOCK) AS target
       USING (SELECT @key AS TokenKey) AS src ON target.TokenKey = src.TokenKey
       WHEN MATCHED THEN UPDATE SET Payload = @payload, ExpiresAt = @expiresAt
       WHEN NOT MATCHED THEN INSERT (TokenKey, Payload, ExpiresAt) VALUES (@key, @payload, @expiresAt);

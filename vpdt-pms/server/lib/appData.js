@@ -114,13 +114,19 @@ async function getAppDataValueWithVersion(key) {
   return { value: JSON.parse(row.DataValue), version: row.UpdatedAt.toISOString() };
 }
 
+// WITH (HOLDLOCK) trên target — cùng lỗi đã biết của SQL Server đã vá cho MERGE upsert token ở
+// lib/ephemeralStore.js (audit Đợt 5, Giai đoạn 3): thiếu HOLDLOCK, 2 request cùng tạo 1 DataKey MỚI
+// gần như đồng thời có thể cùng đọc thấy "chưa khớp" rồi cùng INSERT, vi phạm khoá chính thay vì
+// upsert êm. Đường ghi này dùng cho MỌI key AppData (users, permGroups, collection chưa migrate sang
+// dbo.Records...) nên rủi ro rộng hơn ephemeral token, dù bản thân race hiếm gặp (chỉ lộ khi key CHƯA
+// từng tồn tại).
 async function setAppDataValue(key, value) {
   const pool = await getPool();
   await pool.request()
     .input('k', sql.NVarChar(100), key)
     .input('v', sql.NVarChar(sql.MAX), JSON.stringify(value))
     .query(`
-      MERGE dbo.AppData AS target
+      MERGE dbo.AppData WITH (HOLDLOCK) AS target
       USING (SELECT @k AS DataKey) AS src
       ON target.DataKey = src.DataKey
       WHEN MATCHED THEN

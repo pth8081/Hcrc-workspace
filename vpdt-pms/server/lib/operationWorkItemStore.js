@@ -134,7 +134,27 @@ async function deleteWorkItemById(id) {
   invalidateWorkItemsCache();
 }
 
+// Xoá NHIỀU work item (1 nhánh cây gồm toàn bộ con cháu, hoặc cả cây khi cascade theo hồ sơ nguồn bị
+// xoá) trong ĐÚNG 1 câu DELETE...WHERE Id IN (...) thay vì vòng lặp nhiều câu DELETE riêng lẻ — audit
+// Đợt 5 Giai đoạn 3 phát hiện vòng lặp cũ không bọc transaction: nếu tiến trình crash/khởi động lại
+// giữa vòng lặp, một số node bị xoá còn một số node con vẫn còn (ParentWorkItemId trỏ vào bản ghi vừa
+// bị xoá) — cây bị đứt gãy vĩnh viễn. 1 câu SQL DUY NHẤT tự nó đã atomic (SQL Server áp dụng ngầm cho
+// từng statement, không cần BEGIN/COMMIT tường minh) nên không còn trạng thái "xoá dở dang".
+async function deleteWorkItemsByIds(ids) {
+  const list = Array.from(new Set((ids || []).map(Number).filter(Number.isFinite)));
+  if (!list.length) return;
+  const pool = await getPool();
+  const request = pool.request();
+  const params = list.map((id, i) => {
+    const p = `id${i}`;
+    request.input(p, sql.BigInt, id);
+    return `@${p}`;
+  });
+  await request.query(`DELETE FROM dbo.OperationWorkItems WHERE Id IN (${params.join(',')})`);
+  invalidateWorkItemsCache();
+}
+
 module.exports = {
   getAllWorkItems, getAllWorkItemsCached, getWorkItemsBySource,
-  insertWorkItem, withLockedWorkItemById, deleteWorkItemById, invalidateWorkItemsCache
+  insertWorkItem, withLockedWorkItemById, deleteWorkItemById, deleteWorkItemsByIds, invalidateWorkItemsCache
 };

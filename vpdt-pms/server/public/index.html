@@ -17497,6 +17497,11 @@ function openTaskDetailModal(taskId) {
   if (!t) return;
 
   const sourceLabels = { SUBMISSION: '📜 Văn bản trình', MEETING_MINUTES: '📝 Biên bản họp', MANUAL: '✋ Giao trực tiếp' };
+  // Biên bản họp gốc có thể đã bị admin xóa sau khi công việc đã giao xong (dbo.Tasks.SourceCode chỉ
+  // là chuỗi tham chiếu tự do, không FK) — báo rõ thay vì để người nhận việc bấm vào tra cứu mà không
+  // còn gì (audit Đợt 5, Giai đoạn 3).
+  const sourceDeleted = t.sourceType === 'MEETING_MINUTES' && t.sourceCode
+    && !(DB.meetingMinutes || []).some(m => m.code === t.sourceCode);
   const isAssigner = t.assignedBy === currentUser.username || currentUser.perms?.admin;
   const acceptedUsernames = new Set((t.collaboratorAccepts || []).map(c => c.username).filter(Boolean));
   const acceptedExternalNames = new Set((t.collaboratorAccepts || []).filter(c => !c.username).map(c => c.name));
@@ -17532,7 +17537,7 @@ function openTaskDetailModal(taskId) {
   document.getElementById('taskDetailContent').innerHTML = `
     <div class="grid grid-cols-2 gap-3 bg-gray-50 p-3 rounded border">
       <div><b>Ngày giao:</b> ${escapeHtml(t.createdAt || '')}</div>
-      <div><b>Loại giao việc:</b> ${escapeHtml(sourceLabels[t.sourceType] || t.sourceType || '—')}${t.sourceCode ? ` (${escapeHtml(t.sourceCode)})` : ''}</div>
+      <div><b>Loại giao việc:</b> ${escapeHtml(sourceLabels[t.sourceType] || t.sourceType || '—')}${t.sourceCode ? ` (${escapeHtml(t.sourceCode)})` : ''}${sourceDeleted ? ' <span class="text-red-600 font-bold">⚠️ Biên bản họp nguồn đã bị xóa</span>' : ''}</div>
       <div><b>Người giao:</b> ${escapeHtml(t.assignedByName || '')}</div>
       <div><b>Người nhận:</b> ${t.assignedToName ? escapeHtml(t.assignedToName) : '<span class="text-amber-600 font-bold">Chưa gán</span>'}${t.externalAssignee ? ' <span class="text-gray-400">(ngoài hệ thống — không có tài khoản đăng nhập)</span>' : ''}
         ${t.externalAssignee && t.status === 'TODO' && isAssigner ? ` <button onclick="acceptTaskOnBehalf(${t.id})" class="ml-1 bg-emerald-600 text-white px-1.5 py-0.5 rounded text-[10px] font-bold hover:bg-emerald-700">Nhận việc thay</button>` : ''}

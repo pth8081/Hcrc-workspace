@@ -7,7 +7,7 @@ const { requireAuth, blockIfMustChangePassword } = require('../lib/auth');
 const { HttpError } = require('../lib/httpErrors');
 const recordActions = require('../lib/recordActions');
 const { insertTask, withLockedTaskById, deleteTaskById, getAllTasks, migrateDirectiveTaskLinks } = require('../lib/taskStore');
-const { getAllWorkItems, getWorkItemsBySource, insertWorkItem, withLockedWorkItemById, deleteWorkItemById } = require('../lib/operationWorkItemStore');
+const { getAllWorkItems, getWorkItemsBySource, insertWorkItem, withLockedWorkItemById, deleteWorkItemById, deleteWorkItemsByIds } = require('../lib/operationWorkItemStore');
 const { createForCollection, insertRecord, withLockedRecordForCollection, withLockedRecordById, deleteRecordForCollection, getAllForCollection, withAppLock } = require('../lib/recordStore');
 const { getAllAppData, getAppDataValue, withLockedAppDataValue } = require('../lib/appData');
 // sanitizeInternalPostCommentsForUser: cùng hàm mà routes/data.js dùng để lọc GET /api/data (qua
@@ -760,8 +760,39 @@ router.post('/budgetTemplates/:id/delete', async (req, res) => {
 
 // ===================== VẬN HÀNH (operationOrders / operationStoreOpenings / operationRepairs) =====================
 router.post('/operationOrders/:id/delete', (req, res) => deleteAdminOnly(req, res, 'operationOrders'));
-router.post('/operationStoreOpenings/:id/delete', (req, res) => deleteAdminOnly(req, res, 'operationStoreOpenings'));
-router.post('/operationRepairs/:id/delete', (req, res) => deleteAdminOnly(req, res, 'operationRepairs'));
+// Xoá hồ sơ Mở Mới/Sửa Chữa Siêu Thị CASCADE xoá luôn operationExecutionPeriods + toàn bộ cây
+// dbo.OperationWorkItems tham chiếu tới hồ sơ đó — trước đây chỉ xoá đúng 1 dòng hồ sơ qua
+// deleteAdminOnly() chung, để lại Kỳ Thực Hiện + cây công việc mồ côi VĨNH VIỄN trong DB (bị lọc khỏi
+// mọi API response nên vô hình, nhưng vẫn tồn tại — và nếu id hồ sơ mới trùng Date.now() với id cũ,
+// có nguy cơ "thừa kế" nhầm cây công việc mồ côi) — phát hiện ở audit Đợt 5, Giai đoạn 3.
+// Xoá CON trước (periods + work items) rồi mới xoá hồ sơ CHA — nếu crash giữa chừng, trạng thái xấu
+// nhất là hồ sơ cha còn periods/work items mồ côi (như hành vi CŨ, không tệ hơn), không bao giờ để lại
+// work items trỏ vào 1 hồ sơ đã bị xoá mà chính nó lại chưa kịp dọn.
+async function deleteOperationRecordCascade(req, res, collection, sourceType) {
+  const itemId = Number(req.params.id);
+  if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
+  try {
+    const { freshUser } = await getFreshUser(req);
+    assertAdminForDelete(freshUser);
+    const actor = { username: freshUser.username, name: freshUser.name };
+
+    const periods = await getAllForCollection('operationExecutionPeriods');
+    const periodIdsToDelete = periods.filter(p => p.sourceType === sourceType && p.sourceId === itemId).map(p => p.id);
+    for (const id of periodIdsToDelete) {
+      await deleteRecordForCollection('operationExecutionPeriods', id, () => assertAdminForDelete(freshUser), actor);
+    }
+
+    const workItems = await getWorkItemsBySource(sourceType, itemId);
+    await deleteWorkItemsByIds(workItems.map(w => w.id));
+
+    await deleteRecordForCollection(collection, itemId, () => assertAdminForDelete(freshUser), actor);
+    res.json({ ok: true });
+  } catch (err) {
+    handleError(res, `${collection}/${req.params.id}/delete`, err);
+  }
+}
+router.post('/operationStoreOpenings/:id/delete', (req, res) => deleteOperationRecordCascade(req, res, 'operationStoreOpenings', 'OPERATION_STORE_OPENING'));
+router.post('/operationRepairs/:id/delete', (req, res) => deleteOperationRecordCascade(req, res, 'operationRepairs', 'OPERATION_REPAIR'));
 
 // ===================== ĐÀO TẠO (module con "Truyền Thông Nội Bộ" > Đào tạo) — tạm thời, MVP =====================
 router.post('/trainingDocuments/:id/delete', (req, res) => deleteAdminOnly(req, res, 'trainingDocuments'));
@@ -1809,7 +1840,9 @@ router.post('/operationWorkItems/:id/delete', async (req, res) => {
     if (!item) return res.status(404).json({ error: 'Không tìm thấy công việc' });
     const descendantIds = collectOperationWorkItemDescendantIds(all, itemId);
     const idsToDelete = recordActions.deleteOperationWorkItem(freshUser, item, descendantIds);
-    for (const id of idsToDelete) await deleteWorkItemById(id);
+    // 1 câu DELETE...WHERE Id IN (...) duy nhất (atomic) thay vì vòng lặp nhiều câu DELETE riêng lẻ —
+    // xem giải thích đầy đủ ở deleteWorkItemsByIds() (lib/operationWorkItemStore.js).
+    await deleteWorkItemsByIds(idsToDelete);
     await syncOperationWorkItemAncestors(item.parentWorkItemId, item.sourceType, item.sourceId);
     res.json({ ok: true });
   } catch (err) { handleError(res, `operationWorkItems/${req.params.id}/delete`, err); }
