@@ -6734,6 +6734,7 @@ input[data-sdd-list] {
         <button onclick="closeOperationWorkItemModal()" class="text-gray-400 hover:text-gray-600 text-2xl leading-none">&times;</button>
       </div>
       <div class="p-4 space-y-3">
+        <div id="operationExecutionPeriodsBox" class="hidden border rounded p-3 bg-gray-50 space-y-2"></div>
         <div id="operationWorkItemCreateRootBox"></div>
         <div class="overflow-x-auto">
           <table class="w-full border-collapse border text-xs bg-white">
@@ -6761,8 +6762,18 @@ input[data-sdd-list] {
             <input id="owiAssignedToInput" data-sdd-list="systemUsersDatalist" autocomplete="off" onchange="resolveOwiAssignedToInput(this.value)" placeholder="Gõ tên hoặc tài khoản..." class="w-full border p-1.5 rounded">
             <input type="hidden" id="owiAssignedToUsername">
           </div>
-          <div><label class="block font-semibold text-gray-600 mb-1">Hạn Hoàn Thành</label><input id="owiDeadline" type="date" class="w-full border p-1.5 rounded"></div>
+          <div class="relative">
+            <label class="block font-semibold text-gray-600 mb-1">Người Nghiệm Thu Chỉ Định</label>
+            <input id="owiAcceptorInput" data-sdd-list="systemUsersDatalist" autocomplete="off" onchange="resolveOwiAcceptorInput(this.value)" placeholder="Gõ tên hoặc tài khoản..." class="w-full border p-1.5 rounded">
+            <input type="hidden" id="owiAcceptorUsername">
+          </div>
         </div>
+        <div id="owiPeriodFieldWrap" class="hidden">
+          <label class="block font-semibold text-gray-600 mb-1">Kỳ Thực Hiện</label>
+          <select id="owiPeriodSelect" class="w-full border p-1.5 rounded"></select>
+          <p id="owiPeriodEmptyNote" class="hidden text-[11px] text-red-500 italic mt-1">Chưa có Kỳ Thực Hiện nào đang "Đang thực hiện" — vui lòng tạo/bắt đầu 1 kỳ trước khi thêm công việc gốc.</p>
+        </div>
+        <div><label class="block font-semibold text-gray-600 mb-1">Hạn Hoàn Thành</label><input id="owiDeadline" type="date" class="w-full border p-1.5 rounded"></div>
         <div class="flex justify-end gap-2 pt-2">
           <button type="button" onclick="closeOperationWorkItemFormModal()" class="px-4 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700 hover:bg-gray-300">Hủy</button>
           <button type="submit" class="px-4 py-1.5 rounded text-xs font-bold bg-emerald-600 text-white hover:bg-emerald-700">Lưu Công Việc</button>
@@ -9681,6 +9692,8 @@ async function initDatabase(loggingInUser) {
     // Cây công việc Thực hiện/Nghiệm thu — nguồn riêng dbo.OperationWorkItems (không nằm trong
     // dbo.AppData), cùng khuôn DB.tasks ở dưới.
     DB.operationWorkItems = data.operationWorkItems || [];
+    // Kỳ Thực Hiện — mỗi hồ sơ Mở mới/Sửa chữa có danh sách kỳ riêng (dbo.Records, qua engine chung).
+    DB.operationExecutionPeriods = data.operationExecutionPeriods || [];
 
     DB.licenses = data.licenses || [];
     DB.licenseTypes = data.licenseTypes || [];
@@ -13390,8 +13403,12 @@ function canAccessOperationModule(user) {
   if (!user) return false;
   if (user.perms?.admin) return true;
   if (!hasModuleAccess(user, 'vanHanh')) return false;
-  return !!(user.perms?.operationOrderCreate || user.perms?.operationStoreOpenCreate || user.perms?.operationRepairCreate
-    || user.perms?.operationEstimateCreate || user.perms?.operationExecutionManage || user.perms?.operationAcceptanceManage);
+  if (user.perms?.operationOrderCreate || user.perms?.operationStoreOpenCreate || user.perms?.operationRepairCreate
+    || user.perms?.operationEstimateCreate || user.perms?.operationExecutionManage || user.perms?.operationAcceptanceManage) return true;
+  // Người được gán/chỉ định trực tiếp trên ít nhất 1 công việc (dù không giữ quyền rộng nào ở trên)
+  // cũng cần vào được module để thao tác đúng việc của mình — khớp nhánh nới quyền ở
+  // canAccessOperationSubTab() (EXECUTION/ACCEPTANCE) bên dưới.
+  return (DB.operationWorkItems || []).some(w => w.assignedTo === user.username || w.acceptorUsername === user.username);
 }
 function canAccessOperationSubTab(user, kind) {
   if (!user) return false;
@@ -13400,8 +13417,14 @@ function canAccessOperationSubTab(user, kind) {
   if (kind === 'STORE_OPEN') return !!user.perms?.operationStoreOpenCreate;
   if (kind === 'REPAIR') return !!user.perms?.operationRepairCreate;
   if (kind === 'ESTIMATE') return !!user.perms?.operationEstimateCreate;
-  if (kind === 'EXECUTION') return !!user.perms?.operationExecutionManage;
-  if (kind === 'ACCEPTANCE') return !!user.perms?.operationAcceptanceManage;
+  // EXECUTION/ACCEPTANCE: "toàn quyền" (operationExecutionManage/operationAcceptanceManage) thấy hết;
+  // NGOÀI RA người được gán/chỉ định trực tiếp trên ít nhất 1 công việc (dù không có quyền rộng) cũng
+  // cần thấy tab để còn thao tác đúng việc của mình (xem updateOperationWorkItemProgress/
+  // acceptOperationWorkItem ở lib/recordActions.js — server đã chặn/nới quyền tương ứng).
+  if (kind === 'EXECUTION') return !!user.perms?.operationExecutionManage
+    || (DB.operationWorkItems || []).some(w => w.assignedTo === user.username);
+  if (kind === 'ACCEPTANCE') return !!user.perms?.operationAcceptanceManage
+    || (DB.operationWorkItems || []).some(w => w.acceptorUsername === user.username);
   // 'STORE'/'REPORT': tab cha "Siêu Thị" — hiện khi có BẤT KỲ quyền nào trong 5 giai đoạn con.
   if (kind === 'STORE' || kind === 'REPORT') {
     return ['STORE_OPEN', 'REPAIR', 'ESTIMATE', 'EXECUTION', 'ACCEPTANCE'].some(k => canAccessOperationSubTab(user, k));
@@ -22931,6 +22954,10 @@ function getOperationWorkItemsForRecord(kind, id) {
   const sourceType = operationSourceType(kind);
   return (DB.operationWorkItems || []).filter(w => w.sourceType === sourceType && w.sourceId === id);
 }
+function getOperationExecutionPeriodsForRecord(kind, id) {
+  const sourceType = operationSourceType(kind);
+  return (DB.operationExecutionPeriods || []).filter(p => p.sourceType === sourceType && p.sourceId === id);
+}
 function operationWorkItemStatusBadge(status) {
   const map = {
     CHUA_BAT_DAU: '<span class="px-2 py-0.5 bg-gray-100 text-gray-700 rounded font-bold text-xs">⬜ Chưa bắt đầu</span>',
@@ -23030,6 +23057,7 @@ function openOperationWorkItemModal(kind, id, mode) {
   currentWorkItemModalKind = kind;
   currentWorkItemModalRecordId = id;
   currentWorkItemModalMode = mode;
+  owiPeriodCreateFormOpen = false;
   const meta = OPERATION_KIND_META[kind];
   const o = meta.list().find(x => x.id === id);
   if (!o) return;
@@ -23051,10 +23079,23 @@ function renderOperationWorkItemModalBody() {
   const canManageExecution = !!(currentUser.perms?.admin || currentUser.perms?.operationExecutionManage);
   const canManageAcceptance = !!(currentUser.perms?.admin || currentUser.perms?.operationAcceptanceManage);
 
+  const periodsBox = document.getElementById('operationExecutionPeriodsBox');
+  if (mode === 'EXECUTION') {
+    periodsBox.classList.remove('hidden');
+    renderOperationExecutionPeriodsBox(kind, id, canManageExecution);
+  } else {
+    periodsBox.classList.add('hidden');
+  }
+  const hasActivePeriod = getOperationExecutionPeriodsForRecord(kind, id).some(p => p.status === 'DANG_THUC_HIEN');
+
   const rootBox = document.getElementById('operationWorkItemCreateRootBox');
-  rootBox.innerHTML = (mode === 'EXECUTION' && canManageExecution)
-    ? `<button type="button" onclick="openOperationWorkItemFormModal(null)" class="bg-emerald-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-emerald-700">➕ Thêm Công Việc Gốc</button>`
-    : '';
+  if (mode === 'EXECUTION' && canManageExecution && hasActivePeriod) {
+    rootBox.innerHTML = `<button type="button" onclick="openOperationWorkItemFormModal(null)" class="bg-emerald-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-emerald-700">➕ Thêm Công Việc Gốc</button>`;
+  } else if (mode === 'EXECUTION' && canManageExecution) {
+    rootBox.innerHTML = `<p class="text-xs text-amber-600 italic">⚠️ Chưa có Kỳ Thực Hiện nào đang "Đang thực hiện" — vui lòng tạo/bắt đầu 1 kỳ ở trên trước khi thêm công việc gốc.</p>`;
+  } else {
+    rootBox.innerHTML = '';
+  }
 
   const head = document.getElementById('operationWorkItemTableHead');
   head.innerHTML = mode === 'EXECUTION'
@@ -23065,6 +23106,67 @@ function renderOperationWorkItemModalBody() {
   const colspan = mode === 'EXECUTION' ? 5 : 5;
   const rows = buildOperationWorkItemRows(items, null, 0, mode, canManageExecution, canManageAcceptance);
   body.innerHTML = rows || `<tr><td colspan="${colspan}" class="text-center p-6 text-gray-500 italic">Chưa có công việc nào.</td></tr>`;
+}
+
+// --- Kỳ Thực Hiện (mỗi hồ sơ Mở mới/Sửa chữa có danh sách kỳ riêng — xem lib/createValidation.js
+// operationExecutionPeriods). Việc GỐC chỉ tạo được khi chọn đúng kỳ đang "Đang thực hiện" — xem
+// renderOwiPeriodField() bên dưới, đối chiếu lại phía server ở createOperationWorkItem(). ---
+let owiPeriodCreateFormOpen = false;
+function renderOperationExecutionPeriodsBox(kind, id, canManageExecution) {
+  const box = document.getElementById('operationExecutionPeriodsBox');
+  if (!box) return;
+  const periods = getOperationExecutionPeriodsForRecord(kind, id).sort((a, b) => (a.createdAt || '').localeCompare(b.createdAt || ''));
+  const rows = periods.map(p => `
+    <div class="flex items-center justify-between bg-white border rounded px-2 py-1.5">
+      <div class="text-xs font-semibold text-gray-700">${escapeHtml(p.name)} ${operationWorkItemStatusBadge(p.status)}</div>
+      ${(p.status === 'CHUA_BAT_DAU' && canManageExecution) ? `<button type="button" onclick="startOperationExecutionPeriodAction(${p.id})" class="text-xs px-2 py-0.5 bg-blue-600 text-white rounded font-bold hover:bg-blue-700">▶ Bắt Đầu</button>` : ''}
+    </div>`).join('');
+  const createFormHTML = owiPeriodCreateFormOpen
+    ? `<form onsubmit="submitOperationExecutionPeriod(event)" class="flex items-center gap-2">
+        <input id="owiNewPeriodName" required placeholder="Tên kỳ (VD: Đợt 1 - Thi công mặt bằng)" class="flex-1 border p-1.5 rounded text-xs">
+        <button type="submit" class="text-xs px-2 py-1.5 bg-emerald-600 text-white rounded font-bold hover:bg-emerald-700">Lưu</button>
+        <button type="button" onclick="toggleOperationExecutionPeriodCreateForm(false)" class="text-xs px-2 py-1.5 bg-gray-200 rounded font-bold hover:bg-gray-300">Hủy</button>
+      </form>`
+    : (canManageExecution ? `<button type="button" onclick="toggleOperationExecutionPeriodCreateForm(true)" class="text-xs px-2 py-1.5 bg-gray-700 text-white rounded font-bold hover:bg-gray-800">+ Tạo Kỳ Mới</button>` : '');
+  box.innerHTML = `<div class="text-xs font-bold text-gray-600">📅 Kỳ Thực Hiện</div>${rows || '<p class="text-xs text-gray-400 italic">Chưa có kỳ nào.</p>'}${createFormHTML}`;
+}
+function toggleOperationExecutionPeriodCreateForm(open) {
+  owiPeriodCreateFormOpen = open;
+  renderOperationExecutionPeriodsBox(currentWorkItemModalKind, currentWorkItemModalRecordId, !!(currentUser.perms?.admin || currentUser.perms?.operationExecutionManage));
+}
+async function submitOperationExecutionPeriod(e) {
+  e.preventDefault();
+  const name = document.getElementById('owiNewPeriodName').value.trim();
+  if (!name) return;
+  const payload = { sourceType: operationSourceType(currentWorkItemModalKind), sourceId: currentWorkItemModalRecordId, name };
+  let newItem;
+  try {
+    const result = await callCreateAction('operationExecutionPeriods', payload);
+    newItem = result.item;
+  } catch (err) { return alert(`⛔ ${err.message}`); }
+  DB.operationExecutionPeriods.push(newItem);
+  owiPeriodCreateFormOpen = false;
+  renderOperationWorkItemModalBody();
+}
+async function startOperationExecutionPeriodAction(id) {
+  let result;
+  try {
+    result = await callRecordAction('operationExecutionPeriods', id, 'start', {});
+  } catch (err) { return alert(`⛔ ${err.message}`); }
+  const idx = DB.operationExecutionPeriods.findIndex(p => p.id === id);
+  if (idx !== -1) DB.operationExecutionPeriods[idx] = result.item;
+  renderOperationWorkItemModalBody();
+}
+// Dropdown chọn kỳ trong form thêm công việc — CHỈ hiện/bắt buộc khi thêm công việc GỐC (việc con kế
+// thừa kỳ của cha tự động ở server, xem createOperationWorkItem()); chỉ liệt kê kỳ đang "Đang thực hiện".
+function renderOwiPeriodField(parentWorkItemId) {
+  const wrap = document.getElementById('owiPeriodFieldWrap');
+  if (parentWorkItemId != null) { wrap.classList.add('hidden'); return; }
+  wrap.classList.remove('hidden');
+  const periods = getOperationExecutionPeriodsForRecord(currentWorkItemModalKind, currentWorkItemModalRecordId).filter(p => p.status === 'DANG_THUC_HIEN');
+  document.getElementById('owiPeriodSelect').innerHTML = `<option value="">-- Chọn Kỳ Thực Hiện --</option>` +
+    periods.map(p => `<option value="${p.id}">${escapeHtml(p.name)}</option>`).join('');
+  document.getElementById('owiPeriodEmptyNote').classList.toggle('hidden', periods.length > 0);
 }
 
 function buildOperationWorkItemRows(items, parentId, depth, mode, canManageExecution, canManageAcceptance) {
@@ -23080,20 +23182,29 @@ function buildOperationWorkItemRows(items, parentId, depth, mode, canManageExecu
 
 function buildOperationWorkItemRow(w, depth, hasChildren, mode, canManageExecution, canManageAcceptance) {
   const indent = '&nbsp;'.repeat(depth * 4) + (depth > 0 ? '↳ ' : '');
-  const nameCell = `<td class="border p-2">${indent}${escapeHtml(w.title)}${w.description ? `<div class="text-[10px] text-gray-400">${escapeHtml(w.description)}</div>` : ''}</td>`;
+  const periodLabel = (depth === 0 && w.periodName) ? `<div class="text-[10px] text-indigo-500">📅 ${escapeHtml(w.periodName)}</div>` : '';
+  const nameCell = `<td class="border p-2">${indent}${escapeHtml(w.title)}${periodLabel}${w.description ? `<div class="text-[10px] text-gray-400">${escapeHtml(w.description)}</div>` : ''}</td>`;
   const assigneeCell = `<td class="border p-2">${escapeHtml(w.assignedToName || 'Chưa gán')}</td>`;
 
   if (mode === 'EXECUTION') {
     const deadlineCell = `<td class="border p-2">${w.deadline ? new Date(w.deadline).toLocaleDateString('vi-VN') : ''}</td>`;
     const statusCell = `<td class="border p-2">${operationWorkItemStatusBadge(w.status)}</td>`;
+    // "Toàn quyền" (canManageExecution) làm được mọi thao tác trên mọi việc; NGOÀI RA đúng người phụ
+    // trách (assignedTo) được tự cập nhật tiến độ VIỆC CỦA MÌNH — không được thêm/xoá cây (vẫn chỉ
+    // canManageExecution), khớp lib/recordActions.js updateOperationWorkItemProgress().
+    const isOwner = !!(currentUser.username && w.assignedTo === currentUser.username);
     let actionHTML = '';
     if (canManageExecution && w.status !== 'DA_NGHIEM_THU') {
       actionHTML += `<button type="button" onclick="openOperationWorkItemFormModal(${w.id})" class="text-xs px-2 py-0.5 bg-gray-200 rounded font-bold hover:bg-gray-300 mr-1" title="Thêm việc con">➕ Con</button>`;
+    }
+    if (w.status !== 'DA_NGHIEM_THU') {
       if (!hasChildren) {
-        if (w.status === 'CHUA_BAT_DAU') actionHTML += `<button type="button" onclick="updateOperationWorkItemProgressAction(${w.id}, 'DANG_THUC_HIEN')" class="text-xs px-2 py-0.5 bg-blue-600 text-white rounded font-bold hover:bg-blue-700">▶ Bắt Đầu</button>`;
-        else if (w.status === 'DANG_THUC_HIEN') actionHTML += `<button type="button" onclick="updateOperationWorkItemProgressAction(${w.id}, 'DANG_NGHIEM_THU')" class="text-xs px-2 py-0.5 bg-amber-600 text-white rounded font-bold hover:bg-amber-700">📤 Nộp Nghiệm Thu</button>`;
-        else if (w.status === 'DANG_NGHIEM_THU') actionHTML += `<span class="text-xs text-gray-400 italic">Đang chờ nghiệm thu</span>`;
-      } else {
+        if (canManageExecution || isOwner) {
+          if (w.status === 'CHUA_BAT_DAU') actionHTML += `<button type="button" onclick="updateOperationWorkItemProgressAction(${w.id}, 'DANG_THUC_HIEN')" class="text-xs px-2 py-0.5 bg-blue-600 text-white rounded font-bold hover:bg-blue-700">▶ Bắt Đầu</button>`;
+          else if (w.status === 'DANG_THUC_HIEN') actionHTML += `<button type="button" onclick="updateOperationWorkItemProgressAction(${w.id}, 'DANG_NGHIEM_THU')" class="text-xs px-2 py-0.5 bg-amber-600 text-white rounded font-bold hover:bg-amber-700">📤 Nộp Nghiệm Thu</button>`;
+          else if (w.status === 'DANG_NGHIEM_THU') actionHTML += `<span class="text-xs text-gray-400 italic">Đang chờ nghiệm thu</span>`;
+        }
+      } else if (canManageExecution) {
         actionHTML += `<span class="text-xs text-gray-400 italic">Tự cập nhật theo việc con</span>`;
       }
     }
@@ -23102,9 +23213,12 @@ function buildOperationWorkItemRow(w, depth, hasChildren, mode, canManageExecuti
 
   // ACCEPTANCE mode
   const statusCell = `<td class="border p-2">${operationWorkItemStatusBadge(w.status)}</td>`;
-  const acceptorCell = `<td class="border p-2">${escapeHtml(w.acceptedByName || '-')}</td>`;
+  const acceptorCell = `<td class="border p-2">${escapeHtml(w.acceptedByName || '-')}${(!w.acceptedByName && w.acceptorName) ? `<div class="text-[10px] text-gray-400">Chỉ định: ${escapeHtml(w.acceptorName)}</div>` : ''}</td>`;
+  // "Toàn quyền" (canManageAcceptance) nghiệm thu được mọi việc; NGOÀI RA đúng người được CHỈ ĐỊNH
+  // (acceptorUsername) mới nghiệm thu/bổ sung được việc đó — khớp acceptOperationWorkItem() ở server.
+  const isDesignatedAcceptor = !!(currentUser.username && w.acceptorUsername && w.acceptorUsername === currentUser.username);
   let actionHTML = '<span class="text-xs text-gray-400 italic">—</span>';
-  if (canManageAcceptance && w.status === 'DANG_NGHIEM_THU') {
+  if ((canManageAcceptance || isDesignatedAcceptor) && w.status === 'DANG_NGHIEM_THU') {
     actionHTML = `<button type="button" onclick="openOperationAcceptanceActionModal(${w.id}, 'ACCEPT')" class="text-xs px-2 py-0.5 bg-green-600 text-white rounded font-bold hover:bg-green-700 mr-1">✅ Nghiệm Thu</button>
       <button type="button" onclick="openOperationAcceptanceActionModal(${w.id}, 'REQUEST_INFO')" class="text-xs px-2 py-0.5 bg-amber-500 text-white rounded font-bold hover:bg-amber-600">🔄 Bổ Sung</button>`;
   }
@@ -23120,7 +23234,10 @@ function openOperationWorkItemFormModal(parentWorkItemId) {
   document.getElementById('owiDescription').value = '';
   document.getElementById('owiAssignedToInput').value = '';
   document.getElementById('owiAssignedToUsername').value = '';
+  document.getElementById('owiAcceptorInput').value = '';
+  document.getElementById('owiAcceptorUsername').value = '';
   document.getElementById('owiDeadline').value = '';
+  renderOwiPeriodField(parentWorkItemId);
   document.getElementById('operationWorkItemFormModal').classList.remove('hidden');
 }
 function closeOperationWorkItemFormModal() {
@@ -23131,6 +23248,10 @@ function resolveOwiAssignedToInput(rawValue) {
   const m = rawValue.match(/^(.*) — .*\(([^()]+)\)$/);
   document.getElementById('owiAssignedToUsername').value = m ? m[2].trim() : '';
 }
+function resolveOwiAcceptorInput(rawValue) {
+  const m = rawValue.match(/^(.*) — .*\(([^()]+)\)$/);
+  document.getElementById('owiAcceptorUsername').value = m ? m[2].trim() : '';
+}
 async function submitOperationWorkItemForm(e) {
   e.preventDefault();
   const title = document.getElementById('owiTitle').value.trim();
@@ -23139,12 +23260,21 @@ async function submitOperationWorkItemForm(e) {
   const assignedTo = document.getElementById('owiAssignedToUsername').value || null;
   const assignedInputVal = document.getElementById('owiAssignedToInput').value.trim();
   const assignedToName = assignedTo ? assignedInputVal.split(' — ')[0].trim() : null;
+  const acceptorUsername = document.getElementById('owiAcceptorUsername').value || null;
+  const acceptorInputVal = document.getElementById('owiAcceptorInput').value.trim();
+  const acceptorName = acceptorUsername ? acceptorInputVal.split(' — ')[0].trim() : null;
   const deadline = document.getElementById('owiDeadline').value;
+  let periodId = null;
+  if (currentWorkItemFormParentId == null) {
+    const periodSelectVal = document.getElementById('owiPeriodSelect').value;
+    if (!periodSelectVal) return alert('⛔ Vui lòng chọn Kỳ Thực Hiện (đang "Đang thực hiện") trước khi tạo công việc gốc!');
+    periodId = Number(periodSelectVal);
+  }
   const payload = {
     sourceType: operationSourceType(currentWorkItemModalKind),
     sourceId: currentWorkItemModalRecordId,
     parentWorkItemId: currentWorkItemFormParentId,
-    title, description, assignedTo, assignedToName, deadline
+    title, description, assignedTo, assignedToName, acceptorUsername, acceptorName, deadline, periodId
   };
   let newItem;
   try {

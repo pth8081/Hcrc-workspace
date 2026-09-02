@@ -73,7 +73,7 @@ function createMockState(seed) {
     operationOrders: [], operationOrderDeptWorkflows: {},
     operationStoreOpenings: [], operationStoreOpenDeptWorkflows: {}, operationStoreOpenEstimateDeptWorkflows: {},
     operationRepairs: [], operationRepairDeptWorkflows: {}, operationRepairEstimateDeptWorkflows: {},
-    operationWorkItems: []
+    operationWorkItems: [], operationExecutionPeriods: []
   }, seed || {});
 }
 
@@ -92,6 +92,13 @@ function buildAppDataForCreate(moduleKey, state) {
     operationRepairEstimateDeptWorkflows: state.operationRepairEstimateDeptWorkflows
   };
   if (moduleKey === 'reportEntries') base.reportPeriods = state.reportPeriods;
+  // operationExecutionPeriods — extraValidate() cần tra cứu chéo hồ sơ nguồn (operationStoreOpenings/
+  // operationRepairs) để kiểm tra estimateStatus đã APPROVED chưa, cùng lý do reportEntries ở trên —
+  // mirror routes/create.js nhánh moduleKey === 'operationExecutionPeriods'.
+  if (moduleKey === 'operationExecutionPeriods') {
+    base.operationStoreOpenings = state.operationStoreOpenings;
+    base.operationRepairs = state.operationRepairs;
+  }
   return base;
 }
 
@@ -188,6 +195,7 @@ function createDispatcher(state) {
     if (updated.status === 'DA_NGHIEM_THU') syncOperationWorkItemAncestorsInState(state, updated.parentWorkItemId);
     return updated;
   };
+  actionHandlers['operationExecutionPeriods:start'] = (u, item) => recordActions.startOperationExecutionPeriod(u, item);
 
   function buildDataPayload(username) {
     // Khớp đúng field mà initDatabase() (public/index.html) gán từ GET /api/data — chỉ liệt kê những
@@ -375,7 +383,8 @@ function createDispatcher(state) {
         if (!sourceRecord) return { status: 404, body: { error: 'Không tìm thấy hồ sơ nguồn' } };
         sourceRecord.__workItemSourceType = sourceType;
         const siblings = state.operationWorkItems.filter(w => w.sourceType === sourceType && w.sourceId === srcId);
-        const newItem = recordActions.createOperationWorkItem(freshUser, body, sourceRecord, siblings);
+        const periodsForSource = (state.operationExecutionPeriods || []).filter(p => p.sourceType === sourceType && p.sourceId === srcId);
+        const newItem = recordActions.createOperationWorkItem(freshUser, body, sourceRecord, siblings, periodsForSource);
         newItem.sourceType = sourceType;
         newItem.sourceId = srcId;
         state.operationWorkItems.push(newItem);

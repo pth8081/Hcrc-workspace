@@ -534,7 +534,9 @@ function assertCanManageOperationAcceptance(user) {
 // sourceRecord = hồ sơ operationStoreOpenings/operationRepairs đã đọc sẵn (route tự tra trước khi gọi)
 // — dự toán PHẢI đã duyệt xong mới cho tạo cây Thực hiện, khớp đúng yêu cầu nghiệp vụ "sau khi giai
 // đoạn lập dự toán hoàn thành thì giai đoạn thực hiện mới mở khoá".
-function createOperationWorkItem(user, payload, sourceRecord, siblingsAndDescendants) {
+// periodsForSource = TOÀN BỘ operationExecutionPeriods đúng sourceType/sourceId này (route tự lọc sẵn
+// trước khi gọi, giống siblingsAndDescendants) — dùng để validate periodId công việc GỐC.
+function createOperationWorkItem(user, payload, sourceRecord, siblingsAndDescendants, periodsForSource) {
   assertCanManageOperationExecution(user);
   if (sourceRecord.estimateStatus !== 'APPROVED') {
     throw new HttpError(409, 'Dự toán của hồ sơ này chưa được phê duyệt xong, chưa thể tạo công việc Thực hiện');
@@ -542,6 +544,7 @@ function createOperationWorkItem(user, payload, sourceRecord, siblingsAndDescend
   const title = String(payload?.title || '').trim();
   if (!title) throw new HttpError(400, 'Vui lòng nhập tên công việc');
   let parentWorkItemId = null;
+  let periodId = null, periodName = null;
   if (payload?.parentWorkItemId != null && payload.parentWorkItemId !== '') {
     parentWorkItemId = Number(payload.parentWorkItemId);
     const parent = (siblingsAndDescendants || []).find(w => w.id === parentWorkItemId);
@@ -549,14 +552,34 @@ function createOperationWorkItem(user, payload, sourceRecord, siblingsAndDescend
     if (parent.status === 'DA_NGHIEM_THU') {
       throw new HttpError(409, 'Công việc cha đã nghiệm thu xong, không thể thêm việc con mới');
     }
+    // Việc CON luôn kế thừa ĐÚNG kỳ của cha — KHÔNG tin periodId payload gửi lên (đúng nguyên tắc
+    // "không tin dữ liệu client" áp dụng toàn bộ file này), cả cây con luôn cùng 1 kỳ với gốc.
+    periodId = parent.periodId; periodName = parent.periodName;
+  } else {
+    // Công việc GỐC: bắt buộc chọn ĐÚNG 1 Kỳ Thực Hiện của hồ sơ này VÀ kỳ đó đã "Bắt Đầu"
+    // (DANG_THUC_HIEN) — kỳ "Chưa bắt đầu" (CHUA_BAT_DAU) không được dùng để tạo công việc.
+    const pid = Number(payload?.periodId);
+    if (!Number.isFinite(pid)) throw new HttpError(400, 'Vui lòng chọn Kỳ Thực Hiện');
+    const period = (periodsForSource || []).find(p => p.id === pid);
+    if (!period) throw new HttpError(404, 'Không tìm thấy Kỳ Thực Hiện này trong hồ sơ');
+    if (period.status !== 'DANG_THUC_HIEN') {
+      throw new HttpError(409, 'Kỳ Thực Hiện này chưa bắt đầu, chưa thể tạo công việc gốc');
+    }
+    periodId = period.id; periodName = period.name;
   }
   return {
     id: Date.now(),
     parentWorkItemId,
+    periodId, periodName,
     title,
     description: String(payload?.description || '').trim(),
     assignedTo: payload?.assignedTo ? String(payload.assignedTo) : null,
     assignedToName: payload?.assignedToName ? String(payload.assignedToName) : null,
+    // Người nghiệm thu CHỈ ĐỊNH riêng cho việc này (khác acceptedBy — chỉ ghi SAU khi đã nghiệm thu
+    // xong). Để trống = chỉ "toàn quyền" (operationAcceptanceManage/admin) nghiệm thu được, giữ đúng
+    // hành vi cũ cho việc không chỉ định — xem acceptOperationWorkItem().
+    acceptorUsername: payload?.acceptorUsername ? String(payload.acceptorUsername) : null,
+    acceptorName: payload?.acceptorUsername ? String(payload?.acceptorName || '').trim() : null,
     deadline: payload?.deadline || '',
     status: 'CHUA_BAT_DAU',
     acceptedBy: null, acceptedByName: null, acceptanceNote: null,
@@ -570,7 +593,13 @@ function createOperationWorkItem(user, payload, sourceRecord, siblingsAndDescend
 // Chỉ công việc LÁ (không có con) mới cho cập nhật trực tiếp — công việc có con phải hoàn thành hết
 // con mới tự cập nhật (xem syncParentWorkItemStatus), đúng yêu cầu nghiệp vụ.
 function updateOperationWorkItemProgress(user, item, children, newStatus) {
-  assertCanManageOperationExecution(user);
+  // "Toàn quyền" (admin/operationExecutionManage) xử lý được mọi việc; ngoài ra CHỈ đúng người phụ
+  // trách (item.assignedTo) mới cập nhật được việc của chính mình — trước đây field này chỉ mang tính
+  // hiển thị, không chặn quyền.
+  const isOwner = !!(user.username && user.username === item.assignedTo);
+  if (!user.perms?.admin && !user.perms?.operationExecutionManage && !isOwner) {
+    throw new HttpError(403, 'Bạn không có quyền cập nhật công việc này');
+  }
   if (children.length) {
     throw new HttpError(409, 'Công việc này có việc con — chỉ cập nhật được ở các việc con, việc cha tự cập nhật theo');
   }
@@ -593,7 +622,13 @@ function updateOperationWorkItemProgress(user, item, children, newStatus) {
 // action: 'ACCEPT' (Nghiệm thu — đổi trạng thái) | 'REQUEST_INFO' (Bổ sung — chỉ ghi lý do, KHÔNG đổi
 // trạng thái, đúng yêu cầu "ấn bổ sung thì công việc vẫn ở trạng thái đang nghiệm thu").
 function acceptOperationWorkItem(user, item, { action, reason }) {
-  assertCanManageOperationAcceptance(user);
+  // "Toàn quyền" (admin/operationAcceptanceManage) nghiệm thu được mọi việc; ngoài ra CHỈ đúng người
+  // được CHỈ ĐỊNH nghiệm thu (item.acceptorUsername) mới nghiệm thu/bổ sung được việc đó. Việc chưa
+  // chỉ định người nghiệm thu (acceptorUsername null) chỉ toàn quyền mới xử lý được.
+  const isOwner = !!(user.username && item.acceptorUsername && user.username === item.acceptorUsername);
+  if (!user.perms?.admin && !user.perms?.operationAcceptanceManage && !isOwner) {
+    throw new HttpError(403, 'Bạn không có quyền nghiệm thu công việc này');
+  }
   if (item.status !== 'DANG_NGHIEM_THU') {
     throw new HttpError(409, 'Chỉ nghiệm thu/bổ sung được công việc đang ở trạng thái "Đang nghiệm thu"');
   }
@@ -622,6 +657,21 @@ function computeParentWorkItemStatus(children) {
   if (children.every(c => c.status === 'DA_NGHIEM_THU')) return 'DA_NGHIEM_THU';
   if (children.some(c => c.status !== 'CHUA_BAT_DAU')) return 'DANG_THUC_HIEN';
   return 'CHUA_BAT_DAU';
+}
+
+// Bắt Đầu Kỳ Thực Hiện — CHUA_BAT_DAU -> DANG_THUC_HIEN. Chỉ sau khi bắt đầu, kỳ mới được chọn để tạo
+// công việc GỐC (xem createOperationWorkItem() bên dưới) — đúng yêu cầu "kỳ chưa bắt đầu thì chưa lấy
+// để tạo công việc được". Không có trạng thái đóng/kết thúc (không nằm trong yêu cầu, giữ scope tối thiểu).
+function startOperationExecutionPeriod(user, period) {
+  assertCanManageOperationExecution(user);
+  if (period.status !== 'CHUA_BAT_DAU') {
+    throw new HttpError(409, 'Kỳ Thực Hiện này đã được bắt đầu trước đó');
+  }
+  period.status = 'DANG_THUC_HIEN';
+  period.startedBy = user.username;
+  period.startedByName = user.name;
+  period.startedAt = nowVN();
+  return period;
 }
 
 function deleteOperationWorkItem(user, item, descendantIds) {
@@ -4432,5 +4482,6 @@ module.exports = {
   editOperationRepairDraft, submitOperationRepairDraft,
   submitOperationEstimate,
   createOperationWorkItem, updateOperationWorkItemProgress, acceptOperationWorkItem,
-  computeParentWorkItemStatus, deleteOperationWorkItem
+  computeParentWorkItemStatus, deleteOperationWorkItem,
+  startOperationExecutionPeriod
 };

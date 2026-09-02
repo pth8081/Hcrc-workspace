@@ -1726,12 +1726,30 @@ router.post('/operationWorkItems', async (req, res) => {
     sourceRecord.__workItemSourceType = sourceType;
 
     const siblings = await getWorkItemsBySource(sourceType, srcId);
-    const newItem = recordActions.createOperationWorkItem(freshUser, req.body, sourceRecord, siblings);
+    // Kỳ Thực Hiện đúng hồ sơ này — createOperationWorkItem() tự validate periodId (công việc gốc bắt
+    // buộc chọn đúng kỳ đang "Đang thực hiện"), xem lib/createValidation.js operationExecutionPeriods.
+    const allPeriods = await getAllForCollection('operationExecutionPeriods');
+    const periodsForSource = allPeriods.filter(p => p.sourceType === sourceType && p.sourceId === srcId);
+    const newItem = recordActions.createOperationWorkItem(freshUser, req.body, sourceRecord, siblings, periodsForSource);
     newItem.sourceType = sourceType;
     newItem.sourceId = srcId;
     await insertWorkItem(newItem);
     res.json({ ok: true, item: newItem });
   } catch (err) { handleError(res, 'operationWorkItems', err); }
+});
+
+// POST /api/records/operationExecutionPeriods/:id/start — "Bắt Đầu Kỳ" (CHUA_BAT_DAU -> DANG_THUC_HIEN),
+// mở khoá chọn kỳ này khi tạo công việc gốc — xem lib/recordActions.js startOperationExecutionPeriod().
+router.post('/operationExecutionPeriods/:id/start', async (req, res) => {
+  const itemId = Number(req.params.id);
+  if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
+  try {
+    const { freshUser } = await getFreshUser(req);
+    const result = await withLockedRecordForCollection('operationExecutionPeriods', itemId, (item) =>
+      recordActions.startOperationExecutionPeriod(freshUser, item)
+    );
+    res.json({ ok: true, item: result });
+  } catch (err) { handleError(res, `operationExecutionPeriods/${req.params.id}/start`, err); }
 });
 
 router.post('/operationWorkItems/:id/progress', async (req, res) => {

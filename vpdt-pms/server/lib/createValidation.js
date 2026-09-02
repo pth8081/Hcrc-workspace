@@ -761,6 +761,38 @@ const CREATE_MODULE_CONFIGS = {
       payload.estimateTotalAmount = 0;
     }
   },
+  // Vận Hành > "Siêu Thị" > "Thực hiện" — "Kỳ Thực Hiện": mỗi hồ sơ Mở mới/Sửa chữa có DANH SÁCH kỳ
+  // RIÊNG (không dùng chung toàn hệ thống như vppPeriods/budgetPeriods), để tách bạch nhiều đợt thi công
+  // theo thời gian trên cùng 1 hồ sơ. 2 trạng thái: CHUA_BAT_DAU (mặc định lúc tạo) -> DANG_THUC_HIEN
+  // (qua startOperationExecutionPeriod() ở lib/recordActions.js) — công việc GỐC chỉ tạo được khi chọn
+  // đúng kỳ đang DANG_THUC_HIEN (xem createOperationWorkItem() ở lib/recordActions.js, cùng nguyên tắc
+  // "không tin dữ liệu client" như budgetEntries.periodId ở trên).
+  operationExecutionPeriods: {
+    dbKey: 'operationExecutionPeriods',
+    forceOwnDept: true, // dept chỉ hiển thị "ai tạo kỳ" (phòng ban Vận Hành), không phải phạm vi xem
+    getScope: () => ({}),
+    creatorField: 'creator', creatorNameField: 'creatorName',
+    extraValidate: (payload, collection, user, appData) => {
+      if (!user.perms?.admin && !user.perms?.operationExecutionManage) {
+        throw new CreateError(403, 'Bạn không có quyền tạo Kỳ Thực Hiện');
+      }
+      const sourceType = payload.sourceType === 'OPERATION_REPAIR' ? 'OPERATION_REPAIR' : 'OPERATION_STORE_OPENING';
+      const sourceId = Number(payload.sourceId);
+      const sourceList = sourceType === 'OPERATION_REPAIR' ? appData?.operationRepairs : appData?.operationStoreOpenings;
+      const sourceRecord = (sourceList || []).find(r => r.id === sourceId);
+      if (!sourceRecord) throw new CreateError(404, 'Không tìm thấy hồ sơ Mở mới/Sửa chữa tương ứng');
+      if (sourceRecord.estimateStatus !== 'APPROVED') {
+        throw new CreateError(409, 'Dự toán của hồ sơ này chưa duyệt xong, chưa thể tạo Kỳ Thực Hiện');
+      }
+      const name = String(payload.name || '').trim();
+      if (!name) throw new CreateError(400, 'Thiếu tên Kỳ Thực Hiện');
+      payload.name = name.slice(0, 200);
+      payload.sourceType = sourceType;
+      payload.sourceId = sourceId;
+      payload.status = 'CHUA_BAT_DAU';
+      payload.startedBy = null; payload.startedByName = null; payload.startedAt = null;
+    }
+  },
   // Tài liệu dùng cặp field cũ uploadAll(bool)+uploadDepts(mảng) chứ không phải {all,depts} object
   // như 5 module trên — quy đổi tại chỗ để dùng chung scopeAllows(). Đây cũng là module HỞ NHẤT
   // trước Bước 2: dropdown chọn phòng ban ở form tải lên trước đây không hề lọc theo quyền gì cả.

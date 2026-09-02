@@ -104,6 +104,12 @@ router.post('/:module', async (req, res) => {
       appData.budgetTemplates = await getAllForCollection('budgetTemplates');
     }
     if (moduleKey === 'budgetPeriods') appData.budgetTemplates = await getAllForCollection('budgetTemplates');
+    // operationExecutionPeriods (Vận Hành > Siêu Thị > Thực hiện) cần tra cứu chéo sang hồ sơ nguồn
+    // (operationStoreOpenings/operationRepairs — dự toán đã duyệt xong chưa) — cùng lý do các nhánh trên.
+    if (moduleKey === 'operationExecutionPeriods') {
+      appData.operationStoreOpenings = await getAllForCollection('operationStoreOpenings');
+      appData.operationRepairs = await getAllForCollection('operationRepairs');
+    }
 
     const config = CREATE_MODULE_CONFIGS[moduleKey];
     // Đọc Thùng Rác của ĐÚNG collection này trước khi tạo — validateAndPrepareCreate() dùng để chặn
