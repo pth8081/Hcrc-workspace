@@ -3369,11 +3369,11 @@ input[data-sdd-list] {
   <div id="uniformSection" class="hidden space-y-6">
     <div id="hanhChinhTabBar_uniform" class="hidden flex gap-2 flex-wrap"></div>
     <div class="flex flex-wrap gap-2 border-b pb-2">
-      <button type="button" onclick="setUniformSubTab('PERIODS')" id="btnUniformSubPeriods" class="hidden px-3 py-1.5 rounded text-xs font-bold bg-teal-700 text-white">📦 Kỳ Cấp Phát</button>
-      <button type="button" onclick="setUniformSubTab('STORE')" id="btnUniformSubStore" class="hidden px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">✅ Xác Nhận / Cấp Phát</button>
-      <button type="button" onclick="setUniformSubTab('STOCK')" id="btnUniformSubStock" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">📊 Kho Đồng Phục</button>
-      <button type="button" onclick="setUniformSubTab('DASHBOARD')" id="btnUniformSubDashboard" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">📈 Tổng Quan</button>
-      <button type="button" onclick="setUniformSubTab('EMPLOYEES')" id="btnUniformSubEmployees" class="hidden px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">🧑‍💼 Quản Lý Nhân Viên Siêu Thị</button>
+      <button type="button" data-op="setUniformSubTab" data-arg0="PERIODS" id="btnUniformSubPeriods" class="hidden px-3 py-1.5 rounded text-xs font-bold bg-teal-700 text-white">📦 Kỳ Cấp Phát</button>
+      <button type="button" data-op="setUniformSubTab" data-arg0="STORE" id="btnUniformSubStore" class="hidden px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">✅ Xác Nhận / Cấp Phát</button>
+      <button type="button" data-op="setUniformSubTab" data-arg0="STOCK" id="btnUniformSubStock" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">📊 Kho Đồng Phục</button>
+      <button type="button" data-op="setUniformSubTab" data-arg0="DASHBOARD" id="btnUniformSubDashboard" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">📈 Tổng Quan</button>
+      <button type="button" data-op="setUniformSubTab" data-arg0="EMPLOYEES" id="btnUniformSubEmployees" class="hidden px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">🧑‍💼 Quản Lý Nhân Viên Siêu Thị</button>
     </div>
 
     <!-- Sub-tab: Kỳ Cấp Phát (Hành Chính - uniformManage) -->
@@ -3393,7 +3393,7 @@ input[data-sdd-list] {
             <label class="block font-semibold text-gray-600 mb-1 text-xs">Các Size (cách nhau bằng dấu phẩy)</label>
             <input id="uniformCatalogSizes" placeholder="VD: S, M, L, XL" class="w-full border p-1.5 rounded text-xs">
           </div>
-          <button type="button" onclick="saveUniformCatalogItem()" class="bg-gray-600 text-white px-4 py-1.5 rounded text-xs font-bold hover:bg-gray-700">+ Thêm</button>
+          <button type="button" data-op="saveUniformCatalogItem" class="bg-gray-600 text-white px-4 py-1.5 rounded text-xs font-bold hover:bg-gray-700">+ Thêm</button>
         </div>
         <div id="uniformCatalogListWrap" class="space-y-1.5"></div>
       </div>
@@ -3413,8 +3413,8 @@ input[data-sdd-list] {
         </div>
         <div id="uniformAllocBlocksWrap" class="space-y-3"></div>
         <div class="flex justify-between items-center">
-          <button type="button" onclick="addUniformAllocationBlock()" class="bg-gray-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-gray-700">+ Thêm Siêu Thị</button>
-          <button type="button" onclick="submitUniformPeriod()" class="bg-teal-600 text-white px-5 py-2 rounded text-xs font-bold hover:bg-teal-700">Tạo Kỳ Cấp Phát</button>
+          <button type="button" data-op="addUniformAllocationBlock" class="bg-gray-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-gray-700">+ Thêm Siêu Thị</button>
+          <button type="button" data-op="submitUniformPeriod" class="bg-teal-600 text-white px-5 py-2 rounded text-xs font-bold hover:bg-teal-700">Tạo Kỳ Cấp Phát</button>
         </div>
       </div>
 
@@ -3422,7 +3422,7 @@ input[data-sdd-list] {
         <h3 class="font-bold text-gray-800 text-sm">📋 Danh Sách Kỳ Cấp Phát</h3>
         <div class="bg-gray-50 p-3 rounded-lg border flex items-center gap-2">
           <label class="text-xs font-semibold text-gray-600">Lọc Theo Trạng Thái</label>
-          <select id="filterStatusUniformPeriod" onchange="renderUniformPeriodsList()" class="border p-2 rounded text-sm bg-white">
+          <select id="filterStatusUniformPeriod" data-op-change="renderUniformPeriodsList" class="border p-2 rounded text-sm bg-white">
             <option value="">-- Tất cả trạng thái --</option>
             <option value="PENDING_APPROVAL">⏳ Chờ duyệt</option>
             <option value="APPROVED">✅ Đã duyệt</option>
@@ -3449,7 +3449,7 @@ input[data-sdd-list] {
         <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
           <div>
             <label class="block font-semibold text-gray-600 mb-1 text-xs">Nhân Viên <span class="text-red-500">*</span></label>
-            <input id="uniformIssueEmployee" data-sdd-list="uniformStoreEmployeesDatalist" autocomplete="off" oninput="resolveUniformEmployeeInput('uniformIssueEmployee', 'uniformIssueEmployeeUsername')" placeholder="Gõ tên hoặc tài khoản để tìm..." class="w-full border p-1.5 rounded text-xs bg-white">
+            <input id="uniformIssueEmployee" data-sdd-list="uniformStoreEmployeesDatalist" autocomplete="off" data-op-input="resolveUniformEmployeeInput" data-arg0="uniformIssueEmployee" data-arg1="uniformIssueEmployeeUsername" placeholder="Gõ tên hoặc tài khoản để tìm..." class="w-full border p-1.5 rounded text-xs bg-white">
             <input type="hidden" id="uniformIssueEmployeeUsername">
           </div>
           <div>
@@ -3458,13 +3458,13 @@ input[data-sdd-list] {
           </div>
         </div>
         <div id="uniformIssueItemsWrap" class="space-y-2"></div>
-        <button type="button" onclick="addUniformIssueItemRow()" class="bg-gray-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-gray-700">+ Thêm Mặt Hàng</button>
+        <button type="button" data-op="addUniformIssueItemRow" class="bg-gray-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-gray-700">+ Thêm Mặt Hàng</button>
         <div>
           <label class="block font-semibold text-gray-600 mb-1 text-xs">Ghi Chú</label>
           <input id="uniformIssueNote" class="w-full border p-1.5 rounded text-xs">
         </div>
         <div class="flex justify-end">
-          <button type="button" onclick="submitUniformIssuance()" class="bg-emerald-600 text-white px-5 py-2 rounded text-xs font-bold hover:bg-emerald-700">Cấp Phát</button>
+          <button type="button" data-op="submitUniformIssuance" class="bg-emerald-600 text-white px-5 py-2 rounded text-xs font-bold hover:bg-emerald-700">Cấp Phát</button>
         </div>
       </div>
 
@@ -3528,7 +3528,7 @@ input[data-sdd-list] {
           <textarea id="uniformAdjStockReason" rows="2" class="w-full border p-1.5 rounded text-xs" placeholder="Bắt buộc nhập lý do..."></textarea>
         </div>
         <div class="flex justify-end">
-          <button type="button" onclick="submitUniformStockAdjustment('STOCK')" class="bg-rose-600 text-white px-5 py-2 rounded text-xs font-bold hover:bg-rose-700">Báo Hỏng / Hủy</button>
+          <button type="button" data-op="submitUniformStockAdjustment" data-arg0="STOCK" class="bg-rose-600 text-white px-5 py-2 rounded text-xs font-bold hover:bg-rose-700">Báo Hỏng / Hủy</button>
         </div>
       </div>
 
@@ -3538,14 +3538,14 @@ input[data-sdd-list] {
         <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
           <div>
             <label class="block font-semibold text-gray-600 mb-1 text-xs">Nhân Viên <span class="text-red-500">*</span></label>
-            <input id="uniformAdjEmpEmployee" data-sdd-list="uniformStoreEmployeesDatalist" autocomplete="off" oninput="resolveUniformEmployeeInput('uniformAdjEmpEmployee', 'uniformAdjEmpEmployeeUsername'); renderUniformAdjEmpItemOptions();" placeholder="Gõ tên hoặc tài khoản để tìm..." class="w-full border p-1.5 rounded text-xs bg-white">
+            <input id="uniformAdjEmpEmployee" data-sdd-list="uniformStoreEmployeesDatalist" autocomplete="off" data-op-input="resolveUniformAdjEmpEmployeeInputAndRefresh" data-arg0="uniformAdjEmpEmployee" data-arg1="uniformAdjEmpEmployeeUsername" placeholder="Gõ tên hoặc tài khoản để tìm..." class="w-full border p-1.5 rounded text-xs bg-white">
             <input type="hidden" id="uniformAdjEmpEmployeeUsername">
           </div>
         </div>
         <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
           <div>
             <label class="block font-semibold text-gray-600 mb-1 text-xs">Mặt Hàng — Size <span class="text-red-500">*</span></label>
-            <select id="uniformAdjEmpItemSize" onchange="onUniformAdjEmpItemSizeChange()" class="w-full border p-1.5 rounded text-xs bg-white">
+            <select id="uniformAdjEmpItemSize" data-op-change="onUniformAdjEmpItemSizeChange" class="w-full border p-1.5 rounded text-xs bg-white">
               <option value="">-- Chọn nhân viên trước --</option>
             </select>
           </div>
@@ -3568,7 +3568,7 @@ input[data-sdd-list] {
           <textarea id="uniformAdjEmpReason" rows="2" class="w-full border p-1.5 rounded text-xs" placeholder="Bắt buộc nhập lý do..."></textarea>
         </div>
         <div class="flex justify-end">
-          <button type="button" onclick="submitUniformStockAdjustment('EMPLOYEE')" class="bg-orange-600 text-white px-5 py-2 rounded text-xs font-bold hover:bg-orange-700">Thu Hồi</button>
+          <button type="button" data-op="submitUniformStockAdjustment" data-arg0="EMPLOYEE" class="bg-orange-600 text-white px-5 py-2 rounded text-xs font-bold hover:bg-orange-700">Thu Hồi</button>
         </div>
       </div>
 
@@ -3623,7 +3623,7 @@ input[data-sdd-list] {
             </div>
           </div>
           <div class="flex justify-end">
-            <button type="button" onclick="submitUniformTransfer()" class="bg-cyan-600 text-white px-5 py-2 rounded text-xs font-bold hover:bg-cyan-700">Gửi Yêu Cầu Điều Chuyển</button>
+            <button type="button" data-op="submitUniformTransfer" class="bg-cyan-600 text-white px-5 py-2 rounded text-xs font-bold hover:bg-cyan-700">Gửi Yêu Cầu Điều Chuyển</button>
           </div>
         </div>
 
@@ -3637,7 +3637,7 @@ input[data-sdd-list] {
           <h4 class="font-bold text-sm text-gray-800">📋 Lịch Sử Điều Chuyển</h4>
           <div class="bg-gray-50 p-3 rounded-lg border flex items-center gap-2">
             <label class="text-xs font-semibold text-gray-600">Lọc Theo Trạng Thái</label>
-            <select id="filterStatusUniformTransfer" onchange="renderUniformTransfersTable()" class="border p-2 rounded text-sm bg-white">
+            <select id="filterStatusUniformTransfer" data-op-change="renderUniformTransfersTable" class="border p-2 rounded text-sm bg-white">
               <option value="">-- Tất cả trạng thái --</option>
               <option value="PENDING_APPROVAL">⏳ Chờ duyệt</option>
               <option value="APPROVED">✅ Đã duyệt</option>
@@ -3669,7 +3669,7 @@ input[data-sdd-list] {
         <div class="flex items-center justify-between gap-2 flex-wrap">
           <h3 class="font-bold text-gray-800 text-sm">📊 Tồn Kho Đồng Phục</h3>
           <div id="uniformStockStoreFilterWrap" class="hidden">
-            <input id="uniformStockStoreFilter" data-sdd-list="uniformStoresFilterDatalist" autocomplete="off" oninput="renderUniformStock()" placeholder="Gõ tên siêu thị để tìm (để trống = tất cả)..." class="border p-1.5 rounded text-xs bg-white">
+            <input id="uniformStockStoreFilter" data-sdd-list="uniformStoresFilterDatalist" autocomplete="off" data-op-input="renderUniformStock" placeholder="Gõ tên siêu thị để tìm (để trống = tất cả)..." class="border p-1.5 rounded text-xs bg-white">
             <div id="uniformStoresFilterDatalist" class="hidden sdd-dropdown" data-sdd-dropdown></div>
           </div>
         </div>
@@ -3742,7 +3742,7 @@ input[data-sdd-list] {
       <div id="uniformDashByStoreWrap" class="hidden bg-white p-4 rounded border space-y-2">
         <div class="flex items-center justify-between gap-2 flex-wrap">
           <h4 class="font-bold text-sm text-gray-800">🏬 Theo Siêu Thị</h4>
-          <button type="button" onclick="exportUniformDashByStoreExcel()" class="bg-emerald-600 text-white text-xs font-semibold px-3 py-1.5 rounded hover:bg-emerald-700">📥 Xuất Excel</button>
+          <button type="button" data-op="exportUniformDashByStoreExcel" class="bg-emerald-600 text-white text-xs font-semibold px-3 py-1.5 rounded hover:bg-emerald-700">📥 Xuất Excel</button>
         </div>
         <div class="overflow-x-auto">
           <table class="w-full border-collapse border text-xs">
@@ -3775,7 +3775,7 @@ input[data-sdd-list] {
     <div id="uniformSubEmployees" class="hidden space-y-4">
       <div class="bg-white p-4 rounded border space-y-3">
         <h4 class="font-bold text-sm text-gray-800">➕ Tạo Tài Khoản Nhân Viên Siêu Thị</h4>
-        <form onsubmit="submitUniformEmployeeCreate(event)" class="grid grid-cols-1 md:grid-cols-3 gap-3">
+        <form data-op-submit="submitUniformEmployeeCreate" class="grid grid-cols-1 md:grid-cols-3 gap-3">
           <input id="ueUsername" placeholder="Tên đăng nhập" class="border p-1.5 rounded text-xs" required>
           <input id="uePassword" type="password" placeholder="Mật khẩu" class="border p-1.5 rounded text-xs" required>
           <input id="ueFullName" placeholder="Họ và Tên" class="border p-1.5 rounded text-xs" required>
@@ -3800,9 +3800,9 @@ input[data-sdd-list] {
         <div class="flex items-center justify-between gap-2 flex-wrap">
           <h4 class="font-bold text-sm text-gray-800">📋 Danh Sách Nhân Viên Siêu Thị</h4>
           <div class="flex items-center gap-3 flex-wrap">
-            <input id="ueSearchInput" oninput="renderUniformEmployeesList()" placeholder="Tìm theo tên/username/siêu thị..." class="border p-1.5 rounded text-xs">
+            <input id="ueSearchInput" data-op-input="renderUniformEmployeesList" placeholder="Tìm theo tên/username/siêu thị..." class="border p-1.5 rounded text-xs">
             <label class="flex items-center gap-1 text-xs text-gray-600">
-              <input type="checkbox" id="ueShowInactive" onchange="renderUniformEmployeesList()"> Hiện cả tài khoản đã khoá
+              <input type="checkbox" id="ueShowInactive" data-op-change="renderUniformEmployeesList"> Hiện cả tài khoản đã khoá
             </label>
           </div>
         </div>
@@ -23880,6 +23880,13 @@ bindCspDelegation('itPriceModal');
 bindCspDelegation('itRenewalRenewModal');
 bindCspDelegation('itRenewalEditModal');
 
+// Đồng Phục — 5 sub-tab (Kỳ Cấp Phát/Xác Nhận-Cấp Phát/Kho Đồng Phục/Tổng Quan/Quản Lý Nhân Viên Siêu
+// Thị) đều render trong #uniformSection nên chỉ cần 1 gốc. 3 nút thao tác "Thu Hồi/Báo Hỏng/Báo Mất"
+// của bảng "Đồng Phục Nhân Viên Đang Giữ" (openUniformHoldingActionModal()) KHÔNG mở modal riêng của
+// module — dùng chung showConfirmModal()/#genericConfirmModal (đã bọc sẵn ở cụm Quản Trị/Hệ Thống phía
+// trên, dùng chung toàn hệ thống) nên không cần thêm gốc thứ 2.
+bindCspDelegation('uniformSection');
+
 // ==========================================
 // VĂN PHÒNG PHẨM — kỳ đăng ký (vppPeriods) + đăng ký của nhân viên (vppRegistrations). 3 sub-tab:
 // Đăng Ký (ai cũng vào được) / Kỳ Đăng Ký + Báo Cáo Tổng Hợp (chỉ vppManage/admin).
@@ -39248,7 +39255,7 @@ function renderUniformEmployeesList() {
       <td class="border p-1.5">${escapeHtml(group ? group.name : '—')}</td>
       <td class="border p-1.5">${u.active === false ? '<span class="text-red-600 font-semibold">🔒 Đã khoá</span>' : '<span class="text-emerald-600 font-semibold">✅ Hoạt động</span>'}</td>
       <td class="border p-1.5 text-center">
-        ${u.active === false ? '' : `<button type="button" onclick="lockUniformEmployeeAction(${u.id})" class="text-red-500 font-bold hover:underline">🔒 Khoá</button>`}
+        ${u.active === false ? '' : `<button type="button" data-op="lockUniformEmployeeAction" data-arg0="${u.id}" class="text-red-500 font-bold hover:underline">🔒 Khoá</button>`}
       </td>
     </tr>
   `;
@@ -39320,7 +39327,7 @@ function renderUniformCatalogList() {
           ${(c.sizes || []).map(s => `<span class="inline-block mr-2">${escapeHtml(s)}${c.codesBySize?.[s] ? ` <span class="text-cyan-700 font-mono">(${escapeHtml(c.codesBySize[s])})</span>` : ' <span class="italic">(chưa có mã)</span>'}</span>`).join('') || 'Không có size'}
         </div>
       </div>
-      ${canEdit ? `<button type="button" onclick="deleteUniformCatalogItem(${c.id})" class="text-red-600 hover:text-red-800 text-xs font-bold">🗑️ Xóa</button>` : ''}
+      ${canEdit ? `<button type="button" data-op="deleteUniformCatalogItem" data-arg0="${c.id}" class="text-red-600 hover:text-red-800 text-xs font-bold">🗑️ Xóa</button>` : ''}
     </div>
   `).join('');
 }
@@ -39413,9 +39420,9 @@ function renderUniformAllocationBlocks() {
   wrap.innerHTML = uniformAllocBlocks.map((block, bIdx) => `
     <div class="bg-white p-3 rounded border space-y-2">
       <div class="flex items-center justify-between gap-2">
-        <input value="${escapeHtml(block.dept)}" data-sdd-list="uniformAllocStoreDatalist_${bIdx}" autocomplete="off" onchange="resolveUniformAllocDeptInput(${bIdx}, this.value)" placeholder="Gõ tên siêu thị để tìm..." class="border p-1.5 rounded text-xs bg-white flex-1">
+        <input value="${escapeHtml(block.dept)}" data-sdd-list="uniformAllocStoreDatalist_${bIdx}" autocomplete="off" data-op-change="resolveUniformAllocDeptInput" data-arg0="${bIdx}" data-arg-value="1" placeholder="Gõ tên siêu thị để tìm..." class="border p-1.5 rounded text-xs bg-white flex-1">
         <div id="uniformAllocStoreDatalist_${bIdx}" class="hidden sdd-dropdown" data-sdd-dropdown></div>
-        <button type="button" onclick="removeUniformAllocationBlock(${bIdx})" class="text-red-600 hover:text-red-800 text-xs font-bold whitespace-nowrap">✕ Bỏ siêu thị này</button>
+        <button type="button" data-op="removeUniformAllocationBlock" data-arg0="${bIdx}" class="text-red-600 hover:text-red-800 text-xs font-bold whitespace-nowrap">✕ Bỏ siêu thị này</button>
       </div>
       <table class="w-full text-xs border-collapse">
         <thead><tr class="bg-gray-100 text-left">
@@ -39431,24 +39438,24 @@ function renderUniformAllocationBlocks() {
             return `
             <tr>
               <td class="border p-1">
-                <select onchange="updateUniformAllocItemField(${bIdx}, ${iIdx}, 'name', this.value)" class="w-full border-0 p-1 text-xs bg-white">
+                <select data-op-change="updateUniformAllocItemField" data-arg0="${bIdx}" data-arg1="${iIdx}" data-arg2="name" data-arg-value="3" class="w-full border-0 p-1 text-xs bg-white">
                   <option value="">-- Chọn mặt hàng --</option>
                   ${(DB.uniformCatalog || []).map(c => `<option value="${escapeHtml(c.name)}" ${c.name === it.name ? 'selected' : ''}>${escapeHtml(c.name)}</option>`).join('')}
                 </select>
               </td>
               <td class="border p-1">
-                <select onchange="updateUniformAllocItemField(${bIdx}, ${iIdx}, 'size', this.value)" class="w-full border-0 p-1 text-xs bg-white" ${sizes.length ? '' : 'disabled'}>
+                <select data-op-change="updateUniformAllocItemField" data-arg0="${bIdx}" data-arg1="${iIdx}" data-arg2="size" data-arg-value="3" class="w-full border-0 p-1 text-xs bg-white" ${sizes.length ? '' : 'disabled'}>
                   <option value="">-- Size --</option>
                   ${sizes.map(s => `<option value="${escapeHtml(s)}" ${s === it.size ? 'selected' : ''}>${escapeHtml(s)}</option>`).join('')}
                 </select>
               </td>
-              <td class="border p-1"><input type="number" min="0" value="${it.qty}" oninput="updateUniformAllocItemField(${bIdx}, ${iIdx}, 'qty', this.value)" class="w-full border-0 p-1 text-xs"></td>
-              <td class="border p-1 text-center"><button type="button" onclick="removeUniformAllocItemRow(${bIdx}, ${iIdx})" class="text-red-500 hover:text-red-700">✕</button></td>
+              <td class="border p-1"><input type="number" min="0" value="${it.qty}" data-op-input="updateUniformAllocItemField" data-arg0="${bIdx}" data-arg1="${iIdx}" data-arg2="qty" data-arg-value="3" class="w-full border-0 p-1 text-xs"></td>
+              <td class="border p-1 text-center"><button type="button" data-op="removeUniformAllocItemRow" data-arg0="${bIdx}" data-arg1="${iIdx}" class="text-red-500 hover:text-red-700">✕</button></td>
             </tr>
           `; }).join('')}
         </tbody>
       </table>
-      <button type="button" onclick="addUniformAllocItemRow(${bIdx})" class="text-teal-700 text-xs font-bold hover:underline">+ Thêm dòng mặt hàng</button>
+      <button type="button" data-op="addUniformAllocItemRow" data-arg0="${bIdx}" class="text-teal-700 text-xs font-bold hover:underline">+ Thêm dòng mặt hàng</button>
     </div>
   `).join('');
   uniformAllocBlocks.forEach((block, bIdx) => {
@@ -39541,10 +39548,10 @@ function renderUniformPeriodsList() {
         </div>
         <div class="flex items-center gap-2 flex-wrap">
           ${(canApprove && p.approvalStatus === 'PENDING_APPROVAL') ? `
-            <button type="button" onclick="approveUniformPeriodAction(${p.id})" class="bg-emerald-600 text-white px-3 py-1 rounded text-xs font-bold hover:bg-emerald-700">✔️ Duyệt</button>
-            <button type="button" onclick="rejectUniformPeriodAction(${p.id})" class="bg-red-600 text-white px-3 py-1 rounded text-xs font-bold hover:bg-red-700">✕ Từ Chối</button>
+            <button type="button" data-op="approveUniformPeriodAction" data-arg0="${p.id}" class="bg-emerald-600 text-white px-3 py-1 rounded text-xs font-bold hover:bg-emerald-700">✔️ Duyệt</button>
+            <button type="button" data-op="rejectUniformPeriodAction" data-arg0="${p.id}" class="bg-red-600 text-white px-3 py-1 rounded text-xs font-bold hover:bg-red-700">✕ Từ Chối</button>
           ` : ''}
-          ${currentUser.perms?.admin ? `<button type="button" onclick="deleteUniformPeriodAction(${p.id})" class="text-red-600 hover:text-red-800 text-xs font-bold">🗑️ Xóa</button>` : ''}
+          ${currentUser.perms?.admin ? `<button type="button" data-op="deleteUniformPeriodAction" data-arg0="${p.id}" class="text-red-600 hover:text-red-800 text-xs font-bold">🗑️ Xóa</button>` : ''}
         </div>
       </div>
       <div class="overflow-x-auto">
@@ -39651,7 +39658,7 @@ function renderUniformPendingAllocations() {
         <div class="font-bold text-amber-900 text-xs">${escapeHtml(period.name)}</div>
         <div class="text-[11px] text-gray-600">${uniformItemsSummary(alloc.items)}</div>
       </div>
-      <button type="button" onclick="confirmUniformAllocationAction(${period.id}, ${alloc.id})" class="bg-amber-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-amber-700">✅ Xác Nhận Đã Nhận</button>
+      <button type="button" data-op="confirmUniformAllocationAction" data-arg0="${period.id}" data-arg1="${alloc.id}" class="bg-amber-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-amber-700">✅ Xác Nhận Đã Nhận</button>
     </div>
   `).join('');
 }
@@ -39696,6 +39703,15 @@ function resolveUniformEmployeeInput(inputId, hiddenId) {
   const username = m ? m[1].trim() : '';
   const found = (uniformStoreEmployeesCache || []).some(u => u.username === username);
   document.getElementById(hiddenId).value = found ? username : '';
+}
+
+// Wrapper cho ô "Nhân Viên" ở khối Thu Hồi Từ Nhân Viên — oninput gốc gọi 2 hàm liền
+// (resolveUniformEmployeeInput rồi renderUniformAdjEmpItemOptions để nạp lại dropdown mặt hàng theo
+// đúng nhân viên vừa gõ) nhưng data-op-seq chỉ được xử lý ở sự kiện click, không có ở input, nên gộp
+// thành 1 hàm để dùng với data-op-input.
+function resolveUniformAdjEmpEmployeeInputAndRefresh(inputId, hiddenId) {
+  resolveUniformEmployeeInput(inputId, hiddenId);
+  renderUniformAdjEmpItemOptions();
 }
 
 function resetUniformIssueForm() {
@@ -39750,7 +39766,7 @@ function renderUniformIssueItems() {
           return `
           <tr>
             <td class="border p-1">
-              <select onchange="updateUniformIssueItemNameSize(${idx}, this.value)" class="w-full border-0 p-1 text-xs bg-white">
+              <select data-op-change="updateUniformIssueItemNameSize" data-arg0="${idx}" data-arg-value="1" class="w-full border-0 p-1 text-xs bg-white">
                 <option value="">-- Chọn mặt hàng --</option>
                 ${options.map(o => {
                   const key = `${o.name}|||${o.size}`;
@@ -39759,8 +39775,8 @@ function renderUniformIssueItems() {
                 }).join('')}
               </select>
             </td>
-            <td class="border p-1"><input type="number" min="0" value="${it.qty}" oninput="updateUniformIssueItemField(${idx}, 'qty', this.value)" class="w-full border-0 p-1 text-xs"></td>
-            <td class="border p-1 text-center"><button type="button" onclick="removeUniformIssueItemRow(${idx})" class="text-red-500 hover:text-red-700">✕</button></td>
+            <td class="border p-1"><input type="number" min="0" value="${it.qty}" data-op-input="updateUniformIssueItemField" data-arg0="${idx}" data-arg1="qty" data-arg-value="2" class="w-full border-0 p-1 text-xs"></td>
+            <td class="border p-1 text-center"><button type="button" data-op="removeUniformIssueItemRow" data-arg0="${idx}" class="text-red-500 hover:text-red-700">✕</button></td>
           </tr>
         `; }).join('')}
       </tbody>
@@ -39876,9 +39892,9 @@ function renderUniformHoldingsTable() {
       <td class="border p-2">${escapeHtml(h.size || '—')}${uniformSkuFor(h.name, h.size) ? ` <span class="text-[10px] text-cyan-700 font-mono">(${escapeHtml(uniformSkuFor(h.name, h.size))})</span>` : ''}</td>
       <td class="border p-2 text-right font-bold">${h.held.toLocaleString('vi-VN')}</td>
       <td class="border p-2 text-center space-x-1 whitespace-nowrap">
-        <button type="button" onclick="openUniformHoldingActionModal(${idx}, 'TON')" class="bg-emerald-600 text-white px-2 py-1 rounded text-[11px] font-bold hover:bg-emerald-700">↩️ Thu Hồi</button>
-        <button type="button" onclick="openUniformHoldingActionModal(${idx}, 'HONG')" class="bg-rose-600 text-white px-2 py-1 rounded text-[11px] font-bold hover:bg-rose-700">🔴 Báo Hỏng</button>
-        <button type="button" onclick="openUniformHoldingActionModal(${idx}, 'MAT')" class="bg-slate-600 text-white px-2 py-1 rounded text-[11px] font-bold hover:bg-slate-700">❓ Báo Mất</button>
+        <button type="button" data-op="openUniformHoldingActionModal" data-arg0="${idx}" data-arg1="TON" class="bg-emerald-600 text-white px-2 py-1 rounded text-[11px] font-bold hover:bg-emerald-700">↩️ Thu Hồi</button>
+        <button type="button" data-op="openUniformHoldingActionModal" data-arg0="${idx}" data-arg1="HONG" class="bg-rose-600 text-white px-2 py-1 rounded text-[11px] font-bold hover:bg-rose-700">🔴 Báo Hỏng</button>
+        <button type="button" data-op="openUniformHoldingActionModal" data-arg0="${idx}" data-arg1="MAT" class="bg-slate-600 text-white px-2 py-1 rounded text-[11px] font-bold hover:bg-slate-700">❓ Báo Mất</button>
       </td>
     </tr>
   `).join('');
@@ -40265,7 +40281,7 @@ function renderUniformStock() {
     <tr class="hover:bg-gray-50 border-b">
       <td class="border p-2 font-semibold">${escapeHtml(r.dept)}</td>
       <td class="border p-2">
-        <button type="button" onclick="toggleUniformStockDetail('${escapeHtml(r.dept)}', '${escapeHtml(r.name)}', '${escapeHtml(r.size || '')}')" class="text-teal-700 hover:underline font-semibold">${expanded ? '▾' : '▸'} ${escapeHtml(r.name)}</button>
+        <button type="button" data-op="toggleUniformStockDetail" data-arg0="${escapeHtml(r.dept)}" data-arg1="${escapeHtml(r.name)}" data-arg2="${escapeHtml(r.size || '')}" class="text-teal-700 hover:underline font-semibold">${expanded ? '▾' : '▸'} ${escapeHtml(r.name)}</button>
         ${code ? `<span class="block text-[10px] text-cyan-700 font-mono">${escapeHtml(code)}</span>` : ''}
       </td>
       <td class="border p-2">${escapeHtml(r.size || '—')}</td>
@@ -40408,8 +40424,8 @@ function renderUniformTransferApprovalQueue() {
         <div class="text-[11px] text-gray-400">Yêu cầu bởi ${escapeHtml(t.requestedByName || '')} lúc ${escapeHtml(t.requestedAt || '')}</div>
       </div>
       <div class="flex gap-2">
-        <button type="button" onclick="approveUniformTransferAction(${t.id})" class="bg-emerald-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-emerald-700">✔️ Duyệt</button>
-        <button type="button" onclick="rejectUniformTransferAction(${t.id})" class="bg-red-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-red-700">✕ Từ Chối</button>
+        <button type="button" data-op="approveUniformTransferAction" data-arg0="${t.id}" class="bg-emerald-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-emerald-700">✔️ Duyệt</button>
+        <button type="button" data-op="rejectUniformTransferAction" data-arg0="${t.id}" class="bg-red-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-red-700">✕ Từ Chối</button>
       </div>
     </div>
   `).join('');
