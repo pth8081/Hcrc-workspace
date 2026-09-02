@@ -1,10 +1,57 @@
 # Phiên bản hiện tại
 
-**4.1** — đã merge vào `main` (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge
+**4.2** — đã merge vào `main` (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge
 góc màn hình + `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần
 kiểu `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
 
-## Cập nhật gần nhất — CSP unsafe-inline: đợt 10/N — module Cơ Cấu Tổ Chức
+## Cập nhật gần nhất — CSP unsafe-inline: đợt 11/N — module Báo Cáo
+
+Tiếp tục đợt 10 (Cơ Cấu Tổ Chức, xem mục "Trước đó" ngay bên dưới) — đợt này chuyển module **Báo Cáo**
+(`#reportsSection` — nav 2 cấp Tổng Hợp/theo từng module nghiệp vụ, khối "1. Tạo Báo Cáo Theo Yêu Cầu" +
+"2. Tra Cứu Chi Tiết", cộng modal "Xem Trước" `#reportPreviewModal` sống ngoài section):
+
+- **21 điểm** `onclick`/`onchange`/`oninput` chuyển sang `data-op*`:
+  - **5 điểm** trong HTML tĩnh (nút Xuất Báo Cáo Excel, 2 ô ngày Từ/Đến, dropdown Phòng Ban, nút Đặt Lại
+    Bộ Lọc).
+  - **2 điểm** nút chuyển nav 2 cấp trong hàm render động (`selectReportsNavL1`/`selectReportsNavL2`).
+  - **9 điểm** trong khối "🔍 2. Tra Cứu Chi Tiết" (`renderReportDetailSection`/
+    `buildReportDetailFilterControlHTML`) — control lọc theo cột (select/number min-max/date từ-đến/text),
+    nút Đặt lại bộ lọc, nút Xuất Excel (chi tiết), nút Xem Trước &amp; Xuất.
+  - **1 điểm checkbox** chọn cột hiển thị (`onReportDetailColumnToggle(...,this.checked)`) — trường hợp
+    `this.checked` chưa từng gặp nguyên dạng này (hạ tầng `data-arg*` không hỗ trợ đọc thẳng `this.checked`
+    qua slot có sẵn) nên viết thêm 1 hàm bọc nhỏ `onReportDetailColumnToggleFromCheckbox(moduleKey, colKey,
+    checkboxEl)` gọi lại hàm gốc với `checkboxEl.checked`, bind qua `data-arg-el="2"` — đúng mẫu đã dùng ở
+    `updateBudgetTemplateFieldRequiredFromCheckbox` (đợt Ngân Sách).
+  - **4 điểm** trong modal `#reportPreviewModal` (Đóng ×2, In, Xuất Excel) — modal này sống NGOÀI
+    `#reportsSection` (giống các modal khác), cần thêm 1 gốc riêng.
+  - Cần **2 gốc**: `bindCspDelegation('reportsSection')` (bọc cả thanh bộ lọc tĩnh lẫn toàn bộ nội dung
+    động trong `#reportsContent`, kể cả `<details>` "Tra Cứu Chi Tiết" — cùng 1 container nên không cần
+    thêm gốc riêng cho phần này) + `bindCspDelegation('reportPreviewModal')`.
+- **Không phát hiện lỗi thật nào trong lúc demo module này** — khác với đợt 10 (Cơ Cấu Tổ Chức phát hiện
+  lỗi dropdown dùng chung), lần này mọi thứ hoạt động đúng ngay từ đầu.
+
+**Xác nhận không ảnh hưởng** — 2 lớp kiểm tra độc lập trước khi merge:
+- Demo Playwright thật (SQL Server + server local + đăng nhập UI thật qua tài khoản demo tạm 2FA thật,
+  xoá lại ngay sau demo): mở Báo Cáo, đổi bộ lọc ngày, chuyển vào 1 module con (Tài Liệu), mở khối "Tra
+  Cứu Chi Tiết", toggle 1 checkbox cột hiển thị (xác nhận đổi trạng thái true→false→true qua
+  `onReportDetailColumnToggleFromCheckbox`), mở modal Xem Trước (hiển thị đúng nội dung theo bộ lọc/cột
+  đã chọn), đóng modal, đặt lại bộ lọc chi tiết, xuất Báo Cáo Excel tổng hợp, đặt lại bộ lọc tổng — toàn
+  bộ đúng, không có lỗi JS console mới liên quan tới thay đổi (chỉ có vài lỗi mạng nền của trình duyệt khi
+  thử kết nối Google — không liên quan ứng dụng).
+- Chạy lại toàn bộ 46 file test hồi quy (`tests/test-*.js`) — 44/46 OK, đúng 2 file known-flaky quen
+  thuộc (`test-audit-fixes-batch1.js`/`test-audit-round2-cluster1.js`, timeout hạ tầng test không liên
+  quan thay đổi lần này).
+
+**Deploy-impact:** KHÔNG đổi `sql/schema.sql`, KHÔNG thêm biến môi trường mới, KHÔNG thêm `dependencies`
+mới — toàn bộ thay đổi nằm trong `public/index.html` (thuần client JS/HTML), deploy an toàn chỉ với copy
+code + `pm2 restart`, không cần thao tác 1 lần nào khác.
+
+**Còn lại:** Nhân Sự, Quản Trị/Hệ Thống, Hỗ Trợ IT, Đồng Phục, Giấy Phép, Gia Hạn CNTT, Tuyển Dụng, Tin
+Tức/Truyền Thông, Biên Bản Họp, Công Việc, Văn Bản Trình, Tài Liệu, Báo Cáo Định Kỳ... — dùng hạ tầng
+`data-op*`/`bindCspDelegation()` đã xây, làm tiếp tuần tự mỗi module 1 commit + demo + regression trước
+khi merge, tới khi hết toàn bộ điểm mới gỡ `unsafe-inline`.
+
+## Trước đó — CSP unsafe-inline: đợt 10/N — module Cơ Cấu Tổ Chức
 
 Tiếp tục đợt 9 (Ngân Sách, xem mục "Trước đó" ngay bên dưới) — đợt này chuyển module **Cơ Cấu Tổ Chức**
 (sub-tab "🌳 Cơ Cấu Tổ Chức" trong Nhân Sự — cây quản lý trực tiếp toàn công ty, modal "Đổi Quản Lý Trực
