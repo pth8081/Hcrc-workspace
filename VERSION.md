@@ -1,10 +1,33 @@
 # Phiên bản hiện tại
 
-**2.6** — đã merge vào `main` (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge
+**2.7** — đã merge vào `main` (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge
 góc màn hình + `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần
 kiểu `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
 
-## Cập nhật gần nhất — Audit Đợt 5 Giai đoạn 1+2 (nhánh `claude/chao-ban-oo5ijl`)
+## Cập nhật gần nhất — Audit Đợt 5 Giai đoạn 3: toàn vẹn dữ liệu & cascade xóa (nhánh `claude/chao-ban-oo5ijl`)
+
+Tiếp theo Giai đoạn 1+2 (bên dưới) — 4 phát hiện còn lại trong lộ trình khắc phục, nhóm "toàn vẹn dữ
+liệu & cascade xóa" (không khẩn nhưng càng để lâu càng khó dọn rác dữ liệu):
+
+- Xóa hồ sơ Vận Hành (`operationStoreOpenings`/`operationRepairs`) giờ cascade xóa luôn
+  `operationExecutionPeriods` + toàn bộ cây `dbo.OperationWorkItems` tham chiếu tới hồ sơ đó — trước
+  đây chỉ xóa đúng 1 dòng hồ sơ, để lại Kỳ Thực Hiện + cây công việc mồ côi vĩnh viễn trong DB.
+- Xóa 1 nhánh cây `OperationWorkItems` giờ dùng đúng 1 câu `DELETE...WHERE Id IN (...)` (atomic) thay vì
+  vòng lặp nhiều câu `DELETE` riêng lẻ không bọc transaction — tránh cây bị đứt gãy nếu tiến trình crash
+  giữa vòng lặp.
+- Task được giao từ Biên Bản Họp giờ báo rõ "⚠️ Biên bản họp nguồn đã bị xóa" trong Chi tiết công việc
+  nếu biên bản gốc không còn tồn tại (`dbo.Tasks.SourceCode` chỉ là chuỗi tham chiếu tự do, không FK).
+- Thêm `HOLDLOCK` cho 2 câu `MERGE` upsert (`dbo.EphemeralAuthTokens`, `dbo.AppData`) — lỗi đã biết của
+  SQL Server có thể khiến 2 request cùng tạo 1 key MỚI gần như đồng thời cùng INSERT, gây lỗi 500 thay
+  vì upsert êm.
+
+**Deploy-impact:** KHÔNG đổi `sql/schema.sql`, không thêm biến môi trường, không thêm dependency. Chỉ
+cần copy code + `pm2 restart`.
+
+Test: toàn bộ 46 file `tests/test-*.js` chạy lại, không có regression mới (2 kịch bản thất bại sẵn có do
+sandbox không kết nối được SQL Server thật, không liên quan thay đổi).
+
+## Trước đó — Audit Đợt 5 Giai đoạn 1+2
 
 Rà soát bảo mật/logic nghiệp vụ toàn hệ thống, chốt lộ trình khắc phục 4 giai đoạn theo mức độ. Đã hoàn
 tất Giai đoạn 1 (Nghiêm trọng/Cao) và Giai đoạn 2 (Cao/Trung bình còn lại), gộp merge chung 1 lần.
