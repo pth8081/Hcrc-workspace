@@ -1787,7 +1787,7 @@ input[data-sdd-list] {
       <h3 class="font-bold text-rose-900 text-base flex items-center gap-2">📝 Lập Biên Bản Họp & Ý Kiến Chỉ Đạo</h3>
       <p class="text-xs text-rose-800">Nhập biên bản trực tiếp trong cuộc họp — ghi lại nội dung và các ý kiến chỉ đạo gán ngay cho từng người. Biên bản là kênh chung, không giới hạn theo phòng ban.</p>
 
-      <form id="minutesForm" onsubmit="submitMeetingMinutes(event)" class="bg-white p-3 rounded border text-xs space-y-3">
+      <form id="minutesForm" data-op-submit="submitMeetingMinutes" class="bg-white p-3 rounded border text-xs space-y-3">
         <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
           <div>
             <label class="block font-semibold text-gray-600 mb-1">Mã Biên Bản</label>
@@ -1795,7 +1795,7 @@ input[data-sdd-list] {
           </div>
           <div class="md:col-span-2">
             <label class="block font-semibold text-gray-600 mb-1">Liên Kết Lịch Đặt Phòng Họp (tuỳ chọn)</label>
-            <select id="minutesLinkedMeeting" onchange="onMinutesLinkedMeetingChange()" class="w-full border p-1.5 rounded bg-white">
+            <select id="minutesLinkedMeeting" data-op-change="onMinutesLinkedMeetingChange" class="w-full border p-1.5 rounded bg-white">
               <option value="">-- Không liên kết --</option>
             </select>
           </div>
@@ -1835,10 +1835,10 @@ input[data-sdd-list] {
             <select id="minutesAttendeeTemplateSelect" class="border p-1 rounded text-xs bg-white flex-1 min-w-[180px]">
               <option value="">-- Chọn mẫu đã lưu --</option>
             </select>
-            <button type="button" onclick="applyMeetingAttendeeTemplate(document.getElementById('minutesAttendeeTemplateSelect').value)" class="bg-rose-700 text-white px-2 py-1 rounded text-xs font-bold hover:bg-rose-800">▶️ Áp Dụng</button>
-            <button type="button" onclick="saveMeetingAttendeeTemplate()" class="bg-rose-600 text-white px-2 py-1 rounded text-xs font-bold hover:bg-rose-700">💾 Lưu Mẫu Từ Danh Sách Này</button>
-            <button type="button" onclick="deleteMeetingAttendeeTemplate()" class="bg-gray-400 text-white px-2 py-1 rounded text-xs font-bold hover:bg-gray-500">🗑️ Xóa Mẫu</button>
-            <button type="button" onclick="openAttendeeTemplateManagerModal()" class="bg-slate-600 text-white px-2 py-1 rounded text-xs font-bold hover:bg-slate-700">🗂️ Quản Lý Mẫu</button>
+            <button type="button" data-op="applyMeetingAttendeeTemplateFromSelect" class="bg-rose-700 text-white px-2 py-1 rounded text-xs font-bold hover:bg-rose-800">▶️ Áp Dụng</button>
+            <button type="button" data-op="saveMeetingAttendeeTemplate" class="bg-rose-600 text-white px-2 py-1 rounded text-xs font-bold hover:bg-rose-700">💾 Lưu Mẫu Từ Danh Sách Này</button>
+            <button type="button" data-op="deleteMeetingAttendeeTemplate" class="bg-gray-400 text-white px-2 py-1 rounded text-xs font-bold hover:bg-gray-500">🗑️ Xóa Mẫu</button>
+            <button type="button" data-op="openAttendeeTemplateManagerModal" class="bg-slate-600 text-white px-2 py-1 rounded text-xs font-bold hover:bg-slate-700">🗂️ Quản Lý Mẫu</button>
           </div>
           <p class="text-[11px] text-gray-500 italic">Mẫu dùng chung cho cả công ty — lưu 1 lần, mọi người lập biên bản đều chọn dùng lại được. Áp dụng mẫu xong vẫn sửa/thêm/bớt người tham dự bình thường. Chọn mẫu ở đây rồi bấm "Áp Dụng" hoặc "Xóa Mẫu" tùy ý, chọn xong KHÔNG tự áp dụng ngay. Muốn soạn mẫu mới từ đầu (không cần có sẵn biên bản) hoặc sửa mẫu đã lưu, bấm "Quản Lý Mẫu".</p>
 
@@ -1859,7 +1859,7 @@ input[data-sdd-list] {
               <tbody id="minutesAttendeesTableBody"></tbody>
             </table>
           </div>
-          <button type="button" onclick="addAttendeeRow()" class="bg-rose-600 text-white px-3 py-1 rounded text-xs font-bold hover:bg-rose-700">➕ Thêm Người Tham Dự</button>
+          <button type="button" data-op="addAttendeeRow" class="bg-rose-600 text-white px-3 py-1 rounded text-xs font-bold hover:bg-rose-700">➕ Thêm Người Tham Dự</button>
           <p class="text-[11px] text-gray-500 italic">Cột "Tài khoản" = Có: gõ Họ và tên sẽ gợi ý đúng tài khoản hệ thống (kèm phòng ban để phân biệt người trùng tên) — chọn xong tự điền Chức danh/Phòng/SĐT/Email từ hệ thống (vẫn sửa tay được). Chọn Không: nhập tự do, không tìm theo tài khoản hệ thống.</p>
         </div>
 
@@ -1881,11 +1881,11 @@ input[data-sdd-list] {
               <tbody id="minutesDirectivesTableBody"></tbody>
             </table>
           </div>
-          <button type="button" onclick="addMinutesDirectiveRow()" class="bg-rose-600 text-white px-3 py-1 rounded text-xs font-bold hover:bg-rose-700">➕ Thêm Ý Kiến Chỉ Đạo</button>
+          <button type="button" data-op="addMinutesDirectiveRow" class="bg-rose-600 text-white px-3 py-1 rounded text-xs font-bold hover:bg-rose-700">➕ Thêm Ý Kiến Chỉ Đạo</button>
         </div>
 
         <div class="flex justify-end gap-2">
-          <button type="button" id="minutesCancelEditBtn" onclick="cancelEditMeetingMinutes()" class="hidden bg-gray-200 text-gray-700 px-5 py-2 rounded font-bold hover:bg-gray-300">Huỷ Sửa</button>
+          <button type="button" id="minutesCancelEditBtn" data-op="cancelEditMeetingMinutes" class="hidden bg-gray-200 text-gray-700 px-5 py-2 rounded font-bold hover:bg-gray-300">Huỷ Sửa</button>
           <button type="submit" id="minutesSubmitBtn" class="bg-rose-600 text-white px-5 py-2 rounded font-bold hover:bg-rose-700">Lưu Biên Bản Họp</button>
         </div>
       </form>
@@ -1897,19 +1897,19 @@ input[data-sdd-list] {
       <div class="grid grid-cols-1 md:grid-cols-4 gap-3">
         <div>
           <label class="block text-xs font-semibold text-gray-600 mb-1">Chủ Đề Họp</label>
-          <input id="filterTopicMinutes" oninput="onMinutesFilterChange()" placeholder="Lọc theo tiêu đề cuộc họp..." class="w-full border p-2 rounded text-sm">
+          <input id="filterTopicMinutes" data-op-input="onMinutesFilterChange" placeholder="Lọc theo tiêu đề cuộc họp..." class="w-full border p-2 rounded text-sm">
         </div>
         <div>
           <label class="block text-xs font-semibold text-gray-600 mb-1">Từ Ngày</label>
-          <input id="filterFromDateMinutes" type="date" onchange="onMinutesFilterChange()" class="w-full border p-2 rounded text-sm bg-white">
+          <input id="filterFromDateMinutes" type="date" data-op-change="onMinutesFilterChange" class="w-full border p-2 rounded text-sm bg-white">
         </div>
         <div>
           <label class="block text-xs font-semibold text-gray-600 mb-1">Đến Ngày</label>
-          <input id="filterToDateMinutes" type="date" onchange="onMinutesFilterChange()" class="w-full border p-2 rounded text-sm bg-white">
+          <input id="filterToDateMinutes" type="date" data-op-change="onMinutesFilterChange" class="w-full border p-2 rounded text-sm bg-white">
         </div>
         <div>
           <label class="block text-xs font-semibold text-gray-600 mb-1">Từ Khóa</label>
-          <input id="filterKeywordMinutes" oninput="onMinutesFilterChange()" placeholder="Mã, chủ đề, chủ trì..." class="w-full border p-2 rounded text-sm">
+          <input id="filterKeywordMinutes" data-op-input="onMinutesFilterChange" placeholder="Mã, chủ đề, chủ trì..." class="w-full border p-2 rounded text-sm">
         </div>
       </div>
     </div>
@@ -7446,14 +7446,14 @@ input[data-sdd-list] {
   <div class="bg-white rounded-lg shadow-2xl max-w-lg w-full overflow-hidden">
     <div class="flex justify-between items-center bg-rose-800 text-white p-4">
       <h3 class="font-bold text-base flex items-center gap-2">📧 Soạn Email Thông Báo Người Tham Dự</h3>
-      <button onclick="closeMinutesEmailComposeModal()" class="text-rose-200 hover:text-white font-bold text-xl px-2">✕</button>
+      <button data-op="closeMinutesEmailComposeModal" class="text-rose-200 hover:text-white font-bold text-xl px-2">✕</button>
     </div>
     <div class="p-4 space-y-3 text-xs max-h-[70vh] overflow-y-auto">
       <div id="minutesEmailComposeInfo" class="text-gray-500 italic"></div>
       <div>
         <div class="flex justify-between items-center mb-1">
           <label class="font-semibold text-gray-600">Người nhận</label>
-          <button type="button" onclick="toggleAllMinutesEmailRecipients()" class="text-rose-700 font-semibold hover:underline">Chọn/Bỏ chọn tất cả</button>
+          <button type="button" data-op="toggleAllMinutesEmailRecipients" class="text-rose-700 font-semibold hover:underline">Chọn/Bỏ chọn tất cả</button>
         </div>
         <div id="minutesEmailRecipientsList" class="border rounded p-2 space-y-1 max-h-32 overflow-y-auto bg-gray-50"></div>
       </div>
@@ -7463,8 +7463,8 @@ input[data-sdd-list] {
       </div>
     </div>
     <div class="p-3 bg-gray-100 border-t flex justify-end gap-2 text-xs">
-      <button onclick="closeMinutesEmailComposeModal()" class="bg-gray-500 text-white px-4 py-1.5 rounded font-bold hover:bg-gray-600">Hủy</button>
-      <button onclick="confirmSendMinutesEmail()" class="bg-rose-600 text-white px-5 py-1.5 rounded font-bold hover:bg-rose-700">📧 Gửi Email</button>
+      <button data-op="closeMinutesEmailComposeModal" class="bg-gray-500 text-white px-4 py-1.5 rounded font-bold hover:bg-gray-600">Hủy</button>
+      <button data-op="confirmSendMinutesEmail" class="bg-rose-600 text-white px-5 py-1.5 rounded font-bold hover:bg-rose-700">📧 Gửi Email</button>
     </div>
   </div>
 </div>
@@ -7477,13 +7477,13 @@ input[data-sdd-list] {
   <div class="bg-white rounded-lg shadow-2xl max-w-3xl w-full flex flex-col max-h-[90vh] overflow-hidden">
     <div class="flex justify-between items-center bg-rose-800 text-white p-4">
       <h3 class="font-bold text-base flex items-center gap-2">🗂️ Quản Lý Mẫu Danh Sách Tham Dự</h3>
-      <button onclick="closeAttendeeTemplateManagerModal()" class="text-rose-200 hover:text-white font-bold text-xl px-2">✕</button>
+      <button data-op="closeAttendeeTemplateManagerModal" class="text-rose-200 hover:text-white font-bold text-xl px-2">✕</button>
     </div>
 
     <div id="attendeeTplManagerListView" class="p-4 overflow-y-auto flex-1 text-xs space-y-2">
       <div class="flex justify-between items-center">
         <p class="text-gray-500 italic">Mẫu dùng chung cho cả công ty, ai lập biên bản cũng chọn dùng lại được.</p>
-        <button type="button" onclick="openAttendeeTemplateEditor(null)" class="bg-rose-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-rose-700 whitespace-nowrap">➕ Tạo Mẫu Mới</button>
+        <button type="button" data-op="openAttendeeTemplateEditor" class="bg-rose-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-rose-700 whitespace-nowrap">➕ Tạo Mẫu Mới</button>
       </div>
       <div id="attendeeTplManagerListBody" class="space-y-1.5"></div>
     </div>
@@ -7510,13 +7510,13 @@ input[data-sdd-list] {
           <tbody id="tplEditRowsTableBody"></tbody>
         </table>
       </div>
-      <button type="button" onclick="addTplEditRow()" class="bg-rose-600 text-white px-3 py-1 rounded text-xs font-bold hover:bg-rose-700">➕ Thêm Người Tham Dự</button>
+      <button type="button" data-op="addTplEditRow" class="bg-rose-600 text-white px-3 py-1 rounded text-xs font-bold hover:bg-rose-700">➕ Thêm Người Tham Dự</button>
     </div>
 
     <div class="p-3 bg-gray-100 border-t flex justify-end gap-2 text-xs">
-      <button id="attendeeTplManagerBackBtn" onclick="backToAttendeeTemplateList()" class="hidden bg-gray-500 text-white px-4 py-1.5 rounded font-bold hover:bg-gray-600">← Quay Lại Danh Sách</button>
-      <button id="attendeeTplManagerSaveBtn" onclick="saveAttendeeTemplateFromEditor()" class="hidden bg-rose-600 text-white px-5 py-1.5 rounded font-bold hover:bg-rose-700">💾 Lưu Mẫu</button>
-      <button id="attendeeTplManagerCloseBtn" onclick="closeAttendeeTemplateManagerModal()" class="bg-gray-600 text-white px-5 py-1.5 rounded font-bold hover:bg-gray-700">Đóng</button>
+      <button id="attendeeTplManagerBackBtn" data-op="backToAttendeeTemplateList" class="hidden bg-gray-500 text-white px-4 py-1.5 rounded font-bold hover:bg-gray-600">← Quay Lại Danh Sách</button>
+      <button id="attendeeTplManagerSaveBtn" data-op="saveAttendeeTemplateFromEditor" class="hidden bg-rose-600 text-white px-5 py-1.5 rounded font-bold hover:bg-rose-700">💾 Lưu Mẫu</button>
+      <button id="attendeeTplManagerCloseBtn" data-op="closeAttendeeTemplateManagerModal" class="bg-gray-600 text-white px-5 py-1.5 rounded font-bold hover:bg-gray-700">Đóng</button>
     </div>
   </div>
 </div>
@@ -20051,6 +20051,13 @@ function renderMeetingAttendeeTemplateSelect() {
   if (DB.meetingAttendeeTemplates.some(t => t.id === current)) sel.value = current;
 }
 
+// Wrapper CSP data-op — nút "Áp Dụng" gọi applyMeetingAttendeeTemplate() với arg là
+// document.getElementById('minutesAttendeeTemplateSelect').value (biểu thức đọc trực tiếp DOM, không
+// phải this/this.value/literal) nên không map được vào 1 data-argN — đọc lại select trong wrapper.
+function applyMeetingAttendeeTemplateFromSelect() {
+  applyMeetingAttendeeTemplate(document.getElementById('minutesAttendeeTemplateSelect').value);
+}
+
 function applyMeetingAttendeeTemplate(templateId) {
   if (!templateId) return alert('⛔ Vui lòng chọn 1 mẫu ở danh sách trước khi Áp Dụng!');
   const tpl = DB.meetingAttendeeTemplates.find(t => t.id === templateId);
@@ -20151,8 +20158,8 @@ function renderAttendeeTemplateManagerList() {
         <div class="text-[11px] text-gray-500">${t.attendees.length} người</div>
       </div>
       <div class="flex gap-1.5">
-        <button type="button" onclick="openAttendeeTemplateEditor('${escapeHtml(t.id)}')" class="bg-amber-500 text-white px-2 py-1 rounded text-[11px] font-bold hover:bg-amber-600">✏️ Sửa</button>
-        <button type="button" onclick="deleteAttendeeTemplateFromManager('${escapeHtml(t.id)}')" class="bg-red-500 text-white px-2 py-1 rounded text-[11px] font-bold hover:bg-red-600">🗑️ Xoá</button>
+        <button type="button" data-op="openAttendeeTemplateEditor" data-arg0="${escapeHtml(t.id)}" class="bg-amber-500 text-white px-2 py-1 rounded text-[11px] font-bold hover:bg-amber-600">✏️ Sửa</button>
+        <button type="button" data-op="deleteAttendeeTemplateFromManager" data-arg0="${escapeHtml(t.id)}" class="bg-red-500 text-white px-2 py-1 rounded text-[11px] font-bold hover:bg-red-600">🗑️ Xoá</button>
       </div>
     </div>
   `).join('');
@@ -20246,24 +20253,24 @@ function renderTplEditRowsTable() {
   tbody.innerHTML = tplEditRows.map((a, idx) => {
     const hasAccount = a.hasAccount === 'YES';
     const nameCell = hasAccount
-      ? `<input value="${escapeHtml(a.name)}" data-sdd-list="systemUsersDatalist" autocomplete="off" oninput="updateTplEditField(${idx}, 'name', this.value)" onchange="resolveTplRowAccountInput(${idx}, this.value)" class="w-full border-0 p-0.5 text-xs focus:outline-none" placeholder="Gõ để tìm tài khoản hệ thống...">
+      ? `<input value="${escapeHtml(a.name)}" data-sdd-list="systemUsersDatalist" autocomplete="off" data-op-input="updateTplEditField" data-arg0="${idx}" data-arg1="name" data-arg-value="2" data-op-change="resolveTplRowAccountInput" data-arg0="${idx}" data-arg-value="1" class="w-full border-0 p-0.5 text-xs focus:outline-none" placeholder="Gõ để tìm tài khoản hệ thống...">
          ${a.username ? `<div class="text-[10px] text-emerald-700 mt-0.5">✓ Đã liên kết tài khoản: ${escapeHtml(a.username)}</div>` : '<div class="text-[10px] text-amber-600 mt-0.5">Chưa liên kết — chọn từ gợi ý</div>'}`
-      : `<input value="${escapeHtml(a.name)}" oninput="updateTplEditField(${idx}, 'name', this.value)" class="w-full border-0 p-0.5 text-xs focus:outline-none" placeholder="Họ và tên">`;
+      : `<input value="${escapeHtml(a.name)}" data-op-input="updateTplEditField" data-arg0="${idx}" data-arg1="name" data-arg-value="2" class="w-full border-0 p-0.5 text-xs focus:outline-none" placeholder="Họ và tên">`;
     return `
     <tr>
       <td class="border p-1 text-center">${idx + 1}</td>
       <td class="border p-1">
-        <select onchange="toggleTplRowHasAccount(${idx}, this.value)" class="w-full border-0 p-0.5 text-xs bg-white focus:outline-none">
+        <select data-op-change="toggleTplRowHasAccount" data-arg0="${idx}" data-arg-value="1" class="w-full border-0 p-0.5 text-xs bg-white focus:outline-none">
           <option value="NO" ${!hasAccount ? 'selected' : ''}>Không</option>
           <option value="YES" ${hasAccount ? 'selected' : ''}>Có</option>
         </select>
       </td>
       <td class="border p-1">${nameCell}</td>
-      <td class="border p-1"><input value="${escapeHtml(a.title)}" oninput="updateTplEditField(${idx}, 'title', this.value)" class="w-full border-0 p-0.5 text-xs focus:outline-none" placeholder="Chức danh"></td>
-      <td class="border p-1"><input value="${escapeHtml(a.dept)}" oninput="updateTplEditField(${idx}, 'dept', this.value)" class="w-full border-0 p-0.5 text-xs focus:outline-none" placeholder="Phòng"></td>
-      <td class="border p-1"><input value="${escapeHtml(a.phone)}" oninput="updateTplEditField(${idx}, 'phone', this.value)" class="w-full border-0 p-0.5 text-xs focus:outline-none" placeholder="SĐT"></td>
-      <td class="border p-1"><input type="email" value="${escapeHtml(a.email || '')}" oninput="updateTplEditField(${idx}, 'email', this.value)" class="w-full border-0 p-0.5 text-xs focus:outline-none" placeholder="email@company.com"></td>
-      <td class="border p-1 text-center"><button type="button" onclick="removeTplEditRow(${idx})" class="text-red-600 font-bold hover:text-red-800" title="Xoá dòng">✕</button></td>
+      <td class="border p-1"><input value="${escapeHtml(a.title)}" data-op-input="updateTplEditField" data-arg0="${idx}" data-arg1="title" data-arg-value="2" class="w-full border-0 p-0.5 text-xs focus:outline-none" placeholder="Chức danh"></td>
+      <td class="border p-1"><input value="${escapeHtml(a.dept)}" data-op-input="updateTplEditField" data-arg0="${idx}" data-arg1="dept" data-arg-value="2" class="w-full border-0 p-0.5 text-xs focus:outline-none" placeholder="Phòng"></td>
+      <td class="border p-1"><input value="${escapeHtml(a.phone)}" data-op-input="updateTplEditField" data-arg0="${idx}" data-arg1="phone" data-arg-value="2" class="w-full border-0 p-0.5 text-xs focus:outline-none" placeholder="SĐT"></td>
+      <td class="border p-1"><input type="email" value="${escapeHtml(a.email || '')}" data-op-input="updateTplEditField" data-arg0="${idx}" data-arg1="email" data-arg-value="2" class="w-full border-0 p-0.5 text-xs focus:outline-none" placeholder="email@company.com"></td>
+      <td class="border p-1 text-center"><button type="button" data-op="removeTplEditRow" data-arg0="${idx}" class="text-red-600 font-bold hover:text-red-800" title="Xoá dòng">✕</button></td>
     </tr>
   `;
   }).join('');
@@ -20418,24 +20425,24 @@ function renderAttendeesTable() {
   tbody.innerHTML = minutesAttendeesRows.map((a, idx) => {
     const hasAccount = a.hasAccount === 'YES';
     const nameCell = hasAccount
-      ? `<input value="${escapeHtml(a.name)}" data-sdd-list="systemUsersDatalist" autocomplete="off" oninput="updateAttendeeField(${idx}, 'name', this.value)" onchange="resolveAttendeeAccountInput(${idx}, this.value)" class="w-full border-0 p-0.5 text-xs focus:outline-none" placeholder="Gõ để tìm tài khoản hệ thống...">
+      ? `<input value="${escapeHtml(a.name)}" data-sdd-list="systemUsersDatalist" autocomplete="off" data-op-input="updateAttendeeField" data-arg0="${idx}" data-arg1="name" data-arg-value="2" data-op-change="resolveAttendeeAccountInput" data-arg0="${idx}" data-arg-value="1" class="w-full border-0 p-0.5 text-xs focus:outline-none" placeholder="Gõ để tìm tài khoản hệ thống...">
          ${a.username ? `<div class="text-[10px] text-emerald-700 mt-0.5">✓ Đã liên kết tài khoản: ${escapeHtml(a.username)}</div>` : '<div class="text-[10px] text-amber-600 mt-0.5">Chưa liên kết — chọn từ gợi ý</div>'}`
-      : `<input value="${escapeHtml(a.name)}" oninput="updateAttendeeField(${idx}, 'name', this.value)" class="w-full border-0 p-0.5 text-xs focus:outline-none" placeholder="Họ và tên">`;
+      : `<input value="${escapeHtml(a.name)}" data-op-input="updateAttendeeField" data-arg0="${idx}" data-arg1="name" data-arg-value="2" class="w-full border-0 p-0.5 text-xs focus:outline-none" placeholder="Họ và tên">`;
     return `
     <tr>
       <td class="border p-1 text-center">${idx + 1}</td>
       <td class="border p-1">
-        <select onchange="toggleAttendeeHasAccount(${idx}, this.value)" class="w-full border-0 p-0.5 text-xs bg-white focus:outline-none">
+        <select data-op-change="toggleAttendeeHasAccount" data-arg0="${idx}" data-arg-value="1" class="w-full border-0 p-0.5 text-xs bg-white focus:outline-none">
           <option value="NO" ${!hasAccount ? 'selected' : ''}>Không</option>
           <option value="YES" ${hasAccount ? 'selected' : ''}>Có</option>
         </select>
       </td>
       <td class="border p-1">${nameCell}</td>
-      <td class="border p-1"><input value="${escapeHtml(a.title)}" oninput="updateAttendeeField(${idx}, 'title', this.value)" class="w-full border-0 p-0.5 text-xs focus:outline-none" placeholder="Chức danh"></td>
-      <td class="border p-1"><input value="${escapeHtml(a.dept)}" oninput="updateAttendeeField(${idx}, 'dept', this.value)" class="w-full border-0 p-0.5 text-xs focus:outline-none" placeholder="Phòng"></td>
-      <td class="border p-1"><input value="${escapeHtml(a.phone)}" oninput="updateAttendeeField(${idx}, 'phone', this.value)" class="w-full border-0 p-0.5 text-xs focus:outline-none" placeholder="SĐT"></td>
-      <td class="border p-1"><input type="email" value="${escapeHtml(a.email || '')}" oninput="updateAttendeeField(${idx}, 'email', this.value)" class="w-full border-0 p-0.5 text-xs focus:outline-none" placeholder="email@company.com"></td>
-      <td class="border p-1 text-center"><button type="button" onclick="removeAttendeeRow(${idx})" class="text-red-600 font-bold hover:text-red-800" title="Xoá dòng">✕</button></td>
+      <td class="border p-1"><input value="${escapeHtml(a.title)}" data-op-input="updateAttendeeField" data-arg0="${idx}" data-arg1="title" data-arg-value="2" class="w-full border-0 p-0.5 text-xs focus:outline-none" placeholder="Chức danh"></td>
+      <td class="border p-1"><input value="${escapeHtml(a.dept)}" data-op-input="updateAttendeeField" data-arg0="${idx}" data-arg1="dept" data-arg-value="2" class="w-full border-0 p-0.5 text-xs focus:outline-none" placeholder="Phòng"></td>
+      <td class="border p-1"><input value="${escapeHtml(a.phone)}" data-op-input="updateAttendeeField" data-arg0="${idx}" data-arg1="phone" data-arg-value="2" class="w-full border-0 p-0.5 text-xs focus:outline-none" placeholder="SĐT"></td>
+      <td class="border p-1"><input type="email" value="${escapeHtml(a.email || '')}" data-op-input="updateAttendeeField" data-arg0="${idx}" data-arg1="email" data-arg-value="2" class="w-full border-0 p-0.5 text-xs focus:outline-none" placeholder="email@company.com"></td>
+      <td class="border p-1 text-center"><button type="button" data-op="removeAttendeeRow" data-arg0="${idx}" class="text-red-600 font-bold hover:text-red-800" title="Xoá dòng">✕</button></td>
     </tr>
   `;
   }).join('');
@@ -20459,6 +20466,13 @@ function updateMinutesDirectiveField(idx, field, value) {
   minutesDirectives[idx][field] = value;
 }
 
+// Wrapper CSP data-op-change — <select multiple> "Người phối hợp" cần
+// Array.from(this.selectedOptions).map(o => o.value), không phải this.value đơn giản, nên không map
+// được vào 1 data-arg-value — đọc lại danh sách option đã chọn từ el (data-arg-el) trong wrapper.
+function updateMinutesDirectiveFieldMultiSelect(idx, field, el) {
+  updateMinutesDirectiveField(idx, field, Array.from(el.selectedOptions).map(o => o.value));
+}
+
 function renderMinutesDirectivesTable() {
   const tbody = document.getElementById('minutesDirectivesTableBody');
   if (!tbody) return;
@@ -20474,22 +20488,22 @@ function renderMinutesDirectivesTable() {
     return `
     <tr>
       <td class="border p-1 text-center">${idx + 1}</td>
-      <td class="border p-1"><input value="${escapeHtml(d.content)}" oninput="updateMinutesDirectiveField(${idx}, 'content', this.value)" class="w-full border-0 p-0.5 text-xs focus:outline-none" placeholder="Nội dung chỉ đạo cụ thể..."></td>
+      <td class="border p-1"><input value="${escapeHtml(d.content)}" data-op-input="updateMinutesDirectiveField" data-arg0="${idx}" data-arg1="content" data-arg-value="2" class="w-full border-0 p-0.5 text-xs focus:outline-none" placeholder="Nội dung chỉ đạo cụ thể..."></td>
       <td class="border p-1">
-        <select onchange="updateMinutesDirectiveField(${idx}, 'assignedToAttendeeId', this.value)" class="w-full border-0 p-0.5 text-xs bg-white focus:outline-none">
+        <select data-op-change="updateMinutesDirectiveField" data-arg0="${idx}" data-arg1="assignedToAttendeeId" data-arg-value="2" class="w-full border-0 p-0.5 text-xs bg-white focus:outline-none">
           <option value="">-- Chọn người --</option>
           ${namedAttendees.map(a => `<option value="${escapeHtml(a.id)}" ${String(d.assignedToAttendeeId) === String(a.id) ? 'selected' : ''}>${escapeHtml(a.name)}${a.dept ? ` (${escapeHtml(a.dept)})` : ''}</option>`).join('')}
         </select>
         ${namedAttendees.length === 0 ? '<div class="text-[10px] text-amber-600 mt-0.5">Chưa nhập Thành phần tham dự</div>' : ''}
       </td>
       <td class="border p-1">
-        <select multiple size="3" onchange="updateMinutesDirectiveField(${idx}, 'collaboratorAttendeeIds', Array.from(this.selectedOptions).map(o => o.value))" class="w-full border-0 p-0.5 text-xs bg-white focus:outline-none">
+        <select multiple size="3" data-op-change="updateMinutesDirectiveFieldMultiSelect" data-arg0="${idx}" data-arg1="collaboratorAttendeeIds" data-arg-el="2" class="w-full border-0 p-0.5 text-xs bg-white focus:outline-none">
           ${namedAttendees.map(a => `<option value="${escapeHtml(a.id)}" ${collaboratorIds.includes(String(a.id)) ? 'selected' : ''}>${escapeHtml(a.name)}</option>`).join('')}
         </select>
         <div class="text-[10px] text-gray-400 mt-0.5">Giữ Ctrl/Cmd để chọn nhiều</div>
       </td>
-      <td class="border p-1"><input type="date" value="${escapeHtml(d.deadline)}" onchange="updateMinutesDirectiveField(${idx}, 'deadline', this.value)" class="w-full border-0 p-0.5 text-xs focus:outline-none"></td>
-      <td class="border p-1 text-center"><button type="button" onclick="removeMinutesDirectiveRow(${idx})" class="text-red-600 font-bold hover:text-red-800" title="Xoá dòng">✕</button></td>
+      <td class="border p-1"><input type="date" value="${escapeHtml(d.deadline)}" data-op-change="updateMinutesDirectiveField" data-arg0="${idx}" data-arg1="deadline" data-arg-value="2" class="w-full border-0 p-0.5 text-xs focus:outline-none"></td>
+      <td class="border p-1 text-center"><button type="button" data-op="removeMinutesDirectiveRow" data-arg0="${idx}" class="text-red-600 font-bold hover:text-red-800" title="Xoá dòng">✕</button></td>
     </tr>
   `;
   }).join('');
@@ -20813,7 +20827,7 @@ function renderMeetingMinutes() {
       <td class="border p-2 text-center">${m.tasksAssigned ? '<span class="text-emerald-700 font-bold">✅ Đã hoàn thành giao việc theo chỉ đạo</span>' : (m.directives || []).length}</td>
       <td class="border p-2 text-center space-x-1">
         ${(() => {
-          const primaryBtnHTML = `<button onclick="runMinutesAction(${m.id}, 'detail')" class="bg-rose-600 text-white px-2 py-1 rounded text-xs hover:bg-rose-700 font-bold">🔍 Xem chi tiết</button>`;
+          const primaryBtnHTML = `<button data-op="runMinutesAction" data-arg0="${m.id}" data-arg1="detail" class="bg-rose-600 text-white px-2 py-1 rounded text-xs hover:bg-rose-700 font-bold">🔍 Xem chi tiết</button>`;
           const secondaryOptions = [];
           // "Giao việc" chỉ hiện khi CHƯA giao (chưa khoá) và có ít nhất 1 chỉ đạo đã gán người thực
           // hiện, chưa từng tạo việc — không có chỉ đạo đã gán thì không có gì để giao việc.
@@ -20944,7 +20958,7 @@ function viewMeetingMinutesDetails(id) {
           } else if (d.assignedToAttendeeId) {
             statusCell = m.tasksAssigned
               ? '<span class="text-gray-400 italic text-[11px]">Chưa giao việc</span>'
-              : (canManageTasks(currentUser) ? `<button onclick="createTaskFromMinutesDirective(${m.id}, ${idx})" class="bg-violet-600 text-white px-2 py-0.5 rounded text-[11px] font-bold hover:bg-violet-700">📌 Giao việc</button>` : '<span class="text-gray-400 italic text-[11px]">Chưa giao việc</span>');
+              : (canManageTasks(currentUser) ? `<button data-op="createTaskFromMinutesDirective" data-arg0="${m.id}" data-arg1="${idx}" class="bg-violet-600 text-white px-2 py-0.5 rounded text-[11px] font-bold hover:bg-violet-700">📌 Giao việc</button>` : '<span class="text-gray-400 italic text-[11px]">Chưa giao việc</span>');
           } else {
             statusCell = '<span class="text-gray-400 italic text-[11px]">Chưa gán</span>';
           }
@@ -23925,6 +23939,26 @@ bindCspDelegation('recruitmentReferModal');
 // dùng chung riêng, không thuộc module này.
 bindCspDelegation('internalSection');
 bindCspDelegation('internalArticleModal');
+
+// Biên Bản Họp — form lập biên bản (#minutesForm, submitMeetingMinutes()/updateMeetingMinutes()),
+// bảng Thành phần tham dự (#minutesAttendeesTableBody, renderAttendeesTable()) và bảng Ý kiến chỉ đạo
+// (#minutesDirectivesTableBody, renderMinutesDirectivesTable()) đều render vào bên trong #minutesSection,
+// cùng bộ lọc và danh sách biên bản (renderMeetingMinutes()/viewMeetingMinutesDetails() — modal xem chi
+// tiết dùng chung #viewDocModal của nhiều module khác nên không cần gốc riêng ở đây) — 1 gốc là đủ.
+// Modal soạn email thông báo người tham dự (#minutesEmailComposeModal, closeMinutesEmailComposeModal()/
+// confirmSendMinutesEmail()) và modal Quản Lý Mẫu Danh Sách Tham Dự (#attendeeTemplateManagerModal,
+// renderTplEditRowsTable()/saveAttendeeTemplateFromEditor()) sống NGOÀI section (giống Xe/Vận Hành/Đào
+// Tạo/...) nên cần thêm 2 gốc riêng — 3 gốc tổng cộng. 2 hàm wrapper mới do runtime data-op* chưa hỗ
+// trợ trực tiếp: applyMeetingAttendeeTemplateFromSelect() (nút "Áp Dụng" gọi
+// applyMeetingAttendeeTemplate() với arg là document.getElementById(...).value, một biểu thức đọc DOM
+// chứ không phải this/this.value/literal), updateMinutesDirectiveFieldMultiSelect(idx, field, el) (select
+// multiple "Người phối hợp" cần Array.from(this.selectedOptions).map(o => o.value), không phải
+// this.value đơn giản — đọc lại từ el qua data-arg-el). Dropdown chuyển trạng thái trong
+// buildActionCell() (danh sách biên bản dùng chung) và #genericConfirmModal vẫn để nguyên onclick —
+// nằm trong đợt dọn hạ tầng dùng chung riêng, không thuộc module này.
+bindCspDelegation('minutesSection');
+bindCspDelegation('minutesEmailComposeModal');
+bindCspDelegation('attendeeTemplateManagerModal');
 
 // ==========================================
 // VĂN PHÒNG PHẨM — kỳ đăng ký (vppPeriods) + đăng ký của nhân viên (vppRegistrations). 3 sub-tab:
