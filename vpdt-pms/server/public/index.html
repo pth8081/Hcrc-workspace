@@ -481,7 +481,7 @@ input[data-sdd-list] {
     </div>
 
     <nav class="flex-1 p-2 space-y-1">
-      <button id="btnDashboardTab" onclick="switchTab('dashboard')" class="sidebar-item">
+      <button id="btnDashboardTab" data-op="switchTab" data-arg0="dashboard" class="sidebar-item">
         <span class="sidebar-icon">🏠</span><span class="sidebar-label">Trang chủ</span>
       </button>
       <!-- "✅ Phê Duyệt" — hộp thư duyệt tổng hợp, ĐỨNG ĐỘC LẬP (không lồng trong dropdown Điều Hành)
@@ -490,13 +490,13 @@ input[data-sdd-list] {
            trưởng phòng chỉ duyệt xe của phòng mình) có thể không có bất kỳ quyền nào trong 3 mục đó.
            Đặt ngay sau Trang chủ để dễ thấy nhất — đúng mục đích "phê duyệt nhanh" của tính năng này.
            Số đếm hiện thẳng trên nhãn nút (không cần mở gì cả), xem updateApprovalHubBadge(). -->
-      <button id="btnApprovalHubTab" onclick="switchTab('approvalHub')" class="hidden sidebar-item">
+      <button id="btnApprovalHubTab" data-op="switchTab" data-arg0="approvalHub" class="hidden sidebar-item">
         <span class="sidebar-icon">✅</span><span id="approvalHubNavLabel" class="sidebar-label">Phê Duyệt</span>
       </button>
-      <button id="btnDocTab" onclick="switchTab('doc')" class="hidden sidebar-item">
+      <button id="btnDocTab" data-op="switchTab" data-arg0="doc" class="hidden sidebar-item">
         <span class="sidebar-icon">📂</span><span class="sidebar-label">Tài liệu</span>
       </button>
-      <button id="btnSubmissionTab" onclick="switchTab('submission')" class="hidden sidebar-item">
+      <button id="btnSubmissionTab" data-op="switchTab" data-arg0="submission" class="hidden sidebar-item">
         <span class="sidebar-icon">📜</span><span class="sidebar-label">Văn bản trình</span>
       </button>
       <!-- Truyền Thông — cùng khuôn Hợp Đồng (dropdown TĨNH, không cần hàm updateXNavVisibility riêng):
@@ -504,40 +504,40 @@ input[data-sdd-list] {
            (canAccessInternalModule) — chỉ quyền ĐĂNG bài mới khác nhau theo loại (canCreateInternalPost),
            không ảnh hưởng gì tới việc hiện/ẩn mục nav này. -->
       <div id="truyenThongNavWrap" class="hidden">
-        <button id="btnInternalTab" onclick="toggleTruyenThongDropdown(event)" class="sidebar-item">
+        <button id="btnInternalTab" data-op="toggleTruyenThongDropdown" data-arg-event="0" class="sidebar-item">
           <span class="sidebar-icon">📣</span><span class="sidebar-label flex-1">Truyền thông</span><span class="sidebar-label text-[10px]">▾</span>
         </button>
         <div id="truyenThongDropdownPanel" class="hidden pl-7 space-y-0.5 sidebar-label">
-          <button onclick="closeTruyenThongDropdown(); switchTab('internal'); setInternalSubTab('NEWS')" class="sidebar-subitem">📰 Nhịp Sống HCRC</button>
-          <button onclick="closeTruyenThongDropdown(); switchTab('internal'); setInternalSubTab('TRAINING')" class="sidebar-subitem">🎓 Đào Tạo</button>
-          <button onclick="closeTruyenThongDropdown(); switchTab('internal'); setInternalSubTab('RECRUITMENT')" class="sidebar-subitem">💼 Tuyển Dụng</button>
-          <button onclick="closeTruyenThongDropdown(); switchTab('internal'); setInternalSubTab('SHARE')" class="sidebar-subitem"><span id="internalShareDropdownLabel">💬 Góc Chia Sẻ</span></button>
+          <button data-op-seq="closeTruyenThongDropdown()|switchTab(internal)|setInternalSubTab(NEWS)" class="sidebar-subitem">📰 Nhịp Sống HCRC</button>
+          <button data-op-seq="closeTruyenThongDropdown()|switchTab(internal)|setInternalSubTab(TRAINING)" class="sidebar-subitem">🎓 Đào Tạo</button>
+          <button data-op-seq="closeTruyenThongDropdown()|switchTab(internal)|setInternalSubTab(RECRUITMENT)" class="sidebar-subitem">💼 Tuyển Dụng</button>
+          <button data-op-seq="closeTruyenThongDropdown()|switchTab(internal)|setInternalSubTab(SHARE)" class="sidebar-subitem"><span id="internalShareDropdownLabel">💬 Góc Chia Sẻ</span></button>
           <!-- "HCRC Đồng Hành" — hộp thư hỏi/đáp RIÊNG TƯ với bộ phận Nhân Sự (mỗi người chỉ thấy câu
                hỏi của CHÍNH MÌNH, xem renderHrFeedbackInbox()), không phải bảng tin công khai như 4
                mục trên. Số trên nhãn = số phản hồi CHƯA ĐỌC của riêng người đang đăng nhập (cờ bền
                vững hrFeedback.employeeUnread, xem updateHrFeedbackBadge()). -->
-          <button onclick="closeTruyenThongDropdown(); switchTab('internal'); setInternalSubTab('QNA')" class="sidebar-subitem"><span id="hrFeedbackDropdownLabel">🤝 HCRC Đồng Hành</span></button>
+          <button data-op-seq="closeTruyenThongDropdown()|switchTab(internal)|setInternalSubTab(QNA)" class="sidebar-subitem"><span id="hrFeedbackDropdownLabel">🤝 HCRC Đồng Hành</span></button>
         </div>
       </div>
 
       <div id="hopDongNavWrap" class="hidden">
-        <button id="btnHopDongTab" onclick="toggleHopDongDropdown(event)" class="sidebar-item">
+        <button id="btnHopDongTab" data-op="toggleHopDongDropdown" data-arg-event="0" class="sidebar-item">
           <span class="sidebar-icon">📄</span><span class="sidebar-label flex-1">Hợp Đồng</span><span class="sidebar-label text-[10px]">▾</span>
         </button>
         <div id="hopDongDropdownPanel" class="hidden pl-7 space-y-0.5 sidebar-label">
-          <button onclick="closeHopDongDropdown(); switchTab('contract'); setContractSubTab('APPROVAL')" class="sidebar-subitem">⏳ Phê Duyệt</button>
-          <button onclick="closeHopDongDropdown(); switchTab('contract'); setContractSubTab('MANAGE')" class="sidebar-subitem">📄 Quản Lý HĐ &amp; Giấy Phép</button>
+          <button data-op-seq="closeHopDongDropdown()|switchTab(contract)|setContractSubTab(APPROVAL)" class="sidebar-subitem">⏳ Phê Duyệt</button>
+          <button data-op-seq="closeHopDongDropdown()|switchTab(contract)|setContractSubTab(MANAGE)" class="sidebar-subitem">📄 Quản Lý HĐ &amp; Giấy Phép</button>
         </div>
       </div>
 
       <div id="dieuHanhNavWrap" class="hidden">
-        <button id="btnDieuHanhTab" onclick="toggleDieuHanhDropdown(event)" class="sidebar-item">
+        <button id="btnDieuHanhTab" data-op="toggleDieuHanhDropdown" data-arg-event="0" class="sidebar-item">
           <span class="sidebar-icon">🗂️</span><span class="sidebar-label flex-1">Điều Hành</span><span class="sidebar-label text-[10px]">▾</span>
         </button>
         <div id="dieuHanhDropdownPanel" class="hidden pl-7 space-y-0.5 sidebar-label">
-          <button id="btnMinutesTab" onclick="closeDieuHanhDropdown(); switchTab('minutes')" class="hidden sidebar-subitem">📝 Biên bản họp</button>
-          <button id="btnTaskTab" onclick="closeDieuHanhDropdown(); switchTab('task')" class="hidden sidebar-subitem">📋 Công việc</button>
-          <button id="btnPeriodicReportTab" onclick="closeDieuHanhDropdown(); switchTab('periodicReport')" class="hidden sidebar-subitem">📅 Báo Cáo Định Kỳ</button>
+          <button id="btnMinutesTab" data-op-seq="closeDieuHanhDropdown()|switchTab(minutes)" class="hidden sidebar-subitem">📝 Biên bản họp</button>
+          <button id="btnTaskTab" data-op-seq="closeDieuHanhDropdown()|switchTab(task)" class="hidden sidebar-subitem">📋 Công việc</button>
+          <button id="btnPeriodicReportTab" data-op-seq="closeDieuHanhDropdown()|switchTab(periodicReport)" class="hidden sidebar-subitem">📅 Báo Cáo Định Kỳ</button>
         </div>
       </div>
 
@@ -545,93 +545,93 @@ input[data-sdd-list] {
            "parent" + hasModuleAccess()) — tắt quyền vào "Hành Chính" khoá cả 3 dù mỗi module vẫn giữ
            quyền chi tiết riêng (không đổi so với bản nav ngang cũ). -->
       <div id="hanhChinhNavWrap" class="hidden">
-        <button id="btnHanhChinhTab" onclick="toggleHanhChinhDropdown(event)" class="sidebar-item">
+        <button id="btnHanhChinhTab" data-op="toggleHanhChinhDropdown" data-arg-event="0" class="sidebar-item">
           <span class="sidebar-icon">🏢</span><span class="sidebar-label flex-1">Hành Chính</span><span class="sidebar-label text-[10px]">▾</span>
         </button>
         <div id="hanhChinhDropdownPanel" class="hidden pl-7 space-y-0.5 sidebar-label">
-          <button id="btnMeetingTab" onclick="closeHanhChinhDropdown(); switchTab('meeting')" class="hidden sidebar-subitem">📅 Phòng họp</button>
-          <button id="btnCarTab" onclick="closeHanhChinhDropdown(); switchTab('car')" class="hidden sidebar-subitem">🚗 Đăng ký xe</button>
-          <button id="btnVppTab" onclick="closeHanhChinhDropdown(); switchTab('vpp')" class="hidden sidebar-subitem">🖇️ Văn phòng phẩm</button>
-          <button id="btnUniformTab" onclick="closeHanhChinhDropdown(); switchTab('uniform')" class="hidden sidebar-subitem">👕 Đồng phục</button>
-          <button id="btnLicenseTab" onclick="closeHanhChinhDropdown(); switchTab('license')" class="hidden sidebar-subitem">📜 Giấy phép</button>
+          <button id="btnMeetingTab" data-op-seq="closeHanhChinhDropdown()|switchTab(meeting)" class="hidden sidebar-subitem">📅 Phòng họp</button>
+          <button id="btnCarTab" data-op-seq="closeHanhChinhDropdown()|switchTab(car)" class="hidden sidebar-subitem">🚗 Đăng ký xe</button>
+          <button id="btnVppTab" data-op-seq="closeHanhChinhDropdown()|switchTab(vpp)" class="hidden sidebar-subitem">🖇️ Văn phòng phẩm</button>
+          <button id="btnUniformTab" data-op-seq="closeHanhChinhDropdown()|switchTab(uniform)" class="hidden sidebar-subitem">👕 Đồng phục</button>
+          <button id="btnLicenseTab" data-op-seq="closeHanhChinhDropdown()|switchTab(license)" class="hidden sidebar-subitem">📜 Giấy phép</button>
         </div>
       </div>
 
       <div id="tongHopNavWrap" class="hidden">
-        <button id="btnTongHopTab" onclick="toggleTongHopDropdown(event)" class="sidebar-item">
+        <button id="btnTongHopTab" data-op="toggleTongHopDropdown" data-arg-event="0" class="sidebar-item">
           <span class="sidebar-icon">🗂️</span><span class="sidebar-label flex-1">Tổng Hợp</span><span class="sidebar-label text-[10px]">▾</span>
         </button>
         <div id="tongHopDropdownPanel" class="hidden pl-7 space-y-0.5 sidebar-label">
-          <button id="btnOfficeSubBuyNav" onclick="closeTongHopDropdown(); switchTab('office'); setOfficeSubTab('MUA_BAN')" class="hidden sidebar-subitem">🛒 Mua Bán</button>
-          <button id="btnOfficeSubFixNav" onclick="closeTongHopDropdown(); switchTab('office'); setOfficeSubTab('SUA_CHUA')" class="hidden sidebar-subitem">🔧 Sửa Chữa</button>
-          <button id="btnOfficeSubPaymentNav" onclick="closeTongHopDropdown(); switchTab('office'); setOfficeSubTab('PAYMENT')" class="hidden sidebar-subitem">💰 Thanh Toán</button>
-          <button id="btnBudgetNav" onclick="closeTongHopDropdown(); switchTab('budget')" class="hidden sidebar-subitem">📊 Ngân Sách</button>
+          <button id="btnOfficeSubBuyNav" data-op-seq="closeTongHopDropdown()|switchTab(office)|setOfficeSubTab(MUA_BAN)" class="hidden sidebar-subitem">🛒 Mua Bán</button>
+          <button id="btnOfficeSubFixNav" data-op-seq="closeTongHopDropdown()|switchTab(office)|setOfficeSubTab(SUA_CHUA)" class="hidden sidebar-subitem">🔧 Sửa Chữa</button>
+          <button id="btnOfficeSubPaymentNav" data-op-seq="closeTongHopDropdown()|switchTab(office)|setOfficeSubTab(PAYMENT)" class="hidden sidebar-subitem">💰 Thanh Toán</button>
+          <button id="btnBudgetNav" data-op-seq="closeTongHopDropdown()|switchTab(budget)" class="hidden sidebar-subitem">📊 Ngân Sách</button>
         </div>
       </div>
 
       <!-- Vận Hành — module TOP-LEVEL mới, 3 luồng ĐỘC LẬP (không chung dữ liệu officeReqs của "Tổng
            Hợp"), cùng khuôn dropdown #tongHopNavWrap ở trên. -->
       <div id="vanHanhNavWrap" class="hidden">
-        <button id="btnVanHanhTab" onclick="toggleVanHanhDropdown(event)" class="sidebar-item">
+        <button id="btnVanHanhTab" data-op="toggleVanHanhDropdown" data-arg-event="0" class="sidebar-item">
           <span class="sidebar-icon">⚙️</span><span class="sidebar-label flex-1">Vận Hành</span><span class="sidebar-label text-[10px]">▾</span>
         </button>
         <div id="vanHanhDropdownPanel" class="hidden pl-7 space-y-0.5 sidebar-label">
-          <button id="btnOperationOrderNav" onclick="closeVanHanhDropdown(); switchTab('vanHanh'); setVanHanhSubTab('ORDERS')" class="hidden sidebar-subitem">📦 Phê Duyệt Đơn Hàng</button>
-          <button id="btnOperationStoreNav" onclick="closeVanHanhDropdown(); switchTab('vanHanh'); setVanHanhSubTab('STORE')" class="hidden sidebar-subitem">🏬 Siêu Thị</button>
+          <button id="btnOperationOrderNav" data-op-seq="closeVanHanhDropdown()|switchTab(vanHanh)|setVanHanhSubTab(ORDERS)" class="hidden sidebar-subitem">📦 Phê Duyệt Đơn Hàng</button>
+          <button id="btnOperationStoreNav" data-op-seq="closeVanHanhDropdown()|switchTab(vanHanh)|setVanHanhSubTab(STORE)" class="hidden sidebar-subitem">🏬 Siêu Thị</button>
         </div>
       </div>
 
-      <button id="btnReportsTab" onclick="switchTab('reports')" class="hidden sidebar-item">
+      <button id="btnReportsTab" data-op="switchTab" data-arg0="reports" class="hidden sidebar-item">
         <span class="sidebar-icon">📊</span><span class="sidebar-label">Báo cáo</span>
       </button>
       <!-- Nhân Sự — module TOP-LEVEL độc lập, hiện chỉ có ĐÚNG 1 tab con ("Quản Lý & Phản Hồi Ý Kiến")
            nên dùng nút đơn giản theo khuôn Báo Cáo, KHÔNG dựng dropdown như Hành Chính/Tổng Hợp (chỉ
            đổi sang dropdown khi thực sự có tab con thứ 2). Quyền vào: nhanSuManage — quyền PHẲNG DUY
            NHẤT của module, xem canAccessHrModule(). -->
-      <button id="btnHrTab" onclick="switchTab('hr')" class="hidden sidebar-item">
+      <button id="btnHrTab" data-op="switchTab" data-arg0="hr" class="hidden sidebar-item">
         <span class="sidebar-icon">🤝</span><span class="sidebar-label">Nhân Sự</span>
       </button>
       <!-- Hỗ Trợ IT — cùng khuôn dropdown Hợp Đồng: mở cho toàn bộ nhân viên (giống Công Việc), 2
            sub-tab "Phê Duyệt Giá"/"Hỗ Trợ Yêu Cầu" dùng CHUNG 1 điều kiện quyền canAccessItSupportModule
            (không phân quyền riêng theo từng sub-tab, xem setItSupportSubTab()/toggleItSupportDropdown()). -->
       <div id="itSupportNavWrap" class="hidden">
-        <button id="btnItSupportTab" onclick="toggleItSupportDropdown(event)" class="sidebar-item">
+        <button id="btnItSupportTab" data-op="toggleItSupportDropdown" data-arg-event="0" class="sidebar-item">
           <span class="sidebar-icon">🖥️</span><span class="sidebar-label flex-1">Hỗ Trợ IT</span><span class="sidebar-label text-[10px]">▾</span>
         </button>
         <div id="itSupportDropdownPanel" class="hidden pl-7 space-y-0.5 sidebar-label">
-          <button onclick="closeItSupportDropdown(); switchTab('itSupport'); setItSupportSubTab('PRICE')" class="sidebar-subitem">🏷️ Phê Duyệt Giá</button>
-          <button onclick="closeItSupportDropdown(); switchTab('itSupport'); setItSupportSubTab('TICKET')" class="sidebar-subitem">🎫 Hỗ Trợ Yêu Cầu</button>
+          <button data-op-seq="closeItSupportDropdown()|switchTab(itSupport)|setItSupportSubTab(PRICE)" class="sidebar-subitem">🏷️ Phê Duyệt Giá</button>
+          <button data-op-seq="closeItSupportDropdown()|switchTab(itSupport)|setItSupportSubTab(TICKET)" class="sidebar-subitem">🎫 Hỗ Trợ Yêu Cầu</button>
           <!-- "Gia Hạn Dịch Vụ CNTT" — KHÁC 2 mục trên (mở cho toàn bộ nhân viên): chỉ đội IT
                (itManage/admin) mới thấy mục này, ẩn/hiện riêng qua canManageItSupportClient() ở
                updateItSupportNavVisibility() (không dùng chung điều kiện canAccessItSupportModule). -->
-          <button id="btnItSupportNavRenewal" onclick="closeItSupportDropdown(); switchTab('itSupport'); setItSupportSubTab('RENEWAL')" class="hidden sidebar-subitem">🔔 Gia Hạn Dịch Vụ</button>
+          <button id="btnItSupportNavRenewal" data-op-seq="closeItSupportDropdown()|switchTab(itSupport)|setItSupportSubTab(RENEWAL)" class="hidden sidebar-subitem">🔔 Gia Hạn Dịch Vụ</button>
         </div>
       </div>
       <!-- Hệ Thống — cùng khuôn Hợp Đồng (dropdown TĨNH): cả 4 mục con đều yêu cầu admin (không có
            quyền riêng từng mục như Điều Hành/Hành Chính, xem setSystemSubTab() chặn thẳng !admin ở đầu
            hàm) nên không cần hàm updateXNavVisibility riêng — hiện đủ 4 mục ngay khi mục cha hiện ra. -->
       <div id="heThongNavWrap" class="hidden">
-        <button id="btnSystemTab" onclick="toggleHeThongDropdown(event)" class="sidebar-item">
+        <button id="btnSystemTab" data-op="toggleHeThongDropdown" data-arg-event="0" class="sidebar-item">
           <span class="sidebar-icon">🛠️</span><span class="sidebar-label flex-1">Hệ Thống</span><span class="sidebar-label text-[10px]">▾</span>
         </button>
         <div id="heThongDropdownPanel" class="hidden pl-7 space-y-0.5 sidebar-label">
-          <button onclick="closeHeThongDropdown(); switchTab('system'); setSystemSubTab('ADMIN')" class="sidebar-subitem">⚙️ Quản Trị</button>
-          <button onclick="closeHeThongDropdown(); switchTab('system'); setSystemSubTab('FORM')" class="sidebar-subitem">📋 Biểu Mẫu</button>
-          <button onclick="closeHeThongDropdown(); switchTab('system'); setSystemSubTab('WORKFLOW')" class="sidebar-subitem">🔄 Quy Trình & Phê Duyệt</button>
-          <button onclick="closeHeThongDropdown(); switchTab('system'); setSystemSubTab('UPLOAD')" class="sidebar-subitem">📎 Quản Lý Tệp File</button>
-          <button onclick="closeHeThongDropdown(); switchTab('system'); setSystemSubTab('LOG')" class="sidebar-subitem">📊 Log</button>
+          <button data-op-seq="closeHeThongDropdown()|switchTab(system)|setSystemSubTab(ADMIN)" class="sidebar-subitem">⚙️ Quản Trị</button>
+          <button data-op-seq="closeHeThongDropdown()|switchTab(system)|setSystemSubTab(FORM)" class="sidebar-subitem">📋 Biểu Mẫu</button>
+          <button data-op-seq="closeHeThongDropdown()|switchTab(system)|setSystemSubTab(WORKFLOW)" class="sidebar-subitem">🔄 Quy Trình & Phê Duyệt</button>
+          <button data-op-seq="closeHeThongDropdown()|switchTab(system)|setSystemSubTab(UPLOAD)" class="sidebar-subitem">📎 Quản Lý Tệp File</button>
+          <button data-op-seq="closeHeThongDropdown()|switchTab(system)|setSystemSubTab(LOG)" class="sidebar-subitem">📊 Log</button>
         </div>
       </div>
     </nav>
 
     <div class="p-3 border-t border-slate-700 space-y-2">
-      <div class="cursor-pointer group" onclick="openProfileModal()" title="Bấm để cập nhật thông tin cá nhân & đổi mật khẩu">
+      <div class="cursor-pointer group" data-op="openProfileModal" title="Bấm để cập nhật thông tin cá nhân & đổi mật khẩu">
         <span id="userInfo" class="font-bold text-white block text-xs group-hover:underline sidebar-label"></span>
         <span id="userPhoneInfo" class="text-[11px] text-slate-400 block sidebar-label"></span>
       </div>
       <div class="flex items-center gap-2">
-        <button onclick="toggleSidebarCollapse()" class="text-slate-400 hover:text-white text-xs px-2 py-1 rounded hover:bg-slate-800" title="Thu gọn/Mở rộng menu">↔️</button>
-        <button onclick="logout()" class="flex-1 text-xs text-red-400 hover:text-red-300 font-semibold text-left sidebar-label">Đăng xuất</button>
+        <button data-op="toggleSidebarCollapse" class="text-slate-400 hover:text-white text-xs px-2 py-1 rounded hover:bg-slate-800" title="Thu gọn/Mở rộng menu">↔️</button>
+        <button data-op="logout" class="flex-1 text-xs text-red-400 hover:text-red-300 font-semibold text-left sidebar-label">Đăng xuất</button>
       </div>
     </div>
   </aside>
@@ -23675,6 +23675,96 @@ function bindOperationDelegation(rootId) {
   });
 }
 ['vanHanhSection', 'operationEstimateModal', 'operationWorkItemModal', 'operationWorkItemFormModal', 'operationAcceptanceActionModal', 'operationProcessModal'].forEach(bindOperationDelegation);
+
+// ==========================================
+// CSP — hạ tầng event-delegation DÙNG CHUNG cho các module chuyển đổi từ đợt Hợp Đồng trở đi (thay cho
+// kiểu OP_CLICK_ACTIONS/bindOperationDelegation riêng từng module ở trên, vốn phải viết tay 1 bảng tra
+// cứu cho mỗi module). Không dùng bảng tra cứu tay — gọi thẳng window[fnName], hợp lệ vì mọi hàm xử lý
+// trong file này đều là hàm global (script chính không phải type="module").
+//   data-op / data-op-change / data-op-input = tên hàm gọi khi click/change/input.
+//   data-op-submit = tên hàm gọi khi submit form (luôn nhận nguyên Event, không có tham số vị trí khác).
+//   data-argN = tham số vị trí N (đọc kiểu số nếu khớp /^-?\d+$/, còn lại giữ nguyên chuỗi).
+//   data-arg-value="N" = thay tham số vị trí N bằng el.value (thay cho onchange="fn(this.value)").
+//   data-arg-el="N" = thay tham số vị trí N bằng chính phần tử DOM (thay cho tham số trần "this").
+//   data-arg-event="N" = thay tham số vị trí N bằng Event thật (cho các hàm gọi e.stopPropagation()...).
+//   data-op-prevent-default="1" = gọi e.preventDefault() trước khi gọi hàm xử lý.
+//   data-op-seq="fn1(a,b)|fn2(c)" = nhiều lệnh gọi tuần tự (mẫu dropdown điều hướng sidebar), tham số
+//   trong data-op-seq luôn là chuỗi enum đơn giản (tên tab/sub-tab), không phải biểu thức JS.
+// ==========================================
+function cspCoerceArg(raw) {
+  return /^-?\d+$/.test(raw) ? Number(raw) : raw;
+}
+function cspReadArgSlot(el, i, evt) {
+  if (el.dataset.argValue !== undefined && Number(el.dataset.argValue) === i) return el.value;
+  if (el.dataset.argEl !== undefined && Number(el.dataset.argEl) === i) return el;
+  if (el.dataset.argEvent !== undefined && Number(el.dataset.argEvent) === i) return evt;
+  const raw = el.dataset['arg' + i];
+  return raw === undefined ? undefined : cspCoerceArg(raw);
+}
+function cspCollectArgs(el, evt) {
+  let maxIdx = -1;
+  ['argValue', 'argEl', 'argEvent'].forEach(k => {
+    if (el.dataset[k] !== undefined) maxIdx = Math.max(maxIdx, Number(el.dataset[k]));
+  });
+  Object.keys(el.dataset).forEach(k => {
+    const m = /^arg(\d+)$/.exec(k);
+    if (m) maxIdx = Math.max(maxIdx, Number(m[1]));
+  });
+  const args = [];
+  for (let i = 0; i <= maxIdx; i++) args.push(cspReadArgSlot(el, i, evt));
+  return args;
+}
+function cspRunSeq(seqStr) {
+  seqStr.split('|').forEach(part => {
+    const m = /^([A-Za-z_$][\w$]*)\((.*)\)$/.exec(part);
+    if (!m) return;
+    const fn = window[m[1]];
+    if (typeof fn !== 'function') return;
+    const argStr = m[2];
+    const args = argStr.length ? argStr.split(',').map(cspCoerceArg) : [];
+    fn.apply(null, args);
+  });
+}
+function cspDispatchOp(el, evt, attrName) {
+  const fnName = el.getAttribute(attrName);
+  if (!fnName) return;
+  if (el.dataset.opPreventDefault === '1') evt.preventDefault();
+  const fn = window[fnName];
+  if (typeof fn !== 'function') { console.error('CSP dispatch: không tìm thấy hàm', fnName); return; }
+  fn.apply(null, cspCollectArgs(el, evt));
+}
+function bindCspDelegation(rootId) {
+  const root = document.getElementById(rootId);
+  if (!root) return;
+  root.addEventListener('click', (e) => {
+    const el = e.target.closest('[data-op], [data-op-seq]');
+    if (!el || !root.contains(el)) return;
+    if (el.hasAttribute('data-op-seq')) {
+      if (el.dataset.opPreventDefault === '1') e.preventDefault();
+      cspRunSeq(el.getAttribute('data-op-seq'));
+    } else {
+      cspDispatchOp(el, e, 'data-op');
+    }
+  });
+  root.addEventListener('change', (e) => {
+    const el = e.target.closest('[data-op-change]');
+    if (!el || !root.contains(el)) return;
+    cspDispatchOp(el, e, 'data-op-change');
+  });
+  root.addEventListener('input', (e) => {
+    const el = e.target.closest('[data-op-input]');
+    if (!el || !root.contains(el)) return;
+    cspDispatchOp(el, e, 'data-op-input');
+  });
+  root.addEventListener('submit', (e) => {
+    const el = e.target.closest('[data-op-submit]');
+    if (!el || !root.contains(el)) return;
+    if (el.dataset.opPreventDefault === '1') e.preventDefault();
+    const fn = window[el.getAttribute('data-op-submit')];
+    if (typeof fn === 'function') fn(e);
+  });
+}
+bindCspDelegation('userHeader');
 
 // ==========================================
 // VĂN PHÒNG PHẨM — kỳ đăng ký (vppPeriods) + đăng ký của nhân viên (vppRegistrations). 3 sub-tab:

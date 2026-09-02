@@ -1,10 +1,50 @@
 # Phiên bản hiện tại
 
-**3.2** — đã merge vào `main` (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge
+**3.3** — đã merge vào `main` (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge
 góc màn hình + `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần
 kiểu `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
 
-## Cập nhật gần nhất — CSP unsafe-inline: đợt 1/N — module Vận Hành
+## Cập nhật gần nhất — CSP unsafe-inline: đợt 2/N — Điều hướng Sidebar + hạ tầng dùng chung mới
+
+Tiếp tục phương án chuyển đổi CSP theo từng module (đợt 1 là Vận Hành, xem mục ngay bên dưới). Đợt này
+chuyển **thanh điều hướng bên trái** (`<aside id="userHeader">`) — dropdown Truyền Thông/Hợp Đồng/Điều
+Hành/Hành Chính/Tổng Hợp/Vận Hành/Hỗ Trợ IT/Hệ Thống + các nút Trang chủ/Báo cáo/Nhân sự/Hồ sơ cá
+nhân/Thu gọn sidebar/Đăng xuất — và đồng thời xây **hạ tầng CSP dùng chung mới**, thay cho kiểu bảng tra
+cứu tay riêng từng module (`OP_CLICK_ACTIONS`...) của đợt Vận Hành, để các module còn lại chuyển đổi
+nhanh hơn:
+
+- **46 điểm** `onclick` chuyển sang **1 bộ thuộc tính `data-op*` tổng quát + 1 bộ hàm dispatch dùng
+  chung** (`cspCollectArgs`/`cspRunSeq`/`bindCspDelegation`, đặt cạnh `bindOperationDelegation` cũ):
+  `data-op`/`data-op-change`/`data-op-input` gọi thẳng `window[tênHàm]` (không cần bảng tra cứu tay vì
+  mọi hàm xử lý trong file đều là hàm global), `data-argN` là tham số vị trí (tự nhận biết số nếu khớp
+  `/^-?\d+$/`), `data-arg-value`/`-el`/`-event="N"` thay tham số N bằng `el.value`/chính phần tử
+  DOM/Event thật (thay cho `this.value`/`this` trần/tham số `event` — 8 nút `toggleXDropdown(event)` cần
+  `event.stopPropagation()` để không bị đóng ngay bởi listener bắt-click-ngoài-vùng), và
+  `data-op-seq="fn1(a,b)|fn2(c)"` cho các `onclick` gọi NHIỀU hàm liên tiếp (đúng mẫu dropdown điều
+  hướng: `closeXDropdown(); switchTab('y'); setXSubTab('z')` — 42/46 điểm của đợt này thuộc dạng này).
+  Gắn listener 1 lần vào `#userHeader` (gốc ổn định, sidebar không bị `innerHTML` lại).
+- CSP header **CHƯA đổi** — vẫn còn `unsafe-inline` tới khi xong hết toàn bộ module còn lại (Hợp Đồng,
+  Thanh Toán, Xe, Phòng Họp, VPP, Đào Tạo, Ngân Sách, Cơ Cấu Tổ Chức, Báo Cáo, Nhân Sự, Quản Trị...) và 3
+  hàm dùng chung (`buildActionCell()`/`buildDashboardCardsHTML()`/`buildPaginationBoxHTML()`).
+
+**Xác nhận không ảnh hưởng** — 2 lớp kiểm tra độc lập trước khi merge:
+- Demo Playwright thật (SQL Server + server local + đăng nhập UI thật qua tài khoản demo tạm, xoá lại
+  ngay sau demo): mở lần lượt cả 8 dropdown điều hướng, bấm 1 mục con mỗi dropdown, xác nhận đúng
+  tab/sub-tab tương ứng hiện ra (kể cả Hệ Thống — dropdown admin-only, và `data-op-seq` 2-3 lệnh liên
+  tiếp) + nút đơn (`switchTab('dashboard')`, mở modal Hồ Sơ Cá Nhân) — 10/10 kiểm tra đều đúng, không có
+  lỗi JS console mới.
+- Chạy lại toàn bộ 46 file test hồi quy hiện có (`tests/test-*.js`) — pass 100% (1 file
+  `test-audit-fixes-batch1.js` có bug dọn dẹp có sẵn từ trước — tiến trình không tự thoát sau khi in kết
+  quả, không liên quan gì tới thay đổi lần này — đã xác nhận lại độc lập 14/14 kịch bản PASS).
+
+**Deploy-impact:** KHÔNG đổi `sql/schema.sql`, KHÔNG thêm biến môi trường mới, KHÔNG thêm `dependencies`
+mới — chỉ đổi cách gắn sự kiện JS phía client trong `public/index.html`, deploy an toàn chỉ với copy code.
+
+**Còn lại:** Hợp Đồng, Thanh Toán, Xe, Phòng Họp, VPP, Đào Tạo, Ngân Sách, Cơ Cấu Tổ Chức, Báo Cáo, Nhân
+Sự, Quản Trị... — dùng hạ tầng `data-op*`/`bindCspDelegation()` vừa xây ở đợt này, làm tiếp tuần tự mỗi
+module 1 commit + demo + regression trước khi merge, tới khi hết toàn bộ điểm mới gỡ `unsafe-inline`.
+
+## Trước đó — CSP unsafe-inline: đợt 1/N — module Vận Hành
 
 Bắt đầu thực hiện phương án 2 đã đề xuất ở đợt rà soát bảo mật vòng 2 (chuyển toàn bộ 1017 điểm inline
 event-handler sang `addEventListener` để có thể gỡ `unsafe-inline` khỏi CSP). Làm **theo từng module**,
