@@ -12,6 +12,8 @@ const { requireAuth, blockIfMustChangePassword } = require('../lib/auth');
 const { parsePriceFile, parsePriceTemplateColumns } = require('../lib/priceFileParser');
 const { getAppDataValueCached } = require('../lib/appData');
 const { verifyFileSignature } = require('../lib/fileSignature');
+const { HttpError } = require('../lib/httpErrors');
+const { sendCatchError } = require('../lib/errorResponse');
 
 const router = express.Router();
 router.use(requireAuth, blockIfMustChangePassword);
@@ -45,7 +47,7 @@ const upload = multer({
   fileFilter: (req, file, cb) => {
     const ext = path.extname(file.originalname).toLowerCase();
     if (!ALLOWED_EXT.has(ext)) {
-      return cb(new Error(`Chỉ chấp nhận file Excel (.xlsx/.xls), không hỗ trợ: ${ext || '(không rõ)'}`));
+      return cb(new HttpError(400, `Chỉ chấp nhận file Excel (.xlsx/.xls), không hỗ trợ: ${ext || '(không rõ)'}`));
     }
     cb(null, true);
   }
@@ -68,7 +70,7 @@ router.post('/parse-file', uploadRateLimiter, (req, res) => {
       }
       return res.status(400).json({ error: err.message });
     }
-    if (err) return res.status(400).json({ error: err.message });
+    if (err) return sendCatchError(res, err, 'POST /api/it-price/parse-file');
     if (!req.file) return res.status(400).json({ error: 'Thiếu tệp bảng giá cần tải lên' });
 
     try {
@@ -99,8 +101,7 @@ router.post('/parse-file', uploadRateLimiter, (req, res) => {
       });
     } catch (parseErr) {
       fs.unlink(req.file.path, () => {});
-      const status = parseErr.status || 400;
-      res.status(status).json({ error: parseErr.message || 'Không đọc được nội dung tệp bảng giá' });
+      sendCatchError(res, parseErr, 'POST /api/it-price/parse-file');
     }
   });
 });
@@ -122,7 +123,7 @@ router.post('/master-list/parse-file', uploadRateLimiter, (req, res) => {
       }
       return res.status(400).json({ error: err.message });
     }
-    if (err) return res.status(400).json({ error: err.message });
+    if (err) return sendCatchError(res, err, 'POST /api/it-price/master-list/parse-file');
     if (!req.file) return res.status(400).json({ error: 'Thiếu tệp mẫu cần tải lên' });
 
     try {
@@ -142,8 +143,7 @@ router.post('/master-list/parse-file', uploadRateLimiter, (req, res) => {
       });
     } catch (parseErr) {
       fs.unlink(req.file.path, () => {});
-      const status = parseErr.status || 400;
-      res.status(status).json({ error: parseErr.message || 'Không đọc được nội dung tệp mẫu' });
+      sendCatchError(res, parseErr, 'POST /api/it-price/master-list/parse-file');
     }
   });
 });

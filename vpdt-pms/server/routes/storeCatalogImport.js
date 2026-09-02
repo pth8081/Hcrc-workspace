@@ -13,6 +13,8 @@ const { requireAuth, blockIfMustChangePassword } = require('../lib/auth');
 const { buildStoreTemplateWorkbook, parseStoreFile } = require('../lib/storeCatalogImport');
 const { getAppDataValue } = require('../lib/appData');
 const { verifyFileSignature } = require('../lib/fileSignature');
+const { HttpError } = require('../lib/httpErrors');
+const { sendCatchError } = require('../lib/errorResponse');
 
 const router = express.Router();
 router.use(requireAuth, blockIfMustChangePassword);
@@ -46,7 +48,7 @@ const upload = multer({
   fileFilter: (req, file, cb) => {
     const ext = path.extname(file.originalname).toLowerCase();
     if (!ALLOWED_EXT.has(ext)) {
-      return cb(new Error(`Chỉ chấp nhận file Excel (.xlsx/.xls) hoặc CSV, không hỗ trợ: ${ext || '(không rõ)'}`));
+      return cb(new HttpError(400, `Chỉ chấp nhận file Excel (.xlsx/.xls) hoặc CSV, không hỗ trợ: ${ext || '(không rõ)'}`));
     }
     cb(null, true);
   }
@@ -77,7 +79,7 @@ router.post('/parse-import', uploadRateLimiter, (req, res) => {
       }
       return res.status(400).json({ error: err.message });
     }
-    if (err) return res.status(400).json({ error: err.message });
+    if (err) return sendCatchError(res, err, 'POST /api/stores/parse-import');
     if (!req.file) return res.status(400).json({ error: 'Thiếu tệp danh sách siêu thị cần tải lên' });
 
     try {
@@ -92,8 +94,7 @@ router.post('/parse-import', uploadRateLimiter, (req, res) => {
       const items = names.map(name => ({ name, isNew: !existingSet.has(name) }));
       res.json({ items, fileName: req.file.originalname });
     } catch (parseErr) {
-      const status = parseErr.status || 400;
-      res.status(status).json({ error: parseErr.message || 'Không đọc được nội dung file danh sách siêu thị' });
+      sendCatchError(res, parseErr, 'POST /api/stores/parse-import');
     } finally {
       fs.unlink(req.file.path, () => {}); // chỉ dùng để đọc 1 lần, không cần giữ lại file gốc
     }

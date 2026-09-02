@@ -15,6 +15,8 @@ const { buildRosterTemplateWorkbook, parseRosterFile } = require('../lib/trainin
 const { getAllForCollection } = require('../lib/recordStore');
 const { canManageTrainingClass } = require('../lib/recordActions');
 const { verifyFileSignature } = require('../lib/fileSignature');
+const { HttpError } = require('../lib/httpErrors');
+const { sendCatchError } = require('../lib/errorResponse');
 
 const router = express.Router();
 router.use(requireAuth, blockIfMustChangePassword);
@@ -48,7 +50,7 @@ const upload = multer({
   fileFilter: (req, file, cb) => {
     const ext = path.extname(file.originalname).toLowerCase();
     if (!ALLOWED_EXT.has(ext)) {
-      return cb(new Error(`Chỉ chấp nhận file Excel (.xlsx/.xls) hoặc CSV, không hỗ trợ: ${ext || '(không rõ)'}`));
+      return cb(new HttpError(400, `Chỉ chấp nhận file Excel (.xlsx/.xls) hoặc CSV, không hỗ trợ: ${ext || '(không rõ)'}`));
     }
     cb(null, true);
   }
@@ -80,7 +82,7 @@ router.post('/parse-roster', uploadRateLimiter, (req, res) => {
       }
       return res.status(400).json({ error: err.message });
     }
-    if (err) return res.status(400).json({ error: err.message });
+    if (err) return sendCatchError(res, err, 'POST /api/training/parse-roster');
     if (!req.file) return res.status(400).json({ error: 'Thiếu tệp danh sách học viên cần tải lên' });
 
     try {
@@ -98,8 +100,7 @@ router.post('/parse-roster', uploadRateLimiter, (req, res) => {
       });
       res.json({ items, fileName: req.file.originalname });
     } catch (parseErr) {
-      const status = parseErr.status || 400;
-      res.status(status).json({ error: parseErr.message || 'Không đọc được nội dung file danh sách học viên' });
+      sendCatchError(res, parseErr, 'POST /api/training/parse-roster');
     } finally {
       fs.unlink(req.file.path, () => {}); // chỉ dùng để đọc 1 lần, không cần giữ lại file gốc
     }

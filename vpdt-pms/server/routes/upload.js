@@ -9,6 +9,8 @@ const path = require('path');
 const rateLimit = require('express-rate-limit');
 const { getAppDataValueCached } = require('../lib/appData');
 const { verifyFileSignature } = require('../lib/fileSignature');
+const { HttpError } = require('../lib/httpErrors');
+const { sendCatchError } = require('../lib/errorResponse');
 
 const router = express.Router();
 
@@ -48,7 +50,7 @@ const upload = multer({
   fileFilter: (req, file, cb) => {
     const ext = path.extname(file.originalname).toLowerCase();
     if (!ALLOWED_EXT.has(ext)) {
-      return cb(new Error(`Định dạng tệp không được hỗ trợ: ${ext || '(không rõ)'}`));
+      return cb(new HttpError(400, `Định dạng tệp không được hỗ trợ: ${ext || '(không rõ)'}`));
     }
     cb(null, true);
   }
@@ -64,7 +66,13 @@ router.post('/', uploadRateLimiter, (req, res) => {
       }
       return res.status(400).json({ error: err.message });
     }
-    if (err) return res.status(400).json({ error: err.message });
+    // err ở đây (không phải MulterError) chỉ có thể tới từ fileFilter phía trên — LUÔN là HttpError(400,
+    // <thông điệp an toàn cho người dùng>) do chính route này ném ra (xem fileFilter) — nhưng
+    // sendCatchError() vẫn kiểm instanceof thay vì tin mọi err đều an toàn để hiển thị: nếu tương lai
+    // multer/Node ném ra 1 lỗi KHÔNG PHẢI do fileFilter (VD lỗi ghi đĩa ENOSPC/EACCES — chứa đường dẫn
+    // thật trên server), lỗi đó tự động rơi về sendServerError() (không lộ chi tiết khi NODE_ENV=production)
+    // thay vì trả thẳng err.message như trước — xem lib/errorResponse.js.
+    if (err) return sendCatchError(res, err, 'POST /api/upload');
     if (!req.file) return res.status(400).json({ error: 'Thiếu tệp cần tải lên' });
 
     // Kiểm tra riêng theo module (xem admin "Loại Tệp Cho Phép") — SAU khi ALLOWED_EXT (danh sách

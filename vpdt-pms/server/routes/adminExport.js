@@ -27,7 +27,7 @@ const { verifyFileSignature } = require('../lib/fileSignature');
 const { withLockedAppDataValue } = require('../lib/appData');
 const { assertNoManagerCycle } = require('../lib/recordViewScope');
 const { HttpError } = require('../lib/httpErrors');
-const { sendServerError } = require('../lib/errorResponse');
+const { sendServerError, sendCatchError } = require('../lib/errorResponse');
 
 const router = express.Router();
 router.use(requireAuth, blockIfMustChangePassword);
@@ -64,7 +64,7 @@ const upload = multer({
   storage: multer.memoryStorage(), // chỉ đọc nội dung rồi trả JSON, không cần giữ lại file trên đĩa
   limits: { fileSize: MAX_MB * 1024 * 1024 },
   fileFilter: (req, file, cb) => {
-    if (!/\.xlsx$/i.test(file.originalname)) return cb(new Error('Chỉ chấp nhận file Excel (.xlsx)'));
+    if (!/\.xlsx$/i.test(file.originalname)) return cb(new HttpError(400, 'Chỉ chấp nhận file Excel (.xlsx)'));
     cb(null, true);
   }
 });
@@ -80,7 +80,7 @@ router.post('/users/import-xlsx', (req, res) => {
       if (err.code === 'LIMIT_FILE_SIZE') return res.status(400).json({ error: `Tệp vượt quá dung lượng cho phép (${MAX_MB}MB)` });
       return res.status(400).json({ error: err.message });
     }
-    if (err) return res.status(400).json({ error: err.message });
+    if (err) return sendCatchError(res, err, 'POST /api/admin/users/import-xlsx');
     if (!req.file) return res.status(400).json({ error: 'Thiếu tệp cần import' });
 
     try {
@@ -90,7 +90,7 @@ router.post('/users/import-xlsx', (req, res) => {
       const rows = await parseUsersImportXlsx(req.file.buffer);
       res.json({ rows });
     } catch (parseErr) {
-      res.status(400).json({ error: parseErr.message || 'Không đọc được nội dung file Excel' });
+      sendCatchError(res, parseErr, 'POST /api/admin/users/import-xlsx');
     }
   });
 });
@@ -106,7 +106,7 @@ router.post('/org-chart/import-xlsx', (req, res) => {
       if (err.code === 'LIMIT_FILE_SIZE') return res.status(400).json({ error: `Tệp vượt quá dung lượng cho phép (${MAX_MB}MB)` });
       return res.status(400).json({ error: err.message });
     }
-    if (err) return res.status(400).json({ error: err.message });
+    if (err) return sendCatchError(res, err, 'POST /api/admin/org-chart/import-xlsx');
     if (!req.file) return res.status(400).json({ error: 'Thiếu tệp cần import' });
 
     try {
@@ -116,7 +116,7 @@ router.post('/org-chart/import-xlsx', (req, res) => {
       const rows = await parseOrgChartImportXlsx(req.file.buffer);
       res.json({ rows });
     } catch (parseErr) {
-      res.status(400).json({ error: parseErr.message || 'Không đọc được nội dung file Excel' });
+      sendCatchError(res, parseErr, 'POST /api/admin/org-chart/import-xlsx');
     }
   });
 });

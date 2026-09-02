@@ -6,6 +6,7 @@
 // khái niệm mã hoá ký tự phải lo nữa.
 const ExcelJS = require('exceljs'); // chỉ còn dùng để SINH file .xlsx xuất ra; đọc file upload đi qua lib/xlsxSafeRead.js
 const { streamFirstSheetRows } = require('./xlsxSafeRead');
+const { HttpError } = require('./httpErrors');
 
 function styleHeaderRow(row) {
   row.font = { bold: true };
@@ -100,7 +101,7 @@ async function parseUsersImportXlsx(buffer) {
     return true;
   });
 
-  if (overLimit) throw new Error(`File quá nhiều dòng (tối đa ${MAX_USER_IMPORT_ROWS} người dùng/lần)`);
+  if (overLimit) throw new HttpError(400, `File quá nhiều dòng (tối đa ${MAX_USER_IMPORT_ROWS} người dùng/lần)`);
   return rows;
 }
 

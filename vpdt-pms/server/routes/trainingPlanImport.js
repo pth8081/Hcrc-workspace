@@ -13,6 +13,8 @@ const { requireAuth, blockIfMustChangePassword } = require('../lib/auth');
 const { buildPlanImportTemplateWorkbook, parsePlanImportFile } = require('../lib/trainingPlanImport');
 const { getAllForCollection } = require('../lib/recordStore');
 const { verifyFileSignature } = require('../lib/fileSignature');
+const { HttpError } = require('../lib/httpErrors');
+const { sendCatchError } = require('../lib/errorResponse');
 
 const router = express.Router();
 router.use(requireAuth, blockIfMustChangePassword);
@@ -46,7 +48,7 @@ const upload = multer({
   fileFilter: (req, file, cb) => {
     const ext = path.extname(file.originalname).toLowerCase();
     if (!ALLOWED_EXT.has(ext)) {
-      return cb(new Error(`Chỉ chấp nhận file Excel (.xlsx/.xls) hoặc CSV, không hỗ trợ: ${ext || '(không rõ)'}`));
+      return cb(new HttpError(400, `Chỉ chấp nhận file Excel (.xlsx/.xls) hoặc CSV, không hỗ trợ: ${ext || '(không rõ)'}`));
     }
     cb(null, true);
   }
@@ -88,7 +90,7 @@ router.post('/parse-plan-import', uploadRateLimiter, requireTrainingManage, (req
       }
       return res.status(400).json({ error: err.message });
     }
-    if (err) return res.status(400).json({ error: err.message });
+    if (err) return sendCatchError(res, err, 'POST /api/training/parse-plan-import');
     if (!req.file) return res.status(400).json({ error: 'Thiếu tệp kế hoạch đào tạo cần tải lên' });
 
     try {
@@ -101,8 +103,7 @@ router.post('/parse-plan-import', uploadRateLimiter, requireTrainingManage, (req
       const items = await parsePlanImportFile(buffer, ext, courses);
       res.json({ items, fileName: req.file.originalname });
     } catch (parseErr) {
-      const status = parseErr.status || 400;
-      res.status(status).json({ error: parseErr.message || 'Không đọc được nội dung file kế hoạch đào tạo' });
+      sendCatchError(res, parseErr, 'POST /api/training/parse-plan-import');
     } finally {
       fs.unlink(req.file.path, () => {}); // chỉ dùng để đọc 1 lần, không cần giữ lại file gốc
     }

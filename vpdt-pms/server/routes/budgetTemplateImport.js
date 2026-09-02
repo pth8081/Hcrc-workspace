@@ -11,6 +11,8 @@ const rateLimit = require('express-rate-limit');
 const { requireAuth, blockIfMustChangePassword } = require('../lib/auth');
 const { buildBudgetTemplateFieldsWorkbook, parseBudgetTemplateFieldsExcelBuffer, parseArbitraryColumnLabels } = require('../lib/budgetTemplateImport');
 const { verifyFileSignature } = require('../lib/fileSignature');
+const { HttpError } = require('../lib/httpErrors');
+const { sendCatchError } = require('../lib/errorResponse');
 
 const router = express.Router();
 router.use(requireAuth, blockIfMustChangePassword);
@@ -49,7 +51,7 @@ const upload = multer({
   limits: { fileSize: MAX_MB * 1024 * 1024 },
   fileFilter: (req, file, cb) => {
     const ext = path.extname(file.originalname).toLowerCase();
-    if (!ALLOWED_EXT.has(ext)) return cb(new Error(`Chỉ chấp nhận file Excel (.xlsx/.xls), không hỗ trợ: ${ext || '(không rõ)'}`));
+    if (!ALLOWED_EXT.has(ext)) return cb(new HttpError(400, `Chỉ chấp nhận file Excel (.xlsx/.xls), không hỗ trợ: ${ext || '(không rõ)'}`));
     cb(null, true);
   }
 });
@@ -77,7 +79,7 @@ router.post('/parse-template-fields', requireBudgetManage, uploadRateLimiter, (r
       if (err.code === 'LIMIT_FILE_SIZE') return res.status(400).json({ error: `Tệp vượt quá dung lượng cho phép (${MAX_MB}MB)` });
       return res.status(400).json({ error: err.message });
     }
-    if (err) return res.status(400).json({ error: err.message });
+    if (err) return sendCatchError(res, err, 'POST /api/budget/parse-template-fields');
     if (!req.file) return res.status(400).json({ error: 'Thiếu tệp cần tải lên' });
 
     try {
@@ -89,8 +91,7 @@ router.post('/parse-template-fields', requireBudgetManage, uploadRateLimiter, (r
       const fields = await parseBudgetTemplateFieldsExcelBuffer(buffer);
       res.json({ fields, fileName: req.file.originalname });
     } catch (parseErr) {
-      const status = parseErr.status || 400;
-      res.status(status).json({ error: parseErr.message || 'Không đọc được nội dung file' });
+      sendCatchError(res, parseErr, 'POST /api/budget/parse-template-fields');
     } finally {
       fs.unlink(req.file.path, () => {});
     }
@@ -108,7 +109,7 @@ router.post('/parse-arbitrary-columns', requireBudgetManage, uploadRateLimiter, 
       if (err.code === 'LIMIT_FILE_SIZE') return res.status(400).json({ error: `Tệp vượt quá dung lượng cho phép (${MAX_MB}MB)` });
       return res.status(400).json({ error: err.message });
     }
-    if (err) return res.status(400).json({ error: err.message });
+    if (err) return sendCatchError(res, err, 'POST /api/budget/parse-arbitrary-columns');
     if (!req.file) return res.status(400).json({ error: 'Thiếu tệp cần tải lên' });
 
     try {
@@ -120,8 +121,7 @@ router.post('/parse-arbitrary-columns', requireBudgetManage, uploadRateLimiter, 
       const columns = await parseArbitraryColumnLabels(buffer);
       res.json({ columns, fileName: req.file.originalname });
     } catch (parseErr) {
-      const status = parseErr.status || 400;
-      res.status(status).json({ error: parseErr.message || 'Không đọc được nội dung file' });
+      sendCatchError(res, parseErr, 'POST /api/budget/parse-arbitrary-columns');
     } finally {
       fs.unlink(req.file.path, () => {});
     }
