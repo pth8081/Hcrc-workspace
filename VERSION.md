@@ -1,10 +1,91 @@
 # Phiên bản hiện tại
 
-**4.5** — đã merge vào `main` (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge
+**4.6** — đã merge vào `main` (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge
 góc màn hình + `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần
 kiểu `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
 
-## Cập nhật gần nhất — CSP unsafe-inline: đợt 14/N — module Hỗ Trợ IT
+## Cập nhật gần nhất — CSP unsafe-inline: đợt 15/N — module Đồng Phục
+
+Tiếp tục đợt 14 (Hỗ Trợ IT, xem mục "Trước đó" ngay bên dưới) — đợt này chuyển toàn bộ module **Đồng
+Phục** (`#uniformSection` — 5 sub-tab Kỳ Cấp Phát/Xác Nhận-Cấp Phát/Kho Đồng Phục/Tổng Quan/Quản Lý Nhân
+Viên Siêu Thị trong 1 lần, không có modal nào sống ngoài section):
+
+- **45 điểm** `onclick`/`onchange`/`oninput`/`onsubmit` chuyển sang `data-op*`, chia theo sub-tab:
+  - **5 nút chuyển sub-tab** dùng chung 1 thanh tab (`setUniformSubTab`).
+  - **📦 Kỳ Cấp Phát** (`#uniformSubPeriods` + hàm render `renderUniformCatalogList`/
+    `renderUniformAllocationBlocks`/`renderUniformPeriodsList`): **15 điểm** — nút "+ Thêm" Danh Mục Đồng
+    Phục (`saveUniformCatalogItem`), nút Xóa từng mặt hàng danh mục, khối "Tạo Kỳ Cấp Phát" (nút "+ Thêm
+    Siêu Thị"/"Tạo Kỳ Cấp Phát", ô tìm-siêu-thị theo khối phân bổ `resolveUniformAllocDeptInput`, nút "✕
+    Bỏ siêu thị này", 3 ô chọn mặt hàng/size/số lượng + nút xoá dòng + nút "+ Thêm dòng mặt hàng" trong
+    từng khối), ô lọc trạng thái kỳ cấp phát, 3 nút Duyệt/Từ Chối/Xóa trên từng kỳ trong danh sách.
+  - **✅ Xác Nhận / Cấp Phát** (`#uniformSubStore` + hàm render `renderUniformPendingAllocations`/
+    `renderUniformIssueItems`/`renderUniformHoldingsTable`/`renderUniformAdjEmpItemOptions`/
+    `renderUniformTransferApprovalQueue`/`renderUniformTransfersTable`): **18 điểm** — nút "✅ Xác Nhận Đã
+    Nhận" từng phần phân bổ đang chờ, khối "Cấp Đồng Phục Cho Nhân Viên" (ô tìm nhân viên
+    `resolveUniformEmployeeInput`, nút "+ Thêm Mặt Hàng", chọn mặt hàng/size + số lượng + nút xoá dòng
+    trong từng dòng cấp, nút "Cấp Phát"), 3 nút thao tác "Thu Hồi/Báo Hỏng/Báo Mất" trên bảng "Đồng Phục
+    Nhân Viên Đang Giữ" (`openUniformHoldingActionModal(idx, outcome)`), khối "Báo Hỏng/Hủy (Từ Kho)" (nút
+    submit), khối "Thu Hồi Từ Nhân Viên" (ô tìm nhân viên + dropdown size, nút submit), khối "Điều Chuyển
+    Kho" giữa các siêu thị (nút "Gửi Yêu Cầu Điều Chuyển", ô lọc trạng thái lịch sử, 2 nút Duyệt/Từ Chối
+    trên từng yêu cầu đang chờ).
+  - **📊 Kho Đồng Phục** (`#uniformSubStock` + hàm render `renderUniformStock`): **2 điểm** — ô lọc theo
+    tên siêu thị (`oninput`), nút mở/thu gọn chi tiết từng dòng tồn kho (`toggleUniformStockDetail`).
+  - **📈 Tổng Quan**: **1 điểm** — nút "📥 Xuất Excel" (`exportUniformDashByStoreExcel`); phần còn lại của
+    dashboard thuần hiển thị, không có control nào khác.
+  - **🧑‍💼 Quản Lý Nhân Viên Siêu Thị** (`#uniformSubEmployees`): **4 điểm** — form tạo tài khoản nhân
+    viên siêu thị (`submitUniformEmployeeCreate(event)`), ô tìm kiếm + checkbox "Hiện cả tài khoản đã
+    khoá" (đều gọi lại `renderUniformEmployeesList`), nút "🔒 Khoá" trên từng nhân viên trong bảng.
+- **1 wrapper mới** cho trường hợp `oninput` gọi 2 hàm liền (`oninput="resolveUniformEmployeeInput(...);
+  renderUniformAdjEmpItemOptions();"` ở ô "Nhân Viên" của khối Thu Hồi Từ Nhân Viên) — `data-op-seq` chỉ
+  được `bindCspDelegation()` xử lý ở sự kiện click, không có ở input/change, nên gộp thành 1 hàm
+  `resolveUniformAdjEmpEmployeeInputAndRefresh(inputId, hiddenId)` đặt ngay cạnh
+  `resolveUniformEmployeeInput()` gốc, dùng với `data-op-input`. Không có trường hợp `this.checked` nào
+  trong phạm vi module này (không cần thêm wrapper `FromCheckbox`).
+- **1 điểm converter không tự xử lý đúng, sửa tay**: `onclick="toggleUniformStockDetail('${escapeHtml(
+  r.dept)}', '${escapeHtml(r.name)}', '${escapeHtml(r.size || '')}')"` — tham số thứ 3 chứa `||
+  ''` (chuỗi rỗng dự phòng) khiến converter không nhận ra đây là 1 chuỗi bọc ngoài do có dấu nháy đơn lồng
+  bên trong, giữ nguyên cả dấu nháy trong giá trị `data-arg2` (sai — sẽ biến `size` thành chuỗi có literal
+  dấu nháy thay vì rỗng) — sửa tay thành `data-arg2="${escapeHtml(r.size || '')}"` không bọc nháy.
+- **1 gốc `bindCspDelegation`**: `uniformSection` — cả 5 sub-tab đều render trong section này. 3 nút thao
+  tác "Thu Hồi/Báo Hỏng/Báo Mất" (`openUniformHoldingActionModal()`) KHÔNG mở modal riêng của module — dùng
+  chung `showConfirmModal()`/`#genericConfirmModal` (đã bọc sẵn ở cụm Quản Trị/Hệ Thống, đợt 13, dùng
+  chung toàn hệ thống) nên không cần thêm gốc thứ 2.
+- Tra riêng `renderUniformReportExtra()` (hàm hiển thị thống kê Đồng Phục trong tab report-detail của
+  module Báo Cáo, đã chuyển từ đợt 11) — hàm này chỉ dựng 1 bảng thống kê thuần hiển thị (siêu thị/mặt
+  hàng/size/đã nhận/đã cấp/tồn kho), không có control tương tác nào, không có gì cần chuyển ở đây.
+- **Không phát hiện lỗi thật nào trong lúc demo module này.**
+
+**Xác nhận không ảnh hưởng** — 2 lớp kiểm tra độc lập trước khi merge:
+- Demo Playwright thật (SQL Server + server local + đăng nhập UI thật qua tài khoản demo tạm 2FA thật,
+  xoá lại ngay sau demo cùng toàn bộ dữ liệu demo tạo ra trong lúc test — kỳ cấp phát/phiếu cấp/điều chỉnh
+  tồn kho lưu SQL qua `dbo.Records` [`uniformPeriods`/`uniformIssuances`/`uniformStockAdjustments` đều nằm
+  trong `MIGRATED_COLLECTIONS`, xoá bằng `deleteRecordById()`], còn tài khoản demo + siêu thị demo thêm vào
+  Danh Mục Siêu Thị nằm ở AppData JSON blob thường [`users`/`stores`], xoá bằng `withLockedAppDataValue()`):
+  đăng nhập, mở Đồng Phục; sub-tab Kỳ Cấp Phát — thêm 1 siêu thị demo vào Danh Mục Siêu Thị, tạo 1 kỳ cấp
+  phát (chọn siêu thị qua ô tìm-kiếm-gõ-chọn, chọn mặt hàng/size từ Danh Mục Đồng Phục có sẵn, nhập số
+  lượng), duyệt kỳ vừa tạo; sub-tab Xác Nhận/Cấp Phát — xác nhận đã nhận phần phân bổ, tạo 1 tài khoản
+  nhân viên siêu thị demo qua sub-tab Quản Lý Nhân Viên Siêu Thị rồi quay lại cấp 1 mặt hàng cho nhân viên
+  đó, bấm "↩️ Thu Hồi" trên bảng "Đồng Phục Nhân Viên Đang Giữ" (mở đúng `#genericConfirmModal` dùng
+  chung, nhập lý do, xác nhận); sub-tab Kho Đồng Phục — mở/thu gọn chi tiết 1 dòng tồn kho; sub-tab Tổng
+  Quan — xem dashboard render đúng. Toàn bộ đúng, không có lỗi JS console mới liên quan tới thay đổi (chỉ
+  3 lỗi mạng nền quen thuộc trước lúc đăng nhập: chặn Google Fonts, `/api/auth/me` 401 lúc chưa đăng nhập,
+  `/api/captcha` 404 do CAPTCHA chưa bật ở môi trường demo — cùng 3 lỗi y hệt các đợt trước, không liên
+  quan tới module này).
+- Chạy lại toàn bộ 46 file test hồi quy (`tests/test-*.js`), gồm cả `tests/test-uniform.js` và
+  `tests/test-uniform-phase2.js` (riêng cho module này) — 44/46 OK, đúng 2 file known-flaky quen thuộc
+  (`test-audit-fixes-batch1.js`/`test-audit-round2-cluster1.js`, timeout hạ tầng test không liên quan thay
+  đổi lần này).
+
+**Deploy-impact:** KHÔNG đổi `sql/schema.sql`, KHÔNG thêm biến môi trường mới, KHÔNG thêm `dependencies`
+mới — toàn bộ thay đổi nằm trong `public/index.html` (thuần client JS/HTML), deploy an toàn chỉ với copy
+code + `pm2 restart`, không cần thao tác 1 lần nào khác.
+
+**Còn lại:** Giấy Phép, Tuyển Dụng, Tin Tức/Truyền Thông (bao gồm cả form "HCRC Đồng Hành" phía nhân viên
+— `#hrFeedbackForm`), Biên Bản Họp, Công Việc, Văn Bản Trình, Tài Liệu, Báo Cáo Định Kỳ... — dùng hạ tầng
+`data-op*`/`bindCspDelegation()` đã xây, làm tiếp tuần tự mỗi module 1 commit + demo + regression trước
+khi merge, tới khi hết toàn bộ điểm mới gỡ `unsafe-inline`.
+
+## Trước đó — CSP unsafe-inline: đợt 14/N — module Hỗ Trợ IT
 
 Tiếp tục đợt 13 (Quản Trị/Hệ Thống, xem mục "Trước đó" ngay bên dưới) — đợt này chuyển toàn bộ module **Hỗ
 Trợ IT** (`#itSupportSection` — 3 sub-tab Phê Duyệt Giá/Hỗ Trợ Yêu Cầu/Gia Hạn Dịch Vụ CNTT trong 1 lần,
