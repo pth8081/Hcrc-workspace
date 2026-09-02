@@ -1,10 +1,91 @@
 # Phiên bản hiện tại
 
-**4.3** — đã merge vào `main` (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge
+**4.4** — đã merge vào `main` (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge
 góc màn hình + `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần
 kiểu `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
 
-## Cập nhật gần nhất — CSP unsafe-inline: đợt 12/N — module Nhân Sự (Quản Lý & Phản Hồi Ý Kiến)
+## Cập nhật gần nhất — CSP unsafe-inline: đợt 13/N — module Quản Trị/Hệ Thống
+
+Tiếp tục đợt 12 (Nhân Sự, xem mục "Trước đó" ngay bên dưới) — đợt này chuyển toàn bộ cụm **Quản Trị/Hệ
+Thống** (`#systemSection`) trong 1 lần thay vì tách 3 lần như dự kiến ban đầu (Quản Trị Nội Dung/Biểu
+Mẫu, Quy Trình & Phê Duyệt, Hệ Thống-Admin/Log/Thùng Rác) — cả 6 màn con của tab "🛠️ Hệ Thống" đều đã
+được gộp làm CON trực tiếp của `#systemSection` từ 1 lần fix trước đó (để thanh tab con sticky khi cuộn),
+nên gộp chung vừa đúng phạm vi vừa chỉ cần đúng 1 gốc CSP:
+
+- **148 điểm** `onclick`/`onchange`/`oninput`/`onsubmit` chuyển sang `data-op*`, chia theo 6 sub-tab:
+  - **⚙️ Quản Trị** (`#adminSection` — thanh sub-tab con 4 mục + 4 khối Cấu Hình Email/Quản Lý Danh
+    Mục/Phân Quyền/API Xác Thực Ngoài): **96 điểm** — form lưu SMTP + nút test gửi mail, nút chọn kiểu
+    mã hoá SMTP, toàn bộ CRUD danh mục (Phòng ban, Siêu thị, Chức danh, Chức danh siêu thị, Loại Giấy
+    Phép, Loại Hợp Đồng, Danh mục tài liệu, Từ khoá nhạy cảm, Danh mục đào tạo), form Thêm/Sửa Người
+    Dùng + cây phân quyền (mọi nhóm quyền ALL/theo phòng ban qua `toggleScopeGroup`), danh sách Nhóm
+    Phân Quyền, danh sách Người Dùng (Sửa/Xoá/Khoá-Mở), Nhóm Phê Duyệt Văn Bản Trình/Hợp Đồng, Nhóm Loại
+    Trừ VPP, tạo/thu hồi API Key ngoài, gỡ thiết bị WebAuthn/TOTP hộ người dùng khác.
+  - **🔄 Quy Trình & Phê Duyệt** (`#workflowSection`): **24 điểm** — chuyển đổi module quy trình (13 nút
+    `switchWfModule`), form tạo/sửa mẫu quy trình phê duyệt, danh sách mẫu quy trình (Sửa/Xoá), cấu hình
+    quy trình theo từng phòng ban + đơn vị tham gia quy trình.
+  - **📋 Biểu Mẫu** (`#formSection`): **11 điểm** — chuyển tab loại biểu mẫu, form thêm trường tuỳ biến,
+    bảng trường (di chuyển thứ tự, sửa nhãn/bắt buộc trường mặc định, sửa/xoá trường tuỳ biến).
+  - **📊 Log** (`#logSection`): **7 điểm** — 3 dropdown lọc (Phân Hệ/Sự Kiện/Trạng Thái), ô tìm kiếm, nút
+    Đặt Lại, Xoá Log, Xuất Log Excel.
+  - **📎 Quản Lý Tệp File** (`#uploadTypeSection`): **2 điểm** — checkbox loại tệp cho phép theo module,
+    ô giới hạn dung lượng riêng.
+  - **🗑️ Thùng Rác** (`#trashSection`): **2 điểm** — nút Khôi phục/Xoá vĩnh viễn trong hàm render động
+    (không có điểm tĩnh — toàn bộ nội dung do `renderTrashList()` sinh ra).
+  - Thanh chuyển sub-tab con "🛠️ Hệ Thống" (6 nút `setSystemSubTab`) tính chung vào nhóm Quản Trị ở trên.
+- **4 hàm bọc nhỏ mới** cho các trường hợp hạ tầng `data-arg*` có sẵn không xử lý thẳng được:
+  - **3 wrapper `FromCheckbox`** (đọc `checkboxEl.checked` qua `data-arg-el`, đúng mẫu
+    `updateBudgetTemplateFieldRequiredFromCheckbox` đã dùng ở đợt Ngân Sách):
+    `toggleUploadTypeExtFromCheckbox`, `updateCoreFieldOverrideFromCheckbox`,
+    `toggleStoreJobTitleRestrictedFromCheckbox`.
+  - **1 wrapper `FromInput` mới** (trường hợp chưa từng gặp): ô sửa nhãn trường mặc định trước đây tính
+    fallback ngay trong `oninput` (`this.value.trim() || '<nhãn gốc>'`) — biểu thức JS, không phải lệnh
+    gọi hàm đơn nên converter không nhận diện được; viết `updateCoreFieldOverrideLabelFromInput(coreKey,
+    fieldId, defaultLabel, inputEl)` nhận `defaultLabel` qua `data-arg2` rồi tự tính fallback từ
+    `inputEl.value` qua `data-arg-el`.
+  - **2 chỗ chỉnh hàm gốc thay vì chỉ thêm wrapper**: nút "Tôi đã lưu lại, đóng hộp này" (API Key vừa
+    tạo) trước đây gọi thẳng `document.getElementById(...).classList.add(...)` trong `onclick` — không
+    phải lệnh gọi hàm đơn, tách thành hàm `closeExtApiKeyRevealBox()` riêng; nút "Thu hồi" API Key trước
+    đây truyền cả `name` qua tham số với `.replace(/'/g, "\\'")` để escape nháy đơn cho ngữ cảnh JS-string
+    inline — chuỗi tên key tự do (Q. Reserved) không escape an toàn được cho thuộc tính HTML kiểu
+    `data-argN`, nên đổi `revokeExternalApiKeyAction(id, name)` thành chỉ nhận `id` và tự tra `name` từ
+    `DB.externalApiKeys` bên trong hàm (cùng khuôn `editExternalApiKeyAllowedIpsAction()` đã làm).
+  - Không dùng `data-op-seq` lần này — không có nút nào gọi nhiều lệnh liền (`onclick="fn1();fn2()"`)
+    trong phạm vi cụm này.
+- **Chỉ cần thêm đúng 1 gốc** `bindCspDelegation('systemSection')` — cả 6 sub-tab con đều render bên
+  trong `#systemSection` (không phải anh em ngoài section như hầu hết modal ở các module trước). Không
+  đụng tới modal "Gán vai trò cột" (`#colRoleModal`, `openColumnRoleMappingModal()`) dù được gọi từ Mẫu
+  Ngân Sách/Biểu Mẫu — modal này nằm VẬT LÝ trong `#itSupportSection` (module Hỗ Trợ IT, chưa tới lượt),
+  và không đụng `#genericConfirmModal` (modal xác nhận dùng chung toàn hệ thống, không riêng cụm này) —
+  để lại cho đúng lượt/đợt dọn hạ tầng dùng chung sau.
+- **Không phát hiện lỗi thật nào trong lúc demo module này.**
+
+**Xác nhận không ảnh hưởng** — 2 lớp kiểm tra độc lập trước khi merge:
+- Demo Playwright thật (SQL Server + server local + đăng nhập UI thật qua tài khoản demo tạm 2FA thật,
+  xoá lại ngay sau demo): đăng nhập, mở Hệ Thống > Quản Trị > Phân Quyền (mở rộng cây quyền, tick/bỏ tick
+  1 nhóm ALL, lọc danh sách người dùng), tab Quản Lý Danh Mục, tab Cấu Hình Email (đổi kiểu mã hoá SMTP),
+  tab API Xác Thực Ngoài; chuyển Biểu Mẫu (đổi tab loại biểu mẫu, mở khối sửa trường mặc định, gõ trực
+  tiếp vào ô sửa nhãn + tick/bỏ tick "Bắt buộc" — xác nhận cả 2 wrapper `FromInput`/`FromCheckbox` mới
+  hoạt động đúng, giá trị đổi ngay trên bảng); chuyển Quy Trình & Phê Duyệt (chuyển module con "QT Đăng
+  Ký Xe"); chuyển Quản Lý Tệp File (tick/bỏ tick 1 loại tệp, đổi giới hạn dung lượng — xác nhận log hệ
+  thống ghi đúng `UPDATE_UPLOAD_TYPE_CONFIG`/`UPDATE_UPLOAD_SIZE_LIMIT`); chuyển Log (lọc theo Phân Hệ,
+  xác nhận bảng lọc đúng); chuyển Thùng Rác (danh sách hiện đúng, không bấm Khôi phục/Xoá vĩnh viễn vào
+  dữ liệu thật của module khác) — toàn bộ đúng, không có lỗi JS console mới liên quan tới thay đổi (chỉ
+  có vài lỗi mạng nền quen thuộc trước lúc đăng nhập: chặn Google Fonts, `/api/auth/me` 401 lúc chưa đăng
+  nhập, `/api/captcha` 404 do CAPTCHA chưa bật ở môi trường demo — không liên quan ứng dụng/thay đổi).
+- Chạy lại toàn bộ 46 file test hồi quy (`tests/test-*.js`) — 44/46 OK, đúng 2 file known-flaky quen
+  thuộc (`test-audit-fixes-batch1.js`/`test-audit-round2-cluster1.js`, timeout hạ tầng test không liên
+  quan thay đổi lần này).
+
+**Deploy-impact:** KHÔNG đổi `sql/schema.sql`, KHÔNG thêm biến môi trường mới, KHÔNG thêm `dependencies`
+mới — toàn bộ thay đổi nằm trong `public/index.html` (thuần client JS/HTML), deploy an toàn chỉ với copy
+code + `pm2 restart`, không cần thao tác 1 lần nào khác.
+
+**Còn lại:** Hỗ Trợ IT, Đồng Phục, Giấy Phép, Gia Hạn CNTT, Tuyển Dụng, Tin Tức/Truyền Thông (bao gồm cả
+form "HCRC Đồng Hành" phía nhân viên — `#hrFeedbackForm`), Biên Bản Họp, Công Việc, Văn Bản Trình, Tài
+Liệu, Báo Cáo Định Kỳ... — dùng hạ tầng `data-op*`/`bindCspDelegation()` đã xây, làm tiếp tuần tự mỗi
+module 1 commit + demo + regression trước khi merge, tới khi hết toàn bộ điểm mới gỡ `unsafe-inline`.
+
+## Trước đó — CSP unsafe-inline: đợt 12/N — module Nhân Sự (Quản Lý & Phản Hồi Ý Kiến)
 
 Tiếp tục đợt 11 (Báo Cáo, xem mục "Trước đó" ngay bên dưới) — đợt này chuyển nốt phần còn lại của module
 **Nhân Sự** chưa chuyển ở đợt 10 (đợt đó mới chuyển sub-tab "🌳 Cơ Cấu Tổ Chức", còn sub-tab "🤝 Quản Lý &
