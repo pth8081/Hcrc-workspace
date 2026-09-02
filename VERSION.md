@@ -1,10 +1,78 @@
 # Phiên bản hiện tại
 
-**3.9** — đã merge vào `main` (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge
+**4.0** — đã merge vào `main` (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge
 góc màn hình + `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần
 kiểu `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
 
-## Cập nhật gần nhất — CSP unsafe-inline: đợt 8/N — module Đào Tạo (LMS)
+## Cập nhật gần nhất — CSP unsafe-inline: đợt 9/N — module Ngân Sách
+
+Tiếp tục đợt 8 (Đào Tạo/LMS, xem mục "Trước đó" ngay bên dưới) — đợt này chuyển module **Ngân Sách**
+(3 sub-tab Ngân Sách Phê Duyệt/Ngân Sách Thực Hiện/Tổng Hợp, cộng modal "⚙️ Quản Lý Kỳ &amp; Mẫu" và modal
+Xử Lý/Xem Chi Tiết):
+
+- **44 điểm** `onclick`/`onchange`/`oninput`/`onsubmit` chuyển sang `data-op*`, dùng lại đúng hạ tầng dùng
+  chung (`cspDispatchOp`/`bindCspDelegation`) — không cần code hạ tầng mới:
+  - **15 điểm** trong HTML tĩnh `#budgetSection` (3 nút chuyển sub-tab, nút mở modal Quản Lý Kỳ &amp; Mẫu,
+    chọn kỳ ngân sách `onchange` + ô lọc trạng thái `onchange` cho cả 2 sub-tab PLAN/ACTUAL, nút Thêm dòng/
+    Lưu Nháp/Gửi Duyệt, nút Tổng Hợp).
+  - **10 điểm** trong modal `#budgetPeriodTemplateModal` ("Quản Lý Kỳ &amp; Mẫu") — sống **NGOÀI**
+    `#budgetSection` (giống Xe/Vận Hành/Đào Tạo): 2 nút Đóng, form tạo kỳ (`onsubmit`), checkbox "Tất cả
+    phòng ban", 2 ô chọn file Excel (`onchange` nhận tham số `event`), nút Thêm Mẫu/Thêm cột/Hủy, form lưu
+    mẫu (`onsubmit`).
+  - **2 điểm** trong modal `#budgetProcessModal` (2 nút Đóng, HTML tĩnh) — modal này cũng sống NGOÀI
+    section.
+  - **17 điểm** trong các hàm render động: nút "✕" xoá dòng/nút "✏️ Sửa Nháp"/"✍️ Xử lý / Duyệt"/"👁️ Xem
+    chi tiết" (`renderBudgetEntryLinesTable`/`renderBudgetEntryList`), nút ▲▼ sắp xếp cột + ô nhập tên cột
+    `oninput` + chọn kiểu cột `onchange` + ô nhập tuỳ chọn `oninput` + checkbox Bắt buộc `onchange` + nút
+    xoá cột (`renderBudgetTemplateFieldsBuilder`), 3 nút In/Xuất Excel/Xuất PDF (`renderBudgetSummaryResult`),
+    3 nút Từ Chối/Yêu Cầu Bổ Sung/Phê Duyệt trong modal xử lý (`openBudgetProcessModal`).
+  - Cần **3 gốc** `bindCspDelegation('budgetSection')` + `bindCspDelegation('budgetPeriodTemplateModal')`
+    + `bindCspDelegation('budgetProcessModal')` — cùng mẫu Xe/Vận Hành/Đào Tạo (2 modal sống ngoài section).
+  - **Loại khỏi phạm vi**: `buildActionCell()`/`buildDashboardCardsHTML()` dùng chung (2 nút "Khác ▾" +
+    thẻ dashboard bấm lọc trong `renderBudgetEntryList`) — vẫn dành cho 1 đợt riêng cuối cùng như các module
+    trước; `oncontextmenu="return false"` bảo vệ nội dung Tổng Hợp (`renderBudgetSummaryResult`) — mẫu bảo
+    vệ chống copy dùng chung toàn hệ thống, không thuộc 4 loại thuộc tính `onclick`/`onchange`/`oninput`/
+    `onsubmit` trong phạm vi đợt CSP này.
+- **1 dạng cú pháp nguồn** cần xử lý bằng helper (đã gặp ở đợt 8, lặp lại đúng mẫu): checkbox "Bắt buộc"
+  của cột mẫu tuỳ biến dùng `onchange="...(idx, this.checked)"` — `this.checked` KHÔNG phải 1 trong 3 slot
+  tham số đặc biệt được hỗ trợ (chỉ `data-arg-value`/`data-arg-el`/`data-arg-event`). Trước khi đổi, đã
+  `grep -rn "updateBudgetTemplateField(" tests/` xác nhận `tests/test-office-budget.js` gọi thẳng
+  `updateBudgetTemplateField(idx, 'label', value)` (chữ ký cũ `(idx, key, value)`, không dùng key
+  `'required'`) — nên **giữ nguyên** chữ ký + logic hàm lõi `updateBudgetTemplateField()`, chỉ thêm 1 hàm
+  mỏng mới `updateBudgetTemplateFieldRequiredFromCheckbox(idx, checkboxEl)` đọc `.checked` rồi gọi hàm lõi
+  với key `'required'` — checkbox trong HTML đổi sang gọi hàm mỏng này qua `data-arg-el`.
+- **Không phát hiện lỗi thật nào trong đợt này** (khác đợt 8 phát hiện + sửa lỗi `ttTakeSelectOption`) —
+  `tests/test-office-budget.js` (bộ test hồi quy có sẵn, phủ khá đầy đủ luồng CRUD mẫu/kỳ/lập/duyệt/tổng
+  hợp ngân sách) pass nguyên vẹn 54/54 kịch bản ngay từ lần chạy lại đầu tiên sau khi chuyển đổi.
+
+**Xác nhận không ảnh hưởng** — 2 lớp kiểm tra độc lập trước khi merge:
+- Demo Playwright thật (SQL Server + server local + đăng nhập UI thật qua tài khoản demo tạm `demo_budget`
+  2FA thật, xoá lại ngay sau demo — cũng tạo tạm 1 mẫu ngân sách + 1 kỳ ngân sách + 2 bản ngân sách qua
+  đúng luồng UI rồi xoá lại qua `deleteRecordForCollection()`, KHÔNG phải bug code): điều hướng Sidebar →
+  Tổng Hợp → Ngân Sách, mở modal "⚙️ Quản Lý Kỳ &amp; Mẫu", tạo 1 mẫu ngân sách (thêm 1 cột tuỳ biến, đặt
+  tên qua `oninput`, tick "Bắt buộc" qua checkbox `onchange` — xác nhận đúng giá trị `true` sau khi tick,
+  chứng minh wrapper `data-arg-el` hoạt động đúng), tạo 1 kỳ ngân sách áp dụng tất cả phòng ban gắn mẫu vừa
+  tạo, lập + Thêm dòng + Lưu Nháp + Gửi Duyệt 1 bản Ngân Sách Phê Duyệt (15.000.000đ) và 1 bản Ngân Sách
+  Thực Hiện (13.500.000đ) cùng kỳ, mở modal Xử Lý/Xem Chi Tiết duyệt cả 2 bản (tài khoản demo có quyền
+  admin nên tự duyệt được), qua tab Tổng Hợp chọn kỳ vừa tạo và xác nhận đúng cả 2 số tiền + khối "📌 Toàn
+  Công Ty" hiển thị — toàn bộ đều đúng, không có lỗi JS console mới (3 lỗi console xuất hiện trong log —
+  Google Fonts CDN bị chặn trong sandbox, `401` lúc `tryRestoreSession()` chưa đăng nhập, `404` tài nguyên
+  không liên quan — đều là nhiễu môi trường sandbox có sẵn từ trước, không liên quan thay đổi lần này).
+- Chạy lại toàn bộ 46 file test hồi quy (`tests/test-*.js`) — 44/46 OK, đúng 2 file known-flaky quen thuộc
+  từ các đợt trước (`test-audit-fixes-batch1.js`/`test-audit-round2-cluster1.js`, timeout do đua tranh kết
+  nối SQL Server ở hạ tầng test, không liên quan thay đổi lần này) — `tests/test-office-budget.js` xác nhận
+  54/54 pass.
+
+**Deploy-impact:** KHÔNG đổi `sql/schema.sql`, KHÔNG thêm biến môi trường mới, KHÔNG thêm `dependencies`
+mới — toàn bộ thay đổi nằm trong `public/index.html` (thuần client JS/HTML), deploy an toàn chỉ với copy
+code + `pm2 restart`, không cần thao tác 1 lần nào khác.
+
+**Còn lại:** Cơ Cấu Tổ Chức, Báo Cáo, Nhân Sự, Quản Trị/Hệ Thống, Hỗ Trợ IT, Đồng Phục, Giấy Phép, Gia Hạn
+CNTT, Tuyển Dụng, Tin Tức/Truyền Thông, Biên Bản Họp, Công Việc, Văn Bản Trình, Tài Liệu... — dùng hạ tầng
+`data-op*`/`bindCspDelegation()` đã xây, làm tiếp tuần tự mỗi module 1 commit + demo + regression trước khi
+merge, tới khi hết toàn bộ điểm mới gỡ `unsafe-inline`.
+
+## Trước đó — CSP unsafe-inline: đợt 8/N — module Đào Tạo (LMS)
 
 Tiếp tục đợt 7 (VPP, xem mục "Trước đó" ngay bên dưới) — đợt này chuyển module **Đào Tạo** (Truyền Thông
 Nội Bộ > Đào tạo — 9 sub-tab: Dashboard/Lớp Học/Chương Trình/Kế Hoạch Đào Tạo/Đăng Ký Của Tôi/Kho Tài
