@@ -1,10 +1,43 @@
 # Phiên bản hiện tại
 
-**2.7** — đã merge vào `main` (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge
+**2.8** — đã merge vào `main` (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge
 góc màn hình + `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần
 kiểu `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
 
-## Cập nhật gần nhất — Audit Đợt 5 Giai đoạn 3: toàn vẹn dữ liệu & cascade xóa (nhánh `claude/chao-ban-oo5ijl`)
+## Cập nhật gần nhất — Audit Đợt 5 Giai đoạn 4: hoàn thiện (Thấp) (nhánh `claude/chao-ban-oo5ijl`)
+
+Giai đoạn cuối cùng trong lộ trình 4 giai đoạn của Audit Đợt 5 — các phát hiện mức Thấp, không chặn triển
+khai, chỉ chọn xử lý những mục cơ giới/rủi ro hành vi bằng 0 (không đụng luồng nghiệp vụ nào):
+
+- `careerPathConfirmations` (mốc "Xác nhận hoàn thành cấp bậc" của Lộ Trình Thăng Tiến, Đào Tạo): giờ
+  được lọc lại đúng ở `GET /api/data` — trước đây chỉ ẩn ở giao diện, để lộ mốc thăng tiến (username/
+  phòng ban/thời điểm xác nhận) của MỌI nhân viên cho bất kỳ ai gọi thẳng API.
+- `lib/adminAuth.js`: sửa lại comment mô tả sai nguồn `req.user.admin` (comment cũ ghi nhầm là "cache
+  trong JWT, hiệu lực 1h" — thực ra `requireAuth` đã tự re-fetch DB mỗi request qua cache vài giây, và
+  JWT hệ thống này hiệu lực 8h chứ không phải 1h). Chỉ sửa chú thích, không đổi logic.
+- `sql/schema.sql`: câu `ALTER TABLE dbo.AppData ALTER COLUMN UpdatedAt...` giờ chỉ chạy khi tra
+  `INFORMATION_SCHEMA.COLUMNS` thấy cột CHƯA đúng kiểu — trước đây chạy vô điều kiện ở MỌI lần deploy dù
+  không có gì thay đổi, tốn 1 khoá schema không cần thiết trên bảng đọc ở gần như mọi request. Vẫn an
+  toàn chạy lại nhiều lần như trước (tự bọc điều kiện, không mất dữ liệu).
+- `lib/taskStore.js` (`dbo.Tasks`) và `lib/systemLogStore.js` (`dbo.SystemLogs`): cắt các cột trích xuất
+  độ rộng cố định (`SourceCode`, `TargetObject`, `IpAddress`...) về đúng độ rộng cột SQL trước khi ghi —
+  trước đây nếu 1 giá trị vượt giới hạn cột (VD `IpAddress` lấy từ header có thể bị client gửi chuỗi dài
+  bất thường), INSERT/UPDATE ném thẳng lỗi SQL thô thay vì ghi được bản ghi/log.
+
+**Deploy-impact:** `sql/schema.sql` CÓ đổi (thêm điều kiện `INFORMATION_SCHEMA` quanh 1 câu `ALTER COLUMN`
+đã có sẵn) — nhắc chạy lại script, vẫn an toàn chạy lại nhiều lần như mọi lần trước (tự bọc điều kiện,
+không mất dữ liệu). Không thêm biến môi trường, không thêm dependency. Ngoài chạy lại `schema.sql`, chỉ
+cần copy code + `pm2 restart`.
+
+Test: toàn bộ `tests/test-*.js` chạy lại, không có regression mới (2 kịch bản thất bại sẵn có do sandbox
+không kết nối được SQL Server thật, không liên quan thay đổi).
+
+Đây là giai đoạn cuối trong lộ trình 4 giai đoạn của Audit Đợt 5 — 8 phát hiện Thấp còn lại trong danh
+sách gốc không xử lý ở đợt này (mang tính chọn lọc kiến trúc/UX hơn là lỗi cơ giới, ví dụ tách bạch trách
+nhiệm — segregation of duties — hay cần quyết định sản phẩm cụ thể) — có thể xem xét lại sau nếu người
+dùng muốn tiếp tục.
+
+## Trước đó — Audit Đợt 5 Giai đoạn 3: toàn vẹn dữ liệu & cascade xóa
 
 Tiếp theo Giai đoạn 1+2 (bên dưới) — 4 phát hiện còn lại trong lộ trình khắc phục, nhóm "toàn vẹn dữ
 liệu & cascade xóa" (không khẩn nhưng càng để lâu càng khó dọn rác dữ liệu):
