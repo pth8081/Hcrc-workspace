@@ -679,6 +679,54 @@ function deleteOperationWorkItem(user, item, descendantIds) {
   return [item.id, ...descendantIds];
 }
 
+// Sửa thông tin công việc — CHỈ toàn quyền Thực hiện (giống create/delete), KHÔNG mở cho người phụ
+// trách/người nghiệm thu chỉ định (khác updateOperationWorkItemProgress/acceptOperationWorkItem).
+// KHÔNG cho sửa periodId/parentWorkItemId/status — giữ toàn vẹn cây + kỳ đã lập lúc tạo, muốn đổi thì
+// xoá tạo lại như hiện tại.
+function editOperationWorkItem(user, item, payload) {
+  assertCanManageOperationExecution(user);
+  if (item.status === 'DA_NGHIEM_THU') {
+    throw new HttpError(409, 'Công việc đã nghiệm thu xong, không thể sửa lại');
+  }
+  const title = String(payload?.title || '').trim();
+  if (!title) throw new HttpError(400, 'Vui lòng nhập tên công việc');
+  item.title = title;
+  item.description = String(payload?.description || '').trim();
+  item.assignedTo = payload?.assignedTo ? String(payload.assignedTo) : null;
+  item.assignedToName = payload?.assignedToName ? String(payload.assignedToName) : null;
+  item.acceptorUsername = payload?.acceptorUsername ? String(payload.acceptorUsername) : null;
+  item.acceptorName = payload?.acceptorUsername ? String(payload?.acceptorName || '').trim() : null;
+  item.deadline = payload?.deadline || '';
+  item.history = item.history || [];
+  item.history.push({ action: 'EDITED', by: user.username, byName: user.name, time: nowVN() });
+  return item;
+}
+
+// Xác Nhận Đưa Vào Sử Dụng — mốc CẤP HỒ SƠ, tách khỏi "Đã nghiệm thu" từng công việc/cây công việc.
+// Quyền RIÊNG (operationUseConfirm), KHÔNG dùng chung operationAcceptanceManage — chỉ mở khi TOÀN BỘ
+// cây công việc của hồ sơ đã "Đã nghiệm thu", là hành động chốt dự án 1 lần, không thể huỷ/lặp lại.
+function confirmOperationUse(user, sourceRecord, allWorkItemsForSource) {
+  if (!user.perms?.admin && !user.perms?.operationUseConfirm) {
+    throw new HttpError(403, 'Bạn không có quyền xác nhận đưa vào sử dụng');
+  }
+  if (sourceRecord.useConfirmStatus === 'CONFIRMED') {
+    throw new HttpError(409, 'Hồ sơ này đã được xác nhận đưa vào sử dụng trước đó');
+  }
+  const items = allWorkItemsForSource || [];
+  const rootItems = items.filter(w => w.parentWorkItemId == null);
+  if (!rootItems.length) {
+    throw new HttpError(409, 'Hồ sơ chưa có công việc nào được tạo, chưa thể xác nhận đưa vào sử dụng');
+  }
+  if (items.some(w => w.status !== 'DA_NGHIEM_THU')) {
+    throw new HttpError(409, 'Vẫn còn công việc chưa nghiệm thu xong, chưa thể xác nhận đưa vào sử dụng');
+  }
+  sourceRecord.useConfirmStatus = 'CONFIRMED';
+  sourceRecord.useConfirmBy = user.username;
+  sourceRecord.useConfirmByName = user.name;
+  sourceRecord.useConfirmAt = nowVN();
+  return sourceRecord;
+}
+
 // ----- Văn Bản Trình (submissions) -----
 // Khác 3 module trên: có thể đổi type/dept/"Cấp Phê Duyệt Cuối Cùng"/lớp phê duyệt bổ sung khi sửa —
 // PHẢI dựng lại effectiveSteps/effectiveApprovers giống hệt lúc TẠO (buildEffectiveSubmissionWorkflowServer),
@@ -4482,6 +4530,6 @@ module.exports = {
   editOperationRepairDraft, submitOperationRepairDraft,
   submitOperationEstimate,
   createOperationWorkItem, updateOperationWorkItemProgress, acceptOperationWorkItem,
-  computeParentWorkItemStatus, deleteOperationWorkItem,
-  startOperationExecutionPeriod
+  computeParentWorkItemStatus, deleteOperationWorkItem, editOperationWorkItem,
+  startOperationExecutionPeriod, confirmOperationUse
 };

@@ -1770,6 +1770,20 @@ router.post('/operationWorkItems/:id/progress', async (req, res) => {
   } catch (err) { handleError(res, `operationWorkItems/${req.params.id}/progress`, err); }
 });
 
+// POST /api/records/operationWorkItems/:id/edit — sửa thông tin công việc (title/mô tả/người phụ
+// trách/người nghiệm thu chỉ định/hạn) — xem lib/recordActions.js editOperationWorkItem().
+router.post('/operationWorkItems/:id/edit', async (req, res) => {
+  const itemId = Number(req.params.id);
+  if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
+  try {
+    const { freshUser } = await getFreshUser(req);
+    const result = await withLockedWorkItemById(itemId, (item) =>
+      recordActions.editOperationWorkItem(freshUser, item, req.body || {})
+    );
+    res.json({ ok: true, item: result });
+  } catch (err) { handleError(res, `operationWorkItems/${req.params.id}/edit`, err); }
+});
+
 router.post('/operationWorkItems/:id/accept', async (req, res) => {
   const itemId = Number(req.params.id);
   if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
@@ -1799,6 +1813,35 @@ router.post('/operationWorkItems/:id/delete', async (req, res) => {
     await syncOperationWorkItemAncestors(item.parentWorkItemId, item.sourceType, item.sourceId);
     res.json({ ok: true });
   } catch (err) { handleError(res, `operationWorkItems/${req.params.id}/delete`, err); }
+});
+
+// POST /api/records/(operationStoreOpenings|operationRepairs)/:id/confirm-use — mốc CẤP HỒ SƠ "Xác
+// Nhận Đưa Vào Sử Dụng" (chỉ mở khi TOÀN BỘ cây công việc đã "Đã nghiệm thu") — xem lib/recordActions.js
+// confirmOperationUse().
+router.post('/operationStoreOpenings/:id/confirm-use', async (req, res) => {
+  const itemId = Number(req.params.id);
+  if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
+  try {
+    const { freshUser } = await getFreshUser(req);
+    const result = await withLockedRecordForCollection('operationStoreOpenings', itemId, async (item) => {
+      const workItems = await getWorkItemsBySource('OPERATION_STORE_OPENING', itemId);
+      return recordActions.confirmOperationUse(freshUser, item, workItems);
+    });
+    res.json({ ok: true, item: result });
+  } catch (err) { handleError(res, `operationStoreOpenings/${req.params.id}/confirm-use`, err); }
+});
+
+router.post('/operationRepairs/:id/confirm-use', async (req, res) => {
+  const itemId = Number(req.params.id);
+  if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
+  try {
+    const { freshUser } = await getFreshUser(req);
+    const result = await withLockedRecordForCollection('operationRepairs', itemId, async (item) => {
+      const workItems = await getWorkItemsBySource('OPERATION_REPAIR', itemId);
+      return recordActions.confirmOperationUse(freshUser, item, workItems);
+    });
+    res.json({ ok: true, item: result });
+  } catch (err) { handleError(res, `operationRepairs/${req.params.id}/confirm-use`, err); }
 });
 
 // POST /api/records/budgetTemplates/:id/update — sửa tên/cột bổ sung 1 mẫu ngân sách đã tạo.

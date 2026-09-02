@@ -262,6 +262,33 @@ function assertAtLeastOneAdmin(users) {
 //   lại bằng bcrypt, và đánh dấu mustChangePassword=true — mật khẩu admin gõ tạm chỉ có giá trị cho
 //   LẦN ĐĂNG NHẬP ĐẦU, buộc chính user đó phải tự đổi lại ngay (xem lib/auth.js blockIfMustChangePassword),
 //   giảm nguy cơ mật khẩu tạm/yếu tồn tại lâu dài không ai để ý.
+// Cơ Cấu Tổ Chức: user.managerUsername (field phẳng, lưu như "Chức danh"/jobTitle — không có bảng/
+// collection riêng) — CHƯA từng có khái niệm quản lý/cấp trên trong hệ thống trước đây nên KHÔNG có gì
+// chặn vòng lặp sẵn; phải tự viết validate ở ĐÂY (điểm ghi CSDL duy nhất cho collection "users"), không
+// tin riêng validate phía client (picker Cơ Cấu Tổ Chức tự ẩn cấp dưới, nhưng vẫn có thể lách qua gọi
+// thẳng API). Giới hạn 50 bước đi ngược chỉ để phòng vệ vòng lặp cực dài, không phải giới hạn nghiệp vụ.
+function assertNoManagerCycle(users) {
+  const byUsername = new Map(users.map(u => [u.username, u]));
+  for (const u of users) {
+    if (!u.managerUsername) continue;
+    if (u.managerUsername === u.username) {
+      throw new HttpError(400, `"${u.name || u.username}" không thể chọn chính mình làm quản lý trực tiếp`);
+    }
+    if (!byUsername.has(u.managerUsername)) {
+      throw new HttpError(400, `Quản lý trực tiếp của "${u.name || u.username}" không tồn tại trong danh sách người dùng`);
+    }
+    let cur = byUsername.get(u.managerUsername);
+    let steps = 0;
+    while (cur && steps < 50) {
+      if (cur.username === u.username) {
+        throw new HttpError(400, `Cơ cấu tổ chức tạo vòng lặp quản lý liên quan tới "${u.name || u.username}" — vui lòng kiểm tra lại`);
+      }
+      cur = cur.managerUsername ? byUsername.get(cur.managerUsername) : null;
+      steps++;
+    }
+  }
+}
+
 async function prepareUsersForSave(incomingUsers, currentUsername) {
   // Chặn NGAY tại server việc tự khoá chính tài khoản đang gọi request — trước đây chỉ chặn ở JS
   // trình duyệt (toggleUserActive()), 1 request tự soạn gọi thẳng POST /api/data/users vẫn đặt được
@@ -347,6 +374,7 @@ async function prepareUsersForSave(incomingUsers, currentUsername) {
   }));
 
   assertAtLeastOneAdmin(prepared);
+  assertNoManagerCycle(prepared);
   return prepared;
 }
 
@@ -538,7 +566,7 @@ router.get('/', async (req, res) => {
     // tasks: cùng dạng lỗ hổng như 9 collection ở trên — trước đây hoàn toàn KHÔNG được lọc lại ở
     // server (chỉ ẩn ở renderTasks() qua canViewTaskRecord()), để lộ toàn bộ Công Việc công ty (kể cả
     // nội dung "Ý kiến chỉ đạo" nhạy cảm) cho bất kỳ ai gọi thẳng GET /api/data.
-    if (data.tasks) data.tasks = filterTasksForUser(data.tasks, req.freshUser);
+    if (data.tasks) data.tasks = filterTasksForUser(data.tasks, req.freshUser, data);
     // onboardingProgress (Đào Tạo — Hội Nhập Nhân Viên Mới): trước đây hoàn toàn KHÔNG được lọc lại ở
     // server (chỉ ẩn ở giao diện), để lộ nội dung "stage3Note" (nhận xét đánh giá thử việc, mang tính
     // chất như đánh giá hiệu suất) của MỌI nhân viên cho bất kỳ ai gọi thẳng GET /api/data — xem

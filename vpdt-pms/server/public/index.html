@@ -5417,9 +5417,12 @@ input[data-sdd-list] {
             <span id="permTreeBadge_hr" class="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-gray-100 text-gray-500">0/0</span>
           </summary>
           <div class="p-3 pt-0 space-y-2">
-            <p class="text-[11px] text-gray-500 italic">Còn quyền vào module "Nhân Sự" ở mục 0 mới thấy được màn dưới đây. "Quản lý" là quyền DUY NHẤT, gộp cả quyền vào module lẫn quyền trả lời mọi câu hỏi HCRC Đồng Hành — chưa tách theo tab con (module hiện chỉ có 1 tab). Tab "HCRC Đồng Hành" bên Truyền Thông (nơi nhân viên GỬI câu hỏi) mở sẵn cho mọi người, không cần quyền nào.</p>
+            <p class="text-[11px] text-gray-500 italic">Còn quyền vào module "Nhân Sự" ở mục 0 mới thấy được màn dưới đây. Module có 2 tab con, mỗi tab gác quyền riêng: "Quản lý Nhân Sự" cho tab Phản Hồi Ý Kiến, "Quản Lý Cơ Cấu Tổ Chức" cho tab Cơ Cấu Tổ Chức (giữ quyền nào cũng vào được module, xem thêm được tab kia nếu có cả 2 quyền). Tab "HCRC Đồng Hành" bên Truyền Thông (nơi nhân viên GỬI câu hỏi) mở sẵn cho mọi người, không cần quyền nào.</p>
             <label class="flex items-center gap-2 text-teal-700 font-semibold cursor-pointer">
               <input type="checkbox" id="pNhanSuManage"> 🤝 Quản lý Nhân Sự (quản lý &amp; phản hồi ý kiến)
+            </label>
+            <label class="flex items-center gap-2 text-teal-700 font-semibold cursor-pointer">
+              <input type="checkbox" id="pOrgChartManage"> 🌳 Quản Lý Cơ Cấu Tổ Chức
             </label>
           </div>
         </details>
@@ -5452,6 +5455,9 @@ input[data-sdd-list] {
               </label>
               <label class="flex items-center gap-2 text-teal-700 font-semibold cursor-pointer">
                 <input type="checkbox" id="pOperationAcceptanceManage"> ✅ Nghiệm Thu Công Việc
+              </label>
+              <label class="flex items-center gap-2 text-purple-700 font-semibold cursor-pointer">
+                <input type="checkbox" id="pOperationUseConfirm"> 🏁 Xác Nhận Đưa Vào Sử Dụng
               </label>
             </div>
           </div>
@@ -6736,6 +6742,7 @@ input[data-sdd-list] {
       <div class="p-4 space-y-3">
         <div id="operationExecutionPeriodsBox" class="hidden border rounded p-3 bg-gray-50 space-y-2"></div>
         <div id="operationWorkItemCreateRootBox"></div>
+        <div id="operationUseConfirmBox"></div>
         <div class="overflow-x-auto">
           <table class="w-full border-collapse border text-xs bg-white">
             <thead id="operationWorkItemTableHead"></thead>
@@ -6819,11 +6826,12 @@ input[data-sdd-list] {
     </div>
   </div>
 
-  <!-- Màn hình MODULE NHÂN SỰ — top-level, hiện chỉ có ĐÚNG 1 tab con. Thanh sub-tab vẫn dựng sẵn (dù
-       1 nút) + dispatch qua setHrSubTab() ngay từ đầu để thêm tab sau này không phải sửa lại cấu trúc. -->
+  <!-- Màn hình MODULE NHÂN SỰ — top-level, 2 tab con (Quản Lý & Phản Hồi Ý Kiến + Cơ Cấu Tổ Chức mới),
+       mỗi tab gác quyền riêng qua canAccessHrSubTab(), dispatch qua setHrSubTab(). -->
   <div id="hrSection" class="hidden space-y-6">
     <div class="flex flex-wrap gap-2 border-b pb-2">
       <button type="button" onclick="setHrSubTab('FEEDBACK')" id="btnHrSubFeedback" class="px-3 py-1.5 rounded text-xs font-bold bg-teal-700 text-white">🤝 Quản Lý &amp; Phản Hồi Ý Kiến</button>
+      <button type="button" onclick="setHrSubTab('ORGCHART')" id="btnHrSubOrgChart" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">🌳 Cơ Cấu Tổ Chức</button>
     </div>
 
     <div id="hrSubFeedback" class="space-y-4">
@@ -6841,6 +6849,38 @@ input[data-sdd-list] {
       </div>
 
       <div id="hrFeedbackManageContainer" class="space-y-3"></div>
+    </div>
+
+    <!-- Cơ Cấu Tổ Chức: cây quản lý trực tiếp (user.managerUsername) — xem canAccessHrSubTab()/
+         renderOrgChart(). Xem được với nhanSuManage HOẶC orgChartManage; CHỈ orgChartManage/admin mới
+         đổi được quản lý trực tiếp (nút "Đổi quản lý" tự ẩn nếu không đủ quyền). -->
+    <div id="hrSubOrgChart" class="hidden space-y-4">
+      <div class="bg-teal-50 p-4 rounded border border-teal-200 space-y-2">
+        <h3 class="font-bold text-teal-900 text-base flex items-center gap-2">🌳 Cơ Cấu Tổ Chức</h3>
+        <p class="text-xs text-teal-800">Cây quản lý trực tiếp của toàn bộ nhân viên — dùng làm căn cứ để trưởng phòng xem được việc của nhân viên mình quản lý (Vận Hành, Công Việc). Có thể có nhiều gốc cây (nhân viên không có quản lý trực tiếp).</p>
+      </div>
+      <div id="orgChartContainer" class="bg-white border rounded p-4 space-y-1 text-sm"></div>
+    </div>
+  </div>
+
+  <!-- Modal "Đổi quản lý trực tiếp" — Cơ Cấu Tổ Chức, xem openOrgChartManagerPicker(). -->
+  <div id="orgChartManagerModal" class="hidden fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-[60] p-4">
+    <div class="bg-white rounded-lg shadow-xl max-w-md w-full">
+      <div class="p-4 border-b flex justify-between items-center">
+        <h3 class="font-bold text-base text-gray-800">✏️ Đổi Quản Lý Trực Tiếp</h3>
+        <button onclick="closeOrgChartManagerPicker()" class="text-gray-400 hover:text-gray-600 text-2xl leading-none">&times;</button>
+      </div>
+      <div class="p-4 space-y-3">
+        <p id="orgChartManagerModalSub" class="text-xs text-gray-500"></p>
+        <div class="relative">
+          <input id="orgChartManagerInput" data-sdd-list="systemUsersDatalist" autocomplete="off" placeholder="Gõ tên/tài khoản để tìm..." class="w-full border p-2 rounded text-sm">
+        </div>
+        <button type="button" onclick="clearOrgChartManager()" class="text-xs text-red-600 hover:underline">Bỏ quản lý trực tiếp (đưa lên gốc cây)</button>
+      </div>
+      <div class="p-4 border-t flex justify-end gap-2">
+        <button onclick="closeOrgChartManagerPicker()" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 hover:bg-gray-300">Hủy</button>
+        <button onclick="submitOrgChartManager()" class="px-3 py-1.5 rounded text-xs font-bold bg-emerald-600 text-white hover:bg-emerald-700">Lưu</button>
+      </div>
     </div>
   </div>
 
@@ -9026,11 +9066,16 @@ function canManageTasks(user) {
 
 // XEM 1 công việc cụ thể: admin/người có quyền taskView (xem toàn bộ), người được giao, hoặc người
 // đã giao việc đó (giữ đúng hành vi tiện lợi hiện có — người giao vẫn theo dõi được việc mình giao).
+// Trưởng phòng (đệ quy theo Cơ Cấu Tổ Chức, xem isManagerOf() ở block Cơ Cấu Tổ Chức) XEM được task của
+// nhân viên mình quản lý — CHỈ xem, không thao tác thay (canManageTasks/canAssignSpecificTask/
+// canDeleteTaskRecord không đụng gì, vẫn khoá theo taskEdit/assignedBy như cũ). Mirror ĐÚNG server
+// lib/recordViewScope.js canViewTaskRecord().
 function canViewTaskRecord(user, t) {
   if (!user) return false;
   if (user.perms?.admin) return true;
   if (user.perms?.taskView) return true;
-  return t.assignedTo === user.username || t.assignedBy === user.username || (t.collaborators || []).includes(user.username);
+  if (t.assignedTo === user.username || t.assignedBy === user.username || (t.collaborators || []).includes(user.username)) return true;
+  return isManagerOf(user.username, t.assignedTo, DB.users);
 }
 
 function canDeleteTaskRecord(user) {
@@ -13382,14 +13427,21 @@ function canAccessBudgetModule(user) {
   return !!(user.perms?.budgetCreate || user.perms?.budgetAggregate || user.perms?.budgetManage);
 }
 
-// Nhân Sự — module TOP-LEVEL (không có module cha), cùng khuôn canAccessBudgetModule() ở trên nhưng
-// chỉ có ĐÚNG 1 quyền chi tiết: nhanSuManage vừa là quyền vào module, vừa là quyền trả lời câu hỏi
-// HCRC Đồng Hành (module hiện chỉ có 1 tab con nên không tách quyền theo tab). Lưu ý: tab "HCRC Đồng
-// Hành" bên Truyền Thông (nơi nhân viên GỬI câu hỏi) KHÔNG dùng hàm này — mở cho mọi người.
+// Nhân Sự — module TOP-LEVEL (không có module cha), cùng khuôn canAccessBudgetModule() ở trên. Từ khi
+// thêm tab con "Cơ Cấu Tổ Chức" (orgChartManage), module không còn CHỈ 1 quyền chi tiết nữa — vào được
+// module khi có BẤT KỲ quyền nào trong 2 tab con (nhanSuManage cho Phản Hồi Ý Kiến, orgChartManage cho
+// Cơ Cấu Tổ Chức); mỗi tab con tự gác riêng ở canAccessHrSubTab() bên dưới. Lưu ý: tab "HCRC Đồng Hành"
+// bên Truyền Thông (nơi nhân viên GỬI câu hỏi) KHÔNG dùng hàm này — mở cho mọi người.
 function canAccessHrModule(user) {
   if (!user) return false;
   if (user.perms?.admin) return true;
   if (!hasModuleAccess(user, 'hr')) return false;
+  return !!(user.perms?.nhanSuManage || user.perms?.orgChartManage);
+}
+function canAccessHrSubTab(user, subTab) {
+  if (!user) return false;
+  if (user.perms?.admin) return true;
+  if (subTab === 'ORGCHART') return !!(user.perms?.orgChartManage || user.perms?.nhanSuManage);
   return !!user.perms?.nhanSuManage;
 }
 
@@ -13407,8 +13459,11 @@ function canAccessOperationModule(user) {
     || user.perms?.operationEstimateCreate || user.perms?.operationExecutionManage || user.perms?.operationAcceptanceManage) return true;
   // Người được gán/chỉ định trực tiếp trên ít nhất 1 công việc (dù không giữ quyền rộng nào ở trên)
   // cũng cần vào được module để thao tác đúng việc của mình — khớp nhánh nới quyền ở
-  // canAccessOperationSubTab() (EXECUTION/ACCEPTANCE) bên dưới.
-  return (DB.operationWorkItems || []).some(w => w.assignedTo === user.username || w.acceptorUsername === user.username);
+  // canAccessOperationSubTab() (EXECUTION/ACCEPTANCE) bên dưới. Trưởng phòng (đệ quy theo Cơ Cấu Tổ
+  // Chức) của người được gán/chỉ định cũng vào được để XEM (không thao tác được, các hàm thao tác
+  // không đổi).
+  return (DB.operationWorkItems || []).some(w => w.assignedTo === user.username || w.acceptorUsername === user.username
+    || isManagerOf(user.username, w.assignedTo, DB.users) || isManagerOf(user.username, w.acceptorUsername, DB.users));
 }
 function canAccessOperationSubTab(user, kind) {
   if (!user) return false;
@@ -13422,9 +13477,9 @@ function canAccessOperationSubTab(user, kind) {
   // cần thấy tab để còn thao tác đúng việc của mình (xem updateOperationWorkItemProgress/
   // acceptOperationWorkItem ở lib/recordActions.js — server đã chặn/nới quyền tương ứng).
   if (kind === 'EXECUTION') return !!user.perms?.operationExecutionManage
-    || (DB.operationWorkItems || []).some(w => w.assignedTo === user.username);
+    || (DB.operationWorkItems || []).some(w => w.assignedTo === user.username || isManagerOf(user.username, w.assignedTo, DB.users));
   if (kind === 'ACCEPTANCE') return !!user.perms?.operationAcceptanceManage
-    || (DB.operationWorkItems || []).some(w => w.acceptorUsername === user.username);
+    || (DB.operationWorkItems || []).some(w => w.acceptorUsername === user.username || isManagerOf(user.username, w.acceptorUsername, DB.users));
   // 'STORE'/'REPORT': tab cha "Siêu Thị" — hiện khi có BẤT KỲ quyền nào trong 5 giai đoạn con.
   if (kind === 'STORE' || kind === 'REPORT') {
     return ['STORE_OPEN', 'REPAIR', 'ESTIMATE', 'EXECUTION', 'ACCEPTANCE'].some(k => canAccessOperationSubTab(user, k));
@@ -23052,6 +23107,7 @@ let currentWorkItemModalKind = null;
 let currentWorkItemModalRecordId = null;
 let currentWorkItemModalMode = null;
 let currentWorkItemFormParentId = null;
+let currentEditWorkItemId = null;
 
 function openOperationWorkItemModal(kind, id, mode) {
   currentWorkItemModalKind = kind;
@@ -23095,6 +23151,23 @@ function renderOperationWorkItemModalBody() {
     rootBox.innerHTML = `<p class="text-xs text-amber-600 italic">⚠️ Chưa có Kỳ Thực Hiện nào đang "Đang thực hiện" — vui lòng tạo/bắt đầu 1 kỳ ở trên trước khi thêm công việc gốc.</p>`;
   } else {
     rootBox.innerHTML = '';
+  }
+
+  // Xác Nhận Đưa Vào Sử Dụng — mốc CẤP HỒ SƠ, tách khỏi "Đã nghiệm thu" từng việc/cây việc, xem
+  // lib/recordActions.js confirmOperationUse(). Chỉ hiện ở tab Nghiệm thu, khi TOÀN BỘ cây công việc đã
+  // "Đã nghiệm thu" — quyền RIÊNG (operationUseConfirm), không dùng chung operationAcceptanceManage.
+  const useConfirmBox = document.getElementById('operationUseConfirmBox');
+  const sourceRecord = OPERATION_KIND_META[kind].list().find(x => x.id === id);
+  const canConfirmUse = !!(currentUser.perms?.admin || currentUser.perms?.operationUseConfirm);
+  const allDone = items.length > 0 && items.every(w => w.status === 'DA_NGHIEM_THU');
+  if (mode === 'ACCEPTANCE' && sourceRecord?.useConfirmStatus === 'CONFIRMED') {
+    useConfirmBox.innerHTML = `<div class="bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs font-bold rounded p-2">✅ Đã đưa vào sử dụng — xác nhận bởi ${escapeHtml(sourceRecord.useConfirmByName || '')} lúc ${sourceRecord.useConfirmAt || ''}</div>`;
+  } else if (mode === 'ACCEPTANCE' && canConfirmUse && allDone) {
+    useConfirmBox.innerHTML = `<button type="button" onclick="confirmOperationUseAction('${kind}', ${id})" class="bg-indigo-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-indigo-700">🏁 Xác Nhận Đưa Vào Sử Dụng</button>`;
+  } else if (mode === 'ACCEPTANCE' && canConfirmUse) {
+    useConfirmBox.innerHTML = `<p class="text-xs text-gray-400 italic">Chưa đủ điều kiện xác nhận đưa vào sử dụng — cần toàn bộ công việc đã "Đã nghiệm thu".</p>`;
+  } else {
+    useConfirmBox.innerHTML = '';
   }
 
   const head = document.getElementById('operationWorkItemTableHead');
@@ -23157,6 +23230,18 @@ async function startOperationExecutionPeriodAction(id) {
   if (idx !== -1) DB.operationExecutionPeriods[idx] = result.item;
   renderOperationWorkItemModalBody();
 }
+async function confirmOperationUseAction(kind, id) {
+  if (!confirm('Xác nhận đưa hồ sơ này vào sử dụng? Thao tác này không thể hoàn tác.')) return;
+  let result;
+  try {
+    result = await callRecordAction(kind, id, 'confirm-use', {});
+  } catch (err) { return alert(`⛔ ${err.message}`); }
+  const list = OPERATION_KIND_META[kind].list();
+  const idx = list.findIndex(x => x.id === id);
+  if (idx !== -1) list[idx] = result.item;
+  renderOperationWorkItemModalBody();
+  alert('✅ Đã xác nhận đưa vào sử dụng!');
+}
 // Dropdown chọn kỳ trong form thêm công việc — CHỈ hiện/bắt buộc khi thêm công việc GỐC (việc con kế
 // thừa kỳ của cha tự động ở server, xem createOperationWorkItem()); chỉ liệt kê kỳ đang "Đang thực hiện".
 function renderOwiPeriodField(parentWorkItemId) {
@@ -23195,6 +23280,7 @@ function buildOperationWorkItemRow(w, depth, hasChildren, mode, canManageExecuti
     const isOwner = !!(currentUser.username && w.assignedTo === currentUser.username);
     let actionHTML = '';
     if (canManageExecution && w.status !== 'DA_NGHIEM_THU') {
+      actionHTML += `<button type="button" onclick="openOperationWorkItemEditModal(${w.id})" class="text-xs px-2 py-0.5 bg-gray-200 rounded font-bold hover:bg-gray-300 mr-1" title="Sửa công việc">✏️ Sửa</button>`;
       actionHTML += `<button type="button" onclick="openOperationWorkItemFormModal(${w.id})" class="text-xs px-2 py-0.5 bg-gray-200 rounded font-bold hover:bg-gray-300 mr-1" title="Thêm việc con">➕ Con</button>`;
     }
     if (w.status !== 'DA_NGHIEM_THU') {
@@ -23225,24 +23311,34 @@ function buildOperationWorkItemRow(w, depth, hasChildren, mode, canManageExecuti
   return `<tr class="hover:bg-gray-50 border-b">${nameCell}${assigneeCell}${statusCell}${acceptorCell}<td class="border p-2 text-center">${actionHTML}</td></tr>`;
 }
 
-// --- Form thêm công việc (gốc hoặc con) ---
-function openOperationWorkItemFormModal(parentWorkItemId) {
-  if (!currentUser.perms?.admin && !currentUser.perms?.operationExecutionManage) return alert('⛔ Bạn không có quyền tạo công việc Thực hiện!');
+// --- Form thêm/sửa công việc (gốc hoặc con) --- editItem (tuỳ chọn) = công việc đang sửa, xem
+// editOperationWorkItem() ở server — CHỈ sửa được title/mô tả/người phụ trách/người nghiệm thu chỉ
+// định/hạn, KHÔNG sửa được kỳ/vị trí trong cây/trạng thái (ẩn hẳn ô chọn Kỳ Thực Hiện khi đang sửa).
+function openOperationWorkItemFormModal(parentWorkItemId, editItem) {
+  if (!currentUser.perms?.admin && !currentUser.perms?.operationExecutionManage) return alert('⛔ Bạn không có quyền tạo/sửa công việc Thực hiện!');
   currentWorkItemFormParentId = parentWorkItemId;
-  document.getElementById('operationWorkItemFormModalTitle').innerText = parentWorkItemId == null ? '➕ Thêm Công Việc Gốc' : '➕ Thêm Việc Con';
-  document.getElementById('owiTitle').value = '';
-  document.getElementById('owiDescription').value = '';
-  document.getElementById('owiAssignedToInput').value = '';
-  document.getElementById('owiAssignedToUsername').value = '';
-  document.getElementById('owiAcceptorInput').value = '';
-  document.getElementById('owiAcceptorUsername').value = '';
-  document.getElementById('owiDeadline').value = '';
-  renderOwiPeriodField(parentWorkItemId);
+  currentEditWorkItemId = editItem ? editItem.id : null;
+  document.getElementById('operationWorkItemFormModalTitle').innerText = editItem ? '✏️ Sửa Công Việc' : (parentWorkItemId == null ? '➕ Thêm Công Việc Gốc' : '➕ Thêm Việc Con');
+  document.getElementById('owiTitle').value = editItem ? editItem.title : '';
+  document.getElementById('owiDescription').value = editItem ? (editItem.description || '') : '';
+  document.getElementById('owiAssignedToInput').value = editItem?.assignedToName ? `${editItem.assignedToName} — (${editItem.assignedTo})` : '';
+  document.getElementById('owiAssignedToUsername').value = editItem?.assignedTo || '';
+  document.getElementById('owiAcceptorInput').value = editItem?.acceptorName ? `${editItem.acceptorName} — (${editItem.acceptorUsername})` : '';
+  document.getElementById('owiAcceptorUsername').value = editItem?.acceptorUsername || '';
+  document.getElementById('owiDeadline').value = editItem?.deadline || '';
+  const periodFieldWrap = document.getElementById('owiPeriodFieldWrap');
+  if (editItem) { periodFieldWrap.classList.add('hidden'); } else { renderOwiPeriodField(parentWorkItemId); }
   document.getElementById('operationWorkItemFormModal').classList.remove('hidden');
 }
 function closeOperationWorkItemFormModal() {
   document.getElementById('operationWorkItemFormModal').classList.add('hidden');
   currentWorkItemFormParentId = null;
+  currentEditWorkItemId = null;
+}
+function openOperationWorkItemEditModal(id) {
+  const item = (DB.operationWorkItems || []).find(w => w.id === id);
+  if (!item) return;
+  openOperationWorkItemFormModal(null, item);
 }
 function resolveOwiAssignedToInput(rawValue) {
   const m = rawValue.match(/^(.*) — .*\(([^()]+)\)$/);
@@ -23264,6 +23360,23 @@ async function submitOperationWorkItemForm(e) {
   const acceptorInputVal = document.getElementById('owiAcceptorInput').value.trim();
   const acceptorName = acceptorUsername ? acceptorInputVal.split(' — ')[0].trim() : null;
   const deadline = document.getElementById('owiDeadline').value;
+
+  if (currentEditWorkItemId != null) {
+    const payload = { title, description, assignedTo, assignedToName, acceptorUsername, acceptorName, deadline };
+    let updated;
+    try {
+      const result = await callRecordAction('operationWorkItems', currentEditWorkItemId, 'edit', payload);
+      updated = result.item;
+    } catch (err) { return alert(`⛔ ${err.message}`); }
+    const idx = DB.operationWorkItems.findIndex(w => w.id === updated.id);
+    if (idx !== -1) DB.operationWorkItems[idx] = updated;
+    closeOperationWorkItemFormModal();
+    renderOperationWorkItemModalBody();
+    renderOperationExecutionList();
+    renderOperationAcceptanceList();
+    return;
+  }
+
   let periodId = null;
   if (currentWorkItemFormParentId == null) {
     const periodSelectVal = document.getElementById('owiPeriodSelect').value;
@@ -27474,12 +27587,14 @@ function collectPermsFromForm() {
     licenseApprove: document.getElementById('pLicenseApprove').checked,
     licenseView: document.getElementById('pLicenseView').checked,
     nhanSuManage: document.getElementById('pNhanSuManage').checked,
+    orgChartManage: document.getElementById('pOrgChartManage').checked,
     operationOrderCreate: document.getElementById('pOperationOrderCreate').checked,
     operationStoreOpenCreate: document.getElementById('pOperationStoreOpenCreate').checked,
     operationRepairCreate: document.getElementById('pOperationRepairCreate').checked,
     operationEstimateCreate: document.getElementById('pOperationEstimateCreate').checked,
     operationExecutionManage: document.getElementById('pOperationExecutionManage').checked,
-    operationAcceptanceManage: document.getElementById('pOperationAcceptanceManage').checked
+    operationAcceptanceManage: document.getElementById('pOperationAcceptanceManage').checked,
+    operationUseConfirm: document.getElementById('pOperationUseConfirm').checked
   };
 }
 
@@ -27530,12 +27645,14 @@ function populatePermsForm(permsInput) {
   document.getElementById('pLicenseApprove').checked = !!perms.licenseApprove;
   document.getElementById('pLicenseView').checked = !!perms.licenseView;
   document.getElementById('pNhanSuManage').checked = !!perms.nhanSuManage;
+  document.getElementById('pOrgChartManage').checked = !!perms.orgChartManage;
   document.getElementById('pOperationOrderCreate').checked = !!perms.operationOrderCreate;
   document.getElementById('pOperationStoreOpenCreate').checked = !!perms.operationStoreOpenCreate;
   document.getElementById('pOperationRepairCreate').checked = !!perms.operationRepairCreate;
   document.getElementById('pOperationEstimateCreate').checked = !!perms.operationEstimateCreate;
   document.getElementById('pOperationExecutionManage').checked = !!perms.operationExecutionManage;
   document.getElementById('pOperationAcceptanceManage').checked = !!perms.operationAcceptanceManage;
+  document.getElementById('pOperationUseConfirm').checked = !!perms.operationUseConfirm;
 
   document.getElementById('pUploadAll').checked = !!perms.uploadAll;
   document.getElementById('pViewDraftAll').checked = !!perms.viewDraftAll;
@@ -30384,12 +30501,14 @@ function resetUserForm() {
   document.getElementById('pLicenseApprove').checked = !!defaults.licenseApprove;
   document.getElementById('pLicenseView').checked = !!defaults.licenseView;
   document.getElementById('pNhanSuManage').checked = !!defaults.nhanSuManage;
+  document.getElementById('pOrgChartManage').checked = !!defaults.orgChartManage;
   document.getElementById('pOperationOrderCreate').checked = !!defaults.operationOrderCreate;
   document.getElementById('pOperationStoreOpenCreate').checked = !!defaults.operationStoreOpenCreate;
   document.getElementById('pOperationRepairCreate').checked = !!defaults.operationRepairCreate;
   document.getElementById('pOperationEstimateCreate').checked = !!defaults.operationEstimateCreate;
   document.getElementById('pOperationExecutionManage').checked = !!defaults.operationExecutionManage;
   document.getElementById('pOperationAcceptanceManage').checked = !!defaults.operationAcceptanceManage;
+  document.getElementById('pOperationUseConfirm').checked = !!defaults.operationUseConfirm;
 
   [
     'pUploadAll', 'pViewDraftAll', 'pViewApprovedAll', 'pDocDownloadAll',
@@ -40176,18 +40295,123 @@ function setHrSubTab(subTab) {
     alert('⛔ Bạn không có quyền truy cập Module Nhân Sự!');
     return;
   }
+  // Mỗi tab con gác quyền RIÊNG (canAccessHrSubTab) — vào module không có nghĩa mặc định thấy hết mọi
+  // tab con, tự chuyển sang tab đầu tiên user có quyền nếu tab đang gọi bị chặn.
+  if (!canAccessHrSubTab(currentUser, subTab)) {
+    subTab = canAccessHrSubTab(currentUser, 'FEEDBACK') ? 'FEEDBACK' : 'ORGCHART';
+  }
   activeHrSubTab = subTab;
 
-  const btnMap = { FEEDBACK: 'btnHrSubFeedback' };
+  const btnMap = { FEEDBACK: 'btnHrSubFeedback', ORGCHART: 'btnHrSubOrgChart' };
   const activeCls = 'px-3 py-1.5 rounded text-xs font-bold bg-teal-700 text-white';
   const inactiveCls = 'px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700';
   Object.entries(btnMap).forEach(([key, btnId]) => {
     const btn = document.getElementById(btnId);
-    if (btn) btn.className = key === subTab ? activeCls : inactiveCls;
+    if (!btn) return;
+    btn.classList.toggle('hidden', !canAccessHrSubTab(currentUser, key));
+    btn.className = (key === subTab ? activeCls : inactiveCls) + (canAccessHrSubTab(currentUser, key) ? '' : ' hidden');
   });
   document.getElementById('hrSubFeedback').classList.toggle('hidden', subTab !== 'FEEDBACK');
+  document.getElementById('hrSubOrgChart').classList.toggle('hidden', subTab !== 'ORGCHART');
 
   if (subTab === 'FEEDBACK') renderHrFeedbackManage();
+  if (subTab === 'ORGCHART') renderOrgChart();
+}
+
+// ----- Cơ Cấu Tổ Chức (Nhân Sự > "🌳 Cơ Cấu Tổ Chức") -----
+// user.managerUsername (field phẳng trên DB.users, đúng mẫu jobTitle) — quản lý trực tiếp của 1 nhân
+// viên. Không có bảng/collection riêng, không cần sửa gì phía server ngoài validate chống vòng lặp
+// (routes/data.js assertNoManagerCycle()). Cây có thể có NHIỀU gốc (nhân viên không có quản lý trực
+// tiếp) — renderOrgChart() dựng đệ quy từng gốc.
+
+// Tra tên quản lý trực tiếp của 1 người theo username — mirror getUserJobTitle().
+function getUserManagerName(username) {
+  const u = DB.users.find(x => x.username === username);
+  if (!u?.managerUsername) return '';
+  return DB.users.find(x => x.username === u.managerUsername)?.name || '';
+}
+function getDirectReports(username, allUsers) {
+  return (allUsers || DB.users || []).filter(u => u.managerUsername === username);
+}
+// isManagerOf(): mirror ĐÚNG lib/recordViewScope.js — dùng ở Phần D (trưởng phòng xem việc nhân viên)
+// và để chặn chọn cấp dưới (trực tiếp/gián tiếp) làm quản lý của chính mình trong picker bên dưới.
+function isManagerOf(managerUsername, targetUsername, allUsers) {
+  if (!managerUsername || !targetUsername) return false;
+  let cur = (allUsers || []).find(u => u.username === targetUsername);
+  for (let i = 0; i < 50 && cur?.managerUsername; i++) {
+    if (cur.managerUsername === managerUsername) return true;
+    cur = (allUsers || []).find(u => u.username === cur.managerUsername);
+  }
+  return false;
+}
+
+function renderOrgChart() {
+  const container = document.getElementById('orgChartContainer');
+  if (!container) return;
+  const canEdit = !!(currentUser.perms?.admin || currentUser.perms?.orgChartManage);
+  const activeUsers = (DB.users || []).filter(u => u.active !== false);
+  const roots = activeUsers.filter(u => !u.managerUsername || !activeUsers.some(m => m.username === u.managerUsername));
+  if (!roots.length) {
+    container.innerHTML = '<p class="text-xs text-gray-400 italic">Chưa có người dùng nào.</p>';
+    return;
+  }
+  container.innerHTML = roots
+    .sort((a, b) => (a.name || '').localeCompare(b.name || ''))
+    .map(u => buildOrgChartNode(u, activeUsers, 0, canEdit))
+    .join('');
+}
+function buildOrgChartNode(u, allUsers, depth, canEdit) {
+  const indent = '&nbsp;'.repeat(depth * 4) + (depth > 0 ? '↳ ' : '');
+  const reports = getDirectReports(u.username, allUsers).sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+  const jobTitle = u.jobTitle ? ` — ${escapeHtml(u.jobTitle)}` : '';
+  const editBtn = canEdit ? `<button type="button" onclick="openOrgChartManagerPicker('${u.username}')" class="text-xs px-2 py-0.5 bg-gray-200 rounded font-bold hover:bg-gray-300 ml-2">✏️ Đổi quản lý</button>` : '';
+  let html = `<div class="py-1 border-b border-gray-100 flex items-center flex-wrap gap-1">
+    <span>${indent}<strong>${escapeHtml(u.name)}</strong>${jobTitle} <span class="text-gray-400">(${escapeHtml(u.dept || 'Chưa rõ phòng')})</span>${reports.length ? ` <span class="text-[10px] text-gray-400">— ${reports.length} cấp dưới trực tiếp</span>` : ''}</span>
+    ${editBtn}
+  </div>`;
+  reports.forEach(r => { html += buildOrgChartNode(r, allUsers, depth + 1, canEdit); });
+  return html;
+}
+
+let orgChartEditTarget = null;
+function openOrgChartManagerPicker(username) {
+  const u = DB.users.find(x => x.username === username);
+  if (!u) return;
+  orgChartEditTarget = username;
+  document.getElementById('orgChartManagerModalSub').innerText = `Chọn quản lý trực tiếp cho: ${u.name} (${u.username})`;
+  document.getElementById('orgChartManagerInput').value = u.managerUsername ? `${getUserManagerName(username)} — ${DB.users.find(x => x.username === u.managerUsername)?.dept || ''} (${u.managerUsername})` : '';
+  populateSystemUsersDatalist();
+  document.getElementById('orgChartManagerModal').classList.remove('hidden');
+}
+function closeOrgChartManagerPicker() {
+  document.getElementById('orgChartManagerModal').classList.add('hidden');
+  orgChartEditTarget = null;
+}
+async function saveOrgChartManagerChange(newManagerUsername) {
+  const target = orgChartEditTarget;
+  if (!target) return;
+  if (newManagerUsername === target) return alert('⛔ Không thể chọn chính mình làm quản lý trực tiếp!');
+  if (newManagerUsername && isManagerOf(target, newManagerUsername, DB.users)) {
+    return alert('⛔ Không thể chọn cấp dưới (trực tiếp/gián tiếp) làm quản lý trực tiếp — sẽ tạo vòng lặp!');
+  }
+  const snapshot = JSON.parse(JSON.stringify(DB.users));
+  const u = DB.users.find(x => x.username === target);
+  if (!u) return;
+  u.managerUsername = newManagerUsername || null;
+  const saved = await syncStorage('users');
+  if (!saved) { DB.users = snapshot; return alert('⛔ Lưu thất bại, đã hoàn tác.'); }
+  closeOrgChartManagerPicker();
+  renderOrgChart();
+}
+function submitOrgChartManager() {
+  const raw = document.getElementById('orgChartManagerInput').value.trim();
+  if (!raw) return saveOrgChartManagerChange(null);
+  const m = raw.match(/^(.*) — .*\(([^()]+)\)$/);
+  if (!m) return alert('⛔ Vui lòng chọn 1 người trong danh sách gợi ý.');
+  saveOrgChartManagerChange(m[2].trim());
+}
+function clearOrgChartManager() {
+  saveOrgChartManagerChange(null);
 }
 
 // TOÀN BỘ câu hỏi công ty (không lọc creator) — canAccessHrModule()/canManageHrFeedback() đã gác cả

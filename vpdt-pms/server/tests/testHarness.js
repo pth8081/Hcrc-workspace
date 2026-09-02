@@ -196,6 +196,15 @@ function createDispatcher(state) {
     return updated;
   };
   actionHandlers['operationExecutionPeriods:start'] = (u, item) => recordActions.startOperationExecutionPeriod(u, item);
+  actionHandlers['operationWorkItems:edit'] = (u, item, body) => recordActions.editOperationWorkItem(u, item, body || {});
+  actionHandlers['operationStoreOpenings:confirm-use'] = (u, item) => {
+    const items = state.operationWorkItems.filter(w => w.sourceType === 'OPERATION_STORE_OPENING' && w.sourceId === item.id);
+    return recordActions.confirmOperationUse(u, item, items);
+  };
+  actionHandlers['operationRepairs:confirm-use'] = (u, item) => {
+    const items = state.operationWorkItems.filter(w => w.sourceType === 'OPERATION_REPAIR' && w.sourceId === item.id);
+    return recordActions.confirmOperationUse(u, item, items);
+  };
 
   function buildDataPayload(username) {
     // Khớp đúng field mà initDatabase() (public/index.html) gán từ GET /api/data — chỉ liệt kê những

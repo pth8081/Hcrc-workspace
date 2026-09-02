@@ -34,10 +34,11 @@ const NOPERM = { username: 'vh_noperm', name: 'Người Không Quyền', dept: '
 const WORKER = { username: 'vh_worker', name: 'Kỹ Thuật Viên Được Gán', dept: 'Vận Hành', perms: {}, active: true };
 const DESIGNATED_ACCEPTOR = { username: 'vh_designated_acceptor', name: 'Người Được Chỉ Định Nghiệm Thu', dept: 'Vận Hành', perms: {}, active: true };
 const ADMIN = { username: 'admin', name: 'Quản Trị Viên', dept: 'Vận Hành', perms: { admin: true }, active: true, totpEnabled: true };
+const USE_CONFIRMER = { username: 'vh_use_confirmer', name: 'Người Xác Nhận Đưa Vào Sử Dụng', dept: 'Vận Hành', perms: { operationUseConfirm: true }, active: true };
 
 const state = createMockState({
   depts: ['Vận Hành', 'Ban Giám Đốc'],
-  users: [CREATOR, ESTIMATOR, ESTIMATE_APPROVER, EXECUTOR, ACCEPTOR, NOPERM, WORKER, DESIGNATED_ACCEPTOR, ADMIN],
+  users: [CREATOR, ESTIMATOR, ESTIMATE_APPROVER, EXECUTOR, ACCEPTOR, NOPERM, WORKER, DESIGNATED_ACCEPTOR, ADMIN, USE_CONFIRMER],
   workflows: [{ id: 'WF_ESTIMATE_STORE', steps: [{ order: 1, name: 'Ban Giám Đốc duyệt dự toán' }] }],
   operationStoreOpenEstimateDeptWorkflows: {
     'Vận Hành': { workflowId: 'WF_ESTIMATE_STORE', approvers: { 1: ['vh_est_approver'] } }
@@ -401,6 +402,122 @@ async function main() {
       }, { c2: child2Id, rootId: rootWorkItemId });
       assertEqual(result.child2.status, 'DA_NGHIEM_THU', 'Việc con 2 phải chuyển Đã nghiệm thu');
       assertEqual(result.root.status, 'DA_NGHIEM_THU', 'Việc cha phải TỰ ĐỘNG chuyển Đã nghiệm thu khi hết việc con dở');
+    });
+
+    // ===== Phần A: Nút Sửa công việc — tạo 1 việc gốc MỚI (dùng lại đúng period đang hoạt động) để test
+    // sửa trước khi nghiệm thu (editOperationWorkItem chặn sửa việc đã Đã nghiệm thu). =====
+    let editItemId = null;
+    await run.run('EXECUTOR tạo việc gốc mới để test Sửa + Xác nhận đưa vào sử dụng', async () => {
+      await loginAs(page, EXECUTOR);
+      const result = await page.evaluate(async ({ id, pid }) => {
+        const res = await callRecordCreate('operationWorkItems', {
+          sourceType: 'OPERATION_STORE_OPENING', sourceId: id, parentWorkItemId: null,
+          title: 'Việc gốc test Sửa', description: 'Mô tả ban đầu', assignedTo: null, assignedToName: null,
+          acceptorUsername: null, acceptorName: null, deadline: '', periodId: pid
+        });
+        DB.operationWorkItems.push(res.item);
+        return res.item;
+      }, { id: recordId, pid: periodId });
+      editItemId = result.id;
+      assert(editItemId, 'Phải tạo được việc gốc mới');
+    });
+
+    await run.run('Người không có operationExecutionManage bị chặn Sửa công việc', async () => {
+      await loginAs(page, NOPERM);
+      const result = await page.evaluate(async (id) => {
+        try {
+          await callRecordAction('operationWorkItems', id, 'edit', { title: 'Việc bị sửa trộm' });
+          return { ok: true };
+        } catch (err) { return { ok: false, message: err.message }; }
+      }, editItemId);
+      assert(!result.ok, 'Phải bị chặn vì không có quyền operationExecutionManage');
+    });
+
+    await run.run('EXECUTOR (toàn quyền) Sửa công việc — cập nhật title/mô tả/người phụ trách/người nghiệm thu/hạn, KHÔNG đổi periodId/status', async () => {
+      await loginAs(page, EXECUTOR);
+      const result = await page.evaluate(async ({ id, workerUsername, workerName, acceptorUsername, acceptorName }) => {
+        const r = await callRecordAction('operationWorkItems', id, 'edit', {
+          title: 'Việc gốc ĐÃ SỬA', description: 'Mô tả đã cập nhật',
+          assignedTo: workerUsername, assignedToName: workerName,
+          acceptorUsername, acceptorName, deadline: '2026-12-31'
+        });
+        const idx = DB.operationWorkItems.findIndex(x => x.id === id);
+        DB.operationWorkItems[idx] = r.item;
+        return r.item;
+      }, { id: editItemId, workerUsername: WORKER.username, workerName: WORKER.name, acceptorUsername: ACCEPTOR.username, acceptorName: ACCEPTOR.name });
+      assertEqual(result.title, 'Việc gốc ĐÃ SỬA', 'Title phải được cập nhật');
+      assertEqual(result.description, 'Mô tả đã cập nhật', 'Mô tả phải được cập nhật');
+      assertEqual(result.assignedTo, WORKER.username, 'Người phụ trách phải được cập nhật');
+      assertEqual(result.acceptorUsername, ACCEPTOR.username, 'Người nghiệm thu chỉ định phải được cập nhật');
+      assertEqual(result.deadline, '2026-12-31', 'Hạn phải được cập nhật');
+      assertEqual(result.periodId, periodId, 'periodId KHÔNG được đổi khi sửa');
+      assertEqual(result.status, 'CHUA_BAT_DAU', 'status KHÔNG được đổi khi sửa');
+    });
+
+    // ===== Phần B: Xác nhận đưa vào sử dụng =====
+    await run.run('Chặn Xác nhận đưa vào sử dụng khi còn việc chưa nghiệm thu xong', async () => {
+      await loginAs(page, USE_CONFIRMER);
+      const result = await page.evaluate(async (id) => {
+        try {
+          await callRecordAction('operationStoreOpenings', id, 'confirm-use', {});
+          return { ok: true };
+        } catch (err) { return { ok: false, message: err.message }; }
+      }, recordId);
+      assert(!result.ok, 'Phải bị chặn vì việc gốc test Sửa vẫn còn CHUA_BAT_DAU');
+    });
+
+    await run.run('Người không có operationUseConfirm bị chặn Xác nhận đưa vào sử dụng (dù có operationExecutionManage)', async () => {
+      await loginAs(page, EXECUTOR);
+      const result = await page.evaluate(async (id) => {
+        try {
+          await callRecordAction('operationStoreOpenings', id, 'confirm-use', {});
+          return { ok: true };
+        } catch (err) { return { ok: false, message: err.message }; }
+      }, recordId);
+      assert(!result.ok, 'Phải bị chặn vì thiếu quyền operationUseConfirm riêng');
+    });
+
+    await run.run('Hoàn tất việc gốc test Sửa (Bắt Đầu -> Nộp Nghiệm Thu -> Nghiệm Thu) để đủ điều kiện xác nhận', async () => {
+      await loginAs(page, EXECUTOR);
+      await page.evaluate(async (id) => {
+        const r1 = await callRecordAction('operationWorkItems', id, 'progress', { status: 'DANG_THUC_HIEN' });
+        const idx1 = DB.operationWorkItems.findIndex(x => x.id === id);
+        DB.operationWorkItems[idx1] = r1.item;
+        const r2 = await callRecordAction('operationWorkItems', id, 'progress', { status: 'DANG_NGHIEM_THU' });
+        const idx2 = DB.operationWorkItems.findIndex(x => x.id === id);
+        DB.operationWorkItems[idx2] = r2.item;
+      }, editItemId);
+      await loginAs(page, ACCEPTOR);
+      const result = await page.evaluate(async (id) => {
+        const r = await callRecordAction('operationWorkItems', id, 'accept', { action: 'ACCEPT', reason: 'Đạt yêu cầu' });
+        const idx = DB.operationWorkItems.findIndex(x => x.id === id);
+        DB.operationWorkItems[idx] = r.item;
+        return r.item;
+      }, editItemId);
+      assertEqual(result.status, 'DA_NGHIEM_THU', 'Việc gốc test Sửa phải chuyển Đã nghiệm thu');
+    });
+
+    await run.run('USE_CONFIRMER (quyền operationUseConfirm riêng, KHÔNG phải toàn quyền) Xác nhận đưa vào sử dụng thành công khi toàn bộ cây đã nghiệm thu', async () => {
+      await loginAs(page, USE_CONFIRMER);
+      const result = await page.evaluate(async (id) => {
+        const r = await callRecordAction('operationStoreOpenings', id, 'confirm-use', {});
+        const idx = DB.operationStoreOpenings.findIndex(x => x.id === id);
+        DB.operationStoreOpenings[idx] = r.item;
+        return r.item;
+      }, recordId);
+      assertEqual(result.useConfirmStatus, 'CONFIRMED', 'useConfirmStatus phải chuyển CONFIRMED');
+      assertEqual(result.useConfirmBy, USE_CONFIRMER.username, 'Phải ghi nhận đúng người xác nhận');
+    });
+
+    await run.run('Chặn xác nhận đưa vào sử dụng LẦN 2 (đã CONFIRMED trước đó)', async () => {
+      await loginAs(page, USE_CONFIRMER);
+      const result = await page.evaluate(async (id) => {
+        try {
+          await callRecordAction('operationStoreOpenings', id, 'confirm-use', {});
+          return { ok: true };
+        } catch (err) { return { ok: false, message: err.message }; }
+      }, recordId);
+      assert(!result.ok, 'Phải bị chặn vì hồ sơ đã được xác nhận đưa vào sử dụng trước đó');
     });
   } finally {
     await browser.close();

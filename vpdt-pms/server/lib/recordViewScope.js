@@ -17,6 +17,21 @@ function canManageVpp(user) {
   return !!(user?.perms?.admin || user?.perms?.vppManage);
 }
 
+// isManagerOf(): "managerUsername" có phải là quản lý (TRỰC TIẾP hoặc GIÁN TIẾP, đi ngược cây Cơ Cấu
+// Tổ Chức — xem public/index.html readUserFormState()/user.managerUsername) của "targetUsername" hay
+// không — dùng làm điều kiện XEM (không phải thao tác) cho trưởng phòng ở cả Task lẫn Vận Hành. Giới
+// hạn 50 bước đi ngược để phòng vệ nếu lỡ có vòng lặp lọt qua validate lúc lưu user (xem routes/data.js
+// prepareUsersForSave()).
+function isManagerOf(managerUsername, targetUsername, allUsers) {
+  if (!managerUsername || !targetUsername) return false;
+  let cur = (allUsers || []).find(u => u.username === targetUsername);
+  for (let i = 0; i < 50 && cur?.managerUsername; i++) {
+    if (cur.managerUsername === managerUsername) return true;
+    cur = (allUsers || []).find(u => u.username === cur.managerUsername);
+  }
+  return false;
+}
+
 function scopeAllows(user, scope, dept) {
   if (!user) return false;
   if (user.perms?.admin) return true;
@@ -362,7 +377,12 @@ function filterOperationOrdersForUser(items, user, appData) {
 function hasOwnWorkItemInSource(user, sourceType, sourceId, appData) {
   if (!user?.username) return false;
   return (appData?.operationWorkItems || []).some(w => w.sourceType === sourceType && w.sourceId === sourceId
-    && (w.assignedTo === user.username || w.acceptorUsername === user.username));
+    && (w.assignedTo === user.username || w.acceptorUsername === user.username
+      // Trưởng phòng (đệ quy theo Cơ Cấu Tổ Chức) xem được hồ sơ có cấp dưới đang phụ trách/được chỉ
+      // định nghiệm thu — CHỈ xem, các hàm thao tác (updateOperationWorkItemProgress/
+      // acceptOperationWorkItem) không đổi, vẫn chỉ đúng người/toàn quyền mới bấm được.
+      || isManagerOf(user.username, w.assignedTo, appData?.users)
+      || isManagerOf(user.username, w.acceptorUsername, appData?.users)));
 }
 function canViewOperationStoreOpening(user, item, appData) {
   if (!user) return false;
@@ -470,15 +490,19 @@ function filterMeetingMinutesForUser(meetingMinutes, user) {
 // trên), dù canViewTaskRecord() chỉ dùng để ẨN Ở GIAO DIỆN: gọi thẳng API vẫn thấy được title/
 // description (thường là "Ý kiến chỉ đạo" nội bộ sao chép từ Biên bản họp/Văn bản trình)/hạn hoàn
 // thành/người liên quan của MỌI công việc công ty, kể cả không có quyền taskView và không liên quan.
-function canViewTaskRecord(user, t) {
+// appData (tuỳ chọn) — chỉ cần khi muốn áp dụng nhánh "trưởng phòng xem việc nhân viên" (đọc
+// appData.users để đi ngược cây Cơ Cấu Tổ Chức qua isManagerOf()); gọi thiếu appData vẫn hoạt động
+// đúng như trước (bỏ qua nhánh này) — giữ tương thích ngược cho các chỗ gọi khác chưa cần.
+function canViewTaskRecord(user, t, appData) {
   if (!user) return false;
   if (user.perms?.admin) return true;
   if (user.perms?.taskView) return true;
-  return t.assignedTo === user.username || t.assignedBy === user.username || (t.collaborators || []).includes(user.username);
+  if (t.assignedTo === user.username || t.assignedBy === user.username || (t.collaborators || []).includes(user.username)) return true;
+  return isManagerOf(user.username, t.assignedTo, appData?.users);
 }
 
-function filterTasksForUser(tasks, user) {
-  return (tasks || []).filter(t => canViewTaskRecord(user, t));
+function filterTasksForUser(tasks, user, appData) {
+  return (tasks || []).filter(t => canViewTaskRecord(user, t, appData));
 }
 
 // Đồng Phục: Hành Chính (uniformManage/admin) xem trọn vẹn mọi kỳ. Giám Đốc Siêu Thị (uniformStoreManage)
@@ -619,6 +643,7 @@ function filterPaymentRequestsForUser(items, user) {
 }
 
 module.exports = {
+  isManagerOf, hasOwnWorkItemInSource,
   canViewDoc, canViewSubmission, filterDocsForUser, filterSubmissionsForUser,
   canViewInternalPost, filterInternalPostsForUser,
   canSeeReportCompilation, canSeeReportPdfCompilation, sanitizeReportPeriodsForUser,
