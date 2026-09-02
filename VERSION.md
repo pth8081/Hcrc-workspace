@@ -1,10 +1,48 @@
 # Phiên bản hiện tại
 
-**2.5** — đã merge vào `main` (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge
+**2.6** — đã merge vào `main` (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge
 góc màn hình + `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần
 kiểu `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
 
-## Cập nhật gần nhất (PR #230, nhánh `claude/chao-ban-oo5ijl`)
+## Cập nhật gần nhất — Audit Đợt 5 Giai đoạn 1+2 (nhánh `claude/chao-ban-oo5ijl`)
+
+Rà soát bảo mật/logic nghiệp vụ toàn hệ thống, chốt lộ trình khắc phục 4 giai đoạn theo mức độ. Đã hoàn
+tất Giai đoạn 1 (Nghiêm trọng/Cao) và Giai đoạn 2 (Cao/Trung bình còn lại), gộp merge chung 1 lần.
+
+**Giai đoạn 1 — Nghiêm trọng/Cao:**
+- `GET /api/data` (và `GET /api/data/users`) từng trả nguyên `perms`/`permOverrides`/`groupIds` của
+  MỌI người dùng cho bất kỳ ai đăng nhập (kể cả non-admin) — chỉ admin và chính chủ mới thấy 3 field này
+  của người khác (`sanitizeUsersPermsForViewer()`). 4 nơi cần danh sách người giữ 1 cờ quyền cụ thể để
+  gửi email (duyệt họp/bài đăng nội bộ/giá IT khẩn/giấy phép) chuyển sang đọc field mới
+  `data.moduleApproverUsernames` (tính sẵn phía server từ perms đầy đủ) thay vì tự quét `perms` người khác.
+- `trainingTestSubmissions`/`trainingRegistrations` không lọc theo quyền phía server — học viên bất kỳ
+  từng thấy được bài làm/đăng ký của TẤT CẢ người khác qua `GET /api/data`.
+- Bảng xếp hạng (leaderboard) Đào Tạo hiển thị cho mọi người xem được tab Dashboard dù không có quyền
+  quản lý đào tạo.
+
+**Giai đoạn 2 — Cao/Trung bình:**
+- Người được admin chỉ định duyệt Dự toán Vận Hành (`operationStoreOpeningEstimate`/
+  `operationRepairEstimate` — quy trình độc lập, thường khác phòng ban với hồ sơ chính) trước đây không
+  thấy được hồ sơ qua `GET /api/data` để duyệt bình thường qua giao diện (dù action API vẫn chạy được
+  nếu biết trước id) — bổ sung nhánh approver Dự toán vào `canViewOperationStoreOpening`/
+  `canViewOperationRepair`.
+- Tài khoản chỉ giữ quyền `orgChartManage` (không phải admin thuần) thấy đủ UI Cơ Cấu Tổ Chức nhưng bấm
+  Lưu luôn bị 403 do luồng ghi duy nhất (`POST /api/data/users`) yêu cầu admin thuần — thêm route hẹp
+  `POST /api/admin/org-chart/set-manager`, chỉ đọc/ghi field `managerUsername` (không đụng
+  perms/active/dept của ai), dùng khoá giao dịch thật + `assertNoManagerCycle()` dùng chung với luồng
+  admin.
+- Chặn xoá công việc Vận Hành đã "Đã nghiệm thu" và chặn tạo công việc mới sau khi hồ sơ đã "Xác nhận
+  đưa vào sử dụng" — trước đây 2 thao tác này không có guard nào, có thể làm sai lệch mốc xác nhận đã
+  chốt.
+
+**Deploy-impact:** KHÔNG đổi `sql/schema.sql`, không thêm biến môi trường mới trong `.env.example`,
+không thêm/đổi `dependencies` trong `package.json`. Chỉ cần copy code + `pm2 restart`.
+
+Test: `tests/test-audit-dot5-phase1.js` (13/13), `tests/test-audit-dot5-phase2.js` (10/10) — toàn bộ 46
+file `tests/test-*.js` hiện có đã chạy lại, không có regression mới (2 kịch bản thất bại sẵn có do
+sandbox không kết nối được SQL Server thật, không liên quan thay đổi).
+
+## Trước đó (PR #230)
 
 Vận Hành — tab "🏬 Siêu Thị" gộp Mở Mới/Sửa Chữa, thêm vòng đời "dự án nhỏ" sau khi hồ sơ được tạo: **Dự
 toán** (workflow duyệt độc lập, bảng hạng mục tự tính tổng tiền) → **Thực hiện** (cây công việc đa cấp,
