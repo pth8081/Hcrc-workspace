@@ -1,10 +1,88 @@
 # Phiên bản hiện tại
 
-**4.4** — đã merge vào `main` (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge
+**4.5** — đã merge vào `main` (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge
 góc màn hình + `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần
 kiểu `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
 
-## Cập nhật gần nhất — CSP unsafe-inline: đợt 13/N — module Quản Trị/Hệ Thống
+## Cập nhật gần nhất — CSP unsafe-inline: đợt 14/N — module Hỗ Trợ IT
+
+Tiếp tục đợt 13 (Quản Trị/Hệ Thống, xem mục "Trước đó" ngay bên dưới) — đợt này chuyển toàn bộ module **Hỗ
+Trợ IT** (`#itSupportSection` — 3 sub-tab Phê Duyệt Giá/Hỗ Trợ Yêu Cầu/Gia Hạn Dịch Vụ CNTT trong 1 lần,
+cộng modal dùng chung "Gán vai trò cột" `#colRoleModal` nằm vật lý bên trong section này dù thuộc về Mẫu
+Ngân Sách, và 4 modal xử lý/chi tiết sống ngoài section):
+
+- **56 điểm** `onclick`/`onchange`/`oninput`/`onsubmit` chuyển sang `data-op*`, chia theo 3 sub-tab + modal:
+  - **🏷️ Phê Duyệt Giá** (`#itSubPrice` + hàm render `renderItPriceMasterListAdmin`/`renderItPriceApprovals`/
+    `renderItPriceModalControls`): **31 điểm** — 3 nút chuyển sub-tab (`setItSupportSubTab`), nút "+ Thêm
+    Mẫu Giá", 2 nút Hủy/Xác nhận của `#colRoleModal`, form nộp đề xuất (`submitItPriceApproval`), chọn Mẫu
+    Giá + tải tệp bảng giá (nhận `event` qua `data-arg-event`), 3 ô lọc (trạng thái/từ ngày/đến ngày/từ
+    khoá), 3 nút CRUD Mẫu Giá (Đổi tên/Thay mẫu/Xoá) trong bảng admin, nút "Chi tiết" mở `#itPriceModal`,
+    toàn bộ nút xử lý theo vai trò/trạng thái trong modal chi tiết (Duyệt Huỷ Hồ Sơ/Từ Chối Yêu Cầu
+    Này/Từ Chối Khẩn/Duyệt/Từ chối/Yêu Cầu Bổ Sung ×2/Tôi Đang Xử Lý/Xác nhận đã áp giá/Huỷ Nhận Xử Lý/Gửi
+    Tệp Bổ Sung/Xóa), ô chọn tệp bổ sung (nhận cả `event` lẫn `masterListId` — 2 slot vị trí khác nhau
+    trong cùng 1 lệnh gọi), 1 điểm `event.stopPropagation()` trên link "Tải file gốc" trong `<summary>`
+    (chặn nổi bọt để không đóng/mở nhầm khối `<details>` khi bấm link).
+  - **🎫 Hỗ Trợ Yêu Cầu** (`#itSubTicket` + hàm render `renderItTickets`/`renderItTicketModal`): **19 điểm**
+    — form gửi yêu cầu (`submitItTicket`), 3 ô lọc (trạng thái/danh mục/từ khoá), nút "Xem/Xử lý" mở
+    `#itTicketModal`, toàn bộ nút điều khiển trong modal (Duyệt/Từ chối leo thang, Nhận Xử Lý, Gửi/Gửi Lại
+    Yêu Cầu Phê Duyệt, Gửi phê duyệt, Huỷ form leo thang, Cập Nhật trạng thái, Hủy Yêu Cầu), Đóng ×2, ô
+    bình luận + nút Gửi.
+  - **🔔 Gia Hạn Dịch Vụ CNTT** (`#itSubRenewal` + 2 modal `#itRenewalRenewModal`/`#itRenewalEditModal`
+    sống ngoài section + hàm render `buildItServiceRenewalRowHTML`): **6 điểm** — form thêm dịch vụ
+    (`submitItServiceRenewal`), 2 ô lọc (hiệu lực/loại dịch vụ) + 1 ô từ khoá, nút "🔄 Gia Hạn" trong hàng
+    render động, Đóng/Xác Nhận của modal Gia Hạn, Hủy/Lưu Thay Đổi của modal Sửa.
+- **3 hàm bọc nhỏ mới** cho các trường hợp hạ tầng `data-arg*` có sẵn không xử lý thẳng được:
+  - **1 wrapper dùng chung mới cho `event.stopPropagation()`**: `stopEventPropagation(e)` — trường hợp
+    chưa từng gặp (`onclick="event.stopPropagation()"` không phải lệnh gọi hàm có tên, converter không tự
+    map được), đặt cạnh hạ tầng `cspCoerceArg`/`bindCspDelegation()` để module sau cũng dùng lại được nếu
+    gặp cùng mẫu (kết hợp `data-arg-event="0"` để nhận đúng `Event` thật).
+  - **2 wrapper mới** cho khối gán biến cờ + gọi hàm render liền nhau (`onclick="showItTicketEscalateForm
+    = true; renderItTicketModal();"` / `= false; ...`) — không phải lệnh gọi hàm đơn nên converter không
+    nhận diện được (khác `data-op-seq`, vốn chỉ nhận chuỗi lệnh gọi hàm literal-arg, không nhận phép gán):
+    `openItTicketEscalateForm()`/`closeItTicketEscalateForm()`, đặt ngay cạnh khai báo biến
+    `showItTicketEscalateForm`.
+  - Không có trường hợp `this.checked` nào trong phạm vi module này (không cần thêm wrapper
+    `FromCheckbox`); không dùng `data-op-seq` (không có nút gọi nhiều lệnh liền dạng `fn1();fn2()`).
+- **5 gốc `bindCspDelegation`**: `itSupportSection` (bọc cả section lẫn `#colRoleModal` — modal dùng chung
+  "Gán vai trò cột" cho Mẫu Ngân Sách nhưng nằm vật lý trong section này) + 4 modal sống ngoài section:
+  `itTicketModal`, `itPriceModal` (cả 2 nằm chung khu modal với Ngân Sách phía dưới HTML),
+  `itRenewalRenewModal`, `itRenewalEditModal` — cũng tranh thủ cập nhật lại chú thích cũ ở gốc
+  `systemSection` (đợt 13) đang nói `#colRoleModal` "chưa tới lượt CSP" cho khớp thực tế.
+- **Không phát hiện lỗi thật nào trong lúc demo module này.**
+
+**Xác nhận không ảnh hưởng** — 2 lớp kiểm tra độc lập trước khi merge:
+- Demo Playwright thật (SQL Server + server local + đăng nhập UI thật qua tài khoản demo tạm 2FA thật,
+  xoá lại ngay sau demo, kể cả 1 yêu cầu hỗ trợ IT + 1 dịch vụ CNTT demo tạo ra trong lúc test — cả 2
+  collection này lưu SQL qua `dbo.Records`, xoá bằng `deleteRecordById()` chứ không phải đường AppData):
+  đăng nhập, mở Hỗ Trợ IT; sub-tab Hỗ Trợ Yêu Cầu — tạo 1 yêu cầu demo, mở modal chi tiết (`#itTicketModal`,
+  gốc ngoài section), gửi 1 bình luận (xác nhận `data-op` hoạt động cả trong modal ngoài); sub-tab Gia Hạn
+  Dịch Vụ CNTT (chỉ IT/admin thấy) — thêm 1 dịch vụ demo, mở modal "Gia Hạn" (`#itRenewalRenewModal`, gốc
+  ngoài section riêng), đóng lại, mở modal "Sửa" qua dropdown "Khác ▾" (`#itRenewalEditModal`, gốc ngoài
+  section khác) — xác nhận cả 2 modal Gia Hạn/Sửa dùng 2 gốc CSP riêng đều hoạt động; gọi trực tiếp
+  `openColumnRoleMappingModal()` qua console (mô phỏng đúng luồng gọi thật từ Mẫu Ngân Sách vì cần tải file
+  Excel thật mới trigger được từ UI) để xác nhận riêng `#colRoleModal` — nút "Xác nhận" (`confirmColRoleModal`)
+  chạy đúng logic validate gán trùng vai trò cột, nút "Hủy" (`closeColRoleModal(null)`) đóng modal đúng —
+  cả 2 đều qua gốc `itSupportSection` dù không mở từ chính UI Hỗ Trợ IT; sub-tab Phê Duyệt Giá — mở form
+  đề xuất (chưa có Mẫu Giá nào cấu hình sẵn ở môi trường demo nên chưa test được bước nộp tệp/mở
+  `#itPriceModal` qua UI, nhưng cùng khuôn `data-op`/`data-op-change` với Hỗ Trợ Yêu Cầu/Gia Hạn đã xác
+  nhận hoạt động đúng) — toàn bộ đúng, không có lỗi JS console mới liên quan tới thay đổi (chỉ có 3 lỗi
+  mạng nền quen thuộc trước lúc đăng nhập: chặn Google Fonts, `/api/auth/me` 401 lúc chưa đăng nhập,
+  `/api/captcha` 404 do CAPTCHA chưa bật ở môi trường demo — xác nhận riêng bằng 1 lượt chạy baseline
+  không đụng gì tới module này, cùng 3 lỗi y hệt xuất hiện ngay từ bước tải trang/đăng nhập).
+- Chạy lại toàn bộ 46 file test hồi quy (`tests/test-*.js`), gồm cả `tests/test-it-support.js` (riêng cho
+  module này) — 44/46 OK, đúng 2 file known-flaky quen thuộc (`test-audit-fixes-batch1.js`/
+  `test-audit-round2-cluster1.js`, timeout hạ tầng test không liên quan thay đổi lần này).
+
+**Deploy-impact:** KHÔNG đổi `sql/schema.sql`, KHÔNG thêm biến môi trường mới, KHÔNG thêm `dependencies`
+mới — toàn bộ thay đổi nằm trong `public/index.html` (thuần client JS/HTML), deploy an toàn chỉ với copy
+code + `pm2 restart`, không cần thao tác 1 lần nào khác.
+
+**Còn lại:** Đồng Phục, Giấy Phép, Tuyển Dụng, Tin Tức/Truyền Thông (bao gồm cả form "HCRC Đồng Hành" phía
+nhân viên — `#hrFeedbackForm`), Biên Bản Họp, Công Việc, Văn Bản Trình, Tài Liệu, Báo Cáo Định Kỳ... — dùng
+hạ tầng `data-op*`/`bindCspDelegation()` đã xây, làm tiếp tuần tự mỗi module 1 commit + demo + regression
+trước khi merge, tới khi hết toàn bộ điểm mới gỡ `unsafe-inline`.
+
+## Trước đó — CSP unsafe-inline: đợt 13/N — module Quản Trị/Hệ Thống
 
 Tiếp tục đợt 12 (Nhân Sự, xem mục "Trước đó" ngay bên dưới) — đợt này chuyển toàn bộ cụm **Quản Trị/Hệ
 Thống** (`#systemSection`) trong 1 lần thay vì tách 3 lần như dự kiến ban đầu (Quản Trị Nội Dung/Biểu
