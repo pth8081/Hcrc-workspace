@@ -1,10 +1,46 @@
 # Phiên bản hiện tại
 
-**4.2** — đã merge vào `main` (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge
+**4.3** — đã merge vào `main` (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge
 góc màn hình + `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần
 kiểu `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
 
-## Cập nhật gần nhất — CSP unsafe-inline: đợt 11/N — module Báo Cáo
+## Cập nhật gần nhất — CSP unsafe-inline: đợt 12/N — module Nhân Sự (Quản Lý & Phản Hồi Ý Kiến)
+
+Tiếp tục đợt 11 (Báo Cáo, xem mục "Trước đó" ngay bên dưới) — đợt này chuyển nốt phần còn lại của module
+**Nhân Sự** chưa chuyển ở đợt 10 (đợt đó mới chuyển sub-tab "🌳 Cơ Cấu Tổ Chức", còn sub-tab "🤝 Quản Lý &
+Phản Hồi Ý Kiến" — `#hrSubFeedback`, màn Nhân Sự trả lời câu hỏi nhân viên gửi qua "HCRC Đồng Hành" —
+chưa tới lượt):
+
+- **2 điểm** `onclick`/`onchange` chuyển sang `data-op*`: dropdown lọc trạng thái (`onchange` →
+  `renderHrFeedbackManage`), nút "Gửi Phản Hồi" trong hàm render động (`onclick` →
+  `submitHrFeedbackResponse(${q.id})`).
+- **Không cần thêm gốc mới** — cả 2 điểm đều nằm trong `#hrSection`, gốc `bindCspDelegation('hrSection')`
+  đã bind sẵn từ đợt 10 (Cơ Cấu Tổ Chức) bọc chung mọi sub-tab của module Nhân Sự.
+- Module Nhân Sự (`#hrSection`) coi như **đã xong hoàn toàn** — cả 2 sub-tab (Cơ Cấu Tổ Chức đợt 10 +
+  Quản Lý & Phản Hồi Ý Kiến đợt này) đều không còn `onclick`/`onchange`/`oninput`/`onsubmit` thô.
+
+**Xác nhận không ảnh hưởng** — 2 lớp kiểm tra độc lập trước khi merge:
+- Demo Playwright thật (SQL Server + server local + đăng nhập UI thật qua tài khoản demo tạm 2FA thật,
+  xoá lại ngay sau demo, kể cả dữ liệu `hrFeedback` demo tạo ra trong lúc test): tạo 1 câu hỏi demo qua
+  form nhân viên (Truyền Thông > HCRC Đồng Hành, module khác chưa tới lượt CSP), vào Nhân Sự > Quản Lý &
+  Phản Hồi Ý Kiến, lọc theo trạng thái "Chờ phản hồi" (xác nhận `data-op-change` hoạt động), nhập nội
+  dung và bấm "Gửi Phản Hồi" (xác nhận `data-op` hoạt động) — server trả về 200, câu hỏi chuyển đúng sang
+  trạng thái "Đã phản hồi" — toàn bộ đúng, không có lỗi JS console mới liên quan tới thay đổi.
+- Chạy lại toàn bộ 46 file test hồi quy (`tests/test-*.js`) — 44/46 OK, đúng 2 file known-flaky quen
+  thuộc (`test-audit-fixes-batch1.js`/`test-audit-round2-cluster1.js`, timeout hạ tầng test không liên
+  quan thay đổi lần này).
+
+**Deploy-impact:** KHÔNG đổi `sql/schema.sql`, KHÔNG thêm biến môi trường mới, KHÔNG thêm `dependencies`
+mới — toàn bộ thay đổi nằm trong `public/index.html` (thuần client JS/HTML), deploy an toàn chỉ với copy
+code + `pm2 restart`, không cần thao tác 1 lần nào khác.
+
+**Còn lại:** Quản Trị/Hệ Thống, Hỗ Trợ IT, Đồng Phục, Giấy Phép, Gia Hạn CNTT, Tuyển Dụng, Tin Tức/Truyền
+Thông (bao gồm cả form "HCRC Đồng Hành" phía nhân viên — `#hrFeedbackForm`), Biên Bản Họp, Công Việc, Văn
+Bản Trình, Tài Liệu, Báo Cáo Định Kỳ... — dùng hạ tầng `data-op*`/`bindCspDelegation()` đã xây, làm tiếp
+tuần tự mỗi module 1 commit + demo + regression trước khi merge, tới khi hết toàn bộ điểm mới gỡ
+`unsafe-inline`.
+
+## Trước đó — CSP unsafe-inline: đợt 11/N — module Báo Cáo
 
 Tiếp tục đợt 10 (Cơ Cấu Tổ Chức, xem mục "Trước đó" ngay bên dưới) — đợt này chuyển module **Báo Cáo**
 (`#reportsSection` — nav 2 cấp Tổng Hợp/theo từng module nghiệp vụ, khối "1. Tạo Báo Cáo Theo Yêu Cầu" +
