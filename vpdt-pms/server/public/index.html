@@ -5703,9 +5703,9 @@ input[data-sdd-list] {
        state machine đơn giản TODO->DOING->DONE/CANCELLED, không qua duyệt). Xem setItSupportSubTab(). -->
   <div id="itSupportSection" class="hidden space-y-6">
     <div class="flex flex-wrap gap-2 border-b pb-2">
-      <button type="button" onclick="setItSupportSubTab('PRICE')" id="btnItSubPrice" class="px-3 py-1.5 rounded text-xs font-bold bg-sky-700 text-white">🏷️ Phê Duyệt Giá</button>
-      <button type="button" onclick="setItSupportSubTab('TICKET')" id="btnItSubTicket" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">🎫 Hỗ Trợ Yêu Cầu</button>
-      <button type="button" onclick="setItSupportSubTab('RENEWAL')" id="btnItSubRenewal" class="hidden px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">🔔 Gia Hạn Dịch Vụ</button>
+      <button type="button" data-op="setItSupportSubTab" data-arg0="PRICE" id="btnItSubPrice" class="px-3 py-1.5 rounded text-xs font-bold bg-sky-700 text-white">🏷️ Phê Duyệt Giá</button>
+      <button type="button" data-op="setItSupportSubTab" data-arg0="TICKET" id="btnItSubTicket" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">🎫 Hỗ Trợ Yêu Cầu</button>
+      <button type="button" data-op="setItSupportSubTab" data-arg0="RENEWAL" id="btnItSubRenewal" class="hidden px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">🔔 Gia Hạn Dịch Vụ</button>
     </div>
 
     <!-- Sub-tab: Phê Duyệt Giá -->
@@ -5724,7 +5724,7 @@ input[data-sdd-list] {
             <h4 class="font-bold text-sm text-gray-800">📐 Mẫu Giá (khuôn cột)</h4>
             <p class="text-[11px] text-gray-500 italic">Nạp file mẫu bên mua hàng gửi tại từng thời điểm — hệ thống CHỈ đọc dòng tiêu đề để lấy NGUYÊN VĂN tên cột (không giới hạn số cột/tên cột), KHÔNG lưu dữ liệu giá thật. Tạo được nhiều mẫu (VD theo ngành hàng/đợt cập nhật) — người đề xuất tự chọn đúng mẫu áp dụng lúc nộp bảng giá, hệ thống chỉ kiểm tra tên cột file nộp có khớp đúng với mẫu không (không phân biệt hoa/thường/dấu).</p>
           </div>
-          <button type="button" onclick="addItPriceMasterList()" class="bg-gray-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-gray-700 whitespace-nowrap">+ Thêm Mẫu Giá</button>
+          <button type="button" data-op="addItPriceMasterList" class="bg-gray-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-gray-700 whitespace-nowrap">+ Thêm Mẫu Giá</button>
         </div>
         <div class="overflow-x-auto">
           <table class="w-full border-collapse border text-xs">
@@ -5752,8 +5752,8 @@ input[data-sdd-list] {
           <p id="colRoleModalHint" class="text-gray-500 italic"></p>
           <div id="colRoleModalFields" class="space-y-2"></div>
           <div class="flex justify-end gap-2 pt-2 border-t">
-            <button type="button" onclick="closeColRoleModal(null)" class="bg-gray-200 text-gray-700 px-3 py-1.5 rounded font-bold hover:bg-gray-300">Hủy</button>
-            <button type="button" onclick="confirmColRoleModal()" class="bg-sky-600 text-white px-3 py-1.5 rounded font-bold hover:bg-sky-700">Xác nhận</button>
+            <button type="button" data-op="closeColRoleModal" data-arg0="null" class="bg-gray-200 text-gray-700 px-3 py-1.5 rounded font-bold hover:bg-gray-300">Hủy</button>
+            <button type="button" data-op="confirmColRoleModal" class="bg-sky-600 text-white px-3 py-1.5 rounded font-bold hover:bg-sky-700">Xác nhận</button>
           </div>
         </div>
       </div>
@@ -5762,7 +5762,7 @@ input[data-sdd-list] {
         <h3 class="font-bold text-sky-900 text-base flex items-center gap-2">🏷️ Đề Xuất Duyệt Giá Bán (Siêu Thị)</h3>
         <p class="text-xs text-sky-700">Đề xuất giá bán mới cho 1 mặt hàng tại siêu thị công ty đang vận hành — KHÔNG phải mua sắm/chi phí, không sinh đề nghị thanh toán. Sau khi được duyệt, đội Hỗ Trợ IT sẽ áp giá vào hệ thống bán hàng rồi xác nhận hoàn thành ngay tại đây.</p>
         <div id="itPriceNoCreatePermNote" class="hidden text-xs text-gray-500 italic bg-gray-50 p-3 rounded border">⛔ Bạn không có quyền đề xuất duyệt giá — chỉ xem được danh sách đề xuất bên dưới.</div>
-        <form id="itPriceCreateForm" onsubmit="submitItPriceApproval(event)" class="hidden bg-white p-3 rounded border text-xs space-y-3">
+        <form id="itPriceCreateForm" data-op-submit="submitItPriceApproval" class="hidden bg-white p-3 rounded border text-xs space-y-3">
           <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
             <div>
               <label class="block font-semibold text-gray-600 mb-1">Mã Đề Xuất</label>
@@ -5775,7 +5775,7 @@ input[data-sdd-list] {
           </div>
           <div id="itPriceMasterListSelectWrap" class="hidden">
             <label class="block font-semibold text-gray-600 mb-1">📐 Mẫu Giá Phê Duyệt <span class="text-red-500">*</span></label>
-            <select id="itPriceMasterListSelect" onchange="onItPriceMasterListChange()" class="w-full border p-1.5 rounded bg-white">
+            <select id="itPriceMasterListSelect" data-op-change="onItPriceMasterListChange" class="w-full border p-1.5 rounded bg-white">
               <option value="">-- Chọn Mẫu Giá Phê Duyệt --</option>
             </select>
             <p class="text-gray-400 mt-1">Bắt buộc chọn đúng mẫu áp dụng cho bảng giá của bạn — tệp bảng giá tải lên bên dưới phải có đúng tên cột theo mẫu đã chọn, sai/thiếu cột sẽ bị chặn gửi.</p>
@@ -5783,7 +5783,7 @@ input[data-sdd-list] {
           </div>
           <div>
             <label class="block font-semibold text-gray-600 mb-1">📎 Tệp Bảng Giá (.xlsx) <span class="text-red-500">*</span></label>
-            <input id="itPriceFileInput" type="file" accept=".xlsx,.xls" onchange="onItPriceFileChange(event)" class="w-full border p-1.5 rounded bg-white">
+            <input id="itPriceFileInput" type="file" accept=".xlsx,.xls" data-op-change="onItPriceFileChange" data-arg-event="0" class="w-full border p-1.5 rounded bg-white">
             <p id="itPriceFileStatus" class="text-gray-500 mt-1"></p>
             <p class="text-gray-400 mt-1">Tệp phải có ĐÚNG các cột (tên, không phân biệt hoa/thường/dấu) theo Mẫu Giá đã chọn ở trên — không thiếu, không thừa cột nào (thứ tự cột không quan trọng).</p>
           </div>
@@ -5811,7 +5811,7 @@ input[data-sdd-list] {
         <div class="grid grid-cols-1 md:grid-cols-4 gap-3">
           <div>
             <label class="block text-xs font-semibold text-gray-600 mb-1">Lọc Theo Trạng Thái</label>
-            <select id="filterStatusItPrice" onchange="onItPriceFilterChange()" class="w-full border p-2 rounded text-sm bg-white">
+            <select id="filterStatusItPrice" data-op-change="onItPriceFilterChange" class="w-full border p-2 rounded text-sm bg-white">
               <option value="">-- Tất cả trạng thái --</option>
               <option value="APPROVED">Đã Phê Duyệt</option>
               <option value="PENDING">Đang Chờ Duyệt</option>
@@ -5820,15 +5820,15 @@ input[data-sdd-list] {
           </div>
           <div>
             <label class="block text-xs font-semibold text-gray-600 mb-1">Từ Ngày</label>
-            <input id="filterFromDateItPrice" type="date" onchange="onItPriceFilterChange()" class="w-full border p-2 rounded text-sm bg-white">
+            <input id="filterFromDateItPrice" type="date" data-op-change="onItPriceFilterChange" class="w-full border p-2 rounded text-sm bg-white">
           </div>
           <div>
             <label class="block text-xs font-semibold text-gray-600 mb-1">Đến Ngày</label>
-            <input id="filterToDateItPrice" type="date" onchange="onItPriceFilterChange()" class="w-full border p-2 rounded text-sm bg-white">
+            <input id="filterToDateItPrice" type="date" data-op-change="onItPriceFilterChange" class="w-full border p-2 rounded text-sm bg-white">
           </div>
           <div>
             <label class="block text-xs font-semibold text-gray-600 mb-1">Từ Khóa</label>
-            <input id="filterKeywordItPrice" oninput="onItPriceFilterChange()" placeholder="Mã, tên hàng, người đề xuất..." class="w-full border p-2 rounded text-sm">
+            <input id="filterKeywordItPrice" data-op-input="onItPriceFilterChange" placeholder="Mã, tên hàng, người đề xuất..." class="w-full border p-2 rounded text-sm">
           </div>
         </div>
       </div>
@@ -5859,7 +5859,7 @@ input[data-sdd-list] {
       <div class="bg-emerald-50 p-4 rounded border border-emerald-200 space-y-3">
         <h3 class="font-bold text-emerald-900 text-base flex items-center gap-2">🎫 Gửi Yêu Cầu Hỗ Trợ IT</h3>
         <p class="text-xs text-emerald-700">Gặp sự cố máy tính, phần mềm, mạng, tài khoản... gửi yêu cầu ngay để đội Hỗ Trợ IT tiếp nhận xử lý. Mở cho toàn bộ nhân viên.</p>
-        <form id="itTicketCreateForm" onsubmit="submitItTicket(event)" class="bg-white p-3 rounded border text-xs space-y-3">
+        <form id="itTicketCreateForm" data-op-submit="submitItTicket" class="bg-white p-3 rounded border text-xs space-y-3">
           <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
             <div>
               <label class="block font-semibold text-gray-600 mb-1">Mã Yêu Cầu</label>
@@ -5895,7 +5895,7 @@ input[data-sdd-list] {
         <div class="grid grid-cols-1 md:grid-cols-4 gap-3">
           <div>
             <label class="block text-xs font-semibold text-gray-600 mb-1">Lọc Theo Trạng Thái</label>
-            <select id="filterStatusItTicket" onchange="onItTicketFilterChange()" class="w-full border p-2 rounded text-sm bg-white">
+            <select id="filterStatusItTicket" data-op-change="onItTicketFilterChange" class="w-full border p-2 rounded text-sm bg-white">
               <option value="">-- Tất cả trạng thái --</option>
               <option value="TODO">Chưa Xử Lý</option>
               <option value="DOING">Đang Xử Lý</option>
@@ -5905,7 +5905,7 @@ input[data-sdd-list] {
           </div>
           <div>
             <label class="block text-xs font-semibold text-gray-600 mb-1">Lọc Theo Danh Mục</label>
-            <select id="filterCategoryItTicket" onchange="onItTicketFilterChange()" class="w-full border p-2 rounded text-sm bg-white">
+            <select id="filterCategoryItTicket" data-op-change="onItTicketFilterChange" class="w-full border p-2 rounded text-sm bg-white">
               <option value="">-- Tất cả danh mục --</option>
               <option value="HARDWARE">🖥️ Phần cứng</option>
               <option value="SOFTWARE">💿 Phần mềm</option>
@@ -5916,7 +5916,7 @@ input[data-sdd-list] {
           </div>
           <div class="md:col-span-2">
             <label class="block text-xs font-semibold text-gray-600 mb-1">Từ Khóa</label>
-            <input id="filterKeywordItTicket" oninput="onItTicketFilterChange()" placeholder="Mã, tiêu đề, người tạo..." class="w-full border p-2 rounded text-sm">
+            <input id="filterKeywordItTicket" data-op-input="onItTicketFilterChange" placeholder="Mã, tiêu đề, người tạo..." class="w-full border p-2 rounded text-sm">
           </div>
         </div>
       </div>
@@ -5953,7 +5953,7 @@ input[data-sdd-list] {
       <div class="bg-sky-50 p-4 rounded border border-sky-200 space-y-3">
         <h3 class="font-bold text-sky-900 text-base flex items-center gap-2">🔔 Thêm Dịch Vụ CNTT Cần Theo Dõi Gia Hạn</h3>
         <p class="text-xs text-sky-700">Phần mềm/bản quyền, đường truyền Internet, tên miền, chứng chỉ SSL, hosting... — hệ thống sẽ tự gửi email nhắc trước khi hết hạn (cấu hình ở Quản Trị → Cấu Hình Email).</p>
-        <form id="itRenewalCreateForm" onsubmit="submitItServiceRenewal(event)" class="grid grid-cols-1 md:grid-cols-3 gap-3">
+        <form id="itRenewalCreateForm" data-op-submit="submitItServiceRenewal" class="grid grid-cols-1 md:grid-cols-3 gap-3">
           <input id="itRenewalName" placeholder="Tên dịch vụ (VD: Microsoft 365, Domain hcrc.vn...)" class="border p-2 rounded text-sm md:col-span-2" required>
           <div class="relative">
             <input id="itRenewalCategory" data-sdd-list="itRenewalCategoryDatalist" autocomplete="off" placeholder="Loại dịch vụ" class="w-full border p-2 rounded text-sm" required>
@@ -5983,7 +5983,7 @@ input[data-sdd-list] {
         <div class="grid grid-cols-1 md:grid-cols-4 gap-3 mt-3">
           <div>
             <label class="block text-xs font-semibold text-gray-600 mb-1">Tình Trạng Hiệu Lực</label>
-            <select id="filterItRenewalLifecycle" onchange="onItServiceRenewalFilterChange()" class="w-full border p-2 rounded text-sm bg-white">
+            <select id="filterItRenewalLifecycle" data-op-change="onItServiceRenewalFilterChange" class="w-full border p-2 rounded text-sm bg-white">
               <option value="">-- Tất cả --</option>
               <option value="VALID">🟢 Còn hiệu lực</option>
               <option value="EXPIRING">🟡 Sắp hết hạn (≤30 ngày)</option>
@@ -5992,13 +5992,13 @@ input[data-sdd-list] {
           </div>
           <div>
             <label class="block text-xs font-semibold text-gray-600 mb-1">Loại Dịch Vụ</label>
-            <select id="filterItRenewalCategory" onchange="onItServiceRenewalFilterChange()" class="w-full border p-2 rounded text-sm bg-white">
+            <select id="filterItRenewalCategory" data-op-change="onItServiceRenewalFilterChange" class="w-full border p-2 rounded text-sm bg-white">
               <option value="">-- Tất cả --</option>
             </select>
           </div>
           <div class="md:col-span-2">
             <label class="block text-xs font-semibold text-gray-600 mb-1">Từ Khóa</label>
-            <input id="filterItRenewalKeyword" oninput="onItServiceRenewalFilterChange()" placeholder="Tên dịch vụ, nhà cung cấp, người phụ trách..." class="w-full border p-2 rounded text-sm">
+            <input id="filterItRenewalKeyword" data-op-input="onItServiceRenewalFilterChange" placeholder="Tên dịch vụ, nhà cung cấp, người phụ trách..." class="w-full border p-2 rounded text-sm">
           </div>
         </div>
       </details>
@@ -6046,8 +6046,8 @@ input[data-sdd-list] {
         <input id="itRenewalRenewCost" type="text" inputmode="numeric" class="money-input w-full border p-2 rounded text-sm">
       </div>
       <div class="flex justify-end gap-2 pt-2">
-        <button type="button" onclick="closeItServiceRenewalRenewModal()" class="px-4 py-2 rounded bg-gray-200 text-gray-700 font-semibold hover:bg-gray-300">Đóng</button>
-        <button type="button" onclick="submitItServiceRenewalRenew()" class="px-4 py-2 rounded bg-sky-700 text-white font-bold hover:bg-sky-800">Xác Nhận Gia Hạn</button>
+        <button type="button" data-op="closeItServiceRenewalRenewModal" class="px-4 py-2 rounded bg-gray-200 text-gray-700 font-semibold hover:bg-gray-300">Đóng</button>
+        <button type="button" data-op="submitItServiceRenewalRenew" class="px-4 py-2 rounded bg-sky-700 text-white font-bold hover:bg-sky-800">Xác Nhận Gia Hạn</button>
       </div>
     </div>
   </div>
@@ -6079,8 +6079,8 @@ input[data-sdd-list] {
         <textarea id="itRenewalEditNote" placeholder="Ghi chú thêm (nếu có)..." class="w-full border p-2 rounded text-sm h-16 md:col-span-2"></textarea>
       </div>
       <div class="flex justify-end gap-2 pt-2">
-        <button type="button" onclick="closeItServiceRenewalEditModal()" class="px-4 py-2 rounded bg-gray-200 text-gray-700 font-semibold hover:bg-gray-300">Hủy</button>
-        <button type="button" onclick="submitItServiceRenewalEdit()" class="px-4 py-2 rounded bg-sky-700 text-white font-bold hover:bg-sky-800">Lưu Thay Đổi</button>
+        <button type="button" data-op="closeItServiceRenewalEditModal" class="px-4 py-2 rounded bg-gray-200 text-gray-700 font-semibold hover:bg-gray-300">Hủy</button>
+        <button type="button" data-op="submitItServiceRenewalEdit" class="px-4 py-2 rounded bg-sky-700 text-white font-bold hover:bg-sky-800">Lưu Thay Đổi</button>
       </div>
     </div>
   </div>
@@ -6954,7 +6954,7 @@ input[data-sdd-list] {
         <h3 id="itTicketModalTitle" class="font-bold text-base flex items-center gap-2">🎫 Yêu Cầu Hỗ Trợ IT</h3>
         <p id="itTicketModalSub" class="text-xs text-emerald-200"></p>
       </div>
-      <button onclick="closeItTicketModal()" class="text-emerald-200 hover:text-white font-bold text-xl px-2">✕</button>
+      <button data-op="closeItTicketModal" class="text-emerald-200 hover:text-white font-bold text-xl px-2">✕</button>
     </div>
     <div class="p-4 overflow-y-auto flex-1 space-y-4 text-xs">
       <div id="itTicketModalDetails" class="bg-gray-50 p-3 rounded border space-y-2 text-gray-700"></div>
@@ -6964,12 +6964,12 @@ input[data-sdd-list] {
         <div id="itTicketModalComments" class="space-y-2 bg-slate-50 p-3 rounded border max-h-48 overflow-y-auto"></div>
         <div id="itTicketModalCommentBox" class="hidden mt-2 flex gap-2">
           <input id="itTicketCommentInput" placeholder="Nhập bình luận..." class="flex-1 border p-1.5 rounded text-xs">
-          <button type="button" onclick="submitItTicketComment()" class="bg-emerald-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-emerald-700">Gửi</button>
+          <button type="button" data-op="submitItTicketComment" class="bg-emerald-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-emerald-700">Gửi</button>
         </div>
       </div>
     </div>
     <div class="p-3 bg-gray-100 border-t flex justify-end text-xs">
-      <button onclick="closeItTicketModal()" class="bg-gray-500 text-white px-4 py-1.5 rounded font-bold hover:bg-gray-600">Đóng</button>
+      <button data-op="closeItTicketModal" class="bg-gray-500 text-white px-4 py-1.5 rounded font-bold hover:bg-gray-600">Đóng</button>
     </div>
   </div>
 </div>
@@ -6984,7 +6984,7 @@ input[data-sdd-list] {
         <h3 id="itPriceModalTitle" class="font-bold text-base flex items-center gap-2">🏷️ Đề Xuất Duyệt Giá</h3>
         <p id="itPriceModalSub" class="text-xs text-sky-200"></p>
       </div>
-      <button onclick="closeItPriceModal()" class="text-sky-200 hover:text-white font-bold text-xl px-2">✕</button>
+      <button data-op="closeItPriceModal" class="text-sky-200 hover:text-white font-bold text-xl px-2">✕</button>
     </div>
     <div class="p-4 overflow-y-auto flex-1 space-y-4 text-xs">
       <div id="itPriceModalDetails" class="bg-gray-50 p-3 rounded border space-y-2 text-gray-700"></div>
@@ -7016,7 +7016,7 @@ input[data-sdd-list] {
       <div id="itPriceModalControls"></div>
     </div>
     <div class="p-3 bg-gray-100 border-t flex justify-end text-xs">
-      <button onclick="closeItPriceModal()" class="bg-gray-500 text-white px-4 py-1.5 rounded font-bold hover:bg-gray-600">Đóng</button>
+      <button data-op="closeItPriceModal" class="bg-gray-500 text-white px-4 py-1.5 rounded font-bold hover:bg-gray-600">Đóng</button>
     </div>
   </div>
 </div>
@@ -23719,6 +23719,10 @@ function bindOperationDelegation(rootId) {
 //   data-op-seq="fn1(a,b)|fn2(c)" = nhiều lệnh gọi tuần tự (mẫu dropdown điều hướng sidebar), tham số
 //   trong data-op-seq luôn là chuỗi enum đơn giản (tên tab/sub-tab), không phải biểu thức JS.
 // ==========================================
+// Hàm dùng chung cho các điểm onclick="event.stopPropagation()" cũ (chặn nổi bọt sự kiện lên phần tử
+// cha, VD link tải file nằm trong 1 dòng/thẻ đang có onclick riêng mở modal chi tiết) — kết hợp
+// data-arg-event="0" ở trên để nhận đúng Event thật.
+function stopEventPropagation(e) { e.stopPropagation(); }
 function cspCoerceArg(raw) {
   return /^-?\d+$/.test(raw) ? Number(raw) : raw;
 }
@@ -23857,10 +23861,24 @@ bindCspDelegation('reportPreviewModal');
 // #systemSection trong HTML — sửa hồi trước để thanh tab con sticky hoạt động đúng), nên chỉ cần ĐÚNG 1
 // gốc duy nhất là bọc được toàn bộ, không cần 6 gốc riêng như dự kiến ban đầu. Không có modal nào của
 // cụm này sống ngoài section: modal dùng chung "Gán vai trò cột" (#colRoleModal, openColumnRoleMappingModal())
-// tuy được gọi từ Mẫu Ngân Sách/Biểu Mẫu nhưng lại nằm VẬT LÝ trong #itSupportSection (module Hỗ Trợ IT,
-// chưa tới lượt CSP) nên KHÔNG đụng ở đợt này; #genericConfirmModal dùng chung toàn hệ thống (nhiều module
-// khác cũng gọi), không riêng cụm này, để lại cho 1 đợt dọn hạ tầng dùng chung riêng sau này.
+// tuy được gọi từ Mẫu Ngân Sách/Biểu Mẫu nhưng lại nằm VẬT LÝ trong #itSupportSection (module Hỗ Trợ IT —
+// gốc riêng của module đó ở dưới cũng bọc luôn #colRoleModal); #genericConfirmModal dùng chung toàn hệ
+// thống (nhiều module khác cũng gọi), không riêng cụm này, để lại cho 1 đợt dọn hạ tầng dùng chung riêng
+// sau này.
 bindCspDelegation('systemSection');
+
+// Hỗ Trợ IT — 3 sub-tab (Phê Duyệt Giá/Hỗ Trợ Yêu Cầu/Gia Hạn Dịch Vụ CNTT) đều render trong
+// #itSupportSection, và modal dùng chung "Gán vai trò cột" (#colRoleModal, dùng cho Mẫu Ngân Sách) tuy
+// thuộc về module Ngân Sách nhưng nằm VẬT LÝ bên trong #itSupportSection nên cũng được bọc theo — 1 gốc
+// là đủ cho cả section. Nhưng có tới 4 modal xử lý/chi tiết sống NGOÀI section (giống Xe/Vận Hành/Đào
+// Tạo): #itTicketModal (chi tiết + xử lý Yêu Cầu Hỗ Trợ), #itPriceModal (chi tiết + xử lý Đề Xuất Duyệt
+// Giá) — cả 2 nằm chung khu modal với Ngân Sách phía dưới HTML — và #itRenewalRenewModal/#itRenewalEditModal
+// (Gia Hạn/Sửa dịch vụ CNTT ở sub-tab Gia Hạn Dịch Vụ) nên mỗi modal cần thêm 1 gốc riêng — 5 gốc tổng cộng.
+bindCspDelegation('itSupportSection');
+bindCspDelegation('itTicketModal');
+bindCspDelegation('itPriceModal');
+bindCspDelegation('itRenewalRenewModal');
+bindCspDelegation('itRenewalEditModal');
 
 // ==========================================
 // VĂN PHÒNG PHẨM — kỳ đăng ký (vppPeriods) + đăng ký của nhân viên (vppRegistrations). 3 sub-tab:
@@ -25479,7 +25497,7 @@ function buildItServiceRenewalRowHTML(item) {
   const secondaryOptions = [];
   if (item.fileUrl) secondaryOptions.push({ value: 'download', label: '⬇️ Tải tệp' });
   if (currentUser.perms?.admin) secondaryOptions.push({ value: 'delete', label: '🗑️ Xóa' });
-  const primaryBtnHTML = `<button onclick="runItServiceRenewalAction(${item.id}, 'renew')" class="px-2 py-1 bg-sky-700 text-white rounded text-xs hover:bg-sky-800 font-semibold" title="Gia hạn dịch vụ">🔄 Gia Hạn</button>`;
+  const primaryBtnHTML = `<button data-op="runItServiceRenewalAction" data-arg0="${item.id}" data-arg1="renew" class="px-2 py-1 bg-sky-700 text-white rounded text-xs hover:bg-sky-800 font-semibold" title="Gia hạn dịch vụ">🔄 Gia Hạn</button>`;
   secondaryOptions.unshift({ value: 'edit', label: '✏️ Sửa' });
 
   return `
@@ -37728,9 +37746,9 @@ function renderItPriceMasterListAdmin() {
       <td class="border p-2">${(m.columns || []).map(c => `<span class="inline-block px-1.5 py-0.5 rounded text-[11px] mr-1 mb-1 bg-gray-100 text-gray-700">${escapeHtml(c.label)}</span>`).join('')}</td>
       <td class="border p-2">${escapeHtml(m.uploadedByName || '')}<br><span class="text-[11px] text-gray-400">${escapeHtml(m.uploadedAt || '')}</span></td>
       <td class="border p-2 text-center space-x-1 whitespace-nowrap">
-        <button type="button" onclick="renameItPriceMasterList(${m.id})" class="px-2 py-1 bg-gray-200 text-gray-700 rounded text-[11px] font-bold hover:bg-gray-300">✏️ Đổi tên</button>
-        <button type="button" onclick="replaceItPriceMasterListFile(${m.id})" class="px-2 py-1 bg-sky-600 text-white rounded text-[11px] font-bold hover:bg-sky-700">🔄 Thay mẫu</button>
-        <button type="button" onclick="deleteItPriceMasterList(${m.id})" class="px-2 py-1 bg-red-600 text-white rounded text-[11px] font-bold hover:bg-red-700">🗑️ Xoá</button>
+        <button type="button" data-op="renameItPriceMasterList" data-arg0="${m.id}" class="px-2 py-1 bg-gray-200 text-gray-700 rounded text-[11px] font-bold hover:bg-gray-300">✏️ Đổi tên</button>
+        <button type="button" data-op="replaceItPriceMasterListFile" data-arg0="${m.id}" class="px-2 py-1 bg-sky-600 text-white rounded text-[11px] font-bold hover:bg-sky-700">🔄 Thay mẫu</button>
+        <button type="button" data-op="deleteItPriceMasterList" data-arg0="${m.id}" class="px-2 py-1 bg-red-600 text-white rounded text-[11px] font-bold hover:bg-red-700">🗑️ Xoá</button>
       </td>
     </tr>
   `).join('');
@@ -38014,7 +38032,7 @@ function renderItPriceApprovals() {
         <td class="border p-2">${itPriceStatusBadge(p)}</td>
         <td class="border p-2">${itPriceAppliedBadge(p)}</td>
         <td class="border p-2 text-center">
-          <button onclick="openItPriceModal(${p.id})" class="px-2.5 py-1 bg-sky-600 text-white rounded text-xs hover:opacity-90 font-bold">👁️ Chi tiết</button>
+          <button data-op="openItPriceModal" data-arg0="${p.id}" class="px-2.5 py-1 bg-sky-600 text-white rounded text-xs hover:opacity-90 font-bold">👁️ Chi tiết</button>
         </td>
       </tr>
     `;
@@ -38292,7 +38310,7 @@ function renderItPriceModal() {
       <details class="border rounded bg-white" ${isLatest ? 'open' : ''}>
         <summary class="p-2 cursor-pointer font-semibold">📎 ${escapeHtml(f.fileName)}${tagLatest}${tagOriginal}${tagApproved}
           <span class="block text-xs font-normal text-gray-500 mt-0.5">Tải lên bởi ${escapeHtml(f.uploadedByName)} · ${escapeHtml(f.uploadedAt)} · ${(f.items || []).length} dòng
-            · <a href="${attachmentDownloadUrl(f.fileUrl, null, f.fileName)}" target="_blank" onclick="event.stopPropagation()" class="text-sky-600 hover:underline font-semibold">⬇️ Tải file gốc</a>
+            · <a href="${attachmentDownloadUrl(f.fileUrl, null, f.fileName)}" target="_blank" data-op="stopEventPropagation" data-arg-event="0" class="text-sky-600 hover:underline font-semibold">⬇️ Tải file gốc</a>
           </span>
         </summary>
         <div class="p-2 border-t overflow-x-auto">
@@ -38402,8 +38420,8 @@ function renderItPriceModalControls(p) {
   // Người có quyền itPriceEmergencyRejectApprove xét duyệt trực tiếp ngay tại đây.
   if (emergencyPending && canApproveItPriceEmergencyRejectClient(currentUser)) {
     html += `<div class="flex gap-2 flex-wrap mt-2">
-      <button type="button" onclick="approveItPriceEmergencyRejectAction(${p.id})" class="bg-red-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-red-700">✅ Duyệt Huỷ Hồ Sơ</button>
-      <button type="button" onclick="denyItPriceEmergencyRejectAction(${p.id})" class="bg-gray-500 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-gray-600">❌ Từ Chối Yêu Cầu Này</button>
+      <button type="button" data-op="approveItPriceEmergencyRejectAction" data-arg0="${p.id}" class="bg-red-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-red-700">✅ Duyệt Huỷ Hồ Sơ</button>
+      <button type="button" data-op="denyItPriceEmergencyRejectAction" data-arg0="${p.id}" class="bg-gray-500 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-gray-600">❌ Từ Chối Yêu Cầu Này</button>
     </div>`;
   }
 
@@ -38411,7 +38429,7 @@ function renderItPriceModalControls(p) {
   // APPROVED nhưng CHƯA áp giá thật, và chưa có yêu cầu nào khác đang chờ xử lý.
   if (p.status === 'APPROVED' && !p.applied && !emergencyPending && isFinalStepApproverOfItPriceClient(currentUser, p)) {
     html += `<div class="mt-2">
-      <button type="button" onclick="requestItPriceEmergencyRejectAction(${p.id})" class="bg-red-700 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-red-800">🚨 Từ Chối Khẩn</button>
+      <button type="button" data-op="requestItPriceEmergencyRejectAction" data-arg0="${p.id}" class="bg-red-700 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-red-800">🚨 Từ Chối Khẩn</button>
       <p class="text-[11px] text-gray-500 mt-1">Bạn đã duyệt hồ sơ này ở bước cuối cùng nhưng muốn dừng lại trước khi Hỗ Trợ IT áp giá thật — gửi yêu cầu cho người có quyền xét duyệt để huỷ hồ sơ.</p>
     </div>`;
   }
@@ -38421,9 +38439,9 @@ function renderItPriceModalControls(p) {
       html += `<div class="bg-amber-50 text-amber-800 p-2 rounded border border-amber-200">⏳ Đang chờ người đề xuất tải lên tệp bổ sung trước khi có thể duyệt.</div>`;
     } else {
       html += `<div class="flex gap-2 flex-wrap">
-        <button type="button" onclick="approveItPrice(${p.id})" class="bg-emerald-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-emerald-700">✅ Duyệt</button>
-        <button type="button" onclick="rejectItPrice(${p.id})" class="bg-red-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-red-700">❌ Từ chối</button>
-        <button type="button" onclick="requestItPriceInfoApprover(${p.id})" class="bg-amber-500 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-amber-600">✉️ Yêu Cầu Bổ Sung</button>
+        <button type="button" data-op="approveItPrice" data-arg0="${p.id}" class="bg-emerald-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-emerald-700">✅ Duyệt</button>
+        <button type="button" data-op="rejectItPrice" data-arg0="${p.id}" class="bg-red-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-red-700">❌ Từ chối</button>
+        <button type="button" data-op="requestItPriceInfoApprover" data-arg0="${p.id}" class="bg-amber-500 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-amber-600">✉️ Yêu Cầu Bổ Sung</button>
       </div>`;
     }
   }
@@ -38442,20 +38460,20 @@ function renderItPriceModalControls(p) {
       // nhận hoàn thành, khớp yêu cầu nghiệp vụ: người khác không tự ý xác nhận hộ (xem
       // applyPriceApproval() ở lib/recordActions.js).
       if (!p.applyClaimedBy) {
-        claimHtml += `<button type="button" onclick="claimPriceApplyAction(${p.id})" class="bg-sky-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-sky-700">🖐️ Tôi Đang Xử Lý</button>`;
+        claimHtml += `<button type="button" data-op="claimPriceApplyAction" data-arg0="${p.id}" class="bg-sky-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-sky-700">🖐️ Tôi Đang Xử Lý</button>`;
         if (isAdmin) {
-          claimHtml += `<button type="button" onclick="applyItPriceAction(${p.id})" class="bg-teal-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-teal-700">🏷️ Xác nhận đã áp giá</button>`;
+          claimHtml += `<button type="button" data-op="applyItPriceAction" data-arg0="${p.id}" class="bg-teal-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-teal-700">🏷️ Xác nhận đã áp giá</button>`;
         }
       } else if (claimedByMe || isAdmin) {
-        claimHtml += `<button type="button" onclick="applyItPriceAction(${p.id})" class="bg-teal-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-teal-700">🏷️ Xác nhận đã áp giá</button>`;
-        claimHtml += `<button type="button" onclick="releasePriceApplyClaimAction(${p.id})" class="bg-gray-400 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-gray-500">↩️ Huỷ Nhận Xử Lý</button>`;
+        claimHtml += `<button type="button" data-op="applyItPriceAction" data-arg0="${p.id}" class="bg-teal-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-teal-700">🏷️ Xác nhận đã áp giá</button>`;
+        claimHtml += `<button type="button" data-op="releasePriceApplyClaimAction" data-arg0="${p.id}" class="bg-gray-400 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-gray-500">↩️ Huỷ Nhận Xử Lý</button>`;
       }
       if (claimedByOther && !isAdmin) {
         claimHtml += `<span class="text-xs text-gray-500 self-center">🖐️ Đang được xử lý bởi <b>${escapeHtml(p.applyClaimedByName || p.applyClaimedBy)}</b> — bạn không xác nhận được đề xuất này.</span>`;
       }
       html += `<div class="flex gap-2 flex-wrap items-center mt-2">
         ${claimHtml}
-        <button type="button" onclick="requestItPriceInfoIt(${p.id})" class="bg-amber-500 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-amber-600">✉️ Yêu Cầu Bổ Sung</button>
+        <button type="button" data-op="requestItPriceInfoIt" data-arg0="${p.id}" class="bg-amber-500 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-amber-600">✉️ Yêu Cầu Bổ Sung</button>
       </div>`;
     }
   }
@@ -38466,15 +38484,15 @@ function renderItPriceModalControls(p) {
       <div class="bg-sky-50 p-3 rounded border border-sky-200 space-y-2 mt-2">
         <h4 class="font-bold text-sky-900">📤 Tải Lên Tệp Bổ Sung</h4>
         <p class="text-amber-700">${escapeHtml(openReq.requestedByName)} yêu cầu: "${escapeHtml(openReq.reason)}"</p>
-        <input id="itPriceSupplementFileInput" type="file" accept=".xlsx,.xls" onchange="onItPriceSupplementFileChange(event, ${p.masterListId || 'null'})" class="w-full border p-1.5 rounded bg-white">
+        <input id="itPriceSupplementFileInput" type="file" accept=".xlsx,.xls" data-op-change="onItPriceSupplementFileChange" data-arg1="${p.masterListId || 'null'}" data-arg-event="0" class="w-full border p-1.5 rounded bg-white">
         <p id="itPriceSupplementFileStatus" class="text-gray-500"></p>
         <p class="text-gray-400">Tệp bổ sung sẽ được thêm vào bên cạnh tệp gốc, không thay thế — người duyệt/IT sẽ xem được cả bảng so sánh.</p>
-        <button type="button" id="itPriceSupplementSendBtn" onclick="submitItPriceSupplementAction(${p.id})" class="bg-sky-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-sky-700 disabled:opacity-50" disabled>Gửi Tệp Bổ Sung</button>
+        <button type="button" id="itPriceSupplementSendBtn" data-op="submitItPriceSupplementAction" data-arg0="${p.id}" class="bg-sky-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-sky-700 disabled:opacity-50" disabled>Gửi Tệp Bổ Sung</button>
       </div>`;
   }
 
   if (currentUser.perms?.admin) {
-    html += `<div class="mt-2"><button type="button" onclick="deleteItPriceAction(${p.id})" class="bg-gray-500 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-gray-600">🗑️ Xóa</button></div>`;
+    html += `<div class="mt-2"><button type="button" data-op="deleteItPriceAction" data-arg0="${p.id}" class="bg-gray-500 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-gray-600">🗑️ Xóa</button></div>`;
   }
 
   if (!html) html = '<p class="text-gray-400 italic">Không có thao tác nào khả dụng cho vai trò hiện tại.</p>';
@@ -38756,7 +38774,7 @@ function renderItTickets() {
       <td class="border p-2 text-xs">${t.assigneeName ? escapeHtml(t.assigneeName) : '<span class="text-gray-400 italic">Chưa nhận</span>'}</td>
       <td class="border p-2 text-center space-x-1">
         ${(() => {
-          const primaryBtnHTML = `<button onclick="runItTicketAction(${t.id}, 'view')" class="px-2.5 py-1 bg-emerald-600 text-white rounded text-xs hover:opacity-90 font-bold">👁️ Xem / Xử lý</button>`;
+          const primaryBtnHTML = `<button data-op="runItTicketAction" data-arg0="${t.id}" data-arg1="view" class="px-2.5 py-1 bg-emerald-600 text-white rounded text-xs hover:opacity-90 font-bold">👁️ Xem / Xử lý</button>`;
           const secondaryOptions = [];
           if (currentUser.perms?.admin) secondaryOptions.push({ value: 'delete', label: '🗑️ Xóa' });
           return buildActionCell(t.id, primaryBtnHTML, secondaryOptions, 'runItTicketAction');
@@ -38785,6 +38803,10 @@ function deleteItTicketAction(id) {
 
 let currentItTicketModalId = null;
 let showItTicketEscalateForm = false;
+// 2 hàm bọc cho onclick="showItTicketEscalateForm = true/false; renderItTicketModal();" cũ (gán biến +
+// gọi hàm, không map được vào 1 lệnh gọi hàm đơn cho data-op) — xem CSP data-op ở bindCspDelegation().
+function openItTicketEscalateForm() { showItTicketEscalateForm = true; renderItTicketModal(); }
+function closeItTicketEscalateForm() { showItTicketEscalateForm = false; renderItTicketModal(); }
 
 // Nhãn trạng thái leo thang phê duyệt (xem escalateItTicket() ở lib/recordActions.js) — tách biệt hoàn
 // toàn khỏi IT_TICKET_STATUS_BADGES (t.status: TODO/DOING/DONE/CANCELLED).
@@ -38831,14 +38853,14 @@ function renderItTicketModal() {
         <h4 class="font-bold text-sky-900">📨 Yêu Cầu Phê Duyệt Từ Đội Hỗ Trợ IT</h4>
         <p class="text-gray-600">${escapeHtml(t.approvalReason)}</p>
         <div class="flex gap-2">
-          <button type="button" onclick="approveItTicketEscalationAction()" class="bg-emerald-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-emerald-700">✅ Duyệt</button>
-          <button type="button" onclick="denyItTicketEscalationAction()" class="bg-red-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-red-700">❌ Từ chối</button>
+          <button type="button" data-op="approveItTicketEscalationAction" class="bg-emerald-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-emerald-700">✅ Duyệt</button>
+          <button type="button" data-op="denyItTicketEscalationAction" class="bg-red-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-red-700">❌ Từ chối</button>
         </div>
       </div>`;
   }
 
   if (canManage && t.status === 'TODO') {
-    controlsHTML += `<button type="button" onclick="claimItTicketAction()" class="bg-sky-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-sky-700 mr-2">🎯 Nhận Xử Lý</button>`;
+    controlsHTML += `<button type="button" data-op="claimItTicketAction" class="bg-sky-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-sky-700 mr-2">🎯 Nhận Xử Lý</button>`;
   }
 
   if (canManage && t.status === 'DOING') {
@@ -38852,7 +38874,7 @@ function renderItTicketModal() {
         controlsHTML += `<div class="bg-red-50 text-red-700 text-xs p-2 rounded border border-red-200 mb-2">❌ <b>${escapeHtml(t.approvalApproverName)}</b> đã từ chối yêu cầu phê duyệt${t.approvalComment ? `: "${escapeHtml(t.approvalComment)}"` : '.'}<br>Gửi lại yêu cầu tới người khác hoặc hủy yêu cầu hỗ trợ này.</div>`;
       }
       if (!showItTicketEscalateForm) {
-        controlsHTML += `<button type="button" onclick="showItTicketEscalateForm = true; renderItTicketModal();" class="bg-gray-200 text-gray-700 px-3 py-1.5 rounded text-xs font-bold hover:bg-gray-300 mb-2">📨 ${blockedByRejection ? 'Gửi Lại' : 'Gửi'} Yêu Cầu Phê Duyệt</button>`;
+        controlsHTML += `<button type="button" data-op="openItTicketEscalateForm" class="bg-gray-200 text-gray-700 px-3 py-1.5 rounded text-xs font-bold hover:bg-gray-300 mb-2">📨 ${blockedByRejection ? 'Gửi Lại' : 'Gửi'} Yêu Cầu Phê Duyệt</button>`;
       } else {
         const approverOptions = DB.users.filter(u => u.active !== false && u.username !== currentUser.username)
           .map(u => `<option value="${escapeHtml(u.username)}">${escapeHtml(u.name)} — ${escapeHtml(u.dept || '')}</option>`).join('');
@@ -38862,8 +38884,8 @@ function renderItTicketModal() {
             <select id="itTicketApproverSelect" class="w-full border p-1.5 rounded bg-white text-xs">${approverOptions}</select>
             <textarea id="itTicketApprovalReason" placeholder="Vì sao yêu cầu này cần phê duyệt trước khi xử lý?" class="w-full border p-1.5 rounded h-16 text-xs"></textarea>
             <div class="flex gap-2">
-              <button type="button" onclick="escalateItTicketAction()" class="bg-sky-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-sky-700">Gửi phê duyệt</button>
-              <button type="button" onclick="showItTicketEscalateForm = false; renderItTicketModal();" class="bg-gray-300 text-gray-700 px-3 py-1.5 rounded text-xs font-bold hover:bg-gray-400">Huỷ</button>
+              <button type="button" data-op="escalateItTicketAction" class="bg-sky-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-sky-700">Gửi phê duyệt</button>
+              <button type="button" data-op="closeItTicketEscalateForm" class="bg-gray-300 text-gray-700 px-3 py-1.5 rounded text-xs font-bold hover:bg-gray-400">Huỷ</button>
             </div>
           </div>`;
       }
@@ -38878,13 +38900,13 @@ function renderItTicketModal() {
               <option value="CANCELLED">❌ Hủy yêu cầu</option>
             </select>
             <textarea id="itTicketUpdateNote" placeholder="Ghi chú xử lý (VD: đã thay ổ cứng, đã cấp lại mật khẩu...)" class="w-full border p-1.5 rounded h-16 text-xs">${escapeHtml(t.resolutionNote || '')}</textarea>
-            <button type="button" onclick="updateItTicketStatusAction()" class="bg-sky-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-sky-700">💾 Cập Nhật</button>
+            <button type="button" data-op="updateItTicketStatusAction" class="bg-sky-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-sky-700">💾 Cập Nhật</button>
           </div>`;
       }
     }
   }
   if ((canManage || isCreator) && (t.status === 'TODO' || t.status === 'DOING')) {
-    controlsHTML += `<button type="button" onclick="cancelItTicketAction()" class="bg-red-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-red-700">❌ Hủy Yêu Cầu</button>`;
+    controlsHTML += `<button type="button" data-op="cancelItTicketAction" class="bg-red-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-red-700">❌ Hủy Yêu Cầu</button>`;
   }
   document.getElementById('itTicketModalControls').innerHTML = controlsHTML;
 
