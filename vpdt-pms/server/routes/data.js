@@ -26,7 +26,7 @@ const {
   filterOperationExecutionPeriodsForUser,
   filterVppRegistrationsForUser, filterLicensesForUser, filterHrFeedbackForUser,
   filterItServiceRenewalsForUser, filterPaymentRequestsForUser, filterOnboardingProgressForUser,
-  computeModuleApproverUsernames, sanitizeUsersPermsForViewer
+  computeModuleApproverUsernames, sanitizeUsersPermsForViewer, assertNoManagerCycle
 } = require('../lib/recordViewScope');
 
 const VALID_KEYS = new Set(Object.keys(DEFAULTS));
@@ -264,32 +264,10 @@ function assertAtLeastOneAdmin(users) {
 //   lại bằng bcrypt, và đánh dấu mustChangePassword=true — mật khẩu admin gõ tạm chỉ có giá trị cho
 //   LẦN ĐĂNG NHẬP ĐẦU, buộc chính user đó phải tự đổi lại ngay (xem lib/auth.js blockIfMustChangePassword),
 //   giảm nguy cơ mật khẩu tạm/yếu tồn tại lâu dài không ai để ý.
-// Cơ Cấu Tổ Chức: user.managerUsername (field phẳng, lưu như "Chức danh"/jobTitle — không có bảng/
-// collection riêng) — CHƯA từng có khái niệm quản lý/cấp trên trong hệ thống trước đây nên KHÔNG có gì
-// chặn vòng lặp sẵn; phải tự viết validate ở ĐÂY (điểm ghi CSDL duy nhất cho collection "users"), không
-// tin riêng validate phía client (picker Cơ Cấu Tổ Chức tự ẩn cấp dưới, nhưng vẫn có thể lách qua gọi
-// thẳng API). Giới hạn 50 bước đi ngược chỉ để phòng vệ vòng lặp cực dài, không phải giới hạn nghiệp vụ.
-function assertNoManagerCycle(users) {
-  const byUsername = new Map(users.map(u => [u.username, u]));
-  for (const u of users) {
-    if (!u.managerUsername) continue;
-    if (u.managerUsername === u.username) {
-      throw new HttpError(400, `"${u.name || u.username}" không thể chọn chính mình làm quản lý trực tiếp`);
-    }
-    if (!byUsername.has(u.managerUsername)) {
-      throw new HttpError(400, `Quản lý trực tiếp của "${u.name || u.username}" không tồn tại trong danh sách người dùng`);
-    }
-    let cur = byUsername.get(u.managerUsername);
-    let steps = 0;
-    while (cur && steps < 50) {
-      if (cur.username === u.username) {
-        throw new HttpError(400, `Cơ cấu tổ chức tạo vòng lặp quản lý liên quan tới "${u.name || u.username}" — vui lòng kiểm tra lại`);
-      }
-      cur = cur.managerUsername ? byUsername.get(cur.managerUsername) : null;
-      steps++;
-    }
-  }
-}
+// Cơ Cấu Tổ Chức: user.managerUsername — validate chống vòng lặp (assertNoManagerCycle()) giờ ở
+// lib/recordViewScope.js (chuyển sang đó để dùng chung được với route hẹp
+// POST /api/admin/org-chart/set-manager, xem routes/adminExport.js — trước đây chỉ định nghĩa cục bộ ở
+// đây nên route hẹp không tái dùng được, phải tự viết lại logic).
 
 async function prepareUsersForSave(incomingUsers, currentUsername) {
   // Chặn NGAY tại server việc tự khoá chính tài khoản đang gọi request — trước đây chỉ chặn ở JS

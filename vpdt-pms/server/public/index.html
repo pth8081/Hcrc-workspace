@@ -40417,12 +40417,25 @@ async function saveOrgChartManagerChange(newManagerUsername) {
   if (newManagerUsername && isManagerOf(target, newManagerUsername, DB.users)) {
     return alert('⛔ Không thể chọn cấp dưới (trực tiếp/gián tiếp) làm quản lý trực tiếp — sẽ tạo vòng lặp!');
   }
-  const snapshot = JSON.parse(JSON.stringify(DB.users));
+  // Route hẹp POST /api/admin/org-chart/set-manager (routes/adminExport.js) — CHỈ ghi field
+  // managerUsername, gate orgChartManage||admin — thay cho syncStorage('users') cũ (POST /api/data/users
+  // chỉ admin THUẦN mới ghi được, xem ADMIN_ONLY_KEYS ở routes/data.js), vốn khiến người chỉ giữ
+  // orgChartManage thấy đủ nút sửa nhưng bấm Lưu luôn bị 403.
+  let body;
+  try {
+    const res = await fetch('/api/admin/org-chart/set-manager', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ changes: [{ username: target, managerUsername: newManagerUsername || null }] })
+    });
+    if (res.status === 401) return handleSessionExpired();
+    body = await res.json().catch(() => ({}));
+    if (!res.ok) return alert('⛔ ' + (body.error || 'Lưu thất bại'));
+  } catch (e) {
+    return alert('⛔ Không thể kết nối tới máy chủ: ' + e.message);
+  }
   const u = DB.users.find(x => x.username === target);
-  if (!u) return;
-  u.managerUsername = newManagerUsername || null;
-  const saved = await syncStorage('users');
-  if (!saved) { DB.users = snapshot; return alert('⛔ Lưu thất bại, đã hoàn tác.'); }
+  if (u) u.managerUsername = newManagerUsername || null;
   closeOrgChartManagerPicker();
   renderOrgChart();
 }
@@ -40503,8 +40516,9 @@ function exportOrgChartExcel() {
 // Nhập Excel: server (routes/adminExport.js + lib/orgChartImport.js) CHỈ đọc file, trả về mảng
 // {username, managerUsername} thô — mọi đối chiếu/chặn vòng lặp làm Ở ĐÂY, giống hệt logic
 // saveOrgChartManagerChange() dùng cho picker, để 2 đường (sửa từng người / import hàng loạt) luôn nhất
-// quán. Máy chủ vẫn chốt lại lần cuối (tồn tại/vòng lặp) khi syncStorage('users') gọi
-// prepareUsersForSave() -> assertNoManagerCycle().
+// quán. Danh sách thay đổi ĐÃ LỌC được gửi hàng loạt qua route hẹp POST /api/admin/org-chart/set-manager
+// (routes/adminExport.js) — máy chủ vẫn chốt lại lần cuối (tồn tại/vòng lặp) bằng assertNoManagerCycle()
+// trên toàn bộ mảng users bên trong 1 transaction khoá thật.
 async function importOrgChartExcel(evt) {
   const file = evt.target.files[0];
   if (!file) return;
@@ -40523,8 +40537,7 @@ async function importOrgChartExcel(evt) {
     return alert('⛔ Không thể kết nối tới máy chủ: ' + e.message);
   }
 
-  const snapshot = JSON.parse(JSON.stringify(DB.users));
-  let updated = 0;
+  const changes = [];
   const skippedUnknown = [];
   const skippedBadManager = [];
   rows.forEach(({ username, managerUsername }) => {
@@ -40535,21 +40548,35 @@ async function importOrgChartExcel(evt) {
       if (!DB.users.some(x => x.username === managerUsername)) { skippedBadManager.push(`${username} (không tìm thấy tài khoản quản lý "${managerUsername}")`); return; }
       if (isManagerOf(username, managerUsername, DB.users)) { skippedBadManager.push(`${username} (sẽ tạo vòng lặp quản lý)`); return; }
     }
-    u.managerUsername = managerUsername || null;
-    updated++;
+    changes.push({ username, managerUsername: managerUsername || null });
   });
 
-  if (!updated) {
+  if (!changes.length) {
     let msg = 'Không có dòng nào hợp lệ để cập nhật.';
     if (skippedUnknown.length) msg += `\n⚠️ Không khớp tài khoản: ${skippedUnknown.slice(0, 15).join(', ')}${skippedUnknown.length > 15 ? '...' : ''}`;
     if (skippedBadManager.length) msg += `\n⚠️ Quản lý không hợp lệ: ${skippedBadManager.slice(0, 15).join(', ')}${skippedBadManager.length > 15 ? '...' : ''}`;
     return alert(msg);
   }
 
-  const saved = await syncStorage('users');
-  if (!saved) { DB.users = snapshot; return alert('⛔ Lưu thất bại, đã hoàn tác.'); }
+  try {
+    const res = await fetch('/api/admin/org-chart/set-manager', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ changes })
+    });
+    if (res.status === 401) return handleSessionExpired();
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) return alert('⛔ ' + (body.error || 'Lưu thất bại'));
+  } catch (e) {
+    return alert('⛔ Không thể kết nối tới máy chủ: ' + e.message);
+  }
 
-  let msg = `✅ Đã cập nhật quản lý trực tiếp cho ${updated} người.`;
+  changes.forEach(({ username, managerUsername }) => {
+    const u = DB.users.find(x => x.username === username);
+    if (u) u.managerUsername = managerUsername;
+  });
+
+  let msg = `✅ Đã cập nhật quản lý trực tiếp cho ${changes.length} người.`;
   if (skippedUnknown.length) msg += `\n⚠️ Bỏ qua ${skippedUnknown.length} dòng không khớp tài khoản: ${skippedUnknown.slice(0, 15).join(', ')}${skippedUnknown.length > 15 ? '...' : ''}`;
   if (skippedBadManager.length) msg += `\n⚠️ Bỏ qua ${skippedBadManager.length} dòng quản lý không hợp lệ: ${skippedBadManager.slice(0, 15).join(', ')}${skippedBadManager.length > 15 ? '...' : ''}`;
   alert(msg);

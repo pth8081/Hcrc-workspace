@@ -10,15 +10,24 @@
 //    đảm bảo không đổi hành vi validate/hash mật khẩu đã có sẵn ở POST /api/data/users.
 // 3) POST /api/admin/org-chart/import-xlsx — đọc file .xlsx cơ cấu tổ chức (username + username quản lý
 //    trực tiếp) người có quyền orgChartManage/admin tải lên. Cùng khuôn route (2): CHỈ đọc/trả JSON, client
-//    tự đối chiếu DB.users + isManagerOf() (chặn vòng lặp) rồi gọi syncStorage('users') như khi đổi qua
-//    picker; máy chủ vẫn chốt vòng lặp/tồn tại lần cuối bằng assertNoManagerCycle() khi ghi. Gate RIÊNG
-//    (orgChartManage), KHÔNG đòi admin — khác route (2) vốn phải admin vì tạo mới cả tài khoản/mật khẩu.
+//    tự đối chiếu DB.users + isManagerOf() (chặn vòng lặp) trước khi gọi route (4) bên dưới để GHI.
+// 4) POST /api/admin/org-chart/set-manager — route GHI THẬT cho Cơ Cấu Tổ Chức, dùng chung cho cả
+//    picker (saveOrgChartManagerChange(), 1 thay đổi) lẫn import Excel hàng loạt (importOrgChartExcel(),
+//    nhiều thay đổi). Gate RIÊNG (orgChartManage HOẶC admin) — trước đây 2 luồng này phải đi qua
+//    POST /api/data/users (chỉ admin THUẦN mới ghi được, xem ADMIN_ONLY_KEYS ở routes/data.js) nên một
+//    tài khoản được cấp ĐÚNG orgChartManage (không phải admin) thấy đủ nút sửa nhưng bấm Lưu luôn bị 403
+//    — route hẹp này CHỈ đọc/ghi field managerUsername (không đụng active/perms/dept... của bất kỳ ai),
+//    nên mở gate rộng hơn (orgChartManage) mà không mở đường sửa các field khác qua route này.
 const express = require('express');
 const multer = require('multer');
 const { requireAuth, blockIfMustChangePassword } = require('../lib/auth');
 const { buildGenericWorkbook, parseUsersImportXlsx } = require('../lib/adminExport');
 const { parseOrgChartImportXlsx } = require('../lib/orgChartImport');
 const { verifyFileSignature } = require('../lib/fileSignature');
+const { withLockedAppDataValue } = require('../lib/appData');
+const { assertNoManagerCycle } = require('../lib/recordViewScope');
+const { HttpError } = require('../lib/httpErrors');
+const { sendServerError } = require('../lib/errorResponse');
 
 const router = express.Router();
 router.use(requireAuth, blockIfMustChangePassword);
@@ -110,6 +119,47 @@ router.post('/org-chart/import-xlsx', (req, res) => {
       res.status(400).json({ error: parseErr.message || 'Không đọc được nội dung file Excel' });
     }
   });
+});
+
+// POST /api/admin/org-chart/set-manager — xem giải thích lý do tồn tại route này ở mục (4) đầu file.
+// Nhận { changes: [{ username, managerUsername }, ...] } — client (picker lẫn import) đã tự lọc trước
+// (bỏ qua username không tồn tại/tự chọn chính mình/tạo vòng lặp — xem saveOrgChartManagerChange()/
+// importOrgChartExcel() ở public/index.html), server vẫn chốt lại LẦN CUỐI bằng assertNoManagerCycle()
+// trên TOÀN BỘ mảng users kết quả bên trong transaction khoá thật (withLockedAppDataValue, không phải
+// If-Match lạc quan như POST /api/data/:key) — nếu 1 thay đổi trong batch vẫn gây vòng lặp (hiếm, chỉ
+// xảy ra khi có người khác vừa đổi managerUsername nơi khác đúng lúc race), CẢ batch bị từ chối, không
+// ghi 1 phần.
+const MAX_MANAGER_CHANGES = 5000;
+router.post('/org-chart/set-manager', async (req, res) => {
+  if (!req.freshUser.perms?.admin && !req.freshUser.perms?.orgChartManage) {
+    return res.status(403).json({ error: 'Chỉ người có quyền Quản Lý Cơ Cấu Tổ Chức mới được sửa' });
+  }
+  const changes = Array.isArray(req.body?.changes) ? req.body.changes : null;
+  if (!changes || !changes.length) return res.status(400).json({ error: 'Thiếu danh sách thay đổi' });
+  if (changes.length > MAX_MANAGER_CHANGES) {
+    return res.status(400).json({ error: `Vượt quá ${MAX_MANAGER_CHANGES} thay đổi mỗi lượt` });
+  }
+  for (const c of changes) {
+    if (!c || typeof c.username !== 'string' || !c.username.trim()) {
+      return res.status(400).json({ error: 'Mỗi thay đổi phải có username hợp lệ' });
+    }
+  }
+  try {
+    await withLockedAppDataValue('users', (currentUsers) => {
+      const byUsername = new Map((currentUsers || []).map(u => [u.username, u]));
+      for (const c of changes) {
+        const target = byUsername.get(c.username);
+        if (!target) throw new HttpError(400, `Không tìm thấy tài khoản "${c.username}"`);
+        target.managerUsername = c.managerUsername || null;
+      }
+      assertNoManagerCycle(currentUsers);
+      return currentUsers;
+    });
+    res.json({ ok: true, updated: changes.length });
+  } catch (err) {
+    if (err instanceof HttpError) return res.status(err.status).json({ error: err.message });
+    sendServerError(res, 500, err, 'POST /api/admin/org-chart/set-manager', 'Không thể lưu Cơ Cấu Tổ Chức');
+  }
 });
 
 module.exports = router;

@@ -541,6 +541,9 @@ function createOperationWorkItem(user, payload, sourceRecord, siblingsAndDescend
   if (sourceRecord.estimateStatus !== 'APPROVED') {
     throw new HttpError(409, 'Dự toán của hồ sơ này chưa được phê duyệt xong, chưa thể tạo công việc Thực hiện');
   }
+  if (sourceRecord.useConfirmStatus === 'CONFIRMED') {
+    throw new HttpError(409, 'Hồ sơ đã được xác nhận đưa vào sử dụng, không thể tạo thêm công việc mới');
+  }
   const title = String(payload?.title || '').trim();
   if (!title) throw new HttpError(400, 'Vui lòng nhập tên công việc');
   let parentWorkItemId = null;
@@ -676,6 +679,9 @@ function startOperationExecutionPeriod(user, period) {
 
 function deleteOperationWorkItem(user, item, descendantIds) {
   assertCanManageOperationExecution(user);
+  if (item.status === 'DA_NGHIEM_THU') {
+    throw new HttpError(409, 'Công việc đã nghiệm thu xong, không thể xoá');
+  }
   return [item.id, ...descendantIds];
 }
 

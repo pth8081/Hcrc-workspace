@@ -11,6 +11,7 @@
 const { getAppDataValue } = require('./appData');
 const { MODULE_CONFIGS, resolveContractApprovalWorkflow, resolveContractManageWorkflow } = require('./workflowEngine');
 const { canApproveInternalPost, canManageTraining, canManageTrainingClass, canManageRecruitment, canEvaluateOnboardingStage3 } = require('./recordActions');
+const { HttpError } = require('./httpErrors');
 
 // Khớp canManageVpp() ở public/index.html.
 function canManageVpp(user) {
@@ -30,6 +31,36 @@ function isManagerOf(managerUsername, targetUsername, allUsers) {
     cur = (allUsers || []).find(u => u.username === cur.managerUsername);
   }
   return false;
+}
+
+// Cơ Cấu Tổ Chức: user.managerUsername (field phẳng, lưu như "Chức danh"/jobTitle — không có bảng/
+// collection riêng) — CHƯA từng có khái niệm quản lý/cấp trên trong hệ thống trước đây nên KHÔNG có gì
+// chặn vòng lặp sẵn; phải tự viết validate ở ĐÂY, dùng chung cho MỌI đường ghi "users" (đường ghi toàn
+// mảng POST /api/data/users ở routes/data.js LẪN route hẹp chỉ đổi managerUsername ở
+// routes/adminExport.js — trước đây hàm này định nghĩa cục bộ trong routes/data.js nên route hẹp không
+// tái dùng được). Không tin riêng validate phía client (picker Cơ Cấu Tổ Chức tự ẩn cấp dưới, nhưng vẫn
+// có thể lách qua gọi thẳng API). Giới hạn 50 bước đi ngược chỉ để phòng vệ vòng lặp cực dài, không phải
+// giới hạn nghiệp vụ.
+function assertNoManagerCycle(users) {
+  const byUsername = new Map(users.map(u => [u.username, u]));
+  for (const u of users) {
+    if (!u.managerUsername) continue;
+    if (u.managerUsername === u.username) {
+      throw new HttpError(400, `"${u.name || u.username}" không thể chọn chính mình làm quản lý trực tiếp`);
+    }
+    if (!byUsername.has(u.managerUsername)) {
+      throw new HttpError(400, `Quản lý trực tiếp của "${u.name || u.username}" không tồn tại trong danh sách người dùng`);
+    }
+    let cur = byUsername.get(u.managerUsername);
+    let steps = 0;
+    while (cur && steps < 50) {
+      if (cur.username === u.username) {
+        throw new HttpError(400, `Cơ cấu tổ chức tạo vòng lặp quản lý liên quan tới "${u.name || u.username}" — vui lòng kiểm tra lại`);
+      }
+      cur = cur.managerUsername ? byUsername.get(cur.managerUsername) : null;
+      steps++;
+    }
+  }
 }
 
 function scopeAllows(user, scope, dept) {
@@ -449,7 +480,12 @@ function canViewOperationStoreOpening(user, item, appData) {
   if (user.perms?.admin) return true;
   if (item.dept === user.dept) return true;
   if (hasOwnWorkItemInSource(user, 'OPERATION_STORE_OPENING', item.id, appData)) return true;
-  return isApproverForApproversMap(MODULE_CONFIGS.operationStoreOpenings.resolveWfConfig(item, appData).approvers, user.username);
+  if (isApproverForApproversMap(MODULE_CONFIGS.operationStoreOpenings.resolveWfConfig(item, appData).approvers, user.username)) return true;
+  // Dự toán chạy quy trình duyệt ĐỘC LẬP (operationStoreOpenEstimateDeptWorkflows), thường gán người
+  // duyệt khác phòng ban với hồ sơ chính — thiếu nhánh này khiến người được admin chỉ định duyệt Dự
+  // toán không thấy hồ sơ trong GET /api/data để duyệt qua giao diện bình thường (dù action API vẫn
+  // chạy được nếu biết trước id — phát hiện ở audit Đợt 5, Cao #2).
+  return isApproverForApproversMap(MODULE_CONFIGS.operationStoreOpeningEstimate.resolveWfConfig(item, appData).approvers, user.username);
 }
 function filterOperationStoreOpeningsForUser(items, user, appData) {
   return (items || []).filter(o => canViewOperationStoreOpening(user, o, appData));
@@ -459,7 +495,9 @@ function canViewOperationRepair(user, item, appData) {
   if (user.perms?.admin) return true;
   if (item.dept === user.dept) return true;
   if (hasOwnWorkItemInSource(user, 'OPERATION_REPAIR', item.id, appData)) return true;
-  return isApproverForApproversMap(MODULE_CONFIGS.operationRepairs.resolveWfConfig(item, appData).approvers, user.username);
+  if (isApproverForApproversMap(MODULE_CONFIGS.operationRepairs.resolveWfConfig(item, appData).approvers, user.username)) return true;
+  // Cùng lý do operationStoreOpeningEstimate ở canViewOperationStoreOpening() bên trên.
+  return isApproverForApproversMap(MODULE_CONFIGS.operationRepairEstimate.resolveWfConfig(item, appData).approvers, user.username);
 }
 function filterOperationRepairsForUser(items, user, appData) {
   return (items || []).filter(o => canViewOperationRepair(user, o, appData));
@@ -703,7 +741,7 @@ function filterPaymentRequestsForUser(items, user) {
 }
 
 module.exports = {
-  isManagerOf, hasOwnWorkItemInSource,
+  isManagerOf, assertNoManagerCycle, hasOwnWorkItemInSource,
   canViewDoc, canViewSubmission, filterDocsForUser, filterSubmissionsForUser,
   canViewInternalPost, filterInternalPostsForUser,
   canSeeReportCompilation, canSeeReportPdfCompilation, sanitizeReportPeriodsForUser,
