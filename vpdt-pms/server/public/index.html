@@ -6379,8 +6379,8 @@ input[data-sdd-list] {
        "Sửa & Gửi Lại" ở BOSUNG_MODULE_META/openBosungEditModal()). -->
   <div id="vanHanhSection" class="hidden space-y-6">
     <div class="flex gap-2 flex-wrap">
-      <button onclick="setVanHanhSubTab('ORDERS')" id="btnVanHanhSubOrders" class="px-3 py-1 rounded text-xs font-bold bg-cyan-700 text-white">📦 Phê Duyệt Đơn Hàng</button>
-      <button onclick="setVanHanhSubTab('STORE')" id="btnVanHanhSubStore" class="px-3 py-1 rounded text-xs font-bold bg-gray-200 text-gray-700">🏬 Siêu Thị</button>
+      <button data-op="setVanHanhSubTab" data-tab="ORDERS" id="btnVanHanhSubOrders" class="px-3 py-1 rounded text-xs font-bold bg-cyan-700 text-white">📦 Phê Duyệt Đơn Hàng</button>
+      <button data-op="setVanHanhSubTab" data-tab="STORE" id="btnVanHanhSubStore" class="px-3 py-1 rounded text-xs font-bold bg-gray-200 text-gray-700">🏬 Siêu Thị</button>
     </div>
 
     <!-- ===== TAB 1: PHÊ DUYỆT ĐƠN HÀNG (operationOrders) ===== -->
@@ -6388,7 +6388,7 @@ input[data-sdd-list] {
       <div id="operationOrderDashboardCards"></div>
       <div class="bg-cyan-50 p-4 rounded border border-cyan-200 space-y-3">
         <h3 class="font-bold text-cyan-900 text-base flex items-center gap-2">📦 Tạo Đơn Hàng Mới</h3>
-        <form id="operationOrderForm" onsubmit="submitOperationOrder(event)" class="bg-white p-3 rounded border text-xs space-y-3">
+        <form id="operationOrderForm" data-op-submit="submitOperationOrder" class="bg-white p-3 rounded border text-xs space-y-3">
           <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
             <div><label class="block font-semibold text-gray-600 mb-1">Mã Đơn Hàng</label><input id="voCode" readonly placeholder="Mã tự sinh" class="w-full border p-1.5 rounded bg-gray-100 cursor-not-allowed"></div>
             <div class="md:col-span-2"><label class="block font-semibold text-gray-600 mb-1">Tiêu Đề Đơn Hàng</label><input id="voTitle" placeholder="Tên đơn hàng cần mua..." class="w-full border p-1.5 rounded" required></div>
@@ -6415,7 +6415,7 @@ input[data-sdd-list] {
               </table>
             </div>
             <div class="flex justify-between items-center">
-              <button type="button" onclick="addOperationOrderItemRow()" class="bg-cyan-600 text-white px-3 py-1 rounded text-xs font-bold hover:bg-cyan-700">➕ Thêm Hạng Mục</button>
+              <button type="button" data-op="addOperationOrderItemRow" class="bg-cyan-600 text-white px-3 py-1 rounded text-xs font-bold hover:bg-cyan-700">➕ Thêm Hạng Mục</button>
               <div class="font-bold text-rose-600">Tổng Tiền: <span id="operationOrderItemsTotalDisplay">0</span> VNĐ</div>
             </div>
           </div>
@@ -6429,7 +6429,7 @@ input[data-sdd-list] {
         <div class="grid grid-cols-1 md:grid-cols-4 gap-3">
           <div>
             <label class="block text-xs font-semibold text-gray-600 mb-1">Trạng Thái</label>
-            <select id="filterStatusOperationOrder" onchange="onOperationOrderFilterChange()" class="w-full border p-2 rounded text-sm bg-white">
+            <select id="filterStatusOperationOrder" data-op-change="onOperationOrderFilterChange" class="w-full border p-2 rounded text-sm bg-white">
               <option value="">-- Tất cả trạng thái --</option>
               <option value="APPROVED">Đã Phê Duyệt</option>
               <option value="PENDING">Đang Chờ Duyệt</option>
@@ -6437,9 +6437,9 @@ input[data-sdd-list] {
               <option value="DRAFT">Cần Bổ Sung</option>
             </select>
           </div>
-          <div><label class="block text-xs font-semibold text-gray-600 mb-1">Từ Ngày</label><input id="filterFromDateOperationOrder" type="date" onchange="onOperationOrderFilterChange()" class="w-full border p-2 rounded text-sm bg-white"></div>
-          <div><label class="block text-xs font-semibold text-gray-600 mb-1">Đến Ngày</label><input id="filterToDateOperationOrder" type="date" onchange="onOperationOrderFilterChange()" class="w-full border p-2 rounded text-sm bg-white"></div>
-          <div><label class="block text-xs font-semibold text-gray-600 mb-1">Từ Khóa</label><input id="filterKeywordOperationOrder" oninput="onOperationOrderFilterChange()" placeholder="Mã, tiêu đề, người tạo..." class="w-full border p-2 rounded text-sm"></div>
+          <div><label class="block text-xs font-semibold text-gray-600 mb-1">Từ Ngày</label><input id="filterFromDateOperationOrder" type="date" data-op-change="onOperationOrderFilterChange" class="w-full border p-2 rounded text-sm bg-white"></div>
+          <div><label class="block text-xs font-semibold text-gray-600 mb-1">Đến Ngày</label><input id="filterToDateOperationOrder" type="date" data-op-change="onOperationOrderFilterChange" class="w-full border p-2 rounded text-sm bg-white"></div>
+          <div><label class="block text-xs font-semibold text-gray-600 mb-1">Từ Khóa</label><input id="filterKeywordOperationOrder" data-op-input="onOperationOrderFilterChange" placeholder="Mã, tiêu đề, người tạo..." class="w-full border p-2 rounded text-sm"></div>
         </div>
       </div>
 
@@ -6468,19 +6468,19 @@ input[data-sdd-list] {
          Dự toán/Thực hiện/Nghiệm thu/Báo cáo (cấp lồng thứ 2, cùng khuôn setTrainingLmsTab()). ===== -->
     <div id="vanHanhStoreWrap" class="hidden space-y-4">
       <div class="flex gap-2 flex-wrap border-b pb-2">
-        <button onclick="setOperationStoreSubTab('OPEN')" id="btnOpStoreSubOpen" class="px-3 py-1 rounded text-xs font-bold bg-emerald-700 text-white">🏬 Mở mới</button>
-        <button onclick="setOperationStoreSubTab('REPAIR')" id="btnOpStoreSubRepair" class="px-3 py-1 rounded text-xs font-bold bg-gray-200 text-gray-700">🔧 Sửa chữa</button>
-        <button onclick="setOperationStoreSubTab('ESTIMATE')" id="btnOpStoreSubEstimate" class="px-3 py-1 rounded text-xs font-bold bg-gray-200 text-gray-700">📊 Dự toán</button>
-        <button onclick="setOperationStoreSubTab('EXECUTION')" id="btnOpStoreSubExecution" class="px-3 py-1 rounded text-xs font-bold bg-gray-200 text-gray-700">🛠️ Thực hiện</button>
-        <button onclick="setOperationStoreSubTab('ACCEPTANCE')" id="btnOpStoreSubAcceptance" class="px-3 py-1 rounded text-xs font-bold bg-gray-200 text-gray-700">✅ Nghiệm thu</button>
-        <button onclick="setOperationStoreSubTab('REPORT')" id="btnOpStoreSubReport" class="px-3 py-1 rounded text-xs font-bold bg-gray-200 text-gray-700">📈 Báo cáo</button>
+        <button data-op="setOperationStoreSubTab" data-tab="OPEN" id="btnOpStoreSubOpen" class="px-3 py-1 rounded text-xs font-bold bg-emerald-700 text-white">🏬 Mở mới</button>
+        <button data-op="setOperationStoreSubTab" data-tab="REPAIR" id="btnOpStoreSubRepair" class="px-3 py-1 rounded text-xs font-bold bg-gray-200 text-gray-700">🔧 Sửa chữa</button>
+        <button data-op="setOperationStoreSubTab" data-tab="ESTIMATE" id="btnOpStoreSubEstimate" class="px-3 py-1 rounded text-xs font-bold bg-gray-200 text-gray-700">📊 Dự toán</button>
+        <button data-op="setOperationStoreSubTab" data-tab="EXECUTION" id="btnOpStoreSubExecution" class="px-3 py-1 rounded text-xs font-bold bg-gray-200 text-gray-700">🛠️ Thực hiện</button>
+        <button data-op="setOperationStoreSubTab" data-tab="ACCEPTANCE" id="btnOpStoreSubAcceptance" class="px-3 py-1 rounded text-xs font-bold bg-gray-200 text-gray-700">✅ Nghiệm thu</button>
+        <button data-op="setOperationStoreSubTab" data-tab="REPORT" id="btnOpStoreSubReport" class="px-3 py-1 rounded text-xs font-bold bg-gray-200 text-gray-700">📈 Báo cáo</button>
       </div>
 
     <div id="vanHanhStoreOpenWrap" class="space-y-6">
       <div id="operationStoreOpenDashboardCards"></div>
       <div class="bg-emerald-50 p-4 rounded border border-emerald-200 space-y-3">
         <h3 class="font-bold text-emerald-900 text-base flex items-center gap-2">🏬 Tạo Đề Xuất Mở Mới Siêu Thị</h3>
-        <form id="operationStoreOpenForm" onsubmit="submitOperationStoreOpening(event)" class="bg-white p-3 rounded border text-xs space-y-3">
+        <form id="operationStoreOpenForm" data-op-submit="submitOperationStoreOpening" class="bg-white p-3 rounded border text-xs space-y-3">
           <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
             <div><label class="block font-semibold text-gray-600 mb-1">Mã Đề Xuất</label><input id="vsoCode" readonly placeholder="Mã tự sinh" class="w-full border p-1.5 rounded bg-gray-100 cursor-not-allowed"></div>
             <div class="md:col-span-2"><label class="block font-semibold text-gray-600 mb-1">Tên Siêu Thị Dự Kiến</label><input id="vsoStoreName" placeholder="VD: Siêu thị VPĐT Quận 7" class="w-full border p-1.5 rounded" required></div>
@@ -6501,7 +6501,7 @@ input[data-sdd-list] {
         <div class="grid grid-cols-1 md:grid-cols-4 gap-3">
           <div>
             <label class="block text-xs font-semibold text-gray-600 mb-1">Trạng Thái</label>
-            <select id="filterStatusOperationStoreOpen" onchange="onOperationStoreOpenFilterChange()" class="w-full border p-2 rounded text-sm bg-white">
+            <select id="filterStatusOperationStoreOpen" data-op-change="onOperationStoreOpenFilterChange" class="w-full border p-2 rounded text-sm bg-white">
               <option value="">-- Tất cả trạng thái --</option>
               <option value="APPROVED">Đã Phê Duyệt</option>
               <option value="PENDING">Đang Chờ Duyệt</option>
@@ -6509,9 +6509,9 @@ input[data-sdd-list] {
               <option value="DRAFT">Cần Bổ Sung</option>
             </select>
           </div>
-          <div><label class="block text-xs font-semibold text-gray-600 mb-1">Từ Ngày</label><input id="filterFromDateOperationStoreOpen" type="date" onchange="onOperationStoreOpenFilterChange()" class="w-full border p-2 rounded text-sm bg-white"></div>
-          <div><label class="block text-xs font-semibold text-gray-600 mb-1">Đến Ngày</label><input id="filterToDateOperationStoreOpen" type="date" onchange="onOperationStoreOpenFilterChange()" class="w-full border p-2 rounded text-sm bg-white"></div>
-          <div><label class="block text-xs font-semibold text-gray-600 mb-1">Từ Khóa</label><input id="filterKeywordOperationStoreOpen" oninput="onOperationStoreOpenFilterChange()" placeholder="Mã, tên siêu thị, người tạo..." class="w-full border p-2 rounded text-sm"></div>
+          <div><label class="block text-xs font-semibold text-gray-600 mb-1">Từ Ngày</label><input id="filterFromDateOperationStoreOpen" type="date" data-op-change="onOperationStoreOpenFilterChange" class="w-full border p-2 rounded text-sm bg-white"></div>
+          <div><label class="block text-xs font-semibold text-gray-600 mb-1">Đến Ngày</label><input id="filterToDateOperationStoreOpen" type="date" data-op-change="onOperationStoreOpenFilterChange" class="w-full border p-2 rounded text-sm bg-white"></div>
+          <div><label class="block text-xs font-semibold text-gray-600 mb-1">Từ Khóa</label><input id="filterKeywordOperationStoreOpen" data-op-input="onOperationStoreOpenFilterChange" placeholder="Mã, tên siêu thị, người tạo..." class="w-full border p-2 rounded text-sm"></div>
         </div>
       </div>
 
@@ -6541,7 +6541,7 @@ input[data-sdd-list] {
       <div id="operationRepairDashboardCards"></div>
       <div class="bg-amber-50 p-4 rounded border border-amber-200 space-y-3">
         <h3 class="font-bold text-amber-900 text-base flex items-center gap-2">🔧 Tạo Đề Xuất Sửa Chữa Siêu Thị</h3>
-        <form id="operationRepairForm" onsubmit="submitOperationRepair(event)" class="bg-white p-3 rounded border text-xs space-y-3">
+        <form id="operationRepairForm" data-op-submit="submitOperationRepair" class="bg-white p-3 rounded border text-xs space-y-3">
           <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
             <div><label class="block font-semibold text-gray-600 mb-1">Mã Đề Xuất</label><input id="vrCode" readonly placeholder="Mã tự sinh" class="w-full border p-1.5 rounded bg-gray-100 cursor-not-allowed"></div>
             <div class="md:col-span-2"><label class="block font-semibold text-gray-600 mb-1">Siêu Thị Cần Sửa Chữa</label><input id="vrStoreName" placeholder="Tên/địa điểm siêu thị..." class="w-full border p-1.5 rounded" required></div>
@@ -6560,7 +6560,7 @@ input[data-sdd-list] {
         <div class="grid grid-cols-1 md:grid-cols-4 gap-3">
           <div>
             <label class="block text-xs font-semibold text-gray-600 mb-1">Trạng Thái</label>
-            <select id="filterStatusOperationRepair" onchange="onOperationRepairFilterChange()" class="w-full border p-2 rounded text-sm bg-white">
+            <select id="filterStatusOperationRepair" data-op-change="onOperationRepairFilterChange" class="w-full border p-2 rounded text-sm bg-white">
               <option value="">-- Tất cả trạng thái --</option>
               <option value="APPROVED">Đã Phê Duyệt</option>
               <option value="PENDING">Đang Chờ Duyệt</option>
@@ -6568,9 +6568,9 @@ input[data-sdd-list] {
               <option value="DRAFT">Cần Bổ Sung</option>
             </select>
           </div>
-          <div><label class="block text-xs font-semibold text-gray-600 mb-1">Từ Ngày</label><input id="filterFromDateOperationRepair" type="date" onchange="onOperationRepairFilterChange()" class="w-full border p-2 rounded text-sm bg-white"></div>
-          <div><label class="block text-xs font-semibold text-gray-600 mb-1">Đến Ngày</label><input id="filterToDateOperationRepair" type="date" onchange="onOperationRepairFilterChange()" class="w-full border p-2 rounded text-sm bg-white"></div>
-          <div><label class="block text-xs font-semibold text-gray-600 mb-1">Từ Khóa</label><input id="filterKeywordOperationRepair" oninput="onOperationRepairFilterChange()" placeholder="Mã, siêu thị, người tạo..." class="w-full border p-2 rounded text-sm"></div>
+          <div><label class="block text-xs font-semibold text-gray-600 mb-1">Từ Ngày</label><input id="filterFromDateOperationRepair" type="date" data-op-change="onOperationRepairFilterChange" class="w-full border p-2 rounded text-sm bg-white"></div>
+          <div><label class="block text-xs font-semibold text-gray-600 mb-1">Đến Ngày</label><input id="filterToDateOperationRepair" type="date" data-op-change="onOperationRepairFilterChange" class="w-full border p-2 rounded text-sm bg-white"></div>
+          <div><label class="block text-xs font-semibold text-gray-600 mb-1">Từ Khóa</label><input id="filterKeywordOperationRepair" data-op-input="onOperationRepairFilterChange" placeholder="Mã, siêu thị, người tạo..." class="w-full border p-2 rounded text-sm"></div>
         </div>
       </div>
 
@@ -6667,7 +6667,7 @@ input[data-sdd-list] {
         <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
           <div>
             <label class="block text-xs font-semibold text-gray-600 mb-1">Loại Hồ Sơ</label>
-            <select id="opReportFilterKind" onchange="renderOperationStoreReport()" class="w-full border p-2 rounded text-sm bg-white">
+            <select id="opReportFilterKind" data-op-change="renderOperationStoreReport" class="w-full border p-2 rounded text-sm bg-white">
               <option value="">-- Cả Mở mới &amp; Sửa chữa --</option>
               <option value="operationStoreOpenings">Mở mới</option>
               <option value="operationRepairs">Sửa chữa</option>
@@ -6675,14 +6675,14 @@ input[data-sdd-list] {
           </div>
           <div>
             <label class="block text-xs font-semibold text-gray-600 mb-1">Tiến Độ</label>
-            <select id="opReportFilterProgress" onchange="renderOperationStoreReport()" class="w-full border p-2 rounded text-sm bg-white">
+            <select id="opReportFilterProgress" data-op-change="renderOperationStoreReport" class="w-full border p-2 rounded text-sm bg-white">
               <option value="">-- Tất cả --</option>
               <option value="ON_TIME">Đúng tiến độ</option>
               <option value="LATE">Chậm tiến độ</option>
               <option value="DONE">Đã hoàn thành</option>
             </select>
           </div>
-          <div><label class="block text-xs font-semibold text-gray-600 mb-1">Từ Khóa</label><input id="opReportFilterKeyword" oninput="renderOperationStoreReport()" placeholder="Mã, tên siêu thị..." class="w-full border p-2 rounded text-sm"></div>
+          <div><label class="block text-xs font-semibold text-gray-600 mb-1">Từ Khóa</label><input id="opReportFilterKeyword" data-op-input="renderOperationStoreReport" placeholder="Mã, tên siêu thị..." class="w-full border p-2 rounded text-sm"></div>
         </div>
       </div>
       <div class="overflow-x-auto">
@@ -6717,7 +6717,7 @@ input[data-sdd-list] {
           <h3 id="operationEstimateModalTitle" class="font-bold text-lg text-gray-800"></h3>
           <div id="operationEstimateModalSub" class="text-xs text-gray-500"></div>
         </div>
-        <button onclick="closeOperationEstimateModal()" class="text-gray-400 hover:text-gray-600 text-2xl leading-none">&times;</button>
+        <button data-op="closeOperationEstimateModal" class="text-gray-400 hover:text-gray-600 text-2xl leading-none">&times;</button>
       </div>
       <div class="p-4 space-y-3">
         <div class="overflow-x-auto">
@@ -6738,7 +6738,7 @@ input[data-sdd-list] {
           </table>
         </div>
         <div id="operationEstimateItemsEditControls" class="flex justify-between items-center">
-          <button type="button" onclick="addOperationEstimateItemRow()" class="bg-cyan-600 text-white px-3 py-1 rounded text-xs font-bold hover:bg-cyan-700">➕ Thêm Hạng Mục</button>
+          <button type="button" data-op="addOperationEstimateItemRow" class="bg-cyan-600 text-white px-3 py-1 rounded text-xs font-bold hover:bg-cyan-700">➕ Thêm Hạng Mục</button>
           <div class="font-bold text-rose-600">Tổng Tiền: <span id="operationEstimateItemsTotalDisplay">0</span> VNĐ</div>
         </div>
         <div class="border-t pt-3">
@@ -6760,7 +6760,7 @@ input[data-sdd-list] {
           <h3 id="operationWorkItemModalTitle" class="font-bold text-lg text-gray-800"></h3>
           <div id="operationWorkItemModalSub" class="text-xs text-gray-500"></div>
         </div>
-        <button onclick="closeOperationWorkItemModal()" class="text-gray-400 hover:text-gray-600 text-2xl leading-none">&times;</button>
+        <button data-op="closeOperationWorkItemModal" class="text-gray-400 hover:text-gray-600 text-2xl leading-none">&times;</button>
       </div>
       <div class="p-4 space-y-3">
         <div id="operationExecutionPeriodsBox" class="hidden border rounded p-3 bg-gray-50 space-y-2"></div>
@@ -6781,20 +6781,20 @@ input[data-sdd-list] {
     <div class="bg-white rounded-lg shadow-xl max-w-lg w-full">
       <div class="p-4 border-b flex justify-between items-center">
         <h3 id="operationWorkItemFormModalTitle" class="font-bold text-base text-gray-800">➕ Thêm Công Việc</h3>
-        <button onclick="closeOperationWorkItemFormModal()" class="text-gray-400 hover:text-gray-600 text-2xl leading-none">&times;</button>
+        <button data-op="closeOperationWorkItemFormModal" class="text-gray-400 hover:text-gray-600 text-2xl leading-none">&times;</button>
       </div>
-      <form onsubmit="submitOperationWorkItemForm(event)" class="p-4 space-y-3 text-xs">
+      <form data-op-submit="submitOperationWorkItemForm" class="p-4 space-y-3 text-xs">
         <div><label class="block font-semibold text-gray-600 mb-1">Tên Công Việc</label><input id="owiTitle" required class="w-full border p-1.5 rounded"></div>
         <div><label class="block font-semibold text-gray-600 mb-1">Mô Tả</label><textarea id="owiDescription" class="w-full border p-1.5 rounded h-16"></textarea></div>
         <div class="grid grid-cols-2 gap-3">
           <div class="relative">
             <label class="block font-semibold text-gray-600 mb-1">Người Phụ Trách</label>
-            <input id="owiAssignedToInput" data-sdd-list="systemUsersDatalist" autocomplete="off" onchange="resolveOwiAssignedToInput(this.value)" placeholder="Gõ tên hoặc tài khoản..." class="w-full border p-1.5 rounded">
+            <input id="owiAssignedToInput" data-sdd-list="systemUsersDatalist" autocomplete="off" data-op-change="resolveOwiAssignedToInput" placeholder="Gõ tên hoặc tài khoản..." class="w-full border p-1.5 rounded">
             <input type="hidden" id="owiAssignedToUsername">
           </div>
           <div class="relative">
             <label class="block font-semibold text-gray-600 mb-1">Người Nghiệm Thu Chỉ Định</label>
-            <input id="owiAcceptorInput" data-sdd-list="systemUsersDatalist" autocomplete="off" onchange="resolveOwiAcceptorInput(this.value)" placeholder="Gõ tên hoặc tài khoản..." class="w-full border p-1.5 rounded">
+            <input id="owiAcceptorInput" data-sdd-list="systemUsersDatalist" autocomplete="off" data-op-change="resolveOwiAcceptorInput" placeholder="Gõ tên hoặc tài khoản..." class="w-full border p-1.5 rounded">
             <input type="hidden" id="owiAcceptorUsername">
           </div>
         </div>
@@ -6805,7 +6805,7 @@ input[data-sdd-list] {
         </div>
         <div><label class="block font-semibold text-gray-600 mb-1">Hạn Hoàn Thành</label><input id="owiDeadline" type="date" class="w-full border p-1.5 rounded"></div>
         <div class="flex justify-end gap-2 pt-2">
-          <button type="button" onclick="closeOperationWorkItemFormModal()" class="px-4 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700 hover:bg-gray-300">Hủy</button>
+          <button type="button" data-op="closeOperationWorkItemFormModal" class="px-4 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700 hover:bg-gray-300">Hủy</button>
           <button type="submit" class="px-4 py-1.5 rounded text-xs font-bold bg-emerald-600 text-white hover:bg-emerald-700">Lưu Công Việc</button>
         </div>
       </form>
@@ -6817,13 +6817,13 @@ input[data-sdd-list] {
     <div class="bg-white rounded-lg shadow-xl max-w-md w-full">
       <div class="p-4 border-b flex justify-between items-center">
         <h3 id="operationAcceptanceActionModalTitle" class="font-bold text-base text-gray-800"></h3>
-        <button onclick="closeOperationAcceptanceActionModal()" class="text-gray-400 hover:text-gray-600 text-2xl leading-none">&times;</button>
+        <button data-op="closeOperationAcceptanceActionModal" class="text-gray-400 hover:text-gray-600 text-2xl leading-none">&times;</button>
       </div>
       <div class="p-4 space-y-3 text-xs">
         <div><label class="block font-semibold text-gray-600 mb-1">Lý Do / Ghi Chú</label><textarea id="opAcceptanceReason" rows="3" class="w-full border p-2 rounded" placeholder="Nhập lý do..."></textarea></div>
         <div class="flex justify-end gap-2">
-          <button onclick="closeOperationAcceptanceActionModal()" class="px-4 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700 hover:bg-gray-300">Hủy</button>
-          <button onclick="confirmOperationAcceptanceAction()" class="px-4 py-1.5 rounded text-xs font-bold bg-emerald-600 text-white hover:bg-emerald-700">Xác Nhận</button>
+          <button data-op="closeOperationAcceptanceActionModal" class="px-4 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700 hover:bg-gray-300">Hủy</button>
+          <button data-op="confirmOperationAcceptanceAction" class="px-4 py-1.5 rounded text-xs font-bold bg-emerald-600 text-white hover:bg-emerald-700">Xác Nhận</button>
         </div>
       </div>
     </div>
@@ -6835,7 +6835,7 @@ input[data-sdd-list] {
     <div class="bg-white rounded-lg shadow-xl w-full max-w-3xl max-h-[90vh] overflow-y-auto">
       <div class="p-4 border-b flex justify-between items-center bg-gray-50 sticky top-0">
         <h3 id="operationProcessModalTitle" class="font-bold text-lg text-gray-800"></h3>
-        <button onclick="closeOperationProcessModal()" class="text-gray-400 hover:text-gray-700 text-2xl leading-none">&times;</button>
+        <button data-op="closeOperationProcessModal" class="text-gray-400 hover:text-gray-700 text-2xl leading-none">&times;</button>
       </div>
       <div class="p-4 space-y-4 text-sm">
         <div id="operationProcessModalSub" class="text-xs text-gray-500"></div>
@@ -22347,13 +22347,13 @@ function renderOperationOrderItemsTable() {
   tbody.innerHTML = operationOrderItems.map((it, idx) => `
     <tr>
       <td class="border p-1 text-center">${idx + 1}</td>
-      <td class="border p-1"><input value="${escapeHtml(it.name)}" oninput="updateOperationOrderItemField(${idx}, 'name', this.value)" class="w-full border-0 p-0.5 text-xs focus:outline-none" placeholder="Tên hàng"></td>
-      <td class="border p-1"><input value="${escapeHtml(it.unit)}" oninput="updateOperationOrderItemField(${idx}, 'unit', this.value)" class="w-full border-0 p-0.5 text-xs focus:outline-none" placeholder="Cái/Bộ..."></td>
-      <td class="border p-1"><input type="number" value="${it.qty || ''}" oninput="updateOperationOrderItemField(${idx}, 'qty', this.value)" class="w-full border-0 p-0.5 text-xs focus:outline-none"></td>
-      <td class="border p-1"><input type="text" inputmode="numeric" value="${formatMoneyDisplay(it.unitPrice)}" oninput="updateOperationOrderItemField(${idx}, 'unitPrice', this.value)" class="w-full border-0 p-0.5 text-xs focus:outline-none money-input"></td>
+      <td class="border p-1"><input value="${escapeHtml(it.name)}" data-op-input="updateOperationOrderItemField" data-idx="${idx}" data-field="name" class="w-full border-0 p-0.5 text-xs focus:outline-none" placeholder="Tên hàng"></td>
+      <td class="border p-1"><input value="${escapeHtml(it.unit)}" data-op-input="updateOperationOrderItemField" data-idx="${idx}" data-field="unit" class="w-full border-0 p-0.5 text-xs focus:outline-none" placeholder="Cái/Bộ..."></td>
+      <td class="border p-1"><input type="number" value="${it.qty || ''}" data-op-input="updateOperationOrderItemField" data-idx="${idx}" data-field="qty" class="w-full border-0 p-0.5 text-xs focus:outline-none"></td>
+      <td class="border p-1"><input type="text" inputmode="numeric" value="${formatMoneyDisplay(it.unitPrice)}" data-op-input="updateOperationOrderItemField" data-idx="${idx}" data-field="unitPrice" class="w-full border-0 p-0.5 text-xs focus:outline-none money-input"></td>
       <td class="border p-1 text-right font-semibold" id="operationOrderItemAmount_${idx}">${((it.qty || 0) * (it.unitPrice || 0)).toLocaleString('vi-VN')}</td>
-      <td class="border p-1"><input value="${escapeHtml(it.note)}" oninput="updateOperationOrderItemField(${idx}, 'note', this.value)" class="w-full border-0 p-0.5 text-xs focus:outline-none" placeholder="Ghi chú"></td>
-      <td class="border p-1 text-center"><button type="button" onclick="removeOperationOrderItemRow(${idx})" class="text-red-600 font-bold hover:text-red-800" title="Xoá dòng">✕</button></td>
+      <td class="border p-1"><input value="${escapeHtml(it.note)}" data-op-input="updateOperationOrderItemField" data-idx="${idx}" data-field="note" class="w-full border-0 p-0.5 text-xs focus:outline-none" placeholder="Ghi chú"></td>
+      <td class="border p-1 text-center"><button type="button" data-op="removeOperationOrderItemRow" data-idx="${idx}" class="text-red-600 font-bold hover:text-red-800" title="Xoá dòng">✕</button></td>
     </tr>
   `).join('');
   recalcOperationOrderItemsTotal();
@@ -22551,11 +22551,11 @@ function buildOperationRowHTML(kind, o) {
   let primaryBtnHTML;
   const secondaryOptions = [];
   if (o.status === 'DRAFT' && o.creator === currentUser.username) {
-    primaryBtnHTML = `<button onclick="openBosungEditModal('${kind}', ${o.id})" class="px-2.5 py-1 bg-gray-600 text-white rounded text-xs hover:opacity-90 font-bold">✏️ Sửa &amp; Gửi Lại</button>`;
+    primaryBtnHTML = `<button data-op="openBosungEditModal" data-kind="${kind}" data-id="${o.id}" class="px-2.5 py-1 bg-gray-600 text-white rounded text-xs hover:opacity-90 font-bold">✏️ Sửa &amp; Gửi Lại</button>`;
   } else {
     primaryBtnHTML = canApprove
-      ? `<button onclick="openOperationProcessModal('${kind}', ${o.id})" class="px-2.5 py-1 bg-emerald-600 text-white rounded text-xs hover:opacity-90 font-bold">✍️ Xử lý / Duyệt</button>`
-      : `<button onclick="openOperationProcessModal('${kind}', ${o.id})" class="px-2.5 py-1 bg-gray-600 text-white rounded text-xs hover:opacity-90 font-bold">👁️ Xem chi tiết</button>`;
+      ? `<button data-op="openOperationProcessModal" data-kind="${kind}" data-id="${o.id}" class="px-2.5 py-1 bg-emerald-600 text-white rounded text-xs hover:opacity-90 font-bold">✍️ Xử lý / Duyệt</button>`
+      : `<button data-op="openOperationProcessModal" data-kind="${kind}" data-id="${o.id}" class="px-2.5 py-1 bg-gray-600 text-white rounded text-xs hover:opacity-90 font-bold">👁️ Xem chi tiết</button>`;
   }
   if (currentUser.perms?.admin) secondaryOptions.push({ value: 'delete', label: '🗑️ Xóa' });
   const dispatcherFnName = kind === 'operationOrders' ? 'runOperationOrderAction' : kind === 'operationStoreOpenings' ? 'runOperationStoreOpenAction' : 'runOperationRepairAction';
@@ -22634,7 +22634,7 @@ function buildOperationDetailsHTML(kind, o) {
         <div><b>Nhà cung cấp:</b> ${escapeHtml(o.supplier || 'N/A')}</div>
         <div><b>Tổng tiền:</b> ${(o.amount || 0).toLocaleString('vi-VN')} VNĐ</div>
         ${o.note ? `<div class="col-span-2"><b>Ghi chú:</b> ${escapeHtml(o.note)}</div>` : ''}
-        ${o.fileUrl ? `<div class="col-span-2"><a href="#" onclick="event.preventDefault(); viewOperationAttachment('${kind}', ${o.id})" class="text-blue-600 underline">📎 ${escapeHtml(o.fileName || 'Xem tệp đính kèm')}</a></div>` : ''}
+        ${o.fileUrl ? `<div class="col-span-2"><a href="#" data-op="viewOperationAttachment" data-kind="${kind}" data-id="${o.id}" class="text-blue-600 underline">📎 ${escapeHtml(o.fileName || 'Xem tệp đính kèm')}</a></div>` : ''}
       </div>
       <div class="border-t pt-2 mt-2">
         <div class="font-semibold mb-1 text-xs">Danh sách hạng mục đặt hàng:</div>
@@ -22653,7 +22653,7 @@ function buildOperationDetailsHTML(kind, o) {
         <div><b>Ngày dự kiến khai trương:</b> ${o.expectedOpenDate ? new Date(o.expectedOpenDate).toLocaleDateString('vi-VN') : 'Chưa xác định'}</div>
         <div><b>Người phụ trách:</b> ${escapeHtml(o.personInCharge || 'N/A')}</div>
         ${o.note ? `<div class="col-span-2"><b>Ghi chú:</b> ${escapeHtml(o.note)}</div>` : ''}
-        ${o.fileUrl ? `<div class="col-span-2"><a href="#" onclick="event.preventDefault(); viewOperationAttachment('${kind}', ${o.id})" class="text-blue-600 underline">📎 ${escapeHtml(o.fileName || 'Xem tệp đính kèm')}</a></div>` : ''}
+        ${o.fileUrl ? `<div class="col-span-2"><a href="#" data-op="viewOperationAttachment" data-kind="${kind}" data-id="${o.id}" class="text-blue-600 underline">📎 ${escapeHtml(o.fileName || 'Xem tệp đính kèm')}</a></div>` : ''}
       </div>`;
   }
   return `
@@ -22661,7 +22661,7 @@ function buildOperationDetailsHTML(kind, o) {
       <div><b>Nhà cung cấp/Đơn vị thi công:</b> ${escapeHtml(o.supplier || 'N/A')}</div>
       <div><b>Dự toán chi phí:</b> ${(o.amount || 0).toLocaleString('vi-VN')} VNĐ</div>
       <div class="col-span-2"><b>Mô tả hiện trạng &amp; lý do:</b> <p class="bg-white p-2 rounded border mt-1">${escapeHtml(o.description || '')}</p></div>
-      ${o.fileUrl ? `<div class="col-span-2"><a href="#" onclick="event.preventDefault(); viewOperationAttachment('${kind}', ${o.id})" class="text-blue-600 underline">📎 ${escapeHtml(o.fileName || 'Xem tệp đính kèm')}</a></div>` : ''}
+      ${o.fileUrl ? `<div class="col-span-2"><a href="#" data-op="viewOperationAttachment" data-kind="${kind}" data-id="${o.id}" class="text-blue-600 underline">📎 ${escapeHtml(o.fileName || 'Xem tệp đính kèm')}</a></div>` : ''}
     </div>`;
 }
 
@@ -22709,9 +22709,9 @@ function openOperationProcessModal(kind, id) {
       <div class="space-y-2">
         <textarea id="txtOperationProcessComment" rows="2" class="w-full border p-2 rounded text-xs" placeholder="Ghi chú (bắt buộc khi Từ chối/Yêu cầu bổ sung)"></textarea>
         <div class="flex justify-end gap-2">
-          <button onclick="confirmProcessOperation('REJECT')" class="bg-red-600 text-white px-4 py-1.5 rounded font-bold hover:bg-red-700 text-xs">❌ Từ Chối</button>
-          <button onclick="confirmProcessOperation('REQUEST_CHANGES')" class="bg-amber-500 text-white px-4 py-1.5 rounded font-bold hover:bg-amber-600 text-xs">🔄 Yêu Cầu Bổ Sung</button>
-          <button onclick="confirmProcessOperation('APPROVE')" class="bg-green-600 text-white px-5 py-1.5 rounded font-bold hover:bg-green-700 text-xs">✅ Phê Duyệt</button>
+          <button data-op="confirmProcessOperation" data-action="REJECT" class="bg-red-600 text-white px-4 py-1.5 rounded font-bold hover:bg-red-700 text-xs">❌ Từ Chối</button>
+          <button data-op="confirmProcessOperation" data-action="REQUEST_CHANGES" class="bg-amber-500 text-white px-4 py-1.5 rounded font-bold hover:bg-amber-600 text-xs">🔄 Yêu Cầu Bổ Sung</button>
+          <button data-op="confirmProcessOperation" data-action="APPROVE" class="bg-green-600 text-white px-5 py-1.5 rounded font-bold hover:bg-green-700 text-xs">✅ Phê Duyệt</button>
         </div>
       </div>
     `;
@@ -22835,7 +22835,7 @@ function renderOperationEstimateList() {
       <td class="border p-2">${escapeHtml(o.dept)}</td>
       <td class="border p-2 font-bold text-rose-600">${(o.estimateTotalAmount || 0).toLocaleString('vi-VN')} VNĐ</td>
       <td class="border p-2">${operationEstimateStatusBadge(o)}</td>
-      <td class="border p-2 text-center"><button onclick="openOperationEstimateModal('${kind}', ${o.id})" class="px-2.5 py-1 bg-cyan-600 text-white rounded text-xs hover:opacity-90 font-bold">📊 Xem / Lập Dự Toán</button></td>
+      <td class="border p-2 text-center"><button data-op="openOperationEstimateModal" data-kind="${kind}" data-id="${o.id}" class="px-2.5 py-1 bg-cyan-600 text-white rounded text-xs hover:opacity-90 font-bold">📊 Xem / Lập Dự Toán</button></td>
     </tr>`;
   }).join('');
 }
@@ -22889,13 +22889,13 @@ function renderOperationEstimateItemsTable(editable) {
   tbody.innerHTML = operationEstimateItems.map((it, idx) => `
     <tr>
       <td class="border p-1 text-center">${idx + 1}</td>
-      <td class="border p-1"><input value="${escapeHtml(it.name)}" oninput="updateOperationEstimateItemField(${idx}, 'name', this.value)" class="w-full border-0 p-0.5 text-xs focus:outline-none" placeholder="Tên hạng mục"></td>
-      <td class="border p-1"><input value="${escapeHtml(it.unit)}" oninput="updateOperationEstimateItemField(${idx}, 'unit', this.value)" class="w-full border-0 p-0.5 text-xs focus:outline-none" placeholder="Cái/Bộ..."></td>
-      <td class="border p-1"><input type="number" value="${it.qty || ''}" oninput="updateOperationEstimateItemField(${idx}, 'qty', this.value)" class="w-full border-0 p-0.5 text-xs focus:outline-none"></td>
-      <td class="border p-1"><input type="text" inputmode="numeric" value="${formatMoneyDisplay(it.unitPrice)}" oninput="updateOperationEstimateItemField(${idx}, 'unitPrice', this.value)" class="w-full border-0 p-0.5 text-xs focus:outline-none money-input"></td>
+      <td class="border p-1"><input value="${escapeHtml(it.name)}" data-op-input="updateOperationEstimateItemField" data-idx="${idx}" data-field="name" class="w-full border-0 p-0.5 text-xs focus:outline-none" placeholder="Tên hạng mục"></td>
+      <td class="border p-1"><input value="${escapeHtml(it.unit)}" data-op-input="updateOperationEstimateItemField" data-idx="${idx}" data-field="unit" class="w-full border-0 p-0.5 text-xs focus:outline-none" placeholder="Cái/Bộ..."></td>
+      <td class="border p-1"><input type="number" value="${it.qty || ''}" data-op-input="updateOperationEstimateItemField" data-idx="${idx}" data-field="qty" class="w-full border-0 p-0.5 text-xs focus:outline-none"></td>
+      <td class="border p-1"><input type="text" inputmode="numeric" value="${formatMoneyDisplay(it.unitPrice)}" data-op-input="updateOperationEstimateItemField" data-idx="${idx}" data-field="unitPrice" class="w-full border-0 p-0.5 text-xs focus:outline-none money-input"></td>
       <td class="border p-1 text-right font-semibold" id="operationEstimateItemAmount_${idx}">${((it.qty || 0) * (it.unitPrice || 0)).toLocaleString('vi-VN')}</td>
-      <td class="border p-1"><input value="${escapeHtml(it.note)}" oninput="updateOperationEstimateItemField(${idx}, 'note', this.value)" class="w-full border-0 p-0.5 text-xs focus:outline-none" placeholder="Ghi chú"></td>
-      <td class="border p-1 text-center"><button type="button" onclick="removeOperationEstimateItemRow(${idx})" class="text-red-600 font-bold hover:text-red-800" title="Xoá dòng">✕</button></td>
+      <td class="border p-1"><input value="${escapeHtml(it.note)}" data-op-input="updateOperationEstimateItemField" data-idx="${idx}" data-field="note" class="w-full border-0 p-0.5 text-xs focus:outline-none" placeholder="Ghi chú"></td>
+      <td class="border p-1 text-center"><button type="button" data-op="removeOperationEstimateItemRow" data-idx="${idx}" class="text-red-600 font-bold hover:text-red-800" title="Xoá dòng">✕</button></td>
     </tr>
   `).join('');
   recalcOperationEstimateItemsTotal();
@@ -22936,22 +22936,22 @@ function openOperationEstimateModal(kind, id) {
   const canApprove = (o.estimateStatus === 'PENDING') && canApproveStep(currentUser, currentStepApprovers, o.estimateHistory, o.estimateCurrentStep);
 
   if (editable) {
-    controls.innerHTML = `<div class="flex justify-end"><button onclick="submitOperationEstimateForApproval()" class="bg-cyan-600 text-white px-5 py-2 rounded font-bold hover:bg-cyan-700 text-xs">📤 Gửi Duyệt Dự Toán</button></div>`;
+    controls.innerHTML = `<div class="flex justify-end"><button data-op="submitOperationEstimateForApproval" class="bg-cyan-600 text-white px-5 py-2 rounded font-bold hover:bg-cyan-700 text-xs">📤 Gửi Duyệt Dự Toán</button></div>`;
   } else if (canApprove) {
     controls.innerHTML = `
       <div class="space-y-2">
         <textarea id="txtOperationEstimateComment" rows="2" class="w-full border p-2 rounded text-xs" placeholder="Ghi chú (bắt buộc khi Từ chối/Yêu cầu bổ sung)"></textarea>
         <div class="flex justify-end gap-2">
-          <button onclick="confirmProcessOperationEstimate('REJECT')" class="bg-red-600 text-white px-4 py-1.5 rounded font-bold hover:bg-red-700 text-xs">❌ Từ Chối</button>
-          <button onclick="confirmProcessOperationEstimate('REQUEST_CHANGES')" class="bg-amber-500 text-white px-4 py-1.5 rounded font-bold hover:bg-amber-600 text-xs">🔄 Yêu Cầu Bổ Sung</button>
-          <button onclick="confirmProcessOperationEstimate('APPROVE')" class="bg-green-600 text-white px-5 py-1.5 rounded font-bold hover:bg-green-700 text-xs">✅ Phê Duyệt</button>
+          <button data-op="confirmProcessOperationEstimate" data-action="REJECT" class="bg-red-600 text-white px-4 py-1.5 rounded font-bold hover:bg-red-700 text-xs">❌ Từ Chối</button>
+          <button data-op="confirmProcessOperationEstimate" data-action="REQUEST_CHANGES" class="bg-amber-500 text-white px-4 py-1.5 rounded font-bold hover:bg-amber-600 text-xs">🔄 Yêu Cầu Bổ Sung</button>
+          <button data-op="confirmProcessOperationEstimate" data-action="APPROVE" class="bg-green-600 text-white px-5 py-1.5 rounded font-bold hover:bg-green-700 text-xs">✅ Phê Duyệt</button>
         </div>
       </div>`;
   } else if (o.estimateStatus === 'REJECTED' && canCreateOperationEstimateClient(currentUser)) {
     // Dự toán bị Từ chối trước đây là ngõ cụt, không có đường quay lại DRAFT để lập lại — audit Đợt 5,
     // Giai đoạn 4, đã xác nhận với người dùng cần thêm lối quay lại (khớp resetOperationEstimateToDraft()
     // ở lib/recordActions.js, giữ nguyên hạng mục cũ làm điểm bắt đầu chỉnh sửa).
-    controls.innerHTML = `<div class="flex justify-end"><button onclick="resetOperationEstimateToDraft()" class="bg-amber-600 text-white px-5 py-2 rounded font-bold hover:bg-amber-700 text-xs">🔁 Lập Lại Dự Toán</button></div>`;
+    controls.innerHTML = `<div class="flex justify-end"><button data-op="resetOperationEstimateToDraft" class="bg-amber-600 text-white px-5 py-2 rounded font-bold hover:bg-amber-700 text-xs">🔁 Lập Lại Dự Toán</button></div>`;
   } else {
     controls.innerHTML = `<span class="text-gray-500 italic text-xs">Bạn chỉ có quyền xem dự toán này.</span>`;
   }
@@ -23154,7 +23154,7 @@ function renderOperationExecutionList() {
       <td class="border p-2">${escapeHtml(meta.titleField(o))}</td>
       <td class="border p-2">${escapeHtml(o.dept)}</td>
       <td class="border p-2">${total ? `${done}/${total} đã nghiệm thu` : 'Chưa có công việc'}</td>
-      <td class="border p-2 text-center"><button onclick="openOperationWorkItemModal('${kind}', ${o.id}, 'EXECUTION')" class="px-2.5 py-1 bg-emerald-600 text-white rounded text-xs hover:opacity-90 font-bold">🛠️ Quản Lý Công Việc</button></td>
+      <td class="border p-2 text-center"><button data-op="openOperationWorkItemModal" data-kind="${kind}" data-id="${o.id}" data-mode="EXECUTION" class="px-2.5 py-1 bg-emerald-600 text-white rounded text-xs hover:opacity-90 font-bold">🛠️ Quản Lý Công Việc</button></td>
     </tr>`;
   }).join('');
 }
@@ -23176,7 +23176,7 @@ function renderOperationAcceptanceList() {
       <td class="border p-2">${escapeHtml(meta.titleField(o))}</td>
       <td class="border p-2">${escapeHtml(o.dept)}</td>
       <td class="border p-2">${pendingAcceptance > 0 ? `<span class="font-bold text-amber-700">${pendingAcceptance} việc</span>` : '0 việc'}</td>
-      <td class="border p-2 text-center"><button onclick="openOperationWorkItemModal('${kind}', ${o.id}, 'ACCEPTANCE')" class="px-2.5 py-1 bg-amber-600 text-white rounded text-xs hover:opacity-90 font-bold">✅ Nghiệm Thu</button></td>
+      <td class="border p-2 text-center"><button data-op="openOperationWorkItemModal" data-kind="${kind}" data-id="${o.id}" data-mode="ACCEPTANCE" class="px-2.5 py-1 bg-amber-600 text-white rounded text-xs hover:opacity-90 font-bold">✅ Nghiệm Thu</button></td>
     </tr>`;
   }).join('');
 }
@@ -23225,7 +23225,7 @@ function renderOperationWorkItemModalBody() {
 
   const rootBox = document.getElementById('operationWorkItemCreateRootBox');
   if (mode === 'EXECUTION' && canManageExecution && hasActivePeriod) {
-    rootBox.innerHTML = `<button type="button" onclick="openOperationWorkItemFormModal(null)" class="bg-emerald-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-emerald-700">➕ Thêm Công Việc Gốc</button>`;
+    rootBox.innerHTML = `<button type="button" data-op="openOperationWorkItemFormModal" class="bg-emerald-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-emerald-700">➕ Thêm Công Việc Gốc</button>`;
   } else if (mode === 'EXECUTION' && canManageExecution) {
     rootBox.innerHTML = `<p class="text-xs text-amber-600 italic">⚠️ Chưa có Kỳ Thực Hiện nào đang "Đang thực hiện" — vui lòng tạo/bắt đầu 1 kỳ ở trên trước khi thêm công việc gốc.</p>`;
   } else {
@@ -23242,7 +23242,7 @@ function renderOperationWorkItemModalBody() {
   if (mode === 'ACCEPTANCE' && sourceRecord?.useConfirmStatus === 'CONFIRMED') {
     useConfirmBox.innerHTML = `<div class="bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs font-bold rounded p-2">✅ Đã đưa vào sử dụng — xác nhận bởi ${escapeHtml(sourceRecord.useConfirmByName || '')} lúc ${sourceRecord.useConfirmAt || ''}</div>`;
   } else if (mode === 'ACCEPTANCE' && canConfirmUse && allDone) {
-    useConfirmBox.innerHTML = `<button type="button" onclick="confirmOperationUseAction('${kind}', ${id})" class="bg-indigo-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-indigo-700">🏁 Xác Nhận Đưa Vào Sử Dụng</button>`;
+    useConfirmBox.innerHTML = `<button type="button" data-op="confirmOperationUseAction" data-kind="${kind}" data-id="${id}" class="bg-indigo-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-indigo-700">🏁 Xác Nhận Đưa Vào Sử Dụng</button>`;
   } else if (mode === 'ACCEPTANCE' && canConfirmUse) {
     useConfirmBox.innerHTML = `<p class="text-xs text-gray-400 italic">Chưa đủ điều kiện xác nhận đưa vào sử dụng — cần toàn bộ công việc đã "Đã nghiệm thu".</p>`;
   } else {
@@ -23271,15 +23271,15 @@ function renderOperationExecutionPeriodsBox(kind, id, canManageExecution) {
   const rows = periods.map(p => `
     <div class="flex items-center justify-between bg-white border rounded px-2 py-1.5">
       <div class="text-xs font-semibold text-gray-700">${escapeHtml(p.name)} ${operationWorkItemStatusBadge(p.status)}</div>
-      ${(p.status === 'CHUA_BAT_DAU' && canManageExecution) ? `<button type="button" onclick="startOperationExecutionPeriodAction(${p.id})" class="text-xs px-2 py-0.5 bg-blue-600 text-white rounded font-bold hover:bg-blue-700">▶ Bắt Đầu</button>` : ''}
+      ${(p.status === 'CHUA_BAT_DAU' && canManageExecution) ? `<button type="button" data-op="startOperationExecutionPeriodAction" data-id="${p.id}" class="text-xs px-2 py-0.5 bg-blue-600 text-white rounded font-bold hover:bg-blue-700">▶ Bắt Đầu</button>` : ''}
     </div>`).join('');
   const createFormHTML = owiPeriodCreateFormOpen
-    ? `<form onsubmit="submitOperationExecutionPeriod(event)" class="flex items-center gap-2">
+    ? `<form data-op-submit="submitOperationExecutionPeriod" class="flex items-center gap-2">
         <input id="owiNewPeriodName" required placeholder="Tên kỳ (VD: Đợt 1 - Thi công mặt bằng)" class="flex-1 border p-1.5 rounded text-xs">
         <button type="submit" class="text-xs px-2 py-1.5 bg-emerald-600 text-white rounded font-bold hover:bg-emerald-700">Lưu</button>
-        <button type="button" onclick="toggleOperationExecutionPeriodCreateForm(false)" class="text-xs px-2 py-1.5 bg-gray-200 rounded font-bold hover:bg-gray-300">Hủy</button>
+        <button type="button" data-op="toggleOperationExecutionPeriodCreateForm" data-open="false" class="text-xs px-2 py-1.5 bg-gray-200 rounded font-bold hover:bg-gray-300">Hủy</button>
       </form>`
-    : (canManageExecution ? `<button type="button" onclick="toggleOperationExecutionPeriodCreateForm(true)" class="text-xs px-2 py-1.5 bg-gray-700 text-white rounded font-bold hover:bg-gray-800">+ Tạo Kỳ Mới</button>` : '');
+    : (canManageExecution ? `<button type="button" data-op="toggleOperationExecutionPeriodCreateForm" data-open="true" class="text-xs px-2 py-1.5 bg-gray-700 text-white rounded font-bold hover:bg-gray-800">+ Tạo Kỳ Mới</button>` : '');
   box.innerHTML = `<div class="text-xs font-bold text-gray-600">📅 Kỳ Thực Hiện</div>${rows || '<p class="text-xs text-gray-400 italic">Chưa có kỳ nào.</p>'}${createFormHTML}`;
 }
 function toggleOperationExecutionPeriodCreateForm(open) {
@@ -23359,14 +23359,14 @@ function buildOperationWorkItemRow(w, depth, hasChildren, mode, canManageExecuti
     const isOwner = !!(currentUser.username && w.assignedTo === currentUser.username);
     let actionHTML = '';
     if (canManageExecution && w.status !== 'DA_NGHIEM_THU') {
-      actionHTML += `<button type="button" onclick="openOperationWorkItemEditModal(${w.id})" class="text-xs px-2 py-0.5 bg-gray-200 rounded font-bold hover:bg-gray-300 mr-1" title="Sửa công việc">✏️ Sửa</button>`;
-      actionHTML += `<button type="button" onclick="openOperationWorkItemFormModal(${w.id})" class="text-xs px-2 py-0.5 bg-gray-200 rounded font-bold hover:bg-gray-300 mr-1" title="Thêm việc con">➕ Con</button>`;
+      actionHTML += `<button type="button" data-op="openOperationWorkItemEditModal" data-id="${w.id}" class="text-xs px-2 py-0.5 bg-gray-200 rounded font-bold hover:bg-gray-300 mr-1" title="Sửa công việc">✏️ Sửa</button>`;
+      actionHTML += `<button type="button" data-op="openOperationWorkItemFormModal" data-parent-id="${w.id}" class="text-xs px-2 py-0.5 bg-gray-200 rounded font-bold hover:bg-gray-300 mr-1" title="Thêm việc con">➕ Con</button>`;
     }
     if (w.status !== 'DA_NGHIEM_THU') {
       if (!hasChildren) {
         if (canManageExecution || isOwner) {
-          if (w.status === 'CHUA_BAT_DAU') actionHTML += `<button type="button" onclick="updateOperationWorkItemProgressAction(${w.id}, 'DANG_THUC_HIEN')" class="text-xs px-2 py-0.5 bg-blue-600 text-white rounded font-bold hover:bg-blue-700">▶ Bắt Đầu</button>`;
-          else if (w.status === 'DANG_THUC_HIEN') actionHTML += `<button type="button" onclick="updateOperationWorkItemProgressAction(${w.id}, 'DANG_NGHIEM_THU')" class="text-xs px-2 py-0.5 bg-amber-600 text-white rounded font-bold hover:bg-amber-700">📤 Nộp Nghiệm Thu</button>`;
+          if (w.status === 'CHUA_BAT_DAU') actionHTML += `<button type="button" data-op="updateOperationWorkItemProgressAction" data-id="${w.id}" data-status="DANG_THUC_HIEN" class="text-xs px-2 py-0.5 bg-blue-600 text-white rounded font-bold hover:bg-blue-700">▶ Bắt Đầu</button>`;
+          else if (w.status === 'DANG_THUC_HIEN') actionHTML += `<button type="button" data-op="updateOperationWorkItemProgressAction" data-id="${w.id}" data-status="DANG_NGHIEM_THU" class="text-xs px-2 py-0.5 bg-amber-600 text-white rounded font-bold hover:bg-amber-700">📤 Nộp Nghiệm Thu</button>`;
           else if (w.status === 'DANG_NGHIEM_THU') actionHTML += `<span class="text-xs text-gray-400 italic">Đang chờ nghiệm thu</span>`;
         }
       } else if (canManageExecution) {
@@ -23384,8 +23384,8 @@ function buildOperationWorkItemRow(w, depth, hasChildren, mode, canManageExecuti
   const isDesignatedAcceptor = !!(currentUser.username && w.acceptorUsername && w.acceptorUsername === currentUser.username);
   let actionHTML = '<span class="text-xs text-gray-400 italic">—</span>';
   if ((canManageAcceptance || isDesignatedAcceptor) && w.status === 'DANG_NGHIEM_THU') {
-    actionHTML = `<button type="button" onclick="openOperationAcceptanceActionModal(${w.id}, 'ACCEPT')" class="text-xs px-2 py-0.5 bg-green-600 text-white rounded font-bold hover:bg-green-700 mr-1">✅ Nghiệm Thu</button>
-      <button type="button" onclick="openOperationAcceptanceActionModal(${w.id}, 'REQUEST_INFO')" class="text-xs px-2 py-0.5 bg-amber-500 text-white rounded font-bold hover:bg-amber-600">🔄 Bổ Sung</button>`;
+    actionHTML = `<button type="button" data-op="openOperationAcceptanceActionModal" data-id="${w.id}" data-action="ACCEPT" class="text-xs px-2 py-0.5 bg-green-600 text-white rounded font-bold hover:bg-green-700 mr-1">✅ Nghiệm Thu</button>
+      <button type="button" data-op="openOperationAcceptanceActionModal" data-id="${w.id}" data-action="REQUEST_INFO" class="text-xs px-2 py-0.5 bg-amber-500 text-white rounded font-bold hover:bg-amber-600">🔄 Bổ Sung</button>`;
   }
   return `<tr class="hover:bg-gray-50 border-b">${nameCell}${assigneeCell}${statusCell}${acceptorCell}<td class="border p-2 text-center">${actionHTML}</td></tr>`;
 }
@@ -23581,6 +23581,100 @@ function renderOperationStoreReport() {
     </tr>`;
   }).join('');
 }
+
+// ==========================================
+// VẬN HÀNH — gắn sự kiện qua event delegation (CSP hardening theo yêu cầu team security: bỏ dần
+// onclick/onchange/oninput/onsubmit inline, xem VERSION.md mục "CSP unsafe-inline"). Gắn ĐÚNG 1 LẦN lúc
+// tải trang lên 6 "gốc ổn định" của module này (#vanHanhSection + 5 modal — modal nằm NGOÀI
+// #vanHanhSection nên cần gốc riêng); các div/tbody con bên trong bị innerHTML lại liên tục (render lại
+// danh sách/cây công việc) nhưng bản thân 6 gốc này KHÔNG BAO GIỜ bị thay thế nên listener gắn 1 lần vẫn
+// bắt được phần tử sinh ra sau — tránh 2 lỗi thường gặp khi chuyển onXxx= sang addEventListener ở quy mô
+// lớn: (1) quên gắn lại listener sau mỗi lần render lại danh sách -> nút im lặng, (2) gắn lại nhiều lần
+// -> 1 cú bấm chạy hành động nhiều lần. KHÔNG đổi buildActionCell()/buildDashboardCardsHTML()/
+// buildPaginationBoxHTML() (lib dùng chung ~15+ module khác, kể cả trong file này) — để lại cho đợt CSP
+// riêng của phần dùng chung, không mở rộng phạm vi ngoài Vận Hành ở đợt này.
+const OP_CLICK_ACTIONS = {
+  setVanHanhSubTab: el => setVanHanhSubTab(el.dataset.tab),
+  setOperationStoreSubTab: el => setOperationStoreSubTab(el.dataset.tab),
+  addOperationOrderItemRow: () => addOperationOrderItemRow(),
+  removeOperationOrderItemRow: el => removeOperationOrderItemRow(Number(el.dataset.idx)),
+  openBosungEditModal: el => openBosungEditModal(el.dataset.kind, Number(el.dataset.id)),
+  openOperationProcessModal: el => openOperationProcessModal(el.dataset.kind, Number(el.dataset.id)),
+  viewOperationAttachment: (el, e) => { e.preventDefault(); viewOperationAttachment(el.dataset.kind, Number(el.dataset.id)); },
+  closeOperationProcessModal: () => closeOperationProcessModal(),
+  confirmProcessOperation: el => confirmProcessOperation(el.dataset.action),
+  closeOperationEstimateModal: () => closeOperationEstimateModal(),
+  addOperationEstimateItemRow: () => addOperationEstimateItemRow(),
+  removeOperationEstimateItemRow: el => removeOperationEstimateItemRow(Number(el.dataset.idx)),
+  openOperationEstimateModal: el => openOperationEstimateModal(el.dataset.kind, Number(el.dataset.id)),
+  submitOperationEstimateForApproval: () => submitOperationEstimateForApproval(),
+  confirmProcessOperationEstimate: el => confirmProcessOperationEstimate(el.dataset.action),
+  resetOperationEstimateToDraft: () => resetOperationEstimateToDraft(),
+  closeOperationWorkItemModal: () => closeOperationWorkItemModal(),
+  openOperationWorkItemModal: el => openOperationWorkItemModal(el.dataset.kind, Number(el.dataset.id), el.dataset.mode),
+  openOperationWorkItemFormModal: el => openOperationWorkItemFormModal(el.dataset.parentId ? Number(el.dataset.parentId) : null),
+  confirmOperationUseAction: el => confirmOperationUseAction(el.dataset.kind, Number(el.dataset.id)),
+  startOperationExecutionPeriodAction: el => startOperationExecutionPeriodAction(Number(el.dataset.id)),
+  toggleOperationExecutionPeriodCreateForm: el => toggleOperationExecutionPeriodCreateForm(el.dataset.open === 'true'),
+  closeOperationWorkItemFormModal: () => closeOperationWorkItemFormModal(),
+  openOperationWorkItemEditModal: el => openOperationWorkItemEditModal(Number(el.dataset.id)),
+  updateOperationWorkItemProgressAction: el => updateOperationWorkItemProgressAction(Number(el.dataset.id), el.dataset.status),
+  openOperationAcceptanceActionModal: el => openOperationAcceptanceActionModal(Number(el.dataset.id), el.dataset.action),
+  closeOperationAcceptanceActionModal: () => closeOperationAcceptanceActionModal(),
+  confirmOperationAcceptanceAction: () => confirmOperationAcceptanceAction()
+};
+const OP_CHANGE_ACTIONS = {
+  onOperationOrderFilterChange: () => onOperationOrderFilterChange(),
+  onOperationStoreOpenFilterChange: () => onOperationStoreOpenFilterChange(),
+  onOperationRepairFilterChange: () => onOperationRepairFilterChange(),
+  renderOperationStoreReport: () => renderOperationStoreReport(),
+  resolveOwiAssignedToInput: el => resolveOwiAssignedToInput(el.value),
+  resolveOwiAcceptorInput: el => resolveOwiAcceptorInput(el.value)
+};
+const OP_INPUT_ACTIONS = {
+  onOperationOrderFilterChange: () => onOperationOrderFilterChange(),
+  onOperationStoreOpenFilterChange: () => onOperationStoreOpenFilterChange(),
+  onOperationRepairFilterChange: () => onOperationRepairFilterChange(),
+  renderOperationStoreReport: () => renderOperationStoreReport(),
+  updateOperationOrderItemField: el => updateOperationOrderItemField(Number(el.dataset.idx), el.dataset.field, el.value),
+  updateOperationEstimateItemField: el => updateOperationEstimateItemField(Number(el.dataset.idx), el.dataset.field, el.value)
+};
+const OP_SUBMIT_ACTIONS = {
+  submitOperationOrder: e => submitOperationOrder(e),
+  submitOperationStoreOpening: e => submitOperationStoreOpening(e),
+  submitOperationRepair: e => submitOperationRepair(e),
+  submitOperationWorkItemForm: e => submitOperationWorkItemForm(e),
+  submitOperationExecutionPeriod: e => submitOperationExecutionPeriod(e)
+};
+function bindOperationDelegation(rootId) {
+  const root = document.getElementById(rootId);
+  if (!root) return;
+  root.addEventListener('click', (e) => {
+    const el = e.target.closest('[data-op]');
+    if (!el || !root.contains(el)) return;
+    const fn = OP_CLICK_ACTIONS[el.dataset.op];
+    if (fn) fn(el, e);
+  });
+  root.addEventListener('change', (e) => {
+    const el = e.target.closest('[data-op-change]');
+    if (!el || !root.contains(el)) return;
+    const fn = OP_CHANGE_ACTIONS[el.dataset.opChange];
+    if (fn) fn(el, e);
+  });
+  root.addEventListener('input', (e) => {
+    const el = e.target.closest('[data-op-input]');
+    if (!el || !root.contains(el)) return;
+    const fn = OP_INPUT_ACTIONS[el.dataset.opInput];
+    if (fn) fn(el, e);
+  });
+  root.addEventListener('submit', (e) => {
+    const el = e.target.closest('[data-op-submit]');
+    if (!el || !root.contains(el)) return;
+    const fn = OP_SUBMIT_ACTIONS[el.dataset.opSubmit];
+    if (fn) fn(e);
+  });
+}
+['vanHanhSection', 'operationEstimateModal', 'operationWorkItemModal', 'operationWorkItemFormModal', 'operationAcceptanceActionModal', 'operationProcessModal'].forEach(bindOperationDelegation);
 
 // ==========================================
 // VĂN PHÒNG PHẨM — kỳ đăng ký (vppPeriods) + đăng ký của nhân viên (vppRegistrations). 3 sub-tab:
