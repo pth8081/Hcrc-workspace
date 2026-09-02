@@ -1,10 +1,107 @@
 # Phiên bản hiện tại
 
-**4.8** — đã merge vào `main` (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge
+**4.9** — đã merge vào `main` (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge
 góc màn hình + `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần
 kiểu `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
 
-## Cập nhật gần nhất — CSP unsafe-inline: đợt 17/N — module Tuyển Dụng
+## Cập nhật gần nhất — CSP unsafe-inline: đợt 18/N — module Tin Tức/Truyền Thông
+
+Tiếp tục đợt 17 (Tuyển Dụng, xem mục "Trước đó" ngay bên dưới) — đợt này chuyển toàn bộ module **Tin
+Tức/Truyền Thông Nội Bộ** (`#internalSection` — 5 sub-tab Nhịp Sống HCRC/Đào Tạo/Tuyển Dụng/Góc Chia
+Sẻ/HCRC Đồng Hành trong 1 section, cộng modal xem chi tiết bài viết sống ngoài section), kèm form
+"HCRC Đồng Hành" phía nhân viên (`#hrFeedbackForm`) vốn bị hoãn lại từ đợt 12 (Nhân Sự — đợt đó chỉ xử
+lý phía Nhân Sự quản lý câu hỏi):
+
+- **45 điểm** `onclick`/`onchange`/`oninput`/`onsubmit` chuyển sang `data-op*`:
+  - **5 nút chuyển sub-tab** (`setInternalSubTab`, tham số `'NEWS'`/`'TRAINING'`/`'RECRUITMENT'`/
+    `'SHARE'`/`'QNA'` — 2 sub-tab TRAINING/RECRUITMENT nội dung đã chuyển ở đợt trước, chỉ 5 nút bấm
+    nằm chung 1 hàng nên chuyển luôn cả cụm).
+  - **Form đăng bài "Nhịp Sống HCRC"/"Góc Chia Sẻ"** (`#internalPostForm`, dùng chung cho cả 2 loại qua
+    `activeInternalSubTab`): `onsubmit` (`submitInternalPost`), checkbox "Ghim bài" (`this.checked` —
+    wrapper mới, xem dưới), nút "Huỷ Sửa" (`cancelEditInternalPost`).
+  - **Bộ lọc feed** (4 điểm): trạng thái/từ ngày/đến ngày (`onchange`) + từ khoá (`oninput`), đều gọi lại
+    `onInternalFilterChange`.
+  - **Form + hộp thư "HCRC Đồng Hành" phía nhân viên** (2 điểm): `onsubmit` form
+    (`submitHrFeedbackQuestion`), bấm vào 1 câu đã trả lời trong hộp thư cá nhân
+    (`openHrFeedbackAnswer`, `renderHrFeedbackInbox()` — khác hẳn `renderHrFeedbackManage()` phía Nhân
+    Sự đã chuyển ở đợt 12, xác nhận lại 0 handler raw còn sót ở khu vực đó).
+  - **Các hàm dựng nút thao tác bài đăng** (`internalPostEditButtonHTML`/`internalPostHideActionHTML`/
+    `internalPostRequestInfoActionHTML`/`internalCommentLikeButtonHTML`/
+    `renderInternalModerationQueueHTML`): sửa/ẩn/hiện lại/yêu cầu bổ sung/duyệt/từ chối bài, thích bình
+    luận, bỏ qua/xoá bình luận bị gắn cờ (`editInternalPostUI`/`hideInternalPostAction`/
+    `unhideInternalPostAction`/`requestInternalPostInfoAction`/`toggleInternalCommentLike`/
+    `dismissCommentFlagAction`/`deleteFlaggedCommentAction`/`approveInternalPostAction`/
+    `rejectInternalPostAction`, đều nhận `p.id`/`c.id` làm tham số).
+  - **`renderInternalNewsFeed()`**: 2 nút sắp xếp "Mới nhất"/"Tương tác nhiều"
+    (`setInternalNewsSort`).
+  - **`renderInternalNewsCard()`/`viewInternalPostDetail()`** (thẻ feed + modal chi tiết bài viết): mở
+    chi tiết (`viewInternalPostDetail`, lặp lại ở nhiều vị trí trên cùng 1 thẻ — ảnh/tiêu đề/nút "Chi
+    tiết"/"Xem thêm"), thích bài (`toggleInternalLikeInline`/`toggleInternalLike`), gửi bình luận
+    (`addInternalCommentInline`/`addInternalComment`), đăng ký/huỷ đăng ký lớp đào tạo được nhắc tới
+    trong bài tin (`registerForTraining`/`unregisterFromTraining`), nút "Bình luận" (wrapper mới — xem
+    dưới), nút "Xem tất cả/Thu gọn bình luận" (wrapper mới — xem dưới).
+  - **`#internalArticleModal`** (modal xem bài viết kiểu "trang báo", sống NGOÀI `#internalSection`): 1
+    điểm — nút X đóng modal (`closeInternalArticleModal`).
+- **3 hàm wrapper mới** do runtime `data-op*` chưa hỗ trợ trực tiếp:
+  - `toggleInternalPinDurationWrap(el)` — checkbox "Ghim bài" đọc `this.checked` (không có
+    `data-arg-checked`), nhận thẳng element qua `data-arg-el` rồi tự đọc `el.checked`.
+  - `focusInternalCommentInput(id)` — nút "💬 Bình luận" trên thẻ feed gọi thẳng biểu thức
+    `document.getElementById('internalCommentInput_' + id).focus()`, không phải 1 lời gọi hàm đơn nên
+    không map được vào `data-op="fn(args)"`.
+  - `toggleInternalCommentsExpandedAndView(id)` — nút "Xem tất cả/Thu gọn bình luận" (xuất hiện cả trong
+    thẻ feed lẫn modal chi tiết) gọi 2 hàm liên tiếp `toggleInternalCommentsExpanded(${p.id});
+    viewInternalPostDetail(${p.id});` với tham số là biểu thức template literal, không phải literal
+    thuần nên không đủ điều kiện `data-op-seq` — gộp lại thành 1 hàm gọi cả 2.
+- **2 gốc `bindCspDelegation`**: `internalSection` (5 sub-tab, form đăng bài, bộ lọc, hộp thư "HCRC
+  Đồng Hành", toàn bộ nút thao tác bài/bình luận) và `internalArticleModal` (modal chi tiết, xác nhận là
+  sibling DOM sống ngoài section, giống mẫu Xe/Vận Hành/Đào Tạo/Đồng Phục/Giấy Phép/Tuyển Dụng các đợt
+  trước). Không đụng dropdown đổi trạng thái trong `buildActionCell()` dùng chung và
+  `#genericConfirmModal` — cả 2 nằm trong đợt dọn hạ tầng dùng chung riêng, không thuộc phạm vi module
+  này.
+- **Không phát hiện lỗi thật nào trong lúc demo module này** — chỉ phát hiện 1 quirk có sẵn KHÔNG liên
+  quan CSP: `<select id="internalPostCategoryShare" required>` vẫn giữ `required` dù bị ẩn khi đang ở
+  sub-tab NEWS (`setInternalSubTab()` chỉ toggle class `hidden` trên wrapper, không đồng bộ `.required`)
+  — theo đặc tả WHATWG, "không được render" KHÔNG nằm trong danh sách điều kiện "barred from constraint
+  validation", nên trình duyệt vẫn chặn submit form gốc (console log "invalid form control ... not
+  focusable", submit bị huỷ âm thầm). Đây là lỗi nghiệp vụ có từ trước, không phải do đổi
+  `onsubmit`→`data-op-submit` gây ra (thuộc tính `required` không nằm trong phạm vi đổi của đợt này) —
+  không sửa trong đợt này, chỉ né tạm trong kịch bản demo (gán giá trị cho cả ô ẩn trước khi bấm Đăng) để
+  xác nhận đường `data-op-submit` hoạt động đúng.
+
+**Xác nhận không ảnh hưởng** — 2 lớp kiểm tra độc lập trước khi merge:
+- Demo Playwright thật (SQL Server + server local + đăng nhập UI thật qua tài khoản demo tạm 2FA thật,
+  xoá lại ngay sau demo cùng toàn bộ dữ liệu demo tạo ra trong lúc test — `internalPosts`/`hrFeedback`
+  đều nằm trong `MIGRATED_COLLECTIONS`, xoá bằng `deleteRecordById()`, tài khoản demo xoá bằng
+  `withLockedAppDataValue('users', ...)`): đăng nhập, mở Truyền Thông Nội Bộ > Nhịp Sống HCRC (qua nút
+  sub-tab data-op); đăng 1 bài tin mới qua `#internalPostForm` — tự động "Đã duyệt" (NEWS không qua hàng
+  chờ duyệt); bấm nút "Ghim bài" — xác nhận wrapper `toggleInternalPinDurationWrap` hiện/ẩn đúng khung
+  chọn số ngày ghim; thích bài (`toggleInternalLikeInline`), gửi bình luận
+  (`addInternalCommentInline`), bấm nút "💬 Bình luận" — xác nhận wrapper `focusInternalCommentInput`
+  focus đúng ô nhập; mở modal chi tiết (`viewInternalPostDetail` → `#internalArticleModal` hiện đúng nội
+  dung); thêm đủ 6 bình luận qua modal chi tiết rồi bấm "Xem tất cả bình luận" — xác nhận wrapper
+  `toggleInternalCommentsExpandedAndView` hoạt động đúng (mở rộng danh sách + render lại modal, không
+  lỗi); đóng modal qua nút X (`closeInternalArticleModal`) — đóng đúng; gõ từ khoá vào ô lọc
+  (`onInternalFilterChange` qua `data-op-input`) — không lỗi; bấm "🙈 Ẩn" rồi "👁️ Hiện Lại" trên bài vừa
+  tạo — cả 2 đều đổi đúng trạng thái APPROVED↔HIDDEN; chuyển sang sub-tab "HCRC Đồng Hành" (QNA), gửi 1
+  câu hỏi qua `#hrFeedbackForm` — thành công, hiện đúng trong hộp thư cá nhân, bấm vào mục hộp thư
+  (`openHrFeedbackAnswer`) không lỗi. Toàn bộ đúng, không có lỗi JS console mới liên quan tới thay đổi
+  (chỉ 3 lỗi mạng nền quen thuộc trước lúc đăng nhập: chặn Google Fonts, `/api/auth/me` 401 lúc chưa
+  đăng nhập, `/api/captcha` 404 do CAPTCHA chưa bật ở môi trường demo — cùng 3 lỗi y hệt các đợt trước,
+  không liên quan tới module này).
+- Chạy lại toàn bộ 46 file test hồi quy (`tests/test-*.js`), gồm cả `tests/test-internal-news.js`/
+  `tests/test-hr-feedback.js`/`tests/test-internal-recruitment-share.js` (riêng cho module này) — 44/46
+  OK, đúng 2 file known-flaky quen thuộc (`test-audit-fixes-batch1.js`/`test-audit-round2-cluster1.js`,
+  timeout hạ tầng test không liên quan thay đổi lần này).
+
+**Deploy-impact:** KHÔNG đổi `sql/schema.sql`, KHÔNG thêm biến môi trường mới, KHÔNG thêm `dependencies`
+mới — toàn bộ thay đổi nằm trong `public/index.html` (thuần client JS/HTML), deploy an toàn chỉ với copy
+code + `pm2 restart`, không cần thao tác 1 lần nào khác.
+
+**Còn lại:** Biên Bản Họp, Công Việc, Văn Bản Trình, Tài Liệu, Báo Cáo Định Kỳ... — dùng hạ tầng
+`data-op*`/`bindCspDelegation()` đã xây, làm tiếp tuần tự mỗi module 1 commit + demo + regression trước
+khi merge, tới khi hết toàn bộ điểm mới gỡ `unsafe-inline`.
+
+## Trước đó — CSP unsafe-inline: đợt 17/N — module Tuyển Dụng
 
 Tiếp tục đợt 16 (Giấy Phép, xem mục "Trước đó" ngay bên dưới) — đợt này chuyển toàn bộ module **Tuyển
 Dụng** (`#internalRecruitmentSection` — 3 sub-tab Tin Tuyển Dụng/Ứng Viên Tôi Giới Thiệu/Quản Lý Ứng Viên
