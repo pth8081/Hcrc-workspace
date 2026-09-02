@@ -1,10 +1,54 @@
 # Phiên bản hiện tại
 
-**3.6** — đã merge vào `main` (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge
+**3.7** — đã merge vào `main` (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge
 góc màn hình + `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần
 kiểu `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
 
-## Cập nhật gần nhất — CSP unsafe-inline: đợt 5/N — module Xe (Đăng Ký Xe)
+## Cập nhật gần nhất — CSP unsafe-inline: đợt 6/N — module Phòng Họp
+
+Tiếp tục đợt 5 (Xe, xem mục "Trước đó" ngay bên dưới) — đợt này chuyển module **Phòng Họp** (form đặt
+lịch, lịch phòng dạng lưới, danh sách/lọc, nút Duyệt/Hủy):
+
+- **11 điểm** `onclick`/`onchange`/`oninput`/`onsubmit` chuyển sang `data-op*`, dùng lại đúng hạ tầng dùng
+  chung (`cspDispatchOp`/`bindCspDelegation`) — không cần code hạ tầng mới:
+  - **9 điểm** trong HTML tĩnh `#meetingSection` (2 nút chuyển sub-tab Đăng Ký/Lịch Họp, `onsubmit` form
+    đặt phòng, 5 ô lọc danh sách, 1 ô chọn ngày xem lịch `onchange="renderMeetingCalendar()"`).
+  - **2 điểm** trong `renderMeetings()` (nút "Duyệt" qua `approveMeeting()`, nút "Hủy" qua
+    `runMeetingAction(id,'cancel')` — cả 2 cùng dùng `buildActionCell()` dùng chung, không đụng).
+  - Chỉ cần **1 gốc** `bindCspDelegation('meetingSection')` — không có modal xử lý riêng ngoài section
+    (khác Xe/Vận Hành): `approveMeeting()`/`cancelMeeting()` gọi thẳng API, không mở modal.
+  - Lịch phòng dạng lưới (kéo-thả chọn nhiều khung giờ, tính năng đợt trước — xem mục "Meeting calendar:
+    Outlook-style drag/Shift+click multi-slot select") đã dùng `addEventListener` từ trước, không có
+    `onclick` cần chuyển.
+- **`buildActionCell()`/`buildDashboardCardsHTML()`/`buildPaginationBoxHTML()`/`renderPeopleMultiSelect()`**
+  tiếp tục KHÔNG đụng — vẫn dành cho 1 đợt riêng cuối cùng sau khi hết mọi module đơn lẻ.
+
+**Không phát hiện lỗi phụ nào trong đợt này.**
+
+**Xác nhận không ảnh hưởng** — 2 lớp kiểm tra độc lập trước khi merge:
+- Demo Playwright thật (SQL Server + server local + đăng nhập UI thật qua tài khoản demo tạm 2FA thật,
+  xoá lại ngay sau demo): điều hướng Sidebar → Hành Chính → Phòng họp, chuyển qua tab Lịch Họp rồi đổi
+  ngày xem lịch (lưới giờ/phòng cập nhật đúng), quay lại tab Đăng Ký, điền đầy đủ form đặt phòng (đơn vị,
+  phòng họp, chủ đề, số người, thời gian, thiết bị, nội dung), gửi phê duyệt thành công (dialog "✅ Đã
+  gửi đăng ký lịch phòng họp thành công!"), lọc theo trạng thái + từ khoá, bấm nút "Duyệt" trên dòng vừa
+  tạo (chuyển đúng sang "✅ Đã duyệt lịch"), bấm nút "Hủy" (chuyển đúng sang "❌ Đã hủy lịch") — toàn bộ
+  đều đúng, không có lỗi JS console mới. (Một lượt chạy demo thứ 2 còn xác nhận thêm: cơ chế chặn trùng
+  giờ cùng phòng — tính năng nghiệp vụ có sẵn từ trước, không liên quan CSP — vẫn hoạt động đúng qua
+  `data-op-submit` mới, báo lỗi rõ ràng khi thử đặt trùng giờ với lịch đã duyệt.)
+- Chạy lại toàn bộ 46 file test hồi quy hiện có (`tests/test-*.js`) — pass 100% (2 file
+  `test-audit-fixes-batch1.js`/`test-audit-round2-cluster1.js` treo lúc dọn dẹp sau khi đã chạy hết kịch
+  bản — bug có sẵn từ trước, đã ghi nhận từ đợt 2, không liên quan gì tới thay đổi lần này).
+
+**Deploy-impact:** KHÔNG đổi `sql/schema.sql`, KHÔNG thêm biến môi trường mới, KHÔNG thêm `dependencies`
+mới — toàn bộ thay đổi nằm trong `public/index.html` (thuần client JS/HTML), deploy an toàn chỉ với copy
+code + `pm2 restart`, không cần thao tác 1 lần nào khác.
+
+**Còn lại:** VPP, Đào Tạo, Ngân Sách, Cơ Cấu Tổ Chức, Báo Cáo, Nhân Sự, Quản Trị/Hệ Thống, Hỗ Trợ IT, Đồng
+Phục, Giấy Phép, Gia Hạn CNTT, Tuyển Dụng, Tin Tức/Truyền Thông, Biên Bản Họp, Công Việc, Văn Bản Trình,
+Tài Liệu... — dùng hạ tầng `data-op*`/`bindCspDelegation()` đã xây, làm tiếp tuần tự mỗi module 1 commit +
+demo + regression trước khi merge, tới khi hết toàn bộ điểm mới gỡ `unsafe-inline`.
+
+## Trước đó — CSP unsafe-inline: đợt 5/N — module Xe (Đăng Ký Xe)
 
 Tiếp tục đợt 4 (Thanh Toán, xem mục "Trước đó" ngay bên dưới) — đợt này chuyển module **Xe** (form đăng
 ký xe, lộ trình di chuyển, tab Lái Xe, danh sách/lọc, modal Xử Lý Đăng Ký Xe):
