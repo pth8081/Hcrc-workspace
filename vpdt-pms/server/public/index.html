@@ -5664,7 +5664,7 @@ input[data-sdd-list] {
           <h3 class="font-bold text-sky-900 text-base flex items-center gap-1">📊 Báo Cáo</h3>
           <p class="text-xs text-sky-800">Tổng Hợp đa chiều toàn hệ thống, hoặc chọn báo cáo riêng theo từng module nghiệp vụ. Cùng 1 bộ lọc thời gian & phòng ban áp dụng cho mọi tab.</p>
         </div>
-        <button onclick="exportReportsExcel()" class="text-xs bg-emerald-600 text-white px-3 py-1.5 rounded font-bold hover:bg-emerald-700">📥 Xuất Báo Cáo Excel</button>
+        <button data-op="exportReportsExcel" class="text-xs bg-emerald-600 text-white px-3 py-1.5 rounded font-bold hover:bg-emerald-700">📥 Xuất Báo Cáo Excel</button>
       </div>
 
       <div id="reportsNavL1Bar" class="flex gap-2 flex-wrap border-b pb-2"></div>
@@ -5676,20 +5676,20 @@ input[data-sdd-list] {
       <div class="grid grid-cols-1 md:grid-cols-4 gap-3 bg-white p-3 rounded border text-xs">
         <div>
           <label class="block font-semibold text-gray-600 mb-1">Từ Ngày (theo ngày tạo hồ sơ)</label>
-          <input id="reportsFromDate" type="date" onchange="renderReports()" class="w-full border p-1.5 rounded bg-white">
+          <input id="reportsFromDate" type="date" data-op-change="renderReports" class="w-full border p-1.5 rounded bg-white">
         </div>
         <div>
           <label class="block font-semibold text-gray-600 mb-1">Đến Ngày</label>
-          <input id="reportsToDate" type="date" onchange="renderReports()" class="w-full border p-1.5 rounded bg-white">
+          <input id="reportsToDate" type="date" data-op-change="renderReports" class="w-full border p-1.5 rounded bg-white">
         </div>
         <div>
           <label class="block font-semibold text-gray-600 mb-1">Phòng Ban</label>
-          <select id="reportsDeptFilter" onchange="renderReports()" class="w-full border p-1.5 rounded bg-white font-semibold">
+          <select id="reportsDeptFilter" data-op-change="renderReports" class="w-full border p-1.5 rounded bg-white font-semibold">
             <option value="">-- Tất cả phòng ban --</option>
           </select>
         </div>
         <div class="flex items-end">
-          <button onclick="resetReportsFilters()" class="w-full bg-gray-200 text-gray-700 p-1.5 rounded font-bold hover:bg-gray-300">Đặt Lại Bộ Lọc</button>
+          <button data-op="resetReportsFilters" class="w-full bg-gray-200 text-gray-700 p-1.5 rounded font-bold hover:bg-gray-300">Đặt Lại Bộ Lọc</button>
         </div>
       </div>
     </div>
@@ -7041,13 +7041,13 @@ input[data-sdd-list] {
   <div class="bg-white rounded-lg shadow-2xl max-w-4xl w-full flex flex-col max-h-[90vh] overflow-hidden">
     <div class="flex justify-between items-center bg-indigo-700 text-white p-4">
       <h3 class="font-bold text-base flex items-center gap-2">👁️ Xem Trước Báo Cáo</h3>
-      <button onclick="closeReportPreviewModal()" class="text-indigo-100 hover:text-white font-bold text-xl px-2">✕</button>
+      <button data-op="closeReportPreviewModal" class="text-indigo-100 hover:text-white font-bold text-xl px-2">✕</button>
     </div>
     <div class="p-4 overflow-y-auto flex-1 bg-white" id="reportPreviewModalBody"></div>
     <div class="p-3 bg-gray-50 border-t flex justify-end items-center gap-2 text-xs">
-      <button onclick="closeReportPreviewModal()" class="bg-gray-200 text-gray-700 px-4 py-1.5 rounded font-bold hover:bg-gray-300">Đóng</button>
-      <button onclick="printReportPreview()" class="bg-blue-600 text-white px-4 py-1.5 rounded font-bold hover:bg-blue-700">🖨️ In</button>
-      <button onclick="exportReportPreviewExcel()" class="bg-emerald-600 text-white px-4 py-1.5 rounded font-bold hover:bg-emerald-700">📥 Xuất Excel</button>
+      <button data-op="closeReportPreviewModal" class="bg-gray-200 text-gray-700 px-4 py-1.5 rounded font-bold hover:bg-gray-300">Đóng</button>
+      <button data-op="printReportPreview" class="bg-blue-600 text-white px-4 py-1.5 rounded font-bold hover:bg-blue-700">🖨️ In</button>
+      <button data-op="exportReportPreviewExcel" class="bg-emerald-600 text-white px-4 py-1.5 rounded font-bold hover:bg-emerald-700">📥 Xuất Excel</button>
     </div>
   </div>
 </div>
@@ -23826,6 +23826,13 @@ bindCspDelegation('budgetProcessModal');
 bindCspDelegation('hrSection');
 bindCspDelegation('orgChartManagerModal');
 
+// Báo Cáo (#reportsSection) — thanh bộ lọc tĩnh + #reportsNavL1Bar/#reportsNavL2Bar + #reportsContent
+// (renderReports()/renderModuleReport()/renderReportsSummary()...) đều nằm CHUNG trong #reportsSection
+// nên chỉ cần 1 gốc. Modal "Xem Trước" (#reportPreviewModal, showReportPreview()) sống NGOÀI section
+// nên cần thêm 1 gốc riêng — 2 gốc tổng cộng.
+bindCspDelegation('reportsSection');
+bindCspDelegation('reportPreviewModal');
+
 // ==========================================
 // VĂN PHÒNG PHẨM — kỳ đăng ký (vppPeriods) + đăng ký của nhân viên (vppRegistrations). 3 sub-tab:
 // Đăng Ký (ai cũng vào được) / Kỳ Đăng Ký + Báo Cáo Tổng Hợp (chỉ vppManage/admin).
@@ -31578,7 +31585,7 @@ function renderReportsNavPicker() {
     const cls = n.key === reportsNavL1
       ? 'px-3 py-1.5 rounded text-xs font-bold bg-sky-700 text-white'
       : 'px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700';
-    return `<button type="button" onclick="selectReportsNavL1('${n.key}')" class="${cls}">${n.label}</button>`;
+    return `<button type="button" data-op="selectReportsNavL1" data-arg0="${n.key}" class="${cls}">${n.label}</button>`;
   }).join('');
 
   const activeNode = findReportNavNode(reportsNavL1);
@@ -31588,7 +31595,7 @@ function renderReportsNavPicker() {
       const cls = c.key === reportsNavL2
         ? 'px-3 py-1 rounded text-xs font-bold bg-indigo-600 text-white'
         : 'px-3 py-1 rounded text-xs font-bold bg-gray-100 text-gray-700';
-      return `<button type="button" onclick="selectReportsNavL2('${c.key}')" class="${cls}">${c.label}</button>`;
+      return `<button type="button" data-op="selectReportsNavL2" data-arg0="${c.key}" class="${cls}">${c.label}</button>`;
     }).join('');
   } else {
     l2Wrap.classList.add('hidden');
@@ -31961,7 +31968,7 @@ function buildReportDetailFilterControlHTML(moduleKey, col) {
   const fv = (reportDetailFilterValues[moduleKey] && reportDetailFilterValues[moduleKey][col.key]) || null;
   if (col.type === 'select') {
     const cur = typeof fv === 'string' ? fv : '';
-    return `<select id="${base}" onchange="onReportDetailFilterInput('${moduleKey}','${col.key}','select')" class="w-full border p-1 rounded text-[11px] bg-white">
+    return `<select id="${base}" data-op-change="onReportDetailFilterInput" data-arg0="${moduleKey}" data-arg1="${col.key}" data-arg2="select" class="w-full border p-1 rounded text-[11px] bg-white">
       <option value="">-- Tất cả --</option>
       ${col.options.map(([v, l]) => `<option value="${escapeHtml(String(v))}" ${cur === String(v) ? 'selected' : ''}>${escapeHtml(l)}</option>`).join('')}
     </select>`;
@@ -31970,20 +31977,20 @@ function buildReportDetailFilterControlHTML(moduleKey, col) {
     const min = (fv && fv.min !== undefined) ? fv.min : '';
     const max = (fv && fv.max !== undefined) ? fv.max : '';
     return `<div class="flex gap-1">
-      <input type="number" id="${base}_min" value="${escapeHtml(String(min))}" oninput="onReportDetailFilterInput('${moduleKey}','${col.key}','number')" placeholder="Từ" class="w-1/2 border p-1 rounded text-[11px]">
-      <input type="number" id="${base}_max" value="${escapeHtml(String(max))}" oninput="onReportDetailFilterInput('${moduleKey}','${col.key}','number')" placeholder="Đến" class="w-1/2 border p-1 rounded text-[11px]">
+      <input type="number" id="${base}_min" value="${escapeHtml(String(min))}" data-op-input="onReportDetailFilterInput" data-arg0="${moduleKey}" data-arg1="${col.key}" data-arg2="number" placeholder="Từ" class="w-1/2 border p-1 rounded text-[11px]">
+      <input type="number" id="${base}_max" value="${escapeHtml(String(max))}" data-op-input="onReportDetailFilterInput" data-arg0="${moduleKey}" data-arg1="${col.key}" data-arg2="number" placeholder="Đến" class="w-1/2 border p-1 rounded text-[11px]">
     </div>`;
   }
   if (col.type === 'date') {
     const from = (fv && fv.from) || '';
     const to = (fv && fv.to) || '';
     return `<div class="flex gap-1">
-      <input type="date" id="${base}_from" value="${escapeHtml(from)}" onchange="onReportDetailFilterInput('${moduleKey}','${col.key}','date')" class="w-1/2 border p-1 rounded text-[11px]">
-      <input type="date" id="${base}_to" value="${escapeHtml(to)}" onchange="onReportDetailFilterInput('${moduleKey}','${col.key}','date')" class="w-1/2 border p-1 rounded text-[11px]">
+      <input type="date" id="${base}_from" value="${escapeHtml(from)}" data-op-change="onReportDetailFilterInput" data-arg0="${moduleKey}" data-arg1="${col.key}" data-arg2="date" class="w-1/2 border p-1 rounded text-[11px]">
+      <input type="date" id="${base}_to" value="${escapeHtml(to)}" data-op-change="onReportDetailFilterInput" data-arg0="${moduleKey}" data-arg1="${col.key}" data-arg2="date" class="w-1/2 border p-1 rounded text-[11px]">
     </div>`;
   }
   const cur = typeof fv === 'string' ? fv : '';
-  return `<input type="text" id="${base}" value="${escapeHtml(cur)}" oninput="onReportDetailFilterInput('${moduleKey}','${col.key}','text')" placeholder="Tìm ${escapeHtml(col.label.toLowerCase())}..." class="w-full border p-1 rounded text-[11px]">`;
+  return `<input type="text" id="${base}" value="${escapeHtml(cur)}" data-op-input="onReportDetailFilterInput" data-arg0="${moduleKey}" data-arg1="${col.key}" data-arg2="text" placeholder="Tìm ${escapeHtml(col.label.toLowerCase())}..." class="w-full border p-1 rounded text-[11px]">`;
 }
 
 function onReportDetailFilterInput(moduleKey, colKey, type) {
@@ -32007,6 +32014,9 @@ function onReportDetailColumnToggle(moduleKey, colKey, checked) {
   const sel = reportDetailSelectedCols[moduleKey] || [];
   reportDetailSelectedCols[moduleKey] = checked ? [...sel.filter(k => k !== colKey), colKey] : sel.filter(k => k !== colKey);
   renderReportDetailResultsOnly(moduleKey);
+}
+function onReportDetailColumnToggleFromCheckbox(moduleKey, colKey, checkboxEl) {
+  onReportDetailColumnToggle(moduleKey, colKey, checkboxEl.checked);
 }
 
 function resetReportDetailFilters(moduleKey) {
@@ -32076,7 +32086,7 @@ function buildReportPreviewLauncherHTML(moduleKey) {
         <div class="font-bold text-indigo-900 text-sm">🖨️ 1. Tạo Báo Cáo Theo Yêu Cầu</div>
         <div class="text-indigo-700 text-[11px] mt-0.5">Xem trước dạng văn bản (đúng cột/điều kiện đang chọn ở khối "🔍 2. Tra Cứu Chi Tiết" bên dưới) trước khi xuất Excel hoặc in.</div>
       </div>
-      <button type="button" onclick="showReportPreview('${moduleKey}')" class="bg-indigo-600 text-white px-3 py-1.5 rounded font-bold text-xs hover:bg-indigo-700 whitespace-nowrap shrink-0">👁️ Xem Trước & Xuất</button>
+      <button type="button" data-op="showReportPreview" data-arg0="${moduleKey}" class="bg-indigo-600 text-white px-3 py-1.5 rounded font-bold text-xs hover:bg-indigo-700 whitespace-nowrap shrink-0">👁️ Xem Trước & Xuất</button>
     </div>
   `;
 }
@@ -32160,7 +32170,7 @@ function renderReportDetailSection(moduleKey, records, config) {
         <div>
           <div class="flex items-center justify-between mb-1">
             <span class="font-semibold text-gray-600 text-[11px]">Điều kiện lọc</span>
-            <button type="button" onclick="resetReportDetailFilters('${moduleKey}')" class="text-[11px] text-gray-500 hover:underline">Đặt lại bộ lọc</button>
+            <button type="button" data-op="resetReportDetailFilters" data-arg0="${moduleKey}" class="text-[11px] text-gray-500 hover:underline">Đặt lại bộ lọc</button>
           </div>
           <div class="grid grid-cols-2 md:grid-cols-4 gap-2">
             ${columns.map(c => `
@@ -32176,14 +32186,14 @@ function renderReportDetailSection(moduleKey, records, config) {
           <div class="flex flex-wrap gap-x-3 gap-y-1 border rounded p-2 bg-gray-50 max-h-24 overflow-y-auto">
             ${columns.map(c => `
               <label class="flex items-center gap-1 text-[11px] text-gray-700 cursor-pointer">
-                <input type="checkbox" id="rdc_${moduleKey}_${c.key}" onchange="onReportDetailColumnToggle('${moduleKey}','${c.key}', this.checked)" ${selectedSet.has(c.key) ? 'checked' : ''}>
+                <input type="checkbox" id="rdc_${moduleKey}_${c.key}" data-op-change="onReportDetailColumnToggleFromCheckbox" data-arg0="${moduleKey}" data-arg1="${c.key}" data-arg-el="2" ${selectedSet.has(c.key) ? 'checked' : ''}>
                 <span>${escapeHtml(c.label)}</span>
               </label>
             `).join('')}
           </div>
         </div>
         <div class="flex justify-end">
-          <button type="button" onclick="exportReportDetailExcel('${moduleKey}')" class="text-[11px] bg-emerald-600 text-white px-3 py-1.5 rounded font-bold hover:bg-emerald-700">⬇️ Xuất Excel (chi tiết)</button>
+          <button type="button" data-op="exportReportDetailExcel" data-arg0="${moduleKey}" class="text-[11px] bg-emerald-600 text-white px-3 py-1.5 rounded font-bold hover:bg-emerald-700">⬇️ Xuất Excel (chi tiết)</button>
         </div>
         <div id="reportDetailResultsWrap">${buildReportDetailResultsHTML(moduleKey)}</div>
       </div>
