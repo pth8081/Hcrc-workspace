@@ -1,9 +1,55 @@
 # Phiên bản hiện tại
 
-**1.100.0** — đã merge vào `main` (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở
-badge góc màn hình + `/api/health`).
+**2.5** — đã merge vào `main` (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge
+góc màn hình + `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần
+kiểu `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
 
-## Cập nhật gần nhất (PR #226, nhánh `claude/chao-ban-oo5ijl`)
+## Cập nhật gần nhất (PR #230, nhánh `claude/chao-ban-oo5ijl`)
+
+Vận Hành — tab "🏬 Siêu Thị" gộp Mở Mới/Sửa Chữa, thêm vòng đời "dự án nhỏ" sau khi hồ sơ được tạo: **Dự
+toán** (workflow duyệt độc lập, bảng hạng mục tự tính tổng tiền) → **Thực hiện** (cây công việc đa cấp,
+bảng SQL mới `dbo.OperationWorkItems`, chỉ mở khi Dự toán duyệt xong) → **Nghiệm thu** (nút Nghiệm
+thu/Bổ sung, cha tự chuyển trạng thái khi hết việc con dở) → **Báo cáo** (tổng hợp tiến độ nhanh/chậm).
+3 quyền mới tách riêng theo giai đoạn (`operationEstimateCreate`/`operationExecutionManage`/
+`operationAcceptanceManage`), đã đưa vào Approval Hub.
+
+Bổ sung theo phản hồi thực tế trong quá trình demo:
+- **Chặn thao tác đúng người**: chỉ người được gán (`assignedTo`) mới cập nhật tiến độ việc của mình,
+  chỉ người được CHỈ ĐỊNH nghiệm thu (`acceptorUsername`) mới nghiệm thu được — trước đó ai giữ quyền
+  vai trò cũng thao tác được mọi việc, không đúng thực tế phân công.
+- **Kỳ Thực Hiện** (`operationExecutionPeriods`) — mỗi hồ sơ có nhiều kỳ, việc gốc bắt buộc chọn đúng kỳ
+  đang "Đang thực hiện", việc con kế thừa kỳ của cha (server không tin giá trị client gửi).
+- **Nút "✏️ Sửa" công việc** (title/mô tả/người phụ trách/người nghiệm thu/hạn — không cho sửa
+  kỳ/vị trí cây/trạng thái) và **"🏁 Xác Nhận Đưa Vào Sử Dụng"** — mốc cấp hồ sơ mới, quyền riêng
+  `operationUseConfirm`, chỉ mở khi TOÀN BỘ cây công việc đã "Đã nghiệm thu".
+- **Nhân Sự → 🌳 Cơ Cấu Tổ Chức** (module mới): field `user.managerUsername` (không cần bảng riêng) + cây
+  quản lý nhiều cấp, chống vòng lặp server-side. Quyền mới `orgChartManage`. Áp dụng cho **toàn bộ nhân
+  viên công ty** (mọi phòng ban), không giới hạn theo module Vận Hành. Có nút Tải Mẫu/Xuất Excel/Nhập Từ
+  Excel để chuẩn bị dữ liệu ngoài và lưu hồ sơ.
+- **Trưởng phòng xem việc nhân viên**: dựa trên Cơ Cấu Tổ Chức, trưởng phòng (đệ quy nhiều cấp) XEM được
+  task (Công Việc) và cây công việc Vận Hành của nhân viên mình quản lý — chỉ xem, không thao tác thay.
+- **Fix bố cục**: 3 dòng `</div>` thừa sót lại từ đợt viết lại `#budgetSection` (Ngân Sách) khiến mọi
+  module sau Ngân Sách trong file (Vận Hành, Nhân Sự...) hiển thị lệch ra ngoài khung sidebar.
+
+**Deploy-impact:** CÓ đổi `sql/schema.sql` (bảng `dbo.OperationWorkItems` mới, script tự bọc
+`IF OBJECT_ID(...) IS NULL` nên chạy lại an toàn). Không thêm biến môi trường mới, không thêm dependency
+mới. `operationExecutionPeriods` và `user.managerUsername` đều là field/collection JSON tự do, không cần
+đổi thêm gì ở schema.
+
+Test: `tests/test-operation-store-lifecycle.js` (31/31), `tests/test-org-chart-manager-visibility.js`
+(14/14), `tests/test-orgchart-excel-import.js` (8/8) — toàn bộ 44 file `tests/test-*.js` hiện có đã chạy
+lại, không có regression (2 kịch bản thất bại sẵn có do sandbox không kết nối được SQL Server thật, không
+liên quan thay đổi).
+
+## Trước đó (PR #228–#229) — chưa ghi chi tiết đầy đủ
+
+Giai đoạn giữa PR #226 (v1.100.0) và PR #230 (v2.5) gồm 2 đợt vá lỗi bảo mật/chất lượng lớn — **PR #228**
+"Audit bảo mật: vá 10 lỗi Nghiêm trọng/Cao/Trung bình + cluster-safe hoá auth + quy tắc version mới" (đổi
+sang định dạng version `MAJOR.MINOR`, reset về `2.0`) và **PR #229** "Giai đoạn 3: vá 16 lỗi mức Thấp (rà
+soát 3 agent song song)". Chưa liệt kê chi tiết từng lỗi ở đây do khối lượng lớn — tra cứu trực tiếp lịch
+sử commit/PR trên GitHub (nhánh `main`) khi cần đối chiếu cụ thể.
+
+## Trước đó (PR #226, nhánh `claude/chao-ban-oo5ijl`)
 
 Theo yêu cầu: tạo module top-level mới **"Vận Hành"** gồm 3 tab độc lập, và **xoá hoàn toàn "Đầu Tư"**
 khỏi module "Tổng Hợp" (kể cả dữ liệu trong DB thật, không chỉ ẩn giao diện):
