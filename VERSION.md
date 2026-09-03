@@ -1,10 +1,94 @@
 # Phiên bản hiện tại
 
-**5.7** — đã merge vào `main` (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge
+**5.8** — đã merge vào `main` (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge
 góc màn hình + `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần
 kiểu `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
 
-## Cập nhật gần nhất — CSP hạ tầng dùng chung, đợt C: `#viewDocModal` dùng chung
+## Cập nhật gần nhất — CSP hạ tầng dùng chung, đợt B: `#genericConfirmModal` + fix bug thiếu `bindCspDelegation`
+
+Tiếp tục đợt C (`#viewDocModal`, xem mục "Trước đó" ngay bên dưới) — đợt này chuyển **`#genericConfirmModal`**,
+modal xác nhận Đồng Ý/Hủy DÙNG CHUNG cho **~53 lời gọi `showConfirmModal()`** trải khắp gần hết hệ thống
+(Văn Bản Trình, Hợp Đồng, Văn Phòng, Ngân Sách, Giá IT, Giấy Phép, VPP, Đào Tạo, Đồng Phục, Biên Bản Họp,
+Nhân Sự...). **Đây KHÔNG chỉ là CSP hardening thuần — đợt này còn phát hiện và fix 1 lỗ hổng bind CÓ THẬT
+(xem mục riêng bên dưới), dù may mắn chưa từng ảnh hưởng tới bất kỳ luồng nào đã lên production.**
+
+- **9 điểm** `onclick`/`onchange` chuyển sang `data-op*`:
+  - **Định nghĩa tĩnh modal** (3 điểm): nút "✕" và nút "Hủy" ở chân modal (cả 2 gọi `closeGenericConfirmModal`),
+    nút `#genericConfirmOkBtn` (`runConfirmedAction`).
+  - **Luồng Trợ Lý/Thư Ký xử lý tờ trình** (6 điểm, DUY NHẤT trong ~53 lời gọi `showConfirmModal()` còn tự
+    soạn `bodyHTML` có control tương tác bên trong — xem khảo sát bên dưới): `openTroLyThuKyBoSungChoice()`
+    (2 nút lựa chọn "Đồng Ý — Thay Thế Toàn Bộ Tờ Trình" / "Hủy — Gửi Bình Luận Bổ Sung", cả 2 đều
+    `onclick="closeGenericConfirmModal(); <hàm khác>(...)"` — chuyển `data-op-seq` vì mọi tham số đều thành
+    literal sau khi template string render), `openTroLyThuKyProposeFileForm()` (nút "Gửi Đề Xuất Cho Người
+    Trình" → `confirmTroLyThuKyProposeFile`), `openResolveFileProposalModal()` (nút "Xem" tệp đề xuất →
+    `viewFileProposalAttachment`; 2 nút "Tôi Đồng Ý"/"Tôi Không Đồng Ý" → `confirmResolveFileProposal(id, true/
+    false)` — tham số boolean thứ 2 KHÔNG truyền thẳng qua `data-argN` được (chuỗi `"false"` vẫn truthy trong
+    JS, xem `cspCoerceArg()`), tách 2 hàm wrapper `confirmResolveFileProposalAgree(id)`/
+    `confirmResolveFileProposalDisagree(id)` cùng khuôn `untogglePrAggEntry()` đã dùng ở đợt Báo Cáo Định Kỳ).
+- **2 hàm wrapper mới**: `confirmResolveFileProposalAgree(subId)`, `confirmResolveFileProposalDisagree(subId)`
+  (lý do ở trên).
+- **1 gốc `bindCspDelegation` MỚI**: `genericConfirmModal` (thêm ngay sau khối bind của đợt C).
+
+**FIX BUG THẬT — `#genericConfirmModal` CHƯA TỪNG có `bindCspDelegation()`**: rà exhaustive TOÀN BỘ ~53 lời
+gọi `showConfirmModal()` còn lại trong hệ thống (kể cả `bodyHTML` có template literal LỒNG NHAU, dùng script
+Python tự viết để tách đúng ranh giới backtick lồng thay vì regex đơn giản dễ cắt nhầm) — xác nhận: **KHÔNG
+module nào khác (Submission/Contract/Office/Budget/IT Price/License/VPP/Training/Uniform/Meeting/HR ở các đợt
+module 1-23 trước đây) từng đặt `data-op`/`onclick`/`onchange` bên trong `bodyHTML` tự soạn của riêng mình** —
+mọi luồng khác chỉ dùng `bodyHTML` thuần văn bản (không control tương tác nào) + 2 nút Đồng Ý/Hủy MẶC ĐỊNH của
+modal, hành động thật nằm trong callback JS `onConfirm` (không phải attribute HTML nên không cần `data-op`,
+không bị ảnh hưởng bởi thiếu bind). **Kết luận: lỗ hổng bind là CÓ THẬT (root chưa từng được
+`bindCspDelegation()` phủ tới suốt nhiều đợt module trước), nhưng KHÔNG có nạn nhân thực tế nào trên
+production** — nạn nhân DUY NHẤT tồn tại là chính 6 điểm `data-op`/`data-op-seq` vừa convert ở luồng Trợ
+Lý/Thư Ký TRONG đợt này. Xác minh bằng demo Playwright TRƯỚC/SAU thật (không chỉ suy luận từ code):
+tạm comment `bindCspDelegation('genericConfirmModal')`, chạy lại đúng luồng Trợ Lý/Thư Ký — bấm nút "Đồng Ý —
+Thay Thế Toàn Bộ Tờ Trình" **không phản ứng gì** (modal đứng yên ở màn chọn cũ, tiêu đề không đổi); khôi phục
+dòng bind, chạy lại — bấm đúng nút đó **chuyển đúng sang form đề xuất tệp thay thế** (tiêu đề đổi thành "📤
+Thay Thế Toàn Bộ Tờ Trình"). Bằng chứng rõ ràng lỗi tồn tại thật và đã được fix đúng bằng 1 dòng bind.
+
+**Xác nhận không ảnh hưởng** — 2 lớp kiểm tra độc lập trước khi merge:
+- Integrity check tĩnh: 3 script `<script>` đều `node --check` sạch; đếm `<div>` mở/đóng giữ nguyên
+  `2653/2648`; rà `id=` trùng khớp đúng baseline đã biết trước đó (`systemUsersDatalist`, `bsTitle`, `bsDept`,
+  `bsFile`, `bsType`, `bsReason`, `bsAmount`, `bsSupplier`, `bsNote`, `bsStoreName`, `Y`,
+  `${base}`/`${o.id}`/`${w.id}`/`${f.id}` — toàn bộ pre-existing từ các đợt trước, không phải lỗi mới do đợt
+  này gây ra).
+- Demo Playwright thật (SQL Server + server local + đăng nhập UI thật) qua **3 luồng đại diện khác nhau**,
+  dùng `withLockedAppDataValue('users', ...)` + `insertRecord()` (`lib/recordStore.js` — `submissions`/
+  `licenses` đã migrate sang `dbo.Records`, không còn ở AppData) tạo 3 tài khoản demo tạm không-admin
+  (`demoCspBReq`, `demoCspBTroLy`, `demoCspBApp`, đều `totpEnabled:false`) + 1 tờ trình snapshot sẵn ở đúng
+  bước lớp Trợ Lý/Thư Ký + 1 giấy phép APPROVED — xoá lại toàn bộ ngay sau demo:
+  - **Luồng đã dùng `data-op` sẵn trong `bodyHTML` (bug fix)**: luồng Trợ Lý/Thư Ký đầy đủ — Bổ Sung → chọn
+    Thay Thế Toàn Bộ → tải tệp thay thế thật + ghi chú → Gửi Đề Xuất (nút `data-op="confirmTroLyThuKyProposeFile"`)
+    → alert thành công → đăng nhập lại bằng người trình → mở "📄 Xác Nhận Thay Thế" → nút "👁️ Xem" (`data-op=
+    "viewFileProposalAttachment"`) mở đúng `#viewDocModal` → nhập lý do → "Tôi Đồng Ý" (`data-op=
+    "confirmResolveFileProposalAgree"`, wrapper mới) → alert thành công, hồ sơ quay lại PENDING bước 1 đúng
+    quy trình `RESOLVE_FILE_PROPOSAL`.
+  - **Luồng `bodyHTML` PLAIN (không control tương tác — không bị ảnh hưởng bởi thiếu bind, chỉ xác nhận vẫn
+    chạy đúng sau khi thêm bind)**: Giấy Phép "🔄 Đánh Dấu Đang Gia Hạn" — mở modal xác nhận văn bản thuần;
+    bấm "✕" (định nghĩa tĩnh, `data-op="closeGenericConfirmModal"`) → đóng, KHÔNG đổi trạng thái; mở lại, bấm
+    "Đồng Ý" (`#genericConfirmOkBtn`, `data-op="runConfirmedAction"`) → trạng thái đổi đúng thành "🔵 Đang gia
+    hạn".
+  - 0 lỗi JS console ngoài các lỗi mạng nền không liên quan (proxy egress chặn Google Fonts/reCAPTCHA khi
+    chạy headless, không phải lỗi ứng dụng) trong toàn bộ demo trên.
+- Chạy lại toàn bộ 46 file test hồi quy (`tests/test-*.js`) — 46/46 file OK, 0 FAIL trong mọi kịch bản; đúng
+  2 file known-flaky quen thuộc (`test-audit-fixes-batch1.js`/`test-audit-round2-cluster1.js` — hoàn tất toàn
+  bộ kịch bản (14/14 và 20/20) nhưng tiến trình Node không tự thoát ngay, hạ tầng test có sẵn từ trước, không
+  liên quan thay đổi lần này) đều được xác nhận pass qua log kết thúc đúng ngay dòng kết quả cuối.
+
+**Deploy-impact:** KHÔNG đổi `sql/schema.sql`, KHÔNG thêm biến môi trường mới, KHÔNG thêm `dependencies`
+mới — toàn bộ thay đổi nằm trong `public/index.html` (thuần client JS/HTML), deploy an toàn chỉ với copy
+code + `pm2 restart`, không cần thao tác 1 lần nào khác.
+
+**Còn lại:** ước tính còn khoảng **64-65 điểm** (giảm từ ~74 sau đợt này), chia thành các đợt riêng sẽ làm
+sau, rủi ro tăng dần theo thứ tự dự kiến:
+- **D** — Dashboard/"Approval Hub" (`buildDashboardCardsHTML()`/`#approvalHubSection`).
+- **F** — `#profileModal` (~18 điểm).
+- **E** — Office module (`buildActionCell()`/dropdown "Khác ▾" dùng chung nhiều module, ~26 điểm).
+- **A** — rủi ro cao nhất, để dành sau cùng — `buildActionCell()`/`paginateList()`+
+  `buildPaginationBoxHTML()`/dashboard-card (hạ tầng lõi dùng ở gần như mọi module).
+
+Chỉ khi hết sạch toàn bộ mới gỡ `'unsafe-inline'` khỏi CSP header (`lib/securityHeaders.js`).
+
+## Trước đó — CSP hạ tầng dùng chung, đợt C: `#viewDocModal` dùng chung
 
 Tiếp tục đợt G (login wall/must-change-password/TOTP setup wall, xem mục "Trước đó" ngay bên dưới) — đợt
 này chuyển **`#viewDocModal`**, khung xem tệp/quy trình "an toàn" (Frame Protected Viewer) dùng CHUNG cho
