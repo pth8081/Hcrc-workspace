@@ -1,11 +1,105 @@
 # Phiên bản hiện tại
 
-**6.1** — đã merge vào `main` (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge
+**6.2** — đã merge vào `main` (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge
 góc màn hình + `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần
 kiểu `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. Đúng theo quy tắc MINOR chạy 0-9 trong
-`CLAUDE.md`: sau `6.0` tăng MINOR lên `6.1`.
+`CLAUDE.md`: sau `6.1` tăng MINOR lên `6.2`.
 
-## Cập nhật gần nhất — CSP module Office - đợt E: `#officeSection` + `#officeProcessModal` + `#signedUploadModal`
+## Cập nhật gần nhất — CSP hạ tầng dùng chung, đợt A (CUỐI CÙNG): `buildActionCell()`/pagination/`buildDashboardCardsHTML()` — HOÀN TẤT TOÀN BỘ DỰ ÁN CSP
+
+Đợt cuối cùng của toàn bộ dự án dọn `unsafe-inline`. Tiếp tục đợt E (`#officeSection`/`#officeProcessModal`/
+`#signedUploadModal`, xem mục "Trước đó" ngay bên dưới) — đợt này chuyển 7 hàm **hạ tầng lõi dùng chung**
+(không phải 1 module nghiệp vụ riêng) được gọi từ ~18-20 module khác nhau trong toàn hệ thống:
+`getListPageState()`/`goToListPage()`/`changeListPageSize()`/`paginateList()`/`buildPaginationBoxHTML()`/
+`buildActionCell()`/`buildDashboardCardsHTML()` — rủi ro cao nhất toàn dự án vì sai sót ở đây có thể làm im
+lặng nút "Thao Tác" ở gần như MỌI module.
+
+- **8 điểm** `onclick`/`onchange` chuyển sang `data-op*` (đúng ước lượng ban đầu):
+  - `buildDashboardCardsHTML()` (1 điểm): `onclick="${onClickFnName}('${c.key}')"` → `data-op="${onClickFnName}"
+    data-arg0="${c.key}"` (tên hàm điều phối nội suy động, `c.key` luôn là chuỗi enum tĩnh — khớp đúng pattern
+    đã dùng thành công ở đợt D/E).
+  - `paginateList()` (5 điểm, trong khối "thanh phân trang" `«‹1 2 3›»`): 5 nút `onclick="goToListPage('${moduleKey}',
+    N, '${renderFnName}')"` → `data-op="goToListPage" data-arg0="${moduleKey}" data-arg1="N" data-arg2="${renderFnName}"`
+    (mọi tham số đều literal xác định lúc build chuỗi HTML).
+  - `buildPaginationBoxHTML()` (1 điểm): `<select onchange="changeListPageSize('${moduleKey}', this.value, '${renderFnName}')">`
+    → `data-op-change="changeListPageSize" data-arg0="${moduleKey}" data-arg-value="1" data-arg2="${renderFnName}"`
+    (slot `data-arg-value` có sẵn thay `this.value`, không cần wrapper).
+  - `buildActionCell()` (1 điểm — dropdown "Khác ▾"): `onchange="if(this.value){ dispatcherFn(id, this.value); }
+    this.selectedIndex=0;"` — biểu thức `if` + 2 lệnh, KHÔNG phải 1 lời gọi hàm đơn nên **PHẢI viết 1 wrapper
+    mới**: `handleActionCellDispatch(selectEl, dispatcherFnName, id)` (gọi `window[dispatcherFnName](id,
+    selectEl.value)` nếu có chọn, rồi tự `selectEl.selectedIndex = 0`), bind qua `data-op-change="handleActionCellDispatch"
+    data-arg-el="0" data-arg1="${dispatcherFnName}" data-arg2="${id}"` — `selectEl` ở vị trí tham số 0 đúng thứ tự
+    khai báo hàm (cùng quy ước `data-arg-el` đã dùng ở `updateMinutesDirectiveFieldMultiSelect()`/`onVppHeadcountInput()`
+    từ các đợt trước).
+- **1 wrapper mới duy nhất**: `handleActionCellDispatch()` — không phát sinh điểm phức tạp nào khác ngoài đã
+  liệt kê ở trên (rà lại toàn bộ 3 hàm `buildActionCell`/`paginateList`/`buildDashboardCardsHTML` xác nhận không
+  còn `this.checked` hay biểu thức runtime nào khác).
+- **Không thêm `bindCspDelegation` mới nào** — 7 hàm này chỉ SINH ra chuỗi HTML được `innerHTML` vào các gốc
+  (`docSection`, `submissionSection`, `taskSection`, `contractSection`, `meetingSection`, `carSection`,
+  `licenseSection`, `vppSection`... 18+ gốc) đã được `bindCspDelegation()` phủ tới từ các đợt 1-23/B-I trước đó
+  — xác nhận bằng demo thực tế qua 8 module khác nhau bên dưới, tất cả nút/dropdown mới convert đều hoạt động
+  đúng mà không cần gắn thêm listener nào.
+- **Không đụng** cách các module GỌI `buildActionCell()`/`paginateList()`/`buildDashboardCardsHTML()` (chỉ sửa
+  BÊN TRONG định nghĩa 7 hàm) — không đụng `#genericConfirmModal`/`#viewDocModal`/Dashboard/Approval Hub/
+  `profileModal`/Office (đã xong ở các đợt trước).
+
+**Xác nhận không ảnh hưởng** — 2 lớp kiểm tra độc lập trước khi merge:
+- Integrity check tĩnh: script `<script>` chính `node --check` sạch; đếm `<div>` mở/đóng giữ nguyên
+  `2653/2648`; rà `id=` trùng khớp đúng baseline đã biết trước đó (`bsDept`/`bsTitle`/`bsReason`/`bsType`/
+  `bsFile`/`bsSupplier`/`bsNote`/`bsStoreName`/`bsAmount`/`systemUsersDatalist`/`Y`/`${base}` không lỗi;
+  `${o.id}`/`${w.id}`/`${f.id}` bình thường, toàn bộ pre-existing từ các đợt trước) — **grep toàn file xác nhận
+  0 (KHÔNG) `onclick=`/`onchange=`/`oninput=`/`onsubmit=` còn sót trong toàn bộ `public/index.html`** (13 chuỗi
+  còn khớp grep đều nằm trong dòng comment `//` mô tả lịch sử, không phải attribute HTML sống) — **đây là mục
+  tiêu cuối cùng của TOÀN BỘ dự án CSP, đã đạt 100%**.
+- Demo Playwright thật (SQL Server + server local + đăng nhập UI thật, KHÔNG dùng tài khoản demo admin+TOTP) —
+  dùng tài khoản đã seed sẵn `sep_duyet` (Ban Giám Đốc, **KHÔNG phải admin, `totpEnabled:false`**, đã có sẵn
+  quyền duyệt phẳng rộng — `meetingApprove`/`contractApprove`/`paymentManage`/`officeBuy`/`officeFix` — cùng
+  approver mặc định `deptWorkflows['Phòng IT']`/`submissionDeptWorkflows['Phòng IT']`/`carDeptWorkflows['Phòng
+  IT']` đã seed từ `defaults.js`); cấp tạm thêm 7 quyền phẳng (`taskView`/`taskEdit`/`taskDelete`/`taskDownload`/
+  `licenseCreate`/`licenseApprove`/`licenseView`) + 1 cấu hình `vppDeptWorkflows['Phòng IT']` (workflow 1 bước,
+  approver `sep_duyet`) — cả 2 thay đổi là THUẦN CỘNG THÊM (không ghi đè field nào có sẵn), gỡ lại đúng các key
+  đã thêm ngay sau khi test xong; dữ liệu demo (12 tài liệu + 12 giấy phép + 3 tờ trình + 3 đăng ký xe + 3 lịch
+  họp + 2 công việc + 3 hợp đồng + 3 đăng ký VPP, tổng 41 bản ghi) ghi trực tiếp qua `lib/recordStore.js`/
+  `lib/taskStore.js` (`insertRecord()`/`insertTask()`), KHÔNG qua API admin-only, KHÔNG đăng nhập bằng bất kỳ
+  tài khoản admin nào — test đầy đủ qua UI thật (Playwright, Chromium headless) rồi dọn sạch 100% dữ liệu +
+  cấu hình demo ngay sau khi xong (`deleteRecordById()`/`deleteTaskById()`, xoá file placeholder đã tải lên):
+  - **8 module** demo qua: **Tài Liệu (Doc)**, **Giấy Phép (License)**, **Phòng Họp (Meeting)**, **Công Việc
+    (Task)**, **Văn Bản Trình (Submission)**, **Hợp Đồng (Contract)**, **Đăng Ký Xe (Car)**, **Văn Phòng Phẩm —
+    Đăng Ký (VPP Registration)**.
+  - Mỗi module: xác nhận nút "Thao Tác" chính (primary) hoạt động đúng — Doc/License/Meeting/Task/Contract
+    (dropdown) đều xác nhận network request THẬT gửi đúng tới server (`POST /api/workflow/docs/:id/approve`,
+    `POST /api/records/licenses/:id/approve`, `POST /api/meetings/:id/approve`, `POST /api/records/tasks/:id/accept`,
+    `POST /api/workflow/contracts/:id/approve`... đều 200), Submission/Car/VPP xác nhận primary mở đúng modal xử
+    lý (`#submissionProcessModal`/`#carProcessModal`/`#vppRegModal`).
+  - Dropdown "Khác ▾" test ở TỪNG module trên (License/Meeting/Contract/Doc/Task/Car): chọn 1 mục phụ (reject/
+    Hủy/Duyệt/detail/viewSlip) → xác nhận thực thi đúng hàm điều phối module (qua `handleActionCellDispatch()`
+    mới) → dropdown tự trả về `selectedIndex=0` NGAY sau khi dispatch (đúng hành vi cũ), kể cả khi hành động sau
+    đó làm re-render lại cả dòng (Meeting Hủy/Contract Duyệt xoá luôn dropdown khỏi dòng do đổi trạng thái —
+    xác nhận bằng chính việc dòng cũ biến mất đúng lúc, tương đương reset).
+  - Pagination test ở **2 danh sách khác nhau** (Doc 12 bản ghi demo, License 12 bản ghi demo): `changeListPageSize`
+    đổi đúng 5/10/20 dòng-mỗi-trang cập nhật lại số trang tổng; `goToListPage` chuyển đúng trang 2/3 và trang
+    cuối, nút "›" tự `disabled` đúng khi chỉ còn 1 trang.
+  - Dashboard card (`buildDashboardCardsHTML`, module Doc): bấm 1 thẻ ("Chờ Duyệt: Tài Liệu Mới") lọc đúng danh
+    sách qua `data-op` mới, không phát sinh lỗi console.
+  - **0 lỗi `CSP dispatch: không tìm thấy hàm`** trong console suốt toàn bộ demo (35/35 kiểm tra Playwright PASS
+    sau khi sửa vài lỗi TÍNH SẴN trong kịch bản test — không phải lỗi sản phẩm — như modal xác nhận
+    `#genericConfirmModal` cần bấm "Đồng Ý" mới bắn API, hay dữ liệu demo phân trang rơi sang trang 2 do sort
+    mới-nhất-trước).
+- Chạy lại toàn bộ 46 file test hồi quy (`tests/test-*.js`) — xem chi tiết ở khối kết quả cuối báo cáo hội
+  thoại (46/46 file OK, 0 FAIL, 2 file known-flaky quen thuộc chạy riêng xác nhận PASS qua log).
+
+**Deploy-impact:** KHÔNG đổi `sql/schema.sql`, KHÔNG thêm biến môi trường mới, KHÔNG thêm `dependencies`
+mới — toàn bộ thay đổi nằm trong `public/index.html` (thuần client JS/HTML), deploy an toàn chỉ với copy
+code + `pm2 restart`, không cần thao tác 1 lần nào khác. **Sau đợt này, TOÀN BỘ dự án chuyển đổi CSP đã HOÀN
+TẤT 100%** — bước cuối cùng còn lại (gỡ `'unsafe-inline'` khỏi `lib/securityHeaders.js`) là 1 đợt RIÊNG, có
+rủi ro production cao nhất, do người điều phối thực hiện sau, kèm 1 vòng full regression + demo toàn hệ thống
+lần cuối trước khi bật CSP nghiêm ngặt thật sự.
+
+**Còn lại:** RỖNG — đã hoàn tất 100% việc chuyển đổi `onclick`/`onchange`/`oninput`/`onsubmit` inline sang
+`data-op*` trong toàn bộ `public/index.html`, sẵn sàng gỡ `'unsafe-inline'` khỏi CSP header
+(`lib/securityHeaders.js`) ở 1 đợt riêng do người điều phối thực hiện.
+
+## Trước đó — CSP module Office - đợt E: `#officeSection` + `#officeProcessModal` + `#signedUploadModal`
 
 Tiếp tục đợt F (`#profileModal`, xem mục "Trước đó" ngay bên dưới) — đợt này **KHÔNG phải hạ tầng dùng
 chung** mà là **1 module nghiệp vụ nguyên vẹn chưa từng convert** trong 23 đợt module trước: "Tổng Hợp"
@@ -87,12 +181,6 @@ TỪNG** được `bindCspDelegation()` phủ tới.
 **Deploy-impact:** KHÔNG đổi `sql/schema.sql`, KHÔNG thêm biến môi trường mới, KHÔNG thêm `dependencies`
 mới — toàn bộ thay đổi nằm trong `public/index.html` (thuần client JS/HTML), deploy an toàn chỉ với copy
 code + `pm2 restart`, không cần thao tác 1 lần nào khác.
-
-**Còn lại:** ước tính còn khoảng **11-12 điểm** (giảm từ ~37-38 sau đợt này), CHỈ CÒN ĐÚNG 1 ĐỢT:
-- **A** — rủi ro cao nhất, để dành sau cùng — `buildActionCell()`/`paginateList()`+
-  `buildPaginationBoxHTML()`/`buildDashboardCardsHTML()` (hạ tầng lõi dùng ở gần như mọi module). Sau khi
-  hoàn tất đợt A, tổng số điểm còn lại sẽ về **0**, sẵn sàng gỡ `'unsafe-inline'` khỏi CSP header
-  (`lib/securityHeaders.js`).
 
 ## Trước đó — CSP hạ tầng dùng chung, đợt F: `#profileModal` (Hồ Sơ Cá Nhân)
 
