@@ -1,10 +1,99 @@
 # Phiên bản hiện tại
 
-**5.9** — đã merge vào `main` (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge
+**6.0** — đã merge vào `main` (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge
 góc màn hình + `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần
-kiểu `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+kiểu `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. Đúng theo quy tắc MINOR chạy 0-9 trong
+`CLAUDE.md`: sau `5.9` tăng MAJOR lên `6.0`, reset MINOR về 0.
 
-## Cập nhật gần nhất — CSP hạ tầng dùng chung, đợt D: Dashboard + Approval Hub, tái cấu trúc `action.onclick` → `action.fn`/`action.args`
+## Cập nhật gần nhất — CSP hạ tầng dùng chung, đợt F: `#profileModal` (Hồ Sơ Cá Nhân)
+
+Tiếp tục đợt D (`#dashboardSection`/`#dashboardCustomizeModal`/`#approvalHubSection`, xem mục "Trước đó"
+ngay bên dưới) — đợt này chuyển gốc **`#profileModal`** (modal "⚙️ Cá Nhân Hóa & Cập Nhật Thông Tin" — đổi
+mật khẩu/mã PIN phê duyệt/vân tay-Face ID (WebAuthn)/xác thực 2 lớp (TOTP)/cài đặt PWA), gốc này **CHƯA
+TỪNG** được `bindCspDelegation()` phủ tới dù nút mở modal ở `#userHeader` (`data-op="openProfileModal"`) đã
+convert từ đợt trước đó.
+
+- **17 điểm** `onclick`/`onsubmit` chuyển sang `data-op*` (ước lượng ban đầu ~18, rà thực tế grep lại ra
+  17 — không có điểm nào dùng `this.checked`/biểu thức runtime phức tạp trong modal này nên không cần viết
+  wrapper mới):
+  - **Khung modal + chuyển tab** (6 điểm): nút "✕" đóng modal, 5 nút chuyển sub-tab
+    (`setProfileSubTab('INFO'|'PASSWORD'|'PIN'|'WEBAUTHN'|'TOTP')`, tham số literal qua `data-arg0`).
+  - **Tab Thông Tin** (2 điểm): `<form data-op-submit="savePersonalInfo">` (hàm tự gọi `e.preventDefault()`
+    sẵn nên không cần `data-op-prevent-default`) + nút "Hủy" (`closeProfileModal`).
+  - **Tab Đổi Mật Khẩu** (2 điểm): `<form data-op-submit="changeMyPassword">` (cũng tự
+    `preventDefault()` sẵn) + nút "Hủy" (`closeProfileModal`).
+  - **Tab Mã PIN** (1 điểm): nút "🔑 Cập Nhật Mã PIN" (`changeMyApprovalPin`).
+  - **Tab Vân Tay/Face ID (WebAuthn)** (2 điểm): nút "➕ Đăng Ký Thiết Bị Này" (`registerBiometricDevice`,
+    tĩnh) cộng **1 sink động** trong `renderWebauthnDeviceList()` (`#pfWebauthnListWrap`) — nút "🗑️ Gỡ" mỗi
+    thiết bị đổi từ `onclick="deleteBiometricDevice('${c.id}')"` sang `data-op="deleteBiometricDevice"
+    data-arg0="${c.id}"`, cùng khuôn `deleteAdminBiometricDevice()` ở màn Sửa Người Dùng đã convert từ đợt
+    trước (không phải điểm mới trong đợt này, chỉ đối chiếu để xác nhận đúng khuôn).
+  - **Tab Xác Thực 2 Lớp (TOTP)** (3 điểm): "Chép" khoá thủ công (`copyPfTotpRevealKey`, chỉ clipboard,
+    không gọi API), "Hiện Mã QR" cho máy Authenticator thứ 2 (`revealTotpSecretForNewDevice`, xác nhận bằng
+    mật khẩu — KHÔNG liên quan luồng verify OTP), "🗑️ Gỡ Xác Thực 2 Lớp" (`removeMyTotp`, xác nhận bằng mật
+    khẩu — cũng KHÔNG verify OTP).
+  - **Khối Cài Đặt Ứng Dụng (PWA)** (1 điểm): nút "⬇️ Cài Đặt Ngay" (`triggerPwaInstall`).
+- **1 gốc `bindCspDelegation` MỚI**: `profileModal` (thêm ngay sau khối bind của đợt D,
+  `bindCspDelegation('approvalHubSection')`).
+- **Không đụng** Office module (`buildActionCell()` dùng chung, để dành đợt E) hay
+  `buildActionCell()`/`paginateList()`/`buildDashboardCardsHTML()` (để dành đợt A cuối cùng).
+
+**Lưu ý bảo mật khi convert**: modal này liên quan trực tiếp tới bảo mật tài khoản (đổi mật khẩu/PIN/vân
+tay/TOTP) — chỉ đổi attribute HTML sang `data-op`, **không sửa bất kỳ dòng logic nghiệp vụ/validate/luồng
+xác thực nào** bên trong các hàm JS đang được gọi (`changeMyPassword`/`changeMyApprovalPin`/
+`registerBiometricDevice`/`deleteBiometricDevice`/`revealTotpSecretForNewDevice`/`removeMyTotp`... giữ
+nguyên 100% thân hàm).
+
+**Xác nhận không ảnh hưởng** — 2 lớp kiểm tra độc lập trước khi merge:
+- Integrity check tĩnh: script `<script>` chính `node --check` sạch; đếm `<div>` mở/đóng giữ nguyên
+  `2653/2648`; rà `id=` trùng khớp đúng baseline đã biết trước đó (`bsDept`/`bsTitle`/`bsReason`/`bsType`/
+  `bsFile`/`bsSupplier`/`bsNote`/`bsStoreName`/`bsAmount`/`systemUsersDatalist`/`Y`/`${base}` không lỗi;
+  `${o.id}`/`${w.id}`/`${f.id}` bình thường, toàn bộ pre-existing từ các đợt trước); grep xác nhận 0
+  `onclick=`/`onsubmit=` còn sót trong toàn bộ `#profileModal` (dòng ~7676-7830) và tại sink động
+  `renderWebauthnDeviceList()`.
+- Demo Playwright thật (SQL Server + server local + đăng nhập UI thật) — tạo 1 tài khoản demo tạm
+  `demo_profilef` (**KHÔNG phải admin, `totpEnabled:false`** — tránh đúng bug 401 TOTP thật chưa fix, xem
+  cảnh báo dưới đây), `perms.approverAuthLevel:'PIN'` để tab Mã PIN hiện tự nhiên; dùng CDP virtual
+  WebAuthn authenticator (`WebAuthn.addVirtualAuthenticator`, đặt tạm `WEBAUTHN_RP_ID=localhost` trong
+  `.env` local — chỉ cấu hình máy demo, không commit, revert lại ngay sau demo) để test THẬT cả luồng đăng
+  ký + xoá thiết bị vân tay, không chỉ giả lập lỗi môi trường:
+  - Mở modal qua `data-op="openProfileModal"`, chuyển đủ cả 4 sub-tab (PIN/WEBAUTHN/TOTP force-hiện qua
+    console để kiểm tra wiring/PWA luôn hiển thị sẵn dưới đáy modal).
+  - Lưu thông tin cá nhân thật (`PATCH /api/auth/me` → 200), đổi mật khẩu thật (`PATCH /api/auth/me` → 200,
+    xác nhận qua alert "Đổi mật khẩu thành công" + modal tự đóng đúng như code gốc), đặt mã PIN thật
+    (`POST /api/auth/change-pin` → 200).
+  - Đăng ký thiết bị vân tay THẬT qua virtual authenticator (`POST .../register-options` → 200,
+    `POST .../register-verify` → 200), xác nhận `#pfWebauthnListWrap` hiện đúng thiết bị vừa đăng ký, bấm
+    nút "🗑️ Gỡ" động (`data-op="deleteBiometricDevice" data-arg0` mới convert) → `DELETE
+    .../credentials/:id` → 200, danh sách về lại rỗng.
+  - **Tab TOTP: tuyệt đối không đụng bug 401 đã biết** — vì `#pfTotpSection` chỉ hiện thật cho admin đã có
+    `totpEnabled:true` (tức là đã "setup xong"), test đợt này CHỦ ĐỘNG force-hiện tab qua console (không đi
+    qua luồng thiết lập/đăng nhập TOTP thật) trên chính tài khoản demo không-admin, rồi bấm "Hiện Mã QR"
+    (nhận đúng lỗi nghiệp vụ "Tài khoản chưa thiết lập xác thực 2 lớp" — xác nhận wiring `data-op` gọi đúng
+    hàm/đúng API, không phải lỗi CSP) và "Chép" (clipboard đọc lại đúng giá trị vừa chép) — **không hoàn tất
+    verify OTP thật, không đăng nhập lại bằng tài khoản admin+TOTP nào**.
+  - 0 lỗi JS console liên quan CSP dispatch (`CSP dispatch: không tìm thấy hàm`) trong toàn bộ demo; dọn demo
+    xong: xoá tài khoản `demo_profilef`, revert `.env` về đúng bản gốc.
+- Chạy lại toàn bộ 46 file test hồi quy (`tests/test-*.js`) — 46/46 file OK, 0 FAIL trong mọi kịch bản; đúng
+  2 file known-flaky quen thuộc (`test-audit-fixes-batch1.js`/`test-audit-round2-cluster1.js` — hoàn tất
+  toàn bộ kịch bản 14/14 và 20/20 nhưng tiến trình Node không tự thoát ngay) đều được chạy riêng với
+  timeout 180s và xác nhận PASS qua log kết thúc đúng ngay dòng kết quả cuối.
+
+**Deploy-impact:** KHÔNG đổi `sql/schema.sql`, KHÔNG thêm biến môi trường mới, KHÔNG thêm `dependencies`
+mới — toàn bộ thay đổi nằm trong `public/index.html` (thuần client JS/HTML), deploy an toàn chỉ với copy
+code + `pm2 restart`, không cần thao tác 1 lần nào khác. (Biến `WEBAUTHN_RP_ID` chỉ đặt tạm trên máy demo để
+test, không phải thay đổi cần deploy — môi trường thật đặt biến này theo domain thật riêng khi cần bật tính
+năng vân tay, không liên quan đợt này.)
+
+**Còn lại:** ước tính còn khoảng **37-38 điểm**, chia thành các đợt riêng sẽ làm sau, rủi ro tăng dần theo
+thứ tự dự kiến:
+- **E** — Office module (`buildActionCell()`/dropdown "Khác ▾" dùng chung nhiều module, ~26 điểm).
+- **A** — rủi ro cao nhất, để dành sau cùng — `buildActionCell()`/`paginateList()`+
+  `buildPaginationBoxHTML()`/`buildDashboardCardsHTML()` (hạ tầng lõi dùng ở gần như mọi module).
+
+Chỉ khi hết sạch toàn bộ mới gỡ `'unsafe-inline'` khỏi CSP header (`lib/securityHeaders.js`).
+
+## Trước đó — CSP hạ tầng dùng chung, đợt D: Dashboard + Approval Hub, tái cấu trúc `action.onclick` → `action.fn`/`action.args`
 
 Tiếp tục đợt B (`#genericConfirmModal`, xem mục "Trước đó" ngay bên dưới) — đợt này chuyển 3 gốc **CHƯA
 TỪNG** được `bindCspDelegation()` phủ tới: **`#dashboardSection`**, **`#dashboardCustomizeModal`**,
