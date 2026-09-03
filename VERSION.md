@@ -1,10 +1,94 @@
 # Phiên bản hiện tại
 
-**5.6** — đã merge vào `main` (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge
+**5.7** — đã merge vào `main` (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge
 góc màn hình + `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần
 kiểu `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
 
-## Cập nhật gần nhất — CSP hạ tầng dùng chung, đợt G: login wall + must-change-password + TOTP setup wall
+## Cập nhật gần nhất — CSP hạ tầng dùng chung, đợt C: `#viewDocModal` dùng chung
+
+Tiếp tục đợt G (login wall/must-change-password/TOTP setup wall, xem mục "Trước đó" ngay bên dưới) — đợt
+này chuyển **`#viewDocModal`**, khung xem tệp/quy trình "an toàn" (Frame Protected Viewer) dùng CHUNG cho
+RẤT NHIỀU module khác nhau trong toàn hệ thống, không riêng module nào:
+
+- **4 điểm** `onclick` chuyển sang `data-op*`, cả 4 đều nằm NGAY TRONG định nghĩa tĩnh của modal (không
+  đụng tới nội dung `#viewModalContent` do JS dựng động, và không đụng nút mở modal ở từng module — những
+  nút đó thuộc phạm vi module gốc, phần lớn đã convert ở các đợt module trước): nút "✕" đóng modal
+  (`closeViewDocModal`), nút "🖨️ In" (`printViewModalContent`), nút "🖨️ In có watermark"
+  (`printWordWithWatermark`), nút "Đóng" ở chân modal (`closeViewDocModal`, điểm thứ 2 gọi cùng hàm).
+- **Không cần hàm wrapper mới nào** — cả 4 hàm xử lý đều không nhận tham số (gọi thẳng không có `data-argN`).
+- **1 gốc `bindCspDelegation` MỚI**: `viewDocModal` (thêm ngay sau khối bind của đợt G) — gốc này trước đó
+  CHƯA có `bindCspDelegation` nào phủ tới dù modal đã tồn tại từ lâu và được hàng chục hàm module khác mở ra.
+- **Khảo sát phạm vi ảnh hưởng** (không sửa code ở các điểm này, chỉ xác nhận modal vẫn hoạt động đúng khi
+  mở từ nhiều nguồn khác nhau): modal được mở qua `document.getElementById('viewDocModal').classList.remove
+  ('hidden')` từ ít nhất 11 hàm khác nhau — `openFileProtectedView()` (hàm dùng chung xem tệp đính kèm
+  THẬT, gọi từ `viewDoc()` [Tài Liệu], `viewLicenseFile()` [Giấy Phép], `viewSubmissionAttachment()`/
+  `viewFileProposalAttachment()`/`viewSubmissionExtraFile()` [Văn Bản Trình], `viewContractSignedFile()`
+  [Hợp Đồng], `viewOfficeSignedFile()` [Tổng Hợp], `viewOperationAttachment()` [Vận Hành, dùng chung nhiều
+  "kind"], `viewPrCurrentSlideFile()` [Báo Cáo Định Kỳ]) và các hàm tự dựng HTML "phiếu hệ thống" rồi mở
+  thẳng modal — `previewSubmissionWorkflow()`/`previewContractApprovalWorkflow()` (xem trước quy trình phê
+  duyệt ngay trên form tạo, chưa cần hồ sơ đã lưu), `viewSubmissionApprovalSlip()`/`viewCarApprovalSlip()`/
+  `viewOfficeApprovalSlip()` (Phiếu Phê Duyệt tự dựng), `viewContractDetails()`, `viewMeetingMinutesDetails()`
+  (Biên Bản Họp).
+- **Không phát hiện lỗi nghiệp vụ thật nào trong lúc demo các điểm này.**
+
+**Xác nhận không ảnh hưởng** — 2 lớp kiểm tra độc lập trước khi merge:
+- Integrity check tĩnh trước khi demo: 3/4 script `<script>` (không kể script `type="module"` PDF.js vốn
+  luôn báo lỗi cú pháp giả khi `node --check` một mình vì cú pháp `import` — không liên quan CSP) đều `node
+  --check` sạch; đếm `<div>` mở/đóng giữ nguyên `2653/2648` (chỉ sửa thuộc tính, không thêm/bớt thẻ); rà
+  `id=` trùng khớp đúng baseline đã biết trước đó (`systemUsersDatalist`, `bsTitle`, `bsDept`, `bsFile`,
+  `bsType`, `bsReason`, `bsAmount`, `bsSupplier`, `bsNote`, `bsStoreName`, `Y`, `${base}`/`${o.id}`/`${w.id}`/
+  `${f.id}` — toàn bộ pre-existing từ các đợt trước, không phải lỗi mới do đợt này gây ra).
+- Demo Playwright thật (SQL Server + server local + đăng nhập UI thật) qua **4 module đại diện có luồng mở
+  `#viewDocModal` khác hẳn nhau**: tạo 1 tài khoản demo tạm `demo_csp_c` (`totpEnabled:false`,
+  `mustChangePassword:false`, không phải admin, chỉ cấp đúng quyền cần test — `uploadAll`/`viewDraftAll`/
+  `viewApprovedAll`/`docDownload.all` [Tài Liệu], `submissionView`/`submissionCreate`/`submissionDownload.all`
+  [Văn Bản Trình], `contractView`/`contractCreate`/`contractDownload.all` [Hợp Đồng], `licenseCreate`/
+  `licenseView` [Giấy Phép] — qua `withLockedAppDataValue('users', ...)`) — xoá lại ngay sau demo cùng toàn
+  bộ dữ liệu demo:
+  - **Văn Bản Trình** (`previewSubmissionWorkflow()` — dựng HTML "phiếu" từ ngay trạng thái FORM, không cần
+    hồ sơ đã lưu): chọn Phòng Ban Trình + Loại Tờ Trình trên form tạo, bấm "🔍 Xem Quy Trình" — modal hiện
+    đúng danh sách bước duyệt; bấm "🖨️ In" (`printViewModalContent`, nút này KHÔNG bị ẩn ở luồng "phiếu tự
+    dựng" — chỉ luồng xem tệp thật qua `openFileProtectedView()` mới ẩn) — chạy không lỗi JS; đóng qua nút
+    "✕" (`closeViewDocModal`) — đóng đúng.
+  - **Hợp Đồng** (`previewContractApprovalWorkflow()`, cùng khuôn "phiếu tự dựng"): chọn Phòng Ban Quản Lý
+    trên form tạo, bấm "🔍 Xem Quy Trình" — modal hiện đúng; bấm "🖨️ In" — chạy không lỗi JS; đóng qua nút
+    "Đóng" ở chân modal (điểm `closeViewDocModal` thứ 2, khác nút X đã test ở trên) — đóng đúng.
+  - **Tài Liệu** (`viewDoc()` → `openFileProtectedView()`, luồng xem TỆP PDF thật qua PDF.js): tải lên 1 tệp
+    PDF thật, hồ sơ vào trạng thái chờ duyệt nên bảng chỉ hiện nút "📋 Chi tiết" (`runDocAction(id,'view')` →
+    `viewDocDetails()` → `#docDetailModal`, đã bind từ đợt trước) — bấm vào, trong bảng lịch sử phiên bản bấm
+    "👁️ Xem" (`viewDoc`, điểm dùng chung đã convert từ đợt module Tài Liệu) — `#viewDocModal` mở đúng, PDF
+    render thật qua PDF.js hiện đúng nội dung; xác nhận nút "🖨️ In" VÀ "🖨️ In có watermark" đều bị ẩn đúng
+    (theo code: PDF luôn ẩn cả 2 nút In); đóng qua nút "✕" (`closeViewDocModal`) — đóng đúng, không chặn thao
+    tác phía sau (`#docDetailModal` vẫn tương tác được bình thường).
+  - **Giấy Phép** (`viewLicenseFile()` → `openFileProtectedView()`, luồng xem TỆP .docx thật qua mammoth.js):
+    tải lên 1 tệp .docx thật, hồ sơ chờ duyệt nên vào qua "📋 Chi tiết" (`runLicenseAction(id,'view')` →
+    `viewLicenseDetails()` → `#licenseDetailModal`) → "👁️ Xem" (`viewLicenseFile`) — modal mở đúng, nội dung
+    .docx render thật qua mammoth.js hiện đúng; nút "🖨️ In có watermark" hiện đúng (chỉ .docx mới hiện, khớp
+    code `kind==='word'`) — bấm thử (`printWordWithWatermark`) — chạy không lỗi JS; đóng qua nút "Đóng" ở
+    chân modal — đóng đúng, không chặn thao tác phía sau.
+  - 0 lỗi JS console (`page.on('pageerror')`) trong toàn bộ 4 luồng demo trên.
+- Chạy lại toàn bộ 46 file test hồi quy (`tests/test-*.js`) — 46/46 file OK, 0 FAIL trong mọi kịch bản; đúng
+  2 file known-flaky quen thuộc (`test-audit-fixes-batch1.js`/`test-audit-round2-cluster1.js` — hoàn tất
+  toàn bộ kịch bản (14/14 và 20/20) nhưng tiến trình Node không tự thoát ngay khi chạy dồn, kể cả chạy riêng
+  lẻ với timeout 180s — hạ tầng test có sẵn từ trước, không liên quan thay đổi lần này) đều được xác nhận
+  pass qua log kết thúc đúng ngay dòng kết quả cuối.
+
+**Deploy-impact:** KHÔNG đổi `sql/schema.sql`, KHÔNG thêm biến môi trường mới, KHÔNG thêm `dependencies`
+mới — toàn bộ thay đổi nằm trong `public/index.html` (thuần client JS/HTML), deploy an toàn chỉ với copy
+code + `pm2 restart`, không cần thao tác 1 lần nào khác.
+
+**Còn lại:** ước tính còn khoảng **74 điểm** (giảm từ ~78 sau đợt này), chia thành các đợt riêng sẽ làm
+sau, rủi ro tăng dần theo thứ tự dự kiến:
+- **B** — `#genericConfirmModal` (modal xác nhận dùng chung nhiều module).
+- **D** — Dashboard/"Approval Hub" (`buildDashboardCardsHTML()`/`#approvalHubSection`).
+- **F** — `#profileModal` (~18 điểm).
+- **E** — Office module (`buildActionCell()`/dropdown "Khác ▾" dùng chung nhiều module, ~26 điểm).
+- **A** — rủi ro cao nhất, để dành sau cùng — `buildActionCell()`/`paginateList()`+
+  `buildPaginationBoxHTML()`/dashboard-card (hạ tầng lõi dùng ở gần như mọi module).
+
+Chỉ khi hết sạch toàn bộ mới gỡ `'unsafe-inline'` khỏi CSP header (`lib/securityHeaders.js`).
+
+## Trước đó — CSP hạ tầng dùng chung, đợt G: login wall + must-change-password + TOTP setup wall
 
 Tiếp tục đợt H+I (sidebar/approvalAuthModal/bosungEditModal, xem mục "Trước đó" ngay bên dưới) — đợt này
 chuyển **trang đăng nhập + 2 modal "tường chặn" bắt buộc trước khi vào hệ thống**, độc lập hoàn toàn với

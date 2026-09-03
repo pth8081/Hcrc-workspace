@@ -7063,7 +7063,7 @@ input[data-sdd-list] {
         <h3 id="viewModalTitle" class="font-bold text-base flex items-center gap-2">📄 Xem Tài Liệu Nội Bộ</h3>
         <p id="viewModalSub" class="text-xs text-gray-300"></p>
       </div>
-      <button onclick="closeViewDocModal()" class="text-gray-300 hover:text-white font-bold text-xl px-2">✕</button>
+      <button data-op="closeViewDocModal" class="text-gray-300 hover:text-white font-bold text-xl px-2">✕</button>
     </div>
     <div class="bg-amber-100 text-amber-900 px-4 py-2 text-xs font-semibold flex items-center justify-between border-b border-amber-200 select-none">
       <span>🔒 Chế độ xem an toàn (Tắt menu chuột phải trong khung xem — tải tệp chỉ dành cho người có quyền)</span>
@@ -7073,9 +7073,9 @@ input[data-sdd-list] {
     <div class="p-3 bg-gray-50 border-t flex justify-between items-center text-xs">
       <span id="viewModalFooterInfo" class="text-gray-500 italic"></span>
       <div class="flex gap-2">
-        <button id="viewModalPrintBtn" onclick="printViewModalContent()" class="bg-blue-600 text-white px-4 py-1.5 rounded font-bold hover:bg-blue-700">🖨️ In</button>
-        <button id="viewModalWordPrintBtn" onclick="printWordWithWatermark()" class="hidden bg-blue-600 text-white px-4 py-1.5 rounded font-bold hover:bg-blue-700">🖨️ In có watermark</button>
-        <button onclick="closeViewDocModal()" class="bg-gray-600 text-white px-5 py-1.5 rounded font-bold hover:bg-gray-700">Đóng</button>
+        <button id="viewModalPrintBtn" data-op="printViewModalContent" class="bg-blue-600 text-white px-4 py-1.5 rounded font-bold hover:bg-blue-700">🖨️ In</button>
+        <button id="viewModalWordPrintBtn" data-op="printWordWithWatermark" class="hidden bg-blue-600 text-white px-4 py-1.5 rounded font-bold hover:bg-blue-700">🖨️ In có watermark</button>
+        <button data-op="closeViewDocModal" class="bg-gray-600 text-white px-5 py-1.5 rounded font-bold hover:bg-gray-700">Đóng</button>
       </div>
     </div>
   </div>
@@ -24048,6 +24048,18 @@ bindCspDelegation('bosungEditModal');
 bindCspDelegation('loginSection');
 bindCspDelegation('mustChangePasswordModal');
 bindCspDelegation('totpSetupWallModal');
+
+// CSP hạ tầng dùng chung (đợt C) — #viewDocModal: khung xem tệp/quy trình an toàn DÙNG CHUNG cho RẤT
+// NHIỀU module (mở qua openFileProtectedView() dùng chung — viewDoc(), viewLicenseFile(),
+// viewSubmissionAttachment(), viewSubmissionExtraFile(), viewFileProposalAttachment(),
+// viewContractSignedFile(), viewOfficeSignedFile(), viewOperationAttachment(), viewPrCurrentSlideFile()
+// — và các hàm tự dựng HTML rồi mở thẳng modal — previewSubmissionWorkflow(),
+// previewContractApprovalWorkflow(), viewSubmissionApprovalSlip(), viewCarApprovalSlip(),
+// viewOfficeApprovalSlip(), viewContractDetails(), viewMeetingMinutesDetails()). Chỉ 4 điểm onclick
+// NẰM TRONG định nghĩa modal cần convert (closeViewDocModal() x2, printViewModalContent(),
+// printWordWithWatermark()) — nút mở modal ở từng module là <a>/onclick riêng của module đó, không
+// thuộc phạm vi đợt này (giữ nguyên hoặc đã convert ở đợt khác).
+bindCspDelegation('viewDocModal');
 
 // ==========================================
 // VĂN PHÒNG PHẨM — kỳ đăng ký (vppPeriods) + đăng ký của nhân viên (vppRegistrations). 3 sub-tab:
