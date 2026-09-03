@@ -1,10 +1,92 @@
 # Phiên bản hiện tại
 
-**4.9** — đã merge vào `main` (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge
+**5.0** — đã merge vào `main` (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge
 góc màn hình + `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần
 kiểu `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
 
-## Cập nhật gần nhất — CSP unsafe-inline: đợt 18/N — module Tin Tức/Truyền Thông
+## Cập nhật gần nhất — CSP unsafe-inline: đợt 19/N — module Biên Bản Họp
+
+Tiếp tục đợt 18 (Tin Tức/Truyền Thông, xem mục "Trước đó" ngay bên dưới) — đợt này chuyển toàn bộ module
+**Biên Bản Họp** (`#minutesSection` — form lập biên bản + thành phần tham dự + ý kiến chỉ đạo + bộ lọc
+danh sách trong 1 section, cộng 2 modal sống ngoài section: soạn email thông báo và quản lý mẫu danh sách
+tham dự):
+
+- **50 điểm** `onclick`/`onchange`/`oninput`/`onsubmit` chuyển sang `data-op*`:
+  - **`#minutesForm`**: `onsubmit` (`submitMeetingMinutes`), đổi lịch họp liên kết
+    (`onMinutesLinkedMeetingChange`).
+  - **Toolbar mẫu danh sách tham dự** (4 nút): áp dụng mẫu đã chọn (wrapper mới — xem dưới), lưu mẫu từ
+    danh sách hiện tại (`saveMeetingAttendeeTemplate`), xoá mẫu (`deleteMeetingAttendeeTemplate`), mở
+    modal quản lý mẫu (`openAttendeeTemplateManagerModal`).
+  - **Thêm dòng tham dự/chỉ đạo + Huỷ sửa** (3 nút): `addAttendeeRow`, `addMinutesDirectiveRow`,
+    `cancelEditMeetingMinutes`.
+  - **Bộ lọc danh sách** (4 điểm, đều gọi lại `onMinutesFilterChange`): từ khoá chủ đề, từ ngày, đến
+    ngày, từ khoá chung.
+  - **`renderAttendeesTable()`/`renderTplEditRowsTable()`** (dòng tham dự trong form chính + dòng trong
+    trình soạn mẫu, cấu trúc gần như song song): mỗi dòng — sửa từng trường (`updateAttendeeField`/
+    `updateTplEditField`), gợi ý tài khoản hệ thống theo tên gõ vào (`resolveAttendeeAccountInput`/
+    `resolveTplRowAccountInput`), đổi Có/Không tài khoản (`toggleAttendeeHasAccount`/
+    `toggleTplRowHasAccount`), xoá dòng (`removeAttendeeRow`/`removeTplEditRow`).
+  - **`renderAttendeeTemplateManagerList()`**: sửa mẫu (`openAttendeeTemplateEditor`), xoá mẫu
+    (`deleteAttendeeTemplateFromManager`).
+  - **`renderMinutesDirectivesTable()`**: sửa nội dung/hạn hoàn thành (`updateMinutesDirectiveField`),
+    đổi người thực hiện (`updateMinutesDirectiveField` qua `this.value`), đổi người phối hợp — multi-
+    select (wrapper mới — xem dưới), xoá dòng (`removeMinutesDirectiveRow`).
+  - **`renderMeetingMinutes()`/`viewMeetingMinutesDetails()`**: nút chính "🔍 Xem chi tiết"
+    (`runMinutesAction`, các thao tác khác — sửa/xoá/tải/gửi email/duyệt — vẫn nằm trong dropdown "Khác ▾"
+    dùng chung `buildActionCell()`, ngoài phạm vi đợt này); nút "📌 Giao việc" cho ý kiến chỉ đạo chưa gán
+    (`createTaskFromMinutesDirective`).
+  - **`#minutesEmailComposeModal`** (soạn email thông báo người tham dự, sống ngoài section, 4 điểm):
+    đóng modal (nút X và nút Hủy, cùng `closeMinutesEmailComposeModal`), chọn/bỏ chọn tất cả người nhận
+    (`toggleAllMinutesEmailRecipients`), gửi email (`confirmSendMinutesEmail`).
+  - **`#attendeeTemplateManagerModal`** (quản lý mẫu danh sách tham dự, sống ngoài section, 6 điểm): đóng
+    modal (nút X và nút Đóng, cùng `closeAttendeeTemplateManagerModal`), tạo mẫu mới
+    (`openAttendeeTemplateEditor`, cùng data-op với nút "Sửa" của từng dòng — tham số `null` bỏ qua
+    `data-argN` vì `undefined` giữ nguyên tính falsy), thêm người trong trình soạn (`addTplEditRow`),
+    quay lại danh sách (`backToAttendeeTemplateList`), lưu mẫu (`saveAttendeeTemplateFromEditor`).
+- **2 hàm wrapper mới** do runtime `data-op*` chưa hỗ trợ trực tiếp:
+  - `applyMeetingAttendeeTemplateFromSelect()` — nút "Áp Dụng" gọi thẳng biểu thức
+    `applyMeetingAttendeeTemplate(document.getElementById('minutesAttendeeTemplateSelect').value)`, tham
+    số là 1 biểu thức đọc DOM chứ không phải `this`/`this.value`/literal nên không map trực tiếp được.
+  - `updateMinutesDirectiveFieldMultiSelect(idx, field, el)` — ô chọn người phối hợp là `<select
+    multiple>`, giá trị đọc qua `Array.from(this.selectedOptions).map(o => o.value)` chứ không phải
+    `this.value` đơn giản; wrapper nhận thẳng element qua `data-arg-el` rồi tự đọc danh sách lựa chọn.
+- **3 gốc `bindCspDelegation`**: `minutesSection` (form, thành phần tham dự, ý kiến chỉ đạo, bộ lọc,
+  danh sách), `minutesEmailComposeModal`, `attendeeTemplateManagerModal` (2 modal xác nhận là sibling DOM
+  sống ngoài section). Không đụng dropdown "Khác ▾" dùng chung trong `buildActionCell()`,
+  `#genericConfirmModal`, hay `#viewDocModal` (modal xem file bảo vệ dùng chung — riêng module này còn
+  dùng lại hạ tầng đó để hiển thị "Xem chi tiết" biên bản họp, đóng qua `closeViewDocModal()` vẫn giữ
+  nguyên `onclick` — cả 3 nằm trong phạm vi dọn hạ tầng dùng chung riêng, ngoài phạm vi đợt này). Nút
+  "Giao việc" chỉ TRIGGER module Công Việc (Task), bản thân module Công Việc là đợt CSP riêng sau này.
+- **Không phát hiện lỗi thật nào trong lúc demo module này.**
+
+**Xác nhận không ảnh hưởng** — 2 lớp kiểm tra độc lập trước khi merge:
+- Demo Playwright thật (SQL Server + server local + đăng nhập UI thật qua tài khoản demo tạm 2FA thật,
+  xoá lại ngay sau demo cùng toàn bộ dữ liệu demo tạo ra trong lúc test — `meetingMinutes` nằm trong
+  `MIGRATED_COLLECTIONS`, xoá bằng `deleteRecordById()`; `meetingAttendeeTemplates` là collection
+  `appData` thường, xoá bằng `withLockedAppDataValue()`; tài khoản demo xoá bằng
+  `withLockedAppDataValue('users', ...)`): đăng nhập, mở Điều Hành > Biên bản họp; lập 1 biên bản với 2
+  người tham dự và 1 ý kiến chỉ đạo (gán người thực hiện + người phối hợp qua wrapper multi-select) — lưu
+  thành công, tự mở modal soạn email thông báo, bấm "Chọn/Bỏ chọn tất cả" rồi Hủy; mở "🔍 Xem chi tiết" —
+  hiện đúng nội dung kèm nút "📌 Giao việc"; lưu danh sách tham dự hiện tại thành mẫu dùng chung
+  (`saveMeetingAttendeeTemplate`), mở "Quản Lý Mẫu", sửa mẫu vừa lưu (thêm 1 dòng qua `addTplEditRow`,
+  sửa tên qua wrapper `updateTplEditField`, lưu qua `saveAttendeeTemplateFromEditor`), xoá mẫu
+  (`deleteAttendeeTemplateFromManager`) — toàn bộ đúng, không lỗi JS console mới liên quan tới thay đổi
+  (chỉ 3 lỗi mạng nền quen thuộc trước lúc đăng nhập: chặn Google Fonts, `/api/auth/me` 401 lúc chưa đăng
+  nhập, `/api/captcha` 404 do CAPTCHA chưa bật ở môi trường demo — cùng 3 lỗi y hệt các đợt trước, không
+  liên quan tới module này).
+- Chạy lại toàn bộ 46 file test hồi quy (`tests/test-*.js`), gồm cả `tests/test-minutes.js` (riêng cho
+  module này) — 44/46 OK, đúng 2 file known-flaky quen thuộc (`test-audit-fixes-batch1.js`/
+  `test-audit-round2-cluster1.js`, timeout hạ tầng test không liên quan thay đổi lần này).
+
+**Deploy-impact:** KHÔNG đổi `sql/schema.sql`, KHÔNG thêm biến môi trường mới, KHÔNG thêm `dependencies`
+mới — toàn bộ thay đổi nằm trong `public/index.html` (thuần client JS/HTML), deploy an toàn chỉ với copy
+code + `pm2 restart`, không cần thao tác 1 lần nào khác.
+
+**Còn lại:** Công Việc, Văn Bản Trình, Tài Liệu, Báo Cáo Định Kỳ... — dùng hạ tầng
+`data-op*`/`bindCspDelegation()` đã xây, làm tiếp tuần tự mỗi module 1 commit + demo + regression trước
+khi merge, tới khi hết toàn bộ điểm mới gỡ `unsafe-inline`.
+
+## Trước đó — CSP unsafe-inline: đợt 18/N — module Tin Tức/Truyền Thông
 
 Tiếp tục đợt 17 (Tuyển Dụng, xem mục "Trước đó" ngay bên dưới) — đợt này chuyển toàn bộ module **Tin
 Tức/Truyền Thông Nội Bộ** (`#internalSection` — 5 sub-tab Nhịp Sống HCRC/Đào Tạo/Tuyển Dụng/Góc Chia
