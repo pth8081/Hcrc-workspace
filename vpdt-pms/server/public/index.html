@@ -453,7 +453,7 @@ input[data-sdd-list] {
      mở/đóng sidebar dạng "off-canvas" (xem CSS #userHeader ở khối <style> đầu file). finishLogin()/
      logout() toggle "hidden" y hệt cách đang làm với #userHeader, nên vòng đời ẩn/hiện luôn khớp nhau. -->
 <div id="mobileTopBar" class="hidden md:hidden fixed top-0 inset-x-0 z-30 bg-slate-900 text-white flex items-center justify-between px-3 py-2.5 shadow">
-  <button type="button" onclick="toggleMobileSidebar()" class="text-2xl leading-none px-1" aria-label="Mở menu điều hướng">☰</button>
+  <button type="button" data-op="toggleMobileSidebar" class="text-2xl leading-none px-1" aria-label="Mở menu điều hướng">☰</button>
   <span class="font-bold text-sm flex items-center gap-1.5">
     <svg viewBox="0 0 100 100" fill="none" style="width:1.1rem;height:1.1rem;flex-shrink:0;" aria-hidden="true">
       <rect x="27" y="47" width="46" height="15" rx="7.5" fill="#38bdf8"/>
@@ -466,7 +466,7 @@ input[data-sdd-list] {
 </div>
 <!-- Lớp nền mờ phía sau sidebar khi mở trên điện thoại — bấm vào để đóng lại, giống hành vi drawer
      tiêu chuẩn. Chỉ hiện khi #userHeader có class .mobile-sidebar-open (xem toggleMobileSidebar()). -->
-<div id="sidebarBackdrop" onclick="closeMobileSidebar()" class="hidden md:hidden fixed inset-0 bg-black/50 z-30"></div>
+<div id="sidebarBackdrop" data-op="closeMobileSidebar" class="hidden md:hidden fixed inset-0 bg-black/50 z-30"></div>
 
 <div class="flex min-h-screen">
   <!-- SIDEBAR (Đợt A — thay thanh nav ngang cũ). GIỮ NGUYÊN id "userHeader": finishLogin()/logout()
@@ -7526,7 +7526,7 @@ input[data-sdd-list] {
   <div class="bg-white rounded-lg shadow-2xl max-w-sm w-full overflow-hidden">
     <div class="flex justify-between items-center bg-emerald-800 text-white p-4">
       <h3 class="font-bold text-base flex items-center gap-2">🔐 Xác Thực Trước Khi Duyệt</h3>
-      <button onclick="closeApprovalAuthModal()" class="text-emerald-200 hover:text-white font-bold text-xl px-2">✕</button>
+      <button data-op="closeApprovalAuthModal" class="text-emerald-200 hover:text-white font-bold text-xl px-2">✕</button>
     </div>
     <div class="p-4 space-y-3 text-xs">
       <div id="approvalAuthPasswordGroup" class="hidden">
@@ -7536,7 +7536,7 @@ input[data-sdd-list] {
       <div id="approvalAuthOtpGroup" class="hidden">
         <label class="block font-semibold text-gray-600 mb-1">Nhập mã OTP đã gửi tới email của bạn</label>
         <input id="approvalAuthOtpInput" type="text" inputmode="numeric" maxlength="6" class="w-full border p-2 rounded text-sm tracking-widest" placeholder="000000">
-        <button type="button" onclick="sendApprovalOtp(true)" class="text-emerald-700 font-semibold hover:underline mt-1">↻ Gửi lại mã</button>
+        <button type="button" data-op="sendApprovalOtp" data-arg0="true" class="text-emerald-700 font-semibold hover:underline mt-1">↻ Gửi lại mã</button>
       </div>
       <div id="approvalAuthPinGroup" class="hidden">
         <label class="block font-semibold text-gray-600 mb-1">Nhập mã PIN duyệt</label>
@@ -7544,8 +7544,8 @@ input[data-sdd-list] {
       </div>
     </div>
     <div class="p-3 bg-gray-100 border-t flex justify-end gap-2 text-xs">
-      <button onclick="closeApprovalAuthModal()" class="bg-gray-500 text-white px-4 py-1.5 rounded font-bold hover:bg-gray-600">Huỷ</button>
-      <button onclick="confirmApprovalAuth()" class="bg-emerald-600 text-white px-5 py-1.5 rounded font-bold hover:bg-emerald-700">✅ Xác Nhận & Duyệt</button>
+      <button data-op="closeApprovalAuthModal" class="bg-gray-500 text-white px-4 py-1.5 rounded font-bold hover:bg-gray-600">Huỷ</button>
+      <button data-op="confirmApprovalAuth" class="bg-emerald-600 text-white px-5 py-1.5 rounded font-bold hover:bg-emerald-700">✅ Xác Nhận & Duyệt</button>
     </div>
   </div>
 </div>
@@ -7563,13 +7563,13 @@ input[data-sdd-list] {
   <div class="bg-white rounded-lg shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
     <div class="flex justify-between items-center bg-amber-600 text-white p-4">
       <h3 id="bosungEditTitle" class="font-bold text-base">✏️ Sửa &amp; Gửi Lại</h3>
-      <button onclick="closeBosungEditModal()" class="text-amber-100 hover:text-white font-bold text-xl px-2">✕</button>
+      <button data-op="closeBosungEditModal" class="text-amber-100 hover:text-white font-bold text-xl px-2">✕</button>
     </div>
     <div id="bosungEditReasonNote" class="mx-4 mt-3 bg-orange-50 border border-orange-200 rounded p-2 text-xs text-orange-800"></div>
     <div id="bosungEditBody" class="p-4 text-xs text-gray-700 space-y-3"></div>
     <div class="p-3 bg-gray-100 border-t flex justify-end gap-2 text-xs">
-      <button onclick="closeBosungEditModal()" class="bg-gray-400 text-white px-4 py-1.5 rounded font-bold hover:bg-gray-500">Hủy</button>
-      <button onclick="confirmBosungResubmit()" class="bg-blue-600 text-white px-5 py-1.5 rounded font-bold hover:bg-blue-700">📤 Lưu &amp; Gửi Lại</button>
+      <button data-op="closeBosungEditModal" class="bg-gray-400 text-white px-4 py-1.5 rounded font-bold hover:bg-gray-500">Hủy</button>
+      <button data-op="confirmBosungResubmit" class="bg-blue-600 text-white px-5 py-1.5 rounded font-bold hover:bg-blue-700">📤 Lưu &amp; Gửi Lại</button>
     </div>
   </div>
 </div>
@@ -10888,9 +10888,9 @@ function renderDeptContactsTable() {
     const rows = contractExpiryDeptContactsDraft[dept] || [];
     const rowsHtml = rows.map((c, idx) => `
       <div class="flex gap-1 items-center mb-1">
-        <input value="${escapeHtml(c.name || '')}" placeholder="Họ tên" oninput="updateDeptContactField('${escapeHtml(dept)}', ${idx}, 'name', this.value)" class="border p-1 rounded flex-1">
-        <input value="${escapeHtml(c.email || '')}" type="email" placeholder="Email" oninput="updateDeptContactField('${escapeHtml(dept)}', ${idx}, 'email', this.value)" class="border p-1 rounded flex-1">
-        <button type="button" onclick="removeDeptContact('${escapeHtml(dept)}', ${idx})" class="text-red-600 font-bold px-1.5" title="Xoá">✕</button>
+        <input value="${escapeHtml(c.name || '')}" placeholder="Họ tên" data-op-input="updateDeptContactField" data-arg0="${escapeHtml(dept)}" data-arg1="${idx}" data-arg2="name" data-arg-value="3" class="border p-1 rounded flex-1">
+        <input value="${escapeHtml(c.email || '')}" type="email" placeholder="Email" data-op-input="updateDeptContactField" data-arg0="${escapeHtml(dept)}" data-arg1="${idx}" data-arg2="email" data-arg-value="3" class="border p-1 rounded flex-1">
+        <button type="button" data-op="removeDeptContact" data-arg0="${escapeHtml(dept)}" data-arg1="${idx}" class="text-red-600 font-bold px-1.5" title="Xoá">✕</button>
       </div>
     `).join('');
     return `
@@ -10898,7 +10898,7 @@ function renderDeptContactsTable() {
         <td class="py-2 pr-2 font-semibold">${escapeHtml(dept)}</td>
         <td class="py-2">
           ${rowsHtml || '<p class="text-gray-400 italic text-[11px] mb-1">Chưa có người phụ trách riêng</p>'}
-          <button type="button" onclick="addDeptContact('${escapeHtml(dept)}')" class="text-amber-700 font-semibold text-[11px]">+ Thêm người</button>
+          <button type="button" data-op="addDeptContact" data-arg0="${escapeHtml(dept)}" class="text-amber-700 font-semibold text-[11px]">+ Thêm người</button>
         </td>
       </tr>
     `;
@@ -13133,7 +13133,7 @@ function renderCrossTabBar(groupKey, activeTab) {
   const activeCls = 'px-3 py-1 rounded text-xs font-bold bg-slate-700 text-white';
   const inactiveCls = 'px-3 py-1 rounded text-xs font-bold bg-slate-100 text-slate-600 hover:bg-slate-200';
   container.innerHTML = items.map(t =>
-    `<button type="button" onclick="switchTab('${t.tab}')" class="${t.tab === activeTab ? activeCls : inactiveCls}">${t.label}</button>`
+    `<button type="button" data-op="switchTab" data-arg0="${escapeHtml(t.tab)}" class="${t.tab === activeTab ? activeCls : inactiveCls}">${t.label}</button>`
   ).join('');
 }
 
@@ -24021,6 +24021,16 @@ bindCspDelegation('docDetailModal');
 bindCspDelegation('periodicReportSection');
 bindCspDelegation('prSlideshowModal');
 
+// CSP hạ tầng dùng chung (đợt H+I) — thanh mobile ☰/lớp nền mờ sống NGOÀI mọi section (#mobileTopBar,
+// #sidebarBackdrop, xem toggleMobileSidebar()/closeMobileSidebar()) cộng 2 modal xác thực/bổ sung dùng
+// chung liên module: #approvalAuthModal (OTP/mật khẩu/PIN trước khi duyệt, xem withApprovalAuth()) và
+// #bosungEditModal (sửa + gửi lại hồ sơ bị trả về NHÁP, dùng chung Tài Liệu/Đăng Ký Xe/Mua Bán-Sửa
+// Chữa-Đầu Tư/Văn Bản Trình). 4 gốc độc lập, không cần wrapper mới — mọi tham số đều literal.
+bindCspDelegation('mobileTopBar');
+bindCspDelegation('sidebarBackdrop');
+bindCspDelegation('approvalAuthModal');
+bindCspDelegation('bosungEditModal');
+
 // ==========================================
 // VĂN PHÒNG PHẨM — kỳ đăng ký (vppPeriods) + đăng ký của nhân viên (vppRegistrations). 3 sub-tab:
 // Đăng Ký (ai cũng vào được) / Kỳ Đăng Ký + Báo Cáo Tổng Hợp (chỉ vppManage/admin).
@@ -24055,7 +24065,7 @@ function renderVppDeptHeadcountTable() {
     return `
       <tr data-vpp-dept="${escapeHtml(dept)}">
         <td class="border p-1.5">${escapeHtml(dept)}</td>
-        <td class="border p-1"><input type="number" min="0" step="1" value="${headcount}" oninput="onVppHeadcountInput(this)" class="vpp-headcount-input w-24 border p-1 rounded text-xs text-center"></td>
+        <td class="border p-1"><input type="number" min="0" step="1" value="${headcount}" data-op-input="onVppHeadcountInput" data-arg-el="0" class="vpp-headcount-input w-24 border p-1 rounded text-xs text-center"></td>
         <td class="border p-1.5 text-right font-semibold text-orange-700 vpp-dept-budget-cell">${budget > 0 ? deptBudget.toLocaleString('vi-VN') + ' đ' : '—'}</td>
       </tr>`;
   }).join('');
@@ -27054,7 +27064,7 @@ function renderWfSubmissionTypeTabs() {
   if (!container) return;
   const types = getWfModuleTypes(activeWfMod) || [];
   container.innerHTML = types.map(t => `
-    <button onclick="switchWfSubmissionType('${t.key}')" class="px-3 py-1.5 rounded text-xs font-bold ${t.key === activeWfSubmissionType ? 'bg-emerald-600 text-white' : 'bg-gray-100 text-gray-700'}">${escapeHtml(t.label)}</button>
+    <button data-op="switchWfSubmissionType" data-arg0="${escapeHtml(t.key)}" class="px-3 py-1.5 rounded text-xs font-bold ${t.key === activeWfSubmissionType ? 'bg-emerald-600 text-white' : 'bg-gray-100 text-gray-700'}">${escapeHtml(t.label)}</button>
   `).join('');
 }
 
@@ -27313,9 +27323,16 @@ function addStepRow(nameVal = '') {
   div.innerHTML = `
     <span class="font-bold text-xs w-16">Bước ${count}:</span>
     <input placeholder="Tên bước (VD: Trưởng phòng)" value="${escapeHtml(nameVal)}" class="border p-1 rounded text-xs flex-1 step-name-input" required>
-    <button type="button" onclick="this.parentElement.remove(); reindexStepRows();" class="text-red-500 font-bold px-2 text-xs">✕ Xóa</button>
+    <button type="button" data-op="removeStepRow" data-arg-el="0" class="text-red-500 font-bold px-2 text-xs">✕ Xóa</button>
   `;
   container.appendChild(div);
+}
+
+// Wrapper CSP-safe cho nút xoá 1 dòng bước — tương đương onclick="this.parentElement.remove();
+// reindexStepRows();" cũ (2 lệnh liên tiếp trên `this`, không map được vào 1 lời gọi hàm đơn cho data-op).
+function removeStepRow(btn) {
+  btn.parentElement.remove();
+  reindexStepRows();
 }
 
 function reindexStepRows() {
@@ -27859,7 +27876,7 @@ function buildModuleTabNotesHTML(moduleKey) {
           <span class="text-[10.5px] text-violet-800 leading-snug">
             🏷️ <b>${escapeHtml(t.label)}</b> — ${t.note ? t.note : `hiện ${t.any ? 'nếu có 1 trong' : 'theo quyền'}: ${t.fields.map(f => escapeHtml(f.label)).join(t.any ? ' hoặc ' : ', ')}`}
           </span>
-          ${t.badgeKey ? `<button type="button" onclick="jumpToPermField('${t.badgeKey}')" class="text-[10px] font-bold text-violet-700 hover:underline whitespace-nowrap shrink-0">Đi tới →</button>` : ''}
+          ${t.badgeKey ? `<button type="button" data-op="jumpToPermField" data-arg0="${escapeHtml(t.badgeKey)}" class="text-[10px] font-bold text-violet-700 hover:underline whitespace-nowrap shrink-0">Đi tới →</button>` : ''}
         </div>
       `).join('')}
     </div>
@@ -28908,7 +28925,7 @@ function renderPeopleMultiSelect(containerId, candidates, initialSelected, check
       return `
         <span class="inline-flex items-center gap-1 bg-rose-100 text-rose-700 rounded-full px-2 py-0.5 text-[11px]">
           ${escapeHtml(u ? label(u) : username)}
-          <button type="button" onclick="pmsRemove('${containerId}', '${escapeHtml(username)}')" class="font-bold hover:text-rose-900">×</button>
+          <button type="button" data-op="pmsRemove" data-arg0="${escapeHtml(containerId)}" data-arg1="${escapeHtml(username)}" class="font-bold hover:text-rose-900">×</button>
         </span>
       `;
     }).join('') || '<span class="text-gray-400 italic text-[11px]">Chưa chọn ai.</span>';
@@ -28923,7 +28940,7 @@ function renderPeopleMultiSelect(containerId, candidates, initialSelected, check
     const q = (query || '').trim().toLowerCase();
     const matches = candidates.filter(u => !selected.has(u.username) && (!q || label(u).toLowerCase().includes(q))).slice(0, 30);
     ddEl.innerHTML = matches.length
-      ? matches.map(u => `<div class="px-2 py-1 text-[11px] hover:bg-rose-50 cursor-pointer" onclick="pmsAdd('${containerId}', '${escapeHtml(u.username)}')">${escapeHtml(label(u))}</div>`).join('')
+      ? matches.map(u => `<div class="px-2 py-1 text-[11px] hover:bg-rose-50 cursor-pointer" data-op="pmsAdd" data-arg0="${escapeHtml(containerId)}" data-arg1="${escapeHtml(u.username)}">${escapeHtml(label(u))}</div>`).join('')
       : '<div class="px-2 py-1 text-[11px] text-gray-400 italic">Không tìm thấy.</div>';
     ddEl.classList.remove('hidden');
   }
@@ -28933,7 +28950,7 @@ function renderPeopleMultiSelect(containerId, candidates, initialSelected, check
     <div data-pms-chips class="flex flex-wrap gap-1 mb-1"></div>
     <div class="relative">
       <input type="text" data-pms-search placeholder="Tìm theo tên/username/phòng ban để thêm..." class="w-full border p-1.5 rounded text-[11px]"
-        oninput="pmsFilter('${containerId}', this.value)" onfocus="pmsFilter('${containerId}', this.value)">
+        data-op-input="pmsFilter" data-arg0="${escapeHtml(containerId)}" data-arg-value="1" onfocus="pmsFilter('${containerId}', this.value)">
       <div data-pms-dropdown class="hidden absolute z-20 bg-white border rounded shadow max-h-40 overflow-y-auto w-full mt-0.5"></div>
     </div>
     <div data-pms-hidden></div>
@@ -36000,7 +36017,7 @@ function renderTestBuilderQuestions() {
       <div class="flex flex-wrap items-center gap-2">
         <span class="font-bold text-gray-500">#${qi + 1}</span>
         <input value="${escapeHtml(q.text)}" data-op-input="tbSetQuestionText" data-arg0="${qi}" data-arg-value="1" placeholder="Nội dung câu hỏi..." class="flex-1 min-w-[200px] border p-1.5 rounded text-xs">
-        <select onchange="tbUpdateQuestionField(${qi},'type',this.value)" class="border p-1.5 rounded text-xs bg-white">
+        <select data-op-change="tbUpdateQuestionField" data-arg0="${qi}" data-arg1="type" data-arg-value="2" class="border p-1.5 rounded text-xs bg-white">
           <option value="SINGLE" ${q.type === 'SINGLE' ? 'selected' : ''}>1 đáp án đúng</option>
           <option value="MULTI" ${q.type === 'MULTI' ? 'selected' : ''}>Nhiều đáp án đúng</option>
         </select>
@@ -36659,7 +36676,7 @@ function renderCareerPaths() {
     const manageHTML = canManage ? `
       <div class="mt-2 pt-2 border-t space-y-2">
         <div class="flex gap-2 items-center flex-wrap">
-          <input id="cpConfirmUsername_${p.id}" placeholder="Nhập username nhân viên cần xác nhận..." class="border rounded p-1 text-xs flex-1 min-w-[160px]" oninput="renderCpEmployeeStageLookup(${p.id})">
+          <input id="cpConfirmUsername_${p.id}" placeholder="Nhập username nhân viên cần xác nhận..." class="border rounded p-1 text-xs flex-1 min-w-[160px]" data-op-input="renderCpEmployeeStageLookup" data-arg0="${p.id}">
           <button data-op="deleteCareerPath" data-arg0="${p.id}" class="text-red-500 font-bold hover:underline text-xs">Xóa Lộ Trình</button>
         </div>
         <div id="cpEmployeeStageBox_${p.id}"></div>
