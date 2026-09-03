@@ -811,7 +811,7 @@ input[data-sdd-list] {
         <h2 id="dashboardGreeting" class="text-xl font-bold text-gray-800"></h2>
         <p class="text-sm text-gray-500">Tổng quan các mục đang chờ bạn xử lý.</p>
       </div>
-      <button onclick="openDashboardCustomizeModal()" class="bg-gray-200 text-gray-700 px-3 py-1.5 rounded text-xs font-bold hover:bg-gray-300">⚙️ Tuỳ chỉnh</button>
+      <button data-op="openDashboardCustomizeModal" class="bg-gray-200 text-gray-700 px-3 py-1.5 rounded text-xs font-bold hover:bg-gray-300">⚙️ Tuỳ chỉnh</button>
     </div>
 
     <div id="dashboardStatsGrid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4"></div>
@@ -839,7 +839,7 @@ input[data-sdd-list] {
     <div class="bg-white p-3 rounded border flex flex-wrap gap-3 items-end">
       <div>
         <label class="block text-xs font-bold text-gray-600 mb-1">Trạng Thái</label>
-        <select id="approvalHubFilterStatus" onchange="renderApprovalHub()" class="border rounded px-2 py-1.5 text-sm bg-white">
+        <select id="approvalHubFilterStatus" data-op-change="renderApprovalHub" class="border rounded px-2 py-1.5 text-sm bg-white">
           <option value="PENDING">⏳ Đang chờ duyệt</option>
           <option value="APPROVED">✅ Đã duyệt</option>
           <option value="REJECTED">❌ Đã từ chối</option>
@@ -847,7 +847,7 @@ input[data-sdd-list] {
       </div>
       <div id="approvalHubRangeWrap" class="hidden">
         <label class="block text-xs font-bold text-gray-600 mb-1">Khoảng Thời Gian</label>
-        <select id="approvalHubFilterRange" onchange="renderApprovalHub()" class="border rounded px-2 py-1.5 text-sm bg-white">
+        <select id="approvalHubFilterRange" data-op-change="renderApprovalHub" class="border rounded px-2 py-1.5 text-sm bg-white">
           <option value="30">30 ngày gần đây</option>
           <option value="90" selected>90 ngày gần đây</option>
           <option value="0">Tất cả thời gian</option>
@@ -855,13 +855,13 @@ input[data-sdd-list] {
       </div>
       <div>
         <label class="block text-xs font-bold text-gray-600 mb-1">Lọc Theo Loại</label>
-        <select id="approvalHubFilterType" onchange="renderApprovalHub()" class="border rounded px-2 py-1.5 text-sm">
+        <select id="approvalHubFilterType" data-op-change="renderApprovalHub" class="border rounded px-2 py-1.5 text-sm">
           <option value="">-- Tất cả loại --</option>
         </select>
       </div>
       <div class="flex-1 min-w-[200px]">
         <label class="block text-xs font-bold text-gray-600 mb-1">Tìm Theo Mã / Trích Yếu</label>
-        <input id="approvalHubSearch" type="text" oninput="renderApprovalHub()" placeholder="Mã hồ sơ, tiêu đề..." class="border rounded px-2 py-1.5 text-sm w-full">
+        <input id="approvalHubSearch" type="text" data-op-input="renderApprovalHub" placeholder="Mã hồ sơ, tiêu đề..." class="border rounded px-2 py-1.5 text-sm w-full">
       </div>
     </div>
 
@@ -7029,7 +7029,7 @@ input[data-sdd-list] {
     <p class="text-xs text-gray-500">Bỏ chọn để ẩn thẻ khỏi trang chủ của riêng bạn.</p>
     <div id="dashboardCustomizeList" class="space-y-1.5 max-h-80 overflow-y-auto"></div>
     <div class="flex justify-end gap-2 pt-2">
-      <button type="button" onclick="closeDashboardCustomizeModal()" class="bg-blue-600 text-white px-5 py-2 rounded font-bold hover:bg-blue-700">Đóng</button>
+      <button type="button" data-op="closeDashboardCustomizeModal" class="bg-blue-600 text-white px-5 py-2 rounded font-bold hover:bg-blue-700">Đóng</button>
     </div>
   </div>
 </div>
@@ -12252,21 +12252,21 @@ function getMyPendingApprovals(user) {
     type: 'doc', typeLabel: '📂 Tài liệu',
     codeOf: r => r.displayCode || r.code, titleOf: r => r.title,
     actionsOf: r => [
-      { label: '✅ Duyệt', onclick: `runDocAction(${r.id}, 'approve')`, primary: true },
-      { label: '❌ Từ chối', onclick: `runDocAction(${r.id}, 'reject')` }
+      { label: '✅ Duyệt', fn: 'runDocAction', args: [r.id, 'approve'], primary: true },
+      { label: '❌ Từ chối', fn: 'runDocAction', args: [r.id, 'reject'] }
     ]
   });
 
   addDeptWorkflowItems(DB.submissions, sub => resolveSubmissionWorkflow(sub), {
     type: 'submission', typeLabel: '📜 Văn bản trình',
     codeOf: r => r.code, titleOf: r => r.title,
-    actionsOf: r => [{ label: '✍️ Xử lý / Duyệt', onclick: `openProcessSubmissionModal(${r.id})`, primary: true }]
+    actionsOf: r => [{ label: '✍️ Xử lý / Duyệt', fn: 'openProcessSubmissionModal', args: [r.id], primary: true }]
   });
 
   addDeptWorkflowItems(DB.carRegs, c => DB.carDeptWorkflows[c.dept], {
     type: 'car', typeLabel: '🚗 Đăng ký xe',
     codeOf: r => r.code, titleOf: r => r.destination,
-    actionsOf: r => [{ label: '✍️ Xử lý / Duyệt', onclick: `openCarProcessModal(${r.id})`, primary: true }]
+    actionsOf: r => [{ label: '✍️ Xử lý / Duyệt', fn: 'openCarProcessModal', args: [r.id], primary: true }]
   });
 
   [
@@ -12277,14 +12277,14 @@ function getMyPendingApprovals(user) {
     const subTypeReqs = (DB.officeReqs || []).filter(o => o.subType === subType);
     addDeptWorkflowItems(subTypeReqs, o => wfMap[o.dept], {
       type, typeLabel, codeOf: r => r.code, titleOf: r => r.title,
-      actionsOf: r => [{ label: '✍️ Xử lý / Duyệt', onclick: `openOfficeProcessModal(${r.id})`, primary: true }]
+      actionsOf: r => [{ label: '✍️ Xử lý / Duyệt', fn: 'openOfficeProcessModal', args: [r.id], primary: true }]
     });
   });
 
   addDeptWorkflowItems(DB.vppRegistrations, r => DB.vppDeptWorkflows[r.dept], {
     type: 'vpp', typeLabel: '🖇️ Văn phòng phẩm',
     codeOf: r => r.code, titleOf: r => r.periodName || r.code,
-    actionsOf: r => [{ label: '✍️ Xử lý / Duyệt', onclick: `openVppRegModal(${r.id})`, primary: true }]
+    actionsOf: r => [{ label: '✍️ Xử lý / Duyệt', fn: 'openVppRegModal', args: [r.id], primary: true }]
   });
 
   addDeptWorkflowItems(DB.itPriceApprovals, p => DB.itPriceDeptWorkflows[p.dept], {
@@ -12292,15 +12292,15 @@ function getMyPendingApprovals(user) {
     codeOf: r => r.code, titleOf: r => r.productName,
     statusBadgeOf: r => itPriceHasUnresolvedInfoRequest(r) ? approvalHubNeedInfoBadge() : approvalHubPendingBadge(),
     actionsOf: r => [
-      { label: '✅ Duyệt', onclick: `runItPriceAction(${r.id}, 'approve')`, primary: true },
-      { label: '❌ Từ chối', onclick: `runItPriceAction(${r.id}, 'reject')` }
+      { label: '✅ Duyệt', fn: 'runItPriceAction', args: [r.id, 'approve'], primary: true },
+      { label: '❌ Từ chối', fn: 'runItPriceAction', args: [r.id, 'reject'] }
     ]
   });
 
   addDeptWorkflowItems(DB.budgetEntries, b => DB.budgetDeptWorkflows[b.dept], {
     type: 'budget', typeLabel: '📊 Ngân Sách',
     codeOf: r => r.code, titleOf: r => r.periodName || r.code,
-    actionsOf: r => [{ label: '✍️ Xử lý / Duyệt', onclick: `openBudgetProcessModal(${r.id})`, primary: true }]
+    actionsOf: r => [{ label: '✍️ Xử lý / Duyệt', fn: 'openBudgetProcessModal', args: [r.id], primary: true }]
   });
 
   // Hợp đồng — GIỜ ĐÃ có bước quy trình riêng (xem lib/workflowEngine.js), dùng addDeptWorkflowItems()
@@ -12314,8 +12314,8 @@ function getMyPendingApprovals(user) {
     {
       type: 'contract', typeLabel: '📄 Hợp đồng', codeOf: r => r.code, titleOf: r => r.title,
       actionsOf: r => [
-        { label: '✅ Duyệt', onclick: `approveContractAction(${r.id})`, primary: true },
-        { label: '❌ Từ chối', onclick: `rejectContractAction(${r.id})` }
+        { label: '✅ Duyệt', fn: 'approveContractAction', args: [r.id], primary: true },
+        { label: '❌ Từ chối', fn: 'rejectContractAction', args: [r.id] }
       ]
     },
     { status: 'approvalStatus' }
@@ -12327,8 +12327,8 @@ function getMyPendingApprovals(user) {
     {
       type: 'contractSigned', typeLabel: '📝 Tài liệu ký HĐ', codeOf: r => r.code, titleOf: r => r.title,
       actionsOf: r => [
-        { label: '✅ Duyệt', onclick: `approveContractSignedFileAction(${r.id})`, primary: true },
-        { label: '❌ Từ chối', onclick: `rejectContractSignedFileAction(${r.id})` }
+        { label: '✅ Duyệt', fn: 'approveContractSignedFileAction', args: [r.id], primary: true },
+        { label: '❌ Từ chối', fn: 'rejectContractSignedFileAction', args: [r.id] }
       ]
     },
     { status: 'signedFileStatus', currentStep: 'signedFileCurrentStep', history: 'signedFileHistory' }
@@ -12340,7 +12340,7 @@ function getMyPendingApprovals(user) {
         type: 'meeting', typeLabel: '📅 Phòng họp', code: m.code, title: m.title, dept: m.dept,
         stepLabel: '', createdAt: m.createdAt,
         statusBadge: approvalHubPendingBadge(),
-        actions: [{ label: '✅ Duyệt', onclick: `approveMeeting(${m.id})`, primary: true }]
+        actions: [{ label: '✅ Duyệt', fn: 'approveMeeting', args: [m.id], primary: true }]
       });
     });
   }
@@ -12352,8 +12352,8 @@ function getMyPendingApprovals(user) {
         stepLabel: '', createdAt: p.createdAt,
         statusBadge: approvalHubPendingBadge(),
         actions: [
-          { label: '✅ Duyệt', onclick: `approveInternalPostAction(${p.id})`, primary: true },
-          { label: '❌ Từ chối', onclick: `rejectInternalPostAction(${p.id})` }
+          { label: '✅ Duyệt', fn: 'approveInternalPostAction', args: [p.id], primary: true },
+          { label: '❌ Từ chối', fn: 'rejectInternalPostAction', args: [p.id] }
         ]
       });
     });
@@ -12372,8 +12372,8 @@ function getMyPendingApprovals(user) {
           stepLabel: '', createdAt: c.time,
           statusBadge: approvalHubPendingBadge(),
           actions: [
-            { label: '🗑️ Xoá bình luận', onclick: `deleteFlaggedCommentAction(${p.id}, ${c.id})`, primary: true },
-            { label: '✅ Bỏ qua (không vấn đề)', onclick: `dismissCommentFlagAction(${p.id}, ${c.id})` }
+            { label: '🗑️ Xoá bình luận', fn: 'deleteFlaggedCommentAction', args: [p.id, c.id], primary: true },
+            { label: '✅ Bỏ qua (không vấn đề)', fn: 'dismissCommentFlagAction', args: [p.id, c.id] }
           ]
         });
       });
@@ -12389,8 +12389,8 @@ function getMyPendingApprovals(user) {
         stepLabel: '', createdAt: l.createdAt,
         statusBadge: approvalHubPendingBadge(),
         actions: [
-          { label: '✅ Duyệt', onclick: `runLicenseAction(${l.id}, 'approve')`, primary: true },
-          { label: '❌ Từ chối', onclick: `runLicenseAction(${l.id}, 'reject')` }
+          { label: '✅ Duyệt', fn: 'runLicenseAction', args: [l.id, 'approve'], primary: true },
+          { label: '❌ Từ chối', fn: 'runLicenseAction', args: [l.id, 'reject'] }
         ]
       });
     });
@@ -12402,7 +12402,7 @@ function getMyPendingApprovals(user) {
         type: 'payment', typeLabel: '💰 Thanh toán', code: pr.sourceCode || String(pr.id), title: pr.title,
         dept: pr.dept, stepLabel: '', createdAt: pr.createdAt,
         statusBadge: pr.status === 'NEED_INFO' ? approvalHubNeedInfoBadge() : approvalHubPendingBadge(),
-        actions: [{ label: '✅ Xác nhận', onclick: `approvePaymentRequestAction(${pr.id})`, primary: true }]
+        actions: [{ label: '✅ Xác nhận', fn: 'approvePaymentRequestAction', args: [pr.id], primary: true }]
       });
     });
   }
@@ -12418,8 +12418,8 @@ function getMyPendingApprovals(user) {
         createdAt: p.emergencyRejectRequestedAt,
         statusBadge: approvalHubPendingBadge(),
         actions: [
-          { label: '✅ Duyệt huỷ', onclick: `approveItPriceEmergencyRejectAction(${p.id})`, primary: true },
-          { label: '❌ Từ chối yêu cầu', onclick: `denyItPriceEmergencyRejectAction(${p.id})` }
+          { label: '✅ Duyệt huỷ', fn: 'approveItPriceEmergencyRejectAction', args: [p.id], primary: true },
+          { label: '❌ Từ chối yêu cầu', fn: 'denyItPriceEmergencyRejectAction', args: [p.id] }
         ]
       });
     });
@@ -12432,24 +12432,24 @@ function getMyPendingApprovals(user) {
   addDeptWorkflowItems(DB.operationOrders, o => DB.operationOrderDeptWorkflows[o.dept], {
     type: 'operationOrder', typeLabel: '📦 Vận Hành - Đơn hàng',
     codeOf: r => r.code, titleOf: r => r.title,
-    actionsOf: r => [{ label: '✍️ Xử lý / Duyệt', onclick: `openOperationProcessModal('operationOrders', ${r.id})`, primary: true }]
+    actionsOf: r => [{ label: '✍️ Xử lý / Duyệt', fn: 'openOperationProcessModal', args: ['operationOrders', r.id], primary: true }]
   });
   addDeptWorkflowItems(DB.operationStoreOpenings, o => DB.operationStoreOpenDeptWorkflows[o.dept], {
     type: 'operationStoreOpen', typeLabel: '🏬 Vận Hành - Mở mới siêu thị',
     codeOf: r => r.code, titleOf: r => r.storeName,
-    actionsOf: r => [{ label: '✍️ Xử lý / Duyệt', onclick: `openOperationProcessModal('operationStoreOpenings', ${r.id})`, primary: true }]
+    actionsOf: r => [{ label: '✍️ Xử lý / Duyệt', fn: 'openOperationProcessModal', args: ['operationStoreOpenings', r.id], primary: true }]
   });
   addDeptWorkflowItems(DB.operationRepairs, o => DB.operationRepairDeptWorkflows[o.dept], {
     type: 'operationRepair', typeLabel: '🔧 Vận Hành - Sửa chữa siêu thị',
     codeOf: r => r.code, titleOf: r => r.title,
-    actionsOf: r => [{ label: '✍️ Xử lý / Duyệt', onclick: `openOperationProcessModal('operationRepairs', ${r.id})`, primary: true }]
+    actionsOf: r => [{ label: '✍️ Xử lý / Duyệt', fn: 'openOperationProcessModal', args: ['operationRepairs', r.id], primary: true }]
   });
   addDeptWorkflowItems(
     DB.operationStoreOpenings, o => DB.operationStoreOpenEstimateDeptWorkflows[o.dept],
     {
       type: 'operationStoreOpenEstimate', typeLabel: '📊 Vận Hành - Dự toán Mở mới',
       codeOf: r => r.code, titleOf: r => r.storeName,
-      actionsOf: r => [{ label: '✍️ Xử lý / Duyệt', onclick: `openOperationEstimateModal('operationStoreOpenings', ${r.id})`, primary: true }]
+      actionsOf: r => [{ label: '✍️ Xử lý / Duyệt', fn: 'openOperationEstimateModal', args: ['operationStoreOpenings', r.id], primary: true }]
     },
     { status: 'estimateStatus', currentStep: 'estimateCurrentStep', history: 'estimateHistory' }
   );
@@ -12458,7 +12458,7 @@ function getMyPendingApprovals(user) {
     {
       type: 'operationRepairEstimate', typeLabel: '📊 Vận Hành - Dự toán Sửa chữa',
       codeOf: r => r.code, titleOf: r => r.title,
-      actionsOf: r => [{ label: '✍️ Xử lý / Duyệt', onclick: `openOperationEstimateModal('operationRepairs', ${r.id})`, primary: true }]
+      actionsOf: r => [{ label: '✍️ Xử lý / Duyệt', fn: 'openOperationEstimateModal', args: ['operationRepairs', r.id], primary: true }]
     },
     { status: 'estimateStatus', currentStep: 'estimateCurrentStep', history: 'estimateHistory' }
   );
@@ -12589,7 +12589,7 @@ function getMyProcessedApprovals(user, status, sinceMs) {
         stepLabel: status === 'APPROVED' ? '✅ Bạn đã duyệt' : '❌ Bạn đã từ chối',
         createdAt: lastMine.time,
         statusBadge,
-        actions: [{ label: '🔍 Xem', onclick: `gotoApprovalHubOrigin('${cfg.type}')`, primary: true }]
+        actions: [{ label: '🔍 Xem', fn: 'gotoApprovalHubOrigin', args: [cfg.type], primary: true }]
       });
     });
   }
@@ -12633,7 +12633,7 @@ function getMyProcessedApprovals(user, status, sinceMs) {
         type: 'meeting', typeLabel: '📅 Phòng họp', code: m.code, title: m.title, dept: m.dept,
         stepLabel: '✅ Bạn đã duyệt', createdAt: m.approvedAt,
         statusBadge,
-        actions: [{ label: '🔍 Xem', onclick: `gotoApprovalHubOrigin('meeting')`, primary: true }]
+        actions: [{ label: '🔍 Xem', fn: 'gotoApprovalHubOrigin', args: ['meeting'], primary: true }]
       });
     });
   }
@@ -12646,7 +12646,7 @@ function getMyProcessedApprovals(user, status, sinceMs) {
         type: 'internalShare', typeLabel: '💬 Góc chia sẻ', code: p.code, title: p.title, dept: p.dept,
         stepLabel: status === 'APPROVED' ? '✅ Bạn đã duyệt' : '❌ Bạn đã từ chối', createdAt: p[dateField],
         statusBadge,
-        actions: [{ label: '🔍 Xem', onclick: `gotoApprovalHubOrigin('internalShare')`, primary: true }]
+        actions: [{ label: '🔍 Xem', fn: 'gotoApprovalHubOrigin', args: ['internalShare'], primary: true }]
       });
     });
   }
@@ -12664,7 +12664,7 @@ function getMyProcessedApprovals(user, status, sinceMs) {
         type: 'license', typeLabel: '📜 Giấy phép', code: l.displayCode || l.code, title: l.licenseType, dept: l.dept,
         stepLabel: status === 'APPROVED' ? '✅ Bạn đã duyệt' : '❌ Bạn đã từ chối', createdAt: lastMine.time,
         statusBadge,
-        actions: [{ label: '🔍 Xem', onclick: `gotoApprovalHubOrigin('license')`, primary: true }]
+        actions: [{ label: '🔍 Xem', fn: 'gotoApprovalHubOrigin', args: ['license'], primary: true }]
       });
     });
   }
@@ -12675,7 +12675,7 @@ function getMyProcessedApprovals(user, status, sinceMs) {
         type: 'payment', typeLabel: '💰 Thanh toán', code: pr.sourceCode || String(pr.id), title: pr.title, dept: pr.dept,
         stepLabel: '✅ Bạn đã duyệt', createdAt: pr.approvedAt,
         statusBadge,
-        actions: [{ label: '🔍 Xem', onclick: `gotoApprovalHubOrigin('payment')`, primary: true }]
+        actions: [{ label: '🔍 Xem', fn: 'gotoApprovalHubOrigin', args: ['payment'], primary: true }]
       });
     });
   }
@@ -12816,7 +12816,7 @@ function renderApprovalHub() {
       <td class="p-2 whitespace-nowrap">${it.statusBadge || ''}</td>
       <td class="p-2 text-xs text-gray-500 whitespace-nowrap">${escapeHtml(it.createdAt || '')}</td>
       <td class="p-2 text-center space-x-1 whitespace-nowrap">
-        ${it.actions.map(a => `<button onclick="${a.onclick}" class="px-2 py-1 rounded text-xs font-bold ${a.label.startsWith('🔍') ? 'bg-sky-600 text-white hover:bg-sky-700' : (a.primary ? 'bg-emerald-600 text-white hover:bg-emerald-700' : 'bg-red-600 text-white hover:bg-red-700')}">${a.label}</button>`).join(' ')}
+        ${it.actions.map(a => `<button data-op="${escapeHtml(a.fn)}"${(a.args || []).map((v, i) => ` data-arg${i}="${escapeHtml(String(v))}"`).join('')} class="px-2 py-1 rounded text-xs font-bold ${a.label.startsWith('🔍') ? 'bg-sky-600 text-white hover:bg-sky-700' : (a.primary ? 'bg-emerald-600 text-white hover:bg-emerald-700' : 'bg-red-600 text-white hover:bg-red-700')}">${a.label}</button>`).join(' ')}
       </td>
     </tr>
   `).join('');
@@ -12835,7 +12835,7 @@ function renderDashboard() {
   const grid = document.getElementById('dashboardStatsGrid');
   document.getElementById('dashboardEmptyNote').classList.toggle('hidden', visibleCards.length > 0);
   grid.innerHTML = visibleCards.map(c => `
-    <div onclick="handleDashboardCardClick('${c.key}')" class="dash-card bg-white border rounded-lg p-4 shadow-sm border-l-4 ${c.count > 0 ? 'border-l-amber-500' : 'border-l-slate-300'} flex justify-between items-center cursor-pointer transition-all hover:scale-[1.02]">
+    <div data-op="handleDashboardCardClick" data-arg0="${c.key}" class="dash-card bg-white border rounded-lg p-4 shadow-sm border-l-4 ${c.count > 0 ? 'border-l-amber-500' : 'border-l-slate-300'} flex justify-between items-center cursor-pointer transition-all hover:scale-[1.02]">
       <div>
         <p class="text-xs text-gray-500 uppercase font-bold">${escapeHtml(c.label)}</p>
         <h3 class="text-2xl font-bold ${c.count > 0 ? 'text-amber-600' : 'text-gray-400'}">${c.count}</h3>
@@ -12876,7 +12876,7 @@ function renderDashboardNews() {
     return;
   }
   container.innerHTML = posts.map(p => `
-    <div onclick="switchTab('internal'); setInternalSubTab('${p.type}'); viewInternalPostDetail(${p.id});" class="bg-white rounded border hover:shadow p-3 cursor-pointer">
+    <div data-op-seq="switchTab('internal')|setInternalSubTab('${p.type}')|viewInternalPostDetail(${p.id})" class="bg-white rounded border hover:shadow p-3 cursor-pointer">
       <div class="text-[10px] font-bold text-fuchsia-700">${typeLabel[p.type] || p.type}${isActivePinned(p) ? ' <span class="text-amber-600">📌 Đã ghim</span>' : ''}</div>
       <div class="font-bold text-gray-800 text-sm">${escapeHtml(p.title)}</div>
       <div class="text-xs text-gray-500 mt-0.5">${escapeHtml(p.authorName)} — ${escapeHtml(p.createdAt)}</div>
@@ -12893,7 +12893,7 @@ function openDashboardCustomizeModal() {
   } else {
     list.innerHTML = relevantCards.map(c => `
       <label class="flex items-center gap-2 text-sm p-1.5 rounded hover:bg-gray-50 cursor-pointer">
-        <input type="checkbox" onchange="onDashboardCustomizeToggle('${c.key}', this.checked)" ${hidden.includes(c.key) ? '' : 'checked'}>
+        <input type="checkbox" data-op-change="onDashboardCustomizeToggleFromCheckbox" data-arg0="${c.key}" data-arg-el="1" ${hidden.includes(c.key) ? '' : 'checked'}>
         <span>${c.icon} ${escapeHtml(c.label)}</span>
       </label>
     `).join('');
@@ -12914,6 +12914,12 @@ let dashboardHiddenWorking = [];
 function onDashboardCustomizeToggle(key, checked) {
   dashboardHiddenWorking = checked ? dashboardHiddenWorking.filter(k => k !== key) : [...new Set([...dashboardHiddenWorking, key])];
   saveDashboardHiddenCards(dashboardHiddenWorking);
+}
+// Wrapper cho CSP data-op-change (đợt D): checkbox trong #dashboardCustomizeList cần .checked của
+// chính nó (this.checked) chứ không phải 1 tham số literal — dùng data-arg-el="1" để nhận cả phần tử
+// checkbox rồi tự đọc .checked ở đây, khớp cách các wrapper "FromCheckbox" khác trong hệ thống.
+function onDashboardCustomizeToggleFromCheckbox(key, checkboxEl) {
+  onDashboardCustomizeToggle(key, checkboxEl.checked);
 }
 
 function finishLogin(user) {
@@ -24084,6 +24090,31 @@ bindCspDelegation('viewDocModal');
 // nhận: bấm nút trong bodyHTML không phản ứng gì khi CHƯA bind, chạy đúng sau khi bind — xem báo cáo
 // đợt B). 1 gốc duy nhất.
 bindCspDelegation('genericConfirmModal');
+
+// CSP hạ tầng dùng chung (đợt D) — #dashboardSection: nút "⚙️ Tuỳ chỉnh" (mở
+// #dashboardCustomizeModal), thẻ dashboard động trong #dashboardStatsGrid (renderDashboard() ->
+// handleDashboardCardClick(key)) và thẻ tin tức trong #dashboardNewsContainer (renderDashboardNews() ->
+// 3 lời gọi nối tiếp switchTab()/setInternalSubTab()/viewInternalPostDetail(), mọi tham số literal nên
+// dùng data-op-seq thay vì wrapper riêng). #dashboardCustomizeModal sống NGOÀI section (giống Xe/Vận
+// Hành) nên cần gốc riêng — nút "Đóng" tĩnh + checkbox động trong #dashboardCustomizeList
+// (openDashboardCustomizeModal() -> onDashboardCustomizeToggle(key, this.checked), cần
+// onDashboardCustomizeToggleFromCheckbox() làm wrapper nhận phần tử qua data-arg-el rồi tự đọc .checked,
+// vì tham số thứ 2 là boolean runtime không phải literal).
+bindCspDelegation('dashboardSection');
+bindCspDelegation('dashboardCustomizeModal');
+
+// CSP hạ tầng dùng chung (đợt D) — #approvalHubSection: hộp thư duyệt tổng hợp gộp hồ sơ chờ duyệt từ
+// GẦN NHƯ MỌI module nghiệp vụ (xem getMyPendingApprovals()/getMyProcessedApprovals()). 4 điểm tĩnh
+// (bộ lọc Trạng Thái/Khoảng Thời Gian/Loại + ô tìm kiếm, đều gọi renderApprovalHub()) cộng 1 sink động
+// quan trọng nhất đợt này: nút Duyệt/Từ chối/Xem trong #approvalHubTableBody trước đây là
+// onclick="${a.onclick}" với a.onclick là 1 CHUỖI JS TỰ DO build sẵn ở ~29 nơi định nghĩa action rải
+// khắp getMyPendingApprovals()/getMyProcessedApprovals() (Doc/Submission/Car/Office/Vpp/ItPrice/Budget/
+// Contract x2 luồng/Meeting/InternalPost/FlaggedComment/License/Payment/ItPriceEmergencyReject/
+// Operation x5) — đã tái cấu trúc field action.onclick sang action.fn (tên hàm) + action.args (mảng
+// tham số, mọi phần tử đều id/enum literal đã có giá trị cụ thể lúc build, không có this.value/
+// this.checked/biểu thức runtime) — sink giờ render generic data-op="${a.fn}" + data-argN theo đúng độ
+// dài a.args, không còn onclick="${a.onclick}". 1 gốc duy nhất, không có modal riêng ngoài section.
+bindCspDelegation('approvalHubSection');
 
 // ==========================================
 // VĂN PHÒNG PHẨM — kỳ đăng ký (vppPeriods) + đăng ký của nhân viên (vppRegistrations). 3 sub-tab:

@@ -1,10 +1,104 @@
 # Phiên bản hiện tại
 
-**5.8** — đã merge vào `main` (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge
+**5.9** — đã merge vào `main` (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge
 góc màn hình + `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần
 kiểu `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
 
-## Cập nhật gần nhất — CSP hạ tầng dùng chung, đợt B: `#genericConfirmModal` + fix bug thiếu `bindCspDelegation`
+## Cập nhật gần nhất — CSP hạ tầng dùng chung, đợt D: Dashboard + Approval Hub, tái cấu trúc `action.onclick` → `action.fn`/`action.args`
+
+Tiếp tục đợt B (`#genericConfirmModal`, xem mục "Trước đó" ngay bên dưới) — đợt này chuyển 3 gốc **CHƯA
+TỪNG** được `bindCspDelegation()` phủ tới: **`#dashboardSection`**, **`#dashboardCustomizeModal`**,
+**`#approvalHubSection`** (hộp thư duyệt tổng hợp gộp hồ sơ chờ duyệt từ gần như MỌI module nghiệp vụ có
+quy trình phê duyệt). **Đây là đợt tái cấu trúc, không chỉ convert cơ học** — sink quan trọng nhất của
+Approval Hub (`onclick="${a.onclick}"`, mỗi `a.onclick` là 1 chuỗi JS tự do build sẵn) phải đổi cấu trúc dữ
+liệu nguồn trước khi convert được sang `data-op`/`data-argN`.
+
+- **10 điểm** `onclick`/`onchange`/`oninput` chuyển sang `data-op*`:
+  - **`#dashboardSection`** (3 điểm): nút "⚙️ Tuỳ chỉnh" (`openDashboardCustomizeModal`, literal); thẻ
+    dashboard động trong `#dashboardStatsGrid` (`renderDashboard()` → `handleDashboardCardClick('${c.key}')`,
+    `data-arg0` nội suy literal lúc build); thẻ tin tức động trong `#dashboardNewsContainer`
+    (`renderDashboardNews()` → 3 lời gọi nối tiếp `switchTab('internal')|setInternalSubTab('${p.type}')|
+    viewInternalPostDetail(${p.id})`, mọi tham số literal nên dùng `data-op-seq` thay vì viết wrapper riêng).
+  - **`#dashboardCustomizeModal`** (2 điểm): nút "Đóng" tĩnh (`closeDashboardCustomizeModal`, literal);
+    checkbox động trong `#dashboardCustomizeList` (`openDashboardCustomizeModal()` →
+    `onDashboardCustomizeToggle(key, this.checked)` — tham số thứ 2 là `this.checked` runtime, KHÔNG truyền
+    thẳng qua `data-argN` được, dùng `data-arg-el` nhận cả phần tử checkbox + 1 wrapper mới đọc `.checked`).
+  - **`#approvalHubSection`** (5 điểm): 3 dropdown lọc + 1 ô tìm kiếm (`approvalHubFilterStatus`/
+    `approvalHubFilterRange`/`approvalHubFilterType` → `data-op-change="renderApprovalHub"`,
+    `approvalHubSearch` → `data-op-input="renderApprovalHub"`) cộng **1 sink render generic**: nút
+    Duyệt/Từ chối/Xem trong `#approvalHubTableBody` — xem mục tái cấu trúc bên dưới.
+- **1 hàm wrapper mới**: `onDashboardCustomizeToggleFromCheckbox(key, checkboxEl)` (đọc `checkboxEl.checked`
+  rồi gọi lại `onDashboardCustomizeToggle(key, checked)` gốc — cùng khuôn các wrapper `...FromCheckbox()`
+  khác đã có sẵn trong hệ thống, vd `updateBudgetTemplateFieldRequiredFromCheckbox()`).
+- **3 gốc `bindCspDelegation` MỚI**: `dashboardSection`, `dashboardCustomizeModal`, `approvalHubSection`
+  (thêm ngay sau khối bind của đợt B) — cả 3 gốc này trước đó CHƯA TỪNG được bind ở bất kỳ đợt nào trước
+  đây, dù cả 3 đã tồn tại từ lâu và Approval Hub đặc biệt gộp dữ liệu từ ~9 module khác nhau.
+
+**TÁI CẤU TRÚC — `action.onclick` (chuỗi JS tự do) → `action.fn` + `action.args` (có cấu trúc) ở 33 nơi
+định nghĩa action** (ước lượng ban đầu ~29, rà `grep -c 'onclick:'` thực tế ra 33): rải khắp
+`getMyPendingApprovals()`/`getMyProcessedApprovals()` — Tài liệu/Văn bản trình/Đăng ký xe/Mua Bán/Sửa Chữa/
+VPP/Giá IT/Ngân Sách/Hợp đồng x2 luồng (Phê Duyệt + Tài liệu ký)/Phòng họp/Góc chia sẻ/Bình luận bị gắn
+cờ/Giấy phép/Thanh toán/Từ chối khẩn Giá IT/Vận Hành x5 (Đơn hàng/Mở mới/Sửa chữa/Dự toán Mở mới/Dự toán
+Sửa chữa). Xác nhận trước khi sửa: **mọi tham số ở cả 33 nơi đều là id/enum literal đã có giá trị cụ thể
+lúc build** (không có `this.value`/`this.checked`/biểu thức runtime phức tạp) — script Python tự viết
+(regex `onclick: \`fn(args)\`` → tách từng arg theo dấu phẩy ở độ sâu ngoặc 0, gỡ `${...}` cho arg là biến,
+giữ nguyên arg là chuỗi literal) convert cơ học toàn bộ 33 nơi sang `fn: 'tenHam', args: [...]`, có **1 lỗi
+duy nhất do script gây ra và đã tự phát hiện + sửa tay ngay**: `gotoApprovalHubOrigin('${cfg.type}')` (biến
+`cfg.type` lồng trong dấu nháy đơn bên trong template literal) bị script hiểu nhầm literal `args:
+['${cfg.type}']` thay vì `args: [cfg.type]` — sửa lại đúng thành biến trước khi verify. Sink render tại
+`renderApprovalHub()` đổi từ `onclick="${a.onclick}"` sang generic `data-op="${escapeHtml(a.fn)}"` + vòng lặp
+build `data-arg${i}` theo đúng độ dài mảng `a.args` (không hard-code số lượng tham số, khớp mọi action có
+0-2 tham số tuỳ loại). **KHÔNG đụng** `buildActionCell()`/`paginateList()`/`buildDashboardCardsHTML()` (hạ
+tầng dùng chung để dành đợt A cuối cùng) hay Office module/`#profileModal` (đợt E/F riêng).
+
+**Xác nhận không ảnh hưởng** — 2 lớp kiểm tra độc lập trước khi merge:
+- Integrity check tĩnh: 3 script `<script>` đều `node --check` sạch; đếm `<div>` mở/đóng giữ nguyên
+  `2653/2648`; rà `id=` trùng khớp đúng baseline đã biết trước đó (`bsDept`/`bsTitle`/`bsReason`/`bsType`/
+  `bsFile`/`bsSupplier`/`bsNote`/`bsStoreName`/`bsAmount`/`systemUsersDatalist`/`Y`/`${base}` không lỗi;
+  `${o.id}`/`${w.id}`/`${f.id}` bình thường, toàn bộ pre-existing từ các đợt trước); grep xác nhận **0 field
+  `onclick:` còn sót** trong khối định nghĩa action (12247-12690) và **0 sink `onclick="${a.onclick}"`** còn
+  sót trong toàn file.
+- Demo Playwright thật (SQL Server + server local + đăng nhập UI thật) — tạo 1 tài khoản demo tạm
+  `demo_cspd` (`totpEnabled:false`, `mustChangePassword:false`, không phải admin, chỉ cấp đúng quyền cần
+  test — `meetingApprove`/`licenseApprove`/`approverAuthLevel:'NONE'`) + 1 phòng ban demo tạm với quy trình
+  1 bước riêng (không đụng cấu hình phòng ban thật đang dùng), 5 hồ sơ PENDING qua `insertRecord()`
+  (`lib/recordStore.js`) trải **5 module khác nhau** — Tài liệu, Đăng ký xe, Văn bản trình, Giấy phép, Phòng
+  họp — xoá lại toàn bộ ngay sau demo:
+  - **Dashboard**: click 2 loại thẻ khác nhau ("Công việc cần xử lý" luôn hiện + "Tài liệu chờ duyệt" hiện
+    vì có hồ sơ demo) qua `data-op="handleDashboardCardClick"` — điều hướng đúng sang tab tương ứng cả 2
+    lần; mở modal tuỳ biến (`data-op="openDashboardCustomizeModal"`), un-tick 1 checkbox — xác nhận
+    `onDashboardCustomizeToggleFromCheckbox()` đọc đúng `this.checked` qua `data-arg-el` (state đổi đúng,
+    tick lại + đóng modal qua `data-op="closeDashboardCustomizeModal"` khôi phục nguyên trạng).
+  - **Approval Hub** qua **5 module**: **Giấy phép** (DIRECT-fire `runLicenseAction` qua `genericConfirmModal`
+    đã bind sẵn từ đợt B → `POST /api/records/licenses/:id/approve` status 200); **Phòng họp** (DIRECT-fire
+    `approveMeeting`, KHÔNG qua modal xác nhận nào → `POST /api/meetings/:id/approve` status 200); **Văn bản
+    trình** (MODAL-launcher `openProcessSubmissionModal` → mở đúng `#submissionProcessModal`, gốc đã bind từ
+    đợt module Văn Bản Trình trước đây); **Đăng ký xe** (MODAL-launcher `openCarProcessModal` → mở đúng
+    `#carProcessModal`, gốc đã bind từ đợt module Xe); **Tài liệu** (DIRECT-fire `runDocAction` qua
+    `withApprovalAuth()` mức `NONE` → `POST /api/workflow/docs/:id/approve` status 200) — cộng xác nhận bộ
+    lọc Loại (`data-op-change`) và ô tìm kiếm (`data-op-input`) đều lọc đúng danh sách theo dữ liệu thật.
+  - 19/19 kiểm tra demo PASS, 0 lỗi JS console trong toàn bộ demo.
+- Chạy lại toàn bộ 46 file test hồi quy (`tests/test-*.js`) — 46/46 file OK, 0 FAIL trong mọi kịch bản
+  (bao gồm cập nhật `tests/test-approval-hub.js` để khớp assertion mới: đọc `data-op`/`data-arg0`/
+  `data-arg1` thay vì `onclick` cũ trên nút hàng Tài liệu); đúng 2 file known-flaky quen thuộc
+  (`test-audit-fixes-batch1.js`/`test-audit-round2-cluster1.js` — hoàn tất toàn bộ kịch bản (14/14 và 20/20)
+  nhưng tiến trình Node không tự thoát ngay, hạ tầng test có sẵn từ trước, không liên quan thay đổi lần này)
+  đều được xác nhận pass qua log kết thúc đúng ngay dòng kết quả cuối.
+
+**Deploy-impact:** KHÔNG đổi `sql/schema.sql`, KHÔNG thêm biến môi trường mới, KHÔNG thêm `dependencies`
+mới — toàn bộ thay đổi nằm trong `public/index.html` (thuần client JS/HTML) + `tests/test-approval-hub.js`
+(chỉ test), deploy an toàn chỉ với copy code + `pm2 restart`, không cần thao tác 1 lần nào khác.
+
+**Còn lại:** ước tính còn khoảng **54-55 điểm** (giảm từ ~64-65 sau đợt này), chia thành các đợt riêng sẽ
+làm sau, rủi ro tăng dần theo thứ tự dự kiến:
+- **F** — `#profileModal` (~18 điểm).
+- **E** — Office module (`buildActionCell()`/dropdown "Khác ▾" dùng chung nhiều module, ~26 điểm).
+- **A** — rủi ro cao nhất, để dành sau cùng — `buildActionCell()`/`paginateList()`+
+  `buildPaginationBoxHTML()`/`buildDashboardCardsHTML()` (hạ tầng lõi dùng ở gần như mọi module).
+
+Chỉ khi hết sạch toàn bộ mới gỡ `'unsafe-inline'` khỏi CSP header (`lib/securityHeaders.js`).
+
+## Trước đó — CSP hạ tầng dùng chung, đợt B: `#genericConfirmModal` + fix bug thiếu `bindCspDelegation`
 
 Tiếp tục đợt C (`#viewDocModal`, xem mục "Trước đó" ngay bên dưới) — đợt này chuyển **`#genericConfirmModal`**,
 modal xác nhận Đồng Ý/Hủy DÙNG CHUNG cho **~53 lời gọi `showConfirmModal()`** trải khắp gần hết hệ thống

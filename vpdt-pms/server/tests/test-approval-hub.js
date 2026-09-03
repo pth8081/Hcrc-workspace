@@ -231,7 +231,7 @@ async function scenario(name, fn) {
       const rows = [...document.querySelectorAll('#approvalHubTableBody tr')];
       const codesRendered = rows.map(tr => tr.children[1].textContent.trim()).sort();
       const docRow = rows.find(tr => tr.children[1].textContent.trim() === 'TL-001');
-      const docButtons = docRow ? [...docRow.querySelectorAll('button')].map(b => ({ label: b.textContent.trim(), onclick: b.getAttribute('onclick') })) : [];
+      const docButtons = docRow ? [...docRow.querySelectorAll('button')].map(b => ({ label: b.textContent.trim(), op: b.getAttribute('data-op'), arg0: b.getAttribute('data-arg0'), arg1: b.getAttribute('data-arg1') })) : [];
       const emptyNoteHidden = document.getElementById('approvalHubEmptyNote').classList.contains('hidden');
       const listVisible = !document.getElementById('approvalHubListWrap').classList.contains('hidden');
       const sectionVisible = !document.getElementById('approvalHubSection').classList.contains('hidden');
@@ -245,10 +245,10 @@ async function scenario(name, fn) {
       JSON.stringify(r));
     record('empty-state note is hidden and the list is visible when items are present',
       r.emptyNoteHidden && r.listVisible, JSON.stringify(r));
-    record('doc row renders both "✅ Duyệt" and "❌ Từ chối" action buttons wired to runDocAction(101, ...)',
+    record('doc row renders both "✅ Duyệt" and "❌ Từ chối" action buttons wired via data-op="runDocAction"(101, ...)',
       r.docButtons.length === 2 &&
-      r.docButtons.some(b => /Duyệt/.test(b.label) && b.onclick === "runDocAction(101, 'approve')") &&
-      r.docButtons.some(b => /Từ chối/.test(b.label) && b.onclick === "runDocAction(101, 'reject')"),
+      r.docButtons.some(b => /Duyệt/.test(b.label) && b.op === 'runDocAction' && b.arg0 === '101' && b.arg1 === 'approve') &&
+      r.docButtons.some(b => /Từ chối/.test(b.label) && b.op === 'runDocAction' && b.arg0 === '101' && b.arg1 === 'reject'),
       JSON.stringify(r.docButtons));
     record('type filter dropdown only lists types that actually have pending items (doc/submission/contract)',
       JSON.stringify(r.typeFilterOptions.filter(Boolean).sort()) === JSON.stringify(['contract', 'doc', 'submission']),
