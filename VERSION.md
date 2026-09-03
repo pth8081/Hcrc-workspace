@@ -1,11 +1,100 @@
 # Phiên bản hiện tại
 
-**6.0** — đã merge vào `main` (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge
+**6.1** — đã merge vào `main` (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge
 góc màn hình + `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần
 kiểu `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. Đúng theo quy tắc MINOR chạy 0-9 trong
-`CLAUDE.md`: sau `5.9` tăng MAJOR lên `6.0`, reset MINOR về 0.
+`CLAUDE.md`: sau `6.0` tăng MINOR lên `6.1`.
 
-## Cập nhật gần nhất — CSP hạ tầng dùng chung, đợt F: `#profileModal` (Hồ Sơ Cá Nhân)
+## Cập nhật gần nhất — CSP module Office - đợt E: `#officeSection` + `#officeProcessModal` + `#signedUploadModal`
+
+Tiếp tục đợt F (`#profileModal`, xem mục "Trước đó" ngay bên dưới) — đợt này **KHÔNG phải hạ tầng dùng
+chung** mà là **1 module nghiệp vụ nguyên vẹn chưa từng convert** trong 23 đợt module trước: "Tổng Hợp"
+(Đề Xuất Mua Bán/Sửa Chữa/Thanh Toán, còn gọi "Văn Phòng") — coi như module thứ 24, đúng khuôn các đợt
+module 1-23. Cả 3 gốc **`#officeSection`**, **`#officeProcessModal`**, **`#signedUploadModal`** đều **CHƯA
+TỪNG** được `bindCspDelegation()` phủ tới.
+
+- **26 điểm** `onclick`/`onchange`/`oninput`/`onsubmit` chuyển sang `data-op*` (đúng ước lượng ban đầu):
+  - **`#officeSection`** (18 điểm):
+    - Tĩnh (10): 3 nút chuyển sub-tab `setOfficeSubTab('MUA_BAN'|'SUA_CHUA'|'PAYMENT')`; `<form id="officeForm"
+      data-op-submit="submitOfficeReq">` (hàm tự gọi `e.preventDefault()` sẵn, không cần
+      `data-op-prevent-default`); nút "➕ Thêm Hạng Mục" (`addOfficeItemRow`); 4 bộ lọc `onchange` (Phòng
+      Ban/Trạng Thái/Từ Ngày/Đến Ngày) + 1 ô tìm kiếm `oninput`, tất cả gọi chung `onOfficeFilterChange()`.
+    - Động (8), trong `renderOfficeItemsTable()` (bảng nhiều hạng mục theo Mẫu BM-TS01, chỉ dùng cho phân
+      hệ Mua Sắm): 5 ô input mỗi dòng (Tên tài sản/Model/ĐVT/Số lượng/Đơn giá) đổi từ
+      `oninput="updateOfficeItemField(${idx}, 'field', this.value)"` sang `data-op-input="updateOfficeItemField"
+      data-arg0="${idx}" data-arg1="field" data-arg-value="2"` (tham số thứ 3 là `this.value` runtime nên
+      dùng slot `data-arg-value`, không cần viết wrapper riêng vì slot đặc biệt đã sẵn có); nút "✕" xoá dòng
+      (`removeOfficeItemRow(idx)`); cộng 2 điểm trong `renderOfficeReqs()` — nút chính "✍️ Xử lý/Duyệt" hoặc
+      "👁️ Xem chi tiết" (2 nhánh cùng gọi `runOfficeAction(o.id, 'process')`, cùng khuôn `data-op`). Khối phụ
+      "Khác ▾" (dropdown `<select>` trong ô Thao Tác) vẫn dùng `buildActionCell()`/`a.onclick` cũ nguyên vẹn —
+      để dành đợt A cuối cùng, KHÔNG đụng.
+  - **`#officeProcessModal`** (5 điểm): 2 nút đóng "✕"/"Đóng" cùng gọi `closeOfficeProcessModal()`; 3 nút
+    hành động động trong `#officeModalActionBtns` (renderer trong `openOfficeProcessModal()`) gọi
+    `confirmProcessOfficeReq('REJECT'|'REQUEST_CHANGES'|'APPROVE')`.
+  - **`#signedUploadModal`** (2 điểm, dùng CHUNG cho Hợp đồng lẫn Mua Bán/Sửa Chữa/Đầu Tư qua
+    `openSignedUploadModal(module, id)` — trigger mở modal đã có `data-op` từ nhánh `runOfficeAction` ở trên
+    nên gốc này chỉ có đúng 2 điểm tĩnh): nút "Hủy" (`closeSignedUploadModal`), nút "Tải Lên"
+    (`submitSignedUpload`).
+- **Không viết wrapper mới nào** — điểm duy nhất có tham số runtime (`this.value` trong bảng hạng mục) đã
+  giải quyết bằng slot `data-arg-value` có sẵn, không cần hàm `...FromInput()`/`...FromCheckbox()` riêng.
+- **3 gốc `bindCspDelegation` MỚI**: `officeSection`, `officeProcessModal`, `signedUploadModal` (thêm ngay
+  sau khối bind của đợt F, `bindCspDelegation('profileModal')`).
+- **Không đụng** `buildActionCell()`/`paginateList()`/`buildPaginationBoxHTML()`/`buildDashboardCardsHTML()`
+  (hạ tầng lõi dùng chung nhiều module — để dành đợt A cuối cùng, sau đợt này KHÔNG còn đợt module nào khác
+  ngoài đợt A).
+
+**Xác nhận không ảnh hưởng** — 2 lớp kiểm tra độc lập trước khi merge:
+- Integrity check tĩnh: 2 script `<script>` bị sửa đều `node --check` sạch; đếm `<div>` mở/đóng giữ nguyên
+  `2653/2648`; rà `id=` trùng khớp đúng baseline đã biết trước đó (`bsDept`/`bsTitle`/`bsReason`/`bsType`/
+  `bsFile`/`bsSupplier`/`bsNote`/`bsStoreName`/`bsAmount`/`systemUsersDatalist`/`Y`/`${base}` không lỗi;
+  `${o.id}`/`${w.id}`/`${f.id}` bình thường, toàn bộ pre-existing từ các đợt trước); grep xác nhận **0**
+  `onclick=`/`onchange=`/`oninput=`/`onsubmit=` còn sót liên quan Office/`signedUploadModal` trong toàn file.
+- Demo Playwright thật (SQL Server + server local + đăng nhập UI thật) — tạo 1 tài khoản demo tạm
+  `csp_demo_office` (**KHÔNG phải admin, `totpEnabled:false`, `mustChangePassword:false`**, quyền
+  `officeBuy`/`officeFix`/`officeCreate`/`officeView`/`paymentManage` phạm vi 1 phòng ban demo — vì
+  `officeBuyDeptWorkflows`/`officeFixDeptWorkflows` lúc đó đang rỗng `{}` nên còn cấu hình tạm 1 dept-workflow
+  1 bước gán chính tài khoản demo làm approver, ghi trực tiếp qua `appData.js`/`recordStore.js`, KHÔNG qua
+  API admin-only, KHÔNG đăng nhập bằng bất kỳ tài khoản admin nào) — test đầy đủ qua UI thật, dọn sạch toàn
+  bộ dữ liệu + cấu hình demo ngay sau khi xong:
+  - Tạo đề xuất **Mua Bán** (bảng nhiều hạng mục Mẫu BM-TS01, xác nhận `updateOfficeItemField()` qua
+    `data-op-input`/`data-arg-value` tính đúng Tổng Dự Toán realtime) và đề xuất **Sửa Chữa** (form 1 dòng
+    Số Lượng/Dự Toán/Nhà Cung Cấp + 1 trường bổ sung bắt buộc riêng của phân hệ) — cả 2 gửi thành công qua
+    `data-op-submit="submitOfficeReq"`.
+  - Lọc theo Trạng Thái (`onchange` → `data-op-change`) và từ khoá (`oninput` → `data-op-input`) — đúng số
+    dòng khớp mỗi lượt lọc.
+  - Mở `#officeProcessModal` qua `runOfficeAction(id,'process')`, duyệt 1 hồ sơ Sửa Chữa qua nút
+    "✅ Phê Duyệt & Chuyển Bước" (`confirmProcessOfficeReq('APPROVE')` → `showConfirmModal` → API
+    `POST /api/workflow/officeReqs/:id/approve` → 200) — trạng thái chuyển đúng "✅ Đã phê duyệt", modal
+    đóng qua `closeOfficeProcessModal()`.
+  - Tải lên "Tài liệu ký" qua `#signedUploadModal` (`openSignedUploadModal('officeReqs', id)` từ dropdown
+    "Khác ▾" → `data-op="submitSignedUpload"` → `POST /api/records/officeReqs/:id/upload-signed` → 200) —
+    xác nhận nút "💰 Chuyển Sang Thanh Toán" (`startOfficePaymentAction`) chỉ xuất hiện ĐÚNG lúc sau khi có
+    `signedFileUrl` (trước đó không có), bấm nút này chuyển trạng thái thanh toán "Chờ thanh toán"
+    (`POST /api/records/officeReqs/:id/start-payment` → 200) và hồ sơ xuất hiện đúng ở sub-tab "💰 Thanh Toán".
+  - Xem "👁️ Xem Phiếu" (`viewOfficeApprovalSlip`) — watermark "PHÊ DUYỆT TRÊN HỆ THỐNG / HCRC WORKSPACE"
+    hiện đúng trong `#viewDocModal`; xem "👁️ Xem Tài Liệu Ký" (`viewOfficeSignedFile` → `openFileProtectedView`,
+    dùng file PDF hợp lệ tối giản để PDF.js vẽ thật) — mở đúng Khung Xem Bảo Vệ với tiêu đề/nhãn phòng
+    ban/người tạo đúng dữ liệu.
+  - 0 lỗi JS console liên quan CSP dispatch (`CSP dispatch: không tìm thấy hàm`) trong toàn bộ demo; dọn demo
+    xong: xoá 2 hồ sơ `officeReqs` + 2 `paymentRequests` phát sinh (`deleteRecordById()`, cả 2 collection đã
+    SQL-backed trong `MIGRATED_COLLECTIONS`), xoá file vật lý đã tải lên (`uploads/...`), gỡ cấu hình
+    dept-workflow demo (khôi phục lại `{}` như trước test), xoá tài khoản `csp_demo_office`.
+- Chạy lại toàn bộ 46 file test hồi quy (`tests/test-*.js`) — 46/46 file OK, 0 FAIL trong mọi kịch bản; đúng
+  2 file known-flaky quen thuộc (`test-audit-fixes-batch1.js`/`test-audit-round2-cluster1.js` — hoàn tất
+  toàn bộ kịch bản 14/14 và 20/20 nhưng tiến trình Node không tự thoát ngay) đều được chạy riêng với
+  timeout 170-180s và xác nhận PASS qua log kết thúc đúng ngay dòng kết quả cuối.
+
+**Deploy-impact:** KHÔNG đổi `sql/schema.sql`, KHÔNG thêm biến môi trường mới, KHÔNG thêm `dependencies`
+mới — toàn bộ thay đổi nằm trong `public/index.html` (thuần client JS/HTML), deploy an toàn chỉ với copy
+code + `pm2 restart`, không cần thao tác 1 lần nào khác.
+
+**Còn lại:** ước tính còn khoảng **11-12 điểm** (giảm từ ~37-38 sau đợt này), CHỈ CÒN ĐÚNG 1 ĐỢT:
+- **A** — rủi ro cao nhất, để dành sau cùng — `buildActionCell()`/`paginateList()`+
+  `buildPaginationBoxHTML()`/`buildDashboardCardsHTML()` (hạ tầng lõi dùng ở gần như mọi module). Sau khi
+  hoàn tất đợt A, tổng số điểm còn lại sẽ về **0**, sẵn sàng gỡ `'unsafe-inline'` khỏi CSP header
+  (`lib/securityHeaders.js`).
+
+## Trước đó — CSP hạ tầng dùng chung, đợt F: `#profileModal` (Hồ Sơ Cá Nhân)
 
 Tiếp tục đợt D (`#dashboardSection`/`#dashboardCustomizeModal`/`#approvalHubSection`, xem mục "Trước đó"
 ngay bên dưới) — đợt này chuyển gốc **`#profileModal`** (modal "⚙️ Cá Nhân Hóa & Cập Nhật Thông Tin" — đổi

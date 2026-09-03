@@ -3961,9 +3961,9 @@ input[data-sdd-list] {
       <div class="flex justify-between items-center flex-wrap gap-2">
         <h3 class="font-bold text-teal-900 text-base flex items-center gap-2">🗂️ Tổng Hợp (Mua Bán - Sửa Chữa - Thanh Toán)</h3>
         <div class="flex gap-2">
-          <button onclick="setOfficeSubTab('MUA_BAN')" id="btnSubBuy" class="px-3 py-1 rounded text-xs font-bold bg-teal-700 text-white">🛒 Mua Bán</button>
-          <button onclick="setOfficeSubTab('SUA_CHUA')" id="btnSubFix" class="px-3 py-1 rounded text-xs font-bold bg-gray-200 text-gray-700">🔧 Sửa Chữa</button>
-          <button onclick="setOfficeSubTab('PAYMENT')" id="btnSubPayment" class="px-3 py-1 rounded text-xs font-bold bg-gray-200 text-gray-700">💰 Thanh Toán</button>
+          <button data-op="setOfficeSubTab" data-arg0="MUA_BAN" id="btnSubBuy" class="px-3 py-1 rounded text-xs font-bold bg-teal-700 text-white">🛒 Mua Bán</button>
+          <button data-op="setOfficeSubTab" data-arg0="SUA_CHUA" id="btnSubFix" class="px-3 py-1 rounded text-xs font-bold bg-gray-200 text-gray-700">🔧 Sửa Chữa</button>
+          <button data-op="setOfficeSubTab" data-arg0="PAYMENT" id="btnSubPayment" class="px-3 py-1 rounded text-xs font-bold bg-gray-200 text-gray-700">💰 Thanh Toán</button>
         </div>
       </div>
       <p class="text-xs text-teal-800" id="officeSubTitle">Phân hệ Mua Sắm Trang Thiết Bị / Vật Tư Văn Phòng.</p>
@@ -3971,7 +3971,7 @@ input[data-sdd-list] {
 
     <div id="officeReqsContentWrap" class="space-y-6">
     <div class="bg-teal-50 p-4 rounded border border-teal-200 space-y-3">
-      <form id="officeForm" onsubmit="submitOfficeReq(event)" class="bg-white p-3 rounded border text-xs space-y-3">
+      <form id="officeForm" data-op-submit="submitOfficeReq" class="bg-white p-3 rounded border text-xs space-y-3">
         <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
           <div>
             <label class="block font-semibold text-gray-600 mb-1">Mã Yêu Cầu</label>
@@ -4033,7 +4033,7 @@ input[data-sdd-list] {
             </table>
           </div>
           <div class="flex justify-between items-center">
-            <button type="button" onclick="addOfficeItemRow()" class="bg-teal-600 text-white px-3 py-1 rounded text-xs font-bold hover:bg-teal-700">➕ Thêm Hạng Mục</button>
+            <button type="button" data-op="addOfficeItemRow" class="bg-teal-600 text-white px-3 py-1 rounded text-xs font-bold hover:bg-teal-700">➕ Thêm Hạng Mục</button>
             <div class="font-bold text-rose-600">Tổng Dự Toán (chưa VAT): <span id="officeItemsTotalDisplay">0</span> VNĐ</div>
           </div>
         </div>
@@ -4048,13 +4048,13 @@ input[data-sdd-list] {
       <div class="grid grid-cols-1 md:grid-cols-5 gap-3">
         <div>
           <label class="block text-xs font-semibold text-gray-600 mb-1">Lọc Theo Phòng Ban</label>
-          <select id="filterDeptOffice" onchange="onOfficeFilterChange()" class="w-full border p-2 rounded text-sm bg-white">
+          <select id="filterDeptOffice" data-op-change="onOfficeFilterChange" class="w-full border p-2 rounded text-sm bg-white">
             <option value="">-- Tất cả phòng ban --</option>
           </select>
         </div>
         <div>
           <label class="block text-xs font-semibold text-gray-600 mb-1">Lọc Theo Trạng Thái</label>
-          <select id="filterStatusOffice" onchange="onOfficeFilterChange()" class="w-full border p-2 rounded text-sm bg-white">
+          <select id="filterStatusOffice" data-op-change="onOfficeFilterChange" class="w-full border p-2 rounded text-sm bg-white">
             <option value="">-- Tất cả trạng thái --</option>
             <option value="APPROVED">Đã Phê Duyệt</option>
             <option value="PENDING">Đang Chờ Duyệt</option>
@@ -4063,15 +4063,15 @@ input[data-sdd-list] {
         </div>
         <div>
           <label class="block text-xs font-semibold text-gray-600 mb-1">Từ Ngày</label>
-          <input id="filterFromDateOffice" type="date" onchange="onOfficeFilterChange()" class="w-full border p-2 rounded text-sm bg-white">
+          <input id="filterFromDateOffice" type="date" data-op-change="onOfficeFilterChange" class="w-full border p-2 rounded text-sm bg-white">
         </div>
         <div>
           <label class="block text-xs font-semibold text-gray-600 mb-1">Đến Ngày</label>
-          <input id="filterToDateOffice" type="date" onchange="onOfficeFilterChange()" class="w-full border p-2 rounded text-sm bg-white">
+          <input id="filterToDateOffice" type="date" data-op-change="onOfficeFilterChange" class="w-full border p-2 rounded text-sm bg-white">
         </div>
         <div>
           <label class="block text-xs font-semibold text-gray-600 mb-1">Từ Khóa</label>
-          <input id="filterKeywordOffice" oninput="onOfficeFilterChange()" placeholder="Mã, tên đề xuất, người tạo..." class="w-full border p-2 rounded text-sm">
+          <input id="filterKeywordOffice" data-op-input="onOfficeFilterChange" placeholder="Mã, tên đề xuất, người tạo..." class="w-full border p-2 rounded text-sm">
         </div>
       </div>
     </div>
@@ -4190,8 +4190,8 @@ input[data-sdd-list] {
       <input id="signedUploadFile" type="file" accept=".pdf,.docx,.xlsx" class="w-full border p-1.5 bg-white rounded text-xs">
       <div id="signedUploadDynamicFields" class="space-y-2"></div>
       <div class="flex justify-end gap-2 pt-1">
-        <button onclick="closeSignedUploadModal()" class="bg-gray-200 text-gray-700 px-4 py-1.5 rounded text-xs font-bold hover:bg-gray-300">Hủy</button>
-        <button onclick="submitSignedUpload()" class="bg-cyan-600 text-white px-4 py-1.5 rounded text-xs font-bold hover:bg-cyan-700">Tải Lên</button>
+        <button data-op="closeSignedUploadModal" class="bg-gray-200 text-gray-700 px-4 py-1.5 rounded text-xs font-bold hover:bg-gray-300">Hủy</button>
+        <button data-op="submitSignedUpload" class="bg-cyan-600 text-white px-4 py-1.5 rounded text-xs font-bold hover:bg-cyan-700">Tải Lên</button>
       </div>
     </div>
   </div>
@@ -7220,7 +7220,7 @@ input[data-sdd-list] {
         <h3 id="officeModalTitle" class="font-bold text-base flex items-center gap-2">🏢 Xử Lý Đề Xuất Văn Phòng</h3>
         <p id="officeModalSub" class="text-xs text-teal-200"></p>
       </div>
-      <button onclick="closeOfficeProcessModal()" class="text-teal-200 hover:text-white font-bold text-xl px-2">✕</button>
+      <button data-op="closeOfficeProcessModal" class="text-teal-200 hover:text-white font-bold text-xl px-2">✕</button>
     </div>
     <div class="p-4 overflow-y-auto flex-1 space-y-4 text-xs">
       <div id="officeModalDetails" class="bg-gray-50 p-3 rounded border space-y-2 text-gray-700"></div>
@@ -7236,7 +7236,7 @@ input[data-sdd-list] {
       </div>
     </div>
     <div class="p-3 bg-gray-100 border-t flex justify-between items-center text-xs">
-      <button onclick="closeOfficeProcessModal()" class="bg-gray-500 text-white px-4 py-1.5 rounded font-bold hover:bg-gray-600">Đóng</button>
+      <button data-op="closeOfficeProcessModal" class="bg-gray-500 text-white px-4 py-1.5 rounded font-bold hover:bg-gray-600">Đóng</button>
       <div id="officeModalActionBtns" class="flex gap-2"></div>
     </div>
   </div>
@@ -21840,14 +21840,14 @@ function renderOfficeItemsTable() {
   tbody.innerHTML = officeItems.map((it, idx) => `
     <tr>
       <td class="border p-1 text-center">${idx + 1}</td>
-      <td class="border p-1"><input value="${escapeHtml(it.name)}" oninput="updateOfficeItemField(${idx}, 'name', this.value)" class="w-full border-0 p-0.5 text-xs focus:outline-none" placeholder="Tên tài sản"></td>
-      <td class="border p-1"><input value="${escapeHtml(it.model)}" oninput="updateOfficeItemField(${idx}, 'model', this.value)" class="w-full border-0 p-0.5 text-xs focus:outline-none" placeholder="Model"></td>
-      <td class="border p-1"><input value="${escapeHtml(it.unit)}" oninput="updateOfficeItemField(${idx}, 'unit', this.value)" class="w-full border-0 p-0.5 text-xs focus:outline-none" placeholder="Cái/Bộ..."></td>
-      <td class="border p-1"><input type="number" value="${it.qty || ''}" oninput="updateOfficeItemField(${idx}, 'qty', this.value)" class="w-full border-0 p-0.5 text-xs focus:outline-none"></td>
-      <td class="border p-1"><input type="text" inputmode="numeric" value="${formatMoneyDisplay(it.unitPrice)}" oninput="updateOfficeItemField(${idx}, 'unitPrice', this.value)" class="w-full border-0 p-0.5 text-xs focus:outline-none money-input"></td>
+      <td class="border p-1"><input value="${escapeHtml(it.name)}" data-op-input="updateOfficeItemField" data-arg0="${idx}" data-arg1="name" data-arg-value="2" class="w-full border-0 p-0.5 text-xs focus:outline-none" placeholder="Tên tài sản"></td>
+      <td class="border p-1"><input value="${escapeHtml(it.model)}" data-op-input="updateOfficeItemField" data-arg0="${idx}" data-arg1="model" data-arg-value="2" class="w-full border-0 p-0.5 text-xs focus:outline-none" placeholder="Model"></td>
+      <td class="border p-1"><input value="${escapeHtml(it.unit)}" data-op-input="updateOfficeItemField" data-arg0="${idx}" data-arg1="unit" data-arg-value="2" class="w-full border-0 p-0.5 text-xs focus:outline-none" placeholder="Cái/Bộ..."></td>
+      <td class="border p-1"><input type="number" value="${it.qty || ''}" data-op-input="updateOfficeItemField" data-arg0="${idx}" data-arg1="qty" data-arg-value="2" class="w-full border-0 p-0.5 text-xs focus:outline-none"></td>
+      <td class="border p-1"><input type="text" inputmode="numeric" value="${formatMoneyDisplay(it.unitPrice)}" data-op-input="updateOfficeItemField" data-arg0="${idx}" data-arg1="unitPrice" data-arg-value="2" class="w-full border-0 p-0.5 text-xs focus:outline-none money-input"></td>
       <td class="border p-1 text-right font-semibold" id="officeItemAmount_${idx}">${((it.qty || 0) * (it.unitPrice || 0)).toLocaleString('vi-VN')}</td>
-      <td class="border p-1"><input value="${escapeHtml(it.note)}" oninput="updateOfficeItemField(${idx}, 'note', this.value)" class="w-full border-0 p-0.5 text-xs focus:outline-none" placeholder="Ghi chú"></td>
-      <td class="border p-1 text-center"><button type="button" onclick="removeOfficeItemRow(${idx})" class="text-red-600 font-bold hover:text-red-800" title="Xoá dòng">✕</button></td>
+      <td class="border p-1"><input value="${escapeHtml(it.note)}" data-op-input="updateOfficeItemField" data-arg0="${idx}" data-arg1="note" data-arg-value="2" class="w-full border-0 p-0.5 text-xs focus:outline-none" placeholder="Ghi chú"></td>
+      <td class="border p-1 text-center"><button type="button" data-op="removeOfficeItemRow" data-arg0="${idx}" class="text-red-600 font-bold hover:text-red-800" title="Xoá dòng">✕</button></td>
     </tr>
   `).join('');
   recalcOfficeItemsTotal();
@@ -22027,8 +22027,8 @@ function renderOfficeReqs() {
         <td class="border p-2 text-center space-x-1">
           ${(() => {
             const primaryBtnHTML = canApprove
-              ? `<button onclick="runOfficeAction(${o.id}, 'process')" class="px-2.5 py-1 bg-emerald-600 text-white rounded text-xs hover:opacity-90 font-bold">✍️ Xử lý / Duyệt</button>`
-              : `<button onclick="runOfficeAction(${o.id}, 'process')" class="px-2.5 py-1 bg-gray-600 text-white rounded text-xs hover:opacity-90 font-bold">👁️ Xem chi tiết</button>`;
+              ? `<button data-op="runOfficeAction" data-arg0="${o.id}" data-arg1="process" class="px-2.5 py-1 bg-emerald-600 text-white rounded text-xs hover:opacity-90 font-bold">✍️ Xử lý / Duyệt</button>`
+              : `<button data-op="runOfficeAction" data-arg0="${o.id}" data-arg1="process" class="px-2.5 py-1 bg-gray-600 text-white rounded text-xs hover:opacity-90 font-bold">👁️ Xem chi tiết</button>`;
             const secondaryOptions = [];
             if (o.status === 'APPROVED') {
               secondaryOptions.push({ value: 'viewSlip', label: '👁️ Xem Phiếu' });
@@ -22161,9 +22161,9 @@ function openOfficeProcessModal(officeId) {
   const actionBtns = document.getElementById('officeModalActionBtns');
   if (canApprove) {
     actionBtns.innerHTML = `
-      <button onclick="confirmProcessOfficeReq('REJECT')" class="bg-red-600 text-white px-4 py-1.5 rounded font-bold hover:bg-red-700 text-xs">❌ Từ Chối</button>
-      <button onclick="confirmProcessOfficeReq('REQUEST_CHANGES')" class="bg-amber-500 text-white px-4 py-1.5 rounded font-bold hover:bg-amber-600 text-xs">🔄 Bổ Sung</button>
-      <button onclick="confirmProcessOfficeReq('APPROVE')" class="bg-green-600 text-white px-5 py-1.5 rounded font-bold hover:bg-green-700 text-xs">✅ Phê Duyệt & Chuyển Bước</button>
+      <button data-op="confirmProcessOfficeReq" data-arg0="REJECT" class="bg-red-600 text-white px-4 py-1.5 rounded font-bold hover:bg-red-700 text-xs">❌ Từ Chối</button>
+      <button data-op="confirmProcessOfficeReq" data-arg0="REQUEST_CHANGES" class="bg-amber-500 text-white px-4 py-1.5 rounded font-bold hover:bg-amber-600 text-xs">🔄 Bổ Sung</button>
+      <button data-op="confirmProcessOfficeReq" data-arg0="APPROVE" class="bg-green-600 text-white px-5 py-1.5 rounded font-bold hover:bg-green-700 text-xs">✅ Phê Duyệt & Chuyển Bước</button>
     `;
   } else {
     actionBtns.innerHTML = `<span class="text-gray-500 italic text-xs">Bạn chỉ có quyền xem thông tin đề xuất này.</span>`;
@@ -24127,6 +24127,32 @@ bindCspDelegation('approvalHubSection');
 // Người Dùng đã convert trước đó). Không có checkbox/this.checked trong modal này nên không cần wrapper
 // riêng. 1 gốc duy nhất, không có modal con nào sống ngoài #profileModal.
 bindCspDelegation('profileModal');
+
+// CSP module Office (đợt E) — #officeSection/#officeProcessModal/#signedUploadModal: module "Tổng Hợp"
+// (Mua Bán/Sửa Chữa/Đầu Tư, xem activeOfficeSubTab) CHƯA từng convert qua 23 đợt module trước, coi như
+// module thứ 24. #officeSection: 3 nút chuyển sub-tab setOfficeSubTab('MUA_BAN'|'SUA_CHUA'|'PAYMENT'),
+// form #officeForm (data-op-submit="submitOfficeReq" — submitOfficeReq(e) đã tự gọi e.preventDefault()
+// nên KHÔNG cần data-op-prevent-default), nút "➕ Thêm Hạng Mục" addOfficeItemRow(), 5 điểm tĩnh lọc/tìm
+// kiếm (4 onchange + 1 oninput, đều gọi onOfficeFilterChange()) cộng các sink động trong
+// renderOfficeItemsTable() (bảng nhiều hạng mục Mẫu BM-TS01 — 5 ô input mỗi dòng gọi
+// updateOfficeItemField(idx, field, this.value) dùng data-op-input + data-arg-value="2", 1 nút xoá dòng
+// removeOfficeItemRow(idx)) và trong renderOfficeReqs() (nút chính "Xử lý/Duyệt" hoặc "Xem chi tiết" gọi
+// runOfficeAction(o.id, 'process') — 2 nhánh cùng khuôn data-op, khối phụ "..." trong cùng ô Thao Tác vẫn
+// dùng buildActionCell()/a.onclick cũ, để dành đợt A cùng pagination/buildDashboardCardsHTML).
+// #officeProcessModal (modal duyệt/xử lý đề xuất): 2 nút đóng "✕"/"Đóng" cùng gọi
+// closeOfficeProcessModal(), 3 nút hành động trong #officeModalActionBtns (renderer trong
+// openOfficeProcessModal()) gọi confirmProcessOfficeReq('REJECT'|'REQUEST_CHANGES'|'APPROVE').
+// #signedUploadModal (dùng CHUNG cho Hợp đồng lẫn Mua Bán/Sửa Chữa/Đầu Tư qua openSignedUploadModal(module,
+// id), xem signedUploadTarget — trigger mở modal vẫn qua runOfficeAction ở trên nên gốc này chỉ có 2 điểm
+// tĩnh: nút "Hủy" closeSignedUploadModal(), nút "Tải Lên" submitSignedUpload() — sau khi tải lên thành
+// công với module officeReqs, alert nhắc bấm nút "💰 Chuyển Sang Thanh Toán" (startOfficePaymentAction(id),
+// đã có data-op qua runOfficeAction case 'startPayment' — chỉ hiện khi canManageOfficePaymentClient() +
+// đã có signedFileUrl + paymentStatus CHUA_THANH_TOAN). 3 gốc độc lập, không lồng nhau (dù #paymentSection
+// — đã bindCspDelegation riêng ở đợt trước — nằm lồng vật lý trong #officeSection, không thuộc phạm vi
+// đợt này).
+bindCspDelegation('officeSection');
+bindCspDelegation('officeProcessModal');
+bindCspDelegation('signedUploadModal');
 
 // ==========================================
 // VĂN PHÒNG PHẨM — kỳ đăng ký (vppPeriods) + đăng ký của nhân viên (vppRegistrations). 3 sub-tab:
