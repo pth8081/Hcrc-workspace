@@ -1,10 +1,93 @@
 # Phiên bản hiện tại
 
-**5.5** — đã merge vào `main` (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge
+**5.6** — đã merge vào `main` (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge
 góc màn hình + `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần
 kiểu `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
 
-## Cập nhật gần nhất — CSP hạ tầng dùng chung, đợt H+I: sidebar/approvalAuthModal/bosungEditModal + dọn các điểm sót trong module đã convert
+## Cập nhật gần nhất — CSP hạ tầng dùng chung, đợt G: login wall + must-change-password + TOTP setup wall
+
+Tiếp tục đợt H+I (sidebar/approvalAuthModal/bosungEditModal, xem mục "Trước đó" ngay bên dưới) — đợt này
+chuyển **trang đăng nhập + 2 modal "tường chặn" bắt buộc trước khi vào hệ thống**, độc lập hoàn toàn với
+mọi module nghiệp vụ khác:
+
+- **12 điểm** `onclick`/`onchange`/`onsubmit` chuyển sang `data-op*`:
+  - **`#loginSection`** (5 điểm): form đăng nhập chính (`onsubmit` → `login`, dùng
+    `data-op-prevent-default="1"` vì `login()` không tự nhận `event`/không tự gọi `e.preventDefault()`
+    — khác các form khác đã convert trước đó luôn tự `e.preventDefault()` trong hàm xử lý), nút "Đăng nhập
+    tên khác" (`switchLoginUser`), nút quay lại bước mật khẩu từ bước TOTP (`cancelTotpLoginStep`), nút
+    "↻" lấy CAPTCHA khác (`refreshCaptcha`), nút đăng nhập vân tay/Face ID (`loginWithBiometric`).
+  - **`#mustChangePasswordModal`** (2 điểm): `onsubmit` (`submitMustChangePassword`), nút "Đăng Xuất"
+    (`logout`).
+  - **`#totpSetupWallModal`** (5 điểm): nút "Chép" mã thiết lập thủ công (`copyTotpManualKey`), `onsubmit`
+    bước xác nhận mã 6 số (`submitTotpSetupVerify`), nút "Đăng Xuất" (`logout`, dòng riêng — khác vị trí với
+    dòng ở `#mustChangePasswordModal`), checkbox xác nhận đã lưu mã khôi phục (wrapper mới — xem dưới), nút
+    "Tiếp Tục Vào Hệ Thống" (`completeTotpSetupWall`).
+- **1 hàm wrapper mới** do runtime `data-op*` chưa hỗ trợ trực tiếp:
+  - `setTotpBackupConfirmState(checkboxEl)` — checkbox "Tôi đã lưu lại các mã khôi phục" gọi thẳng
+    `onchange="document.getElementById('totpSetupContinueBtn').disabled = !this.checked"`, là phép GÁN DOM
+    trực tiếp chứ không phải 1 lời gọi hàm đơn; cũng không map thẳng qua `data-arg-value` được vì checkbox
+    cần `.checked` chứ không phải `.value` (slot `data-arg-value` đọc `el.value`, luôn là `"on"`/giá trị
+    thuộc tính `value` bất kể tick hay không). Dùng `data-arg-el="0"` để nhận thẳng phần tử checkbox, wrapper
+    tự đọc `.checked` rồi gán `disabled` cho `#totpSetupContinueBtn`.
+- **3 gốc `bindCspDelegation` MỚI**: `loginSection`, `mustChangePasswordModal`, `totpSetupWallModal` (thêm
+  ngay sau khối bind của đợt H+I, cạnh các lời gọi hiện có) — cả 3 gốc trước đó CHƯA có `bindCspDelegation`
+  nào phủ tới.
+- **Không phát hiện lỗi nghiệp vụ thật nào trong lúc demo các điểm này.**
+
+**Xác nhận không ảnh hưởng** — 2 lớp kiểm tra độc lập trước khi merge:
+- Integrity check tĩnh trước khi demo: 4 script `<script>` đều `node --check` sạch; đếm `<div>` mở/đóng giữ
+  nguyên `2653/2648` (chỉ sửa thuộc tính, không thêm/bớt thẻ); rà `id=` trùng khớp đúng baseline đã biết
+  trước đó (`systemUsersDatalist`, `bsTitle`, `bsDept`, `bsFile`, `bsType`, `bsReason`, `bsAmount`,
+  `bsSupplier`, `bsNote`, `bsStoreName`, `Y`, `${base}`/`${o.id}`/`${w.id}`/`${f.id}` — toàn bộ pre-existing
+  từ các đợt trước, không phải lỗi mới do đợt này gây ra).
+- Demo Playwright thật (SQL Server + server local + đăng nhập UI thật) — vì đây LÀ luồng đăng nhập, dùng
+  ĐÚNG luồng thật thay vì unhide DOM: tạo 3 tài khoản demo tạm (`demo_cspg_normal`,
+  `demo_cspg_mustchange`, `demo_cspg_totpwall`) qua `withLockedAppDataValue('users', ...)`, xoá lại ngay sau
+  demo cùng cách (xác nhận lại tổng số user về đúng 505 như trước demo). **Cố tình KHÔNG dùng tài khoản demo
+  admin+TOTP thật đã setup xong sẵn có trong DB** (tránh đúng bug 401 admin+TOTP thật đã ghi nhận ở lúc
+  đăng nhập lại sau khi hoàn tất thiết lập — bug này KHÔNG thuộc phạm vi đợt CSP):
+  - `demo_cspg_normal` (`totpEnabled:false`, `mustChangePassword:false`, không phải admin): đăng nhập qua
+    UI thật (gõ tài khoản/mật khẩu, bấm nút Đăng nhập qua `data-op-submit="login"`) — vào thẳng
+    `#dashboardSection`, `#loginSection` ẩn đúng.
+  - `demo_cspg_mustchange` (`mustChangePassword:true`): đăng nhập — `#mustChangePasswordModal` hiện đúng;
+    đổi mật khẩu qua UI thật (`data-op-submit="submitMustChangePassword"`) — modal ẩn lại, vào thẳng
+    `#dashboardSection` ngay sau đó (không cần đăng nhập lại lần 2).
+  - `demo_cspg_totpwall` (`perms.admin:true`, `totpEnabled:false`, không có `webauthnCredentials` — đúng
+    điều kiện `perms.admin && !totpEnabled` suy ra ở `openTotpSetupWall()`/client, xem `proceedAfterAuth()`):
+    đăng nhập — `#totpSetupWallModal` hiện đúng ở bước QR; bấm nút "Chép" (`data-op="copyTotpManualKey"`) —
+    chạy không lỗi. **Theo đúng yêu cầu, KHÔNG hoàn tất full TOTP setup + đăng nhập lại** (tránh dính bug 401
+    đã biết) — thay vào đó chuyển thẳng sang bước "đã lưu mã khôi phục" bằng JS (chỉ để lộ đúng khối DOM sẵn
+    có trong modal, không giả lập kết quả server) rồi thao tác CLICK/CHECK THẬT (Playwright) trên checkbox
+    xác nhận: tick → nút "Tiếp Tục Vào Hệ Thống" (`#totpSetupContinueBtn`) chuyển từ `disabled` sang bấm
+    được đúng qua `data-op-change="setTotpBackupConfirmState"` + `data-arg-el="0"`; bỏ tick lại → nút
+    `disabled` lại đúng — xác nhận wrapper hoạt động đúng cả 2 chiều, đây là điểm JS phức tạp nhất của đợt.
+  - Không lỗi JS console mới liên quan tới thay đổi (chỉ lỗi mạng nền quen thuộc trước lúc đăng nhập: font
+    CDN ngoài bị chặn bởi sandbox mạng, `/api/auth/me` 401 lúc kiểm tra phiên đăng nhập cũ, `/api/captcha`
+    404 do CAPTCHA tắt — không liên quan tới đợt này, đã xác nhận lại danh sách URL lỗi giống hệt nhau ở
+    trang trắng chưa đăng nhập).
+- Chạy lại toàn bộ 46 file test hồi quy (`tests/test-*.js`) — 46/46 file OK, 0 FAIL trong mọi kịch bản; đúng
+  2 file known-flaky quen thuộc (`test-audit-fixes-batch1.js`/`test-audit-round2-cluster1.js` — hoàn tất
+  toàn bộ kịch bản (14/14 và 20/20) nhưng tiến trình Node không tự thoát ngay khi chạy dồn, kể cả chạy riêng
+  lẻ với timeout 120-180s — hạ tầng test có sẵn từ trước, không liên quan thay đổi lần này) đều được xác
+  nhận pass qua log kết thúc đúng ngay dòng kết quả cuối.
+
+**Deploy-impact:** KHÔNG đổi `sql/schema.sql`, KHÔNG thêm biến môi trường mới, KHÔNG thêm `dependencies`
+mới — toàn bộ thay đổi nằm trong `public/index.html` (thuần client JS/HTML), deploy an toàn chỉ với copy
+code + `pm2 restart`, không cần thao tác 1 lần nào khác.
+
+**Còn lại:** ước tính còn khoảng **78 điểm** (giảm từ ~90 sau đợt này), chia thành các đợt riêng sẽ làm
+sau, rủi ro tăng dần theo thứ tự dự kiến:
+- **C** — Office module (`buildActionCell()`/dropdown "Khác ▾" dùng chung nhiều module, ~26 điểm).
+- **B** — `#profileModal` (~18 điểm).
+- **D** — `#viewDocModal` (modal xem file bảo vệ dùng chung nhiều module).
+- **F** — `#genericConfirmModal` (modal xác nhận dùng chung nhiều module).
+- **E** — Dashboard/"Approval Hub" (`buildDashboardCardsHTML()`/`#approvalHubSection`).
+- **A** — rủi ro cao nhất, để dành sau cùng — `buildActionCell()`/`paginateList()`+
+  `buildPaginationBoxHTML()`/dashboard-card (hạ tầng lõi dùng ở gần như mọi module).
+
+Chỉ khi hết sạch toàn bộ mới gỡ `'unsafe-inline'` khỏi CSP header (`lib/securityHeaders.js`).
+
+## Trước đó — CSP hạ tầng dùng chung, đợt H+I: sidebar/approvalAuthModal/bosungEditModal + dọn các điểm sót trong module đã convert
 
 Sau khi 23/23 module nghiệp vụ đã convert xong (đợt trước, xem mục "Trước đó" ngay bên dưới), đây là đợt
 đầu tiên trong loạt "dọn hạ tầng dùng chung" — phần cuối cùng còn lại trước khi gỡ hẳn `'unsafe-inline'`
