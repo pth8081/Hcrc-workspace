@@ -1,10 +1,66 @@
 # Phiên bản hiện tại
 
-**5.0** — đã merge vào `main` (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge
+**5.1** — đã merge vào `main` (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge
 góc màn hình + `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần
 kiểu `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
 
-## Cập nhật gần nhất — CSP unsafe-inline: đợt 19/N — module Biên Bản Họp
+## Cập nhật gần nhất — CSP unsafe-inline: đợt 20/N — module Công Việc
+
+Tiếp tục đợt 19 (Biên Bản Họp, xem mục "Trước đó" ngay bên dưới) — đợt này chuyển toàn bộ module
+**Công Việc** (`#taskSection` — danh sách + bộ lọc, cộng 7 modal sống ngoài section: tạo việc thủ công,
+yêu cầu/duyệt gia hạn, huỷ việc 2 bước, cập nhật tiến độ + chia nhỏ công việc, xem chi tiết):
+
+- **31 điểm** `onclick`/`onchange`/`oninput`/`onsubmit` chuyển sang `data-op*`:
+  - **`#taskSection`**: bộ lọc danh sách (từ khoá, trạng thái, nguồn gốc — `onTaskFilterChange`), mở modal
+    tạo việc thủ công (`openCreateTaskModal`).
+  - **`#createTaskModal`** (3 điểm): đóng modal (nút X và Huỷ), lưu (`submitCreateTask`).
+  - **`#taskExtensionRequestModal`/`#taskExtensionApproveModal`** (3 điểm mỗi modal): đóng modal, gửi yêu
+    cầu/xác nhận duyệt gia hạn.
+  - **`#taskCancelModal`/`#taskCancelApproveModal`** (3 điểm mỗi modal): đóng modal, gửi yêu cầu/xác nhận
+    huỷ việc (luồng 2 bước bắt buộc nhập lý do).
+  - **`#taskProgressModal`** (4 điểm): đóng modal, cập nhật tiến độ (`confirmTaskProgress`), thêm công
+    việc nhỏ (`addSubtaskAction`).
+  - **`#taskDetailModal`** (2 điểm): đóng modal (nút X và nút Đóng).
+  - **Dòng động trong `renderTasks()`/`buildActionCell()`**: đánh dấu/xoá công việc nhỏ
+    (`toggleSubtaskAction`/`deleteSubtaskAction`), nút chính "🔄 Cập nhật tiến độ"
+    (`runTaskAction`), "✅ Nhận việc thay" cho người phối hợp bên ngoài (`acceptTaskOnBehalf`) — 1 điểm
+    (`confirmCollaboratorParticipationOnBehalf`) sửa tay thay vì dùng script tự động vì tham số gốc có kỹ
+    thuật escape dấu nháy đơn để nhúng an toàn vào chuỗi JS bên trong `onclick` — chuyển sang thuộc tính
+    `data-argN` (không còn là chuỗi JS) thì kỹ thuật escape đó thừa và đã được bỏ, chỉ còn giữ lại
+    `escapeHtml()` để an toàn HTML như các điểm khác.
+  - **8 gốc `bindCspDelegation`**: `taskSection`, `createTaskModal`, `taskExtensionRequestModal`,
+    `taskExtensionApproveModal`, `taskCancelModal`, `taskCancelApproveModal`, `taskProgressModal`,
+    `taskDetailModal`. Không có hàm wrapper mới nào cần viết (không có điểm nào dùng `this.checked` hay
+    biểu thức JS phức tạp). Không đụng dropdown "Khác ▾" dùng chung trong `buildActionCell()`,
+    `#genericConfirmModal` (ngoài phạm vi đợt này).
+  - **Không phát hiện lỗi thật nào trong lúc demo module này.**
+
+**Xác nhận không ảnh hưởng** — 2 lớp kiểm tra độc lập trước khi merge:
+- Demo Playwright thật (SQL Server + server local + đăng nhập UI thật qua tài khoản demo tạm — không
+  admin/không TOTP để tránh phụ thuộc luồng 2FA, xoá lại ngay sau demo cùng toàn bộ dữ liệu demo: `tasks`
+  là bảng SQL riêng `dbo.Tasks`, xoá bằng `deleteTaskById()`; tài khoản demo xoá bằng
+  `withLockedAppDataValue('users', ...)`): đăng nhập, mở Điều Hành > Công việc; giao việc thủ công cho
+  chính tài khoản demo (tự kích hoạt luồng "Nhận việc" — bấm nút chính lần 1 để xác nhận nhận việc, lần 2
+  mở đúng modal Cập Nhật Tiến Độ); chuyển trạng thái Chưa bắt đầu → Đang thực hiện (bắt buộc ghi chú tiến
+  độ); mở lại modal (nay đã đủ điều kiện `assignedTo === currentUser && status === 'DOING'` để hiện khối
+  Chia Nhỏ Công Việc) — thêm 1 công việc nhỏ kèm hạn hoàn thành, đánh dấu hoàn thành, xoá — cả 3 thao tác
+  qua đúng `data-op="addSubtaskAction"`/`data-op-change="toggleSubtaskAction"`/
+  `data-op="deleteSubtaskAction"` vừa chuyển đổi, đều thành công; cập nhật ghi chú tiến độ tiếp — không lỗi
+  JS console mới liên quan tới thay đổi (chỉ các lỗi mạng nền quen thuộc trước lúc đăng nhập, không liên
+  quan tới module này).
+- Chạy lại toàn bộ 46 file test hồi quy (`tests/test-*.js`) — 44/46 OK, đúng 2 file known-flaky quen thuộc
+  (`test-audit-fixes-batch1.js`/`test-audit-round2-cluster1.js`, timeout hạ tầng test không liên quan thay
+  đổi lần này — cả 2 chạy riêng lẻ đều OK).
+
+**Deploy-impact:** KHÔNG đổi `sql/schema.sql`, KHÔNG thêm biến môi trường mới, KHÔNG thêm `dependencies`
+mới — toàn bộ thay đổi nằm trong `public/index.html` (thuần client JS/HTML), deploy an toàn chỉ với copy
+code + `pm2 restart`, không cần thao tác 1 lần nào khác.
+
+**Còn lại:** Văn Bản Trình, Tài Liệu, Báo Cáo Định Kỳ... — dùng hạ tầng
+`data-op*`/`bindCspDelegation()` đã xây, làm tiếp tuần tự mỗi module 1 commit + demo + regression trước
+khi merge, tới khi hết toàn bộ điểm mới gỡ `unsafe-inline`.
+
+## Trước đó — CSP unsafe-inline: đợt 19/N — module Biên Bản Họp
 
 Tiếp tục đợt 18 (Tin Tức/Truyền Thông, xem mục "Trước đó" ngay bên dưới) — đợt này chuyển toàn bộ module
 **Biên Bản Họp** (`#minutesSection` — form lập biên bản + thành phần tham dự + ý kiến chỉ đạo + bộ lọc
