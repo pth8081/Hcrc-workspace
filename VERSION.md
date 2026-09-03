@@ -1,10 +1,91 @@
 # Phiên bản hiện tại
 
-**5.1** — đã merge vào `main` (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge
+**5.2** — đã merge vào `main` (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge
 góc màn hình + `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần
 kiểu `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
 
-## Cập nhật gần nhất — CSP unsafe-inline: đợt 20/N — module Công Việc
+## Cập nhật gần nhất — CSP unsafe-inline: đợt 21/N — module Văn Bản Trình
+
+Tiếp tục đợt 20 (Công Việc, xem mục "Trước đó" ngay bên dưới) — đợt này chuyển toàn bộ module
+**Văn Bản Trình** (`#submissionSection` — form tạo tờ trình + dropdown "Phê duyệt"/lớp bổ sung + bộ lọc +
+danh sách, cộng 1 modal sống ngoài section: bút phê & xử lý tờ trình):
+
+- **22 điểm** `onclick`/`onchange`/`oninput`/`onsubmit` chuyển sang `data-op*`:
+  - **`#submissionSection`** (13 điểm): `onsubmit` form chính (`submitSubmissionReq`), đổi Cấp Phê Duyệt
+    Cuối Cùng (`renderSubmissionApprovalLayerCheckboxes`), mở/đóng dropdown "Phê duyệt"
+    (`toggleSubApprovalDropdown`, nhận `event` thật qua `data-arg-event`), nút "🔍 Xem Quy Trình"
+    (`previewSubmissionWorkflow`), bộ lọc danh sách (`onSubFilterChange`, 4 điểm `onchange` + 1 điểm
+    `oninput`), tick/bỏ tick 1 lớp phê duyệt bổ sung trong dropdown (`onSubApprovalLayerToggle`, dựng động
+    trong `renderSubmissionApprovalLayerCheckboxes()`), 3 nút thao tác chính của mỗi dòng trong
+    `#submissionTableBody` (`openResolveFileProposalModal`/`openProcessSubmissionModal`/
+    `runSubmissionAction` — dựng động trong `renderSubmissionReqs()`).
+  - **`#submissionProcessModal`** (9 điểm, nội dung do `openProcessSubmissionModal()`/
+    `renderSubModalOpinions()` dựng động): đóng modal (nút X và nút Đóng, cùng
+    `closeProcessSubmissionModal`), xem tệp tờ trình gốc + từng tệp bổ sung (`viewSubmissionAttachment`/
+    `viewSubmissionExtraFile`), 3 nút quyết định ở bước đang chờ duyệt (`confirmProcessSubmission` với
+    `REJECT`/`REQUEST_CHANGES`/`APPROVE` — riêng lớp Trợ Lý/Thư Ký thay `REQUEST_CHANGES` bằng
+    `openTroLyThuKyBoSungChoice` để mở hộp chọn "thay thế toàn bộ tệp" thay vì chỉ bình luận), gửi ý kiến
+    tham khảo (`giveSubmissionOpinion`).
+- **Không cần hàm wrapper mới nào** — mọi tham số đều là ID số/enum chuỗi literal (`sub.id`, `idx`,
+  `layer.key`, `'REJECT'`/`'REQUEST_CHANGES'`/`'APPROVE'`), không có `this.checked`/biểu thức JS phức tạp
+  nào cần bọc riêng.
+- **2 gốc `bindCspDelegation`**: `submissionSection`, `submissionProcessModal`. Không đụng: 3 nhánh dựng
+  trong `showConfirmModal()`/`#genericConfirmModal` (`openTroLyThuKyBoSungChoice()`,
+  `openTroLyThuKyProposeFileForm()`, `openResolveFileProposalModal()` — mỗi hàm tự vẽ nút quyết định NGAY
+  TRONG `bodyHTML` của modal dùng chung, không phải khối tĩnh của module này), dropdown "Khác ▾" dùng
+  chung `buildActionCell()`, `#viewDocModal` (nút "🔍 Xem Quy Trình" xem trước còn dùng lại modal này để
+  hiển thị, đóng qua thao tác trực tiếp `classList`, không có `onclick` tĩnh nào), và `buildDashboardCardsHTML()`
+  (4 thẻ dashboard đầu section — hàm sinh `onclick` ĐỘNG dùng chung cho MỌI module trong hệ thống, không
+  riêng module này) — cả 5 đều là hạ tầng dùng chung, nằm trong đợt dọn hạ tầng riêng sau này, đúng tiền lệ
+  mọi đợt trước.
+- **1 file test hồi quy phải cập nhật theo markup mới**: `tests/test-submission.js` — 1 assertion kiểm tra
+  sự có mặt của nút "Yêu Cầu Bổ Sung" ở bước Trợ Lý/Thư Ký bằng cách `.includes()` chuỗi lệnh gọi hàm cũ
+  kiểu `openTroLyThuKyBoSungChoice(9001)`/`confirmProcessSubmission('REQUEST_CHANGES')` — chuỗi này không
+  còn xuất hiện trong markup mới (`data-op="..." data-arg0="..."` là 2 thuộc tính HTML tách rời, không phải
+  1 lệnh gọi hàm dạng chuỗi) nên assertion cũ báo FAIL dù hành vi thực tế đúng; đã sửa lại assertion để
+  kiểm tra đúng cặp thuộc tính `data-op`/`data-arg0` tương ứng, giữ nguyên ý định kiểm thử ban đầu (đã xác
+  nhận lại 19/19 kịch bản pass sau khi sửa).
+- **Không phát hiện lỗi nghiệp vụ thật nào trong lúc demo module này.**
+
+**Xác nhận không ảnh hưởng** — 2 lớp kiểm tra độc lập trước khi merge:
+- Demo Playwright thật (SQL Server + server local + đăng nhập UI thật qua 2 tài khoản demo tạm — không
+  admin/không TOTP để tránh phụ thuộc luồng 2FA: 1 tài khoản người trình `submissionCreate`/`submissionView`,
+  1 tài khoản người duyệt `submissionView` được tạm gán làm approver bước 1 của phòng "Phòng IT" — xoá lại
+  ngay sau demo cùng toàn bộ dữ liệu demo: `submissions` là bảng SQL riêng `dbo.Records`, xoá bằng
+  `deleteRecordById()`; tài khoản demo + cấu hình quy trình/nhóm phê duyệt tạm chỉnh sửa (khôi phục lại
+  đúng bản gốc đã backup trước khi sửa) xoá/khôi phục bằng `withLockedAppDataValue('submissionDeptWorkflows'
+  | 'submissionApprovalGroups' | 'users', ...)`): đăng nhập người trình, vào Điều Hành > Văn Bản Trình; điền
+  form tạo tờ trình đầy đủ (đính kèm 1 tệp), mở dropdown "Phê duyệt", tick lớp "Xin ý kiến" và tự chọn
+  chính mình làm người xin ý kiến (đúng widget tìm-để-thêm dùng chung, không phải điểm CSP của module này);
+  bấm "🔍 Xem Quy Trình" xem trước quy trình; gửi phê duyệt (modal xác nhận `#genericConfirmModal` — hạ
+  tầng dùng chung); mở lại hồ sơ vừa tạo qua nút "Chi tiết" (`runSubmissionAction`) — xem tệp đính kèm
+  (`viewSubmissionAttachment`), gửi ý kiến tham khảo (`giveSubmissionOpinion`), đóng modal
+  (`closeProcessSubmissionModal`); lọc danh sách theo từ khoá (`onSubFilterChange`); đăng xuất, đăng nhập
+  người duyệt, mở đúng hồ sơ qua nút "✍️ Bút phê / Duyệt" (`openProcessSubmissionModal`) — xác nhận cả 3
+  nút quyết định (Từ Chối/Yêu Cầu Bổ Sung/Phê Duyệt) hiện đúng, bấm "✅ Phê Duyệt & Chuyển Bước"
+  (`confirmProcessSubmission`) hoàn tất quy trình — trạng thái chuyển đúng "Đã phê duyệt hoàn tất" — không
+  lỗi JS console mới liên quan tới thay đổi (chỉ lỗi mạng nền quen thuộc trước/ngoài lúc đăng nhập: font
+  CDN ngoài bị chặn bởi sandbox mạng, `/api/auth/me` 401 sau logout, `/api/captcha` 404 do CAPTCHA tắt,
+  không liên quan tới module này).
+- Chạy lại toàn bộ 46 file test hồi quy (`tests/test-*.js`) — 44/46 OK trực tiếp trong 1 lượt chạy dồn; 2
+  file known-flaky quen thuộc (`test-audit-fixes-batch1.js`/`test-audit-round2-cluster1.js`, hoàn tất toàn
+  bộ kịch bản nhưng tiến trình Node không tự thoát — hạ tầng test, không liên quan thay đổi lần này) cả 2
+  chạy riêng lẻ đều xác nhận pass hết kịch bản (14/14 và 20/20). Phát hiện thêm 2 lượt FAIL khi chạy dồn:
+  `test-vpp.js` (module Văn Phòng Phẩm, KHÔNG đụng tới trong đợt này) — chạy lại riêng lẻ pass 10/10, xác
+  nhận chỉ là nhiễu thời điểm/tải máy lúc chạy dồn 46 file liên tục, không phải lỗi thật; `test-submission.js`
+  — đây MỚI là lỗi thật (assertion cũ dò markup `onclick` cũ, xem mục sửa test ở trên), đã sửa và xác nhận
+  lại 19/19 pass.
+
+**Deploy-impact:** KHÔNG đổi `sql/schema.sql`, KHÔNG thêm biến môi trường mới, KHÔNG thêm `dependencies`
+mới — thay đổi nằm trong `public/index.html` (thuần client JS/HTML) + `tests/test-submission.js` (chỉ sửa
+1 assertion hồi quy, không phải code chạy thật), deploy an toàn chỉ với copy code + `pm2 restart`, không
+cần thao tác 1 lần nào khác.
+
+**Còn lại:** Tài Liệu, Báo Cáo Định Kỳ... — dùng hạ tầng `data-op*`/`bindCspDelegation()` đã xây, làm tiếp
+tuần tự mỗi module 1 commit + demo + regression trước khi merge, tới khi hết toàn bộ điểm mới gỡ
+`unsafe-inline`.
+
+## Trước đó — CSP unsafe-inline: đợt 20/N — module Công Việc
 
 Tiếp tục đợt 19 (Biên Bản Họp, xem mục "Trước đó" ngay bên dưới) — đợt này chuyển toàn bộ module
 **Công Việc** (`#taskSection` — danh sách + bộ lọc, cộng 7 modal sống ngoài section: tạo việc thủ công,

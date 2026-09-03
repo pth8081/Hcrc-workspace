@@ -1026,7 +1026,7 @@ input[data-sdd-list] {
       <h3 class="font-bold text-amber-900 text-base flex items-center gap-2">📜 Trình Văn Bản / Tờ Trình Đề Xuất Phê Duyệt</h3>
       <p class="text-xs text-amber-800">Soạn thảo tờ trình đề xuất chủ trương, kinh phí hoặc quy chế. Luồng chuyển duyệt tích hợp phê duyệt đồng cấp đa cấp.</p>
       
-      <form onsubmit="submitSubmissionReq(event)" class="bg-white p-3 rounded border text-xs space-y-3">
+      <form data-op-submit="submitSubmissionReq" class="bg-white p-3 rounded border text-xs space-y-3">
         <div class="grid grid-cols-1 md:grid-cols-4 gap-3">
           <div>
             <label class="block font-semibold text-gray-600 mb-1">Mã Văn Bản Trình / Tờ Trình</label>
@@ -1042,11 +1042,11 @@ input[data-sdd-list] {
           </div>
           <div>
             <label class="block font-semibold text-gray-600 mb-1">Cấp Phê Duyệt Cuối Cùng</label>
-            <select id="subApprovalLevel" class="w-full border p-1.5 rounded bg-white font-semibold" onchange="renderSubmissionApprovalLayerCheckboxes()"></select>
+            <select id="subApprovalLevel" class="w-full border p-1.5 rounded bg-white font-semibold" data-op-change="renderSubmissionApprovalLayerCheckboxes"></select>
           </div>
           <div class="relative">
             <label class="block font-semibold text-gray-600 mb-1">Phê Duyệt</label>
-            <button type="button" id="subApprovalDropdownBtn" onclick="toggleSubApprovalDropdown(event)" class="w-full border p-1.5 rounded bg-white text-left flex justify-between items-center gap-1">
+            <button type="button" id="subApprovalDropdownBtn" data-op="toggleSubApprovalDropdown" data-arg-event="0" class="w-full border p-1.5 rounded bg-white text-left flex justify-between items-center gap-1">
               <span id="subApprovalDropdownLabel" class="text-gray-500 truncate">-- Chọn cấp phê duyệt --</span>
               <span class="text-gray-400 shrink-0">▾</span>
             </button>
@@ -1091,7 +1091,7 @@ input[data-sdd-list] {
         </div>
 
         <div class="flex justify-end gap-2">
-          <button type="button" onclick="previewSubmissionWorkflow()" class="bg-gray-200 text-gray-700 px-4 py-2 rounded font-bold hover:bg-gray-300">🔍 Xem Quy Trình</button>
+          <button type="button" data-op="previewSubmissionWorkflow" class="bg-gray-200 text-gray-700 px-4 py-2 rounded font-bold hover:bg-gray-300">🔍 Xem Quy Trình</button>
           <button type="submit" class="bg-amber-600 text-white px-5 py-2 rounded font-bold hover:bg-amber-700">Gửi phê duyệt</button>
         </div>
       </form>
@@ -1102,13 +1102,13 @@ input[data-sdd-list] {
       <div class="grid grid-cols-1 md:grid-cols-5 gap-3">
         <div>
           <label class="block text-xs font-semibold text-gray-600 mb-1">Lọc Theo Phòng Ban</label>
-          <select id="filterDeptSub" onchange="onSubFilterChange()" class="w-full border p-2 rounded text-sm bg-white">
+          <select id="filterDeptSub" data-op-change="onSubFilterChange" class="w-full border p-2 rounded text-sm bg-white">
             <option value="">-- Tất cả phòng ban --</option>
           </select>
         </div>
         <div>
           <label class="block text-xs font-semibold text-gray-600 mb-1">Lọc Theo Trạng Thái</label>
-          <select id="filterStatusSub" onchange="onSubFilterChange()" class="w-full border p-2 rounded text-sm bg-white">
+          <select id="filterStatusSub" data-op-change="onSubFilterChange" class="w-full border p-2 rounded text-sm bg-white">
             <option value="">-- Tất cả trạng thái --</option>
             <option value="APPROVED">Đã Phê Duyệt</option>
             <option value="PENDING">Đang Chờ Duyệt</option>
@@ -1117,15 +1117,15 @@ input[data-sdd-list] {
         </div>
         <div>
           <label class="block text-xs font-semibold text-gray-600 mb-1">Từ Ngày</label>
-          <input id="filterFromDateSub" type="date" onchange="onSubFilterChange()" class="w-full border p-2 rounded text-sm bg-white">
+          <input id="filterFromDateSub" type="date" data-op-change="onSubFilterChange" class="w-full border p-2 rounded text-sm bg-white">
         </div>
         <div>
           <label class="block text-xs font-semibold text-gray-600 mb-1">Đến Ngày</label>
-          <input id="filterToDateSub" type="date" onchange="onSubFilterChange()" class="w-full border p-2 rounded text-sm bg-white">
+          <input id="filterToDateSub" type="date" data-op-change="onSubFilterChange" class="w-full border p-2 rounded text-sm bg-white">
         </div>
         <div>
           <label class="block text-xs font-semibold text-gray-600 mb-1">Từ Khóa</label>
-          <input id="filterKeywordSub" oninput="onSubFilterChange()" placeholder="Mã, tiêu đề, nội dung..." class="w-full border p-2 rounded text-sm">
+          <input id="filterKeywordSub" data-op-input="onSubFilterChange" placeholder="Mã, tiêu đề, nội dung..." class="w-full border p-2 rounded text-sm">
         </div>
       </div>
     </div>
@@ -7186,7 +7186,7 @@ input[data-sdd-list] {
         <h3 id="subModalTitle" class="font-bold text-base flex items-center gap-2">📜 Bút Phê & Xử Lý Tờ Trình (Đồng Cấp)</h3>
         <p id="subModalSub" class="text-xs text-amber-200"></p>
       </div>
-      <button onclick="closeProcessSubmissionModal()" class="text-amber-200 hover:text-white font-bold text-xl px-2">✕</button>
+      <button data-op="closeProcessSubmissionModal" class="text-amber-200 hover:text-white font-bold text-xl px-2">✕</button>
     </div>
     <div class="p-4 overflow-y-auto flex-1 space-y-4 text-xs">
       <div id="subModalDetails" class="bg-gray-50 p-3 rounded border space-y-2 text-gray-700"></div>
@@ -7206,7 +7206,7 @@ input[data-sdd-list] {
       </div>
     </div>
     <div class="p-3 bg-gray-100 border-t flex justify-between items-center text-xs">
-      <button onclick="closeProcessSubmissionModal()" class="bg-gray-500 text-white px-4 py-1.5 rounded font-bold hover:bg-gray-600">Đóng</button>
+      <button data-op="closeProcessSubmissionModal" class="bg-gray-500 text-white px-4 py-1.5 rounded font-bold hover:bg-gray-600">Đóng</button>
       <div id="subModalActionBtns" class="flex gap-2"></div>
     </div>
   </div>
@@ -15673,7 +15673,7 @@ function renderSubmissionApprovalLayerCheckboxes() {
 
     return `
       <label class="flex items-start gap-1.5 text-xs p-1 rounded ${disabled ? 'opacity-50' : 'cursor-pointer hover:bg-amber-50'}">
-        <input type="checkbox" class="sub-layer-toggle mt-0.5" value="${layer.key}" ${locked ? 'checked' : ''} ${disabled ? 'disabled' : ''} onchange="onSubApprovalLayerToggle('${layer.key}')">
+        <input type="checkbox" class="sub-layer-toggle mt-0.5" value="${layer.key}" ${locked ? 'checked' : ''} ${disabled ? 'disabled' : ''} data-op-change="onSubApprovalLayerToggle" data-arg0="${layer.key}">
         <span>
           <span class="font-semibold text-gray-700">${escapeHtml(layer.label)}</span>
           ${locked ? `<span class="block text-[10px] text-amber-600 italic">Bắt buộc theo cấp phê duyệt đã chọn.</span>`
@@ -15971,10 +15971,10 @@ function renderSubmissionReqs() {
             // openTroLyThuKyProposeFileForm()/openResolveFileProposalModal() bên dưới) — ưu tiên hiện
             // nút này thay cho Bút phê/Duyệt hay Chi tiết.
             const primaryBtnHTML = (sub.pendingFileProposal && sub.creator === currentUser.username)
-              ? `<button onclick="openResolveFileProposalModal(${sub.id})" class="px-2.5 py-1 bg-purple-600 text-white rounded text-xs hover:opacity-90 font-bold">📄 Xác Nhận Thay Thế</button>`
+              ? `<button data-op="openResolveFileProposalModal" data-arg0="${sub.id}" class="px-2.5 py-1 bg-purple-600 text-white rounded text-xs hover:opacity-90 font-bold">📄 Xác Nhận Thay Thế</button>`
               : canApprove
-                ? `<button onclick="openProcessSubmissionModal(${sub.id})" class="px-2.5 py-1 bg-emerald-600 text-white rounded text-xs hover:opacity-90 font-bold">✍️ Bút phê / Duyệt</button>`
-                : `<button onclick="runSubmissionAction(${sub.id}, 'process')" class="px-2.5 py-1 bg-gray-600 text-white rounded text-xs hover:opacity-90 font-bold">👁️ Chi tiết</button>`;
+                ? `<button data-op="openProcessSubmissionModal" data-arg0="${sub.id}" class="px-2.5 py-1 bg-emerald-600 text-white rounded text-xs hover:opacity-90 font-bold">✍️ Bút phê / Duyệt</button>`
+                : `<button data-op="runSubmissionAction" data-arg0="${sub.id}" data-arg1="process" class="px-2.5 py-1 bg-gray-600 text-white rounded text-xs hover:opacity-90 font-bold">👁️ Chi tiết</button>`;
             const secondaryOptions = [];
             const canDL = canDownloadFile(currentUser, 'submission', sub.dept, sub.creator);
             if (sub.status === 'APPROVED') {
@@ -16095,7 +16095,7 @@ function openProcessSubmissionModal(subId) {
       <div class="border-t pt-2 mt-2 flex items-center justify-between gap-2">
         <span><b>📎 Tờ trình:</b> ${escapeHtml(sub.fileName || '')}</span>
         <div class="flex gap-1">
-          <button type="button" onclick="viewSubmissionAttachment(${sub.id})" class="px-2 py-1 bg-blue-600 text-white rounded text-[11px] font-bold hover:bg-blue-700">👁️ Xem</button>
+          <button type="button" data-op="viewSubmissionAttachment" data-arg0="${sub.id}" class="px-2 py-1 bg-blue-600 text-white rounded text-[11px] font-bold hover:bg-blue-700">👁️ Xem</button>
           ${canDL
             ? `<a href="${attachmentDownloadUrl(sub.fileUrl, sub.fileData, sub.fileName || sub.code)}" download="${escapeHtml(sub.fileName || sub.code)}" class="px-2 py-1 bg-slate-600 text-white rounded text-[11px] font-bold hover:bg-slate-700">⬇️ Tải</a>`
             : `<span class="text-[11px] text-gray-400 italic">Không có quyền tải tệp</span>`}
@@ -16109,7 +16109,7 @@ function openProcessSubmissionModal(subId) {
       <div class="flex items-center justify-between gap-2 ${idx > 0 ? 'border-t pt-1.5 mt-1.5' : ''}">
         <span class="truncate">📎 ${escapeHtml(ef.fileName || '')}</span>
         <div class="flex gap-1 shrink-0">
-          <button type="button" onclick="viewSubmissionExtraFile(${sub.id}, ${idx})" class="px-2 py-1 bg-blue-600 text-white rounded text-[11px] font-bold hover:bg-blue-700">👁️ Xem</button>
+          <button type="button" data-op="viewSubmissionExtraFile" data-arg0="${sub.id}" data-arg1="${idx}" class="px-2 py-1 bg-blue-600 text-white rounded text-[11px] font-bold hover:bg-blue-700">👁️ Xem</button>
           ${canDL
             ? `<a href="${attachmentDownloadUrl(ef.fileUrl, null, ef.fileName || `${sub.code}-${idx + 1}`)}" download="${escapeHtml(ef.fileName || `${sub.code}-${idx + 1}`)}" class="px-2 py-1 bg-slate-600 text-white rounded text-[11px] font-bold hover:bg-slate-700">⬇️ Tải</a>`
             : `<span class="text-[11px] text-gray-400 italic">Không có quyền tải tệp</span>`}
@@ -16161,12 +16161,12 @@ function openProcessSubmissionModal(subId) {
     actionBtns.innerHTML = `<span class="text-amber-600 italic text-xs font-semibold">⏳ Đang chờ người trình (${escapeHtml(sub.creatorName)}) xác nhận đề xuất thay thế tờ trình của ${escapeHtml(sub.pendingFileProposal.proposedByName)} (${escapeHtml(sub.pendingFileProposal.proposedAt)}).</span>`;
   } else if (canApprove) {
     const boSungBtnHTML = currentLayerKey === 'TRO_LY_THU_KY'
-      ? `<button onclick="openTroLyThuKyBoSungChoice(${sub.id})" class="bg-amber-500 text-white px-4 py-1.5 rounded font-bold hover:bg-amber-600 text-xs" title="Bộ phận Trợ Lý/Thư Ký: có thể gửi bình luận bổ sung như cũ, hoặc đề xuất thay thế toàn bộ tệp tờ trình">🔄 Yêu Cầu Bổ Sung</button>`
-      : `<button onclick="confirmProcessSubmission('REQUEST_CHANGES')" class="bg-amber-500 text-white px-4 py-1.5 rounded font-bold hover:bg-amber-600 text-xs" title="Đưa hồ sơ về NHÁP để người trình sửa lại TOÀN BỘ nội dung + tệp rồi gửi lại từ bước 1">🔄 Yêu Cầu Bổ Sung</button>`;
+      ? `<button data-op="openTroLyThuKyBoSungChoice" data-arg0="${sub.id}" class="bg-amber-500 text-white px-4 py-1.5 rounded font-bold hover:bg-amber-600 text-xs" title="Bộ phận Trợ Lý/Thư Ký: có thể gửi bình luận bổ sung như cũ, hoặc đề xuất thay thế toàn bộ tệp tờ trình">🔄 Yêu Cầu Bổ Sung</button>`
+      : `<button data-op="confirmProcessSubmission" data-arg0="REQUEST_CHANGES" class="bg-amber-500 text-white px-4 py-1.5 rounded font-bold hover:bg-amber-600 text-xs" title="Đưa hồ sơ về NHÁP để người trình sửa lại TOÀN BỘ nội dung + tệp rồi gửi lại từ bước 1">🔄 Yêu Cầu Bổ Sung</button>`;
     actionBtns.innerHTML = `
-      <button onclick="confirmProcessSubmission('REJECT')" class="bg-red-600 text-white px-4 py-1.5 rounded font-bold hover:bg-red-700 text-xs">❌ Từ Chối / Trả Về</button>
+      <button data-op="confirmProcessSubmission" data-arg0="REJECT" class="bg-red-600 text-white px-4 py-1.5 rounded font-bold hover:bg-red-700 text-xs">❌ Từ Chối / Trả Về</button>
       ${boSungBtnHTML}
-      <button onclick="confirmProcessSubmission('APPROVE')" class="bg-green-600 text-white px-5 py-1.5 rounded font-bold hover:bg-green-700 text-xs">✅ Phê Duyệt & Chuyển Bước</button>
+      <button data-op="confirmProcessSubmission" data-arg0="APPROVE" class="bg-green-600 text-white px-5 py-1.5 rounded font-bold hover:bg-green-700 text-xs">✅ Phê Duyệt & Chuyển Bước</button>
     `;
   } else {
     actionBtns.innerHTML = `<span class="text-gray-500 italic text-xs">Bạn chỉ có quyền xem thông tin tờ trình này.</span>`;
@@ -16481,7 +16481,7 @@ function renderSubModalOpinions(sub) {
   const myInputBlock = isRequestee
     ? `<div class="flex gap-1 mt-2">
         <input type="text" id="subOpinionInput" placeholder="Nhập ý kiến tham khảo của bạn..." value="${escapeHtml(myResponse?.comment || '')}" class="flex-1 border p-1 rounded text-xs">
-        <button onclick="giveSubmissionOpinion()" class="bg-purple-600 text-white px-2 py-1 rounded text-[11px] font-bold hover:bg-purple-700">${myResponse ? 'Cập Nhật' : 'Gửi'}</button>
+        <button data-op="giveSubmissionOpinion" class="bg-purple-600 text-white px-2 py-1 rounded text-[11px] font-bold hover:bg-purple-700">${myResponse ? 'Cập Nhật' : 'Gửi'}</button>
       </div>`
     : '';
 
@@ -23981,6 +23981,18 @@ bindCspDelegation('taskCancelModal');
 bindCspDelegation('taskCancelApproveModal');
 bindCspDelegation('taskProgressModal');
 bindCspDelegation('taskDetailModal');
+
+// Văn Bản Trình — form/bộ lọc/danh sách chính (#submissionSection, gồm cả dropdown "Phê duyệt"
+// #subApprovalDropdownPanel và các nút Thao Tác chính render trong #submissionTableBody — tất cả nằm
+// TRỰC TIẾP trong section, không có modal nào sống ngoài) cộng 1 modal sống NGOÀI section giống Công
+// Việc/Xe/...: #submissionProcessModal ("Bút Phê & Xử Lý Tờ Trình" — nội dung do openProcessSubmissionModal()
+// dựng động, gồm cả khối Xin Ý Kiến renderSubModalOpinions()). 2 gốc tổng cộng. Không cần wrapper mới —
+// mọi tham số đều là ID/enum literal. Các nhánh dựng trong showConfirmModal()/#genericConfirmModal
+// (openTroLyThuKyBoSungChoice(), openTroLyThuKyProposeFileForm(), openResolveFileProposalModal()) và
+// dropdown "Khác ▾" dùng chung buildActionCell()/#viewDocModal vẫn để nguyên onclick — nằm trong đợt
+// dọn hạ tầng dùng chung riêng, không thuộc module này.
+bindCspDelegation('submissionSection');
+bindCspDelegation('submissionProcessModal');
 
 // ==========================================
 // VĂN PHÒNG PHẨM — kỳ đăng ký (vppPeriods) + đăng ký của nhân viên (vppRegistrations). 3 sub-tab:
