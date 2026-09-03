@@ -1,10 +1,67 @@
 # Phiên bản hiện tại
 
-**5.2** — đã merge vào `main` (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge
+**5.3** — đã merge vào `main` (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge
 góc màn hình + `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần
 kiểu `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
 
-## Cập nhật gần nhất — CSP unsafe-inline: đợt 21/N — module Văn Bản Trình
+## Cập nhật gần nhất — CSP unsafe-inline: đợt 22/N — module Tài Liệu
+
+Tiếp tục đợt 21 (Văn Bản Trình, xem mục "Trước đó" ngay bên dưới) — đợt này chuyển toàn bộ module
+**Tài Liệu** (`#docSection` — form tải lên/cập nhật phiên bản + bộ lọc + danh sách chính, cộng 1 modal
+sống ngoài section: "Chi Tiết Tài Liệu" xem lịch sử phiên bản):
+
+- **16 điểm** `onclick`/`onchange`/`oninput`/`onsubmit` chuyển sang `data-op*`:
+  - **`#docSection`** (11 điểm): `onsubmit` form tải lên chính (`uploadDoc`), đổi Loại thao tác Nhập
+    mới/Cập nhật (`onDocOpModeChange`), chọn tài liệu cần cập nhật (`onDocUpdateTargetChange`), đổi Phòng
+    Ban Trình/Phân Loại để sinh lại Mã Tài Liệu (`refreshDocCodePreview`, 2 điểm), bộ lọc danh sách
+    (`onFilterChange`, 5 điểm `onchange` + 1 điểm `oninput`).
+  - **Dòng động trong `buildDocRowHTML()`/`renderDocs()`** (3 điểm): mở/thu gọn các phiên bản của 1 tài
+    liệu (`toggleDocFamily`), nút chính "✅ Duyệt"/"📋 Chi tiết" của mỗi dòng (`runDocAction`).
+  - **`#docDetailModal`** (2 điểm đóng modal, nút X và nút Đóng, cùng `closeDocDetailModal`) — riêng bảng
+    lịch sử phiên bản bên trong do `viewDocDetails()` dựng động có thêm 2 nút mỗi dòng version
+    (`viewDoc`/`downloadDocFile`, dùng chung khuôn `data-op` nên không tính trùng vào tổng 16 điểm tĩnh ở
+    trên, nhưng vẫn nằm trong phạm vi module này và đã chuyển cùng đợt).
+- **Không cần hàm wrapper mới nào** — mọi tham số đều là ID số/enum chuỗi literal (`doc.id`, `v.id`,
+  `'approve'`/`'view'`), không có `this.checked`/biểu thức JS phức tạp nào cần bọc riêng.
+- **2 gốc `bindCspDelegation`**: `docSection`, `docDetailModal`. Không đụng: dropdown "Khác ▾" dùng chung
+  `buildActionCell()`, `#genericConfirmModal`, `#viewDocModal` (modal xem file bảo vệ dùng chung nhiều
+  module — KHÁC `#docDetailModal` là modal riêng của module này), và "Approval Hub"
+  (`#approvalHubSection`/`getMyPendingApprovals()` — gộp hồ sơ chờ duyệt từ 9 module trong đó có Tài Liệu,
+  hạ tầng dùng chung liên module) — cả 4 đều nằm trong đợt dọn hạ tầng dùng chung riêng, đúng tiền lệ mọi
+  đợt trước.
+- **Không phát hiện lỗi nghiệp vụ thật nào trong lúc demo module này** — không phải sửa file test hồi quy
+  nào.
+
+**Xác nhận không ảnh hưởng** — 2 lớp kiểm tra độc lập trước khi merge:
+- Demo Playwright thật (SQL Server + server local + đăng nhập UI thật qua 1 tài khoản demo tạm — không
+  admin/không TOTP để tránh phụ thuộc luồng 2FA, chỉ có đúng quyền cần cho module Tài Liệu
+  `uploadDepts`/`viewDraftDepts`/`viewApprovedDepts`/`docDownload` giới hạn 1 phòng ban — xoá lại ngay sau
+  demo cùng toàn bộ dữ liệu demo: `docs` là bảng SQL riêng `dbo.Records`, xoá bằng `deleteRecordById()`;
+  tài khoản demo xoá bằng `withLockedAppDataValue('users', ...)`): đăng nhập, vào Tài liệu; mở khối "Tìm
+  Kiếm & Lọc Tài Liệu", đổi Trạng Thái (`onFilterChange` qua `onchange`) và gõ Từ Khóa (`onFilterChange`
+  qua `oninput`); tải lên 1 tài liệu mới (chọn Phòng Ban Trình/Phân Loại kích hoạt `refreshDocCodePreview`,
+  đính kèm tệp, điền Trích Lục, gửi phê duyệt qua `uploadDoc`) — tạo thành công, thấy ngay trong danh
+  sách; lọc lại theo đúng tiêu đề vừa tạo; bấm nút "📋 Chi tiết" của dòng vừa tạo (`runDocAction`) — mở
+  đúng `#docDetailModal` hiện bảng lịch sử phiên bản; trong bảng đó bấm "👁️ Xem" (`viewDoc`, mở đúng
+  `#viewDocModal` dùng chung) và "⬇️ Tải" (`downloadDocFile`); đóng `#docDetailModal` bằng nút X
+  (`closeDocDetailModal`) — đóng đúng, không lỗi JS console mới liên quan tới thay đổi (chỉ lỗi mạng nền
+  quen thuộc trước lúc đăng nhập: font CDN ngoài bị chặn bởi sandbox mạng, `/api/auth/me` 401 lúc kiểm tra
+  phiên đăng nhập cũ, `/api/captcha` 404 do CAPTCHA tắt — không liên quan tới module này).
+- Chạy lại toàn bộ 46 file test hồi quy (`tests/test-*.js`, gồm cả `tests/test-doc.js` riêng cho module
+  này) — 46/46 OK; 2 file known-flaky quen thuộc từ các đợt trước (`test-audit-fixes-batch1.js`/
+  `test-audit-round2-cluster1.js`, hoàn tất toàn bộ kịch bản nhưng tiến trình Node không tự thoát ngay khi
+  chạy dồn — hạ tầng test, không liên quan thay đổi lần này) đều được xác nhận qua log chạy dồn kết thúc
+  đúng ngay khi in dòng kết quả cuối (14/14 và 20/20 pass), khớp đúng pattern known-flaky đã ghi nhận từ
+  đợt trước, không phải lỗi mới.
+
+**Deploy-impact:** KHÔNG đổi `sql/schema.sql`, KHÔNG thêm biến môi trường mới, KHÔNG thêm `dependencies`
+mới — thay đổi nằm thuần trong `public/index.html` (client JS/HTML), deploy an toàn chỉ với copy code +
+`pm2 restart`, không cần thao tác 1 lần nào khác.
+
+**Còn lại:** Báo Cáo Định Kỳ... — dùng hạ tầng `data-op*`/`bindCspDelegation()` đã xây, làm tiếp tuần tự
+mỗi module 1 commit + demo + regression trước khi merge, tới khi hết toàn bộ điểm mới gỡ `unsafe-inline`.
+
+## Trước đó — CSP unsafe-inline: đợt 21/N — module Văn Bản Trình
 
 Tiếp tục đợt 20 (Công Việc, xem mục "Trước đó" ngay bên dưới) — đợt này chuyển toàn bộ module
 **Văn Bản Trình** (`#submissionSection` — form tạo tờ trình + dropdown "Phê duyệt"/lớp bổ sung + bộ lọc +
