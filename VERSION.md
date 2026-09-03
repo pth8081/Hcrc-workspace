@@ -1,10 +1,131 @@
 # Phiên bản hiện tại
 
-**5.4** — đã merge vào `main` (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge
+**5.5** — đã merge vào `main` (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge
 góc màn hình + `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần
 kiểu `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
 
-## Cập nhật gần nhất — CSP unsafe-inline: đợt 23/N (CUỐI CÙNG) — module Báo Cáo Định Kỳ
+## Cập nhật gần nhất — CSP hạ tầng dùng chung, đợt H+I: sidebar/approvalAuthModal/bosungEditModal + dọn các điểm sót trong module đã convert
+
+Sau khi 23/23 module nghiệp vụ đã convert xong (đợt trước, xem mục "Trước đó" ngay bên dưới), đây là đợt
+đầu tiên trong loạt "dọn hạ tầng dùng chung" — phần cuối cùng còn lại trước khi gỡ hẳn `'unsafe-inline'`
+khỏi CSP header (`lib/securityHeaders.js`). Gộp 2 đợt rủi ro thấp nhất (H+I) theo phân loại của 1 lượt
+research quét toàn bộ điểm `onclick`/`onchange`/`oninput`/`onsubmit` còn sót:
+
+- **23 điểm** `onclick`/`onchange`/`oninput`/`onsubmit` chuyển sang `data-op*`:
+  - **Sidebar hamburger mobile** (2 điểm, độc lập không thuộc module nào): nút ☰ ở `#mobileTopBar`
+    (`toggleMobileSidebar`) và lớp nền mờ `#sidebarBackdrop` (`closeMobileSidebar`) — cả 2 sống NGOÀI
+    `#userHeader` (chính là `<aside>` sidebar, không phải wrapper toàn app) nên chưa có gốc
+    `bindCspDelegation` nào phủ tới, phải thêm 2 gốc mới.
+  - **`#approvalAuthModal`** (4 điểm — modal xác thực mật khẩu/OTP/PIN trước khi Duyệt, dùng chung cho 7
+    module qua `withApprovalAuth()`): đóng modal (nút X và nút "Huỷ", cùng `closeApprovalAuthModal`), gửi
+    lại mã OTP (`sendApprovalOtp(true)` — literal `true` giữ nguyên qua `data-arg0="true"`, đúng tiền lệ
+    đã dùng ở `setAllPermTreeNodes` đợt trước, không cần wrapper), xác nhận (`confirmApprovalAuth`).
+  - **`#bosungEditModal`** (3 điểm — modal "Sửa & Gửi Lại" dùng chung cho Tài Liệu/Đăng Ký Xe/Mua Bán-Sửa
+    Chữa-Đầu Tư/Văn Bản Trình khi hồ sơ bị trả về NHÁP): đóng modal (nút X và nút "Hủy", cùng
+    `closeBosungEditModal`), lưu & gửi lại (`confirmBosungResubmit`).
+  - **Các điểm lẻ sót lại trong module ĐÃ convert xong** (root cha đã có `bindCspDelegation` từ đợt trước
+    — chỉ sửa đúng hàm, không cần bind mới): `renderDeptContactsTable()` trong `systemSection` (4 điểm —
+    sửa tên/email người phụ trách theo phòng ban `updateDeptContactField`, xoá/thêm dòng
+    `removeDeptContact`/`addDeptContact`); `renderVppDeptHeadcountTable()` trong `vppSection` (1 điểm —
+    `onVppHeadcountInput(this)` nhận thẳng phần tử input qua `data-arg-el`, KHÔNG cần wrapper vì slot này
+    vốn sinh ra đúng để thay `this` nguyên vẹn); `renderWfSubmissionTypeTabs()`/`addStepRow()` trong
+    `systemSection` (2 điểm — đổi tab loại tờ trình `switchWfSubmissionType`, xoá dòng bước quy trình cần
+    1 wrapper mới — xem dưới); `buildModuleTabNotesHTML()` trong `systemSection` (1 điểm —
+    `jumpToPermField`); `renderTestBuilderQuestions()` trong `internalTrainingLmsSection` (module Đào Tạo,
+    1 điểm — đổi loại câu hỏi `tbUpdateQuestionField`); `renderCareerPaths()` cũng trong
+    `internalTrainingLmsSection` (1 điểm — tra cứu nhân viên theo username `renderCpEmployeeStageLookup`).
+  - **Widget dùng chung nhỏ** (4 điểm, root đích đều đã bind từ trước): `renderCrossTabBar()` (thanh tab
+    chéo module, dùng ở Điều Hành/Hành Chính — `switchTab`), `renderPeopleMultiSelect()` (ô chọn nhiều
+    người dùng chung cho Nhóm Phê Duyệt Trình/HĐ và Nhóm Phân Quyền — `pmsAdd`/`pmsRemove` + `pmsFilter`
+    qua `data-op-input`; riêng `onfocus="pmsFilter(...)"` trên cùng ô KHÔNG đụng tới — nằm ngoài 4 loại
+    thuộc tính (`onclick`/`onchange`/`oninput`/`onsubmit`) mà đợt quét 109 điểm ban đầu bao quát, để dành
+    xử lý riêng khi tới lượt).
+- **1 hàm wrapper mới** do runtime `data-op*` chưa hỗ trợ trực tiếp:
+  - `removeStepRow(btn)` — nút "✕ Xóa" 1 dòng bước quy trình gọi thẳng 2 lệnh liên tiếp trên `this`
+    (`this.parentElement.remove(); reindexStepRows();`), không map được vào 1 lời gọi hàm đơn cho
+    `data-op`; wrapper nhận thẳng nút qua `data-arg-el` rồi tự làm cả 2 việc.
+- **4 gốc `bindCspDelegation` MỚI**: `mobileTopBar`, `sidebarBackdrop`, `approvalAuthModal`,
+  `bosungEditModal` (thêm ngay sau khối bind của đợt 23, cạnh các lời gọi hiện có). Các điểm còn lại trong
+  nhóm "lẻ sót lại"/"widget dùng chung" đều rơi vào root đã bind sẵn (`systemSection`, `vppSection`,
+  `internalTrainingLmsSection`, `meetingSection`/`carSection`/`vppSection`/`uniformSection`,
+  `submissionSection`/`contractSection`) nên không cần bind thêm.
+- **Không phát hiện lỗi nghiệp vụ thật nào trong lúc demo các điểm này.**
+
+**Xác nhận không ảnh hưởng** — 2 lớp kiểm tra độc lập trước khi merge:
+- Integrity check tĩnh trước khi demo: 4 script `<script>` đều `node --check` sạch; đếm `<div>` mở/đóng
+  giữ nguyên `2653/2648` (chỉ sửa thuộc tính, không thêm/bớt thẻ); rà `id=` trùng khớp đúng baseline đã
+  biết trước đó (`systemUsersDatalist`, `bsTitle`, `bsDept`, `bsFile`, `bsType`, `bsReason`, `bsAmount`,
+  `bsSupplier`, `bsNote`, `bsStoreName`, `Y` — toàn bộ pre-existing từ các đợt trước, không phải lỗi mới do
+  đợt này gây ra).
+- Demo Playwright thật (SQL Server + server local + đăng nhập UI thật), chia thành 5 script nhỏ theo
+  nhóm chức năng — dùng đúng 1 tài khoản demo tạm `demo_csp_hi01`, **không phải** tài khoản `admin` có
+  sẵn (tránh hẳn bug 401 admin+TOTP thật đã ghi nhận, dù DB dev hiện `totpEnabled=false` cho `admin`),
+  `totpEnabled:false`, chỉ cấp quyền nghiệp vụ cần test (`submissionCreate`/`submissionView`/`vppManage`/
+  `trainingManage`/`nhanSuManage`/`moduleAccess` theo module test tới) — **1 ngoại lệ có ghi chú rõ**: vì
+  `#systemSection` tự nó gate cứng theo `currentUser.perms.admin === true` ngay ở `switchTab()` (không có
+  cờ quyền riêng lẻ nào thay được), 5/23 điểm (`renderDeptContactsTable`/`renderPeopleMultiSelect` ở
+  `groupMembersPicker`/`renderWfSubmissionTypeTabs`+`addStepRow`/`buildModuleTabNotesHTML`) được xác minh
+  bằng cách unhide đúng khối `systemSection`/`workflowSection`/từng `adminSubXxx` liên quan qua JS (KHÔNG
+  gán `perms.admin` cho tài khoản demo — chỉ hiện lại đúng khối DOM client, mọi API nghiệp vụ các hàm này
+  gọi vẫn chịu đúng permission check phía server như cũ) rồi thao tác CLICK THẬT (Playwright) trên phần
+  tử vừa hiện — vẫn là click thật, DOM thật, `bindCspDelegation` thật, chỉ khác đường VÀO màn hình:
+  - Sidebar: đăng nhập viewport hẹp (mobile) — bấm ☰ mở sidebar (`toggleMobileSidebar`, xác nhận class
+    `.mobile-sidebar-open`), bấm ra lớp nền mờ đóng lại (`closeMobileSidebar`).
+  - Điều Hành > Hành Chính (VPP): mở Kỳ Đăng Ký, sửa tay 1 dòng "Số Nhân Sự" — xác nhận đúng ô "Ngân Sách
+    Phòng Ban" của dòng đó cập nhật (10.100.000đ → 7.000.000đ), không render lại cả bảng.
+  - `renderCrossTabBar()` ở nhóm Hành Chính — bấm sang tab "Phòng họp" từ VPP, xác nhận `#meetingSection`
+    hiện đúng.
+  - Đào Tạo > Ngân Hàng Câu Hỏi — thêm 1 câu hỏi, đổi loại (1 đáp án/nhiều đáp án) qua `<select>` vừa
+    chuyển — xác nhận `tbQuestions[0].type` đổi đúng. Đào Tạo > Lộ Trình Thăng Tiến — gõ username vào ô
+    tra cứu quản lý — xác nhận `renderCpEmployeeStageLookup` chạy đúng.
+  - `systemSection` (unhide qua JS, xem ghi chú trên): thêm/sửa/xoá người phụ trách theo phòng ban; ô
+    chọn nhiều người `groupMembersPicker` (Nhóm Phân Quyền, 500+ candidate thật) — lọc/thêm/xoá 1 người
+    qua chip; đổi tab loại tờ trình trong cấu hình Quy Trình Văn Bản Trình; thêm/xoá dòng bước quy trình —
+    xác nhận `removeStepRow` xoá đúng dòng + đánh lại số thứ tự "Bước 1:"; bấm "Đi tới →" ở 1 khối quyền
+    có tab con — xác nhận mở đúng `<details>` + thêm class `.perm-tree-jump-highlight`.
+  - Văn Bản Trình (đăng nhập THẬT, không unhide): tạo 1 tờ trình, tick lớp "Xin ý kiến" trong dropdown
+    "Phê duyệt" (đã seed tạm `submissionApprovalGroups.XIN_Y_KIEN=[demo_csp_hi01]` để có candidate thật
+    cho `renderPeopleMultiSelect()` — xoá lại ngay sau demo) — xác nhận widget hiện đúng, lọc/thêm/xoá chip
+    hoạt động ngay TRONG form tạo thật (không chỉ ở `groupMembersPicker`), rồi bỏ tick lại trước khi gửi;
+    trình 2 tờ trình test — tờ #1: gán tạm `demo_csp_hi01` làm 1 trong 2 đồng phê duyệt bước 1 phòng "Phòng
+    IT" (`WF_1STEP`, giữ nguyên `sep_duyet` — xoá lại ngay sau demo) + set `approverAuthLevel:'PASSWORD'`
+    cho tài khoản demo, bấm "✍️ Bút phê / Duyệt" → "✅ Phê Duyệt" → `withApprovalAuth()` mở đúng
+    `#approvalAuthModal` với khối mật khẩu hiện đúng — nhập lại mật khẩu, bấm "✅ Xác Nhận & Duyệt"
+    (`confirmApprovalAuth`) — server xác thực đúng mật khẩu + ghi nhận phê duyệt vào `history` (chờ đồng
+    phê duyệt còn lại của `sep_duyet` do cố tình gán 2 người cho bước test này); tờ #2: người duyệt yêu cầu
+    bổ sung (`processSubmission('REQUEST_CHANGES')`) → hồ sơ về NHÁP → mở `openBosungEditModal('submissions',
+    id)` → sửa nội dung → "📤 Lưu & Gửi Lại" (`confirmBosungResubmit`) → quay lại hàng chờ duyệt bước 1
+    thành công; đóng `#bosungEditModal` bằng nút X riêng biệt — đóng đúng. Kiểm thêm nhánh OTP_EMAIL của
+    `#approvalAuthModal` (đổi tạm `approverAuthLevel` phía client để không cần cấu hình DB) — mở modal tự
+    gửi mã lần đầu, bấm "↻ Gửi lại mã" (`sendApprovalOtp(true)`) — request tới đúng server thật (log
+    server xác nhận có lượt gửi email mới, dù SMTP sandbox không kết nối được ra ngoài nên tự timeout —
+    không liên quan CSP); đóng qua cả nút X và nút "Huỷ" — cả 2 đều đóng đúng, không chạy nhầm hành động
+    đang chờ.
+  - Không lỗi JS console mới liên quan tới thay đổi (chỉ lỗi mạng nền quen thuộc trước lúc đăng nhập: font
+    CDN ngoài bị chặn bởi sandbox mạng, `/api/auth/me` 401 lúc kiểm tra phiên đăng nhập cũ, `/api/captcha`
+    404 do CAPTCHA tắt — không liên quan tới đợt này). Toàn bộ dữ liệu demo (6 tờ trình `[DEMO CSP]...`,
+    1 người dùng `demo_csp_hi01`, việc gán tạm approver + `submissionApprovalGroups.XIN_Y_KIEN`) đã xoá/
+    khôi phục lại đúng bản gốc ngay sau demo, xác nhận lại qua truy vấn DB.
+- Chạy lại toàn bộ 46 file test hồi quy (`tests/test-*.js`) — 46/46 file OK (tổng 1019 kịch bản/assertion,
+  0 FAIL), đúng 2 file known-flaky quen thuộc (`test-audit-fixes-batch1.js`/`test-audit-round2-cluster1.js`
+  — hoàn tất toàn bộ kịch bản (14/14 và 20/20) nhưng tiến trình Node không tự thoát, kể cả chạy riêng lẻ
+  với timeout 180s — hạ tầng test có sẵn từ trước, không liên quan thay đổi lần này) đều được xác nhận
+  pass qua log kết thúc đúng ngay dòng kết quả cuối.
+
+**Deploy-impact:** KHÔNG đổi `sql/schema.sql`, KHÔNG thêm biến môi trường mới, KHÔNG thêm `dependencies`
+mới — toàn bộ thay đổi nằm trong `public/index.html` (thuần client JS/HTML), deploy an toàn chỉ với copy
+code + `pm2 restart`, không cần thao tác 1 lần nào khác.
+
+**Còn lại:** đây là đợt ĐẦU TIÊN trong loạt dọn hạ tầng dùng chung (không còn thuộc "mỗi module 1 đợt"
+nữa) — ước tính còn khoảng **90 điểm**, chia thành các đợt riêng sẽ làm sau, rủi ro tăng dần: Office module
+(`buildActionCell()`/dropdown "Khác ▾" dùng chung nhiều module, ~26 điểm), `#profileModal` (~18 điểm),
+màn login/TOTP-wall (`#loginTotpStepWrap`/`#totpSetupWall`..., ~12 điểm), `#viewDocModal`,
+`#genericConfirmModal`, Dashboard/"Approval Hub" (`buildDashboardCardsHTML()`/`#approvalHubSection`), và
+cuối cùng — rủi ro cao nhất, để dành sau cùng — `buildActionCell()`/`paginateList()`+
+`buildPaginationBoxHTML()`/dashboard-card (hạ tầng lõi dùng ở gần như mọi module). Chỉ khi hết sạch toàn
+bộ mới gỡ `'unsafe-inline'` khỏi CSP header (`lib/securityHeaders.js`).
+
+## Trước đó — CSP unsafe-inline: đợt 23/N (CUỐI CÙNG) — module Báo Cáo Định Kỳ
 
 Tiếp tục đợt 22 (Tài Liệu, xem mục "Trước đó" ngay bên dưới) — đợt này chuyển toàn bộ module **Báo Cáo
 Định Kỳ** (`#periodicReportSection` — 4 sub-tab Nhập Báo Cáo/Kỳ Báo Cáo/Tổng Hợp/Đã Phát Hành trong 1
