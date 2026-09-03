@@ -554,7 +554,8 @@ async function main() {
         const actionBtnsHTML = document.getElementById('subModalActionBtns').innerHTML;
         check(
           'submission TRO_LY_THU_KY: ở bước Trợ Lý/Thư Ký, nút "Yêu Cầu Bổ Sung" mở hộp lựa chọn openTroLyThuKyBoSungChoice() thay vì REQUEST_CHANGES trực tiếp',
-          actionBtnsHTML.includes('openTroLyThuKyBoSungChoice(9001)') && !actionBtnsHTML.includes("confirmProcessSubmission('REQUEST_CHANGES')"),
+          actionBtnsHTML.includes('data-op="openTroLyThuKyBoSungChoice" data-arg0="9001"') &&
+            !(actionBtnsHTML.includes('data-op="confirmProcessSubmission"') && actionBtnsHTML.includes('data-arg0="REQUEST_CHANGES"')),
           actionBtnsHTML
         );
 
