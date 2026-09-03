@@ -1547,10 +1547,10 @@ input[data-sdd-list] {
   <div id="periodicReportSection" class="hidden space-y-6">
     <div id="dieuHanhTabBar_periodicReport" class="hidden flex gap-2 flex-wrap"></div>
     <div class="flex flex-wrap gap-2 border-b pb-2">
-      <button type="button" onclick="setPeriodicReportSubTab('ENTRY')" id="btnPRSubEntry" class="px-3 py-1.5 rounded text-xs font-bold bg-sky-700 text-white">📝 Nhập Báo Cáo</button>
-      <button type="button" onclick="setPeriodicReportSubTab('PERIODS')" id="btnPRSubPeriods" class="hidden px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">📅 Kỳ Báo Cáo</button>
-      <button type="button" onclick="setPeriodicReportSubTab('AGGREGATE')" id="btnPRSubAggregate" class="hidden px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">🧩 Tổng Hợp</button>
-      <button type="button" onclick="setPeriodicReportSubTab('PUBLISHED')" id="btnPRSubPublished" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">📣 Đã Phát Hành</button>
+      <button type="button" data-op="setPeriodicReportSubTab" data-arg0="ENTRY" id="btnPRSubEntry" class="px-3 py-1.5 rounded text-xs font-bold bg-sky-700 text-white">📝 Nhập Báo Cáo</button>
+      <button type="button" data-op="setPeriodicReportSubTab" data-arg0="PERIODS" id="btnPRSubPeriods" class="hidden px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">📅 Kỳ Báo Cáo</button>
+      <button type="button" data-op="setPeriodicReportSubTab" data-arg0="AGGREGATE" id="btnPRSubAggregate" class="hidden px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">🧩 Tổng Hợp</button>
+      <button type="button" data-op="setPeriodicReportSubTab" data-arg0="PUBLISHED" id="btnPRSubPublished" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">📣 Đã Phát Hành</button>
     </div>
 
     <!-- Sub-tab: Nhập Báo Cáo — CHỈ người có quyền reportEntryCreate (hoặc admin) mới thấy khối tạo báo
@@ -1563,7 +1563,7 @@ input[data-sdd-list] {
         <h3 class="font-bold text-sky-900 text-sm flex items-center gap-1">📝 Nhập Báo Cáo</h3>
         <div>
           <label class="block text-xs font-semibold text-gray-600 mb-1">Chọn kỳ báo cáo (đang mở, áp dụng cho phòng ban của bạn)</label>
-          <select id="prEntryPeriodSelect" onchange="onPrEntryPeriodChange()" class="w-full border p-2 rounded text-sm bg-white"></select>
+          <select id="prEntryPeriodSelect" data-op-change="onPrEntryPeriodChange" class="w-full border p-2 rounded text-sm bg-white"></select>
         </div>
         <div id="prEntryNoPeriodNote" class="hidden text-xs text-gray-500 italic bg-white p-3 rounded border">Hiện chưa có kỳ báo cáo nào đang mở cho phòng ban của bạn.</div>
         <div id="prEntryAlreadySentNote" class="hidden text-xs text-amber-800 italic bg-amber-50 p-3 rounded border border-amber-200"></div>
@@ -1576,10 +1576,10 @@ input[data-sdd-list] {
             <label class="text-xs font-bold text-gray-700 block mb-2">Hình thức nộp báo cáo</label>
             <div class="flex gap-4 text-xs">
               <label class="flex items-center gap-1.5 cursor-pointer">
-                <input type="radio" name="prEntryMode" value="PPTX" checked onchange="onPrEntryModeChange()"> PowerPoint (.pptx)
+                <input type="radio" name="prEntryMode" value="PPTX" checked data-op-change="onPrEntryModeChange"> PowerPoint (.pptx)
               </label>
               <label class="flex items-center gap-1.5 cursor-pointer">
-                <input type="radio" name="prEntryMode" value="PDF" onchange="onPrEntryModeChange()"> Ghép nhiều file PDF
+                <input type="radio" name="prEntryMode" value="PDF" data-op-change="onPrEntryModeChange"> Ghép nhiều file PDF
               </label>
             </div>
           </div>
@@ -1594,7 +1594,7 @@ input[data-sdd-list] {
                (màu sắc) do người tạo Kỳ Báo Cáo chọn sẵn, người nộp không cần chọn gì ở đây. -->
           <div id="prEntryPptxBox" class="bg-white p-3 rounded border">
             <label class="text-xs font-bold text-gray-700 block mb-2">📎 Tệp Báo Cáo (.pptx)</label>
-            <input type="file" id="prEntryPptxFile" onchange="onPrEntryPptxFileChange(event)" class="w-full text-xs" accept=".pptx,application/vnd.openxmlformats-officedocument.presentationml.presentation">
+            <input type="file" id="prEntryPptxFile" data-op-change="onPrEntryPptxFileChange" data-arg-event="0" class="w-full text-xs" accept=".pptx,application/vnd.openxmlformats-officedocument.presentationml.presentation">
             <p class="text-[11px] text-gray-500 mt-1">Chỉ nhận file PowerPoint <b>.pptx</b> — không nhận được <b>.ppt</b> đời cũ, vui lòng lưu lại bằng .pptx rồi tải lên lại nếu gặp lỗi.</p>
             <div id="prEntryPptxStatus" class="hidden text-xs mt-2 p-2 rounded border"></div>
             <div id="prEntryWholeFileExisting" class="hidden text-[11px] text-gray-500 mt-1"></div>
@@ -1606,15 +1606,15 @@ input[data-sdd-list] {
                ở bước Tổng Hợp (xem #prAggPdfBox). -->
           <div id="prEntryPdfBox" class="hidden bg-white p-3 rounded border">
             <label class="text-xs font-bold text-gray-700 block mb-2">📎 Tệp Báo Cáo PDF (chọn 1 hoặc nhiều file, hệ thống tự ghép lại)</label>
-            <input type="file" id="prEntryPdfFiles" multiple onchange="onPrEntryPdfFilesChange(event)" class="w-full text-xs" accept=".pdf,application/pdf">
+            <input type="file" id="prEntryPdfFiles" multiple data-op-change="onPrEntryPdfFilesChange" data-arg-event="0" class="w-full text-xs" accept=".pdf,application/pdf">
             <p class="text-[11px] text-gray-500 mt-1">Chọn nhiều file PDF cùng lúc để ghép thành đúng 1 tệp duy nhất — giữ nguyên định dạng gốc từng trang, không bị vỡ layout.</p>
             <div id="prEntryPdfStatus" class="hidden text-xs mt-2 p-2 rounded border"></div>
             <div id="prEntryPdfExisting" class="hidden text-[11px] text-gray-500 mt-1"></div>
           </div>
 
           <div class="flex justify-end gap-2">
-            <button type="button" onclick="savePrEntryDraft()" class="bg-gray-600 text-white px-4 py-1.5 rounded text-xs font-bold hover:bg-gray-700">💾 Lưu Nháp</button>
-            <button type="button" id="btnPrEntrySubmit" onclick="submitPrEntry()" class="hidden bg-sky-600 text-white px-4 py-1.5 rounded text-xs font-bold hover:bg-sky-700">📤 Gửi Báo Cáo</button>
+            <button type="button" data-op="savePrEntryDraft" class="bg-gray-600 text-white px-4 py-1.5 rounded text-xs font-bold hover:bg-gray-700">💾 Lưu Nháp</button>
+            <button type="button" id="btnPrEntrySubmit" data-op="submitPrEntry" class="hidden bg-sky-600 text-white px-4 py-1.5 rounded text-xs font-bold hover:bg-sky-700">📤 Gửi Báo Cáo</button>
           </div>
         </div>
       </div>
@@ -1637,7 +1637,7 @@ input[data-sdd-list] {
 
     <!-- Sub-tab: Kỳ Báo Cáo (chỉ reportManage/admin) -->
     <div id="prSubPeriods" class="hidden space-y-4">
-      <form onsubmit="createReportPeriod(event)" class="bg-sky-50 p-4 rounded border border-sky-200 space-y-3">
+      <form data-op-submit="createReportPeriod" class="bg-sky-50 p-4 rounded border border-sky-200 space-y-3">
         <h3 class="font-bold text-sky-900 text-sm flex items-center gap-1">📅 Tạo Kỳ Báo Cáo Mới</h3>
         <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
           <div class="md:col-span-2">
@@ -1651,7 +1651,7 @@ input[data-sdd-list] {
         </div>
         <div>
           <label class="flex items-center gap-2 text-xs font-semibold text-gray-600 mb-1">
-            <input type="checkbox" id="prPeriodDeptAll" onchange="toggleScopeGroup('prPeriodDeptAll', 'prPeriodDept')"> Áp dụng cho TẤT CẢ phòng ban
+            <input type="checkbox" id="prPeriodDeptAll" data-op-change="toggleScopeGroup" data-arg0="prPeriodDeptAll" data-arg1="prPeriodDept"> Áp dụng cho TẤT CẢ phòng ban
           </label>
           <div id="prPeriodDeptContainer" class="grid grid-cols-2 md:grid-cols-4 gap-1 pl-1 max-h-32 overflow-y-auto"></div>
         </div>
@@ -1680,7 +1680,7 @@ input[data-sdd-list] {
     <div id="prSubAggregate" class="hidden space-y-4">
       <div class="bg-white p-4 rounded border space-y-2">
         <label class="block text-xs font-semibold text-gray-600 mb-1">Chọn kỳ cần tổng hợp (đã kết thúc)</label>
-        <select id="prAggPeriodSelect" onchange="onPrAggPeriodChange()" class="w-full border p-2 rounded text-sm bg-white"></select>
+        <select id="prAggPeriodSelect" data-op-change="onPrAggPeriodChange" class="w-full border p-2 rounded text-sm bg-white"></select>
       </div>
       <div id="prAggNoPeriodNote" class="hidden text-xs text-gray-500 italic bg-white p-3 rounded border">Chưa có kỳ báo cáo nào đã kết thúc để tổng hợp.</div>
       <div id="prAggWrap" class="hidden space-y-4">
@@ -1691,7 +1691,7 @@ input[data-sdd-list] {
         <div class="bg-white rounded border p-3">
           <div class="flex justify-between items-center mb-2 flex-wrap gap-2">
             <span class="font-semibold text-xs text-gray-600">Thứ tự đã chọn (▲▼ để sắp lại) — dùng cho "Tổng Hợp Theo Báo Cáo"</span>
-            <button type="button" onclick="mergeReportPeriodAction()" class="bg-sky-600 text-white px-3 py-1 rounded text-xs font-bold hover:bg-sky-700">🧩 Tổng Hợp Theo Báo Cáo</button>
+            <button type="button" data-op="mergeReportPeriodAction" class="bg-sky-600 text-white px-3 py-1 rounded text-xs font-bold hover:bg-sky-700">🧩 Tổng Hợp Theo Báo Cáo</button>
           </div>
           <div id="prAggOrderList" class="space-y-1"></div>
         </div>
@@ -1699,9 +1699,9 @@ input[data-sdd-list] {
           <div class="font-semibold text-xs text-gray-600 mb-2">Bản tổng hợp — sửa tự do từng slide trước khi phát hành</div>
           <div id="prAggSlidesList" class="space-y-3"></div>
           <div class="flex justify-end gap-2 mt-3 pt-3 border-t">
-            <button type="button" onclick="savePrCompilation()" class="bg-gray-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-gray-700">💾 Lưu Chỉnh Sửa</button>
-            <button type="button" id="btnPrPublish" onclick="publishPrCompilation()" class="hidden bg-emerald-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-emerald-700">🚀 Phát Hành</button>
-            <button type="button" id="btnPrUnpublish" onclick="unpublishPrCompilation()" class="hidden bg-amber-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-amber-700">↩️ Hủy Phát Hành</button>
+            <button type="button" data-op="savePrCompilation" class="bg-gray-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-gray-700">💾 Lưu Chỉnh Sửa</button>
+            <button type="button" id="btnPrPublish" data-op="publishPrCompilation" class="hidden bg-emerald-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-emerald-700">🚀 Phát Hành</button>
+            <button type="button" id="btnPrUnpublish" data-op="unpublishPrCompilation" class="hidden bg-amber-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-amber-700">↩️ Hủy Phát Hành</button>
           </div>
         </div>
 
@@ -1719,13 +1719,13 @@ input[data-sdd-list] {
           <div id="prAggPdfGridWrap" class="hidden">
             <div class="flex justify-between items-center mb-2 flex-wrap gap-2">
               <span class="text-[11px] text-gray-500">Kéo-thả để sắp lại trang, bấm ✕ để bỏ trang không cần — sau đó bấm "Tổng Hợp PDF" để lưu lại</span>
-              <button type="button" onclick="mergeReportPeriodPdfAction()" class="bg-sky-600 text-white px-3 py-1 rounded text-xs font-bold hover:bg-sky-700">🧩 Tổng Hợp PDF</button>
+              <button type="button" data-op="mergeReportPeriodPdfAction" class="bg-sky-600 text-white px-3 py-1 rounded text-xs font-bold hover:bg-sky-700">🧩 Tổng Hợp PDF</button>
             </div>
             <div id="prAggPdfGrid" class="grid gap-2" style="grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));"></div>
           </div>
           <div id="prAggPdfActionsWrap" class="hidden flex justify-end gap-2 pt-3 border-t">
-            <button type="button" id="btnPrPdfPublish" onclick="publishPrPdfCompilation()" class="hidden bg-emerald-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-emerald-700">🚀 Phát Hành PDF</button>
-            <button type="button" id="btnPrPdfUnpublish" onclick="unpublishPrPdfCompilation()" class="hidden bg-amber-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-amber-700">↩️ Hủy Phát Hành PDF</button>
+            <button type="button" id="btnPrPdfPublish" data-op="publishPrPdfCompilation" class="hidden bg-emerald-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-emerald-700">🚀 Phát Hành PDF</button>
+            <button type="button" id="btnPrPdfUnpublish" data-op="unpublishPrPdfCompilation" class="hidden bg-amber-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-amber-700">↩️ Hủy Phát Hành PDF</button>
           </div>
           <div id="prAggPdfStatusLine" class="text-xs"></div>
         </div>
@@ -1737,7 +1737,7 @@ input[data-sdd-list] {
         <div class="bg-white rounded border p-3">
           <div class="flex justify-between items-center mb-2 flex-wrap gap-2">
             <span class="font-semibold text-xs text-gray-600">🗂️ Đối chiếu với công việc thật (DB.tasks) — chỉ xem, không ảnh hưởng bản tổng hợp ở trên</span>
-            <button type="button" onclick="mergeReportPeriodByTasksAction()" class="bg-teal-600 text-white px-3 py-1 rounded text-xs font-bold hover:bg-teal-700">🗂️ Đối Chiếu Theo Công Việc</button>
+            <button type="button" data-op="mergeReportPeriodByTasksAction" class="bg-teal-600 text-white px-3 py-1 rounded text-xs font-bold hover:bg-teal-700">🗂️ Đối Chiếu Theo Công Việc</button>
           </div>
           <div id="prTaskCompilationWrap" class="hidden space-y-3 pt-2 border-t">
             <div id="prTaskCompilationSlidesList" class="space-y-3"></div>
@@ -1770,13 +1770,13 @@ input[data-sdd-list] {
       <div id="prSlideshowTitle" class="font-semibold truncate"></div>
       <div class="flex items-center gap-3">
         <span id="prSlideshowCounter" class="text-gray-300"></span>
-        <button type="button" onclick="closePrSlideshow()" class="hover:text-rose-400 font-bold text-sm">✕ Đóng</button>
+        <button type="button" data-op="closePrSlideshow" class="hover:text-rose-400 font-bold text-sm">✕ Đóng</button>
       </div>
     </div>
     <div class="flex-1 relative overflow-hidden">
-      <button type="button" id="prSlideshowPrevBtn" onclick="prSlideshowNav(-1)" class="absolute left-2 top-1/2 -translate-y-1/2 bg-white/10 hover:bg-white/25 text-white rounded-full w-10 h-10 text-lg">‹</button>
+      <button type="button" id="prSlideshowPrevBtn" data-op="prSlideshowNav" data-arg0="-1" class="absolute left-2 top-1/2 -translate-y-1/2 bg-white/10 hover:bg-white/25 text-white rounded-full w-10 h-10 text-lg">‹</button>
       <div id="prSlideshowBody" class="h-full overflow-y-auto p-10 md:p-16"></div>
-      <button type="button" id="prSlideshowNextBtn" onclick="prSlideshowNav(1)" class="absolute right-2 top-1/2 -translate-y-1/2 bg-white/10 hover:bg-white/25 text-white rounded-full w-10 h-10 text-lg">›</button>
+      <button type="button" id="prSlideshowNextBtn" data-op="prSlideshowNav" data-arg0="1" class="absolute right-2 top-1/2 -translate-y-1/2 bg-white/10 hover:bg-white/25 text-white rounded-full w-10 h-10 text-lg">›</button>
     </div>
   </div>
 
@@ -24006,6 +24006,21 @@ bindCspDelegation('submissionProcessModal');
 bindCspDelegation('docSection');
 bindCspDelegation('docDetailModal');
 
+// Báo Cáo Định Kỳ — 4 sub-tab (Nhập Báo Cáo/Kỳ Báo Cáo/Tổng Hợp/Đã Phát Hành) cộng mọi khối render động
+// (bảng #prEntryTableBody, #prPeriodsTableBody, #prPublishedTableBody, khối chọn+sắp thứ tự Tổng Hợp
+// #prAggEntriesList/#prAggOrderList/#prAggSlidesList, khối Ghép PDF #prAggPdfEntriesList/#prAggPdfGrid,
+// khối Đối Chiếu Theo Công Việc #prTaskCompilationSlidesList) đều render TRỰC TIẾP trong
+// #periodicReportSection — nhưng #prSlideshowModal (Trình Chiếu Báo Cáo Định Kỳ toàn màn hình, cả 2 chế
+// độ SLIDES/PDF) sống NGOÀI section (giống Xe/Vận Hành) nên cần thêm 1 gốc riêng. 2 gốc tổng cộng. 3
+// wrapper mới cho checkbox tick báo cáo (onPrAggEntryCheckboxChange()/onPrAggPdfEntryCheckboxChange(),
+// đọc this.checked — không có slot data-arg cho .checked) và nút ✕ bỏ chọn (untogglePrAggEntry(), tránh
+// truyền literal boolean "false" qua data-argN vì cspCoerceArg() chỉ coerce được số nguyên, chuỗi "false"
+// lại truthy). Nút Thao Tác chính ở #prPeriodsTableBody chỉ có dấu "—" (không có onclick), dropdown
+// "Khác ▾" dùng chung buildActionCell()/#genericConfirmModal — vẫn để nguyên, nằm trong đợt dọn hạ tầng
+// dùng chung riêng như mọi module trước.
+bindCspDelegation('periodicReportSection');
+bindCspDelegation('prSlideshowModal');
+
 // ==========================================
 // VĂN PHÒNG PHẨM — kỳ đăng ký (vppPeriods) + đăng ký của nhân viên (vppRegistrations). 3 sub-tab:
 // Đăng Ký (ai cũng vào được) / Kỳ Đăng Ký + Báo Cáo Tổng Hợp (chỉ vppManage/admin).
@@ -29121,7 +29136,7 @@ function renderPrItemsTable(containerId, items, progressField, progressLabel, re
     <div class="border rounded p-2 bg-gray-50 space-y-1" data-pr-item-row="${idx}">
       <div class="flex justify-between items-center">
         <span class="text-[11px] font-bold text-gray-500">Dòng ${idx + 1}</span>
-        <button type="button" onclick="${escapeHtml(`${removeFn}('${containerId}', ${idx}, '${progressField}', ${JSON.stringify(progressLabel)})`)}" class="text-red-500 text-[11px] font-bold hover:underline">✕ Xoá dòng</button>
+        <button type="button" data-op="${removeFn}" data-arg0="${escapeHtml(containerId)}" data-arg1="${idx}" data-arg2="${escapeHtml(progressField)}" data-arg3="${escapeHtml(progressLabel)}" class="text-red-500 text-[11px] font-bold hover:underline">✕ Xoá dòng</button>
       </div>
       <div class="grid grid-cols-1 md:grid-cols-4 gap-1">
         <input placeholder="Mục lớn (VD: I)" value="${escapeHtml(it.group || '')}" class="pr-item-group border p-1 rounded text-xs">
@@ -29420,7 +29435,7 @@ function renderPrEntryTable() {
     let primaryBtnHTML;
     const secondaryOptions = [];
     if (isOwnDraft) {
-      primaryBtnHTML = `<button onclick="editPrEntryDraft(${e.id})" class="px-2.5 py-1 bg-gray-600 text-white rounded text-xs hover:opacity-90 font-bold">✏️ Sửa Nháp</button>`;
+      primaryBtnHTML = `<button data-op="editPrEntryDraft" data-arg0="${e.id}" class="px-2.5 py-1 bg-gray-600 text-white rounded text-xs hover:opacity-90 font-bold">✏️ Sửa Nháp</button>`;
       secondaryOptions.push({ value: 'submit', label: '📤 Gửi Báo Cáo' });
     } else {
       primaryBtnHTML = `<span class="text-gray-400 italic text-[11px]">${escapeHtml(e.creatorName)} (${escapeHtml(e.dept)})</span>`;
@@ -29629,7 +29644,7 @@ function renderPrAggEntriesList() {
   }
   el.innerHTML = entries.map(e => `
     <label class="flex items-center gap-2 text-xs p-1.5 rounded hover:bg-sky-50 cursor-pointer">
-      <input type="checkbox" onchange="togglePrAggEntry(${e.id}, this.checked)" ${prAggSelectedIds.includes(e.id) ? 'checked' : ''}>
+      <input type="checkbox" data-op-change="onPrAggEntryCheckboxChange" data-arg0="${e.id}" data-arg-el="1" ${prAggSelectedIds.includes(e.id) ? 'checked' : ''}>
       <span class="font-semibold text-gray-700">${escapeHtml(e.title)}</span>
       <span class="text-gray-400">— ${escapeHtml(e.creatorName)} (${escapeHtml(e.dept)})</span>
     </label>
@@ -29645,6 +29660,14 @@ function togglePrAggEntry(entryId, checked) {
   renderPrAggEntriesList();
   renderPrAggOrderList();
 }
+
+// Wrapper CSP-safe cho checkbox onchange="togglePrAggEntry(id, this.checked)" cũ — data-arg-el nhận
+// thẳng phần tử checkbox để đọc .checked (không có slot data-arg cho this.checked).
+function onPrAggEntryCheckboxChange(entryId, el) { togglePrAggEntry(entryId, el.checked); }
+// Wrapper cho nút ✕ bỏ chọn ở khối "Thứ tự đã chọn" — tương đương onclick="togglePrAggEntry(id, false)"
+// cũ, tách riêng vì tham số boolean literal "false" bị cspCoerceArg() giữ nguyên dạng chuỗi (chỉ số
+// nguyên mới coerce được), chuỗi "false" lại truthy trong JS nên không dùng data-argN trực tiếp được.
+function untogglePrAggEntry(entryId) { togglePrAggEntry(entryId, false); }
 
 function movePrAggEntry(idx, dir) {
   const target = idx + dir;
@@ -29667,9 +29690,9 @@ function renderPrAggOrderList() {
       <div class="flex items-center gap-2 text-xs p-1.5 rounded border bg-sky-50/60">
         <span class="font-bold text-sky-700 w-5 text-center">${idx + 1}</span>
         <span class="flex-1 truncate">${escapeHtml(e.title)} <span class="text-gray-400">— ${escapeHtml(e.creatorName)}</span></span>
-        <button type="button" onclick="movePrAggEntry(${idx}, -1)" class="px-1.5 py-0.5 bg-gray-200 rounded hover:bg-gray-300" ${idx === 0 ? 'disabled' : ''}>▲</button>
-        <button type="button" onclick="movePrAggEntry(${idx}, 1)" class="px-1.5 py-0.5 bg-gray-200 rounded hover:bg-gray-300" ${idx === prAggSelectedIds.length - 1 ? 'disabled' : ''}>▼</button>
-        <button type="button" onclick="togglePrAggEntry(${id}, false)" class="px-1.5 py-0.5 bg-rose-100 text-rose-700 rounded hover:bg-rose-200">✕</button>
+        <button type="button" data-op="movePrAggEntry" data-arg0="${idx}" data-arg1="-1" class="px-1.5 py-0.5 bg-gray-200 rounded hover:bg-gray-300" ${idx === 0 ? 'disabled' : ''}>▲</button>
+        <button type="button" data-op="movePrAggEntry" data-arg0="${idx}" data-arg1="1" class="px-1.5 py-0.5 bg-gray-200 rounded hover:bg-gray-300" ${idx === prAggSelectedIds.length - 1 ? 'disabled' : ''}>▼</button>
+        <button type="button" data-op="untogglePrAggEntry" data-arg0="${id}" class="px-1.5 py-0.5 bg-rose-100 text-rose-700 rounded hover:bg-rose-200">✕</button>
       </div>
     `;
   }).join('');
@@ -29748,7 +29771,7 @@ function renderPrAggPdfEntriesList() {
   }
   el.innerHTML = entries.map(e => `
     <label class="flex items-center gap-2 text-xs p-1.5 rounded hover:bg-sky-50 cursor-pointer">
-      <input type="checkbox" onchange="togglePrAggPdfEntry(${e.id}, this.checked)" ${prAggPdfSelectedIds.includes(e.id) ? 'checked' : ''}>
+      <input type="checkbox" data-op-change="onPrAggPdfEntryCheckboxChange" data-arg0="${e.id}" data-arg-el="1" ${prAggPdfSelectedIds.includes(e.id) ? 'checked' : ''}>
       <span class="font-semibold text-gray-700">${escapeHtml(e.title)}</span>
       <span class="text-gray-400">— ${escapeHtml(e.creatorName)} (${escapeHtml(e.dept)})</span>
     </label>
@@ -29757,6 +29780,9 @@ function renderPrAggPdfEntriesList() {
 
 // Tick 1 báo cáo PDF -> render TOÀN BỘ trang của nó rồi thêm vào cuối prAggPdfPages (ĐÚNG thứ tự trang
 // gốc); bỏ tick -> gỡ hết trang thuộc entry đó khỏi prAggPdfPages (không đụng thứ tự các trang còn lại).
+// Wrapper CSP-safe cho checkbox onchange="togglePrAggPdfEntry(id, this.checked)" cũ (giống
+// onPrAggEntryCheckboxChange() ở khối Tổng Hợp PPTX phía trên).
+function onPrAggPdfEntryCheckboxChange(entryId, el) { togglePrAggPdfEntry(entryId, el.checked); }
 async function togglePrAggPdfEntry(entryId, checked) {
   const entry = DB.reportEntries.find(e => e.id === entryId);
   if (!entry) return;
@@ -30040,14 +30066,14 @@ function renderPrAggCompilation() {
       const progressLabel = s.kind === 'TASKS' ? 'Tiến độ' : 'Kế hoạch tiếp theo';
       bodyHTML = `
         <div class="flex justify-end">
-          <button type="button" onclick="${escapeHtml(`addPrAggItemRow('prAggItemsTable_${idx}', '${progressField}', ${JSON.stringify(progressLabel)})`)}" class="text-xs bg-sky-100 text-sky-700 px-2 py-1 rounded hover:bg-sky-200 font-semibold" ${isPublished ? 'disabled' : ''}>+ Thêm dòng</button>
+          <button type="button" data-op="addPrAggItemRow" data-arg0="prAggItemsTable_${idx}" data-arg1="${escapeHtml(progressField)}" data-arg2="${escapeHtml(progressLabel)}" class="text-xs bg-sky-100 text-sky-700 px-2 py-1 rounded hover:bg-sky-200 font-semibold" ${isPublished ? 'disabled' : ''}>+ Thêm dòng</button>
         </div>
-        <div id="prAggItemsTable_${idx}" class="space-y-2" oninput="syncPrAggSlideItems(${idx}, '${progressField}')"></div>
+        <div id="prAggItemsTable_${idx}" class="space-y-2" data-op-input="syncPrAggSlideItems" data-arg0="${idx}" data-arg1="${escapeHtml(progressField)}"></div>
       `;
     } else if (s.kind === 'NUMBERS' || s.kind === 'OTHER' || s.kind === 'TASK_STATS') {
       bodyHTML = `
-        <textarea oninput="updatePrAggSlideField(${idx}, 'text', this.value)" class="w-full border p-1.5 rounded text-xs h-20" ${isPublished ? 'disabled' : ''}>${escapeHtml(s.text || '')}</textarea>
-        ${s.fileUrl ? `<div class="flex items-center justify-between text-[11px] bg-white border rounded p-1.5"><span>📎 ${escapeHtml(s.fileName || 'tệp đính kèm')}</span>${!isPublished ? `<button type="button" onclick="removePrAggSlideFile(${idx})" class="text-red-500 font-bold hover:underline">✕ Bỏ tệp</button>` : ''}</div>` : ''}
+        <textarea data-op-input="updatePrAggSlideField" data-arg0="${idx}" data-arg1="text" data-arg-value="2" class="w-full border p-1.5 rounded text-xs h-20" ${isPublished ? 'disabled' : ''}>${escapeHtml(s.text || '')}</textarea>
+        ${s.fileUrl ? `<div class="flex items-center justify-between text-[11px] bg-white border rounded p-1.5"><span>📎 ${escapeHtml(s.fileName || 'tệp đính kèm')}</span>${!isPublished ? `<button type="button" data-op="removePrAggSlideFile" data-arg0="${idx}" class="text-red-500 font-bold hover:underline">✕ Bỏ tệp</button>` : ''}</div>` : ''}
       `;
     } else if (s.kind === 'FILE') {
       bodyHTML = `<div class="text-[11px] bg-white border rounded p-1.5">📎 ${escapeHtml(s.fileName || 'tệp đính kèm')}</div>`;
@@ -30059,7 +30085,7 @@ function renderPrAggCompilation() {
         ? `<div class="flex flex-wrap gap-2 mt-1.5">${(s.images || []).map(im => `<img src="${im.dataUrl}" class="h-20 rounded border" oncontextmenu="return false;">`).join('')}</div>`
         : '';
       bodyHTML = `
-        <textarea oninput="updatePrAggPptxBodyLines(${idx}, this.value)" placeholder="Nội dung (mỗi dòng là 1 gạch đầu dòng)" class="w-full border p-1.5 rounded text-xs h-24" ${isPublished ? 'disabled' : ''}>${escapeHtml((s.bodyLines || []).join('\n'))}</textarea>
+        <textarea data-op-input="updatePrAggPptxBodyLines" data-arg0="${idx}" data-arg-value="1" placeholder="Nội dung (mỗi dòng là 1 gạch đầu dòng)" class="w-full border p-1.5 rounded text-xs h-24" ${isPublished ? 'disabled' : ''}>${escapeHtml((s.bodyLines || []).join('\n'))}</textarea>
         ${imagesHTML ? `<div class="text-[11px] text-gray-500">🖼️ Ảnh/bảng/đồ thị từ tệp gốc (không sửa được nội dung bên trong):</div>${imagesHTML}` : ''}
       `;
     }
@@ -30068,12 +30094,12 @@ function renderPrAggCompilation() {
         <div class="flex justify-between items-center">
           <span class="text-[11px] font-bold text-sky-700">Phần ${idx + 1} — ${escapeHtml(kindLabel)}${sourceInfo}</span>
           <div class="space-x-1">
-            <button type="button" onclick="movePrAggSlide(${idx}, -1)" class="px-1.5 py-0.5 bg-gray-200 rounded hover:bg-gray-300 text-[11px]" ${idx === 0 || isPublished ? 'disabled' : ''}>▲</button>
-            <button type="button" onclick="movePrAggSlide(${idx}, 1)" class="px-1.5 py-0.5 bg-gray-200 rounded hover:bg-gray-300 text-[11px]" ${idx === prAggPendingSlides.length - 1 || isPublished ? 'disabled' : ''}>▼</button>
-            <button type="button" onclick="removePrAggSlide(${idx})" class="px-1.5 py-0.5 bg-rose-100 text-rose-700 rounded hover:bg-rose-200 text-[11px]" ${isPublished ? 'disabled' : ''}>✕</button>
+            <button type="button" data-op="movePrAggSlide" data-arg0="${idx}" data-arg1="-1" class="px-1.5 py-0.5 bg-gray-200 rounded hover:bg-gray-300 text-[11px]" ${idx === 0 || isPublished ? 'disabled' : ''}>▲</button>
+            <button type="button" data-op="movePrAggSlide" data-arg0="${idx}" data-arg1="1" class="px-1.5 py-0.5 bg-gray-200 rounded hover:bg-gray-300 text-[11px]" ${idx === prAggPendingSlides.length - 1 || isPublished ? 'disabled' : ''}>▼</button>
+            <button type="button" data-op="removePrAggSlide" data-arg0="${idx}" class="px-1.5 py-0.5 bg-rose-100 text-rose-700 rounded hover:bg-rose-200 text-[11px]" ${isPublished ? 'disabled' : ''}>✕</button>
           </div>
         </div>
-        <input type="text" value="${escapeHtml(s.title)}" oninput="updatePrAggSlideField(${idx}, 'title', this.value)" class="w-full border p-1.5 rounded text-xs font-semibold" ${isPublished ? 'disabled' : ''}>
+        <input type="text" value="${escapeHtml(s.title)}" data-op-input="updatePrAggSlideField" data-arg0="${idx}" data-arg1="title" data-arg-value="2" class="w-full border p-1.5 rounded text-xs font-semibold" ${isPublished ? 'disabled' : ''}>
         ${bodyHTML}
       </div>
     `;
@@ -30228,9 +30254,9 @@ function renderPrPublishedTable() {
       <td class="border p-2 text-xs">${formatDateTimeVN(publishedAt)} — ${escapeHtml(publishedByName || '')}</td>
       <td class="border p-2 text-center text-xs">${escapeHtml(countParts.join(' · ') || '—')}</td>
       <td class="border p-2 text-center space-x-1">
-        ${slideDone ? `<button onclick="openPrSlideshow(${p.id})" class="px-2.5 py-1 bg-sky-600 text-white rounded text-xs hover:opacity-90 font-bold">🎬 Trình Chiếu</button>
-        <button onclick="downloadPrPdf(${p.id}, this)" class="px-2.5 py-1 bg-gray-600 text-white rounded text-xs hover:opacity-90 font-bold">📄 Tải PDF</button>` : ''}
-        ${pdfDone ? `<button onclick="openPrPdfFullscreen(${p.id})" class="px-2.5 py-1 bg-indigo-600 text-white rounded text-xs hover:opacity-90 font-bold">🖥️ Xem PDF Toàn Màn Hình</button>
+        ${slideDone ? `<button data-op="openPrSlideshow" data-arg0="${p.id}" class="px-2.5 py-1 bg-sky-600 text-white rounded text-xs hover:opacity-90 font-bold">🎬 Trình Chiếu</button>
+        <button data-op="downloadPrPdf" data-arg0="${p.id}" data-arg-el="1" class="px-2.5 py-1 bg-gray-600 text-white rounded text-xs hover:opacity-90 font-bold">📄 Tải PDF</button>` : ''}
+        ${pdfDone ? `<button data-op="openPrPdfFullscreen" data-arg0="${p.id}" class="px-2.5 py-1 bg-indigo-600 text-white rounded text-xs hover:opacity-90 font-bold">🖥️ Xem PDF Toàn Màn Hình</button>
         <a href="/api/files/download?fileUrl=${encodeURIComponent(p.pdfCompilation.publishedFileUrl)}&name=${encodeURIComponent(p.pdfCompilation.publishedFileName || '')}" class="inline-block px-2.5 py-1 bg-gray-600 text-white rounded text-xs hover:opacity-90 font-bold">📄 Tải PDF Ghép</a>` : ''}
       </td>
     </tr>`;
@@ -30387,7 +30413,7 @@ function buildPrFileBlockHTML(s, colors) {
   if (kind === 'image') {
     return `<img src="${s.fileUrl}" class="max-h-96 mx-auto mt-3 block" style="border-radius:6px;border:1px solid ${c.tableBorder};" oncontextmenu="return false;">`;
   }
-  return `<button type="button" onclick="viewPrCurrentSlideFile()" class="mt-3 text-sm px-3 py-1.5 rounded" style="background:${c.navBtnBg};color:${c.navBtnText};">📎 Xem tệp: ${escapeHtml(s.fileName || 'tệp đính kèm')}</button>`;
+  return `<button type="button" data-op="viewPrCurrentSlideFile" class="mt-3 text-sm px-3 py-1.5 rounded" style="background:${c.navBtnBg};color:${c.navBtnText};">📎 Xem tệp: ${escapeHtml(s.fileName || 'tệp đính kèm')}</button>`;
 }
 
 // Nội dung chính của 1 slide theo đúng kind (đặt lúc Tổng Hợp — xem mergeReportPeriod() ở
