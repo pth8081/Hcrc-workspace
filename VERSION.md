@@ -1,11 +1,68 @@
 # Phiên bản hiện tại
 
-**6.2** — đã merge vào `main` (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge
+**6.3** — đã merge vào `main` (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge
 góc màn hình + `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần
 kiểu `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. Đúng theo quy tắc MINOR chạy 0-9 trong
-`CLAUDE.md`: sau `6.1` tăng MINOR lên `6.2`.
+`CLAUDE.md`: sau `6.2` tăng MINOR lên `6.3`.
 
-## Cập nhật gần nhất — CSP hạ tầng dùng chung, đợt A (CUỐI CÙNG): `buildActionCell()`/pagination/`buildDashboardCardsHTML()` — HOÀN TẤT TOÀN BỘ DỰ ÁN CSP
+## Cập nhật gần nhất — 🎉 HOÀN TẤT DỰ ÁN CSP: gỡ 'unsafe-inline' khỏi scriptSrcAttr — CSP nghiêm ngặt đã có hiệu lực thật sự
+
+Bước CUỐI CÙNG trong toàn bộ chuỗi ~24+ đợt chuyển đổi CSP (23 module nghiệp vụ + ~8 đợt hạ tầng dùng
+chung: H+I/G/C/B/D/F/E/A — xem các mục "Trước đó" bên dưới). Tất cả các đợt trước chỉ CHUYỂN ĐỔI cách
+gắn event handler (`onclick=`/`onchange=`/`oninput=`/`onsubmit=` → `data-op*` + `bindCspDelegation()`)
+nhưng CSP header vẫn còn mở `'unsafe-inline'` cho `scriptSrcAttr` suốt thời gian đó — nghĩa là dù có sót
+1 điểm `onclick=` nào chưa convert, trình duyệt vẫn ÂM THẦM CHO CHẠY, không lộ ra lỗi gì. Đợt này mới thực
+sự là bài kiểm tra thật: siết `scriptSrcAttr` từ `["'unsafe-inline'"]` xuống `["'none'"]` trong
+`lib/securityHeaders.js` — CHỈ 1 dòng đổi, không đụng `scriptSrc`/`styleSrc`/directive nào khác (2 directive
+đó vẫn cần `'unsafe-inline'` vì lý do khác hẳn — toàn bộ logic JS nằm trong khối `<script>` inline của
+`index.html`, và style dùng `style="..."` + Tailwind rộng khắp — ngoài phạm vi dự án CSP `onclick` này).
+
+- **`lib/securityHeaders.js`**: `scriptSrcAttr: ["'unsafe-inline'"]` → `scriptSrcAttr: ["'none'"]`. Cập
+  nhật lại đoạn comment đầu file mô tả đúng lý do/trạng thái mới (trước đây giải thích tại sao PHẢI mở, giờ
+  giải thích tại sao ĐÃ CÓ THỂ siết lại).
+- **Verify tĩnh trước khi đổi header**: grep lại toàn bộ `public/index.html` loại trừ dòng comment `//` —
+  xác nhận **0 (KHÔNG)** `onclick=`/`onchange=`/`oninput=`/`onsubmit=` dạng attribute HTML sống còn sót (chỉ
+  còn ~13 chuỗi khớp nằm trong comment lịch sử mô tả lại pattern cũ, không phải attribute thật).
+- **Demo Playwright thật — CSP nghiêm ngặt có hiệu lực thật sự lần đầu tiên**: khởi động lại server thật
+  (SQL Server + `node server.js`), xác nhận header response thật qua `curl -sI` (`script-src-attr 'none'`,
+  không còn `unsafe-inline'` ở đó). Tạo 4 demo user non-admin mới (`totpEnabled:false`, quyền khác nhau: Giám
+  Đốc/Trưởng Phòng/Nhân Viên Kinh Doanh/Kế Toán — KHÔNG dùng tài khoản admin+TOTP có sẵn) ghi trực tiếp vào
+  `AppData.users`, test qua **19 module/luồng** bằng trình duyệt Chromium thật: Dashboard (+ modal Tuỳ
+  chỉnh), Approval Hub, Tài Liệu, Văn Bản Trình, Truyền Thông (Nhịp Sống HCRC), Hợp Đồng (Phê Duyệt + Quản
+  Lý), Điều Hành (Công Việc, Biên Bản Họp, Báo Cáo Định Kỳ), Hành Chính (Phòng Họp, Đăng Ký Xe, Văn Phòng
+  Phẩm), Tổng Hợp (Mua Bán, Thanh Toán, Ngân Sách), Báo Cáo, `profileModal` (2 tài khoản khác nhau), luồng
+  đăng nhập (4 tài khoản) — tổng 43 thao tác click thành công.
+  - **Phát hiện quan trọng khi tự kiểm chứng cách bắt CSP violation**: `page.on('console')` của Playwright
+    CHỈ bắt được `Runtime.consoleAPICalled` (do JS gọi `console.*()` trực tiếp) — CSP violation là
+    `Log.entryAdded` nguồn `"security"` do CHÍNH TRÌNH DUYỆT phát ra, hoàn toàn KHÔNG đi qua Console API nên
+    `page.on('console')` KHÔNG BAO GIỜ thấy được (tự xác nhận bằng 1 sanity check: chèn thẳng 1 nút có
+    `onclick=` thô vào trang thật, bấm — handler bị chặn đúng như kỳ vọng, nhưng `page.on('console')` im
+    lặng; chỉ khi mở phiên CDP riêng + `Log.enable` mới bắt được đúng message browser thật: `Refused to
+    execute inline event handler because it violates the following Content Security Policy directive:
+    "script-src-attr 'none'"...`). Nếu chỉ dùng `page.on('console')` như cách làm mặc định, demo sẽ báo
+    "0 violation" SAI dù có sót lỗi thật — đã sửa lại toàn bộ demo dùng CDP `Log.entryAdded` (lọc theo
+    `entry.source === 'security'`, không phụ thuộc khớp text) trước khi kết luận.
+  - **Kết quả**: dùng đúng cơ chế CDP `Log.entryAdded` xác nhận **0 (KHÔNG) CSP violation nào** trong suốt
+    43 thao tác qua 4 tài khoản — mọi entry `cdp-log` ghi nhận được đều nguồn `"network"` (Google Fonts bị
+    chặn mạng ngoài, `/api/auth/me` 401 lúc chưa đăng nhập, `/api/captcha` 404 vì CAPTCHA chưa bật — cả 3
+    đều KHÔNG liên quan CSP). 0 `pageerror` chưa bắt. Dọn sạch 4 demo user ngay sau khi test xong.
+- **Full regression**: chạy lại toàn bộ 46 file `tests/test-*.js` (kể cả 2 file known-flaky
+  `test-audit-fixes-batch1.js`/`test-audit-round2-cluster1.js` chạy riêng, xác nhận PASS qua log dù không tự
+  thoát) — **46/46 file OK, 0 FAIL**.
+
+**Deploy-impact:** KHÔNG đổi `sql/schema.sql`, KHÔNG thêm biến môi trường mới, KHÔNG thêm `dependencies`
+mới — chỉ 2 file thay đổi: `lib/securityHeaders.js` (server, 1 dòng CSP header) + `public/index.html`
+(client, chỉ đổi comment mô tả — không đổi hành vi runtime). **Đây LÀ 1 thay đổi HÀNH VI QUAN TRỌNG dù
+không phải bước deploy đặc biệt**: sau khi deploy, nếu người dùng thấy BẤT KỲ nút bấm nào không phản ứng, đó
+có thể là CSP đang chặn 1 điểm sót nào đó — cần mở Console trình duyệt (F12) kiểm tra dòng `Refused to
+execute inline event handler ... script-src-attr` và báo lại NGAY để xử lý, thay vì coi là lỗi nghiệp vụ
+thông thường.
+
+**Còn lại:** RỖNG — **dự án CSP `unsafe-inline` remediation đã HOÀN TẤT 100%**: toàn bộ event handler inline
+đã chuyển sang `data-op*`, và CSP header giờ THỰC SỰ chặn mọi `onclick=`/`onchange=`/`oninput=`/`onsubmit=`
+attribute sống sót hay bị chèn sau này (XSS injection qua attribute không còn tự thực thi được).
+
+## Trước đó — CSP hạ tầng dùng chung, đợt A (cuối cùng đợt convert): `buildActionCell()`/pagination/`buildDashboardCardsHTML()` — HOÀN TẤT TOÀN BỘ ĐỢT CONVERT `data-op*`
 
 Đợt cuối cùng của toàn bộ dự án dọn `unsafe-inline`. Tiếp tục đợt E (`#officeSection`/`#officeProcessModal`/
 `#signedUploadModal`, xem mục "Trước đó" ngay bên dưới) — đợt này chuyển 7 hàm **hạ tầng lõi dùng chung**
