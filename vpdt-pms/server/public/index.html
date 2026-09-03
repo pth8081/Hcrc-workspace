@@ -1158,14 +1158,14 @@ input[data-sdd-list] {
     <div class="bg-violet-50 p-4 rounded border border-violet-200 space-y-3">
       <div class="flex justify-between items-center flex-wrap gap-2">
         <h3 class="font-bold text-violet-900 text-base flex items-center gap-2">📋 Quản Lý Công Việc</h3>
-        <button id="btnManualTaskCreate" onclick="openCreateTaskModal({})" class="hidden bg-violet-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-violet-700">➕ Giao Việc Thủ Công</button>
+        <button id="btnManualTaskCreate" data-op="openCreateTaskModal" data-arg0="{}" class="hidden bg-violet-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-violet-700">➕ Giao Việc Thủ Công</button>
       </div>
       <p class="text-xs text-violet-800">Theo dõi công việc được giao trực tiếp hoặc từ ý kiến chỉ đạo trong Văn bản trình & Biên bản họp.</p>
 
       <div class="grid grid-cols-1 md:grid-cols-4 gap-3 bg-white p-3 rounded border text-xs">
         <div>
           <label class="block font-semibold text-gray-600 mb-1">Lọc Theo Trạng Thái</label>
-          <select id="filterTaskStatus" onchange="onTaskFilterChange()" class="w-full border p-1.5 rounded bg-white">
+          <select id="filterTaskStatus" data-op-change="onTaskFilterChange" class="w-full border p-1.5 rounded bg-white">
             <option value="">-- Tất cả trạng thái --</option>
             <option value="TODO">Chưa bắt đầu</option>
             <option value="DOING">Đang thực hiện</option>
@@ -1175,7 +1175,7 @@ input[data-sdd-list] {
         </div>
         <div>
           <label class="block font-semibold text-gray-600 mb-1">Lọc Theo Nguồn Gốc</label>
-          <select id="filterTaskSource" onchange="onTaskFilterChange()" class="w-full border p-1.5 rounded bg-white">
+          <select id="filterTaskSource" data-op-change="onTaskFilterChange" class="w-full border p-1.5 rounded bg-white">
             <option value="">-- Tất cả --</option>
             <option value="SUBMISSION">Từ Văn bản trình</option>
             <option value="MEETING_MINUTES">Từ Biên bản họp</option>
@@ -1184,10 +1184,10 @@ input[data-sdd-list] {
         </div>
         <div>
           <label class="block font-semibold text-gray-600 mb-1">Từ Khóa Tìm Kiếm</label>
-          <input id="filterTaskKeyword" oninput="onTaskFilterChange()" placeholder="Tiêu đề, người nhận, nguồn..." class="w-full border p-1.5 rounded">
+          <input id="filterTaskKeyword" data-op-input="onTaskFilterChange" placeholder="Tiêu đề, người nhận, nguồn..." class="w-full border p-1.5 rounded">
         </div>
         <div class="flex items-end">
-          <button onclick="resetTaskFilters()" class="w-full bg-gray-200 text-gray-700 p-1.5 rounded font-bold hover:bg-gray-300">Đặt Lại Bộ Lọc</button>
+          <button data-op="resetTaskFilters" class="w-full bg-gray-200 text-gray-700 p-1.5 rounded font-bold hover:bg-gray-300">Đặt Lại Bộ Lọc</button>
         </div>
       </div>
     </div>
@@ -7275,7 +7275,7 @@ input[data-sdd-list] {
   <div class="bg-white rounded-lg shadow-2xl max-w-lg w-full flex flex-col max-h-[90vh] overflow-hidden">
     <div class="flex justify-between items-center bg-violet-800 text-white p-4">
       <h3 class="font-bold text-base flex items-center gap-2">📌 Giao Việc</h3>
-      <button onclick="closeCreateTaskModal()" class="text-violet-200 hover:text-white font-bold text-xl px-2">✕</button>
+      <button data-op="closeCreateTaskModal" class="text-violet-200 hover:text-white font-bold text-xl px-2">✕</button>
     </div>
     <div class="p-4 overflow-y-auto flex-1 space-y-3 text-xs">
       <div id="createTaskSourceLabel" class="text-gray-500 italic"></div>
@@ -7304,8 +7304,8 @@ input[data-sdd-list] {
       </div>
     </div>
     <div class="p-3 bg-gray-100 border-t flex justify-end gap-2 text-xs">
-      <button onclick="closeCreateTaskModal()" class="bg-gray-500 text-white px-4 py-1.5 rounded font-bold hover:bg-gray-600">Huỷ</button>
-      <button id="createTaskConfirmBtn" onclick="confirmCreateTask()" class="bg-violet-600 text-white px-5 py-1.5 rounded font-bold hover:bg-violet-700">✅ Xác Nhận Giao Việc</button>
+      <button data-op="closeCreateTaskModal" class="bg-gray-500 text-white px-4 py-1.5 rounded font-bold hover:bg-gray-600">Huỷ</button>
+      <button id="createTaskConfirmBtn" data-op="confirmCreateTask" class="bg-violet-600 text-white px-5 py-1.5 rounded font-bold hover:bg-violet-700">✅ Xác Nhận Giao Việc</button>
     </div>
   </div>
 </div>
@@ -7315,7 +7315,7 @@ input[data-sdd-list] {
   <div class="bg-white rounded-lg shadow-2xl max-w-md w-full overflow-hidden">
     <div class="flex justify-between items-center bg-orange-700 text-white p-4">
       <h3 class="font-bold text-base flex items-center gap-2">📅 Xin Gia Hạn Công Việc</h3>
-      <button onclick="closeExtensionRequestModal()" class="text-orange-200 hover:text-white font-bold text-xl px-2">✕</button>
+      <button data-op="closeExtensionRequestModal" class="text-orange-200 hover:text-white font-bold text-xl px-2">✕</button>
     </div>
     <div class="p-4 space-y-3 text-xs">
       <div id="extReqCurrentInfo" class="text-gray-500 italic"></div>
@@ -7330,8 +7330,8 @@ input[data-sdd-list] {
       <p class="text-[11px] text-amber-700 italic">⚠️ Mỗi lần gia hạn được tính là 1 lần trễ hạn. Yêu cầu cần người giao việc phê duyệt mới có hiệu lực.</p>
     </div>
     <div class="p-3 bg-gray-100 border-t flex justify-end gap-2 text-xs">
-      <button onclick="closeExtensionRequestModal()" class="bg-gray-500 text-white px-4 py-1.5 rounded font-bold hover:bg-gray-600">Huỷ</button>
-      <button onclick="confirmRequestExtension()" class="bg-orange-600 text-white px-5 py-1.5 rounded font-bold hover:bg-orange-700">📤 Gửi Yêu Cầu</button>
+      <button data-op="closeExtensionRequestModal" class="bg-gray-500 text-white px-4 py-1.5 rounded font-bold hover:bg-gray-600">Huỷ</button>
+      <button data-op="confirmRequestExtension" class="bg-orange-600 text-white px-5 py-1.5 rounded font-bold hover:bg-orange-700">📤 Gửi Yêu Cầu</button>
     </div>
   </div>
 </div>
@@ -7341,12 +7341,12 @@ input[data-sdd-list] {
   <div class="bg-white rounded-lg shadow-2xl max-w-md w-full overflow-hidden">
     <div class="flex justify-between items-center bg-orange-700 text-white p-4">
       <h3 class="font-bold text-base flex items-center gap-2">📅 Duyệt Yêu Cầu Gia Hạn</h3>
-      <button onclick="closeExtensionApproveModal()" class="text-orange-200 hover:text-white font-bold text-xl px-2">✕</button>
+      <button data-op="closeExtensionApproveModal" class="text-orange-200 hover:text-white font-bold text-xl px-2">✕</button>
     </div>
     <div class="p-4 space-y-2 text-xs" id="extApproveInfo"></div>
     <div class="p-3 bg-gray-100 border-t flex justify-end gap-2 text-xs">
-      <button onclick="rejectExtension()" class="bg-red-600 text-white px-4 py-1.5 rounded font-bold hover:bg-red-700">✕ Từ Chối</button>
-      <button onclick="approveExtension()" class="bg-green-600 text-white px-5 py-1.5 rounded font-bold hover:bg-green-700">✅ Đồng Ý Gia Hạn</button>
+      <button data-op="rejectExtension" class="bg-red-600 text-white px-4 py-1.5 rounded font-bold hover:bg-red-700">✕ Từ Chối</button>
+      <button data-op="approveExtension" class="bg-green-600 text-white px-5 py-1.5 rounded font-bold hover:bg-green-700">✅ Đồng Ý Gia Hạn</button>
     </div>
   </div>
 </div>
@@ -7358,7 +7358,7 @@ input[data-sdd-list] {
   <div class="bg-white rounded-lg shadow-2xl max-w-md w-full overflow-hidden">
     <div class="flex justify-between items-center bg-red-700 text-white p-4">
       <h3 id="cancelModalTitle" class="font-bold text-base flex items-center gap-2">✕ Huỷ Công Việc</h3>
-      <button onclick="closeCancelTaskModal()" class="text-red-200 hover:text-white font-bold text-xl px-2">✕</button>
+      <button data-op="closeCancelTaskModal" class="text-red-200 hover:text-white font-bold text-xl px-2">✕</button>
     </div>
     <div class="p-4 space-y-3 text-xs">
       <div id="cancelModalInfo" class="text-gray-500 italic"></div>
@@ -7369,8 +7369,8 @@ input[data-sdd-list] {
       <p id="cancelModalNote" class="text-[11px] text-amber-700 italic"></p>
     </div>
     <div class="p-3 bg-gray-100 border-t flex justify-end gap-2 text-xs">
-      <button onclick="closeCancelTaskModal()" class="bg-gray-500 text-white px-4 py-1.5 rounded font-bold hover:bg-gray-600">Đóng</button>
-      <button id="cancelModalConfirmBtn" onclick="confirmCancelTask()" class="bg-red-600 text-white px-5 py-1.5 rounded font-bold hover:bg-red-700">✕ Huỷ Công Việc</button>
+      <button data-op="closeCancelTaskModal" class="bg-gray-500 text-white px-4 py-1.5 rounded font-bold hover:bg-gray-600">Đóng</button>
+      <button id="cancelModalConfirmBtn" data-op="confirmCancelTask" class="bg-red-600 text-white px-5 py-1.5 rounded font-bold hover:bg-red-700">✕ Huỷ Công Việc</button>
     </div>
   </div>
 </div>
@@ -7380,12 +7380,12 @@ input[data-sdd-list] {
   <div class="bg-white rounded-lg shadow-2xl max-w-md w-full overflow-hidden">
     <div class="flex justify-between items-center bg-red-700 text-white p-4">
       <h3 class="font-bold text-base flex items-center gap-2">✕ Duyệt Yêu Cầu Huỷ</h3>
-      <button onclick="closeCancelApproveModal()" class="text-red-200 hover:text-white font-bold text-xl px-2">✕</button>
+      <button data-op="closeCancelApproveModal" class="text-red-200 hover:text-white font-bold text-xl px-2">✕</button>
     </div>
     <div class="p-4 space-y-2 text-xs" id="cancelApproveInfo"></div>
     <div class="p-3 bg-gray-100 border-t flex justify-end gap-2 text-xs">
-      <button onclick="rejectCancellation()" class="bg-gray-500 text-white px-4 py-1.5 rounded font-bold hover:bg-gray-600">Từ Chối (Giữ việc)</button>
-      <button onclick="approveCancellation()" class="bg-red-600 text-white px-5 py-1.5 rounded font-bold hover:bg-red-700">✅ Đồng Ý Huỷ</button>
+      <button data-op="rejectCancellation" class="bg-gray-500 text-white px-4 py-1.5 rounded font-bold hover:bg-gray-600">Từ Chối (Giữ việc)</button>
+      <button data-op="approveCancellation" class="bg-red-600 text-white px-5 py-1.5 rounded font-bold hover:bg-red-700">✅ Đồng Ý Huỷ</button>
     </div>
   </div>
 </div>
@@ -7395,7 +7395,7 @@ input[data-sdd-list] {
   <div class="bg-white rounded-lg shadow-2xl max-w-md w-full overflow-hidden">
     <div class="flex justify-between items-center bg-blue-700 text-white p-4">
       <h3 class="font-bold text-base flex items-center gap-2">🔄 Cập Nhật Tiến Độ Công Việc</h3>
-      <button onclick="closeTaskProgressModal()" class="text-blue-200 hover:text-white font-bold text-xl px-2">✕</button>
+      <button data-op="closeTaskProgressModal" class="text-blue-200 hover:text-white font-bold text-xl px-2">✕</button>
     </div>
     <div class="p-4 space-y-3 text-xs">
       <div id="progressTaskInfo" class="text-gray-500 italic"></div>
@@ -7414,13 +7414,13 @@ input[data-sdd-list] {
         <div class="flex gap-1.5">
           <input id="newSubtaskTitle" placeholder="Tên công việc nhỏ..." class="flex-1 border p-1.5 rounded text-xs">
           <input id="newSubtaskDueDate" type="date" class="border p-1.5 rounded text-xs">
-          <button type="button" onclick="addSubtaskAction()" class="bg-blue-600 text-white px-2.5 py-1 rounded text-xs font-bold hover:bg-blue-700 whitespace-nowrap">+ Thêm</button>
+          <button type="button" data-op="addSubtaskAction" class="bg-blue-600 text-white px-2.5 py-1 rounded text-xs font-bold hover:bg-blue-700 whitespace-nowrap">+ Thêm</button>
         </div>
       </div>
     </div>
     <div class="p-3 bg-gray-100 border-t flex justify-end gap-2 text-xs">
-      <button onclick="closeTaskProgressModal()" class="bg-gray-500 text-white px-4 py-1.5 rounded font-bold hover:bg-gray-600">Huỷ</button>
-      <button onclick="confirmTaskProgress()" class="bg-blue-600 text-white px-5 py-1.5 rounded font-bold hover:bg-blue-700">💾 Cập Nhật</button>
+      <button data-op="closeTaskProgressModal" class="bg-gray-500 text-white px-4 py-1.5 rounded font-bold hover:bg-gray-600">Huỷ</button>
+      <button data-op="confirmTaskProgress" class="bg-blue-600 text-white px-5 py-1.5 rounded font-bold hover:bg-blue-700">💾 Cập Nhật</button>
     </div>
   </div>
 </div>
@@ -7430,11 +7430,11 @@ input[data-sdd-list] {
   <div class="bg-white rounded-lg shadow-2xl max-w-2xl w-full flex flex-col max-h-[90vh] overflow-hidden">
     <div class="flex justify-between items-center bg-slate-800 text-white p-4">
       <h3 id="taskDetailTitle" class="font-bold text-base flex items-center gap-2">👁️ Chi Tiết Công Việc</h3>
-      <button onclick="closeTaskDetailModal()" class="text-slate-300 hover:text-white font-bold text-xl px-2">✕</button>
+      <button data-op="closeTaskDetailModal" class="text-slate-300 hover:text-white font-bold text-xl px-2">✕</button>
     </div>
     <div id="taskDetailContent" class="p-4 overflow-y-auto flex-1 text-xs space-y-3"></div>
     <div class="p-3 bg-gray-100 border-t flex justify-end text-xs">
-      <button onclick="closeTaskDetailModal()" class="bg-gray-600 text-white px-5 py-1.5 rounded font-bold hover:bg-gray-700">Đóng</button>
+      <button data-op="closeTaskDetailModal" class="bg-gray-600 text-white px-5 py-1.5 rounded font-bold hover:bg-gray-700">Đóng</button>
     </div>
   </div>
 </div>
@@ -17144,10 +17144,10 @@ function renderProgressSubtasksList(t) {
   list.innerHTML = subtasks.length
     ? subtasks.map(s => `
         <div class="flex items-center gap-1.5 text-xs bg-gray-50 border rounded px-2 py-1">
-          <input type="checkbox" ${s.done ? 'checked' : ''} onchange="toggleSubtaskAction(${s.id})">
+          <input type="checkbox" ${s.done ? 'checked' : ''} data-op-change="toggleSubtaskAction" data-arg0="${s.id}">
           <span class="flex-1 ${s.done ? 'line-through text-gray-400' : ''}">${escapeHtml(s.title)}</span>
           <span class="text-gray-400">Hạn: ${escapeHtml(s.dueDate)}</span>
-          <button type="button" onclick="deleteSubtaskAction(${s.id})" class="text-red-500 hover:text-red-700 font-bold" title="Xoá">✕</button>
+          <button type="button" data-op="deleteSubtaskAction" data-arg0="${s.id}" class="text-red-500 hover:text-red-700 font-bold" title="Xoá">✕</button>
         </div>
       `).join('')
     : `<p class="text-[11px] text-gray-400 italic">Chưa có công việc nhỏ nào.</p>`;
@@ -17570,7 +17570,7 @@ function openTaskDetailModal(taskId) {
     ...(t.externalCollaborators || []).map(e => {
       const accepted = acceptedExternalNames.has(e.name);
       const onBehalfBtn = (!accepted && isAssigner)
-        ? ` <button onclick="confirmCollaboratorParticipationOnBehalf(${t.id}, '${escapeHtml(e.name).replace(/'/g, "\\'")}')" class="ml-1 bg-teal-600 text-white px-1.5 py-0.5 rounded text-[10px] font-bold hover:bg-teal-700">Xác nhận thay</button>`
+        ? ` <button data-op="confirmCollaboratorParticipationOnBehalf" data-arg0="${t.id}" data-arg1="${escapeHtml(e.name)}" class="ml-1 bg-teal-600 text-white px-1.5 py-0.5 rounded text-[10px] font-bold hover:bg-teal-700">Xác nhận thay</button>`
         : '';
       return `<li>${escapeHtml(e.name)} (ngoài hệ thống) — ${accepted ? '<span class="text-emerald-700 font-bold">✅ Đã xác nhận tham gia</span>' : '<span class="text-gray-400 italic">Chưa xác nhận</span>'}${onBehalfBtn}</li>`;
     })
@@ -17593,7 +17593,7 @@ function openTaskDetailModal(taskId) {
       <div><b>Loại giao việc:</b> ${escapeHtml(sourceLabels[t.sourceType] || t.sourceType || '—')}${t.sourceCode ? ` (${escapeHtml(t.sourceCode)})` : ''}${sourceDeleted ? ' <span class="text-red-600 font-bold">⚠️ Biên bản họp nguồn đã bị xóa</span>' : ''}</div>
       <div><b>Người giao:</b> ${escapeHtml(t.assignedByName || '')}</div>
       <div><b>Người nhận:</b> ${t.assignedToName ? escapeHtml(t.assignedToName) : '<span class="text-amber-600 font-bold">Chưa gán</span>'}${t.externalAssignee ? ' <span class="text-gray-400">(ngoài hệ thống — không có tài khoản đăng nhập)</span>' : ''}
-        ${t.externalAssignee && t.status === 'TODO' && isAssigner ? ` <button onclick="acceptTaskOnBehalf(${t.id})" class="ml-1 bg-emerald-600 text-white px-1.5 py-0.5 rounded text-[10px] font-bold hover:bg-emerald-700">Nhận việc thay</button>` : ''}
+        ${t.externalAssignee && t.status === 'TODO' && isAssigner ? ` <button data-op="acceptTaskOnBehalf" data-arg0="${t.id}" class="ml-1 bg-emerald-600 text-white px-1.5 py-0.5 rounded text-[10px] font-bold hover:bg-emerald-700">Nhận việc thay</button>` : ''}
       </div>
       <div><b>Thời điểm bắt đầu (Nhận việc):</b> ${escapeHtml(t.startedAt || 'Chưa nhận việc')}</div>
       <div><b>Trạng thái:</b> ${TASK_STATUS_LABELS[t.status] || t.status}</div>
@@ -17724,7 +17724,7 @@ function renderTasks() {
       || candidates.find(c => c.value === 'progress')
       || candidates.find(c => c.value === 'detail');
     const primaryTitle = primary.value === 'acceptOnBehalf' ? ' title="Xác nhận thay cho người thực hiện ngoài hệ thống"' : '';
-    const primaryBtnHTML = `<button onclick="runTaskAction(${t.id}, '${primary.value}')" class="${primary.cls} text-white px-2 py-1 rounded text-xs font-bold${primary.urgent ? ' animate-pulse' : ''}"${primaryTitle}>${primary.label}</button>`;
+    const primaryBtnHTML = `<button data-op="runTaskAction" data-arg0="${t.id}" data-arg1="${primary.value}" class="${primary.cls} text-white px-2 py-1 rounded text-xs font-bold${primary.urgent ? ' animate-pulse' : ''}"${primaryTitle}>${primary.label}</button>`;
     const actionBtns = buildActionCell(t.id, primaryBtnHTML, candidates.filter(c => c.value !== primary.value), 'runTaskAction');
     const collabNames = [
       ...(t.collaborators || []).map(u => DB.users.find(x => x.username === u)?.name || u),
@@ -23959,6 +23959,28 @@ bindCspDelegation('internalArticleModal');
 bindCspDelegation('minutesSection');
 bindCspDelegation('minutesEmailComposeModal');
 bindCspDelegation('attendeeTemplateManagerModal');
+
+// Công Việc — form/danh sách/bộ lọc chính (#taskSection) cộng 7 modal sống NGOÀI section (giống Xe/Vận
+// Hành/Đào Tạo/Biên Bản Họp/...): #createTaskModal (tạo/gán/sửa việc thủ công, dùng chung cho cả 3 chế
+// độ openCreateTaskModal()/openAssignTaskModal()/openEditTaskModal()), #taskExtensionRequestModal/
+// #taskExtensionApproveModal (xin/duyệt gia hạn), #taskCancelModal/#taskCancelApproveModal (2 bước huỷ
+// việc), #taskProgressModal (cập nhật tiến độ + chia nhỏ công việc — renderProgressSubtasksList()),
+// #taskDetailModal (xem chi tiết, nội dung do openTaskDetailModal() dựng động, không có handler tĩnh
+// nào khác ngoài 2 nút đóng). 8 gốc tổng cộng. Không cần wrapper mới — 1 điểm duy nhất
+// (confirmCollaboratorParticipationOnBehalf trong renderTasks(), tham số tên người là chuỗi literal có
+// escaping JS-string thủ công `.replace(/'/g, "\\'")`) được sửa tay thay vì chạy qua script chuyển đổi:
+// khi chuyển sang data-arg1, việc escape dấu nháy đơn kiểu JS-string là thừa (data-attribute không cần
+// escape kiểu đó) nên bỏ hẳn .replace(), chỉ giữ escapeHtml() để an toàn HTML. Dropdown "Khác ▾" dùng
+// chung trong buildActionCell() (mở hầu hết modal ở trên qua runTaskAction()) và #genericConfirmModal
+// vẫn để nguyên onclick — nằm trong đợt dọn hạ tầng dùng chung riêng, không thuộc module này.
+bindCspDelegation('taskSection');
+bindCspDelegation('createTaskModal');
+bindCspDelegation('taskExtensionRequestModal');
+bindCspDelegation('taskExtensionApproveModal');
+bindCspDelegation('taskCancelModal');
+bindCspDelegation('taskCancelApproveModal');
+bindCspDelegation('taskProgressModal');
+bindCspDelegation('taskDetailModal');
 
 // ==========================================
 // VĂN PHÒNG PHẨM — kỳ đăng ký (vppPeriods) + đăng ký của nhân viên (vppRegistrations). 3 sub-tab:
