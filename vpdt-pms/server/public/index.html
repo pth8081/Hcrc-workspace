@@ -726,7 +726,7 @@ input[data-sdd-list] {
           <p class="loginpage-card-sub">Nhập thông tin tài khoản được cấp để truy cập hệ thống.</p>
         </div>
 
-        <form onsubmit="event.preventDefault(); login();">
+        <form data-op-submit="login" data-op-prevent-default="1">
           <!-- Thiết bị đã có tài khoản "được nhớ" từ lần đăng ký vân tay/Face ID trước (xem
                initRememberedLoginUser()) — thay ô gõ Tên đăng nhập bằng dòng hiện sẵn tên + nút "Đăng nhập
                tên khác" để đổi tài khoản khi cần (máy dùng chung). Mặc định ẩn, JS tự quyết định hiện cái
@@ -736,7 +736,7 @@ input[data-sdd-list] {
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><circle cx="12" cy="8" r="3.5"/><path d="M4.5 20c1.4-3.6 4.4-5.5 7.5-5.5s6.1 1.9 7.5 5.5"/></svg>
               <span id="loginRememberedUserName" class="loginpage-remembered-user-name"></span>
             </div>
-            <button type="button" id="btnSwitchLoginUser" onclick="switchLoginUser()" class="loginpage-remembered-user-switch">Đăng nhập tên khác</button>
+            <button type="button" id="btnSwitchLoginUser" data-op="switchLoginUser" class="loginpage-remembered-user-switch">Đăng nhập tên khác</button>
           </div>
           <div id="loginUserFieldWrap" class="loginpage-field">
             <label for="txtUser">Tên đăng nhập</label>
@@ -764,7 +764,7 @@ input[data-sdd-list] {
               <input id="txtTotpCode" type="text" inputmode="numeric" autocomplete="one-time-code" placeholder="Mã 6 số hoặc mã khôi phục">
             </div>
             <p class="text-xs text-gray-400 mt-1.5">Tài khoản <b id="loginTotpUsernameLabel"></b> yêu cầu xác thực 2 lớp. Mất điện thoại? Dùng 1 trong các mã khôi phục đã lưu lúc thiết lập, hoặc nhờ quản trị viên khác gỡ hộ.</p>
-            <button type="button" onclick="cancelTotpLoginStep()" class="text-xs text-gray-500 hover:underline mt-1.5">← Quay lại đăng nhập bằng mật khẩu</button>
+            <button type="button" data-op="cancelTotpLoginStep" class="text-xs text-gray-500 hover:underline mt-1.5">← Quay lại đăng nhập bằng mật khẩu</button>
           </div>
 
           <!-- CAPTCHA số tự vẽ trên server — chỉ hiện khi server bật CAPTCHA_ENABLED=true (xem
@@ -774,7 +774,7 @@ input[data-sdd-list] {
             <label for="txtCaptcha">Mã xác nhận</label>
             <div class="loginpage-captcha-row">
               <span id="captchaImgWrap" class="loginpage-captcha-img"></span>
-              <button type="button" id="btnCaptchaRefresh" class="loginpage-captcha-refresh" title="Lấy mã khác" aria-label="Lấy mã khác" onclick="refreshCaptcha()">↻</button>
+              <button type="button" id="btnCaptchaRefresh" class="loginpage-captcha-refresh" title="Lấy mã khác" aria-label="Lấy mã khác" data-op="refreshCaptcha">↻</button>
             </div>
             <div class="loginpage-input-wrap">
               <input id="txtCaptcha" type="text" inputmode="numeric" autocomplete="off" placeholder="Nhập mã số trong ảnh">
@@ -792,7 +792,7 @@ input[data-sdd-list] {
              duyệt cũ/không phải HTTPS, không cần cờ cấu hình riêng phía client). Cần có Tên đăng nhập
              trong ô #txtUser (gõ tay HOẶC tự điền sẵn từ initRememberedLoginUser() khi thiết bị đã "nhớ"
              tài khoản) — nút này chỉ thay bước gõ MẬT KHẨU, không phải đăng nhập không cần tên đăng nhập. -->
-        <button type="button" id="btnBiometricLogin" onclick="loginWithBiometric()" class="loginpage-btn-secondary hidden">
+        <button type="button" id="btnBiometricLogin" data-op="loginWithBiometric" class="loginpage-btn-secondary hidden">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M12 2a5 5 0 0 0-5 5v1.2M12 2a5 5 0 0 1 5 5v1.2M7 8.2a5 5 0 0 0-2 4v1.3a9 9 0 0 0 3.2 6.9M17 8.2a5 5 0 0 1 2 4v1.3c0 1.6-.4 3.1-1.1 4.4M9 8.5a3 3 0 0 1 6 0v1.8M9 8.5v3.8a3 3 0 0 0 1.6 2.7M15 10.3v3a5 5 0 0 1-1.6 3.7"/></svg>
           Đăng nhập bằng vân tay / Face ID
         </button>
@@ -7599,7 +7599,7 @@ input[data-sdd-list] {
       <h3 class="font-bold text-gray-800 text-base flex items-center gap-2">🔒 Bắt Buộc Đổi Mật Khẩu</h3>
       <p class="text-xs text-gray-500 mt-1">Mật khẩu hiện tại của tài khoản đang là mật khẩu tạm/mặc định — vui lòng đặt mật khẩu mới trước khi tiếp tục sử dụng hệ thống.</p>
     </div>
-    <form onsubmit="submitMustChangePassword(event)" class="space-y-3 text-xs">
+    <form data-op-submit="submitMustChangePassword" class="space-y-3 text-xs">
       <div>
         <label class="block font-semibold text-gray-600 mb-1">Mật khẩu mới (tối thiểu 8 ký tự)</label>
         <input id="mcpNewPass" type="password" class="w-full border p-2 rounded" required>
@@ -7609,7 +7609,7 @@ input[data-sdd-list] {
         <input id="mcpConfirmPass" type="password" class="w-full border p-2 rounded" required>
       </div>
       <div class="flex justify-between items-center pt-2">
-        <button type="button" onclick="logout()" class="text-gray-500 font-semibold hover:underline">Đăng Xuất</button>
+        <button type="button" data-op="logout" class="text-gray-500 font-semibold hover:underline">Đăng Xuất</button>
         <button type="submit" class="bg-blue-600 text-white px-5 py-2 rounded font-bold hover:bg-blue-700">Đổi Mật Khẩu & Tiếp Tục</button>
       </div>
     </form>
@@ -7641,17 +7641,17 @@ input[data-sdd-list] {
         <label class="block font-semibold text-gray-600 mb-1">Mã thiết lập thủ công</label>
         <div class="flex gap-2">
           <input id="totpSetupManualKey" type="text" readonly class="w-full border p-2 rounded bg-gray-100 font-mono text-[11px]">
-          <button type="button" onclick="copyTotpManualKey()" class="bg-gray-200 px-2 rounded font-bold hover:bg-gray-300 shrink-0">Chép</button>
+          <button type="button" data-op="copyTotpManualKey" class="bg-gray-200 px-2 rounded font-bold hover:bg-gray-300 shrink-0">Chép</button>
         </div>
       </div>
       <a id="totpSetupOtpauthLink" href="#" class="block text-center text-blue-600 font-semibold hover:underline">📱 Mở trực tiếp trong app Authenticator (nếu đang xem trên cùng điện thoại)</a>
-      <form onsubmit="submitTotpSetupVerify(event)" class="space-y-2 pt-1">
+      <form data-op-submit="submitTotpSetupVerify" class="space-y-2 pt-1">
         <div>
           <label class="block font-semibold text-gray-600 mb-1">Mã 6 số từ app Authenticator</label>
           <input id="totpSetupCode" type="text" inputmode="numeric" autocomplete="one-time-code" class="w-full border p-2 rounded text-center tracking-widest font-bold" maxlength="6" required>
         </div>
         <div class="flex justify-between items-center pt-1">
-          <button type="button" onclick="logout()" class="text-gray-500 font-semibold hover:underline">Đăng Xuất</button>
+          <button type="button" data-op="logout" class="text-gray-500 font-semibold hover:underline">Đăng Xuất</button>
           <button type="submit" class="bg-blue-600 text-white px-5 py-2 rounded font-bold hover:bg-blue-700">Xác Nhận</button>
         </div>
       </form>
@@ -7662,11 +7662,11 @@ input[data-sdd-list] {
       <p class="text-gray-600">Lưu lại 10 mã khôi phục dưới đây ở nơi an toàn — mỗi mã dùng được ĐÚNG 1 LẦN khi bị mất điện thoại/không mở được app Authenticator. Các mã này sẽ KHÔNG hiển thị lại sau khi đóng màn này.</p>
       <div id="totpSetupBackupCodes" class="grid grid-cols-2 gap-1.5 font-mono bg-gray-50 border rounded p-3 text-[11px]"></div>
       <label class="flex items-center gap-2 font-semibold text-gray-700">
-        <input type="checkbox" id="totpSetupBackupConfirm" onchange="document.getElementById('totpSetupContinueBtn').disabled = !this.checked">
+        <input type="checkbox" id="totpSetupBackupConfirm" data-op-change="setTotpBackupConfirmState" data-arg-el="0">
         Tôi đã lưu lại các mã khôi phục này
       </label>
       <div class="flex justify-end pt-1">
-        <button id="totpSetupContinueBtn" type="button" disabled onclick="completeTotpSetupWall()" class="bg-blue-600 text-white px-5 py-2 rounded font-bold hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed">Tiếp Tục Vào Hệ Thống</button>
+        <button id="totpSetupContinueBtn" type="button" disabled data-op="completeTotpSetupWall" class="bg-blue-600 text-white px-5 py-2 rounded font-bold hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed">Tiếp Tục Vào Hệ Thống</button>
       </div>
     </div>
   </div>
@@ -11920,6 +11920,14 @@ async function submitTotpSetupVerify(e) {
   } catch (err) {
     alert('⛔ Không thể kết nối tới máy chủ: ' + err.message);
   }
+}
+
+// Wrapper cho checkbox "Tôi đã lưu lại các mã khôi phục" ở #totpSetupBackupStep — thay cho
+// onchange="document.getElementById('totpSetupContinueBtn').disabled = !this.checked" (phép gán DOM
+// trực tiếp, không phải 1 lời gọi hàm đơn nên không map thẳng qua data-arg-value được — checkbox
+// cần .checked chứ không phải .value, nên dùng data-arg-el="0" để nhận cả phần tử rồi tự đọc .checked).
+function setTotpBackupConfirmState(checkboxEl) {
+  document.getElementById('totpSetupContinueBtn').disabled = !checkboxEl.checked;
 }
 
 async function completeTotpSetupWall() {
@@ -24030,6 +24038,16 @@ bindCspDelegation('mobileTopBar');
 bindCspDelegation('sidebarBackdrop');
 bindCspDelegation('approvalAuthModal');
 bindCspDelegation('bosungEditModal');
+
+// CSP hạ tầng dùng chung (đợt G) — trang đăng nhập + 2 modal "tường chặn" bắt buộc trước khi vào hệ
+// thống, độc lập hoàn toàn với mọi module nghiệp vụ: #loginSection (form đăng nhập, đổi tài khoản đã
+// nhớ, bước TOTP, CAPTCHA, đăng nhập vân tay/Face ID), #mustChangePasswordModal (bắt đổi mật khẩu
+// tạm/mặc định) và #totpSetupWallModal (bắt thiết lập 2FA cho admin chưa bật — checkbox xác nhận đã
+// lưu mã khôi phục dùng wrapper setTotpBackupConfirmState() vì gốc là phép gán DOM trực tiếp, không
+// phải 1 lời gọi hàm đơn). 3 gốc độc lập, không lồng nhau.
+bindCspDelegation('loginSection');
+bindCspDelegation('mustChangePasswordModal');
+bindCspDelegation('totpSetupWallModal');
 
 // ==========================================
 // VĂN PHÒNG PHẨM — kỳ đăng ký (vppPeriods) + đăng ký của nhân viên (vppRegistrations). 3 sub-tab:
