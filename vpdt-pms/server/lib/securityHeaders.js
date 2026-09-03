@@ -1,11 +1,20 @@
 // lib/securityHeaders.js — Cấu hình helmet() cho toàn bộ app.
 //
-// Frontend (public/index.html) là 1 file HTML lớn dùng inline <script>, hàng trăm thuộc tính
-// onclick/onchange/onsubmit, và CSS Tailwind — vì vậy KHÔNG thể dùng CSP mặc định nghiêm ngặt của
-// helmet (chặn toàn bộ inline script/style). Cấu hình dưới đây nới script-src/style-src cho
-// 'unsafe-inline', và bật riêng script-src-attr 'unsafe-inline' (helmet mặc định chặn TOÀN BỘ
-// onclick=... dù script-src đã cho unsafe-inline — đã xác minh bằng test thực tế, không nới sẽ làm hỏng
-// gần như mọi nút bấm trong ứng dụng).
+// Frontend (public/index.html) là 1 file HTML lớn dùng inline <script> và CSS Tailwind — vì vậy
+// KHÔNG thể dùng CSP mặc định nghiêm ngặt của helmet cho script-src/style-src (chặn toàn bộ inline
+// script/style). Cấu hình dưới đây vẫn nới script-src/style-src cho 'unsafe-inline' vì lý do đó.
+//
+// script-src-attr: KHÁC với script-src — đây là directive riêng điều khiển thuộc tính event-handler
+// inline (onclick=/onchange=/oninput=/onsubmit=...) trên thẻ HTML. Trước đây phải mở
+// 'unsafe-inline' cho directive này vì toàn bộ app dùng hàng trăm thuộc tính onclick=/onchange=...
+// rải rác khắp public/index.html. Qua nhiều đợt refactor (23 module nghiệp vụ + các đợt hạ tầng dùng
+// chung: login, đổi mật khẩu, profileModal, genericConfirmModal, viewDocModal, Dashboard, Approval
+// Hub, pagination, buildActionCell, module Office...), TOÀN BỘ các điểm này đã được chuyển sang
+// pattern data-op="..." + addEventListener delegation qua bindCspDelegation() (định nghĩa trong
+// public/index.html) — không còn onclick=/onchange=/oninput=/onsubmit= dạng thuộc tính nào trong file
+// nữa (đã xác minh bằng grep + demo Playwright thực tế, xem VERSION.md). Vì vậy script-src-attr giờ
+// có thể siết về 'none' — trình duyệt sẽ CHẶN THẬT bất kỳ onclick=... nào bị chèn vào DOM sau này
+// (VD qua lỗ hổng XSS), tăng thêm 1 lớp phòng thủ thật sự thay vì chỉ mang tính hình thức.
 //
 // Tailwind: TRƯỚC ĐÂY tải trực tiếp từ https://cdn.tailwindcss.com lúc chạy (không build step) — đã
 // GỠ BỎ hoàn toàn vì mạng nội bộ/tường lửa công ty chặn được CDN này (đã tái hiện được đúng lỗi thực tế:
@@ -34,7 +43,7 @@ const securityHeaders = helmet({
     directives: {
       defaultSrc: ["'self'"],
       scriptSrc: ["'self'", "'unsafe-inline'"],
-      scriptSrcAttr: ["'unsafe-inline'"],
+      scriptSrcAttr: ["'none'"],
       styleSrc: ["'self'", "'unsafe-inline'", 'https://fonts.googleapis.com'],
       imgSrc: ["'self'", 'data:', 'blob:'],
       fontSrc: ["'self'", 'data:', 'https://fonts.gstatic.com'],
