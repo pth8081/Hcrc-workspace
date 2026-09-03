@@ -7578,12 +7578,12 @@ input[data-sdd-list] {
   <div class="bg-white rounded-lg shadow-2xl max-w-lg w-full overflow-hidden">
     <div class="flex justify-between items-center bg-slate-800 text-white p-4">
       <h3 id="genericConfirmTitle" class="font-bold text-base"></h3>
-      <button onclick="closeGenericConfirmModal()" class="text-slate-300 hover:text-white font-bold text-xl px-2">✕</button>
+      <button data-op="closeGenericConfirmModal" class="text-slate-300 hover:text-white font-bold text-xl px-2">✕</button>
     </div>
     <div id="genericConfirmBody" class="p-4 text-xs text-gray-700 max-h-[60vh] overflow-y-auto"></div>
     <div class="p-3 bg-gray-100 border-t flex justify-end gap-2 text-xs">
-      <button onclick="closeGenericConfirmModal()" class="bg-gray-400 text-white px-4 py-1.5 rounded font-bold hover:bg-gray-500">Hủy</button>
-      <button id="genericConfirmOkBtn" onclick="runConfirmedAction()" class="bg-emerald-600 text-white px-5 py-1.5 rounded font-bold hover:bg-emerald-700">Đồng Ý</button>
+      <button data-op="closeGenericConfirmModal" class="bg-gray-400 text-white px-4 py-1.5 rounded font-bold hover:bg-gray-500">Hủy</button>
+      <button id="genericConfirmOkBtn" data-op="runConfirmedAction" class="bg-emerald-600 text-white px-5 py-1.5 rounded font-bold hover:bg-emerald-700">Đồng Ý</button>
     </div>
   </div>
 </div>
@@ -16195,11 +16195,11 @@ function openTroLyThuKyBoSungChoice(subId) {
     bodyHTML: `
       <p class="mb-3">Bộ phận Trợ Lý/Thư Ký có thể xử lý theo 1 trong 2 cách:</p>
       <div class="flex flex-col gap-2">
-        <button type="button" onclick="closeGenericConfirmModal(); openTroLyThuKyProposeFileForm(${subId})" class="w-full text-left border border-blue-300 bg-blue-50 hover:bg-blue-100 rounded p-2">
+        <button type="button" data-op-seq="closeGenericConfirmModal()|openTroLyThuKyProposeFileForm(${subId})" class="w-full text-left border border-blue-300 bg-blue-50 hover:bg-blue-100 rounded p-2">
           <div class="font-bold text-blue-800">📤 Đồng Ý — Thay Thế Toàn Bộ Tờ Trình</div>
           <div class="text-gray-600 font-normal mt-0.5">Tải lên 1 tệp thay thế hoàn toàn tờ trình cũ, gửi cho người trình xác nhận trước khi tiếp tục quy trình.</div>
         </button>
-        <button type="button" onclick="closeGenericConfirmModal(); confirmProcessSubmission('REQUEST_CHANGES')" class="w-full text-left border border-gray-300 bg-gray-50 hover:bg-gray-100 rounded p-2">
+        <button type="button" data-op-seq="closeGenericConfirmModal()|confirmProcessSubmission(REQUEST_CHANGES)" class="w-full text-left border border-gray-300 bg-gray-50 hover:bg-gray-100 rounded p-2">
           <div class="font-bold text-gray-700">💬 Hủy — Gửi Bình Luận Bổ Sung (Theo Luồng Cũ)</div>
           <div class="text-gray-600 font-normal mt-0.5">Đưa tờ trình về NHÁP theo đúng ô Ý kiến chỉ đạo đã nhập, để người trình tự sửa lại toàn bộ nội dung + tệp rồi gửi lại từ bước 1.</div>
         </button>
@@ -16227,7 +16227,7 @@ function openTroLyThuKyProposeFileForm(subId) {
           <textarea id="tltkProposeNote" class="w-full border p-2 rounded h-16" placeholder="Ghi chú cho người trình về nội dung đã thay đổi..."></textarea>
         </div>
         <p class="text-gray-500 italic">Tệp này sẽ thay thế HOÀN TOÀN tệp tờ trình hiện tại, chỉ có hiệu lực sau khi người trình xác nhận đồng ý.</p>
-        <button type="button" onclick="confirmTroLyThuKyProposeFile(${subId})" class="w-full bg-blue-600 text-white rounded p-2 font-bold hover:bg-blue-700">📤 Gửi Đề Xuất Cho Người Trình</button>
+        <button type="button" data-op="confirmTroLyThuKyProposeFile" data-arg0="${subId}" class="w-full bg-blue-600 text-white rounded p-2 font-bold hover:bg-blue-700">📤 Gửi Đề Xuất Cho Người Trình</button>
       </div>
     `,
     confirmLabel: 'Đóng'
@@ -16288,15 +16288,15 @@ function openResolveFileProposalModal(subId) {
         ${p.note ? `<div class="bg-amber-50 border border-amber-200 rounded p-2 italic">"${escapeHtml(p.note)}"</div>` : ''}
         <div class="flex items-center justify-between gap-2 border rounded p-2 bg-gray-50">
           <span>📎 ${escapeHtml(p.fileName)}</span>
-          <button type="button" onclick="viewFileProposalAttachment(${subId})" class="px-2 py-1 bg-blue-600 text-white rounded text-[11px] font-bold hover:bg-blue-700">👁️ Xem</button>
+          <button type="button" data-op="viewFileProposalAttachment" data-arg0="${subId}" class="px-2 py-1 bg-blue-600 text-white rounded text-[11px] font-bold hover:bg-blue-700">👁️ Xem</button>
         </div>
         <div>
           <label class="block font-semibold mb-1">Lý do đồng ý (bắt buộc nếu chọn "Tôi Đồng Ý")</label>
           <textarea id="resolveFileProposalComment" class="w-full border p-2 rounded h-16" placeholder="Nhập lý do đồng ý thay thế nội dung tờ trình..."></textarea>
         </div>
         <div class="flex gap-2">
-          <button type="button" onclick="confirmResolveFileProposal(${subId}, true)" class="flex-1 bg-green-600 text-white rounded p-2 font-bold hover:bg-green-700">✅ Tôi Đồng Ý</button>
-          <button type="button" onclick="confirmResolveFileProposal(${subId}, false)" class="flex-1 bg-gray-500 text-white rounded p-2 font-bold hover:bg-gray-600">✖️ Tôi Không Đồng Ý — Tự Tải Tệp Khác</button>
+          <button type="button" data-op="confirmResolveFileProposalAgree" data-arg0="${subId}" class="flex-1 bg-green-600 text-white rounded p-2 font-bold hover:bg-green-700">✅ Tôi Đồng Ý</button>
+          <button type="button" data-op="confirmResolveFileProposalDisagree" data-arg0="${subId}" class="flex-1 bg-gray-500 text-white rounded p-2 font-bold hover:bg-gray-600">✖️ Tôi Không Đồng Ý — Tự Tải Tệp Khác</button>
         </div>
       </div>
     `,
@@ -16315,6 +16315,12 @@ function viewFileProposalAttachment(subId) {
     fileSrc: p.fileUrl, fileType: p.fileType, fileName: p.fileName
   });
 }
+
+// Wrapper CSP-safe cho 2 nút Đồng Ý/Không Đồng Ý — tránh truyền literal boolean "false" qua data-argN
+// (cspCoerceArg() chỉ coerce được số nguyên, chuỗi "false" lại truthy trong JS), cùng mẫu
+// untogglePrAggEntry() ở trên.
+function confirmResolveFileProposalAgree(subId) { confirmResolveFileProposal(subId, true); }
+function confirmResolveFileProposalDisagree(subId) { confirmResolveFileProposal(subId, false); }
 
 async function confirmResolveFileProposal(subId, agree) {
   const comment = document.getElementById('resolveFileProposalComment').value.trim();
@@ -24060,6 +24066,24 @@ bindCspDelegation('totpSetupWallModal');
 // printWordWithWatermark()) — nút mở modal ở từng module là <a>/onclick riêng của module đó, không
 // thuộc phạm vi đợt này (giữ nguyên hoặc đã convert ở đợt khác).
 bindCspDelegation('viewDocModal');
+
+// CSP hạ tầng dùng chung (đợt B) — #genericConfirmModal: modal xác nhận Đồng Ý/Hủy DÙNG CHUNG cho ~57
+// lời gọi showConfirmModal() trải khắp gần hết hệ thống (Văn Bản Trình/Hợp Đồng/Văn Phòng/Ngân
+// Sách/Giá IT/Giấy Phép/VPP/Đào Tạo/Đồng Phục/Biên Bản Họp/Nhân Sự...). 3 điểm onclick nằm trong định
+// nghĩa tĩnh modal (nút ✕/Hủy gọi closeGenericConfirmModal(), nút #genericConfirmOkBtn gọi
+// runConfirmedAction()) cộng 6 điểm onclick/onchange trong bodyHTML TỰ SOẠN của riêng luồng Trợ
+// Lý/Thư Ký xử lý tờ trình (openTroLyThuKyBoSungChoice()/openTroLyThuKyProposeFileForm()/
+// openResolveFileProposalModal()) đã convert sang data-op/data-op-seq. BUG ĐÃ XÁC MINH: gốc này CHƯA
+// TỪNG được bindCspDelegation() ở bất kỳ đợt nào trước đây — rà soát toàn bộ ~53 lời gọi
+// showConfirmModal() còn lại (bodyHTML dựng bằng backtick, kể cả template lồng nhau) xác nhận KHÔNG
+// module nào khác từng đặt data-op/onclick/onchange bên trong bodyHTML của riêng mình (mọi module khác
+// chỉ dùng bodyHTML thuần văn bản + nút Đồng Ý/Hủy mặc định của modal, hành động thật nằm trong callback
+// onConfirm JS — không phải attribute HTML nên không cần data-op) — nghĩa là lỗ hổng bind này chưa từng
+// làm im lặng bất kỳ luồng nào đã lên production, NHƯNG nếu không bind ngay trong đợt này thì 6 điểm
+// data-op vừa convert ở luồng Trợ Lý/Thư Ký phía trên sẽ im lặng không chạy (đã demo Playwright xác
+// nhận: bấm nút trong bodyHTML không phản ứng gì khi CHƯA bind, chạy đúng sau khi bind — xem báo cáo
+// đợt B). 1 gốc duy nhất.
+bindCspDelegation('genericConfirmModal');
 
 // ==========================================
 // VĂN PHÒNG PHẨM — kỳ đăng ký (vppPeriods) + đăng ký của nhân viên (vppRegistrations). 3 sub-tab:
