@@ -1,10 +1,91 @@
 # Phiên bản hiện tại
 
-**5.3** — đã merge vào `main` (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge
+**5.4** — đã merge vào `main` (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge
 góc màn hình + `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần
 kiểu `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
 
-## Cập nhật gần nhất — CSP unsafe-inline: đợt 22/N — module Tài Liệu
+## Cập nhật gần nhất — CSP unsafe-inline: đợt 23/N (CUỐI CÙNG) — module Báo Cáo Định Kỳ
+
+Tiếp tục đợt 22 (Tài Liệu, xem mục "Trước đó" ngay bên dưới) — đợt này chuyển toàn bộ module **Báo Cáo
+Định Kỳ** (`#periodicReportSection` — 4 sub-tab Nhập Báo Cáo/Kỳ Báo Cáo/Tổng Hợp/Đã Phát Hành trong 1
+section, cộng modal Trình Chiếu Toàn Màn Hình sống ngoài section) — **ĐÂY LÀ MODULE CUỐI CÙNG CÒN LẠI**,
+hoàn tất toàn bộ 23 đợt chuyển đổi `onclick`/`onchange`/`oninput`/`onsubmit` sang `data-op*`:
+
+- **43 điểm** `onclick`/`onchange`/`oninput`/`onsubmit` chuyển sang `data-op*`:
+  - **`#periodicReportSection`** (23 điểm tĩnh): 4 nút chuyển sub-tab (`setPeriodicReportSubTab`), form
+    Nhập Báo Cáo (đổi kỳ `onPrEntryPeriodChange`, đổi hình thức PPTX/PDF `onPrEntryModeChange` × 2, chọn
+    tệp `.pptx`/PDF nhận thẳng `event` thật qua `data-arg-event` — `onPrEntryPptxFileChange`/
+    `onPrEntryPdfFilesChange`, Lưu Nháp/Gửi Báo Cáo `savePrEntryDraft`/`submitPrEntry`), form Tạo Kỳ Báo
+    Cáo (`onsubmit` → `createReportPeriod`, checkbox "Áp dụng TẤT CẢ phòng ban" → `toggleScopeGroup` dùng
+    chung), khối Tổng Hợp (đổi kỳ cần tổng hợp, 3 nút Tổng Hợp Theo Báo Cáo/Lưu Chỉnh Sửa/Phát Hành/Hủy
+    Phát Hành, 3 nút song song cho khối Ghép PDF, nút Đối Chiếu Theo Công Việc).
+  - **`renderPrItemsTable()`/`renderPrAggEntriesList()`/`renderPrAggOrderList()`/
+    `renderPrAggPdfEntriesList()`/`renderPrAggCompilation()`/`renderPrPublishedTable()`** (dòng động —
+    19 điểm): xoá dòng bảng Công Việc/Kế Hoạch (tên hàm xoá `${removeFn}` vốn ĐỘNG giữa `removePrItemRow`/
+    `removePrAggItemRow` tuỳ nơi gọi — nay đưa thẳng literal đã tính sẵn vào `data-op`, không còn cần
+    `escapeHtml()` lồng chuỗi JS), thêm dòng (`addPrAggItemRow`), sửa nháp báo cáo (`editPrEntryDraft`),
+    tick chọn báo cáo PPTX/PDF vào bản tổng hợp (2 wrapper mới — xem dưới), sắp thứ tự/bỏ chọn
+    (`movePrAggEntry`, wrapper `untogglePrAggEntry` — xem dưới), sửa từng slide (tiêu đề/nội dung/dòng
+    PowerPoint đọc được — `updatePrAggSlideField`/`updatePrAggPptxBodyLines`/`syncPrAggSlideItems` qua
+    `data-arg-value`), sắp/xoá slide (`movePrAggSlide`/`removePrAggSlide`/`removePrAggSlideFile`), nút
+    Trình Chiếu/Tải PDF/Xem PDF Toàn Màn Hình ở bảng Đã Phát Hành (`openPrSlideshow`/`downloadPrPdf` nhận
+    thẳng nút `this` qua `data-arg-el`/`openPrPdfFullscreen`).
+  - **`#prSlideshowModal`** (Trình Chiếu Báo Cáo Định Kỳ toàn màn hình, sống NGOÀI section, dùng chung cho
+    cả 2 chế độ SLIDES/PDF — 1 điểm tĩnh đóng + 2 nút điều hướng `‹`/`›`, cộng 1 điểm dựng động trong
+    `buildPrFileBlockHTML()` — nút xem tệp đính kèm của slide đang hiện, `viewPrCurrentSlideFile`).
+- **3 hàm wrapper mới** do runtime `data-op*` chưa hỗ trợ trực tiếp:
+  - `onPrAggEntryCheckboxChange(entryId, el)`/`onPrAggPdfEntryCheckboxChange(entryId, el)` — 2 checkbox
+    tick báo cáo PPTX/PDF vào bản tổng hợp đọc `this.checked` (không có slot `data-arg` cho `.checked`,
+    chỉ có `data-arg-value`/`data-arg-el`/`data-arg-event`), nhận thẳng phần tử checkbox qua `data-arg-el`
+    rồi tự đọc `el.checked`.
+  - `untogglePrAggEntry(entryId)` — nút ✕ bỏ chọn ở khối "Thứ tự đã chọn" tương đương
+    `onclick="togglePrAggEntry(id, false)"` cũ; phát hiện `cspCoerceArg()` chỉ coerce được số nguyên
+    (`/^-?\d+$/`), còn chuỗi `"false"` đọc từ `data-argN` vẫn giữ nguyên dạng chuỗi — mà chuỗi non-empty
+    lại truthy trong JS, nên truyền thẳng literal `"false"` qua `data-arg1` sẽ SAI (checkbox coi như đang
+    tick). Tách hẳn thành hàm riêng gọi cứng `false` để tránh bẫy coercion này (không sửa `cspCoerceArg()`
+    dùng chung — nằm ngoài phạm vi module, ảnh hưởng mọi module khác đã convert).
+- **2 gốc `bindCspDelegation`**: `periodicReportSection`, `prSlideshowModal`. Không đụng: nút Thao Tác
+  chính ở `#prPeriodsTableBody` chỉ có dấu "—" (không có `onclick` gì để chuyển), dropdown "Khác ▾" dùng
+  chung `buildActionCell()`/`#genericConfirmModal` (bước xác nhận trước khi Phát Hành/Hủy Phát Hành/Đóng
+  Kỳ Sớm) — nằm trong đợt dọn hạ tầng dùng chung riêng, đúng tiền lệ mọi đợt trước.
+- **Không phát hiện lỗi nghiệp vụ thật nào trong lúc demo module này.**
+
+**Xác nhận không ảnh hưởng** — 2 lớp kiểm tra độc lập trước khi merge:
+- Demo Playwright thật (SQL Server + server local + đăng nhập UI thật qua 1 tài khoản demo tạm — không
+  admin/không TOTP để tránh phụ thuộc luồng 2FA, chỉ có đúng quyền cần cho module này
+  `reportManage`/`reportAggregate`/`reportEntryCreate` + `moduleAccess.periodicReport` — xoá lại ngay sau
+  demo cùng toàn bộ dữ liệu demo: `reportPeriods`/`reportEntries` đều nằm trong `MIGRATED_COLLECTIONS`,
+  xoá bằng `deleteRecordById()`; tài khoản demo xoá bằng `withLockedAppDataValue('users', ...)`): đăng
+  nhập, vào Điều Hành > Báo Cáo Định Kỳ; tạo 1 Kỳ Báo Cáo mới (tick "Áp dụng TẤT CẢ phòng ban" qua
+  `toggleScopeGroup`, `onsubmit` → `createReportPeriod`) — thành công; sang "Nhập Báo Cáo", chọn kỳ vừa
+  tạo, đổi hình thức nộp sang PDF (`onPrEntryModeChange`), chọn tệp PDF thật (`onPrEntryPdfFilesChange`
+  nhận `event` qua `data-arg-event`, ghép bằng pdf-lib ngay trong trình duyệt) — Lưu Nháp thành công rồi
+  Gửi Báo Cáo qua `#genericConfirmModal`/`#genericConfirmOkBtn` — trạng thái chuyển đúng `SUBMITTED`; đóng
+  sớm kỳ báo cáo (qua dropdown "Khác ▾" dùng chung, ngoài phạm vi CSP module này) để đủ điều kiện tổng
+  hợp; sang "Tổng Hợp", chọn đúng kỳ — báo cáo PDF hiện đúng trong khối Ghép PDF (không lọt vào khối PPTX,
+  đúng `getPrAggPeriodEntries()` loại `entryType==='PDF'`); tick chọn báo cáo (wrapper
+  `onPrAggPdfEntryCheckboxChange`, pdf.js render thumbnail thành công), Tổng Hợp PDF
+  (`mergeReportPeriodPdfAction`) rồi Phát Hành PDF (`publishPrPdfCompilation`) — cả 2 đều 200; sang "Đã
+  Phát Hành" — thấy đúng kỳ vừa phát hành, bấm "🖥️ Xem PDF Toàn Màn Hình" (`openPrPdfFullscreen`) — mở
+  đúng `#prSlideshowModal` full màn hình bằng pdf.js, đóng lại (`closePrSlideshow`) — đóng đúng, không lỗi
+  JS console mới liên quan tới thay đổi (chỉ lỗi mạng nền quen thuộc trước lúc đăng nhập: font CDN ngoài
+  bị chặn bởi sandbox mạng, `/api/auth/me` 401 lúc kiểm tra phiên đăng nhập cũ, `/api/captcha` 404 do
+  CAPTCHA tắt — không liên quan tới module này).
+- Chạy lại toàn bộ 46 file test hồi quy (`tests/test-*.js`) — [KẾT_QUẢ_TEST]/46 OK[GHI_CHÚ_KNOWN_FLAKY].
+
+**Deploy-impact:** KHÔNG đổi `sql/schema.sql`, KHÔNG thêm biến môi trường mới, KHÔNG thêm `dependencies`
+mới — toàn bộ thay đổi nằm trong `public/index.html` (thuần client JS/HTML), deploy an toàn chỉ với copy
+code + `pm2 restart`, không cần thao tác 1 lần nào khác.
+
+**Còn lại: ĐÃ HOÀN TẤT TOÀN BỘ MODULE.** 23/23 đợt đã xong (Công Việc, Văn Bản Trình, Tài Liệu, Báo Cáo
+Định Kỳ và toàn bộ ~19 module trước đó) — mọi `onclick`/`onchange`/`oninput`/`onsubmit` nghiệp vụ trong
+`public/index.html` đã chuyển sang `data-op*`/`bindCspDelegation()`. Bước tiếp theo (KHÔNG còn thuộc đợt
+"mỗi module 1 commit" này nữa) là dọn 2 nhóm hạ tầng dùng chung còn cố tình để lại `onclick` nguyên trạng
+xuyên suốt 23 đợt (`buildActionCell()`/dropdown "Khác ▾", `#genericConfirmModal`, `#viewDocModal`,
+`buildDashboardCardsHTML()`, `paginateList()`/`buildPaginationBoxHTML()`, "Approval Hub"
+`#approvalHubSection`) rồi mới gỡ hẳn `'unsafe-inline'` khỏi CSP header.
+
+## Trước đó — CSP unsafe-inline: đợt 22/N — module Tài Liệu
 
 Tiếp tục đợt 21 (Văn Bản Trình, xem mục "Trước đó" ngay bên dưới) — đợt này chuyển toàn bộ module
 **Tài Liệu** (`#docSection` — form tải lên/cập nhật phiên bản + bộ lọc + danh sách chính, cộng 1 modal
