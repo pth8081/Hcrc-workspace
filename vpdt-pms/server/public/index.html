@@ -7677,22 +7677,22 @@ input[data-sdd-list] {
   <div class="bg-white p-6 rounded-lg shadow-xl max-w-md w-full space-y-4">
     <div class="flex justify-between items-center border-b pb-3">
       <h3 class="font-bold text-gray-800 text-base">⚙️ Cá Nhân Hóa & Cập Nhật Thông Tin</h3>
-      <button onclick="closeProfileModal()" class="text-gray-500 font-bold hover:text-gray-700 text-lg">✕</button>
+      <button data-op="closeProfileModal" class="text-gray-500 font-bold hover:text-gray-700 text-lg">✕</button>
     </div>
     
     <!-- 4 khối thiết lập cá nhân TÁCH RIÊNG theo tab (Thông Tin / Mật Khẩu / Mã PIN / Vân Tay-Face ID)
          thay vì gộp chung 1 form dài như trước — mỗi tab tự lưu riêng, không phụ thuộc nhau. 2 tab
          Mã PIN/Vân Tay chỉ hiện nút khi áp dụng cho tài khoản này (xem openProfileModal()). -->
     <div id="profileSubTabBar" class="flex flex-wrap gap-1.5 text-xs">
-      <button type="button" id="btnProfileSubInfo" onclick="setProfileSubTab('INFO')" class="px-3 py-1.5 rounded font-bold">👤 Thông Tin</button>
-      <button type="button" id="btnProfileSubPassword" onclick="setProfileSubTab('PASSWORD')" class="px-3 py-1.5 rounded font-bold">🔒 Đổi Mật Khẩu</button>
-      <button type="button" id="btnProfileSubPin" onclick="setProfileSubTab('PIN')" class="hidden px-3 py-1.5 rounded font-bold">🔑 Đổi Mã PIN</button>
-      <button type="button" id="btnProfileSubWebauthn" onclick="setProfileSubTab('WEBAUTHN')" class="hidden px-3 py-1.5 rounded font-bold">🖐️ Vân Tay/Face ID</button>
-      <button type="button" id="btnProfileSubTotp" onclick="setProfileSubTab('TOTP')" class="hidden px-3 py-1.5 rounded font-bold">🔐 Xác Thực 2 Lớp</button>
+      <button type="button" id="btnProfileSubInfo" data-op="setProfileSubTab" data-arg0="INFO" class="px-3 py-1.5 rounded font-bold">👤 Thông Tin</button>
+      <button type="button" id="btnProfileSubPassword" data-op="setProfileSubTab" data-arg0="PASSWORD" class="px-3 py-1.5 rounded font-bold">🔒 Đổi Mật Khẩu</button>
+      <button type="button" id="btnProfileSubPin" data-op="setProfileSubTab" data-arg0="PIN" class="hidden px-3 py-1.5 rounded font-bold">🔑 Đổi Mã PIN</button>
+      <button type="button" id="btnProfileSubWebauthn" data-op="setProfileSubTab" data-arg0="WEBAUTHN" class="hidden px-3 py-1.5 rounded font-bold">🖐️ Vân Tay/Face ID</button>
+      <button type="button" id="btnProfileSubTotp" data-op="setProfileSubTab" data-arg0="TOTP" class="hidden px-3 py-1.5 rounded font-bold">🔐 Xác Thực 2 Lớp</button>
     </div>
 
     <div id="profileSubInfo" class="text-xs">
-      <form onsubmit="savePersonalInfo(event)" class="space-y-3">
+      <form data-op-submit="savePersonalInfo" class="space-y-3">
         <div>
           <label class="block font-semibold text-gray-600 mb-1">Tên đăng nhập</label>
           <input id="pfUsername" type="text" disabled class="w-full border p-2 rounded bg-gray-100 font-bold">
@@ -7710,14 +7710,14 @@ input[data-sdd-list] {
           <input id="pfPhone" type="tel" class="w-full border p-2 rounded" placeholder="0912345678" required>
         </div>
         <div class="flex justify-end gap-2 pt-2">
-          <button type="button" onclick="closeProfileModal()" class="bg-gray-400 text-white px-4 py-2 rounded font-bold">Hủy</button>
+          <button type="button" data-op="closeProfileModal" class="bg-gray-400 text-white px-4 py-2 rounded font-bold">Hủy</button>
           <button type="submit" class="bg-blue-600 text-white px-5 py-2 rounded font-bold hover:bg-blue-700">Lưu Thay Đổi</button>
         </div>
       </form>
     </div>
 
     <div id="profileSubPassword" class="hidden text-xs">
-      <form onsubmit="changeMyPassword(event)" class="space-y-3">
+      <form data-op-submit="changeMyPassword" class="space-y-3">
         <div>
           <label class="block font-semibold text-gray-600 mb-1">Mật khẩu hiện tại</label>
           <input id="pfCurrentPass" type="password" class="w-full border p-2 rounded" required>
@@ -7731,7 +7731,7 @@ input[data-sdd-list] {
           <input id="pfConfirmPass" type="password" class="w-full border p-2 rounded" required>
         </div>
         <div class="flex justify-end gap-2 pt-2">
-          <button type="button" onclick="closeProfileModal()" class="bg-gray-400 text-white px-4 py-2 rounded font-bold">Hủy</button>
+          <button type="button" data-op="closeProfileModal" class="bg-gray-400 text-white px-4 py-2 rounded font-bold">Hủy</button>
           <button type="submit" class="bg-blue-600 text-white px-5 py-2 rounded font-bold hover:bg-blue-700">Đổi Mật Khẩu</button>
         </div>
       </form>
@@ -7755,7 +7755,7 @@ input[data-sdd-list] {
         <input id="pfConfirmPin" type="password" inputmode="numeric" autocomplete="off" class="w-full border p-2 rounded">
       </div>
       <div class="flex justify-end">
-        <button type="button" onclick="changeMyApprovalPin()" class="bg-amber-600 text-white px-4 py-2 rounded font-bold hover:bg-amber-700">🔑 Cập Nhật Mã PIN</button>
+        <button type="button" data-op="changeMyApprovalPin" class="bg-amber-600 text-white px-4 py-2 rounded font-bold hover:bg-amber-700">🔑 Cập Nhật Mã PIN</button>
       </div>
     </div>
 
@@ -7768,7 +7768,7 @@ input[data-sdd-list] {
       <div id="pfWebauthnListWrap" class="space-y-1 text-xs"></div>
       <div class="flex gap-2">
         <input id="pfWebauthnDeviceLabel" type="text" placeholder="Tên thiết bị (VD: iPhone của tôi)" class="flex-1 border p-2 rounded text-xs">
-        <button type="button" id="btnRegisterBiometricDevice" onclick="registerBiometricDevice()" class="bg-emerald-600 text-white px-3 py-2 rounded font-bold hover:bg-emerald-700 text-xs whitespace-nowrap">➕ Đăng Ký Thiết Bị Này</button>
+        <button type="button" id="btnRegisterBiometricDevice" data-op="registerBiometricDevice" class="bg-emerald-600 text-white px-3 py-2 rounded font-bold hover:bg-emerald-700 text-xs whitespace-nowrap">➕ Đăng Ký Thiết Bị Này</button>
       </div>
     </div>
 
@@ -7790,12 +7790,12 @@ input[data-sdd-list] {
           <div class="flex justify-center"><img id="pfTotpRevealQrImg" class="border rounded w-32 h-32" alt="Mã QR TOTP hiện tại"></div>
           <div class="flex gap-2">
             <input id="pfTotpRevealManualKey" type="text" readonly class="w-full border p-1.5 rounded bg-white font-mono text-[11px]">
-            <button type="button" onclick="copyPfTotpRevealKey()" class="bg-gray-200 px-2 rounded text-xs font-bold hover:bg-gray-300 shrink-0">Chép</button>
+            <button type="button" data-op="copyPfTotpRevealKey" class="bg-gray-200 px-2 rounded text-xs font-bold hover:bg-gray-300 shrink-0">Chép</button>
           </div>
         </div>
         <div class="flex gap-2">
           <input id="pfTotpRevealPassword" type="password" autocomplete="current-password" placeholder="Nhập mật khẩu để xác nhận" class="flex-1 border p-1.5 rounded text-xs">
-          <button type="button" onclick="revealTotpSecretForNewDevice()" class="bg-blue-600 text-white px-3 py-1.5 rounded font-bold hover:bg-blue-700 text-xs whitespace-nowrap">Hiện Mã QR</button>
+          <button type="button" data-op="revealTotpSecretForNewDevice" class="bg-blue-600 text-white px-3 py-1.5 rounded font-bold hover:bg-blue-700 text-xs whitespace-nowrap">Hiện Mã QR</button>
         </div>
       </div>
 
@@ -7805,7 +7805,7 @@ input[data-sdd-list] {
         <input id="pfTotpRemovePassword" type="password" autocomplete="current-password" class="w-full border p-2 rounded">
       </div>
       <div class="flex justify-end">
-        <button type="button" onclick="removeMyTotp()" class="bg-red-600 text-white px-4 py-2 rounded font-bold hover:bg-red-700">🗑️ Gỡ Xác Thực 2 Lớp</button>
+        <button type="button" data-op="removeMyTotp" class="bg-red-600 text-white px-4 py-2 rounded font-bold hover:bg-red-700">🗑️ Gỡ Xác Thực 2 Lớp</button>
       </div>
     </div>
 
@@ -7817,7 +7817,7 @@ input[data-sdd-list] {
       <div id="pfPwaInstalled" class="hidden text-[11px] text-emerald-700 bg-emerald-50 border border-emerald-200 rounded p-2">✅ Ứng dụng đã được cài đặt trên thiết bị này.</div>
       <div id="pfPwaInstallReady" class="hidden space-y-2">
         <p class="text-[11px] text-gray-500">Cài đặt HCRC Workspace như một ứng dụng lên màn hình chính để mở nhanh hơn, có icon riêng.</p>
-        <button type="button" onclick="triggerPwaInstall()" class="bg-blue-600 text-white px-3 py-2 rounded font-bold hover:bg-blue-700 text-xs">⬇️ Cài Đặt Ngay</button>
+        <button type="button" data-op="triggerPwaInstall" class="bg-blue-600 text-white px-3 py-2 rounded font-bold hover:bg-blue-700 text-xs">⬇️ Cài Đặt Ngay</button>
       </div>
       <div id="pfPwaInstallIos" class="hidden space-y-1 text-[11px] text-gray-600 bg-gray-50 border rounded p-2">
         <p class="font-semibold text-gray-700">Trên iPhone/iPad (Safari):</p>
@@ -11144,7 +11144,7 @@ async function renderWebauthnDeviceList() {
           <div class="font-semibold text-gray-700">${escapeHtml(c.deviceLabel || 'Thiết bị chưa đặt tên')}</div>
           <div class="text-[10px] text-gray-400">Đăng ký lúc: ${escapeHtml(c.createdAt || '')}</div>
         </div>
-        <button type="button" onclick="deleteBiometricDevice('${c.id}')" class="text-red-600 font-bold hover:underline">🗑️ Gỡ</button>
+        <button type="button" data-op="deleteBiometricDevice" data-arg0="${c.id}" class="text-red-600 font-bold hover:underline">🗑️ Gỡ</button>
       </div>
     `).join('');
     return list;
@@ -24115,6 +24115,18 @@ bindCspDelegation('dashboardCustomizeModal');
 // this.checked/biểu thức runtime) — sink giờ render generic data-op="${a.fn}" + data-argN theo đúng độ
 // dài a.args, không còn onclick="${a.onclick}". 1 gốc duy nhất, không có modal riêng ngoài section.
 bindCspDelegation('approvalHubSection');
+
+// CSP hạ tầng dùng chung (đợt F) — #profileModal: "Hồ Sơ Cá Nhân" (nút mở modal ở #userHeader đã có
+// data-op="openProfileModal" từ đợt trước, gốc bind riêng ở đây). 16 điểm tĩnh trong modal (nút đóng "✕"
+// + 2 nút "Hủy", 5 nút chuyển sub-tab setProfileSubTab('INFO'|'PASSWORD'|'PIN'|'WEBAUTHN'|'TOTP'), 2
+// form onsubmit đổi thông tin/đổi mật khẩu — cả 2 hàm savePersonalInfo()/changeMyPassword() đã tự gọi
+// e.preventDefault() bên trong nên KHÔNG cần data-op-prevent-default, nút đổi PIN, nút đăng ký thiết bị
+// vân tay, 3 nút khối TOTP: hiện lại QR cho máy thứ 2/chép khoá/gỡ TOTP, nút cài PWA) cộng 1 sink động
+// trong #pfWebauthnListWrap (renderWebauthnDeviceList() -> deleteBiometricDevice(id), id đã biết lúc
+// build HTML nên dùng data-arg0 thay vì literal, cùng khuôn với deleteAdminBiometricDevice() ở màn Sửa
+// Người Dùng đã convert trước đó). Không có checkbox/this.checked trong modal này nên không cần wrapper
+// riêng. 1 gốc duy nhất, không có modal con nào sống ngoài #profileModal.
+bindCspDelegation('profileModal');
 
 // ==========================================
 // VĂN PHÒNG PHẨM — kỳ đăng ký (vppPeriods) + đăng ký của nhân viên (vppRegistrations). 3 sub-tab:
