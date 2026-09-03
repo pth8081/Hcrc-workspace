@@ -415,11 +415,19 @@ async function main() {
       // 5c. Expand/collapse version history in the list. Child version rows re-use the ROOT doc's
       // displayCode (by design — the version number is shown in a separate column, not baked into the
       // code text), so the presence marker for "is this child row rendered right now" is its row action
-      // button, which is keyed by the child's own numeric id (runDocAction(<id>, ...)).
+      // button, which is keyed by the child's own numeric id.
+      // NOTE: marker updated for the CSP data-op conversion (đợt A, hạ tầng buildActionCell() dùng
+      // chung) — action buttons no longer embed a literal `runDocAction(<id>, ...)` call in the HTML
+      // (that was only ever true because buildActionCell()'s "Khác ▾" dropdown used to be a raw
+      // onchange="if(this.value){ dispatcherFn(id, this.value); }..." string; it is now
+      // data-op-change="handleActionCellDispatch" data-arg-el="0" data-arg1="runDocAction"
+      // data-arg2="<id>"). The id now only ever appears as a bare data-op attribute value
+      // (data-arg0="<id>" on the primary button, data-arg2="<id>" on the dropdown), so match that
+      // instead — still uniquely identifies whether this specific child row is currently rendered.
       renderDocs();
       const collapsedHTML = document.getElementById('docTableBody').innerHTML;
       const versionBadgeVisible = collapsedHTML.includes('2 phiên bản');
-      const childMarker = `runDocAction(${newVersion.id},`;
+      const childMarker = `data-arg0="${newVersion.id}"`;
       toggleDocFamily(approvedDocId);
       const expandedHTML = document.getElementById('docTableBody').innerHTML;
       toggleDocFamily(approvedDocId); // collapse back

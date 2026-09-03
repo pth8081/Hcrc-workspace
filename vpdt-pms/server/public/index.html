@@ -8344,7 +8344,7 @@ function buildDashboardCardsHTML(cards, activeKey, onClickFnName) {
       const isActive = activeKey === c.key;
       return `
       <div class="cursor-pointer border rounded-lg p-2 text-center transition hover:shadow ${colors.border} ${isActive ? colors.activeBg + ' ring-2 ring-offset-1 ring-sky-400' : colors.bg}"
-           onclick="${onClickFnName}('${c.key}')">
+           data-op="${onClickFnName}" data-arg0="${c.key}">
         <div class="text-[11px] ${colors.text} font-semibold">${escapeHtml(c.label)}</div>
         <div class="text-lg font-bold ${colors.text}">${c.count}</div>
       </div>`;
@@ -8385,19 +8385,19 @@ function paginateList(moduleKey, filteredItems, renderFnName, unitLabel) {
   const btnsEl = document.getElementById(`paginationButtons_${moduleKey}`);
   if (btnsEl) {
     let html = `
-      <button onclick="goToListPage('${moduleKey}', 1, '${renderFnName}')" ${st.page === 1 ? 'disabled' : ''} class="px-2 py-1 border rounded bg-white hover:bg-gray-100 disabled:opacity-50">«</button>
-      <button onclick="goToListPage('${moduleKey}', ${st.page - 1}, '${renderFnName}')" ${st.page === 1 ? 'disabled' : ''} class="px-2 py-1 border rounded bg-white hover:bg-gray-100 disabled:opacity-50">‹</button>
+      <button data-op="goToListPage" data-arg0="${moduleKey}" data-arg1="1" data-arg2="${renderFnName}" ${st.page === 1 ? 'disabled' : ''} class="px-2 py-1 border rounded bg-white hover:bg-gray-100 disabled:opacity-50">«</button>
+      <button data-op="goToListPage" data-arg0="${moduleKey}" data-arg1="${st.page - 1}" data-arg2="${renderFnName}" ${st.page === 1 ? 'disabled' : ''} class="px-2 py-1 border rounded bg-white hover:bg-gray-100 disabled:opacity-50">‹</button>
     `;
     for (let i = 1; i <= totalPages; i++) {
       if (i === 1 || i === totalPages || (i >= st.page - 1 && i <= st.page + 1)) {
-        html += `<button onclick="goToListPage('${moduleKey}', ${i}, '${renderFnName}')" class="px-2 py-1 border rounded ${i === st.page ? 'bg-blue-600 text-white font-bold' : 'bg-white hover:bg-gray-100'}">${i}</button>`;
+        html += `<button data-op="goToListPage" data-arg0="${moduleKey}" data-arg1="${i}" data-arg2="${renderFnName}" class="px-2 py-1 border rounded ${i === st.page ? 'bg-blue-600 text-white font-bold' : 'bg-white hover:bg-gray-100'}">${i}</button>`;
       } else if (i === st.page - 2 || i === st.page + 2) {
         html += `<span class="px-1 text-gray-400">...</span>`;
       }
     }
     html += `
-      <button onclick="goToListPage('${moduleKey}', ${st.page + 1}, '${renderFnName}')" ${st.page === totalPages ? 'disabled' : ''} class="px-2 py-1 border rounded bg-white hover:bg-gray-100 disabled:opacity-50">›</button>
-      <button onclick="goToListPage('${moduleKey}', ${totalPages}, '${renderFnName}')" ${st.page === totalPages ? 'disabled' : ''} class="px-2 py-1 border rounded bg-white hover:bg-gray-100 disabled:opacity-50">»</button>
+      <button data-op="goToListPage" data-arg0="${moduleKey}" data-arg1="${st.page + 1}" data-arg2="${renderFnName}" ${st.page === totalPages ? 'disabled' : ''} class="px-2 py-1 border rounded bg-white hover:bg-gray-100 disabled:opacity-50">›</button>
+      <button data-op="goToListPage" data-arg0="${moduleKey}" data-arg1="${totalPages}" data-arg2="${renderFnName}" ${st.page === totalPages ? 'disabled' : ''} class="px-2 py-1 border rounded bg-white hover:bg-gray-100 disabled:opacity-50">»</button>
     `;
     btnsEl.innerHTML = html;
   }
@@ -8418,7 +8418,7 @@ function buildPaginationBoxHTML(moduleKey, renderFnName) {
     <div id="paginationBox_${moduleKey}" class="mt-3 flex flex-col sm:flex-row justify-between items-center gap-3 bg-gray-50 p-3 rounded border text-xs text-gray-700">
       <div class="flex items-center gap-2">
         <span>Hiển thị</span>
-        <select onchange="changeListPageSize('${moduleKey}', this.value, '${renderFnName}')" class="border p-1 rounded bg-white font-semibold">
+        <select data-op-change="changeListPageSize" data-arg0="${moduleKey}" data-arg-value="1" data-arg2="${renderFnName}" class="border p-1 rounded bg-white font-semibold">
           ${[5, 10, 20, 50].map(sizeOptionHTML).join('')}
         </select>
         <span>dòng / trang.</span>
@@ -8437,10 +8437,19 @@ function buildPaginationBoxHTML(moduleKey, renderFnName) {
 // - primaryBtnHTML: chuỗi HTML <button> đã dựng sẵn cho hành động chính.
 // - secondaryOptions: mảng [{ value, label }] — các hành động còn lại.
 // - dispatcherFnName: tên hàm điều phối của module, nhận (id, value) và tự gọi đúng hàm xử lý.
+//
+// Wrapper CSP-safe cho onchange cũ "if(this.value){ dispatcherFn(id, this.value); } this.selectedIndex=0;"
+// — 2 lệnh (gọi hàm điều phối rồi tự trả dropdown về "Khác ▾") nên không thể gọi thẳng qua data-op (chỉ
+// nhận 1 lời gọi hàm đơn). selectEl nhận qua data-arg-el="0" (giống quy ước onVppHeadcountInput/
+// updateMinutesDirectiveFieldMultiSelect ở trên — el luôn đúng vị trí tham số khớp thứ tự khai báo).
+function handleActionCellDispatch(selectEl, dispatcherFnName, id) {
+  if (selectEl.value) { window[dispatcherFnName](id, selectEl.value); }
+  selectEl.selectedIndex = 0;
+}
 function buildActionCell(id, primaryBtnHTML, secondaryOptions, dispatcherFnName) {
   const opts = (secondaryOptions || []).filter(Boolean);
   if (opts.length === 0) return primaryBtnHTML;
-  return `${primaryBtnHTML}<select onchange="if(this.value){ ${dispatcherFnName}(${id}, this.value); } this.selectedIndex=0;" class="border rounded px-1 py-1 text-[11px] bg-white align-middle ml-1">
+  return `${primaryBtnHTML}<select data-op-change="handleActionCellDispatch" data-arg-el="0" data-arg1="${dispatcherFnName}" data-arg2="${id}" class="border rounded px-1 py-1 text-[11px] bg-white align-middle ml-1">
     <option value="">Khác ▾</option>
     ${opts.map(o => `<option value="${escapeHtml(o.value)}">${escapeHtml(o.label)}</option>`).join('')}
   </select>`;
