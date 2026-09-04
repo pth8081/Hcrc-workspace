@@ -1,11 +1,32 @@
 # Phiên bản hiện tại
 
-**8.0** — đã merge vào `main` (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge
+**8.1** — đã merge vào `main` (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge
 góc màn hình + `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần
 kiểu `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. Đúng theo quy tắc MINOR chạy 0-9 trong
-`CLAUDE.md`: sau `7.9` (đang ở MINOR=9) tăng lên MAJOR mới, reset MINOR về 0 → `8.0`.
+`CLAUDE.md`: sau `8.0` tăng MINOR lên 1 → `8.1`.
 
-## Cập nhật gần nhất — Hạ tầng: tách JS client ra file ngoài (Đợt 2/5 — Office/Vận Hành/VPP/Hệ Thống(tabs)/Biểu Mẫu(nav)/Quy Trình/Hỗ Trợ IT(gia hạn+tier)/Ngân Sách)
+## Cập nhật gần nhất — Hạ tầng: tách JS client ra file ngoài (Đợt 3/5 — Admin(user/dept/cat)+Cây Phân Quyền+Nhóm Phân Quyền+Khối 17+Báo Cáo Định Kỳ+Nhóm Phê Duyệt Trình+Danh Sách User Chờ Lưu+Log/Thùng Rác)
+
+Tiếp tục đợt 1-2 (`7.9`/`8.0`, xem mục "Trước đó" ngay dưới) — tách thêm 9 file khỏi khối `<script>`
+inline còn lại của `public/index.html`, giữ đúng nguyên tắc: chỉ di chuyển cơ học, không đổi logic, giữ
+đúng thứ tự xuất hiện gốc.
+
+`module-admin.js` (558 dòng, CRUD Phòng Ban/Danh Mục), `module-admin-permtree.js` (314 dòng, cây phân
+quyền dạng `<details>` gấp/mở dùng ở màn Sửa Người Dùng/Sửa Nhóm), `module-admin-permgroups.js` (240
+dòng, Nhóm Phân Quyền), `module-admin-specialperm.js` (209 dòng, Khối 17 — 2 cấu hình nhóm quyền đặc
+biệt), `module-baocaodinhky-nhap.js` (744 dòng, Báo Cáo Định Kỳ — nhập/kỳ/tổng hợp),
+`module-baocaodinhky-trinhchieu.js` (915 dòng, Báo Cáo Định Kỳ — ghép PDF/trình chiếu toàn màn
+hình/xuất PDF), `module-admin-submissiongroups.js` (233 dòng, Nhóm Phê Duyệt Trình Văn Bản Trình),
+`module-admin-userstaging.js` (526 dòng, danh sách người dùng mới chờ lưu hàng loạt),
+`module-logsystem-trash.js` (250 dòng, Nhật Ký Hệ Thống + Thùng Rác).
+
+Verify: syntax check từng file, không trùng tên hàm/const global nào giữa các file, full 54 file test
+hồi quy Playwright chạy lại sạch (chỉ 2 lỗi biết trước do thiếu SQL Server thật), demo Playwright riêng
+bấm qua 21 tab không lỗi console/page nào. `index.html`: 21.781 → 17.801 dòng.
+
+**Không cần migrate dữ liệu, không đổi `schema.sql`/`.env.example`/`dependencies`/CSP/static-serving.**
+
+## Trước đó — Hạ tầng: tách JS client ra file ngoài (Đợt 2/5 — Office/Vận Hành/VPP/Hệ Thống(tabs)/Biểu Mẫu(nav)/Quy Trình/Hỗ Trợ IT(gia hạn+tier)/Ngân Sách)
 
 Tiếp tục đợt 1 (`7.9`, xem mục "Trước đó" ngay dưới) — tách thêm 9 file khỏi khối `<script>` inline còn
 lại của `public/index.html`, giữ đúng nguyên tắc: chỉ di chuyển cơ học, không đổi logic, giữ đúng thứ tự
