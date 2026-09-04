@@ -70,7 +70,7 @@ async function main() {
       const result = await page.evaluate(async (picUsername) => {
         const res = await callCreateAction('operationStoreOpenings', {
           storeName: 'Siêu thị Test Quận 9', address: '123 Đường Test', area: 200,
-          estimatedBudget: 100000000, expectedOpenDate: '', personInCharge: picUsername, note: ''
+          estimatedBudget: 100000000, approvedBudget: 150000000, expectedOpenDate: '', personInCharge: picUsername, note: ''
         });
         DB.operationStoreOpenings.push(res.item);
         return res.item;
@@ -82,6 +82,39 @@ async function main() {
       assertEqual(result.estimateItems.length, 0, 'estimateItems phải rỗng lúc mới tạo');
       assertEqual(result.personInCharge, PERSON_IN_CHARGE.username, 'personInCharge phải lưu đúng username đã resolve');
       assertEqual(result.personInChargeName, PERSON_IN_CHARGE.name, 'personInChargeName phải snapshot đúng tên hiển thị');
+      // Correction 2 — "Ngân Sách Phê Duyệt": field RIÊNG, ĐỘC LẬP với estimatedBudget ("Chi Phí Phê
+      // Duyệt"), bắt buộc nhập lúc lập hồ sơ.
+      assertEqual(result.approvedBudget, 150000000, 'approvedBudget phải lưu đúng giá trị nhập lúc lập hồ sơ, KHÔNG lấy từ estimatedBudget');
+      assertEqual(result.estimatedBudget, 100000000, 'estimatedBudget ("Chi Phí Phê Duyệt") phải GIỮ NGUYÊN ý nghĩa cũ, không bị ghi đè bởi approvedBudget');
+    });
+
+    // ===== 1a-bis) Correction 2: thiếu approvedBudget lúc lập hồ sơ -> 400 =====
+    await run.run('Thiếu Ngân sách phê duyệt (approvedBudget) lúc lập hồ sơ Mở mới bị từ chối (400)', async () => {
+      await loginAs(page, CREATOR);
+      const result = await page.evaluate(async () => {
+        try {
+          await callCreateAction('operationStoreOpenings', {
+            storeName: 'Siêu thị thiếu ngân sách', address: 'X', area: 1, estimatedBudget: 1, expectedOpenDate: '', personInCharge: '', note: ''
+          });
+          return { ok: true };
+        } catch (err) { return { ok: false, message: err.message }; }
+      });
+      assert(!result.ok, 'Phải bị chặn vì thiếu Ngân sách phê duyệt');
+      assertIncludes(result.message, 'Ngân sách phê duyệt', 'Thông báo lỗi phải nêu rõ thiếu Ngân sách phê duyệt');
+    });
+
+    await run.run('Ngân sách phê duyệt âm bị từ chối (400)', async () => {
+      await loginAs(page, CREATOR);
+      const result = await page.evaluate(async () => {
+        try {
+          await callCreateAction('operationStoreOpenings', {
+            storeName: 'Siêu thị ngân sách âm', address: 'X', area: 1, estimatedBudget: 1, approvedBudget: -5, expectedOpenDate: '', personInCharge: '', note: ''
+          });
+          return { ok: true };
+        } catch (err) { return { ok: false, message: err.message }; }
+      });
+      assert(!result.ok, 'Phải bị chặn vì Ngân sách phê duyệt âm');
+      assertIncludes(result.message, 'không hợp lệ', 'Thông báo lỗi phải nêu rõ không hợp lệ');
     });
 
     // ===== 1b) personInCharge không khớp tài khoản active nào -> 400 =====
@@ -90,7 +123,7 @@ async function main() {
       const result = await page.evaluate(async () => {
         try {
           await callCreateAction('operationStoreOpenings', {
-            storeName: 'Siêu thị lỗi', address: 'X', area: 1, estimatedBudget: 1, expectedOpenDate: '', personInCharge: 'khong_ton_tai', note: ''
+            storeName: 'Siêu thị lỗi', address: 'X', area: 1, estimatedBudget: 1, approvedBudget: 1, expectedOpenDate: '', personInCharge: 'khong_ton_tai', note: ''
           });
           return { ok: true };
         } catch (err) { return { ok: false, message: err.message }; }
@@ -104,7 +137,7 @@ async function main() {
       await loginAs(page, CREATOR);
       const result = await page.evaluate(async (picUsername) => {
         const res = await callCreateAction('operationRepairs', {
-          storeName: 'Siêu thị Sửa Chữa Test', title: 'Sửa hệ thống điện', amount: 20000000,
+          storeName: 'Siêu thị Sửa Chữa Test', title: 'Sửa hệ thống điện', amount: 20000000, approvedBudget: 25000000,
           supplier: 'Công ty Điện X', personInCharge: picUsername, description: 'Hư hỏng hệ thống điện khu kho'
         });
         DB.operationRepairs.push(res.item);
@@ -115,6 +148,7 @@ async function main() {
       assertEqual(result.status, 'APPROVED', 'Mục H: hồ sơ sửa chữa cũng tự APPROVED ngay lúc tạo');
       assertEqual(result.personInCharge, PERSON_IN_CHARGE.username, 'personInCharge (field mới) phải lưu đúng username');
       assertEqual(result.personInChargeName, PERSON_IN_CHARGE.name, 'personInChargeName phải snapshot đúng tên');
+      assertEqual(result.approvedBudget, 25000000, 'approvedBudget phải lưu đúng, ĐỘC LẬP với amount');
     });
 
     // ===== 2) Chặn tạo công việc Thực hiện khi Danh mục đầu tư CHƯA lưu (estimateStatus != APPROVED) =====
@@ -348,6 +382,87 @@ async function main() {
       assertIncludes(result.message, 'Không tìm thấy', 'Thông báo lỗi phải nêu rõ không tìm thấy tài khoản người phụ trách');
     });
 
+    // ===== 6d) Correction 3: cv con (việc lá) có nút "🔄 Cập Nhật Tiến Độ" + "✅ Hoàn Thành" giống
+    //          module Công Việc công ty (mirror #taskProgressModal), gate đúng quyền — dùng 1 việc lá
+    //          RIÊNG (KHÔNG phải child1/child2) rồi XOÁ ngay sau khi test xong để không ảnh hưởng cascade
+    //          của rootWorkItemId ở các bước sau (root cần ĐÚNG child1/child2 để test cascade cha-con). =====
+    let uiTestLeafId = null;
+    await run.run('Correction 3: EXECUTOR tạo 1 việc lá riêng (assignedTo=WORKER) để test UI Cập Nhật Tiến Độ/Hoàn Thành', async () => {
+      await loginAs(page, EXECUTOR);
+      uiTestLeafId = await page.evaluate(async ({ id, rootId, w1 }) => {
+        const res = await callRecordCreate('operationWorkItems', {
+          sourceType: 'OPERATION_STORE_OPENING', sourceId: id, parentWorkItemId: rootId,
+          title: 'Việc lá test UI Cập Nhật Tiến Độ', assignedTo: [w1], deadline: ''
+        });
+        DB.operationWorkItems.push(res.item);
+        return res.item.id;
+      }, { id: recordId, rootId: rootWorkItemId, w1: WORKER.username });
+      assert(uiTestLeafId, 'Phải tạo được việc lá test UI');
+    });
+
+    await run.run('Correction 3: NOPERM (không quyền, không phải assignee) KHÔNG thấy nút thao tác nào trên việc lá', async () => {
+      await loginAs(page, NOPERM);
+      const html = await page.evaluate(({ kind, id, leafId }) => {
+        openOperationWorkItemModal(kind, id, 'EXECUTION');
+        const row = [...document.querySelectorAll('#operationWorkItemTableBody tr')].find(tr => tr.textContent.includes('Việc lá test UI Cập Nhật Tiến Độ'));
+        const actionsHtml = row ? row.querySelector('td:last-child').innerHTML : null;
+        closeOperationWorkItemModal();
+        return actionsHtml;
+      }, { kind: 'operationStoreOpenings', id: recordId, leafId: uiTestLeafId });
+      assert(html !== null, 'Phải tìm thấy dòng của việc lá test UI trong bảng');
+      assert(!html.includes('openOperationWorkItemProgressModal'), 'NOPERM (không phải assignee, không có operationExecutionManage) KHÔNG được thấy nút Cập Nhật Tiến Độ');
+    });
+
+    await run.run('Correction 3: WORKER (assignee, KHÔNG operationExecutionManage) thấy đúng nút "🔄 Cập Nhật Tiến Độ", dùng modal chuyển CHUA_BAT_DAU -> DANG_THUC_HIEN kèm ghi chú (mirror #taskProgressModal)', async () => {
+      await loginAs(page, WORKER);
+      const result = await page.evaluate(async ({ kind, id, leafId }) => {
+        openOperationWorkItemModal(kind, id, 'EXECUTION');
+        const row = [...document.querySelectorAll('#operationWorkItemTableBody tr')].find(tr => tr.textContent.includes('Việc lá test UI Cập Nhật Tiến Độ'));
+        const hasProgressBtn = !!row.querySelector('[data-op="openOperationWorkItemProgressModal"]');
+        // Mở modal Cập Nhật Tiến Độ đúng qua nút thật trên dòng (không gọi thẳng hàm JS, đúng tinh thần "qua UI thật").
+        row.querySelector('[data-op="openOperationWorkItemProgressModal"]').click();
+        const modalVisible = !document.getElementById('operationWorkItemProgressModal').classList.contains('hidden');
+        const statusOptions = [...document.getElementById('owiProgressNewStatus').options].map(o => o.value);
+        document.getElementById('owiProgressNewStatus').value = 'DANG_THUC_HIEN';
+        document.getElementById('owiProgressNote').value = 'Đã bắt đầu khảo sát hiện trường (test UI)';
+        document.getElementById('operationWorkItemProgressModal').querySelector('[data-op="confirmOperationWorkItemProgress"]').click();
+        // confirmOperationWorkItemProgress() là async — chờ 1 vòng microtask cho await hoàn tất rồi mới đọc lại DOM.
+        await new Promise(r => setTimeout(r, 300));
+        const item = DB.operationWorkItems.find(w => w.id === leafId);
+        closeOperationWorkItemModal();
+        return { hasProgressBtn, modalVisible, statusOptions, status: item.status, lastNote: item.history[item.history.length - 1]?.note };
+      }, { kind: 'operationStoreOpenings', id: recordId, leafId: uiTestLeafId });
+      assert(result.hasProgressBtn, 'WORKER (assignee) phải thấy nút "🔄 Cập Nhật Tiến Độ" trên việc lá của mình');
+      assert(result.modalVisible, 'Modal Cập Nhật Tiến Độ phải mở ra khi bấm nút');
+      assertEqual(result.statusOptions.length, 1, 'CHUA_BAT_DAU chỉ có đúng 1 lựa chọn kế tiếp (Đang thực hiện), giống allowedNext ở server');
+      assertEqual(result.statusOptions[0], 'DANG_THUC_HIEN', 'Lựa chọn kế tiếp từ CHUA_BAT_DAU phải là DANG_THUC_HIEN');
+      assertEqual(result.status, 'DANG_THUC_HIEN', 'Việc phải chuyển đúng Đang thực hiện sau khi Cập Nhật Tiến Độ qua UI thật');
+      assertEqual(result.lastNote, 'Đã bắt đầu khảo sát hiện trường (test UI)', 'Ghi chú tiến độ nhập trong modal phải được lưu vào history (mirror #taskProgressModal progressNote)');
+    });
+
+    await run.run('Correction 3: WORKER dùng nút tắt "✅ Hoàn Thành" (khi DANG_THUC_HIEN) — đúng yêu cầu "có nút cập nhật cv VÀ hoàn thành giống module cv"', async () => {
+      await loginAs(page, WORKER);
+      const result = await page.evaluate(async ({ kind, id, leafId }) => {
+        openOperationWorkItemModal(kind, id, 'EXECUTION');
+        const row = [...document.querySelectorAll('#operationWorkItemTableBody tr')].find(tr => tr.textContent.includes('Việc lá test UI Cập Nhật Tiến Độ'));
+        const hasCompleteBtn = !!row.querySelector('[data-op="updateOperationWorkItemProgressAction"][data-status="DANG_NGHIEM_THU"]');
+        row.querySelector('[data-op="updateOperationWorkItemProgressAction"][data-status="DANG_NGHIEM_THU"]').click();
+        await new Promise(r => setTimeout(r, 300));
+        const item = DB.operationWorkItems.find(w => w.id === leafId);
+        closeOperationWorkItemModal();
+        return { hasCompleteBtn, status: item.status, completedAt: item.completedAt };
+      }, { kind: 'operationStoreOpenings', id: recordId, leafId: uiTestLeafId });
+      assert(result.hasCompleteBtn, 'WORKER phải thấy nút "✅ Hoàn Thành" khi việc đang Đang thực hiện');
+      assertEqual(result.status, 'DANG_NGHIEM_THU', 'Việc phải chuyển "Đang nghiệm thu" (= hoàn thành) sau khi bấm nút Hoàn Thành qua UI thật');
+      assert(result.completedAt, 'completedAt phải tự set');
+    });
+
+    await run.run('Correction 3: dọn việc lá test UI (xoá) — không ảnh hưởng cascade của rootWorkItemId (child1/child2) ở các bước sau', async () => {
+      await loginAs(page, EXECUTOR);
+      await page.evaluate((id) => { DB.operationWorkItems = DB.operationWorkItems.filter(w => w.id !== id); }, uiTestLeafId);
+      await page.evaluate(async (id) => { await callRecordAction('operationWorkItems', id, 'delete', {}); }, uiTestLeafId);
+    });
+
     // ===== 7) Chặn cập nhật trực tiếp việc CÓ CON =====
     await run.run('Chặn cập nhật tiến độ trực tiếp cho công việc CÓ việc con', async () => {
       await loginAs(page, EXECUTOR);
@@ -576,7 +691,7 @@ async function main() {
       await loginAs(page, CREATOR);
       const newRepairId = await page.evaluate(async () => {
         const newRepair = await callCreateAction('operationRepairs', {
-          storeName: 'Siêu thị Sửa Chữa Khác', title: 'Việc khác', amount: 1000000,
+          storeName: 'Siêu thị Sửa Chữa Khác', title: 'Việc khác', amount: 1000000, approvedBudget: 1000000,
           supplier: '', personInCharge: 'vh_creator', description: ''
         });
         DB.operationRepairs.push(newRepair.item);
@@ -699,6 +814,130 @@ async function main() {
       assert(!result.ok, 'Phải bị chặn vì hồ sơ đã được xác nhận đưa vào sử dụng trước đó');
     });
 
+    // ===== Phần A2 (đợt sửa theo phản hồi người dùng, correction 1): cascade cha-con 3 CẤP —
+    //       "cv con hoàn thành sẽ tự động hoàn thành cv cha, cv con nghiệm thu xong hết sẽ hoàn thành
+    //       nghiệm thu cv cha", đệ quy lên tới gốc, và gate "Đưa vào sử dụng" đòi TOÀN BỘ cây (cha lẫn
+    //       con, kể cả cha đã cascade tự động) — dùng hồ sơ RIÊNG, tách biệt hoàn toàn khỏi recordId (đã
+    //       CONFIRMED ở trên) để không ảnh hưởng các test khác. Cây: A (gốc) -> B, B2 (con trực tiếp của
+    //       A) -> B có 2 con C1, C2 (cháu của A). B2 là LÁ (không con).
+    let cascadeRecordId = null, itemA = null, itemB = null, itemB2 = null, itemC1 = null, itemC2 = null;
+    await run.run('Cascade 3 cấp — chuẩn bị hồ sơ + Danh mục đầu tư + cây công việc A -> [B -> [C1, C2], B2]', async () => {
+      await loginAs(page, CREATOR);
+      cascadeRecordId = await page.evaluate(async (picUsername) => {
+        const res = await callCreateAction('operationStoreOpenings', {
+          storeName: 'Siêu thị Test Cascade 3 Cấp', address: 'Cascade', area: 10,
+          estimatedBudget: 1, approvedBudget: 1, expectedOpenDate: '', personInCharge: picUsername, note: ''
+        });
+        DB.operationStoreOpenings.push(res.item);
+        return res.item.id;
+      }, PERSON_IN_CHARGE.username);
+      await loginAs(page, ESTIMATOR);
+      await page.evaluate(async (id) => {
+        const res = await callRecordAction('operationStoreOpenings', id, 'estimate/submit', { items: [{ content: 'X', amount: 1, description: '', note: '' }] });
+        const idx = DB.operationStoreOpenings.findIndex(x => x.id === id); DB.operationStoreOpenings[idx] = res.item;
+      }, cascadeRecordId);
+      await loginAs(page, EXECUTOR);
+      const tree = await page.evaluate(async (id) => {
+        const a = await callRecordCreate('operationWorkItems', { sourceType: 'OPERATION_STORE_OPENING', sourceId: id, parentWorkItemId: null, title: 'A - gốc' });
+        DB.operationWorkItems.push(a.item);
+        const b = await callRecordCreate('operationWorkItems', { sourceType: 'OPERATION_STORE_OPENING', sourceId: id, parentWorkItemId: a.item.id, title: 'B - con A, cha C1/C2' });
+        DB.operationWorkItems.push(b.item);
+        const b2 = await callRecordCreate('operationWorkItems', { sourceType: 'OPERATION_STORE_OPENING', sourceId: id, parentWorkItemId: a.item.id, title: 'B2 - con A, lá' });
+        DB.operationWorkItems.push(b2.item);
+        const c1 = await callRecordCreate('operationWorkItems', { sourceType: 'OPERATION_STORE_OPENING', sourceId: id, parentWorkItemId: b.item.id, title: 'C1 - cháu A' });
+        DB.operationWorkItems.push(c1.item);
+        const c2 = await callRecordCreate('operationWorkItems', { sourceType: 'OPERATION_STORE_OPENING', sourceId: id, parentWorkItemId: b.item.id, title: 'C2 - cháu A' });
+        DB.operationWorkItems.push(c2.item);
+        return { a: a.item.id, b: b.item.id, b2: b2.item.id, c1: c1.item.id, c2: c2.item.id };
+      }, cascadeRecordId);
+      itemA = tree.a; itemB = tree.b; itemB2 = tree.b2; itemC1 = tree.c1; itemC2 = tree.c2;
+      assert(itemA && itemB && itemB2 && itemC1 && itemC2, 'Phải tạo đủ 5 công việc theo đúng cây 3 cấp');
+    });
+
+    async function progressLeaf(id, toStatus) {
+      return page.evaluate(async ({ id, toStatus }) => {
+        let r = await callRecordAction('operationWorkItems', id, 'progress', { status: 'DANG_THUC_HIEN' });
+        let idx = DB.operationWorkItems.findIndex(x => x.id === id); DB.operationWorkItems[idx] = r.item;
+        syncOperationWorkItemAncestorsClient(r.item.parentWorkItemId);
+        if (toStatus === 'DANG_NGHIEM_THU') {
+          r = await callRecordAction('operationWorkItems', id, 'progress', { status: 'DANG_NGHIEM_THU' });
+          idx = DB.operationWorkItems.findIndex(x => x.id === id); DB.operationWorkItems[idx] = r.item;
+          syncOperationWorkItemAncestorsClient(r.item.parentWorkItemId);
+        }
+        return r.item;
+      }, { id, toStatus });
+    }
+    function statusOf(id) { return page.evaluate((id) => DB.operationWorkItems.find(w => w.id === id)?.status, id); }
+
+    await run.run('Correction 1: hoàn thành C1 (còn C2 dở) — B CHƯA tự "hoàn thành" (chỉ 1/2 con xong)', async () => {
+      await loginAs(page, EXECUTOR);
+      await progressLeaf(itemC1, 'DANG_NGHIEM_THU');
+      assertEqual(await statusOf(itemB), 'DANG_THUC_HIEN', 'B phải vẫn DANG_THUC_HIEN vì C2 chưa xong (không được nhảy sớm)');
+    });
+
+    await run.run('Correction 1: hoàn thành nốt C2 — B TỰ ĐỘNG "hoàn thành" (DANG_NGHIEM_THU), completedAt tự set — ĐÚNG "cv con hoàn thành sẽ tự động hoàn thành cv cha"', async () => {
+      await loginAs(page, EXECUTOR);
+      await progressLeaf(itemC2, 'DANG_NGHIEM_THU');
+      const b = await page.evaluate((id) => DB.operationWorkItems.find(w => w.id === id), itemB);
+      assertEqual(b.status, 'DANG_NGHIEM_THU', 'B phải TỰ ĐỘNG chuyển "Đang nghiệm thu" (= hoàn thành) khi CẢ 2 con (C1, C2) đều đã hoàn thành');
+      assert(b.completedAt, 'B (cascade tự động) cũng phải tự set completedAt như 1 việc lá tự nộp nghiệm thu');
+      assertEqual(await statusOf(itemA), 'DANG_THUC_HIEN', 'A (ông) chỉ mới có 1/2 con trực tiếp (B) hoàn thành — B2 còn dở — CHƯA được cascade tiếp lên A');
+    });
+
+    await run.run('Correction 1: hoàn thành B2 (con trực tiếp còn lại của A) — A (ông, cách 2 cấp) TỰ ĐỘNG "hoàn thành" — xác nhận đệ quy đúng 3 cấp', async () => {
+      await loginAs(page, EXECUTOR);
+      await progressLeaf(itemB2, 'DANG_NGHIEM_THU');
+      assertEqual(await statusOf(itemA), 'DANG_NGHIEM_THU', 'A phải TỰ ĐỘNG chuyển "Đang nghiệm thu" khi CẢ B lẫn B2 đều đã hoàn thành — xác nhận cascade đệ quy đúng qua 3 cấp (C -> B -> A)');
+    });
+
+    await run.run('Gate "Đưa vào sử dụng" chặn khi cây CHƯA nghiệm thu xong hết (kể cả cha đã cascade "hoàn thành" nhưng chưa "nghiệm thu")', async () => {
+      await loginAs(page, USE_CONFIRMER);
+      const result = await page.evaluate(async (id) => {
+        try { await callRecordAction('operationStoreOpenings', id, 'confirm-use', {}); return { ok: true }; }
+        catch (err) { return { ok: false, message: err.message }; }
+      }, cascadeRecordId);
+      assert(!result.ok, 'Phải bị chặn — A/B đã "hoàn thành" (DANG_NGHIEM_THU) nhưng chưa "nghiệm thu" (DA_NGHIEM_THU), gate phải đòi ĐÚNG DA_NGHIEM_THU trên TOÀN BỘ cây');
+    });
+
+    await run.run('Correction 1: nghiệm thu C1 (còn C2 dở) — B CHƯA tự "nghiệm thu" (chỉ 1/2 con xong)', async () => {
+      await loginAs(page, ACCEPTOR);
+      await page.evaluate(async (id) => {
+        const r = await callRecordAction('operationWorkItems', id, 'accept', { action: 'ACCEPT', reason: 'Đạt yêu cầu' });
+        const idx = DB.operationWorkItems.findIndex(x => x.id === id); DB.operationWorkItems[idx] = r.item;
+        syncOperationWorkItemAncestorsClient(r.item.parentWorkItemId);
+      }, itemC1);
+      assertEqual(await statusOf(itemB), 'DANG_NGHIEM_THU', 'B phải vẫn "Đang nghiệm thu" (chưa tự nghiệm thu xong) vì C2 chưa được nghiệm thu');
+    });
+
+    await run.run('Correction 1: nghiệm thu nốt C2 — B TỰ ĐỘNG "nghiệm thu xong" (DA_NGHIEM_THU) — ĐÚNG "cv con nghiệm thu xong hết sẽ hoàn thành nghiệm thu cv cha"', async () => {
+      await loginAs(page, ACCEPTOR);
+      await page.evaluate(async (id) => {
+        const r = await callRecordAction('operationWorkItems', id, 'accept', { action: 'ACCEPT', reason: 'Đạt yêu cầu' });
+        const idx = DB.operationWorkItems.findIndex(x => x.id === id); DB.operationWorkItems[idx] = r.item;
+        syncOperationWorkItemAncestorsClient(r.item.parentWorkItemId);
+      }, itemC2);
+      assertEqual(await statusOf(itemB), 'DA_NGHIEM_THU', 'B phải TỰ ĐỘNG "Đã nghiệm thu" khi CẢ C1 lẫn C2 đều đã được nghiệm thu — bỏ qua bước nghiệm thu riêng cho B');
+      assertEqual(await statusOf(itemA), 'DANG_NGHIEM_THU', 'A vẫn "Đang nghiệm thu" — B2 (con trực tiếp còn lại) chưa được nghiệm thu, CHƯA cascade tiếp lên A');
+    });
+
+    await run.run('Correction 1: nghiệm thu nốt B2 — A (ông) TỰ ĐỘNG "nghiệm thu xong" — xác nhận đệ quy auto-nghiệm-thu đúng 3 cấp, rồi gate "Đưa vào sử dụng" MỞ KHOÁ', async () => {
+      await loginAs(page, ACCEPTOR);
+      await page.evaluate(async (id) => {
+        const r = await callRecordAction('operationWorkItems', id, 'accept', { action: 'ACCEPT', reason: 'Đạt yêu cầu' });
+        const idx = DB.operationWorkItems.findIndex(x => x.id === id); DB.operationWorkItems[idx] = r.item;
+        syncOperationWorkItemAncestorsClient(r.item.parentWorkItemId);
+      }, itemB2);
+      assertEqual(await statusOf(itemA), 'DA_NGHIEM_THU', 'A phải TỰ ĐỘNG "Đã nghiệm thu" khi CẢ B lẫn B2 đều đã "Đã nghiệm thu" — xác nhận cascade auto-nghiệm-thu đệ quy đúng 3 cấp');
+
+      await loginAs(page, USE_CONFIRMER);
+      const result = await page.evaluate(async (id) => {
+        const r = await callRecordAction('operationStoreOpenings', id, 'confirm-use', {});
+        const idx = DB.operationStoreOpenings.findIndex(x => x.id === id); DB.operationStoreOpenings[idx] = r.item;
+        return r.item;
+      }, cascadeRecordId);
+      assertEqual(result.useConfirmStatus, 'CONFIRMED', 'Gate "Đưa vào sử dụng" phải MỞ KHOÁ ngay khi TOÀN BỘ cây (A, B, B2, C1, C2 — cả cha cascade lẫn lá) đã "Đã nghiệm thu"');
+    });
+
     // ===== Phần C: đợt "Danh Mục Đầu Tư + bỏ Tạo Kỳ" — không được xoá hồ sơ, vòng đời hiển thị mới,
     //       sửa lại Danh mục đầu tư sau khi đã lưu, cột ngân sách =====
     await run.run('Hồ sơ Mở mới/Sửa chữa siêu thị KHÔNG được xoá — kể cả admin', async () => {
@@ -728,7 +967,7 @@ async function main() {
       await loginAs(page, CREATOR);
       const newId = await page.evaluate(async (picUsername) => {
         const res = await callCreateAction('operationStoreOpenings', {
-          storeName: 'Siêu thị Test Vòng Đời', address: 'Y', area: 10, estimatedBudget: 5000000, expectedOpenDate: '', personInCharge: picUsername, note: ''
+          storeName: 'Siêu thị Test Vòng Đời', address: 'Y', area: 10, estimatedBudget: 5000000, approvedBudget: 5000000, expectedOpenDate: '', personInCharge: picUsername, note: ''
         });
         DB.operationStoreOpenings.push(res.item);
         return res.item.id;
@@ -798,7 +1037,7 @@ async function main() {
       await loginAs(page, CREATOR);
       resaveRecordId = await page.evaluate(async (picUsername) => {
         const res = await callCreateAction('operationStoreOpenings', {
-          storeName: 'Siêu thị Test Sửa Danh Mục', address: 'Z', area: 10, estimatedBudget: 100000000, expectedOpenDate: '', personInCharge: picUsername, note: ''
+          storeName: 'Siêu thị Test Sửa Danh Mục', address: 'Z', area: 10, estimatedBudget: 999999999, approvedBudget: 100000000, expectedOpenDate: '', personInCharge: picUsername, note: ''
         });
         DB.operationStoreOpenings.push(res.item);
         return res.item.id;
@@ -831,7 +1070,7 @@ async function main() {
       assertEqual(secondSave.estimateTotalAmount, 15000000, 'Tổng phải tính lại đúng theo danh sách MỚI (10tr + 5tr)');
     });
 
-    await run.run('Cột "Ngân sách phê duyệt"/"Ngân sách còn lại" ở bảng Danh mục đầu tư tính đúng (Ngân sách còn lại = Ngân sách phê duyệt − Tổng danh mục đầu tư)', async () => {
+    await run.run('Cột "Ngân sách phê duyệt"/"Ngân sách còn lại" ở bảng Danh mục đầu tư đọc từ field approvedBudget RIÊNG (Correction 2, KHÔNG phải estimatedBudget)', async () => {
       await loginAs(page, ESTIMATOR);
       await page.evaluate(() => {
         switchTab('vanHanh'); setVanHanhSubTab('STORE'); setOperationStoreSubTab('ESTIMATE');
@@ -840,14 +1079,49 @@ async function main() {
         const o = DB.operationStoreOpenings.find(x => x.id === id);
         const tr = [...document.querySelectorAll('#operationEstimateTableBody tr')].find(r => r.textContent.includes('Siêu thị Test Sửa Danh Mục'));
         const cells = tr ? [...tr.querySelectorAll('td')].map(td => td.textContent.trim()) : null;
-        return { cells, estimatedBudget: o.estimatedBudget, estimateTotalAmount: o.estimateTotalAmount };
+        return { cells, approvedBudget: o.approvedBudget, estimatedBudget: o.estimatedBudget, estimateTotalAmount: o.estimateTotalAmount };
       }, resaveRecordId);
       assert(row.cells, 'Phải tìm thấy đúng dòng của hồ sơ trong bảng Danh mục đầu tư');
       // cells: [Mã, Loại, Tên, Phòng ban, Ngân Sách Phê Duyệt, Tổng Danh Mục Đầu Tư, Ngân Sách Còn Lại, Trạng thái, Thao tác]
-      assertIncludes(row.cells[4], '100.000.000', 'Cột Ngân Sách Phê Duyệt phải hiện đúng estimatedBudget');
+      assertEqual(row.approvedBudget, 100000000, 'approvedBudget phải giữ đúng giá trị nhập lúc tạo');
+      assertEqual(row.estimatedBudget, 999999999, 'estimatedBudget phải KHÁC approvedBudget (xác nhận 2 field độc lập trong seed test)');
+      assertIncludes(row.cells[4], '100.000.000', 'Cột Ngân Sách Phê Duyệt phải hiện đúng approvedBudget (100tr), KHÔNG phải estimatedBudget (999.999.999)');
       assertIncludes(row.cells[5], '15.000.000', 'Cột Tổng Danh Mục Đầu Tư phải hiện đúng estimateTotalAmount MỚI sau khi sửa (15tr)');
-      const expectedRemaining = row.estimatedBudget - row.estimateTotalAmount;
-      assertIncludes(row.cells[6], expectedRemaining.toLocaleString('vi-VN'), 'Cột Ngân Sách Còn Lại phải = Ngân sách phê duyệt − Tổng danh mục đầu tư');
+      const expectedRemaining = row.approvedBudget - row.estimateTotalAmount;
+      assertIncludes(row.cells[6], expectedRemaining.toLocaleString('vi-VN'), 'Cột Ngân Sách Còn Lại phải = Ngân sách phê duyệt (approvedBudget) − Tổng danh mục đầu tư');
+    });
+
+    // ===== Correction 2: hồ sơ CŨ (trước bản vá) không có approvedBudget -> hiện "(chưa nhập)" thay vì
+    //       0/NaN, KHÔNG bị backfill ngược từ estimatedBudget =====
+    await run.run('Hồ sơ CŨ thiếu approvedBudget -> cột hiện "(chưa nhập)", modal hiện "chưa nhập Ngân sách phê duyệt", KHÔNG suy ra từ estimatedBudget', async () => {
+      await loginAs(page, ESTIMATOR);
+      const legacyId = await page.evaluate(() => {
+        const legacyRecord = {
+          id: 999999002, code: 'MM-LEGACY2', dept: 'Vận Hành', creatorName: 'Test',
+          storeName: 'Hồ Sơ Cũ Thiếu Ngân Sách', estimateStatus: 'APPROVED', estimateHistory: [],
+          estimateItems: [{ id: 1, content: 'Hạng mục A', amount: 3000000, description: '', note: '' }],
+          estimateTotalAmount: 3000000, estimatedBudget: 5000000 // approvedBudget CỐ Ý không có
+        };
+        DB.operationStoreOpenings.push(legacyRecord);
+        switchTab('vanHanh'); setVanHanhSubTab('STORE'); setOperationStoreSubTab('ESTIMATE');
+        return legacyRecord.id;
+      });
+      const row = await page.evaluate(() => {
+        const tr = [...document.querySelectorAll('#operationEstimateTableBody tr')].find(r => r.textContent.includes('Hồ Sơ Cũ Thiếu Ngân Sách'));
+        const cells = tr ? [...tr.querySelectorAll('td')].map(td => td.textContent.trim()) : null;
+        return { cells };
+      });
+      assert(row.cells, 'Phải tìm thấy đúng dòng hồ sơ cũ trong bảng Danh mục đầu tư');
+      assertIncludes(row.cells[4], 'chưa nhập', 'Cột Ngân Sách Phê Duyệt phải hiện "(chưa nhập)" cho hồ sơ cũ thiếu approvedBudget');
+      assertEqual(row.cells[6], '—', 'Cột Ngân Sách Còn Lại phải hiện "—" (không suy ra được), KHÔNG phải 0/NaN/-5.000.000');
+      const modalRemainingText = await page.evaluate((id) => {
+        openOperationEstimateModal('operationStoreOpenings', id);
+        const text = document.getElementById('operationEstimateRemainingBudgetDisplay').innerText;
+        closeOperationEstimateModal();
+        return text;
+      }, legacyId);
+      assertIncludes(modalRemainingText, 'chưa nhập', 'Modal Danh Mục Đầu Tư phải nêu rõ "chưa nhập Ngân sách phê duyệt" cho hồ sơ cũ, không hiện 0 hay số âm suy ra từ estimatedBudget');
+      await page.evaluate((id) => { DB.operationStoreOpenings = DB.operationStoreOpenings.filter(x => x.id !== id); }, legacyId);
     });
   } finally {
     await browser.close();

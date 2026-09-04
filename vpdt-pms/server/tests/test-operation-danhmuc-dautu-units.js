@@ -88,6 +88,50 @@ test('OPERATION_STAGE_LABELS: đúng 5 nhãn tiếng Việt theo yêu cầu ngư
   assert.strictEqual(labels.DONG_HO_SO, 'Đóng hồ sơ và đưa vào sử dụng');
 });
 
+// ===================== 1b) computeParentWorkItemStatus (đợt sửa theo phản hồi người dùng, correction 1
+//    — cascade cha-con: "cv con hoàn thành sẽ tự động hoàn thành cv cha, cv con nghiệm thu xong hết sẽ
+//    hoàn thành nghiệm thu cv cha") =====================
+test('computeParentWorkItemStatus: không có con -> CHUA_BAT_DAU', () => {
+  assert.strictEqual(recordActions.computeParentWorkItemStatus([]), 'CHUA_BAT_DAU');
+});
+test('computeParentWorkItemStatus: mọi con vẫn CHUA_BAT_DAU -> cha CHUA_BAT_DAU', () => {
+  const children = [{ status: 'CHUA_BAT_DAU' }, { status: 'CHUA_BAT_DAU' }];
+  assert.strictEqual(recordActions.computeParentWorkItemStatus(children), 'CHUA_BAT_DAU');
+});
+test('computeParentWorkItemStatus: có ít nhất 1 con đã bắt đầu (chưa hoàn thành hết) -> cha DANG_THUC_HIEN', () => {
+  const children = [{ status: 'DANG_THUC_HIEN' }, { status: 'CHUA_BAT_DAU' }];
+  assert.strictEqual(recordActions.computeParentWorkItemStatus(children), 'DANG_THUC_HIEN');
+});
+test('computeParentWorkItemStatus: 1 con đã "hoàn thành" (DANG_NGHIEM_THU) nhưng con kia còn dở -> cha VẪN DANG_THUC_HIEN (chưa được nhảy sớm)', () => {
+  const children = [{ status: 'DANG_NGHIEM_THU' }, { status: 'DANG_THUC_HIEN' }];
+  assert.strictEqual(recordActions.computeParentWorkItemStatus(children), 'DANG_THUC_HIEN');
+});
+test('computeParentWorkItemStatus: TẤT CẢ con đã "hoàn thành" (DANG_NGHIEM_THU) nhưng CHƯA nghiệm thu hết -> cha TỰ ĐỘNG "hoàn thành" (DANG_NGHIEM_THU) — ĐÚNG "cv con hoàn thành sẽ tự động hoàn thành cv cha"', () => {
+  const children = [{ status: 'DANG_NGHIEM_THU' }, { status: 'DANG_NGHIEM_THU' }];
+  assert.strictEqual(recordActions.computeParentWorkItemStatus(children), 'DANG_NGHIEM_THU');
+});
+test('computeParentWorkItemStatus: TẤT CẢ con đã hoàn thành, TRỘN LẪN DANG_NGHIEM_THU và DA_NGHIEM_THU (1 con đã nghiệm thu xong sớm hơn) -> cha vẫn "hoàn thành" (DANG_NGHIEM_THU), CHƯA nghiệm thu vì còn 1 con chưa nghiệm thu', () => {
+  const children = [{ status: 'DA_NGHIEM_THU' }, { status: 'DANG_NGHIEM_THU' }];
+  assert.strictEqual(recordActions.computeParentWorkItemStatus(children), 'DANG_NGHIEM_THU');
+});
+test('computeParentWorkItemStatus: TẤT CẢ con đã DA_NGHIEM_THU -> cha TỰ ĐỘNG DA_NGHIEM_THU luôn (bỏ qua bước nghiệm thu riêng cho cha) — ĐÚNG "cv con nghiệm thu xong hết sẽ hoàn thành nghiệm thu cv cha"', () => {
+  const children = [{ status: 'DA_NGHIEM_THU' }, { status: 'DA_NGHIEM_THU' }, { status: 'DA_NGHIEM_THU' }];
+  assert.strictEqual(recordActions.computeParentWorkItemStatus(children), 'DA_NGHIEM_THU');
+});
+
+// ===================== 1c) computeOperationRecordStageStatus — gate "Đưa vào sử dụng"/NGHIEM_THU vẫn
+//    đòi ĐÚNG DA_NGHIEM_THU trên toàn bộ cây, không bị "hoàn thành" (DANG_NGHIEM_THU) cascade đánh lừa
+//    thành xong (xác nhận gate KHÔNG bị cascade mới làm lỏng lẻo) =====================
+test('computeOperationRecordStageStatus: cha đã cascade "hoàn thành" (DANG_NGHIEM_THU) nhưng CHƯA "nghiệm thu" -> vẫn DANH_SACH_CONG_VIEC, KHÔNG phải NGHIEM_THU', () => {
+  const record = { estimateStatus: 'APPROVED', estimateItems: [{ id: 1 }] };
+  const items = [
+    { id: 1, parentWorkItemId: null, status: 'DANG_NGHIEM_THU' }, // cha vừa cascade "hoàn thành"
+    { id: 2, parentWorkItemId: 1, status: 'DANG_NGHIEM_THU' },
+    { id: 3, parentWorkItemId: 1, status: 'DANG_NGHIEM_THU' }
+  ];
+  assert.strictEqual(recordActions.computeOperationRecordStageStatus(record, items), 'DANH_SACH_CONG_VIEC');
+});
+
 // ===================== 2) submitOperationEstimate =====================
 const ESTIMATOR = { username: 'est1', name: 'Người Lập', perms: { operationEstimateCreate: true } };
 test('submitOperationEstimate: lần lưu đầu (DRAFT) -> APPROVED, mỗi hạng mục được gán id', () => {
@@ -121,6 +165,53 @@ test('submitOperationEstimate: đang REJECTED (dữ liệu cũ trước Mục H)
 test('submitOperationEstimate: thiếu quyền operationEstimateCreate -> 403', () => {
   const item = { estimateStatus: 'DRAFT', estimateItems: [], estimateHistory: [] };
   assert.throws(() => recordActions.submitOperationEstimate({ username: 'x', perms: {} }, item, { items: [{ content: 'A', amount: 100 }] }), /không có quyền/);
+});
+
+// ===================== 2b) Correction 2 — "Ngân Sách Phê Duyệt" (approvedBudget): field RIÊNG, bắt
+//    buộc nhập lúc lập hồ sơ operationStoreOpenings/operationRepairs, ĐỘC LẬP với estimatedBudget/amount
+//    (extraValidate ở lib/createValidation.js, qua CREATE_MODULE_CONFIGS) =====================
+const { CREATE_MODULE_CONFIGS } = require('../lib/createValidation');
+const OP_CREATE_USER = { username: 'x', perms: { operationStoreOpenCreate: true, operationRepairCreate: true } };
+test('operationStoreOpenings.extraValidate: thiếu approvedBudget -> throw rõ ràng', () => {
+  const payload = { storeName: 'A', address: 'B', area: 1, estimatedBudget: 1 };
+  assert.throws(() => CREATE_MODULE_CONFIGS.operationStoreOpenings.extraValidate(payload, 'operationStoreOpenings', OP_CREATE_USER, {}), /Ngân sách phê duyệt/);
+});
+test('operationStoreOpenings.extraValidate: approvedBudget âm -> throw', () => {
+  const payload = { storeName: 'A', address: 'B', area: 1, estimatedBudget: 1, approvedBudget: -1 };
+  assert.throws(() => CREATE_MODULE_CONFIGS.operationStoreOpenings.extraValidate(payload, 'operationStoreOpenings', OP_CREATE_USER, {}), /không hợp lệ/);
+});
+test('operationStoreOpenings.extraValidate: approvedBudget hợp lệ -> payload.approvedBudget ĐÚNG số đã nhập, ĐỘC LẬP với estimatedBudget', () => {
+  const payload = { storeName: 'A', address: 'B', area: 1, estimatedBudget: 999, approvedBudget: 12345 };
+  CREATE_MODULE_CONFIGS.operationStoreOpenings.extraValidate(payload, 'operationStoreOpenings', OP_CREATE_USER, {});
+  assert.strictEqual(payload.approvedBudget, 12345);
+  assert.strictEqual(payload.estimatedBudget, 999, 'estimatedBudget phải GIỮ NGUYÊN, không bị approvedBudget ghi đè');
+});
+test('operationRepairs.extraValidate: thiếu approvedBudget -> throw rõ ràng', () => {
+  const payload = { storeName: 'A', title: 'B', amount: 1 };
+  assert.throws(() => CREATE_MODULE_CONFIGS.operationRepairs.extraValidate(payload, 'operationRepairs', OP_CREATE_USER, {}), /Ngân sách phê duyệt/);
+});
+test('operationRepairs.extraValidate: approvedBudget hợp lệ -> payload.approvedBudget ĐÚNG số đã nhập, ĐỘC LẬP với amount', () => {
+  const payload = { storeName: 'A', title: 'B', amount: 999, approvedBudget: 54321 };
+  CREATE_MODULE_CONFIGS.operationRepairs.extraValidate(payload, 'operationRepairs', OP_CREATE_USER, {});
+  assert.strictEqual(payload.approvedBudget, 54321);
+  assert.strictEqual(payload.amount, 999, 'amount phải GIỮ NGUYÊN, không bị approvedBudget ghi đè');
+});
+
+// ===================== 2c) Correction 3 — updateOperationWorkItemProgress() nhận thêm note tuỳ chọn
+//    (mirror #taskProgressModal — "Ghi chú tiến độ") =====================
+test('updateOperationWorkItemProgress: có note -> ghi vào history entry mới nhất', () => {
+  const user = { username: 'u1', name: 'User 1', perms: { operationExecutionManage: true } };
+  const item = { status: 'CHUA_BAT_DAU', history: [] };
+  const result = recordActions.updateOperationWorkItemProgress(user, item, [], 'DANG_THUC_HIEN', 'Đã bắt đầu khảo sát hiện trường');
+  const last = result.history[result.history.length - 1];
+  assert.strictEqual(last.note, 'Đã bắt đầu khảo sát hiện trường');
+});
+test('updateOperationWorkItemProgress: không có note -> history entry KHÔNG có field note (không ghi rác chuỗi rỗng)', () => {
+  const user = { username: 'u1', name: 'User 1', perms: { operationExecutionManage: true } };
+  const item = { status: 'CHUA_BAT_DAU', history: [] };
+  const result = recordActions.updateOperationWorkItemProgress(user, item, [], 'DANG_THUC_HIEN');
+  const last = result.history[result.history.length - 1];
+  assert.strictEqual(last.note, undefined);
 });
 
 // ===================== 3) rejectOperationDelete =====================

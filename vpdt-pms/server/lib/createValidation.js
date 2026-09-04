@@ -719,6 +719,23 @@ const CREATE_MODULE_CONFIGS = {
       payload.address = address;
       payload.area = Math.max(0, Number(payload.area) || 0);
       payload.estimatedBudget = Math.max(0, Number(payload.estimatedBudget) || 0);
+      // "Ngân Sách Phê Duyệt" (đợt sửa theo phản hồi người dùng sau Vận Hành > Siêu Thị vòng đời mới) —
+      // field RIÊNG, ĐỘC LẬP với estimatedBudget ở trên ("Chi Phí Phê Duyệt" — mục đích cũ, KHÔNG đụng).
+      // Trước đây Danh Mục Đầu Tư (renderOperationEstimateList()/openOperationEstimateModal() ở
+      // public/index.html) LẤY NHẦM estimatedBudget làm "Ngân sách phê duyệt/còn lại" — người dùng xác
+      // nhận đây là 2 khái niệm khác nhau, phải nhập RIÊNG ngay lúc lập hồ sơ. Bắt buộc nhập (khác
+      // estimatedBudget optional) vì đây chính là con số Danh Mục Đầu Tư dùng để tính "còn lại" — để
+      // trống/0 vô nghĩa cho mục đích này. Hồ sơ CŨ trước bản vá này KHÔNG có field — đọc lại sẽ là
+      // undefined/null, các nơi hiển thị (renderOperationEstimateList()...) tự xử lý hiện "(chưa nhập)"
+      // thay vì 0/NaN, KHÔNG backfill ngược từ estimatedBudget (2 field độc lập, không suy ra nhau được).
+      if (payload.approvedBudget === undefined || payload.approvedBudget === null || payload.approvedBudget === '') {
+        throw new CreateError(400, 'Vui lòng nhập Ngân sách phê duyệt (dùng để tính Ngân sách còn lại ở Danh mục đầu tư)');
+      }
+      const approvedBudget = Number(payload.approvedBudget);
+      if (!Number.isFinite(approvedBudget) || approvedBudget < 0) {
+        throw new CreateError(400, 'Ngân sách phê duyệt không hợp lệ (phải là số không âm)');
+      }
+      payload.approvedBudget = approvedBudget;
       // Người Phụ Trách: ô chọn tài khoản hệ thống thật (pattern "sdd*") — payload.personInCharge giờ
       // là USERNAME, personInChargeName là tên hiển thị snapshot lúc tạo (không derive lúc render, cùng
       // triết lý assignedToName). Tương thích ngược: hồ sơ CŨ có personInCharge = tên tự do, xem
@@ -773,6 +790,16 @@ const CREATE_MODULE_CONFIGS = {
       payload.supplier = String(payload.supplier || '').trim();
       payload.amount = Number(payload.amount) || 0;
       if (payload.amount < 0) throw new CreateError(400, 'Số tiền không được là số âm');
+      // "Ngân Sách Phê Duyệt" — cùng field mới/lý do đã thêm ở operationStoreOpenings ngay trên (2 khái
+      // niệm khác nhau với amount ở trên, KHÔNG đụng amount).
+      if (payload.approvedBudget === undefined || payload.approvedBudget === null || payload.approvedBudget === '') {
+        throw new CreateError(400, 'Vui lòng nhập Ngân sách phê duyệt (dùng để tính Ngân sách còn lại ở Danh mục đầu tư)');
+      }
+      const approvedBudget = Number(payload.approvedBudget);
+      if (!Number.isFinite(approvedBudget) || approvedBudget < 0) {
+        throw new CreateError(400, 'Ngân sách phê duyệt không hợp lệ (phải là số không âm)');
+      }
+      payload.approvedBudget = approvedBudget;
       // Người Phụ Trách — field MỚI hoàn toàn cho operationRepairs (trước đây chưa từng có), cùng ô
       // chọn tài khoản hệ thống thật vừa thêm cho operationStoreOpenings ở trên.
       const personInChargeUser = resolveOperationPersonInChargeUsername(payload.personInCharge, appData?.users);

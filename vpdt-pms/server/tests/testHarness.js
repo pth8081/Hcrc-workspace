@@ -196,6 +196,9 @@ function syncOperationWorkItemAncestorsInState(state, parentWorkItemId) {
     const newStatus = recordActions.computeParentWorkItemStatus(children);
     if (newStatus === parent.status) break;
     parent.status = newStatus;
+    // Mirror routes/records.js syncOperationWorkItemAncestors() — completedAt cho cha cascade tự động
+    // (đợt sửa theo phản hồi người dùng, correction 1 — cha "hoàn thành" cũng cần mốc này).
+    if (newStatus === 'DANG_NGHIEM_THU' && !parent.completedAt) parent.completedAt = new Date().toLocaleString('vi-VN');
     currentParentId = parent.parentWorkItemId;
   }
 }
@@ -206,7 +209,7 @@ function createDispatcher(state) {
   const actionHandlers = buildActionHandlers(state);
   actionHandlers['operationWorkItems:progress'] = (u, item, body) => {
     const children = state.operationWorkItems.filter(w => w.parentWorkItemId === item.id);
-    const updated = recordActions.updateOperationWorkItemProgress(u, item, children, body && body.status);
+    const updated = recordActions.updateOperationWorkItemProgress(u, item, children, body && body.status, body && body.note);
     syncOperationWorkItemAncestorsInState(state, updated.parentWorkItemId);
     return updated;
   };

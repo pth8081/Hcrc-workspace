@@ -433,6 +433,13 @@ function editOperationStoreOpeningDraft(user, item, payload, users) {
   }
   if (payload.area !== undefined) item.area = Math.max(0, Number(payload.area) || 0);
   if (payload.estimatedBudget !== undefined) item.estimatedBudget = Math.max(0, Number(payload.estimatedBudget) || 0);
+  // "Ngân Sách Phê Duyệt" — field riêng, xem chú thích đầy đủ ở lib/createValidation.js extraValidate.
+  // Bản Bổ Sung (DRAFT, chỉ còn hồ sơ CŨ từ trước Mục H) vẫn cho sửa lại nếu client gửi kèm.
+  if (payload.approvedBudget !== undefined) {
+    const approvedBudget = Number(payload.approvedBudget);
+    if (!Number.isFinite(approvedBudget) || approvedBudget < 0) throw new HttpError(400, 'Ngân sách phê duyệt không hợp lệ (phải là số không âm)');
+    item.approvedBudget = approvedBudget;
+  }
   if (payload.personInCharge !== undefined) {
     const personInChargeUser = resolveOperationPersonInChargeUsername(payload.personInCharge, users);
     item.personInCharge = personInChargeUser ? personInChargeUser.username : null;
@@ -481,6 +488,12 @@ function editOperationRepairDraft(user, item, payload, users) {
     const amount = Number(payload.amount) || 0;
     if (amount < 0) throw new HttpError(400, 'Số tiền không được là số âm');
     item.amount = amount;
+  }
+  // "Ngân Sách Phê Duyệt" — cùng field/lý do đã thêm ở editOperationStoreOpeningDraft() ngay trên.
+  if (payload.approvedBudget !== undefined) {
+    const approvedBudget = Number(payload.approvedBudget);
+    if (!Number.isFinite(approvedBudget) || approvedBudget < 0) throw new HttpError(400, 'Ngân sách phê duyệt không hợp lệ (phải là số không âm)');
+    item.approvedBudget = approvedBudget;
   }
   if (payload.personInCharge !== undefined) {
     const personInChargeUser = resolveOperationPersonInChargeUsername(payload.personInCharge, users);
@@ -740,7 +753,10 @@ function createOperationWorkItem(user, payload, sourceRecord, siblingsAndDescend
 // children = TOÀN BỘ work item khác thuộc cùng hồ sơ (đã lọc parentWorkItemId === item.id ở route).
 // Chỉ công việc LÁ (không có con) mới cho cập nhật trực tiếp — công việc có con phải hoàn thành hết
 // con mới tự cập nhật (xem syncParentWorkItemStatus), đúng yêu cầu nghiệp vụ.
-function updateOperationWorkItemProgress(user, item, children, newStatus) {
+// note (tuỳ chọn) — Correction 3 (đợt sửa theo phản hồi người dùng): modal "Cập Nhật Tiến Độ" của công
+// việc Vận Hành giờ mirror UI/UX modal #taskProgressModal của module Công Việc công ty (progressNote) —
+// ghi lại ngay trong history entry, KHÔNG có field riêng trên item (chỉ để lưu vết, không ảnh hưởng logic).
+function updateOperationWorkItemProgress(user, item, children, newStatus, note) {
   // "Toàn quyền" (admin/operationExecutionManage) xử lý được mọi việc; ngoài ra CHỈ đúng người phụ
   // trách (item.assignedTo[], Mục E — nay có thể NHIỀU người) mới cập nhật được việc của chính mình —
   // trước đây field này chỉ mang tính hiển thị, không chặn quyền.
@@ -767,7 +783,8 @@ function updateOperationWorkItemProgress(user, item, children, newStatus) {
   // public/index.html) — CHỈ để nhắc, không tự động chuyển trạng thái/không cron job.
   if (newStatus === 'DANG_NGHIEM_THU') item.completedAt = nowVN();
   item.history = item.history || [];
-  item.history.push({ action: `STATUS_${newStatus}`, by: user.username, byName: user.name, time: nowVN() });
+  const noteText = String(note || '').trim();
+  item.history.push({ action: `STATUS_${newStatus}`, by: user.username, byName: user.name, time: nowVN(), ...(noteText ? { note: noteText } : {}) });
   return item;
 }
 
@@ -785,6 +802,11 @@ function acceptOperationWorkItem(user, item, { action, reason }) {
     throw new HttpError(409, 'Chỉ nghiệm thu/bổ sung được công việc đang ở trạng thái "Đang nghiệm thu"');
   }
   if (!reason) throw new HttpError(400, 'Vui lòng nhập lý do');
+  // Đợt sửa theo phản hồi người dùng (đã xác nhận "logic đang là thế" là ĐÚNG, không đổi): acceptanceMode
+  // IMMEDIATE/DELAYED (Mục D) CHỈ đổi mốc "Dự Kiến Nghiệm Thu" hiển thị + badge "Quá hạn" mang tính NHẮC
+  // (xem computeOperationWorkItemExpectedAcceptanceDate() + chú thích ở resolveOperationAcceptanceConfig()
+  // phía trên) — CỐ Ý KHÔNG khoá nút Nghiệm Thu chờ hết N ngày mới cho bấm (không cron job, không tự
+  // động), người nghiệm thu vẫn chủ động bấm được ngay khi việc chuyển DANG_NGHIEM_THU bất kể mode nào.
   item.history = item.history || [];
   if (action === 'ACCEPT') {
     item.status = 'DA_NGHIEM_THU';
@@ -802,13 +824,35 @@ function acceptOperationWorkItem(user, item, { action, reason }) {
 
 // Tính lại trạng thái 1 công việc CHA dựa trên các con TRỰC TIẾP (children đã đọc sẵn) — không tự đệ
 // quy lên tiếp ở đây, route gọi lặp lại hàm này cho từng cấp cha lên tới gốc (xem routes/records.js).
-// Tất cả con đã DA_NGHIEM_THU -> cha DA_NGHIEM_THU luôn (bỏ qua bước nghiệm thu riêng cho cha, vì đã
-// nghiệm thu xong ở cấp lá); có ít nhất 1 con đã bắt đầu -> cha DANG_THUC_HIEN; ngược lại CHUA_BAT_DAU.
+// 3 mốc cascade (đợt sửa theo phản hồi người dùng — "cv con hoàn thành sẽ tự động hoàn thành cv cha,
+// cv con nghiệm thu xong hết sẽ hoàn thành nghiệm thu cv cha"):
+//   - TẤT CẢ con đã DA_NGHIEM_THU (nghiệm thu xong)      -> cha DA_NGHIEM_THU luôn (bỏ qua bước nghiệm
+//     thu RIÊNG cho cha — coi như đã nghiệm thu xong ở cấp lá, không cần ai bấm Nghiệm Thu cho cha).
+//   - TẤT CẢ con đã "hoàn thành" (DANG_NGHIEM_THU hoặc DA_NGHIEM_THU, tức đã nộp nghiệm thu trở lên,
+//     nhưng CHƯA đủ tất cả DA_NGHIEM_THU ở trên) -> cha tự chuyển DANG_NGHIEM_THU ("hoàn thành" cha) —
+//     TRƯỚC ĐÂY bước trung gian này bị bỏ qua (cha nhảy thẳng DANG_THUC_HIEN -> DA_NGHIEM_THU), khiến cha
+//     không bao giờ hiển thị "Đang nghiệm thu" dù mọi việc con đã hoàn thành xong phần thi công.
+//   - Có ít nhất 1 con đã bắt đầu (khác CHUA_BAT_DAU) nhưng chưa đủ điều kiện 2 mốc trên -> DANG_THUC_HIEN.
+//   - Còn lại (không con nào bắt đầu, hoặc không có con) -> CHUA_BAT_DAU.
 function computeParentWorkItemStatus(children) {
   if (!children.length) return 'CHUA_BAT_DAU';
   if (children.every(c => c.status === 'DA_NGHIEM_THU')) return 'DA_NGHIEM_THU';
+  if (children.every(c => c.status === 'DA_NGHIEM_THU' || c.status === 'DANG_NGHIEM_THU')) return 'DANG_NGHIEM_THU';
   if (children.some(c => c.status !== 'CHUA_BAT_DAU')) return 'DANG_THUC_HIEN';
   return 'CHUA_BAT_DAU';
+}
+
+// Ngày dự kiến nghiệm thu 1 công việc — bản sao server-side của computeOperationWorkItemExpectedAcceptanceDate()
+// ở public/index.html (LƯU Ý BẢO TRÌ, 2 bản độc lập, phải sửa đồng thời). null nếu chưa completedAt.
+// = completedAt nếu IMMEDIATE; = completedAt + acceptanceDelayDays ngày nếu DELAYED.
+function computeOperationWorkItemExpectedAcceptanceDate(item) {
+  if (!item?.completedAt) return null;
+  const base = parseVNDateTime(item.completedAt);
+  if (!base) return null;
+  if (item.acceptanceMode === 'DELAYED' && Number(item.acceptanceDelayDays) > 0) {
+    base.setDate(base.getDate() + Number(item.acceptanceDelayDays));
+  }
+  return base;
 }
 
 // Bắt Đầu Kỳ Thực Hiện — CHUA_BAT_DAU -> DANG_THUC_HIEN. Chỉ sau khi bắt đầu, kỳ mới được chọn để tạo
@@ -4799,5 +4843,6 @@ module.exports = {
   computeOperationRecordStageStatus, OPERATION_STAGE_LABELS,
   // Mục E — export cho lib/recordViewScope.js (hasOwnWorkItemInSource()) + test.
   workItemAssignees, isWorkItemAssignee, resolveOperationAssignedTo,
-  resolveOperationAcceptanceConfig, assertCanManageOperationWorkItem
+  resolveOperationAcceptanceConfig, assertCanManageOperationWorkItem,
+  computeOperationWorkItemExpectedAcceptanceDate
 };

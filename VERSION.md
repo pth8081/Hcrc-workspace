@@ -1,11 +1,68 @@
 # Phiên bản hiện tại
 
-**7.7** — đã merge vào `main` (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge
+**7.8** — đã merge vào `main` (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge
 góc màn hình + `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần
 kiểu `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. Đúng theo quy tắc MINOR chạy 0-9 trong
-`CLAUDE.md`: sau `7.6` tăng MINOR lên 1 → `7.7`.
+`CLAUDE.md`: sau `7.7` tăng MINOR lên 1 → `7.8`.
 
-## Cập nhật gần nhất — Vận Hành > Siêu Thị: vòng đời hiển thị mới, Danh Mục Đầu Tư sửa được sau khi lưu + cột ngân sách, bỏ hẳn Tạo Kỳ, không cho xoá hồ sơ, Import/Export Excel, fix hồ sơ cũ kẹt PENDING
+## Cập nhật gần nhất — Vận Hành > Siêu Thị: cascade cha-con tự động, Ngân Sách Phê Duyệt tách field riêng, cv con có nút Cập Nhật Tiến Độ/Hoàn Thành giống module Công Việc
+
+3 sửa đổi/bổ sung theo phản hồi người dùng sau khi review đợt "vòng đời hiển thị mới" (`7.7`, xem mục
+"Trước đó" ngay dưới) — chỉ 2 luồng `operationStoreOpenings`/`operationRepairs`, KHÔNG đụng
+`operationOrders` hay module nào khác.
+
+- **Correction 1 — cascade cha-con tự động (MỚI, chưa từng có trước đây)**: người dùng xác nhận Danh Mục
+  Đầu Tư và Danh Sách Công Việc là 2 khái niệm **độc lập, không liên quan** — quyết định giữ 2 cây tách
+  biệt của đợt trước là ĐÚNG, không đổi. Cũng xác nhận cơ chế "Nghiệm thu ngay khi hoàn thành"/"Nghiệm thu
+  sau N ngày" (`acceptanceMode`, đợt trước) đã đúng như thiết kế — nút "✅ Nghiệm Thu" luôn hiện ngay khi
+  việc chuyển "Đang nghiệm thu" bất kể mode nào, N ngày chỉ mang tính NHẮC (badge "Quá hạn"), không khoá —
+  đã đọc lại kỹ code + xác nhận hành vi này ĐÚNG như mô tả, không sửa.
+  Việc thật sự còn thiếu: **cascade trạng thái cha-con của cây Công việc** (`computeParentWorkItemStatus()`,
+  `lib/recordActions.js`, dùng bởi `syncOperationWorkItemAncestors()` ở `routes/records.js`, gọi đệ quy
+  lên tới gốc sau MỌI lần 1 việc lá đổi trạng thái) trước đây CHỈ có 2 mốc thật (cha nhảy thẳng
+  `DANG_THUC_HIEN` → `DA_NGHIEM_THU`, bỏ qua hẳn bước "hoàn thành" trung gian) — thêm mốc thứ 3: **TẤT CẢ
+  con đã "hoàn thành" (`DANG_NGHIEM_THU`) nhưng chưa nghiệm thu hết → cha TỰ ĐỘNG "hoàn thành"**
+  (`DANG_NGHIEM_THU`, tự set `completedAt` như 1 việc lá thật) — đúng yêu cầu "cv con hoàn thành sẽ tự
+  động hoàn thành cv cha, cv con nghiệm thu xong hết sẽ hoàn thành nghiệm thu cv cha". Đệ quy đúng nhiều
+  cấp (đã test 3 cấp: cháu → con → gốc). Gate "Đưa vào sử dụng"/mốc hiển thị "Đã nghiệm thu"
+  (`computeOperationRecordStageStatus()`) đã tự đúng KHÔNG cần sửa gì thêm — vẫn đòi `DA_NGHIEM_THU` thật
+  trên toàn bộ cây (cha cascade lẫn lá), "hoàn thành" (`DANG_NGHIEM_THU`) trung gian KHÔNG được tính là đủ
+  điều kiện đóng hồ sơ (đã viết test riêng xác nhận không bị cascade mới làm lỏng gate). 2 bản mirror
+  (server `lib/recordActions.js` + client `operationComputeParentWorkItemStatus()`/
+  `syncOperationWorkItemAncestorsClient()` ở `public/index.html`) sửa đồng thời như quy ước cũ.
+- **Correction 2 — "Ngân Sách Phê Duyệt" tách field RIÊNG, ĐỘC LẬP (sửa lỗi thiết kế đợt trước)**: đợt
+  `7.7` LẤY NHẦM `estimatedBudget` (Mở mới)/`amount` (Sửa chữa) — vốn là field "Chi Phí Phê Duyệt" có sẵn
+  từ trước — làm nguồn cho 2 cột "Ngân Sách Phê Duyệt"/"Ngân Sách Còn Lại" ở Danh Mục Đầu Tư. Người dùng
+  xác nhận đây là 2 khái niệm khác nhau. Thêm field MỚI `approvedBudget` — nhập **ngay lúc lập hồ sơ**
+  (form Mở mới/Sửa chữa, ô "Ngân Sách Phê Duyệt — Danh Mục Đầu Tư (VNĐ)", bắt buộc nhập), validate ở
+  `lib/createValidation.js extraValidate` cả 2 collection (số không âm, bắt buộc — throw 400 nếu thiếu).
+  Bảng tổng hợp Danh Mục Đầu Tư + modal "Ngân Sách Còn Lại" đổi hẳn sang đọc `approvedBudget`, KHÔNG còn
+  đụng `estimatedBudget`/`amount` (2 field này GIỮ NGUYÊN ý nghĩa cũ, vẫn hiển thị "Chi Phí Phê Duyệt" ở
+  nơi khác). Hồ sơ CŨ trước bản vá này không có `approvedBudget` — **CHỦ ĐÍCH để `null`, KHÔNG backfill
+  ngược** từ `estimatedBudget`/`amount` (2 field độc lập, không suy ra được) — UI hiện "(chưa nhập)"/"—"
+  thay vì 0/NaN/số âm sai, người phụ trách hồ sơ tự bổ sung sau. Form "Bổ Sung" (sửa lại hồ sơ DRAFT cũ,
+  chỉ còn dùng cho dữ liệu tồn từ trước Mục H) cũng thêm field này cho đủ.
+- **Correction 3 — cv con có nút "🔄 Cập Nhật Tiến Độ" + "✅ Hoàn Thành" giống hệt module Công Việc công
+  ty**: trước đây mỗi việc LÁ chỉ có 2 nút text rời rạc "▶ Bắt Đầu"/"📤 Nộp Nghiệm Thu", không có ghi chú
+  tiến độ. Thêm modal MỚI `#operationWorkItemProgressModal` mirror ĐÚNG UI/UX `#taskProgressModal` của
+  module Công Việc (dropdown trạng thái kế tiếp + ô "Ghi chú tiến độ" tuỳ chọn, lưu vào `history[].note`
+  — `updateOperationWorkItemProgress()` nhận thêm tham số `note`) — áp dụng cho MỌI việc lá ở MỌI cấp
+  trong cây (không chỉ cv gốc), giữ nguyên gate quyền cũ (toàn quyền `operationExecutionManage` HOẶC đúng
+  người trong `assignedTo[]`, xem `updateOperationWorkItemProgressAction()`). Nút tắt "✅ Hoàn Thành"
+  (chuyển thẳng "Đang nghiệm thu") vẫn giữ riêng khi việc đang "Đang thực hiện", đúng yêu cầu "có nút cập
+  nhật cv VÀ hoàn thành".
+
+Đã viết test mới cho cả 3: cascade 3 cấp (`tests/test-operation-store-lifecycle.js`, cả unit
+`computeParentWorkItemStatus()` ở `tests/test-operation-danhmuc-dautu-units.js`), `approvedBudget` bắt
+buộc + hồ sơ cũ thiếu field hiện đúng "(chưa nhập)", và click-through UI thật cho modal Cập Nhật Tiến Độ +
+gate quyền (NOPERM không thấy nút, WORKER là assignee mới thấy). Demo Playwright đầy đủ vòng đời (tạo hồ
+sơ → nhập ngân sách → lập cây công việc → cascade hoàn thành/nghiệm thu tự động → đưa vào sử dụng), 12 ảnh
+chụp màn hình gửi kèm báo cáo.
+
+**Không cần migrate dữ liệu cũ** cho `approvedBudget` (để `null`, UI tự xử lý hiển thị) — không có thay
+đổi `schema.sql`/`.env.example`/`dependencies`.
+
+## Trước đó — Vận Hành > Siêu Thị: vòng đời hiển thị mới, Danh Mục Đầu Tư sửa được sau khi lưu + cột ngân sách, bỏ hẳn Tạo Kỳ, không cho xoá hồ sơ, Import/Export Excel, fix hồ sơ cũ kẹt PENDING
 
 Tiếp nối đợt trước ("Vận Hành > Siêu Thị: Chi Phí Phê Duyệt, Danh Mục Đầu Tư, Thực Hiện linh hoạt, bỏ phê
 duyệt nội bộ" — Mục A-H, xem mục "Trước đó" bên dưới) theo yêu cầu người dùng tiếp theo, CHỈ cho 2 luồng

@@ -1756,6 +1756,10 @@ async function syncOperationWorkItemAncestors(parentWorkItemId, sourceType, sour
     if (newStatus === parent.status) break; // không đổi -> các cấp trên cũng không cần tính lại
     await withLockedWorkItemById(currentParentId, (item) => {
       item.status = newStatus;
+      // Mirror updateOperationWorkItemProgress(): completedAt chỉ server tự set lúc chuyển
+      // DANG_NGHIEM_THU (dùng tính "Dự Kiến Nghiệm Thu") — cha cascade tự động cũng cần mốc này, không
+      // chỉ công việc lá tự tay Nộp Nghiệm Thu mới có.
+      if (newStatus === 'DANG_NGHIEM_THU' && !item.completedAt) item.completedAt = new Date().toLocaleString('vi-VN');
       item.history = item.history || [];
       item.history.push({ action: `STATUS_${newStatus}`, by: 'system', byName: 'Hệ thống (tự động)', time: new Date().toLocaleString('vi-VN') });
       return item;
@@ -1820,13 +1824,13 @@ router.post('/operationWorkItems/:id/progress', async (req, res) => {
   if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
   try {
     const { freshUser } = await getFreshUser(req);
-    const { status: newStatus } = req.body || {};
+    const { status: newStatus, note } = req.body || {};
     let sourceType, sourceId;
     const result = await withLockedWorkItemById(itemId, async (item) => {
       sourceType = item.sourceType; sourceId = item.sourceId;
       const all = await getWorkItemsBySource(item.sourceType, item.sourceId);
       const children = all.filter(w => w.parentWorkItemId === item.id);
-      return recordActions.updateOperationWorkItemProgress(freshUser, item, children, newStatus);
+      return recordActions.updateOperationWorkItemProgress(freshUser, item, children, newStatus, note);
     });
     await syncOperationWorkItemAncestors(result.parentWorkItemId, sourceType, sourceId);
     res.json({ ok: true, item: result });
