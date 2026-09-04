@@ -1,11 +1,49 @@
 # Phiên bản hiện tại
 
-**8.2** — đã merge vào `main` (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge
+**8.3** — đã merge vào `main` (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge
 góc màn hình + `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần
 kiểu `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. Đúng theo quy tắc MINOR chạy 0-9 trong
-`CLAUDE.md`: sau `8.1` tăng MINOR lên 1 → `8.2`.
+`CLAUDE.md`: sau `8.2` tăng MINOR lên 1 → `8.3`.
 
-## Cập nhật gần nhất — Hạ tầng: tách JS client ra file ngoài (Đợt 4/5 — Báo Cáo Quản Trị + Truyền Thông Nội Bộ/Đào Tạo — HOÀN TẤT khối script GỐC, chỉ còn phần vật lý nằm sau script PDF.js)
+## Cập nhật gần nhất — Hạ tầng: tách JS client ra file ngoài (Đợt 5/5 — HOÀN TẤT: Xem Trước File Word/Excel + Hỗ Trợ IT(Phê Duyệt Giá) + Đồng Phục + HCRC Đồng Hành)
+
+Hoàn tất việc tách toàn bộ JS client của `public/index.html` ra `public/js/*.js` (bắt đầu từ đợt 1,
+`7.9`) — 4 file CUỐI CÙNG, nằm trong khối `<script>` KHÁC vật lý ở SAU thẻ `<script type="module">` tải
+PDF.js (không đụng thẻ module này, giữ nguyên vị trí như mọi đợt trước).
+
+`module-internalcomms-daotao-viewer.js` (464 dòng, xem Word/Excel trong trình duyệt qua
+mammoth.js/exceljs — `loadVendorScript()`), `module-itsupport-price.js` (1.707 dòng, Hỗ Trợ IT > Phê
+Duyệt Giá bán mặt hàng siêu thị), `module-dongphuc.js` (1.539 dòng, module Đồng Phục đầy đủ),
+`module-hcrcdonghanh.js` (475 dòng, Nhân Sự "HCRC Đồng Hành" hỏi&đáp).
+
+**Sau đợt này, `public/index.html` KHÔNG còn khối `<script>` JS nghiệp vụ inline nào** — chỉ còn: script
+gán năm bản quyền (dòng ~450), script `type="module"` tải PDF.js (không đổi), và toàn bộ business logic
+nằm trong `public/js/*.js` (35 file, 34.956 dòng), tải qua các thẻ `<script src="/js/...">` theo đúng
+thứ tự gốc trong file cũ. `index.html`: 43.009 → 8.085 dòng.
+
+Verify: syntax check từng file, không trùng tên hàm/const global nào giữa TOÀN BỘ 35 file (rà lại lần
+cuối trên layout hoàn chỉnh), script rà thứ tự hoisting (bản đã sửa ở đợt 4, bắt cả tham chiếu-thuần-tên
+không chỉ lời gọi) chạy trên toàn bộ 35 file — 0 tham chiếu không giải quyết được, full 54 file test hồi
+quy Playwright chạy lại sạch (chỉ 2 lỗi biết trước do thiếu SQL Server thật), demo Playwright riêng bấm
+qua 21 tab (cả module cũ lẫn mới tách) không lỗi console/page nào.
+
+**Layout cuối cùng `public/js/`** (35 file theo đúng thứ tự tải): `core.js` rồi lần lượt
+Tài Liệu → Văn Bản Trình → Công Việc → Hợp Đồng/Thanh Toán → Phòng Họp/Biên Bản Họp → Đăng Ký Xe →
+Office → Vận Hành → VPP → Hệ Thống(tabs) → Biểu Mẫu(nav) → Quy Trình → Hỗ Trợ IT(gia hạn) → Ngân
+Sách → Hỗ Trợ IT(tier) → Admin → Cây/Nhóm Phân Quyền → Khối 17 → Báo Cáo Định Kỳ(nhập+trình chiếu) →
+Nhóm Phê Duyệt Trình → User Chờ Lưu → Log/Thùng Rác → Báo Cáo Quản Trị(preview trước, rồi chính) →
+Truyền Thông Nội Bộ(Nhịp Sống, rồi Đào Tạo) → [thẻ `<script type="module">` PDF.js, không đổi] → Xem
+Trước Word/Excel → Hỗ Trợ IT(price) → Đồng Phục → HCRC Đồng Hành.
+
+**Không cần migrate dữ liệu, không đổi `schema.sql`/`.env.example`/`dependencies`.** `server.js` đã
+`express.static(path.join(__dirname, 'public'))` từ trước (verify lại lần cuối, dòng 266) — `public/js/*.js`
+tự phục vụ đúng theo đường dẫn `/js/...` không cần route/cấu hình gì thêm. CSP (`lib/securityHeaders.js`)
+đã `scriptSrc: ["'self'", "'unsafe-inline'"]` từ trước — `'self'` đã cho phép mọi `<script src>` cùng gốc
+(file JS mới thuộc diện này), `'unsafe-inline'` vẫn cần giữ vì còn 2 khối script nhỏ cố tình để lại
+inline (copyright, `type="module"` PDF.js) — không cần đổi CSP. Deploy như bình thường: copy code +
+`pm2 restart`, không có bước thủ công nào khác.
+
+## Trước đó — Hạ tầng: tách JS client ra file ngoài (Đợt 4/5 — Báo Cáo Quản Trị + Truyền Thông Nội Bộ/Đào Tạo — HOÀN TẤT khối script GỐC, chỉ còn phần vật lý nằm sau script PDF.js)
 
 Tiếp tục đợt 1-3 (`7.9`/`8.0`/`8.1`, xem mục "Trước đó" ngay dưới) — tách nốt 4 file CUỐI CÙNG của khối
 `<script>` inline GỐC (đoạn 7972→38744 trong file trước khi tách). Sau đợt này, khối `<script>` gốc
