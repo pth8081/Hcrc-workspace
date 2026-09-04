@@ -157,11 +157,30 @@ BEGIN
         Status           NVARCHAR(20)   NOT NULL,
         ParentWorkItemId BIGINT         NULL,
         SourceType       NVARCHAR(30)   NOT NULL,
-        SourceId         INT            NOT NULL,
+        SourceId         BIGINT         NOT NULL,
         Payload          NVARCHAR(MAX)  NOT NULL
     );
     CREATE INDEX IX_OperationWorkItems_Source ON dbo.OperationWorkItems (SourceType, SourceId);
     CREATE INDEX IX_OperationWorkItems_Parent ON dbo.OperationWorkItems (ParentWorkItemId);
+END
+GO
+
+/* SỬA LỖI (phát hiện khi triển khai đợt "Chi Phí Phê Duyệt/Danh Mục Đầu Tư/Thực Hiện linh hoạt"): cột
+   SourceId ban đầu tạo kiểu INT (32-bit, tối đa ~2.1 tỷ) trong khi giá trị thật luôn là id kiểu
+   Date.now() (mili-giây từ epoch, ~1.7 nghìn tỷ ở thời điểm hiện tại — VƯỢT TRẦN INT ngay lập tức) —
+   khiến MỌI lần tạo công việc Thực hiện thật sự (POST /api/records/operationWorkItems) chắc chắn lỗi
+   500 "Validation failed for parameter 'sourceId'" trên SQL Server thật, chỉ không bị phát hiện trước
+   đây vì bộ test hiện có chạy qua mock backend (tests/testHarness.js) không đi qua kiểu dữ liệu SQL
+   thật. An toàn chạy lại nhiều lần (chỉ ALTER khi cột CHƯA đúng kiểu, cùng khuôn cột AppData.UpdatedAt
+   ở trên) — mở rộng INT -> BIGINT không mất dữ liệu đã có. */
+IF OBJECT_ID('dbo.OperationWorkItems', 'U') IS NOT NULL AND EXISTS (
+    SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS
+    WHERE TABLE_SCHEMA = 'dbo' AND TABLE_NAME = 'OperationWorkItems' AND COLUMN_NAME = 'SourceId' AND DATA_TYPE = 'int'
+)
+BEGIN
+    DROP INDEX IX_OperationWorkItems_Source ON dbo.OperationWorkItems;
+    ALTER TABLE dbo.OperationWorkItems ALTER COLUMN SourceId BIGINT NOT NULL;
+    CREATE INDEX IX_OperationWorkItems_Source ON dbo.OperationWorkItems (SourceType, SourceId);
 END
 GO
 

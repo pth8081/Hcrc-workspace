@@ -10,7 +10,7 @@
 // khác, xem các hàm riêng bên dưới).
 const { getAppDataValue } = require('./appData');
 const { MODULE_CONFIGS, resolveContractApprovalWorkflow, resolveContractManageWorkflow } = require('./workflowEngine');
-const { canApproveInternalPost, canManageTraining, canManageTrainingClass, canManageRecruitment, canEvaluateOnboardingStage3 } = require('./recordActions');
+const { canApproveInternalPost, canManageTraining, canManageTrainingClass, canManageRecruitment, canEvaluateOnboardingStage3, workItemAssignees, isWorkItemAssignee } = require('./recordActions');
 const { HttpError } = require('./httpErrors');
 
 // Khớp canManageVpp() ở public/index.html.
@@ -467,12 +467,14 @@ function filterOperationOrdersForUser(items, user, appData) {
 // ~498-499 — thứ tự này bắt buộc phải giữ nguyên).
 function hasOwnWorkItemInSource(user, sourceType, sourceId, appData) {
   if (!user?.username) return false;
+  // assignedTo giờ là MẢNG (Mục E, string[]|null — workItemAssignees() tự tương thích ngược với dữ
+  // liệu CŨ còn ở dạng string đơn) — 1 việc có thể nhiều người phụ trách, chỉ cần khớp 1 trong số đó.
   return (appData?.operationWorkItems || []).some(w => w.sourceType === sourceType && w.sourceId === sourceId
-    && (w.assignedTo === user.username || w.acceptorUsername === user.username
+    && (isWorkItemAssignee(w, user.username) || w.acceptorUsername === user.username
       // Trưởng phòng (đệ quy theo Cơ Cấu Tổ Chức) xem được hồ sơ có cấp dưới đang phụ trách/được chỉ
       // định nghiệm thu — CHỈ xem, các hàm thao tác (updateOperationWorkItemProgress/
       // acceptOperationWorkItem) không đổi, vẫn chỉ đúng người/toàn quyền mới bấm được.
-      || isManagerOf(user.username, w.assignedTo, appData?.users)
+      || workItemAssignees(w).some(u => isManagerOf(user.username, u, appData?.users))
       || isManagerOf(user.username, w.acceptorUsername, appData?.users)));
 }
 function canViewOperationStoreOpening(user, item, appData) {

@@ -9,7 +9,7 @@
 // họp thêm cờ minutesEdit (toàn công ty, không theo phòng ban) cho SỬA — riêng XÓA là quyền tối cao,
 // chỉ Admin; Công việc theo NGƯỜI (assignedBy/assignee), hoàn toàn không có khái niệm phòng ban.
 const { HttpError } = require('./httpErrors');
-const { scopeAllows, OFFICE_SUBTYPE_TO_PERM_FLAG, normalizeReportEntryPayload, buildEffectiveContractApprovalWorkflowServer, sanitizeUniformItems, sanitizeBudgetLines, getBudgetTemplateCustomFields, sanitizeBudgetCustomFields, resolveTrainingInstructorUsername, normalizeInviteList, normalizeTrainingPlanFields, normalizeOnboardingPathFields, SUBMISSION_APPROVAL_LEVELS, buildEffectiveSubmissionWorkflowServer, validateRequiredCustomData, assertUploadedFileUrl, assertUploadedFileUrlList } = require('./createValidation');
+const { scopeAllows, OFFICE_SUBTYPE_TO_PERM_FLAG, normalizeReportEntryPayload, buildEffectiveContractApprovalWorkflowServer, sanitizeUniformItems, sanitizeBudgetLines, getBudgetTemplateCustomFields, sanitizeBudgetCustomFields, resolveTrainingInstructorUsername, normalizeInviteList, normalizeTrainingPlanFields, normalizeOnboardingPathFields, resolveOperationPersonInChargeUsername, SUBMISSION_APPROVAL_LEVELS, buildEffectiveSubmissionWorkflowServer, validateRequiredCustomData, assertUploadedFileUrl, assertUploadedFileUrlList } = require('./createValidation');
 const { validateRegistrationItems: validateVppRegItems, calcItemsTotal: calcVppItemsTotal } = require('./vppCatalog');
 const { sanitizePriceFileItems, sanitizeColumnLabels } = require('./priceFileParser');
 const { materializeReportPeriodPdf, writeMergedPdfFile } = require('./reportPdfMerge');
@@ -417,7 +417,7 @@ function submitOperationOrderDraft(user, item) {
   return item;
 }
 
-function editOperationStoreOpeningDraft(user, item, payload) {
+function editOperationStoreOpeningDraft(user, item, payload, users) {
   if (item.creator !== user.username) throw new HttpError(403, 'Chỉ người tạo mới được sửa đề xuất mở mới siêu thị này');
   if (item.status !== 'DRAFT') throw new HttpError(409, 'Đề xuất này không ở trạng thái cần bổ sung, không thể sửa');
   if (!payload || typeof payload !== 'object') throw new HttpError(400, 'Thiếu dữ liệu cập nhật');
@@ -433,7 +433,11 @@ function editOperationStoreOpeningDraft(user, item, payload) {
   }
   if (payload.area !== undefined) item.area = Math.max(0, Number(payload.area) || 0);
   if (payload.estimatedBudget !== undefined) item.estimatedBudget = Math.max(0, Number(payload.estimatedBudget) || 0);
-  if (payload.personInCharge !== undefined) item.personInCharge = String(payload.personInCharge || '').trim();
+  if (payload.personInCharge !== undefined) {
+    const personInChargeUser = resolveOperationPersonInChargeUsername(payload.personInCharge, users);
+    item.personInCharge = personInChargeUser ? personInChargeUser.username : null;
+    item.personInChargeName = personInChargeUser ? personInChargeUser.name : null;
+  }
   if (payload.note !== undefined) item.note = String(payload.note || '').trim();
   if (payload.expectedOpenDate !== undefined) {
     if (payload.expectedOpenDate) {
@@ -457,7 +461,7 @@ function submitOperationStoreOpeningDraft(user, item) {
   return item;
 }
 
-function editOperationRepairDraft(user, item, payload) {
+function editOperationRepairDraft(user, item, payload, users) {
   if (item.creator !== user.username) throw new HttpError(403, 'Chỉ người tạo mới được sửa đề xuất sửa chữa siêu thị này');
   if (item.status !== 'DRAFT') throw new HttpError(409, 'Đề xuất này không ở trạng thái cần bổ sung, không thể sửa');
   if (!payload || typeof payload !== 'object') throw new HttpError(400, 'Thiếu dữ liệu cập nhật');
@@ -478,6 +482,11 @@ function editOperationRepairDraft(user, item, payload) {
     if (amount < 0) throw new HttpError(400, 'Số tiền không được là số âm');
     item.amount = amount;
   }
+  if (payload.personInCharge !== undefined) {
+    const personInChargeUser = resolveOperationPersonInChargeUsername(payload.personInCharge, users);
+    item.personInCharge = personInChargeUser ? personInChargeUser.username : null;
+    item.personInChargeName = personInChargeUser ? personInChargeUser.name : null;
+  }
   assertUploadedFileUrl(payload.fileUrl, 'Tệp đính kèm');
   if (payload.fileUrl !== undefined) item.fileUrl = payload.fileUrl;
   return item;
@@ -491,36 +500,42 @@ function submitOperationRepairDraft(user, item) {
   return item;
 }
 
-// ----- Vận Hành > "Siêu Thị" > Giai đoạn Dự toán -----
-// Bảng hạng mục + chi phí cho hồ sơ Mở Mới/Sửa Chữa — workflow ĐỘC LẬP song song với duyệt hồ sơ chính
-// (xem lib/workflowEngine.js module ảo operationStoreOpeningEstimate/operationRepairEstimate, field
-// FLAT estimateStatus/estimateCurrentStep/estimateHistory/estimateItems/estimateTotalAmount khởi tạo
-// sẵn ở lib/createValidation.js). Dùng CHUNG 1 hàm cho cả 2 collection (chỉ khác thông điệp lỗi/quyền
-// kiểm ở route gọi) vì cấu trúc estimateItems giống hệt operationOrders.items — tự tính lại amount
-// từng dòng + tổng, không tin số client gửi (cùng lý do operationOrders.extraValidate).
+// ----- Vận Hành > "Siêu Thị" > Giai đoạn "Danh mục đầu tư" (trước đây gọi "Dự toán") -----
+// Bảng hạng mục + chi phí cho hồ sơ Mở Mới/Sửa Chữa — trước đây là workflow duyệt riêng song song với
+// duyệt hồ sơ chính; từ Mục H (bỏ phê duyệt module Vận Hành > Siêu Thị) người lập tự lưu là XONG NGAY,
+// không còn ai khác cần bấm Duyệt — estimateStatus đi thẳng DRAFT -> APPROVED (KHÔNG qua PENDING nữa).
+// GIỮ NGUYÊN field kỹ thuật estimateStatus/estimateCurrentStep/estimateHistory (xem lib/workflowEngine.js
+// module ảo operationStoreOpeningEstimate/operationRepairEstimate — vẫn khai báo, chỉ đơn giản không
+// còn hồ sơ nào dừng ở PENDING để đi qua nữa) để mọi nơi đọc lại (badge/gate createOperationWorkItem()
+// đòi estimateStatus==='APPROVED') tự hoạt động đúng không cần sửa thêm. Dùng CHUNG 1 hàm cho cả 2
+// collection (chỉ khác thông điệp lỗi/quyền kiểm ở route gọi).
+//
+// Cấu trúc estimateItems[] (đổi từ {name,unit,qty,unitPrice,amount,note} sang {content,description,
+// amount,note} — bỏ ĐVT/Số lượng/Đơn giá, "Chi phí" nhập trực tiếp thay vì tự tính qty×unitPrice, đúng
+// yêu cầu đơn giản hoá "Danh mục đầu tư"). Vẫn tự chuẩn hoá lại amount (ép kiểu/chặn âm) — không tin số
+// client gửi, cùng lý do operationOrders.extraValidate.
 function submitOperationEstimate(user, item, payload) {
   if (!user.perms?.admin && !user.perms?.operationEstimateCreate) {
-    throw new HttpError(403, 'Bạn không có quyền lập dự toán');
+    throw new HttpError(403, 'Bạn không có quyền lập danh mục đầu tư');
   }
   if (item.estimateStatus !== 'DRAFT') {
-    throw new HttpError(409, 'Dự toán của hồ sơ này không ở trạng thái cần lập/bổ sung (có thể đã gửi duyệt rồi)');
+    throw new HttpError(409, 'Danh mục đầu tư của hồ sơ này không ở trạng thái cần lập/bổ sung (có thể đã lưu rồi)');
   }
   const rawItems = Array.isArray(payload?.items) ? payload.items : [];
   const validItems = rawItems.map((it) => {
-    const name = String(it?.name || '').trim();
-    const qty = Number(it?.qty) || 0;
-    const unitPrice = Number(it?.unitPrice) || 0;
-    if (qty < 0 || unitPrice < 0) throw new HttpError(400, `Hạng mục "${name}": Số lượng/Đơn giá không được là số âm`);
-    return { name, unit: String(it?.unit || '').trim(), qty, unitPrice, amount: qty * unitPrice, note: String(it?.note || '').trim() };
-  }).filter((it) => it.name && it.qty > 0);
-  if (!validItems.length) throw new HttpError(400, 'Vui lòng nhập ít nhất 1 hạng mục dự toán hợp lệ (Tên hạng mục + Số lượng > 0)');
+    const content = String(it?.content ?? it?.name ?? '').trim();
+    const amount = Math.max(0, Number(it?.amount) || 0);
+    return { content, description: String(it?.description || '').trim(), amount, note: String(it?.note || '').trim() };
+  }).filter((it) => it.content);
+  if (!validItems.length) throw new HttpError(400, 'Vui lòng nhập ít nhất 1 hạng mục hợp lệ (có Nội dung)');
 
   item.estimateItems = validItems;
   item.estimateTotalAmount = validItems.reduce((sum, it) => sum + it.amount, 0);
   item.estimateHistory = item.estimateHistory || [];
-  item.estimateHistory.push({ step: 0, approver: user.name, username: user.username, action: 'SUBMITTED', comment: '', time: nowVN() });
-  item.estimateStatus = 'PENDING';
-  item.estimateCurrentStep = 1;
+  // Mục H: không còn khái niệm "gửi duyệt" — lưu là APPROVED luôn, không có bước chờ ai duyệt.
+  item.estimateHistory.push({ step: 0, approver: user.name, username: user.username, action: 'SAVED', comment: '', time: nowVN() });
+  item.estimateStatus = 'APPROVED';
+  item.estimateCurrentStep = 0;
   return item;
 }
 
@@ -561,13 +576,76 @@ function assertCanManageOperationAcceptance(user) {
     throw new HttpError(403, 'Bạn không có quyền nghiệm thu công việc');
   }
 }
+// Quyền SỬA công việc (Mục E) — MỞ RỘNG hơn assertCanManageOperationExecution() ở trên: ngoài
+// admin/operationExecutionManage, "Người Phụ Trách" (personInCharge) của CHÍNH hồ sơ gốc
+// (operationStoreOpenings/operationRepairs, đã đổi sang account picker thật ở Mục C) cũng sửa được
+// công việc thuộc hồ sơ đó — KHÔNG áp dụng cho hồ sơ CŨ còn personInCharge dạng tên tự do (username
+// picker chưa từng gán, so sánh không khớp — hệ quả chấp nhận được, không throw lỗi, chỉ không match).
+// CHỈ mở rộng quyền SỬA — create/delete work item + quản lý Kỳ vẫn dùng nguyên
+// assertCanManageOperationExecution(), đúng phạm vi đã chốt.
+function assertCanManageOperationWorkItem(user, sourceRecord) {
+  if (user.perms?.admin || user.perms?.operationExecutionManage) return;
+  if (user.username && sourceRecord?.personInCharge && user.username === sourceRecord.personInCharge) return;
+  throw new HttpError(403, 'Bạn không có quyền sửa công việc này');
+}
+
+// Nhiều "assignedTo" (Mục E) — mảng string[]|null (trước đây chỉ 1 string|null). 2 helper NHỎ dùng
+// CHUNG khắp nơi đọc field này (server VÀ client, nhưng KHÔNG import chung được giữa 2 phía — bản
+// client copy Y HỆT ở public/index.html, gần isManagerOf()). workItemAssignees() chuẩn hoá cả dữ liệu
+// CŨ (string đơn, trước Mục E) lẫn MỚI (mảng) về 1 dạng mảng duy nhất — tương thích ngược, không cần
+// migrate dữ liệu đã lưu. Export cho lib/recordViewScope.js dùng lại (hasOwnWorkItemInSource()).
+function workItemAssignees(w) {
+  const a = w?.assignedTo;
+  return Array.isArray(a) ? a.filter(Boolean) : (a ? [a] : []);
+}
+function isWorkItemAssignee(w, username) {
+  return !!username && workItemAssignees(w).includes(username);
+}
+
+// "Người Phụ Trách" công việc (assignedTo[]/assignedToName[], Mục E) — trả {usernames, names} mảng
+// SONG SONG cùng thứ tự, lọc trùng, MỖI username PHẢI là tài khoản active thật (khác
+// normalizeInviteList ở lib/createValidation.js vốn không bắt buộc hợp lệ vì chỉ dùng để mời — ở đây
+// gán trực tiếp quyền thao tác/xem việc nên bắt buộc đúng tài khoản có thật, cùng lý do
+// resolveOperationPersonInChargeUsername()).
+function resolveOperationAssignedTo(rawList, users) {
+  const list = Array.isArray(rawList) ? rawList : (rawList ? [rawList] : []);
+  const usernames = [], names = [];
+  const seen = new Set();
+  for (const raw of list) {
+    const username = String(raw || '').trim();
+    if (!username || seen.has(username)) continue;
+    const found = (users || []).find(u => u.username === username && u.active !== false);
+    if (!found) throw new HttpError(400, `Không tìm thấy tài khoản người phụ trách này (hoặc đã bị khoá): ${username}`);
+    seen.add(username);
+    usernames.push(found.username);
+    names.push(found.name);
+  }
+  return { usernames, names };
+}
+
+// Nghiệm thu ngay / sau N ngày (Mục D) — payload.acceptanceMode 'IMMEDIATE' (mặc định) | 'DELAYED'.
+// 'DELAYED' bắt buộc acceptanceDelayDays nguyên dương; 'IMMEDIATE' LUÔN bỏ qua giá trị client gửi (ép
+// về null) — không tin dữ liệu rác gửi kèm khi người dùng đã chọn "ngay". CHỈ tính ngày dự kiến để
+// NHẮC (client tự tính computeOperationWorkItemExpectedAcceptanceDate(), không cron job, không tự
+// chuyển trạng thái — xem completedAt bên dưới, chỉ server tự set lúc chuyển DANG_NGHIEM_THU).
+function resolveOperationAcceptanceConfig(payload) {
+  if (payload?.acceptanceMode === 'DELAYED') {
+    const days = Number(payload?.acceptanceDelayDays);
+    if (!Number.isFinite(days) || !Number.isInteger(days) || days <= 0) {
+      throw new HttpError(400, 'Vui lòng nhập số ngày nghiệm thu hợp lệ (số nguyên dương)');
+    }
+    return { acceptanceMode: 'DELAYED', acceptanceDelayDays: days };
+  }
+  return { acceptanceMode: 'IMMEDIATE', acceptanceDelayDays: null };
+}
 
 // sourceRecord = hồ sơ operationStoreOpenings/operationRepairs đã đọc sẵn (route tự tra trước khi gọi)
 // — dự toán PHẢI đã duyệt xong mới cho tạo cây Thực hiện, khớp đúng yêu cầu nghiệp vụ "sau khi giai
 // đoạn lập dự toán hoàn thành thì giai đoạn thực hiện mới mở khoá".
 // periodsForSource = TOÀN BỘ operationExecutionPeriods đúng sourceType/sourceId này (route tự lọc sẵn
 // trước khi gọi, giống siblingsAndDescendants) — dùng để validate periodId công việc GỐC.
-function createOperationWorkItem(user, payload, sourceRecord, siblingsAndDescendants, periodsForSource) {
+// users = TOÀN BỘ tài khoản hệ thống (route tự truyền sẵn, req.allUsers) — dùng để resolve assignedTo[].
+function createOperationWorkItem(user, payload, sourceRecord, siblingsAndDescendants, periodsForSource, users) {
   assertCanManageOperationExecution(user);
   if (sourceRecord.estimateStatus !== 'APPROVED') {
     throw new HttpError(409, 'Dự toán của hồ sơ này chưa được phê duyệt xong, chưa thể tạo công việc Thực hiện');
@@ -590,31 +668,40 @@ function createOperationWorkItem(user, payload, sourceRecord, siblingsAndDescend
     // "không tin dữ liệu client" áp dụng toàn bộ file này), cả cây con luôn cùng 1 kỳ với gốc.
     periodId = parent.periodId; periodName = parent.periodName;
   } else {
-    // Công việc GỐC: bắt buộc chọn ĐÚNG 1 Kỳ Thực Hiện của hồ sơ này VÀ kỳ đó đã "Bắt Đầu"
-    // (DANG_THUC_HIEN) — kỳ "Chưa bắt đầu" (CHUA_BAT_DAU) không được dùng để tạo công việc.
-    const pid = Number(payload?.periodId);
-    if (!Number.isFinite(pid)) throw new HttpError(400, 'Vui lòng chọn Kỳ Thực Hiện');
-    const period = (periodsForSource || []).find(p => p.id === pid);
-    if (!period) throw new HttpError(404, 'Không tìm thấy Kỳ Thực Hiện này trong hồ sơ');
-    if (period.status !== 'DANG_THUC_HIEN') {
-      throw new HttpError(409, 'Kỳ Thực Hiện này chưa bắt đầu, chưa thể tạo công việc gốc');
+    // Công việc GỐC: Kỳ Thực Hiện giờ đây KHÔNG BẮT BUỘC — không gửi (rỗng/null) thì tạo với
+    // periodId/periodName = null. NẾU có gửi thì vẫn giữ nguyên luật cũ: phải khớp ĐÚNG 1 Kỳ Thực Hiện
+    // của hồ sơ này VÀ kỳ đó đã "Bắt Đầu" (DANG_THUC_HIEN) — kỳ "Chưa bắt đầu" (CHUA_BAT_DAU) không
+    // được dùng để tạo công việc.
+    if (payload?.periodId != null && payload.periodId !== '') {
+      const pid = Number(payload.periodId);
+      if (!Number.isFinite(pid)) throw new HttpError(400, 'Kỳ Thực Hiện không hợp lệ');
+      const period = (periodsForSource || []).find(p => p.id === pid);
+      if (!period) throw new HttpError(404, 'Không tìm thấy Kỳ Thực Hiện này trong hồ sơ');
+      if (period.status !== 'DANG_THUC_HIEN') {
+        throw new HttpError(409, 'Kỳ Thực Hiện này chưa bắt đầu, chưa thể tạo công việc gốc');
+      }
+      periodId = period.id; periodName = period.name;
     }
-    periodId = period.id; periodName = period.name;
   }
+  const { usernames: assignedTo, names: assignedToName } = resolveOperationAssignedTo(payload?.assignedTo, users);
+  const { acceptanceMode, acceptanceDelayDays } = resolveOperationAcceptanceConfig(payload);
   return {
     id: Date.now(),
     parentWorkItemId,
     periodId, periodName,
     title,
     description: String(payload?.description || '').trim(),
-    assignedTo: payload?.assignedTo ? String(payload.assignedTo) : null,
-    assignedToName: payload?.assignedToName ? String(payload.assignedToName) : null,
+    // Mảng NHIỀU người phụ trách (Mục E, trước đây 1 string|null) — assignedToName lưu-cứng-lúc-ghi
+    // (snapshot tên hiển thị, không derive lúc render), cùng thứ tự với assignedTo.
+    assignedTo, assignedToName,
     // Người nghiệm thu CHỈ ĐỊNH riêng cho việc này (khác acceptedBy — chỉ ghi SAU khi đã nghiệm thu
     // xong). Để trống = chỉ "toàn quyền" (operationAcceptanceManage/admin) nghiệm thu được, giữ đúng
-    // hành vi cũ cho việc không chỉ định — xem acceptOperationWorkItem().
+    // hành vi cũ cho việc không chỉ định — xem acceptOperationWorkItem(). Vẫn single-select, không nằm
+    // trong phạm vi Mục E.
     acceptorUsername: payload?.acceptorUsername ? String(payload.acceptorUsername) : null,
     acceptorName: payload?.acceptorUsername ? String(payload?.acceptorName || '').trim() : null,
     deadline: payload?.deadline || '',
+    acceptanceMode, acceptanceDelayDays, completedAt: null,
     status: 'CHUA_BAT_DAU',
     acceptedBy: null, acceptedByName: null, acceptanceNote: null,
     history: [{ action: 'CREATED', by: user.username, byName: user.name, time: nowVN() }],
@@ -628,9 +715,9 @@ function createOperationWorkItem(user, payload, sourceRecord, siblingsAndDescend
 // con mới tự cập nhật (xem syncParentWorkItemStatus), đúng yêu cầu nghiệp vụ.
 function updateOperationWorkItemProgress(user, item, children, newStatus) {
   // "Toàn quyền" (admin/operationExecutionManage) xử lý được mọi việc; ngoài ra CHỈ đúng người phụ
-  // trách (item.assignedTo) mới cập nhật được việc của chính mình — trước đây field này chỉ mang tính
-  // hiển thị, không chặn quyền.
-  const isOwner = !!(user.username && user.username === item.assignedTo);
+  // trách (item.assignedTo[], Mục E — nay có thể NHIỀU người) mới cập nhật được việc của chính mình —
+  // trước đây field này chỉ mang tính hiển thị, không chặn quyền.
+  const isOwner = isWorkItemAssignee(item, user.username);
   if (!user.perms?.admin && !user.perms?.operationExecutionManage && !isOwner) {
     throw new HttpError(403, 'Bạn không có quyền cập nhật công việc này');
   }
@@ -648,6 +735,10 @@ function updateOperationWorkItemProgress(user, item, children, newStatus) {
     throw new HttpError(409, `Không thể chuyển trạng thái từ "${item.status}" sang "${newStatus}"`);
   }
   item.status = newStatus;
+  // Mục D: mốc để tính "Dự Kiến Nghiệm Thu" (completedAt, IMMEDIATE thì đúng ngày này; DELAYED thì +
+  // acceptanceDelayDays, tính ở CLIENT — xem computeOperationWorkItemExpectedAcceptanceDate() ở
+  // public/index.html) — CHỈ để nhắc, không tự động chuyển trạng thái/không cron job.
+  if (newStatus === 'DANG_NGHIEM_THU') item.completedAt = nowVN();
   item.history = item.history || [];
   item.history.push({ action: `STATUS_${newStatus}`, by: user.username, byName: user.name, time: nowVN() });
   return item;
@@ -716,12 +807,17 @@ function deleteOperationWorkItem(user, item, descendantIds) {
   return [item.id, ...descendantIds];
 }
 
-// Sửa thông tin công việc — CHỈ toàn quyền Thực hiện (giống create/delete), KHÔNG mở cho người phụ
-// trách/người nghiệm thu chỉ định (khác updateOperationWorkItemProgress/acceptOperationWorkItem).
-// KHÔNG cho sửa periodId/parentWorkItemId/status — giữ toàn vẹn cây + kỳ đã lập lúc tạo, muốn đổi thì
-// xoá tạo lại như hiện tại.
-function editOperationWorkItem(user, item, payload) {
-  assertCanManageOperationExecution(user);
+// Sửa thông tin công việc — "toàn quyền" Thực hiện HOẶC "Người Phụ Trách" hồ sơ gốc (Mục E, xem
+// assertCanManageOperationWorkItem() ở trên) — KHÔNG mở cho người phụ trách/người nghiệm thu chỉ định
+// CỦA CHÍNH CÔNG VIỆC (khác updateOperationWorkItemProgress/acceptOperationWorkItem, 2 khái niệm khác
+// nhau: "Người Phụ Trách" ở đây là của HỒ SƠ, không phải assignedTo của việc). KHÔNG cho sửa
+// periodId/parentWorkItemId/status/completedAt (completedAt chỉ server tự set lúc chuyển
+// DANG_NGHIEM_THU, xem updateOperationWorkItemProgress()) — giữ toàn vẹn cây + kỳ đã lập lúc tạo, muốn
+// đổi thì xoá tạo lại như hiện tại.
+// sourceRecord = hồ sơ gốc đã đọc sẵn (route tự tra qua item.sourceType/sourceId trước khi gọi).
+// users = TOÀN BỘ tài khoản hệ thống — dùng để resolve assignedTo[] (Mục E).
+function editOperationWorkItem(user, item, payload, users, sourceRecord) {
+  assertCanManageOperationWorkItem(user, sourceRecord);
   if (item.status === 'DA_NGHIEM_THU') {
     throw new HttpError(409, 'Công việc đã nghiệm thu xong, không thể sửa lại');
   }
@@ -729,11 +825,13 @@ function editOperationWorkItem(user, item, payload) {
   if (!title) throw new HttpError(400, 'Vui lòng nhập tên công việc');
   item.title = title;
   item.description = String(payload?.description || '').trim();
-  item.assignedTo = payload?.assignedTo ? String(payload.assignedTo) : null;
-  item.assignedToName = payload?.assignedToName ? String(payload.assignedToName) : null;
+  const { usernames: assignedTo, names: assignedToName } = resolveOperationAssignedTo(payload?.assignedTo, users);
+  item.assignedTo = assignedTo; item.assignedToName = assignedToName;
   item.acceptorUsername = payload?.acceptorUsername ? String(payload.acceptorUsername) : null;
   item.acceptorName = payload?.acceptorUsername ? String(payload?.acceptorName || '').trim() : null;
   item.deadline = payload?.deadline || '';
+  const { acceptanceMode, acceptanceDelayDays } = resolveOperationAcceptanceConfig(payload);
+  item.acceptanceMode = acceptanceMode; item.acceptanceDelayDays = acceptanceDelayDays;
   item.history = item.history || [];
   item.history.push({ action: 'EDITED', by: user.username, byName: user.name, time: nowVN() });
   return item;
@@ -4568,5 +4666,8 @@ module.exports = {
   submitOperationEstimate, resetOperationEstimateToDraft,
   createOperationWorkItem, updateOperationWorkItemProgress, acceptOperationWorkItem,
   computeParentWorkItemStatus, deleteOperationWorkItem, editOperationWorkItem,
-  startOperationExecutionPeriod, confirmOperationUse
+  startOperationExecutionPeriod, confirmOperationUse,
+  // Mục E — export cho lib/recordViewScope.js (hasOwnWorkItemInSource()) + test.
+  workItemAssignees, isWorkItemAssignee, resolveOperationAssignedTo,
+  resolveOperationAcceptanceConfig, assertCanManageOperationWorkItem
 };
