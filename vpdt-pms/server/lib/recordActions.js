@@ -514,18 +514,31 @@ function submitOperationRepairDraft(user, item) {
 // amount,note} — bỏ ĐVT/Số lượng/Đơn giá, "Chi phí" nhập trực tiếp thay vì tự tính qty×unitPrice, đúng
 // yêu cầu đơn giản hoá "Danh mục đầu tư"). Vẫn tự chuẩn hoá lại amount (ép kiểu/chặn âm) — không tin số
 // client gửi, cùng lý do operationOrders.extraValidate.
+// Mục "Danh mục đầu tư có thể sửa để cập nhật": estimateStatus APPROVED KHÔNG còn là ngõ cụt như trước
+// — cho phép lưu lại (thêm/sửa/xoá hạng mục) cả khi đã APPROVED, không chỉ lần đầu (DRAFT). REJECTED vẫn
+// PHẢI qua resetOperationEstimateToDraft() trước (giữ nguyên hành vi cũ cho dữ liệu tồn từ trước Mục H).
+// Mỗi hạng mục được gán 1 `id` ỔN ĐỊNH (giữ nguyên qua các lần sửa nếu client gửi lại đúng id cũ, sinh
+// mới nếu là dòng mới thêm/không có id) — CHỦ ĐÍCH KHÔNG dùng để tự tạo/xoá công việc Thực hiện tương
+// ứng (quyết định thiết kế: Danh mục đầu tư và cây Công việc là 2 khái niệm ĐỘC LẬP, xem chú thích đầy
+// đủ ở routes/records.js ngay trước 2 route estimate/submit) — id ở đây chỉ để có 1 khoá ổn định cho
+// tương lai (đối chiếu import/export, tránh phải so khớp theo nội dung chuỗi dễ trùng/dễ lệch).
 function submitOperationEstimate(user, item, payload) {
   if (!user.perms?.admin && !user.perms?.operationEstimateCreate) {
     throw new HttpError(403, 'Bạn không có quyền lập danh mục đầu tư');
   }
-  if (item.estimateStatus !== 'DRAFT') {
-    throw new HttpError(409, 'Danh mục đầu tư của hồ sơ này không ở trạng thái cần lập/bổ sung (có thể đã lưu rồi)');
+  if (item.estimateStatus !== 'DRAFT' && item.estimateStatus !== 'APPROVED') {
+    throw new HttpError(409, 'Danh mục đầu tư của hồ sơ này không ở trạng thái cần lập/bổ sung (có thể đang chờ lập lại sau khi bị từ chối)');
   }
   const rawItems = Array.isArray(payload?.items) ? payload.items : [];
+  const existingIds = new Set((item.estimateItems || []).map(it => it.id).filter(Boolean));
+  let nextId = Date.now();
+  const genId = () => { while (existingIds.has(nextId)) nextId += 1; existingIds.add(nextId); return nextId++; };
   const validItems = rawItems.map((it) => {
     const content = String(it?.content ?? it?.name ?? '').trim();
     const amount = Math.max(0, Number(it?.amount) || 0);
-    return { content, description: String(it?.description || '').trim(), amount, note: String(it?.note || '').trim() };
+    const rawId = Number(it?.id);
+    const id = (Number.isFinite(rawId) && existingIds.has(rawId)) ? rawId : genId();
+    return { id, content, description: String(it?.description || '').trim(), amount, note: String(it?.note || '').trim() };
   }).filter((it) => it.content);
   if (!validItems.length) throw new HttpError(400, 'Vui lòng nhập ít nhất 1 hạng mục hợp lệ (có Nội dung)');
 
@@ -877,6 +890,31 @@ function confirmOperationUse(user, sourceRecord, allWorkItemsForSource) {
   sourceRecord.useConfirmByName = user.name;
   sourceRecord.useConfirmAt = nowVN();
   return sourceRecord;
+}
+
+// Trạng thái hiển thị "vòng đời dự án nhỏ" (yêu cầu người dùng, đợt "Danh Mục Đầu Tư + bỏ Tạo Kỳ") —
+// HÀM THUẦN, KHÔNG lưu thành field riêng trên bản ghi: tính lại NGAY tại chỗ mỗi lần cần hiển thị/kiểm
+// tra, từ đúng các field kỹ thuật đã có sẵn (status/estimateStatus/estimateItems/useConfirmStatus +
+// danh sách work items của hồ sơ) — tránh phải thêm 1 field mới rồi lo đồng bộ lại ở MỌI điểm ghi
+// (submitOperationEstimate/createOperationWorkItem/acceptOperationWorkItem/confirmOperationUse đều nằm
+// ở nhiều nơi khác nhau, dễ sót 1 chỗ khiến field hiển thị lệch khỏi dữ liệu thật). PHẢI giữ giống hệt
+// bản mirror phía client operationRecordStageStatus() ở public/index.html (2 cài đặt độc lập, sửa 1 bên
+// phải sửa cả 2 — cùng quy ước đã ghi ở đầu lib/workflowEngine.js).
+// items = TOÀN BỘ operationWorkItems đúng sourceType/sourceId của record này (cha lẫn con).
+const OPERATION_STAGE_LABELS = {
+  LAP: 'Hồ sơ đã lập',
+  DANH_MUC_DAU_TU: 'Đã lập danh mục đầu tư',
+  DANH_SACH_CONG_VIEC: 'Đã lập danh sách công việc',
+  NGHIEM_THU: 'Đã nghiệm thu',
+  DONG_HO_SO: 'Đóng hồ sơ và đưa vào sử dụng'
+};
+function computeOperationRecordStageStatus(record, items) {
+  if (record?.useConfirmStatus === 'CONFIRMED') return 'DONG_HO_SO';
+  const list = items || [];
+  if (list.length > 0 && list.every(w => w.status === 'DA_NGHIEM_THU')) return 'NGHIEM_THU';
+  if (list.length > 0) return 'DANH_SACH_CONG_VIEC';
+  if (record?.estimateStatus === 'APPROVED' && (record?.estimateItems || []).length > 0) return 'DANH_MUC_DAU_TU';
+  return 'LAP';
 }
 
 // ----- Văn Bản Trình (submissions) -----
@@ -4758,6 +4796,7 @@ module.exports = {
   createOperationWorkItem, updateOperationWorkItemProgress, acceptOperationWorkItem,
   computeParentWorkItemStatus, deleteOperationWorkItem, editOperationWorkItem,
   startOperationExecutionPeriod, confirmOperationUse,
+  computeOperationRecordStageStatus, OPERATION_STAGE_LABELS,
   // Mục E — export cho lib/recordViewScope.js (hasOwnWorkItemInSource()) + test.
   workItemAssignees, isWorkItemAssignee, resolveOperationAssignedTo,
   resolveOperationAcceptanceConfig, assertCanManageOperationWorkItem

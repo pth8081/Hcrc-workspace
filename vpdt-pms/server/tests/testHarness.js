@@ -398,8 +398,10 @@ function createDispatcher(state) {
         return { status: 200, body: { ok: true, item: outcome.item, transition: outcome.transition } };
       }
 
-      // Vận Hành > Siêu Thị > Dự toán — 2 segment action (estimate/submit), không khớp regex generic
-      // 1-action bên dưới. Mirror ĐÚNG routes/records.js '/operationStoreOpenings|operationRepairs/:id/estimate/submit'.
+      // Vận Hành > Siêu Thị > Danh mục đầu tư — 2 segment action (estimate/submit), không khớp regex
+      // generic 1-action bên dưới. Mirror ĐÚNG routes/records.js '/operationStoreOpenings|
+      // operationRepairs/:id/estimate/submit' — KHÔNG tự tạo/xoá công việc Thực hiện (quyết định thiết
+      // kế, xem chú thích đầy đủ ở routes/records.js ngay trước route này).
       if ((m = pathName.match(/^\/api\/records\/(operationStoreOpenings|operationRepairs)\/(\d+)\/estimate\/submit$/)) && method === 'POST') {
         const moduleKey = m[1];
         const id = Number(m[2]);
@@ -459,6 +461,12 @@ function createDispatcher(state) {
         const list = state[moduleKey];
         const idx = list.findIndex(x => x.id === id);
         if (idx === -1) return { status: 404, body: { error: 'Không tìm thấy hồ sơ' } };
+        // "Hồ sơ Mở Mới/Sửa Chữa Siêu Thị sau khi lập xong không được xoá" — mirror ĐÚNG
+        // rejectOperationDelete() ở routes/records.js: KHÔNG còn ngoại lệ nào (kể cả admin), khác hẳn
+        // nhánh admin-only chung ngay dưới đây.
+        if (action === 'delete' && (moduleKey === 'operationStoreOpenings' || moduleKey === 'operationRepairs')) {
+          return { status: 403, body: { error: 'Hồ sơ Mở mới/Sửa chữa siêu thị sau khi đã lập không được phép xoá.' } };
+        }
         // Xóa admin-only (mirrors routes/records.js deleteAdminOnly()/assertAdminForDelete() — dùng
         // CHUNG cho mọi collection đã ở dbo.Records, không có handler riêng trong actionHandlers).
         if (action === 'delete') {

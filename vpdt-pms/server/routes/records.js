@@ -760,39 +760,16 @@ router.post('/budgetTemplates/:id/delete', async (req, res) => {
 
 // ===================== VẬN HÀNH (operationOrders / operationStoreOpenings / operationRepairs) =====================
 router.post('/operationOrders/:id/delete', (req, res) => deleteAdminOnly(req, res, 'operationOrders'));
-// Xoá hồ sơ Mở Mới/Sửa Chữa Siêu Thị CASCADE xoá luôn operationExecutionPeriods + toàn bộ cây
-// dbo.OperationWorkItems tham chiếu tới hồ sơ đó — trước đây chỉ xoá đúng 1 dòng hồ sơ qua
-// deleteAdminOnly() chung, để lại Kỳ Thực Hiện + cây công việc mồ côi VĨNH VIỄN trong DB (bị lọc khỏi
-// mọi API response nên vô hình, nhưng vẫn tồn tại — và nếu id hồ sơ mới trùng Date.now() với id cũ,
-// có nguy cơ "thừa kế" nhầm cây công việc mồ côi) — phát hiện ở audit Đợt 5, Giai đoạn 3.
-// Xoá CON trước (periods + work items) rồi mới xoá hồ sơ CHA — nếu crash giữa chừng, trạng thái xấu
-// nhất là hồ sơ cha còn periods/work items mồ côi (như hành vi CŨ, không tệ hơn), không bao giờ để lại
-// work items trỏ vào 1 hồ sơ đã bị xoá mà chính nó lại chưa kịp dọn.
-async function deleteOperationRecordCascade(req, res, collection, sourceType) {
-  const itemId = Number(req.params.id);
-  if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
-  try {
-    const { freshUser } = await getFreshUser(req);
-    assertAdminForDelete(freshUser);
-    const actor = { username: freshUser.username, name: freshUser.name };
-
-    const periods = await getAllForCollection('operationExecutionPeriods');
-    const periodIdsToDelete = periods.filter(p => p.sourceType === sourceType && p.sourceId === itemId).map(p => p.id);
-    for (const id of periodIdsToDelete) {
-      await deleteRecordForCollection('operationExecutionPeriods', id, () => assertAdminForDelete(freshUser), actor);
-    }
-
-    const workItems = await getWorkItemsBySource(sourceType, itemId);
-    await deleteWorkItemsByIds(workItems.map(w => w.id));
-
-    await deleteRecordForCollection(collection, itemId, () => assertAdminForDelete(freshUser), actor);
-    res.json({ ok: true });
-  } catch (err) {
-    handleError(res, `${collection}/${req.params.id}/delete`, err);
-  }
+// "Hồ sơ Mở Mới/Sửa Chữa Siêu Thị sau khi lập xong KHÔNG được xoá" — yêu cầu người dùng, đợt "Danh Mục
+// Đầu Tư + bỏ Tạo Kỳ". TRƯỚC ĐÂY route này cho admin xoá CASCADE (kèm operationExecutionPeriods + cây
+// dbo.OperationWorkItems) — nay chặn HẲN, không còn ngoại lệ nào (kể cả admin), khác mọi collection khác
+// trong hệ thống vẫn giữ deleteAdminOnly(). Chặn ở ĐÚNG route này (không chỉ ẩn nút ở client) vì đây là
+// nơi thật sự ghi CSDL — 1 request tự soạn bỏ qua UI trước đây vẫn xoá được nếu biết id.
+function rejectOperationDelete(req, res) {
+  return res.status(403).json({ error: 'Hồ sơ Mở mới/Sửa chữa siêu thị sau khi đã lập không được phép xoá.' });
 }
-router.post('/operationStoreOpenings/:id/delete', (req, res) => deleteOperationRecordCascade(req, res, 'operationStoreOpenings', 'OPERATION_STORE_OPENING'));
-router.post('/operationRepairs/:id/delete', (req, res) => deleteOperationRecordCascade(req, res, 'operationRepairs', 'OPERATION_REPAIR'));
+router.post('/operationStoreOpenings/:id/delete', rejectOperationDelete);
+router.post('/operationRepairs/:id/delete', rejectOperationDelete);
 
 // ===================== ĐÀO TẠO (module con "Truyền Thông Nội Bộ" > Đào tạo) — tạm thời, MVP =====================
 router.post('/trainingDocuments/:id/delete', (req, res) => deleteAdminOnly(req, res, 'trainingDocuments'));
@@ -1702,10 +1679,23 @@ router.post('/operationRepairs/:id/submit', async (req, res) => {
   } catch (err) { handleError(res, `operationRepairs/${req.params.id}/submit`, err); }
 });
 
-// Vận Hành > "Siêu Thị" > Giai đoạn Dự toán — gửi/gửi lại bảng hạng mục để duyệt (workflow Duyệt/Từ
-// chối/Bổ sung sau đó đi qua route generic POST /api/workflow/operationStoreOpeningEstimate|
-// operationRepairEstimate/:id/:action, xem lib/workflowEngine.js). recordActions.submitOperationEstimate
-// dùng CHUNG cho cả 2 collection.
+// QUYẾT ĐỊNH THIẾT KẾ — quan hệ Danh mục đầu tư ↔ Công việc (yêu cầu người dùng: "danh mục đầu tư lập
+// xong có thể sửa để thêm bớt công việc, tự động cập nhật sang nghiệm thu", không nói rõ cơ chế cụ thể):
+// CÂN NHẮC rồi CHỦ ĐÍCH KHÔNG tự tạo/xoá công việc Thực hiện theo từng hạng mục Danh mục đầu tư (dù đã
+// thử — xem lịch sử commit — nhưng gây tác dụng phụ 2 chiều nguy hiểm: (1) hồ sơ CŨ đã có sẵn Danh mục
+// đầu tư trước tính năng này, chỉ cần sửa nhỏ (thêm 1 hạng mục) cũng bất ngờ sinh ra công việc "ma" cho
+// TOÀN BỘ hạng mục cũ; (2) "Danh mục đầu tư" (hạng mục ngân sách/chi phí) và "Công việc" (đầu việc thi
+// công thực tế, có cây cha/con) thường khác NHAU về mức độ chi tiết — 1 hạng mục ngân sách có thể ứng
+// với 0, 1, hay nhiều công việc, ép đúng 1-1 sẽ SAI với thực tế vận hành). Thay vào đó, "tự động cập
+// nhật" được hiểu là: MỌI thứ hiển thị suy ra từ Danh mục đầu tư (trạng thái vòng đời hiển thị ở
+// operationRecordStageStatus()/computeOperationRecordStageStatus(), "Ngân sách còn lại") đều tính TRỰC
+// TIẾP từ estimateItems/estimateStatus mỗi lần hiển thị — sửa danh mục xong là các số này tự đúng NGAY,
+// không cần bước đồng bộ thủ công nào. Công việc (Thực hiện) tiếp tục là 1 cây độc lập, tự thêm/xoá tay
+// như trước — không đổi.
+//
+// Vận Hành > "Siêu Thị" > Giai đoạn Danh mục đầu tư — lưu/lưu lại bảng hạng mục (KHÔNG còn qua duyệt,
+// CÓ THỂ lưu lại nhiều lần kể cả sau khi đã APPROVED — xem lib/recordActions.js submitOperationEstimate()).
+// recordActions.submitOperationEstimate dùng CHUNG cho cả 2 collection.
 router.post('/operationStoreOpenings/:id/estimate/submit', async (req, res) => {
   const itemId = Number(req.params.id);
   if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
@@ -2510,3 +2500,6 @@ router.post('/itServiceRenewals/:id/renew', async (req, res) => {
 });
 
 module.exports = router;
+// Export riêng cho test (tests/test-operation-danhmuc-dautu-units.js) — xác nhận route xoá
+// operationStoreOpenings/operationRepairs LUÔN từ chối, không phụ thuộc quyền/trạng thái người gọi.
+module.exports.rejectOperationDelete = rejectOperationDelete;

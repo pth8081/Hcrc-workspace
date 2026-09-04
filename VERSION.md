@@ -1,11 +1,128 @@
 # Phiên bản hiện tại
 
-**7.6** — đã merge vào `main` (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge
+**7.7** — đã merge vào `main` (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge
 góc màn hình + `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần
 kiểu `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. Đúng theo quy tắc MINOR chạy 0-9 trong
-`CLAUDE.md`: sau `7.5` tăng MINOR lên 1 → `7.6`.
+`CLAUDE.md`: sau `7.6` tăng MINOR lên 1 → `7.7`.
 
-## Cập nhật gần nhất — Biểu Mẫu: gộp 43 tab phẳng thành tab+sub-tab theo nhóm + Ngân Sách Thực Hiện bỏ phê duyệt
+## Cập nhật gần nhất — Vận Hành > Siêu Thị: vòng đời hiển thị mới, Danh Mục Đầu Tư sửa được sau khi lưu + cột ngân sách, bỏ hẳn Tạo Kỳ, không cho xoá hồ sơ, Import/Export Excel, fix hồ sơ cũ kẹt PENDING
+
+Tiếp nối đợt trước ("Vận Hành > Siêu Thị: Chi Phí Phê Duyệt, Danh Mục Đầu Tư, Thực Hiện linh hoạt, bỏ phê
+duyệt nội bộ" — Mục A-H, xem mục "Trước đó" bên dưới) theo yêu cầu người dùng tiếp theo, CHỈ cho 2 luồng
+`operationStoreOpenings` ("Mở Mới Siêu Thị")/`operationRepairs` ("Sửa Chữa Siêu Thị") — KHÔNG đụng
+`operationOrders` ("📦 Phê Duyệt Đơn Hàng") hay bất kỳ module nào khác.
+
+**Quan trọng — đọc kỹ trước khi coi đây là việc làm từ đầu**: phần lớn nền tảng (bỏ phê duyệt hồ sơ
+chính, đổi "Dự toán" → "Danh mục đầu tư", Kỳ Thực Hiện đã thành KHÔNG BẮT BUỘC, "Chi Phí Còn Lại" live)
+**đã có sẵn** từ đợt trước — bản tóm tắt giao việc ban đầu (dựa trên trí nhớ phiên làm việc trước) nói
+sai rằng "Danh Mục Đầu Tư" chưa tồn tại; đã tự xác minh lại toàn bộ code trước khi thiết kế, theo đúng
+yêu cầu. Việc thật sự làm ở đợt này là các khoảng trống CÒN LẠI so với yêu cầu người dùng mới nhất:
+
+- **Vòng đời hiển thị mới (5 mốc, thay hẳn badge trạng thái cũ DRAFT/PENDING/APPROVED/REJECTED cho 2
+  luồng này)** — hàm thuần MỚI `computeOperationRecordStageStatus()` (`lib/recordActions.js`, mirror
+  client `computeOperationRecordStageStatusClient()`/`operationRecordStageStatus()` ở `public/index.html`,
+  cùng quy ước "2 cài đặt độc lập" đã dùng cho `computeParentWorkItemStatus`): **KHÔNG lưu field mới**,
+  tính lại trực tiếp mỗi lần hiển thị từ `estimateStatus`/`estimateItems`/danh sách work items/
+  `useConfirmStatus` đã có sẵn — tránh nguy cơ lệch dữ liệu do quên đồng bộ ở 1 trong nhiều điểm ghi.
+  5 mốc đúng nguyên văn yêu cầu: **"Hồ sơ đã lập"** (`LAP`, ngay lúc tạo) → **"Đã lập danh mục đầu tư"**
+  (`DANH_MUC_DAU_TU`, sau khi lưu Danh mục đầu tư có ít nhất 1 hạng mục) → **"Đã lập danh sách công việc"**
+  (`DANH_SACH_CONG_VIEC`, sau khi có ít nhất 1 công việc Thực hiện) → **"Đã nghiệm thu"** (`NGHIEM_THU`,
+  KHI TOÀN BỘ cây công việc — cả việc lớn lẫn việc con — đã "Đã nghiệm thu") → **"Đóng hồ sơ và đưa vào sử
+  dụng"** (`DONG_HO_SO`, sau khi bấm nút có sẵn "🏁 Xác Nhận Đưa Vào Sử Dụng"/`confirmOperationUse()` —
+  nút này đã tồn tại từ đợt trước, chỉ còn thiếu đúng nhãn trạng thái hiển thị mới). Áp dụng vào badge cột
+  "Trạng Thái" (2 bảng Mở mới/Sửa chữa), 5 dashboard-card + ô lọc "Trạng Thái" (chỉ 2 tab này — tab Đơn
+  Hàng giữ nguyên PENDING/APPROVED/REJECTED cũ).
+- **Danh mục đầu tư sửa được cả sau khi đã lưu (APPROVED)** — trước đây `submitOperationEstimate()` chỉ
+  nhận lại từ `DRAFT`, lưu xong là hết đường sửa (ngõ cụt thật, đúng như người dùng phản ánh). Nay nhận
+  thêm từ `APPROVED`; mỗi hạng mục được gán `id` ổn định (giữ nguyên qua các lần sửa nếu client gửi lại
+  đúng id cũ) để làm nền cho tương lai, dù đợt này **chủ đích KHÔNG** dùng id đó để tự tạo/xoá công việc
+  Thực hiện tương ứng — xem quyết định thiết kế "Danh mục đầu tư ↔ Công việc" ngay dưới.
+- **Quyết định thiết kế — "tự động cập nhật sang nghiệm thu" nghĩa là gì**: đã CÂN NHẮC rồi bỏ phương án
+  tự tạo/xoá công việc Thực hiện theo từng hạng mục Danh mục đầu tư (thử code thật, phát hiện qua chính
+  bộ test hiện có: hồ sơ CŨ chỉ cần sửa nhỏ Danh mục đầu tư cũng bất ngờ sinh công việc "ma" cho TOÀN BỘ
+  hạng mục cũ; và về nghiệp vụ, 1 hạng mục ngân sách có thể ứng với 0/1/nhiều công việc thi công thực tế,
+  ép đúng 1-1 sẽ sai). Quyết định cuối: Danh mục đầu tư và cây Công việc là **2 khái niệm độc lập** như
+  cũ (Công việc vẫn thêm/sửa/xoá tay) — "tự động cập nhật" là mọi con số/trạng thái SUY RA từ Danh mục
+  đầu tư (vòng đời hiển thị ở trên, "Ngân Sách Còn Lại" dưới đây) đều tính lại NGAY mỗi lần hiển thị,
+  không cần bước đồng bộ thủ công nào.
+- **2 cột ngân sách mới ở bảng tổng hợp "Danh mục đầu tư"** (`#operationEstimateTableBody`, TRƯỚC ĐÂY chỉ
+  có ở trong modal từng hồ sơ dưới tên "Chi Phí Còn Lại"): **"Ngân Sách Phê Duyệt"** (bên trái cột "Tổng
+  Danh Mục Đầu Tư", = `estimatedBudget` cho Mở mới / `amount` cho Sửa chữa — field CÓ SẴN, nhập lúc lập
+  hồ sơ, không thêm field mới) và **"Ngân Sách Còn Lại"** (bên phải, = Ngân Sách Phê Duyệt − Tổng Danh
+  Mục Đầu Tư, tự tính, số âm tô đỏ) — đúng thứ tự cột người dùng yêu cầu.
+- **Bỏ HẲN "Tạo Kỳ"** (khác đợt trước chỉ làm optional) khỏi cả màn Thực hiện lẫn Lập công việc: xoá form
+  "+ Tạo Kỳ Mới"/nút "▶ Bắt Đầu"/ô chọn Kỳ trong form thêm công việc, cùng 4 hàm client liên quan
+  (`renderOperationExecutionPeriodsBox`/`toggleOperationExecutionPeriodCreateForm`/
+  `submitOperationExecutionPeriod`/`startOperationExecutionPeriodAction`) — kèm dọn `CORE_FIELD_MANIFEST`/
+  `FORM_TABS` entry `OPERATION_EXECUTION_PERIOD` (tab "Biểu Mẫu" tuỳ biến nhãn cho 1 form không còn tồn
+  tại nữa thì cũng vô nghĩa). GIỮ NGUYÊN server (`operationExecutionPeriods` collection/route/validate) +
+  `periodId`/`periodName` optional trên work items — hồ sơ CŨ còn gắn kỳ vẫn hiển thị đúng badge, không
+  cần migrate dữ liệu.
+- **Fix bug thật "Danh mục cv trong thực hiện đang lỗi ko lập và tạo được"** — root-cause xác nhận qua
+  dữ liệu thật trong DB sandbox (không đoán): hồ sơ lập TRƯỚC khi Mục H (bỏ phê duyệt) tồn tại có thể còn
+  kẹt ở `status`/`estimateStatus` = `PENDING` — với `estimateStatus` đặc biệt nghiêm trọng vì
+  `submitOperationEstimate()`/`resetOperationEstimateToDraft()` chỉ nhận từ `DRAFT`/`APPROVED`/`REJECTED`,
+  **không có đường thoát nào từ `PENDING`** → không bao giờ lập được Danh mục đầu tư → không bao giờ mở
+  khoá được Thực hiện. Thêm di trú 1 lần lúc khởi động `migrateStuckOperationApprovalStatuses()`
+  (`seedDefaults.js`, idempotent, cùng khuôn `migratePendingActualBudgetEntries()` đã có cho Ngân Sách):
+  mọi bản ghi 2 collection này còn kẹt `PENDING` (hồ sơ chính hoặc Danh mục đầu tư) tự chuyển `APPROVED`,
+  ghi `SYSTEM_MIGRATION`.
+- **Hồ sơ Mở Mới/Sửa Chữa sau khi lập xong KHÔNG được xoá** — chặn ở ĐÚNG route ghi CSDL
+  (`POST /api/records/operation{StoreOpenings,Repairs}/:id/delete` trả 403 KHÔNG điều kiện, kể cả admin —
+  route CASCADE-xoá cũ đã gỡ hoàn toàn, không còn ngoại lệ nào), không chỉ ẩn nút ở client (dù nút cũng đã
+  ẩn, `buildOperationRowHTML()` chỉ còn hiện "🗑️ Xóa" cho `operationOrders`).
+- **Import/Export Excel + file mẫu tiếng Việt** cho cả Danh mục đầu tư lẫn Danh sách công việc — mirror
+  đúng khuôn `lib/storeCatalogImport.js`/`routes/storeCatalogImport.js` (đọc file qua
+  `lib/xlsxSafeRead.js` chống zip-bomb, KHÔNG dùng gói `xlsx`/SheetJS): `lib/operationImport.js` +
+  `routes/operationImport.js` (mount `/api/operation`) — 2 route mẫu (`GET .../estimate-import-template`,
+  `.../workitem-import-template`) + 2 route đọc (`POST .../estimate-parse-import`,
+  `.../workitem-parse-import`, CHỈ đọc/trả JSON, không tự ghi — client vẫn phải gọi đúng API ghi thật có
+  sẵn cho từng dòng, giữ nguyên toàn bộ validate/quyền). XUẤT dùng lại thẳng route dùng chung có sẵn
+  `POST /api/admin/export-xlsx`, không cần route mới. **Phạm vi Import công việc CHỦ ĐÍCH thu hẹp về công
+  việc GỐC** (không import được cây cha/con qua Excel — phức tạp không tương xứng lợi ích, việc con vẫn
+  thêm tay "➕ Con" như cũ).
+
+**2 fix phụ phát hiện qua chính bộ test hiện có khi xoá "Tạo Kỳ"** (ngoài phạm vi yêu cầu gốc, tự sửa vì
+là bug thật do chính đợt này gây ra): (1) sót 1 dòng gán `owiPeriodCreateFormOpen = false` không khai báo
+biến (implicit global, không lỗi cú pháp nên "new Function()" parse-check không bắt được — chỉ lộ ra khi
+thật sự chạy) trong `openOperationWorkItemModal()`; (2) `tests/test-forms-batch3.js` (đợt Biểu Mẫu cũ) có
+1 kịch bản test riêng cho form "Tạo Kỳ Mới" đã xoá — cập nhật bỏ kịch bản đó, `NEW_TABS` còn 10 (từ 11).
+
+**Xác nhận qua demo Playwright** (mock backend chạy `lib/recordActions.js`/`lib/createValidation.js`
+THẬT trong tiến trình Node — cùng khuôn `tests/testHarness.js` mọi test khác dùng, KHÔNG có tài khoản demo
+sẵn có/quyền admin thật trên SQL Server sandbox của phiên này để chạy trên `server.js` thật đầu-cuối; xem
+phần "Giới hạn kiểm thử" bên dưới): chạy trọn vòng đời 5 mốc cho 1 hồ sơ Mở Mới + 1 hồ sơ Sửa Chữa — lập
+hồ sơ (APPROVED/LAP ngay) → xác nhận KHÔNG có nút Xoá + gọi thẳng API xoá (bỏ qua UI, tài khoản admin
+thật) vẫn bị chặn → lập Danh mục đầu tư (DANH_MUC_DAU_TU, cột Ngân Sách Phê Duyệt/Còn Lại đúng số) → mở
+lại xác nhận vẫn sửa được → sang Thực hiện xác nhận KHÔNG còn UI "Tạo Kỳ" → lập công việc gốc THÀNH CÔNG
+(xác nhận bug báo cáo đã hết) → DANH_SACH_CONG_VIEC → tiến độ + nghiệm thu → NGHIEM_THU → "Đưa vào sử
+dụng" → DONG_HO_SO. 22 ảnh chụp màn hình đã lưu.
+
+**Giới hạn kiểm thử (nêu rõ, không giấu)**: phiên làm việc này không có sẵn tài khoản demo non-admin nào
+có quyền Vận Hành trên SQL Server sandbox thật, và không có mật khẩu/TOTP của tài khoản `admin` có sẵn để
+đăng nhập thật (không tự tạo tài khoản mới bằng cách ghi thẳng CSDL ngoài luồng ứng dụng — bị chặn có chủ
+đích). Vì vậy demo Playwright ở trên chạy trên mock backend (dùng chung code nghiệp vụ thật) thay vì
+`server.js` thật đầu-cuối như các đợt trước. Đã bù lại bằng: (1) `tests/test-operation-danhmuc-dautu-units.js`
+(17 kịch bản, hàm thuần không qua mock) test trực tiếp `computeOperationRecordStageStatus()`/
+`submitOperationEstimate()`/`rejectOperationDelete()`/`lib/operationImport.js` (round-trip mẫu Excel thật
+qua `exceljs`); (2) xác nhận trực tiếp qua SQL Server thật (đang chạy sẵn, Docker `vpdt-mssql`) rằng bug
+"kẹt PENDING" có xảy ra thật trong dữ liệu sandbox hiện có (1 hồ sơ `operationStoreOpenings` thật đang kẹt
+`status: PENDING`), xác nhận migration mới viết đúng nhắm vào tình huống thật.
+
+**Regression**: toàn bộ 54 file `tests/test-*.js` PASS — chỉ còn đúng 2 lỗi known pre-existing cần SQL
+Server thật (`test-audit-fixes-batch1.js`/`test-audit-round2-cluster1.js`, timeout thoát tiến trình chứ
+không phải lỗi nghiệp vụ, cùng 2 file đã biết từ trước). `tests/test-operation-store-lifecycle.js` mở
+rộng thêm 5 kịch bản mới (40 → 45) cho đúng vòng đời/xoá/sửa-lại-danh-mục/cột ngân sách; sửa
+`tests/test-forms-batch3.js` (nêu ở trên); thêm mới `tests/test-operation-danhmuc-dautu-units.js` (17
+kịch bản).
+
+**Deploy-impact:** KHÔNG đổi `sql/schema.sql` (mọi field mới — `estimateItems[].id`, `assignedTo`... —
+đều nằm trong payload JSON blob sẵn có của `dbo.Records`). KHÔNG thêm biến môi trường mới. KHÔNG thêm
+`dependencies` mới (`exceljs`/`multer`/`express-rate-limit` đều đã có sẵn, dùng lại nguyên). **1 migration
+tự động lúc khởi động** (`migrateStuckOperationApprovalStatuses()`, idempotent, không cần thao tác tay) —
+chuyển các hồ sơ Mở Mới/Sửa Chữa cũ còn kẹt `PENDING` sang `APPROVED`, xem phần fix bug ở trên.
+
+## Trước đó — Biểu Mẫu: gộp 43 tab phẳng thành tab+sub-tab theo nhóm + Ngân Sách Thực Hiện bỏ phê duyệt
 
 Gồm 2 phần độc lập, gộp chung 1 lần merge theo yêu cầu người dùng.
 

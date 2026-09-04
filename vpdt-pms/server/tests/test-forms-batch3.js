@@ -1,9 +1,10 @@
 'use strict';
 // Regression test cho Đợt 3 mở rộng "Biểu Mẫu" (Vận Hành/Đào Tạo/Tuyển Dụng + 3 gap-fill phát hiện qua
-// audit BUSINESS_MODULES/FORM_TABS toàn app — 11 tab mới: OPERATION_ORDER/OPERATION_STORE_OPEN/
-// OPERATION_REPAIR/OPERATION_WORK_ITEM/OPERATION_EXECUTION_PERIOD/TRAINING_CLASS/TRAINING_TEST/
+// audit BUSINESS_MODULES/FORM_TABS toàn app — ban đầu 11 tab mới, nay còn 10: OPERATION_ORDER/
+// OPERATION_STORE_OPEN/OPERATION_REPAIR/OPERATION_WORK_ITEM/TRAINING_CLASS/TRAINING_TEST/
 // RECRUITMENT_JOB/RECRUITMENT_REFERRAL/HR_FEEDBACK/IT_RENEWAL, xem CORE_FIELD_MANIFEST + FORM_TABS
-// trong public/index.html). Cùng khuôn tests/test-forms-batch1.js / tests/test-forms-batch2.js.
+// trong public/index.html — OPERATION_EXECUTION_PERIOD đã BỎ ở đợt "Danh Mục Đầu Tư + bỏ Tạo Kỳ", form
+// "Tạo Kỳ Mới" mà nó tuỳ biến nhãn không còn tồn tại). Cùng khuôn tests/test-forms-batch1.js/batch2.js.
 //
 // Không có backend SQL Server thật trong môi trường này — serve public/index.html tĩnh, boot Chromium
 // thật (Playwright), set thẳng biến toàn cục DB/currentUser rồi gọi ĐÚNG các hàm sản xuất thật
@@ -23,10 +24,8 @@
 //   8. IT_RENEWAL: sửa nhãn "itRenewalName" -> hiện đúng trên #itRenewalCreateForm (fallback placeholder,
 //      không có <label> riêng), KHÔNG lem placeholder sang itRenewalVendor liền kề (xác nhận đã vá đúng
 //      lỗi div-wrapping giống #licenseForm Đợt 1).
-//   9. OPERATION_EXECUTION_PERIOD: field "owiNewPeriodName" render ĐỘNG (chỉ có trong DOM khi form Tạo
-//      Kỳ Mới đang mở) -> sửa nhãn qua Biểu Mẫu, mở lại renderOperationExecutionPeriodsBox() (call site
-//      riêng vừa thêm), xác nhận placeholder mới hiện đúng.
-//   10. Không có nút/thao tác XOÁ nào cho trường mặc định ở cả 11 tab mới.
+//   9. (đã bỏ — OPERATION_EXECUTION_PERIOD/"Tạo Kỳ Mới" không còn tồn tại, xem chú thích ở đầu file.)
+//   10. Không có nút/thao tác XOÁ nào cho trường mặc định ở cả 10 tab mới.
 //   11. applyAllCoreFieldCustomizations() (gọi 1 lần sau load thật) áp đúng cho MỌI coreKey mới.
 //   12. TRAINING_CLASS: tcDocumentIds KHÔNG nằm trong CORE_FIELD_MANIFEST (loại trừ do xung đột với
 //       onTrainingClassModeChange() tự đổi nhãn theo #tcMode).
@@ -64,9 +63,11 @@ function startServer() {
   });
 }
 
+// 'OPERATION_EXECUTION_PERIOD' đã bỏ khỏi danh sách này (đợt "Danh Mục Đầu Tư + bỏ Tạo Kỳ" — coreKey +
+// tab Biểu Mẫu tương ứng không còn tồn tại nữa, xem CORE_FIELD_MANIFEST/FORM_TABS ở public/index.html).
 const NEW_TABS = [
   'OPERATION_ORDER', 'OPERATION_STORE_OPEN', 'OPERATION_REPAIR', 'OPERATION_WORK_ITEM',
-  'OPERATION_EXECUTION_PERIOD', 'TRAINING_CLASS', 'TRAINING_TEST', 'RECRUITMENT_JOB',
+  'TRAINING_CLASS', 'TRAINING_TEST', 'RECRUITMENT_JOB',
   'RECRUITMENT_REFERRAL', 'HR_FEEDBACK', 'IT_RENEWAL'
 ];
 
@@ -218,20 +219,11 @@ async function main() {
         otherPh === 'Nhà Cung Cấp', otherPh);
     }
 
-    // ---------- 9) OPERATION_EXECUTION_PERIOD: field render ĐỘNG, cần mở form trước rồi mới thấy trong
-    //             DOM -- xác nhận call site riêng trong renderOperationExecutionPeriodsBox() hoạt động ----------
-    editDefaultFieldLabel('OPERATION_EXECUTION_PERIOD', 'OPERATION_EXECUTION_PERIOD', 'owiNewPeriodName', 'Tên Kỳ (ĐÃ SỬA)');
-    {
-      const beforeOpen = document.getElementById('owiNewPeriodName');
-      check('OPERATION_EXECUTION_PERIOD: owiNewPeriodName KHÔNG có trong DOM khi form đang đóng (render động, chưa render lần nào)',
-        !beforeOpen);
-      toggleOperationExecutionPeriodCreateForm(true); // mở form -> render lại, gọi applyCoreFieldCustomizations('OPERATION_EXECUTION_PERIOD') tại chỗ
-      const ph = document.getElementById('owiNewPeriodName')?.placeholder || '';
-      check('OPERATION_EXECUTION_PERIOD: sau khi mở form, placeholder đã phản ánh đúng nhãn admin đã sửa (call site riêng hoạt động)',
-        ph.includes('Tên Kỳ (ĐÃ SỬA)'), ph);
-    }
+    // ---------- 9) OPERATION_EXECUTION_PERIOD: BỎ HẲN (đợt "Danh Mục Đầu Tư + bỏ Tạo Kỳ") — coreKey +
+    //             tab Biểu Mẫu tương ứng đã xoá khỏi CORE_FIELD_MANIFEST/FORM_TABS cùng với form
+    //             "Tạo Kỳ Mới" ở public/index.html, không còn gì để kiểm ở đây nữa. ----------
 
-    // ---------- 10) Không có nút/thao tác XOÁ nào cho trường mặc định ở cả 11 tab mới ----------
+    // ---------- 10) Không có nút/thao tác XOÁ nào cho trường mặc định ở cả 10 tab mới ----------
     NEW_TABS.forEach(key => {
       activeFormTab = key;
       switchFormTab(key);

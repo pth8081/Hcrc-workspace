@@ -698,6 +698,157 @@ async function main() {
       }, recordId);
       assert(!result.ok, 'Phải bị chặn vì hồ sơ đã được xác nhận đưa vào sử dụng trước đó');
     });
+
+    // ===== Phần C: đợt "Danh Mục Đầu Tư + bỏ Tạo Kỳ" — không được xoá hồ sơ, vòng đời hiển thị mới,
+    //       sửa lại Danh mục đầu tư sau khi đã lưu, cột ngân sách =====
+    await run.run('Hồ sơ Mở mới/Sửa chữa siêu thị KHÔNG được xoá — kể cả admin', async () => {
+      await loginAs(page, ADMIN);
+      const r1 = await page.evaluate(async (id) => {
+        try { await callRecordAction('operationStoreOpenings', id, 'delete', {}); return { ok: true }; }
+        catch (err) { return { ok: false, message: err.message }; }
+      }, recordId);
+      assert(!r1.ok, 'Admin cũng phải bị chặn xoá operationStoreOpenings');
+      assertIncludes(r1.message, 'không được phép xoá', 'Thông báo lỗi phải nêu rõ lý do');
+      const r2 = await page.evaluate(async (id) => {
+        try { await callRecordAction('operationRepairs', id, 'delete', {}); return { ok: true }; }
+        catch (err) { return { ok: false, message: err.message }; }
+      }, repairRecordId);
+      assert(!r2.ok, 'Admin cũng phải bị chặn xoá operationRepairs');
+    });
+
+    await run.run('Vòng đời hiển thị mới (operationRecordStageStatus, cùng logic computeOperationRecordStageStatus phía server) — hồ sơ recordId đã DONG_HO_SO', async () => {
+      const stage = await page.evaluate((id) => {
+        const o = DB.operationStoreOpenings.find(x => x.id === id);
+        return operationRecordStageStatus('operationStoreOpenings', o);
+      }, recordId);
+      assertEqual(stage, 'DONG_HO_SO', 'Hồ sơ đã Xác Nhận Đưa Vào Sử Dụng phải ở stage DONG_HO_SO');
+    });
+
+    await run.run('Vòng đời hiển thị mới — hồ sơ MỚI TẠO (chưa có gì) phải là LAP, sau khi lưu Danh mục đầu tư (chưa tạo việc) phải là DANH_MUC_DAU_TU', async () => {
+      await loginAs(page, CREATOR);
+      const newId = await page.evaluate(async (picUsername) => {
+        const res = await callCreateAction('operationStoreOpenings', {
+          storeName: 'Siêu thị Test Vòng Đời', address: 'Y', area: 10, estimatedBudget: 5000000, expectedOpenDate: '', personInCharge: picUsername, note: ''
+        });
+        DB.operationStoreOpenings.push(res.item);
+        return res.item.id;
+      }, PERSON_IN_CHARGE.username);
+      const stageAfterCreate = await page.evaluate((id) => {
+        const o = DB.operationStoreOpenings.find(x => x.id === id);
+        return operationRecordStageStatus('operationStoreOpenings', o);
+      }, newId);
+      assertEqual(stageAfterCreate, 'LAP', 'Hồ sơ vừa lập, chưa có Danh mục đầu tư -> stage LAP ("Hồ sơ đã lập")');
+
+      await loginAs(page, ESTIMATOR);
+      await page.evaluate(async (id) => {
+        const res = await callRecordAction('operationStoreOpenings', id, 'estimate/submit', { items: [{ content: 'Hạng mục A', amount: 1000000, description: '', note: '' }] });
+        const idx = DB.operationStoreOpenings.findIndex(x => x.id === id);
+        DB.operationStoreOpenings[idx] = res.item;
+      }, newId);
+      const stageAfterEstimate = await page.evaluate((id) => {
+        const o = DB.operationStoreOpenings.find(x => x.id === id);
+        return operationRecordStageStatus('operationStoreOpenings', o);
+      }, newId);
+      assertEqual(stageAfterEstimate, 'DANH_MUC_DAU_TU', 'Đã lưu Danh mục đầu tư, chưa tạo công việc -> stage DANH_MUC_DAU_TU');
+
+      await loginAs(page, EXECUTOR);
+      const workId = await page.evaluate(async (id) => {
+        const res = await callRecordCreate('operationWorkItems', { sourceType: 'OPERATION_STORE_OPENING', sourceId: id, parentWorkItemId: null, title: 'Việc test vòng đời' });
+        DB.operationWorkItems.push(res.item);
+        return res.item.id;
+      }, newId);
+      const stageAfterWorkItem = await page.evaluate((id) => {
+        const o = DB.operationStoreOpenings.find(x => x.id === id);
+        return operationRecordStageStatus('operationStoreOpenings', o);
+      }, newId);
+      assertEqual(stageAfterWorkItem, 'DANH_SACH_CONG_VIEC', 'Đã tạo ít nhất 1 công việc, chưa nghiệm thu xong -> stage DANH_SACH_CONG_VIEC');
+
+      await loginAs(page, EXECUTOR);
+      await page.evaluate(async (id) => {
+        let r = await callRecordAction('operationWorkItems', id, 'progress', { status: 'DANG_THUC_HIEN' });
+        let idx = DB.operationWorkItems.findIndex(x => x.id === id); DB.operationWorkItems[idx] = r.item;
+        r = await callRecordAction('operationWorkItems', id, 'progress', { status: 'DANG_NGHIEM_THU' });
+        idx = DB.operationWorkItems.findIndex(x => x.id === id); DB.operationWorkItems[idx] = r.item;
+      }, workId);
+      await loginAs(page, ACCEPTOR);
+      await page.evaluate(async (id) => {
+        const r = await callRecordAction('operationWorkItems', id, 'accept', { action: 'ACCEPT', reason: 'Đạt yêu cầu' });
+        const idx = DB.operationWorkItems.findIndex(x => x.id === id); DB.operationWorkItems[idx] = r.item;
+      }, workId);
+      const stageAfterAccept = await page.evaluate((id) => {
+        const o = DB.operationStoreOpenings.find(x => x.id === id);
+        return operationRecordStageStatus('operationStoreOpenings', o);
+      }, newId);
+      assertEqual(stageAfterAccept, 'NGHIEM_THU', 'Toàn bộ công việc đã Đã nghiệm thu -> stage NGHIEM_THU');
+
+      await loginAs(page, USE_CONFIRMER);
+      await page.evaluate(async (id) => {
+        const r = await callRecordAction('operationStoreOpenings', id, 'confirm-use', {});
+        const idx = DB.operationStoreOpenings.findIndex(x => x.id === id); DB.operationStoreOpenings[idx] = r.item;
+      }, newId);
+      const stageAfterConfirm = await page.evaluate((id) => {
+        const o = DB.operationStoreOpenings.find(x => x.id === id);
+        return operationRecordStageStatus('operationStoreOpenings', o);
+      }, newId);
+      assertEqual(stageAfterConfirm, 'DONG_HO_SO', 'Sau khi Xác Nhận Đưa Vào Sử Dụng -> stage DONG_HO_SO ("Đóng hồ sơ và đưa vào sử dụng")');
+    });
+
+    let resaveRecordId = null;
+    await run.run('Danh mục đầu tư ĐÃ LƯU (APPROVED) vẫn sửa/lưu lại được — id hạng mục giữ ổn định, KHÔNG tự tạo/xoá công việc Thực hiện (quyết định thiết kế)', async () => {
+      await loginAs(page, CREATOR);
+      resaveRecordId = await page.evaluate(async (picUsername) => {
+        const res = await callCreateAction('operationStoreOpenings', {
+          storeName: 'Siêu thị Test Sửa Danh Mục', address: 'Z', area: 10, estimatedBudget: 100000000, expectedOpenDate: '', personInCharge: picUsername, note: ''
+        });
+        DB.operationStoreOpenings.push(res.item);
+        return res.item.id;
+      }, PERSON_IN_CHARGE.username);
+
+      await loginAs(page, ESTIMATOR);
+      const firstSave = await page.evaluate(async (id) => {
+        const res = await callRecordAction('operationStoreOpenings', id, 'estimate/submit', {
+          items: [{ content: 'Hạng mục 1', amount: 10000000, description: '', note: '' }, { content: 'Hạng mục 2', amount: 20000000, description: '', note: '' }]
+        });
+        const idx = DB.operationStoreOpenings.findIndex(x => x.id === id); DB.operationStoreOpenings[idx] = res.item;
+        return res.item;
+      }, resaveRecordId);
+      assertEqual(firstSave.estimateStatus, 'APPROVED', 'Lần lưu đầu phải đi thẳng APPROVED');
+      assert(firstSave.estimateItems[0].id != null && firstSave.estimateItems[1].id != null, 'Mỗi hạng mục phải được gán id ổn định');
+      const id1 = firstSave.estimateItems[0].id;
+
+      // Sửa lại: GIỮ hạng mục 1 (gửi lại đúng id cũ), XOÁ hạng mục 2, THÊM hạng mục 3 mới.
+      const secondSave = await page.evaluate(async ({ id, id1 }) => {
+        const res = await callRecordAction('operationStoreOpenings', id, 'estimate/submit', {
+          items: [{ id: id1, content: 'Hạng mục 1', amount: 10000000, description: '', note: '' }, { content: 'Hạng mục 3 mới', amount: 5000000, description: '', note: '' }]
+        });
+        const idx = DB.operationStoreOpenings.findIndex(x => x.id === id); DB.operationStoreOpenings[idx] = res.item;
+        return res.item;
+      }, { id: resaveRecordId, id1 });
+      assertEqual(secondSave.estimateStatus, 'APPROVED', 'Sửa lại lần 2 (từ APPROVED) vẫn phải ra APPROVED, KHÔNG bị chặn "ngõ cụt"');
+      assertEqual(secondSave.estimateItems.length, 2, 'Phải còn đúng 2 hạng mục sau khi sửa (giữ 1, xoá 1, thêm 1)');
+      assertEqual(secondSave.estimateItems[0].id, id1, 'Hạng mục giữ nguyên phải GIỮ ĐÚNG id cũ (không sinh id mới)');
+      assertEqual(secondSave.estimateItems[1].content, 'Hạng mục 3 mới', 'Hạng mục mới thêm phải xuất hiện đúng nội dung');
+      assertEqual(secondSave.estimateTotalAmount, 15000000, 'Tổng phải tính lại đúng theo danh sách MỚI (10tr + 5tr)');
+    });
+
+    await run.run('Cột "Ngân sách phê duyệt"/"Ngân sách còn lại" ở bảng Danh mục đầu tư tính đúng (Ngân sách còn lại = Ngân sách phê duyệt − Tổng danh mục đầu tư)', async () => {
+      await loginAs(page, ESTIMATOR);
+      await page.evaluate(() => {
+        switchTab('vanHanh'); setVanHanhSubTab('STORE'); setOperationStoreSubTab('ESTIMATE');
+      });
+      const row = await page.evaluate((id) => {
+        const o = DB.operationStoreOpenings.find(x => x.id === id);
+        const tr = [...document.querySelectorAll('#operationEstimateTableBody tr')].find(r => r.textContent.includes('Siêu thị Test Sửa Danh Mục'));
+        const cells = tr ? [...tr.querySelectorAll('td')].map(td => td.textContent.trim()) : null;
+        return { cells, estimatedBudget: o.estimatedBudget, estimateTotalAmount: o.estimateTotalAmount };
+      }, resaveRecordId);
+      assert(row.cells, 'Phải tìm thấy đúng dòng của hồ sơ trong bảng Danh mục đầu tư');
+      // cells: [Mã, Loại, Tên, Phòng ban, Ngân Sách Phê Duyệt, Tổng Danh Mục Đầu Tư, Ngân Sách Còn Lại, Trạng thái, Thao tác]
+      assertIncludes(row.cells[4], '100.000.000', 'Cột Ngân Sách Phê Duyệt phải hiện đúng estimatedBudget');
+      assertIncludes(row.cells[5], '15.000.000', 'Cột Tổng Danh Mục Đầu Tư phải hiện đúng estimateTotalAmount MỚI sau khi sửa (15tr)');
+      const expectedRemaining = row.estimatedBudget - row.estimateTotalAmount;
+      assertIncludes(row.cells[6], expectedRemaining.toLocaleString('vi-VN'), 'Cột Ngân Sách Còn Lại phải = Ngân sách phê duyệt − Tổng danh mục đầu tư');
+    });
   } finally {
     await browser.close();
     server.close();

@@ -43,6 +43,7 @@ async function seedDefaults() {
   await migrateAllLegacyCollections();
   await migrateDefaultStorePermGroup();
   await migratePendingActualBudgetEntries();
+  await migrateStuckOperationApprovalStatuses();
 }
 
 // Trước đây mật khẩu lưu plaintext (cả trong seed mặc định lẫn dữ liệu do admin tạo trước khi có
@@ -171,6 +172,47 @@ async function migratePendingActualBudgetEntries() {
     });
   }
   console.log(`   ↳ Đã di trú ${stuck.length} bản Ngân Sách Thực Hiện (ACTUAL) còn kẹt ở PENDING sang APPROVED (bỏ phê duyệt cho ACTUAL).`);
+}
+
+// Vận Hành > Siêu Thị (operationStoreOpenings/operationRepairs) — "mỗi khi lập không cần phê duyệt"
+// (Mục H) bỏ qua bước duyệt cho CẢ hồ sơ chính LẪN Danh mục đầu tư (estimateStatus) ngay lúc tạo/lưu,
+// nhưng bản ghi đã LỠ gửi duyệt TRƯỚC khi Mục H tồn tại (còn kẹt ở PENDING chờ 1 phê duyệt sẽ KHÔNG BAO
+// GIỜ tới nữa vì không còn ai/đường nào set PENDING mới) sẽ bị kẹt VĨNH VIỄN — hồ sơ chính kẹt PENDING
+// khiến badge hiển thị sai "đang chờ duyệt" dù thực chất đã coi như xong; Danh mục đầu tư kẹt PENDING
+// nghiêm trọng hơn: submitOperationEstimate() chỉ nhận lại từ DRAFT/APPROVED, resetOperationEstimateToDraft()
+// chỉ nhận từ REJECTED — KHÔNG có đường thoát nào từ PENDING, tức không bao giờ lập được công việc Thực
+// hiện (đây chính là gốc rễ "Danh mục cv trong thực hiện đang lỗi ko lập và tạo được" mà người dùng báo).
+// Di trú 1 LẦN, chuyển thẳng sang APPROVED (đúng đích mà 2 hàm trên giờ đi tới), ghi SYSTEM_MIGRATION —
+// cùng khuôn/lý do migratePendingActualBudgetEntries() ngay trên. Idempotent — chạy mỗi lần khởi động,
+// chỉ còn tác dụng khi thực sự còn bản ghi PENDING (rất hiếm sau lần chạy đầu).
+async function migrateStuckOperationApprovalStatuses() {
+  for (const collection of ['operationStoreOpenings', 'operationRepairs']) {
+    const records = await getAllRecords(collection);
+    const stuck = records.filter(r => r.status === 'PENDING' || r.estimateStatus === 'PENDING');
+    for (const rec of stuck) {
+      await withLockedRecordById(collection, rec.id, (item) => {
+        const note = { step: 0, approver: 'Hệ Thống', username: 'system', action: 'SYSTEM_MIGRATION',
+          comment: 'Module Vận Hành > Siêu Thị không còn qua phê duyệt — tự động chuyển từ "Chờ duyệt" sang "Đã duyệt".',
+          time: nowVNForMigration() };
+        if (item.status === 'PENDING') {
+          item.history = item.history || [];
+          item.history.push(note);
+          item.status = 'APPROVED';
+          item.currentStep = 0;
+        }
+        if (item.estimateStatus === 'PENDING') {
+          item.estimateHistory = item.estimateHistory || [];
+          item.estimateHistory.push(note);
+          item.estimateStatus = 'APPROVED';
+          item.estimateCurrentStep = 0;
+        }
+        return item;
+      });
+    }
+    if (stuck.length) {
+      console.log(`   ↳ Đã di trú ${stuck.length} hồ sơ ${collection} còn kẹt ở PENDING (hồ sơ chính/danh mục đầu tư) sang APPROVED (bỏ phê duyệt Vận Hành > Siêu Thị).`);
+    }
+  }
 }
 
 // Cùng định dạng với nowVN() ở lib/recordActions.js (không export sẵn cho seedDefaults.js nên lặp lại
