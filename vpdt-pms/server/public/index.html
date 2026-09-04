@@ -319,7 +319,7 @@ table { display: block; overflow-x: auto; max-width: 100%; }
 .loginpage-btn:disabled { opacity: .65; cursor: not-allowed; transform: none; }
 .loginpage-btn svg { width: 16px; height: 16px; }
 
-/* Dòng "đã nhớ tài khoản" thay ô gõ Tên đăng nhập trên thiết bị đã đăng ký vân tay/Face ID trước đó
+/* Dòng "đã nhớ tài khoản" thay ô gõ Tên đăng nhập trên thiết bị đã đăng nhập thành công lần gần nhất
    (xem initRememberedLoginUser()/switchLoginUser() ở script cuối trang) — cùng tông màu xanh với
    .loginpage-btn-secondary cho nhất quán, không phải input nên không dùng .loginpage-input-wrap.
    .loginpage-remembered-user.hidden bắt buộc phải khai riêng (không trông cậy mỗi .hidden của
@@ -727,16 +727,17 @@ input[data-sdd-list] {
         </div>
 
         <form data-op-submit="login" data-op-prevent-default="1">
-          <!-- Thiết bị đã có tài khoản "được nhớ" từ lần đăng ký vân tay/Face ID trước (xem
-               initRememberedLoginUser()) — thay ô gõ Tên đăng nhập bằng dòng hiện sẵn tên + nút "Đăng nhập
-               tên khác" để đổi tài khoản khi cần (máy dùng chung). Mặc định ẩn, JS tự quyết định hiện cái
-               nào lúc tải trang. -->
+          <!-- Thiết bị đã "nhớ" một tài khoản từ lần đăng nhập THÀNH CÔNG gần nhất — bằng bất kỳ phương
+               thức nào (mật khẩu, mật khẩu+TOTP, hay vân tay/Face ID), xem proceedAfterAuth()/
+               initRememberedLoginUser() ở script cuối trang — thay ô gõ Tên đăng nhập bằng dòng hiện sẵn
+               tên đầy đủ + nút "Tài khoản khác" để đổi tài khoản khi cần (máy dùng chung). Mặc định ẩn,
+               JS tự quyết định hiện cái nào lúc tải trang. -->
           <div id="loginRememberedUserWrap" class="loginpage-remembered-user hidden">
             <div class="loginpage-remembered-user-info">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><circle cx="12" cy="8" r="3.5"/><path d="M4.5 20c1.4-3.6 4.4-5.5 7.5-5.5s6.1 1.9 7.5 5.5"/></svg>
               <span id="loginRememberedUserName" class="loginpage-remembered-user-name"></span>
             </div>
-            <button type="button" id="btnSwitchLoginUser" data-op="switchLoginUser" class="loginpage-remembered-user-switch">Đăng nhập tên khác</button>
+            <button type="button" id="btnSwitchLoginUser" data-op="switchLoginUser" class="loginpage-remembered-user-switch">Tài khoản khác</button>
           </div>
           <div id="loginUserFieldWrap" class="loginpage-field">
             <label for="txtUser">Tên đăng nhập</label>
@@ -796,8 +797,6 @@ input[data-sdd-list] {
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M12 2a5 5 0 0 0-5 5v1.2M12 2a5 5 0 0 1 5 5v1.2M7 8.2a5 5 0 0 0-2 4v1.3a9 9 0 0 0 3.2 6.9M17 8.2a5 5 0 0 1 2 4v1.3c0 1.6-.4 3.1-1.1 4.4M9 8.5a3 3 0 0 1 6 0v1.8M9 8.5v3.8a3 3 0 0 0 1.6 2.7M15 10.3v3a5 5 0 0 1-1.6 3.7"/></svg>
           Đăng nhập bằng vân tay / Face ID
         </button>
-
-        <div class="loginpage-card-foot">Quên mật khẩu hoặc chưa có tài khoản? Liên hệ Phòng CNTT.</div>
       </div>
     </div>
   </div>
@@ -11232,8 +11231,10 @@ async function registerBiometricDevice() {
     document.getElementById('pfWebauthnDeviceLabel').value = '';
     await renderWebauthnDeviceList();
     // Nhớ tài khoản này cho MÁY hiện tại — lần sau mở trang đăng nhập sẽ tự ẩn ô gõ Tên đăng nhập, điền
-    // sẵn luôn (xem initRememberedLoginUser() ở khối "ĐĂNG NHẬP BẰNG VÂN TAY").
-    setRememberedWebauthnUsername(currentUser.username);
+    // sẵn luôn (xem initRememberedLoginUser() ở khối "ĐĂNG NHẬP BẰNG VÂN TAY"). proceedAfterAuth() đã tự
+    // làm việc này ở MỌI lượt đăng nhập thành công rồi — gọi thêm ở đây vô hại (ghi đè cùng dữ liệu),
+    // giữ lại để không đụng logic đăng ký thiết bị đang chạy ổn.
+    setRecognizedLogin(currentUser.username, currentUser.name);
     alert('✅ Đã đăng ký thiết bị này — lần sau đăng nhập/xác thực khi Duyệt có thể dùng vân tay/Face ID.');
   } catch (err) {
     alert('⛔ Không thể kết nối tới máy chủ: ' + err.message);
@@ -11255,7 +11256,7 @@ async function deleteBiometricDevice(id) {
     // trên máy này (nếu không, màn đăng nhập vẫn ẩn ô gõ Tên đăng nhập dù đăng nhập vân tay giờ chắc chắn
     // thất bại). Chỉ xoá khi biết CHẮC danh sách rỗng (remaining=[]) — bỏ qua nếu tải lại danh sách lỗi
     // (remaining=undefined), tránh xoá nhầm lúc mạng chập chờn.
-    if (remaining && remaining.length === 0) setRememberedWebauthnUsername(null);
+    if (remaining && remaining.length === 0) setRecognizedLogin(null);
   } catch (err) {
     alert('⛔ Không thể kết nối tới máy chủ: ' + err.message);
   }
@@ -11448,33 +11449,52 @@ if (canShowBiometricLogin()) {
 
 let biometricLoginInFlight = false;
 
-// Thiết bị "nhớ" tài khoản đã đăng ký vân tay/Face ID — thuần localStorage phía trình duyệt (không phải
-// dữ liệu WebAuthn thật, chỉ là gợi ý UI: máy NÀY từng đăng ký thành công cho user NÀY). Set ở
-// registerBiometricDevice() lúc đăng ký thành công, xoá khi gỡ hết thiết bị (deleteBiometricDevice()) —
-// KHÔNG xoá lúc logout(), vì mục đích là nhớ xuyên suốt nhiều lượt đăng nhập trên cùng máy.
-const REMEMBERED_WEBAUTHN_USER_KEY = 'vpdt_webauthn_username';
-function getRememberedWebauthnUsername() {
-  try { return localStorage.getItem(REMEMBERED_WEBAUTHN_USER_KEY) || ''; } catch (e) { return ''; }
-}
-function setRememberedWebauthnUsername(username) {
+// Thiết bị "nhớ" tài khoản đã đăng nhập thành công lần gần nhất (kiểu app SeABank) — thuần localStorage
+// phía trình duyệt (không phải dữ liệu WebAuthn thật, chỉ là gợi ý UI: máy NÀY từng đăng nhập thành công
+// cho user NÀY, bằng BẤT KỲ phương thức nào — mật khẩu, mật khẩu+TOTP, hay vân tay/Face ID). Ghi ở đầu
+// proceedAfterAuth() (điểm hội tụ chung của cả 3 luồng đăng nhập) và ở registerBiometricDevice() lúc
+// đăng ký vân tay thành công; xoá khi gỡ hết thiết bị vân tay (deleteBiometricDevice()) — KHÔNG xoá lúc
+// logout(), vì mục đích là nhớ xuyên suốt nhiều lượt đăng nhập trên cùng máy.
+// Giữ NGUYÊN tên key localStorage cũ (đã có dữ liệu người dùng thật) dù không còn giới hạn riêng WebAuthn.
+const RECOGNIZED_LOGIN_KEY = 'vpdt_webauthn_username';
+function getRecognizedLogin() {
   try {
-    if (username) localStorage.setItem(REMEMBERED_WEBAUTHN_USER_KEY, username);
-    else localStorage.removeItem(REMEMBERED_WEBAUTHN_USER_KEY);
+    const raw = localStorage.getItem(RECOGNIZED_LOGIN_KEY);
+    if (!raw) return null;
+    try {
+      const parsed = JSON.parse(raw);
+      if (parsed && typeof parsed === 'object' && parsed.username) {
+        return { username: parsed.username, name: parsed.name || parsed.username };
+      }
+      return null;
+    } catch (e) {
+      // Tương thích ngược: dữ liệu ghi TRƯỚC đợt này là raw username string (không phải JSON) —
+      // JSON.parse throw, coi thẳng chuỗi cũ đó là username, chưa có tên đầy đủ để hiện.
+      return { username: raw, name: raw };
+    }
+  } catch (e) { return null; }
+}
+function setRecognizedLogin(username, name) {
+  try {
+    if (username) localStorage.setItem(RECOGNIZED_LOGIN_KEY, JSON.stringify({ username, name: name || username }));
+    else localStorage.removeItem(RECOGNIZED_LOGIN_KEY);
   } catch (e) { /* Safari duyệt riêng tư/chặn localStorage — bỏ qua, không ảnh hưởng đăng nhập bằng mật khẩu */ }
 }
 
-// Ẩn ô gõ Tên đăng nhập, thay bằng dòng "Xin chào, <tên>" + nút "Đăng nhập tên khác" khi máy này đã có
-// tài khoản được nhớ — điền sẵn #txtUser để cả login() (mật khẩu) lẫn loginWithBiometric() dùng được
-// ngay, không cần gõ lại. Chỉ áp dụng khi trình duyệt còn hỗ trợ WebAuthn (nếu không, dù có tên nhớ sẵn
-// vẫn hiện ô nhập bình thường — tránh kẹt không đăng nhập được nếu đổi trình duyệt/thiết bị mất hỗ trợ).
+// Ẩn ô gõ Tên đăng nhập, thay bằng dòng hiện tên đầy đủ + nút "Tài khoản khác" khi máy này đã "nhớ" một
+// tài khoản (đã đăng nhập thành công ít nhất 1 lần, bằng BẤT KỲ phương thức nào) — điền sẵn #txtUser để
+// cả login() (mật khẩu) lẫn loginWithBiometric() dùng được ngay, không cần gõ lại. Điều kiện hiện UI này
+// ĐỘC LẬP với việc trình duyệt có hỗ trợ WebAuthn hay không (canShowBiometricLogin() chỉ quyết định
+// riêng việc hiện/ẩn nút vân tay #btnBiometricLogin) — có tài khoản để nhớ và trình duyệt có vân tay là
+// 2 việc khác nhau, không nên gộp điều kiện.
 // Gọi lại được nhiều lần (lúc tải trang VÀ sau logout()) nên phải tự đảo ngược đúng trạng thái mỗi lần.
 function initRememberedLoginUser() {
   const wrap = document.getElementById('loginRememberedUserWrap');
   const fieldWrap = document.getElementById('loginUserFieldWrap');
-  const remembered = getRememberedWebauthnUsername();
-  if (remembered && canShowBiometricLogin()) {
-    document.getElementById('txtUser').value = remembered;
-    document.getElementById('loginRememberedUserName').textContent = remembered;
+  const recognized = getRecognizedLogin();
+  if (recognized) {
+    document.getElementById('txtUser').value = recognized.username;
+    document.getElementById('loginRememberedUserName').textContent = recognized.name || recognized.username;
     wrap.classList.remove('hidden');
     fieldWrap.classList.add('hidden');
   } else {
@@ -11484,9 +11504,9 @@ function initRememberedLoginUser() {
 }
 initRememberedLoginUser();
 
-// Bấm "Đăng nhập tên khác" — hiện lại ô nhập thủ công (trống, focus sẵn) để đăng nhập tài khoản khác
-// TRÊN CÙNG thiết bị này (máy dùng chung). KHÔNG xoá tên đã nhớ trong localStorage — chỉ đổi tạm hiển
-// thị cho lượt đăng nhập này, tải lại trang sau đó vẫn quay về đúng tài khoản đã nhớ như cũ.
+// Bấm "Tài khoản khác" — hiện lại ô nhập thủ công (trống, focus sẵn) để đăng nhập tài khoản khác
+// TRÊN CÙNG thiết bị này (máy dùng chung). KHÔNG xoá tài khoản đã nhớ trong localStorage — chỉ đổi tạm
+// hiển thị cho lượt đăng nhập này, tải lại trang sau đó vẫn quay về đúng tài khoản đã nhớ như cũ.
 function switchLoginUser() {
   document.getElementById('loginRememberedUserWrap').classList.add('hidden');
   document.getElementById('loginUserFieldWrap').classList.remove('hidden');
@@ -11853,6 +11873,11 @@ async function submitTotpLoginStep() {
 // (xem lib/totp.js/lib/auth.js blockIfMustChangePassword — bắt buộc, không có ngoại lệ).
 async function proceedAfterAuth(user) {
   currentUser = user;
+  // Nhớ tài khoản này cho MÁY hiện tại (kiểu app SeABank) — áp dụng cho MỌI lượt đăng nhập thành công
+  // (mật khẩu thường, mật khẩu+TOTP bước 2, vân tay/Face ID) vì đây là điểm hội tụ chung của cả 3 luồng,
+  // KHÔNG chỉ riêng lúc đăng ký vân tay như trước. Lần sau mở trang sẽ tự ẩn ô gõ Tên đăng nhập, hiện tên
+  // đầy đủ + nút "Tài khoản khác" (xem initRememberedLoginUser()/getRecognizedLogin()).
+  setRecognizedLogin(user.username, user.name);
   if (user.mustChangePassword) {
     hideBootSplash();
     document.getElementById('loginSection').classList.add('hidden');

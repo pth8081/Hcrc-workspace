@@ -1,11 +1,64 @@
 # Phiên bản hiện tại
 
-**6.5** — đã merge vào `main` (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge
+**6.6** — đã merge vào `main` (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge
 góc màn hình + `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần
 kiểu `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. Đúng theo quy tắc MINOR chạy 0-9 trong
-`CLAUDE.md`: sau `6.4` tăng MINOR lên `6.5`.
+`CLAUDE.md`: sau `6.5` tăng MINOR lên `6.6`.
 
-## Cập nhật gần nhất — Vá 3 lỗi thiếu validate picker + bỏ dấu tìm kiếm toàn hệ thống + Task module đổi sang picker chuẩn
+## Cập nhật gần nhất — Đăng nhập: nhớ tài khoản trên thiết bị (kiểu SeABank) — ẩn ô gõ tên, "Tài khoản khác", bỏ "Quên mật khẩu"
+
+Màn hình đăng nhập (`#loginSection`, `public/index.html`) đổi theo flow app SeABank tham chiếu: sau lần
+đăng nhập **thành công đầu tiên** trên 1 thiết bị — bằng **bất kỳ phương thức nào** (mật khẩu thường,
+mật khẩu + TOTP bước 2, hay vân tay/Face ID) — hệ thống tự "nhớ" tài khoản đó (username + tên hiển thị)
+trong `localStorage` của trình duyệt. Lần mở lại sau đó, màn đăng nhập tự ẩn hẳn ô gõ Tên đăng nhập, chỉ
+hiện tên đầy đủ người dùng + nút **"Tài khoản khác"** (đổi sang tài khoản khác khi cần, máy dùng chung)
++ ô Mật khẩu như bình thường. Bỏ hẳn dòng footer "Quên mật khẩu hoặc chưa có tài khoản? Liên hệ Phòng
+CNTT.".
+
+App trước đó đã có sẵn 1 phần cơ chế này nhưng bị giới hạn hẹp — chỉ ghi nhớ lúc người dùng chủ động vào
+Hồ Sơ Cá Nhân đăng ký vân tay/Face ID, và chỉ hiện UI "đã nhớ" khi trình duyệt hỗ trợ WebAuthn (gộp nhầm
+2 điều kiện độc lập). Đợt này MỞ RỘNG cơ chế có sẵn ra áp dụng cho MỌI lượt đăng nhập thành công, và tách
+đúng 2 điều kiện hiển thị UI:
+
+- **Mở rộng việc "nhớ" ra mọi lượt đăng nhập, lưu cả tên hiển thị** — đổi định dạng lưu trong
+  `localStorage` từ raw string sang JSON `{username, name}`. Đổi tên hàm cho đúng ngữ nghĩa mới:
+  `getRememberedWebauthnUsername()`/`setRememberedWebauthnUsername()` → `getRecognizedLogin()`/
+  `setRecognizedLogin(username, name)` — **giữ NGUYÊN key `localStorage`** (`vpdt_webauthn_username`) để
+  không mất dữ liệu đã lưu trên máy người dùng thật. `getRecognizedLogin()` bọc try/catch quanh
+  `JSON.parse`: nếu giá trị cũ trong `localStorage` là raw string (định dạng TRƯỚC đợt này), parse lỗi
+  thì coi thẳng chuỗi đó là username (fallback `{username: raw, name: raw}`) — tương thích ngược, không
+  vỡ trạng thái "đã nhớ" của thiết bị đang dùng. Gọi `setRecognizedLogin(user.username, user.name)` ngay
+  đầu `proceedAfterAuth(user)` — điểm hội tụ chung của cả 3 luồng đăng nhập (`login()`,
+  `submitTotpLoginStep()`, `loginWithBiometric()`) nên chỉ cần sửa đúng 1 chỗ.
+- **Tách điều kiện hiển thị UI "đã nhớ" khỏi việc trình duyệt có hỗ trợ WebAuthn hay không** —
+  `initRememberedLoginUser()` giờ chỉ còn phụ thuộc "có tài khoản đã nhớ" (bỏ `&& canShowBiometricLogin()`
+  khỏi điều kiện hiện UI); nút vân tay/Face ID vẫn ẩn/hiện độc lập theo `canShowBiometricLogin()` như cũ.
+  Dòng hiển thị tên ưu tiên `recognized.name || recognized.username` (tên đầy đủ, fallback username cho
+  dữ liệu cũ chưa có tên).
+- **HTML**: đổi label nút `#btnSwitchLoginUser` từ "Đăng nhập tên khác" → "Tài khoản khác" (giữ nguyên
+  `data-op="switchLoginUser"`, không đụng CSP delegation).
+- **Bỏ hẳn "Quên mật khẩu"**: xoá dòng `<div class="loginpage-card-foot">Quên mật khẩu hoặc chưa có tài
+  khoản? Liên hệ Phòng CNTT.</div>` ở footer màn đăng nhập.
+
+**Demo Playwright thật** (server + SQL Server thật, tài khoản demo non-admin `totpEnabled:false`, KHÔNG
+dùng admin+TOTP theo pattern tránh bug 401 đã biết): xoá `localStorage` (thiết bị mới) → xác nhận hiện ô
+gõ tên bình thường → đăng nhập bằng MẬT KHẨU thường → tải lại trang sau khi logout → xác nhận đúng UI
+"đã nhớ" (ẩn ô gõ tên, hiện TÊN ĐẦY ĐỦ, nút "Tài khoản khác") → bấm "Tài khoản khác" → ô gõ tên hiện lại
+trống, focus → gõ lại tên cũ đăng nhập lại vẫn hoạt động → xác nhận footer không còn "Quên mật khẩu" →
+đăng ký 1 thiết bị vân tay ảo (CDP virtual authenticator) → logout/tải lại → UI "đã nhớ" + nút vân tay
+đều hiện đúng, đăng nhập vân tay vẫn hoạt động với tài khoản đã nhớ → test tương thích ngược: set thủ
+công `localStorage.setItem('vpdt_webauthn_username', 'someuser')` (raw string định dạng CŨ) rồi tải lại
+→ không vỡ, UI "đã nhớ" vẫn hiện đúng (hiển thị = username vì dữ liệu cũ không có tên đầy đủ). Toàn bộ
+các bước đều PASS. Dọn tài khoản demo sau khi test xong.
+
+**Regression**: 46/46 file `tests/test-*.js` PASS (bao gồm 2 file known-flaky
+`test-audit-fixes-batch1.js`/`test-audit-round2-cluster1.js`, xác nhận PASS qua log dù không tự thoát
+tiến trình).
+
+**Deploy-impact**: KHÔNG đổi `sql/schema.sql`, KHÔNG thêm biến môi trường mới, KHÔNG thêm `dependencies`
+mới — chỉ sửa `public/index.html` (client thuần). Chỉ cần copy code + `pm2 restart`.
+
+## Trước đó — Vá 3 lỗi thiếu validate picker + bỏ dấu tìm kiếm toàn hệ thống + Task module đổi sang picker chuẩn
 
 4 mục sửa lỗi/cải thiện đã research và duyệt phương án trước:
 
