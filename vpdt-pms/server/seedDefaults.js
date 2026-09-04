@@ -16,6 +16,12 @@ const KNOWN_DEFAULT_PASSWORDS = ['123456'];
 
 async function seedDefaults() {
   const pool = await getPool();
+  // PHẢI chạy TRƯỚC vòng lặp seed mặc định bên dưới — vòng lặp đó sẽ tự tạo row "vppExcludedJobTitles"
+  // rỗng ([]) cho MỌI DB (kể cả DB đã tồn tại lâu năm, chưa từng có key này) ngay khi thấy key thiếu
+  // trong DEFAULTS, khiến hàm này không còn phân biệt được "chưa từng tồn tại" (cần di trú dữ liệu cũ)
+  // với "đã tồn tại nhưng rỗng" (admin xoá hết/chưa cấu hình gì thật) nếu chạy sau. Xem chi tiết ở
+  // migrateVppExcludedJobTitles() bên dưới.
+  await migrateVppExcludedJobTitles(pool);
   for (const key of Object.keys(DEFAULTS)) {
     const existing = await pool.request()
       .input('k', sql.NVarChar(100), key)
@@ -109,6 +115,33 @@ async function migrateDefaultStorePermGroup() {
   };
   await setAppDataValue('permGroups', [...groups, seeded]);
   console.log('   ↳ Đã thêm Nhóm Phân Quyền mặc định "Nhân Viên Siêu Thị" (scope STORE).');
+}
+
+// Di trú "Nhóm Không Cấp Văn Phòng Phẩm" từ vppExcludeGroups[] (DẠNG CŨ — nhiều nhóm đặt tên tự do,
+// mỗi nhóm mang 1 danh sách chức danh, user còn phải được gán thủ công vào từng nhóm) sang
+// vppExcludedJobTitles[] (DẠNG MỚI — 1 mảng chuỗi phẳng, cùng khuôn workflowParticipatingDepts, xem
+// isUserVppExcluded() ở index.html). CHỈ chạy đúng 1 lần trên mỗi DB: kiểm tra TRỰC TIẾP bằng SQL xem
+// row "vppExcludedJobTitles" đã tồn tại trong dbo.AppData hay chưa (giống hệt cách vòng lặp DEFAULTS ở
+// seedDefaults() kiểm tra) — PHẢI tự kiểm tra riêng thay vì dùng getAppDataValue()==null, vì hàm này
+// bắt buộc phải chạy TRƯỚC vòng lặp đó (xem seedDefaults()) nên tại thời điểm gọi, row chắc chắn CHƯA
+// được vòng lặp tạo). Nếu chưa từng tồn tại: gộp (union, khử trùng) toàn bộ jobTitles[] của MỌI nhóm
+// trong vppExcludeGroups[] hiện có thành giá trị khởi tạo — không để mất cấu hình admin đã lưu trước
+// đó dù DB hoàn toàn mới (vppExcludeGroups rỗng/chưa có) vẫn ra mảng rỗng, đúng ý "khởi tạo lần đầu".
+// key "vppExcludeGroups" + field user.vppExcludeGroupIds vẫn giữ nguyên trong CSDL sau di trú này,
+// không xoá — chỉ đơn giản không còn nơi nào trong code mới đọc/ghi tới 2 chỗ đó nữa.
+async function migrateVppExcludedJobTitles(pool) {
+  const existing = await pool.request()
+    .input('k', sql.NVarChar(100), 'vppExcludedJobTitles')
+    .query('SELECT 1 FROM dbo.AppData WHERE DataKey = @k');
+  if (existing.recordset.length > 0) return; // đã di trú/seed rồi (kể cả admin đã lưu qua UI mới)
+
+  const oldGroups = await getAppDataValue('vppExcludeGroups');
+  const unioned = [...new Set(
+    (Array.isArray(oldGroups) ? oldGroups : [])
+      .flatMap(g => (Array.isArray(g?.jobTitles) ? g.jobTitles : []))
+  )];
+  await setAppDataValue('vppExcludedJobTitles', unioned);
+  console.log(`   ↳ Di trú "Nhóm Không Cấp Văn Phòng Phẩm" (vppExcludeGroups -> vppExcludedJobTitles, ${unioned.length} chức danh).`);
 }
 
 module.exports = { seedDefaults };

@@ -4773,11 +4773,6 @@ input[data-sdd-list] {
           <div id="uPermGroupsChecklist" class="flex flex-wrap gap-x-4 gap-y-1 max-h-28 overflow-y-auto border rounded p-2 bg-gray-50"></div>
         </div>
 
-        <div class="bg-white p-3 rounded border">
-          <label class="block text-xs font-semibold text-gray-600 mb-1">Nhóm Quyền Đặc Biệt (chọn được nhiều nhóm cùng lúc)</label>
-          <div id="uVppExcludeGroupsChecklist" class="flex flex-wrap gap-x-4 gap-y-1 max-h-28 overflow-y-auto border rounded p-2 bg-gray-50"></div>
-        </div>
-
         <div id="pendingNewUsersSection" class="hidden bg-white p-3 rounded border border-amber-300">
           <div class="flex items-center justify-between mb-2 flex-wrap gap-2">
             <h4 class="font-bold text-sm text-amber-800">📋 Danh Sách Người Dùng Chờ Lưu (<span id="pendingNewUsersCount">0</span>)</h4>
@@ -5367,12 +5362,17 @@ input[data-sdd-list] {
             </div>
             <div>
               <h5 class="font-bold text-gray-700 text-xs mb-1">🚫 Nhóm Không Cấp Văn Phòng Phẩm</h5>
-              <p class="text-[11px] text-gray-500 italic mb-2">Tạo các nhóm gồm 1 hoặc nhiều CHỨC DANH. Người dùng có chức danh nằm trong 1 nhóm mà tài khoản được gán vào (chọn ở màn "Người Dùng") sẽ: (1) không đăng ký được Văn Phòng Phẩm ở bất kỳ kỳ nào, kể cả đã thuộc phòng ban còn hạn đăng ký; (2) không tính vào số nhân sự gợi ý khi Hành Chính tạo kỳ (vẫn sửa tay được số này như bình thường).</p>
-              <div id="vppJobTitlesDatalist" class="hidden sdd-dropdown" data-sdd-dropdown></div>
-              <div id="vppExcludeGroupsListWrap" class="space-y-2"></div>
-              <button type="button" data-op="addVppExcludeGroupRow" class="mt-2 bg-gray-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-gray-700">+ Thêm Nhóm</button>
+              <p class="text-[11px] text-gray-500 italic mb-2">Chọn chức danh từ ô bên dưới rồi bấm "Thêm" để đưa vào danh sách chức danh không được cấp Văn Phòng Phẩm. Người dùng có chức danh HIỆN TẠI nằm trong danh sách này sẽ: (1) không đăng ký được Văn Phòng Phẩm ở bất kỳ kỳ nào, kể cả đã thuộc phòng ban còn hạn đăng ký; (2) không tính vào số nhân sự gợi ý khi Hành Chính tạo kỳ (vẫn sửa tay được số này như bình thường). Thêm/bớt xong thì bấm "Lưu" 1 lần.</p>
+              <div class="flex gap-2 items-center mb-2">
+                <input id="vppExcludedJobTitlePicker" data-sdd-list="vppExcludedJobTitleDatalist" placeholder="🔍 Tìm chức danh..." autocomplete="off"
+                  onkeydown="if(event.key==='Enter'){event.preventDefault();addVppExcludedJobTitle();}"
+                  class="flex-1 border p-1.5 rounded bg-white text-xs">
+                <div id="vppExcludedJobTitleDatalist" class="hidden sdd-dropdown" data-sdd-dropdown></div>
+                <button type="button" data-op="addVppExcludedJobTitle" class="bg-gray-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-gray-700 whitespace-nowrap">➕ Thêm Chức Danh</button>
+              </div>
+              <div id="vppExcludedJobTitlesList" class="flex flex-wrap gap-1.5 min-h-[2rem] border rounded p-2 bg-gray-50"></div>
               <div class="flex justify-end mt-2">
-                <button type="button" data-op="saveVppExcludeGroups" class="bg-emerald-600 text-white px-4 py-1.5 rounded text-xs font-bold hover:bg-emerald-700">💾 Lưu Danh Sách Nhóm</button>
+                <button type="button" data-op="saveVppExcludedJobTitles" class="bg-emerald-600 text-white px-4 py-1.5 rounded text-xs font-bold hover:bg-emerald-700">💾 Lưu Danh Sách Chức Danh</button>
               </div>
             </div>
           </div>
@@ -7909,7 +7909,7 @@ const DB = {
   paymentRequests: [],
   formTemplates: {},
   permGroups: [],
-  vppExcludeGroups: [], workflowParticipatingDepts: [],
+  vppExcludeGroups: [], vppExcludedJobTitles: [], workflowParticipatingDepts: [],
   pwaShortcutModules: [],
   itPriceMasterLists: [],
   uploadFileTypeConfig: {}, uploadSizeLimitConfig: {},
@@ -9828,6 +9828,7 @@ async function initDatabase(loggingInUser) {
     DB.formTemplates = data.formTemplates || {};
     DB.permGroups = data.permGroups || [];
     DB.vppExcludeGroups = data.vppExcludeGroups || [];
+    DB.vppExcludedJobTitles = data.vppExcludedJobTitles || [];
     DB.workflowParticipatingDepts = data.workflowParticipatingDepts || [];
     DB.pwaShortcutModules = data.pwaShortcutModules || [];
     // Sửa lỗi cũ: 2 dòng dưới đây trước nay CHƯA từng được gán từ data (chỉ có nhánh khởi tạo lười
@@ -25454,7 +25455,7 @@ function setSystemSubTab(subTab) {
   document.getElementById('btnSystemSubTrash').className = subTab === 'TRASH' ? activeCls : inactiveCls;
 
   if (subTab === 'ADMIN') {
-    renderDeptList(); renderCatList(); renderContractTypeAbbrList(); renderJobTitleList(); renderStoreJobTitleList(); renderTrainingCategoryList(); renderSensitiveKeywordList(); renderDeptCheckboxes(); renderModuleAccessCheckboxes(); renderUsers(); loadEmailConfigToForm(); renderPermGroupsList(); renderSubmissionApprovalGroups(); renderContractApprovalGroups(); workflowParticipatingDeptsDraft = null; renderWorkflowParticipatingDeptsChecklist(); vppExcludeGroupsDraft = null; renderVppExcludeGroupsAdmin(); renderPwaShortcutCheckboxes(); renderStoreList(); renderLicenseTypeList();
+    renderDeptList(); renderCatList(); renderContractTypeAbbrList(); renderJobTitleList(); renderStoreJobTitleList(); renderTrainingCategoryList(); renderSensitiveKeywordList(); renderDeptCheckboxes(); renderModuleAccessCheckboxes(); renderUsers(); loadEmailConfigToForm(); renderPermGroupsList(); renderSubmissionApprovalGroups(); renderContractApprovalGroups(); workflowParticipatingDeptsDraft = null; renderWorkflowParticipatingDeptsChecklist(); vppExcludedJobTitlesDraft = null; renderVppExcludedJobTitlesChecklist(); renderPwaShortcutCheckboxes(); renderStoreList(); renderLicenseTypeList();
     setAdminSubTab(activeAdminSubTab);
     positionAdminSubTabBar();
   }
@@ -27714,7 +27715,7 @@ function renderItPriceTierWorkflowTab(container) {
       const isCheckedFn = u => Array.isArray(currentApprovers) ? currentApprovers.includes(u.username) : currentApprovers === u.username;
       const candidates = getApproverCandidateUsers(currentApprovers).slice().sort((a, b) => (a.name || '').localeCompare(b.name || '', 'vi'));
 
-      const candidatesHTML = candidates.map(u => {
+      const renderCandidateCheckbox = u => {
         const isChecked = isCheckedFn(u);
         return `
           <label class="inline-flex items-center gap-1 bg-white px-2 py-0.5 rounded border text-[11px] cursor-pointer">
@@ -27722,7 +27723,27 @@ function renderItPriceTierWorkflowTab(container) {
             <span>${escapeHtml(u.name)} (${escapeHtml(u.username)})</span>
           </label>
         `;
-      }).join('');
+      };
+
+      // Mức Margin/Chiết Khấu không có khái niệm "cùng phòng ban" như nhánh dept-based ở trên nên
+      // không tách được sameDept/otherDept — thay vào đó: người ĐÃ được tick LUÔN hiện sẵn (không bao
+      // giờ ẩn), người CHƯA tick gộp phía sau nút "Hiện thêm" (mặc định ẩn) — vẫn giữ đúng tinh thần
+      // "ẩn bớt người phê duyệt" của các quy trình khác mà không cần khái niệm phòng ban. Tái dùng
+      // ĐÚNG toggleWfOtherDeptCandidates() đã có (chỉ đổi nhãn/id, hàm không phụ thuộc gì vào "dept").
+      const checkedCandidates = candidates.filter(isCheckedFn);
+      const uncheckedCandidates = candidates.filter(u => !isCheckedFn(u));
+      const checkedHTML = checkedCandidates.map(renderCandidateCheckbox).join('');
+      const stepKey = `${tier.key}_${step.order}`;
+      const otherContainerId = `wfTierOther_${stepKey}`;
+      const otherBtnId = `wfTierOtherBtn_${stepKey}`;
+      const showLabel = `▾ Hiện thêm (${uncheckedCandidates.length} người)`;
+      const hideLabel = `▴ Ẩn bớt (${uncheckedCandidates.length} người)`;
+      const otherSection = uncheckedCandidates.length ? `
+        <button type="button" id="${otherBtnId}" data-op="toggleWfOtherDeptCandidates" data-arg0="${otherContainerId}" data-arg1="${otherBtnId}"
+          data-show-label="${escapeHtml(showLabel)}" data-hide-label="${escapeHtml(hideLabel)}"
+          class="text-[11px] text-sky-600 font-semibold hover:underline">${escapeHtml(showLabel)}</button>
+        <div id="${otherContainerId}" class="flex flex-wrap gap-1.5 pt-1 hidden">${uncheckedCandidates.map(renderCandidateCheckbox).join('')}</div>
+      ` : '';
 
       const emptyHint = candidates.length === 0
         ? `<div class="text-[11px] text-gray-400 italic">Chưa có ai được cấp quyền "Người duyệt" — vào Module Quản trị (khối 12) để cấp trước.</div>` : '';
@@ -27730,8 +27751,9 @@ function renderItPriceTierWorkflowTab(container) {
       return `
         <div class="bg-gray-100 p-2 rounded text-xs space-y-1 border">
           <div class="font-bold text-gray-700">Bước ${step.order}: ${escapeHtml(step.name)}</div>
-          <div class="flex flex-wrap gap-1.5 pt-1">${candidatesHTML}</div>
+          <div class="flex flex-wrap gap-1.5 pt-1">${checkedHTML}</div>
           ${emptyHint}
+          ${otherSection}
         </div>
       `;
     }).join('');
@@ -28129,7 +28151,7 @@ function renderStoreList() {
 // thường: route đó tự ghi danh mục + cascade cập nhật MỌI nơi khác đang lưu nguyên chuỗi cũ (xem
 // lib/catalogRename.js — user.dept/jobTitle, docs/submissions/carRegs/officeReqs/vppRegistrations/
 // itPriceApprovals/budgetEntries/uniformIssuances/uniformStockAdjustments/uniformTransfers.dept,
-// contracts.dept+custodianDept, uniformPeriods[].allocations[].dept, vppExcludeGroups[].jobTitles[]...).
+// contracts.dept+custodianDept, uniformPeriods[].allocations[].dept, vppExcludedJobTitles[]...).
 // DB.<catalogKey> phía trình duyệt được cập nhật NGAY từ giá trị server trả về, nhưng các collection
 // KHÁC (DB.docs, DB.users, DB.contracts...) đang có sẵn trong bộ nhớ vẫn giữ TÊN CŨ cho tới khi tải lại
 // trang (server đã ghi đúng tên mới) — nhắc admin tải lại trang để thấy tên mới ở TOÀN BỘ màn hình.
@@ -29152,12 +29174,22 @@ async function deletePermGroup(id) {
 
 // ==========================================
 // KHỐI 17 — "NHÓM QUYỀN ĐẶC BIỆT": 2 cấu hình tách biệt hoàn toàn, cùng đặt chung 1 khối cây quyền vì
-// đều là cấu hình "đặc biệt" ngoài khuôn permission thường (checkbox on/off theo user):
-// 1) workflowParticipatingDepts — 1 CÀI ĐẶT CHUNG toàn hệ thống (không gắn user nào), lọc bớt danh
-//    sách phòng ban hiển thị ở màn "Quy Trình & Phê Duyệt" (renderWorkflowTab()).
-// 2) vppExcludeGroups — nhiều NHÓM đặt tên tự do, mỗi nhóm mang 1 danh sách chức danh; user được gán
-//    vào 0..N nhóm loại này (multi-select ở form Người Dùng, khác permGroups chỉ 1 nhóm/user) — có
-//    chức danh trong nhóm mình thuộc thì bị loại khỏi đăng ký + đầu người tính ngân sách VPP.
+// đều là cấu hình "đặc biệt" ngoài khuôn permission thường (checkbox on/off theo user), và CÙNG 1 KHUÔN
+// UI: 1 CÀI ĐẶT CHUNG toàn hệ thống (không gắn user nào) là 1 mảng chuỗi phẳng, chỉnh qua ô tìm-kiếm-
+// chọn (sdd) + nút "Thêm" + danh sách chip xoá được + 1 nút "Lưu":
+// 1) workflowParticipatingDepts — lọc bớt danh sách phòng ban hiển thị ở màn "Quy Trình & Phê Duyệt"
+//    (renderWorkflowTab()).
+// 2) vppExcludedJobTitles — danh sách CHỨC DANH không được cấp Văn Phòng Phẩm; user có jobTitle HIỆN
+//    TẠI nằm trong danh sách này bị loại khỏi đăng ký + đầu người tính ngân sách VPP (xem
+//    isUserVppExcluded() bên dưới). TRƯỚC ĐÂY đây là vppExcludeGroups[] (nhiều nhóm đặt tên tự do, mỗi
+//    nhóm mang 1 danh sách chức danh, RIÊNG user còn phải được gán thủ công vào 0..N nhóm ở form Người
+//    Dùng) — đổi sang 1 danh sách phẳng vì bước "gán user vào nhóm" không thêm giá trị gì so với so
+//    khớp thẳng theo chức danh (2 chức danh giống nhau thì luôn cùng bị loại/không bị loại như nhau,
+//    chưa từng có nhu cầu 2 nhóm khác nhau cho cùng 1 chức danh). Dữ liệu vppExcludeGroups[] CŨ đã được
+//    di trú 1 lần (gộp toàn bộ jobTitles[] của mọi nhóm) sang vppExcludedJobTitles[] lúc khởi động server
+//    (xem migrateVppExcludedJobTitles() ở seedDefaults.js) — key AppData "vppExcludeGroups" + field
+//    user.vppExcludeGroupIds vẫn còn nguyên trong CSDL (không xoá) nhưng KHÔNG còn được đọc/ghi ở đâu
+//    trong code mới, chỉ còn là dữ liệu tồn đọng vô hại.
 // ==========================================
 
 function getWorkflowParticipatingDepts() {
@@ -29165,8 +29197,8 @@ function getWorkflowParticipatingDepts() {
 }
 
 // Draft chỉnh sửa trực tiếp trong cây quyền (thêm/bớt qua nút, chưa ghi DB.workflowParticipatingDepts
-// thật) — chỉ ghi thật xuống khi bấm "Lưu", cùng khuôn vppExcludeGroupsDraft ngay bên dưới, tránh hẳn
-// tình huống nhiều lượt thêm liên tiếp bắn nhiều request riêng rồi rollback đè lên nhau.
+// thật) — chỉ ghi thật xuống khi bấm "Lưu", cùng khuôn vppExcludedJobTitlesDraft ngay bên dưới, tránh
+// hẳn tình huống nhiều lượt thêm liên tiếp bắn nhiều request riêng rồi rollback đè lên nhau.
 let workflowParticipatingDeptsDraft = null;
 
 function renderWorkflowParticipatingDeptsChecklist() {
@@ -29287,135 +29319,66 @@ function canRegisterVpp(user) {
   return !!(user?.perms?.admin || user?.perms?.vppRegisterCreate);
 }
 
-// ============ Nhóm Không Cấp Văn Phòng Phẩm (vppExcludeGroups) ============
+// ============ Nhóm Không Cấp Văn Phòng Phẩm (vppExcludedJobTitles) ============
 function isUserVppExcluded(user) {
-  if (!user?.jobTitle) return false;
-  const ids = new Set(user.vppExcludeGroupIds || []);
-  return (DB.vppExcludeGroups || []).some(g => ids.has(g.id) && (g.jobTitles || []).includes(user.jobTitle));
+  return !!(user?.jobTitle && (DB.vppExcludedJobTitles || []).includes(user.jobTitle));
 }
 
-// Draft chỉnh sửa trực tiếp trong cây quyền — chỉ ghi thật xuống DB.vppExcludeGroups khi bấm "Lưu Danh
-// Sách Nhóm" (saveVppExcludeGroups()), khớp cách color/scope khác trong cùng cây quyền không tự lưu
-// theo từng lượt tick lẻ tẻ, tránh spam request khi đang tick nhiều chức danh liên tục cho 1 nhóm.
-let vppExcludeGroupsDraft = null;
+// Draft chỉnh sửa trực tiếp trong cây quyền — chỉ ghi thật xuống DB.vppExcludedJobTitles khi bấm "Lưu",
+// cùng khuôn workflowParticipatingDeptsDraft ở trên (tránh spam request khi đang thêm/bớt liên tục).
+let vppExcludedJobTitlesDraft = null;
 
-function renderVppExcludeGroupsAdmin() {
-  if (!vppExcludeGroupsDraft) vppExcludeGroupsDraft = JSON.parse(JSON.stringify(DB.vppExcludeGroups || []));
-  const wrap = document.getElementById('vppExcludeGroupsListWrap');
-  const datalist = document.getElementById('vppJobTitlesDatalist');
-  if (datalist) sddSetOptions('vppJobTitlesDatalist', DB.jobTitles);
-  // Dropdown gợi ý dùng CHUNG cho mọi ô "Tìm chức danh..." (1 div nằm NGOÀI wrap, định vị lại theo
-  // đúng ô đang focus mỗi lần hiện — xem sddPositionAndShow()) — nhưng hàm này xoá/dựng lại TOÀN BỘ
-  // input bên trong wrap.innerHTML mỗi lần gọi (thêm/xoá chức danh, thêm/xoá nhóm...). Nếu dropdown
-  // đang mở lúc gọi (VD gõ xong bấm Enter thêm 1 chức danh), _sddActiveInput vẫn trỏ vào input CŨ vừa
-  // bị huỷ — bấm chọn tiếp 1 gợi ý sau đó sẽ ghi giá trị vào input đã chết, mất lựa chọn mà không báo
-  // lỗi gì. Ẩn dropdown TRƯỚC khi dựng lại wrap để buộc phải focus lại (trên input MỚI) mới mở lại được.
-  if (datalist) datalist.classList.add('hidden');
-  if (!wrap) return;
-  if (!vppExcludeGroupsDraft.length) {
-    wrap.innerHTML = `<div class="text-[11px] text-gray-400 italic p-2 bg-gray-50 rounded border">Chưa có nhóm nào.</div>`;
-    return;
-  }
-  wrap.innerHTML = vppExcludeGroupsDraft.map((g, idx) => {
-    const memberCount = DB.users.filter(u => (u.vppExcludeGroupIds || []).includes(g.id)).length;
-    const chipsHTML = (g.jobTitles || []).length
-      ? g.jobTitles.map(t => `
-          <span class="inline-flex items-center gap-1 bg-white border rounded-full pl-2 pr-1 py-0.5 text-[11px] text-gray-700">
-            ${escapeHtml(t)}
-            <button type="button" data-op="removeVppExcludeGroupJobTitle" data-arg0="${idx}" data-arg1="${escapeHtml(t)}" class="text-gray-400 hover:text-red-600 font-bold px-1" title="Bỏ chức danh này">✕</button>
-          </span>`).join('')
-      : '<span class="text-[11px] text-gray-400 italic">Chưa chọn chức danh nào.</span>';
-    return `
-    <div class="bg-white border rounded p-2 space-y-1.5">
-      <div class="flex items-center gap-2">
-        <input value="${escapeHtml(g.name)}" data-op-input="updateVppExcludeGroupField" data-arg0="${idx}" data-arg1="name" data-arg-value="2" placeholder="Tên nhóm (VD: Bảo vệ/Tạp vụ)" class="flex-1 border p-1 rounded text-xs font-semibold">
-        <span class="text-[11px] text-gray-400 whitespace-nowrap">${memberCount} người</span>
-        <button type="button" data-op="removeVppExcludeGroupRow" data-arg0="${idx}" class="text-red-600 hover:text-red-800 text-xs font-bold">✕</button>
-      </div>
-      <div class="flex gap-2 items-center">
-        <input data-sdd-list="vppJobTitlesDatalist" id="vppExcludeGroupJobTitleInput_${idx}" placeholder="🔍 Tìm chức danh..." autocomplete="off"
-          onkeydown="if(event.key==='Enter'){event.preventDefault();addVppExcludeGroupJobTitle(${idx});}"
-          class="flex-1 border p-1 rounded text-xs">
-        <button type="button" data-op="addVppExcludeGroupJobTitle" data-arg0="${idx}" class="bg-gray-600 text-white px-2 py-1 rounded text-[11px] font-bold hover:bg-gray-700 whitespace-nowrap">+ Thêm</button>
-      </div>
-      <div class="flex flex-wrap gap-1.5">${chipsHTML}</div>
-    </div>
-  `;
-  }).join('');
+function renderVppExcludedJobTitlesChecklist() {
+  const picker = document.getElementById('vppExcludedJobTitlePicker');
+  const datalist = document.getElementById('vppExcludedJobTitleDatalist');
+  const list = document.getElementById('vppExcludedJobTitlesList');
+  if (!picker || !list) return;
+  if (!vppExcludedJobTitlesDraft) vppExcludedJobTitlesDraft = [...(DB.vppExcludedJobTitles || [])];
+  const remaining = DB.jobTitles.filter(t => t && !vppExcludedJobTitlesDraft.includes(t));
+  if (datalist) sddSetOptions('vppExcludedJobTitleDatalist', remaining);
+  picker.value = '';
+  picker.placeholder = remaining.length ? '🔍 Tìm chức danh...' : 'Đã thêm hết chức danh';
+  picker.disabled = !remaining.length;
+  list.innerHTML = vppExcludedJobTitlesDraft.length
+    ? vppExcludedJobTitlesDraft.map(t => `
+      <span class="inline-flex items-center gap-1 bg-white border rounded-full pl-2.5 pr-1 py-1 text-xs text-gray-700">
+        ${escapeHtml(t)}
+        <button type="button" data-op="removeVppExcludedJobTitle" data-arg0="${escapeHtml(t)}" class="text-gray-400 hover:text-red-600 font-bold px-1" title="Bỏ chức danh này">✕</button>
+      </span>
+    `).join('')
+    : '<span class="text-[11px] text-gray-400 italic">Chưa thêm chức danh nào — để trống thì mọi chức danh đều được cấp Văn Phòng Phẩm bình thường.</span>';
 }
 
-function addVppExcludeGroupJobTitle(idx) {
-  const g = vppExcludeGroupsDraft?.[idx];
-  const input = document.getElementById(`vppExcludeGroupJobTitleInput_${idx}`);
-  const title = (input?.value || '').trim();
-  if (!g || !title) return;
+function addVppExcludedJobTitle() {
+  const picker = document.getElementById('vppExcludedJobTitlePicker');
+  const title = (picker?.value || '').trim();
+  if (!title) return;
   if (!DB.jobTitles.includes(title)) return alert('Không tìm thấy chức danh này — vui lòng chọn đúng từ danh sách gợi ý.');
-  g.jobTitles = g.jobTitles || [];
-  if (!g.jobTitles.includes(title)) g.jobTitles.push(title);
-  renderVppExcludeGroupsAdmin();
+  if (!vppExcludedJobTitlesDraft) vppExcludedJobTitlesDraft = [...(DB.vppExcludedJobTitles || [])];
+  if (!vppExcludedJobTitlesDraft.includes(title)) vppExcludedJobTitlesDraft.push(title);
+  renderVppExcludedJobTitlesChecklist();
 }
 
-function removeVppExcludeGroupJobTitle(idx, title) {
-  const g = vppExcludeGroupsDraft?.[idx];
-  if (!g) return;
-  g.jobTitles = (g.jobTitles || []).filter(t => t !== title);
-  renderVppExcludeGroupsAdmin();
+function removeVppExcludedJobTitle(title) {
+  if (!vppExcludedJobTitlesDraft) return;
+  vppExcludedJobTitlesDraft = vppExcludedJobTitlesDraft.filter(t => t !== title);
+  renderVppExcludedJobTitlesChecklist();
 }
 
-function addVppExcludeGroupRow() {
-  if (!vppExcludeGroupsDraft) vppExcludeGroupsDraft = JSON.parse(JSON.stringify(DB.vppExcludeGroups || []));
-  vppExcludeGroupsDraft.push({ id: 'vppexcl_' + Date.now(), name: '', jobTitles: [] });
-  renderVppExcludeGroupsAdmin();
-}
-
-function removeVppExcludeGroupRow(idx) {
-  vppExcludeGroupsDraft.splice(idx, 1);
-  renderVppExcludeGroupsAdmin();
-}
-
-function updateVppExcludeGroupField(idx, field, value) {
-  if (!vppExcludeGroupsDraft?.[idx]) return;
-  vppExcludeGroupsDraft[idx][field] = value;
-}
-
-async function saveVppExcludeGroups() {
-  const cleaned = (vppExcludeGroupsDraft || []).map(g => ({ ...g, name: (g.name || '').trim() }));
-  if (cleaned.some(g => !g.name)) return alert('Vui lòng nhập tên cho tất cả các nhóm (hoặc bấm ✕ để xoá dòng chưa dùng đến).');
-  const snapshot = JSON.parse(JSON.stringify(DB.vppExcludeGroups || []));
-  DB.vppExcludeGroups = cleaned;
-  const saved = await syncStorage('vppExcludeGroups');
+async function saveVppExcludedJobTitles() {
+  const next = [...(vppExcludedJobTitlesDraft || [])];
+  const snapshot = [...(DB.vppExcludedJobTitles || [])];
+  DB.vppExcludedJobTitles = next;
+  const saved = await syncStorage('vppExcludedJobTitles');
   if (!saved) {
-    DB.vppExcludeGroups = snapshot;
-    vppExcludeGroupsDraft = JSON.parse(JSON.stringify(snapshot));
-    renderVppExcludeGroupsAdmin();
+    DB.vppExcludedJobTitles = snapshot;
+    vppExcludedJobTitlesDraft = [...snapshot];
+    renderVppExcludedJobTitlesChecklist();
     return;
   }
-  vppExcludeGroupsDraft = JSON.parse(JSON.stringify(cleaned));
-  logSystemAction('USER_MGM', 'SAVE_VPP_EXCLUDE_GROUPS', `Cập nhật danh sách Nhóm Không Cấp Văn Phòng Phẩm (${cleaned.length} nhóm)`, 'SUCCESS');
-  alert('✅ Đã lưu danh sách nhóm!');
-  renderVppExcludeGroupsAdmin();
-  renderUVppExcludeGroupsChecklist(currentEditingUserVppExcludeGroupIds());
-}
-
-// ============ Form Người Dùng — chọn nhiều "Nhóm Quyền Đặc Biệt" (vppExcludeGroupIds) ============
-function currentEditingUserVppExcludeGroupIds() {
-  return [...document.querySelectorAll('.u-vpp-exclude-group-cb:checked')].map(cb => cb.value);
-}
-
-function renderUVppExcludeGroupsChecklist(selectedIds) {
-  const wrap = document.getElementById('uVppExcludeGroupsChecklist');
-  if (!wrap) return;
-  const selected = new Set(selectedIds || []);
-  if (!DB.vppExcludeGroups.length) {
-    wrap.innerHTML = `<div class="text-[11px] text-gray-400 italic">Chưa có nhóm nào — tạo ở cây phân quyền, khối "17. Nhóm Quyền Đặc Biệt".</div>`;
-    return;
-  }
-  wrap.innerHTML = DB.vppExcludeGroups.map(g => `
-    <label class="flex items-center gap-1.5 text-gray-700 cursor-pointer">
-      <input type="checkbox" class="u-vpp-exclude-group-cb" value="${escapeHtml(g.id)}" ${selected.has(g.id) ? 'checked' : ''}>
-      <span>${escapeHtml(g.name)}</span>
-    </label>
-  `).join('');
+  vppExcludedJobTitlesDraft = [...next];
+  logSystemAction('USER_MGM', 'SAVE_VPP_EXCLUDED_JOB_TITLES', `Cập nhật danh sách Nhóm Không Cấp Văn Phòng Phẩm (${next.length} chức danh)`, 'SUCCESS');
+  alert('✅ Đã lưu danh sách chức danh.');
 }
 
 // ==========================================
@@ -31409,7 +31372,6 @@ function readUserFormState() {
   const isDriver = !!document.getElementById('uIsDriver')?.checked;
   const startDate = document.getElementById('uStartDate').value || '';
   const groupIds = currentEditingUserGroupIds();
-  const vppExcludeGroupIds = currentEditingUserVppExcludeGroupIds();
 
   // Nếu gán vào (một hoặc nhiều) nhóm phân quyền: khối checkbox trên form KHÔNG còn bị khoá, cho phép
   // tick thêm/bớt tuỳ chỉnh riêng trên nền quyền GỘP của các nhóm (xem mergeGroupsBasePerms()). Chỉ lưu
@@ -31430,20 +31392,20 @@ function readUserFormState() {
     return null;
   }
 
-  return { editId, username, pass, pin, name, email, phone, posType, dept, jobTitle, isDriver, startDate, groupIds, vppExcludeGroupIds, perms, permOverrides };
+  return { editId, username, pass, pin, name, email, phone, posType, dept, jobTitle, isDriver, startDate, groupIds, perms, permOverrides };
 }
 
 // Dựng 1 bản ghi người dùng MỚI từ state đã đọc — dùng chung cho lưu ngay (saveUser()) lẫn thêm vào
 // danh sách chờ (addUserToStagingList()). Kiểm tra trùng username với CẢ DB.users lẫn danh sách chờ
 // hiện tại (tránh 2 người trong cùng danh sách trùng tên đăng nhập nhau).
 function buildNewUserFromState(state) {
-  const { username, pass, pin, name, email, phone, posType, dept, jobTitle, isDriver, startDate, groupIds, vppExcludeGroupIds, perms, permOverrides } = state;
+  const { username, pass, pin, name, email, phone, posType, dept, jobTitle, isDriver, startDate, groupIds, perms, permOverrides } = state;
   if (!pass) { alert('Vui lòng nhập mật khẩu cho người dùng mới!'); return null; }
   if (DB.users.some(u => u.username === username)) { alert('Tên đăng nhập đã tồn tại!'); return null; }
   if (pendingNewUsers.some(u => u.username === username)) { alert('Tên đăng nhập đã có trong danh sách chờ lưu!'); return null; }
   return {
     id: Date.now() + pendingNewUsers.length,
-    username, pass, ...(pin && { pin }), name, email, phone, posType, dept, jobTitle, isDriver, startDate, perms, groupIds, vppExcludeGroupIds, permOverrides
+    username, pass, ...(pin && { pin }), name, email, phone, posType, dept, jobTitle, isDriver, startDate, perms, groupIds, permOverrides
   };
 }
 
@@ -31453,7 +31415,7 @@ async function saveUser(e) {
 
   const state = readUserFormState();
   if (!state) return;
-  const { editId, username, pass, pin, name, email, phone, posType, dept, jobTitle, isDriver, startDate, groupIds, vppExcludeGroupIds, perms, permOverrides } = state;
+  const { editId, username, pass, pin, name, email, phone, posType, dept, jobTitle, isDriver, startDate, groupIds, perms, permOverrides } = state;
 
   // Chụp lại nguyên trạng DB.users TRƯỚC khi sửa trực tiếp trong mảng bên dưới — nếu server từ chối
   // lưu (409/400), phục hồi lại đúng bằng bản chụp này rồi render lại, tránh để "user"/DB.users bị sửa
@@ -31484,7 +31446,6 @@ async function saveUser(e) {
       user.perms = username === 'admin' ? { admin: true } : perms;
       user.groupIds = username === 'admin' ? [] : groupIds;
       user.permOverrides = username === 'admin' ? null : permOverrides;
-      user.vppExcludeGroupIds = username === 'admin' ? [] : vppExcludeGroupIds;
     }
   } else {
     // Tạo mới ngay lập tức, lưu 1 người — nếu muốn gộp nhiều người rồi lưu 1 lần, dùng "+ Thêm Vào
@@ -31642,7 +31603,6 @@ function resetUserForm() {
   document.getElementById('uStartDate').value = '';
   renderUPermGroupsChecklist([]);
   updatePermGroupNote(false);
-  renderUVppExcludeGroupsChecklist([]);
   // CẬP NHẬT: mặc định AN TOÀN cho user mới — không bật sẵn quyền xem/tạo liên phòng ban nào ở
   // module nào cả (trước đây hầu hết module nghiệp vụ được bật sẵn = toàn công ty, xem phân tích ở
   // defaultNewUserPerms()). Mỗi người vẫn luôn thao tác được trong phòng ban của chính mình.
@@ -31766,7 +31726,6 @@ function editUser(id) {
   // khi tải dữ liệu, đây chỉ là lớp phòng vệ bổ sung).
   const userGroupIds = user.groupIds || (user.groupId ? [user.groupId] : []);
   renderUPermGroupsChecklist(userGroupIds);
-  renderUVppExcludeGroupsChecklist(user.vppExcludeGroupIds || []);
 
   // Perms của user cũ (nếu chưa từng được di trú vì lý do nào đó) sẽ được quy đổi tạm thời ở đây để
   // form luôn đọc đúng cấu trúc mới — initDatabase() đã tự động lưu lại bản di trú nên trường hợp

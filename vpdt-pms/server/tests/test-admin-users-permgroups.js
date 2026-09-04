@@ -119,6 +119,8 @@ async function scenario(name, fn) {
     DB.users = [];
     DB.permGroups = [];
     DB.vppExcludeGroups = [];
+    DB.vppExcludedJobTitles = [];
+    DB.workflowParticipatingDepts = [];
 
     // Nhóm A: được duyệt Hợp Đồng + xác thực WEBAUTHN (mức cao nhất) + docDownload chỉ phòng Kế Toán.
     const groupAPerms = { ...defaultNewUserPerms(), contractApprove: true, paymentManage: false,
@@ -456,9 +458,10 @@ async function scenario(name, fn) {
   });
 
   // ==========================================================================
-  // (e) Khối 17 "Nhóm Quyền Đặc Biệt": picker phòng ban tham gia quy trình + picker chức danh loại
-  //     trừ VPP giờ là input tìm kiếm (list+datalist) thay vì <select>/lưới checkbox cứng — chọn đúng
-  //     giá trị gợi ý thì thêm được, gõ tự do sai thì báo lỗi và KHÔNG thêm.
+  // (e) Khối 17 "Nhóm Quyền Đặc Biệt": picker phòng ban tham gia quy trình + picker chức danh không
+  //     được cấp VPP giờ CÙNG 1 khuôn — mảng chuỗi phẳng, input tìm kiếm (list+datalist) + chip xoá
+  //     được, thay vì <select>/lưới checkbox cứng — chọn đúng giá trị gợi ý thì thêm được, gõ tự do sai
+  //     thì báo lỗi và KHÔNG thêm.
   // ==========================================================================
   await scenario('(e) Đơn Vị Tham Gia Quy Trình: searchable input+datalist thêm/chặn đúng', async () => {
     const r = await page.evaluate(() => {
@@ -499,38 +502,65 @@ async function scenario(name, fn) {
       r.invalidAlerts.length === 1 && !r.draftAfterInvalid.includes('Phòng Không Tồn Tại'), JSON.stringify(r));
   });
 
-  await scenario('(e) Nhóm Không Cấp Văn Phòng Phẩm: searchable input+datalist chọn chức danh', async () => {
+  await scenario('(e) Nhóm Không Cấp Văn Phòng Phẩm: searchable input+datalist thêm/chặn đúng (mảng phẳng)', async () => {
     const r = await page.evaluate(() => {
       switchTab('system'); setSystemSubTab('ADMIN');
-      vppExcludeGroupsDraft = [];
-      addVppExcludeGroupRow();
-      const datalistOptions = (document.getElementById('vppJobTitlesDatalist')._sddItems || []).map(o => o.value);
+      vppExcludedJobTitlesDraft = [];
+      renderVppExcludedJobTitlesChecklist();
+      const picker = document.getElementById('vppExcludedJobTitlePicker');
+      const datalistBefore = (document.getElementById('vppExcludedJobTitleDatalist')._sddItems || []).map(o => o.value);
 
-      // addVppExcludeGroupJobTitle() gọi renderVppExcludeGroupsAdmin() thay hẳn innerHTML của wrap sau
-      // mỗi lần thêm -> node <input> cũ bị thay thế, phải getElementById LẠI mỗi lần (không giữ tham
-      // chiếu cũ) mới đúng như người dùng thật gõ vào ô đang hiển thị.
-      document.getElementById('vppExcludeGroupJobTitleInput_0').value = 'Nhân viên';
-      addVppExcludeGroupJobTitle(0);
-      const chipsAfterAdd = document.querySelector('#vppExcludeGroupsListWrap').textContent;
+      // Chọn đúng 1 chức danh có trong datalist gợi ý.
+      picker.value = 'Nhân viên';
+      addVppExcludedJobTitle();
+      const afterAddList = document.getElementById('vppExcludedJobTitlesList').textContent;
+      const datalistAfterAdd = (document.getElementById('vppExcludedJobTitleDatalist')._sddItems || []).map(o => o.value);
 
+      // Gõ tự do 1 giá trị không tồn tại -> phải bị chặn, không thêm vào danh sách.
       window.__alerts.length = 0;
-      document.getElementById('vppExcludeGroupJobTitleInput_0').value = 'Chức Danh Bịa Đặt';
-      addVppExcludeGroupJobTitle(0);
+      picker.value = 'Chức Danh Bịa Đặt';
+      addVppExcludedJobTitle();
 
       return {
-        datalistOptions,
-        addedChip: /Nhân viên/.test(chipsAfterAdd),
+        datalistBefore,
+        addedChip: /Nhân viên/.test(afterAddList),
+        removedFromRemainingDatalist: !datalistAfterAdd.includes('Nhân viên'),
         invalidAlerts: window.__alerts.slice(),
-        draftJobTitles: [...vppExcludeGroupsDraft[0].jobTitles],
+        draftAfterInvalid: [...vppExcludedJobTitlesDraft],
       };
     });
     record('(e) datalist chức danh liệt kê đúng DB.jobTitles',
-      JSON.stringify(r.datalistOptions.slice().sort()) === JSON.stringify(['Nhân viên', 'Trưởng phòng'].sort()), JSON.stringify(r.datalistOptions));
-    record('(e) chọn đúng chức danh từ gợi ý -> thêm được vào chip của đúng dòng nhóm',
+      JSON.stringify(r.datalistBefore.slice().sort()) === JSON.stringify(['Nhân viên', 'Trưởng phòng'].sort()), JSON.stringify(r.datalistBefore));
+    record('(e) chọn đúng chức danh từ gợi ý -> thêm được vào danh sách chip',
       r.addedChip, JSON.stringify(r));
-    record('(e) gõ tự do chức danh không tồn tại -> báo lỗi, KHÔNG thêm vào nhóm',
-      r.invalidAlerts.length === 1 && !r.draftJobTitles.includes('Chức Danh Bịa Đặt') && r.draftJobTitles.includes('Nhân viên'),
+    record('(e) chức danh vừa thêm biến mất khỏi datalist còn lại (không gợi ý trùng)',
+      r.removedFromRemainingDatalist, JSON.stringify(r));
+    record('(e) gõ tự do chức danh không tồn tại -> báo lỗi, KHÔNG thêm',
+      r.invalidAlerts.length === 1 && !r.draftAfterInvalid.includes('Chức Danh Bịa Đặt') && r.draftAfterInvalid.includes('Nhân viên'),
       JSON.stringify(r));
+  });
+
+  // ==========================================================================
+  // (f) Form "Sửa Người Dùng" KHÔNG còn bước gán user vào "Nhóm Quyền Đặc Biệt" (vppExcludeGroupIds) —
+  //     bước đó đã bị xoá hẳn cùng với việc chuyển sang mảng phẳng vppExcludedJobTitles ở trên (chỉ cần
+  //     so khớp thẳng chức danh, không cần gán user vào nhóm nào nữa).
+  // ==========================================================================
+  await scenario('(f) Sửa Người Dùng: không còn checklist "Nhóm Quyền Đặc Biệt" gán theo user', async () => {
+    const r = await page.evaluate((userId) => {
+      resetUserForm();
+      editUser(userId);
+      const savedUser = DB.users.find(u => u.id === userId);
+      return {
+        checklistElementExists: !!document.getElementById('uVppExcludeGroupsChecklist'),
+        renderFnExists: typeof renderUVppExcludeGroupsChecklist !== 'undefined',
+        currentEditingFnExists: typeof currentEditingUserVppExcludeGroupIds !== 'undefined',
+        savedUserHasField: savedUser ? ('vppExcludeGroupIds' in savedUser) : null,
+      };
+    }, multiUserId != null ? multiUserId : 1);
+    record('(f) #uVppExcludeGroupsChecklist đã bị gỡ khỏi form',
+      r.checklistElementExists === false, JSON.stringify(r));
+    record('(f) renderUVppExcludeGroupsChecklist()/currentEditingUserVppExcludeGroupIds() đã bị xoá khỏi client',
+      r.renderFnExists === false && r.currentEditingFnExists === false, JSON.stringify(r));
   });
 
   await browser.close();

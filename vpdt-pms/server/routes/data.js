@@ -88,9 +88,12 @@ const ADMIN_ONLY_KEYS = new Set([
   // phải danh sách nhãn hiển thị thuần như jobTitles/trainingCategories — chỉ admin mới sửa được danh
   // sách từ khoá quét (xem defaults.js + lib/recordActions.js scanCommentForSensitiveContent()).
   'sensitiveKeywords',
-  // vppExcludeGroups (khối 17 "Nhóm Quyền Đặc Biệt")/workflowParticipatingDepts: cấu hình quản trị,
-  // chỉ sửa được ở màn Phân Quyền (admin) — xem defaults.js.
-  'vppExcludeGroups', 'workflowParticipatingDepts',
+  // vppExcludedJobTitles/workflowParticipatingDepts (khối 17 "Nhóm Quyền Đặc Biệt"): cấu hình quản trị,
+  // chỉ sửa được ở màn Phân Quyền (admin) — xem defaults.js. vppExcludeGroups (DẠNG CŨ, đã thay bằng
+  // vppExcludedJobTitles) vẫn giữ trong danh sách này để nếu có nơi nào lỡ còn ghi tới thì vẫn bị chặn
+  // đúng như trước — không phải vì còn được code mới dùng tới (xem migrateVppExcludedJobTitles() ở
+  // seedDefaults.js).
+  'vppExcludeGroups', 'vppExcludedJobTitles', 'workflowParticipatingDepts',
   // pwaShortcutModules: cấu hình "Phím Tắt PWA", chỉ admin sửa được ở màn Hệ Thống → Quản Trị — xem
   // defaults.js + routes/pwaManifest.js.
   'pwaShortcutModules',

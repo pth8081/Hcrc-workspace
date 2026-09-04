@@ -38,7 +38,11 @@ function record(name, pass, detail) {
 }
 
 // ===================== In-memory "server" state =====================
-const store = { vppPeriods: [], vppRegistrations: [] };
+// vppExcludedJobTitles: mirrors the AppData key admin's "Nhóm Không Cấp Văn Phòng Phẩm" saves to
+// (POST /api/data/vppExcludedJobTitles, see handler below) — kept as REAL server-side state (not just
+// asserted from window.DB) so the server-side create validation below reads the SAME value the admin
+// UI actually persisted, exactly like appData in production (lib/createValidation.js).
+const store = { vppPeriods: [], vppRegistrations: [], vppExcludedJobTitles: [] };
 let activeServerUser = null;
 const vppDeptWorkflows = {}; // phòng ban -> { workflowId, approvers: {1:[username,...]} } — cấu hình quy trình duyệt
 
@@ -68,7 +72,9 @@ const server = http.createServer(async (req, res) => {
     const moduleKey = createMatch[1];
     const body = await readBody(req);
     const collection = moduleKey === 'vppPeriods' ? store.vppPeriods : store.vppRegistrations;
-    const appData = moduleKey === 'vppRegistrations' ? { vppPeriods: store.vppPeriods, vppExcludeGroups: [] } : {};
+    const appData = moduleKey === 'vppRegistrations'
+      ? { vppPeriods: store.vppPeriods, vppExcludedJobTitles: store.vppExcludedJobTitles }
+      : {};
     try {
       const item = validateAndPrepareCreate(moduleKey, body, activeServerUser, collection, appData);
       collection.push(item);
@@ -136,6 +142,15 @@ const server = http.createServer(async (req, res) => {
     }
   }
 
+  // POST /api/data/vppExcludedJobTitles — real persistence for saveVppExcludedJobTitles() (khối 17
+  // admin UI), so the create-validation check above (appData.vppExcludedJobTitles) sees the SAME value
+  // the admin actually saved, exactly like production (routes/data.js -> lib/appData.js AppData row).
+  if (req.method === 'POST' && url.pathname === '/api/data/vppExcludedJobTitles') {
+    const body = await readBody(req);
+    store.vppExcludedJobTitles = Array.isArray(body) ? body : [];
+    return sendJson(res, 200, { ok: true });
+  }
+
   sendJson(res, 200, {});
 });
 
@@ -150,6 +165,14 @@ const employeeUser = {
   phone: '0977777777', email: 'nv2@company.com', jobTitle: 'Nhân viên',
   active: true, perms: { vppRegisterCreate: true }
 };
+// jobTitle này sẽ được thêm vào "Nhóm Không Cấp Văn Phòng Phẩm" (vppExcludedJobTitles) ở kịch bản V9 —
+// cùng phòng ban + cùng quyền vppRegisterCreate với employeeUser để cô lập đúng 1 biến khác nhau
+// (jobTitle) khi so sánh hành vi bị loại trừ.
+const excludedUser = {
+  username: 'nv_baove1', name: 'Đặng Văn Bảo Vệ', dept: 'Phòng Kinh Doanh', role: 'STAFF',
+  phone: '0988888888', email: 'baove1@company.com', jobTitle: 'Bảo vệ',
+  active: true, perms: { vppRegisterCreate: true }
+};
 
 vppDeptWorkflows[employeeUser.dept] = { workflowId: 'WF_1STEP', approvers: { 1: [managerUser.username] } };
 
@@ -162,12 +185,12 @@ const CATALOG_ITEMS = [
 const seedDB = {
   depts: ['Phòng Kinh Doanh', 'Phòng Hành Chính'],
   cats: [], stores: [],
-  jobTitles: ['Nhân viên', 'Trưởng phòng Hành Chính'],
+  jobTitles: ['Nhân viên', 'Trưởng phòng Hành Chính', 'Bảo vệ'],
   submissionTypes: [], contractTypes: [], carTypes: [],
-  users: [managerUser, employeeUser],
+  users: [managerUser, employeeUser, excludedUser],
   meetings: [], meetingMinutes: [], meetingAttendeeTemplates: [],
   carRegs: [], carDeptWorkflows: {},
-  tasks: [], permGroups: [], vppExcludeGroups: [],
+  tasks: [], permGroups: [], vppExcludeGroups: [], vppExcludedJobTitles: [], workflowParticipatingDepts: [],
   vppPeriods: [], vppRegistrations: [], vppDeptWorkflows,
   budgetEntries: [], budgetDeptWorkflows: {},
   itPriceApprovals: [], itPriceDeptWorkflows: {},
@@ -364,6 +387,101 @@ async function main() {
     'VPP: approver APPROVEs the resubmitted registration — workflow completes (PENDING -> APPROVED)',
     v7approve.status === 'APPROVED' && v7approve.alerts.some((a) => a.includes('Phê duyệt') || a.includes('phê duyệt')),
     `status=${v7approve.status} alerts=${JSON.stringify(v7approve.alerts)}`
+  );
+
+  // ===================== V9 — "Nhóm Không Cấp Văn Phòng Phẩm" (vppExcludedJobTitles, flat list) =====
+  // Dept headcount BEFORE any exclusion — both employeeUser and excludedUser are active in "Phòng Kinh
+  // Doanh" at this point, neither jobTitle excluded yet.
+  const v9headcountBefore = await page.evaluate(() => vppActiveHeadcountForDept('Phòng Kinh Doanh'));
+  record('VPP-exclude: dept headcount counts BOTH users before any job title is excluded',
+    v9headcountBefore === 2, `headcount=${v9headcountBefore}`);
+
+  // Admin (khối 17 cây phân quyền) adds "Bảo vệ" to the flat exclusion list via the EXACT
+  // add/save flow the UI wires up (mirrors "Đơn Vị Tham Gia Quy Trình" — searchable picker + "Lưu").
+  await loginAs(page, managerUser);
+  const v9admin = await page.evaluate(async () => {
+    window.__alerts = [];
+    switchTab('system'); setSystemSubTab('ADMIN');
+    vppExcludedJobTitlesDraft = [];
+    renderVppExcludedJobTitlesChecklist();
+    document.getElementById('vppExcludedJobTitlePicker').value = 'Bảo vệ';
+    addVppExcludedJobTitle();
+    await saveVppExcludedJobTitles();
+    return { alerts: window.__alerts.slice(), draftAfterSave: [...vppExcludedJobTitlesDraft], dbAfterSave: [...DB.vppExcludedJobTitles] };
+  });
+  record('VPP-exclude: admin adds "Bảo vệ" to the flat list and Lưu persists it (DB + draft in sync)',
+    v9admin.dbAfterSave.includes('Bảo vệ') && v9admin.draftAfterSave.includes('Bảo vệ') &&
+    v9admin.alerts.some((a) => a.includes('Đã lưu')),
+    JSON.stringify(v9admin)
+  );
+  record('VPP-exclude: save actually reached the (fake) server — persisted server-side too',
+    store.vppExcludedJobTitles.includes('Bảo vệ'), JSON.stringify(store.vppExcludedJobTitles));
+
+  // Dept headcount AFTER exclusion — excludedUser ("Bảo vệ") no longer counted, employeeUser still is.
+  const v9headcountAfter = await page.evaluate(() => vppActiveHeadcountForDept('Phòng Kinh Doanh'));
+  record('VPP-exclude: dept headcount drops by 1 once the job title is excluded',
+    v9headcountAfter === 1, `headcount=${v9headcountAfter}`);
+
+  // Client-side gate: excludedUser sees the "not eligible" note and a disabled period picker.
+  await loginAs(page, excludedUser);
+  const v9clientGate = await page.evaluate((periodId) => {
+    switchTab('vpp');
+    renderVppRegPeriodOptions();
+    return {
+      isExcluded: isUserVppExcluded(currentUser),
+      selectDisabled: document.getElementById('vppRegPeriodSelect').disabled,
+      excludedNoteHidden: document.getElementById('vppRegExcludedNote').classList.contains('hidden'),
+    };
+  }, periodId);
+  record('VPP-exclude: isUserVppExcluded(currentUser) is true for the excluded job title',
+    v9clientGate.isExcluded === true, JSON.stringify(v9clientGate));
+  record('VPP-exclude: registration period picker is disabled + "not eligible" note shown (client gate)',
+    v9clientGate.selectDisabled === true && v9clientGate.excludedNoteHidden === false, JSON.stringify(v9clientGate));
+
+  // Server-side gate: a direct create call (bypassing the disabled UI, as a forged/replayed request
+  // would) must ALSO be rejected — this is the real security boundary, not just the UI hint above.
+  const v9serverGate = await page.evaluate(async (periodId) => {
+    const countBefore = DB.vppRegistrations.length;
+    let serverError = null;
+    try {
+      await callCreateAction('vppRegistrations', {
+        code: `DK-VPP-TEST-EXCLUDED-${Date.now()}`, periodId,
+        items: [{ name: 'Bút bi Thiên Long', qty: 1 }], createdAt: new Date().toLocaleString('vi-VN')
+      });
+    } catch (err) { serverError = err.message; }
+    return { serverError, countBefore, countAfter: DB.vppRegistrations.length };
+  }, periodId);
+  record('VPP-exclude: server-side create validation ALSO rejects the excluded job title (not just the UI)',
+    !!v9serverGate.serverError && v9serverGate.serverError.includes('không thuộc diện được đăng ký') &&
+    v9serverGate.countAfter === v9serverGate.countBefore,
+    JSON.stringify(v9serverGate)
+  );
+
+  // Control: employeeUser (jobTitle "Nhân viên", NOT in the excluded list) is completely unaffected.
+  await loginAs(page, employeeUser);
+  const v9unaffected = await page.evaluate(() => {
+    switchTab('vpp');
+    renderVppRegPeriodOptions();
+    return {
+      isExcluded: isUserVppExcluded(currentUser),
+      selectDisabled: document.getElementById('vppRegPeriodSelect').disabled,
+    };
+  });
+  record('VPP-exclude: a DIFFERENT job title (not on the list) is unaffected — not excluded, picker enabled',
+    v9unaffected.isExcluded === false && v9unaffected.selectDisabled === false, JSON.stringify(v9unaffected));
+
+  // Removing the job title from the flat list (admin UI) reverses the effect — round-trips cleanly.
+  await loginAs(page, managerUser);
+  const v9removed = await page.evaluate(async () => {
+    window.__alerts = [];
+    renderVppExcludedJobTitlesChecklist();
+    removeVppExcludedJobTitle('Bảo vệ');
+    await saveVppExcludedJobTitles();
+    return { dbAfterSave: [...DB.vppExcludedJobTitles] };
+  });
+  record('VPP-exclude: admin removes "Bảo vệ" from the flat list and Lưu persists the removal',
+    !v9removed.dbAfterSave.includes('Bảo vệ') && !store.vppExcludedJobTitles.includes('Bảo vệ'),
+    JSON.stringify({ v9removed, storeAfter: store.vppExcludedJobTitles })
   );
 
   // ===================== V8 — validation: registering against a CLOSED period is blocked =====================

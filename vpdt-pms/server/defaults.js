@@ -201,13 +201,20 @@ const DEFAULTS = {
     }
   ],
 
-  // "Nhóm Quyền Đặc Biệt" (khối 17 cây phân quyền, tách riêng khỏi permGroups ở trên — 1 user chọn
-  // được NHIỀU nhóm loại này cùng lúc, khác permGroups chỉ 1 nhóm/user): mỗi nhóm mang 1 danh sách
-  // chức danh — user có jobTitle nằm trong danh sách của bất kỳ nhóm nào mình được gán vào sẽ bị loại
-  // khỏi việc đăng ký Văn Phòng Phẩm (xem lib/createValidation.js vppRegistrations.extraValidate) và
-  // khỏi số nhân sự gợi ý tính ngân sách/người theo phòng ban (xem vppActiveHeadcountForDept() ở
-  // index.html). user.vppExcludeGroupIds (mảng id nhóm) là field mới trên "users".
+  // "Nhóm Quyền Đặc Biệt" (khối 17 cây phân quyền) — DẠNG CŨ: mỗi nhóm mang 1 danh sách chức danh, user
+  // phải được gán thủ công vào 0..N nhóm (field user.vppExcludeGroupIds) mới bị loại. GIỮ NGUYÊN key này
+  // trong AppData (không xoá dữ liệu cũ) nhưng KHÔNG còn được đọc/ghi ở bất kỳ đâu trong code mới — đã
+  // thay bằng vppExcludedJobTitles (mảng phẳng) ngay bên dưới, xem migrateVppExcludedJobTitles() ở
+  // seedDefaults.js (di trú 1 lần, gộp toàn bộ jobTitles[] của mọi nhóm ở đây vào mảng phẳng đó).
   vppExcludeGroups: [],
+
+  // Danh sách CHỨC DANH không được cấp Văn Phòng Phẩm (khối 17 cây phân quyền, thay cho vppExcludeGroups
+  // ở trên) — mảng chuỗi phẳng, cùng khuôn workflowParticipatingDepts ngay bên dưới. User có jobTitle
+  // HIỆN TẠI nằm trong mảng này sẽ bị loại khỏi việc đăng ký Văn Phòng Phẩm (xem
+  // lib/createValidation.js vppRegistrations.extraValidate) và khỏi số nhân sự gợi ý tính ngân sách/
+  // người theo phòng ban (xem vppActiveHeadcountForDept() ở index.html) — không cần gán user vào nhóm
+  // nào nữa, so khớp thẳng theo chức danh.
+  vppExcludedJobTitles: [],
 
   // PWA — danh sách module (key khớp đúng tên tab dùng ở switchTab()/BUSINESS_MODULES) admin chọn làm
   // "phím tắt" khi nhấn giữ icon app đã cài trên màn hình chính (Android/Chrome — xem routes/pwaManifest.js

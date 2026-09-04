@@ -60,15 +60,14 @@ async function cascadeStoreRename(oldValue, newValue) {
 
 // jobTitles (Khối Văn Phòng/HO): cascade users[].jobTitle CHỈ cho user KHÔNG phải posType STORE
 // (posType STORE dùng danh mục storeJobTitles riêng, xem cascadeStoreJobTitleRename() bên dưới) +
-// vppExcludeGroups[].jobTitles[] (so khớp chuỗi thô, xem isUserVppExcluded() ở index.html).
+// vppExcludedJobTitles[] (mảng chuỗi phẳng, so khớp chuỗi thô, xem isUserVppExcluded() ở index.html).
+// KHÔNG còn cascade vppExcludeGroups[].jobTitles[] (DẠNG CŨ) — key đó vẫn còn trong AppData nhưng
+// không còn được đọc/ghi ở đâu trong code mới, xem migrateVppExcludedJobTitles() ở seedDefaults.js.
 async function cascadeJobTitleRename(oldValue, newValue) {
   await withLockedAppDataValue('users', (list) => (list || []).map(u =>
     (u.jobTitle === oldValue && u.posType !== 'STORE') ? { ...u, jobTitle: newValue } : u
   ));
-  await withLockedAppDataValue('vppExcludeGroups', (list) => (list || []).map(g => {
-    if (!Array.isArray(g.jobTitles) || !g.jobTitles.includes(oldValue)) return g;
-    return { ...g, jobTitles: g.jobTitles.map(jt => (jt === oldValue ? newValue : jt)) };
-  }));
+  await withLockedAppDataValue('vppExcludedJobTitles', (list) => (list || []).map(jt => (jt === oldValue ? newValue : jt)));
 }
 
 // storeJobTitles (Siêu Thị, mục 4a): cascade users[].jobTitle CHỈ cho posType === 'STORE'.

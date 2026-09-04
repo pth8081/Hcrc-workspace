@@ -1,11 +1,58 @@
 # Phiên bản hiện tại
 
-**7.0** — đã merge vào `main` (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge
+**7.1** — đã merge vào `main` (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge
 góc màn hình + `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần
 kiểu `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. Đúng theo quy tắc MINOR chạy 0-9 trong
-`CLAUDE.md`: sau `6.9` (đã hết mức MINOR 0-9) tăng MAJOR lên `7`, reset MINOR về `0` → `7.0`.
+`CLAUDE.md`: sau `7.0` tăng MINOR lên 1 → `7.1`.
 
-## Cập nhật gần nhất — Hỗ Trợ IT: Tài liệu bổ sung ở Phê Duyệt Giá, Bán Buôn đổi sang duyệt theo Margin/Chiết Khấu, fix nút Mở rộng/Thu gọn cây phân quyền
+## Cập nhật gần nhất — Nhóm Không Cấp Văn Phòng Phẩm: chuyển từ gán theo NHÓM sang chọn thẳng CHỨC DANH (mảng phẳng)
+
+Khối 17 "Nhóm Quyền Đặc Biệt" (màn Hệ Thống → Quản Trị → Phân Quyền) — "Nhóm Không Cấp Văn Phòng Phẩm"
+trước đây là 1 danh sách NHIỀU NHÓM tự đặt tên, mỗi nhóm mang 1 danh sách chức danh, và còn phải gán thủ
+công user vào 0..N nhóm (`user.vppExcludeGroupIds`) mới thực sự bị loại — 2 lớp gián tiếp không cần thiết.
+Đổi hẳn sang `vppExcludedJobTitles`: 1 mảng chuỗi PHẲNG (cùng khuôn `workflowParticipatingDepts` ngay bên
+cạnh) — user có `jobTitle` HIỆN TẠI nằm trong mảng này là bị loại thẳng, không cần gán vào đâu nữa.
+
+**Di trú dữ liệu cũ (tự động, 1 lần/DB)**: `seedDefaults.js` thêm `migrateVppExcludedJobTitles()`, PHẢI
+chạy TRƯỚC vòng lặp seed `DEFAULTS` thường (vòng lặp đó tự tạo row rỗng cho key thiếu, sẽ làm mất khả năng
+phân biệt "DB chưa từng có key này — cần di trú" với "đã có nhưng admin để rỗng" nếu chạy sau) — gộp
+(union, khử trùng) toàn bộ `jobTitles[]` của mọi nhóm trong `vppExcludeGroups[]` cũ thành giá trị khởi tạo
+của `vppExcludedJobTitles[]`. Key `vppExcludeGroups` + field `user.vppExcludeGroupIds` vẫn GIỮ NGUYÊN
+trong CSDL sau di trú (không xoá dữ liệu), chỉ đơn giản không còn nơi nào trong code mới đọc/ghi tới nữa —
+`routes/data.js` vẫn chặn ghi trực tiếp key cũ này (đề phòng có nơi nào lỡ còn gọi tới).
+
+**Code liên quan cũng đổi theo mảng phẳng**: `lib/createValidation.js` (chặn đăng ký VPP khi chức danh
+nằm trong `appData.vppExcludedJobTitles`, thay vì dò qua 2 lớp nhóm+gán) — thu gọn từ so khớp
+lồng nhau còn đúng 1 dòng `includes()`; `lib/catalogRename.js::cascadeJobTitleRename()` (đổi tên chức
+danh trong danh mục giờ cascade thẳng vào mảng phẳng, không còn duyệt qua từng nhóm cũ). Admin UI (`public/index.html`)
+đổi hẳn sang widget tìm-kiếm-gõ-chọn (`sdd*`, đúng khuôn `workflowParticipatingDepts`) + chip xoá được,
+gõ sai/tự do bị chặn ngay ở client (và server chặn lại lần nữa qua `ADMIN_ONLY_KEYS`); form "Sửa Người
+Dùng" bỏ hẳn bước gán user vào nhóm (không còn nhóm nào để gán).
+
+**Test**: `tests/test-vpp.js` thêm bộ kịch bản VPP-exclude (thêm/xoá chức danh qua UI thật, số nhân sự gợi
+ý giảm đúng khi loại 1 chức danh, `isUserVppExcluded()` + khoá client (picker kỳ đăng ký bị disable) +
+chặn server-side độc lập với client, chức danh khác không bị ảnh hưởng); `tests/test-admin-users-permgroups.js`
+viết lại kịch bản (e) theo mảng phẳng (chọn đúng gợi ý mới thêm được, gõ tự do sai bị chặn, chức danh vừa
+thêm biến mất khỏi datalist gợi ý còn lại) + thêm (f) xác nhận form Sửa Người Dùng đã gỡ hẳn checklist gán
+nhóm cũ. Chạy lại toàn bộ `tests/test-*.js` (48 file) — chỉ còn đúng 2 lỗi known pre-existing cần SQL
+Server thật (`test-audit-fixes-batch1.js`, `test-audit-round2-cluster1.js`), output byte-identical với
+baseline trước đợt sửa, không phát sinh regression nào khác.
+
+Demo Playwright thật (khởi động `vpdt-mssql` Docker + `node server.js`, đăng nhập admin thật qua UI —
+gồm cả bước bắt buộc đổi mật khẩu tạm + thiết lập TOTP lần đầu): mở khối 17, thêm chức danh "Trưởng
+phòng" vào "Nhóm Không Cấp Văn Phòng Phẩm" qua đúng ô tìm-kiếm-gõ-chọn + nút "➕ Thêm Chức Danh" thật, bấm
+Lưu — nhận đúng alert thành công; RELOAD LẠI TRANG TỪ ĐẦU (không phải chỉ đọc state client) và xác nhận
+`DB.vppExcludedJobTitles` trả về từ SQL Server thật đã có đúng "Trưởng phòng" cạnh 2 chức danh đã di trú
+sẵn từ trước ("Nhân viên", "Chuyên viên") — xác nhận cả di trú tự động lẫn lượt lưu mới đều xuyên suốt tới
+CSDL thật, không chỉ đúng trên máy client. Sau đó gỡ lại "Trưởng phòng" + Lưu + reload xác nhận CSDL về
+đúng trạng thái ban đầu (không để lại dữ liệu demo).
+
+**Deploy-impact**: KHÔNG đổi `sql/schema.sql` (vẫn là JSON blob trong `dbo.AppData`), KHÔNG đổi
+`.env.example`, KHÔNG thêm `dependencies` mới — chỉ copy code + `pm2 restart`; di trú dữ liệu cũ tự chạy
+đúng 1 lần ngay trong lần khởi động server đầu tiên sau khi cập nhật (xem `seedDefaults()` ở trên), không
+cần thao tác tay nào thêm.
+
+## Trước đó — Hỗ Trợ IT: Tài liệu bổ sung ở Phê Duyệt Giá, Bán Buôn đổi sang duyệt theo Margin/Chiết Khấu, fix nút Mở rộng/Thu gọn cây phân quyền
 
 3 việc độc lập gộp 1 đợt (cùng khu vực code module Hỗ Trợ IT + màn admin "Quy Trình & Phê Duyệt"/"Phân Quyền"):
 
