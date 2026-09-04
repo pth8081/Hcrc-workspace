@@ -1,11 +1,72 @@
 # Phiên bản hiện tại
 
-**6.9** — đã merge vào `main` (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge
+**7.0** — đã merge vào `main` (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge
 góc màn hình + `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần
 kiểu `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. Đúng theo quy tắc MINOR chạy 0-9 trong
-`CLAUDE.md`: sau `6.8` tăng MINOR lên `6.9`.
+`CLAUDE.md`: sau `6.9` (đã hết mức MINOR 0-9) tăng MAJOR lên `7`, reset MINOR về `0` → `7.0`.
 
-## Cập nhật gần nhất — Fix: nút Duyệt/Từ chối Phê Duyệt Giá ở màn "Phê Duyệt" tổng hợp không phản ứng gì
+## Cập nhật gần nhất — Hỗ Trợ IT: Tài liệu bổ sung ở Phê Duyệt Giá, Bán Buôn đổi sang duyệt theo Margin/Chiết Khấu, fix nút Mở rộng/Thu gọn cây phân quyền
+
+3 việc độc lập gộp 1 đợt (cùng khu vực code module Hỗ Trợ IT + màn admin "Quy Trình & Phê Duyệt"/"Phân Quyền"):
+
+**A. "📎 Tài liệu bổ sung liên quan" (nhiều tệp)** — thêm vào form tạo Phê Duyệt Giá (`#itPriceCreateForm`,
+dùng chung cho cả Bán Lẻ lẫn Bán Buôn), mirror đúng khuôn "Tài Liệu Bổ Sung Theo Tờ Trình" (`subExtraFiles`)
+của Văn Bản Trình — hoàn toàn tuỳ chọn, chọn nhiều tệp cùng lúc, hiện trong modal chi tiết kèm nút Xem/Tải.
+Kèm 2 chỗ vá bảo mật: `lib/fileAuthz.js::findOwningRecord()` trước đây chỉ tra `item.files` (bảng giá) của
+`itPriceApprovals`, không tra `item.extraFiles` — file "tài liệu bổ sung" mới upload sẽ tra không ra hồ sơ
+sở hữu và rơi vào nhánh FAIL-OPEN (bất kỳ ai đăng nhập cũng đọc được, kể cả người không có quyền xem hồ sơ
+đó); và `authorizeFileAccess()` nhánh `owning.itPrice` trước đây áp luật "chỉ file đã duyệt mới tải được"
+(vốn chỉ dành cho bảng giá Excel) lên CẢ `extraFiles`, khiến mọi lượt tải tài liệu bổ sung đều bị chặn nhầm.
+
+**B. Bán Buôn: bỏ hẳn quy trình duyệt theo phòng ban, chuyển sang chọn 1 trong 4 mức Margin/Chiết Khấu cố
+định** (`Margin < 5%`, `Margin ≥ 5%`, `Chiết khấu ≤ 5%`, `Chiết khấu > 5%` — danh sách PHẲNG, không lồng
+nhau, đã chốt với người dùng). Bán Lẻ giữ nguyên 100% quy trình theo phòng ban như cũ, không bị ảnh hưởng.
+Trường mới `priceTier` bắt buộc trên form Bán Buôn (server tự xác minh lại, null hoá cho Bán Lẻ dù client
+cố gửi kèm giá trị lạ). `lib/workflowEngine.js` thêm `resolveItPriceTierWorkflowConfig()` + collection MỚI
+`itPriceTierWorkflows` (map phẳng `{tierKey: {workflowId, approvers}}`, không cần tương thích ngược vì là
+cấu hình hoàn toàn mới) — `resolveWfConfig` của `itPriceApprovals` branch theo `priceType`: WHOLESALE tra
+theo tier, RETAIL tra theo dept như cũ. Admin cấu hình người duyệt riêng cho từng mức ở màn "Quy Trình &
+Phê Duyệt" — tab "Bán Buôn" của "Hỗ Trợ IT - Duyệt giá" đổi hẳn sang layout 4 thẻ cố định theo tier (không
+còn tách cùng phòng/khác phòng như layout theo dept), tab "Bán Lẻ" giữ nguyên UI theo dept không đổi. Rất
+nhiều điểm client hiển thị/kiểm quyền theo hồ sơ cụ thể (badge trạng thái, nút Duyệt/Từ chối trong modal,
+Approval Hub, `canViewItPriceApproval`, cảnh báo trước khi khoá tài khoản...) phải branch đúng theo tier
+cho hồ sơ Bán Buôn — gom về 1 hàm `resolveItPriceWorkflowConfigForItemClient()` để không bỏ sót điểm nào.
+
+**C. Fix nút "Mở rộng tất cả"/"Thu gọn tất cả" ở cây phân quyền (màn Sửa Người Dùng/Sửa Nhóm Phân Quyền)**
+— bug có thật, không phải giả định: nút gọi qua cơ chế CSP-safe `data-op="setAllPermTreeNodes" data-arg0="false"`,
+nhưng `cspCoerceArg()` chỉ coerce chuỗi TOÀN SỐ sang `Number`, giữ nguyên `"true"`/`"false"` ở dạng STRING.
+`d.open = "false"` gán 1 chuỗi KHÔNG RỖNG vào thuộc tính boolean IDL của `<details>`, mà `Boolean("false") === true`
+(chuỗi không rỗng luôn truthy) — nghĩa là CẢ 2 nút đều MỞ RỘNG hết, "Thu gọn tất cả" không hề thu gọn được
+gì. Fix: so sánh tường minh (`open === true || open === 'true'`) thay vì tin kiểu dữ liệu.
+
+**Verify**: `node -c` mọi file server sửa (`lib/fileAuthz.js`, `lib/createValidation.js`,
+`lib/workflowEngine.js`, `defaults.js`, `routes/data.js`) OK; syntax/dup-id check `public/index.html` khớp
+đúng baseline (1 lỗi import pre-existing, 17 dup-id, không phát sinh mới). Test mới: `tests/test-uploads-file-authz.js`
+(3 kịch bản mới, gọi thẳng `authorizeFileAccess()` thật) khoá chặt cả 2 lỗ hổng của mục A — người ngoài
+phạm vi bị chặn (không FAIL-OPEN), extraFiles không bị luật "chỉ file đã duyệt" chặn nhầm, item.files vẫn
+giữ đúng hành vi cũ; `tests/test-it-support.js` thêm ~10 kịch bản (2 sub-tab tạo hồ sơ kèm priceTier, chặn
+thiếu priceTier cả client lẫn server, người duyệt tier A không duyệt được hồ sơ tier B và ngược lại, người
+duyệt Bán Buôn theo dept CŨ không còn quyền gì với hồ sơ Bán Buôn nữa, Bán Lẻ song song không đổi, tạo hồ
+sơ kèm/không kèm tài liệu bổ sung); `tests/test-perm-tree-expand-collapse.js` (file MỚI, Playwright thật
+trên `public/index.html` thật) gọi `setAllPermTreeNodes('false')`/`('true')` bằng ĐÚNG string như đường đi
+`data-op` thật (đã xác nhận test này bắt được bug gốc khi tạm revert fix), cộng thêm kịch bản bấm nút thật
+qua dispatch. Chạy lại toàn bộ `tests/test-*.js` (48 file, +1 file mới) — chỉ còn đúng 2 lỗi known-flaky
+đã biết từ trước (`test-audit-fixes-batch1.js`, `test-audit-round2-cluster1.js`, cần SQL Server thật, output
+byte-identical với baseline trước đợt), không phát sinh regression nào khác.
+
+Demo Playwright thật (server thật + SQL Server thật, tài khoản demo có sẵn `nv_nhansu`/`ks_kiemsoat`/`sep_duyet`
+non-admin `totpEnabled:false`, admin dùng 1 phiên duy nhất xuyên suốt để né lỗi 401-sau-khi-bật-TOTP đã biết
+từ trước): tạo hồ sơ Bán Lẻ kèm 2 tệp tài liệu bổ sung — hiện đúng trong modal chi tiết, chính chủ tải được
+cả 2 tệp, người ngoài phạm vi bị chặn tải (403) và hồ sơ bị lọc khỏi `GET /api/data` phía họ; admin cấu hình
+qua UI thật 2 người duyệt riêng cho "Margin < 5%" và "Chiết khấu > 5%" — tạo hồ sơ Bán Buôn ở mức Margin < 5%,
+xác nhận đúng người duyệt mức đó thấy và duyệt được trong "Phê Duyệt" tổng hợp, người duyệt mức kia không
+thấy/không duyệt được; hồ sơ Bán Lẻ song song vẫn duyệt đúng theo phòng ban như cũ; màn "Sửa Người Dùng" bấm
+"Thu gọn tất cả" đóng hết 23 khối quyền, bấm "Mở rộng tất cả" mở lại hết (có chụp ảnh trước/sau).
+
+**Deploy-impact**: KHÔNG đổi `sql/schema.sql` (mọi field mới là JSON blob trong `dbo.Records`/`dbo.AppData`),
+KHÔNG đổi `.env.example`, KHÔNG thêm `dependencies` mới — chỉ copy code + `pm2 restart`.
+
+## Trước đó — Fix: nút Duyệt/Từ chối Phê Duyệt Giá ở màn "Phê Duyệt" tổng hợp không phản ứng gì
 
 Người dùng báo lỗi thật: mở màn "Phê Duyệt" tổng hợp (Approval Hub, gộp hồ sơ chờ duyệt từ mọi module),
 bấm nút Duyệt cho 1 hồ sơ Phê Duyệt Giá (Hỗ Trợ IT) — không có phản ứng gì, không mở được bảng chi tiết để
