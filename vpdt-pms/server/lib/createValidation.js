@@ -1240,6 +1240,13 @@ const CREATE_MODULE_CONFIGS = {
       if (!user.perms?.admin && !user.perms?.itPriceProposeCreate) {
         throw new CreateError(403, 'Bạn không có quyền đề xuất duyệt giá');
       }
+      // priceType (RETAIL/WHOLESALE) — bắt buộc, client tự gắn đúng giá trị theo sub-tab "Bán Lẻ"/"Bán
+      // Buôn" đang mở lúc gửi (KHÔNG có dropdown chọn tay, xem submitItPriceApproval() ở index.html),
+      // không tin nguyên văn giá trị lạ nào khác client gửi kèm. Dùng để lọc đúng sub-tab hiển thị VÀ để
+      // resolveWfConfig() (lib/workflowEngine.js) tra đúng nhánh approver theo cặp (dept, priceType).
+      const priceType = payload.priceType === 'WHOLESALE' ? 'WHOLESALE' : (payload.priceType === 'RETAIL' ? 'RETAIL' : null);
+      if (!priceType) throw new CreateError(400, 'Vui lòng chọn đúng loại giá (Bán Lẻ/Bán Buôn)');
+      payload.priceType = priceType;
       // Đề xuất giờ nộp bằng cách tải lên 1 tệp Excel bảng giá (nhiều dòng/mặt hàng cùng lúc) thay vì
       // nhập tay 1 mặt hàng — client gọi POST /api/it-price/parse-file trước để server đọc + trả về
       // items có cấu trúc, rồi echo lại NGUYÊN VĂN vào đây (payload.files[0]) — cùng mức tin cậy với

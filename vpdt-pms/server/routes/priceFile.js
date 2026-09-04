@@ -7,10 +7,16 @@ const multer = require('multer');
 const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
+const ExcelJS = require('exceljs');
 const rateLimit = require('express-rate-limit');
 const { requireAuth, blockIfMustChangePassword } = require('../lib/auth');
-const { parsePriceFile, parsePriceTemplateColumns } = require('../lib/priceFileParser');
-const { getAppDataValueCached } = require('../lib/appData');
+const { parsePriceFile, parsePriceTemplateColumns, normalizeHeader } = require('../lib/priceFileParser');
+const { getAppDataValueCached, getAllAppData } = require('../lib/appData');
+const { getAllForCollection } = require('../lib/recordStore');
+const { canViewItPriceApproval } = require('../lib/recordViewScope');
+const { resolveApprovedFileUrl } = require('../lib/recordActions');
+const { parseUploadsFileUrl } = require('../lib/fileAuthz');
+const { assertDecompressedSizeWithinBudget } = require('../lib/xlsxSafeRead');
 const { verifyFileSignature } = require('../lib/fileSignature');
 const { HttpError } = require('../lib/httpErrors');
 const { sendCatchError } = require('../lib/errorResponse');
@@ -146,6 +152,106 @@ router.post('/master-list/parse-file', uploadRateLimiter, (req, res) => {
       sendCatchError(res, parseErr, 'POST /api/it-price/master-list/parse-file');
     }
   });
+});
+
+// POST /api/it-price/:id/download-marked — "Đánh dấu cột trước khi tải" (mục 4 kế hoạch): tô nền xanh
+// da trời nhạt cho TOÀN BỘ cell (cả header lẫn dữ liệu) của các cột được chọn, GIỮ NGUYÊN ĐỦ mọi cột
+// khác của file gốc — KHÔNG xoá/ẩn cột nào. Sinh buffer MỚI theo TỪNG request, KHÔNG bao giờ ghi đè file
+// gốc trên đĩa (chỉ đọc buffer vào bộ nhớ rồi trả thẳng qua response, không fs.writeFile lại filePath).
+//
+// CHỈ áp dụng cho ĐÚNG file khớp resolveApprovedFileUrl(item) (dùng lại NGUYÊN hàm dùng chung với
+// lib/fileAuthz.js mục 2 — không viết luồng quyền/luồng xác định "file đã duyệt" riêng, xem rủi ro #3/#4
+// ở kế hoạch). Tự kiểm lại canViewItPriceApproval() ngay tại đây (KHÔNG tin riêng client đã lọc đúng
+// quyền trước khi hiện nút) — cùng khuôn mọi route ghi/đọc dữ liệu nhạy cảm khác trong hệ thống.
+const MARK_COLUMN_FILL = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFBFDFF5' } };
+
+router.post('/:id/download-marked', async (req, res) => {
+  const itemId = Number(req.params.id);
+  if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
+  try {
+    const items = await getAllForCollection('itPriceApprovals');
+    const item = (items || []).find(x => x.id === itemId);
+    if (!item) return res.status(404).json({ error: 'Không tìm thấy đề xuất' });
+
+    const appData = await getAllAppData();
+    if (!(await canViewItPriceApproval(req.freshUser, item, appData))) {
+      return res.status(403).json({ error: 'Bạn không có quyền tải tệp của đề xuất này' });
+    }
+
+    const approvedFileUrl = resolveApprovedFileUrl(item);
+    if (!approvedFileUrl) {
+      return res.status(403).json({ error: 'Đề xuất này chưa có tệp đã được phê duyệt chính thức để tải' });
+    }
+    const file = (item.files || []).find(f => f.fileUrl === approvedFileUrl);
+    if (!file) return res.status(404).json({ error: 'Không tìm thấy tệp đã phê duyệt' });
+
+    const columnLabels = (file.columnLabels && file.columnLabels.length) ? file.columnLabels : [{ key: 'c0', label: 'Dữ liệu' }];
+    const validKeys = new Set(columnLabels.map(c => c.key));
+    const rawKeys = Array.isArray(req.body?.columnKeys) ? req.body.columnKeys : [];
+    const markKeys = Array.from(new Set(rawKeys.map(k => String(k)).filter(k => validKeys.has(k))));
+    if (!markKeys.length) return res.status(400).json({ error: 'Vui lòng chọn ít nhất 1 cột cần đánh dấu' });
+
+    const fileName = parseUploadsFileUrl(approvedFileUrl);
+    if (!fileName) return res.status(400).json({ error: 'Đường dẫn tệp không hợp lệ' });
+    const filePath = path.join(UPLOAD_DIR, fileName);
+    if (path.dirname(filePath) !== UPLOAD_DIR || !fs.existsSync(filePath)) {
+      return res.status(404).json({ error: 'Không tìm thấy tệp' });
+    }
+
+    const buffer = fs.readFileSync(filePath);
+    // Phòng thủ thêm (defense-in-depth) dù tệp này đã qua đúng lớp kiểm zip-bomb 1 lần lúc TẢI LÊN ban
+    // đầu (xem lib/priceFileParser.js::parsePriceFile -> streamFirstSheetRows) — ở đây lần đầu tiên đọc
+    // TOÀN BỘ workbook (workbook.xlsx.load(), không streaming) để giữ được style/định dạng gốc lúc ghi
+    // lại, tốn RAM nhiều hơn hẳn nên đáng kiểm lại cho chắc trước khi load.
+    await assertDecompressedSizeWithinBudget(buffer);
+
+    const workbook = new ExcelJS.Workbook();
+    await workbook.xlsx.load(buffer);
+    const worksheet = workbook.worksheets[0];
+    if (!worksheet) return res.status(400).json({ error: 'Tệp không có sheet dữ liệu nào' });
+
+    // Map key cột (columnLabels[].key) -> chỉ số cột THẬT trong sheet — không tin lại vị trí suy ra lúc
+    // parse ban đầu (có thể lệch nếu nộp qua Mẫu Giá, xem lib/priceFileParser.js::matchColumnsToTemplate:
+    // thứ tự cột trong file thật không nhất thiết trùng Mẫu Giá) mà DÒ LẠI theo TÊN CỘT (đã chuẩn hoá hoa/
+    // thường/dấu, dùng ĐÚNG normalizeHeader() dùng chung với lib/priceFileParser.js) ngay trên dòng tiêu
+    // đề thật của sheet đang mở — luôn khớp đúng cột thật bất kể thứ tự.
+    const headerRow = worksheet.getRow(1);
+    const headerColByNorm = new Map();
+    headerRow.eachCell({ includeEmpty: true }, (cell, colNumber) => {
+      const norm = normalizeHeader(cell.value == null ? '' : String(cell.value));
+      if (norm && !headerColByNorm.has(norm)) headerColByNorm.set(norm, colNumber);
+    });
+
+    const labelByKey = new Map(columnLabels.map(c => [c.key, c.label]));
+    const targetCols = [];
+    for (const key of markKeys) {
+      const label = labelByKey.get(key);
+      const colNumber = label ? headerColByNorm.get(normalizeHeader(label)) : null;
+      if (colNumber) targetCols.push(colNumber);
+    }
+    if (!targetCols.length) {
+      return res.status(400).json({ error: 'Không khớp được cột nào cần đánh dấu với tệp gốc trên đĩa' });
+    }
+
+    const maxRow = Math.max(worksheet.rowCount || 0, worksheet.actualRowCount || 0, 1);
+    for (const colNumber of targetCols) {
+      for (let r = 1; r <= maxRow; r++) {
+        worksheet.getCell(r, colNumber).fill = MARK_COLUMN_FILL;
+      }
+    }
+
+    const outName = `${(file.fileName || 'bang-gia').replace(/\.xlsx?$/i, '')}-danh-dau.xlsx`;
+    const asciiFallback = outName.replace(/[^\x20-\x7E]/g, '_');
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `attachment; filename="${asciiFallback}"; filename*=UTF-8''${encodeURIComponent(outName)}`);
+    // Ghi buffer MỚI thẳng vào response — KHÔNG đụng tới filePath trên đĩa (đọc bằng fs.readFileSync ở
+    // trên, không có bất kỳ fs.writeFile*/fs.copyFile* nào nhắm vào filePath trong toàn bộ handler này).
+    await workbook.xlsx.write(res);
+    res.end();
+  } catch (err) {
+    console.error('⛔ POST /api/it-price/:id/download-marked lỗi:', err && err.stack || err);
+    if (!res.headersSent) res.status(500).json({ error: 'Không thể tạo tệp đã đánh dấu' });
+  }
 });
 
 module.exports = router;

@@ -258,8 +258,11 @@ const DEFAULTS = {
   // "officeInvestDeptWorkflows" (Đầu Tư) đã bị xoá hoàn toàn — luồng duyệt đơn hàng tương đương giờ
   // nằm ở module Vận Hành (operationOrderDeptWorkflows bên dưới).
   vppDeptWorkflows: {},
-  // Hỗ Trợ IT > Phê Duyệt Giá — quy trình duyệt theo phòng ban, cùng khuôn vppDeptWorkflows (không có
-  // lớp bổ sung). Admin cấu hình ở tab "Quy Trình & Phê Duyệt".
+  // Hỗ Trợ IT > Phê Duyệt Giá — quy trình duyệt theo phòng ban × LOẠI GIÁ (RETAIL/WHOLESALE): mỗi phần
+  // tử là { RETAIL: {workflowId,approvers}, WHOLESALE: {workflowId,approvers} } (cấu hình phòng ban CŨ,
+  // phẳng — trước khi có 2 sub-tab "Bán Lẻ"/"Bán Buôn" — vẫn được ĐỌC ĐÚNG là RETAIL qua
+  // resolveItPriceDeptWorkflowConfig() ở lib/workflowEngine.js, không cần migrate dữ liệu). Admin cấu
+  // hình ở tab "Quy Trình & Phê Duyệt".
   itPriceDeptWorkflows: {},
   // Ngân Sách — Trưởng phòng duyệt bản ngân sách theo phòng ban, cùng khuôn vppDeptWorkflows/
   // itPriceDeptWorkflows ở trên. Admin cấu hình ở tab "Quy Trình & Phê Duyệt".

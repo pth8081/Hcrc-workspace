@@ -137,4 +137,4 @@ async function streamFirstSheetRows(buffer, onRow, options = {}) {
   if (!sawSheet) throw new HttpError(400, 'File Excel không có sheet dữ liệu nào');
 }
 
-module.exports = { streamFirstSheetRows, MAX_UNCOMPRESSED_BYTES };
+module.exports = { streamFirstSheetRows, assertDecompressedSizeWithinBudget, MAX_UNCOMPRESSED_BYTES };

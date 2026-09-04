@@ -97,6 +97,29 @@ function flatWorkflowConfigToSteps(wfConfig, appData) {
   return { steps: wf.steps, approvers: wfConfig?.approvers || {} };
 }
 
+// ===== Hỗ Trợ IT — Phê Duyệt Giá: cấu hình duyệt theo phòng ban × LOẠI GIÁ (RETAIL/WHOLESALE) =====
+// itPriceDeptWorkflows đổi cấu trúc từ { [dept]: {workflowId,approvers} } (CŨ, phẳng — 1 cấu hình
+// chung cho mọi loại giá) sang lồng thêm 1 cấp loại giá: { [dept]: { RETAIL: {...}, WHOLESALE: {...} } }
+// (xem defaults.js). CHỈ dùng cho ĐÚNG module itPriceApprovals — resolveWfConfig() của các module khác
+// trong MODULE_CONFIGS bên dưới KHÔNG đụng tới hàm này.
+//
+// Tương thích ngược BẮT BUỘC (2 tầng, xem thêm item.priceType ở createValidation.js): cấu hình phòng
+// ban CŨ (phẳng, có workflowId trực tiếp, KHÔNG có nhánh RETAIL/WHOLESALE lồng bên trong) coi TOÀN BỘ
+// là cấu hình cho RETAIL — đúng tinh thần "dữ liệu hiện tại chuyển hết vào Bán Lẻ". WHOLESALE của
+// phòng ban đó coi như CHƯA cấu hình (trả null — flatWorkflowConfigToSteps() bên dưới tự rơi về mặc
+// định {WF_1STEP, approvers rỗng} như mọi module khác chưa cấu hình gì, KHÔNG throw). Không cần script
+// migrate dữ liệu DB — xử lý hoàn toàn bằng fallback đọc lúc runtime. PHẢI giữ giống hệt bản mirror
+// client resolveItPriceDeptWorkflowConfigClient() ở public/index.html.
+function resolveItPriceDeptWorkflowConfig(itPriceDeptWorkflows, dept, priceType) {
+  const cfg = (itPriceDeptWorkflows || {})[dept];
+  if (!cfg) return null;
+  const type = priceType === 'WHOLESALE' ? 'WHOLESALE' : 'RETAIL';
+  // Cấu trúc MỚI: có nhánh RETAIL và/hoặc WHOLESALE lồng bên trong (kể cả khi chỉ mới có 1 trong 2).
+  if (cfg.RETAIL || cfg.WHOLESALE) return cfg[type] || null;
+  // Cấu trúc CŨ (phẳng) — chỉ có ý nghĩa cho RETAIL.
+  return type === 'RETAIL' ? cfg : null;
+}
+
 // Đầu Tư (DAU_TU) đã bị xoá hoàn toàn khỏi module Tổng Hợp — xem lib/createValidation.js
 // OFFICE_SUBTYPE_TO_PERM_FLAG (đã bỏ DAU_TU ở đó nên không còn tạo mới được nữa).
 const OFFICE_SUBTYPE_TO_DBKEY = {
@@ -204,7 +227,11 @@ const MODULE_CONFIGS = {
   // lib/recordActions.js, route riêng POST /api/records/itPriceApprovals/:id/apply.
   itPriceApprovals: {
     dbKey: 'itPriceApprovals',
-    resolveWfConfig: (item, appData) => flatWorkflowConfigToSteps(appData.itPriceDeptWorkflows?.[item.dept], appData),
+    // item.priceType: fallback 'RETAIL' cho hồ sơ CŨ chưa có field này (mục 1 kế hoạch) — khớp
+    // resolveItPriceDeptWorkflowConfig() ở trên đọc đúng nhánh RETAIL/WHOLESALE (hoặc cấu hình phẳng cũ).
+    resolveWfConfig: (item, appData) => flatWorkflowConfigToSteps(
+      resolveItPriceDeptWorkflowConfig(appData.itPriceDeptWorkflows, item.dept, item.priceType || 'RETAIL'), appData
+    ),
     // Người duyệt phòng ban ở bước hiện tại có thể yêu cầu bổ sung (vd file có dòng giá bất thường) mà
     // KHÔNG từ chối hẳn — ghi vào item.infoRequests dùng CHUNG với yêu cầu bổ sung của đội Hỗ Trợ IT sau
     // khi đã APPROVED (xem requestPriceInfoFromIt() ở lib/recordActions.js, và extraValidate của
@@ -566,5 +593,6 @@ module.exports = {
   isStepApprovalComplete,
   resolveSubmissionWorkflow,
   resolveContractApprovalWorkflow,
-  resolveContractManageWorkflow
+  resolveContractManageWorkflow,
+  resolveItPriceDeptWorkflowConfig
 };

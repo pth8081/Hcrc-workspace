@@ -34,6 +34,9 @@ const {
   canViewOperationOrder, canViewOperationStoreOpening, canViewOperationRepair,
   canViewDoc, canViewSubmission, canViewContract, canViewCarReg, canViewOfficeReq
 } = require('./recordViewScope');
+// resolveApprovedFileUrl() — nguồn sự thật DUY NHẤT cho "file đã phê duyệt" của itPriceApprovals, dùng
+// chung với routes/priceFile.js (route đánh dấu cột) — xem chú thích đầy đủ ở lib/recordActions.js.
+const { resolveApprovedFileUrl } = require('./recordActions');
 
 // Tra ngược fileUrl -> bản ghi sở hữu nó — Tài Liệu, Văn Bản Trình, Hợp Đồng, Đăng Ký Xe, Văn Phòng
 // Tổng Hợp đều dùng chung 1 khuôn quyền tải theo phòng ban ({all,depts}, cờ "<moduleKey>Download" +
@@ -220,7 +223,16 @@ async function authorizeFileAccess(user, fileUrl, mode) {
   if (owning.internal) return canViewInternalPost(user, owning.post);
   if (owning.itPrice) {
     const appData = await getAllAppData();
-    return canViewItPriceApproval(user, owning.item, appData);
+    if (!(await canViewItPriceApproval(user, owning.item, appData))) return false;
+    // mode 'download' (mục 2 kế hoạch): giới hạn thêm — CHỈ file ĐÃ ĐƯỢC PHÊ DUYỆT chính thức mới tải
+    // được qua route này (mode 'view'/Khung Xem Bảo Vệ KHÔNG bị giới hạn thêm — chỉ hành động TẢI).
+    // Hồ sơ chưa APPROVED thì resolveApprovedFileUrl() luôn trả null -> không file nào tải được, đúng ý
+    // "chỉ file đã duyệt mới tải được". Dùng ĐÚNG 1 nguồn logic chung với routes/priceFile.js (mục 4).
+    if (mode === 'download') {
+      const approvedFileUrl = resolveApprovedFileUrl(owning.item);
+      return !!approvedFileUrl && approvedFileUrl === fileUrl;
+    }
+    return true;
   }
   if (owning.reportEntry) return canViewReportEntry(user, owning.entry);
   if (owning.reportPeriod) return canSeeReportCompilation(user, owning.period) || canSeeReportPdfCompilation(user, owning.period);

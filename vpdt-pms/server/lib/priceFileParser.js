@@ -170,5 +170,5 @@ async function parsePriceTemplateColumns(buffer) {
 
 module.exports = {
   parsePriceFile, sanitizePriceFileItems, sanitizeColumnLabels, DEFAULT_COLUMN_LABELS,
-  parsePriceTemplateColumns
+  parsePriceTemplateColumns, normalizeHeader
 };

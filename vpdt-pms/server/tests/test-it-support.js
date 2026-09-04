@@ -28,6 +28,16 @@ const IT1 = { username: 'it1', name: 'Đội Hỗ Trợ IT', dept: 'IT', perms: 
 const APPROVER1 = { username: 'approver1', name: 'Trưởng Phòng Duyệt', dept: 'Ban Giám Đốc', perms: {}, active: true };
 const PLAIN = { username: 'plain', name: 'Nhân Viên Thường', dept: 'Kinh Doanh', perms: {}, active: true };
 const EMERGENCY_APPROVER = { username: 'emg1', name: 'Người Xét Từ Chối Khẩn', dept: 'Ban Giám Đốc', perms: { itPriceEmergencyRejectApprove: true }, active: true };
+// ===== Bổ sung cho mục 1/5/6 kế hoạch (2 sub-tab loại giá + khoá khẩn cấp lúc IT đang xử lý) =====
+// Phòng "Marketing" dùng cấu hình itPriceDeptWorkflows LỒNG MỚI (RETAIL/WHOLESALE tách riêng người
+// duyệt) — khác "Kinh Doanh" ở trên CỐ Ý giữ NGUYÊN dạng phẳng CŨ để làm bằng chứng cho test tương
+// thích ngược (mục 6: cấu hình cũ phải resolve đúng thành RETAIL, không throw, không cần migrate).
+const STAFF_MKT = { username: 'staff_mkt', name: 'Trần Thị Marketing', dept: 'Marketing', perms: { itPriceProposeCreate: true }, active: true };
+const RETAIL_APPROVER_MKT = { username: 'retail_appr_mkt', name: 'Người Duyệt Bán Lẻ MKT', dept: 'Marketing', perms: {}, active: true };
+const WHOLESALE_APPROVER_MKT = { username: 'wholesale_appr_mkt', name: 'Người Duyệt Bán Buôn MKT', dept: 'Marketing', perms: {}, active: true };
+// admin KHÔNG bật TOTP (mock, không đi qua luồng TOTP thật) — dùng riêng cho kịch bản xác nhận khoá
+// "🚨 Từ Chối Khẩn" áp dụng cho CẢ ADMIN khi IT đang xử lý (mục 5 kế hoạch).
+const ADMIN = { username: 'admin', name: 'Quản Trị Viên', dept: 'Ban Giám Đốc', perms: { admin: true }, active: true };
 
 // Mẫu Giá giờ chỉ là khuôn CỘT (không còn dữ liệu items thật) — khớp đúng hình dạng
 // parsePriceTemplateColumns() trả về + addItPriceMasterList() lưu ở public/index.html.
@@ -44,13 +54,25 @@ const MASTER_LIST = {
 };
 
 const state = createMockState({
-  depts: ['Kinh Doanh', 'IT', 'Ban Giám Đốc'],
-  users: [STAFF_KD, IT1, APPROVER1, PLAIN, EMERGENCY_APPROVER],
+  depts: ['Kinh Doanh', 'IT', 'Ban Giám Đốc', 'Marketing'],
+  users: [STAFF_KD, IT1, APPROVER1, PLAIN, EMERGENCY_APPROVER, STAFF_MKT, RETAIL_APPROVER_MKT, WHOLESALE_APPROVER_MKT, ADMIN],
   itPriceMasterLists: [MASTER_LIST],
-  // Bỏ auto-approve -> mọi đề xuất phải qua đúng 1 bước duyệt phòng ban (dept 'Kinh Doanh', khớp
-  // forceOwnDept của itPriceApprovals) trước khi đội IT áp giá — approver1 là người duyệt bước 1.
-  itPriceDeptWorkflows: { 'Kinh Doanh': { workflowId: 'wf-kd-price', approvers: { 1: ['approver1'] } } },
-  workflows: [{ id: 'wf-kd-price', steps: [{ order: 1, name: 'Trưởng Phòng Duyệt' }] }]
+  // Bỏ auto-approve -> mọi đề xuất phải qua đúng 1 bước duyệt phòng ban trước khi đội IT áp giá.
+  // 'Kinh Doanh' CỐ Ý giữ cấu trúc PHẲNG CŨ (approver1 là người duyệt bước 1) — dùng làm bằng chứng
+  // "cấu hình cũ vẫn resolve đúng thành RETAIL" (mục 6 kế hoạch, KHÔNG cần migrate dữ liệu).
+  // 'Marketing' dùng cấu trúc LỒNG MỚI, 2 người duyệt TÁCH RIÊNG theo loại giá (mục 1/6 kế hoạch).
+  itPriceDeptWorkflows: {
+    'Kinh Doanh': { workflowId: 'wf-kd-price', approvers: { 1: ['approver1'] } },
+    'Marketing': {
+      RETAIL: { workflowId: 'wf-mkt-retail', approvers: { 1: ['retail_appr_mkt'] } },
+      WHOLESALE: { workflowId: 'wf-mkt-wholesale', approvers: { 1: ['wholesale_appr_mkt'] } }
+    }
+  },
+  workflows: [
+    { id: 'wf-kd-price', steps: [{ order: 1, name: 'Trưởng Phòng Duyệt' }] },
+    { id: 'wf-mkt-retail', steps: [{ order: 1, name: 'Duyệt Bán Lẻ' }] },
+    { id: 'wf-mkt-wholesale', steps: [{ order: 1, name: 'Duyệt Bán Buôn' }] }
+  ]
 });
 
 async function loginAs(page, user) {
@@ -466,6 +488,189 @@ async function main() {
         }
       }, emergencyPriceApprovalId);
       assertIncludes(blockedAfterReject.threw, 'chưa được phê duyệt xong', 'Sau khi đã REJECTED, không thể nhận xử lý áp giá nữa');
+    });
+
+    // ===== 10) 2 sub-tab "Bán Lẻ"/"Bán Buôn" (mục 1 kế hoạch): tạo đúng priceType theo sub-tab đang
+    // mở, lọc đúng danh sách theo sub-tab, VÀ mỗi loại giá có người duyệt RIÊNG (cấu hình LỒNG mới của
+    // dept "Marketing", mục 6) — người duyệt Bán Lẻ không duyệt được hồ sơ Bán Buôn và ngược lại. =====
+    let mktRetailId = null, mktWholesaleId = null;
+    await run.run('Sub-tab Bán Lẻ/Bán Buôn: tạo đúng priceType theo sub-tab đang mở, lọc đúng danh sách theo sub-tab', async () => {
+      await loginAs(page, STAFF_MKT);
+      const created = await page.evaluate(async () => {
+        switchTab('itSupport');
+        setItSupportSubTab('PRICE');
+
+        setItPriceSubTab('RETAIL');
+        document.getElementById('itPriceMasterListSelect').value = String(1);
+        document.getElementById('itPriceReason').value = 'Điều chỉnh giá bán lẻ Marketing';
+        itPricePendingFile = {
+          fileUrl: '/uploads/gia-mkt-retail.xlsx', fileName: 'gia-mkt-retail.xlsx',
+          items: [{ values: { code: 'MK001', name: 'Sản phẩm MKT', oldPrice: '1000', newPrice: '1200' } }],
+          columnLabels: [
+            { key: 'code', label: 'Mã hàng' }, { key: 'name', label: 'Tên mặt hàng' },
+            { key: 'oldPrice', label: 'Giá cũ' }, { key: 'newPrice', label: 'Giá mới' }
+          ]
+        };
+        await submitItPriceApproval({ preventDefault() {}, target: { reset() {} } });
+        const retailItem = DB.itPriceApprovals[0];
+
+        setItPriceSubTab('WHOLESALE');
+        document.getElementById('itPriceMasterListSelect').value = String(1);
+        document.getElementById('itPriceReason').value = 'Điều chỉnh giá bán buôn Marketing';
+        itPricePendingFile = {
+          fileUrl: '/uploads/gia-mkt-wholesale.xlsx', fileName: 'gia-mkt-wholesale.xlsx',
+          items: [{ values: { code: 'MK001', name: 'Sản phẩm MKT', oldPrice: '900', newPrice: '1000' } }],
+          columnLabels: [
+            { key: 'code', label: 'Mã hàng' }, { key: 'name', label: 'Tên mặt hàng' },
+            { key: 'oldPrice', label: 'Giá cũ' }, { key: 'newPrice', label: 'Giá mới' }
+          ]
+        };
+        await submitItPriceApproval({ preventDefault() {}, target: { reset() {} } });
+        const wholesaleItem = DB.itPriceApprovals[0];
+
+        // Đang ở sub-tab WHOLESALE -> danh sách chỉ hiện hồ sơ WHOLESALE.
+        setItPriceSubTab('WHOLESALE');
+        const wholesaleTabCodes = Array.from(document.querySelectorAll('#itPriceTableBody tr')).map(tr => tr.querySelector('td')?.innerText);
+        setItPriceSubTab('RETAIL');
+        const retailTabCodes = Array.from(document.querySelectorAll('#itPriceTableBody tr')).map(tr => tr.querySelector('td')?.innerText);
+
+        return { retailItem, wholesaleItem, wholesaleTabCodes, retailTabCodes };
+      });
+      mktRetailId = created.retailItem.id;
+      mktWholesaleId = created.wholesaleItem.id;
+      assertEqual(created.retailItem.priceType, 'RETAIL', 'Đề xuất tạo lúc sub-tab Bán Lẻ đang mở phải gắn priceType RETAIL');
+      assertEqual(created.wholesaleItem.priceType, 'WHOLESALE', 'Đề xuất tạo lúc sub-tab Bán Buôn đang mở phải gắn priceType WHOLESALE');
+      assert(created.wholesaleTabCodes.includes(created.wholesaleItem.code), 'Sub-tab Bán Buôn phải hiện đúng hồ sơ WHOLESALE vừa tạo');
+      assert(!created.wholesaleTabCodes.includes(created.retailItem.code), 'Sub-tab Bán Buôn KHÔNG được hiện hồ sơ RETAIL');
+      assert(created.retailTabCodes.includes(created.retailItem.code), 'Sub-tab Bán Lẻ phải hiện đúng hồ sơ RETAIL vừa tạo');
+      assert(!created.retailTabCodes.includes(created.wholesaleItem.code), 'Sub-tab Bán Lẻ KHÔNG được hiện hồ sơ WHOLESALE');
+    });
+
+    await run.run('Cấu hình lồng dept×priceType: người duyệt Bán Lẻ KHÔNG duyệt được hồ sơ Bán Buôn (và ngược lại)', async () => {
+      // retail_appr_mkt (chỉ được gán cho nhánh RETAIL của Marketing) thử duyệt hồ sơ WHOLESALE -> chặn.
+      await loginAs(page, RETAIL_APPROVER_MKT);
+      const blockedRetailOnWholesale = await page.evaluate(async (id) => {
+        try {
+          await callWorkflowAction('itPriceApprovals', id, 'approve', {});
+          return { threw: null };
+        } catch (e) {
+          return { threw: e.message };
+        }
+      }, mktWholesaleId);
+      assertIncludes(blockedRetailOnWholesale.threw, 'Bạn không có quyền xử lý ở bước hiện tại', 'Người duyệt Bán Lẻ không được duyệt hồ sơ Bán Buôn của cùng phòng ban');
+
+      // wholesale_appr_mkt thử duyệt hồ sơ RETAIL -> cũng chặn tương tự (đối xứng 2 chiều).
+      await loginAs(page, WHOLESALE_APPROVER_MKT);
+      const blockedWholesaleOnRetail = await page.evaluate(async (id) => {
+        try {
+          await callWorkflowAction('itPriceApprovals', id, 'approve', {});
+          return { threw: null };
+        } catch (e) {
+          return { threw: e.message };
+        }
+      }, mktRetailId);
+      assertIncludes(blockedWholesaleOnRetail.threw, 'Bạn không có quyền xử lý ở bước hiện tại', 'Người duyệt Bán Buôn không được duyệt hồ sơ Bán Lẻ của cùng phòng ban');
+
+      // Đúng người được gán mới duyệt được: retail_appr_mkt duyệt RETAIL, wholesale_appr_mkt duyệt WHOLESALE.
+      await loginAs(page, RETAIL_APPROVER_MKT);
+      const retailApproved = await page.evaluate(async (id) => {
+        const r = await callWorkflowAction('itPriceApprovals', id, 'approve', {});
+        return r.item.status;
+      }, mktRetailId);
+      assertEqual(retailApproved, 'APPROVED', 'Đúng người duyệt Bán Lẻ phải duyệt được hồ sơ Bán Lẻ');
+
+      await loginAs(page, WHOLESALE_APPROVER_MKT);
+      const wholesaleApproved = await page.evaluate(async (id) => {
+        const r = await callWorkflowAction('itPriceApprovals', id, 'approve', {});
+        return r.item.status;
+      }, mktWholesaleId);
+      assertEqual(wholesaleApproved, 'APPROVED', 'Đúng người duyệt Bán Buôn phải duyệt được hồ sơ Bán Buôn');
+    });
+
+    // ===== 11) Hồ sơ CŨ (mock trực tiếp, KHÔNG có field priceType) vẫn lọc đúng vào sub-tab Bán Lẻ
+    // (mục 1/2 kế hoạch: fallback '|| RETAIL', không cần script migrate dữ liệu). =====
+    await run.run('Hồ sơ cũ không có priceType vẫn hiện đúng ở sub-tab Bán Lẻ (fallback RETAIL)', async () => {
+      await loginAs(page, ADMIN);
+      const result = await page.evaluate(() => {
+        const legacyItem = {
+          id: 999001, code: 'ITP-LEGACY-1', dept: 'Kinh Doanh',
+          creator: 'staff_kd', creatorName: 'Ngô Văn Kinh Doanh',
+          status: 'APPROVED', currentStep: 1, history: [], infoRequests: [],
+          applied: false, applyClaimedBy: null,
+          files: [{ id: 111, fileUrl: '/uploads/legacy-gia.xlsx', fileName: 'legacy-gia.xlsx', columnLabels: [{ key: 'c0', label: 'Dữ liệu' }], items: [] }],
+          createdAt: new Date().toLocaleString('vi-VN')
+          // KHÔNG có field priceType — đúng hình dạng hồ sơ tạo trước khi tính năng này ra đời.
+        };
+        DB.itPriceApprovals.unshift(legacyItem);
+        switchTab('itSupport');
+        setItSupportSubTab('PRICE');
+        setItPriceSubTab('RETAIL');
+        const retailCodes = Array.from(document.querySelectorAll('#itPriceTableBody tr')).map(tr => tr.querySelector('td')?.innerText);
+        setItPriceSubTab('WHOLESALE');
+        const wholesaleCodes = Array.from(document.querySelectorAll('#itPriceTableBody tr')).map(tr => tr.querySelector('td')?.innerText);
+        // resolveApprovedFileUrlClient() phải fallback đúng về file cuối cùng (không có approvedFileId).
+        const approvedFileUrl = resolveApprovedFileUrlClient(legacyItem);
+        return { retailCodes, wholesaleCodes, approvedFileUrl };
+      });
+      assert(result.retailCodes.includes('ITP-LEGACY-1'), 'Hồ sơ cũ (không priceType) phải hiện ở sub-tab Bán Lẻ');
+      assert(!result.wholesaleCodes.includes('ITP-LEGACY-1'), 'Hồ sơ cũ (không priceType) KHÔNG được hiện ở sub-tab Bán Buôn');
+      assertEqual(result.approvedFileUrl, '/uploads/legacy-gia.xlsx', 'Fallback file đã duyệt của hồ sơ cũ phải là file cuối cùng (không có approvedFileId + chưa từng có yêu cầu bổ sung từ IT)');
+      // Dọn lại state cho các kịch bản sau (không ảnh hưởng test khác dùng DB.itPriceApprovals[0]).
+      await page.evaluate(() => { DB.itPriceApprovals = DB.itPriceApprovals.filter(x => x.id !== 999001); });
+    });
+
+    // ===== 12) Khoá "🚨 Từ Chối Khẩn" khi IT đang xử lý (applyClaimedBy có giá trị) — ÁP DỤNG CHO
+    // MỌI NGƯỜI, KỂ CẢ ADMIN (mục 5 kế hoạch, không có nhánh admin bypass nào). =====
+    await run.run('Từ Chối Khẩn bị khoá khi IT đang "Tôi đang xử lý" — kể cả tài khoản admin', async () => {
+      // IT claim xử lý hồ sơ Bán Lẻ Marketing đã APPROVED ở kịch bản 10.
+      await loginAs(page, IT1);
+      await page.evaluate(async (id) => { await claimPriceApplyAction(id); }, mktRetailId);
+
+      // retail_appr_mkt (người duyệt bước cuối, đủ điều kiện isFinalStepApproverOfItPrice) — nút phải ẩn
+      // + server phải chặn nếu cố gọi thẳng API.
+      await loginAs(page, RETAIL_APPROVER_MKT);
+      const blockedApprover = await page.evaluate(async (id) => {
+        openItPriceModal(id);
+        const html = document.getElementById('itPriceModalControls').innerHTML;
+        const hasButton = html.includes('requestItPriceEmergencyRejectAction');
+        const hasLockedNote = html.includes('đang xử lý áp giá');
+        try {
+          await callRecordAction('itPriceApprovals', id, 'request-emergency-reject', { reason: 'thử trong lúc IT đang xử lý' });
+          return { hasButton, hasLockedNote, threw: null };
+        } catch (e) {
+          return { hasButton, hasLockedNote, threw: e.message };
+        }
+      }, mktRetailId);
+      assertEqual(blockedApprover.hasButton, false, 'Nút Từ Chối Khẩn phải ẨN với người duyệt bước cuối khi IT đang xử lý');
+      assert(blockedApprover.hasLockedNote, 'Giao diện phải hiện ghi chú tạm khoá vì IT đang xử lý');
+      assertIncludes(blockedApprover.threw, 'Không thể từ chối khẩn cấp khi IT đang xử lý áp giá', 'Server phải chặn cứng request-emergency-reject khi applyClaimedBy có giá trị');
+
+      // admin — ĐÚNG TRỌNG TÂM mục 5: không có nhánh nào cho admin bỏ qua chặn applyClaimedBy này.
+      await loginAs(page, ADMIN);
+      const blockedAdmin = await page.evaluate(async (id) => {
+        openItPriceModal(id);
+        const html = document.getElementById('itPriceModalControls').innerHTML;
+        const hasButton = html.includes('requestItPriceEmergencyRejectAction');
+        try {
+          await callRecordAction('itPriceApprovals', id, 'request-emergency-reject', { reason: 'admin thử trong lúc IT đang xử lý' });
+          return { hasButton, threw: null };
+        } catch (e) {
+          return { hasButton, threw: e.message };
+        }
+      }, mktRetailId);
+      assertEqual(blockedAdmin.hasButton, false, 'Nút Từ Chối Khẩn phải ẨN với admin khi IT đang xử lý (không có bypass)');
+      assertIncludes(blockedAdmin.threw, 'Không thể từ chối khẩn cấp khi IT đang xử lý áp giá', 'Server phải chặn cứng request-emergency-reject với admin y hệt người thường — không có nhánh bypass');
+
+      // Sau khi IT huỷ nhận việc (release), Từ Chối Khẩn phải gửi được lại bình thường (không khoá vĩnh viễn).
+      await loginAs(page, IT1);
+      await page.evaluate(async (id) => { await callRecordAction('itPriceApprovals', id, 'release-apply-claim', {}); }, mktRetailId);
+      await loginAs(page, RETAIL_APPROVER_MKT);
+      const unblockedAfterRelease = await page.evaluate(async (id) => {
+        openItPriceModal(id);
+        const hasButton = document.getElementById('itPriceModalControls').innerHTML.includes('requestItPriceEmergencyRejectAction');
+        return { hasButton };
+      }, mktRetailId);
+      assert(unblockedAfterRelease.hasButton, 'Sau khi IT huỷ nhận việc (release-apply-claim), nút Từ Chối Khẩn phải hiện lại bình thường');
     });
   } finally {
     await browser.close();

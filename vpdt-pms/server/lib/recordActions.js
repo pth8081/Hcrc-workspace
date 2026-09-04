@@ -3485,6 +3485,33 @@ function hasUnresolvedPriceInfoRequest(item) {
   return (item.infoRequests || []).some(r => !r.response);
 }
 
+// "File đã phê duyệt" — DÙNG CHUNG cho cả server (lib/fileAuthz.js giới hạn tải, routes/priceFile.js
+// route đánh dấu cột) lẫn nguồn sự thật để client mirror lại (resolveApprovedFileUrlClient() ở
+// index.html) — CHỈ 1 nơi viết logic này, không sáng tác lại. MIRROR ĐÚNG fallback đã có sẵn ở client
+// (public/index.html, renderItPriceModal() khu vực liệt kê file, dòng tính `approvedFileId`): item.
+// approvedFileId được lib/workflowEngine.js chốt ngay lúc duyệt xong bước cuối (mục "Nền tảng đã có")
+// — hồ sơ APPROVED nào tạo SAU KHI tính năng đó ra đời luôn có field này. Hồ sơ CŨ đã APPROVED TRƯỚC
+// khi có approvedFileId thì không có field này — fallback hợp lý: nếu chưa từng có yêu cầu bổ sung từ
+// đội Hỗ Trợ IT (byRole:'it', tức files[] không bị đội IT làm phình thêm SAU KHI duyệt xong) thì coi
+// file CUỐI CÙNG lúc đó là file đã duyệt. Hồ sơ CHƯA APPROVED (PENDING/REJECTED/DRAFT) luôn trả null —
+// không có file nào "đã duyệt" để tải qua route giới hạn.
+function resolveApprovedFileId(item) {
+  if (item.approvedFileId) return item.approvedFileId;
+  const files = item.files || [];
+  if (item.status === 'APPROVED' && !(item.infoRequests || []).some(r => r.byRole === 'it')) {
+    return files.length ? files[files.length - 1].id : null;
+  }
+  return null;
+}
+
+function resolveApprovedFileUrl(item) {
+  const approvedFileId = resolveApprovedFileId(item);
+  if (approvedFileId == null) return null;
+  const files = item.files || [];
+  const f = files.find(x => x.id === approvedFileId);
+  return f ? f.fileUrl : null;
+}
+
 // "Tôi đang xử lý" — 1 người trong đội Hỗ Trợ IT nhận việc áp giá cho ĐÚNG đề xuất này, khoá lại để
 // CHỈ chính người đó (hoặc admin) mới xác nhận hoàn thành được sau này — tránh 2 người cùng đội tưởng
 // nhầm người kia đã áp giá xong (hoặc ngược lại, cùng áp giá trùng lặp) khi có nhiều đề xuất đang chờ
@@ -3601,6 +3628,14 @@ function canApproveItPriceEmergencyReject(user) {
 function requestItPriceEmergencyReject(user, item, payload) {
   if (item.status !== 'APPROVED') throw new HttpError(409, 'Chỉ gửi được yêu cầu từ chối khẩn cấp khi đề xuất đã được phê duyệt xong');
   if (item.applied) throw new HttpError(409, 'Đề xuất này đã được áp giá xong, không thể từ chối khẩn cấp nữa');
+  // KHOÁ CỨNG khi IT đang xử lý ("Tôi đang xử lý" đã bấm, applyClaimedBy có giá trị) — ĐẶT TRƯỚC MỌI
+  // nhánh có thể cho phép admin bỏ qua (isFinalStepApproverOfItPrice() bên dưới CHO admin qua luôn,
+  // nên chặn này phải đứng độc lập, không nằm sau nhánh đó) — áp dụng cho TẤT CẢ mọi người, KỂ CẢ
+  // ADMIN, không có ngoại lệ nào (yêu cầu nghiệp vụ mục 5 kế hoạch: tránh huỷ hồ sơ giữa lúc IT đang
+  // thao tác áp giá thật vào hệ thống bán hàng ngoài app).
+  if (item.applyClaimedBy) {
+    throw new HttpError(409, 'Không thể từ chối khẩn cấp khi IT đang xử lý áp giá — vui lòng chờ IT huỷ nhận việc hoặc hoàn tất trước.');
+  }
   // Cùng lý do applyPriceApproval()/requestPriceInfoFromIt() chặn khi còn yêu cầu bổ sung chưa phản hồi:
   // hồ sơ đang chờ người đề xuất tải tệp bảng giá bổ sung (nội dung giá CHƯA chốt), quyết ngay "từ chối
   // khẩn cấp" lúc này là quyết trên dữ liệu sắp bị thay thế. Phải để người đề xuất phản hồi xong (hoặc
@@ -4660,6 +4695,7 @@ module.exports = {
   canManageRecruitment, closeRecruitmentJob, confirmRecruitmentJobFilled, setRecruitmentReferralStatus,
   canManageItSupport, applyPriceApproval, claimPriceApply, releasePriceApplyClaim, requestPriceInfoFromIt, submitPriceSupplementFile,
   canApproveItPriceEmergencyReject, requestItPriceEmergencyReject, approveItPriceEmergencyReject, denyItPriceEmergencyReject,
+  resolveApprovedFileId, resolveApprovedFileUrl,
   claimItTicket, updateItTicketStatus, addItTicketComment, cancelItTicket,
   escalateItTicket, approveItTicketEscalation, denyItTicketEscalation,
   canManageHrFeedback, respondToHrFeedback, markHrFeedbackRead,
