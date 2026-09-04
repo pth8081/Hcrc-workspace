@@ -12395,10 +12395,12 @@ function getMyPendingApprovals(user) {
     type: 'itPrice', typeLabel: '🏷️ Hỗ Trợ IT - Duyệt giá',
     codeOf: r => r.code, titleOf: r => r.productName,
     statusBadgeOf: r => itPriceHasUnresolvedInfoRequest(r) ? approvalHubNeedInfoBadge() : approvalHubPendingBadge(),
-    actionsOf: r => [
-      { label: '✅ Duyệt', fn: 'runItPriceAction', args: [r.id, 'approve'], primary: true },
-      { label: '❌ Từ chối', fn: 'runItPriceAction', args: [r.id, 'reject'] }
-    ]
+    // Duyệt giá LUÔN cần mở bảng chi tiết (bảng giá/file đính kèm) trước khi quyết định — không thể duyệt
+    // "mù" ngay tại danh sách như Tài liệu/Hợp đồng. Mở thẳng modal chi tiết (đã có sẵn nút Duyệt/Từ chối/
+    // Yêu Cầu Bổ Sung thật trong renderItPriceModalControls()) — cùng khuôn với Văn bản trình/Xe/Mua Bán-
+    // Sửa Chữa/VPP/Ngân Sách. TRƯỚC ĐÂY trỏ tới hàm 'runItPriceAction' không hề tồn tại trong code, khiến
+    // nút Duyệt/Từ chối ở màn Phê Duyệt tổng hợp bấm không có phản ứng gì.
+    actionsOf: r => [{ label: '✍️ Xử lý / Duyệt', fn: 'openItPriceModal', args: [r.id], primary: true }]
   });
 
   addDeptWorkflowItems(DB.budgetEntries, b => DB.budgetDeptWorkflows[b.dept], {

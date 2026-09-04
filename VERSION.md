@@ -1,11 +1,40 @@
 # Phiên bản hiện tại
 
-**6.8** — đã merge vào `main` (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge
+**6.9** — đã merge vào `main` (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge
 góc màn hình + `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần
 kiểu `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. Đúng theo quy tắc MINOR chạy 0-9 trong
-`CLAUDE.md`: sau `6.7` tăng MINOR lên `6.8`.
+`CLAUDE.md`: sau `6.8` tăng MINOR lên `6.9`.
 
-## Cập nhật gần nhất — Fix: "Đánh dấu cột trước khi tải" báo sai lỗi "Không khớp được cột nào" khi file thật có dòng trống phía trên dòng tiêu đề
+## Cập nhật gần nhất — Fix: nút Duyệt/Từ chối Phê Duyệt Giá ở màn "Phê Duyệt" tổng hợp không phản ứng gì
+
+Người dùng báo lỗi thật: mở màn "Phê Duyệt" tổng hợp (Approval Hub, gộp hồ sơ chờ duyệt từ mọi module),
+bấm nút Duyệt cho 1 hồ sơ Phê Duyệt Giá (Hỗ Trợ IT) — không có phản ứng gì, không mở được bảng chi tiết để
+xem giá rồi mới quyết định duyệt.
+
+**Nguyên nhân**: `getMyPendingApprovals()` (`public/index.html`) nối dây nút Duyệt/Từ chối của hồ sơ
+`itPriceApprovals` tới hàm `runItPriceAction` — hàm này **không hề tồn tại** ở bất kỳ đâu trong code (có
+thể sót lại từ 1 lần refactor trước, dự định viết nhưng chưa từng viết). Bấm nút gọi `data-op="runItPriceAction"`
+qua cơ chế `bindCspDelegation()` chung, không tìm thấy hàm nên không làm gì cả — không báo lỗi rõ ràng cho
+người dùng thấy.
+
+**Fix**: đổi hành động của dòng Phê Duyệt Giá trong Approval Hub từ cặp nút "Duyệt/Từ chối" trực tiếp
+(kiểu Tài liệu/Hợp đồng) sang mở thẳng modal chi tiết (`openItPriceModal`) — ĐÚNG khuôn với Văn bản
+trình/Đăng ký xe/Mua Bán-Sửa Chữa/VPP/Ngân Sách (đều cần xem bảng chi tiết trước khi quyết định, không
+duyệt "mù" ngay tại danh sách). Modal chi tiết đã có sẵn đầy đủ nút Duyệt/Từ chối/Yêu Cầu Bổ Sung thật
+(`renderItPriceModalControls()`, gọi đúng `approveItPrice()`/`rejectItPrice()` đã hoạt động tốt từ trước) —
+chỉ cần trỏ đúng nút ở Approval Hub tới modal đó, không viết logic duyệt/từ chối mới.
+
+**Verify**: syntax/dup-id check khớp đúng baseline (không đổi). Thêm 5 kịch bản mới vào
+`tests/test-approval-hub.js` (Playwright thật, chạy code thật của `index.html`) — xác nhận dòng Phê Duyệt
+Giá chỉ còn đúng 1 nút, nút đó nối tới 1 hàm THẬT SỰ tồn tại (chặn tái phát lỗi "hàm không tồn tại"), đúng
+là `openItPriceModal`, bấm vào thực sự mở được modal, và modal mở ra có đủ nút Duyệt/Từ chối thật hoạt
+động được. Cả 30/30 kịch bản trong file PASS. Chạy lại toàn bộ `tests/test-*.js` (47 file) — vẫn 2 lỗi
+known-flaky đã biết từ trước (cần SQL Server thật), không phát sinh regression nào khác.
+
+**Deploy-impact**: KHÔNG đổi `sql/schema.sql`, KHÔNG đổi `.env.example`, KHÔNG thêm `dependencies` mới —
+chỉ copy code + `pm2 restart`.
+
+## Trước đó — Fix: "Đánh dấu cột trước khi tải" báo sai lỗi "Không khớp được cột nào" khi file thật có dòng trống phía trên dòng tiêu đề
 
 Người dùng báo lỗi thật khi dùng tính năng "Đánh dấu cột trước khi tải" (module Hỗ Trợ IT > Phê Duyệt Giá,
 mới thêm ở bản `6.7`): tick chọn cột có thật trong bảng dữ liệu (VD "CT khuyến mãi") nhưng bấm "Tải file đã

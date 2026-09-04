@@ -279,6 +279,58 @@ async function scenario(name, fn) {
   });
 
   // ==========================================================================
+  // Regression: Hỗ Trợ IT - Duyệt giá (itPriceApprovals) row action MUST open the
+  // detail modal (which has the real "✅ Duyệt"/"❌ Từ chối" buttons + the price
+  // table) rather than firing an approve/reject action directly from the hub row.
+  // A prior version wired the row buttons to a function named 'runItPriceAction'
+  // that was never defined anywhere in the codebase — clicking Duyệt/Từ chối in
+  // the hub silently did nothing. Guard against both regressions: (1) the wired
+  // fn must be a real, callable global function, (2) it must be the modal-opening
+  // flow, not a direct approve/reject pair.
+  // ==========================================================================
+  await scenario('Approval Hub itPrice row opens the price detail modal (not a broken direct-approve action)', async () => {
+    const r = await page.evaluate(() => {
+      DB.itPriceDeptWorkflows = {
+        'Kế Toán': { RETAIL: { workflowId: 'WF_1STEP', approvers: { 1: ['duyet1'] } } }
+      };
+      DB.itPriceApprovals = [
+        { id: 601, dept: 'Kế Toán', status: 'PENDING', currentStep: 1, history: [], priceType: 'RETAIL',
+          code: 'ITPG-001', productName: 'Giá chờ duyệt của tôi', creator: 'someone.else', creatorName: 'Người Đề Xuất',
+          createdAt: '2026-08-24', files: [], infoRequests: [] }
+      ];
+      renderApprovalHub();
+      const rows = [...document.querySelectorAll('#approvalHubTableBody tr')];
+      const itPriceRow = rows.find(tr => tr.children[1].textContent.trim() === 'ITPG-001');
+      const buttons = itPriceRow ? [...itPriceRow.querySelectorAll('button')].map(b => ({ label: b.textContent.trim(), op: b.getAttribute('data-op'), arg0: b.getAttribute('data-arg0') })) : [];
+      const wiredFnIsRealFunction = buttons.length === 1 && typeof window[buttons[0].op] === 'function';
+
+      // Actually click it (through the same data-op delegation the real UI uses), confirm it opens the modal.
+      itPriceRow.querySelector('button').click();
+      const modalVisible = !document.getElementById('itPriceModal').classList.contains('hidden');
+      const controlsHTML = document.getElementById('itPriceModalControls').innerHTML;
+      const hasRealApproveButton = controlsHTML.includes('data-op="approveItPrice"') && controlsHTML.includes('data-arg0="601"');
+      const hasRealRejectButton = controlsHTML.includes('data-op="rejectItPrice"') && controlsHTML.includes('data-arg0="601"');
+
+      closeItPriceModal();
+      delete DB.itPriceDeptWorkflows['Kế Toán'];
+      DB.itPriceApprovals = [];
+      renderApprovalHub();
+
+      return { buttons, wiredFnIsRealFunction, modalVisible, hasRealApproveButton, hasRealRejectButton };
+    });
+    record('itPrice row renders exactly 1 action button (not the old 2-button Duyệt/Từ chối pair)',
+      r.buttons.length === 1, JSON.stringify(r.buttons));
+    record('itPrice row button is wired to a REAL function (regression guard for the never-defined "runItPriceAction")',
+      r.wiredFnIsRealFunction, JSON.stringify(r.buttons));
+    record('itPrice row button is wired to openItPriceModal specifically',
+      r.buttons[0]?.op === 'openItPriceModal' && r.buttons[0]?.arg0 === '601', JSON.stringify(r.buttons));
+    record('clicking the row button actually opens the price detail modal',
+      r.modalVisible, JSON.stringify(r));
+    record('the opened modal contains the REAL working Duyệt/Từ chối buttons for this record',
+      r.hasRealApproveButton && r.hasRealRejectButton, JSON.stringify(r));
+  });
+
+  // ==========================================================================
   // Access gating: a user in NO approval flow at all cannot open the hub.
   // ==========================================================================
   await scenario('canAccessApprovalHub()/switchTab() gate out a user with no approval flow at all', async () => {
