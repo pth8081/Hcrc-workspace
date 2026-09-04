@@ -623,6 +623,18 @@ function resolveOperationAssignedTo(rawList, users) {
   return { usernames, names };
 }
 
+// Người nghiệm thu CHỈ ĐỊNH (acceptorUsername) — đối chiếu đúng danh sách tài khoản đang hoạt động
+// (users), cùng chuẩn resolveOperationPersonInChargeUsername() ở lib/createValidation.js. Trả về null
+// nếu không gửi (không bắt buộc, giữ nguyên hành vi cũ); throw 400 nếu gửi nhưng không khớp tài khoản
+// active nào — trước đây chỗ này chỉ String() thẳng payload mà không đối chiếu users thật.
+function resolveOperationAcceptorUsername(rawUsername, users) {
+  const username = String(rawUsername || '').trim();
+  if (!username) return null;
+  const found = (users || []).find(u => u.username === username && u.active !== false);
+  if (!found) throw new HttpError(400, 'Không tìm thấy tài khoản người nghiệm thu này (hoặc đã bị khoá)');
+  return found;
+}
+
 // Nghiệm thu ngay / sau N ngày (Mục D) — payload.acceptanceMode 'IMMEDIATE' (mặc định) | 'DELAYED'.
 // 'DELAYED' bắt buộc acceptanceDelayDays nguyên dương; 'IMMEDIATE' LUÔN bỏ qua giá trị client gửi (ép
 // về null) — không tin dữ liệu rác gửi kèm khi người dùng đã chọn "ngay". CHỈ tính ngày dự kiến để
@@ -685,6 +697,7 @@ function createOperationWorkItem(user, payload, sourceRecord, siblingsAndDescend
   }
   const { usernames: assignedTo, names: assignedToName } = resolveOperationAssignedTo(payload?.assignedTo, users);
   const { acceptanceMode, acceptanceDelayDays } = resolveOperationAcceptanceConfig(payload);
+  const acceptorUser = resolveOperationAcceptorUsername(payload?.acceptorUsername, users);
   return {
     id: Date.now(),
     parentWorkItemId,
@@ -697,9 +710,10 @@ function createOperationWorkItem(user, payload, sourceRecord, siblingsAndDescend
     // Người nghiệm thu CHỈ ĐỊNH riêng cho việc này (khác acceptedBy — chỉ ghi SAU khi đã nghiệm thu
     // xong). Để trống = chỉ "toàn quyền" (operationAcceptanceManage/admin) nghiệm thu được, giữ đúng
     // hành vi cũ cho việc không chỉ định — xem acceptOperationWorkItem(). Vẫn single-select, không nằm
-    // trong phạm vi Mục E.
-    acceptorUsername: payload?.acceptorUsername ? String(payload.acceptorUsername) : null,
-    acceptorName: payload?.acceptorUsername ? String(payload?.acceptorName || '').trim() : null,
+    // trong phạm vi Mục E. Đối chiếu users thật qua resolveOperationAcceptorUsername() (thay vì
+    // String() thẳng payload như trước) — throw 400 nếu gửi username không khớp tài khoản active nào.
+    acceptorUsername: acceptorUser ? acceptorUser.username : null,
+    acceptorName: acceptorUser ? acceptorUser.name : null,
     deadline: payload?.deadline || '',
     acceptanceMode, acceptanceDelayDays, completedAt: null,
     status: 'CHUA_BAT_DAU',
@@ -827,8 +841,11 @@ function editOperationWorkItem(user, item, payload, users, sourceRecord) {
   item.description = String(payload?.description || '').trim();
   const { usernames: assignedTo, names: assignedToName } = resolveOperationAssignedTo(payload?.assignedTo, users);
   item.assignedTo = assignedTo; item.assignedToName = assignedToName;
-  item.acceptorUsername = payload?.acceptorUsername ? String(payload.acceptorUsername) : null;
-  item.acceptorName = payload?.acceptorUsername ? String(payload?.acceptorName || '').trim() : null;
+  // Đối chiếu users thật qua resolveOperationAcceptorUsername() (thay vì String() thẳng payload như
+  // trước) — throw 400 nếu gửi username không khớp tài khoản active nào.
+  const acceptorUser = resolveOperationAcceptorUsername(payload?.acceptorUsername, users);
+  item.acceptorUsername = acceptorUser ? acceptorUser.username : null;
+  item.acceptorName = acceptorUser ? acceptorUser.name : null;
   item.deadline = payload?.deadline || '';
   const { acceptanceMode, acceptanceDelayDays } = resolveOperationAcceptanceConfig(payload);
   item.acceptanceMode = acceptanceMode; item.acceptanceDelayDays = acceptanceDelayDays;
