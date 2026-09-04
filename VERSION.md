@@ -1,11 +1,35 @@
 # Phiên bản hiện tại
 
-**7.9** — đã merge vào `main` (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge
+**8.0** — đã merge vào `main` (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge
 góc màn hình + `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần
 kiểu `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. Đúng theo quy tắc MINOR chạy 0-9 trong
-`CLAUDE.md`: sau `7.8` tăng MINOR lên 1 → `7.9`.
+`CLAUDE.md`: sau `7.9` (đang ở MINOR=9) tăng lên MAJOR mới, reset MINOR về 0 → `8.0`.
 
-## Cập nhật gần nhất — Hạ tầng: tách JS client ra file ngoài (Đợt 1/5 — core.js + 6 module đầu: Tài Liệu/Văn Bản Trình/Công Việc/Hợp Đồng+Thanh Toán/Phòng Họp+Biên Bản Họp/Đăng Ký Xe)
+## Cập nhật gần nhất — Hạ tầng: tách JS client ra file ngoài (Đợt 2/5 — Office/Vận Hành/VPP/Hệ Thống(tabs)/Biểu Mẫu(nav)/Quy Trình/Hỗ Trợ IT(gia hạn+tier)/Ngân Sách)
+
+Tiếp tục đợt 1 (`7.9`, xem mục "Trước đó" ngay dưới) — tách thêm 9 file khỏi khối `<script>` inline còn
+lại của `public/index.html`, giữ đúng nguyên tắc: chỉ di chuyển cơ học, không đổi logic, giữ đúng thứ tự
+xuất hiện gốc trong file (đã verify lại KHÔNG có tham chiếu-tới-trước xuyên file nào bằng script AST tự
+viết ở đợt 1, áp dụng lại cho đợt này). File mới: `module-office.js` (462 dòng, module Phê Duyệt Văn
+Phòng), `module-vanhanh.js` (1.797 dòng, module Vận Hành — Đơn Hàng/Mở Mới Siêu Thị/Sửa Chữa, dự
+toán+thực hiện+nghiệm thu+báo cáo, cả bảng `OP_CLICK_ACTIONS`/`bindOperationDelegation` CSP dispatch
+RIÊNG của module này — khác `bindCspDelegation()` dùng chung đã dời vào `core.js` ở đợt 1),
+`module-vpp.js` (930 dòng, Văn Phòng Phẩm), `module-hethong-tabs.js` (203 dòng, chuyển tab màn "Hệ
+Thống" gộp Quản Trị/Biểu Mẫu/Quy Trình), `module-formbuilder-nav.js` (376 dòng, thanh tab cấp 1 Biểu
+Mẫu), `module-workflow.js` (60 dòng, bảng tra cứu module↔collection Quy Trình Phê Duyệt),
+`module-itsupport-renewal.js` (288 dòng, Gia Hạn Dịch Vụ CNTT), `module-ngansach.js` (1.519 dòng, Ngân
+Sách Phê Duyệt/Thực Hiện/Tổng Hợp), `module-itsupport-tier.js` (369 dòng, Hỗ Trợ IT > Phê Duyệt Giá Bán
+Buôn theo Tier).
+
+Verify: syntax check từng file, không trùng tên hàm/const global, full 54 file test hồi quy Playwright
+chạy lại sạch (chỉ 2 lỗi biết trước do thiếu SQL Server thật), demo Playwright riêng bấm qua 21 tab
+không lỗi console/page nào. `index.html`: 27.776 → 21.781 dòng (giảm đúng 5.995 dòng = tổng 9 file mới,
+lệch 9 dòng do mỗi file có 1 dòng trắng cuối).
+
+**Không cần migrate dữ liệu, không đổi `schema.sql`/`.env.example`/`dependencies`/CSP/static-serving** —
+deploy như bình thường (copy code + `pm2 restart`).
+
+## Trước đó — Hạ tầng: tách JS client ra file ngoài (Đợt 1/5 — core.js + 6 module đầu: Tài Liệu/Văn Bản Trình/Công Việc/Hợp Đồng+Thanh Toán/Phòng Họp+Biên Bản Họp/Đăng Ký Xe)
 
 Bắt đầu chia nhỏ khối `<script>` inline khổng lồ của `public/index.html` (~30.800 dòng, ~1.565 hàm
 top-level, DÙNG CHUNG 1 khối duy nhất — lớn hơn cả toàn bộ backend `lib/`+`routes/` gộp lại) thành
