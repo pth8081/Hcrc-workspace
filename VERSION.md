@@ -1,11 +1,98 @@
 # Phiên bản hiện tại
 
-**7.3** — đã merge vào `main` (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge
+**7.4** — đã merge vào `main` (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge
 góc màn hình + `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần
 kiểu `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. Đúng theo quy tắc MINOR chạy 0-9 trong
-`CLAUDE.md`: sau `7.2` tăng MINOR lên 1 → `7.3`.
+`CLAUDE.md`: sau `7.3` tăng MINOR lên 1 → `7.4`.
 
-## Cập nhật gần nhất — Biểu Mẫu Đợt 2: mở rộng ra Thanh Toán/Ngân Sách/Báo Cáo Định Kỳ/Đồng Phục (10 tab mới)
+## Cập nhật gần nhất — Biểu Mẫu Đợt 3: mở rộng ra Vận Hành/Đào Tạo/Tuyển Dụng + 3 gap-fill (11 tab mới)
+
+Tiếp nối Đợt 1 (`TASK`/`VPP`/`LICENSE`/`IT_PRICE`/`IT_TICKET`) và Đợt 2 (`PAYMENT`/`BUDGET_PERIOD`/
+`BUDGET_TEMPLATE`/`REPORT_ENTRY`/`REPORT_PERIOD`/5 coreKey Đồng Phục) — mở rộng module "📋 Biểu Mẫu" ra 3
+phân hệ theo yêu cầu người dùng: **Vận Hành** (duyệt đơn hàng/mở mới-sửa chữa siêu thị/công việc thực
+hiện-nghiệm thu), **Đào Tạo** (tạo lớp học, ngân hàng câu hỏi), và **Tuyển Dụng** (đăng tin, giới thiệu
+ứng viên). Kèm audit đối chiếu `BUSINESS_MODULES` với `FORM_TABS` trên toàn app, phát hiện thêm 3
+"biểu mẫu" thật bị Đợt 1/2 bỏ sót: **HCRC Đồng Hành** (gửi câu hỏi tới Nhân Sự, sống trong module Truyền
+Thông Nội Bộ), **Hỗ Trợ IT - Gia Hạn Dịch Vụ** (Đợt 1 chỉ tách Đề Xuất Duyệt Giá/Yêu Cầu Hỗ Trợ, bỏ sót
+tab con này), và **Vận Hành - Tạo Kỳ Thực Hiện** (form con trong luồng Thực hiện).
+
+**11 `coreKey` mới trong `CORE_FIELD_MANIFEST`** (`public/index.html`): `OPERATION_ORDER` (5 field),
+`OPERATION_STORE_OPEN` (9 field), `OPERATION_REPAIR` (8 field), `OPERATION_WORK_ITEM` (4 field),
+`OPERATION_EXECUTION_PERIOD` (1 field), `TRAINING_CLASS` (14 field), `TRAINING_TEST` (3 field),
+`RECRUITMENT_JOB` (10 field), `RECRUITMENT_REFERRAL` (5 field), `HR_FEEDBACK` (2 field), `IT_RENEWAL`
+(9 field) — cùng 11 `FORM_TABS` entry mới. Cơ chế áp dụng (`applyCoreFieldCustomizations()`/
+`applyAllCoreFieldCustomizations()`) vẫn CHUNG cho mọi coreKey, không cần call site riêng — ĐÚNG 1 NGOẠI
+LỆ DUY NHẤT: `OPERATION_EXECUTION_PERIOD` (field `owiNewPeriodName`) render ĐỘNG qua `innerHTML` (chỉ có
+trong DOM khi form "Tạo Kỳ Mới" đang mở, khác mọi field khác vốn là `<div>` tĩnh có sẵn từ lúc tải trang)
+nên cần 1 call site `applyCoreFieldCustomizations()` riêng ngay trong `renderOperationExecutionPeriodsBox()`.
+Giữ nguyên tắc: mọi trường mặc định chỉ sửa được Nhãn hiển thị + Bắt buộc nhập, KHÔNG xoá được, KHÔNG đổi
+kiểu dữ liệu — không thêm nút xoá nào cho trường mặc định ở 11 tab mới.
+
+**Đào Tạo — audit phát hiện `tcDocumentIds` (Giáo Trình) KHÔNG đưa vào `TRAINING_CLASS`**: nhãn của field
+này bị `onTrainingClassModeChange()` TỰ ĐỘNG đổi qua lại theo `#tcMode` (2 câu chữ khác nhau tùy
+Online/Offline) MỖI LẦN vào lại module/đổi sub-tab — nếu đưa vào manifest, nhãn admin tùy biến sẽ liên tục
+bị hàm này ghi đè lại ngay sau khi tải trang. Ngân Hàng Câu Hỏi (`TRAINING_TEST`) — bản thân khối câu hỏi
+(`tbQuestionsContainer`) đã là biểu mẫu tự do hoàn toàn (giảng viên tự gõ nội dung/đáp án từng câu, không
+có "nhãn mặc định"), không đưa vào — chỉ 3 field cố định ngoài khối câu hỏi. `#uniformCatalogAdminForm`-kiểu
+CRUD danh mục (`trainingCourseForm`/`trainingPlanForm`/`trainingDocForm`/`careerPathForm`/
+`onboardingPathForm`) CHƯA đưa vào đợt này — xem "Phạm vi CHƯA làm" bên dưới.
+
+**Audit form markup phát hiện 1 lỗi div-wrapping mới, cùng lớp lỗi `#licenseForm` ở Đợt 1**:
+`#itRenewalCreateForm` (Hỗ Trợ IT - Gia Hạn Dịch Vụ) có 6 field là con TRỰC TIẾP của `<form>` (không bọc
+`<div>` riêng), khiến `applyCoreFieldCustomizations()` có thể ghi đè nhầm nhãn "Ngày bắt đầu"/"Ngày hết
+hạn" khi sửa bất kỳ field nào trong số đó — đã bọc lại từng field trong `<div>` riêng trước khi thêm vào
+`CORE_FIELD_MANIFEST.IT_RENEWAL`. 3 module còn lại (Vận Hành/Đào Tạo/Tuyển Dụng) audit KHÔNG phát hiện lỗi
+tương tự — mọi field được chọn đều đã bọc `<div>` riêng sẵn.
+
+**Không có dropdown "danh sách lựa chọn cố định" nào cần thêm `optionsKey` mới ở đợt này** ngoại trừ
+`tcCategory`/`ttCategory` (Loại Đào Tạo) trỏ `DB.trainingCategories` — danh sách NÀY ĐÃ admin-editable qua
+màn Quản Lý Danh Mục riêng có sẵn từ trước, optionsKey ở đây chỉ THÊM 1 lối sửa song song, cùng khuôn
+`licenseType`/`contractType` ở Đợt 1 — không đụng `defaults.js`/`routes/data.js`/`lib/createValidation.js`
+lần này. Mọi radio group (không có id chung, VD `owiAcceptanceMode`/`prEntryMode`) và mọi select chọn 1
+bản ghi có sẵn (VD `owiPeriodSelect`) tiếp tục bị loại trừ theo đúng nguyên tắc đã chốt từ Đợt 1/2.
+
+**Dọn dẹp phụ**: audit DB.formTemplates hiện tại phát hiện 3 override nhãn "(Demo Biểu Mẫu)" còn sót lại
+từ Đợt 1/2 (`TASK.taskTitleInput`/`LICENSE.licenseIssueDate`/`IT_TICKET.itTicketTitle`) — dữ liệu demo
+lẽ ra phải được dọn sau khi chụp ảnh nhưng bị bỏ sót, đang hiển thị SAI trên form thật cho người dùng thật.
+Đã dọn sạch cả 3 (không thuộc phạm vi Đợt 3 nhưng phát hiện được trong lúc audit, sửa luôn vì ảnh hưởng
+trực tiếp tới người dùng thật).
+
+**Test**: `tests/test-forms-batch3.js` (MỚI, cùng khuôn `tests/test-forms-batch1.js`/`test-forms-batch2.js`
+— mock DOM/DB) — 49 kịch bản: 11 tab mới hiện đúng; sửa nhãn mặc định qua `editCoreField()`+
+`addCustomField()` phản ánh đúng lên form thật cho OPERATION_ORDER/OPERATION_WORK_ITEM/TRAINING_CLASS/
+RECRUITMENT_JOB/RECRUITMENT_REFERRAL/HR_FEEDBACK/IT_RENEWAL, xác nhận không lem nhãn sang field liền kề
+(kể cả field không có `<label>` riêng, dùng fallback placeholder); riêng OPERATION_EXECUTION_PERIOD xác
+nhận field render động + call site riêng hoạt động đúng; xác nhận `tcDocumentIds` bị loại trừ có chủ đích;
+cả 11 tab mới đều đủ field mặc định và KHÔNG có nút xoá. Chạy lại toàn bộ `tests/test-*.js` (51 file) —
+chỉ còn đúng 2 lỗi known pre-existing cần SQL Server thật (`test-audit-fixes-batch1.js`,
+`test-audit-round2-cluster1.js` — mọi kịch bản BÊN TRONG đều PASS), không phát sinh regression nào khác.
+
+Demo Playwright thật (Docker `vpdt-mssql` + `node server.js`, tài khoản `demo_forms_admin` có sẵn từ Đợt 1
+— reset mật khẩu + `totpEnabled:false` để đi lại đúng màn "Bắt Buộc Thiết Lập Xác Thực 2 Lớp" bằng mã 6 số
+sinh thật từ `otplib`): mở Biểu Mẫu, xác nhận đủ 11 tab mới hiện trên UI thật; sửa nhãn 1 trường mặc định
+ở 4 module (Vận Hành/Đào Tạo/Tuyển Dụng/HCRC Đồng Hành) qua đúng nút "✏️ Sửa" + form thật, lưu — mở form
+nghiệp vụ thật tương ứng (`#operationOrderForm`/`#trainingClassForm`/`#recruitmentJobForm`/`#hrFeedbackForm`)
+và xác nhận nhãn mới hiện đúng ngay; xác nhận cả 9 tab kiểm tra qua UI thật đều không có nút xoá nào cho
+trường mặc định. 28/28 kịch bản pass. Đã dọn lại override demo (`DB.formTemplates`) sau khi chụp ảnh xong,
+không để lại dữ liệu demo trong hệ thống thật (kèm dọn sạch cả 3 override demo sót lại từ Đợt 1/2 nêu trên).
+
+**Phạm vi CHƯA làm**: "trường bổ sung" hoàn toàn mới cho 11 tab này CHƯA wire vào form nghiệp vụ thật (như
+mọi đợt trước). Đào Tạo còn nhiều form thật khác CHƯA đưa vào Biểu Mẫu (phạm vi gốc chỉ định "tạo lớp học,
+ngân hàng câu hỏi"): `trainingCourseForm` (Tạo Chương Trình), `trainingPlanForm` (Kế Hoạch Đào Tạo),
+`trainingDocForm` (Kho Tài Liệu), `careerPathForm` (Lộ Trình Thăng Tiến), `onboardingPathForm` +
+`onboardingAssignForm` (Đào Tạo Tân Binh) — để dành cho 1 đợt sau nếu người dùng muốn phủ hết Đào Tạo. Toàn
+bộ các màn "Quản Lý Danh Mục" (saveCat/saveDept/saveJobTitle/saveLicenseType/saveTrainingCategory/
+saveStore/saveStoreJobTitle/saveSensitiveKeyword/saveEmailConfig/saveWorkflowTemplate/saveUser) và cấu
+hình hệ thống (API key, Cơ Cấu Tổ Chức "Đổi quản lý trực tiếp" — chỉ 1 field picker, không phải biểu mẫu
+nhiều trường) tiếp tục CỐ Ý không đưa vào — đúng nguyên tắc Biểu Mẫu chỉ áp cho form TẠO 1 HỒ SƠ NGHIỆP VỤ,
+không áp cho CRUD danh mục đã tự sửa/xoá trực tiếp. Sau Đợt 3, đối chiếu lại toàn bộ `BUSINESS_MODULES`
+(19 module/module con) với `FORM_TABS`: chỉ còn đúng phạm vi Đào Tạo nêu trên là gap thật sự đáng kể còn
+lại — mọi module khác đã có coreKey phủ đủ mọi form nhập liệu thật.
+
+**Deploy-impact**: KHÔNG đổi `sql/schema.sql`, KHÔNG đổi `.env.example`, KHÔNG thêm `dependencies` mới —
+chỉ copy code + `pm2 restart`.
+
+## Trước đó — Biểu Mẫu Đợt 2: mở rộng ra Thanh Toán/Ngân Sách/Báo Cáo Định Kỳ/Đồng Phục (10 tab mới)
 
 Tiếp nối Đợt 1 (`TASK`/`VPP`/`LICENSE`/`IT_PRICE`/`IT_TICKET`) — mở rộng module "📋 Biểu Mẫu" ra đúng 4
 phân hệ còn lại theo yêu cầu người dùng: **Thanh Toán** (`#paymentCreateForm`), **Ngân Sách**, **Báo Cáo

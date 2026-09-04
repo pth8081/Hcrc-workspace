@@ -5975,14 +5975,20 @@ input[data-sdd-list] {
         <h3 class="font-bold text-sky-900 text-base flex items-center gap-2">🔔 Thêm Dịch Vụ CNTT Cần Theo Dõi Gia Hạn</h3>
         <p class="text-xs text-sky-700">Phần mềm/bản quyền, đường truyền Internet, tên miền, chứng chỉ SSL, hosting... — hệ thống sẽ tự gửi email nhắc trước khi hết hạn (cấu hình ở Quản Trị → Cấu Hình Email).</p>
         <form id="itRenewalCreateForm" data-op-submit="submitItServiceRenewal" class="grid grid-cols-1 md:grid-cols-3 gap-3">
-          <input id="itRenewalName" placeholder="Tên dịch vụ (VD: Microsoft 365, Domain hcrc.vn...)" class="border p-2 rounded text-sm md:col-span-2" required>
+          <!-- Đợt 3 (audit Biểu Mẫu): itRenewalName/Vendor/Responsible/Cost/File/Note trước đây là con
+               TRỰC TIẾP của <form> (không bọc <div> riêng) — cùng lỗi #licenseForm đã vá ở Đợt 1, khiến
+               applyCoreFieldCustomizations() (input.closest('div')?.querySelector('label')) có thể ghi
+               đè nhầm nhãn "Ngày bắt đầu"/"Ngày hết hạn" (2 <label> thật gần nhất trong div bao ngoài
+               cùng #itSubRenewal) khi sửa bất kỳ field nào trong số này. Đã bọc lại từng field trong
+               <div> riêng trước khi thêm vào CORE_FIELD_MANIFEST.IT_RENEWAL. -->
+          <div class="md:col-span-2"><input id="itRenewalName" placeholder="Tên dịch vụ (VD: Microsoft 365, Domain hcrc.vn...)" class="w-full border p-2 rounded text-sm" required></div>
           <div class="relative">
             <input id="itRenewalCategory" data-sdd-list="itRenewalCategoryDatalist" autocomplete="off" placeholder="Loại dịch vụ" class="w-full border p-2 rounded text-sm" required>
             <div id="itRenewalCategoryDatalist" class="hidden" data-sdd-dropdown></div>
           </div>
-          <input id="itRenewalVendor" placeholder="Nhà cung cấp" class="border p-2 rounded text-sm">
-          <input id="itRenewalResponsible" placeholder="Người phụ trách" class="border p-2 rounded text-sm">
-          <input id="itRenewalCost" type="text" inputmode="numeric" placeholder="Chi phí gia hạn (đ)" class="money-input border p-2 rounded text-sm">
+          <div><input id="itRenewalVendor" placeholder="Nhà cung cấp" class="w-full border p-2 rounded text-sm"></div>
+          <div><input id="itRenewalResponsible" placeholder="Người phụ trách" class="w-full border p-2 rounded text-sm"></div>
+          <div><input id="itRenewalCost" type="text" inputmode="numeric" placeholder="Chi phí gia hạn (đ)" class="money-input w-full border p-2 rounded text-sm"></div>
           <div>
             <label class="block text-xs font-semibold text-gray-600 mb-1">Ngày bắt đầu</label>
             <input id="itRenewalStartDate" type="date" class="w-full border p-2 rounded text-sm">
@@ -5991,8 +5997,8 @@ input[data-sdd-list] {
             <label class="block text-xs font-semibold text-gray-600 mb-1">Ngày hết hạn <span class="text-red-500">*</span></label>
             <input id="itRenewalExpiryDate" type="date" class="w-full border p-2 rounded text-sm" required>
           </div>
-          <input id="itRenewalFile" type="file" class="border p-1 bg-white rounded text-sm md:col-span-3">
-          <textarea id="itRenewalNote" placeholder="Ghi chú thêm (nếu có)..." class="w-full border p-2 rounded text-sm h-16 md:col-span-3"></textarea>
+          <div class="md:col-span-3"><input id="itRenewalFile" type="file" class="w-full border p-1 bg-white rounded text-sm"></div>
+          <div class="md:col-span-3"><textarea id="itRenewalNote" placeholder="Ghi chú thêm (nếu có)..." class="w-full border p-2 rounded text-sm h-16"></textarea></div>
           <div class="md:col-span-3 flex justify-end">
             <button type="submit" class="bg-sky-700 text-white px-5 py-2 rounded font-bold hover:bg-sky-800 transition">Thêm vào danh mục</button>
           </div>
@@ -8188,6 +8194,146 @@ const CORE_FIELD_MANIFEST = {
     { id: 'uniformTransferItemSize', label: 'Mặt Hàng — Size', required: true },
     { id: 'uniformTransferQty', label: 'Số Lượng', required: true },
     { id: 'uniformTransferReason', label: 'Lý Do', required: true }
+  ],
+  // ===== Biểu Mẫu Đợt 3 (Vận Hành/Đào Tạo/Tuyển Dụng) =====
+  // OPERATION_ORDER: #operationOrderForm (Vận Hành > Phê Duyệt Đơn Hàng > Tạo Đơn Hàng Mới). Bảng
+  // "Danh Sách Hạng Mục Đặt Hàng" (operationOrderItemsTableBody) KHÔNG đưa vào — hàng động do người
+  // dùng tự thêm/bớt (addOperationOrderItemRow()), không phải field cố định có id ổn định, cùng lý do
+  // budgetEntries/bảng dòng ngân sách bị loại ở Đợt 2.
+  OPERATION_ORDER: [
+    { id: 'voCode', label: 'Mã Đơn Hàng', required: false },
+    { id: 'voTitle', label: 'Tiêu Đề Đơn Hàng', required: true },
+    { id: 'voSupplier', label: 'Nhà Cung Cấp', required: false },
+    { id: 'voFile', label: 'File Đính Kèm', required: false },
+    { id: 'voNote', label: 'Ghi Chú', required: false }
+  ],
+  // OPERATION_STORE_OPEN: #operationStoreOpenForm (Vận Hành > Siêu Thị > Mở mới > Tạo Đề Xuất).
+  OPERATION_STORE_OPEN: [
+    { id: 'vsoCode', label: 'Mã Đề Xuất', required: false },
+    { id: 'vsoStoreName', label: 'Tên Siêu Thị Dự Kiến', required: true },
+    { id: 'vsoAddress', label: 'Địa Điểm Dự Kiến', required: true },
+    { id: 'vsoArea', label: 'Diện Tích Dự Kiến (m²)', required: false },
+    { id: 'vsoBudget', label: 'Chi Phí Phê Duyệt (VNĐ)', required: false },
+    { id: 'vsoOpenDate', label: 'Ngày Dự Kiến Khai Trương', required: false },
+    { id: 'vsoPersonInChargeInput', label: 'Người Phụ Trách', required: false },
+    { id: 'vsoFile', label: 'Tài Liệu Đính Kèm', required: false },
+    { id: 'vsoNote', label: 'Ghi Chú', required: false }
+  ],
+  // OPERATION_REPAIR: #operationRepairForm (Vận Hành > Siêu Thị > Sửa chữa > Tạo Đề Xuất).
+  OPERATION_REPAIR: [
+    { id: 'vrCode', label: 'Mã Đề Xuất', required: false },
+    { id: 'vrStoreName', label: 'Siêu Thị Cần Sửa Chữa', required: true },
+    { id: 'vrTitle', label: 'Nội Dung Sửa Chữa', required: true },
+    { id: 'vrAmount', label: 'Chi Phí Phê Duyệt (VNĐ)', required: false },
+    { id: 'vrSupplier', label: 'Nhà Cung Cấp / Đơn Vị Thi Công', required: false },
+    { id: 'vrPersonInChargeInput', label: 'Người Phụ Trách', required: false },
+    { id: 'vrDescription', label: 'Mô Tả Chi Tiết Hiện Trạng & Lý Do Sửa Chữa', required: false },
+    { id: 'vrFile', label: 'Tài Liệu Đính Kèm', required: false }
+  ],
+  // OPERATION_WORK_ITEM: #operationWorkItemFormModal (Vận Hành > Siêu Thị > Thực hiện/Nghiệm thu > Thêm
+  // Công Việc, dùng CHUNG cho tạo mới lẫn sửa). owiAssignedToPicker (renderPeopleMultiSelect(), div
+  // container không phải input/không có <label> RIÊNG bên trong) KHÔNG đưa vào — cùng lý do mọi picker
+  // nhiều người khác (groupMembersPicker...) chưa từng vào diện Biểu Mẫu. owiPeriodSelect (chọn 1 Kỳ
+  // Thực Hiện có sẵn) và owiAcceptanceMode (radio, không có id chung cho cả nhóm — applyCoreFieldCustomizations()
+  // cần đúng 1 id) KHÔNG đưa vào, cùng lý do prEntryPeriodSelect/prEntryMode ở Đợt 2.
+  OPERATION_WORK_ITEM: [
+    { id: 'owiTitle', label: 'Tên Công Việc', required: true },
+    { id: 'owiDescription', label: 'Mô Tả', required: false },
+    { id: 'owiAcceptorInput', label: 'Người Nghiệm Thu Chỉ Định', required: false },
+    { id: 'owiDeadline', label: 'Hạn Hoàn Thành', required: false }
+  ],
+  // TRAINING_CLASS: #trainingClassForm (Đào Tạo > Lớp Học > Tạo Lớp Học Mới). tcCategory optionsKey trỏ
+  // DB.trainingCategories — danh sách NÀY ĐÃ admin-editable qua màn Quản Lý Danh Mục riêng (khối "Loại
+  // Đào Tạo" trong module Đào Tạo) VÀ optionsKey ở đây chỉ THÊM 1 lối sửa song song, cùng khuôn
+  // licenseType/contractType ở Đợt 1. tcMode (Online/Offline) KHÔNG có optionsKey — cùng lý do
+  // licenseOperatingStatus. tcDocumentIds (Giáo Trình) KHÔNG đưa vào — nhãn của field này được
+  // onTrainingClassModeChange() TỰ ĐỘNG đổi qua lại theo #tcMode (2 câu chữ khác nhau tùy Online/Offline,
+  // xem hàm đó) MỖI LẦN vào lại module/đổi sub-tab (renderTrainingLms() gọi onTrainingClassModeChange()
+  // không điều kiện) — nếu đưa vào manifest, nhãn admin tùy biến sẽ liên tục bị hàm này ghi đè lại ngay
+  // sau khi tải trang, khác hẳn mọi field khác trong hệ thống (chỉ đổi 1 lần lúc tải, không đổi lại sau).
+  TRAINING_CLASS: [
+    { id: 'tcCategory', label: 'Loại Đào Tạo', required: true, optionsKey: 'trainingCategories' },
+    { id: 'tcTitle', label: 'Tên Lớp Học', required: true },
+    { id: 'tcMode', label: 'Kiểu Lớp Học', required: false },
+    { id: 'tcInstructor', label: 'Giảng Viên / Người Phụ Trách', required: false },
+    { id: 'tcCourseId', label: 'Chương Trình', required: false },
+    { id: 'tcStart', label: 'Thời Gian Bắt Đầu', required: true },
+    { id: 'tcEnd', label: 'Thời Gian Kết Thúc', required: false },
+    { id: 'tcLocation', label: 'Địa Điểm / Hình Thức', required: false },
+    { id: 'tcDeadline', label: 'Hạn Đăng Ký', required: false },
+    { id: 'tcCapacity', label: 'Số Lượng Tối Đa', required: false },
+    { id: 'tcPassScore', label: 'Điểm Đạt Yêu Cầu (%)', required: false },
+    { id: 'tcTestId', label: 'Bài Test Gán Cho Lớp', required: false },
+    { id: 'tcTestSecondsPerQuestion', label: 'Số Giây / Câu Hỏi', required: false },
+    { id: 'tcDescription', label: 'Mô Tả / Nội Dung', required: false }
+  ],
+  // TRAINING_TEST: #trainingTestForm (Đào Tạo > Ngân Hàng Câu Hỏi > Tạo Bài Test Mới) — chỉ 3 field cố
+  // định NGOÀI khối câu hỏi; bản thân danh sách câu hỏi (tbQuestionsContainer/tbAddQuestion) đã là biểu
+  // mẫu HOÀN TOÀN tự do (giảng viên tự gõ nội dung/đáp án từng câu, không có "nhãn mặc định" nào để sửa)
+  // nên không xung đột/không cần đưa vào đây — cùng tinh thần loại trừ BUDGET_PERIOD.budgetEntries.
+  TRAINING_TEST: [
+    { id: 'ttTitle', label: 'Tên Bài Test', required: true },
+    { id: 'ttCategory', label: 'Loại Đào Tạo', required: false, optionsKey: 'trainingCategories' },
+    { id: 'ttPassScore', label: 'Điểm Đạt Yêu Cầu Gợi Ý (%)', required: false }
+  ],
+  // RECRUITMENT_JOB: #recruitmentJobForm (Tuyển Dụng > Tin Tuyển Dụng > Đăng Tin Mới). rjDept (chọn đơn
+  // vị/siêu thị) KHÔNG có optionsKey — danh sách phòng ban là dữ liệu hệ thống (DB.depts), không phải
+  // danh sách nhãn riêng của module này.
+  RECRUITMENT_JOB: [
+    { id: 'rjTitle', label: 'Tên Vị Trí', required: true },
+    { id: 'rjSlots', label: 'Số Lượng Cần Tuyển', required: false },
+    { id: 'rjMonth', label: 'Đợt Tuyển (Tháng)', required: false },
+    { id: 'rjDept', label: 'Đơn Vị/Siêu Thị Đăng Tuyển', required: false },
+    { id: 'rjLocation', label: 'Địa Điểm Làm Việc', required: false },
+    { id: 'rjDeadline', label: 'Hạn Nhận Hồ Sơ', required: false },
+    { id: 'rjContactInfo', label: 'Thông Tin Liên Hệ', required: true },
+    { id: 'rjBannerFile', label: 'Ảnh/Banner Tin Tuyển Dụng', required: false },
+    { id: 'rjDescription', label: 'Mô Tả Công Việc', required: true },
+    { id: 'rjRequirements', label: 'Yêu Cầu Ứng Viên', required: false }
+  ],
+  // RECRUITMENT_REFERRAL: #recruitmentReferForm (modal "🙋 Giới Thiệu Ứng Viên", mở từ mọi tin tuyển
+  // dụng, ai đăng nhập cũng dùng được). rrJobId (hidden)/rrJobTitleLabel/rrReferrerLabel chỉ là hiển thị
+  // tự động, không phải field admin sửa nhãn được.
+  RECRUITMENT_REFERRAL: [
+    { id: 'rrCandidateName', label: 'Họ Tên Ứng Viên', required: true },
+    { id: 'rrCandidatePhone', label: 'Số Điện Thoại', required: true },
+    { id: 'rrCandidateEmail', label: 'Email', required: false },
+    { id: 'rrCvFile', label: 'CV Ứng Viên', required: true },
+    { id: 'rrCandidateNote', label: 'Ghi Chú Thêm', required: false }
+  ],
+  // HR_FEEDBACK: #hrFeedbackForm ("🤝 HCRC Đồng Hành" — khối riêng sống trong module Truyền Thông Nội Bộ,
+  // xem internalQnaSection, mở cho MỌI người gửi câu hỏi tới Nhân Sự) — audit Đợt 3 phát hiện đây là 1
+  // biểu mẫu thật (2 field cố định) bị Đợt 1/2 bỏ sót vì không nằm cùng khung #internalPostForm chung.
+  // hrFeedbackCategory (4 lựa chọn cố định) KHÔNG có optionsKey — gắn trực tiếp phân loại nội bộ, không
+  // phải danh sách tự do như internalNewsCategories.
+  HR_FEEDBACK: [
+    { id: 'hrFeedbackCategory', label: 'Chủ Đề', required: false },
+    { id: 'hrFeedbackQuestion', label: 'Nội Dung Câu Hỏi', required: true }
+  ],
+  // OPERATION_EXECUTION_PERIOD: form "Tạo Kỳ Mới" trong #operationExecutionPeriodsBox (Vận Hành > Siêu
+  // Thị > Thực hiện, mở từ #operationWorkItemModal) — CHỈ 1 field (owiNewPeriodName, không có <label>
+  // riêng nên rơi vào nhánh fallback đổi PLACEHOLDER, cùng khuôn taskAssigneeInput ở Đợt 1). NGOẠI LỆ
+  // DUY NHẤT trong toàn bộ CORE_FIELD_MANIFEST: input này render ĐỘNG qua innerHTML (chỉ tồn tại khi
+  // form đang mở), nên cần 1 call site applyCoreFieldCustomizations() riêng ngay trong
+  // renderOperationExecutionPeriodsBox() — xem chú thích tại đó.
+  OPERATION_EXECUTION_PERIOD: [
+    { id: 'owiNewPeriodName', label: 'Tên Kỳ Thực Hiện', required: true }
+  ],
+  // IT_RENEWAL: #itRenewalCreateForm (Hỗ Trợ IT > Gia Hạn Dịch Vụ CNTT) — audit Đợt 3 phát hiện đây là 1
+  // biểu mẫu thật bị Đợt 1 bỏ sót (Đợt 1 chỉ tách IT_PRICE/IT_TICKET, không có tab con này). itRenewalCategory
+  // (free-text + gợi ý tự học qua data-sdd-list, giống licenseType TRƯỚC KHI có optionsKey) KHÔNG có
+  // optionsKey ở đợt này — giữ nguyên phạm vi audit, không đụng defaults.js/routes/data.js lần này. Kèm
+  // fix lỗi div-wrapping giống #licenseForm Đợt 1 (xem chú thích ngay tại markup #itRenewalCreateForm).
+  IT_RENEWAL: [
+    { id: 'itRenewalName', label: 'Tên Dịch Vụ', required: true },
+    { id: 'itRenewalCategory', label: 'Loại Dịch Vụ', required: true },
+    { id: 'itRenewalVendor', label: 'Nhà Cung Cấp', required: false },
+    { id: 'itRenewalResponsible', label: 'Người Phụ Trách', required: false },
+    { id: 'itRenewalCost', label: 'Chi Phí Gia Hạn (đ)', required: false },
+    { id: 'itRenewalStartDate', label: 'Ngày Bắt Đầu', required: false },
+    { id: 'itRenewalExpiryDate', label: 'Ngày Hết Hạn', required: true },
+    { id: 'itRenewalFile', label: 'Tệp Đính Kèm', required: false },
+    { id: 'itRenewalNote', label: 'Ghi Chú', required: false }
   ]
 };
 
@@ -8229,7 +8375,20 @@ const FORM_TABS = [
   { key: 'UNIFORM_ISSUE', coreKey: 'UNIFORM_ISSUE', label: 'Đồng Phục - Cấp Cho Nhân Viên', icon: '👕', short: 'ĐP - Cấp Phát' },
   { key: 'UNIFORM_ADJUST_STOCK', coreKey: 'UNIFORM_ADJUST_STOCK', label: 'Đồng Phục - Báo Hỏng/Hủy (Kho)', icon: '🗑️', short: 'ĐP - Báo Hỏng Kho' },
   { key: 'UNIFORM_ADJUST_EMPLOYEE', coreKey: 'UNIFORM_ADJUST_EMPLOYEE', label: 'Đồng Phục - Thu Hồi Từ Nhân Viên', icon: '↩️', short: 'ĐP - Thu Hồi' },
-  { key: 'UNIFORM_TRANSFER', coreKey: 'UNIFORM_TRANSFER', label: 'Đồng Phục - Điều Chuyển Kho', icon: '🔁', short: 'ĐP - Điều Chuyển' }
+  { key: 'UNIFORM_TRANSFER', coreKey: 'UNIFORM_TRANSFER', label: 'Đồng Phục - Điều Chuyển Kho', icon: '🔁', short: 'ĐP - Điều Chuyển' },
+  // Đợt 3 (mở rộng Biểu Mẫu ra thêm Vận Hành/Đào Tạo/Tuyển Dụng + 1 gap-fill HCRC Đồng Hành phát hiện
+  // qua audit BUSINESS_MODULES) — mỗi tab key riêng TRÙNG coreKey, cùng khuôn Đợt 1/2.
+  { key: 'OPERATION_ORDER', coreKey: 'OPERATION_ORDER', label: 'Vận Hành - Phê Duyệt Đơn Hàng', icon: '📦', short: 'VH - Đơn Hàng' },
+  { key: 'OPERATION_STORE_OPEN', coreKey: 'OPERATION_STORE_OPEN', label: 'Vận Hành - Mở Mới Siêu Thị', icon: '🏬', short: 'VH - Mở Mới' },
+  { key: 'OPERATION_REPAIR', coreKey: 'OPERATION_REPAIR', label: 'Vận Hành - Sửa Chữa Siêu Thị', icon: '🔧', short: 'VH - Sửa Chữa' },
+  { key: 'OPERATION_WORK_ITEM', coreKey: 'OPERATION_WORK_ITEM', label: 'Vận Hành - Thêm Công Việc (Thực Hiện/Nghiệm Thu)', icon: '🛠️', short: 'VH - Công Việc' },
+  { key: 'TRAINING_CLASS', coreKey: 'TRAINING_CLASS', label: 'Đào Tạo - Tạo Lớp Học', icon: '🎓', short: 'ĐT - Lớp Học' },
+  { key: 'TRAINING_TEST', coreKey: 'TRAINING_TEST', label: 'Đào Tạo - Ngân Hàng Câu Hỏi', icon: '🧪', short: 'ĐT - Bài Test' },
+  { key: 'RECRUITMENT_JOB', coreKey: 'RECRUITMENT_JOB', label: 'Tuyển Dụng - Đăng Tin', icon: '💼', short: 'TD - Đăng Tin' },
+  { key: 'RECRUITMENT_REFERRAL', coreKey: 'RECRUITMENT_REFERRAL', label: 'Tuyển Dụng - Giới Thiệu Ứng Viên', icon: '🙋', short: 'TD - Giới Thiệu' },
+  { key: 'HR_FEEDBACK', coreKey: 'HR_FEEDBACK', label: 'HCRC Đồng Hành - Gửi Câu Hỏi', icon: '🤝', short: 'HCRC Đồng Hành' },
+  { key: 'OPERATION_EXECUTION_PERIOD', coreKey: 'OPERATION_EXECUTION_PERIOD', label: 'Vận Hành - Tạo Kỳ Thực Hiện', icon: '📅', short: 'VH - Kỳ Thực Hiện' },
+  { key: 'IT_RENEWAL', coreKey: 'IT_RENEWAL', label: 'Hỗ Trợ IT - Gia Hạn Dịch Vụ', icon: '🔔', short: 'IT - Gia Hạn' }
 ];
 
 // Trả về (và khởi tạo nếu chưa có) đối tượng override {fieldId: {label, required}} của các trường
@@ -23785,6 +23944,12 @@ function renderOperationExecutionPeriodsBox(kind, id, canManageExecution) {
       </form>`
     : (canManageExecution ? `<button type="button" data-op="toggleOperationExecutionPeriodCreateForm" data-open="true" class="text-xs px-2 py-1.5 bg-gray-700 text-white rounded font-bold hover:bg-gray-800">+ Tạo Kỳ Mới</button>` : '');
   box.innerHTML = `<div class="text-xs font-bold text-gray-600">📅 Kỳ Thực Hiện</div>${rows || '<p class="text-xs text-gray-400 italic">Chưa có kỳ nào.</p>'}${createFormHTML}`;
+  // #owiNewPeriodName chỉ tồn tại trong DOM khi owiPeriodCreateFormOpen=true (render qua innerHTML ở
+  // trên, KHÁC mọi field khác trong CORE_FIELD_MANIFEST vốn là hidden <div> tĩnh có sẵn từ lúc tải
+  // trang) — applyAllCoreFieldCustomizations() (chạy 1 lần lúc initDatabase()) không thấy được field
+  // này nếu form đang đóng, nên cần gọi lại NGAY TẠI ĐÂY mỗi lần render lại box, không dùng chung được
+  // cơ chế "generic, không cần call site riêng" như các coreKey khác — đây là NGOẠI LỆ DUY NHẤT.
+  applyCoreFieldCustomizations('OPERATION_EXECUTION_PERIOD');
 }
 function toggleOperationExecutionPeriodCreateForm(open) {
   owiPeriodCreateFormOpen = open;
