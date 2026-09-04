@@ -4458,6 +4458,17 @@ function updateBudgetEntryDraft(user, item, payload, period, templates) {
 // "Gửi": NHÁP -> PENDING, khởi động (lại) luồng duyệt Trưởng phòng từ bước 1 — kể cả khi gửi lại sau
 // "Yêu cầu bổ sung" (item.history đã có sẵn dòng REQUEST_CHANGES từ lib/workflowEngine.js, giữ nguyên
 // làm dấu vết, không xoá).
+//
+// entryKind === 'ACTUAL' ("Ngân Sách Thực Hiện") KHÔNG qua PENDING nữa — theo yêu cầu người dùng: chỉ
+// bản PLAN ("Ngân Sách Phê Duyệt") mới cần Trưởng phòng duyệt, ACTUAL là nhân viên tự ghi nhận, quản lý
+// chỉ cần XEM/KIỂM SOÁT (sửa TRỰC TIẾP bất kể trạng thái qua updateApprovedActualBudgetEntry() ở dưới,
+// KHÔNG phải "duyệt"), Ngân Sách ở đây chỉ là công cụ quản lý nội bộ cho đơn vị. Cùng tinh thần Mục H
+// (bỏ phê duyệt module Vận Hành > Siêu Thị, xem submitOperationEstimate() ở trên: DRAFT -> APPROVED
+// thẳng, không còn khái niệm "gửi duyệt", chỉ ghi 1 dòng lịch sử cho có dấu vết) — khác ở chỗ Mục H bỏ
+// hẳn bước "Gửi" ngay từ lúc tạo, còn ở đây "Gửi" (submitBudgetEntry) vẫn là hành động rời NHÁP, chỉ
+// đích đến cuối cùng đổi từ PENDING sang thẳng APPROVED cho riêng ACTUAL. state machine DRAFT/PENDING/
+// APPROVED/REJECTED giữ nguyên (không đổi field kỹ thuật) nên mọi nơi đọc status (renderBudgetSummaryResult()
+// lọc 'APPROVED', badge, v.v.) tự hoạt động đúng không cần sửa thêm.
 function submitBudgetEntry(user, item, period) {
   if (!user.perms?.admin && !user.perms?.budgetCreate) throw new HttpError(403, 'Bạn không có quyền lập ngân sách');
   if (item.dept !== user.dept) throw new HttpError(403, 'Bạn chỉ gửi được ngân sách của phòng ban mình');
@@ -4469,9 +4480,36 @@ function submitBudgetEntry(user, item, period) {
   if (isBudgetPeriodClosed(period)) throw new HttpError(409, 'Kỳ ngân sách này đã kết thúc, không thể gửi nữa');
   if (!item.lines || !item.lines.length) throw new HttpError(400, 'Vui lòng nhập ít nhất 1 dòng ngân sách trước khi gửi');
   if (!item.history) item.history = [];
+  if (item.entryKind === 'ACTUAL') {
+    item.history.push({ step: 0, approver: user.name, username: user.username, action: 'SUBMITTED_NO_APPROVAL', comment: 'Ngân sách thực hiện — ghi nhận trực tiếp, không qua phê duyệt', time: nowVN() });
+    item.status = 'APPROVED';
+    item.currentStep = 0;
+    return item;
+  }
   item.history.push({ step: 0, approver: user.name, username: user.username, action: 'SUBMITTED', comment: '', time: nowVN() });
   item.status = 'PENDING';
   item.currentStep = 1;
+  return item;
+}
+
+// budgetManage/admin sửa TRỰC TIẾP 1 bản Ngân Sách Thực Hiện (entryKind==='ACTUAL') BẤT KỂ trạng thái
+// (DRAFT/APPROVED/REJECTED) — khác hẳn updateBudgetEntryDraft() (chỉ người phòng ban sửa được bản NHÁP
+// của CHÍNH phòng mình, chặn cứng khi status !== 'DRAFT'). Vì ACTUAL không còn qua bước duyệt Trưởng
+// phòng (submitBudgetEntry() ở trên) nên không còn ai "duyệt" để bắt lỗi số liệu nữa — người quản lý
+// Ngân Sách cần sửa lại được trực tiếp nếu phát hiện đơn vị nhập sai, kể cả sau khi đã APPROVED (đúng ý
+// người dùng "xem và kiểm soát" — xem submitBudgetEntry() ở trên). KHÔNG áp dụng cho PLAN (vẫn phải qua
+// đúng luồng NHÁP -> Gửi -> Trưởng phòng duyệt như trước, không đổi gì).
+function updateApprovedActualBudgetEntry(user, item, payload, period, templates) {
+  if (!canManageBudget(user)) throw new HttpError(403, 'Chỉ người có quyền quản lý Ngân Sách mới được sửa trực tiếp bản ngân sách thực hiện');
+  if (item.entryKind !== 'ACTUAL') throw new HttpError(409, 'Thao tác này chỉ áp dụng cho Ngân Sách Thực Hiện');
+  if (!period) throw new HttpError(404, 'Không tìm thấy kỳ ngân sách');
+  const customFields = getBudgetTemplateCustomFields(period.templateId, templates);
+  item.lines = sanitizeBudgetLines(payload?.lines, customFields);
+  if (!item.history) item.history = [];
+  item.history.push({
+    step: 0, approver: user.name, username: user.username, action: 'MANAGER_EDIT',
+    comment: String(payload?.comment || '').trim().slice(0, 500), time: nowVN()
+  });
   return item;
 }
 
@@ -4706,7 +4744,7 @@ module.exports = {
   confirmUniformAllocation, buildUniformIssuance, buildUniformStockAdjustment,
   canApproveUniformTransfer, buildUniformTransfer, approveUniformTransfer, rejectUniformTransfer,
   canManageBudget, canAggregateBudget, isBudgetPeriodClosed,
-  closeBudgetPeriod, reopenBudgetPeriod, updateBudgetEntryDraft, submitBudgetEntry, updateBudgetTemplate,
+  closeBudgetPeriod, reopenBudgetPeriod, updateBudgetEntryDraft, submitBudgetEntry, updateApprovedActualBudgetEntry, updateBudgetTemplate,
   canConfirmCarDriverAssignment, confirmCarDriverAssignment,
   canApproveLicense, approveLicense, rejectLicense, setLicenseRenewing, revokeLicense, unrevokeLicense,
   canManageItServiceRenewal, editItServiceRenewal, renewItServiceRenewal,

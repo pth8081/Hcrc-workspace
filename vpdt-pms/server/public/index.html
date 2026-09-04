@@ -4230,6 +4230,9 @@ input[data-sdd-list] {
         </div>
         <div id="formTabsBar" class="flex gap-2 flex-wrap"></div>
       </div>
+      <!-- Hàng tab CON (cấp 2) — chỉ hiện khi nhóm cấp 1 đang chọn có >1 form thật (mirror
+           #wfSubmissionTypeTabs bên màn Quy Trình & Phê Duyệt), xem renderFormSubTabsBar(). -->
+      <div id="formSubTabsBar" class="hidden gap-2 flex-wrap border-t border-rose-200 pt-3"></div>
 
       <form data-op-submit="addCustomField" class="bg-white p-4 rounded border space-y-3 text-xs">
         <h4 class="font-bold text-gray-800 text-sm flex items-center gap-1"><span id="lblFormFieldFormMode">➕ Thêm Trường Dữ Liệu Bổ Sung Cho:</span> <span id="lblActiveFormName" class="text-rose-600 font-extrabold">Văn Bản Trình / Tờ Trình</span></h4>
@@ -6113,16 +6116,19 @@ input[data-sdd-list] {
   </div>
 
   <!-- Màn hình MODULE NGÂN SÁCH — module con của "Tổng Hợp" (BUSINESS_MODULES parent:'office'), 3
-       sub-tab: Ngân Sách Phê Duyệt (entryKind=PLAN, budgetCreate), Ngân Sách Thực Hiện (entryKind=ACTUAL,
-       budgetCreate — cùng cấu trúc/quyền với tab Phê Duyệt), Tổng Hợp (budgetAggregate — so sánh Phê
+       sub-tab: Ngân Sách Phê Duyệt (entryKind=PLAN, budgetCreate, qua Trưởng phòng duyệt), Ngân Sách
+       Thực Hiện (entryKind=ACTUAL, budgetCreate — cùng cấu trúc lập/sửa nháp với tab Phê Duyệt nhưng
+       KHÔNG qua duyệt: "Gửi" là ghi nhận NGAY, budgetManage/admin chỉ xem/kiểm soát + sửa trực tiếp nếu
+       cần — xem submitBudgetEntry() ở lib/recordActions.js), Tổng Hợp (budgetAggregate — so sánh Phê
        Duyệt vs Thực Hiện). "Tạo Kỳ Ngân Sách + Mẫu Ngân Sách" (budgetManage) không còn là sub-tab — đã
        chuyển vào modal #budgetPeriodTemplateModal, mở qua nút "⚙️ Quản Lý Kỳ & Mẫu". Xem setBudgetSubTab(). -->
   <div id="budgetSection" class="hidden space-y-6">
     <!-- 3 tab con: Ngân Sách Phê Duyệt (entryKind=PLAN, dept lập/gửi/Trưởng phòng duyệt) / Ngân Sách
-         Thực Hiện (entryKind=ACTUAL, cùng khuôn — dept ghi nhận chi tiêu thực tế, cũng qua Trưởng phòng
-         duyệt để số liệu đối chiếu ở Tổng Hợp đáng tin) / Tổng Hợp (so sánh 2 chiều). "Tạo Kỳ Ngân Sách +
-         Mẫu" trước đây là 1 sub-tab riêng — nay gộp vào modal "⚙️ Quản Lý Kỳ & Mẫu" (chỉ budgetManage)
-         để đúng 3 tab, xem openBudgetPeriodTemplateModal(). -->
+         Thực Hiện (entryKind=ACTUAL, cùng khuôn lập/sửa nháp — dept ghi nhận chi tiêu thực tế, nhưng
+         "Gửi" đi THẲNG APPROVED, không qua Trưởng phòng nữa — chỉ nhân viên tự ghi nhận, quản lý Ngân
+         Sách xem/kiểm soát) / Tổng Hợp (so sánh 2 chiều). "Tạo Kỳ Ngân Sách + Mẫu" trước đây là 1
+         sub-tab riêng — nay gộp vào modal "⚙️ Quản Lý Kỳ & Mẫu" (chỉ budgetManage) để đúng 3 tab, xem
+         openBudgetPeriodTemplateModal(). -->
     <div class="flex flex-wrap gap-2 border-b pb-2 items-center">
       <button type="button" data-op="setBudgetSubTab" data-arg0="APPROVED" id="btnBudgetSubApproved" class="px-3 py-1.5 rounded text-xs font-bold bg-violet-700 text-white">✅ Ngân Sách Phê Duyệt</button>
       <button type="button" data-op="setBudgetSubTab" data-arg0="ACTUAL" id="btnBudgetSubActual" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">💳 Ngân Sách Thực Hiện</button>
@@ -6200,13 +6206,16 @@ input[data-sdd-list] {
       </div>
     </div>
 
-    <!-- Sub-tab: Ngân Sách Thực Hiện (entryKind=ACTUAL — cùng cấu trúc/quyền budgetCreate + duyệt Trưởng
-         phòng như tab Phê Duyệt, chỉ khác mục đích: ghi nhận chi tiêu THỰC TẾ để đối chiếu ở Tổng Hợp) -->
+    <!-- Sub-tab: Ngân Sách Thực Hiện (entryKind=ACTUAL — cùng cấu trúc/quyền budgetCreate như tab Phê
+         Duyệt, nhưng KHÔNG qua duyệt Trưởng phòng: nhân viên tự ghi nhận chi tiêu THỰC TẾ, "Gửi" là ghi
+         nhận NGAY (APPROVED), người quản lý Ngân Sách (budgetManage/admin) chỉ xem/kiểm soát + sửa trực
+         tiếp qua nút "✏️ Sửa (Quản Lý)" nếu cần đính chính — xem submitBudgetEntry()/
+         updateApprovedActualBudgetEntry() ở lib/recordActions.js. -->
     <div id="budgetSubActual" class="hidden space-y-4">
       <div id="budgetDashboardCards_ACTUAL"></div>
       <div class="bg-violet-50 p-4 rounded border border-violet-200 space-y-3">
         <h3 class="font-bold text-violet-900 text-base flex items-center gap-2">💳 Ngân Sách Thực Hiện Đơn Vị</h3>
-        <p class="text-xs text-violet-700">Ghi nhận chi tiêu THỰC TẾ theo cùng kỳ ngân sách — nhiều người cùng phòng có quyền lập đều sửa chung được 1 bản nháp của đơn vị. Gửi rồi sẽ chuyển cho Trưởng phòng duyệt, khi APPROVED sẽ là số liệu "Thực Hiện" ở tab Tổng Hợp.</p>
+        <p class="text-xs text-violet-700">Ghi nhận chi tiêu THỰC TẾ theo cùng kỳ ngân sách — nhiều người cùng phòng có quyền lập đều sửa chung được 1 bản nháp của đơn vị. Bấm "Ghi Nhận" là LƯU NGAY, không cần ai duyệt — số liệu này sẽ là "Thực Hiện" ở tab Tổng Hợp ngay lập tức. Người quản lý Ngân Sách vẫn xem/kiểm soát được toàn bộ và có thể sửa lại nếu phát hiện sai sót.</p>
         <div id="budgetNoCreatePermNote_ACTUAL" class="hidden text-xs text-gray-500 italic bg-gray-50 p-3 rounded border">⛔ Bạn không có quyền lập ngân sách — chỉ xem được danh sách bên dưới.</div>
         <div id="budgetEntryFormWrap_ACTUAL" class="hidden bg-white p-3 rounded border text-xs space-y-3">
           <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -6235,7 +6244,7 @@ input[data-sdd-list] {
               <div class="font-bold text-gray-700">Tổng cộng: <span id="budgetEntryTotalDisplay_ACTUAL" class="text-violet-700">0 đ</span></div>
               <div id="budgetEntrySaveActions_ACTUAL" class="flex gap-2">
                 <button type="button" data-op="saveBudgetEntryDraft" data-arg0="ACTUAL" class="bg-gray-600 text-white px-3 py-1.5 rounded font-bold hover:bg-gray-700">💾 Lưu Nháp</button>
-                <button type="button" data-op="submitCurrentBudgetEntry" data-arg0="ACTUAL" class="bg-violet-600 text-white px-3 py-1.5 rounded font-bold hover:bg-violet-700">📤 Gửi Duyệt</button>
+                <button type="button" data-op="submitCurrentBudgetEntry" data-arg0="ACTUAL" class="bg-violet-600 text-white px-3 py-1.5 rounded font-bold hover:bg-violet-700">📤 Ghi Nhận</button>
               </div>
             </div>
           </div>
@@ -6976,6 +6985,46 @@ input[data-sdd-list] {
       </div>
       <div class="p-3 bg-gray-100 border-t flex justify-end text-xs">
         <button data-op="closeBudgetProcessModal" class="bg-gray-500 text-white px-4 py-1.5 rounded font-bold hover:bg-gray-600">Đóng</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL "SỬA (QUẢN LÝ)" NGÂN SÁCH THỰC HIỆN — chỉ budgetManage/admin, sửa TRỰC TIẾP 1 bản ACTUAL
+       bất kể trạng thái (không qua phê duyệt Trưởng phòng nữa, xem submitBudgetEntry() ở
+       lib/recordActions.js) — mở từ nút "✏️ Sửa (Quản Lý)" ở danh sách sub-tab "Ngân Sách Thực Hiện",
+       xem openBudgetManagerEditModal(). KHÔNG dùng cho PLAN. -->
+  <div id="budgetManagerEditModal" class="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center hidden z-50 p-4">
+    <div class="bg-white rounded-lg shadow-2xl max-w-3xl w-full flex flex-col max-h-[90vh] overflow-hidden">
+      <div class="flex justify-between items-center bg-violet-800 text-white p-4">
+        <div>
+          <h3 class="font-bold text-base flex items-center gap-2">✏️ Sửa Ngân Sách Thực Hiện (Quản Lý)</h3>
+          <p id="budgetManagerEditModalSub" class="text-xs text-violet-200"></p>
+        </div>
+        <button data-op="closeBudgetManagerEditModal" class="text-violet-200 hover:text-white font-bold text-xl px-2">✕</button>
+      </div>
+      <div class="p-4 overflow-y-auto flex-1 space-y-3 text-xs">
+        <p class="text-amber-700 bg-amber-50 border border-amber-200 rounded p-2 italic">⚠️ Bản Ngân Sách Thực Hiện không còn qua phê duyệt Trưởng phòng — sửa ở đây áp dụng NGAY, không cần ai duyệt lại. Chỉ dùng khi cần đính chính số liệu đơn vị đã ghi nhận.</p>
+        <div class="flex justify-between items-center">
+          <label class="font-semibold text-gray-600">Danh Sách Hạng Mục</label>
+          <button type="button" data-op="addBudgetManagerEditLine" class="text-violet-700 font-bold hover:underline">➕ Thêm dòng</button>
+        </div>
+        <div class="overflow-x-auto border rounded">
+          <table class="w-full border-collapse text-xs bg-white">
+            <thead id="budgetManagerEditLinesHead" class="bg-gray-100 text-left text-gray-700"></thead>
+            <tbody id="budgetManagerEditLinesBody"></tbody>
+          </table>
+        </div>
+        <div class="flex justify-between items-center pt-2 border-t">
+          <div class="font-bold text-gray-700">Tổng cộng: <span id="budgetManagerEditTotalDisplay" class="text-violet-700">0 đ</span></div>
+        </div>
+        <div>
+          <label class="block font-semibold text-gray-600 mb-1">Ghi chú sửa đổi (tuỳ chọn, lưu vào lịch sử)</label>
+          <input id="budgetManagerEditComment" placeholder="VD: đính chính hạng mục X theo hoá đơn thực tế..." class="w-full border p-1.5 rounded">
+        </div>
+      </div>
+      <div class="p-3 bg-gray-100 border-t flex justify-end gap-2 text-xs">
+        <button data-op="closeBudgetManagerEditModal" class="bg-gray-500 text-white px-4 py-1.5 rounded font-bold hover:bg-gray-600">Hủy</button>
+        <button data-op="saveBudgetManagerEditEntry" class="bg-violet-600 text-white px-4 py-1.5 rounded font-bold hover:bg-violet-700">💾 Lưu Thay Đổi</button>
       </div>
     </div>
   </div>
@@ -7946,6 +7995,11 @@ let currentProcessingVppRegId = null;
 // Id hồ sơ NHÁP đang được sửa trong form đăng ký ở trên (null = form đang tạo mới, chưa lưu lần nào).
 let vppFormDraftId = null;
 let activeFormTab = 'SUBMISSION';
+// Nhóm cấp 1 đang chọn ở thanh tab Biểu Mẫu (mirror activeWfMod) — luôn khớp group của activeFormTab,
+// xem switchFormTab()/switchFormGroup() ở khối "8. FORM BUILDER". Khởi tạo tạm bằng key group của
+// SUBMISSION (không gọi getFormGroupForTab() ở đây vì FORM_TABS/FORM_GROUPS là const khai báo SAU dòng
+// này — sẽ được switchFormTab() tính lại đúng ngay khi màn Biểu Mẫu thực sự mở lần đầu).
+let activeFormGroup = 'SUBMISSION';
 let editingCustomFieldId = null;
 // Khác null khi form Biểu Mẫu đang sửa 1 trường MẶC ĐỊNH (không phải trường bổ sung) — { coreKey,
 // fieldId }. Loại trừ lẫn nhau với editingCustomFieldId (chỉ 1 trong 2 khác null tại 1 thời điểm).
@@ -8442,66 +8496,106 @@ const CORE_FIELD_MANIFEST = {
 // với key trong CORE_FIELD_MANIFEST (trường mặc định) — ví dụ 3 phân hệ Văn phòng dùng chung 1 form
 // (và chung 1 bộ trường mặc định 'OFFICE') nhưng mỗi phân hệ có bộ trường bổ sung riêng.
 const FORM_TABS = [
-  { key: 'SUBMISSION', coreKey: 'SUBMISSION', label: 'Văn Bản Trình / Tờ Trình', icon: '📜', short: 'Tờ Trình' },
+  { key: 'SUBMISSION', coreKey: 'SUBMISSION', group: 'SUBMISSION', label: 'Văn Bản Trình / Tờ Trình', icon: '📜', short: 'Tờ Trình' },
   // Hợp Đồng TÁCH 2 bộ trường bổ sung riêng theo đúng 2 sub-tab (Phê Duyệt / Quản Lý HĐ &amp; Giấy
   // Phép) — cùng chung 1 coreKey 'CONTRACT' (trường mặc định là các field DOM dùng chung giữa 2 sub-tab
   // nên vẫn sửa nhãn/bắt buộc chung), nhưng key riêng để mỗi bên có DANH SÁCH TRƯỜNG BỔ SUNG khác nhau.
   // CONTRACT_APPROVAL áp cho chế độ Tạo Mới/Bổ Sung Phụ Lục (renderDynamicInputsForModule() gọi tuỳ
   // theo contractOpMode, xem onContractOpModeChange()); CONTRACT_MANAGE áp cho chế độ Nhập Đã Ký VÀ
   // cho bước "Tải Tài Liệu Ký" riêng (modal #signedUploadModal, xem openSignedUploadModal()).
-  { key: 'CONTRACT_APPROVAL', coreKey: 'CONTRACT', label: 'Hợp Đồng - Phê Duyệt', icon: '📄', short: 'HĐ - Phê Duyệt' },
-  { key: 'CONTRACT_MANAGE', coreKey: 'CONTRACT', label: 'Hợp Đồng - Quản Lý HĐ & Giấy Phép', icon: '📋', short: 'HĐ - Quản Lý' },
-  { key: 'CAR', coreKey: 'CAR', label: 'Đăng Ký Xe', icon: '🚗', short: 'Đăng Ký Xe' },
-  { key: 'MUA_BAN', coreKey: 'OFFICE', label: 'Văn Phòng - Mua Bán', icon: '🛒', short: 'Mua Bán' },
-  { key: 'SUA_CHUA', coreKey: 'OFFICE', label: 'Văn Phòng - Sửa Chữa', icon: '🔧', short: 'Sửa Chữa' },
-  { key: 'DOC', coreKey: 'DOC', label: 'Tài Liệu', icon: '📁', short: 'Tài Liệu' },
-  { key: 'MEETING_MINUTES', coreKey: 'MEETING_MINUTES', label: 'Biên Bản Họp', icon: '📝', short: 'Biên Bản Họp' },
-  { key: 'MEETING_ROOM', coreKey: 'MEETING_ROOM', label: 'Đặt Phòng Họp', icon: '📅', short: 'Đặt Phòng' },
-  { key: 'INTERNAL_POST', coreKey: 'INTERNAL_POST', label: 'Truyền Thông Nội Bộ - Chuyên Đề', icon: '📣', short: 'Chuyên Đề TTNB' },
+  { key: 'CONTRACT_APPROVAL', coreKey: 'CONTRACT', group: 'CONTRACT', label: 'Hợp Đồng - Phê Duyệt', icon: '📄', short: 'HĐ - Phê Duyệt' },
+  { key: 'CONTRACT_MANAGE', coreKey: 'CONTRACT', group: 'CONTRACT', label: 'Hợp Đồng - Quản Lý HĐ & Giấy Phép', icon: '📋', short: 'HĐ - Quản Lý' },
+  { key: 'CAR', coreKey: 'CAR', group: 'CAR', label: 'Đăng Ký Xe', icon: '🚗', short: 'Đăng Ký Xe' },
+  { key: 'MUA_BAN', coreKey: 'OFFICE', group: 'OFFICE', label: 'Văn Phòng - Mua Bán', icon: '🛒', short: 'Mua Bán' },
+  { key: 'SUA_CHUA', coreKey: 'OFFICE', group: 'OFFICE', label: 'Văn Phòng - Sửa Chữa', icon: '🔧', short: 'Sửa Chữa' },
+  { key: 'DOC', coreKey: 'DOC', group: 'DOC', label: 'Tài Liệu', icon: '📁', short: 'Tài Liệu' },
+  { key: 'MEETING_MINUTES', coreKey: 'MEETING_MINUTES', group: 'MEETING_MINUTES', label: 'Biên Bản Họp', icon: '📝', short: 'Biên Bản Họp' },
+  { key: 'MEETING_ROOM', coreKey: 'MEETING_ROOM', group: 'MEETING_ROOM', label: 'Đặt Phòng Họp', icon: '📅', short: 'Đặt Phòng' },
+  { key: 'INTERNAL_POST', coreKey: 'INTERNAL_POST', group: 'INTERNAL_POST', label: 'Truyền Thông Nội Bộ - Chuyên Đề', icon: '📣', short: 'Chuyên Đề TTNB' },
   // Đợt 1 (mở rộng Biểu Mẫu ra thêm Công Việc/VPP/Giấy Phép/Hỗ Trợ IT) — mỗi tab key riêng TRÙNG coreKey
   // (module chỉ có 1 bộ trường mặc định/1 form, không tách theo sub-tab như CONTRACT/OFFICE ở trên).
-  { key: 'TASK', coreKey: 'TASK', label: 'Công Việc - Giao Việc', icon: '📌', short: 'Công Việc' },
-  { key: 'VPP', coreKey: 'VPP', label: 'Văn Phòng Phẩm - Tạo Kỳ Đăng Ký', icon: '🖇️', short: 'VPP' },
-  { key: 'LICENSE', coreKey: 'LICENSE', label: 'Giấy Phép', icon: '📜', short: 'Giấy Phép' },
-  { key: 'IT_PRICE', coreKey: 'IT_PRICE', label: 'Hỗ Trợ IT - Đề Xuất Duyệt Giá', icon: '🏷️', short: 'IT - Duyệt Giá' },
-  { key: 'IT_TICKET', coreKey: 'IT_TICKET', label: 'Hỗ Trợ IT - Yêu Cầu Hỗ Trợ', icon: '🎫', short: 'IT - Yêu Cầu' },
+  { key: 'TASK', coreKey: 'TASK', group: 'TASK', label: 'Công Việc - Giao Việc', icon: '📌', short: 'Công Việc' },
+  { key: 'VPP', coreKey: 'VPP', group: 'VPP', label: 'Văn Phòng Phẩm - Tạo Kỳ Đăng Ký', icon: '🖇️', short: 'VPP' },
+  { key: 'LICENSE', coreKey: 'LICENSE', group: 'LICENSE', label: 'Giấy Phép', icon: '📜', short: 'Giấy Phép' },
+  { key: 'IT_PRICE', coreKey: 'IT_PRICE', group: 'IT', label: 'Hỗ Trợ IT - Đề Xuất Duyệt Giá', icon: '🏷️', short: 'IT - Duyệt Giá' },
+  { key: 'IT_TICKET', coreKey: 'IT_TICKET', group: 'IT', label: 'Hỗ Trợ IT - Yêu Cầu Hỗ Trợ', icon: '🎫', short: 'IT - Yêu Cầu' },
   // Đợt 2 (mở rộng Biểu Mẫu ra thêm Thanh Toán/Ngân Sách/Báo Cáo Định Kỳ/Đồng Phục) — mỗi tab key riêng
   // TRÙNG coreKey (như Đợt 1), trừ Đồng Phục có 5 form thật riêng biệt nên 5 coreKey/tab riêng.
-  { key: 'PAYMENT', coreKey: 'PAYMENT', label: 'Thanh Toán', icon: '💰', short: 'Thanh Toán' },
-  { key: 'BUDGET_PERIOD', coreKey: 'BUDGET_PERIOD', label: 'Ngân Sách - Tạo Kỳ', icon: '📅', short: 'NS - Tạo Kỳ' },
-  { key: 'BUDGET_TEMPLATE', coreKey: 'BUDGET_TEMPLATE', label: 'Ngân Sách - Mẫu Ngân Sách', icon: '🧩', short: 'NS - Mẫu' },
-  { key: 'REPORT_ENTRY', coreKey: 'REPORT_ENTRY', label: 'Báo Cáo Định Kỳ - Nhập Báo Cáo', icon: '📝', short: 'BCĐK - Nhập' },
-  { key: 'REPORT_PERIOD', coreKey: 'REPORT_PERIOD', label: 'Báo Cáo Định Kỳ - Tạo Kỳ', icon: '📅', short: 'BCĐK - Tạo Kỳ' },
-  { key: 'UNIFORM_PERIOD', coreKey: 'UNIFORM_PERIOD', label: 'Đồng Phục - Tạo Kỳ Cấp Phát', icon: '📦', short: 'ĐP - Tạo Kỳ' },
-  { key: 'UNIFORM_ISSUE', coreKey: 'UNIFORM_ISSUE', label: 'Đồng Phục - Cấp Cho Nhân Viên', icon: '👕', short: 'ĐP - Cấp Phát' },
-  { key: 'UNIFORM_ADJUST_STOCK', coreKey: 'UNIFORM_ADJUST_STOCK', label: 'Đồng Phục - Báo Hỏng/Hủy (Kho)', icon: '🗑️', short: 'ĐP - Báo Hỏng Kho' },
-  { key: 'UNIFORM_ADJUST_EMPLOYEE', coreKey: 'UNIFORM_ADJUST_EMPLOYEE', label: 'Đồng Phục - Thu Hồi Từ Nhân Viên', icon: '↩️', short: 'ĐP - Thu Hồi' },
-  { key: 'UNIFORM_TRANSFER', coreKey: 'UNIFORM_TRANSFER', label: 'Đồng Phục - Điều Chuyển Kho', icon: '🔁', short: 'ĐP - Điều Chuyển' },
+  { key: 'PAYMENT', coreKey: 'PAYMENT', group: 'PAYMENT', label: 'Thanh Toán', icon: '💰', short: 'Thanh Toán' },
+  { key: 'BUDGET_PERIOD', coreKey: 'BUDGET_PERIOD', group: 'BUDGET', label: 'Ngân Sách - Tạo Kỳ', icon: '📅', short: 'NS - Tạo Kỳ' },
+  { key: 'BUDGET_TEMPLATE', coreKey: 'BUDGET_TEMPLATE', group: 'BUDGET', label: 'Ngân Sách - Mẫu Ngân Sách', icon: '🧩', short: 'NS - Mẫu' },
+  { key: 'REPORT_ENTRY', coreKey: 'REPORT_ENTRY', group: 'REPORT', label: 'Báo Cáo Định Kỳ - Nhập Báo Cáo', icon: '📝', short: 'BCĐK - Nhập' },
+  { key: 'REPORT_PERIOD', coreKey: 'REPORT_PERIOD', group: 'REPORT', label: 'Báo Cáo Định Kỳ - Tạo Kỳ', icon: '📅', short: 'BCĐK - Tạo Kỳ' },
+  { key: 'UNIFORM_PERIOD', coreKey: 'UNIFORM_PERIOD', group: 'UNIFORM', label: 'Đồng Phục - Tạo Kỳ Cấp Phát', icon: '📦', short: 'ĐP - Tạo Kỳ' },
+  { key: 'UNIFORM_ISSUE', coreKey: 'UNIFORM_ISSUE', group: 'UNIFORM', label: 'Đồng Phục - Cấp Cho Nhân Viên', icon: '👕', short: 'ĐP - Cấp Phát' },
+  { key: 'UNIFORM_ADJUST_STOCK', coreKey: 'UNIFORM_ADJUST_STOCK', group: 'UNIFORM', label: 'Đồng Phục - Báo Hỏng/Hủy (Kho)', icon: '🗑️', short: 'ĐP - Báo Hỏng Kho' },
+  { key: 'UNIFORM_ADJUST_EMPLOYEE', coreKey: 'UNIFORM_ADJUST_EMPLOYEE', group: 'UNIFORM', label: 'Đồng Phục - Thu Hồi Từ Nhân Viên', icon: '↩️', short: 'ĐP - Thu Hồi' },
+  { key: 'UNIFORM_TRANSFER', coreKey: 'UNIFORM_TRANSFER', group: 'UNIFORM', label: 'Đồng Phục - Điều Chuyển Kho', icon: '🔁', short: 'ĐP - Điều Chuyển' },
   // Đợt 3 (mở rộng Biểu Mẫu ra thêm Vận Hành/Đào Tạo/Tuyển Dụng + 1 gap-fill HCRC Đồng Hành phát hiện
   // qua audit BUSINESS_MODULES) — mỗi tab key riêng TRÙNG coreKey, cùng khuôn Đợt 1/2.
-  { key: 'OPERATION_ORDER', coreKey: 'OPERATION_ORDER', label: 'Vận Hành - Phê Duyệt Đơn Hàng', icon: '📦', short: 'VH - Đơn Hàng' },
-  { key: 'OPERATION_STORE_OPEN', coreKey: 'OPERATION_STORE_OPEN', label: 'Vận Hành - Mở Mới Siêu Thị', icon: '🏬', short: 'VH - Mở Mới' },
-  { key: 'OPERATION_REPAIR', coreKey: 'OPERATION_REPAIR', label: 'Vận Hành - Sửa Chữa Siêu Thị', icon: '🔧', short: 'VH - Sửa Chữa' },
-  { key: 'OPERATION_WORK_ITEM', coreKey: 'OPERATION_WORK_ITEM', label: 'Vận Hành - Thêm Công Việc (Thực Hiện/Nghiệm Thu)', icon: '🛠️', short: 'VH - Công Việc' },
-  { key: 'TRAINING_CLASS', coreKey: 'TRAINING_CLASS', label: 'Đào Tạo - Tạo Lớp Học', icon: '🎓', short: 'ĐT - Lớp Học' },
-  { key: 'TRAINING_TEST', coreKey: 'TRAINING_TEST', label: 'Đào Tạo - Ngân Hàng Câu Hỏi', icon: '🧪', short: 'ĐT - Bài Test' },
-  { key: 'RECRUITMENT_JOB', coreKey: 'RECRUITMENT_JOB', label: 'Tuyển Dụng - Đăng Tin', icon: '💼', short: 'TD - Đăng Tin' },
-  { key: 'RECRUITMENT_REFERRAL', coreKey: 'RECRUITMENT_REFERRAL', label: 'Tuyển Dụng - Giới Thiệu Ứng Viên', icon: '🙋', short: 'TD - Giới Thiệu' },
-  { key: 'HR_FEEDBACK', coreKey: 'HR_FEEDBACK', label: 'HCRC Đồng Hành - Gửi Câu Hỏi', icon: '🤝', short: 'HCRC Đồng Hành' },
-  { key: 'OPERATION_EXECUTION_PERIOD', coreKey: 'OPERATION_EXECUTION_PERIOD', label: 'Vận Hành - Tạo Kỳ Thực Hiện', icon: '📅', short: 'VH - Kỳ Thực Hiện' },
-  { key: 'IT_RENEWAL', coreKey: 'IT_RENEWAL', label: 'Hỗ Trợ IT - Gia Hạn Dịch Vụ', icon: '🔔', short: 'IT - Gia Hạn' },
+  { key: 'OPERATION_ORDER', coreKey: 'OPERATION_ORDER', group: 'OPERATION', label: 'Vận Hành - Phê Duyệt Đơn Hàng', icon: '📦', short: 'VH - Đơn Hàng' },
+  { key: 'OPERATION_STORE_OPEN', coreKey: 'OPERATION_STORE_OPEN', group: 'OPERATION', label: 'Vận Hành - Mở Mới Siêu Thị', icon: '🏬', short: 'VH - Mở Mới' },
+  { key: 'OPERATION_REPAIR', coreKey: 'OPERATION_REPAIR', group: 'OPERATION', label: 'Vận Hành - Sửa Chữa Siêu Thị', icon: '🔧', short: 'VH - Sửa Chữa' },
+  { key: 'OPERATION_WORK_ITEM', coreKey: 'OPERATION_WORK_ITEM', group: 'OPERATION', label: 'Vận Hành - Thêm Công Việc (Thực Hiện/Nghiệm Thu)', icon: '🛠️', short: 'VH - Công Việc' },
+  { key: 'TRAINING_CLASS', coreKey: 'TRAINING_CLASS', group: 'TRAINING', label: 'Đào Tạo - Tạo Lớp Học', icon: '🎓', short: 'ĐT - Lớp Học' },
+  { key: 'TRAINING_TEST', coreKey: 'TRAINING_TEST', group: 'TRAINING', label: 'Đào Tạo - Ngân Hàng Câu Hỏi', icon: '🧪', short: 'ĐT - Bài Test' },
+  { key: 'RECRUITMENT_JOB', coreKey: 'RECRUITMENT_JOB', group: 'RECRUITMENT', label: 'Tuyển Dụng - Đăng Tin', icon: '💼', short: 'TD - Đăng Tin' },
+  { key: 'RECRUITMENT_REFERRAL', coreKey: 'RECRUITMENT_REFERRAL', group: 'RECRUITMENT', label: 'Tuyển Dụng - Giới Thiệu Ứng Viên', icon: '🙋', short: 'TD - Giới Thiệu' },
+  { key: 'HR_FEEDBACK', coreKey: 'HR_FEEDBACK', group: 'HR_FEEDBACK', label: 'HCRC Đồng Hành - Gửi Câu Hỏi', icon: '🤝', short: 'HCRC Đồng Hành' },
+  { key: 'OPERATION_EXECUTION_PERIOD', coreKey: 'OPERATION_EXECUTION_PERIOD', group: 'OPERATION', label: 'Vận Hành - Tạo Kỳ Thực Hiện', icon: '📅', short: 'VH - Kỳ Thực Hiện' },
+  { key: 'IT_RENEWAL', coreKey: 'IT_RENEWAL', group: 'IT', label: 'Hỗ Trợ IT - Gia Hạn Dịch Vụ', icon: '🔔', short: 'IT - Gia Hạn' },
   // Đợt 4 (nốt các form Đào Tạo còn lại: Chương Trình/Kế Hoạch/Kho Tài Liệu/Lộ Trình Thăng Tiến/Đào Tạo
   // Tân Binh) — mỗi tab key riêng TRÙNG coreKey, cùng khuôn Đợt 1/2/3.
-  { key: 'TRAINING_COURSE', coreKey: 'TRAINING_COURSE', label: 'Đào Tạo - Tạo Chương Trình', icon: '📚', short: 'ĐT - Chương Trình' },
-  { key: 'TRAINING_PLAN', coreKey: 'TRAINING_PLAN', label: 'Đào Tạo - Kế Hoạch Đào Tạo', icon: '🗓️', short: 'ĐT - Kế Hoạch' },
-  { key: 'TRAINING_DOC', coreKey: 'TRAINING_DOC', label: 'Đào Tạo - Kho Tài Liệu', icon: '📁', short: 'ĐT - Kho Tài Liệu' },
-  { key: 'CAREER_PATH', coreKey: 'CAREER_PATH', label: 'Đào Tạo - Lộ Trình Thăng Tiến', icon: '🪜', short: 'ĐT - Lộ Trình' },
-  { key: 'ONBOARDING_PATH', coreKey: 'ONBOARDING_PATH', label: 'Đào Tạo Tân Binh - Quản Lý Lộ Trình', icon: '🎒', short: 'Tân Binh - Lộ Trình' },
-  { key: 'ONBOARDING_ASSIGN', coreKey: 'ONBOARDING_ASSIGN', label: 'Đào Tạo Tân Binh - Phân Công', icon: '📋', short: 'Tân Binh - Phân Công' },
+  { key: 'TRAINING_COURSE', coreKey: 'TRAINING_COURSE', group: 'TRAINING', label: 'Đào Tạo - Tạo Chương Trình', icon: '📚', short: 'ĐT - Chương Trình' },
+  { key: 'TRAINING_PLAN', coreKey: 'TRAINING_PLAN', group: 'TRAINING', label: 'Đào Tạo - Kế Hoạch Đào Tạo', icon: '🗓️', short: 'ĐT - Kế Hoạch' },
+  { key: 'TRAINING_DOC', coreKey: 'TRAINING_DOC', group: 'TRAINING', label: 'Đào Tạo - Kho Tài Liệu', icon: '📁', short: 'ĐT - Kho Tài Liệu' },
+  { key: 'CAREER_PATH', coreKey: 'CAREER_PATH', group: 'TRAINING', label: 'Đào Tạo - Lộ Trình Thăng Tiến', icon: '🪜', short: 'ĐT - Lộ Trình' },
+  { key: 'ONBOARDING_PATH', coreKey: 'ONBOARDING_PATH', group: 'TRAINING', label: 'Đào Tạo Tân Binh - Quản Lý Lộ Trình', icon: '🎒', short: 'Tân Binh - Lộ Trình' },
+  { key: 'ONBOARDING_ASSIGN', coreKey: 'ONBOARDING_ASSIGN', group: 'TRAINING', label: 'Đào Tạo Tân Binh - Phân Công', icon: '📋', short: 'Tân Binh - Phân Công' },
   // Gap-fill phát hiện qua audit toàn app (đếm lại 25 <form data-op-submit> thật trong file — xem chú
   // thích tại CORE_FIELD_MANIFEST.TRAINING_CLASS_EDIT).
-  { key: 'TRAINING_CLASS_EDIT', coreKey: 'TRAINING_CLASS_EDIT', label: 'Đào Tạo - Sửa Lớp Học', icon: '✏️', short: 'ĐT - Sửa Lớp Học' }
+  { key: 'TRAINING_CLASS_EDIT', coreKey: 'TRAINING_CLASS_EDIT', group: 'TRAINING', label: 'Đào Tạo - Sửa Lớp Học', icon: '✏️', short: 'ĐT - Sửa Lớp Học' }
 ];
+
+// Nhóm module CẤP 1 cho thanh tab Biểu Mẫu (mirror WF_MODULE_CONFIG/renderWfSubmissionTypeTabs bên màn
+// "Quy Trình & Phê Duyệt" — xem switchWfModule()/getWfModuleTypes()): 33+ tab FORM_TABS phẳng trước đây
+// gộp thành ~20 nhóm nghiệp vụ thật ở đây, mỗi FORM_TABS entry khai `group` trỏ về 1 key trong danh sách
+// này. Nhóm chỉ có ĐÚNG 1 form (VD DOC, TASK, PAYMENT...) hành xử như module KHÔNG hasTypes bên WF —
+// bấm nút cấp 1 vào thẳng form đó, không hiện hàng tab con cấp 2. Nhóm có >1 form (VD CONTRACT, IT,
+// TRAINING...) hiện thêm hàng tab con cấp 2 liệt kê đúng các FORM_TABS entry thuộc nhóm — xem
+// renderFormTabsBar()/renderFormSubTabsBar()/switchFormGroup()/switchFormTab() ngay dưới đây. Thứ tự
+// mảng này quyết định thứ tự nút cấp 1 hiển thị.
+const FORM_GROUPS = [
+  { key: 'SUBMISSION', label: 'Văn Bản Trình', icon: '📜' },
+  { key: 'CONTRACT', label: 'Hợp Đồng', icon: '📄' },
+  { key: 'CAR', label: 'Đăng Ký Xe', icon: '🚗' },
+  { key: 'OFFICE', label: 'Văn Phòng', icon: '🛒' },
+  { key: 'DOC', label: 'Tài Liệu', icon: '📁' },
+  { key: 'MEETING_MINUTES', label: 'Biên Bản Họp', icon: '📝' },
+  { key: 'MEETING_ROOM', label: 'Đặt Phòng Họp', icon: '📅' },
+  { key: 'INTERNAL_POST', label: 'Truyền Thông Nội Bộ', icon: '📣' },
+  { key: 'TASK', label: 'Công Việc', icon: '📌' },
+  { key: 'VPP', label: 'Văn Phòng Phẩm', icon: '🖇️' },
+  { key: 'LICENSE', label: 'Giấy Phép', icon: '📜' },
+  { key: 'IT', label: 'Hỗ Trợ IT', icon: '🏷️' },
+  { key: 'PAYMENT', label: 'Thanh Toán', icon: '💰' },
+  { key: 'BUDGET', label: 'Ngân Sách', icon: '📊' },
+  { key: 'REPORT', label: 'Báo Cáo Định Kỳ', icon: '📈' },
+  { key: 'UNIFORM', label: 'Đồng Phục', icon: '👕' },
+  { key: 'OPERATION', label: 'Vận Hành', icon: '🛠️' },
+  { key: 'TRAINING', label: 'Đào Tạo', icon: '🎓' },
+  { key: 'RECRUITMENT', label: 'Tuyển Dụng', icon: '💼' },
+  { key: 'HR_FEEDBACK', label: 'HCRC Đồng Hành', icon: '🤝' }
+];
+
+function getFormTabsInGroup(groupKey) {
+  return FORM_TABS.filter(t => t.group === groupKey);
+}
+
+function getFormGroupForTab(tabKey) {
+  const tab = FORM_TABS.find(t => t.key === tabKey);
+  return tab ? tab.group : null;
+}
 
 // Trả về (và khởi tạo nếu chưa có) đối tượng override {fieldId: {label, required}} của các trường
 // mặc định thuộc 1 bộ core-field (SUBMISSION/CONTRACT/CAR/OFFICE/DOC/MEETING_MINUTES/MEETING_ROOM).
@@ -26082,18 +26176,52 @@ async function revokeExternalApiKeyAction(id) {
 // ==========================================
 // 8. FORM BUILDER (DYNAMIC FIELDS)
 // ==========================================
+// Thanh tab CẤP 1 — một nút cho mỗi nhóm nghiệp vụ trong FORM_GROUPS (mirror hàng nút module tĩnh
+// #btnWfMod... bên màn Quy Trình & Phê Duyệt, chỉ khác là ở đây render động từ mảng vì FORM_GROUPS
+// nhiều hơn hẳn số module WF tĩnh). Bấm 1 nhóm gọi switchFormGroup().
 function renderFormTabsBar() {
   const bar = document.getElementById('formTabsBar');
   if (!bar) return;
-  bar.innerHTML = FORM_TABS.map(t => `
-    <button data-op="switchFormTab" data-arg0="${t.key}" id="btnFormTab_${t.key}" class="px-3 py-1.5 rounded text-xs font-bold ${t.key === activeFormTab ? 'bg-rose-700 text-white' : 'bg-gray-200 text-gray-700'}">${t.icon} ${escapeHtml(t.short)}</button>
+  bar.innerHTML = FORM_GROUPS.map(g => `
+    <button data-op="switchFormGroup" data-arg0="${g.key}" id="btnFormGroup_${g.key}" class="px-3 py-1.5 rounded text-xs font-bold ${g.key === activeFormGroup ? 'bg-rose-700 text-white' : 'bg-gray-200 text-gray-700'}">${g.icon} ${escapeHtml(g.label)}</button>
   `).join('');
 }
 
+// Thanh tab CON (cấp 2) — chỉ render/hiện khi nhóm cấp 1 đang chọn (activeFormGroup) có >1 form thật
+// (mirror #wfSubmissionTypeTabs/renderWfSubmissionTypeTabs() — nhóm chỉ 1 form thì nút cấp 1 CHÍNH LÀ
+// đích đến, không có gì để chọn thêm ở cấp 2, xem switchFormGroup()).
+function renderFormSubTabsBar() {
+  const container = document.getElementById('formSubTabsBar');
+  if (!container) return;
+  const entries = getFormTabsInGroup(activeFormGroup);
+  const showSub = entries.length > 1;
+  container.classList.toggle('hidden', !showSub);
+  container.classList.toggle('flex', showSub);
+  if (!showSub) { container.innerHTML = ''; return; }
+  container.innerHTML = entries.map(t => `
+    <button data-op="switchFormTab" data-arg0="${t.key}" id="btnFormTab_${t.key}" class="px-3 py-1.5 rounded text-xs font-bold ${t.key === activeFormTab ? 'bg-rose-500 text-white' : 'bg-white text-gray-700 border border-rose-200'}">${t.icon} ${escapeHtml(t.short)}</button>
+  `).join('');
+}
+
+// Bấm nút nhóm cấp 1 — luôn chuyển tới form ĐẦU TIÊN của nhóm (mirror switchWfModule() reset
+// activeWfSubmissionType về types[0].key mỗi lần đổi module), rồi switchFormTab() bên dưới tự lo phần
+// hiện/ẩn + render đúng hàng tab con cấp 2 theo nhóm mới.
+function switchFormGroup(groupKey) {
+  const entries = getFormTabsInGroup(groupKey);
+  if (!entries.length) return;
+  switchFormTab(entries[0].key);
+}
+
+// Nguồn chân lý DUY NHẤT cho form đang sửa (activeFormTab) — KHÔNG đổi so với trước (vẫn khớp key dùng
+// bởi CORE_FIELD_MANIFEST/DB.formTemplates). Hàm này giờ còn tự suy ra + đồng bộ lại nhóm cấp 1
+// (activeFormGroup) và cả 2 hàng tab bar mỗi lần gọi — nên gọi switchFormTab(activeFormTab) mỗi khi mở
+// lại màn Biểu Mẫu (xem setSystemSubTab 'FORM') là đủ để tự chọn đúng nhóm cấp 1 chứa form hiện tại.
 function switchFormTab(tabName) {
   activeFormTab = tabName;
+  activeFormGroup = getFormGroupForTab(tabName) || activeFormGroup;
   cancelEditCustomField();
   renderFormTabsBar();
+  renderFormSubTabsBar();
 
   const lbl = document.getElementById('lblActiveFormName');
   const tab = FORM_TABS.find(t => t.key === tabName);
@@ -26778,9 +26906,12 @@ async function submitItServiceRenewalEdit() {
 // (openBudgetPeriodTemplateModal(), chỉ budgetManage) để module đúng 3 tab. budgetEntries khoá theo
 // PHÒNG BAN (không phải người tạo) — nhiều người cùng phòng có budgetCreate cùng sửa chung 1 bản NHÁP
 // của đơn vị, RIÊNG theo từng entryKind (1 phòng có thể có cả bản PLAN lẫn bản ACTUAL cùng lúc trong 1
-// kỳ — xem lib/recordActions.js updateBudgetEntryDraft/submitBudgetEntry). Duyệt qua dept-workflow
-// engine chung (Trưởng phòng, CÙNG 1 cấu hình DB.budgetDeptWorkflows cho cả 2 entryKind), có thêm "Yêu
-// cầu bổ sung" dùng REQUEST_CHANGES (đưa về NHÁP để đơn vị sửa lại), cùng khuôn VPP/Hỗ Trợ IT. 4 cột lõi
+// kỳ — xem lib/recordActions.js updateBudgetEntryDraft/submitBudgetEntry). CHỈ PLAN còn duyệt qua
+// dept-workflow engine (Trưởng phòng, DB.budgetDeptWorkflows[dept]), có thêm "Yêu cầu bổ sung" dùng
+// REQUEST_CHANGES (đưa về NHÁP để đơn vị sửa lại), cùng khuôn VPP/Hỗ Trợ IT. ACTUAL KHÔNG qua bước
+// duyệt này nữa — "Gửi" đi thẳng DRAFT -> APPROVED (xem submitBudgetEntry()), budgetManage/admin chỉ
+// xem/kiểm soát + sửa trực tiếp bất kể trạng thái qua updateApprovedActualBudgetEntry()/
+// openBudgetManagerEditModal() nếu cần đính chính, không phải "duyệt". 4 cột lõi
 // (STT tự tính/Tên hạng mục/Mô tả chi tiết/Số tiền/Loại NS) luôn có ở MỌI dòng bất kể mẫu nào — mẫu chỉ
 // CỘNG THÊM cột tuỳ biến (extra), đảm bảo Tổng Hợp luôn cộng dồn/đối chiếu được dù các phòng dùng mẫu
 // khác nhau (xem sanitizeBudgetLines() ở lib/createValidation.js).
@@ -26793,6 +26924,12 @@ function bId(kind, base) { return `${base}_${kind}`; }
 function bEl(kind, base) { return document.getElementById(bId(kind, base)); }
 let budgetEntryFormDraftId = { PLAN: null, ACTUAL: null }; // id bản NHÁP đang sửa trong từng tab (null nếu chưa lưu lần nào)
 let budgetEntryFormLines = { PLAN: [], ACTUAL: [] }; // các dòng đang sửa trong từng form (đồng bộ 2 chiều với DOM mỗi khi thêm/xoá dòng)
+// State riêng cho modal "Sửa (Quản Lý)" 1 bản Ngân Sách Thực Hiện (budgetManage/admin, bất kể trạng
+// thái) — độc lập hoàn toàn với budgetEntryFormDraftId/budgetEntryFormLines ở trên (vốn khoá theo
+// currentUser.dept + chỉ áp dụng bản NHÁP), xem openBudgetManagerEditModal().
+let budgetManagerEditEntryId = null;
+let budgetManagerEditLines = [];
+let budgetManagerEditFields = [];
 let editingBudgetTemplateId = null; // id mẫu ngân sách đang sửa (null = đang tạo mới)
 let budgetTemplateFormFields = []; // cột bổ sung đang sửa trong form Mẫu Ngân Sách
 let currentProcessingBudgetEntryId = null; // id bản ngân sách đang mở trong budgetProcessModal
@@ -26924,10 +27061,14 @@ function onBudgetEntryPeriodChange(kind) {
   const noteEl = bEl(kind, 'budgetEntryReadonlyNote');
   noteEl.classList.toggle('hidden', !readonly);
   if (readonly) {
+    // ACTUAL không còn qua PENDING nữa (xem submitBudgetEntry() ở lib/recordActions.js) — "APPROVED"
+    // ở đây nghĩa là "đã ghi nhận", KHÔNG phải ai đó vừa bấm duyệt. Nhánh PENDING chỉ còn ý nghĩa cho
+    // PLAN (hoặc 1 bản ACTUAL cũ chưa kịp di trú lúc khởi động, cực hiếm) — giữ nguyên chung 1 hàm cho
+    // cả 2 kind, chỉ khác câu chữ hiển thị.
     noteEl.innerText = existing.status === 'PENDING'
       ? '⏳ Bản ngân sách này đã gửi, đang chờ Trưởng phòng duyệt — không sửa được nữa.'
       : existing.status === 'APPROVED'
-        ? '✅ Bản ngân sách này đã được duyệt.'
+        ? (kind === 'ACTUAL' ? '✅ Đã ghi nhận — không tự sửa được nữa (liên hệ người quản lý Ngân Sách nếu cần đính chính).' : '✅ Bản ngân sách này đã được duyệt.')
         : '❌ Bản ngân sách này đã bị từ chối.';
   }
   bEl(kind, 'budgetEntryAddRowBtn').classList.toggle('hidden', readonly);
@@ -27066,14 +27207,20 @@ async function saveBudgetEntryDraft(kind) {
   renderBudgetEntryList(kind);
 }
 
+// kind==='ACTUAL': KHÔNG qua Trưởng phòng duyệt nữa (xem submitBudgetEntry() ở lib/recordActions.js) —
+// "Gửi" ở đây là GHI NHẬN NGAY (DRAFT -> APPROVED thẳng), nên lời nhắc xác nhận + thông báo sau khi
+// xong đều khác hẳn kind==='PLAN' (vẫn xin xác nhận gửi Trưởng phòng duyệt như trước, không đổi gì).
 async function submitCurrentBudgetEntry(kind) {
-  if (!budgetEntryFormDraftId[kind]) return alert('Vui lòng bấm "Lưu Nháp" trước khi gửi duyệt!');
+  if (!budgetEntryFormDraftId[kind]) return alert('Vui lòng bấm "Lưu Nháp" trước!');
   const entry = DB.budgetEntries.find(e => e.id === budgetEntryFormDraftId[kind]);
   if (!entry) return;
+  const isActual = kind === 'ACTUAL';
   showConfirmModal({
-    title: '📤 Xác Nhận Gửi Duyệt',
-    bodyHTML: `<p>Gửi bản ngân sách kỳ <b>${escapeHtml(entry.periodName)}</b> (${entry.lines.length} hạng mục) để Trưởng phòng duyệt? Sau khi gửi sẽ không tự sửa được nữa.</p>`,
-    confirmLabel: 'Gửi duyệt',
+    title: isActual ? '📤 Xác Nhận Ghi Nhận' : '📤 Xác Nhận Gửi Duyệt',
+    bodyHTML: isActual
+      ? `<p>Ghi nhận bản ngân sách thực hiện kỳ <b>${escapeHtml(entry.periodName)}</b> (${entry.lines.length} hạng mục)? Số liệu sẽ áp dụng NGAY (không qua duyệt) và tính vào tab Tổng Hợp. Sau khi ghi nhận sẽ không tự sửa được nữa (liên hệ người quản lý Ngân Sách nếu cần đính chính).</p>`
+      : `<p>Gửi bản ngân sách kỳ <b>${escapeHtml(entry.periodName)}</b> (${entry.lines.length} hạng mục) để Trưởng phòng duyệt? Sau khi gửi sẽ không tự sửa được nữa.</p>`,
+    confirmLabel: isActual ? 'Ghi nhận' : 'Gửi duyệt',
     onConfirm: async () => {
       let result;
       try {
@@ -27082,17 +27229,20 @@ async function submitCurrentBudgetEntry(kind) {
       const updated = result.item;
       const idx = DB.budgetEntries.findIndex(e => e.id === updated.id);
       if (idx !== -1) DB.budgetEntries[idx] = updated;
-      logSystemAction('BUDGET', 'SUBMIT_BUDGET_ENTRY', `Gửi duyệt ngân sách [${updated.code}]`, 'SUCCESS', updated.code);
-      alert('✅ Đã gửi, đang chờ Trưởng phòng duyệt!');
+      logSystemAction('BUDGET', 'SUBMIT_BUDGET_ENTRY', `${isActual ? 'Ghi nhận' : 'Gửi duyệt'} ngân sách [${updated.code}]`, 'SUCCESS', updated.code);
+      alert(isActual ? '✅ Đã ghi nhận — số liệu đã áp dụng, không cần chờ duyệt!' : '✅ Đã gửi, đang chờ Trưởng phòng duyệt!');
       onBudgetEntryPeriodChange(kind);
       renderBudgetEntryList(kind);
 
+      // ACTUAL đã APPROVED ngay, không có ai cần "duyệt" nữa nên KHÔNG gửi email nhắc phê duyệt (khác
+      // PLAN vẫn giữ nguyên hành vi cũ).
+      if (isActual) return;
       const wfConfig = DB.budgetDeptWorkflows[updated.dept] || { workflowId: 'WF_1STEP', approvers: { 1: ['admin'] } };
       const approvers = wfConfig.approvers?.[1] || [];
       if (approvers.length) {
         notifyUsersByEmail('BUDGET', 'NOTIFY_APPROVAL_NEEDED', updated.code, approvers,
           `[VPDT] Ngân sách ${updated.code} cần bạn phê duyệt`,
-          `Bản ngân sách phòng ${updated.dept} kỳ "${updated.periodName}" (${kind === 'ACTUAL' ? 'Thực hiện' : 'Phê duyệt'}) đang chờ bạn phê duyệt.`);
+          `Bản ngân sách phòng ${updated.dept} kỳ "${updated.periodName}" (Phê duyệt) đang chờ bạn phê duyệt.`);
       }
     }
   });
@@ -27157,6 +27307,10 @@ function renderBudgetEntryList(kind) {
         : `<button data-op="openBudgetProcessModal" data-arg0="${e.id}" class="px-2.5 py-1 bg-gray-600 text-white rounded text-xs hover:opacity-90 font-bold">👁️ Xem chi tiết</button>`;
     }
     if (currentUser.perms?.admin) secondaryOptions.push({ value: 'delete', label: '🗑️ Xóa' });
+    // Ngân Sách Thực Hiện không còn qua phê duyệt (xem submitBudgetEntry() ở lib/recordActions.js) —
+    // budgetManage/admin cần sửa TRỰC TIẾP được số liệu bất kể trạng thái (DRAFT/APPROVED/REJECTED) để
+    // "xem và kiểm soát" đơn vị, xem openBudgetManagerEditModal()/updateApprovedActualBudgetEntry().
+    if (kind === 'ACTUAL' && canManage) secondaryOptions.push({ value: 'managerEdit', label: '✏️ Sửa (Quản Lý)' });
     return `
       <tr class="hover:bg-gray-50 border-b">
         <td class="border p-2 font-bold text-violet-800">${escapeHtml(e.code)}</td>
@@ -27172,6 +27326,7 @@ function renderBudgetEntryList(kind) {
 function runBudgetEntryListAction(id, action) {
   switch (action) {
     case 'delete': deleteBudgetEntryAction(id); break;
+    case 'managerEdit': openBudgetManagerEditModal(id); break;
   }
 }
 function deleteBudgetEntryAction(id) {
@@ -27190,6 +27345,105 @@ function editBudgetEntryDraft(kind, id) {
   bEl(kind, 'budgetEntryPeriodSelect').value = String(e.periodId);
   onBudgetEntryPeriodChange(kind);
   bEl(kind, 'budgetEntryFormWrap').scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+// ============ MODAL "SỬA (QUẢN LÝ)" 1 BẢN NGÂN SÁCH THỰC HIỆN (budgetManage/admin, BẤT KỂ trạng thái) ============
+// Độc lập với form sửa NHÁP ở trên (budgetEntryFormDraftId/budgetEntryFormLines — chỉ áp dụng bản NHÁP
+// của ĐÚNG phòng ban currentUser.dept) — modal này cho phép người quản lý Ngân Sách sửa lại bất kỳ bản
+// ACTUAL nào (mọi phòng ban, mọi trạng thái) vì ACTUAL không còn ai "duyệt" để kiểm soát chất lượng số
+// liệu nữa, xem lib/recordActions.js updateApprovedActualBudgetEntry(). Tái dùng các hàm dựng dòng
+// chung ở trên (buildBudgetLinesTableHead/buildBudgetFieldInputHTML/getBudgetLineFieldValue/
+// getBudgetPeriodTemplateFields/blankBudgetLine/getMoneyValue) — chỉ khác bộ id DOM cố định (không hậu
+// tố _PLAN/_ACTUAL vì modal luôn chỉ sửa 1 bản ACTUAL tại 1 thời điểm) + state riêng
+// (budgetManagerEditEntryId/budgetManagerEditLines/budgetManagerEditFields).
+function openBudgetManagerEditModal(id) {
+  if (!canManageBudgetClient(currentUser)) return;
+  const e = DB.budgetEntries.find(x => x.id === id);
+  if (!e || e.entryKind !== 'ACTUAL') return;
+  const period = DB.budgetPeriods.find(p => p.id === e.periodId);
+  budgetManagerEditEntryId = id;
+  budgetManagerEditFields = getBudgetPeriodTemplateFields(period);
+  budgetManagerEditLines = (e.lines || []).map(l => ({ ...l, extra: { ...(l.extra || {}) } }));
+  if (!budgetManagerEditLines.length) budgetManagerEditLines.push(blankBudgetLine());
+  document.getElementById('budgetManagerEditModalSub').innerText = `${e.code} — ${e.dept} — Kỳ "${e.periodName || ''}" (${budgetEntryStatusBadgeText(e.status)})`;
+  document.getElementById('budgetManagerEditComment').value = '';
+  renderBudgetManagerEditLinesTable();
+  document.getElementById('budgetManagerEditModal').classList.remove('hidden');
+}
+function budgetEntryStatusBadgeText(status) {
+  return status === 'DRAFT' ? 'Nháp' : status === 'APPROVED' ? 'Đã duyệt' : status === 'REJECTED' ? 'Từ chối' : 'Chờ duyệt';
+}
+function closeBudgetManagerEditModal() {
+  document.getElementById('budgetManagerEditModal').classList.add('hidden');
+  budgetManagerEditEntryId = null;
+}
+function buildBudgetManagerEditLineRowHTML(line, idx) {
+  return `<tr data-mgr-line-idx="${idx}">
+    <td class="border p-1.5 text-center">${idx + 1}</td>
+    ${budgetManagerEditFields.map(f => buildBudgetFieldInputHTML(f, getBudgetLineFieldValue(line, f))).join('')}
+    <td class="border p-1.5 text-center"><button type="button" data-op="removeBudgetManagerEditLine" data-arg0="${idx}" class="text-red-600 font-bold hover:underline">✕</button></td>
+  </tr>`;
+}
+function renderBudgetManagerEditLinesTable() {
+  document.getElementById('budgetManagerEditLinesHead').innerHTML = buildBudgetLinesTableHead(budgetManagerEditFields, false);
+  const body = document.getElementById('budgetManagerEditLinesBody');
+  body.innerHTML = budgetManagerEditLines.length
+    ? budgetManagerEditLines.map((line, idx) => buildBudgetManagerEditLineRowHTML(line, idx)).join('')
+    : `<tr><td colspan="${2 + budgetManagerEditFields.length}" class="text-center p-3 text-gray-400 italic">Chưa có dòng nào.</td></tr>`;
+  updateBudgetManagerEditTotalDisplay();
+}
+function collectBudgetManagerEditLinesFromForm() {
+  return Array.from(document.querySelectorAll('#budgetManagerEditLinesBody tr[data-mgr-line-idx]')).map(row => {
+    const line = { name: '', description: '', amount: null, budgetType: 'OPEX', extra: {} };
+    row.querySelectorAll('.budget-line-core').forEach(el => {
+      const key = el.dataset.coreKey;
+      if (key === 'amount') line.amount = getMoneyValue(el);
+      else if (key === 'budgetType') line.budgetType = el.value || 'OPEX';
+      else line[key] = el.value.trim();
+    });
+    row.querySelectorAll('.budget-line-extra').forEach(el => {
+      line.extra[el.dataset.fieldId] = el.classList.contains('money-input') ? getMoneyValue(el) : el.value;
+    });
+    return line;
+  });
+}
+function addBudgetManagerEditLine() {
+  budgetManagerEditLines = collectBudgetManagerEditLinesFromForm();
+  budgetManagerEditLines.push(blankBudgetLine());
+  renderBudgetManagerEditLinesTable();
+}
+function removeBudgetManagerEditLine(idx) {
+  budgetManagerEditLines = collectBudgetManagerEditLinesFromForm();
+  budgetManagerEditLines.splice(idx, 1);
+  renderBudgetManagerEditLinesTable();
+}
+function updateBudgetManagerEditTotalDisplay() {
+  const el = document.getElementById('budgetManagerEditTotalDisplay');
+  if (!el) return;
+  const total = Array.from(document.querySelectorAll('#budgetManagerEditLinesBody .budget-line-core[data-core-key="amount"]'))
+    .reduce((sum, input) => sum + getMoneyValue(input), 0);
+  el.innerText = total.toLocaleString('vi-VN') + ' đ';
+}
+document.addEventListener('input', (e) => {
+  if (e.target?.dataset?.coreKey !== 'amount') return;
+  if (e.target.closest('#budgetManagerEditLinesBody')) updateBudgetManagerEditTotalDisplay();
+});
+async function saveBudgetManagerEditEntry() {
+  if (!budgetManagerEditEntryId) return;
+  const lines = collectBudgetManagerEditLinesFromForm().filter(l => l.name || l.amount || l.description);
+  if (!lines.length) return alert('Vui lòng nhập ít nhất 1 dòng ngân sách!');
+  const comment = document.getElementById('budgetManagerEditComment').value.trim();
+  let result;
+  try {
+    result = await callRecordAction('budgetEntries', budgetManagerEditEntryId, 'manager-edit', { lines, comment });
+  } catch (err) { return alert(`⛔ ${err.message}`); }
+  const updated = result.item;
+  const idx = DB.budgetEntries.findIndex(e => e.id === updated.id);
+  if (idx !== -1) DB.budgetEntries[idx] = updated; else DB.budgetEntries.unshift(updated);
+  logSystemAction('BUDGET', 'MANAGER_EDIT_BUDGET_ENTRY', `Quản lý sửa trực tiếp bản ngân sách thực hiện [${updated.code}]`, 'SUCCESS', updated.code);
+  alert('✅ Đã lưu thay đổi.');
+  closeBudgetManagerEditModal();
+  renderBudgetEntryList('ACTUAL');
 }
 
 // ============ MODAL "QUẢN LÝ KỲ & MẪU NGÂN SÁCH" (budgetManage/admin) ============

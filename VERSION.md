@@ -1,11 +1,73 @@
 # Phiên bản hiện tại
 
-**7.5** — đã merge vào `main` (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge
+**7.6** — đã merge vào `main` (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge
 góc màn hình + `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần
 kiểu `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. Đúng theo quy tắc MINOR chạy 0-9 trong
-`CLAUDE.md`: sau `7.4` tăng MINOR lên 1 → `7.5`.
+`CLAUDE.md`: sau `7.5` tăng MINOR lên 1 → `7.6`.
 
-## Cập nhật gần nhất — Biểu Mẫu Đợt 4: nốt các form Đào Tạo còn lại + 1 gap-fill (7 tab mới) — HOÀN TẤT
+## Cập nhật gần nhất — Biểu Mẫu: gộp 43 tab phẳng thành tab+sub-tab theo nhóm + Ngân Sách Thực Hiện bỏ phê duyệt
+
+Gồm 2 phần độc lập, gộp chung 1 lần merge theo yêu cầu người dùng.
+
+### Phần A — "📋 Biểu Mẫu": tab+sub-tab (nhóm → form), mirror màn "Quy Trình & Phê Duyệt"
+
+Sau 4 đợt mở rộng liên tiếp, "📋 Biểu Mẫu" đã phình ra 43 nút tab phẳng (`FORM_TABS`) xếp thành 1 hàng
+dài khó dùng. Đưa về đúng 2 cấp, cùng khuôn `WF_MODULE_CONFIG`/`renderWfSubmissionTypeTabs()` bên màn
+"🔄 Quy Trình & Phê Duyệt":
+
+- Mỗi entry `FORM_TABS` thêm field `group` (20 nhóm nghiệp vụ thật, mảng mới `FORM_GROUPS` — VD "Hợp
+  Đồng" gộp `CONTRACT_APPROVAL`/`CONTRACT_MANAGE`, "Hỗ Trợ IT" gộp `IT_PRICE`/`IT_TICKET`/`IT_RENEWAL`,
+  "Đào Tạo" gộp 9 form kể cả 2 form "Đào Tạo Tân Binh"...).
+- `renderFormTabsBar()` giờ vẽ **cấp 1**: 1 nút/nhóm (~20 nút thay vì 43). `renderFormSubTabsBar()`
+  (hàng mới `#formSubTabsBar`) vẽ **cấp 2**: các form cụ thể trong nhóm đang chọn — **chỉ hiện khi
+  nhóm có >1 form**; nhóm chỉ 1 form (VD "Tài Liệu", "Công Việc"...) thì bấm nút cấp 1 vào THẲNG form
+  đó, không có gì để chọn thêm (đúng hệt module không `hasTypes` bên WF).
+- `switchFormGroup(group)`/`switchFormTab(tabKey)` (hàm mới/sửa) tự đồng bộ 2 hàng tab + tự chọn đúng
+  nhóm chứa `activeFormTab` mỗi khi mở lại màn — `activeFormTab` (nguồn chân lý cho
+  `CORE_FIELD_MANIFEST`/`DB.formTemplates`) và toàn bộ tầng dữ liệu/field-editing **giữ nguyên 100%**,
+  đây thuần là thay đổi điều hướng UI.
+- Cập nhật `tests/test-forms-batch1.js..batch4.js` (đọc `formTabsBar` cấp bằng tên tab cũ) sang điều
+  hướng qua `switchFormGroup()`/hàng tab con mới — không sửa/nới lỏng assertion nào, chỉ đổi bước bấm.
+  Thêm `tests/test-forms-nav-groups.js` (mới, 207 kịch bản): lặp ĐỘNG qua toàn bộ `FORM_TABS` xác nhận
+  mọi form đều đến được qua đúng nhóm cấp 1 (+ cấp 2 nếu có), không hard-code danh sách 43 tab bằng tay.
+
+### Phần B — Ngân Sách: "Thực Hiện" (ACTUAL) bỏ hẳn bước phê duyệt, chỉ "Phê Duyệt" (PLAN) còn qua Trưởng phòng
+
+Theo đúng yêu cầu người dùng: ACTUAL là nhân viên tự ghi nhận chi tiêu thực tế, người quản lý chỉ cần
+xem/kiểm soát chứ không "duyệt" — Ngân Sách ở đây chỉ là công cụ quản lý nội bộ cho đơn vị.
+
+- `submitBudgetEntry()` (`lib/recordActions.js`): `entryKind==='ACTUAL'` giờ đi THẲNG `DRAFT ->
+  APPROVED` (bỏ qua `PENDING`), ghi 1 dòng lịch sử `SUBMITTED_NO_APPROVAL` làm dấu vết — cùng tinh thần
+  Mục H (bỏ phê duyệt Vận Hành > Siêu Thị) nhưng khác ở chỗ bước "Gửi" vẫn tồn tại, chỉ đích đến cuối
+  đổi. `entryKind!=='ACTUAL'` (PLAN) **giữ nguyên 100%** luồng `DRAFT -> PENDING -> Trưởng phòng duyệt`.
+- **Di trú 1 lần lúc khởi động** (`seedDefaults.js` → `migratePendingActualBudgetEntries()`, idempotent):
+  mọi `budgetEntries` cũ có `entryKind==='ACTUAL'` đang kẹt ở `PENDING` (gửi trước khi đổi, chờ 1 phê
+  duyệt sẽ không bao giờ tới) tự chuyển sang `APPROVED`, kèm dòng lịch sử `SYSTEM_MIGRATION`.
+  **Đã kiểm thử thủ công**: chèn 1 bản ACTUAL/PENDING giả, khởi động lại server, xác nhận tự chuyển
+  đúng sang APPROVED.
+- **Sửa trực tiếp bản ACTUAL bất kể trạng thái**: thêm `updateApprovedActualBudgetEntry()` +
+  route `POST /api/records/budgetEntries/:id/manager-edit` + modal mới `#budgetManagerEditModal`
+  ("✏️ Sửa (Quản Lý)" ở danh sách sub-tab "Ngân Sách Thực Hiện") — chỉ `budgetManage`/admin, áp dụng
+  cho MỌI trạng thái (kể cả đã APPROVED), vì ACTUAL không còn ai "duyệt" để bắt lỗi số liệu nữa.
+- Nút Duyệt/Từ chối ở modal xử lý (`openBudgetProcessModal()`) tự động KHÔNG còn hiện cho bản ACTUAL
+  (gate có sẵn `canApprove = status==='PENDING'`, ACTUAL không còn đường tới PENDING) — không cần sửa
+  gì thêm. Đổi nhãn nút "📤 Gửi Duyệt" → "📤 Ghi Nhận" + các câu chữ xác nhận/thông báo ở sub-tab "Ngân
+  Sách Thực Hiện" (KHÔNG đụng tới sub-tab "Ngân Sách Phê Duyệt"). `renderBudgetSummaryResult()`
+  (Tổng Hợp) không cần sửa — vẫn lọc `status==='APPROVED'` cho cả 2 loại, ACTUAL giờ tới APPROVED
+  nhanh hơn nhưng cùng điều kiện.
+- Mở rộng `tests/test-office-budget.js` (kịch bản 9b/10): ACTUAL "Gửi" đi thẳng APPROVED (không qua
+  Trưởng phòng), PLAN giữ nguyên luồng cũ, modal xử lý cho bản ACTUAL đã APPROVED không còn nút Duyệt.
+
+### Kiểm thử
+
+Toàn bộ `tests/test-*.js` (53 file) chạy lại — chỉ còn đúng 2 lỗi known pre-existing cần SQL Server
+thật (`test-audit-fixes-batch1.js`, `test-audit-round2-cluster1.js` — mọi kịch bản BÊN TRONG đều PASS,
+100% scenario, exit code khác 0 chỉ là treo tiến trình lúc thoát, không phải lỗi nghiệp vụ), không phát
+sinh regression nào khác. Demo Playwright thật trên server thật (Docker `vpdt-mssql` + `node server.js`,
+tài khoản `demo_forms_admin`) xác nhận cả 2 phần hoạt động đúng trên app thật (không chỉ mock) — 18/18
+kịch bản pass, đã dọn sạch dữ liệu/label demo sau khi xong.
+
+## Trước đó — Biểu Mẫu Đợt 4: nốt các form Đào Tạo còn lại + 1 gap-fill (7 tab mới) — HOÀN TẤT
 
 Đợt cuối dọn "Phạm vi CHƯA làm" ghi ở cuối Đợt 3: đưa 6 form Đào Tạo còn lại vào "📋 Biểu Mẫu" —
 `trainingCourseForm` (Tạo Chương Trình), `trainingPlanForm` (Kế Hoạch Đào Tạo), `trainingDocForm` (Kho Tài

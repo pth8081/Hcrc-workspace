@@ -102,13 +102,24 @@ async function main() {
 
     currentUser = { username: 'admin', name: 'Quản Trị Viên', dept: 'Phòng Hành Chính', perms: { admin: true } };
 
-    // ---------- 1) 10 tab mới có mặt ở màn Biểu Mẫu ----------
+    // ---------- 1) 10 tab mới có mặt ở màn Biểu Mẫu (tab+sub-tab: nhóm chỉ 1 form thì nút cấp 1 CHÍNH
+    // LÀ đích đến, nhóm >1 form thì phải thấy nút ở hàng tab con cấp 2 sau khi chọn đúng nhóm — xem
+    // renderFormTabsBar()/renderFormSubTabsBar()/switchFormGroup()) ----------
     activeFormTab = 'SUBMISSION';
-    renderFormTabsBar();
-    const bar = document.getElementById('formTabsBar').innerHTML;
+    switchFormTab('SUBMISSION');
     NEW_TABS.forEach(key => {
-      check(`FORM_TABS: tab "${key}" có nút trong renderFormTabsBar()`,
-        bar.includes(`data-arg0="${key}"`), bar.slice(0, 200));
+      const group = getFormGroupForTab(key);
+      switchFormGroup(group);
+      const entries = getFormTabsInGroup(group);
+      if (entries.length > 1) {
+        const subBar = document.getElementById('formSubTabsBar').innerHTML;
+        check(`FORM_TABS: tab "${key}" có nút ở hàng tab con (nhóm ${group} có ${entries.length} form)`,
+          subBar.includes(`data-arg0="${key}"`), subBar.slice(0, 300));
+      } else {
+        const bar = document.getElementById('formTabsBar').innerHTML;
+        check(`FORM_TABS: tab "${key}" có nút cấp 1 (nhóm ${group} chỉ 1 form, vào thẳng)`,
+          bar.includes(`data-arg0="${group}"`) && activeFormTab === key, bar.slice(0, 300));
+      }
     });
 
     // ---------- Helper: mô phỏng đúng luồng UI thật ----------

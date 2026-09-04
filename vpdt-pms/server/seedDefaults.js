@@ -7,7 +7,7 @@ const { hashPassword, isBcryptHash, verifyPassword } = require('./lib/auth');
 const { getAppDataValue, setAppDataValue } = require('./lib/appData');
 const { migrateLegacySystemLogs } = require('./lib/systemLogStore');
 const { migrateLegacyTasks } = require('./lib/taskStore');
-const { migrateAllLegacyCollections } = require('./lib/recordStore');
+const { migrateAllLegacyCollections, getAllRecords, withLockedRecordById } = require('./lib/recordStore');
 
 // Mật khẩu mặc định của các tài khoản seed lúc khởi tạo hệ thống lần đầu (defaults.js) — dùng để dò
 // tài khoản NÀO CÒN đang dùng đúng mật khẩu này (xem flagKnownDefaultPasswords() bên dưới), bất kể
@@ -42,6 +42,7 @@ async function seedDefaults() {
   await migrateLegacyTasks();
   await migrateAllLegacyCollections();
   await migrateDefaultStorePermGroup();
+  await migratePendingActualBudgetEntries();
 }
 
 // Trước đây mật khẩu lưu plaintext (cả trong seed mặc định lẫn dữ liệu do admin tạo trước khi có
@@ -142,6 +143,40 @@ async function migrateVppExcludedJobTitles(pool) {
   )];
   await setAppDataValue('vppExcludedJobTitles', unioned);
   console.log(`   ↳ Di trú "Nhóm Không Cấp Văn Phòng Phẩm" (vppExcludeGroups -> vppExcludedJobTitles, ${unioned.length} chức danh).`);
+}
+
+// Ngân Sách "Thực Hiện" (entryKind==='ACTUAL') không còn qua bước phê duyệt Trưởng phòng nữa — chỉ
+// "Ngân Sách Phê Duyệt" (PLAN) còn giữ (xem submitBudgetEntry() ở lib/recordActions.js). Di trú 1 LẦN
+// cho các bản ACTUAL đã lỡ gửi TRƯỚC thay đổi này, đang kẹt ở PENDING chờ 1 phê duyệt sẽ KHÔNG BAO GIỜ
+// tới nữa — chuyển thẳng sang APPROVED (cùng đích mà submitBudgetEntry() giờ đi thẳng tới), ghi 1 dòng
+// lịch sử SYSTEM_MIGRATION để có dấu vết đây là chuyển tự động lúc khởi động, không phải ai đó bấm
+// Duyệt. Idempotent — chạy mỗi lần khởi động, chỉ còn tác dụng khi thực sự có bản ACTUAL nào đang
+// PENDING (sau lần chạy đầu tiên sẽ không còn bản nào để di trú nữa).
+async function migratePendingActualBudgetEntries() {
+  const entries = await getAllRecords('budgetEntries');
+  const stuck = entries.filter(e => e.entryKind === 'ACTUAL' && e.status === 'PENDING');
+  if (!stuck.length) return;
+  for (const entry of stuck) {
+    await withLockedRecordById('budgetEntries', entry.id, (item) => {
+      if (item.entryKind !== 'ACTUAL' || item.status !== 'PENDING') return item; // đã đổi bởi request khác giữa lúc đọc và khoá
+      item.history = item.history || [];
+      item.history.push({
+        step: 0, approver: 'Hệ Thống', username: 'system', action: 'SYSTEM_MIGRATION',
+        comment: 'Ngân sách thực hiện không còn qua phê duyệt — tự động chuyển từ "Chờ duyệt" sang "Đã duyệt".',
+        time: nowVNForMigration()
+      });
+      item.status = 'APPROVED';
+      item.currentStep = 0;
+      return item;
+    });
+  }
+  console.log(`   ↳ Đã di trú ${stuck.length} bản Ngân Sách Thực Hiện (ACTUAL) còn kẹt ở PENDING sang APPROVED (bỏ phê duyệt cho ACTUAL).`);
+}
+
+// Cùng định dạng với nowVN() ở lib/recordActions.js (không export sẵn cho seedDefaults.js nên lặp lại
+// nguyên văn 1 dòng, tránh phải require chéo module chỉ vì 1 hàm định dạng giờ).
+function nowVNForMigration() {
+  return new Date().toLocaleString('vi-VN');
 }
 
 module.exports = { seedDefaults };

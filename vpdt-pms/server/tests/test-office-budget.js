@@ -206,18 +206,21 @@ async function run() {
     const budgetEntriesForDeptPeriod = await page.evaluate(() => DB.budgetEntries.filter((e) => e.dept === 'Phòng Kinh Doanh' && e.periodId));
     check('Phòng Kinh Doanh có ĐÚNG 2 bản ngân sách ở kỳ này (1 PLAN + 1 ACTUAL), không đè lên nhau', budgetEntriesForDeptPeriod.length === 2, budgetEntriesForDeptPeriod.map((e) => ({ id: e.id, entryKind: e.entryKind })));
 
-    // ============ Kịch bản 10: Gửi Duyệt cả 2 bản (DRAFT -> PENDING) rồi Trưởng phòng KD duyệt cả 2 =>
-    // APPROVED (dùng CHUNG 1 cấu hình duyệt theo phòng ban budgetDeptWorkflows cho cả PLAN lẫn ACTUAL) ==
+    // ============ Kịch bản 10: "Gửi" bản ACTUAL -> ĐI THẲNG APPROVED (không qua PENDING/Trưởng phòng
+    // duyệt nữa — theo yêu cầu người dùng: Ngân Sách Thực Hiện chỉ để đơn vị tự ghi nhận, quản lý xem/
+    // kiểm soát chứ không "duyệt", xem submitBudgetEntry() ở lib/recordActions.js). PLAN vẫn giữ NGUYÊN
+    // luồng cũ: Gửi -> PENDING -> Trưởng phòng duyệt -> APPROVED. ============
     await page.evaluate(() => submitCurrentBudgetEntry('ACTUAL'));
     await confirmPending();
     const actualEntry1AfterSubmit = await page.evaluate((id) => DB.budgetEntries.find((e) => e.id === id), actualEntry1.id);
-    check('"Gửi Duyệt" bản Thực Hiện -> chuyển PENDING, bắt đầu chờ Trưởng phòng duyệt', actualEntry1AfterSubmit.status === 'PENDING', actualEntry1AfterSubmit.status);
+    check('"Ghi Nhận" bản Thực Hiện -> ĐI THẲNG APPROVED, không qua PENDING', actualEntry1AfterSubmit.status === 'APPROVED', actualEntry1AfterSubmit.status);
+    check('Lịch sử bản Thực Hiện có dòng SUBMITTED_NO_APPROVAL đánh dấu ghi nhận trực tiếp, không qua phê duyệt', actualEntry1AfterSubmit.history.some((h) => h.action === 'SUBMITTED_NO_APPROVAL'), actualEntry1AfterSubmit.history);
 
     await goToBudget('APPROVED');
     await page.evaluate(() => submitCurrentBudgetEntry('PLAN'));
     await confirmPending();
     const entry1AfterSubmit = await page.evaluate((id) => DB.budgetEntries.find((e) => e.id === id), entry1.id);
-    check('"Gửi Duyệt" bản Phê Duyệt -> chuyển PENDING, bắt đầu chờ Trưởng phòng duyệt', entry1AfterSubmit.status === 'PENDING', entry1AfterSubmit.status);
+    check('"Gửi Duyệt" bản Phê Duyệt -> chuyển PENDING, bắt đầu chờ Trưởng phòng duyệt (KHÔNG đổi hành vi)', entry1AfterSubmit.status === 'PENDING', entry1AfterSubmit.status);
 
     await loginAs('tp_kd');
     await goToBudget('APPROVED');
@@ -230,14 +233,14 @@ async function run() {
     const entry1AfterApprove = await page.evaluate((id) => DB.budgetEntries.find((e) => e.id === id).status, entry1.id);
     check('Trưởng phòng duyệt bản ngân sách Phê Duyệt -> chuyển APPROVED', entry1AfterApprove === 'APPROVED', entry1AfterApprove);
 
+    // Bản ACTUAL đã APPROVED thẳng từ lúc "Ghi Nhận" — Trưởng phòng mở modal chỉ THẤY, KHÔNG còn nút
+    // Duyệt/Từ chối nào (canApprove chỉ true khi status==='PENDING', ACTUAL không còn đường tới đó nữa).
     await page.evaluate((id) => openBudgetProcessModal(id), actualEntry1.id);
     const processModalTitleActual = await page.locator('#budgetProcessModalTitle').innerText();
     check('Modal xử lý hiện đúng nhãn "Ngân Sách Thực Hiện" cho bản ACTUAL', processModalTitleActual.includes('Thực Hiện'), processModalTitleActual);
-    await page.fill('#txtBudgetProcessComment', 'Đồng ý — khớp số liệu chi tiêu thực tế.');
-    await page.evaluate(() => confirmProcessBudgetEntry('APPROVE'));
-    await confirmPending();
-    const actualEntry1AfterApprove = await page.evaluate((id) => DB.budgetEntries.find((e) => e.id === id).status, actualEntry1.id);
-    check('Trưởng phòng duyệt bản ngân sách Thực Hiện -> chuyển APPROVED', actualEntry1AfterApprove === 'APPROVED', actualEntry1AfterApprove);
+    const actualProcessControlsText = await page.locator('#budgetProcessModalControls').innerText();
+    check('Bản ACTUAL đã APPROVED -> modal KHÔNG còn nút Duyệt/Từ Chối nào cho Trưởng phòng (chỉ xem)', !actualProcessControlsText.includes('Phê Duyệt') && !actualProcessControlsText.includes('Từ Chối'), actualProcessControlsText);
+    await page.evaluate(() => closeBudgetProcessModal());
 
     // ============ Kịch bản 11: Kỳ ngân sách đã ĐÓNG -> chặn lập ngân sách mới (kể cả phòng ban thuộc
     // phạm vi và đang trong hạn), qua modal Quản Lý Kỳ & Mẫu ============

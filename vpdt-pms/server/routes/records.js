@@ -1624,6 +1624,27 @@ router.post('/budgetEntries/:id/update', async (req, res) => {
   }
 });
 
+// POST /api/records/budgetEntries/:id/manager-edit — budgetManage/admin sửa TRỰC TIẾP 1 bản Ngân Sách
+// Thực Hiện (entryKind='ACTUAL') BẤT KỂ trạng thái (không cần bản đang NHÁP, không giới hạn phòng ban
+// của người sửa) — xem recordActions.updateApprovedActualBudgetEntry(). ACTUAL không còn qua phê duyệt
+// Trưởng phòng nên đây là kênh DUY NHẤT để sửa lại số liệu sau khi đã ghi nhận.
+router.post('/budgetEntries/:id/manager-edit', async (req, res) => {
+  const itemId = Number(req.params.id);
+  if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
+  try {
+    const { freshUser } = await getFreshUser(req);
+    const periods = await getAllForCollection('budgetPeriods');
+    const templates = await getAllForCollection('budgetTemplates');
+    const result = await withLockedRecordForCollection('budgetEntries', itemId, (item) => {
+      const period = periods.find(p => p.id === item.periodId);
+      return recordActions.updateApprovedActualBudgetEntry(freshUser, item, req.body, period, templates);
+    });
+    res.json({ ok: true, item: result });
+  } catch (err) {
+    handleError(res, `budgetEntries/${req.params.id}/manager-edit`, err);
+  }
+});
+
 // Vận Hành — cùng khuôn officeReqs/carRegs update+submit ở trên (chỉ người tạo sửa được lúc còn NHÁP,
 // "Gửi" đẩy về PENDING bước 1).
 router.post('/operationOrders/:id/update', async (req, res) => {
