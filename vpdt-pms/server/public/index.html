@@ -8101,6 +8101,93 @@ const CORE_FIELD_MANIFEST = {
     { id: 'itTicketTitle', label: 'Tiêu Đề', required: true },
     { id: 'itTicketCategory', label: 'Danh Mục', required: false, optionsKey: 'itTicketCategories', optionsIsKeyLabel: true },
     { id: 'itTicketDescription', label: 'Mô Tả Chi Tiết', required: true }
+  ],
+  // ===== Biểu Mẫu Đợt 2 (Thanh Toán/Ngân Sách/Báo Cáo Định Kỳ/Đồng Phục) =====
+  // PAYMENT: #paymentCreateForm (Tổng Hợp > Thanh Toán > Tạo Mới). paymentSourceType (Loại Đề Nghị:
+  // Thủ công/Hợp đồng/Mua Bán/Sửa Chữa) KHÔNG có optionsKey — 4 giá trị này gắn trực tiếp với logic rẽ
+  // nhánh lấy hồ sơ nguồn (populatePaymentSourceRecordOptions()), đổi/thêm giá trị ở đây mà không sửa
+  // code sẽ không có tác dụng gì (KHÔNG đưa vào diện admin tự thêm/bớt, chỉ sửa nhãn/bắt buộc — cùng lý
+  // do itPriceTier ở Đợt 1). paymentSourceRecord.required TỰ ĐỘNG đổi theo paymentSourceType lúc người
+  // dùng thao tác thật (onPaymentSourceTypeChange(), true trừ khi Thủ công) — override "Bắt buộc" ở đây
+  // chỉ có hiệu lực làm giá trị KHỞI ĐẦU (lúc nạp trang/lúc admin lưu), form vẫn tự ghi đè lại đúng theo
+  // luồng chọn của người dùng ngay sau đó, không phá logic.
+  PAYMENT: [
+    { id: 'paymentSourceType', label: 'Loại Đề Nghị', required: false },
+    { id: 'paymentSourceRecord', label: 'Chọn Hồ Sơ Nguồn', required: true },
+    { id: 'paymentDept', label: 'Phòng Ban', required: true },
+    { id: 'paymentTitle', label: 'Tiêu Đề / Nội Dung Thanh Toán', required: true }
+  ],
+  // BUDGET_PERIOD: form "📅 Tạo Kỳ Ngân Sách Mới" trong modal #budgetPeriodTemplateModal (Ngân Sách >
+  // ⚙️ Quản Lý Kỳ & Mẫu). LƯU Ý: bảng dòng ngân sách thật (#budgetEntryFormWrap_PLAN/_ACTUAL, nhập theo
+  // từng kỳ) KHÔNG đưa vào CORE_FIELD_MANIFEST — module này đã có cơ chế tự sửa nhãn/bắt buộc/thêm-bớt
+  // cột RIÊNG còn mạnh hơn (BUDGET_CORE_FIELD_DEFS + "🧩 Mẫu Ngân Sách" bên dưới, admin tự do đổi nhãn
+  // 3 cột lõi Tên Hạng Mục/Số Tiền/Loại NS theo TỪNG MẪU qua bảng ở #budgetTemplateFieldsBody, xem
+  // renderBudgetTemplateFieldsBuilder()) — gộp thêm vào Biểu Mẫu sẽ chỉ tạo 2 lối sửa chồng chéo, xung
+  // đột nhau (mẫu khác nhau có nhãn khác nhau, không có 1 nhãn "mặc định" duy nhất để CORE_FIELD_MANIFEST
+  // áp).
+  BUDGET_PERIOD: [
+    { id: 'budgetPeriodName', label: 'Tên Kỳ Ngân Sách', required: true },
+    { id: 'budgetPeriodEndTime', label: 'Hạn Chót Lập', required: true },
+    { id: 'budgetPeriodTemplateSelect', label: 'Mẫu Ngân Sách', required: false }
+  ],
+  // BUDGET_TEMPLATE: form "🧩 Mẫu Ngân Sách" (#budgetTemplateForm, cùng modal ⚙️ Quản Lý Kỳ & Mẫu) —
+  // chỉ riêng "Tên Mẫu" (field cố định ngoài bảng cột động) là ứng viên hợp lệ ở đây; bản thân bảng cột
+  // (budgetTemplateFieldsBody) đã tự sửa được ngay tại chỗ (không qua Biểu Mẫu, xem BUDGET_PERIOD ở trên).
+  BUDGET_TEMPLATE: [
+    { id: 'budgetTemplateName', label: 'Tên Mẫu', required: true }
+  ],
+  // REPORT_ENTRY: form "📝 Nhập Báo Cáo" (#prEntryFormWrap, Báo Cáo Định Kỳ > Nhập Báo Cáo). Ô chọn kỳ
+  // (prEntryPeriodSelect) và 2 radio "Hình thức nộp" (prEntryMode) KHÔNG đưa vào — chọn kỳ là chọn 1 bản
+  // ghi có sẵn (không phải nhãn tự do), còn 2 hình thức PPTX/PDF gắn trực tiếp 2 luồng xử lý khác hẳn
+  // nhau ở client (parsePptxToSlideContents() JSZip vs ghép PDF bằng pdf-lib) — cùng lý do loại trừ
+  // paymentSourceType/prEntryMode ở trên.
+  REPORT_ENTRY: [
+    { id: 'prEntryTitle', label: 'Tiêu Đề Báo Cáo', required: false },
+    { id: 'prEntryPptxFile', label: 'Tệp Báo Cáo (.pptx)', required: false },
+    { id: 'prEntryPdfFiles', label: 'Tệp Báo Cáo PDF', required: false }
+  ],
+  // REPORT_PERIOD: form "📅 Tạo Kỳ Báo Cáo Mới" (#prSubPeriods, chỉ reportManage/admin).
+  REPORT_PERIOD: [
+    { id: 'prPeriodName', label: 'Tên Kỳ Báo Cáo', required: true },
+    { id: 'prPeriodEndTime', label: 'Hạn Chót Nộp', required: true }
+  ],
+  // ===== Đồng Phục — 5 form nhập liệu thật riêng biệt (mỗi form đủ điều kiện coreKey riêng, không dùng
+  // chung field nào) — #uniformCatalogAdminForm (Tên Đồng Phục/Size) KHÔNG đưa vào, cùng lý do
+  // licenseTypes/contractTypes ở Đợt 1: đây là màn "Quản Lý Danh Mục" (CRUD danh sách), không phải form
+  // tạo 1 hồ sơ nghiệp vụ — admin đã sửa/xoá tự do trực tiếp tại đó rồi.
+  // UNIFORM_PERIOD: "📦 Tạo Kỳ Cấp Phát Đồng Phục" (#uniformCreatePeriodBlock).
+  UNIFORM_PERIOD: [
+    { id: 'uniformPeriodName', label: 'Tên Kỳ Cấp Phát', required: true },
+    { id: 'uniformPeriodNote', label: 'Ghi Chú', required: false }
+  ],
+  // UNIFORM_ISSUE: "👕 Cấp Đồng Phục Cho Nhân Viên" (#uniformSubStore).
+  UNIFORM_ISSUE: [
+    { id: 'uniformIssueEmployee', label: 'Nhân Viên', required: true },
+    { id: 'uniformIssueCode', label: 'Mã Phiếu', required: false },
+    { id: 'uniformIssueNote', label: 'Ghi Chú', required: false }
+  ],
+  // UNIFORM_ADJUST_STOCK: "🗑️ Báo Hỏng / Hủy (Từ Kho)". uniformAdjStockOutcome (2 radio Hỏng/Hủy) KHÔNG
+  // đưa vào — trạng thái hệ thống cố định gắn trực tiếp xử lý tồn kho (cùng lý do licenseOperatingStatus
+  // ở Đợt 1), không phải nhãn tự do.
+  UNIFORM_ADJUST_STOCK: [
+    { id: 'uniformAdjStockItemSize', label: 'Đồng Phục — Size', required: true },
+    { id: 'uniformAdjStockQty', label: 'Số Lượng', required: true },
+    { id: 'uniformAdjStockReason', label: 'Lý Do', required: true }
+  ],
+  // UNIFORM_ADJUST_EMPLOYEE: "↩️ Thu Hồi Từ Nhân Viên". uniformAdjEmpOutcome (4 radio Về Tồn Kho/Hỏng/
+  // Hủy/Mất) KHÔNG đưa vào — cùng lý do uniformAdjStockOutcome ở trên.
+  UNIFORM_ADJUST_EMPLOYEE: [
+    { id: 'uniformAdjEmpEmployee', label: 'Nhân Viên', required: true },
+    { id: 'uniformAdjEmpItemSize', label: 'Mặt Hàng — Size', required: true },
+    { id: 'uniformAdjEmpQty', label: 'Số Lượng', required: true },
+    { id: 'uniformAdjEmpReason', label: 'Lý Do', required: true }
+  ],
+  // UNIFORM_TRANSFER: "🔁 Điều Chuyển Kho Giữa Các Siêu Thị" (#uniformTransferRequestForm).
+  UNIFORM_TRANSFER: [
+    { id: 'uniformTransferTargetDept', label: 'Siêu Thị Nhận', required: true },
+    { id: 'uniformTransferItemSize', label: 'Mặt Hàng — Size', required: true },
+    { id: 'uniformTransferQty', label: 'Số Lượng', required: true },
+    { id: 'uniformTransferReason', label: 'Lý Do', required: true }
   ]
 };
 
@@ -8130,7 +8217,19 @@ const FORM_TABS = [
   { key: 'VPP', coreKey: 'VPP', label: 'Văn Phòng Phẩm - Tạo Kỳ Đăng Ký', icon: '🖇️', short: 'VPP' },
   { key: 'LICENSE', coreKey: 'LICENSE', label: 'Giấy Phép', icon: '📜', short: 'Giấy Phép' },
   { key: 'IT_PRICE', coreKey: 'IT_PRICE', label: 'Hỗ Trợ IT - Đề Xuất Duyệt Giá', icon: '🏷️', short: 'IT - Duyệt Giá' },
-  { key: 'IT_TICKET', coreKey: 'IT_TICKET', label: 'Hỗ Trợ IT - Yêu Cầu Hỗ Trợ', icon: '🎫', short: 'IT - Yêu Cầu' }
+  { key: 'IT_TICKET', coreKey: 'IT_TICKET', label: 'Hỗ Trợ IT - Yêu Cầu Hỗ Trợ', icon: '🎫', short: 'IT - Yêu Cầu' },
+  // Đợt 2 (mở rộng Biểu Mẫu ra thêm Thanh Toán/Ngân Sách/Báo Cáo Định Kỳ/Đồng Phục) — mỗi tab key riêng
+  // TRÙNG coreKey (như Đợt 1), trừ Đồng Phục có 5 form thật riêng biệt nên 5 coreKey/tab riêng.
+  { key: 'PAYMENT', coreKey: 'PAYMENT', label: 'Thanh Toán', icon: '💰', short: 'Thanh Toán' },
+  { key: 'BUDGET_PERIOD', coreKey: 'BUDGET_PERIOD', label: 'Ngân Sách - Tạo Kỳ', icon: '📅', short: 'NS - Tạo Kỳ' },
+  { key: 'BUDGET_TEMPLATE', coreKey: 'BUDGET_TEMPLATE', label: 'Ngân Sách - Mẫu Ngân Sách', icon: '🧩', short: 'NS - Mẫu' },
+  { key: 'REPORT_ENTRY', coreKey: 'REPORT_ENTRY', label: 'Báo Cáo Định Kỳ - Nhập Báo Cáo', icon: '📝', short: 'BCĐK - Nhập' },
+  { key: 'REPORT_PERIOD', coreKey: 'REPORT_PERIOD', label: 'Báo Cáo Định Kỳ - Tạo Kỳ', icon: '📅', short: 'BCĐK - Tạo Kỳ' },
+  { key: 'UNIFORM_PERIOD', coreKey: 'UNIFORM_PERIOD', label: 'Đồng Phục - Tạo Kỳ Cấp Phát', icon: '📦', short: 'ĐP - Tạo Kỳ' },
+  { key: 'UNIFORM_ISSUE', coreKey: 'UNIFORM_ISSUE', label: 'Đồng Phục - Cấp Cho Nhân Viên', icon: '👕', short: 'ĐP - Cấp Phát' },
+  { key: 'UNIFORM_ADJUST_STOCK', coreKey: 'UNIFORM_ADJUST_STOCK', label: 'Đồng Phục - Báo Hỏng/Hủy (Kho)', icon: '🗑️', short: 'ĐP - Báo Hỏng Kho' },
+  { key: 'UNIFORM_ADJUST_EMPLOYEE', coreKey: 'UNIFORM_ADJUST_EMPLOYEE', label: 'Đồng Phục - Thu Hồi Từ Nhân Viên', icon: '↩️', short: 'ĐP - Thu Hồi' },
+  { key: 'UNIFORM_TRANSFER', coreKey: 'UNIFORM_TRANSFER', label: 'Đồng Phục - Điều Chuyển Kho', icon: '🔁', short: 'ĐP - Điều Chuyển' }
 ];
 
 // Trả về (và khởi tạo nếu chưa có) đối tượng override {fieldId: {label, required}} của các trường

@@ -1,11 +1,73 @@
 # Phiên bản hiện tại
 
-**7.2** — đã merge vào `main` (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge
+**7.3** — đã merge vào `main` (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge
 góc màn hình + `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần
 kiểu `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. Đúng theo quy tắc MINOR chạy 0-9 trong
-`CLAUDE.md`: sau `7.1` tăng MINOR lên 1 → `7.2`.
+`CLAUDE.md`: sau `7.2` tăng MINOR lên 1 → `7.3`.
 
-## Cập nhật gần nhất — Biểu Mẫu Đợt 1: mở rộng ra Công Việc/Văn Phòng Phẩm/Giấy Phép/Hỗ Trợ IT (5 tab mới)
+## Cập nhật gần nhất — Biểu Mẫu Đợt 2: mở rộng ra Thanh Toán/Ngân Sách/Báo Cáo Định Kỳ/Đồng Phục (10 tab mới)
+
+Tiếp nối Đợt 1 (`TASK`/`VPP`/`LICENSE`/`IT_PRICE`/`IT_TICKET`) — mở rộng module "📋 Biểu Mẫu" ra đúng 4
+phân hệ còn lại theo yêu cầu người dùng: **Thanh Toán** (`#paymentCreateForm`), **Ngân Sách**, **Báo Cáo
+Định Kỳ**, và **Đồng Phục**.
+
+**Ngân Sách — audit phát hiện KHÔNG đưa `budgetEntries` (dòng ngân sách theo từng kỳ) vào
+`CORE_FIELD_MANIFEST`**: module này đã có sẵn cơ chế tự sửa nhãn/bắt buộc/thêm-bớt cột MẠNH HƠN Biểu Mẫu —
+`BUDGET_CORE_FIELD_DEFS` + màn "🧩 Mẫu Ngân Sách" (`budgetTemplateFieldsBody`), admin đổi nhãn 3 cột lõi
+(Tên Hạng Mục/Số Tiền/Loại NS) TỪNG MẪU riêng biệt, không có 1 nhãn "mặc định" duy nhất để Biểu Mẫu áp —
+gộp thêm sẽ chỉ tạo 2 lối sửa chồng chéo. Chỉ 2 form THẬT SỰ hardcode field cố định được đưa vào: "Tạo Kỳ
+Ngân Sách Mới" (`BUDGET_PERIOD`) và "Mẫu Ngân Sách" phần Tên Mẫu (`BUDGET_TEMPLATE`).
+
+**Đồng Phục có 5 form nhập liệu thật riêng biệt** (không dùng chung field nào) → 5 coreKey/tab riêng:
+`UNIFORM_PERIOD` (Tạo Kỳ Cấp Phát), `UNIFORM_ISSUE` (Cấp Cho Nhân Viên), `UNIFORM_ADJUST_STOCK` (Báo
+Hỏng/Hủy Từ Kho), `UNIFORM_ADJUST_EMPLOYEE` (Thu Hồi Từ Nhân Viên), `UNIFORM_TRANSFER` (Điều Chuyển Kho
+Giữa Các Siêu Thị). `#uniformCatalogAdminForm` (Tên Đồng Phục/Size) CỐ Ý không đưa vào — cùng lý do
+`licenseTypes`/`contractTypes` ở Đợt 1: đây là màn "Quản Lý Danh Mục" (CRUD danh sách), không phải form 1
+hồ sơ nghiệp vụ, admin đã sửa/xoá tự do trực tiếp tại đó rồi.
+
+**10 `coreKey` mới trong `CORE_FIELD_MANIFEST`** (`public/index.html`): `PAYMENT` (4 field), `BUDGET_PERIOD`
+(3 field), `BUDGET_TEMPLATE` (1 field), `REPORT_ENTRY` (3 field), `REPORT_PERIOD` (2 field), `UNIFORM_PERIOD`
+(2 field), `UNIFORM_ISSUE` (3 field), `UNIFORM_ADJUST_STOCK` (3 field), `UNIFORM_ADJUST_EMPLOYEE` (4 field),
+`UNIFORM_TRANSFER` (4 field) — cùng 10 `FORM_TABS` entry mới. Cơ chế áp dụng
+(`applyCoreFieldCustomizations()`/`applyAllCoreFieldCustomizations()`) vẫn CHUNG cho mọi coreKey, không cần
+call site riêng — đúng như Đợt 1. Giữ nguyên tắc: mọi trường mặc định chỉ sửa được Nhãn hiển thị + Bắt buộc
+nhập, KHÔNG xoá được, KHÔNG đổi kiểu dữ liệu — không thêm nút xoá nào cho trường mặc định ở 10 tab mới.
+
+**KHÔNG có dropdown "danh sách lựa chọn cố định" nào cần thêm `optionsKey` mới ở đợt này** — đã audit từng
+dropdown (`paymentSourceType`, `budgetPeriodTemplateSelect`, 2 radio "Hình thức nộp" báo cáo, 2/4 radio
+"Kết quả" đồng phục...) và xác nhận tất cả đều gắn trực tiếp với logic rẽ nhánh/trạng thái hệ thống cố định
+(cùng lý do `itPriceTier`/`licenseOperatingStatus` ở Đợt 1 không có optionsKey), không phải nhãn tự do — nên
+KHÔNG đụng `defaults.js`/`routes/data.js`/`lib/createValidation.js` lần này.
+
+Audit form markup cả 4 module — KHÔNG phát hiện lỗi div-wrapping nào giống `#licenseForm` ở Đợt 1 (mọi field
+được chọn đều đã bọc riêng `<div>` sẵn từ trước).
+
+**Test**: `tests/test-forms-batch2.js` (MỚI, cùng khuôn `tests/test-forms-batch1.js` — mock DOM/DB) — 41
+kịch bản: 10 tab mới hiện đúng; sửa nhãn mặc định qua `editCoreField()`+`addCustomField()` phản ánh đúng lên
+form thật cho PAYMENT/BUDGET_PERIOD/REPORT_PERIOD/UNIFORM_ISSUE/UNIFORM_ADJUST_EMPLOYEE, xác nhận không lem
+nhãn sang field liền kề (kể cả 2 field "Lý Do" trùng gợi ý ở 2 coreKey UNIFORM khác nhau); cả 10 tab mới đều
+đủ field mặc định và KHÔNG có nút xoá. Chạy lại toàn bộ `tests/test-*.js` (50 file) — chỉ còn đúng 2 lỗi
+known pre-existing cần SQL Server thật (`test-audit-fixes-batch1.js`, `test-audit-round2-cluster1.js` — mọi
+kịch bản BÊN TRONG đều PASS, process chỉ không tự thoát sau khi xong do connection pool chưa đóng, không
+phải lỗi mới), không phát sinh regression nào khác.
+
+Demo Playwright thật (Docker `vpdt-mssql` + `node server.js`, tài khoản `demo_forms_admin` có sẵn từ Đợt 1
+— reset `totpEnabled:false` để đi lại đúng màn "Bắt Buộc Thiết Lập Xác Thực 2 Lớp" lần đăng nhập admin đầu
+bằng mã 6 số sinh thật từ `otplib`): mở Biểu Mẫu, xác nhận đủ 10 tab mới hiện trên UI thật; sửa nhãn 1
+trường mặc định ở cả 4 module (Thanh Toán/Ngân Sách/Báo Cáo Định Kỳ/Đồng Phục) qua đúng nút "✏️ Sửa" + form
+thật, lưu — mở form nghiệp vụ thật tương ứng (`#paymentCreateForm`/`#budgetPeriodTemplateModal`/`#prSubPeriods`/
+`#uniformSubStore`) và xác nhận nhãn mới hiện đúng ngay; xác nhận cả 10 tab mới đều không có nút xoá nào cho
+trường mặc định. 25/25 kịch bản pass. Đã dọn lại override demo (`DB.formTemplates`) sau khi chụp ảnh xong,
+không để lại dữ liệu demo trong hệ thống thật.
+
+**Phạm vi CHƯA làm (giống Đợt 1)**: "trường bổ sung" hoàn toàn mới cho 10 tab này CHƯA wire vào form nghiệp
+vụ thật (chưa có `dynamicFieldsContainer_*` tương ứng) — admin vẫn thêm được qua UI Biểu Mẫu (lưu vào
+`DB.formTemplates`) nhưng chưa hiện trên form thật. Yêu cầu gốc (sửa nhãn/bắt buộc trường MẶC ĐỊNH) đã đủ.
+
+**Deploy-impact**: KHÔNG đổi `sql/schema.sql`, KHÔNG đổi `.env.example`, KHÔNG thêm `dependencies` mới —
+chỉ copy code + `pm2 restart`.
+
+## Trước đó — Biểu Mẫu Đợt 1: mở rộng ra Công Việc/Văn Phòng Phẩm/Giấy Phép/Hỗ Trợ IT (5 tab mới)
 
 Module "📋 Biểu Mẫu" (Hệ Thống → Quản Trị) trước đây chỉ phủ 9 phân hệ (Văn Bản Trình, Hợp Đồng ×2, Đăng
 Ký Xe, Văn Phòng ×2, Tài Liệu, Biên Bản Họp, Đặt Phòng Họp, Truyền Thông Nội Bộ) — đợt 1 mở rộng thêm
