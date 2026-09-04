@@ -123,7 +123,7 @@ async function findOwningRecord(fileUrl) {
   if (officeReq) return { moduleKey: 'office', dept: officeReq.dept, ownerUsername: officeReq.creator, record: officeReq };
   const post = (internalPosts || []).find(p => (p.attachment && p.attachment.fileUrl === fileUrl) || customDataHasFileUrl(p, fileUrl));
   if (post) return { internal: true, post };
-  const priceItem = (itPriceApprovals || []).find(p => (p.files || []).some(f => f.fileUrl === fileUrl));
+  const priceItem = (itPriceApprovals || []).find(p => (p.files || []).some(f => f.fileUrl === fileUrl) || (p.extraFiles || []).some(f => f.fileUrl === fileUrl));
   if (priceItem) return { itPrice: true, item: priceItem };
   const entry = (reportEntries || []).find(e => e.fileUrl === fileUrl);
   if (entry) return { reportEntry: true, entry };
@@ -228,9 +228,15 @@ async function authorizeFileAccess(user, fileUrl, mode) {
     // được qua route này (mode 'view'/Khung Xem Bảo Vệ KHÔNG bị giới hạn thêm — chỉ hành động TẢI).
     // Hồ sơ chưa APPROVED thì resolveApprovedFileUrl() luôn trả null -> không file nào tải được, đúng ý
     // "chỉ file đã duyệt mới tải được". Dùng ĐÚNG 1 nguồn logic chung với routes/priceFile.js (mục 4).
+    // Giới hạn này CHỈ áp dụng cho bảng giá (item.files, file Excel) — "Tài liệu bổ sung liên quan"
+    // (item.extraFiles, mục A kế hoạch mới) không phải bảng giá, không thuộc luật "chỉ file đã duyệt".
     if (mode === 'download') {
-      const approvedFileUrl = resolveApprovedFileUrl(owning.item);
-      return !!approvedFileUrl && approvedFileUrl === fileUrl;
+      const isPriceSheet = (owning.item.files || []).some(f => f.fileUrl === fileUrl);
+      if (isPriceSheet) {
+        const approvedFileUrl = resolveApprovedFileUrl(owning.item);
+        return !!approvedFileUrl && approvedFileUrl === fileUrl;
+      }
+      return true; // extraFiles (Tài liệu bổ sung liên quan) — không thuộc diện giới hạn "chỉ file đã duyệt"
     }
     return true;
   }

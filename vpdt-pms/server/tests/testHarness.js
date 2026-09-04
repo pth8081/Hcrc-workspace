@@ -62,7 +62,7 @@ function startStaticServer(preferredPort) {
 function createMockState(seed) {
   return Object.assign({
     depts: [], stores: [], cats: [], deptAbbrs: {}, jobTitles: [], permGroups: [], users: [],
-    itPriceMasterLists: [], itPriceDeptWorkflows: {}, workflows: [],
+    itPriceMasterLists: [], itPriceDeptWorkflows: {}, itPriceTierWorkflows: {}, workflows: [],
     uniformPeriods: [], uniformIssuances: [], uniformStockAdjustments: [], uniformTransfers: [], uniformCatalog: [],
     itPriceApprovals: [], itSupportTickets: [], reportPeriods: [], reportEntries: [],
     tasks: [],
@@ -84,6 +84,11 @@ function buildAppDataForCreate(moduleKey, state) {
     stores: state.stores,
     itPriceMasterLists: state.itPriceMasterLists,
     itPriceDeptWorkflows: state.itPriceDeptWorkflows,
+    // itPriceTierWorkflows: Bán Buôn (WHOLESALE) — bỏ quy trình theo phòng ban, chuyển theo 1 trong 4
+    // mức Margin/Chiết Khấu cố định (mục B đợt sau) — resolveWfConfig() (lib/workflowEngine.js) đọc
+    // thẳng map này qua appData khi item.priceType === 'WHOLESALE', y hệt cách itPriceDeptWorkflows
+    // được đọc cho RETAIL ở trên.
+    itPriceTierWorkflows: state.itPriceTierWorkflows,
     workflows: state.workflows,
     uniformCatalog: state.uniformCatalog,
     // Vận Hành > Siêu Thị > Danh mục đầu tư — resolveWfConfig() (lib/workflowEngine.js) đọc thẳng 2 map

@@ -5788,6 +5788,17 @@ input[data-sdd-list] {
             <p class="text-gray-400 mt-1">Bắt buộc chọn đúng mẫu áp dụng cho bảng giá của bạn — tệp bảng giá tải lên bên dưới phải có đúng tên cột theo mẫu đã chọn, sai/thiếu cột sẽ bị chặn gửi.</p>
             <a id="itPriceMasterListDownloadLink" href="#" target="_blank" class="hidden inline-block mt-1 text-sky-600 hover:underline font-semibold">📥 Tải Mẫu Giá này về để làm theo</a>
           </div>
+          <div id="itPriceTierSelectWrap" class="hidden">
+            <label class="block font-semibold text-gray-600 mb-1">Mức Margin / Chiết Khấu <span class="text-red-500">*</span></label>
+            <select id="itPriceTier" class="w-full border p-1.5 rounded bg-white">
+              <option value="">-- Chọn mức áp dụng --</option>
+              <option value="MARGIN_LT5">Margin &lt; 5%</option>
+              <option value="MARGIN_GTE5">Margin ≥ 5%</option>
+              <option value="DISCOUNT_LTE5">Chiết khấu ≤ 5%</option>
+              <option value="DISCOUNT_GT5">Chiết khấu &gt; 5%</option>
+            </select>
+            <p class="text-gray-400 mt-1">Bắt buộc chọn đúng mức áp dụng cho đề xuất Bán Buôn này — mỗi mức có quy trình duyệt riêng do admin cấu hình (không còn theo phòng ban).</p>
+          </div>
           <div>
             <label class="block font-semibold text-gray-600 mb-1">📎 Tệp Bảng Giá (.xlsx) <span class="text-red-500">*</span></label>
             <input id="itPriceFileInput" type="file" accept=".xlsx,.xls" data-op-change="onItPriceFileChange" data-arg-event="0" class="w-full border p-1.5 rounded bg-white">
@@ -5806,6 +5817,11 @@ input[data-sdd-list] {
           <div>
             <label class="block font-semibold text-gray-600 mb-1">Lý Do Điều Chỉnh Giá</label>
             <textarea id="itPriceReason" placeholder="VD: Giá nhập tăng theo nhà cung cấp, điều chỉnh theo mặt bằng thị trường..." class="w-full border p-1.5 rounded h-16"></textarea>
+          </div>
+          <div>
+            <label class="block font-semibold text-gray-600 mb-1">📎 Tài liệu bổ sung liên quan</label>
+            <input id="itPriceExtraFiles" type="file" multiple class="w-full border p-1.5 rounded bg-white">
+            <p class="text-gray-400 mt-1">Tuỳ chọn — các tài liệu liên quan khác (không phải bảng giá), có thể chọn nhiều tệp cùng lúc.</p>
           </div>
           <div class="flex justify-end">
             <button type="submit" class="bg-sky-600 text-white px-5 py-2 rounded font-bold hover:bg-sky-700">Gửi phê duyệt</button>
@@ -7009,6 +7025,10 @@ input[data-sdd-list] {
       <div>
         <h4 class="font-bold text-gray-800 mb-2">🗂️ Tệp Bảng Giá Đã Tải Lên</h4>
         <div id="itPriceModalFiles" class="space-y-2"></div>
+      </div>
+      <div id="itPriceModalExtraFilesWrap" class="hidden">
+        <h4 class="font-bold text-gray-800 mb-2">📎 Tài Liệu Bổ Sung Liên Quan</h4>
+        <div id="itPriceModalExtraFiles" class="space-y-1 bg-gray-50 p-2 rounded border"></div>
       </div>
       <div id="itPriceModalDiffWrap" class="hidden">
         <h4 class="font-bold text-gray-800 mb-2">🔍 So Sánh Thay Đổi (tệp mới nhất so với tệp trước đó)</h4>
@@ -8844,6 +8864,13 @@ function resolveItPriceDeptWorkflowConfigClient(dept, priceType) {
   return type === 'RETAIL' ? cfg : null;
 }
 
+// Bán Buôn (WHOLESALE) — KHÔNG còn theo phòng ban, đổi sang theo 1 trong 4 mức Margin/Chiết Khấu cố
+// định (mục B). MIRROR ĐÚNG resolveItPriceTierWorkflowConfig() ở lib/workflowEngine.js (server) —
+// map PHẲNG, không cần tương thích ngược (cấu hình hoàn toàn mới).
+function resolveItPriceTierWorkflowConfigClient(priceTier) {
+  return (DB.itPriceTierWorkflows || {})[priceTier] || null;
+}
+
 // Quét TOÀN BỘ itPriceDeptWorkflows (mọi phòng ban × cả 2 loại giá) xem người dùng có phải approver ở
 // đâu đó không — dùng cho canAccessApprovalHub() (không xét theo 1 hồ sơ cụ thể nên không có priceType
 // để tra thẳng resolveItPriceDeptWorkflowConfigClient()).
@@ -8856,6 +8883,37 @@ function isApproverInItPriceWorkflowMap(wfDeptMap, username) {
     }
     return isApproverForDeptWorkflow(cfg, username);
   });
+}
+
+// Quét TOÀN BỘ itPriceTierWorkflows (4 mức Margin/Chiết Khấu) xem người dùng có phải approver ở mức
+// nào không — cùng mục đích với isApproverInItPriceWorkflowMap() ở trên nhưng cho map PHẲNG mới (Bán
+// Buôn), gọi CẢ 2 hàm ở nơi cần biết "user có phải approver ở ĐÂU ĐÓ trong module Hỗ Trợ IT không" (nếu
+// không, người chỉ được gán làm approver cho 1 mức Margin/Chiết Khấu sẽ không thấy hồ sơ Bán Buôn trong
+// "Phê Duyệt" tổng hợp dù họ thực sự là approver).
+function isApproverInItPriceTierWorkflowMap(wfTierMap, username) {
+  if (!wfTierMap) return false;
+  return Object.values(wfTierMap).some(cfg => isApproverForDeptWorkflow(cfg, username));
+}
+
+// Điểm CHUNG duy nhất mà mọi nơi hiển thị/kiểm quyền của 1 hồ sơ itPriceApprovals CỤ THỂ nên gọi, thay
+// vì tự branch resolveItPriceDeptWorkflowConfigClient()/resolveItPriceTierWorkflowConfigClient() rải
+// rác — MIRROR ĐÚNG nhánh trong resolveWfConfig() (lib/workflowEngine.js, mục B): WHOLESALE tra theo
+// item.priceTier (4 mức cố định), RETAIL tra theo item.dept như cũ 100%. Gộp về 1 hàm để không bỏ sót
+// chỗ nào khi thêm mới (bug mục B dễ bỏ sót nhất trong cả đợt vì rải rác nhiều nơi).
+function resolveItPriceWorkflowConfigForItemClient(p) {
+  if ((p.priceType || 'RETAIL') === 'WHOLESALE') return resolveItPriceTierWorkflowConfigClient(p.priceTier);
+  return resolveItPriceDeptWorkflowConfigClient(p.dept, 'RETAIL');
+}
+
+// Nhãn hiển thị cho 4 mức Margin/Chiết Khấu cố định — khớp options của #itPriceTier + fixedTiers ở
+// WF_MODULE_CONFIG.ITPRICE (public/index.html) — chỉ dùng để hiển thị, KHÔNG dùng để xác thực (validate
+// thật nằm ở lib/createValidation.js phía server).
+const IT_PRICE_TIER_LABELS = {
+  MARGIN_LT5: 'Margin < 5%', MARGIN_GTE5: 'Margin ≥ 5%',
+  DISCOUNT_LTE5: 'Chiết khấu ≤ 5%', DISCOUNT_GT5: 'Chiết khấu > 5%'
+};
+function itPriceTierLabel(tier) {
+  return IT_PRICE_TIER_LABELS[tier] || tier || '—';
 }
 
 // ==========================================
@@ -9357,6 +9415,7 @@ function canAccessApprovalHub(user) {
   if (isApproverInWorkflowMap(DB.contractManageDeptWorkflows, user.username)) return true;
   if (Object.values(DB.contractApprovalGroups || {}).some(list => Array.isArray(list) && list.includes(user.username))) return true;
   if (isApproverInItPriceWorkflowMap(DB.itPriceDeptWorkflows, user.username)) return true;
+  if (isApproverInItPriceTierWorkflowMap(DB.itPriceTierWorkflows, user.username)) return true;
   return false;
 }
 
@@ -9799,6 +9858,7 @@ async function initDatabase(loggingInUser) {
     DB.officeFixDeptWorkflows = data.officeFixDeptWorkflows || {};
     DB.vppDeptWorkflows = data.vppDeptWorkflows || {};
     DB.itPriceDeptWorkflows = data.itPriceDeptWorkflows || {};
+    DB.itPriceTierWorkflows = data.itPriceTierWorkflows || {};
     // Sửa lỗi cũ tương tự uploadFileTypeConfig/uploadSizeLimitConfig ở trên: 3 dòng dưới đây trước nay
     // CHƯA từng được gán từ data (server đã trả đúng — xem routes/data.js — nhưng client không đọc vào),
     // khiến "Nhóm Phê Duyệt HĐ" (mục 14 Phân Quyền) không vẽ được ô chọn người (renderContractApprovalGroups()
@@ -12391,7 +12451,7 @@ function getMyPendingApprovals(user) {
     actionsOf: r => [{ label: '✍️ Xử lý / Duyệt', fn: 'openVppRegModal', args: [r.id], primary: true }]
   });
 
-  addDeptWorkflowItems(DB.itPriceApprovals, p => resolveItPriceDeptWorkflowConfigClient(p.dept, p.priceType || 'RETAIL'), {
+  addDeptWorkflowItems(DB.itPriceApprovals, p => resolveItPriceWorkflowConfigForItemClient(p), {
     type: 'itPrice', typeLabel: '🏷️ Hỗ Trợ IT - Duyệt giá',
     codeOf: r => r.code, titleOf: r => r.productName,
     statusBadgeOf: r => itPriceHasUnresolvedInfoRequest(r) ? approvalHubNeedInfoBadge() : approvalHubPendingBadge(),
@@ -12630,7 +12690,7 @@ function findPendingApprovalsForUsername(username) {
     typeLabel: '🖇️ Văn phòng phẩm', codeOf: r => r.code, titleOf: r => r.periodName || r.code
   });
 
-  scan(DB.itPriceApprovals, p => resolveItPriceDeptWorkflowConfigClient(p.dept, p.priceType || 'RETAIL'), {
+  scan(DB.itPriceApprovals, p => resolveItPriceWorkflowConfigForItemClient(p), {
     typeLabel: '🏷️ Hỗ Trợ IT - Duyệt giá', codeOf: r => r.code, titleOf: r => r.productName
   });
 
@@ -25925,6 +25985,14 @@ const WF_MODULE_CONFIG = {
   ITPRICE: {
     dbKey: 'itPriceDeptWorkflows', hasTypes: true, priceTypeNested: true,
     fixedTypes: [{ key: 'RETAIL', label: '🏷️ Bán Lẻ' }, { key: 'WHOLESALE', label: '🏪 Bán Buôn' }],
+    // Bán Buôn KHÔNG còn theo phòng ban (mục B kế hoạch) — tierDbKeyForWholesale trỏ collection MỚI
+    // (itPriceTierWorkflows, phẳng {tierKey: config}), fixedTiers liệt kê 4 mức cố định. RETAIL vẫn dùng
+    // dbKey ở trên (itPriceDeptWorkflows) hoàn toàn không đổi.
+    tierDbKeyForWholesale: 'itPriceTierWorkflows',
+    fixedTiers: [
+      { key: 'MARGIN_LT5', label: 'Margin < 5%' }, { key: 'MARGIN_GTE5', label: 'Margin ≥ 5%' },
+      { key: 'DISCOUNT_LTE5', label: 'Chiết khấu ≤ 5%' }, { key: 'DISCOUNT_GT5', label: 'Chiết khấu > 5%' }
+    ],
     label: 'Hỗ Trợ IT - Duyệt giá', title: '🏷️ Cấu Hình Quy Trình Phê Duyệt Giá Bán (Hỗ Trợ IT) Theo Phòng Ban × Loại Giá'
   },
   // "Ngân Sách" — Trưởng phòng duyệt bản ngân sách theo phòng ban, cùng khuôn ITPRICE ở trên.
@@ -27509,6 +27577,14 @@ function renderWorkflowTab() {
   const container = document.getElementById('deptWorkflowConfigContainer');
   if (!container) return;
 
+  // Bán Buôn (Hỗ Trợ IT - Duyệt giá) — mục B: KHÔNG còn theo phòng ban, tách render riêng theo TIER
+  // (4 mức Margin/Chiết Khấu cố định) NGAY ĐẦU HÀM, không chạy tiếp phần loop-theo-dept cũ bên dưới.
+  // "Bán Lẻ" (RETAIL) của CÙNG module này rơi qua nhánh dưới, giữ nguyên hành vi cũ 100%.
+  if (WF_MODULE_CONFIG[activeWfMod].tierDbKeyForWholesale && activeWfSubmissionType === 'WHOLESALE') {
+    renderItPriceTierWorkflowTab(container);
+    return;
+  }
+
   // Module có "types": cấu hình LỒNG thêm 1 cấp. Văn bản trình (SUBMISSION) lồng {loại: {phòng ban:
   // config}} — chưa cấu hình riêng cho loại đang chọn thì rơi về cấu hình chung cũ (legacyDbKey) làm
   // mặc định hiển thị, để không đổi hành vi cho tới khi admin chủ động tuỳ chỉnh riêng loại đó. Hỗ Trợ
@@ -27612,6 +27688,128 @@ function renderWorkflowTab() {
   }).join('');
 
   renderWorkflowTemplatesTable();
+}
+
+// ===== Hỗ Trợ IT > Phê Duyệt Giá — Bán Buôn: cấu hình theo TIER (mục B) =====
+// MIRROR cấu trúc card/step UI của renderWorkflowTab() (nhánh theo dept ở trên) nhưng loop qua 4 mức
+// Margin/Chiết Khấu CỐ ĐỊNH (modConfig.fixedTiers) thay vì getWorkflowParticipatingDepts(), và danh
+// sách ứng viên approver mỗi bước dùng THẲNG getApproverCandidateUsers() — KHÔNG tách "cùng phòng/khác
+// phòng" như nhánh dept (mức Margin/Chiết Khấu không có khái niệm phòng ban).
+function renderItPriceTierWorkflowTab(container) {
+  const modConfig = WF_MODULE_CONFIG[activeWfMod];
+  const tierDbKey = modConfig.tierDbKeyForWholesale;
+  if (!DB[tierDbKey]) DB[tierDbKey] = {};
+  const tierWfMap = DB[tierDbKey];
+
+  container.innerHTML = modConfig.fixedTiers.map(tier => {
+    const savedConfig = tierWfMap[tier.key] || { workflowId: 'WF_1STEP', approvers: { 1: ['admin'] } };
+    const pendingKey = `TIER_${tier.key}`;
+    const isPending = pendingWfTemplate[pendingKey] !== undefined && pendingWfTemplate[pendingKey] !== savedConfig.workflowId;
+    const effectiveWfId = isPending ? pendingWfTemplate[pendingKey] : savedConfig.workflowId;
+    const selectedWf = DB.workflows.find(w => w.id === effectiveWfId) || DB.workflows[0];
+    const effectiveApprovers = isPending ? {} : (savedConfig.approvers || {});
+
+    const stepsConfigHTML = selectedWf.steps.map(step => {
+      const currentApprovers = effectiveApprovers[step.order] || [];
+      const isCheckedFn = u => Array.isArray(currentApprovers) ? currentApprovers.includes(u.username) : currentApprovers === u.username;
+      const candidates = getApproverCandidateUsers(currentApprovers).slice().sort((a, b) => (a.name || '').localeCompare(b.name || '', 'vi'));
+
+      const candidatesHTML = candidates.map(u => {
+        const isChecked = isCheckedFn(u);
+        return `
+          <label class="inline-flex items-center gap-1 bg-white px-2 py-0.5 rounded border text-[11px] cursor-pointer">
+            <input type="checkbox" value="${escapeHtml(u.username)}" data-tier="${escapeHtml(tier.key)}" data-step="${step.order}" ${isChecked ? 'checked' : ''}>
+            <span>${escapeHtml(u.name)} (${escapeHtml(u.username)})</span>
+          </label>
+        `;
+      }).join('');
+
+      const emptyHint = candidates.length === 0
+        ? `<div class="text-[11px] text-gray-400 italic">Chưa có ai được cấp quyền "Người duyệt" — vào Module Quản trị (khối 12) để cấp trước.</div>` : '';
+
+      return `
+        <div class="bg-gray-100 p-2 rounded text-xs space-y-1 border">
+          <div class="font-bold text-gray-700">Bước ${step.order}: ${escapeHtml(step.name)}</div>
+          <div class="flex flex-wrap gap-1.5 pt-1">${candidatesHTML}</div>
+          ${emptyHint}
+        </div>
+      `;
+    }).join('');
+
+    const wfOptions = DB.workflows.map(w => `<option value="${w.id}" ${w.id === effectiveWfId ? 'selected' : ''}>${escapeHtml(w.name)} (${w.steps.length} bước)</option>`).join('');
+
+    return `
+      <div class="bg-white p-3 rounded border space-y-2">
+        <div class="flex justify-between items-center border-b pb-2">
+          <h4 class="font-bold text-sm text-gray-800">📊 ${escapeHtml(tier.label)}</h4>
+          <div class="flex items-center gap-2">
+            <span class="text-xs font-semibold text-gray-600">Chọn mẫu quy trình:</span>
+            <select id="wfSelectTier_${tier.key}" data-op-change="onItPriceTierWorkflowTemplateChange" data-arg0="${escapeHtml(tier.key)}" class="border p-1 rounded text-xs bg-white font-bold text-emerald-700">
+              ${wfOptions}
+            </select>
+          </div>
+        </div>
+        ${isPending ? `<div class="text-[11px] text-amber-800 bg-amber-50 border border-amber-200 rounded px-2 py-1">⚠️ Mẫu quy trình vừa đổi — <b>chưa lưu</b>. Gán người duyệt cho từng bước rồi bấm "Lưu Cấu Hình" để áp dụng.</div>` : ''}
+        <div class="space-y-2">${stepsConfigHTML}</div>
+        <div class="flex justify-end pt-1">
+          <button data-op="saveItPriceTierWorkflowConfig" data-arg0="${escapeHtml(tier.key)}" class="bg-emerald-600 text-white px-3 py-1 rounded text-xs font-bold hover:bg-emerald-700">Lưu Cấu Hình [${escapeHtml(tier.label)}]</button>
+        </div>
+      </div>
+    `;
+  }).join('');
+
+  renderWorkflowTemplatesTable();
+}
+
+// Đổi mẫu quy trình cho 1 tier — cùng khuôn onWorkflowTemplateChange() (preview trước, không lưu ngay).
+function onItPriceTierWorkflowTemplateChange(tierKey) {
+  const sel = document.getElementById(`wfSelectTier_${tierKey}`);
+  if (!sel) return;
+  pendingWfTemplate[`TIER_${tierKey}`] = sel.value;
+  renderWorkflowTab();
+}
+
+// Đọc mẫu quy trình + người duyệt từng bước đang chọn trên DOM cho 1 tier — mirror collectDeptWorkflowConfig()
+// nhưng đọc data-tier thay vì data-dept, dùng thẳng tierKey làm id suffix (tierKey vốn đã là hằng số
+// không dấu/không khoảng trắng, không cần .replace(/\s+/g,'_')).
+function collectItPriceTierWorkflowConfig(tierKey) {
+  const wfSelect = document.getElementById(`wfSelectTier_${tierKey}`);
+  if (!wfSelect) return null;
+
+  const selectedWfId = wfSelect.value;
+  const approversObj = {};
+  document.querySelectorAll(`input[data-tier="${tierKey}"]`).forEach(cb => {
+    const stepOrder = parseInt(cb.getAttribute('data-step'), 10);
+    if (!approversObj[stepOrder]) approversObj[stepOrder] = [];
+    if (cb.checked) approversObj[stepOrder].push(cb.value);
+  });
+
+  const selectedWf = DB.workflows.find(w => w.id === selectedWfId);
+  const emptySteps = selectedWf ? selectedWf.steps.filter(s => !(approversObj[s.order] && approversObj[s.order].length > 0)) : [];
+  return { config: { workflowId: selectedWfId, approvers: approversObj }, emptySteps };
+}
+
+// Lưu cấu hình quy trình cho 1 tier — mirror saveDeptWorkflowConfig(). KHÔNG cần "Lưu Cấu Hình Tất Cả"
+// riêng (chỉ 4 thẻ cố định, nút lưu từng thẻ là đủ).
+function saveItPriceTierWorkflowConfig(tierKey) {
+  const result = collectItPriceTierWorkflowConfig(tierKey);
+  if (!result) return;
+
+  if (result.emptySteps.length > 0) {
+    const stepNames = result.emptySteps.map(s => `Bước ${s.order} (${s.name})`).join(', ');
+    const proceed = confirm(`⚠️ Các bước sau CHƯA có người duyệt nào được chọn:\n${stepNames}\n\nHồ sơ tới các bước này sẽ không ai (ngoài Admin) duyệt được. Vẫn lưu?`);
+    if (!proceed) return;
+  }
+
+  const tierDbKey = WF_MODULE_CONFIG[activeWfMod].tierDbKeyForWholesale;
+  if (!DB[tierDbKey]) DB[tierDbKey] = {};
+  DB[tierDbKey][tierKey] = result.config;
+  syncStorage(tierDbKey);
+
+  delete pendingWfTemplate[`TIER_${tierKey}`];
+  logSystemAction('CONFIG', 'UPDATE_DEPT_WORKFLOW', `Cập nhật cấu hình quy trình Hỗ Trợ IT - Duyệt giá Bán Buôn [${tierKey}]`, 'SUCCESS', tierKey);
+  alert(`✅ Đã lưu cấu hình quy trình cho mức [${tierKey}] thành công!`);
+  renderWorkflowTab();
 }
 
 // Đọc mẫu quy trình + người duyệt từng bước đang chọn trên DOM cho 1 phòng ban — dùng CHUNG cho cả
@@ -28404,10 +28602,19 @@ function scopeFromForm(allId, deptPrefix) {
 // ==========================================
 
 // Mở/đóng TẤT CẢ khối quyền cùng lúc (nút "Mở rộng tất cả"/"Thu gọn tất cả" phía trên form).
+//
+// BUG ĐÃ VÁ (mục C): 2 nút gọi qua data-op="setAllPermTreeNodes" data-arg0="true"/"false" — nhưng
+// cspCoerceArg() (chỉ coerce chuỗi TOÀN SỐ sang Number) giữ nguyên "true"/"false" ở dạng STRING khi
+// truyền vào đây. `d.open = open` gán 1 STRING KHÔNG RỖNG vào thuộc tính boolean IDL
+// HTMLDetailsElement.open luôn bị ép kiểu Boolean(str), mà Boolean("false") === true (chuỗi không rỗng
+// luôn truthy) — nghĩa là CẢ 2 nút đều MỞ RỘNG hết, "Thu gọn tất cả" không hề thu gọn được gì. So sánh
+// tường minh thay vì tin kiểu dữ liệu của `open` — chấp cả boolean thật (true, phòng khi có chỗ gọi JS
+// trực tiếp không qua data-op) lẫn chuỗi 'true' (đường đi hiện tại qua cspCoerceArg).
 function setAllPermTreeNodes(open) {
+  const shouldOpen = (open === true || open === 'true');
   // Không dùng combinator "trực tiếp" (>) vì các khối 1-14 giờ lồng trong 1 div lưới 3 cột (xem HTML
   // #permFieldsContainer) — chỉ khối 0 còn là con trực tiếp.
-  document.querySelectorAll('#permFieldsContainer details.perm-tree-node').forEach(d => { d.open = open; });
+  document.querySelectorAll('#permFieldsContainer details.perm-tree-node').forEach(d => { d.open = shouldOpen; });
 }
 
 // Đếm số "mục quyền" đã cấp / tổng số mục quyền trong 1 khối — dùng CHUNG cho mọi khối, không cần
@@ -38491,16 +38698,34 @@ async function submitItPriceApproval(e) {
   if ((DB.itPriceMasterLists || []).length && !masterListId) {
     return alert('⛔ Vui lòng chọn Mẫu Giá Phê Duyệt trước khi gửi đề xuất.');
   }
+  // Bán Buôn (mục B) — bắt buộc chọn đúng 1 trong 4 mức Margin/Chiết Khấu, chặn sớm cho trải nghiệm
+  // mượt (server tự xác minh lại y hệt ở itPriceApprovals.extraValidate, không tin giá trị client gửi).
+  if (activeItPriceSubTab === 'WHOLESALE' && !document.getElementById('itPriceTier').value) {
+    return alert('⛔ Vui lòng chọn Mức Margin/Chiết Khấu áp dụng.');
+  }
+  // Tài liệu bổ sung liên quan (mục A, mirror ĐÚNG extraFilesInput/extraFiles của doSubmitSubmissionReq())
+  // — hoàn toàn TUỲ CHỌN, mảng rỗng nếu không chọn tệp nào.
+  const extraFilesInput = document.getElementById('itPriceExtraFiles');
+  let extraFiles = [];
+  if (extraFilesInput.files && extraFilesInput.files.length > 0) {
+    try {
+      extraFiles = await Promise.all(Array.from(extraFilesInput.files).map(f => uploadFileToServer(f, 'itPrice')));
+    } catch (err) {
+      return alert(`⛔ Tải tài liệu bổ sung thất bại: ${err.message}`);
+    }
+  }
   const payload = {
     code,
     // Tự động gắn đúng priceType theo sub-tab con đang mở (KHÔNG có dropdown chọn tay — mục 1 kế
     // hoạch) — server tự xác minh lại giá trị hợp lệ ở itPriceApprovals.extraValidate.
     priceType: activeItPriceSubTab,
+    priceTier: activeItPriceSubTab === 'WHOLESALE' ? document.getElementById('itPriceTier').value : null,
     masterListId: masterListId ? Number(masterListId) : null,
     files: [{
       fileUrl: itPricePendingFile.fileUrl, fileName: itPricePendingFile.fileName,
       items: itPricePendingFile.items, columnLabels: itPricePendingFile.columnLabels
     }],
+    extraFiles,
     reason: document.getElementById('itPriceReason').value.trim(),
     createdAt: new Date().toLocaleString('vi-VN')
   };
@@ -38516,9 +38741,10 @@ async function submitItPriceApproval(e) {
   DB.itPriceApprovals.unshift(newItem);
   logSystemAction('IT_SUPPORT', 'CREATE_IT_PRICE_APPROVAL', `Tạo đề xuất duyệt giá [${code}]`, 'SUCCESS', code);
 
-  // Mọi đề xuất giờ LUÔN đi qua đúng quy trình duyệt phòng ban (không còn nhánh autoApproved — xem
+  // Mọi đề xuất giờ LUÔN đi qua đúng quy trình duyệt (phòng ban cho RETAIL, theo tier cho WHOLESALE —
+  // mục B, xem resolveItPriceWorkflowConfigForItemClient()). Không còn nhánh autoApproved — xem
   // itPriceApprovals.extraValidate ở lib/createValidation.js).
-  const wfConfig = resolveItPriceDeptWorkflowConfigClient(newItem.dept, newItem.priceType || 'RETAIL');
+  const wfConfig = resolveItPriceWorkflowConfigForItemClient(newItem);
   const firstStepApprovers = wfConfig?.approvers?.[1] || [];
   if (firstStepApprovers.length) {
     notifyUsersByEmail('IT_SUPPORT', 'NOTIFY_APPROVAL_NEEDED', code, firstStepApprovers,
@@ -38533,6 +38759,7 @@ async function submitItPriceApproval(e) {
   document.getElementById('itPriceFilePreviewWrap').classList.add('hidden');
   document.getElementById('itPriceCode').value = generateItPriceCode();
   document.getElementById('itPriceDeptDisplay').value = currentUser.dept;
+  document.getElementById('itPriceTier').value = '';
   renderItPriceMasterListSelect();
   renderItPriceApprovals();
 }
@@ -38553,6 +38780,9 @@ function filterItPriceByCard(status) {
 let activeItPriceSubTab = 'RETAIL';
 function setItPriceSubTab(subTab) {
   activeItPriceSubTab = subTab === 'WHOLESALE' ? 'WHOLESALE' : 'RETAIL';
+  // Mục B: trường Mức Margin/Chiết Khấu chỉ hiện + bắt buộc khi đang ở sub-tab Bán Buôn.
+  const tierWrap = document.getElementById('itPriceTierSelectWrap');
+  if (tierWrap) tierWrap.classList.toggle('hidden', activeItPriceSubTab !== 'WHOLESALE');
   resetListPage('itPrice');
   renderItPriceApprovals();
 }
@@ -38589,7 +38819,7 @@ function canViewItPriceApproval(user, p) {
   if (user.perms?.itPriceEmergencyRejectApprove && (p.emergencyRejectStatus === 'PENDING' || p.emergencyRejectDecidedBy === user.username)) {
     return true;
   }
-  return isApproverForDeptWorkflow(resolveItPriceDeptWorkflowConfigClient(p.dept, p.priceType || 'RETAIL'), user.username);
+  return isApproverForDeptWorkflow(resolveItPriceWorkflowConfigForItemClient(p), user.username);
 }
 
 // Còn ít nhất 1 yêu cầu bổ sung CHƯA được người đề xuất phản hồi (chưa tải tệp bổ sung) — dùng chung
@@ -38609,7 +38839,7 @@ function itPriceStatusBadge(p) {
     return `<span class="px-2 py-0.5 bg-green-100 text-green-800 rounded font-bold text-xs">✅ Đã phê duyệt</span>`;
   }
   if (itPriceHasUnresolvedInfoRequest(p)) return `<span class="px-2 py-0.5 bg-amber-100 text-amber-800 rounded font-bold text-xs">🟠 Chờ bổ sung</span>`;
-  const wfConfig = resolveItPriceDeptWorkflowConfigClient(p.dept, p.priceType || 'RETAIL') || { workflowId: 'WF_1STEP', approvers: { 1: ['admin'] } };
+  const wfConfig = resolveItPriceWorkflowConfigForItemClient(p) || { workflowId: 'WF_1STEP', approvers: { 1: ['admin'] } };
   const wf = DB.workflows.find(w => w.id === wfConfig.workflowId) || { steps: [{ name: 'Duyệt' }] };
   const currentStepApprovers = wfConfig.approvers ? (wfConfig.approvers[p.currentStep] || []) : [];
   return `<span class="px-2 py-0.5 bg-indigo-100 text-indigo-800 rounded font-bold text-xs">⏳ Bước ${p.currentStep}/${wf.steps.length}${escapeHtml(getStepApprovalProgressText(currentStepApprovers, p.history, p.currentStep))}</span>`;
@@ -38896,6 +39126,22 @@ function itPriceMasterListDownloadLinkHTML(masterListId) {
   return ` <a href="${attachmentDownloadUrl(list.fileUrl, null, list.fileName)}" target="_blank" class="text-sky-600 hover:underline font-semibold">📥 Tải Mẫu</a>`;
 }
 
+// Xem trước 1 tệp trong danh sách "Tài liệu bổ sung liên quan" (p.extraFiles[idx]) — cùng Khung Xem
+// Bảo Vệ với mọi tệp khác trong hệ thống (mirror viewSubmissionExtraFile()).
+function viewItPriceExtraFile(itemId, idx) {
+  const p = DB.itPriceApprovals.find(x => x.id === itemId);
+  if (!p) return;
+  const ef = (p.extraFiles || [])[idx];
+  if (!ef || !ef.fileUrl) return;
+
+  openFileProtectedView({
+    title: `📎 ${ef.fileName || p.code} (${p.code})`,
+    sub: `Phòng ban: ${p.dept} | Người đề xuất: ${p.creatorName}`,
+    footerInfo: `Tài liệu bổ sung liên quan — Đề xuất duyệt giá: ${p.code}`,
+    fileSrc: ef.fileUrl, fileType: ef.fileType, fileName: ef.fileName
+  });
+}
+
 let currentItPriceModalId = null;
 
 function openItPriceModal(id) {
@@ -38924,6 +39170,7 @@ function renderItPriceModal() {
   document.getElementById('itPriceModalDetails').innerHTML = `
     <div><b>Trạng thái:</b> ${itPriceStatusBadge(p)}</div>
     <div><b>Áp giá:</b> ${itPriceAppliedBadge(p)}</div>
+    ${p.priceType === 'WHOLESALE' ? `<div><b>Mức áp dụng:</b> ${escapeHtml(itPriceTierLabel(p.priceTier))}</div>` : ''}
     ${p.masterListName ? `<div><b>Mẫu Giá áp dụng:</b> ${escapeHtml(p.masterListName)}${itPriceMasterListDownloadLinkHTML(p.masterListId)}</div>` : ''}
     <div><b>Lý do điều chỉnh:</b> ${p.reason ? escapeHtml(p.reason) : '<span class="text-gray-400">—</span>'}</div>
     ${historyRows}
@@ -39002,6 +39249,27 @@ function renderItPriceModal() {
       </details>
     `;
   }).join('');
+
+  // 📎 Tài liệu bổ sung liên quan (mục A) — mirror ĐÚNG khối render sub.extraFiles ở submissions
+  // (~16272), luôn hiện nếu có ít nhất 1 tệp, không cần logic ẩn/hiện phức tạp. Không có khái niệm
+  // canDL riêng cho module này (canViewItPriceApproval() đã gác cả modal ở đầu hàm) — Xem/Tải luôn hiện,
+  // server (lib/fileAuthz.js) là lớp chặn thật sự phía sau.
+  const extraFilesWrap = document.getElementById('itPriceModalExtraFilesWrap');
+  const extraFiles = p.extraFiles || [];
+  if (extraFiles.length > 0) {
+    extraFilesWrap.classList.remove('hidden');
+    document.getElementById('itPriceModalExtraFiles').innerHTML = extraFiles.map((ef, idx) => `
+      <div class="flex items-center justify-between gap-2 ${idx > 0 ? 'border-t pt-1.5 mt-1.5' : ''}">
+        <span class="truncate">📎 ${escapeHtml(ef.fileName || '')}</span>
+        <div class="flex gap-1 shrink-0">
+          <button type="button" data-op="viewItPriceExtraFile" data-arg0="${p.id}" data-arg1="${idx}" class="px-2 py-1 bg-blue-600 text-white rounded text-[11px] font-bold hover:bg-blue-700">👁️ Xem</button>
+          <a href="${attachmentDownloadUrl(ef.fileUrl, null, ef.fileName || `${p.code}-${idx + 1}`)}" download="${escapeHtml(ef.fileName || `${p.code}-${idx + 1}`)}" class="px-2 py-1 bg-slate-600 text-white rounded text-[11px] font-bold hover:bg-slate-700">⬇️ Tải</a>
+        </div>
+      </div>
+    `).join('');
+  } else {
+    extraFilesWrap.classList.add('hidden');
+  }
 
   // Bảng "So Sánh Thay Đổi" — cột động theo ĐÚNG columnLabels của tệp mới nhất (không còn 3 cột cố định
   // Mã hàng/Tên mặt hàng/Thay đổi) + 1 cột "Trạng Thái" phụ ở cuối (Mới thêm/Đã bỏ/Đã đổi/Không đổi).
@@ -39122,7 +39390,7 @@ async function downloadItPriceMarkedFile(itemId, fileId) {
 function renderItPriceModalControls(p) {
   const wrap = document.getElementById('itPriceModalControls');
   const blocked = itPriceHasUnresolvedInfoRequest(p);
-  const wfConfig = resolveItPriceDeptWorkflowConfigClient(p.dept, p.priceType || 'RETAIL') || { workflowId: 'WF_1STEP', approvers: { 1: ['admin'] } };
+  const wfConfig = resolveItPriceWorkflowConfigForItemClient(p) || { workflowId: 'WF_1STEP', approvers: { 1: ['admin'] } };
   const currentStepApprovers = wfConfig.approvers ? (wfConfig.approvers[p.currentStep] || []) : [];
   const canApprove = p.status === 'PENDING' && canApproveStep(currentUser, currentStepApprovers, p.history, p.currentStep);
   const emergencyPending = p.emergencyRejectStatus === 'PENDING';

@@ -120,6 +120,14 @@ function resolveItPriceDeptWorkflowConfig(itPriceDeptWorkflows, dept, priceType)
   return type === 'RETAIL' ? cfg : null;
 }
 
+// Bán Buôn (WHOLESALE) — KHÔNG còn theo phòng ban, đổi sang theo 1 trong 4 mức Margin/Chiết Khấu cố
+// định (đã chốt với người dùng: danh sách PHẲNG, không lồng nhau). Map phẳng đơn giản {tierKey:
+// {workflowId, approvers}}, không cần fallback tương thích ngược (cấu hình hoàn toàn mới, không kế
+// thừa dữ liệu cũ nào).
+function resolveItPriceTierWorkflowConfig(itPriceTierWorkflows, priceTier) {
+  return (itPriceTierWorkflows || {})[priceTier] || null;
+}
+
 // Đầu Tư (DAU_TU) đã bị xoá hoàn toàn khỏi module Tổng Hợp — xem lib/createValidation.js
 // OFFICE_SUBTYPE_TO_PERM_FLAG (đã bỏ DAU_TU ở đó nên không còn tạo mới được nữa).
 const OFFICE_SUBTYPE_TO_DBKEY = {
@@ -229,9 +237,19 @@ const MODULE_CONFIGS = {
     dbKey: 'itPriceApprovals',
     // item.priceType: fallback 'RETAIL' cho hồ sơ CŨ chưa có field này (mục 1 kế hoạch) — khớp
     // resolveItPriceDeptWorkflowConfig() ở trên đọc đúng nhánh RETAIL/WHOLESALE (hoặc cấu hình phẳng cũ).
-    resolveWfConfig: (item, appData) => flatWorkflowConfigToSteps(
-      resolveItPriceDeptWorkflowConfig(appData.itPriceDeptWorkflows, item.dept, item.priceType || 'RETAIL'), appData
-    ),
+    // WHOLESALE (mục B kế hoạch mới): bỏ hẳn quy trình theo phòng ban, tra theo item.priceTier (1 trong
+    // 4 mức Margin/Chiết Khấu cố định) qua resolveItPriceTierWorkflowConfig() — RETAIL GIỮ NGUYÊN hành
+    // vi cũ 100% (nhánh này giờ chỉ còn chạy khi priceType chắc chắn là RETAIL).
+    resolveWfConfig: (item, appData) => {
+      if ((item.priceType || 'RETAIL') === 'WHOLESALE') {
+        return flatWorkflowConfigToSteps(
+          resolveItPriceTierWorkflowConfig(appData.itPriceTierWorkflows, item.priceTier), appData
+        );
+      }
+      return flatWorkflowConfigToSteps(
+        resolveItPriceDeptWorkflowConfig(appData.itPriceDeptWorkflows, item.dept, 'RETAIL'), appData
+      );
+    },
     // Người duyệt phòng ban ở bước hiện tại có thể yêu cầu bổ sung (vd file có dòng giá bất thường) mà
     // KHÔNG từ chối hẳn — ghi vào item.infoRequests dùng CHUNG với yêu cầu bổ sung của đội Hỗ Trợ IT sau
     // khi đã APPROVED (xem requestPriceInfoFromIt() ở lib/recordActions.js, và extraValidate của
@@ -594,5 +612,6 @@ module.exports = {
   resolveSubmissionWorkflow,
   resolveContractApprovalWorkflow,
   resolveContractManageWorkflow,
-  resolveItPriceDeptWorkflowConfig
+  resolveItPriceDeptWorkflowConfig,
+  resolveItPriceTierWorkflowConfig
 };

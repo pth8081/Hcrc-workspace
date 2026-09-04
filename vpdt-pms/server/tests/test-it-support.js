@@ -38,6 +38,12 @@ const WHOLESALE_APPROVER_MKT = { username: 'wholesale_appr_mkt', name: 'Người
 // admin KHÔNG bật TOTP (mock, không đi qua luồng TOTP thật) — dùng riêng cho kịch bản xác nhận khoá
 // "🚨 Từ Chối Khẩn" áp dụng cho CẢ ADMIN khi IT đang xử lý (mục 5 kế hoạch).
 const ADMIN = { username: 'admin', name: 'Quản Trị Viên', dept: 'Ban Giám Đốc', perms: { admin: true }, active: true };
+// ===== Bổ sung đợt sau (mục B kế hoạch): Bán Buôn bỏ quy trình theo phòng ban, chuyển sang theo 1
+// trong 4 mức Margin/Chiết Khấu cố định (itPriceTierWorkflows, map PHẲNG {tierKey: config}) — 2 người
+// duyệt RIÊNG cho 2 mức KHÁC NHAU (khác dept của WHOLESALE_APPROVER_MKT ở trên, CỐ Ý để chứng minh
+// WHOLESALE giờ KHÔNG còn đọc theo dept nữa, dù dept đó có/không có cấu hình cũ).
+const TIER_A_APPROVER = { username: 'tier_a_appr', name: 'Người Duyệt Mức Margin<5%', dept: 'Kinh Doanh', perms: {}, active: true };
+const TIER_B_APPROVER = { username: 'tier_b_appr', name: 'Người Duyệt Mức Chiết Khấu>5%', dept: 'Kinh Doanh', perms: {}, active: true };
 
 // Mẫu Giá giờ chỉ là khuôn CỘT (không còn dữ liệu items thật) — khớp đúng hình dạng
 // parsePriceTemplateColumns() trả về + addItPriceMasterList() lưu ở public/index.html.
@@ -55,12 +61,14 @@ const MASTER_LIST = {
 
 const state = createMockState({
   depts: ['Kinh Doanh', 'IT', 'Ban Giám Đốc', 'Marketing'],
-  users: [STAFF_KD, IT1, APPROVER1, PLAIN, EMERGENCY_APPROVER, STAFF_MKT, RETAIL_APPROVER_MKT, WHOLESALE_APPROVER_MKT, ADMIN],
+  users: [STAFF_KD, IT1, APPROVER1, PLAIN, EMERGENCY_APPROVER, STAFF_MKT, RETAIL_APPROVER_MKT, WHOLESALE_APPROVER_MKT, ADMIN, TIER_A_APPROVER, TIER_B_APPROVER],
   itPriceMasterLists: [MASTER_LIST],
   // Bỏ auto-approve -> mọi đề xuất phải qua đúng 1 bước duyệt phòng ban trước khi đội IT áp giá.
   // 'Kinh Doanh' CỐ Ý giữ cấu trúc PHẲNG CŨ (approver1 là người duyệt bước 1) — dùng làm bằng chứng
   // "cấu hình cũ vẫn resolve đúng thành RETAIL" (mục 6 kế hoạch, KHÔNG cần migrate dữ liệu).
-  // 'Marketing' dùng cấu trúc LỒNG MỚI, 2 người duyệt TÁCH RIÊNG theo loại giá (mục 1/6 kế hoạch).
+  // 'Marketing' vẫn giữ nhánh WHOLESALE lồng cũ trong itPriceDeptWorkflows CỐ Ý KHÔNG XOÁ (dữ liệu tồn
+  // đọng từ trước đợt B) — để chứng minh WHOLESALE giờ KHÔNG còn đọc nhánh này nữa (resolveWfConfig()
+  // chuyển hẳn sang itPriceTierWorkflows cho WHOLESALE, xem kịch bản 11 bên dưới).
   itPriceDeptWorkflows: {
     'Kinh Doanh': { workflowId: 'wf-kd-price', approvers: { 1: ['approver1'] } },
     'Marketing': {
@@ -68,10 +76,18 @@ const state = createMockState({
       WHOLESALE: { workflowId: 'wf-mkt-wholesale', approvers: { 1: ['wholesale_appr_mkt'] } }
     }
   },
+  // Bán Buôn (mục B đợt sau) — map PHẲNG {tierKey: {workflowId,approvers}}, 2 mức TIER_A/TIER_B có
+  // người duyệt RIÊNG hoàn toàn khác nhau, không liên quan gì tới phòng ban.
+  itPriceTierWorkflows: {
+    MARGIN_LT5: { workflowId: 'wf-tier-a', approvers: { 1: ['tier_a_appr'] } },
+    DISCOUNT_GT5: { workflowId: 'wf-tier-b', approvers: { 1: ['tier_b_appr'] } }
+  },
   workflows: [
     { id: 'wf-kd-price', steps: [{ order: 1, name: 'Trưởng Phòng Duyệt' }] },
     { id: 'wf-mkt-retail', steps: [{ order: 1, name: 'Duyệt Bán Lẻ' }] },
-    { id: 'wf-mkt-wholesale', steps: [{ order: 1, name: 'Duyệt Bán Buôn' }] }
+    { id: 'wf-mkt-wholesale', steps: [{ order: 1, name: 'Duyệt Bán Buôn' }] },
+    { id: 'wf-tier-a', steps: [{ order: 1, name: 'Duyệt Margin < 5%' }] },
+    { id: 'wf-tier-b', steps: [{ order: 1, name: 'Duyệt Chiết khấu > 5%' }] }
   ]
 });
 
@@ -491,10 +507,10 @@ async function main() {
     });
 
     // ===== 10) 2 sub-tab "Bán Lẻ"/"Bán Buôn" (mục 1 kế hoạch): tạo đúng priceType theo sub-tab đang
-    // mở, lọc đúng danh sách theo sub-tab, VÀ mỗi loại giá có người duyệt RIÊNG (cấu hình LỒNG mới của
-    // dept "Marketing", mục 6) — người duyệt Bán Lẻ không duyệt được hồ sơ Bán Buôn và ngược lại. =====
+    // mở, lọc đúng danh sách theo sub-tab. Bán Buôn (mục B đợt sau) BẮT BUỘC chọn 1 trong 4 mức Margin/
+    // Chiết Khấu (#itPriceTier) — thiếu thì server (extraValidate) chặn tạo mới. =====
     let mktRetailId = null, mktWholesaleId = null;
-    await run.run('Sub-tab Bán Lẻ/Bán Buôn: tạo đúng priceType theo sub-tab đang mở, lọc đúng danh sách theo sub-tab', async () => {
+    await run.run('Sub-tab Bán Lẻ/Bán Buôn: tạo đúng priceType theo sub-tab đang mở, lọc đúng danh sách theo sub-tab, Bán Buôn gắn đúng priceTier', async () => {
       await loginAs(page, STAFF_MKT);
       const created = await page.evaluate(async () => {
         switchTab('itSupport');
@@ -517,6 +533,7 @@ async function main() {
         setItPriceSubTab('WHOLESALE');
         document.getElementById('itPriceMasterListSelect').value = String(1);
         document.getElementById('itPriceReason').value = 'Điều chỉnh giá bán buôn Marketing';
+        document.getElementById('itPriceTier').value = 'MARGIN_LT5';
         itPricePendingFile = {
           fileUrl: '/uploads/gia-mkt-wholesale.xlsx', fileName: 'gia-mkt-wholesale.xlsx',
           items: [{ values: { code: 'MK001', name: 'Sản phẩm MKT', oldPrice: '900', newPrice: '1000' } }],
@@ -539,52 +556,129 @@ async function main() {
       mktRetailId = created.retailItem.id;
       mktWholesaleId = created.wholesaleItem.id;
       assertEqual(created.retailItem.priceType, 'RETAIL', 'Đề xuất tạo lúc sub-tab Bán Lẻ đang mở phải gắn priceType RETAIL');
+      assertEqual(created.retailItem.priceTier, null, 'RETAIL không dùng priceTier — server phải null hoá dù không client không gửi kèm');
       assertEqual(created.wholesaleItem.priceType, 'WHOLESALE', 'Đề xuất tạo lúc sub-tab Bán Buôn đang mở phải gắn priceType WHOLESALE');
+      assertEqual(created.wholesaleItem.priceTier, 'MARGIN_LT5', 'Đề xuất Bán Buôn phải gắn đúng priceTier đã chọn trên form');
       assert(created.wholesaleTabCodes.includes(created.wholesaleItem.code), 'Sub-tab Bán Buôn phải hiện đúng hồ sơ WHOLESALE vừa tạo');
       assert(!created.wholesaleTabCodes.includes(created.retailItem.code), 'Sub-tab Bán Buôn KHÔNG được hiện hồ sơ RETAIL');
       assert(created.retailTabCodes.includes(created.retailItem.code), 'Sub-tab Bán Lẻ phải hiện đúng hồ sơ RETAIL vừa tạo');
       assert(!created.retailTabCodes.includes(created.wholesaleItem.code), 'Sub-tab Bán Lẻ KHÔNG được hiện hồ sơ WHOLESALE');
     });
 
-    await run.run('Cấu hình lồng dept×priceType: người duyệt Bán Lẻ KHÔNG duyệt được hồ sơ Bán Buôn (và ngược lại)', async () => {
-      // retail_appr_mkt (chỉ được gán cho nhánh RETAIL của Marketing) thử duyệt hồ sơ WHOLESALE -> chặn.
-      await loginAs(page, RETAIL_APPROVER_MKT);
-      const blockedRetailOnWholesale = await page.evaluate(async (id) => {
+    // ===== 10b) Validation mục B: thiếu priceTier cho Bán Buôn bị chặn NGAY TRÊN CLIENT (không gọi
+    // server) VÀ server cũng tự chặn nếu client cố tình bỏ qua bước kiểm tra đó (gọi thẳng callCreateAction). ====
+    await run.run('Validation mục B: Bán Buôn thiếu priceTier bị chặn cả client lẫn server', async () => {
+      await loginAs(page, STAFF_MKT);
+      const clientBlocked = await page.evaluate(async () => {
+        window.__resetCapture();
+        switchTab('itSupport'); setItSupportSubTab('PRICE'); setItPriceSubTab('WHOLESALE');
+        document.getElementById('itPriceCode').value = generateItPriceCode();
+        document.getElementById('itPriceMasterListSelect').value = String(1);
+        document.getElementById('itPriceTier').value = ''; // cố tình không chọn mức
+        itPricePendingFile = {
+          fileUrl: '/uploads/thieu-tier.xlsx', fileName: 'thieu-tier.xlsx',
+          items: [{ values: { code: 'X', name: 'X', oldPrice: '1', newPrice: '1' } }],
+          columnLabels: [{ key: 'code', label: 'Mã hàng' }, { key: 'name', label: 'Tên mặt hàng' }, { key: 'oldPrice', label: 'Giá cũ' }, { key: 'newPrice', label: 'Giá mới' }]
+        };
+        const before = DB.itPriceApprovals.length;
+        await submitItPriceApproval({ preventDefault() {}, target: { reset() {} } });
+        return { alerts: window.__alerts.slice(), count: DB.itPriceApprovals.length, before };
+      });
+      assertIncludes(clientBlocked.alerts, 'Vui lòng chọn Mức Margin/Chiết Khấu', 'Client phải chặn sớm khi chưa chọn mức Margin/Chiết Khấu cho Bán Buôn');
+      assertEqual(clientBlocked.count, clientBlocked.before, 'Không được tạo hồ sơ nào khi thiếu priceTier');
+
+      // Server cũng tự xác minh lại độc lập (đúng triết lý "server tự xác minh") — giả lập client bỏ
+      // qua bước kiểm tra sớm bằng cách gọi thẳng callCreateAction() với priceTier rỗng.
+      const serverBlocked = await page.evaluate(async () => {
         try {
-          await callWorkflowAction('itPriceApprovals', id, 'approve', {});
+          await callCreateAction('itPriceApprovals', {
+            code: generateItPriceCode(), priceType: 'WHOLESALE', priceTier: '',
+            files: [{ fileUrl: '/uploads/thieu-tier-2.xlsx', fileName: 'thieu-tier-2.xlsx', items: [], columnLabels: [] }],
+            masterListId: 1, reason: 'x', createdAt: new Date().toLocaleString('vi-VN')
+          });
           return { threw: null };
-        } catch (e) {
-          return { threw: e.message };
-        }
+        } catch (e) { return { threw: e.message }; }
+      });
+      assertIncludes(serverBlocked.threw, 'Vui lòng chọn đúng Mức Margin/Chiết Khấu', 'Server (extraValidate) phải tự chặn độc lập, không tin client');
+    });
+
+    // ===== 11) Bán Buôn theo TIER (mục B đợt sau): mỗi mức Margin/Chiết Khấu có người duyệt RIÊNG,
+    // hoàn toàn KHÔNG liên quan tới phòng ban (khác hẳn Bán Lẻ) — người duyệt mức A không duyệt được hồ
+    // sơ mức B và ngược lại. Đồng thời xác nhận hồ sơ Bán Lẻ song song (mktRetailId, kịch bản 10) vẫn
+    // duyệt đúng theo phòng ban NHƯ CŨ, hoàn toàn không bị ảnh hưởng bởi thay đổi B. =====
+    let mktWholesaleTierBId = null;
+    await run.run('Bán Buôn theo tier: tạo thêm 1 hồ sơ ở mức Chiết khấu > 5% (tier khác hồ sơ kịch bản 10)', async () => {
+      await loginAs(page, STAFF_MKT);
+      const created = await page.evaluate(async () => {
+        switchTab('itSupport'); setItSupportSubTab('PRICE'); setItPriceSubTab('WHOLESALE');
+        document.getElementById('itPriceMasterListSelect').value = String(1);
+        document.getElementById('itPriceReason').value = 'Điều chỉnh giá bán buôn Marketing — chiết khấu lớn';
+        document.getElementById('itPriceTier').value = 'DISCOUNT_GT5';
+        itPricePendingFile = {
+          fileUrl: '/uploads/gia-mkt-wholesale-tierb.xlsx', fileName: 'gia-mkt-wholesale-tierb.xlsx',
+          items: [{ values: { code: 'MK002', name: 'Sản phẩm MKT 2', oldPrice: '800', newPrice: '900' } }],
+          columnLabels: [
+            { key: 'code', label: 'Mã hàng' }, { key: 'name', label: 'Tên mặt hàng' },
+            { key: 'oldPrice', label: 'Giá cũ' }, { key: 'newPrice', label: 'Giá mới' }
+          ]
+        };
+        await submitItPriceApproval({ preventDefault() {}, target: { reset() {} } });
+        return DB.itPriceApprovals[0];
+      });
+      mktWholesaleTierBId = created.id;
+      assertEqual(created.priceTier, 'DISCOUNT_GT5', 'Hồ sơ mới phải gắn đúng priceTier đã chọn');
+    });
+
+    await run.run('Bán Buôn theo tier: người duyệt mức A KHÔNG duyệt được hồ sơ mức B (và ngược lại) — dept KHÔNG còn liên quan', async () => {
+      // tier_b_appr (chỉ gán cho DISCOUNT_GT5) thử duyệt hồ sơ MARGIN_LT5 (mktWholesaleId) -> chặn.
+      await loginAs(page, TIER_B_APPROVER);
+      const blockedBOnA = await page.evaluate(async (id) => {
+        try { await callWorkflowAction('itPriceApprovals', id, 'approve', {}); return { threw: null }; }
+        catch (e) { return { threw: e.message }; }
       }, mktWholesaleId);
-      assertIncludes(blockedRetailOnWholesale.threw, 'Bạn không có quyền xử lý ở bước hiện tại', 'Người duyệt Bán Lẻ không được duyệt hồ sơ Bán Buôn của cùng phòng ban');
+      assertIncludes(blockedBOnA.threw, 'Bạn không có quyền xử lý ở bước hiện tại', 'Người duyệt mức Chiết khấu>5% không được duyệt hồ sơ mức Margin<5%');
 
-      // wholesale_appr_mkt thử duyệt hồ sơ RETAIL -> cũng chặn tương tự (đối xứng 2 chiều).
+      // tier_a_appr thử duyệt hồ sơ DISCOUNT_GT5 (mktWholesaleTierBId) -> chặn tương tự (đối xứng 2 chiều).
+      await loginAs(page, TIER_A_APPROVER);
+      const blockedAOnB = await page.evaluate(async (id) => {
+        try { await callWorkflowAction('itPriceApprovals', id, 'approve', {}); return { threw: null }; }
+        catch (e) { return { threw: e.message }; }
+      }, mktWholesaleTierBId);
+      assertIncludes(blockedAOnB.threw, 'Bạn không có quyền xử lý ở bước hiện tại', 'Người duyệt mức Margin<5% không được duyệt hồ sơ mức Chiết khấu>5%');
+
+      // Đúng người được gán mới duyệt được: tier_a_appr duyệt MARGIN_LT5, tier_b_appr duyệt DISCOUNT_GT5.
+      // wholesale_appr_mkt/retail_appr_mkt (approver theo DEPT cũ của Marketing) KHÔNG còn liên quan gì
+      // tới hồ sơ Bán Buôn nữa (dữ liệu itPriceDeptWorkflows.Marketing.WHOLESALE vẫn còn trong seed
+      // nhưng resolveWfConfig() không đọc nhánh đó cho WHOLESALE nữa — xem seed ở đầu file).
       await loginAs(page, WHOLESALE_APPROVER_MKT);
-      const blockedWholesaleOnRetail = await page.evaluate(async (id) => {
-        try {
-          await callWorkflowAction('itPriceApprovals', id, 'approve', {});
-          return { threw: null };
-        } catch (e) {
-          return { threw: e.message };
-        }
-      }, mktRetailId);
-      assertIncludes(blockedWholesaleOnRetail.threw, 'Bạn không có quyền xử lý ở bước hiện tại', 'Người duyệt Bán Buôn không được duyệt hồ sơ Bán Lẻ của cùng phòng ban');
+      const oldDeptApproverBlocked = await page.evaluate(async (id) => {
+        try { await callWorkflowAction('itPriceApprovals', id, 'approve', {}); return { threw: null }; }
+        catch (e) { return { threw: e.message }; }
+      }, mktWholesaleId);
+      assertIncludes(oldDeptApproverBlocked.threw, 'Bạn không có quyền xử lý ở bước hiện tại', 'Người duyệt Bán Buôn theo DEPT cũ (Marketing) KHÔNG còn quyền duyệt hồ sơ Bán Buôn nữa — chỉ tier mới còn hiệu lực');
 
-      // Đúng người được gán mới duyệt được: retail_appr_mkt duyệt RETAIL, wholesale_appr_mkt duyệt WHOLESALE.
+      await loginAs(page, TIER_A_APPROVER);
+      const tierAApproved = await page.evaluate(async (id) => {
+        const r = await callWorkflowAction('itPriceApprovals', id, 'approve', {});
+        return r.item.status;
+      }, mktWholesaleId);
+      assertEqual(tierAApproved, 'APPROVED', 'Đúng người duyệt mức Margin<5% phải duyệt được hồ sơ mức đó');
+
+      await loginAs(page, TIER_B_APPROVER);
+      const tierBApproved = await page.evaluate(async (id) => {
+        const r = await callWorkflowAction('itPriceApprovals', id, 'approve', {});
+        return r.item.status;
+      }, mktWholesaleTierBId);
+      assertEqual(tierBApproved, 'APPROVED', 'Đúng người duyệt mức Chiết khấu>5% phải duyệt được hồ sơ mức đó');
+    });
+
+    await run.run('Bán Lẻ song song (mktRetailId, kịch bản 10) vẫn duyệt đúng theo phòng ban NHƯ CŨ — không bị ảnh hưởng bởi thay đổi mục B', async () => {
       await loginAs(page, RETAIL_APPROVER_MKT);
       const retailApproved = await page.evaluate(async (id) => {
         const r = await callWorkflowAction('itPriceApprovals', id, 'approve', {});
         return r.item.status;
       }, mktRetailId);
-      assertEqual(retailApproved, 'APPROVED', 'Đúng người duyệt Bán Lẻ phải duyệt được hồ sơ Bán Lẻ');
-
-      await loginAs(page, WHOLESALE_APPROVER_MKT);
-      const wholesaleApproved = await page.evaluate(async (id) => {
-        const r = await callWorkflowAction('itPriceApprovals', id, 'approve', {});
-        return r.item.status;
-      }, mktWholesaleId);
-      assertEqual(wholesaleApproved, 'APPROVED', 'Đúng người duyệt Bán Buôn phải duyệt được hồ sơ Bán Buôn');
+      assertEqual(retailApproved, 'APPROVED', 'Bán Lẻ vẫn duyệt đúng theo phòng ban (itPriceDeptWorkflows), hoàn toàn không đổi so với trước mục B');
     });
 
     // ===== 11) Hồ sơ CŨ (mock trực tiếp, KHÔNG có field priceType) vẫn lọc đúng vào sub-tab Bán Lẻ
@@ -671,6 +765,73 @@ async function main() {
         return { hasButton };
       }, mktRetailId);
       assert(unblockedAfterRelease.hasButton, 'Sau khi IT huỷ nhận việc (release-apply-claim), nút Từ Chối Khẩn phải hiện lại bình thường');
+    });
+
+    // ===== 13) "📎 Tài liệu bổ sung liên quan" (mục A đợt sau, #itPriceExtraFiles) — hoàn toàn TUỲ
+    // CHỌN, mirror ĐÚNG khuôn subExtraFiles của Văn Bản Trình. Quyền truy cập file (findOwningRecord()/
+    // authorizeFileAccess() ở lib/fileAuthz.js) có test riêng, độc lập, ở tests/test-uploads-file-authz.js
+    // (không đi qua browser/mock backend này — gọi thẳng hàm thật với dữ liệu giả lập). =====
+    await run.run('Tài liệu bổ sung liên quan: chọn nhiều tệp lúc tạo -> lưu đúng vào item.extraFiles, hiện đúng trong modal chi tiết', async () => {
+      await loginAs(page, STAFF_KD);
+      const created = await page.evaluate(async () => {
+        switchTab('itSupport'); setItSupportSubTab('PRICE'); setItPriceSubTab('RETAIL');
+        document.getElementById('itPriceMasterListSelect').value = String(1);
+        document.getElementById('itPriceReason').value = 'Điều chỉnh giá kèm tài liệu bổ sung';
+        itPricePendingFile = {
+          fileUrl: '/uploads/gia-co-extra.xlsx', fileName: 'gia-co-extra.xlsx',
+          items: [{ values: { code: 'SP009', name: 'Sản phẩm test extra', oldPrice: '1000', newPrice: '1100' } }],
+          columnLabels: [
+            { key: 'code', label: 'Mã hàng' }, { key: 'name', label: 'Tên mặt hàng' },
+            { key: 'oldPrice', label: 'Giá cũ' }, { key: 'newPrice', label: 'Giá mới' }
+          ]
+        };
+        // Chọn 2 tệp cùng lúc cho #itPriceExtraFiles (mirror cách test-submission.js gán File qua DataTransfer).
+        const dt = new DataTransfer();
+        dt.items.add(new File(['bao cao khao sat gia'], 'khao-sat-gia.pdf', { type: 'application/pdf' }));
+        dt.items.add(new File(['bang bao gia nha cung cap'], 'bao-gia-ncc.pdf', { type: 'application/pdf' }));
+        document.getElementById('itPriceExtraFiles').files = dt.files;
+
+        await submitItPriceApproval({ preventDefault() {}, target: { reset() {} } });
+        const item = DB.itPriceApprovals[0];
+
+        openItPriceModal(item.id);
+        const modalHTML = document.getElementById('itPriceModalExtraFiles').innerHTML;
+        const wrapHidden = document.getElementById('itPriceModalExtraFilesWrap').classList.contains('hidden');
+        return { item, modalHTML, wrapHidden };
+      });
+      assertEqual(created.item.extraFiles.length, 2, 'Phải lưu đúng 2 tệp đã chọn vào item.extraFiles');
+      assertIncludes(created.item.extraFiles.map(f => f.fileName), 'khao-sat-gia.pdf', 'Phải giữ đúng tên tệp thứ nhất');
+      assertIncludes(created.item.extraFiles.map(f => f.fileName), 'bao-gia-ncc.pdf', 'Phải giữ đúng tên tệp thứ hai');
+      assertEqual(created.wrapHidden, false, 'Khối "Tài liệu bổ sung liên quan" phải HIỆN trong modal chi tiết khi có tệp');
+      assertIncludes(created.modalHTML, 'khao-sat-gia.pdf', 'Modal chi tiết phải liệt kê đúng tên tệp bổ sung');
+      assertIncludes(created.modalHTML, 'bao-gia-ncc.pdf', 'Modal chi tiết phải liệt kê đúng tên tệp bổ sung');
+    });
+
+    await run.run('Tài liệu bổ sung liên quan: KHÔNG chọn tệp nào vẫn tạo được bình thường (hoàn toàn tuỳ chọn) — khối modal ẨN', async () => {
+      await loginAs(page, STAFF_KD);
+      const created = await page.evaluate(async () => {
+        switchTab('itSupport'); setItSupportSubTab('PRICE'); setItPriceSubTab('RETAIL');
+        document.getElementById('itPriceMasterListSelect').value = String(1);
+        document.getElementById('itPriceReason').value = 'Điều chỉnh giá không kèm tài liệu bổ sung';
+        // Dọn lại #itPriceExtraFiles còn sót từ kịch bản trước — fake event.target.reset() ở test này
+        // KHÔNG chạm DOM thật (khác form.reset() thật của trình duyệt khi submit thật), nên phải dọn tay.
+        document.getElementById('itPriceExtraFiles').files = new DataTransfer().files;
+        itPricePendingFile = {
+          fileUrl: '/uploads/gia-khong-extra.xlsx', fileName: 'gia-khong-extra.xlsx',
+          items: [{ values: { code: 'SP010', name: 'Sản phẩm test không extra', oldPrice: '500', newPrice: '550' } }],
+          columnLabels: [
+            { key: 'code', label: 'Mã hàng' }, { key: 'name', label: 'Tên mặt hàng' },
+            { key: 'oldPrice', label: 'Giá cũ' }, { key: 'newPrice', label: 'Giá mới' }
+          ]
+        };
+        await submitItPriceApproval({ preventDefault() {}, target: { reset() {} } });
+        const item = DB.itPriceApprovals[0];
+        openItPriceModal(item.id);
+        const wrapHidden = document.getElementById('itPriceModalExtraFilesWrap').classList.contains('hidden');
+        return { item, wrapHidden };
+      });
+      assertEqual(created.item.extraFiles.length, 0, 'Không chọn tệp nào thì extraFiles phải là mảng rỗng');
+      assertEqual(created.wrapHidden, true, 'Khối "Tài liệu bổ sung liên quan" phải ẨN trong modal khi không có tệp nào');
     });
   } finally {
     await browser.close();

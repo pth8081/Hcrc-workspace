@@ -53,6 +53,11 @@ const ADMIN_ONLY_KEYS = new Set([
   // Duyệt (admin), nhưng trước đây BỊ BỎ SÓT khỏi danh sách này: bất kỳ tài khoản đã đăng nhập nào cũng
   // ghi trực tiếp được qua POST /api/data/itPriceDeptWorkflows và tự đặt mình làm người duyệt giá.
   'itPriceDeptWorkflows',
+  // itPriceTierWorkflows: cấu hình người duyệt Phê Duyệt Giá Bán Buôn theo 1 trong 4 mức Margin/Chiết
+  // Khấu cố định (mục B đợt sau, thay cho theo phòng ban) — cùng lý do bảo mật với itPriceDeptWorkflows
+  // ở trên: không cho user thường tự ghi thẳng qua POST /api/data/itPriceTierWorkflows và tự phong
+  // mình làm approver.
+  'itPriceTierWorkflows',
   'contractApprovalDeptWorkflows', 'contractApprovalGroups', 'contractManageDeptWorkflows',
   // budgetDeptWorkflows: cấu hình Trưởng phòng duyệt ngân sách theo phòng ban (module Ngân Sách) —
   // cùng khuôn carDeptWorkflows/vppDeptWorkflows ở trên, chỉ sửa được ở màn Quy Trình & Phê Duyệt (admin).

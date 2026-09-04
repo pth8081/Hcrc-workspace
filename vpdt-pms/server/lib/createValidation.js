@@ -1247,6 +1247,22 @@ const CREATE_MODULE_CONFIGS = {
       const priceType = payload.priceType === 'WHOLESALE' ? 'WHOLESALE' : (payload.priceType === 'RETAIL' ? 'RETAIL' : null);
       if (!priceType) throw new CreateError(400, 'Vui lòng chọn đúng loại giá (Bán Lẻ/Bán Buôn)');
       payload.priceType = priceType;
+      // Bán Buôn: bỏ quy trình theo phòng ban, chuyển sang theo 1 trong 4 mức Margin/Chiết Khấu cố định
+      // (đã chốt với người dùng — danh sách PHẲNG, không lồng nhau). RETAIL không dùng field này — không
+      // tin giá trị lạ client cố tình gửi kèm (null hoá để resolveWfConfig() không đọc nhầm).
+      const PRICE_TIER_VALUES = new Set(['MARGIN_LT5', 'MARGIN_GTE5', 'DISCOUNT_LTE5', 'DISCOUNT_GT5']);
+      if (priceType === 'WHOLESALE') {
+        if (!PRICE_TIER_VALUES.has(payload.priceTier)) {
+          throw new CreateError(400, 'Vui lòng chọn đúng Mức Margin/Chiết Khấu áp dụng cho đề xuất Bán Buôn');
+        }
+      } else {
+        payload.priceTier = null;
+      }
+      // Tài liệu bổ sung liên quan (#itPriceExtraFiles ở index.html) — mirror ĐÚNG khuôn
+      // submissions.extraFiles (~380): chỉ kiểm khuôn URL rồi giữ nguyên payload.extraFiles, hoàn toàn
+      // TUỲ CHỌN (mảng rỗng hợp lệ). Trần 20 tệp phòng payload khổng lồ.
+      assertUploadedFileUrlList(payload.extraFiles, 'Tài liệu bổ sung liên quan');
+      payload.extraFiles = Array.isArray(payload.extraFiles) ? payload.extraFiles.slice(0, 20) : [];
       // Đề xuất giờ nộp bằng cách tải lên 1 tệp Excel bảng giá (nhiều dòng/mặt hàng cùng lúc) thay vì
       // nhập tay 1 mặt hàng — client gọi POST /api/it-price/parse-file trước để server đọc + trả về
       // items có cấu trúc, rồi echo lại NGUYÊN VĂN vào đây (payload.files[0]) — cùng mức tin cậy với

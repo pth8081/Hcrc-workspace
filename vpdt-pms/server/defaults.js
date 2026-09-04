@@ -264,6 +264,12 @@ const DEFAULTS = {
   // resolveItPriceDeptWorkflowConfig() ở lib/workflowEngine.js, không cần migrate dữ liệu). Admin cấu
   // hình ở tab "Quy Trình & Phê Duyệt".
   itPriceDeptWorkflows: {},
+  // Hỗ Trợ IT > Phê Duyệt Giá — Bán Buôn (WHOLESALE): KHÔNG còn theo phòng ban (mục B đợt sau), chuyển
+  // sang theo 1 trong 4 mức Margin/Chiết Khấu cố định (MARGIN_LT5/MARGIN_GTE5/DISCOUNT_LTE5/DISCOUNT_GT5).
+  // Map PHẲNG { [tierKey]: {workflowId,approvers} }, không lồng cấp nào khác — không cần tương thích
+  // ngược (cấu hình hoàn toàn mới). itPriceDeptWorkflows ở trên giờ CHỈ còn dùng cho RETAIL. Admin cấu
+  // hình ở tab "Quy Trình & Phê Duyệt" (nhánh "Bán Buôn" của module Hỗ Trợ IT - Duyệt giá).
+  itPriceTierWorkflows: {},
   // Ngân Sách — Trưởng phòng duyệt bản ngân sách theo phòng ban, cùng khuôn vppDeptWorkflows/
   // itPriceDeptWorkflows ở trên. Admin cấu hình ở tab "Quy Trình & Phê Duyệt".
   budgetDeptWorkflows: {},

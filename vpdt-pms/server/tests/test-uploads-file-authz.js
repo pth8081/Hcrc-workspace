@@ -43,11 +43,29 @@ const POST_PENDING = {
 const LICENSE = { id: 'lic-1', fileUrl: '/uploads/license.pdf', creator: 'owner_lic' };
 const IT_RENEWAL = { id: 'itr-1', fileUrl: '/uploads/it-renewal.pdf', creator: 'someone' };
 
+// Hỗ Trợ IT — Phê Duyệt Giá: "Tài liệu bổ sung liên quan" (item.extraFiles, mục A đợt sau) — 2 ĐIỂM
+// SECURITY-CRITICAL bị vá ở lib/fileAuthz.js:
+//   1) findOwningRecord() PHẢI khớp CẢ item.extraFiles (không chỉ item.files) — nếu không, file mới
+//      upload rơi vào nhánh FAIL-OPEN (bất kỳ ai đăng nhập cũng đọc được).
+//   2) authorizeFileAccess() nhánh owning.itPrice, mode 'download': luật "chỉ file đã duyệt mới tải
+//      được" CHỈ áp dụng cho item.files (bảng giá Excel) — KHÔNG áp dụng cho item.extraFiles.
+// files[] có 2 phần tử để phân biệt rõ "file đã duyệt" (mới nhất, id 2) với "file KHÔNG phải file đã
+// duyệt" (bản gốc, id 1) — đúng luật resolveApprovedFileId()/resolveApprovedFileUrl() (lib/recordActions.js).
+const IT_PRICE_ITEM = {
+  id: 'itp-1', dept: DEPT_A, creator: 'owner_itp', status: 'APPROVED', currentStep: 1, infoRequests: [],
+  files: [
+    { id: 1, fileUrl: '/uploads/itprice-sheet-orig.xlsx' },
+    { id: 2, fileUrl: '/uploads/itprice-sheet-latest.xlsx' }
+  ],
+  extraFiles: [{ id: 1, fileUrl: '/uploads/itprice-extra.pdf', fileName: 'extra.pdf' }]
+};
+
 const COLLECTIONS = {
   docs: [DOC],
   internalPosts: [POST_PENDING],
   licenses: [LICENSE],
-  itServiceRenewals: [IT_RENEWAL]
+  itServiceRenewals: [IT_RENEWAL],
+  itPriceApprovals: [IT_PRICE_ITEM]
 };
 
 // ===================== Người dùng =====================
@@ -63,6 +81,7 @@ const VIEWER_NO_DOWNLOAD = {
 // hổng cũ (biết URL là đọc được file).
 const OUTSIDER = { username: 'outsider', dept: DEPT_B, perms: {} };
 const IT_MANAGER = { username: 'it_mgr', dept: 'CNTT', perms: { itManage: true } };
+const OWNER_ITP = { username: 'owner_itp', dept: DEPT_A, perms: {} };
 
 // ===================== Cắm bản giả cho recordStore + appData =====================
 // Phải làm TRƯỚC require('../lib/fileAuthz') — nếu không, lib/recordStore sẽ kéo theo lib/db.js và thử
@@ -153,6 +172,39 @@ async function main() {
     assert.strictEqual(await authorizeFileAccess(OUTSIDER, IT_RENEWAL.fileUrl, 'view'), false);
     assert.strictEqual(await authorizeFileAccess(IT_MANAGER, IT_RENEWAL.fileUrl, 'view'), true);
     assert.strictEqual(await authorizeFileAccess(IT_MANAGER, IT_RENEWAL.fileUrl, 'download'), true);
+  });
+
+  // ===== 4b) Hỗ Trợ IT — Phê Duyệt Giá: "Tài liệu bổ sung liên quan" (item.extraFiles, mục A đợt sau) =====
+  await run('extraFiles: findOwningRecord() khớp ĐÚNG hồ sơ sở hữu (không rơi FAIL-OPEN) — người ngoài phạm vi bị chặn cả view lẫn download', async () => {
+    const url = IT_PRICE_ITEM.extraFiles[0].fileUrl;
+    // Nếu findOwningRecord() BỎ SÓT extraFiles (lỗ hổng mục A), owning sẽ là null -> rơi FAIL-OPEN ->
+    // authorizeFileAccess() trả true cho MỌI người kể cả OUTSIDER. Assert false ở đây khẳng định file đã
+    // tra ra ĐÚNG hồ sơ sở hữu và đi qua nhánh owning.itPrice (canViewItPriceApproval) như mọi module khác.
+    assert.strictEqual(await authorizeFileAccess(OUTSIDER, url, 'view'), false);
+    assert.strictEqual(await authorizeFileAccess(OUTSIDER, url, 'download'), false);
+  });
+
+  await run('extraFiles: người có quyền xem hồ sơ (chính chủ) xem VÀ tải được', async () => {
+    const url = IT_PRICE_ITEM.extraFiles[0].fileUrl;
+    assert.strictEqual(await authorizeFileAccess(OWNER_ITP, url, 'view'), true);
+    assert.strictEqual(await authorizeFileAccess(OWNER_ITP, url, 'download'), true);
+  });
+
+  await run('extraFiles: KHÔNG bị chặn bởi luật "chỉ file đã duyệt mới tải được" — khác hẳn item.files', async () => {
+    // Hồ sơ IT_PRICE_ITEM đã APPROVED, "file đã duyệt" (resolveApprovedFileUrl) là files[1] (mới nhất) —
+    // extraFiles[0] KHÔNG PHẢI là file đã duyệt đó, nhưng vẫn phải tải được bình thường vì luật "chỉ file
+    // đã duyệt mới tải được" chỉ áp dụng cho item.files (bảng giá), không áp dụng cho extraFiles.
+    const extraUrl = IT_PRICE_ITEM.extraFiles[0].fileUrl;
+    assert.strictEqual(await authorizeFileAccess(OWNER_ITP, extraUrl, 'download'), true, 'extraFiles phải tải được dù không phải "file đã duyệt"');
+
+    // Đối chứng: ĐÚNG hành vi cũ vẫn giữ nguyên cho item.files (bảng giá) — bản GỐC (không phải file mới
+    // nhất/đã duyệt) vẫn bị chặn tải, chỉ file MỚI NHẤT (đã duyệt) mới tải được.
+    const origSheetUrl = IT_PRICE_ITEM.files[0].fileUrl;
+    const latestSheetUrl = IT_PRICE_ITEM.files[1].fileUrl;
+    assert.strictEqual(await authorizeFileAccess(OWNER_ITP, origSheetUrl, 'download'), false, 'Bản gốc (KHÔNG phải file đã duyệt) phải tiếp tục bị chặn tải — hành vi cũ không đổi');
+    assert.strictEqual(await authorizeFileAccess(OWNER_ITP, latestSheetUrl, 'download'), true, 'File mới nhất (đã duyệt) vẫn tải được như cũ');
+    // mode 'view' không bị giới hạn "chỉ file đã duyệt" cho CẢ 2 loại (chỉ 'download' mới giới hạn).
+    assert.strictEqual(await authorizeFileAccess(OWNER_ITP, origSheetUrl, 'view'), true, 'Xem (view, Khung Xem Bảo Vệ) không bị giới hạn "chỉ file đã duyệt" — chỉ hành động Tải mới giới hạn');
   });
 
   // ===== 5) Fail-open có chủ ý cho file không tra ra hồ sơ nào =====
