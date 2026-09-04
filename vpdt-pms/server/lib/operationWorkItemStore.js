@@ -46,7 +46,7 @@ async function getWorkItemsBySource(sourceType, sourceId) {
   const pool = await getPool();
   const result = await pool.request()
     .input('sourceType', sql.NVarChar(30), sourceType)
-    .input('sourceId', sql.Int, sourceId)
+    .input('sourceId', sql.BigInt, sourceId)
     .query('SELECT Payload FROM dbo.OperationWorkItems WHERE SourceType = @sourceType AND SourceId = @sourceId ORDER BY CreatedAt ASC, Id ASC');
   return result.recordset.map(toWorkItem);
 }
@@ -64,7 +64,7 @@ async function insertWorkItem(item) {
         .input('status', sql.NVarChar(20), cols.status)
         .input('parentWorkItemId', sql.BigInt, cols.parentWorkItemId)
         .input('sourceType', sql.NVarChar(30), cols.sourceType)
-        .input('sourceId', sql.Int, cols.sourceId)
+        .input('sourceId', sql.BigInt, cols.sourceId)
         .input('payload', sql.NVarChar(sql.MAX), JSON.stringify(item))
         .query(`
           INSERT INTO dbo.OperationWorkItems (Id, Status, ParentWorkItemId, SourceType, SourceId, Payload)
@@ -108,7 +108,7 @@ async function withLockedWorkItemById(id, mutatorFn) {
       .input('status', sql.NVarChar(20), cols.status)
       .input('parentWorkItemId', sql.BigInt, cols.parentWorkItemId)
       .input('sourceType', sql.NVarChar(30), cols.sourceType)
-      .input('sourceId', sql.Int, cols.sourceId)
+      .input('sourceId', sql.BigInt, cols.sourceId)
       .input('payload', sql.NVarChar(sql.MAX), JSON.stringify(updated))
       .query(`
         UPDATE dbo.OperationWorkItems

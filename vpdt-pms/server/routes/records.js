@@ -1648,8 +1648,8 @@ router.post('/operationStoreOpenings/:id/update', async (req, res) => {
   const itemId = Number(req.params.id);
   if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
   try {
-    const { freshUser } = await getFreshUser(req);
-    const result = await withLockedRecordForCollection('operationStoreOpenings', itemId, (item) => recordActions.editOperationStoreOpeningDraft(freshUser, item, req.body));
+    const { freshUser, users } = await getFreshUser(req);
+    const result = await withLockedRecordForCollection('operationStoreOpenings', itemId, (item) => recordActions.editOperationStoreOpeningDraft(freshUser, item, req.body, users));
     res.json({ ok: true, item: result });
   } catch (err) { handleError(res, `operationStoreOpenings/${req.params.id}/update`, err); }
 });
@@ -1666,8 +1666,8 @@ router.post('/operationRepairs/:id/update', async (req, res) => {
   const itemId = Number(req.params.id);
   if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
   try {
-    const { freshUser } = await getFreshUser(req);
-    const result = await withLockedRecordForCollection('operationRepairs', itemId, (item) => recordActions.editOperationRepairDraft(freshUser, item, req.body));
+    const { freshUser, users } = await getFreshUser(req);
+    const result = await withLockedRecordForCollection('operationRepairs', itemId, (item) => recordActions.editOperationRepairDraft(freshUser, item, req.body, users));
     res.json({ ok: true, item: result });
   } catch (err) { handleError(res, `operationRepairs/${req.params.id}/update`, err); }
 });
@@ -1766,7 +1766,7 @@ function collectOperationWorkItemDescendantIds(all, rootId) {
 
 router.post('/operationWorkItems', async (req, res) => {
   try {
-    const { freshUser } = await getFreshUser(req);
+    const { freshUser, users } = await getFreshUser(req);
     const { sourceType, sourceId } = req.body || {};
     if (!operationWorkItemSourceTypes.has(sourceType)) return res.status(400).json({ error: 'sourceType không hợp lệ' });
     const srcId = Number(sourceId);
@@ -1782,7 +1782,7 @@ router.post('/operationWorkItems', async (req, res) => {
     // buộc chọn đúng kỳ đang "Đang thực hiện"), xem lib/createValidation.js operationExecutionPeriods.
     const allPeriods = await getAllForCollection('operationExecutionPeriods');
     const periodsForSource = allPeriods.filter(p => p.sourceType === sourceType && p.sourceId === srcId);
-    const newItem = recordActions.createOperationWorkItem(freshUser, req.body, sourceRecord, siblings, periodsForSource);
+    const newItem = recordActions.createOperationWorkItem(freshUser, req.body, sourceRecord, siblings, periodsForSource, users);
     newItem.sourceType = sourceType;
     newItem.sourceId = srcId;
     await insertWorkItem(newItem);
@@ -1823,15 +1823,21 @@ router.post('/operationWorkItems/:id/progress', async (req, res) => {
 });
 
 // POST /api/records/operationWorkItems/:id/edit — sửa thông tin công việc (title/mô tả/người phụ
-// trách/người nghiệm thu chỉ định/hạn) — xem lib/recordActions.js editOperationWorkItem().
+// trách[]/người nghiệm thu chỉ định/hạn/nghiệm thu ngay-sau N ngày) — xem lib/recordActions.js
+// editOperationWorkItem(). Mục E: quyền sửa mở rộng theo "Người Phụ Trách" hồ sơ gốc (không chỉ
+// operationExecutionManage) — cần load thêm sourceRecord (mirror route create ở trên, KHÔNG cache vì
+// personInCharge có thể vừa đổi qua route update hồ sơ) để editOperationWorkItem() tự đối chiếu.
 router.post('/operationWorkItems/:id/edit', async (req, res) => {
   const itemId = Number(req.params.id);
   if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
   try {
-    const { freshUser } = await getFreshUser(req);
-    const result = await withLockedWorkItemById(itemId, (item) =>
-      recordActions.editOperationWorkItem(freshUser, item, req.body || {})
-    );
+    const { freshUser, users } = await getFreshUser(req);
+    const result = await withLockedWorkItemById(itemId, async (item) => {
+      const sourceCollection = item.sourceType === 'OPERATION_STORE_OPENING' ? 'operationStoreOpenings' : 'operationRepairs';
+      const sourceRecords = await getAllForCollection(sourceCollection);
+      const sourceRecord = sourceRecords.find(r => r.id === item.sourceId);
+      return recordActions.editOperationWorkItem(freshUser, item, req.body || {}, users, sourceRecord);
+    });
     res.json({ ok: true, item: result });
   } catch (err) { handleError(res, `operationWorkItems/${req.params.id}/edit`, err); }
 });

@@ -707,7 +707,7 @@ const CREATE_MODULE_CONFIGS = {
     getScope: () => ({}),
     forceOwnDept: true,
     creatorField: 'creator', creatorNameField: 'creatorName',
-    extraValidate: (payload, collection, user) => {
+    extraValidate: (payload, collection, user, appData) => {
       if (!user.perms?.admin && !user.perms?.operationStoreOpenCreate) {
         throw new CreateError(403, 'Bạn không có quyền tạo đề xuất mở mới siêu thị');
       }
@@ -719,7 +719,13 @@ const CREATE_MODULE_CONFIGS = {
       payload.address = address;
       payload.area = Math.max(0, Number(payload.area) || 0);
       payload.estimatedBudget = Math.max(0, Number(payload.estimatedBudget) || 0);
-      payload.personInCharge = String(payload.personInCharge || '').trim();
+      // Người Phụ Trách: ô chọn tài khoản hệ thống thật (pattern "sdd*") — payload.personInCharge giờ
+      // là USERNAME, personInChargeName là tên hiển thị snapshot lúc tạo (không derive lúc render, cùng
+      // triết lý assignedToName). Tương thích ngược: hồ sơ CŨ có personInCharge = tên tự do, xem
+      // CLAUDE.md ghi chú "mọi nơi hiển thị dùng personInChargeName || personInCharge".
+      const personInChargeUser = resolveOperationPersonInChargeUsername(payload.personInCharge, appData?.users);
+      payload.personInCharge = personInChargeUser ? personInChargeUser.username : null;
+      payload.personInChargeName = personInChargeUser ? personInChargeUser.name : null;
       payload.note = String(payload.note || '').trim();
       if (payload.expectedOpenDate) {
         const d = new Date(payload.expectedOpenDate);
@@ -729,11 +735,16 @@ const CREATE_MODULE_CONFIGS = {
         payload.expectedOpenDate = '';
       }
       assertUploadedFileUrl(payload.fileUrl, 'Tài liệu đính kèm');
-      payload.status = 'PENDING';
-      payload.currentStep = 1;
-      payload.history = [];
-      // Giai đoạn "Dự toán" — workflow ĐỘC LẬP, chạy song song với duyệt hồ sơ chính (không chờ status
-      // ở trên APPROVED mới cho lập dự toán, xem lib/workflowEngine.js module ảo
+      // Mục H (bỏ phê duyệt module Vận Hành > Siêu Thị): người lập hồ sơ tự xử lý hết, không còn ai
+      // khác cần bấm Duyệt — hồ sơ vào thẳng APPROVED ngay lúc tạo (khác operationOrders "Phê Duyệt Đơn
+      // Hàng", vẫn giữ nguyên PENDING/quy trình duyệt cũ, KHÔNG đụng tới). status/currentStep/history
+      // GIỮ NGUYÊN field kỹ thuật (không đổi data model) để mọi nơi đọc lại (badge/filter/dashboard) tự
+      // hoạt động đúng mà không cần sửa thêm — chỉ khác giá trị khởi tạo.
+      payload.status = 'APPROVED';
+      payload.currentStep = 0;
+      payload.history = [{ step: 0, approver: 'Hệ thống (tự động)', username: 'system', action: 'AUTO_APPROVED', comment: 'Không yêu cầu phê duyệt — hồ sơ tự động hoàn tất ngay khi tạo', time: new Date().toLocaleString('vi-VN') }];
+      // Giai đoạn "Danh mục đầu tư" — workflow ĐỘC LẬP, chạy song song với hồ sơ chính (không chờ status
+      // ở trên APPROVED mới cho lập, xem lib/workflowEngine.js module ảo
       // operationStoreOpeningEstimate). Field FLAT có tiền tố estimate*, cùng kỹ thuật signedFileStatus*
       // của contracts — không lồng object để applyWorkflowAction() truy cập được bằng bracket-access.
       payload.estimateStatus = 'DRAFT';
@@ -748,7 +759,7 @@ const CREATE_MODULE_CONFIGS = {
     getScope: () => ({}),
     forceOwnDept: true,
     creatorField: 'creator', creatorNameField: 'creatorName',
-    extraValidate: (payload, collection, user) => {
+    extraValidate: (payload, collection, user, appData) => {
       if (!user.perms?.admin && !user.perms?.operationRepairCreate) {
         throw new CreateError(403, 'Bạn không có quyền tạo đề xuất sửa chữa siêu thị');
       }
@@ -762,11 +773,17 @@ const CREATE_MODULE_CONFIGS = {
       payload.supplier = String(payload.supplier || '').trim();
       payload.amount = Number(payload.amount) || 0;
       if (payload.amount < 0) throw new CreateError(400, 'Số tiền không được là số âm');
+      // Người Phụ Trách — field MỚI hoàn toàn cho operationRepairs (trước đây chưa từng có), cùng ô
+      // chọn tài khoản hệ thống thật vừa thêm cho operationStoreOpenings ở trên.
+      const personInChargeUser = resolveOperationPersonInChargeUsername(payload.personInCharge, appData?.users);
+      payload.personInCharge = personInChargeUser ? personInChargeUser.username : null;
+      payload.personInChargeName = personInChargeUser ? personInChargeUser.name : null;
       assertUploadedFileUrl(payload.fileUrl, 'Tệp đính kèm');
-      payload.status = 'PENDING';
-      payload.currentStep = 1;
-      payload.history = [];
-      // Giai đoạn "Dự toán" — cùng lý do/kỹ thuật đã thêm ở operationStoreOpenings ngay trên.
+      // Mục H — cùng lý do/kỹ thuật đã thêm ở operationStoreOpenings ngay trên.
+      payload.status = 'APPROVED';
+      payload.currentStep = 0;
+      payload.history = [{ step: 0, approver: 'Hệ thống (tự động)', username: 'system', action: 'AUTO_APPROVED', comment: 'Không yêu cầu phê duyệt — hồ sơ tự động hoàn tất ngay khi tạo', time: new Date().toLocaleString('vi-VN') }];
+      // Giai đoạn "Danh mục đầu tư" — cùng lý do/kỹ thuật đã thêm ở operationStoreOpenings ngay trên.
       payload.estimateStatus = 'DRAFT';
       payload.estimateCurrentStep = 0;
       payload.estimateHistory = [];
@@ -2423,6 +2440,19 @@ function resolveTrainingInstructorUsername(rawUsername, users) {
   return found;
 }
 
+// "Người Phụ Trách" (Vận Hành > Siêu Thị — operationStoreOpenings/operationRepairs, đợt đổi ô gõ tên tự
+// do -> ô chọn tài khoản hệ thống thật, xem CLAUDE.md "sdd*") — cùng khuôn
+// resolveTrainingInstructorUsername() ở trên nhưng KHÔNG tái dùng thẳng hàm đó vì thông điệp lỗi sai
+// ngữ cảnh (giảng viên vs người phụ trách). Trả null nếu rỗng (field vẫn không bắt buộc), throw 400 nếu
+// có nhập nhưng không khớp tài khoản active nào.
+function resolveOperationPersonInChargeUsername(rawUsername, users) {
+  const username = String(rawUsername || '').trim();
+  if (!username) return null;
+  const found = (users || []).find(u => u.username === username && u.active !== false);
+  if (!found) throw new CreateError(400, 'Không tìm thấy tài khoản người phụ trách này (hoặc đã bị khoá)');
+  return found;
+}
+
 // Danh Sách Được Mời (inviteList, Đợt 3) — chỉ chuẩn hoá thành mảng username duy nhất, không bắt buộc
 // từng username phải là tài khoản có thật (nhập sai chỉ khiến người đó không tự đăng ký được, không
 // gây lỗi dữ liệu gì) — dùng chung cho tạo lớp lẫn sửa lớp giống resolveTrainingInstructorUsername ở trên.
@@ -2523,6 +2553,7 @@ module.exports = {
   sanitizeUniformItems,
   BUDGET_TYPE_OPTIONS, BUDGET_FIELD_TYPES, sanitizeBudgetLines, getBudgetTemplateCustomFields, sanitizeBudgetCustomFields,
   resolveTrainingInstructorUsername, normalizeInviteList,
+  resolveOperationPersonInChargeUsername,
   normalizeTrainingPlanFields,
   normalizeOnboardingPathFields
 };

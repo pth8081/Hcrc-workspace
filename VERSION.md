@@ -1,11 +1,97 @@
 # Phiên bản hiện tại
 
-**6.3** — đã merge vào `main` (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge
+**6.4** — đã merge vào `main` (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge
 góc màn hình + `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần
 kiểu `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. Đúng theo quy tắc MINOR chạy 0-9 trong
-`CLAUDE.md`: sau `6.2` tăng MINOR lên `6.3`.
+`CLAUDE.md`: sau `6.3` tăng MINOR lên `6.4`.
 
-## Cập nhật gần nhất — 🎉 HOÀN TẤT DỰ ÁN CSP: gỡ 'unsafe-inline' khỏi scriptSrcAttr — CSP nghiêm ngặt đã có hiệu lực thật sự
+## Cập nhật gần nhất — Vận Hành > Siêu Thị: Chi Phí Phê Duyệt, Danh Mục Đầu Tư, Thực Hiện linh hoạt, bỏ phê duyệt nội bộ
+
+Đơn giản hoá + linh hoạt hoá luồng lập hồ sơ → lập ngân sách → thực hiện công việc của 2 loại hồ sơ
+`operationStoreOpenings` ("Mở Mới Siêu Thị") / `operationRepairs` ("Sửa Chữa Siêu Thị") trong module Vận
+Hành > 🏬 Siêu Thị. 8 mục (A→H):
+
+- **A — Đổi label "Chi Phí Phê Duyệt"**: đổi tên hiển thị "Ngân Sách Dự Kiến"/"Dự Toán Chi Phí" →
+  "Chi Phí Phê Duyệt" ở form tạo, form "Bổ Sung", hiển thị chi tiết hồ sơ, header cột bảng danh sách —
+  CHỈ đổi label, giữ nguyên field kỹ thuật (`estimatedBudget`/`amount`).
+- **B — Bỏ bắt buộc Kỳ Thực Hiện**: công việc GỐC giờ tạo được KHÔNG CẦN chọn Kỳ Thực Hiện
+  (`periodId` optional — `lib/recordActions.js createOperationWorkItem()`); nếu CÓ chọn vẫn giữ nguyên
+  luật cũ (kỳ phải "Đang thực hiện"). `public/index.html renderOwiPeriodField()` đổi option đầu thành
+  "-- Không thuộc kỳ nào --", bỏ cảnh báo bắt buộc; nút "➕ Thêm Công Việc Gốc" hiện luôn khi có quyền,
+  không còn phụ thuộc đã có kỳ đang chạy.
+- **C — "Người Phụ Trách" (`personInCharge`): ô gõ tên tự do → ô chọn tài khoản hệ thống thật** (pattern
+  `sdd*`): đổi Ý NGHĨA field có sẵn cho `operationStoreOpenings`, thêm MỚI HOÀN TOÀN cho `operationRepairs`
+  (trước đây chưa từng có). Server: `resolveOperationPersonInChargeUsername()`
+  (`lib/createValidation.js`) dùng ở cả tạo (`extraValidate`) lẫn sửa "Bổ Sung"
+  (`editOperationStoreOpeningDraft`/`editOperationRepairDraft`, `lib/recordActions.js`) — lưu thêm
+  `personInChargeName` (snapshot tên hiển thị). Tương thích ngược: hồ sơ cũ còn tên tự do, mọi nơi hiển
+  thị ưu tiên `personInChargeName || personInCharge`.
+- **D — "Nghiệm thu ngay" / "Nghiệm thu sau N ngày"** (`acceptanceMode`/`acceptanceDelayDays` trên
+  `operationWorkItems`, mặc định IMMEDIATE): CHỈ hiển thị cột "Dự Kiến Nghiệm Thu" để NHẮC (badge cam nếu
+  quá hạn), KHÔNG tự động chuyển trạng thái, KHÔNG cần cron job — `completedAt` server tự set lúc chuyển
+  "Đang nghiệm thu", ngày dự kiến tính ở client (`computeOperationWorkItemExpectedAcceptanceDate()`).
+- **E — Nhiều người phụ trách 1 công việc + quyền sửa theo "Người Phụ Trách" hồ sơ gốc**: `assignedTo`
+  đổi `string|null` → `string[]|null` (multi-select `renderPeopleMultiSelect()`, khớp mảng song song
+  `assignedToName`) — 2 bản `workItemAssignees()`/`isWorkItemAssignee()` (server `lib/recordActions.js`
+  + client `public/index.html`, không shared lib giữa 2 phía) thay mọi so sánh trực tiếp cũ (quyền cập
+  nhật tiến độ, `hasOwnWorkItemInSource()`, hiển thị danh sách, gate tab). Quyền SỬA công việc (không
+  phải tạo/xoá) mở rộng cho đúng `personInCharge` của hồ sơ gốc qua `assertCanManageOperationWorkItem()`
+  — route sửa (`POST /operationWorkItems/:id/edit`) load thêm `sourceRecord` để đối chiếu.
+- **F — "Dự toán" → "Danh mục đầu tư"**: đơn giản hoá cột `estimateItems[]` từ
+  `{name,unit,qty,unitPrice,amount,note}` (7 cột, tự tính Thành Tiền = SL×Đơn Giá) → `{content,description,
+  amount,note}` (5 cột: STT/Nội Dung/Mô Tả/Chi Phí/Lưu Ý, Chi Phí nhập trực tiếp) — tương thích ngược
+  `content: it.content ?? it.name ?? ''` khi load hồ sơ cũ. Thêm khối **"Chi Phí Còn Lại"** = Chi Phí Phê
+  Duyệt − tổng Danh mục đầu tư, tính LIVE mỗi lần thêm/sửa/xoá dòng, số âm hiển thị đỏ — KHÔNG chặn submit
+  khi vượt ngân sách, chỉ cảnh báo trực quan. Đồng bộ thuật ngữ "Dự toán" → "Danh mục đầu tư" toàn bộ UI
+  trong phạm vi module Siêu Thị (không đụng module Ngân Sách/Budget, tên trùng ngẫu nhiên).
+- **G — Tự động mở "Danh mục đầu tư" ngay sau khi lập hồ sơ**: `submitOperationStoreOpening()`/
+  `submitOperationRepair()` tự chuyển sang tab "Danh mục đầu tư" + mở modal cho hồ sơ vừa tạo, không cần
+  người dùng tự tìm lại.
+- **H — Bỏ phê duyệt nội bộ cho module Siêu Thị** (bổ sung giữa chừng theo yêu cầu người dùng): hồ sơ
+  Mở Mới/Sửa Chữa giờ `status: 'APPROVED'` NGAY lúc tạo (không qua `PENDING`/chờ ai duyệt —
+  `lib/createValidation.js`), Danh mục đầu tư lưu là `estimateStatus: 'APPROVED'` NGAY (không qua workflow
+  duyệt riêng — `submitOperationEstimate()`, `lib/recordActions.js`), nút "Gửi phê duyệt"/"Gửi Duyệt
+  Danh Mục Đầu Tư" đổi thành "💾 Lưu Hồ Sơ"/"💾 Lưu Danh Mục Đầu Tư". Toàn bộ luồng lập hồ sơ → Danh mục
+  đầu tư → Thực hiện → Nghiệm thu giờ 1 tài khoản duy nhất tự làm hết, không cần tài khoản thứ 2 "duyệt".
+  KHÔNG đụng `operationOrders` ("📦 Phê Duyệt Đơn Hàng") — luồng phê duyệt RIÊNG, tách biệt hoàn toàn, vẫn
+  giữ nguyên quy trình duyệt cũ.
+
+**2 bug thật phát hiện qua demo Playwright chạy trên app thật (ngoài phạm vi 8 mục A-H, đã tự sửa vì nhỏ
+và rõ ràng)**:
+1. `dbo.OperationWorkItems.SourceId` tạo kiểu `INT` (tối đa ~2.1 tỷ) trong khi giá trị luôn là id kiểu
+   `Date.now()` (mili-giây từ epoch, ~1.7 nghìn tỷ — vượt trần INT ngay lập tức) — khiến MỌI lần tạo công
+   việc Thực hiện thật sự luôn lỗi 500 trên SQL Server thật (chỉ không lộ ra trước đây vì bộ test hiện có
+   chạy qua mock backend không đi qua kiểu dữ liệu SQL thật). Sửa `sql/schema.sql` (`INT` → `BIGINT`,
+   kèm khối `ALTER COLUMN` tự chạy an toàn nhiều lần cho DB đã tồn tại) + `lib/operationWorkItemStore.js`
+   (`sql.Int` → `sql.BigInt` ở mọi chỗ bind `sourceId`).
+2. Modal "Bổ Sung" (`#bosungEditModal`, dùng chung 7 module kể cả `operationStoreOpenings`/
+   `operationRepairs`) chưa từng được `bindCspDelegation()` bọc — sau đợt CSP siết `scriptSrcAttr:
+   'none'` (bản 6.3), nút "Hủy"/"📤 Lưu & Gửi Lại" của TOÀN BỘ modal này (mọi module dùng chung, không
+   riêng Siêu Thị) đã âm thầm không phản hồi khi bấm; chỉ lộ ra khi thêm ô picker "Người Phụ Trách" mới
+   (Mục C) dùng `data-op-change` trong modal chưa được bọc dispatcher. Đã thêm
+   `bindCspDelegation('bosungEditModal')`.
+
+**Xác nhận qua demo Playwright thật (server.js + SQL Server thật, tài khoản non-admin
+`totpEnabled:false`)**: lập hồ sơ Mở Mới (chọn Người Phụ Trách qua picker) → tự động chuyển tab + mở
+modal Danh mục đầu tư (Mục G); nhập item, xác nhận "Chi Phí Còn Lại" live (kể cả vượt ngân sách hiển thị
+đỏ, không chặn submit) → Lưu (Mục H, tự APPROVED); tạo công việc GỐC không chọn Kỳ (Mục B); tạo công việc
+2 người phụ trách (Mục E) + "Nghiệm thu sau 3 ngày" (Mục D), cập nhật tiến độ, xác nhận cột ngày dự kiến;
+lập hồ sơ Sửa Chữa xác nhận field Người Phụ Trách MỚI (Mục C); đăng nhập bằng chính `personInCharge`
+(không có quyền hệ thống) — sửa được đúng công việc thuộc hồ sơ của mình, không tạo/xoá được. Dọn sạch dữ
+liệu + 2 tài khoản demo sau khi test xong.
+
+**Regression**: 46/46 file `tests/test-*.js` PASS (1030 scenario, 0 FAIL — bao gồm 2 file known-flaky
+`test-audit-fixes-batch1.js`/`test-audit-round2-cluster1.js`, xác nhận PASS qua log dù không tự thoát
+tiến trình).
+
+**Deploy-impact:** `sql/schema.sql` CÓ đổi (chỉ 1 cột `SourceId` của `dbo.OperationWorkItems` từ `INT`
+→ `BIGINT`, tự ALTER an toàn khi chạy lại — **bắt buộc chạy lại `schema.sql` khi deploy đợt này**, nếu
+không mọi lần tạo công việc Thực hiện mới sẽ tiếp tục lỗi 500). KHÔNG thêm biến môi trường mới, KHÔNG
+thêm `dependencies` mới — mọi field nghiệp vụ mới khác (`personInCharge`/`personInChargeName`,
+`assignedTo[]`, `acceptanceMode`/`acceptanceDelayDays`/`completedAt`, `estimateItems[]` cấu trúc mới) đều
+lưu trong payload JSON blob sẵn có, không cần đổi cột nào khác.
+
+## Trước đó — 🎉 HOÀN TẤT DỰ ÁN CSP: gỡ 'unsafe-inline' khỏi scriptSrcAttr — CSP nghiêm ngặt đã có hiệu lực thật sự
 
 Bước CUỐI CÙNG trong toàn bộ chuỗi ~24+ đợt chuyển đổi CSP (23 module nghiệp vụ + ~8 đợt hạ tầng dùng
 chung: H+I/G/C/B/D/F/E/A — xem các mục "Trước đó" bên dưới). Tất cả các đợt trước chỉ CHUYỂN ĐỔI cách

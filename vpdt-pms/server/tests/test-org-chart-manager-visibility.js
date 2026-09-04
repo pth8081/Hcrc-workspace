@@ -96,6 +96,29 @@ await run.run('hasOwnWorkItemInSource(): quản lý qua acceptorUsername (ngư�
   const DIRECTOR_USER = { username: 'director', perms: {} };
   assert(hasOwnWorkItemInSource(DIRECTOR_USER, 'OPERATION_REPAIR', 2, opAppData), 'director (quản lý gián tiếp) phải thấy hồ sơ qua acceptorUsername=staff1');
 });
+// Mục E: assignedTo string|null -> string[]|null — hasOwnWorkItemInSource() phải tự tương thích ngược
+// (workItemAssignees()) với CẢ 2 dạng dữ liệu, không throw/bỏ sót cho dữ liệu CŨ.
+await run.run('hasOwnWorkItemInSource(): assignedTo DẠNG MẢNG (Mục E, nhiều người phụ trách) — khớp trực tiếp LẪN qua trưởng phòng', () => {
+  const opAppData = {
+    users: USERS,
+    operationWorkItems: [
+      { sourceType: 'OPERATION_STORE_OPENING', sourceId: 3, assignedTo: ['staff2', 'staff1'], acceptorUsername: null }
+    ]
+  };
+  const STAFF2_USER = { username: 'staff2', perms: {} };
+  assert(hasOwnWorkItemInSource(STAFF2_USER, 'OPERATION_STORE_OPENING', 3, opAppData), 'staff2 phải thấy hồ sơ — nằm trong mảng assignedTo (khớp trực tiếp)');
+  assert(hasOwnWorkItemInSource(MANAGER_USER, 'OPERATION_STORE_OPENING', 3, opAppData), 'manager (quản lý staff1, 1 trong 2 người assignedTo[]) phải thấy hồ sơ qua đệ quy Cơ Cấu Tổ Chức');
+  assert(!hasOwnWorkItemInSource(OTHER_USER, 'OPERATION_STORE_OPENING', 3, opAppData), 'other không liên quan tới bất kỳ ai trong assignedTo[], không thấy hồ sơ');
+});
+await run.run('hasOwnWorkItemInSource(): dữ liệu CŨ assignedTo dạng STRING ĐƠN (trước Mục E) vẫn tương thích ngược đúng', () => {
+  const opAppData = {
+    users: USERS,
+    operationWorkItems: [
+      { sourceType: 'OPERATION_STORE_OPENING', sourceId: 4, assignedTo: 'staff1', acceptorUsername: null }
+    ]
+  };
+  assert(hasOwnWorkItemInSource(MANAGER_USER, 'OPERATION_STORE_OPENING', 4, opAppData), 'dữ liệu cũ (assignedTo string đơn) phải vẫn hoạt động đúng qua workItemAssignees() tự chuẩn hoá');
+});
 
 // ----- assertNoManagerCycle() (routes/data.js) — mirror logic để test trực tiếp không phụ thuộc route,
 // vì routes/data.js chỉ export router (đúng quy ước toàn bộ routes/*.js trong hệ thống, KHÔNG export
