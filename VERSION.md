@@ -1,11 +1,44 @@
 # Phiên bản hiện tại
 
-**8.1** — đã merge vào `main` (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge
+**8.2** — đã merge vào `main` (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge
 góc màn hình + `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần
 kiểu `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. Đúng theo quy tắc MINOR chạy 0-9 trong
-`CLAUDE.md`: sau `8.0` tăng MINOR lên 1 → `8.1`.
+`CLAUDE.md`: sau `8.1` tăng MINOR lên 1 → `8.2`.
 
-## Cập nhật gần nhất — Hạ tầng: tách JS client ra file ngoài (Đợt 3/5 — Admin(user/dept/cat)+Cây Phân Quyền+Nhóm Phân Quyền+Khối 17+Báo Cáo Định Kỳ+Nhóm Phê Duyệt Trình+Danh Sách User Chờ Lưu+Log/Thùng Rác)
+## Cập nhật gần nhất — Hạ tầng: tách JS client ra file ngoài (Đợt 4/5 — Báo Cáo Quản Trị + Truyền Thông Nội Bộ/Đào Tạo — HOÀN TẤT khối script GỐC, chỉ còn phần vật lý nằm sau script PDF.js)
+
+Tiếp tục đợt 1-3 (`7.9`/`8.0`/`8.1`, xem mục "Trước đó" ngay dưới) — tách nốt 4 file CUỐI CÙNG của khối
+`<script>` inline GỐC (đoạn 7972→38744 trong file trước khi tách). Sau đợt này, khối `<script>` gốc
+không còn tồn tại — toàn bộ đã ra `public/js/*.js`. Đợt 5 (cuối) sẽ tách 1 khối `<script>` KHÁC, nằm
+vật lý SAU thẻ `<script type="module">` tải PDF.js (không đụng thẻ này).
+
+`module-baocaoquantri.js` (638 dòng, Module Báo Cáo Quản Trị), `module-baocaoquantri-preview.js` (660
+dòng, "Tạo Báo Cáo Theo Yêu Cầu" xem trước), `module-internalcomms-nhipsong.js` (1.441 dòng, Truyền
+Thông Nội Bộ — Nhịp Sống HCRC/Góc Chia Sẻ), `module-internalcomms-daotao.js` (2.797 dòng, Đào Tạo).
+
+**Phát hiện + sửa 1 lỗi thật khi verify đợt này (bài học cho việc rà thứ tự hoisting)**: script AST tự
+viết ở đợt 1 chỉ rà "lời GỌI hàm" (`CallExpression`) ở top-level làm rủi ro tham chiếu-tới-trước — bỏ
+sót 1 dạng khác cũng thực thi NGAY khi định nghĩa: **tham chiếu THUẦN TÊN HÀM (không gọi) làm GIÁ TRỊ
+thuộc tính trong object literal top-level**, VD `REPORT_MODULE_CONFIGS = { office: { renderExtra:
+renderOfficeReportExtra, ... } }` — chỉ 1 tên hàm, không có `()`, nhưng việc DỰNG object literal này vẫn
+phải tra `renderOfficeReportExtra` trong scope NGAY LÚC ĐÓ (khác hẳn arrow function `el =>
+someFn(el)` — trường hợp NÀY mới thực sự an toàn vì thân hàm hoãn thực thi). Phát hiện qua đúng bước
+demo Playwright bấm qua các tab (`ReferenceError: renderOfficeReportExtra is not defined` tại
+`module-baocaoquantri.js`, vì 5 hàm `render*ReportExtra` cần lại nằm trong
+`module-baocaoquantri-preview.js`, tải SAU). Đã viết lại script rà theo đúng quy tắc JS thật (thu thập
+MỌI định danh chạm tới ở top-level, không riêng lời gọi hàm) và chạy lại trên TOÀN BỘ ~35 file theo
+đúng thứ tự tải cuối cùng — xác nhận đây là ĐIỂM DUY NHẤT bị bỏ sót trong toàn bộ 4 đợt (batch 1-3 đã
+merge trước đó không dính lỗi này). Sửa bằng cách đổi thứ tự 2 thẻ `<script src>` (tải
+`module-baocaoquantri-preview.js` TRƯỚC `module-baocaoquantri.js`) — không đổi nội dung file nào.
+
+Verify: syntax check từng file, không trùng tên hàm/const global, script rà thứ tự hoisting đã sửa chạy
+lại trên toàn bộ 35 file (0 tham chiếu không giải quyết được), full 54 file test hồi quy Playwright chạy
+lại sạch (chỉ 2 lỗi biết trước do thiếu SQL Server thật), demo Playwright riêng bấm qua 21 tab xác nhận
+0 lỗi console/page (bắt đúng lỗi trên trước khi sửa).
+
+**Không cần migrate dữ liệu, không đổi `schema.sql`/`.env.example`/`dependencies`/CSP/static-serving.**
+
+## Trước đó — Hạ tầng: tách JS client ra file ngoài (Đợt 3/5 — Admin(user/dept/cat)+Cây Phân Quyền+Nhóm Phân Quyền+Khối 17+Báo Cáo Định Kỳ+Nhóm Phê Duyệt Trình+Danh Sách User Chờ Lưu+Log/Thùng Rác)
 
 Tiếp tục đợt 1-2 (`7.9`/`8.0`, xem mục "Trước đó" ngay dưới) — tách thêm 9 file khỏi khối `<script>`
 inline còn lại của `public/index.html`, giữ đúng nguyên tắc: chỉ di chuyển cơ học, không đổi logic, giữ
