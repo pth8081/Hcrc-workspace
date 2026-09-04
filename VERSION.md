@@ -1,11 +1,84 @@
 # Phiên bản hiện tại
 
-**7.4** — đã merge vào `main` (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge
+**7.5** — đã merge vào `main` (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge
 góc màn hình + `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần
 kiểu `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. Đúng theo quy tắc MINOR chạy 0-9 trong
-`CLAUDE.md`: sau `7.3` tăng MINOR lên 1 → `7.4`.
+`CLAUDE.md`: sau `7.4` tăng MINOR lên 1 → `7.5`.
 
-## Cập nhật gần nhất — Biểu Mẫu Đợt 3: mở rộng ra Vận Hành/Đào Tạo/Tuyển Dụng + 3 gap-fill (11 tab mới)
+## Cập nhật gần nhất — Biểu Mẫu Đợt 4: nốt các form Đào Tạo còn lại + 1 gap-fill (7 tab mới) — HOÀN TẤT
+
+Đợt cuối dọn "Phạm vi CHƯA làm" ghi ở cuối Đợt 3: đưa 6 form Đào Tạo còn lại vào "📋 Biểu Mẫu" —
+`trainingCourseForm` (Tạo Chương Trình), `trainingPlanForm` (Kế Hoạch Đào Tạo), `trainingDocForm` (Kho Tài
+Liệu), `careerPathForm` (Lộ Trình Thăng Tiến), `onboardingPathForm` + `onboardingAssignForm` (Đào Tạo Tân
+Binh — Quản Lý Lộ Trình/Phân Công, 2 form riêng biệt).
+
+**Audit toàn app phát hiện thêm 1 gap-fill ngoài phạm vi gốc**: đếm lại TOÀN BỘ `<form id=...
+data-op-submit=...>` thật trong `public/index.html` (đúng 25 form) đối chiếu với `CORE_FIELD_MANIFEST` —
+chỉ còn đúng 1 form chưa có coreKey: `#trainingEditClassForm` (modal "✏️ Sửa Lớp Học", mở từ bảng Lớp Học
+qua `openEditTrainingClassModal()`) — bản SỬA riêng biệt của `trainingClassForm` (Tạo Mới), id khác hẳn
+(prefix `te` thay vì `tc`), Đợt 3 chỉ phủ form Tạo Mới nên bỏ sót form Sửa này. Thêm coreKey thứ 7:
+`TRAINING_CLASS_EDIT` (14 field, mirror đúng `TRAINING_CLASS`). Sau khi thêm, **cả 25/25 form nhập liệu
+thật trong toàn app đều đã có coreKey phủ** — xác nhận bằng 1 kịch bản audit riêng trong
+`tests/test-forms-batch4.js` (đếm động số `<form>` thật lúc chạy, không hard-code số 25) để tránh audit tự
+vô hiệu hoá nếu file thay đổi sau này.
+
+**7 `coreKey` mới trong `CORE_FIELD_MANIFEST`**: `TRAINING_COURSE` (3 field), `TRAINING_PLAN` (7 field),
+`TRAINING_DOC` (6 field), `CAREER_PATH` (3 field), `ONBOARDING_PATH` (4 field), `ONBOARDING_ASSIGN` (2
+field), `TRAINING_CLASS_EDIT` (14 field) — cùng 7 `FORM_TABS` entry mới. Cơ chế áp dụng
+(`applyCoreFieldCustomizations()`/`applyAllCoreFieldCustomizations()`) vẫn CHUNG cho mọi coreKey, KHÔNG
+phát sinh ngoại lệ call-site riêng nào ở đợt này — tất cả 7 form đều là DOM TĨNH có sẵn từ lúc tải trang
+(kể cả `#onboardingAssignForm`, LÀ 1 `<div>` chứ không phải `<form>`, chỉ `classList.toggle('hidden')`
+theo quyền, không render lại qua `innerHTML` — khác hẳn ngoại lệ `OPERATION_EXECUTION_PERIOD` ở Đợt 3).
+
+**3 field bị loại trừ có chủ đích khỏi `TRAINING_DOC`** (audit div-wrapping + nhãn động, cùng tinh thần
+Đợt 1/3): `tdMandatory` (checkbox "⚠️ Bắt Buộc Hoàn Thành") — `<label>` BỌC TRỰC TIẾP input checkbox
+(`<label><input id="tdMandatory">...</label>`, không phải label SIBLING trong div dùng chung như mọi field
+khác), nên `applyCoreFieldCustomizations()` sẽ ghi đè `labelEl.innerHTML` và XOÁ MẤT checkbox khỏi DOM nếu
+đưa vào — field DUY NHẤT có cấu trúc ngược này trong toàn app, loại khỏi manifest thay vì sửa lại markup.
+`tdFile`/`tdFileLabel` — nhãn bị `onTrainingDocTypeChange()` tự đổi qua lại "Tệp Tài Liệu"/"Ảnh Tài Liệu"
+theo `#tdDocType`, cùng lý do `tcDocumentIds` bị loại ở Đợt 3. Ngược lại, `teDocumentIds` (Giáo Trình) ở
+`TRAINING_CLASS_EDIT` ĐƯA VÀO ĐƯỢC bình thường — form Sửa Lớp Học không cho đổi `#tcMode` sau khi tạo
+(mode đã khoá), nên nhãn field này CỐ ĐỊNH, không có hàm nào tự đổi qua lại như bản Tạo Mới.
+
+**optionsKey mới**: `tccCategory` (TRAINING_COURSE)/`tdCategory` (TRAINING_DOC) trỏ `DB.trainingCategories`
+— CÙNG danh sách với `tcCategory`/`ttCategory` đã có từ Đợt 3 (populate qua chung 1 vòng lặp
+`['tcCategory','tdCategory','tccCategory'].forEach(...)` trong `renderTrainingLms()`) — chỉ THÊM 1 lối sửa
+song song, không đụng `defaults.js`/`routes/data.js`. `tpCourseId`/`tpTargetDept`/`opStage1/2RequiredCourseIds`
+KHÔNG có optionsKey — select tham chiếu dữ liệu khác (trainingCourses/depts), không phải danh sách nhãn cố
+định.
+
+**Test**: `tests/test-forms-batch4.js` (MỚI, cùng khuôn `tests/test-forms-batch1-3.js` — mock DOM/DB) — 43
+kịch bản: 7 tab mới hiện đúng; sửa nhãn mặc định qua `editCoreField()`+`addCustomField()` phản ánh đúng lên
+form thật cho TRAINING_COURSE/TRAINING_PLAN/TRAINING_DOC/CAREER_PATH/ONBOARDING_PATH/ONBOARDING_ASSIGN/
+TRAINING_CLASS_EDIT, xác nhận không lem nhãn sang field liền kề; `ONBOARDING_ASSIGN` xác nhận hoạt động
+đúng dù là `<div>` không phải `<form>`; xác nhận `tdMandatory` KHÔNG bị xoá khỏi DOM (checkbox vẫn còn
+nguyên sau `applyAllCoreFieldCustomizations()`); xác nhận `tdFile`/`cpStageBuilderContainer` bị loại trừ
+đúng; cả 7 tab mới đều đủ field mặc định và KHÔNG có nút xoá; 1 kịch bản audit toàn app xác nhận cả 25
+form thật đều có coreKey phủ. Chạy lại toàn bộ `tests/test-*.js` (52 file) — chỉ còn đúng 2 lỗi known
+pre-existing cần SQL Server thật (`test-audit-fixes-batch1.js`, `test-audit-round2-cluster1.js` — mọi kịch
+bản BÊN TRONG đều PASS), không phát sinh regression nào khác (bao gồm chạy lại `test-forms-batch3.js` —
+49/49 vẫn pass).
+
+Demo Playwright thật (Docker `vpdt-mssql` + `node server.js` đang chạy sẵn, tài khoản `demo_forms_admin` có
+sẵn từ Đợt 1 — reset mật khẩu + `totpEnabled:false` để đi lại đúng màn thiết lập TOTP lần đầu bằng mã 6 số
+sinh thật từ `otplib`): đăng nhập, thiết lập TOTP qua đúng API `/totp/setup-options` + `/totp/setup-verify`
+với mã thật, mở Hệ Thống → Biểu Mẫu, xác nhận đủ 7 tab mới hiện trên UI thật; sửa nhãn 1 trường mặc định ở
+5 form (TRAINING_COURSE/TRAINING_DOC/CAREER_PATH/ONBOARDING_ASSIGN/TRAINING_CLASS_EDIT) qua đúng nút "✏️
+Sửa" + form thật, lưu — mở đúng form nghiệp vụ thật tương ứng (bao gồm mở modal "Sửa Lớp Học" thật cho
+gap-fill `TRAINING_CLASS_EDIT`) và xác nhận nhãn mới hiện đúng ngay; xác nhận cả 7 tab đều không có nút
+xoá nào cho trường mặc định. 23/23 kịch bản pass. Đã dọn lại toàn bộ 5 override demo khỏi `DB.formTemplates`
+sau khi chụp ảnh xong, không để lại dữ liệu demo trong hệ thống thật.
+
+**Kết luận audit toàn app (BUSINESS_MODULES × FORM_TABS/CORE_FIELD_MANIFEST)**: sau Đợt 4, KHÔNG còn form
+nhập liệu nghiệp vụ thật nào (đếm theo `<form data-op-submit>`) thiếu coreKey trong Biểu Mẫu — yêu cầu gốc
+"cho phép admin sửa mọi form nhập liệu thật không cần sửa code" coi như đã HOÀN TẤT cho toàn bộ ứng dụng.
+Các màn "Quản Lý Danh Mục" (CRUD tự sửa/xoá trực tiếp) và cấu hình hệ thống tiếp tục CỐ Ý không đưa vào,
+đúng nguyên tắc đã chốt từ Đợt 1-3 (Biểu Mẫu chỉ áp cho form TẠO 1 HỒ SƠ NGHIỆP VỤ).
+
+**Deploy-impact**: KHÔNG đổi `sql/schema.sql`, KHÔNG đổi `.env.example`, KHÔNG thêm `dependencies` mới —
+chỉ copy code + `pm2 restart`.
+
+## Trước đó — Biểu Mẫu Đợt 3: mở rộng ra Vận Hành/Đào Tạo/Tuyển Dụng + 3 gap-fill (11 tab mới)
 
 Tiếp nối Đợt 1 (`TASK`/`VPP`/`LICENSE`/`IT_PRICE`/`IT_TICKET`) và Đợt 2 (`PAYMENT`/`BUDGET_PERIOD`/
 `BUDGET_TEMPLATE`/`REPORT_ENTRY`/`REPORT_PERIOD`/5 coreKey Đồng Phục) — mở rộng module "📋 Biểu Mẫu" ra 3

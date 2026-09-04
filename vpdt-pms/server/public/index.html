@@ -8334,6 +8334,107 @@ const CORE_FIELD_MANIFEST = {
     { id: 'itRenewalExpiryDate', label: 'Ngày Hết Hạn', required: true },
     { id: 'itRenewalFile', label: 'Tệp Đính Kèm', required: false },
     { id: 'itRenewalNote', label: 'Ghi Chú', required: false }
+  ],
+  // ===== Biểu Mẫu Đợt 4 (nốt các form Đào Tạo còn lại — dọn "Phạm vi chưa làm" ghi ở cuối Đợt 3) =====
+  // TRAINING_COURSE: #trainingCourseForm (Đào Tạo > Chương Trình > Tạo Chương Trình Mới). tccCategory
+  // optionsKey trỏ DB.trainingCategories — CÙNG danh sách với TRAINING_CLASS.tcCategory/TRAINING_TEST.
+  // ttCategory (3 field dùng chung 1 nguồn qua populateTrainingCategorySelects(), xem dòng
+  // ['tcCategory','tdCategory','tccCategory'].forEach ở renderTrainingLms()) — optionsKey ở đây chỉ
+  // THÊM 1 lối sửa song song, cùng khuôn tcCategory ở Đợt 3.
+  TRAINING_COURSE: [
+    { id: 'tccCategory', label: 'Loại Đào Tạo', required: true, optionsKey: 'trainingCategories' },
+    { id: 'tccName', label: 'Tên Chương Trình', required: true },
+    { id: 'tccDescription', label: 'Mô Tả (tuỳ chọn)', required: false }
+  ],
+  // TRAINING_PLAN: #trainingPlanForm (Đào Tạo > Kế Hoạch Đào Tạo > Lập Kế Hoạch Đào Tạo Mới). tpCourseId/
+  // tpTargetDept là select tham chiếu dữ liệu khác (trainingCourses/depts, không phải danh sách nhãn cố
+  // định) nên KHÔNG có optionsKey — cùng lý do rjDept ở Đợt 3.
+  TRAINING_PLAN: [
+    { id: 'tpMonth', label: 'Tháng', required: true },
+    { id: 'tpCourseId', label: 'Chương Trình (tuỳ chọn)', required: false },
+    { id: 'tpTargetDept', label: 'Đơn Vị (tuỳ chọn)', required: false },
+    { id: 'tpAudience', label: 'Đối Tượng', required: false },
+    { id: 'tpPlannedClasses', label: 'Số Lớp (kế hoạch)', required: false },
+    { id: 'tpPlannedTrainees', label: 'Số Học Viên (kế hoạch)', required: false },
+    { id: 'tpPlannedHours', label: 'Thời Lượng Đào Tạo (giờ, kế hoạch)', required: false }
+  ],
+  // TRAINING_DOC: #trainingDocForm (Đào Tạo > Kho Tài Liệu > Thêm Tài Liệu Vào Kho). tdCategory optionsKey
+  // trỏ DB.trainingCategories (cùng nguồn tcCategory/tccCategory ở trên). tdMandatory (checkbox "⚠️ Bắt
+  // Buộc Hoàn Thành") KHÔNG đưa vào — <label> BỌC NGOÀI chính input checkbox
+  // (<label><input id="tdMandatory">...</label>, không phải label SIBLING trong div dùng chung như mọi
+  // field khác) nên applyCoreFieldCustomizations() (input.closest('div')?.querySelector('label')) sẽ
+  // tìm ra ĐÚNG label đó rồi ghi đè labelEl.innerHTML — xoá mất luôn <input> con bên trong, làm biến mất
+  // hẳn checkbox khỏi DOM ngay từ lúc tải trang. Khác lỗi div-wrapping (nhãn lân cận bị ghi đè nhầm) đã
+  // vá ở Đợt 1/3 — đây là field DUY NHẤT có cấu trúc ngược (label cha, input con) trong toàn app, không
+  // đáng sửa lại markup chỉ để thêm 1 field phụ, nên loại khỏi manifest thay vì bọc lại. tdFile/
+  // tdFileLabel KHÔNG đưa vào — nhãn bị onTrainingDocTypeChange() tự đổi qua lại "Tệp Tài Liệu"/"Ảnh Tài
+  // Liệu" theo #tdDocType (cùng lý do tcDocumentIds ở Đợt 3, dù trigger là người dùng tự đổi dropdown chứ
+  // không tự động mỗi lần vào lại module — vẫn cùng bản chất "nhãn bị JS khác ghi đè", tránh xung đột với
+  // tùy biến admin). tdVideoUrl vẫn đưa vào bình thường — label field này CỐ ĐỊNH ("Link Video Youtube"),
+  // chỉ có .required bị onTrainingDocTypeChange() bật/tắt theo #tdDocType lúc runtime — cùng khuôn
+  // contractFile/offQty/offAmount/paymentSourceRecord (đã có sẵn trong manifest từ Đợt 1/2, cũng bị JS
+  // khác toggle .required tương tự), không phải trường hợp ngoại lệ mới.
+  TRAINING_DOC: [
+    { id: 'tdCategory', label: 'Loại Đào Tạo', required: true, optionsKey: 'trainingCategories' },
+    { id: 'tdTitle', label: 'Tên Tài Liệu', required: true },
+    { id: 'tdDocType', label: 'Loại Tài Liệu', required: false },
+    { id: 'tdCourseId', label: 'Chương Trình (tuỳ chọn)', required: false },
+    { id: 'tdVideoUrl', label: 'Link Video Youtube', required: false },
+    { id: 'tdDescription', label: 'Mô Tả (tuỳ chọn)', required: false }
+  ],
+  // CAREER_PATH: #careerPathForm (Đào Tạo > Lộ Trình Thăng Tiến > Tạo Lộ Trình Thăng Tiến Mới). Khối
+  // "Các Cấp Bậc" (cpStageBuilderContainer, addCpStageRow()) KHÔNG đưa vào — hàng động do người dùng tự
+  // thêm/bớt lúc tạo lộ trình, không phải field cố định có id ổn định, cùng lý do
+  // operationOrderItemsTableBody/budgetEntries đã loại ở Đợt 2/3.
+  CAREER_PATH: [
+    { id: 'cpName', label: 'Tên Lộ Trình', required: true },
+    { id: 'cpTargetTitle', label: 'Chức Danh Mục Tiêu (tuỳ chọn)', required: false },
+    { id: 'cpDescription', label: 'Mô Tả', required: false }
+  ],
+  // ONBOARDING_PATH: #onboardingPathForm (Đào Tạo > Đào Tạo Tân Binh > Quản Lý Lộ Trình Đào Tạo Tân Binh).
+  // opStage1/2RequiredCourseIds là <select multiple> tham chiếu trainingCourses (không phải danh sách
+  // nhãn cố định) nên KHÔNG có optionsKey, cùng lý do tpCourseId ở trên.
+  ONBOARDING_PATH: [
+    { id: 'opName', label: 'Tên Lộ Trình', required: true },
+    { id: 'opStage1RequiredCourseIds', label: 'Chương Trình Học Bắt Buộc Giai Đoạn 1 (Ngày 1-7, giữ Ctrl/Cmd để chọn nhiều)', required: true },
+    { id: 'opStage2RequiredCourseIds', label: 'Chương Trình Học Bắt Buộc Giai Đoạn 2 (Ngày 8-21, giữ Ctrl/Cmd để chọn nhiều)', required: true },
+    { id: 'opStage3Criteria', label: 'Tiêu Chí Đánh Giá Giai Đoạn 3 (Ngày 59, quản lý trực tiếp đánh giá — không có bài test)', required: false }
+  ],
+  // ONBOARDING_ASSIGN: #onboardingAssignForm (Đào Tạo > Đào Tạo Tân Binh > Phân Công Lộ Trình Cho Nhân
+  // Viên Mới) — LÀ 1 <div> (không phải <form>, nút "Phân Công" data-op gọi thẳng
+  // submitOnboardingAssignment() thay vì data-op-submit), nhưng vẫn là DOM TĨNH có sẵn từ lúc tải trang
+  // (chỉ classList.toggle('hidden') theo quyền ở renderTrainingLms(), KHÔNG render lại qua innerHTML) —
+  // KHÔNG rơi vào diện ngoại lệ như OPERATION_EXECUTION_PERIOD, applyAllCoreFieldCustomizations() 1 lần
+  // lúc initDatabase() là đủ, không cần call site riêng.
+  ONBOARDING_ASSIGN: [
+    { id: 'oaEmployeeInput', label: 'Nhân Viên', required: false },
+    { id: 'oaPathId', label: 'Lộ Trình', required: false }
+  ],
+  // TRAINING_CLASS_EDIT: #trainingEditClassForm (modal "✏️ Sửa Lớp Học", mở từ bảng Lớp Học qua
+  // openEditTrainingClassModal()) — gap-fill phát hiện qua audit toàn app (đếm lại TOÀN BỘ <form id=...
+  // data-op-submit=...> thật trong file: 25 form, 24/25 đã có coreKey qua Đợt 1-4, CHỈ CÒN đúng form
+  // này). Là bản SỬA riêng biệt của TRAINING_CLASS (id khác hẳn, prefix "te" thay vì "tc", có
+  // teInstructorFieldWrap/teLocationFieldWrap ẩn/hiện tĩnh theo c.mode SẴN CÓ của lớp — KHÔNG có ô đổi
+  // #tcMode như form Tạo Mới, xem chú thích ngay tại markup #trainingEditClassModal), nên KHÔNG dùng
+  // chung override với tcXxx được — cần 1 coreKey riêng, đúng khuôn "form tạo mới + form sửa là 2 bộ
+  // field độc lập" đã áp dụng cho mọi module khác trong toàn hệ thống. teDocumentIds (Giáo Trình) ĐƯA VÀO
+  // ĐƯỢC (khác tcDocumentIds bị loại ở Đợt 3) — nhãn field này CỐ ĐỊNH ở form Sửa, không có hàm nào tự
+  // đổi qua lại theo mode (mode đã khoá, không đổi được sau khi tạo).
+  TRAINING_CLASS_EDIT: [
+    { id: 'teCategory', label: 'Loại Đào Tạo', required: true, optionsKey: 'trainingCategories' },
+    { id: 'teTitle', label: 'Tên Lớp Học', required: true },
+    { id: 'teInstructor', label: 'Giảng Viên / Người Phụ Trách', required: false },
+    { id: 'teCourseId', label: 'Chương Trình (tuỳ chọn)', required: false },
+    { id: 'teStart', label: 'Thời Gian Bắt Đầu', required: true },
+    { id: 'teEnd', label: 'Thời Gian Kết Thúc', required: false },
+    { id: 'teLocation', label: 'Địa Điểm / Hình Thức', required: false },
+    { id: 'teDeadline', label: 'Hạn Đăng Ký', required: false },
+    { id: 'teCapacity', label: 'Số Lượng Tối Đa (để trống = không giới hạn)', required: false },
+    { id: 'tePassScore', label: 'Điểm Đạt Yêu Cầu (%) — bắt buộc nếu có gán Bài Test', required: false },
+    { id: 'teTestId', label: 'Bài Test Gán Cho Lớp', required: false },
+    { id: 'teTestSecondsPerQuestion', label: 'Số Giây / Câu Hỏi', required: false },
+    { id: 'teDocumentIds', label: 'Giáo Trình (chọn từ Kho Tài Liệu, giữ Ctrl/Cmd để chọn nhiều)', required: false },
+    { id: 'teDescription', label: 'Mô Tả / Nội Dung', required: false }
   ]
 };
 
@@ -8388,7 +8489,18 @@ const FORM_TABS = [
   { key: 'RECRUITMENT_REFERRAL', coreKey: 'RECRUITMENT_REFERRAL', label: 'Tuyển Dụng - Giới Thiệu Ứng Viên', icon: '🙋', short: 'TD - Giới Thiệu' },
   { key: 'HR_FEEDBACK', coreKey: 'HR_FEEDBACK', label: 'HCRC Đồng Hành - Gửi Câu Hỏi', icon: '🤝', short: 'HCRC Đồng Hành' },
   { key: 'OPERATION_EXECUTION_PERIOD', coreKey: 'OPERATION_EXECUTION_PERIOD', label: 'Vận Hành - Tạo Kỳ Thực Hiện', icon: '📅', short: 'VH - Kỳ Thực Hiện' },
-  { key: 'IT_RENEWAL', coreKey: 'IT_RENEWAL', label: 'Hỗ Trợ IT - Gia Hạn Dịch Vụ', icon: '🔔', short: 'IT - Gia Hạn' }
+  { key: 'IT_RENEWAL', coreKey: 'IT_RENEWAL', label: 'Hỗ Trợ IT - Gia Hạn Dịch Vụ', icon: '🔔', short: 'IT - Gia Hạn' },
+  // Đợt 4 (nốt các form Đào Tạo còn lại: Chương Trình/Kế Hoạch/Kho Tài Liệu/Lộ Trình Thăng Tiến/Đào Tạo
+  // Tân Binh) — mỗi tab key riêng TRÙNG coreKey, cùng khuôn Đợt 1/2/3.
+  { key: 'TRAINING_COURSE', coreKey: 'TRAINING_COURSE', label: 'Đào Tạo - Tạo Chương Trình', icon: '📚', short: 'ĐT - Chương Trình' },
+  { key: 'TRAINING_PLAN', coreKey: 'TRAINING_PLAN', label: 'Đào Tạo - Kế Hoạch Đào Tạo', icon: '🗓️', short: 'ĐT - Kế Hoạch' },
+  { key: 'TRAINING_DOC', coreKey: 'TRAINING_DOC', label: 'Đào Tạo - Kho Tài Liệu', icon: '📁', short: 'ĐT - Kho Tài Liệu' },
+  { key: 'CAREER_PATH', coreKey: 'CAREER_PATH', label: 'Đào Tạo - Lộ Trình Thăng Tiến', icon: '🪜', short: 'ĐT - Lộ Trình' },
+  { key: 'ONBOARDING_PATH', coreKey: 'ONBOARDING_PATH', label: 'Đào Tạo Tân Binh - Quản Lý Lộ Trình', icon: '🎒', short: 'Tân Binh - Lộ Trình' },
+  { key: 'ONBOARDING_ASSIGN', coreKey: 'ONBOARDING_ASSIGN', label: 'Đào Tạo Tân Binh - Phân Công', icon: '📋', short: 'Tân Binh - Phân Công' },
+  // Gap-fill phát hiện qua audit toàn app (đếm lại 25 <form data-op-submit> thật trong file — xem chú
+  // thích tại CORE_FIELD_MANIFEST.TRAINING_CLASS_EDIT).
+  { key: 'TRAINING_CLASS_EDIT', coreKey: 'TRAINING_CLASS_EDIT', label: 'Đào Tạo - Sửa Lớp Học', icon: '✏️', short: 'ĐT - Sửa Lớp Học' }
 ];
 
 // Trả về (và khởi tạo nếu chưa có) đối tượng override {fieldId: {label, required}} của các trường
