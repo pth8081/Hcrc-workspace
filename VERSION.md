@@ -1,11 +1,107 @@
 # Phiên bản hiện tại
 
-**6.6** — đã merge vào `main` (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge
+**6.7** — đã merge vào `main` (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge
 góc màn hình + `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần
 kiểu `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. Đúng theo quy tắc MINOR chạy 0-9 trong
-`CLAUDE.md`: sau `6.5` tăng MINOR lên `6.6`.
+`CLAUDE.md`: sau `6.6` tăng MINOR lên `6.7`.
 
-## Cập nhật gần nhất — Đăng nhập: nhớ tài khoản trên thiết bị (kiểu SeABank) — ẩn ô gõ tên, "Tài khoản khác", bỏ "Quên mật khẩu"
+## Cập nhật gần nhất — Hỗ Trợ IT > Phê Duyệt Giá: tách Bán Lẻ/Bán Buôn, giới hạn tải file, đánh dấu cột, khoá khẩn cấp lúc IT đang xử lý
+
+6 cải thiện cho module "Hỗ Trợ IT" > "Phê Duyệt Giá" (`itPriceApprovals`), đã research kỹ code hiện có +
+chốt hướng thiết kế với người dùng trước khi làm (không thêm cờ quyền phẳng mới, mở rộng đúng cấu hình
+"ai duyệt bước nào theo phòng ban" có sẵn sang thêm 1 chiều loại giá):
+
+- **Mục 1 — Tách `priceType` (RETAIL/WHOLESALE) + 2 sub-tab con**: `lib/createValidation.js`
+  (`itPriceApprovals.extraValidate`) bắt buộc `priceType` hợp lệ khi tạo (400 nếu thiếu/sai).
+  `public/index.html` — thêm 2 nút sub-tab con "🏷️ Bán Lẻ"/"🏪 Bán Buôn" trong tab Phê Duyệt Giá
+  (`setItPriceSubTab()`, mặc định RETAIL), mỗi sub-tab dùng CHUNG 1 form tạo nhưng tự động gắn đúng
+  `priceType` theo sub-tab đang mở (không có dropdown chọn tay, tránh chọn nhầm) — lọc danh sách + đếm
+  dashboard theo `(item.priceType || 'RETAIL') === activeSubTab`, hồ sơ CŨ chưa có field này tự rơi vào
+  Bán Lẻ, không cần script migrate dữ liệu.
+- **Mục 2/3 — Giới hạn tải: chỉ file đã phê duyệt, cả IT lẫn người duyệt phòng ban đều tải được đúng file
+  đó**: viết `resolveApprovedFileId()`/`resolveApprovedFileUrl()` DÙNG CHUNG (`lib/recordActions.js`) —
+  MIRROR đúng fallback đã có sẵn ở client cho hồ sơ CŨ APPROVED trước khi có `approvedFileId` (chưa từng
+  có yêu cầu bổ sung từ IT thì coi file cuối cùng là file đã duyệt, khác thì không file nào đủ tin cậy).
+  `lib/fileAuthz.js` (`authorizeFileAccess()`, nhánh `owning.itPrice`, `mode==='download'`) — sau khi
+  `canViewItPriceApproval()` pass, kiểm thêm `fileUrl` phải khớp đúng file đã duyệt mới cho tải (403 nếu
+  không khớp); `mode==='view'` (Khung Xem Bảo Vệ) GIỮ NGUYÊN không đổi. Client (`renderItPriceModal()`)
+  chỉ hiện nút "⬇️ Tải file gốc" cho đúng file khớp (mirror `resolveApprovedFileIdClient()`), file khác
+  vẫn xem được bảng dữ liệu đầy đủ, chỉ ẩn nút tải.
+- **Mục 4 — Đánh dấu cột trước khi tải (tô xanh da trời nhạt, giữ NGUYÊN đủ mọi cột)**: route mới
+  `POST /api/it-price/:id/download-marked` (`routes/priceFile.js`) — tự kiểm lại quyền
+  (`canViewItPriceApproval()`) + xác định đúng file đã duyệt (dùng lại `resolveApprovedFileUrl()`, không
+  tin riêng client), đọc file gốc từ đĩa bằng `exceljs` (`workbook.xlsx.load()`, có thêm lớp phòng thủ
+  zip-bomb `assertDecompressedSizeWithinBudget()` dù file đã qua kiểm 1 lần lúc tải lên), dò lại cột theo
+  TÊN (khớp `normalizeHeader()` dùng chung với `lib/priceFileParser.js`, không tin lại vị trí suy ra lúc
+  parse ban đầu vì có thể lệch nếu nộp qua Mẫu Giá), tô `fill` màu `FFBFDFF5` cho TOÀN BỘ cell (header +
+  dữ liệu) của các cột được chọn, sinh buffer MỚI theo từng request — KHÔNG bao giờ ghi đè file gốc trên
+  đĩa. `public/index.html` — nút "📋 Đánh dấu cột trước khi tải" mở box checkbox (tick đổi nền xanh da
+  trời nhạt ngay lúc chọn), nút "⬇️ Tải file đã đánh dấu" gọi route mới, song song với link tải file gốc
+  hiện có (không bắt buộc phải đánh dấu mới tải được).
+- **Mục 5 — Khoá "🚨 Từ Chối Khẩn" khi IT đang xử lý ("Tôi đang xử lý" đã bấm, `applyClaimedBy` có giá
+  trị) — ÁP DỤNG CHO MỌI NGƯỜI, KỂ CẢ ADMIN**: `public/index.html` (điều kiện hiện nút,
+  `renderItPriceModalControls()`) thêm `&& !p.applyClaimedBy` ĐỘC LẬP với nhánh admin của
+  `isFinalStepApproverOfItPriceClient()`. `lib/recordActions.js`
+  (`requestItPriceEmergencyReject()`) thêm chặn cứng NGAY ĐẦU HÀM (trước mọi nhánh có thể cho admin bỏ
+  qua): `item.applyClaimedBy` có giá trị → 409, không có ngoại lệ nào cho `user.perms?.admin`.
+- **Mục 6 — Tách cấu hình duyệt theo dept × loại giá, tương thích ngược cấu hình cũ**: `defaults.js` —
+  `itPriceDeptWorkflows` đổi cấu trúc từ `{dept: {workflowId,approvers}}` (CŨ, phẳng) sang lồng thêm 1
+  cấp `{dept: {RETAIL:{...}, WHOLESALE:{...}}}`. `lib/workflowEngine.js` — hàm mới
+  `resolveItPriceDeptWorkflowConfig(map, dept, priceType)`: cấu hình CŨ (phẳng, không có nhánh
+  RETAIL/WHOLESALE) coi TOÀN BỘ là RETAIL, WHOLESALE coi như chưa cấu hình (null, không throw) — CHỈ sửa
+  ĐÚNG nhánh `resolveWfConfig` của `itPriceApprovals` trong `MODULE_CONFIGS`, không đụng module khác dùng
+  chung file (`docs`/`carRegs`/`officeReqs`/`budgetEntries`/...). `public/index.html`
+  (`WORKFLOW_TAB` entry `ITPRICE`) — thêm cờ `priceTypeNested` (khác `hasTypes` thường của Văn Bản Trình,
+  vì thứ tự lồng NGƯỢC: dept-ngoài/loại-trong thay vì loại-ngoài/dept-trong), 2 sub-tab "Bán Lẻ"/"Bán
+  Buôn" trong màn cấu hình admin để gán người duyệt riêng cho từng tổ hợp phòng ban × loại giá — khi admin
+  lần đầu cấu hình loại thứ 2 cho 1 phòng ban đang có cấu hình phẳng cũ, tự chuyển cấu hình cũ đó thành
+  nhánh RETAIL trước khi ghi thêm (không mất dữ liệu).
+
+**Verify integrity**: `node -c` toàn bộ file server sửa (`lib/fileAuthz.js`, `lib/recordActions.js`,
+`lib/createValidation.js`, `lib/workflowEngine.js`, `lib/priceFileParser.js`, `lib/xlsxSafeRead.js`,
+`defaults.js`, `routes/priceFile.js`) OK. Script kiểm `public/index.html` (parse 4 script block, quét
+trùng `id=`, đếm div mở/đóng) khớp đúng baseline pre-existing (13 dup-id đã biết từ trước, lệch div=5
+không đổi) — không phát sinh thêm.
+
+**Test tự động**: mở rộng `tests/test-it-support.js` (Playwright + mock backend chạy CODE THẬT của
+`lib/recordActions.js`/`lib/workflowEngine.js`) — thêm 4 kịch bản: tạo hồ sơ RETAIL/WHOLESALE từ đúng
+sub-tab + lọc đúng danh sách theo sub-tab; cấu hình lồng dept×priceType (dept "Marketing" mới) — người
+duyệt Bán Lẻ/Bán Buôn KHÔNG duyệt chéo được nhau; hồ sơ CŨ mock trực tiếp (không `priceType`) vẫn lọc
+đúng vào Bán Lẻ; "Từ Chối Khẩn" bị khoá khi `applyClaimedBy` có giá trị — test riêng case ADMIN cũng bị
+chặn, mở khoá lại sau khi IT huỷ nhận việc. Viết mới `tests/test-itprice-download.js` (thuần Node, lib
+thật + Express router thật, không mock lại logic) — 17 kịch bản: giới hạn tải file theo mode
+'download'/'view', fallback file đã duyệt cho hồ sơ cũ (cả 2 nhánh có/không từng có yêu cầu bổ sung từ
+IT), `resolveItPriceDeptWorkflowConfig()` với cấu hình phẳng/lồng/chưa cấu hình, `applyWorkflowAction()`
+thật với hồ sơ thiếu `priceType`, và route `download-marked` thật (file `.xlsx` thật trên đĩa) — tô đúng
+cột, giữ nguyên dữ liệu, KHÔNG ghi đè file gốc (so sánh hash trước/sau), chặn người ngoài phạm vi/hồ sơ
+chưa duyệt/columnKeys không hợp lệ. Cả 2 file PASS 100%. Chạy toàn bộ `tests/test-*.js` (47 file) —
+giữ nguyên 2 file known-flaky đã biết từ trước (`test-audit-fixes-batch1.js`/
+`test-audit-round2-cluster1.js`, cần SQL Server thật không có trong sandbox unit-test, xác nhận lỗi
+GIỐNG HỆT baseline trước khi sửa qua diff log), còn lại đều PASS — không phát sinh regression cho các
+module khác dùng chung `resolveWfConfig`/`MODULE_CONFIGS` ở `lib/workflowEngine.js`.
+
+**Demo Playwright thật** (server.js + SQL Server thật qua Docker container `vpdt-mssql`, tài khoản demo
+`itSupport`/`itManage`/2 người duyệt phòng ban `totpEnabled:false`; tài khoản admin BẮT BUỘC lần đầu qua
+màn thiết lập TOTP — tự động hoàn tất bằng `otplib` tính đúng mã 6 số từ secret hiện trên màn, dùng 1
+page RIÊNG giữ đăng nhập XUYÊN SUỐT cho admin để tránh đúng bug 401-ở-lượt-đăng-nhập-kế-tiếp đã biết,
+không đăng nhập lại admin lần 2 trong cả phiên demo): admin cấu hình 2 người duyệt TÁCH RIÊNG cho Bán
+Lẻ/Bán Buôn của phòng ban thật ("Phòng Kế Toán") → tạo 1 hồ sơ Bán Lẻ + 1 hồ sơ Bán Buôn từ đúng 2
+sub-tab, xác nhận đúng người duyệt hiện lên theo đúng loại, người duyệt Bán Buôn thử duyệt hồ sơ Bán Lẻ
+bị chặn (và ngược lại) → người duyệt Bán Lẻ yêu cầu bổ sung, người đề xuất tải tệp bổ sung (append-only,
+2 tệp) rồi duyệt xong → xác nhận CHỈ file đã duyệt (tệp bổ sung, tệp cuối) tải được, tệp gốc bị chặn 403 —
+đúng cho CẢ tài khoản IT lẫn tài khoản người duyệt → đánh dấu 2 cột rồi tải, đọc lại bằng `exceljs` xác
+nhận tô ĐÚNG 2 cột đã chọn (cả header lẫn dữ liệu), 2 cột còn lại không bị tô, không mất dòng/cột/dữ liệu
+nào → IT bấm "Tôi đang xử lý" → xác nhận nút "🚨 Từ Chối Khẩn" biến mất + server chặn cứng gọi thẳng API,
+đúng cho CẢ người duyệt bước cuối LẪN tài khoản admin (không có bypass) → mock 1 hồ sơ CŨ trực tiếp
+(không `priceType`) vẫn hiện đúng ở sub-tab Bán Lẻ, không lọt sang Bán Buôn. 36/36 kiểm tra PASS, chụp 16
+ảnh màn hình minh hoạ từng bước.
+
+**Deploy-impact**: KHÔNG đổi `sql/schema.sql` (`itPriceApprovals` lưu payload JSON blob trong
+`dbo.Records`, field mới `priceType` chỉ là thay đổi code) — KHÔNG cần chạy lại schema. KHÔNG thêm biến
+môi trường mới (`.env.example` không đổi). KHÔNG thêm `dependencies` mới (`exceljs` đã có sẵn từ trước
+cho `lib/priceFileParser.js`, route mới dùng lại đúng gói đó). Chỉ cần copy code + `pm2 restart`.
+
+## Trước đó — Đăng nhập: nhớ tài khoản trên thiết bị (kiểu SeABank) — ẩn ô gõ tên, "Tài khoản khác", bỏ "Quên mật khẩu"
 
 Màn hình đăng nhập (`#loginSection`, `public/index.html`) đổi theo flow app SeABank tham chiếu: sau lần
 đăng nhập **thành công đầu tiên** trên 1 thiết bị — bằng **bất kỳ phương thức nào** (mật khẩu thường,
