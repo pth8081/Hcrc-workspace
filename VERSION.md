@@ -1,11 +1,97 @@
 # Phiên bản hiện tại
 
-**7.1** — đã merge vào `main` (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge
+**7.2** — đã merge vào `main` (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge
 góc màn hình + `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần
 kiểu `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. Đúng theo quy tắc MINOR chạy 0-9 trong
-`CLAUDE.md`: sau `7.0` tăng MINOR lên 1 → `7.1`.
+`CLAUDE.md`: sau `7.1` tăng MINOR lên 1 → `7.2`.
 
-## Cập nhật gần nhất — Nhóm Không Cấp Văn Phòng Phẩm: chuyển từ gán theo NHÓM sang chọn thẳng CHỨC DANH (mảng phẳng)
+## Cập nhật gần nhất — Biểu Mẫu Đợt 1: mở rộng ra Công Việc/Văn Phòng Phẩm/Giấy Phép/Hỗ Trợ IT (5 tab mới)
+
+Module "📋 Biểu Mẫu" (Hệ Thống → Quản Trị) trước đây chỉ phủ 9 phân hệ (Văn Bản Trình, Hợp Đồng ×2, Đăng
+Ký Xe, Văn Phòng ×2, Tài Liệu, Biên Bản Họp, Đặt Phòng Họp, Truyền Thông Nội Bộ) — đợt 1 mở rộng thêm
+đúng 4-5 phân hệ theo yêu cầu người dùng ("mọi biểu mẫu nhập liệu trong app phải lên được Biểu Mẫu để sửa
+nhãn/bắt buộc/danh sách lựa chọn mà không đụng code"): **Công Việc** (form Giao Việc, `#createTaskModal`),
+**Văn Phòng Phẩm** (form Tạo Kỳ Đăng Ký, `#vppSubPeriods` — VPP không có "1 hồ sơ = field cố định" như các
+module khác, đăng ký là chọn số lượng trực tiếp trên bảng danh mục hàng hoá động theo từng kỳ nên không có
+field cố định nào để đưa vào Biểu Mẫu ở đúng màn đó), **Giấy Phép** (`#licenseForm`), và **Hỗ Trợ IT** tách
+riêng 2 tab con — **Đề Xuất Duyệt Giá** (`#itPriceCreateForm`) và **Yêu Cầu Hỗ Trợ** (`#itTicketCreateForm`).
+
+**5 `coreKey` mới trong `CORE_FIELD_MANIFEST`** (`public/index.html`): `TASK` (4 field), `VPP` (4 field),
+`LICENSE` (10 field), `IT_PRICE` (7 field), `IT_TICKET` (4 field) — cùng 5 `FORM_TABS` entry mới (key
+trùng coreKey, mỗi module chỉ có 1 form nên không tách sub-tab như `CONTRACT`/`OFFICE`). Cơ chế áp dụng
+(`applyCoreFieldCustomizations()`/`applyAllCoreFieldCustomizations()`) đã CHUNG cho MỌI coreKey từ trước —
+chỉ cần khai đúng field id trong manifest là admin sửa nhãn/bắt buộc có hiệu lực ngay trên form thật, không
+cần thêm call site riêng cho 5 module mới (đã verify bằng cả Playwright mock lẫn demo thật). Giữ đúng
+nguyên tắc đã chốt với người dùng: **mọi trường mặc định chỉ sửa được Nhãn hiển thị + Bắt buộc nhập,
+KHÔNG xoá được, KHÔNG đổi kiểu dữ liệu** — không thêm nút xoá nào cho trường mặc định ở 5 tab mới.
+
+**2 dropdown "danh sách lựa chọn cố định" mới thành admin-editable** (`optionsKey`, cùng khuôn
+`submissionTypes`/`contractTypes`/`carTypes`/`internalNewsCategories` có sẵn):
+- `LICENSE.licenseType` → `optionsKey: 'licenseTypes'` — danh sách NÀY đã tồn tại sẵn (đã admin-editable
+  qua màn "Quản Lý Danh Mục" riêng + tự học thêm khi ai gõ loại mới, xem `uploadLicense()`), optionsKey chỉ
+  thêm 1 lối sửa song song (đúng khuôn `cats`/DOC đã có 2 lối sửa từ trước), KHÔNG đổi cơ chế tự học.
+- `IT_TICKET.itTicketCategory` → `optionsKey: 'itTicketCategories'`, `optionsIsKeyLabel: true` — danh sách
+  **MỚI HOÀN TOÀN**: "Danh Mục" của Hỗ Trợ Yêu Cầu IT trước đây gõ cứng 5 `<option>` (`IT_TICKET_CATEGORY_
+  LABELS`), giờ chuyển thành `DEFAULTS.itTicketCategories` (`defaults.js`, seed đúng 5 giá trị cũ để không
+  đổi hành vi dữ liệu có sẵn) + `ADMIN_ONLY_KEYS` (`routes/data.js`) — client đổ động qua
+  `populateItTicketCategorySelect()` (cùng khuôn `populateInternalPostCategorySelects()`), hiển thị đọc qua
+  `getItTicketCategoryLabel()` (fallback về nhãn gốc nếu key không còn trong DB — dữ liệu cũ trước khi seed
+  chạy). Server-side: `itSupportTickets.extraValidate()` (`lib/createValidation.js`) đổi từ `Set` cố định 5
+  giá trị sang đọc `appData.itTicketCategories` (vẫn giữ fallback y hệt `Set` cũ nếu `appData` chưa seed).
+  `itPriceTier` (Margin/Chiết Khấu Bán Buôn) và `itPriceMasterListSelect` (Mẫu Giá) CỐ Ý không có optionsKey
+  — 2 danh sách này gắn trực tiếp với cấu hình duyệt/khuôn cột đã có màn quản trị riêng, đổi khoá tự do sẽ
+  làm mồ côi cấu hình đã gán.
+
+**Fix 1 lỗi thật phát hiện trong lúc audit `#licenseForm`**: nhiều field (`licenseCode`/`licenseCompanyName`/
+`licenseLocationName`/`licenseOperatingStatus`/`licenseNumber`/`licenseIssuingAuthority`/`licenseFile`) là
+CON TRỰC TIẾP của `<form>` (không bọc riêng từng `<div>`) — cơ chế `applyCoreFieldCustomizations()` tìm
+`<label>` qua `input.closest('div')`, nên TRƯỚC KHI thêm `LICENSE` vào manifest, sửa nhãn BẤT KỲ field nào
+trong số này sẽ vô tình ghi đè nhãn "Loại thao tác:" ở đầu form (`closest('div')` của các field bare này
+đều trỏ về cùng 1 div ngoài cùng chứa label đó). Đã bọc lại từng field trong `<div>` riêng trước khi thêm
+`optionsKey`/field vào manifest — không đổi id/giá trị/hành vi nào khác của form, chỉ đổi cấu trúc bọc.
+
+**Test**: `tests/test-forms-batch1.js` (MỚI, cùng khuôn `tests/test-doc.js` — mock DOM/DB, không cần SQL
+Server thật) — 26 kịch bản: 5 tab mới hiện đúng trong `renderFormTabsBar()`; sửa nhãn mặc định qua
+`editCoreField()`+`addCustomField()` (mô phỏng submit form Biểu Mẫu thật) phản ánh đúng lên form thật cho
+TASK/LICENSE; xác nhận sửa 1 field KHÔNG lem nhãn sang field khác (regression guard cho lỗi `#licenseForm`
+ở trên); sửa `optionsKey` (`licenseTypes` + `itTicketCategories` optionsIsKeyLabel:true — key ổn định GIỮ
+NGUYÊN khi nhãn không đổi, chỉ nhãn thực sự mới mới sinh key mới, đúng khuôn `saveCoreFieldOptionsList()`
+đã dùng cho `submissionTypes`); cả 5 tab mới đều đủ số field mặc định khai trong manifest và KHÔNG có nút
+xoá (`deleteCustomField`) nào cho trường mặc định. `tests/testHarness.js` (dùng chung bởi nhiều bài test
+khác, gồm `tests/test-it-support.js`) bổ sung seed mặc định `itTicketCategories` (cả trong `createMockState()`
+lẫn `buildAppDataForCreate()`) — thiếu bước này thì `<select id="itTicketCategory">` (giờ đổ động, không còn
+`<option>` gõ cứng) sẽ RỖNG trong môi trường test, khiến `document.getElementById('itTicketCategory').value =
+'HARDWARE'` (nhiều dòng có sẵn trong `test-it-support.js`) không set được gì — đã phát hiện VÀ vá TRƯỚC khi
+chạy full suite, không phải regression sót lại.
+
+Chạy lại toàn bộ `tests/test-*.js` (49 file, tính cả bài mới) — chỉ còn đúng 2 lỗi known pre-existing cần
+SQL Server thật (`test-audit-fixes-batch1.js`, `test-audit-round2-cluster1.js` — mọi kịch bản BÊN TRONG 2
+bài này đều PASS, chỉ process không tự thoát sau khi xong, không phải lỗi mới), không phát sinh regression
+nào khác ngoài lỗi `itTicketCategories` ở `testHarness.js` đã tự vá kể trên.
+
+Demo Playwright thật (Docker `vpdt-mssql` + `node server.js`, tài khoản `demo_forms_admin` — admin MỚI TẠO,
+`totpEnabled:false` ban đầu nhưng vẫn phải qua đúng màn "Bắt Buộc Thiết Lập Xác Thực 2 Lớp" lần đăng nhập
+đầu vì TOTP là BẮT BUỘC với MỌI tài khoản admin bất kể `totpEnabled`, xem `proceedAfterAuth()` — hoàn tất
+bằng mã 6 số sinh THẬT từ `otplib` cùng thư viện server dùng để verify, không phải giả lập): mở Biểu Mẫu,
+xác nhận đủ 5 tab mới hiện trên UI thật; sửa nhãn 1 trường mặc định ở 3 module (Công Việc/Giấy Phép/Hỗ Trợ
+Yêu Cầu IT) qua đúng nút "✏️ Sửa" + form thật, lưu — mở form nghiệp vụ thật tương ứng (`#createTaskModal`/
+`#licenseForm`/`#itTicketCreateForm`) và xác nhận nhãn mới hiện đúng ngay; xác nhận cả 5 tab mới đều không
+có nút xoá nào cho trường mặc định. 14/14 kịch bản pass.
+
+**Phạm vi CHƯA làm trong đợt này (để lại cho đợt sau nếu cần)**: "trường bổ sung" (custom field admin tự
+thêm hoàn toàn mới, khác sửa trường mặc định có sẵn) cho 5 module mới CHƯA được wire vào form nghiệp vụ
+thật (chưa có `dynamicFieldsContainer_*` + `renderDynamicInputsForModule()`/`collectDynamicFieldsData()`/
+`validateRequiredCustomData()` cho TASK/VPP/LICENSE/IT_PRICE/IT_TICKET như 8 module cũ đã có) — admin VẪN
+thêm được 1 trường bổ sung qua UI Biểu Mẫu cho các tab này (lưu vào `DB.formTemplates`), nhưng nó sẽ KHÔNG
+hiện trên form thật cho tới khi hạ tầng này được nối thêm. Yêu cầu gốc của người dùng (sửa nhãn/bắt buộc/
+danh sách lựa chọn của trường MẶC ĐỊNH) đã đủ, không bị ảnh hưởng bởi giới hạn này.
+
+**Deploy-impact**: KHÔNG đổi `sql/schema.sql` (vẫn là JSON blob trong `dbo.AppData`), KHÔNG đổi
+`.env.example`, KHÔNG thêm `dependencies` mới — chỉ copy code + `pm2 restart`. `itTicketCategories` tự seed
+đúng 1 lần ngay trong lần khởi động server đầu tiên sau khi cập nhật (`seedDefaults()`, vòng lặp `DEFAULTS`
+đã có sẵn tự nhận key mới), không cần thao tác tay nào thêm.
+
+## Trước đó — Nhóm Không Cấp Văn Phòng Phẩm: chuyển từ gán theo NHÓM sang chọn thẳng CHỨC DANH (mảng phẳng)
 
 Khối 17 "Nhóm Quyền Đặc Biệt" (màn Hệ Thống → Quản Trị → Phân Quyền) — "Nhóm Không Cấp Văn Phòng Phẩm"
 trước đây là 1 danh sách NHIỀU NHÓM tự đặt tên, mỗi nhóm mang 1 danh sách chức danh, và còn phải gán thủ

@@ -75,6 +75,10 @@ const ADMIN_ONLY_KEYS = new Set([
   // Truyền Thông Nội Bộ) — cùng lý do submissionTypes ở trên, quyết định trực tiếp giá trị postCategory
   // hợp lệ khi tạo bài (xem createValidation.js internalPosts.extraValidate).
   'internalNewsCategories', 'internalShareCategories',
+  // itTicketCategories: "Danh Mục" của ô Yêu Cầu Hỗ Trợ IT (CORE_FIELD_MANIFEST.IT_TICKET, optionsKey) —
+  // cùng lý do contractTypes/carTypes ở trên: từ khi cho sửa danh sách lựa chọn qua màn Biểu Mẫu (chỉ
+  // Admin), ghi trực tiếp POST /api/data/itTicketCategories phải khoá lại đúng độ mở của màn đó.
+  'itTicketCategories',
   // Người phụ trách nhận thông báo hết hạn hợp đồng theo phòng ban (xem jobs/contractExpiryReminder.js)
   // — cùng khuôn quản trị như emailConfig ở trên, không phải danh sách hiển thị thuần.
   'contractExpiryDeptContacts',

@@ -133,6 +133,18 @@ const DEFAULTS = {
   contractTypes: ['Hợp đồng kinh tế', 'Hợp đồng lao động', 'Giấy phép kinh doanh / Pháp lý', 'Thỏa thuận bảo mật (NDA)', 'Phụ lục hợp đồng'],
   carTypes: ['5 chỗ', '7 chỗ'],
 
+  // "Danh Mục" của ô Yêu Cầu Hỗ Trợ IT — TRƯỚC ĐÂY gõ cứng <option> trong index.html (IT_TICKET_CATEGORY_LABELS),
+  // giờ chuyển thành dữ liệu để admin tự thêm/bớt/đổi nhãn tại màn Biểu Mẫu (CORE_FIELD_MANIFEST.IT_TICKET,
+  // optionsKey 'itTicketCategories', optionsIsKeyLabel:true — GIỮ NGUYÊN đúng key hiện có để không mồ côi
+  // giá trị t.category đã lưu trên các ticket cũ, cùng khuôn submissionTypes/internalNewsCategories ở trên).
+  itTicketCategories: [
+    { key: 'HARDWARE', label: '🖥️ Phần cứng' },
+    { key: 'SOFTWARE', label: '💿 Phần mềm' },
+    { key: 'NETWORK', label: '🌐 Mạng / Internet' },
+    { key: 'ACCOUNT', label: '🔑 Tài khoản / Đăng nhập' },
+    { key: 'OTHER', label: '❓ Khác' }
+  ],
+
   // Danh Mục Đồng Phục — mỗi mục = 1 loại đồng phục + các size khả dụng của loại đó. Trước đây Hành
   // Chính gõ tay tên/size tự do khi phân bổ (uniformPeriods.allocations[].items), dễ sai lệch chính tả
   // (khoá tồn kho ghép chuỗi "tên|||size" — gõ khác 1 ký tự là tính thành 1 dòng tồn kho khác hẳn).

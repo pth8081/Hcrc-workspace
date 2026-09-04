@@ -3850,19 +3850,21 @@ input[data-sdd-list] {
           <p class="text-[11px] text-gray-500 italic mt-1">Chỉ hiện giấy phép mà phiên bản mới nhất không đang chờ duyệt.</p>
         </div>
 
-        <input id="licenseCode" readonly placeholder="Mã giấy phép (tự sinh)" class="border p-2 rounded text-sm bg-gray-100 cursor-not-allowed" required>
-        <input id="licenseCompanyName" placeholder="Tên công ty chủ quản" class="border p-2 rounded text-sm" required>
-        <input id="licenseLocationName" placeholder="Tên địa điểm" class="border p-2 rounded text-sm" required>
+        <div><input id="licenseCode" readonly placeholder="Mã giấy phép (tự sinh)" class="w-full border p-2 rounded text-sm bg-gray-100 cursor-not-allowed" required></div>
+        <div><input id="licenseCompanyName" placeholder="Tên công ty chủ quản" class="w-full border p-2 rounded text-sm" required></div>
+        <div><input id="licenseLocationName" placeholder="Tên địa điểm" class="w-full border p-2 rounded text-sm" required></div>
 
-        <select id="licenseOperatingStatus" class="border p-2 rounded text-sm bg-white" required>
-          <option value="ACTIVE">Đang hoạt động</option>
-          <option value="CLOSED">Đã đóng cửa</option>
-        </select>
+        <div>
+          <select id="licenseOperatingStatus" class="w-full border p-2 rounded text-sm bg-white" required>
+            <option value="ACTIVE">Đang hoạt động</option>
+            <option value="CLOSED">Đã đóng cửa</option>
+          </select>
+        </div>
         <div class="relative">
           <input id="licenseType" data-sdd-list="licenseTypeDatalist" autocomplete="off" placeholder="Tên giấy phép / Loại giấy phép" class="w-full border p-2 rounded text-sm" required>
           <div id="licenseTypeDatalist" class="hidden" data-sdd-dropdown></div>
         </div>
-        <input id="licenseNumber" placeholder="Số giấy phép" class="border p-2 rounded text-sm" required>
+        <div><input id="licenseNumber" placeholder="Số giấy phép" class="w-full border p-2 rounded text-sm" required></div>
 
         <div>
           <label class="block text-xs font-semibold text-gray-600 mb-1">Ngày cấp</label>
@@ -3872,9 +3874,9 @@ input[data-sdd-list] {
           <label class="block text-xs font-semibold text-gray-600 mb-1">Ngày hết hạn</label>
           <input id="licenseExpiryDate" type="date" class="w-full border p-2 rounded text-sm" required>
         </div>
-        <input id="licenseIssuingAuthority" placeholder="Cơ quan cấp phép" class="border p-2 rounded text-sm" required>
+        <div><input id="licenseIssuingAuthority" placeholder="Cơ quan cấp phép" class="w-full border p-2 rounded text-sm" required></div>
 
-        <input id="licenseFile" type="file" accept=".pdf,.docx,.xlsx" class="md:col-span-3 border p-1 bg-white rounded text-sm" required>
+        <div class="md:col-span-3"><input id="licenseFile" type="file" accept=".pdf,.docx,.xlsx" class="w-full border p-1 bg-white rounded text-sm" required></div>
 
         <div class="md:col-span-3 flex justify-end">
           <button type="submit" class="bg-green-600 text-white px-5 py-2 rounded font-bold hover:bg-green-700 transition">Gửi phê duyệt</button>
@@ -5894,13 +5896,9 @@ input[data-sdd-list] {
             </div>
             <div>
               <label class="block font-semibold text-gray-600 mb-1">Danh Mục</label>
-              <select id="itTicketCategory" class="w-full border p-1.5 rounded bg-white">
-                <option value="HARDWARE">🖥️ Phần cứng</option>
-                <option value="SOFTWARE">💿 Phần mềm</option>
-                <option value="NETWORK">🌐 Mạng / Internet</option>
-                <option value="ACCOUNT">🔑 Tài khoản / Đăng nhập</option>
-                <option value="OTHER">❓ Khác</option>
-              </select>
+              <!-- Đổ động từ DB.itTicketCategories (admin tự thêm/bớt/đổi nhãn ở màn Biểu Mẫu, xem
+                   CORE_FIELD_MANIFEST.IT_TICKET optionsKey) — populateItTicketCategorySelect(). -->
+              <select id="itTicketCategory" class="w-full border p-1.5 rounded bg-white"></select>
             </div>
           </div>
           <div>
@@ -7880,7 +7878,7 @@ input[data-sdd-list] {
 const DB = {
   depts: [], cats: [], users: [], docs: [],
   deptAbbrs: {}, docCatAbbrs: {}, contractTypeAbbrs: {},
-  jobTitles: [], submissionTypes: [], contractTypes: [], carTypes: [], uniformCatalog: [],
+  jobTitles: [], submissionTypes: [], contractTypes: [], carTypes: [], uniformCatalog: [], itTicketCategories: [],
   workflows: [], deptWorkflows: {},
   submissions: [], submissionDeptWorkflows: {},
   submissionTypeDeptWorkflows: {}, submissionApprovalGroups: {},
@@ -8038,6 +8036,71 @@ const CORE_FIELD_MANIFEST = {
   INTERNAL_POST: [
     { id: 'internalPostCategory', label: 'Chuyên Đề Nhịp Sống HCRC', required: true, optionsKey: 'internalNewsCategories', optionsIsKeyLabel: true },
     { id: 'internalPostCategoryShare', label: 'Chuyên Đề Góc Chia Sẻ', required: true, optionsKey: 'internalShareCategories', optionsIsKeyLabel: true }
+  ],
+  // ===== Biểu Mẫu Đợt 1 (Công Việc/VPP/Giấy Phép/Hỗ Trợ IT) =====
+  // TASK: modal #createTaskModal (Giao Việc) — dùng chung 3 chế độ CREATE/ASSIGN/EDIT (taskModalMode),
+  // 4 field mặc định ở đây chỉ có mặt/áp dụng ở chế độ CREATE/EDIT (ASSIGN chỉ đổi người nhận/hạn, xem
+  // confirmCreateTask()). taskAssigneeInput không có <label> RIÊNG bọc cùng khối (input.closest('div')
+  // trỏ đúng wrapper #taskAssigneeSingleWrap không chứa <label>) nên applyCoreFieldCustomizations() rơi
+  // vào nhánh fallback cập nhật PLACEHOLDER thay vì <label> — chấp nhận được, đúng khuôn tài liệu đã ghi
+  // ở applyCoreFieldCustomizations().
+  TASK: [
+    { id: 'taskTitleInput', label: 'Tiêu Đề Công Việc', required: true },
+    { id: 'taskDescInput', label: 'Mô Tả / Nội Dung', required: false },
+    { id: 'taskAssigneeInput', label: 'Người Nhận', required: true },
+    { id: 'taskDeadlineInput', label: 'Hạn Hoàn Thành', required: false }
+  ],
+  // VPP: module Văn Phòng Phẩm KHÔNG có form nhập liệu cố định kiểu 1 hồ sơ (đăng ký = chọn số lượng
+  // trực tiếp trên bảng danh mục hàng hoá động theo từng kỳ, không phải field cố định) — bộ field mặc
+  // định duy nhất có ý nghĩa để admin sửa nhãn/bắt buộc là form "➕ Tạo Kỳ Đăng Ký Mới" (chỉ
+  // vppManage/admin thấy, sub-tab Kỳ Đăng Ký).
+  VPP: [
+    { id: 'vppNewPeriodName', label: 'Tên Kỳ Đăng Ký', required: true },
+    { id: 'vppNewPeriodStart', label: 'Ngày Bắt Đầu', required: false },
+    { id: 'vppNewPeriodEnd', label: 'Ngày Kết Thúc', required: false },
+    { id: 'vppNewPeriodBudget', label: 'Ngân Sách Văn Phòng Phẩm / Người (VNĐ)', required: false }
+  ],
+  // LICENSE: #licenseForm (Tải Lên Giấy Phép). licenseType optionsKey trỏ DB.licenseTypes — danh sách
+  // NÀY TRƯỚC ĐÂY ĐÃ admin-editable qua màn Quản Lý Danh Mục riêng (saveLicenseType()/deleteLicenseType(),
+  // ADMIN_ONLY_KEYS) VÀ tự học thêm khi ai gõ loại mới (uploadLicense()) — optionsKey ở đây chỉ THÊM 1
+  // lối sửa nữa (cùng khuôn 'cats' của DOC cũng có 2 lối sửa song song), KHÔNG thay thế cơ chế tự học.
+  // licenseOperatingStatus (ACTIVE/CLOSED) KHÔNG có optionsKey — 2 giá trị này là trạng thái hệ thống cố
+  // định (không phải danh sách nhãn tự do).
+  LICENSE: [
+    { id: 'licenseCode', label: 'Mã Giấy Phép', required: true },
+    { id: 'licenseCompanyName', label: 'Tên Công Ty Chủ Quản', required: true },
+    { id: 'licenseLocationName', label: 'Tên Địa Điểm', required: true },
+    { id: 'licenseOperatingStatus', label: 'Tình Trạng Hoạt Động', required: true },
+    { id: 'licenseType', label: 'Tên Giấy Phép / Loại Giấy Phép', required: true, optionsKey: 'licenseTypes' },
+    { id: 'licenseNumber', label: 'Số Giấy Phép', required: true },
+    { id: 'licenseIssueDate', label: 'Ngày Cấp', required: true },
+    { id: 'licenseExpiryDate', label: 'Ngày Hết Hạn', required: true },
+    { id: 'licenseIssuingAuthority', label: 'Cơ Quan Cấp Phép', required: true },
+    { id: 'licenseFile', label: 'Tệp Đính Kèm Giấy Phép', required: true }
+  ],
+  // IT_PRICE: #itPriceCreateForm (Hỗ Trợ IT > Đề Xuất Duyệt Giá Bán). itPriceMasterListSelect/itPriceTier
+  // KHÔNG có optionsKey — mẫu giá (itPriceMasterLists) đã có màn quản trị riêng (chọn KHUÔN CỘT, không
+  // phải nhãn thuần), còn itPriceTier (Margin/Chiết Khấu) là 4 mức CỐ ĐỊNH gắn trực tiếp với cấu hình
+  // quy trình duyệt riêng theo mức (itPriceTierWorkflows) — đổi khoá ở đây sẽ làm mồ côi cấu hình duyệt
+  // đã gán, nên KHÔNG đưa vào diện admin tự thêm/bớt giá trị (chỉ sửa nhãn/bắt buộc như mọi field khác).
+  IT_PRICE: [
+    { id: 'itPriceCode', label: 'Mã Đề Xuất', required: false },
+    { id: 'itPriceDeptDisplay', label: 'Phòng Ban Đề Xuất', required: false },
+    { id: 'itPriceMasterListSelect', label: 'Mẫu Giá Phê Duyệt', required: false },
+    { id: 'itPriceTier', label: 'Mức Margin / Chiết Khấu', required: false },
+    { id: 'itPriceFileInput', label: 'Tệp Bảng Giá (.xlsx)', required: false },
+    { id: 'itPriceReason', label: 'Lý Do Điều Chỉnh Giá', required: false },
+    { id: 'itPriceExtraFiles', label: 'Tài Liệu Bổ Sung Liên Quan', required: false }
+  ],
+  // IT_TICKET: #itTicketCreateForm (Hỗ Trợ IT > Hỗ Trợ Yêu Cầu). itTicketCategory optionsKey trỏ DB.
+  // itTicketCategories (MỚI — TRƯỚC ĐÂY gõ cứng <option>, xem defaults.js + populateItTicketCategorySelect()),
+  // optionsIsKeyLabel:true để GIỮ NGUYÊN key ổn định (tránh mồ côi t.category đã lưu trên ticket cũ, cùng
+  // khuôn submissionTypes/internalNewsCategories).
+  IT_TICKET: [
+    { id: 'itTicketCode', label: 'Mã Yêu Cầu', required: false },
+    { id: 'itTicketTitle', label: 'Tiêu Đề', required: true },
+    { id: 'itTicketCategory', label: 'Danh Mục', required: false, optionsKey: 'itTicketCategories', optionsIsKeyLabel: true },
+    { id: 'itTicketDescription', label: 'Mô Tả Chi Tiết', required: true }
   ]
 };
 
@@ -8060,7 +8123,14 @@ const FORM_TABS = [
   { key: 'DOC', coreKey: 'DOC', label: 'Tài Liệu', icon: '📁', short: 'Tài Liệu' },
   { key: 'MEETING_MINUTES', coreKey: 'MEETING_MINUTES', label: 'Biên Bản Họp', icon: '📝', short: 'Biên Bản Họp' },
   { key: 'MEETING_ROOM', coreKey: 'MEETING_ROOM', label: 'Đặt Phòng Họp', icon: '📅', short: 'Đặt Phòng' },
-  { key: 'INTERNAL_POST', coreKey: 'INTERNAL_POST', label: 'Truyền Thông Nội Bộ - Chuyên Đề', icon: '📣', short: 'Chuyên Đề TTNB' }
+  { key: 'INTERNAL_POST', coreKey: 'INTERNAL_POST', label: 'Truyền Thông Nội Bộ - Chuyên Đề', icon: '📣', short: 'Chuyên Đề TTNB' },
+  // Đợt 1 (mở rộng Biểu Mẫu ra thêm Công Việc/VPP/Giấy Phép/Hỗ Trợ IT) — mỗi tab key riêng TRÙNG coreKey
+  // (module chỉ có 1 bộ trường mặc định/1 form, không tách theo sub-tab như CONTRACT/OFFICE ở trên).
+  { key: 'TASK', coreKey: 'TASK', label: 'Công Việc - Giao Việc', icon: '📌', short: 'Công Việc' },
+  { key: 'VPP', coreKey: 'VPP', label: 'Văn Phòng Phẩm - Tạo Kỳ Đăng Ký', icon: '🖇️', short: 'VPP' },
+  { key: 'LICENSE', coreKey: 'LICENSE', label: 'Giấy Phép', icon: '📜', short: 'Giấy Phép' },
+  { key: 'IT_PRICE', coreKey: 'IT_PRICE', label: 'Hỗ Trợ IT - Đề Xuất Duyệt Giá', icon: '🏷️', short: 'IT - Duyệt Giá' },
+  { key: 'IT_TICKET', coreKey: 'IT_TICKET', label: 'Hỗ Trợ IT - Yêu Cầu Hỗ Trợ', icon: '🎫', short: 'IT - Yêu Cầu' }
 ];
 
 // Trả về (và khởi tạo nếu chưa có) đối tượng override {fieldId: {label, required}} của các trường
@@ -9777,6 +9847,7 @@ async function initDatabase(loggingInUser) {
     DB.submissionTypes = data.submissionTypes || [];
     DB.contractTypes = data.contractTypes || [];
     DB.carTypes = data.carTypes || [];
+    DB.itTicketCategories = data.itTicketCategories || [];
     DB.uniformCatalog = data.uniformCatalog || [];
 
     // Di trú phân quyền cũ (cờ bật/tắt toàn công ty theo module) sang mô hình mới theo phòng ban.
@@ -13831,6 +13902,27 @@ function populateInternalPostCategorySelects() {
   fillCategorySelect('internalPostCategoryShare', DB.internalShareCategories);
 }
 
+// Đổ danh sách "Danh Mục" cho ô #itTicketCategory (Hỗ Trợ Yêu Cầu IT, xem CORE_FIELD_MANIFEST.IT_TICKET) —
+// value là KEY (khớp payload.category server yêu cầu, xem lib/createValidation.js itSupportTickets),
+// cùng khuôn populateInternalPostCategorySelects() ở trên. Gọi lại mỗi khi DB.itTicketCategories đổi
+// (populateDropdowns() sau initDatabase()/sau khi admin lưu danh sách ở màn Biểu Mẫu).
+function populateItTicketCategorySelect() {
+  const sel = document.getElementById('itTicketCategory');
+  if (!sel) return;
+  const current = sel.value;
+  const list = DB.itTicketCategories || [];
+  sel.innerHTML = list.map(c => `<option value="${escapeHtml(c.key)}">${escapeHtml(c.label)}</option>`).join('');
+  if (list.some(c => c.key === current)) sel.value = current;
+}
+
+// Nhãn hiển thị hiện tại (đổi theo admin) của 1 category IT Ticket — fallback về nhãn gốc (defaults.js)
+// nếu key không còn trong DB.itTicketCategories (VD dữ liệu cũ trước khi seed chạy).
+function getItTicketCategoryLabel(key) {
+  const found = (DB.itTicketCategories || []).find(c => c.key === key);
+  if (found) return found.label;
+  return IT_TICKET_CATEGORY_LABELS_DEFAULT[key] || key;
+}
+
 function populateDropdowns() {
   const selDept = document.getElementById('selDept');
   if (selDept) {
@@ -13986,6 +14078,9 @@ function populateDropdowns() {
     carTypeSel.innerHTML = DB.carTypes.map(t => `<option value="${escapeHtml(t)}">${escapeHtml(t)}</option>`).join('');
     if (DB.carTypes.includes(current)) carTypeSel.value = current;
   }
+
+  // Danh Mục Yêu Cầu Hỗ Trợ IT — cùng khuôn subType/contractType/carType ở trên.
+  populateItTicketCategorySelect();
 }
 
 function updateUploadDeptDropdown() {
@@ -39641,7 +39736,10 @@ async function submitItPriceSupplementAction(id) {
 }
 
 // ----- 🎫 Hỗ Trợ Yêu Cầu -----
-const IT_TICKET_CATEGORY_LABELS = {
+// Nhãn GỐC (defaults.js) — chỉ dùng làm fallback trong getItTicketCategoryLabel() khi key không (còn)
+// có trong DB.itTicketCategories; hiển thị thật LUÔN đọc qua getItTicketCategoryLabel() để phản ánh
+// đúng nhãn admin đã sửa ở màn Biểu Mẫu (CORE_FIELD_MANIFEST.IT_TICKET).
+const IT_TICKET_CATEGORY_LABELS_DEFAULT = {
   HARDWARE: '🖥️ Phần cứng', SOFTWARE: '💿 Phần mềm', NETWORK: '🌐 Mạng / Internet',
   ACCOUNT: '🔑 Tài khoản / Đăng nhập', OTHER: '❓ Khác'
 };
@@ -39727,7 +39825,7 @@ function renderItTickets() {
       <td class="border p-2 font-mono font-bold text-emerald-800">${escapeHtml(t.code)}</td>
       <td class="border p-2">${escapeHtml(t.dept)}<br><span class="text-xs text-gray-500">${escapeHtml(t.creatorName)}</span></td>
       <td class="border p-2">${escapeHtml(t.title)}</td>
-      <td class="border p-2 text-xs">${IT_TICKET_CATEGORY_LABELS[t.category] || escapeHtml(t.category)}</td>
+      <td class="border p-2 text-xs">${escapeHtml(getItTicketCategoryLabel(t.category))}</td>
       <td class="border p-2">${IT_TICKET_STATUS_BADGES[t.status] || escapeHtml(t.status)}</td>
       <td class="border p-2 text-xs">${t.assigneeName ? escapeHtml(t.assigneeName) : '<span class="text-gray-400 italic">Chưa nhận</span>'}</td>
       <td class="border p-2 text-center space-x-1">
@@ -39786,7 +39884,7 @@ function renderItTicketModal() {
   if (!t) return closeItTicketModal();
 
   document.getElementById('itTicketModalTitle').innerText = `🎫 ${t.code}: ${t.title}`;
-  document.getElementById('itTicketModalSub').innerText = `${t.dept} | ${t.creatorName} | ${IT_TICKET_CATEGORY_LABELS[t.category] || t.category}`;
+  document.getElementById('itTicketModalSub').innerText = `${t.dept} | ${t.creatorName} | ${getItTicketCategoryLabel(t.category)}`;
 
   document.getElementById('itTicketModalDetails').innerHTML = `
     <div><b>Trạng thái:</b> ${IT_TICKET_STATUS_BADGES[t.status] || escapeHtml(t.status)}</div>

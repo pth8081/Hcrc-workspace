@@ -1341,13 +1341,19 @@ const CREATE_MODULE_CONFIGS = {
     forceOwnDept: true,
     getScope: () => ({}),
     creatorField: 'creator', creatorNameField: 'creatorName',
-    extraValidate: (payload) => {
+    extraValidate: (payload, existingCollection, user, appData) => {
       if (!payload.title || !String(payload.title).trim()) throw new CreateError(400, 'Thiếu tiêu đề yêu cầu');
       payload.title = String(payload.title).trim();
       if (!payload.description || !String(payload.description).trim()) throw new CreateError(400, 'Thiếu mô tả sự cố/yêu cầu');
       payload.description = String(payload.description).trim();
-      const allowedCategories = new Set(['HARDWARE', 'SOFTWARE', 'NETWORK', 'ACCOUNT', 'OTHER']);
-      payload.category = allowedCategories.has(payload.category) ? payload.category : 'OTHER';
+      // Danh Mục — nguồn hợp lệ giờ đọc từ appData.itTicketCategories (CORE_FIELD_MANIFEST.IT_TICKET,
+      // optionsKey, admin tự thêm/bớt/đổi nhãn ở màn Biểu Mẫu), cùng khuôn postCategory/internalNewsCategories
+      // ở trên — KHÔNG còn Set cố định 5 giá trị, nhưng vẫn fallback về danh sách gốc nếu appData chưa
+      // có (dữ liệu cũ trước khi seed defaults.js chạy).
+      const categoryList = (appData?.itTicketCategories && appData.itTicketCategories.length)
+        ? appData.itTicketCategories
+        : [{ key: 'HARDWARE' }, { key: 'SOFTWARE' }, { key: 'NETWORK' }, { key: 'ACCOUNT' }, { key: 'OTHER' }];
+      payload.category = categoryList.some(c => c.key === payload.category) ? payload.category : 'OTHER';
       // Trạng thái/người xử lý luôn khởi tạo rỗng ở server — request tự soạn không thể tự xưng đã có
       // người nhận xử lý hay đã hoàn thành ngay lúc tạo.
       payload.status = 'TODO';

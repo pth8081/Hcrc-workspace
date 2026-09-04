@@ -65,6 +65,15 @@ function createMockState(seed) {
     itPriceMasterLists: [], itPriceDeptWorkflows: {}, itPriceTierWorkflows: {}, workflows: [],
     uniformPeriods: [], uniformIssuances: [], uniformStockAdjustments: [], uniformTransfers: [], uniformCatalog: [],
     itPriceApprovals: [], itSupportTickets: [], reportPeriods: [], reportEntries: [],
+    // itTicketCategories: "Danh Mục" của #itTicketCategory (CORE_FIELD_MANIFEST.IT_TICKET, optionsKey) —
+    // TRƯỚC ĐÂY <option> gõ cứng nên mock không cần seed gì, giờ đổ động từ đây (populateDropdowns() ->
+    // populateItTicketCategorySelect()) nên PHẢI seed đủ else các test set `.value = 'HARDWARE'`/... sẽ
+    // không khớp <option> nào (select rỗng), cùng đúng 5 giá trị mặc định ở defaults.js.
+    itTicketCategories: [
+      { key: 'HARDWARE', label: '🖥️ Phần cứng' }, { key: 'SOFTWARE', label: '💿 Phần mềm' },
+      { key: 'NETWORK', label: '🌐 Mạng / Internet' }, { key: 'ACCOUNT', label: '🔑 Tài khoản / Đăng nhập' },
+      { key: 'OTHER', label: '❓ Khác' }
+    ],
     tasks: [],
     budgetTemplates: [], budgetPeriods: [], budgetEntries: [], budgetDeptWorkflows: {},
     licenses: [], licenseTypes: [],
@@ -91,6 +100,9 @@ function buildAppDataForCreate(moduleKey, state) {
     itPriceTierWorkflows: state.itPriceTierWorkflows,
     workflows: state.workflows,
     uniformCatalog: state.uniformCatalog,
+    // itTicketCategories: nguồn hợp lệ cho itSupportTickets.category (CORE_FIELD_MANIFEST.IT_TICKET,
+    // optionsKey) — xem itSupportTickets.extraValidate ở lib/createValidation.js.
+    itTicketCategories: state.itTicketCategories,
     // Vận Hành > Siêu Thị > Danh mục đầu tư — resolveWfConfig() (lib/workflowEngine.js) đọc thẳng 2 map
     // này qua appData khi xử lý /api/workflow/operationStoreOpeningEstimate|operationRepairEstimate/:id/:action.
     operationStoreOpenEstimateDeptWorkflows: state.operationStoreOpenEstimateDeptWorkflows,
