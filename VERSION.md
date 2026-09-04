@@ -1,11 +1,78 @@
 # Phiên bản hiện tại
 
-**7.8** — đã merge vào `main` (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge
+**7.9** — đã merge vào `main` (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge
 góc màn hình + `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần
 kiểu `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. Đúng theo quy tắc MINOR chạy 0-9 trong
-`CLAUDE.md`: sau `7.7` tăng MINOR lên 1 → `7.8`.
+`CLAUDE.md`: sau `7.8` tăng MINOR lên 1 → `7.9`.
 
-## Cập nhật gần nhất — Vận Hành > Siêu Thị: cascade cha-con tự động, Ngân Sách Phê Duyệt tách field riêng, cv con có nút Cập Nhật Tiến Độ/Hoàn Thành giống module Công Việc
+## Cập nhật gần nhất — Hạ tầng: tách JS client ra file ngoài (Đợt 1/5 — core.js + 6 module đầu: Tài Liệu/Văn Bản Trình/Công Việc/Hợp Đồng+Thanh Toán/Phòng Họp+Biên Bản Họp/Đăng Ký Xe)
+
+Bắt đầu chia nhỏ khối `<script>` inline khổng lồ của `public/index.html` (~30.800 dòng, ~1.565 hàm
+top-level, DÙNG CHUNG 1 khối duy nhất — lớn hơn cả toàn bộ backend `lib/`+`routes/` gộp lại) thành
+nhiều file `.js` riêng dưới `public/js/`, tải qua nhiều thẻ `<script src="/js/...">` theo đúng thứ tự
+xuất hiện gốc trong file, thay cho 1 khối inline duy nhất. Lý do: nhiều agent nền cùng sửa 1 file này
+đã gây gần xung đột merge suốt phiên làm việc trước, phải khoá tay tuần tự thủ công. Đây là đợt 1/5 —
+sẽ tiếp tục tách nốt phần còn lại (Office/Vận Hành/VPP/Ngân Sách/Hệ Thống/Admin/Báo Cáo/Truyền Thông Nội
+Bộ/Đồng Phục/Hỗ Trợ IT/HCRC Đồng Hành...) ở các đợt kế tiếp.
+
+**Nguyên tắc: CHỈ di chuyển cơ học (mechanical relocation), KHÔNG đổi 1 dòng logic nào.** Mọi hàm giữ
+nguyên tên/tham số/thân hàm, vẫn là hàm global thường (`function foo(){}`), không bọc IIFE/module — cơ
+chế `data-op` (CSP dispatch: `cspCoerceArg`/`bindCspDelegation`...) đọc hàm theo tên qua `window[fnName]`
+vẫn hoạt động y hệt.
+
+- **Rủi ro kỹ thuật chính đã xử lý — thứ tự hoisting**: trước đây `function foo(){}` được hoisted trong
+  toàn khối `<script>`, gọi được từ bất kỳ đâu trong khối bất kể thứ tự vật lý. Tách ra nhiều
+  `<script src>` riêng thì hoisting CHỈ còn hiệu lực TRONG từng file — 1 lời gọi ở top-level file A tới
+  hàm định nghĩa ở file B sẽ `ReferenceError` nếu B tải SAU A. Đã viết công cụ phân tích AST (acorn) rà
+  toàn bộ ~34.956 dòng JS, liệt kê hết mọi statement top-level THỰC SỰ thực thi ngay (không phải khai báo
+  hàm hay object literal chứa hàm — 2 loại này KHÔNG thực thi ngay nên an toàn bất kể thứ tự file), xác
+  nhận: toàn bộ ~120 điểm "rủi ro" tìm được đều tham chiếu tới hàm/const định nghĩa NGAY GẦN đó cùng khu
+  vực gốc trong file — không có tham chiếu-tới-trước (forward reference) nào xuyên khu vực. 1 khối hạ
+  tầng CSP dispatch dùng chung cho MỌI module (`bindCspDelegation`/`cspDispatchOp`... + ~70 lời gọi
+  `bindCspDelegation('xxxSection')` cho từng module) nằm vật lý xen giữa module Vận Hành và VPP trong
+  file gốc — do đây là hạ tầng dùng chung thật sự (không phụ thuộc code riêng module nào, chỉ dùng ID
+  chuỗi + tra `window[fnName]` LÚC CLICK chứ không phải lúc định nghĩa), đã dời nguyên khối này vào
+  `core.js` (tải đầu tiên) thay vì giữ đúng vị trí gốc — ngoại lệ DUY NHẤT về thứ tự, có ghi chú rõ trong
+  code. Đã verify lại bằng script riêng: mô phỏng đúng thứ tự tải `<script src>` cuối cùng, 0 tham chiếu
+  không giải quyết được.
+- **`const`/`let` top-level KHÔNG gắn vào `window`** (đúng với MỌI `<script>` — inline hay external, đây
+  không phải hành vi mới do tách file) — mọi `<script>` cùng trang (kể cả nhiều file ngoài) vẫn CHIA SẺ
+  CHUNG 1 "global lexical environment" của trang, y hệt trước đây — đã verify bằng Playwright thật (đọc
+  `DB`/`SUBMISSION_APPROVAL_LAYERS` qua `typeof` từ `page.evaluate` chạy sau khi mọi file tải xong).
+- **`server.js` đã `express.static(public/)` từ trước** — `public/js/*.js` tự động phục vụ được, KHÔNG
+  cần thêm route/cấu hình gì.
+- **CSP (`lib/securityHeaders.js`) đã có `scriptSrc: ["'self'", ...]` từ trước** — script cùng gốc
+  (`/js/...`) không bị chặn, không cần đổi gì (vẫn giữ `'unsafe-inline'` vì còn 2 khối script nhỏ cố tình
+  để lại inline: `type="module"` tải PDF.js, và script gán năm bản quyền).
+- **9 file test Playwright/harness cũ (test-vpp/test-meeting-car/test-minutes/test-admin-users-permgroups/
+  test-approval-hub/test-auth-login/test-catalog-rename-uniform-employees/test-perm-tree-expand-collapse
+  + `test-audit-round2-cluster6.js`) tự dựng static server RIÊNG chỉ biết phục vụ `index.html`** (không
+  generic như `testHarness.js`/`_harness.js`) — phát hiện qua đúng full regression suite (54 file), sửa
+  thêm route tĩnh cho `/js/*.js` (8 file) + đổi cách tìm hàm sang quét cả `public/js/*.js` thay vì giả
+  định còn nằm trong `index.html` (1 file, `test-audit-round2-cluster6.js` mục [3] Thanh Toán). KHÔNG đổi
+  logic nghiệp vụ nào trong các file test này, chỉ hạ tầng phục vụ tĩnh.
+
+**Layout mới**: `public/js/core.js` (DB/state dùng chung, escapeHtml, tìm-kiếm/lọc/phân trang dùng
+chung, CSP dispatch, xác thực lại khi duyệt, WebAuthn/TOTP, PWA, Approval Hub, phiếu phê duyệt dựng
+động, dropdown tìm-kiếm-gõ-chọn + chọn nhiều người dùng chung...) tải ĐẦU TIÊN, rồi
+`module-tailieu.js`/`module-vanbantrinh.js`/`module-congviec.js`/`module-hopdong.js`/
+`module-thanhtoan.js`/`module-phonghop.js`/`module-bienbanhop.js`/`module-dangkyxe.js` theo đúng thứ tự
+xuất hiện gốc. Phần còn lại của khối script cũ (Office/Vận Hành/VPP/Ngân Sách/Hệ Thống/Admin/Báo Cáo
+Định Kỳ/Báo Cáo Quản Trị/Truyền Thông Nội Bộ/Đào Tạo/Hỗ Trợ IT/Đồng Phục/HCRC Đồng Hành...) TẠM THỜI vẫn
+còn inline trong `index.html` (sẽ tách nốt ở đợt 2-5) — trang vẫn chạy đúng y hệt, không có hành vi nào
+đổi.
+
+Verify: syntax check (`node --check`) từng file mới, không trùng tên hàm/const global nào giữa các file,
+0 tham chiếu top-level không giải quyết được (script tự viết), FULL 54 file test hồi quy Playwright chạy
+lại từ đầu (chỉ 2 lỗi biết trước do thiếu SQL Server thật —
+`test-audit-fixes-batch1.js`/`test-audit-round2-cluster1.js`, không lỗi mới), demo Playwright riêng bấm
+qua 21 tab (cả module đã tách lẫn chưa tách) không có lỗi console/page nào, `index.html` giảm từ 43.009
+xuống 27.776 dòng (giảm ~15.233 dòng, đúng bằng tổng dòng của 9 file mới tách).
+
+**Không cần migrate dữ liệu** — không đổi `schema.sql`/`.env.example`/`dependencies`. Deploy: copy code +
+`pm2 restart` như bình thường (file tĩnh mới dưới `public/js/` tự phục vụ qua `express.static` sẵn có).
+
+## Trước đó — Vận Hành > Siêu Thị: cascade cha-con tự động, Ngân Sách Phê Duyệt tách field riêng, cv con có nút Cập Nhật Tiến Độ/Hoàn Thành giống module Công Việc
 
 3 sửa đổi/bổ sung theo phản hồi người dùng sau khi review đợt "vòng đời hiển thị mới" (`7.7`, xem mục
 "Trước đó" ngay dưới) — chỉ 2 luồng `operationStoreOpenings`/`operationRepairs`, KHÔNG đụng

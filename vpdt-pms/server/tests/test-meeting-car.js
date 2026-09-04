@@ -54,6 +54,20 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
+  // Tài nguyên JS ngoài index.html — public/index.html giờ tải JS qua nhiều
+  // <script src="/js/...">  thay vì 1 khối inline (xem VERSION.md "Tách JS ra file ngoài") — phục vụ
+  // tĩnh trực tiếp từ public/js/, khớp đúng cách server.js thật serve (express.static(public/)).
+  if (req.method === 'GET' && url.pathname.startsWith('/js/')) {
+    const PUBLIC_DIR = path.join(__dirname, '..', 'public');
+    const filePath = path.join(PUBLIC_DIR, decodeURIComponent(url.pathname));
+    if (!filePath.startsWith(PUBLIC_DIR)) { res.writeHead(403); return res.end(); }
+    return fs.readFile(filePath, (err, data) => {
+      if (err) { res.writeHead(404); return res.end('Not found: ' + url.pathname); }
+      res.writeHead(200, { 'Content-Type': 'text/javascript; charset=utf-8' });
+      res.end(data);
+    });
+  }
+
   // POST /api/create/meetings | /api/create/carRegs — same generic module routes/create.js dispatches to.
   const createMatch = url.pathname.match(/^\/api\/create\/(meetings|carRegs)$/);
   if (req.method === 'POST' && createMatch) {

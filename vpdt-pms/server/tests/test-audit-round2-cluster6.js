@@ -441,7 +441,17 @@ async function main() {
   });
 
   await run('[3] Client đã nối dây: nút Xác nhận thanh toán đi qua withApprovalAuth()', async () => {
-    const html = fs.readFileSync(path.join(__dirname, '..', 'public', 'index.html'), 'utf8');
+    // public/index.html KHÔNG còn chứa toàn bộ JS client inline — đã tách ra nhiều file
+    // public/js/*.js (xem VERSION.md "Tách JS ra file ngoài"), mỗi file <script src="/js/...">. Tìm
+    // đúng file chứa hàm này thay vì giả định nó còn nằm trong index.html.
+    const jsDir = path.join(__dirname, '..', 'public', 'js');
+    const jsFiles = fs.readdirSync(jsDir).filter(f => f.endsWith('.js'));
+    let html = null;
+    for (const f of jsFiles) {
+      const content = fs.readFileSync(path.join(jsDir, f), 'utf8');
+      if (content.includes('function approvePaymentRequestAction(')) { html = content; break; }
+    }
+    if (html === null) html = fs.readFileSync(path.join(__dirname, '..', 'public', 'index.html'), 'utf8');
     const fnStart = html.indexOf('function approvePaymentRequestAction(');
     assert.ok(fnStart > 0, 'không tìm thấy approvePaymentRequestAction()');
     const body = html.slice(fnStart, fnStart + 1400);

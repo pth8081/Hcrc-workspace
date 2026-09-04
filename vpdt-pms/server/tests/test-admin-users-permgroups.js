@@ -40,6 +40,20 @@ const PORT = 8996;
 function startServer() {
   return new Promise((resolve, reject) => {
     const server = http.createServer((req, res) => {
+      const urlPath = decodeURIComponent((req.url || '/').split('?')[0]);
+      // Tài nguyên JS ngoài index.html — public/index.html giờ tải JS qua nhiều
+      // <script src="/js/...">  thay vì 1 khối inline (xem VERSION.md "Tách JS ra file ngoài") — phục
+      // vụ tĩnh trực tiếp từ public/js/, khớp đúng cách server.js thật serve (express.static(public/)).
+      if (urlPath.startsWith('/js/')) {
+        const PUBLIC_DIR = path.join(__dirname, '..', 'public');
+        const filePath = path.join(PUBLIC_DIR, urlPath);
+        if (!filePath.startsWith(PUBLIC_DIR)) { res.writeHead(403); return res.end(); }
+        return fs.readFile(filePath, (err, data) => {
+          if (err) { res.writeHead(404); return res.end('Not found: ' + urlPath); }
+          res.writeHead(200, { 'Content-Type': 'text/javascript; charset=utf-8' });
+          res.end(data);
+        });
+      }
       // Always re-read from disk (never cache) so we always test the CURRENT code.
       fs.readFile(INDEX_HTML_PATH, (err, data) => {
         if (err) { res.writeHead(500); res.end(String(err)); return; }
