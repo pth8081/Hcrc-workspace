@@ -208,16 +208,16 @@ async function main() {
       switchTab('task');
 
       // Helper mirroring what a person does in the "Giao Việc" modal: open it (as admin, who always
-      // passes canManageTasks()), fill title/description/deadline, pick 1 assignee + N collaborators
-      // from the real <select> elements the modal renders, then confirm.
+      // passes canManageTasks()), fill title/description/deadline, pick 1 assignee (ô tìm-gõ-chọn sdd*
+      // single, xem setTaskAssigneeSingle()) + N collaborators (renderPeopleMultiSelect(), chọn qua
+      // pmsAdd() đúng cách người dùng thật bấm chọn từng người từ dropdown gợi ý), rồi xác nhận.
       function createManualTask({ title, description, deadline, assignedTo, collaborators }) {
         openCreateTaskModal({ sourceType: 'MANUAL', sourceCode: '' });
         document.getElementById('taskTitleInput').value = title;
         document.getElementById('taskDescInput').value = description || '';
         document.getElementById('taskDeadlineInput').value = deadline || '';
-        document.getElementById('taskAssigneeInput').value = assignedTo || '';
-        const collabSel = document.getElementById('taskCollaboratorsInput');
-        [...collabSel.options].forEach(o => { o.selected = (collaborators || []).includes(o.value); });
+        setTaskAssigneeSingle(assignedTo || '');
+        (collaborators || []).forEach(u => pmsAdd('taskCollaboratorsPicker', u));
       }
 
       // ================= Scenario 1: happy path — manual task creation with a collaborator ===========

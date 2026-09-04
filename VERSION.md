@@ -1,11 +1,74 @@
 # Phiên bản hiện tại
 
-**6.4** — đã merge vào `main` (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge
+**6.5** — đã merge vào `main` (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge
 góc màn hình + `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần
 kiểu `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. Đúng theo quy tắc MINOR chạy 0-9 trong
-`CLAUDE.md`: sau `6.3` tăng MINOR lên `6.4`.
+`CLAUDE.md`: sau `6.4` tăng MINOR lên `6.5`.
 
-## Cập nhật gần nhất — Vận Hành > Siêu Thị: Chi Phí Phê Duyệt, Danh Mục Đầu Tư, Thực Hiện linh hoạt, bỏ phê duyệt nội bộ
+## Cập nhật gần nhất — Vá 3 lỗi thiếu validate picker + bỏ dấu tìm kiếm toàn hệ thống + Task module đổi sang picker chuẩn
+
+4 mục sửa lỗi/cải thiện đã research và duyệt phương án trước:
+
+- **Mục 1-2 — thiếu chặn "phải chọn từ gợi ý" ở "Người Phụ Trách"**: `submitOperationStoreOpening()`
+  (`vsoPersonInChargeInput`/`vsoPersonInChargeUsername`) và `submitOperationRepair()`
+  (`vrPersonInChargeInput`/`vrPersonInChargeUsername`, `public/index.html`) trước đây chỉ đọc hidden
+  username mà KHÔNG đối chiếu lại text đã gõ — gõ tự do không chọn từ gợi ý âm thầm gửi rỗng
+  (`personInCharge: ''`) thay vì báo lỗi. Thêm chặn đúng khuôn `carAssignedDriver` đã có sẵn: gõ có chữ
+  nhưng chưa chọn đúng → alert chặn lại; để trống vẫn hợp lệ (field vẫn optional như trước).
+- **Mục 3 — cùng lỗi ở "Người Nghiệm Thu"**: `submitOperationWorkItemForm()`
+  (`owiAcceptorInput`/`owiAcceptorUsername`) — thêm chặn tương tự.
+- **Mục 3b (server) — `acceptorUsername` chưa đối chiếu tài khoản thật**: `createOperationWorkItem()` /
+  `editOperationWorkItem()` (`lib/recordActions.js`) trước đây chỉ `String(payload.acceptorUsername)`
+  không kiểm tra có phải tài khoản active thật hay không (khác `resolveOperationPersonInChargeUsername()`
+  ở `lib/createValidation.js` đã làm đúng chuẩn này cho `personInCharge`). Thêm hàm mới
+  `resolveOperationAcceptorUsername(rawUsername, users)` cùng khuôn — đối chiếu `users` active, throw 400
+  rõ ràng nếu gửi username không khớp tài khoản nào; rỗng vẫn hợp lệ (không bắt buộc, giữ hành vi cũ).
+- **Mục 4 — bỏ dấu tiếng Việt khi tìm kiếm, áp dụng 2 điểm TRUNG TÂM**: `sddRenderRows()` và
+  `renderDropdown()` (bên trong `renderPeopleMultiSelect()`) — trước đây so khớp
+  `label.toLowerCase().includes(query)` không bỏ dấu, gõ không dấu ("nguyen") không ra kết quả có dấu
+  ("Nguyễn"). Áp dụng `stripVnDiacritics()` (hàm bỏ dấu đã có sẵn từ trước, dùng chung với
+  `deriveAbbr()`) cho CẢ query lẫn label trước khi so sánh. Sửa đúng 2 điểm trung tâm này tự động áp dụng
+  cho TOÀN BỘ ~12 điểm dùng `sddSetOptions` + 6 điểm dùng `renderPeopleMultiSelect` trong hệ thống, không
+  cần sửa từng nơi gọi riêng lẻ.
+- **Mục 5 — Module "Giao Việc" (Task) đổi từ `<select>`/`<select multiple>` native sang chuẩn picker
+  `sdd*`/`renderPeopleMultiSelect()`**: phạm vi CHỈ 2 ô chọn người (không đụng state machine/subtask/gia
+  hạn/accept — mọi logic nghiệp vụ khác của Task giữ nguyên).
+  - "Người Nhận" (1 người, chế độ CREATE/EDIT): `<select id="taskAssigneeInput">` → ô tìm-gõ-chọn `sdd*`
+    (`#taskAssigneeSingleWrap`, dùng chung dropdown `#systemUsersDatalist`), hidden
+    `#taskAssigneeUsername` lưu username thật — thêm chặn "phải chọn từ gợi ý" cùng khuôn Mục 1-3.
+  - Chế độ ASSIGN (gán nhiều người nhận cùng lúc cho việc tự sinh từ Văn bản trình/Biên bản họp):
+    `<select multiple>` → multi-select `renderPeopleMultiSelect()` riêng (`#taskAssigneeMultiWrap` +
+    `#taskAssigneeMultiPicker`, checkbox ẩn class `task-assignee-multi`) — 2 khối UI (single/multi) tồn
+    tại song song trong cùng modal, ẩn/hiện theo chế độ (`setTaskAssigneeMode()`).
+  - "Người Phối Hợp" (multi, dùng chung cả 3 chế độ): `<select multiple id="taskCollaboratorsInput">` →
+    `renderPeopleMultiSelect()` (`#taskCollaboratorsPicker`, checkbox ẩn class `task-collaborator`,
+    `populateTaskCollaboratorsSelect()`).
+  - Cập nhật `openCreateTaskModal()`/`openAssignTaskModal()`/`openEditTaskModal()`/`confirmCreateTask()`
+    đọc/ghi đúng qua cơ chế mới; `tests/test-task.js` cập nhật helper `createManualTask()` dùng
+    `setTaskAssigneeSingle()`/`pmsAdd()` thay thao tác trực tiếp lên `<select>` cũ.
+
+**Verify integrity**: `node --check lib/recordActions.js` OK; parse thử 3 script block `public/index.html`
+OK; scan trùng `id=` không phát sinh thêm (chỉ còn đúng baseline pre-existing đã biết); đếm div mở/đóng
+khớp đúng baseline (không lệch thêm do đổi cấu trúc `<select>` → `renderPeopleMultiSelect()`).
+
+**Xác nhận qua demo Playwright thật (server.js + SQL Server thật, tài khoản non-admin
+`totpEnabled:false`)**: gõ tự do không chọn gợi ý ở cả 3 field (Người Phụ Trách x2, Người Nghiệm Thu) →
+alert chặn đúng; chọn đúng từ dropdown → lưu thành công. Tạo 2 tài khoản demo tên gần giống ("Nguyễn Văn
+Test1"/"Test2"), gõ KHÔNG DẤU ("nguyen van test") ở picker → ra đúng cả 2 kết quả CÓ DẤU (trước đây không
+ra gì). Task module: tạo task mới qua ô sdd* + 1 người phối hợp qua multi-picker mới → lưu đúng; mở chế độ
+ASSIGN xác nhận đúng multi-picker hiện/ẩn, chọn 2 người tick đúng 2 checkbox, submit phản hồi đúng nghiệp
+vụ (task đã có người nhận, không phải lỗi picker); mở chế độ EDIT xác nhận prefill đúng người nhận hiện
+tại qua ô sdd* single, sửa lưu thành công. Dọn sạch dữ liệu + tài khoản demo sau khi test xong.
+
+**Regression**: 46/46 file `tests/test-*.js` PASS (bao gồm 2 file known-flaky
+`test-audit-fixes-batch1.js`/`test-audit-round2-cluster1.js`, xác nhận PASS qua log dù không tự thoát
+tiến trình) + `tests/test-task.js` (11/11 scenario) đã cập nhật khớp cơ chế picker mới.
+
+**Deploy-impact**: KHÔNG đổi `sql/schema.sql`, KHÔNG thêm biến môi trường mới, KHÔNG thêm `dependencies`
+mới — chỉ sửa `public/index.html`, `lib/recordActions.js`, `tests/test-task.js`. Chỉ cần copy code +
+`pm2 restart`.
+
+## Trước đó — Vận Hành > Siêu Thị: Chi Phí Phê Duyệt, Danh Mục Đầu Tư, Thực Hiện linh hoạt, bỏ phê duyệt nội bộ
 
 Đơn giản hoá + linh hoạt hoá luồng lập hồ sơ → lập ngân sách → thực hiện công việc của 2 loại hồ sơ
 `operationStoreOpenings` ("Mở Mới Siêu Thị") / `operationRepairs` ("Sửa Chữa Siêu Thị") trong module Vận

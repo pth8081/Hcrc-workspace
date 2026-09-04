@@ -7297,7 +7297,17 @@ input[data-sdd-list] {
       <div class="grid grid-cols-2 gap-3">
         <div>
           <label class="block font-semibold text-gray-600 mb-1">Người Nhận</label>
-          <select id="taskAssigneeInput" class="w-full border p-2 rounded bg-white text-sm"></select>
+          <!-- CREATE/EDIT: 1 người nhận, ô tìm-gõ-chọn sdd* chuẩn (khuôn vsoPersonInChargeInput) —
+               dùng chung dropdown #systemUsersDatalist đã nạp sẵn toàn bộ tài khoản đang hoạt động. -->
+          <div id="taskAssigneeSingleWrap" class="relative">
+            <input id="taskAssigneeInput" data-sdd-list="systemUsersDatalist" autocomplete="off" data-op-change="resolveTaskAssigneeInput" data-arg-value="0" placeholder="Gõ tên hoặc tài khoản..." class="w-full border p-2 rounded text-sm">
+            <input type="hidden" id="taskAssigneeUsername">
+          </div>
+          <!-- ASSIGN (gán người nhận cho việc đã có, có thể gán nhiều người cùng lúc): multi-select
+               renderPeopleMultiSelect() (khuôn owiAssignedToPicker) — chỉ hiện ở chế độ ASSIGN. -->
+          <div id="taskAssigneeMultiWrap" class="hidden">
+            <div id="taskAssigneeMultiPicker" class="border rounded p-2"></div>
+          </div>
         </div>
         <div>
           <label class="block font-semibold text-gray-600 mb-1">Hạn Hoàn Thành</label>
@@ -7306,8 +7316,8 @@ input[data-sdd-list] {
       </div>
       <div>
         <label class="block font-semibold text-gray-600 mb-1">Người Phối Hợp (tuỳ chọn)</label>
-        <select id="taskCollaboratorsInput" multiple size="4" class="w-full border p-2 rounded bg-white text-sm"></select>
-        <div class="text-[11px] text-gray-400 mt-0.5">Giữ Ctrl/Cmd để chọn nhiều — lấy từ tài khoản hệ thống, sẽ nhận được email thông báo cùng người nhận.</div>
+        <div id="taskCollaboratorsPicker" class="border rounded p-2"></div>
+        <div class="text-[11px] text-gray-400 mt-0.5">Gõ tìm rồi bấm chọn — lấy từ tài khoản hệ thống, sẽ nhận được email thông báo cùng người nhận.</div>
       </div>
     </div>
     <div class="p-3 bg-gray-100 border-t flex justify-end gap-2 text-xs">
@@ -16745,12 +16755,35 @@ let editingTaskId = null;
 // 'CREATE' | 'ASSIGN' | 'EDIT' — modal Giao Việc dùng chung 1 form cho cả 3 luồng, xem confirmCreateTask().
 let taskModalMode = 'CREATE';
 
-// Đổ lại các lựa chọn "Người Phối Hợp" (từ DB.users) cho modal Giao Việc, giữ nguyên những người đã
-// chọn sẵn (preselected) — dùng chung cho cả 3 chế độ CREATE/ASSIGN/EDIT.
+// Đổ lại các lựa chọn "Người Phối Hợp" (từ DB.users đang hoạt động) cho modal Giao Việc, giữ nguyên
+// những người đã chọn sẵn (preselected) — dùng chung cho cả 3 chế độ CREATE/ASSIGN/EDIT. Đổi từ
+// <select multiple> native sang renderPeopleMultiSelect() (khuôn owiAssignedToPicker, Vận Hành Siêu
+// Thị) — checkbox ẩn mang class "task-collaborator", đọc lại lúc submit ở confirmCreateTask().
 function populateTaskCollaboratorsSelect(preselected) {
-  const sel = document.getElementById('taskCollaboratorsInput');
-  const selectedSet = new Set(preselected || []);
-  sel.innerHTML = DB.users.map(u => `<option value="${escapeHtml(u.username)}" ${selectedSet.has(u.username) ? 'selected' : ''}>${escapeHtml(u.name)} (${escapeHtml(u.username)})</option>`).join('');
+  const activeUsers = (DB.users || []).filter(u => u.active !== false);
+  renderPeopleMultiSelect('taskCollaboratorsPicker', activeUsers, preselected, 'task-collaborator', {});
+}
+
+// Ô "Người Nhận" chế độ CREATE/EDIT (1 người, sdd*) — chuyển từ dạng hiển thị "Tên — Phòng (username)"
+// đã chọn qua gợi ý sang username thật để gửi server, cùng khuôn resolveVsoPersonInChargeInput().
+function resolveTaskAssigneeInput(rawValue) {
+  const m = rawValue.match(/^(.*) — .*\(([^()]+)\)$/);
+  document.getElementById('taskAssigneeUsername').value = m ? m[2].trim() : '';
+}
+
+// Đổ sẵn "Người Nhận" (ô sdd* single, chế độ CREATE/EDIT) từ 1 username có sẵn (prefill khi mở modal
+// sửa/tạo có đổ trước) — trống nếu không tìm thấy tài khoản (giữ hợp lệ, y hệt vsoPersonInChargeInput).
+function setTaskAssigneeSingle(username) {
+  const u = username ? (DB.users || []).find(x => x.username === username) : null;
+  document.getElementById('taskAssigneeInput').value = u ? `${u.name} — ${u.dept || 'Chưa rõ phòng'} (${u.username})` : '';
+  document.getElementById('taskAssigneeUsername').value = u ? u.username : '';
+}
+
+// Chuyển đổi HIỂN THỊ giữa ô "Người Nhận" 1 người (sdd*, CREATE/EDIT) và nhiều người (multi-select,
+// chỉ ASSIGN) — 2 khối HTML riêng, ẩn/hiện theo chế độ (xem taskModalMode).
+function setTaskAssigneeMode(isMulti) {
+  document.getElementById('taskAssigneeSingleWrap').classList.toggle('hidden', isMulti);
+  document.getElementById('taskAssigneeMultiWrap').classList.toggle('hidden', !isMulti);
 }
 
 function openCreateTaskModal(opts) {
@@ -16763,11 +16796,8 @@ function openCreateTaskModal(opts) {
   document.getElementById('taskDescInput').value = opts.description || '';
   document.getElementById('taskDeadlineInput').value = opts.deadline || '';
 
-  const assigneeSel = document.getElementById('taskAssigneeInput');
-  assigneeSel.multiple = false;
-  assigneeSel.size = 1;
-  assigneeSel.innerHTML = '<option value="">-- Chọn người nhận --</option>' +
-    DB.users.map(u => `<option value="${escapeHtml(u.username)}" ${opts.assignedTo === u.username ? 'selected' : ''}>${escapeHtml(u.name)} (${escapeHtml(u.username)})</option>`).join('');
+  setTaskAssigneeMode(false);
+  setTaskAssigneeSingle(opts.assignedTo || '');
   populateTaskCollaboratorsSelect(opts.collaborators);
 
   const labels = { SUBMISSION: 'Từ Văn bản trình', MEETING_MINUTES: 'Từ Biên bản họp', MANUAL: 'Giao việc trực tiếp' };
@@ -16794,12 +16824,12 @@ function openAssignTaskModal(taskId) {
   document.getElementById('taskDescInput').value = t.description || '';
   document.getElementById('taskDeadlineInput').value = t.deadline || '';
 
-  const assigneeSel = document.getElementById('taskAssigneeInput');
   // Chỉ chế độ ASSIGN mới cho chọn NHIỀU người thực hiện cùng lúc (Văn bản trình chỉ đạo có thể giao
-  // cho nhiều người) — xem confirmCreateTask() nhánh ASSIGN + assignTask() ở server.
-  assigneeSel.multiple = true;
-  assigneeSel.size = 5;
-  assigneeSel.innerHTML = DB.users.map(u => `<option value="${escapeHtml(u.username)}">${escapeHtml(u.name)} (${escapeHtml(u.username)})</option>`).join('');
+  // cho nhiều người) — xem confirmCreateTask() nhánh ASSIGN + assignTask() ở server. Multi-select
+  // renderPeopleMultiSelect() (khuôn owiAssignedToPicker), không có ai chọn sẵn (giữ đúng hành vi cũ).
+  setTaskAssigneeMode(true);
+  const activeUsersForAssign = (DB.users || []).filter(u => u.active !== false);
+  renderPeopleMultiSelect('taskAssigneeMultiPicker', activeUsersForAssign, [], 'task-assignee-multi', {});
   populateTaskCollaboratorsSelect(t.collaborators);
 
   const labels = { SUBMISSION: 'Từ Văn bản trình', MEETING_MINUTES: 'Từ Biên bản họp', MANUAL: 'Giao việc trực tiếp' };
@@ -16824,11 +16854,8 @@ function openEditTaskModal(taskId) {
   document.getElementById('taskDescInput').value = t.description || '';
   document.getElementById('taskDeadlineInput').value = t.deadline || '';
 
-  const assigneeSel = document.getElementById('taskAssigneeInput');
-  assigneeSel.multiple = false;
-  assigneeSel.size = 1;
-  assigneeSel.innerHTML = '<option value="">-- Chọn người nhận --</option>' +
-    DB.users.map(u => `<option value="${escapeHtml(u.username)}" ${t.assignedTo === u.username ? 'selected' : ''}>${escapeHtml(u.name)} (${escapeHtml(u.username)})</option>`).join('');
+  setTaskAssigneeMode(false);
+  setTaskAssigneeSingle(t.assignedTo || '');
   populateTaskCollaboratorsSelect(t.collaborators);
 
   const labels = { SUBMISSION: 'Từ Văn bản trình', MEETING_MINUTES: 'Từ Biên bản họp', MANUAL: 'Giao việc trực tiếp' };
@@ -16857,17 +16884,29 @@ function notifyTaskCollaborators(t, collaboratorUsernames, title, description, d
 async function confirmCreateTask() {
   const title = document.getElementById('taskTitleInput').value.trim();
   const description = document.getElementById('taskDescInput').value.trim();
-  const assigneeSelEl = document.getElementById('taskAssigneeInput');
-  // ASSIGN mode (gán người nhận cho việc tự sinh từ Văn bản trình) cho phép chọn NHIỀU người thực
-  // hiện cùng lúc (select multiple, xem openAssignTaskModal()) — CREATE/EDIT vẫn 1 người như cũ.
-  const assignedToList = assigneeSelEl.multiple
-    ? Array.from(assigneeSelEl.selectedOptions).map(o => o.value)
-    : (assigneeSelEl.value ? [assigneeSelEl.value] : []);
-  const assignedTo = assignedToList[0] || '';
   const deadline = document.getElementById('taskDeadlineInput').value;
-  const collaborators = Array.from(document.getElementById('taskCollaboratorsInput').selectedOptions).map(o => o.value);
+  // Người Phối Hợp — renderPeopleMultiSelect() (checkbox ẩn class "task-collaborator"), dùng chung cho
+  // cả 3 chế độ CREATE/ASSIGN/EDIT, xem populateTaskCollaboratorsSelect().
+  const collaborators = [...document.querySelectorAll('input.task-collaborator:checked')].map(cb => cb.value);
 
   if (!title) return alert('Vui lòng nhập tiêu đề công việc!');
+
+  let assignedToList;
+  if (taskModalMode === 'ASSIGN') {
+    // ASSIGN mode (gán người nhận cho việc tự sinh từ Văn bản trình) cho phép chọn NHIỀU người thực
+    // hiện cùng lúc — multi-select renderPeopleMultiSelect(), checkbox ẩn class "task-assignee-multi".
+    assignedToList = [...document.querySelectorAll('input.task-assignee-multi:checked')].map(cb => cb.value);
+  } else {
+    // CREATE/EDIT: 1 người nhận, ô tìm-gõ-chọn sdd* — phải chọn ĐÚNG từ gợi ý, gõ tự do không khớp
+    // (đã gõ nhưng chưa chọn) thì chặn lại thay vì âm thầm gửi rỗng, cùng khuôn carAssignedDriver.
+    const assigneeText = document.getElementById('taskAssigneeInput').value.trim();
+    const assigneeUsername = document.getElementById('taskAssigneeUsername').value || '';
+    if (assigneeText && !assigneeUsername) {
+      return alert('Vui lòng chọn đúng người nhận từ danh sách gợi ý (gõ tên hoặc tài khoản để tìm)!');
+    }
+    assignedToList = assigneeUsername ? [assigneeUsername] : [];
+  }
+  const assignedTo = assignedToList[0] || '';
   if (assignedToList.length === 0) return alert('Vui lòng chọn người nhận!');
 
   const assignee = DB.users.find(u => u.username === assignedTo);
@@ -22524,7 +22563,11 @@ async function submitOperationStoreOpening(e) {
   const expectedOpenDate = document.getElementById('vsoOpenDate').value;
   // Người Phụ Trách: gửi USERNAME đã resolve qua picker sdd* (không phải text hiển thị) — server tự tra
   // lại tên hiển thị (personInChargeName) từ đúng tài khoản này, xem resolveOperationPersonInChargeUsername().
+  const vsoPersonInChargeText = document.getElementById('vsoPersonInChargeInput').value.trim();
   const personInCharge = document.getElementById('vsoPersonInChargeUsername').value || '';
+  if (vsoPersonInChargeText && !personInCharge) {
+    return alert('Vui lòng chọn đúng người phụ trách từ danh sách gợi ý (gõ tên hoặc tài khoản để tìm)!');
+  }
   const note = document.getElementById('vsoNote').value.trim();
 
   let fileUrl = '', fileName = '', fileType = '';
@@ -22570,7 +22613,11 @@ async function submitOperationRepair(e) {
   const supplier = document.getElementById('vrSupplier').value.trim();
   // Người Phụ Trách — field MỚI hoàn toàn cho operationRepairs, cùng picker sdd* vừa thêm cho
   // operationStoreOpenings ở trên.
+  const vrPersonInChargeText = document.getElementById('vrPersonInChargeInput').value.trim();
   const personInCharge = document.getElementById('vrPersonInChargeUsername').value || '';
+  if (vrPersonInChargeText && !personInCharge) {
+    return alert('Vui lòng chọn đúng người phụ trách từ danh sách gợi ý (gõ tên hoặc tài khoản để tìm)!');
+  }
   const description = document.getElementById('vrDescription').value.trim();
 
   let fileUrl = '', fileName = '', fileType = '';
@@ -23624,6 +23671,9 @@ async function submitOperationWorkItemForm(e) {
   const assignedTo = [...document.querySelectorAll('input.owi-assignee:checked')].map(cb => cb.value);
   const acceptorUsername = document.getElementById('owiAcceptorUsername').value || null;
   const acceptorInputVal = document.getElementById('owiAcceptorInput').value.trim();
+  if (acceptorInputVal && !acceptorUsername) {
+    return alert('Vui lòng chọn đúng người nghiệm thu từ danh sách gợi ý (gõ tên hoặc tài khoản để tìm)!');
+  }
   const acceptorName = acceptorUsername ? acceptorInputVal.split(' — ')[0].trim() : null;
   const deadline = document.getElementById('owiDeadline').value;
   const acceptanceMode = document.querySelector('input[name="owiAcceptanceMode"]:checked')?.value || 'IMMEDIATE';
@@ -29100,9 +29150,11 @@ function sddSetOptions(dropdownId, items) {
 }
 
 function sddRenderRows(dd, query) {
-  const q = String(query || '').trim().toLowerCase();
+  // Bỏ dấu tiếng Việt trước khi so khớp (query lẫn label) — gõ không dấu ("nguyen") vẫn ra đúng kết
+  // quả có dấu ("Nguyễn"), dùng chung stripVnDiacritics() đã có sẵn (xem block đầu file).
+  const q = stripVnDiacritics(String(query || '').trim().toLowerCase());
   const items = dd._sddItems || [];
-  const matches = q ? items.filter(it => it.label.toLowerCase().includes(q)) : items;
+  const matches = q ? items.filter(it => stripVnDiacritics(it.label.toLowerCase()).includes(q)) : items;
   const shown = matches.slice(0, 50);
   dd._sddShown = shown;
   dd.innerHTML = shown.length
@@ -29206,8 +29258,9 @@ function renderPeopleMultiSelect(containerId, candidates, initialSelected, check
 
   function renderDropdown(query) {
     const ddEl = container.querySelector('[data-pms-dropdown]');
-    const q = (query || '').trim().toLowerCase();
-    const matches = candidates.filter(u => !selected.has(u.username) && (!q || label(u).toLowerCase().includes(q))).slice(0, 30);
+    // Bỏ dấu tiếng Việt trước khi so khớp (query lẫn label) — cùng cách xử lý vừa thêm ở sddRenderRows().
+    const q = stripVnDiacritics((query || '').trim().toLowerCase());
+    const matches = candidates.filter(u => !selected.has(u.username) && (!q || stripVnDiacritics(label(u).toLowerCase()).includes(q))).slice(0, 30);
     ddEl.innerHTML = matches.length
       ? matches.map(u => `<div class="px-2 py-1 text-[11px] hover:bg-rose-50 cursor-pointer" data-op="pmsAdd" data-arg0="${escapeHtml(containerId)}" data-arg1="${escapeHtml(u.username)}">${escapeHtml(label(u))}</div>`).join('')
       : '<div class="px-2 py-1 text-[11px] text-gray-400 italic">Không tìm thấy.</div>';
