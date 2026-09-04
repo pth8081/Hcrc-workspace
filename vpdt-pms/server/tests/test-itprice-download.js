@@ -273,6 +273,55 @@ async function main() {
     fs.unlinkSync(filePath);
   });
 
+  // Tái hiện lỗi thật ngoài production: file .xlsx thật có 1 dòng trống/tiêu đề phụ phía TRÊN dòng tiêu đề
+  // cột thật (VD dòng tên công ty/tiêu đề bảng để trống ở cột A) — dòng tiêu đề cột không nằm ở dòng 1 vật
+  // lý. lib/priceFileParser.js (qua streamFirstSheetRows, includeEmpty:false) đã coi dòng KHÔNG-TRỐNG ĐẦU
+  // TIÊN là tiêu đề khi parse ban đầu — route download-marked phải dò lại ĐÚNG quy ước đó, không được giả
+  // định cứng dòng 1 (nếu không sẽ báo "Không khớp được cột nào cần đánh dấu với tệp gốc trên đĩa" dù cột
+  // đã chọn tồn tại thật trong file).
+  await run('[3] download-marked: file thật có dòng trống phía trên dòng tiêu đề (không phải dòng 1) vẫn dò đúng cột', async () => {
+    const fileName = `test-itprice-mark-offset-${crypto.randomBytes(6).toString('hex')}.xlsx`;
+    const filePath = path.join(UPLOAD_DIR, fileName);
+    const wb = new ExcelJS.Workbook();
+    const sheet = wb.addWorksheet('Sheet1');
+    sheet.addRow([]); // dòng 1: trống hoàn toàn (mô phỏng dòng tiêu đề phụ/khoảng trắng của file thật)
+    sheet.addRow(['Mã hàng', 'Tên mặt hàng', 'Giá mới']); // dòng 2: tiêu đề cột THẬT
+    sheet.addRow(['SP001', 'Mì gói Hảo Hảo', '5500']);
+    sheet.addRow(['SP002', 'Bánh Chocopie', '11000']);
+    fs.writeFileSync(filePath, Buffer.from(await wb.xlsx.writeBuffer()));
+
+    ITEMS = [baseItem({
+      id: 12, status: 'APPROVED', approvedFileId: 1200,
+      files: [{ id: 1200, fileUrl: `/uploads/${fileName}`, fileName, columnLabels: COLUMN_LABELS, items: [] }]
+    })];
+
+    CURRENT_USER = IT_MANAGER;
+    await withServer(app, async (base) => {
+      const res = await fetch(`${base}/api/it-price/12/download-marked`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ columnKeys: ['name'] })
+      });
+      assert.strictEqual(res.status, 200, 'phải trả về 200 dù dòng tiêu đề cột nằm ở dòng 2, không phải dòng 1');
+      const buf = Buffer.from(await res.arrayBuffer());
+      const outWb = new ExcelJS.Workbook();
+      await outWb.xlsx.load(buf);
+      const outSheet = outWb.worksheets[0];
+
+      // Cột "Tên mặt hàng" (cột 2) phải được tô đúng từ dòng tiêu đề THẬT (dòng 2) trở xuống.
+      for (const r of [2, 3, 4]) {
+        const cell = outSheet.getCell(r, 2);
+        assert.strictEqual(cell.fill?.fgColor?.argb, MARK_FILL_ARGB, `Cột đã đánh dấu (dòng ${r}) phải có màu tô đúng`);
+      }
+      // Dòng 1 (trống, phía trên tiêu đề thật) KHÔNG được tô nhầm.
+      assert.notStrictEqual(outSheet.getCell(1, 2).fill?.fgColor?.argb, MARK_FILL_ARGB, 'Dòng trống phía trên tiêu đề thật không được tô nhầm');
+      // Dữ liệu vẫn giữ nguyên, không mất dòng nào.
+      assert.strictEqual(String(outSheet.getCell(3, 1).value), 'SP001');
+      assert.strictEqual(String(outSheet.getCell(4, 2).value), 'Bánh Chocopie');
+    });
+
+    fs.unlinkSync(filePath);
+  });
+
   await run('[3] download-marked: cả IT lẫn người duyệt phòng ban đều gọi được (cùng phạm vi mục 2/3 kế hoạch)', async () => {
     const fileName = `test-itprice-mark2-${crypto.randomBytes(6).toString('hex')}.xlsx`;
     const filePath = path.join(UPLOAD_DIR, fileName);

@@ -215,7 +215,19 @@ router.post('/:id/download-marked', async (req, res) => {
     // thứ tự cột trong file thật không nhất thiết trùng Mẫu Giá) mà DÒ LẠI theo TÊN CỘT (đã chuẩn hoá hoa/
     // thường/dấu, dùng ĐÚNG normalizeHeader() dùng chung với lib/priceFileParser.js) ngay trên dòng tiêu
     // đề thật của sheet đang mở — luôn khớp đúng cột thật bất kể thứ tự.
-    const headerRow = worksheet.getRow(1);
+    // Dòng tiêu đề THẬT không chắc luôn là dòng 1 vật lý — lib/priceFileParser.js::parsePriceFile (qua
+    // streamFirstSheetRows, mặc định includeEmpty:false) coi dòng KHÔNG-TRỐNG ĐẦU TIÊN là dòng tiêu đề, tức
+    // file thật có thể có dòng trống/tiêu đề phụ phía trên (VD dòng tên công ty/tiêu đề bảng) mà dòng tiêu
+    // đề cột thật nằm ở dòng 2/3... — dò lại ĐÚNG quy ước đó ở đây (row.hasValues), KHÔNG giả định cứng
+    // dòng 1, nếu không sẽ đọc nhầm dòng trống/tiêu đề phụ làm tiêu đề cột và không khớp được cột nào.
+    let headerRowNumber = null;
+    for (let r = 1; r <= worksheet.rowCount; r++) {
+      if (worksheet.getRow(r).hasValues) { headerRowNumber = r; break; }
+    }
+    if (!headerRowNumber) {
+      return res.status(400).json({ error: 'Tệp không có dòng tiêu đề nào' });
+    }
+    const headerRow = worksheet.getRow(headerRowNumber);
     const headerColByNorm = new Map();
     headerRow.eachCell({ includeEmpty: true }, (cell, colNumber) => {
       const norm = normalizeHeader(cell.value == null ? '' : String(cell.value));
@@ -233,9 +245,12 @@ router.post('/:id/download-marked', async (req, res) => {
       return res.status(400).json({ error: 'Không khớp được cột nào cần đánh dấu với tệp gốc trên đĩa' });
     }
 
-    const maxRow = Math.max(worksheet.rowCount || 0, worksheet.actualRowCount || 0, 1);
+    // Tô từ ĐÚNG dòng tiêu đề thật trở xuống (headerRowNumber, không phải dòng 1) — tránh tô nhầm lên
+    // dòng trống/tiêu đề phụ phía trên dòng tiêu đề cột nếu file thật có (xem chú thích dò headerRowNumber
+    // ở trên).
+    const maxRow = Math.max(worksheet.rowCount || 0, worksheet.actualRowCount || 0, headerRowNumber);
     for (const colNumber of targetCols) {
-      for (let r = 1; r <= maxRow; r++) {
+      for (let r = headerRowNumber; r <= maxRow; r++) {
         worksheet.getCell(r, colNumber).fill = MARK_COLUMN_FILL;
       }
     }

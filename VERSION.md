@@ -1,11 +1,41 @@
 # Phiên bản hiện tại
 
-**6.7** — đã merge vào `main` (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge
+**6.8** — đã merge vào `main` (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge
 góc màn hình + `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần
 kiểu `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. Đúng theo quy tắc MINOR chạy 0-9 trong
-`CLAUDE.md`: sau `6.6` tăng MINOR lên `6.7`.
+`CLAUDE.md`: sau `6.7` tăng MINOR lên `6.8`.
 
-## Cập nhật gần nhất — Hỗ Trợ IT > Phê Duyệt Giá: tách Bán Lẻ/Bán Buôn, giới hạn tải file, đánh dấu cột, khoá khẩn cấp lúc IT đang xử lý
+## Cập nhật gần nhất — Fix: "Đánh dấu cột trước khi tải" báo sai lỗi "Không khớp được cột nào" khi file thật có dòng trống phía trên dòng tiêu đề
+
+Người dùng báo lỗi thật khi dùng tính năng "Đánh dấu cột trước khi tải" (module Hỗ Trợ IT > Phê Duyệt Giá,
+mới thêm ở bản `6.7`): tick chọn cột có thật trong bảng dữ liệu (VD "CT khuyến mãi") nhưng bấm "Tải file đã
+đánh dấu" lại báo lỗi "Không khớp được cột nào cần đánh dấu với tệp gốc trên đĩa".
+
+**Nguyên nhân**: route `POST /api/it-price/:id/download-marked` (`routes/priceFile.js`) đọc dòng tiêu đề
+cột bằng cách giả định CỨNG dòng 1 vật lý (`worksheet.getRow(1)`) là dòng tiêu đề. Nhưng bộ đọc file gốc
+lúc parse ban đầu (`lib/priceFileParser.js` qua `lib/xlsxSafeRead.js::streamFirstSheetRows`, mặc định
+`includeEmpty:false`) lại coi dòng KHÔNG-TRỐNG ĐẦU TIÊN là dòng tiêu đề — nếu file Excel thật có 1 dòng
+trống hoặc tiêu đề phụ (VD dòng tên bảng/công ty để trống ở các cột dữ liệu) phía TRÊN dòng tiêu đề cột
+thật, dòng tiêu đề cột không nằm ở dòng 1 vật lý. Route `download-marked` đọc nhầm dòng trống đó làm tiêu
+đề, không tìm thấy tên cột nào để so khớp, nên báo "Không khớp được cột nào" dù cột đã chọn tồn tại thật
+trong file.
+
+**Fix**: `routes/priceFile.js` — dò lại dòng tiêu đề THẬT bằng ĐÚNG quy ước `row.hasValues` (dòng
+không-trống đầu tiên) thay vì giả định dòng 1, khớp chính xác cách `streamFirstSheetRows` đã dùng lúc parse
+ban đầu. Đồng thời sửa vòng lặp tô màu cột chỉ tô từ dòng tiêu đề thật trở xuống (không tô nhầm lên dòng
+trống/tiêu đề phụ phía trên nếu có).
+
+**Verify**: `node -c routes/priceFile.js` OK. Thêm 1 kịch bản mới vào `tests/test-itprice-download.js` mô
+phỏng đúng file thật có 1 dòng trống ở dòng 1 rồi mới tới dòng tiêu đề cột ở dòng 2 — xác nhận route vẫn dò
+đúng cột, tô đúng từ dòng tiêu đề thật trở xuống, không tô nhầm dòng trống, không mất dữ liệu. Chạy lại cả
+file `tests/test-itprice-download.js` (18/18 PASS) và toàn bộ `tests/test-*.js` (47 file) — vẫn 2 lỗi
+known-flaky đã biết từ trước (`test-audit-fixes-batch1.js`/`test-audit-round2-cluster1.js`, cần SQL Server
+thật không có trong sandbox unit-test), không phát sinh regression nào khác.
+
+**Deploy-impact**: KHÔNG đổi `sql/schema.sql`, KHÔNG đổi `.env.example`, KHÔNG thêm `dependencies` mới —
+chỉ copy code + `pm2 restart`.
+
+## Trước đó — Hỗ Trợ IT > Phê Duyệt Giá: tách Bán Lẻ/Bán Buôn, giới hạn tải file, đánh dấu cột, khoá khẩn cấp lúc IT đang xử lý
 
 6 cải thiện cho module "Hỗ Trợ IT" > "Phê Duyệt Giá" (`itPriceApprovals`), đã research kỹ code hiện có +
 chốt hướng thiết kế với người dùng trước khi làm (không thêm cờ quyền phẳng mới, mở rộng đúng cấu hình
