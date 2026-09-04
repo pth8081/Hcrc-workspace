@@ -86,10 +86,13 @@ function buildAppDataForCreate(moduleKey, state) {
     itPriceDeptWorkflows: state.itPriceDeptWorkflows,
     workflows: state.workflows,
     uniformCatalog: state.uniformCatalog,
-    // Vận Hành > Siêu Thị > Dự toán — resolveWfConfig() (lib/workflowEngine.js) đọc thẳng 2 map này
-    // qua appData khi xử lý /api/workflow/operationStoreOpeningEstimate|operationRepairEstimate/:id/:action.
+    // Vận Hành > Siêu Thị > Danh mục đầu tư — resolveWfConfig() (lib/workflowEngine.js) đọc thẳng 2 map
+    // này qua appData khi xử lý /api/workflow/operationStoreOpeningEstimate|operationRepairEstimate/:id/:action.
     operationStoreOpenEstimateDeptWorkflows: state.operationStoreOpenEstimateDeptWorkflows,
-    operationRepairEstimateDeptWorkflows: state.operationRepairEstimateDeptWorkflows
+    operationRepairEstimateDeptWorkflows: state.operationRepairEstimateDeptWorkflows,
+    // users — operationStoreOpenings/operationRepairs.extraValidate() cần để resolve "Người Phụ Trách"
+    // qua resolveOperationPersonInChargeUsername() (Mục C).
+    users: state.users
   };
   if (moduleKey === 'reportEntries') base.reportPeriods = state.reportPeriods;
   // operationExecutionPeriods — extraValidate() cần tra cứu chéo hồ sơ nguồn (operationStoreOpenings/
@@ -196,7 +199,16 @@ function createDispatcher(state) {
     return updated;
   };
   actionHandlers['operationExecutionPeriods:start'] = (u, item) => recordActions.startOperationExecutionPeriod(u, item);
-  actionHandlers['operationWorkItems:edit'] = (u, item, body) => recordActions.editOperationWorkItem(u, item, body || {});
+  // Mục E — editOperationWorkItem() giờ nhận thêm users (resolve assignedTo[]) + sourceRecord (quyền
+  // sửa mở rộng theo "Người Phụ Trách" hồ sơ gốc) — mirror ĐÚNG route thật (routes/records.js
+  // POST /operationWorkItems/:id/edit, tự tra sourceRecord qua item.sourceType/sourceId).
+  actionHandlers['operationWorkItems:edit'] = (u, item, body) => {
+    const sourceCollection = item.sourceType === 'OPERATION_STORE_OPENING' ? 'operationStoreOpenings' : 'operationRepairs';
+    const sourceRecord = (state[sourceCollection] || []).find(r => r.id === item.sourceId);
+    return recordActions.editOperationWorkItem(u, item, body || {}, state.users, sourceRecord);
+  };
+  actionHandlers['operationStoreOpenings:update'] = (u, item, body) => recordActions.editOperationStoreOpeningDraft(u, item, body || {}, state.users);
+  actionHandlers['operationRepairs:update'] = (u, item, body) => recordActions.editOperationRepairDraft(u, item, body || {}, state.users);
   actionHandlers['operationStoreOpenings:confirm-use'] = (u, item) => {
     const items = state.operationWorkItems.filter(w => w.sourceType === 'OPERATION_STORE_OPENING' && w.sourceId === item.id);
     return recordActions.confirmOperationUse(u, item, items);
@@ -393,11 +405,33 @@ function createDispatcher(state) {
         sourceRecord.__workItemSourceType = sourceType;
         const siblings = state.operationWorkItems.filter(w => w.sourceType === sourceType && w.sourceId === srcId);
         const periodsForSource = (state.operationExecutionPeriods || []).filter(p => p.sourceType === sourceType && p.sourceId === srcId);
-        const newItem = recordActions.createOperationWorkItem(freshUser, body, sourceRecord, siblings, periodsForSource);
+        const newItem = recordActions.createOperationWorkItem(freshUser, body, sourceRecord, siblings, periodsForSource, state.users);
         newItem.sourceType = sourceType;
         newItem.sourceId = srcId;
         state.operationWorkItems.push(newItem);
         return { status: 200, body: { ok: true, item: newItem } };
+      }
+
+      // POST /api/records/operationWorkItems/:id/delete — route RIÊNG (không phải collection dbo.Records
+      // generic bên dưới, khác cascade admin-only mirror ở đó) — mirror ĐÚNG routes/records.js: quyền
+      // qua recordActions.deleteOperationWorkItem() (assertCanManageOperationExecution — admin/
+      // operationExecutionManage, KHÔNG mở cho personInCharge, đúng phạm vi hẹp Mục E), xoá cascade toàn
+      // bộ hậu duệ + đồng bộ lại trạng thái cha.
+      if ((m = pathName.match(/^\/api\/records\/operationWorkItems\/(\d+)\/delete$/)) && method === 'POST') {
+        const id = Number(m[1]);
+        const item = state.operationWorkItems.find(w => w.id === id);
+        if (!item) return { status: 404, body: { error: 'Không tìm thấy công việc' } };
+        const descendantIds = [];
+        const queue = state.operationWorkItems.filter(w => w.parentWorkItemId === id).map(w => w.id);
+        while (queue.length) {
+          const wid = queue.shift();
+          descendantIds.push(wid);
+          state.operationWorkItems.filter(w => w.parentWorkItemId === wid).forEach(w => queue.push(w.id));
+        }
+        const idsToDelete = recordActions.deleteOperationWorkItem(freshUser, item, descendantIds);
+        state.operationWorkItems = state.operationWorkItems.filter(w => !idsToDelete.includes(w.id));
+        syncOperationWorkItemAncestorsInState(state, item.parentWorkItemId);
+        return { status: 200, body: { ok: true } };
       }
 
       if ((m = pathName.match(/^\/api\/records\/([^/]+)\/(\d+)\/([^/]+)$/)) && method === 'POST') {
