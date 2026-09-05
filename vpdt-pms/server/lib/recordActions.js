@@ -9,7 +9,7 @@
 // họp thêm cờ minutesEdit (toàn công ty, không theo phòng ban) cho SỬA — riêng XÓA là quyền tối cao,
 // chỉ Admin; Công việc theo NGƯỜI (assignedBy/assignee), hoàn toàn không có khái niệm phòng ban.
 const { HttpError } = require('./httpErrors');
-const { scopeAllows, OFFICE_SUBTYPE_TO_PERM_FLAG, normalizeReportEntryPayload, buildEffectiveContractApprovalWorkflowServer, sanitizeUniformItems, sanitizeBudgetLines, getBudgetTemplateCustomFields, sanitizeBudgetCustomFields, resolveTrainingInstructorUsername, normalizeInviteList, normalizeTrainingPlanFields, normalizeOnboardingPathFields, resolveOperationPersonInChargeUsername, SUBMISSION_APPROVAL_LEVELS, buildEffectiveSubmissionWorkflowServer, validateRequiredCustomData, assertUploadedFileUrl, assertUploadedFileUrlList } = require('./createValidation');
+const { scopeAllows, OFFICE_SUBTYPE_TO_PERM_FLAG, normalizeReportEntryPayload, buildEffectiveContractApprovalWorkflowServer, sanitizeUniformItems, sanitizeBudgetLines, getBudgetTemplateCustomFields, sanitizeBudgetCustomFields, resolveTrainingInstructorUsername, normalizeInviteList, normalizeTrainingPlanFields, normalizeOnboardingPathFields, SUBMISSION_APPROVAL_LEVELS, buildEffectiveSubmissionWorkflowServer, validateRequiredCustomData, assertUploadedFileUrl, assertUploadedFileUrlList } = require('./createValidation');
 const { validateRegistrationItems: validateVppRegItems, calcItemsTotal: calcVppItemsTotal } = require('./vppCatalog');
 const { sanitizePriceFileItems, sanitizeColumnLabels } = require('./priceFileParser');
 const { materializeReportPeriodPdf, writeMergedPdfFile } = require('./reportPdfMerge');
@@ -417,101 +417,13 @@ function submitOperationOrderDraft(user, item) {
   return item;
 }
 
-function editOperationStoreOpeningDraft(user, item, payload, users) {
-  if (item.creator !== user.username) throw new HttpError(403, 'Chỉ người tạo mới được sửa đề xuất mở mới siêu thị này');
-  if (item.status !== 'DRAFT') throw new HttpError(409, 'Đề xuất này không ở trạng thái cần bổ sung, không thể sửa');
-  if (!payload || typeof payload !== 'object') throw new HttpError(400, 'Thiếu dữ liệu cập nhật');
-  if (payload.storeName !== undefined) {
-    const storeName = String(payload.storeName || '').trim();
-    if (!storeName) throw new HttpError(400, 'Vui lòng nhập tên siêu thị dự kiến');
-    item.storeName = storeName;
-  }
-  if (payload.address !== undefined) {
-    const address = String(payload.address || '').trim();
-    if (!address) throw new HttpError(400, 'Vui lòng nhập địa điểm dự kiến');
-    item.address = address;
-  }
-  if (payload.area !== undefined) item.area = Math.max(0, Number(payload.area) || 0);
-  if (payload.estimatedBudget !== undefined) item.estimatedBudget = Math.max(0, Number(payload.estimatedBudget) || 0);
-  // "Ngân Sách Phê Duyệt" — field riêng, xem chú thích đầy đủ ở lib/createValidation.js extraValidate.
-  // Bản Bổ Sung (DRAFT, chỉ còn hồ sơ CŨ từ trước Mục H) vẫn cho sửa lại nếu client gửi kèm.
-  if (payload.approvedBudget !== undefined) {
-    const approvedBudget = Number(payload.approvedBudget);
-    if (!Number.isFinite(approvedBudget) || approvedBudget < 0) throw new HttpError(400, 'Ngân sách phê duyệt không hợp lệ (phải là số không âm)');
-    item.approvedBudget = approvedBudget;
-  }
-  if (payload.personInCharge !== undefined) {
-    const personInChargeUser = resolveOperationPersonInChargeUsername(payload.personInCharge, users);
-    item.personInCharge = personInChargeUser ? personInChargeUser.username : null;
-    item.personInChargeName = personInChargeUser ? personInChargeUser.name : null;
-  }
-  if (payload.note !== undefined) item.note = String(payload.note || '').trim();
-  if (payload.expectedOpenDate !== undefined) {
-    if (payload.expectedOpenDate) {
-      const d = new Date(payload.expectedOpenDate);
-      if (Number.isNaN(d.getTime())) throw new HttpError(400, 'Ngày dự kiến khai trương không hợp lệ');
-      item.expectedOpenDate = d.toISOString();
-    } else {
-      item.expectedOpenDate = '';
-    }
-  }
-  assertUploadedFileUrl(payload.fileUrl, 'Tài liệu đính kèm');
-  if (payload.fileUrl !== undefined) item.fileUrl = payload.fileUrl;
-  return item;
-}
-function submitOperationStoreOpeningDraft(user, item) {
-  if (item.creator !== user.username) throw new HttpError(403, 'Chỉ người tạo mới được gửi lại đề xuất mở mới siêu thị này');
-  if (item.status !== 'DRAFT') throw new HttpError(409, 'Đề xuất này không ở trạng thái cần bổ sung (có thể đã gửi lại rồi)');
-  item.history = item.history || [];
-  item.history.push({ step: 0, approver: user.name, username: user.username, action: 'RESUBMITTED', comment: '', time: nowVN() });
-  resetForResubmit(item, {});
-  return item;
-}
-
-function editOperationRepairDraft(user, item, payload, users) {
-  if (item.creator !== user.username) throw new HttpError(403, 'Chỉ người tạo mới được sửa đề xuất sửa chữa siêu thị này');
-  if (item.status !== 'DRAFT') throw new HttpError(409, 'Đề xuất này không ở trạng thái cần bổ sung, không thể sửa');
-  if (!payload || typeof payload !== 'object') throw new HttpError(400, 'Thiếu dữ liệu cập nhật');
-  if (payload.storeName !== undefined) {
-    const storeName = String(payload.storeName || '').trim();
-    if (!storeName) throw new HttpError(400, 'Vui lòng nhập tên/địa điểm siêu thị cần sửa chữa');
-    item.storeName = storeName;
-  }
-  if (payload.title !== undefined) {
-    const title = String(payload.title || '').trim();
-    if (!title) throw new HttpError(400, 'Vui lòng nhập nội dung sửa chữa');
-    item.title = title;
-  }
-  if (payload.description !== undefined) item.description = String(payload.description || '').trim();
-  if (payload.supplier !== undefined) item.supplier = String(payload.supplier || '').trim();
-  if (payload.amount !== undefined) {
-    const amount = Number(payload.amount) || 0;
-    if (amount < 0) throw new HttpError(400, 'Số tiền không được là số âm');
-    item.amount = amount;
-  }
-  // "Ngân Sách Phê Duyệt" — cùng field/lý do đã thêm ở editOperationStoreOpeningDraft() ngay trên.
-  if (payload.approvedBudget !== undefined) {
-    const approvedBudget = Number(payload.approvedBudget);
-    if (!Number.isFinite(approvedBudget) || approvedBudget < 0) throw new HttpError(400, 'Ngân sách phê duyệt không hợp lệ (phải là số không âm)');
-    item.approvedBudget = approvedBudget;
-  }
-  if (payload.personInCharge !== undefined) {
-    const personInChargeUser = resolveOperationPersonInChargeUsername(payload.personInCharge, users);
-    item.personInCharge = personInChargeUser ? personInChargeUser.username : null;
-    item.personInChargeName = personInChargeUser ? personInChargeUser.name : null;
-  }
-  assertUploadedFileUrl(payload.fileUrl, 'Tệp đính kèm');
-  if (payload.fileUrl !== undefined) item.fileUrl = payload.fileUrl;
-  return item;
-}
-function submitOperationRepairDraft(user, item) {
-  if (item.creator !== user.username) throw new HttpError(403, 'Chỉ người tạo mới được gửi lại đề xuất sửa chữa siêu thị này');
-  if (item.status !== 'DRAFT') throw new HttpError(409, 'Đề xuất này không ở trạng thái cần bổ sung (có thể đã gửi lại rồi)');
-  item.history = item.history || [];
-  item.history.push({ step: 0, approver: user.name, username: user.username, action: 'RESUBMITTED', comment: '', time: nowVN() });
-  resetForResubmit(item, {});
-  return item;
-}
+// editOperationStoreOpeningDraft()/submitOperationStoreOpeningDraft()/editOperationRepairDraft()/
+// submitOperationRepairDraft() (cơ chế "Sửa & Gửi Lại Bổ Sung" cho operationStoreOpenings/
+// operationRepairs) đã bị XOÁ — từ Mục H (60c473b) 2 collection này không còn qua phê duyệt, status
+// đi thẳng APPROVED ngay lúc tạo và KHÔNG BAO GIỜ vào lại DRAFT nữa; bản ghi CŨ (trước Mục H) còn kẹt
+// ở DRAFT được migrateStuckOperationApprovalStatuses() (seedDefaults.js) tự chuyển sang APPROVED mỗi
+// lúc khởi động — nên 4 hàm trên hết đường gọi tới, đã xoá cùng route ở routes/records.js và
+// BOSUNG_MODULE_META/openBosungEditModal()/confirmBosungResubmit() ở public/js/core.js.
 
 // ----- Vận Hành > "Siêu Thị" > Giai đoạn "Danh mục đầu tư" (trước đây gọi "Dự toán") -----
 // Bảng hạng mục + chi phí cho hồ sơ Mở Mới/Sửa Chữa — trước đây là workflow duyệt riêng song song với
@@ -4901,12 +4813,13 @@ module.exports = {
   canConfirmCarDriverAssignment, confirmCarDriverAssignment,
   canApproveLicense, approveLicense, rejectLicense, setLicenseRenewing, revokeLicense, unrevokeLicense,
   canManageItServiceRenewal, editItServiceRenewal, renewItServiceRenewal,
-  // Vận Hành — 6 hàm sau vốn đã tồn tại từ trước (routes/records.js gọi tới) nhưng bị BỎ SÓT khỏi
-  // exports (bug tiềm ẩn: gọi update/submit "Bổ sung" cho 3 luồng này sẽ ném lỗi "not a function"),
-  // tiện sửa cùng lúc khi thêm exports cho tính năng "Siêu Thị" mới bên dưới.
+  // Vận Hành — operationOrders GIỮ NGUYÊN quy trình duyệt cũ (routes/records.js gọi tới update/submit
+  // "Bổ sung"). editOperationStoreOpeningDraft/submitOperationStoreOpeningDraft/editOperationRepairDraft/
+  // submitOperationRepairDraft (operationStoreOpenings/operationRepairs) đã bị XOÁ cùng đợt bỏ hẳn phê
+  // duyệt Vận Hành > Siêu Thị (Mục H, 60c473b) — status 2 collection này không bao giờ vào lại DRAFT
+  // nữa (migrateStuckOperationApprovalStatuses() ở seedDefaults.js quét sạch bản ghi cũ mỗi lúc khởi
+  // động) nên cơ chế "Sửa & Gửi Lại Bổ Sung" không còn đường gọi tới, xoá cùng route ở routes/records.js.
   editOperationOrderDraft, submitOperationOrderDraft,
-  editOperationStoreOpeningDraft, submitOperationStoreOpeningDraft,
-  editOperationRepairDraft, submitOperationRepairDraft,
   submitOperationEstimate, resetOperationEstimateToDraft,
   createOperationWorkItem, updateOperationWorkItemProgress, acceptOperationWorkItem,
   computeParentWorkItemStatus, deleteOperationWorkItem, editOperationWorkItem,

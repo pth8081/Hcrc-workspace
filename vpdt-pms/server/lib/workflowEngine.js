@@ -272,21 +272,21 @@ const MODULE_CONFIGS = {
     resolveWfConfig: (item, appData) => flatWorkflowConfigToSteps(appData.budgetDeptWorkflows?.[item.dept], appData),
     supportsRequestChanges: true
   },
-  // Vận Hành — 3 luồng độc lập, mỗi luồng 1 dept-workflow map riêng (khác officeReqs dùng chung 1
-  // OFFICE_SUBTYPE_TO_DBKEY tra theo subType — ở đây mỗi collection đã tách sẵn nên trỏ thẳng luôn).
+  // Vận Hành — operationOrders vẫn giữ nguyên quy trình duyệt cũ theo phòng ban (khác officeReqs dùng
+  // chung 1 OFFICE_SUBTYPE_TO_DBKEY tra theo subType — ở đây trỏ thẳng luôn). operationStoreOpenings/
+  // operationRepairs ĐÃ BỊ XOÁ khỏi đây (Mục H, 60c473b — bỏ hẳn phê duyệt cho 2 luồng "Siêu Thị": status
+  // đi thẳng APPROVED ngay lúc tạo ở lib/createValidation.js, không bao giờ vào PENDING nữa nên
+  // applyWorkflowAction()/route generic /api/workflow/<module>/:id/:action cho 2 module này chỉ còn ném
+  // lỗi 409 "không ở trạng thái chờ xử lý" — dọn hẳn cấu hình thay vì để lại 1 route chết). Bản ghi CŨ
+  // (trước Mục H) còn kẹt PENDING/DRAFT được migrateStuckOperationApprovalStatuses() (seedDefaults.js) tự
+  // chuyển sang APPROVED mỗi lúc khởi động. dept-workflow map operationStoreOpenDeptWorkflows/
+  // operationRepairDeptWorkflows GIỮ NGUYÊN trong AppData (không xoá dữ liệu cấu hình cũ của admin,
+  // đơn giản không còn nơi nào đọc tới) — canViewOperationStoreOpening()/canViewOperationRepair()
+  // (lib/recordViewScope.js) đã bỏ nhánh "đang là approver" tương ứng, chỉ còn dept/hasOwnWorkItemInSource/
+  // approver của Danh mục đầu tư (vẫn giữ nguyên object bên dưới).
   operationOrders: {
     dbKey: 'operationOrders',
     resolveWfConfig: (item, appData) => flatWorkflowConfigToSteps(appData.operationOrderDeptWorkflows?.[item.dept], appData),
-    supportsRequestChanges: true
-  },
-  operationStoreOpenings: {
-    dbKey: 'operationStoreOpenings',
-    resolveWfConfig: (item, appData) => flatWorkflowConfigToSteps(appData.operationStoreOpenDeptWorkflows?.[item.dept], appData),
-    supportsRequestChanges: true
-  },
-  operationRepairs: {
-    dbKey: 'operationRepairs',
-    resolveWfConfig: (item, appData) => flatWorkflowConfigToSteps(appData.operationRepairDeptWorkflows?.[item.dept], appData),
     supportsRequestChanges: true
   },
   // Vận Hành — giai đoạn "Dự toán", 2 module ẢO cùng dbKey với hồ sơ gốc nhưng field trạng thái RIÊNG

@@ -1,10 +1,73 @@
 # Phiên bản hiện tại
 
-**9.2** — đã merge vào `main` (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge
+**9.3** — đã merge vào `main` (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge
 góc màn hình + `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần
 kiểu `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
 
-## Cập nhật gần nhất — Soát toàn hệ thống các ô nhập tiền còn thiếu dấu phân cách hàng nghìn (2026-09-05)
+## Cập nhật gần nhất — Vận Hành > Siêu Thị: xoá hẳn cơ chế "Bổ Sung" (không còn phê duyệt), vá lỗ hổng dữ liệu cũ (2026-09-05)
+
+Theo xác nhận của người dùng: trong "Tab Siêu Thị" (2 loại hồ sơ `operationStoreOpenings`/
+`operationRepairs` 🏬 Mở Mới + 🔧 Sửa Chữa, cùng "Danh Mục Đầu Tư" — `estimateStatus` — của chính 2 loại
+này) **chưa bao giờ có yêu cầu phê duyệt** — đúng như Mục H (60c473b, 2026-09-04) đã làm: hồ sơ vào thẳng
+`APPROVED` ngay lúc tạo, không ai cần bấm Duyệt. Việc này bỏ sót 1 nguy cơ: 2 loại hồ sơ này được thêm
+sớm hơn Mục H đúng 3 ngày (b89d46e, 2026-09-01) nên có 1 khoảng hẹp đã đi qua pipeline duyệt ĐẦY ĐỦ kiểu
+cũ — nếu trong 3 ngày đó có ai bấm "Yêu Cầu Bổ Sung" trên 1 hồ sơ thật, hồ sơ sẽ kẹt ở `status: 'DRAFT'`
+vĩnh viễn (di trú cũ `migrateStuckOperationApprovalStatuses()`, thêm ở c02376f, chỉ tự sửa `PENDING`,
+không sửa `DRAFT`) — đúng lúc cơ chế "Sửa & Gửi Lại Bổ Sung" (đường thoát DUY NHẤT khỏi DRAFT) sắp bị xoá.
+
+**Bước 1 — vá lỗ hổng trước khi xoá gì:** mở rộng `migrateStuckOperationApprovalStatuses()`
+(`seedDefaults.js`, chạy mỗi lần khởi động server) — ngoài việc tự chuyển `PENDING`→`APPROVED` như cũ,
+nay CŨNG quét sạch mọi hồ sơ `operationStoreOpenings`/`operationRepairs` đang ở `status: 'DRAFT'` (trạng
+thái nghỉ của "Yêu Cầu Bổ Sung") sang `APPROVED`, ghi thêm 1 dòng lịch sử `SYSTEM_MIGRATION`. **KHÔNG**
+đụng tới `estimateStatus: 'DRAFT'` (Danh Mục Đầu Tư) — đây là trạng thái ĐẦU vào bình thường, đang dùng
+(hồ sơ chưa lập/đang lập danh mục), khác hẳn ý nghĩa DRAFT của hồ sơ chính. Viết 3 kịch bản test mới
+(`tests/test-operation-danhmuc-dautu-units.js`, mock `lib/recordStore.js` qua `require.cache` — không cần
+SQL Server thật) xác nhận: hồ sơ DRAFT cũ được chuyển đúng, hồ sơ vừa DRAFT (chính) vừa PENDING (Danh mục
+đầu tư) cùng lúc thì cả 2 field đều được xử lý, và hồ sơ đã đúng sẵn thì không bị đụng vào (idempotent).
+
+**Bước 2 — xoá "Bổ Sung" cho 2 loại hồ sơ này (giờ đã provably không thể xảy ra nữa):**
+- `public/js/core.js`: bỏ 2 nhánh `operationStoreOpenings`/`operationRepairs` khỏi `BOSUNG_MODULE_META`,
+  `openBosungEditModal()`, `confirmBosungResubmit()`; xoá luôn `resolveBsPersonInChargeInput()` (chỉ 2
+  nhánh này từng dùng picker Người Phụ Trách trong modal Bổ Sung).
+- `lib/recordActions.js`: xoá `editOperationStoreOpeningDraft`/`submitOperationStoreOpeningDraft`/
+  `editOperationRepairDraft`/`submitOperationRepairDraft` + export tương ứng.
+- `routes/records.js`: xoá 4 route `POST /operationStoreOpenings|operationRepairs/:id/update|submit`.
+- `lib/workflowEngine.js`: xoá `MODULE_CONFIGS.operationStoreOpenings`/`.operationRepairs` (hồ sơ này
+  không bao giờ vào `PENDING` nữa nên route generic `/api/workflow/<module>/:id/:action` chỉ còn ném lỗi
+  409 chết — dọn hẳn). **Giữ nguyên** `operationStoreOpeningEstimate`/`operationRepairEstimate` (Danh Mục
+  Đầu Tư, ngoài phạm vi lần này).
+- `lib/recordViewScope.js`: `canViewOperationStoreOpening()`/`canViewOperationRepair()` bỏ nhánh "đang là
+  approver hồ sơ chính" (tham chiếu tới `MODULE_CONFIGS` vừa xoá ở trên, tránh crash) — giữ nguyên dept
+  match/`hasOwnWorkItemInSource()`/approver của Danh Mục Đầu Tư.
+- `public/js/module-vanhanh.js`: nút "✏️ Sửa & Gửi Lại" giờ chỉ hiện cho `operationOrders` (loại DUY NHẤT
+  còn giữ quy trình duyệt cũ trong module Vận Hành — xác nhận qua code, KHÔNG đụng tới).
+- `public/js/core-approvalhub.js`: bỏ 2 lệnh `addDeptWorkflowItems(DB.operationStoreOpenings/...)` (không
+  bao giờ góp kết quả nữa) — giữ nguyên 2 lệnh tương ứng cho Danh Mục Đầu Tư.
+- `tests/testHarness.js`: bỏ 2 action handler `operationStoreOpenings:update`/`operationRepairs:update`
+  (gọi hàm đã xoá).
+
+**`operationOrders` ("📦 Đơn Hàng"):** xác nhận đây là collection HOÀN TOÀN RIÊNG (không phải cùng dữ liệu
+với "Danh Mục Đầu Tư"/`estimateStatus`) và vẫn giữ nguyên quy trình duyệt PENDING theo phòng ban thật —
+`lib/createValidation.js` tự ghi rõ "khác operationOrders 'Phê Duyệt Đơn Hàng', vẫn giữ nguyên PENDING/quy
+trình duyệt cũ, KHÔNG đụng tới" — nên **KHÔNG** áp dụng đợt dọn dẹp này cho `operationOrders`.
+
+Xác minh: bộ hồi quy đầy đủ 59 file `tests/test-*.js` — 57 qua, đúng 2 lỗi biết trước do sandbox không có
+SQL Server thật (không liên quan thay đổi này). `tests/test-office-budget.js` (Kịch bản 13 — Bổ Sung
+`officeReqs`) và `tests/test-operation-store-lifecycle.js` đều PASS toàn bộ — thêm 4 kịch bản Playwright
+mới ở file sau xác nhận: KHÔNG còn nút "Sửa & Gửi Lại" nào cho 2 loại hồ sơ Siêu Thị (kể cả khi giả lập
+dữ liệu client lệch `status:'DRAFT'`, điều kiện `kind==='operationOrders'` vẫn chặn cứng ở
+`buildOperationRowHTML()`), modal "Xem chi tiết" vẫn mở bình thường (view-only, không crash), và
+`BOSUNG_MODULE_META` không còn khai 2 kind này.
+
+**Deploy — QUAN TRỌNG, khác thông lệ "chỉ copy code":** không đổi `schema.sql`/`.env.example`/
+`package.json` dependencies, nhưng di trú `migrateStuckOperationApprovalStatuses()` ở `seedDefaults.js`
+**tự chạy ngay khi server khởi động lại** — nếu CSDL thật có bất kỳ hồ sơ `operationStoreOpenings`/
+`operationRepairs` nào đang kẹt ở `status: 'DRAFT'` (do 1 phê duyệt viên lỡ bấm "Yêu Cầu Bổ Sung" trong
+khoảng 2026-09-01 → 2026-09-04), nó sẽ TỰ ĐỘNG được chuyển sang `APPROVED` ngay ở lần restart tới — đây là
+thay đổi DỮ LIỆU THẬT tự động, một chiều, và đúng ý (khớp với "loại hồ sơ này giờ không bao giờ cần phê
+duyệt nữa"), không cần thao tác thủ công nào thêm, nhưng người dùng nên biết trước khi restart.
+
+## Cập nhật trước đó — Soát toàn hệ thống các ô nhập tiền còn thiếu dấu phân cách hàng nghìn (2026-09-05)
 
 Theo yêu cầu người dùng: "rà soát toàn bộ các ô liên quan tới tiền trong app xem có tuân thủ đúng định
 dạng [dấu phẩy hàng nghìn] không, cái nào chưa tuân thủ thì chỉnh lại luôn". Soát toàn bộ `public/index.html`

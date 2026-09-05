@@ -233,6 +233,37 @@ async function migrateStuckOperationApprovalStatuses() {
     if (stuck.length) {
       console.log(`   ↳ Đã di trú ${stuck.length} hồ sơ ${collection} còn kẹt ở PENDING (hồ sơ chính/danh mục đầu tư) sang APPROVED (bỏ phê duyệt Vận Hành > Siêu Thị).`);
     }
+
+    // Hồ sơ CHÍNH (status, KHÔNG phải estimateStatus) còn kẹt ở DRAFT — nghỉ tại đây CHỈ có thể là do 1
+    // phê duyệt viên đã bấm "Yêu Cầu Bổ Sung" (REQUEST_CHANGES) TRƯỚC khi Mục H tồn tại (b89d46e ngày
+    // 2026-09-01 tới 60c473b ngày 2026-09-04 — 2 loại hồ sơ này mới có, đi qua đúng 3 ngày pipeline duyệt
+    // đầy đủ trước khi Mục H bỏ hẳn phê duyệt). Từ Mục H, KHÔNG còn đường nào tạo mới trạng thái DRAFT
+    // cho 2 collection này nữa (createValidation.js đặt thẳng APPROVED ngay lúc tạo) — nhưng bản ghi CŨ
+    // lỡ kẹt ở đây thì cũng KHÔNG còn đường thoát nào khác ngoài chính cơ chế "Sửa & Gửi Lại Bổ Sung"
+    // (editOperationStoreOpeningDraft/submitOperationStoreOpeningDraft/...) mà bản thân nó sắp bị xoá vì
+    // hết còn ai dùng tới — nên phải quét dọn TẠI ĐÂY, cùng lúc với PENDING ở trên, để đảm bảo an toàn dữ
+    // liệu TRƯỚC khi xoá cơ chế Bổ Sung. Coi như 1 dạng "Yêu cầu bổ sung" cũng đã hết hiệu lực — chuyển
+    // thẳng sang APPROVED giống hệt PENDING ở trên (đúng tinh thần "không ai/không còn phê duyệt module
+    // này nữa" — dù trước đó có ai yêu cầu sửa gì thì giờ cũng coi như xong).
+    // KHÔNG đụng estimateStatus==='DRAFT' — đó là trạng thái ĐẦU vào hợp lệ, ĐANG DÙNG bình thường cho
+    // giai đoạn "Danh mục đầu tư" (xem submitOperationEstimate() ở lib/recordActions.js, chấp nhận cả
+    // DRAFT lẫn APPROVED để lưu — không phải trạng thái kẹt cần di trú).
+    const stuckDraft = records.filter(r => r.status === 'DRAFT');
+    for (const rec of stuckDraft) {
+      await withLockedRecordById(collection, rec.id, (item) => {
+        if (item.status !== 'DRAFT') return item; // đã đổi bởi request khác giữa lúc đọc và khoá
+        item.history = item.history || [];
+        item.history.push({ step: 0, approver: 'Hệ Thống', username: 'system', action: 'SYSTEM_MIGRATION',
+          comment: 'Module Vận Hành > Siêu Thị không còn qua phê duyệt — tự động chuyển từ "Yêu cầu bổ sung" (DRAFT, còn sót từ trước Mục H) sang "Đã duyệt".',
+          time: nowVNForMigration() });
+        item.status = 'APPROVED';
+        item.currentStep = 0;
+        return item;
+      });
+    }
+    if (stuckDraft.length) {
+      console.log(`   ↳ Đã di trú ${stuckDraft.length} hồ sơ ${collection} còn kẹt ở DRAFT (Yêu cầu bổ sung, còn sót từ trước Mục H) sang APPROVED (bỏ phê duyệt Vận Hành > Siêu Thị).`);
+    }
   }
 }
 
@@ -242,4 +273,8 @@ function nowVNForMigration() {
   return new Date().toLocaleString('vi-VN');
 }
 
-module.exports = { seedDefaults };
+// migrateStuckOperationApprovalStatuses export riêng THÊM vào cho
+// tests/test-operation-danhmuc-dautu-units.js (gọi trực tiếp hàm này với lib/recordStore.js đã mock qua
+// require.cache, không cần SQL Server thật) — xác nhận đúng hành vi "quét sạch bản ghi DRAFT/PENDING
+// còn sót từ trước Mục H mỗi lúc khởi động".
+module.exports = { seedDefaults, migrateStuckOperationApprovalStatuses };

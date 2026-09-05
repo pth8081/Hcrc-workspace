@@ -1,9 +1,13 @@
 // ==========================================
 // 7b. MODULE VẬN HÀNH — 3 luồng ĐỘC LẬP (operationOrders/operationStoreOpenings/operationRepairs), mỗi
-// luồng 1 collection + 1 quyền tạo + 1 dept-workflow map riêng (xem lib/workflowEngine.js). Cùng khuôn
-// tạo-thẳng-PENDING của officeReqs (không có bước NHÁP thủ công), DRAFT chỉ quay lại qua "Yêu Cầu Bổ
-// Sung" (dùng chung BOSUNG_MODULE_META/openBosungEditModal() đã nối ở trên). OPERATION_KIND_META gom mọi
-// khác biệt giữa 3 luồng vào 1 chỗ để renderOperationList()/openOperationProcessModal() dùng chung logic.
+// luồng 1 collection + 1 quyền tạo + 1 dept-workflow map riêng (xem lib/workflowEngine.js). operationOrders
+// GIỮ NGUYÊN quy trình duyệt cũ — cùng khuôn tạo-thẳng-PENDING của officeReqs (không có bước NHÁP thủ
+// công), DRAFT chỉ quay lại qua "Yêu Cầu Bổ Sung" (dùng chung BOSUNG_MODULE_META/openBosungEditModal()
+// đã nối ở trên). operationStoreOpenings/operationRepairs KHÔNG còn qua phê duyệt (Mục H, 60c473b) —
+// status đi thẳng APPROVED ngay lúc tạo, không có PENDING/DRAFT/"Bổ Sung" nào cho 2 luồng này nữa.
+// OPERATION_KIND_META gom mọi khác biệt giữa 3 luồng vào 1 chỗ để renderOperationList()/
+// openOperationProcessModal() dùng chung logic (2 luồng sau chỉ còn hiển thị "Xem chi tiết", không bao
+// giờ hiện nút Duyệt/Từ chối/Bổ sung vì canApprove luôn false — status không bao giờ là PENDING).
 // ==========================================
 const OPERATION_KIND_META = {
   operationOrders: {
@@ -456,7 +460,11 @@ function buildOperationRowHTML(kind, o) {
 
   let primaryBtnHTML;
   const secondaryOptions = [];
-  if (o.status === 'DRAFT' && o.creator === currentUser.username) {
+  // "Sửa & Gửi Lại" (Bổ Sung) CHỈ còn cho operationOrders — operationStoreOpenings/operationRepairs
+  // không bao giờ vào lại DRAFT nữa (Mục H) nên BOSUNG_MODULE_META không còn khai 2 kind này; giữ điều
+  // kiện `kind === 'operationOrders'` tường minh ở đây để tránh gọi openBosungEditModal() với 1 kind
+  // BOSUNG_MODULE_META không có (crash) nếu status của 2 kind kia lỡ lệch dữ liệu ở đâu đó.
+  if (kind === 'operationOrders' && o.status === 'DRAFT' && o.creator === currentUser.username) {
     primaryBtnHTML = `<button data-op="openBosungEditModal" data-kind="${kind}" data-id="${o.id}" class="px-2.5 py-1 bg-gray-600 text-white rounded text-xs hover:opacity-90 font-bold">✏️ Sửa &amp; Gửi Lại</button>`;
   } else {
     primaryBtnHTML = canApprove

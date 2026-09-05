@@ -253,24 +253,17 @@ function getMyPendingApprovals(user) {
     });
   }
 
-  // Vận Hành — TRƯỚC ĐÂY hoàn toàn KHÔNG có mặt ở Approval Hub (chỉ ở tab "Đã xử lý"). 5 luồng: 3 hồ sơ
-  // chính (Đơn hàng/Mở mới/Sửa chữa) + 2 quy trình Dự toán ĐỘC LẬP song song trên chính hồ sơ Mở mới/Sửa
-  // chữa (đúng kỹ thuật dual-workflow Hợp đồng ở trên — fields override estimateStatus/estimateCurrentStep/
-  // estimateHistory, xem lib/workflowEngine.js operationStoreOpeningEstimate/operationRepairEstimate).
+  // Vận Hành — TRƯỚC ĐÂY hoàn toàn KHÔNG có mặt ở Approval Hub (chỉ ở tab "Đã xử lý"). Còn 3 luồng: 1 hồ
+  // sơ chính (Đơn hàng — operationOrders, VẪN giữ nguyên quy trình duyệt cũ) + 2 quy trình Dự toán ĐỘC
+  // LẬP song song trên chính hồ sơ Mở mới/Sửa chữa (đúng kỹ thuật dual-workflow Hợp đồng ở trên — fields
+  // override estimateStatus/estimateCurrentStep/estimateHistory, xem lib/workflowEngine.js
+  // operationStoreOpeningEstimate/operationRepairEstimate). Hồ sơ chính operationStoreOpenings/
+  // operationRepairs KHÔNG còn ở đây nữa (Mục H, 60c473b — bỏ hẳn phê duyệt, status không bao giờ vào
+  // PENDING nên 2 lệnh addDeptWorkflowItems() tương ứng chỉ luôn góp 0 kết quả — dọn hẳn).
   addDeptWorkflowItems(DB.operationOrders, o => DB.operationOrderDeptWorkflows[o.dept], {
     type: 'operationOrder', typeLabel: '📦 Vận Hành - Đơn hàng',
     codeOf: r => r.code, titleOf: r => r.title,
     actionsOf: r => [{ label: '✍️ Xử lý / Duyệt', fn: 'openOperationProcessModal', args: ['operationOrders', r.id], primary: true }]
-  });
-  addDeptWorkflowItems(DB.operationStoreOpenings, o => DB.operationStoreOpenDeptWorkflows[o.dept], {
-    type: 'operationStoreOpen', typeLabel: '🏬 Vận Hành - Mở mới siêu thị',
-    codeOf: r => r.code, titleOf: r => r.storeName,
-    actionsOf: r => [{ label: '✍️ Xử lý / Duyệt', fn: 'openOperationProcessModal', args: ['operationStoreOpenings', r.id], primary: true }]
-  });
-  addDeptWorkflowItems(DB.operationRepairs, o => DB.operationRepairDeptWorkflows[o.dept], {
-    type: 'operationRepair', typeLabel: '🔧 Vận Hành - Sửa chữa siêu thị',
-    codeOf: r => r.code, titleOf: r => r.title,
-    actionsOf: r => [{ label: '✍️ Xử lý / Duyệt', fn: 'openOperationProcessModal', args: ['operationRepairs', r.id], primary: true }]
   });
   addDeptWorkflowItems(
     DB.operationStoreOpenings, o => DB.operationStoreOpenEstimateDeptWorkflows[o.dept],

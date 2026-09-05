@@ -151,6 +151,78 @@ async function main() {
       assertEqual(result.approvedBudget, 25000000, 'approvedBudget phải lưu đúng, ĐỘC LẬP với amount');
     });
 
+    // ===== 1d) Đợt "xoá hẳn Bổ Sung Vận Hành > Siêu Thị" — KHÔNG còn đường nào ra được modal "Sửa & Gửi
+    // Lại" (Bổ Sung) cho operationStoreOpenings/operationRepairs nữa, kể cả khi (giả lập) dữ liệu client
+    // lỡ có status:'DRAFT' — openBosungEditModal() BOSUNG_MODULE_META không còn khai 2 kind này, và
+    // buildOperationRowHTML() đã tường minh chỉ cho phép nút này với kind==='operationOrders' =====
+    await run.run('Đăng nhập chính người tạo, xem danh sách Mở Mới/Sửa Chữa: KHÔNG còn nút "Sửa & Gửi Lại" (Bổ Sung), chỉ còn "Xem chi tiết"', async () => {
+      await loginAs(page, CREATOR);
+      const rows = await page.evaluate((ids) => {
+        switchTab('vanHanh'); setVanHanhSubTab('STORE'); setOperationStoreSubTab('OPEN');
+        renderOperationList('operationStoreOpenings');
+        const openRow = [...document.querySelectorAll('#operationStoreOpenTableBody tr')].find(tr => tr.textContent.includes('Siêu thị Test Quận 9'));
+        setOperationStoreSubTab('REPAIR');
+        renderOperationList('operationRepairs');
+        const repairRow = [...document.querySelectorAll('#operationRepairTableBody tr')].find(tr => tr.textContent.includes('Siêu thị Sửa Chữa Test'));
+        return {
+          openHasBosung: !!openRow?.querySelector('[data-op="openBosungEditModal"]'),
+          openHasViewDetail: !!openRow?.querySelector('[data-op="openOperationProcessModal"]'),
+          repairHasBosung: !!repairRow?.querySelector('[data-op="openBosungEditModal"]'),
+          repairHasViewDetail: !!repairRow?.querySelector('[data-op="openOperationProcessModal"]')
+        };
+      }, [recordId, repairRecordId]);
+      assert(!rows.openHasBosung, 'Hồ sơ Mở Mới (status APPROVED) KHÔNG được có nút Bổ Sung "Sửa & Gửi Lại"');
+      assert(rows.openHasViewDetail, 'Hồ sơ Mở Mới phải có nút "Xem chi tiết"/xử lý thay thế');
+      assert(!rows.repairHasBosung, 'Hồ sơ Sửa Chữa (status APPROVED) KHÔNG được có nút Bổ Sung "Sửa & Gửi Lại"');
+      assert(rows.repairHasViewDetail, 'Hồ sơ Sửa Chữa phải có nút "Xem chi tiết"/xử lý thay thế');
+    });
+
+    await run.run('"Xem chi tiết" (openOperationProcessModal) vẫn mở được bình thường cho cả 2 loại hồ sơ, không crash, chỉ hiện view-only (không còn ai để Duyệt/Từ chối/Bổ sung)', async () => {
+      const result = await page.evaluate((ids) => {
+        openOperationProcessModal('operationStoreOpenings', ids[0]);
+        const openControlsText = document.getElementById('operationProcessModalControls').innerText;
+        const openDetailsHTML = document.getElementById('operationProcessModalDetails').innerHTML;
+        closeOperationProcessModal();
+        openOperationProcessModal('operationRepairs', ids[1]);
+        const repairControlsText = document.getElementById('operationProcessModalControls').innerText;
+        const repairDetailsHTML = document.getElementById('operationProcessModalDetails').innerHTML;
+        closeOperationProcessModal();
+        return { openControlsText, openDetailsHTML, repairControlsText, repairDetailsHTML };
+      }, [recordId, repairRecordId]);
+      assertIncludes(result.openControlsText, 'chỉ có quyền xem', 'Hồ sơ Mở Mới: modal chi tiết phải hiện view-only (canApprove luôn false — status không bao giờ PENDING)');
+      assert(result.openDetailsHTML.includes('Địa điểm dự kiến'), 'Modal chi tiết Mở Mới phải hiện đúng nội dung hồ sơ (không rỗng/crash)');
+      assertIncludes(result.repairControlsText, 'chỉ có quyền xem', 'Hồ sơ Sửa Chữa: modal chi tiết phải hiện view-only');
+      assert(result.repairDetailsHTML.includes('Nhà cung cấp/Đơn vị thi công'), 'Modal chi tiết Sửa Chữa phải hiện đúng nội dung hồ sơ (không rỗng/crash)');
+    });
+
+    await run.run('BOSUNG_MODULE_META không còn khai operationStoreOpenings/operationRepairs — openBosungEditModal() cho 2 kind này không còn hoạt động', async () => {
+      const hasMeta = await page.evaluate(() => ({
+        storeOpen: Object.prototype.hasOwnProperty.call(BOSUNG_MODULE_META, 'operationStoreOpenings'),
+        repair: Object.prototype.hasOwnProperty.call(BOSUNG_MODULE_META, 'operationRepairs'),
+        orderStillThere: Object.prototype.hasOwnProperty.call(BOSUNG_MODULE_META, 'operationOrders')
+      }));
+      assert(!hasMeta.storeOpen, 'BOSUNG_MODULE_META không được khai "operationStoreOpenings"');
+      assert(!hasMeta.repair, 'BOSUNG_MODULE_META không được khai "operationRepairs"');
+      assert(hasMeta.orderStillThere, 'operationOrders vẫn PHẢI còn (vẫn giữ nguyên quy trình duyệt cũ)');
+    });
+
+    // Ngay cả khi dữ liệu client lỡ lệch (record giả có status:'DRAFT' — KHÔNG BAO GIỜ xảy ra thật từ
+    // server sau Mục H, nhưng test phòng thủ 2 lớp: điều kiện kind==='operationOrders' ở
+    // buildOperationRowHTML() vẫn phải chặn nút Bổ Sung cho đúng loại hồ sơ).
+    await run.run('Phòng thủ 2 lớp: dù (giả lập) status client lệch về DRAFT, hàng operationStoreOpenings/operationRepairs vẫn KHÔNG hiện nút Bổ Sung', async () => {
+      const result = await page.evaluate(() => {
+        const fakeStoreOpen = { id: 999999999, code: 'MM-FAKE-DRAFT', dept: 'Vận Hành', creatorName: 'Test', creator: currentUser.username,
+          status: 'DRAFT', currentStep: 1, history: [], storeName: 'Hồ Sơ Giả DRAFT', estimateStatus: 'APPROVED', estimateHistory: [] };
+        DB.operationStoreOpenings.push(fakeStoreOpen);
+        renderOperationList('operationStoreOpenings');
+        const row = [...document.querySelectorAll('#operationStoreOpenTableBody tr')].find(tr => tr.textContent.includes('Hồ Sơ Giả DRAFT'));
+        const hasBosung = !!row?.querySelector('[data-op="openBosungEditModal"]');
+        DB.operationStoreOpenings = DB.operationStoreOpenings.filter(x => x.id !== fakeStoreOpen.id);
+        return { hasBosung };
+      });
+      assert(!result.hasBosung, 'Dù status client lỡ lệch về DRAFT, operationStoreOpenings vẫn KHÔNG được hiện nút Bổ Sung (kind !== operationOrders chặn cứng ở buildOperationRowHTML())');
+    });
+
     // ===== 2) Chặn tạo công việc Thực hiện khi Danh mục đầu tư CHƯA lưu (estimateStatus != APPROVED) =====
     await run.run('Chặn tạo công việc Thực hiện khi estimateStatus chưa APPROVED', async () => {
       await loginAs(page, EXECUTOR);

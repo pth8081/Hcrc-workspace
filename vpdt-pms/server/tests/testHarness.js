@@ -227,8 +227,9 @@ function createDispatcher(state) {
     const sourceRecord = (state[sourceCollection] || []).find(r => r.id === item.sourceId);
     return recordActions.editOperationWorkItem(u, item, body || {}, state.users, sourceRecord);
   };
-  actionHandlers['operationStoreOpenings:update'] = (u, item, body) => recordActions.editOperationStoreOpeningDraft(u, item, body || {}, state.users);
-  actionHandlers['operationRepairs:update'] = (u, item, body) => recordActions.editOperationRepairDraft(u, item, body || {}, state.users);
+  // operationStoreOpenings/operationRepairs:update ĐÃ BỊ XOÁ khỏi đây cùng
+  // editOperationStoreOpeningDraft()/editOperationRepairDraft() (lib/recordActions.js) — cơ chế "Sửa &
+  // Gửi Lại Bổ Sung" không còn tồn tại cho 2 collection này (Mục H, 60c473b).
   actionHandlers['operationStoreOpenings:confirm-use'] = (u, item) => {
     const items = state.operationWorkItems.filter(w => w.sourceType === 'OPERATION_STORE_OPENING' && w.sourceId === item.id);
     return recordActions.confirmOperationUse(u, item, items);

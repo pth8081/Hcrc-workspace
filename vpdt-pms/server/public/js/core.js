@@ -3022,23 +3022,21 @@ async function requestWorkflowChangesAction(moduleKey, id, list, renderFnName, r
 // này (xem editVppRegDraft()/openEditContract() ở mỗi module).
 let bosungEditTarget = null; // { module, id }
 
+// operationStoreOpenings/operationRepairs ĐÃ BỊ XOÁ khỏi đây (Mục H, 60c473b — bỏ hẳn phê duyệt cho 2
+// luồng "Siêu Thị": status đi thẳng APPROVED ngay lúc tạo, không bao giờ vào lại DRAFT nữa nên không
+// còn hồ sơ nào cần "Bổ Sung" — server cũng đã xoá route update/submit tương ứng, xem routes/records.js).
 const BOSUNG_MODULE_META = {
   docs: { list: () => DB.docs, title: '📂 Bổ Sung Tài Liệu', renderFn: 'renderDocs' },
   carRegs: { list: () => DB.carRegs, title: '🚗 Bổ Sung Phiếu Đăng Ký Xe', renderFn: 'renderCarRegs' },
   officeReqs: { list: () => DB.officeReqs, title: '🛒 Bổ Sung Đề Xuất Văn Phòng', renderFn: 'renderOfficeReqs' },
   submissions: { list: () => DB.submissions, title: '📜 Bổ Sung Văn Bản Trình', renderFn: 'renderSubmissionReqs' },
-  operationOrders: { list: () => DB.operationOrders, title: '📦 Bổ Sung Đơn Hàng', renderFn: 'renderOperationOrderList' },
-  operationStoreOpenings: { list: () => DB.operationStoreOpenings, title: '🏬 Bổ Sung Đề Xuất Mở Mới Siêu Thị', renderFn: 'renderOperationStoreOpeningList' },
-  operationRepairs: { list: () => DB.operationRepairs, title: '🔧 Bổ Sung Đề Xuất Sửa Chữa Siêu Thị', renderFn: 'renderOperationRepairList' }
+  operationOrders: { list: () => DB.operationOrders, title: '📦 Bổ Sung Đơn Hàng', renderFn: 'renderOperationOrderList' }
 };
 
 function openBosungEditModal(moduleKey, id) {
   const meta = BOSUNG_MODULE_META[moduleKey];
   const item = meta.list().find(x => x.id === id);
   if (!item) return;
-  // Mục C: nhánh operationStoreOpenings/operationRepairs bên dưới có picker "Người Phụ Trách" dùng
-  // chung datalist sdd* — nạp nguồn gợi ý trước (vô hại/rẻ với các moduleKey khác không dùng tới).
-  populateSystemUsersDatalist();
   bosungEditTarget = { module: moduleKey, id };
   document.getElementById('bosungEditTitle').innerText = `${meta.title}: ${item.code || ''}`;
   // FILE_PROPOSAL_DECLINED: người trình từ chối đề xuất thay thế tệp của Trợ Lý/Thư Ký (xem
@@ -3121,48 +3119,15 @@ function openBosungEditModal(moduleKey, id) {
       <p class="text-gray-500 italic">Danh sách hạng mục giữ nguyên như đã trình — chỉ sửa được tiêu đề/nhà cung cấp/ghi chú ở đây. Cần sửa hạng mục, vui lòng liên hệ Quản Trị Viên.</p>
       <div><label class="block font-semibold mb-1">Ghi chú</label><textarea id="bsNote" class="w-full border p-2 rounded h-20">${escapeHtml(item.note || '')}</textarea></div>
     `;
-  } else if (moduleKey === 'operationStoreOpenings') {
-    bodyHTML = `
-      <div><label class="block font-semibold mb-1">Tên siêu thị dự kiến</label><input id="bsStoreName" class="w-full border p-2 rounded" value="${escapeHtml(item.storeName || '')}"></div>
-      <div><label class="block font-semibold mb-1">Địa điểm dự kiến</label><input id="bsAddress" class="w-full border p-2 rounded" value="${escapeHtml(item.address || '')}"></div>
-      <div class="grid grid-cols-2 gap-3">
-        <div><label class="block font-semibold mb-1">Diện tích dự kiến (m²)</label><input type="number" id="bsArea" class="w-full border p-2 rounded" value="${item.area || 0}"></div>
-        <div><label class="block font-semibold mb-1">Chi Phí Phê Duyệt</label><input type="text" inputmode="numeric" id="bsBudget" class="w-full border p-2 rounded money-input" value="${formatMoneyDisplay(item.estimatedBudget || 0)}"></div>
-        <div><label class="block font-semibold mb-1">Ngân Sách Phê Duyệt (Danh Mục Đầu Tư)</label><input type="text" inputmode="numeric" id="bsApprovedBudget" class="w-full border p-2 rounded money-input" value="${formatMoneyDisplay(item.approvedBudget || 0)}"></div>
-      </div>
-      <div class="grid grid-cols-2 gap-3">
-        <div><label class="block font-semibold mb-1">Ngày dự kiến khai trương</label><input type="date" id="bsOpenDate" class="w-full border p-2 rounded" value="${escapeHtml((item.expectedOpenDate || '').slice(0, 10))}"></div>
-        <div class="relative"><label class="block font-semibold mb-1">Người phụ trách</label><input id="bsPersonInChargeInput" data-sdd-list="systemUsersDatalist" autocomplete="off" data-op-change="resolveBsPersonInChargeInput" data-arg-value="0" placeholder="Gõ tên hoặc tài khoản..." class="w-full border p-2 rounded" value="${item.personInChargeName ? escapeHtml(`${item.personInChargeName} — (${item.personInCharge})`) : escapeHtml(item.personInCharge || '')}"><input type="hidden" id="bsPersonInChargeUsername" value="${escapeHtml(item.personInChargeName ? (item.personInCharge || '') : '')}"></div>
-      </div>
-      <div><label class="block font-semibold mb-1">Ghi chú</label><textarea id="bsNote" class="w-full border p-2 rounded h-20">${escapeHtml(item.note || '')}</textarea></div>
-    `;
-  } else if (moduleKey === 'operationRepairs') {
-    bodyHTML = `
-      <div><label class="block font-semibold mb-1">Siêu thị cần sửa chữa</label><input id="bsStoreName" class="w-full border p-2 rounded" value="${escapeHtml(item.storeName || '')}"></div>
-      <div><label class="block font-semibold mb-1">Nội dung sửa chữa</label><input id="bsTitle" class="w-full border p-2 rounded" value="${escapeHtml(item.title || '')}"></div>
-      <div class="grid grid-cols-2 gap-3">
-        <div><label class="block font-semibold mb-1">Chi Phí Phê Duyệt</label><input type="text" inputmode="numeric" id="bsAmount" class="w-full border p-2 rounded money-input" value="${formatMoneyDisplay(item.amount || 0)}"></div>
-        <div><label class="block font-semibold mb-1">Ngân Sách Phê Duyệt (Danh Mục Đầu Tư)</label><input type="text" inputmode="numeric" id="bsApprovedBudget" class="w-full border p-2 rounded money-input" value="${formatMoneyDisplay(item.approvedBudget || 0)}"></div>
-        <div><label class="block font-semibold mb-1">Nhà cung cấp</label><input id="bsSupplier" class="w-full border p-2 rounded" value="${escapeHtml(item.supplier || '')}"></div>
-      </div>
-      <div class="relative"><label class="block font-semibold mb-1">Người phụ trách</label><input id="bsPersonInChargeInput" data-sdd-list="systemUsersDatalist" autocomplete="off" data-op-change="resolveBsPersonInChargeInput" data-arg-value="0" placeholder="Gõ tên hoặc tài khoản..." class="w-full border p-2 rounded" value="${item.personInChargeName ? escapeHtml(`${item.personInChargeName} — (${item.personInCharge})`) : escapeHtml(item.personInCharge || '')}"><input type="hidden" id="bsPersonInChargeUsername" value="${escapeHtml(item.personInChargeName ? (item.personInCharge || '') : '')}"></div>
-      <div><label class="block font-semibold mb-1">Mô tả chi tiết</label><textarea id="bsDescription" class="w-full border p-2 rounded h-20">${escapeHtml(item.description || '')}</textarea></div>
-    `;
   }
   document.getElementById('bosungEditBody').innerHTML = bodyHTML;
   document.getElementById('bosungEditModal').classList.remove('hidden');
 }
 
-// Người Phụ Trách trong modal "Bổ Sung" — modal này dùng chung cho nhiều module (docs/carRegs/
-// officeReqs/submissions/operationOrders/operationStoreOpenings/operationRepairs), KHÔNG nằm trong
-// bindOperationDelegation() (chỉ bọc vanHanhSection/các modal con của Vận Hành). Dùng data-op-change
-// qua bindCspDelegation('bosungEditModal') (đăng ký cạnh các bindCspDelegation() khác, gần cuối file)
-// — CSP scriptSrcAttr đã khoá 'none' toàn hệ thống nên KHÔNG được dùng onchange= inline (đã thử, bị
-// trình duyệt chặn ngay — phát hiện qua demo Playwright thật). Cùng khuôn resolveVsoPersonInChargeInput().
-function resolveBsPersonInChargeInput(rawValue) {
-  const m = rawValue.match(/^(.*) — .*\(([^()]+)\)$/);
-  document.getElementById('bsPersonInChargeUsername').value = m ? m[2].trim() : '';
-}
+// resolveBsPersonInChargeInput() (picker "Người Phụ Trách" trong modal "Bổ Sung") đã bị xoá cùng 2
+// nhánh operationStoreOpenings/operationRepairs ở openBosungEditModal()/confirmBosungResubmit() —
+// đây là 2 nhánh DUY NHẤT từng dùng ô bsPersonInChargeInput, các module còn lại trong BOSUNG_MODULE_META
+// (docs/carRegs/officeReqs/submissions/operationOrders) không có ô này.
 
 function closeBosungEditModal() {
   document.getElementById('bosungEditModal').classList.add('hidden');
@@ -3231,27 +3196,6 @@ async function confirmBosungResubmit() {
         title: document.getElementById('bsTitle').value.trim(),
         supplier: document.getElementById('bsSupplier').value.trim(),
         note: document.getElementById('bsNote').value.trim()
-      };
-    } else if (moduleKey === 'operationStoreOpenings') {
-      payload = {
-        storeName: document.getElementById('bsStoreName').value.trim(),
-        address: document.getElementById('bsAddress').value.trim(),
-        area: Number(document.getElementById('bsArea').value) || 0,
-        estimatedBudget: getMoneyValue(document.getElementById('bsBudget')),
-        approvedBudget: getMoneyValue(document.getElementById('bsApprovedBudget')),
-        expectedOpenDate: document.getElementById('bsOpenDate').value,
-        personInCharge: document.getElementById('bsPersonInChargeUsername').value || '',
-        note: document.getElementById('bsNote').value.trim()
-      };
-    } else if (moduleKey === 'operationRepairs') {
-      payload = {
-        storeName: document.getElementById('bsStoreName').value.trim(),
-        title: document.getElementById('bsTitle').value.trim(),
-        amount: getMoneyValue(document.getElementById('bsAmount')),
-        approvedBudget: getMoneyValue(document.getElementById('bsApprovedBudget')),
-        supplier: document.getElementById('bsSupplier').value.trim(),
-        personInCharge: document.getElementById('bsPersonInChargeUsername').value || '',
-        description: document.getElementById('bsDescription').value.trim()
       };
     }
   } catch (err) {

@@ -7,6 +7,12 @@
 //   3. rejectOperationDelete() (routes/records.js) — luôn từ chối, không phụ thuộc quyền/trạng thái.
 //   4. lib/operationImport.js — sinh file mẫu + đọc lại (round-trip) cho cả Danh Mục Đầu Tư lẫn Danh
 //      Sách Công Việc, dò đúng tiêu đề tiếng Việt (không phân biệt hoa-thường/dấu).
+//   5. seedDefaults.migrateStuckOperationApprovalStatuses() — đợt "xoá hẳn Bổ Sung cho Vận Hành >
+//      Siêu Thị": xác nhận hàm di trú lúc khởi động quét sạch CẢ status===PENDING (đã có từ trước) LẪN
+//      status===DRAFT (mới thêm — hồ sơ CŨ lỡ bị 1 phê duyệt viên bấm "Yêu Cầu Bổ Sung" TRONG 3 ngày
+//      operationStoreOpenings/operationRepairs còn qua phê duyệt đầy đủ, TRƯỚC khi Mục H bỏ hẳn phê
+//      duyệt — b89d46e 2026-09-01 tới 60c473b 2026-09-04) sang APPROVED, KHÔNG đụng tới hồ sơ đã đúng
+//      hoặc tới estimateStatus (Danh mục đầu tư — DRAFT ở field NÀY vẫn là trạng thái hợp lệ đang dùng).
 //
 // Chạy: node server/tests/test-operation-danhmuc-dautu-units.js
 const assert = require('assert');
@@ -16,6 +22,39 @@ const {
   buildOperationEstimateTemplateWorkbook, parseOperationEstimateImportXlsx,
   buildOperationWorkItemTemplateWorkbook, parseOperationWorkItemImportXlsx
 } = require('../lib/operationImport');
+
+// Fake lib/recordStore.js tối thiểu — chỉ 2 hàm mà migrateStuckOperationApprovalStatuses() thực sự
+// dùng (getAllRecords/withLockedRecordById), thao tác thẳng trên mảng in-memory `seed` (mutate tại
+// chỗ) thay vì SQL Server thật — cùng kỹ thuật require.cache đã dùng ở
+// tests/test-operation-workitem-sourceid-schema.js (mock '../db'), áp dụng cho '../lib/recordStore' vì
+// đó là lớp mà seedDefaults.js trực tiếp gọi tới (không cần giả lập sâu tới tận sql.Transaction).
+function makeFakeRecordStore(seed) {
+  return {
+    async getAllRecords(collection) { return seed[collection] || []; },
+    async withLockedRecordById(collection, id, mutatorFn) {
+      const arr = seed[collection] || [];
+      const idx = arr.findIndex(r => r.id === id);
+      if (idx === -1) throw new Error(`fakeRecordStore: không tìm thấy ${collection}#${id}`);
+      arr[idx] = await mutatorFn(arr[idx]);
+      return arr[idx];
+    },
+    async migrateAllLegacyCollections() {} // không dùng tới trong test này, chỉ cần tồn tại
+  };
+}
+// requireFreshMigrationFn(): mock '../lib/recordStore' rồi require lại '../seedDefaults' TỪ ĐẦU (xoá
+// cache 2 module) để lấy đúng bản migrateStuckOperationApprovalStatuses() đang chạy trên `seed` giả —
+// PHẢI dọn cache lại ngay sau khi dùng xong (return cleanup()) để không rò module giả sang test khác.
+function requireFreshMigrationFn(seed) {
+  const recordStorePath = require.resolve('../lib/recordStore');
+  const seedDefaultsPath = require.resolve('../seedDefaults');
+  require.cache[recordStorePath] = { id: recordStorePath, filename: recordStorePath, loaded: true, exports: makeFakeRecordStore(seed) };
+  delete require.cache[seedDefaultsPath];
+  const { migrateStuckOperationApprovalStatuses } = require('../seedDefaults');
+  return {
+    migrateStuckOperationApprovalStatuses,
+    cleanup: () => { delete require.cache[recordStorePath]; delete require.cache[seedDefaultsPath]; }
+  };
+}
 
 let passed = 0, failed = 0;
 function test(name, fn) {
@@ -269,6 +308,70 @@ async function main() {
     wb.addWorksheet('Sheet1').addRow(['Nội Dung', 'Mô Tả', 'Chi Phí (VNĐ)', 'Lưu Ý']);
     const buf = await bufferOf(wb);
     await assert.rejects(() => parseOperationEstimateImportXlsx(buf), /Không đọc được hạng mục/);
+  });
+
+  // ===== 5) seedDefaults.migrateStuckOperationApprovalStatuses() =====
+  await testAsync('migrateStuckOperationApprovalStatuses(): hồ sơ CŨ kẹt DRAFT (Yêu Cầu Bổ Sung, trước Mục H) -> APPROVED, ghi SYSTEM_MIGRATION, KHÔNG đụng estimateStatus đã đúng', async () => {
+    const seed = {
+      operationStoreOpenings: [
+        { id: 1, code: 'MM-OLD1', status: 'DRAFT', currentStep: 1,
+          history: [{ step: 1, approver: 'Trưởng phòng', username: 'tp1', action: 'REQUEST_CHANGES', comment: 'Sửa lại địa chỉ', time: '01/09/2026 10:00:00' }],
+          estimateStatus: 'APPROVED', estimateHistory: [] },
+        { id: 2, code: 'MM-OK', status: 'APPROVED', currentStep: 0, history: [],
+          estimateStatus: 'DRAFT', estimateHistory: [] } // hồ sơ bình thường (estimateStatus DRAFT = đang lập, HỢP LỆ) — không được đụng tới
+      ],
+      operationRepairs: []
+    };
+    const { migrateStuckOperationApprovalStatuses, cleanup } = requireFreshMigrationFn(seed);
+    try {
+      await migrateStuckOperationApprovalStatuses();
+    } finally { cleanup(); }
+
+    const mm1 = seed.operationStoreOpenings.find(r => r.id === 1);
+    assert.strictEqual(mm1.status, 'APPROVED', 'Hồ sơ Mở Mới cũ kẹt DRAFT phải được chuyển sang APPROVED');
+    assert.strictEqual(mm1.currentStep, 0, 'currentStep phải reset về 0 cùng lúc chuyển APPROVED');
+    assert(mm1.history.some(h => h.action === 'SYSTEM_MIGRATION'), 'Phải ghi thêm 1 dòng lịch sử SYSTEM_MIGRATION');
+    assert.strictEqual(mm1.estimateStatus, 'APPROVED', 'estimateStatus vốn đã APPROVED — không bị đụng lại (không phải nhánh PENDING)');
+    assert.strictEqual(mm1.estimateHistory.length, 0, 'estimateHistory không liên quan phải giữ nguyên rỗng');
+
+    const mm2 = seed.operationStoreOpenings.find(r => r.id === 2);
+    assert.strictEqual(mm2.status, 'APPROVED', 'Hồ sơ đã APPROVED sẵn không đổi (idempotent)');
+    assert.strictEqual(mm2.history.length, 0, 'Không thêm lịch sử cho hồ sơ vốn đã đúng, không ở DRAFT/PENDING');
+    assert.strictEqual(mm2.estimateStatus, 'DRAFT', 'estimateStatus===DRAFT là trạng thái Danh mục đầu tư đang lập, HỢP LỆ — di trú CHỈ quét status (hồ sơ chính) ở DRAFT, KHÔNG được đụng vào estimateStatus DRAFT');
+  });
+
+  await testAsync('migrateStuckOperationApprovalStatuses(): 1 hồ sơ vừa kẹt DRAFT (hồ sơ chính) VỪA kẹt PENDING (Danh mục đầu tư) -> cả 2 field cùng chuyển APPROVED trong 1 lượt', async () => {
+    const seed = {
+      operationStoreOpenings: [],
+      operationRepairs: [
+        { id: 3, code: 'SC-OLD1', status: 'DRAFT', currentStep: 1, history: [],
+          estimateStatus: 'PENDING', estimateCurrentStep: 1, estimateHistory: [] }
+      ]
+    };
+    const { migrateStuckOperationApprovalStatuses, cleanup } = requireFreshMigrationFn(seed);
+    try {
+      await migrateStuckOperationApprovalStatuses();
+    } finally { cleanup(); }
+
+    const sc1 = seed.operationRepairs.find(r => r.id === 3);
+    assert.strictEqual(sc1.status, 'APPROVED', 'Hồ sơ Sửa Chữa cũ kẹt DRAFT (hồ sơ chính) phải chuyển sang APPROVED');
+    assert.strictEqual(sc1.estimateStatus, 'APPROVED', 'estimateStatus kẹt PENDING (Danh mục đầu tư) phải CŨNG được chuyển sang APPROVED (nhánh PENDING đã có từ trước)');
+    assert.strictEqual(sc1.estimateCurrentStep, 0);
+    assert(sc1.estimateHistory.some(h => h.action === 'SYSTEM_MIGRATION'), 'estimateHistory phải ghi lại SYSTEM_MIGRATION cho nhánh estimateStatus PENDING');
+    assert(sc1.history.some(h => h.action === 'SYSTEM_MIGRATION'), 'history phải ghi lại SYSTEM_MIGRATION cho nhánh status DRAFT');
+  });
+
+  await testAsync('migrateStuckOperationApprovalStatuses(): không còn hồ sơ DRAFT/PENDING nào -> idempotent, không throw, không đổi gì', async () => {
+    const seed = {
+      operationStoreOpenings: [{ id: 10, code: 'MM-CLEAN', status: 'APPROVED', currentStep: 0, history: [], estimateStatus: 'APPROVED', estimateHistory: [] }],
+      operationRepairs: []
+    };
+    const { migrateStuckOperationApprovalStatuses, cleanup } = requireFreshMigrationFn(seed);
+    try {
+      await migrateStuckOperationApprovalStatuses();
+    } finally { cleanup(); }
+    assert.strictEqual(seed.operationStoreOpenings[0].status, 'APPROVED');
+    assert.strictEqual(seed.operationStoreOpenings[0].history.length, 0, 'Không được thêm lịch sử khi không có gì cần di trú');
   });
 
   console.log(`\n==== ${passed}/${passed + failed} scenario(s) passed${failed ? `, ${failed} FAILED` : ''} ====`);

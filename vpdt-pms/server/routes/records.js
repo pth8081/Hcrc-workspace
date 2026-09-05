@@ -1703,42 +1703,12 @@ router.post('/operationOrders/:id/submit', async (req, res) => {
     res.json({ ok: true, item: result });
   } catch (err) { handleError(res, `operationOrders/${req.params.id}/submit`, err); }
 });
-router.post('/operationStoreOpenings/:id/update', async (req, res) => {
-  const itemId = Number(req.params.id);
-  if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
-  try {
-    const { freshUser, users } = await getFreshUser(req);
-    const result = await withLockedRecordForCollection('operationStoreOpenings', itemId, (item) => recordActions.editOperationStoreOpeningDraft(freshUser, item, req.body, users));
-    res.json({ ok: true, item: result });
-  } catch (err) { handleError(res, `operationStoreOpenings/${req.params.id}/update`, err); }
-});
-router.post('/operationStoreOpenings/:id/submit', async (req, res) => {
-  const itemId = Number(req.params.id);
-  if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
-  try {
-    const { freshUser } = await getFreshUser(req);
-    const result = await withLockedRecordForCollection('operationStoreOpenings', itemId, (item) => recordActions.submitOperationStoreOpeningDraft(freshUser, item));
-    res.json({ ok: true, item: result });
-  } catch (err) { handleError(res, `operationStoreOpenings/${req.params.id}/submit`, err); }
-});
-router.post('/operationRepairs/:id/update', async (req, res) => {
-  const itemId = Number(req.params.id);
-  if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
-  try {
-    const { freshUser, users } = await getFreshUser(req);
-    const result = await withLockedRecordForCollection('operationRepairs', itemId, (item) => recordActions.editOperationRepairDraft(freshUser, item, req.body, users));
-    res.json({ ok: true, item: result });
-  } catch (err) { handleError(res, `operationRepairs/${req.params.id}/update`, err); }
-});
-router.post('/operationRepairs/:id/submit', async (req, res) => {
-  const itemId = Number(req.params.id);
-  if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
-  try {
-    const { freshUser } = await getFreshUser(req);
-    const result = await withLockedRecordForCollection('operationRepairs', itemId, (item) => recordActions.submitOperationRepairDraft(freshUser, item));
-    res.json({ ok: true, item: result });
-  } catch (err) { handleError(res, `operationRepairs/${req.params.id}/submit`, err); }
-});
+// operationStoreOpenings/operationRepairs KHÔNG còn route update/submit "Bổ Sung" (đã xoá cùng đợt bỏ
+// hẳn phê duyệt Vận Hành > Siêu Thị — Mục H, 60c473b) — status của 2 collection này giờ đi thẳng
+// APPROVED ngay lúc tạo, KHÔNG BAO GIỜ vào lại DRAFT nữa (migrateStuckOperationApprovalStatuses() ở
+// seedDefaults.js đã quét sạch mọi bản ghi DRAFT còn sót từ trước Mục H mỗi lần khởi động), nên
+// editOperationStoreOpeningDraft/submitOperationStoreOpeningDraft/editOperationRepairDraft/
+// submitOperationRepairDraft (lib/recordActions.js) không còn đường gọi tới — đã xoá cùng route này.
 
 // QUYẾT ĐỊNH THIẾT KẾ — quan hệ Danh mục đầu tư ↔ Công việc (yêu cầu người dùng: "danh mục đầu tư lập
 // xong có thể sửa để thêm bớt công việc, tự động cập nhật sang nghiệm thu", không nói rõ cơ chế cụ thể):
