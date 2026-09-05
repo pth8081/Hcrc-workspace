@@ -75,7 +75,10 @@ function setVanHanhSubTab(subTab) {
 
 // ===== Cấp lồng thứ 2 trong tab "🏬 Siêu Thị" — Mở mới/Sửa chữa (đổi tên, giữ nguyên logic hiện có) +
 // Dự toán/Thực hiện/Nghiệm thu/Báo cáo (mới) — cùng khuôn setTrainingLmsTab(). =====
-let activeOperationStoreSubTab = 'OPEN';
+// activeOperationStoreSubTab KHAI BÁO Ở core.js (không phải ở đây) — updateOperationStoreSubTabVisibility()
+// (core.js, gọi từ finishLogin() NGAY SAU đăng nhập, TRƯỚC KHI mở bất kỳ tab nào) đọc/ghi biến này để nhớ
+// đúng tab con đã chọn, nên phải có sẵn ngay từ đầu — không thể khai báo ở 1 file module-*.js được nạp
+// lười (Hạ tầng: nạp module theo cụm, đợt 7).
 function setOperationStoreSubTab(tab) {
   activeOperationStoreSubTab = tab;
   const tabs = [

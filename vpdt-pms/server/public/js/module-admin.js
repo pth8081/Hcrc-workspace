@@ -326,10 +326,8 @@ function renderTrainingCategoryList() {
   `).join('');
 }
 
-const SENSITIVE_CATEGORY_LABELS = { TUC_TIU: 'Tục tĩu', TIEU_CUC: 'Tiêu cực', CUC_DOAN: 'Cực đoan', PHAN_DONG: 'Phản động nhà nước' };
-// CUC_DOAN/PHAN_DONG hiện nổi bật hơn (đỏ đậm) trong màn Phê Duyệt — cần người kiểm duyệt xử lý ngay,
-// khác 2 nhóm còn lại (vàng, xử lý khi rảnh) — xem getMyPendingApprovals()/renderInternalNewsCard().
-const SENSITIVE_CATEGORY_SEVERE = new Set(['CUC_DOAN', 'PHAN_DONG']);
+// SENSITIVE_CATEGORY_LABELS/SENSITIVE_CATEGORY_SEVERE da chuyen sang core.js (Ha tang: nap module theo
+// cum, dot 7) - getMyPendingApprovals() (core-approvalhub.js, luon nap san) goi thang 2 hang so nay.
 
 function saveSensitiveKeyword(e) {
   e.preventDefault();

@@ -2,21 +2,8 @@
 // MODULE BÁO CÁO QUẢN TRỊ (REPORTS MODULE)
 // ==========================================
 
-// Parse ngược chuỗi "HH:MM:SS D/M/YYYY" do new Date().toLocaleString('vi-VN') sinh ra (định dạng cố
-// định của locale này) — cần thiết vì Date() không tự parse lại được chuỗi theo locale vi-VN.
-function parseVNDateTime(str) {
-  if (!str || typeof str !== 'string') return null;
-  const parts = str.trim().split(' ');
-  if (parts.length !== 2) return null;
-  const [timePart, datePart] = parts;
-  const timeBits = timePart.split(':').map(Number);
-  const dateBits = datePart.split('/').map(Number);
-  if (dateBits.length !== 3 || dateBits.some(isNaN)) return null;
-  const [h, mi, s] = timeBits;
-  const [d, mo, y] = dateBits;
-  const dt = new Date(y, mo - 1, d, h || 0, mi || 0, s || 0);
-  return isNaN(dt.getTime()) ? null : dt;
-}
+// parseVNDateTime() da chuyen sang core.js (Ha tang: nap module theo cum, dot 7) - isInDateRange()
+// (core.js, dung chung cho bo loc khoang ngay o HAU HET module) va nhieu noi khac goi thang ham nay.
 
 function formatHoursLabel(h) {
   if (h === null || h === undefined) return 'Chưa có dữ liệu';

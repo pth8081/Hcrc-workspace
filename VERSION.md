@@ -1,11 +1,100 @@
 # Phiên bản hiện tại
 
-**8.5** — đã merge vào `main` (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge
+**8.6** — đã merge vào `main` (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge
 góc màn hình + `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần
 kiểu `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. Đúng theo quy tắc MINOR chạy 0-9 trong
-`CLAUDE.md`: sau `8.4` tăng MINOR lên 1 → `8.5`.
+`CLAUDE.md`: sau `8.5` tăng MINOR lên 1 → `8.6`.
 
-## Cập nhật gần nhất — Hạ tầng: Cache-Control + cache-busting cho `public/js/*.js` (Đợt 7, Phần A)
+## Cập nhật gần nhất — Hạ tầng: nạp module theo cụm (lazy load), Đợt 7 Phần B
+
+Phần A (8.5) đã xử lý Cache-Control/cache-busting. Phần B này xử lý khoảng trống còn lại: 34 file
+`module-*.js` (không tính 5 file `core*.js`) trước đây nạp EAGER hết trên MỌI lượt tải trang — giờ chỉ
+nạp khi người dùng THỰC SỰ mở đúng tab/cụm liên quan trong phiên.
+
+**Công cụ**: dựng 1 bộ quét AST thật (acorn, không đoán tay) quét TOÀN BỘ 39 file — mọi tham chiếu
+identifier (kể cả trong callback/hàm lồng, không chỉ lời gọi cấp cao nhất) + mọi tham chiếu qua chuỗi
+`data-op="..."`/`data-op-seq="..."` (cơ chế điều phối CSP-safe dùng khắp app, xem `CLAUDE.md`) — dựng đồ
+thị phụ thuộc file→file, gộp các file phụ thuộc VÒNG (SCC, tính bằng Tarjan) thành 1 cụm bắt buộc nạp
+chung.
+
+**Kết quả cụm — DÀY hơn 1 tab = 1 cụm sạch đẹp như kỳ vọng ban đầu**: 34 file gộp thành **22 cụm** (không
+phải 34 cụm riêng biệt). Vài cụm nhiều file thật sự đan xen vòng lẫn nhau:
+- `admin*` (6 file: `module-admin(-permtree/-permgroups/-submissiongroups/-userstaging)`,
+  `module-internalcomms-daotao.js`) — Quản Trị + Đào Tạo dính vòng lẫn nhau (helper Excel dùng chung).
+- `hopdong` (3 file: `module-hopdong/office/thanhtoan.js`) — Hợp Đồng/Tổng Hợp/Thanh Toán chia sẻ luồng
+  Thanh Toán chung.
+- `baocaoquantri-preview` (2 file: `module-baocaoquantri(-preview).js`) — Báo Cáo Quản Trị + bản xem trước.
+- `baocaodinhky-nhap` (2 file: nhập liệu + trình chiếu Báo Cáo Định Kỳ).
+- `itsupport-tier` (2 file: `module-itsupport-tier.js` + `module-ngansach.js`) — Ngân Sách dùng chung cấu
+  hình mức giá IT.
+- `formbuilder-nav` (2 file: `module-tailieu.js` + `module-formbuilder-nav.js`) — **HUB trung tâm**, được
+  22/34 file khác tham chiếu (helper mở Khung Xem Bảo Vệ, sinh mã, dropdown động...) — hầu như module nào
+  cũng kéo theo cụm này.
+- 16 cụm còn lại là 1 file/cụm (Công Việc, Biên Bản Họp, Đăng Ký Xe, VPP, Đồng Phục, Phòng Họp, Văn Bản
+  Trình, Nhân Sự, Vận Hành, Hệ Thống(Hệ Thống Tabs), Log/Thùng Rác, Quy Trình, Đặc Quyền Admin, Hỗ Trợ IT
+  (Giá/Gia Hạn riêng), Xem Trước Word/Excel).
+
+Báo cáo trung thực: đây KHÔNG phải 1 tab = 1 file tải riêng biệt sạch sẽ — do là app lớn phát triển tăng
+dần với nhiều hàm dùng chung, nhiều cụm phụ thuộc bắc cầu vào `formbuilder-nav`/`admin*`. Tab "Hệ Thống"
+(cấu hình admin) kéo theo nhiều nhất (~13/34 file, đúng bản chất màn cấu hình trung tâm).
+
+**7 hàm/hằng số nhỏ đã CHUYỂN sang `core.js`** (thuần cơ học, không đổi logic) vì bị gọi từ code LUÔN
+CHẠY bất kể tab nào (lúc đăng nhập/mỗi lần chuyển tab) — không thể để nằm ở 1 file nạp lười:
+`loadVendorScript()`, `isManagerOf()`/`workItemAssignees()`/`isWorkItemAssignee()`, `applyUploadAcceptAttrs()`,
+`populateUserJobTitleOptions()`, `stripVnDiacritics()`, `parseVNDateTime()`,
+`SENSITIVE_CATEGORY_LABELS`/`SENSITIVE_CATEGORY_SEVERE`, `canManagePaymentRequestsClient()`,
+`itPriceHasUnresolvedInfoRequest()`, `canAggregateReportsClient()`, `isInternalPostScheduled()`,
+`activeOperationStoreSubTab`. Phát hiện qua chính bộ quét AST (tham chiếu core→module ở code không hề
+qua tab nào).
+
+**Cơ chế nạp** (`core.js`): `loadModuleGroup(key)` tạo `<script>` động cho từng file trong cụm (giữ
+`?v=<version>` của Phần A qua `window.__ASSET_VERSION__`), tự nạp ĐỆ QUY cụm phụ thuộc trước/cùng lúc,
+cache theo Promise (gọi lại cùng `key` không nạp lại — idempotent), lỗi mạng xoá cache để lần sau thử
+lại. `script.async = false` để giữ ĐÚNG thứ tự thực thi trong 1 cụm (phát hiện qua bộ test: 1 file cấu
+hình top-level gán thẳng hàm của file khác cùng cụm làm giá trị field — không phải gọi hàm — cần đúng
+thứ tự script, không phải bảng chữ cái). `ensureFnReady(fnName)` tra cứu 1 hàm bất kỳ qua TÊN CHUỖI (dùng
+cho `data-op`), tự nạp đúng cụm nếu chưa có. `switchTab()` giờ là hàm bất đồng bộ, nhưng có "đường nhanh
+đồng bộ": nếu cụm của tab đó ĐÃ nạp xong trong phiên, gọi render NGAY, không lùi 1 nhịp vi mô nào (giữ
+đúng hành vi trước đây — quan trọng vì phát hiện qua test hồi quy: 1 số chỗ bấm xong đọc lại DOM ngay
+không đợi).
+
+**Nhảy xuyên cụm**: rà toàn bộ điểm `switchTab()` có code chạy NGAY SAU nó (Approval Hub/Dashboard nhảy
+tới tab khác, `applyPwaShortcutParam()`, `openTakeTestFromQueryParam()`...) — sửa thành `await switchTab()`
+trước khi gọi tiếp. `cspDispatchOp()`/`cspRunSeq()` (điều phối `data-op`/`data-op-seq`, dùng ở HẦU HẾT nút
+bấm + toàn bộ điều hướng sidebar) tự kiểm tra hàm đã sẵn sàng chưa trước khi gọi — sẵn rồi thì gọi NGAY
+đồng bộ (không đổi hiệu năng/hành vi so với trước), chưa có thì tự nạp cụm rồi gọi lại, báo lỗi rõ ràng
+nếu nạp thất bại (không treo im lặng).
+
+**Kiểm chứng**: bộ quét AST chạy lại ở "chế độ xác minh" — xác nhận MỌI tham chiếu file→file (cả bare
+identifier lẫn `data-op*`) đều được thoả bởi core/cùng cụm/cụm phụ thuộc bắc cầu — **0 vi phạm**. Toàn bộ
+55 file `tests/test-*.js` (54 cũ + 1 mới `test-lazy-load-all-tabs.js`) chạy `node --check` sạch + chạy
+thật, CHỈ 2 lỗi biết trước (kết nối SQL Server, không liên quan) — không yếu bớt assertion nào để né lỗi;
+2 bug thật phát hiện qua vòng chạy đầu (đường nhanh đồng bộ thiếu ở `cspDispatchOp`/`switchTab` gây lệch
+nhịp vi mô làm 1 test merge-quyền đọc nhầm DOM cũ; thứ tự script "async ngầm" làm 1 file đọc nhầm hàm
+chưa định nghĩa của file cùng cụm) đã sửa tận gốc, không phải vá test.
+
+Bài test mới `test-lazy-load-all-tabs.js`: duyệt qua **toàn bộ ~35 điểm điều hướng sidebar** (mọi
+tab + mọi tab con) bằng CLICK THẬT (không gọi thẳng hàm qua JS), xác nhận mỗi lần section tương ứng
+hiện ra + không lỗi JS/console.error; xác nhận mở lại 1 tab lần 2 KHÔNG tải lại file `/js/module-*.js`
+qua mạng (idempotent); xác nhận nhảy xuyên cụm thật (Approval Hub → tab khác qua `gotoApprovalHubOrigin()`,
+`ensureFnReady()` tự nạp đúng cụm cho 1 hàm chưa từng dùng trong phiên) — 41/41 kịch bản qua.
+
+**Đo thực tế trước/sau** (gzip, gần khớp mạng thật):
+- Trước (EAGER hết): 39 file JS ≈ 2,22MB thô → **~526KB gzip** mỗi lượt tải trang, bất kể dùng tab nào.
+- Sau, chỉ mở Trang chủ (không mở tab nghiệp vụ nào): 5 file core*.js ≈ 558KB thô → **~145KB gzip**
+  (giảm ~72%).
+- Sau, phiên thực tế mở thêm Tài Liệu + Hợp Đồng (2-3 tab, kéo theo cụm `formbuilder-nav`+`hopdong`+
+  `vanbantrinh`+`congviec`+`vpp`+`admin-specialperm` = 9/34 file): core + 9 file ≈ 1,03MB thô →
+  **~256KB gzip** (giảm ~52% so với trước).
+- Người dùng mở hết mọi tab (đặc biệt "Hệ Thống") trong 1 phiên sẽ tiệm cận lại tổng cũ — đây là quyền
+  đánh đổi trung thực, không phải "luôn nhỏ hơn nhiều lần"; lợi ích thật là NGƯỜI DÙNG CHỈ DÙNG VÀI TAB
+  (đa số) tải ít hơn đáng kể + trang tải xong ban đầu nhanh hơn (core.js nhỏ hơn nhiều so với gộp cả 39
+  file).
+
+**Tác động triển khai:** không cần gì ngoài copy code + `pm2 restart` — không đổi `schema.sql`, không
+thêm biến `.env`, không thêm `dependencies` mới.
+
+## Cập nhật trước đó — Hạ tầng: Cache-Control + cache-busting cho `public/js/*.js` (Đợt 7, Phần A)
 
 Đo thực tế (trước khi làm): gzip đã bật sẵn từ trước (`compression()`, `server.js`) — ~627KB truyền thật
 trên tổng ~2,7MB JS thô, phần này ĐÃ ổn, không đụng tới. Nhưng phát hiện 2 khoảng trống thật:

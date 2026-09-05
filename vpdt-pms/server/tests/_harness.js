@@ -57,6 +57,11 @@ async function launchPage(port) {
     }
   });
   await page.goto(`http://127.0.0.1:${port}/index.html`, { waitUntil: 'load' });
+  // Ha tang: nap module theo cum, dot 7 (server/public/js/*.js) - cac test o day drive truc tiep ham
+  // module-*.js qua page.evaluate()/click that thay vi luon di qua switchTab() nhu nguoi dung that, nen
+  // chu dong nap TOAN BO cum module ngay tu dau (gia lap 1 phien da tung mo het moi tab) - dam bao moi
+  // ham can toi deu san sang, khong doi ket qua test nao (van goi dung ham that).
+  await page.evaluate(() => Promise.all(Object.keys(typeof MODULE_LOAD_GROUPS !== 'undefined' ? MODULE_LOAD_GROUPS : {}).map(k => loadModuleGroup(k))));
   // Install the mock backend (window.fetch/confirm/alert/prompt stubs + server-logic re-implementation)
   // as a real <script> tag so its top-level `function` declarations land in the SAME global scope as
   // the app's own inline script (needed so bare references like `_pendingConfirmAction` resolve).

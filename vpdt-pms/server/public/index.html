@@ -7969,41 +7969,15 @@ input[data-sdd-list] {
   </div>
 </div>
 
+<!-- Ha tang: nap module theo cum (lazy load), dot 7 — CHI con 5 file core*.js nap EAGER (dung o moi
+     phien, xem chu thich dau file core.js: khoi "HA TANG: NAP MODULE THEO CUM"). 34 file module-*.js
+     truoc day nap tinh o day (script src co dinh) gio nap DONG qua loadModuleGroup()/switchTab() —
+     CHI KHI nguoi dung thuc su mo dung tab/cum lien quan trong phien, khong con o day nua. -->
 <script src="/js/core.js"></script>
 <script src="/js/core-pwa.js"></script>
 <script src="/js/core-devicesecurity.js"></script>
 <script src="/js/core-dashboard.js"></script>
 <script src="/js/core-approvalhub.js"></script>
-<script src="/js/module-tailieu.js"></script>
-<script src="/js/module-vanbantrinh.js"></script>
-<script src="/js/module-congviec.js"></script>
-<script src="/js/module-hopdong.js"></script>
-<script src="/js/module-thanhtoan.js"></script>
-<script src="/js/module-phonghop.js"></script>
-<script src="/js/module-bienbanhop.js"></script>
-<script src="/js/module-dangkyxe.js"></script>
-<script src="/js/module-office.js"></script>
-<script src="/js/module-vanhanh.js"></script>
-<script src="/js/module-vpp.js"></script>
-<script src="/js/module-hethong-tabs.js"></script>
-<script src="/js/module-formbuilder-nav.js"></script>
-<script src="/js/module-workflow.js"></script>
-<script src="/js/module-itsupport-renewal.js"></script>
-<script src="/js/module-ngansach.js"></script>
-<script src="/js/module-itsupport-tier.js"></script>
-<script src="/js/module-admin.js"></script>
-<script src="/js/module-admin-permtree.js"></script>
-<script src="/js/module-admin-permgroups.js"></script>
-<script src="/js/module-admin-specialperm.js"></script>
-<script src="/js/module-baocaodinhky-nhap.js"></script>
-<script src="/js/module-baocaodinhky-trinhchieu.js"></script>
-<script src="/js/module-admin-submissiongroups.js"></script>
-<script src="/js/module-admin-userstaging.js"></script>
-<script src="/js/module-logsystem-trash.js"></script>
-<script src="/js/module-baocaoquantri-preview.js"></script>
-<script src="/js/module-baocaoquantri.js"></script>
-<script src="/js/module-internalcomms-nhipsong.js"></script>
-<script src="/js/module-internalcomms-daotao.js"></script>
 
 <!-- Vẽ PDF ra <canvas> bằng PDF.js (tự lưu trên server qua /vendor/pdfjs, không qua CDN) thay cho
      plugin PDF gốc của trình duyệt — sửa tận gốc lỗi Chrome/Edge chặn PDF nhúng trong modal có lớp nền
@@ -8080,10 +8054,8 @@ input[data-sdd-list] {
      .docx/.xlsx) không đọc được bằng cách này — rơi về khung "chưa hỗ trợ xem trực tuyến" (getFileKind()
      đã loại 2 định dạng cũ này khỏi kind "word"/"excel" từ đầu, không tới được đây). LƯU Ý GIỚI HẠN:
      đây là chống sao chép thông thường (khoá bôi đen văn bản, chặn chuột phải) chứ không phải bảo mật
-     tuyệt đối, giống PDF.js ở trên. -->
-<script src="/js/module-internalcomms-daotao-viewer.js"></script>
-<script src="/js/module-itsupport-price.js"></script>
-<script src="/js/module-dongphuc.js"></script>
-<script src="/js/module-hcrcdonghanh.js"></script>
+     tuyệt đối, giống PDF.js ở trên. renderWordProtected()/renderExcelProtected() (module-internalcomms-
+     daotao-viewer.js) giờ nạp LƯỜI qua loadModuleGroup() (Hạ tầng: nạp module theo cụm, đợt 7) — KHÔNG
+     còn <script src> tĩnh ở đây nữa, xem ensureFnReady() ở openFileProtectedView() (module-tailieu.js). -->
 </body>
 </html>

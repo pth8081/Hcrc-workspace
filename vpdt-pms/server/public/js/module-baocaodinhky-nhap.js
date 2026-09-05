@@ -40,9 +40,8 @@ let prSlideshowTemplate = 'DEFAULT';
 function canManageReportPeriodsClient(user) {
   return !!(user?.perms?.admin || user?.perms?.reportManage);
 }
-function canAggregateReportsClient(user) {
-  return !!(user?.perms?.admin || user?.perms?.reportAggregate);
-}
+// canAggregateReportsClient() da chuyen sang core.js (Ha tang: nap module theo cum, dot 7) -
+// buildDashboardCards() (core-dashboard.js, luon nap san) goi thang ham nay o MOI lan mo trang chu.
 function canCreateReportEntryClient(user) {
   return !!(user?.perms?.admin || user?.perms?.reportEntryCreate);
 }

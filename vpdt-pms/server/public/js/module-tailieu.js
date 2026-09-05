@@ -24,9 +24,8 @@ function onFilterChange() {
 // ---- Sinh Mã Tài Liệu tự động + quản lý version (Cập nhật/Nhập mới) ----
 
 // Bỏ dấu tiếng Việt để suy ra viết tắt — đ/Đ không tách được qua NFD nên xử lý riêng.
-function stripVnDiacritics(str) {
-  return (str || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\u0111/g, 'd').replace(/\u0110/g, 'D');
-}
+// stripVnDiacritics() da chuyen sang core.js (Ha tang: nap module theo cum, dot 7) - sddRenderRows()
+// (widget tim-kiem-go-chon dung chung cho hau het module, xem CLAUDE.md) goi thang ham nay o core.js.
 
 // Các từ đứng đầu tên phòng ban không mang nghĩa phân biệt (Phòng/Ban/Bộ phận...) — bỏ qua khi suy ra
 // viết tắt để "Phòng Công Nghệ Thông Tin" ra "CNTT" thay vì "PCNTT".
@@ -1248,25 +1247,8 @@ function mapFormModKeyToUploadModule(modKey) {
   return UPLOAD_MODULE_KEY_MAP[modKey] || String(modKey || '').toLowerCase();
 }
 
-// Cập nhật thuộc tính accept của các ô chọn tệp TĨNH theo đúng cấu hình "Loại Tệp Cho Phép" của admin
-// (DB.uploadFileTypeConfig) — chỉ là gợi ý UI (bộ lọc chọn tệp của trình duyệt), việc chặn thật sự vẫn
-// do server quyết định (xem routes/upload.js). Module chưa cấu hình thì giữ nguyên accept mặc định có
-// sẵn trong HTML. Gọi lại sau khi lưu cấu hình ở admin để áp dụng ngay không cần tải lại trang.
-function applyUploadAcceptAttrs() {
-  const STATIC_INPUTS = {
-    doc: ['docFile'], submission: ['subFile', 'subExtraFiles'], contract: ['contractFile'], internal: ['internalFile']
-  };
-  const config = DB.uploadFileTypeConfig || {};
-  for (const moduleKey in STATIC_INPUTS) {
-    const allowed = config[moduleKey];
-    if (!Array.isArray(allowed) || !allowed.length) continue;
-    const acceptValue = allowed.join(',');
-    STATIC_INPUTS[moduleKey].forEach(id => {
-      const el = document.getElementById(id);
-      if (el) el.setAttribute('accept', acceptValue);
-    });
-  }
-}
+// applyUploadAcceptAttrs() CHUYỂN sang core.js (Hạ tầng: nạp module theo cụm, đợt 7) — finishLogin() gọi
+// thẳng hàm này NGAY SAU đăng nhập, trước khi mở bất kỳ tab nào.
 
 // Vũ trụ phần mở rộng khả dụng — PHẢI khớp ALLOWED_EXT ở routes/upload.js (đó mới là chặn thật, admin
 // chỉ chọn ra 1 tập con của danh sách này cho từng module qua màn "Loại Tệp" bên dưới).
@@ -1528,11 +1510,21 @@ function openFileProtectedView({ title, sub, footerInfo, fileSrc, fileType, file
       currentWordPrintFile = { fileSrc, fileName };
       document.getElementById('viewModalWordPrintBtn').classList.remove('hidden');
     }
-    const renderFn = kind === 'word' ? window.renderWordProtected : window.renderExcelProtected;
-    if (renderFn) {
-      renderFn(officeContainer, fileSrc);
+    // renderWordProtected()/renderExcelProtected() dinh nghia trong module-internalcomms-daotao-viewer.js
+    // (cum rieng "internalcomms-daotao-viewer", nap LUOI) - truoc day chi kiem tra window.renderXProtected
+    // co san hay chua (khong throw vi la truy cap thuoc tinh, nhung neu chua co thi ket qua la 1 dong chu
+    // "Dang tai..." dung yen MAI MAI, khong co gi kich lai) — gio dung ensureFnReady() (Ha tang: nap module
+    // theo cum, dot 7) de CHU DONG nap dung cum roi goi lai, khong con phu thuoc may rui thu tu nap file.
+    const fnName = kind === 'word' ? 'renderWordProtected' : 'renderExcelProtected';
+    if (typeof window[fnName] === 'function') {
+      window[fnName](officeContainer, fileSrc);
     } else {
       officeContainer.innerHTML = '<div class="p-6 text-center text-gray-500 text-sm">⏳ Đang tải bộ xem...</div>';
+      ensureFnReady(fnName).then(() => {
+        window[fnName](officeContainer, fileSrc);
+      }).catch(err => {
+        officeContainer.innerHTML = `<div class="p-6 text-center text-red-600 text-sm">⛔ Không tải được bộ xem: ${escapeHtml(err.message)}</div>`;
+      });
     }
     return;
   }

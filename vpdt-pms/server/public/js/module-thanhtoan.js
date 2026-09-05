@@ -5,9 +5,8 @@
 // ==========================================
 let editingPaymentRequestId = null;
 
-function canManagePaymentRequestsClient(user) {
-  return !!(user?.perms?.admin || user?.perms?.paymentManage);
-}
+// canManagePaymentRequestsClient() da chuyen sang core.js (Ha tang: nap module theo cum, dot 7) -
+// getMyPendingApprovals() (core-approvalhub.js, luon nap san) goi thang ham nay o MOI switchTab().
 
 function setPaymentSubTab(subTab) {
   window.scrollTo({ top: 0, behavior: 'auto' }); // Tránh "bay xuống cuối" khi đổi tab con — xem setSystemSubTab().

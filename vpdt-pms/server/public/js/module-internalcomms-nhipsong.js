@@ -250,11 +250,15 @@ function canEditInternalPostUI(p) {
   return !!p && (p.status === 'DRAFT' || p.status === 'NEED_INFO') && (p.author === currentUser.username || currentUser.perms?.admin);
 }
 
-function editInternalPostUI(id) {
+async function editInternalPostUI(id) {
   const p = DB.internalPosts.find(x => x.id === id);
   if (!canEditInternalPostUI(p)) return;
   closeInternalArticleModal();
-  switchTab('internal');
+  // await switchTab() (Ha tang: nap module theo cum, dot 7) - tranh setInternalSubTab(p.type) ngay duoi
+  // chay TRUOC phan render mac dinh cua switchTab('internal') (activeInternalSubTab CU) roi bi render lai
+  // đè len 1 nhip sau do, gay nhay/render 2 lan (ca 2 ham cung dinh nghia trong module nay nen KHONG gay
+  // ReferenceError, chi la thu tu chay khong dam bao neu khong await).
+  await switchTab('internal');
   setInternalSubTab(p.type); // reset form trắng + đúng tab con trước, điền lại dữ liệu cũ ngay dưới đây
   editingInternalPostId = p.id;
 
@@ -741,9 +745,8 @@ function setInternalNewsSort(mode) {
 // (viewInternalPostDetail) — PENDING/REJECTED đã có từ trước (Góc chia sẻ chờ/bị từ chối duyệt), bổ
 // sung DRAFT/NEED_INFO/HIDDEN + "Chờ đăng" (APPROVED nhưng publishAt còn ở tương lai, tính LIVE theo
 // Date.now(), KHÔNG cron — cùng cách pinExpiresAt đã tính ở renderDashboardNews()/render ở trên).
-function isInternalPostScheduled(p) {
-  return p.type === 'NEWS' && p.status === 'APPROVED' && !!p.publishAt && new Date(p.publishAt).getTime() > Date.now();
-}
+// isInternalPostScheduled() da chuyen sang core.js (Ha tang: nap module theo cum, dot 7) -
+// renderDashboardNews() (core-dashboard.js, luon nap san) goi thang ham nay o MOI lan mo trang chu.
 
 function internalPostStatusBadgeHTML(p) {
   const badge = (cls, text) => `<span class="text-[10px] font-bold px-2 py-0.5 rounded-full ${cls} align-middle ml-2">${text}</span>`;

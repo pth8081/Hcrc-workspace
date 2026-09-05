@@ -1,3 +1,127 @@
+// ==========================================
+// HA TANG: NAP MODULE THEO CUM (LAZY LOAD) - dot 7
+// ==========================================
+// 39 file public/js/*.js truoc day nap EAGER het (script src tinh trong index.html). Doan nay
+// thay 34 file module-*.js (khong tinh 5 file core*.js luon nap san) bang co che nap LUOI theo
+// CUM (group) khi thuc su can - xem switchTab()/cspDispatchOp() ben duoi goi loadModuleGroup().
+//
+// MODULE_LOAD_GROUPS: cum duoc tinh bang cong cu AST that (khong doan tay) - quet MOI tham chieu
+// identifier & tham chieu qua data-op="..."/data-op-seq="..." xuyen suot 34 file, gop nhung file
+// PHU THUOC VONG (SCC) lai thanh 1 cum bat buoc nap chung, cum nao phu thuoc cum khac thi ghi o
+// deps (loadModuleGroup() tu dong nap ĐỆ QUY deps truoc/cung luc). files: ten file trong /js/.
+const MODULE_LOAD_GROUPS = {"formbuilder-nav":{"files":["module-tailieu.js","module-formbuilder-nav.js"],"deps":[]},"congviec":{"files":["module-congviec.js"],"deps":[]},"bienbanhop":{"files":["module-bienbanhop.js"],"deps":["congviec","formbuilder-nav"]},"admin-permgroups":{"files":["module-admin.js","module-admin-permtree.js","module-admin-permgroups.js","module-admin-submissiongroups.js","module-admin-userstaging.js","module-internalcomms-daotao.js"],"deps":["bienbanhop","formbuilder-nav"]},"admin-specialperm":{"files":["module-admin-specialperm.js"],"deps":[]},"internalcomms-daotao-viewer":{"files":["module-internalcomms-daotao-viewer.js"],"deps":["formbuilder-nav"]},"baocaodinhky-nhap":{"files":["module-baocaodinhky-nhap.js","module-baocaodinhky-trinhchieu.js"],"deps":["formbuilder-nav","internalcomms-daotao-viewer"]},"dongphuc":{"files":["module-dongphuc.js"],"deps":["admin-permgroups"]},"baocaoquantri-preview":{"files":["module-baocaoquantri-preview.js","module-baocaoquantri.js"],"deps":["admin-permgroups","baocaodinhky-nhap","dongphuc","formbuilder-nav"]},"dangkyxe":{"files":["module-dangkyxe.js"],"deps":["bienbanhop","formbuilder-nav"]},"hcrcdonghanh":{"files":["module-hcrcdonghanh.js"],"deps":["admin-permgroups","bienbanhop"]},"itsupport-renewal":{"files":["module-itsupport-renewal.js"],"deps":["formbuilder-nav"]},"itsupport-price":{"files":["module-itsupport-price.js"],"deps":["formbuilder-nav","itsupport-renewal"]},"workflow":{"files":["module-workflow.js"],"deps":[]},"itsupport-tier":{"files":["module-ngansach.js","module-itsupport-tier.js"],"deps":["admin-permgroups","admin-specialperm","baocaodinhky-nhap","formbuilder-nav","internalcomms-daotao-viewer","itsupport-price","workflow"]},"logsystem-trash":{"files":["module-logsystem-trash.js"],"deps":["admin-permgroups"]},"hethong-tabs":{"files":["module-hethong-tabs.js"],"deps":["admin-permgroups","admin-specialperm","formbuilder-nav","itsupport-tier","logsystem-trash"]},"vanbantrinh":{"files":["module-vanbantrinh.js"],"deps":["congviec","formbuilder-nav"]},"vpp":{"files":["module-vpp.js"],"deps":["admin-specialperm","formbuilder-nav"]},"hopdong":{"files":["module-hopdong.js","module-thanhtoan.js","module-office.js"],"deps":["formbuilder-nav","vanbantrinh","vpp"]},"phonghop":{"files":["module-phonghop.js"],"deps":["formbuilder-nav"]},"internalcomms-nhipsong":{"files":["module-internalcomms-nhipsong.js"],"deps":["admin-permgroups","formbuilder-nav","hcrcdonghanh","phonghop"]},"vanhanh":{"files":["module-vanhanh.js"],"deps":["admin-permgroups","bienbanhop","formbuilder-nav"]}};
+
+// MODULE_FN_GROUP: tra CHINH XAC 1 identifier top-level (function/const/let/class hoac window.X=)
+// duoc dinh nghia o file module-*.js NAO thuoc cum nao - dung cho ensureFnReady() (goi qua ten
+// chuoi, vd cspDispatchOp() data-op="...") va cho nguoi debug tra cuu nhanh.
+const MODULE_FN_GROUP = {"toggleUserPermFormMode":"admin-permgroups","updatePermGroupNote":"admin-permgroups","currentEditingUserGroupIds":"admin-permgroups","onUserPermGroupsChange":"admin-permgroups","renderUPermGroupsChecklist":"admin-permgroups","renderPermGroupsList":"admin-permgroups","renderGroupMembersPicker":"admin-permgroups","startCreateGroup":"admin-permgroups","editPermGroup":"admin-permgroups","savePermGroup":"admin-permgroups","deletePermGroup":"admin-permgroups","setAllPermTreeNodes":"admin-permgroups","computePermTreeNodeCount":"admin-permgroups","refreshPermTreeBadges":"admin-permgroups","filterPermTree":"admin-permgroups","markPermTreeDirty":"admin-permgroups","clearPermTreeDirtyMarks":"admin-permgroups","onApproverAuthLevelChange":"admin-permgroups","collectPermsFromForm":"admin-permgroups","populatePermsForm":"admin-permgroups","getWorkflowParticipatingDepts":"admin-specialperm","workflowParticipatingDeptsDraft":"admin-specialperm","renderWorkflowParticipatingDeptsChecklist":"admin-specialperm","addWorkflowParticipatingDept":"admin-specialperm","removeWorkflowParticipatingDept":"admin-specialperm","saveWorkflowParticipatingDepts":"admin-specialperm","PWA_SHORTCUT_CATALOG_CLIENT":"admin-specialperm","PWA_SHORTCUT_MAX":"admin-specialperm","renderPwaShortcutCheckboxes":"admin-specialperm","enforcePwaShortcutMax":"admin-specialperm","savePwaShortcutModules":"admin-specialperm","canRegisterVpp":"admin-specialperm","isUserVppExcluded":"admin-specialperm","vppExcludedJobTitlesDraft":"admin-specialperm","renderVppExcludedJobTitlesChecklist":"admin-specialperm","addVppExcludedJobTitle":"admin-specialperm","removeVppExcludedJobTitle":"admin-specialperm","saveVppExcludedJobTitles":"admin-specialperm","renderSubmissionApprovalGroups":"admin-permgroups","saveSubmissionApprovalGroup":"admin-permgroups","renderContractApprovalGroups":"admin-permgroups","saveContractApprovalGroup":"admin-permgroups","cancelPermFormEdit":"admin-permgroups","onUserPosTypeChange":"admin-permgroups","readUserFormState":"admin-permgroups","buildNewUserFromState":"admin-permgroups","saveUser":"admin-permgroups","addUserToStagingList":"admin-permgroups","renderPendingNewUsersList":"admin-permgroups","removePendingNewUser":"admin-permgroups","editPendingNewUser":"admin-permgroups","commitPendingNewUsers":"admin-permgroups","resetUserForm":"admin-permgroups","setAdminAccountPermsLocked":"admin-permgroups","editUser":"admin-permgroups","deleteUser":"admin-permgroups","toggleUserActive":"admin-permgroups","summarizeUserPerms":"admin-permgroups","onUserFilterChange":"admin-permgroups","renderUsers":"admin-permgroups","downloadXlsxFromServer":"admin-permgroups","downloadUserTemplate":"admin-permgroups","exportUsersExcel":"admin-permgroups","importUsersExcel":"admin-permgroups","saveDept":"admin-permgroups","deleteDept":"admin-permgroups","updateDeptAbbr":"admin-permgroups","renderDeptList":"admin-permgroups","saveStore":"admin-permgroups","deleteStore":"admin-permgroups","renderStoreList":"admin-permgroups","renameCatalogEntryClient":"admin-permgroups","renameStore":"admin-permgroups","storeImportPreviewItems":"admin-permgroups","onStoreImportFileChange":"admin-permgroups","confirmStoreImport":"admin-permgroups","moveDeptToStore":"admin-permgroups","saveJobTitle":"admin-permgroups","deleteJobTitle":"admin-permgroups","renderJobTitleList":"admin-permgroups","renameJobTitle":"admin-permgroups","saveStoreJobTitle":"admin-permgroups","deleteStoreJobTitle":"admin-permgroups","toggleStoreJobTitleRestricted":"admin-permgroups","toggleStoreJobTitleRestrictedFromCheckbox":"admin-permgroups","renameStoreJobTitle":"admin-permgroups","renderStoreJobTitleList":"admin-permgroups","saveTrainingCategory":"admin-permgroups","deleteTrainingCategory":"admin-permgroups","renderTrainingCategoryList":"admin-permgroups","saveSensitiveKeyword":"admin-permgroups","deleteSensitiveKeyword":"admin-permgroups","renderSensitiveKeywordList":"admin-permgroups","saveCat":"admin-permgroups","deleteCat":"admin-permgroups","updateCatAbbr":"admin-permgroups","renderCatList":"admin-permgroups","updateContractTypeAbbr":"admin-permgroups","renderContractTypeAbbrList":"admin-permgroups","buildModuleTabNotesHTML":"admin-permgroups","renderModuleAccessCheckboxes":"admin-permgroups","readModuleAccessFromForm":"admin-permgroups","populateModuleAccessForm":"admin-permgroups","renderDeptCheckboxes":"admin-permgroups","toggleScopeGroup":"admin-permgroups","scopeFromForm":"admin-permgroups","activePeriodicReportSubTab":"baocaodinhky-nhap","prEntryDraftId":"baocaodinhky-nhap","prEntryExistingFile":"baocaodinhky-nhap","prEntryPendingFile":"baocaodinhky-nhap","prEntryMode":"baocaodinhky-nhap","prAggCurrentPeriodId":"baocaodinhky-nhap","prAggSelectedIds":"baocaodinhky-nhap","prAggPendingSlides":"baocaodinhky-nhap","prAggPdfSelectedIds":"baocaodinhky-nhap","prAggPdfPages":"baocaodinhky-nhap","prAggPdfDragFromIndex":"baocaodinhky-nhap","prAggPdfEntryPagesCache":"baocaodinhky-nhap","prSlideshowSlides":"baocaodinhky-nhap","prSlideshowIndex":"baocaodinhky-nhap","prSlideshowTemplate":"baocaodinhky-nhap","canManageReportPeriodsClient":"baocaodinhky-nhap","canCreateReportEntryClient":"baocaodinhky-nhap","reportPeriodIsOpen":"baocaodinhky-nhap","reportPeriodIsClosed":"baocaodinhky-nhap","reportPeriodDeptAllowed":"baocaodinhky-nhap","reportPeriodDeptLabel":"baocaodinhky-nhap","formatDateTimeVN":"baocaodinhky-nhap","formatDateVN":"baocaodinhky-nhap","setPeriodicReportSubTab":"baocaodinhky-nhap","findOwnReportEntryForPeriod":"baocaodinhky-nhap","renderPrEntryPeriodOptions":"baocaodinhky-nhap","toIsoDateForInput":"baocaodinhky-nhap","renderPrItemsTable":"baocaodinhky-nhap","collectPrItemsTable":"baocaodinhky-nhap","addPrItemRow":"baocaodinhky-nhap","removePrItemRow":"baocaodinhky-nhap","onPrEntryPptxFileChange":"baocaodinhky-nhap","onPrEntryModeChange":"baocaodinhky-nhap","onPrEntryPdfFilesChange":"baocaodinhky-nhap","showPrExistingFileHint":"baocaodinhky-nhap","onPrEntryPeriodChange":"baocaodinhky-nhap","uploadPrOptionalFile":"baocaodinhky-nhap","savePrEntryDraft":"baocaodinhky-nhap","submitPrEntry":"baocaodinhky-nhap","submitPrEntryAction":"baocaodinhky-nhap","prEntryStatusBadge":"baocaodinhky-nhap","renderPrEntryTable":"baocaodinhky-nhap","runPrEntryAction":"baocaodinhky-nhap","editPrEntryDraft":"baocaodinhky-nhap","deletePrEntryAction":"baocaodinhky-nhap","renderReportDeptCheckboxes":"baocaodinhky-nhap","createReportPeriod":"baocaodinhky-nhap","prPeriodStatusBadge":"baocaodinhky-nhap","renderPrPeriodsTable":"baocaodinhky-nhap","runPrPeriodAction":"baocaodinhky-nhap","closePrPeriodAction":"baocaodinhky-nhap","deletePrPeriodAction":"baocaodinhky-nhap","renderPrAggPeriodOptions":"baocaodinhky-nhap","onPrAggPeriodChange":"baocaodinhky-nhap","getPrAggPeriodEntries":"baocaodinhky-nhap","getPrAggPdfPeriodEntries":"baocaodinhky-nhap","renderPrAggEntriesList":"baocaodinhky-nhap","togglePrAggEntry":"baocaodinhky-nhap","onPrAggEntryCheckboxChange":"baocaodinhky-nhap","untogglePrAggEntry":"baocaodinhky-nhap","movePrAggEntry":"baocaodinhky-nhap","renderPrAggOrderList":"baocaodinhky-nhap","mergeReportPeriodAction":"baocaodinhky-nhap","ensureEntryPagesCached":"baocaodinhky-nhap","loadPrAggPdfThumbnails":"baocaodinhky-nhap","renderPrAggPdfEntriesList":"baocaodinhky-nhap","onPrAggPdfEntryCheckboxChange":"baocaodinhky-nhap","togglePrAggPdfEntry":"baocaodinhky-nhap","renderPrAggPdfGrid":"baocaodinhky-nhap","updatePrAggPdfActionsWrap":"baocaodinhky-nhap","renderPrAggPdfSection":"baocaodinhky-nhap","mergeReportPeriodPdfAction":"baocaodinhky-nhap","publishPrPdfCompilation":"baocaodinhky-nhap","unpublishPrPdfCompilation":"baocaodinhky-nhap","mergeReportPeriodByTasksAction":"baocaodinhky-nhap","renderPrTaskCompilation":"baocaodinhky-nhap","PR_SLIDE_KIND_LABELS":"baocaodinhky-nhap","PR_SLIDE_TEMPLATES":"baocaodinhky-nhap","getPrSlideTemplateColors":"baocaodinhky-nhap","renderPrAggCompilation":"baocaodinhky-nhap","updatePrAggSlideField":"baocaodinhky-nhap","updatePrAggPptxBodyLines":"baocaodinhky-nhap","syncPrAggSlideItems":"baocaodinhky-nhap","addPrAggItemRow":"baocaodinhky-nhap","removePrAggItemRow":"baocaodinhky-nhap","removePrAggSlideFile":"baocaodinhky-nhap","movePrAggSlide":"baocaodinhky-nhap","removePrAggSlide":"baocaodinhky-nhap","savePrCompilation":"baocaodinhky-nhap","publishPrCompilation":"baocaodinhky-nhap","unpublishPrCompilation":"baocaodinhky-nhap","renderPrPublishedTable":"baocaodinhky-nhap","prSlideshowMode":"baocaodinhky-nhap","openPrSlideshow":"baocaodinhky-nhap","prPdfFsDoc":"baocaodinhky-nhap","openPrPdfFullscreen":"baocaodinhky-nhap","renderPrPdfFsPage":"baocaodinhky-nhap","toRomanNumeral":"baocaodinhky-nhap","buildPrTaskTableHTML":"baocaodinhky-nhap","viewPrCurrentSlideFile":"baocaodinhky-nhap","buildPrFileBlockHTML":"baocaodinhky-nhap","buildPrSlideBodyHTML":"baocaodinhky-nhap","buildPrPptxSlideBodyHTML":"baocaodinhky-nhap","buildPrSlideScreenHTML":"baocaodinhky-nhap","applyPrTemplateBackground":"baocaodinhky-nhap","preloadImage":"baocaodinhky-nhap","renderPrSlideshowSlide":"baocaodinhky-nhap","prSlideshowNav":"baocaodinhky-nhap","closePrSlideshow":"baocaodinhky-nhap","prPdfLibsPromise":"baocaodinhky-nhap","loadPrPdfLibs":"baocaodinhky-nhap","PR_PDF_SLIDE_WIDTH":"baocaodinhky-nhap","PR_PDF_SLIDE_HEIGHT":"baocaodinhky-nhap","downloadPrPdf":"baocaodinhky-nhap","currentReportPreviewModuleKey":"baocaoquantri-preview","buildReportPreviewLauncherHTML":"baocaoquantri-preview","buildReportPreviewDocumentHTML":"baocaoquantri-preview","showReportPreview":"baocaoquantri-preview","closeReportPreviewModal":"baocaoquantri-preview","printReportPreview":"baocaoquantri-preview","exportReportPreviewExcel":"baocaoquantri-preview","renderReportDetailSection":"baocaoquantri-preview","renderContractReportExtra":"baocaoquantri-preview","renderOfficeReportExtra":"baocaoquantri-preview","renderUniformReportExtra":"baocaoquantri-preview","renderTaskReportExtra":"baocaoquantri-preview","renderInternalReportExtra":"baocaoquantri-preview","exportModuleReportExcel":"baocaoquantri-preview","renderReportsSummary":"baocaoquantri-preview","exportReportsExcel":"baocaoquantri-preview","exportReportsSummaryExcel":"baocaoquantri-preview","formatHoursLabel":"baocaoquantri-preview","buildStatBarHTML":"baocaoquantri-preview","computeApprovalStats":"baocaoquantri-preview","resetReportsFilters":"baocaoquantri-preview","reportsNavL1":"baocaoquantri-preview","reportsNavL2":"baocaoquantri-preview","REPORT_NAV_TREE":"baocaoquantri-preview","isReportNavNodeVisible":"baocaoquantri-preview","findReportNavNode":"baocaoquantri-preview","getActiveReportLeafKey":"baocaoquantri-preview","renderReportsNavPicker":"baocaoquantri-preview","selectReportsNavL1":"baocaoquantri-preview","selectReportsNavL2":"baocaoquantri-preview","repopulateReportsDeptFilterOptions":"baocaoquantri-preview","renderReports":"baocaoquantri-preview","REPORT_MODULE_CONFIGS":"baocaoquantri-preview","renderModuleReport":"baocaoquantri-preview","reportDetailContext":"baocaoquantri-preview","reportDetailFilterValues":"baocaoquantri-preview","reportDetailSelectedCols":"baocaoquantri-preview","REPORT_FIELD_LABELS":"baocaoquantri-preview","humanizeReportFieldKey":"baocaoquantri-preview","REPORT_FIELD_EXCLUDE_KEYS":"baocaoquantri-preview","inferReportFieldType":"baocaoquantri-preview","buildReportDetailColumns":"baocaoquantri-preview","formatReportDetailValue":"baocaoquantri-preview","applyReportDetailFilters":"baocaoquantri-preview","buildReportDetailFilterControlHTML":"baocaoquantri-preview","onReportDetailFilterInput":"baocaoquantri-preview","onReportDetailColumnToggle":"baocaoquantri-preview","onReportDetailColumnToggleFromCheckbox":"baocaoquantri-preview","resetReportDetailFilters":"baocaoquantri-preview","buildReportDetailResultsHTML":"baocaoquantri-preview","renderReportDetailResultsOnly":"baocaoquantri-preview","exportReportDetailExcel":"baocaoquantri-preview","onMinutesFilterChange":"bienbanhop","populateMinutesLinkSelect":"bienbanhop","onMinutesLinkedMeetingChange":"bienbanhop","addAttendeeRow":"bienbanhop","renderMeetingAttendeeTemplateSelect":"bienbanhop","applyMeetingAttendeeTemplateFromSelect":"bienbanhop","applyMeetingAttendeeTemplate":"bienbanhop","saveMeetingAttendeeTemplate":"bienbanhop","deleteMeetingAttendeeTemplate":"bienbanhop","tplEditRows":"bienbanhop","tplEditingId":"bienbanhop","openAttendeeTemplateManagerModal":"bienbanhop","closeAttendeeTemplateManagerModal":"bienbanhop","showAttendeeTemplateListView":"bienbanhop","renderAttendeeTemplateManagerList":"bienbanhop","openAttendeeTemplateEditor":"bienbanhop","backToAttendeeTemplateList":"bienbanhop","addTplEditRow":"bienbanhop","removeTplEditRow":"bienbanhop","updateTplEditField":"bienbanhop","applyTplRowSystemUser":"bienbanhop","toggleTplRowHasAccount":"bienbanhop","resolveTplRowAccountInput":"bienbanhop","renderTplEditRowsTable":"bienbanhop","saveAttendeeTemplateFromEditor":"bienbanhop","deleteAttendeeTemplateFromManager":"bienbanhop","removeAttendeeRow":"bienbanhop","updateAttendeeField":"bienbanhop","applyAttendeeSystemUser":"bienbanhop","toggleAttendeeHasAccount":"bienbanhop","resolveAttendeeAccountInput":"bienbanhop","populateSystemUsersDatalist":"bienbanhop","populateCarDriversDatalist":"bienbanhop","renderAttendeesTable":"bienbanhop","addMinutesDirectiveRow":"bienbanhop","removeMinutesDirectiveRow":"bienbanhop","updateMinutesDirectiveField":"bienbanhop","updateMinutesDirectiveFieldMultiSelect":"bienbanhop","renderMinutesDirectivesTable":"bienbanhop","applyAutoCreatedTasks":"bienbanhop","pendingMinutesEmailNotify":"bienbanhop","openMinutesEmailComposeModal":"bienbanhop","renderMinutesEmailRecipientsList":"bienbanhop","toggleAllMinutesEmailRecipients":"bienbanhop","closeMinutesEmailComposeModal":"bienbanhop","confirmSendMinutesEmail":"bienbanhop","submitMeetingMinutes":"bienbanhop","openEditMeetingMinutes":"bienbanhop","cancelEditMeetingMinutes":"bienbanhop","updateMeetingMinutes":"bienbanhop","renderMeetingMinutes":"bienbanhop","runMinutesAction":"bienbanhop","confirmAssignMinutesTasks":"bienbanhop","assignMinutesTasksAction":"bienbanhop","deleteMeetingMinutes":"bienbanhop","viewMeetingMinutesDetails":"bienbanhop","buildMeetingMinutesDocumentHTML":"bienbanhop","downloadMeetingMinutes":"bienbanhop","pendingTaskSource":"congviec","editingTaskId":"congviec","taskModalMode":"congviec","populateTaskCollaboratorsSelect":"congviec","resolveTaskAssigneeInput":"congviec","setTaskAssigneeSingle":"congviec","setTaskAssigneeMode":"congviec","openCreateTaskModal":"congviec","openAssignTaskModal":"congviec","openEditTaskModal":"congviec","closeCreateTaskModal":"congviec","notifyTaskCollaborators":"congviec","confirmCreateTask":"congviec","createTaskFromSubmission":"congviec","createTaskFromMinutesDirective":"congviec","updateTaskStatus":"congviec","acceptTask":"congviec","acceptTaskOnBehalf":"congviec","confirmCollaboratorParticipation":"congviec","confirmCollaboratorParticipationOnBehalf":"congviec","progressingTaskId":"congviec","TASK_STATUS_LABELS":"congviec","openTaskProgressModal":"congviec","renderProgressSubtasksList":"congviec","addSubtaskAction":"congviec","toggleSubtaskAction":"congviec","deleteSubtaskAction":"congviec","closeTaskProgressModal":"congviec","confirmTaskProgress":"congviec","requestingExtensionTaskId":"congviec","openExtensionRequestModal":"congviec","closeExtensionRequestModal":"congviec","confirmRequestExtension":"congviec","openExtensionApproveModal":"congviec","closeExtensionApproveModal":"congviec","approveExtension":"congviec","rejectExtension":"congviec","cancellingTaskId":"congviec","openCancelTaskModal":"congviec","closeCancelTaskModal":"congviec","confirmCancelTask":"congviec","openCancelApproveModal":"congviec","closeCancelApproveModal":"congviec","approveCancellation":"congviec","rejectCancellation":"congviec","openTaskDetailModal":"congviec","closeTaskDetailModal":"congviec","onTaskFilterChange":"congviec","renderTasks":"congviec","runTaskAction":"congviec","deleteTask":"congviec","buildTaskSlipHTML":"congviec","downloadTaskSlip":"congviec","resetTaskFilters":"congviec","submitCarReq":"dangkyxe","resetCarRoutePoints":"dangkyxe","addCarRoutePoint":"dangkyxe","removeCarRoutePoint":"dangkyxe","updateCarRoutePoint":"dangkyxe","renderCarRoutePoints":"dangkyxe","setCarSubTab":"dangkyxe","renderCarDriverTab":"dangkyxe","confirmCarDriverAssignmentAction":"dangkyxe","onCarFilterChange":"dangkyxe","filterCarByCard":"dangkyxe","renderCarRegs":"dangkyxe","runCarAction":"dangkyxe","deleteCarRegAction":"dangkyxe","resolveCarAssignedDriverInput":"dangkyxe","openCarProcessModal":"dangkyxe","closeCarProcessModal":"dangkyxe","confirmProcessCarReg":"dangkyxe","processCarReg":"dangkyxe","activeUniformSubTab":"dongphuc","uniformAllocBlocks":"dongphuc","uniformIssueItems":"dongphuc","uniformStoreEmployeesCache":"dongphuc","canManageUniform":"dongphuc","canManageUniformStore":"dongphuc","canApproveUniformClient":"dongphuc","setUniformSubTab":"dongphuc","populateUniformEmployeeGroupOptions":"dongphuc","resetUniformEmployeeCreateForm":"dongphuc","submitUniformEmployeeCreate":"dongphuc","renderUniformEmployeesList":"dongphuc","lockUniformEmployeeAction":"dongphuc","uniformSkuFor":"dongphuc","formatUniformLabel":"dongphuc","uniformItemsSummary":"dongphuc","renderUniformCatalogList":"dongphuc","saveUniformCatalogItem":"dongphuc","deleteUniformCatalogItem":"dongphuc","resetUniformPeriodForm":"dongphuc","addUniformAllocationBlock":"dongphuc","removeUniformAllocationBlock":"dongphuc","updateUniformAllocDept":"dongphuc","resolveUniformAllocDeptInput":"dongphuc","addUniformAllocItemRow":"dongphuc","removeUniformAllocItemRow":"dongphuc","updateUniformAllocItemField":"dongphuc","renderUniformAllocationBlocks":"dongphuc","submitUniformPeriod":"dongphuc","uniformAllocStatusBadge":"dongphuc","uniformPeriodApprovalBadge":"dongphuc","filterUniformPeriodByCard":"dongphuc","renderUniformPeriodsList":"dongphuc","approveUniformPeriodAction":"dongphuc","rejectUniformPeriodAction":"dongphuc","deleteUniformPeriodAction":"dongphuc","renderUniformPendingAllocations":"dongphuc","confirmUniformAllocationAction":"dongphuc","renderUniformIssueEmployeeOptions":"dongphuc","resolveUniformEmployeeInput":"dongphuc","resolveUniformAdjEmpEmployeeInputAndRefresh":"dongphuc","resetUniformIssueForm":"dongphuc","addUniformIssueItemRow":"dongphuc","removeUniformIssueItemRow":"dongphuc","updateUniformIssueItemField":"dongphuc","updateUniformIssueItemNameSize":"dongphuc","renderUniformIssueItems":"dongphuc","callCreateUniformIssuance":"dongphuc","submitUniformIssuance":"dongphuc","renderUniformIssuancesTable":"dongphuc","computeAllEmployeeUniformHoldingsClient":"dongphuc","uniformHoldingsCache":"dongphuc","renderUniformHoldingsTable":"dongphuc","openUniformHoldingActionModal":"dongphuc","renderUniformAdjStockItemOptions":"dongphuc","resetUniformAdjustForms":"dongphuc","renderUniformAdjEmpItemOptions":"dongphuc","onUniformAdjEmpItemSizeChange":"dongphuc","callCreateUniformStockAdjustment":"dongphuc","submitUniformStockAdjustment":"dongphuc","uniformAdjOutcomeLabel":"dongphuc","renderUniformAdjustmentsTable":"dongphuc","computeUniformStockClient":"dongphuc","computeUniformStockBreakdownClient":"dongphuc","uniformStockExpandedKeys":"dongphuc","uniformStockRowKey":"dongphuc","uniformPeriodBreakdownFor":"dongphuc","toggleUniformStockDetail":"dongphuc","renderUniformStockStoreFilterOptions":"dongphuc","renderUniformStock":"dongphuc","canViewUniformTransferClient":"dongphuc","resetUniformTransferForm":"dongphuc","callCreateUniformTransfer":"dongphuc","submitUniformTransfer":"dongphuc","uniformTransferStatusBadge":"dongphuc","renderUniformTransferApprovalQueue":"dongphuc","approveUniformTransferAction":"dongphuc","rejectUniformTransferAction":"dongphuc","filterUniformTransferByCard":"dongphuc","renderUniformTransfersTable":"dongphuc","renderUniformDashboard":"dongphuc","uniformDashByStoreCache":"dongphuc","exportUniformDashByStoreExcel":"dongphuc","renderFormTabsBar":"formbuilder-nav","renderFormSubTabsBar":"formbuilder-nav","switchFormGroup":"formbuilder-nav","switchFormTab":"formbuilder-nav","toggleOptionsInput":"formbuilder-nav","addCustomField":"formbuilder-nav","editCustomField":"formbuilder-nav","editCoreField":"formbuilder-nav","cancelEditCustomField":"formbuilder-nav","deleteCustomField":"formbuilder-nav","moveCustomField":"formbuilder-nav","FIELD_TYPE_LABELS":"formbuilder-nav","renderFormFieldsTable":"formbuilder-nav","getDynamicContainerId":"formbuilder-nav","renderDynamicInputsForModule":"formbuilder-nav","collectDynamicFieldsData":"formbuilder-nav","prefillDynamicFieldsData":"formbuilder-nav","HR_FEEDBACK_CATEGORY_LABELS":"hcrcdonghanh","HR_FEEDBACK_STATUS_BADGES":"hcrcdonghanh","submitHrFeedbackQuestion":"hcrcdonghanh","renderHrFeedbackInbox":"hcrcdonghanh","openHrFeedbackAnswer":"hcrcdonghanh","updateHrFeedbackBadge":"hcrcdonghanh","activeHrSubTab":"hcrcdonghanh","setHrSubTab":"hcrcdonghanh","getUserManagerName":"hcrcdonghanh","getDirectReports":"hcrcdonghanh","renderOrgChart":"hcrcdonghanh","buildOrgChartNode":"hcrcdonghanh","orgChartEditTarget":"hcrcdonghanh","openOrgChartManagerPicker":"hcrcdonghanh","closeOrgChartManagerPicker":"hcrcdonghanh","saveOrgChartManagerChange":"hcrcdonghanh","submitOrgChartManager":"hcrcdonghanh","clearOrgChartManager":"hcrcdonghanh","downloadOrgChartTemplate":"hcrcdonghanh","buildOrgChartExportRows":"hcrcdonghanh","exportOrgChartExcel":"hcrcdonghanh","importOrgChartExcel":"hcrcdonghanh","renderHrFeedbackManage":"hcrcdonghanh","submitHrFeedbackResponse":"hcrcdonghanh","positionAdminSubTabBar":"hethong-tabs","setSystemSubTab":"hethong-tabs","setAdminSubTab":"hethong-tabs","renderExternalApiKeysTable":"hethong-tabs","createExternalApiKeyAction":"hethong-tabs","editExternalApiKeyAllowedIpsAction":"hethong-tabs","closeExtApiKeyRevealBox":"hethong-tabs","copyExternalApiKeyReveal":"hethong-tabs","revokeExternalApiKeyAction":"hethong-tabs","editingContractId":"hopdong","setContractSubTab":"hopdong","onContractOpModeChange":"hopdong","refreshContractCodePreview":"hopdong","populateContractAddendumTargets":"hopdong","resolveContractAddendumTargetInput":"hopdong","onContractAddendumTargetChange":"hopdong","getContractAmountValue":"hopdong","renderContractInstallmentsList":"hopdong","onContractInstallmentPercentInput":"hopdong","onContractInstallmentAmountInput":"hopdong","recalcContractInstallmentAmountsFromPercent":"hopdong","addContractInstallmentRow":"hopdong","removeContractInstallmentRow":"hopdong","collectContractInstallments":"hopdong","submitContractReq":"hopdong","openEditContract":"hopdong","cancelEditContract":"hopdong","updateContractReq":"hopdong","onContractFilterChange":"hopdong","filterContractByCard":"hopdong","getContractFamily":"hopdong","toggleContractFamily":"hopdong","CONTRACT_PAYMENT_LABELS":"hopdong","CONTRACT_PAYMENT_BADGE_CLS":"hopdong","renderContracts":"hopdong","buildContractRowHTML":"hopdong","runContractAction":"hopdong","deleteContractAction":"hopdong","approveContractAction":"hopdong","rejectContractAction":"hopdong","approveContractSignedFileAction":"hopdong","rejectContractSignedFileAction":"hopdong","requestContractChangesAction":"hopdong","requestContractSignedFileChangesAction":"hopdong","signedUploadTarget":"hopdong","openSignedUploadModal":"hopdong","closeSignedUploadModal":"hopdong","submitSignedUpload":"hopdong","startContractPaymentAction":"hopdong","startOfficePaymentAction":"hopdong","buildOfficeWatermarkOverlayEl":"internalcomms-daotao-viewer","WORD_PDF_PAGE_W":"internalcomms-daotao-viewer","WORD_PDF_PAGE_H":"internalcomms-daotao-viewer","WORD_PDF_MARGIN":"internalcomms-daotao-viewer","WORD_PDF_CAPTURE_SCALE":"internalcomms-daotao-viewer","renderWordProtected":"internalcomms-daotao-viewer","printWordWithWatermark":"internalcomms-daotao-viewer","renderExcelProtected":"internalcomms-daotao-viewer","parsePptxToSlideContents":"internalcomms-daotao-viewer","canManageTrainingLocal":"admin-permgroups","canManageTrainingClassLocal":"admin-permgroups","getTrainingClassSessionState":"admin-permgroups","TRAINING_SESSION_STATE_LABELS":"admin-permgroups","getTrainingRegDisplayStatus":"admin-permgroups","activeTrainingLmsTab":"admin-permgroups","setTrainingLmsTab":"admin-permgroups","populateTrainingCategorySelects":"admin-permgroups","populateTrainingCourseSelects":"admin-permgroups","populateTrainingPlanDeptSelects":"admin-permgroups","populateTrainingClassMultiSelects":"admin-permgroups","populateCpStageCourseSelectOptions":"admin-permgroups","addCpStageRow":"admin-permgroups","removeCpStageRow":"admin-permgroups","reindexCpStageRows":"admin-permgroups","populateCareerPathStageBuilder":"admin-permgroups","resetCareerPathForm":"admin-permgroups","renderTrainingLms":"admin-permgroups","onTrainingClassModeChange":"admin-permgroups","applyTrainingClassTestDefaultPassScore":"admin-permgroups","resolveTrainingInstructorInput":"admin-permgroups","tcInviteListStaged":"admin-permgroups","renderTrainingInviteListStagedList":"admin-permgroups","addTrainingInviteListPick":"admin-permgroups","removeTrainingInviteListStaged":"admin-permgroups","submitTrainingClass":"admin-permgroups","computeTrainingDashboard":"admin-permgroups","renderTrainingDashboard":"admin-permgroups","renderTrainingClasses":"admin-permgroups","startOfflineTrainingClassAction":"admin-permgroups","endOfflineTrainingClassAction":"admin-permgroups","resolveTrainingEditInstructorInput":"admin-permgroups","teInviteListStaged":"admin-permgroups","renderTrainingEditInviteListStagedList":"admin-permgroups","addTrainingEditInviteListPick":"admin-permgroups","removeTrainingEditInviteListStaged":"admin-permgroups","tcInviteFilePreviewItems":"admin-permgroups","teInviteFilePreviewItems":"admin-permgroups","onTrainingInviteFileChange":"admin-permgroups","addTrainingInviteFileFound":"admin-permgroups","exportTrainingInviteList":"admin-permgroups","openEditTrainingClassModal":"admin-permgroups","closeEditTrainingClassModal":"admin-permgroups","submitEditTrainingClass":"admin-permgroups","registerForTrainingClass":"admin-permgroups","deleteTrainingClass":"admin-permgroups","submitTrainingCourse":"admin-permgroups","renderTrainingCourses":"admin-permgroups","deleteTrainingCourse":"admin-permgroups","editingTrainingPlanId":"admin-permgroups","submitTrainingPlan":"admin-permgroups","cancelEditTrainingPlan":"admin-permgroups","openEditTrainingPlan":"admin-permgroups","deleteTrainingPlanAction":"admin-permgroups","renderTrainingPlans":"admin-permgroups","trainingPlanMonthRange":"admin-permgroups","trainingClassDurationHours":"admin-permgroups","getClassesForTrainingPlan":"admin-permgroups","getTrainingPlanActualStats":"admin-permgroups","getTrainingPlanCompletionPct":"admin-permgroups","isTrainingPlanOverdue":"admin-permgroups","computeTrainingPlanDashboard":"admin-permgroups","currentTrainingPlanDashboardData":"admin-permgroups","renderTrainingPlanDashboard":"admin-permgroups","exportTrainingPlanDashboardExcel":"admin-permgroups","trainingPlanImportPreviewItems":"admin-permgroups","onTrainingPlanImportFileChange":"admin-permgroups","confirmTrainingPlanImport":"admin-permgroups","openTrainingClassQrModal":"admin-permgroups","closeTrainingClassQrModal":"admin-permgroups","trainingResultsModalClassId":"admin-permgroups","openTrainingResultsModal":"admin-permgroups","closeTrainingResultsModal":"admin-permgroups","renderTrainingResultsModalBody":"admin-permgroups","saveTrainingResult":"admin-permgroups","approveCancelTrainingRegAction":"admin-permgroups","rejectCancelTrainingRegAction":"admin-permgroups","renderTrainingCancelRequestsQueue":"admin-permgroups","exportTrainingResultsExcel":"admin-permgroups","trainingRosterModalClassId":"admin-permgroups","trainingRosterStaged":"admin-permgroups","trainingRosterFilePreviewItems":"admin-permgroups","openTrainingRosterModal":"admin-permgroups","closeTrainingRosterModal":"admin-permgroups","stageTrainingRosterUser":"admin-permgroups","renderTrainingRosterStagedList":"admin-permgroups","removeTrainingRosterStaged":"admin-permgroups","addTrainingRosterPick":"admin-permgroups","onTrainingRosterFileChange":"admin-permgroups","addTrainingRosterFileFound":"admin-permgroups","TRAINING_ROSTER_SKIP_REASON_LABELS":"admin-permgroups","confirmTrainingRosterAdd":"admin-permgroups","tbQuestions":"admin-permgroups","tbAddQuestion":"admin-permgroups","tbRemoveQuestion":"admin-permgroups","tbAddOption":"admin-permgroups","tbRemoveOption":"admin-permgroups","tbUpdateQuestionField":"admin-permgroups","tbSetQuestionText":"admin-permgroups","tbSetQuestionPoints":"admin-permgroups","tbSetOptionText":"admin-permgroups","tbToggleCorrect":"admin-permgroups","renderTestBuilderQuestions":"admin-permgroups","submitTrainingTest":"admin-permgroups","renderTrainingTests":"admin-permgroups","deleteTrainingTest":"admin-permgroups","renderTrainingMyRegs":"admin-permgroups","cancelTrainingRegistrationAction":"admin-permgroups","trainingJoinClassRegId":"admin-permgroups","openTrainingJoinClassModal":"admin-permgroups","closeTrainingJoinClassModal":"admin-permgroups","trainingDocOpenLinkHTML":"admin-permgroups","renderTrainingJoinClassModalBody":"admin-permgroups","markTrainingDocumentViewedAction":"admin-permgroups","ttTakeClassId":"admin-permgroups","ttTakeQuestions":"admin-permgroups","ttTakeAnswers":"admin-permgroups","ttTakeIndex":"admin-permgroups","ttTakeSecondsPerQuestion":"admin-permgroups","ttTakeSecondsLeft":"admin-permgroups","ttTakeTimerHandle":"admin-permgroups","shuffleArrayCopy":"admin-permgroups","openTakeTestModal":"admin-permgroups","ttTakeExit":"admin-permgroups","ttTakeRenderQuestion":"admin-permgroups","ttTakeUpdateTimerDisplay":"admin-permgroups","ttTakeSelectOption":"admin-permgroups","ttTakeToggleOptionFromCheckbox":"admin-permgroups","ttTakeGoNext":"admin-permgroups","ttTakeSubmit":"admin-permgroups","onTrainingDocTypeChange":"admin-permgroups","submitTrainingDocument":"admin-permgroups","trainingYoutubeEmbedUrl":"admin-permgroups","onTrainingDocFilterCategoryChange":"admin-permgroups","renderTrainingDocuments":"admin-permgroups","deleteTrainingDocument":"admin-permgroups","submitCareerPath":"admin-permgroups","computeCareerPathStageStatuses":"admin-permgroups","renderCareerPathStagesHTML":"admin-permgroups","findCareerPathCurrentStage":"admin-permgroups","renderCareerPaths":"admin-permgroups","renderCpEmployeeStageLookup":"admin-permgroups","confirmCareerPathAction":"admin-permgroups","deleteCareerPath":"admin-permgroups","ONBOARDING_STAGE1_DAYS":"admin-permgroups","ONBOARDING_STAGE2_DAYS":"admin-permgroups","ONBOARDING_STAGE3_DAYS":"admin-permgroups","ONBOARDING_DUE_SOON_DAYS":"admin-permgroups","onboardingAddDays":"admin-permgroups","onboardingMilestoneStatus":"admin-permgroups","computeOnboardingMilestones":"admin-permgroups","ONBOARDING_STATUS_BADGE_CLASS":"admin-permgroups","onboardingStageBadgeHTML":"admin-permgroups","editingOnboardingPathId":"admin-permgroups","populateOnboardingPathSelects":"admin-permgroups","submitOnboardingPath":"admin-permgroups","openEditOnboardingPath":"admin-permgroups","cancelEditOnboardingPath":"admin-permgroups","deleteOnboardingPath":"admin-permgroups","renderOnboardingPathsTable":"admin-permgroups","computeOnboardingStageProgress":"admin-permgroups","onboardingStageConfirmCellHTML":"admin-permgroups","onboardingEmployeesCache":"admin-permgroups","populateOnboardingEmployeesDatalist":"admin-permgroups","resolveOnboardingEmployeeInput":"admin-permgroups","submitOnboardingAssignment":"admin-permgroups","deleteOnboardingProgress":"admin-permgroups","confirmOnboardingStageAction":"admin-permgroups","renderOnboardingProgressTable":"admin-permgroups","onboardingStageCoursesHTML":"admin-permgroups","renderMyOnboardingCardHTML":"admin-permgroups","renderMyOnboarding":"admin-permgroups","canEvaluateOnboardingStage3Local":"admin-permgroups","renderOnboardingStage3Queue":"admin-permgroups","submitOnboardingStage3Evaluation":"admin-permgroups","issueOnboardingCertificateAction":"admin-permgroups","ONBOARDING_CERT_PAGE_W":"admin-permgroups","ONBOARDING_CERT_PAGE_H":"admin-permgroups","downloadOnboardingCertificatePdf":"admin-permgroups","renderOnboardingLms":"admin-permgroups","setInternalSubTab":"internalcomms-nhipsong","onInternalFilterChange":"internalcomms-nhipsong","filterInternalByCard":"internalcomms-nhipsong","editingInternalPostId":"internalcomms-nhipsong","submitInternalPost":"internalcomms-nhipsong","canEditInternalPostUI":"internalcomms-nhipsong","editInternalPostUI":"internalcomms-nhipsong","cancelEditInternalPost":"internalcomms-nhipsong","toggleInternalPinDurationWrap":"internalcomms-nhipsong","hideInternalPostAction":"internalcomms-nhipsong","unhideInternalPostAction":"internalcomms-nhipsong","requestInternalPostInfoAction":"internalcomms-nhipsong","canManageRecruitmentLocal":"internalcomms-nhipsong","RECRUITMENT_STATUS_LABELS":"internalcomms-nhipsong","RECRUITMENT_STATUS_COLORS":"internalcomms-nhipsong","RECRUITMENT_JOB_EXPIRING_SOON_DAYS":"internalcomms-nhipsong","isRecruitmentJobExpiringSoon":"internalcomms-nhipsong","recruitmentJobStatusBadgeHTML":"internalcomms-nhipsong","setRecruitmentTab":"internalcomms-nhipsong","renderRecruitment":"internalcomms-nhipsong","submitRecruitmentJob":"internalcomms-nhipsong","populateRecruitmentJobsMonthFilter":"internalcomms-nhipsong","onRecruitmentJobsFilterChange":"internalcomms-nhipsong","renderRecruitmentJobs":"internalcomms-nhipsong","closeRecruitmentJobUi":"internalcomms-nhipsong","confirmRecruitmentJobFilledUi":"internalcomms-nhipsong","deleteRecruitmentJob":"internalcomms-nhipsong","openRecruitmentReferModal":"internalcomms-nhipsong","closeRecruitmentReferModal":"internalcomms-nhipsong","submitRecruitmentReferral":"internalcomms-nhipsong","renderRecruitmentMyReferrals":"internalcomms-nhipsong","populateRecruitmentManageFilter":"internalcomms-nhipsong","onRecruitmentManageFilterChange":"internalcomms-nhipsong","renderRecruitmentManage":"internalcomms-nhipsong","setRecruitmentReferralStatusUi":"internalcomms-nhipsong","isInternalImageAttachment":"internalcomms-nhipsong","internalNewsSortMode":"internalcomms-nhipsong","setInternalNewsSort":"internalcomms-nhipsong","internalPostStatusBadgeHTML":"internalcomms-nhipsong","internalPostEditButtonHTML":"internalcomms-nhipsong","internalPostInfoRequestBannerHTML":"internalcomms-nhipsong","internalPostHideActionHTML":"internalcomms-nhipsong","internalPostRequestInfoActionHTML":"internalcomms-nhipsong","expandedInternalComments":"internalcomms-nhipsong","toggleInternalCommentsExpanded":"internalcomms-nhipsong","toggleInternalCommentsExpandedAndView":"internalcomms-nhipsong","focusInternalCommentInput":"internalcomms-nhipsong","toggleInternalCommentLike":"internalcomms-nhipsong","internalCommentLikeButtonHTML":"internalcomms-nhipsong","pickHighlightedComments":"internalcomms-nhipsong","renderInternalModerationQueueHTML":"internalcomms-nhipsong","renderInternalPosts":"internalcomms-nhipsong","renderInternalNewsFeed":"internalcomms-nhipsong","renderInternalNewsCard":"internalcomms-nhipsong","toggleInternalLikeInline":"internalcomms-nhipsong","addInternalCommentInline":"internalcomms-nhipsong","dismissCommentFlagAction":"internalcomms-nhipsong","deleteFlaggedCommentAction":"internalcomms-nhipsong","closeInternalArticleModal":"internalcomms-nhipsong","viewInternalPostDetail":"internalcomms-nhipsong","markInternalRead":"internalcomms-nhipsong","toggleInternalLike":"internalcomms-nhipsong","addInternalComment":"internalcomms-nhipsong","registerForTraining":"internalcomms-nhipsong","unregisterFromTraining":"internalcomms-nhipsong","approveInternalPostAction":"internalcomms-nhipsong","rejectInternalPostAction":"internalcomms-nhipsong","activeItSupportSubTab":"itsupport-price","setItSupportSubTab":"itsupport-price","itPricePendingFile":"itsupport-price","itPriceCellHTML":"itsupport-price","renderItPriceFilePreview":"itsupport-price","parseItPriceFileForPreview":"itsupport-price","onItPriceFileChange":"itsupport-price","onItPriceMasterListChange":"itsupport-price","updateItPriceMasterListDownloadLink":"itsupport-price","colRoleModalState":"itsupport-price","openColumnRoleMappingModal":"itsupport-price","closeColRoleModal":"itsupport-price","confirmColRoleModal":"itsupport-price","renderItPriceMasterListAdmin":"itsupport-price","pickAndParseMasterListFile":"itsupport-price","itPriceColumnListText":"itsupport-price","addItPriceMasterList":"itsupport-price","replaceItPriceMasterListFile":"itsupport-price","renameItPriceMasterList":"itsupport-price","deleteItPriceMasterList":"itsupport-price","renderItPriceMasterListSelect":"itsupport-price","submitItPriceApproval":"itsupport-price","onItPriceFilterChange":"itsupport-price","filterItPriceByCard":"itsupport-price","activeItPriceSubTab":"itsupport-price","setItPriceSubTab":"itsupport-price","resolveApprovedFileIdClient":"itsupport-price","resolveApprovedFileUrlClient":"itsupport-price","canViewItPriceApproval":"itsupport-price","itPriceStatusBadge":"itsupport-price","itPriceAppliedBadge":"itsupport-price","renderItPriceApprovals":"itsupport-price","approveItPrice":"itsupport-price","approveItPriceConfirmed":"itsupport-price","rejectItPrice":"itsupport-price","claimPriceApplyAction":"itsupport-price","releasePriceApplyClaimAction":"itsupport-price","applyItPriceAction":"itsupport-price","deleteItPriceAction":"itsupport-price","diffPriceFileItems":"itsupport-price","itPriceMasterListDownloadLinkHTML":"itsupport-price","viewItPriceExtraFile":"itsupport-price","currentItPriceModalId":"itsupport-price","openItPriceModal":"itsupport-price","closeItPriceModal":"itsupport-price","renderItPriceModal":"itsupport-price","toggleItPriceMarkColsBox":"itsupport-price","onItPriceMarkColToggle":"itsupport-price","downloadItPriceMarkedFile":"itsupport-price","renderItPriceModalControls":"itsupport-price","requestItPriceInfoApprover":"itsupport-price","requestItPriceEmergencyRejectAction":"itsupport-price","approveItPriceEmergencyRejectAction":"itsupport-price","denyItPriceEmergencyRejectAction":"itsupport-price","requestItPriceInfoIt":"itsupport-price","itPriceSupplementPendingFile":"itsupport-price","onItPriceSupplementFileChange":"itsupport-price","submitItPriceSupplementAction":"itsupport-price","IT_TICKET_CATEGORY_LABELS_DEFAULT":"itsupport-price","IT_TICKET_STATUS_BADGES":"itsupport-price","submitItTicket":"itsupport-price","onItTicketFilterChange":"itsupport-price","canViewItTicket":"itsupport-price","renderItTickets":"itsupport-price","runItTicketAction":"itsupport-price","deleteItTicketAction":"itsupport-price","currentItTicketModalId":"itsupport-price","showItTicketEscalateForm":"itsupport-price","openItTicketEscalateForm":"itsupport-price","closeItTicketEscalateForm":"itsupport-price","IT_TICKET_APPROVAL_BADGES":"itsupport-price","openItTicketModal":"itsupport-price","renderItTicketModal":"itsupport-price","closeItTicketModal":"itsupport-price","claimItTicketAction":"itsupport-price","escalateItTicketAction":"itsupport-price","approveItTicketEscalationAction":"itsupport-price","denyItTicketEscalationAction":"itsupport-price","updateItTicketStatusAction":"itsupport-price","cancelItTicketAction":"itsupport-price","submitItTicketComment":"itsupport-price","IT_RENEWAL_CATEGORY_SUGGESTIONS":"itsupport-renewal","computeItRenewalLifecycleState":"itsupport-renewal","IT_RENEWAL_LIFECYCLE_LABELS":"itsupport-renewal","filterItServiceRenewalByCard":"itsupport-renewal","onItServiceRenewalFilterChange":"itsupport-renewal","renderItServiceRenewals":"itsupport-renewal","buildItServiceRenewalRowHTML":"itsupport-renewal","runItServiceRenewalAction":"itsupport-renewal","submitItServiceRenewal":"itsupport-renewal","downloadItServiceRenewalFile":"itsupport-renewal","deleteItServiceRenewalAction":"itsupport-renewal","openItServiceRenewalRenewModal":"itsupport-renewal","closeItServiceRenewalRenewModal":"itsupport-renewal","submitItServiceRenewalRenew":"itsupport-renewal","openItServiceRenewalEditModal":"itsupport-renewal","closeItServiceRenewalEditModal":"itsupport-renewal","submitItServiceRenewalEdit":"itsupport-renewal","renderItPriceTierWorkflowTab":"itsupport-tier","onItPriceTierWorkflowTemplateChange":"itsupport-tier","collectItPriceTierWorkflowConfig":"itsupport-tier","saveItPriceTierWorkflowConfig":"itsupport-tier","collectDeptWorkflowConfig":"itsupport-tier","writeDeptWorkflowConfig":"itsupport-tier","saveDeptWorkflowConfig":"itsupport-tier","saveAllDeptWorkflowConfigs":"itsupport-tier","renderWorkflowTemplatesTable":"itsupport-tier","addStepRow":"itsupport-tier","removeStepRow":"itsupport-tier","reindexStepRows":"itsupport-tier","resetWorkflowForm":"itsupport-tier","saveWorkflowTemplate":"itsupport-tier","editWorkflowTemplate":"itsupport-tier","deleteWorkflowTemplate":"itsupport-tier","populateLogFilterSelect":"logsystem-trash","onLogFilterChange":"logsystem-trash","getFilteredSystemLogs":"logsystem-trash","TRASH_COLLECTION_LABELS":"logsystem-trash","trashCollectionLabel":"logsystem-trash","trashItemLabel":"logsystem-trash","trashItemsCache":"logsystem-trash","loadTrashItems":"logsystem-trash","renderTrashList":"logsystem-trash","restoreTrashItem":"logsystem-trash","permanentlyDeleteTrashItemUI":"logsystem-trash","permanentlyDeleteTrashItemConfirmed":"logsystem-trash","loadSystemLogs":"logsystem-trash","renderSystemLogs":"logsystem-trash","clearSystemLogs":"logsystem-trash","exportSystemLogsExcel":"logsystem-trash","resetLogFilters":"logsystem-trash","activeBudgetSubTab":"itsupport-tier","bId":"itsupport-tier","bEl":"itsupport-tier","budgetEntryFormDraftId":"itsupport-tier","budgetEntryFormLines":"itsupport-tier","budgetManagerEditEntryId":"itsupport-tier","budgetManagerEditLines":"itsupport-tier","budgetManagerEditFields":"itsupport-tier","editingBudgetTemplateId":"itsupport-tier","budgetTemplateFormFields":"itsupport-tier","currentProcessingBudgetEntryId":"itsupport-tier","currentBudgetSummaryData":"itsupport-tier","BUDGET_FIELD_TYPE_LABELS":"itsupport-tier","BUDGET_CORE_FIELD_DEFS":"itsupport-tier","BUDGET_CORE_ORDER_DEFAULT":"itsupport-tier","defaultBudgetFields":"itsupport-tier","canManageBudgetClient":"itsupport-tier","canCreateBudgetEntryClient":"itsupport-tier","canAggregateBudgetClient":"itsupport-tier","budgetPeriodIsOpen":"itsupport-tier","budgetPeriodIsClosed":"itsupport-tier","budgetPeriodDeptAllowed":"itsupport-tier","setBudgetSubTab":"itsupport-tier","renderBudgetEntrySubTab":"itsupport-tier","getOpenBudgetPeriodsForDept":"itsupport-tier","renderBudgetEntryPeriodOptions":"itsupport-tier","normalizeBudgetTemplateFieldsForDisplay":"itsupport-tier","getBudgetPeriodTemplateFields":"itsupport-tier","getBudgetLineFieldValue":"itsupport-tier","blankBudgetLine":"itsupport-tier","onBudgetEntryPeriodChange":"itsupport-tier","buildBudgetLinesTableHead":"itsupport-tier","formatBudgetFieldDisplayValue":"itsupport-tier","buildBudgetFieldInputHTML":"itsupport-tier","buildBudgetLineRowHTML":"itsupport-tier","renderBudgetEntryLinesTable":"itsupport-tier","collectBudgetEntryLinesFromForm":"itsupport-tier","addBudgetEntryLine":"itsupport-tier","removeBudgetEntryLine":"itsupport-tier","updateBudgetEntryTotalDisplay":"itsupport-tier","saveBudgetEntryDraft":"itsupport-tier","submitCurrentBudgetEntry":"itsupport-tier","generateBudgetEntryCode":"itsupport-tier","budgetEntryStatusBadge":"itsupport-tier","budgetEntryTotal":"itsupport-tier","filterBudgetByCard":"itsupport-tier","filterBudgetByCardPLAN":"itsupport-tier","filterBudgetByCardACTUAL":"itsupport-tier","renderBudgetEntryList":"itsupport-tier","runBudgetEntryListAction":"itsupport-tier","deleteBudgetEntryAction":"itsupport-tier","editBudgetEntryDraft":"itsupport-tier","openBudgetManagerEditModal":"itsupport-tier","budgetEntryStatusBadgeText":"itsupport-tier","closeBudgetManagerEditModal":"itsupport-tier","buildBudgetManagerEditLineRowHTML":"itsupport-tier","renderBudgetManagerEditLinesTable":"itsupport-tier","collectBudgetManagerEditLinesFromForm":"itsupport-tier","addBudgetManagerEditLine":"itsupport-tier","removeBudgetManagerEditLine":"itsupport-tier","updateBudgetManagerEditTotalDisplay":"itsupport-tier","saveBudgetManagerEditEntry":"itsupport-tier","openBudgetPeriodTemplateModal":"itsupport-tier","closeBudgetPeriodTemplateModal":"itsupport-tier","renderBudgetPeriodSubTab":"itsupport-tier","renderBudgetPeriodDeptChecklist":"itsupport-tier","renderBudgetPeriodTemplateOptions":"itsupport-tier","createBudgetPeriod":"itsupport-tier","budgetPeriodDeptLabel":"itsupport-tier","budgetPeriodStatusBadge":"itsupport-tier","renderBudgetPeriodList":"itsupport-tier","runBudgetPeriodAction":"itsupport-tier","closeBudgetPeriodAction":"itsupport-tier","reopenBudgetPeriodAction":"itsupport-tier","deleteBudgetPeriodAction":"itsupport-tier","renderBudgetTemplateList":"itsupport-tier","runBudgetTemplateAction":"itsupport-tier","startNewBudgetTemplate":"itsupport-tier","editBudgetTemplateAction":"itsupport-tier","cancelBudgetTemplateForm":"itsupport-tier","renderBudgetTemplateFieldsBuilder":"itsupport-tier","moveBudgetTemplateField":"itsupport-tier","addBudgetTemplateField":"itsupport-tier","removeBudgetTemplateField":"itsupport-tier","updateBudgetTemplateField":"itsupport-tier","updateBudgetTemplateFieldRequiredFromCheckbox":"itsupport-tier","uploadBudgetTemplateFieldsXlsx":"itsupport-tier","createBudgetTemplateFromRealFile":"itsupport-tier","saveBudgetTemplate":"itsupport-tier","deleteBudgetTemplateAction":"itsupport-tier","renderBudgetSummarySubTab":"itsupport-tier","renderBudgetSummaryPeriodOptions":"itsupport-tier","buildBudgetSummary":"itsupport-tier","budgetTypeTotal":"itsupport-tier","sumEntriesByDept":"itsupport-tier","renderBudgetSummaryResult":"itsupport-tier","exportBudgetSummaryExcel":"itsupport-tier","BUDGET_PDF_PAGE_W":"itsupport-tier","BUDGET_PDF_PAGE_H":"itsupport-tier","BUDGET_PDF_MARGIN":"itsupport-tier","BUDGET_PDF_CAPTURE_SCALE":"itsupport-tier","exportBudgetSummaryPdf":"itsupport-tier","printBudgetSummary":"itsupport-tier","openBudgetProcessModal":"itsupport-tier","closeBudgetProcessModal":"itsupport-tier","confirmProcessBudgetEntry":"itsupport-tier","processBudgetEntry":"itsupport-tier","getWfModuleTypes":"itsupport-tier","switchWfModule":"itsupport-tier","renderWfSubmissionTypeTabs":"itsupport-tier","switchWfSubmissionType":"itsupport-tier","getApproverCandidateUsers":"itsupport-tier","toggleWfOtherDeptCandidates":"itsupport-tier","onWorkflowTemplateChange":"itsupport-tier","renderWorkflowTab":"itsupport-tier","addOfficeItemRow":"hopdong","removeOfficeItemRow":"hopdong","updateOfficeItemField":"hopdong","recalcOfficeItemsTotal":"hopdong","renderOfficeItemsTable":"hopdong","submitOfficeReq":"hopdong","onOfficeFilterChange":"hopdong","filterOfficeByCard":"hopdong","renderOfficeReqs":"hopdong","runOfficeAction":"hopdong","deleteOfficeReqAction":"hopdong","openOfficeProcessModal":"hopdong","closeOfficeProcessModal":"hopdong","confirmProcessOfficeReq":"hopdong","processOfficeReq":"hopdong","findMeetingConflict":"phonghop","toDatetimeLocalValue":"phonghop","generateMeetingTimeSlots":"phonghop","setMeetingSubTab":"phonghop","meetingCalCurrentDate":"phonghop","meetingCalSlots":"phonghop","meetingCalDrag":"phonghop","meetingCalLastClickedSlot":"phonghop","renderMeetingCalendar":"phonghop","wireMeetingCalendarSelection":"phonghop","highlightMeetingDragRange":"phonghop","handleMeetingSingleSlotClick":"phonghop","showMeetingSlotInfo":"phonghop","quickBookMeetingSlot":"phonghop","finalizeMeetingSlotSelection":"phonghop","submitMeetingReq":"phonghop","onMeetingFilterChange":"phonghop","filterMeetingByCard":"phonghop","renderMeetings":"phonghop","runMeetingAction":"phonghop","approveMeeting":"phonghop","cancelMeeting":"phonghop","filterDocByCard":"formbuilder-nav","onFilterChange":"formbuilder-nav","DEPT_ABBR_STOPWORDS":"formbuilder-nav","deriveAbbr":"formbuilder-nav","getDeptAbbr":"formbuilder-nav","getDocCatAbbr":"formbuilder-nav","computeNextDocSeq":"formbuilder-nav","generateDocCode":"formbuilder-nav","getContractTypeAbbr":"formbuilder-nav","computeNextContractSeq":"formbuilder-nav","generateContractCode":"formbuilder-nav","computeNextAddendumSeq":"formbuilder-nav","generateAddendumCode":"formbuilder-nav","todayCodeDatePart":"formbuilder-nav","computeNextHcrcSeq":"formbuilder-nav","generateHcrcCode":"formbuilder-nav","generateSubCode":"formbuilder-nav","generateCarCode":"formbuilder-nav","generateOfficeCode":"formbuilder-nav","generateMinutesCode":"formbuilder-nav","generateMeetingCode":"formbuilder-nav","generateItPriceCode":"formbuilder-nav","generateItTicketCode":"formbuilder-nav","computeNextWfSeq":"formbuilder-nav","generateWfCode":"formbuilder-nav","getDocFamily":"formbuilder-nav","getDocFamilyLatest":"formbuilder-nav","isDocFamilyLatestBlocking":"formbuilder-nav","onDocOpModeChange":"formbuilder-nav","refreshDocCodePreview":"formbuilder-nav","populateDocUpdateTargets":"formbuilder-nav","onDocUpdateTargetChange":"formbuilder-nav","renderDocs":"formbuilder-nav","toggleDocFamily":"formbuilder-nav","buildDocRowHTML":"formbuilder-nav","runDocAction":"formbuilder-nav","deleteDocAction":"formbuilder-nav","downloadDocFile":"formbuilder-nav","uploadDoc":"formbuilder-nav","onLicenseOpModeChange":"formbuilder-nav","getLicenseFamily":"formbuilder-nav","getLicenseFamilyLatest":"formbuilder-nav","isLicenseFamilyLatestBlocking":"formbuilder-nav","populateLicenseUpdateTargets":"formbuilder-nav","onLicenseUpdateTargetChange":"formbuilder-nav","computeLicenseLifecycleState":"formbuilder-nav","LICENSE_LIFECYCLE_LABELS":"formbuilder-nav","filterLicenseByCard":"formbuilder-nav","onLicenseFilterChange":"formbuilder-nav","renderLicenses":"formbuilder-nav","toggleLicenseFamily":"formbuilder-nav","buildLicenseRowHTML":"formbuilder-nav","runLicenseAction":"formbuilder-nav","approveLicenseAction":"formbuilder-nav","rejectLicenseAction":"formbuilder-nav","setLicenseRenewingAction":"formbuilder-nav","revokeLicenseAction":"formbuilder-nav","unrevokeLicenseAction":"formbuilder-nav","deleteLicenseAction":"formbuilder-nav","downloadLicenseFile":"formbuilder-nav","viewLicenseFile":"formbuilder-nav","viewLicenseDetails":"formbuilder-nav","closeLicenseDetailModal":"formbuilder-nav","uploadLicense":"formbuilder-nav","saveLicenseType":"formbuilder-nav","deleteLicenseType":"formbuilder-nav","renderLicenseTypeList":"formbuilder-nav","uploadFileToServer":"formbuilder-nav","UPLOAD_MODULE_KEY_MAP":"formbuilder-nav","mapFormModKeyToUploadModule":"formbuilder-nav","UPLOAD_EXT_UNIVERSE":"formbuilder-nav","UPLOAD_MODULE_LIST":"formbuilder-nav","renderUploadTypeConfig":"formbuilder-nav","updateUploadSizeLimit":"formbuilder-nav","toggleUploadTypeExt":"formbuilder-nav","toggleUploadTypeExtFromCheckbox":"formbuilder-nav","approveDoc":"formbuilder-nav","approveDocConfirmed":"formbuilder-nav","rejectDoc":"formbuilder-nav","getFileKind":"formbuilder-nav","PROTECTED_VIEW_WATERMARK_COMPANY":"formbuilder-nav","PROTECTED_VIEW_WATERMARK_STYLE":"formbuilder-nav","attachmentDownloadUrl":"formbuilder-nav","buildProtectedViewerHTML":"formbuilder-nav","openFileProtectedView":"formbuilder-nav","viewDoc":"formbuilder-nav","closeViewDocModal":"formbuilder-nav","viewDocDetails":"formbuilder-nav","closeDocDetailModal":"formbuilder-nav","printViewModalContent":"formbuilder-nav","printHtmlViaHiddenIframe":"formbuilder-nav","editingPaymentRequestId":"hopdong","setPaymentSubTab":"hopdong","renderPaymentCreateInstallmentsList":"hopdong","addPaymentCreateInstallmentRow":"hopdong","removePaymentCreateInstallmentRow":"hopdong","collectPaymentCreateInstallments":"hopdong","updatePaymentCreateInstallmentsSummary":"hopdong","populatePaymentSourceRecordOptions":"hopdong","computeSourcePaymentInstallmentsPreview":"hopdong","onPaymentSourceTypeChange":"hopdong","onPaymentSourceRecordChange":"hopdong","submitManualPaymentRequest":"hopdong","cancelEditPaymentRequest":"hopdong","openEditPaymentRequest":"hopdong","PAYMENT_STATUS_LABELS":"hopdong","PAYMENT_STATUS_BADGE_CLS":"hopdong","PAYMENT_SOURCE_LABELS":"hopdong","onPaymentFilterChange":"hopdong","filterPaymentByCard":"hopdong","renderPaymentRequests":"hopdong","approvePaymentRequestAction":"hopdong","requestPaymentInfoAction":"hopdong","deletePaymentRequestAction":"hopdong","confirmPaymentInstallmentAction":"hopdong","viewContractDetails":"hopdong","viewContract":"hopdong","viewContractSignedFile":"hopdong","submitSubmissionReq":"vanbantrinh","doSubmitSubmissionReq":"vanbantrinh","renderSubmissionApprovalLayerCheckboxes":"vanbantrinh","toggleSubApprovalDropdown":"vanbantrinh","updateSubApprovalDropdownLabel":"vanbantrinh","onSubApprovalLayerToggle":"vanbantrinh","renderContractApprovalLayerCheckboxes":"vanbantrinh","toggleContractApprovalDropdown":"vanbantrinh","updateContractApprovalDropdownLabel":"vanbantrinh","onContractApprovalLayerToggle":"vanbantrinh","previewContractApprovalWorkflow":"vanbantrinh","onSubFilterChange":"vanbantrinh","filterSubByCard":"vanbantrinh","renderSubmissionReqs":"vanbantrinh","runSubmissionAction":"vanbantrinh","deleteSubmissionAction":"vanbantrinh","downloadAllSubmissionFiles":"vanbantrinh","openProcessSubmissionModal":"vanbantrinh","openTroLyThuKyBoSungChoice":"vanbantrinh","openTroLyThuKyProposeFileForm":"vanbantrinh","confirmTroLyThuKyProposeFile":"vanbantrinh","openResolveFileProposalModal":"vanbantrinh","viewFileProposalAttachment":"vanbantrinh","confirmResolveFileProposalAgree":"vanbantrinh","confirmResolveFileProposalDisagree":"vanbantrinh","confirmResolveFileProposal":"vanbantrinh","currentStepApproversFor":"vanbantrinh","closeProcessSubmissionModal":"vanbantrinh","confirmProcessSubmission":"vanbantrinh","processSubmission":"vanbantrinh","renderSubModalOpinions":"vanbantrinh","renderSubModalOpinionWarning":"vanbantrinh","giveSubmissionOpinion":"vanbantrinh","buildSubmissionApprovalSlipHTML":"vanbantrinh","viewSubmissionAttachment":"vanbantrinh","viewSubmissionExtraFile":"vanbantrinh","viewSubmissionApprovalSlip":"vanbantrinh","downloadSubmissionApprovalSlip":"vanbantrinh","buildEffectiveSubmissionWorkflow":"vanbantrinh","buildSubmissionWorkflowPreviewHTML":"vanbantrinh","readSelectedSubmissionLayers":"vanbantrinh","previewSubmissionWorkflow":"vanbantrinh","OPERATION_KIND_META":"vanhanh","activeVanHanhSubTab":"vanhanh","VAN_HANH_SUBTAB_TO_KIND":"vanhanh","setVanHanhSubTab":"vanhanh","setOperationStoreSubTab":"vanhanh","operationStatusBadge":"vanhanh","OPERATION_STAGE_LABELS":"vanhanh","computeOperationRecordStageStatusClient":"vanhanh","operationRecordStageStatus":"vanhanh","OPERATION_STAGE_BADGE_CLASS":"vanhanh","operationStageBadge":"vanhanh","canCreateOperationOrderClient":"vanhanh","canCreateOperationStoreOpeningClient":"vanhanh","canCreateOperationRepairClient":"vanhanh","resolveVsoPersonInChargeInput":"vanhanh","resolveVrPersonInChargeInput":"vanhanh","operationOrderItems":"vanhanh","addOperationOrderItemRow":"vanhanh","removeOperationOrderItemRow":"vanhanh","updateOperationOrderItemField":"vanhanh","recalcOperationOrderItemsTotal":"vanhanh","renderOperationOrderItemsTable":"vanhanh","generateOperationOrderCode":"vanhanh","generateOperationStoreOpenCode":"vanhanh","generateOperationRepairCode":"vanhanh","submitOperationOrder":"vanhanh","submitOperationStoreOpening":"vanhanh","submitOperationRepair":"vanhanh","notifyOperationApprovalNeeded":"vanhanh","onOperationOrderFilterChange":"vanhanh","onOperationStoreOpenFilterChange":"vanhanh","onOperationRepairFilterChange":"vanhanh","filterOperationOrderByCard":"vanhanh","filterOperationStoreOpenByCard":"vanhanh","filterOperationRepairByCard":"vanhanh","OPERATION_FILTER_PREFIX":"vanhanh","OPERATION_STORE_OR_REPAIR":"vanhanh","renderOperationList":"vanhanh","renderOperationOrderList":"vanhanh","renderOperationStoreOpeningList":"vanhanh","renderOperationRepairList":"vanhanh","buildOperationRowHTML":"vanhanh","runOperationAction":"vanhanh","runOperationOrderAction":"vanhanh","runOperationStoreOpenAction":"vanhanh","runOperationRepairAction":"vanhanh","deleteOperationAction":"vanhanh","currentProcessingOperationKind":"vanhanh","currentProcessingOperationId":"vanhanh","buildOperationDetailsHTML":"vanhanh","viewOperationAttachment":"vanhanh","openOperationProcessModal":"vanhanh","closeOperationProcessModal":"vanhanh","confirmProcessOperation":"vanhanh","processOperation":"vanhanh","OPERATION_ESTIMATE_MODULE_KEY":"vanhanh","operationEstimateWfMap":"vanhanh","canCreateOperationEstimateClient":"vanhanh","operationEstimateStatusBadge":"vanhanh","renderOperationEstimateList":"vanhanh","operationEstimateItems":"vanhanh","currentEstimateKind":"vanhanh","currentEstimateRecordId":"vanhanh","currentEstimateBudget":"vanhanh","currentEstimateBudgetMissing":"vanhanh","addOperationEstimateItemRow":"vanhanh","removeOperationEstimateItemRow":"vanhanh","updateOperationEstimateItemField":"vanhanh","recalcOperationEstimateItemsTotal":"vanhanh","renderOperationEstimateItemsTable":"vanhanh","openOperationEstimateModal":"vanhanh","closeOperationEstimateModal":"vanhanh","submitOperationEstimateForApproval":"vanhanh","exportOperationEstimateItems":"vanhanh","onOperationEstimateImportFileChange":"vanhanh","resetOperationEstimateToDraft":"vanhanh","confirmProcessOperationEstimate":"vanhanh","processOperationEstimate":"vanhanh","operationSourceType":"vanhanh","getOperationWorkItemsForRecord":"vanhanh","getOperationExecutionPeriodsForRecord":"vanhanh","operationWorkItemStatusBadge":"vanhanh","operationComputeParentWorkItemStatus":"vanhanh","syncOperationWorkItemAncestorsClient":"vanhanh","operationExecutionEligibleRows":"vanhanh","operationWorkItemProgressSummary":"vanhanh","renderOperationExecutionList":"vanhanh","renderOperationAcceptanceList":"vanhanh","currentWorkItemModalKind":"vanhanh","currentWorkItemModalRecordId":"vanhanh","currentWorkItemModalMode":"vanhanh","currentWorkItemFormParentId":"vanhanh","currentEditWorkItemId":"vanhanh","openOperationWorkItemModal":"vanhanh","closeOperationWorkItemModal":"vanhanh","renderOperationWorkItemModalBody":"vanhanh","confirmOperationUseAction":"vanhanh","buildOperationWorkItemRows":"vanhanh","computeOperationWorkItemExpectedAcceptanceDate":"vanhanh","buildOperationWorkItemRow":"vanhanh","openOperationWorkItemFormModal":"vanhanh","onOwiAcceptanceModeChange":"vanhanh","closeOperationWorkItemFormModal":"vanhanh","openOperationWorkItemEditModal":"vanhanh","resolveOwiAcceptorInput":"vanhanh","submitOperationWorkItemForm":"vanhanh","exportOperationWorkItems":"vanhanh","OPERATION_WORK_ITEM_STATUS_LABELS":"vanhanh","onOperationWorkItemImportFileChange":"vanhanh","updateOperationWorkItemProgressAction":"vanhanh","currentOwiProgressItemId":"vanhanh","OPERATION_WORK_ITEM_NEXT_STATUS_LABEL":"vanhanh","openOperationWorkItemProgressModal":"vanhanh","closeOperationWorkItemProgressModal":"vanhanh","confirmOperationWorkItemProgress":"vanhanh","currentAcceptanceActionItemId":"vanhanh","currentAcceptanceActionType":"vanhanh","openOperationAcceptanceActionModal":"vanhanh","closeOperationAcceptanceActionModal":"vanhanh","confirmOperationAcceptanceAction":"vanhanh","renderOperationStoreReport":"vanhanh","OP_CLICK_ACTIONS":"vanhanh","OP_CHANGE_ACTIONS":"vanhanh","OP_INPUT_ACTIONS":"vanhanh","OP_SUBMIT_ACTIONS":"vanhanh","bindOperationDelegation":"vanhanh","canManageVpp":"vpp","vppCalcItemsTotal":"vpp","vppActiveHeadcountForDept":"vpp","renderVppDeptHeadcountTable":"vpp","onVppBudgetInput":"vpp","onVppHeadcountInput":"vpp","collectVppDeptHeadcounts":"vpp","vppPeriodIsOpen":"vpp","setVppSubTab":"vpp","renderVppRegPeriodOptions":"vpp","vppStripAccents":"vpp","findOwnVppRegForPeriod":"vpp","onVppRegPeriodChange":"vpp","filterVppRegItemsTable":"vpp","collectVppRegFormItems":"vpp","updateVppRegTotalDisplay":"vpp","saveVppRegDraft":"vpp","submitVppRegDraftAction":"vpp","vppRegStatusBadge":"vpp","onVppFilterChange":"vpp","filterVppByCard":"vpp","renderVppRegistrations":"vpp","editVppRegDraft":"vpp","runVppRegAction":"vpp","deleteVppRegAction":"vpp","openVppRegModal":"vpp","closeVppRegModal":"vpp","confirmProcessVppReg":"vpp","processVppReg":"vpp","vppPendingCatalog":"vpp","onVppCatalogFileChange":"vpp","createVppPeriod":"vpp","vppPeriodStatusBadge":"vpp","renderVppPeriods":"vpp","runVppPeriodAction":"vpp","closeVppPeriodAction":"vpp","deleteVppPeriodAction":"vpp","downloadVppExport":"vpp","renderVppReportPeriodOptions":"vpp","renderVppReports":"vpp","buildOfficeApprovalSlipHTML":"vpp","viewOfficeApprovalSlip":"vpp","viewOfficeSignedFile":"vpp","downloadOfficeApprovalSlip":"vpp","WF_MODULE_CONFIG":"workflow"};
+
+// TAB_MODULE_GROUPS: tabName (switchTab()) -> cac cum PHAI nap TRUOC KHI goi ham render/setXSubTab
+// tuong ung cua tab do (chi liet ke cum THAM CHIEU TRUC TIEP - loadModuleGroup() tu lo phan deps
+// bac cao hon). Tab khong co trong bang (approvalHub/dashboard) khong can nap gi them.
+const TAB_MODULE_GROUPS = {"approvalHub":[],"doc":["formbuilder-nav"],"task":["congviec"],"internal":["internalcomms-nhipsong"],"submission":["formbuilder-nav","vanbantrinh"],"contract":["hopdong"],"meeting":["formbuilder-nav","phonghop"],"minutes":["bienbanhop","formbuilder-nav"],"car":["dangkyxe"],"vpp":["vpp"],"uniform":["dongphuc"],"license":["formbuilder-nav"],"periodicReport":["baocaodinhky-nhap"],"office":["hopdong"],"reports":["baocaoquantri-preview"],"hr":["hcrcdonghanh"],"budget":["itsupport-tier"],"vanHanh":["vanhanh"],"dashboard":[],"system":["hethong-tabs"],"itSupport":["itsupport-price"]};
+
+const _loadedModuleGroups = {}; // groupKey -> Promise (cache, dam bao idempotent - goi lai khong nap lai)
+// _settledModuleGroups: groupKey da THUC SU nap xong (Promise cua no đa resolve), khong chi "da bat dau
+// nap". Dung de kiem tra DONG BO (khong qua await/microtask nao) xem 1 tabName da san sang hay chua —
+// xem switchTab() ben duoi: neu san sang, goi thang render dong bo (KHONG lui 1 nhip vi mo nao ca, giu
+// nguyen hanh vi dong bo y het truoc khi co Ha tang nap cum) thay vi luon await loadTabModuleGroups().
+const _settledModuleGroups = new Set();
+
+function _loadModuleScriptTag(fileName) {
+  return new Promise((resolve, reject) => {
+    const v = window.__ASSET_VERSION__ ? ("?v=" + encodeURIComponent(window.__ASSET_VERSION__)) : "";
+    const s = document.createElement("script");
+    // script.async = false: 1 the <script> TAO/CHEN DONG (document.createElement + appendChild) mac dinh
+    // chay o che do "async" NGAM (dung nhu <script async>) - moi file TAI XONG la THUC THI NGAY, KHONG
+    // theo dung thu tu da chen, du fetch/tai xong o thu tu nao. Vai file module-*.js CUNG 1 cum co tham
+    // chieu bare-identifier (khong phai goi ham, chi la GAN GIA TRI, vd 1 object cau hinh top-level gan
+    // thang 1 ham cua file khac lam field) o cap TOP LEVEL (khong nam trong than ham nao) - loai tham
+    // chieu nay CAN dung thu tu thuc thi giua cac file trong CUNG 1 cum (khac voi goi HAM, von an toan du
+    // thu tu nao vi luon duoc goi SAU, o thoi diem da nap het). Dat async=false phuc hoi dung hanh vi
+    // "thuc thi theo THU TU CHEN vao DOM" (giong het cach <script> tinh cu trong index.html tung chay) -
+    // xem MODULE_LOAD_GROUPS.<key>.files da duoc sap theo DUNG thu tu khoi script GOC (khong phai bang
+    // chu cai) o dau file nay, phat hien qua bo test hoi quy (renderOfficeReportExtra is not defined).
+    s.async = false;
+    s.src = "/js/" + fileName + v;
+    s.onload = () => resolve();
+    s.onerror = () => reject(new Error("Khong tai duoc mo-dun " + fileName));
+    document.head.appendChild(s);
+  });
+}
+
+// Nap 1 cum module-*.js (dung script tag dong, giu nguyen cache-busting ?v= cua Phan A) - tu dong
+// nap TRUOC/CUNG LUC moi cum khac ma cum nay phu thuoc (groups[key].deps, tinh de quy). Idempotent:
+// goi lai voi cung key tra ve DUNG promise cu (khong chen lai <script>, khong tai lai qua mang).
+// Loi mang/404 xoa cache de lan goi SAU co the thu lai (khong ket qua that bai vinh vien).
+function loadModuleGroup(key) {
+  if (_loadedModuleGroups[key]) return _loadedModuleGroups[key];
+  const grp = MODULE_LOAD_GROUPS[key];
+  if (!grp) return Promise.reject(new Error("Khong ro nhom module: " + key));
+  const p = Promise.all([
+    Promise.all((grp.deps || []).map(loadModuleGroup)),
+    Promise.all(grp.files.map(_loadModuleScriptTag))
+  ]).then(() => { _settledModuleGroups.add(key); });
+  _loadedModuleGroups[key] = p;
+  p.catch(() => { delete _loadedModuleGroups[key]; });
+  return p;
+}
+
+// true neu TAT CA cum can cho tabName đa nap xong THUC SU (khong chi dang nap dang bat dau) — cho phep
+// switchTab() goi render dong bo, khong lui nhip nao, khi tab da tung mo truoc do trong phien.
+function isTabModuleGroupsSettled(tabName) {
+  const keys = TAB_MODULE_GROUPS[tabName];
+  return !keys || keys.every(k => _settledModuleGroups.has(k));
+}
+
+// Nap tat ca cum can cho 1 tabName (TAB_MODULE_GROUPS[tabName], neu co) - dung o switchTab().
+function loadTabModuleGroups(tabName) {
+  const keys = TAB_MODULE_GROUPS[tabName];
+  if (!keys || !keys.length) return Promise.resolve();
+  return Promise.all(keys.map(loadModuleGroup)).then(() => {});
+}
+
+// Dam bao 1 ham toan cuc (goi qua TEN CHUOI - cspDispatchOp()/window[fnName]()) da san sang truoc
+// khi goi that - neu chua co (chua nap file dinh nghia no), tu dong nap dung cum roi resolve.
+// Tra loi ngay (Promise da resolve) neu ham co san - khong ton chi phi cho duong da nap.
+function ensureFnReady(fnName) {
+  if (typeof window[fnName] === "function") return Promise.resolve();
+  const grp = MODULE_FN_GROUP[fnName];
+  if (!grp) return Promise.reject(new Error("Khong ro mo-dun chua ham '" + fnName + "'"));
+  return loadModuleGroup(grp);
+}
+
+// loadVendorScript() — CHUYỂN từ module-internalcomms-daotao-viewer.js sang đây (Hạ tầng: nạp module
+// theo cụm, đợt 7). core-devicesecurity.js (WebAuthn vân tay/Face ID, luôn nạp sẵn — có thể được gọi
+// ngay ở màn đăng nhập, TRƯỚC khi có currentUser) và core.js (dưới đây) đều gọi thẳng hàm này để tải thư
+// viện /vendor/* CHỈ LÚC THỰC SỰ CẦN — không thể để nằm ở 1 file module-*.js được nạp lười theo tab.
+const _loadedVendorScripts = {};
+function loadVendorScript(src) {
+  if (_loadedVendorScripts[src]) return _loadedVendorScripts[src];
+  _loadedVendorScripts[src] = new Promise((resolve, reject) => {
+    const s = document.createElement('script');
+    s.src = src;
+    s.onload = () => resolve();
+    s.onerror = () => { delete _loadedVendorScripts[src]; reject(new Error('Không tải được thư viện ' + src)); };
+    document.head.appendChild(s);
+  });
+  return _loadedVendorScripts[src];
+}
+
+// SENSITIVE_CATEGORY_LABELS/SENSITIVE_CATEGORY_SEVERE - CHUYEN tu module-admin.js sang day (Ha tang:
+// nap module theo cum, dot 7) - getMyPendingApprovals() (core-approvalhub.js, luon nap san, quet binh
+// luan bi gan co nhay cam o MOI switchTab()) goi thang 2 hang so nay - khong the de nam o 1 file
+// module-*.js duoc nap luoi. CUC_DOAN/PHAN_DONG hien noi bat hon (do dam) trong man Phe Duyet.
+const SENSITIVE_CATEGORY_LABELS = { TUC_TIU: 'Tục tĩu', TIEU_CUC: 'Tiêu cực', CUC_DOAN: 'Cực đoan', PHAN_DONG: 'Phản động nhà nước' };
+const SENSITIVE_CATEGORY_SEVERE = new Set(['CUC_DOAN', 'PHAN_DONG']);
+
+// itPriceHasUnresolvedInfoRequest() - CHUYEN tu module-itsupport-price.js sang day (Ha tang: nap module
+// theo cum, dot 7) - getMyPendingApprovals() (core-approvalhub.js, luon nap san) goi thang ham nay o MOI
+// switchTab() de tinh badge trang thai cua hang muc "Phe Duyet Gia" trong Hop Thu Duyet Tong Hop.
+function itPriceHasUnresolvedInfoRequest(p) {
+  return (p.infoRequests || []).some(r => !r.response);
+}
+
 // --- KHỞI TẠO DỮ LIỆU DB v6.0 ---
 const DB = {
   depts: [], cats: [], users: [], docs: [],
@@ -951,6 +1075,25 @@ function matchesKeywordFields(fields, keyword) {
 // về true (coi như "không lọc được nên giữ lại") cho MỌI bản ghi có dateStr kiểu này — bộ lọc khoảng
 // ngày ở mọi báo cáo trong hệ thống thực chất KHÔNG lọc gì cả. Dùng parseVNDateTime() trước, chỉ khi
 // đó không parse được (dateStr đã là ISO, vd startTime của input datetime-local) mới rơi về new Date().
+// parseVNDateTime() - CHUYEN tu module-baocaoquantri.js sang day (Ha tang: nap module theo cum, dot 7):
+// isInDateRange() ngay duoi day (dung chung cho bo loc khoang ngay o hau het module) va nhieu noi khac
+// (core-approvalhub.js...) goi thang ham nay - khong the de nam o 1 file module-*.js duoc nap luoi.
+// Parse nguoc chuoi "HH:MM:SS D/M/YYYY" do new Date().toLocaleString('vi-VN') sinh ra (dinh dang co
+// dinh cua locale nay) - can thiet vi Date() khong tu parse lai duoc chuoi theo locale vi-VN.
+function parseVNDateTime(str) {
+  if (!str || typeof str !== 'string') return null;
+  const parts = str.trim().split(' ');
+  if (parts.length !== 2) return null;
+  const [timePart, datePart] = parts;
+  const timeBits = timePart.split(':').map(Number);
+  const dateBits = datePart.split('/').map(Number);
+  if (dateBits.length !== 3 || dateBits.some(isNaN)) return null;
+  const [h, mi, s] = timeBits;
+  const [d, mo, y] = dateBits;
+  const dt = new Date(y, mo - 1, d, h || 0, mi || 0, s || 0);
+  return isNaN(dt.getTime()) ? null : dt;
+}
+
 function isInDateRange(dateStr, fromDate, toDate) {
   if (!fromDate && !toDate) return true;
   const d = parseVNDateTime(dateStr) || new Date(dateStr);
@@ -4290,6 +4433,28 @@ function closeMobileSidebar() {
   document.getElementById('sidebarBackdrop').classList.add('hidden');
 }
 
+// Cập nhật thuộc tính accept của các ô chọn tệp TĨNH theo đúng cấu hình "Loại Tệp Cho Phép" của admin
+// (DB.uploadFileTypeConfig) — chỉ là gợi ý UI (bộ lọc chọn tệp của trình duyệt), việc chặn thật sự vẫn
+// do server quyết định (xem routes/upload.js). Module chưa cấu hình thì giữ nguyên accept mặc định có
+// sẵn trong HTML. Gọi lại sau khi lưu cấu hình ở admin để áp dụng ngay không cần tải lại trang. CHUYỂN từ
+// module-tailieu.js sang đây (Hạ tầng: nạp module theo cụm, đợt 7) — finishLogin() ngay dưới đây gọi hàm
+// này NGAY SAU đăng nhập, trước khi mở bất kỳ tab nào, nên không thể để nằm ở 1 module-*.js nạp lười.
+function applyUploadAcceptAttrs() {
+  const STATIC_INPUTS = {
+    doc: ['docFile'], submission: ['subFile', 'subExtraFiles'], contract: ['contractFile'], internal: ['internalFile']
+  };
+  const config = DB.uploadFileTypeConfig || {};
+  for (const moduleKey in STATIC_INPUTS) {
+    const allowed = config[moduleKey];
+    if (!Array.isArray(allowed) || !allowed.length) continue;
+    const acceptValue = allowed.join(',');
+    STATIC_INPUTS[moduleKey].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.setAttribute('accept', acceptValue);
+    });
+  }
+}
+
 function finishLogin(user) {
   currentUser = user;
   migrateDashboardHiddenCardsFromLocalStorage();
@@ -4346,16 +4511,26 @@ function finishLogin(user) {
 // hướng vào đúng màn "Đăng Ký Của Tôi" của Đào Tạo LMS rồi mở luôn modal làm bài, thay vì bắt học viên
 // tự bấm qua nhiều lớp điều hướng (Truyền thông > Đào tạo > Đăng Ký Của Tôi) trên điện thoại vừa quét
 // xong. Xoá query param khỏi URL ngay sau khi dùng — tải lại trang (F5) không tự mở lại modal lần nữa.
-function openTakeTestFromQueryParam() {
+async function openTakeTestFromQueryParam() {
   const params = new URLSearchParams(window.location.search);
   const classId = Number(params.get('takeTest'));
   if (!Number.isFinite(classId) || !params.has('takeTest')) return;
   history.replaceState(null, '', window.location.pathname);
   if (!canAccessInternalModule(currentUser)) return alert('⛔ Bạn không có quyền truy cập Module Truyền thông nội bộ để làm bài test.');
-  switchTab('internal');
-  setInternalSubTab('TRAINING');
-  setTrainingLmsTab('MY_REGS');
-  setTimeout(() => openTakeTestModal(classId), 200);
+  // Ha tang: nap module theo cum, dot 7 - switchTab() gio la ham bat dong bo (co the phai nap cum
+  // "internalcomms-nhipsong", cum nay tu dong keo theo cum "admin-permgroups" noi setTrainingLmsTab()/
+  // openTakeTestModal() (module-internalcomms-daotao.js) dinh nghia) - PHAI await xong roi moi goi tiep.
+  try {
+    await switchTab('internal');
+    setInternalSubTab('TRAINING');
+    await ensureFnReady('setTrainingLmsTab');
+    setTrainingLmsTab('MY_REGS');
+    await ensureFnReady('openTakeTestModal');
+    setTimeout(() => openTakeTestModal(classId), 200);
+  } catch (err) {
+    console.error('openTakeTestFromQueryParam: không tải được mô-đun Đào Tạo', err);
+    alert('⛔ Không tải được màn làm bài test. Vui lòng tải lại trang và thử lại.');
+  }
 }
 
 // Giữ phiên đăng nhập không bị hết hạn khi người dùng vẫn đang mở trang nhưng KHÔNG gọi API nào (vd.
@@ -4673,7 +4848,7 @@ function setActiveSidebarTab(tabName) {
   });
 }
 
-function switchTab(tabName) {
+async function switchTab(tabName) {
   if (!currentUser) return logout();
   closeMobileSidebar(); // Đóng sidebar off-canvas trên điện thoại mỗi khi chuyển màn hình (không ảnh hưởng desktop).
 
@@ -4793,6 +4968,30 @@ function switchTab(tabName) {
   if (['minutes', 'task', 'periodicReport'].includes(tabName)) renderCrossTabBar('dieuHanh', tabName);
   if (['meeting', 'car', 'vpp', 'uniform', 'license'].includes(tabName)) renderCrossTabBar('hanhChinh', tabName);
 
+  // Ha tang: nap module theo cum, dot 7 — file(s) module-*.js cua tab nay (neu co, xem TAB_MODULE_GROUPS
+  // dau file) co the CHUA nap (lan dau vao tab trong phien nay) — doi nap xong TRUOC KHI goi ham render/
+  // setXSubTab tuong ung o _dispatchTabRender(), tranh ReferenceError. Khong chan phan hien/an section o
+  // TREN (da chay xong, dong bo) — chi phan render THAT SU can file module bi hoan lai vai chuc mili-giay
+  // o lan dau. isTabModuleGroupsSettled() cho phep NHANH DONG BO (khong lui 1 nhip vi mo/microtask nao)
+  // khi tab nay (va cum cua no) DA tung mo trong phien — giu dung hanh vi dong bo y het truoc Ha tang nay,
+  // tranh 1 lop bug tinh vi: code goi switchTab(x) roi DOC LAI DOM ngay dong bo sau do (khong await) —
+  // nếu luon buoc qua await du chi 1 nhip, phan render se chay CHAM hon code doc sau, doc phai DOM CU
+  // (phat hien qua bo test hoi quy — xem VERSION.md).
+  if (isTabModuleGroupsSettled(tabName)) {
+    _dispatchTabRender(tabName);
+    return;
+  }
+  try {
+    await loadTabModuleGroups(tabName);
+  } catch (err) {
+    console.error('switchTab: không tải được mô-đun cho tab', tabName, err);
+    alert('⛔ Không tải được nội dung mô-đun. Vui lòng kiểm tra kết nối mạng và thử lại.');
+    return;
+  }
+  _dispatchTabRender(tabName);
+}
+
+function _dispatchTabRender(tabName) {
   if (tabName === 'dashboard') { renderDashboard(); }
   if (tabName === 'approvalHub') { renderApprovalHub(); }
   if (tabName === 'doc') {
@@ -4845,6 +5044,29 @@ function canAccessPaymentModule(user) {
   return !!(user?.perms?.admin || user?.perms?.paymentManage);
 }
 
+// canManagePaymentRequestsClient() - CHUYEN tu module-thanhtoan.js sang day (Ha tang: nap module theo
+// cum, dot 7) - getMyPendingApprovals() (core-approvalhub.js, luon nap san) goi thang ham nay o MOI
+// switchTab(), khong the de nam o 1 file module-*.js duoc nap luoi. Cung dieu kien voi
+// canAccessPaymentModule() ngay tren nhung giu ten rieng (dung o ngu canh khac trong code cu, khong doi
+// de tranh anh huong noi khac dang goi dung ten nay).
+function canManagePaymentRequestsClient(user) {
+  return !!(user?.perms?.admin || user?.perms?.paymentManage);
+}
+
+// canAggregateReportsClient() - CHUYEN tu module-baocaodinhky-nhap.js sang day (Ha tang: nap module theo
+// cum, dot 7) - buildDashboardCards() (core-dashboard.js, luon nap san) goi thang ham nay o MOI lan mo
+// trang chu (khong the de nam o 1 file module-*.js duoc nap luoi).
+function canAggregateReportsClient(user) {
+  return !!(user?.perms?.admin || user?.perms?.reportAggregate);
+}
+
+// isInternalPostScheduled() - CHUYEN tu module-internalcomms-nhipsong.js sang day (Ha tang: nap module
+// theo cum, dot 7) - renderDashboardNews() (core-dashboard.js, luon nap san) goi thang ham nay o MOI lan
+// mo trang chu.
+function isInternalPostScheduled(p) {
+  return p.type === 'NEWS' && p.status === 'APPROVED' && !!p.publishAt && new Date(p.publishAt).getTime() > Date.now();
+}
+
 // Ngân Sách — module con của "Tổng Hợp" (BUSINESS_MODULES parent:'office'). Phải có ÍT NHẤT 1 trong 3
 // quyền chi tiết (budgetCreate/budgetAggregate/budgetManage) mới vào được module — KHÔNG có "quyền mặc
 // định xem miễn phí" chỉ nhờ còn quyền vào module (mục 0), đúng khuôn canAccessOfficeModule() (đòi
@@ -4883,6 +5105,34 @@ function canAccessHrSubTab(user, subTab) {
   if (user.perms?.admin) return true;
   if (subTab === 'ORGCHART') return !!(user.perms?.orgChartManage || user.perms?.nhanSuManage);
   return !!user.perms?.nhanSuManage;
+}
+
+// isManagerOf()/workItemAssignees()/isWorkItemAssignee() — CHUYỂN từ module-hcrcdonghanh.js sang đây
+// (Hạ tầng: nạp module theo cụm, đợt 7 — tách JS thành cụm nạp lười theo tab). canAccessOperationModule()/
+// canAccessOperationSubTab() ngay dưới đây gọi thẳng 3 hàm này để tính hiện/ẩn nav "Vận Hành"
+// (updateVanHanhNavVisibility(), gọi từ finishLogin() NGAY SAU đăng nhập) — TRƯỚC KHI người dùng mở bất
+// kỳ tab nào, nên bắt buộc phải có sẵn ngay từ đầu, không thể nằm ở 1 file module-*.js được nạp lười khi
+// mở tab (module-hcrcdonghanh.js chỉ nạp khi vào tab "Nhân Sự"). 3 hàm này tự thân không phụ thuộc gì
+// khác trong module-hcrcdonghanh.js (chỉ dùng DB.users/tham số truyền vào) nên chuyển nguyên vẹn, không
+// đổi 1 dòng logic.
+function isManagerOf(managerUsername, targetUsername, allUsers) {
+  if (!managerUsername || !targetUsername) return false;
+  let cur = (allUsers || []).find(u => u.username === targetUsername);
+  for (let i = 0; i < 50 && cur?.managerUsername; i++) {
+    if (cur.managerUsername === managerUsername) return true;
+    cur = (allUsers || []).find(u => u.username === cur.managerUsername);
+  }
+  return false;
+}
+// workItemAssignees()/isWorkItemAssignee() (Mục E, Vận Hành > Siêu Thị > Thực hiện) — mirror ĐÚNG bản
+// server ở lib/recordActions.js (không import chung được giữa 2 phía, xem ghi chú ở đó). assignedTo giờ
+// là string[]|null (trước đây string|null) — workItemAssignees() tự tương thích ngược với dữ liệu CŨ.
+function workItemAssignees(w) {
+  const a = w?.assignedTo;
+  return Array.isArray(a) ? a.filter(Boolean) : (a ? [a] : []);
+}
+function isWorkItemAssignee(w, username) {
+  return !!username && workItemAssignees(w).includes(username);
 }
 
 // Vận Hành — module TOP-LEVEL mới, 3 luồng ĐỘC LẬP (operationOrders/operationStoreOpenings/
@@ -4926,6 +5176,13 @@ function canAccessOperationSubTab(user, kind) {
   }
   return false;
 }
+
+// activeOperationStoreSubTab — CHUYỂN từ module-vanhanh.js sang đây (Hạ tầng: nạp module theo cụm, đợt
+// 7): updateOperationStoreSubTabVisibility() ngay dưới đây đọc/ghi biến này, gọi từ finishLogin() NGAY
+// SAU đăng nhập — TRƯỚC KHI người dùng mở tab "Vận Hành" — nên không thể để khai báo nằm ở module-vanhanh.js
+// (chỉ nạp lười khi vào tab đó). setOperationStoreSubTab()/switchSubTab (module-vanhanh.js) vẫn đọc/ghi
+// đúng biến toàn cục này bình thường (biến top-level dùng chung mọi <script> cổ điển trên trang).
+let activeOperationStoreSubTab = 'OPEN';
 
 // Ẩn/hiện từng nút sub-tab cấp 2 bên trong "🏬 Siêu Thị" theo đúng quyền (khác cấp 1 chỉ cần 1 quyền
 // bất kỳ để hiện tab cha) — nếu tab đang active bị ẩn, tự chuyển sang tab hợp lệ đầu tiên.
@@ -5019,6 +5276,23 @@ function setOfficeSubTab(subTab) {
 // hợp lệ (cùng khuôn subTypeSel ở populateDropdowns()). Gọi lại mỗi khi DB.internalNewsCategories/
 // internalShareCategories đổi (populateDropdowns() sau initDatabase()/sau khi admin lưu danh sách ở màn
 // Biểu Mẫu) — KHÔNG phụ thuộc activeInternalSubTab, setInternalSubTab() chỉ lo ẩn/hiện wrapper.
+// Chức Danh (uJobTitle) phụ thuộc Vị Trí (uPosType, mục 4a) — HO dùng DB.jobTitles (Khối Văn Phòng),
+// Siêu Thị dùng DB.storeJobTitles (mảng {label, restrictedFromSelfService}). KHÔNG lọc
+// restrictedFromSelfService ở đây — hạn chế đó chỉ áp dụng cho form RÚT GỌN "Quản Lý Nhân Viên Siêu
+// Thị" (mục 4b); form Người Dùng đầy đủ này do Admin/uniformManage thao tác nên vẫn chọn được mọi chức
+// danh siêu thị, kể cả chức danh đã bị khoá tự tạo. Tách khỏi populateDropdowns() (logic tĩnh cũ) để
+// gọi lại được riêng mỗi khi đổi Vị Trí, không cần render lại toàn bộ dropdown khác của trang. CHUYỂN từ
+// module-admin-submissiongroups.js sang đây (Hạ tầng: nạp module theo cụm, đợt 7) — populateDropdowns()
+// gọi thẳng hàm này ở MỌI switchTab(), không riêng gì tab Hệ Thống/Admin.
+function populateUserJobTitleOptions(posType) {
+  const uJobTitle = document.getElementById('uJobTitle');
+  if (!uJobTitle) return;
+  const current = uJobTitle.value;
+  const options = posType === 'STORE' ? (DB.storeJobTitles || []).map(t => t.label) : (DB.jobTitles || []);
+  uJobTitle.innerHTML = '<option value="">-- Chưa gán --</option>' + options.map(t => `<option value="${escapeHtml(t)}">${escapeHtml(t)}</option>`).join('');
+  if (options.includes(current)) uJobTitle.value = current;
+}
+
 function populateInternalPostCategorySelects() {
   const fillCategorySelect = (selId, list) => {
     const sel = document.getElementById(selId);
@@ -5431,7 +5705,10 @@ function downloadCarApprovalSlip(carId) {
 // data-arg-event="0" ở trên để nhận đúng Event thật.
 function stopEventPropagation(e) { e.stopPropagation(); }
 function cspCoerceArg(raw) {
-  return /^-?\d+$/.test(raw) ? Number(raw) : raw;
+  // Bo dau nhay bao ngoai neu co (vd data-op-seq="fn('literal')" — thay vi quy uoc thong thuong khong
+  // dau nhay "fn(literal)") — cac gia tri con lai (khong dau nhay) giu nguyen hanh vi cu, khong doi.
+  const unquoted = /^'(.*)'$/.test(raw) ? raw.slice(1, -1) : raw;
+  return /^-?\d+$/.test(unquoted) ? Number(unquoted) : unquoted;
 }
 function cspReadArgSlot(el, i, evt) {
   if (el.dataset.argValue !== undefined && Number(el.dataset.argValue) === i) return el.value;
@@ -5453,24 +5730,75 @@ function cspCollectArgs(el, evt) {
   for (let i = 0; i <= maxIdx; i++) args.push(cspReadArgSlot(el, i, evt));
   return args;
 }
+// cspRunSeq()/cspDispatchOp() — Ha tang: nap module theo cum, dot 7. TRUOC DAY 2 ham nay goi thang
+// window[fnName] dong bo, gia dinh ham CHAC CHAN da co san (dung khi moi file module-*.js deu nap EAGER
+// tu dau). Gio 1 phan file module-*.js chi nap LUOI khi vao dung tab/cum lien quan lan dau — ham dich co
+// the CHUA co san tai thoi diem bam nut (vd nhay tu Trang chu/Approval Hub sang 1 module chua tung mo).
+//
+// QUAN TRONG: khi ham dich DA san sang (truong hop bau troi 99% — cum da nap tu truoc), 2 ham nay PHAI
+// goi no THAT SU DONG BO, khong qua bat ky await nao — kể ca `await Promise.resolve()` cũng lùi 1 tick
+// vi mo (microtask) so voi truoc day (goi thang window[fnName]() ngay lap tuc). 1 vai noi trong code (vd
+// onUserPermGroupsChange(), gan qua data-op-change de cap nhat lai form NGAY khi tick nhom phan quyen)
+// dua vao dung tinh dong bo nay: code goi sau do (readUserFormState() trong cung 1 hop callback dong bo)
+// doc lai DOM ngay lap tuc, TRUOC KHI event-loop kip chay bat ky microtask nao — nếu chèn 1 await vào
+// giữa, ham cap nhat form se chay CHAM 1 nhip, và code doc sau đó thay DOM CHUA duoc cap nhat (bug thuc
+// su phat hien qua bo test hoi quy — xem VERSION.md). Vi vay: kiem tra typeof window[fnName] TRUOC, chi
+// rơi vao nhanh await ensureFnReady() (co doi 1 nhip) o CHINH XAC truong hop hiem — ham thuc su chua nap.
 function cspRunSeq(seqStr) {
-  seqStr.split('|').forEach(part => {
-    const m = /^([A-Za-z_$][\w$]*)\((.*)\)$/.exec(part);
-    if (!m) return;
-    const fn = window[m[1]];
-    if (typeof fn !== 'function') return;
-    const argStr = m[2];
-    const args = argStr.length ? argStr.split(',').map(cspCoerceArg) : [];
-    fn.apply(null, args);
-  });
+  const parts = seqStr.split('|');
+  let i = 0;
+  function runFromCurrentIndex() {
+    while (i < parts.length) {
+      const part = parts[i++];
+      const m = /^([A-Za-z_$][\w$]*)\((.*)\)$/.exec(part);
+      if (!m) continue;
+      const fnName = m[1];
+      const fn = window[fnName];
+      if (typeof fn === 'function') {
+        const argStr = m[2];
+        const args = argStr.length ? argStr.split(',').map(cspCoerceArg) : [];
+        const result = fn.apply(null, args);
+        // fn tra ve Promise (vd switchTab(), gio la ham bat dong bo) — buoc SAU trong chuoi co the phu
+        // thuoc cum vua duoc fn nap xong, PHAI cho xong roi moi tiep tuc (khong thi tiep tuc ngay dong bo).
+        if (result && typeof result.then === 'function') {
+          return result.then(runFromCurrentIndex, err => {
+            console.error('CSP dispatch (seq):', fnName, err);
+            alert('⛔ Không tải được phần chức năng cần thiết. Vui lòng tải lại trang và thử lại.');
+          });
+        }
+        continue;
+      }
+      // Ham CHUA nap — nhanh hiem, chi xay ra o lan dau vao 1 cum module-*.js chua tung mo trong phien.
+      return ensureFnReady(fnName).then(() => {
+        const fn2 = window[fnName];
+        if (typeof fn2 !== 'function') return;
+        const argStr = m[2];
+        const args = argStr.length ? argStr.split(',').map(cspCoerceArg) : [];
+        return fn2.apply(null, args);
+      }).then(runFromCurrentIndex, err => {
+        console.error('CSP dispatch (seq): không tải được mô-đun cho hàm', fnName, err);
+        alert('⛔ Không tải được phần chức năng cần thiết. Vui lòng tải lại trang và thử lại.');
+      });
+    }
+  }
+  return runFromCurrentIndex();
 }
 function cspDispatchOp(el, evt, attrName) {
   const fnName = el.getAttribute(attrName);
   if (!fnName) return;
   if (el.dataset.opPreventDefault === '1') evt.preventDefault();
+  const args = cspCollectArgs(el, evt);
   const fn = window[fnName];
-  if (typeof fn !== 'function') { console.error('CSP dispatch: không tìm thấy hàm', fnName); return; }
-  fn.apply(null, cspCollectArgs(el, evt));
+  if (typeof fn === 'function') { fn.apply(null, args); return; }
+  // Nhanh hiem: ham chua nap (cum module-*.js chua tung mo trong phien) — nap xong roi goi lai.
+  ensureFnReady(fnName).then(() => {
+    const fn2 = window[fnName];
+    if (typeof fn2 !== 'function') { console.error('CSP dispatch: không tìm thấy hàm', fnName); return; }
+    fn2.apply(null, args);
+  }).catch(err => {
+    console.error('CSP dispatch: không tải được mô-đun cho hàm', fnName, err);
+    alert('⛔ Không tải được phần chức năng cần thiết. Vui lòng tải lại trang và thử lại.');
+  });
 }
 function bindCspDelegation(rootId) {
   const root = document.getElementById(rootId);
@@ -5499,8 +5827,17 @@ function bindCspDelegation(rootId) {
     const el = e.target.closest('[data-op-submit]');
     if (!el || !root.contains(el)) return;
     if (el.dataset.opPreventDefault === '1') e.preventDefault();
-    const fn = window[el.getAttribute('data-op-submit')];
-    if (typeof fn === 'function') fn(e);
+    const fnName = el.getAttribute('data-op-submit');
+    const fn = window[fnName];
+    if (typeof fn === 'function') { fn(e); return; }
+    // Nhanh hiem: ham chua nap (cum module-*.js chua tung mo trong phien) — nap xong roi goi lai.
+    ensureFnReady(fnName).then(() => {
+      const fn2 = window[fnName];
+      if (typeof fn2 === 'function') fn2(e);
+    }).catch(err => {
+      console.error('CSP dispatch (submit): không tải được mô-đun cho hàm', fnName, err);
+      alert('⛔ Không tải được phần chức năng cần thiết. Vui lòng tải lại trang và thử lại.');
+    });
   });
 }
 bindCspDelegation('userHeader');
@@ -5857,6 +6194,15 @@ bindCspDelegation('signedUploadModal');
 // dùng chung cho NHIỀU input khác nhau (khớp cách 1 datalist cũ phục vụ nhiều input, vd
 // systemUsersDatalist) — tự định vị lại theo ĐÚNG ô đang có focus mỗi lần hiện.
 // ==========================================
+// stripVnDiacritics() - CHUYEN tu module-tailieu.js sang day (Ha tang: nap module theo cum, dot 7) -
+// sddRenderRows() ngay duoi day goi thang ham nay khi go vao BAT KY o tim-kiem-go-chon (widget "sdd*")
+// nao trong toan he thong, dung chung cho hau het module (xem CLAUDE.md) - khong the de nam o 1 file
+// module-*.js duoc nap luoi. Bo dau tieng Viet de suy ra viet tat - dd/DD khong tach duoc qua NFD nen
+// xu ly rieng.
+function stripVnDiacritics(str) {
+  return (str || '').normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/đ/g, 'd').replace(/Đ/g, 'D');
+}
+
 function sddSetOptions(dropdownId, items) {
   const dd = document.getElementById(dropdownId);
   if (!dd) return;

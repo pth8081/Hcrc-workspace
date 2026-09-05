@@ -454,9 +454,8 @@ function canViewItPriceApproval(user, p) {
 // Còn ít nhất 1 yêu cầu bổ sung CHƯA được người đề xuất phản hồi (chưa tải tệp bổ sung) — dùng chung
 // item.infoRequests giữa nhánh REQUEST_INFO của người duyệt phòng ban (đang PENDING) và nhánh của đội
 // Hỗ Trợ IT (sau khi đã APPROVED, trước khi áp giá), xem lib/workflowEngine.js + lib/recordActions.js.
-function itPriceHasUnresolvedInfoRequest(p) {
-  return (p.infoRequests || []).some(r => !r.response);
-}
+// itPriceHasUnresolvedInfoRequest() da chuyen sang core.js (Ha tang: nap module theo cum, dot 7) -
+// getMyPendingApprovals() (core-approvalhub.js, luon nap san) goi thang ham nay o MOI switchTab().
 
 function itPriceStatusBadge(p) {
   if (p.status === 'REJECTED') return `<span class="px-2 py-0.5 bg-red-100 text-red-800 rounded font-bold text-xs">❌ Từ chối</span>`;

@@ -172,26 +172,10 @@ function getDirectReports(username, allUsers) {
 }
 // isManagerOf(): mirror ĐÚNG lib/recordViewScope.js — dùng ở Phần D (trưởng phòng xem việc nhân viên)
 // và để chặn chọn cấp dưới (trực tiếp/gián tiếp) làm quản lý của chính mình trong picker bên dưới.
-function isManagerOf(managerUsername, targetUsername, allUsers) {
-  if (!managerUsername || !targetUsername) return false;
-  let cur = (allUsers || []).find(u => u.username === targetUsername);
-  for (let i = 0; i < 50 && cur?.managerUsername; i++) {
-    if (cur.managerUsername === managerUsername) return true;
-    cur = (allUsers || []).find(u => u.username === cur.managerUsername);
-  }
-  return false;
-}
-
-// workItemAssignees()/isWorkItemAssignee() (Mục E, Vận Hành > Siêu Thị > Thực hiện) — mirror ĐÚNG bản
-// server ở lib/recordActions.js (không import chung được giữa 2 phía, xem ghi chú ở đó). assignedTo giờ
-// là string[]|null (trước đây string|null) — workItemAssignees() tự tương thích ngược với dữ liệu CŨ.
-function workItemAssignees(w) {
-  const a = w?.assignedTo;
-  return Array.isArray(a) ? a.filter(Boolean) : (a ? [a] : []);
-}
-function isWorkItemAssignee(w, username) {
-  return !!username && workItemAssignees(w).includes(username);
-}
+// isManagerOf()/workItemAssignees()/isWorkItemAssignee() chuyển sang core.js (Hạ tầng: nạp module theo
+// cụm, đợt 7) — canAccessOperationModule()/canAccessOperationSubTab() (core.js) gọi thẳng 3 hàm này để
+// tính hiện/ẩn nav "Vận Hành" ngay sau đăng nhập, TRƯỚC KHI người dùng mở bất kỳ tab nào, nên KHÔNG thể
+// để nằm ở 1 module-*.js được nạp lười (xem chú thích ở core.js).
 
 function renderOrgChart() {
   const container = document.getElementById('orgChartContainer');

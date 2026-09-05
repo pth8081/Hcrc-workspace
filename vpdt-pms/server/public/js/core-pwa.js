@@ -78,13 +78,16 @@ const PWA_SUBTAB_SETTERS = {
   contract: 'setContractSubTab', internal: 'setInternalSubTab',
   office: 'setOfficeSubTab', itSupport: 'setItSupportSubTab', vanHanh: 'setVanHanhSubTab'
 };
-function applyPwaShortcutParam() {
+async function applyPwaShortcutParam() {
   if (!pwaShortcutParam) return;
   const [moduleKey, subTabKey] = pwaShortcutParam.split(':');
   window.history.replaceState({}, '', window.location.pathname);
   if (typeof switchTab !== 'function') return;
   try {
-    switchTab(moduleKey);
+    // Ha tang: nap module theo cum, dot 7 - switchTab() gio la ham bat dong bo (co the phai nap 1 cum
+    // module-*.js chua tung mo) - PHAI cho no xong (await) TRUOC KHI goi setterName ngay sau, vi setterName
+    // (setContractSubTab/setInternalSubTab/...) dinh nghia trong CHINH cum vua nap.
+    await switchTab(moduleKey);
     const setterName = subTabKey && PWA_SUBTAB_SETTERS[moduleKey];
     if (setterName && typeof window[setterName] === 'function') window[setterName](subTabKey);
   } catch (e) { console.warn('Không mở được phím tắt PWA:', pwaShortcutParam, e.message); }

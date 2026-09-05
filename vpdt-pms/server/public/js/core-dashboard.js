@@ -97,26 +97,30 @@ function buildDashboardCards(user) {
   const cards = [];
   function addCard(cfg) { dashboardCardActions[cfg.key] = cfg.action; cards.push(cfg); }
 
+  // Ha tang: nap module theo cum, dot 7 - switchTab() gio la HAM BAT DONG BO (co the phai nap 1 cum
+  // module-*.js chua tung mo trong phien) - MOI action() ben duoi PHAI await switchTab() truoc khi goi
+  // setXSubTab()/applyPendingStatusFilter() ngay sau (ca 2 co the dinh nghia trong CHINH cum vua nap).
+
   const docCount = countDeptWorkflowPending(DB.docs, doc => DB.deptWorkflows[doc.dept], user);
   addCard({ key: 'doc', icon: '📂', label: 'Tài liệu chờ duyệt', count: docCount, show: docCount > 0,
-    action: () => { switchTab('doc'); applyPendingStatusFilter('filterStatus', onFilterChange); } });
+    action: async () => { await switchTab('doc'); applyPendingStatusFilter('filterStatus', onFilterChange); } });
 
   const subCount = countDeptWorkflowPending(DB.submissions, sub => resolveSubmissionWorkflow(sub), user);
   addCard({ key: 'submission', icon: '📜', label: 'Văn bản trình chờ duyệt', count: subCount, show: subCount > 0,
-    action: () => { switchTab('submission'); applyPendingStatusFilter('filterStatusSub', onSubFilterChange); } });
+    action: async () => { await switchTab('submission'); applyPendingStatusFilter('filterStatusSub', onSubFilterChange); } });
 
   const contractCount = countDeptWorkflowPending((DB.contracts || []).filter(c => !c.isAddendum), c => resolveContractApprovalWorkflow(c), user, 'approvalStatus');
   addCard({ key: 'contract', icon: '📄', label: 'Hợp đồng chờ duyệt', count: contractCount, show: contractCount > 0,
-    action: () => { switchTab('contract'); setContractSubTab('APPROVAL'); } });
+    action: async () => { await switchTab('contract'); setContractSubTab('APPROVAL'); } });
 
   const meetingCanApprove = canApproveMeeting(user);
   const meetingCount = meetingCanApprove ? (DB.meetings || []).filter(m => m.status === 'PENDING').length : 0;
   addCard({ key: 'meeting', icon: '📅', label: 'Đặt phòng họp chờ duyệt', count: meetingCount, show: meetingCanApprove,
-    action: () => { switchTab('meeting'); applyPendingStatusFilter('filterStatusMeeting', onMeetingFilterChange); } });
+    action: async () => { await switchTab('meeting'); applyPendingStatusFilter('filterStatusMeeting', onMeetingFilterChange); } });
 
   const carCount = countDeptWorkflowPending(DB.carRegs, c => DB.carDeptWorkflows[c.dept], user);
   addCard({ key: 'car', icon: '🚗', label: 'Đăng ký xe chờ duyệt', count: carCount, show: carCount > 0,
-    action: () => { switchTab('car'); applyPendingStatusFilter('filterStatusCar', onCarFilterChange); } });
+    action: async () => { await switchTab('car'); applyPendingStatusFilter('filterStatusCar', onCarFilterChange); } });
 
   [
     { key: 'officeBuy', subType: 'MUA_BAN', icon: '🛒', label: 'Mua Bán chờ duyệt' },
@@ -126,27 +130,27 @@ function buildDashboardCards(user) {
     const subTypeReqs = (DB.officeReqs || []).filter(o => o.subType === subType);
     const count = countDeptWorkflowPending(subTypeReqs, o => wfMap[o.dept], user);
     addCard({ key, icon, label, count, show: count > 0,
-      action: () => { switchTab('office'); setOfficeSubTab(subType); applyPendingStatusFilter('filterStatusOffice', onOfficeFilterChange); } });
+      action: async () => { await switchTab('office'); setOfficeSubTab(subType); applyPendingStatusFilter('filterStatusOffice', onOfficeFilterChange); } });
   });
 
   const paymentCanManage = canManagePaymentRequestsClient(user);
   const paymentCount = paymentCanManage ? (DB.paymentRequests || []).filter(pr => pr.status === 'PENDING' || pr.status === 'NEED_INFO').length : 0;
   addCard({ key: 'payment', icon: '💰', label: 'Thanh toán chờ duyệt', count: paymentCount, show: paymentCanManage,
-    action: () => { switchTab('office'); setOfficeSubTab('PAYMENT'); } });
+    action: async () => { await switchTab('office'); setOfficeSubTab('PAYMENT'); } });
 
   const vppCount = countDeptWorkflowPending(DB.vppRegistrations, r => DB.vppDeptWorkflows[r.dept], user);
   addCard({ key: 'vpp', icon: '🖇️', label: 'Văn phòng phẩm chờ duyệt', count: vppCount, show: vppCount > 0,
-    action: () => { switchTab('vpp'); setVppSubTab('REGISTER'); } });
+    action: async () => { await switchTab('vpp'); setVppSubTab('REGISTER'); } });
 
   const reportAggCan = canAggregateReportsClient(user);
   const reportAggCount = reportAggCan ? (DB.reportEntries || []).filter(e => e.status === 'SUBMITTED').length : 0;
   addCard({ key: 'periodicReport', icon: '📅', label: 'Báo cáo định kỳ chờ tổng hợp', count: reportAggCount, show: reportAggCan,
-    action: () => { switchTab('periodicReport'); setPeriodicReportSubTab('AGGREGATE'); } });
+    action: async () => { await switchTab('periodicReport'); setPeriodicReportSubTab('AGGREGATE'); } });
 
   const shareCanApprove = canApproveInternalPost(user);
   const shareCount = shareCanApprove ? (DB.internalPosts || []).filter(p => p.type === 'SHARE' && p.status === 'PENDING').length : 0;
   addCard({ key: 'internalShare', icon: '💬', label: 'Góc chia sẻ chờ duyệt', count: shareCount, show: shareCanApprove,
-    action: () => { switchTab('internal'); setInternalSubTab('SHARE'); } });
+    action: async () => { await switchTab('internal'); setInternalSubTab('SHARE'); } });
 
   const taskCount = (DB.tasks || []).filter(t => taskNeedsMyAction(t, user)).length;
   addCard({ key: 'task', icon: '📋', label: 'Công việc cần xử lý', count: taskCount, show: true,
@@ -157,7 +161,7 @@ function buildDashboardCards(user) {
 
 function handleDashboardCardClick(key) {
   const fn = dashboardCardActions[key];
-  if (fn) fn();
+  if (fn) Promise.resolve(fn()).catch(err => console.error('handleDashboardCardClick:', key, err));
 }
 
 function renderDashboard() {

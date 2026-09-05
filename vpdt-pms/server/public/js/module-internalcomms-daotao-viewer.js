@@ -1,15 +1,6 @@
-  const _loadedVendorScripts = {};
-  function loadVendorScript(src) {
-    if (_loadedVendorScripts[src]) return _loadedVendorScripts[src];
-    _loadedVendorScripts[src] = new Promise((resolve, reject) => {
-      const s = document.createElement('script');
-      s.src = src;
-      s.onload = () => resolve();
-      s.onerror = () => { delete _loadedVendorScripts[src]; reject(new Error('Không tải được thư viện ' + src)); };
-      document.head.appendChild(s);
-    });
-    return _loadedVendorScripts[src];
-  }
+  // loadVendorScript() chuyển sang core.js (Hạ tầng: nạp module theo cụm, đợt 7) — core-devicesecurity.js
+  // (WebAuthn, luôn nạp sẵn) cũng gọi thẳng hàm này nên KHÔNG thể để nằm ở 1 module-*.js được nạp lười,
+  // xem chú thích ở core.js. File này giữ nguyên phần còn lại (renderWordProtected/renderExcelProtected/...).
 
   function buildOfficeWatermarkOverlayEl() {
     const wm = document.createElement('div');

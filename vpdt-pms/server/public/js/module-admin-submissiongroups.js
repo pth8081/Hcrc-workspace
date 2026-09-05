@@ -100,20 +100,8 @@ function onUserPosTypeChange() {
   populateUserJobTitleOptions(posType);
 }
 
-// Chức Danh (uJobTitle) phụ thuộc Vị Trí (uPosType, mục 4a) — HO dùng DB.jobTitles (Khối Văn Phòng),
-// Siêu Thị dùng DB.storeJobTitles (mảng {label, restrictedFromSelfService}). KHÔNG lọc
-// restrictedFromSelfService ở đây — hạn chế đó chỉ áp dụng cho form RÚT GỌN "Quản Lý Nhân Viên Siêu
-// Thị" (mục 4b); form Người Dùng đầy đủ này do Admin/uniformManage thao tác nên vẫn chọn được mọi chức
-// danh siêu thị, kể cả chức danh đã bị khoá tự tạo. Tách khỏi populateDropdowns() (logic tĩnh cũ) để
-// gọi lại được riêng mỗi khi đổi Vị Trí, không cần render lại toàn bộ dropdown khác của trang.
-function populateUserJobTitleOptions(posType) {
-  const uJobTitle = document.getElementById('uJobTitle');
-  if (!uJobTitle) return;
-  const current = uJobTitle.value;
-  const options = posType === 'STORE' ? (DB.storeJobTitles || []).map(t => t.label) : (DB.jobTitles || []);
-  uJobTitle.innerHTML = '<option value="">-- Chưa gán --</option>' + options.map(t => `<option value="${escapeHtml(t)}">${escapeHtml(t)}</option>`).join('');
-  if (options.includes(current)) uJobTitle.value = current;
-}
+// populateUserJobTitleOptions() CHUYỂN sang core.js (Hạ tầng: nạp module theo cụm, đợt 7) —
+// populateDropdowns() gọi thẳng hàm này ở MỌI switchTab() (không riêng gì tab Hệ Thống/Admin).
 
 function readUserFormState() {
   const editId = document.getElementById('editUserId').value;

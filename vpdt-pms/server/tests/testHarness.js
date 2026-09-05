@@ -505,6 +505,10 @@ async function launchPage(port, state) {
   page.on('console', (msg) => { if (msg.type() === 'error') console.error('CONSOLE ERROR:', msg.text()); });
 
   await page.goto(`http://127.0.0.1:${port}/index.html`, { waitUntil: 'load' });
+  // Ha tang: nap module theo cum, dot 7 (server/public/js/*.js) - test o day drive truc tiep ham
+  // module-*.js qua page.evaluate() thay vi luon di qua switchTab() nhu nguoi dung that, nen chu dong nap
+  // TOAN BO cum module ngay tu dau (gia lap 1 phien da tung mo het moi tab) - khong doi ket qua test nao.
+  await page.evaluate(() => Promise.all(Object.keys(typeof MODULE_LOAD_GROUPS !== 'undefined' ? MODULE_LOAD_GROUPS : {}).map(k => loadModuleGroup(k))));
 
   // Seed các stub trình duyệt cần trước khi gọi finishLogin()/các hành động nghiệp vụ — chạy SAU khi
   // trang đã load xong (index.html là 1 script cổ điển, không phải module — mọi `let`/`const`/function

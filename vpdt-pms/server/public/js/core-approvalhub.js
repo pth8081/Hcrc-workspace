@@ -516,28 +516,37 @@ function getMyProcessedApprovals(user, status, sinceMs) {
 // ô lọc trạng thái riêng) đúng bộ lọc khớp trạng thái đang xem ở Hub, để thấy ngay đúng hồ sơ mà không
 // cần tự lọc lại thủ công. CHỈ điều hướng UI, không đọc/ghi gì thêm — hồ sơ luôn nằm nguyên ở module gốc
 // (đúng nguyên tắc Hub thuần lớp UI tổng hợp, xem đầu khối PHÊ DUYỆT).
-function gotoApprovalHubOrigin(type) {
+// Ha tang: nap module theo cum, dot 7 - switchTab() gio la HAM BAT DONG BO (co the phai nap 1 cum
+// module-*.js chua tung mo trong phien) - PHAI cho no nap XONG (await) TRUOC KHI goi setXSubTab()/
+// setStatus() ngay sau, neu khong cac ham do (dinh nghia trong CHINH cum vua await) co the chay truoc
+// khi cum kip nap xong, gay ReferenceError hoac chay tren DOM chua san sang.
+async function gotoApprovalHubOrigin(type) {
   const status = document.getElementById('approvalHubFilterStatus').value || 'APPROVED';
   const setStatus = (selectId, onChangeFn) => {
     const el = document.getElementById(selectId);
     if (el) { el.value = status; onChangeFn(); }
   };
-  switch (type) {
-    case 'doc': switchTab('doc'); setStatus('filterStatus', onFilterChange); break;
-    case 'submission': switchTab('submission'); setStatus('filterStatusSub', onSubFilterChange); break;
-    case 'car': switchTab('car'); setStatus('filterStatusCar', onCarFilterChange); break;
-    case 'officeBuy': switchTab('office'); setOfficeSubTab('MUA_BAN'); setStatus('filterStatusOffice', onOfficeFilterChange); break;
-    case 'officeFix': switchTab('office'); setOfficeSubTab('SUA_CHUA'); setStatus('filterStatusOffice', onOfficeFilterChange); break;
-    case 'vpp': switchTab('vpp'); setVppSubTab('REGISTER'); break;
-    case 'itPrice': switchTab('itSupport'); setItSupportSubTab('PRICE'); setStatus('filterStatusItPrice', onItPriceFilterChange); break;
-    case 'budget': switchTab('budget'); break;
-    case 'contract': switchTab('contract'); setContractSubTab('APPROVAL'); break;
-    case 'contractSigned': switchTab('contract'); setContractSubTab('MANAGE'); break;
-    case 'meeting': switchTab('meeting'); setStatus('filterStatusMeeting', onMeetingFilterChange); break;
-    case 'internalShare': switchTab('internal'); setInternalSubTab('SHARE'); break;
-    case 'payment': switchTab('office'); setOfficeSubTab('PAYMENT'); break;
-    case 'license': switchTab('license'); setStatus('filterLicenseStatus', onLicenseFilterChange); break;
-    default: switchTab('approvalHub');
+  try {
+    switch (type) {
+      case 'doc': await switchTab('doc'); setStatus('filterStatus', onFilterChange); break;
+      case 'submission': await switchTab('submission'); setStatus('filterStatusSub', onSubFilterChange); break;
+      case 'car': await switchTab('car'); setStatus('filterStatusCar', onCarFilterChange); break;
+      case 'officeBuy': await switchTab('office'); setOfficeSubTab('MUA_BAN'); setStatus('filterStatusOffice', onOfficeFilterChange); break;
+      case 'officeFix': await switchTab('office'); setOfficeSubTab('SUA_CHUA'); setStatus('filterStatusOffice', onOfficeFilterChange); break;
+      case 'vpp': await switchTab('vpp'); setVppSubTab('REGISTER'); break;
+      case 'itPrice': await switchTab('itSupport'); setItSupportSubTab('PRICE'); setStatus('filterStatusItPrice', onItPriceFilterChange); break;
+      case 'budget': await switchTab('budget'); break;
+      case 'contract': await switchTab('contract'); setContractSubTab('APPROVAL'); break;
+      case 'contractSigned': await switchTab('contract'); setContractSubTab('MANAGE'); break;
+      case 'meeting': await switchTab('meeting'); setStatus('filterStatusMeeting', onMeetingFilterChange); break;
+      case 'internalShare': await switchTab('internal'); setInternalSubTab('SHARE'); break;
+      case 'payment': await switchTab('office'); setOfficeSubTab('PAYMENT'); break;
+      case 'license': await switchTab('license'); setStatus('filterLicenseStatus', onLicenseFilterChange); break;
+      default: await switchTab('approvalHub');
+    }
+  } catch (err) {
+    console.error('gotoApprovalHubOrigin: không tải được mô-đun đích', type, err);
+    alert('⛔ Không tải được nội dung mô-đun. Vui lòng kiểm tra kết nối mạng và thử lại.');
   }
 }
 
@@ -546,7 +555,19 @@ function gotoApprovalHubOrigin(type) {
 function updateApprovalHubBadge() {
   const label = document.getElementById('approvalHubNavLabel');
   updateInternalShareBadge();
-  updateHrFeedbackBadge();
+  // updateHrFeedbackBadge() (module-hcrcdonghanh.js, cụm "hcrcdonghanh") gọi Ở MỌI switchTab()/lần đăng
+  // nhập, không riêng gì tab Nhân Sự — Hạ tầng: nạp module theo cụm, đợt 7. Cụm này có thể CHƯA nạp
+  // (chưa vào tab "Nhân Sự" trong phiên) — không ép cả switchTab() phải chờ đồng bộ cho 1 số đếm phụ:
+  // nếu đã sẵn sàng thì cập nhật ngay (giữ nguyên hành vi cũ, không tốn gì thêm); nếu chưa, âm thầm nạp
+  // nền rồi tự cập nhật lại đúng số ngay khi xong (badge có thể trễ vài trăm mili-giây ở LẦN ĐẦU trong
+  // phiên, không bao giờ bị bỏ sót vĩnh viễn).
+  if (typeof updateHrFeedbackBadge === 'function') {
+    updateHrFeedbackBadge();
+  } else {
+    loadModuleGroup('hcrcdonghanh').then(() => {
+      if (typeof updateHrFeedbackBadge === 'function') updateHrFeedbackBadge();
+    }).catch(err => console.error('updateApprovalHubBadge: không tải được cụm hcrcdonghanh', err));
+  }
   if (!label) return;
   if (!currentUser || !canAccessApprovalHub(currentUser)) { label.innerText = 'Phê Duyệt'; return; }
   const count = getMyPendingApprovals(currentUser).length;
