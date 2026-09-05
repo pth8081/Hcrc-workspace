@@ -1,11 +1,38 @@
 # Phiên bản hiện tại
 
-**8.9** — đã merge vào `main` (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge
+**9.0** — đã merge vào `main` (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge
 góc màn hình + `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần
 kiểu `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. Đúng theo quy tắc MINOR chạy 0-9 trong
-`CLAUDE.md`: sau `8.8` tăng MINOR lên 1 → `8.9`.
+`CLAUDE.md`: merge ngay sau khi đang ở `8.9` (MINOR đã chạm 9) → tăng MAJOR lên 1, reset MINOR về 0 → `9.0`.
 
-## Cập nhật gần nhất — Báo Cáo Định Kỳ: bỏ hẳn upload PowerPoint (.pptx), thêm Xuất PDF/Excel cho Tổng Hợp Theo Công Việc (2026-09-05)
+## Cập nhật gần nhất — Hỗ Trợ IT > Hỗ Trợ Yêu Cầu: thêm "Gửi Phê Duyệt" vào nút thao tác (2026-09-05)
+
+Theo yêu cầu người dùng: "yêu cầu cần có phê duyệt IT sẽ gửi cho người phê duyệt và khi nào được phê
+duyệt thì mới quay lại trạng thái IT xử lý" — **tính năng nghiệp vụ này đã có sẵn ĐẦY ĐỦ từ trước**
+(`escalateItTicket()`/`approveItTicketEscalation()`/`denyItTicketEscalation()`, `lib/recordActions.js`):
+đội IT gửi yêu cầu phê duyệt tới 1 người cụ thể (`approvalStatus: PENDING`), server tự chặn
+`updateItTicketStatus()` (không cho tiếp tục cập nhật DONE/CANCELLED) cho tới khi người đó duyệt
+(`APPROVED`) — đúng "khi nào được phê duyệt mới quay lại trạng thái IT xử lý". **Không phải tính năng
+mới** — chỉ thiếu đúng 1 việc: nút "📨 Gửi Phê Duyệt" trước đây CHỈ nằm trong modal chi tiết ticket
+(phải mở "👁️ Xem / Xử lý" rồi tự tìm), chưa lộ ra ở dropdown "Khác ▾" của nút thao tác trên danh sách
+như người dùng yêu cầu.
+
+- `public/js/module-itsupport-price.js`: thêm mục "📨 Gửi Phê Duyệt" (hoặc "Gửi Lại Phê Duyệt" nếu vừa
+  bị từ chối) vào dropdown "Khác ▾" ở cột Thao Tác, hiện đúng điều kiện với nút tương ứng trong modal
+  (đội IT + ticket đang `DOING` + chưa có yêu cầu phê duyệt nào đang chờ). Bấm vào mở thẳng modal chi
+  tiết + hiện luôn form chọn người duyệt/lý do — không phải tìm thêm 1 bước, không dựng lại UI riêng
+  (giữ đúng 1 nguồn cho form, `renderItTicketModal()`).
+- KHÔNG đổi gì ở server (`lib/recordActions.js`/`routes/records.js`) — state machine phê duyệt giữ
+  nguyên, đã đúng theo yêu cầu từ trước.
+
+**Test**: `tests/test-it-support.js` thêm 1 kịch bản mới xác nhận dropdown hiện đúng mục này khi ticket
+đang DOING + chưa có yêu cầu chờ duyệt, bấm mở đúng modal + form, và mục này TỰ ẨN khi ticket đã DONE.
+Toàn bộ `tests/test-*.js` (60 file): 58/60 pass (2 lỗi known pre-existing cần SQL Server thật).
+
+**Deploy**: không có thay đổi `schema.sql`/`.env.example`/`package.json` dependencies nào — chỉ code
+client hiện có, copy code + `pm2 restart` là đủ.
+
+## Cập nhật trước đó — Báo Cáo Định Kỳ: bỏ hẳn upload PowerPoint (.pptx), thêm Xuất PDF/Excel cho Tổng Hợp Theo Công Việc (2026-09-05)
 
 Theo yêu cầu người dùng: "bỏ luôn không sử dụng upload báo cáo file ppt/pptx, tổng hợp báo cáo từ nguồn
 công việc có thể xuất ra cả file pdf và excel".

@@ -291,6 +291,34 @@ async function main() {
       assertEqual(result.assigneeName, IT1.name, 'Phải ghi đúng người nhận xử lý');
     });
 
+    // ===== 6b) Nút thao tác (dropdown "Khác") ở danh sách Hỗ Trợ Yêu Cầu có mục "Gửi Phê Duyệt" — yêu
+    // cầu người dùng: trước đây phải mở modal chi tiết rồi tự tìm nút, giờ bấm thẳng từ dropdown mở luôn
+    // modal + hiện luôn form gửi phê duyệt (không phải tìm thêm 1 bước). Chỉ hiện khi đội IT đang xử lý
+    // (DOING) và CHƯA có yêu cầu phê duyệt nào đang chờ (approvalStatus khác PENDING). =====
+    await run.run('Nút thao tác "Gửi Phê Duyệt": hiện đúng điều kiện (đội IT + đang DOING + chưa có yêu cầu chờ duyệt), bấm mở đúng modal + form', async () => {
+      const result = await page.evaluate((id) => {
+        switchTab('itSupport');
+        setItSupportSubTab('TICKET');
+        renderItTickets();
+        const rowHtml = document.getElementById('itTicketTableBody').innerHTML;
+        const hasEscalateOption = rowHtml.includes('value="escalate"') && rowHtml.includes('Gửi Phê Duyệt');
+        // Bấm thẳng qua dispatcher của action-dropdown (runItTicketAction), đúng như UI thật gọi khi
+        // chọn mục "📨 Gửi Phê Duyệt" ở <select> "Khác ▾" (handleActionCellDispatch() ở core.js).
+        runItTicketAction(id, 'escalate');
+        const modalOpen = !document.getElementById('itTicketModal').classList.contains('hidden');
+        const formShown = !!document.getElementById('itTicketApproverSelect') && !!document.getElementById('itTicketApprovalReason');
+        // Chỉ đóng FORM (không gửi, không đụng gì tới trạng thái ticket) — CỐ Ý không gọi
+        // closeItTicketModal() ở đây: kịch bản kế tiếp (Leo thang phê duyệt) giả định modal ĐANG MỞ
+        // sẵn đúng ticket này (chỉ tự bật lại form qua showItTicketEscalateForm=true, không tự mở lại
+        // modal từ đầu) — đóng modal ở đây sẽ làm kịch bản đó lỗi vì currentItTicketModalId bị reset về null.
+        closeItTicketEscalateForm();
+        return { hasEscalateOption, modalOpen, formShown };
+      }, ticketDoneId);
+      assert(result.hasEscalateOption, 'Dropdown "Khác" phải có mục "📨 Gửi Phê Duyệt" khi ticket đang DOING và chưa có yêu cầu chờ duyệt');
+      assert(result.modalOpen, 'Bấm mục "Gửi Phê Duyệt" ở dropdown phải mở modal chi tiết ticket');
+      assert(result.formShown, 'Phải hiện LUÔN form gửi phê duyệt (chọn người duyệt + lý do), không bắt tìm thêm nút bên trong modal');
+    });
+
     // ===== 7) Leo thang phê duyệt -> người được chỉ định DUYỆT -> IT hoàn tất xử lý (workflow đầy đủ) =====
     await run.run('Leo thang phê duyệt: người được chỉ định DUYỆT rồi IT hoàn tất xử lý (DONE)', async () => {
       const escalateResult = await page.evaluate(async (id) => {
@@ -331,6 +359,16 @@ async function main() {
       }, ticketDoneId);
       assertEqual(doneResult.status, 'DONE', 'Sau khi được duyệt, IT phải cập nhật hoàn tất được (DONE)');
       assertEqual(doneResult.resolutionNote, 'Đã thay nguồn máy tính, hoạt động bình thường.', 'Phải lưu đúng ghi chú xử lý');
+
+      // Ticket đã DONE — mục "Gửi Phê Duyệt" ở dropdown phải TỰ ẨN (chỉ áp dụng khi còn DOING). Đúng
+      // đúng 1 ticket tồn tại ở thời điểm này (ticketDoneId, các kịch bản tạo thêm ticket khác nằm SAU
+      // đây) nên soát cả tbody là an toàn, không lẫn dropdown của ticket khác.
+      const afterDone = await page.evaluate(() => {
+        renderItTickets();
+        return { rowHtml: document.getElementById('itTicketTableBody').innerHTML, count: DB.itSupportTickets.length };
+      });
+      assertEqual(afterDone.count, 1, 'Đúng 1 ticket tồn tại ở thời điểm này (giả định thứ tự kịch bản không đổi)');
+      assert(!afterDone.rowHtml.includes('value="escalate"'), 'Ticket đã DONE thì dropdown KHÔNG được còn mục "Gửi Phê Duyệt"');
     });
 
     // ===== 8) Leo thang phê duyệt bị TỪ CHỐI -> IT vẫn bị chặn cập nhật tiến độ (server chặn kép) =====

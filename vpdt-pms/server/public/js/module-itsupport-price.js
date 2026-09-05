@@ -1406,6 +1406,14 @@ function renderItTickets() {
         ${(() => {
           const primaryBtnHTML = `<button data-op="runItTicketAction" data-arg0="${t.id}" data-arg1="view" class="px-2.5 py-1 bg-emerald-600 text-white rounded text-xs hover:opacity-90 font-bold">👁️ Xem / Xử lý</button>`;
           const secondaryOptions = [];
+          // "Gửi Phê Duyệt" ngay ở nút thao tác (yêu cầu người dùng) — mirror ĐÚNG điều kiện hiện nút
+          // "📨 Gửi/Gửi Lại Yêu Cầu Phê Duyệt" bên trong modal (renderItTicketModal()): chỉ đội IT
+          // (canManageItSupportClient), đang xử lý (status DOING), và KHÔNG đang có 1 yêu cầu phê duyệt
+          // nào chờ xử lý (approvalStatus PENDING — REJECTED vẫn cho gửi LẠI). Bấm vào mở thẳng modal +
+          // hiện luôn form gửi phê duyệt (openItTicketEscalateForm()), không phải tự tìm nút bên trong.
+          if (canManageItSupportClient(currentUser) && t.status === 'DOING' && t.approvalStatus !== 'PENDING') {
+            secondaryOptions.push({ value: 'escalate', label: t.approvalStatus === 'REJECTED' ? '📨 Gửi Lại Phê Duyệt' : '📨 Gửi Phê Duyệt' });
+          }
           if (currentUser.perms?.admin) secondaryOptions.push({ value: 'delete', label: '🗑️ Xóa' });
           return buildActionCell(t.id, primaryBtnHTML, secondaryOptions, 'runItTicketAction');
         })()}
@@ -1418,6 +1426,9 @@ function runItTicketAction(id, action) {
   switch (action) {
     case 'view': openItTicketModal(id); break;
     case 'delete': deleteItTicketAction(id); break;
+    // "Gửi Phê Duyệt" từ nút thao tác — mở thẳng modal + hiện luôn form gửi phê duyệt, giữ ĐÚNG 1 nguồn
+    // duy nhất cho form này (renderItTicketModal()), không dựng lại 1 bản UI riêng ở đây.
+    case 'escalate': openItTicketModal(id); openItTicketEscalateForm(); break;
   }
 }
 
