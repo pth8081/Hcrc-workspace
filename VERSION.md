@@ -1,11 +1,52 @@
 # Phiên bản hiện tại
 
-**8.7** — đã merge vào `main` (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge
+**8.8** — đã merge vào `main` (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge
 góc màn hình + `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần
 kiểu `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. Đúng theo quy tắc MINOR chạy 0-9 trong
-`CLAUDE.md`: sau `8.6` tăng MINOR lên 1 → `8.7`.
+`CLAUDE.md`: sau `8.7` tăng MINOR lên 1 → `8.8`.
 
-## Cập nhật gần nhất — Đào Tạo: Ngân Hàng Câu Hỏi có ảnh minh hoạ + Video 0.5x-1.5x/PDF phải xem hết mới tính hoàn thành (2026-09-05)
+## Cập nhật gần nhất — FIX KHẨN: Vận Hành > Siêu Thị > Thực Hiện không tạo được công việc gốc (2026-09-05)
+
+**Triệu chứng người dùng báo**: mở "➕ Thêm Công Việc Gốc" trên hồ sơ Sửa Chữa (hoặc Mở Mới) Siêu Thị,
+điền đủ Tên Công Việc/Mô Tả/Người Nghiệm Thu Chỉ Định/Hạn Hoàn Thành/Nghiệm thu-timing, bấm "Lưu Công
+Việc" → toast lỗi chung chung "⛔ Không thể xử lý yêu cầu".
+
+**GỐC RỄ THẬT (xác nhận bằng cách dựng lại chính xác `routes/records.js` thật + giả lập kiểu cột SQL Server
+thật, KHÔNG chỉ qua `tests/testHarness.js` — harness đó mock thẳng mảng JS trong bộ nhớ, bỏ qua hoàn toàn
+lớp SQL của `lib/operationWorkItemStore.js` nên 61/61 kịch bản vẫn "pass" dù bug này vẫn còn nguyên)**:
+cột `dbo.OperationWorkItems.SourceId` trên CSDL SQL Server thật vẫn là kiểu `INT` (tối đa ~2.1 tỷ) trong
+khi giá trị luôn là id kiểu `Date.now()` (~1.7 nghìn tỷ — VƯỢT TRẦN INT ngay lập tức) → SQL Server ném lỗi
+"Arithmetic overflow error converting expression to data type int." ở CHÍNH XÁC câu INSERT khi tạo công
+việc GỐC. Đây là lỗi SQL thô (không phải `HttpError`) nên `handleError()` (`routes/records.js`) không nhận
+diện được, rơi về toast chung chung mặc định — **không phải bug nghiệp vụ mới**: `periodId`/"Tạo Kỳ",
+`acceptorUsername`, `approvedBudget`, cascade cha-con... đều đã được trace tay + test lại kỹ, hoàn toàn
+đúng. Migration `ALTER COLUMN SourceId ... BIGINT` sửa đúng lỗi này ĐÃ có sẵn trong `sql/schema.sql` từ 1
+đợt merge trước (bản `6.4`, tự chạy an toàn nhiều lần) — **nhưng đó là script CHẠY TAY**, và rất có thể
+chưa được chạy lại trên SQL Server thật đang chạy production kể từ lúc migration đó được thêm vào.
+
+**⚠️ HÀNH ĐỘNG BẮT BUỘC NGAY (đây MỚI là điều thật sự khắc phục được lỗi)**: chạy lại
+`server/sql/schema.sql` trên SQL Server production NGAY BÂY GIỜ (an toàn, chỉ ALTER cột nếu còn sai kiểu,
+không mất dữ liệu, không cần dừng server) — xem mục 12 `HUONG_DAN_DEPLOY_UBUNTU.md`. Nếu không chạy lại,
+tạo công việc Thực hiện vẫn tiếp tục lỗi dù đã cập nhật code bản này.
+
+**Code bản này cải thiện thêm (không tự sửa được schema, chỉ giúp CHẨN ĐOÁN rõ hơn)**:
+`assertSourceIdColumnIsBigInt()` (`lib/operationWorkItemStore.js`) chủ động dò kiểu cột thật qua
+`INFORMATION_SCHEMA.COLUMNS` trước khi insert/update công việc Thực hiện — nếu vẫn `INT`, chặn NGAY với
+thông báo RÕ RÀNG chỉ thẳng hướng khắc phục (thay vì để lỗi SQL Server thô lọt ra ngoài thành toast chung
+chung); tự dò lại (không cache kết quả lỗi) nên nhận ra NGAY khi quản trị chạy xong `schema.sql`, không
+cần khởi động lại server. `seedDefaults.js` gọi thêm 1 lần lúc khởi động để in cảnh báo ra console ngay
+khi deploy (cùng khuôn cảnh báo `DB_ENCRYPT`/`LOG_ENCRYPTION_KEY` đã có ở `db.js`).
+
+**Test**: `tests/test-operation-workitem-sourceid-schema.js` (mới, 5 kịch bản) — giả lập cả 2 trạng thái
+cột (`int`/`bigint`) xác nhận đúng hành vi chặn/cho qua + cache. Dựng lại thật `routes/records.js` bằng
+Express + pool SQL giả lập (không qua `testHarness.js`) xác nhận: trạng thái `int` → lỗi rõ ràng, KHÔNG
+đụng câu INSERT; trạng thái `bigint` (sau khi chạy `schema.sql`) → tạo công việc thành công thật, cả
+`operationRepairs` lẫn `operationStoreOpenings` (không phân biệt sourceType, cùng 1 cột). Toàn bộ
+`tests/test-*.js` (59 file): 57/59 pass (2 lỗi known pre-existing cần SQL Server thật —
+`test-audit-fixes-batch1.js`, `test-audit-round2-cluster1.js`), bao gồm `test-operation-store-lifecycle.js`
+(61/61, Playwright thật trên `public/index.html`, cả Mở Mới lẫn Sửa Chữa).
+
+## Cập nhật trước đó — Đào Tạo: Ngân Hàng Câu Hỏi có ảnh minh hoạ + Video 0.5x-1.5x/PDF phải xem hết mới tính hoàn thành (2026-09-05)
 
 3 phần độc lập của module Đào Tạo (Truyền Thông Nội Bộ), thực hiện theo đúng phân tích đã thống nhất với
 người dùng, gộp chung 1 lần merge (các phần chia sẻ chung 1 collection mới, tách merge riêng rủi ro hơn).

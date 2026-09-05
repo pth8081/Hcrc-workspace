@@ -51,11 +51,46 @@ async function getWorkItemsBySource(sourceType, sourceId) {
   return result.recordset.map(toWorkItem);
 }
 
+// BÀI HỌC TỪ 1 BUG THẬT ĐÃ GẶP (xem sql/schema.sql, khối ALTER COLUMN ngay trên CREATE TABLE
+// dbo.OperationWorkItems): cột SourceId BAN ĐẦU tạo kiểu INT (tối đa ~2.1 tỷ) trong khi giá trị luôn là
+// id kiểu Date.now() (~1.7 nghìn tỷ ở thời điểm hiện tại — VƯỢT TRẦN INT ngay lập tức) — khiến MỌI lần
+// tạo/sửa công việc Thực hiện chắc chắn lỗi trên SQL Server thật. schema.sql ĐÃ có sẵn migration ALTER
+// COLUMN tự chạy an toàn nhiều lần, NHƯNG đó là script CHẠY TAY (quản trị viên phải tự chạy lại mỗi khi
+// schema.sql đổi, xem CLAUDE.md/HUONG_DAN_DEPLOY_UBUNTU.md) — nếu quên chạy lại sau 1 lần cập nhật code,
+// cột SourceId trên CSDL thật vẫn còn INT dù code đã đúng từ lâu, và lỗi SQL Server THÔ (không phải
+// HttpError) lọt qua handleError() ở routes/records.js thành toast chung chung "Không thể xử lý yêu cầu"
+// — không ai biết đường sửa (đây CHÍNH XÁC là triệu chứng người dùng báo "không tạo được công việc Thực
+// hiện", dù mọi validate nghiệp vụ ở lib/recordActions.js createOperationWorkItem() đều đã đúng).
+// Hàm này CHỦ ĐỘNG dò kiểu cột thật trước khi ghi — KHÔNG tự ALTER ở đây (DDL luôn đi qua schema.sql,
+// không qua code chạy lúc runtime, tránh cần cấp quyền ALTER cho tài khoản ứng dụng) — để chặn SỚM bằng
+// 1 lỗi RÕ RÀNG, dễ hiểu, thay vì để lỗi SQL Server thô lọt ra ngoài. Cache kết quả OK vĩnh viễn trong
+// tiến trình (schema không đổi khi server đang chạy, đọc lại mỗi lần tốn 1 query nhỏ không cần thiết);
+// KHÔNG cache khi CHƯA đúng — tự dò lại ở lần gọi kế tiếp để tự nhận ra ngay khi quản trị vừa chạy xong
+// schema.sql mà không cần khởi động lại server.
+let sourceIdColumnConfirmedBigInt = false;
+async function assertSourceIdColumnIsBigInt(pool) {
+  if (sourceIdColumnConfirmedBigInt) return;
+  const result = await pool.request().query(`
+    SELECT DATA_TYPE FROM INFORMATION_SCHEMA.COLUMNS
+    WHERE TABLE_SCHEMA = 'dbo' AND TABLE_NAME = 'OperationWorkItems' AND COLUMN_NAME = 'SourceId'
+  `);
+  const dataType = result.recordset[0]?.DATA_TYPE;
+  if (dataType && dataType !== 'bigint') {
+    throw new HttpError(500,
+      `Cấu trúc CSDL chưa được cập nhật: cột dbo.OperationWorkItems.SourceId vẫn là kiểu "${dataType}" ` +
+      '(cần "bigint" để chứa id dạng Date.now()). Vui lòng nhờ quản trị hệ thống chạy lại server/sql/schema.sql ' +
+      'trên SQL Server (script tự ALTER an toàn, không mất dữ liệu — xem mục 12 HUONG_DAN_DEPLOY_UBUNTU.md), ' +
+      'sau đó thử tạo lại công việc này.');
+  }
+  sourceIdColumnConfirmedBigInt = true;
+}
+
 // Id sinh theo đúng quy ước Date.now()[+offset] đã dùng cho Task/Record — không phải IDENTITY. Va chạm
 // dưới tải cao được tự retry (cùng cơ chế đã vá cho insertTask/insertRecord ở Giai đoạn 2 audit).
 const INSERT_WORK_ITEM_MAX_ATTEMPTS = 5;
 async function insertWorkItem(item) {
   const pool = await getPool();
+  await assertSourceIdColumnIsBigInt(pool);
   for (let attempt = 1; attempt <= INSERT_WORK_ITEM_MAX_ATTEMPTS; attempt++) {
     const cols = extractColumns(item);
     try {
@@ -87,6 +122,7 @@ async function insertWorkItem(item) {
 // withLockedTaskById() (lib/taskStore.js). Ném sẵn 404 nếu không tìm thấy.
 async function withLockedWorkItemById(id, mutatorFn) {
   const pool = await getPool();
+  await assertSourceIdColumnIsBigInt(pool);
   const tx = new sql.Transaction(pool);
   await tx.begin();
   try {
@@ -156,5 +192,9 @@ async function deleteWorkItemsByIds(ids) {
 
 module.exports = {
   getAllWorkItems, getAllWorkItemsCached, getWorkItemsBySource,
-  insertWorkItem, withLockedWorkItemById, deleteWorkItemById, deleteWorkItemsByIds, invalidateWorkItemsCache
+  insertWorkItem, withLockedWorkItemById, deleteWorkItemById, deleteWorkItemsByIds, invalidateWorkItemsCache,
+  // Export riêng cho seedDefaults.js gọi 1 LẦN lúc khởi động — in cảnh báo RÕ RÀNG ra console ngay khi
+  // server bật lên (cùng khuôn cảnh báo DB_ENCRYPT/LOG_ENCRYPTION_KEY ở db.js) thay vì phải đợi 1 người
+  // dùng thật bấm "Lưu Công Việc" rồi mới lộ ra qua toast lỗi.
+  assertSourceIdColumnIsBigInt
 };

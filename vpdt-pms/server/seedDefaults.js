@@ -8,6 +8,8 @@ const { getAppDataValue, setAppDataValue } = require('./lib/appData');
 const { migrateLegacySystemLogs } = require('./lib/systemLogStore');
 const { migrateLegacyTasks } = require('./lib/taskStore');
 const { migrateAllLegacyCollections, getAllRecords, withLockedRecordById } = require('./lib/recordStore');
+const { assertSourceIdColumnIsBigInt } = require('./lib/operationWorkItemStore');
+const { HttpError } = require('./lib/httpErrors');
 
 // Mật khẩu mặc định của các tài khoản seed lúc khởi tạo hệ thống lần đầu (defaults.js) — dùng để dò
 // tài khoản NÀO CÒN đang dùng đúng mật khẩu này (xem flagKnownDefaultPasswords() bên dưới), bất kể
@@ -44,6 +46,25 @@ async function seedDefaults() {
   await migrateDefaultStorePermGroup();
   await migratePendingActualBudgetEntries();
   await migrateStuckOperationApprovalStatuses();
+  await warnIfOperationWorkItemsSchemaOutdated(pool);
+}
+
+// Cảnh báo NGAY lúc khởi động (cùng khuôn DB_ENCRYPT/LOG_ENCRYPTION_KEY ở db.js) nếu cột
+// dbo.OperationWorkItems.SourceId trên CSDL thật CHƯA được ALTER sang BIGINT theo migration đã có sẵn ở
+// sql/schema.sql — xem giải thích đầy đủ ở assertSourceIdColumnIsBigInt() (lib/operationWorkItemStore.js).
+// KHÔNG chặn khởi động (server vẫn chạy bình thường cho MỌI tính năng khác, chỉ riêng tạo/sửa công việc
+// Thực hiện của Vận Hành > Siêu Thị sẽ tự chặn lại với đúng thông báo này) — giúp phát hiện NGAY qua log
+// khi deploy, thay vì phải đợi 1 người dùng thật bấm "Lưu Công Việc" rồi mới lộ ra qua toast lỗi.
+async function warnIfOperationWorkItemsSchemaOutdated(pool) {
+  try {
+    await assertSourceIdColumnIsBigInt(pool);
+  } catch (err) {
+    if (err instanceof HttpError) {
+      console.error(`⛔ ${err.message}`);
+      return;
+    }
+    throw err;
+  }
 }
 
 // Trước đây mật khẩu lưu plaintext (cả trong seed mặc định lẫn dữ liệu do admin tạo trước khi có
