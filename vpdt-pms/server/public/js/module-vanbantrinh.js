@@ -1177,3 +1177,111 @@ function downloadSubmissionApprovalSlip(subId) {
   URL.revokeObjectURL(url);
 }
 
+// ==========================================
+// VĂN BẢN TRÌNH — QUY TRÌNH THEO LOẠI TỜ TRÌNH + LỚP PHÊ DUYỆT BỔ SUNG CỘNG THÊM — chuyển từ core.js
+// về đúng module này (Hạ tầng: tách JS client, đợt 6): buildEffectiveSubmissionWorkflow()/
+// buildSubmissionWorkflowPreviewHTML()/readSelectedSubmissionLayers()/previewSubmissionWorkflow() chỉ
+// được module Văn Bản Trình gọi (đã rà toàn bộ public/js/*.js + index.html để xác nhận, không module
+// nào khác đụng tới) — khác với getSubmissionDeptWorkflowConfig()/resolveSubmissionWorkflow() (vẫn ở
+// core.js vì Dashboard/Approval Hub dùng chung). Thuần cơ học, không đổi 1 dòng logic — vẫn gọi
+// getSubmissionDeptWorkflowConfig()/getSubmissionApprovalLevelRule()/SUBMISSION_APPROVAL_LAYERS/
+// escapeHtml() ở core.js (nạp TRƯỚC module này) bình thường.
+// ==========================================
+
+// Dựng quy trình HIỆU LỰC cho 1 tờ trình MỚI (lúc tạo) = quy trình phòng ban (gốc, theo đúng loại) +
+// các lớp phê duyệt bổ sung tuỳ chọn người trình đã tick, nối vào SAU theo đúng thứ tự cố định ở
+// SUBMISSION_APPROVAL_LAYERS. selectedLayerMembers: { layerKey: [username,...] } — CHỈ những người
+// người trình đã chọn cụ thể cho lớp đó (trong số thành viên admin gán), KHÔNG phải cả nhóm — snapshot
+// ngay lúc tạo nên sau này admin đổi thành viên nhóm không ảnh hưởng tới tờ trình đang xử lý dở. Server
+// (lib/createValidation.js) tự dựng lại y hệt và xác minh lại từ DB, không tin kết quả này của client.
+function buildEffectiveSubmissionWorkflow(type, dept, selectedLayerKeys, selectedLayerMembers, approvalLevel) {
+  const baseConfig = getSubmissionDeptWorkflowConfig(type, dept);
+  const baseWf = DB.workflows.find(w => w.id === baseConfig.workflowId) || { steps: [{ order: 1, name: 'Sếp duyệt' }] };
+
+  const steps = baseWf.steps.map(s => ({ order: s.order, name: s.name }));
+  const approvers = {};
+  baseWf.steps.forEach(s => { approvers[s.order] = baseConfig.approvers?.[s.order] || []; });
+
+  const rule = getSubmissionApprovalLevelRule(approvalLevel);
+  const opinionRequestees = [];
+  (selectedLayerKeys || []).forEach(layerKey => {
+    const layer = SUBMISSION_APPROVAL_LAYERS.find(l => l.key === layerKey);
+    if (!layer) return;
+    // Lớp bị khoá bắt buộc theo cấp phê duyệt (vd. TGD, Trợ Lý/Thư Ký ở cấp TGD): không có card chọn
+    // người (xem renderSubmissionApprovalLayerCheckboxes()) — luôn dùng TOÀN BỘ nhóm admin gán.
+    const chosen = rule.locked.includes(layerKey)
+      ? [...(DB.submissionApprovalGroups[layerKey] || [])]
+      : [...(selectedLayerMembers?.[layerKey] || [])];
+    if (layer.blocking) {
+      const stepOrder = steps.length + 1;
+      // layerKey: ghi lại lớp gốc sinh ra bước này — dùng để biết bước này có nằm SAU "Xin ý kiến"
+      // trong thứ tự chuẩn hay không (xem isSubmissionLayerAfterOpinion() + openProcessSubmissionModal()).
+      steps.push({ order: stepOrder, name: layer.label, layerKey: layer.key });
+      approvers[stepOrder] = chosen;
+    } else {
+      // XIN_Y_KIEN: không phải bước duyệt — chỉ cosmetic ở client, giá trị THẬT do server tự dựng lại
+      // và ghi đè (xem buildEffectiveSubmissionWorkflowServer trong lib/createValidation.js).
+      opinionRequestees.push(...chosen);
+    }
+  });
+
+  return { steps, approvers, opinionRequestees: [...new Set(opinionRequestees)] };
+}
+
+// Dựng HTML xem trước quy trình (danh sách bước + người duyệt từng bước + ai được xin ý kiến) từ
+// đúng trạng thái form hiện tại — dùng chung cho nút "Xem quy trình" (previewSubmissionWorkflow()) và
+// hộp thoại xác nhận trước khi Trình (xem submitSubmissionReq()). CHỈ MANG TÍNH THAM KHẢO cho người
+// trình tự kiểm tra lại — quy trình THẬT SỰ vẫn do server tự dựng lại và xác minh khi trình (khớp
+// buildEffectiveSubmissionWorkflowServer() trong lib/createValidation.js).
+function buildSubmissionWorkflowPreviewHTML(type, dept, selectedLayerKeys, selectedLayerMembers, approvalLevel) {
+  if (!type || !dept) {
+    return '<div class="text-amber-600 italic">Vui lòng chọn Phòng Ban Trình và Loại Tờ Trình để xem quy trình.</div>';
+  }
+  const userLabel = (username) => {
+    const u = DB.users.find(x => x.username === username);
+    return escapeHtml(u ? u.name : username);
+  };
+  const wf = buildEffectiveSubmissionWorkflow(type, dept, selectedLayerKeys, selectedLayerMembers, approvalLevel);
+  const stepsHTML = wf.steps.map(s => {
+    const names = (wf.approvers[s.order] || []).map(userLabel).join(', ') ||
+      '<span class="text-amber-600 italic">(chưa có người duyệt — kiểm tra lại cấu hình quy trình phòng ban)</span>';
+    return `
+      <div class="bg-slate-50 border rounded p-2 mb-1.5">
+        <div class="font-bold text-gray-800">Bước ${s.order}: ${escapeHtml(s.name)}</div>
+        <div class="text-gray-600 mt-0.5">Người duyệt: ${names}</div>
+      </div>`;
+  }).join('');
+  const opinionHTML = wf.opinionRequestees.length ? `
+      <div class="bg-purple-50 border border-purple-200 rounded p-2 mt-1">
+        <div class="font-bold text-purple-700">💬 Xin ý kiến tham khảo (không chặn quy trình)</div>
+        <div class="text-gray-600 mt-0.5">${wf.opinionRequestees.map(userLabel).join(', ')}</div>
+      </div>` : '';
+  return `<div>${stepsHTML}${opinionHTML}</div>`;
+}
+
+// Đọc lại đúng lớp phê duyệt bổ sung + người đã chọn TỪ FORM HIỆN TẠI — dùng chung ở nhiều nơi
+// (submitSubmissionReq(), previewSubmissionWorkflow()) để không lặp lại cùng 1 đoạn đọc DOM.
+function readSelectedSubmissionLayers() {
+  const selectedLayerKeys = [...document.querySelectorAll('#subApprovalDropdownPanel input.sub-layer-toggle:checked')].map(cb => cb.value);
+  const selectedLayerMembers = {};
+  for (const layerKey of selectedLayerKeys) {
+    selectedLayerMembers[layerKey] = [...document.querySelectorAll(`input.sub-layer-member[data-layer="${layerKey}"]:checked`)].map(cb => cb.value);
+  }
+  return { selectedLayerKeys, selectedLayerMembers };
+}
+
+// Nút "🔍 Xem quy trình" cạnh nút Trình — cho người trình xem trước quy trình sẽ áp dụng dựa trên
+// Phòng ban/Loại tờ trình/lớp bổ sung đã chọn NGAY LÚC NÀY trên form, trước khi thực sự bấm Trình.
+function previewSubmissionWorkflow() {
+  const dept = document.getElementById('subDept').value;
+  const type = document.getElementById('subType').value;
+  if (!dept || !type) return alert('Vui lòng chọn Phòng Ban Trình và Loại Tờ Trình trước khi xem quy trình!');
+  const approvalLevel = document.getElementById('subApprovalLevel')?.value;
+  const { selectedLayerKeys, selectedLayerMembers } = readSelectedSubmissionLayers();
+
+  document.getElementById('viewModalTitle').innerText = '🔍 Xem Trước Quy Trình Phê Duyệt';
+  document.getElementById('viewModalSub').innerText = `Phòng ban: ${dept} | Loại tờ trình: ${type}`;
+  document.getElementById('viewModalFooterInfo').innerText = 'Chỉ mang tính tham khảo — quy trình thật sự do server xác minh lại khi bạn bấm Trình.';
+  document.getElementById('viewModalContent').innerHTML = buildSubmissionWorkflowPreviewHTML(type, dept, selectedLayerKeys, selectedLayerMembers, approvalLevel);
+  document.getElementById('viewDocModal').classList.remove('hidden');
+}

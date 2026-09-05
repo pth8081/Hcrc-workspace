@@ -1,11 +1,73 @@
 # Phiên bản hiện tại
 
-**8.3** — đã merge vào `main` (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge
+**8.4** — đã merge vào `main` (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge
 góc màn hình + `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần
 kiểu `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. Đúng theo quy tắc MINOR chạy 0-9 trong
-`CLAUDE.md`: sau `8.2` tăng MINOR lên 1 → `8.3`.
+`CLAUDE.md`: sau `8.3` tăng MINOR lên 1 → `8.4`.
 
-## Cập nhật gần nhất — Hạ tầng: tách JS client ra file ngoài (Đợt 5/5 — HOÀN TẤT: Xem Trước File Word/Excel + Hỗ Trợ IT(Phê Duyệt Giá) + Đồng Phục + HCRC Đồng Hành)
+## Cập nhật gần nhất — Hạ tầng: tách tiếp `core.js` (Đợt 6 — core.js 7.440 → 6.034 dòng, tách 4 file mới + chuyển 1 khối về đúng module)
+
+Đợt 1-5 (`7.9`→`8.3`) đã tách hết khối `<script>` inline khổng lồ của `index.html` ra `public/js/*.js`,
+nhưng `core.js` (7.440 dòng) vẫn to gấp gần 3 lần file lớn thứ nhì (`module-internalcomms-daotao.js`,
+2.797 dòng) vì gộp chung cả hạ tầng thật-sự-dùng-chung LẪN vài khối nghiệp vụ lớn tự-đứng-được (Approval
+Hub, quản lý thiết bị 2FA, PWA, Dashboard). Đợt này rà lại TOÀN BỘ `core.js` (đọc hết nội dung, không
+tin lại mốc dòng cũ) và tách tiếp — thuần cơ học, không đổi 1 dòng logic.
+
+**4 file mới** (nạp ngay sau `core.js`, trước mọi `module-*.js`):
+- `core-approvalhub.js` (653 dòng) — "✅ PHÊ DUYỆT — HỘP THƯ DUYỆT TỔNG HỢP": `getMyPendingApprovals()`/
+  `renderApprovalHub()`/`updateApprovalHubBadge()`/`updateInternalShareBadge()`/... Khối banner gốc
+  "✅ PHÊ DUYỆT" trong `core.js` thực ra lồng cả `switchTab()`/`populateDropdowns()`/`logout()`/
+  `finishLogin()`/toàn bộ toggle dropdown điều hướng/`canAccessXModule()` khác — những hàm này dùng
+  chung cho CẢ hệ thống (không riêng gì Phê Duyệt), nên vẫn giữ nguyên ở `core.js`, chỉ tách đúng phần
+  thật sự là Approval Hub.
+- `core-dashboard.js` (259 dòng) — trang chủ cá nhân hoá: gộp 2 khối gốc nằm CÁCH NHAU bởi khối Approval
+  Hub xen giữa (`buildDashboardCards()`+helper đếm/ẩn-hiện, và `renderDashboard()`/modal Cá Nhân Hoá).
+- `core-devicesecurity.js` (336 dòng) — quản lý thiết bị vân tay/Face ID (WebAuthn) + TOTP: tự quản lý
+  của chính mình (`renderWebauthnDeviceList()`...), admin xem/gỡ hộ CỦA NGƯỜI KHÁC (WebAuthn + TOTP,
+  cùng màn Sửa Người Dùng nên gộp chung), và màn bắt buộc thiết lập TOTP cho admin (`openTotpSetupWall()`).
+- `core-pwa.js` (91 dòng) — cài đặt PWA/service worker, tự chứa hoàn toàn (không module nào khác đụng
+  tới; `applyPwaShortcutParam()` do `finishLogin()` gọi, tra hàm theo TÊN lúc chạy nên không phát sinh
+  phụ thuộc thứ tự nạp file).
+
+**1 khối chuyển về đúng module** (không phải file mới): `buildEffectiveSubmissionWorkflow()`/
+`buildSubmissionWorkflowPreviewHTML()`/`readSelectedSubmissionLayers()`/`previewSubmissionWorkflow()`
+("VĂN BẢN TRÌNH — QUY TRÌNH THEO LOẠI TỜ TRÌNH...") chuyển từ `core.js` sang `module-vanbantrinh.js` —
+đã rà toàn bộ `public/js/*.js` + `index.html`, xác nhận CHỈ module Văn Bản Trình gọi 4 hàm này.
+`getSubmissionDeptWorkflowConfig()`/`resolveSubmissionWorkflow()` (2 hàm liền kề, cùng banner gốc)
+**CỐ Ý giữ nguyên ở `core.js`** vì Dashboard (`core-dashboard.js`) + Approval Hub (`core-approvalhub.js`)
+cũng gọi tới, không riêng gì Văn Bản Trình.
+
+**1 khối rà rồi quyết định KHÔNG chuyển**: "Hỗ Trợ IT > Phê Duyệt Giá — cấu hình duyệt theo phòng ban ×
+LOẠI GIÁ" (`resolveItPriceDeptWorkflowConfigClient()`...) — rà thấy `module-ngansach.js` (Ngân Sách,
+KHÔNG phải Hỗ Trợ IT) cũng gọi thẳng `resolveItPriceDeptWorkflowConfigClient()` (dùng chung cơ chế cấu
+hình duyệt giá cho tab Ngân Sách Phê Duyệt) — không "riêng 1 module" như giả định ban đầu nên giữ
+nguyên ở `core.js`, không dời sang `module-itsupport-price.js`/`module-itsupport-tier.js`.
+
+**`core.js`: 7.440 → 6.034 dòng** (phần còn lại là hạ tầng thật sự dùng chung cho CẢ ~30 module: khởi
+tạo/đồng bộ DB, tìm-kiếm/lọc/phân trang dùng chung, modal xác nhận, phân quyền-theo-module, xác thực
+lại khi duyệt (OTP/PIN), đồng phê duyệt, dropdown/multi-select tự dựng, hạ tầng CSP event-delegation +
+~70 lời gọi wiring, đăng nhập/phiên/đăng xuất, `switchTab()`/`populateDropdowns()`/toggle điều hướng —
+KHÔNG rút gọn thêm được nữa mà không phá vỡ tính "hạ tầng dùng chung" của các khối này).
+
+Verify: syntax check cả 6 file (4 mới + `core.js` + `module-vanbantrinh.js`), không trùng tên hàm/const
+global nào giữa TOÀN BỘ 39 file `public/js/*.js`, script AST tự viết lại (đã kiểm tra bắt đúng cả dạng
+tham chiếu-thuần-tên làm giá trị object-literal top-level, không chỉ lời gọi trực tiếp) chạy trên toàn
+bộ 39 file theo đúng thứ tự `<script src>` mới — 0 tham chiếu không giải quyết được. Full 54 file test
+hồi quy Playwright chạy lại sạch (chỉ 2 lỗi biết trước do thiếu SQL Server thật:
+`test-audit-fixes-batch1.js`, `test-audit-round2-cluster1.js`). Thêm 1 smoke test Playwright riêng cho
+đợt này: đăng nhập (seed `DB.*` + `finishLogin()`), bấm qua Dashboard/Phê Duyệt/Văn Bản Trình (nút "Xem
+Quy Trình")/Hỗ Trợ IT/mở Hồ Sơ Cá Nhân (WebAuthn tự quản lý + khối cài PWA)/Admin "Sửa Người Dùng" (xem
+hộ thiết bị vân tay + TOTP người khác) — theo dõi `console`/`pageerror` suốt: không có lỗi JS nào (2
+cảnh báo MIME-type/connection-reset chỉ do harness test tự dựng không phục vụ `/vendor/pdfjs/*`, không
+liên quan tới khối `<script type="module">` PDF.js thật — không đổi gì khối đó).
+
+**`index.html`**: chỉ thêm 4 dòng `<script src="/js/core-*.js">` ngay sau `<script src="/js/core.js">`,
+không đụng markup/CSS/thẻ `<script type="module">` PDF.js/script copyright. **Không cần migrate dữ
+liệu, không đổi `schema.sql`/`.env.example`/`dependencies`.** `server.js` vẫn
+`express.static(path.join(__dirname, 'public'))` — file JS mới tự phục vụ theo đường dẫn, không cần
+route/cấu hình gì thêm. Deploy như bình thường: copy code + `pm2 restart`, không có bước thủ công nào khác.
+
+## Trước đó — Hạ tầng: tách JS client ra file ngoài (Đợt 5/5 — HOÀN TẤT: Xem Trước File Word/Excel + Hỗ Trợ IT(Phê Duyệt Giá) + Đồng Phục + HCRC Đồng Hành)
 
 Hoàn tất việc tách toàn bộ JS client của `public/index.html` ra `public/js/*.js` (bắt đầu từ đợt 1,
 `7.9`) — 4 file CUỐI CÙNG, nằm trong khối `<script>` KHÁC vật lý ở SAU thẻ `<script type="module">` tải
