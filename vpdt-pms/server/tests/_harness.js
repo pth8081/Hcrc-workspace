@@ -18,6 +18,16 @@ function contentType(filePath) {
   return {
     '.html': 'text/html; charset=utf-8',
     '.js': 'text/javascript; charset=utf-8',
+    // .mjs (module ESM, VD /vendor/pdfjs/pdf.mjs — nạp qua <script type="module"> ở index.html) THIẾU
+    // trước đây -> rơi về 'application/octet-stream' mặc định bên dưới -> trình duyệt từ chối nạp module
+    // script ("Expected a JavaScript-or-Wasm module script but the server responded with a MIME type of
+    // application/octet-stream") -> window.pdfjsLib/window.renderPdfProtected KHÔNG BAO GIỜ được định
+    // nghĩa trong bộ test Playwright này (không riêng gì tính năng mới — MỌI test trước đây, kể cả đã
+    // pass, chưa từng thực sự render PDF thật qua PDF.js). Thêm mapping này để test PDF thật (theo dõi
+    // tiến độ xem từng trang) chạy được — không ảnh hưởng gì tới các test khác (trước giờ không ai dựa
+    // vào renderPdfProtected() có sẵn cả).
+    '.mjs': 'text/javascript; charset=utf-8',
+    '.pdf': 'application/pdf',
     '.css': 'text/css; charset=utf-8',
     '.json': 'application/json; charset=utf-8',
     '.png': 'image/png',

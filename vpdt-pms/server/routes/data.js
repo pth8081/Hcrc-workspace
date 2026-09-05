@@ -19,7 +19,7 @@ const {
   filterDocsForUser, filterSubmissionsForUser, filterInternalPostsForUser, sanitizeReportPeriodsForUser,
   filterReportEntriesForUser, filterContractsForUser, filterCarRegsForUser, filterOfficeReqsForUser,
   filterMeetingsForUser, filterMeetingMinutesForUser, filterTasksForUser, sanitizeTrainingTestsForUser,
-  filterTrainingTestSubmissionsForUser, filterTrainingRegistrationsForUser,
+  filterTrainingTestSubmissionsForUser, filterTrainingRegistrationsForUser, filterTrainingDocumentProgressForUser,
   filterRecruitmentReferralsForUser, filterItPriceApprovalsForUser, filterItSupportTicketsForUser,
   filterUniformPeriodsForUser, filterUniformIssuancesForUser, filterUniformStockAdjustmentsForUser, filterUniformTransfersForUser, filterBudgetEntriesForUser,
   filterOperationOrdersForUser, filterOperationStoreOpeningsForUser, filterOperationRepairsForUser,
@@ -494,6 +494,9 @@ router.get('/', async (req, res) => {
     // công khai toàn công ty như trước (danh mục, không phải bài làm cá nhân), không đụng tới.
     if (data.trainingTestSubmissions) data.trainingTestSubmissions = filterTrainingTestSubmissionsForUser(data.trainingTestSubmissions, req.freshUser, data);
     if (data.trainingRegistrations) data.trainingRegistrations = filterTrainingRegistrationsForUser(data.trainingRegistrations, req.freshUser, data);
+    // trainingDocumentProgress (video/PDF phải xem hết mới tính hoàn thành): giây/trang đã xem của TỪNG
+    // người — dữ liệu theo dõi riêng tư, cùng tinh thần trainingRegistrations ở trên.
+    if (data.trainingDocumentProgress) data.trainingDocumentProgress = filterTrainingDocumentProgressForUser(data.trainingDocumentProgress, req.freshUser);
     // recruitmentReferrals: thông tin liên hệ ứng viên chỉ lộ cho người giới thiệu + bộ phận tuyển dụng
     // — xem lý do đầy đủ ở lib/recordViewScope.js filterRecruitmentReferralsForUser().
     if (data.recruitmentReferrals) data.recruitmentReferrals = filterRecruitmentReferralsForUser(data.recruitmentReferrals, req.freshUser);

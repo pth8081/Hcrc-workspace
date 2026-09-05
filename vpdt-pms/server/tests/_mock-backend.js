@@ -436,7 +436,12 @@ function __mockValidateTrainingTestCreate(payload, user) {
     if (!correctOptionIds.length) throw __mockHttpError(400, `Câu hỏi số ${i + 1} chưa chọn đáp án đúng`);
     if (type === 'SINGLE' && correctOptionIds.length > 1) throw __mockHttpError(400, `Câu hỏi số ${i + 1} là loại 1 đáp án đúng nhưng lại chọn nhiều hơn 1`);
     const points = Number(q?.points) > 0 ? Number(q.points) : 1;
-    return { id: i + 1, text, type, options, correctOptionIds, points };
+    // imageUrl (tuỳ chọn, ảnh minh hoạ câu hỏi) — mirrors createValidation.js assertUploadedFileUrl():
+    // chỉ chấp nhận đúng khuôn "/uploads/<tên-file>" do routes/upload.js sinh ra (mock /api/upload cũng
+    // trả đúng khuôn này, xem __mockOkRes({ fileUrl: ... }) ở dưới).
+    const imageUrl = q?.imageUrl ? String(q.imageUrl).trim() : '';
+    if (imageUrl && !/^\/uploads\/[A-Za-z0-9._-]+$/.test(imageUrl)) throw __mockHttpError(400, `Ảnh câu hỏi số ${i + 1} không hợp lệ`);
+    return { id: i + 1, text, type, options, correctOptionIds, points, imageUrl };
   });
   payload.title = String(payload.title).trim();
   payload.category = payload.category ? String(payload.category).trim() : '';
@@ -608,6 +613,73 @@ function __mockMarkDocumentViewed(payload, user, reg, cls) {
   reg.viewedDocumentIds = Array.isArray(reg.viewedDocumentIds) ? reg.viewedDocumentIds : [];
   if (!reg.viewedDocumentIds.includes(documentId)) reg.viewedDocumentIds.push(documentId);
   return reg;
+}
+
+// ===================== trainingDocumentProgress (video 0.5x-1.5x/PDF xem hết mới hoàn thành) =====================
+// mirrors lib/recordActions.js computeTrainingDocumentProgressUpdate() — hàm THUẦN, không đọc/ghi DB.
+const TRAINING_VIDEO_COMPLETION_RATIO = 0.95;
+function __mockIsVideoProgressComplete(furthestSeconds, durationSeconds) {
+  const duration = Number(durationSeconds) || 0;
+  const furthest = Number(furthestSeconds) || 0;
+  return duration > 0 && furthest >= duration * TRAINING_VIDEO_COMPLETION_RATIO;
+}
+function __mockIsPdfProgressComplete(viewedPages, pageCount) {
+  const count = Number(pageCount) || 0;
+  if (count <= 0) return false;
+  const viewed = new Set((viewedPages || []).map(Number));
+  for (let p = 1; p <= count; p++) { if (!viewed.has(p)) return false; }
+  return true;
+}
+function __mockComputeProgressUpdate(existing, payload) {
+  const wasCompleted = !!existing?.completedAt;
+  const kind = payload?.kind === 'PDF' ? 'PDF' : 'VIDEO';
+  const fields = { kind };
+  if (kind === 'VIDEO') {
+    const prevFurthest = Number(existing?.furthestSeconds) || 0;
+    const incomingFurthest = Number(payload?.furthestSeconds);
+    fields.furthestSeconds = Math.max(prevFurthest, Number.isFinite(incomingFurthest) && incomingFurthest > 0 ? incomingFurthest : 0);
+    const incomingDuration = Number(payload?.durationSeconds);
+    fields.durationSeconds = Number.isFinite(incomingDuration) && incomingDuration > 0 ? incomingDuration : (Number(existing?.durationSeconds) || 0);
+    fields.viewedPages = Array.isArray(existing?.viewedPages) ? existing.viewedPages : [];
+    fields.pageCount = Number(existing?.pageCount) || 0;
+  } else {
+    const prevPages = Array.isArray(existing?.viewedPages) ? existing.viewedPages : [];
+    const incomingPages = Array.isArray(payload?.viewedPages) ? payload.viewedPages.map(Number).filter((n) => Number.isInteger(n) && n >= 1) : [];
+    fields.viewedPages = [...new Set([...prevPages, ...incomingPages])].sort((a, b) => a - b);
+    const incomingPageCount = Number(payload?.pageCount);
+    fields.pageCount = Number.isFinite(incomingPageCount) && incomingPageCount > 0 ? incomingPageCount : (Number(existing?.pageCount) || 0);
+    fields.furthestSeconds = Number(existing?.furthestSeconds) || 0;
+    fields.durationSeconds = Number(existing?.durationSeconds) || 0;
+  }
+  const nowCompleted = kind === 'VIDEO'
+    ? __mockIsVideoProgressComplete(fields.furthestSeconds, fields.durationSeconds)
+    : __mockIsPdfProgressComplete(fields.viewedPages, fields.pageCount);
+  fields.completedAt = nowCompleted ? (existing?.completedAt || new Date().toLocaleString('vi-VN')) : null;
+  return { fields, completedNow: nowCompleted && !wasCompleted };
+}
+// mirrors POST /api/records/trainingDocuments/:id/track-progress ở routes/records.js.
+function __mockTrackDocumentProgress(payload, user, doc) {
+  const isPdfDoc = doc.docType === 'DOCUMENT' && /\.pdf$/i.test(doc.fileName || '');
+  if (doc.docType !== 'VIDEO' && !isPdfDoc) throw __mockHttpError(400, 'Tài liệu này không thuộc loại được theo dõi tiến độ (chỉ video/PDF)');
+  const kind = doc.docType === 'VIDEO' ? 'VIDEO' : 'PDF';
+  if (!DB.trainingDocumentProgress) DB.trainingDocumentProgress = [];
+  let existing = DB.trainingDocumentProgress.find((p) => p.docId === doc.id && p.username === user.username);
+  const { fields, completedNow } = __mockComputeProgressUpdate(existing, Object.assign({}, payload, { kind }));
+  if (existing) { Object.assign(existing, fields); } else {
+    existing = Object.assign({ id: __mockGenId(), docId: doc.id, username: user.username, name: user.name, dept: user.dept }, fields);
+    DB.trainingDocumentProgress.push(existing);
+  }
+  const updatedRegistrations = [];
+  if (completedNow) {
+    const relevantClassIds = new Set(DB.trainingClasses.filter((c) => c.mode === 'ONLINE' && Array.isArray(c.documentIds) && c.documentIds.includes(doc.id)).map((c) => c.id));
+    if (relevantClassIds.size) {
+      DB.trainingRegistrations.filter((r) => r.creator === user.username && r.result !== 'CANCELLED' && relevantClassIds.has(r.classId)).forEach((reg) => {
+        const cls = DB.trainingClasses.find((c) => c.id === reg.classId);
+        updatedRegistrations.push(__mockMarkDocumentViewed({ documentId: doc.id }, user, reg, cls));
+      });
+    }
+  }
+  return { progress: existing, updatedRegistrations };
 }
 
 // ===================== recruitmentJobs / recruitmentReferrals =====================
@@ -925,6 +997,13 @@ async function __mockHandleRecordAction(moduleKey, idStr, action, payload, user)
     if (action === 'end-session') { const clone = JSON.parse(JSON.stringify(cls)); const r = __mockEndOfflineTrainingClass(user, clone); Object.assign(cls, r); return cls; }
     throw __mockHttpError(400, 'Hành động không hợp lệ');
   }
+  if (moduleKey === 'trainingDocuments') {
+    const id = Number(idStr);
+    const doc = DB.trainingDocuments.find((d) => d.id === id);
+    if (!doc) throw __mockHttpError(404, 'Không tìm thấy tài liệu');
+    if (action === 'track-progress') return __mockTrackDocumentProgress(payload, user, doc);
+    throw __mockHttpError(400, 'Hành động không hợp lệ');
+  }
   if (moduleKey === 'trainingRegistrations') {
     const id = Number(idStr);
     const reg = DB.trainingRegistrations.find((r) => r.id === id);
@@ -1039,11 +1118,22 @@ async function __mockHandleRecordAction(moduleKey, idStr, action, payload, user)
 window.__xlsxExports = [];
 window.__rosterParsePreset = [];
 window.__planImportParsePreset = [];
+window.__testQuestionsParsePreset = [];
+
+// Fetch THẬT (trước khi bị ghi đè bên dưới) — dùng cho các tải tài nguyên TĨNH (VD PDF.js
+// pdfjsLib.getDocument() fetch thẳng /uploads/<tên-file>.pdf để vẽ trang) mà bản mock KHÔNG thay thế nổi:
+// mock chỉ trả object giả {ok,status,json,blob} (không có .arrayBuffer()/.body/.headers thật) — PDF.js
+// cần response Fetch THẬT (đọc stream nhị phân), không phải "server logic re-implementation" như các
+// route /api/* — xem __mockRealFetch() bên dưới.
+const __mockRealFetch = window.fetch.bind(window);
 
 window.fetch = async function (url, opts) {
   opts = opts || {};
   try {
     const method = (opts.method || 'GET').toUpperCase();
+    // Bất kỳ URL nào KHÔNG bắt đầu bằng "/api/" là tải tài nguyên tĩnh (file /uploads/, /vendor/...) —
+    // đi thẳng fetch THẬT tới static server của harness, không qua bất kỳ mock nào bên dưới.
+    if (typeof url === 'string' && !url.startsWith('/api/')) return __mockRealFetch(url, opts);
     const u = typeof url === 'string' ? url : String(url && url.url || url);
 
     if (u.startsWith('/api/create/') && method === 'POST') {
@@ -1061,6 +1151,7 @@ window.fetch = async function (url, opts) {
       if (result && (result.added || result.skipped)) return __mockOkRes(result);
       if (result && result.registration) return __mockOkRes(result);
       if (result && result.confirmation) return __mockOkRes(Object.assign({ ok: true }, result));
+      if (result && result.progress) return __mockOkRes(Object.assign({ ok: true }, result));
       if (result && result.__deleted) return __mockOkRes({ ok: true });
       return __mockOkRes({ ok: true, item: result });
     }
@@ -1081,6 +1172,10 @@ window.fetch = async function (url, opts) {
 
     if (u === '/api/training/parse-plan-import' && method === 'POST') {
       return __mockOkRes({ fileName: 'ke-hoach.xlsx', items: window.__planImportParsePreset || [] });
+    }
+
+    if (u === '/api/training/parse-test-questions' && method === 'POST') {
+      return __mockOkRes({ fileName: 'cau-hoi.xlsx', items: window.__testQuestionsParsePreset || [] });
     }
 
     if (u === '/api/admin/export-xlsx' && method === 'POST') {

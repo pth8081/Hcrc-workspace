@@ -1256,6 +1256,9 @@ function mapFormModKeyToUploadModule(modKey) {
 // .pptx cho phần Nhập Báo Cáo, xem onPrEntryPptxFileChange(), nên không đưa vào màn cấu hình 3 định
 // dạng này, luôn dùng nguyên ALLOWED_EXT mặc định phía server).
 const UPLOAD_EXT_UNIVERSE = ['.pdf', '.docx', '.xlsx'];
+// Ảnh minh hoạ câu hỏi (Ngân Hàng Câu Hỏi, Đào Tạo) — universe RIÊNG (chỉ ảnh), khác 8 module tài liệu
+// văn phòng ở trên dùng chung UPLOAD_EXT_UNIVERSE — xem extUniverse per-module bên dưới.
+const UPLOAD_EXT_UNIVERSE_IMAGE = ['.jpg', '.jpeg', '.png', '.webp'];
 const UPLOAD_MODULE_LIST = [
   { key: 'doc', label: '📂 Tài Liệu' },
   { key: 'submission', label: '📜 Văn Bản Trình' },
@@ -1264,7 +1267,10 @@ const UPLOAD_MODULE_LIST = [
   { key: 'meeting', label: '🏢 Phòng Họp' },
   { key: 'minutes', label: '📝 Biên Bản Họp' },
   { key: 'office', label: '🛒 Văn Phòng Tổng Hợp' },
-  { key: 'internal', label: '📣 Truyền Thông Nội Bộ' }
+  { key: 'internal', label: '📣 Truyền Thông Nội Bộ' },
+  // extUniverse riêng (ảnh, không phải .pdf/.docx/.xlsx) — mọi module KHÔNG có field này dùng mặc định
+  // chung UPLOAD_EXT_UNIVERSE (giữ nguyên hành vi 8 module ở trên).
+  { key: 'trainingTestImage', label: '🧪 Ngân Hàng Câu Hỏi (Ảnh Minh Hoạ)', extUniverse: UPLOAD_EXT_UNIVERSE_IMAGE }
 ];
 
 function renderUploadTypeConfig() {
@@ -1272,8 +1278,9 @@ function renderUploadTypeConfig() {
   const config = DB.uploadFileTypeConfig || {};
   const sizeConfig = DB.uploadSizeLimitConfig || {};
   container.innerHTML = UPLOAD_MODULE_LIST.map(m => {
-    const allowed = Array.isArray(config[m.key]) && config[m.key].length ? config[m.key] : UPLOAD_EXT_UNIVERSE;
-    const checkboxesHTML = UPLOAD_EXT_UNIVERSE.map(ext => `
+    const extUniverse = m.extUniverse || UPLOAD_EXT_UNIVERSE;
+    const allowed = Array.isArray(config[m.key]) && config[m.key].length ? config[m.key] : extUniverse;
+    const checkboxesHTML = extUniverse.map(ext => `
       <label class="inline-flex items-center gap-1 mr-4 mb-1 text-xs">
         <input type="checkbox" data-op-change="toggleUploadTypeExtFromCheckbox" data-arg0="${m.key}" data-arg1="${ext}" data-arg-el="2" ${allowed.includes(ext) ? 'checked' : ''}>
         ${ext}
@@ -1309,8 +1316,10 @@ function updateUploadSizeLimit(moduleKey, rawValue) {
 // mảng rỗng như "chưa cấu hình", tự rơi về danh sách mặc định — không khoá cứng module về 0 định dạng).
 function toggleUploadTypeExt(moduleKey, ext, checked) {
   if (!DB.uploadFileTypeConfig) DB.uploadFileTypeConfig = {};
+  const moduleDef = UPLOAD_MODULE_LIST.find(m => m.key === moduleKey);
+  const extUniverse = moduleDef?.extUniverse || UPLOAD_EXT_UNIVERSE;
   const current = Array.isArray(DB.uploadFileTypeConfig[moduleKey]) && DB.uploadFileTypeConfig[moduleKey].length
-    ? DB.uploadFileTypeConfig[moduleKey] : UPLOAD_EXT_UNIVERSE.slice();
+    ? DB.uploadFileTypeConfig[moduleKey] : extUniverse.slice();
   DB.uploadFileTypeConfig[moduleKey] = checked ? [...new Set([...current, ext])] : current.filter(e => e !== ext);
   syncStorage('uploadFileTypeConfig');
   applyUploadAcceptAttrs();
@@ -1473,7 +1482,11 @@ function buildProtectedViewerHTML(fileSrc, fileType, fileName, altLabel) {
 // đúng chính sách mới: PDF luôn ẩn nút In (vẽ bằng PDF.js ra canvas, không có thao tác in/tải nào từ
 // khung xem); các loại tệp khác (ảnh, văn phòng...) cũng ẩn nút In vì đây là khung xem tệp đính kèm
 // thô, không phải chứng từ được thiết kế để in — nút In chỉ dành cho Phiếu hệ thống tự tạo.
-function openFileProtectedView({ title, sub, footerInfo, fileSrc, fileType, fileName, noFileFallbackHTML }) {
+// pdfProgress (tuỳ chọn, Đào Tạo > PDF phải xem hết mới tính hoàn thành — xem viewTrainingPdfDoc() ở
+// module-internalcomms-daotao.js): { initialViewedPages, onPageViewed } chuyển thẳng cho
+// renderPdfProtected() (tham số thứ 4, xem chú thích ở đó) — MỌI caller khác không truyền field này nên
+// hành vi giữ NGUYÊN VẸN như trước (undefined).
+function openFileProtectedView({ title, sub, footerInfo, fileSrc, fileType, fileName, noFileFallbackHTML, pdfProgress }) {
   document.getElementById('viewModalTitle').innerText = title;
   document.getElementById('viewModalSub').innerText = sub || '';
   document.getElementById('viewModalFooterInfo').innerText = footerInfo || '';
@@ -1488,7 +1501,7 @@ function openFileProtectedView({ title, sub, footerInfo, fileSrc, fileType, file
     const pdfContainer = container.firstElementChild;
     document.getElementById('viewDocModal').classList.remove('hidden');
     if (window.renderPdfProtected) {
-      window.renderPdfProtected(pdfContainer, fileSrc, PROTECTED_VIEW_WATERMARK_COMPANY);
+      window.renderPdfProtected(pdfContainer, fileSrc, PROTECTED_VIEW_WATERMARK_COMPANY, pdfProgress);
     } else {
       pdfContainer.innerHTML = '<div class="p-6 text-center text-gray-500 text-sm">⏳ Đang tải bộ xem PDF...</div>';
     }

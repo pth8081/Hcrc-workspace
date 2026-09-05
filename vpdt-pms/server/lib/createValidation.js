@@ -1618,7 +1618,16 @@ const CREATE_MODULE_CONFIGS = {
           throw new CreateError(400, `Câu hỏi số ${i + 1} là loại 1 đáp án đúng nhưng lại chọn nhiều hơn 1`);
         }
         const points = Number(q?.points) > 0 ? Number(q.points) : 1;
-        return { id: i + 1, text, type, options, correctOptionIds, points };
+        // imageUrl (tuỳ chọn, ảnh minh hoạ câu hỏi — VD hình sơ đồ/biểu mẫu cần nhận diện) — CÙNG lỗ hổng
+        // stored-XSS scheme "javascript:" như mọi field URL tệp khác trong file này nếu KHÔNG xác minh:
+        // trainingManage tự soạn payload gọi thẳng route tạo có thể gài imageUrl bất kỳ, hiển thị lại
+        // thành <img src="..."> ở màn Test Builder/lúc học viên làm bài (ttTakeRenderQuestion(), client).
+        // assertUploadedFileUrl() chỉ chấp nhận đúng khuôn "/uploads/<tên-file>" do routes/upload.js sinh
+        // ra, KHÔNG chấp nhận URL ngoài hệ thống hay scheme javascript:/data: — mirror y hệt cách mọi
+        // field file khác (fileUrl của trainingDocuments, licenses...) đã được vá ở đầu file này.
+        const imageUrl = q?.imageUrl ? String(q.imageUrl).trim() : '';
+        assertUploadedFileUrl(imageUrl, `Ảnh câu hỏi số ${i + 1}`);
+        return { id: i + 1, text, type, options, correctOptionIds, points, imageUrl };
       });
       payload.title = String(payload.title).trim();
       payload.category = payload.category ? String(payload.category).trim() : '';

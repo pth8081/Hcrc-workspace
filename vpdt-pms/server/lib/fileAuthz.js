@@ -32,7 +32,8 @@ const {
   canViewItPriceApproval, canViewReportEntry, canSeeReportCompilation, canSeeReportPdfCompilation, filterRecruitmentReferralsForUser,
   canViewLicense, canViewItServiceRenewal,
   canViewOperationOrder, canViewOperationStoreOpening, canViewOperationRepair,
-  canViewDoc, canViewSubmission, canViewContract, canViewCarReg, canViewOfficeReq
+  canViewDoc, canViewSubmission, canViewContract, canViewCarReg, canViewOfficeReq,
+  canViewTrainingTestQuestionImage
 } = require('./recordViewScope');
 // resolveApprovedFileUrl() — nguồn sự thật DUY NHẤT cho "file đã phê duyệt" của itPriceApprovals, dùng
 // chung với routes/priceFile.js (route đánh dấu cột) — xem chú thích đầy đủ ở lib/recordActions.js.
@@ -90,7 +91,7 @@ function customDataHasFileUrl(record, fileUrl) {
 }
 
 async function findOwningRecord(fileUrl) {
-  const [docs, submissions, contracts, carRegs, officeReqs, internalPosts, itPriceApprovals, reportEntries, reportPeriods, recruitmentReferrals, licenses, itServiceRenewals, operationOrders, operationStoreOpenings, operationRepairs] = await Promise.all([
+  const [docs, submissions, contracts, carRegs, officeReqs, internalPosts, itPriceApprovals, reportEntries, reportPeriods, recruitmentReferrals, licenses, itServiceRenewals, operationOrders, operationStoreOpenings, operationRepairs, trainingTests] = await Promise.all([
     getAllForCollection('docs'),
     getAllForCollection('submissions'),
     getAllForCollection('contracts'),
@@ -105,7 +106,11 @@ async function findOwningRecord(fileUrl) {
     getAllForCollection('itServiceRenewals'),
     getAllForCollection('operationOrders'),
     getAllForCollection('operationStoreOpenings'),
-    getAllForCollection('operationRepairs')
+    getAllForCollection('operationRepairs'),
+    // trainingTests (Ngân Hàng Câu Hỏi hỗ trợ ảnh minh hoạ câu hỏi): questions[].imageUrl là 1 file
+    // /uploads/... như mọi field khác — thiếu nhánh này thì ảnh câu hỏi rơi thẳng vào FAIL-OPEN bên dưới,
+    // đọc được bởi BẤT KỲ ai đã đăng nhập dù bài test có thể đang gán cho lớp giới hạn theo danh sách mời.
+    getAllForCollection('trainingTests')
   ]);
   // customDataHasFileUrl() phủ thêm file của TRƯỜNG BỔ SUNG kiểu Tải tệp/Tải nhiều tệp cho đúng 6 module
   // có hỗ trợ Biểu Mẫu ở đây (xem validateRequiredCustomData() ở lib/createValidation.js) — trả về ĐÚNG
@@ -153,6 +158,11 @@ async function findOwningRecord(fileUrl) {
   if (opStoreOpening) return { operationStoreOpening: true, item: opStoreOpening };
   const opRepair = (operationRepairs || []).find(o => o.fileUrl === fileUrl);
   if (opRepair) return { operationRepair: true, item: opRepair };
+  // trainingTests: tra theo ĐÚNG câu hỏi chứa fileUrl (1 bài test có thể có nhiều ảnh câu hỏi khác nhau)
+  // — trả kèm câu hỏi khớp để dùng chung nếu cần, dù authorizeFileAccess() bên dưới hiện chỉ cần "item"
+  // (cả bài test) cho canViewTrainingTestQuestionImage().
+  const test = (trainingTests || []).find(t => (t.questions || []).some(q => q.imageUrl === fileUrl));
+  if (test) return { trainingTestQuestion: true, item: test };
   return null;
 }
 
@@ -248,6 +258,18 @@ async function authorizeFileAccess(user, fileUrl, mode) {
   if (owning.operationOrder) return canViewOperationOrder(user, owning.item, await getAllAppData());
   if (owning.operationStoreOpening) return canViewOperationStoreOpening(user, owning.item, await getAllAppData());
   if (owning.operationRepair) return canViewOperationRepair(user, owning.item, await getAllAppData());
+  // trainingTestQuestion (ảnh minh hoạ câu hỏi Ngân Hàng Câu Hỏi) — canViewTrainingTestQuestionImage()
+  // cần đọc kèm trainingClasses/trainingRegistrations (KHÔNG có trong getAllAppData(), 2 collection này
+  // đã chuyển sang dbo.Records — xem lib/recordStore.js MIGRATED_COLLECTIONS) để xét "đang có đăng ký/là
+  // giảng viên của 1 lớp dùng đúng bài test này" — cùng mode cho cả 'view' lẫn 'download' (module này
+  // không có khái niệm quyền "tải riêng" tách khỏi "xem", giống nhóm itPrice/license/... ở trên).
+  if (owning.trainingTestQuestion) {
+    const [trainingClasses, trainingRegistrations] = await Promise.all([
+      getAllForCollection('trainingClasses'),
+      getAllForCollection('trainingRegistrations')
+    ]);
+    return canViewTrainingTestQuestionImage(user, owning.item, { trainingClasses, trainingRegistrations });
+  }
 
   // ——— Nhóm 5 module "theo phòng ban" (doc/submission/contract/car/office) ———
   if (mode === 'download') {

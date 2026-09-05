@@ -27,6 +27,22 @@ const uploadRateLimiter = rateLimit({
 const UPLOAD_DIR = path.join(__dirname, '..', 'uploads');
 const MAX_MB = parseInt(process.env.UPLOAD_MAX_MB || '20', 10);
 
+// Mặc định SAN cho module MỚI khi admin CHƯA từng cấu hình riêng ở "Quản Lý Tệp File" (khác các module
+// cũ hơn — doc/submission/contract/...: KHÔNG cấu hình riêng thì rơi về ALLOWED_EXT chung, gồm cả
+// .pdf/.docx/.xlsx lẫn ảnh, vì các module đó vốn CHỈ tải lên tài liệu văn phòng). "trainingTestImage"
+// (ảnh minh hoạ câu hỏi Ngân Hàng Câu Hỏi) đúng ra CHỈ nên nhận ảnh ngay từ đầu — không đợi admin phải tự
+// vào cấu hình mới siết đúng, vì defaults.js chỉ seed được cho CSDL hoàn toàn mới (seedDefaults.js chỉ
+// ghi key CHƯA từng tồn tại, không tự thêm sub-key mới vào 1 key "uploadFileTypeConfig" đã có sẵn ở các
+// hệ thống đang chạy) — dùng map mặc định NGAY TẠI ĐÂY để áp dụng được cho CẢ 2 trường hợp (cài mới lẫn
+// hệ thống đang chạy nâng cấp code). Admin vẫn override được bình thường qua UI (config[moduleKey] khi
+// đó khác rỗng sẽ thắng map này, xem 2 dòng "||" bên dưới).
+const MODULE_DEFAULT_ALLOWED_EXT = {
+  trainingTestImage: ['.jpg', '.jpeg', '.png', '.webp']
+};
+const MODULE_DEFAULT_MAX_MB = {
+  trainingTestImage: 5
+};
+
 fs.mkdirSync(UPLOAD_DIR, { recursive: true });
 
 // Danh sách phần mở rộng cho phép — khớp với loại tài liệu/hồ sơ DMS thường dùng
@@ -86,7 +102,9 @@ router.post('/', uploadRateLimiter, (req, res) => {
           getAppDataValueCached('uploadFileTypeConfig'),
           getAppDataValueCached('uploadSizeLimitConfig')
         ]);
-        const allowedForModule = config && config[moduleKey];
+        const configuredForModule = config && config[moduleKey];
+        const allowedForModule = (Array.isArray(configuredForModule) && configuredForModule.length)
+          ? configuredForModule : MODULE_DEFAULT_ALLOWED_EXT[moduleKey];
         if (Array.isArray(allowedForModule) && allowedForModule.length) {
           const ext = path.extname(req.file.originalname).toLowerCase();
           if (!allowedForModule.includes(ext)) {
@@ -97,7 +115,8 @@ router.post('/', uploadRateLimiter, (req, res) => {
         // Giới hạn dung lượng RIÊNG theo module (Hệ Thống → "Quản Lý Tệp File") — CHỈ có thể siết chặt
         // thêm, không vượt qua nổi giới hạn CHUNG toàn hệ thống ở multer.limits.fileSize phía trên (file
         // vượt giới hạn chung đã bị multer tự chặn từ trước khi tới được đây, xem nhánh LIMIT_FILE_SIZE).
-        const maxMbForModule = sizeConfig && Number(sizeConfig[moduleKey]) > 0 ? Number(sizeConfig[moduleKey]) : null;
+        const configuredMaxMb = sizeConfig && Number(sizeConfig[moduleKey]) > 0 ? Number(sizeConfig[moduleKey]) : null;
+        const maxMbForModule = configuredMaxMb || MODULE_DEFAULT_MAX_MB[moduleKey] || null;
         if (maxMbForModule && req.file.size > maxMbForModule * 1024 * 1024) {
           fs.unlink(req.file.path, () => {});
           return res.status(400).json({ error: `Tệp vượt quá dung lượng cho phép cho mục này (${maxMbForModule}MB)` });

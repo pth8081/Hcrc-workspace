@@ -2469,6 +2469,35 @@ input[data-sdd-list] {
           <div class="flex justify-end"><button type="submit" class="bg-emerald-600 text-white px-5 py-2 rounded font-bold hover:bg-emerald-700">Tạo Bài Test</button></div>
         </form>
         <p id="trainingTestNoPermNote" class="hidden text-xs text-gray-500 italic bg-gray-50 border rounded p-3">⛔ Bạn không có quyền tạo bài test.</p>
+
+        <!-- Nhập Câu Hỏi Từ Excel — nạp vào danh sách câu hỏi đang soạn dở ở form trên (KHÔNG tự tạo bài
+             test), người dùng vẫn bấm "Tạo Bài Test" ở form trên như bình thường sau khi nạp. -->
+        <div id="trainingTestImportSection" class="hidden bg-white p-3 rounded border text-xs space-y-2">
+          <h4 class="font-bold text-gray-700">📥 Nhập Câu Hỏi Từ Excel</h4>
+          <p class="text-gray-500">Bước 1 (tuỳ chọn): tải trước các ảnh minh hoạ câu hỏi sẽ dùng. Bước 2: tải mẫu Excel, điền câu hỏi (cột "Ảnh" gõ đúng tên tệp ảnh vừa tải ở Bước 1, hoặc để trống). Bước 3: tải file đã điền lên để xem trước, rồi bấm nạp vào danh sách câu hỏi.</p>
+          <div class="space-y-1">
+            <label class="block font-semibold text-gray-600">Bước 1: Tải Ảnh Minh Hoạ Câu Hỏi (tuỳ chọn, chọn được nhiều ảnh)</label>
+            <input id="ttImportImageInput" type="file" accept=".jpg,.jpeg,.png,.webp" multiple data-op-change="onTrainingTestImportImageFileChange" data-arg-event="0" class="text-xs">
+            <p id="ttImportImageStatus" class="text-gray-500"></p>
+            <div id="ttImportImagesStagedList" class="flex flex-wrap gap-1"><span class="text-gray-400 italic text-xs">Chưa tải ảnh nào.</span></div>
+          </div>
+          <div class="flex flex-wrap items-center gap-3 pt-1 border-t">
+            <a href="/api/training/test-question-template" class="text-indigo-600 font-bold text-xs hover:underline">⬇️ Bước 2: Tải Mẫu Excel</a>
+            <label class="font-semibold text-gray-600">Bước 3:</label>
+            <input id="ttImportFileInput" type="file" accept=".xlsx,.xls,.csv" data-op-change="onTrainingTestImportFileChange" data-arg-event="0" class="text-xs">
+          </div>
+          <p id="ttImportStatus" class="text-xs text-gray-500"></p>
+          <div id="ttImportPreviewWrap" class="hidden border rounded max-h-56 overflow-y-auto">
+            <table class="w-full text-xs">
+              <thead class="bg-gray-100 text-left sticky top-0"><tr>
+                <th class="p-1">#</th><th class="p-1">Nội Dung Câu Hỏi</th><th class="p-1">Loại</th><th class="p-1 text-center">Điểm</th><th class="p-1">Đáp Án</th><th class="p-1">Trạng Thái</th>
+              </tr></thead>
+              <tbody id="ttImportPreviewBody"></tbody>
+            </table>
+          </div>
+          <button type="button" id="ttImportConfirmBtn" data-op="confirmTrainingTestImport" class="hidden bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1.5 rounded text-xs font-bold">✅ Nạp Các Câu Hỏi Hợp Lệ Vào Danh Sách</button>
+        </div>
+
         <div class="space-y-3">
           <h3 class="font-bold text-gray-800">🧪 Danh Sách Bài Test</h3>
           <div id="trainingTestsContainer" class="grid grid-cols-1 md:grid-cols-2 gap-2"></div>
@@ -2774,11 +2803,30 @@ input[data-sdd-list] {
         </div>
         <div class="p-5">
           <p id="ttTakeQuestionCounter" class="text-xs font-bold text-gray-400 mb-1"></p>
+          <div id="ttTakeQuestionImageWrap" class="hidden mb-2"></div>
           <p id="ttTakeQuestionText" class="font-semibold text-gray-800 mb-3"></p>
           <div id="ttTakeOptionsContainer" class="space-y-2"></div>
         </div>
         <div class="p-4 border-t flex justify-end">
           <button type="button" id="ttTakeNextBtn" data-op="ttTakeGoNext" class="bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-2 rounded font-bold text-sm">Câu Tiếp Theo →</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Modal xem Video bài giảng (Youtube IFrame Player API) — chặn tốc độ phát ngoài 0.5x-1.5x + chặn
+         tua vượt điểm đã xem xa nhất, xem viewTrainingVideoDoc() ở module-internalcomms-daotao.js. LƯU Ý
+         GIỚI HẠN đã trao đổi với người dùng: đây là chế độ "phát hiện rồi sửa lại" (best-effort phía
+         client), KHÔNG PHẢI khoá cứng tuyệt đối — giao diện trình phát gốc của Youtube (menu chuột phải
+         trên iframe) không thể bị trang nhúng gỡ bỏ tuỳ chọn, người rành kỹ thuật vẫn có đường lách. -->
+    <div id="trainingVideoModal" class="hidden fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
+      <div class="bg-white rounded-lg shadow-xl max-w-2xl w-full">
+        <div class="p-3 border-b flex justify-between items-center gap-2">
+          <h3 id="trainingVideoModalTitle" class="font-bold text-gray-800 text-sm"></h3>
+          <button type="button" data-op="closeTrainingVideoModal" class="text-gray-400 hover:text-red-600 font-bold text-xl leading-none">&times;</button>
+        </div>
+        <div class="p-3">
+          <div id="trainingVideoPlayerMount" class="w-full bg-black rounded" style="aspect-ratio:16/9;"></div>
+          <p class="text-[11px] text-gray-400 mt-2">⚠️ Tốc độ phát bị giới hạn 0.5x–1.5x, và không thể tua vượt qua điểm bạn chưa từng xem tới.</p>
         </div>
       </div>
     </div>
@@ -7993,14 +8041,49 @@ input[data-sdd-list] {
   // client) — không tải lại thư viện lần 2.
   window.pdfjsLib = pdfjsLib;
 
-  window.renderPdfProtected = async function(container, fileSrc, watermarkText) {
+  // progress (tuỳ chọn, Đào Tạo > PDF phải xem hết mới tính hoàn thành — xem viewTrainingPdfDoc() ở
+  // module-internalcomms-daotao.js): { initialViewedPages: number[], onPageViewed(pageNum, totalPages) }.
+  // MỌI caller khác (viewDoc/viewContract/viewLicenseFile...) không truyền tham số này -> hành vi giữ
+  // NGUYÊN VẸN như trước (undefined, if (progress?.onPageViewed) bên dưới không kích hoạt gì cả).
+  window.renderPdfProtected = async function(container, fileSrc, watermarkText, progress) {
     container.innerHTML = '<div class="p-6 text-center text-gray-500 text-sm">⏳ Đang tải PDF để xem...</div>';
+    // Dọn observer của lượt render TRƯỚC (nếu container này từng vẽ PDF khác) — tránh 2 observer cùng
+    // gắn vào 1 phần tử <div> dùng lại nhiều lượt mở Khung Xem Bảo Vệ trong 1 phiên.
+    if (container._pdfPageObserver) { container._pdfPageObserver.disconnect(); container._pdfPageObserver = null; }
     try {
       const pdf = await pdfjsLib.getDocument(fileSrc).promise;
       container.innerHTML = '';
       const wrap = document.createElement('div');
       wrap.className = 'flex flex-col items-center gap-3 py-2 w-full';
       container.appendChild(wrap);
+
+      // Đánh dấu "đã xem" 1 trang khi trang đó nằm trong khung nhìn (root = chính container cuộn được)
+      // ĐỦ LÂU (dwell ~900ms, tránh tính "đã xem" 1 trang lướt qua khi cuộn nhanh/fling) — mỗi trang chỉ
+      // báo callback ĐÚNG 1 LẦN (viewedPages chặn báo lại), khớp yêu cầu "phải THẬT SỰ xem qua từng trang".
+      let observer = null;
+      const viewedPages = new Set(progress?.initialViewedPages || []);
+      const dwellTimers = new Map(); // pageNum -> timeout handle
+      if (progress && typeof progress.onPageViewed === 'function') {
+        observer = new IntersectionObserver((entries) => {
+          entries.forEach((entry) => {
+            const pageNum = Number(entry.target.dataset.pageNum);
+            if (entry.isIntersecting) {
+              if (viewedPages.has(pageNum) || dwellTimers.has(pageNum)) return;
+              const handle = setTimeout(() => {
+                dwellTimers.delete(pageNum);
+                if (viewedPages.has(pageNum)) return;
+                viewedPages.add(pageNum);
+                progress.onPageViewed(pageNum, pdf.numPages);
+              }, 900);
+              dwellTimers.set(pageNum, handle);
+            } else if (dwellTimers.has(pageNum)) {
+              clearTimeout(dwellTimers.get(pageNum));
+              dwellTimers.delete(pageNum);
+            }
+          });
+        }, { root: container, threshold: 0.6 });
+        container._pdfPageObserver = observer;
+      }
 
       for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
         const page = await pdf.getPage(pageNum);
@@ -8014,6 +8097,8 @@ input[data-sdd-list] {
         pageWrap.style.width = viewport.width + 'px';
         pageWrap.style.height = viewport.height + 'px';
         pageWrap.oncontextmenu = () => false;
+        pageWrap.dataset.pageNum = String(pageNum);
+        if (observer) observer.observe(pageWrap);
 
         const canvas = document.createElement('canvas');
         canvas.width = viewport.width;

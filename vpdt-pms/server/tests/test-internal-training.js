@@ -666,7 +666,10 @@ async function main() {
       assertEqual(doc.mandatory, false, 'mandatory should default to false when the checkbox is left unchecked');
 
       const containerHTML = await page.evaluate(() => { renderTrainingDocuments(); return document.getElementById('trainingDocumentsContainer').innerHTML; });
-      assert(containerHTML.includes('<iframe'), 'a VIDEO document should render as an embedded iframe');
+      // Đợt (video 0.5x-1.5x + chặn tua vượt điểm đã xem xa nhất): VIDEO không còn nhúng <iframe> trực
+      // tiếp trong Kho Tài Liệu nữa — mở qua trình xem CÓ THEO DÕI TIẾN ĐỘ (viewTrainingVideoDoc(), xem
+      // tests/test-training-video-pdf-progress.js cho luồng theo dõi đầy đủ).
+      assert(containerHTML.includes('data-op="viewTrainingVideoDoc"'), 'a VIDEO document should render a tracked "Xem Video" button instead of a raw iframe');
     });
 
     await run('trainingDocuments: creating an IMAGE document (file upload) with mandatory + courseId round-trips and renders a thumbnail', async () => {

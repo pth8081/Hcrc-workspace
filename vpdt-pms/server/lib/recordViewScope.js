@@ -267,6 +267,37 @@ function filterTrainingRegistrationsForUser(registrations, user, appData) {
     || canManageTrainingClass(user, classes.find(c => c.id === r.classId)));
 }
 
+// Ảnh minh hoạ câu hỏi (trainingTests.questions[].imageUrl, mục "Ngân Hàng Câu Hỏi hỗ trợ ảnh") — dùng ở
+// lib/fileAuthz.js (cả mode 'view' lẫn 'download') để chặn đúng lỗ hổng đã vá cho các module khác (đọc
+// chú thích đầu file đó): file KHÔNG được để bất kỳ ai đã đăng nhập cũng xem được chỉ vì biết/đoán đúng
+// URL /uploads/<tên-file>. "Quyền xem hợp lệ" 1 bài test ở ĐÂY hẹp hơn sanitizeTrainingTestsForUser() ở
+// trên (hàm đó KHÔNG lọc bớt danh sách bài test — trainingTests hiển thị công khai toàn công ty ở màn
+// Ngân Hàng Câu Hỏi/lúc tạo lớp, chỉ ẩn ĐÁP ÁN ĐÚNG với người không quản lý): ảnh câu hỏi chỉ THẬT SỰ cần
+// xem được bởi (1) trainingManage/admin (tạo/sửa/xem toàn bộ ngân hàng câu hỏi), (2) giảng viên được gán
+// cho 1 lớp có dùng ĐÚNG bài test này (canManageTrainingClass), hoặc (3) học viên đang có 1 đăng ký còn
+// hiệu lực (khác CANCELLED) vào 1 lớp như vậy — tức là người ĐANG/SẼ làm đúng bài test chứa câu hỏi đó.
+// Bài test CHƯA được gán cho lớp nào (mới tạo trong Ngân Hàng Câu Hỏi, chưa ai dùng) thì KHÔNG ai ngoài
+// trainingManage/admin cần xem ảnh của nó — an toàn hơn là mở cho "công khai toàn công ty" như
+// trainingTests nói chung, vì ảnh câu hỏi không có lý do gì hiển thị ra ngoài luồng làm bài/quản lý.
+function canViewTrainingTestQuestionImage(user, test, appData) {
+  if (canManageTraining(user)) return true;
+  const classes = (appData?.trainingClasses || []).filter(c => c.testId === test?.id);
+  if (!classes.length) return false;
+  if (classes.some(c => canManageTrainingClass(user, c))) return true;
+  const classIds = new Set(classes.map(c => c.id));
+  const registrations = appData?.trainingRegistrations || [];
+  return registrations.some(r => r.creator === user.username && r.result !== 'CANCELLED' && classIds.has(r.classId));
+}
+
+// Tiến độ xem tài liệu/video đào tạo (trainingDocumentProgress, mục "video/PDF phải xem hết mới tính
+// hoàn thành") — mỗi dòng là dữ liệu THEO DÕI RIÊNG TƯ của 1 người (giây đã xem xa nhất/trang đã xem) cho
+// 1 tài liệu, cùng tinh thần filterTrainingRegistrationsForUser() ở trên: KHÔNG có lý do gì người khác
+// (không phải chính chủ/người quản lý đào tạo) cần đọc được tiến độ xem tài liệu của đồng nghiệp.
+function filterTrainingDocumentProgressForUser(list, user) {
+  if (canManageTraining(user)) return list || [];
+  return (list || []).filter(p => p.username === user.username);
+}
+
 // Danh sách username đang giữ 1 cờ quyền phê duyệt CỤ THỂ (không phải toàn bộ perms) — client cần cái
 // này để tự dựng danh sách người nhận email khi tạo hồ sơ (VD getMeetingApproverUsernames() ở
 // public/index.html, dùng cho Đặt Phòng Họp/Góc Chia Sẻ/Phê Duyệt Giá IT/Giấy Phép). Tính SẴN ở đây từ
@@ -764,6 +795,7 @@ module.exports = {
   canViewInternalPost, filterInternalPostsForUser,
   canSeeReportCompilation, canSeeReportPdfCompilation, sanitizeReportPeriodsForUser,
   sanitizeTrainingTestsForUser, filterTrainingTestSubmissionsForUser, filterTrainingRegistrationsForUser,
+  canViewTrainingTestQuestionImage, filterTrainingDocumentProgressForUser,
   computeModuleApproverUsernames, sanitizeUsersPermsForViewer,
   filterRecruitmentReferralsForUser,
   canViewReportEntry, filterReportEntriesForUser,

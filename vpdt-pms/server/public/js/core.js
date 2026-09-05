@@ -147,6 +147,9 @@ const DB = {
   trainingCategories: [], trainingDocuments: [], trainingClasses: [], trainingRegistrations: [],
   careerPaths: [], careerPathConfirmations: [],
   trainingTests: [], trainingTestSubmissions: [], trainingCourses: [], trainingPlans: [],
+  // trainingDocumentProgress (video 0.5x-1.5x/xem hết PDF mới tính hoàn thành) — riêng tư theo người
+  // dùng, xem lib/recordViewScope.js filterTrainingDocumentProgressForUser().
+  trainingDocumentProgress: [],
   onboardingPaths: [], onboardingProgress: [],
   recruitmentJobs: [], recruitmentReferrals: [],
   // hrFeedback (Nhân Sự — "HCRC Đồng Hành"): câu hỏi RIÊNG TƯ của nhân viên + phản hồi của Nhân Sự.
@@ -2532,6 +2535,7 @@ async function initDatabase(loggingInUser) {
     DB.careerPathConfirmations = data.careerPathConfirmations || [];
     DB.trainingTests = data.trainingTests || [];
     DB.trainingTestSubmissions = data.trainingTestSubmissions || [];
+    DB.trainingDocumentProgress = data.trainingDocumentProgress || [];
     DB.trainingCourses = data.trainingCourses || [];
     DB.trainingPlans = data.trainingPlans || [];
     DB.recruitmentJobs = data.recruitmentJobs || [];

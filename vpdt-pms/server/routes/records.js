@@ -925,6 +925,67 @@ router.post('/trainingRegistrations/:id/mark-document-viewed', async (req, res) 
   }
 });
 
+// "Bắt Buộc Hoàn Thành" có logic thật (video/PDF) — POST /api/records/trainingDocuments/:id/track-progress.
+// Bất kỳ ai đã đăng nhập cũng gọi được (trainingDocuments công khai toàn công ty, cùng tinh thần
+// mark-document-viewed ở trên) — route TỰ suy ra "kind" (VIDEO/PDF) từ doc.docType thật, KHÔNG tin
+// payload.kind client gửi (chặn 1 request tự soạn báo khống "đã xem hết PDF" cho 1 tài liệu video, hay
+// ngược lại). Khoá theo docId+username TRONG SUỐT đọc-hợp nhất-ghi (video/PDF poll tiến độ mỗi vài giây,
+// cùng 1 người có thể gửi gần như đồng thời — cùng lý do training_test_submission ở submit-test).
+router.post('/trainingDocuments/:id/track-progress', async (req, res) => {
+  const docId = Number(req.params.id);
+  if (!Number.isFinite(docId)) return res.status(400).json({ error: 'id không hợp lệ' });
+  try {
+    const { freshUser } = await getFreshUser(req);
+    const result = await withAppLock(`training_doc_progress:${docId}:${freshUser.username}`, async () => {
+      const docs = await getAllForCollection('trainingDocuments');
+      const doc = docs.find(d => d.id === docId);
+      if (!doc) throw new HttpError(404, 'Không tìm thấy tài liệu');
+      const isPdfDoc = doc.docType === 'DOCUMENT' && /\.pdf$/i.test(doc.fileName || '');
+      if (doc.docType !== 'VIDEO' && !isPdfDoc) {
+        throw new HttpError(400, 'Tài liệu này không thuộc loại được theo dõi tiến độ (chỉ video/PDF)');
+      }
+      const kind = doc.docType === 'VIDEO' ? 'VIDEO' : 'PDF';
+
+      const progressList = await getAllForCollection('trainingDocumentProgress');
+      const existing = progressList.find(p => p.docId === docId && p.username === freshUser.username);
+      const { fields, completedNow } = recordActions.computeTrainingDocumentProgressUpdate(existing, { ...req.body, kind });
+
+      const progressRow = existing
+        ? await withLockedRecordForCollection('trainingDocumentProgress', existing.id, (item) => Object.assign(item, fields))
+        : await insertRecord('trainingDocumentProgress', {
+            id: Date.now(), docId, username: freshUser.username, name: freshUser.name, dept: freshUser.dept, ...fields
+          });
+
+      // Hoàn thành LẦN ĐẦU (completedNow) -> tự động đánh dấu "đã xem" cho MỌI đăng ký (lớp ONLINE) đang
+      // coi tài liệu này là giáo trình bắt buộc — thay hẳn cú click thủ công của
+      // markTrainingDocumentViewed() cho đúng 2 loại có tín hiệu khách quan này (KHÔNG đổi gì ở hàm đó —
+      // IMAGE/tài liệu không phải PDF vẫn dùng cú click thủ công như trước).
+      const updatedRegistrations = [];
+      if (completedNow) {
+        const classes = await getAllForCollection('trainingClasses');
+        const relevantClassIds = new Set(classes
+          .filter(c => c.mode === 'ONLINE' && Array.isArray(c.documentIds) && c.documentIds.includes(docId))
+          .map(c => c.id));
+        if (relevantClassIds.size) {
+          const regs = await getAllForCollection('trainingRegistrations');
+          const myRegs = regs.filter(r => r.creator === freshUser.username && r.result !== 'CANCELLED' && relevantClassIds.has(r.classId));
+          for (const reg of myRegs) {
+            const cls = classes.find(c => c.id === reg.classId);
+            const updatedReg = await withLockedRecordForCollection('trainingRegistrations', reg.id, (item) =>
+              recordActions.markTrainingDocumentViewed({ documentId: docId }, freshUser, item, cls));
+            updatedRegistrations.push(updatedReg);
+          }
+        }
+      }
+
+      return { progress: progressRow, updatedRegistrations };
+    });
+    res.json({ ok: true, ...result });
+  } catch (err) {
+    handleError(res, `trainingDocuments/${req.params.id}/track-progress`, err);
+  }
+});
+
 // set-result (Đợt 3) cần đọc kèm trainingClasses — quyền ghi giờ so theo canManageTrainingClass()
 // (trainingManage quản lý MỌI lớp, trainingInstruct chỉ đúng lớp mình được gán làm giảng viên, xem
 // lib/recordActions.js), không còn so trực tiếp reg.classCreator như trước Đợt 3 nên không dùng chung

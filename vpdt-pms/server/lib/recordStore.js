@@ -51,7 +51,13 @@ const { HttpError } = require('./httpErrors');
 // Sự (mô hình 1 hỏi – 1 đáp), tạo qua engine chung lib/createValidation.js (mở cho mọi nhân viên,
 // không cần quyền riêng — cùng khuôn itSupportTickets), trả lời/đánh dấu đã đọc qua 2 route riêng ở
 // routes/records.js (respondToHrFeedback()/markHrFeedbackRead() ở lib/recordActions.js).
-const MIGRATED_COLLECTIONS = new Set(['submissions', 'docs', 'carRegs', 'officeReqs', 'contracts', 'meetings', 'meetingMinutes', 'internalPosts', 'paymentRequests', 'vppPeriods', 'vppRegistrations', 'reportPeriods', 'reportEntries', 'trainingDocuments', 'trainingClasses', 'trainingRegistrations', 'careerPaths', 'careerPathConfirmations', 'trainingTests', 'trainingTestSubmissions', 'trainingCourses', 'trainingPlans', 'onboardingPaths', 'onboardingProgress', 'recruitmentJobs', 'recruitmentReferrals', 'itPriceApprovals', 'itSupportTickets', 'uniformPeriods', 'uniformIssuances', 'uniformStockAdjustments', 'uniformTransfers', 'budgetTemplates', 'budgetPeriods', 'budgetEntries', 'licenses', 'itServiceRenewals', 'hrFeedback', 'operationOrders', 'operationStoreOpenings', 'operationRepairs', 'operationExecutionPeriods']);
+// trainingDocumentProgress (video 0.5x-1.5x/xem hết PDF mới tính hoàn thành): 1 dòng/1 (tài liệu, người
+// dùng) theo dõi giây đã xem xa nhất (video)/trang đã xem (PDF) — xem lib/recordActions.js
+// computeTrainingDocumentProgressUpdate() + routes/records.js POST trainingDocuments/:id/track-progress.
+// Cùng khuôn trainingTestSubmissions (không có createValidation.js riêng — route tự quản lý upsert theo
+// khoá tự nhiên docId+username thay vì qua validateAndPrepareCreate(), vì đây không phải "tạo 1 hồ sơ độc
+// lập theo lựa chọn người dùng" mà là 1 dòng trạng thái server tự cập nhật liên tục).
+const MIGRATED_COLLECTIONS = new Set(['submissions', 'docs', 'carRegs', 'officeReqs', 'contracts', 'meetings', 'meetingMinutes', 'internalPosts', 'paymentRequests', 'vppPeriods', 'vppRegistrations', 'reportPeriods', 'reportEntries', 'trainingDocuments', 'trainingClasses', 'trainingRegistrations', 'careerPaths', 'careerPathConfirmations', 'trainingTests', 'trainingTestSubmissions', 'trainingCourses', 'trainingPlans', 'onboardingPaths', 'onboardingProgress', 'recruitmentJobs', 'recruitmentReferrals', 'itPriceApprovals', 'itSupportTickets', 'uniformPeriods', 'uniformIssuances', 'uniformStockAdjustments', 'uniformTransfers', 'budgetTemplates', 'budgetPeriods', 'budgetEntries', 'licenses', 'itServiceRenewals', 'hrFeedback', 'operationOrders', 'operationStoreOpenings', 'operationRepairs', 'operationExecutionPeriods', 'trainingDocumentProgress']);
 
 function toRecord(row) {
   return JSON.parse(row.Payload);

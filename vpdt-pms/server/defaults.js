@@ -48,13 +48,21 @@ const DEFAULTS = {
     meeting: ['.pdf', '.docx', '.xlsx'],
     minutes: ['.pdf', '.docx', '.xlsx'],
     office: ['.pdf', '.docx', '.xlsx'],
-    internal: ['.pdf', '.docx', '.xlsx']
+    internal: ['.pdf', '.docx', '.xlsx'],
+    // trainingTestImage (Ngân Hàng Câu Hỏi hỗ trợ ảnh minh hoạ câu hỏi) — CHỈ ảnh, khác 8 module trên
+    // (tài liệu văn phòng .pdf/.docx/.xlsx) — xem UPLOAD_MODULE_LIST trong module-tailieu.js. Chỉ áp
+    // dụng cho CSDL hoàn toàn mới (seedDefaults.js không tự thêm sub-key này vào 1 key
+    // "uploadFileTypeConfig" đã tồn tại sẵn ở hệ thống đang chạy) — routes/upload.js có map mặc định
+    // riêng (MODULE_DEFAULT_ALLOWED_EXT) để cùng giá trị này áp dụng được cho cả hệ thống đang chạy.
+    trainingTestImage: ['.jpg', '.jpeg', '.png', '.webp']
   },
   // Giới hạn dung lượng tối đa (MB) riêng cho từng module, cùng danh sách key với uploadFileTypeConfig
   // ở trên — admin cấu hình ở Hệ Thống → "📎 Quản Lý Tệp File". Rỗng/không có key = dùng nguyên giới
   // hạn CHUNG toàn hệ thống (env UPLOAD_MAX_MB, mặc định 20MB, xem routes/upload.js) — giá trị ở đây
   // chỉ có thể SIẾT CHẶT thêm cho riêng module đó, không thể vượt quá giới hạn chung.
-  uploadSizeLimitConfig: {},
+  // trainingTestImage: 5MB mặc định — ảnh câu hỏi không cần lớn, cùng lý do MODULE_DEFAULT_MAX_MB ở
+  // routes/upload.js áp dụng cho hệ thống đang chạy.
+  uploadSizeLimitConfig: { trainingTestImage: 5 },
   // Viết tắt Loại Pháp Lý hợp đồng — dùng sinh Mã Hợp Đồng (xem generateContractCode() trong
   // index.html: HCRC-<viết tắt Phòng ban>-<viết tắt Loại Pháp Lý>-<số thứ tự>), cùng mô hình với
   // deptAbbrs/docCatAbbrs ở trên (rỗng mặc định, client tự suy ra nếu chưa cấu hình).

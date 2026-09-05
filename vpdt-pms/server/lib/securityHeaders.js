@@ -36,13 +36,23 @@
 // đều PHẢI được mở tương ứng ở styleSrc/fontSrc, thiếu 1 trong 2 sẽ khiến trình duyệt lặng lẽ chặn (bị
 // phát hiện qua báo lỗi thực tế trên server thật: CSP chặn cả stylesheet lẫn font, chữ rơi về font hệ
 // thống mặc định, không báo lỗi rõ ràng cho người dùng thường).
+//
+// Youtube IFrame Player API (Đào Tạo > Video bài giảng — chặn tốc độ phát 0.5x-1.5x + snap-back khi tua
+// vượt điểm đã xem xa nhất, xem viewTrainingVideoDoc() ở module-internalcomms-daotao.js): script bootstrap
+// tải từ https://www.youtube.com/iframe_api (định nghĩa window.YT), rồi chính API đó tự dựng 1
+// <iframe src="https://www.youtube.com/embed/..."> để nhúng trình phát thật — 2 lượt tải NGOÀI domain
+// này đều cần mở tương ứng ở scriptSrc (script bootstrap) VÀ frameSrc (iframe trình phát, directive
+// TRƯỚC ĐÂY chưa từng khai báo ở đây nên MẶC ĐỊNH rơi về default-src 'self' — tức là bản nhúng Youtube cũ
+// (trước tính năng theo dõi tiến độ này, xem trainingYoutubeEmbedUrl()) NHIỀU KHẢ NĂNG đã âm thầm bị CSP
+// chặn từ trước, không hiện được, kể cả không có tính năng mới này). KHÔNG mở thêm connectSrc — giao tiếp
+// giữa iframe trình phát và trang qua postMessage, không qua XHR/fetch nào từ trang cha.
 const helmet = require('helmet');
 
 const securityHeaders = helmet({
   contentSecurityPolicy: {
     directives: {
       defaultSrc: ["'self'"],
-      scriptSrc: ["'self'", "'unsafe-inline'"],
+      scriptSrc: ["'self'", "'unsafe-inline'", 'https://www.youtube.com'],
       scriptSrcAttr: ["'none'"],
       styleSrc: ["'self'", "'unsafe-inline'", 'https://fonts.googleapis.com'],
       imgSrc: ["'self'", 'data:', 'blob:'],
@@ -50,6 +60,7 @@ const securityHeaders = helmet({
       connectSrc: ["'self'"],
       workerSrc: ["'self'", 'blob:'],
       objectSrc: ["'none'"],
+      frameSrc: ["'self'", 'https://www.youtube.com'],
       frameAncestors: ["'self'"],
       baseUri: ["'self'"],
       formAction: ["'self'"]

@@ -3043,6 +3043,76 @@ function markTrainingDocumentViewed(payload, user, reg, cls) {
   return reg;
 }
 
+// ===================== "Bắt Buộc Hoàn Thành" có LOGIC THẬT (video/PDF) — trainingDocumentProgress =====================
+// Trước đây trainingDocuments.mandatory CHỈ là cờ hiển thị (badge ⚠️), không hề có logic theo dõi/chặn gì
+// (xem chú thích ở createValidation.js) — markTrainingDocumentViewed() ở trên vẫn là 1 CÚ CLICK đơn
+// thuần, không xác nhận người dùng THẬT SỰ đã xem hết nội dung. Phần này thêm tín hiệu THẬT cho đúng 2
+// loại nội dung có thể theo dõi khách quan được — video (giây đã xem xa nhất) và PDF (trang đã cuộn qua)
+// — IMAGE/tài liệu không phải PDF (docx/xlsx) vẫn dùng nguyên cú click thủ công ở trên (không có tín hiệu
+// khách quan nào tốt hơn để đòi hỏi, xem quyết định nghiệp vụ ở module-internalcomms-daotao.js).
+const TRAINING_VIDEO_COMPLETION_RATIO = 0.95; // ~95% thời lượng — chừa biên nhỏ, không đòi hỏi xem chính xác từng khung hình cuối.
+
+function isTrainingVideoProgressComplete(furthestSeconds, durationSeconds) {
+  const duration = Number(durationSeconds) || 0;
+  const furthest = Number(furthestSeconds) || 0;
+  return duration > 0 && furthest >= duration * TRAINING_VIDEO_COMPLETION_RATIO;
+}
+
+// pageCount phải > 0 và đã xem đủ MỌI trang 1..pageCount (không chỉ đủ SỐ LƯỢNG — dùng Set để không đếm
+// trùng 1 trang xem lại nhiều lần) mới coi là hoàn thành.
+function isTrainingPdfProgressComplete(viewedPages, pageCount) {
+  const count = Number(pageCount) || 0;
+  if (count <= 0) return false;
+  const viewed = new Set((viewedPages || []).map(Number));
+  for (let p = 1; p <= count; p++) { if (!viewed.has(p)) return false; }
+  return true;
+}
+
+// Hợp nhất 1 lượt báo cáo tiến độ (payload từ client — poll video mỗi vài giây/mỗi trang PDF cuộn qua đủ
+// lâu) vào bản ghi trainingDocumentProgress hiện có (existing — null nếu đây là lượt đầu tiên cho đúng
+// cặp docId+username). Hàm THUẦN (không đọc/ghi CSDL) để test được không cần DB — dùng ở CẢ route thật
+// (routes/records.js POST trainingDocuments/:id/track-progress) LẪN unit test.
+//
+// Chống thụt lùi có chủ ý: furthestSeconds/viewedPages CHỈ được phép tăng dần (Math.max/hợp mảng), không
+// bao giờ giảm — 1 lượt báo cáo trễ/không theo thứ tự (mạng chậm, tab nền) không được xoá mất tiến độ đã
+// ghi nhận trước đó. completedAt giữ nguyên mốc THỜI ĐIỂM ĐẦU TIÊN đạt hoàn thành (không cập nhật lại mỗi
+// lần poll sau khi đã hoàn thành).
+//
+// Trả về { fields, completedNow }: `fields` là các field cần gán vào bản ghi (spread vào bản ghi hiện
+// có/bản ghi mới); `completedNow` CHỈ true đúng ở lượt báo cáo làm bản ghi chuyển từ "chưa hoàn thành"
+// sang "hoàn thành" — routes/records.js dùng cờ này để biết có cần tự động gọi markTrainingDocumentViewed()
+// cho các đăng ký (trainingRegistrations) đang coi tài liệu này là giáo trình bắt buộc hay không.
+function computeTrainingDocumentProgressUpdate(existing, payload) {
+  const wasCompleted = !!existing?.completedAt;
+  const kind = payload?.kind === 'PDF' ? 'PDF' : 'VIDEO';
+  const fields = { kind };
+
+  if (kind === 'VIDEO') {
+    const prevFurthest = Number(existing?.furthestSeconds) || 0;
+    const incomingFurthest = Number(payload?.furthestSeconds);
+    fields.furthestSeconds = Math.max(prevFurthest, Number.isFinite(incomingFurthest) && incomingFurthest > 0 ? incomingFurthest : 0);
+    const incomingDuration = Number(payload?.durationSeconds);
+    fields.durationSeconds = Number.isFinite(incomingDuration) && incomingDuration > 0 ? incomingDuration : (Number(existing?.durationSeconds) || 0);
+    fields.viewedPages = Array.isArray(existing?.viewedPages) ? existing.viewedPages : [];
+    fields.pageCount = Number(existing?.pageCount) || 0;
+  } else {
+    const prevPages = Array.isArray(existing?.viewedPages) ? existing.viewedPages : [];
+    const incomingPages = Array.isArray(payload?.viewedPages)
+      ? payload.viewedPages.map(Number).filter(n => Number.isInteger(n) && n >= 1) : [];
+    fields.viewedPages = [...new Set([...prevPages, ...incomingPages])].sort((a, b) => a - b);
+    const incomingPageCount = Number(payload?.pageCount);
+    fields.pageCount = Number.isFinite(incomingPageCount) && incomingPageCount > 0 ? incomingPageCount : (Number(existing?.pageCount) || 0);
+    fields.furthestSeconds = Number(existing?.furthestSeconds) || 0;
+    fields.durationSeconds = Number(existing?.durationSeconds) || 0;
+  }
+
+  const nowCompleted = kind === 'VIDEO'
+    ? isTrainingVideoProgressComplete(fields.furthestSeconds, fields.durationSeconds)
+    : isTrainingPdfProgressComplete(fields.viewedPages, fields.pageCount);
+  fields.completedAt = nowCompleted ? (existing?.completedAt || new Date().toLocaleString('vi-VN')) : null;
+  return { fields, completedNow: nowCompleted && !wasCompleted };
+}
+
 // Ghi nhận kết quả (Đạt/Không đạt + điểm nếu có) cho 1 đăng ký — Đợt 3: gác bằng canManageTrainingClass()
 // (cls đọc kèm theo reg.classId, xem routes/records.js) thay vì so trực tiếp reg.classCreator, để
 // trainingManage quản lý được MỌI lớp và giảng viên gán riêng (trainingInstruct) quản lý được đúng lớp
@@ -4808,6 +4878,7 @@ module.exports = {
   mergeReportPeriodPdf, publishReportPeriodPdf, unpublishReportPeriodPdf,
   canManageTraining, canManageTrainingClass, cancelTrainingRegistration, approveCancelTrainingRegistration,
   rejectCancelTrainingRegistration, markTrainingDocumentViewed, setTrainingRegistrationResult, confirmCareerPathForEmployee,
+  isTrainingVideoProgressComplete, isTrainingPdfProgressComplete, computeTrainingDocumentProgressUpdate,
   bulkRegisterTrainingClass, editTrainingClass, startOfflineTrainingClass, endOfflineTrainingClass, editTrainingPlan,
   gradeTrainingTestSubmission, applyAutoGradedTestResult,
   startTrainingTestAttempt, evaluateTrainingTestTiming,

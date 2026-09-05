@@ -250,6 +250,7 @@ function renderTrainingLms() {
   populateCareerPathStageBuilder();
   document.getElementById('trainingTestForm').classList.toggle('hidden', !canManage);
   document.getElementById('trainingTestNoPermNote').classList.toggle('hidden', canManage);
+  document.getElementById('trainingTestImportSection').classList.toggle('hidden', !canManage);
   // Đào Tạo Tân Binh (Đợt 6) — Khối 1/2 (quản lý danh mục Lộ Trình + Phân Công) CHỈ trainingManage/admin
   // như mọi catalog khác ở trên; Khối 3 (Lộ Trình Của Tôi)/Khối 4 (Đánh Giá GĐ3) có điều kiện hiện riêng,
   // không đi theo canManage — xem renderOnboardingLms().
@@ -1577,7 +1578,7 @@ async function confirmTrainingRosterAdd() {
 let tbQuestions = []; // [{ text, type: 'SINGLE'|'MULTI', points, options: [{text, correct}] }]
 
 function tbAddQuestion() {
-  tbQuestions.push({ text: '', type: 'SINGLE', points: 1, options: [{ text: '', correct: false }, { text: '', correct: false }] });
+  tbQuestions.push({ text: '', type: 'SINGLE', points: 1, imageUrl: '', options: [{ text: '', correct: false }, { text: '', correct: false }] });
   renderTestBuilderQuestions();
 }
 function tbRemoveQuestion(qi) { tbQuestions.splice(qi, 1); renderTestBuilderQuestions(); }
@@ -1599,6 +1600,31 @@ function tbToggleCorrect(qi, oi, checkboxEl) {
   renderTestBuilderQuestions();
 }
 
+// Ảnh minh hoạ câu hỏi (tuỳ chọn) — dùng ĐÚNG uploadFileToServer() chung của cả hệ thống (moduleKey
+// 'trainingTestImage' để admin scope riêng được ở Quản Lý Tệp File, xem UPLOAD_MODULE_LIST ở
+// module-tailieu.js), KHÔNG có route riêng nào khác. Server (createValidation.js trainingTests.
+// extraValidate) tự xác minh lại imageUrl trả về đúng khuôn "/uploads/..." trước khi lưu, nên upload
+// thất bại/imageUrl bị can thiệp phía client cũng không tạo được câu hỏi với ảnh không hợp lệ.
+async function tbQuestionImageFileChange(qi, inputEl) {
+  const file = inputEl.files[0];
+  if (!file) return;
+  const statusId = `tbQImgStatus_${qi}`;
+  const statusEl = document.getElementById(statusId);
+  if (statusEl) statusEl.innerText = '⏳ Đang tải ảnh lên...';
+  try {
+    const uploaded = await uploadFileToServer(file, 'trainingTestImage');
+    tbQuestions[qi].imageUrl = uploaded.fileUrl;
+  } catch (err) {
+    alert(`⛔ Tải ảnh câu hỏi thất bại: ${err.message}`);
+  }
+  inputEl.value = '';
+  renderTestBuilderQuestions();
+}
+function tbRemoveQuestionImage(qi) {
+  tbQuestions[qi].imageUrl = '';
+  renderTestBuilderQuestions();
+}
+
 function renderTestBuilderQuestions() {
   const wrap = document.getElementById('tbQuestionsContainer');
   if (!wrap) return;
@@ -1617,6 +1643,17 @@ function renderTestBuilderQuestions() {
         </select>
         <input type="number" min="1" value="${q.points}" data-op-input="tbSetQuestionPoints" data-arg0="${qi}" data-arg-value="1" title="Điểm câu này" class="w-16 border p-1.5 rounded text-xs">
         <button type="button" data-op="tbRemoveQuestion" data-arg0="${qi}" class="text-red-500 font-bold text-xs hover:underline">Xoá Câu</button>
+      </div>
+      <div class="pl-4">
+        ${q.imageUrl
+          ? `<div class="flex items-center gap-2 mb-1">
+               <img src="${escapeHtml(q.imageUrl)}" class="max-h-24 max-w-[160px] object-contain rounded border bg-white" alt="Ảnh minh hoạ câu hỏi">
+               <button type="button" data-op="tbRemoveQuestionImage" data-arg0="${qi}" class="text-red-500 text-xs font-bold hover:underline">Xoá Ảnh</button>
+             </div>`
+          : `<div class="flex items-center gap-2 mb-1">
+               <input type="file" accept=".jpg,.jpeg,.png,.webp" data-op-change="tbQuestionImageFileChange" data-arg0="${qi}" data-arg-el="1" class="text-xs">
+               <span id="tbQImgStatus_${qi}" class="text-[11px] text-gray-400 italic">Ảnh minh hoạ (tuỳ chọn)</span>
+             </div>`}
       </div>
       <div class="space-y-1 pl-4">
         ${q.options.map((o, oi) => `
@@ -1650,7 +1687,7 @@ async function submitTrainingTest(e) {
     questions: tbQuestions.map(q => {
       const filled = q.options.filter(o => o.text.trim());
       return {
-        text: q.text.trim(), type: q.type, points: q.points,
+        text: q.text.trim(), type: q.type, points: q.points, imageUrl: q.imageUrl || '',
         options: filled.map(o => ({ text: o.text.trim() })),
         correctOptionIds: filled.map((o, idx) => o.correct ? idx + 1 : null).filter(x => x != null)
       };
@@ -1682,19 +1719,166 @@ function renderTrainingTests() {
   const pageItems = paginateList('trainingTests', list, 'renderTrainingTests', 'bài test');
 
   if (!pageItems.length) { container.innerHTML = `<p class="text-gray-400 italic text-xs col-span-2">Chưa có bài test nào.</p>`; return; }
+  const canManage = canManageTrainingLocal(currentUser);
   container.innerHTML = pageItems.map(t => {
     const totalPoints = t.questions.reduce((s, q) => s + q.points, 0);
     const delHTML = currentUser.perms?.admin ? `<button data-op="deleteTrainingTest" data-arg0="${t.id}" class="text-red-500 font-bold hover:underline text-xs ml-2">Xóa</button>` : '';
+    // Xuất Excel (mirror khuôn cột của template Nhập Từ Excel — xem exportTrainingTestQuestionsExcel())
+    // — CHỈ trainingManage/admin (đáp án đúng chỉ họ thấy, xem sanitizeTrainingTestsForUser() server).
+    const exportHTML = canManage ? `<button data-op="exportTrainingTestQuestionsExcel" data-arg0="${t.id}" class="bg-emerald-600 text-white px-2 py-1 rounded text-xs font-bold hover:bg-emerald-700 ml-2">📤 Xuất Excel</button>` : '';
     return `<div class="border rounded p-3 bg-white text-xs">
       <div class="flex justify-between items-start gap-2">
         <div>
           <div class="font-bold text-gray-800">${escapeHtml(t.title)}</div>
           <div class="text-gray-500 mt-0.5">${t.questions.length} câu hỏi · ${totalPoints} điểm${t.category ? ' · ' + escapeHtml(t.category) : ''}${t.passScore != null ? ` · Gợi ý đạt ${t.passScore}%` : ''}</div>
         </div>
-        ${delHTML}
+        <div class="flex-shrink-0 text-right">${exportHTML}${delHTML}</div>
       </div>
     </div>`;
   }).join('');
+}
+
+// ---------- Ngân Hàng Câu Hỏi: NHẬP/XUẤT Excel (mirror khuôn Kế Hoạch Đào Tạo — xem
+// onTrainingPlanImportFileChange()/confirmTrainingPlanImport() ở trên) ----------
+// Bước 1: (tuỳ chọn) tải TRƯỚC các ảnh minh hoạ câu hỏi sẽ dùng, qua ĐÚNG uploadFileToServer() +
+// moduleKey 'trainingTestImage' như khi thêm ảnh tay ở Test Builder — lưu lại {fileName gốc, fileUrl
+// thật} để bước 3 đối chiếu với cột "Ảnh" của file Excel theo TÊN TỆP GỐC (không phân biệt hoa/thường).
+let ttImportImagesStaged = []; // [{fileName, fileUrl}]
+async function onTrainingTestImportImageFileChange(event) {
+  const files = [...(event.target.files || [])];
+  if (!files.length) return;
+  const statusEl = document.getElementById('ttImportImageStatus');
+  statusEl.innerText = `⏳ Đang tải ${files.length} ảnh lên...`;
+  let okCount = 0;
+  for (const file of files) {
+    try {
+      const uploaded = await uploadFileToServer(file, 'trainingTestImage');
+      ttImportImagesStaged.push({ fileName: file.name, fileUrl: uploaded.fileUrl });
+      okCount++;
+    } catch (err) {
+      alert(`⛔ Tải ảnh "${file.name}" thất bại: ${err.message}`);
+    }
+  }
+  statusEl.innerText = `✅ Đã tải ${okCount}/${files.length} ảnh — dùng ĐÚNG tên tệp gốc bên dưới trong cột "Ảnh" của file Excel.`;
+  event.target.value = '';
+  renderTrainingTestImportImagesStagedList();
+}
+function renderTrainingTestImportImagesStagedList() {
+  const wrap = document.getElementById('ttImportImagesStagedList');
+  if (!wrap) return;
+  if (!ttImportImagesStaged.length) { wrap.innerHTML = `<span class="text-gray-400 italic text-xs">Chưa tải ảnh nào.</span>`; return; }
+  wrap.innerHTML = ttImportImagesStaged.map((img, idx) => `
+    <span class="inline-flex items-center gap-1 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-full pl-2 pr-1 py-0.5 text-xs">
+      ${escapeHtml(img.fileName)}
+      <button type="button" data-op="removeTrainingTestImportImageStaged" data-arg0="${idx}" class="text-emerald-600 hover:text-red-600 font-bold leading-none px-1">&times;</button>
+    </span>`).join('');
+}
+function removeTrainingTestImportImageStaged(idx) {
+  ttImportImagesStaged.splice(idx, 1);
+  renderTrainingTestImportImagesStagedList();
+}
+
+// Bước 3: tải file Excel/CSV đã điền — server (routes/trainingTestImport.js) chỉ đọc/tách THÔ, không xác
+// minh cột "Ảnh" (client tự đối chiếu ở confirmTrainingTestImport() bên dưới).
+let ttImportPreviewItems = [];
+async function onTrainingTestImportFileChange(event) {
+  const file = event.target.files[0];
+  ttImportPreviewItems = [];
+  document.getElementById('ttImportPreviewWrap').classList.add('hidden');
+  document.getElementById('ttImportConfirmBtn').classList.add('hidden');
+  const statusEl = document.getElementById('ttImportStatus');
+  if (!file) { statusEl.innerText = ''; return; }
+
+  statusEl.innerText = '⏳ Đang đọc file...';
+  const formData = new FormData();
+  formData.append('file', file);
+  try {
+    const res = await fetch('/api/training/parse-test-questions', { method: 'POST', body: formData });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Lỗi không xác định');
+    ttImportPreviewItems = data.items;
+    const validCount = data.items.filter(it => it.valid).length;
+    statusEl.innerText = `✅ Đọc file "${data.fileName}": ${validCount}/${data.items.length} câu hỏi hợp lệ.`;
+    document.getElementById('ttImportPreviewBody').innerHTML = data.items.map((it, idx) => {
+      const imgMatch = resolveTrainingTestImportImageRef(it.imageRef);
+      const imgStatusHTML = !it.imageRef ? '' : (imgMatch ? ' <span class="text-emerald-600">✅ đã có ảnh</span>' : ' <span class="text-amber-600">⚠️ không khớp ảnh nào đã tải</span>');
+      return `<tr>
+        <td class="p-1 text-center">${idx + 1}</td>
+        <td class="p-1">${escapeHtml(it.text)}</td>
+        <td class="p-1">${it.type === 'MULTI' ? 'Nhiều đáp án' : '1 đáp án'}</td>
+        <td class="p-1 text-center">${it.points}</td>
+        <td class="p-1">${it.options.length} đáp án${it.imageRef ? `<br><span class="text-gray-400">Ảnh: ${escapeHtml(it.imageRef)}${imgStatusHTML}</span>` : ''}</td>
+        <td class="p-1">${it.valid ? '<span class="text-emerald-600">✅ Hợp lệ</span>' : `<span class="text-red-600">⛔ ${escapeHtml((it.errors || []).join(', '))}</span>`}</td>
+      </tr>`;
+    }).join('');
+    document.getElementById('ttImportPreviewWrap').classList.remove('hidden');
+    if (validCount > 0) document.getElementById('ttImportConfirmBtn').classList.remove('hidden');
+  } catch (err) {
+    statusEl.innerText = `⛔ ${err.message}`;
+    event.target.value = '';
+  }
+}
+
+// Khớp ĐÚNG khuôn "/uploads/<tên-file>" mà routes/upload.js sinh ra (mirror UPLOADED_FILE_URL_RE ở
+// lib/createValidation.js — 2 cài đặt độc lập, client/server không import chung được, xem "LƯU Ý BẢO
+// TRÌ" đầu file đó) — dùng để nhận diện cột "Ảnh" đang chứa 1 đường dẫn THẬT (VD dán lại từ file do
+// exportTrainingTestQuestionsExcel() xuất ra) thay vì 1 tên tệp cần đối chiếu với ảnh vừa tải ở bước 1.
+const UPLOADED_FILE_URL_RE_CLIENT = /^\/uploads\/[A-Za-z0-9._-]+$/;
+function resolveTrainingTestImportImageRef(imageRef) {
+  const ref = String(imageRef || '').trim();
+  if (!ref) return '';
+  if (UPLOADED_FILE_URL_RE_CLIENT.test(ref)) return ref; // đã là 1 đường dẫn hệ thống thật
+  const needle = ref.toLowerCase();
+  const found = ttImportImagesStaged.find(img => img.fileName.toLowerCase() === needle);
+  return found ? found.fileUrl : '';
+}
+
+// Nạp các câu hỏi HỢP LỆ (valid) vào danh sách đang soạn dở (tbQuestions) — KHÔNG tự tạo bài test, người
+// dùng vẫn bấm "Tạo Bài Test" như bình thường sau đó (server xác minh lại toàn bộ, cùng khuôn mọi field
+// khác của form này).
+function confirmTrainingTestImport() {
+  const validItems = ttImportPreviewItems.filter(it => it.valid);
+  if (!validItems.length) return alert('Không có câu hỏi hợp lệ nào để nạp.');
+  validItems.forEach(it => {
+    tbQuestions.push({
+      text: it.text, type: it.type, points: it.points,
+      imageUrl: resolveTrainingTestImportImageRef(it.imageRef),
+      options: it.options.map((text, idx) => ({ text, correct: it.correctIndexes.includes(idx + 1) }))
+    });
+  });
+  logSystemAction('INTERNAL', 'IMPORT_TRAINING_TEST_QUESTIONS', `Nhập ${validItems.length} câu hỏi từ Excel vào bài test đang soạn`, 'SUCCESS');
+  alert(`✅ Đã nạp ${validItems.length} câu hỏi vào danh sách — kiểm tra lại rồi bấm "Tạo Bài Test" để lưu.`);
+  document.getElementById('ttImportFileInput').value = '';
+  document.getElementById('ttImportPreviewWrap').classList.add('hidden');
+  document.getElementById('ttImportConfirmBtn').classList.add('hidden');
+  document.getElementById('ttImportStatus').innerText = '';
+  ttImportPreviewItems = [];
+  renderTestBuilderQuestions();
+}
+
+// Xuất Excel — dùng ĐÚNG khuôn cột với template Nhập Từ Excel (cột "Ảnh" xuất ra fileUrl THẬT của hệ
+// thống, dán ngược lại được đúng vào 1 lượt nhập khác mà không cần tải ảnh lại — xem
+// resolveTrainingTestImportImageRef() nhận diện "/uploads/..." ở trên) — tái dùng downloadXlsxFromServer()
+// chung, không cần route riêng.
+function exportTrainingTestQuestionsExcel(testId) {
+  const test = DB.trainingTests.find(t => t.id === testId);
+  if (!test) return;
+  const rows = (test.questions || []).map(q => ({
+    text: q.text,
+    type: q.type === 'MULTI' ? 'Nhiều đáp án đúng' : '1 đáp án đúng',
+    points: q.points,
+    options: (q.options || []).map(o => o.text).join('; '),
+    correct: (q.options || []).map((o, idx) => (q.correctOptionIds || []).includes(o.id) ? idx + 1 : null).filter(x => x != null).join(';'),
+    image: q.imageUrl || ''
+  }));
+  downloadXlsxFromServer(`CauHoi_${test.title.replace(/[^\w\d]+/g, '_')}.xlsx`, 'Câu Hỏi', [
+    { header: 'Nội Dung Câu Hỏi', key: 'text', width: 40 },
+    { header: 'Loại (1 đáp án đúng / Nhiều đáp án đúng)', key: 'type', width: 24 },
+    { header: 'Điểm', key: 'points', width: 8 },
+    { header: 'Các Đáp Án (cách nhau bằng ;)', key: 'options', width: 45 },
+    { header: 'Đáp Án Đúng (số thứ tự, cách nhau bằng ;)', key: 'correct', width: 24 },
+    { header: 'Ảnh (đường dẫn /uploads/... hoặc tên tệp đã tải ở bước 2)', key: 'image', width: 32 }
+  ], rows);
 }
 
 function deleteTrainingTest(id) {
@@ -1810,11 +1994,18 @@ function closeTrainingJoinClassModal() {
 // renderTrainingDocuments() ở Kho Tài Liệu — dùng chung cho cả 2 nhánh ONLINE/OFFLINE của
 // renderTrainingJoinClassModalBody() bên dưới.
 function trainingDocOpenLinkHTML(d) {
+  // VIDEO/PDF (mục "video/PDF phải xem hết mới tính hoàn thành") — mở qua trình xem CÓ THEO DÕI TIẾN ĐỘ
+  // (viewTrainingVideoDoc()/viewTrainingPdfDoc(), tự động ghi lại + báo server) thay vì nhúng iframe
+  // Youtube trực tiếp/mở file thô ở tab mới như trước — 2 nhánh này đều KHÔNG có link mở tab mới nữa
+  // (bắt buộc đi qua trình xem để theo dõi được), khác IMAGE/DOCUMENT không phải PDF vẫn giữ nguyên hành
+  // vi cũ (không có tín hiệu khách quan để theo dõi).
   if (d.docType === 'VIDEO') {
-    const embedUrl = trainingYoutubeEmbedUrl(d.videoUrl);
-    return embedUrl
-      ? `<iframe src="${escapeHtml(embedUrl)}" class="w-full h-40 rounded border" frameborder="0" allowfullscreen title="${escapeHtml(d.title)}"></iframe>`
-      : `<a href="${escapeHtml(d.videoUrl || '')}" target="_blank" rel="noopener" class="text-indigo-600 underline text-xs">▶️ Xem video</a>`;
+    return extractYoutubeVideoId(d.videoUrl)
+      ? `<button type="button" data-op="viewTrainingVideoDoc" data-arg0="${d.id}" class="bg-red-600 text-white px-2 py-1 rounded text-xs font-bold hover:bg-red-700">▶️ Xem Video</button>`
+      : `<span class="text-xs text-gray-400 italic">Link video không hợp lệ</span>`;
+  }
+  if (isPdfTrainingDoc(d)) {
+    return `<button type="button" data-op="viewTrainingPdfDoc" data-arg0="${d.id}" class="bg-indigo-600 text-white px-2 py-1 rounded text-xs font-bold hover:bg-indigo-700">👁️ Xem Tài Liệu</button>`;
   }
   if (d.docType === 'IMAGE') {
     return `<a href="${escapeHtml(d.fileUrl)}" target="_blank" rel="noopener"><img src="${escapeHtml(d.fileUrl)}" class="w-full max-h-40 object-contain rounded border" alt="${escapeHtml(d.title)}"></a>`;
@@ -1871,6 +2062,20 @@ function renderTrainingJoinClassModalBody() {
     const d = DB.trainingDocuments.find(x => x.id === docId);
     if (!d) return '';
     const isViewed = viewedIds.includes(docId);
+    // VIDEO/PDF (tín hiệu khách quan thật — xem isAutoTrackedTrainingDoc()) giờ tự động đánh dấu "đã
+    // xem" khi server nhận đủ tiến độ hoàn thành (POST trainingDocuments/:id/track-progress, xem
+    // trackTrainingDocumentProgress()) — KHÔNG còn nút bấm tay cho 2 loại này (mất tác dụng "phải thật sự
+    // xem hết" nếu vẫn có nút bấm tắt). IMAGE/tài liệu không phải PDF vẫn giữ nguyên cú click thủ công.
+    const autoTracked = isAutoTrackedTrainingDoc(d);
+    let statusHTML;
+    if (isViewed) {
+      statusHTML = '';
+    } else if (autoTracked) {
+      const hint = d.docType === 'VIDEO' ? 'xem đủ ~95% thời lượng video' : 'cuộn xem hết mọi trang tài liệu';
+      statusHTML = `<div class="text-[11px] text-gray-400 italic">📊 Sẽ tự động đánh dấu đã xem khi bạn ${hint}.</div>`;
+    } else {
+      statusHTML = `<button data-op="markTrainingDocumentViewedAction" data-arg0="${docId}" class="bg-emerald-600 text-white px-2 py-1 rounded text-xs font-bold hover:bg-emerald-700">Đánh dấu đã xem</button>`;
+    }
     return `
       <div class="bg-white border rounded p-3 space-y-2">
         <div class="flex justify-between items-start gap-2">
@@ -1878,7 +2083,7 @@ function renderTrainingJoinClassModalBody() {
           ${isViewed ? `<span class="text-xs px-2 py-0.5 rounded bg-emerald-100 text-emerald-700 font-bold flex-shrink-0">✅ Đã xem</span>` : ''}
         </div>
         ${trainingDocOpenLinkHTML(d)}
-        ${isViewed ? '' : `<button data-op="markTrainingDocumentViewedAction" data-arg0="${docId}" class="bg-emerald-600 text-white px-2 py-1 rounded text-xs font-bold hover:bg-emerald-700">Đánh dấu đã xem</button>`}
+        ${statusHTML}
       </div>`;
   }).join('');
 }
@@ -1959,6 +2164,18 @@ function ttTakeRenderQuestion() {
   const total = ttTakeQuestions.length;
   document.getElementById('ttTakeQuestionCounter').innerText = `Câu ${ttTakeIndex + 1} / ${total}${q.type === 'MULTI' ? ' — có thể chọn nhiều đáp án' : ''}`;
   document.getElementById('ttTakeQuestionText').innerText = q.text;
+  // Ảnh minh hoạ câu hỏi (tuỳ chọn) — không đổi layout của câu hỏi không có ảnh (wrap ẩn hẳn, không
+  // chiếm chỗ) khi q.imageUrl rỗng.
+  const imgWrap = document.getElementById('ttTakeQuestionImageWrap');
+  if (imgWrap) {
+    if (q.imageUrl) {
+      imgWrap.innerHTML = `<img src="${escapeHtml(q.imageUrl)}" class="max-w-full max-h-64 object-contain rounded border mx-auto" alt="Ảnh minh hoạ câu hỏi">`;
+      imgWrap.classList.remove('hidden');
+    } else {
+      imgWrap.innerHTML = '';
+      imgWrap.classList.add('hidden');
+    }
+  }
   document.getElementById('ttTakeProgressBar').style.width = `${Math.round((ttTakeIndex / total) * 100)}%`;
   const selected = ttTakeAnswers[q.id] || [];
   const inputType = q.type === 'MULTI' ? 'checkbox' : 'radio';
@@ -2111,6 +2328,216 @@ function trainingYoutubeEmbedUrl(url) {
   } catch (e) { return null; }
 }
 
+// Tách riêng videoId thô (không phải embed URL) — dùng cho YT.Player({ videoId }), xem
+// viewTrainingVideoDoc() bên dưới. Cùng luật tách với trainingYoutubeEmbedUrl() ở trên (2 dạng phổ biến
+// youtube.com/watch?v=... và youtu.be/...) nhưng KHÔNG dựng lại thành URL embed.
+function extractYoutubeVideoId(url) {
+  if (!url) return null;
+  try {
+    const u = new URL(url);
+    if (u.hostname.replace(/^www\./, '') === 'youtu.be') return u.pathname.slice(1) || null;
+    if (u.hostname.replace(/^www\./, '').endsWith('youtube.com')) {
+      const v = u.searchParams.get('v');
+      if (v) return v;
+      if (u.pathname.startsWith('/embed/')) return u.pathname.split('/embed/')[1] || null;
+    }
+    return null;
+  } catch (e) { return null; }
+}
+
+// PDF (docType DOCUMENT + đuôi tệp .pdf) — CHỈ 2 loại tài liệu này (video/PDF) có tín hiệu khách quan để
+// theo dõi tiến độ THẬT (xem computeTrainingDocumentProgressUpdate(), lib/recordActions.js) — IMAGE/tài
+// liệu văn phòng khác (.docx/.xlsx) vẫn dùng cú click thủ công "Đánh dấu đã xem" như trước (quyết định
+// nghiệp vụ, không có tín hiệu khách quan tốt hơn để đòi hỏi).
+function isPdfTrainingDoc(d) {
+  return d.docType === 'DOCUMENT' && /\.pdf$/i.test(d.fileName || '');
+}
+function isAutoTrackedTrainingDoc(d) {
+  return d.docType === 'VIDEO' || isPdfTrainingDoc(d);
+}
+
+// ---------- Video 0.5x-1.5x + chặn tua vượt điểm đã xem xa nhất (Youtube IFrame Player API) ----------
+// LƯU Ý GIỚI HẠN đã trao đổi với người dùng: đây là "phát hiện rồi sửa lại" (best-effort phía client),
+// KHÔNG PHẢI khoá cứng tuyệt đối — giao diện gốc của trình phát Youtube (menu chuột phải trên iframe)
+// không thể bị trang nhúng gỡ bỏ tuỳ chọn bằng JS, người rành kỹ thuật vẫn có đường lách (VD devtools đổi
+// tốc độ trực tiếp qua postMessage giả). Mục tiêu ở đây là NGĂN CẢN đường dùng thông thường (menu "tốc độ
+// phát"/kéo thanh tua), không phải chống lại người cố tình phá.
+
+// 3 hàm THUẦN dưới đây tách riêng khỏi mọi event handler/YT.Player thật — test được trực tiếp không cần
+// dựng 1 iframe Youtube thật nào (xem tests/test-training-video-pdf-progress.js).
+function clampYoutubePlaybackRate(rate) {
+  if (!Number.isFinite(rate)) return 1;
+  if (rate < 0.5) return 0.5;
+  if (rate > 1.5) return 1.5;
+  return rate;
+}
+// Trả về vị trí (giây) cần seekTo() để "kéo lùi" nếu currentTime vượt quá điểm đã xem xa nhất + biên
+// dung sai (mặc định 3 giây — chừa chỗ cho buffering/tua nhẹ TRONG phạm vi đã xem, tránh dương tính giả),
+// hoặc null nếu KHÔNG cần snap-back (đang xem trong phạm vi hợp lệ, kể cả tua NGƯỢC về trước — luôn cho
+// phép xem lại nội dung cũ).
+function computeYoutubeSeekSnapback(currentTime, furthestWatched, toleranceSeconds = 3) {
+  return currentTime > furthestWatched + toleranceSeconds ? furthestWatched : null;
+}
+function computeYoutubeFurthestWatched(currentTime, furthestWatched) {
+  return Math.max(Number(currentTime) || 0, Number(furthestWatched) || 0);
+}
+
+let ytApiLoadPromise = null;
+// Tải script bootstrap https://www.youtube.com/iframe_api (định nghĩa window.YT) — CSP (lib/securityHeaders.js)
+// đã mở scriptSrc cho domain này riêng cho mục đích này. Cache theo Promise (gọi lại nhiều lần trong 1
+// phiên không tải lại), giữ nguyên callback onYouTubeIframeAPIReady cũ nếu trang đã tự gán trước đó.
+function loadYoutubeIframeApi() {
+  if (window.YT && window.YT.Player) return Promise.resolve();
+  if (ytApiLoadPromise) return ytApiLoadPromise;
+  ytApiLoadPromise = new Promise((resolve, reject) => {
+    const prevCallback = window.onYouTubeIframeAPIReady;
+    window.onYouTubeIframeAPIReady = () => {
+      if (typeof prevCallback === 'function') prevCallback();
+      resolve();
+    };
+    const tag = document.createElement('script');
+    tag.src = 'https://www.youtube.com/iframe_api';
+    tag.onerror = () => { ytApiLoadPromise = null; reject(new Error('Không tải được script Youtube IFrame API — kiểm tra kết nối mạng.')); };
+    document.head.appendChild(tag);
+    setTimeout(() => { if (!(window.YT && window.YT.Player)) { ytApiLoadPromise = null; reject(new Error('Quá thời gian chờ tải Youtube IFrame API.')); } }, 15000);
+  });
+  return ytApiLoadPromise;
+}
+
+let ytPlayerState = null; // { docId, player, pollHandle, furthestWatched, duration, lastFlushAt }
+function closeTrainingVideoModal() {
+  if (ytPlayerState) {
+    clearInterval(ytPlayerState.pollHandle);
+    flushYtProgress(true);
+    try { ytPlayerState.player.destroy(); } catch (e) { /* ignore */ }
+    ytPlayerState = null;
+  }
+  document.getElementById('trainingVideoModal').classList.add('hidden');
+  document.getElementById('trainingVideoPlayerMount').innerHTML = '';
+}
+function flushYtProgress() {
+  if (!ytPlayerState) return;
+  ytPlayerState.lastFlushAt = Date.now();
+  trackTrainingDocumentProgress(ytPlayerState.docId, {
+    kind: 'VIDEO',
+    furthestSeconds: Math.floor(ytPlayerState.furthestWatched),
+    durationSeconds: Math.floor(ytPlayerState.duration)
+  });
+}
+function startYtPolling() {
+  if (!ytPlayerState || ytPlayerState.pollHandle) return;
+  ytPlayerState.pollHandle = setInterval(() => {
+    if (!ytPlayerState || !ytPlayerState.player || typeof ytPlayerState.player.getCurrentTime !== 'function') return;
+    const current = ytPlayerState.player.getCurrentTime();
+    const duration = ytPlayerState.player.getDuration();
+    if (duration > 0) ytPlayerState.duration = duration;
+    const snapTo = computeYoutubeSeekSnapback(current, ytPlayerState.furthestWatched);
+    if (snapTo != null) { ytPlayerState.player.seekTo(snapTo, true); return; }
+    ytPlayerState.furthestWatched = computeYoutubeFurthestWatched(current, ytPlayerState.furthestWatched);
+    if (Date.now() - (ytPlayerState.lastFlushAt || 0) > 8000) flushYtProgress();
+  }, 1500);
+}
+function stopYtPolling() {
+  if (ytPlayerState?.pollHandle) { clearInterval(ytPlayerState.pollHandle); ytPlayerState.pollHandle = null; }
+  if (ytPlayerState) flushYtProgress();
+}
+
+async function viewTrainingVideoDoc(docId) {
+  const d = DB.trainingDocuments.find(x => x.id === docId);
+  if (!d) return;
+  const videoId = extractYoutubeVideoId(d.videoUrl);
+  if (!videoId) return alert('Không đọc được video này — link Youtube không hợp lệ.');
+  document.getElementById('trainingVideoModalTitle').innerText = `🎬 ${d.title}`;
+  const mount = document.getElementById('trainingVideoPlayerMount');
+  mount.innerHTML = '<div class="p-6 text-center text-gray-300 text-sm">⏳ Đang tải trình phát video...</div>';
+  document.getElementById('trainingVideoModal').classList.remove('hidden');
+  try {
+    await loadYoutubeIframeApi();
+  } catch (err) {
+    mount.innerHTML = `<div class="p-6 text-center text-red-400 text-sm">⛔ ${escapeHtml(err.message)}</div>`;
+    return;
+  }
+  mount.innerHTML = '';
+  const existing = (DB.trainingDocumentProgress || []).find(p => p.docId === docId && p.username === currentUser.username);
+  ytPlayerState = {
+    docId, player: null, pollHandle: null,
+    furthestWatched: existing?.furthestSeconds || 0,
+    duration: existing?.durationSeconds || 0,
+    lastFlushAt: 0
+  };
+  ytPlayerState.player = new YT.Player('trainingVideoPlayerMount', {
+    videoId,
+    width: '100%', height: '100%',
+    playerVars: { modestbranding: 1, rel: 0 },
+    events: {
+      onStateChange: (e) => {
+        if (e.data === YT.PlayerState.PLAYING) startYtPolling();
+        else stopYtPolling();
+        if (e.data === YT.PlayerState.ENDED) flushYtProgress();
+      },
+      onPlaybackRateChange: (e) => {
+        const clamped = clampYoutubePlaybackRate(e.data);
+        if (clamped !== e.data && ytPlayerState?.player) ytPlayerState.player.setPlaybackRate(clamped);
+      }
+    }
+  });
+}
+
+// ---------- PDF phải xem hết mọi trang mới tính hoàn thành (renderPdfProtected() + IntersectionObserver) ----------
+function viewTrainingPdfDoc(docId) {
+  const d = DB.trainingDocuments.find(x => x.id === docId);
+  if (!d) return;
+  const existing = (DB.trainingDocumentProgress || []).find(p => p.docId === docId && p.username === currentUser.username);
+  const initialViewedPages = Array.isArray(existing?.viewedPages) ? existing.viewedPages : [];
+  let pendingPages = new Set(initialViewedPages);
+  let flushTimer = null;
+  openFileProtectedView({
+    title: `📄 ${d.title}`,
+    sub: escapeHtml(d.category || ''),
+    fileSrc: d.fileUrl, fileType: d.fileType, fileName: d.fileName,
+    pdfProgress: {
+      initialViewedPages,
+      // Debounce ~1.2s — gộp nhiều trang cuộn qua nhanh liên tiếp thành 1 lượt gửi server, không gọi
+      // API mỗi trang.
+      onPageViewed: (pageNum, totalPages) => {
+        pendingPages.add(pageNum);
+        clearTimeout(flushTimer);
+        flushTimer = setTimeout(() => {
+          trackTrainingDocumentProgress(docId, { kind: 'PDF', viewedPages: [...pendingPages], pageCount: totalPages });
+        }, 1200);
+      }
+    }
+  });
+}
+
+// ---------- Gửi tiến độ lên server (dùng chung cho cả video lẫn PDF) ----------
+// Cập nhật DB.trainingDocumentProgress + DB.trainingRegistrations (nếu server tự động đánh dấu "đã xem"
+// do vừa đạt hoàn thành lần đầu, xem POST trainingDocuments/:id/track-progress ở routes/records.js) rồi
+// làm mới lại các màn đang mở có thể bị ảnh hưởng (modal "Vào Lớp Học"/Đăng Ký Của Tôi) — im lặng bỏ qua
+// lỗi mạng (KHÔNG alert() làm phiền người đang xem video/đọc tài liệu chỉ vì 1 lượt báo cáo tiến độ lỗi,
+// lượt kế tiếp sẽ tự thử lại).
+async function trackTrainingDocumentProgress(docId, payload) {
+  let result;
+  try {
+    result = await callRecordAction('trainingDocuments', docId, 'track-progress', payload);
+  } catch (err) {
+    console.warn('Không ghi được tiến độ xem tài liệu đào tạo:', err.message);
+    return;
+  }
+  const idx = DB.trainingDocumentProgress.findIndex(p => p.id === result.progress.id);
+  if (idx !== -1) DB.trainingDocumentProgress[idx] = result.progress; else DB.trainingDocumentProgress.push(result.progress);
+  (result.updatedRegistrations || []).forEach(reg => {
+    const ridx = DB.trainingRegistrations.findIndex(r => r.id === reg.id);
+    if (ridx !== -1) DB.trainingRegistrations[ridx] = reg; else DB.trainingRegistrations.push(reg);
+  });
+  if (result.updatedRegistrations && result.updatedRegistrations.length) {
+    if (document.getElementById('trainingJoinClassModal') && !document.getElementById('trainingJoinClassModal').classList.contains('hidden')) {
+      renderTrainingJoinClassModalBody();
+    }
+    if (activeTrainingLmsTab === 'MY_REGS') renderTrainingMyRegs();
+  }
+}
+
 function onTrainingDocFilterCategoryChange() { resetListPage('trainingDocuments'); renderTrainingDocuments(); }
 
 function renderTrainingDocuments() {
@@ -2128,14 +2555,14 @@ function renderTrainingDocuments() {
     // đã có từ trước, không thay thế.
     const course = d.courseId != null ? DB.trainingCourses.find(c => c.id === d.courseId) : null;
     const mandatoryBadge = d.mandatory ? ' <span class="text-xs px-1.5 py-0.5 rounded bg-red-100 text-red-700 font-bold align-middle">⚠️ Bắt buộc</span>' : '';
-    // docType (Đợt 4): DOCUMENT giữ nguyên link tải cũ; VIDEO nhúng iframe Youtube; IMAGE hiện thumbnail
-    // thay vì link tải (fileUrl vẫn là 1 file thật đã tải lên, chỉ khác cách hiển thị).
+    // docType (Đợt 4): DOCUMENT giữ nguyên link tải cũ; IMAGE hiện thumbnail thay vì link tải (fileUrl
+    // vẫn là 1 file thật đã tải lên, chỉ khác cách hiển thị). VIDEO/PDF (mục "video/PDF phải xem hết mới
+    // tính hoàn thành") giờ mở qua trình xem CÓ THEO DÕI TIẾN ĐỘ (viewTrainingVideoDoc()/
+    // viewTrainingPdfDoc()) thay vì nhúng iframe/mở tab mới trực tiếp — dùng CHUNG với
+    // trainingDocOpenLinkHTML() (modal "Vào Lớp Học") để 2 nơi không lệch nhau.
     let actionHTML;
-    if (d.docType === 'VIDEO') {
-      const embedUrl = trainingYoutubeEmbedUrl(d.videoUrl);
-      actionHTML = embedUrl
-        ? `<iframe src="${escapeHtml(embedUrl)}" class="w-40 h-24 rounded border" frameborder="0" allowfullscreen title="${escapeHtml(d.title)}"></iframe>`
-        : `<a href="${escapeHtml(d.videoUrl || '')}" target="_blank" rel="noopener" class="text-indigo-600 underline text-xs">▶️ Xem video</a>`;
+    if (d.docType === 'VIDEO' || isPdfTrainingDoc(d)) {
+      actionHTML = trainingDocOpenLinkHTML(d);
     } else if (d.docType === 'IMAGE') {
       actionHTML = `<a href="${escapeHtml(d.fileUrl)}" target="_blank" rel="noopener"><img src="${escapeHtml(d.fileUrl)}" class="w-24 h-24 object-cover rounded border" alt="${escapeHtml(d.title)}"></a>`;
     } else {

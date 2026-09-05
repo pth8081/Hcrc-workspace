@@ -1,11 +1,90 @@
 # Phiên bản hiện tại
 
-**8.6** — đã merge vào `main` (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge
+**8.7** — đã merge vào `main` (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge
 góc màn hình + `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần
 kiểu `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. Đúng theo quy tắc MINOR chạy 0-9 trong
-`CLAUDE.md`: sau `8.5` tăng MINOR lên 1 → `8.6`.
+`CLAUDE.md`: sau `8.6` tăng MINOR lên 1 → `8.7`.
 
-## Cập nhật gần nhất — Hạ tầng: nạp module theo cụm (lazy load), Đợt 7 Phần B
+## Cập nhật gần nhất — Đào Tạo: Ngân Hàng Câu Hỏi có ảnh minh hoạ + Video 0.5x-1.5x/PDF phải xem hết mới tính hoàn thành (2026-09-05)
+
+3 phần độc lập của module Đào Tạo (Truyền Thông Nội Bộ), thực hiện theo đúng phân tích đã thống nhất với
+người dùng, gộp chung 1 lần merge (các phần chia sẻ chung 1 collection mới, tách merge riêng rủi ro hơn).
+
+**Phần 1 — Ngân Hàng Câu Hỏi hỗ trợ ảnh minh hoạ câu hỏi (giữ nguyên câu hỏi thuần văn bản như trước):**
+- `trainingTests.questions[].imageUrl` (tuỳ chọn) — server (`lib/createValidation.js`) xác minh bằng ĐÚNG
+  `assertUploadedFileUrl()` đã dùng cho mọi field file khác trong file này (chặn scheme `javascript:`/URL
+  ngoài hệ thống — cùng lỗ hổng stored-XSS đã vá trước đó cho `licenses`/`itServiceRenewals`...).
+- Test Builder (Test Builder câu hỏi) thêm ô tải ảnh/xem trước/xoá ảnh mỗi câu (`uploadFileToServer()`,
+  moduleKey `trainingTestImage` — thêm mới trong "Quản Lý Tệp File", mặc định CHỈ nhận `.jpg/.jpeg/.png/
+  .webp`, trần 5MB, admin chỉnh được). Màn làm bài (`ttTakeRenderQuestion()`) hiện ảnh phía trên nội dung
+  câu hỏi nếu có, không đổi layout câu hỏi không ảnh.
+- **Phân quyền xem ảnh câu hỏi** (`lib/fileAuthz.js`, cả `/api/files/download` lẫn Khung Xem Bảo Vệ
+  `/uploads/...`): trước đây MỌI file không tra ra được hồ sơ sở hữu đều FAIL-OPEN (ai đăng nhập cũng xem
+  được) — thêm nhánh tra `trainingTests` theo đúng câu hỏi chứa ảnh, chỉ trainingManage/admin, giảng viên
+  được gán cho 1 lớp dùng đúng bài test đó, hoặc học viên đang có đăng ký còn hiệu lực vào lớp đó mới xem
+  được; bài test CHƯA gán lớp nào thì chỉ trainingManage/admin xem được ảnh của nó.
+- **Nhập/Xuất Excel hàng loạt**: tải mẫu Excel (`lib/trainingTestImport.js` + route mới
+  `routes/trainingTestImport.js`, mirror khuôn `lib/trainingPlanImport.js`), tải ảnh picker trước (cùng
+  moduleKey `trainingTestImage`), điền câu hỏi (cột "Ảnh" gõ đúng tên tệp ảnh vừa tải — client tự đối
+  chiếu, KHÔNG chấp nhận URL ảnh ngoài hệ thống từ file Excel), xem trước rồi nạp vào Test Builder (câu
+  hỏi vẫn đi qua ĐÚNG `POST /api/create/trainingTests` khi bấm "Tạo Bài Test", không có đường tạo tắt nào
+  bỏ qua validate). Xuất Excel dùng cùng khuôn cột để có thể tải về sửa rồi nhập lại.
+
+**Phần 2 — Video bài giảng: giới hạn tốc độ phát 0.5x-1.5x + chặn tua vượt điểm đã xem xa nhất.** Thay
+hẳn `<iframe>` nhúng Youtube thô bằng Youtube IFrame Player API thật (`viewTrainingVideoDoc()`, modal mới
+`#trainingVideoModal`) — poll `getCurrentTime()`/`getDuration()` mỗi 1.5s, tự `seekTo()` kéo lùi nếu tua
+vượt điểm xa nhất đã xem (biên dung sai 3s, luôn cho tua NGƯỢC tự do), tự `setPlaybackRate()` kéo về
+[0.5, 1.5] nếu `onPlaybackRateChange` báo vượt ngoài khoảng. **THÀNH THẬT về giới hạn đã trao đổi với
+người dùng**: đây là "phát hiện rồi sửa lại" (best-effort phía client) — giao diện gốc của trình phát
+Youtube (menu chuột phải trên iframe) không thể bị trang nhúng gỡ bỏ tuỳ chọn bằng JS, người rành kỹ
+thuật vẫn có đường lách (devtools...); không phải khoá cứng tuyệt đối, chỉ chặn đường dùng thông thường.
+Logic chấm/tua tách thành 3 hàm THUẦN test được không cần dựng iframe thật
+(`clampYoutubePlaybackRate()`/`computeYoutubeSeekSnapback()`/`computeYoutubeFurthestWatched()`).
+
+**Phần 3 — PDF phải cuộn xem hết MỌI trang mới tính "đã xem".** `renderPdfProtected()` (script PDF.js gốc,
+`public/index.html`) thêm tham số `progress` tuỳ chọn (mọi caller khác không đổi hành vi) —
+`IntersectionObserver` (root = khung cuộn) + dwell ~900ms mỗi trang trước khi tính "đã xem" (chống tính
+nhầm khi lướt nhanh), báo callback đúng 1 lần/trang. `viewTrainingPdfDoc()` gộp báo cáo (debounce ~1.2s)
+gửi lên server. Áp dụng cho `trainingDocuments` loại `DOCUMENT` có đuôi `.pdf` — ảnh/`.docx`/`.xlsx` vẫn
+dùng cú click thủ công "Đánh dấu đã xem" như trước (không có tín hiệu khách quan để đòi hỏi hơn).
+
+**Dữ liệu chung Phần 2+3 — `trainingDocumentProgress` (collection mới, `dbo.Records`, không cần đổi
+`schema.sql`)**: 1 dòng/1 (tài liệu, người dùng) — giây đã xem xa nhất/trang đã xem, tính hoàn thành bằng
+`lib/recordActions.js` (`isTrainingVideoProgressComplete()` ~95% thời lượng, `isTrainingPdfProgressComplete()`
+đủ MỌI trang 1..N) — 2 hàm THUẦN + `computeTrainingDocumentProgressUpdate()` (hợp nhất tiến độ, chống thụt
+lùi: giây/trang đã ghi nhận không bao giờ bị 1 lượt báo cáo trễ/thấp hơn xoá mất) test được không cần DB.
+Route mới `POST /api/records/trainingDocuments/:id/track-progress` tự suy "kind" từ `docType` THẬT (không
+tin `payload.kind` client gửi), khoá theo `docId+username`. **"Bắt Buộc Hoàn Thành" giờ có logic thật**:
+lần đầu đạt hoàn thành tự động gọi `markTrainingDocumentViewed()` cho MỌI đăng ký (lớp ONLINE) đang coi
+tài liệu này là giáo trình bắt buộc — trước đây field `mandatory` "CHỈ là cờ hiển thị (badge), KHÔNG có
+logic" (đúng theo ghi chú cũ ở `createValidation.js`), giờ nút bấm tay bị GỠ BỎ cho đúng 2 loại có tín
+hiệu khách quan (video/PDF), thay bằng dòng chữ "Sẽ tự động đánh dấu khi..." — ảnh/tài liệu văn phòng khác
+vẫn giữ nguyên nút bấm tay cũ. Riêng tư theo người dùng ở `GET /api/data`
+(`filterTrainingDocumentProgressForUser()`, cùng khuôn `trainingRegistrations`).
+
+**CSP (`lib/securityHeaders.js`) — thay đổi cần lưu ý khi triển khai**: mở `scriptSrc`/`frameSrc` cho
+`https://www.youtube.com` (script bootstrap IFrame API + iframe trình phát thật) — trước đây 2 directive
+này CHƯA từng mở domain này, nghĩa là NHIỀU KHẢ NĂNG bản nhúng Youtube `<iframe>` cũ (trước đợt này) đã bị
+CSP âm thầm chặn từ trước, không hiện được, không riêng gì tính năng mới. Không mở thêm `connectSrc` (giao
+tiếp iframe-trang qua `postMessage`, không qua XHR/fetch).
+
+**Không có dependency npm mới** (`pdf-lib` dùng để dựng file PDF thật cho test đã có sẵn trong
+`dependencies` từ trước). Không đổi `.env.example`. Không cần thao tác thủ công nào khác ngoài copy code +
+`pm2 restart` (schema.sql không đổi — collection mới dùng chung bảng `dbo.Records` sẵn có).
+
+**Kiểm chứng**: `node --check` sạch mọi file server đã sửa; test THUẦN NODE mới
+(`tests/test-training-question-images.js`) phủ validate ảnh câu hỏi + ma trận phân quyền xem ảnh (kể cả
+xác nhận người ngoài cuộc KHÔNG tải được dù biết đúng URL) + parse Excel; test Playwright mới
+(`tests/test-training-question-images-ui.js`) phủ luồng tải ảnh/nhập-xuất Excel thật qua UI;
+`tests/test-training-video-pdf-progress.js` phủ 3 hàm thuần Youtube + PDF THẬT (PDF.js + Intersection
+Observer thật, không giả lập) cuộn qua 1 phần (chưa hoàn thành) rồi cuộn hết (hoàn thành + tự động đánh
+dấu đăng ký) — cùng dịp vá 2 gap có sẵn của bộ hạ tầng test (`tests/_harness.js` thiếu MIME `.mjs` khiến
+`renderPdfProtected()`/PDF.js CHƯA TỪNG chạy được trong bộ test Playwright này dù đã tồn tại từ trước rất
+lâu; `tests/_mock-backend.js` ghi đè toàn bộ `window.fetch` kể cả tải file tĩnh, phải cho tải tài nguyên
+KHÔNG phải `/api/*` đi qua fetch thật). Toàn bộ `tests/test-*.js` chạy `node --check` sạch + chạy thật,
+CHỈ 2 lỗi biết trước (kết nối SQL Server, không liên quan) — không yếu bớt assertion nào để né lỗi.
+
+## Cập nhật trước đó — Hạ tầng: nạp module theo cụm (lazy load), Đợt 7 Phần B
 
 Phần A (8.5) đã xử lý Cache-Control/cache-busting. Phần B này xử lý khoảng trống còn lại: 34 file
 `module-*.js` (không tính 5 file `core*.js`) trước đây nạp EAGER hết trên MỌI lượt tải trang — giờ chỉ
