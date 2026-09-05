@@ -1,10 +1,55 @@
 # Phiên bản hiện tại
 
-**9.1** — đã merge vào `main` (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge
+**9.2** — đã merge vào `main` (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge
 góc màn hình + `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần
 kiểu `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
 
-## Cập nhật gần nhất — Sắp xếp lại menu: dời "Báo Cáo" cạnh "Hệ Thống", "Nhân Sự" thành dropdown có module con (2026-09-05)
+## Cập nhật gần nhất — Soát toàn hệ thống các ô nhập tiền còn thiếu dấu phân cách hàng nghìn (2026-09-05)
+
+Theo yêu cầu người dùng: "rà soát toàn bộ các ô liên quan tới tiền trong app xem có tuân thủ đúng định
+dạng [dấu phẩy hàng nghìn] không, cái nào chưa tuân thủ thì chỉnh lại luôn". Soát toàn bộ `public/index.html`
+(mọi HTML tĩnh) + toàn bộ `public/js/module-*.js` (mọi form dựng bằng template string ở JS, không chỉ HTML
+tĩnh) theo cả từ khoá tiếng Việt ("chi phí", "ngân sách", "đơn giá", "VNĐ"...) lẫn id/tên biến tiếng Anh
+(amount/cost/price/budget), cộng quét toàn bộ `type="number"` còn sót + mọi lượt đọc `.value` bằng
+`Number(...)`/`parseInt`/`parseFloat` thẳng thay vì qua `getMoneyValue()`.
+
+Phát hiện đúng **5 ô tiền** (trong 3 module) còn dùng `type="number"` thay vì cơ chế `money-input` chuẩn
+(`core.js`, mục "Ô NHẬP TIỀN" — xem `CLAUDE.md`/ghi chú tại đó), toàn bộ đều nằm trong modal dùng CHUNG
+"Sửa & Gửi Lại" (`openBosungEditModal()`/`confirmBosungResubmit()` ở `core.js`, hiện ra khi người duyệt
+yêu cầu bổ sung hồ sơ — REQUEST_CHANGES):
+
+- `#bsAmount` — nhánh `officeReqs` ("Dự toán / Chi phí", Mua Sắm/Sửa Chữa Văn Phòng)
+- `#bsBudget` / `#bsApprovedBudget` — nhánh `operationStoreOpenings` ("Chi Phí Phê Duyệt" / "Ngân Sách
+  Phê Duyệt — Danh Mục Đầu Tư", Vận Hành > Siêu Thị > Mở Mới)
+- `#bsAmount` / `#bsApprovedBudget` — nhánh `operationRepairs` (cùng 2 khái niệm, Vận Hành > Siêu Thị >
+  Sửa Chữa)
+
+Đã đổi cả 5 ô sang đúng khuôn `type="text" inputmode="numeric" class="... money-input"`, prefill lúc mở
+modal qua `formatMoneyDisplay(item.xxx || 0)` (trước đây gán thẳng số thô, hồ sơ cũ mở ra hiện không có
+dấu chấm cho tới khi gõ thêm 1 ký tự), và đổi đúng 5 chỗ đọc giá trị trong `confirmBosungResubmit()` từ
+`Number(document.getElementById('bsXxx').value) || 0` sang `getMoneyValue(document.getElementById('bsXxx'))`
+— nếu chỉ đổi input mà quên đổi chỗ đọc thì `Number(...)` sẽ đọc thẳng chuỗi có dấu chấm hiển thị
+("15.000.000") ra `NaN`, mất luôn số tiền lúc gửi lại hồ sơ.
+
+**Toàn bộ các ô tiền còn lại đã kiểm tra đều tuân thủ đúng** (không sửa gì thêm): 16 ô `money-input` sẵn
+có (`contractAmount`, `vppNewPeriodBudget`, `offAmount`, `itRenewalCost`/`RenewCost`/`EditCost`,
+`vsoBudget`/`vsoApprovedBudget`, `vrAmount`/`vrApprovedBudget`, các dòng hạng mục Hợp Đồng/Thanh
+Toán/Mua Sắm Văn Phòng/Đơn Hàng Vận Hành/Danh Mục Đầu Tư, cột "money" tuỳ biến của module Ngân Sách) đều
+đã đọc đúng qua `getMoneyValue()` và prefill đúng qua `formatMoneyDisplay()`. Các `type="number"` còn lại
+trong toàn hệ thống xác nhận đều là số lượng/điểm/ngày/m²/cổng SMTP... — không phải tiền, không đụng tới.
+Module "🏷️ Phê Duyệt Giá" (Hỗ Trợ IT) không có ô nhập tiền thủ công (giá đến từ upload Excel bảng giá),
+ngoài phạm vi soát này.
+
+Xác minh: bộ hồi quy đầy đủ 59 file `tests/test-*.js` chạy lại — 57 qua, đúng 2 lỗi biết trước do sandbox
+không có SQL Server thật (không liên quan thay đổi này). Viết thêm 1 kịch bản Playwright riêng (dùng
+`tests/testHarness.js`, gõ từng ký tự thật vào cả 5 ô vừa sửa) xác nhận: hiện dấu chấm đúng lúc gõ, hồ sơ
+cũ mở ra đã hiện dấu chấm ngay (không đợi gõ thêm), và giá trị gửi đi + lưu lại cuối cùng đúng bằng số đã
+gõ (không `NaN`, không lệch) ở cả 3 module.
+
+**Deploy**: không đổi `schema.sql`/`.env.example`/`package.json` dependencies nào — chỉ code client hiện
+có (`public/js/core.js`), copy code + `pm2 restart` là đủ.
+
+## Cập nhật trước đó — Sắp xếp lại menu: dời "Báo Cáo" cạnh "Hệ Thống", "Nhân Sự" thành dropdown có module con (2026-09-05)
 
 Theo yêu cầu người dùng: "chuyển đổi vị trí module báo cáo xuống dưới, để cạnh module hệ thống. Nhân sự
 tới đây sẽ là module lớn nên chuyển qua dạng menu sổ xuống, có thể mở rộng thêm — bên trong sau này có

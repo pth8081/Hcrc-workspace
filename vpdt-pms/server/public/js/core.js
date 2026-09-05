@@ -3094,7 +3094,7 @@ function openBosungEditModal(moduleKey, id) {
         ? `<p class="text-gray-500 italic">Danh sách hạng mục (Mua Sắm) giữ nguyên như đã trình — chỉ sửa được tiêu đề/lý do ở đây trong bản Bổ Sung này. Cần sửa hạng mục, vui lòng liên hệ Quản Trị Viên.</p>`
         : `<div class="grid grid-cols-2 gap-3">
             <div><label class="block font-semibold mb-1">Số lượng</label><input id="bsQty" class="w-full border p-2 rounded" value="${escapeHtml(item.qty || '')}"></div>
-            <div><label class="block font-semibold mb-1">Dự toán / Chi phí</label><input type="number" id="bsAmount" class="w-full border p-2 rounded" value="${item.amount || 0}"></div>
+            <div><label class="block font-semibold mb-1">Dự toán / Chi phí</label><input type="text" inputmode="numeric" id="bsAmount" class="w-full border p-2 rounded money-input" value="${formatMoneyDisplay(item.amount || 0)}"></div>
           </div>
           <div><label class="block font-semibold mb-1">Nhà cung cấp</label><input id="bsSupplier" class="w-full border p-2 rounded" value="${escapeHtml(item.supplier || '')}"></div>`}
       <div><label class="block font-semibold mb-1">Lý do / Nội dung</label><textarea id="bsReason" class="w-full border p-2 rounded h-20">${escapeHtml(item.reason || '')}</textarea></div>
@@ -3127,8 +3127,8 @@ function openBosungEditModal(moduleKey, id) {
       <div><label class="block font-semibold mb-1">Địa điểm dự kiến</label><input id="bsAddress" class="w-full border p-2 rounded" value="${escapeHtml(item.address || '')}"></div>
       <div class="grid grid-cols-2 gap-3">
         <div><label class="block font-semibold mb-1">Diện tích dự kiến (m²)</label><input type="number" id="bsArea" class="w-full border p-2 rounded" value="${item.area || 0}"></div>
-        <div><label class="block font-semibold mb-1">Chi Phí Phê Duyệt</label><input type="number" id="bsBudget" class="w-full border p-2 rounded" value="${item.estimatedBudget || 0}"></div>
-        <div><label class="block font-semibold mb-1">Ngân Sách Phê Duyệt (Danh Mục Đầu Tư)</label><input type="number" id="bsApprovedBudget" class="w-full border p-2 rounded" value="${item.approvedBudget || 0}"></div>
+        <div><label class="block font-semibold mb-1">Chi Phí Phê Duyệt</label><input type="text" inputmode="numeric" id="bsBudget" class="w-full border p-2 rounded money-input" value="${formatMoneyDisplay(item.estimatedBudget || 0)}"></div>
+        <div><label class="block font-semibold mb-1">Ngân Sách Phê Duyệt (Danh Mục Đầu Tư)</label><input type="text" inputmode="numeric" id="bsApprovedBudget" class="w-full border p-2 rounded money-input" value="${formatMoneyDisplay(item.approvedBudget || 0)}"></div>
       </div>
       <div class="grid grid-cols-2 gap-3">
         <div><label class="block font-semibold mb-1">Ngày dự kiến khai trương</label><input type="date" id="bsOpenDate" class="w-full border p-2 rounded" value="${escapeHtml((item.expectedOpenDate || '').slice(0, 10))}"></div>
@@ -3141,8 +3141,8 @@ function openBosungEditModal(moduleKey, id) {
       <div><label class="block font-semibold mb-1">Siêu thị cần sửa chữa</label><input id="bsStoreName" class="w-full border p-2 rounded" value="${escapeHtml(item.storeName || '')}"></div>
       <div><label class="block font-semibold mb-1">Nội dung sửa chữa</label><input id="bsTitle" class="w-full border p-2 rounded" value="${escapeHtml(item.title || '')}"></div>
       <div class="grid grid-cols-2 gap-3">
-        <div><label class="block font-semibold mb-1">Chi Phí Phê Duyệt</label><input type="number" id="bsAmount" class="w-full border p-2 rounded" value="${item.amount || 0}"></div>
-        <div><label class="block font-semibold mb-1">Ngân Sách Phê Duyệt (Danh Mục Đầu Tư)</label><input type="number" id="bsApprovedBudget" class="w-full border p-2 rounded" value="${item.approvedBudget || 0}"></div>
+        <div><label class="block font-semibold mb-1">Chi Phí Phê Duyệt</label><input type="text" inputmode="numeric" id="bsAmount" class="w-full border p-2 rounded money-input" value="${formatMoneyDisplay(item.amount || 0)}"></div>
+        <div><label class="block font-semibold mb-1">Ngân Sách Phê Duyệt (Danh Mục Đầu Tư)</label><input type="text" inputmode="numeric" id="bsApprovedBudget" class="w-full border p-2 rounded money-input" value="${formatMoneyDisplay(item.approvedBudget || 0)}"></div>
         <div><label class="block font-semibold mb-1">Nhà cung cấp</label><input id="bsSupplier" class="w-full border p-2 rounded" value="${escapeHtml(item.supplier || '')}"></div>
       </div>
       <div class="relative"><label class="block font-semibold mb-1">Người phụ trách</label><input id="bsPersonInChargeInput" data-sdd-list="systemUsersDatalist" autocomplete="off" data-op-change="resolveBsPersonInChargeInput" data-arg-value="0" placeholder="Gõ tên hoặc tài khoản..." class="w-full border p-2 rounded" value="${item.personInChargeName ? escapeHtml(`${item.personInChargeName} — (${item.personInCharge})`) : escapeHtml(item.personInCharge || '')}"><input type="hidden" id="bsPersonInChargeUsername" value="${escapeHtml(item.personInChargeName ? (item.personInCharge || '') : '')}"></div>
@@ -3211,7 +3211,7 @@ async function confirmBosungResubmit() {
       };
       if (item.subType !== 'MUA_BAN') {
         payload.qty = document.getElementById('bsQty').value.trim();
-        payload.amount = Number(document.getElementById('bsAmount').value) || 0;
+        payload.amount = getMoneyValue(document.getElementById('bsAmount'));
         payload.supplier = document.getElementById('bsSupplier').value.trim();
       }
     } else if (moduleKey === 'submissions') {
@@ -3237,8 +3237,8 @@ async function confirmBosungResubmit() {
         storeName: document.getElementById('bsStoreName').value.trim(),
         address: document.getElementById('bsAddress').value.trim(),
         area: Number(document.getElementById('bsArea').value) || 0,
-        estimatedBudget: Number(document.getElementById('bsBudget').value) || 0,
-        approvedBudget: Number(document.getElementById('bsApprovedBudget').value) || 0,
+        estimatedBudget: getMoneyValue(document.getElementById('bsBudget')),
+        approvedBudget: getMoneyValue(document.getElementById('bsApprovedBudget')),
         expectedOpenDate: document.getElementById('bsOpenDate').value,
         personInCharge: document.getElementById('bsPersonInChargeUsername').value || '',
         note: document.getElementById('bsNote').value.trim()
@@ -3247,8 +3247,8 @@ async function confirmBosungResubmit() {
       payload = {
         storeName: document.getElementById('bsStoreName').value.trim(),
         title: document.getElementById('bsTitle').value.trim(),
-        amount: Number(document.getElementById('bsAmount').value) || 0,
-        approvedBudget: Number(document.getElementById('bsApprovedBudget').value) || 0,
+        amount: getMoneyValue(document.getElementById('bsAmount')),
+        approvedBudget: getMoneyValue(document.getElementById('bsApprovedBudget')),
         supplier: document.getElementById('bsSupplier').value.trim(),
         personInCharge: document.getElementById('bsPersonInChargeUsername').value || '',
         description: document.getElementById('bsDescription').value.trim()
