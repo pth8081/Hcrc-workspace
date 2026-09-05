@@ -5,6 +5,7 @@ const compression = require('compression');
 const cookieParser = require('cookie-parser');
 const { rateLimit, ipKeyGenerator } = require('express-rate-limit');
 const path = require('path');
+const fs = require('fs');
 const securityHeaders = require('./lib/securityHeaders');
 const { version: APP_VERSION } = require('./package.json');
 const { getPool } = require('./db');
@@ -262,11 +263,55 @@ app.get('/api/captcha', captchaRateLimiter, async (req, res) => {
 // "shortcuts" đọc cấu hình admin) — đăng ký TRƯỚC static/catch-all bên dưới để không bị index.html nuốt.
 app.use(pwaManifestRoutes);
 
-// Phục vụ frontend tĩnh (file index.html đã chuyển đổi sang gọi API thay vì localStorage)
-app.use(express.static(path.join(__dirname, 'public')));
-app.get('*', (req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'index.html'));
-});
+// Phục vụ file JS client (public/js/*.js) với cache dài hạn ở trình duyệt — an toàn vì mỗi file luôn
+// được nạp kèm query string "?v=<version>" (xem renderIndexHtml() bên dưới + loadModuleGroup() ở
+// core.js): bản deploy mới tăng version -> URL đổi -> trình duyệt tự tải bản mới, không có rủi ro dùng
+// nhầm cache cũ. Đăng ký TRƯỚC static/catch-all bên dưới để header cache riêng này luôn được áp dụng,
+// không rơi vào nhánh express.static(public) chung (vốn không đặt Cache-Control).
+const JS_STATIC_OPTS = { maxAge: '1y', immutable: true };
+app.use('/js', express.static(path.join(__dirname, 'public', 'js'), JS_STATIC_OPTS));
+
+// index.html là file DUY NHẤT phải luôn tải mới (không cache) vì nó là nơi "công bố" version hiện tại
+// qua query string gắn vào từng thẻ <script src="/js/...">. Đọc file từ đĩa + thay thế chuỗi ngay khi
+// có request (không dùng templating engine, dự án này vốn không có) thay vì để express.static phục vụ
+// nguyên văn — cache theo mtime để không phải đọc+thay thế lại mỗi request khi file không đổi (chi phí
+// 1 lần fs.statSync() rẻ hơn nhiều so với đọc+regex lại toàn bộ trang ~8000 dòng mỗi lần).
+const INDEX_HTML_PATH = path.join(__dirname, 'public', 'index.html');
+const SCRIPT_SRC_RE = /(<script\b[^>]*\bsrc=")\/js\/([\w.-]+)\.js(")/g;
+let _indexHtmlCache = null; // { mtimeMs, html }
+
+function renderIndexHtml() {
+  const stat = fs.statSync(INDEX_HTML_PATH);
+  if (!_indexHtmlCache || _indexHtmlCache.mtimeMs !== stat.mtimeMs) {
+    const raw = fs.readFileSync(INDEX_HTML_PATH, 'utf8');
+    let versioned = raw.replace(SCRIPT_SRC_RE, (full, pre, name, post) => `${pre}/js/${name}.js?v=${encodeURIComponent(APP_VERSION)}${post}`);
+    // Gắn version ra window TRƯỚC thẻ <script src="/js/core.js..."> đầu tiên — loadModuleGroup() (core.js)
+    // đọc lại đúng giá trị này để gắn "?v=..." cho các file lazy-load nạp sau, không hardcode version
+    // client-side (khớp đúng bản server đang chạy tại thời điểm request, kể cả khi deploy version mới
+    // mà chưa reload lại toàn trang).
+    const versionScript = `<script>window.__ASSET_VERSION__=${JSON.stringify(APP_VERSION)};</script>\n`;
+    versioned = versioned.replace(/<script\b[^>]*\bsrc="\/js\/core\.js/, (m) => versionScript + m);
+    _indexHtmlCache = { mtimeMs: stat.mtimeMs, html: versioned };
+  }
+  return _indexHtmlCache.html;
+}
+
+function sendIndexHtml(req, res) {
+  res.set('Cache-Control', 'no-cache');
+  res.type('html').send(renderIndexHtml());
+}
+
+// Chặn /index.html tải thẳng qua express.static bên dưới theo đúng tên file (index:false chỉ tắt việc
+// tự phục vụ index.html làm "trang mặc định" của thư mục "/", KHÔNG chặn request gõ thẳng path
+// "/index.html" — nếu không có route riêng này thì request đó vẫn lọt qua express.static và trả về
+// bản GỐC chưa gắn version, vô hiệu hoá toàn bộ cơ chế cache-busting ở trên).
+app.get('/index.html', sendIndexHtml);
+
+// Phục vụ frontend tĩnh (file index.html đã chuyển đổi sang gọi API thay vì localStorage). index:false
+// để express.static không tự trả index.html nguyên văn (chưa gắn version) khi gặp "/" — nhường việc đó
+// cho catch-all bên dưới gọi sendIndexHtml().
+app.use(express.static(path.join(__dirname, 'public'), { index: false }));
+app.get('*', sendIndexHtml);
 
 async function start() {
   try {

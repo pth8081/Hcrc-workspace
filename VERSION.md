@@ -1,9 +1,45 @@
 # Phiên bản hiện tại
 
-**8.4** — đã merge vào `main` (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge
+**8.5** — đã merge vào `main` (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge
 góc màn hình + `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần
 kiểu `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. Đúng theo quy tắc MINOR chạy 0-9 trong
-`CLAUDE.md`: sau `8.3` tăng MINOR lên 1 → `8.4`.
+`CLAUDE.md`: sau `8.4` tăng MINOR lên 1 → `8.5`.
+
+## Cập nhật gần nhất — Hạ tầng: Cache-Control + cache-busting cho `public/js/*.js` (Đợt 7, Phần A)
+
+Đo thực tế (trước khi làm): gzip đã bật sẵn từ trước (`compression()`, `server.js`) — ~627KB truyền thật
+trên tổng ~2,7MB JS thô, phần này ĐÃ ổn, không đụng tới. Nhưng phát hiện 2 khoảng trống thật:
+
+1. **Không có Cache-Control nào** cho `index.html` lẫn toàn bộ `public/js/*.js` — `express.static(public)`
+   phục vụ nguyên trạng, mỗi lần tải trang trình duyệt phải re-validate lại cả 39 file JS với server (dù
+   nội dung file không đổi giữa 2 lần deploy), trong khi `/vendor/*` (thư viện ngoài) đã có
+   `VENDOR_STATIC_OPTS = { maxAge: '7d', immutable: true }` từ trước.
+2. 39 file `public/js/*.js` nạp **EAGER hết** trên MỌI lượt tải trang, bất kể người dùng có mở tới module
+   đó hay không trong phiên — tiền đề cho Đợt 7 Phần B (nạp theo cụm khi cần, xem mục dưới khi merge).
+
+**Cách làm Phần A này** (`server/server.js`):
+- Route `/index.html` VÀ catch-all (`app.get('*')`) không còn `res.sendFile()` thẳng nữa — đọc file, thay
+  thế MỌI `<script src="/js/xxx.js">` thành `src="/js/xxx.js?v=<version>"` (đọc SỐNG từ `package.json`,
+  không hard-code), cache kết quả theo `mtimeMs` (không đọc+thay lại mỗi request khi file không đổi).
+  Response của route này luôn `Cache-Control: no-cache` — đây là file DUY NHẤT phải luôn tải mới để phát
+  hiện đúng version hiện tại. Cũng chặn riêng path `/index.html` (không chỉ `"/"`) để không có đường nào
+  lọt qua `express.static` trả về bản GỐC chưa gắn version.
+- Mount tĩnh mới `/js` (mirror đúng khuôn `VENDOR_STATIC_OPTS`): `{ maxAge: '1y', immutable: true }` —
+  AN TOÀN vì luôn đi kèm `?v=`, bản deploy mới đổi version → đổi URL → trình duyệt tự tải bản mới, không
+  có rủi ro dùng nhầm cache cũ.
+- Gắn kèm `window.__ASSET_VERSION__` (script nhỏ, chèn ngay trước `<script src="/js/core.js...">`) để
+  phía client (Đợt 7 Phần B, `loadModuleGroup()`) tự đọc lại ĐÚNG version đang chạy khi tạo `<script>`
+  động cho các file nạp sau, không hard-code version ở client.
+
+Đã xác nhận qua HTTP request thật (dựng lại đúng logic ở 1 server Express riêng, vì sandbox này không có
+SQL Server thật để chạy `server.js` thật — xem `server/tests/README.md`): `GET /` trả về HTML với MỌI thẻ
+`<script src="/js/...">` đã gắn `?v=8.5` khớp `package.json`, `window.__ASSET_VERSION__="8.5"`, header
+`Cache-Control: no-cache`; `GET /js/core.js?v=8.5` trả `Cache-Control: public, max-age=31536000,
+immutable`; `GET /index.html` (path literal) cũng trả đúng bản đã gắn version + `no-cache`, không có
+đường nào lọt bản gốc.
+
+**Tác động triển khai:** không cần gì ngoài copy code + `pm2 restart` — không đổi `schema.sql`, không
+thêm biến `.env`, không thêm `dependencies` mới.
 
 ## Cập nhật gần nhất — Hạ tầng: tách tiếp `core.js` (Đợt 6 — core.js 7.440 → 6.034 dòng, tách 4 file mới + chuyển 1 khối về đúng module)
 
