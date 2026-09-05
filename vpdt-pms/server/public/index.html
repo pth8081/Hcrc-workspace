@@ -1571,39 +1571,13 @@ input[data-sdd-list] {
             <label class="block text-xs font-semibold text-gray-600 mb-1">Tiêu đề báo cáo (chỉ để nhận diện trong danh sách, không hiện trên slide)</label>
             <input id="prEntryTitle" placeholder="VD: Báo cáo công việc tuần 12 - Phòng Kinh Doanh" class="w-full border p-2 rounded text-sm">
           </div>
-          <div class="bg-white p-3 rounded border">
-            <label class="text-xs font-bold text-gray-700 block mb-2">Hình thức nộp báo cáo</label>
-            <div class="flex gap-4 text-xs">
-              <label class="flex items-center gap-1.5 cursor-pointer">
-                <input type="radio" name="prEntryMode" value="PPTX" checked data-op-change="onPrEntryModeChange"> PowerPoint (.pptx)
-              </label>
-              <label class="flex items-center gap-1.5 cursor-pointer">
-                <input type="radio" name="prEntryMode" value="PDF" data-op-change="onPrEntryModeChange"> Ghép nhiều file PDF
-              </label>
-            </div>
-          </div>
-
-          <!-- CHỈ nhận file .pptx — trình duyệt tự đọc nội dung (văn bản + bảng/biểu đồ/ảnh) NGAY LÚC
-               chọn tệp qua parsePptxToSlideContents() (JSZip + DOMParser gốc, KHÔNG qua server, xem
-               script cuối trang) rồi hiện xem trước số slide/nội dung bên dưới — nội dung đọc được sẽ
-               GỘP THẲNG vào bản trình chiếu khi Tổng Hợp (không phải kiểu đính kèm tệp thô như trước):
-               văn bản (tiêu đề/đoạn văn) sửa được trực tiếp ở bước Tổng Hợp; bảng/biểu đồ được vẽ lại
-               thành ảnh (không sửa được nội dung, chỉ hiển thị nguyên trạng). KHÔNG đọc được .ppt nhị
-               phân đời cũ (giống hệt giới hạn Word .doc/.docx trước đây) — chỉ đọc được .pptx. Mẫu NỀN
-               (màu sắc) do người tạo Kỳ Báo Cáo chọn sẵn, người nộp không cần chọn gì ở đây. -->
-          <div id="prEntryPptxBox" class="bg-white p-3 rounded border">
-            <label class="text-xs font-bold text-gray-700 block mb-2">📎 Tệp Báo Cáo (.pptx)</label>
-            <input type="file" id="prEntryPptxFile" data-op-change="onPrEntryPptxFileChange" data-arg-event="0" class="w-full text-xs" accept=".pptx,application/vnd.openxmlformats-officedocument.presentationml.presentation">
-            <p class="text-[11px] text-gray-500 mt-1">Chỉ nhận file PowerPoint <b>.pptx</b> — không nhận được <b>.ppt</b> đời cũ, vui lòng lưu lại bằng .pptx rồi tải lên lại nếu gặp lỗi.</p>
-            <div id="prEntryPptxStatus" class="hidden text-xs mt-2 p-2 rounded border"></div>
-            <div id="prEntryWholeFileExisting" class="hidden text-[11px] text-gray-500 mt-1"></div>
-          </div>
-
           <!-- Ghép nhiều file PDF thành 1 file DUY NHẤT NGAY TRONG trình duyệt (pdf-lib) lúc chọn tệp,
-               giữ nguyên vẹn định dạng/font/vector từng trang gốc — khác hẳn .pptx ở trên (đọc rồi làm
-               phẳng thành slide). Bản ghép này chính là tệp báo cáo của cả kỳ, gộp cùng các phòng khác
-               ở bước Tổng Hợp (xem #prAggPdfBox). -->
-          <div id="prEntryPdfBox" class="hidden bg-white p-3 rounded border">
+               giữ nguyên vẹn định dạng/font/vector từng trang gốc. Bản ghép này chính là tệp báo cáo của
+               cả kỳ, gộp cùng các phòng khác ở bước Tổng Hợp (xem #prAggPdfBox). Đã bỏ hẳn hình thức nộp
+               PowerPoint (.pptx) — PDF giờ là hình thức DUY NHẤT (yêu cầu người dùng, xem VERSION.md).
+               Báo cáo CŨ đã nộp bằng .pptx trước đây vẫn xem/đối chiếu lại được nguyên trạng (không xoá
+               dữ liệu), chỉ không còn tạo mới được nữa. -->
+          <div id="prEntryPdfBox" class="bg-white p-3 rounded border">
             <label class="text-xs font-bold text-gray-700 block mb-2">📎 Tệp Báo Cáo PDF (chọn 1 hoặc nhiều file, hệ thống tự ghép lại)</label>
             <input type="file" id="prEntryPdfFiles" multiple data-op-change="onPrEntryPdfFilesChange" data-arg-event="0" class="w-full text-xs" accept=".pdf,application/pdf">
             <p class="text-[11px] text-gray-500 mt-1">Chọn nhiều file PDF cùng lúc để ghép thành đúng 1 tệp duy nhất — giữ nguyên định dạng gốc từng trang, không bị vỡ layout.</p>
@@ -1739,6 +1713,10 @@ input[data-sdd-list] {
             <button type="button" data-op="mergeReportPeriodByTasksAction" class="bg-teal-600 text-white px-3 py-1 rounded text-xs font-bold hover:bg-teal-700">🗂️ Đối Chiếu Theo Công Việc</button>
           </div>
           <div id="prTaskCompilationWrap" class="hidden space-y-3 pt-2 border-t">
+            <div class="flex justify-end gap-2">
+              <button type="button" id="btnPrTaskCompilationExportPdf" data-op="exportPrTaskCompilationPdf" class="bg-gray-600 text-white px-2.5 py-1 rounded text-xs font-bold hover:bg-gray-700">📄 Xuất PDF</button>
+              <button type="button" data-op="exportPrTaskCompilationExcel" class="bg-emerald-600 text-white px-2.5 py-1 rounded text-xs font-bold hover:bg-emerald-700">📊 Xuất Excel</button>
+            </div>
             <div id="prTaskCompilationSlidesList" class="space-y-3"></div>
           </div>
         </div>

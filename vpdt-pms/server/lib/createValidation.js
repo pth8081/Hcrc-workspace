@@ -2412,44 +2412,21 @@ function sanitizeBudgetLines(rawLines, fields) {
   return out;
 }
 
-// Chuẩn hoá + kiểm tra tối thiểu nội dung báo cáo — CHỈ nhận đúng 1 tệp .pptx (không còn nhập tay/đính
-// nhiều loại tệp như trước). `parsedSlides` do TRÌNH DUYỆT tự đọc/phân tích tệp .pptx ngay lúc chọn tệp
-// (JSZip + DOMParser gốc, xem parsePptxToSlideContents() ở index.html — KHÔNG xử lý gì trên server, tệp
-// .pptx gốc dù có lưu qua /api/upload cũng chỉ để lưu vết/xem lại, KHÔNG dùng để dựng slide tổng hợp,
-// mọi thứ dựng từ parsedSlides) — server chỉ kiểm tra LẠI hình dạng dữ liệu (không tin tưởng mù quáng
-// dữ liệu từ client), không tự đọc/parse lại tệp gốc. Mỗi phần tử parsedSlides khớp đúng 1 slide gốc
-// trong .pptx: `title` (tiêu đề, có thể rỗng nếu slide gốc không có), `bodyLines` (mảng dòng văn bản —
-// sửa được trực tiếp ở bước Tổng Hợp), `images` (bảng/biểu đồ/ảnh nhúng đã được trình duyệt vẽ lại
-// thành ảnh PNG dạng base64 — KHÔNG sửa được, chỉ hiển thị nguyên trạng). Dùng chung cho cả tạo mới
-// (extraValidate ở trên) lẫn sửa nháp (updateReportEntryDraft ở lib/recordActions.js) để 2 luồng luôn
-// validate giống hệt nhau.
+// Chuẩn hoá + kiểm tra tối thiểu nội dung báo cáo — CHỈ nhận tệp PDF (đã tự ghép nhiều file thành 1 blob
+// DUY NHẤT ngay trên trình duyệt bằng pdf-lib rồi mới tải lên). Đã BỎ HẲN hình thức nộp PowerPoint
+// (.pptx) theo yêu cầu người dùng — parsePptxToSlideContents()/parsedSlides không còn đường tạo mới nào
+// nữa (chỉ còn đọc lại cho báo cáo CŨ đã nộp bằng .pptx trước khi tính năng này bị gỡ, xem
+// PPTX_SLIDE ở lib/recordActions.js mergeReportPeriod() — KHÔNG xoá dữ liệu cũ, chỉ khoá đường tạo mới).
+// Dùng chung cho cả tạo mới (extraValidate ở trên) lẫn sửa nháp (updateReportEntryDraft ở
+// lib/recordActions.js) để 2 luồng luôn validate giống hệt nhau. assertUploadedFileUrl() định nghĩa ở
+// đầu file này.
 function normalizeReportEntryPayload(payload) {
-  // entryType 'PDF': nhân viên đã tự ghép nhiều file PDF thành 1 blob DUY NHẤT ngay trên trình duyệt
-  // (pdf-lib) rồi mới tải lên — ở đây chỉ cần xác thực đường dẫn tệp, KHÔNG parse nội dung slide nào cả
-  // (khác hẳn nhánh .pptx bên dưới). assertUploadedFileUrl() định nghĩa ở đầu file này.
-  payload.entryType = payload.entryType === 'PDF' ? 'PDF' : 'PPTX';
+  payload.entryType = 'PDF';
   payload.fileName = String(payload.fileName || '').trim();
   payload.fileType = String(payload.fileType || '');
-  if (payload.entryType === 'PDF') {
-    if (!payload.fileUrl) throw new CreateError(400, 'Vui lòng chọn tệp báo cáo PDF (đã gộp) cần tải lên');
-    assertUploadedFileUrl(payload.fileUrl, 'Tệp báo cáo PDF');
-    payload.parsedSlides = [];
-    return;
-  }
-  if (!payload.fileUrl) throw new CreateError(400, 'Vui lòng chọn tệp báo cáo (.pptx) cần tải lên');
-  const rawSlides = Array.isArray(payload.parsedSlides) ? payload.parsedSlides : [];
-  const IMAGE_KINDS = ['embedded', 'table', 'chart'];
-  payload.parsedSlides = rawSlides.map((s, idx) => ({
-    order: idx + 1,
-    title: String(s?.title || '').trim(),
-    bodyLines: (Array.isArray(s?.bodyLines) ? s.bodyLines : []).map(l => String(l || '').trim()).filter(Boolean),
-    images: (Array.isArray(s?.images) ? s.images : [])
-      .filter(im => im && typeof im.dataUrl === 'string' && im.dataUrl.startsWith('data:image/'))
-      .map(im => ({ dataUrl: im.dataUrl, kind: IMAGE_KINDS.includes(im.kind) ? im.kind : 'embedded' }))
-  }));
-  if (!payload.parsedSlides.length) {
-    throw new CreateError(400, 'Không đọc được nội dung nào từ tệp — chỉ đọc được định dạng .pptx (không đọc được .ppt nhị phân đời cũ), vui lòng lưu lại bằng .pptx rồi tải lên lại');
-  }
+  if (!payload.fileUrl) throw new CreateError(400, 'Vui lòng chọn tệp báo cáo PDF (đã gộp) cần tải lên');
+  assertUploadedFileUrl(payload.fileUrl, 'Tệp báo cáo PDF');
+  payload.parsedSlides = [];
 }
 
 // payload: dữ liệu hồ sơ client gửi lên (mọi field nghiệp vụ giữ nguyên) — chỉ id/creator/creatorName

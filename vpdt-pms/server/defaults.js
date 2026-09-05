@@ -35,11 +35,10 @@ const DEFAULTS = {
   // Danh sách phần mở rộng cho phép tải lên theo TỪNG MODULE nghiệp vụ (key: 'doc'/'submission'/
   // 'contract'/'car'/'meeting'/'minutes'/'office'/'internal' — xem UPLOAD_MODULE_LIST trong
   // index.html), admin cấu hình lại tuỳ ý ở Hệ Thống → "📎 Loại Tệp". Mặc định GIỚI HẠN chỉ .pdf/.docx/
-  // .xlsx cho 8 module tài liệu/hồ sơ thông thường này. KHÔNG có key "periodicReport" ở đây — Báo Cáo
-  // Định Kỳ cần tải lên cả .pptx (tệp trình chiếu gốc) lẫn ảnh nền (Mẫu Trình Chiếu, xem
-  // processSlideTemplateFile() trong index.html) nên module này KHÔNG đưa vào màn cấu hình 3 định dạng
-  // ở đây — vẫn dùng nguyên danh sách mặc định chung ALLOWED_EXT (xem routes/upload.js), không giới
-  // hạn riêng.
+  // .xlsx cho 8 module tài liệu/hồ sơ thông thường này. KHÔNG có key "periodicReport" ở đây — module Báo
+  // Cáo Định Kỳ trước đây cần tải lên cả .pptx (đã BỎ HẲN hình thức nộp PowerPoint, chỉ còn PDF, xem
+  // VERSION.md) nên chưa từng đưa vào màn cấu hình 3 định dạng ở đây — vẫn dùng nguyên danh sách mặc
+  // định chung ALLOWED_EXT (xem routes/upload.js), không giới hạn riêng qua màn này.
   uploadFileTypeConfig: {
     doc: ['.pdf', '.docx', '.xlsx'],
     submission: ['.pdf', '.docx', '.xlsx'],

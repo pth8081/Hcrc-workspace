@@ -1,7 +1,8 @@
 // server/tests/test-periodic-report-pdf.js
 //
-// Regression test cho luồng GHÉP FILE PDF THẬT của Báo Cáo Định Kỳ (reportEntries.entryType==='PDF'),
-// chạy SONG SONG với luồng .pptx đã có ở test-periodic-report.js (không đụng nhau):
+// Regression test cho luồng GHÉP FILE PDF THẬT của Báo Cáo Định Kỳ (reportEntries.entryType==='PDF') —
+// giờ là hình thức nộp báo cáo DUY NHẤT (đã bỏ hẳn PowerPoint .pptx). Luồng PPTX ở test-periodic-report.js
+// giờ chỉ còn kiểm tra khả năng ĐỌC LẠI dữ liệu CŨ (không còn đường tạo entry PPTX mới nào nữa):
 //   - Nộp báo cáo dạng PDF (entryType='PDF', không có parsedSlides).
 //   - Validation: fileUrl bắt buộc + đúng khuôn /uploads/... (assertUploadedFileUrl).
 //   - Tổng Hợp PDF (mergeReportPeriodPdf) — gom theo phòng ban, chặn trang tham chiếu entry không hợp lệ,
@@ -57,17 +58,14 @@ async function loginAs(page, user) {
   }, user);
 }
 
-// Nộp + gửi 1 báo cáo PDF (giả lập onPrEntryPdfFilesChange() đã ghép xong — set thẳng prEntryPendingFile
-// giống cách test-periodic-report.js giả lập onPrEntryPptxFileChange() cho luồng .pptx, tránh phải dựng
-// File nhị phân thật xuyên qua CDP evaluate()).
+// Nộp + gửi 1 báo cáo PDF (giả lập onPrEntryPdfFilesChange() đã ghép xong — set thẳng prEntryPendingFile,
+// tránh phải dựng File nhị phân thật xuyên qua CDP evaluate()).
 async function submitPdfEntry(page, periodId, title, fileUrl) {
   return page.evaluate(async ({ pId, title, fileUrl }) => {
     switchTab('periodicReport');
     setPeriodicReportSubTab('ENTRY');
     document.getElementById('prEntryPeriodSelect').value = String(pId);
     onPrEntryPeriodChange();
-    document.querySelector('input[name="prEntryMode"][value="PDF"]').checked = true;
-    onPrEntryModeChange();
     document.getElementById('prEntryTitle').value = title;
     prEntryPendingFile = { file: { name: fileUrl.split('/').pop() }, parsedSlides: [] };
     uploadFileToServer = async () => ({ fileUrl, fileName: fileUrl.split('/').pop(), fileType: 'application/pdf' });
@@ -168,19 +166,25 @@ async function main() {
       tmpPeriodId = tmpPeriod.id;
     });
 
-    // ===== 2) Regression: không truyền entryType (mặc định .pptx) vẫn hoạt động như cũ =====
-    await run.run('Regression: entryType mặc định là PPTX khi không truyền (không phá luồng cũ)', async () => {
+    // ===== 2) Regression: đã BỎ HẲN hình thức nộp PowerPoint (.pptx) — entryType LUÔN bị ép về 'PDF' ở
+    // server (normalizeReportEntryPayload(), lib/createValidation.js), kể cả khi client cố tình gửi
+    // entryType 'PPTX' + fileUrl .pptx + parsedSlides (giả lập 1 request thủ công cố lách qua UI đã gỡ
+    // form PPTX) — parsedSlides luôn bị ép về [] cho MỌI entry tạo mới từ nay, không còn đường tạo entry
+    // PPTX mới nào nữa (chỉ dữ liệu CŨ tạo trước đợt này còn giữ entryType 'PPTX', xem
+    // test-periodic-report.js kịch bản "dữ liệu CŨ"). fileUrl vẫn phải đúng khuôn /uploads/... (PDF) —
+    // đường dẫn .pptx gửi kèm không được chấp nhận thay thế.
+    await run.run('Regression: entryType LUÔN ép về PDF (đã bỏ PPTX) — client cố gửi PPTX/parsedSlides cũng bị bỏ qua', async () => {
       await loginAs(page, EMP_NOAGG);
       const result = await page.evaluate(async (pId) => {
         const created = await callCreateAction('reportEntries', {
-          periodId: pId, title: 'Báo cáo PPTX như cũ',
-          fileUrl: '/uploads/fake_old.pptx', fileName: 'fake_old.pptx', fileType: 'pptx',
+          periodId: pId, title: 'Cố tạo báo cáo PPTX sau khi đã bỏ tính năng',
+          entryType: 'PPTX', fileUrl: '/uploads/fake_old.pdf', fileName: 'fake_old.pdf', fileType: 'pdf',
           parsedSlides: [{ title: 'Slide 1', bodyLines: ['abc'], images: [] }]
         });
         return created.item;
       }, tmpPeriodId);
-      assertEqual(result.entryType, 'PPTX', 'Không truyền entryType phải mặc định PPTX');
-      assertEqual(result.parsedSlides.length, 1, 'Luồng .pptx cũ vẫn giữ nguyên parsedSlides đã đọc');
+      assertEqual(result.entryType, 'PDF', 'Dù client gửi entryType PPTX, server vẫn phải ép về PDF (đã bỏ hẳn PPTX)');
+      assertEqual(result.parsedSlides.length, 0, 'parsedSlides client gửi kèm phải bị bỏ qua (ép về mảng rỗng) cho entry tạo mới');
     });
 
     // ===== 3) Permission: EMP_NOAGG (không có reportAggregate) bị chặn cả mergePdf/publishPdf/unpublishPdf =====

@@ -1,11 +1,58 @@
 # Phiên bản hiện tại
 
-**8.8** — đã merge vào `main` (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge
+**8.9** — đã merge vào `main` (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge
 góc màn hình + `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần
 kiểu `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. Đúng theo quy tắc MINOR chạy 0-9 trong
-`CLAUDE.md`: sau `8.7` tăng MINOR lên 1 → `8.8`.
+`CLAUDE.md`: sau `8.8` tăng MINOR lên 1 → `8.9`.
 
-## Cập nhật gần nhất — FIX KHẨN: Vận Hành > Siêu Thị > Thực Hiện không tạo được công việc gốc (2026-09-05)
+## Cập nhật gần nhất — Báo Cáo Định Kỳ: bỏ hẳn upload PowerPoint (.pptx), thêm Xuất PDF/Excel cho Tổng Hợp Theo Công Việc (2026-09-05)
+
+Theo yêu cầu người dùng: "bỏ luôn không sử dụng upload báo cáo file ppt/pptx, tổng hợp báo cáo từ nguồn
+công việc có thể xuất ra cả file pdf và excel".
+
+**Phần 1 — Bỏ hẳn hình thức nộp PowerPoint (.pptx)**, chỉ còn PDF (ghép nhiều file bằng pdf-lib ngay
+trong trình duyệt, đã có sẵn từ trước — nay là hình thức DUY NHẤT):
+- Form "📝 Nhập Báo Cáo": bỏ hẳn 2 radio "Hình thức nộp" + ô chọn tệp `.pptx` (`public/index.html`,
+  `public/js/module-baocaodinhky-nhap.js`) — không còn `prEntryMode`, luôn gửi `entryType: 'PDF'`.
+- Server (`lib/createValidation.js normalizeReportEntryPayload()`): LUÔN ép `entryType` về `'PDF'` +
+  `parsedSlides` về `[]`, kể cả khi 1 request thủ công cố gửi `entryType: 'PPTX'` kèm `parsedSlides` (đã
+  có test regression riêng xác nhận không lách được).
+- Xoá hẳn `parsePptxToSlideContents()` (JSZip + DOMParser đọc XML `.pptx`, từng nằm ở
+  `public/js/module-internalcomms-daotao-viewer.js` — xác nhận đây là CONSUMER DUY NHẤT trước khi xoá,
+  không đụng module Đào Tạo dùng chung file này cho các hàm xem Word/Excel bảo vệ khác). Dọn theo:
+  `/vendor/jszip` (route tĩnh phục vụ bundle JSZip cho trình duyệt, `server.js`) + entry copy trong
+  `scripts/copy-vendor-assets.js` + file `public/vendor/jszip/jszip.min.js` đã commit — **`jszip` VẪN
+  còn là dependency `package.json` (server.js không đổi ở đây)**, vì `lib/xlsxSafeRead.js` (chống
+  zip-bomb khi đọc mọi file Excel import) dùng `jszip` phía SERVER, hoàn toàn độc lập với bundle trình
+  duyệt vừa gỡ.
+- Dữ liệu CŨ đã nộp bằng `.pptx` trước đợt này KHÔNG bị xoá/hỏng — `period.compilation`
+  (`PPTX_SLIDE`, mergeReportPeriod()) vẫn xem/đối chiếu/phát hành lại được bình thường, chỉ không còn
+  đường tạo entry `.pptx` MỚI nào nữa (xác nhận qua test seed thẳng 1 entry legacy vào state, không đi
+  qua form đã gỡ).
+
+**Phần 2 — Xuất PDF + Excel cho "🗂️ Đối Chiếu Theo Công Việc" (`period.taskCompilation`, dựng từ
+`DB.tasks` qua `mergeReportPeriodByTasks()`, TÁCH RIÊNG khỏi bản tổng hợp báo cáo chính thức)**:
+- 📄 Xuất PDF (`exportPrTaskCompilationPdf()`, `module-baocaodinhky-trinhchieu.js`): mirror ĐÚNG kỹ
+  thuật `exportBudgetSummaryPdf()` (module-ngansach.js, đã có sẵn) — dựng lại nội dung ĐANG HIỂN THỊ vào
+  1 stage ẩn khổ A4, chụp html2canvas, cắt lát ghép nhiều trang bằng jsPDF.
+- 📊 Xuất Excel (`exportPrTaskCompilationExcel()`): dùng ĐÚNG route dùng chung có sẵn
+  `POST /api/admin/export-xlsx` (`downloadXlsxFromServer()`, cùng khuôn `exportOperationWorkItems()` ở
+  module-vanhanh.js) — làm PHẲNG slides thành 1 dòng/công việc (Phòng Ban/Người Phụ Trách/Nội Dung/Tiến
+  Độ/Hạn Chót/Hỗ Trợ), dễ lọc/sắp xếp lại hơn giữ nguyên cấu trúc slide.
+- 2 nút mới ngay trên khối "Đối Chiếu Theo Công Việc" (chỉ hiện khi đã có bản đối chiếu).
+
+**Test**: `tests/test-periodic-report.js` viết lại kịch bản Nhập Liệu (chỉ còn PDF) + kịch bản Tổng Hợp
+Theo Báo Cáo đổi sang seed dữ liệu CŨ (giả lập production có sẵn từ trước) + thêm 3 kịch bản mới (Xuất
+PDF thật — chặn `jsPDF` constructor đọc lại byte PDF thật, có chữ ký `%PDF`; Xuất Excel — chặn
+`downloadXlsxFromServer()` xác nhận đúng cột/dữ liệu; báo lỗi rõ ràng khi chưa từng đối chiếu).
+`tests/test-periodic-report-pdf.js` viết lại kịch bản "entryType mặc định" (từ "mặc định PPTX" thành
+"LUÔN ép về PDF, không lách được"). Toàn bộ `tests/test-*.js` (60 file): 58/60 pass (2 lỗi known
+pre-existing cần SQL Server thật).
+
+**Deploy**: không có thay đổi `schema.sql`/`.env.example`/`package.json` dependencies nào — chỉ code
+client+server hiện có, copy code + `pm2 restart` là đủ.
+
+## Cập nhật trước đó — FIX KHẨN: Vận Hành > Siêu Thị > Thực Hiện không tạo được công việc gốc (2026-09-05)
 
 **Triệu chứng người dùng báo**: mở "➕ Thêm Công Việc Gốc" trên hồ sơ Sửa Chữa (hoặc Mở Mới) Siêu Thị,
 điền đủ Tên Công Việc/Mô Tả/Người Nghiệm Thu Chỉ Định/Hạn Hoàn Thành/Nghiệm thu-timing, bấm "Lưu Công

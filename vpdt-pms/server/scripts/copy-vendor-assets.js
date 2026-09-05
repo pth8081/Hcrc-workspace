@@ -7,9 +7,9 @@
 // KHÔNG tự "build" gì, chỉ git pull + copy code thẳng, xem HUONG_DAN_DEPLOY_UBUNTU.md mục 12). Trước
 // đây bước "copy từ node_modules ra public/vendor" chưa từng được làm (thủ công lẫn tự động) nên
 // public/vendor/ hoàn toàn trống trên mọi lần deploy — mọi tính năng phụ thuộc các thư viện này (xem
-// PDF.js xem PDF bảo vệ, JSZip đọc .pptx, Mammoth xem Word, ExcelJS xuất Excel, jsPDF xuất PDF,
-// html2canvas chụp ảnh, DOMPurify khử XSS cho mammoth) đều âm thầm lỗi "chưa tải xong thư viện..." mà
-// không ai để ý cho tới khi thử đúng luồng đó (vd tải mẫu trình chiếu Báo Cáo bằng PDF/PowerPoint).
+// PDF.js xem PDF bảo vệ, Mammoth xem Word, ExcelJS xuất Excel, jsPDF xuất PDF, html2canvas chụp ảnh,
+// DOMPurify khử XSS cho mammoth) đều âm thầm lỗi "chưa tải xong thư viện..." mà không ai để ý cho tới
+// khi thử đúng luồng đó (vd tải PDF Báo Cáo Định Kỳ).
 //
 // Chạy tự động qua "postinstall" (package.json) — MỌI LẦN "npm install" (kể cả lần đầu, kể cả sau khi
 // nâng cấp version 1 trong các thư viện này) đều tự đồng bộ lại public/vendor/, không cần nhớ làm thủ
@@ -25,7 +25,6 @@ const ROOT = path.join(__dirname, '..');
 const ASSETS = [
   { from: 'pdfjs-dist/build/pdf.mjs', to: 'pdfjs/pdf.mjs' },
   { from: 'pdfjs-dist/build/pdf.worker.mjs', to: 'pdfjs/pdf.worker.mjs' },
-  { from: 'jszip/dist/jszip.min.js', to: 'jszip/jszip.min.js' },
   { from: 'mammoth/mammoth.browser.min.js', to: 'mammoth/mammoth.browser.min.js' },
   { from: 'exceljs/dist/exceljs.min.js', to: 'exceljs/exceljs.min.js' },
   { from: 'jspdf/dist/jspdf.umd.min.js', to: 'jspdf/jspdf.umd.min.js' },

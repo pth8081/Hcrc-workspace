@@ -295,6 +295,121 @@ function renderPrTaskCompilation() {
 
 const PR_SLIDE_KIND_LABELS = { COVER: 'Trang bìa', DEPT: 'Chia phòng ban', TASKS: 'Bảng công việc', PLAN: 'Bảng kế hoạch', NUMBERS: 'Số liệu', OTHER: 'Khác', FILE: 'Tệp đính kèm', TASK_STATS: 'Thống kê công việc', PPTX_SLIDE: 'Trang PowerPoint' };
 
+// Xuất PDF/Excel cho "Tổng Hợp Theo Công Việc" (period.taskCompilation) — yêu cầu người dùng, đợt bỏ
+// upload PPTX. PDF: mirror ĐÚNG kỹ thuật exportBudgetSummaryPdf() (module-ngansach.js) — dựng lại nội
+// dung ĐANG HIỂN THỊ (#prTaskCompilationSlidesList, đã render sẵn bởi renderPrTaskCompilation()) vào 1
+// stage ẩn bề rộng cố định khổ A4, chụp html2canvas, cắt lát theo chiều cao 1 trang rồi ghép PDF nhiều
+// trang bằng jsPDF — khác downloadPrPdf() ở trên (dựng slideshow 16:9 từ template màu), vì taskCompilation
+// vốn là bảng/text đơn giản, không phải slideshow. Excel: dùng ĐÚNG route dùng chung
+// POST /api/admin/export-xlsx (downloadXlsxFromServer(), cùng khuôn exportOperationWorkItems() ở
+// module-vanhanh.js) — làm PHẲNG slides thành 1 dòng/công việc (dễ lọc/sắp xếp lại hơn giữ cấu trúc slide).
+const PR_TASK_PDF_PAGE_W = 794;  // A4 @ 96dpi (px)
+const PR_TASK_PDF_PAGE_H = 1123;
+const PR_TASK_PDF_MARGIN = 30;
+const PR_TASK_PDF_CAPTURE_SCALE = 2;
+
+async function exportPrTaskCompilationPdf() {
+  const period = DB.reportPeriods.find(p => p.id === prAggCurrentPeriodId);
+  const source = document.getElementById('prTaskCompilationSlidesList');
+  if (!period?.taskCompilation?.slides?.length || !source) {
+    return alert('Chưa có bản đối chiếu nào — bấm "🗂️ Đối Chiếu Theo Công Việc" trước.');
+  }
+  const btn = document.getElementById('btnPrTaskCompilationExportPdf');
+  const originalLabel = btn ? btn.innerHTML : '';
+  if (btn) { btn.disabled = true; btn.innerHTML = '⏳ Đang tạo PDF...'; }
+  const stage = document.createElement('div');
+  try {
+    await Promise.all([
+      loadVendorScript('/vendor/html2canvas/html2canvas.min.js'),
+      loadVendorScript('/vendor/jspdf/jspdf.umd.min.js')
+    ]);
+    const contentWidth = PR_TASK_PDF_PAGE_W - PR_TASK_PDF_MARGIN * 2;
+    stage.style.cssText = `position:fixed;left:-10000px;top:0;width:${contentWidth}px;background:#fff;color:#111;box-sizing:border-box;font-family:Arial,'Segoe UI',sans-serif;font-size:12px;`;
+    stage.innerHTML = `<h2 style="font-size:16px;font-weight:bold;margin:0 0 12px;">TỔNG HỢP THEO CÔNG VIỆC — ${escapeHtml(period.name)}</h2>` + source.innerHTML;
+    document.body.appendChild(stage);
+
+    const bigCanvas = await window.html2canvas(stage, { backgroundColor: '#ffffff', scale: PR_TASK_PDF_CAPTURE_SCALE, useCORS: true, logging: false });
+
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF({ orientation: 'portrait', unit: 'px', format: [PR_TASK_PDF_PAGE_W, PR_TASK_PDF_PAGE_H], compress: true });
+
+    const pageCanvasW = PR_TASK_PDF_PAGE_W * PR_TASK_PDF_CAPTURE_SCALE;
+    const pageCanvasH = PR_TASK_PDF_PAGE_H * PR_TASK_PDF_CAPTURE_SCALE;
+    const marginPx = PR_TASK_PDF_MARGIN * PR_TASK_PDF_CAPTURE_SCALE;
+    const sliceH = (PR_TASK_PDF_PAGE_H - PR_TASK_PDF_MARGIN * 2) * PR_TASK_PDF_CAPTURE_SCALE;
+    const totalPages = Math.min(100, Math.max(1, Math.ceil(bigCanvas.height / sliceH)));
+
+    for (let i = 0; i < totalPages; i++) {
+      const pageCanvas = document.createElement('canvas');
+      pageCanvas.width = pageCanvasW;
+      pageCanvas.height = pageCanvasH;
+      const ctx = pageCanvas.getContext('2d');
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0, 0, pageCanvasW, pageCanvasH);
+      const thisSliceH = Math.min(sliceH, bigCanvas.height - i * sliceH);
+      if (thisSliceH > 0) {
+        ctx.drawImage(bigCanvas, 0, i * sliceH, bigCanvas.width, thisSliceH, marginPx, marginPx, bigCanvas.width, thisSliceH);
+      }
+      const imgData = pageCanvas.toDataURL('image/jpeg', 0.92);
+      if (i > 0) doc.addPage([PR_TASK_PDF_PAGE_W, PR_TASK_PDF_PAGE_H], 'portrait');
+      doc.addImage(imgData, 'JPEG', 0, 0, PR_TASK_PDF_PAGE_W, PR_TASK_PDF_PAGE_H);
+    }
+
+    const safeName = (period.name || 'KyBaoCao').replace(/[\\/:*?"<>|]+/g, '_');
+    doc.save(`TongHopTheoCongViec_${safeName}.pdf`);
+    logSystemAction('PERIODIC_REPORT', 'EXPORT_TASK_COMPILATION_PDF', `Xuất PDF Tổng Hợp Theo Công Việc kỳ [${period.name}]`, 'SUCCESS', String(period.id));
+  } catch (err) {
+    alert('⛔ Không tạo được PDF: ' + err.message);
+  } finally {
+    stage.remove();
+    if (btn) { btn.disabled = false; btn.innerHTML = originalLabel; }
+  }
+}
+
+async function exportPrTaskCompilationExcel() {
+  const period = DB.reportPeriods.find(p => p.id === prAggCurrentPeriodId);
+  const slides = period?.taskCompilation?.slides;
+  if (!slides?.length) return alert('Chưa có bản đối chiếu nào — bấm "🗂️ Đối Chiếu Theo Công Việc" trước.');
+
+  const columns = [
+    { header: 'Phòng Ban', key: 'dept', width: 22 },
+    { header: 'Người Phụ Trách', key: 'person', width: 22 },
+    { header: 'Nội Dung Công Việc', key: 'content', width: 40 },
+    { header: 'Tiến Độ', key: 'progress', width: 16 },
+    { header: 'Hạn Chót', key: 'deadline', width: 14 },
+    { header: 'Hỗ Trợ', key: 'support', width: 22 }
+  ];
+  // Làm PHẲNG slides -> 1 dòng/công việc: DEPT set phòng ban đang xét cho các slide TASKS theo SAU nó
+  // (đúng thứ tự đã dựng ở mergeReportPeriodByTasks(), TASKS.sourceDept cũng đã có sẵn nên dùng trực
+  // tiếp field đó cho chắc, currentDept chỉ là phòng hờ nếu thiếu).
+  let currentDept = '';
+  const rows = [];
+  slides.forEach((s) => {
+    if (s.kind === 'DEPT') { currentDept = s.title || ''; return; }
+    if (s.kind !== 'TASKS') return;
+    (s.items || []).forEach((it) => {
+      rows.push({
+        dept: s.sourceDept || currentDept,
+        person: s.sourceCreatorName || '',
+        content: it.content || '',
+        progress: it.progress || '',
+        deadline: formatDateVN(it.deadline),
+        support: it.support || ''
+      });
+    });
+  });
+  if (!rows.length) return alert('Không có công việc nào để xuất.');
+
+  try {
+    await ensureFnReady('downloadXlsxFromServer');
+  } catch (err) {
+    return alert('⛔ Không tải được bộ xuất Excel: ' + err.message);
+  }
+  const safeName = (period.name || 'KyBaoCao').replace(/[^\p{L}\p{N}]+/gu, '_');
+  await downloadXlsxFromServer(`TongHopTheoCongViec_${safeName}.xlsx`, 'Tổng Hợp Theo Công Việc', columns, rows);
+  logSystemAction('PERIODIC_REPORT', 'EXPORT_TASK_COMPILATION_XLSX', `Xuất Excel Tổng Hợp Theo Công Việc kỳ [${period.name}]`, 'SUCCESS', String(period.id));
+}
+
 // 2 mẫu màu cố định cho trình chiếu/PDF Báo Cáo Định Kỳ — KHÔNG còn chọn được (đã gỡ tính năng "Mẫu
 // Trình Chiếu" tự tạo, mọi kỳ mới đều dùng đúng 'DEFAULT'). 'ORANGE_GOLD' chỉ còn đọc lại cho các kỳ đã
 // tạo TRƯỚC đây có chọn mẫu này (period.slideTemplate cũ) — không xoá để không vỡ hiển thị kỳ cũ.

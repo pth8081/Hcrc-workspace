@@ -6,19 +6,15 @@
 // ==========================================
 let activePeriodicReportSubTab = 'ENTRY';
 let prEntryDraftId = null;
-// Tệp .pptx + nội dung ĐÃ ĐỌC (parsedSlides) của bản nháp đang sửa — giữ lại nếu người dùng không chọn
-// tệp mới khi lưu nháp tiếp, giống mô hình "sửa hồ sơ không bắt buộc chọn lại file" của Hợp đồng (xem
-// openEditContract()). null nếu đang tạo báo cáo mới hoặc chưa từng chọn tệp.
+// Tệp PDF (đã ghép) của bản nháp đang sửa — giữ lại nếu người dùng không chọn tệp mới khi lưu nháp
+// tiếp, giống mô hình "sửa hồ sơ không bắt buộc chọn lại file" của Hợp đồng (xem openEditContract()).
+// null nếu đang tạo báo cáo mới, chưa từng chọn tệp, hoặc báo cáo CŨ nộp bằng .pptx (đã bỏ hình thức
+// này — xem onPrEntryPeriodChange(), không còn đường tái sử dụng tệp .pptx cũ ở form nhập nữa, chỉ còn
+// xem/đối chiếu lại được ở phần Tổng Hợp/Trình Chiếu).
 let prEntryExistingFile = null; // { fileUrl, fileName, fileType, parsedSlides } | null
-// Tệp .pptx VỪA chọn ở ô file (chưa tải lên server) — trình duyệt đã tự đọc xong (parsePptxToSlideContents())
-// ngay lúc chọn, chỉ thực sự tải file gốc lên server lúc bấm Lưu Nháp/Gửi (tránh tải lên nhiều lần nếu
-// người dùng đổi ý chọn lại tệp khác trước khi lưu).
-let prEntryPendingFile = null; // { file, parsedSlides } | null
-// Hình thức nộp báo cáo đang chọn ở form — 'PPTX' (mặc định, gõ/đọc nội dung thành slide) hoặc 'PDF'
-// (ghép nhiều file PDF thành 1 tệp DUY NHẤT ngay trong trình duyệt, giữ nguyên định dạng gốc — xem
-// onPrEntryPdfFilesChange()). CẢ 2 chế độ đều dùng chung biến prEntryPendingFile ở trên (chế độ PDF chỉ
-// gán { file: <blob đã ghép>, parsedSlides: [] } vào đó) để savePrEntryDraft() không cần rẽ nhánh riêng.
-let prEntryMode = 'PPTX';
+// Tệp PDF VỪA ghép ở ô chọn file (chưa tải lên server) — chỉ thực sự tải file lên server lúc bấm Lưu
+// Nháp/Gửi (tránh tải lên nhiều lần nếu người dùng đổi ý chọn lại tệp khác trước khi lưu).
+let prEntryPendingFile = null; // { file, parsedSlides: [] } | null
 let prAggCurrentPeriodId = null;
 let prAggSelectedIds = [];
 let prAggPendingSlides = null;
@@ -192,59 +188,9 @@ function removePrItemRow(containerId, idx, progressField, progressLabel, removeF
   renderPrItemsTable(containerId, current, progressField, progressLabel, removeFnName);
 }
 
-// Chọn file .pptx ở form Nhập Báo Cáo — đọc luôn nội dung (JSZip + DOMParser gốc, KHÔNG qua server)
-// bằng parsePptxToSlideContents() NGAY LÚC chọn tệp, lưu tạm vào prEntryPendingFile (chưa tải file gốc
-// lên server) — chỉ thực sự tải lên lúc bấm Lưu Nháp/Gửi. Báo lỗi rõ ràng nếu không đọc được (thường do
-// chọn nhầm .ppt nhị phân đời cũ, JSZip không mở được vì không phải định dạng zip).
-async function onPrEntryPptxFileChange(event) {
-  const file = event.target.files?.[0];
-  const statusEl = document.getElementById('prEntryPptxStatus');
-  prEntryPendingFile = null;
-  if (!file) { statusEl.classList.add('hidden'); return; }
-
-  statusEl.className = 'text-xs mt-2 p-2 rounded border bg-gray-50 text-gray-600 border-gray-200';
-  statusEl.innerText = '⏳ Đang đọc nội dung tệp...';
-  statusEl.classList.remove('hidden');
-  try {
-    await loadVendorScript('/vendor/jszip/jszip.min.js');
-    const arrayBuffer = await file.arrayBuffer();
-    const slides = await parsePptxToSlideContents(arrayBuffer);
-    if (!slides.length) throw new Error('Không đọc được nội dung nào từ tệp này');
-    prEntryPendingFile = { file, parsedSlides: slides };
-    statusEl.className = 'text-xs mt-2 p-2 rounded border bg-emerald-50 text-emerald-800 border-emerald-200';
-    statusEl.innerText = `✅ Đã đọc ${slides.length} trang từ "${file.name}" — nội dung sẽ được gộp vào bản trình chiếu khi Tổng Hợp.`;
-  } catch (err) {
-    statusEl.className = 'text-xs mt-2 p-2 rounded border bg-red-50 text-red-700 border-red-200';
-    statusEl.innerText = `⛔ Không đọc được tệp này: ${err.message}. Chỉ đọc được định dạng .pptx — nếu tệp là .ppt đời cũ, vui lòng lưu lại bằng .pptx rồi chọn lại.`;
-    event.target.value = '';
-  }
-}
-
-// Đổi hình thức nộp (PPTX <-> PDF) — ẩn/hiện đúng khối tương ứng, bỏ tệp đang chọn dở của chế độ VỪA
-// RỜI ĐI (tránh gửi nhầm tệp .pptx khi đang ở chế độ PDF hoặc ngược lại). Nếu tệp cũ của báo cáo đang
-// sửa (prEntryExistingFile) thuộc chế độ KHÁC chế độ vừa chọn thì cũng bỏ luôn — không giữ lại tham
-// chiếu tệp sai loại, bắt buộc chọn tệp mới đúng chế độ.
-function onPrEntryModeChange() {
-  prEntryMode = document.querySelector('input[name="prEntryMode"]:checked')?.value === 'PDF' ? 'PDF' : 'PPTX';
-  document.getElementById('prEntryPptxBox').classList.toggle('hidden', prEntryMode !== 'PPTX');
-  document.getElementById('prEntryPdfBox').classList.toggle('hidden', prEntryMode !== 'PDF');
-  prEntryPendingFile = null;
-  document.getElementById('prEntryPptxFile').value = '';
-  document.getElementById('prEntryPptxStatus').classList.add('hidden');
-  document.getElementById('prEntryPdfFiles').value = '';
-  document.getElementById('prEntryPdfStatus').classList.add('hidden');
-  if (prEntryExistingFile && prEntryExistingFile.entryType !== prEntryMode) {
-    prEntryExistingFile = null;
-    document.getElementById('prEntryWholeFileExisting').classList.add('hidden');
-    document.getElementById('prEntryPdfExisting').classList.add('hidden');
-  }
-}
-
-// Chọn nhiều file PDF ở form Nhập Báo Cáo (chế độ PDF) — ghép TẤT CẢ file đã chọn thành 1 blob PDF DUY
-// NHẤT ngay trong trình duyệt bằng pdf-lib (PDFDocument.create() + copyPages() từng nguồn + save()) —
-// đúng kỹ thuật đã kiểm chứng ở bản demo ghép PDF trước đó, giữ nguyên vẹn từng trang gốc (không đọc/
-// làm phẳng nội dung như .pptx ở trên). Lưu tạm vào prEntryPendingFile (dùng CHUNG shape với chế độ
-// PPTX: { file, parsedSlides: [] }) — chỉ thực sự tải lên server lúc bấm Lưu Nháp/Gửi.
+// Chọn nhiều file PDF ở form Nhập Báo Cáo — ghép TẤT CẢ file đã chọn thành 1 blob PDF DUY NHẤT ngay
+// trong trình duyệt bằng pdf-lib (PDFDocument.create() + copyPages() từng nguồn + save()) — giữ nguyên
+// vẹn từng trang gốc. Lưu tạm vào prEntryPendingFile — chỉ thực sự tải lên server lúc bấm Lưu Nháp/Gửi.
 async function onPrEntryPdfFilesChange(event) {
   const files = Array.from(event.target.files || []);
   const statusEl = document.getElementById('prEntryPdfStatus');
@@ -315,23 +261,16 @@ function onPrEntryPeriodChange() {
 
   prEntryDraftId = existing ? existing.id : null; // existing (nếu có) chắc chắn đang DRAFT ở nhánh này
   document.getElementById('prEntryTitle').value = existing?.title || '';
-  document.getElementById('prEntryPptxFile').value = '';
-  document.getElementById('prEntryPptxStatus').classList.add('hidden');
   document.getElementById('prEntryPdfFiles').value = '';
   document.getElementById('prEntryPdfStatus').classList.add('hidden');
 
-  prEntryExistingFile = existing?.fileUrl
-    ? { fileUrl: existing.fileUrl, fileName: existing.fileName, fileType: existing.fileType, parsedSlides: existing.parsedSlides || [], entryType: existing.entryType === 'PDF' ? 'PDF' : 'PPTX' }
+  // Chỉ còn hình thức PDF — bản nháp CŨ lỡ dở nộp bằng .pptx (đã bỏ hình thức này) không còn tệp nào để
+  // giữ lại tiếp tục, bắt buộc chọn tệp PDF mới (rất hiếm gặp: chỉ ảnh hưởng đúng 1 bản NHÁP chưa gửi
+  // tạo trước khi tính năng này bị gỡ, dữ liệu .pptx cũ không mất, chỉ không dùng lại được ở form này).
+  prEntryExistingFile = (existing?.fileUrl && existing.entryType === 'PDF')
+    ? { fileUrl: existing.fileUrl, fileName: existing.fileName, fileType: existing.fileType, parsedSlides: existing.parsedSlides || [] }
     : null;
-  showPrExistingFileHint('prEntryWholeFileExisting', prEntryExistingFile);
   showPrExistingFileHint('prEntryPdfExisting', prEntryExistingFile);
-
-  // Mở lại đúng chế độ của báo cáo nháp đang sửa (mặc định PPTX khi tạo mới) — khớp entryType đã lưu.
-  prEntryMode = prEntryExistingFile?.entryType === 'PDF' ? 'PDF' : 'PPTX';
-  const modeRadio = document.querySelector(`input[name="prEntryMode"][value="${prEntryMode}"]`);
-  if (modeRadio) modeRadio.checked = true;
-  document.getElementById('prEntryPptxBox').classList.toggle('hidden', prEntryMode !== 'PPTX');
-  document.getElementById('prEntryPdfBox').classList.toggle('hidden', prEntryMode !== 'PDF');
 
   wrap.classList.remove('hidden');
 
@@ -360,17 +299,17 @@ async function savePrEntryDraft() {
   const title = document.getElementById('prEntryTitle').value.trim();
   if (!title) return alert('Vui lòng nhập tiêu đề báo cáo!');
 
-  const payload = { periodId, title, entryType: prEntryMode };
+  const payload = { periodId, title, entryType: 'PDF' };
   try {
     if (prEntryPendingFile) {
       const uploaded = await uploadFileToServer(prEntryPendingFile.file, 'periodicReport');
       payload.fileUrl = uploaded.fileUrl; payload.fileName = uploaded.fileName; payload.fileType = uploaded.fileType;
       payload.parsedSlides = prEntryPendingFile.parsedSlides;
-    } else if (prEntryExistingFile && prEntryExistingFile.entryType === prEntryMode) {
+    } else if (prEntryExistingFile) {
       payload.fileUrl = prEntryExistingFile.fileUrl; payload.fileName = prEntryExistingFile.fileName; payload.fileType = prEntryExistingFile.fileType;
       payload.parsedSlides = prEntryExistingFile.parsedSlides;
     } else {
-      return alert(prEntryMode === 'PDF' ? 'Vui lòng chọn ít nhất 1 tệp báo cáo PDF cần tải lên!' : 'Vui lòng chọn tệp báo cáo (.pptx) cần tải lên!');
+      return alert('Vui lòng chọn ít nhất 1 tệp báo cáo PDF cần tải lên!');
     }
   } catch (err) {
     return alert(`⛔ Tải tệp lên thất bại: ${err.message}`);

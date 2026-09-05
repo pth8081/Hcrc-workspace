@@ -1252,9 +1252,9 @@ function mapFormModKeyToUploadModule(modKey) {
 
 // Vũ trụ phần mở rộng khả dụng — PHẢI khớp ALLOWED_EXT ở routes/upload.js (đó mới là chặn thật, admin
 // chỉ chọn ra 1 tập con của danh sách này cho từng module qua màn "Loại Tệp" bên dưới).
-// Chỉ còn 3 định dạng phổ biến cho hồ sơ/tài liệu văn phòng — KHÔNG gồm Báo Cáo Định Kỳ (module đó cần
-// .pptx cho phần Nhập Báo Cáo, xem onPrEntryPptxFileChange(), nên không đưa vào màn cấu hình 3 định
-// dạng này, luôn dùng nguyên ALLOWED_EXT mặc định phía server).
+// Chỉ còn 3 định dạng phổ biến cho hồ sơ/tài liệu văn phòng — KHÔNG gồm Báo Cáo Định Kỳ (module đó đã
+// bỏ hẳn hình thức nộp PowerPoint .pptx, chỉ còn PDF, nhưng chưa đưa vào màn cấu hình 3 định dạng này,
+// luôn dùng nguyên ALLOWED_EXT mặc định phía server).
 const UPLOAD_EXT_UNIVERSE = ['.pdf', '.docx', '.xlsx'];
 // Ảnh minh hoạ câu hỏi (Ngân Hàng Câu Hỏi, Đào Tạo) — universe RIÊNG (chỉ ảnh), khác 8 module tài liệu
 // văn phòng ở trên dùng chung UPLOAD_EXT_UNIVERSE — xem extUniverse per-module bên dưới.

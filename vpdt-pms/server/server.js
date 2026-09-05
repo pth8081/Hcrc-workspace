@@ -220,14 +220,6 @@ app.use('/vendor/mammoth', express.static(path.join(__dirname, 'node_modules', '
 // dependency) nên khai báo thẳng làm dependency riêng cho rõ ràng, cùng cách làm với jszip ở dưới.
 app.use('/vendor/dompurify', express.static(path.join(__dirname, 'node_modules', 'dompurify', 'dist'), VENDOR_STATIC_OPTS));
 
-// Phục vụ JSZip (tự lưu trên server, không qua CDN — cùng lý do với các thư viện trên) — dùng để giải
-// nén file .pptx NGAY TRONG trình duyệt người nộp báo cáo lúc chọn tệp (parsePptxToSlideContents() ở
-// index.html, module Báo Cáo Định Kỳ) rồi đọc XML bên trong bằng DOMParser gốc của trình duyệt (không
-// cần thêm thư viện XML riêng) — xử lý HOÀN TOÀN phía trình duyệt, giống hệt cách mammoth/exceljs ở
-// trên đã làm. jszip đã sẵn là dependency gián tiếp (qua exceljs/mammoth) nên khai báo thẳng làm
-// dependency riêng cho rõ ràng, không phụ thuộc ngầm vào cách 2 gói kia cài đặt.
-app.use('/vendor/jszip', express.static(path.join(__dirname, 'node_modules', 'jszip', 'dist'), VENDOR_STATIC_OPTS));
-
 // Health check (dùng cho giám sát / load balancer / kiểm tra nhanh sau khi deploy). "version" luôn
 // trả về ngay cả khi DB lỗi — dùng để xác nhận server đang chạy ĐÚNG bản code vừa deploy (so khớp với
 // package.json trên máy), độc lập với tình trạng kết nối SQL Server.

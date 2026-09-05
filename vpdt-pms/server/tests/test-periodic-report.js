@@ -82,22 +82,21 @@ async function main() {
       periodId = result.period.id;
     });
 
-    // ===== 2) Nhân viên nộp báo cáo: Lưu Nháp rồi Gửi (happy path Nhập Liệu) =====
-    await run.run('Nhân viên nhập liệu: Lưu Nháp rồi Gửi Báo Cáo (happy path)', async () => {
+    // ===== 2) Nhân viên nộp báo cáo: Lưu Nháp rồi Gửi (happy path Nhập Liệu) — CHỈ còn hình thức PDF
+    // (đã bỏ hẳn PowerPoint .pptx, xem VERSION.md) — savePrEntryDraft() giờ LUÔN gửi entryType 'PDF' và
+    // KHÔNG còn parsedSlides nào (mảng rỗng), khác hẳn hành vi cũ. =====
+    await run.run('Nhân viên nhập liệu: Lưu Nháp rồi Gửi Báo Cáo (happy path, chỉ còn hình thức PDF)', async () => {
       await loginAs(page, EMP_KD);
-      // Bỏ qua đọc thật tệp .pptx (JSZip) — set thẳng kết quả như onPrEntryPptxFileChange() sẽ tạo ra,
-      // và giả lập luôn bước tải tệp lên server (uploadFileToServer gọi /api/upload thật, không có mock).
+      // Bỏ qua ghép PDF thật (pdf-lib) — set thẳng kết quả như onPrEntryPdfFilesChange() sẽ tạo ra, và
+      // giả lập luôn bước tải tệp lên server (uploadFileToServer gọi /api/upload thật, không có mock).
       const result = await page.evaluate(async (pId) => {
         switchTab('periodicReport');
         setPeriodicReportSubTab('ENTRY');
-        uploadFileToServer = async () => ({ fileUrl: '/uploads/bao-cao-tuan.pptx', fileName: 'bao-cao-tuan.pptx', fileType: 'pptx' });
+        uploadFileToServer = async () => ({ fileUrl: '/uploads/bao-cao-tuan.pdf', fileName: 'bao-cao-tuan.pdf', fileType: 'pdf' });
         document.getElementById('prEntryPeriodSelect').value = String(pId);
         onPrEntryPeriodChange();
         document.getElementById('prEntryTitle').value = 'Báo cáo tuần — Phòng Kinh Doanh';
-        prEntryPendingFile = {
-          file: { name: 'bao-cao-tuan.pptx' },
-          parsedSlides: [{ title: 'Công việc tuần này', bodyLines: ['Chốt đơn hàng ABC', 'Gặp khách hàng XYZ'], images: [] }]
-        };
+        prEntryPendingFile = { file: { name: 'bao-cao-tuan.pdf' }, parsedSlides: [] };
         await savePrEntryDraft();
         const draftId = prEntryDraftId;
         await submitPrEntryAction(draftId, true);
@@ -107,7 +106,8 @@ async function main() {
       }, periodId);
       assert(result.entry, 'Báo cáo phải được tạo');
       assertEqual(result.entry.status, 'SUBMITTED', 'Sau khi Gửi, báo cáo phải chuyển sang SUBMITTED');
-      assertEqual(result.entry.parsedSlides.length, 1, 'Phải lưu đúng số slide đã đọc được từ tệp .pptx');
+      assertEqual(result.entry.entryType, 'PDF', 'Hình thức nộp giờ luôn là PDF (đã bỏ PowerPoint)');
+      assertEqual(result.entry.parsedSlides.length, 0, 'Entry PDF không còn parsedSlides nào (khác hẳn PPTX cũ)');
       assertIncludes(result.alerts, 'Đã gửi báo cáo', 'Phải có thông báo gửi báo cáo thành công');
       entryId = result.entry.id;
     });
@@ -123,7 +123,7 @@ async function main() {
         document.getElementById('prEntryPeriodSelect').value = String(pId);
         document.getElementById('prEntryTitle').value = 'Báo cáo trùng lần 2';
         prEntryDraftId = null;
-        prEntryPendingFile = { file: { name: 'khac.pptx' }, parsedSlides: [{ title: 'Khác', bodyLines: ['x'], images: [] }] };
+        prEntryPendingFile = { file: { name: 'khac.pdf' }, parsedSlides: [] };
         await savePrEntryDraft();
         return { alerts: window.__alerts, count: DB.reportEntries.length };
       }, periodId);
@@ -161,9 +161,24 @@ async function main() {
       assertIncludes(result.alerts, 'Đã đóng kỳ báo cáo', 'Phải có thông báo đóng kỳ thành công');
     });
 
-    // ===== 6) reportAggregate tổng hợp theo Báo Cáo đã chọn, sửa 1 slide, rồi Phát Hành/Hủy Phát Hành =====
-    await run.run('Tổng Hợp Theo Báo Cáo: chọn+sắp thứ tự, sửa slide, Phát Hành rồi Hủy Phát Hành', async () => {
-      await loginAs(page, AGG1);
+    // ===== 6) reportAggregate tổng hợp theo Báo Cáo đã chọn, sửa 1 slide, rồi Phát Hành/Hủy Phát Hành —
+    // KỊCH BẢN DỮ LIỆU CŨ: từ đợt bỏ hình thức nộp PowerPoint (.pptx, xem VERSION.md), KHÔNG còn đường
+    // nào tạo entry entryType='PPTX' mới qua UI nữa (entry của EMP_KD ở bước 2 giờ luôn là 'PDF', bị
+    // getPrAggPeriodEntries() loại khỏi checklist tổng hợp CHÍNH THỨC này — xem module-baocaodinhky-nhap.js).
+    // Cơ chế period.compilation/PPTX_SLIDE vẫn PHẢI hoạt động đúng cho dữ liệu CŨ đã có trong hệ thống
+    // TRƯỚC đợt bỏ tính năng — seed thẳng 1 entry legacy vào state (giả lập dữ liệu production có sẵn từ
+    // trước, không đi qua form đã gỡ), re-login để DB phía client nạp lại đúng bản mới. =====
+    const LEGACY_PPTX_ENTRY = {
+      id: 555001, periodId, periodName: 'Báo Cáo Tuần 35/2026', dept: 'Kinh Doanh',
+      creator: 'emp_kd_legacy', creatorName: 'Ngô Văn Cũ', title: 'Báo cáo tuần cũ (.pptx, trước khi bỏ tính năng)',
+      status: 'SUBMITTED', entryType: 'PPTX', fileUrl: '/uploads/bao-cao-cu.pptx', fileName: 'bao-cao-cu.pptx', fileType: 'pptx',
+      parsedSlides: [{ title: 'Công việc tuần này', bodyLines: ['Chốt đơn hàng ABC', 'Gặp khách hàng XYZ'], images: [] }],
+      createdAt: '00:00:00 1/1/2026'
+    };
+    state.reportEntries.push(LEGACY_PPTX_ENTRY);
+
+    await run.run('Tổng Hợp Theo Báo Cáo (dữ liệu CŨ đã nộp bằng PPTX): chọn+sắp thứ tự, sửa slide, Phát Hành rồi Hủy Phát Hành', async () => {
+      await loginAs(page, AGG1); // re-login để DB.reportEntries nạp lại, thấy đúng entry legacy vừa seed
       const mergeResult = await page.evaluate(async ({ pId, eId }) => {
         switchTab('periodicReport');
         setPeriodicReportSubTab('AGGREGATE');
@@ -178,7 +193,7 @@ async function main() {
           slideKinds: p.compilation.slides.map(s => s.kind),
           pptxTitle: p.compilation.slides.find(s => s.kind === 'PPTX_SLIDE')?.title
         };
-      }, { pId: periodId, eId: entryId });
+      }, { pId: periodId, eId: LEGACY_PPTX_ENTRY.id });
       assertEqual(mergeResult.compilationStatus, 'MERGED', 'Sau khi tổng hợp, trạng thái bản tổng hợp phải là MERGED');
       assertIncludes(mergeResult.slideKinds.join(','), 'COVER', 'Bản tổng hợp phải có trang bìa (COVER)');
       assertIncludes(mergeResult.slideKinds.join(','), 'PPTX_SLIDE', 'Bản tổng hợp phải có slide nội dung lấy từ báo cáo .pptx đã nộp');
@@ -255,7 +270,88 @@ async function main() {
       assertEqual(JSON.stringify(result.compilation), JSON.stringify(beforeCompilation), 'compilation (bản tổng hợp chính thức, đã phát hành/hủy phát hành) không được thay đổi gì');
     });
 
-    // ===== 8) Đối Chiếu Theo Công Việc KHÔNG hiện cho người không có quyền quản lý/tổng hợp báo cáo =====
+    // ===== 8) Xuất PDF cho "Tổng Hợp Theo Công Việc" — dựng THẬT bằng html2canvas+jsPDF (chạy thật trong
+    // Chromium headless, không mock) từ #prTaskCompilationSlidesList đã render ở bước 7. Chặn
+    // jsPDF.prototype.save() để đọc lại byte thật thay vì chờ sự kiện download của trình duyệt. =====
+    await run.run('Xuất PDF "Tổng Hợp Theo Công Việc": dựng PDF thật (html2canvas+jsPDF), có nội dung thống kê', async () => {
+      const result = await page.evaluate(async () => {
+        renderPrTaskCompilation(); // đảm bảo #prTaskCompilationSlidesList đã render đúng bản hiện có
+        let captured = null;
+        await loadVendorScript('/vendor/jspdf/jspdf.umd.min.js');
+        // jsPDF gán save() làm OWN PROPERTY của từng instance ngay trong constructor (kiểu closure riêng
+        // theo từng doc, không phải phương thức chung trên prototype) — patch jsPDF.prototype.save
+        // KHÔNG có tác dụng gì với instance đã tạo. Bọc lại chính constructor: gọi constructor GỐC rồi
+        // ghi đè .save NGAY TRÊN instance vừa tạo trước khi trả về (constructor trả về object -> `new`
+        // tự dùng object đó thay vì `this` ngầm định, đúng ngữ nghĩa JS).
+        const OrigJsPDF = window.jspdf.jsPDF;
+        window.jspdf.jsPDF = function (...args) {
+          const doc = new OrigJsPDF(...args);
+          doc.save = function (fileName) {
+            captured = { fileName, bytes: doc.output('arraybuffer').byteLength, header: doc.output('datauristring').includes('base64,JVBER') };
+          };
+          return doc;
+        };
+        let errDebug = null;
+        try {
+          await exportPrTaskCompilationPdf();
+        } catch (e) { errDebug = e.message + '\n' + e.stack; }
+        finally {
+          window.jspdf.jsPDF = OrigJsPDF;
+        }
+        return { alerts: window.__alerts, captured, errDebug };
+      });
+      assert(result.captured, 'Phải thực sự gọi doc.save() (tạo PDF xong)' + (result.errDebug ? `: ${result.errDebug}` : ''));
+      assertIncludes(result.captured.fileName, 'TongHopTheoCongViec_', 'Tên file PDF phải theo đúng khuôn TongHopTheoCongViec_<tên kỳ>');
+      assert(result.captured.bytes > 500, 'File PDF dựng ra phải có nội dung thật (không rỗng)');
+      assert(result.captured.header, 'File PDF phải có chữ ký PDF hợp lệ (%PDF, base64 "JVBER")');
+      assertEqual(result.alerts.length, 0, 'Xuất PDF thành công không được có alert lỗi nào');
+    });
+
+    // ===== 9) Xuất Excel cho "Tổng Hợp Theo Công Việc" — chặn downloadXlsxFromServer() (route dùng
+    // chung POST /api/admin/export-xlsx, không có mock cho route này trong harness) để xác nhận đúng
+    // cột/dữ liệu ĐÃ LÀM PHẲNG từ slides (2 công việc của emp_kd, xem TASKS ở đầu file) trước khi gửi lên
+    // server thật — route xuất-xlsx tự nó là code dùng chung đã có sẵn ở nơi khác, không phải logic mới
+    // của đợt này nên không cần re-test lại ở đây. =====
+    await run.run('Xuất Excel "Tổng Hợp Theo Công Việc": làm phẳng đúng cột/dữ liệu công việc trước khi gửi lên server', async () => {
+      const result = await page.evaluate(async () => {
+        let captured = null;
+        const orig = window.downloadXlsxFromServer;
+        window.downloadXlsxFromServer = async (fileName, sheetName, columns, rows) => { captured = { fileName, sheetName, columns, rows }; };
+        try {
+          await exportPrTaskCompilationExcel();
+        } finally {
+          window.downloadXlsxFromServer = orig;
+        }
+        return { alerts: window.__alerts, captured };
+      });
+      assert(result.captured, 'Phải thực sự gọi downloadXlsxFromServer()');
+      assertIncludes(result.captured.fileName, 'TongHopTheoCongViec_', 'Tên file Excel phải theo đúng khuôn TongHopTheoCongViec_<tên kỳ>');
+      assertEqual(result.captured.sheetName, 'Tổng Hợp Theo Công Việc', 'Tên sheet phải đúng');
+      const headers = result.captured.columns.map((c) => c.header);
+      ['Phòng Ban', 'Người Phụ Trách', 'Nội Dung Công Việc', 'Tiến Độ', 'Hạn Chót', 'Hỗ Trợ'].forEach((h) => {
+        assert(headers.includes(h), `Phải có cột "${h}"`);
+      });
+      assertEqual(result.captured.rows.length, 2, 'Phải làm phẳng đúng 2 dòng (2 công việc của emp_kd trong phạm vi kỳ)');
+      assert(result.captured.rows.every((r) => r.dept === 'Kinh Doanh'), 'Mọi dòng phải đúng phòng ban Kinh Doanh (nguồn duy nhất trong kịch bản test)');
+      assert(result.captured.rows.some((r) => r.content.includes('Chuẩn bị báo giá')), 'Phải có đúng nội dung công việc đã hoàn thành');
+      assert(result.captured.rows.some((r) => r.content.includes('Theo dõi công nợ')), 'Phải có đúng nội dung công việc đang thực hiện');
+      assertEqual(result.alerts.length, 0, 'Xuất Excel thành công không được có alert lỗi nào');
+    });
+
+    // ===== 10) Xuất PDF/Excel khi CHƯA từng bấm "Đối Chiếu Theo Công Việc" — phải báo rõ, không crash =====
+    await run.run('Xuất PDF/Excel "Tổng Hợp Theo Công Việc": báo lỗi rõ ràng nếu chưa đối chiếu lần nào (kỳ khác, taskCompilation null)', async () => {
+      const result = await page.evaluate(async () => {
+        window.__resetCapture();
+        prAggCurrentPeriodId = 999999999; // kỳ không tồn tại / chưa đối chiếu -> taskCompilation null
+        await exportPrTaskCompilationPdf();
+        await exportPrTaskCompilationExcel();
+        return { alerts: window.__alerts };
+      });
+      assertEqual(result.alerts.length, 2, 'Cả 2 nút phải tự chặn + báo lỗi, không crash im lặng');
+      result.alerts.forEach((a) => assertIncludes(a, 'Đối Chiếu Theo Công Việc', 'Thông báo phải hướng dẫn bấm nút Đối Chiếu Theo Công Việc trước'));
+    });
+
+    // ===== 11) Đối Chiếu Theo Công Việc KHÔNG hiện cho người không có quyền quản lý/tổng hợp báo cáo =====
     await run.run('Riêng tư: taskCompilation KHÔNG lộ cho người không có reportManage/reportAggregate', async () => {
       await loginAs(page, EMP_NOAGG);
       const period = await page.evaluate((pId) => DB.reportPeriods.find(x => x.id === pId), periodId);
