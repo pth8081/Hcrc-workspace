@@ -100,7 +100,16 @@ async function main() {
       depts: ['Phòng CNTT', 'Phòng Kế Toán'], stores: ['Siêu Thị Quận 1'], cats: ['Chung'],
       deptAbbrs: {}, docCatAbbrs: {}, contractTypeAbbrs: {},
       jobTitles: ['Nhân viên'], storeJobTitles: [], submissionTypes: [], contractTypes: [], carTypes: [],
-      uniformCatalog: [], itTicketCategories: [], workflows: [], deptWorkflows: {},
+      uniformCatalog: [], itTicketCategories: [],
+      // "workflows" KHÔNG được để rỗng — mọi màn hình đọc DB.workflows đều giả định LUÔN có ít nhất 1
+      // mẫu quy trình mặc định (đúng seed thật ở defaults.js, WF_1STEP) để rơi về khi 1 phòng ban chưa
+      // được cấu hình workflowId riêng (xem `DB.workflows.find(...) || DB.workflows[0]` rải khắp các
+      // renderXWorkflowTab()) — để rỗng khiến renderWorkflowTab() (Hệ Thống > Quy Trình & Phê Duyệt)
+      // throw "Cannot read properties of undefined (reading 'steps')" ngay khi thật sự render (trước đây
+      // bài test này chưa từng thật sự click tới "Hệ Thống > Quản Trị" xong rồi mới qua "Quy Trình & Phê
+      // Duyệt" bằng click DOM thật, nên lỗ hổng seed này chưa lộ ra).
+      workflows: [{ id: 'WF_1STEP', name: 'Quy trình 1 bước (Sếp duyệt)', steps: [{ order: 1, name: 'Phê duyệt 1' }] }],
+      deptWorkflows: {},
       docs: [], submissions: [], submissionDeptWorkflows: {}, submissionTypeDeptWorkflows: {}, submissionApprovalGroups: {},
       contracts: [], contractApprovalGroups: {}, contractApprovalDeptWorkflows: {}, contractManageDeptWorkflows: {},
       meetings: [], meetingMinutes: [], meetingAttendeeTemplates: [],
@@ -146,7 +155,8 @@ async function main() {
     { label: 'Tài liệu', click: '[data-op="switchTab"][data-arg0="doc"]', section: 'docSection' },
     { label: 'Văn bản trình', click: '[data-op="switchTab"][data-arg0="submission"]', section: 'submissionSection' },
     { label: 'Báo cáo Quản trị', click: '[data-op="switchTab"][data-arg0="reports"]', section: 'reportsSection' },
-    { label: 'Nhân Sự', click: '[data-op="switchTab"][data-arg0="hr"]', section: 'hrSection' },
+    { label: 'Nhân Sự > Quản Lý &amp; Phản Hồi Ý Kiến', toggle: '#btnHrTab', click: '#btnHrFeedbackNav', section: 'hrSection' },
+    { label: 'Nhân Sự > Cơ Cấu Tổ Chức', toggle: '#btnHrTab', click: '#btnOrgChartNav', section: 'orgChartSection' },
 
     { label: 'Truyền Thông > Nhịp Sống HCRC', toggle: '#btnInternalTab', click: 'button[data-op-seq*="setInternalSubTab(NEWS)"]', section: 'internalSection' },
     { label: 'Truyền Thông > Đào Tạo', toggle: '#btnInternalTab', click: 'button[data-op-seq*="setInternalSubTab(TRAINING)"]', section: 'internalSection' },
@@ -191,7 +201,16 @@ async function main() {
     if (point.toggle) {
       await page.click(point.toggle, { force: true });
     }
-    await page.click(point.click, { force: true });
+    // Dùng .click() DOM THẬT qua evaluate (không phải page.click() toạ độ chuột của Playwright) — bài
+    // test này chỉ kiểm tra đúng handler data-op/data-op-seq có chạy hay không (bubbling sự kiện click),
+    // không kiểm tra vị trí/hiển thị thật trên màn hình, nên không cần đúng điểm ảnh. page.click(...,
+    // {force:true}) tính theo TOẠ ĐỘ giữa bounding box: khi sidebar <nav> liệt kê ~14 mục cấp 1, dropdown
+    // MỞ RA (đặc biệt "Hệ Thống", mục cuối) có thể đẩy mục con xuống dưới mép viewport mặc định (720px)
+    // tuỳ thứ tự/số dòng phía trên nó tại đúng thời điểm click — phát hiện qua bài test hồi quy khi dời
+    // "Báo Cáo" xuống cạnh "Hệ Thống" khiến "Hệ Thống > Quản Trị" click trượt ra ngoài khung nhìn (không
+    // lỗi JS nào cả, elementFromPoint() ở toạ độ đó chỉ đơn giản trả về null) dù phần tử vẫn tồn tại/hiển
+    // thị đúng trong DOM. .click() DOM thật không phụ thuộc vị trí/scroll nên tránh hẳn lớp lỗi này.
+    await page.evaluate((sel) => document.querySelector(sel)?.click(), point.click);
     await page.waitForTimeout(120); // cho nhip lazy-load (loadModuleGroup async) + render kip xong
     const hidden = await page.evaluate((id) => {
       const el = document.getElementById(id);

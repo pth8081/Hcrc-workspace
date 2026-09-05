@@ -591,16 +591,20 @@ input[data-sdd-list] {
         </div>
       </div>
 
-      <button id="btnReportsTab" data-op="switchTab" data-arg0="reports" class="hidden sidebar-item">
-        <span class="sidebar-icon">📊</span><span class="sidebar-label">Báo cáo</span>
-      </button>
-      <!-- Nhân Sự — module TOP-LEVEL độc lập, hiện chỉ có ĐÚNG 1 tab con ("Quản Lý & Phản Hồi Ý Kiến")
-           nên dùng nút đơn giản theo khuôn Báo Cáo, KHÔNG dựng dropdown như Hành Chính/Tổng Hợp (chỉ
-           đổi sang dropdown khi thực sự có tab con thứ 2). Quyền vào: nhanSuManage — quyền PHẲNG DUY
-           NHẤT của module, xem canAccessHrModule(). -->
-      <button id="btnHrTab" data-op="switchTab" data-arg0="hr" class="hidden sidebar-item">
-        <span class="sidebar-icon">🤝</span><span class="sidebar-label">Nhân Sự</span>
-      </button>
+      <!-- Nhân Sự — cùng khuôn Vận Hành/Tổng Hợp: dropdown bọc "Quản Lý & Phản Hồi Ý Kiến" (module "hr")
+           và module con "Cơ Cấu Tổ Chức" (module "orgChart", parent:'hr' ở BUSINESS_MODULES) — TÁCH
+           RIÊNG khỏi module "hr" (trước đây là 2 tab con CÙNG 1 module 'hr') để dropdown có chỗ nối
+           thêm module con thật sự khác sau này (Onboarding/Offboarding/Hồ Sơ Nhân Sự/KPI/Công & Phép),
+           xem updateHrNavVisibility(). -->
+      <div id="hrNavWrap" class="hidden">
+        <button id="btnHrTab" data-op="toggleHrDropdown" data-arg-event="0" class="sidebar-item">
+          <span class="sidebar-icon">🤝</span><span class="sidebar-label flex-1">Nhân Sự</span><span class="sidebar-label text-[10px]">▾</span>
+        </button>
+        <div id="hrDropdownPanel" class="hidden pl-7 space-y-0.5 sidebar-label">
+          <button id="btnHrFeedbackNav" data-op-seq="closeHrDropdown()|switchTab(hr)" class="hidden sidebar-subitem">🤝 Quản Lý &amp; Phản Hồi Ý Kiến</button>
+          <button id="btnOrgChartNav" data-op-seq="closeHrDropdown()|switchTab(orgChart)" class="hidden sidebar-subitem">🌳 Cơ Cấu Tổ Chức</button>
+        </div>
+      </div>
       <!-- Hỗ Trợ IT — cùng khuôn dropdown Hợp Đồng: mở cho toàn bộ nhân viên (giống Công Việc), 2
            sub-tab "Phê Duyệt Giá"/"Hỗ Trợ Yêu Cầu" dùng CHUNG 1 điều kiện quyền canAccessItSupportModule
            (không phân quyền riêng theo từng sub-tab, xem setItSupportSubTab()/toggleItSupportDropdown()). -->
@@ -617,6 +621,15 @@ input[data-sdd-list] {
           <button id="btnItSupportNavRenewal" data-op-seq="closeItSupportDropdown()|switchTab(itSupport)|setItSupportSubTab(RENEWAL)" class="hidden sidebar-subitem">🔔 Gia Hạn Dịch Vụ</button>
         </div>
       </div>
+      <!-- Báo Cáo — CHUYỂN xuống cạnh Hệ Thống (trước đây nằm ngay sau Vận Hành, phía trên Nhân Sự): cả
+           2 đều là công cụ đọc/giám sát tổng quan toàn hệ thống, khác nhóm module tác nghiệp hàng ngày
+           phía trên — KHÁC "Báo Cáo Định Kỳ" (nhóm Điều Hành, giữ nguyên vị trí cũ): đó là 1 QUY TRÌNH
+           nghiệp vụ chủ động (nộp/tổng hợp/duyệt theo kỳ), còn "Báo Cáo" ở đây chỉ tổng hợp SỐ LIỆU đọc
+           từ 11 module khác, không có luồng nghiệp vụ riêng — xem BUSINESS_MODULES (core.js) entry
+           "reports" + "periodicReport" để phân biệt rõ. -->
+      <button id="btnReportsTab" data-op="switchTab" data-arg0="reports" class="hidden sidebar-item">
+        <span class="sidebar-icon">📊</span><span class="sidebar-label">Báo cáo</span>
+      </button>
       <!-- Hệ Thống — cùng khuôn Hợp Đồng (dropdown TĨNH): cả 4 mục con đều yêu cầu admin (không có
            quyền riêng từng mục như Điều Hành/Hành Chính, xem setSystemSubTab() chặn thẳng !admin ở đầu
            hàm) nên không cần hàm updateXNavVisibility riêng — hiện đủ 4 mục ngay khi mục cha hiện ra. -->
@@ -6963,48 +6976,43 @@ input[data-sdd-list] {
     </div>
   </div>
 
-  <!-- Màn hình MODULE NHÂN SỰ — top-level, 2 tab con (Quản Lý & Phản Hồi Ý Kiến + Cơ Cấu Tổ Chức mới),
-       mỗi tab gác quyền riêng qua canAccessHrSubTab(), dispatch qua setHrSubTab(). -->
-  <div id="hrSection" class="hidden space-y-6">
-    <div class="flex flex-wrap gap-2 border-b pb-2">
-      <button type="button" data-op="setHrSubTab" data-arg0="FEEDBACK" id="btnHrSubFeedback" class="px-3 py-1.5 rounded text-xs font-bold bg-teal-700 text-white">🤝 Quản Lý &amp; Phản Hồi Ý Kiến</button>
-      <button type="button" data-op="setHrSubTab" data-arg0="ORGCHART" id="btnHrSubOrgChart" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">🌳 Cơ Cấu Tổ Chức</button>
-    </div>
-
-    <div id="hrSubFeedback" class="space-y-4">
-      <div class="bg-teal-50 p-4 rounded border border-teal-200 space-y-3">
-        <h3 class="font-bold text-teal-900 text-base flex items-center gap-2">🤝 Quản Lý &amp; Phản Hồi Ý Kiến (HCRC Đồng Hành)</h3>
-        <p class="text-xs text-teal-800">Toàn bộ câu hỏi nhân viên gửi lên qua tab "HCRC Đồng Hành" (Truyền Thông). Mỗi câu hỏi trả lời ĐÚNG 1 lần — trả lời xong là kết thúc, nhân viên nhận thông báo ngay trong app.</p>
-        <div class="flex flex-wrap items-center gap-2">
-          <label class="text-xs font-semibold text-gray-600">Trạng thái:</label>
-          <select id="hrFeedbackManageStatusFilter" data-op-change="renderHrFeedbackManage" class="border p-1.5 rounded text-xs bg-white">
-            <option value="">-- Tất cả --</option>
-            <option value="PENDING">🕒 Chờ phản hồi</option>
-            <option value="ANSWERED">✅ Đã phản hồi</option>
-          </select>
-        </div>
+  <!-- Màn hình MODULE NHÂN SỰ — top-level, CHỈ còn 1 tab "Quản Lý & Phản Hồi Ý Kiến" (Cơ Cấu Tổ Chức đã
+       TÁCH sang #orgChartSection riêng ngay dưới đây — module con parent:'hr', xem BUSINESS_MODULES). -->
+  <div id="hrSection" class="hidden space-y-4">
+    <div class="bg-teal-50 p-4 rounded border border-teal-200 space-y-3">
+      <h3 class="font-bold text-teal-900 text-base flex items-center gap-2">🤝 Quản Lý &amp; Phản Hồi Ý Kiến (HCRC Đồng Hành)</h3>
+      <p class="text-xs text-teal-800">Toàn bộ câu hỏi nhân viên gửi lên qua tab "HCRC Đồng Hành" (Truyền Thông). Mỗi câu hỏi trả lời ĐÚNG 1 lần — trả lời xong là kết thúc, nhân viên nhận thông báo ngay trong app.</p>
+      <div class="flex flex-wrap items-center gap-2">
+        <label class="text-xs font-semibold text-gray-600">Trạng thái:</label>
+        <select id="hrFeedbackManageStatusFilter" data-op-change="renderHrFeedbackManage" class="border p-1.5 rounded text-xs bg-white">
+          <option value="">-- Tất cả --</option>
+          <option value="PENDING">🕒 Chờ phản hồi</option>
+          <option value="ANSWERED">✅ Đã phản hồi</option>
+        </select>
       </div>
-
-      <div id="hrFeedbackManageContainer" class="space-y-3"></div>
     </div>
 
-    <!-- Cơ Cấu Tổ Chức: cây quản lý trực tiếp (user.managerUsername) — xem canAccessHrSubTab()/
-         renderOrgChart(). Xem được với nhanSuManage HOẶC orgChartManage; CHỈ orgChartManage/admin mới
-         đổi được quản lý trực tiếp (nút "Đổi quản lý" tự ẩn nếu không đủ quyền). -->
-    <div id="hrSubOrgChart" class="hidden space-y-4">
-      <div class="bg-teal-50 p-4 rounded border border-teal-200 space-y-2">
-        <h3 class="font-bold text-teal-900 text-base flex items-center gap-2">🌳 Cơ Cấu Tổ Chức</h3>
-        <p class="text-xs text-teal-800">Cây quản lý trực tiếp của <b>toàn bộ nhân viên công ty</b> (mọi phòng ban) — dùng làm căn cứ để trưởng phòng xem được việc của nhân viên mình quản lý (Vận Hành, Công Việc). Có thể có nhiều gốc cây (nhân viên không có quản lý trực tiếp).</p>
-        <div class="flex flex-wrap items-center gap-2 pt-1">
-          <button type="button" data-op="downloadOrgChartTemplate" class="bg-gray-600 text-white px-2.5 py-1.5 rounded text-xs font-semibold hover:bg-gray-700 transition">📄 Tải Mẫu (.xlsx) — chuẩn bị dữ liệu để nhập</button>
-          <button type="button" data-op="exportOrgChartExcel" class="bg-emerald-700 text-white px-2.5 py-1.5 rounded text-xs font-semibold hover:bg-emerald-800 transition">📊 Xuất Excel — lưu hồ sơ cơ cấu hiện tại</button>
-          <label id="btnOrgChartImportExcel" class="hidden bg-teal-700 text-white px-2.5 py-1.5 rounded text-xs font-semibold hover:bg-teal-800 transition cursor-pointer">
-            📥 Nhập Từ Excel<input type="file" accept=".xlsx" data-op-change="importOrgChartExcel" data-arg-event="0" class="hidden">
-          </label>
-        </div>
+    <div id="hrFeedbackManageContainer" class="space-y-3"></div>
+  </div>
+
+  <!-- Màn hình MODULE CƠ CẤU TỔ CHỨC — module con của Nhân Sự (parent:'hr' ở BUSINESS_MODULES), TÁCH
+       RIÊNG khỏi #hrSection (trước đây là tab con "hrSubOrgChart" CÙNG 1 module 'hr' — xem git log "thêm
+       tab con Cơ Cấu Tổ Chức") để dropdown "Nhân Sự" có chỗ nối thêm module con thật sự khác sau này —
+       xem canAccessOrgChartModule()/renderOrgChart(). Xem được với nhanSuManage HOẶC orgChartManage; CHỈ
+       orgChartManage/admin mới đổi được quản lý trực tiếp (nút "Đổi quản lý" tự ẩn nếu không đủ quyền). -->
+  <div id="orgChartSection" class="hidden space-y-4">
+    <div class="bg-teal-50 p-4 rounded border border-teal-200 space-y-2">
+      <h3 class="font-bold text-teal-900 text-base flex items-center gap-2">🌳 Cơ Cấu Tổ Chức</h3>
+      <p class="text-xs text-teal-800">Cây quản lý trực tiếp của <b>toàn bộ nhân viên công ty</b> (mọi phòng ban) — dùng làm căn cứ để trưởng phòng xem được việc của nhân viên mình quản lý (Vận Hành, Công Việc). Có thể có nhiều gốc cây (nhân viên không có quản lý trực tiếp).</p>
+      <div class="flex flex-wrap items-center gap-2 pt-1">
+        <button type="button" data-op="downloadOrgChartTemplate" class="bg-gray-600 text-white px-2.5 py-1.5 rounded text-xs font-semibold hover:bg-gray-700 transition">📄 Tải Mẫu (.xlsx) — chuẩn bị dữ liệu để nhập</button>
+        <button type="button" data-op="exportOrgChartExcel" class="bg-emerald-700 text-white px-2.5 py-1.5 rounded text-xs font-semibold hover:bg-emerald-800 transition">📊 Xuất Excel — lưu hồ sơ cơ cấu hiện tại</button>
+        <label id="btnOrgChartImportExcel" class="hidden bg-teal-700 text-white px-2.5 py-1.5 rounded text-xs font-semibold hover:bg-teal-800 transition cursor-pointer">
+          📥 Nhập Từ Excel<input type="file" accept=".xlsx" data-op-change="importOrgChartExcel" data-arg-event="0" class="hidden">
+        </label>
       </div>
-      <div id="orgChartContainer" class="bg-white border rounded p-4 space-y-1 text-sm"></div>
     </div>
+    <div id="orgChartContainer" class="bg-white border rounded p-4 space-y-1 text-sm"></div>
   </div>
 
   <!-- Modal "Đổi quản lý trực tiếp" — Cơ Cấu Tổ Chức, xem openOrgChartManagerPicker(). -->

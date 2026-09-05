@@ -132,7 +132,7 @@ async function main() {
     await run.run('Nhân viên không có nhanSuManage: nút "Nhân Sự" bị ẩn, switchTab("hr") bị chặn, gọi thẳng route respond -> 403', async () => {
       const result = await page.evaluate(async (id) => {
         window.__resetCapture();
-        const navHidden = document.getElementById('btnHrTab').classList.contains('hidden');
+        const navHidden = document.getElementById('btnHrFeedbackNav').classList.contains('hidden');
         switchTab('hr');
         const sectionHidden = document.getElementById('hrSection').classList.contains('hidden');
         let threw = null;
@@ -153,7 +153,7 @@ async function main() {
     await run.run('Nhân Sự (nhanSuManage) thấy toàn bộ câu hỏi công ty ở màn Quản Lý & Phản Hồi, trả lời -> ANSWERED + employeeUnread=true', async () => {
       await loginAs(page, HR1);
       const seen = await page.evaluate(() => {
-        const navHidden = document.getElementById('btnHrTab').classList.contains('hidden');
+        const navHidden = document.getElementById('btnHrFeedbackNav').classList.contains('hidden');
         switchTab('hr');
         return {
           navHidden,
@@ -268,7 +268,7 @@ async function main() {
     await run.run('Admin (không có nhanSuManage) vẫn vào được module Nhân Sự và trả lời được', async () => {
       await loginAs(page, ADMIN);
       const result = await page.evaluate(async () => {
-        const navHidden = document.getElementById('btnHrTab').classList.contains('hidden');
+        const navHidden = document.getElementById('btnHrFeedbackNav').classList.contains('hidden');
         switchTab('hr');
         const pending = DB.hrFeedback.find(x => x.status === 'PENDING');
         window.__resetCapture();

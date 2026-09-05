@@ -1,11 +1,65 @@
 # Phiên bản hiện tại
 
-**9.0** — đã merge vào `main` (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge
+**9.1** — đã merge vào `main` (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge
 góc màn hình + `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần
-kiểu `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. Đúng theo quy tắc MINOR chạy 0-9 trong
-`CLAUDE.md`: merge ngay sau khi đang ở `8.9` (MINOR đã chạm 9) → tăng MAJOR lên 1, reset MINOR về 0 → `9.0`.
+kiểu `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
 
-## Cập nhật gần nhất — Hỗ Trợ IT > Hỗ Trợ Yêu Cầu: thêm "Gửi Phê Duyệt" vào nút thao tác (2026-09-05)
+## Cập nhật gần nhất — Sắp xếp lại menu: dời "Báo Cáo" cạnh "Hệ Thống", "Nhân Sự" thành dropdown có module con (2026-09-05)
+
+Theo yêu cầu người dùng: "chuyển đổi vị trí module báo cáo xuống dưới, để cạnh module hệ thống. Nhân sự
+tới đây sẽ là module lớn nên chuyển qua dạng menu sổ xuống, có thể mở rộng thêm — bên trong sau này có
+các module nhỏ như Onboarding, Offboarding, Hồ Sơ Nhân Sự, KPI, Công & Phép, Cơ Cấu Tổ Chức".
+
+**Phần 1 — dời "Báo Cáo"**: xác nhận có 2 module tên gần giống nhau — "Báo Cáo" (`reports`, màn tổng hợp
+số liệu ĐỌC từ 11 module khác, không có luồng nghiệp vụ riêng) và "Báo Cáo Định Kỳ" (`periodicReport`,
+1 QUY TRÌNH nghiệp vụ chủ động — nộp/tổng hợp/duyệt theo kỳ). Đã dời đúng **"Báo Cáo" (`reports`)** —
+gần với nhóm công cụ giám sát/hệ thống hơn — xuống nằm ngay TRƯỚC "Hệ Thống" ở cuối sidebar (trước đây
+nằm ngay sau "Vận Hành", phía trên "Nhân Sự"); **"Báo Cáo Định Kỳ" giữ nguyên** ở nhóm "Điều Hành" vì là
+quy trình nghiệp vụ hàng ngày, không phải màn giám sát. Đây là dời HTML thuần (thứ tự nút sidebar
+`public/index.html` KHÔNG do mảng `BUSINESS_MODULES` sinh ra — mảng đó chỉ phục vụ màn checkbox "Quyền
+Truy Cập Module" ở Hệ Thống > Quản Trị), cộng dời luôn entry `reports` trong `BUSINESS_MODULES` xuống
+cuối cho khớp.
+
+**Phần 2 — "Nhân Sự" thành dropdown có module con**: trước đây "Nhân Sự" (`hr`) là 1 module phẳng với 2
+TAB CON cùng 1 màn hình (Quản Lý & Phản Hồi Ý Kiến + Cơ Cấu Tổ Chức, chọn qua nút pill nội bộ). Đã tách
+"Cơ Cấu Tổ Chức" thành **module con riêng** (`orgChart`, `BUSINESS_MODULES` khai `parent:'hr'`, đúng khuôn
+"Ngân Sách" là con của "Tổng Hợp") với section riêng (`#orgChartSection`), quyền riêng
+(`canAccessOrgChartModule()`, giữ nguyên 2 quyền cũ `orgChartManage`/`nhanSuManage`, không ai bị siết/nới
+quyền). "Nhân Sự" đổi từ nút phẳng sang **dropdown** (`#hrNavWrap`/`#hrDropdownPanel`) đúng khuôn "Hành
+Chính"/"Tổng Hợp"/"Vận Hành" — bấm mở ra 2 mục: "Quản Lý & Phản Hồi Ý Kiến" (module `hr`, giờ chỉ còn 1
+tab) và "Cơ Cấu Tổ Chức" (module `orgChart`). **CHƯA xây 5 module con user liệt kê** (Onboarding/
+Offboarding/Hồ Sơ Nhân Sự/KPI/Công & Phép) — người dùng mô tả đây là việc "sau này", chỉ dựng đúng cấu
+trúc dropdown/parent-child để các đợt sau nối thêm module con thật theo đúng khuôn `orgChart` vừa tách,
+không tạo mục "sắp ra mắt" giả cho tính năng chưa tồn tại.
+
+- `public/js/core.js`: `BUSINESS_MODULES` thêm entry `orgChart` (parent:`hr`), dời `reports` xuống cuối;
+  `canAccessHrModule()` quay về đúng 1 quyền `nhanSuManage`; thêm `canAccessOrgChartModule()`;
+  `switchTab()`/`_dispatchTabRender()` thêm nhánh `orgChart`; thêm `updateHrNavVisibility()`/
+  `toggleHrDropdown()`/`closeHrDropdown()` (đúng khuôn `vanHanh`); `TAB_MODULE_GROUPS` thêm
+  `orgChart:["hcrcdonghanh"]` (dùng chung cụm nạp lười với `hr`, cùng file `module-hcrcdonghanh.js`).
+- `public/index.html`: nút "Nhân Sự" đổi thành dropdown; nút "Báo Cáo" dời xuống trước "Hệ Thống"; tách
+  `#hrSection` (chỉ còn nội dung Phản Hồi Ý Kiến) và `#orgChartSection` (nội dung Cơ Cấu Tổ Chức, tách từ
+  "hrSubOrgChart" cũ) thành 2 section riêng.
+- `public/js/module-hcrcdonghanh.js`: bỏ `setHrSubTab()`/`activeHrSubTab` (không còn cần dispatch giữa 2
+  tab con — mỗi module giờ có đúng 1 màn, gọi thẳng `renderHrFeedbackManage()`/`renderOrgChart()` từ
+  `switchTab()`).
+
+**Test**: `tests/test-lazy-load-all-tabs.js` cập nhật điểm điều hướng "Nhân Sự" (tách 2 điểm dropdown) +
+sửa lỗ hổng seed dữ liệu tiền tồn tại phát hiện được khi bài test này bắt đầu click DOM thật xuyên suốt
+"Hệ Thống > Quản Trị" rồi "Quy Trình & Phê Duyệt" (thêm `DB.workflows` mặc định `WF_1STEP`, khớp
+`defaults.js` thật — bài test cũ không hề liên quan tới thay đổi lần này, chỉ tình cờ lộ ra) + đổi cơ chế
+click trong vòng lặp điều hướng sang `.click()` DOM thật qua `page.evaluate()` (không dùng toạ độ chuột
+của Playwright nữa — tránh phụ thuộc vị trí/scroll khi sidebar dài thêm/bớt dòng). `tests/test-hr-
+feedback.js` cập nhật 3 chỗ kiểm tra nút nav "Nhân Sự" ẩn/hiện (`btnHrTab` → `btnHrFeedbackNav`, đúng
+phần tử thật sự bị ẩn/hiện theo quyền sau khi tách dropdown). `tests/test-org-chart-manager-visibility.js`
+không cần sửa (chỉ test logic server `lib/recordViewScope.js`, không đụng DOM/nav). Toàn bộ 59 file
+`tests/test-*.js`: 57/59 pass, đúng 2 lỗi known pre-existing cần SQL Server thật (không liên quan thay
+đổi lần này).
+
+**Deploy**: không đổi `schema.sql`/`.env.example`/`package.json` dependencies nào — chỉ code client hiện
+có, copy code + `pm2 restart` là đủ.
+
+## Cập nhật trước đó — Hỗ Trợ IT > Hỗ Trợ Yêu Cầu: thêm "Gửi Phê Duyệt" vào nút thao tác (2026-09-05)
 
 Theo yêu cầu người dùng: "yêu cầu cần có phê duyệt IT sẽ gửi cho người phê duyệt và khi nào được phê
 duyệt thì mới quay lại trạng thái IT xử lý" — **tính năng nghiệp vụ này đã có sẵn ĐẦY ĐỦ từ trước**

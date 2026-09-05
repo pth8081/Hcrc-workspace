@@ -121,41 +121,12 @@ function updateHrFeedbackBadge() {
 }
 
 // ----- Phía NHÂN SỰ (module "Nhân Sự" > "Quản Lý & Phản Hồi Ý Kiến") -----
+// "Cơ Cấu Tổ Chức" ĐÃ TÁCH thành module con riêng (parent:'hr', xem BUSINESS_MODULES/#orgChartSection)
+// — module "hr" giờ chỉ còn ĐÚNG 1 tab, không còn setHrSubTab()/activeHrSubTab() dispatch giữa 2 tab
+// con nữa: switchTab('hr') (core.js _dispatchTabRender()) gọi thẳng renderHrFeedbackManage(), và
+// switchTab('orgChart') gọi thẳng renderOrgChart() bên dưới.
 
-let activeHrSubTab = 'FEEDBACK';
-
-// Dispatch dạng btnMap ngay từ đầu dù hiện chỉ có ĐÚNG 1 tab con — thêm tab sau này chỉ cần thêm 1
-// dòng vào btnMap + 1 khối toggle, không phải viết lại cấu trúc (cùng khuôn setBudgetSubTab()).
-function setHrSubTab(subTab) {
-  window.scrollTo({ top: 0, behavior: 'auto' }); // Tránh "bay xuống cuối" khi đổi tab con — xem setSystemSubTab().
-  if (!canAccessHrModule(currentUser)) {
-    alert('⛔ Bạn không có quyền truy cập Module Nhân Sự!');
-    return;
-  }
-  // Mỗi tab con gác quyền RIÊNG (canAccessHrSubTab) — vào module không có nghĩa mặc định thấy hết mọi
-  // tab con, tự chuyển sang tab đầu tiên user có quyền nếu tab đang gọi bị chặn.
-  if (!canAccessHrSubTab(currentUser, subTab)) {
-    subTab = canAccessHrSubTab(currentUser, 'FEEDBACK') ? 'FEEDBACK' : 'ORGCHART';
-  }
-  activeHrSubTab = subTab;
-
-  const btnMap = { FEEDBACK: 'btnHrSubFeedback', ORGCHART: 'btnHrSubOrgChart' };
-  const activeCls = 'px-3 py-1.5 rounded text-xs font-bold bg-teal-700 text-white';
-  const inactiveCls = 'px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700';
-  Object.entries(btnMap).forEach(([key, btnId]) => {
-    const btn = document.getElementById(btnId);
-    if (!btn) return;
-    btn.classList.toggle('hidden', !canAccessHrSubTab(currentUser, key));
-    btn.className = (key === subTab ? activeCls : inactiveCls) + (canAccessHrSubTab(currentUser, key) ? '' : ' hidden');
-  });
-  document.getElementById('hrSubFeedback').classList.toggle('hidden', subTab !== 'FEEDBACK');
-  document.getElementById('hrSubOrgChart').classList.toggle('hidden', subTab !== 'ORGCHART');
-
-  if (subTab === 'FEEDBACK') renderHrFeedbackManage();
-  if (subTab === 'ORGCHART') renderOrgChart();
-}
-
-// ----- Cơ Cấu Tổ Chức (Nhân Sự > "🌳 Cơ Cấu Tổ Chức") -----
+// ----- Cơ Cấu Tổ Chức (module con "orgChart" của Nhân Sự) -----
 // user.managerUsername (field phẳng trên DB.users, đúng mẫu jobTitle) — quản lý trực tiếp của 1 nhân
 // viên. Không có bảng/collection riêng, không cần sửa gì phía server ngoài validate chống vòng lặp
 // (routes/data.js assertNoManagerCycle()). Cây có thể có NHIỀU gốc (nhân viên không có quản lý trực
