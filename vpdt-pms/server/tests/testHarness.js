@@ -45,7 +45,12 @@ function startStaticServer(preferredPort) {
       fs.readFile(filePath, (err, data) => {
         if (err) { res.writeHead(404); return res.end('Not found'); }
         const ext = path.extname(filePath).toLowerCase();
-        const mime = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.png': 'image/png', '.svg': 'image/svg+xml' }[ext] || 'application/octet-stream';
+        // .mjs/.wasm: thêm cho đợt "Đọc PDF Đơn Hàng tự động điền form" — demo/test cần nạp
+        // public/vendor/pdfjs/pdf.mjs qua <script type="module"> thật (renderPdfProtected() cũng dùng),
+        // trình duyệt ép kiểm tra MIME type nghiêm ngặt cho module script nên PHẢI đúng "text/javascript"
+        // (application/octet-stream mặc định trước đây làm import thất bại) — thuần bổ sung, không đổi
+        // hành vi mọi extension khác đã dùng trước đây.
+        const mime = { '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'text/javascript', '.css': 'text/css', '.png': 'image/png', '.svg': 'image/svg+xml', '.wasm': 'application/wasm' }[ext] || 'application/octet-stream';
         res.writeHead(200, { 'Content-Type': mime });
         res.end(data);
       });

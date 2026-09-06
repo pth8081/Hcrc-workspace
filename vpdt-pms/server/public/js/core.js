@@ -448,11 +448,31 @@ const CORE_FIELD_MANIFEST = {
   // "Danh Sách Hạng Mục Đặt Hàng" (operationOrderItemsTableBody) KHÔNG đưa vào — hàng động do người
   // dùng tự thêm/bớt (addOperationOrderItemRow()), không phải field cố định có id ổn định, cùng lý do
   // budgetEntries/bảng dòng ngân sách bị loại ở Đợt 2.
+  // Đợt "Đọc PDF Đơn Hàng tự động điền form": 14 field MỚI (voPoNumber...voPaymentTotalAmount) đọc được
+  // từ phiếu đặt hàng NCC khi upload PDF ở voFile (xem handleOperationOrderPdfUpload() ở
+  // module-vanhanh.js) — TẤT CẢ required:false giống mọi field optional khác trong bộ này, khớp đúng
+  // lib/createValidation.js operationOrders.extraValidate (không field nào trong nhóm mới bắt buộc).
+  // voFile đổi nhãn "File Đính Kèm" -> "File Đơn Hàng" theo yêu cầu người dùng (giờ có hành vi tự đọc,
+  // không còn đơn thuần "đính kèm" nữa).
   OPERATION_ORDER: [
     { id: 'voCode', label: 'Mã Đơn Hàng', required: false },
     { id: 'voTitle', label: 'Tiêu Đề Đơn Hàng', required: true },
     { id: 'voSupplier', label: 'Nhà Cung Cấp', required: false },
-    { id: 'voFile', label: 'File Đính Kèm', required: false },
+    { id: 'voFile', label: 'File Đơn Hàng', required: false },
+    { id: 'voPoNumber', label: 'Số Đơn (NCC)', required: false },
+    { id: 'voOrderDate', label: 'Ngày Đặt', required: false },
+    { id: 'voDeliveryDate', label: 'Ngày Giao', required: false },
+    { id: 'voOrdererName', label: 'Người Đặt', required: false },
+    { id: 'voStationCode', label: 'Tại Trạm', required: false },
+    { id: 'voSupplierCode', label: 'Mã NCC', required: false },
+    { id: 'voSupplierTaxCode', label: 'MST NCC', required: false },
+    { id: 'voReceivingLocationCode', label: 'Mã Nơi Nhận', required: false },
+    { id: 'voReceivingLocationName', label: 'Nơi Nhận', required: false },
+    { id: 'voDeliveryAddress', label: 'Địa Chỉ Giao Hàng', required: false },
+    { id: 'voDiscountAmount', label: 'Giá Trị Chiết Khấu (VNĐ)', required: false },
+    { id: 'voAfterDiscountAmount', label: 'Thành Tiền Sau CK (VNĐ)', required: false },
+    { id: 'voVatAmount', label: 'VAT (VNĐ)', required: false },
+    { id: 'voPaymentTotalAmount', label: 'Tổng Giá Trị Thanh Toán (VNĐ)', required: false },
     { id: 'voNote', label: 'Ghi Chú', required: false }
   ],
   // OPERATION_STORE_OPEN: #operationStoreOpenForm (Vận Hành > Siêu Thị > Mở mới > Tạo Đề Xuất).

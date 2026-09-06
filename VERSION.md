@@ -1,10 +1,81 @@
 # Phiên bản hiện tại
 
-**9.3** — đã merge vào `main` (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge
+**9.4** — đã merge vào `main` (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge
 góc màn hình + `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần
 kiểu `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
 
-## Cập nhật gần nhất — Vận Hành > Siêu Thị: xoá hẳn cơ chế "Bổ Sung" (không còn phê duyệt), vá lỗ hổng dữ liệu cũ (2026-09-05)
+## Cập nhật gần nhất — Vận Hành > 📦 Đơn Hàng: đọc PDF phiếu đặt hàng NCC tự động điền form (2026-09-06)
+
+Theo yêu cầu người dùng: khi lập "Đơn Hàng" (`operationOrders`), upload file phiếu đặt hàng NCC (PDF) ở
+form tạo mới thì ứng dụng **tự đọc và điền TOÀN BỘ field** (không chỉ vài field) để người dùng chỉ cần
+kiểm tra lại rồi gửi phê duyệt, không phải gõ tay lại từ đầu. Xác nhận qua PDF mẫu người dùng cung cấp
+(`120HT_PO.pdf`) và lời xác nhận trực tiếp: **chỉ 1 mẫu/1 hệ thống NCC duy nhất** — không cần tổng quát
+hoá cho định dạng khác.
+
+**Phát hiện kỹ thuật cốt lõi:** PDF mẫu dùng phông chữ Việt kiểu cũ (họ TCVN3/.VnTime, dấu câu chữ Việt
+nằm ở dải mã 0xA0-0xFF) mà không có bảng ToUnicode CMap đúng — lớp text mà `pdfjs-dist` (đã vendor sẵn ở
+`public/vendor/pdfjs/pdf.mjs`, dùng chung với `renderPdfProtected()`) trích ra qua `getTextContent()` bị
+"mojibake" (SAI bảng mã ở ĐÚNG vị trí, không phải thiếu dữ liệu) — VD ký tự thô `μ` luôn là `à`, `§` luôn
+là `Đ`. Đối chiếu ký tự-theo-ký-tự giữa bản PDF.js trích ra và bản văn bản đúng dựng lại được ĐẦY ĐỦ 3
+bảng ánh xạ tất định: `PO_CHAR_FIXED_MAP` (ký tự thô -> đúng, cố định cả hoa/thường vì TCVN3 dùng mã
+riêng cho từng dạng), `PO_CHAR_CASE_MAP` (10 ký tự chỉ thấy 1 dạng trong mẫu — viết hoa theo ngữ cảnh từ
+ASCII xung quanh) và `PO_WORD_FIXUPS` (8 từ bị RỚT hẳn ký tự `ư` — lỗi rộng chiều ngang bằng 0 của dấu
+móc trong phông, khác hẳn lỗi sai bảng mã). Riêng phần trích xuất thứ tự đọc: thay vì dùng thẳng thứ tự
+content-stream thô (label/value có thể in xen kẽ lộn xộn), nhóm lại các text item theo toạ độ Y (dung
+sai 3.2pt) rồi sắp theo X trong từng dòng — phục hồi đúng thứ tự đọc thị giác thật của phiếu.
+
+**`lib/createValidation.js` (`operationOrders.extraValidate`):** thêm 14 field cấp đơn hàng — `poNumber`,
+`orderDate`, `deliveryDate`, `ordererName`, `stationCode`, `supplierCode`, `supplierTaxCode`,
+`receivingLocationCode`, `receivingLocationName`, `deliveryAddress`, `discountAmount`, `vatAmount`,
+`afterDiscountAmount`, `paymentTotalAmount` — và 3 field mới ở từng hạng mục (`items[]`): `productCode`,
+`barcode`, `qtyReceived`. **TẤT CẢ optional** (khớp `assertUploadedFileUrl`/`title`/`items` bắt buộc GIỮ
+NGUYÊN như cũ) — hồ sơ tạo tay không upload PDF vẫn hợp lệ y hệt trước, field mới tự về `''`/`0`/`null`
+(qtyReceived dùng `null` khi chưa nhập, khác `0` thật). Không đổi `schema.sql` — `operationOrders` đã nằm
+trong `MIGRATED_COLLECTIONS` (`lib/recordStore.js`), lưu JSON qua `dbo.Records`, field mới tự có chỗ
+chứa mà không cần cột mới nào.
+
+**`public/index.html` + `public/js/module-vanhanh.js`:**
+- Đổi nhãn "File Đính Kèm (báo giá/hợp đồng...)" (`#voFile`) thành **"File Đơn Hàng"** — giờ có hành vi tự
+  đọc, không còn đơn thuần "đính kèm".
+- Thêm khối gấp/mở "Chi Tiết Từ Phiếu Đặt Hàng" (`#operationOrderPoDetailsBox`) chứa 14 input mới (Số Đơn
+  (NCC)/Ngày Đặt/Ngày Giao/Người Đặt/Tại Trạm/Mã NCC/MST NCC/Mã Nơi Nhận/Nơi Nhận/Địa Chỉ Giao Hàng/Giá
+  Trị Chiết Khấu/Thành Tiền Sau CK/VAT/Tổng Giá Trị Thanh Toán) — 4 ô tiền dùng đúng khuôn
+  `money-input`/`getMoneyValue()`/`formatMoneyDisplay()` (khớp đợt soát tiền `77173bc` vừa xong).
+- Bảng hạng mục thêm 2 cột "Mã Hàng"/"Mã Vạch" + 1 cột "SL Nhận" (Thực Nhận, tách khỏi "SL Đặt" — field
+  `qty` cũ giữ nguyên ý nghĩa "số lượng đặt").
+- `handleOperationOrderPdfUpload()` (mới, wired qua `data-op-change` trên `#voFile`, đăng ký ở
+  `OP_CHANGE_ACTIONS` — module Vận Hành dùng registry dispatch riêng, không phải `window[fnName]` chung):
+  chỉ tự đọc khi file chọn là PDF thật; parse xong TỰ ĐIỀN mọi field tương ứng (kể cả field cũ
+  title/supplier/items) rồi DỪNG LẠI — không tự gửi phê duyệt, người dùng vẫn tự kiểm tra + bấm nút gửi
+  như cũ (cùng UX luồng import Excel đã có). Đọc lỗi/PDF không đúng mẫu/không có lớp text (scan ảnh) ->
+  thông báo "Không đọc được thông tin từ file, vui lòng nhập tay" ngay tại chỗ, không throw lỗi JS thô,
+  không chặn người dùng tự nhập tay tiếp.
+- `buildOperationDetailsHTML()`: thêm khối "Thông tin từ phiếu đặt hàng NCC" + breakdown Chiết Khấu/Sau
+  CK/VAT/Thanh Toán ở màn xem chi tiết — CHỈ hiện khi có ít nhất 1 field (hồ sơ cũ/tạo tay không hiện dãy
+  "N/A" vô nghĩa), bảng hạng mục thêm 4 cột Mã hàng/Mã vạch/SL nhận tương ứng.
+
+**`public/js/core.js` (Biểu Mẫu — `CORE_FIELD_MANIFEST.OPERATION_ORDER`):** thêm đủ 14 field mới vào bộ
+trường mặc định của tab "Vận Hành - Phê Duyệt Đơn Hàng" (cùng pattern `{id, label, required:false}` như
+mọi field khác trong bộ này) — admin sửa nhãn hiển thị được qua màn Biểu Mẫu giống hệt `voTitle`/
+`voSupplier` đã có từ trước; xác nhận cơ chế này CHỈ tuỳ biến nhãn hiển thị + bắt buộc/không bắt buộc
+(không phải điền sẵn giá trị mặc định thật/không phải 1 engine nghiệp vụ khác).
+
+Test mới `tests/test-operation-order-po-fields.js` (thuần Node, không Playwright — gọi thẳng
+`validateAndPrepareCreate('operationOrders', ...)`) xác nhận: (a) hồ sơ kiểu cũ không field mới vẫn hợp
+lệ y hệt trước, (b) hồ sơ đầy đủ field lưu & đọc lại đúng (kể cả `amount` vẫn tự tính lại từ
+qty×unitPrice, không bị field mới can thiệp), (c) số tiền round-trip đúng, chuỗi lạ tự về 0 an toàn
+(không throw/NaN), số âm bị chặn, ngày sai định dạng tự về rỗng không crash.
+
+Demo Playwright thật (server thật + SQL Server thật) upload đúng file mẫu `120HT_PO.pdf` vào `#voFile`
+trên form thật, chụp màn hình TRƯỚC/SAU khi tự điền và sau khi nộp — ảnh lưu ở
+`server/demo-screenshots/operation-order-pdf-autofill/`.
+
+**Deploy: không cần thao tác gì ngoài copy code + `pm2 restart`** — không đổi `schema.sql` (đã xác nhận
+`operationOrders` lưu JSON qua `dbo.Records`, không có cột SQL nào cần thêm), không đổi `.env.example`,
+không thêm/đổi `dependencies` (`pdfjs-dist` đã có sẵn từ trước, chỉ dùng lại instance `window.pdfjsLib`
+mà `renderPdfProtected()` đã nạp).
+
+## Cập nhật trước đó — Vận Hành > Siêu Thị: xoá hẳn cơ chế "Bổ Sung" (không còn phê duyệt), vá lỗ hổng dữ liệu cũ (2026-09-05)
 
 Theo xác nhận của người dùng: trong "Tab Siêu Thị" (2 loại hồ sơ `operationStoreOpenings`/
 `operationRepairs` 🏬 Mở Mới + 🔧 Sửa Chữa, cùng "Danh Mục Đầu Tư" — `estimateStatus` — của chính 2 loại

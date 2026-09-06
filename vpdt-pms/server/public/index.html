@@ -6472,7 +6472,33 @@ input[data-sdd-list] {
             <div><label class="block font-semibold text-gray-600 mb-1">Mã Đơn Hàng</label><input id="voCode" readonly placeholder="Mã tự sinh" class="w-full border p-1.5 rounded bg-gray-100 cursor-not-allowed"></div>
             <div class="md:col-span-2"><label class="block font-semibold text-gray-600 mb-1">Tiêu Đề Đơn Hàng</label><input id="voTitle" placeholder="Tên đơn hàng cần mua..." class="w-full border p-1.5 rounded" required></div>
             <div><label class="block font-semibold text-gray-600 mb-1">Nhà Cung Cấp</label><input id="voSupplier" placeholder="Công ty cung cấp..." class="w-full border p-1.5 rounded"></div>
-            <div class="md:col-span-2"><label class="block font-semibold text-gray-600 mb-1">File Đính Kèm (báo giá/hợp đồng...)</label><input type="file" id="voFile" class="w-full border p-1.5 rounded bg-white"></div>
+            <div class="md:col-span-2">
+              <label class="block font-semibold text-gray-600 mb-1">File Đơn Hàng</label>
+              <!-- Đợt "Đọc PDF Đơn Hàng tự động điền form": chọn PDF phiếu đặt hàng NCC ở đây sẽ TỰ ĐỘNG đọc
+                   và điền toàn bộ field bên dưới (xem handleOperationOrderPdfUpload() ở module-vanhanh.js)
+                   — người dùng vẫn phải tự bấm "Gửi phê duyệt" sau khi kiểm tra lại, KHÔNG tự gửi. -->
+              <input type="file" id="voFile" data-op-change="handleOperationOrderPdfUpload" class="w-full border p-1.5 rounded bg-white">
+              <div id="voPdfParseStatus" class="hidden"></div>
+            </div>
+          </div>
+          <div class="border-t pt-3">
+            <button type="button" data-op="toggleOperationOrderPoDetailsBox" class="text-xs font-bold text-cyan-700 hover:underline">▾ Chi Tiết Từ Phiếu Đặt Hàng (tự điền khi upload File Đơn Hàng ở trên, hoặc tự nhập tay)</button>
+            <div id="operationOrderPoDetailsBox" class="grid grid-cols-1 md:grid-cols-3 gap-3 mt-2">
+              <div><label class="block font-semibold text-gray-600 mb-1">Số Đơn (NCC)</label><input id="voPoNumber" placeholder="Số đơn hàng bên NCC..." class="w-full border p-1.5 rounded"></div>
+              <div><label class="block font-semibold text-gray-600 mb-1">Ngày Đặt</label><input type="datetime-local" id="voOrderDate" class="w-full border p-1.5 rounded"></div>
+              <div><label class="block font-semibold text-gray-600 mb-1">Ngày Giao</label><input type="date" id="voDeliveryDate" class="w-full border p-1.5 rounded"></div>
+              <div><label class="block font-semibold text-gray-600 mb-1">Người Đặt</label><input id="voOrdererName" placeholder="Người lập đơn bên NCC..." class="w-full border p-1.5 rounded"></div>
+              <div><label class="block font-semibold text-gray-600 mb-1">Tại Trạm</label><input id="voStationCode" placeholder="Mã trạm/mã siêu thị đặt hàng..." class="w-full border p-1.5 rounded"></div>
+              <div><label class="block font-semibold text-gray-600 mb-1">Mã NCC</label><input id="voSupplierCode" placeholder="Mã nhà cung cấp..." class="w-full border p-1.5 rounded"></div>
+              <div><label class="block font-semibold text-gray-600 mb-1">MST NCC</label><input id="voSupplierTaxCode" placeholder="Mã số thuế nhà cung cấp..." class="w-full border p-1.5 rounded"></div>
+              <div><label class="block font-semibold text-gray-600 mb-1">Mã Nơi Nhận</label><input id="voReceivingLocationCode" placeholder="Mã siêu thị/kho nhận hàng..." class="w-full border p-1.5 rounded"></div>
+              <div><label class="block font-semibold text-gray-600 mb-1">Nơi Nhận</label><input id="voReceivingLocationName" placeholder="Tên siêu thị/kho nhận hàng..." class="w-full border p-1.5 rounded"></div>
+              <div class="md:col-span-3"><label class="block font-semibold text-gray-600 mb-1">Địa Chỉ Giao Hàng</label><input id="voDeliveryAddress" placeholder="Địa chỉ nơi nhận hàng..." class="w-full border p-1.5 rounded"></div>
+              <div><label class="block font-semibold text-gray-600 mb-1">Giá Trị Chiết Khấu (VNĐ)</label><input type="text" inputmode="numeric" id="voDiscountAmount" class="w-full border p-1.5 rounded money-input"></div>
+              <div><label class="block font-semibold text-gray-600 mb-1">Thành Tiền Sau CK (VNĐ)</label><input type="text" inputmode="numeric" id="voAfterDiscountAmount" class="w-full border p-1.5 rounded money-input"></div>
+              <div><label class="block font-semibold text-gray-600 mb-1">VAT (VNĐ)</label><input type="text" inputmode="numeric" id="voVatAmount" class="w-full border p-1.5 rounded money-input"></div>
+              <div><label class="block font-semibold text-gray-600 mb-1">Tổng Giá Trị Thanh Toán (VNĐ)</label><input type="text" inputmode="numeric" id="voPaymentTotalAmount" class="w-full border p-1.5 rounded money-input"></div>
+            </div>
           </div>
           <div class="border-t pt-3 space-y-2">
             <label class="block font-semibold text-gray-600">Danh Sách Hạng Mục Đặt Hàng</label>
@@ -6482,8 +6508,11 @@ input[data-sdd-list] {
                   <tr class="bg-gray-100 text-left text-gray-700">
                     <th class="border p-1.5 w-8">STT</th>
                     <th class="border p-1.5">Tên Hàng</th>
-                    <th class="border p-1.5 w-20">ĐVT</th>
-                    <th class="border p-1.5 w-20">Số Lượng</th>
+                    <th class="border p-1.5 w-24">Mã Hàng</th>
+                    <th class="border p-1.5 w-28">Mã Vạch</th>
+                    <th class="border p-1.5 w-16">ĐVT</th>
+                    <th class="border p-1.5 w-20">SL Đặt</th>
+                    <th class="border p-1.5 w-20">SL Nhận</th>
                     <th class="border p-1.5 w-32">Đơn Giá (VNĐ)</th>
                     <th class="border p-1.5 w-32">Thành Tiền (VNĐ)</th>
                     <th class="border p-1.5">Ghi Chú</th>

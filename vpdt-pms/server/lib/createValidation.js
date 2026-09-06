@@ -692,11 +692,52 @@ const CREATE_MODULE_CONFIGS = {
         const qty = Number(it?.qty) || 0;
         const unitPrice = Number(it?.unitPrice) || 0;
         if (qty < 0 || unitPrice < 0) throw new CreateError(400, `Hạng mục "${name}": Số lượng/Đơn giá không được là số âm`);
-        return { name, unit: String(it?.unit || '').trim(), qty, unitPrice, amount: qty * unitPrice, note: String(it?.note || '').trim() };
+        // productCode/barcode/qtyReceived: MỚI (đợt "Đọc PDF Đơn Hàng tự động điền form") — 3 field TÙY
+        // CHỌN đọc từ phiếu đặt hàng nhà cung cấp (Mã hàng/Mã vạch/Thực nhận), KHÔNG bắt buộc và KHÔNG
+        // ảnh hưởng gì tới validItems.filter bên dưới hay payload.amount (vẫn tính từ qty/unitPrice như
+        // cũ) — hồ sơ tạo tay từ trước (không có 3 field này) đọc lại vẫn ra undefined/null, mọi nơi
+        // hiển thị tự xử lý '' thay vì crash. qtyReceived giữ nguyên null nếu chưa nhập (khác 0 thật —
+        // "chưa nhận" khác "nhận 0 cái"), qty âm cũng chặn cùng lý do qty/unitPrice ở trên.
+        const qtyReceivedRaw = it?.qtyReceived;
+        const hasQtyReceived = qtyReceivedRaw !== undefined && qtyReceivedRaw !== null && qtyReceivedRaw !== '';
+        const qtyReceived = hasQtyReceived ? Math.max(0, Number(qtyReceivedRaw) || 0) : null;
+        return {
+          name, unit: String(it?.unit || '').trim(), qty, unitPrice, amount: qty * unitPrice, note: String(it?.note || '').trim(),
+          productCode: String(it?.productCode || '').trim(), barcode: String(it?.barcode || '').trim(), qtyReceived
+        };
       }).filter((it) => it.name && it.qty > 0);
       if (!validItems.length) throw new CreateError(400, 'Vui lòng nhập ít nhất 1 hạng mục hợp lệ (Tên hàng + Số lượng > 0)');
       payload.items = validItems;
       payload.amount = validItems.reduce((sum, it) => sum + it.amount, 0);
+      // ===== Đợt "Đọc PDF Đơn Hàng tự động điền form" — các field MỚI đọc từ phiếu đặt hàng NCC (mẫu
+      // 120HT_PO.pdf, xem parsePoTextToFields() ở module-vanhanh.js) — TẤT CẢ tùy chọn (optional), hồ sơ
+      // tạo tay/hồ sơ cũ trước đợt này KHÔNG có các field này vẫn hợp lệ y hệt trước (không field nào ở
+      // đây bắt buộc, không field nào cũ bị đổi hành vi). Chuỗi trim về rỗng, số ép về 0 nếu không hợp
+      // lệ/không nhập — KHÔNG throw lỗi cho bất kỳ field nào trong nhóm này (khác hẳn title/items ở trên).
+      payload.poNumber = String(payload.poNumber || '').trim();
+      payload.ordererName = String(payload.ordererName || '').trim();
+      payload.stationCode = String(payload.stationCode || '').trim();
+      payload.supplierCode = String(payload.supplierCode || '').trim();
+      payload.supplierTaxCode = String(payload.supplierTaxCode || '').trim();
+      payload.receivingLocationCode = String(payload.receivingLocationCode || '').trim();
+      payload.receivingLocationName = String(payload.receivingLocationName || '').trim();
+      payload.deliveryAddress = String(payload.deliveryAddress || '').trim();
+      payload.discountAmount = Math.max(0, Number(payload.discountAmount) || 0);
+      payload.vatAmount = Math.max(0, Number(payload.vatAmount) || 0);
+      payload.afterDiscountAmount = Math.max(0, Number(payload.afterDiscountAmount) || 0);
+      payload.paymentTotalAmount = Math.max(0, Number(payload.paymentTotalAmount) || 0);
+      // orderDate/deliveryDate: datetime-local/date thô từ input HTML — không throw lỗi nếu sai định
+      // dạng (field tự điền từ PDF, người dùng có thể xoá tay), chỉ âm thầm bỏ qua (khác hẳn
+      // expectedOpenDate ở operationStoreOpenings — module đó throw lỗi vì field đó người dùng TỰ gõ tay
+      // là chính, còn field này chủ yếu do parser điền, sai định dạng không nên chặn cả đơn hàng).
+      if (payload.orderDate) {
+        const d = new Date(payload.orderDate);
+        payload.orderDate = Number.isNaN(d.getTime()) ? '' : d.toISOString();
+      } else payload.orderDate = '';
+      if (payload.deliveryDate) {
+        const d = new Date(payload.deliveryDate);
+        payload.deliveryDate = Number.isNaN(d.getTime()) ? '' : d.toISOString();
+      } else payload.deliveryDate = '';
       payload.status = 'PENDING';
       payload.currentStep = 1;
       payload.history = [];

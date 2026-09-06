@@ -183,9 +183,12 @@ function resolveVrPersonInChargeInput(rawValue) {
 }
 
 // --- Bảng nhiều hạng mục cho Đơn Hàng (operationOrders.items[]) — cùng khuôn officeItems/renderOfficeItemsTable() ---
+// productCode/barcode/qtyReceived: 3 cột MỚI (đợt "Đọc PDF Đơn Hàng tự động điền form") — Mã hàng/Mã
+// vạch/Thực nhận đọc được từ phiếu đặt hàng NCC (xem parsePoLinesToFields() bên dưới), TÙY CHỌN, không
+// bắt buộc nhập tay — người dùng vẫn thêm dòng/nhập tay bình thường như trước nếu không upload PDF.
 let operationOrderItems = [];
 function addOperationOrderItemRow() {
-  operationOrderItems.push({ name: '', unit: '', qty: 0, unitPrice: 0, note: '' });
+  operationOrderItems.push({ name: '', unit: '', qty: 0, unitPrice: 0, note: '', productCode: '', barcode: '', qtyReceived: null });
   renderOperationOrderItemsTable();
 }
 function removeOperationOrderItemRow(idx) {
@@ -194,7 +197,7 @@ function removeOperationOrderItemRow(idx) {
 }
 function updateOperationOrderItemField(idx, field, value) {
   if (!operationOrderItems[idx]) return;
-  if (field === 'qty') operationOrderItems[idx][field] = parseFloat(value) || 0;
+  if (field === 'qty' || field === 'qtyReceived') operationOrderItems[idx][field] = value === '' ? (field === 'qtyReceived' ? null : 0) : (parseFloat(value) || 0);
   else if (field === 'unitPrice') operationOrderItems[idx][field] = Number(String(value || '').replace(/\D/g, '')) || 0;
   else operationOrderItems[idx][field] = value;
   const amountCell = document.getElementById(`operationOrderItemAmount_${idx}`);
@@ -214,8 +217,11 @@ function renderOperationOrderItemsTable() {
     <tr>
       <td class="border p-1 text-center">${idx + 1}</td>
       <td class="border p-1"><input value="${escapeHtml(it.name)}" data-op-input="updateOperationOrderItemField" data-idx="${idx}" data-field="name" class="w-full border-0 p-0.5 text-xs focus:outline-none" placeholder="Tên hàng"></td>
+      <td class="border p-1"><input value="${escapeHtml(it.productCode || '')}" data-op-input="updateOperationOrderItemField" data-idx="${idx}" data-field="productCode" class="w-full border-0 p-0.5 text-xs focus:outline-none" placeholder="Mã hàng"></td>
+      <td class="border p-1"><input value="${escapeHtml(it.barcode || '')}" data-op-input="updateOperationOrderItemField" data-idx="${idx}" data-field="barcode" class="w-full border-0 p-0.5 text-xs focus:outline-none" placeholder="Mã vạch"></td>
       <td class="border p-1"><input value="${escapeHtml(it.unit)}" data-op-input="updateOperationOrderItemField" data-idx="${idx}" data-field="unit" class="w-full border-0 p-0.5 text-xs focus:outline-none" placeholder="Cái/Bộ..."></td>
       <td class="border p-1"><input type="number" value="${it.qty || ''}" data-op-input="updateOperationOrderItemField" data-idx="${idx}" data-field="qty" class="w-full border-0 p-0.5 text-xs focus:outline-none"></td>
+      <td class="border p-1"><input type="number" value="${it.qtyReceived ?? ''}" data-op-input="updateOperationOrderItemField" data-idx="${idx}" data-field="qtyReceived" class="w-full border-0 p-0.5 text-xs focus:outline-none" placeholder="Thực nhận"></td>
       <td class="border p-1"><input type="text" inputmode="numeric" value="${formatMoneyDisplay(it.unitPrice)}" data-op-input="updateOperationOrderItemField" data-idx="${idx}" data-field="unitPrice" class="w-full border-0 p-0.5 text-xs focus:outline-none money-input"></td>
       <td class="border p-1 text-right font-semibold" id="operationOrderItemAmount_${idx}">${((it.qty || 0) * (it.unitPrice || 0)).toLocaleString('vi-VN')}</td>
       <td class="border p-1"><input value="${escapeHtml(it.note)}" data-op-input="updateOperationOrderItemField" data-idx="${idx}" data-field="note" class="w-full border-0 p-0.5 text-xs focus:outline-none" placeholder="Ghi chú"></td>
@@ -228,6 +234,244 @@ function renderOperationOrderItemsTable() {
 function generateOperationOrderCode() { return generateHcrcCode(DB.operationOrders, OPERATION_KIND_META.operationOrders.codeAbbr); }
 function generateOperationStoreOpenCode() { return generateHcrcCode(DB.operationStoreOpenings, OPERATION_KIND_META.operationStoreOpenings.codeAbbr); }
 function generateOperationRepairCode() { return generateHcrcCode(DB.operationRepairs, OPERATION_KIND_META.operationRepairs.codeAbbr); }
+
+// Đóng/mở khối "Chi Tiết Từ Phiếu Đặt Hàng" (#operationOrderPoDetailsBox) — mặc định MỞ (auto-fill điền
+// vào đây, người dùng cần thấy ngay để kiểm tra), bấm nút để thu gọn nếu không cần dùng tới các field
+// này (đặt hàng không kèm PDF, nhập tay tối thiểu title/supplier/items như trước).
+function toggleOperationOrderPoDetailsBox(btn) {
+  const box = document.getElementById('operationOrderPoDetailsBox');
+  if (!box) return;
+  box.classList.toggle('hidden');
+  if (btn) btn.innerText = btn.innerText.replace(/^[▾▸]/, box.classList.contains('hidden') ? '▸' : '▾');
+}
+
+// ==========================================
+// ĐỌC PDF ĐƠN HÀNG TỰ ĐỘNG ĐIỀN FORM (đợt "operationOrders PDF autofill")
+// ==========================================
+// Áp dụng cho ĐÚNG 1 mẫu phiếu đặt hàng của NCC hiện đang dùng (người dùng xác nhận "chỉ từ 1 hệ thống
+// NCC") — KHÔNG cố tổng quát hoá cho định dạng/NCC khác. PDF nguồn dùng phông chữ Việt kiểu cũ (họ
+// TCVN3/.VnTime — dấu câu chữ Việt nằm ở dải mã 0xA0-0xFF) mà KHÔNG có bảng ToUnicode CMap đúng trong
+// PDF, nên lớp text mà PDF.js getTextContent() trích ra bị "mojibake" (ký tự SAI bảng mã, không phải
+// thiếu dữ liệu) — VD ký tự thô 'μ' luôn có nghĩa là 'à', '§' luôn là 'Đ', v.v. 3 bảng dưới đây build
+// bằng cách đối chiếu ký tự-theo-ký-tự văn bản gốc đúng với văn bản PDF.js trích ra (xem 120HT_PO.pdf
+// mẫu người dùng cung cấp) — hoàn toàn xác định (deterministic), áp lại đúng cho mọi PDF cùng mẫu.
+//
+// PO_CHAR_FIXED_MAP: ký tự thô -> ký tự đúng CỐ ĐỊNH (đã bao gồm đúng hoa/thường, phông TCVN3 dùng mã
+// RIÊNG cho chữ hoa/thường nên không cần đoán ngữ cảnh).
+const PO_CHAR_FIXED_MAP = {
+  '¦': 'Ư', '§': 'Đ', '¨': 'ă', '©': 'â', 'ª': 'ê', '«': 'ô', '¬': 'ơ',
+  '®': 'đ', '·': 'ã', '¾': 'ắ', 'Ç': 'ầ', 'È': 'ẩ', 'Ê': 'ấ', 'Ë': 'ậ',
+  'Ì': 'è', 'Î': 'ẻ', 'Ï': 'ẽ', 'Ò': 'ề', 'Ó': 'ể', 'Ô': 'ễ', 'Ö': 'ệ',
+  'Ø': 'ỉ', 'Ý': 'í', 'Þ': 'ị', 'ß': 'ò', 'á': 'ỏ', 'å': 'ồ', 'é': 'ộ',
+  'ï': 'ù', 'ñ': 'ủ', 'ò': 'ũ', 'ó': 'ú', 'ô': 'ụ', 'õ': 'ừ', 'ø': 'ứ', 'ù': 'ự',
+};
+// PO_CHAR_CASE_MAP: ký tự thô mà bản PDF mẫu chỉ thấy xuất hiện ở 1 dạng hoa/thường (không đủ dữ liệu
+// để tách 2 mã riêng như PO_CHAR_FIXED_MAP) — giá trị dưới đây là dạng THƯỜNG, viết hoa theo ngữ cảnh
+// (xem poIsAsciiUpperToken()) khi từ chứa >=2 chữ cái ASCII và toàn bộ đều viết hoa (VD "ĐỐC" trong
+// "TỔNG GIÁM ĐỐC" — không ảnh hưởng field nào ta thực sự đọc, khối chữ ký/con dấu không cần parse).
+const PO_CHAR_CASE_MAP = {
+  '¶': 'ả', '¸': 'á', '¹': 'ạ', 'Æ': 'ặ', 'Õ': 'ế', 'ã': 'ó', 'æ': 'ổ',
+  'è': 'ố', 'ë': 'ở', 'μ': 'à', 'ê': 'ờ', 'ý': 'ý',
+};
+// PO_WORD_FIXUPS: 1 số từ bị MẤT hẳn ký tự 'ư' (không phải sai bảng mã mà đúng là rớt ký tự — font horn
+// diacritic "ư" trong PDF này có bề rộng 0, PDF.js đôi khi không trả ra) — chỉ xảy ra ở đúng các từ liệt
+// kê dưới đây trong mẫu phiếu (nhãn cố định "Người đặt/Số lượng/Phường..." VÀ có thể trùng tên riêng
+// "Hương"/"tương" ở dữ liệu biến — literal fix theo đúng chuỗi thô, xác định 100% vì cùng 1 phông/mẫu).
+const PO_WORD_FIXUPS = {
+  'lîng': 'lượng', 'H¬ng': 'Hương', 'Ngêi': 'Người', 'Phêng': 'Phường',
+  'Trng,': 'Trưng,', 't¬ng': 'tương', 'tríc': 'trước', 'díi': 'dưới',
+};
+function poIsAsciiUpperToken(tok) {
+  const letters = Array.from(tok).filter(c => /[A-Za-z]/.test(c));
+  return letters.length >= 2 && letters.every(c => c === c.toUpperCase());
+}
+function poFixToken(tok) {
+  if (PO_WORD_FIXUPS[tok]) return PO_WORD_FIXUPS[tok];
+  const upper = poIsAsciiUpperToken(tok);
+  return Array.from(tok).map(ch => {
+    if (PO_CHAR_FIXED_MAP[ch] !== undefined) return PO_CHAR_FIXED_MAP[ch];
+    if (PO_CHAR_CASE_MAP[ch] !== undefined) { const v = PO_CHAR_CASE_MAP[ch]; return upper ? v.toUpperCase() : v; }
+    return ch;
+  }).join('');
+}
+// Sửa mojibake cho CẢ CHUỖI (có thể nhiều từ cách nhau bởi khoảng trắng, VD tên sản phẩm) — tách theo
+// khoảng trắng, sửa từng từ rồi ghép lại (ranh giới từ không ảnh hưởng gì tới việc sửa ký tự).
+function poFixText(text) {
+  return String(text || '').split(/\s+/).filter(Boolean).map(poFixToken).join(' ');
+}
+
+// Nhóm các text item của 1 trang PDF thành từng DÒNG theo toạ độ Y (dung sai poLineTol) rồi sắp theo X
+// trong dòng — phục hồi đúng thứ tự đọc thị giác (label/value đứng cạnh nhau), khác thứ tự content-stream
+// thô của PDF (labels/values có thể bị in xen kẽ lộn xộn nếu đọc thẳng theo thứ tự vẽ).
+const POP_LINE_TOL = 3.2;
+async function poExtractLines(pdfDoc) {
+  const lines = [];
+  for (let pageNum = 1; pageNum <= pdfDoc.numPages; pageNum++) {
+    const page = await pdfDoc.getPage(pageNum);
+    const content = await page.getTextContent();
+    const items = content.items
+      .map(it => ({ str: poFixText(it.str), x: it.transform[4], y: it.transform[5] }))
+      .filter(it => it.str.trim().length > 0);
+    const pageLines = [];
+    for (const it of items) {
+      let line = pageLines.find(l => Math.abs(l.y - it.y) <= POP_LINE_TOL);
+      if (!line) { line = { y: it.y, items: [] }; pageLines.push(line); }
+      line.items.push(it);
+    }
+    pageLines.sort((a, b) => b.y - a.y);
+    pageLines.forEach(l => l.items.sort((a, b) => a.x - b.x));
+    pageLines.forEach(l => lines.push(l.items.map(it => it.str.trim())));
+  }
+  return lines;
+}
+
+// Tìm dòng có chứa token đúng bằng `label`, trả về tokens[idx+1+offset] (offset=1 mặc định: giá trị
+// đứng NGAY SAU nhãn). `fromEnd`=true tìm từ dòng CUỐI lên (dùng cho "Địa chỉ:" xuất hiện 2 lần trong
+// mẫu — lần 2 mới là địa chỉ nơi nhận/giao hàng ta cần, lần 1 là địa chỉ letterhead công ty phát hành).
+function poFindValueAfterLabel(lines, label, offset, fromEnd) {
+  const list = fromEnd ? lines.slice().reverse() : lines;
+  for (const tokens of list) {
+    const idx = tokens.indexOf(label);
+    if (idx !== -1 && tokens[idx + (offset || 1)] !== undefined) return tokens[idx + (offset || 1)];
+  }
+  return '';
+}
+function poFindLineWithLabel(lines, label) {
+  return lines.find(tokens => tokens.includes(label)) || null;
+}
+function poParseMoney(str) {
+  const n = Number(String(str || '').replace(/[^\d.-]/g, ''));
+  return Number.isFinite(n) ? n : 0;
+}
+// "27/08/2026" -> "2026-08-27" (input type="date"). Trả '' nếu không đúng định dạng dd/mm/yyyy.
+function poDdMmYyyyToIso(str) {
+  const m = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(String(str || '').trim());
+  if (!m) return '';
+  const [, d, mo, y] = m;
+  return `${y}-${mo.padStart(2, '0')}-${d.padStart(2, '0')}`;
+}
+// "27/08/2026" + "09:22" -> "2026-08-27T09:22" (input type="datetime-local").
+function poDdMmYyyyHmToIso(dateStr, timeStr) {
+  const iso = poDdMmYyyyToIso(dateStr);
+  if (!iso) return '';
+  const m = /^(\d{1,2}):(\d{2})$/.exec(String(timeStr || '').trim());
+  return m ? `${iso}T${m[1].padStart(2, '0')}:${m[2]}` : iso + 'T00:00';
+}
+
+// Parse toàn bộ field cần điền từ mảng dòng (poExtractLines()) — hardcode theo ĐÚNG cấu trúc mẫu
+// 120HT_PO.pdf (đã xác nhận "chỉ 1 mẫu duy nhất"), KHÔNG cố đoán/tổng quát cho bố cục khác.
+function parsePoLinesToFields(lines) {
+  const f = {};
+  f.poNumber = poFindValueAfterLabel(lines, 'Số Đơn:');
+  const orderDateStr = poFindValueAfterLabel(lines, 'Ngày đặt:');
+  const orderTimeLine = poFindLineWithLabel(lines, 'Ngày đặt:');
+  const orderTimeStr = orderTimeLine ? orderTimeLine[orderTimeLine.indexOf('Ngày đặt:') + 2] : '';
+  f.orderDate = poDdMmYyyyHmToIso(orderDateStr, orderTimeStr);
+  f.deliveryDate = poDdMmYyyyToIso(poFindValueAfterLabel(lines, 'Ngày giao:'));
+  f.ordererName = poFindValueAfterLabel(lines, 'Người đặt:');
+  f.stationCode = poFindValueAfterLabel(lines, 'Tại trạm:');
+  f.supplierCode = poFindValueAfterLabel(lines, 'NCC:', 1);
+  f.supplierName = poFindValueAfterLabel(lines, 'NCC:', 2);
+  f.supplierTaxCode = poFindValueAfterLabel(lines, 'MST:');
+  f.receivingLocationCode = poFindValueAfterLabel(lines, 'Nơi nhận:', 1);
+  f.receivingLocationName = poFindValueAfterLabel(lines, 'Nơi nhận:', 2);
+  f.deliveryAddress = poFindValueAfterLabel(lines, 'Địa chỉ:', 1, true);
+  f.discountAmount = poParseMoney(poFindValueAfterLabel(lines, 'Giá trị chiết khấu'));
+  f.afterDiscountAmount = poParseMoney(poFindValueAfterLabel(lines, 'Thành tiền sau CK:'));
+  f.vatAmount = poParseMoney(poFindValueAfterLabel(lines, 'VAT'));
+  f.paymentTotalAmount = poParseMoney(poFindValueAfterLabel(lines, 'Tổng giá trị thanh toán'));
+
+  // Bảng hạng mục: mỗi dòng hàng thật có đúng 8 token [STT, Tên hàng, Mã hàng, Mã vạch, ĐVT, SL, Đơn
+  // giá, Thành tiền] — nhận diện bằng STT/Mã hàng/Mã vạch đều thuần số, ĐVT ngắn (khác hẳn dòng tiêu đề
+  // bảng/dòng tổng cộng có số token hoặc kiểu dữ liệu khác).
+  f.items = [];
+  for (const tokens of lines) {
+    if (tokens.length !== 8) continue;
+    const [stt, name, productCode, barcode, unit, qty, unitPrice, amount] = tokens;
+    if (!/^\d+$/.test(stt) || !/^\d+$/.test(productCode) || !/^\d+$/.test(barcode)) continue;
+    if (!unit || unit.length > 4) continue;
+    f.items.push({
+      name, productCode, barcode, unit,
+      qty: parseFloat(qty) || 0,
+      unitPrice: poParseMoney(unitPrice),
+      note: ''
+    });
+  }
+  return f;
+}
+
+// Điền field đơn (input/textarea theo id) nếu tìm thấy phần tử và giá trị không rỗng — KHÔNG ghi đè nếu
+// parser không đọc được (để trống, người dùng tự nhập tay), không throw nếu thiếu phần tử.
+function poFillField(id, value) {
+  const el = document.getElementById(id);
+  if (el && value) el.value = value;
+}
+function poFillMoneyField(id, value) {
+  const el = document.getElementById(id);
+  if (el && value) el.value = formatMoneyDisplay(value);
+}
+
+// Handler onchange của #voFile (data-op-change) — chỉ tự động đọc khi tệp chọn là PDF; các định dạng
+// khác (ảnh báo giá/hợp đồng scan...) giữ nguyên hành vi CŨ (chỉ đính kèm, không tự đọc) vì đây là
+// hành vi MỚI HOÀN TOÀN, không có gì để tự đọc từ ảnh/docx.
+async function handleOperationOrderPdfUpload(event) {
+  const file = event.target.files && event.target.files[0];
+  const statusEl = document.getElementById('voPdfParseStatus');
+  if (!statusEl) return;
+  if (!file || file.type !== 'application/pdf') { statusEl.classList.add('hidden'); return; }
+
+  statusEl.className = 'text-xs mt-1 p-2 rounded border bg-gray-50 text-gray-600 border-gray-200';
+  statusEl.innerText = '⏳ Đang đọc thông tin từ file PDF để tự điền form...';
+  statusEl.classList.remove('hidden');
+
+  try {
+    // pdfjsLib được nạp sẵn ở <script type="module"> cuối index.html (renderPdfProtected() dùng chung) —
+    // chờ tối đa ~5s phòng trường hợp hiếm module đó chưa kịp chạy xong (thực tế luôn đã sẵn sàng vì
+    // người dùng cần tải trang xong mới bấm chọn file được).
+    for (let i = 0; i < 50 && !window.pdfjsLib; i++) await new Promise(r => setTimeout(r, 100));
+    if (!window.pdfjsLib) throw new Error('Thư viện đọc PDF chưa sẵn sàng');
+
+    const buf = await file.arrayBuffer();
+    const pdfDoc = await window.pdfjsLib.getDocument({ data: new Uint8Array(buf) }).promise;
+    const lines = await poExtractLines(pdfDoc);
+    const f = parsePoLinesToFields(lines);
+
+    const gotAnything = f.poNumber || f.ordererName || f.supplierCode || f.items.length > 0;
+    if (!gotAnything) throw new Error('Không đọc được thông tin từ file, vui lòng nhập tay');
+
+    if (f.supplierName && !document.getElementById('voSupplier').value.trim()) {
+      document.getElementById('voSupplier').value = f.supplierName;
+    }
+    if (!document.getElementById('voTitle').value.trim() && f.supplierName) {
+      document.getElementById('voTitle').value = `Đặt hàng NCC ${f.supplierName}${f.poNumber ? ' - ' + f.poNumber : ''}`;
+    }
+    poFillField('voPoNumber', f.poNumber);
+    poFillField('voOrderDate', f.orderDate);
+    poFillField('voDeliveryDate', f.deliveryDate);
+    poFillField('voOrdererName', f.ordererName);
+    poFillField('voStationCode', f.stationCode);
+    poFillField('voSupplierCode', f.supplierCode);
+    poFillField('voSupplierTaxCode', f.supplierTaxCode);
+    poFillField('voReceivingLocationCode', f.receivingLocationCode);
+    poFillField('voReceivingLocationName', f.receivingLocationName);
+    poFillField('voDeliveryAddress', f.deliveryAddress);
+    poFillMoneyField('voDiscountAmount', f.discountAmount);
+    poFillMoneyField('voVatAmount', f.vatAmount);
+    poFillMoneyField('voAfterDiscountAmount', f.afterDiscountAmount);
+    poFillMoneyField('voPaymentTotalAmount', f.paymentTotalAmount);
+
+    if (f.items.length > 0) {
+      operationOrderItems = f.items;
+      renderOperationOrderItemsTable();
+    }
+
+    statusEl.className = 'text-xs mt-1 p-2 rounded border bg-emerald-50 text-emerald-800 border-emerald-200';
+    statusEl.innerText = `✅ Đã tự điền form từ file PDF (${f.items.length} hạng mục) — vui lòng kiểm tra lại trước khi gửi phê duyệt.`;
+  } catch (err) {
+    statusEl.className = 'text-xs mt-1 p-2 rounded border bg-amber-50 text-amber-800 border-amber-200';
+    statusEl.innerText = `⚠️ Không đọc được thông tin từ file, vui lòng nhập tay. (${err.message})`;
+  }
+}
 
 async function submitOperationOrder(e) {
   e.preventDefault();
@@ -248,7 +492,30 @@ async function submitOperationOrder(e) {
     } catch (err) { return alert(`⛔ ${err.message}`); }
   }
 
-  const payload = { code, title, supplier, note, items: validItems, fileUrl, fileName, fileType };
+  // Các field MỚI đọc từ phiếu đặt hàng NCC (đợt "Đọc PDF Đơn Hàng tự động điền form") — người dùng có
+  // thể để trống hoàn toàn (không upload PDF) hoặc tự sửa lại sau khi PDF tự điền, server coi TẤT CẢ là
+  // optional (xem lib/createValidation.js operationOrders.extraValidate).
+  const poNumber = document.getElementById('voPoNumber').value.trim();
+  const orderDate = document.getElementById('voOrderDate').value;
+  const deliveryDate = document.getElementById('voDeliveryDate').value;
+  const ordererName = document.getElementById('voOrdererName').value.trim();
+  const stationCode = document.getElementById('voStationCode').value.trim();
+  const supplierCode = document.getElementById('voSupplierCode').value.trim();
+  const supplierTaxCode = document.getElementById('voSupplierTaxCode').value.trim();
+  const receivingLocationCode = document.getElementById('voReceivingLocationCode').value.trim();
+  const receivingLocationName = document.getElementById('voReceivingLocationName').value.trim();
+  const deliveryAddress = document.getElementById('voDeliveryAddress').value.trim();
+  const discountAmount = getMoneyValue(document.getElementById('voDiscountAmount'));
+  const vatAmount = getMoneyValue(document.getElementById('voVatAmount'));
+  const afterDiscountAmount = getMoneyValue(document.getElementById('voAfterDiscountAmount'));
+  const paymentTotalAmount = getMoneyValue(document.getElementById('voPaymentTotalAmount'));
+
+  const payload = {
+    code, title, supplier, note, items: validItems, fileUrl, fileName, fileType,
+    poNumber, orderDate, deliveryDate, ordererName, stationCode, supplierCode, supplierTaxCode,
+    receivingLocationCode, receivingLocationName, deliveryAddress,
+    discountAmount, vatAmount, afterDiscountAmount, paymentTotalAmount
+  };
   let newItem;
   try {
     const result = await callCreateAction('operationOrders', payload);
@@ -540,23 +807,56 @@ function buildOperationDetailsHTML(kind, o) {
       <tr>
         <td class="border p-1 text-center">${idx + 1}</td>
         <td class="border p-1">${escapeHtml(it.name)}</td>
+        <td class="border p-1 font-mono">${escapeHtml(it.productCode || '')}</td>
+        <td class="border p-1 font-mono">${escapeHtml(it.barcode || '')}</td>
         <td class="border p-1">${escapeHtml(it.unit || '')}</td>
         <td class="border p-1 text-right">${it.qty}</td>
+        <td class="border p-1 text-right">${(it.qtyReceived === null || it.qtyReceived === undefined) ? '' : it.qtyReceived}</td>
         <td class="border p-1 text-right">${(it.unitPrice || 0).toLocaleString('vi-VN')}</td>
         <td class="border p-1 text-right font-semibold">${(it.amount || 0).toLocaleString('vi-VN')}</td>
         <td class="border p-1">${escapeHtml(it.note || '')}</td>
       </tr>`).join('');
+    // Khối "Thông tin từ phiếu đặt hàng NCC" (đợt "Đọc PDF Đơn Hàng tự động điền form") — CHỈ hiện khi có
+    // ít nhất 1 field trong nhóm này (hồ sơ cũ trước đợt này/hồ sơ tạo tay không upload PDF sẽ không có
+    // field nào -> ẩn hẳn khối, không hiện 1 dãy "N/A" vô nghĩa).
+    const poFieldsPresent = [o.poNumber, o.orderDate, o.deliveryDate, o.ordererName, o.stationCode, o.supplierCode, o.supplierTaxCode, o.receivingLocationCode, o.receivingLocationName, o.deliveryAddress].some(v => v);
+    const poBlock = poFieldsPresent ? `
+      <div class="border-t pt-2 mt-2">
+        <div class="font-semibold mb-1 text-xs">Thông tin từ phiếu đặt hàng NCC:</div>
+        <div class="grid grid-cols-2 gap-2 text-xs bg-white p-2 rounded border">
+          ${o.poNumber ? `<div><b>Số Đơn (NCC):</b> ${escapeHtml(o.poNumber)}</div>` : ''}
+          ${o.orderDate ? `<div><b>Ngày đặt:</b> ${new Date(o.orderDate).toLocaleString('vi-VN')}</div>` : ''}
+          ${o.deliveryDate ? `<div><b>Ngày giao:</b> ${new Date(o.deliveryDate).toLocaleDateString('vi-VN')}</div>` : ''}
+          ${o.ordererName ? `<div><b>Người đặt:</b> ${escapeHtml(o.ordererName)}</div>` : ''}
+          ${o.stationCode ? `<div><b>Tại trạm:</b> ${escapeHtml(o.stationCode)}</div>` : ''}
+          ${o.supplierCode ? `<div><b>Mã NCC:</b> ${escapeHtml(o.supplierCode)}</div>` : ''}
+          ${o.supplierTaxCode ? `<div><b>MST NCC:</b> ${escapeHtml(o.supplierTaxCode)}</div>` : ''}
+          ${o.receivingLocationCode ? `<div><b>Mã nơi nhận:</b> ${escapeHtml(o.receivingLocationCode)}</div>` : ''}
+          ${o.receivingLocationName ? `<div><b>Nơi nhận:</b> ${escapeHtml(o.receivingLocationName)}</div>` : ''}
+          ${o.deliveryAddress ? `<div class="col-span-2"><b>Địa chỉ giao hàng:</b> ${escapeHtml(o.deliveryAddress)}</div>` : ''}
+        </div>
+      </div>` : '';
+    const hasTotalsBreakdown = o.discountAmount || o.vatAmount || o.afterDiscountAmount || o.paymentTotalAmount;
+    const totalsBlock = hasTotalsBreakdown ? `
+      <div class="grid grid-cols-2 gap-2 text-xs bg-white p-2 rounded border mt-2">
+        <div><b>Giá trị chiết khấu:</b> ${(o.discountAmount || 0).toLocaleString('vi-VN')} VNĐ</div>
+        <div><b>Thành tiền sau CK:</b> ${(o.afterDiscountAmount || 0).toLocaleString('vi-VN')} VNĐ</div>
+        <div><b>VAT:</b> ${(o.vatAmount || 0).toLocaleString('vi-VN')} VNĐ</div>
+        <div><b>Tổng giá trị thanh toán:</b> ${(o.paymentTotalAmount || 0).toLocaleString('vi-VN')} VNĐ</div>
+      </div>` : '';
     return `
       <div class="grid grid-cols-2 gap-2 text-xs">
         <div><b>Nhà cung cấp:</b> ${escapeHtml(o.supplier || 'N/A')}</div>
-        <div><b>Tổng tiền:</b> ${(o.amount || 0).toLocaleString('vi-VN')} VNĐ</div>
+        <div><b>Tổng tiền (hạng mục):</b> ${(o.amount || 0).toLocaleString('vi-VN')} VNĐ</div>
         ${o.note ? `<div class="col-span-2"><b>Ghi chú:</b> ${escapeHtml(o.note)}</div>` : ''}
         ${o.fileUrl ? `<div class="col-span-2"><a href="#" data-op="viewOperationAttachment" data-kind="${kind}" data-id="${o.id}" class="text-blue-600 underline">📎 ${escapeHtml(o.fileName || 'Xem tệp đính kèm')}</a></div>` : ''}
       </div>
+      ${totalsBlock}
+      ${poBlock}
       <div class="border-t pt-2 mt-2">
         <div class="font-semibold mb-1 text-xs">Danh sách hạng mục đặt hàng:</div>
         <div class="overflow-x-auto"><table class="w-full border-collapse border text-xs bg-white">
-          <thead><tr class="bg-gray-100 text-left"><th class="border p-1">STT</th><th class="border p-1">Tên hàng</th><th class="border p-1">ĐVT</th><th class="border p-1">SL</th><th class="border p-1">Đơn giá</th><th class="border p-1">Thành tiền</th><th class="border p-1">Ghi chú</th></tr></thead>
+          <thead><tr class="bg-gray-100 text-left"><th class="border p-1">STT</th><th class="border p-1">Tên hàng</th><th class="border p-1">Mã hàng</th><th class="border p-1">Mã vạch</th><th class="border p-1">ĐVT</th><th class="border p-1">SL đặt</th><th class="border p-1">SL nhận</th><th class="border p-1">Đơn giá</th><th class="border p-1">Thành tiền</th><th class="border p-1">Ghi chú</th></tr></thead>
           <tbody>${itemsRows}</tbody>
         </table></div>
       </div>`;
@@ -1711,6 +2011,7 @@ const OP_CLICK_ACTIONS = {
   setOperationStoreSubTab: el => setOperationStoreSubTab(el.dataset.tab),
   addOperationOrderItemRow: () => addOperationOrderItemRow(),
   removeOperationOrderItemRow: el => removeOperationOrderItemRow(Number(el.dataset.idx)),
+  toggleOperationOrderPoDetailsBox: el => toggleOperationOrderPoDetailsBox(el),
   openBosungEditModal: el => openBosungEditModal(el.dataset.kind, Number(el.dataset.id)),
   openOperationProcessModal: el => openOperationProcessModal(el.dataset.kind, Number(el.dataset.id)),
   viewOperationAttachment: (el, e) => { e.preventDefault(); viewOperationAttachment(el.dataset.kind, Number(el.dataset.id)); },
@@ -1757,7 +2058,8 @@ const OP_CHANGE_ACTIONS = {
   resolveVrPersonInChargeInput: el => resolveVrPersonInChargeInput(el.value),
   onOwiAcceptanceModeChange: () => onOwiAcceptanceModeChange(),
   onOperationEstimateImportFileChange: (el, e) => onOperationEstimateImportFileChange(e),
-  onOperationWorkItemImportFileChange: (el, e) => onOperationWorkItemImportFileChange(e)
+  onOperationWorkItemImportFileChange: (el, e) => onOperationWorkItemImportFileChange(e),
+  handleOperationOrderPdfUpload: (el, e) => handleOperationOrderPdfUpload(e)
 };
 const OP_INPUT_ACTIONS = {
   onOperationOrderFilterChange: () => onOperationOrderFilterChange(),
