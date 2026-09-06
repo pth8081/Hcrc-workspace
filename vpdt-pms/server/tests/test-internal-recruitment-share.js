@@ -27,10 +27,14 @@ async function main() {
   try {
     const hr = makeUser({ username: 'hr.mai', name: 'Phạm Thị Mai', dept: 'Phòng Nhân Sự', perms: { internalRecruitmentCreate: true } });
     const staff = makeUser({ username: 'nv.binh', name: 'Lê Văn Bình', dept: 'Phòng CNTT', perms: {} });
-    const approver = makeUser({ username: 'qtv.hoa', name: 'Ngô Thị Hoa', dept: 'Phòng Nhân Sự', perms: { internalPostApprove: true } });
+    const approver = makeUser({ username: 'qtv.hoa', name: 'Ngô Thị Hoa', dept: 'Phòng Nhân Sự', email: 'qtv.hoa@company.com', perms: { internalPostApprove: true } });
 
     await page.evaluate((seed) => { Object.assign(DB, seed); }, baseCatalogSeed());
     await page.evaluate((users) => { DB.users = users; }, [hr, staff, approver]);
+    // moduleApproverUsernames (bình thường do routes/data.js computeModuleApproverUsernames() trả về khi
+    // tải dữ liệu ban đầu, xem core.js) — seed thủ công ở đây để getInternalPostApproverUsernames() trả
+    // về đúng approver thật, cho phép so sánh danh sách người nhận email giữa nhánh tạo mới và resubmit.
+    await page.evaluate(() => { DB.moduleApproverUsernames = { internalPostApprove: ['qtv.hoa'] }; });
     await page.evaluate((u) => finishLogin(u), hr);
     await page.evaluate(() => { switchTab('internal'); setInternalSubTab('RECRUITMENT'); });
 
@@ -282,6 +286,97 @@ async function main() {
       assertEqual(post.status, 'REJECTED', 'post should now be REJECTED');
       assertEqual(post.rejectReason, 'Nội dung chưa phù hợp với văn hoá công ty.', 'rejectReason mismatch');
       assertEqual(post.rejectedByName, 'Ngô Thị Hoa', 'rejectedByName should be the approver');
+    });
+
+    // ===== Resubmit sau "Yêu Cầu Bổ Sung" (NEED_INFO -> PENDING) — checkbox "Gửi email thông báo lại
+    // cho người duyệt" (mặc định KHÔNG tích, xem editInternalPostUI()/setInternalSubTab() +
+    // submitInternalPost() nhánh isEditing ở module-internalcomms-nhipsong.js). =====
+    let needInfoSharePostId = null;
+    await run('any staff can post a third SHARE post (to exercise the NEED_INFO resubmit-email flow)', async () => {
+      await page.evaluate((u) => { currentUser = u; }, staff);
+      await page.evaluate(() => { switchTab('internal'); setInternalSubTab('SHARE'); });
+      const hiddenOnCreate = await page.evaluate(() => document.getElementById('internalResendEmailField').classList.contains('hidden'));
+      assert(hiddenOnCreate, 'resend-email checkbox must stay hidden on the brand-new post creation form');
+      await page.evaluate(() => {
+        document.getElementById('internalTitle').value = 'Chia sẻ kinh nghiệm làm việc nhóm';
+        document.getElementById('internalContent').value = 'Nội dung ban đầu, cần bổ sung thêm ví dụ cụ thể.';
+        document.getElementById('internalPostCategoryShare').value = 'CONG_VIEC';
+      });
+      await page.evaluate(() => submitInternalPost({ preventDefault() {}, target: { reset() {} } }));
+      const posts = await page.evaluate(() => DB.internalPosts.filter((p) => p.type === 'SHARE' && p.status === 'PENDING'));
+      assertEqual(posts.length, 1, 'expected exactly 1 PENDING SHARE post (the other two are APPROVED/REJECTED already)');
+      needInfoSharePostId = posts[0].id;
+      const createLogs = await page.evaluate((code) => DB.systemLogs.filter((l) => l.actionType === 'NOTIFY_APPROVAL_NEEDED' && l.targetObject === code), posts[0].code);
+      assertEqual(createLogs.length, 1, 'creating a brand-new post must always email approvers exactly once, unconditionally');
+      assert(createLogs[0].description.includes('qtv.hoa@company.com'), `expected the creation email to reach the approver, got: ${createLogs[0].description}`);
+    });
+
+    await run('approver requests info (NEED_INFO); author reopens it and sees the resend-email checkbox, unchecked by default', async () => {
+      await page.evaluate((u) => { currentUser = u; }, approver);
+      await page.evaluate(() => { window.__promptQueue = ['Vui lòng bổ sung ví dụ cụ thể.']; });
+      await page.evaluate((id) => requestInternalPostInfoAction(id), needInfoSharePostId);
+      await page.evaluate(() => window.__runPendingConfirm());
+      const post = await page.evaluate((id) => DB.internalPosts.find((p) => p.id === id), needInfoSharePostId);
+      assertEqual(post.status, 'NEED_INFO', 'post should now be NEED_INFO after the request-info action');
+
+      await page.evaluate((u) => { currentUser = u; }, staff);
+      await page.evaluate((id) => editInternalPostUI(id), needInfoSharePostId);
+      const checkboxState = await page.evaluate(() => ({
+        hidden: document.getElementById('internalResendEmailField').classList.contains('hidden'),
+        checked: document.getElementById('internalResendEmailCheckbox').checked
+      }));
+      assert(!checkboxState.hidden, 'resend-email checkbox must be visible when resubmitting a NEED_INFO post');
+      assertEqual(checkboxState.checked, false, 'resend-email checkbox must default to UNCHECKED');
+    });
+
+    await run('resubmitting with the checkbox left UNCHECKED does NOT resend the approval email, but still returns to PENDING', async () => {
+      const code = await page.evaluate((id) => DB.internalPosts.find((p) => p.id === id).code, needInfoSharePostId);
+      await page.evaluate(() => { window.__alerts.length = 0; document.getElementById('internalContent').value = 'Nội dung đã bổ sung ví dụ cụ thể theo yêu cầu.'; });
+      await page.evaluate(() => submitInternalPost({ preventDefault() {}, target: { reset() {} } }));
+      const post = await page.evaluate((id) => DB.internalPosts.find((p) => p.id === id), needInfoSharePostId);
+      assertEqual(post.status, 'PENDING', 'resubmitted post should go back to PENDING even without resending the email');
+      assertEqual(post.content, 'Nội dung đã bổ sung ví dụ cụ thể theo yêu cầu.', 'edited content should be saved');
+      const notifyLogs = await page.evaluate((c) => DB.systemLogs.filter((l) => l.actionType === 'NOTIFY_APPROVAL_NEEDED' && l.targetObject === c).length, code);
+      assertEqual(notifyLogs, 1, 'unchecked resend-email checkbox must NOT trigger another approval-needed email (still just the 1 from original creation)');
+      const alerts = await page.evaluate(() => window.__alerts.slice());
+      assert(alerts.some((a) => a.includes('Đã gửi lại')), `expected the resubmit success alert, got ${JSON.stringify(alerts)}`);
+    });
+
+    await run('resubmitting again with the checkbox CHECKED DOES resend the approval email, to the same approver list', async () => {
+      await page.evaluate((u) => { currentUser = u; }, approver);
+      await page.evaluate(() => { window.__promptQueue = ['Cần bổ sung thêm phần kết luận.']; });
+      await page.evaluate((id) => requestInternalPostInfoAction(id), needInfoSharePostId);
+      await page.evaluate(() => window.__runPendingConfirm());
+
+      await page.evaluate((u) => { currentUser = u; }, staff);
+      await page.evaluate((id) => editInternalPostUI(id), needInfoSharePostId);
+      const code = await page.evaluate((id) => DB.internalPosts.find((p) => p.id === id).code, needInfoSharePostId);
+      await page.evaluate(() => {
+        document.getElementById('internalContent').value = 'Nội dung đã bổ sung phần kết luận.';
+        document.getElementById('internalResendEmailCheckbox').checked = true;
+      });
+      await page.evaluate(() => submitInternalPost({ preventDefault() {}, target: { reset() {} } }));
+      const post = await page.evaluate((id) => DB.internalPosts.find((p) => p.id === id), needInfoSharePostId);
+      assertEqual(post.status, 'PENDING', 'resubmitted post should go back to PENDING');
+      const notifyLogs = await page.evaluate((c) => DB.systemLogs.filter((l) => l.actionType === 'NOTIFY_APPROVAL_NEEDED' && l.targetObject === c), code);
+      assertEqual(notifyLogs.length, 2, 'checked resend-email checkbox must trigger a second approval-needed email');
+      assert(notifyLogs[1].description.includes('qtv.hoa@company.com'), `expected the resend email to reach the same approver as post creation, got: ${notifyLogs[1].description}`);
+    });
+
+    await run('editing a DRAFT (not a NEED_INFO resubmit) keeps the resend-email checkbox hidden', async () => {
+      await page.evaluate(() => { switchTab('internal'); setInternalSubTab('SHARE'); });
+      await page.evaluate(() => {
+        document.getElementById('internalTitle').value = 'Bản nháp không phải resubmit';
+        document.getElementById('internalContent').value = 'Nội dung nháp.';
+        document.getElementById('internalPostCategoryShare').value = 'CONG_VIEC';
+      });
+      await page.evaluate(() => submitInternalPost({ preventDefault() {}, submitter: { id: 'internalDraftBtn' }, target: { reset() {} } }));
+      const draftPost = await page.evaluate(() => DB.internalPosts.find((p) => p.status === 'DRAFT' && p.title === 'Bản nháp không phải resubmit'));
+      assert(!!draftPost, 'expected the draft post to have been created');
+      await page.evaluate((id) => editInternalPostUI(id), draftPost.id);
+      const hiddenOnDraftEdit = await page.evaluate(() => document.getElementById('internalResendEmailField').classList.contains('hidden'));
+      assert(hiddenOnDraftEdit, 'resend-email checkbox must stay hidden when editing a DRAFT (not a NEED_INFO resubmit)');
+      await page.evaluate(() => cancelEditInternalPost());
     });
 
     assertEqual(pageErrors.length, 0, `unexpected uncaught page errors: ${pageErrors.map((e) => e.message).join(' | ')}`);

@@ -2623,6 +2623,18 @@
           </select>
         </div>
       </div>
+      <!-- Gửi lại email thông báo cho người duyệt khi resubmit sau "Yêu Cầu Bổ Sung" (NEED_INFO->PENDING,
+           xem requestInternalPostInfoAction() ở trên) — CHỈ hiện trong đúng ngữ cảnh resubmit này (bật/tắt
+           + reset checkbox ở editInternalPostUI()/setInternalSubTab()), KHÔNG hiện khi tạo bài mới (luôn
+           gửi email, không cần hỏi) hay khi Sửa bài Nháp (chưa từng gửi duyệt nên không phải "gửi lại").
+           Mặc định KHÔNG tích — không tích thì bài vẫn quay lại PENDING/vào hàng chờ duyệt bình thường,
+           chỉ bỏ qua bước gửi email (đọc ở submitInternalPost() nhánh isEditing). -->
+      <div id="internalResendEmailField" class="hidden bg-blue-50 border border-blue-200 rounded p-2">
+        <label class="flex items-center gap-1.5 font-semibold text-blue-800 cursor-pointer">
+          <input type="checkbox" id="internalResendEmailCheckbox">
+          📧 Gửi email thông báo lại cho người duyệt
+        </label>
+      </div>
       <!-- Lưu Nháp / Đăng ngay-Gửi duyệt (Đợt 1) — 2 nút submit CÙNG form, phân biệt bằng
            e.submitter.id trong submitInternalPost() (draft không qua hàng chờ duyệt/công khai ngay,
            xem payload.draft ở extraValidate/editInternalPost() phía server). "Huỷ Sửa" chỉ hiện khi

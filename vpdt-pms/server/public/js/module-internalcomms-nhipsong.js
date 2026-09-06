@@ -61,6 +61,13 @@ function setInternalSubTab(subTab) {
   document.getElementById('internalPinCheckbox').checked = false;
   document.getElementById('internalPinDurationWrap').classList.add('hidden');
 
+  // Checkbox "Gửi email thông báo lại cho người duyệt" (chỉ dùng khi resubmit NEED_INFO->PENDING) — reset
+  // ẩn + bỏ tích mỗi lần đổi tab/mở lại form (kể cả từ editInternalPostUI()), tránh mang theo lựa chọn của
+  // phiên Sửa bài trước đó. editInternalPostUI() tự hiện lại field này NGAY SAU khi gọi setInternalSubTab()
+  // nếu đúng bài đang NEED_INFO — xem hàm đó bên dưới.
+  document.getElementById('internalResendEmailField').classList.add('hidden');
+  document.getElementById('internalResendEmailCheckbox').checked = false;
+
   // Chuyên đề (NEWS/SHARE, xem CORE_FIELD_MANIFEST.INTERNAL_POST) + Lịch đăng (chỉ NEWS) — chỉ 2 tab
   // này còn dùng #internalPostForm (Đào tạo/Tuyển dụng đã return sớm ở trên với form riêng).
   document.getElementById('internalCategoryNewsField').classList.toggle('hidden', subTab !== 'NEWS');
@@ -166,8 +173,10 @@ async function submitInternalPost(e) {
   // Sửa bài: gộp với customData cũ của bài (thay vì ghi đè toàn bộ) — cùng lý do với attachment ở
   // trên, tránh mất giá trị trường kiểu Tải tệp không được chọn lại (collectDynamicFieldsData() bỏ
   // hẳn field đó khỏi kết quả khi không có tệp mới, xem hàm này ở phần Biểu Mẫu).
+  let originalPostStatus;
   if (isEditing) {
     const existingPost = DB.internalPosts.find(x => x.id === editingInternalPostId);
+    originalPostStatus = existingPost?.status;
     customData = { ...(existingPost?.customData || {}), ...customData };
   }
 
@@ -188,6 +197,16 @@ async function submitInternalPost(e) {
     const idx = DB.internalPosts.findIndex(x => x.id === updated.id);
     if (idx !== -1) DB.internalPosts[idx] = updated; else DB.internalPosts.unshift(updated);
     logSystemAction('INTERNAL', 'EDIT_INTERNAL_POST', `Sửa ${INTERNAL_TYPE_LABELS[type]} [${updated.code} - ${title}]`, 'SUCCESS', updated.code);
+    // Resubmit thật (NEED_INFO -> PENDING, xem requestInternalPostInfoAction()) — mặc định KHÔNG gửi lại
+    // email cho người duyệt, chỉ gửi khi tác giả CHỦ ĐỘNG tích checkbox "Gửi email thông báo lại" (hiện
+    // đúng ngữ cảnh này ở editInternalPostUI()). Dùng LẠI y hệt pattern notifyUsersByEmail() của nhánh tạo
+    // mới bên dưới (!isEditing) — cùng người nhận (getInternalPostApproverUsernames()), cùng loại thông báo.
+    if (originalPostStatus === 'NEED_INFO' && updated.status === 'PENDING' && document.getElementById('internalResendEmailCheckbox')?.checked) {
+      const approvers = getInternalPostApproverUsernames();
+      notifyUsersByEmail('INTERNAL', 'NOTIFY_APPROVAL_NEEDED', updated.code, approvers,
+        `[VPDT] Bài đăng Góc Chia Sẻ chờ duyệt: ${title}`,
+        `${currentUser.name} vừa gửi lại bài "${title}" sau khi bổ sung theo yêu cầu, đang chờ phê duyệt trước khi công khai.`);
+    }
     cancelEditInternalPost();
     if (updated.status === 'DRAFT') alert('✅ Đã lưu nháp!');
     else if (updated.status === 'PENDING') alert('✅ Đã gửi lại, bài viết sẽ hiển thị công khai sau khi được phê duyệt!');
@@ -281,6 +300,13 @@ async function editInternalPostUI(id) {
     if (sel) sel.value = p.postCategory || '';
   }
   prefillDynamicFieldsData('dynamicFieldsContainer_INTERNAL_POST', p.customData);
+
+  // Resubmit thật (NEED_INFO -> PENDING) — chỉ ở đây mới hiện checkbox "Gửi email thông báo lại cho
+  // người duyệt" (đã bị ẩn + bỏ tích sẵn ở setInternalSubTab() ngay phía trên). Sửa bài Nháp (chưa từng
+  // gửi duyệt) thì field này giữ nguyên trạng thái ẩn.
+  if (p.status === 'NEED_INFO') {
+    document.getElementById('internalResendEmailField').classList.remove('hidden');
+  }
 
   document.getElementById('internalFormTitle').innerText = `✏️ Sửa ${INTERNAL_TYPE_LABELS[p.type]}`;
   document.getElementById('internalSubmitBtn').innerText = p.status === 'NEED_INFO' ? 'Gửi Lại' : 'Gửi';
