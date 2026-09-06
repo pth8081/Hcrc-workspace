@@ -9,6 +9,11 @@ function renderItPriceTierWorkflowTab(container) {
   if (!DB[tierDbKey]) DB[tierDbKey] = {};
   const tierWfMap = DB[tierDbKey];
 
+  // wfPickersToRender: cùng lý do renderWorkflowTab() (module-ngansach.js) — renderPeopleMultiSelect()
+  // cần container đã tồn tại trong DOM, nên gom danh sách cần render widget vào đây rồi render THẬT SAU
+  // khi container.innerHTML đã gán xong (xem vòng forEach ngay dưới .map()), thay vì dựng checkbox
+  // ngay trong lúc build chuỗi HTML như trước.
+  const wfPickersToRender = [];
   container.innerHTML = modConfig.fixedTiers.map(tier => {
     const savedConfig = tierWfMap[tier.key] || { workflowId: 'WF_1STEP', approvers: { 1: ['admin'] } };
     const pendingKey = `TIER_${tier.key}`;
@@ -18,39 +23,12 @@ function renderItPriceTierWorkflowTab(container) {
     const effectiveApprovers = isPending ? {} : (savedConfig.approvers || {});
 
     const stepsConfigHTML = selectedWf.steps.map(step => {
-      const currentApprovers = effectiveApprovers[step.order] || [];
-      const isCheckedFn = u => Array.isArray(currentApprovers) ? currentApprovers.includes(u.username) : currentApprovers === u.username;
+      const currentApproversRaw = effectiveApprovers[step.order] || [];
+      const currentApprovers = Array.isArray(currentApproversRaw) ? currentApproversRaw : (currentApproversRaw ? [currentApproversRaw] : []);
       const candidates = getApproverCandidateUsers(currentApprovers).slice().sort((a, b) => (a.name || '').localeCompare(b.name || '', 'vi'));
-
-      const renderCandidateCheckbox = u => {
-        const isChecked = isCheckedFn(u);
-        return `
-          <label class="inline-flex items-center gap-1 bg-white px-2 py-0.5 rounded border text-[11px] cursor-pointer">
-            <input type="checkbox" value="${escapeHtml(u.username)}" data-tier="${escapeHtml(tier.key)}" data-step="${step.order}" ${isChecked ? 'checked' : ''}>
-            <span>${escapeHtml(u.name)} (${escapeHtml(u.username)})</span>
-          </label>
-        `;
-      };
-
-      // Mức Margin/Chiết Khấu không có khái niệm "cùng phòng ban" như nhánh dept-based ở trên nên
-      // không tách được sameDept/otherDept — thay vào đó: người ĐÃ được tick LUÔN hiện sẵn (không bao
-      // giờ ẩn), người CHƯA tick gộp phía sau nút "Hiện thêm" (mặc định ẩn) — vẫn giữ đúng tinh thần
-      // "ẩn bớt người phê duyệt" của các quy trình khác mà không cần khái niệm phòng ban. Tái dùng
-      // ĐÚNG toggleWfOtherDeptCandidates() đã có (chỉ đổi nhãn/id, hàm không phụ thuộc gì vào "dept").
-      const checkedCandidates = candidates.filter(isCheckedFn);
-      const uncheckedCandidates = candidates.filter(u => !isCheckedFn(u));
-      const checkedHTML = checkedCandidates.map(renderCandidateCheckbox).join('');
       const stepKey = `${tier.key}_${step.order}`;
-      const otherContainerId = `wfTierOther_${stepKey}`;
-      const otherBtnId = `wfTierOtherBtn_${stepKey}`;
-      const showLabel = `▾ Hiện thêm (${uncheckedCandidates.length} người)`;
-      const hideLabel = `▴ Ẩn bớt (${uncheckedCandidates.length} người)`;
-      const otherSection = uncheckedCandidates.length ? `
-        <button type="button" id="${otherBtnId}" data-op="toggleWfOtherDeptCandidates" data-arg0="${otherContainerId}" data-arg1="${otherBtnId}"
-          data-show-label="${escapeHtml(showLabel)}" data-hide-label="${escapeHtml(hideLabel)}"
-          class="text-[11px] text-sky-600 font-semibold hover:underline">${escapeHtml(showLabel)}</button>
-        <div id="${otherContainerId}" class="flex flex-wrap gap-1.5 pt-1 hidden">${uncheckedCandidates.map(renderCandidateCheckbox).join('')}</div>
-      ` : '';
+      const pickerId = `wfTierApproverPicker_${stepKey}`;
+      wfPickersToRender.push({ pickerId, candidates, currentApprovers, tierKey: tier.key, stepOrder: step.order });
 
       const emptyHint = candidates.length === 0
         ? `<div class="text-[11px] text-gray-400 italic">Chưa có ai được cấp quyền "Người duyệt" — vào Module Quản trị (khối 12) để cấp trước.</div>` : '';
@@ -58,9 +36,8 @@ function renderItPriceTierWorkflowTab(container) {
       return `
         <div class="bg-gray-100 p-2 rounded text-xs space-y-1 border">
           <div class="font-bold text-gray-700">Bước ${step.order}: ${escapeHtml(step.name)}</div>
-          <div class="flex flex-wrap gap-1.5 pt-1">${checkedHTML}</div>
+          <div id="${pickerId}"></div>
           ${emptyHint}
-          ${otherSection}
         </div>
       `;
     }).join('');
@@ -86,6 +63,12 @@ function renderItPriceTierWorkflowTab(container) {
       </div>
     `;
   }).join('');
+
+  // Container (#pickerId) chỉ có mặt trong DOM SAU dòng gán innerHTML ở trên — cùng lý do
+  // renderWorkflowTab() (module-ngansach.js).
+  wfPickersToRender.forEach(({ pickerId, candidates, currentApprovers, tierKey, stepOrder }) => {
+    renderPeopleMultiSelect(pickerId, candidates, currentApprovers, '', { 'data-tier': tierKey, 'data-step': stepOrder });
+  });
 
   renderWorkflowTemplatesTable();
 }

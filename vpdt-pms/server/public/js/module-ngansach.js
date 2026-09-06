@@ -1379,16 +1379,10 @@ function getApproverCandidateUsers(currentApproversForStep) {
   return [...eligible, ...alreadyAssignedExtra];
 }
 
-// Ẩn/hiện khối "người phòng khác" ở 1 bước quy trình (renderWorkflowTab()) — checkbox bên trong vẫn ở
-// nguyên trong DOM lúc ẩn (chỉ thêm class "hidden"), nên collectDeptWorkflowConfig() đọc .checked vẫn
-// đúng dù khối đang ẩn hay hiện, không cần đổi gì ở luồng lưu.
-function toggleWfOtherDeptCandidates(containerId, btnId) {
-  const el = document.getElementById(containerId);
-  const btn = document.getElementById(btnId);
-  if (!el || !btn) return;
-  const nowHidden = el.classList.toggle('hidden');
-  btn.textContent = nowHidden ? btn.dataset.showLabel : btn.dataset.hideLabel;
-}
+// toggleWfOtherDeptCandidates() — nút "Hiện thêm/Ẩn bớt" khối checkbox "người phòng khác" cũ của
+// renderWorkflowTab()/renderItPriceTierWorkflowTab() — ĐÃ XOÁ (đợt chuyển box chọn checkbox sang ô
+// tìm-kiếm-gõ-chọn nhiều người renderPeopleMultiSelect(), không còn cần tách "hiện thêm" nữa vì gõ tìm
+// đã thay thế được việc lọc bớt danh sách hiện trên màn hình).
 
 function onWorkflowTemplateChange(dept) {
   // CẬP NHẬT: đổi mẫu quy trình giờ CHỈ preview lại danh sách bước/người duyệt theo mẫu mới, KHÔNG
@@ -1436,6 +1430,11 @@ function renderWorkflowTab() {
     legacyMap = {};
   }
 
+  // wfPickersToRender: renderPeopleMultiSelect() cần container đã có mặt trong DOM mới gọi được (đọc
+  // querySelector bên trong ngay lúc gọi) — nên bước dựng chuỗi HTML dưới đây chỉ để lại 1 <div id>
+  // rỗng cho mỗi bước, gom (containerId, candidates, currentApprovers, dept, step.order) vào mảng này,
+  // rồi render widget thật SAU KHI container.innerHTML đã gán xong (xem vòng forEach ngay dưới .map()).
+  const wfPickersToRender = [];
   container.innerHTML = getWorkflowParticipatingDepts().map(dept => {
     const savedConfig = modConfig.priceTypeNested
       ? (resolveItPriceDeptWorkflowConfigClient(dept, activeWfSubmissionType) || { workflowId: 'WF_1STEP', approvers: { 1: ['admin'] } })
@@ -1448,50 +1447,26 @@ function renderWorkflowTab() {
     const effectiveApprovers = isPending ? {} : (savedConfig.approvers || {});
 
     const stepsConfigHTML = selectedWf.steps.map(step => {
-      const currentApprovers = effectiveApprovers[step.order] || [];
-      const isCheckedFn = u => Array.isArray(currentApprovers) ? currentApprovers.includes(u.username) : currentApprovers === u.username;
+      const currentApproversRaw = effectiveApprovers[step.order] || [];
+      const currentApprovers = Array.isArray(currentApproversRaw) ? currentApproversRaw : (currentApproversRaw ? [currentApproversRaw] : []);
+      // canBeApprover là cờ CHUNG toàn công ty (không theo phòng ban) nên danh sách ứng viên dồn cả công
+      // ty vào 1 bước — trước đây tách "cùng phòng/phòng khác" + nút "Hiện thêm" để đỡ rối mắt vì liệt
+      // kê hết bằng checkbox; nay dùng ô tìm-kiếm-gõ-chọn nhiều người (renderPeopleMultiSelect(), CLAUDE.md
+      // mục "Ô tìm-kiếm-gõ-chọn") nên không cần tách nữa — label của widget đã hiện kèm phòng ban
+      // (`${tên} (${username}) - ${phòng ban}`) để admin vẫn phân biệt được cùng phòng hay khác phòng.
       const candidates = getApproverCandidateUsers(currentApprovers).slice().sort((a, b) => (a.name || '').localeCompare(b.name || '', 'vi'));
-      // canBeApprover là cờ CHUNG toàn công ty (không theo phòng ban) nên danh sách ứng viên vốn dồn cả
-      // công ty vào 1 bước — tách người CÙNG phòng ban đang cấu hình ra hiện sẵn, người phòng KHÁC gom
-      // vào phần ẩn sau nút "Hiện thêm" để đỡ rối mắt, trừ khi đã có người phòng khác được chọn từ
-      // trước (giữ hiện sẵn, không để admin tưởng nhầm là mất lựa chọn cũ khi mở lại màn này).
-      const sameDept = candidates.filter(u => u.dept === dept);
-      const otherDept = candidates.filter(u => u.dept !== dept);
-      const anyOtherChecked = otherDept.some(isCheckedFn);
-
-      const renderCandidateCheckbox = u => {
-        const isChecked = isCheckedFn(u);
-        return `
-          <label class="inline-flex items-center gap-1 bg-white px-2 py-0.5 rounded border text-[11px] cursor-pointer">
-            <input type="checkbox" value="${escapeHtml(u.username)}" data-dept="${escapeHtml(dept)}" data-step="${step.order}" ${isChecked ? 'checked' : ''}>
-            <span>${escapeHtml(u.name)} (${escapeHtml(u.username)})${u.dept !== dept ? ` · <span class="text-gray-400">${escapeHtml(u.dept)}</span>` : ''}</span>
-          </label>
-        `;
-      };
-
-      const sameDeptHTML = sameDept.map(renderCandidateCheckbox).join('');
       const stepKey = `${dept.replace(/\s+/g, '_')}_${step.order}`;
-      const otherContainerId = `wfOtherDept_${stepKey}`;
-      const otherBtnId = `wfOtherDeptBtn_${stepKey}`;
-      const showLabel = `▾ Hiện thêm (${otherDept.length} người phòng khác)`;
-      const hideLabel = `▴ Ẩn bớt (${otherDept.length} người phòng khác)`;
-      const otherDeptSection = otherDept.length ? `
-        <button type="button" id="${otherBtnId}" data-op="toggleWfOtherDeptCandidates" data-arg0="${otherContainerId}" data-arg1="${otherBtnId}"
-          data-show-label="${escapeHtml(showLabel)}" data-hide-label="${escapeHtml(hideLabel)}"
-          class="text-[11px] text-sky-600 font-semibold hover:underline">${escapeHtml(anyOtherChecked ? hideLabel : showLabel)}</button>
-        <div id="${otherContainerId}" class="flex flex-wrap gap-1.5 pt-1 ${anyOtherChecked ? '' : 'hidden'}">${otherDept.map(renderCandidateCheckbox).join('')}</div>
-      ` : '';
+      const pickerId = `wfApproverPicker_${stepKey}`;
+      wfPickersToRender.push({ pickerId, candidates, currentApprovers, dept, stepOrder: step.order });
 
       const emptyHint = candidates.length === 0
-        ? `<div class="text-[11px] text-gray-400 italic">Chưa có ai được cấp quyền "Người duyệt" — vào Module Quản trị (khối 12) để cấp trước.</div>`
-        : (sameDept.length === 0 ? `<div class="text-[11px] text-gray-400 italic">Chưa ai trong "${escapeHtml(dept)}" có quyền duyệt — chọn từ phòng khác bên dưới.</div>` : '');
+        ? `<div class="text-[11px] text-gray-400 italic">Chưa có ai được cấp quyền "Người duyệt" — vào Module Quản trị (khối 12) để cấp trước.</div>` : '';
 
       return `
         <div class="bg-gray-100 p-2 rounded text-xs space-y-1 border">
           <div class="font-bold text-gray-700">Bước ${step.order}: ${escapeHtml(step.name)}</div>
-          <div class="flex flex-wrap gap-1.5 pt-1">${sameDeptHTML}</div>
+          <div id="${pickerId}"></div>
           ${emptyHint}
-          ${otherDeptSection}
         </div>
       `;
     }).join('');
@@ -1517,6 +1492,13 @@ function renderWorkflowTab() {
       </div>
     `;
   }).join('');
+
+  // Container (#pickerId) chỉ có mặt trong DOM SAU dòng gán innerHTML ở trên — render widget chọn
+  // nhiều người NGAY SAU ĐÓ, KHÔNG lồng vào trong .map() (renderPeopleMultiSelect() querySelector vào
+  // chính container, gọi trước khi nó tồn tại sẽ no-op im lặng, xem hàm đó ở core.js).
+  wfPickersToRender.forEach(({ pickerId, candidates, currentApprovers, dept, stepOrder }) => {
+    renderPeopleMultiSelect(pickerId, candidates, currentApprovers, '', { 'data-dept': dept, 'data-step': stepOrder });
+  });
 
   renderWorkflowTemplatesTable();
 }

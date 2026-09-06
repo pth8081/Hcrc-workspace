@@ -1,12 +1,64 @@
 # Phiên bản hiện tại
 
-**9.7** — đã merge vào `main` (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge
-góc màn hình + `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần
-kiểu `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (9.6 — mục "Vận Hành > Đơn Hàng: tách Đặt
-Hàng Tại Siêu Thị/Tại HO..." bên dưới — đã được xác nhận demo và merge vào `main` ở đợt trước, ghi chú
-"CHƯA MERGE" cũ trong bản này đã lạc hậu, đính chính lại ở đây.)
+**9.8 — CHƯA MERGE vào `main`** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở
+badge góc màn hình + `/api/health`). Đang ở nhánh `claude/chao-ban-oo5ijl`, chờ người dùng xem demo rồi
+xác nhận mới merge — xem mục "Chuyển box chọn checkbox..." ngay dưới. Bản merge gần nhất vào `main` vẫn
+là **9.7**. Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu `1.100.0`) —
+xem quy tắc đánh version trong `CLAUDE.md`. (9.6 — mục "Vận Hành > Đơn Hàng: tách Đặt Hàng Tại Siêu
+Thị/Tại HO..." bên dưới — đã được xác nhận demo và merge vào `main` ở đợt trước, ghi chú "CHƯA MERGE" cũ
+trong bản đó đã lạc hậu, đã đính chính ở đợt 9.7.)
 
-## Cập nhật gần nhất — Siết CSP (bỏ 'unsafe-inline' script-src/style-src) + vá lỗ hổng CSP script-src-attr chặn nhầm Protected View + 3 tối ưu hiệu năng nạp module (2026-09-06)
+## Chuyển box chọn checkbox người duyệt sang ô tìm-kiếm-gõ-chọn nhiều người ở "Quy Trình & Phê Duyệt" (2026-09-06) — CHƯA MERGE, chờ demo
+
+**Bối cảnh**: `CLAUDE.md` đã quy định "mọi ô tìm-kiếm-gõ-chọn mới từ giờ trở đi phải dùng cơ chế `sdd*`/
+`renderPeopleMultiSelect()`" (đợt thay 19 điểm `<datalist>` trước đây). Rà soát lại toàn bộ màn "Hệ Thống
+> Quy Trình & Phê Duyệt" phát hiện 2 hàm dựng UI vẫn còn "box chọn" kiểu checkbox-list cũ cho bước chọn
+người duyệt (chưa dùng widget này):
+
+1. **`renderWorkflowTab()`** (`module-ngansach.js`) — nhánh theo PHÒNG BAN, dùng chung cho MỌI module
+   `WF_MODULE_CONFIG` không theo tier: Tài liệu, Văn Bản Trình, Đăng Ký Xe, Mua Bán/Sửa Chữa VP, Văn
+   Phòng Phẩm, Hợp Đồng (Phê Duyệt + Quản Lý HĐ), Hỗ Trợ IT Duyệt Giá (nhánh Bán Lẻ), Ngân Sách, Vận Hành
+   (Mở Mới/Sửa Chữa Siêu Thị + 2 giai đoạn Dự Toán) — trước đây mỗi bước hiện 1 khối checkbox tách
+   "người cùng phòng ban" (hiện sẵn) / "người phòng khác" (ẩn sau nút "▾ Hiện thêm").
+2. **`renderItPriceTierWorkflowTab()`** (`module-itsupport-tier.js`) — nhánh theo MỨC/TIER cố định: Hỗ
+   Trợ IT Duyệt Giá (nhánh Bán Buôn, 4 mức Margin/Chiết Khấu), Vận Hành > Đặt Hàng Tại Siêu Thị (3 mức
+   giá trị), Vận Hành > Đặt Hàng Tại HO (2 mức giá trị) — trước đây mỗi bước hiện checkbox "đã tick"
+   (hiện sẵn) + phần "chưa tick" ẩn sau nút "▾ Hiện thêm".
+
+Cả 2 hàm trên **đã chuyển hẳn sang `renderPeopleMultiSelect()`** (ô gõ tìm theo tên/username/phòng ban +
+chọn nhiều, hiện dạng chip có nút xoá) — mỗi bước 1 widget riêng (container `wfApproverPicker_<phòng
+ban>_<bước>` / `wfTierApproverPicker_<tier>_<bước>`), backing bằng checkbox ẩn mang đúng `data-dept`/
+`data-tier` + `data-step` như cũ để **không đổi gì** ở `collectDeptWorkflowConfig()`/
+`collectItPriceTierWorkflowConfig()`/`saveDeptWorkflowConfig()`/`saveItPriceTierWorkflowConfig()`/
+`saveAllDeptWorkflowConfigs()` — chỉ đổi Ô NHẬP, giữ nguyên 100% dữ liệu lưu vào
+`DB.deptWorkflows`/`DB.itPriceDeptWorkflows`/`DB.budgetDeptWorkflows`/... /`DB.operationOrderStoreTierWorkflows`/
+`DB.operationOrderHOTierWorkflows`/`DB.itPriceTierWorkflows`. Xoá kèm hàm `toggleWfOtherDeptCandidates()`
+(nút "Hiện thêm/Ẩn bớt" cũ, không còn nơi nào gọi tới sau khi chuyển đổi).
+
+**Đã xác nhận KHÔNG cần sửa** (đã dùng đúng `renderPeopleMultiSelect()` từ trước, không thuộc đợt này):
+"Quản Lý Nhóm Phê Duyệt Trình" (`DB.submissionApprovalGroups`) và "Nhóm Phê Duyệt HĐ"
+(`DB.contractApprovalGroups`) ở `module-admin-submissiongroups.js`, cùng khối chọn thành viên nhóm phân
+quyền (`module-admin-permgroups.js`) và các ô chọn nhiều người khác đã dùng widget này (Công Việc, Văn
+Bản Trình lớp bổ sung...).
+
+**Kiểm thử**: `node -c` toàn bộ file JS đã sửa, quét trùng tên hàm top-level `public/js/*.js` (0 trùng
+mới), chạy lại TOÀN BỘ `tests/test-*.js` — chỉ còn đúng 2 lỗi cũ đã biết (không kết nối được SQL Server
+`localhost:1433` khi chạy ngoài môi trường có SQL Server thật), không phát sinh lỗi mới. Demo Playwright
+thật (ảnh chụp ở `server/demo-screenshots/approver-picker-searchable/`, thư mục này KHÔNG commit vào git
+— đã có sẵn trong `.gitignore`): so sánh trực tiếp UI checkbox-list CŨ (chạy lại đúng code trước khi sửa
+qua `git show HEAD:...`) với UI widget MỚI cho cả nhánh phòng ban (Tài liệu) lẫn nhánh tier (Đặt Hàng Tại
+Siêu Thị) — gõ tìm lọc, chọn 2 người, bấm Lưu, rồi đọc lại `DB.deptWorkflows`/`DB.operationOrderStoreTierWorkflows`
+VÀ payload `POST /api/data/...` thực gửi đi: đúng NGUYÊN 2 người vừa chọn ở cả 2 bản CŨ/MỚI, chứng minh
+đổi ô nhập không đổi dữ liệu lưu.
+
+**Tác động deploy**: THUẦN client-side (`public/js/module-ngansach.js`, `public/js/module-itsupport-tier.js`,
+`public/js/core.js` — chỉ xoá 1 dòng tra cứu hàm không dùng nữa). KHÔNG đổi `server/sql/schema.sql`,
+KHÔNG thêm biến `.env`, KHÔNG đổi `dependencies` trong `package.json` — chỉ cần copy code (bao gồm 3 file
+`.js` trong `public/js/`) + không cần `pm2 restart` bắt buộc (file tĩnh phục vụ qua Express static, người
+dùng chỉ cần tải lại trang là thấy bản mới — nhưng vẫn nên `pm2 restart` theo đúng quy trình chuẩn ở
+`HUONG_DAN_DEPLOY_UBUNTU.md` mục 12 để chắc chắn không có cache tầng trung gian nào giữ bản cũ).
+
+## Cập nhật gần nhất trước đó — Siết CSP (bỏ 'unsafe-inline' script-src/style-src) + vá lỗ hổng CSP script-src-attr chặn nhầm Protected View + 3 tối ưu hiệu năng nạp module (2026-09-06)
 
 **Bối cảnh**: 4 agent nghiên cứu song song (kích thước/thành phần bundle, XSS, CSP, hiệu năng) đã rà
 soát toàn bộ mã nguồn ở đợt trước (chỉ nghiên cứu, không sửa gì) — người dùng duyệt kết quả tổng hợp và
