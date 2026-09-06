@@ -1,5 +1,15 @@
 # Ghi chú cho Claude khi làm việc trên repo này
 
+## Repo GitHub đã đổi tên (không phải chuyển repo khác)
+
+`git push` tới remote cũ (`github.com/pth8081/vpdt-dms`) có thể trả về thông
+báo "This repository moved. Please use the new location:
+`github.com/pth8081/Hcrc-workspace`" — đây chỉ là do người dùng đổi tên
+thư mục/repo trên GitHub, KHÔNG phải tạo repo mới hay chuyển dữ liệu. Push
+vẫn thành công bình thường (GitHub tự redirect theo tên cũ). Không cần coi
+đây là lỗi hay việc cần xử lý gì thêm — chỉ nêu 1 dòng nếu thấy thông báo
+này, không cần cảnh báo lặp lại mỗi lần.
+
 ## Lưu ý bắt buộc khi báo cáo thay đổi liên quan tới deploy
 
 Người dùng chạy `server/` trên máy chủ thật riêng, KHÔNG tự động đồng bộ code
