@@ -1703,6 +1703,31 @@ router.post('/operationOrders/:id/submit', async (req, res) => {
     res.json({ ok: true, item: result });
   } catch (err) { handleError(res, `operationOrders/${req.params.id}/submit`, err); }
 });
+// "Nhập Hàng"/"Hủy Nhập" (đợt "Báo Cáo + Nhập Hàng") — CHỈ nhận từ AWAITING_RECEIPT (giai đoạn
+// applyWorkflowAction() ở lib/workflowEngine.js tự chuyển sang ngay sau khi duyệt xong bước cuối), hoàn
+// toàn TÁCH RIÊNG khỏi route generic POST /api/workflow/operationOrders/:id/:action (route đó chỉ nhận
+// PENDING, xem đầu applyWorkflowAction()) — không đụng gì tới quy trình duyệt phòng ban cũ. appData cần
+// cho recordActions.isApproverForOperationOrderReceipt() tra lại đúng dept-workflow của hồ sơ.
+router.post('/operationOrders/:id/receive-goods', async (req, res) => {
+  const itemId = Number(req.params.id);
+  if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
+  try {
+    const { freshUser } = await getFreshUser(req);
+    const appData = await getAllAppData();
+    const result = await withLockedRecordForCollection('operationOrders', itemId, (item) => recordActions.receiveOperationOrderGoods(freshUser, item, appData));
+    res.json({ ok: true, item: result });
+  } catch (err) { handleError(res, `operationOrders/${req.params.id}/receive-goods`, err); }
+});
+router.post('/operationOrders/:id/cancel-receipt', async (req, res) => {
+  const itemId = Number(req.params.id);
+  if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
+  try {
+    const { freshUser } = await getFreshUser(req);
+    const appData = await getAllAppData();
+    const result = await withLockedRecordForCollection('operationOrders', itemId, (item) => recordActions.cancelOperationOrderReceipt(freshUser, item, req.body, appData));
+    res.json({ ok: true, item: result });
+  } catch (err) { handleError(res, `operationOrders/${req.params.id}/cancel-receipt`, err); }
+});
 // operationStoreOpenings/operationRepairs KHÔNG còn route update/submit "Bổ Sung" (đã xoá cùng đợt bỏ
 // hẳn phê duyệt Vận Hành > Siêu Thị — Mục H, 60c473b) — status của 2 collection này giờ đi thẳng
 // APPROVED ngay lúc tạo, KHÔNG BAO GIỜ vào lại DRAFT nữa (migrateStuckOperationApprovalStatuses() ở

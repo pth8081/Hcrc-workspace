@@ -417,6 +417,57 @@ function submitOperationOrderDraft(user, item) {
   return item;
 }
 
+// ----- Vận Hành > Đơn Hàng > "Nhập Hàng"/"Hủy Nhập" (đợt "Báo Cáo + Nhập Hàng") -----
+// Sau khi duyệt xong (applyWorkflowAction() ở lib/workflowEngine.js tự chuyển APPROVED -> AWAITING_RECEIPT
+// ngay lúc đó), người phụ trách xác nhận hàng đã về kho (RECEIVED, "kết thúc" đơn) hoặc hàng không về
+// thực tế (RECEIPT_CANCELLED) — 2 TRẠNG THÁI KẾT THÚC riêng, không lẫn với REJECTED (đó là bị từ chối
+// ngay ở bước duyệt phòng ban, trước khi có hàng gì để nói tới việc nhập hay không).
+//
+// Quyền thao tác: MIRROR đúng quần thể được phép Duyệt/Từ chối đơn hàng này (canApproveStep() ở
+// lib/workflowEngine.js — admin hoặc có tên trong approvers của BẤT KỲ bước nào ở dept-workflow của
+// đúng phòng ban hồ sơ) — không phải người tạo đơn (canApproveStep xưa nay đã tách biệt "người tạo" và
+// "người duyệt", người tạo trong module này thường là người ĐI MUA/đặt hàng, còn người xác nhận nhập
+// kho thực tế hợp lý hơn khi là cùng phía quản lý/phê duyệt đã ký duyệt đơn — xem chú thích đầy đủ ở
+// báo cáo bàn giao, đây là 1 lựa chọn thiết kế có thể điều chỉnh sau nếu nghiệp vụ thực tế khác). KHÔNG
+// xét theo "cùng phòng ban" như canViewOperationOrder() (lib/recordViewScope.js, dùng để XEM) — thao
+// tác đổi trạng thái phải chặt hơn xem, chỉ đúng quần thể approver mới được bấm.
+function isApproverForOperationOrderReceipt(user, item, appData) {
+  if (user.perms?.admin) return true;
+  const { MODULE_CONFIGS } = require('./workflowEngine'); // require trễ (bên trong hàm) — tránh vòng lặp
+  // require ở mức module: workflowEngine.js không require recordActions.js/recordViewScope.js nên về lý
+  // thuyết require ở đầu file cũng an toàn, nhưng đặt trễ ở đây để tường minh "chỉ dùng đúng 1 chỗ".
+  const { approvers } = MODULE_CONFIGS.operationOrders.resolveWfConfig(item, appData) || {};
+  return Object.values(approvers || {}).some(list => Array.isArray(list) ? list.includes(user.username) : list === user.username);
+}
+function receiveOperationOrderGoods(user, item, appData) {
+  if (item.status !== 'AWAITING_RECEIPT') {
+    throw new HttpError(409, 'Đơn hàng không ở trạng thái chờ nhập hàng, không thể xác nhận nhập hàng (có thể đã xử lý ở nơi khác)');
+  }
+  if (!isApproverForOperationOrderReceipt(user, item, appData)) {
+    throw new HttpError(403, 'Bạn không có quyền xác nhận nhập hàng cho đơn hàng này');
+  }
+  item.status = 'RECEIVED';
+  item.receivedAt = new Date().toISOString();
+  item.history = item.history || [];
+  item.history.push({ step: item.currentStep || 0, approver: user.name, username: user.username, action: 'RECEIVED', comment: '', time: nowVN() });
+  return item;
+}
+function cancelOperationOrderReceipt(user, item, payload, appData) {
+  if (item.status !== 'AWAITING_RECEIPT') {
+    throw new HttpError(409, 'Đơn hàng không ở trạng thái chờ nhập hàng, không thể hủy nhập (có thể đã xử lý ở nơi khác)');
+  }
+  if (!isApproverForOperationOrderReceipt(user, item, appData)) {
+    throw new HttpError(403, 'Bạn không có quyền hủy nhập cho đơn hàng này');
+  }
+  const reason = String(payload?.reason || '').trim();
+  if (!reason) throw new HttpError(400, 'Vui lòng nhập lý do hủy nhập');
+  item.status = 'RECEIPT_CANCELLED';
+  item.receiptCancelledAt = new Date().toISOString();
+  item.history = item.history || [];
+  item.history.push({ step: item.currentStep || 0, approver: user.name, username: user.username, action: 'RECEIPT_CANCELLED', comment: reason, time: nowVN() });
+  return item;
+}
+
 // editOperationStoreOpeningDraft()/submitOperationStoreOpeningDraft()/editOperationRepairDraft()/
 // submitOperationRepairDraft() (cơ chế "Sửa & Gửi Lại Bổ Sung" cho operationStoreOpenings/
 // operationRepairs) đã bị XOÁ — từ Mục H (60c473b) 2 collection này không còn qua phê duyệt, status
@@ -4820,6 +4871,11 @@ module.exports = {
   // nữa (migrateStuckOperationApprovalStatuses() ở seedDefaults.js quét sạch bản ghi cũ mỗi lúc khởi
   // động) nên cơ chế "Sửa & Gửi Lại Bổ Sung" không còn đường gọi tới, xoá cùng route ở routes/records.js.
   editOperationOrderDraft, submitOperationOrderDraft,
+  receiveOperationOrderGoods, cancelOperationOrderReceipt,
+  // parseVNDateTime — export thêm cho seedDefaults.js dùng ở migrateApprovedOperationOrdersToAwaitingReceipt()
+  // (đọc lại thời điểm APPROVED cuối cùng từ history[] cho hồ sơ operationOrders cũ) — tránh chép lại
+  // nguyên hàm này lần thứ 3 (đã có 1 bản độc lập ở public/js/core.js cho client, xem chú thích tại hàm).
+  parseVNDateTime,
   submitOperationEstimate, resetOperationEstimateToDraft,
   createOperationWorkItem, updateOperationWorkItemProgress, acceptOperationWorkItem,
   computeParentWorkItemStatus, deleteOperationWorkItem, editOperationWorkItem,

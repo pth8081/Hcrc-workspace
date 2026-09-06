@@ -10,6 +10,7 @@ const { migrateLegacyTasks } = require('./lib/taskStore');
 const { migrateAllLegacyCollections, getAllRecords, withLockedRecordById } = require('./lib/recordStore');
 const { assertSourceIdColumnIsBigInt } = require('./lib/operationWorkItemStore');
 const { HttpError } = require('./lib/httpErrors');
+const { parseVNDateTime } = require('./lib/recordActions');
 
 // Mật khẩu mặc định của các tài khoản seed lúc khởi tạo hệ thống lần đầu (defaults.js) — dùng để dò
 // tài khoản NÀO CÒN đang dùng đúng mật khẩu này (xem flagKnownDefaultPasswords() bên dưới), bất kể
@@ -46,6 +47,7 @@ async function seedDefaults() {
   await migrateDefaultStorePermGroup();
   await migratePendingActualBudgetEntries();
   await migrateStuckOperationApprovalStatuses();
+  await migrateApprovedOperationOrdersToAwaitingReceipt();
   await warnIfOperationWorkItemsSchemaOutdated(pool);
 }
 
@@ -267,6 +269,45 @@ async function migrateStuckOperationApprovalStatuses() {
   }
 }
 
+// operationOrders (đợt "Báo Cáo + Nhập Hàng") — applyWorkflowAction() (lib/workflowEngine.js) từ nay tự
+// chuyển hồ sơ sang AWAITING_RECEIPT ("Chờ nhập hàng") ngay khi duyệt xong bước cuối, thay vì dừng ở
+// APPROVED như trước — nhưng hồ sơ đã ở APPROVED TỪ TRƯỚC đợt này (duyệt xong trước khi tính năng "Nhập
+// Hàng"/"Hủy Nhập" tồn tại) sẽ kẹt VĨNH VIỄN ở APPROVED nếu không di trú: 2 nút Nhập Hàng/Hủy Nhập MỚI
+// (module-vanhanh.js) chỉ hiện khi status === 'AWAITING_RECEIPT', và Báo Cáo (renderOperationOrderReport())
+// đếm "đã phê duyệt" theo nhóm AWAITING_RECEIPT/RECEIVED/RECEIPT_CANCELLED — hồ sơ kẹt APPROVED sẽ vừa
+// không thao tác được gì tiếp, vừa lọt khỏi mọi ô đếm báo cáo mới. Coi như đã hoàn tất bước duyệt phòng
+// ban, chỉ còn thiếu bước xác nhận nhập hàng MỚI thêm, nên chuyển thẳng sang AWAITING_RECEIPT (KHÔNG
+// phải RECEIVED — không có căn cứ để tự suy đoán hàng đã thực nhận hay chưa, để người phụ trách tự xác
+// nhận qua đúng luồng mới). approvedAt lấy lại từ dòng lịch sử APPROVED cuối cùng nếu parse được (khớp
+// đúng thời điểm duyệt thật, không lệch báo cáo "theo tháng"); không parse được (hồ sơ rất cũ/lỗi định
+// dạng hiếm gặp) thì dùng thời điểm chạy di trú làm giá trị tạm — chỉ ảnh hưởng nhóm tháng hiển thị ở
+// Báo Cáo, không ảnh hưởng gì khác. Cùng khuôn/idempotent với migrateStuckOperationApprovalStatuses() ở
+// trên — chạy mỗi lần khởi động, chỉ còn tác dụng khi thực sự còn bản ghi APPROVED (rất hiếm sau lần
+// chạy đầu, vì mọi lượt duyệt MỚI từ giờ đã tự đi thẳng AWAITING_RECEIPT).
+async function migrateApprovedOperationOrdersToAwaitingReceipt() {
+  const records = await getAllRecords('operationOrders');
+  const stuck = records.filter(r => r.status === 'APPROVED');
+  for (const rec of stuck) {
+    await withLockedRecordById('operationOrders', rec.id, (item) => {
+      if (item.status !== 'APPROVED') return item; // đã đổi bởi request khác giữa lúc đọc và khoá
+      const lastApproved = [...(item.history || [])].reverse().find(h => h.action === 'APPROVED');
+      const parsed = lastApproved ? parseVNDateTime(lastApproved.time) : null;
+      item.approvedAt = parsed ? parsed.toISOString() : new Date().toISOString();
+      item.status = 'AWAITING_RECEIPT';
+      item.history = item.history || [];
+      item.history.push({
+        step: item.currentStep || 0, approver: 'Hệ Thống', username: 'system', action: 'SYSTEM_MIGRATION',
+        comment: 'Đơn hàng đã phê duyệt trước khi hệ thống có bước "Chờ nhập hàng" — tự động chuyển sang chờ xác nhận nhập hàng.',
+        time: nowVNForMigration()
+      });
+      return item;
+    });
+  }
+  if (stuck.length) {
+    console.log(`   ↳ Đã di trú ${stuck.length} đơn hàng (operationOrders) đã duyệt trước đợt "Nhập Hàng" sang chờ nhập hàng (AWAITING_RECEIPT).`);
+  }
+}
+
 // Cùng định dạng với nowVN() ở lib/recordActions.js (không export sẵn cho seedDefaults.js nên lặp lại
 // nguyên văn 1 dòng, tránh phải require chéo module chỉ vì 1 hàm định dạng giờ).
 function nowVNForMigration() {
@@ -277,4 +318,4 @@ function nowVNForMigration() {
 // tests/test-operation-danhmuc-dautu-units.js (gọi trực tiếp hàm này với lib/recordStore.js đã mock qua
 // require.cache, không cần SQL Server thật) — xác nhận đúng hành vi "quét sạch bản ghi DRAFT/PENDING
 // còn sót từ trước Mục H mỗi lúc khởi động".
-module.exports = { seedDefaults, migrateStuckOperationApprovalStatuses };
+module.exports = { seedDefaults, migrateStuckOperationApprovalStatuses, migrateApprovedOperationOrdersToAwaitingReceipt };

@@ -391,15 +391,21 @@ function getMyProcessedApprovals(user, status, sinceMs) {
     return !d || d.getTime() >= sinceMs;
   }
 
-  // records: mảng bản ghi gốc; cfg: {type, typeLabel, codeOf, titleOf}; fields: {status, history} (mặc
-  // định 'status'/'history', Hợp đồng Tài liệu ký khai riêng — khớp addDeptWorkflowItems() ở
+  // records: mảng bản ghi gốc; cfg: {type, typeLabel, codeOf, titleOf}; fields: {status, history, matchStatuses}
+  // (mặc định 'status'/'history', Hợp đồng Tài liệu ký khai riêng — khớp addDeptWorkflowItems() ở
   // getMyPendingApprovals()). Chỉ nhận hồ sơ hiện ĐANG ở đúng status đang lọc VÀ có ít nhất 1 dòng lịch
   // sử do CHÍNH user này thực hiện đúng hành động đó — lấy mốc thời gian ở lần gần nhất user duyệt/từ
-  // chối để sắp xếp + lọc khoảng thời gian.
+  // chối để sắp xếp + lọc khoảng thời gian. matchStatuses (tuỳ chọn, mặc định [status]) — operationOrders
+  // (đợt "Báo Cáo + Nhập Hàng") CẦN override: duyệt xong bước cuối KHÔNG còn dừng ở status==='APPROVED'
+  // nữa (applyWorkflowAction() ở lib/workflowEngine.js tự chuyển tiếp sang AWAITING_RECEIPT/RECEIVED/
+  // RECEIPT_CANCELLED) — nếu vẫn so đúng === 'APPROVED' như mọi module khác, mục "Hồ Sơ Đã Xử Lý > Đã
+  // Duyệt" ở Approval Hub sẽ KHÔNG BAO GIỜ còn thấy đơn hàng nào dù người dùng thực sự đã duyệt (rec.status
+  // đã đổi tiếp ngay sau đó) — xem lời gọi addProcessedItems(DB.operationOrders, ...) bên dưới.
   function addProcessedItems(records, cfg, fields) {
-    const f = { status: 'status', history: 'history', ...(fields || {}) };
+    const f = { status: 'status', history: 'history', matchStatuses: null, ...(fields || {}) };
+    const statusesToMatch = f.matchStatuses || [status];
     (records || []).forEach(rec => {
-      if (rec[f.status] !== status) return;
+      if (!statusesToMatch.includes(rec[f.status])) return;
       const mine = (rec[f.history] || []).filter(h => h.username === user.username && h.action === status);
       if (!mine.length) return;
       const lastMine = mine[mine.length - 1];
@@ -429,7 +435,12 @@ function getMyProcessedApprovals(user, status, sinceMs) {
   addProcessedItems(DB.vppRegistrations, { type: 'vpp', typeLabel: '🖇️ Văn phòng phẩm', codeOf: r => r.code, titleOf: r => r.periodName || r.code });
   addProcessedItems(DB.itPriceApprovals, { type: 'itPrice', typeLabel: '🏷️ Hỗ Trợ IT - Duyệt giá', codeOf: r => r.code, titleOf: r => r.productName });
   addProcessedItems(DB.budgetEntries, { type: 'budget', typeLabel: '📊 Ngân Sách', codeOf: r => r.code, titleOf: r => r.periodName || r.code });
-  addProcessedItems(DB.operationOrders, { type: 'operationOrders', typeLabel: '📦 Vận Hành - Đơn Hàng', codeOf: r => r.code, titleOf: r => r.title });
+  addProcessedItems(DB.operationOrders, {
+    type: 'operationOrders', typeLabel: '📦 Vận Hành - Đơn Hàng', codeOf: r => r.code, titleOf: r => r.title,
+    // Xem chú thích matchStatuses ở định nghĩa addProcessedItems() phía trên — REJECTED không cần override
+    // (hồ sơ bị từ chối luôn dừng hẳn ở đó, không có giai đoạn tiếp theo nào khác).
+    matchStatuses: status === 'APPROVED' ? ['APPROVED', 'AWAITING_RECEIPT', 'RECEIVED', 'RECEIPT_CANCELLED'] : null
+  });
   addProcessedItems(DB.operationStoreOpenings, { type: 'operationStoreOpenings', typeLabel: '🏬 Vận Hành - Mở Mới Siêu Thị', codeOf: r => r.code, titleOf: r => r.storeName });
   addProcessedItems(DB.operationRepairs, { type: 'operationRepairs', typeLabel: '🔧 Vận Hành - Sửa Chữa Siêu Thị', codeOf: r => r.code, titleOf: r => r.storeName });
 

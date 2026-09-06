@@ -6462,8 +6462,16 @@ input[data-sdd-list] {
       <button data-op="setVanHanhSubTab" data-tab="STORE" id="btnVanHanhSubStore" class="px-3 py-1 rounded text-xs font-bold bg-gray-200 text-gray-700">🏬 Siêu Thị</button>
     </div>
 
-    <!-- ===== TAB 1: PHÊ DUYỆT ĐƠN HÀNG (operationOrders) ===== -->
-    <div id="vanHanhOrdersWrap" class="space-y-6">
+    <!-- ===== TAB 1: PHÊ DUYỆT ĐƠN HÀNG (operationOrders) — 2 sub-tab lồng bên trong (đợt "Báo Cáo +
+         Nhập Hàng", cùng khuôn cấp lồng thứ 2 của tab "Siêu Thị" ngay dưới): "📋 Danh Sách" (màn hình cũ,
+         nguyên vẹn) + "📊 Báo Cáo" (mới, xem renderOperationOrderReport() ở module-vanhanh.js). ===== -->
+    <div id="vanHanhOrdersWrap" class="space-y-4">
+      <div class="flex gap-2 flex-wrap border-b pb-2">
+        <button data-op="setOperationOrderSubTab" data-tab="LIST" id="btnOpOrderSubList" class="px-3 py-1 rounded text-xs font-bold bg-cyan-700 text-white">📋 Danh Sách</button>
+        <button data-op="setOperationOrderSubTab" data-tab="REPORT" id="btnOpOrderSubReport" class="px-3 py-1 rounded text-xs font-bold bg-gray-200 text-gray-700">📊 Báo Cáo</button>
+      </div>
+
+    <div id="opOrderListPanel" class="space-y-6">
       <div id="operationOrderDashboardCards"></div>
       <div class="bg-cyan-50 p-4 rounded border border-cyan-200 space-y-3">
         <h3 class="font-bold text-cyan-900 text-base flex items-center gap-2">📦 Tạo Đơn Hàng Mới</h3>
@@ -6534,17 +6542,25 @@ input[data-sdd-list] {
 
       <div class="bg-gray-50 p-4 rounded-lg border space-y-3">
         <h4 class="font-bold text-gray-700 text-sm">🔍 Tìm Kiếm &amp; Lọc Đơn Hàng</h4>
-        <div class="grid grid-cols-1 md:grid-cols-4 gap-3">
+        <div class="grid grid-cols-1 md:grid-cols-5 gap-3">
           <div>
             <label class="block text-xs font-semibold text-gray-600 mb-1">Trạng Thái</label>
             <select id="filterStatusOperationOrder" data-op-change="onOperationOrderFilterChange" class="w-full border p-2 rounded text-sm bg-white">
               <option value="">-- Tất cả trạng thái --</option>
-              <option value="APPROVED">Đã Phê Duyệt</option>
               <option value="PENDING">Đang Chờ Duyệt</option>
+              <option value="AWAITING_RECEIPT">Chờ Nhập Hàng</option>
+              <option value="RECEIVED">Đã Nhập Hàng</option>
+              <option value="RECEIPT_CANCELLED">Đã Hủy Nhập</option>
               <option value="REJECTED">Bị Từ Chối</option>
               <option value="DRAFT">Cần Bổ Sung</option>
+              <option value="APPROVED">Đã Phê Duyệt (hồ sơ cũ)</option>
             </select>
           </div>
+          <!-- Lọc "Siêu Thị" (Nơi Nhận) — đợt "Báo Cáo + Nhập Hàng": receivingLocationName là free-text
+               đọc từ PDF NCC (chưa đối chiếu Danh Mục Siêu Thị), nên đây là danh sách GIÁ TRỊ THỰC TẾ đã
+               có trong dữ liệu (populateOperationOrderLocationOptions() ở module-vanhanh.js tự đổ), không
+               phải danh mục cấu hình sẵn. -->
+          <div><label class="block text-xs font-semibold text-gray-600 mb-1">Siêu Thị (Nơi Nhận)</label><select id="filterLocationOperationOrder" data-op-change="onOperationOrderFilterChange" class="w-full border p-2 rounded text-sm bg-white"><option value="">-- Tất cả nơi nhận --</option></select></div>
           <div><label class="block text-xs font-semibold text-gray-600 mb-1">Từ Ngày</label><input id="filterFromDateOperationOrder" type="date" data-op-change="onOperationOrderFilterChange" class="w-full border p-2 rounded text-sm bg-white"></div>
           <div><label class="block text-xs font-semibold text-gray-600 mb-1">Đến Ngày</label><input id="filterToDateOperationOrder" type="date" data-op-change="onOperationOrderFilterChange" class="w-full border p-2 rounded text-sm bg-white"></div>
           <div><label class="block text-xs font-semibold text-gray-600 mb-1">Từ Khóa</label><input id="filterKeywordOperationOrder" data-op-input="onOperationOrderFilterChange" placeholder="Mã, tiêu đề, người tạo..." class="w-full border p-2 rounded text-sm"></div>
@@ -6570,6 +6586,35 @@ input[data-sdd-list] {
         </div>
         <div id="paginationContainer_operationOrder"></div>
       </div>
+    </div>
+
+    <!-- ===== SUB-TAB "📊 Báo Cáo" của Đơn Hàng (đợt "Báo Cáo + Nhập Hàng") — xem
+         renderOperationOrderReport() ở module-vanhanh.js. ===== -->
+    <div id="opOrderReportPanel" class="hidden space-y-4">
+      <div class="bg-gray-50 p-4 rounded-lg border space-y-3">
+        <h4 class="font-bold text-gray-700 text-sm">🔍 Lọc Báo Cáo</h4>
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+          <div><label class="block text-xs font-semibold text-gray-600 mb-1">Từ Ngày (theo ngày tạo đơn)</label><input id="opReportFromDateOperationOrder" type="date" data-op-change="onOperationOrderReportFilterChange" class="w-full border p-2 rounded text-sm bg-white"></div>
+          <div><label class="block text-xs font-semibold text-gray-600 mb-1">Đến Ngày (theo ngày tạo đơn)</label><input id="opReportToDateOperationOrder" type="date" data-op-change="onOperationOrderReportFilterChange" class="w-full border p-2 rounded text-sm bg-white"></div>
+          <div><label class="block text-xs font-semibold text-gray-600 mb-1">Siêu Thị (Nơi Nhận)</label><select id="opReportFilterLocation" data-op-change="onOperationOrderReportFilterChange" class="w-full border p-2 rounded text-sm bg-white"><option value="">-- Tất cả nơi nhận --</option></select></div>
+        </div>
+      </div>
+
+      <div class="grid grid-cols-2 md:grid-cols-4 gap-2" id="opOrderReportSummaryCards"></div>
+
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-3" id="opOrderReportValueTotals"></div>
+
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div class="bg-white p-3 rounded border space-y-2">
+          <h4 class="font-bold text-gray-700 text-sm">📈 Giá Trị Đơn Đã Phê Duyệt Theo Tháng</h4>
+          <div id="opOrderReportApprovedByMonth" class="space-y-2"></div>
+        </div>
+        <div class="bg-white p-3 rounded border space-y-2">
+          <h4 class="font-bold text-gray-700 text-sm">📈 Giá Trị Đơn Đã Nhập Hàng Theo Tháng</h4>
+          <div id="opOrderReportReceivedByMonth" class="space-y-2"></div>
+        </div>
+      </div>
+    </div>
     </div>
 
     <!-- ===== TAB 2: SIÊU THỊ — tab cha bọc Mở mới/Sửa chữa (đổi tên, giữ nguyên logic) + 4 sub-tab mới
@@ -6953,6 +6998,25 @@ input[data-sdd-list] {
         <div class="flex justify-end gap-2">
           <button data-op="closeOperationAcceptanceActionModal" class="px-4 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700 hover:bg-gray-300">Hủy</button>
           <button data-op="confirmOperationAcceptanceAction" class="px-4 py-1.5 rounded text-xs font-bold bg-emerald-600 text-white hover:bg-emerald-700">Xác Nhận</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal "📥 Nhập Hàng"/"🚫 Hủy Nhập" cho operationOrders (đợt "Báo Cáo + Nhập Hàng") — dùng chung cho
+       cả 2 hành động, cùng khuôn #operationAcceptanceActionModal ngay trên (opReceiptReasonWrap chỉ ẩn
+       khi Nhập Hàng — không bắt buộc lý do, xem openOperationOrderReceiptActionModal() ở module-vanhanh.js). -->
+  <div id="operationOrderReceiptModal" class="hidden fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-[60] p-4">
+    <div class="bg-white rounded-lg shadow-xl max-w-md w-full">
+      <div class="p-4 border-b flex justify-between items-center">
+        <h3 id="operationOrderReceiptModalTitle" class="font-bold text-base text-gray-800"></h3>
+        <button data-op="closeOperationOrderReceiptActionModal" class="text-gray-400 hover:text-gray-600 text-2xl leading-none">&times;</button>
+      </div>
+      <div class="p-4 space-y-3 text-xs">
+        <div id="opReceiptReasonWrap"><label class="block font-semibold text-gray-600 mb-1">Lý Do Hủy Nhập</label><textarea id="opReceiptReason" rows="3" class="w-full border p-2 rounded" placeholder="Nhập lý do hủy nhập..."></textarea></div>
+        <div class="flex justify-end gap-2">
+          <button data-op="closeOperationOrderReceiptActionModal" class="px-4 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700 hover:bg-gray-300">Hủy</button>
+          <button data-op="confirmOperationOrderReceiptAction" class="px-4 py-1.5 rounded text-xs font-bold bg-emerald-600 text-white hover:bg-emerald-700">Xác Nhận</button>
         </div>
       </div>
     </div>

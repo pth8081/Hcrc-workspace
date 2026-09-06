@@ -48,6 +48,28 @@ const OPERATION_KIND_META = {
   }
 };
 
+// activeOperationOrderSubTab — cấp lồng thứ 2 MỚI bên trong tab "📦 Phê Duyệt Đơn Hàng" (đợt "Báo Cáo +
+// Nhập Hàng", theo đúng yêu cầu "tách Đơn Hàng thành sub-tab"): 'LIST' (danh sách/form tạo — y hệt màn
+// hình cũ) và 'REPORT' (mới, xem renderOperationOrderReport() bên dưới). Cùng khuôn
+// activeOperationStoreSubTab (khai ở core.js vì cần sẵn NGAY sau đăng nhập) nhưng biến này KHÔNG cần
+// vậy — tab "Đơn Hàng" luôn là sub-tab MẶC ĐỊNH của Vận Hành (VAN_HANH_SUBTAB_TO_KIND.ORDERS) nên biến
+// này chỉ cần tồn tại khi module-vanhanh.js đã nạp (đúng lúc setVanHanhSubTab('ORDERS') chạy lần đầu).
+let activeOperationOrderSubTab = 'LIST';
+function setOperationOrderSubTab(tab) {
+  activeOperationOrderSubTab = tab;
+  const tabs = [
+    ['LIST', 'opOrderListPanel', 'btnOpOrderSubList'],
+    ['REPORT', 'opOrderReportPanel', 'btnOpOrderSubReport']
+  ];
+  tabs.forEach(([key, wrapId, btnId]) => {
+    const isActive = key === tab;
+    document.getElementById(wrapId).classList.toggle('hidden', !isActive);
+    const btn = document.getElementById(btnId);
+    btn.className = `px-3 py-1 rounded text-xs font-bold ${isActive ? 'bg-cyan-700 text-white' : 'bg-gray-200 text-gray-700'}`;
+  });
+  if (tab === 'REPORT') renderOperationOrderReport();
+}
+
 let activeVanHanhSubTab = 'ORDERS';
 // STORE_OPEN/REPAIR không còn ở cấp 1 — đã gộp vào tab cha 'STORE' (xem setOperationStoreSubTab() bên
 // dưới, cấp lồng thứ 2 cùng khuôn setTrainingLmsTab()). VAN_HANH_SUBTAB_TO_KIND chỉ còn dùng cho ORDERS
@@ -72,6 +94,9 @@ function setVanHanhSubTab(subTab) {
   if (subTab === 'ORDERS') {
     document.getElementById('voCode').value = generateOperationOrderCode();
     if (operationOrderItems.length === 0) addOperationOrderItemRow(); else renderOperationOrderItemsTable();
+    // Cấp lồng thứ 2 MỚI (đợt "Báo Cáo + Nhập Hàng") — 2 sub-tab "📋 Danh Sách"/"📊 Báo Cáo" bên trong
+    // chính tab Đơn Hàng, xem setOperationOrderSubTab() ở trên.
+    setOperationOrderSubTab(activeOperationOrderSubTab);
   } else if (subTab === 'STORE') {
     setOperationStoreSubTab(activeOperationStoreSubTab);
   }
@@ -124,12 +149,48 @@ function setOperationStoreSubTab(tab) {
 }
 
 // --- Trạng thái hiển thị CHỈ CÒN dùng cho operationOrders (khớp DRAFT/PENDING/APPROVED/REJECTED của
-// workflowEngine — luồng Đơn Hàng KHÔNG đụng tới, vẫn giữ nguyên quy trình duyệt cũ). ---
+// workflowEngine — luồng Đơn Hàng KHÔNG đụng tới, vẫn giữ nguyên quy trình duyệt cũ). Đợt "Báo Cáo +
+// Nhập Hàng" thêm 3 trạng thái MỚI TIẾP SAU APPROVED: AWAITING_RECEIPT (Chờ nhập hàng, applyWorkflowAction()
+// ở lib/workflowEngine.js tự chuyển sang ngay khi duyệt xong bước cuối) -> RECEIVED (Đã nhập hàng,
+// "kết thúc" đơn) hoặc RECEIPT_CANCELLED (Đã hủy nhập, hàng không về thực tế). 'APPROVED' vẫn giữ lại ở
+// đây (không xoá nhánh) làm lưới an toàn hiển thị cho khoảnh khắc cực hiếm giữa lúc
+// migrateApprovedOperationOrdersToAwaitingReceipt() (seedDefaults.js) chưa kịp chạy xong sau khi nâng
+// cấp — hồ sơ thật sự không nên còn kẹt ở đây lâu dài. ---
 function operationStatusBadge(o) {
   if (o.status === 'DRAFT') return `<span class="px-2 py-0.5 bg-orange-100 text-orange-800 rounded font-bold text-xs">✏️ Cần bổ sung — chờ sửa lại</span>`;
+  if (o.status === 'AWAITING_RECEIPT') return `<span class="px-2 py-0.5 bg-indigo-100 text-indigo-800 rounded font-bold text-xs">📥 Chờ nhập hàng</span>`;
+  if (o.status === 'RECEIVED') return `<span class="px-2 py-0.5 bg-emerald-100 text-emerald-800 rounded font-bold text-xs">✅ Đã nhập hàng</span>`;
+  if (o.status === 'RECEIPT_CANCELLED') return `<span class="px-2 py-0.5 bg-slate-200 text-slate-700 rounded font-bold text-xs">🚫 Đã hủy nhập</span>`;
   if (o.status === 'APPROVED') return `<span class="px-2 py-0.5 bg-green-100 text-green-800 rounded font-bold text-xs">✅ Đã phê duyệt</span>`;
   if (o.status === 'REJECTED') return `<span class="px-2 py-0.5 bg-red-100 text-red-800 rounded font-bold text-xs">❌ Từ chối</span>`;
   return `<span class="px-2 py-0.5 bg-cyan-100 text-cyan-800 rounded font-bold text-xs">⏳ Bước ${o.currentStep}</span>`;
+}
+// Quần thể được phép bấm "📥 Nhập Hàng"/"🚫 Hủy Nhập" — MIRROR đúng lib/recordActions.js
+// isApproverForOperationOrderReceipt() (server luôn tự kiểm lại, đây chỉ là lớp UI ẩn/hiện nút): admin
+// hoặc có tên trong approvers ở BẤT KỲ bước nào của dept-workflow đúng phòng ban hồ sơ này — cùng quần
+// thể đã được phép Duyệt/Từ chối đơn hàng (xem chú thích đầy đủ ở hàm server tương ứng).
+function canManageOperationOrderReceiptClient(o) {
+  if (currentUser?.perms?.admin) return true;
+  const wfMap = OPERATION_KIND_META.operationOrders.wfMap();
+  return isApproverForDeptWorkflow(wfMap[o.dept], currentUser?.username);
+}
+
+// Đổ danh sách "Nơi Nhận" (siêu thị/kho) cho ô lọc — dùng chung cho cả Danh Sách (filterLocationOperationOrder)
+// lẫn Báo Cáo (opReportFilterLocation). Nguồn: GIÁ TRỊ THỰC TẾ ĐÃ CÓ trong operationOrders
+// (receivingLocationName, free-text đọc từ PDF NCC — KHÔNG đối chiếu DB.stores/"Danh Mục Siêu Thị" vì
+// field này chưa từng được validate khớp danh mục đó lúc tạo, xem lib/createValidation.js
+// operationOrders.extraValidate chỉ .trim(); dùng DB.stores làm nguồn dropdown rất dễ khiến bộ lọc
+// "không khớp gì cả" nếu tên PDF parse ra khác cách viết trong danh mục) — dropdown vì vậy CHỈ liệt kê
+// tên nào ĐANG THỰC SỰ xuất hiện trong `scopedList` (đã lọc quyền xem trước khi truyền vào đây), tránh
+// lộ tên nơi nhận của hồ sơ người dùng không thấy được. Giữ lại lựa chọn đang chọn nếu vẫn còn hợp lệ
+// trong danh sách mới (khớp quy ước repopulateReportsDeptFilterOptions() ở module-baocaoquantri.js).
+function populateOperationOrderLocationOptions(scopedList, selectId) {
+  const el = document.getElementById(selectId);
+  if (!el) return;
+  const prevValue = el.value;
+  const names = Array.from(new Set((scopedList || []).map(o => (o.receivingLocationName || '').trim()).filter(Boolean))).sort((a, b) => a.localeCompare(b, 'vi'));
+  el.innerHTML = `<option value="">-- Tất cả nơi nhận --</option>` + names.map(n => `<option value="${escapeHtml(n)}">${escapeHtml(n)}</option>`).join('');
+  if (names.includes(prevValue)) el.value = prevValue;
 }
 
 // --- Vòng đời "dự án nhỏ" operationStoreOpenings/operationRepairs (yêu cầu người dùng, đợt "Danh Mục
@@ -674,11 +735,16 @@ function renderOperationList(kind) {
   const fromDate = document.getElementById(`filterFromDate${fp}`)?.value || '';
   const toDate = document.getElementById(`filterToDate${fp}`)?.value || '';
   const keyword = (document.getElementById(`filterKeyword${fp}`)?.value || '').trim();
+  // Lọc "Nơi Nhận" (siêu thị/kho nhận hàng) — CHỈ operationOrders có field receivingLocationName (đợt PDF
+  // autofill), 2 kind kia không có select tương ứng nên document.getElementById luôn null -> '' -> không
+  // lọc gì (an toàn, không cần if riêng). Xem populateOperationOrderLocationOptions() ngay dưới đây.
+  const locationFilter = kind === 'operationOrders' ? (document.getElementById('filterLocationOperationOrder')?.value || '') : '';
 
   const wfMap = meta.wfMap();
   const canView = (o) => currentUser.perms?.admin || o.creator === currentUser.username || isApproverForDeptWorkflow(wfMap[o.dept], currentUser.username);
   const scoped = meta.list().filter(canView);
   const stageOf = (o) => operationRecordStageStatus(kind, o);
+  if (kind === 'operationOrders') populateOperationOrderLocationOptions(scoped, 'filterLocationOperationOrder');
 
   const dashCards = isStoreOrRepair ? [
     { key: '', label: 'Tổng Số', count: scoped.length, colorClass: 'border-l-blue-500' },
@@ -690,7 +756,11 @@ function renderOperationList(kind) {
   ] : [
     { key: '', label: 'Tổng Số', count: scoped.length, colorClass: 'border-l-blue-500' },
     { key: 'PENDING', label: 'Đang Chờ Duyệt', count: scoped.filter(o => o.status === 'PENDING').length, colorClass: 'border-l-yellow-500' },
-    { key: 'APPROVED', label: 'Đã Phê Duyệt', count: scoped.filter(o => o.status === 'APPROVED').length, colorClass: 'border-l-green-500' },
+    // AWAITING_RECEIPT/RECEIVED/RECEIPT_CANCELLED — 3 trạng thái MỚI (đợt "Báo Cáo + Nhập Hàng"), thêm
+    // vào ngay sau APPROVED (giữ lại nhánh APPROVED làm lưới an toàn cho hồ sơ chưa kịp di trú, xem chú
+    // thích operationStatusBadge() — dashboard card riêng cho nó không cần thiết vì thực tế luôn ~0).
+    { key: 'AWAITING_RECEIPT', label: 'Chờ Nhập Hàng', count: scoped.filter(o => o.status === 'AWAITING_RECEIPT').length, colorClass: 'border-l-indigo-500' },
+    { key: 'RECEIVED', label: 'Đã Nhập Hàng', count: scoped.filter(o => o.status === 'RECEIVED').length, colorClass: 'border-l-emerald-500' },
     { key: 'REJECTED', label: 'Bị Từ Chối', count: scoped.filter(o => o.status === 'REJECTED').length, colorClass: 'border-l-red-500' }
   ];
   const dashEl = document.getElementById(meta.dashboardCards);
@@ -702,6 +772,7 @@ function renderOperationList(kind) {
       else if (o.status !== statusFilter) return false;
     }
     if (!isInDateRange(o.createdAt, fromDate, toDate)) return false;
+    if (locationFilter && (o.receivingLocationName || '') !== locationFilter) return false;
     if (!matchesKeywordFields([o.code, meta.titleField(o), o.creatorName], keyword)) return false;
     return true;
   });
@@ -742,6 +813,13 @@ function buildOperationRowHTML(kind, o) {
   // (Đơn Hàng, không thuộc phạm vi thay đổi này). Server (routes/records.js) cũng chặn cứng route xoá
   // của 2 collection này rồi — ẩn nút ở đây chỉ là UX, không phải lớp bảo vệ duy nhất.
   if (currentUser.perms?.admin && kind === 'operationOrders') secondaryOptions.push({ value: 'delete', label: '🗑️ Xóa' });
+  // "📥 Nhập Hàng"/"🚫 Hủy Nhập" (đợt "Báo Cáo + Nhập Hàng") — CHỈ hiện ở đúng trạng thái AWAITING_RECEIPT
+  // (server chặn lại y hệt nếu bấm sai trạng thái, xem receiveOperationOrderGoods()/cancelOperationOrderReceipt()
+  // ở lib/recordActions.js) VÀ đúng quần thể được phép (canManageOperationOrderReceiptClient() ở trên).
+  if (kind === 'operationOrders' && o.status === 'AWAITING_RECEIPT' && canManageOperationOrderReceiptClient(o)) {
+    secondaryOptions.push({ value: 'receive-goods', label: '📥 Nhập Hàng' });
+    secondaryOptions.push({ value: 'cancel-receipt', label: '🚫 Hủy Nhập' });
+  }
   const dispatcherFnName = kind === 'operationOrders' ? 'runOperationOrderAction' : kind === 'operationStoreOpenings' ? 'runOperationStoreOpenAction' : 'runOperationRepairAction';
   const actionCell = buildActionCell(o.id, primaryBtnHTML, secondaryOptions, dispatcherFnName);
 
@@ -778,6 +856,8 @@ function buildOperationRowHTML(kind, o) {
 function runOperationAction(kind, id, action) {
   switch (action) {
     case 'delete': deleteOperationAction(kind, id); break;
+    case 'receive-goods': openOperationOrderReceiptActionModal(id, 'RECEIVE'); break;
+    case 'cancel-receipt': openOperationOrderReceiptActionModal(id, 'CANCEL'); break;
   }
 }
 function runOperationOrderAction(id, action) { runOperationAction('operationOrders', id, action); }
@@ -1940,6 +2020,182 @@ async function confirmOperationAcceptanceAction() {
 }
 
 // ==========================================
+// VẬN HÀNH > ĐƠN HÀNG > "📥 Nhập Hàng" / "🚫 Hủy Nhập" (đợt "Báo Cáo + Nhập Hàng") — modal xác nhận dùng
+// chung cho cả 2 hành động, cùng khuôn operationAcceptanceActionModal ở trên (RECEIVE không bắt buộc lý
+// do — hàng về đúng như đơn thì không cần giải trình gì thêm; CANCEL bắt buộc, khớp
+// cancelOperationOrderReceipt() ở lib/recordActions.js đòi payload.reason không rỗng).
+// ==========================================
+let currentReceiptActionOrderId = null;
+let currentReceiptActionType = null; // 'RECEIVE' | 'CANCEL'
+function openOperationOrderReceiptActionModal(id, action) {
+  currentReceiptActionOrderId = id;
+  currentReceiptActionType = action;
+  document.getElementById('operationOrderReceiptModalTitle').innerText = action === 'RECEIVE' ? '📥 Xác Nhận Nhập Hàng' : '🚫 Xác Nhận Hủy Nhập';
+  document.getElementById('opReceiptReasonWrap').classList.toggle('hidden', action === 'RECEIVE');
+  document.getElementById('opReceiptReason').value = '';
+  document.getElementById('operationOrderReceiptModal').classList.remove('hidden');
+}
+function closeOperationOrderReceiptActionModal() {
+  document.getElementById('operationOrderReceiptModal').classList.add('hidden');
+  currentReceiptActionOrderId = null;
+  currentReceiptActionType = null;
+}
+async function confirmOperationOrderReceiptAction() {
+  const actionType = currentReceiptActionType;
+  const itemId = currentReceiptActionOrderId;
+  if (!actionType || !itemId) return;
+  const reason = document.getElementById('opReceiptReason').value.trim();
+  if (actionType === 'CANCEL' && !reason) return alert('Vui lòng nhập lý do hủy nhập!');
+  const urlAction = actionType === 'RECEIVE' ? 'receive-goods' : 'cancel-receipt';
+  let result;
+  try {
+    result = await callRecordAction('operationOrders', itemId, urlAction, actionType === 'CANCEL' ? { reason } : {});
+  } catch (err) { return alert(`⛔ ${err.message}`); }
+  const idx = DB.operationOrders.findIndex(o => o.id === result.item.id);
+  if (idx !== -1) DB.operationOrders[idx] = result.item;
+  logSystemAction(OPERATION_KIND_META.operationOrders.logModule, actionType === 'RECEIVE' ? 'RECEIVE_GOODS' : 'CANCEL_RECEIPT',
+    `${actionType === 'RECEIVE' ? 'Xác nhận nhập hàng' : 'Hủy nhập'} đơn hàng [${result.item.code}]`, 'SUCCESS', result.item.code);
+  closeOperationOrderReceiptActionModal();
+  renderOperationList('operationOrders');
+  if (activeOperationOrderSubTab === 'REPORT') renderOperationOrderReport();
+  alert(actionType === 'RECEIVE' ? '✅ Đã xác nhận nhập hàng!' : '✅ Đã hủy nhập đơn hàng!');
+}
+
+// ==========================================
+// VẬN HÀNH > ĐƠN HÀNG > "📊 Báo Cáo" (đợt "Báo Cáo + Nhập Hàng") — sub-tab MỚI bên trong chính màn Đơn
+// Hàng (setOperationOrderSubTab() ở đầu file), KHÔNG gộp vào module "Báo Cáo" top-level riêng (đúng yêu
+// cầu người dùng). Kiểu dáng MIRROR đúng khối "Báo Cáo Quản Trị" (module-baocaoquantri.js
+// computeApprovalStats()/buildStatBarHTML() — bộ lọc khoảng ngày + thẻ tổng hợp + thanh tỷ lệ ngang thay
+// biểu đồ thư viện ngoài) — KHÔNG gọi thẳng buildStatBarHTML() ở file đó vì cụm module nạp lười
+// "vanhanh" (MODULE_LOAD_GROUPS, core.js) KHÔNG khai deps tới cụm "baocaoquantri-preview" (nơi định
+// nghĩa hàm đó) — mở tab Vận Hành trước khi ai từng mở Báo Cáo Quản Trị sẽ ReferenceError. Viết lại 1
+// bản THANH TỶ LỆ NGANG cục bộ (buildOpOrderStatBarHTML() ngay dưới đây) thay vì đổi deps của cả cụm chỉ
+// vì 1 hàm vẽ thanh — cùng tinh thần chủ động trùng lặp nhỏ đã áp dụng cho canApproveStep()/
+// normalizeApproversList() (core.js) so với bản server lib/workflowEngine.js.
+// ==========================================
+function buildOpOrderStatBarHTML(label, value, max, colorClass) {
+  const pct = max > 0 ? Math.min(100, Math.round((value / max) * 100)) : 0;
+  return `
+    <div>
+      <div class="flex justify-between mb-0.5 text-xs"><span class="font-semibold text-gray-700">${escapeHtml(label)}</span><span class="font-bold text-gray-800">${(value || 0).toLocaleString('vi-VN')}</span></div>
+      <div class="w-full bg-gray-100 rounded h-2.5 overflow-hidden"><div class="${colorClass} h-2.5 rounded" style="width:${pct}%"></div></div>
+    </div>
+  `;
+}
+// Nhóm theo "Tháng YYYY" từ 1 field ISO (approvedAt/receivedAt) — trả mảng đã sắp xếp theo thời gian
+// tăng dần [{ key: '2026-08', label: 'Tháng 8/2026', count, total }]. Bỏ qua bản ghi thiếu field mốc
+// thời gian tương ứng (hồ sơ chưa tới trạng thái đó thì vốn không thuộc nhóm đang tính).
+function groupOperationOrdersByMonth(items, dateField) {
+  const buckets = {};
+  items.forEach(o => {
+    const raw = o[dateField];
+    if (!raw) return;
+    const d = new Date(raw);
+    if (isNaN(d.getTime())) return;
+    const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+    if (!buckets[key]) buckets[key] = { key, label: `Tháng ${d.getMonth() + 1}/${d.getFullYear()}`, count: 0, total: 0 };
+    buckets[key].count++;
+    buckets[key].total += o.amount || 0;
+  });
+  return Object.values(buckets).sort((a, b) => a.key.localeCompare(b.key));
+}
+function onOperationOrderReportFilterChange() { renderOperationOrderReport(); }
+function renderOperationOrderReport() {
+  const summaryEl = document.getElementById('opOrderReportSummaryCards');
+  if (!summaryEl) return;
+  const fromDate = document.getElementById('opReportFromDateOperationOrder')?.value || '';
+  const toDate = document.getElementById('opReportToDateOperationOrder')?.value || '';
+  const locationFilter = document.getElementById('opReportFilterLocation')?.value || '';
+
+  // Cùng phạm vi Xem với Danh Sách (canView — chính người tạo/admin/approver dept-workflow), KHÔNG đọc
+  // thẳng DB.operationOrders để tránh lộ số liệu của hồ sơ người dùng này vốn không được xem.
+  const wfMap = OPERATION_KIND_META.operationOrders.wfMap();
+  const canView = (o) => currentUser.perms?.admin || o.creator === currentUser.username || isApproverForDeptWorkflow(wfMap[o.dept], currentUser.username);
+  const scoped = (DB.operationOrders || []).filter(canView);
+  populateOperationOrderLocationOptions(scoped, 'opReportFilterLocation');
+
+  // Khoảng ngày áp theo NGÀY TẠO đơn (createdAt) — cùng field/quy ước lọc "Từ Ngày/Đến Ngày" ở Danh Sách
+  // (isInDateRange()), xác định phạm vi ĐƠN HÀNG đưa vào báo cáo; việc nhóm "theo tháng" bên dưới lại
+  // dùng approvedAt/receivedAt riêng của từng nhóm (thời điểm đúng của sự kiện đang đếm — 1 đơn tạo
+  // trong khoảng ngày lọc nhưng được duyệt/nhập hàng ở tháng khác vẫn lên đúng tháng đó, không gộp nhầm
+  // vào tháng tạo đơn).
+  const filtered = scoped.filter(o => {
+    if (!isInDateRange(o.createdAt, fromDate, toDate)) return false;
+    if (locationFilter && (o.receivingLocationName || '') !== locationFilter) return false;
+    return true;
+  });
+
+  const total = filtered.length;
+  // "Đã phê duyệt" = đã qua xong bước duyệt phòng ban (bất kể giai đoạn nhập hàng sau đó ra sao) —
+  // AWAITING_RECEIPT/RECEIVED/RECEIPT_CANCELLED đều tính, vì cả 3 đều ĐÃ được duyệt; APPROVED giữ lại
+  // cho hồ sơ hiếm chưa kịp di trú (xem operationStatusBadge()). "Chưa phê duyệt" = còn trong vòng xử lý
+  // (PENDING/DRAFT) — KHÔNG gộp REJECTED vào đây (bị từ chối là 1 kết quả đã CHỐT, không phải "chưa
+  // xong"), đếm riêng ở thẻ Bị Từ Chối để không lẫn 2 khái niệm.
+  const APPROVED_FAMILY = new Set(['APPROVED', 'AWAITING_RECEIPT', 'RECEIVED', 'RECEIPT_CANCELLED']);
+  const approvedOrders = filtered.filter(o => APPROVED_FAMILY.has(o.status));
+  const notYetApprovedOrders = filtered.filter(o => o.status === 'PENDING' || o.status === 'DRAFT');
+  const rejectedOrders = filtered.filter(o => o.status === 'REJECTED');
+  const awaitingReceiptOrders = filtered.filter(o => o.status === 'AWAITING_RECEIPT');
+  const receivedOrders = filtered.filter(o => o.status === 'RECEIVED');
+  const cancelledReceiptOrders = filtered.filter(o => o.status === 'RECEIPT_CANCELLED');
+
+  const approvedValueTotal = approvedOrders.reduce((sum, o) => sum + (o.amount || 0), 0);
+  const receivedValueTotal = receivedOrders.reduce((sum, o) => sum + (o.amount || 0), 0);
+
+  const summaryCards = [
+    { label: 'Tổng Số Đơn', value: total, colorClass: 'text-blue-700' },
+    { label: 'Đã Phê Duyệt', value: approvedOrders.length, colorClass: 'text-green-700' },
+    { label: 'Chưa Phê Duyệt', value: notYetApprovedOrders.length, colorClass: 'text-yellow-700' },
+    { label: 'Bị Từ Chối', value: rejectedOrders.length, colorClass: 'text-red-700' },
+    { label: 'Chờ Nhập Hàng', value: awaitingReceiptOrders.length, colorClass: 'text-indigo-700' },
+    { label: 'Đã Nhập Hàng', value: receivedOrders.length, colorClass: 'text-emerald-700' },
+    { label: 'Đã Hủy Nhập', value: cancelledReceiptOrders.length, colorClass: 'text-slate-600' }
+  ];
+  summaryEl.innerHTML = summaryCards.map(c => `
+    <div class="border rounded-lg p-2 text-center bg-white">
+      <div class="text-[11px] text-gray-500 font-semibold">${escapeHtml(c.label)}</div>
+      <div class="text-lg font-bold ${c.colorClass}">${c.value.toLocaleString('vi-VN')}</div>
+    </div>
+  `).join('');
+
+  const valueTotalsEl = document.getElementById('opOrderReportValueTotals');
+  if (valueTotalsEl) {
+    valueTotalsEl.innerHTML = `
+      <div class="bg-white p-3 rounded border text-xs">
+        <div class="text-gray-500 font-semibold">Tổng Giá Trị Đơn Đã Phê Duyệt</div>
+        <div class="text-xl font-bold text-green-700">${approvedValueTotal.toLocaleString('vi-VN')} VNĐ</div>
+      </div>
+      <div class="bg-white p-3 rounded border text-xs">
+        <div class="text-gray-500 font-semibold">Tổng Giá Trị Đơn Đã Nhập Hàng</div>
+        <div class="text-xl font-bold text-emerald-700">${receivedValueTotal.toLocaleString('vi-VN')} VNĐ</div>
+      </div>
+    `;
+  }
+
+  // "Theo thời gian" — nhóm theo tháng, approvedAt cho nhóm Đã Duyệt / receivedAt cho nhóm Đã Nhập Hàng
+  // (2 mốc thời gian riêng, KHÔNG dùng chung createdAt — xem chú thích ở lib/workflowEngine.js/
+  // lib/recordActions.js nơi gán 2 field này). Hồ sơ cũ di trú qua migrateApprovedOperationOrdersToAwaitingReceipt()
+  // (seedDefaults.js) vẫn có approvedAt (lấy lại từ lịch sử hoặc thời điểm di trú) nên vẫn lên đúng biểu đồ.
+  const approvedByMonth = groupOperationOrdersByMonth(approvedOrders, 'approvedAt');
+  const receivedByMonth = groupOperationOrdersByMonth(receivedOrders, 'receivedAt');
+  const approvedMaxTotal = Math.max(1, ...approvedByMonth.map(b => b.total));
+  const receivedMaxTotal = Math.max(1, ...receivedByMonth.map(b => b.total));
+
+  const approvedByMonthEl = document.getElementById('opOrderReportApprovedByMonth');
+  if (approvedByMonthEl) {
+    approvedByMonthEl.innerHTML = approvedByMonth.length
+      ? approvedByMonth.map(b => buildOpOrderStatBarHTML(`${b.label} (${b.count} đơn)`, b.total, approvedMaxTotal, 'bg-green-500')).join('')
+      : `<div class="text-gray-400 italic text-xs">Không có đơn hàng đã phê duyệt trong khoảng lọc hiện tại.</div>`;
+  }
+  const receivedByMonthEl = document.getElementById('opOrderReportReceivedByMonth');
+  if (receivedByMonthEl) {
+    receivedByMonthEl.innerHTML = receivedByMonth.length
+      ? receivedByMonth.map(b => buildOpOrderStatBarHTML(`${b.label} (${b.count} đơn)`, b.total, receivedMaxTotal, 'bg-emerald-500')).join('')
+      : `<div class="text-gray-400 italic text-xs">Không có đơn hàng đã nhập hàng trong khoảng lọc hiện tại.</div>`;
+  }
+}
+
+// ==========================================
 // VẬN HÀNH > "SIÊU THỊ" > BÁO CÁO — tổng hợp tiến độ nhanh/chậm theo từng hồ sơ Mở mới/Sửa chữa.
 // ==========================================
 function renderOperationStoreReport() {
@@ -2040,6 +2296,9 @@ const OP_CLICK_ACTIONS = {
   openOperationAcceptanceActionModal: el => openOperationAcceptanceActionModal(Number(el.dataset.id), el.dataset.action),
   closeOperationAcceptanceActionModal: () => closeOperationAcceptanceActionModal(),
   confirmOperationAcceptanceAction: () => confirmOperationAcceptanceAction(),
+  closeOperationOrderReceiptActionModal: () => closeOperationOrderReceiptActionModal(),
+  confirmOperationOrderReceiptAction: () => confirmOperationOrderReceiptAction(),
+  setOperationOrderSubTab: el => setOperationOrderSubTab(el.dataset.tab),
   // Mục E: owiAssignedToPicker (renderPeopleMultiSelect(), khuôn groupMembersPicker) sống trong
   // operationWorkItemFormModal — bọc bởi bindOperationDelegation() (OP_CLICK_ACTIONS riêng của Vận
   // Hành, KHÔNG phải bindCspDelegation() dùng chung window[fnName] mà renderPeopleMultiSelect() vốn giả
@@ -2052,6 +2311,7 @@ const OP_CHANGE_ACTIONS = {
   onOperationOrderFilterChange: () => onOperationOrderFilterChange(),
   onOperationStoreOpenFilterChange: () => onOperationStoreOpenFilterChange(),
   onOperationRepairFilterChange: () => onOperationRepairFilterChange(),
+  onOperationOrderReportFilterChange: () => onOperationOrderReportFilterChange(),
   renderOperationStoreReport: () => renderOperationStoreReport(),
   resolveOwiAcceptorInput: el => resolveOwiAcceptorInput(el.value),
   resolveVsoPersonInChargeInput: el => resolveVsoPersonInChargeInput(el.value),
@@ -2059,7 +2319,19 @@ const OP_CHANGE_ACTIONS = {
   onOwiAcceptanceModeChange: () => onOwiAcceptanceModeChange(),
   onOperationEstimateImportFileChange: (el, e) => onOperationEstimateImportFileChange(e),
   onOperationWorkItemImportFileChange: (el, e) => onOperationWorkItemImportFileChange(e),
-  handleOperationOrderPdfUpload: (el, e) => handleOperationOrderPdfUpload(e)
+  handleOperationOrderPdfUpload: (el, e) => handleOperationOrderPdfUpload(e),
+  // handleActionCellDispatch() (core.js) — dropdown "Khác ▾" dùng chung cho MỌI bảng danh sách nghiệp vụ
+  // (buildActionCell()), đọc data-arg-el="0"/data-arg1/data-arg2 để gọi lại đúng hàm điều phối của module
+  // (runOperationOrderAction()...). BỊ THIẾU ở đây từ trước (đợt CSP hardening riêng cho Vận Hành, xem
+  // chú thích OP_CLICK_ACTIONS phía trên) khiến "🗑️ Xóa" (đã có sẵn cho operationOrders) — và giờ thêm
+  // "📥 Nhập Hàng"/"🚫 Hủy Nhập" mới — hoàn toàn im lặng không chạy khi chọn trong dropdown: sự kiện
+  // 'change' nổi bọt tới #vanHanhSection (root của bindOperationDelegation()) nhưng OP_CHANGE_ACTIONS
+  // không có khoá "handleActionCellDispatch" nên bị bỏ qua lặng lẽ, không báo lỗi gì. Vá TẠI ĐÂY (không
+  // sửa buildActionCell()/handleActionCellDispatch() dùng chung ~15+ module khác) — mirror đúng cách
+  // cspDispatchOp() (core.js) tự đọc data-arg-el/data-arg1/data-arg2 để dựng lại đúng thứ tự tham số.
+  // cspCoerceArg() (core.js) — ép id về Number (giống hệt cspReadArgSlot() ở đường dispatch chung),
+  // KHÔNG được để nguyên chuỗi: mọi hàm điều phối phía dưới đều so sánh id bằng "===" với x.id (number).
+  handleActionCellDispatch: el => handleActionCellDispatch(el, el.dataset.arg1, cspCoerceArg(el.dataset.arg2))
 };
 const OP_INPUT_ACTIONS = {
   onOperationOrderFilterChange: () => onOperationOrderFilterChange(),
@@ -2106,5 +2378,5 @@ function bindOperationDelegation(rootId) {
     if (fn) fn(e);
   });
 }
-['vanHanhSection', 'operationEstimateModal', 'operationWorkItemModal', 'operationWorkItemFormModal', 'operationAcceptanceActionModal', 'operationProcessModal', 'operationWorkItemProgressModal'].forEach(bindOperationDelegation);
+['vanHanhSection', 'operationEstimateModal', 'operationWorkItemModal', 'operationWorkItemFormModal', 'operationAcceptanceActionModal', 'operationProcessModal', 'operationWorkItemProgressModal', 'operationOrderReceiptModal'].forEach(bindOperationDelegation);
 

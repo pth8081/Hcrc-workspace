@@ -1,10 +1,117 @@
 # Phiên bản hiện tại
 
-**9.4** — đã merge vào `main` (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge
+**9.5** — đã merge vào `main` (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge
 góc màn hình + `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần
 kiểu `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
 
-## Cập nhật gần nhất — Vận Hành > 📦 Đơn Hàng: đọc PDF phiếu đặt hàng NCC tự động điền form (2026-09-06)
+## Cập nhật gần nhất — Vận Hành > 📦 Đơn Hàng: sub-tab "📊 Báo Cáo" + giai đoạn "Chờ Nhập Hàng" sau khi duyệt (2026-09-06)
+
+Theo yêu cầu người dùng: tách màn "📦 Đơn Hàng" thành 2 sub-tab ("📋 Danh Sách" — màn cũ nguyên vẹn — và
+"📊 Báo Cáo" mới), thêm 1 giai đoạn MỚI sau khi duyệt xong ("Chờ Nhập Hàng" → "Nhập Hàng"/"Hủy Nhập"), và
+thêm bộ lọc theo "Siêu Thị (Nơi Nhận)" — dựa trên field `receivingLocationName` đã có từ đợt PDF autofill
+(commit ngay trước, `da8403f`). **KHÔNG đụng gì tới quy trình duyệt PENDING theo phòng ban gốc** (đúng yêu
+cầu tường minh của người dùng) — đây chỉ là 1 giai đoạn TIẾP THEO, bắt đầu SAU KHI đã duyệt xong.
+
+**Trạng thái mới (`lib/workflowEngine.js` `applyWorkflowAction()`):** duyệt xong bước CUỐI của
+`operationOrders` giờ KHÔNG dừng ở `APPROVED` như mọi module khác nữa — tự động chuyển tiếp sang
+`AWAITING_RECEIPT` ("⏳🚚 Chờ nhập hàng") ngay trong cùng 1 lượt xử lý, ghi thêm `approvedAt` (ISO, khác
+`history[].time` dạng `vi-VN` không tiện sort/nhóm) để Báo Cáo nhóm "theo tháng" mà không phải tự parse
+ngược lịch sử. Chỉ đúng `moduleKey === 'operationOrders'` bị ảnh hưởng — mọi module khác (carRegs, docs,
+submissions...) vẫn dừng ở `APPROVED` y hệt trước (có test regression riêng xác nhận điều này).
+
+**2 hành động MỚI, TÁCH RIÊNG khỏi engine duyệt PENDING** (`lib/recordActions.js`
+`receiveOperationOrderGoods()`/`cancelOperationOrderReceipt()`, route
+`POST /api/records/operationOrders/:id/receive-goods|cancel-receipt` ở `routes/records.js` — KHÔNG đi qua
+`POST /api/workflow/.../approve|reject` vì hàm đó chỉ nhận hồ sơ đang `PENDING`):
+- **"📥 Nhập Hàng"** → `RECEIVED` ("✅ Đã nhập hàng", coi như KẾT THÚC đơn) + `receivedAt` (ISO).
+- **"🚫 Hủy Nhập"** → `RECEIPT_CANCELLED` ("🚫 Đã hủy nhập" — hàng không về thực tế, KHÁC `REJECTED`: đó là
+  bị từ chối ngay ở bước duyệt, trước khi có gì để nói tới việc nhập hay không) + `receiptCancelledAt`
+  (ISO) + bắt buộc lý do.
+- Cả 2 CHỈ nhận từ đúng `AWAITING_RECEIPT` (409 nếu sai trạng thái nguồn, kể cả gọi lại lần 2 sau khi đã
+  xử lý xong).
+- **Quyền thao tác — quyết định thiết kế:** MIRROR đúng quần thể được phép Duyệt/Từ chối đơn hàng đó (admin
+  hoặc có tên ở BẤT KỲ bước nào trong dept-workflow của phòng ban hồ sơ) — KHÔNG mở thêm cho người tạo đơn
+  (thường là người đi mua/đặt hàng, khác vai trò xác nhận nhập kho). Đây là lựa chọn hợp lý nhất với dữ
+  liệu hiện có (không có bảng "nhân sự phụ trách kho theo từng nơi nhận" nào để gán chính xác hơn) — nếu
+  thực tế nghiệp vụ cần người khác (VD nhân viên kho tại chính siêu thị đó) thao tác, cần bổ sung 1 khái
+  niệm quyền mới ở đợt sau.
+
+**Hồ sơ CŨ đã ở `APPROVED` từ trước đợt này** (di trú 1 lần, idempotent — `migrateApprovedOperationOrdersToAwaitingReceipt()`,
+`seedDefaults.js`, chạy mỗi lần khởi động): tự chuyển sang `AWAITING_RECEIPT` (không suy đoán đã nhận hàng
+hay chưa), `approvedAt` lấy lại từ dòng lịch sử `APPROVED` cuối cùng nếu parse được (không thì dùng thời
+điểm di trú), ghi thêm 1 dòng `SYSTEM_MIGRATION` — nếu không di trú, hồ sơ cũ sẽ kẹt vĩnh viễn không bao
+giờ thấy được 2 nút mới và lọt khỏi mọi ô đếm Báo Cáo.
+
+**Sub-tab "📊 Báo Cáo"** (`renderOperationOrderReport()`, `public/js/module-vanhanh.js`) — mirror phong
+cách "Báo Cáo Quản Trị" (bộ lọc khoảng ngày + thẻ tổng hợp + thanh tỷ lệ ngang thay biểu đồ thư viện
+ngoài, viết 1 bản cục bộ `buildOpOrderStatBarHTML()` thay vì gọi thẳng `buildStatBarHTML()` ở
+`module-baocaoquantri.js` vì cụm nạp module lười "vanhanh" không khai deps tới cụm đó), sống NGAY TRONG
+màn Đơn Hàng (không gộp vào module "Báo Cáo" top-level riêng, đúng yêu cầu):
+- Lọc theo khoảng ngày TẠO đơn + "Siêu Thị (Nơi Nhận)".
+- 7 thẻ đếm: Tổng Số Đơn / Đã Phê Duyệt (`APPROVED`+`AWAITING_RECEIPT`+`RECEIVED`+`RECEIPT_CANCELLED` — cả
+  3 trạng thái sau đều ĐÃ qua xong bước duyệt phòng ban) / Chưa Phê Duyệt (`PENDING`+`DRAFT`) / Bị Từ Chối
+  (`REJECTED`, tách riêng khỏi "chưa phê duyệt" — đây là kết quả đã CHỐT) / Chờ Nhập Hàng / Đã Nhập Hàng /
+  Đã Hủy Nhập.
+- 2 tổng giá trị: Đơn Đã Phê Duyệt (dùng `amount` — tổng luôn có sẵn từ hạng mục, không phải
+  `paymentTotalAmount` optional từ PDF) và Đơn Đã Nhập Hàng.
+- 2 khối "theo tháng" (nhóm theo `approvedAt`/`receivedAt`, KHÁC `createdAt` — 1 đơn tạo trong khoảng lọc
+  nhưng duyệt/nhập hàng ở tháng khác vẫn lên đúng tháng sự kiện đó).
+
+**Lọc "Siêu Thị (Nơi Nhận)"** — quyết định thiết kế: dùng danh sách GIÁ TRỊ THỰC TẾ đã có trong
+`receivingLocationName` (free-text đọc từ PDF NCC), KHÔNG đối chiếu "Danh Mục Siêu Thị" (`DB.stores`,
+`lib/storeCatalogImport.js`) vì field này chưa từng được validate khớp danh mục đó lúc tạo — dùng
+`DB.stores` làm nguồn dropdown rất dễ khiến bộ lọc "không khớp gì cả" nếu tên PDF parse ra khác cách viết
+trong danh mục. Áp dụng cho CẢ Danh Sách lẫn Báo Cáo (không chỉ Báo Cáo — theo đúng cách hiểu ngữ nghĩa
+"bộ lọc chung", không phải riêng cho báo cáo).
+
+**Bug tiện thể vá — dropdown "Khác ▾" của Vận Hành chưa từng hoạt động qua click:** phát hiện khi viết
+demo — `module-vanhanh.js` tự dựng 1 hệ thống dispatch CSP riêng (`OP_CHANGE_ACTIONS`, KHÔNG dùng
+`bindCspDelegation()`/`window[fnName]` chung của `core.js`) nhưng THIẾU khoá `handleActionCellDispatch`
+(hàm dùng chung cho MỌI dropdown "Khác ▾" ở `buildActionCell()`) — nghĩa là "🗑️ Xóa" (đã có sẵn cho
+`operationOrders` từ trước) chưa BAO GIỜ chạy được khi chọn qua dropdown thật (sự kiện `change` nổi bọt
+lên `#vanHanhSection` nhưng bị bỏ qua lặng lẽ, không lỗi gì). Vá tại `OP_CHANGE_ACTIONS` (thêm 1 dòng,
+dùng `cspCoerceArg()` có sẵn ở `core.js` để ép đúng kiểu tham số `id`) — 2 nút MỚI "Nhập Hàng"/"Hủy Nhập"
+đi qua đúng dropdown này nên nếu không vá thì cũng sẽ không hoạt động.
+
+**Sweep các nơi đếm/lọc `operationOrders` theo status khác:** `public/js/core-approvalhub.js`
+`getMyProcessedApprovals()` — mục "Hồ Sơ Đã Xử Lý > Đã Duyệt" ở Approval Hub trước đây so khớp cứng
+`rec.status === 'APPROVED'`, nếu không sửa sẽ KHÔNG BAO GIỜ còn thấy đơn hàng nào ở đây (status đã đổi
+tiếp ngay sau khi duyệt) dù người dùng thực sự đã duyệt — thêm tham số `matchStatuses` (mặc định vẫn so
+đúng `[status]` như cũ cho MỌI module khác) để `operationOrders` so khớp cả nhóm
+`APPROVED`/`AWAITING_RECEIPT`/`RECEIVED`/`RECEIPT_CANCELLED` khi lọc "Đã duyệt". `addDeptWorkflowItems()`
+("đang chờ tôi duyệt") không cần sửa — đã chỉ nhận đúng `status === 'PENDING'` từ trước.
+
+Test mới:
+- `tests/test-operation-order-receiving.js` (thuần Node, không Playwright) — 16 kịch bản: quy trình duyệt
+  PENDING→APPROVE/REJECT không hồi quy (kể cả bước giữa của quy trình nhiều bước KHÔNG bị tự chuyển
+  `AWAITING_RECEIPT`, chỉ đúng bước CUỐI mới chuyển, và module KHÁC — carRegs — hoàn toàn không bị ảnh
+  hưởng), `receiveOperationOrderGoods()`/`cancelOperationOrderReceipt()` đúng quyền/đúng trạng thái nguồn,
+  và di trú hồ sơ cũ (`migrateApprovedOperationOrdersToAwaitingReceipt()`) đúng + idempotent.
+- `tests/test-operation-order-report.js` (Playwright, `tests/testHarness.js` — mở rộng thêm
+  `operationOrderDeptWorkflows` vào `buildAppDataForCreate()` + 2 action handler `receive-goods`/
+  `cancel-receipt` gọi thẳng hàm thật) — 20 kịch bản: tạo/duyệt/từ chối/nhập hàng/hủy nhập qua ĐÚNG luồng
+  UI thật, nút mới chỉ hiện + chỉ hoạt động đúng quyền/trạng thái, đếm/tổng giá trị/nhóm theo tháng ở Báo
+  Cáo đúng số liệu tay tính trước, lọc Siêu Thị thu hẹp đúng cả Danh Sách lẫn Báo Cáo, chuyển sub-tab qua
+  lại không lỗi.
+
+Demo Playwright thật (dùng `tests/testHarness.js` — sandbox không có SQL Server/Docker để chạy server
+thật, xem ghi chú đầu file) — tạo 4 đơn hàng ở 2 siêu thị khác nhau, duyệt 3 đơn, 1 đơn Nhập Hàng xong
+(RECEIVED), 1 đơn Hủy Nhập (RECEIPT_CANCELLED), 1 đơn còn Chờ Nhập Hàng — ảnh lưu ở
+`server/demo-screenshots/operation-order-report-receiving/`: (01) sub-tab Danh Sách + badge trạng thái
+mới, (02a/02b) dropdown "Khác ▾" + modal xác nhận Nhập Hàng thật, (03) sub-tab Báo Cáo, (04) lọc Siêu Thị
+thu hẹp danh sách.
+
+Xác minh: bộ hồi quy đầy đủ 64 file `tests/test-*.js` — 62 qua, đúng 2 lỗi biết trước do sandbox không có
+SQL Server thật (không liên quan thay đổi này, giống mọi lần chạy trước).
+
+**Deploy: không cần thao tác gì ngoài copy code + `pm2 restart`** — không đổi `schema.sql` (dữ liệu vẫn là
+JSON qua `dbo.Records`, chỉ thêm field/status mới, không cột SQL nào), không đổi `.env.example`, không
+thêm/đổi `dependencies`. Có 1 điểm cần biết: `migrateApprovedOperationOrdersToAwaitingReceipt()`
+(`seedDefaults.js`) sẽ TỰ ĐỘNG chuyển mọi đơn hàng đang ở `APPROVED` sang `AWAITING_RECEIPT` ngay lần
+restart tới (thay đổi dữ liệu thật, một chiều, đúng ý — cùng khuôn di trú `migrateStuckOperationApprovalStatuses()`
+đã có từ đợt trước) — người dùng nên biết trước khi restart nếu hệ thống thật đang có đơn hàng đã duyệt.
+
+## Cập nhật trước đó — Vận Hành > 📦 Đơn Hàng: đọc PDF phiếu đặt hàng NCC tự động điền form (2026-09-06)
 
 Theo yêu cầu người dùng: khi lập "Đơn Hàng" (`operationOrders`), upload file phiếu đặt hàng NCC (PDF) ở
 form tạo mới thì ứng dụng **tự đọc và điền TOÀN BỘ field** (không chỉ vài field) để người dùng chỉ cần

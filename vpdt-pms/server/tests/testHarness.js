@@ -112,6 +112,13 @@ function buildAppDataForCreate(moduleKey, state) {
     // này qua appData khi xử lý /api/workflow/operationStoreOpeningEstimate|operationRepairEstimate/:id/:action.
     operationStoreOpenEstimateDeptWorkflows: state.operationStoreOpenEstimateDeptWorkflows,
     operationRepairEstimateDeptWorkflows: state.operationRepairEstimateDeptWorkflows,
+    // Vận Hành > Đơn Hàng (đợt "Báo Cáo + Nhập Hàng") — resolveWfConfig() (MODULE_CONFIGS.operationOrders,
+    // lib/workflowEngine.js) đọc thẳng map này qua appData khi xử lý /api/workflow/operationOrders/:id/
+    // :action (quy trình duyệt phòng ban cũ, GIỮ NGUYÊN) VÀ khi lib/recordActions.js
+    // isApproverForOperationOrderReceipt() tra lại đúng approver để gác "Nhập Hàng"/"Hủy Nhập" — THIẾU
+    // field này trước đây (chưa module nào trong bộ test cần tới operationOrders' dept-workflow thật)
+    // khiến resolveWfConfig() luôn rơi về approvers rỗng, canApproveStep() chỉ còn admin bấm được.
+    operationOrderDeptWorkflows: state.operationOrderDeptWorkflows,
     // users — operationStoreOpenings/operationRepairs.extraValidate() cần để resolve "Người Phụ Trách"
     // qua resolveOperationPersonInChargeUsername() (Mục C).
     users: state.users
@@ -185,7 +192,13 @@ function buildActionHandlers(state) {
 
     // ===== NHÂN SỰ — HCRC Đồng Hành (hỏi & đáp) =====
     'hrFeedback:respond': (u, item, body) => recordActions.respondToHrFeedback(u, item, body),
-    'hrFeedback:mark-read': (u, item) => recordActions.markHrFeedbackRead(u, item)
+    'hrFeedback:mark-read': (u, item) => recordActions.markHrFeedbackRead(u, item),
+
+    // ===== VẬN HÀNH > ĐƠN HÀNG > "Nhập Hàng"/"Hủy Nhập" (đợt "Báo Cáo + Nhập Hàng") — mirror ĐÚNG
+    // routes/records.js POST /operationOrders/:id/receive-goods|cancel-receipt, gọi thẳng hàm thật ở
+    // lib/recordActions.js (không tự đoán lại logic quyền/trạng thái nguồn) =====
+    'operationOrders:receive-goods': (u, item) => recordActions.receiveOperationOrderGoods(u, item, buildAppDataForCreate('operationOrders', state)),
+    'operationOrders:cancel-receipt': (u, item, body) => recordActions.cancelOperationOrderReceipt(u, item, body, buildAppDataForCreate('operationOrders', state))
   };
 }
 
