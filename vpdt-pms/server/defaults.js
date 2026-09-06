@@ -378,21 +378,23 @@ const DEFAULTS = {
   contractApprovalGroups: {},
   contractManageDeptWorkflows: DEFAULT_MAP,
 
-  // Nhân Sự > Cơ Cấu Tổ Chức > "🎯 Cấu Hình KPI Theo Vị Trí" — cấu hình CHỈ tiêu chí KPI theo Phòng
-  // Ban × Chức Danh (KHÔNG phải quy trình duyệt như *DeptWorkflows ở trên, và KHÔNG phải chấm điểm/
-  // duyệt KPI thật — phạm vi đợt này CHỈ dừng ở cấu hình + tự động tra cứu theo vị trí, chưa có màn
-  // chấm điểm/kỳ đánh giá/phê duyệt). Dạng { [dept]: { [jobTitle]: {criteria, updatedAt, updatedBy} } }
-  // — criteria = [{id, name, weight, note}]. dept có thể là tên thật trong DB.depts/DB.stores, HOẶC
-  // khoá đặc biệt "_ALL_" (nghĩa "áp dụng mọi phòng ban" cho đúng chức danh đó) — cùng tinh thần
-  // deptMap fallback ở buildEffectiveSubmissionWorkflowServer() (lib/createValidation.js) nhưng đảo
-  // ngược thứ tự ưu tiên: khớp ĐÚNG dept trước, không có thì mới rơi về "_ALL_". Tra cứu tại thời điểm
-  // dùng theo user.dept + user.jobTitle (2 field phẳng có sẵn trên DB.users, xem uDept/uJobTitle ở
-  // index.html) — KHÔNG gán KPI trực tiếp cho từng user, nên cấp 1 tài khoản mới đúng Phòng Ban + Chức
-  // Danh đã cấu hình là tự động thừa hưởng, không cần cấu hình lại. Gate ghi: NON_ADMIN_GATED_KEYS
-  // (routes/data.js) — orgChartManage/nhanSuManage/admin, đúng độ mở của màn "Cơ Cấu Tổ Chức". Đọc mở
-  // cho mọi người đã đăng nhập (không có bí mật nào) — cần đọc được để hiện modal "🎯 KPI" ở cây tổ
-  // chức cho bất kỳ ai xem được cây đó.
-  kpiCriteriaConfig: {},
+  // Nhân Sự > Cơ Cấu Tổ Chức > "🎯 Cấu Hình Cấp Đánh Giá KPI Theo Vị Trí" — ĐÍNH CHÍNH sau demo bản đầu
+  // (bản đầu SAI: hiểu nhầm thành danh sách tiêu chí KPI theo vị trí — đã bỏ hoàn toàn, không lưu tiêu
+  // chí/trọng số nào ở đây). Yêu cầu THẬT: cấu hình 1 LẦN "vị trí X (phòng ban Y hoặc mọi phòng ban) do
+  // CHỨC DANH NÀO đánh giá KPI", KHÔNG chọn tay người quản lý/đánh giá trên TỪNG tài khoản nhân viên
+  // (nguyên văn người dùng: "cấu hình cấp quản lý trên từng nhân viên gây khó khăn vì cty đông người").
+  // Dạng { [dept]: { [jobTitle]: {evaluatorJobTitle, updatedAt, updatedBy} } } — dept có thể là tên thật
+  // trong DB.depts/DB.stores, HOẶC khoá đặc biệt "_ALL_" (nghĩa "áp dụng mọi phòng ban" cho đúng chức
+  // danh đó) — cùng tinh thần deptMap fallback ở buildEffectiveSubmissionWorkflowServer()
+  // (lib/createValidation.js) nhưng đảo ngược thứ tự ưu tiên: khớp ĐÚNG dept trước, không có thì mới
+  // rơi về "_ALL_". CHỈ lưu CHỨC DANH người đánh giá (KHÔNG lưu username cụ thể nào) — người đánh giá
+  // THẬT được tra ĐỘNG tại thời điểm xem bằng cách lọc DB.users cùng phòng ban + đúng chức danh đã cấu
+  // hình + đang active (xem resolveKpiEvaluatorForUser(), module-hcrcdonghanh.js), nên nhân sự thay đổi
+  // (nghỉ việc/tuyển mới/đổi chức danh) KHÔNG cần sửa lại cấu hình này — tự động khớp lại. Gate ghi:
+  // NON_ADMIN_GATED_KEYS (routes/data.js) — orgChartManage/nhanSuManage/admin, đúng độ mở của màn "Cơ
+  // Cấu Tổ Chức". Đọc mở cho mọi người đã đăng nhập (không có bí mật nào) — cần đọc được để hiện modal
+  // "🎯 KPI" ở cây tổ chức cho bất kỳ ai xem được cây đó.
+  kpiEvaluatorConfig: {},
 
   // Phân quyền theo module (submissionView/Create, contractView/Create, meetingView/BookScope,
   // carView/Create, officeView/Create) dùng dạng { all, depts } — xem/tạo mới theo TOÀN CÔNG TY

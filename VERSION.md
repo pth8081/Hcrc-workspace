@@ -2,61 +2,77 @@
 
 **10.3** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Bản merge gần nhất vào `main` vẫn là **10.2** — **10.3** hiện mới chỉ nằm trên nhánh
-`claude/chao-ban-oo5ijl` (xem mục "Nhân Sự > Cơ Cấu Tổ Chức: 🎯 Cấu Hình KPI Theo Vị Trí..." ngay dưới),
-CHỜ người dùng xem demo trước khi merge vào `main` theo đúng yêu cầu của đợt này. Từ v2.0 trở đi đổi
-sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu `1.100.0`) — xem quy tắc đánh version trong
-`CLAUDE.md`.
+`claude/chao-ban-oo5ijl` (xem mục "Nhân Sự > Cơ Cấu Tổ Chức: 🎯 Cấu Hình Cấp Đánh Giá KPI Theo Vị
+Trí..." ngay dưới), CHỜ người dùng xem demo trước khi merge vào `main` theo đúng yêu cầu của đợt này.
+Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu `1.100.0`) — xem quy tắc
+đánh version trong `CLAUDE.md`.
 
-## Nhân Sự > Cơ Cấu Tổ Chức: "🎯 Cấu Hình KPI Theo Vị Trí" — chỉ tiêu KPI tự động tra cứu theo Phòng Ban × Chức Danh, không cần gán riêng từng người (2026-09-06)
+## Nhân Sự > Cơ Cấu Tổ Chức: "🎯 Cấu Hình Cấp Đánh Giá KPI Theo Vị Trí" — tự động tra ra AI đánh giá vị trí nào, không chọn tay người quản lý trên từng nhân viên (2026-09-06)
 
-**Yêu cầu gốc**: "xem module nhân sự ở mục cơ cấu tổ chức tôi muốn cấu hình đánh giá kpi dựa trên
-position based sẽ được lấy khi cấp account điền theo vị trí, phòng" — cấu hình chỉ tiêu KPI theo VỊ TRÍ
-(Phòng Ban + Chức Danh), để khi cấp/sửa 1 tài khoản đã điền đúng 2 trường này, hệ thống tự tra cứu ra
-bộ tiêu chí áp dụng, không cần gán KPI thủ công cho từng người. **Phạm vi đợt này CHỈ dừng ở cấu hình +
-tự động tra cứu theo vị trí** — KHÔNG bao gồm màn chấm điểm/kỳ đánh giá/phê duyệt KPI (chưa có KPI
-module nào tồn tại trước đợt này — xác nhận qua rà soát toàn bộ codebase, không có `DB.kpi*`/route `kpi`
-nào).
+**Yêu cầu gốc**: "cấu hình đánh giá kpi dựa trên position based sẽ được lấy khi cấp account điền theo
+vị trí, phòng". **ĐÍNH CHÍNH sau khi xem demo bản đầu** — bản đầu hiểu SAI thành cấu hình 1 DANH SÁCH
+TIÊU CHÍ KPI (tên/trọng số %/ghi chú) theo vị trí. Phản hồi chính xác của người dùng: *"tôi chưa đề cập
+đến cấu hình tiêu chí kpi, tôi chỉ cấu hình cấp nào đánh giá kpi cấp nào theo vị trí để tôi cấu hình
+trước, vì bạn đang để cấu hình cấp quản lý trên từng nhân viên gây khó khăn vì cty đông người. KPI tôi
+chưa đưa tiêu chí đâu"*. Yêu cầu THẬT: cấu hình 1 LẦN DUY NHẤT "vị trí X (phòng ban Y, hoặc mọi phòng
+ban) do CHỨC DANH NÀO đánh giá KPI", KHÔNG chọn tay người quản lý/đánh giá trên TỪNG tài khoản nhân
+viên (không khả thi ở công ty đông người) — **KHÔNG có tiêu chí/trọng số/ghi chú KPI nào trong đợt
+này**, chỉ dừng ở cấu hình "cấp nào đánh giá cấp nào" + tự động tra ra người thật đang giữ chức danh đó.
+Giả định đơn giản hoá (chưa được người dùng xác nhận, sẽ sửa nếu cần): 1 chức danh đánh giá cho mỗi cặp
+(dept, vị trí) — chưa hỗ trợ chuỗi nhiều cấp hay nhiều chức danh đánh giá khác nhau cho cùng 1 vị trí.
 
-**Dữ liệu**: `DB.kpiCriteriaConfig` (key mới trong `dbo.AppData`, seed `{}` ở `defaults.js`) — dạng
-`{ [dept]: { [jobTitle]: {criteria, updatedAt, updatedBy} } }`, `criteria = [{id, name, weight, note}]`.
-`dept` là tên thật trong `DB.depts`/`DB.stores`, HOẶC khoá đặc biệt `"_ALL_"` ("🌐 Áp dụng mọi phòng
-ban"). Tra cứu tại thời điểm dùng theo `user.dept` + `user.jobTitle` (2 field phẳng có sẵn trên
-`DB.users`) — khớp ĐÚNG dept trước, không có thì rơi về `"_ALL_"` cho đúng jobTitle đó, không khớp gì
-thì `null` (mirror đúng tinh thần `buildEffectiveSubmissionWorkflowServer()`,
-`lib/createValidation.js`).
+**Dữ liệu**: `DB.kpiEvaluatorConfig` (key mới trong `dbo.AppData`, seed `{}` ở `defaults.js` — ĐỔI TÊN
+từ `kpiCriteriaConfig` của bản đầu sai, xoá hẳn không còn dùng ở đâu) — dạng
+`{ [dept]: { [jobTitle]: {evaluatorJobTitle, updatedAt, updatedBy} } }`. `dept` là tên thật trong
+`DB.depts`/`DB.stores`, HOẶC khoá đặc biệt `"_ALL_"` ("🌐 Áp dụng mọi phòng ban"). CHỈ lưu CHỨC DANH
+người đánh giá (KHÔNG lưu username cụ thể nào) — người đánh giá THẬT được tra ĐỘNG tại thời điểm xem
+bằng cách lọc `DB.users` cùng phòng ban với nhân viên + đúng chức danh đã cấu hình + đang active, nên
+nhân sự thay đổi (nghỉ việc/tuyển mới/đổi chức danh) KHÔNG cần sửa lại cấu hình.
 
-**Server**: `kpiCriteriaConfig` vào `NON_ADMIN_GATED_KEYS` (`routes/data.js`, cùng khuôn
+**Resolution 2 bước** (`resolveKpiEvaluatorForUser(user, allUsers, appData)`, hàm thuần trong
+`module-hcrcdonghanh.js`): (1) tra QUY TẮC theo `user.dept` + `user.jobTitle` — khớp ĐÚNG dept trước,
+không có thì rơi về `"_ALL_"` (mirror tinh thần `buildEffectiveSubmissionWorkflowServer()`,
+`lib/createValidation.js`); (2) nếu có quy tắc, lọc `allUsers` CÙNG PHÒNG BAN với nhân viên + đúng
+`evaluatorJobTitle` + `active !== false`. Trả về 3 trạng thái PHẢI phân biệt rõ ràng: `null` (chưa cấu
+hình quy tắc nào), `{evaluatorJobTitle, evaluators: []}` (đã cấu hình nhưng hiện không ai giữ chức danh
+đó trong phòng ban này), hoặc `{evaluatorJobTitle, evaluators: [{username,name}, ...]}` (tra ra người
+thật — có thể nhiều người).
+
+**Server**: `kpiEvaluatorConfig` vào `NON_ADMIN_GATED_KEYS` (`routes/data.js`, cùng khuôn
 `meetingAttendeeTemplates`) — gate ghi RIÊNG `admin || orgChartManage || nhanSuManage` (đúng độ mở của
 module con "Cơ Cấu Tổ Chức"), KHÔNG phải `ADMIN_ONLY_KEYS`. Đọc (GET) mở cho MỌI người đã đăng nhập —
-không có bí mật nào trong key này, cần đọc được để hiện modal "🎯 KPI" ở cây tổ chức.
+không có bí mật nào trong key này (chỉ ánh xạ chức danh -> chức danh), cần đọc được để hiện modal "🎯
+KPI" ở cây tổ chức.
 
-**UI** (`public/index.html` + `public/js/module-hcrcdonghanh.js`): thêm sub-tab strip 2 nút vào
-`#orgChartSection` ("🌳 Sơ Đồ Tổ Chức" / "🎯 Cấu Hình KPI Theo Vị Trí", `setOrgChartSubTab()` — module
-con này TRƯỚC ĐÓ chỉ có 1 view duy nhất, không có sub-tab). Tab mới: dropdown Phòng Ban (gộp
-`DB.depts`+`DB.stores` — user.dept thật có thể tới từ 1 trong 2 nguồn tuỳ `posType`, xem
-`getKpiConfigDeptOptions()`) + dropdown Vị Trí/Chức Danh (gộp `DB.jobTitles`+`DB.storeJobTitles`, xem
-`getKpiConfigJobTitleOptions()`) + danh sách dòng tiêu chí (tên/trọng số %/ghi chú, thêm/xoá dòng được)
-+ tổng trọng số hiện cảnh báo MỀM màu hổ phách nếu ≠100% (không chặn lưu — validation nghiệp vụ chưa
-được yêu cầu). Nút "💾 Lưu Cấu Hình" ghi `DB.kpiCriteriaConfig[dept][jobTitle]` rồi
-`syncStorage('kpiCriteriaConfig')` (mirror đúng `saveVppExcludedJobTitles()`,
-`module-admin-specialperm.js` — snapshot trước khi ghi, rollback nếu server từ chối). Danh sách "📋 Đã
-Cấu Hình" hiện thẻ mỗi vị trí kèm nút "✏️ Sửa"/"🗑️ Xoá" (tự ẩn nếu không đủ quyền ghi). Cây tổ chức
-(`buildOrgChartNode()`) thêm nút "🎯 KPI" trên MỖI người — mở modal chỉ đọc hiện CHỈ TIÊU KPI tự động
-tra cứu theo `resolveKpiCriteriaForUser(user)` (hàm thuần, không đụng DOM) dựa đúng `dept`/`jobTitle`
-hiện tại của người đó, hoặc "⚠️ Chưa cấu hình KPI cho vị trí này" nếu không khớp gì — đây là bằng chứng
-cụ thể "cấu hình theo vị trí tự áp dụng cho MỌI tài khoản mang đúng Phòng Ban/Chức Danh", không cần
-gán KPI riêng cho từng người. Modal này sống NGOÀI `#orgChartSection` (cùng khuôn
-`#orgChartManagerModal`) nên cần `bindCspDelegation('orgChartKpiModal')` riêng (`core.js`) — thiếu dòng
-này 2 nút Đóng của modal không phản hồi click gì cả dù modal vẫn mở đúng nội dung (phát hiện được nhờ
-demo Playwright chạy full CSS thật, xem mục Kiểm thử).
+**UI** (`public/index.html` + `public/js/module-hcrcdonghanh.js`): sub-tab strip 2 nút trong
+`#orgChartSection` ("🌳 Sơ Đồ Tổ Chức" / "🎯 Cấu Hình Cấp Đánh Giá KPI", `setOrgChartSubTab()`). Form
+CHỈ CÒN 3 dropdown (Phòng Ban, Vị Trí cần đánh giá, Chức Danh Người Đánh Giá — 2 dropdown chức danh
+dùng CHUNG 1 danh mục nguồn gộp `DB.jobTitles`+`DB.storeJobTitles`) — **KHÔNG còn** ô tiêu chí/trọng
+số/ghi chú/nút "+ Thêm tiêu chí" nào (đã bỏ hoàn toàn so với bản đầu sai). Nút "💾 Lưu Cấu Hình" ghi
+`DB.kpiEvaluatorConfig[dept][jobTitle] = {evaluatorJobTitle,...}` rồi `syncStorage('kpiEvaluatorConfig')`
+(mirror `saveVppExcludedJobTitles()`, `module-admin-specialperm.js` — snapshot/rollback). Danh sách
+"📋 Đã Cấu Hình" hiện "Phòng: X — Vị trí: Y → Người đánh giá: Z" kèm Sửa/Xoá. Cây tổ chức
+(`buildOrgChartNode()`) giữ nguyên nút "🎯 KPI" trên mỗi người, nhưng modal đổi hẳn nội dung — hiện AI
+(tên + username) hiện đang đánh giá người này, hoặc 1 trong 2 thông báo phân biệt rõ ở trên. Modal sống
+NGOÀI `#orgChartSection` (cùng khuôn `#orgChartManagerModal`) nên cần `bindCspDelegation('orgChartKpiModal')`
+riêng (`core.js`, phát hiện qua demo Playwright chạy CSS thật ở đợt trước — vẫn giữ nguyên, không đổi).
 
-**Kiểm thử**: file mới `tests/test-kpi-criteria-config.js` (11 kịch bản — gate ghi 403 cho non-admin/
-quyền nghiệp vụ khác không liên quan, ghi được cho orgChartManage/nhanSuManage/admin, đọc mở cho mọi
-người, và 5 kịch bản resolution algorithm chạy THẲNG hàm `resolveKpiCriteriaForUser()` thật qua sandbox
-`vm` — khớp đúng dept, rơi về "_ALL_", dept đè "_ALL_", không khớp gì trả `null`, thiếu `jobTitle` không
-crash). Toàn bộ file `tests/test-*.js` cũ chạy lại — không có hồi quy mới (2 lỗi tiền tồn tại ở
-`test-audit-fixes-batch1.js`/`test-audit-round2-cluster1.js` đã xác minh KHÔNG liên quan, tái hiện y hệt
-trên baseline chưa có đợt này).
+**Kiểm thử**: `tests/test-kpi-criteria-config.js` (bản đầu sai) đã XOÁ HẲN, thay bằng
+`tests/test-kpi-evaluator-config.js` (12 kịch bản — 6 kịch bản gate ghi/đọc không đổi so với bản đầu, 6
+kịch bản resolution 2 bước: quy tắc riêng cho dept + tra đúng người cùng phòng ban, rơi về "_ALL_" và
+vẫn tra đúng người đúng phòng ban của nhân viên, quy tắc có nhưng chưa ai giữ chức danh -> mảng rỗng
+không crash, không có quy tắc nào -> `null`, thiếu `jobTitle` -> `null`, nhiều người cùng giữ chức danh
+-> trả về đủ tất cả và loại người `active:false`). Toàn bộ 66 file `tests/test-*.js` chạy lại — không
+có hồi quy mới (2 lỗi tiền tồn tại ở `test-audit-fixes-batch1.js`/`test-audit-round2-cluster1.js` đã
+xác minh KHÔNG liên quan, tái hiện y hệt trên baseline chưa có đợt này).
+
+**Demo**: `tests/demo-kpi-position-config.js` (bản đầu sai) đã XOÁ, thay bằng
+`tests/demo-kpi-evaluator-config.js` — ảnh chụp mới tại `demo-screenshots/kpi-evaluator-config/` (7
+ảnh: màn hình rỗng ban đầu KHÔNG còn ô tiêu chí nào, cấu hình dept cụ thể "Nhân viên bán hàng -> Giám
+đốc siêu thị" áp dụng cho CẢ 3 nhân viên cùng vị trí không cần cấu hình riêng từng người, cấu hình
+wildcard "_ALL_" + 1 rule "đã cấu hình nhưng chưa có người", còn nguyên sau `page.reload()` thật, modal
+tra ra đúng người theo dept cụ thể, modal rơi về "_ALL_" và vẫn khớp đúng phòng ban của nhân viên, modal
+phân biệt rõ "đã cấu hình nhưng chưa ai giữ chức danh" với "chưa cấu hình" ở vị trí khác).
 
 **Deploy**: KHÔNG cần thao tác gì ngoài copy code + `pm2 restart` — không đổi `server/sql/schema.sql`
 (dữ liệu vẫn ở `dbo.AppData` như mọi key khác), không thêm biến môi trường, không thêm `dependencies`
