@@ -167,10 +167,21 @@ const ADMIN_ONLY_KEYS = new Set([
 // tự soạn và chia sẻ cho nhau (tính năng cố ý mở cho người dùng thường), khoá lại chỉ-admin sẽ phá
 // đúng tính năng đó. Gate đúng bằng quyền của module: minutesCreate (lập biên bản, xem
 // canCreateMinutes()) hoặc minutesEdit (sửa biên bản, xem canEditMinutes() ở lib/recordActions.js).
+// kpiCriteriaConfig (Nhân Sự > Cơ Cấu Tổ Chức > "🎯 Cấu Hình KPI Theo Vị Trí", xem defaults.js): cùng lý
+// do meetingAttendeeTemplates ở trên — không phải admin-only (đây là màn quản lý của module con
+// "orgChart", không phải màn Quản Trị), nhưng cũng không mở cho mọi tài khoản đã đăng nhập. Gate đúng
+// bằng quyền vào module: orgChartManage HOẶC nhanSuManage (2 quyền cùng gác "Cơ Cấu Tổ Chức" ở client,
+// xem canAccessOrgChartModule() ở core.js), hoặc admin. Đọc (GET) KHÔNG bị chặn — không có bí mật nào
+// trong key này, và bất kỳ ai xem được cây tổ chức đều cần đọc được để hiện modal "🎯 KPI" tự động tra
+// cứu theo dept/jobTitle của từng nhân viên.
 const NON_ADMIN_GATED_KEYS = new Map([
   ['meetingAttendeeTemplates', {
     allow: (perms) => !!(perms?.admin || perms?.minutesCreate || perms?.minutesEdit),
     error: 'Chỉ người có quyền Lập/Sửa Biên Bản Họp mới được sửa mẫu danh sách tham dự dùng chung'
+  }],
+  ['kpiCriteriaConfig', {
+    allow: (perms) => !!(perms?.admin || perms?.orgChartManage || perms?.nhanSuManage),
+    error: 'Chỉ người có quyền Cơ Cấu Tổ Chức/Nhân Sự mới được sửa cấu hình KPI theo vị trí'
   }]
 ]);
 

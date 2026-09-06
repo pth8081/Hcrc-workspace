@@ -169,9 +169,15 @@ function buildOrgChartNode(u, allUsers, depth, canEdit) {
   const reports = getDirectReports(u.username, allUsers).sort((a, b) => (a.name || '').localeCompare(b.name || ''));
   const jobTitle = u.jobTitle ? ` — ${escapeHtml(u.jobTitle)}` : '';
   const editBtn = canEdit ? `<button type="button" data-op="openOrgChartManagerPicker" data-arg0="${u.username}" class="text-xs px-2 py-0.5 bg-gray-200 rounded font-bold hover:bg-gray-300 ml-2">✏️ Đổi quản lý</button>` : '';
+  // "🎯 KPI": mở modal chỉ-đọc tự tra cứu CHỈ TIÊU KPI hiệu lực của người này theo ĐÚNG dept+jobTitle
+  // hiện tại (resolveKpiCriteriaForUser(), xem khối "Cấu Hình KPI Theo Vị Trí" bên dưới) — bằng chứng cụ
+  // thể "cấu hình theo vị trí tự áp dụng cho mọi tài khoản mang đúng Phòng Ban/Chức Danh", không cần
+  // gán KPI riêng cho từng người. Mở cho MỌI người xem được cây (không riêng canEdit) — cùng độ mở với
+  // chính cây tổ chức, không phải thao tác sửa.
+  const kpiBtn = `<button type="button" data-op="openOrgChartKpiModal" data-arg0="${u.username}" class="text-xs px-2 py-0.5 bg-teal-100 text-teal-800 rounded font-bold hover:bg-teal-200 ml-1" title="Xem KPI tự động tra cứu theo vị trí">🎯 KPI</button>`;
   let html = `<div class="py-1 border-b border-gray-100 flex items-center flex-wrap gap-1">
     <span>${indent}<strong>${escapeHtml(u.name)}</strong>${jobTitle} <span class="text-gray-400">(${escapeHtml(u.dept || 'Chưa rõ phòng')})</span>${reports.length ? ` <span class="text-[10px] text-gray-400">— ${reports.length} cấp dưới trực tiếp</span>` : ''}</span>
-    ${editBtn}
+    ${kpiBtn}${editBtn}
   </div>`;
   reports.forEach(r => { html += buildOrgChartNode(r, allUsers, depth + 1, canEdit); });
   return html;
@@ -362,6 +368,298 @@ async function importOrgChartExcel(evt) {
   if (skippedBadManager.length) msg += `\n⚠️ Bỏ qua ${skippedBadManager.length} dòng quản lý không hợp lệ: ${skippedBadManager.slice(0, 15).join(', ')}${skippedBadManager.length > 15 ? '...' : ''}`;
   alert(msg);
   renderOrgChart();
+}
+
+// ===== "🎯 Cấu Hình KPI Theo Vị Trí" — sub-tab MỚI của module con "Cơ Cấu Tổ Chức" =====
+// Cấu hình CHỈ TIÊU KPI theo Phòng Ban × Chức Danh (DB.kpiCriteriaConfig, xem defaults.js) — KHÔNG phải
+// chấm điểm/duyệt KPI (đợt này CHỈ dừng ở cấu hình + tự động tra cứu theo vị trí, chưa có kỳ đánh giá/
+// màn chấm điểm/phê duyệt). Tra cứu tại thời điểm dùng theo user.dept + user.jobTitle (2 field phẳng
+// có sẵn trên DB.users) — cấp 1 tài khoản đúng Phòng Ban/Chức Danh đã cấu hình là TỰ ĐỘNG thừa hưởng,
+// không cần gán KPI riêng cho từng người (đúng yêu cầu gốc: "đánh giá kpi dựa trên position based sẽ
+// được lấy khi cấp account điền theo vị trí, phòng").
+const KPI_ALL_DEPT_KEY = '_ALL_';
+
+// Gộp danh sách Phòng Ban để chọn — DB.depts (Khối Văn Phòng/HO) + DB.stores (Siêu Thị) VÌ user.dept
+// thật có thể đến từ 1 trong 2 nguồn này tuỳ posType (xem uPosType/onUserPosTypeChange() ở index.html)
+// — cấu hình KPI theo dept phải phủ được cả 2. "_ALL_" luôn đứng đầu (khoá đặc biệt "áp dụng mọi phòng
+// ban", xem defaults.js).
+function getKpiConfigDeptOptions() {
+  return [KPI_ALL_DEPT_KEY, ...(DB.depts || []), ...(DB.stores || [])];
+}
+
+// Gộp danh sách Chức Danh — DB.jobTitles (mảng chuỗi phẳng, Khối Văn Phòng/HO) + DB.storeJobTitles
+// (mảng {label,...}, Siêu Thị) — cùng lý do getKpiConfigDeptOptions() ở trên: KPI cấu hình theo CHỨC
+// DANH THẬT (chuỗi hiển thị), không cần biết chức danh đó đến từ danh mục nào — 1 danh sách gợi ý DUY
+// NHẤT, khử trùng, đơn giản hơn cho người cấu hình so với tách theo posType như
+// populateUserJobTitleOptions() (core.js, dùng cho form Người Dùng — mục đích khác).
+function getKpiConfigJobTitleOptions() {
+  const office = DB.jobTitles || [];
+  const store = (DB.storeJobTitles || []).map(t => t.label).filter(Boolean);
+  return [...new Set([...office, ...store])].sort((a, b) => a.localeCompare(b, 'vi'));
+}
+
+// Tra cứu CHỈ TIÊU KPI hiệu lực của 1 user theo dept+jobTitle HIỆN TẠI — HÀM THUẦN (không đụng DOM, dễ
+// unit test), mirror ĐÚNG tinh thần buildEffectiveSubmissionWorkflowServer() (lib/createValidation.js):
+// khớp ĐÚNG dept trước, không có thì rơi về "_ALL_" (áp dụng mọi phòng ban) cho đúng jobTitle đó; không
+// khớp gì (chưa cấu hình cho vị trí này) trả về null — KHÔNG NÉM LỖI, để nơi gọi tự hiện "⚠️ Chưa cấu
+// hình". Dùng ở modal "🎯 KPI" của từng node cây tổ chức (openOrgChartKpiModal() bên dưới).
+function resolveKpiCriteriaForUser(user) {
+  if (!user || !user.jobTitle) return null;
+  const cfg = DB.kpiCriteriaConfig || {};
+  const byDept = cfg[user.dept] && cfg[user.dept][user.jobTitle];
+  if (byDept) return byDept;
+  const byAll = cfg[KPI_ALL_DEPT_KEY] && cfg[KPI_ALL_DEPT_KEY][user.jobTitle];
+  return byAll || null;
+}
+
+// Quyền SỬA (Lưu/Xoá) cấu hình KPI — mirror ĐÚNG gate server (NON_ADMIN_GATED_KEYS['kpiCriteriaConfig'],
+// routes/data.js): admin HOẶC orgChartManage HOẶC nhanSuManage. Xem (đọc) tab này mở rộng hơn — bất kỳ
+// ai vào được module con "Cơ Cấu Tổ Chức" (canAccessOrgChartModule()) đều xem được danh sách đã cấu
+// hình, chỉ ẩn nút Lưu/Sửa/Xoá nếu không đủ quyền ghi.
+function canEditKpiConfig() {
+  return !!(currentUser?.perms?.admin || currentUser?.perms?.orgChartManage || currentUser?.perms?.nhanSuManage);
+}
+
+let kpiConfigDraftRows = [];
+let kpiConfigEditingDept = null;
+let kpiConfigEditingJobTitle = null;
+
+function renderKpiConfigTab() {
+  populateKpiConfigSelects();
+  if (!kpiConfigDraftRows.length) addKpiCriteriaRow();
+  else renderKpiCriteriaRows();
+  renderKpiConfigList();
+  const canEdit = canEditKpiConfig();
+  document.getElementById('btnSaveKpiConfig')?.classList.toggle('hidden', !canEdit);
+  document.getElementById('btnAddKpiCriteriaRow')?.classList.toggle('hidden', !canEdit);
+  document.getElementById('kpiConfigFormFieldset')?.toggleAttribute('disabled', !canEdit);
+}
+
+function populateKpiConfigSelects() {
+  const deptSel = document.getElementById('kpiConfigDeptSelect');
+  const jtSel = document.getElementById('kpiConfigJobTitleSelect');
+  if (deptSel) {
+    const current = deptSel.value;
+    deptSel.innerHTML = getKpiConfigDeptOptions().map(d =>
+      `<option value="${escapeHtml(d)}">${d === KPI_ALL_DEPT_KEY ? '🌐 Áp dụng mọi phòng ban' : escapeHtml(d)}</option>`
+    ).join('');
+    if ([...deptSel.options].some(o => o.value === current)) deptSel.value = current;
+  }
+  if (jtSel) {
+    const current = jtSel.value;
+    jtSel.innerHTML = '<option value="">-- Chọn chức danh --</option>' +
+      getKpiConfigJobTitleOptions().map(t => `<option value="${escapeHtml(t)}">${escapeHtml(t)}</option>`).join('');
+    if ([...jtSel.options].some(o => o.value === current)) jtSel.value = current;
+  }
+}
+
+function addKpiCriteriaRow() {
+  kpiConfigDraftRows.push({ name: '', weight: 0, note: '' });
+  renderKpiCriteriaRows();
+}
+function removeKpiCriteriaRow(idx) {
+  kpiConfigDraftRows.splice(idx, 1);
+  renderKpiCriteriaRows();
+}
+// Chỉ cập nhật model + tổng trọng số (không render lại toàn bộ danh sách dòng) — mirror
+// updateOfficeItemField() (module-office.js): tránh mất focus/con trỏ đang gõ dở ở các dòng khác.
+function updateKpiCriteriaField(idx, field, value) {
+  if (!kpiConfigDraftRows[idx]) return;
+  kpiConfigDraftRows[idx][field] = field === 'weight' ? (parseFloat(value) || 0) : value;
+  renderKpiWeightSum();
+}
+function renderKpiWeightSum() {
+  const el = document.getElementById('kpiConfigWeightSum');
+  if (!el) return;
+  const sum = kpiConfigDraftRows.reduce((s, r) => s + (Number(r.weight) || 0), 0);
+  el.innerText = `Tổng trọng số: ${sum}% / 100%`;
+  // Cảnh báo MỀM (không chặn lưu) nếu tổng khác 100% — business validation người dùng chưa yêu cầu,
+  // chỉ là gợi ý trực quan.
+  el.className = sum === 100 ? 'text-xs font-semibold text-emerald-700' : 'text-xs font-semibold text-amber-600';
+}
+function renderKpiCriteriaRows() {
+  const container = document.getElementById('kpiConfigCriteriaRows');
+  if (!container) return;
+  container.innerHTML = kpiConfigDraftRows.map((r, idx) => `
+    <div class="flex gap-1.5 items-center">
+      <input value="${escapeHtml(r.name)}" placeholder="Tên tiêu chí (VD: Doanh số)" data-op-input="updateKpiCriteriaField" data-arg0="${idx}" data-arg1="name" data-arg-value="2" class="border p-1.5 rounded text-xs flex-[2]">
+      <input type="number" min="0" max="100" value="${r.weight || ''}" placeholder="%" data-op-input="updateKpiCriteriaField" data-arg0="${idx}" data-arg1="weight" data-arg-value="2" class="border p-1.5 rounded text-xs w-20">
+      <input value="${escapeHtml(r.note || '')}" placeholder="Ghi chú (tuỳ chọn)" data-op-input="updateKpiCriteriaField" data-arg0="${idx}" data-arg1="note" data-arg-value="2" class="border p-1.5 rounded text-xs flex-[2]">
+      <button type="button" data-op="removeKpiCriteriaRow" data-arg0="${idx}" class="text-red-600 font-bold hover:text-red-800 px-1" title="Xoá tiêu chí">✕</button>
+    </div>
+  `).join('');
+  renderKpiWeightSum();
+}
+
+function resetKpiConfigForm() {
+  kpiConfigEditingDept = null;
+  kpiConfigEditingJobTitle = null;
+  kpiConfigDraftRows = [];
+  addKpiCriteriaRow();
+  populateKpiConfigSelects();
+  const deptSel = document.getElementById('kpiConfigDeptSelect');
+  const jtSel = document.getElementById('kpiConfigJobTitleSelect');
+  if (deptSel) deptSel.value = KPI_ALL_DEPT_KEY;
+  if (jtSel) jtSel.value = '';
+  const titleEl = document.getElementById('kpiConfigFormTitle');
+  if (titleEl) titleEl.innerText = '➕ Thêm Cấu Hình Mới';
+}
+
+// "Sửa" (từ danh sách thẻ bên dưới) — nạp lại ĐÚNG cấu hình đã lưu vào form để sửa tiếp, KHÔNG tạo bản
+// nháp rỗng. Đổi Phòng Ban/Chức Danh rồi Lưu (khác cặp đang sửa) sẽ CHUYỂN bản ghi (xoá cặp cũ, tạo cặp
+// mới) thay vì để lại 2 bản trùng lặp — xem saveKpiCriteriaConfig().
+function loadKpiConfigForEdit(dept, jobTitle) {
+  const entry = DB.kpiCriteriaConfig?.[dept]?.[jobTitle];
+  if (!entry) return;
+  kpiConfigEditingDept = dept;
+  kpiConfigEditingJobTitle = jobTitle;
+  kpiConfigDraftRows = (entry.criteria || []).map(c => ({ ...c }));
+  populateKpiConfigSelects();
+  const deptSel = document.getElementById('kpiConfigDeptSelect');
+  const jtSel = document.getElementById('kpiConfigJobTitleSelect');
+  if (deptSel) deptSel.value = dept;
+  if (jtSel) jtSel.value = jobTitle;
+  renderKpiCriteriaRows();
+  const titleEl = document.getElementById('kpiConfigFormTitle');
+  const deptLabel = dept === KPI_ALL_DEPT_KEY ? '🌐 Mọi phòng ban' : dept;
+  if (titleEl) titleEl.innerText = `✏️ Sửa Cấu Hình: ${deptLabel} — ${jobTitle}`;
+  document.getElementById('orgChartKpiFormAnchor')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+// Lưu — ghi DB.kpiCriteriaConfig[dept][jobTitle] rồi syncStorage('kpiCriteriaConfig') (mirror ĐÚNG
+// saveVppExcludedJobTitles(), module-admin-specialperm.js: snapshot trước khi ghi, rollback nếu server
+// từ chối — 403 nếu thiếu quyền ghi, 409 nếu ai khác vừa sửa cùng lúc, xem syncStorage()/syncStorageOnce()
+// ở core.js).
+async function saveKpiCriteriaConfig() {
+  if (!canEditKpiConfig()) return alert('⛔ Bạn không có quyền cấu hình KPI theo vị trí!');
+  const dept = document.getElementById('kpiConfigDeptSelect')?.value;
+  const jobTitle = document.getElementById('kpiConfigJobTitleSelect')?.value;
+  if (!dept) return alert('⛔ Vui lòng chọn Phòng Ban (hoặc "Áp dụng mọi phòng ban")!');
+  if (!jobTitle) return alert('⛔ Vui lòng chọn Chức Danh!');
+  const criteria = kpiConfigDraftRows
+    .map((r, i) => ({ id: r.id || `c${Date.now()}_${i}`, name: (r.name || '').trim(), weight: Number(r.weight) || 0, note: (r.note || '').trim() }))
+    .filter(c => c.name);
+  if (!criteria.length) return alert('⛔ Vui lòng nhập ít nhất 1 tiêu chí KPI có tên!');
+
+  const snapshot = JSON.parse(JSON.stringify(DB.kpiCriteriaConfig || {}));
+  if (!DB.kpiCriteriaConfig) DB.kpiCriteriaConfig = {};
+  if (!DB.kpiCriteriaConfig[dept]) DB.kpiCriteriaConfig[dept] = {};
+  // Đổi Phòng Ban/Chức Danh khi đang SỬA (khác cặp cũ) — xoá bản ghi cũ trước, tránh để lại 2 bản trùng.
+  if (kpiConfigEditingDept && kpiConfigEditingJobTitle &&
+      (kpiConfigEditingDept !== dept || kpiConfigEditingJobTitle !== jobTitle) &&
+      DB.kpiCriteriaConfig[kpiConfigEditingDept]) {
+    delete DB.kpiCriteriaConfig[kpiConfigEditingDept][kpiConfigEditingJobTitle];
+  }
+  DB.kpiCriteriaConfig[dept][jobTitle] = { criteria, updatedAt: new Date().toISOString(), updatedBy: currentUser.username };
+
+  const saved = await syncStorage('kpiCriteriaConfig');
+  if (!saved) { DB.kpiCriteriaConfig = snapshot; return; }
+
+  const deptLabel = dept === KPI_ALL_DEPT_KEY ? 'Mọi phòng ban' : dept;
+  logSystemAction('HR', 'SAVE_KPI_CRITERIA_CONFIG', `Cập nhật cấu hình KPI theo vị trí [${deptLabel} — ${jobTitle}]`, 'SUCCESS');
+  alert('✅ Đã lưu cấu hình KPI theo vị trí!');
+  resetKpiConfigForm();
+  renderKpiConfigList();
+}
+
+async function deleteKpiCriteriaConfig(dept, jobTitle) {
+  if (!canEditKpiConfig()) return alert('⛔ Bạn không có quyền xoá cấu hình KPI theo vị trí!');
+  const deptLabel = dept === KPI_ALL_DEPT_KEY ? 'Mọi phòng ban' : dept;
+  if (!confirm(`Xoá cấu hình KPI cho [${deptLabel} — ${jobTitle}]?`)) return;
+  const snapshot = JSON.parse(JSON.stringify(DB.kpiCriteriaConfig || {}));
+  if (DB.kpiCriteriaConfig[dept]) delete DB.kpiCriteriaConfig[dept][jobTitle];
+  const saved = await syncStorage('kpiCriteriaConfig');
+  if (!saved) { DB.kpiCriteriaConfig = snapshot; return; }
+  logSystemAction('HR', 'DELETE_KPI_CRITERIA_CONFIG', `Xoá cấu hình KPI theo vị trí [${deptLabel} — ${jobTitle}]`, 'SUCCESS');
+  if (kpiConfigEditingDept === dept && kpiConfigEditingJobTitle === jobTitle) resetKpiConfigForm();
+  renderKpiConfigList();
+}
+
+function getAllKpiConfigEntries() {
+  const cfg = DB.kpiCriteriaConfig || {};
+  const entries = [];
+  Object.keys(cfg).forEach(dept => {
+    Object.keys(cfg[dept] || {}).forEach(jobTitle => {
+      entries.push({ dept, jobTitle, ...cfg[dept][jobTitle] });
+    });
+  });
+  return entries.sort((a, b) =>
+    (a.dept === KPI_ALL_DEPT_KEY ? -1 : b.dept === KPI_ALL_DEPT_KEY ? 1 : a.dept.localeCompare(b.dept, 'vi')) ||
+    a.jobTitle.localeCompare(b.jobTitle, 'vi')
+  );
+}
+
+function renderKpiConfigList() {
+  const container = document.getElementById('kpiConfigListContainer');
+  if (!container) return;
+  const entries = getAllKpiConfigEntries();
+  if (!entries.length) {
+    container.innerHTML = '<p class="text-xs text-gray-400 italic">Chưa cấu hình KPI cho vị trí nào.</p>';
+    return;
+  }
+  const canEdit = canEditKpiConfig();
+  container.innerHTML = entries.map(e => {
+    const deptLabel = e.dept === KPI_ALL_DEPT_KEY ? '🌐 Mọi phòng ban' : escapeHtml(e.dept);
+    const actions = canEdit ? `
+      <button type="button" data-op="loadKpiConfigForEdit" data-arg0="${escapeHtml(e.dept)}" data-arg1="${escapeHtml(e.jobTitle)}" class="text-xs px-2 py-0.5 bg-teal-600 text-white rounded font-bold hover:bg-teal-700">✏️ Sửa</button>
+      <button type="button" data-op="deleteKpiCriteriaConfig" data-arg0="${escapeHtml(e.dept)}" data-arg1="${escapeHtml(e.jobTitle)}" class="text-xs px-2 py-0.5 bg-red-600 text-white rounded font-bold hover:bg-red-700">🗑️ Xoá</button>` : '';
+    return `
+      <div class="bg-white border rounded p-2.5 flex flex-wrap items-center justify-between gap-2">
+        <div class="text-xs text-gray-700">
+          <span class="font-bold">Phòng: ${deptLabel}</span> — <span class="font-bold">Vị trí: ${escapeHtml(e.jobTitle)}</span>
+          <span class="text-gray-400"> — ${(e.criteria || []).length} tiêu chí</span>
+        </div>
+        <div class="flex gap-1.5">${actions}</div>
+      </div>`;
+  }).join('');
+}
+
+// Toggle 2 sub-tab của module con "Cơ Cấu Tổ Chức" — cùng khuôn setSystemSubTab() (module-hethong-tabs.js)
+// nhưng chỉ 2 nút, không cần cuộn về đầu trang (nội dung 2 view đều ngắn).
+let activeOrgChartSubTab = 'TREE';
+function setOrgChartSubTab(subTab) {
+  activeOrgChartSubTab = subTab;
+  document.getElementById('orgChartTreeView')?.classList.toggle('hidden', subTab !== 'TREE');
+  document.getElementById('orgChartKpiView')?.classList.toggle('hidden', subTab !== 'KPI');
+  const activeCls = 'px-2.5 py-1.5 rounded text-xs font-bold bg-teal-700 text-white';
+  const inactiveCls = 'px-2.5 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700 hover:bg-gray-300';
+  const btnTree = document.getElementById('btnOrgChartSubTree');
+  const btnKpi = document.getElementById('btnOrgChartSubKpi');
+  if (btnTree) btnTree.className = subTab === 'TREE' ? activeCls : inactiveCls;
+  if (btnKpi) btnKpi.className = subTab === 'KPI' ? activeCls : inactiveCls;
+  if (subTab === 'KPI') renderKpiConfigTab();
+  else renderOrgChart();
+}
+
+// Modal "🎯 KPI" trên từng node cây tổ chức — CHỈ ĐỌC, chứng minh cụ thể việc tự động tra cứu theo vị
+// trí: hiện đúng dept/jobTitle hiện tại của người này rồi gọi thẳng resolveKpiCriteriaForUser() (KHÔNG
+// có đường ghi/sửa nào ở modal này — sửa phải qua đúng form "Cấu Hình KPI Theo Vị Trí" ở trên).
+function openOrgChartKpiModal(username) {
+  const u = DB.users.find(x => x.username === username);
+  if (!u) return;
+  document.getElementById('orgChartKpiModalTitle').innerText = `🎯 KPI — ${u.name}`;
+  document.getElementById('orgChartKpiModalSub').innerText = `Phòng: ${u.dept || 'Chưa rõ'} — Vị trí: ${u.jobTitle || 'Chưa gán chức danh'}`;
+  const entry = resolveKpiCriteriaForUser(u);
+  const body = document.getElementById('orgChartKpiModalBody');
+  if (!entry || !(entry.criteria || []).length) {
+    body.innerHTML = '<p class="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded p-2">⚠️ Chưa cấu hình KPI cho vị trí này.</p>';
+  } else {
+    const sum = entry.criteria.reduce((s, c) => s + (Number(c.weight) || 0), 0);
+    body.innerHTML = `
+      <ul class="divide-y border rounded">
+        ${entry.criteria.map(c => `
+          <li class="p-2 text-xs flex justify-between gap-2">
+            <span>${escapeHtml(c.name)}${c.note ? ` <span class="text-gray-400">(${escapeHtml(c.note)})</span>` : ''}</span>
+            <span class="font-bold text-teal-700">${c.weight || 0}%</span>
+          </li>`).join('')}
+      </ul>
+      <p class="text-[11px] text-gray-400 mt-1">Tổng trọng số: ${sum}%</p>
+    `;
+  }
+  document.getElementById('orgChartKpiModal').classList.remove('hidden');
+}
+function closeOrgChartKpiModal() {
+  document.getElementById('orgChartKpiModal').classList.add('hidden');
 }
 
 // TOÀN BỘ câu hỏi công ty (không lọc creator) — canAccessHrModule()/canManageHrFeedback() đã gác cả

@@ -5524,7 +5524,11 @@ function _dispatchTabRender(tabName) {
   if (tabName === 'budget') { setBudgetSubTab(activeBudgetSubTab); }
   if (tabName === 'vanHanh') { setVanHanhSubTab(activeVanHanhSubTab); }
   if (tabName === 'hr') { renderHrFeedbackManage(); }
-  if (tabName === 'orgChart') { renderOrgChart(); }
+  // setOrgChartSubTab() (module-hcrcdonghanh.js, "🎯 Cấu Hình KPI Theo Vị Trí") tự gọi lại renderOrgChart()
+  // khi subTab==='TREE' — dùng hàm này thay vì gọi thẳng renderOrgChart() để giữ đúng sub-tab đang mở
+  // (cùng khuôn setBudgetSubTab(activeBudgetSubTab)/setVanHanhSubTab(activeVanHanhSubTab) ở trên) thay vì
+  // luôn bật lại về "Sơ Đồ Tổ Chức" mỗi lần rời rồi quay lại module con này.
+  if (tabName === 'orgChart') { setOrgChartSubTab(activeOrgChartSubTab); }
 }
 
 // Quyền vào sub-tab "💰 Thanh Toán" của Tổng Hợp — khác hẳn canAccessOfficeSubTab() (không có khái
@@ -6477,9 +6481,11 @@ bindCspDelegation('hrSection');
 // Cơ Cấu Tổ Chức — module con riêng của Nhân Sự (#orgChartSection, TÁCH khỏi #hrSection — trước đây là
 // sub-tab "hrSubOrgChart" CÙNG 1 module 'hr', xem BUSINESS_MODULES parent:'hr') — modal "Đổi Quản Lý
 // Trực Tiếp" (#orgChartManagerModal) sống NGOÀI section (giống các modal khác) nên cần thêm 1 gốc
-// riêng — 2 gốc tổng cộng.
+// riêng. modal "🎯 KPI" (#orgChartKpiModal, "Cấu Hình KPI Theo Vị Trí") CŨNG sống ngoài section cùng lý
+// do — 3 gốc tổng cộng.
 bindCspDelegation('orgChartSection');
 bindCspDelegation('orgChartManagerModal');
+bindCspDelegation('orgChartKpiModal');
 
 // Báo Cáo (#reportsSection) — thanh bộ lọc tĩnh + #reportsNavL1Bar/#reportsNavL2Bar + #reportsContent
 // (renderReports()/renderModuleReport()/renderReportsSummary()...) đều nằm CHUNG trong #reportsSection
