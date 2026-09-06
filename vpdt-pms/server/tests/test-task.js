@@ -450,6 +450,69 @@ async function main() {
         );
       }
 
+      // ================= Scenario 8 (Fix): "Cập Nhật Tiến Độ" phải ẩn "✅ Hoàn thành" khi đang có yêu
+      // cầu HUỶ (pendingCancellation) chờ duyệt, không chỉ pendingExtension — khớp updateTaskStatusAction()
+      // ở server (chặn DONE cho CẢ 2 trường hợp) =================
+      {
+        createManualTask({ title: 'Việc test pendingCancellation phải ẩn "Hoàn thành"', deadline: '2026-10-10', assignedTo: 'bob', collaborators: [] });
+        await confirmCreateTask();
+        const task4Id = DB.tasks[0].id;
+
+        currentUser = bobUser;
+        await acceptTask(task4Id); // TODO -> DOING
+
+        // Bob (assignee, KHÔNG phải người giao việc) xin huỷ -> chỉ tạo pendingCancellation, việc vẫn
+        // đang mở (DOING) chờ admin (người giao việc) duyệt — đúng luồng 2 bước đã kiểm ở Kịch bản 6.
+        openCancelTaskModal(task4Id);
+        document.getElementById('cancelReasonInput').value = 'Không còn cần thiết nữa.';
+        alerts.length = 0;
+        await confirmCancelTask();
+        const task4AfterRequest = DB.tasks.find(t => t.id === task4Id);
+
+        openTaskProgressModal(task4Id);
+        const doneOptionWithPendingCancellation = [...document.getElementById('progressNewStatus').options].some(o => o.value === 'DONE');
+        currentUser = adminUser;
+
+        check(
+          'task: "Cập Nhật Tiến Độ" ẩn tuỳ chọn "✅ Hoàn thành" khi có pendingCancellation đang chờ duyệt (trước đây chỉ xét pendingExtension)',
+          task4AfterRequest.status === 'DOING' && !!task4AfterRequest.pendingCancellation && !doneOptionWithPendingCancellation,
+          `status=${task4AfterRequest.status} pendingCancellation=${JSON.stringify(task4AfterRequest.pendingCancellation)} doneOptionPresent=${doneOptionWithPendingCancellation}`
+        );
+      }
+
+      // ================= Scenario 9 (Fix): "Xác nhận thay" (người phối hợp NGOÀI hệ thống) phải ẩn khi
+      // việc đã đóng (DONE/CANCELLED) — khớp confirmCollaboratorParticipation() ở server (chặn khi
+      // status DONE/CANCELLED), trước đây chỉ xét !accepted && isAssigner, hiện mãi kể cả việc đã đóng ==
+      {
+        const extTaskId = nextId++;
+        const extTask = {
+          id: extTaskId, title: 'Việc có người phối hợp ngoài hệ thống', description: '', deadline: '2026-09-30',
+          assignedTo: 'bob', assignedToName: 'Trần Văn Bob', assignedBy: 'admin', assignedByName: 'Quản Trị Viên',
+          sourceType: 'MANUAL', sourceCode: '', status: 'DOING', startedAt: nowVN(),
+          externalCollaborators: [{ name: 'Đối Tác Ngoài Hệ Thống', email: 'doitac@example.com' }],
+          collaboratorAccepts: [], subtasks: [], extensionCount: 0, lateCount: 0, pendingExtension: null, pendingCancellation: null,
+          createdAt: nowVN(), history: []
+        };
+        DB.tasks.push(extTask);
+
+        openTaskDetailModal(extTaskId);
+        const onBehalfVisibleWhileOpen = document.getElementById('taskDetailContent').innerHTML.includes('confirmCollaboratorParticipationOnBehalf');
+
+        extTask.status = 'DONE';
+        openTaskDetailModal(extTaskId);
+        const onBehalfVisibleAfterDone = document.getElementById('taskDetailContent').innerHTML.includes('confirmCollaboratorParticipationOnBehalf');
+
+        extTask.status = 'CANCELLED';
+        openTaskDetailModal(extTaskId);
+        const onBehalfVisibleAfterCancelled = document.getElementById('taskDetailContent').innerHTML.includes('confirmCollaboratorParticipationOnBehalf');
+
+        check(
+          'task: nút "Xác nhận thay" hiện khi việc còn mở (DOING) và biến mất đúng khi việc đã DONE hoặc CANCELLED',
+          onBehalfVisibleWhileOpen && !onBehalfVisibleAfterDone && !onBehalfVisibleAfterCancelled,
+          `whileOpen=${onBehalfVisibleWhileOpen} afterDone=${onBehalfVisibleAfterDone} afterCancelled=${onBehalfVisibleAfterCancelled}`
+        );
+      }
+
       return results;
     });
 

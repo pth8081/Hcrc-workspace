@@ -1,11 +1,60 @@
 # Phiên bản hiện tại
 
-**9.9** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
-`/api/health`). Bản merge gần nhất vào `main` là **9.9** — xem mục "Chạy như dịch vụ hệ thống
-(systemd)..." ngay dưới. Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
-`1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (9.8 — mục "Chuyển box chọn checkbox người
-duyệt..." bên dưới — đã được xác nhận demo và merge vào `main` ở đợt trước, ghi chú "CHƯA MERGE" cũ
-trong bản đó đã lạc hậu, đã đính chính ở đợt 9.9.)
+**10.0** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+`/api/health`). Bản merge gần nhất vào `main` là **10.0** — xem mục "Fix 4 lỗi nghiệp vụ phát hiện qua
+audit..." ngay dưới. Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
+`1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md` (MINOR chạy 0-9, ở `9.9` nên lần này tăng MAJOR
+lên `10.0` thay vì `9.10`).
+
+## Fix 4 lỗi nghiệp vụ phát hiện qua audit — Văn Phòng Tổng Hợp / Biên Bản Họp / Công Việc (2026-09-06)
+
+**Bối cảnh**: 1 đợt audit sâu logic nghiệp vụ phát hiện 4 lỗi đã xác nhận, cả 4 đều thuần client-side
+(`public/js/module-office.js`, `module-bienbanhop.js`, `module-congviec.js`) — không đụng tới bất kỳ
+route/lib server nào.
+
+**Fix 1 — Văn Phòng Tổng Hợp: nút "📤 Tải lại Tài liệu ký" biến mất vĩnh viễn sau lần tải đầu tiên**:
+server (`uploadOfficeSignedFile()`) đã đúng từ trước — cho tải lại/sửa Tài liệu ký của đề xuất Mua
+Bán/Sửa Chữa/Đầu Tư bất kỳ lúc nào còn `paymentStatus === 'CHUA_THANH_TOAN'`, kể cả khi đã có tệp (vd
+lỡ chọn nhầm). Nhưng client chỉ hiện nút khi `!o.signedFileUrl`, nên sau lần tải đầu tiên nút biến mất
+vĩnh viễn dù còn cơ hội sửa. Sửa: hiện nút cả khi `o.signedFileUrl && paymentStatus === 'CHUA_THANH_TOAN'`
+— nút vẫn biến mất đúng lúc ngay khi đã bấm "Chuyển Sang Thanh Toán".
+
+**Fix 2 — Biên Bản Họp: nút "📌 Giao việc" theo TỪNG dòng chỉ đạo (trong modal Chi tiết) là 1 đường tạo
+việc CŨ, khác nút "Giao việc" hàng loạt chính thức** — mở modal Giao Việc thủ công thông thường, không
+set `sourceType`/`sourceCode`/`sourceDirectiveId` (server `createTask()` ép cứng `sourceType='MANUAL'`),
+nên: (a) nút không bao giờ tự ẩn (lookup "đã có việc" theo `sourceDirectiveId` luôn thất bại) — bấm lại
+nhiều lần tạo việc trùng; (b) việc tạo ra khởi động `TODO` thay vì tự động `DOING` (đúng quy tắc việc
+nguồn Biên Bản Họp); (c) `d.taskCreated`/`m.tasksAssigned` không được set nên biên bản không khoá lại.
+Sửa: nút này giờ gọi thẳng `confirmAssignMinutesTasks()` — CÙNG hàm với nút "Giao việc" hàng loạt ở danh
+sách (loại bỏ hẳn đường tạo việc cũ, không thêm đường thứ 3), cộng thêm tự render lại modal Chi tiết
+đang mở sau khi tạo việc xong để nút ẩn ngay lập tức. `createTaskFromMinutesDirective()` (hàm cũ, không
+còn dùng) đã xoá khỏi `module-congviec.js`.
+
+**Fix 3 — Công Việc: "Cập Nhật Tiến Độ" không ẩn "✅ Hoàn thành" khi có yêu cầu HUỶ đang chờ duyệt** —
+chỉ xét `t.pendingExtension`, không xét `t.pendingCancellation`, trong khi server
+(`updateTaskStatusAction()`) chặn `DONE` cho CẢ 2 trường hợp — chọn "Hoàn thành" lúc đó luôn bị server
+trả 409 (dead click). Sửa: mở rộng điều kiện lọc để loại "Hoàn thành" khi có 1 trong 2 (mirror đúng
+cách `pendingExtension` đã được xử lý).
+
+**Fix 4 — Công Việc: nút "Xác nhận thay" (người phối hợp ngoài hệ thống) không ẩn khi việc đã đóng** —
+điều kiện chỉ xét `!accepted && isAssigner`, không xét việc còn mở hay không, trong khi server
+(`confirmCollaboratorParticipation()`) chặn khi `status` là `DONE`/`CANCELLED` — nút hiện mãi trên việc
+đã đóng, bấm vào luôn 409. Sửa: thêm điều kiện `isOpenTask` (`status !== 'DONE' && status !== 'CANCELLED'`,
+cùng công thức `isOpenTask` đã dùng ở chỗ khác trong `module-congviec.js`) vào điều kiện hiện nút.
+
+**Deploy impact**: KHÔNG đổi `server/sql/schema.sql`, KHÔNG thêm biến môi trường, KHÔNG thêm/đổi
+`dependencies` — thuần client-side (chỉ 3 file `public/js/module-*.js`), chỉ cần copy code + `pm2 restart`
+theo quy trình hiện có (mục 16 `HUONG_DAN_DEPLOY_UBUNTU.md`).
+
+Đã kiểm thử: toàn bộ 63 file `tests/test-*.js` — 61/63 pass hoàn toàn, 2 file còn lại chỉ fail đúng 1
+kịch bản mỗi file do SQL Server thật không có trong sandbox kiểm thử (lỗi kết nối `localhost:1433`, đã
+xác nhận là hạn chế môi trường có từ trước, không liên quan gì tới 4 fix này). Bổ sung/mở rộng kiểm thử
+Playwright thật (click nút/mở modal trên DOM thật, không chỉ gọi hàm) cho cả 4 fix:
+`tests/test-office-budget.js` (Fix 1 — nút hiện đúng cả 2 giai đoạn trước/sau tải tệp, ẩn đúng lúc sau
+khi thanh toán, server vẫn 409 nếu gọi thẳng API sau khi khoá), `tests/test-minutes.js` (Fix 2 — nút
+theo dòng tạo đúng việc DOING/sourceType/sourceDirectiveId, tự ẩn, gọi lại bị 409 không tạo trùng),
+`tests/test-task.js` (Fix 3 + Fix 4 — ẩn "Hoàn thành" khi pendingCancellation, ẩn "Xác nhận thay" khi
+DONE/CANCELLED).
 
 ## Chạy như dịch vụ hệ thống (systemd) dưới tài khoản riêng, không phải root + viết lại toàn bộ HUONG_DAN_DEPLOY_UBUNTU.md (2026-09-06)
 

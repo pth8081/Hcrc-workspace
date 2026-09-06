@@ -282,21 +282,11 @@ function createTaskFromSubmission(subId) {
   });
 }
 
-// Mở modal Giao Việc đổ sẵn từ 1 dòng "Ý kiến chỉ đạo" cụ thể trong Biên bản họp.
-function createTaskFromMinutesDirective(minutesId, directiveIdx) {
-  const m = DB.meetingMinutes.find(x => x.id === minutesId);
-  if (!m || !m.directives[directiveIdx]) return;
-  const d = m.directives[directiveIdx];
-  const resolved = resolveDirectiveAttendee(m.attendees, d.assignedToAttendeeId);
-  openCreateTaskModal({
-    title: `Chỉ đạo từ biên bản họp: ${m.title}`,
-    description: d.content,
-    assignedTo: resolved?.username || '',
-    deadline: d.deadline,
-    sourceType: 'MEETING_MINUTES',
-    sourceCode: m.code
-  });
-}
+// createTaskFromMinutesDirective() (nút "Giao việc" theo TỪNG dòng chỉ đạo trong modal Chi tiết Biên
+// bản họp) đã BỎ — mở modal Giao Việc thủ công là 1 đường tạo việc riêng, không set
+// sourceType/sourceCode/sourceDirectiveId nên không bao giờ khớp lookup "đã có việc" (module-bienbanhop.js),
+// tạo việc trùng lặp được và không khoá biên bản/chỉ đạo như thiết kế. Nút đó giờ gọi thẳng
+// confirmAssignMinutesTasks() — CÙNG đường tạo việc với nút "Giao việc" hàng loạt (xem module-bienbanhop.js).
 
 async function updateTaskStatus(id, newStatus, note) {
   const t = DB.tasks.find(x => x.id === id);
@@ -464,8 +454,9 @@ function openTaskProgressModal(taskId) {
   } else {
     nextOptions = [];
   }
-  // Không cho chọn Hoàn thành khi đang có yêu cầu gia hạn chờ duyệt — xem updateTaskStatus().
-  if (t.pendingExtension) nextOptions = nextOptions.filter(o => o.value !== 'DONE');
+  // Không cho chọn Hoàn thành khi đang có yêu cầu gia hạn/huỷ chờ duyệt — khớp updateTaskStatusAction()
+  // ở server (chặn DONE cho CẢ 2 trường hợp, xem lib/recordActions.js).
+  if (t.pendingExtension || t.pendingCancellation) nextOptions = nextOptions.filter(o => o.value !== 'DONE');
 
   const sel = document.getElementById('progressNewStatus');
   sel.innerHTML = nextOptions.map(o => `<option value="${o.value}" data-require-note="${o.requireNote ? '1' : ''}">${o.label}</option>`).join('')
@@ -904,6 +895,10 @@ function openTaskDetailModal(taskId) {
   const sourceDeleted = t.sourceType === 'MEETING_MINUTES' && t.sourceCode
     && !(DB.meetingMinutes || []).some(m => m.code === t.sourceCode);
   const isAssigner = t.assignedBy === currentUser.username || currentUser.perms?.admin;
+  // Khớp isOpenTask ở renderTasks() (cùng file) + gate thật ở server confirmCollaboratorParticipation()
+  // (chặn khi status DONE/CANCELLED) — trước đây "Xác nhận thay" chỉ xét !accepted && isAssigner, còn
+  // hiện mãi kể cả khi việc đã đóng, bấm vào luôn bị server trả lỗi 409.
+  const isOpenTask = t.status !== 'DONE' && t.status !== 'CANCELLED';
   const acceptedUsernames = new Set((t.collaboratorAccepts || []).map(c => c.username).filter(Boolean));
   const acceptedExternalNames = new Set((t.collaboratorAccepts || []).filter(c => !c.username).map(c => c.name));
 
@@ -917,7 +912,7 @@ function openTaskDetailModal(taskId) {
     }),
     ...(t.externalCollaborators || []).map(e => {
       const accepted = acceptedExternalNames.has(e.name);
-      const onBehalfBtn = (!accepted && isAssigner)
+      const onBehalfBtn = (!accepted && isAssigner && isOpenTask)
         ? ` <button data-op="confirmCollaboratorParticipationOnBehalf" data-arg0="${t.id}" data-arg1="${escapeHtml(e.name)}" class="ml-1 bg-teal-600 text-white px-1.5 py-0.5 rounded text-[10px] font-bold hover:bg-teal-700">Xác nhận thay</button>`
         : '';
       return `<li>${escapeHtml(e.name)} (ngoài hệ thống) — ${accepted ? '<span class="text-emerald-700 font-bold">✅ Đã xác nhận tham gia</span>' : '<span class="text-gray-400 italic">Chưa xác nhận</span>'}${onBehalfBtn}</li>`;

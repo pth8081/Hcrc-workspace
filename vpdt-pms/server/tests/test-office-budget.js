@@ -4,6 +4,8 @@
 // Hợp Ngân Sách (chỉ cộng dồn các bản ĐÃ DUYỆT).
 'use strict';
 
+const fs = require('fs');
+const path = require('path');
 const { startHarness } = require('./_harness-contract');
 
 let pass = 0, fail = 0;
@@ -24,6 +26,33 @@ async function run() {
   }
   async function openBudgetManageModal() {
     await page.evaluate(() => { switchTab('budget'); openBudgetPeriodTemplateModal(); });
+  }
+
+  // Đọc lại danh sách value của các "secondaryOptions" (dropdown "Khác ▾") đang hiển thị cho ĐÚNG 1
+  // dòng đề xuất — buildActionCell() (core.js) gắn "data-arg2" = id lên <select> điều phối, "data-arg1"
+  // = tên hàm điều phối ("runOfficeAction" cho module Văn Phòng Tổng Hợp) — khớp đúng attribute thật,
+  // không dò theo thứ tự cột/nội dung text (dễ vỡ khi đổi câu chữ).
+  async function officeSecondaryOptionValues(id) {
+    return page.evaluate((oid) => {
+      const sel = document.querySelector(`select[data-arg1="runOfficeAction"][data-arg2="${oid}"]`);
+      if (!sel) return [];
+      return [...sel.querySelectorAll('option')].map((o) => o.value).filter(Boolean);
+    }, id);
+  }
+
+  const assetDir = path.join(__dirname, '.tmp-assets');
+  fs.mkdirSync(assetDir, { recursive: true });
+  const officeSignedFile1 = path.join(assetDir, 'office-signed-1.pdf');
+  fs.writeFileSync(officeSignedFile1, '%PDF-1.4 fake office signed file 1');
+  const officeSignedFile2 = path.join(assetDir, 'office-signed-2.pdf');
+  fs.writeFileSync(officeSignedFile2, '%PDF-1.4 fake office signed file 2 (sua lai)');
+
+  async function uploadOfficeSignedAs(username, id, file) {
+    await loginAs(username);
+    await page.evaluate((oid) => openSignedUploadModal('officeReqs', oid), id);
+    await page.setInputFiles('#signedUploadFile', file);
+    await page.evaluate(() => submitSignedUpload());
+    await page.waitForTimeout(250);
   }
 
   try {
@@ -396,6 +425,58 @@ async function run() {
     await confirmPending();
     const office3Final = await page.evaluate((id) => DB.officeReqs.find((x) => x.id === id).status, office3.id);
     check('Sau khi bổ sung + gửi lại, đề xuất được duyệt lại bình thường -> APPROVED', office3Final === 'APPROVED', office3Final);
+
+    // ============ Kịch bản 7 (Fix): nút "📤 Tải Tài Liệu Ký" phải còn lại (cho tải lại/sửa) khi ĐÃ có
+    // tệp nhưng CHƯA chuyển sang thanh toán, và biến mất đúng lúc ngay khi đã "Chuyển Sang Thanh Toán"
+    // — khớp uploadOfficeSignedFile() ở lib/recordActions.js (chỉ khoá khi paymentStatus rời khỏi
+    // CHUA_THANH_TOAN), trước đây nút biến mất vĩnh viễn ngay sau lần tải đầu tiên ============
+    await loginAs('kd1');
+    await goToOffice('MUA_BAN');
+    const office1BeforeAnyUpload = await officeSecondaryOptionValues(office1.id);
+    check('Trước khi có Tài liệu ký nào -> chỉ có nút "uploadSigned", chưa có "startPayment"',
+      office1BeforeAnyUpload.includes('uploadSigned') && !office1BeforeAnyUpload.includes('startPayment'),
+      office1BeforeAnyUpload);
+
+    await uploadOfficeSignedAs('kd1', office1.id, officeSignedFile1);
+    const office1AfterUpload1 = await page.evaluate((id) => DB.officeReqs.find((x) => x.id === id), office1.id);
+    check('Tải Tài liệu ký lần 1 thành công, paymentStatus vẫn CHUA_THANH_TOAN', !!office1AfterUpload1.signedFileUrl && office1AfterUpload1.paymentStatus === 'CHUA_THANH_TOAN', office1AfterUpload1);
+
+    await goToOffice('MUA_BAN');
+    const office1AfterUpload1Options = await officeSecondaryOptionValues(office1.id);
+    check('Đã có Tài liệu ký nhưng CHƯA thanh toán -> "uploadSigned" (tải lại) VẪN hiện, cùng lúc với "startPayment"',
+      office1AfterUpload1Options.includes('uploadSigned') && office1AfterUpload1Options.includes('startPayment'),
+      office1AfterUpload1Options);
+
+    // Lỡ chọn nhầm tệp -> tải lại (re-upload) tệp khác, vẫn TRƯỚC khi thanh toán -> phải cho phép, tệp
+    // mới phải THAY THẾ tệp cũ (không cộng dồn/giữ song song).
+    await uploadOfficeSignedAs('kd1', office1.id, officeSignedFile2);
+    const office1AfterReupload = await page.evaluate((id) => DB.officeReqs.find((x) => x.id === id), office1.id);
+    check('Tải LẠI Tài liệu ký (sửa nhầm tệp) trước khi thanh toán -> được phép, tệp mới thay thế tệp cũ',
+      office1AfterReupload.signedFileUrl.includes('office-signed-2') && !office1AfterReupload.signedFileUrl.includes('office-signed-1'),
+      office1AfterReupload.signedFileUrl);
+
+    await page.evaluate((id) => startOfficePaymentAction(id), office1.id);
+    await confirmPending();
+    const office1AfterStartPayment = await page.evaluate((id) => DB.officeReqs.find((x) => x.id === id), office1.id);
+    check('"Chuyển Sang Thanh Toán" thành công -> paymentStatus rời khỏi CHUA_THANH_TOAN', office1AfterStartPayment.paymentStatus === 'CHO_THANH_TOAN', office1AfterStartPayment.paymentStatus);
+
+    await goToOffice('MUA_BAN');
+    const office1AfterStartPaymentOptions = await officeSecondaryOptionValues(office1.id);
+    check('Sau khi đã "Chuyển Sang Thanh Toán" -> CẢ "uploadSigned" LẪN "startPayment" đều biến mất (khoá lại đúng thiết kế)',
+      !office1AfterStartPaymentOptions.includes('uploadSigned') && !office1AfterStartPaymentOptions.includes('startPayment'),
+      office1AfterStartPaymentOptions);
+
+    await clearAlerts();
+    const reuploadAfterPaymentResult = await page.evaluate(async (id) => {
+      try {
+        await callRecordAction('officeReqs', id, 'upload-signed', { fileName: 'x.pdf', fileType: 'application/pdf', fileUrl: '/uploads/x.pdf' });
+        return { blocked: false };
+      } catch (err) {
+        return { blocked: true, message: err.message };
+      }
+    }, office1.id);
+    check('Gọi thẳng API tải Tài liệu ký SAU khi đã thanh toán vẫn bị server 409 chặn (không chỉ ẩn ở giao diện)',
+      reuploadAfterPaymentResult.blocked, reuploadAfterPaymentResult);
 
     check('Không có ngoại lệ JS chưa bắt (pageerror) nào phát sinh trong suốt bộ test', jsExceptions.length === 0, jsExceptions);
   } catch (err) {

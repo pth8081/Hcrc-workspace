@@ -146,7 +146,10 @@ const server = http.createServer(async (req, res) => {
 const secretaryUser = {
   username: 'thuky1', name: 'Đặng Thị Ký', dept: 'Phòng Hành Chính', role: 'STAFF',
   phone: '0911111111', email: 'ky@company.com', jobTitle: 'Thư ký',
-  active: true, perms: { minutesCreate: true }
+  // taskEdit: cần cho canManageTasks() ở module-congviec.js — nút "📌 Giao việc" theo TỪNG dòng chỉ đạo
+  // trong modal Chi tiết (xem Kịch bản 5, kiểm thử Fix "per-row Giao việc") chỉ hiện khi user này có
+  // canManageTasks(), không liên quan gì tới minutesCreate (quyền lập/khoá biên bản).
+  active: true, perms: { minutesCreate: true, taskEdit: true }
 };
 const directorUser = {
   username: 'gdA', name: 'Nguyễn Văn Giám Đốc', dept: 'Ban Giám Đốc',
@@ -386,6 +389,122 @@ async function main() {
     s4.stillNotEditing &&
     s4.alerts.some((a) => a.includes('không có quyền sửa')),
     `tasksAssigned=${s4.tasksAssigned} alerts=${JSON.stringify(s4.alerts)}`
+  );
+
+  // ===================== Scenario 5 (Fix): nút "📌 Giao việc" theo TỪNG dòng chỉ đạo trong modal Chi
+  // tiết PHẢI đi qua ĐÚNG 1 đường tạo việc với nút "Giao việc" hàng loạt (confirmAssignMinutesTasks()) —
+  // trước đây mở 1 modal Giao Việc thủ công riêng, không set sourceType/sourceCode/sourceDirectiveId nên
+  // không bao giờ tự ẩn (có thể bấm lại tạo trùng việc), việc tạo ra khởi động TODO thay vì DOING, và
+  // biên bản không khoá lại (d.taskCreated/m.tasksAssigned không được set) =====================
+  const s5Create = await page.evaluate(async ({ directorFullLabel }) => {
+    window.__alerts = [];
+    // Kịch bản 3 (trùng mã) ở trên đã mở khoá + để lại giá trị mã TRÙNG trong ô #minutesCode (submit
+    // thất bại nên form không tự xoá trắng) — phải sinh lại mã mới + khoá lại ô, nếu không lần lập biên
+    // bản mới này sẽ bị chặn "Mã biên bản đã tồn tại!" y hệt kịch bản 3.
+    document.getElementById('minutesCode').value = generateMinutesCode();
+    document.getElementById('minutesCode').readOnly = true;
+    document.getElementById('minutesTitle').value = 'Họp xét duyệt ngân sách quý 4';
+    document.getElementById('minutesTime').value = '2026-09-01T09:00';
+    document.getElementById('minutesLocation').value = 'Phòng họp B';
+    document.getElementById('minutesChair').value = 'Nguyễn Văn Giám Đốc';
+    document.getElementById('minutesSecretary').value = 'Đặng Thị Ký';
+    document.getElementById('minutesContent').value = 'Xét duyệt ngân sách quý 4.';
+
+    minutesAttendeesRows = [];
+    minutesDirectives = [];
+    addAttendeeRow();
+    toggleAttendeeHasAccount(0, 'YES');
+    resolveAttendeeAccountInput(0, directorFullLabel);
+
+    addMinutesDirectiveRow();
+    updateMinutesDirectiveField(0, 'content', 'Chỉ đạo A — hoàn thiện báo cáo ngân sách');
+    updateMinutesDirectiveField(0, 'assignedToAttendeeId', minutesAttendeesRows[0].id);
+    addMinutesDirectiveRow();
+    updateMinutesDirectiveField(1, 'content', 'Chỉ đạo B — rà soát định mức chi');
+    updateMinutesDirectiveField(1, 'assignedToAttendeeId', minutesAttendeesRows[0].id);
+
+    const form = document.getElementById('minutesForm');
+    await submitMeetingMinutes({ preventDefault() {}, target: form });
+
+    const saved = DB.meetingMinutes.find((m) => m.title === 'Họp xét duyệt ngân sách quý 4');
+    return {
+      alerts: window.__alerts.slice(),
+      savedId: saved && saved.id,
+      directiveIds: saved ? saved.directives.map((d) => d.id) : []
+    };
+  }, { directorFullLabel: `${directorUser.name} — ${directorUser.dept} (${directorUser.username})` });
+
+  record(
+    'Minutes (setup Fix 2): tạo được biên bản mới với 2 chỉ đạo đã gán người thực hiện',
+    !!s5Create.savedId && s5Create.directiveIds.length === 2,
+    JSON.stringify(s5Create)
+  );
+
+  const minutesId2 = s5Create.savedId;
+  const tasksBeforeS5 = await page.evaluate(() => DB.tasks.length);
+
+  await page.evaluate((id) => viewMeetingMinutesDetails(id), minutesId2);
+  const beforeButtons = await page.locator('#viewModalContent button[data-op="confirmAssignMinutesTasks"]').count();
+  record(
+    'Minutes (Fix 2): TRƯỚC khi giao việc, mỗi dòng chỉ đạo đã gán người đều hiện nút "📌 Giao việc" gọi thẳng confirmAssignMinutesTasks() (đường tạo việc dùng chung với nút hàng loạt)',
+    beforeButtons === 2,
+    beforeButtons
+  );
+
+  // Bấm nút "Giao việc" ở dòng đầu tiên (như 1 người dùng thật) rồi xác nhận trên modal chung.
+  await page.locator('#viewModalContent button[data-op="confirmAssignMinutesTasks"]').first().click();
+  await page.click('#genericConfirmOkBtn');
+  await page.waitForTimeout(250);
+
+  const s5After = await page.evaluate((id) => {
+    const m = DB.meetingMinutes.find((x) => x.id === id);
+    const tasksForThis = DB.tasks.filter((t) => t.sourceType === 'MEETING_MINUTES' && t.sourceCode === m.code);
+    return {
+      tasksAssigned: m.tasksAssigned,
+      directivesTaskCreated: m.directives.map((d) => d.taskCreated),
+      tasksCount: tasksForThis.length,
+      tasks: tasksForThis.map((t) => ({ status: t.status, sourceDirectiveId: t.sourceDirectiveId, sourceType: t.sourceType, sourceCode: t.sourceCode }))
+    };
+  }, minutesId2);
+
+  record(
+    'Minutes (Fix 2): bấm "Giao việc" ở 1 dòng -> tạo đủ việc cho các chỉ đạo đã gán, mỗi việc khởi động DOING (không phải TODO) với ĐÚNG sourceType=MEETING_MINUTES/sourceCode',
+    s5After.tasksCount === 2 &&
+    s5After.tasks.every((t) => t.status === 'DOING' && t.sourceType === 'MEETING_MINUTES' && t.sourceCode),
+    JSON.stringify(s5After)
+  );
+  record(
+    'Minutes (Fix 2): sourceDirectiveId của từng việc khớp đúng d.id tương ứng (không lệch/không mất)',
+    s5Create.directiveIds.every((did) => s5After.tasks.some((t) => t.sourceDirectiveId === did)),
+    JSON.stringify({ expectedDirectiveIds: s5Create.directiveIds, gotTasks: s5After.tasks })
+  );
+  record(
+    'Minutes (Fix 2): d.taskCreated + m.tasksAssigned được set đúng -> biên bản khoá lại đúng thiết kế',
+    s5After.tasksAssigned === true && s5After.directivesTaskCreated.every(Boolean),
+    JSON.stringify(s5After)
+  );
+
+  // Mở lại modal Chi tiết — cả 2 nút "Giao việc" phải biến mất (lookup theo sourceType/sourceCode/
+  // sourceDirectiveId nay khớp đúng, trước đây KHÔNG BAO GIỜ khớp nên nút hiện vĩnh viễn).
+  await page.evaluate((id) => viewMeetingMinutesDetails(id), minutesId2);
+  const afterButtons = await page.locator('#viewModalContent button[data-op="confirmAssignMinutesTasks"]').count();
+  record(
+    'Minutes (Fix 2): SAU khi tạo việc, nút "📌 Giao việc" biến mất khỏi cả 2 dòng chỉ đạo',
+    afterButtons === 0,
+    afterButtons
+  );
+
+  // Mô phỏng thử "bấm lại" (gọi lại đúng hành động, dù nút thật đã ẩn) — server phải chặn 409 vì biên
+  // bản đã khoá, KHÔNG được tạo thêm việc trùng.
+  await page.evaluate(() => { window.__alerts = []; });
+  await page.evaluate((id) => assignMinutesTasksAction(id), minutesId2);
+  await page.waitForTimeout(150);
+  const s5SecondAlerts = await page.evaluate(() => window.__alerts.slice());
+  const tasksAfterSecondAttempt = await page.evaluate(() => DB.tasks.length);
+  record(
+    'Minutes (Fix 2): gọi lại hành động giao việc lần 2 cho CÙNG biên bản bị server 409 chặn ("đã được giao việc rồi"), không tạo thêm việc trùng',
+    s5SecondAlerts.some((a) => a.includes('đã được giao việc rồi')) && tasksAfterSecondAttempt === tasksBeforeS5 + 2,
+    JSON.stringify({ alerts: s5SecondAlerts, tasksBeforeS5, tasksAfterSecondAttempt })
   );
 
   await browser.close();

@@ -887,6 +887,11 @@ async function assignMinutesTasksAction(id) {
   logSystemAction('MINUTES', 'ASSIGN_MINUTES_TASKS', `Giao việc theo chỉ đạo biên bản họp [${updated.code}] — đã tạo ${createdTasks.length} công việc, biên bản chuyển sang khoá`, 'SUCCESS', updated.code);
   alert(`✅ Đã giao việc thành công! Đã tạo ${createdTasks.length} công việc. Biên bản đã được khoá, không thể sửa nữa.`);
   renderMeetingMinutes();
+  // Bấm từ nút "Giao việc" theo TỪNG dòng chỉ đạo trong modal Chi tiết (xem viewMeetingMinutesDetails())
+  // thì modal đó vẫn đang mở — render lại để nút biến mất đúng ngay lập tức (không thì vẫn hiện nút cũ
+  // dù đã tạo việc xong, tới lần mở lại modal mới cập nhật).
+  const viewModal = document.getElementById('viewDocModal');
+  if (viewModal && !viewModal.classList.contains('hidden')) viewMeetingMinutesDetails(id);
 }
 
 function deleteMeetingMinutes(id) {
@@ -958,9 +963,20 @@ function viewMeetingMinutesDetails(id) {
                 ${recentHistory ? `<ul class="text-[10px] text-gray-500 list-disc list-inside">${recentHistory}</ul>` : ''}
               </div>`;
           } else if (d.assignedToAttendeeId) {
+            // Nút "Giao việc" theo TỪNG dòng chỉ đạo — dùng CHUNG đúng 1 đường tạo việc với nút "Giao
+            // việc" hàng loạt (confirmAssignMinutesTasks()/assignMinutesTasksAction(), xem trên) thay
+            // vì mở modal Giao Việc thủ công riêng như trước đây: đường cũ không set
+            // sourceType/sourceCode/sourceDirectiveId (server createTask() ép cứng sourceType='MANUAL'),
+            // nên nút không bao giờ tự ẩn (lookup task theo sourceDirectiveId ở trên luôn thất bại) và
+            // có thể bấm lại nhiều lần tạo trùng việc; việc tạo ra cũng khởi động ở TODO thay vì DOING,
+            // và d.taskCreated/m.tasksAssigned không được set nên biên bản không khoá lại như thiết kế.
+            // assign-tasks ở server xử lý theo LÔ (mọi chỉ đạo đã gán người còn thiếu việc trong CÙNG 1
+            // biên bản, xem buildTasksFromDirectives()) rồi khoá cả biên bản — không có API tạo riêng
+            // lẻ 1 chỉ đạo, nên bấm ở bất kỳ dòng nào cũng tạo đủ việc còn thiếu + khoá biên bản, đúng
+            // ĐÚNG NHƯ nút "Giao việc" hàng loạt ở danh sách đã làm — không phải hành vi mới.
             statusCell = m.tasksAssigned
               ? '<span class="text-gray-400 italic text-[11px]">Chưa giao việc</span>'
-              : (canManageTasks(currentUser) ? `<button data-op="createTaskFromMinutesDirective" data-arg0="${m.id}" data-arg1="${idx}" class="bg-violet-600 text-white px-2 py-0.5 rounded text-[11px] font-bold hover:bg-violet-700">📌 Giao việc</button>` : '<span class="text-gray-400 italic text-[11px]">Chưa giao việc</span>');
+              : (canManageTasks(currentUser) ? `<button data-op="confirmAssignMinutesTasks" data-arg0="${m.id}" class="bg-violet-600 text-white px-2 py-0.5 rounded text-[11px] font-bold hover:bg-violet-700">📌 Giao việc</button>` : '<span class="text-gray-400 italic text-[11px]">Chưa giao việc</span>');
           } else {
             statusCell = '<span class="text-gray-400 italic text-[11px]">Chưa gán</span>';
           }

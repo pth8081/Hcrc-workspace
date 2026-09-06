@@ -241,8 +241,12 @@ function renderOfficeReqs() {
               if (canDL) secondaryOptions.push({ value: 'downloadSlip', label: '⬇️ Tải' });
               if (o.signedFileUrl && canDL) secondaryOptions.push({ value: 'viewSigned', label: '👁️ Xem Tài Liệu Ký' });
               if (canManageOfficePaymentClient(currentUser, o)) {
-                if (!o.signedFileUrl) secondaryOptions.push({ value: 'uploadSigned', label: '📤 Tải Tài Liệu Ký' });
-                else if (o.paymentStatus === 'CHUA_THANH_TOAN') secondaryOptions.push({ value: 'startPayment', label: '💰 Chuyển Sang Thanh Toán' });
+                // Khớp uploadOfficeSignedFile() ở server: vẫn cho tải lại/sửa Tài liệu ký TRƯỚC KHI
+                // chuyển sang thanh toán (paymentStatus vẫn CHUA_THANH_TOAN), kể cả khi đã có tệp —
+                // trước đây nút "Tải Tài Liệu Ký" biến mất vĩnh viễn ngay sau lần tải đầu tiên, không
+                // còn cách nào sửa khi lỡ chọn nhầm tệp.
+                if (!o.signedFileUrl || o.paymentStatus === 'CHUA_THANH_TOAN') secondaryOptions.push({ value: 'uploadSigned', label: '📤 Tải Tài Liệu Ký' });
+                if (o.signedFileUrl && o.paymentStatus === 'CHUA_THANH_TOAN') secondaryOptions.push({ value: 'startPayment', label: '💰 Chuyển Sang Thanh Toán' });
               }
             }
             // "Sửa & Gửi Lại" — chỉ chính người tạo, chỉ khi đang cần bổ sung (NHÁP do
