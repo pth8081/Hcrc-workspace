@@ -61,13 +61,18 @@ function assertThrows(fn, statusExpected, messageContains, label) {
 const DEPT = 'Phòng Vận Hành';
 const APPROVER_STEP1 = 'tp.vanhanh';
 const APPROVER_STEP2 = 'gd.congty';
+// operationOrderDeptWorkflows (theo phòng ban) đã bị XOÁ HẲN — đợt "Tách Đơn Hàng Siêu Thị/HO" đổi sang
+// quy trình theo MỨC GIÁ TRỊ, TÁCH RIÊNG Siêu Thị/HO (xem lib/workflowEngine.js). Fixture của test này
+// giữ nguyên orderLocationType='HO' cho MỌI đơn (freshOrder() bên dưới) + amount 1.000.000 (< 100 triệu)
+// nên chỉ cần cấu hình đúng 1 tier LT100M là đủ cho toàn bộ kịch bản Duyệt/Từ Chối/Nhập Hàng ở file này —
+// biên giới/độc lập Siêu Thị-HO có bộ test RIÊNG ở test-operation-order-location-tiers.js.
 const appData = {
   workflows: [
     { id: 'WF_1STEP', steps: [{ order: 1, name: 'Duyệt' }] },
     { id: 'WF_2STEP', steps: [{ order: 1, name: 'Trưởng phòng' }, { order: 2, name: 'Giám đốc' }] }
   ],
-  operationOrderDeptWorkflows: {
-    [DEPT]: { workflowId: 'WF_1STEP', approvers: { 1: [APPROVER_STEP1] } }
+  operationOrderHOTierWorkflows: {
+    LT100M: { workflowId: 'WF_1STEP', approvers: { 1: [APPROVER_STEP1] } }
   },
   // carRegs dùng để xác nhận module KHÁC không bị ảnh hưởng (mục A5) — cùng khuôn appData tối thiểu.
   carRegDeptWorkflows: {
@@ -76,15 +81,15 @@ const appData = {
 };
 const appData2Step = {
   workflows: appData.workflows,
-  operationOrderDeptWorkflows: {
-    [DEPT]: { workflowId: 'WF_2STEP', approvers: { 1: [APPROVER_STEP1], 2: [APPROVER_STEP2] } }
+  operationOrderHOTierWorkflows: {
+    LT100M: { workflowId: 'WF_2STEP', approvers: { 1: [APPROVER_STEP1], 2: [APPROVER_STEP2] } }
   }
 };
 
 function freshOrder(overrides) {
   return Object.assign({
     id: 1, code: 'DH-0001', dept: DEPT, status: 'PENDING', currentStep: 1, history: [],
-    creator: 'nv.mua', creatorName: 'Nhân Viên Mua Hàng', amount: 1000000, items: []
+    creator: 'nv.mua', creatorName: 'Nhân Viên Mua Hàng', amount: 1000000, orderLocationType: 'HO', items: []
   }, overrides);
 }
 function makeUser(username, extra) { return Object.assign({ username, name: username, perms: {} }, extra); }

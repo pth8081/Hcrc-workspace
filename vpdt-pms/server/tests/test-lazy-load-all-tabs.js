@@ -127,7 +127,7 @@ async function main() {
       vppRegistrations: [], vppDeptWorkflows: {}, vppPeriods: [], itPriceApprovals: [], itServiceRenewals: [], itSupportTickets: [],
       budgetEntries: [], budgetDeptWorkflows: {}, budgetTemplates: [], budgetPeriods: [],
       reportPeriods: [], reportEntries: [], licenses: [], licenseTypes: [],
-      operationOrders: [], operationOrderDeptWorkflows: {},
+      operationOrders: [], operationOrderStoreTierWorkflows: {}, operationOrderHOTierWorkflows: {},
       operationStoreOpenings: [], operationStoreOpenDeptWorkflows: {}, operationStoreOpenEstimateDeptWorkflows: {},
       operationRepairs: [], operationRepairDeptWorkflows: {}, operationRepairEstimateDeptWorkflows: {},
       operationWorkItems: [], operationExecutionPeriods: [], orgChartManagerOverrides: {},

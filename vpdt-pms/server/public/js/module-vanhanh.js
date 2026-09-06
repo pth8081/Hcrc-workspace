@@ -10,9 +10,16 @@
 // giờ hiện nút Duyệt/Từ chối/Bổ sung vì canApprove luôn false — status không bao giờ là PENDING).
 // ==========================================
 const OPERATION_KIND_META = {
+  // operationOrders: "wfMap" theo PHÒNG BAN đã bị bỏ hẳn (đợt "Tách Đơn Hàng Siêu Thị/HO") — quy trình
+  // duyệt giờ theo MỨC GIÁ TRỊ, TÁCH RIÊNG Siêu Thị/HO theo item.orderLocationType, resolve ĐÚNG cho
+  // TỪNG hồ sơ qua resolveWfConfigForItem (o) thay vì tra 1 map phẳng theo dept — xem
+  // resolveOperationOrderWorkflowConfigForItemClient() (core.js). 2 kind kia (operationStoreOpenings/
+  // operationRepairs) vẫn theo phòng ban, resolveWfConfigForItem chỉ là wrapper tra wfMap()[dept] để mọi
+  // hàm dùng chung (buildOperationRowHTML/renderOperationList/openOperationProcessModal...) gọi thống
+  // nhất 1 API bất kể kind nào, không cần if/else theo kind ở từng nơi gọi.
   operationOrders: {
     list: () => DB.operationOrders,
-    wfMap: () => DB.operationOrderDeptWorkflows || {},
+    resolveWfConfigForItem: (o) => resolveOperationOrderWorkflowConfigForItemClient(o),
     permCreate: 'operationOrderCreate',
     codeAbbr: 'DH',
     tableBody: 'operationOrderTableBody',
@@ -25,6 +32,7 @@ const OPERATION_KIND_META = {
   operationStoreOpenings: {
     list: () => DB.operationStoreOpenings,
     wfMap: () => DB.operationStoreOpenDeptWorkflows || {},
+    resolveWfConfigForItem: (o) => OPERATION_KIND_META.operationStoreOpenings.wfMap()[o.dept],
     permCreate: 'operationStoreOpenCreate',
     codeAbbr: 'MMST',
     tableBody: 'operationStoreOpenTableBody',
@@ -37,6 +45,7 @@ const OPERATION_KIND_META = {
   operationRepairs: {
     list: () => DB.operationRepairs,
     wfMap: () => DB.operationRepairDeptWorkflows || {},
+    resolveWfConfigForItem: (o) => OPERATION_KIND_META.operationRepairs.wfMap()[o.dept],
     permCreate: 'operationRepairCreate',
     codeAbbr: 'SCST',
     tableBody: 'operationRepairTableBody',
@@ -48,26 +57,36 @@ const OPERATION_KIND_META = {
   }
 };
 
-// activeOperationOrderSubTab — cấp lồng thứ 2 MỚI bên trong tab "📦 Phê Duyệt Đơn Hàng" (đợt "Báo Cáo +
-// Nhập Hàng", theo đúng yêu cầu "tách Đơn Hàng thành sub-tab"): 'LIST' (danh sách/form tạo — y hệt màn
-// hình cũ) và 'REPORT' (mới, xem renderOperationOrderReport() bên dưới). Cùng khuôn
+// activeOperationOrderSubTab — cấp lồng thứ 2 bên trong tab "📦 Đơn Hàng": đợt "Tách Đơn Hàng Siêu Thị/
+// HO" đổi từ 2 sub-tab ('LIST'/'REPORT') sang 3 sub-tab 'STORE' ("Đặt Hàng Tại Siêu Thị")/'HO' ("Đặt
+// Hàng Tại HO")/'REPORT' (mở rộng, xem renderOperationOrderReport() bên dưới) — 'STORE'/'HO' dùng
+// CHUNG 1 khối DOM (form tạo/bộ lọc/bảng danh sách, #opOrderListPanel) y hệt cơ chế sub-tab "Bán Lẻ"/
+// "Bán Buôn" của module-itsupport-price.js (activeItPriceSubTab) thay vì nhân đôi HTML: khác biệt DUY
+// NHẤT giữa 2 tab là orderLocationType gắn ngầm vào đơn tạo mới + bộ lọc "Nơi Nhận"/danh sách chỉ hiện
+// đúng loại đang chọn — KHÔNG có dropdown chọn tay orderLocationType nào (mirror priceType). Cùng khuôn
 // activeOperationStoreSubTab (khai ở core.js vì cần sẵn NGAY sau đăng nhập) nhưng biến này KHÔNG cần
 // vậy — tab "Đơn Hàng" luôn là sub-tab MẶC ĐỊNH của Vận Hành (VAN_HANH_SUBTAB_TO_KIND.ORDERS) nên biến
 // này chỉ cần tồn tại khi module-vanhanh.js đã nạp (đúng lúc setVanHanhSubTab('ORDERS') chạy lần đầu).
-let activeOperationOrderSubTab = 'LIST';
+let activeOperationOrderSubTab = 'STORE';
+const OPERATION_ORDER_SUBTAB_LABELS = { STORE: '🏬 Đặt Hàng Tại Siêu Thị', HO: '🏢 Đặt Hàng Tại HO' };
 function setOperationOrderSubTab(tab) {
   activeOperationOrderSubTab = tab;
-  const tabs = [
-    ['LIST', 'opOrderListPanel', 'btnOpOrderSubList'],
-    ['REPORT', 'opOrderReportPanel', 'btnOpOrderSubReport']
-  ];
-  tabs.forEach(([key, wrapId, btnId]) => {
-    const isActive = key === tab;
-    document.getElementById(wrapId).classList.toggle('hidden', !isActive);
-    const btn = document.getElementById(btnId);
-    btn.className = `px-3 py-1 rounded text-xs font-bold ${isActive ? 'bg-cyan-700 text-white' : 'bg-gray-200 text-gray-700'}`;
+  const isList = tab === 'STORE' || tab === 'HO';
+  document.getElementById('opOrderListPanel').classList.toggle('hidden', !isList);
+  document.getElementById('opOrderReportPanel').classList.toggle('hidden', tab !== 'REPORT');
+  ['STORE', 'HO', 'REPORT'].forEach(key => {
+    const btn = document.getElementById(`btnOpOrderSub${key}`);
+    if (!btn) return;
+    btn.className = `px-3 py-1 rounded text-xs font-bold ${key === tab ? 'bg-cyan-700 text-white' : 'bg-gray-200 text-gray-700'}`;
   });
-  if (tab === 'REPORT') renderOperationOrderReport();
+  if (isList) {
+    const badge = document.getElementById('operationOrderFormSubTabBadge');
+    if (badge) badge.innerText = OPERATION_ORDER_SUBTAB_LABELS[tab] || '';
+    resetListPage('operationOrder');
+    renderOperationOrderList();
+  } else if (tab === 'REPORT') {
+    renderOperationOrderReport();
+  }
 }
 
 let activeVanHanhSubTab = 'ORDERS';
@@ -171,8 +190,7 @@ function operationStatusBadge(o) {
 // thể đã được phép Duyệt/Từ chối đơn hàng (xem chú thích đầy đủ ở hàm server tương ứng).
 function canManageOperationOrderReceiptClient(o) {
   if (currentUser?.perms?.admin) return true;
-  const wfMap = OPERATION_KIND_META.operationOrders.wfMap();
-  return isApproverForDeptWorkflow(wfMap[o.dept], currentUser?.username);
+  return isApproverForDeptWorkflow(resolveOperationOrderWorkflowConfigForItemClient(o), currentUser?.username);
 }
 
 // Đổ danh sách "Nơi Nhận" (siêu thị/kho) cho ô lọc — dùng chung cho cả Danh Sách (filterLocationOperationOrder)
@@ -537,6 +555,15 @@ async function handleOperationOrderPdfUpload(event) {
 async function submitOperationOrder(e) {
   e.preventDefault();
   if (!canCreateOperationOrderClient(currentUser)) return alert('⛔ Bạn không có quyền tạo đơn hàng!');
+  // orderLocationType: KHÔNG có ô chọn tay — gắn ngầm theo đúng sub-tab "Đặt Hàng Tại Siêu Thị"/"Đặt
+  // Hàng Tại HO" đang mở lúc bấm gửi (mirror priceType của itPriceApprovals, xem
+  // submitItPriceApproval()). Form chỉ hiện được khi activeOperationOrderSubTab là 'STORE'/'HO'
+  // (setOperationOrderSubTab() ẩn hẳn #opOrderListPanel ở tab 'REPORT') nên về lý thuyết luôn hợp lệ ở
+  // đây — vẫn kiểm lại tường minh để không gửi 'REPORT' lên server nếu có lỗi UI/race hiếm gặp nào.
+  if (activeOperationOrderSubTab !== 'STORE' && activeOperationOrderSubTab !== 'HO') {
+    return alert('⛔ Vui lòng chọn đúng sub-tab "Đặt Hàng Tại Siêu Thị"/"Đặt Hàng Tại HO" trước khi tạo đơn!');
+  }
+  const orderLocationType = activeOperationOrderSubTab;
   const code = document.getElementById('voCode').value.trim();
   const title = document.getElementById('voTitle').value.trim();
   const supplier = document.getElementById('voSupplier').value.trim();
@@ -572,7 +599,7 @@ async function submitOperationOrder(e) {
   const paymentTotalAmount = getMoneyValue(document.getElementById('voPaymentTotalAmount'));
 
   const payload = {
-    code, title, supplier, note, items: validItems, fileUrl, fileName, fileType,
+    code, title, supplier, note, items: validItems, fileUrl, fileName, fileType, orderLocationType,
     poNumber, orderDate, deliveryDate, ordererName, stationCode, supplierCode, supplierTaxCode,
     receivingLocationCode, receivingLocationName, deliveryAddress,
     discountAmount, vatAmount, afterDiscountAmount, paymentTotalAmount
@@ -584,7 +611,7 @@ async function submitOperationOrder(e) {
   } catch (err) { return alert(`⛔ ${err.message}`); }
 
   DB.operationOrders.unshift(newItem);
-  logSystemAction(OPERATION_KIND_META.operationOrders.logModule, 'CREATE', `Tạo đơn hàng [${newItem.code} - ${title}]`, 'SUCCESS', newItem.code);
+  logSystemAction(OPERATION_KIND_META.operationOrders.logModule, 'CREATE', `Tạo đơn hàng [${newItem.code} - ${title}] (${OPERATION_ORDER_SUBTAB_LABELS[orderLocationType]})`, 'SUCCESS', newItem.code);
   notifyOperationApprovalNeeded('operationOrders', newItem);
 
   alert('✅ Đã gửi đơn hàng thành công!');
@@ -592,7 +619,7 @@ async function submitOperationOrder(e) {
   document.getElementById('voCode').value = generateOperationOrderCode();
   operationOrderItems = [];
   addOperationOrderItemRow();
-  renderOperationList('operationOrders');
+  renderOperationOrderList();
 }
 
 async function submitOperationStoreOpening(e) {
@@ -699,7 +726,7 @@ async function submitOperationRepair(e) {
 
 function notifyOperationApprovalNeeded(kind, item) {
   const meta = OPERATION_KIND_META[kind];
-  const wfConfig = meta.wfMap()[item.dept];
+  const wfConfig = meta.resolveWfConfigForItem(item);
   const approvers = wfConfig?.approvers?.[1] || [];
   if (approvers.length) {
     notifyUsersByEmail(meta.logModule, 'NOTIFY_APPROVAL_NEEDED', item.code, approvers,
@@ -740,9 +767,17 @@ function renderOperationList(kind) {
   // lọc gì (an toàn, không cần if riêng). Xem populateOperationOrderLocationOptions() ngay dưới đây.
   const locationFilter = kind === 'operationOrders' ? (document.getElementById('filterLocationOperationOrder')?.value || '') : '';
 
-  const wfMap = meta.wfMap();
-  const canView = (o) => currentUser.perms?.admin || o.creator === currentUser.username || isApproverForDeptWorkflow(wfMap[o.dept], currentUser.username);
-  const scoped = meta.list().filter(canView);
+  const canView = (o) => currentUser.perms?.admin || o.creator === currentUser.username || isApproverForDeptWorkflow(meta.resolveWfConfigForItem(o), currentUser.username);
+  let scoped = meta.list().filter(canView);
+  // Đơn Hàng (operationOrders) — TÁCH RIÊNG "Đặt Hàng Tại Siêu Thị"/"Đặt Hàng Tại HO" (đợt "Tách Đơn
+  // Hàng Siêu Thị/HO"): sub-tab đang mở (activeOperationOrderSubTab, module-scope) quyết định chỉ hiện
+  // ĐÚNG loại đó — cùng khuôn activeItPriceSubTab lọc DB.itPriceApprovals theo priceType. Hồ sơ CŨ chưa
+  // có orderLocationType (trước đợt tách) coi như 'HO' (khớp migrateOperationOrdersDefaultLocationType()
+  // ở seedDefaults.js) — KHÔNG lọc gì khi đang ở sub-tab 'REPORT' (hàm này không được gọi lúc đó, nhưng
+  // giữ điều kiện tường minh phòng khi có nơi khác gọi renderOperationList('operationOrders') trực tiếp).
+  if (kind === 'operationOrders' && (activeOperationOrderSubTab === 'STORE' || activeOperationOrderSubTab === 'HO')) {
+    scoped = scoped.filter(o => (o.orderLocationType === 'STORE' ? 'STORE' : 'HO') === activeOperationOrderSubTab);
+  }
   const stageOf = (o) => operationRecordStageStatus(kind, o);
   if (kind === 'operationOrders') populateOperationOrderLocationOptions(scoped, 'filterLocationOperationOrder');
 
@@ -792,7 +827,7 @@ function renderOperationStoreOpeningList() { renderOperationList('operationStore
 function renderOperationRepairList() { renderOperationList('operationRepairs'); }
 
 function buildOperationRowHTML(kind, o) {
-  const wfConfig = OPERATION_KIND_META[kind].wfMap()[o.dept] || { workflowId: 'WF_1STEP', approvers: { 1: ['admin'] } };
+  const wfConfig = OPERATION_KIND_META[kind].resolveWfConfigForItem(o) || { workflowId: 'WF_1STEP', approvers: { 1: ['admin'] } };
   const currentStepApprovers = wfConfig.approvers?.[o.currentStep] || [];
   const canApprove = (o.status === 'PENDING') && canApproveStep(currentUser, currentStepApprovers, o.history, o.currentStep);
 
@@ -828,7 +863,7 @@ function buildOperationRowHTML(kind, o) {
       <td class="border p-2 font-mono font-bold text-cyan-800">${escapeHtml(o.code)}</td>
       <td class="border p-2">${escapeHtml(o.dept)}<br><span class="text-xs text-gray-500">${escapeHtml(o.creatorName)}</span></td>
       <td class="border p-2"><div class="font-bold text-gray-800">${escapeHtml(o.title)}</div><div class="text-xs text-gray-500">NCC: ${escapeHtml(o.supplier || 'N/A')} — ${(o.items || []).length} hạng mục</div></td>
-      <td class="border p-2 font-bold text-rose-600">${(o.amount || 0).toLocaleString('vi-VN')} VNĐ</td>
+      <td class="border p-2 font-bold text-rose-600">${(o.amount || 0).toLocaleString('vi-VN')} VNĐ<div class="text-[11px] font-normal text-gray-400">${escapeHtml(operationOrderTierLabel((o.orderLocationType === 'STORE' ? 'STORE' : 'HO'), computeOperationOrderTierClient((o.orderLocationType === 'STORE' ? 'STORE' : 'HO'), computeOperationOrderAmountClient(o))))}</div></td>
       <td class="border p-2">${operationStatusBadge(o)}</td>
       <td class="border p-2 text-center space-x-1">${actionCell}</td>
     </tr>`;
@@ -1000,7 +1035,7 @@ function openOperationProcessModal(kind, id) {
   `).join('');
   document.getElementById('operationProcessModalHistory').innerHTML = historyHTML || '<div class="text-gray-400 italic">Chưa có lịch sử xử lý.</div>';
 
-  const wfConfig = meta.wfMap()[o.dept] || { workflowId: 'WF_1STEP', approvers: { 1: ['admin'] } };
+  const wfConfig = meta.resolveWfConfigForItem(o) || { workflowId: 'WF_1STEP', approvers: { 1: ['admin'] } };
   const currentStepApprovers = wfConfig.approvers?.[o.currentStep] || [];
   const canApprove = (o.status === 'PENDING') && canApproveStep(currentUser, currentStepApprovers, o.history, o.currentStep);
   const controls = document.getElementById('operationProcessModalControls');
@@ -2100,6 +2135,45 @@ function groupOperationOrdersByMonth(items, dateField) {
   return Object.values(buckets).sort((a, b) => a.key.localeCompare(b.key));
 }
 function onOperationOrderReportFilterChange() { renderOperationOrderReport(); }
+
+// Tính bộ số liệu tóm tắt (đếm theo trạng thái + tổng giá trị) cho 1 tập đơn hàng ĐÃ LỌC sẵn — tách
+// thành hàm riêng (đợt "Tách Đơn Hàng Siêu Thị/HO", mục 2 yêu cầu người dùng: cần TÁI SỬ DỤNG đúng 1
+// logic này cho 3 lát cắt khác nhau — Tổng Chuỗi/Siêu Thị/HO — thay vì lặp lại 3 lần).
+// "Đã phê duyệt" = đã qua xong bước duyệt (bất kể giai đoạn nhập hàng sau đó ra sao) — AWAITING_RECEIPT/
+// RECEIVED/RECEIPT_CANCELLED đều tính, vì cả 3 đều ĐÃ được duyệt; APPROVED giữ lại cho hồ sơ hiếm chưa
+// kịp di trú (xem operationStatusBadge()). "Chưa phê duyệt" = còn trong vòng xử lý (PENDING/DRAFT) —
+// KHÔNG gộp REJECTED vào đây (bị từ chối là 1 kết quả đã CHỐT, không phải "chưa xong"), đếm riêng ở thẻ
+// Bị Từ Chối để không lẫn 2 khái niệm.
+const OP_ORDER_APPROVED_FAMILY = new Set(['APPROVED', 'AWAITING_RECEIPT', 'RECEIVED', 'RECEIPT_CANCELLED']);
+function computeOperationOrderReportStats(list) {
+  const approvedOrders = list.filter(o => OP_ORDER_APPROVED_FAMILY.has(o.status));
+  const notYetApprovedOrders = list.filter(o => o.status === 'PENDING' || o.status === 'DRAFT');
+  const rejectedOrders = list.filter(o => o.status === 'REJECTED');
+  const awaitingReceiptOrders = list.filter(o => o.status === 'AWAITING_RECEIPT');
+  const receivedOrders = list.filter(o => o.status === 'RECEIVED');
+  const cancelledReceiptOrders = list.filter(o => o.status === 'RECEIPT_CANCELLED');
+  return {
+    total: list.length, approvedOrders, notYetApprovedOrders, rejectedOrders,
+    awaitingReceiptOrders, receivedOrders, cancelledReceiptOrders,
+    approvedValueTotal: approvedOrders.reduce((sum, o) => sum + (o.amount || 0), 0),
+    receivedValueTotal: receivedOrders.reduce((sum, o) => sum + (o.amount || 0), 0)
+  };
+}
+function buildOpOrderSummaryCardsHTML(stats, extraCards) {
+  const cards = [
+    { label: 'Tổng Số Đơn', value: stats.total, colorClass: 'text-blue-700' },
+    { label: 'Đã Phê Duyệt', value: stats.approvedOrders.length, colorClass: 'text-green-700' },
+    { label: 'Chưa Phê Duyệt', value: stats.notYetApprovedOrders.length, colorClass: 'text-yellow-700' },
+    { label: 'Bị Từ Chối', value: stats.rejectedOrders.length, colorClass: 'text-red-700' },
+    ...(extraCards || [])
+  ];
+  return cards.map(c => `
+    <div class="border rounded-lg p-2 text-center bg-white">
+      <div class="text-[11px] text-gray-500 font-semibold">${escapeHtml(c.label)}</div>
+      <div class="text-lg font-bold ${c.colorClass}">${c.value.toLocaleString('vi-VN')}</div>
+    </div>
+  `).join('');
+}
 function renderOperationOrderReport() {
   const summaryEl = document.getElementById('opOrderReportSummaryCards');
   if (!summaryEl) return;
@@ -2107,10 +2181,11 @@ function renderOperationOrderReport() {
   const toDate = document.getElementById('opReportToDateOperationOrder')?.value || '';
   const locationFilter = document.getElementById('opReportFilterLocation')?.value || '';
 
-  // Cùng phạm vi Xem với Danh Sách (canView — chính người tạo/admin/approver dept-workflow), KHÔNG đọc
-  // thẳng DB.operationOrders để tránh lộ số liệu của hồ sơ người dùng này vốn không được xem.
-  const wfMap = OPERATION_KIND_META.operationOrders.wfMap();
-  const canView = (o) => currentUser.perms?.admin || o.creator === currentUser.username || isApproverForDeptWorkflow(wfMap[o.dept], currentUser.username);
+  // Cùng phạm vi Xem với Danh Sách (canView — chính người tạo/admin/approver theo mức giá trị của ĐÚNG
+  // hồ sơ đó), KHÔNG đọc thẳng DB.operationOrders để tránh lộ số liệu của hồ sơ người dùng này vốn
+  // không được xem. Báo Cáo giờ luôn hiện CẢ Siêu Thị lẫn HO (không lọc theo sub-tab đang mở của Danh
+  // Sách như trước — đúng yêu cầu "Tổng Chuỗi" phải gộp cả 2 loại).
+  const canView = (o) => currentUser.perms?.admin || o.creator === currentUser.username || isApproverForDeptWorkflow(resolveOperationOrderWorkflowConfigForItemClient(o), currentUser.username);
   const scoped = (DB.operationOrders || []).filter(canView);
   populateOperationOrderLocationOptions(scoped, 'opReportFilterLocation');
 
@@ -2124,60 +2199,52 @@ function renderOperationOrderReport() {
     if (locationFilter && (o.receivingLocationName || '') !== locationFilter) return false;
     return true;
   });
+  const locationTypeOf = (o) => (o.orderLocationType === 'STORE' ? 'STORE' : 'HO');
+  const storeOrders = filtered.filter(o => locationTypeOf(o) === 'STORE');
+  const hoOrders = filtered.filter(o => locationTypeOf(o) === 'HO');
 
-  const total = filtered.length;
-  // "Đã phê duyệt" = đã qua xong bước duyệt phòng ban (bất kể giai đoạn nhập hàng sau đó ra sao) —
-  // AWAITING_RECEIPT/RECEIVED/RECEIPT_CANCELLED đều tính, vì cả 3 đều ĐÃ được duyệt; APPROVED giữ lại
-  // cho hồ sơ hiếm chưa kịp di trú (xem operationStatusBadge()). "Chưa phê duyệt" = còn trong vòng xử lý
-  // (PENDING/DRAFT) — KHÔNG gộp REJECTED vào đây (bị từ chối là 1 kết quả đã CHỐT, không phải "chưa
-  // xong"), đếm riêng ở thẻ Bị Từ Chối để không lẫn 2 khái niệm.
-  const APPROVED_FAMILY = new Set(['APPROVED', 'AWAITING_RECEIPT', 'RECEIVED', 'RECEIPT_CANCELLED']);
-  const approvedOrders = filtered.filter(o => APPROVED_FAMILY.has(o.status));
-  const notYetApprovedOrders = filtered.filter(o => o.status === 'PENDING' || o.status === 'DRAFT');
-  const rejectedOrders = filtered.filter(o => o.status === 'REJECTED');
-  const awaitingReceiptOrders = filtered.filter(o => o.status === 'AWAITING_RECEIPT');
-  const receivedOrders = filtered.filter(o => o.status === 'RECEIVED');
-  const cancelledReceiptOrders = filtered.filter(o => o.status === 'RECEIPT_CANCELLED');
-
-  const approvedValueTotal = approvedOrders.reduce((sum, o) => sum + (o.amount || 0), 0);
-  const receivedValueTotal = receivedOrders.reduce((sum, o) => sum + (o.amount || 0), 0);
-
-  const summaryCards = [
-    { label: 'Tổng Số Đơn', value: total, colorClass: 'text-blue-700' },
-    { label: 'Đã Phê Duyệt', value: approvedOrders.length, colorClass: 'text-green-700' },
-    { label: 'Chưa Phê Duyệt', value: notYetApprovedOrders.length, colorClass: 'text-yellow-700' },
-    { label: 'Bị Từ Chối', value: rejectedOrders.length, colorClass: 'text-red-700' },
-    { label: 'Chờ Nhập Hàng', value: awaitingReceiptOrders.length, colorClass: 'text-indigo-700' },
-    { label: 'Đã Nhập Hàng', value: receivedOrders.length, colorClass: 'text-emerald-700' },
-    { label: 'Đã Hủy Nhập', value: cancelledReceiptOrders.length, colorClass: 'text-slate-600' }
-  ];
-  summaryEl.innerHTML = summaryCards.map(c => `
-    <div class="border rounded-lg p-2 text-center bg-white">
-      <div class="text-[11px] text-gray-500 font-semibold">${escapeHtml(c.label)}</div>
-      <div class="text-lg font-bold ${c.colorClass}">${c.value.toLocaleString('vi-VN')}</div>
-    </div>
-  `).join('');
-
+  // "Tổng Chuỗi" — TOÀN BỘ đơn hàng đã lọc (Siêu Thị + HO gộp lại), giữ đúng ý nghĩa/id các thẻ cũ trước
+  // đợt tách (không đổi hành vi màn hình trước đây, chỉ thêm 2 khối con Siêu Thị/HO bên dưới).
+  const chainStats = computeOperationOrderReportStats(filtered);
+  summaryEl.innerHTML = buildOpOrderSummaryCardsHTML(chainStats, [
+    { label: 'Chờ Nhập Hàng', value: chainStats.awaitingReceiptOrders.length, colorClass: 'text-indigo-700' },
+    { label: 'Đã Nhập Hàng', value: chainStats.receivedOrders.length, colorClass: 'text-emerald-700' },
+    { label: 'Đã Hủy Nhập', value: chainStats.cancelledReceiptOrders.length, colorClass: 'text-slate-600' }
+  ]);
   const valueTotalsEl = document.getElementById('opOrderReportValueTotals');
   if (valueTotalsEl) {
     valueTotalsEl.innerHTML = `
       <div class="bg-white p-3 rounded border text-xs">
         <div class="text-gray-500 font-semibold">Tổng Giá Trị Đơn Đã Phê Duyệt</div>
-        <div class="text-xl font-bold text-green-700">${approvedValueTotal.toLocaleString('vi-VN')} VNĐ</div>
+        <div class="text-xl font-bold text-green-700">${chainStats.approvedValueTotal.toLocaleString('vi-VN')} VNĐ</div>
       </div>
       <div class="bg-white p-3 rounded border text-xs">
         <div class="text-gray-500 font-semibold">Tổng Giá Trị Đơn Đã Nhập Hàng</div>
-        <div class="text-xl font-bold text-emerald-700">${receivedValueTotal.toLocaleString('vi-VN')} VNĐ</div>
+        <div class="text-xl font-bold text-emerald-700">${chainStats.receivedValueTotal.toLocaleString('vi-VN')} VNĐ</div>
       </div>
     `;
   }
+
+  // 2 khối MỚI (đợt "Tách Đơn Hàng Siêu Thị/HO", mục 2): báo cáo riêng cho từng loại nơi đặt hàng, cùng
+  // bộ thẻ rút gọn (bỏ 3 thẻ Chờ Nhập/Đã Nhập/Đã Hủy Nhập cho gọn, thêm 1 thẻ Tổng Giá Trị Đã Duyệt).
+  const storeStats = computeOperationOrderReportStats(storeOrders);
+  const hoStats = computeOperationOrderReportStats(hoOrders);
+  const storeSummaryEl = document.getElementById('opOrderReportStoreSummaryCards');
+  if (storeSummaryEl) storeSummaryEl.innerHTML = buildOpOrderSummaryCardsHTML(storeStats, [
+    { label: 'Tổng Giá Trị Đã Duyệt', value: storeStats.approvedValueTotal, colorClass: 'text-emerald-700' }
+  ]);
+  const hoSummaryEl = document.getElementById('opOrderReportHOSummaryCards');
+  if (hoSummaryEl) hoSummaryEl.innerHTML = buildOpOrderSummaryCardsHTML(hoStats, [
+    { label: 'Tổng Giá Trị Đã Duyệt', value: hoStats.approvedValueTotal, colorClass: 'text-emerald-700' }
+  ]);
 
   // "Theo thời gian" — nhóm theo tháng, approvedAt cho nhóm Đã Duyệt / receivedAt cho nhóm Đã Nhập Hàng
   // (2 mốc thời gian riêng, KHÔNG dùng chung createdAt — xem chú thích ở lib/workflowEngine.js/
   // lib/recordActions.js nơi gán 2 field này). Hồ sơ cũ di trú qua migrateApprovedOperationOrdersToAwaitingReceipt()
   // (seedDefaults.js) vẫn có approvedAt (lấy lại từ lịch sử hoặc thời điểm di trú) nên vẫn lên đúng biểu đồ.
-  const approvedByMonth = groupOperationOrdersByMonth(approvedOrders, 'approvedAt');
-  const receivedByMonth = groupOperationOrdersByMonth(receivedOrders, 'receivedAt');
+  // Luôn TỔNG CHUỖI (chainStats, không tách Siêu Thị/HO riêng) — giữ đúng 2 biểu đồ cũ, tránh nhân đôi UI.
+  const approvedByMonth = groupOperationOrdersByMonth(chainStats.approvedOrders, 'approvedAt');
+  const receivedByMonth = groupOperationOrdersByMonth(chainStats.receivedOrders, 'receivedAt');
   const approvedMaxTotal = Math.max(1, ...approvedByMonth.map(b => b.total));
   const receivedMaxTotal = Math.max(1, ...receivedByMonth.map(b => b.total));
 
@@ -2192,6 +2259,42 @@ function renderOperationOrderReport() {
     receivedByMonthEl.innerHTML = receivedByMonth.length
       ? receivedByMonth.map(b => buildOpOrderStatBarHTML(`${b.label} (${b.count} đơn)`, b.total, receivedMaxTotal, 'bg-emerald-500')).join('')
       : `<div class="text-gray-400 italic text-xs">Không có đơn hàng đã nhập hàng trong khoảng lọc hiện tại.</div>`;
+  }
+
+  // "📍 Số Đơn Theo Từng Siêu Thị (Nơi Nhận)" + dòng "TỔNG CHUỖI" (đợt "Tách Đơn Hàng Siêu Thị/HO", mục
+  // 2): nhóm TOÀN BỘ đơn đã lọc (cả Siêu Thị lẫn HO — 1 đơn HO vẫn có thể mang receivingLocationName
+  // riêng, vd kho tổng) theo receivingLocationName, đếm tổng số đơn + số đơn ĐÃ NHẬN HÀNG (RECEIVED) +
+  // tổng giá trị mỗi nơi nhận — dòng cuối cộng dồn "Tổng Chuỗi" (toàn bộ, không phân biệt nơi nhận).
+  const byStoreTbody = document.getElementById('opOrderReportByStoreTableBody');
+  if (byStoreTbody) {
+    const byStore = {};
+    filtered.forEach(o => {
+      const name = (o.receivingLocationName || '').trim() || '(Chưa xác định nơi nhận)';
+      if (!byStore[name]) byStore[name] = { name, total: 0, received: 0, value: 0 };
+      byStore[name].total++;
+      if (o.status === 'RECEIVED') byStore[name].received++;
+      byStore[name].value += o.amount || 0;
+    });
+    const rows = Object.values(byStore).sort((a, b) => b.total - a.total);
+    const rowsHTML = rows.map(r => `
+      <tr class="hover:bg-gray-50 border-b">
+        <td class="border p-2">${escapeHtml(r.name)}</td>
+        <td class="border p-2 text-center font-bold">${r.total.toLocaleString('vi-VN')}</td>
+        <td class="border p-2 text-center font-bold text-emerald-700">${r.received.toLocaleString('vi-VN')}</td>
+        <td class="border p-2 text-right">${r.value.toLocaleString('vi-VN')} VNĐ</td>
+      </tr>
+    `).join('');
+    const totalRow = `
+      <tr class="bg-cyan-50 font-bold border-t-2 border-cyan-300">
+        <td class="border p-2">🔗 TỔNG CHUỖI</td>
+        <td class="border p-2 text-center">${filtered.length.toLocaleString('vi-VN')}</td>
+        <td class="border p-2 text-center text-emerald-700">${chainStats.receivedOrders.length.toLocaleString('vi-VN')}</td>
+        <td class="border p-2 text-right">${rows.reduce((sum, r) => sum + r.value, 0).toLocaleString('vi-VN')} VNĐ</td>
+      </tr>
+    `;
+    byStoreTbody.innerHTML = (rows.length
+      ? rowsHTML
+      : `<tr><td colspan="4" class="text-center p-4 text-gray-400 italic">Không có đơn hàng nào trong khoảng lọc hiện tại.</td></tr>`) + totalRow;
   }
 }
 

@@ -46,10 +46,36 @@ const WF_MODULE_CONFIG = {
   },
   // "Ngân Sách" — Trưởng phòng duyệt bản ngân sách theo phòng ban, cùng khuôn ITPRICE ở trên.
   BUDGET: { dbKey: 'budgetDeptWorkflows', label: 'Ngân Sách', title: '📊 Cấu Hình Quy Trình Duyệt Ngân Sách Theo Phòng Ban' },
-  // "Vận Hành" — 3 luồng ĐỘC LẬP (xem lib/workflowEngine.js OFFICE_SUBTYPE_TO_DBKEY-style map riêng cho
-  // module này), mỗi luồng 1 map dept-workflow RIÊNG — cùng khuôn OFFICE_BUY/OFFICE_FIX ở trên nhưng
-  // KHÔNG liên quan gì tới module "Tổng Hợp" (2 module tách biệt hoàn toàn, xem BUSINESS_MODULES).
-  OPERATION_ORDER: { dbKey: 'operationOrderDeptWorkflows', label: 'Vận Hành - Đơn Hàng', title: '📦 Cấu Hình Quy Trình Phê Duyệt Đơn Hàng Theo Phòng Ban' },
+  // "Vận Hành" — Mở Mới/Sửa Chữa Siêu Thị vẫn theo phòng ban (mỗi luồng 1 map dept-workflow RIÊNG, cùng
+  // khuôn OFFICE_BUY/OFFICE_FIX ở trên), KHÔNG liên quan gì tới module "Tổng Hợp" (2 module tách biệt
+  // hoàn toàn, xem BUSINESS_MODULES).
+  // Đơn Hàng (OPERATION_ORDER cũ, theo phòng ban) đã ĐỔI HẲN sang 2 module PURE-TIER độc lập ngay dưới —
+  // TÁCH RIÊNG "Đặt Hàng Tại Siêu Thị"/"Đặt Hàng Tại HO", mỗi cái duyệt theo MỨC GIÁ TRỊ đơn hàng
+  // (KHÔNG theo phòng ban nữa) — mirror ĐÚNG cơ chế `fixedTiers`/`tierDbKeyForWholesale` của ITPRICE
+  // Bán Buôn bên dưới, nhưng thêm cờ `pureTier: true` để renderWorkflowTab() (module-ngansach.js) render
+  // THẲNG tab theo tier ngay từ đầu — module này không có "types"/dept nào để rơi về nữa (khác ITPRICE,
+  // nơi RETAIL vẫn còn nhánh dept-based song song). Tier tự tính từ số tiền đơn hàng (KHÔNG cho chọn tay
+  // như priceTier của ITPRICE) — xem computeOperationOrderTier()/OPERATION_ORDER_STORE_TIERS/
+  // OPERATION_ORDER_HO_TIERS ở lib/workflowEngine.js (PHẢI giữ đúng y hệt bản mirror client ở core.js).
+  OPERATION_ORDER_STORE: {
+    pureTier: true,
+    tierDbKeyForWholesale: 'operationOrderStoreTierWorkflows',
+    fixedTiers: [
+      { key: 'LT10M', label: '< 10 triệu' },
+      { key: 'FROM10M_TO100M', label: '10 triệu - dưới 100 triệu' },
+      { key: 'GTE100M', label: '>= 100 triệu' }
+    ],
+    label: 'Vận Hành - Đặt Hàng Tại Siêu Thị', title: '📦 Cấu Hình Quy Trình Phê Duyệt Đặt Hàng Tại Siêu Thị Theo Mức Giá Trị'
+  },
+  OPERATION_ORDER_HO: {
+    pureTier: true,
+    tierDbKeyForWholesale: 'operationOrderHOTierWorkflows',
+    fixedTiers: [
+      { key: 'LT100M', label: '< 100 triệu' },
+      { key: 'GTE100M', label: '>= 100 triệu' }
+    ],
+    label: 'Vận Hành - Đặt Hàng Tại HO', title: '📦 Cấu Hình Quy Trình Phê Duyệt Đặt Hàng Tại HO Theo Mức Giá Trị'
+  },
   OPERATION_STORE_OPEN: { dbKey: 'operationStoreOpenDeptWorkflows', label: 'Vận Hành - Mở Mới Siêu Thị', title: '🏬 Cấu Hình Quy Trình Phê Duyệt Mở Mới Siêu Thị Theo Phòng Ban' },
   OPERATION_REPAIR: { dbKey: 'operationRepairDeptWorkflows', label: 'Vận Hành - Sửa Chữa Siêu Thị', title: '🔧 Cấu Hình Quy Trình Phê Duyệt Sửa Chữa Siêu Thị Theo Phòng Ban' },
   // Giai đoạn Dự toán (tab "🏬 Siêu Thị") — quy trình duyệt RIÊNG, độc lập với quy trình duyệt hồ sơ

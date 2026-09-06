@@ -130,13 +130,16 @@ function saveItPriceTierWorkflowConfig(tierKey) {
     if (!proceed) return;
   }
 
-  const tierDbKey = WF_MODULE_CONFIG[activeWfMod].tierDbKeyForWholesale;
+  const modConfig = WF_MODULE_CONFIG[activeWfMod];
+  const tierDbKey = modConfig.tierDbKeyForWholesale;
   if (!DB[tierDbKey]) DB[tierDbKey] = {};
   DB[tierDbKey][tierKey] = result.config;
   syncStorage(tierDbKey);
 
   delete pendingWfTemplate[`TIER_${tierKey}`];
-  logSystemAction('CONFIG', 'UPDATE_DEPT_WORKFLOW', `Cập nhật cấu hình quy trình Hỗ Trợ IT - Duyệt giá Bán Buôn [${tierKey}]`, 'SUCCESS', tierKey);
+  // modConfig.label thay vì chuỗi cứng "Hỗ Trợ IT - Duyệt giá Bán Buôn" — hàm này giờ dùng chung cho cả
+  // ITPRICE (Bán Buôn) lẫn 2 module pureTier MỚI (Vận Hành > Đặt Hàng Tại Siêu Thị/HO).
+  logSystemAction('CONFIG', 'UPDATE_DEPT_WORKFLOW', `Cập nhật cấu hình quy trình ${modConfig.label} [${tierKey}]`, 'SUCCESS', tierKey);
   alert(`✅ Đã lưu cấu hình quy trình cho mức [${tierKey}] thành công!`);
   renderWorkflowTab();
 }
@@ -353,6 +356,16 @@ function deleteWorkflowTemplate(code) {
     Object.keys(map).forEach(dept => {
       if (map[dept]?.workflowId === code) usages.push(`${cfg.label} — ${dept}`);
     });
+    // Module theo TIER (fixedTiers/tierDbKeyForWholesale, vd ITPRICE Bán Buôn + 2 module MỚI Vận Hành >
+    // Đặt Hàng Tại Siêu Thị/HO) lưu cấu hình ở collection RIÊNG (cfg.dbKey ở trên KHÔNG trỏ tới đây) —
+    // trước đây bị bỏ sót khỏi vòng quét này, khiến xoá 1 mẫu quy trình đang được gán cho 1 mức tier vẫn
+    // "thành công", để lại workflowId trỏ tới mẫu không còn tồn tại (tham chiếu treo).
+    if (cfg.tierDbKeyForWholesale) {
+      const tierMap = DB[cfg.tierDbKeyForWholesale] || {};
+      Object.keys(tierMap).forEach(tierKey => {
+        if (tierMap[tierKey]?.workflowId === code) usages.push(`${cfg.label} — ${tierKey}`);
+      });
+    }
   });
 
   if (usages.length > 0) {

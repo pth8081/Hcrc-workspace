@@ -1407,7 +1407,11 @@ function renderWorkflowTab() {
   // Bán Buôn (Hỗ Trợ IT - Duyệt giá) — mục B: KHÔNG còn theo phòng ban, tách render riêng theo TIER
   // (4 mức Margin/Chiết Khấu cố định) NGAY ĐẦU HÀM, không chạy tiếp phần loop-theo-dept cũ bên dưới.
   // "Bán Lẻ" (RETAIL) của CÙNG module này rơi qua nhánh dưới, giữ nguyên hành vi cũ 100%.
-  if (WF_MODULE_CONFIG[activeWfMod].tierDbKeyForWholesale && activeWfSubmissionType === 'WHOLESALE') {
+  // `pureTier` (Vận Hành > Đặt Hàng Tại Siêu Thị/HO — đợt "Tách Đơn Hàng Siêu Thị/HO"): module này
+  // KHÔNG có "types"/dept nào để rơi về — luôn render thẳng tab theo tier, không cần activeWfSubmissionType
+  // === 'WHOLESALE' như ITPRICE (module đó vẫn có nhánh RETAIL dept-based song song).
+  const wfModConfigForTierCheck = WF_MODULE_CONFIG[activeWfMod];
+  if (wfModConfigForTierCheck.tierDbKeyForWholesale && (wfModConfigForTierCheck.pureTier || activeWfSubmissionType === 'WHOLESALE')) {
     renderItPriceTierWorkflowTab(container);
     return;
   }

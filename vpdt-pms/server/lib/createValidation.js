@@ -681,6 +681,15 @@ const CREATE_MODULE_CONFIGS = {
       const title = String(payload.title || '').trim();
       if (!title) throw new CreateError(400, 'Vui lòng nhập tiêu đề đơn hàng');
       payload.title = title;
+      // orderLocationType (STORE/HO) — bắt buộc, client tự gắn đúng giá trị theo sub-tab "Đặt Hàng Tại
+      // Siêu Thị"/"Đặt Hàng Tại HO" đang mở lúc gửi (KHÔNG có dropdown chọn tay, cùng cơ chế priceType ở
+      // itPriceApprovals bên dưới), không tin nguyên văn giá trị lạ nào khác client gửi kèm. Quyết định
+      // đúng quy trình duyệt nào áp dụng (2 quy trình TÁCH RIÊNG hoàn toàn theo mức giá trị, xem
+      // resolveOperationOrderWorkflow() ở lib/workflowEngine.js) — KHÔNG có field "mức giá trị" nào client
+      // tự chọn/gửi kèm vì mức suy ra được thẳng từ amount, server tự tính lại mỗi lần cần tra quy trình.
+      const orderLocationType = payload.orderLocationType === 'STORE' ? 'STORE' : (payload.orderLocationType === 'HO' ? 'HO' : null);
+      if (!orderLocationType) throw new CreateError(400, 'Vui lòng chọn đúng nơi đặt hàng (Siêu Thị/HO)');
+      payload.orderLocationType = orderLocationType;
       payload.supplier = String(payload.supplier || '').trim();
       payload.note = String(payload.note || '').trim();
       assertUploadedFileUrl(payload.fileUrl, 'Tệp đính kèm đơn hàng');

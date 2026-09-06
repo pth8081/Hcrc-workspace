@@ -31,8 +31,8 @@ const APPROVER = { username: 'vh_demo_tp', name: 'Trưởng Phòng Vận Hành (
 const state = createMockState({
   depts: [DEPT],
   users: [CREATOR, APPROVER],
-  operationOrderDeptWorkflows: {
-    [DEPT]: { workflowId: 'wf-vh-order-demo', approvers: { 1: [APPROVER.username] } }
+  operationOrderHOTierWorkflows: {
+    LT100M: { workflowId: 'wf-vh-order-demo', approvers: { 1: [APPROVER.username] } }
   },
   workflows: [{ id: 'wf-vh-order-demo', steps: [{ order: 1, name: 'Trưởng Phòng Duyệt' }] }]
 });
@@ -42,6 +42,7 @@ async function loginAs(page, user) {
 }
 async function createOrder(page, { title, receivingLocationName, amount }) {
   return page.evaluate(({ title, receivingLocationName, amount }) => {
+    setOperationOrderSubTab('HO');
     document.getElementById('voCode').value = generateOperationOrderCode();
     document.getElementById('voTitle').value = title;
     document.getElementById('voSupplier').value = 'Công ty CP Thực Phẩm Demo';
@@ -105,7 +106,7 @@ async function main() {
     // ===== Ảnh 1: Sub-tab "📋 Danh Sách" — tổng quan các trạng thái (PENDING/AWAITING_RECEIPT/RECEIVED/RECEIPT_CANCELLED) =====
     // Vẫn đang đăng nhập APPROVER (vừa duyệt/nhập hàng xong ở trên) — đủ quyền xem module (operationOrderCreate)
     // LẪN thấy nút Nhập Hàng/Hủy Nhập (approver dept-workflow) nên không cần đổi user cho phần chụp ảnh.
-    await page.evaluate(() => { switchTab('vanHanh'); setVanHanhSubTab('ORDERS'); setOperationOrderSubTab('LIST'); });
+    await page.evaluate(() => { switchTab('vanHanh'); setVanHanhSubTab('ORDERS'); setOperationOrderSubTab('HO'); });
     await page.waitForSelector('#opOrderListPanel', { state: 'visible' });
     await page.locator('#vanHanhOrdersWrap').screenshot({ path: path.join(OUT_DIR, '01-danh-sach-subtab-tong-quan.png') });
     console.log('Đã chụp: 01-danh-sach-subtab-tong-quan.png (sub-tab Danh Sách + Báo Cáo, badge trạng thái mới)');
@@ -132,7 +133,7 @@ async function main() {
     console.log('Đã chụp: 03-bao-cao-subtab.png');
 
     // ===== Ảnh 4: Lọc "Siêu Thị (Nơi Nhận)" thu hẹp danh sách =====
-    await page.evaluate(() => setOperationOrderSubTab('LIST'));
+    await page.evaluate(() => setOperationOrderSubTab('HO'));
     await page.waitForSelector('#opOrderListPanel', { state: 'visible' });
     const rowCountBefore = await page.locator('#operationOrderTableBody tr').count();
     await page.selectOption('#filterLocationOperationOrder', 'Siêu thị BRGMart Quận 1');

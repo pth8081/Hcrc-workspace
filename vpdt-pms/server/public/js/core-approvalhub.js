@@ -260,7 +260,11 @@ function getMyPendingApprovals(user) {
   // operationStoreOpeningEstimate/operationRepairEstimate). Hồ sơ chính operationStoreOpenings/
   // operationRepairs KHÔNG còn ở đây nữa (Mục H, 60c473b — bỏ hẳn phê duyệt, status không bao giờ vào
   // PENDING nên 2 lệnh addDeptWorkflowItems() tương ứng chỉ luôn góp 0 kết quả — dọn hẳn).
-  addDeptWorkflowItems(DB.operationOrders, o => DB.operationOrderDeptWorkflows[o.dept], {
+  // Đơn hàng (operationOrders) đã ĐỔI HẲN từ quy trình theo phòng ban sang theo MỨC GIÁ TRỊ, TÁCH RIÊNG
+  // Siêu Thị/HO — resolveOperationOrderWorkflowConfigForItemClient() (core.js) tự tra đúng nhánh theo
+  // item.orderLocationType, cùng khuôn resolveSubmissionWorkflow(sub) ngay trên (resolver theo TỪNG hồ
+  // sơ, không phải map phẳng theo dept nữa).
+  addDeptWorkflowItems(DB.operationOrders, o => resolveOperationOrderWorkflowConfigForItemClient(o), {
     type: 'operationOrder', typeLabel: '📦 Vận Hành - Đơn hàng',
     codeOf: r => r.code, titleOf: r => r.title,
     actionsOf: r => [{ label: '✍️ Xử lý / Duyệt', fn: 'openOperationProcessModal', args: ['operationOrders', r.id], primary: true }]

@@ -39,15 +39,21 @@ const ADMIN_ONLY_KEYS = new Set([
   'users', 'permGroups', 'emailConfig', 'workflows',
   'deptWorkflows', 'submissionDeptWorkflows', 'submissionTypeDeptWorkflows', 'submissionApprovalGroups',
   'carDeptWorkflows', 'officeBuyDeptWorkflows', 'officeFixDeptWorkflows', 'officeInvestDeptWorkflows', 'vppDeptWorkflows',
-  // operationOrderDeptWorkflows/operationStoreOpenDeptWorkflows/operationRepairDeptWorkflows: cấu hình
-  // người duyệt theo phòng ban cho 3 luồng module Vận Hành — cùng khuôn carDeptWorkflows/vppDeptWorkflows
-  // ở trên nhưng BỊ BỎ SÓT khỏi danh sách này khi thêm module Vận Hành, khiến bất kỳ tài khoản đã đăng
-  // nhập nào (kể cả người chỉ có quyền tạo hồ sơ operationOrderCreate) cũng ghi trực tiếp được qua
-  // POST /api/data/operationOrderDeptWorkflows và tự đặt mình làm người duyệt bước 1 phòng ban mình.
-  'operationOrderDeptWorkflows', 'operationStoreOpenDeptWorkflows', 'operationRepairDeptWorkflows',
+  // operationStoreOpenDeptWorkflows/operationRepairDeptWorkflows: cấu hình người duyệt theo phòng ban
+  // cho 2 luồng "Siêu Thị" của module Vận Hành — cùng khuôn carDeptWorkflows/vppDeptWorkflows ở trên
+  // nhưng BỊ BỎ SÓT khỏi danh sách này khi thêm module Vận Hành, khiến bất kỳ tài khoản đã đăng nhập nào
+  // (kể cả người chỉ có quyền tạo hồ sơ operationStoreOpenCreate/operationRepairCreate) cũng ghi trực
+  // tiếp được qua POST /api/data/<key> và tự đặt mình làm người duyệt bước 1 phòng ban mình.
+  'operationStoreOpenDeptWorkflows', 'operationRepairDeptWorkflows',
   // Cùng lý do — quy trình duyệt RIÊNG cho giai đoạn Dự toán (Vận Hành > Siêu Thị), độc lập với 2 map
   // duyệt hồ sơ chính ở trên.
   'operationStoreOpenEstimateDeptWorkflows', 'operationRepairEstimateDeptWorkflows',
+  // operationOrderStoreTierWorkflows/operationOrderHOTierWorkflows: cấu hình người duyệt Đơn Hàng (Vận
+  // Hành) theo MỨC GIÁ TRỊ đơn hàng, TÁCH RIÊNG "Đặt Hàng Tại Siêu Thị"/"Đặt Hàng Tại HO" (đã thay hẳn
+  // cho operationOrderDeptWorkflows theo phòng ban trước đây — xem lib/workflowEngine.js) — cùng lý do
+  // bảo mật với itPriceTierWorkflows bên dưới: không cho user thường tự ghi thẳng qua POST
+  // /api/data/<key> và tự phong mình làm approver.
+  'operationOrderStoreTierWorkflows', 'operationOrderHOTierWorkflows',
   // itPriceDeptWorkflows: cấu hình người duyệt Phê Duyệt Giá (module Hỗ Trợ IT) theo phòng ban — cùng
   // khuôn carDeptWorkflows/vppDeptWorkflows/budgetDeptWorkflows, chỉ sửa được ở màn Quy Trình & Phê
   // Duyệt (admin), nhưng trước đây BỊ BỎ SÓT khỏi danh sách này: bất kỳ tài khoản đã đăng nhập nào cũng

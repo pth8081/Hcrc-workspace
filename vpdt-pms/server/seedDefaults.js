@@ -48,6 +48,7 @@ async function seedDefaults() {
   await migratePendingActualBudgetEntries();
   await migrateStuckOperationApprovalStatuses();
   await migrateApprovedOperationOrdersToAwaitingReceipt();
+  await migrateOperationOrdersDefaultLocationType();
   await warnIfOperationWorkItemsSchemaOutdated(pool);
 }
 
@@ -308,6 +309,34 @@ async function migrateApprovedOperationOrdersToAwaitingReceipt() {
   }
 }
 
+// operationOrders (đợt "Tách Đơn Hàng Siêu Thị/HO") — item.orderLocationType (STORE/HO) là field MỚI,
+// quyết định quy trình duyệt nào áp dụng (2 quy trình TÁCH RIÊNG theo mức giá trị, xem
+// resolveOperationOrderWorkflow() ở lib/workflowEngine.js). Hồ sơ TẠO TRƯỚC đợt tách này không có field
+// -> phải gán 1 giá trị mặc định để resolveWfConfig() luôn tra được đúng 1 trong 2 map (không rơi vào
+// nhánh "chưa xác định" nào). Chọn 'HO' làm mặc định (không phải 'STORE'): hồ sơ CŨ không có căn cứ nào
+// để suy luận NGƯỢC lại chúng thuộc "Đặt Hàng Tại Siêu Thị" hay "Tại HO" (receivingLocationName là
+// free-text đọc từ PDF NCC, không đối chiếu được danh mục siêu thị — xem
+// populateOperationOrderLocationOptions() ở module-vanhanh.js) — 'HO' là lựa chọn AN TOÀN hơn vì HO chỉ
+// có 2 mức (LT100M/GTE100M, rộng hơn 3 mức của Siêu Thị), tránh vô tình rơi vào mức thấp nhất "< 10
+// triệu" (chỉ có ở Siêu Thị) của 1 đơn có thể giá trị lớn mà chưa admin nào cấu hình người duyệt. Idempotent
+// (chỉ gán cho bản ghi CHƯA có field hợp lệ) — cùng khuôn/lý do migrateApprovedOperationOrdersToAwaitingReceipt()
+// ở trên, chạy mỗi lần khởi động, chỉ còn tác dụng khi thực sự còn bản ghi thiếu field (rất hiếm sau lần
+// chạy đầu, vì mọi đơn MỚI từ giờ luôn có orderLocationType do createValidation.js bắt buộc).
+async function migrateOperationOrdersDefaultLocationType() {
+  const records = await getAllRecords('operationOrders');
+  const missing = records.filter(r => r.orderLocationType !== 'STORE' && r.orderLocationType !== 'HO');
+  for (const rec of missing) {
+    await withLockedRecordById('operationOrders', rec.id, (item) => {
+      if (item.orderLocationType === 'STORE' || item.orderLocationType === 'HO') return item; // đã đổi bởi request khác giữa lúc đọc và khoá
+      item.orderLocationType = 'HO';
+      return item;
+    });
+  }
+  if (missing.length) {
+    console.log(`   ↳ Đã gán mặc định orderLocationType="HO" cho ${missing.length} đơn hàng (operationOrders) tạo trước đợt "Tách Đơn Hàng Siêu Thị/HO".`);
+  }
+}
+
 // Cùng định dạng với nowVN() ở lib/recordActions.js (không export sẵn cho seedDefaults.js nên lặp lại
 // nguyên văn 1 dòng, tránh phải require chéo module chỉ vì 1 hàm định dạng giờ).
 function nowVNForMigration() {
@@ -317,5 +346,9 @@ function nowVNForMigration() {
 // migrateStuckOperationApprovalStatuses export riêng THÊM vào cho
 // tests/test-operation-danhmuc-dautu-units.js (gọi trực tiếp hàm này với lib/recordStore.js đã mock qua
 // require.cache, không cần SQL Server thật) — xác nhận đúng hành vi "quét sạch bản ghi DRAFT/PENDING
-// còn sót từ trước Mục H mỗi lúc khởi động".
-module.exports = { seedDefaults, migrateStuckOperationApprovalStatuses, migrateApprovedOperationOrdersToAwaitingReceipt };
+// còn sót từ trước Mục H mỗi lúc khởi động". migrateOperationOrdersDefaultLocationType export thêm cho
+// bộ test hồi quy MỚI của đợt "Tách Đơn Hàng Siêu Thị/HO" (cùng lý do, cùng khuôn mock recordStore).
+module.exports = {
+  seedDefaults, migrateStuckOperationApprovalStatuses, migrateApprovedOperationOrdersToAwaitingReceipt,
+  migrateOperationOrdersDefaultLocationType
+};

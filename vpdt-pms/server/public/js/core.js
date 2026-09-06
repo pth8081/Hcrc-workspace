@@ -1700,6 +1700,46 @@ function itPriceTierLabel(tier) {
   return IT_PRICE_TIER_LABELS[tier] || tier || '—';
 }
 
+// ===== Vận Hành > Đơn Hàng — "Đặt Hàng Tại Siêu Thị"/"Đặt Hàng Tại HO" (đợt "Tách Đơn Hàng Siêu Thị/
+// HO"): 2 quy trình duyệt ĐỘC LẬP theo MỨC GIÁ TRỊ đơn hàng, thay hẳn quy trình theo phòng ban cũ. MIRROR
+// ĐÚNG OPERATION_ORDER_STORE_TIERS/OPERATION_ORDER_HO_TIERS/computeOperationOrderAmount()/
+// computeOperationOrderTier()/resolveOperationOrderWorkflow() ở lib/workflowEngine.js (server) — sửa 1
+// bên PHẢI sửa cả 2 bên (2 cài đặt độc lập, cùng lý do isApproverForDeptWorkflow()/canApproveStep() ở
+// đầu file). Mức chỉ dùng để HIỂN THỊ/ẨN-HIỆN nút ở client — server LUÔN tự tính lại, không tin giá trị
+// nào từ đây.
+const OPERATION_ORDER_STORE_TIERS = [
+  { key: 'LT10M', label: '< 10 triệu', maxExclusive: 10000000 },
+  { key: 'FROM10M_TO100M', label: '10 triệu - dưới 100 triệu', maxExclusive: 100000000 },
+  { key: 'GTE100M', label: '>= 100 triệu', maxExclusive: Infinity }
+];
+const OPERATION_ORDER_HO_TIERS = [
+  { key: 'LT100M', label: '< 100 triệu', maxExclusive: 100000000 },
+  { key: 'GTE100M', label: '>= 100 triệu', maxExclusive: Infinity }
+];
+function computeOperationOrderAmountClient(o) {
+  const paymentTotal = Number(o?.paymentTotalAmount) || 0;
+  if (paymentTotal > 0) return paymentTotal;
+  return Number(o?.amount) || 0;
+}
+function computeOperationOrderTierClient(locationType, amount) {
+  const tiers = locationType === 'STORE' ? OPERATION_ORDER_STORE_TIERS : OPERATION_ORDER_HO_TIERS;
+  const found = tiers.find(t => amount < t.maxExclusive);
+  return (found || tiers[tiers.length - 1]).key;
+}
+function operationOrderTierLabel(locationType, tier) {
+  const tiers = locationType === 'STORE' ? OPERATION_ORDER_STORE_TIERS : OPERATION_ORDER_HO_TIERS;
+  return (tiers.find(t => t.key === tier) || {}).label || tier || '—';
+}
+// Điểm CHUNG duy nhất mọi nơi hiển thị/kiểm quyền của 1 hồ sơ operationOrders CỤ THỂ nên gọi (mirror
+// resolveItPriceWorkflowConfigForItemClient() ở trên) — thay cho mọi chỗ trước đây tra thẳng
+// DB.operationOrderDeptWorkflows[o.dept] (đã xoá hẳn).
+function resolveOperationOrderWorkflowConfigForItemClient(o) {
+  const locationType = o.orderLocationType === 'STORE' ? 'STORE' : 'HO';
+  const tierMap = locationType === 'STORE' ? DB.operationOrderStoreTierWorkflows : DB.operationOrderHOTierWorkflows;
+  const tier = computeOperationOrderTierClient(locationType, computeOperationOrderAmountClient(o));
+  return (tierMap || {})[tier] || null;
+}
+
 // ==========================================
 // ĐỒNG PHÊ DUYỆT (nhiều người duyệt cùng 1 bước) — dùng chung cho mọi module có luồng duyệt nhiều
 // bước (Tài liệu, Văn bản trình, Đăng ký xe, Văn phòng). Khi 1 bước được gán từ 2 người duyệt trở
@@ -2588,7 +2628,10 @@ async function initDatabase(loggingInUser) {
     DB.budgetPeriods = data.budgetPeriods || [];
     DB.budgetEntries = data.budgetEntries || [];
 
-    DB.operationOrderDeptWorkflows = data.operationOrderDeptWorkflows || {};
+    // "operationOrderDeptWorkflows" (Đơn Hàng theo phòng ban) đã bị XOÁ HẲN — thay bằng 2 map theo MỨC
+    // GIÁ TRỊ, TÁCH RIÊNG Siêu Thị/HO (xem resolveOperationOrderWorkflowConfigForItemClient() bên dưới).
+    DB.operationOrderStoreTierWorkflows = data.operationOrderStoreTierWorkflows || {};
+    DB.operationOrderHOTierWorkflows = data.operationOrderHOTierWorkflows || {};
     DB.operationStoreOpenDeptWorkflows = data.operationStoreOpenDeptWorkflows || {};
     DB.operationRepairDeptWorkflows = data.operationRepairDeptWorkflows || {};
     // Giai đoạn Dự toán (tab "🏬 Siêu Thị") — 2 map quy trình duyệt RIÊNG (song song, không dùng chung

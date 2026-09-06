@@ -5,13 +5,16 @@
 // đầu file đó) vì sandbox này không có SQL Server/Docker để chạy server.js thật.
 //
 // Phủ:
-//   1. Sub-tab "📋 Danh Sách"/"📊 Báo Cáo" mới trong chính màn Đơn Hàng.
-//   2. Quy trình duyệt phòng ban CŨ (PENDING -> APPROVE bởi đúng approver) vẫn hoạt động y hệt trước —
-//      chỉ khác 1 điểm: duyệt xong bước cuối giờ tự động chuyển AWAITING_RECEIPT (không dừng ở APPROVED).
+//   1. Sub-tab "🏬 Đặt Hàng Tại Siêu Thị"/"🏢 Đặt Hàng Tại HO"/"📊 Báo Cáo" (đợt "Tách Đơn Hàng Siêu
+//      Thị/HO" — thay cho 2 sub-tab "Danh Sách"/"Báo Cáo" cũ).
+//   2. Quy trình duyệt theo MỨC GIÁ TRỊ (HO, tier LT100M — thay cho quy trình theo phòng ban cũ):
+//      PENDING -> APPROVE bởi đúng approver vẫn hoạt động y hệt trước — chỉ khác 1 điểm: duyệt xong
+//      bước cuối giờ tự động chuyển AWAITING_RECEIPT (không dừng ở APPROVED).
 //   3. 2 nút MỚI "📥 Nhập Hàng"/"🚫 Hủy Nhập": chỉ hiện + chỉ gọi được khi AWAITING_RECEIPT, chỉ đúng
 //      quần thể approver/admin mới thao tác được (chặn 403 với người ngoài quyền).
-//   4. Báo cáo: đếm đúng Tổng/Đã phê duyệt/Chưa phê duyệt/Bị từ chối/Chờ nhập hàng/Đã nhập hàng/Đã hủy
-//      nhập + tổng giá trị đã duyệt/đã nhập hàng + nhóm đúng theo tháng (approvedAt/receivedAt).
+//   4. Báo cáo (luôn gộp CẢ Siêu Thị lẫn HO — "Tổng Chuỗi"): đếm đúng Tổng/Đã phê duyệt/Chưa phê
+//      duyệt/Bị từ chối/Chờ nhập hàng/Đã nhập hàng/Đã hủy nhập + tổng giá trị đã duyệt/đã nhập hàng +
+//      nhóm đúng theo tháng (approvedAt/receivedAt).
 //   5. Lọc "Siêu Thị (Nơi Nhận)" thu hẹp đúng cả Danh Sách lẫn Báo Cáo.
 //
 // Chạy: node server/tests/test-operation-order-report.js
@@ -28,11 +31,14 @@ const APPROVER = { username: 'tp.vanhanh', name: 'Trưởng Phòng Vận Hành',
 const OUTSIDER = { username: 'nv.khac', name: 'Nhân Viên Phòng Khác', dept: 'Phòng Kế Toán', perms: {}, active: true };
 const ADMIN = { username: 'admin', name: 'Quản Trị Viên', dept: DEPT, perms: { admin: true }, active: true };
 
+// Tất cả 5 đơn của test này đều tạo ở sub-tab "Đặt Hàng Tại HO" (đợt "Tách Đơn Hàng Siêu Thị/HO") — quy
+// trình duyệt giờ theo MỨC GIÁ TRỊ (HO chỉ 2 mức LT100M/GTE100M), mọi amount dùng trong test đều < 100
+// triệu nên rơi hết vào tier LT100M, chỉ cần cấu hình đúng 1 tier này là đủ cho toàn bộ kịch bản.
 const state = createMockState({
   depts: [DEPT, 'Phòng Kế Toán'],
   users: [CREATOR, APPROVER, OUTSIDER, ADMIN],
-  operationOrderDeptWorkflows: {
-    [DEPT]: { workflowId: 'wf-vh-order', approvers: { 1: [APPROVER.username] } }
+  operationOrderHOTierWorkflows: {
+    LT100M: { workflowId: 'wf-vh-order', approvers: { 1: [APPROVER.username] } }
   },
   workflows: [
     { id: 'wf-vh-order', steps: [{ order: 1, name: 'Trưởng Phòng Duyệt' }] }
@@ -48,9 +54,12 @@ async function loginAs(page, user) {
 
 // Tạo 1 đơn hàng qua ĐÚNG luồng thật (submitOperationOrder() -> POST /api/create/operationOrders ->
 // validateAndPrepareCreate() thật ở lib/createValidation.js, qua dispatcher của testHarness.js) — không
-// tự dựng object giả, đảm bảo hồ sơ seed ra khớp 100% hình dạng dữ liệu thật.
+// tự dựng object giả, đảm bảo hồ sơ seed ra khớp 100% hình dạng dữ liệu thật. setOperationOrderSubTab('HO')
+// TRƯỚC khi điền form: orderLocationType gắn ngầm theo đúng sub-tab đang mở lúc gửi (mirror priceType),
+// KHÔNG có ô chọn tay nào — mọi đơn của test này đều "Đặt Hàng Tại HO" (xem chú thích ở state phía trên).
 async function createOrder(page, { title, receivingLocationName, amount }) {
   return page.evaluate(({ title, receivingLocationName, amount }) => {
+    setOperationOrderSubTab('HO');
     document.getElementById('voCode').value = generateOperationOrderCode();
     document.getElementById('voTitle').value = title;
     document.getElementById('voSupplier').value = 'NCC Test';
@@ -280,21 +289,31 @@ async function main() {
       await page.evaluate(() => { document.getElementById('opReportFilterLocation').value = ''; onOperationOrderReportFilterChange(); });
     });
 
-    // ===== 6) Sub-tab Danh Sách/Báo Cáo — chuyển qua lại đúng, không lỗi JS =====
-    await run.run('Chuyển sub-tab "📊 Báo Cáo" rồi quay lại "📋 Danh Sách" không lỗi, đúng panel hiển thị', async () => {
+    // ===== 6) Sub-tab Siêu Thị/HO/Báo Cáo (đợt "Tách Đơn Hàng Siêu Thị/HO") — chuyển qua lại đúng =====
+    await run.run('Chuyển sub-tab "📊 Báo Cáo" rồi quay lại "HO" không lỗi, đúng panel hiển thị', async () => {
       const result = await page.evaluate(() => {
         setOperationOrderSubTab('REPORT');
         const reportVisible = !document.getElementById('opOrderReportPanel').classList.contains('hidden');
         const listHiddenWhileReport = document.getElementById('opOrderListPanel').classList.contains('hidden');
-        setOperationOrderSubTab('LIST');
+        setOperationOrderSubTab('HO');
         const listVisibleAfter = !document.getElementById('opOrderListPanel').classList.contains('hidden');
         const reportHiddenAfter = document.getElementById('opOrderReportPanel').classList.contains('hidden');
         return { reportVisible, listHiddenWhileReport, listVisibleAfter, reportHiddenAfter };
       });
       assert(result.reportVisible, 'Panel Báo Cáo phải hiện khi chọn sub-tab REPORT');
       assert(result.listHiddenWhileReport, 'Panel Danh Sách phải ẩn khi đang ở sub-tab REPORT');
-      assert(result.listVisibleAfter, 'Panel Danh Sách phải hiện lại khi chọn sub-tab LIST');
-      assert(result.reportHiddenAfter, 'Panel Báo Cáo phải ẩn khi quay lại sub-tab LIST');
+      assert(result.listVisibleAfter, 'Panel Danh Sách phải hiện lại khi chọn sub-tab HO');
+      assert(result.reportHiddenAfter, 'Panel Báo Cáo phải ẩn khi quay lại sub-tab HO');
+    });
+    await run.run('Sub-tab "STORE" chỉ hiện đơn STORE (0 đơn — toàn bộ 5 đơn của test này đều là HO)', async () => {
+      const rowCodes = await page.evaluate(() => {
+        setOperationOrderSubTab('STORE');
+        return Array.from(document.querySelectorAll('#operationOrderTableBody tr td:first-child')).map(td => td.innerText.trim());
+      });
+      // Bảng rỗng render 1 dòng duy nhất "Chưa có đơn hàng nào." (không phải mã đơn) — không có mã đơn
+      // thật nào (bắt đầu bằng DH) lọt qua sub-tab STORE.
+      assert(!rowCodes.some(c => c.startsWith('DH')), `Sub-tab STORE không được hiện đơn hàng nào (toàn bộ đều tạo ở HO), thực tế: ${JSON.stringify(rowCodes)}`);
+      await page.evaluate(() => setOperationOrderSubTab('HO')); // trả lại đúng sub-tab cho các bước sau (không còn bước nào dùng activeOperationOrderSubTab, nhưng giữ nguyên trạng thái sạch)
     });
   } finally {
     await browser.close();

@@ -4347,7 +4347,8 @@ input[data-sdd-list] {
       <button data-op="switchWfModule" data-arg0="OFFICE_BUY" id="btnWfModOfficeBuy" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">🛒 QT Mua Bán</button>
       <button data-op="switchWfModule" data-arg0="OFFICE_FIX" id="btnWfModOfficeFix" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">🔧 QT Sửa Chữa</button>
       <button data-op="switchWfModule" data-arg0="VPP" id="btnWfModVpp" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">🖇️ QT Văn Phòng Phẩm</button>
-      <button data-op="switchWfModule" data-arg0="OPERATION_ORDER" id="btnWfModOperationOrder" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">📦 QT Vận Hành - Đơn Hàng</button>
+      <button data-op="switchWfModule" data-arg0="OPERATION_ORDER_STORE" id="btnWfModOperationOrderStore" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">📦 QT Vận Hành - Đặt Hàng Tại Siêu Thị</button>
+      <button data-op="switchWfModule" data-arg0="OPERATION_ORDER_HO" id="btnWfModOperationOrderHO" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">📦 QT Vận Hành - Đặt Hàng Tại HO</button>
       <button data-op="switchWfModule" data-arg0="OPERATION_STORE_OPEN" id="btnWfModOperationStoreOpen" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">🏬 QT Vận Hành - Mở Mới Siêu Thị</button>
       <button data-op="switchWfModule" data-arg0="OPERATION_REPAIR" id="btnWfModOperationRepair" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">🔧 QT Vận Hành - Sửa Chữa Siêu Thị</button>
       <button data-op="switchWfModule" data-arg0="OPERATION_STORE_OPEN_ESTIMATE" id="btnWfModOperationStoreOpenEstimate" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">📊 QT Dự Toán - Mở Mới Siêu Thị</button>
@@ -6458,23 +6459,26 @@ input[data-sdd-list] {
        "Sửa & Gửi Lại" ở BOSUNG_MODULE_META/openBosungEditModal()). -->
   <div id="vanHanhSection" class="hidden space-y-6">
     <div class="flex gap-2 flex-wrap">
-      <button data-op="setVanHanhSubTab" data-tab="ORDERS" id="btnVanHanhSubOrders" class="px-3 py-1 rounded text-xs font-bold bg-cyan-700 text-white">📦 Phê Duyệt Đơn Hàng</button>
+      <button data-op="setVanHanhSubTab" data-tab="ORDERS" id="btnVanHanhSubOrders" class="px-3 py-1 rounded text-xs font-bold bg-cyan-700 text-white">📦 Đơn Hàng</button>
       <button data-op="setVanHanhSubTab" data-tab="STORE" id="btnVanHanhSubStore" class="px-3 py-1 rounded text-xs font-bold bg-gray-200 text-gray-700">🏬 Siêu Thị</button>
     </div>
 
-    <!-- ===== TAB 1: PHÊ DUYỆT ĐƠN HÀNG (operationOrders) — 2 sub-tab lồng bên trong (đợt "Báo Cáo +
-         Nhập Hàng", cùng khuôn cấp lồng thứ 2 của tab "Siêu Thị" ngay dưới): "📋 Danh Sách" (màn hình cũ,
-         nguyên vẹn) + "📊 Báo Cáo" (mới, xem renderOperationOrderReport() ở module-vanhanh.js). ===== -->
+    <!-- ===== TAB 1: ĐƠN HÀNG (operationOrders) — 3 sub-tab lồng bên trong (đợt "Tách Đơn Hàng Siêu
+         Thị/HO", thay cho 2 sub-tab "Danh Sách"/"Báo Cáo" cũ): "🏬 Đặt Hàng Tại Siêu Thị"/"🏢 Đặt Hàng Tại
+         HO" (CÙNG 1 khối DOM #opOrderListPanel bên dưới, chỉ khác orderLocationType gắn ngầm + bộ lọc —
+         mirror activeItPriceSubTab của module-itsupport-price.js) + "📊 Báo Cáo" (mở rộng, xem
+         renderOperationOrderReport() ở module-vanhanh.js). ===== -->
     <div id="vanHanhOrdersWrap" class="space-y-4">
       <div class="flex gap-2 flex-wrap border-b pb-2">
-        <button data-op="setOperationOrderSubTab" data-tab="LIST" id="btnOpOrderSubList" class="px-3 py-1 rounded text-xs font-bold bg-cyan-700 text-white">📋 Danh Sách</button>
-        <button data-op="setOperationOrderSubTab" data-tab="REPORT" id="btnOpOrderSubReport" class="px-3 py-1 rounded text-xs font-bold bg-gray-200 text-gray-700">📊 Báo Cáo</button>
+        <button data-op="setOperationOrderSubTab" data-tab="STORE" id="btnOpOrderSubSTORE" class="px-3 py-1 rounded text-xs font-bold bg-cyan-700 text-white">🏬 Đặt Hàng Tại Siêu Thị</button>
+        <button data-op="setOperationOrderSubTab" data-tab="HO" id="btnOpOrderSubHO" class="px-3 py-1 rounded text-xs font-bold bg-gray-200 text-gray-700">🏢 Đặt Hàng Tại HO</button>
+        <button data-op="setOperationOrderSubTab" data-tab="REPORT" id="btnOpOrderSubREPORT" class="px-3 py-1 rounded text-xs font-bold bg-gray-200 text-gray-700">📊 Báo Cáo</button>
       </div>
 
     <div id="opOrderListPanel" class="space-y-6">
       <div id="operationOrderDashboardCards"></div>
       <div class="bg-cyan-50 p-4 rounded border border-cyan-200 space-y-3">
-        <h3 class="font-bold text-cyan-900 text-base flex items-center gap-2">📦 Tạo Đơn Hàng Mới</h3>
+        <h3 class="font-bold text-cyan-900 text-base flex items-center gap-2">📦 Tạo Đơn Hàng Mới <span id="operationOrderFormSubTabBadge" class="px-2 py-0.5 rounded-full bg-cyan-600 text-white text-[11px] font-bold"></span></h3>
         <form id="operationOrderForm" data-op-submit="submitOperationOrder" class="bg-white p-3 rounded border text-xs space-y-3">
           <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
             <div><label class="block font-semibold text-gray-600 mb-1">Mã Đơn Hàng</label><input id="voCode" readonly placeholder="Mã tự sinh" class="w-full border p-1.5 rounded bg-gray-100 cursor-not-allowed"></div>
@@ -6600,18 +6604,53 @@ input[data-sdd-list] {
         </div>
       </div>
 
-      <div class="grid grid-cols-2 md:grid-cols-4 gap-2" id="opOrderReportSummaryCards"></div>
+      <!-- "Tổng Chuỗi" (đợt "Tách Đơn Hàng Siêu Thị/HO") — TOÀN BỘ đơn hàng bất kể orderLocationType,
+           khớp đúng số liệu màn hình cũ trước đợt tách (KHÔNG đổi ý nghĩa các thẻ này). 2 khối MỚI ngay
+           dưới (Siêu Thị/HO) là 2 lát cắt CON của đúng cùng 1 tập dữ liệu đã lọc theo ngày/nơi nhận. -->
+      <div class="space-y-2">
+        <h3 class="font-bold text-gray-800 text-sm">🔗 Tổng Chuỗi (Toàn Bộ Đơn Hàng)</h3>
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-2" id="opOrderReportSummaryCards"></div>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-3" id="opOrderReportValueTotals"></div>
+      </div>
 
-      <div class="grid grid-cols-1 md:grid-cols-2 gap-3" id="opOrderReportValueTotals"></div>
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div class="space-y-2">
+          <h3 class="font-bold text-gray-800 text-sm">🏬 Đặt Hàng Tại Siêu Thị</h3>
+          <div class="grid grid-cols-2 gap-2" id="opOrderReportStoreSummaryCards"></div>
+        </div>
+        <div class="space-y-2">
+          <h3 class="font-bold text-gray-800 text-sm">🏢 Đặt Hàng Tại HO</h3>
+          <div class="grid grid-cols-2 gap-2" id="opOrderReportHOSummaryCards"></div>
+        </div>
+      </div>
 
       <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div class="bg-white p-3 rounded border space-y-2">
-          <h4 class="font-bold text-gray-700 text-sm">📈 Giá Trị Đơn Đã Phê Duyệt Theo Tháng</h4>
+          <h4 class="font-bold text-gray-700 text-sm">📈 Giá Trị Đơn Đã Phê Duyệt Theo Tháng (Tổng Chuỗi)</h4>
           <div id="opOrderReportApprovedByMonth" class="space-y-2"></div>
         </div>
         <div class="bg-white p-3 rounded border space-y-2">
-          <h4 class="font-bold text-gray-700 text-sm">📈 Giá Trị Đơn Đã Nhập Hàng Theo Tháng</h4>
+          <h4 class="font-bold text-gray-700 text-sm">📈 Giá Trị Đơn Đã Nhập Hàng Theo Tháng (Tổng Chuỗi)</h4>
           <div id="opOrderReportReceivedByMonth" class="space-y-2"></div>
+        </div>
+      </div>
+
+      <!-- Số đơn theo từng siêu thị (receivingLocationName) + dòng "Tổng Chuỗi" — đợt "Tách Đơn Hàng
+           Siêu Thị/HO", mục 2 yêu cầu người dùng. -->
+      <div class="space-y-2">
+        <h3 class="font-bold text-gray-800 text-sm">📍 Số Đơn Theo Từng Siêu Thị (Nơi Nhận)</h3>
+        <div class="overflow-x-auto">
+          <table class="w-full border-collapse border text-xs bg-white">
+            <thead>
+              <tr class="bg-gray-100 text-left text-gray-700">
+                <th class="border p-2">Siêu Thị (Nơi Nhận)</th>
+                <th class="border p-2 text-center">Tổng Số Đơn</th>
+                <th class="border p-2 text-center">Đã Nhận Hàng</th>
+                <th class="border p-2 text-right">Tổng Giá Trị</th>
+              </tr>
+            </thead>
+            <tbody id="opOrderReportByStoreTableBody"></tbody>
+          </table>
         </div>
       </div>
     </div>

@@ -84,7 +84,7 @@ function createMockState(seed) {
     licenses: [], licenseTypes: [],
     itServiceRenewals: [],
     hrFeedback: [],
-    operationOrders: [], operationOrderDeptWorkflows: {},
+    operationOrders: [], operationOrderStoreTierWorkflows: {}, operationOrderHOTierWorkflows: {},
     operationStoreOpenings: [], operationStoreOpenDeptWorkflows: {}, operationStoreOpenEstimateDeptWorkflows: {},
     operationRepairs: [], operationRepairDeptWorkflows: {}, operationRepairEstimateDeptWorkflows: {},
     operationWorkItems: [], operationExecutionPeriods: []
@@ -112,13 +112,14 @@ function buildAppDataForCreate(moduleKey, state) {
     // này qua appData khi xử lý /api/workflow/operationStoreOpeningEstimate|operationRepairEstimate/:id/:action.
     operationStoreOpenEstimateDeptWorkflows: state.operationStoreOpenEstimateDeptWorkflows,
     operationRepairEstimateDeptWorkflows: state.operationRepairEstimateDeptWorkflows,
-    // Vận Hành > Đơn Hàng (đợt "Báo Cáo + Nhập Hàng") — resolveWfConfig() (MODULE_CONFIGS.operationOrders,
-    // lib/workflowEngine.js) đọc thẳng map này qua appData khi xử lý /api/workflow/operationOrders/:id/
-    // :action (quy trình duyệt phòng ban cũ, GIỮ NGUYÊN) VÀ khi lib/recordActions.js
-    // isApproverForOperationOrderReceipt() tra lại đúng approver để gác "Nhập Hàng"/"Hủy Nhập" — THIẾU
-    // field này trước đây (chưa module nào trong bộ test cần tới operationOrders' dept-workflow thật)
-    // khiến resolveWfConfig() luôn rơi về approvers rỗng, canApproveStep() chỉ còn admin bấm được.
-    operationOrderDeptWorkflows: state.operationOrderDeptWorkflows,
+    // Vận Hành > Đơn Hàng (đợt "Tách Đơn Hàng Siêu Thị/HO") — resolveWfConfig() (MODULE_CONFIGS.operationOrders,
+    // lib/workflowEngine.js) đọc thẳng 2 map này qua appData theo item.orderLocationType khi xử lý
+    // /api/workflow/operationOrders/:id/:action (quy trình duyệt theo MỨC GIÁ TRỊ, TÁCH RIÊNG Siêu Thị/
+    // HO — đã thay hẳn cho operationOrderDeptWorkflows theo phòng ban trước đây) VÀ khi
+    // lib/recordActions.js isApproverForOperationOrderReceipt() tra lại đúng approver để gác "Nhập
+    // Hàng"/"Hủy Nhập".
+    operationOrderStoreTierWorkflows: state.operationOrderStoreTierWorkflows,
+    operationOrderHOTierWorkflows: state.operationOrderHOTierWorkflows,
     // users — operationStoreOpenings/operationRepairs.extraValidate() cần để resolve "Người Phụ Trách"
     // qua resolveOperationPersonInChargeUsername() (Mục C).
     users: state.users

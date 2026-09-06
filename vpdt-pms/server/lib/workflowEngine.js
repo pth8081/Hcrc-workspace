@@ -135,6 +135,56 @@ const OFFICE_SUBTYPE_TO_DBKEY = {
   SUA_CHUA: 'officeFixDeptWorkflows'
 };
 
+// ===== Vận Hành > Đơn Hàng — tách "Đặt Hàng Tại Siêu Thị"/"Đặt Hàng Tại HO" (item.orderLocationType,
+// STORE/HO) + đổi hẳn từ quy trình duyệt THEO PHÒNG BAN (operationOrderDeptWorkflows, đã bị xoá — xem
+// lịch sử ở CHANGELOG/VERSION.md "Tách Đơn Hàng Siêu Thị/HO") sang quy trình duyệt THEO MỨC GIÁ TRỊ đơn
+// hàng (tier), 2 quy trình HOÀN TOÀN ĐỘC LẬP nhau — cùng tinh thần resolveItPriceTierWorkflowConfig() ở
+// trên (Hỗ Trợ IT > Bán Buôn) nhưng khác 1 điểm quan trọng: mức Margin/Chiết Khấu ở ITPRICE phải người
+// đề xuất TỰ CHỌN (không suy ra được từ field nào khác), còn ở đây mức giá trị SUY RA ĐƯỢC trực tiếp từ
+// chính số tiền đơn hàng — nên KHÔNG có field priceTier-tương-đương nào client tự chọn/gửi lên, tier
+// luôn được SERVER TỰ TÍNH LẠI ngay tại đây mỗi lần cần tra quy trình (không lưu thành field riêng trên
+// item — tính trực tiếp từ orderLocationType + amount/paymentTotalAmount ĐANG CÓ trên item, đảm bảo luôn
+// khớp đúng dữ liệu hiện tại của hồ sơ, kể cả sau khi "Sửa & Gửi Lại" đổi lại amount).
+//
+// Biên giới mức (đã chốt với người dùng, dùng đúng chữ "<"/càng lớn càng nghiêm — mốc đúng bằng luôn rơi
+// vào mức CAO HƠN, khớp tinh thần "< 10 triệu"/"< 100 triệu" loại trừ đúng mốc đó):
+//   Siêu Thị (STORE): < 10.000.000đ | 10.000.000đ - dưới 100.000.000đ | >= 100.000.000đ (3 mức)
+//   HO:               < 100.000.000đ | >= 100.000.000đ (2 mức)
+const OPERATION_ORDER_STORE_TIERS = [
+  { key: 'LT10M', label: '< 10 triệu', maxExclusive: 10000000 },
+  { key: 'FROM10M_TO100M', label: '10 triệu - dưới 100 triệu', maxExclusive: 100000000 },
+  { key: 'GTE100M', label: '>= 100 triệu', maxExclusive: Infinity }
+];
+const OPERATION_ORDER_HO_TIERS = [
+  { key: 'LT100M', label: '< 100 triệu', maxExclusive: 100000000 },
+  { key: 'GTE100M', label: '>= 100 triệu', maxExclusive: Infinity }
+];
+
+// Số tiền dùng làm căn cứ xét mức: ưu tiên paymentTotalAmount (Tổng Giá Trị Thanh Toán, đọc được từ PDF
+// phiếu đặt hàng NCC — chính xác hơn vì đã gồm VAT/trừ chiết khấu) nếu có nhập (> 0); rơi về amount
+// (tổng Số lượng × Đơn giá các hạng mục, LUÔN có — server tự tính lại ở createValidation.js, không tin
+// số client gửi) khi đơn hàng tạo tay không kèm PDF (paymentTotalAmount = 0/chưa nhập).
+function computeOperationOrderAmount(item) {
+  const paymentTotal = Number(item?.paymentTotalAmount) || 0;
+  if (paymentTotal > 0) return paymentTotal;
+  return Number(item?.amount) || 0;
+}
+function computeOperationOrderTier(locationType, amount) {
+  const tiers = locationType === 'STORE' ? OPERATION_ORDER_STORE_TIERS : OPERATION_ORDER_HO_TIERS;
+  const found = tiers.find(t => amount < t.maxExclusive);
+  return (found || tiers[tiers.length - 1]).key;
+}
+// item.orderLocationType: 'STORE'|'HO', bắt buộc từ lib/createValidation.js lúc tạo (client gửi đúng
+// giá trị theo sub-tab "Đặt Hàng Tại Siêu Thị"/"Đặt Hàng Tại HO" đang mở, KHÔNG có dropdown chọn tay —
+// cùng cơ chế priceType RETAIL/WHOLESALE của itPriceApprovals). Hồ sơ CŨ trước đợt tách này không có
+// field -> coi như 'HO' (migrateOperationOrdersDefaultLocationType(), seedDefaults.js di trú 1 lần).
+function resolveOperationOrderWorkflow(item, appData) {
+  const locationType = item.orderLocationType === 'STORE' ? 'STORE' : 'HO';
+  const tierMap = locationType === 'STORE' ? appData.operationOrderStoreTierWorkflows : appData.operationOrderHOTierWorkflows;
+  const tier = computeOperationOrderTier(locationType, computeOperationOrderAmount(item));
+  return flatWorkflowConfigToSteps(tierMap?.[tier] || null, appData);
+}
+
 // ===== Hợp đồng — 2 quy trình TÁCH RIÊNG trên CÙNG 1 bản ghi contracts (khớp index.html) =====
 // 1) "Phê Duyệt" (contracts): approvalStatus/currentStep/history — quy trình theo phòng ban + tối đa 4
 //    lớp bổ sung tuỳ chọn (GD_PGD/PTGD/TRO_LY_THU_KY/TGD), snapshot effectiveSteps/effectiveApprovers
@@ -272,21 +322,24 @@ const MODULE_CONFIGS = {
     resolveWfConfig: (item, appData) => flatWorkflowConfigToSteps(appData.budgetDeptWorkflows?.[item.dept], appData),
     supportsRequestChanges: true
   },
-  // Vận Hành — operationOrders vẫn giữ nguyên quy trình duyệt cũ theo phòng ban (khác officeReqs dùng
-  // chung 1 OFFICE_SUBTYPE_TO_DBKEY tra theo subType — ở đây trỏ thẳng luôn). operationStoreOpenings/
-  // operationRepairs ĐÃ BỊ XOÁ khỏi đây (Mục H, 60c473b — bỏ hẳn phê duyệt cho 2 luồng "Siêu Thị": status
-  // đi thẳng APPROVED ngay lúc tạo ở lib/createValidation.js, không bao giờ vào PENDING nữa nên
-  // applyWorkflowAction()/route generic /api/workflow/<module>/:id/:action cho 2 module này chỉ còn ném
-  // lỗi 409 "không ở trạng thái chờ xử lý" — dọn hẳn cấu hình thay vì để lại 1 route chết). Bản ghi CŨ
-  // (trước Mục H) còn kẹt PENDING/DRAFT được migrateStuckOperationApprovalStatuses() (seedDefaults.js) tự
-  // chuyển sang APPROVED mỗi lúc khởi động. dept-workflow map operationStoreOpenDeptWorkflows/
-  // operationRepairDeptWorkflows GIỮ NGUYÊN trong AppData (không xoá dữ liệu cấu hình cũ của admin,
-  // đơn giản không còn nơi nào đọc tới) — canViewOperationStoreOpening()/canViewOperationRepair()
-  // (lib/recordViewScope.js) đã bỏ nhánh "đang là approver" tương ứng, chỉ còn dept/hasOwnWorkItemInSource/
-  // approver của Danh mục đầu tư (vẫn giữ nguyên object bên dưới).
+  // Vận Hành > Đơn Hàng — ĐỔI HẲN từ quy trình duyệt theo phòng ban (operationOrderDeptWorkflows, đã bị
+  // xoá khỏi AppData/admin UI) sang quy trình duyệt theo MỨC GIÁ TRỊ đơn hàng, TÁCH RIÊNG hoàn toàn cho
+  // "Đặt Hàng Tại Siêu Thị" (STORE, 3 mức) và "Đặt Hàng Tại HO" (HO, 2 mức) — xem
+  // resolveOperationOrderWorkflow()/OPERATION_ORDER_STORE_TIERS/OPERATION_ORDER_HO_TIERS ở trên. Mức tự
+  // tính lại NGAY TẠI ĐÂY mỗi lần cần (không tin/không lưu giá trị nào client tự gửi).
+  // operationStoreOpenings/operationRepairs ĐÃ BỊ XOÁ khỏi đây (Mục H, 60c473b — bỏ hẳn phê duyệt cho 2
+  // luồng "Siêu Thị": status đi thẳng APPROVED ngay lúc tạo ở lib/createValidation.js, không bao giờ vào
+  // PENDING nữa nên applyWorkflowAction()/route generic /api/workflow/<module>/:id/:action cho 2 module
+  // này chỉ còn ném lỗi 409 "không ở trạng thái chờ xử lý" — dọn hẳn cấu hình thay vì để lại 1 route
+  // chết). Bản ghi CŨ (trước Mục H) còn kẹt PENDING/DRAFT được migrateStuckOperationApprovalStatuses()
+  // (seedDefaults.js) tự chuyển sang APPROVED mỗi lúc khởi động. dept-workflow map
+  // operationStoreOpenDeptWorkflows/operationRepairDeptWorkflows GIỮ NGUYÊN trong AppData (không xoá dữ
+  // liệu cấu hình cũ của admin, đơn giản không còn nơi nào đọc tới) — canViewOperationStoreOpening()/
+  // canViewOperationRepair() (lib/recordViewScope.js) đã bỏ nhánh "đang là approver" tương ứng, chỉ còn
+  // dept/hasOwnWorkItemInSource/approver của Danh mục đầu tư (vẫn giữ nguyên object bên dưới).
   operationOrders: {
     dbKey: 'operationOrders',
-    resolveWfConfig: (item, appData) => flatWorkflowConfigToSteps(appData.operationOrderDeptWorkflows?.[item.dept], appData),
+    resolveWfConfig: (item, appData) => resolveOperationOrderWorkflow(item, appData),
     supportsRequestChanges: true
   },
   // Vận Hành — giai đoạn "Dự toán", 2 module ẢO cùng dbKey với hồ sơ gốc nhưng field trạng thái RIÊNG
@@ -629,5 +682,10 @@ module.exports = {
   resolveContractApprovalWorkflow,
   resolveContractManageWorkflow,
   resolveItPriceDeptWorkflowConfig,
-  resolveItPriceTierWorkflowConfig
+  resolveItPriceTierWorkflowConfig,
+  resolveOperationOrderWorkflow,
+  computeOperationOrderAmount,
+  computeOperationOrderTier,
+  OPERATION_ORDER_STORE_TIERS,
+  OPERATION_ORDER_HO_TIERS
 };

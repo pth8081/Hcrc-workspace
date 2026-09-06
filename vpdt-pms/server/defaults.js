@@ -282,7 +282,7 @@ const DEFAULTS = {
   officeBuyDeptWorkflows: {},
   officeFixDeptWorkflows: {},
   // "officeInvestDeptWorkflows" (Đầu Tư) đã bị xoá hoàn toàn — luồng duyệt đơn hàng tương đương giờ
-  // nằm ở module Vận Hành (operationOrderDeptWorkflows bên dưới).
+  // nằm ở module Vận Hành (operationOrderStoreTierWorkflows/operationOrderHOTierWorkflows bên dưới).
   vppDeptWorkflows: {},
   // Hỗ Trợ IT > Phê Duyệt Giá — quy trình duyệt theo phòng ban × LOẠI GIÁ (RETAIL/WHOLESALE): mỗi phần
   // tử là { RETAIL: {workflowId,approvers}, WHOLESALE: {workflowId,approvers} } (cấu hình phòng ban CŨ,
@@ -299,12 +299,21 @@ const DEFAULTS = {
   // Ngân Sách — Trưởng phòng duyệt bản ngân sách theo phòng ban, cùng khuôn vppDeptWorkflows/
   // itPriceDeptWorkflows ở trên. Admin cấu hình ở tab "Quy Trình & Phê Duyệt".
   budgetDeptWorkflows: {},
-  // Vận Hành — 3 luồng độc lập (Phê Duyệt Đơn Hàng/Mở Mới Siêu Thị/Sửa Chữa Siêu Thị), mỗi luồng 1 map
-  // riêng, cùng khuôn officeBuyDeptWorkflows/budgetDeptWorkflows ở trên. Admin cấu hình ở tab "Quy Trình
-  // & Phê Duyệt".
-  operationOrderDeptWorkflows: {},
+  // Vận Hành — Mở Mới Siêu Thị/Sửa Chữa Siêu Thị: mỗi luồng 1 map riêng, cùng khuôn
+  // officeBuyDeptWorkflows/budgetDeptWorkflows ở trên. Admin cấu hình ở tab "Quy Trình & Phê Duyệt".
+  // ("operationOrderDeptWorkflows" — quy trình duyệt Đơn Hàng theo phòng ban — đã bị XOÁ HẲN, thay bằng
+  // operationOrderStoreTierWorkflows/operationOrderHOTierWorkflows bên dưới, xem chú thích ở đó.)
   operationStoreOpenDeptWorkflows: {},
   operationRepairDeptWorkflows: {},
+  // Vận Hành > Đơn Hàng — đợt "Tách Đơn Hàng Siêu Thị/HO": bỏ hẳn quy trình duyệt theo phòng ban, tách
+  // thành 2 quy trình ĐỘC LẬP theo MỨC GIÁ TRỊ đơn hàng (khớp resolveOperationOrderWorkflow()/
+  // OPERATION_ORDER_STORE_TIERS/OPERATION_ORDER_HO_TIERS ở lib/workflowEngine.js) — cùng khuôn phẳng
+  // { [tierKey]: {workflowId,approvers} } với itPriceTierWorkflows ở trên, không lồng cấp nào khác,
+  // không cần tương thích ngược (cấu hình hoàn toàn mới). "Đặt Hàng Tại Siêu Thị" có 3 mức (LT10M/
+  // FROM10M_TO100M/GTE100M), "Đặt Hàng Tại HO" có 2 mức (LT100M/GTE100M) — 2 map admin cấu hình HOÀN
+  // TOÀN riêng biệt ở tab "Quy Trình & Phê Duyệt" (không dùng chung người duyệt nào giữa 2 luồng).
+  operationOrderStoreTierWorkflows: {},
+  operationOrderHOTierWorkflows: {},
   // Vận Hành > "Siêu Thị" > Giai đoạn Dự toán — quy trình duyệt RIÊNG, ĐỘC LẬP với 2 map duyệt hồ sơ
   // chính ở trên (cùng kỹ thuật contractManageDeptWorkflows tách riêng contractApprovalDeptWorkflows).
   operationStoreOpenEstimateDeptWorkflows: {},

@@ -4,7 +4,79 @@
 góc màn hình + `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần
 kiểu `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
 
-## Cập nhật gần nhất — Vận Hành > 📦 Đơn Hàng: sub-tab "📊 Báo Cáo" + giai đoạn "Chờ Nhập Hàng" sau khi duyệt (2026-09-06)
+**9.6 — TRÊN NHÁNH `claude/chao-ban-oo5ijl`, CHƯA MERGE vào `main`** (người dùng yêu cầu xem demo trước
+khi merge cho đợt này — xem mục ngay dưới đây). `main` vẫn đang ở 9.5 cho tới khi được xác nhận merge.
+
+## Cập nhật gần nhất (CHƯA MERGE — đang chờ người dùng xác nhận demo) — Vận Hành > 📦 Đơn Hàng: tách "Đặt Hàng Tại Siêu Thị"/"Đặt Hàng Tại HO" + duyệt theo mức giá trị đơn hàng (2026-09-06)
+
+Theo yêu cầu người dùng: tách sub-tab "📋 Danh Sách" (gộp chung Siêu Thị + HO) thành 2 sub-tab RIÊNG —
+"🏬 Đặt Hàng Tại Siêu Thị"/"🏢 Đặt Hàng Tại HO" — cộng với "📊 Báo Cáo" (mở rộng) thành 3 sub-tab, và đổi
+HẲN quy trình duyệt `operationOrders` từ theo PHÒNG BAN (`operationOrderDeptWorkflows`) sang theo MỨC GIÁ
+TRỊ đơn hàng, 2 quy trình TÁCH RIÊNG hoàn toàn cho 2 luồng trên (không dùng chung người duyệt) — mirror
+đúng kỹ thuật tier-based đã có sẵn cho Hỗ Trợ IT > Bán Buôn (`itPriceTierWorkflows`/
+`resolveItPriceTierWorkflowConfig()`), với 1 khác biệt quan trọng: mức ở đây **tự tính từ chính số tiền
+đơn hàng** (KHÔNG có ô chọn tay như `priceTier` của ITPRICE, vì mức hoàn toàn suy ra được từ dữ liệu sẵn
+có) — server LUÔN tự tính lại (`computeOperationOrderTier()`, `lib/workflowEngine.js`), không tin bất kỳ
+giá trị mức nào (nếu có) client tự gửi kèm.
+
+**Biên giới mức đã chốt** (mốc đúng bằng luôn rơi vào mức CAO HƠN):
+- **Đặt Hàng Tại Siêu Thị** (3 mức): `< 10.000.000đ` (`LT10M`) | `10.000.000đ` – `< 100.000.000đ`
+  (`FROM10M_TO100M`) | `>= 100.000.000đ` (`GTE100M`).
+- **Đặt Hàng Tại HO** (2 mức): `< 100.000.000đ` (`LT100M`) | `>= 100.000.000đ` (`GTE100M`).
+- Số tiền căn cứ (`computeOperationOrderAmount()`): ưu tiên `paymentTotalAmount` (Tổng Giá Trị Thanh
+  Toán, đọc từ PDF NCC) nếu > 0, rơi về `amount` (tổng hạng mục, server tự tính lại) khi tạo tay không
+  kèm PDF.
+
+**Field mới** `item.orderLocationType` (`STORE`/`HO`) — bắt buộc, gắn NGẦM theo đúng sub-tab đang mở lúc
+tạo (không có dropdown chọn tay, cùng cơ chế `priceType` của itPriceApprovals) — `lib/createValidation.js`
+throw 400 nếu thiếu/sai giá trị. Hồ sơ CŨ trước đợt này không có field -> di trú 1 lần
+(`migrateOperationOrdersDefaultLocationType()`, `seedDefaults.js`, idempotent, chạy mỗi lần khởi động)
+gán mặc định `'HO'` (lựa chọn AN TOÀN hơn `'STORE'` vì HO chỉ 2 mức rộng, tránh vô tình rơi vào mức thấp
+nhất "< 10 triệu" — chỉ Siêu Thị mới có — của 1 đơn có thể giá trị lớn mà chưa admin nào cấu hình).
+
+**2 collection AppData MỚI** (admin-only-write, `routes/data.js`) thay hẳn cho
+`operationOrderDeptWorkflows` (đã XOÁ HẲN khỏi `defaults.js`/admin UI — không còn nơi nào đọc/ghi tới):
+`operationOrderStoreTierWorkflows` (3 khoá tier) và `operationOrderHOTierWorkflows` (2 khoá tier), cùng
+khuôn phẳng `{ [tierKey]: {workflowId, approvers} }` với `itPriceTierWorkflows`. 2 tab admin MỚI ở "Quy
+Trình & Phê Duyệt" (`OPERATION_ORDER_STORE`/`OPERATION_ORDER_HO`, cờ `pureTier: true` mới thêm vào
+`renderWorkflowTab()` để render thẳng theo tier, không cần điều kiện `activeWfSubmissionType==='WHOLESALE'`
+như ITPRICE) mirror đúng UI `renderItPriceTierWorkflowTab()` đã có sẵn — tái dùng nguyên hàm, không viết
+lại. Nhân tiện vá 1 lỗ hổng nhỏ liên quan: `deleteWorkflowTemplate()` trước đây chỉ quét usage của mẫu
+quy trình ở map dept-based (`cfg.dbKey`), bỏ sót hẳn các collection theo tier (`cfg.tierDbKeyForWholesale`)
+— giờ quét cả 2, tránh để lại tham chiếu treo khi xoá 1 mẫu đang được gán cho 1 mức tier.
+
+**Client** (`public/js/module-vanhanh.js`): `activeOperationOrderSubTab` đổi từ 2 giá trị (`LIST`/`REPORT`)
+sang 3 (`STORE`/`HO`/`REPORT`) — `STORE`/`HO` dùng CHUNG 1 khối DOM (`#opOrderListPanel`: form tạo/bộ
+lọc/bảng danh sách) y hệt cơ chế sub-tab "Bán Lẻ"/"Bán Buôn" của `module-itsupport-price.js`
+(`activeItPriceSubTab`) thay vì nhân đôi HTML — khác biệt duy nhất là `orderLocationType` gắn ngầm +
+lọc theo loại khi render danh sách/dashboard card. Mọi chỗ trước đây tra `DB.operationOrderDeptWorkflows[o.dept]`
+(6 chỗ: `canManageOperationOrderReceiptClient()`, `notifyOperationApprovalNeeded()`, `renderOperationList()`,
+`buildOperationRowHTML()`, `openOperationProcessModal()`, `renderOperationOrderReport()`) đổi sang gọi
+`resolveOperationOrderWorkflowConfigForItemClient(o)` (mirror server, `core.js`) — resolve theo TỪNG hồ
+sơ thay vì map phẳng theo dept.
+
+**Báo Cáo mở rộng** (`renderOperationOrderReport()`): giữ nguyên "Tổng Chuỗi" (toàn bộ đơn, không đổi ý
+nghĩa các thẻ cũ), thêm 2 khối con "🏬 Đặt Hàng Tại Siêu Thị"/"🏢 Đặt Hàng Tại HO" (cùng bộ số liệu, tách
+theo `orderLocationType`) VÀ bảng MỚI "📍 Số Đơn Theo Từng Siêu Thị (Nơi Nhận)" (nhóm theo
+`receivingLocationName`: tổng số đơn + đã nhận hàng + tổng giá trị mỗi nơi, cộng 1 dòng "🔗 TỔNG CHUỖI").
+
+**Tương thích ngược:** `receiveOperationOrderGoods()`/`cancelOperationOrderReceipt()`/
+`canViewOperationOrder()` (Nhập Hàng/Hủy Nhập, xem hồ sơ) đều gọi thẳng
+`MODULE_CONFIGS.operationOrders.resolveWfConfig()` sẵn có — tự động dùng đúng logic tier mới, KHÔNG cần
+sửa gì thêm ở 2 file đó. `editOperationOrderDraft()`/`submitOperationOrderDraft()` ("Sửa & Gửi Lại Bổ
+Sung") không đổi gì (không đụng `orderLocationType`) — mức tự tính lại đúng nếu `amount` đổi sau khi sửa
+(không lưu tier thành field riêng, luôn tính trực tiếp từ `orderLocationType` + `amount`/`paymentTotalAmount`
+hiện có trên hồ sơ).
+
+**Test mới:** `tests/test-operation-order-location-tiers.js` (20 kịch bản — biên giới mức ở CẢ 2 phía đúng
+mốc 10 triệu/100 triệu, 2 luồng Siêu Thị/HO tách biệt hoàn toàn kể cả cùng số tiền, chống giả mạo field
+tier phía client, di trú hồ sơ cũ). `tests/test-operation-order-report.js`/
+`tests/test-operation-order-receiving.js`/`tests/test-operation-order-po-fields.js` cập nhật để dùng
+`operationOrderHOTierWorkflows`/`orderLocationType` thay cho dept-workflow cũ. Demo Playwright mới:
+`tests/demo-operation-order-store-ho-split.js` (ảnh chụp ở
+`demo-screenshots/operation-order-store-ho-split/`).
+
+## Cập nhật trước đó — Vận Hành > 📦 Đơn Hàng: sub-tab "📊 Báo Cáo" + giai đoạn "Chờ Nhập Hàng" sau khi duyệt (2026-09-06)
 
 Theo yêu cầu người dùng: tách màn "📦 Đơn Hàng" thành 2 sub-tab ("📋 Danh Sách" — màn cũ nguyên vẹn — và
 "📊 Báo Cáo" mới), thêm 1 giai đoạn MỚI sau khi duyệt xong ("Chờ Nhập Hàng" → "Nhập Hàng"/"Hủy Nhập"), và
