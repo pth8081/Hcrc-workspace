@@ -1459,16 +1459,16 @@ function buildProtectedViewerHTML(fileSrc, fileType, fileName, altLabel) {
     // Watermark đè lên ảnh ở góc dưới-trái — trước đây nhánh ảnh KHÔNG có watermark, là lỗ hổng vì ảnh
     // scan (hợp đồng/giấy phép chụp ảnh...) xem được nguyên vẹn không dấu vết nếu chụp lại màn hình.
     return `
-      <div class="relative flex flex-col items-center justify-center p-4 w-full protected-view-container" oncontextmenu="return false;">
-        <img src="${fileSrc}" alt="${escapeHtml(altLabel || '')}" class="max-h-[65vh] max-w-full rounded border shadow-md object-contain pointer-events-none select-none" oncontextmenu="return false;" />
-        <div style="${PROTECTED_VIEW_WATERMARK_STYLE}">${escapeHtml(PROTECTED_VIEW_WATERMARK_COMPANY)}</div>
+      <div class="relative flex flex-col items-center justify-center p-4 w-full protected-view-container" data-no-ctxmenu>
+        <img src="${fileSrc}" alt="${escapeHtml(altLabel || '')}" class="max-h-[65vh] max-w-full rounded border shadow-md object-contain pointer-events-none select-none" data-no-ctxmenu />
+        <div data-style="${PROTECTED_VIEW_WATERMARK_STYLE}">${escapeHtml(PROTECTED_VIEW_WATERMARK_COMPANY)}</div>
       </div>
     `;
   }
 
   const kindLabel = kind === 'office' ? 'Định dạng này (Word/Excel đời cũ .doc/.xls, hoặc PowerPoint)' : 'Định dạng tệp này';
   return `
-    <div class="w-full h-[65vh] bg-white rounded border shadow-inner flex flex-col items-center justify-center gap-2 p-6 text-center protected-view-container" oncontextmenu="return false;">
+    <div class="w-full h-[65vh] bg-white rounded border shadow-inner flex flex-col items-center justify-center gap-2 p-6 text-center protected-view-container" data-no-ctxmenu>
       <div class="text-5xl">📎</div>
       <div class="font-bold text-gray-700">${escapeHtml(fileName || 'Tệp đính kèm')}</div>
       <div class="text-xs text-gray-500 max-w-sm">${kindLabel} chưa hỗ trợ xem trực tuyến ngay trong trình duyệt. Vui lòng dùng nút "⬇️ Tải" để tải về và mở bằng phần mềm tương ứng.</div>
@@ -1497,7 +1497,7 @@ function openFileProtectedView({ title, sub, footerInfo, fileSrc, fileType, file
   const kind = fileSrc ? getFileKind(fileType, fileName) : null;
 
   if (kind === 'pdf') {
-    container.innerHTML = `<div class="w-full h-[65vh] overflow-y-auto bg-gray-200 rounded protected-view-container" oncontextmenu="return false;"></div>`;
+    container.innerHTML = `<div class="w-full h-[65vh] overflow-y-auto bg-gray-200 rounded protected-view-container" data-no-ctxmenu></div>`;
     const pdfContainer = container.firstElementChild;
     document.getElementById('viewDocModal').classList.remove('hidden');
     if (window.renderPdfProtected) {
@@ -1514,7 +1514,7 @@ function openFileProtectedView({ title, sub, footerInfo, fileSrc, fileType, file
   // type="module" import tĩnh, còn mammoth/exceljs tải LÚC CẦN qua loadVendorScript() vì khá nặng, đa
   // số tệp đính kèm KHÔNG phải Word/Excel nên không đáng tải sẵn cho mọi người).
   if (kind === 'word' || kind === 'excel') {
-    container.innerHTML = `<div class="w-full h-[65vh] overflow-y-auto bg-gray-100 rounded protected-view-container" oncontextmenu="return false;"></div>`;
+    container.innerHTML = `<div class="w-full h-[65vh] overflow-y-auto bg-gray-100 rounded protected-view-container" data-no-ctxmenu></div>`;
     const officeContainer = container.firstElementChild;
     document.getElementById('viewDocModal').classList.remove('hidden');
     if (kind === 'word') {
@@ -1544,10 +1544,11 @@ function openFileProtectedView({ title, sub, footerInfo, fileSrc, fileType, file
 
   const viewerHTML = fileSrc ? buildProtectedViewerHTML(fileSrc, fileType, fileName, title) : null;
   container.innerHTML = viewerHTML || noFileFallbackHTML || `
-    <div class="w-full h-[60vh] bg-white p-6 rounded shadow border flex items-center justify-center text-gray-400 italic protected-view-container" oncontextmenu="return false;">
+    <div class="w-full h-[60vh] bg-white p-6 rounded shadow border flex items-center justify-center text-gray-400 italic protected-view-container" data-no-ctxmenu>
       Không có tệp đính kèm để xem trước.
     </div>
   `;
+  applyDataStyles(container);
   document.getElementById('viewDocModal').classList.remove('hidden');
 }
 
@@ -1563,8 +1564,8 @@ function viewDoc(docId) {
     footerInfo: `Trích lục: ${doc.summary || 'Không có mô tả'}`,
     fileSrc, fileType: doc.fileType, fileName: doc.fileName,
     noFileFallbackHTML: `
-      <div class="w-full h-[60vh] bg-white p-6 rounded shadow border overflow-y-auto relative protected-view-container" oncontextmenu="return false;">
-        <div style="${PROTECTED_VIEW_WATERMARK_STYLE}">${escapeHtml(PROTECTED_VIEW_WATERMARK_COMPANY)}</div>
+      <div class="w-full h-[60vh] bg-white p-6 rounded shadow border overflow-y-auto relative protected-view-container" data-no-ctxmenu>
+        <div data-style="${PROTECTED_VIEW_WATERMARK_STYLE}">${escapeHtml(PROTECTED_VIEW_WATERMARK_COMPANY)}</div>
         <h4 class="font-bold text-lg text-gray-800 border-b pb-2 mb-4">${escapeHtml(doc.title)} (${escapeHtml(doc.code)})</h4>
         <div class="text-sm text-gray-700 space-y-3">
           <p><b>Phòng ban:</b> ${escapeHtml(doc.dept)}</p>

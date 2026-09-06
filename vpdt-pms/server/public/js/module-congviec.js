@@ -1145,7 +1145,7 @@ function buildTaskSlipHTML(t) {
     ...(t.externalCollaborators || []).map(e => `${e.name} (ngoài hệ thống)`)
   ];
   const historyRows = (t.history || []).map(h => `<tr><td>${escapeHtml(h.action)}</td><td>${escapeHtml(h.byName)}</td><td>${escapeHtml(h.time)}</td><td>${escapeHtml(h.note || '')}</td></tr>`).join('')
-    || `<tr><td colspan="4" style="text-align:center;color:#888;">Chưa có lịch sử xử lý</td></tr>`;
+    || `<tr><td colspan="4" data-style="text-align:center;color:#888;">Chưa có lịch sử xử lý</td></tr>`;
 
   return `
     <div class="task-doc">
@@ -1207,7 +1207,7 @@ function downloadTaskSlip(id) {
   const t = DB.tasks.find(x => x.id === id);
   if (!t) return;
 
-  const fullHtml = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Phieu Giao Viec - ${escapeHtml(t.title)}</title></head><body>${buildTaskSlipHTML(t)}</body></html>`;
+  const fullHtml = standaloneHtmlRestoreStyles(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>Phieu Giao Viec - ${escapeHtml(t.title)}</title></head><body>${buildTaskSlipHTML(t)}</body></html>`);
   const blob = new Blob([fullHtml], { type: 'text/html;charset=utf-8;' });
   const url = URL.createObjectURL(blob);
   const link = document.createElement('a');

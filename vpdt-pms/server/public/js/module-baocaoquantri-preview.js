@@ -35,13 +35,13 @@ function buildReportPreviewDocumentHTML(moduleKey) {
   const deptLabel = deptFilter ? `Phòng ban/Siêu thị: ${deptFilter}` : 'Tất cả phòng ban/siêu thị';
 
   const html = `
-    <div style="font-family: Arial, Helvetica, sans-serif; color:#111;">
-      <h2 style="margin:0 0 4px;">${escapeHtml(config.title || 'Báo Cáo')}</h2>
-      <div style="font-size:12px;color:#555;margin-bottom:2px;">${escapeHtml(rangeLabel)} — ${escapeHtml(deptLabel)}</div>
-      <div style="font-size:12px;color:#555;margin-bottom:12px;">Xuất lúc: ${new Date().toLocaleString('vi-VN')} — Tổng số dòng: ${filtered.length.toLocaleString('vi-VN')}</div>
-      <table style="width:100%;border-collapse:collapse;font-size:12px;">
-        <thead><tr>${cols.map(c => `<th style="border:1px solid #999;padding:4px 6px;background:#eef2ff;text-align:left;">${escapeHtml(c.label)}</th>`).join('')}</tr></thead>
-        <tbody>${filtered.length ? filtered.map(r => `<tr>${cols.map(c => `<td style="border:1px solid #ccc;padding:4px 6px;">${escapeHtml(formatReportDetailValue(c, c.getValue(r)))}</td>`).join('')}</tr>`).join('') : `<tr><td colspan="${cols.length}" style="text-align:center;padding:16px;color:#888;font-style:italic;">Không có hồ sơ nào khớp bộ lọc.</td></tr>`}</tbody>
+    <div data-style="font-family: Arial, Helvetica, sans-serif; color:#111;">
+      <h2 data-style="margin:0 0 4px;">${escapeHtml(config.title || 'Báo Cáo')}</h2>
+      <div data-style="font-size:12px;color:#555;margin-bottom:2px;">${escapeHtml(rangeLabel)} — ${escapeHtml(deptLabel)}</div>
+      <div data-style="font-size:12px;color:#555;margin-bottom:12px;">Xuất lúc: ${new Date().toLocaleString('vi-VN')} — Tổng số dòng: ${filtered.length.toLocaleString('vi-VN')}</div>
+      <table data-style="width:100%;border-collapse:collapse;font-size:12px;">
+        <thead><tr>${cols.map(c => `<th data-style="border:1px solid #999;padding:4px 6px;background:#eef2ff;text-align:left;">${escapeHtml(c.label)}</th>`).join('')}</tr></thead>
+        <tbody>${filtered.length ? filtered.map(r => `<tr>${cols.map(c => `<td data-style="border:1px solid #ccc;padding:4px 6px;">${escapeHtml(formatReportDetailValue(c, c.getValue(r)))}</td>`).join('')}</tr>`).join('') : `<tr><td colspan="${cols.length}" data-style="text-align:center;padding:16px;color:#888;font-style:italic;">Không có hồ sơ nào khớp bộ lọc.</td></tr>`}</tbody>
       </table>
     </div>
   `;
@@ -52,7 +52,9 @@ function showReportPreview(moduleKey) {
   const built = buildReportPreviewDocumentHTML(moduleKey);
   if (built.error) { alert(built.error); return; }
   currentReportPreviewModuleKey = moduleKey;
-  document.getElementById('reportPreviewModalBody').innerHTML = built.html;
+  const modalBody = document.getElementById('reportPreviewModalBody');
+  modalBody.innerHTML = built.html;
+  applyDataStyles(modalBody);
   document.getElementById('reportPreviewModal').classList.remove('hidden');
 }
 

@@ -1,20 +1,43 @@
 // lib/securityHeaders.js — Cấu hình helmet() cho toàn bộ app.
 //
-// Frontend (public/index.html) là 1 file HTML lớn dùng inline <script> và CSS Tailwind — vì vậy
-// KHÔNG thể dùng CSP mặc định nghiêm ngặt của helmet cho script-src/style-src (chặn toàn bộ inline
-// script/style). Cấu hình dưới đây vẫn nới script-src/style-src cho 'unsafe-inline' vì lý do đó.
+// script-src / style-src: KHÔNG còn 'unsafe-inline' cho CẢ HAI directive (đợt siết CSP mới nhất) —
+// trước đây phải mở vì public/index.html dùng inline <script>/<style>/style="..." khắp nơi. Qua đợt
+// dọn dẹp toàn diện: 2 khối <script> nội tuyến còn sót (dòng set copyrightYear + khối bootstrap PDF.js
+// type="module") đã CHUYỂN hết vào public/js/core.js (dòng set copyrightYear chạy thẳng ở top-level;
+// PDF.js đổi sang import() ĐỘNG qua ensurePdfJsReady(), tải LƯỜI lần đầu cần dùng thay vì tải tĩnh mọi
+// trang) — public/index.html giờ không còn <script> nội tuyến nào. Khối <style> nội tuyến lớn (~386
+// dòng CSS tuỳ biến toàn app) đã chuyển nguyên vẹn sang file ngoài public/app.css (nạp qua <link>); 7
+// điểm dùng thuộc tính style="..." TĨNH trong index.html đổi sang class CSS thật trong app.css. Các
+// điểm dùng style="..." ĐỘNG (giá trị đổi theo dữ liệu — watermark Protected View, màu mẫu trình chiếu
+// Báo Cáo Định Kỳ, thanh tỷ lệ % báo cáo, cột chữ ký phê duyệt...) rải khắp nhiều module-*.js: đổi tên
+// thuộc tính thành data-style="..." (dữ liệu thuần, KHÔNG bị CSP diễn giải/chặn) rồi dùng
+// applyDataStyles()/MutationObserver (core.js) gán lại qua el.style.cssText = ... (thuộc tính CSSOM
+// qua JS — KHÔNG bị style-src chi phối, đúng tinh thần CSP: chỉ chặn parse HTML style="..."/khối
+// <style>, không chặn JS tự set style runtime). Vài "Phiếu"/"Biên bản" tải về THÀNH FILE .html ĐỘC LẬP
+// (Đăng Ký Xe/Văn Bản Trình/Văn Phòng/Giao Việc/Biên Bản Họp) dùng CHUNG các hàm build HTML nói trên
+// nhưng file tải về không có JS nào của app chạy kèm để tự chuyển data-style lại — standaloneHtmlRestoreStyles()
+// (core.js) đổi NGƯỢC data-style="..." -> style="..." bằng thao tác chuỗi thuần tuý NGAY TRƯỚC khi tạo
+// Blob, vì file đó mở độc lập (file://, không qua server này) nên không hề bị CSP của app này chi phối.
 //
 // script-src-attr: KHÁC với script-src — đây là directive riêng điều khiển thuộc tính event-handler
-// inline (onclick=/onchange=/oninput=/onsubmit=...) trên thẻ HTML. Trước đây phải mở
-// 'unsafe-inline' cho directive này vì toàn bộ app dùng hàng trăm thuộc tính onclick=/onchange=...
-// rải rác khắp public/index.html. Qua nhiều đợt refactor (23 module nghiệp vụ + các đợt hạ tầng dùng
-// chung: login, đổi mật khẩu, profileModal, genericConfirmModal, viewDocModal, Dashboard, Approval
-// Hub, pagination, buildActionCell, module Office...), TOÀN BỘ các điểm này đã được chuyển sang
-// pattern data-op="..." + addEventListener delegation qua bindCspDelegation() (định nghĩa trong
-// public/index.html) — không còn onclick=/onchange=/oninput=/onsubmit= dạng thuộc tính nào trong file
-// nữa (đã xác minh bằng grep + demo Playwright thực tế, xem VERSION.md). Vì vậy script-src-attr giờ
-// có thể siết về 'none' — trình duyệt sẽ CHẶN THẬT bất kỳ onclick=... nào bị chèn vào DOM sau này
-// (VD qua lỗ hổng XSS), tăng thêm 1 lớp phòng thủ thật sự thay vì chỉ mang tính hình thức.
+// inline TRÊN THẺ HTML, áp dụng cho MỌI tên thuộc tính onXxx= (onclick=/onchange=/oninput=/onsubmit=/
+// oncontextmenu=/onkeydown=/onfocus=.../...), KHÔNG chỉ 4 tên hay gặp nhất. Trước đây phải mở
+// 'unsafe-inline' cho directive này vì toàn bộ app dùng hàng trăm thuộc tính onclick=/onchange=... rải
+// rác khắp public/index.html. Qua nhiều đợt refactor, TOÀN BỘ các điểm này đã chuyển sang 2 cơ chế CSP-
+// an toàn: (1) pattern data-op="..." + addEventListener delegation qua bindCspDelegation() (định nghĩa
+// trong core.js) cho click/change/input/submit; (2) phần mở rộng data-no-ctxmenu (chặn menu chuột phải
+// khung Protected View) + data-op-enterkey (Enter-để-gửi ở các ô "gõ rồi bấm Enter") — CẢ 2 đều là 1
+// listener DUY NHẤT gắn ở document, không phải thuộc tính onXxx= trên từng thẻ — không còn onclick=/
+// onchange=/oninput=/onsubmit=/oncontextmenu=/onkeydown=/onfocus= dạng thuộc tính nào trong toàn bộ
+// public/index.html + public/js/*.js nữa (đã xác minh bằng grep + Playwright thực tế, xem VERSION.md).
+// Vì vậy script-src-attr có thể siết về 'none' — trình duyệt sẽ CHẶN THẬT bất kỳ onclick=... nào bị
+// chèn vào DOM sau này (VD qua lỗ hổng XSS), tăng thêm 1 lớp phòng thủ thật sự thay vì chỉ mang tính
+// hình thức. LƯU Ý LỊCH SỬ: bản thân directive này ĐÃ TỪNG bị đặt 'none' quá sớm 1 lần trước đây, dựa
+// trên 1 lượt audit CHỈ kiểm 4 tên onclick=/onchange=/oninput=/onsubmit= — bỏ sót 20 điểm
+// oncontextmenu=/onkeydown=/onfocus= còn sót lại, khiến tính năng chặn menu chuột phải (Protected View)
+// bị CSP âm thầm vô hiệu hoá suốt thời gian đó (xác minh thực tế bằng Playwright: click phải KHÔNG hề
+// bị chặn + console có đúng thông báo "Refused to execute inline event handler... script-src-attr
+// 'none'"). Đợt dọn dẹp này đã quét lại TOÀN BỘ tên thuộc tính onXxx=, không chỉ 4 tên cũ.
 //
 // Tailwind: TRƯỚC ĐÂY tải trực tiếp từ https://cdn.tailwindcss.com lúc chạy (không build step) — đã
 // GỠ BỎ hoàn toàn vì mạng nội bộ/tường lửa công ty chặn được CDN này (đã tái hiện được đúng lỗi thực tế:
@@ -52,9 +75,9 @@ const securityHeaders = helmet({
   contentSecurityPolicy: {
     directives: {
       defaultSrc: ["'self'"],
-      scriptSrc: ["'self'", "'unsafe-inline'", 'https://www.youtube.com'],
+      scriptSrc: ["'self'", 'https://www.youtube.com'],
       scriptSrcAttr: ["'none'"],
-      styleSrc: ["'self'", "'unsafe-inline'", 'https://fonts.googleapis.com'],
+      styleSrc: ["'self'", 'https://fonts.googleapis.com'],
       imgSrc: ["'self'", 'data:', 'blob:'],
       fontSrc: ["'self'", 'data:', 'https://fonts.gstatic.com'],
       connectSrc: ["'self'"],

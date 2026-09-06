@@ -485,8 +485,8 @@ function viewContract(contractId) {
     footerInfo: `Trích lược: ${c.content || 'Không có mô tả'}`,
     fileSrc, fileType: c.fileType, fileName: c.fileName,
     noFileFallbackHTML: `
-      <div class="w-full h-[60vh] bg-white p-6 rounded shadow border overflow-y-auto relative protected-view-container" oncontextmenu="return false;">
-        <div style="${PROTECTED_VIEW_WATERMARK_STYLE}">${escapeHtml(PROTECTED_VIEW_WATERMARK_COMPANY)}</div>
+      <div class="w-full h-[60vh] bg-white p-6 rounded shadow border overflow-y-auto relative protected-view-container" data-no-ctxmenu>
+        <div data-style="${PROTECTED_VIEW_WATERMARK_STYLE}">${escapeHtml(PROTECTED_VIEW_WATERMARK_COMPANY)}</div>
         <h4 class="font-bold text-lg text-gray-800 border-b pb-2 mb-4">${escapeHtml(c.title)} (${escapeHtml(c.code)})</h4>
         <div class="text-sm text-gray-700 space-y-3">
           <p><b>Đối tác:</b> ${escapeHtml(c.partner)}</p>

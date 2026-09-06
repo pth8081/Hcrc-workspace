@@ -1,13 +1,109 @@
 # Phiên bản hiện tại
 
-**9.5** — đã merge vào `main` (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge
+**9.7** — đã merge vào `main` (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge
 góc màn hình + `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần
-kiểu `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+kiểu `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (9.6 — mục "Vận Hành > Đơn Hàng: tách Đặt
+Hàng Tại Siêu Thị/Tại HO..." bên dưới — đã được xác nhận demo và merge vào `main` ở đợt trước, ghi chú
+"CHƯA MERGE" cũ trong bản này đã lạc hậu, đính chính lại ở đây.)
 
-**9.6 — TRÊN NHÁNH `claude/chao-ban-oo5ijl`, CHƯA MERGE vào `main`** (người dùng yêu cầu xem demo trước
-khi merge cho đợt này — xem mục ngay dưới đây). `main` vẫn đang ở 9.5 cho tới khi được xác nhận merge.
+## Cập nhật gần nhất — Siết CSP (bỏ 'unsafe-inline' script-src/style-src) + vá lỗ hổng CSP script-src-attr chặn nhầm Protected View + 3 tối ưu hiệu năng nạp module (2026-09-06)
 
-## Cập nhật gần nhất (CHƯA MERGE — đang chờ người dùng xác nhận demo) — Vận Hành > 📦 Đơn Hàng: tách "Đặt Hàng Tại Siêu Thị"/"Đặt Hàng Tại HO" + duyệt theo mức giá trị đơn hàng (2026-09-06)
+**Bối cảnh**: 4 agent nghiên cứu song song (kích thước/thành phần bundle, XSS, CSP, hiệu năng) đã rà
+soát toàn bộ mã nguồn ở đợt trước (chỉ nghiên cứu, không sửa gì) — người dùng duyệt kết quả tổng hợp và
+yêu cầu triển khai 3 việc cùng lúc: (A) vá 1 lỗ hổng CSP có thật, (B) 3 tối ưu hiệu năng an toàn, (C) siết
+CSP bỏ hẳn `'unsafe-inline'` khỏi `script-src`/`style-src`.
+
+**A — Vá lỗ hổng CSP `script-src-attr` chặn nhầm tính năng "Protected View" (ưu tiên cao nhất)**:
+`lib/securityHeaders.js` đặt `scriptSrcAttr: ["'none'"]` từ 1 đợt trước, dựa trên 1 lượt audit CHỈ kiểm
+4 tên thuộc tính `onclick=`/`onchange=`/`oninput=`/`onsubmit=` — bỏ sót đúng **21 điểm** còn lại dùng
+`oncontextmenu=`/`onkeydown=`/`onfocus=` (audit trước ước tính 20, kiểm đếm thực tế ra 21: 13×
+`oncontextmenu="return false;"` ở khung "Protected View" `Tài Liệu`/`Ngân Sách`/`Thanh Toán`/`Báo Cáo
+Định Kỳ` + `index.html`, 7× `onkeydown="if(event.key==='Enter'){...}"` ở các ô "gõ rồi bấm Enter"
+(mời đào tạo, phòng ban tham gia quy trình, chức danh loại trừ VPP, bình luận Nhịp Sống nội bộ), 1×
+`onfocus="pmsFilter(...)"` chết trùng lặp cạnh bản `data-op-input` đã đúng — xem `core.js`).
+
+**Xác minh THỰC TẾ trước khi sửa** (Playwright thật + server thật, helmet thật, không giả lập): mở khung
+"Protected View" 1 tài liệu, click phải — context menu **VẪN HIỆN** (tính năng chặn click phải bị vô
+hiệu hoàn toàn), console có đúng 4 thông báo CSP thật `"Refused to execute inline event handler...
+script-src-attr 'none'"`. Xác nhận đúng giả thuyết: lỗ hổng CSP âm thầm vô hiệu hoá 1 tính năng bảo mật
+(chống copy tài liệu), không phải hình thức.
+
+**Sửa**: bỏ hết 21 thuộc tính onXxx= còn lại, thay bằng 2 cơ chế delegation MỚI (mirror `bindCspDelegation()`
+đã có sẵn cho click/change/input/submit) — `data-no-ctxmenu` (1 listener `contextmenu` DUY NHẤT trên
+`document`, `closest()` theo thuộc tính này) và `data-op-enterkey` (1 listener `keydown` DUY NHẤT, dùng
+lại nguyên `cspDispatchOp()`/quy ước `data-arg0`...) — cả 2 định nghĩa ở `core.js`. Xoá hẳn `onfocus="pmsFilter(...)"`
+chết (xác minh: `data-op-input="pmsFilter"` đã xử lý đủ, `onfocus` chưa từng thực thi được do CSP nên xoá
+không đổi hành vi thực tế nào). Xác minh LẠI sau fix (cùng kịch bản Playwright thật): click phải bị chặn
+đúng, Enter-để-thêm hoạt động đúng, 0 vi phạm CSP.
+
+**B — 3 tối ưu hiệu năng an toàn**:
+1. Chuyển `downloadXlsxFromServer()` (từ `module-admin-userstaging.js`) và `scopeFromForm()` (từ
+   `module-admin.js`) sang `core.js` (luôn nạp eager) — trước đây nằm trong cụm lazy-load
+   "admin-permgroups", bị `module-vanhanh.js`/`module-dongphuc.js`/`module-hcrcdonghanh.js`/
+   `module-logsystem-trash.js`/`module-baocaoquantri(-preview).js` gọi THẲNG (không qua `ensureFnReady()`)
+   buộc phải nạp kéo theo TOÀN BỘ cụm đó (315KB/82KB gzip) + module Đào Tạo 205KB không liên quan (qua
+   vòng phụ thuộc SCC). Đồng thời bọc `populateTrainingCategorySelects()` (module.js gọi từ `admin.js`)
+   qua `ensureFnReady()` — tách nốt cạnh phụ thuộc còn lại giữa `admin.js` và Đào Tạo. Xác minh lại bằng
+   công cụ AST/SCC thật (tự viết, tái tạo đúng 100% `MODULE_LOAD_GROUPS` gốc trước khi tin kết quả sau
+   sửa) — cụm "admin-permgroups" 6 file TÁCH thành 4 cụm độc lập, `vanHanh` hết còn phụ thuộc cụm đó.
+   **Đo thật** (Playwright network listener, mở tab Vận Hành lần đầu 1 phiên): **763.873 → 448.394 bytes
+   gốc (giảm 41,3%)**, **≈194.818 → 112.367 bytes gzip (giảm 42,3%, ≈82KB)** — 6 file (đủ 5 file cụm
+   admin-permgroups + module Đào Tạo 205KB) không còn tải khi mở Vận Hành nữa.
+2. PDF.js: đổi `import` TĨNH trong `<script type="module">` (cuối `index.html`) sang `import()` ĐỘNG,
+   nạp LƯỜI lần đầu thực sự cần đọc/vẽ PDF (`ensurePdfJsReady()`, `core.js`, cache theo Promise) — trước
+   đây tải sẵn ~1MB ngay lúc mở trang dù phần lớn phiên không xem PDF nào. Cập nhật 3 điểm
+   `module-vanhanh.js`/`module-baocaodinhky-trinhchieu.js` (2 chỗ) từng polling `while(!window.pdfjsLib)`
+   sang `await ensurePdfJsReady()`.
+3. `module-baocaodinhky-trinhchieu.js`: `loadPrPdfLibs()` (dùng cho `downloadPrPdf()`) đổi sang gọi
+   `loadVendorScript()` dùng chung (đã cache theo src) thay vì tự dựng `loadScript()`/Promise cache
+   RIÊNG — trước đây bấm cả "Tổng Hợp Theo Công Việc" (PDF) lẫn "Tải PDF" trình chiếu trong CÙNG 1 phiên
+   tải trùng 2 lần html2canvas+jspdf.
+
+**C — Siết CSP: bỏ `'unsafe-inline'` khỏi CẢ `script-src` LẪN `style-src`** (`lib/securityHeaders.js`):
+- 2 khối `<script>` nội tuyến còn lại trong `index.html` (dòng set `copyrightYear` + khối bootstrap
+  PDF.js) đã chuyển hết vào `core.js` — file này giờ không còn `<script>` nội tuyến nào.
+- 1 khối `<style>` nội tuyến lớn (~386 dòng CSS tuỳ biến toàn app, đầu `index.html`) chuyển nguyên vẹn
+  sang file ngoài MỚI `public/app.css` (nạp qua `<link>`).
+- 7 thuộc tính `style="..."` TĨNH trong `index.html` (nền gradient màn chờ, cỡ chữ, icon SVG, lưới PDF,
+  thanh tiến độ, khung video 16:9) đổi sang class CSS thật trong `app.css`.
+- **Phát hiện thêm ngoài phạm vi audit ban đầu** (audit trước chỉ nêu vài điểm ví dụ "watermark Protected
+  View"/"màu mẫu trình chiếu"): rà lại TOÀN BỘ `public/js/*.js` thấy tổng cộng **~45 điểm** dùng
+  `style="..."` ĐỘNG (giá trị đổi theo dữ liệu) rải khắp `module-baocaodinhky-trinhchieu.js` (mẫu màu
+  trình chiếu, ~19 điểm), `module-tailieu.js`/`module-thanhtoan.js` (watermark, 3 điểm),
+  `module-baocaoquantri(-preview).js`/`module-vanhanh.js` (thanh tỷ lệ %, bảng báo cáo),
+  `module-bienbanhop.js`/`module-congviec.js`/`module-vpp.js` (bảng "Phiếu"/"Biên bản"), và **1 khối
+  `<style>` nội tuyến hoàn toàn bị bỏ sót** trong `buildApprovalSlipShellHTML()` (`core.js`, khung
+  "Phiếu Phê Duyệt" dùng chung Xe/Văn Bản Trình/Văn Phòng) — phát hiện được nhờ soát console THẬT (không
+  chỉ nhìn qua code) khi demo `viewCarApprovalSlip()`, xem đúng thông báo CSP "Refused to apply inline
+  style" trước khi tin là đã xong. Toàn bộ đổi sang thuộc tính `data-style="..."` (dữ liệu thuần, không
+  bị CSP diễn giải) rồi gán lại qua `el.style.cssText = ...` (CSSOM qua JS, không bị `style-src` chi
+  phối) bằng `applyDataStyles()` gọi tường minh ở từng điểm chèn `.innerHTML` ĐÃ RÀ SOÁT, CỘNG 1
+  `MutationObserver` toàn cục (`core.js`) làm lưới an toàn thứ 2 tự động quét mọi node DOM mới chèn vào
+  bất cứ đâu — phòng trường hợp lỡ sót 1 điểm nào đó trong ~700 tính năng của hệ thống. Riêng khối
+  `<style>` của `buildApprovalSlipShellHTML()`: nội dung CSS tách thành hằng số `APPROVAL_SLIP_CSS`
+  (`core.js`) — vừa copy sang `app.css` (phục vụ màn xem trực tiếp trong app), vừa được 5 hàm
+  `downloadXxxApprovalSlip()`/`downloadTaskSlip()`/`downloadMeetingMinutes()` (tải "Phiếu"/"Biên bản"
+  thành file `.html` ĐỘC LẬP, mở lại sau không có JS nào của app chạy kèm) tự nhúng lại/khôi phục qua
+  `standaloneHtmlRestoreStyles()` (đổi `data-style="..."` ngược lại `style="..."` bằng chuỗi thuần tuý
+  NGAY TRƯỚC khi tạo Blob) — các file `.html` tải về vẫn hiển thị đúng, độc lập hoàn toàn với CSP của
+  app này (mở qua `file://`, không qua server).
+- `lib/securityHeaders.js`: `scriptSrc`/`styleSrc` bỏ hẳn `'unsafe-inline'`.
+
+**Kiểm chứng**: `node -c` mọi file server đã sửa; soát cân bằng `<div>`/trùng `id`/trùng tên hàm top-level
+toàn bộ `public/js/*.js` (0 trùng); chạy TOÀN BỘ 63 file `tests/test-*.js` — 61 PASS, đúng 2 FAIL đã biết
+trước do KHÔNG có SQL Server thật trong môi trường này (`Failed to connect to localhost:1433`), không có
+lỗi MỚI nào; smoke thật qua Playwright (server thật + `lib/securityHeaders.js` thật) mở 9+ tab (Tài
+Liệu/Công Việc/Hợp Đồng/Xe/Vận Hành/Hệ Thống/Báo Cáo/Ngân Sách/Hỗ Trợ IT), mở khung Protected View, xem
+Phiếu Phê Duyệt Xe — console sạch hoàn toàn, 0 vi phạm CSP. Ảnh chụp Playwright thật lưu tại
+`server/demo-screenshots/csp-perf-hardening/`: click-phải bị chặn trước/sau fix, giảm tải mạng thật của
+tab Vận Hành (763.873→448.394 bytes), console sạch qua phiên nhiều tab.
+
+**Tác động triển khai**: KHÔNG cần thao tác gì ngoài copy code + `pm2 restart` — không đổi
+`server/sql/schema.sql`, không thêm biến môi trường mới (`server/.env.example` không đổi), không thêm/đổi
+`dependencies` trong `server/package.json` (chỉ đổi field `version`). File tĩnh mới `public/app.css` tự
+được `express.static` phục vụ, không cần cấu hình gì thêm ở Nginx/PM2.
+
+## Cập nhật trước đó — Vận Hành > 📦 Đơn Hàng: tách "Đặt Hàng Tại Siêu Thị"/"Đặt Hàng Tại HO" + duyệt theo mức giá trị đơn hàng (2026-09-06)
 
 Theo yêu cầu người dùng: tách sub-tab "📋 Danh Sách" (gộp chung Siêu Thị + HO) thành 2 sub-tab RIÊNG —
 "🏬 Đặt Hàng Tại Siêu Thị"/"🏢 Đặt Hàng Tại HO" — cộng với "📊 Báo Cáo" (mở rộng) thành 3 sub-tab, và đổi

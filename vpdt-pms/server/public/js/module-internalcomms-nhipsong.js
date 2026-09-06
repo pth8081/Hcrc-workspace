@@ -1102,7 +1102,7 @@ function renderInternalNewsCard(p) {
         ${expandToggleHTML}
         ${renderInternalModerationQueueHTML(p)}
         <div class="flex gap-2 items-center">
-          <input id="internalCommentInput_${p.id}" type="text" placeholder="Viết bình luận..." class="flex-1 border rounded-full px-3 py-1.5 text-sm" onkeydown="if(event.key==='Enter'){event.preventDefault();addInternalCommentInline(${p.id});}">
+          <input id="internalCommentInput_${p.id}" type="text" placeholder="Viết bình luận..." class="flex-1 border rounded-full px-3 py-1.5 text-sm" data-op-enterkey="addInternalCommentInline" data-arg0="${p.id}">
           <button data-op="addInternalCommentInline" data-arg0="${p.id}" class="px-3 py-1.5 bg-fuchsia-600 text-white rounded-full text-xs font-bold hover:bg-fuchsia-700">Gửi</button>
         </div>
       </div>
@@ -1293,7 +1293,7 @@ function viewInternalPostDetail(id) {
         ${expandToggleDetailHTML}
         ${renderInternalModerationQueueHTML(p)}
         <div class="flex gap-2 pt-1">
-          <input id="internalCommentInput" placeholder="Viết bình luận..." class="flex-1 border p-1.5 rounded text-xs" onkeydown="if(event.key==='Enter'){event.preventDefault(); addInternalComment(${p.id});}">
+          <input id="internalCommentInput" placeholder="Viết bình luận..." class="flex-1 border p-1.5 rounded text-xs" data-op-enterkey="addInternalComment" data-arg0="${p.id}">
           <button data-op="addInternalComment" data-arg0="${p.id}" class="bg-fuchsia-600 text-white px-3 py-1 rounded text-xs font-bold hover:bg-fuchsia-700">Gửi</button>
         </div>
       </div>

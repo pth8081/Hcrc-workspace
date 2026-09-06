@@ -837,8 +837,8 @@ function buildOfficeApprovalSlipHTML(o) {
           </tr>
         `).join('')}
         <tr>
-          <td colspan="6" class="as-items-right" style="font-weight:bold;">Tổng Cộng (chưa VAT):</td>
-          <td class="as-items-right" style="font-weight:bold;">${(o.amount || 0).toLocaleString('vi-VN')}</td>
+          <td colspan="6" class="as-items-right" data-style="font-weight:bold;">Tổng Cộng (chưa VAT):</td>
+          <td class="as-items-right" data-style="font-weight:bold;">${(o.amount || 0).toLocaleString('vi-VN')}</td>
           <td></td>
         </tr>
       </tbody>
@@ -918,7 +918,7 @@ function downloadOfficeApprovalSlip(officeId) {
   if (!o) return;
   if (o.status !== 'APPROVED') return alert('Chỉ tải được Phiếu Phê Duyệt sau khi đề xuất đã được phê duyệt hoàn tất.');
 
-  const fullHtml = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Phiếu Phê Duyệt Đề Xuất Văn Phòng - ${escapeHtml(o.code)}</title></head><body>${buildOfficeApprovalSlipHTML(o)}</body></html>`;
+  const fullHtml = standaloneHtmlRestoreStyles(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>Phiếu Phê Duyệt Đề Xuất Văn Phòng - ${escapeHtml(o.code)}</title><style>${APPROVAL_SLIP_CSS}</style></head><body>${buildOfficeApprovalSlipHTML(o)}</body></html>`);
   const blob = new Blob([fullHtml], { type: 'text/html;charset=utf-8;' });
   const url = URL.createObjectURL(blob);
   const link = document.createElement('a');

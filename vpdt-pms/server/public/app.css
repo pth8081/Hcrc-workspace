@@ -1,0 +1,470 @@
+/* app.css — CSS TĨNH của toàn ứng dụng, trước đây nằm trong 1 khối <style> nội tuyến ngay đầu
+   public/index.html — chuyển ra file ngoài này để bỏ được 'unsafe-inline' khỏi styleSrc (CSP style-src
+   chặn CẢ thuộc tính style="..." LẪN khối <style> nội tuyến, chỉ KHÔNG chặn stylesheet ngoài dù cùng
+   domain 'self' hay JS tự gán CSSOM qua el.style.* — xem lib/securityHeaders.js). Nội dung bên dưới
+   GIỮ NGUYÊN VẸN, không đổi 1 dòng nào so với khối <style> cũ (chỉ đổi vị trí file).
+
+   Phần đầu file: các style TĨNH trước đây nằm dạng thuộc tính style="..." nội tuyến trực tiếp trên
+   thẻ HTML (7 điểm, cùng đợt chuyển này) — gộp chung vào đây cho gọn, khỏi phải link thêm 1 file .css
+   riêng. */
+
+/* .approval-slip — khung "Phiếu Phê Duyệt" dùng chung (Xe/Văn Bản Trình/Văn Phòng, xem
+   buildApprovalSlipShellHTML() ở public/js/core.js) — TRƯỚC ĐÂY nhúng qua khối <style> ngay trong
+   HTML trả về (bị CSP styleSrc chặn khi hiện ở màn xem trực tiếp trong app). Nội dung y hệt hằng số
+   APPROVAL_SLIP_CSS ở core.js (giữ 2 bản: bản này phục vụ màn xem trực tiếp qua app.css đã load sẵn;
+   bản trong core.js phục vụ 3 hàm downloadXxxApprovalSlip() tự nhúng lại vào file .html tải về độc lập,
+   không load được app.css này). */
+.approval-slip { font-family: 'Times New Roman', Georgia, serif; color: #111; background: #fff; padding: 24px; max-width: 800px; margin: 0 auto; position: relative; font-size: 13px; line-height: 1.55; }
+.approval-slip .as-watermark { position: absolute; top: 42%; left: 50%; transform: translate(-50%,-50%) rotate(-28deg); font-size: 26px; font-weight: bold; color: rgba(200,0,0,0.13); white-space: nowrap; pointer-events: none; z-index: 0; text-transform: uppercase; text-align: center; }
+.approval-slip .as-content { position: relative; z-index: 1; }
+.approval-slip .as-header { text-align: center; margin-bottom: 6px; }
+.approval-slip .as-form-code { font-size: 11px; color: #555; }
+.approval-slip .as-title { font-size: 19px; font-weight: bold; text-transform: uppercase; margin: 6px 0; }
+.approval-slip .as-approved-note { font-size: 11px; font-style: italic; color: #16a34a; font-weight: bold; }
+.approval-slip table.as-field-table { width: 100%; border-collapse: collapse; margin: 8px 0; }
+.approval-slip table.as-field-table td { padding: 3px 4px; vertical-align: top; }
+.approval-slip .as-label { font-weight: bold; width: 230px; white-space: nowrap; }
+.approval-slip .as-section-title { font-weight: bold; margin-top: 14px; margin-bottom: 2px; background: #f0f0f0; padding: 4px 6px; }
+.approval-slip table.as-items-table { width: 100%; border-collapse: collapse; margin: 6px 0 10px; font-size: 12px; }
+.approval-slip table.as-items-table th, .approval-slip table.as-items-table td { border: 1px solid #999; padding: 4px 6px; }
+.approval-slip table.as-items-table th { background: #f0f0f0; font-weight: bold; text-align: center; }
+.approval-slip .as-items-center { text-align: center; }
+.approval-slip .as-items-right { text-align: right; }
+.approval-slip .as-sign-table { width: 100%; border-collapse: collapse; margin-top: 22px; table-layout: fixed; }
+.approval-slip .as-sign-table td { text-align: center; vertical-align: top; padding: 8px 6px; border: 1px solid #ccc; }
+.approval-slip .as-sign-role { font-weight: bold; text-transform: uppercase; display: block; margin-bottom: 6px; }
+.approval-slip .as-sign-stamp { border: 2px solid #16a34a; color: #16a34a; display: inline-block; padding: 3px 8px; border-radius: 4px; font-weight: bold; font-size: 10px; transform: rotate(-6deg); margin: 6px 0 4px; }
+.approval-slip .as-sign-name { font-weight: bold; margin-top: 2px; }
+.approval-slip .as-sign-jobtitle { font-size: 11px; color: #444; font-style: italic; }
+.approval-slip .as-sign-time { font-size: 10.5px; color: #555; }
+.approval-slip .as-comment-box { background: #fffbeb; border: 1px solid #fde68a; border-radius: 4px; padding: 8px 10px; margin: 6px 0; }
+.approval-slip .as-comment-box p { margin: 0; font-style: italic; }
+.approval-slip .as-comment-meta { margin-top: 4px; font-size: 11px; color: #666; text-align: right; }
+.approval-slip .as-footer-note { margin-top: 16px; font-size: 11px; color: #444; border-top: 1px solid #ccc; padding-top: 6px; }
+@media print { .approval-slip { padding: 0; } }
+
+.boot-splash-bg {
+  background: linear-gradient(155deg, #0b1f4d 0%, #060f26 100%);
+}
+
+.boot-splash-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: #a9b8e6;
+  letter-spacing: .04em;
+}
+
+.icon-sm {
+  width: 1.1rem;
+  height: 1.1rem;
+  flex-shrink: 0;
+}
+
+.icon-md {
+  width: 1.5rem;
+  height: 1.5rem;
+  flex-shrink: 0;
+}
+
+.pr-agg-pdf-grid {
+  grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));
+}
+
+/* Giá trị ban đầu 0% — JS cập nhật lại bằng el.style.width = "...%" (gán thuộc tính CSSOM qua JS,
+   không qua HTML attribute) mỗi lần tiến độ đổi, xem module-internalcomms-daotao.js. */
+.progress-bar-init0 {
+  width: 0%;
+}
+
+.video-16-9 {
+  aspect-ratio: 16 / 9;
+}
+
+/* ============================================================
+   Nội dung nguyên vẹn của khối <style> cũ trong public/index.html bắt đầu từ đây
+   ============================================================ */
+.dash-card.active-card {
+  ring-width: 2px;
+  --tw-ring-color: #2563eb;
+  background-color: #f0f9ff;
+}
+.protected-view-container {
+  user-select: none;
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+}
+/* Cây phân quyền (mục "Sửa Người Dùng"/"Sửa Nhóm Phân Quyền") — mỗi khối quyền gấp gọn bằng
+   <details>/<summary> gốc trình duyệt (không cần JS quản lý trạng thái mở/đóng riêng). */
+.perm-tree-node > summary { list-style: none; cursor: pointer; }
+.perm-tree-node > summary::-webkit-details-marker { display: none; }
+.perm-tree-node > summary .perm-tree-chevron { transition: transform 0.15s ease; display: inline-block; }
+.perm-tree-node[open] > summary .perm-tree-chevron { transform: rotate(90deg); }
+/* Giai đoạn B — đánh dấu khối quyền vừa bị admin sửa (tick/bỏ tick/đổi select) nhưng CHƯA bấm "Lưu
+   Người Dùng & Phân Quyền" — chỉ là dấu hiệu thị giác (viền/nền cam), không giữ lại giá trị cũ để so
+   sánh nên không chặn được trường hợp tick rồi tick lại y hệt ban đầu, nhưng đủ để admin nhận ra ngay
+   khối nào mình vừa đụng vào giữa 1 cây quyền dài gần 14 khối (xem markPermTreeDirty()/clearPermTreeDirtyMarks()). */
+.perm-tree-node.perm-tree-dirty { border-left: 3px solid #f59e0b !important; background-color: #fffbeb !important; }
+/* Box "🔍 Tìm Kiếm & Lọc" thu gọn mặc định — dùng lại đúng khuôn <details>/<summary> ở trên, tách class
+   riêng để không lẫn với cây phân quyền. Class dùng chung cho MỌI module (không đặt tên riêng theo
+   module) — module nào sau này có phần lọc dài chỉ cần bọc bằng đúng class này là tự thu gọn/mở ra. */
+.filter-box-details > summary { list-style: none; cursor: pointer; }
+.filter-box-details > summary::-webkit-details-marker { display: none; }
+.filter-box-details > summary .filter-box-chevron { transition: transform 0.15s ease; display: inline-block; }
+.filter-box-details[open] > summary .filter-box-chevron { transform: rotate(90deg); }
+/* Mục "0. Quyền Truy Cập Module" — mỗi tab con của module/module con (VD "Kỳ Đăng Ký" trong Văn Phòng
+   Phẩm) hiện 1 dòng chú thích trỏ tới đúng khối 1-18 đang giữ checkbox quyền thật quyết định tab đó
+   (KHÔNG nhân bản checkbox — chỉ đọc + nút "Đi tới", xem jumpToPermField()). Bấm "Đi tới" mở khối đích
+   + cuộn tới + chớp sáng 1.8s để admin nhận ra ngay, không cần dò cả cây dài. */
+.perm-tree-jump-highlight { animation: permTreeJumpFlash 1.8s ease-out; }
+@keyframes permTreeJumpFlash {
+  0%, 20% { background-color: #fef9c3; border-color: #facc15 !important; }
+  100% { background-color: transparent; }
+}
+
+/* Sidebar điều hành (thay thanh nav ngang cũ) — #userHeader GIỮ NGUYÊN id cũ (finishLogin()/logout()
+   chỉ toggle add/remove('hidden'), không sửa JS), giờ gắn vào chính khối <aside>. Tailwind ".hidden"
+   có !important nên luôn thắng khi còn class đó; khi JS gỡ "hidden", quy tắc ID bên dưới (đặc hiệu cao
+   hơn ".hidden") mới có hiệu lực, tự chuyển sang flex-column mà không cần thêm class Tailwind nào khác. */
+#userHeader:not(.hidden) { display: flex; flex-direction: column; }
+/* #userHeader nằm trong "<div class="flex min-h-screen">" cùng hàng với nội dung chính — không có ràng
+   buộc chiều cao nào nên nó chỉ TỰ CAO đúng bằng nội dung bên trong (Tailwind "overflow-y-auto" đã gắn
+   sẵn KHÔNG BAO GIỜ có tác dụng vì scrollHeight luôn bằng clientHeight). Kết quả: mở nhiều nhóm dropdown
+   cùng lúc (mỗi nút toggleXDropdown() độc lập, không tự đóng nút khác) — ví dụ mở "Tổng Hợp" (chứa Ngân
+   Sách) — đẩy các mục "Hỗ Trợ IT"/"Hệ Thống"/footer đăng xuất ra khỏi màn hình 1366x768 phổ biến, buộc
+   phải CUỘN CẢ TRANG mới thấy hết. "position: sticky" + "height: 100vh" ghim sidebar đúng bằng chiều cao
+   màn hình, để overflow-y-auto có sẵn phát huy tác dụng THẬT — sidebar tự cuộn RIÊNG bên trong nó, không
+   đụng tới cách nội dung chính đang cuộn (giữ nguyên hành vi mọi module khác). Chỉ áp dụng từ 768px trở
+   lên — dưới đó sidebar chuyển hẳn sang "off-canvas" (position: fixed, xem @media bên dưới), không xung
+   đột với position: sticky ở đây. */
+@media (min-width: 768px) {
+  #userHeader:not(.hidden) { position: sticky; top: 0; height: 100vh; }
+}
+.sidebar-item, .sidebar-subitem {
+  display: flex; align-items: center; gap: 0.5rem; width: 100%;
+  padding: 0.55rem 0.75rem; border-radius: 0.375rem; font-weight: 600; font-size: 0.8rem;
+  color: #cbd5e1; text-align: left; background: transparent; border: 0; cursor: pointer;
+}
+.sidebar-item:hover, .sidebar-subitem:hover { background: #1e293b; color: #fff; }
+.sidebar-subitem { font-weight: 500; padding: 0.4rem 0.75rem; font-size: 0.75rem; }
+/* Tab đang mở ở sidebar trái — xem setActiveSidebarTab() (gọi từ trong switchTab()). Nền xanh đậm hơn
+   :hover (đổi tông, không chỉ đổi độ đậm, để không lẫn với hover) + viền trái màu sky-400 khớp màu logo
+   HCRC ở đầu sidebar (xem <svg> phía trên) — đọc rõ là "đang chọn" chứ không phải chỉ đang rê chuột qua. */
+.sidebar-item-active, .sidebar-subitem-active {
+  background: #1e3a5f; color: #fff;
+  border-left: 3px solid #38bdf8;
+  padding-left: calc(0.75rem - 3px);
+}
+.sidebar-icon { font-size: 1rem; width: 1.25rem; text-align: center; flex-shrink: 0; }
+/* Thu gọn (toggleSidebarCollapse(), lưu localStorage) — chỉ còn icon, ẩn hết nhãn chữ + khối con đang mở. */
+#userHeader.sidebar-collapsed { width: 4.5rem; }
+#userHeader.sidebar-collapsed .sidebar-label { display: none; }
+#userHeader.sidebar-collapsed .sidebar-item, #userHeader.sidebar-collapsed .sidebar-subitem { justify-content: center; }
+#userHeader.sidebar-collapsed #truyenThongDropdownPanel,
+#userHeader.sidebar-collapsed #hopDongDropdownPanel,
+#userHeader.sidebar-collapsed #dieuHanhDropdownPanel,
+#userHeader.sidebar-collapsed #hanhChinhDropdownPanel,
+#userHeader.sidebar-collapsed #tongHopDropdownPanel,
+#userHeader.sidebar-collapsed #itSupportDropdownPanel,
+#userHeader.sidebar-collapsed #heThongDropdownPanel { display: none !important; }
+
+/* Responsive điện thoại (< 768px, khớp breakpoint "md" của Tailwind) — sidebar 16rem cố định trước đây
+   chiếm gần hết bề ngang màn hình điện thoại, gần như không dùng được. Chuyển sang dạng "off-canvas":
+   mặc định trượt ra ngoài bên trái (ẩn), bấm ☰ ở thanh trên cùng mới trượt vào đè lên nội dung (có lớp
+   nền mờ phía sau). Dùng transform CSS thuần (không phải class Tailwind translate-x) để JS chỉ cần
+   toggle đúng 1 class .mobile-sidebar-open, không bị đụng độ đặc hiệu với các class Tailwind khác —
+   cùng kiểu với .sidebar-collapsed đã có sẵn ở trên. Từ 768px trở lên, đoạn @media này không áp dụng gì
+   cả nên hành vi sidebar tại chỗ (desktop) giữ nguyên 100% như cũ. */
+@media (max-width: 767px) {
+  #userHeader:not(.hidden) {
+    position: fixed; top: 0; bottom: 0; left: 0; z-index: 40;
+    transform: translateX(-100%);
+    transition: transform 0.2s ease;
+  }
+  #userHeader.mobile-sidebar-open { transform: translateX(0); }
+}
+
+/* Đợt B — polish màu sắc/bo góc/đổ bóng cho chuyên nghiệp hơn, ĐỊNH NGHĨA LẠI diện mạo của các
+   class Tailwind ĐÃ DÙNG SẴN khắp file (không đổi 1 className nào trong HTML/JS) nên rủi ro rất thấp.
+   Dùng !important vì Tailwind CDN chạy JIT (MutationObserver quét DOM liên tục, có thể chèn/ghi đè lại
+   <style> của nó bất cứ lúc nào sau khi trang đã tải — không đảm bảo khối <style> này luôn đứng sau). */
+body { color: #1e293b !important; }
+h1, h2, h3, h4 { letter-spacing: -0.01em !important; }
+.rounded { border-radius: 0.5rem !important; }
+.rounded-lg { border-radius: 0.75rem !important; }
+.border { border-color: #e2e8f0 !important; }
+.shadow-sm { box-shadow: 0 1px 2px 0 rgba(15, 23, 42, .05) !important; }
+.shadow { box-shadow: 0 1px 3px 0 rgba(15, 23, 42, .08), 0 1px 2px -1px rgba(15, 23, 42, .06) !important; }
+.shadow-md { box-shadow: 0 4px 10px -2px rgba(15, 23, 42, .10), 0 2px 4px -2px rgba(15, 23, 42, .05) !important; }
+.shadow-lg { box-shadow: 0 10px 20px -4px rgba(15, 23, 42, .12), 0 4px 8px -4px rgba(15, 23, 42, .06) !important; }
+.bg-gray-50 { background-color: #f8fafc !important; }
+.bg-gray-100 { background-color: #f1f5f9 !important; }
+.bg-gray-200 { background-color: #e2e8f0 !important; }
+.hover\:bg-blue-700:hover { background-color: #1d4ed8 !important; }
+
+/* ================== Đợt UI Polish (A1-A3) ==================
+   Cùng nguyên tắc Đợt B ở trên: chỉ ĐỊNH NGHĨA LẠI diện mạo của class/thẻ HTML ĐÃ DÙNG SẴN khắp file,
+   không đổi 1 className hay cấu trúc HTML nào — rủi ro rất thấp, áp dụng toàn cục ngay lập tức. */
+
+/* A1 — Font tiếng Việt riêng (Be Vietnam Pro, xem <link> Google Fonts ở đầu <head>) thay cho font hệ
+   thống mặc định trước đây, tạo phân cấp tiêu đề/nhãn rõ hơn qua letter-spacing đã có ở Đợt B. */
+body, input, select, textarea, button {
+  font-family: 'Be Vietnam Pro', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif !important;
+}
+h1, h2, h3 { font-weight: 800 !important; }
+
+/* A2 — Bảng dữ liệu: bỏ viền kẻ ô kiểu lưới nặng (Tailwind .border trên từng <td>/<th>), chuyển sang
+   viền ngang mảnh + hover dòng, ÁP DỤNG TOÀN CỤC cho mọi bảng hiện có. Chọn "td.border, th.border" (class
+   + thẻ) để đủ độ đặc hiệu THẮNG bare ".border" ở trên mà KHÔNG đụng tới .border dùng cho card/box khác
+   (xem specificity: "td.border" > ".border" do có thêm 1 tag selector, không liên quan !important).
+   table.no-cell-border cho phép 1 vài bảng tự loại trừ nếu cần (không có bảng nào dùng hiện tại). */
+table:not(.no-cell-border) td.border, table:not(.no-cell-border) th.border {
+  border-left-width: 0 !important;
+  border-right-width: 0 !important;
+  border-top-width: 0 !important;
+  border-bottom-width: 1px !important;
+  border-bottom-color: #eef2f7 !important;
+}
+table:not(.no-cell-border) { border-collapse: collapse !important; }
+table:not(.no-cell-border) tbody tr:hover { background-color: #f8fafc !important; }
+
+/* A3 — Input/select/file-upload: đồng bộ viền/bo góc/focus ring, style lại nút "Choose File" mặc định
+   của trình duyệt (::file-selector-button) và icon lịch (date/datetime picker) cho khớp phần còn lại. */
+input[type="text"], input[type="number"], input[type="password"], input[type="email"],
+input[type="tel"], input[type="date"], input[type="datetime-local"], input[type="search"],
+select, textarea {
+  transition: border-color .15s ease, box-shadow .15s ease;
+}
+input[type="text"]:focus, input[type="number"]:focus, input[type="password"]:focus,
+input[type="email"]:focus, input[type="tel"]:focus, input[type="date"]:focus,
+input[type="datetime-local"]:focus, input[type="search"]:focus, select:focus, textarea:focus {
+  outline: none !important;
+  border-color: #2563eb !important;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, .12) !important;
+}
+input[type="file"] {
+  font-size: .8rem !important;
+  color: #64748b !important;
+}
+input[type="file"]::file-selector-button {
+  font-family: inherit;
+  font-size: .75rem;
+  font-weight: 600;
+  padding: .4rem .75rem;
+  margin-right: .6rem;
+  border: 1px solid #cbd5e1;
+  border-radius: .5rem;
+  background: #f8fafc;
+  color: #334155;
+  cursor: pointer;
+  transition: background-color .15s ease;
+}
+input[type="file"]::file-selector-button:hover { background: #e2e8f0; }
+input[type="date"]::-webkit-calendar-picker-indicator,
+input[type="datetime-local"]::-webkit-calendar-picker-indicator {
+  cursor: pointer;
+  opacity: .55;
+}
+select {
+  cursor: pointer;
+}
+
+/* Giai đoạn B — responsive cho bảng nhiều cột: mỗi bảng TỰ trở thành khung cuộn ngang khi tràn màn
+   hình, không phụ thuộc việc HTML có sẵn khối bọc overflow-x-auto ngoài hay chưa (nhiều bảng cũ trong
+   hệ thống chưa có) — áp dụng ĐỒNG LOẠT cho mọi bảng, không cần rà từng chỗ. Không set
+   white-space:nowrap để các ô có mô tả dài vẫn xuống dòng bình thường như cũ; chỉ bảng nào thực sự
+   rộng hơn khung chứa mới xuất hiện thanh cuộn ngang. */
+table { display: block; overflow-x: auto; max-width: 100%; }
+
+/* Khung xem file Word (.docx) qua mammoth.js (renderWordProtected(), xem script cuối trang) — mammoth
+   xuất HTML thuần (p/h1-h6/table/ul/img...) không kèm style riêng, cần giới hạn lại trong khung xem
+   (không để ảnh/bảng tràn khổ) và khoá bôi đen văn bản khớp chính sách "Protected View" chung (chống
+   sao chép thông thường, không phải bảo mật tuyệt đối — xem ghi chú ở script cuối trang). */
+.word-view-content { user-select: none; line-height: 1.6; }
+.word-view-content img { max-width: 100%; height: auto; }
+.word-view-content table { display: table; width: auto; max-width: 100%; overflow-x: visible; border-collapse: collapse; }
+.word-view-content table td, .word-view-content table th { border: 1px solid #d1d5db; padding: 4px 8px; }
+
+/* ================== Trang Đăng Nhập (#loginSection) ==================
+   Chia đôi màn hình: panel thương hiệu (trái, nền xanh navy) + form đăng nhập (phải, nền trắng) —
+   xếp chồng dọc dưới 880px. Toàn bộ class con dùng tiền tố "loginpage-" để không đụng class nào khác
+   trong file. #loginSection GIỮ NGUYÊN id cũ (login()/finishLogin()/logout() toggle .hidden). Tự thêm
+   riêng #loginSection.hidden { display: none !important } thay vì trông cậy vào việc Tailwind CDN có
+   tự gắn !important cho .hidden hay không (bản Play CDN v3 hiện dùng thì có, nhưng không nên phụ thuộc
+   hành vi ngầm định của bên thứ ba cho phần chuyển màn hình đăng nhập/đăng xuất). Cùng bảng màu/logo
+   với sidebar (xem svg #mobileTopBar phía trên) để nhất quán thương hiệu. */
+#loginSection {
+  display: grid;
+  grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr);
+  border-radius: 20px;
+  overflow: hidden;
+  border: 1px solid #e3e8f2;
+  box-shadow: 0 24px 60px -24px rgba(11, 31, 77, .28);
+  min-height: 560px;
+}
+#loginSection.hidden {
+  display: none !important;
+}
+@media (max-width: 880px) {
+  #loginSection { grid-template-columns: 1fr; min-height: 0; }
+}
+
+.loginpage-hero {
+  position: relative;
+  overflow: hidden;
+  background:
+    radial-gradient(60% 55% at 18% 8%, rgba(56,189,248,.35), transparent 60%),
+    radial-gradient(70% 60% at 90% 100%, rgba(29,78,216,.55), transparent 55%),
+    linear-gradient(155deg, #0b1f4d 0%, #060f26 100%);
+  color: #eef3ff;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: 40px 44px;
+}
+.loginpage-hero-nodes { position: absolute; inset: 0; opacity: .5; pointer-events: none; }
+.loginpage-hero-top, .loginpage-hero-mid, .loginpage-hero-modules, .loginpage-hero-foot { position: relative; z-index: 1; }
+.loginpage-hero-brand { display: flex; align-items: center; gap: 12px; }
+.loginpage-hero-brand svg { width: 32px; height: 32px; flex-shrink: 0; }
+.loginpage-hero-wordmark { font-size: 16px; font-weight: 700; }
+.loginpage-hero-wordmark small { display: block; font-size: 10px; font-weight: 600; letter-spacing: .14em; text-transform: uppercase; color: #a9b8e6; margin-top: 1px; }
+
+.loginpage-hero-mid { max-width: 460px; margin: auto 0; padding: 40px 0; }
+.loginpage-hero-eyebrow { display: inline-flex; align-items: center; gap: 8px; font-size: 11px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: #38bdf8; margin-bottom: 16px; }
+.loginpage-hero-eyebrow::before { content: ''; width: 18px; height: 2px; background: #38bdf8; border-radius: 2px; }
+.loginpage-hero-headline { font-size: clamp(24px, 2.4vw, 32px); line-height: 1.2; font-weight: 700; letter-spacing: -.01em; text-wrap: balance; margin: 0 0 14px; }
+.loginpage-hero-sub { font-size: 14.5px; line-height: 1.65; color: #a9b8e6; max-width: 42ch; margin: 0; }
+
+.loginpage-hero-modules { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1px; background: rgba(255,255,255,.09); border-radius: 12px; overflow: hidden; border: 1px solid rgba(255,255,255,.09); }
+.loginpage-hero-module { background: rgba(255,255,255,.03); padding: 13px 11px; }
+.loginpage-hero-module svg { width: 17px; height: 17px; color: #38bdf8; margin-bottom: 7px; }
+.loginpage-hero-module span { display: block; font-size: 11px; font-weight: 600; color: #eef3ff; line-height: 1.35; }
+.loginpage-hero-foot { font-size: 11.5px; color: #a9b8e6; }
+
+@media (max-width: 880px) { .loginpage-hero-modules { display: none; } }
+@media (max-width: 520px) { .loginpage-hero { padding: 32px 26px; } }
+
+.loginpage-panel { background: #f6f8fc; display: flex; align-items: center; justify-content: center; padding: 44px 32px; }
+.loginpage-card { width: 100%; max-width: 372px; }
+.loginpage-card-head { margin-bottom: 26px; }
+.loginpage-card-title { font-size: 21px; font-weight: 700; margin: 0 0 6px; letter-spacing: -.01em; color: #0f1729; }
+.loginpage-card-sub { font-size: 13.5px; color: #4b5876; margin: 0; line-height: 1.5; }
+
+.loginpage-field { margin-bottom: 16px; }
+.loginpage-field label { display: block; font-size: 12.5px; font-weight: 700; color: #0f1729; margin-bottom: 7px; }
+.loginpage-input-wrap { position: relative; }
+.loginpage-input-wrap svg { position: absolute; left: 13px; top: 50%; transform: translateY(-50%); width: 17px; height: 17px; color: #4b5876; pointer-events: none; }
+.loginpage-input-wrap input {
+  width: 100%; font-size: 14px; color: #0f1729;
+  background: #fff; border: 1.5px solid #e3e8f2; border-radius: 10px;
+  padding: 11px 13px 11px 40px;
+  transition: border-color .15s ease, box-shadow .15s ease;
+}
+.loginpage-input-wrap input::placeholder { color: #a4adc2; }
+.loginpage-input-wrap input:focus { outline: none; border-color: #38bdf8; box-shadow: 0 0 0 3.5px rgba(56,189,248,.18); }
+
+.loginpage-btn {
+  width: 100%; font-size: 14.5px; font-weight: 700; color: #fff;
+  background: linear-gradient(135deg, #2563eb, #1d4ed8);
+  border: 0; border-radius: 10px; padding: 12.5px; margin-top: 6px;
+  cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px;
+  box-shadow: 0 10px 22px -10px rgba(29,78,216,.65);
+  transition: transform .15s ease, box-shadow .15s ease, opacity .15s ease;
+}
+.loginpage-btn:hover { transform: translateY(-1px); box-shadow: 0 14px 26px -10px rgba(29,78,216,.75); }
+.loginpage-btn:disabled { opacity: .65; cursor: not-allowed; transform: none; }
+.loginpage-btn svg { width: 16px; height: 16px; }
+
+/* Dòng "đã nhớ tài khoản" thay ô gõ Tên đăng nhập trên thiết bị đã đăng nhập thành công lần gần nhất
+   (xem initRememberedLoginUser()/switchLoginUser() ở script cuối trang) — cùng tông màu xanh với
+   .loginpage-btn-secondary cho nhất quán, không phải input nên không dùng .loginpage-input-wrap.
+   .loginpage-remembered-user.hidden bắt buộc phải khai riêng (không trông cậy mỗi .hidden của
+   tailwind.css) — cùng lý do đã ghi ở #loginSection.hidden phía trên: 2 class cùng gắn 1 phần tử,
+   .hidden của tailwind.css KHÔNG có !important nên đứng sau .loginpage-remembered-user trong cùng
+   file là thua (display:flex đè display:none), phần tử "đã nhớ tài khoản" cứ hiện dù đang bị ẩn. */
+.loginpage-remembered-user {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  background: #f0f9ff; border: 1.5px solid #bfdbfe; border-radius: 10px;
+  padding: 11px 13px; margin-bottom: 16px;
+}
+.loginpage-remembered-user.hidden { display: none !important; }
+.loginpage-remembered-user-info { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.loginpage-remembered-user-info svg { width: 18px; height: 18px; color: #1d4ed8; flex-shrink: 0; }
+.loginpage-remembered-user-name { font-size: 14px; font-weight: 700; color: #0f1729; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.loginpage-remembered-user-switch { font-size: 12px; font-weight: 700; color: #1d4ed8; background: none; border: 0; cursor: pointer; white-space: nowrap; padding: 4px; flex-shrink: 0; }
+.loginpage-remembered-user-switch:hover { text-decoration: underline; }
+
+.loginpage-btn-secondary {
+  width: 100%; font-size: 14px; font-weight: 700; color: #1d4ed8;
+  background: #fff; border: 1.5px solid #bfdbfe; border-radius: 10px; padding: 11px;
+  margin-top: 10px; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px;
+  transition: border-color .15s ease, background .15s ease, opacity .15s ease;
+}
+.loginpage-btn-secondary:hover { border-color: #38bdf8; background: #f0f9ff; }
+.loginpage-btn-secondary:disabled { opacity: .6; cursor: not-allowed; }
+.loginpage-btn-secondary svg { width: 17px; height: 17px; }
+.loginpage-spinner {
+  display: inline-block; width: 15px; height: 15px; flex-shrink: 0;
+  border: 2px solid rgba(255,255,255,.45); border-top-color: #fff; border-radius: 50%;
+  animation: loginpage-spin .7s linear infinite;
+}
+@keyframes loginpage-spin { to { transform: rotate(360deg); } }
+.boot-splash-spinner {
+  display: inline-block; width: 34px; height: 34px;
+  border: 3px solid rgba(255,255,255,.2); border-top-color: #38bdf8; border-radius: 50%;
+  animation: loginpage-spin .8s linear infinite;
+}
+
+.loginpage-captcha-row { display: flex; align-items: center; gap: 8px; margin-bottom: 9px; }
+.loginpage-captcha-img { flex: 1; border: 1.5px solid #e3e8f2; border-radius: 10px; overflow: hidden; line-height: 0; background: #eef0f7; }
+.loginpage-captcha-img svg { display: block; width: 100%; height: 44px; }
+.loginpage-captcha-refresh {
+  flex-shrink: 0; width: 40px; height: 44px; font-size: 17px; color: #4b5876;
+  background: #fff; border: 1.5px solid #e3e8f2; border-radius: 10px; cursor: pointer;
+  transition: border-color .15s ease, transform .15s ease;
+}
+.loginpage-captcha-refresh:hover { border-color: #38bdf8; }
+.loginpage-captcha-refresh:active { transform: rotate(90deg); }
+
+.loginpage-card-foot { margin-top: 24px; padding-top: 16px; border-top: 1px solid #eef1f8; font-size: 12.5px; color: #4b5876; text-align: center; line-height: 1.6; }
+
+/* Ô tìm-kiếm-dùng-chung thay <input list>+<datalist> native (xem sddSetOptions() ở script chính) —
+   position:fixed, toạ độ do JS tự tính lại theo ô input đang gõ mỗi lần hiện. */
+.sdd-dropdown {
+  position: fixed; z-index: 9999; background: #fff; border: 1px solid #d1d5db; border-radius: 6px;
+  box-shadow: 0 4px 14px rgba(0,0,0,.12); font-size: 12px; max-height: 14rem; overflow-y: auto;
+}
+/* Mũi tên ▼ cố định bên phải MỌI ô input[data-sdd-list] — dấu hiệu trực quan "có danh sách để chọn"
+   mà <datalist> native trước đây tự có (trình duyệt tự vẽ), widget JS thuần ở trên không tự có nên
+   phải tự vẽ lại bằng CSS (không dùng ::after vì <input> là replaced element, trình duyệt không render
+   generated content cho nó) — !important vì Tailwind Play CDN tự tạo/chèn stylesheet lúc runtime, thứ
+   tự nạp so với <style> tĩnh này không đảm bảo, không thể chỉ dựa vào độ ưu tiên selector thông thường. */
+input[data-sdd-list] {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='%236b7280'%3E%3Cpath fill-rule='evenodd' d='M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z' clip-rule='evenodd'/%3E%3C/svg%3E") !important;
+  background-repeat: no-repeat !important;
+  background-position: right 0.5rem center !important;
+  background-size: 1rem !important;
+  padding-right: 1.75rem !important;
+}
+
+/* Lưới trang PDF khi Tổng Hợp (Báo Cáo Định Kỳ, entryType 'PDF') — kéo-thả sắp lại/xoá TỪNG TRANG
+   trước khi ghép, xem renderPrAggPdfGrid() ở script chính. */
+.pr-pdf-page-card {
+  position: relative; border: 1px solid #d1d5db; border-radius: 6px; background: #f9fafb;
+  padding: 6px; cursor: grab; user-select: none; transition: box-shadow .12s, border-color .12s;
+}
+.pr-pdf-page-card.dragging { opacity: .4; }
+.pr-pdf-page-card.dragover { border-color: #0284c7; box-shadow: 0 0 0 2px #e0f2fe; }
+.pr-pdf-page-card canvas, .pr-pdf-page-card img { width: 100%; display: block; border-radius: 4px; border: 1px solid #e5e7eb; background: #fff; min-height: 40px; }
+.pr-pdf-page-card .pr-pdf-idx {
+  position: absolute; top: 3px; left: 3px; background: #111827; color: #fff; font-size: 10px;
+  font-weight: 600; border-radius: 4px; padding: 1px 5px; opacity: .85;
+}
+.pr-pdf-page-card .pr-pdf-rm {
+  position: absolute; top: 3px; right: 3px; all: unset; cursor: pointer; background: #dc2626; color: #fff;
+  width: 17px; height: 17px; border-radius: 50%; display: flex; align-items: center; justify-content: center;
+  font-size: 10px; line-height: 1; opacity: .9;
+}
+.pr-pdf-page-card .pr-pdf-src {
+  font-size: 9px; color: #6b7280; margin-top: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}

@@ -3191,15 +3191,16 @@ async function downloadOnboardingCertificatePdf(progressId) {
     const stage = document.createElement('div');
     stage.style.cssText = `position:fixed;left:-10000px;top:0;width:${ONBOARDING_CERT_PAGE_W}px;height:${ONBOARDING_CERT_PAGE_H}px;background:#fff;color:#111;box-sizing:border-box;font-family:Arial,'Segoe UI',sans-serif;padding:70px 60px;text-align:center;border:10px double #92400e;`;
     stage.innerHTML = `
-      <div style="font-size:14px;letter-spacing:3px;color:#6b7280;">HCRC WORKSPACE</div>
-      <div style="font-size:26px;font-weight:bold;color:#92400e;margin-top:50px;">CHỨNG NHẬN HOÀN THÀNH ĐÀO TẠO TÂN BINH</div>
-      <div style="font-size:14px;color:#374151;margin-top:50px;">Chứng nhận nhân viên</div>
-      <div style="font-size:24px;font-weight:bold;color:#111827;margin-top:12px;">${escapeHtml(p.employeeName)}</div>
-      <div style="font-size:13px;color:#6b7280;margin-top:4px;">(${escapeHtml(p.employeeUsername)})</div>
-      <div style="font-size:14px;color:#374151;margin-top:30px;">đã hoàn thành lộ trình đào tạo tân binh</div>
-      <div style="font-size:20px;font-weight:bold;color:#111827;margin-top:10px;">${escapeHtml(p.pathName)}</div>
-      <div style="font-size:13px;color:#6b7280;margin-top:60px;">Ngày cấp: ${issuedDate}</div>
+      <div data-style="font-size:14px;letter-spacing:3px;color:#6b7280;">HCRC WORKSPACE</div>
+      <div data-style="font-size:26px;font-weight:bold;color:#92400e;margin-top:50px;">CHỨNG NHẬN HOÀN THÀNH ĐÀO TẠO TÂN BINH</div>
+      <div data-style="font-size:14px;color:#374151;margin-top:50px;">Chứng nhận nhân viên</div>
+      <div data-style="font-size:24px;font-weight:bold;color:#111827;margin-top:12px;">${escapeHtml(p.employeeName)}</div>
+      <div data-style="font-size:13px;color:#6b7280;margin-top:4px;">(${escapeHtml(p.employeeUsername)})</div>
+      <div data-style="font-size:14px;color:#374151;margin-top:30px;">đã hoàn thành lộ trình đào tạo tân binh</div>
+      <div data-style="font-size:20px;font-weight:bold;color:#111827;margin-top:10px;">${escapeHtml(p.pathName)}</div>
+      <div data-style="font-size:13px;color:#6b7280;margin-top:60px;">Ngày cấp: ${issuedDate}</div>
     `;
+    applyDataStyles(stage);
     document.body.appendChild(stage);
     const canvas = await window.html2canvas(stage, { backgroundColor: '#ffffff', scale: 2, useCORS: true, logging: false });
     stage.remove();

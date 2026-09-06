@@ -504,11 +504,10 @@ async function handleOperationOrderPdfUpload(event) {
   statusEl.classList.remove('hidden');
 
   try {
-    // pdfjsLib được nạp sẵn ở <script type="module"> cuối index.html (renderPdfProtected() dùng chung) —
-    // chờ tối đa ~5s phòng trường hợp hiếm module đó chưa kịp chạy xong (thực tế luôn đã sẵn sàng vì
-    // người dùng cần tải trang xong mới bấm chọn file được).
-    for (let i = 0; i < 50 && !window.pdfjsLib; i++) await new Promise(r => setTimeout(r, 100));
-    if (!window.pdfjsLib) throw new Error('Thư viện đọc PDF chưa sẵn sàng');
+    // pdfjsLib giờ nạp LƯỜI qua ensurePdfJsReady() (core.js, Task hiệu năng) — trước đây nạp sẵn tĩnh lúc
+    // mở trang nên chỉ cần chờ; giờ gọi thẳng, tự tải lần đầu cần dùng (có cache, gọi nhiều lần không
+    // tải lại) — xem chú thích ở core.js.
+    await ensurePdfJsReady();
 
     const buf = await file.arrayBuffer();
     const pdfDoc = await window.pdfjsLib.getDocument({ data: new Uint8Array(buf) }).promise;
@@ -2113,7 +2112,7 @@ function buildOpOrderStatBarHTML(label, value, max, colorClass) {
   return `
     <div>
       <div class="flex justify-between mb-0.5 text-xs"><span class="font-semibold text-gray-700">${escapeHtml(label)}</span><span class="font-bold text-gray-800">${(value || 0).toLocaleString('vi-VN')}</span></div>
-      <div class="w-full bg-gray-100 rounded h-2.5 overflow-hidden"><div class="${colorClass} h-2.5 rounded" style="width:${pct}%"></div></div>
+      <div class="w-full bg-gray-100 rounded h-2.5 overflow-hidden"><div class="${colorClass} h-2.5 rounded" data-style="width:${pct}%"></div></div>
     </div>
   `;
 }

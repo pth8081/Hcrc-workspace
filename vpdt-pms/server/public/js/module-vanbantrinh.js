@@ -1167,7 +1167,7 @@ function downloadSubmissionApprovalSlip(subId) {
   if (!sub) return;
   if (sub.status !== 'APPROVED') return alert('Chỉ tải được Phiếu Phê Duyệt sau khi văn bản trình đã được phê duyệt hoàn tất.');
 
-  const fullHtml = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Phiếu Phê Duyệt Văn Bản Trình - ${escapeHtml(sub.code)}</title></head><body>${buildSubmissionApprovalSlipHTML(sub)}</body></html>`;
+  const fullHtml = standaloneHtmlRestoreStyles(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>Phiếu Phê Duyệt Văn Bản Trình - ${escapeHtml(sub.code)}</title><style>${APPROVAL_SLIP_CSS}</style></head><body>${buildSubmissionApprovalSlipHTML(sub)}</body></html>`);
   const blob = new Blob([fullHtml], { type: 'text/html;charset=utf-8;' });
   const url = URL.createObjectURL(blob);
   const link = document.createElement('a');

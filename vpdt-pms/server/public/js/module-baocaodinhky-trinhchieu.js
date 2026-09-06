@@ -3,13 +3,14 @@
 // publishReportPeriodPdf() ở lib/recordActions.js. ============
 
 // Render lại toàn bộ N trang của 1 entry PDF (pdf.js, ngay trong trình duyệt) — cache theo entryId để
-// tick/bỏ tick qua lại nhiều lần không phải tải/vẽ lại. pdfjsLib đã sẵn toàn cục (nạp sẵn lúc mở trang,
-// xem window.renderPdfProtected/type="module" script cuối trang), không cần loadVendorScript() riêng.
+// tick/bỏ tick qua lại nhiều lần không phải tải/vẽ lại. pdfjsLib giờ nạp LƯỜI qua ensurePdfJsReady()
+// (core.js, Task hiệu năng) — gọi thẳng, tự tải lần đầu cần dùng, có cache theo Promise riêng.
 function ensureEntryPagesCached(entryId) {
   if (prAggPdfEntryPagesCache.has(entryId)) return prAggPdfEntryPagesCache.get(entryId);
   const entry = DB.reportEntries.find(e => e.id === entryId);
   const promise = (async () => {
     if (!entry || !entry.fileUrl) return [];
+    await ensurePdfJsReady();
     const pdf = await window.pdfjsLib.getDocument(entry.fileUrl).promise;
     const urls = [];
     for (let p = 1; p <= pdf.numPages; p++) {
@@ -325,7 +326,8 @@ async function exportPrTaskCompilationPdf() {
     ]);
     const contentWidth = PR_TASK_PDF_PAGE_W - PR_TASK_PDF_MARGIN * 2;
     stage.style.cssText = `position:fixed;left:-10000px;top:0;width:${contentWidth}px;background:#fff;color:#111;box-sizing:border-box;font-family:Arial,'Segoe UI',sans-serif;font-size:12px;`;
-    stage.innerHTML = `<h2 style="font-size:16px;font-weight:bold;margin:0 0 12px;">TỔNG HỢP THEO CÔNG VIỆC — ${escapeHtml(period.name)}</h2>` + source.innerHTML;
+    stage.innerHTML = `<h2 data-style="font-size:16px;font-weight:bold;margin:0 0 12px;">TỔNG HỢP THEO CÔNG VIỆC — ${escapeHtml(period.name)}</h2>` + source.innerHTML;
+    applyDataStyles(stage);
     document.body.appendChild(stage);
 
     const bigCanvas = await window.html2canvas(stage, { backgroundColor: '#ffffff', scale: PR_TASK_PDF_CAPTURE_SCALE, useCORS: true, logging: false });
@@ -475,7 +477,7 @@ function renderPrAggCompilation() {
       // trình chiếu). Ảnh (embedded/bảng/đồ thị — bảng và đồ thị đã được vẽ lại thành ảnh lúc đọc file,
       // xem parsePptxToSlideContents()) CHỈ ĐỌC, không sửa lại được nội dung bên trong ảnh.
       const imagesHTML = (s.images || []).length
-        ? `<div class="flex flex-wrap gap-2 mt-1.5">${(s.images || []).map(im => `<img src="${im.dataUrl}" class="h-20 rounded border" oncontextmenu="return false;">`).join('')}</div>`
+        ? `<div class="flex flex-wrap gap-2 mt-1.5">${(s.images || []).map(im => `<img src="${im.dataUrl}" class="h-20 rounded border" data-no-ctxmenu>`).join('')}</div>`
         : '';
       bodyHTML = `
         <textarea data-op-input="updatePrAggPptxBodyLines" data-arg0="${idx}" data-arg-value="1" placeholder="Nội dung (mỗi dòng là 1 gạch đầu dòng)" class="w-full border p-1.5 rounded text-xs h-24" ${isPublished ? 'disabled' : ''}>${escapeHtml((s.bodyLines || []).join('\n'))}</textarea>
@@ -676,8 +678,9 @@ function openPrSlideshow(periodId) {
   renderPrSlideshowSlide();
 }
 
-// Trình chiếu PDF THẬT toàn màn hình — render TRỰC TIẾP từng trang bằng pdf.js (window.pdfjsLib đã sẵn
-// toàn cục) vào <canvas>, KHÔNG rasterize/làm phẳng qua html2canvas như downloadPrPdf() — giữ nguyên vẹn
+// Trình chiếu PDF THẬT toàn màn hình — render TRỰC TIẾP từng trang bằng pdf.js (window.pdfjsLib nạp
+// LƯỜI qua ensurePdfJsReady(), xem core.js) vào <canvas>, KHÔNG rasterize/làm phẳng qua html2canvas như
+// downloadPrPdf() — giữ nguyên vẹn
 // định dạng/font/vector gốc của file đã ghép, đúng yêu cầu "không vỡ cấu trúc file". Dùng chung modal
 // #prSlideshowModal (đã là khung tối toàn màn hình sẵn) + nút điều hướng/phím tắt có sẵn.
 let prPdfFsDoc = null;
@@ -697,6 +700,7 @@ async function openPrPdfFullscreen(periodId) {
   const bodyEl = document.getElementById('prSlideshowBody');
   bodyEl.innerHTML = `<div class="text-white text-center text-sm mt-20">⏳ Đang tải file PDF...</div>`;
   try {
+    await ensurePdfJsReady();
     prPdfFsDoc = await window.pdfjsLib.getDocument(period.pdfCompilation.publishedFileUrl).promise;
     renderPrPdfFsPage();
   } catch (err) {
@@ -743,12 +747,12 @@ function toRomanNumeral(n) {
 function buildPrTaskTableHTML(items, progressField, progressLabel, colors) {
   const list = Array.isArray(items) ? items : [];
   const c = colors || getPrSlideTemplateColors(prSlideshowTemplate);
-  if (!list.length) return `<p style="font-style:italic;color:#9ca3af;">Không có nội dung.</p>`;
+  if (!list.length) return `<p data-style="font-style:italic;color:#9ca3af;">Không có nội dung.</p>`;
   const cellStyle = `border:1px solid ${c.tableBorder};padding:8px;font-size:14px;vertical-align:top;color:${c.tableText};`;
-  const cellAttr = `style="${cellStyle}"`;
-  const cellAttrCenter = `style="${cellStyle}text-align:center;"`;
-  const headAttr = `style="border:1px solid ${c.tableBorder};padding:8px;font-size:14px;background:${c.tableHeadBg};text-align:left;color:${c.tableText};"`;
-  const groupAttr = `style="border:1px solid ${c.tableBorder};padding:8px;font-size:14px;font-weight:700;background:${c.tableHeadBg};color:${c.tableText};"`;
+  const cellAttr = `data-style="${cellStyle}"`;
+  const cellAttrCenter = `data-style="${cellStyle}text-align:center;"`;
+  const headAttr = `data-style="border:1px solid ${c.tableBorder};padding:8px;font-size:14px;background:${c.tableHeadBg};text-align:left;color:${c.tableText};"`;
+  const groupAttr = `data-style="border:1px solid ${c.tableBorder};padding:8px;font-size:14px;font-weight:700;background:${c.tableHeadBg};color:${c.tableText};"`;
   let romanCounter = 0, lastGroup = null, subCounter = 0, prevHadGroup = false;
   const rows = list.map((it) => {
     let groupRowHTML = '';
@@ -773,7 +777,7 @@ function buildPrTaskTableHTML(items, progressField, progressLabel, colors) {
     return groupRowHTML + rowHTML;
   }).join('');
   return `
-    <table style="width:100%;border-collapse:collapse;">
+    <table data-style="width:100%;border-collapse:collapse;">
       <thead><tr>
         <th ${headAttr} width="40">#</th>
         <th ${headAttr}>Nội dung công việc</th>
@@ -804,9 +808,9 @@ function buildPrFileBlockHTML(s, colors) {
   const c = colors || getPrSlideTemplateColors(prSlideshowTemplate);
   const kind = getFileKind(s.fileType, s.fileName);
   if (kind === 'image') {
-    return `<img src="${s.fileUrl}" class="max-h-96 mx-auto mt-3 block" style="border-radius:6px;border:1px solid ${c.tableBorder};" oncontextmenu="return false;">`;
+    return `<img src="${s.fileUrl}" class="max-h-96 mx-auto mt-3 block" data-style="border-radius:6px;border:1px solid ${c.tableBorder};" data-no-ctxmenu>`;
   }
-  return `<button type="button" data-op="viewPrCurrentSlideFile" class="mt-3 text-sm px-3 py-1.5 rounded" style="background:${c.navBtnBg};color:${c.navBtnText};">📎 Xem tệp: ${escapeHtml(s.fileName || 'tệp đính kèm')}</button>`;
+  return `<button type="button" data-op="viewPrCurrentSlideFile" class="mt-3 text-sm px-3 py-1.5 rounded" data-style="background:${c.navBtnBg};color:${c.navBtnText};">📎 Xem tệp: ${escapeHtml(s.fileName || 'tệp đính kèm')}</button>`;
 }
 
 // Nội dung chính của 1 slide theo đúng kind (đặt lúc Tổng Hợp — xem mergeReportPeriod() ở
@@ -818,9 +822,9 @@ function buildPrSlideBodyHTML(s, colors) {
   if (s.kind === 'TASKS') return buildPrTaskTableHTML(s.items, 'progress', 'Tiến độ', c);
   if (s.kind === 'PLAN') return buildPrTaskTableHTML(s.items, 'plan', 'Kế hoạch tiếp theo', c);
   if (s.kind === 'NUMBERS' || s.kind === 'OTHER' || s.kind === 'FILE' || s.kind === 'TASK_STATS') {
-    const textHTML = s.text ? `<div style="white-space:pre-wrap;font-size:16px;line-height:1.7;color:${c.bodyTextColor};">${escapeHtml(s.text)}</div>` : '';
+    const textHTML = s.text ? `<div data-style="white-space:pre-wrap;font-size:16px;line-height:1.7;color:${c.bodyTextColor};">${escapeHtml(s.text)}</div>` : '';
     const fileHTML = buildPrFileBlockHTML(s, c);
-    return (textHTML + fileHTML) || `<p style="font-style:italic;color:#9ca3af;">Không có nội dung.</p>`;
+    return (textHTML + fileHTML) || `<p data-style="font-style:italic;color:#9ca3af;">Không có nội dung.</p>`;
   }
   if (s.kind === 'PPTX_SLIDE') return buildPrPptxSlideBodyHTML(s, c);
   return ''; // COVER / DEPT — chỉ có tiêu đề
@@ -833,16 +837,16 @@ function buildPrSlideBodyHTML(s, colors) {
 // theo phương án đã chọn).
 function buildPrPptxSlideBodyHTML(s, c) {
   const linesHTML = (s.bodyLines || []).length
-    ? `<ul style="margin:0;padding-left:1.25em;font-size:16px;line-height:1.8;color:${c.bodyTextColor};">
+    ? `<ul data-style="margin:0;padding-left:1.25em;font-size:16px;line-height:1.8;color:${c.bodyTextColor};">
         ${(s.bodyLines || []).map(l => `<li>${escapeHtml(l)}</li>`).join('')}
       </ul>`
     : '';
   const imagesHTML = (s.images || []).length
     ? `<div class="flex flex-wrap gap-3 justify-center mt-3">
-        ${(s.images || []).map(im => `<img src="${im.dataUrl}" class="max-h-72 max-w-full" style="border-radius:6px;border:1px solid ${c.tableBorder};" oncontextmenu="return false;">`).join('')}
+        ${(s.images || []).map(im => `<img src="${im.dataUrl}" class="max-h-72 max-w-full" data-style="border-radius:6px;border:1px solid ${c.tableBorder};" data-no-ctxmenu>`).join('')}
       </div>`
     : '';
-  return (linesHTML + imagesHTML) || `<p style="font-style:italic;color:#9ca3af;">Không có nội dung.</p>`;
+  return (linesHTML + imagesHTML) || `<p data-style="font-style:italic;color:#9ca3af;">Không có nội dung.</p>`;
 }
 
 // Dựng nội dung 1 slide (tiêu đề + nguồn + thân) theo màu "c" của mẫu đang chọn — dùng CHUNG cho khung
@@ -863,16 +867,16 @@ function buildPrSlideScreenHTML(s, c) {
   // đề rỗng chiếm chỗ.
   const titleHTML = (s.kind === 'PPTX_SLIDE' && !s.title) ? '' : isCover
     ? `<div class="text-center">
-        <h2 class="text-3xl md:text-6xl font-extrabold" style="color:${c.coverTitleColor};">${escapeHtml(s.title)}</h2>
-        ${c.coverAccentColor !== 'transparent' ? `<div class="mx-auto mt-4" style="width:120px;height:4px;background:${c.coverAccentColor};border-radius:2px;"></div>` : ''}
+        <h2 class="text-3xl md:text-6xl font-extrabold" data-style="color:${c.coverTitleColor};">${escapeHtml(s.title)}</h2>
+        ${c.coverAccentColor !== 'transparent' ? `<div class="mx-auto mt-4" data-style="width:120px;height:4px;background:${c.coverAccentColor};border-radius:2px;"></div>` : ''}
       </div>`
     : isDept
-    ? `<h2 class="text-3xl md:text-5xl font-extrabold text-center" style="color:${c.sectionTitleColor};">${escapeHtml(s.title)}</h2>`
-    : `<h2 class="text-2xl md:text-4xl font-bold" style="color:${c.sectionTitleColor};">${escapeHtml(s.title)}</h2>`;
+    ? `<h2 class="text-3xl md:text-5xl font-extrabold text-center" data-style="color:${c.sectionTitleColor};">${escapeHtml(s.title)}</h2>`
+    : `<h2 class="text-2xl md:text-4xl font-bold" data-style="color:${c.sectionTitleColor};">${escapeHtml(s.title)}</h2>`;
   return `
     <div class="max-w-4xl mx-auto space-y-6${(isCover || isDept) ? ' flex flex-col items-center justify-center min-h-full text-center' : ''}">
       ${titleHTML}
-      ${showSource ? `<div class="text-sm" style="color:${c.sourceLabelColor};">${escapeHtml(s.sourceCreatorName)}${s.sourceDept ? ` — ${escapeHtml(s.sourceDept)}` : ''}</div>` : ''}
+      ${showSource ? `<div class="text-sm" data-style="color:${c.sourceLabelColor};">${escapeHtml(s.sourceCreatorName)}${s.sourceDept ? ` — ${escapeHtml(s.sourceDept)}` : ''}</div>` : ''}
       ${buildPrSlideBodyHTML(s, c)}
     </div>
   `;
@@ -920,6 +924,7 @@ function renderPrSlideshowSlide() {
   const bodyEl = document.getElementById('prSlideshowBody');
   bodyEl.style.color = c.bodyTextColor;
   bodyEl.innerHTML = buildPrSlideScreenHTML(s, c);
+  applyDataStyles(bodyEl);
 }
 
 function prSlideshowNav(dir) {
@@ -958,21 +963,16 @@ document.addEventListener('keydown', (ev) => {
 // script kiểu lười (chỉ khi bấm "Tải PDF" lần đầu) vì file khá nặng và không phải ai cũng dùng tính năng
 // này. Thay cho cách cũ dùng window.print() qua iframe ẩn (chỉ mở hộp thoại in của trình duyệt, người
 // dùng phải tự chọn "Save as PDF" — không phải thao tác tải file thật). ============
-let prPdfLibsPromise = null;
+// loadPrPdfLibs() — DÙNG CHUNG loadVendorScript() (core.js, đã tự cache theo src) thay vì tự dựng
+// loadScript()/Promise cache RIÊNG như trước đây (2 lượt tải ĐỘC LẬP cho CÙNG 2 thư viện html2canvas/
+// jspdf, trùng với exportPrTaskCompilationPdf() bên trên trong CHÍNH file này — bấm cả "Xuất Excel/PDF
+// Tổng Hợp Theo Công Việc" (exportPrTaskCompilationPdf) lẫn "Tải PDF" (downloadPrPdf, dùng hàm này) cùng
+// 1 phiên trước đây sẽ tải riêng 2 lần html2canvas+jspdf thay vì dùng chung 1 lần đã cache).
 function loadPrPdfLibs() {
-  if (prPdfLibsPromise) return prPdfLibsPromise;
-  const loadScript = (src) => new Promise((resolve, reject) => {
-    const el = document.createElement('script');
-    el.src = src;
-    el.onload = () => resolve();
-    el.onerror = () => reject(new Error(`Không tải được thư viện xuất PDF (${src})`));
-    document.head.appendChild(el);
-  });
-  prPdfLibsPromise = Promise.all([
-    loadScript('/vendor/html2canvas/html2canvas.min.js'),
-    loadScript('/vendor/jspdf/jspdf.umd.min.js')
-  ]).catch(err => { prPdfLibsPromise = null; throw err; });
-  return prPdfLibsPromise;
+  return Promise.all([
+    loadVendorScript('/vendor/html2canvas/html2canvas.min.js'),
+    loadVendorScript('/vendor/jspdf/jspdf.umd.min.js')
+  ]);
 }
 
 const PR_PDF_SLIDE_WIDTH = 1280;
@@ -1004,6 +1004,7 @@ async function downloadPrPdf(periodId, btnEl) {
 
     for (let i = 0; i < slides.length; i++) {
       stage.innerHTML = buildPrSlideScreenHTML(slides[i], c);
+      applyDataStyles(stage);
       // Đợi mọi ảnh đính kèm trong slide tải xong trước khi chụp — html2canvas chụp ngay trạng thái DOM
       // hiện tại, ảnh <img> (tệp NUMBERS/OTHER/FILE, xem buildPrFileBlockHTML()) chưa load xong sẽ ra
       // khoảng trống trên PDF.

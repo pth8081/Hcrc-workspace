@@ -26,393 +26,7 @@
      class Tailwind MỚI (chưa từng dùng ở đâu trong file) phải chạy lại "npm run build:css" trong server/
      rồi commit file public/tailwind.css mới, nếu không class mới sẽ không có CSS và hiển thị sai. -->
 <link rel="stylesheet" href="/tailwind.css">
-<style>
-.dash-card.active-card {
-  ring-width: 2px;
-  --tw-ring-color: #2563eb;
-  background-color: #f0f9ff;
-}
-.protected-view-container {
-  user-select: none;
-  -webkit-user-select: none;
-  -moz-user-select: none;
-  -ms-user-select: none;
-}
-/* Cây phân quyền (mục "Sửa Người Dùng"/"Sửa Nhóm Phân Quyền") — mỗi khối quyền gấp gọn bằng
-   <details>/<summary> gốc trình duyệt (không cần JS quản lý trạng thái mở/đóng riêng). */
-.perm-tree-node > summary { list-style: none; cursor: pointer; }
-.perm-tree-node > summary::-webkit-details-marker { display: none; }
-.perm-tree-node > summary .perm-tree-chevron { transition: transform 0.15s ease; display: inline-block; }
-.perm-tree-node[open] > summary .perm-tree-chevron { transform: rotate(90deg); }
-/* Giai đoạn B — đánh dấu khối quyền vừa bị admin sửa (tick/bỏ tick/đổi select) nhưng CHƯA bấm "Lưu
-   Người Dùng & Phân Quyền" — chỉ là dấu hiệu thị giác (viền/nền cam), không giữ lại giá trị cũ để so
-   sánh nên không chặn được trường hợp tick rồi tick lại y hệt ban đầu, nhưng đủ để admin nhận ra ngay
-   khối nào mình vừa đụng vào giữa 1 cây quyền dài gần 14 khối (xem markPermTreeDirty()/clearPermTreeDirtyMarks()). */
-.perm-tree-node.perm-tree-dirty { border-left: 3px solid #f59e0b !important; background-color: #fffbeb !important; }
-/* Box "🔍 Tìm Kiếm & Lọc" thu gọn mặc định — dùng lại đúng khuôn <details>/<summary> ở trên, tách class
-   riêng để không lẫn với cây phân quyền. Class dùng chung cho MỌI module (không đặt tên riêng theo
-   module) — module nào sau này có phần lọc dài chỉ cần bọc bằng đúng class này là tự thu gọn/mở ra. */
-.filter-box-details > summary { list-style: none; cursor: pointer; }
-.filter-box-details > summary::-webkit-details-marker { display: none; }
-.filter-box-details > summary .filter-box-chevron { transition: transform 0.15s ease; display: inline-block; }
-.filter-box-details[open] > summary .filter-box-chevron { transform: rotate(90deg); }
-/* Mục "0. Quyền Truy Cập Module" — mỗi tab con của module/module con (VD "Kỳ Đăng Ký" trong Văn Phòng
-   Phẩm) hiện 1 dòng chú thích trỏ tới đúng khối 1-18 đang giữ checkbox quyền thật quyết định tab đó
-   (KHÔNG nhân bản checkbox — chỉ đọc + nút "Đi tới", xem jumpToPermField()). Bấm "Đi tới" mở khối đích
-   + cuộn tới + chớp sáng 1.8s để admin nhận ra ngay, không cần dò cả cây dài. */
-.perm-tree-jump-highlight { animation: permTreeJumpFlash 1.8s ease-out; }
-@keyframes permTreeJumpFlash {
-  0%, 20% { background-color: #fef9c3; border-color: #facc15 !important; }
-  100% { background-color: transparent; }
-}
-
-/* Sidebar điều hành (thay thanh nav ngang cũ) — #userHeader GIỮ NGUYÊN id cũ (finishLogin()/logout()
-   chỉ toggle add/remove('hidden'), không sửa JS), giờ gắn vào chính khối <aside>. Tailwind ".hidden"
-   có !important nên luôn thắng khi còn class đó; khi JS gỡ "hidden", quy tắc ID bên dưới (đặc hiệu cao
-   hơn ".hidden") mới có hiệu lực, tự chuyển sang flex-column mà không cần thêm class Tailwind nào khác. */
-#userHeader:not(.hidden) { display: flex; flex-direction: column; }
-/* #userHeader nằm trong "<div class="flex min-h-screen">" cùng hàng với nội dung chính — không có ràng
-   buộc chiều cao nào nên nó chỉ TỰ CAO đúng bằng nội dung bên trong (Tailwind "overflow-y-auto" đã gắn
-   sẵn KHÔNG BAO GIỜ có tác dụng vì scrollHeight luôn bằng clientHeight). Kết quả: mở nhiều nhóm dropdown
-   cùng lúc (mỗi nút toggleXDropdown() độc lập, không tự đóng nút khác) — ví dụ mở "Tổng Hợp" (chứa Ngân
-   Sách) — đẩy các mục "Hỗ Trợ IT"/"Hệ Thống"/footer đăng xuất ra khỏi màn hình 1366x768 phổ biến, buộc
-   phải CUỘN CẢ TRANG mới thấy hết. "position: sticky" + "height: 100vh" ghim sidebar đúng bằng chiều cao
-   màn hình, để overflow-y-auto có sẵn phát huy tác dụng THẬT — sidebar tự cuộn RIÊNG bên trong nó, không
-   đụng tới cách nội dung chính đang cuộn (giữ nguyên hành vi mọi module khác). Chỉ áp dụng từ 768px trở
-   lên — dưới đó sidebar chuyển hẳn sang "off-canvas" (position: fixed, xem @media bên dưới), không xung
-   đột với position: sticky ở đây. */
-@media (min-width: 768px) {
-  #userHeader:not(.hidden) { position: sticky; top: 0; height: 100vh; }
-}
-.sidebar-item, .sidebar-subitem {
-  display: flex; align-items: center; gap: 0.5rem; width: 100%;
-  padding: 0.55rem 0.75rem; border-radius: 0.375rem; font-weight: 600; font-size: 0.8rem;
-  color: #cbd5e1; text-align: left; background: transparent; border: 0; cursor: pointer;
-}
-.sidebar-item:hover, .sidebar-subitem:hover { background: #1e293b; color: #fff; }
-.sidebar-subitem { font-weight: 500; padding: 0.4rem 0.75rem; font-size: 0.75rem; }
-/* Tab đang mở ở sidebar trái — xem setActiveSidebarTab() (gọi từ trong switchTab()). Nền xanh đậm hơn
-   :hover (đổi tông, không chỉ đổi độ đậm, để không lẫn với hover) + viền trái màu sky-400 khớp màu logo
-   HCRC ở đầu sidebar (xem <svg> phía trên) — đọc rõ là "đang chọn" chứ không phải chỉ đang rê chuột qua. */
-.sidebar-item-active, .sidebar-subitem-active {
-  background: #1e3a5f; color: #fff;
-  border-left: 3px solid #38bdf8;
-  padding-left: calc(0.75rem - 3px);
-}
-.sidebar-icon { font-size: 1rem; width: 1.25rem; text-align: center; flex-shrink: 0; }
-/* Thu gọn (toggleSidebarCollapse(), lưu localStorage) — chỉ còn icon, ẩn hết nhãn chữ + khối con đang mở. */
-#userHeader.sidebar-collapsed { width: 4.5rem; }
-#userHeader.sidebar-collapsed .sidebar-label { display: none; }
-#userHeader.sidebar-collapsed .sidebar-item, #userHeader.sidebar-collapsed .sidebar-subitem { justify-content: center; }
-#userHeader.sidebar-collapsed #truyenThongDropdownPanel,
-#userHeader.sidebar-collapsed #hopDongDropdownPanel,
-#userHeader.sidebar-collapsed #dieuHanhDropdownPanel,
-#userHeader.sidebar-collapsed #hanhChinhDropdownPanel,
-#userHeader.sidebar-collapsed #tongHopDropdownPanel,
-#userHeader.sidebar-collapsed #itSupportDropdownPanel,
-#userHeader.sidebar-collapsed #heThongDropdownPanel { display: none !important; }
-
-/* Responsive điện thoại (< 768px, khớp breakpoint "md" của Tailwind) — sidebar 16rem cố định trước đây
-   chiếm gần hết bề ngang màn hình điện thoại, gần như không dùng được. Chuyển sang dạng "off-canvas":
-   mặc định trượt ra ngoài bên trái (ẩn), bấm ☰ ở thanh trên cùng mới trượt vào đè lên nội dung (có lớp
-   nền mờ phía sau). Dùng transform CSS thuần (không phải class Tailwind translate-x) để JS chỉ cần
-   toggle đúng 1 class .mobile-sidebar-open, không bị đụng độ đặc hiệu với các class Tailwind khác —
-   cùng kiểu với .sidebar-collapsed đã có sẵn ở trên. Từ 768px trở lên, đoạn @media này không áp dụng gì
-   cả nên hành vi sidebar tại chỗ (desktop) giữ nguyên 100% như cũ. */
-@media (max-width: 767px) {
-  #userHeader:not(.hidden) {
-    position: fixed; top: 0; bottom: 0; left: 0; z-index: 40;
-    transform: translateX(-100%);
-    transition: transform 0.2s ease;
-  }
-  #userHeader.mobile-sidebar-open { transform: translateX(0); }
-}
-
-/* Đợt B — polish màu sắc/bo góc/đổ bóng cho chuyên nghiệp hơn, ĐỊNH NGHĨA LẠI diện mạo của các
-   class Tailwind ĐÃ DÙNG SẴN khắp file (không đổi 1 className nào trong HTML/JS) nên rủi ro rất thấp.
-   Dùng !important vì Tailwind CDN chạy JIT (MutationObserver quét DOM liên tục, có thể chèn/ghi đè lại
-   <style> của nó bất cứ lúc nào sau khi trang đã tải — không đảm bảo khối <style> này luôn đứng sau). */
-body { color: #1e293b !important; }
-h1, h2, h3, h4 { letter-spacing: -0.01em !important; }
-.rounded { border-radius: 0.5rem !important; }
-.rounded-lg { border-radius: 0.75rem !important; }
-.border { border-color: #e2e8f0 !important; }
-.shadow-sm { box-shadow: 0 1px 2px 0 rgba(15, 23, 42, .05) !important; }
-.shadow { box-shadow: 0 1px 3px 0 rgba(15, 23, 42, .08), 0 1px 2px -1px rgba(15, 23, 42, .06) !important; }
-.shadow-md { box-shadow: 0 4px 10px -2px rgba(15, 23, 42, .10), 0 2px 4px -2px rgba(15, 23, 42, .05) !important; }
-.shadow-lg { box-shadow: 0 10px 20px -4px rgba(15, 23, 42, .12), 0 4px 8px -4px rgba(15, 23, 42, .06) !important; }
-.bg-gray-50 { background-color: #f8fafc !important; }
-.bg-gray-100 { background-color: #f1f5f9 !important; }
-.bg-gray-200 { background-color: #e2e8f0 !important; }
-.hover\:bg-blue-700:hover { background-color: #1d4ed8 !important; }
-
-/* ================== Đợt UI Polish (A1-A3) ==================
-   Cùng nguyên tắc Đợt B ở trên: chỉ ĐỊNH NGHĨA LẠI diện mạo của class/thẻ HTML ĐÃ DÙNG SẴN khắp file,
-   không đổi 1 className hay cấu trúc HTML nào — rủi ro rất thấp, áp dụng toàn cục ngay lập tức. */
-
-/* A1 — Font tiếng Việt riêng (Be Vietnam Pro, xem <link> Google Fonts ở đầu <head>) thay cho font hệ
-   thống mặc định trước đây, tạo phân cấp tiêu đề/nhãn rõ hơn qua letter-spacing đã có ở Đợt B. */
-body, input, select, textarea, button {
-  font-family: 'Be Vietnam Pro', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif !important;
-}
-h1, h2, h3 { font-weight: 800 !important; }
-
-/* A2 — Bảng dữ liệu: bỏ viền kẻ ô kiểu lưới nặng (Tailwind .border trên từng <td>/<th>), chuyển sang
-   viền ngang mảnh + hover dòng, ÁP DỤNG TOÀN CỤC cho mọi bảng hiện có. Chọn "td.border, th.border" (class
-   + thẻ) để đủ độ đặc hiệu THẮNG bare ".border" ở trên mà KHÔNG đụng tới .border dùng cho card/box khác
-   (xem specificity: "td.border" > ".border" do có thêm 1 tag selector, không liên quan !important).
-   table.no-cell-border cho phép 1 vài bảng tự loại trừ nếu cần (không có bảng nào dùng hiện tại). */
-table:not(.no-cell-border) td.border, table:not(.no-cell-border) th.border {
-  border-left-width: 0 !important;
-  border-right-width: 0 !important;
-  border-top-width: 0 !important;
-  border-bottom-width: 1px !important;
-  border-bottom-color: #eef2f7 !important;
-}
-table:not(.no-cell-border) { border-collapse: collapse !important; }
-table:not(.no-cell-border) tbody tr:hover { background-color: #f8fafc !important; }
-
-/* A3 — Input/select/file-upload: đồng bộ viền/bo góc/focus ring, style lại nút "Choose File" mặc định
-   của trình duyệt (::file-selector-button) và icon lịch (date/datetime picker) cho khớp phần còn lại. */
-input[type="text"], input[type="number"], input[type="password"], input[type="email"],
-input[type="tel"], input[type="date"], input[type="datetime-local"], input[type="search"],
-select, textarea {
-  transition: border-color .15s ease, box-shadow .15s ease;
-}
-input[type="text"]:focus, input[type="number"]:focus, input[type="password"]:focus,
-input[type="email"]:focus, input[type="tel"]:focus, input[type="date"]:focus,
-input[type="datetime-local"]:focus, input[type="search"]:focus, select:focus, textarea:focus {
-  outline: none !important;
-  border-color: #2563eb !important;
-  box-shadow: 0 0 0 3px rgba(37, 99, 235, .12) !important;
-}
-input[type="file"] {
-  font-size: .8rem !important;
-  color: #64748b !important;
-}
-input[type="file"]::file-selector-button {
-  font-family: inherit;
-  font-size: .75rem;
-  font-weight: 600;
-  padding: .4rem .75rem;
-  margin-right: .6rem;
-  border: 1px solid #cbd5e1;
-  border-radius: .5rem;
-  background: #f8fafc;
-  color: #334155;
-  cursor: pointer;
-  transition: background-color .15s ease;
-}
-input[type="file"]::file-selector-button:hover { background: #e2e8f0; }
-input[type="date"]::-webkit-calendar-picker-indicator,
-input[type="datetime-local"]::-webkit-calendar-picker-indicator {
-  cursor: pointer;
-  opacity: .55;
-}
-select {
-  cursor: pointer;
-}
-
-/* Giai đoạn B — responsive cho bảng nhiều cột: mỗi bảng TỰ trở thành khung cuộn ngang khi tràn màn
-   hình, không phụ thuộc việc HTML có sẵn khối bọc overflow-x-auto ngoài hay chưa (nhiều bảng cũ trong
-   hệ thống chưa có) — áp dụng ĐỒNG LOẠT cho mọi bảng, không cần rà từng chỗ. Không set
-   white-space:nowrap để các ô có mô tả dài vẫn xuống dòng bình thường như cũ; chỉ bảng nào thực sự
-   rộng hơn khung chứa mới xuất hiện thanh cuộn ngang. */
-table { display: block; overflow-x: auto; max-width: 100%; }
-
-/* Khung xem file Word (.docx) qua mammoth.js (renderWordProtected(), xem script cuối trang) — mammoth
-   xuất HTML thuần (p/h1-h6/table/ul/img...) không kèm style riêng, cần giới hạn lại trong khung xem
-   (không để ảnh/bảng tràn khổ) và khoá bôi đen văn bản khớp chính sách "Protected View" chung (chống
-   sao chép thông thường, không phải bảo mật tuyệt đối — xem ghi chú ở script cuối trang). */
-.word-view-content { user-select: none; line-height: 1.6; }
-.word-view-content img { max-width: 100%; height: auto; }
-.word-view-content table { display: table; width: auto; max-width: 100%; overflow-x: visible; border-collapse: collapse; }
-.word-view-content table td, .word-view-content table th { border: 1px solid #d1d5db; padding: 4px 8px; }
-
-/* ================== Trang Đăng Nhập (#loginSection) ==================
-   Chia đôi màn hình: panel thương hiệu (trái, nền xanh navy) + form đăng nhập (phải, nền trắng) —
-   xếp chồng dọc dưới 880px. Toàn bộ class con dùng tiền tố "loginpage-" để không đụng class nào khác
-   trong file. #loginSection GIỮ NGUYÊN id cũ (login()/finishLogin()/logout() toggle .hidden). Tự thêm
-   riêng #loginSection.hidden { display: none !important } thay vì trông cậy vào việc Tailwind CDN có
-   tự gắn !important cho .hidden hay không (bản Play CDN v3 hiện dùng thì có, nhưng không nên phụ thuộc
-   hành vi ngầm định của bên thứ ba cho phần chuyển màn hình đăng nhập/đăng xuất). Cùng bảng màu/logo
-   với sidebar (xem svg #mobileTopBar phía trên) để nhất quán thương hiệu. */
-#loginSection {
-  display: grid;
-  grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr);
-  border-radius: 20px;
-  overflow: hidden;
-  border: 1px solid #e3e8f2;
-  box-shadow: 0 24px 60px -24px rgba(11, 31, 77, .28);
-  min-height: 560px;
-}
-#loginSection.hidden {
-  display: none !important;
-}
-@media (max-width: 880px) {
-  #loginSection { grid-template-columns: 1fr; min-height: 0; }
-}
-
-.loginpage-hero {
-  position: relative;
-  overflow: hidden;
-  background:
-    radial-gradient(60% 55% at 18% 8%, rgba(56,189,248,.35), transparent 60%),
-    radial-gradient(70% 60% at 90% 100%, rgba(29,78,216,.55), transparent 55%),
-    linear-gradient(155deg, #0b1f4d 0%, #060f26 100%);
-  color: #eef3ff;
-  display: flex;
-  flex-direction: column;
-  justify-content: space-between;
-  padding: 40px 44px;
-}
-.loginpage-hero-nodes { position: absolute; inset: 0; opacity: .5; pointer-events: none; }
-.loginpage-hero-top, .loginpage-hero-mid, .loginpage-hero-modules, .loginpage-hero-foot { position: relative; z-index: 1; }
-.loginpage-hero-brand { display: flex; align-items: center; gap: 12px; }
-.loginpage-hero-brand svg { width: 32px; height: 32px; flex-shrink: 0; }
-.loginpage-hero-wordmark { font-size: 16px; font-weight: 700; }
-.loginpage-hero-wordmark small { display: block; font-size: 10px; font-weight: 600; letter-spacing: .14em; text-transform: uppercase; color: #a9b8e6; margin-top: 1px; }
-
-.loginpage-hero-mid { max-width: 460px; margin: auto 0; padding: 40px 0; }
-.loginpage-hero-eyebrow { display: inline-flex; align-items: center; gap: 8px; font-size: 11px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: #38bdf8; margin-bottom: 16px; }
-.loginpage-hero-eyebrow::before { content: ''; width: 18px; height: 2px; background: #38bdf8; border-radius: 2px; }
-.loginpage-hero-headline { font-size: clamp(24px, 2.4vw, 32px); line-height: 1.2; font-weight: 700; letter-spacing: -.01em; text-wrap: balance; margin: 0 0 14px; }
-.loginpage-hero-sub { font-size: 14.5px; line-height: 1.65; color: #a9b8e6; max-width: 42ch; margin: 0; }
-
-.loginpage-hero-modules { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1px; background: rgba(255,255,255,.09); border-radius: 12px; overflow: hidden; border: 1px solid rgba(255,255,255,.09); }
-.loginpage-hero-module { background: rgba(255,255,255,.03); padding: 13px 11px; }
-.loginpage-hero-module svg { width: 17px; height: 17px; color: #38bdf8; margin-bottom: 7px; }
-.loginpage-hero-module span { display: block; font-size: 11px; font-weight: 600; color: #eef3ff; line-height: 1.35; }
-.loginpage-hero-foot { font-size: 11.5px; color: #a9b8e6; }
-
-@media (max-width: 880px) { .loginpage-hero-modules { display: none; } }
-@media (max-width: 520px) { .loginpage-hero { padding: 32px 26px; } }
-
-.loginpage-panel { background: #f6f8fc; display: flex; align-items: center; justify-content: center; padding: 44px 32px; }
-.loginpage-card { width: 100%; max-width: 372px; }
-.loginpage-card-head { margin-bottom: 26px; }
-.loginpage-card-title { font-size: 21px; font-weight: 700; margin: 0 0 6px; letter-spacing: -.01em; color: #0f1729; }
-.loginpage-card-sub { font-size: 13.5px; color: #4b5876; margin: 0; line-height: 1.5; }
-
-.loginpage-field { margin-bottom: 16px; }
-.loginpage-field label { display: block; font-size: 12.5px; font-weight: 700; color: #0f1729; margin-bottom: 7px; }
-.loginpage-input-wrap { position: relative; }
-.loginpage-input-wrap svg { position: absolute; left: 13px; top: 50%; transform: translateY(-50%); width: 17px; height: 17px; color: #4b5876; pointer-events: none; }
-.loginpage-input-wrap input {
-  width: 100%; font-size: 14px; color: #0f1729;
-  background: #fff; border: 1.5px solid #e3e8f2; border-radius: 10px;
-  padding: 11px 13px 11px 40px;
-  transition: border-color .15s ease, box-shadow .15s ease;
-}
-.loginpage-input-wrap input::placeholder { color: #a4adc2; }
-.loginpage-input-wrap input:focus { outline: none; border-color: #38bdf8; box-shadow: 0 0 0 3.5px rgba(56,189,248,.18); }
-
-.loginpage-btn {
-  width: 100%; font-size: 14.5px; font-weight: 700; color: #fff;
-  background: linear-gradient(135deg, #2563eb, #1d4ed8);
-  border: 0; border-radius: 10px; padding: 12.5px; margin-top: 6px;
-  cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px;
-  box-shadow: 0 10px 22px -10px rgba(29,78,216,.65);
-  transition: transform .15s ease, box-shadow .15s ease, opacity .15s ease;
-}
-.loginpage-btn:hover { transform: translateY(-1px); box-shadow: 0 14px 26px -10px rgba(29,78,216,.75); }
-.loginpage-btn:disabled { opacity: .65; cursor: not-allowed; transform: none; }
-.loginpage-btn svg { width: 16px; height: 16px; }
-
-/* Dòng "đã nhớ tài khoản" thay ô gõ Tên đăng nhập trên thiết bị đã đăng nhập thành công lần gần nhất
-   (xem initRememberedLoginUser()/switchLoginUser() ở script cuối trang) — cùng tông màu xanh với
-   .loginpage-btn-secondary cho nhất quán, không phải input nên không dùng .loginpage-input-wrap.
-   .loginpage-remembered-user.hidden bắt buộc phải khai riêng (không trông cậy mỗi .hidden của
-   tailwind.css) — cùng lý do đã ghi ở #loginSection.hidden phía trên: 2 class cùng gắn 1 phần tử,
-   .hidden của tailwind.css KHÔNG có !important nên đứng sau .loginpage-remembered-user trong cùng
-   file là thua (display:flex đè display:none), phần tử "đã nhớ tài khoản" cứ hiện dù đang bị ẩn. */
-.loginpage-remembered-user {
-  display: flex; align-items: center; justify-content: space-between; gap: 10px;
-  background: #f0f9ff; border: 1.5px solid #bfdbfe; border-radius: 10px;
-  padding: 11px 13px; margin-bottom: 16px;
-}
-.loginpage-remembered-user.hidden { display: none !important; }
-.loginpage-remembered-user-info { display: flex; align-items: center; gap: 10px; min-width: 0; }
-.loginpage-remembered-user-info svg { width: 18px; height: 18px; color: #1d4ed8; flex-shrink: 0; }
-.loginpage-remembered-user-name { font-size: 14px; font-weight: 700; color: #0f1729; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.loginpage-remembered-user-switch { font-size: 12px; font-weight: 700; color: #1d4ed8; background: none; border: 0; cursor: pointer; white-space: nowrap; padding: 4px; flex-shrink: 0; }
-.loginpage-remembered-user-switch:hover { text-decoration: underline; }
-
-.loginpage-btn-secondary {
-  width: 100%; font-size: 14px; font-weight: 700; color: #1d4ed8;
-  background: #fff; border: 1.5px solid #bfdbfe; border-radius: 10px; padding: 11px;
-  margin-top: 10px; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px;
-  transition: border-color .15s ease, background .15s ease, opacity .15s ease;
-}
-.loginpage-btn-secondary:hover { border-color: #38bdf8; background: #f0f9ff; }
-.loginpage-btn-secondary:disabled { opacity: .6; cursor: not-allowed; }
-.loginpage-btn-secondary svg { width: 17px; height: 17px; }
-.loginpage-spinner {
-  display: inline-block; width: 15px; height: 15px; flex-shrink: 0;
-  border: 2px solid rgba(255,255,255,.45); border-top-color: #fff; border-radius: 50%;
-  animation: loginpage-spin .7s linear infinite;
-}
-@keyframes loginpage-spin { to { transform: rotate(360deg); } }
-.boot-splash-spinner {
-  display: inline-block; width: 34px; height: 34px;
-  border: 3px solid rgba(255,255,255,.2); border-top-color: #38bdf8; border-radius: 50%;
-  animation: loginpage-spin .8s linear infinite;
-}
-
-.loginpage-captcha-row { display: flex; align-items: center; gap: 8px; margin-bottom: 9px; }
-.loginpage-captcha-img { flex: 1; border: 1.5px solid #e3e8f2; border-radius: 10px; overflow: hidden; line-height: 0; background: #eef0f7; }
-.loginpage-captcha-img svg { display: block; width: 100%; height: 44px; }
-.loginpage-captcha-refresh {
-  flex-shrink: 0; width: 40px; height: 44px; font-size: 17px; color: #4b5876;
-  background: #fff; border: 1.5px solid #e3e8f2; border-radius: 10px; cursor: pointer;
-  transition: border-color .15s ease, transform .15s ease;
-}
-.loginpage-captcha-refresh:hover { border-color: #38bdf8; }
-.loginpage-captcha-refresh:active { transform: rotate(90deg); }
-
-.loginpage-card-foot { margin-top: 24px; padding-top: 16px; border-top: 1px solid #eef1f8; font-size: 12.5px; color: #4b5876; text-align: center; line-height: 1.6; }
-
-/* Ô tìm-kiếm-dùng-chung thay <input list>+<datalist> native (xem sddSetOptions() ở script chính) —
-   position:fixed, toạ độ do JS tự tính lại theo ô input đang gõ mỗi lần hiện. */
-.sdd-dropdown {
-  position: fixed; z-index: 9999; background: #fff; border: 1px solid #d1d5db; border-radius: 6px;
-  box-shadow: 0 4px 14px rgba(0,0,0,.12); font-size: 12px; max-height: 14rem; overflow-y: auto;
-}
-/* Mũi tên ▼ cố định bên phải MỌI ô input[data-sdd-list] — dấu hiệu trực quan "có danh sách để chọn"
-   mà <datalist> native trước đây tự có (trình duyệt tự vẽ), widget JS thuần ở trên không tự có nên
-   phải tự vẽ lại bằng CSS (không dùng ::after vì <input> là replaced element, trình duyệt không render
-   generated content cho nó) — !important vì Tailwind Play CDN tự tạo/chèn stylesheet lúc runtime, thứ
-   tự nạp so với <style> tĩnh này không đảm bảo, không thể chỉ dựa vào độ ưu tiên selector thông thường. */
-input[data-sdd-list] {
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='%236b7280'%3E%3Cpath fill-rule='evenodd' d='M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z' clip-rule='evenodd'/%3E%3C/svg%3E") !important;
-  background-repeat: no-repeat !important;
-  background-position: right 0.5rem center !important;
-  background-size: 1rem !important;
-  padding-right: 1.75rem !important;
-}
-
-/* Lưới trang PDF khi Tổng Hợp (Báo Cáo Định Kỳ, entryType 'PDF') — kéo-thả sắp lại/xoá TỪNG TRANG
-   trước khi ghép, xem renderPrAggPdfGrid() ở script chính. */
-.pr-pdf-page-card {
-  position: relative; border: 1px solid #d1d5db; border-radius: 6px; background: #f9fafb;
-  padding: 6px; cursor: grab; user-select: none; transition: box-shadow .12s, border-color .12s;
-}
-.pr-pdf-page-card.dragging { opacity: .4; }
-.pr-pdf-page-card.dragover { border-color: #0284c7; box-shadow: 0 0 0 2px #e0f2fe; }
-.pr-pdf-page-card canvas, .pr-pdf-page-card img { width: 100%; display: block; border-radius: 4px; border: 1px solid #e5e7eb; background: #fff; min-height: 40px; }
-.pr-pdf-page-card .pr-pdf-idx {
-  position: absolute; top: 3px; left: 3px; background: #111827; color: #fff; font-size: 10px;
-  font-weight: 600; border-radius: 4px; padding: 1px 5px; opacity: .85;
-}
-.pr-pdf-page-card .pr-pdf-rm {
-  position: absolute; top: 3px; right: 3px; all: unset; cursor: pointer; background: #dc2626; color: #fff;
-  width: 17px; height: 17px; border-radius: 50%; display: flex; align-items: center; justify-content: center;
-  font-size: 10px; line-height: 1; opacity: .9;
-}
-.pr-pdf-page-card .pr-pdf-src {
-  font-size: 9px; color: #6b7280; margin-top: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-}
-</style>
+<link rel="stylesheet" href="/app.css">
 </head>
 <body class="bg-gray-100 min-h-screen font-sans">
 <!-- systemUsersDatalist/carDriversDatalist: 2 dropdown gợi ý tài khoản DÙNG CHUNG cho RẤT NHIỀU module
@@ -433,10 +47,10 @@ input[data-sdd-list] {
      thoáng chốc, dù thực ra phiên vẫn còn nguyên. Chỉ ẩn đi ở ĐÚNG 1 chỗ — hàm hideBootSplash() (script
      cuối trang) — gọi khi biết chắc: hoặc lộ ra màn Đăng Nhập thật (không còn phiên hợp lệ), hoặc chuyển
      hẳn sang giao diện chính/hộp thoại bắt đổi mật khẩu (phiên vẫn hợp lệ). -->
-<div id="bootSplash" class="fixed inset-0 z-50 flex items-center justify-center" style="background:linear-gradient(155deg,#0b1f4d 0%,#060f26 100%);">
+<div id="bootSplash" class="fixed inset-0 z-50 flex items-center justify-center boot-splash-bg">
   <div class="flex flex-col items-center gap-3">
     <span class="boot-splash-spinner"></span>
-    <span style="font-size:13px;font-weight:600;color:#a9b8e6;letter-spacing:.04em;">Đang tải HCRC Workspace…</span>
+    <span class="boot-splash-label">Đang tải HCRC Workspace…</span>
   </div>
 </div>
 <!-- Số phiên bản đang chạy trên server — lấy từ GET /api/health (xem server.js), không phải giá trị
@@ -447,15 +61,17 @@ input[data-sdd-list] {
 <!-- Ghi chú bản quyền — hiện cố định ở mọi màn hình (kể cả trước khi đăng nhập), năm lấy động bằng JS
      ngay dưới đây để không cần sửa code mỗi năm. -->
 <div id="appCopyright" class="fixed bottom-1 left-2 text-[10px] text-gray-400 select-none z-10">© <span id="copyrightYear"></span> Công ty HCRC. Bảo lưu mọi quyền.</div>
-<script>document.getElementById('copyrightYear').textContent = new Date().getFullYear();</script>
+<!-- Dòng set copyrightYear CHUYỂN sang public/js/core.js (Task siết CSP — bỏ 'unsafe-inline' script-src,
+     không còn <script> inline nào trong file này nữa). -->
+
 
 <!-- Thanh trên cùng CHỈ hiện trên điện thoại (< 768px, ẩn hẳn từ md trở lên bằng "md:hidden") — nút ☰
-     mở/đóng sidebar dạng "off-canvas" (xem CSS #userHeader ở khối <style> đầu file). finishLogin()/
+     mở/đóng sidebar dạng "off-canvas" (xem CSS #userHeader ở public/app.css). finishLogin()/
      logout() toggle "hidden" y hệt cách đang làm với #userHeader, nên vòng đời ẩn/hiện luôn khớp nhau. -->
 <div id="mobileTopBar" class="hidden md:hidden fixed top-0 inset-x-0 z-30 bg-slate-900 text-white flex items-center justify-between px-3 py-2.5 shadow">
   <button type="button" data-op="toggleMobileSidebar" class="text-2xl leading-none px-1" aria-label="Mở menu điều hướng">☰</button>
   <span class="font-bold text-sm flex items-center gap-1.5">
-    <svg viewBox="0 0 100 100" fill="none" style="width:1.1rem;height:1.1rem;flex-shrink:0;" aria-hidden="true">
+    <svg viewBox="0 0 100 100" fill="none" class="icon-sm" aria-hidden="true">
       <rect x="27" y="47" width="46" height="15" rx="7.5" fill="#38bdf8"/>
       <rect x="27" y="17" width="17" height="66" rx="8.5" fill="#1d4ed8"/>
       <rect x="56" y="29" width="17" height="54" rx="8.5" fill="#2563eb"/>
@@ -472,14 +88,14 @@ input[data-sdd-list] {
   <!-- SIDEBAR (Đợt A — thay thanh nav ngang cũ). GIỮ NGUYÊN id "userHeader": finishLogin()/logout()
        chỉ toggle classList add/remove('hidden') cho đúng 1 id này, không cần sửa JS gì thêm — id đó giờ
        gắn thẳng vào <aside>, ẩn/hiện luôn CẢ sidebar cùng lúc (xem CSS #userHeader:not(.hidden) ở
-       <style> đầu file). Mọi nút con bên trong GIỮ NGUYÊN 100% id/onclick so với bản nav ngang cũ — chỉ
+       public/app.css). Mọi nút con bên trong GIỮ NGUYÊN 100% id/onclick so với bản nav ngang cũ — chỉ
        đổi class cho hợp bố cục dọc (bỏ kiểu dropdown nổi "absolute", chuyển thành khối mở rộng ngay
        trong dòng chảy sidebar khi bấm, dùng lại NGUYÊN các hàm toggleXDropdown()/closeXDropdown() cũ,
        không đổi 1 dòng JS nào cho phần mở/đóng nhóm). "Hợp Đồng" và "Tổng Hợp" vẫn là 2 nhóm ngang hàng,
        độc lập — không lồng module này vào module kia (giữ nguyên quyết định thiết kế trước đó). -->
   <aside id="userHeader" class="hidden w-64 shrink-0 bg-slate-900 overflow-y-auto">
     <div class="p-4 border-b border-slate-700 flex items-center gap-2">
-      <svg viewBox="0 0 100 100" fill="none" style="width:1.5rem;height:1.5rem;flex-shrink:0;" aria-hidden="true">
+      <svg viewBox="0 0 100 100" fill="none" class="icon-md" aria-hidden="true">
         <rect x="27" y="47" width="46" height="15" rx="7.5" fill="#38bdf8"/>
         <rect x="27" y="17" width="17" height="66" rx="8.5" fill="#1d4ed8"/>
         <rect x="56" y="29" width="17" height="54" rx="8.5" fill="#2563eb"/>
@@ -664,7 +280,7 @@ input[data-sdd-list] {
     <div class="max-w-6xl mx-auto p-4 md:p-6 space-y-6">
 
   <!-- Màn hình 1: Đăng nhập — chia đôi màn hình (panel thương hiệu trái + form phải), xem CSS
-       "#loginSection" ở khối <style> đầu file. id/hành vi hidden-toggle giữ nguyên như cũ, chỉ đổi
+       "#loginSection" ở public/app.css. id/hành vi hidden-toggle giữ nguyên như cũ, chỉ đổi
        diện mạo bên trong. -->
   <div id="loginSection" class="my-6 md:my-10 hidden">
     <div class="loginpage-hero">
@@ -1707,7 +1323,7 @@ input[data-sdd-list] {
               <span class="text-[11px] text-gray-500">Kéo-thả để sắp lại trang, bấm ✕ để bỏ trang không cần — sau đó bấm "Tổng Hợp PDF" để lưu lại</span>
               <button type="button" data-op="mergeReportPeriodPdfAction" class="bg-sky-600 text-white px-3 py-1 rounded text-xs font-bold hover:bg-sky-700">🧩 Tổng Hợp PDF</button>
             </div>
-            <div id="prAggPdfGrid" class="grid gap-2" style="grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));"></div>
+            <div id="prAggPdfGrid" class="grid gap-2 pr-agg-pdf-grid"></div>
           </div>
           <div id="prAggPdfActionsWrap" class="hidden flex justify-end gap-2 pt-3 border-t">
             <button type="button" id="btnPrPdfPublish" data-op="publishPrPdfCompilation" class="hidden bg-emerald-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-emerald-700">🚀 Phát Hành PDF</button>
@@ -2046,7 +1662,7 @@ input[data-sdd-list] {
             <div class="md:col-span-3 bg-gray-50 border rounded p-2 space-y-2">
               <label class="block font-semibold text-gray-600">Danh Sách Được Mời (tuỳ chọn — để trống = mở tự do cho mọi người tự đăng ký)</label>
               <div class="flex gap-2">
-                <input id="tcInviteListPickInput" data-sdd-list="systemUsersDatalist" autocomplete="off" placeholder="Gõ tên hoặc tài khoản..." class="flex-1 border p-1.5 rounded" onkeydown="if(event.key==='Enter'){event.preventDefault();addTrainingInviteListPick();}">
+                <input id="tcInviteListPickInput" data-sdd-list="systemUsersDatalist" autocomplete="off" placeholder="Gõ tên hoặc tài khoản..." class="flex-1 border p-1.5 rounded" data-op-enterkey="addTrainingInviteListPick">
                 <button type="button" data-op="addTrainingInviteListPick" class="bg-gray-200 hover:bg-gray-300 px-3 py-1.5 rounded font-bold">Thêm</button>
               </div>
               <div class="flex items-center gap-3 flex-wrap text-xs pt-2 border-t">
@@ -2640,7 +2256,7 @@ input[data-sdd-list] {
           <div>
             <label class="block font-semibold text-gray-600 mb-1 text-xs">Cách 1 — Tìm và chọn từng người</label>
             <div class="flex gap-2">
-              <input id="trRosterPickInput" data-sdd-list="systemUsersDatalist" autocomplete="off" placeholder="Gõ tên hoặc tài khoản..." class="flex-1 border p-1.5 rounded text-xs" onkeydown="if(event.key==='Enter'){event.preventDefault();addTrainingRosterPick();}">
+              <input id="trRosterPickInput" data-sdd-list="systemUsersDatalist" autocomplete="off" placeholder="Gõ tên hoặc tài khoản..." class="flex-1 border p-1.5 rounded text-xs" data-op-enterkey="addTrainingRosterPick">
               <button type="button" data-op="addTrainingRosterPick" class="bg-gray-200 hover:bg-gray-300 px-3 py-1.5 rounded text-xs font-bold">Thêm</button>
             </div>
           </div>
@@ -2744,7 +2360,7 @@ input[data-sdd-list] {
             <div class="md:col-span-3 bg-gray-50 border rounded p-2 space-y-2">
               <label class="block font-semibold text-gray-600">Danh Sách Được Mời (tuỳ chọn — để trống = mở tự do cho mọi người tự đăng ký)</label>
               <div class="flex gap-2">
-                <input id="teInviteListPickInput" data-sdd-list="systemUsersDatalist" autocomplete="off" placeholder="Gõ tên hoặc tài khoản..." class="flex-1 border p-1.5 rounded" onkeydown="if(event.key==='Enter'){event.preventDefault();addTrainingEditInviteListPick();}">
+                <input id="teInviteListPickInput" data-sdd-list="systemUsersDatalist" autocomplete="off" placeholder="Gõ tên hoặc tài khoản..." class="flex-1 border p-1.5 rounded" data-op-enterkey="addTrainingEditInviteListPick">
                 <button type="button" data-op="addTrainingEditInviteListPick" class="bg-gray-200 hover:bg-gray-300 px-3 py-1.5 rounded font-bold">Thêm</button>
               </div>
               <div class="flex items-center gap-3 flex-wrap text-xs pt-2 border-t">
@@ -2789,7 +2405,7 @@ input[data-sdd-list] {
             </div>
           </div>
           <div class="w-full bg-gray-200 rounded-full h-1.5 mt-2">
-            <div id="ttTakeProgressBar" class="bg-indigo-600 h-1.5 rounded-full transition-all" style="width:0%"></div>
+            <div id="ttTakeProgressBar" class="bg-indigo-600 h-1.5 rounded-full transition-all progress-bar-init0"></div>
           </div>
         </div>
         <div class="p-5">
@@ -2816,7 +2432,7 @@ input[data-sdd-list] {
           <button type="button" data-op="closeTrainingVideoModal" class="text-gray-400 hover:text-red-600 font-bold text-xl leading-none">&times;</button>
         </div>
         <div class="p-3">
-          <div id="trainingVideoPlayerMount" class="w-full bg-black rounded" style="aspect-ratio:16/9;"></div>
+          <div id="trainingVideoPlayerMount" class="w-full bg-black rounded video-16-9"></div>
           <p class="text-[11px] text-gray-400 mt-2">⚠️ Tốc độ phát bị giới hạn 0.5x–1.5x, và không thể tua vượt qua điểm bạn chưa từng xem tới.</p>
         </div>
       </div>
@@ -5395,7 +5011,7 @@ input[data-sdd-list] {
               <p class="text-[11px] text-gray-500 italic mb-2">Chọn phòng ban từ ô bên dưới rồi bấm "Thêm" để đưa vào danh sách đơn vị tham gia — màn "Hệ Thống → Quy Trình & Phê Duyệt" sẽ CHỈ hiện đúng các đơn vị đã thêm ở đây thay vì liệt kê toàn bộ danh sách phòng ban. Không thêm đơn vị nào (để trống) thì màn đó vẫn hiện đầy đủ như trước, không ảnh hưởng gì. Thêm/bớt xong thì bấm "Lưu" 1 lần.</p>
               <div class="flex gap-2 items-center mb-2">
                 <input id="workflowParticipatingDeptPicker" data-sdd-list="workflowParticipatingDeptDatalist" placeholder="🔍 Tìm phòng ban..." autocomplete="off"
-                  onkeydown="if(event.key==='Enter'){event.preventDefault();addWorkflowParticipatingDept();}"
+                  data-op-enterkey="addWorkflowParticipatingDept"
                   class="flex-1 border p-1.5 rounded bg-white text-xs">
                 <div id="workflowParticipatingDeptDatalist" class="hidden sdd-dropdown" data-sdd-dropdown></div>
                 <button type="button" data-op="addWorkflowParticipatingDept" class="bg-gray-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-gray-700 whitespace-nowrap">➕ Thêm Đơn Vị</button>
@@ -5410,7 +5026,7 @@ input[data-sdd-list] {
               <p class="text-[11px] text-gray-500 italic mb-2">Chọn chức danh từ ô bên dưới rồi bấm "Thêm" để đưa vào danh sách chức danh không được cấp Văn Phòng Phẩm. Người dùng có chức danh HIỆN TẠI nằm trong danh sách này sẽ: (1) không đăng ký được Văn Phòng Phẩm ở bất kỳ kỳ nào, kể cả đã thuộc phòng ban còn hạn đăng ký; (2) không tính vào số nhân sự gợi ý khi Hành Chính tạo kỳ (vẫn sửa tay được số này như bình thường). Thêm/bớt xong thì bấm "Lưu" 1 lần.</p>
               <div class="flex gap-2 items-center mb-2">
                 <input id="vppExcludedJobTitlePicker" data-sdd-list="vppExcludedJobTitleDatalist" placeholder="🔍 Tìm chức danh..." autocomplete="off"
-                  onkeydown="if(event.key==='Enter'){event.preventDefault();addVppExcludedJobTitle();}"
+                  data-op-enterkey="addVppExcludedJobTitle"
                   class="flex-1 border p-1.5 rounded bg-white text-xs">
                 <div id="vppExcludedJobTitleDatalist" class="hidden sdd-dropdown" data-sdd-dropdown></div>
                 <button type="button" data-op="addVppExcludedJobTitle" class="bg-gray-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-gray-700 whitespace-nowrap">➕ Thêm Chức Danh</button>
@@ -7363,7 +6979,7 @@ input[data-sdd-list] {
       <span>🔒 Chế độ xem an toàn (Tắt menu chuột phải trong khung xem — tải tệp chỉ dành cho người có quyền)</span>
       <span class="text-[10px] bg-amber-200 text-amber-900 font-bold px-2 py-0.5 rounded">Frame Protected Viewer</span>
     </div>
-    <div class="p-4 overflow-y-auto flex-1 bg-gray-100 flex flex-col items-center justify-center protected-view-container" id="viewModalContent" oncontextmenu="return false;"></div>
+    <div class="p-4 overflow-y-auto flex-1 bg-gray-100 flex flex-col items-center justify-center protected-view-container" id="viewModalContent" data-no-ctxmenu></div>
     <div class="p-3 bg-gray-50 border-t flex justify-between items-center text-xs">
       <span id="viewModalFooterInfo" class="text-gray-500 italic"></span>
       <div class="flex gap-2">
@@ -8145,107 +7761,9 @@ input[data-sdd-list] {
 <script src="/js/core-dashboard.js"></script>
 <script src="/js/core-approvalhub.js"></script>
 
-<!-- Vẽ PDF ra <canvas> bằng PDF.js (tự lưu trên server qua /vendor/pdfjs, không qua CDN) thay cho
-     plugin PDF gốc của trình duyệt — sửa tận gốc lỗi Chrome/Edge chặn PDF nhúng trong modal có lớp nền
-     mờ (cảnh báo "PDF bị che bởi phần tử khác"), đồng thời loại bỏ thanh công cụ In/Tải có sẵn của
-     plugin trình duyệt (JS trang không thể ẩn được) và hiển thị nhất quán trên mọi trình duyệt kể cả
-     trình duyệt không hỗ trợ xem PDF sẵn. Dùng type="module" vì PDF.js chỉ phát hành bản ESM (.mjs).
-     LƯU Ý GIỚI HẠN: đây là chống sao chép thông thường (ẩn nút in/tải, chặn chuột phải) chứ không phải
-     bảo mật tuyệt đối — người dùng rành kỹ thuật vẫn có thể lấy tệp qua công cụ nhà phát triển. -->
-<script type="module">
-  import * as pdfjsLib from '/vendor/pdfjs/pdf.mjs';
-  pdfjsLib.GlobalWorkerOptions.workerSrc = '/vendor/pdfjs/pdf.worker.mjs';
-  // Gán ra window để dùng lại ở script chính (renderPdfProtected() và mọi nơi khác cần đọc/vẽ PDF phía
-  // client) — không tải lại thư viện lần 2.
-  window.pdfjsLib = pdfjsLib;
-
-  // progress (tuỳ chọn, Đào Tạo > PDF phải xem hết mới tính hoàn thành — xem viewTrainingPdfDoc() ở
-  // module-internalcomms-daotao.js): { initialViewedPages: number[], onPageViewed(pageNum, totalPages) }.
-  // MỌI caller khác (viewDoc/viewContract/viewLicenseFile...) không truyền tham số này -> hành vi giữ
-  // NGUYÊN VẸN như trước (undefined, if (progress?.onPageViewed) bên dưới không kích hoạt gì cả).
-  window.renderPdfProtected = async function(container, fileSrc, watermarkText, progress) {
-    container.innerHTML = '<div class="p-6 text-center text-gray-500 text-sm">⏳ Đang tải PDF để xem...</div>';
-    // Dọn observer của lượt render TRƯỚC (nếu container này từng vẽ PDF khác) — tránh 2 observer cùng
-    // gắn vào 1 phần tử <div> dùng lại nhiều lượt mở Khung Xem Bảo Vệ trong 1 phiên.
-    if (container._pdfPageObserver) { container._pdfPageObserver.disconnect(); container._pdfPageObserver = null; }
-    try {
-      const pdf = await pdfjsLib.getDocument(fileSrc).promise;
-      container.innerHTML = '';
-      const wrap = document.createElement('div');
-      wrap.className = 'flex flex-col items-center gap-3 py-2 w-full';
-      container.appendChild(wrap);
-
-      // Đánh dấu "đã xem" 1 trang khi trang đó nằm trong khung nhìn (root = chính container cuộn được)
-      // ĐỦ LÂU (dwell ~900ms, tránh tính "đã xem" 1 trang lướt qua khi cuộn nhanh/fling) — mỗi trang chỉ
-      // báo callback ĐÚNG 1 LẦN (viewedPages chặn báo lại), khớp yêu cầu "phải THẬT SỰ xem qua từng trang".
-      let observer = null;
-      const viewedPages = new Set(progress?.initialViewedPages || []);
-      const dwellTimers = new Map(); // pageNum -> timeout handle
-      if (progress && typeof progress.onPageViewed === 'function') {
-        observer = new IntersectionObserver((entries) => {
-          entries.forEach((entry) => {
-            const pageNum = Number(entry.target.dataset.pageNum);
-            if (entry.isIntersecting) {
-              if (viewedPages.has(pageNum) || dwellTimers.has(pageNum)) return;
-              const handle = setTimeout(() => {
-                dwellTimers.delete(pageNum);
-                if (viewedPages.has(pageNum)) return;
-                viewedPages.add(pageNum);
-                progress.onPageViewed(pageNum, pdf.numPages);
-              }, 900);
-              dwellTimers.set(pageNum, handle);
-            } else if (dwellTimers.has(pageNum)) {
-              clearTimeout(dwellTimers.get(pageNum));
-              dwellTimers.delete(pageNum);
-            }
-          });
-        }, { root: container, threshold: 0.6 });
-        container._pdfPageObserver = observer;
-      }
-
-      for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
-        const page = await pdf.getPage(pageNum);
-        const containerWidth = container.clientWidth || 800;
-        const baseViewport = page.getViewport({ scale: 1 });
-        const scale = Math.max(0.5, Math.min(2.5, (containerWidth - 32) / baseViewport.width));
-        const viewport = page.getViewport({ scale });
-
-        const pageWrap = document.createElement('div');
-        pageWrap.className = 'relative bg-white shadow-md flex-shrink-0';
-        pageWrap.style.width = viewport.width + 'px';
-        pageWrap.style.height = viewport.height + 'px';
-        pageWrap.oncontextmenu = () => false;
-        pageWrap.dataset.pageNum = String(pageNum);
-        if (observer) observer.observe(pageWrap);
-
-        const canvas = document.createElement('canvas');
-        canvas.width = viewport.width;
-        canvas.height = viewport.height;
-        canvas.style.display = 'block';
-        canvas.oncontextmenu = () => false;
-        const ctx = canvas.getContext('2d');
-        await page.render({ canvasContext: ctx, viewport }).promise;
-        pageWrap.appendChild(canvas);
-
-        if (watermarkText) {
-          const wm = document.createElement('div');
-          wm.style.cssText = PROTECTED_VIEW_WATERMARK_STYLE;
-          wm.textContent = watermarkText;
-          pageWrap.appendChild(wm);
-        }
-
-        const pageLabel = document.createElement('div');
-        pageLabel.className = 'text-[11px] text-gray-400 select-none';
-        pageLabel.textContent = `Trang ${pageNum}/${pdf.numPages}`;
-
-        wrap.appendChild(pageWrap);
-        wrap.appendChild(pageLabel);
-      }
-    } catch (err) {
-      container.innerHTML = `<div class="p-6 text-center text-red-600 text-sm">⛔ Không tải được PDF để xem: ${err.message}</div>`;
-    }
-  };
-</script>
+<!-- PDF.js (window.pdfjsLib/window.renderPdfProtected) — CHUYỂN sang public/js/core.js (Task hiệu
+     năng — nạp lười, xem chú thích ensurePdfJsReady() ở đó) — KHÔNG còn <script type="module"> tĩnh nào
+     ở đây nữa, cũng bỏ luôn nhu cầu 'unsafe-inline' cho script-src (xem lib/securityHeaders.js). -->
 
 <!-- Xem file Word (.docx)/Excel (.xlsx) NGAY TRONG trình duyệt người xem, qua mammoth.js (docx -> HTML)
      và exceljs (xlsx -> bảng HTML) — tự lưu trên server (/vendor/mammoth, /vendor/exceljs, không qua

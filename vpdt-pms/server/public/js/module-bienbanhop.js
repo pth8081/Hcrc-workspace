@@ -1002,14 +1002,14 @@ function buildMeetingMinutesDocumentHTML(m) {
   const attendeesRows = Array.isArray(m.attendees) ? m.attendees : [];
   const attendeeRowsHTML = attendeesRows.map((a, idx) => `
     <tr><td>${idx + 1}</td><td>${escapeHtml(a.name)}</td><td>${escapeHtml(a.title || '')}</td><td>${escapeHtml(a.dept || '')}</td><td>${escapeHtml(a.phone || '')}</td></tr>
-  `).join('') || `<tr><td colspan="5" style="text-align:center;color:#888;">Không có thành phần tham dự</td></tr>`;
+  `).join('') || `<tr><td colspan="5" data-style="text-align:center;color:#888;">Không có thành phần tham dự</td></tr>`;
 
   const directiveRows = (m.directives || []).map((d, idx) => {
     const resolved = resolveDirectiveAttendee(m.attendees, d.assignedToAttendeeId);
     const collaboratorNames = (Array.isArray(d.collaboratorAttendeeIds) ? d.collaboratorAttendeeIds : [])
       .map(id => resolveDirectiveAttendee(m.attendees, id)?.name).filter(Boolean).join(', ');
     return `<tr><td>${idx + 1}</td><td>${escapeHtml(d.content)}</td><td>${escapeHtml(resolved ? resolved.name : 'Chưa gán')}</td><td>${escapeHtml(collaboratorNames)}</td><td>${escapeHtml(d.deadline || '')}</td></tr>`;
-  }).join('') || `<tr><td colspan="5" style="text-align:center;color:#888;">Không có ý kiến chỉ đạo</td></tr>`;
+  }).join('') || `<tr><td colspan="5" data-style="text-align:center;color:#888;">Không có ý kiến chỉ đạo</td></tr>`;
 
   return `
     <div class="minutes-doc">
@@ -1083,7 +1083,7 @@ function downloadMeetingMinutes(id) {
   if (!canDownloadMeetingMinutesRecord(currentUser, m)) {
     return alert('⛔ Bạn không có quyền tải biên bản họp này!');
   }
-  const fullHtml = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Bien Ban Hop - ${escapeHtml(m.code)}</title></head><body>${buildMeetingMinutesDocumentHTML(m)}</body></html>`;
+  const fullHtml = standaloneHtmlRestoreStyles(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>Bien Ban Hop - ${escapeHtml(m.code)}</title></head><body>${buildMeetingMinutesDocumentHTML(m)}</body></html>`);
   const blob = new Blob([fullHtml], { type: 'text/html;charset=utf-8;' });
   const url = URL.createObjectURL(blob);
   const link = document.createElement('a');

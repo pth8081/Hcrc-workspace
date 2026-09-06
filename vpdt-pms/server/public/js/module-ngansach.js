@@ -1069,7 +1069,7 @@ function renderBudgetSummaryResult(period, planEntries, actualEntries, fields) {
       </div>`;
 
   wrap.innerHTML = `
-    <div id="budgetSummaryProtectedContent" class="relative select-none" oncontextmenu="return false">
+    <div id="budgetSummaryProtectedContent" class="relative select-none" data-no-ctxmenu>
       <div class="text-center mb-2">
         <h3 class="font-bold text-lg text-violet-900">TỔNG HỢP NGÂN SÁCH — PHÊ DUYỆT vs THỰC HIỆN</h3>
         <p class="text-sm text-gray-600">Kỳ: ${escapeHtml(period.name)} — chỉ tính các bản đã được duyệt của mỗi loại</p>

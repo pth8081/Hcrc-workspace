@@ -422,34 +422,11 @@ function renderUsers() {
   }).join('');
 }
 
-// Gọi chung cho mọi màn "Xuất Excel" ở Quản trị (Người dùng, Nhật ký hệ thống, Báo Cáo Quản Trị) —
-// server (POST /api/admin/export-xlsx) chỉ đổi định dạng {columns, rows} thành file .xlsx thật bằng
-// exceljs, không đọc/tính toán gì thêm (dữ liệu đã có sẵn ở client qua các API đã phân quyền từ trước).
-// Thay hẳn cách cũ (tự dựng chuỗi CSV bằng tay) — vừa hết lỗi vỡ font tiếng Việt (thiếu BOM), vừa có
-// định dạng (dòng tiêu đề in đậm, độ rộng cột) như file Excel thật.
-async function downloadXlsxFromServer(fileName, sheetName, columns, rows) {
-  try {
-    const res = await fetch('/api/admin/export-xlsx', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ fileName, sheetName, columns, rows })
-    });
-    if (res.status === 401) return handleSessionExpired();
-    if (!res.ok) {
-      const body = await res.json().catch(() => ({}));
-      return alert(body.error || 'Không thể tạo file Excel');
-    }
-    const blob = await res.blob();
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = fileName;
-    link.click();
-    URL.revokeObjectURL(url);
-  } catch (e) {
-    alert('⛔ Không thể kết nối tới máy chủ: ' + e.message);
-  }
-}
+// downloadXlsxFromServer() — CHUYỂN sang public/js/core.js (file luôn nạp EAGER) — xem chú thích ở đó.
+// Trước đây định nghĩa Ở ĐÂY (cụm lazy-load "admin-permgroups") khiến module-vanhanh.js/module-dongphuc.js/
+// module-hcrcdonghanh.js/module-logsystem-trash.js/module-baocaoquantri(-preview).js phải nạp kéo theo
+// TOÀN BỘ cụm "admin-permgroups" (315KB/82KB gzip, kéo theo luôn module Đào Tạo 205KB không liên quan
+// qua vòng phụ thuộc SCC) chỉ vì gọi thẳng hàm này không qua ensureFnReady().
 
 function downloadUserTemplate() {
   downloadXlsxFromServer('user_template.xlsx', 'Mẫu Người Dùng',

@@ -294,6 +294,22 @@ function renderStoreJobTitleList() {
   `).join('');
 }
 
+// Cập nhật lại các dropdown chọn "Loại đào tạo" bên module Đào Tạo (module-internalcomms-daotao.js,
+// cụm lazy-load RIÊNG, KHÔNG còn gộp chung cụm với admin.js — xem chú thích Hạ tầng: nạp module theo
+// cụm ở core.js) sau khi thêm/xoá danh mục ở màn "Quản Trị > Quản Lý Danh Mục" này. Màn hình NÀY (nút
+// bấm, danh sách renderTrainingCategoryList()) hoàn toàn tự thân trong admin.js, không cần daotao.js đã
+// nạp hay chưa — chỉ CÁC DROPDOWN Ở NƠI KHÁC (module Đào Tạo, nếu đã từng mở trong phiên) mới cần đồng
+// bộ ngay, nên dùng ensureFnReady() thay vì gọi thẳng populateTrainingCategorySelects() — tránh buộc
+// admin.js phải kéo theo cả module Đào Tạo (205KB) chỉ để có sẵn 1 hàm ít khi thực sự cần gọi ngay lúc
+// đó (đa số trường hợp module Đào Tạo còn chưa mở trong phiên nên các dropdown đó chưa hiện ra để cần
+// đồng bộ gấp — lần sau người dùng mở module Đào Tạo, populateTrainingCategorySelects() tự chạy lại với
+// dữ liệu mới nhất qua đường render bình thường của module đó).
+function syncTrainingCategorySelectsIfLoaded() {
+  ensureFnReady('populateTrainingCategorySelects').then(() => {
+    if (typeof window.populateTrainingCategorySelects === 'function') window.populateTrainingCategorySelects();
+  }).catch(() => { /* module Đào Tạo chưa từng mở/không tải được — bỏ qua, không ảnh hưởng màn hình này */ });
+}
+
 function saveTrainingCategory(e) {
   e.preventDefault();
   const name = document.getElementById('txtTrainingCategoryName').value.trim();
@@ -303,7 +319,7 @@ function saveTrainingCategory(e) {
   logSystemAction('USER_MGM', 'ADD_TRAINING_CATEGORY', `Thêm loại đào tạo mới [${name}]`, 'SUCCESS', name);
   document.getElementById('txtTrainingCategoryName').value = '';
   renderTrainingCategoryList();
-  populateTrainingCategorySelects();
+  syncTrainingCategorySelectsIfLoaded();
 }
 
 function deleteTrainingCategory(name) {
@@ -312,7 +328,7 @@ function deleteTrainingCategory(name) {
   syncStorage('trainingCategories');
   logSystemAction('USER_MGM', 'DELETE_TRAINING_CATEGORY', `Xóa loại đào tạo [${name}]`, 'SUCCESS', name);
   renderTrainingCategoryList();
-  populateTrainingCategorySelects();
+  syncTrainingCategorySelectsIfLoaded();
 }
 
 function renderTrainingCategoryList() {
@@ -546,11 +562,5 @@ function toggleScopeGroup(allCheckId, deptCheckPrefix) {
   });
 }
 
-// Đọc 1 nhóm quyền theo phòng ban ({all, depts}) từ cặp checkbox ALL + danh sách phòng ban trên form.
-function scopeFromForm(allId, deptPrefix) {
-  return {
-    all: document.getElementById(allId).checked,
-    depts: Array.from(document.querySelectorAll(`[id^="${deptPrefix}_"]:checked`)).map(cb => cb.value)
-  };
-}
+// scopeFromForm() — CHUYỂN sang public/js/core.js (file luôn nạp EAGER) — xem chú thích ở đó.
 
