@@ -1847,10 +1847,12 @@ const OPERATION_ORDER_HO_TIERS = [
   { key: 'LT100M', label: '< 100 triệu', maxExclusive: 100000000 },
   { key: 'GTE100M', label: '>= 100 triệu', maxExclusive: Infinity }
 ];
+// Mirror ĐÚNG lib/workflowEngine.js computeOperationOrderAmount() — MAX(amount, paymentTotalAmount),
+// paymentTotalAmount chỉ được đẩy mức hiển thị LÊN cao hơn, không được kéo xuống thấp hơn amount thật.
 function computeOperationOrderAmountClient(o) {
+  const amount = Number(o?.amount) || 0;
   const paymentTotal = Number(o?.paymentTotalAmount) || 0;
-  if (paymentTotal > 0) return paymentTotal;
-  return Number(o?.amount) || 0;
+  return Math.max(amount, paymentTotal);
 }
 function computeOperationOrderTierClient(locationType, amount) {
   const tiers = locationType === 'STORE' ? OPERATION_ORDER_STORE_TIERS : OPERATION_ORDER_HO_TIERS;

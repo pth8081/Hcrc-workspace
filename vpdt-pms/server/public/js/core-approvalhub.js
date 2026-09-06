@@ -269,6 +269,35 @@ function getMyPendingApprovals(user) {
     codeOf: r => r.code, titleOf: r => r.title,
     actionsOf: r => [{ label: '✍️ Xử lý / Duyệt', fn: 'openOperationProcessModal', args: ['operationOrders', r.id], primary: true }]
   });
+  // Đơn hàng đang "Chờ Nhập Hàng" (AWAITING_RECEIPT) — người dùng đã xác nhận đưa vào Hub ("Có, đưa vào
+  // Hub"): người chịu trách nhiệm vẫn cần HÀNH ĐỘNG (xác nhận nhập hàng/hủy nhập), dù đây KHÔNG phải
+  // quyết định duyệt/từ chối nên KHÔNG dùng addDeptWorkflowItems() (hàm đó chỉ bắt status==='PENDING') —
+  // thêm 1 loại riêng ('operationOrderReceipt') với 2 nút hành động ĐÚNG như ở list Vận Hành gốc
+  // (openOperationOrderReceiptActionModal(), module-vanhanh.js — KHÔNG viết lại modal riêng cho Hub).
+  // Quyền dùng ĐÚNG canManageOperationOrderReceiptClient() (module-vanhanh.js) — không tạo logic quyền
+  // mới. Hàm đó thuộc cụm nạp LƯỜI "vanhanh" (Hạ tầng: nạp module theo cụm) trong khi core-approvalhub.js
+  // luôn nạp EAGER — guard `typeof` trước khi gọi (mirror đúng guard updateHrFeedbackBadge() ở
+  // updateApprovalHubBadge() bên dưới): nếu cụm "vanhanh" chưa từng mở trong phiên, bỏ qua nhóm này ở
+  // LẦN GỌI NÀY (không throw ReferenceError làm hỏng toàn bộ Hub) + âm thầm nạp nền rồi tự làm mới lại
+  // Hub/badge ngay khi xong, không bao giờ bỏ sót vĩnh viễn.
+  if (typeof canManageOperationOrderReceiptClient === 'function') {
+    (DB.operationOrders || []).filter(o => o.status === 'AWAITING_RECEIPT' && canManageOperationOrderReceiptClient(o)).forEach(o => {
+      items.push({
+        type: 'operationOrderReceipt', typeLabel: '📦 Vận Hành - Đơn hàng (Chờ Nhập Hàng)',
+        code: o.code, title: o.title, dept: o.dept,
+        stepLabel: '📥 Chờ xác nhận nhập hàng', createdAt: o.approvedAt || o.createdAt,
+        statusBadge: `<span class="px-2 py-0.5 bg-indigo-100 text-indigo-800 rounded font-bold text-xs">📥 Chờ Nhập Hàng</span>`,
+        actions: [
+          { label: '✅ Nhập Hàng', fn: 'openOperationOrderReceiptActionModal', args: [o.id, 'RECEIVE'], primary: true },
+          { label: '🚫 Hủy Nhập', fn: 'openOperationOrderReceiptActionModal', args: [o.id, 'CANCEL'] }
+        ]
+      });
+    });
+  } else if (typeof loadModuleGroup === 'function') {
+    loadModuleGroup('vanhanh').then(() => {
+      if (typeof refreshApprovalSurfaces === 'function') refreshApprovalSurfaces();
+    }).catch(err => console.error('getMyPendingApprovals: không tải được cụm "vanhanh" cho mục AWAITING_RECEIPT', err));
+  }
   addDeptWorkflowItems(
     DB.operationStoreOpenings, o => DB.operationStoreOpenEstimateDeptWorkflows[o.dept],
     {

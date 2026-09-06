@@ -753,13 +753,19 @@ function updateOperationWorkItemProgress(user, item, children, newStatus, note) 
 
 // action: 'ACCEPT' (Nghiệm thu — đổi trạng thái) | 'REQUEST_INFO' (Bổ sung — chỉ ghi lý do, KHÔNG đổi
 // trạng thái, đúng yêu cầu "ấn bổ sung thì công việc vẫn ở trạng thái đang nghiệm thu").
-function acceptOperationWorkItem(user, item, { action, reason }) {
+function acceptOperationWorkItem(user, item, children, { action, reason }) {
   // "Toàn quyền" (admin/operationAcceptanceManage) nghiệm thu được mọi việc; ngoài ra CHỈ đúng người
   // được CHỈ ĐỊNH nghiệm thu (item.acceptorUsername) mới nghiệm thu/bổ sung được việc đó. Việc chưa
   // chỉ định người nghiệm thu (acceptorUsername null) chỉ toàn quyền mới xử lý được.
   const isOwner = !!(user.username && item.acceptorUsername && user.username === item.acceptorUsername);
   if (!user.perms?.admin && !user.perms?.operationAcceptanceManage && !isOwner) {
     throw new HttpError(403, 'Bạn không có quyền nghiệm thu công việc này');
+  }
+  // Việc có con (không phải lá) không được nghiệm thu trực tiếp bằng tay — chỉ tự động cập nhật khi
+  // TẤT CẢ con đã DA_NGHIEM_THU (xem computeParentWorkItemStatus/syncOperationWorkItemAncestors), mirror
+  // đúng chặn của updateOperationWorkItemProgress() ở trên cho cùng bất biến "chỉ việc lá cập nhật tay".
+  if (children && children.length) {
+    throw new HttpError(409, 'Công việc này có việc con — chỉ cập nhật được ở các việc con, việc cha tự cập nhật theo');
   }
   if (item.status !== 'DANG_NGHIEM_THU') {
     throw new HttpError(409, 'Chỉ nghiệm thu/bổ sung được công việc đang ở trạng thái "Đang nghiệm thu"');
@@ -4661,6 +4667,96 @@ function confirmCarDriverAssignment(user, carReg) {
   return carReg;
 }
 
+// ===================== ĐĂNG KÝ XE > "Hủy chuyến" / "Đổi tài xế-xe" SAU KHI ĐÃ DUYỆT (Fix 4, đợt rà
+// soát nghiệp vụ) =====================
+// TRƯỚC ĐÂY 1 phiếu đã APPROVED là NGÕ CỤT — không có cách nào huỷ chuyến hay đổi lại tài xế/xe đã
+// phân công ngoài admin xoá cứng hẳn bản ghi (mất hết lịch sử). Người dùng đã xác nhận "Thêm nút Hủy/
+// Đổi sau duyệt" — mirror ĐÚNG cơ chế Huỷ của Phòng Họp (canCancelMeeting() ở public/js/core.js +
+// routes/meetingActions.js action "cancel"): mọi user LUÔN huỷ được chuyến do CHÍNH MÌNH đăng ký
+// (creator === self, không cần quyền gì thêm) — carDispatch ("Người Điều Hành Xe", đúng quyền đang
+// dùng cho phân công xe/lái xe lúc duyệt, xem applyWorkflowAction() ở lib/workflowEngine.js)/admin huỷ
+// được BẤT KỲ chuyến nào của ai (đổi vai "Người quản lý phòng họp" -> "Người Điều Hành Xe", cùng tinh
+// thần "ai quản lý tài nguyên chung thì huỷ được hộ người khác").
+function canCancelCarReg(user, carReg) {
+  if (!user) return false;
+  if (user.perms?.admin || user.perms?.carDispatch) return true;
+  return !!(carReg && carReg.creator === user.username);
+}
+
+// action mới, CHỈ áp dụng cho phiếu ĐÃ APPROVED (chưa CANCELLED) — phiếu đang PENDING/DRAFT đã có kênh
+// riêng để dừng lại (Từ chối ở bước duyệt, hoặc admin xoá cứng), không cần thêm "Hủy chuyến" ở đây.
+// CANCELLED là trạng thái KẾT THÚC mới cho carRegs (trước đây chưa từng tồn tại — findCarPlateConflict()
+// ở lib/workflowEngine.js đã SẴN loại trừ 'CANCELLED' khỏi kiểm tra trùng biển số dù trạng thái này chưa
+// từng đạt tới qua bất kỳ đường nào, nên chuyến bị huỷ tự động "nhả" lại biển số/khung giờ cho phiếu
+// khác mà không cần sửa gì thêm ở đó).
+function cancelCarReg(user, item, payload) {
+  if (!canCancelCarReg(user, item)) {
+    throw new HttpError(403, 'Bạn không có quyền hủy chuyến đăng ký xe này');
+  }
+  if (item.status !== 'APPROVED') {
+    throw new HttpError(409, 'Chỉ hủy được chuyến đã phê duyệt xong (có thể đã hủy/xử lý ở nơi khác)');
+  }
+  const reason = String(payload?.reason || '').trim();
+  item.status = 'CANCELLED';
+  item.cancelledAt = nowVN();
+  item.cancelledBy = user.username;
+  item.cancelledByName = user.name;
+  item.history = item.history || [];
+  item.history.push({ step: item.currentStep || 0, approver: user.name, username: user.username, action: 'CANCELLED', comment: reason, time: nowVN() });
+  return item;
+}
+
+// "Đổi tài xế-xe" — CHỈ Người Điều Hành Xe (carDispatch)/admin, CHỈ áp dụng cho phiếu ĐÃ APPROVED —
+// applyWorkflowAction() (lib/workflowEngine.js) chỉ cho gán/đổi tài xế-xe TRONG LÚC còn PENDING (mỗi
+// lần Duyệt/Từ chối ở 1 bước), khoá cứng ngay dòng đầu (`item[statusField] !== 'PENDING'` -> throw 409)
+// nên KHÔNG thể tái dùng thẳng hàm đó cho phiếu đã xong toàn bộ quy trình — đây là hàm RIÊNG, cùng logic
+// gán/kiểm tra trùng biển số/reset xác nhận lái xe cũ (mirror ĐÚNG đoạn extraFields ở
+// applyWorkflowAction(), không viết lại cách kiểm tra), chỉ khác điều kiện trạng thái đầu vào.
+function reassignCarDispatch(user, item, payload, existingCarRegs, users) {
+  if (!(user?.perms?.admin || user?.perms?.carDispatch)) {
+    throw new HttpError(403, 'Bạn không có quyền phân công lại xe/lái xe (cần quyền Người Điều Hành Xe)');
+  }
+  if (item.status !== 'APPROVED') {
+    throw new HttpError(409, 'Chỉ đổi tài xế/xe được cho chuyến đã phê duyệt xong (có thể đã hủy/xử lý ở nơi khác)');
+  }
+  const { findCarPlateConflict } = require('./workflowEngine'); // require trễ (bên trong hàm) — tránh
+  // vòng lặp require ở mức module, mirror đúng isApproverForOperationOrderReceipt() ở trên (workflowEngine.js
+  // không require lại recordActions.js nên an toàn).
+  const newPlate = String(payload?.assignedPlate || '').trim();
+  if (newPlate && newPlate !== item.assignedPlate) {
+    const conflict = findCarPlateConflict(existingCarRegs, item.id, newPlate, item.startTime, item.endTime);
+    if (conflict) {
+      throw new HttpError(409, `Biển số "${newPlate}" đã được gán cho phiếu "${conflict.code}" trùng khung giờ này`);
+    }
+  }
+  const assignedVehicleType = String(payload?.assignedVehicleType || '').trim();
+  const assignedDriverUsername = String(payload?.assignedDriverUsername || '').trim();
+  const extraSnapshot = {};
+  // Lái xe PHẢI là 1 tài khoản hệ thống có thật (mirror applyWorkflowAction()) — server tự tra display
+  // name, không tin bất kỳ text nào client gửi kèm.
+  if (assignedDriverUsername && assignedDriverUsername !== item.assignedDriverUsername) {
+    const driverUser = (users || []).find(u => u.username === assignedDriverUsername && u.active !== false);
+    if (!driverUser) throw new HttpError(400, 'Không tìm thấy tài khoản lái xe này (hoặc đã bị khoá)');
+    item.assignedDriverUsername = driverUser.username;
+    item.assignedDriver = driverUser.name;
+    extraSnapshot.assignedDriverUsername = driverUser.username;
+    extraSnapshot.assignedDriver = driverUser.name;
+    // Đổi sang lái xe khác -> hủy xác nhận cũ (nếu phiếu đã được lái xe cũ xác nhận) — trách nhiệm
+    // chuyến đi đã chuyển sang người khác, không thể giữ "đã xác nhận" hộ người cũ (mirror
+    // applyWorkflowAction()).
+    if (item.driverConfirmed) {
+      item.driverConfirmed = false;
+      item.driverConfirmedAt = null;
+    }
+  }
+  if (newPlate) { item.assignedPlate = newPlate; extraSnapshot.assignedPlate = newPlate; }
+  if (assignedVehicleType) { item.assignedVehicleType = assignedVehicleType; extraSnapshot.assignedVehicleType = assignedVehicleType; }
+  if (!Object.keys(extraSnapshot).length) throw new HttpError(400, 'Vui lòng nhập ít nhất 1 thay đổi (xe/biển số/lái xe)');
+  item.history = item.history || [];
+  item.history.push({ step: item.currentStep || 0, approver: user.name, username: user.username, action: 'REASSIGNED', comment: String(payload?.comment || '').trim(), time: nowVN(), ...extraSnapshot });
+  return item;
+}
+
 // ===================== GIẤY PHÉP (module con của Hành Chính) =====================
 // Duyệt bằng 2 quyền PHẲNG (licenseCreate/licenseApprove), KHÔNG đi qua lib/workflowEngine.js — cùng
 // khuôn approveInternalPost()/rejectInternalPost() ở trên (Góc Chia Sẻ). lifecycleStatus (RENEWING/
@@ -4862,6 +4958,7 @@ module.exports = {
   canManageBudget, canAggregateBudget, isBudgetPeriodClosed,
   closeBudgetPeriod, reopenBudgetPeriod, updateBudgetEntryDraft, submitBudgetEntry, updateApprovedActualBudgetEntry, updateBudgetTemplate,
   canConfirmCarDriverAssignment, confirmCarDriverAssignment,
+  canCancelCarReg, cancelCarReg, reassignCarDispatch,
   canApproveLicense, approveLicense, rejectLicense, setLicenseRenewing, revokeLicense, unrevokeLicense,
   canManageItServiceRenewal, editItServiceRenewal, renewItServiceRenewal,
   // Vận Hành — operationOrders GIỮ NGUYÊN quy trình duyệt cũ (routes/records.js gọi tới update/submit

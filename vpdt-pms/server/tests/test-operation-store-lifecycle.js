@@ -665,6 +665,47 @@ async function main() {
       assertEqual(result.child1.acceptedBy, DESIGNATED_ACCEPTOR.username, 'Phải ghi nhận đúng người nghiệm thu (DESIGNATED_ACCEPTOR)');
     });
 
+    // ===== 15b) Fix 1 (đợt rà soát nghiệp vụ): nghiệm thu TRỰC TIẾP bằng tay 1 việc CHA (có con) phải
+    // bị chặn 409 — chỉ chặn cú click TAY trực tiếp, KHÔNG ảnh hưởng cascade tự động (đã xác nhận ở bước
+    // 17 dưới: cha vẫn tự chuyển Đã nghiệm thu khi mọi con hoàn tất). Tại đây rootWorkItemId đã tự động
+    // cascade lên DANG_NGHIEM_THU (child1 DA_NGHIEM_THU + child2 DANG_NGHIEM_THU = "mọi con đã hoàn
+    // thành" — xem computeParentWorkItemStatus()), đúng kịch bản lỗ hổng thật: trước khi vá, ACCEPTOR có
+    // thể bấm "Nghiệm Thu" thẳng lên root này (đang hiện nút vì status đã là DANG_NGHIEM_THU) và tự tay
+    // ghi đè acceptedBy/status, phá vỡ bất biến "việc cha chỉ được cập nhật TỰ ĐỘNG theo con, không ai
+    // bấm tay được" — kể cả khi root có 0 con dở, việc CÓ CON vẫn phải chặn (chỉ việc LÁ mới nghiệm thu
+    // tay được, mirror updateOperationWorkItemProgress()).
+    await run.run('Fix 1: nghiệm thu trực tiếp bằng tay 1 việc CHA (có con) bị chặn 409, dù đang ở DANG_NGHIEM_THU do cascade tự động', async () => {
+      await loginAs(page, ACCEPTOR);
+      const result = await page.evaluate(async ({ rootId }) => {
+        const root = DB.operationWorkItems.find(x => x.id === rootId);
+        const rootStatusBeforeAttempt = root ? root.status : null; // chỉ để log — KHÔNG phải điều kiện chặn
+        try {
+          await callRecordAction('operationWorkItems', rootId, 'accept', { action: 'ACCEPT', reason: 'Cố nghiệm thu tay việc cha' });
+          return { ok: true, rootStatusBeforeAttempt };
+        } catch (err) { return { ok: false, message: err.message, rootStatusBeforeAttempt }; }
+      }, { rootId: rootWorkItemId });
+      assert(!result.ok, `Phải bị chặn 409 khi nghiệm thu tay việc cha có con (root status lúc thử: ${result.rootStatusBeforeAttempt})`);
+      assertIncludes(result.message, 'việc con', 'Thông báo lỗi phải nêu rõ lý do là "có việc con" (mirror đúng updateOperationWorkItemProgress())');
+    });
+
+    // ===== 15c) Fix 1 (client): dòng CHA (có con) ở chế độ ACCEPTANCE (mode='ACCEPTANCE') KHÔNG được
+    // hiện nút "✅ Nghiệm Thu"/"🔄 Bổ Sung" — mirror EXECUTION-mode ("Tự cập nhật theo việc con") — dù
+    // ACCEPTOR (toàn quyền) đang xem đúng lúc root ở DANG_NGHIEM_THU (nút LẼ RA sẽ hiện nếu chỉ so status
+    // mà quên check hasChildren, đúng lỗ hổng đã báo). =====
+    await run.run('Fix 1 (client): dòng việc CHA ở tab Nghiệm Thu KHÔNG hiện nút Nghiệm Thu/Bổ Sung, hiện "Tự cập nhật theo việc con" thay vào đó', async () => {
+      await loginAs(page, ACCEPTOR);
+      const html = await page.evaluate(({ kind, id }) => {
+        openOperationWorkItemModal(kind, id, 'ACCEPTANCE');
+        const row = [...document.querySelectorAll('#operationWorkItemTableBody tr')].find(tr => tr.textContent.includes('Thi công nội thất'));
+        const actionsHtml = row ? row.querySelector('td:last-child').innerHTML : null;
+        closeOperationWorkItemModal();
+        return actionsHtml;
+      }, { kind: 'operationStoreOpenings', id: recordId });
+      assert(html !== null, 'Phải tìm thấy dòng việc gốc (cha) trong bảng Nghiệm Thu');
+      assert(!html.includes('openOperationAcceptanceActionModal'), 'Dòng việc CHA (có con) KHÔNG được có nút Nghiệm Thu/Bổ Sung (openOperationAcceptanceActionModal) dù ACCEPTOR có toàn quyền');
+      assertIncludes(html, 'Tự cập nhật theo việc con', 'Dòng việc CHA phải hiện thông báo "Tự cập nhật theo việc con" thay cho nút bấm (mirror EXECUTION-mode)');
+    });
+
     // ===== 16) Người được chỉ định của việc con 1 KHÔNG nghiệm thu được việc con 2 (không phải của mình) =====
     await run.run('DESIGNATED_ACCEPTOR bị chặn nghiệm thu việc KHÁC (không được chỉ định trên việc đó)', async () => {
       await loginAs(page, DESIGNATED_ACCEPTOR);

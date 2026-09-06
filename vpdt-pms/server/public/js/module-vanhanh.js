@@ -1797,7 +1797,16 @@ function buildOperationWorkItemRow(w, depth, hasChildren, mode, canManageExecuti
   // (acceptorUsername) mới nghiệm thu/bổ sung được việc đó — khớp acceptOperationWorkItem() ở server.
   const isDesignatedAcceptor = !!(currentUser.username && w.acceptorUsername && w.acceptorUsername === currentUser.username);
   let actionHTML = '<span class="text-xs text-gray-400 italic">—</span>';
-  if ((canManageAcceptance || isDesignatedAcceptor) && w.status === 'DANG_NGHIEM_THU') {
+  // Việc có con (không phải lá) KHÔNG được nghiệm thu trực tiếp bằng tay — mirror đúng chặn 409 ở
+  // server (acceptOperationWorkItem(), lib/recordActions.js) và mirror pattern EXECUTION-mode ở trên
+  // (nhánh !hasChildren): cha tự động DA_NGHIEM_THU khi TẤT CẢ con đã nghiệm thu xong (cascade tự động
+  // qua computeParentWorkItemStatus/syncOperationWorkItemAncestors vẫn hoạt động bình thường, chỉ chặn
+  // click tay trực tiếp trên việc cha).
+  if (hasChildren) {
+    if (canManageAcceptance || isDesignatedAcceptor) {
+      actionHTML = '<span class="text-xs text-gray-400 italic">Tự cập nhật theo việc con</span>';
+    }
+  } else if ((canManageAcceptance || isDesignatedAcceptor) && w.status === 'DANG_NGHIEM_THU') {
     actionHTML = `<button type="button" data-op="openOperationAcceptanceActionModal" data-id="${w.id}" data-action="ACCEPT" class="text-xs px-2 py-0.5 bg-green-600 text-white rounded font-bold hover:bg-green-700 mr-1">✅ Nghiệm Thu</button>
       <button type="button" data-op="openOperationAcceptanceActionModal" data-id="${w.id}" data-action="REQUEST_INFO" class="text-xs px-2 py-0.5 bg-amber-500 text-white rounded font-bold hover:bg-amber-600">🔄 Bổ Sung</button>`;
   }

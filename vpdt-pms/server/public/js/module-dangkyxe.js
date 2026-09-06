@@ -180,6 +180,79 @@ function confirmCarDriverAssignmentAction(carId) {
   });
 }
 
+// ============ "Hủy chuyến" / "Đổi tài xế-xe" SAU KHI ĐÃ DUYỆT (Fix 4, đợt rà soát nghiệp vụ) ============
+// Mirror ĐÚNG canCancelCarReg()/quyền carDispatch ở lib/recordActions.js — chỉ dùng để ẩn/hiện nút,
+// server LUÔN tự kiểm tra lại (không tin riêng lớp UI này).
+function canCancelCarRegClient(c) {
+  if (currentUser?.perms?.admin || currentUser?.perms?.carDispatch) return true;
+  return !!(c && c.creator === currentUser?.username);
+}
+function canDispatchCarClient() {
+  return !!(currentUser?.perms?.admin || currentUser?.perms?.carDispatch);
+}
+
+// Dùng chung cho cả nút ở dòng danh sách (secondaryOptions) LẪN nút bên trong modal xử lý
+// (openCarProcessModal(), khi status đã APPROVED) — reason KHÔNG bắt buộc (mirror đúng Phòng Họp,
+// canCancelMeeting()/routes/meetingActions.js action "cancel" cũng không đòi lý do).
+function openCancelCarRegModal(id) {
+  const c = DB.carRegs.find(x => x.id === id);
+  if (!c) return;
+  const reason = prompt('Lý do hủy chuyến (không bắt buộc):', '');
+  if (reason === null) return; // bấm Hủy ở hộp prompt -> bỏ ngang, không mở tiếp modal xác nhận
+  showConfirmModal({
+    title: '🚫 Xác Nhận Hủy Chuyến',
+    bodyHTML: `<p>Hủy chuyến đăng ký xe <b>${escapeHtml(c.code)}</b> — <i>${escapeHtml(c.destination)}</i>?</p>${reason.trim() ? `<p class="mt-2 italic text-gray-600">Lý do: "${escapeHtml(reason.trim())}"</p>` : ''}<p class="mt-2 text-red-600 font-semibold">Chuyến đã hủy không thể phục hồi lại.</p>`,
+    confirmLabel: 'Hủy Chuyến',
+    onConfirm: async () => {
+      let result;
+      try {
+        result = await callRecordAction('carRegs', id, 'cancel', { reason: reason.trim() });
+      } catch (err) { return alert(`⛔ ${err.message}`); }
+      const idx = DB.carRegs.findIndex(x => x.id === id);
+      if (idx !== -1) DB.carRegs[idx] = result.item;
+      logSystemAction('CAR', 'CANCEL_TRIP', `Hủy chuyến đăng ký xe [${result.item.code}]`, 'SUCCESS', result.item.code);
+      alert('✅ Đã hủy chuyến đăng ký xe!');
+      closeCarProcessModal();
+      renderCarRegs();
+      refreshApprovalSurfaces();
+    }
+  });
+}
+
+// "Đổi tài xế-xe" — CHỈ mở được từ trong openCarProcessModal() (carDispatchSection, cùng 3 ô lái
+// xe/loại xe/BKS đã dùng để phân công lúc duyệt — TÁI DÙNG nguyên UI đó, không dựng form riêng) — đọc
+// currentProcessingCarId (biến toàn cục đã có sẵn của modal này, mirror đúng confirmProcessCarReg()).
+function confirmCarReassign() {
+  if (!currentProcessingCarId) return;
+  const c = DB.carRegs.find(item => item.id === currentProcessingCarId);
+  if (!c) return;
+  const carAssignedDriverText = document.getElementById('carAssignedDriver').value.trim();
+  const assignedDriverUsername = document.getElementById('carAssignedDriverUsername').value;
+  if (carAssignedDriverText && !assignedDriverUsername) {
+    return alert('Vui lòng chọn đúng lái xe từ danh sách gợi ý (gõ tên hoặc tài khoản để tìm)!');
+  }
+  const assignedVehicleType = document.getElementById('carAssignedVehicleType').value.trim();
+  const assignedPlate = document.getElementById('carAssignedPlate').value.trim();
+  const comment = document.getElementById('txtCarComment').value.trim();
+  showConfirmModal({
+    title: '🔁 Xác Nhận Đổi Tài Xế-Xe',
+    bodyHTML: `<p>Cập nhật phân công xe/lái xe cho chuyến <b>${escapeHtml(c.code)}</b> — <i>${escapeHtml(c.destination)}</i>?</p>`,
+    confirmLabel: 'Cập Nhật',
+    onConfirm: async () => {
+      let result;
+      try {
+        result = await callRecordAction('carRegs', c.id, 'reassign', { assignedDriverUsername, assignedVehicleType, assignedPlate, comment });
+      } catch (err) { return alert(`⛔ ${err.message}`); }
+      const idx = DB.carRegs.findIndex(x => x.id === c.id);
+      if (idx !== -1) DB.carRegs[idx] = result.item;
+      logSystemAction('CAR', 'REASSIGN', `Đổi tài xế-xe cho phiếu [${result.item.code}]`, 'SUCCESS', result.item.code);
+      alert('✅ Đã cập nhật tài xế-xe!');
+      closeCarProcessModal();
+      renderCarRegs();
+    }
+  });
+}
+
 function onCarFilterChange() {
   resetListPage('car');
   renderCarRegs();
@@ -209,7 +282,10 @@ function renderCarRegs() {
     { key: '', label: 'Tổng Đăng Ký', count: scopedCarRegs.length, colorClass: 'border-l-blue-500' },
     { key: 'PENDING', label: 'Đang Chờ Duyệt', count: scopedCarRegs.filter(c => c.status === 'PENDING').length, colorClass: 'border-l-yellow-500' },
     { key: 'APPROVED', label: 'Đã Phê Duyệt', count: scopedCarRegs.filter(c => c.status === 'APPROVED').length, colorClass: 'border-l-green-500' },
-    { key: 'REJECTED', label: 'Bị Từ Chối', count: scopedCarRegs.filter(c => c.status === 'REJECTED').length, colorClass: 'border-l-red-500' }
+    { key: 'REJECTED', label: 'Bị Từ Chối', count: scopedCarRegs.filter(c => c.status === 'REJECTED').length, colorClass: 'border-l-red-500' },
+    // CANCELLED — trạng thái KẾT THÚC mới (Fix 4, đợt rà soát nghiệp vụ: "Hủy chuyến" sau khi đã duyệt,
+    // xem canCancelCarReg()/cancelCarReg() ở lib/recordActions.js).
+    { key: 'CANCELLED', label: 'Đã Hủy Chuyến', count: scopedCarRegs.filter(c => c.status === 'CANCELLED').length, colorClass: 'border-l-slate-500' }
   ];
   document.getElementById('carDashboardCards').innerHTML = buildDashboardCardsHTML(carDashCards, statusFilter, 'filterCarByCard');
 
@@ -242,6 +318,7 @@ function renderCarRegs() {
     let statusBadge = '';
     if (c.status === 'APPROVED') statusBadge = `<span class="px-2 py-0.5 bg-green-100 text-green-800 rounded font-bold text-xs">✅ Đã phê duyệt</span>`;
     else if (c.status === 'REJECTED') statusBadge = `<span class="px-2 py-0.5 bg-red-100 text-red-800 rounded font-bold text-xs">❌ Từ chối</span>`;
+    else if (c.status === 'CANCELLED') statusBadge = `<span class="px-2 py-0.5 bg-slate-200 text-slate-700 rounded font-bold text-xs">🚫 Đã hủy chuyến</span>`;
     else if (c.status === 'DRAFT') statusBadge = `<span class="px-2 py-0.5 bg-orange-100 text-orange-800 rounded font-bold text-xs">✏️ Cần bổ sung — chờ sửa lại</span>`;
     else statusBadge = `<span class="px-2 py-0.5 bg-indigo-100 text-indigo-800 rounded font-bold text-xs">⏳ Bước ${c.currentStep}/${wf.steps.length}${escapeHtml(getStepApprovalProgressText(currentStepApprovers, c.history, c.currentStep))}</span>`;
 
@@ -271,6 +348,11 @@ function renderCarRegs() {
             if (c.status === 'APPROVED') {
               secondaryOptions.push({ value: 'viewSlip', label: '👁️ Xem Phiếu' });
               if (canDL) secondaryOptions.push({ value: 'downloadSlip', label: '⬇️ Tải' });
+              // Fix 4 (đợt rà soát nghiệp vụ, người dùng xác nhận "Thêm nút Hủy/Đổi sau duyệt") — trước
+              // đây 1 phiếu đã APPROVED là ngõ cụt, chỉ admin xóa cứng được. "Đổi Tài Xế-Xe" mở modal xử
+              // lý sẵn có (đã có UI phân công) để tái dùng, "Hủy Chuyến" mở thẳng modal xác nhận riêng.
+              if (canDispatchCarClient()) secondaryOptions.push({ value: 'reassign', label: '🔁 Đổi Tài Xế-Xe' });
+              if (canCancelCarRegClient(c)) secondaryOptions.push({ value: 'cancelTrip', label: '🚫 Hủy Chuyến' });
             }
             // "Sửa & Gửi Lại" — chỉ chính người tạo phiếu, chỉ khi đang cần bổ sung (NHÁP do
             // REQUEST_CHANGES, xem confirmProcessCarReg('REQUEST_CHANGES')/openBosungEditModal()).
@@ -294,6 +376,10 @@ function runCarAction(id, action) {
     case 'downloadSlip': downloadCarApprovalSlip(id); break;
     case 'editDraft': openBosungEditModal('carRegs', id); break;
     case 'delete': deleteCarRegAction(id); break;
+    // Fix 4 — "Hủy chuyến"/"Đổi tài xế-xe" reachable trực tiếp từ dòng danh sách (row bấm "⋮" ->
+    // secondaryOptions ở trên), KHÔNG bắt buộc phải mở modal "Xử lý/Duyệt" trước.
+    case 'reassign': openCarProcessModal(id); break;
+    case 'cancelTrip': openCancelCarRegModal(id); break;
   }
 }
 
@@ -379,6 +465,15 @@ function openCarProcessModal(carId) {
       <button data-op="confirmProcessCarReg" data-arg0="REQUEST_CHANGES" class="bg-amber-500 text-white px-4 py-1.5 rounded font-bold hover:bg-amber-600 text-xs">🔄 Bổ Sung</button>
       <button data-op="confirmProcessCarReg" data-arg0="APPROVE" class="bg-green-600 text-white px-5 py-1.5 rounded font-bold hover:bg-green-700 text-xs">✅ Phê Duyệt & Chuyển Bước</button>
     `;
+  } else if (c.status === 'APPROVED' && (canDispatchCar || canCancelCarRegClient(c))) {
+    // Fix 4 — phiếu đã APPROVED KHÔNG còn nút Duyệt/Từ chối nào (quy trình đã xong), nhưng vẫn có thể
+    // "Đổi Tài Xế-Xe" (canDispatchCar — TÁI DÙNG nguyên carDispatchSection ở trên, không dựng form
+    // riêng) và/hoặc "Hủy Chuyến" (chính người tạo HOẶC canDispatchCar, mirror canCancelCarReg() ở
+    // server) thay vì chỉ hiện dòng "chỉ có quyền xem" như trước đây.
+    const btns = [];
+    if (canDispatchCar) btns.push(`<button data-op="confirmCarReassign" class="bg-indigo-600 text-white px-4 py-1.5 rounded font-bold hover:bg-indigo-700 text-xs">🔁 Đổi Tài Xế-Xe</button>`);
+    if (canCancelCarRegClient(c)) btns.push(`<button data-op="openCancelCarRegModal" data-arg0="${c.id}" class="bg-red-600 text-white px-4 py-1.5 rounded font-bold hover:bg-red-700 text-xs">🚫 Hủy Chuyến</button>`);
+    actionBtns.innerHTML = btns.join(' ');
   } else {
     actionBtns.innerHTML = `<span class="text-gray-500 italic text-xs">Bạn chỉ có quyền xem thông tin đăng ký này.</span>`;
   }

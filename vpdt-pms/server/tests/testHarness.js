@@ -233,7 +233,8 @@ function createDispatcher(state) {
     return updated;
   };
   actionHandlers['operationWorkItems:accept'] = (u, item, body) => {
-    const updated = recordActions.acceptOperationWorkItem(u, item, body || {});
+    const children = state.operationWorkItems.filter(w => w.parentWorkItemId === item.id);
+    const updated = recordActions.acceptOperationWorkItem(u, item, children, body || {});
     if (updated.status === 'DA_NGHIEM_THU') syncOperationWorkItemAncestorsInState(state, updated.parentWorkItemId);
     return updated;
   };

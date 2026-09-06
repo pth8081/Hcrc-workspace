@@ -160,14 +160,18 @@ const OPERATION_ORDER_HO_TIERS = [
   { key: 'GTE100M', label: '>= 100 triệu', maxExclusive: Infinity }
 ];
 
-// Số tiền dùng làm căn cứ xét mức: ưu tiên paymentTotalAmount (Tổng Giá Trị Thanh Toán, đọc được từ PDF
-// phiếu đặt hàng NCC — chính xác hơn vì đã gồm VAT/trừ chiết khấu) nếu có nhập (> 0); rơi về amount
-// (tổng Số lượng × Đơn giá các hạng mục, LUÔN có — server tự tính lại ở createValidation.js, không tin
-// số client gửi) khi đơn hàng tạo tay không kèm PDF (paymentTotalAmount = 0/chưa nhập).
+// Số tiền dùng làm căn cứ xét mức: lấy MAX(amount, paymentTotalAmount) — amount là tổng Số lượng × Đơn
+// giá các hạng mục, server LUÔN tự tính lại (createValidation.js, không tin số client gửi) nên đáng tin
+// cậy; paymentTotalAmount (Tổng Giá Trị Thanh Toán, đọc được từ PDF phiếu đặt hàng NCC) là field NGƯỜI
+// DÙNG TỰ GÕ trên form — hợp lệ khi nó CAO HƠN amount (VD gồm VAT/phụ phí chưa liệt kê ở hạng mục), NHƯNG
+// không được phép THẤP HƠN amount rồi kéo mức duyệt xuống thấp (dùng field tự gõ né bớt lớp duyệt của 1
+// đơn hàng có tổng hạng mục thật sự cao) — xem tests/test-operation-order-location-tiers.js phần
+// "Tamper: paymentTotalAmount giả mạo THẤP...". Trước đây hàm này ưu tiên paymentTotalAmount tuyệt đối
+// bất kể amount cao hơn bao nhiêu — đã sửa.
 function computeOperationOrderAmount(item) {
+  const amount = Number(item?.amount) || 0;
   const paymentTotal = Number(item?.paymentTotalAmount) || 0;
-  if (paymentTotal > 0) return paymentTotal;
-  return Number(item?.amount) || 0;
+  return Math.max(amount, paymentTotal);
 }
 function computeOperationOrderTier(locationType, amount) {
   const tiers = locationType === 'STORE' ? OPERATION_ORDER_STORE_TIERS : OPERATION_ORDER_HO_TIERS;
@@ -684,6 +688,7 @@ module.exports = {
   resolveItPriceDeptWorkflowConfig,
   resolveItPriceTierWorkflowConfig,
   resolveOperationOrderWorkflow,
+  findCarPlateConflict,
   computeOperationOrderAmount,
   computeOperationOrderTier,
   OPERATION_ORDER_STORE_TIERS,

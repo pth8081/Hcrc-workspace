@@ -353,6 +353,68 @@ async function scenario(name, fn) {
   });
 
   // ==========================================================================
+  // Fix 3 (đợt rà soát nghiệp vụ, người dùng xác nhận "Có, đưa vào Hub"): operationOrders đang ở
+  // AWAITING_RECEIPT ("Chờ Nhập Hàng") phải xuất hiện trong Hub cho ĐÚNG người được phép Nhập Hàng/Hủy
+  // Nhập (canManageOperationOrderReceiptClient(), module-vanhanh.js) — với 2 nút hành động riêng (✅
+  // Nhập Hàng/🚫 Hủy Nhập) thay vì Duyệt/Từ chối thông thường — và KHÔNG xuất hiện cho người không có
+  // quyền đó. getMyPendingApprovals() (core-approvalhub.js) guard bằng typeof trước khi gọi hàm này (hàm
+  // sống ở cụm nạp lười "vanhanh") — file test này đã loadModuleGroup() TOÀN BỘ cụm ngay từ đầu nên
+  // guard đó luôn đi qua nhánh "đã sẵn sàng".
+  // ==========================================================================
+  await scenario('Approval Hub includes AWAITING_RECEIPT operationOrders for the right approver, with Nhập Hàng/Hủy Nhập actions', async () => {
+    const r = await page.evaluate(() => {
+      DB.operationOrderHOTierWorkflows = { LT100M: { approvers: { 1: ['duyet1'] } } };
+      DB.operationOrderStoreTierWorkflows = {};
+      DB.operationOrders = [
+        { id: 701, dept: 'Kế Toán', status: 'AWAITING_RECEIPT', currentStep: 1, history: [], code: 'DH-001',
+          title: 'Đơn hàng chờ nhập kho của tôi', orderLocationType: 'HO', amount: 5000000, paymentTotalAmount: 0,
+          creator: 'someone.else', creatorName: 'Người Mua Hàng', createdAt: '2026-08-25' },
+        // 1 đơn PENDING bình thường (đã phủ ở scenario tổng hợp trên) không lặp lại ở đây.
+      ];
+      const itemsBefore = getMyPendingApprovals(currentUser);
+      renderApprovalHub();
+      const rows = [...document.querySelectorAll('#approvalHubTableBody tr')];
+      const orderRow = rows.find(tr => tr.children[1].textContent.trim() === 'DH-001');
+      const buttons = orderRow ? [...orderRow.querySelectorAll('button')].map(b => ({ label: b.textContent.trim(), op: b.getAttribute('data-op'), arg0: b.getAttribute('data-arg0'), arg1: b.getAttribute('data-arg1') })) : [];
+
+      // Người KHÔNG có quyền Nhập Hàng/Hủy Nhập (không phải approver ở bất kỳ bước nào của dept-workflow
+      // đúng phòng ban của đơn này, không phải admin) -> KHÔNG được thấy mục này. canManageOperationOrderReceiptClient()
+      // (module-vanhanh.js) đọc thẳng biến toàn cục `currentUser` (không nhận `user` làm tham số, khác
+      // các hàm quyền khác ở getMyPendingApprovals() — ĐÚNG với mọi lời gọi thật trong toàn bộ codebase,
+      // luôn là getMyPendingApprovals(currentUser), xem core-approvalhub.js) nên phải finishLogin() thật
+      // sang tài khoản này để kiểm đúng, không chỉ truyền object rời cho getMyPendingApprovals().
+      const outsider = { username: 'khong.duyet.donhang', name: 'X', dept: 'Nhân Sự', role: 'NHANVIEN', jobTitle: null, perms: { admin: false, moduleAccess: {} } };
+      DB.users.push(outsider);
+      finishLogin(outsider);
+      const itemsForOutsider = getMyPendingApprovals(currentUser);
+
+      // Đăng nhập lại đúng "duyet1" cho các scenario sau (mirror finishLogin(outsider) ở scenario "Access
+      // gating" phía dưới cũng tự làm việc tương tự, nhưng đó là scenario CUỐI nên không cần đăng nhập lại).
+      finishLogin(DB.users.find(u => u.username === 'duyet1'));
+
+      DB.operationOrders = [];
+      delete DB.operationOrderHOTierWorkflows;
+      delete DB.operationOrderStoreTierWorkflows;
+      renderApprovalHub();
+
+      return {
+        includedForApprover: itemsBefore.some(it => it.code === 'DH-001' && it.type === 'operationOrderReceipt'),
+        buttons,
+        includedForOutsider: itemsForOutsider.some(it => it.code === 'DH-001'),
+      };
+    });
+    record('AWAITING_RECEIPT order appears in getMyPendingApprovals() for the authorized approver, tagged type "operationOrderReceipt"',
+      r.includedForApprover, JSON.stringify(r));
+    record('row renders exactly 2 buttons: "✅ Nhập Hàng" (openOperationOrderReceiptActionModal, RECEIVE) + "🚫 Hủy Nhập" (CANCEL)',
+      r.buttons.length === 2 &&
+      r.buttons.some(b => /Nhập Hàng/.test(b.label) && b.op === 'openOperationOrderReceiptActionModal' && b.arg0 === '701' && b.arg1 === 'RECEIVE') &&
+      r.buttons.some(b => /Hủy Nhập/.test(b.label) && b.op === 'openOperationOrderReceiptActionModal' && b.arg0 === '701' && b.arg1 === 'CANCEL'),
+      JSON.stringify(r.buttons));
+    record('AWAITING_RECEIPT order does NOT appear for a user without receipt-management permission on it',
+      !r.includedForOutsider, JSON.stringify(r));
+  });
+
+  // ==========================================================================
   // Access gating: a user in NO approval flow at all cannot open the hub.
   // ==========================================================================
   await scenario('canAccessApprovalHub()/switchTab() gate out a user with no approval flow at all', async () => {

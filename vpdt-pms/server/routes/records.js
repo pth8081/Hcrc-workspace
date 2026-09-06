@@ -729,6 +729,41 @@ router.post('/carRegs/:id/confirm-driver', async (req, res) => {
     handleError(res, `carRegs/${req.params.id}/confirm-driver`, err);
   }
 });
+
+// "Hủy chuyến" — CHỈ hồ sơ đang APPROVED (Fix 4, đợt rà soát nghiệp vụ: trước đây phiếu đã duyệt là
+// NGÕ CỤT, chỉ admin xoá cứng được) — mirror POST /api/meetings/:id/cancel (routes/meetingActions.js):
+// tự huỷ được chuyến của chính mình HOẶC carDispatch/admin huỷ được của bất kỳ ai, xem
+// canCancelCarReg()/cancelCarReg() ở lib/recordActions.js.
+router.post('/carRegs/:id/cancel', async (req, res) => {
+  const itemId = Number(req.params.id);
+  if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
+  try {
+    const { freshUser } = await getFreshUser(req);
+    const result = await withLockedRecordForCollection('carRegs', itemId, (item) =>
+      recordActions.cancelCarReg(freshUser, item, req.body || {}));
+    res.json({ ok: true, item: result });
+  } catch (err) {
+    handleError(res, `carRegs/${req.params.id}/cancel`, err);
+  }
+});
+
+// "Đổi tài xế-xe" — CHỈ Người Điều Hành Xe (carDispatch)/admin, CHỈ hồ sơ đang APPROVED — reassignCarDispatch()
+// (lib/recordActions.js) cần đọc TOÀN BỘ carRegs hiện có để tái kiểm tra trùng biển số (mirror đúng
+// applyWorkflowAction() ở lib/workflowEngine.js/findCarPlateConflict()) + danh sách users để đối chiếu
+// tài khoản lái xe mới — đọc TRƯỚC khi khoá bản ghi (cùng khuôn allMeetings ở routes/meetingActions.js).
+router.post('/carRegs/:id/reassign', async (req, res) => {
+  const itemId = Number(req.params.id);
+  if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
+  try {
+    const { freshUser, users } = await getFreshUser(req);
+    const existingCarRegs = await getAllForCollection('carRegs');
+    const result = await withLockedRecordForCollection('carRegs', itemId, (item) =>
+      recordActions.reassignCarDispatch(freshUser, item, req.body || {}, existingCarRegs, users));
+    res.json({ ok: true, item: result });
+  } catch (err) {
+    handleError(res, `carRegs/${req.params.id}/reassign`, err);
+  }
+});
 router.post('/vppPeriods/:id/delete', (req, res) => deleteAdminOnly(req, res, 'vppPeriods'));
 router.post('/vppRegistrations/:id/delete', (req, res) => deleteAdminOnly(req, res, 'vppRegistrations'));
 router.post('/reportPeriods/:id/delete', (req, res) => deleteAdminOnly(req, res, 'reportPeriods'));
@@ -1919,9 +1954,11 @@ router.post('/operationWorkItems/:id/accept', async (req, res) => {
   try {
     const { freshUser } = await getFreshUser(req);
     let sourceType, sourceId, parentWorkItemId;
-    const result = await withLockedWorkItemById(itemId, (item) => {
+    const result = await withLockedWorkItemById(itemId, async (item) => {
       sourceType = item.sourceType; sourceId = item.sourceId; parentWorkItemId = item.parentWorkItemId;
-      return recordActions.acceptOperationWorkItem(freshUser, item, req.body || {});
+      const all = await getWorkItemsBySource(item.sourceType, item.sourceId);
+      const children = all.filter(w => w.parentWorkItemId === item.id);
+      return recordActions.acceptOperationWorkItem(freshUser, item, children, req.body || {});
     });
     await syncOperationWorkItemAncestors(parentWorkItemId, sourceType, sourceId);
     res.json({ ok: true, item: result });

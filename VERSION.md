@@ -1,10 +1,86 @@
 # Phiên bản hiện tại
 
-**10.0** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
-`/api/health`). Bản merge gần nhất vào `main` là **10.0** — xem mục "Fix 4 lỗi nghiệp vụ phát hiện qua
-audit..." ngay dưới. Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
-`1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md` (MINOR chạy 0-9, ở `9.9` nên lần này tăng MAJOR
-lên `10.0` thay vì `9.10`).
+**10.1** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+`/api/health`). Bản merge gần nhất vào `main` là **10.1** — xem mục "4 lỗi nghiệp vụ Vận Hành/Đăng Ký
+Xe/Approval Hub..." ngay dưới. Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần
+kiểu `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## 4 lỗi nghiệp vụ Vận Hành / Đăng Ký Xe / Approval Hub phát hiện qua audit + 2 tính năng người dùng xác nhận (2026-09-06)
+
+**Bối cảnh**: 1 đợt audit sâu logic nghiệp vụ khác (song song với đợt "Văn Phòng Tổng Hợp/Biên Bản
+Họp/Công Việc" ở mục dưới) phát hiện thêm 2 lỗi ở Vận Hành + 2 tính năng người dùng đã xác nhận muốn
+thêm ở Approval Hub và Đăng Ký Xe.
+
+**Fix 1 — Vận Hành: nghiệm thu (nãi) trực tiếp 1 công việc CHA (có con) không bị chặn, phá vỡ bất biến
+cascade**: `acceptOperationWorkItem()` (`lib/recordActions.js`) trước đây chỉ kiểm tra
+`status === 'DANG_NGHIEM_THU'`, không kiểm tra công việc có con hay không — người có quyền nghiệm thu
+có thể bấm "✅ Nghiệm Thu" thẳng lên 1 việc CHA (đặc biệt dễ xảy ra vì việc cha tự cascade lên
+`DANG_NGHIEM_THU` khi mọi con đã "hoàn thành"), tự tay ghi đè `acceptedBy`/`status` dù đúng ra chỉ được
+tự động cập nhật theo con (`computeParentWorkItemStatus`/`syncOperationWorkItemAncestors`). Sửa: mirror
+đúng chặn 409 đã có ở `updateOperationWorkItemProgress()` — `acceptOperationWorkItem()` nay nhận thêm
+tham số `children`, ném lỗi "Công việc này có việc con..." nếu còn con; route `POST
+/operationWorkItems/:id/accept` (`routes/records.js`) tự đọc children trước khi gọi, mirror đúng route
+`/progress` đã làm. Client (`module-vanhanh.js`, nhánh ACCEPTANCE-mode): ẩn 2 nút "✅ Nghiệm Thu"/"🔄 Bổ
+Sung" khi `hasChildren`, hiện "Tự cập nhật theo việc con" thay vào đó (mirror đúng nhánh EXECUTION-mode
+đã có). Cascade tự động (con nghiệm thu xong hết → cha tự `DA_NGHIEM_THU`) vẫn hoạt động y hệt — chỉ
+chặn cú click TAY trực tiếp lên việc cha.
+
+**Fix 2 — Vận Hành > Đơn Hàng: `paymentTotalAmount` (field người dùng tự gõ) có thể kéo đơn hàng thật
+sự giá trị cao xuống mức duyệt thấp hơn**: `computeOperationOrderAmount()` (`lib/workflowEngine.js`)
+trước đây ưu tiên `paymentTotalAmount` tuyệt đối bất cứ khi nào > 0, hoàn toàn bỏ qua `amount` (tổng
+Số lượng × Đơn giá các hạng mục, server LUÔN tự tính lại, tamper-proof) dù `amount` cao hơn nhiều —
+1 đơn hàng 200 triệu tiền hàng thật nhưng khai `paymentTotalAmount` giả 5 triệu sẽ né được tier duyệt
+cao, chỉ cần người ít thẩm quyền hơn duyệt. Sửa: đổi thành `Math.max(amount, paymentTotalAmount)` —
+`paymentTotalAmount` chỉ được phép đẩy tier LÊN cao hơn (hợp lệ khi gồm VAT/phụ phí thật), không bao
+giờ kéo XUỐNG dưới mức `amount` thật yêu cầu. Đúng cho cả Store (3 mức) lẫn HO (2 mức). Client
+(`computeOperationOrderAmountClient()`, `public/js/core.js`) mirror lại y hệt để nhãn hiển thị mức duyệt
+dự kiến luôn khớp server (chỉ 1 nhãn hiển thị, không phải điểm chặn quyền — server luôn tự tính lại).
+
+**Fix 3 — Approval Hub: đơn hàng `AWAITING_RECEIPT` ("Chờ Nhập Hàng") không bao giờ vào Hub dù người
+chịu trách nhiệm còn phải xác nhận nhập/hủy nhập** — người dùng xác nhận "Có, đưa vào Hub".
+`getMyPendingApprovals()` (`public/js/core-approvalhub.js`) trước đây chỉ gộp hồ sơ `status==='PENDING'`.
+Sửa: gộp thêm `operationOrders` đang `AWAITING_RECEIPT` mà người dùng hiện tại pass
+`canManageOperationOrderReceiptClient()` (`module-vanhanh.js`, tái dùng nguyên hàm quyền đã có, không
+viết lại logic) — hiện như 1 loại mục riêng (`type: 'operationOrderReceipt'`) với 2 nút hành động ĐÚNG
+như ở list Vận Hành gốc ("✅ Nhập Hàng"/"🚫 Hủy Nhập"), không phải Duyệt/Từ chối thông thường (đây không
+phải quyết định duyệt/từ chối). Vì hàm quyền đó sống ở cụm nạp lười "vanhanh" trong khi
+core-approvalhub.js luôn nạp sẵn (eager), có guard `typeof` trước khi gọi + tự nạp nền/làm mới lại Hub
+khi cụm chưa từng mở trong phiên (không throw ReferenceError). Tab "Đã xử lý" đã tự hoạt động đúng từ
+trước (`matchStatuses: ['APPROVED','AWAITING_RECEIPT','RECEIVED','RECEIPT_CANCELLED']`, thêm ở
+`48fd713`) — chỉ xác nhận lại, không sửa gì thêm.
+
+**Fix 4 — Đăng Ký Xe: thêm "Hủy chuyến"/"Đổi tài xế-xe" SAU KHI đã duyệt** — người dùng xác nhận "Thêm
+nút Hủy/Đổi sau duyệt". Trước đây 1 phiếu đã `APPROVED` là ngõ cụt, chỉ admin xóa cứng được. Mirror cơ
+chế Huỷ của Phòng Họp (`canCancelMeeting()`/`routes/meetingActions.js`): "Hủy chuyến" (action + route
+mới `POST /api/records/carRegs/:id/cancel`, hàm `cancelCarReg()`/`canCancelCarReg()` ở
+`lib/recordActions.js`) — tự huỷ được chuyến của CHÍNH MÌNH (creator, không cần quyền gì thêm) HOẶC
+`carDispatch`("Người Điều Hành Xe")/admin huỷ được của bất kỳ ai — chuyển sang trạng thái `CANCELLED`
+MỚI (chưa từng tồn tại cho `carRegs`; `findCarPlateConflict()` đã sẵn loại trừ trạng thái này khỏi kiểm
+tra trùng biển số từ trước). "Đổi tài xế-xe" (route mới `POST /api/records/carRegs/:id/reassign`, hàm
+`reassignCarDispatch()`) — CHỈ `carDispatch`/admin, tái dùng UI phân công có sẵn (`carDispatchSection`
+trong modal xử lý) + `findCarPlateConflict()` để chặn gán trùng biển số, reset `driverConfirmed` khi đổi
+tài xế (mirror đúng `applyWorkflowAction()`). Cả 2 hành động CHỈ áp dụng khi `status === 'APPROVED'` —
+`applyWorkflowAction()` (dùng cho Duyệt/Từ chối) khoá cứng chỉ nhận `status==='PENDING'` nên đây là 2
+hàm HOÀN TOÀN RIÊNG, không đụng tới engine duyệt theo bước. Client (`module-dangkyxe.js`): 2 lựa chọn
+mới ở dòng danh sách (dropdown "Khác ▾") + 2 nút trong modal xử lý, gate đúng
+`canCancelCarRegClient()`/`canDispatchCarClient()` (mirror chính xác gate server).
+
+**Deploy impact**: KHÔNG đổi `server/sql/schema.sql`, KHÔNG thêm biến môi trường, KHÔNG thêm/đổi
+`dependencies` — thuần JSON-blob data (field `status` mới `CANCELLED` cho `carRegs`, các field
+`cancelledAt/cancelledBy/cancelledByName` mới, không cần migrate dữ liệu cũ) + app logic, chỉ cần copy
+code + `pm2 restart` theo quy trình hiện có (mục 16 `HUONG_DAN_DEPLOY_UBUNTU.md`).
+
+Đã kiểm thử: toàn bộ 63 file `tests/test-*.js` chạy tới hoàn tất thật — chỉ 2 file (`test-audit-fixes-batch1.js`,
+`test-audit-round2-cluster1.js`) fail đúng những kịch bản gọi `GET /api/data` cần SQL Server thật (lỗi
+kết nối `localhost:1433`), đã xác nhận là hạn chế môi trường sandbox có từ trước, không liên quan gì
+tới 4 fix này. Bổ sung/mở rộng kiểm thử Playwright thật cho cả 4 fix: `tests/test-operation-store-lifecycle.js`
+(Fix 1 — nghiệm thu tay việc cha bị chặn 409 + client ẩn đúng nút, cascade tự động vẫn qua 67/67 kịch
+bản kể cả cascade 3 cấp), `tests/test-operation-order-location-tiers.js` (Fix 2 — `max(amount,
+paymentTotalAmount)` đúng cả 2 hướng + đúng biên giới tier cho cả Store/HO, 24/24), `tests/test-approval-hub.js`
+(Fix 3 — đơn `AWAITING_RECEIPT` vào đúng Hub của đúng approver với nút Nhập Hàng/Hủy Nhập, không vào Hub
+của người không có quyền, 33/33), `tests/test-meeting-car.js` (Fix 4 — huỷ/đổi tài xế-xe hoạt động đúng
+sau khi duyệt, gate đúng quyền, chặn biển số trùng, chặn thao tác trên phiếu chưa/không còn APPROVED,
+53/53).
 
 ## Fix 4 lỗi nghiệp vụ phát hiện qua audit — Văn Phòng Tổng Hợp / Biên Bản Họp / Công Việc (2026-09-06)
 

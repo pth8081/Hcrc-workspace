@@ -8,8 +8,10 @@
 // Phủ:
 //   1. computeOperationOrderTier() bắt đúng biên giới ở CẢ 2 phía đúng mốc 10.000.000 và 100.000.000
 //      (mốc đúng bằng luôn rơi vào mức CAO HƠN — "< 10 triệu"/"< 100 triệu" LOẠI TRỪ đúng mốc đó).
-//   2. computeOperationOrderAmount() ưu tiên paymentTotalAmount (> 0) trước amount — fallback đúng khi
-//      paymentTotalAmount = 0/chưa nhập (đơn tạo tay không kèm PDF).
+//   2. computeOperationOrderAmount() lấy MAX(amount, paymentTotalAmount) — paymentTotalAmount (field
+//      người dùng tự gõ trên form/đọc từ PDF) chỉ được phép đẩy tier LÊN cao hơn (VD gồm VAT/phụ phí),
+//      KHÔNG được phép kéo tier XUỐNG thấp hơn mức mà amount (server tự tính lại từ items, tamper-proof)
+//      thật sự yêu cầu — đây chính là hướng đã từng là lỗ hổng (đã vá).
 //   3. 2 quy trình Siêu Thị/HO ĐỘC LẬP HOÀN TOÀN: approver cấu hình cho 1 mức của Siêu Thị KHÔNG được
 //      quyền duyệt đơn HO (dù cùng mức giá trị tương đương), và ngược lại.
 //   4. Server LUÔN tự tính lại tier từ amount/orderLocationType hiện có trên item — 1 field lạ client tự
@@ -79,10 +81,13 @@ test('computeOperationOrderTier(): locationType lạ/thiếu (fallback) coi như
 });
 
 // ===================== 2) Ưu tiên paymentTotalAmount > amount =====================
-test('computeOperationOrderAmount(): paymentTotalAmount > 0 -> ưu tiên dùng số này (bỏ qua amount)', () => {
+test('computeOperationOrderAmount(): paymentTotalAmount > amount -> dùng paymentTotalAmount (max thắng)', () => {
   assert.strictEqual(computeOperationOrderAmount({ amount: 1000000, paymentTotalAmount: 250000000 }), 250000000);
 });
-test('computeOperationOrderAmount(): paymentTotalAmount = 0/chưa nhập -> fallback về amount (đơn tạo tay không kèm PDF)', () => {
+test('computeOperationOrderAmount(): amount > paymentTotalAmount -> dùng amount (max thắng, paymentTotalAmount giả thấp KHÔNG kéo xuống được)', () => {
+  assert.strictEqual(computeOperationOrderAmount({ amount: 250000000, paymentTotalAmount: 1000000 }), 250000000);
+});
+test('computeOperationOrderAmount(): paymentTotalAmount = 0/chưa nhập -> dùng amount (đơn tạo tay không kèm PDF)', () => {
   assert.strictEqual(computeOperationOrderAmount({ amount: 5000000, paymentTotalAmount: 0 }), 5000000);
   assert.strictEqual(computeOperationOrderAmount({ amount: 5000000 }), 5000000);
   assert.strictEqual(computeOperationOrderAmount({ amount: 5000000, paymentTotalAmount: null }), 5000000);
@@ -162,18 +167,49 @@ test('Tamper: item mang field lạ mô phỏng tier THẤP (vd client tự gắn
     403, 'Bạn không có quyền', 'Field lạ "orderTier" client tự gắn KHÔNG được server tin — vẫn phải chặn đúng theo amount thật (GTE100M, chưa cấu hình approver)'
   );
 });
-test('Tamper: paymentTotalAmount giả mạo THẤP không giúp né tier cao nếu amount (tự tính từ items) thật cao hơn — ưu tiên paymentTotalAmount khi > 0 là quy tắc CÔNG KHAI, không phải lỗ hổng: xác nhận cấu hình đúng tier theo paymentTotalAmount khi có, đúng thiết kế đã công bố', () => {
-  // Trường hợp NGƯỢC LẠI (paymentTotalAmount CAO hơn amount) mới là rủi ro thật (đơn thật rẻ nhưng khai
-  // paymentTotalAmount cao để rơi vào tier ít người duyệt hơn) — nhưng paymentTotalAmount được server tự
-  // Math.max(0, Number(...)) ở lib/createValidation.js lúc TẠO, không thể sửa sau creation qua đường nào
-  // khác ngoài editOperationOrderDraft() (không đụng field này) — an toàn theo thiết kế, không phải lỗ
-  // hổng cần vá thêm ở đây. Test này chỉ xác nhận hành vi ưu tiên đã đúng như tài liệu công bố.
+test('paymentTotalAmount CAO hơn amount (VD gồm VAT/phụ phí) hợp lệ đẩy tier LÊN cao hơn — đúng thiết kế công khai (max(amount, paymentTotalAmount))', () => {
+  // paymentTotalAmount (250tr) > amount (5tr) -> max = 250tr -> tier HO phải là GTE100M (chưa cấu hình approver nào ở appData) -> chặn cả HO_APPROVER (chỉ được gán ở LT100M).
   const item = freshOrder({ orderLocationType: 'HO', amount: 5000000, paymentTotalAmount: 250000000 });
-  // paymentTotalAmount (250tr) thắng amount (5tr) -> tier HO phải là GTE100M (chưa cấu hình approver nào ở appData) -> chặn cả HO_APPROVER (chỉ được gán ở LT100M).
+  assert.strictEqual(computeOperationOrderAmount(item), 250000000, 'max(5tr, 250tr) phải = 250tr');
   assertThrows(
     () => applyWorkflowAction({ moduleKey: 'operationOrders', item, action: 'APPROVE', user: makeUser(HO_APPROVER), comment: '', appData }),
     403, 'Bạn không có quyền', 'paymentTotalAmount cao hơn amount phải thắng, đẩy đơn lên tier GTE100M chưa cấu hình'
   );
+});
+// ===== Tamper: paymentTotalAmount giả mạo THẤP KHÔNG được phép né tier cao khi amount thật (server tự
+// tính từ items, tamper-proof) cao hơn — đây là hướng RỦI RO THẬT (đơn hàng thật đắt, khai
+// paymentTotalAmount thấp/giả để rơi vào tier ít người duyệt hơn/mức duyệt thấp hơn) — trước bản vá này
+// computeOperationOrderAmount() ưu tiên paymentTotalAmount tuyệt đối bất kể amount cao hơn bao nhiêu,
+// nên hướng này đã KHÔNG được test tới (dù tên test cũ đã nhắc tới rủi ro này, phần thân lại chỉ test
+// hướng ngược lại) — nay bổ sung đúng hướng này cho cả STORE (3 mức) và HO (2 mức).
+test('Tamper STORE: amount thật 200 triệu (GTE100M) + paymentTotalAmount giả mạo THẤP 5 triệu -> tier vẫn phải tính theo 200tr (GTE100M), KHÔNG rơi xuống LT10M', () => {
+  const item = freshOrder({ orderLocationType: 'STORE', amount: 200000000, paymentTotalAmount: 5000000 });
+  assert.strictEqual(computeOperationOrderAmount(item), 200000000, 'max(200tr, 5tr) phải = 200tr, không được kéo xuống 5tr');
+  assert.strictEqual(computeOperationOrderTier('STORE', computeOperationOrderAmount(item)), 'GTE100M');
+  // GTE100M chưa cấu hình approver nào ở appData (chỉ có LT10M) -> STORE_APPROVER (chỉ gán ở LT10M) PHẢI bị chặn dù paymentTotalAmount khai giả 5tr rơi đúng mức của họ.
+  assertThrows(
+    () => applyWorkflowAction({ moduleKey: 'operationOrders', item, action: 'APPROVE', user: makeUser(STORE_APPROVER), comment: '', appData }),
+    403, 'Bạn không có quyền', 'STORE: paymentTotalAmount giả thấp không được né tier cao của amount thật'
+  );
+});
+test('Tamper HO: amount thật 200 triệu (GTE100M) + paymentTotalAmount giả mạo THẤP 5 triệu -> tier vẫn phải tính theo 200tr (GTE100M), KHÔNG rơi xuống LT100M', () => {
+  const item = freshOrder({ orderLocationType: 'HO', amount: 200000000, paymentTotalAmount: 5000000 });
+  assert.strictEqual(computeOperationOrderAmount(item), 200000000, 'max(200tr, 5tr) phải = 200tr, không được kéo xuống 5tr');
+  assert.strictEqual(computeOperationOrderTier('HO', computeOperationOrderAmount(item)), 'GTE100M');
+  // GTE100M chưa cấu hình approver nào ở appData (chỉ có LT100M) -> HO_APPROVER (chỉ gán ở LT100M) PHẢI bị chặn dù paymentTotalAmount khai giả 5tr rơi đúng mức của họ (LT100M).
+  assertThrows(
+    () => applyWorkflowAction({ moduleKey: 'operationOrders', item, action: 'APPROVE', user: makeUser(HO_APPROVER), comment: '', appData }),
+    403, 'Bạn không có quyền', 'HO: paymentTotalAmount giả thấp không được né tier cao của amount thật'
+  );
+});
+// Kiểm tra biên giới CHÍNH XÁC quanh mốc tier khi dùng max(): amount ngay dưới mốc + paymentTotalAmount ngay trên mốc -> phải nhảy tier theo paymentTotalAmount (đúng hướng ĐẨY LÊN hợp lệ), và ngược lại (paymentTotalAmount thấp không kéo xuống).
+test('Biên giới HO đúng mốc 100 triệu qua max(): amount=99.999.999 (LT100M) + paymentTotalAmount=100.000.000 (đúng mốc, GTE100M) -> phải là GTE100M', () => {
+  const item = freshOrder({ orderLocationType: 'HO', amount: 99999999, paymentTotalAmount: 100000000 });
+  assert.strictEqual(computeOperationOrderTier('HO', computeOperationOrderAmount(item)), 'GTE100M');
+});
+test('Biên giới HO đúng mốc 100 triệu qua max(): amount=100.000.000 (đúng mốc, GTE100M) + paymentTotalAmount=1 (giả thấp) -> vẫn phải là GTE100M (không kéo xuống LT100M)', () => {
+  const item = freshOrder({ orderLocationType: 'HO', amount: 100000000, paymentTotalAmount: 1 });
+  assert.strictEqual(computeOperationOrderTier('HO', computeOperationOrderAmount(item)), 'GTE100M');
 });
 
 // ===================== 5) migrateOperationOrdersDefaultLocationType() (seedDefaults.js) =====================

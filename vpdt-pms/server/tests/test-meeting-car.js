@@ -150,6 +150,39 @@ const server = http.createServer(async (req, res) => {
     }
   }
 
+  // POST /api/records/carRegs/:id/cancel — Fix 4 (đợt rà soát nghiệp vụ) "Hủy chuyến" sau khi đã duyệt —
+  // mirrors routes/records.js POST /api/records/carRegs/:id/cancel.
+  const cancelCarMatch = url.pathname.match(/^\/api\/records\/carRegs\/(\d+)\/cancel$/);
+  if (req.method === 'POST' && cancelCarMatch) {
+    const id = Number(cancelCarMatch[1]);
+    const body = await readBody(req);
+    const item = store.carRegs.find((c) => c.id === id);
+    if (!item) return sendJson(res, 404, { error: 'Không tìm thấy hồ sơ' });
+    try {
+      const result = recordActions.cancelCarReg(activeServerUser, item, body);
+      return sendJson(res, 200, { ok: true, item: result });
+    } catch (err) {
+      return sendJson(res, err.status || 500, { error: err.message });
+    }
+  }
+
+  // POST /api/records/carRegs/:id/reassign — Fix 4 "Đổi tài xế-xe" sau khi đã duyệt — mirrors
+  // routes/records.js POST /api/records/carRegs/:id/reassign (đọc TOÀN BỘ store.carRegs để tái kiểm tra
+  // trùng biển số, mirror đúng route thật đọc existingCarRegs trước khi khoá bản ghi).
+  const reassignCarMatch = url.pathname.match(/^\/api\/records\/carRegs\/(\d+)\/reassign$/);
+  if (req.method === 'POST' && reassignCarMatch) {
+    const id = Number(reassignCarMatch[1]);
+    const body = await readBody(req);
+    const item = store.carRegs.find((c) => c.id === id);
+    if (!item) return sendJson(res, 404, { error: 'Không tìm thấy hồ sơ' });
+    try {
+      const result = recordActions.reassignCarDispatch(activeServerUser, item, body, store.carRegs, store.users);
+      return sendJson(res, 200, { ok: true, item: result });
+    } catch (err) {
+      return sendJson(res, err.status || 500, { error: err.message });
+    }
+  }
+
   // POST /api/records/carRegs/:id/update|submit — "Bổ Sung": sửa lại NHÁP (sau REQUEST_CHANGES) + gửi
   // lại, xem lib/recordActions.js editCarRegDraft()/submitCarRegDraft() — mirrors routes/records.js.
   const carDraftMatch = url.pathname.match(/^\/api\/records\/carRegs\/(\d+)\/(update|submit)$/);
@@ -947,6 +980,210 @@ async function main() {
     'Car Bổ Sung: sau khi bổ sung + gửi lại, phiếu được duyệt lại bình thường -> APPROVED',
     e5 === 'APPROVED',
     e5
+  );
+
+  // ===================== F1-F11 — Fix 4 (đợt rà soát nghiệp vụ, người dùng xác nhận "Thêm nút Hủy/Đổi
+  // sau duyệt"): "Hủy chuyến" (cancelCarReg) reachable khi status===APPROVED — mirror canCancelMeeting()
+  // (tự huỷ được của CHÍNH MÌNH HOẶC carDispatch/admin huỷ được của bất kỳ ai); "Đổi tài xế-xe"
+  // (reassignCarDispatch) CHỈ carDispatch/admin, cũng CHỈ khi APPROVED, tái dùng findCarPlateConflict()
+  // để chặn gán trùng biển số. Trước đây 1 phiếu đã APPROVED là ngõ cụt — chỉ admin xóa cứng được.
+  // =====================
+  const carF1 = {
+    id: 900401, code: 'HCRC-DPH-F1', dept: 'Ban Giám Đốc', status: 'APPROVED', currentStep: 1, history: [],
+    type: 'Xe 4 chỗ', km: '30', passengers: '01', purpose: 'Công tác',
+    startTime: '2026-09-20T08:00', endTime: '2026-09-20T12:00', destination: 'HCM', reason: 'Fix 4 test cancel',
+    creator: bookerUser.username, creatorName: bookerUser.name,
+    assignedDriverUsername: 'lx1', assignedDriver: 'Nguyễn Văn Tài', assignedPlate: '51A-111.11', assignedVehicleType: 'Xe 4 chỗ',
+    driverConfirmed: true, driverConfirmedAt: '18/09/2026 07:00'
+  };
+  const carF2 = {
+    id: 900402, code: 'HCRC-DPH-F2', dept: 'Ban Giám Đốc', status: 'APPROVED', currentStep: 1, history: [],
+    type: 'Xe 7 chỗ', km: '40', passengers: '02', purpose: 'Công tác',
+    startTime: '2026-09-21T08:00', endTime: '2026-09-21T12:00', destination: 'HCM', reason: 'Fix 4 test reassign',
+    creator: bookerUser.username, creatorName: bookerUser.name,
+    assignedDriverUsername: 'lx1', assignedDriver: 'Nguyễn Văn Tài', assignedPlate: '51A-222.22', assignedVehicleType: 'Xe 7 chỗ',
+    driverConfirmed: true, driverConfirmedAt: '18/09/2026 07:00'
+  };
+  // Chuyến KHÁC, TRÙNG khung giờ với carF2 nhưng biển số khác — dùng để test findCarPlateConflict()
+  // chặn gán trùng biển số lúc "Đổi tài xế-xe" (mirror đúng conflict check applyWorkflowAction() đã có).
+  const carF3Conflict = {
+    id: 900403, code: 'HCRC-DPH-F3', dept: 'Ban Giám Đốc', status: 'APPROVED', currentStep: 1, history: [],
+    startTime: '2026-09-21T09:00', endTime: '2026-09-21T11:00', destination: 'HN', reason: 'Fix 4 test conflict',
+    creator: bookerUser.username, creatorName: bookerUser.name, assignedPlate: '51A-333.33'
+  };
+  const carF4 = {
+    id: 900404, code: 'HCRC-DPH-F4', dept: 'Ban Giám Đốc', status: 'APPROVED', currentStep: 1, history: [],
+    startTime: '2026-09-22T08:00', endTime: '2026-09-22T12:00', destination: 'HCM', reason: 'Fix 4 dispatcher-cancel test',
+    creator: bookerUser.username, creatorName: bookerUser.name
+  };
+  const carF5Pending = {
+    id: 900405, code: 'HCRC-DPH-F5', dept: 'Ban Giám Đốc', status: 'PENDING', currentStep: 1, history: [],
+    startTime: '2026-09-23T08:00', endTime: '2026-09-23T12:00', destination: 'HCM', reason: 'Fix 4 pending guard',
+    creator: bookerUser.username, creatorName: bookerUser.name
+  };
+  const carF9 = {
+    id: 900409, code: 'HCRC-DPH-F9', dept: 'Ban Giám Đốc', status: 'APPROVED', currentStep: 1, history: [],
+    type: 'Xe 4 chỗ', km: '20', passengers: '01', purpose: 'Công tác',
+    startTime: '2026-09-24T08:00', endTime: '2026-09-24T12:00', destination: 'HCM', reason: 'Fix 4 UI gating test',
+    creator: bookerUser.username, creatorName: bookerUser.name, assignedPlate: '', assignedDriverUsername: ''
+  };
+  store.carRegs.push(carF1, carF2, carF3Conflict, carF4, carF5Pending, carF9);
+  await page.evaluate((items) => { items.forEach((c) => DB.carRegs.push(c)); }, [carF1, carF2, carF3Conflict, carF4, carF5Pending, carF9]);
+
+  // F1 — người KHÔNG phải người tạo VÀ KHÔNG có carDispatch KHÔNG huỷ được chuyến của người khác.
+  await loginAs(page, noDispatchApproverUser);
+  const f1 = await page.evaluate(async (carId) => {
+    try { await callRecordAction('carRegs', carId, 'cancel', { reason: 'thử trái phép' }); return { ok: true }; }
+    catch (err) { return { ok: false, message: err.message }; }
+  }, carF1.id);
+  record('Fix 4: người KHÔNG phải chủ chuyến và KHÔNG có carDispatch KHÔNG hủy được chuyến của người khác (403)', !f1.ok, JSON.stringify(f1));
+
+  // F2 — chính người tạo (self-cancel, không cần quyền gì thêm) hủy được chuyến của MÌNH.
+  await loginAs(page, bookerUser);
+  const f2 = await page.evaluate(async (carId) => {
+    const result = await callRecordAction('carRegs', carId, 'cancel', { reason: 'Đổi kế hoạch công tác' });
+    const idx = DB.carRegs.findIndex((c) => c.id === carId);
+    DB.carRegs[idx] = result.item;
+    return result.item;
+  }, carF1.id);
+  record('Fix 4: chính người tạo (self-cancel) HỦY được chuyến APPROVED của mình -> CANCELLED', f2.status === 'CANCELLED', JSON.stringify(f2));
+  record(
+    'Fix 4: hủy chuyến ghi đúng cancelledBy/cancelledByName + dòng lịch sử CANCELLED kèm lý do',
+    f2.cancelledBy === bookerUser.username && f2.cancelledByName === bookerUser.name &&
+      (f2.history || []).some((h) => h.action === 'CANCELLED' && h.comment.includes('Đổi kế hoạch')),
+    JSON.stringify(f2)
+  );
+
+  // F3 — hủy lại 1 chuyến ĐÃ hủy trước đó -> 409 (không hủy lại được).
+  const f3 = await page.evaluate(async (carId) => {
+    try { await callRecordAction('carRegs', carId, 'cancel', { reason: 'again' }); return { ok: true }; }
+    catch (err) { return { ok: false, message: err.message }; }
+  }, carF1.id);
+  record('Fix 4: hủy lại 1 chuyến ĐÃ CANCELLED trước đó bị chặn (409)', !f3.ok, JSON.stringify(f3));
+
+  // F4 — carDispatch hủy được chuyến của NGƯỜI KHÁC (không phải chủ hồ sơ), khác self-cancel ở F2.
+  await loginAs(page, dispatchApproverUser);
+  const f4 = await page.evaluate(async (carId) => {
+    const result = await callRecordAction('carRegs', carId, 'cancel', { reason: 'Điều phối lại chuyến' });
+    return result.item;
+  }, carF4.id);
+  record('Fix 4: carDispatch (Người Điều Hành Xe) HỦY được BẤT KỲ chuyến nào, không chỉ của chính mình', f4.status === 'CANCELLED', JSON.stringify(f4));
+
+  // F5 — chuyến còn PENDING (chưa duyệt xong) không hủy được qua kênh "Hủy chuyến" này (dùng Từ chối ở
+  // bước duyệt, hoặc admin xóa cứng, như trước đây).
+  await loginAs(page, bookerUser);
+  const f5 = await page.evaluate(async (carId) => {
+    try { await callRecordAction('carRegs', carId, 'cancel', { reason: 'x' }); return { ok: true }; }
+    catch (err) { return { ok: false, message: err.message }; }
+  }, carF5Pending.id);
+  record('Fix 4: "Hủy chuyến" bị chặn trên 1 phiếu còn PENDING (chưa APPROVED) (409)', !f5.ok, JSON.stringify(f5));
+
+  // F6 — người tạo (KHÔNG có carDispatch) KHÔNG đổi được tài xế-xe, kể cả trên chuyến của chính mình.
+  const f6 = await page.evaluate(async (carId) => {
+    try { await callRecordAction('carRegs', carId, 'reassign', { assignedDriverUsername: 'lx2', assignedPlate: '51A-999.99' }); return { ok: true }; }
+    catch (err) { return { ok: false, message: err.message }; }
+  }, carF2.id);
+  record('Fix 4: người tạo (KHÔNG có carDispatch) KHÔNG đổi được tài xế-xe, kể cả trên chuyến của chính mình (403)', !f6.ok, JSON.stringify(f6));
+
+  // F7a — đổi biển số TRÙNG với 1 chuyến APPROVED khác cùng trùng khung giờ -> chặn (mirror
+  // findCarPlateConflict() ở applyWorkflowAction()).
+  await loginAs(page, dispatchApproverUser);
+  const f7a = await page.evaluate(async (carId) => {
+    try { await callRecordAction('carRegs', carId, 'reassign', { assignedPlate: '51A-333.33' }); return { ok: true }; }
+    catch (err) { return { ok: false, message: err.message }; }
+  }, carF2.id);
+  record('Fix 4: "Đổi tài xế-xe" chặn gán biển số đã dùng cho 1 chuyến APPROVED KHÁC trùng khung giờ (409)', !f7a.ok, JSON.stringify(f7a));
+
+  // F7b — carDispatch đổi tài xế + loại xe + biển số (biển mới, KHÔNG trùng) hợp lệ.
+  const f7b = await page.evaluate(async (carId) => {
+    const result = await callRecordAction('carRegs', carId, 'reassign', {
+      assignedDriverUsername: 'lx2', assignedVehicleType: 'Xe 16 chỗ', assignedPlate: '51A-444.44',
+      comment: 'Đổi tài xế do lx1 bận đột xuất'
+    });
+    const idx = DB.carRegs.findIndex((c) => c.id === carId);
+    DB.carRegs[idx] = result.item;
+    return result.item;
+  }, carF2.id);
+  record(
+    'Fix 4: carDispatch đổi tài xế-xe thành công trên 1 chuyến đã APPROVED (driver/loại xe/biển số mới)',
+    f7b.assignedDriverUsername === 'lx2' && f7b.assignedPlate === '51A-444.44' && f7b.assignedVehicleType === 'Xe 16 chỗ',
+    JSON.stringify(f7b)
+  );
+  record(
+    'Fix 4: đổi sang tài xế KHÁC reset xác nhận cũ của lái xe trước (mirror applyWorkflowAction())',
+    f7b.driverConfirmed === false && f7b.driverConfirmedAt === null,
+    JSON.stringify(f7b)
+  );
+  record('Fix 4: "Đổi tài xế-xe" ghi đúng dòng lịch sử REASSIGNED', (f7b.history || []).some((h) => h.action === 'REASSIGNED'), JSON.stringify(f7b.history));
+
+  // F8 — "Đổi tài xế-xe" bị chặn trên chuyến KHÔNG còn APPROVED nữa (vd đã CANCELLED — carF1 từ F2).
+  const f8 = await page.evaluate(async (carId) => {
+    try { await callRecordAction('carRegs', carId, 'reassign', { assignedPlate: '51A-555.55' }); return { ok: true }; }
+    catch (err) { return { ok: false, message: err.message }; }
+  }, carF1.id);
+  record('Fix 4: "Đổi tài xế-xe" bị chặn trên chuyến KHÔNG còn APPROVED (vd đã CANCELLED) (409)', !f8.ok, JSON.stringify(f8));
+
+  // F9 — UI gating: dòng danh sách + modal xử lý hiện ĐÚNG 2 nút cho carDispatch (Đổi Tài Xế-Xe + Hủy
+  // Chuyến), CHỈ 1 nút Hủy Chuyến cho chính người tạo (không có carDispatch), và KHÔNG nút nào cho
+  // canCancelCarRegClient()/canDispatchCarClient() trả false (mirror chính xác gate server ở trên).
+  const f9dispatch = await (async () => {
+    await loginAs(page, dispatchApproverUser);
+    return page.evaluate(({ carId }) => {
+      switchTab('car');
+      // Lọc theo từ khóa mã phiếu — tránh phiếu F9 (tạo cuối cùng) rơi ra ngoài trang hiện tại của
+      // pagination do danh sách carRegs đã tích lũy rất nhiều bản ghi qua các scenario trước đó trong
+      // cùng file test này (mirror đúng cách người dùng thật lọc theo mã phiếu, ổn định hơn giả định
+      // "trang 1 luôn có").
+      document.getElementById('filterKeywordCar').value = 'HCRC-DPH-F9';
+      renderCarRegs();
+      const row = [...document.querySelectorAll('#carTableBody tr')].find((tr) => tr.textContent.includes('HCRC-DPH-F9'));
+      openCarProcessModal(carId);
+      const modalBtnsHtml = document.getElementById('carModalActionBtns').innerHTML;
+      closeCarProcessModal();
+      return { rowHtml: row ? row.innerHTML : null, modalBtnsHtml };
+    }, { carId: carF9.id });
+  })();
+  record(
+    'Fix 4 UI: carDispatch thấy CẢ 2 lựa chọn "Đổi Tài Xế-Xe"(reassign)/"Hủy Chuyến"(cancelTrip) ở dòng danh sách',
+    f9dispatch.rowHtml && f9dispatch.rowHtml.includes('value="reassign"') && f9dispatch.rowHtml.includes('value="cancelTrip"'),
+    JSON.stringify(f9dispatch.rowHtml)
+  );
+  record(
+    'Fix 4 UI: carDispatch thấy CẢ 2 nút trong modal xử lý (confirmCarReassign + openCancelCarRegModal)',
+    f9dispatch.modalBtnsHtml.includes('confirmCarReassign') && f9dispatch.modalBtnsHtml.includes('openCancelCarRegModal'),
+    JSON.stringify(f9dispatch.modalBtnsHtml)
+  );
+
+  await loginAs(page, bookerUser);
+  const f9booker = await page.evaluate(({ carId }) => {
+    switchTab('car');
+    renderCarRegs();
+    const row = [...document.querySelectorAll('#carTableBody tr')].find((tr) => tr.textContent.includes('HCRC-DPH-F9'));
+    openCarProcessModal(carId);
+    const modalBtnsHtml = document.getElementById('carModalActionBtns').innerHTML;
+    closeCarProcessModal();
+    return { rowHtml: row ? row.innerHTML : null, modalBtnsHtml };
+  }, { carId: carF9.id });
+  record(
+    'Fix 4 UI: chính người tạo (KHÔNG carDispatch) chỉ thấy "Hủy Chuyến", KHÔNG thấy "Đổi Tài Xế-Xe"',
+    f9booker.rowHtml && f9booker.rowHtml.includes('value="cancelTrip"') && !f9booker.rowHtml.includes('value="reassign"'),
+    JSON.stringify(f9booker.rowHtml)
+  );
+  record(
+    'Fix 4 UI: modal của chính người tạo chỉ có nút Hủy Chuyến, không có Đổi Tài Xế-Xe',
+    f9booker.modalBtnsHtml.includes('openCancelCarRegModal') && !f9booker.modalBtnsHtml.includes('confirmCarReassign'),
+    JSON.stringify(f9booker.modalBtnsHtml)
+  );
+
+  await loginAs(page, noDispatchApproverUser);
+  const f9outsider = await page.evaluate(({ carId }) => {
+    const car = DB.carRegs.find((c) => c.id === carId);
+    return { canCancel: canCancelCarRegClient(car), canDispatch: canDispatchCarClient() };
+  }, { carId: carF9.id });
+  record(
+    'Fix 4 UI: người KHÔNG phải chủ chuyến và KHÔNG có carDispatch -> canCancelCarRegClient()/canDispatchCarClient() đều false',
+    f9outsider.canCancel === false && f9outsider.canDispatch === false,
+    JSON.stringify(f9outsider)
   );
 
   await browser.close();
