@@ -56,6 +56,39 @@ theo dòng tạo đúng việc DOING/sourceType/sourceDirectiveId, tự ẩn, g�
 `tests/test-task.js` (Fix 3 + Fix 4 — ẩn "Hoàn thành" khi pendingCancellation, ẩn "Xác nhận thay" khi
 DONE/CANCELLED).
 
+## Góc Chia Sẻ: checkbox tuỳ chọn gửi lại email duyệt khi resubmit sau "Yêu Cầu Bổ Sung" (2026-09-06)
+
+**Bối cảnh**: 1 đợt audit sâu logic nghiệp vụ phát hiện: khi tác giả sửa + gửi lại bài Góc Chia Sẻ sau
+khi nhận "Yêu Cầu Bổ Sung" (NEED_INFO -> PENDING), bài quay lại đúng hàng chờ duyệt nhưng KHÔNG có email
+nào báo lại cho người duyệt — khác nhánh tạo bài mới (`submitInternalPost()` nhánh `!isEditing`) luôn gửi
+email qua `notifyUsersByEmail(..., getInternalPostApproverUsernames(), ...)`.
+
+Hỏi lại người dùng có nên tự động gửi lại email hay không, người dùng đề xuất đúng: thêm 1 checkbox để
+tác giả TỰ CHỌN, mặc định KHÔNG tích (không gửi) — tích thì mới gửi lại.
+
+**Đã làm**: thêm checkbox "📧 Gửi email thông báo lại cho người duyệt" trên form Sửa bài Góc Chia Sẻ
+(`#internalResendEmailField`/`#internalResendEmailCheckbox`, `public/index.html`), mặc định ẩn + không
+tích, CHỈ hiện ra khi đang thực sự resubmit 1 bài NEED_INFO (`editInternalPostUI()` kiểm tra
+`p.status === 'NEED_INFO'`) — không hiện ở form tạo bài mới, không hiện khi Sửa bài Nháp (chưa từng gửi
+duyệt nên không phải "gửi lại"); tự ẩn + bỏ tích lại mỗi lần đổi tab/mở form khác
+(`setInternalSubTab()`), tránh mang theo lựa chọn của phiên Sửa trước. Ở `submitInternalPost()` nhánh
+`isEditing`, khi phát hiện đúng chuyển trạng thái NEED_INFO -> PENDING, chỉ gửi lại email (dùng LẠI y hệt
+lệnh gọi `notifyUsersByEmail()` của nhánh tạo mới, cùng danh sách người nhận) nếu checkbox đang tích;
+không tích thì bài vẫn resubmit/vào lại hàng chờ duyệt bình thường như trước giờ, chỉ bỏ qua bước gửi
+email (`public/js/module-internalcomms-nhipsong.js`).
+
+**Deploy impact**: KHÔNG đổi `server/sql/schema.sql`, KHÔNG thêm biến môi trường, KHÔNG thêm/đổi
+`dependencies` — thuần client-side (`public/index.html` + 1 file `public/js/module-*.js`), chỉ cần copy
+code + `pm2 restart` theo quy trình hiện có (mục 16 `HUONG_DAN_DEPLOY_UBUNTU.md`).
+
+Đã kiểm thử: toàn bộ 63 file `tests/test-*.js` — 61/63 pass hoàn toàn, 2 file còn lại chỉ fail đúng do SQL
+Server thật không có trong sandbox kiểm thử (lỗi kết nối `localhost:1433`, hạn chế môi trường có từ
+trước, không liên quan tính năng này). Bổ sung 4 kịch bản Playwright thật vào
+`tests/test-internal-recruitment-share.js`: tạo bài mới không có checkbox này (luôn gửi email như cũ),
+resubmit NEED_INFO thấy checkbox hiện đúng ngữ cảnh + mặc định không tích, resubmit KHÔNG tích thì không
+gửi email thêm (vẫn về PENDING bình thường), resubmit CÓ tích thì gửi thêm 1 email đúng tới cùng danh
+sách người duyệt như lúc tạo bài, và Sửa bài Nháp (không phải resubmit) thì checkbox vẫn ẩn.
+
 ## Chạy như dịch vụ hệ thống (systemd) dưới tài khoản riêng, không phải root + viết lại toàn bộ HUONG_DAN_DEPLOY_UBUNTU.md (2026-09-06)
 
 **Bối cảnh**: Trước đây `HUONG_DAN_DEPLOY_UBUNTU.md` hướng dẫn chạy PM2 bằng chính tài khoản admin đang
