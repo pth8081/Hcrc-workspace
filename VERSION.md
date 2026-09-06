@@ -1,14 +1,104 @@
 # Phiên bản hiện tại
 
-**9.8 — CHƯA MERGE vào `main`** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở
-badge góc màn hình + `/api/health`). Đang ở nhánh `claude/chao-ban-oo5ijl`, chờ người dùng xem demo rồi
-xác nhận mới merge — xem mục "Chuyển box chọn checkbox..." ngay dưới. Bản merge gần nhất vào `main` vẫn
-là **9.7**. Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu `1.100.0`) —
-xem quy tắc đánh version trong `CLAUDE.md`. (9.6 — mục "Vận Hành > Đơn Hàng: tách Đặt Hàng Tại Siêu
-Thị/Tại HO..." bên dưới — đã được xác nhận demo và merge vào `main` ở đợt trước, ghi chú "CHƯA MERGE" cũ
-trong bản đó đã lạc hậu, đã đính chính ở đợt 9.7.)
+**9.9** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+`/api/health`). Bản merge gần nhất vào `main` là **9.9** — xem mục "Chạy như dịch vụ hệ thống
+(systemd)..." ngay dưới. Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
+`1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (9.8 — mục "Chuyển box chọn checkbox người
+duyệt..." bên dưới — đã được xác nhận demo và merge vào `main` ở đợt trước, ghi chú "CHƯA MERGE" cũ
+trong bản đó đã lạc hậu, đã đính chính ở đợt 9.9.)
 
-## Chuyển box chọn checkbox người duyệt sang ô tìm-kiếm-gõ-chọn nhiều người ở "Quy Trình & Phê Duyệt" (2026-09-06) — CHƯA MERGE, chờ demo
+## Chạy như dịch vụ hệ thống (systemd) dưới tài khoản riêng, không phải root + viết lại toàn bộ HUONG_DAN_DEPLOY_UBUNTU.md (2026-09-06)
+
+**Bối cảnh**: Trước đây `HUONG_DAN_DEPLOY_UBUNTU.md` hướng dẫn chạy PM2 bằng chính tài khoản admin đang
+đăng nhập (thường có quyền `sudo`, đôi khi là `root`) — nếu có lỗ hổng chưa biết trong ứng dụng hoặc 1
+gói npm phụ thuộc bị khai thác, kẻ tấn công có thể chiếm toàn quyền máy chủ thay vì chỉ 1 phạm vi giới
+hạn. Người dùng yêu cầu: (1) chạy ứng dụng như dịch vụ hệ thống thật (systemd), sống sót qua reboot +
+đóng phiên SSH thay vì tiến trình chạy tay; (2) tạo tài khoản hệ thống riêng, không phải root, không
+phải tài khoản cá nhân admin; (3) khoá quyền thư mục ứng dụng + đặc biệt `.env` chỉ tài khoản đó đọc
+được; (4) viết lại toàn bộ hướng dẫn deploy cho rõ ràng, gộp đúng nội dung PM2 cluster mode (đã có từ
+đợt trước) + phần mới này thành 1 luồng liền mạch.
+
+**Thiết kế tài khoản dịch vụ + systemd (mục 9-10 mới trong `HUONG_DAN_DEPLOY_UBUNTU.md`)**:
+- `useradd --system --no-create-home --home-dir /opt/vpdt --shell /usr/sbin/nologin vpdt-app` — tài
+  khoản hệ thống, không cho đăng nhập tương tác (SSH/`su -`), **trỏ thẳng "home" vào chính thư mục ứng
+  dụng** thay vì tạo thư mục home riêng biệt. Đây là điểm mấu chốt xác minh được thực tế trong sandbox:
+  PM2 lưu trạng thái/log vào `$HOME/.pm2` — nếu dùng `--no-create-home` mà KHÔNG trỏ `--home-dir` vào
+  thư mục có thật, PM2 báo lỗi `ENOENT` ngay lần chạy đầu (đã tái hiện lỗi này rồi mới tìm ra cách sửa
+  đúng). Trỏ home vào `/opt/vpdt` giải quyết gọn: mọi lệnh `sudo -u vpdt-app pm2 ...` tự dùng đúng
+  `/opt/vpdt/.pm2` mà không cần khai báo `PM2_HOME` thủ công ở bất kỳ đâu.
+- `chown -R vpdt-app:vpdt-app /opt/vpdt` + `chmod 750` thư mục + `chmod 600 .env` — đã rà lại toàn bộ
+  repo, xác nhận không có file/thư mục nào khác (kể cả `uploads/`) cần quyền rộng hơn (không cần bật
+  `770`/group-writable cho `uploads/` vì chỉ đúng 1 tiến trình, chạy dưới đúng 1 tài khoản, ghi vào đây).
+- `pm2 startup systemd -u vpdt-app --hp /opt/vpdt` — đã tự kiểm chứng ĐÚNG cú pháp này với PM2 `7.0.3`
+  cài trong sandbox (không đoán): lệnh tự phát hiện `systemd`, in ra 1 dòng lệnh `sudo env PATH=...`
+  khác cần copy-paste chạy lại (do PM2 chủ động không tự chạy khi chưa đủ quyền), tạo dịch vụ tên
+  `pm2-vpdt-app` (đọc thẳng template `systemd.tpl` của PM2 để xác nhận: `User=vpdt-app`,
+  `Environment=PM2_HOME=/opt/vpdt/.pm2`, `ExecStart=pm2 resurrect`, `ExecReload=pm2 reload all`).
+  `pm2 save` (chạy dưới `vpdt-app`) bắt buộc phải làm ngay sau khi start app lần đầu — đây là danh sách
+  `pm2 resurrect` sẽ phục hồi lại mỗi khi server reboot.
+
+**Đã thực sự smoke-test được gì trong sandbox (container, KHÔNG có systemd thật làm PID 1 — đã tự kiểm
+tra bằng `systemctl status`/`ps -p 1` trước khi giả định, xác nhận không thể đăng ký/khởi động 1 service
+systemd thật ở đây) — không có bất kỳ khẳng định "đã kiểm chứng end-to-end" nào cho phần systemd thật**:
+- Tạo tài khoản hệ thống thật (`useradd --system --no-create-home --home-dir ... --shell nologin`),
+  `chown -R` + `chmod 750`/`600` 1 thư mục ứng dụng thử — xác nhận THẬT (không suy đoán): 1 tài khoản
+  KHÁC (không phải chủ sở hữu) bị từ chối đọc/liệt kê thư mục VÀ đọc `.env` (`Permission denied`), trong
+  khi chính tài khoản dịch vụ đọc/ghi bình thường (kể cả ghi vào `uploads/` mô phỏng).
+- Khởi động PM2 **cluster mode thật** (`exec_mode: 'cluster'`, 2 tiến trình) dưới tài khoản dịch vụ qua
+  `runuser -u vpdt-app`: `pm2 list` xác nhận cột `user` = đúng tài khoản dịch vụ (không phải root); log
+  thực tế của 2 tiến trình xác nhận ĐÚNG cơ chế cron-guard hiện có (biến `NODE_APP_INSTANCE` PM2 tự gán)
+  vẫn hoạt động dưới tài khoản mới: instance 0 tự nhận `scheduler=true`, instance 1 tự nhận
+  `scheduler=false` — không đổi gì ở `ecosystem.config.js`/`server.js` mà vẫn đúng.
+- `pm2 startup systemd -u ... --hp ...` chạy được và in ra đúng cú pháp lệnh cần chạy (đã đọc thẳng mã
+  nguồn PM2 để xác nhận ý nghĩa `--hp`/tên service sinh ra), nhưng **KHÔNG thể xác nhận việc đăng ký
+  service thật + sống sót qua reboot thật** trong sandbox này (không có systemd PID 1) — phần này cần
+  người dùng tự xác nhận trên máy chủ thật của họ theo đúng các bước đã viết ở mục 10c
+  `HUONG_DAN_DEPLOY_UBUNTU.md` (đã hướng dẫn cả cách tự thử bằng `sudo reboot` để xác nhận chắc chắn).
+- Toàn bộ tài khoản/thư mục thử nghiệm trong sandbox đã dọn sạch (`userdel`, `rm -rf`) sau khi xác minh
+  xong — không để lại trạng thái thử nghiệm nào trong môi trường.
+
+**Sửa nhỏ kèm theo**: `ecosystem.config.js` sửa 1 chú thích sai (ghi nhầm tên biến `PM2_APP_INSTANCE`
+— biến PM2 thật sự dùng là `NODE_APP_INSTANCE`, code `server.js` vẫn luôn đọc đúng biến, chỉ chú thích
+bị sai tên) và bổ sung ghi chú xác nhận không có giả định đường dẫn/tài khoản cụ thể nào ở file này. Cập
+nhật các chú thích trỏ số mục cũ trong code server đã lạc hậu do đánh số lại `HUONG_DAN_DEPLOY_UBUNTU.md`
+(`routes/auth.js`, `routes/systemLog.js`, `scripts/copy-vendor-assets.js`,
+`lib/operationWorkItemStore.js`) và trong `CLAUDE.md` ("mục 12" → "mục 16" cho quy trình cập nhật code).
+Không có thay đổi hành vi thực tế nào ở các file `.js` này — thuần sửa nội dung chú thích/thông báo lỗi
+trỏ đúng mục trong tài liệu.
+
+**Viết lại toàn bộ `HUONG_DAN_DEPLOY_UBUNTU.md`**: giữ nguyên các mục dựng máy lần đầu (Node.js, SQL
+Server, `.env`, SMTP, chạy thử) và các mục bảo mật/vận hành đã có (CAPTCHA, WebAuthn, PWA, fail2ban,
+`TRUST_PROXY`, `DB_ENCRYPT`), chèn thêm 2 mục MỚI đúng vị trí luồng thao tác thực tế (mục 9 — tạo tài
+khoản dịch vụ + khoá quyền, ngay sau bước "chạy thử" mục 8; mục 10c — đăng ký PM2 làm dịch vụ systemd,
+trong mục PM2 cluster mode đã đổi từ 9a cũ thành mục 10 mới), đánh số lại toàn bộ các mục còn lại cho
+liền mạch (Nginx/TRUST_PROXY/fail2ban dời từ 9b/9c/9d cũ thành 11/12/13; tình trạng bảo mật từ mục 10
+cũ thành 14; kiểm tra sức khỏe + quy trình cập nhật code từ 11/12 cũ thành 15/16). Mọi lệnh `pm2
+restart`/`pm2 status`/`pm2 logs` trong toàn bộ tài liệu đã đổi thành `sudo -u vpdt-app pm2 ...` cho khớp
+tài khoản chạy thực tế; quy trình cập nhật code (mục 16, cũ là mục 12) bổ sung bước `chown -R` trả lại
+quyền sở hữu cho tài khoản dịch vụ sau khi copy code mới (vì bước copy code/`npm install` làm bằng tài
+khoản admin sẽ tạo file thuộc sở hữu admin, cần trả lại đúng quyền trước khi restart). Đã soát lại toàn
+bộ tài liệu xác nhận không còn tham chiếu số mục cũ nào bị lạc hậu, và không còn hướng dẫn "chạy bằng tài
+khoản hiện tại"/`pm2 restart` (không `sudo -u vpdt-app`) nào sót lại ở phần vận hành production.
+
+**Kiểm thử**: `node -c` toàn bộ file `.js` đã sửa (`ecosystem.config.js`, `routes/auth.js`,
+`routes/systemLog.js`, `scripts/copy-vendor-assets.js`, `lib/operationWorkItemStore.js`), chạy lại TOÀN
+BỘ `tests/test-*.js` 2 lần (trước và sau khi sửa các file trên) — cả 2 lần đều chỉ còn đúng 2 lỗi cũ đã
+biết (không kết nối được SQL Server `localhost:1433` khi chạy ngoài môi trường có SQL Server thật),
+không phát sinh lỗi mới.
+
+**Tác động deploy — ĐÂY LÀ TRỌNG TÂM CỦA ĐỢT NÀY, KHÔNG PHẢI "chỉ copy code + restart" như thường lệ**:
+bản cập nhật này chỉ đổi code THUẦN Ở MỨC CHÚ THÍCH (không đổi hành vi runtime nào của
+`ecosystem.config.js`/`server.js`/route nào) — nhưng **giá trị thật của đợt này là 1 THỦ TỤC THỦ CÔNG,
+1 LẦN, PHẢI TỰ LÀM TRÊN MÁY CHỦ THẬT** để chuyển từ "PM2 chạy tay bằng tài khoản admin" sang "PM2 chạy
+như dịch vụ hệ thống dưới tài khoản riêng, không phải root" — làm theo đúng thứ tự mục 9 → mục 10c mới
+trong `HUONG_DAN_DEPLOY_UBUNTU.md` (tạo tài khoản `vpdt-app`, `chown -R` + khoá quyền thư mục/`.env`,
+dừng tiến trình PM2 cũ đang chạy dưới tài khoản cũ, khởi động lại dưới `vpdt-app`, đăng ký systemd,
+`pm2 save`). KHÔNG đổi `server/sql/schema.sql`, KHÔNG thêm biến `.env` mới, KHÔNG đổi `dependencies`
+trong `package.json` — nhưng KHÔNG thể chỉ "copy code + `pm2 restart`" mà có được lợi ích bảo mật của
+đợt này; nếu không tự thực hiện thủ tục ở mục 9-10c, hệ thống vẫn chạy đúng như cũ (không có gì hỏng),
+chỉ là chưa có được lớp bảo vệ least-privilege + chưa sống sót qua reboot server mà thôi.
+
+## Chuyển box chọn checkbox người duyệt sang ô tìm-kiếm-gõ-chọn nhiều người ở "Quy Trình & Phê Duyệt" (2026-09-06)
 
 **Bối cảnh**: `CLAUDE.md` đã quy định "mọi ô tìm-kiếm-gõ-chọn mới từ giờ trở đi phải dùng cơ chế `sdd*`/
 `renderPeopleMultiSelect()`" (đợt thay 19 điểm `<datalist>` trước đây). Rà soát lại toàn bộ màn "Hệ Thống

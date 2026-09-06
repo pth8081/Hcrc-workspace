@@ -79,7 +79,7 @@ async function assertSourceIdColumnIsBigInt(pool) {
     throw new HttpError(500,
       `Cấu trúc CSDL chưa được cập nhật: cột dbo.OperationWorkItems.SourceId vẫn là kiểu "${dataType}" ` +
       '(cần "bigint" để chứa id dạng Date.now()). Vui lòng nhờ quản trị hệ thống chạy lại server/sql/schema.sql ' +
-      'trên SQL Server (script tự ALTER an toàn, không mất dữ liệu — xem mục 12 HUONG_DAN_DEPLOY_UBUNTU.md), ' +
+      'trên SQL Server (script tự ALTER an toàn, không mất dữ liệu — xem mục 16 HUONG_DAN_DEPLOY_UBUNTU.md), ' +
       'sau đó thử tạo lại công việc này.');
   }
   sourceIdColumnConfirmedBigInt = true;

@@ -4,7 +4,7 @@
 //
 // TẠI SAO CẦN SCRIPT NÀY: các thư viện này chỉ tồn tại trong node_modules/ (không commit vào git, đúng
 // quy ước .gitignore chuẩn) — nhưng public/vendor/ LẠI PHẢI commit vào git (server chạy production
-// KHÔNG tự "build" gì, chỉ git pull + copy code thẳng, xem HUONG_DAN_DEPLOY_UBUNTU.md mục 12). Trước
+// KHÔNG tự "build" gì, chỉ git pull + copy code thẳng, xem HUONG_DAN_DEPLOY_UBUNTU.md mục 16). Trước
 // đây bước "copy từ node_modules ra public/vendor" chưa từng được làm (thủ công lẫn tự động) nên
 // public/vendor/ hoàn toàn trống trên mọi lần deploy — mọi tính năng phụ thuộc các thư viện này (xem
 // PDF.js xem PDF bảo vệ, Mammoth xem Word, ExcelJS xuất Excel, jsPDF xuất PDF, html2canvas chụp ảnh,

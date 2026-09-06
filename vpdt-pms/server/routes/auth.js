@@ -55,19 +55,19 @@ function toSafeUser(user) {
 // cookie phiên vừa cấp ở trên CÓ THỂ bị trình duyệt ÂM THẦM từ chối lưu lại: setAuthCookie() mặc định
 // đặt cờ Secure (COOKIE_SECURE=true, bắt buộc chỉ gửi qua HTTPS — xem lib/auth.js), nhưng nếu request
 // đăng nhập này lại tới qua HTTP thuần (req.secure=false, đã tôn trọng đúng cấu hình 'trust proxy' nếu
-// deploy sau Nginx — xem mục 9b/TRUST_PROXY ở server.js), trình duyệt sẽ không lưu cookie dù server trả
-// về 200 "đăng nhập thành công" — người dùng tưởng đã vào được nhưng lần tải lại trang/thao tác kế tiếp
-// lập tức bị coi như CHƯA đăng nhập, đúng triệu chứng "thao tác đang thoát phiên phải đăng nhập lại"
-// khó hiểu đã gặp trong thực tế. Đây là nguyên nhân phổ biến nhất (xem cảnh báo cùng nội dung ở mục 6/
-// 9b HUONG_DAN_DEPLOY_UBUNTU.md) nên chủ động log ngay tại đây để admin thấy ngay trong `pm2 logs` thay
-// vì phải tự suy đoán từ báo cáo mơ hồ của người dùng.
+// deploy sau Nginx — xem mục 11 (Nginx)/mục 12 (TRUST_PROXY) ở server.js), trình duyệt sẽ không lưu
+// cookie dù server trả về 200 "đăng nhập thành công" — người dùng tưởng đã vào được nhưng lần tải lại
+// trang/thao tác kế tiếp lập tức bị coi như CHƯA đăng nhập, đúng triệu chứng "thao tác đang thoát phiên
+// phải đăng nhập lại" khó hiểu đã gặp trong thực tế. Đây là nguyên nhân phổ biến nhất (xem cảnh báo cùng
+// nội dung ở mục 6/11 HUONG_DAN_DEPLOY_UBUNTU.md) nên chủ động log ngay tại đây để admin thấy ngay trong
+// `pm2 logs` thay vì phải tự suy đoán từ báo cáo mơ hồ của người dùng.
 let warnedInsecureCookieOnce = false;
 function warnIfCookieLikelyNotPersisted(req) {
   if (warnedInsecureCookieOnce) return;
   if (process.env.COOKIE_SECURE === 'false') return; // đã chủ động tắt Secure — không áp dụng
   if (req.secure) return; // đang qua HTTPS thật (hoặc Nginx + trust proxy đúng) — không có gì bất thường
   warnedInsecureCookieOnce = true;
-  console.warn('⚠️  Đăng nhập vừa tới qua kết nối KHÔNG an toàn (http://) trong khi COOKIE_SECURE đang bắt buộc HTTPS (mặc định true) — trình duyệt sẽ ÂM THẦM KHÔNG lưu cookie phiên đăng nhập. Người dùng sẽ tưởng đăng nhập thành công nhưng bị coi như chưa đăng nhập ngay ở lần tải lại trang/thao tác tiếp theo. Xem mục 9b HUONG_DAN_DEPLOY_UBUNTU.md để bật HTTPS qua Nginx, hoặc tạm đặt COOKIE_SECURE=false trong .env nếu đang chạy thử trong LAN kín.');
+  console.warn('⚠️  Đăng nhập vừa tới qua kết nối KHÔNG an toàn (http://) trong khi COOKIE_SECURE đang bắt buộc HTTPS (mặc định true) — trình duyệt sẽ ÂM THẦM KHÔNG lưu cookie phiên đăng nhập. Người dùng sẽ tưởng đăng nhập thành công nhưng bị coi như chưa đăng nhập ngay ở lần tải lại trang/thao tác tiếp theo. Xem mục 11 HUONG_DAN_DEPLOY_UBUNTU.md để bật HTTPS qua Nginx, hoặc tạm đặt COOKIE_SECURE=false trong .env nếu đang chạy thử trong LAN kín.');
 }
 
 // Chặn dò mật khẩu ồ ạt từ 1 nguồn (IP) — bổ sung cho khoá theo TÀI KHOẢN ở lib/loginAttempts.js (2

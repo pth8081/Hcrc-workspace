@@ -9,8 +9,14 @@
 // khác). Ứng dụng đã stateless giữa các request (xác thực qua JWT + tra DB, không giữ session trong
 // bộ nhớ tiến trình) nên chạy nhiều tiến trình cùng lúc an toàn — KHÔNG cần sticky session ở Nginx.
 //
-// Job định kỳ (nhắc hết hạn hợp đồng, server.js) đã tự nhận biết PM2_APP_INSTANCE để chỉ chạy ở ĐÚNG 1
-// tiến trình (instance 0) khi ở cluster mode — không cần cấu hình thêm gì ở đây cho việc đó.
+// Job định kỳ (nhắc hết hạn hợp đồng, giám sát ổ đĩa... — server.js) đã tự nhận biết biến
+// NODE_APP_INSTANCE (PM2 tự gán, KHÔNG phải tự đặt tay) để chỉ chạy ở ĐÚNG 1 tiến trình (instance 0)
+// khi ở cluster mode — không cần cấu hình thêm gì ở đây cho việc đó.
+//
+// Chạy dưới tài khoản hệ thống riêng (không phải root) + PM2 do systemd quản lý: xem
+// HUONG_DAN_DEPLOY_UBUNTU.md mục 9a-9b — không cần sửa gì ở file này cho việc đó, mọi đường dẫn ở đây
+// (script, log PM2...) đều tương đối/tự suy ra theo user đang chạy `pm2 start`, không giả định user cụ
+// thể nào.
 //
 // Sử dụng: pm2 start ecosystem.config.js --env production
 module.exports = {
