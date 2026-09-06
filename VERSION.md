@@ -1,9 +1,62 @@
 # Phiên bản hiện tại
 
-**10.1** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
-`/api/health`). Bản merge gần nhất vào `main` là **10.1** — xem mục "4 lỗi nghiệp vụ Vận Hành/Đăng Ký
-Xe/Approval Hub..." ngay dưới. Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần
-kiểu `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+**10.2** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+`/api/health`). Bản merge gần nhất vào `main` là **10.2** — xem mục "Quản Trị > Thông Báo Email Phê
+Duyệt..." ngay dưới. Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
+`1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## Quản Trị > "🔔 Thông Báo Email Phê Duyệt" — bật/tắt riêng email phê duyệt theo từng phân hệ, giảm trùng lặp với Hub Phê Duyệt (2026-09-06)
+
+**Bối cảnh**: nhiều người đã thấy hồ sơ chờ duyệt qua Hub Phê Duyệt nên email "Cần phê duyệt" gửi cho
+người duyệt thường TRÙNG LẶP/gây spam; ngược lại email "Kết quả duyệt" (Duyệt/Từ chối/Yêu cầu bổ sung)
+gửi cho NGƯỜI TRÌNH — người không hề theo dõi Hub cho hồ sơ của chính mình — vẫn hữu ích. Thêm 1 màn
+Quản Trị mới cho phép admin tự bật/tắt riêng 2 nhóm email này theo TỪNG PHÂN HỆ, không đụng gì tới Cấu
+Hình Email (SMTP) đã có.
+
+**Dữ liệu**: `DB.approvalEmailConfig` (key mới trong `dbo.AppData`, seed mặc định ở `defaults.js`) —
+1 object phẳng theo module, mỗi module 2 khoá chính `approvalNeeded`/`result` (mặc định lần lượt
+**false**/**true**) cộng thêm các khoá đặc thù riêng module (mặc định giữ nguyên hành vi cũ — **true**):
+CAR/DOC/BUDGET/OFFICE/MEETING/VPP/CONTRACT/INTERNAL/OPERATION chỉ có 2 khoá chính; LICENSE chỉ có
+`approvalNeeded` (Duyệt/Từ chối Giấy Phép hiện không gửi email ở bất kỳ đâu — không có khoá `result`);
+SUBMISSION có thêm `opinionRequested`/`fileProposal`/`fileProposalAccepted`; IT_SUPPORT có thêm
+`applied`/`requestInfo`/`emergencyRejectRequest`/`emergencyRejectApproved`/`emergencyRejectDenied`
+(Phê Duyệt Giá) và `ticketApprovalNeeded`/`ticketEscalationApproved`/`ticketEscalationDenied`/
+`ticketDone` (Ticket); OPERATION gộp chung cả 3 luồng con thật (OPERATION_ORDER/OPERATION_STORE_OPEN/
+OPERATION_REPAIR). Ngoài phạm vi tính năng này (giữ nguyên, luôn gửi, không có toggle): toàn bộ họ
+`NOTIFY_TASK_*`/`NOTIFY_EXTENSION_*`/`NOTIFY_CANCEL_*`/`NOTIFY_COLLABORATOR_CONFIRMED` (Công Việc —
+không hiện trong Hub Phê Duyệt nên lý do "trùng lặp" không áp dụng), 3 email Biên Bản Họp
+(`NOTIFY_TASK_ASSIGNED`/`NOTIFY_TASK_COLLABORATOR`/`NOTIFY_MINUTES_CREATED` — thủ công, đã có checkbox
+opt-out riêng theo từng người nhận), checkbox "Gửi lại email" khi resubmit của Góc Chia Sẻ
+(`internalResendEmailCheckbox` — cơ chế độc lập, giữ nguyên), OTP xác thực lại khi duyệt
+(`routes/auth.js`, không đi qua `notifyUsersByEmail`), và 3 job nhắc hạn chạy theo lịch server (hợp
+đồng/giấy phép/dịch vụ CNTT — theo hạn, không theo bước chuyển trạng thái).
+
+**Cổng chặn**: DUY NHẤT bên trong `notifyRecipientsByEmail()` (`public/js/core.js`) — nơi TOÀN BỘ 88
+điểm gọi `notifyUsersByEmail()`/`notifyRecipientsByEmail()` rải khắp ~13 module đã cùng đi qua từ
+trước, nên không phải sửa từng điểm gọi. Phân loại `(module, actionType) -> {configModule, family}` gom
+về 1 nguồn duy nhất `APPROVAL_EMAIL_EVENTS`/`classifyApprovalEmailEvent()` — dùng chung cho CẢ việc
+chặn LẪN dựng màn hình admin (`renderApprovalEmailConfigForm()`), tránh lệch nhau khi sửa sau này. Sự
+kiện KHÔNG nhận diện được (TASK/MINUTES, hoặc actionType tương lai chưa liệt kê) và module CHƯA có gì
+trong `DB.approvalEmailConfig` (CSDL/phiên chưa từng lưu) đều **fail-open — luôn gửi**, không âm thầm
+chặn oan. Khi email bị admin tắt: vẫn ghi đủ 1 dòng Nhật ký hệ thống cùng actionType/targetCode như cũ
+(status mới `SUPPRESSED`) — chỉ bỏ qua bước gọi `dispatchRealEmail()` thật, không xoá dấu vết sự kiện.
+
+**Server**: thêm `approvalEmailConfig` vào `ADMIN_ONLY_KEYS` (`routes/data.js`, cùng khuôn `emailConfig`
+— `isCurrentlyAdmin()` tra CSDL mới, không tin cache JWT); không cần sanitize khi đọc (không có bí mật
+nào trong key này) nên mọi người đã đăng nhập vẫn đọc được nguyên vẹn — cần để client tự tra cứu trước
+khi quyết định gửi.
+
+**UI**: tab con mới "🔔 Thông Báo Email Phê Duyệt" cạnh "📧 Cấu Hình Email" (`Quản Trị`) — 1 bảng 2 cột
+"Cần Phê Duyệt"/"Kết Quả Duyệt" (1 dòng/module, ô không áp dụng được — LICENSE.result — hiện disabled
+kèm ghi chú "Chưa có email" thay vì 1 checkbox khả dụng nhưng vô tác dụng) + 1 khối riêng các sự kiện
+đặc thù theo module (SUBMISSION/IT_SUPPORT), 1 nút "Lưu Cấu Hình" chung.
+
+**Kiểm thử**: 2 file mới `tests/test-approval-email-config.js` (32 kịch bản — cổng chặn/fail-open/
+family độc lập/render mặc định/toggle qua đúng luồng UI thật cho CAR, SUBMISSION, IT_SUPPORT) và
+`tests/test-approval-email-config-admin-gate.js` (4 kịch bản — 403 ghi cho non-admin, đọc vẫn mở, admin
+ghi có hiệu lực thật). Toàn bộ 63 file test cũ chạy lại đạt, KHÔNG cần sửa seed data nào — do "module
+chưa cấu hình gì trong `DB.approvalEmailConfig` -> fail-open" nên các test cũ (không hề seed key mới
+này) giữ nguyên hành vi gửi email như trước.
 
 ## 4 lỗi nghiệp vụ Vận Hành / Đăng Ký Xe / Approval Hub phát hiện qua audit + 2 tính năng người dùng xác nhận (2026-09-06)
 

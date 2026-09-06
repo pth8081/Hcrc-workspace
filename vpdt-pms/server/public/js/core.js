@@ -293,7 +293,12 @@ const DB = {
   pwaShortcutModules: [],
   itPriceMasterLists: [],
   uploadFileTypeConfig: {}, uploadSizeLimitConfig: {},
-  emailConfig: {}, systemLogs: [],
+  emailConfig: {},
+  // approvalEmailConfig: bật/tắt email thông báo phê duyệt theo từng phân hệ (xem
+  // APPROVAL_EMAIL_EVENTS/classifyApprovalEmailEvent() + màn Quản Trị → "🔔 Thông Báo Email Phê
+  // Duyệt" bên dưới) — cùng khuôn emailConfig ở trên.
+  approvalEmailConfig: {},
+  systemLogs: [],
   externalApiKeys: [],
   // Version (UpdatedAt) từng collection tại lần đọc gần nhất — gửi kèm header If-Match khi ghi
   // (syncStorage()) để server phát hiện xung đột nếu người khác đã ghi đè kể từ lúc đọc (Bước 1:
@@ -2701,6 +2706,7 @@ async function initDatabase(loggingInUser) {
     // GET /api/data như mọi collection khác, không cần lọc bớt như thiết kế cũ.
     DB.itPriceMasterLists = data.itPriceMasterLists || [];
     DB.emailConfig = data.emailConfig || {};
+    DB.approvalEmailConfig = data.approvalEmailConfig || {};
     // externalApiKeys: server tự trả mảng RỖNG cho non-admin (ẩn hoàn toàn, xem
     // sanitizeExternalApiKeys() ở routes/data.js) — không cần lọc gì thêm ở client.
     DB.externalApiKeys = data.externalApiKeys || [];
@@ -3156,6 +3162,135 @@ function logEmailDeliveryResult(module, targetCode, addresses, result, networkEr
   }
 }
 
+// ==========================================
+// QUẢN TRỊ > "🔔 THÔNG BÁO EMAIL PHÊ DUYỆT" — DB.approvalEmailConfig (defaults.js), cho phép admin
+// TẮT RIÊNG từng loại email liên quan phê duyệt theo từng phân hệ mà không đụng gì tới Cấu Hình Email
+// (SMTP) ở trên — lý do: nhiều người đã thấy hồ sơ chờ duyệt qua Hub Phê Duyệt nên email "Cần phê
+// duyệt" thường TRÙNG LẶP/spam, trong khi email "Kết quả duyệt" gửi NGƯỜI TRÌNH (người không hề theo
+// dõi Hub cho hồ sơ của chính mình) vẫn hữu ích — xem defaults.js để biết đầy đủ lý do + mặc định.
+//
+// APPROVAL_EMAIL_EVENTS: nguồn DUY NHẤT mô tả toàn bộ sự kiện email phê duyệt hiện có trong hệ thống —
+// dùng để (1) phân loại (module, actionType) -> {configModule, family} cho isApprovalEmailSuppressed()
+// (cổng chặn DUY NHẤT bên trong notifyRecipientsByEmail(), KHÔNG đụng tới 88 điểm gọi
+// notifyUsersByEmail()/notifyRecipientsByEmail() rải rác ở ~13 module), và (2) dựng màn hình admin
+// (renderApprovalEmailConfigForm() bên dưới) — SỬA Ở ĐÂY LÀ ĐỦ CHO CẢ 2, không cần sửa 2 nơi rồi lo
+// lệch nhau. Mỗi phần tử: { configModule, label, families: [...], moduleAliases? }.
+//   - families[].actionTypes: DANH SÁCH actionType (đúng chuỗi truyền vào notifyUsersByEmail()/
+//     notifyRecipientsByEmail() ở từng module-*.js) khớp với family này. Mảng RỖNG ([]) = family
+//     KHÔNG áp dụng được cho module này (chưa có bất kỳ điểm gọi email nào tương ứng, vd
+//     LICENSE.result — Duyệt/Từ chối Giấy Phép hiện không gửi email ở đâu cả) — UI phải hiện ô TẮT
+//     (disabled) kèm ghi chú, không cho tích dù tích cũng vô nghĩa.
+//   - families[].defaultOn: giá trị dùng để RENDER checkbox khi DB.approvalEmailConfig[configModule]
+//     hoàn toàn chưa có (CSDL/phiên test chưa seed) — false cho "approvalNeeded" (mặc định TẮT), còn
+//     lại coi undefined = true (mặc định BẬT, khớp đúng hành vi "luôn gửi" trước khi có tính năng này).
+//   - moduleAliases: DÙNG KHI module thật truyền vào notifyRecipientsByEmail() KHÁC configModule (chỉ
+//     áp dụng cho Vận Hành — OPERATION_ORDER/OPERATION_STORE_OPEN/OPERATION_REPAIR, xem
+//     OPERATION_KIND_META.logModule ở module-vanhanh.js, đều gộp chung 1 khối cấu hình "OPERATION").
+const APPROVAL_EMAIL_EVENTS = [
+  { configModule: 'CAR', label: '🚗 Đăng Ký Xe', families: [
+    { key: 'approvalNeeded', label: 'Cần phê duyệt', defaultOn: false, actionTypes: ['NOTIFY_APPROVAL_NEEDED'] },
+    { key: 'result', label: 'Kết quả duyệt (Duyệt / Từ chối / Yêu cầu bổ sung)', actionTypes: ['NOTIFY_APPROVED', 'NOTIFY_REJECTED', 'NOTIFY_REQUEST_CHANGES'] }
+  ] },
+  { configModule: 'DOC', label: '📂 Tài Liệu', families: [
+    { key: 'approvalNeeded', label: 'Cần phê duyệt', defaultOn: false, actionTypes: ['NOTIFY_APPROVAL_NEEDED'] },
+    { key: 'result', label: 'Kết quả duyệt (Duyệt / Từ chối)', actionTypes: ['NOTIFY_APPROVED', 'NOTIFY_REJECTED'],
+      note: 'Riêng "Yêu Cầu Bổ Sung" của Tài Liệu hiện CHƯA gửi email ở bất kỳ đâu (không phải do tắt ở đây) — ô này chỉ ảnh hưởng email Duyệt/Từ chối.' }
+  ] },
+  { configModule: 'LICENSE', label: '📜 Giấy Phép', families: [
+    { key: 'approvalNeeded', label: 'Cần phê duyệt', defaultOn: false, actionTypes: ['NOTIFY_APPROVAL_NEEDED'] },
+    { key: 'result', label: 'Kết quả duyệt (Duyệt / Từ chối)', actionTypes: [],
+      note: 'Chưa có email cho sự kiện này — Duyệt/Từ chối Giấy Phép hiện không gửi email ở bất kỳ đâu.' }
+  ] },
+  { configModule: 'BUDGET', label: '💰 Ngân Sách', families: [
+    { key: 'approvalNeeded', label: 'Cần phê duyệt', defaultOn: false, actionTypes: ['NOTIFY_APPROVAL_NEEDED'] },
+    { key: 'result', label: 'Kết quả duyệt (Duyệt / Từ chối / Yêu cầu bổ sung)', actionTypes: ['NOTIFY_APPROVED', 'NOTIFY_REJECTED', 'NOTIFY_REQUEST_CHANGES'] }
+  ] },
+  { configModule: 'OFFICE', label: '🛒 Văn Phòng (Mua / Sửa Chữa / Đầu Tư)', families: [
+    { key: 'approvalNeeded', label: 'Cần phê duyệt', defaultOn: false, actionTypes: ['NOTIFY_APPROVAL_NEEDED'] },
+    { key: 'result', label: 'Kết quả duyệt (Duyệt / Từ chối / Yêu cầu bổ sung)', actionTypes: ['NOTIFY_APPROVED', 'NOTIFY_REJECTED', 'NOTIFY_REQUEST_CHANGES'] }
+  ] },
+  { configModule: 'MEETING', label: '📅 Phòng Họp', families: [
+    { key: 'approvalNeeded', label: 'Cần phê duyệt', defaultOn: false, actionTypes: ['NOTIFY_APPROVAL_NEEDED'] },
+    { key: 'result', label: 'Kết quả duyệt (Duyệt / Từ chối)', actionTypes: ['NOTIFY_APPROVED', 'NOTIFY_REJECTED'] }
+  ] },
+  { configModule: 'VPP', label: '🖊️ Văn Phòng Phẩm', families: [
+    { key: 'approvalNeeded', label: 'Cần phê duyệt', defaultOn: false, actionTypes: ['NOTIFY_APPROVAL_NEEDED'] },
+    { key: 'result', label: 'Kết quả duyệt (Duyệt / Từ chối / Yêu cầu bổ sung)', actionTypes: ['NOTIFY_APPROVED', 'NOTIFY_REJECTED', 'NOTIFY_REQUEST_CHANGES'] }
+  ] },
+  { configModule: 'SUBMISSION', label: '📝 Văn Bản Trình', families: [
+    { key: 'approvalNeeded', label: 'Cần phê duyệt', defaultOn: false, actionTypes: ['NOTIFY_APPROVAL_NEEDED'] },
+    { key: 'result', label: 'Kết quả duyệt (Duyệt / Từ chối / Yêu cầu bổ sung)', actionTypes: ['NOTIFY_APPROVED', 'NOTIFY_REJECTED', 'NOTIFY_REQUEST_CHANGES'] },
+    { key: 'opinionRequested', label: 'Xin ý kiến (mời góp ý)', actionTypes: ['NOTIFY_OPINION_REQUESTED'] },
+    { key: 'fileProposal', label: 'Trợ Lý/Thư Ký đề xuất thay thế tệp', actionTypes: ['NOTIFY_FILE_PROPOSAL'] },
+    { key: 'fileProposalAccepted', label: 'Người trình chấp nhận đề xuất thay thế tệp', actionTypes: ['NOTIFY_FILE_PROPOSAL_ACCEPTED'] }
+  ] },
+  { configModule: 'CONTRACT', label: '📑 Hợp Đồng', families: [
+    { key: 'approvalNeeded', label: 'Cần phê duyệt', defaultOn: false, actionTypes: ['NOTIFY_APPROVAL_NEEDED'] },
+    { key: 'result', label: 'Kết quả duyệt (Duyệt / Từ chối / Yêu cầu bổ sung)', actionTypes: ['NOTIFY_APPROVED', 'NOTIFY_REJECTED', 'NOTIFY_REQUEST_CHANGES'],
+      note: 'Không áp dụng cho luồng duyệt riêng "Tài liệu ký" (Quản Lý HĐ, contractsSignedFile) — luồng đó hiện CHƯA gửi email ở bất kỳ sự kiện nào (Duyệt/Từ chối/Bổ sung).' }
+  ] },
+  { configModule: 'INTERNAL', label: '📰 Truyền Thông Nội Bộ (Nhịp Sống HCRC)', families: [
+    { key: 'approvalNeeded', label: 'Cần phê duyệt', defaultOn: false, actionTypes: ['NOTIFY_APPROVAL_NEEDED'] },
+    { key: 'result', label: 'Kết quả duyệt (Duyệt / Từ chối / Yêu cầu bổ sung)', actionTypes: ['NOTIFY_APPROVED', 'NOTIFY_REJECTED', 'NOTIFY_NEED_INFO'],
+      note: 'KHÔNG ảnh hưởng checkbox "Gửi email thông báo lại cho người duyệt" khi tác giả tự Gửi Lại sau Yêu Cầu Bổ Sung ở Góc Chia Sẻ — đó là lựa chọn RIÊNG của người trình cho ĐÚNG 1 lượt gửi lại, độc lập với cấu hình admin này.' }
+  ] },
+  { configModule: 'IT_SUPPORT', label: '🖥️ Hỗ Trợ IT (Phê Duyệt Giá & Ticket)', families: [
+    { key: 'approvalNeeded', label: 'Cần phê duyệt (giá)', defaultOn: false, actionTypes: ['NOTIFY_APPROVAL_NEEDED'] },
+    { key: 'result', label: 'Kết quả duyệt giá (Duyệt / Từ chối)', actionTypes: ['NOTIFY_APPROVED', 'NOTIFY_REJECTED'] },
+    { key: 'applied', label: 'Đã áp dụng giá', actionTypes: ['NOTIFY_APPLIED'] },
+    { key: 'requestInfo', label: 'Yêu cầu bổ sung thông tin (giá)', actionTypes: ['NOTIFY_REQUEST_INFO'] },
+    { key: 'emergencyRejectRequest', label: 'Yêu cầu huỷ khẩn cấp — gửi người duyệt', actionTypes: ['NOTIFY_IT_PRICE_EMERGENCY_REJECT_REQUEST'] },
+    { key: 'emergencyRejectApproved', label: 'Huỷ khẩn cấp được duyệt', actionTypes: ['NOTIFY_IT_PRICE_EMERGENCY_REJECT_APPROVED'] },
+    { key: 'emergencyRejectDenied', label: 'Huỷ khẩn cấp bị từ chối', actionTypes: ['NOTIFY_IT_PRICE_EMERGENCY_REJECT_DENIED'] },
+    { key: 'ticketApprovalNeeded', label: 'Ticket cần phê duyệt', actionTypes: ['NOTIFY_TICKET_APPROVAL_NEEDED'] },
+    { key: 'ticketEscalationApproved', label: 'Ticket leo thang được duyệt', actionTypes: ['NOTIFY_TICKET_ESCALATION_APPROVED'] },
+    { key: 'ticketEscalationDenied', label: 'Ticket leo thang bị từ chối', actionTypes: ['NOTIFY_TICKET_ESCALATION_DENIED'] },
+    { key: 'ticketDone', label: 'Ticket hoàn tất', actionTypes: ['NOTIFY_TICKET_DONE'] }
+  ] },
+  { configModule: 'OPERATION', label: '🏬 Vận Hành (Đơn Hàng / Mở Mới / Sửa Chữa Siêu Thị)', families: [
+    { key: 'approvalNeeded', label: 'Cần phê duyệt', defaultOn: false, actionTypes: ['NOTIFY_APPROVAL_NEEDED'] },
+    { key: 'result', label: 'Kết quả duyệt (Duyệt / Từ chối / Yêu cầu bổ sung)', actionTypes: ['NOTIFY_APPROVED', 'NOTIFY_REJECTED', 'NOTIFY_REQUEST_CHANGES'] }
+  ], moduleAliases: ['OPERATION_ORDER', 'OPERATION_STORE_OPEN', 'OPERATION_REPAIR'] }
+];
+
+// Dựng sẵn bảng tra "<module thật>|<actionType>" -> {configModule, family} 1 LẦN lúc nạp trang (từ
+// APPROVAL_EMAIL_EVENTS ở trên) — tránh phải duyệt lại toàn bộ mảng mỗi lần gửi email.
+const APPROVAL_EMAIL_CLASSIFY_MAP = (() => {
+  const map = {};
+  APPROVAL_EMAIL_EVENTS.forEach(mod => {
+    const dispatchModules = (mod.moduleAliases && mod.moduleAliases.length) ? mod.moduleAliases : [mod.configModule];
+    mod.families.forEach(fam => {
+      (fam.actionTypes || []).forEach(actionType => {
+        dispatchModules.forEach(dm => { map[`${dm}|${actionType}`] = { configModule: mod.configModule, family: fam.key }; });
+      });
+    });
+  });
+  return map;
+})();
+
+// classifyApprovalEmailEvent(): trả {configModule, family} nếu (module, actionType) khớp 1 sự kiện đã
+// biết ở APPROVAL_EMAIL_EVENTS, hoặc null nếu KHÔNG nhận diện được (module TASK/MINUTES — cố ý ngoài
+// phạm vi tính năng này, xem defaults.js — hoặc bất kỳ actionType nào trong tương lai chưa được liệt kê
+// ở trên). null LUÔN đồng nghĩa "gửi bình thường" (fail-open) ở isApprovalEmailSuppressed() bên dưới.
+function classifyApprovalEmailEvent(module, actionType) {
+  return APPROVAL_EMAIL_CLASSIFY_MAP[`${module}|${actionType}`] || null;
+}
+
+// isApprovalEmailSuppressed(): cổng DUY NHẤT quyết định 1 email phê duyệt có bị admin tắt hay không —
+// gọi TRƯỚC dispatchRealEmail() ở notifyRecipientsByEmail() bên dưới. Fail-open ở CẢ 2 trường hợp
+// không chắc chắn: (1) actionType chưa phân loại được (xem classifyApprovalEmailEvent()) và (2) module
+// đó chưa có gì trong DB.approvalEmailConfig (CSDL mới/phiên test chưa seed qua seedDefaults.js, hoặc
+// admin chưa từng mở màn cấu hình để lưu) — cả 2 trường hợp đều COI NHƯ CHƯA CÓ CHỦ Ý TẮT, phải gửi
+// như hành vi gốc trước khi có tính năng này, không được để 1 sự kiện âm thầm biến mất. CHỈ chặn khi
+// admin đã lưu RÕ RÀNG giá trị false cho đúng module/family đó.
+function isApprovalEmailSuppressed(module, actionType) {
+  const cls = classifyApprovalEmailEvent(module, actionType);
+  if (!cls) return false;
+  const cfg = DB.approvalEmailConfig && DB.approvalEmailConfig[cls.configModule];
+  if (!cfg) return false;
+  return cfg[cls.family] === false;
+}
+
 // --- EMAIL SIMULATOR ---
 function sendNotificationEmail(recipientEmail, recipientName, subject, messageBody) {
   if (!DB.emailConfig.enabled) return;
@@ -3183,6 +3318,24 @@ function notifyUsersByEmail(module, actionType, targetCode, usernames, subject, 
 // Log, nhất quán với cách jobs/contractExpiryReminder.js đã làm ở phía server cho nhắc hạn hợp đồng.
 function notifyRecipientsByEmail(module, actionType, targetCode, recipients, subject, bodyText) {
   const valid = (recipients || []).filter(r => r && r.email);
+
+  // Cổng admin "🔔 Thông Báo Email Phê Duyệt" (DB.approvalEmailConfig) — xem isApprovalEmailSuppressed()
+  // ở trên. CHỈ chặn dispatchRealEmail() thật (không tốn lượt gọi SMTP/POST /api/send-email) — VẪN ghi
+  // 1 dòng Nhật ký hệ thống cùng actionType/targetCode như bình thường (không đổi actionType, không bỏ
+  // qua bước ghi log) để: (1) màn Nhật ký hệ thống vẫn thấy ĐẦY ĐỦ dấu vết sự kiện đã xảy ra (chỉ khác
+  // là email bị admin chủ động tắt, không phải lỗi), (2) các bộ đếm/kiểm tra hiện có lọc theo actionType
+  // (vd tests/test-internal-recruitment-share.js) không bị mất dòng nào chỉ vì tính năng này.
+  if (isApprovalEmailSuppressed(module, actionType)) {
+    logSystemAction(
+      module, actionType,
+      `${bodyText} (Email KHÔNG gửi — đã TẮT ở Quản Trị > Thông Báo Email Phê Duyệt cho sự kiện này.` +
+        (valid.length ? ` Người nhận nếu bật lại: ${valid.map(r => `${r.name || r.email} <${r.email}>`).join(', ')})` : ' Ngoài ra cũng không có người nhận hợp lệ.)'),
+      'SUPPRESSED',
+      targetCode
+    );
+    return;
+  }
+
   valid.forEach(r => {
     console.log(`[DMS EMAIL SIMULATOR] To: ${r.name || r.email} <${r.email}> | Subject: ${subject}\n  ${bodyText}`);
   });
@@ -3809,6 +3962,94 @@ function loadEmailConfigToForm() {
   loadSmtpAuthStatus();
   contractExpiryDeptContactsDraft = JSON.parse(JSON.stringify(DB.contractExpiryDeptContacts || {}));
   renderDeptContactsTable();
+}
+
+// Vẽ bảng "Cần phê duyệt"/"Kết quả duyệt" (2 cột chính, 1 dòng/module) + khối "Sự kiện đặc thù riêng
+// từng phân hệ" (SUBMISSION/IT_SUPPORT) của màn Quản Trị → "🔔 Thông Báo Email Phê Duyệt" — dựng HOÀN
+// TOÀN từ APPROVAL_EMAIL_EVENTS (khai báo cùng classifyApprovalEmailEvent() ở trên) để KHÔNG BAO GIỜ
+// lệch với bộ phân loại thật đang chặn/cho gửi email. Checkbox id đặt theo khuôn
+// "apel_<configModule>_<familyKey>" (saveApprovalEmailConfig() bên dưới đọc lại đúng id này).
+function renderApprovalEmailConfigForm() {
+  const tbody = document.getElementById('approvalEmailModuleTableBody');
+  const specialsWrap = document.getElementById('approvalEmailSpecialList');
+  if (!tbody || !specialsWrap) return;
+  const cfg = DB.approvalEmailConfig || {};
+
+  const checkedFor = (mod, fam) => {
+    const modCfg = cfg[mod.configModule];
+    // Module CHƯA có gì trong DB.approvalEmailConfig (CSDL mới/chưa từng lưu) -> hiện đúng giá trị
+    // mặc định dự kiến (fam.defaultOn, xem APPROVAL_EMAIL_EVENTS) thay vì luôn tích/luôn bỏ tích.
+    if (!modCfg) return fam.defaultOn !== false;
+    return modCfg[fam.key] !== false;
+  };
+
+  const mainRows = [];
+  const specialBlocks = [];
+  APPROVAL_EMAIL_EVENTS.forEach(mod => {
+    const mainFamilies = mod.families.filter(f => f.key === 'approvalNeeded' || f.key === 'result');
+    const specialFamilies = mod.families.filter(f => f.key !== 'approvalNeeded' && f.key !== 'result');
+
+    const cellsHTML = mainFamilies.map(f => {
+      const inputId = `apel_${mod.configModule}_${f.key}`;
+      const applicable = (f.actionTypes || []).length > 0;
+      const titleAttr = f.note ? ` title="${escapeHtml(f.note)}"` : '';
+      if (!applicable) {
+        return `<td class="p-2 border text-center bg-gray-50"${titleAttr}>
+          <input type="checkbox" id="${inputId}" disabled class="opacity-40 cursor-not-allowed align-middle">
+          <div class="text-[10px] text-gray-400 italic mt-0.5">Chưa có email</div>
+        </td>`;
+      }
+      return `<td class="p-2 border text-center"${titleAttr}>
+        <input type="checkbox" id="${inputId}" ${checkedFor(mod, f) ? 'checked' : ''} class="w-4 h-4 align-middle">
+      </td>`;
+    }).join('');
+
+    mainRows.push(`<tr class="border-b hover:bg-gray-50">
+      <td class="p-2 border font-semibold">${escapeHtml(mod.label)}</td>
+      ${cellsHTML}
+    </tr>`);
+
+    if (specialFamilies.length) {
+      const itemsHTML = specialFamilies.map(f => {
+        const inputId = `apel_${mod.configModule}_${f.key}`;
+        const titleAttr = f.note ? ` title="${escapeHtml(f.note)}"` : '';
+        return `<label class="flex items-center gap-2 text-xs bg-white border rounded px-2 py-1.5"${titleAttr}>
+          <input type="checkbox" id="${inputId}" ${checkedFor(mod, f) ? 'checked' : ''} class="w-4 h-4">
+          <span>${escapeHtml(f.label)}</span>
+        </label>`;
+      }).join('');
+      specialBlocks.push(`<div class="bg-gray-50 border rounded p-2">
+        <div class="font-semibold text-xs text-gray-600 mb-1.5">${escapeHtml(mod.label)}</div>
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-1.5">${itemsHTML}</div>
+      </div>`);
+    }
+  });
+
+  tbody.innerHTML = mainRows.join('');
+  specialsWrap.innerHTML = specialBlocks.length
+    ? specialBlocks.join('')
+    : '<p class="text-gray-400 italic text-xs">Không có sự kiện đặc thù nào.</p>';
+}
+
+// Lưu DB.approvalEmailConfig — đọc lại TOÀN BỘ checkbox đã vẽ ở renderApprovalEmailConfigForm() theo
+// đúng APPROVAL_EMAIL_EVENTS (không đọc lẻ tẻ theo id cứng, tránh sót/lệch khi thêm module mới). Family
+// KHÔNG áp dụng được (actionTypes rỗng, vd LICENSE.result) không lưu giá trị (không có ô nào để đọc).
+function saveApprovalEmailConfig(e) {
+  e.preventDefault();
+  const next = {};
+  APPROVAL_EMAIL_EVENTS.forEach(mod => {
+    const modOut = {};
+    mod.families.forEach(f => {
+      if (!(f.actionTypes || []).length) return;
+      const el = document.getElementById(`apel_${mod.configModule}_${f.key}`);
+      modOut[f.key] = el ? !!el.checked : (f.defaultOn !== false);
+    });
+    next[mod.configModule] = modOut;
+  });
+  DB.approvalEmailConfig = next;
+  syncStorage('approvalEmailConfig');
+  logSystemAction('CONFIG', 'UPDATE_APPROVAL_EMAIL_CONFIG', 'Cập nhật cấu hình bật/tắt email thông báo phê duyệt theo phân hệ.', 'SUCCESS', 'APPROVAL_EMAIL_CONFIG');
+  alert('✅ Đã lưu cấu hình Thông Báo Email Phê Duyệt thành công!');
 }
 
 // Hỏi backend server đang cấu hình tài khoản/mật khẩu đăng nhập SMTP hay không (DB.emailConfig hoặc

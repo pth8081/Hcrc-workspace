@@ -188,6 +188,58 @@ const DEFAULTS = {
   // kỳ hợp đồng phòng nào) chứ không thay thế. Xem jobs/contractExpiryReminder.js.
   contractExpiryDeptContacts: {},
 
+  // approvalEmailConfig: bật/tắt email thông báo LIÊN QUAN PHÊ DUYỆT theo TỪNG PHÂN HỆ, màn Quản Trị
+  // → "🔔 Thông Báo Email Phê Duyệt" (public/index.html tab adminSubApprovalEmail, render/lưu qua
+  // renderApprovalEmailConfigForm()/saveApprovalEmailConfig() ở public/js/core.js). Lý do: nhiều người
+  // đã thấy hồ sơ chờ duyệt qua Hub Phê Duyệt nên email "Cần phê duyệt" (approvalNeeded) thường TRÙNG
+  // LẶP — mặc định TẮT (false); ngược lại email "Kết quả duyệt" (result — Duyệt/Từ chối/Bổ sung gửi
+  // NGƯỜI TRÌNH, người này không hề theo dõi Hub cho hồ sơ CỦA CHÍNH MÌNH) vẫn còn hữu ích — mặc định
+  // BẬT (true). Mỗi module con 2 khoá chính "approvalNeeded"/"result" (module nào KHÔNG có sự kiện
+  // tương ứng thì KHÔNG có khoá đó — vd LICENSE không có "result" vì Duyệt/Từ chối Giấy Phép hiện chưa
+  // gửi email ở bất kỳ đâu, xem VERSION.md/CLAUDE.md phần "known gaps"), cộng thêm các sự kiện ĐẶC THÙ
+  // riêng của module (vd SUBMISSION.opinionRequested, IT_SUPPORT.ticketDone...) — mặc định giữ NGUYÊN
+  // hành vi cũ (BẬT/true) vì đây là các sự kiện hiếm, không có lý do rõ ràng để tắt mặc định.
+  //
+  // Phân loại (module, actionType) -> {configModule, family} dùng để CHẶN gửi nằm ở
+  // APPROVAL_EMAIL_EVENTS/classifyApprovalEmailEvent() (public/js/core.js) — cổng DUY NHẤT nằm trong
+  // notifyRecipientsByEmail() (chọn gọi trước dispatchRealEmail(), 88 điểm gọi trong ~13 module KHÔNG
+  // đổi gì). Sự kiện KHÔNG nhận diện được (TASK/MINUTES, hoặc actionType tương lai chưa liệt kê) LUÔN
+  // gửi (fail-open) — không bao giờ để 1 sự kiện chưa phân loại bị âm thầm chặn.
+  //
+  // seedDefaults() (xem seedDefaults.js) chỉ ghi TOÀN BỘ key này 1 LẦN nếu dbo.AppData CHƯA TỪNG có
+  // dòng "approvalEmailConfig" — không tự thêm sub-key mới vào 1 CSDL đã có sẵn key này (cùng quy ước
+  // uploadFileTypeConfig.trainingTestImage ở trên) — nên khi thêm module/sự kiện mới sau này, PHẢI tự
+  // viết 1 di trú riêng (giống migrateVppExcludedJobTitles()) nếu muốn áp dụng cho CSDL đang chạy.
+  approvalEmailConfig: {
+    CAR: { approvalNeeded: false, result: true },
+    DOC: { approvalNeeded: false, result: true },
+    // LICENSE: KHÔNG có "result" — Duyệt/Từ chối Giấy Phép hiện không gửi email ở bất kỳ điểm nào.
+    LICENSE: { approvalNeeded: false },
+    BUDGET: { approvalNeeded: false, result: true },
+    OFFICE: { approvalNeeded: false, result: true },
+    MEETING: { approvalNeeded: false, result: true },
+    VPP: { approvalNeeded: false, result: true },
+    SUBMISSION: {
+      approvalNeeded: false, result: true,
+      opinionRequested: true, fileProposal: true, fileProposalAccepted: true
+    },
+    // CONTRACT: chỉ áp dụng cho luồng hợp đồng CHÍNH — luồng "Tài liệu ký" (contractsSignedFile) hiện
+    // không gửi email ở bất kỳ sự kiện nào (Duyệt/Từ chối/Bổ sung), không có khoá riêng ở đây.
+    CONTRACT: { approvalNeeded: false, result: true },
+    // INTERNAL: không ảnh hưởng checkbox "Gửi lại email" của resubmit Góc Chia Sẻ
+    // (internalResendEmailCheckbox, module-internalcomms-nhipsong.js) — cơ chế đó độc lập, giữ nguyên.
+    INTERNAL: { approvalNeeded: false, result: true },
+    IT_SUPPORT: {
+      approvalNeeded: false, result: true,
+      applied: true, requestInfo: true,
+      emergencyRejectRequest: true, emergencyRejectApproved: true, emergencyRejectDenied: true,
+      ticketApprovalNeeded: true, ticketEscalationApproved: true, ticketEscalationDenied: true, ticketDone: true
+    },
+    // OPERATION: gộp chung 3 module con thật (OPERATION_ORDER/OPERATION_STORE_OPEN/OPERATION_REPAIR,
+    // xem OPERATION_KIND_META ở module-vanhanh.js) — cùng 1 khối cấu hình cho cả 3.
+    OPERATION: { approvalNeeded: false, result: true }
+  },
+
   // Trạng thái đã cảnh báo ổ đĩa gần nhất ({lastAlertAt, lastAlertPercent}) — dùng để tránh dội email
   // liên tục khi ổ đĩa vẫn còn đầy giữa các lượt kiểm tra hàng giờ, xem jobs/diskSpaceMonitor.js.
   diskSpaceMonitorState: {},

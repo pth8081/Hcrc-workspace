@@ -88,6 +88,12 @@ const ADMIN_ONLY_KEYS = new Set([
   // Người phụ trách nhận thông báo hết hạn hợp đồng theo phòng ban (xem jobs/contractExpiryReminder.js)
   // — cùng khuôn quản trị như emailConfig ở trên, không phải danh sách hiển thị thuần.
   'contractExpiryDeptContacts',
+  // approvalEmailConfig: bật/tắt email thông báo phê duyệt theo từng phân hệ (màn Quản Trị → "🔔 Thông
+  // Báo Email Phê Duyệt") — cùng khuôn quản trị như emailConfig ở trên. Không chứa bí mật nào (chỉ
+  // true/false theo module/sự kiện) nên KHÔNG cần sanitize khi đọc như emailConfig/externalApiKeys —
+  // mọi người đã đăng nhập vẫn ĐỌC được nguyên vẹn (client cần tra cứu giá trị này trước khi quyết định
+  // gửi email ở notifyRecipientsByEmail(), xem public/js/core.js), chỉ GHI mới bị khoá admin-only.
+  'approvalEmailConfig',
   // formTemplates (cấu hình trường tuỳ biến bắt buộc/không bắt buộc cho từng module), deptAbbrs/
   // docCatAbbrs (quy ước viết tắt dùng để sinh Mã Tài Liệu), uploadFileTypeConfig (định dạng file cho
   // phép tải lên theo từng module) — cả 4 chỉ có màn sửa trong dropdown "Hệ Thống" (setSystemSubTab()

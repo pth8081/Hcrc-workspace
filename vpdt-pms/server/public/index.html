@@ -4059,6 +4059,7 @@
          thấp hơn #systemSubTabBar (z-20) để không đè lên khi cả 2 cùng dính ở đầu. -->
     <div id="adminSubTabBar" class="sticky z-10 bg-white flex flex-wrap gap-2 border-b pb-2 pt-1">
       <button type="button" data-op="setAdminSubTab" data-arg0="EMAIL" id="btnAdminSubEmail" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">📧 Cấu Hình Email</button>
+      <button type="button" data-op="setAdminSubTab" data-arg0="APPREMAIL" id="btnAdminSubApprovalEmail" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">🔔 Thông Báo Email Phê Duyệt</button>
       <button type="button" data-op="setAdminSubTab" data-arg0="CATALOG" id="btnAdminSubCatalog" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">🗂️ Quản Lý Danh Mục</button>
       <button type="button" data-op="setAdminSubTab" data-arg0="PERMS" id="btnAdminSubPerms" class="px-3 py-1.5 rounded text-xs font-bold bg-amber-700 text-white">🔐 Phân Quyền</button>
       <button type="button" data-op="setAdminSubTab" data-arg0="EXTAUTH" id="btnAdminSubExtAuth" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">🔑 API Xác Thực Ngoài</button>
@@ -4067,7 +4068,7 @@
     <!-- CẤU HÌNH HỆ THỐNG EMAIL -->
     <div id="adminSubEmail" class="hidden bg-amber-50 p-4 rounded border border-amber-300 space-y-3">
       <h3 class="font-bold text-amber-900 text-sm flex items-center gap-1">✉️ Cấu Hình Máy Chủ Gửi Email Thông Báo</h3>
-      <p class="text-[11px] text-gray-500 italic">Cấu hình đầy đủ ngay tại đây — kể cả tài khoản/mật khẩu đăng nhập SMTP (nếu máy chủ yêu cầu xác thực), không cần đụng tới server/file .env nữa. Chưa nhập SMTP Server bên dưới thì hệ thống tự chuyển sang chế độ mô phỏng (ghi Nhật ký hệ thống, không gửi hộp thư thật).</p>
+      <p class="text-[11px] text-gray-500 italic">Cấu hình đầy đủ ngay tại đây — kể cả tài khoản/mật khẩu đăng nhập SMTP (nếu máy chủ yêu cầu xác thực), không cần đụng tới server/file .env nữa. Chưa nhập SMTP Server bên dưới thì hệ thống tự chuyển sang chế độ mô phỏng (ghi Nhật ký hệ thống, không gửi hộp thư thật). Muốn TẮT RIÊNG từng loại email phê duyệt (VD email "Cần phê duyệt" bị trùng lặp với Hub Phê Duyệt) theo từng phân hệ, xem tab "🔔 Thông Báo Email Phê Duyệt" bên cạnh.</p>
       <p id="cfgSmtpAuthStatus" class="text-[11px] font-semibold rounded px-2 py-1 bg-white border"></p>
 
       <form data-op-submit="saveEmailConfig" class="space-y-3 bg-white p-3 rounded border text-xs">
@@ -4189,6 +4190,40 @@
         </table>
         <button type="button" data-op="saveContractExpiryDeptContacts" class="bg-amber-600 text-white px-4 py-1.5 rounded font-bold hover:bg-amber-700">Lưu Người Phụ Trách</button>
       </div>
+    </div>
+
+    <!-- THÔNG BÁO EMAIL PHÊ DUYỆT — bật/tắt từng loại email liên quan phê duyệt theo TỪNG PHÂN HỆ,
+         ĐỘC LẬP với Cấu Hình Email (SMTP) ở trên. Rendering hoàn toàn động qua
+         renderApprovalEmailConfigForm() (public/js/core.js, dựng từ APPROVAL_EMAIL_EVENTS) — 2 vùng
+         cố định dưới đây (#approvalEmailModuleTableBody/#approvalEmailSpecialList) chỉ là khung chứa. -->
+    <div id="adminSubApprovalEmail" class="hidden bg-amber-50 p-4 rounded border border-amber-300 space-y-3">
+      <h3 class="font-bold text-amber-900 text-sm flex items-center gap-1">🔔 Bật/Tắt Email Thông Báo Phê Duyệt Theo Phân Hệ</h3>
+      <p class="text-[11px] text-gray-500 italic">Nhiều người đã thấy hồ sơ chờ duyệt qua "Hub Phê Duyệt" nên email <b>"Cần phê duyệt"</b> gửi cho người duyệt thường TRÙNG LẶP/gây spam — có thể tắt riêng theo từng phân hệ (mặc định TẮT). Ngược lại email <b>"Kết quả duyệt"</b> (Duyệt/Từ chối/Yêu cầu bổ sung) gửi cho NGƯỜI TRÌNH — người không hề theo dõi Hub cho hồ sơ của chính mình — vẫn hữu ích nên mặc định BẬT. Tắt 1 ô ở đây KHÔNG xoá lịch sử — Nhật ký hệ thống vẫn ghi lại đầy đủ sự kiện, chỉ email thật không được gửi đi.</p>
+
+      <form data-op-submit="saveApprovalEmailConfig" class="space-y-4">
+        <div class="bg-white p-3 rounded border overflow-x-auto">
+          <table class="w-full border-collapse text-xs min-w-[420px]">
+            <thead>
+              <tr class="border-b bg-gray-50 text-left">
+                <th class="p-2 border">Phân Hệ</th>
+                <th class="p-2 border text-center w-36">Cần Phê Duyệt</th>
+                <th class="p-2 border text-center w-44">Kết Quả Duyệt</th>
+              </tr>
+            </thead>
+            <tbody id="approvalEmailModuleTableBody"></tbody>
+          </table>
+        </div>
+
+        <div class="bg-white p-3 rounded border space-y-2">
+          <h4 class="font-bold text-amber-900 text-xs flex items-center gap-1">🧩 Sự Kiện Đặc Thù Riêng Từng Phân Hệ</h4>
+          <p class="text-[11px] text-gray-500 italic">Các sự kiện không thuộc 2 nhóm chính ở trên (VD Văn Bản Trình xin ý kiến, Hỗ Trợ IT huỷ khẩn cấp/ticket) — mặc định giữ nguyên hành vi cũ (BẬT).</p>
+          <div id="approvalEmailSpecialList" class="space-y-2"></div>
+        </div>
+
+        <div class="flex justify-end border-t pt-2">
+          <button type="submit" class="bg-amber-600 text-white px-4 py-1.5 rounded font-bold hover:bg-amber-700">Lưu Cấu Hình</button>
+        </div>
+      </form>
     </div>
 
     <!-- API XÁC THỰC NGOÀI (verify-credentials cho ứng dụng khác) -->
