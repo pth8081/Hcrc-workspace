@@ -852,6 +852,32 @@ function computeOperationWorkItemProgressUpdateOverdueDays(item, hasChildren) {
   return elapsedDays >= freq ? elapsedDays : null;
 }
 
+// VHST-6: trạng thái "quá hạn hoàn thành" (khác HẲN computeOperationWorkItemProgressUpdateOverdueDays()
+// ngay trên — đó là quá hạn CẬP NHẬT TIẾN ĐỘ theo tần suất, còn đây là quá hạn HOÀN THÀNH theo field
+// deadline đã có sẵn trên MỌI công việc, cả gốc/con/lá/có-con, xem createOperationWorkItem()/
+// editOperationWorkItem() — 2 khái niệm ĐỘC LẬP, 1 công việc có thể dính CẢ HAI cảnh báo cùng lúc, không
+// gộp chung). Yêu cầu người dùng: báo cáo phải TÁCH RIÊNG "quá hạn nhưng chưa bắt đầu" khỏi "quá hạn
+// nhưng chưa kết thúc" (trước đây gộp chung 1 trạng thái LATE ở renderOperationStoreReport() — xem
+// public/js/module-vanhanh.js). Hàm dùng CHUNG cho báo cáo (thống kê số lượng theo 4 trạng thái) LẪN 2
+// màn danh sách sống (Quản Lý Công Việc/Quản Lý Nghiệm Thu, badge từng dòng) — ĐÚNG 1 nguồn sự thật, xem
+// bản sao client-side computeOperationWorkItemDeadlineStatus() ở module-vanhanh.js (LƯU Ý BẢO TRÌ, 2 bản
+// độc lập, phải sửa đồng thời).
+// Trả về 1 trong 4: 'HOAN_THANH' (đã DA_NGHIEM_THU — KHÔNG bao giờ tính quá hạn dù deadline đã qua, đúng
+// yêu cầu "hoàn thành thì không còn cảnh báo"), 'QUA_HAN_CHUA_BAT_DAU' (deadline đã qua, status vẫn
+// CHUA_BAT_DAU), 'QUA_HAN_CHUA_XONG' (deadline đã qua, status DANG_THUC_HIEN hoặc DANG_NGHIEM_THU — đã
+// bắt đầu/đã nộp nghiệm thu nhưng CHƯA nghiệm thu xong), 'DUNG_TIEN_DO' (còn lại: chưa tới hạn, hoặc
+// KHÔNG đặt deadline — không đặt hạn thì không có gì để so sánh, không bao giờ gắn cờ quá hạn).
+function computeOperationWorkItemDeadlineStatus(item) {
+  if (!item) return 'DUNG_TIEN_DO';
+  if (item.status === 'DA_NGHIEM_THU') return 'HOAN_THANH';
+  const deadline = parseISODateOnly(item.deadline);
+  if (!deadline) return 'DUNG_TIEN_DO';
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  if (deadline.getTime() >= today.getTime()) return 'DUNG_TIEN_DO'; // hạn hôm nay hoặc còn ở tương lai -> chưa tính quá hạn
+  return item.status === 'CHUA_BAT_DAU' ? 'QUA_HAN_CHUA_BAT_DAU' : 'QUA_HAN_CHUA_XONG';
+}
+
 // sourceRecord = hồ sơ operationStoreOpenings/operationRepairs đã đọc sẵn (route tự tra trước khi gọi)
 // — dự toán PHẢI đã duyệt xong mới cho tạo cây Thực hiện, khớp đúng yêu cầu nghiệp vụ "sau khi giai
 // đoạn lập dự toán hoàn thành thì giai đoạn thực hiện mới mở khoá".
@@ -5284,6 +5310,7 @@ module.exports = {
   computeOperationWorkItemExpectedAcceptanceDate,
   // Ngày bắt đầu + Tần suất cập nhật tiến độ (VHST-4) — export cho test.
   resolveOperationWorkItemScheduleFields, computeOperationWorkItemProgressUpdateOverdueDays,
+  computeOperationWorkItemDeadlineStatus,
   // "🔗 Liên kết" công việc (VHST-5) — export cho test + routes/records.js.
   resolveOperationWorkItemDependencyIds, assertNoOperationWorkItemDependencyCycle, setOperationWorkItemDependencies
 };

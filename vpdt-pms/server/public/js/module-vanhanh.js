@@ -1645,13 +1645,34 @@ function operationWorkItemProgressSummary(kind, id) {
   const pendingAcceptance = items.filter(w => w.status === 'DANG_NGHIEM_THU').length;
   return { total, done, pendingAcceptance };
 }
+// VHST-6: đếm số công việc "quá hạn hoàn thành" (2 trạng thái tách riêng — xem
+// computeOperationWorkItemDeadlineStatus()) của 1 hồ sơ, dùng ở CẢ 2 màn danh sách sống (Quản Lý Công
+// Việc/Quản Lý Nghiệm Thu) — cột "Quá Hạn" mới, cùng nguồn dữ liệu với renderOperationStoreReport().
+function operationWorkItemDeadlineSummary(kind, id) {
+  const items = getOperationWorkItemsForRecord(kind, id);
+  let notStarted = 0, notFinished = 0;
+  items.forEach(w => {
+    const st = computeOperationWorkItemDeadlineStatus(w);
+    if (st === 'QUA_HAN_CHUA_BAT_DAU') notStarted++;
+    else if (st === 'QUA_HAN_CHUA_XONG') notFinished++;
+  });
+  return { notStarted, notFinished };
+}
+function operationWorkItemDeadlineSummaryCellHTML(kind, id) {
+  const { notStarted, notFinished } = operationWorkItemDeadlineSummary(kind, id);
+  if (!notStarted && !notFinished) return '<span class="text-gray-400 italic">-</span>';
+  const parts = [];
+  if (notStarted) parts.push(`<span class="inline-block px-1.5 py-0.5 bg-red-100 text-red-800 rounded font-bold text-[10px] mr-1">🔴 ${notStarted} chưa bắt đầu</span>`);
+  if (notFinished) parts.push(`<span class="inline-block px-1.5 py-0.5 bg-orange-100 text-orange-800 rounded font-bold text-[10px]">🟠 ${notFinished} chưa hoàn thành</span>`);
+  return parts.join('');
+}
 
 function renderOperationExecutionList() {
   const tbody = document.getElementById('operationExecutionTableBody');
   if (!tbody) return;
   const rows = operationExecutionEligibleRows();
   if (!rows.length) {
-    tbody.innerHTML = `<tr><td colspan="6" class="text-center p-6 text-gray-500 italic">Chưa có hồ sơ nào đã lưu xong Danh mục đầu tư.</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="7" class="text-center p-6 text-gray-500 italic">Chưa có hồ sơ nào đã lưu xong Danh mục đầu tư.</td></tr>`;
     return;
   }
   tbody.innerHTML = rows.map(({ kind, item: o }) => {
@@ -1664,6 +1685,7 @@ function renderOperationExecutionList() {
       <td class="border p-2">${escapeHtml(meta.titleField(o))}</td>
       <td class="border p-2">${escapeHtml(o.dept)}</td>
       <td class="border p-2">${total ? `${done}/${total} đã nghiệm thu` : 'Chưa có công việc'}</td>
+      <td class="border p-2">${operationWorkItemDeadlineSummaryCellHTML(kind, o.id)}</td>
       <td class="border p-2 text-center"><button data-op="openOperationWorkItemModal" data-kind="${kind}" data-id="${o.id}" data-mode="EXECUTION" class="px-2.5 py-1 bg-emerald-600 text-white rounded text-xs hover:opacity-90 font-bold">🛠️ Quản Lý Công Việc</button></td>
     </tr>`;
   }).join('');
@@ -1673,7 +1695,7 @@ function renderOperationAcceptanceList() {
   if (!tbody) return;
   const rows = operationExecutionEligibleRows();
   if (!rows.length) {
-    tbody.innerHTML = `<tr><td colspan="6" class="text-center p-6 text-gray-500 italic">Chưa có hồ sơ nào đã lưu xong Danh mục đầu tư.</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="7" class="text-center p-6 text-gray-500 italic">Chưa có hồ sơ nào đã lưu xong Danh mục đầu tư.</td></tr>`;
     return;
   }
   tbody.innerHTML = rows.map(({ kind, item: o }) => {
@@ -1686,6 +1708,7 @@ function renderOperationAcceptanceList() {
       <td class="border p-2">${escapeHtml(meta.titleField(o))}</td>
       <td class="border p-2">${escapeHtml(o.dept)}</td>
       <td class="border p-2">${pendingAcceptance > 0 ? `<span class="font-bold text-amber-700">${pendingAcceptance} việc</span>` : '0 việc'}</td>
+      <td class="border p-2">${operationWorkItemDeadlineSummaryCellHTML(kind, o.id)}</td>
       <td class="border p-2 text-center"><button data-op="openOperationWorkItemModal" data-kind="${kind}" data-id="${o.id}" data-mode="ACCEPTANCE" class="px-2.5 py-1 bg-amber-600 text-white rounded text-xs hover:opacity-90 font-bold">✅ Nghiệm Thu</button></td>
     </tr>`;
   }).join('');
@@ -1866,6 +1889,32 @@ function computeOperationWorkItemProgressUpdateOverdueDays(w, hasChildren) {
   return elapsedDays >= freq ? elapsedDays : null;
 }
 
+// VHST-6: trạng thái "quá hạn hoàn thành" — bản sao client-side của computeOperationWorkItemDeadlineStatus()
+// ở lib/recordActions.js (LƯU Ý BẢO TRÌ, 2 bản độc lập, phải sửa đồng thời) — xem chú thích đầy đủ ở đó.
+// Dùng CHUNG cho renderOperationStoreReport() (thống kê theo 4 trạng thái) LẪN buildOperationWorkItemRow()
+// (badge từng dòng ở 2 màn Quản Lý Công Việc/Quản Lý Nghiệm Thu) — ĐÚNG 1 nguồn sự thật, không lệch nhau.
+function computeOperationWorkItemDeadlineStatus(w) {
+  if (!w) return 'DUNG_TIEN_DO';
+  if (w.status === 'DA_NGHIEM_THU') return 'HOAN_THANH';
+  const deadline = parseISODateOnly(w.deadline);
+  if (!deadline) return 'DUNG_TIEN_DO';
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  if (deadline.getTime() >= today.getTime()) return 'DUNG_TIEN_DO';
+  return w.status === 'CHUA_BAT_DAU' ? 'QUA_HAN_CHUA_BAT_DAU' : 'QUA_HAN_CHUA_XONG';
+}
+const OPERATION_WORK_ITEM_DEADLINE_STATUS_BADGE = {
+  QUA_HAN_CHUA_BAT_DAU: '<span class="inline-block px-1.5 py-0.5 bg-red-100 text-red-800 rounded font-bold text-[10px]">🔴 Quá hạn — Chưa bắt đầu</span>',
+  QUA_HAN_CHUA_XONG: '<span class="inline-block px-1.5 py-0.5 bg-orange-100 text-orange-800 rounded font-bold text-[10px]">🟠 Quá hạn — Chưa hoàn thành</span>'
+};
+// Badge hiển thị ở 2 màn sống (Quản Lý Công Việc/Quản Lý Nghiệm Thu) — CHỈ hiện khi thật sự quá hạn
+// (HOAN_THANH/DUNG_TIEN_DO trả về rỗng, không cần thêm badge "đúng tiến độ" gây rối màn danh sách vốn đã
+// có statusCell riêng thể hiện trạng thái công việc).
+function operationWorkItemDeadlineBadge(w) {
+  const st = computeOperationWorkItemDeadlineStatus(w);
+  return OPERATION_WORK_ITEM_DEADLINE_STATUS_BADGE[st] || '';
+}
+
 function buildOperationWorkItemRow(w, depth, hasChildren, mode, canManageExecution, canManageAcceptance, canEditWorkItems, items) {
   const indent = '&nbsp;'.repeat(depth * 4) + (depth > 0 ? '↳ ' : '');
   const periodLabel = (depth === 0 && w.periodName) ? `<div class="text-[10px] text-indigo-500">📅 ${escapeHtml(w.periodName)}</div>` : '';
@@ -1882,7 +1931,12 @@ function buildOperationWorkItemRow(w, depth, hasChildren, mode, canManageExecuti
   const dependencyNames = dependsOnIds.map(id => (items || []).find(x => x.id === id)?.title).filter(Boolean);
   const dependencyLabel = dependencyNames.length
     ? `<div class="mt-0.5 text-[10px] text-purple-600">🔗 Phụ thuộc: ${escapeHtml(dependencyNames.join(', '))}</div>` : '';
-  const nameCell = `<td class="border p-2">${indent}${escapeHtml(w.title)}${periodLabel}${w.description ? `<div class="text-[10px] text-gray-400">${escapeHtml(w.description)}</div>` : ''}${progressOverdueBadge}${dependencyLabel}</td>`;
+  // VHST-6: badge "quá hạn hoàn thành" (deadline) — dựng ở nameCell CÙNG chỗ progressOverdueBadge (VHST-4,
+  // quá hạn CẬP NHẬT TIẾN ĐỘ, khái niệm khác) nên hiện đúng "mọi nơi công việc này được hiển thị" — cả
+  // EXECUTION lẫn ACCEPTANCE mode dùng chung 1 nameCell, không cần lặp lại logic ở 2 nhánh return riêng.
+  const deadlineStatusBadge = operationWorkItemDeadlineBadge(w);
+  const deadlineStatusBadgeHTML = deadlineStatusBadge ? `<div class="mt-0.5">${deadlineStatusBadge}</div>` : '';
+  const nameCell = `<td class="border p-2">${indent}${escapeHtml(w.title)}${periodLabel}${w.description ? `<div class="text-[10px] text-gray-400">${escapeHtml(w.description)}</div>` : ''}${progressOverdueBadge}${deadlineStatusBadgeHTML}${dependencyLabel}</td>`;
   // Nhiều người phụ trách (Mục E) — nối tên bằng dấu phẩy.
   const assigneeNames = Array.isArray(w.assignedToName) ? w.assignedToName.filter(Boolean) : (w.assignedToName ? [w.assignedToName] : []);
   const assigneeCell = `<td class="border p-2">${escapeHtml(assigneeNames.join(', ') || 'Chưa gán')}</td>`;
@@ -2659,11 +2713,22 @@ function renderOperationStoreReport() {
     let progressKey = 'ON_TIME', progressLabel = '🟢 Đúng tiến độ';
     if (total > 0 && done === total) { progressKey = 'DONE'; progressLabel = '✅ Đã hoàn thành'; }
     else {
-      const overdue = items.some(w => w.status !== 'DA_NGHIEM_THU' && w.deadline && new Date(w.deadline) < today);
+      // VHST-6: dùng ĐÚNG computeOperationWorkItemDeadlineStatus() (ĐÚNG 1 nguồn sự thật, cùng hàm dựng
+      // thống kê/cảnh báo cấp công việc ngay dưới) thay vì tự parse `new Date(w.deadline) < today` trực
+      // tiếp như trước (parse theo UTC, có thể lệch 1 ngày tuỳ múi giờ server — xem parseISODateOnly()).
+      const overdue = items.some(w => {
+        const st = computeOperationWorkItemDeadlineStatus(w);
+        return st === 'QUA_HAN_CHUA_BAT_DAU' || st === 'QUA_HAN_CHUA_XONG';
+      });
       if (overdue) { progressKey = 'LATE'; progressLabel = '🔴 Chậm tiến độ'; }
     }
-    return { kind, o, total, done, doing, notStarted, pct, progressKey, progressLabel };
+    return { kind, o, items, total, done, doing, notStarted, pct, progressKey, progressLabel };
   }).filter(r => !filterProgress || r.progressKey === filterProgress);
+
+  // VHST-6: thống kê + cảnh báo CẤP CÔNG VIỆC (item-level), TÁCH RIÊNG "quá hạn chưa bắt đầu" khỏi "quá
+  // hạn chưa hoàn thành" (yêu cầu người dùng) — tính trên ĐÚNG tập hồ sơ đang hiển thị (đã áp dụng filter
+  // ở trên), không phải toàn bộ dữ liệu chưa lọc. Giữ nguyên bảng rollup cấp HỒ SƠ bên dưới không đổi.
+  renderOperationStoreReportItemStats(computed);
 
   if (!computed.length) {
     tbody.innerHTML = `<tr><td colspan="10" class="text-center p-6 text-gray-500 italic">Không có dữ liệu phù hợp.</td></tr>`;
@@ -2685,6 +2750,80 @@ function renderOperationStoreReport() {
       <td class="border p-2">${r.progressLabel}</td>
     </tr>`;
   }).join('');
+}
+
+// VHST-6: khối "Thống Kê Quá Hạn Theo Công Việc" ở đầu tab Báo Cáo — 4 ô đếm số lượng theo ĐÚNG 4 trạng
+// thái computeOperationWorkItemDeadlineStatus() trả về, + 2 bảng "cảnh báo" liệt kê TỪNG công việc cụ thể
+// đang quá hạn (đúng yêu cầu người dùng "thống kê ĐƯỢC ... cảnh báo ĐƯỢC" — không chỉ đếm số mà còn chỉ
+// rõ công việc nào). computed = mảng đã tính sẵn ở renderOperationStoreReport() (mỗi phần tử có sẵn
+// items[] của hồ sơ đó, ĐÃ áp dụng filter hiện tại — thống kê/cảnh báo luôn khớp đúng tập hồ sơ đang xem).
+function renderOperationStoreReportItemStats(computed) {
+  const statsBox = document.getElementById('operationWorkItemDeadlineStatsBox');
+  const warnBox = document.getElementById('operationWorkItemDeadlineWarningBox');
+  if (!statsBox || !warnBox) return;
+  const counts = { HOAN_THANH: 0, QUA_HAN_CHUA_BAT_DAU: 0, QUA_HAN_CHUA_XONG: 0, DUNG_TIEN_DO: 0 };
+  const notStartedRows = [], notFinishedRows = [];
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  computed.forEach(r => {
+    const kindLabel = r.kind === 'operationStoreOpenings' ? 'Mở mới' : 'Sửa chữa';
+    (r.items || []).forEach(w => {
+      const st = computeOperationWorkItemDeadlineStatus(w);
+      counts[st] = (counts[st] || 0) + 1;
+      if (st === 'QUA_HAN_CHUA_BAT_DAU' || st === 'QUA_HAN_CHUA_XONG') {
+        const deadlineDate = parseISODateOnly(w.deadline);
+        const overdueDays = deadlineDate ? Math.floor((today.getTime() - deadlineDate.getTime()) / 86400000) : null;
+        const row = { code: r.o.code, kindLabel, title: w.title, deadline: w.deadline, overdueDays };
+        (st === 'QUA_HAN_CHUA_BAT_DAU' ? notStartedRows : notFinishedRows).push(row);
+      }
+    });
+  });
+
+  statsBox.innerHTML = `
+    <div class="bg-red-50 border border-red-200 rounded-lg p-3">
+      <div class="text-2xl font-bold text-red-700">${counts.QUA_HAN_CHUA_BAT_DAU}</div>
+      <div class="text-xs font-semibold text-red-600">🔴 Quá hạn — Chưa bắt đầu</div>
+    </div>
+    <div class="bg-orange-50 border border-orange-200 rounded-lg p-3">
+      <div class="text-2xl font-bold text-orange-700">${counts.QUA_HAN_CHUA_XONG}</div>
+      <div class="text-xs font-semibold text-orange-600">🟠 Quá hạn — Chưa hoàn thành</div>
+    </div>
+    <div class="bg-green-50 border border-green-200 rounded-lg p-3">
+      <div class="text-2xl font-bold text-green-700">${counts.DUNG_TIEN_DO}</div>
+      <div class="text-xs font-semibold text-green-600">🟢 Đúng tiến độ</div>
+    </div>
+    <div class="bg-emerald-50 border border-emerald-200 rounded-lg p-3">
+      <div class="text-2xl font-bold text-emerald-700">${counts.HOAN_THANH}</div>
+      <div class="text-xs font-semibold text-emerald-600">✅ Hoàn thành</div>
+    </div>
+  `;
+
+  const buildWarnTableHTML = (rowsArr, emptyMsg) => rowsArr.length ? `
+    <div class="overflow-x-auto">
+      <table class="w-full border-collapse border text-xs bg-white">
+        <thead><tr class="bg-gray-100 text-left text-gray-700">
+          <th class="border p-1.5">Mã Hồ Sơ</th><th class="border p-1.5">Loại</th><th class="border p-1.5">Công Việc</th>
+          <th class="border p-1.5">Hạn</th><th class="border p-1.5 text-center">Số Ngày Quá Hạn</th>
+        </tr></thead>
+        <tbody>${rowsArr.map(r => `<tr class="hover:bg-gray-50 border-b">
+          <td class="border p-1.5 font-mono font-bold text-cyan-800">${escapeHtml(r.code)}</td>
+          <td class="border p-1.5">${escapeHtml(r.kindLabel)}</td>
+          <td class="border p-1.5">${escapeHtml(r.title)}</td>
+          <td class="border p-1.5">${r.deadline ? new Date(r.deadline).toLocaleDateString('vi-VN') : ''}</td>
+          <td class="border p-1.5 text-center font-bold">${r.overdueDays != null ? r.overdueDays : ''}</td>
+        </tr>`).join('')}</tbody>
+      </table>
+    </div>` : `<p class="text-xs text-gray-400 italic p-2">${emptyMsg}</p>`;
+
+  warnBox.innerHTML = `
+    <div>
+      <h4 class="font-bold text-red-700 text-sm mb-1">🔴 Cảnh Báo: Công Việc Quá Hạn — Chưa Bắt Đầu (${notStartedRows.length})</h4>
+      ${buildWarnTableHTML(notStartedRows, 'Không có công việc nào quá hạn mà chưa bắt đầu.')}
+    </div>
+    <div class="mt-3">
+      <h4 class="font-bold text-orange-700 text-sm mb-1">🟠 Cảnh Báo: Công Việc Quá Hạn — Chưa Hoàn Thành (${notFinishedRows.length})</h4>
+      ${buildWarnTableHTML(notFinishedRows, 'Không có công việc nào quá hạn mà chưa hoàn thành.')}
+    </div>
+  `;
 }
 
 // ==========================================

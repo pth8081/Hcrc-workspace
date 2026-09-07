@@ -1,8 +1,69 @@
 # Phiên bản hiện tại
 
-**11.6** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**11.7** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Đã merge vào `main` (fast-forward) cùng đợt này. Từ v2.0 trở đi đổi sang định dạng
 `MAJOR.MINOR` (không còn semver 3 phần kiểu `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## Vận Hành > 🏬 Siêu Thị: tách riêng cảnh báo "quá hạn chưa bắt đầu" / "quá hạn chưa hoàn thành" (2026-09-07)
+
+**Yêu cầu người dùng (nguyên văn)**: "Trong báo cáo phải thông kế được các đầu mục công việc quá hạn nhưng
+chưa bắt đầu, cảnh báo các công việc quá hạn nhưng chưa bắt dầu, các công việc quá hạn nhưng chưa kết thúc
+(hiện trạng thái ở báo cáo và trạng thái tại quản lý công việc, quản lý nghiệm thu".
+
+**Thiết kế đã triển khai** (item thứ 6/7 trong loạt việc Vận Hành > Siêu Thị đang làm): trước bản này, tab
+Báo Cáo chỉ có 1 trạng thái gộp chung `LATE`/"🔴 Chậm tiến độ" ở cấp HỒ SƠ cho MỌI công việc quá hạn (bất kể
+chưa bắt đầu hay đã bắt đầu mà chưa xong), và 2 màn danh sách sống (Quản Lý Công Việc/Quản Lý Nghiệm Thu)
+không hề hiển thị dấu hiệu quá hạn nào. Field `deadline` (hạn hoàn thành) trên mỗi `operationWorkItems` đã
+CÓ SẴN từ trước (không phải field mới — form tạo/sửa công việc `owiDeadline` đã tồn tại) nên **không cần
+field mới/không cần migration SQL** — chỉ cần 1 hàm tính trạng thái + hiển thị ở 3 nơi.
+
+- Hàm dùng CHUNG **`computeOperationWorkItemDeadlineStatus(item)`** (bản gốc `lib/recordActions.js`, mirror
+  client-side cùng tên ở `public/js/module-vanhanh.js` — theo đúng khuôn "2 bản độc lập, phải sửa đồng thời"
+  đã dùng cho `computeOperationWorkItemProgressUpdateOverdueDays()` VHST-4) trả về 1 trong 4 trạng thái:
+  - `HOAN_THANH` — đã `DA_NGHIEM_THU` (KHÔNG bao giờ gắn cờ quá hạn dù `deadline` đã qua rất lâu).
+  - `QUA_HAN_CHUA_BAT_DAU` — `deadline` đã qua, status vẫn `CHUA_BAT_DAU`.
+  - `QUA_HAN_CHUA_XONG` — `deadline` đã qua, status `DANG_THUC_HIEN` hoặc `DANG_NGHIEM_THU` (đã bắt đầu/đã
+    nộp nghiệm thu nhưng CHƯA nghiệm thu xong thật sự).
+  - `DUNG_TIEN_DO` — còn lại (chưa tới hạn, hoặc KHÔNG đặt `deadline` — không có hạn thì không có gì để so
+    sánh, không bao giờ gắn cờ quá hạn).
+  - LƯU Ý: khác HẲN cảnh báo "quá hạn cập nhật tiến độ" của VHST-4 (`progressUpdateFrequencyDays`, tần suất
+    BẮT BUỘC cập nhật, không liên quan `deadline`) — 2 khái niệm ĐỘC LẬP, 1 công việc có thể dính CẢ HAI
+    cảnh báo cùng lúc, không gộp chung.
+- **Tab Báo Cáo** (`renderOperationStoreReport()`): thêm khối **"📊 Thống Kê Quá Hạn Theo Công Việc"** (4 ô
+  đếm số lượng theo đúng 4 trạng thái trên) + 2 bảng **cảnh báo** liệt kê TỪNG công việc cụ thể đang quá hạn
+  (mã hồ sơ, loại, tên công việc, hạn, số ngày quá hạn) — tách riêng "🔴 Quá hạn — Chưa bắt đầu" khỏi "🟠 Quá
+  hạn — Chưa hoàn thành", dựng bởi `renderOperationStoreReportItemStats()` mới, tính trên ĐÚNG tập hồ sơ đang
+  hiển thị (đã áp dụng bộ lọc hiện tại). Bảng rollup cấp HỒ SƠ có sẵn (Tổng CV/Đã Nghiệm Thu/Đang Thực
+  Hiện/Chưa Bắt Đầu/% Hoàn Thành/Tiến Độ) GIỮ NGUYÊN, chỉ đổi cách tính cờ "🔴 Chậm tiến độ" sang dùng đúng
+  `computeOperationWorkItemDeadlineStatus()` (trước đây tự parse `new Date(deadline) < today` trực tiếp, có
+  thể lệch 1 ngày tuỳ múi giờ server) — thống kê cấp hồ sơ và cấp công việc giờ luôn khớp nhau.
+- **2 màn danh sách sống** (Quản Lý Công Việc/Quản Lý Nghiệm Thu, `renderOperationExecutionList()`/
+  `renderOperationAcceptanceList()`): thêm cột mới **"Quá Hạn"** ở mỗi dòng hồ sơ, đếm số công việc theo 2
+  trạng thái quá hạn (`operationWorkItemDeadlineSummary()` mới) — hiện "🔴 N chưa bắt đầu"/"🟠 N chưa hoàn
+  thành" hoặc "-" nếu không có gì quá hạn.
+- **Modal cây công việc** (mở từ nút "🛠️ Quản Lý Công Việc"/"✅ Nghiệm Thu"): mỗi dòng công việc (cả
+  EXECUTION lẫn ACCEPTANCE mode, `buildOperationWorkItemRow()`) hiện thêm badge quá hạn ngay dưới tên công
+  việc — CÙNG chỗ badge "⚠️ Quá hạn cập nhật tiến độ" (VHST-4) nhưng là badge riêng, 2 badge có thể cùng hiện.
+
+**Đã sửa**:
+- `lib/recordActions.js` — thêm `computeOperationWorkItemDeadlineStatus()`, export cho test.
+- `public/js/module-vanhanh.js` — thêm bản mirror `computeOperationWorkItemDeadlineStatus()`,
+  `operationWorkItemDeadlineBadge()`, `operationWorkItemDeadlineSummary()`,
+  `operationWorkItemDeadlineSummaryCellHTML()`, `renderOperationStoreReportItemStats()`; sửa
+  `renderOperationExecutionList()`/`renderOperationAcceptanceList()` (thêm cột "Quá Hạn", colspan rỗng
+  6→7), `buildOperationWorkItemRow()` (thêm badge ở `nameCell`), `renderOperationStoreReport()` (gọi
+  `renderOperationStoreReportItemStats()`, đổi cách tính cờ `LATE`).
+- `public/index.html` — thêm cột `<th>Quá Hạn</th>` ở 2 bảng Thực Hiện/Nghiệm Thu; thêm khối
+  `#operationWorkItemDeadlineStatsBox`/`#operationWorkItemDeadlineWarningBox` ở tab Báo Cáo.
+- `tests/test-operation-workitem-deadline-status.js` (mới) — 13 kịch bản test thuần cho
+  `computeOperationWorkItemDeadlineStatus()`: quá hạn+`CHUA_BAT_DAU`, quá hạn+`DANG_THUC_HIEN`, quá
+  hạn+`DANG_NGHIEM_THU`, quá hạn+`DA_NGHIEM_THU` (không cảnh báo), hạn tương lai, hạn = hôm nay, không đặt
+  hạn, hạn sai định dạng, item null, và đếm tổng hợp (aggregate) trên 1 tập công việc trộn đủ 4 trạng thái.
+
+**Deploy-impact**: KHÔNG cần chạy lại `schema.sql` (field `deadline` đã có sẵn trong JSON `Payload` của
+`dbo.OperationWorkItems` từ trước, hàm mới chỉ ĐỌC lại field cũ — không có field payload mới nào cần thêm).
+Không thêm biến môi trường, không thêm dependency `package.json` nào khác ngoài bump version. Chỉ cần copy
+code + `pm2 restart`.
 
 ## Vận Hành > 🏬 Siêu Thị > Thực Hiện: "🔗 Liên Kết" công việc — phụ thuộc kiểu quản lý dự án (2026-09-07)
 

@@ -6406,6 +6406,7 @@
               <th class="border p-2">Siêu Thị / Nội Dung</th>
               <th class="border p-2">Phòng Ban</th>
               <th class="border p-2">Tiến Độ Công Việc</th>
+              <th class="border p-2">Quá Hạn</th>
               <th class="border p-2 text-center">Thao Tác</th>
             </tr>
           </thead>
@@ -6427,6 +6428,7 @@
               <th class="border p-2">Siêu Thị / Nội Dung</th>
               <th class="border p-2">Phòng Ban</th>
               <th class="border p-2">Chờ Nghiệm Thu</th>
+              <th class="border p-2">Quá Hạn</th>
               <th class="border p-2 text-center">Thao Tác</th>
             </tr>
           </thead>
@@ -6460,6 +6462,15 @@
           <div><label class="block text-xs font-semibold text-gray-600 mb-1">Từ Khóa</label><input id="opReportFilterKeyword" data-op-input="renderOperationStoreReport" placeholder="Mã, tên siêu thị..." class="w-full border p-2 rounded text-sm"></div>
         </div>
       </div>
+
+      <!-- VHST-6: thống kê + cảnh báo CẤP CÔNG VIỆC (tách riêng "quá hạn chưa bắt đầu" khỏi "quá hạn chưa
+           hoàn thành") — dựng bởi renderOperationStoreReportItemStats(), module-vanhanh.js. -->
+      <div>
+        <h4 class="font-bold text-gray-700 text-sm mb-2">📊 Thống Kê Quá Hạn Theo Công Việc</h4>
+        <div id="operationWorkItemDeadlineStatsBox" class="grid grid-cols-2 md:grid-cols-4 gap-3"></div>
+      </div>
+      <div id="operationWorkItemDeadlineWarningBox" class="space-y-1"></div>
+
       <div class="overflow-x-auto">
         <table class="w-full border-collapse border text-xs bg-white">
           <thead>

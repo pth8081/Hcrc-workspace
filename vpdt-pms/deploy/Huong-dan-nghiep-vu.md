@@ -432,6 +432,41 @@ với "Tổng Hợp"):
     - VD đã test: công việc A liên kết phụ thuộc công việc B → A bị chặn "Bắt
       đầu" trong khi B còn "Đang thực hiện"/"Đang nghiệm thu" → sau khi B được
       nghiệm thu xong ("Đã nghiệm thu"), A bấm "Bắt đầu" thành công bình thường.
+  - **Tách riêng cảnh báo "quá hạn chưa bắt đầu" / "quá hạn chưa hoàn thành"
+    (từ v11.7)**: mỗi công việc trong cây Thực Hiện (gốc/con/lá, cả có con lẫn
+    không) có thể đặt **"Hạn Hoàn Thành"** (field `deadline` đã có từ trước,
+    không phải field mới) khi Thêm/Sửa công việc. Trước bản này, quá hạn được
+    tính gộp chung 1 trạng thái "Chậm tiến độ" ở tab Báo Cáo, còn 2 tab Thực
+    Hiện/Nghiệm Thu không hiện dấu hiệu quá hạn nào — nay tách rõ **2 trạng
+    thái riêng biệt**, hiện đồng bộ ở CẢ 3 nơi (dùng đúng 1 hàm tính, không
+    lệch nhau):
+    - **🔴 "Quá hạn — Chưa bắt đầu"**: đã qua Hạn Hoàn Thành mà công việc vẫn
+      còn "Chưa bắt đầu".
+    - **🟠 "Quá hạn — Chưa hoàn thành"**: đã qua Hạn Hoàn Thành mà công việc
+      đã "Đang thực hiện" hoặc "Đang nghiệm thu" nhưng CHƯA đạt "Đã nghiệm
+      thu" (chưa thật sự "kết thúc").
+    - Công việc đã **"Đã nghiệm thu"** thì KHÔNG BAO GIỜ bị gắn cờ quá hạn dù
+      Hạn Hoàn Thành đã qua rất lâu — đã xong thì hết cảnh báo. Công việc
+      KHÔNG đặt Hạn Hoàn Thành thì cũng KHÔNG BAO GIỜ bị gắn cờ (không có hạn
+      để so sánh) — tương thích ngược hoàn toàn với công việc CŨ chưa từng
+      đặt hạn.
+    - **Tab Báo Cáo** (tab con "📊 Báo Cáo" trong Siêu Thị): thêm khối **"📊
+      Thống Kê Quá Hạn Theo Công Việc"** — 4 ô đếm tổng số công việc theo 4
+      trạng thái (Quá hạn chưa bắt đầu/Quá hạn chưa hoàn thành/Đúng tiến
+      độ/Hoàn thành), TÍNH TRÊN đúng tập hồ sơ đang lọc — cùng bên dưới là 2
+      bảng **cảnh báo** liệt kê TỪNG công việc cụ thể đang quá hạn (mã hồ sơ,
+      tên công việc, hạn, số ngày đã quá hạn), tách riêng theo 2 trạng thái
+      trên. Bảng tổng hợp cấp HỒ SƠ có sẵn (cột "Tiến Độ": Đúng tiến độ/Chậm
+      tiến độ/Đã hoàn thành) vẫn giữ nguyên, không đổi cách hiển thị.
+    - **2 tab Thực Hiện/Nghiệm Thu** (danh sách hồ sơ, trước khi mở vào từng
+      cây công việc): thêm cột **"Quá Hạn"** — hiện "🔴 N chưa bắt đầu"/"🟠 N
+      chưa hoàn thành" (hoặc "-" nếu hồ sơ không có công việc nào quá hạn).
+    - **Trong cây công việc** (sau khi bấm "🛠️ Quản Lý Công Việc"/"✅ Nghiệm
+      Thu"): mỗi dòng công việc quá hạn hiện thêm badge màu ngay dưới tên —
+      CÙNG chỗ badge "⚠️ Quá hạn cập nhật tiến độ" (mục ngay trên, khái niệm
+      KHÁC — đó là quá hạn BÁO CÁO tiến độ theo tần suất, đây là quá hạn HOÀN
+      THÀNH theo Hạn Hoàn Thành) — 1 công việc có thể hiện CẢ HAI badge cùng
+      lúc nếu dính cả 2 cảnh báo.
 
 ### 3.6. Hỗ Trợ IT
 
