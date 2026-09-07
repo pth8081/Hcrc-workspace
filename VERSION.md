@@ -1,8 +1,65 @@
 # Phiên bản hiện tại
 
-**11.7** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**11.8** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Đã merge vào `main` (fast-forward) cùng đợt này. Từ v2.0 trở đi đổi sang định dạng
 `MAJOR.MINOR` (không còn semver 3 phần kiểu `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## Vận Hành > 🏬 Siêu Thị > Báo Cáo: "📋 Tổng Quan Toàn Bộ Công Việc" + Xuất Excel (2026-09-07)
+
+**Yêu cầu người dùng (nguyên văn)**: "Trong báo cáo phải có một báo cáo tổng quan về tất cả các công việc
+đang thực hiện, trạng thái liên quan, chậm, tiến độ, chạm nghiệm thu, nghiệm thu, hoàn thành và xuất được
+ra file excel để xem tổng thể".
+
+**Bối cảnh**: item **CUỐI CÙNG (7/7)** trong loạt cải tiến "Vận Hành > 🏬 Siêu Thị" đợt này (VHST-1..6 đã
+merge trước đó cùng ngày, xem các mục ngay bên dưới). VHST-6 (mục ngay dưới) đã dựng sẵn khối "📊 Thống Kê
+Quá Hạn Theo Công Việc" ở tab Báo Cáo — nhưng chỉ đếm SỐ LƯỢNG + liệt kê công việc **ĐANG QUÁ HẠN**, KHÔNG
+liệt kê được TOÀN BỘ công việc (cả đang đúng tiến độ/đã hoàn thành) trong 1 bảng duy nhất, và KHÔNG xuất
+được Excel. Mục này bổ sung đúng phần còn thiếu đó — **KHÔNG đụng/không thay đổi** khối thống kê VHST-6 đã
+có (vẫn giữ nguyên).
+
+**Thiết kế đã triển khai — HOÀN TOÀN CLIENT-SIDE, KHÔNG có thay đổi server/schema nào**: `DB.operationWorkItems`
+đã được nạp đầy đủ (đúng phạm vi xem của người dùng — lọc theo hồ sơ nguồn ở `routes/data.js`, không đổi gì
+thêm) ngay từ `GET /api/data` có sẵn — bảng tổng quan + xuất Excel đọc thẳng dữ liệu ĐÃ CÓ trong bộ nhớ
+trình duyệt, không cần route/API mới nào.
+
+- **`buildOperationStoreReportComputed()`** (mới, `public/js/module-vanhanh.js`) — tách phần dựng danh
+  sách hồ sơ đã lọc 3 filter cấp hồ sơ (Loại Hồ Sơ/Tiến Độ/Từ Khóa) ra khỏi `renderOperationStoreReport()`
+  — dùng CHUNG cho bảng rollup cấp hồ sơ có sẵn, khối thống kê VHST-6, VÀ bảng tổng quan mới — đúng 1
+  nguồn sự thật cho "tập hồ sơ đang xem".
+- **`buildOperationStoreReportOverviewRows(computed)`** (mới) — làm PHẲNG `computed` thành 1 dòng/công
+  việc (MỌI công việc, gốc lẫn con, mọi trạng thái — không chỉ việc quá hạn như 2 bảng cảnh báo VHST-6),
+  áp dụng thêm **2 filter RIÊNG** đọc trực tiếp DOM: `#opReportItemFilterStatus` (Trạng Thái Công Việc —
+  đúng enum thật `CHUA_BAT_DAU`/`DANG_THUC_HIEN`/`DANG_NGHIEM_THU`/`DA_NGHIEM_THU`, "Đang nghiệm thu" =
+  "chờ nghiệm thu" trong yêu cầu người dùng) và `#opReportItemFilterDeadlineStatus` (Trạng Thái Hạn — 4
+  trạng thái `computeOperationWorkItemDeadlineStatus()` của VHST-6: `QUA_HAN_CHUA_BAT_DAU`/
+  `QUA_HAN_CHUA_XONG`/`DUNG_TIEN_DO`/`HOAN_THANH` — đúng "chậm"/"tiến độ"/"hoàn thành" trong yêu cầu). Hàm
+  này là NGUỒN DUY NHẤT cho CẢ hiển thị lẫn xuất Excel — file xuất LUÔN khớp đúng bảng đang lọc trên màn
+  hình, không lệch nhau.
+- **`renderOperationStoreReportOverview(computed)`** (mới) — dựng bảng 10 cột vào `tbody`
+  `#operationWorkItemOverviewTableBody`: Mã Hồ Sơ, Tên Hồ Sơ, Tên Công Việc, Người Thực Hiện, Người Nghiệm
+  Thu, Trạng Thái Công Việc, Trạng Thái Hạn, Ngày Bắt Đầu, Hạn Chót, **Ngày Nghiệm Thu** (đọc từ mốc
+  history hành động `'ACCEPTED'` GẦN NHẤT — `acceptOperationWorkItem()` không lưu field ngày riêng, chỉ
+  `acceptedBy`/`acceptedByName`/`acceptanceNote`).
+- **`exportOperationStoreReportOverview()`** (mới) — nút "📥 Xuất Excel" ngay trên bảng, dùng ĐÚNG cơ chế
+  `downloadXlsxFromServer()` có sẵn (`POST /api/admin/export-xlsx`, khác `exportOperationWorkItems()` có
+  sẵn ở chỗ hàm đó CHỈ xuất công việc của 1 hồ sơ đang mở, còn hàm này xuất TOÀN BỘ hồ sơ đang hiển thị,
+  respecting ĐỦ 5 filter — 3 cấp hồ sơ + 2 cấp công việc mới). Xuất file
+  `Tong_Quan_Cong_Viec_Van_Hanh.xlsx`, sheet "Tổng Quan Công Việc", 10 cột khớp đúng bảng trên màn hình.
+  Không có dòng nào phù hợp thì báo `alert()`, KHÔNG gọi server.
+- **`index.html`**: thêm 2 dropdown filter mới (Trạng Thái Công Việc/Trạng Thái Hạn) ngay dưới 3 filter cấp
+  hồ sơ có sẵn ở tab Báo Cáo, + khối bảng "📋 Tổng Quan Toàn Bộ Công Việc" mới (kèm ô đếm tổng số + nút
+  Xuất Excel) chèn giữa khối cảnh báo VHST-6 và bảng rollup cấp hồ sơ (nay có thêm tiêu đề "📊 Tổng Hợp
+  Theo Hồ Sơ" cho rõ ràng, KHÔNG đổi nội dung/cột của bảng đó).
+- **Test mới**: `tests/test-operation-store-report-overview.js` (Playwright, cùng khuôn `testHarness.js`
+  đã dùng cho `test-operation-store-lifecycle.js`) — seed 2 hồ sơ KHÁC NHAU (1 Mở mới + 1 Sửa chữa) với 5
+  công việc trải đủ tổ hợp trạng thái công việc × trạng thái hạn: xác nhận bảng gộp ĐÚNG công việc từ
+  NHIỀU hồ sơ, nhãn hiển thị đúng cho từng tổ hợp (kể cả việc "Đã nghiệm thu" dù hạn đã qua RẤT lâu vẫn
+  hiện "Hoàn thành", không bị gắn cờ quá hạn), lọc theo Trạng Thái Công Việc/Trạng Thái Hạn thu hẹp ĐÚNG cả
+  bảng trên màn hình lẫn file xuất, Ngày Nghiệm Thu lấy đúng mốc history `ACCEPTED` gần nhất, và trường
+  hợp lọc rỗng báo alert đúng thay vì gọi xuất file trống. 6/6 kịch bản PASS.
+- **Deploy-impact**: hoàn toàn KHÔNG — không đổi `sql/schema.sql`, không đổi `.env.example`, không đổi
+  `dependencies` trong `package.json` (chỉ bump field `version`). Chỉ cần copy code + `pm2 restart` như
+  thường lệ, không cần thao tác thủ công nào khác.
 
 ## Vận Hành > 🏬 Siêu Thị: tách riêng cảnh báo "quá hạn chưa bắt đầu" / "quá hạn chưa hoàn thành" (2026-09-07)
 

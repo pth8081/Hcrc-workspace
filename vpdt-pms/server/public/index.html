@@ -6461,6 +6461,31 @@
           </div>
           <div><label class="block text-xs font-semibold text-gray-600 mb-1">Từ Khóa</label><input id="opReportFilterKeyword" data-op-input="renderOperationStoreReport" placeholder="Mã, tên siêu thị..." class="w-full border p-2 rounded text-sm"></div>
         </div>
+        <!-- VHST-7: 2 filter RIÊNG cho khối "📋 Tổng Quan Toàn Bộ Công Việc" (cấp CÔNG VIỆC, khác 3 filter
+             cấp HỒ SƠ ở trên) — mirror mức đơn giản (dropdown) của 3 filter trên, xem
+             buildOperationStoreReportOverviewRows() (module-vanhanh.js). -->
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-3 pt-1 border-t mt-1">
+          <div>
+            <label class="block text-xs font-semibold text-gray-600 mb-1">Trạng Thái Công Việc (Tổng Quan)</label>
+            <select id="opReportItemFilterStatus" data-op-change="renderOperationStoreReport" class="w-full border p-2 rounded text-sm bg-white">
+              <option value="">-- Tất cả --</option>
+              <option value="CHUA_BAT_DAU">⬜ Chưa bắt đầu</option>
+              <option value="DANG_THUC_HIEN">🔄 Đang thực hiện</option>
+              <option value="DANG_NGHIEM_THU">⏳ Đang nghiệm thu (chờ nghiệm thu)</option>
+              <option value="DA_NGHIEM_THU">✅ Đã nghiệm thu</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-gray-600 mb-1">Trạng Thái Hạn (Tổng Quan)</label>
+            <select id="opReportItemFilterDeadlineStatus" data-op-change="renderOperationStoreReport" class="w-full border p-2 rounded text-sm bg-white">
+              <option value="">-- Tất cả --</option>
+              <option value="QUA_HAN_CHUA_BAT_DAU">🔴 Quá hạn — Chưa bắt đầu</option>
+              <option value="QUA_HAN_CHUA_XONG">🟠 Quá hạn — Chưa hoàn thành</option>
+              <option value="DUNG_TIEN_DO">🟢 Đúng tiến độ</option>
+              <option value="HOAN_THANH">✅ Hoàn thành</option>
+            </select>
+          </div>
+        </div>
       </div>
 
       <!-- VHST-6: thống kê + cảnh báo CẤP CÔNG VIỆC (tách riêng "quá hạn chưa bắt đầu" khỏi "quá hạn chưa
@@ -6471,24 +6496,57 @@
       </div>
       <div id="operationWorkItemDeadlineWarningBox" class="space-y-1"></div>
 
-      <div class="overflow-x-auto">
-        <table class="w-full border-collapse border text-xs bg-white">
-          <thead>
-            <tr class="bg-gray-100 text-left text-gray-700">
-              <th class="border p-2">Mã Hồ Sơ</th>
-              <th class="border p-2">Loại</th>
-              <th class="border p-2">Siêu Thị / Nội Dung</th>
-              <th class="border p-2">Giai Đoạn Danh Mục Đầu Tư</th>
-              <th class="border p-2">Tổng CV</th>
-              <th class="border p-2">Đã Nghiệm Thu</th>
-              <th class="border p-2">Đang Thực Hiện</th>
-              <th class="border p-2">Chưa Bắt Đầu</th>
-              <th class="border p-2">% Hoàn Thành</th>
-              <th class="border p-2">Tiến Độ</th>
-            </tr>
-          </thead>
-          <tbody id="operationStoreReportTableBody"></tbody>
-        </table>
+      <!-- VHST-7: "📋 Tổng Quan Toàn Bộ Công Việc" — báo cáo tổng quan CẤP CÔNG VIỆC (item-level, MỌI công
+           việc gốc lẫn con của TẤT CẢ hồ sơ đang hiển thị, không chỉ rollup theo hồ sơ như bảng dưới) +
+           xuất Excel — xem renderOperationStoreReportOverview()/exportOperationStoreReportOverview()
+           (module-vanhanh.js). -->
+      <div>
+        <div class="flex justify-between items-center mb-2 flex-wrap gap-2">
+          <h4 class="font-bold text-gray-700 text-sm">📋 Tổng Quan Toàn Bộ Công Việc <span id="operationWorkItemOverviewCount" class="font-normal text-gray-400 text-xs"></span></h4>
+          <button type="button" data-op="exportOperationStoreReportOverview" class="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold px-3 py-1.5 rounded">📥 Xuất Excel</button>
+        </div>
+        <div class="overflow-x-auto">
+          <table class="w-full border-collapse border text-xs bg-white">
+            <thead>
+              <tr class="bg-gray-100 text-left text-gray-700">
+                <th class="border p-1.5">Mã Hồ Sơ</th>
+                <th class="border p-1.5">Tên Hồ Sơ</th>
+                <th class="border p-1.5">Tên Công Việc</th>
+                <th class="border p-1.5">Người Thực Hiện</th>
+                <th class="border p-1.5">Người Nghiệm Thu</th>
+                <th class="border p-1.5">Trạng Thái Công Việc</th>
+                <th class="border p-1.5">Trạng Thái Hạn</th>
+                <th class="border p-1.5">Ngày Bắt Đầu</th>
+                <th class="border p-1.5">Hạn Chót</th>
+                <th class="border p-1.5">Ngày Nghiệm Thu</th>
+              </tr>
+            </thead>
+            <tbody id="operationWorkItemOverviewTableBody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div>
+        <h4 class="font-bold text-gray-700 text-sm mb-2">📊 Tổng Hợp Theo Hồ Sơ</h4>
+        <div class="overflow-x-auto">
+          <table class="w-full border-collapse border text-xs bg-white">
+            <thead>
+              <tr class="bg-gray-100 text-left text-gray-700">
+                <th class="border p-2">Mã Hồ Sơ</th>
+                <th class="border p-2">Loại</th>
+                <th class="border p-2">Siêu Thị / Nội Dung</th>
+                <th class="border p-2">Giai Đoạn Danh Mục Đầu Tư</th>
+                <th class="border p-2">Tổng CV</th>
+                <th class="border p-2">Đã Nghiệm Thu</th>
+                <th class="border p-2">Đang Thực Hiện</th>
+                <th class="border p-2">Chưa Bắt Đầu</th>
+                <th class="border p-2">% Hoàn Thành</th>
+                <th class="border p-2">Tiến Độ</th>
+              </tr>
+            </thead>
+            <tbody id="operationStoreReportTableBody"></tbody>
+          </table>
+        </div>
       </div>
     </div>
   </div>

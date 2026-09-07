@@ -2688,9 +2688,13 @@ function renderOperationOrderReport() {
 // ==========================================
 // VẬN HÀNH > "SIÊU THỊ" > BÁO CÁO — tổng hợp tiến độ nhanh/chậm theo từng hồ sơ Mở mới/Sửa chữa.
 // ==========================================
-function renderOperationStoreReport() {
-  const tbody = document.getElementById('operationStoreReportTableBody');
-  if (!tbody) return;
+// Tách riêng phần dựng "computed" (danh sách hồ sơ ĐÃ áp dụng 3 filter cấp hồ sơ: Loại Hồ Sơ/Tiến Độ/Từ
+// Khóa, mỗi phần tử kèm sẵn items[] = toàn bộ công việc của hồ sơ đó) khỏi renderOperationStoreReport()
+// — VHST-7: dùng CHUNG cho CẢ bảng rollup cấp hồ sơ, khối thống kê/cảnh báo cấp công việc (VHST-6) LẪN
+// bảng "📋 Tổng Quan Toàn Bộ Công Việc" mới + xuất Excel của bảng đó (buildOperationStoreReportOverviewRows()
+// ngay dưới) — ĐÚNG 1 nguồn sự thật cho "tập hồ sơ đang xem", tránh lệch nhau giữa các khối trong cùng 1
+// tab Báo Cáo.
+function buildOperationStoreReportComputed() {
   const filterKind = document.getElementById('opReportFilterKind')?.value || '';
   const filterProgress = document.getElementById('opReportFilterProgress')?.value || '';
   const keyword = (document.getElementById('opReportFilterKeyword')?.value || '').trim().toLowerCase();
@@ -2702,8 +2706,7 @@ function renderOperationStoreReport() {
   if (filterKind) rows = rows.filter(r => r.kind === filterKind);
   if (keyword) rows = rows.filter(({ kind, item: o }) => matchesKeywordFields([o.code, OPERATION_KIND_META[kind].titleField(o)], keyword));
 
-  const today = new Date(); today.setHours(0, 0, 0, 0);
-  const computed = rows.map(({ kind, item: o }) => {
+  return rows.map(({ kind, item: o }) => {
     const items = getOperationWorkItemsForRecord(kind, o.id);
     const total = items.length;
     const done = items.filter(w => w.status === 'DA_NGHIEM_THU').length;
@@ -2724,11 +2727,19 @@ function renderOperationStoreReport() {
     }
     return { kind, o, items, total, done, doing, notStarted, pct, progressKey, progressLabel };
   }).filter(r => !filterProgress || r.progressKey === filterProgress);
+}
+function renderOperationStoreReport() {
+  const tbody = document.getElementById('operationStoreReportTableBody');
+  if (!tbody) return;
+  const computed = buildOperationStoreReportComputed();
 
   // VHST-6: thống kê + cảnh báo CẤP CÔNG VIỆC (item-level), TÁCH RIÊNG "quá hạn chưa bắt đầu" khỏi "quá
   // hạn chưa hoàn thành" (yêu cầu người dùng) — tính trên ĐÚNG tập hồ sơ đang hiển thị (đã áp dụng filter
   // ở trên), không phải toàn bộ dữ liệu chưa lọc. Giữ nguyên bảng rollup cấp HỒ SƠ bên dưới không đổi.
   renderOperationStoreReportItemStats(computed);
+  // VHST-7: bảng "📋 Tổng Quan Toàn Bộ Công Việc" — liệt kê TỪNG công việc (không rollup theo hồ sơ như
+  // bảng dưới), xem chú thích đầy đủ ở renderOperationStoreReportOverview().
+  renderOperationStoreReportOverview(computed);
 
   if (!computed.length) {
     tbody.innerHTML = `<tr><td colspan="10" class="text-center p-6 text-gray-500 italic">Không có dữ liệu phù hợp.</td></tr>`;
@@ -2826,6 +2837,101 @@ function renderOperationStoreReportItemStats(computed) {
   `;
 }
 
+// VHST-7: "Trong báo cáo phải có một báo cáo tổng quan về TẤT CẢ các công việc đang thực hiện, trạng thái
+// liên quan, chậm, tiến độ, chờ nghiệm thu, nghiệm thu, hoàn thành và xuất được ra file excel để xem tổng
+// thể" — khác 2 khối phía trên (rollup cấp HỒ SƠ / cảnh báo CHỈ liệt kê việc quá hạn), khối này liệt kê
+// CẤP CÔNG VIỆC, MỌI công việc (gốc lẫn con, bất kể trạng thái) của TẤT CẢ hồ sơ đang hiển thị — đúng 1
+// dòng = 1 công việc, kèm cả trạng thái công việc THẬT (enum status) LẪN trạng thái hạn (overlay VHST-6,
+// computeOperationWorkItemDeadlineStatus()) để xem được cả 2 góc cùng lúc (VD 1 việc "Đang thực hiện"
+// nhưng ĐÃ "Quá hạn — chưa hoàn thành"). 2 filter RIÊNG của khối này (Trạng Thái Công Việc/Trạng Thái
+// Hạn, đọc trực tiếp DOM — mirror mức đơn giản của opReportFilterKind/Progress/Keyword đã có, KHÔNG thêm
+// cơ chế lọc phức tạp hơn) áp dụng SAU 3 filter cấp hồ sơ đã lọc sẵn trong `computed` (đối số truyền vào,
+// xem buildOperationStoreReportComputed()).
+const OPERATION_WORK_ITEM_DEADLINE_STATUS_LABELS = {
+  QUA_HAN_CHUA_BAT_DAU: '🔴 Quá hạn — Chưa bắt đầu', QUA_HAN_CHUA_XONG: '🟠 Quá hạn — Chưa hoàn thành',
+  DUNG_TIEN_DO: '🟢 Đúng tiến độ', HOAN_THANH: '✅ Hoàn thành'
+};
+// Hàm build DÙNG CHUNG cho CẢ hiển thị (renderOperationStoreReportOverview()) LẪN xuất Excel
+// (exportOperationStoreReportOverview()) — ĐÚNG 1 nguồn sự thật, đảm bảo file xuất LUÔN khớp đúng bảng
+// đang xem trên màn hình (respecting MỌI filter đang áp dụng, cả 3 filter cấp hồ sơ lẫn 2 filter cấp
+// công việc), không lệch nhau — mirror đúng tinh thần exportOperationWorkItems() (xuất đúng tập đang xem,
+// không re-query server).
+function buildOperationStoreReportOverviewRows(computed) {
+  const filterStatus = document.getElementById('opReportItemFilterStatus')?.value || '';
+  const filterDeadlineStatus = document.getElementById('opReportItemFilterDeadlineStatus')?.value || '';
+  const rows = [];
+  (computed || []).forEach(r => {
+    const kindLabel = r.kind === 'operationStoreOpenings' ? 'Mở mới' : 'Sửa chữa';
+    const recordTitle = OPERATION_KIND_META[r.kind].titleField(r.o);
+    (r.items || []).forEach(w => {
+      if (filterStatus && w.status !== filterStatus) return;
+      const deadlineStatus = computeOperationWorkItemDeadlineStatus(w);
+      if (filterDeadlineStatus && deadlineStatus !== filterDeadlineStatus) return;
+      // Ngày nghiệm thu: item KHÔNG có field ngày riêng (acceptOperationWorkItem() chỉ set
+      // acceptedBy/acceptedByName/acceptanceNote, xem lib/recordActions.js) — lấy time của lần
+      // history action 'ACCEPTED' GẦN NHẤT (mirror cách computeOperationWorkItemProgressUpdateOverdueDays()
+      // đọc history ở trên).
+      let acceptedAt = '';
+      if (w.status === 'DA_NGHIEM_THU' && Array.isArray(w.history)) {
+        for (let i = w.history.length - 1; i >= 0; i--) {
+          if (w.history[i] && w.history[i].action === 'ACCEPTED') { acceptedAt = w.history[i].time || ''; break; }
+        }
+      }
+      rows.push({
+        code: r.o.code, kindLabel, recordTitle, title: w.title,
+        assignedToName: (Array.isArray(w.assignedToName) ? w.assignedToName : (w.assignedToName ? [w.assignedToName] : [])).join(', '),
+        acceptorName: w.acceptorName || '',
+        status: w.status, statusLabel: OPERATION_WORK_ITEM_STATUS_LABELS[w.status] || w.status || '',
+        deadlineStatus, deadlineStatusLabel: OPERATION_WORK_ITEM_DEADLINE_STATUS_LABELS[deadlineStatus] || deadlineStatus,
+        startDate: w.startDate || '', deadline: w.deadline || '', acceptedAt
+      });
+    });
+  });
+  return rows;
+}
+function renderOperationStoreReportOverview(computed) {
+  const tbody = document.getElementById('operationWorkItemOverviewTableBody');
+  const countBox = document.getElementById('operationWorkItemOverviewCount');
+  if (!tbody) return;
+  const rows = buildOperationStoreReportOverviewRows(computed);
+  if (countBox) countBox.innerText = `Tổng ${rows.length} công việc`;
+  if (!rows.length) {
+    tbody.innerHTML = `<tr><td colspan="10" class="text-center p-6 text-gray-500 italic">Không có công việc nào phù hợp.</td></tr>`;
+    return;
+  }
+  tbody.innerHTML = rows.map(row => `<tr class="hover:bg-gray-50 border-b">
+      <td class="border p-1.5 font-mono font-bold text-cyan-800">${escapeHtml(row.code)}</td>
+      <td class="border p-1.5">${escapeHtml(row.recordTitle)}</td>
+      <td class="border p-1.5">${escapeHtml(row.title)}</td>
+      <td class="border p-1.5">${escapeHtml(row.assignedToName)}</td>
+      <td class="border p-1.5">${escapeHtml(row.acceptorName)}</td>
+      <td class="border p-1.5">${operationWorkItemStatusBadge(row.status)}</td>
+      <td class="border p-1.5 whitespace-nowrap">${escapeHtml(row.deadlineStatusLabel)}</td>
+      <td class="border p-1.5">${row.startDate ? new Date(row.startDate).toLocaleDateString('vi-VN') : ''}</td>
+      <td class="border p-1.5">${row.deadline ? new Date(row.deadline).toLocaleDateString('vi-VN') : ''}</td>
+      <td class="border p-1.5">${escapeHtml(row.acceptedAt)}</td>
+    </tr>`).join('');
+}
+// Nút "📥 Xuất Excel" của khối "Tổng Quan Toàn Bộ Công Việc" — cùng cơ chế downloadXlsxFromServer() đã
+// dùng ở exportOperationWorkItems()/exportOperationEstimateItems(), KHÁC Ở CHỖ hàm đó xuất công việc của
+// ĐÚNG 1 hồ sơ đang mở (currentWorkItemModalKind/RecordId), còn hàm này xuất TOÀN BỘ (mọi hồ sơ) đang
+// hiển thị trên tab Báo Cáo, respecting ĐỦ 5 filter đang áp dụng (3 cấp hồ sơ + 2 cấp công việc) — đúng
+// yêu cầu người dùng "xuất được ra file excel để xem tổng thể".
+async function exportOperationStoreReportOverview() {
+  const computed = buildOperationStoreReportComputed();
+  const rows = buildOperationStoreReportOverviewRows(computed);
+  if (!rows.length) return alert('Không có công việc nào phù hợp để xuất.');
+  const columns = [
+    { header: 'Mã Hồ Sơ', key: 'code', width: 14 }, { header: 'Loại', key: 'kindLabel', width: 10 },
+    { header: 'Tên Hồ Sơ', key: 'recordTitle', width: 28 }, { header: 'Tên Công Việc', key: 'title', width: 30 },
+    { header: 'Người Thực Hiện', key: 'assignedToName', width: 26 }, { header: 'Người Nghiệm Thu', key: 'acceptorName', width: 22 },
+    { header: 'Trạng Thái Công Việc', key: 'statusLabel', width: 20 }, { header: 'Trạng Thái Hạn', key: 'deadlineStatusLabel', width: 24 },
+    { header: 'Ngày Bắt Đầu', key: 'startDate', width: 14 }, { header: 'Hạn Chót', key: 'deadline', width: 14 },
+    { header: 'Ngày Nghiệm Thu', key: 'acceptedAt', width: 20 }
+  ];
+  await downloadXlsxFromServer('Tong_Quan_Cong_Viec_Van_Hanh.xlsx', 'Tổng Quan Công Việc', columns, rows);
+}
+
 // ==========================================
 // VẬN HÀNH — gắn sự kiện qua event delegation (CSP hardening theo yêu cầu team security: bỏ dần
 // onclick/onchange/oninput/onsubmit inline, xem VERSION.md mục "CSP unsafe-inline"). Gắn ĐÚNG 1 LẦN lúc
@@ -2862,6 +2968,8 @@ const OP_CLICK_ACTIONS = {
   resetOperationEstimateToDraft: () => resetOperationEstimateToDraft(),
   exportOperationEstimateItems: () => exportOperationEstimateItems(),
   exportOperationWorkItems: () => exportOperationWorkItems(),
+  // VHST-7: nút "📥 Xuất Excel" khối "Tổng Quan Toàn Bộ Công Việc" (tab Báo Cáo).
+  exportOperationStoreReportOverview: () => exportOperationStoreReportOverview(),
   closeOperationWorkItemModal: () => closeOperationWorkItemModal(),
   openOperationWorkItemModal: el => openOperationWorkItemModal(el.dataset.kind, Number(el.dataset.id), el.dataset.mode),
   openOperationWorkItemFormModal: el => openOperationWorkItemFormModal(el.dataset.parentId ? Number(el.dataset.parentId) : null),

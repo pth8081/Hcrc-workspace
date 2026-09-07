@@ -467,6 +467,26 @@ với "Tổng Hợp"):
       KHÁC — đó là quá hạn BÁO CÁO tiến độ theo tần suất, đây là quá hạn HOÀN
       THÀNH theo Hạn Hoàn Thành) — 1 công việc có thể hiện CẢ HAI badge cùng
       lúc nếu dính cả 2 cảnh báo.
+  - **"📋 Tổng Quan Toàn Bộ Công Việc" + Xuất Excel (từ v11.8, item cuối 7/7
+    trong loạt cải tiến Vận Hành > Siêu Thị đợt này)**: tab con "📊 Báo Cáo"
+    có thêm 1 bảng MỚI **liệt kê TỪNG công việc** (không rollup theo hồ sơ như
+    bảng "Tổng Hợp Theo Hồ Sơ" có sẵn bên dưới) — MỖI dòng = 1 công việc (gốc
+    lẫn con) của **TẤT CẢ** hồ sơ Mở Mới/Sửa Chữa đang hiển thị, kèm đủ: Mã Hồ
+    Sơ, Tên Hồ Sơ, Tên Công Việc, Người Thực Hiện, Người Nghiệm Thu, **Trạng
+    Thái Công Việc** (Chưa bắt đầu/Đang thực hiện/Đang nghiệm thu — tức "chờ
+    nghiệm thu"/Đã nghiệm thu), **Trạng Thái Hạn** (Quá hạn — Chưa bắt đầu/Quá
+    hạn — Chưa hoàn thành/Đúng tiến độ/Hoàn thành, dùng ĐÚNG 1 hàm tính đã có
+    ở mục ngay trên — không lệch nhau giữa các khối trong tab Báo Cáo), Ngày
+    Bắt Đầu, Hạn Chót, Ngày Nghiệm Thu (đọc từ mốc "📜 Lịch Sử" hành động
+    "ACCEPTED" gần nhất — bản thân công việc không lưu riêng field ngày này).
+    - **2 filter riêng** cho bảng này (Trạng Thái Công Việc/Trạng Thái Hạn) —
+      áp dụng SAU 3 filter cấp hồ sơ có sẵn (Loại Hồ Sơ/Tiến Độ/Từ Khóa) —
+      thu hẹp ĐỒNG THỜI cả bảng đang xem lẫn file xuất Excel (đúng 1 nguồn dữ
+      liệu cho cả 2, không lệch nhau).
+    - Nút **"📥 Xuất Excel"** ngay trên bảng — xuất ĐÚNG bảng đang xem (áp dụng
+      MỌI filter hiện tại, cả 3 filter cấp hồ sơ lẫn 2 filter cấp công việc)
+      ra file `Tong_Quan_Cong_Viec_Van_Hanh.xlsx`, đủ 10 cột như trên — dùng
+      để xem tổng thể ngoại tuyến hoặc lọc/sắp xếp tiếp trong Excel.
 
 ### 3.6. Hỗ Trợ IT
 
