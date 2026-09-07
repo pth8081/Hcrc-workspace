@@ -1,8 +1,18 @@
 # Phiên bản hiện tại
 
-**12.5** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**12.6** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Đã merge vào `main` (fast-forward) cùng đợt này. Từ v2.0 trở đi đổi sang định dạng
 `MAJOR.MINOR` (không còn semver 3 phần kiểu `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## Hỗ Trợ IT > Hỗ Trợ Yêu Cầu: làm rõ phê duyệt là TÙY CHỌN, IT tự quyết định (2026-09-07)
+
+**Không có thay đổi code** (bổ sung ngay sau đợt sửa tài liệu ở trên). Người
+dùng nhấn mạnh lại mấu chốt: phê duyệt quản lý chỉ áp dụng khi IT **chủ động
+thấy cần** cho 1 ticket cụ thể — không phải điều kiện bắt buộc cho mọi ticket.
+Đã xác nhận đây đúng là hành vi hiện tại (`escalateItTicket()` luôn do IT tự
+tay gọi, không có ticket nào tự động rơi vào trạng thái chờ duyệt) — chỉ làm
+rõ lại câu chữ trong `Huong-dan-nghiep-vu.md` §3.6 cho khỏi gây hiểu nhầm là
+bắt buộc.
 
 ## Hỗ Trợ IT > Hỗ Trợ Yêu Cầu: sửa tài liệu nghiệp vụ nói sai "không qua duyệt" (2026-09-07)
 

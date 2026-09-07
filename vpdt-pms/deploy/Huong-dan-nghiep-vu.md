@@ -597,8 +597,11 @@ với "Tổng Hợp"):
   admin tự thêm/bớt/đổi nhãn ở màn Biểu Mẫu — dropdown lọc "Lọc Theo Danh Mục"
   (khối Tìm Kiếm & Lọc) nay luôn đồng bộ theo (từ v12.0, trước đây lệch pha
   với danh mục thật admin đang cấu hình).
-  - **Gửi phê duyệt quản lý trước khi tiếp tục xử lý**: khi 1 yêu cầu đang
-    "Đang xử lý", đội IT có thể bấm "📨 Gửi/Gửi Lại Phê Duyệt" — chọn 1 người
+  - **Phê duyệt là TÙY CHỌN theo từng ticket, do IT tự quyết định** — mặc
+    định mọi ticket xử lý bình thường không cần qua duyệt. Chỉ khi đội IT
+    thấy ticket nào đó cần xác nhận từ quản lý (VD yêu cầu nhạy cảm) thì mới
+    chủ động gửi; không phải điều kiện bắt buộc áp lên toàn bộ module. Khi 1
+    yêu cầu đang "Đang xử lý", đội IT có thể bấm "📨 Gửi/Gửi Lại Phê Duyệt" — chọn 1 người
     bất kỳ trong hệ thống (không giới hạn đúng quản lý trực tiếp theo Cơ Cấu
     Tổ Chức) + nhập lý do — ticket chuyển trạng thái phê duyệt "⏳ Đang chờ
     duyệt". Người được chọn xem được ticket này (dù không phải người tạo/IT)
